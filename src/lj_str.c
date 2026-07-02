@@ -276,25 +276,42 @@ void lj_str_resize(lua_State *L, MSize newmask)
 {
   global_State *g = G(L);
   StrTabHdr *newhdr;
-  StrTabHdr *oldhdr = lj_str_tabh_acq(g);
-  GCRef *newtab, *oldtab = oldhdr ? oldhdr->bucket : NULL;
+  StrTabHdr *oldhdr;
+  GCRef *newtab, *oldtab;
   GCSize newsize;
-  MSize i, oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
+  MSize i, oldmask;
 
   /* No resizing during GC traversal or if already too big. */
   if (g->gc.state == GCSsweepstring || newmask >= LJ_MAX_STRTAB-1)
     return;
-
-  if (oldhdr) {
-    if (!strtab_claim(L, oldhdr))
-      return;
-  }
 
   newsize = lj_str_tabsize(newmask);
   newhdr = (StrTabHdr *)lj_mem_new(L, newsize);
   memset(newhdr, 0, newsize);
   newhdr->mask = newmask;
   newtab = newhdr->bucket;
+
+restart:
+  oldhdr = lj_str_tabh_acq(g);
+  oldtab = oldhdr ? oldhdr->bucket : NULL;
+  oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
+
+  if (oldhdr) {
+    if (!strtab_claim(L, oldhdr)) {
+      lj_mem_free(g, newhdr, newsize);
+      return;
+    }
+    if (LJ_UNLIKELY(lj_str_tabh_acq(g) != oldhdr)) {
+      StrTabHdr *curhdr = lj_str_tabh_acq(g);
+      strtab_release(oldhdr);
+      if (!curhdr || curhdr->mask >= newmask) {
+	lj_mem_free(g, newhdr, newsize);
+	return;
+      }
+      strtab_wait(L);
+      goto restart;
+    }
+  }
 
 #if LUAJIT_SECURITY_STRHASH
   /* Check which chains need secondary hashes. */

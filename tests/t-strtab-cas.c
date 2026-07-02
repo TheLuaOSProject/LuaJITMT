@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "lua.h"
@@ -23,6 +24,30 @@ typedef struct ActiveReleaseCtx {
   StrTabHdr *hdr;
 } ActiveReleaseCtx;
 
+typedef struct FailAllocCtx {
+  int fail_next;
+  size_t fail_min;
+} FailAllocCtx;
+
+typedef struct ResizeOOMCtx {
+  MSize newmask;
+} ResizeOOMCtx;
+
+static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
+{
+  FailAllocCtx *ctx = (FailAllocCtx *)ud;
+  UNUSED(osize);
+  if (nsize == 0) {
+    free(ptr);
+    return NULL;
+  }
+  if (ctx->fail_next && nsize >= ctx->fail_min) {
+    ctx->fail_next = 0;
+    return NULL;
+  }
+  return realloc(ptr, nsize);
+}
+
 static void *release_active_after_claim(void *arg)
 {
   ActiveReleaseCtx *ctx = (ActiveReleaseCtx *)arg;
@@ -33,6 +58,45 @@ static void *release_active_after_claim(void *arg)
   lj_tg_strtab_active_depth_rel(ctx->tg, 0);
   lj_tg_strtab_active_hdr_rel(ctx->tg, NULL);
   return NULL;
+}
+
+static int protected_resize(lua_State *L)
+{
+  ResizeOOMCtx *ctx = (ResizeOOMCtx *)lua_touserdata(L, 1);
+  lj_str_resize(L, ctx->newmask);
+  return 0;
+}
+
+static void exercise_resize_oom_does_not_claim(void)
+{
+  FailAllocCtx allocctx = { 0, 0 };
+  lua_State *L = lua_newstate(fail_alloc, &allocctx);
+  global_State *g;
+  StrTabHdr *hdr;
+  ResizeOOMCtx resizectx;
+  int rc;
+
+  assert(L != NULL);
+  g = G(L);
+  hdr = lj_str_tabh_acq(g);
+  assert(hdr != NULL);
+  assert(hdr->resize == 0);
+
+  resizectx.newmask = (hdr->mask << 1) + 1u;
+  lua_pushcfunction(L, protected_resize);
+  lua_pushlightuserdata(L, &resizectx);
+  allocctx.fail_min = lj_str_tabsize(resizectx.newmask);
+  allocctx.fail_next = 1;
+  rc = lua_pcall(L, 1, 0, 0);
+  assert(rc == LUA_ERRMEM);
+  assert(allocctx.fail_next == 0);
+  assert(lj_str_tabh_acq(g) == hdr);
+  assert(hdr->resize == 0);
+  lua_settop(L, 0);
+  assert(lj_str_new(L, "m5-strtab-resize-oom",
+		    strlen("m5-strtab-resize-oom")) != NULL);
+
+  lua_close(L);
 }
 
 int main(void)
@@ -53,6 +117,9 @@ int main(void)
   g = G(L);
   tg = L2TG(L);
   assert(tg != NULL);
+
+  exercise_resize_oom_does_not_claim();
+
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
   assert(hdr->resize == 0);
@@ -105,6 +172,6 @@ int main(void)
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
   lua_close(L);
-  printf("t-strtab-cas OK: active-drain resize claim, GC2 epoch retire, and duplicate intern guard verified\n");
+  printf("t-strtab-cas OK: resize OOM, active-drain claim, GC2 epoch retire, and duplicate intern guard verified\n");
   return 0;
 }
