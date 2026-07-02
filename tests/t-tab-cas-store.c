@@ -547,9 +547,11 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
 {
   GCtab *t;
   TValue *oldarray, *newarray;
-  TValue src[3], oldval;
+  TValue src[3], srcjit, oldval;
+  TValue *stored;
   MSize oldasize, newasize;
   int32_t start = 5;
+  int32_t jitkey = start + 3;
   MSize i;
 
   lua_settop(L, 0);
@@ -558,7 +560,7 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   assert(lj_tab_array_separated(t));
   oldarray = lj_tab_array_acq(t);
   oldasize = lj_tab_asize_acq(t);
-  assert((MSize)(start + 2) < oldasize);
+  assert((MSize)jitkey < oldasize);
   for (i = 0; i < oldasize; i++)
     lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)i), (int32_t)i + 7000);
 
@@ -583,6 +585,14 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   tabfwd_assert_i32(&newarray[start], 8181);
   tabfwd_assert_i32(&newarray[start + 1], 8282);
   tabfwd_assert_i32(&newarray[start + 2], 8383);
+
+  lj_tab_storeint(L, &oldarray[jitkey], jitkey + 9000);
+  setintV(&srcjit, 8484);
+  stored = lj_tab_storetv_forjit_array_nogc(L, t, &oldarray[jitkey],
+					    &srcjit, (MSize)jitkey);
+  assert(stored == &newarray[jitkey]);
+  tabfwd_assert_i32(&oldarray[jitkey], jitkey + 9000);
+  tabfwd_assert_i32(&newarray[jitkey], 8484);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);

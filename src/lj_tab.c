@@ -2213,6 +2213,31 @@ static LJ_AINLINE MSize tab_store_node_snapshot_acq(GCtab *parent,
   }
 }
 
+static LJ_AINLINE int tab_array_forward_hop_writer(const GCtab *t,
+						   TValue **arrayp,
+						   MSize *asizep)
+{
+  TValue *array = *arrayp;
+  TValue *root;
+  TValue *next;
+  if (!array || lj_tab_array_is_colocated(t, array))
+    return 0;
+  root = lj_tab_array_acq(t);
+  if (root != array) {
+    *asizep = lj_tab_array_snapshot_acq(t, arrayp);
+    return *arrayp != NULL;
+  }
+  if (!lj_tab_array_is_retiring(t, array))
+    return 0;
+  next = lj_tab_array_nextgen_acq(array);
+  if (next && next != array && !lj_tab_array_is_colocated(t, next)) {
+    *arrayp = next;
+    *asizep = lj_tab_array_hdr_asize_acq(next);
+    return 1;
+  }
+  return 0;
+}
+
 static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
 					  int32_t key)
 {
@@ -2233,7 +2258,7 @@ static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
     if ((lj_tab_array_is_retiring(parent, array) || tvisforward(&val)) &&
 	(tvisforward(&val) ?
 	 lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
-	 lj_tab_array_forward_hop(parent, &next, &nextasize)) &&
+	 tab_array_forward_hop_writer(parent, &next, &nextasize)) &&
 	(MSize)key < nextasize)
       return dst == &next[key] && !lj_tab_array_is_retiring(parent, next);
   }
@@ -2508,24 +2533,31 @@ static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
 					    TValue *array, MSize asize,
 					    TValue *dst, MSize key)
 {
-  TValue val;
-  MSize idx;
-  lj_tv_load_acq(&val, dst);
-  if (!tvisforward(&val) && !lj_tab_array_is_retiring(parent, array))
-    return dst;
-  if (tvisforward(&val) && lj_tab_array_is_colocated(parent, array))
-    return lj_tab_setint(L, parent, (int32_t)key);
-  if (!tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
-		     asize, &idx))
-    return dst;
-  if (tvisforward(&val) ?
-      lj_tab_array_forward_hop_forward(parent, &array, &asize) :
-      lj_tab_array_forward_hop(parent, &array, &asize)) {
-    if (idx < asize)
-      return &array[idx];
+  for (;;) {
+    TValue val;
+    MSize idx;
+    int retiring = lj_tab_array_is_retiring(parent, array);
+    lj_tv_load_acq(&val, dst);
+    if (!tvisforward(&val) && !retiring)
+      return dst;
+    if (tvisforward(&val) && lj_tab_array_is_colocated(parent, array))
+      return lj_tab_setint(L, parent, (int32_t)key);
+    if (!tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
+		       asize, &idx))
+      return dst;
+    if (tvisforward(&val) ?
+	lj_tab_array_forward_hop_forward(parent, &array, &asize) :
+	tab_array_forward_hop_writer(parent, &array, &asize)) {
+      if (idx < asize)
+	return &array[idx];
+      return lj_tab_setinth(L, parent, (int32_t)key);
+    }
+    if (retiring && lj_tab_array_acq(parent) == array) {
+      lj_tab_store_wait_l(L);
+      continue;
+    }
     return lj_tab_setinth(L, parent, (int32_t)key);
   }
-  return lj_tab_setinth(L, parent, (int32_t)key);
 }
 
 static TValue *tab_forwarded_jit_hash_slot(lua_State *L, GCtab *parent,
@@ -2592,27 +2624,27 @@ LJ_FUNCA TValue *lj_tab_test_storetv_forjit_hash_observed(lua_State *L,
 static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
 					  TValue *orig, MSize key)
 {
-  TValue *array;
-  MSize asize, idx;
-  asize = tab_store_array_snapshot_acq(parent, &array);
-  if (tab_ptr_index((uintptr_t)array, (uintptr_t)orig, sizeof(TValue),
-			    asize, &idx)) {
-    if (lj_tab_array_is_retiring(parent, array)) {
-      TValue *next = array;
-      MSize nextasize = asize;
-      TValue val;
-      lj_tv_load_acq(&val, orig);
-      if (tvisforward(&val) ?
-	  lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
-	  lj_tab_array_forward_hop(parent, &next, &nextasize)) {
-	if (idx < nextasize)
-	  return &next[idx];
-	return lj_tab_setinth(L, parent, (int32_t)key);
+  for (;;) {
+    TValue *array;
+    MSize asize, idx;
+    asize = tab_store_array_snapshot_acq(parent, &array);
+    if (tab_ptr_index((uintptr_t)array, (uintptr_t)orig, sizeof(TValue),
+		      asize, &idx)) {
+      if (lj_tab_array_is_retiring(parent, array)) {
+	TValue *next = array;
+	MSize nextasize = asize;
+	if (tab_array_forward_hop_writer(parent, &next, &nextasize)) {
+	  if (idx < nextasize)
+	    return &next[idx];
+	  return lj_tab_setinth(L, parent, (int32_t)key);
+	}
+	lj_tab_store_wait_l(L);
+	continue;
       }
+      return tab_forwarded_jit_array_slot(L, parent, array, asize, orig, key);
     }
-    return tab_forwarded_jit_array_slot(L, parent, array, asize, orig, key);
+    return lj_tab_setint(L, parent, (int32_t)key);
   }
-  return lj_tab_setint(L, parent, (int32_t)key);
 }
 
 static LJ_AINLINE int tab_jit_array_current_match(GCtab *parent,

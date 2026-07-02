@@ -35,6 +35,14 @@ typedef struct TSetMForwardHookCtx {
 
 static TSetMForwardHookCtx *tsetm_forward_hook_ctx;
 
+static const char tset_forward_src[] =
+  "local t = tset_forward_t\n"
+  "local kv = tset_forward_vkey\n"
+  "local kr = tset_forward_rkey\n"
+  "t[3] = tset_forward_bvalue\n"
+  "t[kv] = tset_forward_vvalue\n"
+  "for i = kr, kr do t[i] = tset_forward_rvalue end\n";
+
 static int tsetm_forward_local_i32(lua_State *L, lua_Debug *ar, int slot,
 				   int32_t want)
 {
@@ -192,13 +200,7 @@ int main(void)
   lua_setglobal(L, "tset_forward_vvalue");
   lua_pushinteger(L, val_r);
   lua_setglobal(L, "tset_forward_rvalue");
-  tabfwd_load_lua(L,
-    "local t = tset_forward_t\n"
-    "local kv = tset_forward_vkey\n"
-    "local kr = tset_forward_rkey\n"
-    "t[3] = tset_forward_bvalue\n"
-    "t[kv] = tset_forward_vvalue\n"
-    "for i = kr, kr do t[i] = tset_forward_rvalue end\n");
+  tabfwd_load_lua(L, tset_forward_src);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   newarray = lj_tab_array_acq(t);
@@ -228,20 +230,47 @@ int main(void)
   tabfwd_assert_i32(&newarray[key_v], val_v);
   tabfwd_assert_i32(&newarray[key_r], val_r);
 
+  val_b += 100;
+  val_v += 100;
+  val_r += 100;
+  lj_tab_storeint(L, &oldarray[key_b], key_b + 9700);
+  lj_tab_storeint(L, &oldarray[key_v], key_v + 9700);
+  lj_tab_storeint(L, &oldarray[key_r], key_r + 9700);
+  lua_pushinteger(L, val_b);
+  lua_setglobal(L, "tset_forward_bvalue");
+  lua_pushinteger(L, val_v);
+  lua_setglobal(L, "tset_forward_vvalue");
+  lua_pushinteger(L, val_r);
+  lua_setglobal(L, "tset_forward_rvalue");
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  tabfwd_load_lua(L, tset_forward_src);
+  tabfwd_run_loaded(L);
+
+  tabfwd_assert_i32(&oldarray[key_b], key_b + 9700);
+  tabfwd_assert_i32(&oldarray[key_v], key_v + 9700);
+  tabfwd_assert_i32(&oldarray[key_r], key_r + 9700);
+  tabfwd_assert_i32(&newarray[key_b], val_b);
+  tabfwd_assert_i32(&newarray[key_v], val_v);
+  tabfwd_assert_i32(&newarray[key_r], val_r);
+
   {
     TValue src;
     TValue *stored;
     setintV(&src, val_helper);
-    lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+    lj_tab_storeint(L, &oldarray[key_helper], key_helper + 9700);
     stored = lj_tab_storetv_forvm_array(L, t, &oldarray[key_helper], &src,
 					(MSize)key_helper);
     assert(stored == &newarray[key_helper]);
-    tabfwd_assert_forward(&oldarray[key_helper]);
+    tabfwd_assert_i32(&oldarray[key_helper], key_helper + 9700);
     tabfwd_assert_i32(&newarray[key_helper], val_helper);
   }
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
+  assert(tabfwd_get_i32(t, key_b) == val_b);
+  assert(tabfwd_get_i32(t, key_v) == val_v);
+  assert(tabfwd_get_i32(t, key_r) == val_r);
+  assert(tabfwd_get_i32(t, key_helper) == val_helper);
 
   exercise_vm_tsetm_forward_retry(L);
 
