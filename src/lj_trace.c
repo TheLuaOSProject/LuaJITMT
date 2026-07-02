@@ -1599,6 +1599,21 @@ static int trace_poll_pending(lua_State *L)
 
 /* Stitch a new trace to the previous trace. */
 #if LJ_TARGET_X64
+uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)
+{
+  TraceNo traceno, link;
+  if (T == NULL)
+    return 0;
+  traceno = trace_traceno_acq(T);
+  if (traceno == 0 || traceref(J, traceno) != T ||
+      la_load64_acq(&T->retire_epoch) != 0)
+    return 0;
+  link = trace_link_acq(T);
+  if (link == traceno)
+    return 0;  /* Blacklisted by trace_flushall_direct(). */
+  return ((uint32_t)link << 16) | (uint32_t)traceno;
+}
+
 void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc, lua_State *L,
 				 TraceNo traceno)
 #else

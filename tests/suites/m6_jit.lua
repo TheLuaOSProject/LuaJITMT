@@ -691,6 +691,31 @@ local function assert_c_jit_stale_slot_guards(t)
     error("x86 assembler reintroduced unchecked linked-trace mcode read")
   end
 
+  local tracect = t:read(t:path("src", "lj_trace.c"))
+  checks.assert_text_all_contains("x64 cont_stitch live-trace probe", tracect, {
+    "uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)",
+    "traceref(J, traceno) != T",
+    "la_load64_acq(&T->retire_epoch) != 0",
+    "link = trace_link_acq(T);",
+    "return ((uint32_t)link << 16) | (uint32_t)traceno;"
+  }, "x64 cont_stitch live-trace probe")
+  local vmx64 = t:read(t:path("src", "vm_x64.dasc"))
+  checks.assert_text_all_contains("x64 cont_stitch VM live-trace probe", vmx64, {
+    "mov L:RB, SAVE_L",
+    "mov L:RB->base, BASE",
+    "call extern lj_trace_stitch_probe",
+    "mov BASE, L:RB->base",
+    "test eax, eax",
+    "jz ->cont_nop",
+    "and RBd, 0xffff",
+    "shr RDd, 16",
+    "jne =>BC_JLOOP"
+  }, "x64 cont_stitch VM live-trace probe")
+  if contains(vmx64, "word TRACE:ITYPE->traceno") or
+     contains(vmx64, "word TRACE:ITYPE->link") then
+    error("x64 cont_stitch reintroduced raw saved-trace field reads")
+  end
+
   local bcwritec = t:read(t:path("src", "lj_bcwrite.c"))
   checks.assert_text_all_contains("bytecode writer stale-slot guard", bcwritec, {
     "static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)",

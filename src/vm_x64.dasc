@@ -2607,10 +2607,18 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |  test TRACE:ITYPE, TRACE:ITYPE
   |  jz ->cont_nop
-  |  movzx RBd, word TRACE:ITYPE->traceno
-  |  movzx RDd, word TRACE:ITYPE->link
-  |  cmp RDd, RBd
-  |  je ->cont_nop			// Blacklisted.
+  |  mov L:RB, SAVE_L
+  |  mov L:RB->base, BASE
+  |  load_J CARG1
+  |  mov CARG2, TRACE:ITYPE
+  |  call extern lj_trace_stitch_probe	// (jit_State *J, GCtrace *T)
+  |  mov BASE, L:RB->base
+  |  test eax, eax
+  |  jz ->cont_nop
+  |  mov RBd, eax
+  |  mov RDd, eax
+  |  and RBd, 0xffff
+  |  shr RDd, 16
   |  test RDd, RDd
   |  jne =>BC_JLOOP			// Jump to stitched trace.
   |

@@ -54,6 +54,7 @@ LJ_FUNC void lj_trace_ins(jit_State *J, const BCIns *pc);
 #if LJ_TARGET_X64
 LJ_FUNCA void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc,
 				       lua_State *L);
+LJ_FUNCA uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T);
 LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc,
 					  lua_State *L, TraceNo traceno);
 #else
