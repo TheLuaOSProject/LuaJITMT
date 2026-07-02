@@ -186,7 +186,10 @@ TGState *lj_thr_get_tg_fallback(global_State *g)
 
 static void state_gcscan_wait_no_l(void)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  uint32_t i;
+  for (i = 0; i < 64; i++)
+    la_cpu_pause();
+  (void)lj_thr_yield(NULL);
 }
 
 int lj_state_claim(lua_State *L, uint32_t tid)

@@ -1896,15 +1896,22 @@ static int lj_gc2_finalizer_try_enter(global_State *g)
 
 static void gc2_peer_wait_no_l(void)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  uint32_t i;
+  for (i = 0; i < 64; i++)
+    la_cpu_pause();
+  (void)lj_thr_yield(NULL);
 }
 
 static void gc2_peer_wait_l(lua_State *L)
 {
-  if (L)
-    (void)lj_thr_sleep_ns(L, 1000000);
-  else
+  uint32_t i;
+  if (!L) {
     gc2_peer_wait_no_l();
+    return;
+  }
+  for (i = 0; i < 64; i++)
+    la_cpu_pause();
+  (void)lj_thr_yield(L);
 }
 
 static void gc2_peer_wait_owned_l(lua_State *L)

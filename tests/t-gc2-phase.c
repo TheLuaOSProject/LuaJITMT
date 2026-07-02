@@ -71,20 +71,28 @@ static void sleep_ns(long ns)
   }
 }
 
-static void *release_worker_active(void *arg)
+static void peer_release_wait_native(PeerRelease *rel)
 {
-  PeerRelease *rel = (PeerRelease *)arg;
-  long waited = 0;
-  while (rel->wait_tg && waited < rel->delay_ns) {
+  uint64_t start = lj_thr_now_ns();
+  uint64_t deadline = start + (uint64_t)rel->delay_ns;
+  uint64_t now = start;
+  while (rel->wait_tg && now < deadline) {
     if (lj_tg_in_native_acq(rel->wait_tg)) {
       rel->saw_native = 1;
       break;
     }
-    sleep_ns(1000000L);
-    waited += 1000000L;
+    la_cpu_pause();
+    now = lj_thr_now_ns();
   }
-  if (waited < rel->delay_ns)
-    sleep_ns(rel->delay_ns - waited);
+  now = lj_thr_now_ns();
+  if (now < deadline)
+    sleep_ns((long)(deadline - now));
+}
+
+static void *release_worker_active(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  peer_release_wait_native(rel);
   gc2_worker_active_rel(rel->g, 0);
   return NULL;
 }
@@ -92,17 +100,7 @@ static void *release_worker_active(void *arg)
 static void *release_assist_active(void *arg)
 {
   PeerRelease *rel = (PeerRelease *)arg;
-  long waited = 0;
-  while (rel->wait_tg && waited < rel->delay_ns) {
-    if (lj_tg_in_native_acq(rel->wait_tg)) {
-      rel->saw_native = 1;
-      break;
-    }
-    sleep_ns(1000000L);
-    waited += 1000000L;
-  }
-  if (waited < rel->delay_ns)
-    sleep_ns(rel->delay_ns - waited);
+  peer_release_wait_native(rel);
   gc2_assist_active_rel(rel->g, 0);
   return NULL;
 }
