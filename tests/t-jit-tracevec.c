@@ -60,6 +60,9 @@ int main(void)
   assert(oldtv != NULL);
   assert(oldtv->sizetrace == 3);
   assert(trace_sizetrace_acq(J) == oldtv->sizetrace);
+  trace_sizetrace_rel(J, oldtv->sizetrace + 8u);
+  assert(traceref(J, oldtv->sizetrace) == NULL);
+  trace_sizetrace_rel(J, oldtv->sizetrace);
   assert(tracevec_retired_head_acq(J) == NULL);
 
   ljt_lua_dostring(L,

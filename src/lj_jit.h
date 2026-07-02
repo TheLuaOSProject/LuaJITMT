@@ -990,8 +990,9 @@ static LJ_AINLINE void trace_sizetrace_rel(jit_State *J, MSize sizetrace)
 static LJ_AINLINE GCtrace *traceref(jit_State *J, TraceNo n)
 {
   TraceVec *tv = tracevec_acq(J);
-  return check_exp((n)>0 && tv != NULL && (MSize)(n)<tv->sizetrace,
-    traceref_fromgco(gcref_acq(tv->slot[(n)])));
+  if ((n)>0 && tv != NULL && (MSize)(n)<tv->sizetrace)
+    return traceref_fromgco(gcref_acq(tv->slot[(n)]));
+  return NULL;
 }
 
 #ifdef LUA_USE_ASSERT

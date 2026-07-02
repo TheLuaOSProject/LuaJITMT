@@ -608,6 +608,18 @@ local function assert_x64_jloop_stale_slot_guards(t)
 end
 
 local function assert_c_jit_stale_slot_guards(t)
+  local jith = t:read(t:path("src", "lj_jit.h"))
+  checks.assert_text_all_contains("traceref trace-vector bounds guard", jith, {
+    "static LJ_AINLINE GCtrace *traceref(jit_State *J, TraceNo n)",
+    "TraceVec *tv = tracevec_acq(J);",
+    "(MSize)(n)<tv->sizetrace",
+    "return traceref_fromgco(gcref_acq(tv->slot[(n)]));",
+    "return NULL;"
+  }, "traceref trace-vector bounds guard")
+  if contains(jith, "return check_exp((n)>0 && tv != NULL") then
+    error("traceref reintroduced release-build unchecked trace-vector slot load")
+  end
+
   local recordc = t:read(t:path("src", "lj_record.c"))
   checks.assert_text_all_contains("recorder stale-slot guard", recordc, {
     "static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)",
