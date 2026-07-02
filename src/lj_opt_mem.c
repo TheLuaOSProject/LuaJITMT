@@ -42,6 +42,20 @@ static LJ_AINLINE IRRef xload_alias_limit(jit_State *J, IRRef lim,
   return lim;
 }
 
+static LJ_AINLINE int uload_type_can_cross_xpoll(IRType1 t)
+{
+  return irt_isnum(t) || irt_isint(t) || irt_ispri(t);
+}
+
+static LJ_AINLINE IRRef uload_alias_limit(jit_State *J, IRRef lim, IRType1 t)
+{
+  if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
+  if ((!uload_type_can_cross_xpoll(t) || mt_active_acq(J2G(J)) != 0) &&
+      J->chain[IR_XPOLL] > lim)
+    lim = J->chain[IR_XPOLL];
+  return lim;
+}
+
 /*
 ** Caveat #1: return value is not always a TRef -- only use with tref_ref().
 ** Caveat #2: FWD relies on active CSE for xREF operands -- see lj_opt_fold().
@@ -527,7 +541,7 @@ static AliasRet aa_uref(IRIns *refa, IRIns *refb)
 TRef LJ_FASTCALL lj_opt_fwd_uload(jit_State *J)
 {
   IRRef uref = fins->op1;
-  IRRef lim = poll_alias_limit(J, uref);  /* Search limit. */
+  IRRef lim = uload_alias_limit(J, uref, fins->t);  /* Search limit. */
   IRIns *xr = IR(uref);
   IRRef ref;
 

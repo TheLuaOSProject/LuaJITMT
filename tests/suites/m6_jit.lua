@@ -675,6 +675,33 @@ assert(uv==vals[64])
       if not store_before then
         error("x64 upvalue USTORE must release-copy before OBAR publication", 2)
       end
+
+      local numuv = t:tmp("lj_t-jit-numeric-uload-xpoll.dump")
+      luajit_dump(t, numuv, "-jdump=i", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local x = 0
+local function inc()
+  x = x + 1
+end
+for i = 1, 80 do inc() end
+assert(x == 80)
+]=], { timeout = "20s" })
+      assert_loop_ir_markers(t, numuv, "numeric upvalue loop", { "XPOLL", "USTORE" })
+      do
+        local ndata = t:read(numuv)
+        local loop = false
+        for line in lines(ndata) do
+          if contains(line, "------ LOOP") then
+            loop = true
+          elseif loop and contains(line, "---- TRACE 1 stop") then
+            break
+          elseif loop and contains(line, "ULOAD") then
+            error("numeric ULOAD should forward across pre-MT XPOLL:\n" ..
+                  ndata, 2)
+          end
+        end
+      end
       print("M6 JIT XPOLL barrier behavior passed")
     end
   })
