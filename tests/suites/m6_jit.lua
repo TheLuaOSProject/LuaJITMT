@@ -72,6 +72,7 @@ local m6_cases = {
   "m6_jit_mcode_native",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
+  "m6_jit_mt_activation_flush",
   "m6_jit_vmevent_flush",
   "m6_jit_gdbjit_publish",
   "m6_jit_tmpbuf_thread_format",
@@ -709,6 +710,7 @@ assert(s == 240)
     name = "m6_jit_table_store_helper",
     description = "M6 helper-backed table store behavior",
     run = function(t)
+      build.make_clean(t, { quiet = true })
       t:build({ clean = true, quiet = true, xcflags = "-DLJ_TAB_TEST_HELPERS" })
       build_and_run_c(t, t:tmp("lj_t-jit-forward-store"),
                       "t-jit-forward-store.c", {
@@ -899,8 +901,52 @@ assert(s == 3280 and h.stable == 80.5)
         return st.hstore and st.hrefk and not st.hload and st.xpoll
       end)
 
+      local single_dump = t:tmp("lj-m6-table-store-single-thread.dump")
+      luajit_dump(t, single_dump, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local a = { 0 }
+for i = 1, 80 do
+  a[1] = i + 0.5
+end
+assert(a[1] == 80.5)
+assert(util.traceinfo(1), "numeric array store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local b = {}
+for i = 1, 256 do b[i] = 0 end
+for i = 1, 80 do
+  local j = (i % 256) + 1
+  b[j] = i + 0.5
+end
+assert(b[81] == 80.5)
+assert(util.traceinfo(1), "separated numeric array store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local h = { stable = 0 }
+for i = 1, 80 do
+  h.stable = i + 0.5
+end
+assert(h.stable == 80.5)
+assert(util.traceinfo(1), "numeric hash store did not trace")
+]=], { timeout = "20s" })
+      do
+        local data = t:read(single_dump)
+        if contains(data, "lock cmpxchg") or
+           contains(data, "lj_tab_storetv_forjit_array") or
+           contains(data, "lj_tab_storetv_forjit_hash") then
+          error("single-thread table stores used MT helper/CAS route:\n" ..
+                data, 0)
+        end
+      end
+
       local route_dump = t:tmp("lj-m6-table-store-helper-routes.dump")
       luajit_dump(t, route_dump, "-jdump=im", [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -943,6 +989,8 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
 
       local hash_route_dump = t:tmp("lj-m6-hstore-inline-cas.dump")
       luajit_dump(t, hash_route_dump, "-jdump=im", [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -962,6 +1010,8 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
 
       local int_route_dump = t:tmp("lj-m6-int-store-inline-cas.dump")
       luajit_dump(t, int_route_dump, "-jdump=im", [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -1458,6 +1508,33 @@ assert(live >= 8, live)
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
       print("M6 JIT flush handshake guard passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_mt_activation_flush",
+    description = "pre-MT JIT traces are flushed before first thread activation",
+    run = function(t)
+      build_default(t)
+      luajit_code(t, [=[
+local threading = require("threading")
+local trace_count = require("jit_harness").trace_count
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function hot(n)
+  local s = 0
+  for i = 1, n do s = s + i end
+  return s
+end
+for _ = 1, 20 do assert(hot(80) == 3240) end
+assert(trace_count(200) > 0, "pre-MT loop did not trace")
+
+local worker = threading.spawn(function() return true end)
+assert(({ worker:join(5) })[1] == true)
+assert(trace_count(200) == 0, "first thread activation did not flush traces")
+]=], { timeout = "20s" })
+      print("M6 JIT MT activation flush guard passed")
     end
   })
 

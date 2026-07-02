@@ -31,6 +31,7 @@
 #include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lj_trace.h"
 #include "lj_udata.h"
 
 #define THREADING_MAIN_KEY	"__main"
@@ -422,6 +423,17 @@ void lj_threading_shutdown(lua_State *L)
 
 static void threading_gc_leave(global_State *g);
 
+#if LJ_HASJIT
+static void threading_mt_active_flush_traces(lua_State *L)
+{
+  global_State *g = G(L);
+  if (lj_trace_hasany(g) && lj_trace_flushall_hs(L))
+    lj_err_callermsg(L, "cannot activate threading while a GC hook is active");
+}
+#else
+#define threading_mt_active_flush_traces(L)	UNUSED(L)
+#endif
+
 static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
 {
   global_State *g = G(L);
@@ -440,6 +452,8 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
       return 0;
     }
     expect = 0;
+    if (mt_active_acq(g) == 0)
+      threading_mt_active_flush_traces(L);
     (void)mt_active_cas(g, &expect, 1);
     if (rootud)
       threading_spawn_gc_handoff(L, rootud);

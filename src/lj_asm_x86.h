@@ -2184,17 +2184,19 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
     asm_ustore_forjit(as, ir);
     return;
   }
-  if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
-    asm_ahstore_inline_array_tvalue(as, ir);
-    return;
-  }
-  if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
-    asm_ahstore_inline_hash_tvalue(as, ir);
-    return;
-  }
-  if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
-    asm_ahstore_forjit(as, ir);
-    return;
+  if (mt_active_acq(J2G(as->J)) != 0) {
+    if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
+      asm_ahstore_inline_array_tvalue(as, ir);
+      return;
+    }
+    if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
+      asm_ahstore_inline_hash_tvalue(as, ir);
+      return;
+    }
+    if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
+      asm_ahstore_forjit(as, ir);
+      return;
+    }
   }
 #endif
   if (irt_isnum(ir->t)) {
