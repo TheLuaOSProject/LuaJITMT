@@ -43,6 +43,11 @@ Permanent shape:
   `lua_tothread`, and `lua_topointer`) acquire state claims before reading stack
   slots. The claimed region is read-only and preserves stock conversion results;
   a genuinely busy foreign state reports `thread busy`.
+- Public string conversion APIs (`lua_tolstring`, `luaL_checklstring`,
+  `luaL_optlstring`) copy numeric values under a target-state claim, drop that
+  claim while formatting/interning the string, then reclaim and publish the
+  converted stack slot only if it still holds the same numeric value. `lua_objlen`
+  uses the same allocation-free claimed conversion path for numeric slots.
 - Auxiliary check/conversion APIs that only inspect existing stack values
   (`luaL_checkany`, `luaL_checknumber`, `luaL_optnumber`,
   `luaL_checkinteger`, and `luaL_optinteger`) use the same read-only claim
@@ -69,11 +74,11 @@ Regression coverage:
 
 - `m5_api_debug_claim_cleanup` source guards enforce the helper/root/drop
   ordering, the stack/getter/load/call/metamethod resume-claim boundaries, and
-  the allocation-free claimed metafield helper shape.
+  the allocation-free claimed metafield and string-conversion helper shapes.
 - `m5_state_owner` covers public C API `lua_getinfo()` on an unowned yielded
   coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,
   `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first
   stack-manipulation group, the read-only stack getter/conversion group, and
-  the read-only auxiliary check/conversion group, and the raw object getter
-  group, upvalue introspection group, userdata metatable check group, and
-  metafield/callmeta helper paths.
+  the read-only auxiliary check/conversion group, string conversion group, raw
+  object getter group, upvalue introspection group, userdata metatable check
+  group, and metafield/callmeta helper paths.

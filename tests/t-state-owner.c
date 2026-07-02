@@ -220,6 +220,37 @@ static lua_State *load_ownerless_results(lua_State *L, const char *src,
   return co;
 }
 
+static void check_string_conversion_api_unowned(lua_State *L)
+{
+  lua_State *co;
+  const char *s;
+  size_t len;
+  lua_settop(L, 0);
+
+  co = load_ownerless_results(L, "return 123, 'abc', nil, {}, 456", 5);
+  s = lua_tolstring(co, 1, &len);
+  assert(s != NULL && strcmp(s, "123") == 0 && len == 3);
+  assert(lua_type(co, 1) == LUA_TSTRING);
+  s = luaL_checklstring(co, 2, &len);
+  assert(s != NULL && strcmp(s, "abc") == 0 && len == 3);
+  s = luaL_optlstring(co, 3, "fallback", &len);
+  assert(s != NULL && strcmp(s, "fallback") == 0 && len == 8);
+  s = luaL_checklstring(co, 5, &len);
+  assert(s != NULL && strcmp(s, "456") == 0 && len == 3);
+  s = lua_tolstring(co, 4, &len);
+  assert(s == NULL && len == 0);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L, "return 789, {1, 2, 3}, 'hello'", 3);
+  assert(lua_objlen(co, 1) == 3);
+  assert(lua_type(co, 1) == LUA_TSTRING);
+  assert(lua_objlen(co, 2) == 3);
+  assert(lua_objlen(co, 3) == 5);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+}
+
 static void check_raw_object_api_unowned(lua_State *L)
 {
   lua_State *co;
@@ -713,6 +744,37 @@ static int busy_lua_topointer(lua_State *L)
   return 0;
 }
 
+static int busy_lua_tolstring(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  size_t len = 0;
+  (void)lua_tolstring(co, 1, &len);
+  return 0;
+}
+
+static int busy_luaL_checklstring(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  size_t len = 0;
+  (void)luaL_checklstring(co, 1, &len);
+  return 0;
+}
+
+static int busy_luaL_optlstring(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  size_t len = 0;
+  (void)luaL_optlstring(co, 1, "fallback", &len);
+  return 0;
+}
+
+static int busy_lua_objlen(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_objlen(co, 1);
+  return 0;
+}
+
 static lua_State *busy_table_prepare(lua_State *L, int push_key)
 {
   lua_State *co = lua_newthread(L);
@@ -1105,6 +1167,7 @@ int main(void)
   check_xmove_unowned_source(L);
   check_stack_api_unowned(L);
   check_getter_api_unowned(L);
+  check_string_conversion_api_unowned(L);
   check_thread_env_unowned(L);
   check_call_entry_unowned(L);
   check_raw_object_api_unowned(L);
@@ -1169,6 +1232,10 @@ int main(void)
   expect_thread_busy(L, busy_lua_touserdata, "busy lua_touserdata");
   expect_thread_busy(L, busy_lua_tothread, "busy lua_tothread");
   expect_thread_busy(L, busy_lua_topointer, "busy lua_topointer");
+  expect_thread_busy(L, busy_lua_tolstring, "busy lua_tolstring");
+  expect_thread_busy(L, busy_luaL_checklstring, "busy luaL_checklstring");
+  expect_thread_busy(L, busy_luaL_optlstring, "busy luaL_optlstring");
+  expect_thread_busy(L, busy_lua_objlen, "busy lua_objlen");
   expect_thread_busy(L, busy_lua_rawget, "busy lua_rawget");
   expect_thread_busy(L, busy_lua_rawgeti, "busy lua_rawgeti");
   expect_thread_busy(L, busy_lua_getmetatable, "busy lua_getmetatable");

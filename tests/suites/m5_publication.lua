@@ -214,6 +214,140 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
+  upstore = 0; stackstore = 0; publish = 0
+}
+/^static void index2adr_storestr\(lua_State \*L,/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/index2adr_cupvalue_store_rel/) upstore = NR
+  if (/setstrV\(L, o, s\)/) stackstore = NR
+  if (/lj_state_stack_pubtv/) publish = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!upstore || !stackstore || !publish || stackstore > publish) {
+    print "index2adr_storestr must publish converted stack strings"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
+  claim1 = 0; access1 = 0; drop1 = 0; errstate = 0; format = 0
+  claim2 = 0; access2 = 0; store = 0; drop2 = 0
+}
+/^static GCstr \*api_tolstring_claimed\(lua_State \*L,/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim\(L, &claim\)/) {
+    if (!claim1) claim1 = NR
+    else if (format && !claim2) claim2 = NR
+  }
+  if (/index2adr_read/) {
+    if (!access1) access1 = NR
+    else if (format && !access2) access2 = NR
+  }
+  if (/lj_state_dropclaim\(&claim\)/) {
+    if (!format && !drop1) drop1 = NR
+    else if (claim2 && !drop2) drop2 = NR
+  }
+  if (/api_errstate/) errstate = NR
+  if (/lj_strfmt_number/) format = NR
+  if (/index2adr_storestr/) store = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!claim1 || !access1 || !drop1 || !errstate || !format || !claim2 ||
+      !access2 || !store || !drop2 || claim1 > access1 || access1 > drop1 ||
+      drop1 > errstate || errstate > format || format > claim2 ||
+      claim2 > access2 || access2 > store || store > drop2) {
+    print "api_tolstring_claimed must allocate outside target claim and republish"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function reset(name, want_error) {
+  fun = name; want_err = want_error
+  started = 0; depth = 0; helper = 0; err = 0; raw = 0
+}
+function finish() {
+  if (fun) {
+    if (!helper || raw || (want_err && (!err || helper > err))) {
+      print fun " string conversion helper boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUA_API const char \*lua_tolstring\(lua_State \*L,/ { finish(); reset("lua_tolstring", 0); next }
+/^LUALIB_API const char \*luaL_checklstring\(lua_State \*L,/ { finish(); reset("luaL_checklstring", 1); next }
+/^LUALIB_API const char \*luaL_optlstring\(lua_State \*L,/ { finish(); reset("luaL_optlstring", 1); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_tolstring_claimed/) helper = NR
+  if (/lj_err_argt/) err = NR
+  if (/index2adr_read|lj_strfmt_number/) raw = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 3) {
+    print "missing public string conversion helper guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; claim = 0; access = 0; drop = 0; helper = 0 }
+/^LUA_API size_t lua_objlen\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /api_checkclaim\(L, &claim\)/ { claim = NR }
+infn && /index2adr_read/ { access = NR }
+infn && /lj_state_dropclaim\(&claim\)/ && !drop { drop = NR }
+infn && /api_tolstring_claimed/ { helper = NR }
+END {
+  if (!claim || !access || !drop || !helper ||
+      claim > access || access > drop || drop > helper) {
+    print "lua_objlen must drop state claim before numeric string allocation"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 function reset(name) {
   fun = name; started = 0; depth = 0; claim = 0; access = 0; drop = 0; err = 0
 }

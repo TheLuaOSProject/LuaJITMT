@@ -37,6 +37,9 @@
 #define lj_checkapi_slot(idx) \
   lj_checkapi((idx) <= (L->top - L->base), "stack slot %d out of range", (idx))
 
+static lua_State *api_errstate(lua_State *L);
+static void api_checkclaim(lua_State *L, LJStateClaim *claim);
+
 static TValue *index2adr(lua_State *L, int idx)
 {
   if (idx > 0) {
@@ -120,17 +123,76 @@ static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,
   }
 }
 
-static GCstr *index2adr_number_tostr(lua_State *L, int idx, TValue *o)
+enum {
+  API_TOSTR_BAD = -1,
+  API_TOSTR_NIL = 0,
+  API_TOSTR_OK = 1
+};
+
+static void index2adr_storestr(lua_State *L, int idx, TValue *o, GCstr *s)
 {
-  GCstr *s = lj_strfmt_number(L, o);
   if (index_iscupvalue(idx)) {
     TValue tv;
     setstrV(L, &tv, s);
     index2adr_cupvalue_store_rel(L, idx, &tv);
   } else {
     setstrV(L, o, s);
+    lj_state_stack_pubtv(L, L, o);
   }
-  return s;
+}
+
+static GCstr *api_tolstring_claimed(lua_State *L, int idx, int *status)
+{
+  for (;;) {
+    LJStateClaim claim;
+    TValue snap, numtv;
+    cTValue *o;
+    GCstr *s;
+    api_checkclaim(L, &claim);
+    o = index2adr_read(L, idx, &snap);
+    if (LJ_LIKELY(tvisstr(o))) {
+      s = strV(o);
+      lj_state_dropclaim(&claim);
+      *status = API_TOSTR_OK;
+      return s;
+    }
+    if (!tvisnumber(o)) {
+      *status = tvisnil(o) ? API_TOSTR_NIL : API_TOSTR_BAD;
+      lj_state_dropclaim(&claim);
+      return NULL;
+    }
+    copyTV(L, &numtv, o);
+    lj_state_dropclaim(&claim);
+
+    {
+      lua_State *errL = api_errstate(L);
+      lj_gc_check(errL);
+      s = lj_strfmt_number(errL, &numtv);
+    }
+
+    api_checkclaim(L, &claim);
+    o = index2adr_read(L, idx, &snap);
+    if (tvisstr(o)) {
+      s = strV(o);
+      lj_state_dropclaim(&claim);
+      *status = API_TOSTR_OK;
+      return s;
+    }
+    if (tvisnumber(o)) {
+      if (tv_rawload_acq(o) == tv_rawload(&numtv)) {
+	index2adr_storestr(L, idx, index_iscupvalue(idx) ? NULL : (TValue *)o,
+			   s);
+	lj_state_dropclaim(&claim);
+	*status = API_TOSTR_OK;
+	return s;
+      }
+      lj_state_dropclaim(&claim);
+      continue;
+    }
+    *status = tvisnil(o) ? API_TOSTR_NIL : API_TOSTR_BAD;
+    lj_state_dropclaim(&claim);
+    return NULL;
+  }
 }
 
 static TValue *index2adr_stack(lua_State *L, int idx)
@@ -879,17 +941,9 @@ LUA_API int lua_toboolean(lua_State *L, int idx)
 
 LUA_API const char *lua_tolstring(lua_State *L, int idx, size_t *len)
 {
-  TValue snap;
-  TValue *o = index2adr_read(L, idx, &snap);
-  GCstr *s;
-  if (LJ_LIKELY(tvisstr(o))) {
-    s = strV(o);
-  } else if (tvisnumber(o)) {
-    lj_gc_check(L);
-    o = index_iscupvalue(idx) ? &snap :
-	index2adr(L, idx);  /* GC may move the stack. */
-    s = index2adr_number_tostr(L, idx, o);
-  } else {
+  int status;
+  GCstr *s = api_tolstring_claimed(L, idx, &status);
+  if (status != API_TOSTR_OK) {
     if (len != NULL) *len = 0;
     return NULL;
   }
@@ -899,19 +953,10 @@ LUA_API const char *lua_tolstring(lua_State *L, int idx, size_t *len)
 
 LUALIB_API const char *luaL_checklstring(lua_State *L, int idx, size_t *len)
 {
-  TValue snap;
-  TValue *o = index2adr_read(L, idx, &snap);
-  GCstr *s;
-  if (LJ_LIKELY(tvisstr(o))) {
-    s = strV(o);
-  } else if (tvisnumber(o)) {
-    lj_gc_check(L);
-    o = index_iscupvalue(idx) ? &snap :
-	index2adr(L, idx);  /* GC may move the stack. */
-    s = index2adr_number_tostr(L, idx, o);
-  } else {
+  int status;
+  GCstr *s = api_tolstring_claimed(L, idx, &status);
+  if (status != API_TOSTR_OK)
     lj_err_argt(L, idx, LUA_TSTRING);
-  }
   if (len != NULL) *len = s->len;
   return strdata(s);
 }
@@ -919,20 +964,12 @@ LUALIB_API const char *luaL_checklstring(lua_State *L, int idx, size_t *len)
 LUALIB_API const char *luaL_optlstring(lua_State *L, int idx,
 				       const char *def, size_t *len)
 {
-  TValue snap;
-  TValue *o = index2adr_read(L, idx, &snap);
-  GCstr *s;
-  if (LJ_LIKELY(tvisstr(o))) {
-    s = strV(o);
-  } else if (tvisnil(o)) {
+  int status;
+  GCstr *s = api_tolstring_claimed(L, idx, &status);
+  if (status == API_TOSTR_NIL) {
     if (len != NULL) *len = def ? strlen(def) : 0;
     return def;
-  } else if (tvisnumber(o)) {
-    lj_gc_check(L);
-    o = index_iscupvalue(idx) ? &snap :
-	index2adr(L, idx);  /* GC may move the stack. */
-    s = index2adr_number_tostr(L, idx, o);
-  } else {
+  } else if (status != API_TOSTR_OK) {
     lj_err_argt(L, idx, LUA_TSTRING);
   }
   if (len != NULL) *len = s->len;
@@ -954,20 +991,29 @@ LUALIB_API int luaL_checkoption(lua_State *L, int idx, const char *def,
 
 LUA_API size_t lua_objlen(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  TValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
+  size_t len;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (tvisstr(o)) {
-    return strV(o)->len;
+    len = strV(o)->len;
   } else if (tvistab(o)) {
-    return (size_t)lj_tab_len(tabV(o));
+    len = (size_t)lj_tab_len(tabV(o));
   } else if (tvisudata(o)) {
-    return udataV(o)->len;
+    len = udataV(o)->len;
   } else if (tvisnumber(o)) {
-    GCstr *s = index2adr_number_tostr(L, idx, o);
-    return s->len;
+    int status;
+    GCstr *s;
+    lj_state_dropclaim(&claim);
+    s = api_tolstring_claimed(L, idx, &status);
+    return status == API_TOSTR_OK ? s->len : 0;
   } else {
-    return 0;
+    len = 0;
   }
+  lj_state_dropclaim(&claim);
+  return len;
 }
 
 LUA_API lua_CFunction lua_tocfunction(lua_State *L, int idx)
