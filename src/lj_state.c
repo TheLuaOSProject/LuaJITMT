@@ -445,12 +445,11 @@ static void close_state(lua_State *L)
     lj_mem_freevec(g, mref(g->gc.lightudseg, uint32_t), segnum, uint32_t);
   }
 #endif
-  if (arena_alloc && mt_active_acq(g) != 0 &&
-      lj_gc_total_load(g) >= sizeof(GG_State)) {
+  if (arena_alloc && lj_gc_total_load(g) >= sizeof(GG_State)) {
     /*
-    ** Lockless MT can leave per-thread arena accounting visible until the
-    ** arena allocator is destroyed below. The allocator owns that memory at
-    ** this point; keep the legacy single-state close assertion meaningful.
+    ** Internal arena slabs are released when the arena allocator is destroyed
+    ** below. Once all roots and runtime side structures are gone, any remaining
+    ** arena-owned accounting belongs to that allocator, not to live Lua state.
     */
     lj_gc_total_store(g, sizeof(GG_State));
   }
