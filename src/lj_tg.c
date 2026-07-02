@@ -260,6 +260,7 @@ restart:
   while (tg != NULL) {
     TGState *next = lj_tg_next_acq(tg);
     if (lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+      uint8_t heap_tg = lj_tg_flags_test_acq(tg, TGF_HEAP);
       if (!tg_transfer_dead_alloc(g, tg)) {
 	prev = tg;  /* Keep owner lookup live until allocator transfer succeeds. */
 	tg = next;
@@ -274,6 +275,10 @@ restart:
       }
       lj_tg_next_rel(tg, NULL);
       reclaimed++;
+      if (heap_tg) {
+	lj_tg_fini_thread(g, tg);
+	free(tg);
+      }
       tg = next;
       continue;
     }

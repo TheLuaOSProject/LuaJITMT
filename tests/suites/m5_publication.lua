@@ -2,12 +2,64 @@ local build = require("suite_build")
 local runtime = require("suite_runtime")
 local cellops = require("suite_cell_ops")
 local checks = require("suite_assert")
+local utils = require("suite_utils")
 
 local run_luajit = runtime.luajit
 local run_stock = runtime.run_stock
 local build_and_run_c = build.compile_and_run_c
 local run_c_fixture_specs = build.run_c_fixture_specs
 local build_and_run_luajit_script = runtime.build_and_run_luajit_script
+local shell_quote = utils.shell_quote
+
+local function assert_profile_dumpstack_claim_cleanup(t)
+  local awk_api = [=[
+BEGIN { infn = 0; claim = 0; protect = 0; drop = 0; rethrow = 0 }
+/^LUA_API const char \*luaJIT_profile_dumpstack\(lua_State \*L,/ {
+  infn = 1
+  next
+}
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_tryclaim/ { claim = NR }
+infn && /lj_vm_cpcall/ { protect = NR }
+infn && /lj_state_dropclaim/ { drop = NR }
+infn && /lj_err_throw/ {
+  rethrow = NR
+  if (!drop || drop > NR) {
+    print "profile dumpstack rethrows before dropping state claim"
+    exit 1
+  }
+}
+END {
+  if (!claim || !protect || !drop || !rethrow || claim > protect || protect > drop) {
+    print "profile dumpstack claim cleanup boundary missing"
+    exit 1
+  }
+}
+]=]
+  local awk_cp = [=[
+BEGIN { infn = 0; reset = 0; dump = 0; len = 0 }
+/^static TValue \*profile_dumpstack_cp\(lua_State \*L,/ {
+  infn = 1
+  next
+}
+infn && /^}/ { infn = 0; next }
+infn && /lj_buf_reset/ { reset = NR }
+infn && /lj_debug_dumpstack/ { dump = NR }
+infn && /sbuflen/ { len = NR }
+END {
+  if (!reset || !dump || !len || reset > dump || dump > len) {
+    print "profile dumpstack protected body missing"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(awk_api) ..
+                        " src/lj_profile.c")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(awk_cp) ..
+                        " src/lj_profile.c")
+end
 
 local function table_value_smoke()
   return [=[
@@ -568,6 +620,7 @@ return function(add)
     name = "m5_profile_stop_native",
     description = "jit.profile stop native-state STOPREQ behavior",
     run = function(t)
+      assert_profile_dumpstack_claim_cleanup(t)
       t:build({ quiet = true })
       build_and_run_c(t, t:tmp("lj_t_profile_stop_native"),
                       "t-profile-stop-native.c", { build = false,
@@ -580,6 +633,7 @@ return function(add)
     name = "m5_profile_blocked_tg_samples",
     description = "jit.profile sample delivery with another TG blocked",
     run = function(t)
+      assert_profile_dumpstack_claim_cleanup(t)
       t:build({ quiet = true })
       build_and_run_luajit_script(t, "t-profile-blocked-tg.lua", nil,
                                   { build = false, joff = true,

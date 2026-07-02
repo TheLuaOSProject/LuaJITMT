@@ -702,6 +702,25 @@ LUA_API void luaJIT_profile_stop(lua_State *L)
   profile_checkstop_fresh(L, actions, had_stopreq);
 }
 
+typedef struct ProfileDumpstackCtx {
+  SBuf *sb;
+  const char *fmt;
+  int depth;
+  size_t len;
+} ProfileDumpstackCtx;
+
+static TValue *profile_dumpstack_cp(lua_State *L, lua_CFunction dummy,
+				    void *ud)
+{
+  ProfileDumpstackCtx *ctx = (ProfileDumpstackCtx *)ud;
+  UNUSED(dummy);
+  setsbufL(ctx->sb, L);
+  lj_buf_reset(ctx->sb);
+  lj_debug_dumpstack(L, ctx->sb, ctx->fmt, ctx->depth);
+  ctx->len = (size_t)sbuflen(ctx->sb);
+  return NULL;
+}
+
 /* Return a compact stack dump. */
 LUA_API const char *luaJIT_profile_dumpstack(lua_State *L, const char *fmt,
 					     int depth, size_t *len)
@@ -709,13 +728,19 @@ LUA_API const char *luaJIT_profile_dumpstack(lua_State *L, const char *fmt,
   LJStateClaim claim;
   ProfileState *ps = &profile_state;
   SBuf *sb = &ps->sb;
+  ProfileDumpstackCtx ctx;
+  int errcode;
   if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(profile_errstate(L), "thread busy");
-  setsbufL(sb, L);
-  lj_buf_reset(sb);
-  lj_debug_dumpstack(L, sb, fmt, depth);
-  *len = (size_t)sbuflen(sb);
+  ctx.sb = sb;
+  ctx.fmt = fmt;
+  ctx.depth = depth;
+  ctx.len = 0;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, profile_dumpstack_cp);
   lj_state_dropclaim(&claim);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+  *len = ctx.len;
   return sb->b;
 }
 

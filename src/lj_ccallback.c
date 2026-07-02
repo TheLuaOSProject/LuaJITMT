@@ -75,6 +75,61 @@ static void callback_owner_barrier_l(lua_State *L, lua_State *carrier)
   lj_gc_pubroot(L, &tv);  /* 11.5 callback carrier side root. */
 }
 
+typedef struct CallbackOwnerBarrierCtx {
+  lua_State *carrier;
+} CallbackOwnerBarrierCtx;
+
+static TValue *callback_owner_barrier_cp(lua_State *L, lua_CFunction dummy,
+					 void *ud)
+{
+  CallbackOwnerBarrierCtx *ctx = (CallbackOwnerBarrierCtx *)ud;
+  UNUSED(dummy);
+  callback_owner_barrier_l(L, ctx->carrier);
+  return NULL;
+}
+
+static void callback_owner_barrier_claimed_l(lua_State *L, lua_State **owner,
+					     MSize slot, lua_State *carrier)
+{
+  CallbackOwnerBarrierCtx ctx;
+  int errcode;
+  ctx.carrier = carrier;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, callback_owner_barrier_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    (void)callback_owner_clear(owner, slot, carrier);
+    lj_err_throw(L, errcode);
+  }
+}
+
+static void callback_func_barrier_l(lua_State *L, cTValue *slot)
+{
+  lj_gc_pubroot(L, slot);  /* 11.5 callback function side root. */
+}
+
+static LJ_AINLINE TValue *callback_func_slots(CTState *cts);
+
+typedef struct CallbackFuncStoreCtx {
+  CTState *cts;
+  MSize slot;
+  GCfunc *fn;
+} CallbackFuncStoreCtx;
+
+static TValue *callback_func_store_cp(lua_State *L, lua_CFunction dummy,
+				      void *ud)
+{
+  CallbackFuncStoreCtx *ctx = (CallbackFuncStoreCtx *)ud;
+  TValue *func = callback_func_slots(ctx->cts);
+  TValue tv;
+  UNUSED(dummy);
+  if (LJ_UNLIKELY(func == NULL ||
+		  ctx->slot >= ctype_cb_sizeid_acq(ctx->cts)))
+    lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
+  setfuncV(L, &tv, ctx->fn);
+  copyTVrel(L, &func[ctx->slot], &tv);
+  callback_func_barrier_l(L, &func[ctx->slot]);
+  return NULL;
+}
+
 static LJ_AINLINE TValue *callback_func_slots(CTState *cts)
 {
   return ctype_cb_func_acq(cts);
@@ -100,7 +155,7 @@ void lj_ccallback_func_store_l(lua_State *L, CTState *cts, MSize slot,
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   setfuncV(L, &tv, fn);
   copyTVrel(L, &func[slot], &tv);
-  lj_gc_pubroot(L, &func[slot]);  /* 11.5 callback function side root. */
+  callback_func_barrier_l(L, &func[slot]);
 }
 
 void lj_ccallback_func_clear(CTState *cts, MSize slot)
@@ -111,6 +166,32 @@ void lj_ccallback_func_clear(CTState *cts, MSize slot)
     TValue nilv;
     setnilV(&nilv);
     copyTVrel(mainthread_acq(cts->g), &func[slot], &nilv);
+  }
+}
+
+static void callback_slot_clear_owner(CTState *cts, MSize slot)
+{
+  lua_State **owner = ctype_cb_owner_acq(cts);
+  if (LJ_LIKELY(owner != NULL && slot < ctype_cb_sizeid_acq(cts))) {
+    lua_State *carrier = callback_owner_load(owner, slot);
+    if (carrier != NULL)
+      (void)callback_owner_clear(owner, slot, carrier);
+  }
+}
+
+static void callback_func_store_claimed_l(lua_State *L, CTState *cts,
+					  MSize slot, GCfunc *fn)
+{
+  CallbackFuncStoreCtx ctx;
+  int errcode;
+  ctx.cts = cts;
+  ctx.slot = slot;
+  ctx.fn = fn;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, callback_func_store_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    lj_ccallback_func_clear(cts, slot);
+    callback_slot_clear_owner(cts, slot);
+    lj_err_throw(L, errcode);
   }
 }
 
@@ -1213,7 +1294,7 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
       if (carrier == NULL)
 	carrier = callback_carrier_new_l(L);
       if (LJ_LIKELY(callback_owner_claim(owner, top, carrier))) {
-	callback_owner_barrier_l(L, carrier);
+	callback_owner_barrier_claimed_l(L, owner, top, carrier);
 	return top;
       }
     }
@@ -1297,7 +1378,7 @@ void *lj_ccallback_new_l(lua_State *L, CTState *cts, CTypeID id, GCfunc *fn)
     CTypeID1 *cbid;
     slot = callback_slot_claim_l(L, cts);
     cbid = ctype_cb_cbid_acq(cts);
-    lj_ccallback_func_store_l(L, cts, slot, fn);
+    callback_func_store_claimed_l(L, cts, slot, fn);
     callback_cbid_store(cbid, slot, cbid_id);
     return callback_slot2ptr(cts, slot);
   }

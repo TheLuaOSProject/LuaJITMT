@@ -33,6 +33,7 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 #include "lj_udata.h"
+#include "lj_vm.h"
 
 #define THREADING_MAIN_KEY	"__main"
 
@@ -348,6 +349,67 @@ static int threading_worker_start_ok(lua_State *L, LJThread *th)
   return 0;
 }
 
+typedef struct ThreadingStackCopyCtx {
+  lua_State *child;
+  TValue *base;
+  ptrdiff_t nargs;
+} ThreadingStackCopyCtx;
+
+static TValue *threading_stack_copy_cp(lua_State *L, lua_CFunction dummy,
+				       void *ud)
+{
+  ThreadingStackCopyCtx *ctx = (ThreadingStackCopyCtx *)ud;
+  ptrdiff_t i;
+  UNUSED(dummy);
+  for (i = 0; i <= ctx->nargs; i++) {
+    TValue *dst = ctx->child->top++;
+    copyTV(ctx->child, dst, ctx->base + i);
+    lj_state_stack_pubtv(L, ctx->child, dst);
+  }
+  return NULL;
+}
+
+static void threading_stack_copy_claimed_l(lua_State *L, lua_State *child,
+					   TValue *base, ptrdiff_t nargs,
+					   uint32_t tid)
+{
+  ThreadingStackCopyCtx ctx;
+  ptrdiff_t oldtop = savestack(child, child->top);
+  int errcode;
+  if (!lj_state_claim(child, tid))
+    lj_err_callermsg(L, "thread busy");
+  ctx.child = child;
+  ctx.base = base;
+  ctx.nargs = nargs;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, threading_stack_copy_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    child->top = restorestack(child, oldtop);
+    lj_state_release(child, tid);
+    lj_err_throw(L, errcode);
+  }
+  lj_state_release(child, tid);
+}
+
+typedef struct ThreadingStackPublishCtx {
+  lua_State *target;
+} ThreadingStackPublishCtx;
+
+static TValue *threading_stack_publish_cp(lua_State *L, lua_CFunction dummy,
+					  void *ud)
+{
+  ThreadingStackPublishCtx *ctx = (ThreadingStackPublishCtx *)ud;
+  UNUSED(dummy);
+  lj_state_stack_pubrange(L, ctx->target);
+  return NULL;
+}
+
+static int threading_stack_publish_protected(lua_State *L, lua_State *target)
+{
+  ThreadingStackPublishCtx ctx;
+  ctx.target = target;
+  return lj_vm_cpcall(L, NULL, &ctx, threading_stack_publish_cp);
+}
+
 static void threading_entering_leave(global_State *g)
 {
   if (mt_entering_sub_acqrel(g, 1) == 1)
@@ -556,31 +618,44 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
   (void)lj_arena_allocf(&tg->allocd, oldst, sz, 0);
 }
 
-static void *threading_worker(void *arg)
+typedef struct ThreadingWorkerCtx {
+  LJThread *th;
+  lua_State *L;
+  TGState *tg;
+  global_State *g;
+  uint32_t tid;
+  uint8_t tls_set;
+  uint8_t claimed;
+  uint8_t tg_state_set;
+  uint8_t attached;
+} ThreadingWorkerCtx;
+
+static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
+				   void *ud)
 {
-  LJThread *th = (LJThread *)arg;
-  lua_State *L = lj_thread_state_load_acq(th);
-  TGState *tg = th->tg;
-  global_State *g = G(L);
-  uint32_t tid = lj_thr_id(&th->thr);
+  ThreadingWorkerCtx *ctx = (ThreadingWorkerCtx *)ud;
+  LJThread *th = ctx->th;
+  TGState *tg = ctx->tg;
+  global_State *g = ctx->g;
   int status;
+  UNUSED(dummy);
 
   lj_thr_set_tg(tg);
-  lj_tg_tid_rel(tg, tid);
+  ctx->tls_set = 1;
+  lj_tg_tid_rel(tg, ctx->tid);
   L->tg_hint = tg;
-  if (!lj_state_claim(L, tid)) {
+  if (!lj_state_claim(L, ctx->tid)) {
     th->status = LUA_ERRRUN;
     th->nresults = 0;
-    lj_thr_set_tg(NULL);
-    threading_gc_leave(g);
-    la_store32_rel(&th->state, LJ_THREAD_DONE);
-    threading_wake_thread(th);
     return NULL;
   }
+  ctx->claimed = 1;
   lj_tg_store_cur_L(tg, L);
   lj_tg_store_thread_L(tg, L);
   tg->thread_ud = th->ud;
+  ctx->tg_state_set = 1;
   lj_tg_attach(g, tg);
+  ctx->attached = 1;
   lj_state_stack_pubrange(L, L);
   la_store32_rel(&th->start_ready, 1);
   threading_wake_thread(th);
@@ -599,18 +674,69 @@ static void *threading_worker(void *arg)
     th->status = (uint32_t)status;
     th->nresults = (uint32_t)(L->top - L->base);
   }
+  return NULL;
+}
 
-  lj_ccallback_disown_state(L);
-  lj_state_release(L, tid);
-  lj_tg_detach(g, tg);
-  lj_tg_store_cur_L(tg, NULL);
-  lj_tg_store_thread_L(tg, NULL);
-  tg->thread_ud = NULL;
-  lj_thr_set_tg(NULL);
+static void threading_worker_error_result(ThreadingWorkerCtx *ctx, int errcode)
+{
+  lua_State *L = ctx->L;
+  LJThread *th = ctx->th;
+  th->status = (uint32_t)errcode;
+  if (ctx->claimed && L->top > L->base) {
+    TValue err;
+    copyTV(L, &err, L->top - 1);
+    L->top = L->base;
+    copyTV(L, L->top++, &err);
+    th->nresults = 1;
+  } else {
+    th->nresults = 0;
+  }
+}
+
+static void threading_worker_cleanup(ThreadingWorkerCtx *ctx)
+{
+  LJThread *th = ctx->th;
+  lua_State *L = ctx->L;
+  TGState *tg = ctx->tg;
+  global_State *g = ctx->g;
+  if (ctx->claimed)
+    lj_ccallback_disown_state(L);
+  if (ctx->claimed)
+    lj_state_release(L, ctx->tid);
+  if (ctx->attached)
+    lj_tg_detach(g, tg);
+  if (ctx->tg_state_set) {
+    lj_tg_store_cur_L(tg, NULL);
+    lj_tg_store_thread_L(tg, NULL);
+    tg->thread_ud = NULL;
+  }
+  if (ctx->tls_set)
+    lj_thr_set_tg(NULL);
   threading_gc_leave(g);
-
   la_store32_rel(&th->state, LJ_THREAD_DONE);
   threading_wake_thread(th);
+}
+
+static void *threading_worker(void *arg)
+{
+  LJThread *th = (LJThread *)arg;
+  lua_State *L = lj_thread_state_load_acq(th);
+  TGState *tg = th->tg;
+  global_State *g = G(L);
+  uint32_t tid = lj_thr_id(&th->thr);
+  ThreadingWorkerCtx ctx;
+  int errcode;
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.th = th;
+  ctx.L = L;
+  ctx.tg = tg;
+  ctx.g = g;
+  ctx.tid = tid;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, threading_worker_cp);
+  if (LJ_UNLIKELY(errcode))
+    threading_worker_error_result(&ctx, errcode);
+  threading_worker_cleanup(&ctx);
   return NULL;
 }
 
@@ -632,6 +758,77 @@ static int threading_tg_is_registered(global_State *g, TGState *target)
       return 1;
   }
   return 0;
+}
+
+typedef struct ThreadingAttachCtx {
+  global_State *g;
+  TGState *tg;
+  uint32_t tid;
+  uint8_t entering;
+  uint8_t tls_set;
+  uint8_t tg_state_set;
+  uint8_t gc_entered;
+  uint8_t attached;
+  uint8_t success;
+} ThreadingAttachCtx;
+
+static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
+				   void *ud)
+{
+  ThreadingAttachCtx *ctx = (ThreadingAttachCtx *)ud;
+  GCobj *o;
+  UNUSED(dummy);
+  L->tg_hint = ctx->tg;
+  lj_thr_set_tg(ctx->tg);
+  ctx->tls_set = 1;
+  lj_tg_store_cur_L(ctx->tg, L);
+  lj_tg_store_thread_L(ctx->tg, L);
+  ctx->tg_state_set = 1;
+  o = lj_state_mt_thread_acq(L);
+  if (o && o->gch.gct == ~LJ_TUDATA &&
+      lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
+    ctx->tg->thread_ud = gco2ud(o);
+  if (!threading_gc_enter_counted(L, NULL)) {
+    ctx->entering = 0;
+    return NULL;
+  }
+  ctx->entering = 0;
+  ctx->gc_entered = 1;
+  lj_tg_attach(ctx->g, ctx->tg);
+  ctx->attached = 1;
+  if (mt_shutdown_acq(ctx->g) != 0)
+    return NULL;
+  ctx->success = 1;
+  return NULL;
+}
+
+static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
+				     int disown_callbacks)
+{
+  if (ctx->attached && disown_callbacks)
+    lj_ccallback_disown_state(L);
+  if (ctx->attached) {
+    lj_tg_store_cur_L(ctx->tg, NULL);
+    lj_tg_store_thread_L(ctx->tg, NULL);
+    ctx->tg->thread_ud = NULL;
+    ctx->tg_state_set = 0;
+    lj_tg_detach(ctx->g, ctx->tg);
+  }
+  if (ctx->tg_state_set) {
+    lj_tg_store_cur_L(ctx->tg, NULL);
+    lj_tg_store_thread_L(ctx->tg, NULL);
+    ctx->tg->thread_ud = NULL;
+  }
+  if (ctx->gc_entered)
+    threading_gc_leave(ctx->g);
+  if (ctx->tls_set)
+    lj_thr_set_tg(NULL);
+  L->tg_hint = NULL;
+  lj_state_release(L, ctx->tid);
+  if (ctx->entering)
+    threading_entering_leave(ctx->g);
+  lj_tg_fini_thread(ctx->g, ctx->tg);
+  free(ctx->tg);
 }
 
 static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
@@ -1309,7 +1506,6 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lua_State *L1;
   uint32_t tid = lj_thr_current_id(G(L));
   ptrdiff_t baseofs = base - L->base;
-  ptrdiff_t i;
   int rc;
 
   if (mt_shutdown_acq(G(L)) != 0)
@@ -1317,15 +1513,8 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lj_state_checkstack(L, 2);
   base = L->base + baseofs;
   L1 = lua_newthread(L);
-  if (!lj_state_claim(L1, tid))
-    lj_err_callermsg(L, "thread busy");
   lj_state_checkstack(L1, (MSize)(nargs + 1));
-  for (i = 0; i <= nargs; i++) {
-    TValue *dst = L1->top++;
-    copyTV(L1, dst, base + i);
-    lj_state_stack_pubtv(L, L1, dst);
-  }
-  lj_state_release(L1, tid);
+  threading_stack_copy_claimed_l(L, L1, base, nargs, tid);
 
   ud = threading_new_thread_ud(L, env);
   threading_state_set_ud(L, L1, ud);
@@ -1404,7 +1593,15 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     }
   }
 
-  lj_state_stack_pubrange(L, L1);
+  {
+    int errcode = threading_stack_publish_protected(L, L1);
+    if (LJ_UNLIKELY(errcode)) {
+      uint32_t actions = 0;
+      threading_join_aborted_start(L, th, &actions);
+      UNUSED(actions);
+      lj_err_throw(L, errcode);
+    }
+  }
   if (!threading_start_release(th)) {
     uint32_t actions = 0;
     threading_join_aborted_start(L, th, &actions);
@@ -1533,8 +1730,9 @@ static int threading_attach(lua_State *L, int wait)
 {
   global_State *g;
   TGState *cur, *tg;
-  GCobj *o;
   uint32_t tid;
+  ThreadingAttachCtx ctx;
+  int errcode;
   if (!L)
     return 0;
   g = G(L);
@@ -1568,27 +1766,21 @@ static int threading_attach(lua_State *L, int wait)
     return 0;
   }
   lj_tg_init_thread(g, tg, L, threading_arena_internal(g));
+  lj_tg_flags_or_rlx(tg, TGF_HEAP);
   lj_tg_tid_rel(tg, tid);
   lj_tg_derive_prng(g, tg, tid);
-  L->tg_hint = tg;
-  lj_thr_set_tg(tg);
-  lj_tg_store_cur_L(tg, L);
-  lj_tg_store_thread_L(tg, L);
-  o = lj_state_mt_thread_acq(L);
-  if (o && o->gch.gct == ~LJ_TUDATA &&
-      lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
-    tg->thread_ud = gco2ud(o);
-  if (!threading_gc_enter_counted(L, NULL)) {
-    L->tg_hint = NULL;
-    lj_thr_set_tg(NULL);
-    lj_state_release(L, tid);
-    lj_tg_fini_thread(g, tg);
-    free(tg);
-    return 0;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.tid = tid;
+  ctx.entering = 1;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, threading_attach_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    threading_attach_cleanup(L, &ctx, 0);
+    lj_err_throw(L, errcode);
   }
-  lj_tg_attach(g, tg);
-  if (mt_shutdown_acq(g) != 0) {
-    lj_threading_detach(L, 1);
+  if (!ctx.success) {
+    threading_attach_cleanup(L, &ctx, 1);
     return 0;
   }
   return 1;
@@ -1626,7 +1818,6 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   L->tg_hint = NULL;
   lj_state_release(L, tid);
   lj_thr_set_tg(NULL);
-  (void)lj_tg_reclaim_dead(g);
   threading_gc_leave(g);
 }
 

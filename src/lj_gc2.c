@@ -2166,6 +2166,27 @@ static int gc2_finalizer_pcall(global_State *g, lua_State *L,
   return errcode;
 }
 
+static int gc2_finalizer_checkstack_claimed(global_State *g, lua_State *L,
+					    MSize need, LJStateClaim *claim)
+{
+  ptrdiff_t oldtop = savestack(L, L->top);
+  int errcode = 0;
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue))
+    errcode = lj_state_cpgrowstack(L, need);
+  if (LJ_UNLIKELY(errcode)) {
+    TValue tmp;
+    copyTV(L, &tmp, L->top-1);
+    L->top = restorestack(L, oldtop);
+    lj_state_dropclaim(claim);
+    lj_vmevent_send(g, ERRFIN,
+      copyTV(V, V->top++, &tmp);
+    );
+    return 0;
+  }
+  return 1;
+}
+
 static int gc2_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o)
 {
@@ -2185,13 +2206,15 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
     return 0;  /* Caller must preclaim before clearing FINREG state. */
   lj_assertG(cbL != vmthread_acq(g),
 	     "gc2 finalizer must not use shared vmthread callback stack");
+  if (!gc2_finalizer_checkstack_claimed(g, cbL, 2+LJ_FR2+LUA_MINSTACK,
+					&claim))
+    return 1;
   oldL = lj_tg_cur_L(g);
   oldh = hook_save(g);
   oldt = gc2_finalizer_pause_threshold(g);
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  lj_state_checkstack(cbL, 2+LJ_FR2+LUA_MINSTACK);
   oldtop = savestack(cbL, cbL->top);
   top = cbL->top;
   copyTV(cbL, top++, mo);
