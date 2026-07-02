@@ -61,13 +61,13 @@ static int safepoint_wait_consumed_ack(TGState *tg)
   uint32_t poll;
   /* A native-ack leader clears poll only after it finishes applying actions.
   ** If this thread races with that consumed request, it must not resume the VM
-  ** while the leader may still be scanning its Lua stack. A late reqmask store
-  ** can become visible after the poll check without waking the poll futex, so
-  ** use a short timed wait and let the caller retry when work appears. */
+  ** while the leader may still be scanning its Lua stack. New request
+  ** publication wakes poll waiters after storing reqmask, so this can wait for
+  ** either poll clear or a late request without a timeout. */
   while ((poll = lj_tg_poll_acq(tg)) != 0) {
     if (lj_tg_reqmask_acq(tg) != 0)
       return 1;
-    lj_tg_poll_futex_wait(tg, poll, 1000000);
+    lj_tg_poll_futex_wait(tg, poll, -1);
   }
   return 0;
 }
@@ -263,6 +263,7 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
     signaled++;
     lj_tg_reqmask_rel(tg, actions);  /* 05 section 5.4.2. */
     lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
+    lj_tg_poll_futex_wake(tg, 1);
     if (lj_safepoint_retire_dead_tg(g, tg) && signaled != 0)
       signaled--;
   }

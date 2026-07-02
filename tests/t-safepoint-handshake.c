@@ -67,9 +67,11 @@ typedef struct DispatchUpdateWaitCtx {
 } DispatchUpdateWaitCtx;
 
 typedef struct ConsumedAckCtx {
+  global_State *g;
   TGState *tg;
   pthread_t thread;
   uint32_t cleared;
+  uint32_t actions;
 } ConsumedAckCtx;
 
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
@@ -178,12 +180,30 @@ static void *consumed_ack_clear_thread(void *arg)
   return NULL;
 }
 
+static void *consumed_ack_reqmask_thread(void *arg)
+{
+  ConsumedAckCtx *ctx = (ConsumedAckCtx *)arg;
+  uint64_t epoch = la_load64_rlx(&ctx->g->gc2.hs_epoch) + 1u;
+  struct timespec delay;
+  delay.tv_sec = 0;
+  delay.tv_nsec = 20000000;
+  (void)nanosleep(&delay, NULL);
+  la_store32_rel(&ctx->g->gc2.hs_actions, ctx->actions);
+  la_store32_rel(&ctx->g->gc2.hs_pending, 1);
+  la_store64_rel(&ctx->g->gc2.hs_epoch, epoch);
+  lj_tg_reqmask_rel(ctx->tg, ctx->actions);
+  lj_tg_poll_futex_wake(ctx->tg, 1);
+  return NULL;
+}
+
 static void test_consumed_ack_poll_gate(lua_State *L, TGState *tg)
 {
   ConsumedAckCtx ctx;
   int err;
+  ctx.g = G(L);
   ctx.tg = tg;
   ctx.cleared = 0;
+  ctx.actions = 0;
   la_store32_rel(&tg->reqmask, 0);
   la_store32_rel(&tg->poll, 1);
   err = pthread_create(&ctx.thread, NULL, consumed_ack_clear_thread, &ctx);
@@ -192,6 +212,27 @@ static void test_consumed_ack_poll_gate(lua_State *L, TGState *tg)
   assert(la_load32_acq(&ctx.cleared) == 1);
   err = pthread_join(ctx.thread, NULL);
   assert(err == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+}
+
+static void test_consumed_ack_reqmask_wake(lua_State *L, TGState *tg)
+{
+  ConsumedAckCtx ctx;
+  int err;
+  ctx.g = G(L);
+  ctx.tg = tg;
+  ctx.cleared = 0;
+  ctx.actions = LJ_GC2_HS_ALLOC_WHITE;
+  la_store32_rel(&ctx.g->gc2.hs_pending, 0);
+  la_store32_rel(&tg->reqmask, 0);
+  la_store32_rel(&tg->poll, 1);
+  err = pthread_create(&ctx.thread, NULL, consumed_ack_reqmask_thread, &ctx);
+  assert(err == 0);
+  assert(lj_safepoint_ack(L) == ctx.actions);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(ctx.g->gc2.hs_pending == 0);
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
 }
@@ -925,6 +966,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.hs_ack_latency_max_ns) >= ack_max0);
   assert(lj_safepoint_poll(L) == 0);
   test_consumed_ack_poll_gate(L, tg);
+  test_consumed_ack_reqmask_wake(L, tg);
 
   lj_native_enter(tg);
   assert(lj_tg_in_native_acq(tg) == 1);
