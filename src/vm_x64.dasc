@@ -397,6 +397,18 @@
 |  cmp tmp, [g+GL_OFS(gc2.hard_bytes)]  // lj_gc2_hard_limit_reached().
 |  ja target
 |.endmacro
+|.macro x64_vm_tstore_direct_ok, target
+|  cmp TGMARK, 0
+|  jnz target
+|  test byte TAB:RB->marked, LJ_GC_WEAK
+|  jnz target
+|  x64_vm_gcref_acq r8, TAB:RB->metatable
+|  test r8, r8
+|  jnz target
+|  load_G r8
+|  cmp dword GL:r8->mt_active, 0
+|  jne target
+|.endmacro
 |.macro x64_vm_basemt_acq, dst, g, itype
 |  mov dst, [g+itype*8+GL_OFS(gcroot[GCROOT_BASEMT])]	// x64_vm_basemt_acq.
 |.endmacro
@@ -4395,13 +4407,29 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
-    |  mov64 r10, LJ_TFORWARD_BITS
-    |  cmp r8, r10
+    |  mov64 ITYPE, LJ_TFORWARD_BITS
+    |  cmp r8, ITYPE
     |  je ->vmeta_tsetv
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
     |2:  // Set array slot.
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8
+    |  je >6
+    |  x64_vm_tab_array_flags_acq r8d, TMPR
+    |  test r8d, TABARRAY_FLAG_RETIRING
+    |  jnz >7
+    |6:
+    |  x64_vm_tstore_direct_ok >7
+    |  mov ITYPE, [BASE+RA*8]
+    |  mov [RC], ITYPE
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
+    |  jmp ->vm_gc2_barriertv_tab
+    |8:
+    |  ins_next
+    |7:
     |.if X64WIN
     |  mov ARG5d, r9d
     |  lea CARG4, [BASE+RA*8]
@@ -4437,10 +4465,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |3:  // Check for __newindex if previous value is nil.
     |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
     |  test TAB:TMPR, TAB:TMPR
-    |  jz <1
+    |  jz <7
     |  test byte TAB:TMPR->nomm, 1<<MM_newindex
     |  jz ->vmeta_tsetv			// 'no __newindex' flag NOT set: check.
-    |  jmp <1
+    |  jmp <7
     |
     |5:  // String key?
     |  cmp ITYPEd, LJ_TSTR; jne ->vmeta_tsetv
@@ -4473,6 +4501,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  je ->vmeta_tsets
     |  cmp r8, LJ_TNIL
     |  je ->vmeta_tsets
+    |  x64_vm_tstore_direct_ok >6
+    |  mov ITYPE, [BASE+RA*8]
+    |  mov NODE:TMPR->val, ITYPE
+    |  mov RC, TMPR
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
+    |  jmp ->vm_gc2_barriertv_tab
+    |8:
+    |  ins_next
+    |6:
     |.if X64WIN
     |  mov ARG5, STR:RC
     |  lea CARG4, [BASE+RA*8]
@@ -4536,13 +4574,29 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
-    |  mov64 r10, LJ_TFORWARD_BITS
-    |  cmp r8, r10
+    |  mov64 ITYPE, LJ_TFORWARD_BITS
+    |  cmp r8, ITYPE
     |  je ->vmeta_tsetb
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
     |2:	 // Set array slot.
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8
+    |  je >6
+    |  x64_vm_tab_array_flags_acq r8d, TMPR
+    |  test r8d, TABARRAY_FLAG_RETIRING
+    |  jnz >7
+    |6:
+    |  x64_vm_tstore_direct_ok >7
+    |  mov ITYPE, [BASE+RA*8]
+    |  mov [RC], ITYPE
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
+    |  jmp ->vm_gc2_barriertv_tab
+    |8:
+    |  ins_next
+    |7:
     |.if X64WIN
     |  mov ARG5d, r9d
     |  lea CARG4, [BASE+RA*8]
@@ -4578,10 +4632,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |3:  // Check for __newindex if previous value is nil.
     |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
     |  test TAB:TMPR, TAB:TMPR
-    |  jz <1
+    |  jz <7
     |  test byte TAB:TMPR->nomm, 1<<MM_newindex
     |  jz ->vmeta_tsetb			// 'no __newindex' flag NOT set: check.
-    |  jmp <1
+    |  jmp <7
     |
     break;
   case BC_TSETR:
@@ -4609,12 +4663,28 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
-    |  mov64 r10, LJ_TFORWARD_BITS
-    |  cmp r8, r10; jne >4
+    |  mov64 ITYPE, LJ_TFORWARD_BITS
+    |  cmp r8, ITYPE; jne >4
     |  mov RCd, r9d
     |  jmp ->vmeta_tsetr
     |  // Set array slot.
     |4:
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8
+    |  je >6
+    |  x64_vm_tab_array_flags_acq r8d, TMPR
+    |  test r8d, TABARRAY_FLAG_RETIRING
+    |  jnz >7
+    |6:
+    |  x64_vm_tstore_direct_ok >7
+    |  mov ITYPE, [BASE+RA*8]
+    |  mov [RC], ITYPE
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
+    |  jmp ->vm_gc2_barriertv_tab
+    |8:
+    |  ins_next
+    |7:
     |.if X64WIN
     |  mov ARG5d, r9d
     |  lea CARG4, [BASE+RA*8]

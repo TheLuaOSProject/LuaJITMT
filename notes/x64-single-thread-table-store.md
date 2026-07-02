@@ -13,6 +13,12 @@ x64 single-thread table-store lowering
 - After `mt_active` is latched, the existing helper/CAS lowering remains in
   force for non-trace-local table stores, preserving the FORWARD/migration and
   racy no-tear contracts.
+- x64 interpreter `TSETV`/`TSETB`/`TSETR`/existing-key `TSETS` now take a
+  single-thread direct store only for established non-nil current-generation
+  slots. The VM still falls back to the parent/key-aware helpers when MT has
+  activated, GC2 marking is active, the table is weak or has a metatable, the
+  array/hash generation is retiring, a FORWARD slot is observed, or the old
+  value is nil and `__newindex` semantics must be preserved.
 
 Verification guard:
 
@@ -20,3 +26,5 @@ Verification guard:
   helper/CAS route and that explicitly activated-MT dumps still contain it.
 - `m6_jit_mt_activation_flush` checks that pre-MT traces are flushed by the
   first `threading.spawn()` activation.
+- `m5_x64_tset_nil_snapshot` covers interpreter `__newindex`, nil-slot helper
+  fallback, and forwarded-slot rerouting for the affected TSET bytecodes.
