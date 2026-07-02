@@ -35,11 +35,12 @@ Permanent shape:
   `lua_checkstack`, `lua_settop`, `lua_remove`, `lua_insert`, `lua_pushvalue`,
   `lua_replace`, `lua_copy`, `lua_pushnil`, `lua_pushnumber`,
   `lua_pushinteger`, `lua_pushboolean`, `lua_pushthread`, `lua_pushlstring`,
-  and `lua_pushstring`) acquire state claims before stack access. Stack-growth
-  paths use resume claims and protected growth; stack mutation paths
-  release-publish adjusted slots before dropping ownerless claims. Non-null
-  string pushes precheck ownership, drop the preclaim for interning, then
-  resume-claim to publish the stack slot.
+  `lua_pushstring`, and `lua_pushlightuserdata`) acquire state claims before
+  stack access. Stack-growth paths use resume claims and protected growth; stack
+  mutation paths release-publish adjusted slots before dropping ownerless
+  claims. Non-null string pushes and x64 lightuserdata pushes precheck
+  ownership, drop the preclaim for interning, then resume-claim to publish the
+  stack slot.
 - Public read-only stack getter/conversion APIs (`lua_type`,
   `lua_iscfunction`, `lua_isnumber`, `lua_isstring`, `lua_isuserdata`,
   `lua_rawequal`, `lua_tonumber`, `lua_tonumberx`, `lua_tointeger`,

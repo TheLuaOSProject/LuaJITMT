@@ -78,6 +78,7 @@ static void check_xmove_unowned_source(lua_State *L)
 
 static void check_stack_api_unowned(lua_State *L)
 {
+  int marker = 0;
   lua_State *co;
   lua_settop(L, 0);
   co = lua_newthread(L);
@@ -122,6 +123,8 @@ static void check_stack_api_unowned(lua_State *L)
   assert(strcmp(lua_tostring(co, 10), "ownerless") == 0);
   lua_pushstring(co, NULL);
   assert(lua_gettop(co) == 11 && lua_isnil(co, 11));
+  lua_pushlightuserdata(co, &marker);
+  assert(lua_gettop(co) == 12 && lua_touserdata(co, 12) == &marker);
   lua_settop(co, 3);
   lua_settop(co, 5);
   assert(lua_gettop(co) == 5);
@@ -695,6 +698,15 @@ static int busy_lua_pushstring_null(lua_State *L)
   lua_State *co = lua_newthread(L);
   busy_stack_prepare(L, co);
   lua_pushstring(co, NULL);
+  return 0;
+}
+
+static int busy_lua_pushlightuserdata(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  int marker = 0;
+  busy_stack_prepare(L, co);
+  lua_pushlightuserdata(co, &marker);
   return 0;
 }
 
@@ -1330,6 +1342,8 @@ int main(void)
   expect_thread_busy(L, busy_lua_pushlstring, "busy lua_pushlstring");
   expect_thread_busy(L, busy_lua_pushstring, "busy lua_pushstring");
   expect_thread_busy(L, busy_lua_pushstring_null, "busy lua_pushstring NULL");
+  expect_thread_busy(L, busy_lua_pushlightuserdata,
+		     "busy lua_pushlightuserdata");
   expect_thread_busy(L, busy_lua_type, "busy lua_type");
   expect_thread_busy(L, busy_lua_isnumber, "busy lua_isnumber");
   expect_thread_busy(L, busy_lua_isstring, "busy lua_isstring");

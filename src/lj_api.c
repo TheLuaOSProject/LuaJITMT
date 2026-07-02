@@ -1220,11 +1220,21 @@ LUA_API void lua_pushboolean(lua_State *L, int b)
 
 LUA_API void lua_pushlightuserdata(lua_State *L, void *p)
 {
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
+  api_checkclaim(L, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
 #if LJ_64
-  p = lj_lightud_intern(L, p);
+  p = lj_lightud_intern(errL, p);
 #endif
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setrawlightudV(L->top, p);
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_createtable(lua_State *L, int narray, int nrec)
