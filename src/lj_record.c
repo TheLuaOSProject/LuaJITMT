@@ -1609,7 +1609,7 @@ static TRef rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)
 {
   TRef hdrref = emitir(IRT(IR_ADD, IRT_PGC), arrayref,
 		       lj_ir_kintpgc(J, -(int32_t)sizeof(TabArrayHdr)));
-  return emitir(IRTI(IR_XLOAD), hdrref, 0);
+  return emitir(IRTI(IR_XLOAD), hdrref, IRXLOAD_POLLBOUND);
 }
 
 static void rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)

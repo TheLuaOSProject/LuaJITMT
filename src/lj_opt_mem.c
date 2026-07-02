@@ -33,6 +33,15 @@ static LJ_AINLINE IRRef poll_alias_limit(jit_State *J, IRRef lim)
   return lim;
 }
 
+static LJ_AINLINE IRRef xload_alias_limit(jit_State *J, IRRef lim,
+					   uint32_t mode)
+{
+  if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
+  if ((mode & IRXLOAD_POLLBOUND) && J->chain[IR_XPOLL] > lim)
+    lim = J->chain[IR_XPOLL];
+  return lim;
+}
+
 /*
 ** Caveat #1: return value is not always a TRef -- only use with tref_ref().
 ** Caveat #2: FWD relies on active CSE for xREF operands -- see lj_opt_fold().
@@ -869,7 +878,7 @@ TRef LJ_FASTCALL lj_opt_fwd_xload(jit_State *J)
   ref = J->chain[IR_XSTORE];
 retry:
   if (J->chain[IR_CALLXS] > lim) lim = J->chain[IR_CALLXS];
-  lim = poll_alias_limit(J, lim);
+  lim = xload_alias_limit(J, lim, fins->op2);
   while (ref > lim) {
     IRIns *store = IR(ref);
     switch (aa_xref(J, xr, fins, store)) {

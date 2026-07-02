@@ -681,6 +681,41 @@ assert(s == 0)
 ]=])
       assert_loop_after_xpoll(t, load_dump, "FFI XLOAD loop", { "XLOAD" })
 
+      local scalar_dump = t:tmp("lj-m6-xload-scalar-ir.dump")
+      run_ir_dump_probe(t, scalar_dump, [=[
+local ffi = require("ffi")
+ffi.cdef("typedef struct { double x, y; } xpoll_point_t;")
+local p = ffi.new("xpoll_point_t", 1, 2)
+jit.opt.start("hotloop=1", "hotexit=1")
+local s = 0
+for i = 1, 120 do
+  p.x = p.x + 1
+  s = s + p.y
+end
+assert(s == 240 and p.x == 121)
+]=])
+      do
+        local data = t:read(scalar_dump)
+        local loop, xpoll = false, false
+        for line in lines(data) do
+          if contains(line, "------ LOOP") then
+            loop = true
+          elseif loop and contains(line, "---- TRACE 1 stop") then
+            break
+          elseif loop then
+            if contains(line, "XPOLL") then xpoll = true end
+            if xpoll and contains(line, " XLOAD ") then
+              io.stderr:write(data)
+              error("scalar FFI XLOAD should forward/hoist across XPOLL", 2)
+            end
+          end
+        end
+        if not xpoll then
+          io.stderr:write(data)
+          error("scalar FFI XLOAD probe missing loop XPOLL", 2)
+        end
+      end
+
       local store_dump = t:tmp("lj-m6-xbar-xstore-ir.dump")
       run_ir_dump_probe(t, store_dump, [=[
 local ffi = require("ffi")

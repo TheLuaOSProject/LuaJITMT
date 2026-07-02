@@ -244,6 +244,7 @@ IRFLDEF(FLENUM)
 #define IRXLOAD_READONLY	0x01	/* Load from read-only data. */
 #define IRXLOAD_VOLATILE	0x02	/* Load from volatile data. */
 #define IRXLOAD_UNALIGNED	0x04	/* Unaligned load. */
+#define IRXLOAD_POLLBOUND	0x08	/* XPOLL bounds load forwarding/CSE. */
 
 /* BUFHDR mode, stored in op2. */
 #define IRBUFHDR_RESET		0	/* Reset buffer. */
