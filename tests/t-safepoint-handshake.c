@@ -836,6 +836,15 @@ int main(void)
   assert((tg->tg_flags & TGF_STOPREQ) != 0);
   tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
 
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  assert(lj_safepoint_fresh_stopreq(L, 0, 0));
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert((tg->tg_flags & TGF_STOPREQ) != 0);
+  tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
+
 #if LJ_HASJIT
   assert(luaL_dostring(L,
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"

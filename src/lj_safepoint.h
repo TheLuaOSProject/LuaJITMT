@@ -28,11 +28,31 @@ LJ_FUNCA uint32_t lj_native_leave(lua_State *L);
 LJ_FUNCA void lj_native_enter_l(lua_State *L, LJNativeFrame *frame);
 LJ_FUNCA uint32_t lj_native_leave_l(lua_State *L, LJNativeFrame *frame);
 
+static LJ_AINLINE int lj_safepoint_pending_stopreq(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  if (!tg)
+    return 0;
+  if (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ)
+    return 1;
+  return lj_tg_poll_acq(tg) != 0 &&
+    (gc2_hs_actions_acq(G(L)) & LJ_GC2_HS_STOPREQ);
+}
+
+static LJ_AINLINE uint32_t lj_safepoint_poll_pending_stopreq(lua_State *L,
+							     uint32_t actions)
+{
+  if (!(actions & LJ_GC2_HS_STOPREQ) && lj_safepoint_pending_stopreq(L))
+    actions |= lj_safepoint_poll(L);
+  return actions;
+}
+
 static LJ_AINLINE int lj_safepoint_fresh_stopreq(lua_State *L,
 						 uint32_t actions,
 						 int had_stopreq)
 {
   TGState *tg = L ? L2TG(L) : NULL;
+  actions = lj_safepoint_poll_pending_stopreq(L, actions);
   return (actions & LJ_GC2_HS_STOPREQ) ||
     (tg && lj_tg_flags_all_acq(tg, TGF_STOPREQ|TGF_STOPREQ_FRESH)) ||
     (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
