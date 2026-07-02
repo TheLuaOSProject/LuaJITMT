@@ -54,6 +54,25 @@ cTValue *lj_debug_frame(lua_State *L, int level, int *size)
 /* Invalid bytecode position. */
 #define NO_BCPOS	(~(BCPos)0)
 
+#if LJ_HASJIT
+static BCPos debug_jit_startpc(jit_State *J, GCproto *pt, const BCIns *ins)
+{
+  GCtrace *T = (GCtrace *)((char *)(ins-1) - offsetof(GCtrace, startins));
+  TraceVec *tv = tracevec_acq(J);
+  MSize i;
+  if (tv == NULL)
+    return NO_BCPOS;
+  for (i = 1; i < tv->sizetrace; i++) {
+    GCtrace *cur = traceref_fromgco(gcref_acq(tv->slot[i]));
+    if (cur == T && trace_traceno_acq(cur) == (TraceNo)i &&
+	la_load64_acq(&cur->retire_epoch) == 0 &&
+	trace_startpt_acq(cur) == pt && ins == &cur->startins + 1)
+      return proto_bcpos(pt, trace_startpc_acq(cur));
+  }
+  return NO_BCPOS;
+}
+#endif
+
 /* Return bytecode position for function/frame or NO_BCPOS. */
 static BCPos debug_framepc(lua_State *L, GCfunc *fn, cTValue *nextframe)
 {
@@ -109,8 +128,7 @@ static BCPos debug_framepc(lua_State *L, GCfunc *fn, cTValue *nextframe)
   if (pos == NO_BCPOS) return 1;  /* Pretend it's the first bytecode. */
   if (pos > pt->sizebc) {  /* Undo the effects of lj_trace_exit for JLOOP. */
     if (bc_isret(bc_op(ins[-1]))) {
-      GCtrace *T = (GCtrace *)((char *)(ins-1) - offsetof(GCtrace, startins));
-      pos = proto_bcpos(pt, trace_startpc_acq(T));
+      pos = debug_jit_startpc(G(L)->jitp, pt, ins);
     } else {
       pos = NO_BCPOS;  /* Punt in case of stack overflow for stitched trace. */
     }

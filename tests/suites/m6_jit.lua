@@ -716,6 +716,22 @@ local function assert_c_jit_stale_slot_guards(t)
     error("x64 cont_stitch reintroduced raw saved-trace field reads")
   end
 
+  local debugc = t:read(t:path("src", "lj_debug.c"))
+  checks.assert_text_all_contains("debug framepc live trace guard", debugc, {
+    "static BCPos debug_jit_startpc(jit_State *J, GCproto *pt, const BCIns *ins)",
+    "TraceVec *tv = tracevec_acq(J);",
+    "GCtrace *cur = traceref_fromgco(gcref_acq(tv->slot[i]));",
+    "cur == T && trace_traceno_acq(cur) == (TraceNo)i",
+    "la_load64_acq(&cur->retire_epoch) == 0",
+    "trace_startpt_acq(cur) == pt",
+    "ins == &cur->startins + 1",
+    "return proto_bcpos(pt, trace_startpc_acq(cur));",
+    "pos = debug_jit_startpc(G(L)->jitp, pt, ins);"
+  }, "debug framepc live trace guard")
+  if contains(debugc, "proto_bcpos(pt, trace_startpc_acq(T))") then
+    error("debug_framepc reintroduced unchecked trace startpc recovery")
+  end
+
   local bcwritec = t:read(t:path("src", "lj_bcwrite.c"))
   checks.assert_text_all_contains("bytecode writer stale-slot guard", bcwritec, {
     "static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)",
