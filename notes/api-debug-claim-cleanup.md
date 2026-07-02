@@ -85,6 +85,10 @@ Permanent shape:
   slots or value slots, keep the claim through GC-owned field/upvalue
   publication, and drop it only after the API's consumed stack slots are
   removed. `lua_setfenv` uses a separate nested claim for the thread value case.
+- `lua_upvaluejoin()` resume-claims the target state before reading both Lua
+  function slots, keeps the claim through trace invalidation and release
+  publication of the joined upvalue pointer, then drops the claim without
+  changing stack shape.
 - Upvalue introspection APIs (`lua_getupvalue` and `lua_upvalueid`) claim the
   target state before reading the function slot. `lua_getupvalue` uses the
   protected one-slot growth helper and release-publishes the copied upvalue

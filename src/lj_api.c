@@ -1672,9 +1672,14 @@ LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
 
 LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap1, snap2;
-  GCfunc *fn1 = funcV(index2adr_read(L, idx1, &snap1));
-  GCfunc *fn2 = funcV(index2adr_read(L, idx2, &snap2));
+  GCfunc *fn1, *fn2;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  fn1 = funcV(index2adr_read(L, idx1, &snap1));
+  fn2 = funcV(index2adr_read(L, idx2, &snap2));
   n1--; n2--;
   lj_checkapi(isluafunc(fn1), "stack slot %d is not a Lua function", idx1);
   lj_checkapi(isluafunc(fn2), "stack slot %d is not a Lua function", idx2);
@@ -1684,11 +1689,12 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
     GCobj *uv = func_uvptr_acq(&fn2->l, (uint32_t)n2);
     GCobj *old = func_uvptr_acq(&fn1->l, (uint32_t)n1);
     if (old != uv) {
-      api_trace_flush_mutation(L);
+      api_trace_flush_mutation_claimed(L, errL, &claim);
       setgcrefrel(fn1->l.uvptr[n1], uv);
       lj_gc_pubobjobj(L, fn1, uv);
     }
   }
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)

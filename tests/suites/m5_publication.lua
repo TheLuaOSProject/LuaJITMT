@@ -1161,6 +1161,32 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+BEGIN {
+  infn = 0; claim = 0; read1 = 0; read2 = 0
+  flush = 0; store = 0; pub = 0; drop = 0
+}
+/^LUA_API void lua_upvaluejoin\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /index2adr_read/ {
+  if (!read1) read1 = NR
+  else if (!read2) read2 = NR
+}
+infn && /api_trace_flush_mutation_claimed/ { flush = NR }
+infn && /setgcrefrel/ { store = NR }
+infn && /lj_gc_pubobjobj/ { pub = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+END {
+  if (!claim || !read1 || !read2 || !flush || !store || !pub || !drop ||
+      claim > read1 || read1 > read2 || read2 > flush || flush > store ||
+      store > pub || pub > drop) {
+    print "lua_upvaluejoin owner-claim boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 function reset(name) {
   fun = name; started = 0; depth = 0; claim = 0; call = 0; drop = 0
 }

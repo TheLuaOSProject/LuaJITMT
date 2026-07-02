@@ -37,13 +37,21 @@ static void expect_thread_busy(lua_State *L, lua_CFunction fn,
 			       const char *what)
 {
   int status;
+  const char *msg;
   lua_pushcfunction(L, fn);
   status = lua_pcall(L, 0, 0, 0);
-  assert(status == LUA_ERRRUN);
-  assert(lua_tostring(L, -1) != NULL);
-  assert(strstr(lua_tostring(L, -1), "thread busy") != NULL);
+  if (status != LUA_ERRRUN) {
+    fprintf(stderr, "%s: expected LUA_ERRRUN, got %d\n", what, status);
+    assert(status == LUA_ERRRUN);
+  }
+  msg = lua_tostring(L, -1);
+  if (msg == NULL || strstr(msg, "thread busy") == NULL) {
+    fprintf(stderr, "%s: unexpected error object type=%s message=%s\n",
+	    what, lua_typename(L, lua_type(L, -1)), msg ? msg : "<null>");
+    assert(msg != NULL);
+    assert(strstr(msg, "thread busy") != NULL);
+  }
   lua_pop(L, 1);
-  (void)what;
 }
 
 static uint32_t foreign_tid(lua_State *L)
@@ -453,6 +461,16 @@ static void check_upvalue_api_unowned(lua_State *L)
   assert(lua_gettop(co) == 1);
   lua_call(co, 0, 1);
   assert(lua_tointeger(co, -1) == 80);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+  co = load_ownerless_results(L,
+    "local function make(x) return function() return x end end\n"
+    "return make(1), make(2)", 2);
+  lua_upvaluejoin(co, 1, 1, 2, 1);
+  lua_pushvalue(co, 1);
+  lua_call(co, 0, 1);
+  assert(lua_tointeger(co, -1) == 2);
   assert(lj_state_owner_acq(co) == 0);
 
   lua_settop(L, 0);
@@ -1189,6 +1207,19 @@ static int busy_lua_setupvalue(lua_State *L)
   return 0;
 }
 
+static int busy_lua_upvaluejoin(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  assert(luaL_loadstring(L,
+    "local function make(x) return function() return x end end\n"
+    "return make(1), make(2)") == 0);
+  lua_call(L, 0, 2);
+  lua_xmove(L, co, 2);
+  lj_state_owner_rel(co, foreign_tid(L));
+  lua_upvaluejoin(co, 1, 1, 2, 1);
+  return 0;
+}
+
 static lua_State *busy_udata_prepare(lua_State *L)
 {
   lua_State *co;
@@ -1602,6 +1633,7 @@ int main(void)
   expect_thread_busy(L, busy_lua_getupvalue, "busy lua_getupvalue");
   expect_thread_busy(L, busy_lua_upvalueid, "busy lua_upvalueid");
   expect_thread_busy(L, busy_lua_setupvalue, "busy lua_setupvalue");
+  expect_thread_busy(L, busy_lua_upvaluejoin, "busy lua_upvaluejoin");
   expect_thread_busy(L, busy_luaL_testudata, "busy luaL_testudata");
   expect_thread_busy(L, busy_luaL_checkudata, "busy luaL_checkudata");
   expect_thread_busy(L, busy_luaL_getmetafield, "busy luaL_getmetafield");
