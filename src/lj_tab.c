@@ -71,9 +71,17 @@ static LJ_AINLINE int tab_key_islocked(cTValue *key)
   return tviskeylock(key);
 }
 
+static LJ_AINLINE void tab_wait_pause(void)
+{
+  uint32_t i;
+  for (i = 0; i < 64; i++)
+    la_cpu_pause();
+}
+
 LJ_FUNCA void lj_tab_wait_no_l(void)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  tab_wait_pause();
+  (void)lj_thr_yield(NULL);
 }
 
 LJ_FUNCA void lj_tab_wait_l(lua_State *L)
@@ -83,7 +91,8 @@ LJ_FUNCA void lj_tab_wait_l(lua_State *L)
   ** while preserving the no-state helper for VM/JIT/internal paths where only
   ** TLS ownership is known.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  tab_wait_pause();
+  (void)lj_thr_yield(L);
 }
 
 static uint32_t tab_struct_tid(lua_State *L)

@@ -2744,6 +2744,20 @@ static int gc2_thread_is_remote_current(global_State *g, lua_State *L)
 	 lj_tg_load_cur_L(tg) == L && L != lj_tg_cur_L(g);
 }
 
+static int gc2_thread_is_native_current(global_State *g, lua_State *L)
+{
+  uint32_t owner;
+  TGState *tg;
+  if (!g || !L)
+    return 0;
+  owner = lj_state_owner_acq(L);
+  if (owner == 0 || owner == LJ_THREAD_GCSCAN)
+    return 0;
+  tg = lj_tg_find_owner(g, owner);
+  return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	 lj_tg_load_cur_L(tg) == L && lj_tg_in_native_acq(tg) != 0;
+}
+
 static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
 {
   TValue *bot = tvref(L->stack);
@@ -2785,8 +2799,9 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used, *max = tvref(L->maxstack);
-  if (gc2_thread_is_remote_current(g, L))
-    return max;  /* Remote frame chain is unstable; scan conservatively. */
+  if (gc2_thread_is_remote_current(g, L) ||
+      gc2_thread_is_native_current(g, L))
+    return max;  /* Current native/remote frame chains are unstable. */
   used = L->top - 1;
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);

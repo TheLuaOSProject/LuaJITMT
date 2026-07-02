@@ -19,6 +19,7 @@
 #endif
 #include <windows.h>
 #else
+#include <sched.h>
 #include <time.h>
 #include <unistd.h>
 #endif
@@ -364,6 +365,26 @@ uint32_t lj_thr_cpucount(void)
 void lj_thr_fence(void)
 {
   la_fence_seq();  /* 09 section 9.1 threading.fence memory edge. */
+}
+
+uint32_t lj_thr_yield(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : lj_thr_tls_get();
+  uint32_t actions = 0;
+  if (tg)
+    lj_native_enter(tg);
+#if LJ_TARGET_WINDOWS
+  if (!SwitchToThread())
+    Sleep(0);
+#else
+  (void)sched_yield();
+#endif
+  if (L) {
+    actions = lj_native_leave(L);
+  } else if (tg) {
+    (void)lj_tg_in_native_dec_rel(tg);
+  }
+  return actions;
 }
 
 uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns)

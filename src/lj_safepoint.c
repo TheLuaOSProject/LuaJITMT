@@ -228,11 +228,18 @@ void lj_native_enter(TGState *tg)
 uint32_t lj_native_leave(lua_State *L)
 {
   TGState *tg;
+  uint32_t depth;
   if (!L)
     return 0;
   tg = L2TG(L);
   if (!tg)
     return 0;
+  depth = lj_tg_in_native_acq(tg);
+  if (depth == 1) {
+    uint32_t actions = lj_safepoint_poll(L);
+    (void)lj_tg_in_native_dec_rel(tg);
+    return actions;
+  }
   if (lj_tg_in_native_dec_rel(tg) != 0)
     return 0;
   return lj_safepoint_poll(L);
