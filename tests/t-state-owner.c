@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -642,6 +643,35 @@ static void check_lua_load_unowned(lua_State *L)
   assert(lua_dump(co, count_dump_writer, &dumpsz) == 0);
   assert(dumpsz > 0);
   assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
+}
+
+static void check_aux_result_api_unowned(lua_State *L)
+{
+  lua_State *co;
+  lua_settop(L, 0);
+
+  co = lua_newthread(L);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(luaL_fileresult(co, 1, NULL) == 1);
+  assert(lua_toboolean(co, -1));
+  assert(lj_state_owner_acq(co) == 0);
+  lua_pop(co, 1);
+
+  errno = ENOENT;
+  assert(luaL_fileresult(co, 0, "state_owner_missing") == 3);
+  assert(lua_isnil(co, -3));
+  assert(lua_isstring(co, -2));
+  assert(lua_tointeger(co, -1) == ENOENT);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_pop(co, 3);
+
+  assert(luaL_execresult(co, 0) == 3);
+  assert(lua_toboolean(co, -3));
+  assert(strcmp(lua_tostring(co, -2), "exit") == 0);
+  assert(lua_tointeger(co, -1) == 0);
+  assert(lj_state_owner_acq(co) == 0);
+
   lua_settop(L, 0);
 }
 
@@ -1435,6 +1465,23 @@ static int busy_lua_dump(lua_State *L)
   return 0;
 }
 
+static int busy_luaL_fileresult(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lj_state_owner_rel(co, foreign_tid(L));
+  errno = ENOENT;
+  (void)luaL_fileresult(co, 0, "state_owner_busy_missing");
+  return 0;
+}
+
+static int busy_luaL_execresult(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)luaL_execresult(co, 0);
+  return 0;
+}
+
 static int busy_coroutine_resume(lua_State *L)
 {
   uint32_t tid = lj_thr_current_id(G(L));
@@ -1621,6 +1668,7 @@ int main(void)
   check_metamethod_api_unowned(L);
   check_resume_unowned(L);
   check_lua_load_unowned(L);
+  check_aux_result_api_unowned(L);
   check_lua_getinfo_unowned(L);
   check_coroutine_resume_unowned(L);
   check_coroutine_wrap_unowned(L);
@@ -1727,6 +1775,8 @@ int main(void)
   expect_thread_busy(L, busy_lua_load, "busy lua_load");
   expect_thread_busy(L, busy_luaL_loadfile, "busy luaL_loadfile");
   expect_thread_busy(L, busy_lua_dump, "busy lua_dump");
+  expect_thread_busy(L, busy_luaL_fileresult, "busy luaL_fileresult");
+  expect_thread_busy(L, busy_luaL_execresult, "busy luaL_execresult");
   expect_thread_busy(L, busy_coroutine_resume, "busy coroutine.resume");
   expect_thread_busy(L, busy_coroutine_wrap, "busy coroutine.wrap");
   expect_thread_busy(L, busy_lua_getstack, "busy lua_getstack");

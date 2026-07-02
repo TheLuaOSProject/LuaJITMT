@@ -33,18 +33,18 @@
 LUALIB_API int luaL_fileresult(lua_State *L, int stat, const char *fname)
 {
   if (stat) {
-    setboolV(L->top++, 1);
+    lua_pushboolean(L, 1);
     return 1;
   } else {
     int en = errno;  /* Lua API calls may change this value. */
     char errbuf[LJ_ERR_ERRNO_BUFSZ];
     const char *emsg = lj_err_strerrno(en, errbuf, sizeof(errbuf));
-    setnilV(L->top++);
+    lua_pushnil(L);
     if (fname)
       lua_pushfstring(L, "%s: %s", fname, emsg);
     else
       lua_pushfstring(L, "%s", emsg);
-    setintV(L->top++, en);
+    lua_pushinteger(L, en);
     lj_trace_abort(G(L));
     return 3;
   }
@@ -56,25 +56,25 @@ LUALIB_API int luaL_execresult(lua_State *L, int stat)
 #if LJ_TARGET_POSIX
     if (WIFSIGNALED(stat)) {
       stat = WTERMSIG(stat);
-      setnilV(L->top++);
+      lua_pushnil(L);
       lua_pushliteral(L, "signal");
     } else {
       if (WIFEXITED(stat))
 	stat = WEXITSTATUS(stat);
       if (stat == 0)
-	setboolV(L->top++, 1);
+	lua_pushboolean(L, 1);
       else
-	setnilV(L->top++);
+	lua_pushnil(L);
       lua_pushliteral(L, "exit");
     }
 #else
     if (stat == 0)
-      setboolV(L->top++, 1);
+      lua_pushboolean(L, 1);
     else
-      setnilV(L->top++);
+      lua_pushnil(L);
     lua_pushliteral(L, "exit");
 #endif
-    setintV(L->top++, stat);
+    lua_pushinteger(L, stat);
     return 3;
   }
   return luaL_fileresult(L, 0, NULL);

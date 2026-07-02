@@ -1040,6 +1040,54 @@ END {
 ]=], "src/lj_load.c")
 
   awk([=[
+function reset(name) {
+  fun = name; started = 0; depth = 0
+  boolpush = 0; nilpush = 0; strpush = 0; intpush = 0; rawtop = 0
+}
+function finish() {
+  if (fun) {
+    if (rawtop || !boolpush || !nilpush || !strpush || !intpush) {
+      print fun " must use owner-claiming public stack pushes"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUALIB_API int luaL_fileresult\(lua_State \*L,/ {
+  finish(); reset("luaL_fileresult"); next
+}
+/^LUALIB_API int luaL_execresult\(lua_State \*L,/ {
+  finish(); reset("luaL_execresult"); next
+}
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/lua_pushboolean/) boolpush = NR
+  if (/lua_pushnil/) nilpush = NR
+  if (/lua_pushfstring|lua_pushliteral/) strpush = NR
+  if (/lua_pushinteger/) intpush = NR
+  if (/L->top/) rawtop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 2) {
+    print "missing aux result owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lib_aux.c")
+
+  awk([=[
 BEGIN {
   infn = 0; claim = 0; pcall = 0; call = 0; drop_err = 0; drop_call = 0; rethrow = 0
 }

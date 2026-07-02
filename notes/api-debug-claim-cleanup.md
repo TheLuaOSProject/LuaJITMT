@@ -27,6 +27,8 @@ Permanent shape:
   adjustment after native file I/O, avoiding raw target-state `L->top` edits.
 - `lua_dump()` resume-claims the target state before reading the function stack
   slot and keeps the claim through bytecode dump traversal.
+- `luaL_fileresult()` and `luaL_execresult()` build their public result tuples
+  with owner-claiming public stack push APIs instead of raw target-stack writes.
 - Public metamethod-facing APIs (`lua_equal`, `lua_lessthan`, `lua_concat`,
   `lua_gettable`, `lua_getfield`, `lua_settable`, `lua_setfield`, and
   `luaL_callmeta`) hold resume claims around stack inspection/mutation and route
