@@ -133,6 +133,15 @@ int main(void)
   assert(lj_state_owner_acq(L) == tg->tid);
   assert(lj_thr_get_tg() == tg);
   assert(G2TG(g) == tg);
+  assert(lj_tg_cur_L(NULL) == lj_tg_cur_L(g));
+  assert(lj_tg_jit_base(NULL) == lj_tg_jit_base(g));
+  lj_thr_set_tg(NULL);
+  assert(lj_tg_cur_L(NULL) == NULL);
+  assert(lj_tg_jit_base(NULL) == NULL);
+  lj_tg_setcur_L(NULL, NULL);
+  lj_tg_clearcur_L(NULL);
+  lj_tg_setjit_base(NULL, NULL);
+  lj_thr_set_tg(tg);
   assert(lj_thr_cpucount() >= 1u);
   lj_thr_fence();
 

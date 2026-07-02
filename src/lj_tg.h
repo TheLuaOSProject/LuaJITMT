@@ -645,6 +645,8 @@ static LJ_AINLINE lua_State *lj_tg_cur_L(global_State *g)
   TGState *tg = G2TG(g);
   if (tg)
     return lj_tg_load_cur_L(tg);
+  if (!g)
+    return NULL;
   {
     GCobj *o = gcref_acq(g->cur_L);
     return o ? gco2th(o) : NULL;
@@ -656,6 +658,8 @@ static LJ_AINLINE void lj_tg_setcur_L(global_State *g, lua_State *L)
   TGState *tg = G2TG(g);
   if (tg)
     lj_tg_store_cur_L(tg, L);
+  if (!g)
+    return;
   setgcrefrel(g->cur_L, obj2gco(L));  /* Transitional mirror for VM asm. */
 }
 
@@ -664,6 +668,8 @@ static LJ_AINLINE void lj_tg_clearcur_L(global_State *g)
   TGState *tg = G2TG(g);
   if (tg)
     lj_tg_store_cur_L(tg, NULL);
+  if (!g)
+    return;
   setgcrefnullrel(g->cur_L);  /* Transitional mirror for VM asm. */
 }
 
@@ -672,6 +678,8 @@ static LJ_AINLINE TValue *lj_tg_jit_base(global_State *g)
   TGState *tg = G2TG(g);
   if (tg)
     return lj_tg_load_jit_base(tg);
+  if (!g)
+    return NULL;
   return mref_acq(g->jit_base, TValue);  /* Transitional mirror for VM asm writes. */
 }
 
@@ -680,6 +688,8 @@ static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
   TGState *tg = G2TG(g);
   if (tg)
     lj_tg_store_jit_base(tg, base);
+  if (!g)
+    return;
   setmrefrel(g->jit_base, base);  /* Transitional mirror for VM asm. */
 }
 

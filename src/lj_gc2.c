@@ -2179,6 +2179,8 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   int errcode;
   ptrdiff_t oldtop;
   TValue *top;
+  if (!g || !cbL || !mo || !o)
+    return 0;
   if (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
     return 0;  /* Caller must preclaim before clearing FINREG state. */
   lj_assertG(cbL != vmthread_acq(g),
