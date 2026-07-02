@@ -81,6 +81,61 @@ END {
                         " src/lj_func.c")
 end
 
+local function assert_mt_activation_jit_token_boundary(t)
+  local awk = [=[
+BEGIN {
+  inprep = 0
+  inenter = 0
+  prep_token = 0
+  prep_hasany = 0
+  enter_prepare = 0
+  enter_cas = 0
+  enter_finish = 0
+}
+/^static int threading_mt_active_prepare_traces\(lua_State \*L\)/ {
+  inprep = 1
+  next
+}
+inprep && /^}/ {
+  inprep = 0
+  next
+}
+inprep && /lj_jit_token_acquire_wait/ { prep_token = NR }
+inprep && /lj_trace_hasany/ {
+  prep_hasany = NR
+  if (!prep_token || prep_token > NR) {
+    print "threading_mt_active_prepare_traces checks traces before holding JIT token"
+    exit 1
+  }
+}
+/^static int threading_gc_enter_counted\(lua_State \*L, GCudata \*rootud\)/ {
+  inenter = 1
+  next
+}
+inenter && /^}/ {
+  inenter = 0
+  next
+}
+inenter && /threading_mt_active_prepare_traces/ { enter_prepare = NR }
+inenter && /mt_active_cas/ && enter_prepare && !enter_cas { enter_cas = NR }
+inenter && /threading_mt_active_finish_traces/ { enter_finish = NR }
+END {
+  if (!prep_token || !prep_hasany) {
+    print "threading_mt_active_prepare_traces missing tokened trace boundary"
+    exit 1
+  }
+  if (!enter_prepare || !enter_cas || !enter_finish ||
+      !(enter_prepare < enter_cas && enter_cas < enter_finish)) {
+    print "threading_gc_enter_counted does not hold JIT token across mt_active CAS"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lib_threading.c")
+end
+
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
@@ -1693,6 +1748,7 @@ assert(live >= 8, live)
     description = "pre-MT JIT traces are flushed before first thread activation",
     run = function(t)
       build_default(t)
+      assert_mt_activation_jit_token_boundary(t)
       luajit_code(t, [=[
 local threading = require("threading")
 local trace_count = require("jit_harness").trace_count

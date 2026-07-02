@@ -426,21 +426,35 @@ void lj_threading_shutdown(lua_State *L)
 static void threading_gc_leave(global_State *g);
 
 #if LJ_HASJIT
-static void threading_mt_active_flush_traces(lua_State *L)
+static int threading_mt_active_prepare_traces(lua_State *L)
 {
   global_State *g = G(L);
+  jit_State *J = L2J(L);
+  int token = lj_jit_token_acquire_wait(J);
   if (!lj_trace_hasany(g))
-    return;
+    return token;
   if ((hookmask_load(g) & HOOK_GC)) {
     lj_trace_abort(g);
     (void)lj_trace_flushall_gc(L);
-    return;
+    return token;
   }
-  if (lj_trace_flushall_hs(L))
+  if (lj_trace_flushall_hs(L)) {
+    if (token)
+      lj_jit_token_release(J);
     lj_err_callermsg(L, "cannot activate threading while a GC hook is active");
+  }
+  return token;
+}
+
+static void threading_mt_active_finish_traces(lua_State *L, int token)
+{
+  if (token)
+    lj_jit_token_release(L2J(L));
 }
 #else
-#define threading_mt_active_flush_traces(L)	UNUSED(L)
+#define threading_mt_active_prepare_traces(L)	(UNUSED(L), 0)
+#define threading_mt_active_finish_traces(L, token) \
+  (UNUSED(L), UNUSED(token))
 #endif
 
 static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
@@ -461,9 +475,13 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
       return 0;
     }
     expect = 0;
-    if (mt_active_acq(g) == 0)
-      threading_mt_active_flush_traces(L);
-    (void)mt_active_cas(g, &expect, 1);
+    if (mt_active_acq(g) == 0) {
+      int token = threading_mt_active_prepare_traces(L);
+      (void)mt_active_cas(g, &expect, 1);
+      threading_mt_active_finish_traces(L, token);
+    } else {
+      (void)mt_active_cas(g, &expect, 1);
+    }
     if (rootud)
       threading_spawn_gc_handoff(L, rootud);
     if (mt_live_add_rlx(g, 1) == 0) {
