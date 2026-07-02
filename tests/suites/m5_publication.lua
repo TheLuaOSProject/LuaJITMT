@@ -137,6 +137,11 @@ BEGIN { fun = ""; seen = 0; claim_kind = "" }
 /^LUA_API void lua_pushvalue\(lua_State \*L,/ { finish(); reset("lua_pushvalue", 1, 1, "tv"); next }
 /^LUA_API void lua_replace\(lua_State \*L,/ { finish(); reset("lua_replace", 0, 0, "none"); next }
 /^LUA_API void lua_copy\(lua_State \*L,/ { finish(); reset("lua_copy", 0, 0, "none"); next }
+/^LUA_API void lua_pushnil\(lua_State \*L\)/ { finish(); reset("lua_pushnil", 1, 1, "tv"); next }
+/^LUA_API void lua_pushnumber\(lua_State \*L,/ { finish(); reset("lua_pushnumber", 1, 1, "tv"); next }
+/^LUA_API void lua_pushinteger\(lua_State \*L,/ { finish(); reset("lua_pushinteger", 1, 1, "tv"); next }
+/^LUA_API void lua_pushboolean\(lua_State \*L,/ { finish(); reset("lua_pushboolean", 1, 1, "tv"); next }
+/^LUA_API int lua_pushthread\(lua_State \*L\)/ { finish(); reset("lua_pushthread", 1, 1, "tv"); next }
 fun {
   if (index($0, "{")) started = 1
   depth += count_char($0, "{")
@@ -154,7 +159,7 @@ fun {
 }
 END {
   finish()
-  if (seen != 8) {
+  if (seen != 13) {
     print "missing public stack API owner-claim guard coverage"
     exit 1
   }

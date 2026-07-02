@@ -103,6 +103,17 @@ static void check_stack_api_unowned(lua_State *L)
   assert(lua_gettop(co) == 3);
   assert(lua_tointeger(co, 2) == 1);
   assert(lua_tointeger(co, 3) == 1);
+  lua_pushnil(co);
+  assert(lua_gettop(co) == 4 && lua_isnil(co, 4));
+  lua_pushnumber(co, 4.5);
+  assert(lua_gettop(co) == 5 && lua_tonumber(co, 5) == 4.5);
+  lua_pushinteger(co, 6);
+  assert(lua_gettop(co) == 6 && lua_tointeger(co, 6) == 6);
+  lua_pushboolean(co, 1);
+  assert(lua_gettop(co) == 7 && lua_toboolean(co, 7));
+  assert(lua_pushthread(co) == 0);
+  assert(lua_gettop(co) == 8 && lua_tothread(co, 8) == co);
+  lua_settop(co, 3);
   lua_settop(co, 5);
   assert(lua_gettop(co) == 5);
   assert(lua_isnil(co, 4) && lua_isnil(co, 5));
@@ -611,6 +622,46 @@ static int busy_lua_copy(lua_State *L)
   lua_State *co = lua_newthread(L);
   busy_stack_prepare(L, co);
   lua_copy(co, 1, 2);
+  return 0;
+}
+
+static int busy_lua_pushnil(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_pushnil(co);
+  return 0;
+}
+
+static int busy_lua_pushnumber(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_pushnumber(co, 3.5);
+  return 0;
+}
+
+static int busy_lua_pushinteger(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_pushinteger(co, 3);
+  return 0;
+}
+
+static int busy_lua_pushboolean(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_pushboolean(co, 1);
+  return 0;
+}
+
+static int busy_lua_pushthread(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  (void)lua_pushthread(co);
   return 0;
 }
 
@@ -1238,6 +1289,11 @@ int main(void)
   expect_thread_busy(L, busy_lua_pushvalue, "busy lua_pushvalue");
   expect_thread_busy(L, busy_lua_replace, "busy lua_replace");
   expect_thread_busy(L, busy_lua_copy, "busy lua_copy");
+  expect_thread_busy(L, busy_lua_pushnil, "busy lua_pushnil");
+  expect_thread_busy(L, busy_lua_pushnumber, "busy lua_pushnumber");
+  expect_thread_busy(L, busy_lua_pushinteger, "busy lua_pushinteger");
+  expect_thread_busy(L, busy_lua_pushboolean, "busy lua_pushboolean");
+  expect_thread_busy(L, busy_lua_pushthread, "busy lua_pushthread");
   expect_thread_busy(L, busy_lua_type, "busy lua_type");
   expect_thread_busy(L, busy_lua_isnumber, "busy lua_isnumber");
   expect_thread_busy(L, busy_lua_isstring, "busy lua_isstring");

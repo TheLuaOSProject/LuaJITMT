@@ -1088,22 +1088,43 @@ LUA_API const void *lua_topointer(lua_State *L, int idx)
 
 LUA_API void lua_pushnil(lua_State *L)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setnilV(L->top);
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_pushnumber(lua_State *L, lua_Number n)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setnumV(L->top, n);
   if (LJ_UNLIKELY(tvisnan(L->top)))
     setnanV(L->top);  /* Canonicalize injected NaNs. */
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_pushinteger(lua_State *L, lua_Integer n)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setintptrV(L->top, n);
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_pushlstring(lua_State *L, const char *str, size_t len)
@@ -1165,8 +1186,15 @@ LUA_API void lua_pushcclosure(lua_State *L, lua_CFunction f, int n)
 
 LUA_API void lua_pushboolean(lua_State *L, int b)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setboolV(L->top, (b != 0));
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_pushlightuserdata(lua_State *L, void *p)
@@ -1224,9 +1252,18 @@ LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 
 LUA_API int lua_pushthread(lua_State *L)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  int ismain;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setthreadV(L, L->top, L);
-  incr_top(L);
-  return (mainthread_acq(G(L)) == L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  ismain = (mainthread_acq(G(L)) == L);
+  lj_state_dropresumeclaim(&claim);
+  return ismain;
 }
 
 LUA_API lua_State *lua_newthread(lua_State *L)
