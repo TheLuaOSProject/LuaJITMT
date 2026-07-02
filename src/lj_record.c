@@ -1402,15 +1402,12 @@ static void rec_rbchash_publish(jit_State *J, TRef tr, const BCIns *pc)
 
 static LJ_AINLINE void rec_template_wait(lua_State *L)
 {
-  uint32_t i;
   /*
   ** Optional table-bump template markers retry after table resize forwarding
   ** or a slot CAS loss. The recorder owns a current Lua state, so keep that TG
   ** native and safepoint-visible without coarse timer parking.
   */
-  for (i = 0; i < 64; i++)
-    la_cpu_pause();
-  (void)lj_thr_yield(L);
+  (void)lj_thr_retry_yield(L);
 }
 
 static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)

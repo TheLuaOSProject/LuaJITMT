@@ -53,10 +53,7 @@
 
 static void gc_root_wait_no_l(void)
 {
-  uint32_t i;
-  for (i = 0; i < 64; i++)
-    la_cpu_pause();
-  (void)lj_thr_yield(NULL);
+  (void)lj_thr_retry_yield(NULL);
 }
 
 /* -- Mark phase ---------------------------------------------------------- */
