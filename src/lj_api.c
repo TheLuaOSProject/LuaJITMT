@@ -1670,7 +1670,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     total = lj_gc_total_load(g);
     lj_gc_threshold_store(g, (a <= total) ? (total - a) : 0);
     while (lj_gc_total_load(g) >= lj_gc_threshold_load(g))
-      if (lj_gc_step(L) > 0) {
+      if (lj_gc_step_explicit(L) > 0) {
 	res = 1;
 	break;
       }

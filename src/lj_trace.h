@@ -34,6 +34,7 @@ LJ_FUNC uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno);
 LJ_FUNC uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno);
 LJ_FUNC int lj_trace_hasany(global_State *g);
 LJ_FUNC int lj_trace_flushall(lua_State *L);
+LJ_FUNC int lj_trace_flushall_gc(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs(lua_State *L);
 LJ_FUNC void lj_trace_flushscope_hs(global_State *g, uint32_t work);
 LJ_FUNC int lj_jit_token_try(jit_State *J);

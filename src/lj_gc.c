@@ -1804,8 +1804,7 @@ static size_t gc_onestep(lua_State *L)
   }
 }
 
-/* Perform a limited amount of incremental GC steps. */
-int LJ_FASTCALL lj_gc_step(lua_State *L)
+static int gc_step_limited(lua_State *L, GCSize quantum, int batch_threshold)
 {
   global_State *g = G(L);
   GCSize lim;
@@ -1829,17 +1828,28 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
     }
   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
   {
-    GCSize quantum = gc_step_debt_quantum(g);
     if (g->gc.debt < quantum) {
       lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
       vmstate_store_rel(g, ostate);
       return -1;
     }
     g->gc.debt -= quantum;
-    lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
+    lj_gc_threshold_store(g, lj_gc_total_load(g) +
+			  (batch_threshold ? quantum : 0));
     vmstate_store_rel(g, ostate);
     return 0;
   }
+}
+
+/* Perform a limited amount of incremental GC steps. */
+int LJ_FASTCALL lj_gc_step(lua_State *L)
+{
+  return gc_step_limited(L, gc_step_debt_quantum(G(L)), 1);
+}
+
+int lj_gc_step_explicit(lua_State *L)
+{
+  return gc_step_limited(L, GCSTEPSIZE, 0);
 }
 
 static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step)

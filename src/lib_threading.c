@@ -427,7 +427,14 @@ static void threading_gc_leave(global_State *g);
 static void threading_mt_active_flush_traces(lua_State *L)
 {
   global_State *g = G(L);
-  if (lj_trace_hasany(g) && lj_trace_flushall_hs(L))
+  if (!lj_trace_hasany(g))
+    return;
+  if ((hookmask_load(g) & HOOK_GC)) {
+    lj_trace_abort(g);
+    (void)lj_trace_flushall_gc(L);
+    return;
+  }
+  if (lj_trace_flushall_hs(L))
     lj_err_callermsg(L, "cannot activate threading while a GC hook is active");
 }
 #else

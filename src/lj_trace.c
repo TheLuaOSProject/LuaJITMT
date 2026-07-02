@@ -860,12 +860,13 @@ int lj_trace_hasany(global_State *g)
   return 0;
 }
 
-int lj_trace_flushall(lua_State *L)
+static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
+				 int send_event)
 {
   jit_State *J = L2J(L);
   ptrdiff_t i;
   int token;
-  if ((hookmask_load(J2G(J)) & HOOK_GC))
+  if (!allow_gc_hook && (hookmask_load(J2G(J)) & HOOK_GC))
     return 1;
   token = lj_jit_token_acquire_wait(J);
   for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
@@ -891,10 +892,22 @@ int lj_trace_flushall(lua_State *L)
   memset(J->exitstubgroup, 0, sizeof(J->exitstubgroup));
   if (token)
     lj_jit_token_release(J);
-  lj_vmevent_send(J2G(J), TRACE,
-    setstrV(V, V->top++, lj_str_newlit(V, "flush"));
-  );
+  if (send_event) {
+    lj_vmevent_send(J2G(J), TRACE,
+      setstrV(V, V->top++, lj_str_newlit(V, "flush"));
+    );
+  }
   return 0;
+}
+
+int lj_trace_flushall(lua_State *L)
+{
+  return trace_flushall_direct(L, 0, 1);
+}
+
+int lj_trace_flushall_gc(lua_State *L)
+{
+  return trace_flushall_direct(L, 1, 0);
 }
 
 /* Request a leader-owned full trace flush through the safepoint protocol. */

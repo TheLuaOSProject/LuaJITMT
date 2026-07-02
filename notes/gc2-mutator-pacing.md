@@ -10,6 +10,12 @@ quantum after a bounded `lj_gc_step()` does not finish a cycle.  This keeps GC
 progress visible without making allocation-heavy loops run the collector on
 nearly every object.
 
+Public explicit `collectgarbage("step", n)` calls keep stock-style threshold
+republish through `lj_gc_step_explicit()`.  This separates API-visible GC-step
+semantics from the automatic allocation pacing batch: large explicit steps still
+continue into FINREG/finalizer dispatch, while allocation-triggered assists keep
+the lower overhead batch quantum.
+
 GC2 hard assists are also batch-gated.  Normal hard limits only run an assist
 when the current TG has accumulated a full `LJ_GC2_ACCT_FLUSH` local allocation
 batch.  Forced tiny hard limits used by focused tests still bypass the gate so
