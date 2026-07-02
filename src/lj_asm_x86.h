@@ -2019,7 +2019,7 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
 #if LJ_HAS_X64_MT_JIT_HELPERS
 static int asm_ahstore_can_inline_tvalue(IRType1 t)
 {
-  return irt_isnum(t) || (LJ_DUALNUM && irt_isint(t));
+  return irt_isnum(t) || irt_ispri(t) || (LJ_DUALNUM && irt_isint(t));
 }
 
 static uint64_t asm_ahstore_int_tvalue_tag(void)
@@ -2031,17 +2031,30 @@ static uint64_t asm_ahstore_int_tvalue_tag(void)
 #endif
 }
 
+static uint64_t asm_ahstore_pri_tvalue_bits(IRType1 t)
+{
+  TValue tv;
+  tv_rawstore(&tv, 0);
+  if (irt_isnil(t))
+    setnilV(&tv);
+  else
+    setpriV(&tv, irt_toitype(t));
+  return tv_rawload(&tv);
+}
+
 static void asm_ahstore_emit_src_raw(ASMState *as, IRIns *ir, Reg src,
 				     RegSet allow)
 {
   if (irt_isnum(ir->t)) {
     Reg fsrc = ra_alloc1(as, ir->op2, RSET_FPR);
     emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
+  } else if (irt_ispri(ir->t)) {
+    emit_loadu64(as, src, asm_ahstore_pri_tvalue_bits(ir->t));
   } else {
     Reg isrc = RID_NONE;
     Reg tag;
     lj_assertA(LJ_DUALNUM && irt_isint(ir->t),
-	       "expected number or DUALNUM integer table store");
+	       "expected number, primitive, or DUALNUM integer table store");
     if (!irref_isk(ir->op2)) {
       isrc = ra_alloc1(as, ir->op2, allow);
       rset_clear(allow, isrc);
