@@ -69,6 +69,55 @@ function M.file_exists(path)
   return false
 end
 
+local function sleep_seconds(seconds)
+  os.execute("sleep " .. tostring(seconds) .. " >/dev/null 2>&1")
+end
+
+function M.with_directory_lock(path, label, fn, opts)
+  opts = opts or {}
+  label = label or path
+  if os.getenv("LJ_TEST_DISABLE_RUN_LOCK") == "1" then
+    return fn()
+  end
+
+  local timeout = tonumber(os.getenv("LJ_TEST_RUN_LOCK_TIMEOUT") or
+                            opts.timeout or 900)
+  local started = os.time()
+  local owner = path .. "/owner"
+  local quoted = M.shell_quote(path)
+  local announced = false
+
+  while not M.command_succeeded("mkdir " .. quoted .. " 2>/dev/null") do
+    if timeout >= 0 and os.time() - started >= timeout then
+      local detail = ""
+      local f = io.open(owner, "rb")
+      if f then
+        detail = "\nowner:\n" .. f:read("*a")
+        f:close()
+      end
+      error(label .. " lock timed out: " .. path .. detail, 2)
+    end
+    if not announced then
+      io.stderr:write("waiting for " .. label .. " lock: " .. path .. "\n")
+      announced = true
+    end
+    sleep_seconds(0.2)
+  end
+
+  local f = io.open(owner, "wb")
+  if f then
+    f:write("time=", os.date("!%Y-%m-%dT%H:%M:%SZ"), "\n")
+    f:write("cmd=", arg and table.concat(arg, " ") or "unknown", "\n")
+    f:close()
+  end
+
+  local results = { pcall(fn) }
+  os.remove(owner)
+  M.command_succeeded("rmdir " .. quoted .. " 2>/dev/null")
+  if not results[1] then error(results[2], 0) end
+  return unpack(results, 2)
+end
+
 function M.with_temp_paths(t, prefixes, fn)
   local paths = {}
   for i = 1, #prefixes do

@@ -60,7 +60,6 @@ if #passthrough > 0 and #names ~= 1 then
   os.exit(2)
 end
 
-local t = ljtest.new(root)
 for i = 1, #names do
   local name = names[i]
   if not tests[name] then
@@ -68,5 +67,15 @@ for i = 1, #names do
     usage()
     os.exit(2)
   end
-  utils.run_case(tests, t, name, passthrough)
 end
+
+local function run_selected()
+  local t = ljtest.new(root)
+  for i = 1, #names do
+    local name = names[i]
+    utils.run_case(tests, t, name, passthrough)
+  end
+end
+
+utils.with_directory_lock(root .. "/src/.lj-test-run.lock", "Lua test runner",
+                          run_selected)
