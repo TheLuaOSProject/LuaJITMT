@@ -547,13 +547,12 @@ GCstr * LJ_FASTCALL lj_strfmt_obj(lua_State *L, cTValue *o)
 ** - %s %c %p without formatting.
 */
 
-/* Push formatted message as a string object to Lua stack. va_list variant. */
-const char *lj_strfmt_pushvf(lua_State *L, const char *fmt, va_list argp)
+/* Format message as a string object. va_list variant. */
+GCstr *lj_strfmt_vstr(lua_State *L, const char *fmt, va_list argp)
 {
   SBuf *sb = lj_buf_tmp_(L);
   FormatState fs;
   SFormat sf;
-  GCstr *str;
   lj_strfmt_init(&fs, fmt, (MSize)strlen(fmt));
   while ((sf = lj_strfmt_parse(&fs)) != STRFMT_EOF) {
     switch (STRFMT_TYPE(sf)) {
@@ -588,7 +587,13 @@ const char *lj_strfmt_pushvf(lua_State *L, const char *fmt, va_list argp)
       break;
     }
   }
-  str = lj_buf_str(L, sb);
+  return lj_buf_str(L, sb);
+}
+
+/* Push formatted message as a string object to Lua stack. va_list variant. */
+const char *lj_strfmt_pushvf(lua_State *L, const char *fmt, va_list argp)
+{
+  GCstr *str = lj_strfmt_vstr(L, fmt, argp);
   setstrV(L, L->top, str);
   incr_top(L);
   return strdata(str);

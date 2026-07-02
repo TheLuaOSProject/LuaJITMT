@@ -121,6 +121,7 @@ LJ_FUNC GCstr * LJ_FASTCALL lj_strfmt_char(lua_State *L, int c);
 LJ_FUNC GCstr * LJ_FASTCALL lj_strfmt_obj(lua_State *L, cTValue *o);
 
 /* Internal string formatting. */
+LJ_FUNC GCstr *lj_strfmt_vstr(lua_State *L, const char *fmt, va_list argp);
 LJ_FUNC const char *lj_strfmt_pushvf(lua_State *L, const char *fmt,
 				     va_list argp);
 LJ_FUNC const char *lj_strfmt_pushf(lua_State *L, const char *fmt, ...)

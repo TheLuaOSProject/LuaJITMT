@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,6 +20,16 @@
 
 static int resume_return(lua_State *L);
 static int c_upvalue_return(lua_State *L);
+
+static const char *push_vfstring(lua_State *L, const char *fmt, ...)
+{
+  const char *ret;
+  va_list argp;
+  va_start(argp, fmt);
+  ret = lua_pushvfstring(L, fmt, argp);
+  va_end(argp);
+  return ret;
+}
 
 static void expect_thread_busy(lua_State *L, lua_CFunction fn,
 			       const char *what)
@@ -123,23 +134,31 @@ static void check_stack_api_unowned(lua_State *L)
   assert(strcmp(lua_tostring(co, 10), "ownerless") == 0);
   lua_pushstring(co, NULL);
   assert(lua_gettop(co) == 11 && lua_isnil(co, 11));
+  assert(strcmp(push_vfstring(co, "vf:%s:%d", "ownerless", 21),
+		"vf:ownerless:21") == 0);
+  assert(lua_gettop(co) == 12);
+  assert(strcmp(lua_tostring(co, 12), "vf:ownerless:21") == 0);
+  assert(strcmp(lua_pushfstring(co, "f:%s:%d", "ownerless", 22),
+		"f:ownerless:22") == 0);
+  assert(lua_gettop(co) == 13);
+  assert(strcmp(lua_tostring(co, 13), "f:ownerless:22") == 0);
   lua_pushlightuserdata(co, &marker);
-  assert(lua_gettop(co) == 12 && lua_touserdata(co, 12) == &marker);
+  assert(lua_gettop(co) == 14 && lua_touserdata(co, 14) == &marker);
   lua_createtable(co, 2, 1);
-  assert(lua_gettop(co) == 13 && lua_type(co, 13) == LUA_TTABLE);
+  assert(lua_gettop(co) == 15 && lua_type(co, 15) == LUA_TTABLE);
   assert(lua_newuserdata(co, 4) != NULL);
-  assert(lua_gettop(co) == 14 && lua_isuserdata(co, 14));
-  assert(lua_newthread(co) == lua_tothread(co, 15));
-  assert(lua_gettop(co) == 15 && lua_type(co, 15) == LUA_TTHREAD);
+  assert(lua_gettop(co) == 16 && lua_isuserdata(co, 16));
+  assert(lua_newthread(co) == lua_tothread(co, 17));
+  assert(lua_gettop(co) == 17 && lua_type(co, 17) == LUA_TTHREAD);
   lua_pushcclosure(co, resume_return, 0);
-  assert(lua_gettop(co) == 16 && lua_iscfunction(co, 16));
+  assert(lua_gettop(co) == 18 && lua_iscfunction(co, 18));
   lua_call(co, 0, 1);
-  assert(lua_gettop(co) == 16 && lua_tointeger(co, 16) == 91);
+  assert(lua_gettop(co) == 18 && lua_tointeger(co, 18) == 91);
   lua_pushinteger(co, 70);
   lua_pushcclosure(co, c_upvalue_return, 1);
-  assert(lua_gettop(co) == 17 && lua_iscfunction(co, 17));
+  assert(lua_gettop(co) == 19 && lua_iscfunction(co, 19));
   lua_call(co, 0, 1);
-  assert(lua_gettop(co) == 17 && lua_tointeger(co, 17) == 70);
+  assert(lua_gettop(co) == 19 && lua_tointeger(co, 19) == 70);
   lua_settop(co, 3);
   lua_settop(co, 5);
   assert(lua_gettop(co) == 5);
@@ -713,6 +732,14 @@ static int busy_lua_pushstring_null(lua_State *L)
   lua_State *co = lua_newthread(L);
   busy_stack_prepare(L, co);
   lua_pushstring(co, NULL);
+  return 0;
+}
+
+static int busy_lua_pushfstring(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  (void)lua_pushfstring(co, "busy:%d", 1);
   return 0;
 }
 
@@ -1389,6 +1416,7 @@ int main(void)
   expect_thread_busy(L, busy_lua_pushlstring, "busy lua_pushlstring");
   expect_thread_busy(L, busy_lua_pushstring, "busy lua_pushstring");
   expect_thread_busy(L, busy_lua_pushstring_null, "busy lua_pushstring NULL");
+  expect_thread_busy(L, busy_lua_pushfstring, "busy lua_pushfstring");
   expect_thread_busy(L, busy_lua_pushlightuserdata,
 		     "busy lua_pushlightuserdata");
   expect_thread_busy(L, busy_lua_createtable, "busy lua_createtable");

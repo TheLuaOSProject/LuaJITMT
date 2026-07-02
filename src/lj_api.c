@@ -1173,17 +1173,29 @@ LUA_API void lua_pushstring(lua_State *L, const char *str)
 LUA_API const char *lua_pushvfstring(lua_State *L, const char *fmt,
 				     va_list argp)
 {
-  lj_gc_check(L);
-  return lj_strfmt_pushvf(L, fmt, argp);
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
+  GCstr *s;
+  api_checkclaim(L, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
+  s = lj_strfmt_vstr(errL, fmt, argp);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
+  setstrV(L, L->top, s);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
+  return strdata(s);
 }
 
 LUA_API const char *lua_pushfstring(lua_State *L, const char *fmt, ...)
 {
   const char *ret;
   va_list argp;
-  lj_gc_check(L);
   va_start(argp, fmt);
-  ret = lj_strfmt_pushvf(L, fmt, argp);
+  ret = lua_pushvfstring(L, fmt, argp);
   va_end(argp);
   return ret;
 }

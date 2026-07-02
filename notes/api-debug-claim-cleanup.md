@@ -44,6 +44,10 @@ Permanent shape:
   allocation, then resume-claim to publish the stack slot. `lua_newuserdata()`
   and `lua_newthread()` snapshot the target current environment before dropping
   the preclaim.
+- `lua_pushvfstring()` prechecks target ownership, drops the preclaim while
+  formatting/interning through the current error state, then resume-claims the
+  target for one-slot growth and string publication. `lua_pushfstring()`
+  delegates through the same helper path.
 - `lua_pushcclosure()` prechecks the target stack and snapshots the current
   environment under a target-state claim, drops that preclaim for closure
   allocation, then resume-claims to revalidate the stack, copy upvalues, and
