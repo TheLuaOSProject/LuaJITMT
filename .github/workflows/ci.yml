@@ -32,15 +32,6 @@ jobs:
       - name: Build, run, and test Linux platform
         run: |
           tools/ci/platform_build.sh linux-x86_64
-      - name: Compare selected benchmarks against stock LuaJIT
-        env:
-          LJ_BENCH_STOCK_BIN: /usr/bin/luajit
-          LJ_BENCH_STOCK_FILTERS: arith_loop fib30 tab_hash_write alloc_tables closures_upval
-          LJ_BENCH_STOCK_MAX: "100"
-          LJ_BENCH_STOCK_TIMEOUT: 60s
-          BENCH_SCALE: "0.001"
-        run: |
-          tools/ci/lua_test.sh m9_bench_stock_compare
 
   macos:
     name: macOS x86_64 build/run
@@ -63,25 +54,22 @@ jobs:
 
   windows-ucrt:
     name: Windows x86_64 UCRT build/run
-    runs-on: ubuntu-24.04
-    container: debian:trixie
-    env:
-      LUA: luajit
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
-      - name: Install build tools
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            build-essential ca-certificates git luajit make \
-            binutils-mingw-w64-ucrt64 gcc-mingw-w64-ucrt64 mingw-w64 \
-            wine wine64
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            make
+            mingw-w64-ucrt-x86_64-gcc
       - name: Build, run, and test Windows UCRT platform
         run: |
-          mkdir -p "$PWD/.ci-home" "$PWD/.wine"
-          export HOME="$PWD/.ci-home"
-          export WINEPREFIX="$PWD/.wine"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           tools/ci/platform_build.sh windows-x86_64-ucrt

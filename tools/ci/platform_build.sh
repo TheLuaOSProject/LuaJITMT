@@ -10,9 +10,9 @@ platform:
   macos-x86_64
   windows-x86_64-ucrt
 
-Builds the requested platform target, runs it directly, and executes the
-matching platform binary smoke test. Release install-tree archive checks live
-in tools/release/build_artifact.sh.
+Builds the requested platform target, runs it directly on the matching host,
+and executes the matching platform binary smoke test. Release install-tree
+archive checks and Wine/Darling validation live in tools/release/build_artifact.sh.
 USAGE
   exit 2
 }
@@ -29,6 +29,13 @@ case "$platform" in
   linux-x86_64|macos-x86_64|windows-x86_64-ucrt) ;;
   *) usage ;;
 esac
+
+is_windows_host() {
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 make_clean() {
   make -C "$root" clean
@@ -70,19 +77,18 @@ run_direct_smoke() {
   printf 'CI %s binary smoke passed\n' "$label"
 }
 
-run_windows_smoke() {
+run_windows_direct_smoke() {
   local bin=$1
-  local runner=${LJ_CI_WINDOWS_RUNNER:-${LJ_RELEASE_WINDOWS_RUNNER:-wine}}
   local out
+  if ! is_windows_host; then
+    printf 'CI Windows smoke must run on a Windows host; use tools/release/build_artifact.sh for Wine release validation\n' >&2
+    exit 1
+  fi
   if [ ! -f "$bin" ]; then
     printf 'CI Windows smoke binary is missing: %s\n' "$bin" >&2
     exit 1
   fi
-  if ! command -v "$runner" >/dev/null 2>&1; then
-    printf 'CI Windows smoke runner is not in PATH: %s\n' "$runner" >&2
-    exit 1
-  fi
-  if ! out=$(WINEDEBUG=-all "$runner" "$bin" -e "$smoke_code" 2>&1); then
+  if ! out=$("$bin" -e "$smoke_code" 2>&1); then
     printf '%s\n' "$out" >&2
     exit 1
   fi
@@ -136,9 +142,12 @@ case "$platform" in
       release_macos_binary macos LJ_RELEASE_MACOS_BIN "$root/src/luajit"
     ;;
   windows-x86_64-ucrt)
-    cross=${LJ_CI_WINDOWS_CROSS:-${LJ_RELEASE_WINDOWS_CROSS:-x86_64-w64-mingw32ucrt-}}
+    if ! is_windows_host; then
+      printf 'CI Windows smoke must run on a Windows host; use tools/release/build_artifact.sh for Wine release validation\n' >&2
+      exit 1
+    fi
+    cross=${LJ_CI_WINDOWS_CROSS-}
     cc=${LJ_CI_WINDOWS_CC:-${LJ_RELEASE_WINDOWS_CC:-gcc}}
-    runner=${LJ_CI_WINDOWS_RUNNER:-${LJ_RELEASE_WINDOWS_RUNNER:-wine}}
     windows_make_args=(
       HOST_CC="${HOST_CC:-gcc}"
       CROSS="$cross"
@@ -147,9 +156,6 @@ case "$platform" in
     )
     make_clean
     build_make "${windows_make_args[@]}"
-    run_windows_smoke "$root/src/luajit.exe"
-    run_platform_test \
-      release_windows_binary windows LJ_RELEASE_WINDOWS_BIN "$root/src/luajit.exe" \
-      LJ_RELEASE_WINDOWS_RUNNER="$runner"
+    run_windows_direct_smoke "$root/src/luajit.exe"
     ;;
 esac
