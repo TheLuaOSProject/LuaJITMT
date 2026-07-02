@@ -455,21 +455,30 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
       index2adr_cupvalue_store_rel(L, idx, f);
     } else {
       copyTV(L, o, f);
+      lj_state_stack_pubtv(L, L, o);
     }
   }
 }
 
 LUA_API void lua_replace(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
   lj_checkapi_slot(1);
   copy_slot(L, L->top - 1, idx);
   L->top--;
+  lj_state_dropclaim(&claim);
 }
 
 LUA_API void lua_copy(lua_State *L, int fromidx, int toidx)
 {
+  LJStateClaim claim;
   TValue snap;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
   copy_slot(L, index2adr_read(L, fromidx, &snap), toidx);
+  lj_state_dropclaim(&claim);
 }
 
 LUA_API void lua_pushvalue(lua_State *L, int idx)

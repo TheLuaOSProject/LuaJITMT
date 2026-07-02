@@ -32,10 +32,10 @@ Permanent shape:
   resume-claim and use `api_getmetafield_key_claimed()` for stack access,
   metatable lookup, stack growth, and result publication.
 - Public stack APIs in the first stack-manipulation group (`lua_gettop`,
-  `lua_checkstack`, `lua_settop`, `lua_remove`, `lua_insert`, `lua_pushvalue`)
-  acquire state claims before stack access. Stack-growth paths use resume claims
-  and protected growth; stack mutation paths release-publish adjusted slots
-  before dropping ownerless claims.
+  `lua_checkstack`, `lua_settop`, `lua_remove`, `lua_insert`, `lua_pushvalue`,
+  `lua_replace`, and `lua_copy`) acquire state claims before stack access.
+  Stack-growth paths use resume claims and protected growth; stack mutation
+  paths release-publish adjusted slots before dropping ownerless claims.
 - Public read-only stack getter/conversion APIs (`lua_type`,
   `lua_iscfunction`, `lua_isnumber`, `lua_isstring`, `lua_isuserdata`,
   `lua_rawequal`, `lua_tonumber`, `lua_tonumberx`, `lua_tointeger`,

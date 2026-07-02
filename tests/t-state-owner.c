@@ -96,6 +96,13 @@ static void check_stack_api_unowned(lua_State *L)
   assert(lua_tointeger(co, 1) == 1);
   assert(lua_tointeger(co, 2) == 1);
   assert(lua_tointeger(co, 3) == 3);
+  lua_copy(co, 3, 1);
+  assert(lua_tointeger(co, 1) == 3);
+  lua_pushvalue(co, 2);
+  lua_replace(co, 3);
+  assert(lua_gettop(co) == 3);
+  assert(lua_tointeger(co, 2) == 1);
+  assert(lua_tointeger(co, 3) == 1);
   lua_settop(co, 5);
   assert(lua_gettop(co) == 5);
   assert(lua_isnil(co, 4) && lua_isnil(co, 5));
@@ -588,6 +595,22 @@ static int busy_lua_pushvalue(lua_State *L)
   lua_State *co = lua_newthread(L);
   busy_stack_prepare(L, co);
   lua_pushvalue(co, 1);
+  return 0;
+}
+
+static int busy_lua_replace(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_replace(co, 1);
+  return 0;
+}
+
+static int busy_lua_copy(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_copy(co, 1, 2);
   return 0;
 }
 
@@ -1213,6 +1236,8 @@ int main(void)
   expect_thread_busy(L, busy_lua_remove, "busy lua_remove");
   expect_thread_busy(L, busy_lua_insert, "busy lua_insert");
   expect_thread_busy(L, busy_lua_pushvalue, "busy lua_pushvalue");
+  expect_thread_busy(L, busy_lua_replace, "busy lua_replace");
+  expect_thread_busy(L, busy_lua_copy, "busy lua_copy");
   expect_thread_busy(L, busy_lua_type, "busy lua_type");
   expect_thread_busy(L, busy_lua_isnumber, "busy lua_isnumber");
   expect_thread_busy(L, busy_lua_isstring, "busy lua_isstring");

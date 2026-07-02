@@ -135,6 +135,8 @@ BEGIN { fun = ""; seen = 0; claim_kind = "" }
 /^LUA_API void lua_remove\(lua_State \*L,/ { finish(); reset("lua_remove", 0, 0, "range"); next }
 /^LUA_API void lua_insert\(lua_State \*L,/ { finish(); reset("lua_insert", 0, 0, "range"); next }
 /^LUA_API void lua_pushvalue\(lua_State \*L,/ { finish(); reset("lua_pushvalue", 1, 1, "tv"); next }
+/^LUA_API void lua_replace\(lua_State \*L,/ { finish(); reset("lua_replace", 0, 0, "none"); next }
+/^LUA_API void lua_copy\(lua_State \*L,/ { finish(); reset("lua_copy", 0, 0, "none"); next }
 fun {
   if (index($0, "{")) started = 1
   depth += count_char($0, "{")
@@ -152,8 +154,38 @@ fun {
 }
 END {
   finish()
-  if (seen != 6) {
+  if (seen != 8) {
     print "missing public stack API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
+  stackcopy = 0; publish = 0; registry = 0; upvalue = 0
+}
+/^static void copy_slot\(lua_State \*L,/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/lj_registry_store_rel/) registry = NR
+  if (/index2adr_cupvalue_store_rel/) upvalue = NR
+  if (/copyTV\(L, o, f\)/) stackcopy = NR
+  if (/lj_state_stack_pubtv\(L, L, o\)/) publish = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!registry || !upvalue || !stackcopy || !publish || stackcopy > publish) {
+    print "copy_slot must preserve registry/upvalue and publish stack stores"
     exit 1
   }
 }
