@@ -389,6 +389,14 @@
 |.macro x64_vm_gcroot_cmpzero, g, idx, target
 |  cmp aword [g+GL_OFS(gcroot)+8*(idx)], 0; jne target  // x64_vm_gcroot_cmpzero.
 |.endmacro
+|.macro x64_vm_gc_should_step, g, tmp, target
+|  mov tmp, [g+GL_OFS(gc.total)]	// TSO acquire load: lj_gc_total_load().
+|  cmp tmp, [g+GL_OFS(gc.threshold)]	// TSO acquire load: lj_gc_threshold_load().
+|  jae target
+|  mov tmp, [g+GL_OFS(gc2.alloc_since_trigger)]  // TSO acquire load.
+|  cmp tmp, [g+GL_OFS(gc2.hard_bytes)]  // lj_gc2_hard_limit_reached().
+|  ja target
+|.endmacro
 |.macro x64_vm_basemt_acq, dst, g, itype
 |  mov dst, [g+itype*8+GL_OFS(gcroot[GCROOT_BASEMT])]	// x64_vm_basemt_acq.
 |.endmacro
@@ -1303,16 +1311,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  movsd xmm1, qword [BASE+8]
   |.endmacro
   |
-  |// C-owned GC threshold check. Caveat: uses label 1.
+  |// VM-owned GC threshold/assist check. Caveat: uses labels 1 and 9.
   |.macro ffgccheck
-  |  mov RB, BASE
-  |  mov TMP1, RD
-  |  load_G CARG1
-  |  call extern lj_gc_should_step_vm
-  |  test eax, eax
-  |  mov BASE, RB
-  |  mov RD, TMP1
-  |  jz >1
+  |  load_G TMPR
+  |  x64_vm_gc_should_step TMPR, ITYPE, >9
+  |  jmp >1
+  |9:
   |  call ->fff_gcstep
   |1:
   |.endmacro
@@ -4114,15 +4118,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov L:RB, SAVE_L
     |  mov L:RB->base, BASE
     |  mov SAVE_PC, PC
-    |  mov RB, BASE
-    |  mov TMP1, RD
-    |  load_G CARG1
-    |  call extern lj_gc_should_step_vm
-    |  test eax, eax
-    |  mov BASE, RB
-    |  mov L:RB, SAVE_L
-    |  mov RD, TMP1
-    |  jnz >5
+    |  load_G TMPR
+    |  x64_vm_gc_should_step TMPR, ITYPE, >5
     |1:
     |  test RDd, RDd
     |  jnz >6
@@ -4160,15 +4157,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov L:RB, SAVE_L
     |  mov L:RB->base, BASE
     |  mov SAVE_PC, PC
-    |  mov RB, BASE
-    |  mov TMP1, RD
-    |  load_G CARG1
-    |  call extern lj_gc_should_step_vm
-    |  test eax, eax
-    |  mov BASE, RB
-    |  mov L:RB, SAVE_L
-    |  mov RD, TMP1
-    |  jnz >3
+    |  load_G TMPR
+    |  x64_vm_gc_should_step TMPR, ITYPE, >3
     |2:
     |  mov TAB:CARG2, [KBASE+RD*8]	// Caveat: CARG2 == BASE
     |  mov L:CARG1, L:RB		// Caveat: CARG1 == RA

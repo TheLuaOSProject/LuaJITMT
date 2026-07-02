@@ -1271,6 +1271,9 @@ assert(seen == 80)
     description = "M6 allocator accounting behavior",
     run = function(t)
       build_default(t)
+      if contains(t:read(t:path("src", "lj_vm.S")), "lj_gc_should_step_vm") then
+        error("x64 VM allocation checks regressed to C GC-step predicate helper")
+      end
       build_and_run_c(t, t:tmp("lj_t-gc2-alloc-account"),
                       "t-gc2-alloc-account.c", { build = false, timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-gc2-interp-hard-check"),
