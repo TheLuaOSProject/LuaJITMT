@@ -832,23 +832,27 @@ static void rec_profile_ret(jit_State *J)
 static int rec_call_same_trace_fnew(jit_State *J, GCproto *pt, TRef tr)
 {
   IRRef ref = tref_ref(tr);
-  IRIns *call, *arg_parent, *arg_pt, *ptref;
+  IRIns *call;
   if (ref < REF_FIRST)
     return 0;
   call = IR(ref);
-  if (call->o != IR_CALLA || call->op2 != IRCALL_lj_func_newL_gc_forjit ||
-      call->op1 < REF_FIRST)
+  if (call->o != IR_CALLA || call->op1 < REF_FIRST ||
+      (call->op2 != IRCALL_lj_func_newL_gc_forjit &&
+       call->op2 != IRCALL_lj_func_newL_gc1num_forjit))
     return 0;
-  arg_parent = IR(call->op1);
-  if (arg_parent->o != IR_CARG || arg_parent->op1 < REF_FIRST)
-    return 0;
-  arg_pt = IR(arg_parent->op1);
-  if (arg_pt->o != IR_CARG || arg_pt->op1 != REF_BASE ||
-      !irref_isk(arg_pt->op2))
-    return 0;
-  ptref = IR(arg_pt->op2);
-  return (ptref->o == IR_KPTR || ptref->o == IR_KKPTR) &&
-	 ir_kptr(ptref) == pt;
+  ref = call->op1;
+  while (ref >= REF_FIRST) {
+    IRIns *arg = IR(ref);
+    if (arg->o != IR_CARG)
+      return 0;
+    if (arg->op1 == REF_BASE && irref_isk(arg->op2)) {
+      IRIns *ptref = IR(arg->op2);
+      return (ptref->o == IR_KPTR || ptref->o == IR_KKPTR) &&
+	     ir_kptr(ptref) == pt;
+    }
+    ref = arg->op1;
+  }
+  return 0;
 }
 
 /* Specialize to the runtime value of the called function or its prototype. */
@@ -2550,6 +2554,34 @@ static int rec_fnew_celluv(jit_State *J, GCproto *pt)
   return nlocal != 0;
 }
 
+static TRef rec_fnew_gc1num(jit_State *J, GCproto *pt)
+{
+  uint32_t v;
+  BCReg slot;
+  TRef tr;
+  if (pt->sizeuv != 1 || !proto_celluv(pt))
+    return 0;
+  v = proto_uv(pt)[0];
+  if (!(v & PROTO_UV_LOCAL))
+    return 0;
+  slot = (BCReg)(v & 0xff);
+  if (slot >= J->maxslot)
+    return 0;
+  if (itype(&J->L->base[slot]) == LJ_TUPVAL)
+    return 0;
+  tr = getslot(J, slot);
+  if (tref_istype(tr, IRT_P32))
+    return 0;
+  if (tref_isinteger(tr))
+    tr = emitir(IRTN(IR_CONV), tr, IRCONV_NUM_INT);
+  if (!tref_isnum(tr))
+    return 0;
+  J->needsnap = 1;
+  return lj_ir_call(J, IRCALL_lj_func_newL_gc1num_forjit, REF_BASE,
+		    lj_ir_kptr(J, pt), getcurrf(J),
+		    lj_ir_kint(J, (int32_t)slot), tr);
+}
+
 /* Reload slots that the FNEW helper promotes from raw values to cells. */
 static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
 {
@@ -2568,6 +2600,11 @@ static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
 static TRef rec_fnew(jit_State *J, GCproto *pt)
 {
   TRef fn;
+  fn = rec_fnew_gc1num(J, pt);
+  if (fn) {
+    rec_fnew_promoted_slots(J, pt);
+    return fn;
+  }
   if (!rec_fnew_celluv(J, pt)) {
     setintV(&J->errinfo, BC_FNEW);
     lj_trace_err_info(J, LJ_TRERR_NYIBC);

@@ -34,7 +34,7 @@ local function assert_fnew_call_prototype_guard(t, dump)
   local data = t:read(dump)
   local callref
   for line in (data .. "\n"):gmatch("(.-)\n") do
-    local ref = line:match("^(%d+).-CALLA%s+lj_func_newL_gc_forjit")
+    local ref = line:match("^(%d+).-CALLA%s+lj_func_newL_gc[%w_]*_forjit")
     if ref then
       callref = ref
       break
@@ -203,8 +203,9 @@ function M.run_jit_dump_guards(t, dump)
     trace_assert = "assigned-before-FNEW creation should trace"
   }))
   assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "assigned-before-FNEW trace")
-  assert_dump_match(t, dump, "CALLS.*lj_func_syncslot_forjit", "assigned-before-FNEW sync helper")
-  assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "assigned-before-FNEW FNEW helper")
+  assert_dump_not_contains(t, dump, "CALLS.*lj_func_syncslot_forjit",
+			   "assigned-before-FNEW sync helper")
+  assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc1num_forjit", "assigned-before-FNEW numeric FNEW helper")
   assert_dump_not_contains(t, dump, "lj_func_promoteuv_forjit",
 			   "assigned-before-FNEW discarded promotion")
 

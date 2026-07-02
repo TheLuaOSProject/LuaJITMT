@@ -62,6 +62,7 @@ BEGIN { in_interp = 0; in_jit = 0; interp_check = 0; jit_check = 0 }
 in_interp && /^}/ { in_interp = 0; next }
 in_interp && /lj_gc_check_fixtop/ { interp_check = 1 }
 /^GCfunc \*lj_func_newL_gc_forjit\(lua_State \*L/ { in_jit = 1; next }
+/^GCfunc \*lj_func_newL_gc1num_forjit\(lua_State \*L/ { in_jit = 1; next }
 in_jit && /^}/ { in_jit = 0; next }
 in_jit && /lj_gc_check_fixtop/ { jit_check = 1 }
 END {

@@ -37,6 +37,9 @@ LJ_FUNCA GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base,
 					   int32_t slot);
 LJ_FUNCA GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base,
 					GCproto *pt, GCfuncL *parent);
+LJ_FUNCA GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base,
+					    GCproto *pt, GCfuncL *parent,
+					    int32_t slot, lua_Number n);
 LJ_FUNC void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *c);
 
 #endif

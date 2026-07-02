@@ -335,6 +335,40 @@ GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base, GCproto *pt,
   return func_newL_gc_base(L, base, pt, parent);
 }
 
+GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
+				   GCfuncL *parent, int32_t slotno,
+				   lua_Number n)
+{
+  GCfunc *fn;
+  GCupval *uv;
+  TValue tv, *slot;
+  uint32_t v;
+  lj_assertL(pt->sizeuv == 1 && proto_celluv(pt),
+	     "bad one-upvalue FNEW helper");
+  if (base == NULL)
+    base = L->base;
+  v = proto_uv(pt)[0];
+  lj_assertL((v & PROTO_UV_LOCAL) && (int32_t)(v & 0xff) == slotno,
+	     "bad one-upvalue FNEW slot");
+  fn = func_newL(L, pt, lj_funcL_env_acq(parent));
+  slot = base + slotno;
+  if (itype(slot) == LJ_TUPVAL) {
+    uv = gco2uv(gcV(slot));
+    lj_assertL(uv->closed && uvval(uv) == &uv->tv,
+	       "bad local cell upvalue");
+  } else {
+    setnumV(&tv, n);
+    uv = func_snapshotuv(L, &tv);
+    if (!(v & PROTO_UV_IMMUTABLE))
+      setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
+  }
+  func_uvmeta(uv, parent, v);
+  setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
+  lj_gc_pubobjobj(L, fn, uv);
+  fn->l.nupvalues = 1;
+  return fn;
+}
+
 void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *fn)
 {
   MSize size = isluafunc(fn) ? sizeLfunc((MSize)fn->l.nupvalues) :
