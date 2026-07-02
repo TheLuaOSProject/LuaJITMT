@@ -532,10 +532,16 @@ local function assert_x64_jloop_stale_slot_guards(t)
     "mov RA, [RA+J_OFS(tracev)]\n" ..
     "  |  test RA, RA\n" ..
     "  |  jz >7\n" ..
-    "  |  mov TRACE:RA, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
+    "  |  mov TMPRd, RDd\n" ..
+    "  |  mov TRACE:RA, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
     "  |  cmp TRACE:RA, 1\n" ..
-    "  |  ja >6\n" ..
-    "  |7:\n" ..
+    "  |  jbe >7\n" ..
+    "  |  movzx RDd, word TRACE:RA->traceno\n" ..
+    "  |  cmp RDd, TMPRd\n" ..
+    "  |  jne >7\n" ..
+    "  |  cmp aword TRACE:RA->retire_epoch, 0\n" ..
+    "  |  je >6\n" ..
+    "|7:\n" ..
     "  |  mov RCd, [PC-4]\n" ..
     "  |  movzx RAd, RCH\n" ..
     "  |  movzx OP, RCL\n" ..
@@ -548,18 +554,30 @@ local function assert_x64_jloop_stale_slot_guards(t)
     "    |  test RA, RA\n" ..
     "    |  jz <1\n" ..
     "    |  movzx RCd, word [PC+2]\n" ..
-    "    |  mov TRACE:RA, [RA+RC*8+TRACEV_SLOT_OFS]\n" ..
+    "    |  mov TMPRd, RCd\n" ..
+    "    |  mov TRACE:RA, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
     "    |  cmp TRACE:RA, 1\n" ..
-    "    |  ja >7\n" ..
+    "    |  jbe <1\n" ..
+    "    |  movzx RCd, word TRACE:RA->traceno\n" ..
+    "    |  cmp RCd, TMPRd\n" ..
+    "    |  jne <1\n" ..
+    "    |  cmp aword TRACE:RA->retire_epoch, 0\n" ..
+    "    |  je >7\n" ..
     "    |  jmp <1",
 
     "mov RA, [RA+J_OFS(tracev)]\n" ..
     "    |  test RA, RA\n" ..
     "    |  jz >3\n" ..
-    "    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
+    "    |  mov TMPRd, RDd\n" ..
+    "    |  mov TRACE:RD, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
     "    |  cmp TRACE:RD, 1\n" ..
-    "    |  ja >2\n" ..
-    "    |3:\n" ..
+    "    |  jbe >3\n" ..
+    "    |  movzx RAd, word TRACE:RD->traceno\n" ..
+    "    |  cmp RAd, TMPRd\n" ..
+    "    |  jne >3\n" ..
+    "    |  cmp aword TRACE:RD->retire_epoch, 0\n" ..
+    "    |  je >2\n" ..
+    "|3:\n" ..
     "    |  cmp OP, BC_JLOOP\n" ..
     "    |  jne >4\n" ..
     "    |  mov RCd, [PC-4]\n" ..
@@ -575,10 +593,16 @@ local function assert_x64_jloop_stale_slot_guards(t)
     "mov RA, [RA+J_OFS(tracev)]\n" ..
     "    |  test RA, RA\n" ..
     "    |  jz >7\n" ..
-    "    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
+    "    |  mov TMPRd, RDd\n" ..
+    "    |  mov TRACE:RD, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
     "    |  cmp TRACE:RD, 1\n" ..
-    "    |  ja >6\n" ..
-    "    |7:\n" ..
+    "    |  jbe >7\n" ..
+    "    |  movzx RAd, word TRACE:RD->traceno\n" ..
+    "    |  cmp RAd, TMPRd\n" ..
+    "    |  jne >7\n" ..
+    "    |  cmp aword TRACE:RD->retire_epoch, 0\n" ..
+    "    |  je >6\n" ..
+    "|7:\n" ..
     "    |  mov RCd, [PC-4]\n" ..
     "    |  movzx RAd, RCH\n" ..
     "    |  movzx OP, RCL\n" ..

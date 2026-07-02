@@ -2804,10 +2804,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RA, [RA+J_OFS(tracev)]
   |  test RA, RA
   |  jz >7
-  |  mov TRACE:RA, [RA+RD*8+TRACEV_SLOT_OFS]
+  |  mov TMPRd, RDd
+  |  mov TRACE:RA, [RA+TMPR*8+TRACEV_SLOT_OFS]
   |  cmp TRACE:RA, 1
-  |  ja >6
-  |7:
+  |  jbe >7
+  |  movzx RDd, word TRACE:RA->traceno
+  |  cmp RDd, TMPRd
+  |  jne >7
+  |  cmp aword TRACE:RA->retire_epoch, 0
+  |  je >6
+|7:
   |  mov RCd, [PC-4]
   |  movzx RAd, RCH
   |  movzx OP, RCL
@@ -5188,11 +5194,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test RA, RA
     |  jz <1
     |  movzx RCd, word [PC+2]
-    |  mov TRACE:RA, [RA+RC*8+TRACEV_SLOT_OFS]
+    |  mov TMPRd, RCd
+    |  mov TRACE:RA, [RA+TMPR*8+TRACEV_SLOT_OFS]
     |  cmp TRACE:RA, 1
-    |  ja >7
+    |  jbe <1
+    |  movzx RCd, word TRACE:RA->traceno
+    |  cmp RCd, TMPRd
+    |  jne <1
+    |  cmp aword TRACE:RA->retire_epoch, 0
+    |  je >7
     |  jmp <1
-    |7:
+|7:
     |  mov eax, TRACE:RA->startins
     |  mov al, BC_ITERC
     |  mov RB, BASE			// Save BASE.
@@ -5583,10 +5595,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RA, [RA+J_OFS(tracev)]
     |  test RA, RA
     |  jz >3
-    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]
+    |  mov TMPRd, RDd
+    |  mov TRACE:RD, [RA+TMPR*8+TRACEV_SLOT_OFS]
     |  cmp TRACE:RD, 1
-    |  ja >2
-    |3:
+    |  jbe >3
+    |  movzx RAd, word TRACE:RD->traceno
+    |  cmp RAd, TMPRd
+    |  jne >3
+    |  cmp aword TRACE:RD->retire_epoch, 0
+    |  je >2
+|3:
     |  cmp OP, BC_JLOOP
     |  jne >4
     |  mov RCd, [PC-4]
@@ -5632,10 +5650,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RA, [RA+J_OFS(tracev)]
     |  test RA, RA
     |  jz >7
-    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]
+    |  mov TMPRd, RDd
+    |  mov TRACE:RD, [RA+TMPR*8+TRACEV_SLOT_OFS]
     |  cmp TRACE:RD, 1
-    |  ja >6
-    |7:
+    |  jbe >7
+    |  movzx RAd, word TRACE:RD->traceno
+    |  cmp RAd, TMPRd
+    |  jne >7
+    |  cmp aword TRACE:RD->retire_epoch, 0
+    |  je >6
+|7:
     |  mov RCd, [PC-4]
     |  movzx RAd, RCH
     |  movzx OP, RCL
