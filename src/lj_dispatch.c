@@ -198,7 +198,10 @@ static uint8_t dispatch_state_mode(global_State *g
 
 static void dispatch_update_wait_no_l(void)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  uint32_t i;
+  for (i = 0; i < 64; i++)
+    la_cpu_pause();
+  (void)lj_thr_yield(NULL);
 }
 
 /* Update dispatch table depending on various flags. */

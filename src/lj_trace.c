@@ -103,7 +103,12 @@ int lj_jit_token_acquire_wait(jit_State *J)
     if (lj_jit_token_try(J))
       return 1;
     lj_trace_state_abort(J);
-    jit_token_checkstop_fresh(L, lj_thr_sleep_ns(L, 1000000), had_stopreq);
+    {
+      uint32_t i;
+      for (i = 0; i < 64; i++)
+	la_cpu_pause();
+      jit_token_checkstop_fresh(L, lj_thr_yield(L), had_stopreq);
+    }
   }
 }
 
