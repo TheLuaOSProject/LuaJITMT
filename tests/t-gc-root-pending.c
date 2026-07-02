@@ -179,6 +179,42 @@ static void test_tls_only_tg_flush(lua_State *L)
   lj_tg_fini_thread(g, &extra);
 }
 
+static void test_attach_flushes_pending(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState extra, *oldtg = lj_thr_get_tg();
+  TGState *oldhint = L->tg_hint;
+  GCtab *t;
+  GCudata *ud;
+  assert(oldtg != NULL);
+  (void)lj_gc_flush_root_pending(g);
+
+  lj_tg_init_thread(g, &extra, NULL, 0);
+  lj_tg_tid_rel(&extra, lj_thr_newid());
+  lj_thr_set_tg(&extra);
+  L->tg_hint = &extra;
+
+  t = lj_tab_new(L, 0, 0);
+  ud = lj_udata_new(L, 16, NULL);
+  assert(pending_contains(&extra, obj2gco(t)));
+  assert(pending_after_main_contains(&extra, obj2gco(ud)));
+  assert(!root_contains(g, obj2gco(t)));
+  assert(!after_main_contains(g, obj2gco(ud)));
+
+  L->tg_hint = oldhint;
+  lj_thr_set_tg(oldtg);
+
+  lj_tg_attach(g, &extra);
+  assert(lj_tg_gcroot_pending_acq(&extra) == NULL);
+  assert(lj_tg_gcroot_pending_after_main_acq(&extra) == NULL);
+  assert(root_contains(g, obj2gco(t)));
+  assert(after_main_contains(g, obj2gco(ud)));
+
+  lj_tg_detach(g, &extra);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -187,6 +223,7 @@ int main(void)
   test_after_main_flush(L);
   test_fullgc_flush(L);
   test_tls_only_tg_flush(L);
+  test_attach_flushes_pending(L);
   lua_close(L);
   return 0;
 }

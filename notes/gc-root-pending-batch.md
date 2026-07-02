@@ -37,6 +37,11 @@
   in `lj_gc_flush_root_pending()` with a synthetic current TG that is not linked
   into `gc2.tg_list`. That protects attach/detach-adjacent flush behavior where
   the current TG may be the only discoverable owner of pending roots.
+- 2026-07-02 attach follow-up: `lj_tg_attach()` now drains pending-root stacks
+  immediately after publishing the TG to `gc2.tg_list`. This closes the
+  pre-attach publication gap for any future path that queues objects before its
+  TG is globally discoverable. The root-pending fixture now synthesizes that
+  state with the TG no longer TLS-current.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

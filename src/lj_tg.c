@@ -198,6 +198,7 @@ void lj_tg_attach(global_State *g, TGState *tg)
     lj_tg_next_rel(tg, head);
   } while (!gc2_tg_list_cas(g, &head, tg));  /* 05 section 5.4.1 CAS-prepend. */
   gc2_n_threads_add_rlx(g, 1);  /* Live TG count; list keeps dead nodes. */
+  (void)lj_gc_flush_root_pending(g);
 }
 
 void lj_tg_detach(global_State *g, TGState *tg)
