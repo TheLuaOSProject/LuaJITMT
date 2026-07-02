@@ -1354,6 +1354,8 @@ typedef struct GC2State {
   uint64_t hs_ack_latency_buckets[LJ_GC2_HS_LATENCY_BUCKETS];
   uint64_t smr_reclaim_runs;  /* Retired-object epoch drains with work. */
   uint64_t smr_reclaimed;  /* Retired objects freed after a grace period. */
+  uint32_t smr_readers;  /* Retired-list root scans currently active. */
+  uint32_t smr_reclaiming;  /* Retired-list reclaim drain in progress. */
   uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */
   uint64_t cycle_starts;  /* Requested cycles consumed at mark begin. */
   uint64_t major_cycle_starts;  /* Actual major GC2 mark begins. */
@@ -3708,6 +3710,51 @@ static LJ_AINLINE void gc2_smr_reclaimed_store_rlx(global_State *g,
 static LJ_AINLINE void gc2_smr_reclaimed_add(global_State *g, uint64_t n)
 {
   la_add64_rlx(&g->gc2.smr_reclaimed, n);
+}
+
+static LJ_AINLINE uint32_t gc2_smr_readers_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.smr_readers);
+}
+
+static LJ_AINLINE void gc2_smr_readers_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.smr_readers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_smr_readers_add(global_State *g, uint32_t n)
+{
+  return la_add32_acqrel(&g->gc2.smr_readers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_smr_readers_sub(global_State *g, uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.smr_readers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_smr_reclaiming_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.smr_reclaiming);
+}
+
+static LJ_AINLINE void gc2_smr_reclaiming_store_rlx(global_State *g,
+						    uint32_t active)
+{
+  la_store32_rlx(&g->gc2.smr_reclaiming, active);
+}
+
+static LJ_AINLINE void gc2_smr_reclaiming_rel(global_State *g,
+					      uint32_t active)
+{
+  la_store32_rel(&g->gc2.smr_reclaiming, active);
+}
+
+static LJ_AINLINE int gc2_smr_reclaiming_cas(global_State *g,
+					     uint32_t *oldp,
+					     uint32_t active)
+{
+  return la_cas32(&g->gc2.smr_reclaiming, oldp, active,
+		  LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE uint32_t gc2_generational_acq(global_State *g)

@@ -379,6 +379,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
   StrTabHdr *hdr;
   TabNodeRetire *ret;
   TabArrayRetire *aret;
+  lj_gc2_smr_read_enter(g);
   hdr = lj_str_tabh_acq(g);
   if (hdr)
     gc2_paranoia_checkmem(g, hdr, "string table");
@@ -476,6 +477,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
     gc2_paranoia_checkmem(g, J->snapmapbuf, "snapshot map buffer");
   }
 #endif
+  lj_gc2_smr_read_leave(g);
 }
 
 static void gc2_paranoia_check_fixpoint(global_State *g)
@@ -701,6 +703,7 @@ static void gc_mark_threading_states(global_State *g)
 static void gc_mark_gcroot(global_State *g)
 {
   ptrdiff_t i;
+  lj_gc2_smr_read_enter(g);
   for (i = 0; i < GCROOT_MAX; i++) {
     GCobj *o = lj_gcroot_acq(g, (GCRootID)i);
     if (o != NULL)
@@ -785,6 +788,7 @@ static void gc_mark_gcroot(global_State *g)
     lj_gc_arena_markmem(g, J->snapmapbuf);
   }
 #endif
+  lj_gc2_smr_read_leave(g);
 }
 
 /* Start a GC cycle and mark the root set. */

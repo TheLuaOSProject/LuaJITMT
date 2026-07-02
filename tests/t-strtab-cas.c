@@ -11,6 +11,7 @@
 #include "lauxlib.h"
 
 #include "lj_atomic.h"
+#include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_str.h"
@@ -32,6 +33,13 @@ typedef struct FailAllocCtx {
 typedef struct ResizeOOMCtx {
   MSize newmask;
 } ResizeOOMCtx;
+
+typedef struct ReclaimReaderCtx {
+  global_State *g;
+  uint64_t epoch;
+  uint32_t done;
+  uint32_t reclaimed;
+} ReclaimReaderCtx;
 
 static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
@@ -65,6 +73,14 @@ static int protected_resize(lua_State *L)
   ResizeOOMCtx *ctx = (ResizeOOMCtx *)lua_touserdata(L, 1);
   lj_str_resize(L, ctx->newmask);
   return 0;
+}
+
+static void *reclaim_retired_worker(void *arg)
+{
+  ReclaimReaderCtx *ctx = (ReclaimReaderCtx *)arg;
+  ctx->reclaimed = lj_gc2_reclaim_retired(ctx->g, ctx->epoch);
+  la_store32_rel(&ctx->done, 1);
+  return NULL;
 }
 
 static void exercise_resize_oom_does_not_claim(void)
@@ -110,7 +126,9 @@ int main(void)
   uint64_t smr_runs0, smr_reclaimed0;
   GCstr *s1, *s2;
   ActiveReleaseCtx ctx;
+  ReclaimReaderCtx reclaim_ctx;
   LJThr release_thr;
+  LJThr reclaim_thr;
   int i;
 
   assert(L != NULL);
@@ -156,6 +174,38 @@ int main(void)
   assert(gc2_smr_reclaim_runs_acq(g) == smr_runs0);
   assert(gc2_smr_reclaimed_acq(g) == smr_reclaimed0);
   assert(lj_str_retired_head_acq(g) == hdr);
+  gc2_phase_rel(g, LJ_GC2_MARK);
+  assert(lj_gc2_reclaim_retired(g, retire_epoch + 1u) == 0);
+  gc2_phase_rel(g, LJ_GC2_IDLE);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_reclaim_retired(g, retire_epoch + 1u) == 0);
+  g->gc.state = GCSpause;
+  gc2_worker_active_rel(g, 1);
+  assert(lj_gc2_reclaim_retired(g, retire_epoch + 1u) == 0);
+  gc2_worker_active_rel(g, 0);
+  assert(gc2_smr_reclaim_runs_acq(g) == smr_runs0);
+  assert(gc2_smr_reclaimed_acq(g) == smr_reclaimed0);
+  assert(lj_str_retired_head_acq(g) == hdr);
+  reclaim_ctx.g = g;
+  reclaim_ctx.epoch = retire_epoch + 1u;
+  reclaim_ctx.done = 0;
+  reclaim_ctx.reclaimed = 0;
+  lj_gc2_smr_read_enter(g);
+  assert(lj_thr_create(&reclaim_thr, reclaim_retired_worker,
+		       &reclaim_ctx) == 0);
+  for (i = 0; i < 1000 &&
+	      gc2_smr_reclaiming_acq(g) == 0 &&
+	      la_load32_acq(&reclaim_ctx.done) == 0; i++)
+    (void)lj_thr_sleep_ns(NULL, 100000);
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(la_load32_acq(&reclaim_ctx.done) == 0);
+  assert(lj_str_retired_head_acq(g) == hdr);
+  lj_gc2_smr_read_leave(g);
+  assert(lj_thr_join(&reclaim_thr, NULL) == 0);
+  assert(la_load32_acq(&reclaim_ctx.done) != 0);
+  assert(reclaim_ctx.reclaimed >= 1u);
+  assert(gc2_smr_reclaiming_acq(g) == 0);
+  assert(lj_str_retired_head_acq(g) == NULL);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
 

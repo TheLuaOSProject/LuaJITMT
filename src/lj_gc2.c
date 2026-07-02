@@ -191,6 +191,8 @@ void lj_gc2_init(global_State *g)
     gc2_hs_ack_latency_bucket_store_rlx(g, i, 0);
   gc2_smr_reclaim_runs_store_rlx(g, 0);
   gc2_smr_reclaimed_store_rlx(g, 0);
+  gc2_smr_readers_store_rlx(g, 0);
+  gc2_smr_reclaiming_store_rlx(g, 0);
   gc2_cycle_requests_store_rlx(g, 0);
   gc2_cycle_starts_store_rlx(g, 0);
   gc2_major_cycle_starts_store_rlx(g, 0);
@@ -2691,11 +2693,56 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
     gc2_finalizer_spawn_release_wakes_acq(g);
 }
 
+static LJ_AINLINE int gc2_reclaim_retired_ready(global_State *g)
+{
+  return g->gc.state == GCSpause &&
+	 gc2_phase_acq(g) == LJ_GC2_IDLE &&
+	 gc2_worker_active_acq(g) == 0 &&
+	 gc2_assist_active_acq(g) == 0 &&
+	 gc2_weak_drain_active_acq(g) == 0 &&
+	 gc2_weak_write_active_acq(g) == 0;
+}
+
+void lj_gc2_smr_read_enter(global_State *g)
+{
+  if (!g)
+    return;
+  for (;;) {
+    while (gc2_smr_reclaiming_acq(g) != 0)
+      (void)lj_thr_retry_yield(NULL);
+    (void)gc2_smr_readers_add(g, 1);
+    if (gc2_smr_reclaiming_acq(g) == 0)
+      return;
+    (void)gc2_smr_readers_sub(g, 1);
+  }
+}
+
+void lj_gc2_smr_read_leave(global_State *g)
+{
+  uint32_t old;
+  if (!g)
+    return;
+  old = gc2_smr_readers_sub(g, 1);
+  lj_assertG(old != 0, "gc2 SMR reader underflow");
+  UNUSED(old);
+}
+
 uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
 {
+  uint32_t expect = 0;
   uint32_t n = 0;
-  if (!g)
+  if (!g || epoch == 0)
     return 0;
+  if (!gc2_reclaim_retired_ready(g))
+    return 0;
+  if (!gc2_smr_reclaiming_cas(g, &expect, 1))
+    return 0;
+  if (!gc2_reclaim_retired_ready(g)) {
+    gc2_smr_reclaiming_rel(g, 0);
+    return 0;
+  }
+  while (gc2_smr_readers_acq(g) != 0)
+    (void)lj_thr_retry_yield(NULL);
   n += lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
   n += lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
 #if LJ_HASFFI
@@ -2708,6 +2755,7 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
     gc2_smr_reclaim_runs_add(g, 1);
     gc2_smr_reclaimed_add(g, n);
   }
+  gc2_smr_reclaiming_rel(g, 0);
   return n;
 }
 
@@ -3216,6 +3264,7 @@ static void gc2_scan_global_roots(global_State *g)
   lua_State *mainL = mainthread_acq(g);
   lua_State *vmL = vmthread_acq(g);
   ptrdiff_t i;
+  lj_gc2_smr_read_enter(g);
   lj_gc2_markobj(g, obj2gco(mainL));
   {
     GCtab *env = lj_state_env_acq(mainL);
@@ -3303,6 +3352,7 @@ static void gc2_scan_global_roots(global_State *g)
     lj_gc2_markmem(g, J->snapmapbuf);
   }
 #endif
+  lj_gc2_smr_read_leave(g);
 }
 
 static void lj_gc2_scan_roots(global_State *g, lua_State *L)
