@@ -132,9 +132,9 @@ static LJ_AINLINE void serialize_dict_wait(lua_State *L)
   /*
   ** Serializer dictionary preparation retries after table resize forwarding or
   ** a slot CAS loss. The constructor has a current Lua state, so wait as
-  ** native time for that TG instead of using the no-state fallback.
+  ** native time for that TG without millisecond parking.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  (void)lj_thr_retry_yield(L);
 }
 
 static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,

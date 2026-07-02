@@ -255,7 +255,7 @@ static LJ_AINLINE void parse_keep_wait(lua_State *L)
   ** CAS loss. Source parsing runs with a current Lua state, so keep that TG
   ** native and safepoint-visible while waiting for the table publisher.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  (void)lj_thr_retry_yield(L);
 }
 
 static void parse_keep_storebool(lua_State *L, GCtab *t, cTValue *key)

@@ -122,12 +122,21 @@ static LJ_AINLINE int profile_state_cas(ProfileState *ps, uint32_t *oldp,
   return la_cas32(&ps->state, oldp, state, LA_ACQ_REL, LA_ACQ);
 }
 
+static uint32_t profile_futex_wait_l(lua_State *L, uint32_t *addr,
+				     uint32_t expect)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  (void)la_futex_wait(addr, expect, 1000000);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
 static void profile_state_wait_l(lua_State *L, ProfileState *ps, uint32_t state)
 {
-  uint32_t actions = lj_thr_sleep_ns(L, 1000000);
+  uint32_t actions = profile_futex_wait_l(L, &ps->state, state);
   if (actions)
     lj_safepoint_checkstop(L, actions);
-  UNUSED(ps); UNUSED(state);
 }
 
 static LJ_AINLINE global_State *profile_g_load_acq(ProfileState *ps)
@@ -195,7 +204,7 @@ static uint32_t profile_callbacks_wait(lua_State *L, ProfileState *ps)
     uint32_t callbacks = la_load32_acq(&ps->callbacks);
     if (callbacks == 0 || la_load32_acq(&ps->callback_tid) == tid)
       return actions;
-    actions |= lj_thr_sleep_ns(L, 1000000);
+    actions |= profile_futex_wait_l(L, &ps->callbacks, callbacks);
   }
 }
 

@@ -784,7 +784,7 @@ static void gdbjit_lock_wait(lua_State *L)
   ** opt-in debugger metadata and must still finish trace add/delete cleanup, so
   ** STOPREQ is acknowledged but not thrown from inside the descriptor update.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  (void)lj_thr_retry_yield(L);
 }
 
 static void gdbjit_lock_acquire(lua_State *L)
