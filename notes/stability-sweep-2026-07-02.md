@@ -42,3 +42,26 @@ highest-value stability work should either increase stress around already-known
 hot structures (GC root publication, table resize/retire, JIT trace flush), or
 move to a permanent implementation cleanup from the audit list with the same
 gate set rerun afterward.
+
+## Post-threading-NYI boundary sweep
+
+After `65610c71` (`jit: narrow threading NYI hard stops`), another local
+stability pass focused on the areas that had produced recent corruption:
+
+- `tools/ci/lua_test.sh m4_threading_stress m4_threading_shutdown
+  m4_threading_coroutine m7_ffi m8_weak m9_m10_gc`
+- `tools/ci/lua_test.sh m4_chan_stress m5_hookmask_atomic
+  m5_hook_state_atomic`
+- `tools/ci/lua_test.sh m6_jit_threading_nyi_boundary
+  m6_jit_recursive_call_unroll m4_threading_api m4_threading_hooks`
+- Direct FINREG stress:
+  `src/luajit tests/t-ffi-gc-finreg.lua 3 72`, 300/300 with normal JIT.
+
+All of these passed locally.
+
+A sidecar stress runner also built successfully and passed direct
+`t-ffi-gc-finreg.lua 3 72` for 200/200 iterations. Its larger 300 second
+wrapper timed out while contending with the local `src/.lj-test-run.lock` and
+then entering the slow `t-ffi-cparse-rollback-reader.lua` case; the reader case
+passed when rerun directly with a 60 second timeout. Treat that timeout as a
+harness scheduling artifact, not a runtime reproducer.
