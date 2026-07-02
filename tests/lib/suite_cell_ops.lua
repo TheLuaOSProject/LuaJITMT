@@ -30,6 +30,28 @@ local function assert_dump_not_contains(t, dump, needle, label)
   end
 end
 
+local function assert_fnew_call_prototype_guard(t, dump)
+  local data = t:read(dump)
+  local callref
+  for line in (data .. "\n"):gmatch("(.-)\n") do
+    local ref = line:match("^(%d+).-CALLA%s+lj_func_newL_gc_forjit")
+    if ref then
+      callref = ref
+      break
+    end
+  end
+  if not callref then
+    error("same-trace FNEW call: missing FNEW helper call", 2)
+  end
+  for line in (data .. "\n"):gmatch("(.-)\n") do
+    if line:match("FLOAD%s+" .. callref .. "%s+func%.pc") then
+      return
+    end
+  end
+  error("same-trace FNEW call: missing prototype guard for CALLA ref " ..
+        callref, 2)
+end
+
 function M.run_bytecode_guards(t, tmpname)
   local out = t:tmp(tmpname)
   luajit_capture(t, { "-bl", "-e", probes.parser_capture() }, out)
@@ -192,6 +214,22 @@ function M.run_jit_dump_guards(t, dump)
   }))
   assert_dump_not_contains(t, dump, "->lj_func_syncslot_forjit",
 			   "assigned-before-FNEW numeric sync lowering")
+
+  dump_i(t, dump, [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local s = 0
+for i = 1, 80 do
+  local x = i
+  local f = function()
+    x = x + 1
+    return x
+  end
+  s = s + f()
+end
+assert(s > 0)
+]=])
+  assert_fnew_call_prototype_guard(t, dump)
 end
 
 function M.run_jit_runtime_guards(t)

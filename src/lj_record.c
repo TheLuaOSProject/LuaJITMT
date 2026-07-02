@@ -828,14 +828,40 @@ static void rec_profile_ret(jit_State *J)
 
 /* -- Record calls and returns -------------------------------------------- */
 
+/* Check whether a called function value was created by same-trace FNEW. */
+static int rec_call_same_trace_fnew(jit_State *J, GCproto *pt, TRef tr)
+{
+  IRRef ref = tref_ref(tr);
+  IRIns *call, *arg_parent, *arg_pt, *ptref;
+  if (ref < REF_FIRST)
+    return 0;
+  call = IR(ref);
+  if (call->o != IR_CALLA || call->op2 != IRCALL_lj_func_newL_gc_forjit ||
+      call->op1 < REF_FIRST)
+    return 0;
+  arg_parent = IR(call->op1);
+  if (arg_parent->o != IR_CARG || arg_parent->op1 < REF_FIRST)
+    return 0;
+  arg_pt = IR(arg_parent->op1);
+  if (arg_pt->o != IR_CARG || arg_pt->op1 != REF_BASE ||
+      !irref_isk(arg_pt->op2))
+    return 0;
+  ptref = IR(arg_pt->op2);
+  return (ptref->o == IR_KPTR || ptref->o == IR_KKPTR) &&
+	 ir_kptr(ptref) == pt;
+}
+
 /* Specialize to the runtime value of the called function or its prototype. */
 static TRef rec_call_specialize(jit_State *J, GCfunc *fn, TRef tr)
 {
   TRef kfunc;
   if (isluafunc(fn)) {
     GCproto *pt = funcproto(fn);
-    /* Too many closures created? Probably not a monomorphic function. */
-    if (pt->flags >= PROTO_CLC_POLY) {  /* Specialize to prototype instead. */
+    /* Too many closures created, or this exact trace just created the callee?
+    ** The latter is intentionally non-monomorphic by identity: every FNEW
+    ** returns a fresh closure, but the prototype/upvalue layout is stable.
+    */
+    if (pt->flags >= PROTO_CLC_POLY || rec_call_same_trace_fnew(J, pt, tr)) {
       TRef trpt = emitir(IRT(IR_FLOAD, IRT_PGC), tr, IRFL_FUNC_PC);
       emitir(IRTG(IR_EQ, IRT_PGC), trpt, lj_ir_kptr(J, proto_bc(pt)));
       (void)lj_ir_kgc(J, obj2gco(pt), IRT_PROTO);  /* Prevent GC of proto. */
