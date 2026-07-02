@@ -141,10 +141,10 @@ static LJ_AINLINE uint32_t lj_tg_strtab_active_depth_acq(const TGState *tg)
   return la_load32_acq(&tg->strtab_active_depth);
 }
 
-static LJ_AINLINE uint32_t lj_tg_strtab_active_depth_xchg(TGState *tg,
-							  uint32_t depth)
+static LJ_AINLINE void lj_tg_strtab_active_depth_rel(TGState *tg,
+						     uint32_t depth)
 {
-  return la_xchg32_acqrel(&tg->strtab_active_depth, depth);
+  la_store32_rel(&tg->strtab_active_depth, depth);
 }
 
 static LJ_AINLINE uint32_t lj_tg_in_native_inc_rel(TGState *tg)

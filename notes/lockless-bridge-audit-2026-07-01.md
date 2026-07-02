@@ -63,9 +63,10 @@ Follow-up slice:
 
 - `TGState.strtab_active_hdr/depth` now carry the active lookup/insert marker.
   `strtab_enter()` publishes the TG-local marker and rechecks the current header
-  plus resize bit. Depth transitions use a TG-local acquire/release exchange,
-  so the resizer has a stable ordering point without putting an RMW on the
-  shared string-table header. `strtab_claim()` still sets `StrTabHdr.resize`
-  but waits by scanning live TG markers for the claimed header. This preserves
-  the current destructive resize/secondary-rehash exclusion rule while removing
-  the shared-header RMW pair from the normal intern path.
+  plus resize bit. Depth transitions use release stores read by resizer acquire
+  scans, so the resizer has a stable ordering point without putting an RMW on
+  either the shared string-table header or the owner TG's active-depth word.
+  `strtab_claim()` still sets `StrTabHdr.resize` but waits by scanning live TG
+  markers for the claimed header. This preserves the current destructive
+  resize/secondary-rehash exclusion rule while removing the shared-header RMW
+  pair from the normal intern path.

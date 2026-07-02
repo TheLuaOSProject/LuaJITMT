@@ -30,7 +30,7 @@ static void *release_active_after_claim(void *arg)
     (void)lj_thr_sleep_ns(NULL, 100000);
   assert(lj_tg_strtab_active_hdr_acq(ctx->tg) == ctx->hdr);
   assert(lj_tg_strtab_active_depth_acq(ctx->tg) == 1u);
-  (void)lj_tg_strtab_active_depth_xchg(ctx->tg, 0);
+  lj_tg_strtab_active_depth_rel(ctx->tg, 0);
   lj_tg_strtab_active_hdr_rel(ctx->tg, NULL);
   return NULL;
 }
@@ -68,7 +68,7 @@ int main(void)
 
   /* Simulate the last active interner leaving after resize claims the header. */
   lj_tg_strtab_active_hdr_rel(tg, hdr);
-  (void)lj_tg_strtab_active_depth_xchg(tg, 1);
+  lj_tg_strtab_active_depth_rel(tg, 1);
   ctx.tg = tg;
   ctx.hdr = hdr;
   assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);

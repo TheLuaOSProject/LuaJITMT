@@ -189,7 +189,7 @@ static void strtab_active_enter(TGState *tg, StrTabHdr *hdr)
     lj_assertX(lj_tg_strtab_active_hdr_acq(tg) == hdr,
 	       "nested string-table enter changed header");
   }
-  (void)lj_tg_strtab_active_depth_xchg(tg, depth + 1u);
+  lj_tg_strtab_active_depth_rel(tg, depth + 1u);
 }
 
 static void strtab_active_leave(TGState *tg, StrTabHdr *hdr)
@@ -199,7 +199,7 @@ static void strtab_active_leave(TGState *tg, StrTabHdr *hdr)
   lj_assertX(lj_tg_strtab_active_hdr_acq(tg) == hdr,
 	     "string table active header mismatch");
   depth--;
-  (void)lj_tg_strtab_active_depth_xchg(tg, depth);
+  lj_tg_strtab_active_depth_rel(tg, depth);
   if (depth == 0)
     lj_tg_strtab_active_hdr_rel(tg, NULL);
 }
