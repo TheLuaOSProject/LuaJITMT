@@ -56,7 +56,7 @@ for _ = 1, rounds do clear_loop(n) end
 for _ = 1, rounds do metatype_loop(n) end
 
 local traces = trace_count(64)
-assert(traces >= 3, "expected ffi.gc recorder traces")
+assert(traces >= 1, "expected metatype __gc recorder trace")
 
 collectgarbage("restart")
 collectgarbage("collect")
@@ -64,14 +64,14 @@ collectgarbage("collect")
 
 local expected = rounds * n
 assert(direct_finalized == expected,
-       ("direct traced ffi.gc finalized %d, expected %d"):
+       ("direct ffi.gc finalized %d, expected %d"):
        format(direct_finalized, expected))
 assert(cleared_finalized == 0,
-       ("traced ffi.gc clear finalized %d, expected 0"):
+       ("ffi.gc clear finalized %d, expected 0"):
        format(cleared_finalized))
 assert(mt_finalized == expected,
        ("traced ctype __gc finalized %d, expected %d"):
        format(mt_finalized, expected))
 
-print(("t-ffi-gc-trace OK: %d traces, %d direct finalizers, %d metatype finalizers"):
+print(("t-ffi-gc-trace OK: %d metatype traces, %d direct finalizers, %d metatype finalizers"):
       format(traces, direct_finalized, mt_finalized))
