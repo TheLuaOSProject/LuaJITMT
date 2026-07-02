@@ -43,6 +43,23 @@ function M.clean_build(t, opts)
   t:build({ clean = true, quiet = true, xcflags = opts.xcflags })
 end
 
+function M.with_default_build_restore(t, fn, opts)
+  opts = opts or {}
+  local quiet = opts.quiet
+  if quiet == nil then quiet = true end
+  local ok, err = xpcall(fn, debug.traceback)
+  local restore_ok, restore_err = xpcall(function()
+    t:build({ clean = true, quiet = quiet, jobs = opts.jobs })
+  end, debug.traceback)
+  if not ok then
+    if not restore_ok then
+      err = err .. "\n\n(default build restore also failed)\n" .. restore_err
+    end
+    error(err, 0)
+  end
+  if not restore_ok then error(restore_err, 0) end
+end
+
 function M.compile_and_run_c(t, out, cfile, opts)
   opts = opts or {}
   local sources = opts.sources or

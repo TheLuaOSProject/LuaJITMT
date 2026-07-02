@@ -165,29 +165,31 @@ return function(add)
     name = "m3_gc2_paranoia",
     description = "GC2 paranoia build, oracle fixtures, and stock tests",
     run = function(t)
-      make_clean(t)
-      make_default(t, {
-        args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
-      })
-      run_c_fixtures(t, {
-        "t-gc2-paranoia",
-        "t-gc2-phase",
-        "t-gc2-markbits",
-        "t-gc2-traverse"
-      }, {
-        output_suffix = "_paranoia",
-        cflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
-      })
-      runtime.run_stock(t, { "test.lua", "--quiet" })
+      build.with_default_build_restore(t, function()
+        make_clean(t)
+        make_default(t, {
+          args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
+        })
+        run_c_fixtures(t, {
+          "t-gc2-paranoia",
+          "t-gc2-phase",
+          "t-gc2-markbits",
+          "t-gc2-traverse"
+        }, {
+          output_suffix = "_paranoia",
+          cflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
+        })
+        runtime.run_stock(t, { "test.lua", "--quiet" })
 
-      make_clean(t)
-      make_default(t, {
-        args = {
-          "BUILDMODE=static",
-          "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -DLUAJIT_DISABLE_JIT"
-        }
-      })
-      runtime.run_stock(t, { "test.lua", "--quiet", "-jit" })
+        make_clean(t)
+        make_default(t, {
+          args = {
+            "BUILDMODE=static",
+            "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -DLUAJIT_DISABLE_JIT"
+          }
+        })
+        runtime.run_stock(t, { "test.lua", "--quiet", "-jit" })
+      end)
     end
   })
 
