@@ -3,7 +3,9 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -15,6 +17,7 @@
 #include "lib/tab_forward_helpers.h"
 
 static const char ipairs_forward_src[] =
+  "if ipairs_forward_arm_release then ipairs_forward_arm_release() end\n"
   "local n, seen, v3 = 0, false, nil\n"
   "for i, v in ipairs(ipairs_forward_t) do\n"
   "  n = n + 1\n"
@@ -23,6 +26,79 @@ static const char ipairs_forward_src[] =
   "end\n"
   "assert(v3 == ipairs_forward_value, type(v3))\n"
   "assert(n > 0 and seen, tostring(n)..':'..tostring(seen))\n";
+
+typedef struct IPairsArrayReleaseCtx {
+  GCtab *t;
+  TValue *array;
+  MSize asize;
+  pthread_t thread;
+  int armed;
+} IPairsArrayReleaseCtx;
+
+static IPairsArrayReleaseCtx *ipairs_release_ctx;
+
+static void ipairs_sleep_ns(long ns)
+{
+  struct timespec ts;
+  ts.tv_sec = ns / 1000000000L;
+  ts.tv_nsec = ns % 1000000000L;
+  while (nanosleep(&ts, &ts) != 0)
+    ;
+}
+
+static void *ipairs_publish_array_after_delay(void *arg)
+{
+  IPairsArrayReleaseCtx *ctx = (IPairsArrayReleaseCtx *)arg;
+  ipairs_sleep_ns(5000000L);
+  lj_tab_array_rel(ctx->t, ctx->array);
+  lj_tab_asize_rel(ctx->t, ctx->asize);
+  return NULL;
+}
+
+static int ipairs_arm_release(lua_State *L)
+{
+  IPairsArrayReleaseCtx *ctx = ipairs_release_ctx;
+  UNUSED(L);
+  assert(ctx != NULL);
+  assert(!ctx->armed);
+  ctx->armed = 1;
+  assert(pthread_create(&ctx->thread, NULL,
+			ipairs_publish_array_after_delay, ctx) == 0);
+  return 0;
+}
+
+static void ipairs_run_with_retiring_current_root(lua_State *L, GCtab *t,
+						  TValue *oldarray,
+						  TValue *newarray,
+						  MSize oldasize,
+						  MSize newasize,
+						  int32_t target)
+{
+  IPairsArrayReleaseCtx ctx;
+  int32_t want = target + 1000;
+  lj_tab_storeint(L, &oldarray[target], target + 9000);
+  lj_tab_storeint(L, &newarray[target], want);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lua_pushinteger(L, want);
+  lua_setglobal(L, "ipairs_forward_value");
+  ctx.t = t;
+  ctx.array = newarray;
+  ctx.asize = newasize;
+  ctx.armed = 0;
+  ipairs_release_ctx = &ctx;
+  lua_pushcfunction(L, ipairs_arm_release);
+  lua_setglobal(L, "ipairs_forward_arm_release");
+  tabfwd_load_lua(L, ipairs_forward_src);
+  tabfwd_run_loaded(L);
+  assert(ctx.armed);
+  assert(pthread_join(ctx.thread, NULL) == 0);
+  ipairs_release_ctx = NULL;
+  lua_pushnil(L);
+  lua_setglobal(L, "ipairs_forward_arm_release");
+  assert(tabfwd_get_i32(t, target) == want);
+}
 
 int main(void)
 {
@@ -81,6 +157,9 @@ int main(void)
     assert((tvisint(tv) ? intV(tv) : (int32_t)numV(tv)) == target + 1000);
   }
   tabfwd_run_loaded(L);
+
+  ipairs_run_with_retiring_current_root(L, t, oldarray, newarray, oldasize,
+					newasize, target);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);

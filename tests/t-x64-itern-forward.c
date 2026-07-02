@@ -3,8 +3,10 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -17,11 +19,85 @@
 #include "lib/tab_forward_helpers.h"
 
 static const char itern_forward_array_src[] =
+  "if itern_forward_array_arm_release then itern_forward_array_arm_release() end\n"
   "local seen = false\n"
   "for k, v in pairs(itern_forward_array_t) do\n"
   "  if v == itern_forward_array_value then seen = true end\n"
   "end\n"
   "assert(seen, 'missing array successor value')\n";
+
+typedef struct IterNArrayReleaseCtx {
+  GCtab *t;
+  TValue *array;
+  MSize asize;
+  pthread_t thread;
+  int armed;
+} IterNArrayReleaseCtx;
+
+static IterNArrayReleaseCtx *itern_release_ctx;
+
+static void itern_sleep_ns(long ns)
+{
+  struct timespec ts;
+  ts.tv_sec = ns / 1000000000L;
+  ts.tv_nsec = ns % 1000000000L;
+  while (nanosleep(&ts, &ts) != 0)
+    ;
+}
+
+static void *itern_publish_array_after_delay(void *arg)
+{
+  IterNArrayReleaseCtx *ctx = (IterNArrayReleaseCtx *)arg;
+  itern_sleep_ns(5000000L);
+  lj_tab_array_rel(ctx->t, ctx->array);
+  lj_tab_asize_rel(ctx->t, ctx->asize);
+  return NULL;
+}
+
+static int itern_arm_release(lua_State *L)
+{
+  IterNArrayReleaseCtx *ctx = itern_release_ctx;
+  UNUSED(L);
+  assert(ctx != NULL);
+  assert(!ctx->armed);
+  ctx->armed = 1;
+  assert(pthread_create(&ctx->thread, NULL,
+			itern_publish_array_after_delay, ctx) == 0);
+  return 0;
+}
+
+static void itern_run_with_retiring_current_root(lua_State *L, GCtab *t,
+						 TValue *oldarray,
+						 TValue *newarray,
+						 MSize oldasize,
+						 MSize newasize,
+						 int32_t target)
+{
+  IterNArrayReleaseCtx ctx;
+  int32_t want = target + 5100;
+  lj_tab_storeint(L, &oldarray[target], target + 9000);
+  lj_tab_storeint(L, &newarray[target], want);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lua_pushinteger(L, want);
+  lua_setglobal(L, "itern_forward_array_value");
+  ctx.t = t;
+  ctx.array = newarray;
+  ctx.asize = newasize;
+  ctx.armed = 0;
+  itern_release_ctx = &ctx;
+  lua_pushcfunction(L, itern_arm_release);
+  lua_setglobal(L, "itern_forward_array_arm_release");
+  tabfwd_load_lua(L, itern_forward_array_src);
+  tabfwd_run_loaded(L);
+  assert(ctx.armed);
+  assert(pthread_join(ctx.thread, NULL) == 0);
+  itern_release_ctx = NULL;
+  lua_pushnil(L);
+  lua_setglobal(L, "itern_forward_array_arm_release");
+  assert(tabfwd_get_i32(t, target) == want);
+}
 
 static void exercise_array_forward(lua_State *L)
 {
@@ -62,6 +138,9 @@ static void exercise_array_forward(lua_State *L)
   lj_tab_array_rel(t, oldarray);
   assert(tabfwd_get_i32(t, target) == target + 5100);
   tabfwd_run_loaded(L);
+
+  itern_run_with_retiring_current_root(L, t, oldarray, newarray, oldasize,
+				       newasize, target);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);

@@ -3,9 +3,11 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -24,6 +26,31 @@
 #define LJ_XSTR_(s)	#s
 #define LJ_XSTR(s)	LJ_XSTR_(s)
 #define LJ_ASM_SYM(s)	LJ_XSTR(__USER_LABEL_PREFIX__) #s
+
+typedef struct VMNextArrayReleaseCtx {
+  GCtab *t;
+  TValue *array;
+  MSize asize;
+  pthread_t thread;
+} VMNextArrayReleaseCtx;
+
+static void vmnext_sleep_ns(long ns)
+{
+  struct timespec ts;
+  ts.tv_sec = ns / 1000000000L;
+  ts.tv_nsec = ns % 1000000000L;
+  while (nanosleep(&ts, &ts) != 0)
+    ;
+}
+
+static void *vmnext_publish_array_after_delay(void *arg)
+{
+  VMNextArrayReleaseCtx *ctx = (VMNextArrayReleaseCtx *)arg;
+  vmnext_sleep_ns(5000000L);
+  lj_tab_array_rel(ctx->t, ctx->array);
+  lj_tab_asize_rel(ctx->t, ctx->asize);
+  return NULL;
+}
 
 static uint32_t call_vm_next(GCtab *t, uint32_t idx, TValue *val, TValue *key)
 {
@@ -89,6 +116,28 @@ static void exercise_array_forward(lua_State *L)
 	 target + 7100);
   assert(!tvistabinternal(&val));
   assert(!tvistabinternal(&key));
+
+  {
+    VMNextArrayReleaseCtx ctx;
+    int32_t want = target + 7100;
+    lj_tab_storeint(L, &oldarray[target], target + 9000);
+    lj_tab_storeint(L, &newarray[target], want);
+    lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+    lj_tab_asize_rel(t, oldasize);
+    lj_tab_array_rel(t, oldarray);
+    ctx.t = t;
+    ctx.array = newarray;
+    ctx.asize = newasize;
+    assert(pthread_create(&ctx.thread, NULL,
+			  vmnext_publish_array_after_delay, &ctx) == 0);
+    next = call_vm_next(t, (uint32_t)target, &val, &key);
+    assert(pthread_join(ctx.thread, NULL) == 0);
+    assert(next != (uint32_t)-1);
+    assert(tvisnumber(&val));
+    assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) == want);
+    assert(!tvistabinternal(&val));
+    assert(!tvistabinternal(&key));
+  }
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
