@@ -27,6 +27,10 @@ Permanent shape:
   `lua_gettable`, `lua_getfield`, `lua_settable`, `lua_setfield`, and
   `luaL_callmeta`) hold resume claims around stack inspection/mutation and route
   VM calls through `api_vm_call_claimed`.
+- `luaL_getmetafield()` and `luaL_callmeta()` claim-check the target state
+  before interning the field key, drop that preclaim for allocation, then
+  resume-claim and use `api_getmetafield_key_claimed()` for stack access,
+  metatable lookup, stack growth, and result publication.
 - Public stack APIs in the first stack-manipulation group (`lua_gettop`,
   `lua_checkstack`, `lua_settop`, `lua_remove`, `lua_insert`, `lua_pushvalue`)
   acquire state claims before stack access. Stack-growth paths use resume claims
@@ -64,10 +68,12 @@ Permanent shape:
 Regression coverage:
 
 - `m5_api_debug_claim_cleanup` source guards enforce the helper/root/drop
-  ordering and the stack/getter/load/call/metamethod resume-claim boundaries.
+  ordering, the stack/getter/load/call/metamethod resume-claim boundaries, and
+  the allocation-free claimed metafield helper shape.
 - `m5_state_owner` covers public C API `lua_getinfo()` on an unowned yielded
   coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,
   `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first
   stack-manipulation group, the read-only stack getter/conversion group, and
   the read-only auxiliary check/conversion group, and the raw object getter
-  group, upvalue introspection group, and userdata metatable check group.
+  group, upvalue introspection group, userdata metatable check group, and
+  metafield/callmeta helper paths.

@@ -570,7 +570,6 @@ BEGIN { fun = ""; seen = 0 }
 /^LUA_API void lua_getfield\(lua_State \*L,/ { finish(); reset("lua_getfield"); next }
 /^LUA_API void lua_settable\(lua_State \*L,/ { finish(); reset("lua_settable"); next }
 /^LUA_API void lua_setfield\(lua_State \*L,/ { finish(); reset("lua_setfield"); next }
-/^LUALIB_API int luaL_callmeta\(lua_State \*L,/ { finish(); reset("luaL_callmeta"); next }
 fun {
   if (index($0, "{")) started = 1
   depth += count_char($0, "{")
@@ -582,8 +581,108 @@ fun {
 }
 END {
   finish()
-  if (seen != 8) {
+  if (seen != 7) {
     print "missing public metamethod VM entry guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
+  pre = 0; pre_drop = 0; key = 0; claim = 0; helper = 0; drop = 0
+}
+/^LUALIB_API int luaL_getmetafield\(lua_State \*L,/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim\(L, &preclaim\)/) pre = NR
+  if (/lj_state_dropclaim\(&preclaim\)/) pre_drop = NR
+  if (/lj_str_newz\(api_errstate\(L\), field\)/) key = NR
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/api_getmetafield_key_claimed/) helper = NR
+  if (/lj_state_dropresumeclaim\(&claim\)/) drop = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!pre || !pre_drop || !key || !claim || !helper || !drop ||
+      pre > pre_drop || pre_drop > key || key > claim || claim > helper ||
+      helper > drop) {
+    print "luaL_getmetafield must pre-intern key and use claimed helper"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
+  access = 0; lookup = 0; grow = 0; publish = 0
+}
+/^static int api_getmetafield_key_claimed\(lua_State \*L,/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/index2adr_read/) access = NR
+  if (/lj_tab_getstr/) lookup = NR
+  if (/api_checkstack1_claimed/) grow = NR
+  if (/lj_state_stack_pubtv/) publish = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!access || !lookup || !grow || !publish ||
+      access > lookup || lookup > grow || grow > publish) {
+    print "api_getmetafield_key_claimed must read, lookup, grow, then publish"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
+  pre = 0; pre_drop = 0; key = 0; claim = 0; helper = 0; call = 0; drop = 0
+}
+/^LUALIB_API int luaL_callmeta\(lua_State \*L,/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim\(L, &preclaim\)/) pre = NR
+  if (/lj_state_dropclaim\(&preclaim\)/) pre_drop = NR
+  if (/lj_str_newz\(api_errstate\(L\), field\)/) key = NR
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/api_getmetafield_key_claimed/) helper = NR
+  if (/api_vm_call_claimed/) call = NR
+  if (/lj_state_dropresumeclaim\(&claim\)/ && !drop) drop = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!pre || !pre_drop || !key || !claim || !helper || !call || !drop ||
+      pre > pre_drop || pre_drop > key || key > claim || claim > helper ||
+      helper > call || call > drop) {
+    print "luaL_callmeta must pre-intern key and hold claim across VM call"
     exit 1
   }
 }

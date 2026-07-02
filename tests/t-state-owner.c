@@ -365,6 +365,12 @@ static void check_metamethod_api_unowned(lua_State *L)
   assert(lua_tointeger(co, -1) == 55);
   assert(lj_state_owner_acq(co) == 0);
 
+  co = load_ownerless_results(L,
+    "return setmetatable({}, {__call=function() return 56 end})", 1);
+  assert(luaL_getmetafield(co, 1, "__call") == 1);
+  assert(lua_iscfunction(co, -1) == 0);
+  assert(lj_state_owner_acq(co) == 0);
+
   lua_settop(L, 0);
 }
 
@@ -833,6 +839,31 @@ static int busy_luaL_checkudata(lua_State *L)
   return 0;
 }
 
+static lua_State *busy_callmeta_prepare(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  assert(luaL_loadstring(L,
+    "return setmetatable({}, {__call=function() return 55 end})") == 0);
+  lua_call(L, 0, 1);
+  lua_xmove(L, co, 1);
+  lj_state_owner_rel(co, foreign_tid(L));
+  return co;
+}
+
+static int busy_luaL_getmetafield(lua_State *L)
+{
+  lua_State *co = busy_callmeta_prepare(L);
+  (void)luaL_getmetafield(co, 1, "__call");
+  return 0;
+}
+
+static int busy_luaL_callmeta(lua_State *L)
+{
+  lua_State *co = busy_callmeta_prepare(L);
+  (void)luaL_callmeta(co, 1, "__call");
+  return 0;
+}
+
 static int busy_getfenv_thread(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -1147,6 +1178,8 @@ int main(void)
   expect_thread_busy(L, busy_lua_upvalueid, "busy lua_upvalueid");
   expect_thread_busy(L, busy_luaL_testudata, "busy luaL_testudata");
   expect_thread_busy(L, busy_luaL_checkudata, "busy luaL_checkudata");
+  expect_thread_busy(L, busy_luaL_getmetafield, "busy luaL_getmetafield");
+  expect_thread_busy(L, busy_luaL_callmeta, "busy luaL_callmeta");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
   expect_thread_busy(L, busy_lua_call, "busy lua_call");

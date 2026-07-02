@@ -185,6 +185,9 @@ static void api_checkstack1_claimed(lua_State *L, lua_State *errL,
   }
 }
 
+static int api_getmetafield_key_claimed(lua_State *L, int idx, GCstr *field,
+					LJStateClaim *claim);
+
 static void api_vm_call_claimed(lua_State *L, TValue *base, int nres1,
 				LJStateClaim *claim)
 {
@@ -1333,17 +1336,42 @@ LUA_API int lua_getmetatable(lua_State *L, int idx)
 
 LUALIB_API int luaL_getmetafield(lua_State *L, int idx, const char *field)
 {
-  if (lua_getmetatable(L, idx)) {
-    cTValue *tv = lj_tab_getstr(tabV(L->top-1), lj_str_newz(L, field));
-    if (tv) {
-      TValue mtv;
-      lj_tv_load_acq(&mtv, tv);
-      if (!tvisnil(&mtv)) {
-	copyTV(L, L->top-1, &mtv);
-	return 1;
-      }
+  LJStateClaim preclaim, claim;
+  GCstr *key;
+  int ok;
+  api_checkclaim(L, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  key = lj_str_newz(api_errstate(L), field);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  ok = api_getmetafield_key_claimed(L, idx, key, &claim);
+  lj_state_dropresumeclaim(&claim);
+  return ok;
+}
+
+static int api_getmetafield_key_claimed(lua_State *L, int idx, GCstr *field,
+					LJStateClaim *claim)
+{
+  TValue snap;
+  cTValue *o, *tv;
+  GCtab *mt = NULL;
+  o = index2adr_read(L, idx, &snap);
+  if (tvistab(o))
+    mt = lj_tab_metatable_acq(tabV(o));
+  else if (tvisudata(o))
+    mt = lj_udata_metatable_acq(udataV(o));
+  else
+    mt = lj_basemt_obj_acq(G(L), o);
+  if (mt != NULL && (tv = lj_tab_getstr(mt, field)) != NULL) {
+    TValue mtv;
+    lj_tv_load_acq(&mtv, tv);
+    if (!tvisnil(&mtv)) {
+      api_checkstack1_claimed(L, api_errstate(L), claim);
+      copyTV(L, L->top, &mtv);
+      lj_state_stack_pubtv(L, L, L->top);
+      incr_top(L);
+      return 1;
     }
-    L->top--;
   }
   return 0;
 }
@@ -1891,10 +1919,14 @@ LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
 
 LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
 {
-  LJStateClaim claim;
+  LJStateClaim preclaim, claim;
+  GCstr *key;
+  api_checkclaim(L, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  key = lj_str_newz(api_errstate(L), field);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(api_errstate(L), "thread busy");
-  if (luaL_getmetafield(L, idx, field)) {
+  if (api_getmetafield_key_claimed(L, idx, key, &claim)) {
     TValue snap;
     TValue *top = L->top--;
     if (LJ_FR2) setnilV(top++);
