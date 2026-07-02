@@ -1293,36 +1293,60 @@ LUA_API void lua_createtable(lua_State *L, int narray, int nrec)
 
 LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 {
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
   GCtab *regt = lj_registry_tab_acq(G(L));
-  GCstr *key = lj_str_newz(L, tname);
+  GCstr *key;
   TValue keytv;
+  api_checkclaim(L, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
+  key = lj_str_newz(errL, tname);
   setstrV(L, &keytv, key);
   for (;;) {
-    TValue *tv = lj_tab_setstr(L, regt, key);
+    TValue *tv = lj_tab_setstr(errL, regt, key);
     TValue old;
     int rc = lj_tab_read_current_keyed(regt, tv, &keytv, &old);
     if (rc != LJ_TAB_STORE_CAS_OK) {
-      lj_tab_store_wait_l(L);  /* luaL_newmetatable saw stale/FORWARD slot. */
+      lj_tab_store_wait_l(errL);  /* luaL_newmetatable saw stale/FORWARD slot. */
       continue;
     }
     if (tvisnil(&old)) {
-      GCtab *mt = lj_tab_new(L, 0, 1);
+      GCtab *mt = lj_tab_new(errL, 0, 1);
       TValue tmp;
       settabV(L, &tmp, mt);
-      rc = lj_tab_trysetnil_cas_keyed(L, regt, tv, &keytv, &tmp, &old);
+      rc = lj_tab_trysetnil_cas_keyed(errL, regt, tv, &keytv, &tmp, &old);
       if (rc == LJ_TAB_STORE_CAS_OK) {
-	settabV(L, L->top++, mt);
-	lj_gc_pubtab(L, regt);
+	lj_gc_pubtab(errL, regt);
+	if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+	  lj_err_callermsg(errL, "thread busy");
+	api_checkstack1_claimed(L, errL, &claim);
+	settabV(L, L->top, mt);
+	lj_state_stack_pubtv(L, L, L->top);
+	L->top++;
+	lj_state_dropresumeclaim(&claim);
 	return 1;
       }
       if (rc != LJ_TAB_STORE_CAS_EXISTS) {
-	lj_tab_store_wait_l(L);
+	lj_tab_store_wait_l(errL);
 	continue;
       }
-      copyTV(L, L->top++, &old);
+      if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+	lj_err_callermsg(errL, "thread busy");
+      api_checkstack1_claimed(L, errL, &claim);
+      copyTV(L, L->top, &old);
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
+      lj_state_dropresumeclaim(&claim);
       return 0;
     } else {
-      copyTV(L, L->top++, &old);
+      if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+	lj_err_callermsg(errL, "thread busy");
+      api_checkstack1_claimed(L, errL, &claim);
+      copyTV(L, L->top, &old);
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
+      lj_state_dropresumeclaim(&claim);
       return 0;
     }
   }

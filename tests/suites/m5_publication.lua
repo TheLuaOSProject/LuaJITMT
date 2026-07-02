@@ -904,6 +904,38 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+BEGIN {
+  infn = 0; preclaim = 0; predrop = 0; key = 0; setslot = 0
+  alloc = 0; cas = 0; regpub = 0; resume = 0; check = 0
+  stackpub = 0; drop = 0
+}
+/^LUALIB_API int luaL_newmetatable\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /api_checkclaim\(L, &preclaim\)/ { preclaim = NR }
+infn && /lj_state_dropclaim\(&preclaim\)/ { predrop = NR }
+infn && /lj_str_newz\(errL,/ { key = NR }
+infn && /lj_tab_setstr\(errL,/ { setslot = NR }
+infn && /lj_tab_new\(errL,/ { alloc = NR }
+infn && /lj_tab_trysetnil_cas_keyed\(errL,/ { cas = NR }
+infn && /lj_gc_pubtab\(errL,/ { regpub = NR }
+infn && /lj_state_resumeclaim/ { resume = NR }
+infn && /api_checkstack1_claimed/ { check = NR }
+infn && /lj_state_stack_pubtv/ { stackpub = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+END {
+  if (!preclaim || !predrop || !key || !setslot || !alloc || !cas ||
+      !regpub || !resume || !check || !stackpub || !drop ||
+      preclaim > predrop || predrop > key || key > setslot ||
+      setslot > alloc || alloc > cas || cas > regpub ||
+      regpub > resume || resume > check || check > stackpub ||
+      stackpub > drop) {
+    print "luaL_newmetatable owner-claim boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
 /^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

@@ -89,6 +89,9 @@ Permanent shape:
   function slots, keeps the claim through trace invalidation and release
   publication of the joined upvalue pointer, then drops the claim without
   changing stack shape.
+- `luaL_newmetatable()` preclaims the target state to reject busy targets,
+  drops that preclaim before string/table allocation and registry CAS work,
+  then resume-claims only for the result stack push and release-publication.
 - Upvalue introspection APIs (`lua_getupvalue` and `lua_upvalueid`) claim the
   target state before reading the function slot. `lua_getupvalue` uses the
   protected one-slot growth helper and release-publishes the copied upvalue

@@ -496,6 +496,25 @@ static void check_userdata_api_unowned(lua_State *L)
   lua_settop(L, 0);
 }
 
+static void check_newmetatable_api_unowned(lua_State *L)
+{
+  lua_State *co;
+  lua_settop(L, 0);
+
+  co = lua_newthread(L);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(luaL_newmetatable(co, "state_owner_newmt_unowned") == 1);
+  assert(lua_istable(co, -1));
+  assert(lj_state_owner_acq(co) == 0);
+  lua_pop(co, 1);
+
+  assert(luaL_newmetatable(co, "state_owner_newmt_unowned") == 0);
+  assert(lua_istable(co, -1));
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+}
+
 static void check_metamethod_api_unowned(lua_State *L)
 {
   lua_State *co;
@@ -1248,6 +1267,14 @@ static int busy_luaL_checkudata(lua_State *L)
   return 0;
 }
 
+static int busy_luaL_newmetatable(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)luaL_newmetatable(co, "state_owner_busy_newmt");
+  return 0;
+}
+
 static lua_State *busy_callmeta_prepare(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -1542,6 +1569,7 @@ int main(void)
   check_raw_object_api_unowned(L);
   check_upvalue_api_unowned(L);
   check_userdata_api_unowned(L);
+  check_newmetatable_api_unowned(L);
   check_metamethod_api_unowned(L);
   check_resume_unowned(L);
   check_lua_load_unowned(L);
@@ -1636,6 +1664,7 @@ int main(void)
   expect_thread_busy(L, busy_lua_upvaluejoin, "busy lua_upvaluejoin");
   expect_thread_busy(L, busy_luaL_testudata, "busy luaL_testudata");
   expect_thread_busy(L, busy_luaL_checkudata, "busy luaL_checkudata");
+  expect_thread_busy(L, busy_luaL_newmetatable, "busy luaL_newmetatable");
   expect_thread_busy(L, busy_luaL_getmetafield, "busy luaL_getmetafield");
   expect_thread_busy(L, busy_luaL_callmeta, "busy luaL_callmeta");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
