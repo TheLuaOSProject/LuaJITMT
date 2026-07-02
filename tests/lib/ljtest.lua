@@ -11,10 +11,6 @@ local read_file = utils.read_file
 local write_file = utils.write_file
 local file_exists = utils.file_exists
 
-local repository_source_roots = {
-  "src", "dynasm", "tests", "tools", ".github", "plan", "notes"
-}
-
 local function read_raw_file(path)
   local f = io.open(path, "rb")
   if not f then return nil end
@@ -55,19 +51,6 @@ local function append_flags(parts, flags)
   end
 end
 
-local function is_repository_source_path(self, path)
-  local root = self.root .. "/"
-  if path:sub(1, #root) ~= root then return false end
-  local rest = path:sub(#root + 1)
-  for i = 1, #repository_source_roots do
-    local dir = repository_source_roots[i]
-    if rest == dir or rest:sub(1, #dir + 1) == dir .. "/" then
-      return true
-    end
-  end
-  return false
-end
-
 function M.new(root)
   local self = {
     root = root,
@@ -93,7 +76,7 @@ function Test:tmp(name)
 end
 
 function Test:read(path)
-  if is_repository_source_path(self, path) then
+  if utils.is_repository_source_path(self.root, path) then
     error("tests must not read repository source as a pass/fail oracle: " ..
           path, 2)
   end

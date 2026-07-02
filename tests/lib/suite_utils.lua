@@ -1,6 +1,10 @@
 local M = {}
 local checks = require("suite_assert")
 
+local repository_source_roots = {
+  "src", "dynasm", "tests", "tools", ".github", "plan", "notes"
+}
+
 function M.getenv(name, default)
   local v = os.getenv(name)
   if v == nil or v == "" then return default end
@@ -48,10 +52,37 @@ local function read_raw_file(path)
   return data
 end
 
+function M.is_repository_source_path(root, path)
+  local rest
+  if not path then return false end
+  if root and root ~= "" then
+    if root:sub(-1) == "/" then root = root:sub(1, -2) end
+    if path == root then
+      rest = ""
+    elseif path:sub(1, #root + 1) == root .. "/" then
+      rest = path:sub(#root + 2)
+    end
+  end
+  if not rest then
+    rest = path:gsub("^%./", "")
+  end
+  for i = 1, #repository_source_roots do
+    local dir = repository_source_roots[i]
+    if rest == dir or rest:sub(1, #dir + 1) == dir .. "/" then
+      return true
+    end
+  end
+  return false
+end
+
 function M.read_file(path)
   -- Read generated outputs, fixtures, or captured logs. The root-aware
-  -- Test:read() wrapper rejects repository source paths so implementation
-  -- spelling cannot become a test oracle again.
+  -- source-path rejection keeps implementation spelling from becoming a test
+  -- oracle again, even when a suite calls this utility directly.
+  if M.is_repository_source_path(M.getenv("LJ_TEST_ROOT"), path) then
+    error("tests must not read repository source as a pass/fail oracle: " ..
+          path, 2)
+  end
   return read_raw_file(path)
 end
 
