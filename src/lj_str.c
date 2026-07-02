@@ -131,13 +131,16 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 
 static void strtab_wait(lua_State *L)
 {
+  uint32_t i;
   /*
   ** String-table claim/enter waits are reached from string interning, resize,
-  ** and secondary rehash paths with a current Lua state. Wait as native time
-  ** for that TG so safepoint handshakes can observe threads contending on the
-  ** pin-and-drain resize bit.
+  ** and secondary rehash paths with a current Lua state. Keep the wait native
+  ** and safepoint-visible, but avoid millisecond parking for transient resize
+  ** claim or active-reader drain windows.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  for (i = 0; i < 64; i++)
+    la_cpu_pause();
+  (void)lj_thr_yield(L);
 }
 
 static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want)
