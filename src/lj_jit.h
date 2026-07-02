@@ -399,6 +399,23 @@ typedef struct GCtrace {
 #endif
 } GCtrace;
 
+#define TRACE_EXITTAB_MCODE	0x01
+
+static LJ_AINLINE int trace_exittab_ismcode(const GCtrace *T)
+{
+  return (T->unused1 & TRACE_EXITTAB_MCODE) != 0;
+}
+
+static LJ_AINLINE void trace_exittab_mcode_set(GCtrace *T)
+{
+  T->unused1 |= TRACE_EXITTAB_MCODE;
+}
+
+static LJ_AINLINE void trace_exittab_mcode_clear(GCtrace *T)
+{
+  T->unused1 &= (uint8_t)~TRACE_EXITTAB_MCODE;
+}
+
 #define gco2trace(o)	check_exp((o)->gch.gct == ~LJ_TTRACE, (GCtrace *)(o))
 #define LJ_TRACE_PENDING	((uintptr_t)1u)
 static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)

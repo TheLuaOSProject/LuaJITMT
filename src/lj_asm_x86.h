@@ -68,8 +68,33 @@ static void asm_exitstub_trace_setup(ASMState *as, ExitNo nexits)
   ExitNo i;
   if (nexits == 0)
     return;
+#if LJ_TARGET_X64 && defined(__linux__)
+  while ((uintptr_t)mxp & 7) asm_mcode_u8(as, &mxp, XI_INT3);
+  if (mxp + nexits*(sizeof(MCode *) + EXITSTUB_TRACE_SPACING) >= as->mctop)
+    asm_mclimit(as);
+  T->exittab = (MCode **)lj_mcode_rw(as->J, mxp);
+  trace_exittab_mcode_set(T);
+  for (i = 0; i < nexits; i++)
+    trace_exittarget_rel(T, i, exitstub_addr(as->J, i));
+  mxp += nexits*sizeof(MCode *);
+  T->exitstub = mxp;
+  for (i = 0; i < nexits; i++) {
+    MCode *stub = mxp;
+    MCode *slot = (MCode *)T->exitstub - nexits*sizeof(MCode *) +
+		  i*sizeof(MCode *);
+    int32_t disp = (int32_t)(slot - (stub + 6));
+    asm_mcode_u8(as, &mxp, XI_GROUP5);
+    asm_mcode_u8(as, &mxp, MODRM(XM_OFS0, XOg_JMP, RID_RIP));
+    asm_mcode_i32(as, &mxp, disp);
+    while (mxp < stub + EXITSTUB_TRACE_SPACING)
+      asm_mcode_u8(as, &mxp, XI_INT3);
+    lj_assertA(mxp == T->exitstub + EXITSTUB_TRACE_SPACING*(i+1),
+	       "bad trace exit stub size");
+  }
+#else
   if (T->exittab == NULL)
     T->exittab = lj_mem_newvec(as->J->L, nexits, MCode *);
+  trace_exittab_mcode_clear(T);
   while ((uintptr_t)mxp & 7) asm_mcode_u8(as, &mxp, XI_INT3);
   if (mxp + nexits*EXITSTUB_TRACE_SPACING >= as->mctop)
     asm_mclimit(as);
@@ -89,6 +114,7 @@ static void asm_exitstub_trace_setup(ASMState *as, ExitNo nexits)
     lj_assertA(mxp == T->exitstub + EXITSTUB_TRACE_SPACING*(i+1),
 	       "bad trace exit stub size");
   }
+#endif
   lj_mcode_commitbot(as->J, mxp);
   as->mcbot = mxp;
   as->mclim = as->mcbot + MCLIM_REDZONE;

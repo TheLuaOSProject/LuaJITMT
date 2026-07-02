@@ -164,7 +164,11 @@ typedef struct {
 #define EXITSTUB_SPACING	(2+2)
 #define EXITSTUBS_PER_GROUP	32
 #if LJ_64
+#if LJ_TARGET_X64 && defined(__linux__)
+#define EXITSTUB_TRACE_SPACING	8
+#else
 #define EXITSTUB_TRACE_SPACING	16
+#endif
 #define exitstub_trace_addr(T, exitno) \
   ((T)->exitstub + EXITSTUB_TRACE_SPACING*(exitno))
 #endif

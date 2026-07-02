@@ -206,7 +206,7 @@ static void trace_retire(global_State *g, GCtrace *T)
   lj_gc_arena_markmem(g, T);
   {
     MCode **exittab = trace_exittab_acq(T);
-    if (exittab)
+    if (exittab && !trace_exittab_ismcode(T))
       lj_gc_arena_markmem(g, exittab);
   }
   trace_retired_push(J, T);
@@ -245,7 +245,7 @@ static void trace_markbody(global_State *g, GCtrace *T, int gc2)
   if (gc2) lj_gc2_markmem(g, T); else lj_gc_arena_markmem(g, T);
   {
     MCode **exittab = trace_exittab_acq(T);
-    if (exittab) {
+    if (exittab && !trace_exittab_ismcode(T)) {
       if (gc2) lj_gc2_markmem(g, exittab);
       else lj_gc_arena_markmem(g, exittab);
     }
@@ -479,8 +479,10 @@ static void trace_exittab_free(global_State *g, GCtrace *T)
   MCode **exittab = trace_exittab_acq(T);
   if (exittab) {
     trace_exittab_rel(T, NULL);
-    lj_mem_freevec(g, exittab, trace_nsnap_acq(T), MCode *);
+    if (!trace_exittab_ismcode(T))
+      lj_mem_freevec(g, exittab, trace_nsnap_acq(T), MCode *);
   }
+  trace_exittab_mcode_clear(T);
   trace_exitstub_rel(T, NULL);
 }
 

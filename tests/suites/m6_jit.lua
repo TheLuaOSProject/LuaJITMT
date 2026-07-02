@@ -1606,6 +1606,23 @@ for i=1,80 do s=s+i end
 assert(s==3240)
 ]=], { timeout = timeout })
       luajit_code(t, [=[
+if jit.arch == "x64" and jit.os == "Linux" then
+  local ffi = require("ffi")
+  local util = require("jit.util")
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  local s = 0
+  for i = 1, 80 do s = s + i end
+  assert(s == 3240)
+  local addr = assert(util.traceexitstub(1, 0),
+                      "missing trace exit stub")
+  local p = ffi.cast("const uint8_t *", addr)
+  assert(p[0] == 0xff and p[1] == 0x25,
+         string.format("trace exit stub is %02x %02x, not rip-indirect jmp",
+                       tonumber(p[0]), tonumber(p[1])))
+end
+]=], { timeout = timeout })
+      luajit_code(t, [=[
 local util = require"jit.util"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=8")
