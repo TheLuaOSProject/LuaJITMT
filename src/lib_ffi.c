@@ -111,6 +111,18 @@ static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
 			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 			       CType *rawp);
 
+static LJ_AINLINE void ffi_publish_stack_args(lua_State *L)
+{
+  /*
+  ** Public FFI helpers often keep Lua arguments live while parsing ctypes,
+  ** waiting for ctype snapshots, allocating cdata, or publishing metatype and
+  ** finalizer side roots. Stock LuaJIT makes those values live through the
+  ** ordinary stack root; in the concurrent runtime we must release-publish the
+  ** visible stack before any such native wait/allocation boundary.
+  */
+  lj_state_stack_pubrange(L, L);
+}
+
 static int ffi_qual_token(const char *p, MSize len, CTInfo *qualp)
 {
   if (len == 5 && ffi_strlit(p, len, "const", 5)) {
@@ -1495,7 +1507,7 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
   TValue *o;
   GCcdata *cd;
   int isstr, neednelem = 0;
-  lj_state_stack_pubrange(L, L);
+  ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr)
     id = ffi_checkctype(L, cts, NULL);
@@ -1552,6 +1564,7 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
   ptrdiff_t ofs = o - L->base;
   int isstr;
   int ok;
+  ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr)
     id = ffi_checkctype(L, cts, NULL);
@@ -1578,7 +1591,7 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
 LJLIB_CF(ffi_typeof)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
-  lj_state_stack_pubrange(L, L);
+  ffi_publish_stack_args(L);
   CTypeID id = ffi_checkctype(L, cts, L->base+1);
   GCcdata *cd = lj_cdata_new_(L, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
@@ -1915,6 +1928,7 @@ LJLIB_CF(ffi_istype)	LJLIB_REC(.)
   CTypeID id1;
   int b = 0;
   int isstr;
+  ffi_publish_stack_args(L);
   id1 = ffi_checkctype_noparse(L, NULL, &isstr);
   if (tviscdata(o)) {
     GCcdata *cd = cdataV(o);
@@ -2463,7 +2477,7 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
   CTState *cts = ctype_cts(L);
   CTypeID id;
   CTSize sz;
-  lj_state_stack_pubrange(L, L);
+  ffi_publish_stack_args(L);
   if (LJ_UNLIKELY(tviscdata(L->base) && cdataisv(cdataV(L->base)))) {
     sz = cdatavlen(cdataV(L->base));
   } else {
@@ -2513,6 +2527,7 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
   CTypeID id;
   CTSize align;
   int isstr;
+  ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr) {
 #if LJ_HASJIT
@@ -2543,6 +2558,7 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
   GCstr *name;
   CTSize ofs;
   int isstr;
+  ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr)
     id = ffi_checkctype(L, cts, NULL);
@@ -2732,6 +2748,7 @@ LJLIB_CF(ffi_metatype)
   GCcdata *cd;
   CTSize sz;
   int ok;
+  ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr)
     id = ffi_checkctype(L, cts, NULL);
@@ -2760,7 +2777,9 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
   ptrdiff_t finofs = savestack(L, fin);
   CTInfo info;
   CTSize sz;
-  int ok = ffi_ctype_info_read(L, cts, cd->ctypeid, &info, &sz, NULL, NULL);
+  int ok;
+  ffi_publish_stack_args(L);
+  ok = ffi_ctype_info_read(L, cts, cd->ctypeid, &info, &sz, NULL, NULL);
   if (ok <= 0)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(ctype_isptr(info) || ctype_isstruct(info) || ctype_isrefarray(info)))

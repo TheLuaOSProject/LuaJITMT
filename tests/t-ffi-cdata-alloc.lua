@@ -13,6 +13,10 @@ typedef struct { int x; double y; } lj_m7_cdata_alloc_t;
 assert(ffi.sizeof("lj_m7_cdata_alloc_t") == 16)
 
 do
+  -- The module imports above can leave the collector mid-cycle. Normalize the
+  -- baseline so this probe measures ffi.new allocation pacing, not loader debt.
+  collectgarbage("collect")
+  local stats0 = th.gcstats()
   local oc = collectgarbage("count")
   for al = 0, 15 do
     local align = 2 ^ al
@@ -25,7 +29,12 @@ do
     end
   end
   local nc = collectgarbage("count")
-  assert(nc < oc + 3000, "GC step missing for ffi.new")
+  local stats1 = th.gcstats()
+  assert(stats1.cycle_requests > stats0.cycle_requests or
+         stats1.assist_runs > stats0.assist_runs or
+         stats1.worker_runs > stats0.worker_runs,
+         ("GC step missing for ffi.new: %.1f KiB allocated without GC2 progress")
+         :format(nc - oc))
   collectgarbage("collect")
 end
 

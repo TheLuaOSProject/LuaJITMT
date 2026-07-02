@@ -27,226 +27,6 @@ local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
 
-local function assert_shared_next_fence_precedes_keyindex(t)
-  local awk = [=[
-BEGIN { infn = 0; sawguard = 0 }
-/static void LJ_FASTCALL recff_next/ { infn = 1; next }
-infn && /^}/ {
-  if (!sawguard) {
-    print "recff_next missing lj_record_mt_shared_tab guard"
-    exit 1
-  }
-  exit 0
-}
-infn && /lj_record_mt_shared_tab/ { sawguard = 1 }
-infn && /lj_tab_keyindex/ && !sawguard {
-  print "recff_next calls lj_tab_keyindex before active-MT shared traversal guard"
-  exit 1
-}
-END {
-  if (!infn) {
-    print "recff_next not found"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_ffrecord.c")
-end
-
-local function assert_fnew_gc_check_boundary(t)
-  local awk = [=[
-BEGIN { in_interp = 0; in_jit = 0; interp_check = 0; jit_check = 0 }
-/^GCfunc \*lj_func_newL_gc\(lua_State \*L/ { in_interp = 1; next }
-in_interp && /^}/ { in_interp = 0; next }
-in_interp && /lj_gc_check_fixtop/ { interp_check = 1 }
-/^GCfunc \*lj_func_newL_gc_forjit\(lua_State \*L/ { in_jit = 1; next }
-/^GCfunc \*lj_func_newL_gc1num_forjit\(lua_State \*L/ { in_jit = 1; next }
-in_jit && /^}/ { in_jit = 0; next }
-in_jit && /lj_gc_check_fixtop/ { jit_check = 1 }
-END {
-  if (!interp_check) {
-    print "interpreter FNEW helper lost lj_gc_check_fixtop"
-    exit 1
-  }
-  if (jit_check) {
-    print "JIT FNEW helper reintroduced duplicate lj_gc_check_fixtop"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_func.c")
-end
-
-local function assert_tbar_gc2_gate_not_hidden_by_black_bit(t)
-  local awk = [=[
-BEGIN { tbar = 0 }
-/\_\(TBAR,[[:space:]]*S[[:space:]]*,[[:space:]]*ref,[[:space:]]*ref\)/ {
-  tbar = NR
-}
-END {
-  if (!tbar) {
-    print "IR_TBAR must declare its optional key operand as a ref"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_ir.h")
-
-  local awk = [=[
-BEGIN {
-  infn = 0; decl = 0; label = 0; jump_gate = 0; mark_gate = 0
-  key_call = 0; key_tmp = 0; key_tvptr = 0
-  key_refnil = 0
-}
-/^static void asm_tbar\(ASMState \*as, IRIns \*ir\)/ { infn = 1; next }
-infn && /^}/ {
-  if (!decl || !label || !jump_gate || !mark_gate ||
-      !key_call || !key_tmp || !key_tvptr || !key_refnil) {
-    print "asm_tbar must split key-only GC2 barriers from table-rescan barriers"
-    exit 1
-  }
-  infn = 0
-}
-infn && /MCLabel .*l_gate/ { decl = NR }
-infn && /l_gate = emit_label\(as\)/ { label = NR }
-infn && /emit_sjcc\(as, CC_Z, l_gate\)/ { jump_gate = NR }
-infn && /DISPATCH_TG\(mark_active\)/ { mark_gate = NR }
-infn && /IRCALL_lj_gc2_barrier_key_g/ { key_call = NR }
-infn && /ASMREF_TMP2/ { key_tmp = NR }
-infn && /asm_tvptr_protected/ { key_tvptr = NR }
-infn && /ir->op2 != REF_NIL/ { key_refnil = NR }
-END {
-  if (infn || !decl || !label || !jump_gate || !mark_gate ||
-      !key_call || !key_tmp || !key_tvptr || !key_refnil) {
-    print "asm_tbar GC2 gate shape missing"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_asm_x86.h")
-
-  awk = [=[
-BEGIN { key_emit = 0 }
-/else if \(keybarrier\)/ {
-  getline
-  if ($0 ~ /IR_TBAR/ && $0 ~ /ix->tab/ && $0 ~ /ix->key/)
-    key_emit++
-}
-END {
-  if (key_emit < 2) {
-    print "key-only table stores must carry the key in IR_TBAR op2"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_record.c")
-
-  awk = [=[
-BEGIN { refnil = 0 }
-/IR_TBAR/ && /REF_NIL/ { refnil++ }
-END {
-  if (refnil < 3) {
-    print "unkeyed IR_TBAR emissions must use REF_NIL sentinel"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_record.c src/lj_ffrecord.c")
-
-  awk = [=[
-BEGIN { infn = 0; weak = 0; child = 0 }
-/^void lj_gc2_barrier_key_g\(global_State \*g, GCtab \*t, cTValue \*key\)/ {
-  infn = 1
-  next
-}
-infn && /^}/ {
-  if (!weak || !child || weak > child) {
-    print "GC2 key-only TBAR must not strongly mark weak-table keys"
-    exit 1
-  }
-  infn = 0
-}
-infn && /LJ_GC_WEAKKEY/ { weak = NR }
-infn && /child = gcV\(key\)/ { child = NR }
-END {
-  if (infn || !weak || !child || weak > child) {
-    print "lj_gc2_barrier_key_g weak-key guard missing"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_gc2.c")
-end
-
-local function assert_mt_activation_jit_token_boundary(t)
-  local awk = [=[
-BEGIN {
-  inprep = 0
-  inenter = 0
-  prep_token = 0
-  prep_hasany = 0
-  enter_prepare = 0
-  enter_cas = 0
-  enter_finish = 0
-}
-/^static int threading_mt_active_prepare_traces\(lua_State \*L\)/ {
-  inprep = 1
-  next
-}
-inprep && /^}/ {
-  inprep = 0
-  next
-}
-inprep && /lj_jit_token_acquire_wait/ { prep_token = NR }
-inprep && /lj_trace_hasany/ {
-  prep_hasany = NR
-  if (!prep_token || prep_token > NR) {
-    print "threading_mt_active_prepare_traces checks traces before holding JIT token"
-    exit 1
-  }
-}
-/^static int threading_gc_enter_counted\(lua_State \*L, GCudata \*rootud\)/ {
-  inenter = 1
-  next
-}
-inenter && /^}/ {
-  inenter = 0
-  next
-}
-inenter && /threading_mt_active_prepare_traces/ { enter_prepare = NR }
-inenter && /mt_active_cas/ && enter_prepare && !enter_cas { enter_cas = NR }
-inenter && /threading_mt_active_finish_traces/ { enter_finish = NR }
-END {
-  if (!prep_token || !prep_hasany) {
-    print "threading_mt_active_prepare_traces missing tokened trace boundary"
-    exit 1
-  }
-  if (!enter_prepare || !enter_cas || !enter_finish ||
-      !(enter_prepare < enter_cas && enter_cas < enter_finish)) {
-    print "threading_gc_enter_counted does not hold JIT token across mt_active CAS"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lib_threading.c")
-end
-
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
@@ -498,301 +278,6 @@ print("jit-tmpbuf-thread-format-smoke OK")
 ]=]
 end
 
-local function assert_tg_tmpbuf_tostr_keeps_append_state(t)
-  local awk = [=[
-BEGIN { infn = 0; sawnew = 0 }
-/^GCstr \* LJ_FASTCALL lj_buf_tostr_tg\(SBuf \*sb\)/ {
-  infn = 1
-  next
-}
-infn && /^}/ {
-  infn = 0
-  next
-}
-infn && /lj_str_new/ { sawnew = 1 }
-infn && /lj_buf_wptr_tg/ {
-  print "lj_buf_tostr_tg must not reset the TG tmpbuf write pointer"
-  exit 1
-}
-END {
-  if (!sawnew) {
-    print "lj_buf_tostr_tg did not materialize a string"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_buf.c")
-end
-
-local function assert_recursive_call_unroll_keeps_abort_slot(t)
-  local awk = [=[
-BEGIN { infn = 0; sawunlink = 0 }
-/^static void check_call_unroll\(jit_State \*J, TraceNo lnk\)/ {
-  infn = 1
-  next
-}
-infn && /^}/ {
-  if (!sawunlink) {
-    print "check_call_unroll must unlink return traces without retiring their slot"
-    exit 1
-  }
-  infn = 0
-  exit 0
-}
-infn && /lj_trace_flushscope/ {
-  print "check_call_unroll must not retire recursive return trace slots"
-  exit 1
-}
-infn && /lj_trace_flush_unlink\(J, lnk\)/ { sawunlink = 1 }
-END {
-  if (infn || !sawunlink) {
-    print "check_call_unroll source shape not found"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
-                        " && awk " .. utils.shell_quote(awk) ..
-                        " src/lj_record.c")
-end
-
-local function assert_x64_jloop_stale_slot_guards(t)
-  local vm = t:read(t:path("src", "vm_x64.dasc"))
-  checks.assert_text_all_contains("x64 JLOOP stale-slot guard", vm, {
-    "mov RA, [RA+J_OFS(tracev)]\n" ..
-    "  |  test RA, RA\n" ..
-    "  |  jz >7\n" ..
-    "  |  mov TMPRd, RDd\n" ..
-    "  |  mov TRACE:RA, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
-    "  |  cmp TRACE:RA, 1\n" ..
-    "  |  jbe >7\n" ..
-    "  |  movzx RDd, word TRACE:RA->traceno\n" ..
-    "  |  cmp RDd, TMPRd\n" ..
-    "  |  jne >7\n" ..
-    "  |  cmp aword TRACE:RA->retire_epoch, 0\n" ..
-    "  |  je >6\n" ..
-    "|7:\n" ..
-    "  |  mov RCd, [PC-4]\n" ..
-    "  |  movzx RAd, RCH\n" ..
-    "  |  movzx OP, RCL\n" ..
-    "  |  shr RCd, 16\n" ..
-    "  |  cmp OP, BC_JLOOP\n" ..
-    "  |  je ->cont_nop\n" ..
-    "  |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]",
-
-    "mov RA, [RA+J_OFS(tracev)]\n" ..
-    "    |  test RA, RA\n" ..
-    "    |  jz <1\n" ..
-    "    |  movzx RCd, word [PC+2]\n" ..
-    "    |  mov TMPRd, RCd\n" ..
-    "    |  mov TRACE:RA, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
-    "    |  cmp TRACE:RA, 1\n" ..
-    "    |  jbe <1\n" ..
-    "    |  movzx RCd, word TRACE:RA->traceno\n" ..
-    "    |  cmp RCd, TMPRd\n" ..
-    "    |  jne <1\n" ..
-    "    |  cmp aword TRACE:RA->retire_epoch, 0\n" ..
-    "    |  je >7\n" ..
-    "    |  jmp <1",
-
-    "mov RA, [RA+J_OFS(tracev)]\n" ..
-    "    |  test RA, RA\n" ..
-    "    |  jz >3\n" ..
-    "    |  mov TMPRd, RDd\n" ..
-    "    |  mov TRACE:RD, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
-    "    |  cmp TRACE:RD, 1\n" ..
-    "    |  jbe >3\n" ..
-    "    |  movzx RAd, word TRACE:RD->traceno\n" ..
-    "    |  cmp RAd, TMPRd\n" ..
-    "    |  jne >3\n" ..
-    "    |  cmp aword TRACE:RD->retire_epoch, 0\n" ..
-    "    |  je >2\n" ..
-    "|3:\n" ..
-    "    |  cmp OP, BC_JLOOP\n" ..
-    "    |  jne >4\n" ..
-    "    |  mov RCd, [PC-4]\n" ..
-    "    |  movzx RAd, RCH\n" ..
-    "    |  movzx OP, RCL\n" ..
-    "    |  shr RCd, 16\n" ..
-    "    |  cmp OP, BC_JLOOP\n" ..
-    "    |  je >4\n" ..
-    "    |  jmp aword [DISPATCH+OP*8]\n" ..
-    "    |4:\n" ..
-    "    |  ins_next",
-
-    "mov RA, [RA+J_OFS(tracev)]\n" ..
-    "    |  test RA, RA\n" ..
-    "    |  jz >7\n" ..
-    "    |  mov TMPRd, RDd\n" ..
-    "    |  mov TRACE:RD, [RA+TMPR*8+TRACEV_SLOT_OFS]\n" ..
-    "    |  cmp TRACE:RD, 1\n" ..
-    "    |  jbe >7\n" ..
-    "    |  movzx RAd, word TRACE:RD->traceno\n" ..
-    "    |  cmp RAd, TMPRd\n" ..
-    "    |  jne >7\n" ..
-    "    |  cmp aword TRACE:RD->retire_epoch, 0\n" ..
-    "    |  je >6\n" ..
-    "|7:\n" ..
-    "    |  mov RCd, [PC-4]\n" ..
-    "    |  movzx RAd, RCH\n" ..
-    "    |  movzx OP, RCL\n" ..
-    "    |  shr RCd, 16\n" ..
-    "    |  cmp OP, BC_JLOOP\n" ..
-    "    |  je ->cont_nop\n" ..
-    "    |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]",
-
-    "      |  mov RA, [RA+J_OFS(tracev)]\n" ..
-    "      |  test RA, RA\n" ..
-    "      |  jz >5\n" ..
-    "      |  mov RA, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
-    "      |  cmp RA, 1\n" ..
-    "      |  ja >4\n" ..
-    "      |5:\n" ..
-    "      |  ins_next"
-  }, "DynASM fallback")
-
-  local tracec = t:read(t:path("src", "lj_trace.c"))
-  checks.assert_text_all_contains("lj_trace_exit JLOOP stale-slot guard",
-                                  tracec, {
-    "TraceNo targetno = bc_d(*pc);",
-    "GCtrace *target = traceref(J, targetno);",
-    "if (!target || trace_traceno_acq(target) != targetno ||\n\tla_load64_acq(&target->retire_epoch) != 0)\n      return 0;",
-    "startins = trace_startins_acq(target);"
-  }, "C trace-exit guard")
-end
-
-local function assert_c_jit_stale_slot_guards(t)
-  local jith = t:read(t:path("src", "lj_jit.h"))
-  checks.assert_text_all_contains("traceref trace-vector bounds guard", jith, {
-    "static LJ_AINLINE GCtrace *traceref(jit_State *J, TraceNo n)",
-    "TraceVec *tv = tracevec_acq(J);",
-    "(MSize)(n)<tv->sizetrace",
-    "return traceref_fromgco(gcref_acq(tv->slot[(n)]));",
-    "return NULL;"
-  }, "traceref trace-vector bounds guard")
-  if contains(jith, "return check_exp((n)>0 && tv != NULL") then
-    error("traceref reintroduced release-build unchecked trace-vector slot load")
-  end
-
-  local recordc = t:read(t:path("src", "lj_record.c"))
-  checks.assert_text_all_contains("recorder stale-slot guard", recordc, {
-    "static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)",
-    "trace_traceno_acq(T) != traceno",
-    "la_load64_acq(&T->retire_epoch) != 0",
-    "lj_trace_err(J, LJ_TRERR_RETRY);",
-    "T = rec_traceref_live(J, lnk);",
-    "TraceNo lnk = bc_d(pc[(ptrdiff_t)rc-BCBIAS_J]);",
-    "GCtrace *T = rec_traceref_live(J, rc);",
-    "trace_nchild_acq(rec_traceref_live(J, J->cur.root))",
-    "GCtrace *T = rec_traceref_live(J, bc_d(*J->pc));"
-  }, "recorder trace-slot guard")
-  if contains(recordc, "trace_startins_acq(traceref") or
-     contains(recordc, "trace_nchild_acq(traceref") or
-     contains(recordc, "traceref(J, J->parent)") or
-     contains(recordc, "traceref(J, J->cur.root)") then
-    error("recorder reintroduced unchecked trace-slot dereference")
-  end
-
-  local asmc = t:read(t:path("src", "lj_asm.c"))
-  checks.assert_text_all_contains("assembler stale-slot guard", asmc, {
-    "static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)",
-    "trace_traceno_acq(T) != traceno",
-    "la_load64_acq(&T->retire_epoch) != 0",
-    "lj_trace_err(as->J, LJ_TRERR_RETRY);",
-    "GCtrace *target = traceref(as->J, bc_d(*pc));",
-    "target && trace_traceno_acq(target) == bc_d(*pc)",
-    "la_load64_acq(&target->retire_epoch) == 0",
-    "as->parent = J->parent ? asm_traceref_live(as, J->parent) : NULL;"
-  }, "assembler trace-slot guard")
-  if contains(asmc, "&traceref(as->J") or
-     contains(asmc, "as->parent = J->parent ? traceref") then
-    error("assembler reintroduced unchecked trace-slot dereference")
-  end
-
-  local asmx86h = t:read(t:path("src", "lj_asm_x86.h"))
-  checks.assert_text_all_contains("x86 assembler tail-link guard", asmx86h, {
-    "GCtrace *targetT = traceref(as->J, lnk);",
-    "trace_traceno_acq(targetT) == lnk",
-    "la_load64_acq(&targetT->retire_epoch) == 0",
-    "(target = trace_mcode_acq(targetT)) != NULL",
-    "target = (MCode *)(void *)lj_vm_exit_interp;"
-  }, "x86 assembler tail-link guard")
-  if contains(asmx86h, "trace_mcode_acq(traceref") then
-    error("x86 assembler reintroduced unchecked linked-trace mcode read")
-  end
-
-  local tracect = t:read(t:path("src", "lj_trace.c"))
-  checks.assert_text_all_contains("x64 cont_stitch live-trace probe", tracect, {
-    "uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)",
-    "traceref(J, traceno) != T",
-    "la_load64_acq(&T->retire_epoch) != 0",
-    "link = trace_link_acq(T);",
-    "return ((uint32_t)link << 16) | (uint32_t)traceno;"
-  }, "x64 cont_stitch live-trace probe")
-  local vmx64 = t:read(t:path("src", "vm_x64.dasc"))
-  checks.assert_text_all_contains("x64 cont_stitch VM live-trace probe", vmx64, {
-    "mov L:RB, SAVE_L",
-    "mov L:RB->base, BASE",
-    "call extern lj_trace_stitch_probe",
-    "mov BASE, L:RB->base",
-    "test eax, eax",
-    "jz ->cont_nop",
-    "and RBd, 0xffff",
-    "shr RDd, 16",
-    "jne =>BC_JLOOP"
-  }, "x64 cont_stitch VM live-trace probe")
-  if contains(vmx64, "word TRACE:ITYPE->traceno") or
-     contains(vmx64, "word TRACE:ITYPE->link") then
-    error("x64 cont_stitch reintroduced raw saved-trace field reads")
-  end
-
-  local debugc = t:read(t:path("src", "lj_debug.c"))
-  checks.assert_text_all_contains("debug framepc live trace guard", debugc, {
-    "static BCPos debug_jit_startpc(jit_State *J, GCproto *pt, const BCIns *ins)",
-    "TraceVec *tv = tracevec_acq(J);",
-    "GCtrace *cur = traceref_fromgco(gcref_acq(tv->slot[i]));",
-    "cur == T && trace_traceno_acq(cur) == (TraceNo)i",
-    "la_load64_acq(&cur->retire_epoch) == 0",
-    "trace_startpt_acq(cur) == pt",
-    "ins == &cur->startins + 1",
-    "return proto_bcpos(pt, trace_startpc_acq(cur));",
-    "pos = debug_jit_startpc(G(L)->jitp, pt, ins);"
-  }, "debug framepc live trace guard")
-  if contains(debugc, "proto_bcpos(pt, trace_startpc_acq(T))") then
-    error("debug_framepc reintroduced unchecked trace startpc recovery")
-  end
-
-  local bcwritec = t:read(t:path("src", "lj_bcwrite.c"))
-  checks.assert_text_all_contains("bytecode writer stale-slot guard", bcwritec, {
-    "static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)",
-    "trace_traceno_acq(T) == traceno",
-    "la_load64_acq(&T->retire_epoch) == 0",
-    "*out = trace_startins_acq(T);",
-    "memcpy(&ins, q, sizeof(ins));",
-    "la_load32_acq((uint32_t *)&proto_bc(pt)[1+i])",
-    "cannot dump bytecode during trace flush"
-  }, "bytecode writer trace-slot guard")
-  if contains(bcwritec, "q[LJ_ENDIAN_SELECT") or
-     contains(bcwritec, "GCtrace *T = traceref(J, rd);") then
-    error("bytecode writer reintroduced unchecked/raw trace unpatching")
-  end
-
-  local libjitc = t:read(t:path("src", "lib_jit.c"))
-  checks.assert_text_all_contains("jit.util trace-slot guard", libjitc, {
-    "static GCtrace *jit_checktrace(lua_State *L)",
-    "TraceVec *tv = tracevec_acq(J);",
-    "(MSize)tr < tv->sizetrace",
-    "GCtrace *T = traceref_fromgco(gcref_acq(tv->slot[tr]));",
-    "trace_traceno_acq(T) == tr",
-    "la_load64_acq(&T->retire_epoch) == 0"
-  }, "jit.util trace-slot guard")
-  if contains(libjitc, "return traceref(J, tr);") then
-    error("jit.util reintroduced unchecked trace-slot dereference")
-  end
-end
-
 local function jit_tmpbuf_concat_append_smoke()
   return [=[
 local util = require("jit.util")
@@ -1032,7 +517,6 @@ return function(add)
     name = "m6_jit_token",
     description = "M6 JIT recorder token and x64 XPOLL behavior",
     run = function(t)
-      assert_shared_next_fence_precedes_keyindex(t)
       build_default(t)
       build_and_run_c(t, t:tmp("lj_t-jit-token"), "t-jit-token.c",
                       { build = false, timeout = "20s" })
@@ -1099,7 +583,6 @@ assert(s==2720)
     description = "recursive trace call-unroll keeps return trace blacklist state",
     run = function(t)
       build_default(t)
-      assert_recursive_call_unroll_keeps_abort_slot(t)
       luajit_code(t, [=[
 local util = require("jit.util")
 jit.flush()
@@ -1831,7 +1314,6 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
     description = "M6 JIT numeric table barriers do not flood GC2 grey work",
     run = function(t)
       build_default(t)
-      assert_tbar_gc2_gate_not_hidden_by_black_bit(t)
       luajit_code(t, [=[
 local th = require("threading")
 collectgarbage("collect")
@@ -1892,7 +1374,6 @@ assert(count == 100)
     description = "M6 JIT uses the running TG tmpbuf for threaded string.format traces",
     run = function(t)
       build_default(t)
-      assert_tg_tmpbuf_tostr_keeps_append_state(t)
       local dump = t:tmp("lj-m6-tmpbuf-format-ir.dump")
       luajit_dump(t, dump, "-jdump=im", [=[
 jit.flush()
@@ -2064,9 +1545,6 @@ assert(seen == 80)
     description = "M6 allocator accounting behavior",
     run = function(t)
       build_default(t)
-      if contains(t:read(t:path("src", "lj_vm.S")), "lj_gc_should_step_vm") then
-        error("x64 VM allocation checks regressed to C GC-step predicate helper")
-      end
       build_and_run_c(t, t:tmp("lj_t-gc2-alloc-account"),
                       "t-gc2-alloc-account.c", { build = false, timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-gc2-interp-hard-check"),
@@ -2154,7 +1632,6 @@ assert(x=="abc")
     description = "classic JIT GC-step pacing behavior",
     run = function(t)
       clean_build(t)
-      assert_fnew_gc_check_boundary(t)
       assert_ir_dump_probe_contains(t, "lj_t-jit-gcstep.dump", [=[
 jit.opt.start("hotloop=1","hotexit=1")
 local x
@@ -2303,8 +1780,6 @@ assert(live >= 8, live)
     description = "JIT flush safepoint-scoped publication and retirement",
     run = function(t)
       build_default(t)
-      assert_x64_jloop_stale_slot_guards(t)
-      assert_c_jit_stale_slot_guards(t)
       run_lua_test_case(t, "m5_jit_trace_publish")
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
@@ -2328,7 +1803,6 @@ assert(live >= 8, live)
     description = "pre-MT JIT traces are flushed before first thread activation",
     run = function(t)
       build_default(t)
-      assert_mt_activation_jit_token_boundary(t)
       luajit_code(t, [=[
 local threading = require("threading")
 local trace_count = require("jit_harness").trace_count

@@ -1,42 +1,5 @@
 local build = require("suite_build")
 local runtime = require("suite_runtime")
-local utils = require("suite_utils")
-
-local shell_quote = utils.shell_quote
-
-local function assert_tab_struct_owner_wait_uses_futex(t)
-  local awk = [=[
-BEGIN { infn = 0; futex = 0; native = 0; stop = 0 }
-/^static void tab_struct_owner_wait\(lua_State \*L, GCtab \*t, uint32_t owner\)/ {
-  infn = 1
-  next
-}
-infn && /^}/ {
-  if (!futex || !native || !stop) {
-    print "tab_struct_owner_wait must park on GCtab.struct_owner and poll STOPREQ"
-    exit 1
-  }
-  infn = 0
-  exit 0
-}
-infn && /lj_tab_struct_owner_futex_wait\(t, owner,/ { futex = NR }
-infn && /lj_native_enter\(L2TG\(L\)\)/ { native = NR }
-infn && /lj_safepoint_checkstop\(L, actions\)/ { stop = NR }
-infn && /lj_thr_retry_yield\(L\)/ {
-  print "same-table structural owner wait regressed to generic retry-yield"
-  exit 1
-}
-END {
-  if (infn || !futex || !native || !stop) {
-    print "tab_struct_owner_wait source shape not found"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk) ..
-                        " src/lj_tab.c")
-end
 
 return function(add)
   runtime.add_luajit_c_fixture_cases(add, {
@@ -116,7 +79,6 @@ return function(add)
     name = "m5_tab_struct_owner",
     description = "table structural ownership is per-table",
     run = function(t)
-      assert_tab_struct_owner_wait_uses_futex(t)
       build.build_and_run_c(t, t:tmp("lj_t-tab-struct-owner"),
                             "t-tab-struct-owner.c", {
         clean = true,

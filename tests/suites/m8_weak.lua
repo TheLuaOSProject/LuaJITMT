@@ -6,7 +6,6 @@ local utils = require("suite_utils")
 local capture_luajit = runtime.capture_luajit
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
-local shell_quote = utils.shell_quote
 local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
 
 local M8_C_FIXTURES = {
@@ -16,61 +15,6 @@ local M8_C_FIXTURES = {
   "t-m8-close-finalizers",
   "t-m8-finalizer-state"
 }
-
-local function assert_finalizer_claim_cleanup_boundaries(t)
-  local awk_helper = [=[
-BEGIN { infn = 0; grow = 0; drop = 0; report = 0 }
-/^static int gc2_finalizer_checkstack_claimed\(global_State \*g,/ {
-  infn = 1
-  next
-}
-infn && /^}/ { infn = 0; next }
-infn && /lj_state_cpgrowstack/ { grow = NR }
-infn && /lj_state_dropclaim/ { drop = NR }
-infn && /lj_vmevent_send/ {
-  report = NR
-  if (!drop || drop > NR) {
-    print "finalizer stack-prep error reports before dropping state claim"
-    exit 1
-  }
-}
-END {
-  if (!grow || !drop || !report) {
-    print "finalizer stack-prep claim cleanup helper missing"
-    exit 1
-  }
-}
-]=]
-  local awk_call = [=[
-BEGIN { infn = 0; claim = 0; check = 0; hook = 0 }
-/^static int gc2_call_finalizer\(global_State \*g, lua_State \*L,/ {
-  infn = 1
-  next
-}
-infn && /^}/ { infn = 0; next }
-infn && /lj_state_tryclaim/ { claim = NR }
-infn && /gc2_finalizer_checkstack_claimed/ { check = NR }
-infn && /hook_entergc/ {
-  hook = NR
-  if (!check || check > NR) {
-    print "finalizer stack prep is not checked before hook/threshold mutation"
-    exit 1
-  }
-}
-END {
-  if (!claim || !check || !hook || claim > check) {
-    print "finalizer claim/checkstack boundary missing"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_helper) ..
-                        " src/lj_gc2.c")
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_call) ..
-                        " src/lj_gc2.c")
-end
 
 local function finalizer_error_native_stdio_smoke()
   return [=[
@@ -89,7 +33,6 @@ end
 local function run_finalizer_error_native_stdio(t, opts)
   opts = opts or {}
   local out = t:tmp("lj_m8_finalizer_error_native_stdio.out")
-  assert_finalizer_claim_cleanup_boundaries(t)
   if opts.build ~= false then
     t:build({ quiet = true })
   end

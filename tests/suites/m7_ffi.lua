@@ -81,162 +81,6 @@ local function assert_recorded_ffi_calls_gate_fails(t)
     "build output")
 end
 
-local function assert_finreg_claim_cleanup_boundaries(t)
-  local awk_cdata = [=[
-BEGIN { instore = 0; sawbarrier = 0; saworder = 0 }
-/^static void cdata_fin_store\(lua_State \*L/ { instore = 1; next }
-instore && /^}/ { instore = 0; next }
-instore && /cdata_fin_weak_key_barrier_claimed/ { sawbarrier = NR }
-instore && /lj_ctype_fin_order_publish/ {
-  saworder = NR
-  if (!sawbarrier || sawbarrier > NR) {
-    print "cdata FINREG publishes order before protected weak-key barrier"
-    exit 1
-  }
-}
-END {
-  if (!sawbarrier || !saworder) {
-    print "cdata FINREG store missing protected barrier/order boundary"
-    exit 1
-  }
-}
-]=]
-  local awk_gc2 = [=[
-BEGIN { infn = 0; prepare = 0; claim = 0 }
-/^size_t lj_gc2_finreg_cdata_finalize_pweak\(lua_State \*L, global_State \*g,/ {
-  infn = 1
-  next
-}
-infn && /^}/ { infn = 0; next }
-infn && /gc2_finclaim_prepare/ { prepare = NR }
-infn && /lj_cdata_fin_claim_func_l/ {
-  claim = NR
-  if (!prepare || prepare > NR) {
-    print "GC2 FINREG claims slot before preparing preclaim storage"
-    exit 1
-  }
-}
-END {
-  if (!prepare || !claim) {
-    print "GC2 FINREG missing preclaim prepare/claim boundary"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_cdata) ..
-                        " src/lj_cdata.c")
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_gc2) ..
-                        " src/lj_gc2.c")
-end
-
-local function assert_callback_claim_publication_boundaries(t)
-  local awk_owner_use = [=[
-BEGIN { infn = 0; claim = 0; protected = 0 }
-/^static MSize callback_slot_claim_l\(lua_State \*L, CTState \*cts\)/ {
-  infn = 1
-  next
-}
-infn && /^}/ { infn = 0; next }
-infn && /callback_owner_claim/ { claim = NR }
-infn && /callback_owner_barrier_claimed_l/ {
-  protected = NR
-  if (!claim || claim > NR) {
-    print "callback carrier barrier is not protected after owner claim"
-    exit 1
-  }
-}
-END {
-  if (!claim || !protected) {
-    print "callback owner claim protection boundary missing"
-    exit 1
-  }
-}
-]=]
-  local awk_owner_cleanup = [=[
-BEGIN { infn = 0; cpcall = 0; cleanup = 0; rethrow = 0 }
-/^static void callback_owner_barrier_claimed_l\(lua_State \*L,/ {
-  infn = 1
-  next
-}
-infn && /^}/ { infn = 0; next }
-infn && /lj_vm_cpcall/ { cpcall = NR }
-infn && /callback_owner_clear/ { cleanup = NR }
-infn && /lj_err_throw/ {
-  rethrow = NR
-  if (!cleanup || cleanup > NR) {
-    print "callback owner claim rethrow happens before cleanup"
-    exit 1
-  }
-}
-END {
-  if (!cpcall || !cleanup || !rethrow) {
-    print "callback owner claim cleanup wrapper missing"
-    exit 1
-  }
-}
-]=]
-  local awk_func_use = [=[
-BEGIN { infn = 0; store = 0; publish = 0 }
-/^void \*lj_ccallback_new_l\(lua_State \*L, CTState \*cts,/ {
-  infn = 1
-  next
-}
-infn && /^}/ { infn = 0; next }
-infn && /callback_func_store_claimed_l/ { store = NR }
-infn && /callback_cbid_store/ {
-  publish = NR
-  if (!store || store > NR) {
-    print "callback cbid is published before protected function store"
-    exit 1
-  }
-}
-END {
-  if (!store || !publish) {
-    print "callback function store publication boundary missing"
-    exit 1
-  }
-}
-]=]
-  local awk_func_cleanup = [=[
-BEGIN { infn = 0; cpcall = 0; clearfunc = 0; clearowner = 0; rethrow = 0 }
-/^static void callback_func_store_claimed_l\(lua_State \*L,/ {
-  infn = 1
-  next
-}
-infn && /^}/ { infn = 0; next }
-infn && /lj_vm_cpcall/ { cpcall = NR }
-infn && /lj_ccallback_func_clear/ { clearfunc = NR }
-infn && /callback_slot_clear_owner/ { clearowner = NR }
-infn && /lj_err_throw/ {
-  rethrow = NR
-  if (!clearfunc || !clearowner || clearfunc > NR || clearowner > NR) {
-    print "callback function store rethrow happens before cleanup"
-    exit 1
-  }
-}
-END {
-  if (!cpcall || !clearfunc || !clearowner || !rethrow) {
-    print "callback function store cleanup wrapper missing"
-    exit 1
-  }
-}
-]=]
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_owner_use) ..
-                        " src/lj_ccallback.c")
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_owner_cleanup) ..
-                        " src/lj_ccallback.c")
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_func_use) ..
-                        " src/lj_ccallback.c")
-  utils.capture_command("cd " .. shell_quote(t.root) ..
-                        " && awk " .. shell_quote(awk_func_cleanup) ..
-                        " src/lj_ccallback.c")
-end
-
 local function build_clib_ldscript_fixture(t)
   local script = t:tmp("lj_t-ffi-clib-ldscript.so")
   local so = build_shared_library(t, t:tmp("lj_t-ffi-clib-ldscript-real.so"),
@@ -304,7 +148,6 @@ print("bulk fill ok")
     description = "FFI callback slot install behavior",
     run = function(t)
       local pthread = getenv("PTHREAD", "-pthread")
-      assert_callback_claim_publication_boundaries(t)
       clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-callback-mcode-native"),
                       "t-ffi-callback-mcode-native.c", {
@@ -668,7 +511,6 @@ assert(cl.lj_clib_ldscript_value() == 42)
     description = "FFI cdata finalizer registry behavior",
     run = function(t)
       clean_build(t)
-      assert_finreg_claim_cleanup_boundaries(t)
       run_luajit_script(t, "t-ffi-gc-finreg.lua", {
         getenv("LJ_M7_FFI_FIN_THREADS", "6"),
         getenv("LJ_M7_FFI_FIN_ITERS", "240")

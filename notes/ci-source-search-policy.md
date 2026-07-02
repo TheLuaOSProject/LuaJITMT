@@ -30,6 +30,13 @@ Their useful signal now lives in the existing parser-token behavior fixtures:
 `t-ffi-cdata-conv-snapshot.c`, `t-ffi-carith-check64-snapshot.c`, and
 `t-ffi-carith-arg-snapshot.c`.
 
+2026-07-02 follow-up: removed the remaining Lua-suite source guards from the
+M4 threading, M5 publication/table, M6 JIT, M7 FFI, and M8 weak/finalizer
+suites. These cases now rely on runtime Lua behavior, C fixtures, and generated
+JIT/bytecode/runtime dumps where behavior is observable. Non-observable
+ordering requirements belong in comments near the helper or in `notes/`, not
+in CI source-text predicates.
+
 The only supported shell entrypoint under `tools/ci/` is
 `tools/ci/lua_test.sh`. Run focused cases as
 `tools/ci/lua_test.sh <case...>`; do not add per-case compatibility wrapper
