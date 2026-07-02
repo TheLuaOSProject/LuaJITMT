@@ -148,6 +148,36 @@ static LJ_AINLINE void lj_gc_threshold_store(global_State *g, GCSize threshold)
   lj_gcsize_store_rel(&g->gc.threshold, threshold);
 }
 
+static LJ_AINLINE MSize lj_gc_pause_load(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc.pause);
+}
+
+static LJ_AINLINE void lj_gc_pause_store(global_State *g, MSize pause)
+{
+  la_store32_rel(&g->gc.pause, (uint32_t)pause);
+}
+
+static LJ_AINLINE MSize lj_gc_pause_xchg(global_State *g, MSize pause)
+{
+  return (MSize)la_xchg32_acqrel(&g->gc.pause, (uint32_t)pause);
+}
+
+static LJ_AINLINE MSize lj_gc_stepmul_load(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc.stepmul);
+}
+
+static LJ_AINLINE void lj_gc_stepmul_store(global_State *g, MSize stepmul)
+{
+  la_store32_rel(&g->gc.stepmul, (uint32_t)stepmul);
+}
+
+static LJ_AINLINE MSize lj_gc_stepmul_xchg(global_State *g, MSize stepmul)
+{
+  return (MSize)la_xchg32_acqrel(&g->gc.stepmul, (uint32_t)stepmul);
+}
+
 static LJ_AINLINE GCSize lj_gc_mt_threshold_load(global_State *g)
 {
   return lj_gcsize_load_acq(&g->mt_gc_threshold);

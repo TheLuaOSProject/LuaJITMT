@@ -575,8 +575,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_gc_root_rel(g, obj2gco(L));
   setmref(g->gc.sweep, lj_gc_root_ref(g));
   lj_gc_total_store(g, sizeof(GG_State));
-  g->gc.pause = LUAI_GCPAUSE;
-  g->gc.stepmul = LUAI_GCMUL;
+  lj_gc_pause_store(g, LUAI_GCPAUSE);
+  lj_gc_stepmul_store(g, LUAI_GCMUL);
   lj_dispatch_init((GG_State *)L);
   lj_tg_init((GG_State *)L, arena_internal);
   lj_gc2_init(g);

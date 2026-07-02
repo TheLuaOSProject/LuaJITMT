@@ -2305,7 +2305,7 @@ static void api_gc_setlogical(global_State *g, GCSize threshold)
 static GCSize api_gc_restart_threshold(global_State *g)
 {
   GCSize total = lj_gc_total_load(g);
-  return (total/100) * g->gc.pause;
+  return (total/100) * lj_gc_pause_load(g);
 }
 
 static int api_gc_enterexclusive(global_State *g)
@@ -2380,15 +2380,13 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     break;
   }
   case LUA_GCSETPAUSE:
-    res = (int)(g->gc.pause);
-    g->gc.pause = (MSize)data;
+    res = (int)lj_gc_pause_xchg(g, (MSize)data);
     gc2_gcpause_pct_rel(g, data > 0 ? (uint32_t)data : 1u);
     lj_gc2_update_pacing(g);
     lj_gc2_publish_idle_threshold(g);
     break;
   case LUA_GCSETSTEPMUL:
-    res = (int)(g->gc.stepmul);
-    g->gc.stepmul = (MSize)data;
+    res = (int)lj_gc_stepmul_xchg(g, (MSize)data);
     gc2_assist_shift_rel(g, lj_gc2_assist_shift_from_stepmul((uint32_t)data));
     break;
   case LUA_GCISRUNNING:

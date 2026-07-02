@@ -2299,6 +2299,70 @@ print("gc2-pacing-atomic-smoke OK")
 ]=]
 end
 
+local function assert_gc_pacing_controls_atomic(t)
+  local helper_guard = [=[
+BEGIN {
+  pause_load = 0; pause_store = 0; pause_xchg = 0
+  step_load = 0; step_store = 0; step_xchg = 0
+  pause_load_impl = 0; pause_store_impl = 0; pause_xchg_impl = 0
+  step_load_impl = 0; step_store_impl = 0; step_xchg_impl = 0
+}
+/lj_gc_pause_load\(global_State \*g\)/ { pause_load = 1 }
+/lj_gc_pause_store\(global_State \*g, MSize pause\)/ { pause_store = 1 }
+/lj_gc_pause_xchg\(global_State \*g, MSize pause\)/ { pause_xchg = 1 }
+/lj_gc_stepmul_load\(global_State \*g\)/ { step_load = 1 }
+/lj_gc_stepmul_store\(global_State \*g, MSize stepmul\)/ { step_store = 1 }
+/lj_gc_stepmul_xchg\(global_State \*g, MSize stepmul\)/ { step_xchg = 1 }
+/la_load32_acq\(&g->gc.pause\)/ { pause_load_impl = 1 }
+/la_store32_rel\(&g->gc.pause, \(uint32_t\)pause\)/ { pause_store_impl = 1 }
+/la_xchg32_acqrel\(&g->gc.pause, \(uint32_t\)pause\)/ { pause_xchg_impl = 1 }
+/la_load32_acq\(&g->gc.stepmul\)/ { step_load_impl = 1 }
+/la_store32_rel\(&g->gc.stepmul, \(uint32_t\)stepmul\)/ { step_store_impl = 1 }
+/la_xchg32_acqrel\(&g->gc.stepmul, \(uint32_t\)stepmul\)/ { step_xchg_impl = 1 }
+END {
+  if (!pause_load || !pause_store || !pause_xchg ||
+      !step_load || !step_store || !step_xchg ||
+      !pause_load_impl || !pause_store_impl || !pause_xchg_impl ||
+      !step_load_impl || !step_store_impl || !step_xchg_impl) {
+    print "GC pacing-control atomic accessor definitions missing"
+    exit 1
+  }
+}
+]=]
+  local raw_guard = [=[
+{
+  if ($0 !~ /src\/lj_gc\.h:.*la_(load32_acq|store32_rel|xchg32_acqrel)\(&g->gc\.(pause|stepmul)/) {
+    print "raw GC pacing-control access: " $0
+    bad = 1
+  }
+}
+END { exit bad }
+]=]
+  local api_guard = [=[
+BEGIN { pause_xchg = 0; step_xchg = 0; restart_load = 0 }
+/lj_gc_pause_load\(g\)/ { restart_load = 1 }
+/lj_gc_pause_xchg\(g, \(MSize\)data\)/ { pause_xchg = 1 }
+/lj_gc_stepmul_xchg\(g, \(MSize\)data\)/ { step_xchg = 1 }
+END {
+  if (!restart_load || !pause_xchg || !step_xchg) {
+    print "lua_gc pacing-control atomic use missing"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(helper_guard) ..
+                        " src/lj_gc.h")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && rg -n -- " ..
+                        shell_quote("g->gc\\.(pause|stepmul)") ..
+                        " src/*.c src/*.h | awk " ..
+                        shell_quote(raw_guard))
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(api_guard) ..
+                        " src/lj_api.c")
+end
+
 local function proto_kgc_acq_smoke()
   return [=[
 local util = require("jit.util")
@@ -2568,13 +2632,14 @@ return function(add)
 
   add({
     name = "m5_gc2_pacing_atomic",
-    description = "GC2 pacing counter atomic helper behavior",
+    description = "GC/GC2 pacing control atomic helper behavior",
     run = function(t)
       t:build({ quiet = true })
+      assert_gc_pacing_controls_atomic(t)
       build_and_run_c(t, t:tmp("lj_t_gc2_pacing_atomic"),
                       "t-gc2-pacing-atomic.c", { build = false })
       run_luajit(t, { "-e", gc2_pacing_atomic_smoke() })
-      print("M5 GC2 pacing counter atomic helper behavior passed")
+      print("M5 GC/GC2 pacing control atomic helper behavior passed")
     end
   })
 

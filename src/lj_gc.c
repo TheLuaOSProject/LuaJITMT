@@ -1810,7 +1810,7 @@ static int gc_step_limited(lua_State *L, GCSize quantum, int batch_threshold)
   GCSize lim;
   int32_t ostate = vmstate_load_acq(g);
   setvmstate(g, GC);
-  lim = (GCSTEPSIZE/100) * g->gc.stepmul;
+  lim = (GCSTEPSIZE/100) * lj_gc_stepmul_load(g);
   if (lim == 0)
     lim = LJ_MAX_MEM;
   {
