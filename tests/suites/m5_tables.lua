@@ -132,7 +132,7 @@ return function(add)
       description = "table resize forwarding stress across GC, traversal, length, weak clear, metatables, metamethod dispatch, table-library shifts, and JIT reads/stores/iterators",
       script = "t-tab-resize-stress.lua",
       opts = {
-	timeout = "30s",
+	timeout = os.getenv("LJ_M5_TAB_RESIZE_STRESS_TIMEOUT") or "30s",
 	env = {
 	  LJ_M5_TAB_RESIZE_STRESS_REPS =
 	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_REPS") or "768",
