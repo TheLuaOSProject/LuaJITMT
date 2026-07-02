@@ -10,4 +10,4 @@
   `channel:send(value, timeout)`, so a stale shutdown flag does not turn normal
   channel timeout semantics into an interruption.
 - Helper comments document why channel waits must use the fresh STOPREQ helper.
-  The old source guard rejecting raw checks is obsolete.
+  The old source-text check rejecting raw checks is obsolete.

@@ -10,5 +10,7 @@ The generic table retry helper remains for transient `KEYLOCK`, `FORWARD`, and
 generation-publication races. This change only fixes the cold same-table
 structural owner path whose release side already issued a futex wake.
 
-Guard: `m5_tab_struct_owner` now source-checks the futex/native/STOPREQ shape
-before running the existing threaded C fixture.
+`m5_tab_struct_owner` owns the behavior coverage: same-table structural
+contention must park through the futex/native/STOPREQ-aware wait and the
+threaded C fixture verifies the observable wait path. The helper comments own
+the implementation rule; CI must not source-text check the helper spelling.

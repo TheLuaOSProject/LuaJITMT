@@ -18,5 +18,4 @@ Validation:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
 - stock `lib/ffi/istype.lua`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

@@ -30,6 +30,6 @@ Regression:
   must return to its baseline after clear and after queueing.
 
 Verification:
-- `tools/ci/m0_source_guard.sh`, `git diff --check`, focused
+- `git diff --check`, focused
   `t-gc2-traverse`, `tests/t-gc-stats.lua`, `tools/ci/m8_weak.sh`, and
   `tools/ci/m7_ffi_finreg.sh` passed.

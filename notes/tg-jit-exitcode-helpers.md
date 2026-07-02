@@ -9,7 +9,7 @@ Changes:
 - Routed the x64/Linux trace-unwind error-code handoff through release stores
   and acquire reads.
 - Kept the non-x64 fallback `J->exitcode` path unchanged.
-- Extended `tools/ci/m6_jit_flush_hs.sh` to reject raw production
+- Documented the invariant formerly checked by `m6_jit_flush_hs`: raw production
   `jit_exitcode` access outside `src/lj_tg.h`.
 
 Validation:

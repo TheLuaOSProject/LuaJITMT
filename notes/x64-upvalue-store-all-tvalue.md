@@ -39,10 +39,10 @@ of value type. `IR_OBAR` remains GC-only because only GC values need the
 `lua_getlocal()` now acquire-loads unwrapped closed local-cell values, matching
 `lua_getupvalue()`. Ordinary owner-claimed raw stack locals still use `copyTV`.
 
-## Guards
+## Coverage
 
-- `m5_cell_ops` source-guards the broadened x64 helper condition and the
-  `lua_getlocal()` acquire load.
+- `m5_cell_ops` documents the closed-upvalue helper condition and the
+  `lua_getlocal()` acquire load through comments near the implementation.
 - `m5_cell_ops` now has a traced primitive closed-local-cell behavior probe.
 - `m6_jit_cell_ops` now checks mcode dumps for `->lj_func_storeuv_forjit` on
   numeric and primitive closed-upvalue stores.

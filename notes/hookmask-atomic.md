@@ -20,7 +20,7 @@ IR records a volatile memory load of the hookmask byte for generated code.
 generated traces. VM/dasc hookmask byte loads remain a separate generated-code
 follow-up.
 
-Guard: `tools/ci/m5_hookmask_atomic.sh` rejects raw C-side `->hookmask` access
+Guard: `m5_hookmask_atomic` invariant: raw C-side `->hookmask` access
 outside `lj_obj.h`, the recorder field-address exception, and backend
 generated-code operands, then runs the `m5_hookmask_atomic` Lua smoke.
 
@@ -28,6 +28,6 @@ Validation:
 
 - `tools/ci/m5_hookmask_atomic.sh`: passed.
 - `tools/ci/m5_state_owner.sh`: passed.
-- `tools/ci/m0_source_guard.sh`: passed.
+-: passed.
 - `tools/ci/m5_concurrent_objects.sh`: passed.
 - `git diff --check`: passed.

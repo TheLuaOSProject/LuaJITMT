@@ -19,7 +19,7 @@ helpers.
 ## Guardrail
 
 `tools/ci/m3_gc2_worker_scheduler.sh` now requires the finalizer counter helper
-surface and rejects raw production access in `src/lj_gc.c`, `src/lj_gc2.c`,
+surface and documents why raw production access in `src/lj_gc.c`, `src/lj_gc2.c`,
 `src/lib_base.c`, and `src/lib_threading.c`, plus raw fixture access in
 `tests/t-gc2-phase.c` and `tests/t-gc2-traverse.c`.
 

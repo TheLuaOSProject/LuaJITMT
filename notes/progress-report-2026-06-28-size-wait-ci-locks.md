@@ -13,7 +13,7 @@ Overall correctness/stability progress: 69-79%.
 - Interpreter-side FFI parser fallback removal: 50-60%.
 - FFI recorder read-only ctype paths: 82-90%.
 - Legacy/compat bridge removal, excluding public API semantics: 83-89%.
-- CI migration from source guards to behavior tests: 70-80%.
+- CI migration from source-text checks to behavior tests: 70-80%.
 - Release-quality soak and benchmark readiness: 46-56%.
 - Performance parity with stock LuaJIT: 35-45%, intentionally secondary.
 
@@ -32,7 +32,7 @@ Overall correctness/stability progress: 69-79%.
   parser sequence only advances by the helper release.
 - Added narrow CI guards only for the removed fallback path and stale-pointer
   helper shape.
-- Removed a redundant exact source guard from `m7_ffi_cdef_token`; the C
+- Removed a redundant exact source-text check from `m7_ffi_cdef_token`; the C
   STOPREQ fixture owns that behavior contract.
 - Moved `t-ffi-finreg-free-invariant.c` into `m7_ffi_finreg` and removed the
   hardcoded `/tmp` compile from `tools/ci/m7_ffi_finreg.sh`.
@@ -46,7 +46,7 @@ Overall correctness/stability progress: 69-79%.
   where string types or mutable layout errors are involved.
 - GC2 still has real legacy bridge surfaces: weak clearing, finalizer ordering,
   pacing/threshold bridge behavior, and explicit legacy-GC exclusion.
-- CI scripts must not contain source guards. Keep unobservable memory ordering
+- CI scripts must not contain source-text checks. Keep unobservable memory ordering
   and static ownership rules in comments/notes; convert observable failures
   into behavior or generated-artifact tests.
 - Release confidence still needs long stress/soak, TSan-style runs where

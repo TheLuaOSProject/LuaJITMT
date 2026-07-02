@@ -16,7 +16,7 @@ progress, the old epoch is published and later worker-owner freshness checks
 will reject it instead of treating a stale scan as current-cycle coverage.
 
 Guarding:
-- `tools/ci/m3_gc2_worker_scheduler.sh` rejects raw production access to
+- `m3_gc2_worker_scheduler` invariant: raw production access to
   `GC2State.cycle` in `lj_gc.c`, `lj_gc2.c`, and `lj_safepoint.c`.
 - The guard intentionally does not match `cycle_requests`, `cycle_starts`, or
   the minor-cycle latch fields.
@@ -29,6 +29,6 @@ Validation:
 - `tools/ci/m10_generational.sh` passed.
 - `tools/ci/m8_weak.sh` passed.
 - `tools/ci/m6_jit_alloc_account.sh` passed.
-- `tools/ci/m0_source_guard.sh` passed.
+- passed.
 - Raw production `GC2State.cycle` access scan passed.
 - `git diff --check` passed.

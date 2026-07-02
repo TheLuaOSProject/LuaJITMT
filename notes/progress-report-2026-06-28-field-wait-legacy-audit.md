@@ -13,7 +13,7 @@ Overall correctness/stability progress: 70-80%.
 - Interpreter-side FFI parser fallback removal: 58-68%.
 - FFI recorder read-only ctype paths: 82-90%.
 - Legacy/compat bridge removal, excluding public API semantics: 90-94%.
-- CI migration from source guards to behavior tests: 74-84%.
+- CI migration from source-text checks to behavior tests: 74-84%.
 - Release-quality soak and benchmark readiness: 47-57%.
 - Performance parity with stock LuaJIT: 35-45%, intentionally secondary.
 
@@ -38,7 +38,7 @@ Overall correctness/stability progress: 70-80%.
   no parser lock/direct field lookup in `lj_cdata_index_l()`, no sequence-free
   field snapshot miss, and ID-rooted wait helpers.
 - Completed a legacy/compat audit pass. Real removal targets are old
-  `legacy_*` GC2 bridge/source guards and duplicate guard scripts. FFI pointer
+  `legacy_*` GC2 bridge/source-text checks and duplicate guard scripts. FFI pointer
   compatibility helpers are semantic compatibility logic and should not be
   deleted just because they contain `compat`.
 - Removed the exact internal M10 legacy mark-suppression helper name. The
@@ -55,7 +55,7 @@ Overall correctness/stability progress: 70-80%.
 - Renamed local/diagnostic legacy wording in GC pacing and GC2 paranoia tests:
   `legacy_live` / `legacy_step` are now current-purpose local names, and the
   paranoia reverse oracle is exposed as `lj_gc2_test_paranoia_root_diff()`.
-- Removed duplicate/tombstone-only source guards: M3 no longer duplicates M5's
+- Removed duplicate/tombstone-only source-text checks: M3 no longer duplicates M5's
   x64 `barrierback` guard, M10 no longer duplicates M9's stats-builder guard,
   and old removed-helper tombstones were dropped where current helper checks and
   behavior coverage already protect the boundary.
@@ -90,10 +90,10 @@ Overall correctness/stability progress: 70-80%.
   snapshot equivalents.
 - `lj_clib.c` namespace lookup still has a parser fallback path.
 - GC2 bridge names and tests remain in finalizer areas. The highest-value
-  cleanup is to convert exact-name source guards around finalizer behavior into
+  cleanup is to convert exact-name source-text checks around finalizer behavior into
   semantic tests, then rename or remove old bridge names where the names are
   only fork-era scaffolding.
-- Aggregate CI must not contain source guards. Keep memory ordering, ABI, and
+- Aggregate CI must not contain source-text checks. Keep memory ordering, ABI, and
   generated-code boundary rules as comments/notes, and use behavior or
   generated-artifact checks when the invariant is observable.
 - Release confidence still needs long stress/soak, sanitizer-style runs where
@@ -103,7 +103,7 @@ Overall correctness/stability progress: 70-80%.
 
 - Remaining FFI parser-fallback cleanup: 1-3 focused days for the next batch,
   likely longer if layout/VLA semantics expose corner cases.
-- GC2 legacy bridge/source-guard cleanup: 3-7 focused days for the first
+- GC2 legacy bridge/source-text-check cleanup: 3-7 focused days for the first
   meaningful pass.
 - Correctness alpha for x86_64/Linux scope: about 2-4 focused weeks.
 - Strong beta with broader FFI/JIT/GC stress and cleaner CI: about 6-10 focused

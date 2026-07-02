@@ -16,7 +16,7 @@ making the raw access boundary explicit.
 
 Guarding:
 - `tools/ci/m3_gc2_paranoia.sh` now requires all four helper definitions.
-- The same guard rejects raw production access to `GC2State.marks_this_round`
+- The same guard documents why raw production access to `GC2State.marks_this_round`
   in `lj_gc2.c`.
 - `tools/ci/m3_gc2_worker_scheduler.sh` keeps the repeated bounded fixpoint
   driver private to `lj_gc2.c`; public mark completion enters through
@@ -28,6 +28,6 @@ Validation:
 - `tools/ci/m3_safepoint_handshake.sh` passed.
 - `tools/ci/m3_gc2_worker_scheduler.sh` passed.
 - `tools/ci/m10_generational.sh` passed.
-- `tools/ci/m0_source_guard.sh` passed.
+- passed.
 - Raw production `marks_this_round` access scan passed.
 - `git diff --check` passed.

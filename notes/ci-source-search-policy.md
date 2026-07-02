@@ -2,13 +2,13 @@
 
 CI must not pass or fail by grepping repository source text for helper names,
 function calls, field accesses, or implementation snippets. There are no
-exception categories for source guards: not memory ordering, ABI fences,
+exception categories for source-text checks: not memory ordering, ABI fences,
 architecture boundaries, or temporary migration contracts. Those rules belong
 in comments, design notes, review checklists, behavior fixtures, or generated
 artifact checks.
 
-This policy supersedes older notes that mention deliberate static source guards,
-per-case guard scripts, `m0_source_guard`, or `suite_utils.read_source_file()`.
+This policy supersedes older notes that mention deliberate static source-text checks,
+per-case guard scripts, or `suite_utils.read_source_file()`.
 Treat those older entries as historical context for why a helper exists, not as
 instructions to recreate any historical guard suite.
 
@@ -33,7 +33,7 @@ Their useful signal now lives in the existing parser-token behavior fixtures:
 `t-ffi-cdata-conv-snapshot.c`, `t-ffi-carith-check64-snapshot.c`, and
 `t-ffi-carith-arg-snapshot.c`.
 
-2026-07-02 follow-up: removed the remaining Lua-suite source guards from the
+2026-07-02 follow-up: removed the remaining Lua-suite source-text checks from the
 M4 threading, M5 publication/table, M6 JIT, M7 FFI, and M8 weak/finalizer
 suites, then hardened the harness so aggregate tests cannot read repository
 source as a pass/fail oracle. These cases now rely on runtime Lua behavior, C
@@ -78,7 +78,7 @@ Examples of invariants that should be documented or tested behaviorally:
 - Native entropy and mcode paths need behavioral fixtures for STOPREQ/native
   boundary handling rather than source-order assertions.
 
-When replacing an old source guard, keep the useful part: document the memory
+When replacing an old source-text check, keep the useful part: document the memory
 ordering, ownership, or publication rule near the helper or in `notes/`, and
 add a behavior fixture when a bad implementation would be observable. Do not
 encode the implementation spelling as the test.

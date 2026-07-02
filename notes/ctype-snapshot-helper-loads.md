@@ -22,5 +22,4 @@ Guardrail:
 Validation:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

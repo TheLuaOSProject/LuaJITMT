@@ -12,7 +12,7 @@ directly while CTState publication continues moving toward lockless readers.
 
 Guardrail:
 
-- `tools/ci/m7_ffi_jit_cnew.sh` rejects raw `->info` / `->size` reads in
+- `m7_ffi_jit_cnew` invariant: raw `->info` / `->size` reads in
   `crec_isnonzero()` and `crec_ct_ct()`.
 
 Validation:
@@ -20,5 +20,4 @@ Validation:
 - `tools/ci/m7_ffi_jit_cnew.sh`
 - `tools/ci/m7_ffi_snap_restore_l.sh`
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

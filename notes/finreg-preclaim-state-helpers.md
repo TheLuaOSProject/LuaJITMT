@@ -24,7 +24,7 @@ advances `head` through helper stores after clearing consumed slots.
 
 ## Guardrail
 
-`tools/ci/m7_ffi_finreg.sh` now requires the helper surface and rejects raw
+`tools/ci/m7_ffi_finreg.sh` now requires the helper surface and documents why raw
 production access to `finreg_cdata_preclaim_obj`, `finreg_cdata_preclaim_fin`,
 `finreg_cdata_preclaim_capacity`, `finreg_cdata_preclaim_head`, and
 `finreg_cdata_preclaim_count` in `lj_gc.c`/`lj_gc2.c`. It also rejects legacy

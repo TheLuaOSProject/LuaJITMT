@@ -24,7 +24,7 @@ the sticky STOPREQ flag on the TG.
 
 ## Guard
 
-`tools/ci/m8_finalizer_error_native_stdio.sh` rejects raw finalizer-error stdio
+`m8_finalizer_error_native_stdio` invariant: raw finalizer-error stdio
 outside `aux_finalizer_error_report()`, verifies that the helper enters/leaves
 native state, and runs `m8_finalizer_error_native_stdio`, which triggers an
 erroring FFI finalizer and checks the default reporter output.

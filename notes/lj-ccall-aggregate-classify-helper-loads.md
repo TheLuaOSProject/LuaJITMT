@@ -12,7 +12,7 @@ lj_ccall aggregate classification helper loads
   `lj_cconv_ct_tv_l()` conversion helper. The stack spill path no longer
   rereads the raw destination `CType *` after conversion may have parked on the
   parser token.
-- Extended `tools/ci/m7_ffi_cdata_set_l.sh` to reject raw payload reads in the
+- Documented the invariant formerly checked by `m7_ffi_cdata_set_l`: raw payload reads in the
   x86_64/POSIX C-call aggregate classification helpers.
 - `tests/t-ffi-ccall-struct-overflow.c` forces six integer arguments followed
   by a parser-owned small struct argument so SysV x64 spills the converted

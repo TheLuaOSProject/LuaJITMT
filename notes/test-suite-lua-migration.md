@@ -1,6 +1,6 @@
 # Lua test-suite migration
 
-## 2026-06-28 source-search guard removal
+## 2026-06-28 source-text check removal
 
 - Removed the old source-file content guard API and generic `assert_file_*`
   compatibility wrappers from the Lua test harness.
@@ -83,7 +83,7 @@ Validation:
 - Historical state: this pass left compatibility exports in `suite_utils.lua`
   while routing dump and file-result suites to `suite_assert` directly.
 - Historical state: this pass added source-file content guards to
-  `suite_assert` and raw `Test:read()`. Those source-search guards were removed
+  `suite_assert` and raw `Test:read()`. Those source-text checks were removed
   on 2026-06-28; current policy is behavior fixtures, generated artifact
   assertions, or documentation.
 - Confirmed JIT/bytecode dump matching remains supported as result matching.
@@ -100,8 +100,8 @@ Validation:
 - Historical state: this pass added source-file rejection to
   `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
   `suite_utils.read_source_file()` escape hatch. Both the explicit source-read
-  API and those source-search tests were removed in the later 2026-06-28
-  source-search guard removal.
+  API and those source-text tests were removed in the later 2026-06-28
+  source-text check removal.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
@@ -111,7 +111,7 @@ Validation:
   public wrapper as a thin launcher. The callback runtime case now relies on
   its C/Lua behavior fixtures for native-state restoration, stale callback
   returns, callback blacklisting, and fresh STOPREQ behavior.
-- Removed the M3 shell wrapper's FFI C-call source guard because the same
+- Removed the M3 shell wrapper's FFI C-call source-text check because the same
   native-entry STOPREQ path is now covered by the M7 callback STOPREQ fixture.
 
 Validation:
@@ -191,7 +191,7 @@ Validation:
 - Direct Lua metadata smoke over aggregate `deps` entries.
 - `tools/ci/lua_test.sh m2_arena_all`
 
-## 2026-06-20 source guard and aggregate execution tightening
+## 2026-06-20 source-text check and aggregate execution tightening
 
 - Broadened source-content guards so behavior assertions cannot read test,
   wrapper, tool, aux, bench, or `src/` source files directly.
@@ -238,18 +238,18 @@ Validation:
 - `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot m5_tab_value_publish m6_jit_table_store_helper`
 - `git diff --check`
 
-## 2026-06-20 source guard behavior case
+## 2026-06-20 source-text check behavior case
 
-- Historical state: this pass added `m0_source_guard` as a first-class Lua
+- Historical state: this pass added as a first-class Lua
   suite case and added a thin CI compatibility wrapper.
-- That case and wrapper were removed by the 2026-06-28 source-search guard
+- That case and wrapper were removed by the 2026-06-28 source-text check
   cleanup. Generated result-file matching remains supported because generated
   IR/bytecode/ASM output is an allowed behavior surface.
 
 Validation:
 
-- Historical validation used `tools/ci/lua_test.sh m0_source_guard` and
-  `tools/ci/m0_source_guard.sh`; neither entrypoint exists now.
+- Historical validation used and
+ ; neither entrypoint exists now.
 - `git diff --check`
 
 ## 2026-06-20 Lua benchmark CSV gate

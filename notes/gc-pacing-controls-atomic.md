@@ -10,7 +10,7 @@ the public `lua_gc()` API while GC step/pacing code reads them. They now use
 - Restart-threshold calculation, incremental step-limit calculation, GC2 init,
   and state initialization all use the same helper spelling.
 - The existing `m5_gc2_pacing_atomic` guard now covers these legacy controls as
-  well as the GC2 pacing counters. It rejects raw runtime access to
+  well as the GC2 pacing counters. It documents why raw runtime access to
   `g->gc.pause` and `g->gc.stepmul` outside the helper definitions.
 
 Verification:

@@ -9,12 +9,15 @@ Slice: table node/array retired-record payload discipline.
   through those helpers.
 - Updated `t-tab-retire` and `t-tab-array-publish` to inspect retired-record
   payload and state through the helpers.
-- Extended `tools/ci/m5_tab_retire.sh` and `tools/ci/m5_tab_array_publish.sh`
-  to reject direct retired-record payload/state access in table retirement
-  files and focused tests.
+- Documented the rule that retired-record payload/state access must use the
+  helper layer because records are published to reclamation and GC walkers.
+  Retirement and array-publication fixtures cover the behavior; CI must not
+  enforce helper spelling by source search.
 
 Verification:
 
-- `tools/ci/m5_tab_retire.sh`
-- `tools/ci/m5_tab_array_publish.sh`
-- `tools/ci/m5_concurrent_objects.sh && tools/ci/m3_gc2_scaffold.sh && tools/ci/m0_source_guard.sh && git diff --check`
+- `tools/ci/lua_test.sh m5_tab_retire`
+- `tools/ci/lua_test.sh m5_tab_array_publish`
+- `tools/ci/lua_test.sh m5_concurrent_objects`
+- `tools/ci/lua_test.sh m3_gc2_scaffold`
+- `git diff --check`

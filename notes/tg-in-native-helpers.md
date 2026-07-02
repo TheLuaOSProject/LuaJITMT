@@ -11,7 +11,7 @@ Changes:
 - Routed production native enter/leave, channel/sleep clear paths, GC2 worker
   joins, safepoint remote native ack, and FFI callback re-entry checks through
   the helper layer.
-- Extended `tools/ci/m3_safepoint_handshake.sh` to reject raw production
+- Documented the invariant formerly checked by `m3_safepoint_handshake`: raw production
   `in_native` access outside `src/lj_tg.h`.
 
 Validation:

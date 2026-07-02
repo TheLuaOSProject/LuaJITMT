@@ -6,4 +6,4 @@ accessors in `lj_obj.h`.
 
 Runtime initialization and increments now use the helper family, the traversal
 and phase fixtures read the counters through acquire helpers, and the M3 worker
-scheduler guard rejects raw production C access to the grey telemetry fields.
+scheduler guard documents why raw production C access to the grey telemetry fields.

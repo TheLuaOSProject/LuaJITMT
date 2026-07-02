@@ -28,7 +28,7 @@ cycle.
 
 ## Guardrail
 
-`tools/ci/m8_weak.sh` now requires the vector helper surface and rejects raw
+`tools/ci/m8_weak.sh` now requires the vector helper surface and documents why raw
 production access to `weak_stack`, `weak_ready`, or `weak_capacity` in
 `lj_gc2.c`.
 

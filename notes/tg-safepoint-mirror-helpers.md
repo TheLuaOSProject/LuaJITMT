@@ -23,5 +23,4 @@ Validation:
 - `tools/ci/m3_vm_safepoint.sh`
 - `tools/ci/m4_thr_substrate.sh`
 - `tools/ci/m4_threading_capi.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

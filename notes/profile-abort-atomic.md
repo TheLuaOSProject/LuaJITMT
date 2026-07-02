@@ -10,5 +10,5 @@ timer-thread shutdown flag.
 keeps profile shutdown in the repository's shared-memory model without changing
 the existing global hook/profiler design.
 
-`tools/ci/m5_state_owner.sh` rejects raw `ps->abort` tests or assignments in
+`m5_state_owner` invariant: raw `ps->abort` tests or assignments in
 `src/lj_profile.c`.

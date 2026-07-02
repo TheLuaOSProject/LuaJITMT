@@ -15,7 +15,7 @@ Overall completion remains roughly 65-75%.
 
 - Runtime lockless substrate: 70-80%.
 - Threading/channel/shutdown behavior coverage: 75-85%.
-- Test/CI migration from source guards to behavior fixtures: 50-60%.
+- Test/CI migration from source-text checks to behavior fixtures: 50-60%.
 - FFI concurrency and fallback-lock cleanup: 55-65%.
 - Weak/finalizer/generational GC completion: 50-65%.
 - Release-quality soak and benchmark readiness: 45-55%.
@@ -66,9 +66,9 @@ repo can race build outputs when clean/building tests share a checkout.
 
 Removed/refactored now:
 
-- M4 threading join-result wait source guards.
-- M4 threading mutex bounded-wait source guard.
-- M4 C API attach-order source guard, now covered by the existing entering
+- M4 threading join-result wait source-text checks.
+- M4 threading mutex bounded-wait source-text check.
+- M4 C API attach-order source-text check, now covered by the existing entering
   attach/lua_close behavior fixture.
 
 Historical high-priority legacy/static guard areas:
@@ -88,7 +88,7 @@ Historical high-priority legacy/static guard areas:
 - Large GC/finalizer wrapper behavior belongs in suite cases and C fixtures,
   not source-text lint helpers.
 
-Current rule: source guards are not allowed. Non-observable memory-order, ABI,
+Current rule: source-text checks are not allowed. Non-observable memory-order, ABI,
 or temporary migration contracts must be documented near the helper or in notes
 and reviewed there; observable failures need behavior, stress, or generated
 artifact coverage.

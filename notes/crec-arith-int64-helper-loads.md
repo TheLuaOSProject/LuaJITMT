@@ -11,7 +11,7 @@ recorder's int64 arithmetic helper.
 
 Guardrail:
 
-- `tools/ci/m7_ffi_carith_l.sh` rejects raw `->info` / `->size` reads in
+- `m7_ffi_carith_l` invariant: raw `->info` / `->size` reads in
   `crec_arith_int64()`.
 
 Validation:
@@ -19,5 +19,4 @@ Validation:
 - `tools/ci/m7_ffi_carith_l.sh`
 - `tools/ci/m7_ffi_jit_cnew.sh`
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

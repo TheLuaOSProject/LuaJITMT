@@ -17,7 +17,9 @@ Changes:
   rather than recursively redispatching the same missing trace.
 - `lj_trace_exit()` now treats a missing `BC_JLOOP` trace body as a normal
   interpreter redispatch instead of dereferencing a null trace.
-- `m6_jit_flush_hs` now source-guards the x64 VM and C trace-exit shapes.
+- `m6_jit_flush_hs` covers stale-slot behavior through runtime and generated
+  artifact checks. The x64 VM and C trace-exit comments document the required
+  validation before dereferencing a trace slot.
 
 Reasoning:
 - Full trace flush unpatches bytecode before clearing trace slots, but another

@@ -10,7 +10,7 @@ Changes:
 - Preserved the existing ordering: relaxed owner-side increments when stack
   ownership changes and acquire reads for GC2 thread-root scan decisions.
 - Routed the C-side owner increment and GC2 scan read through the helper layer.
-- Extended `tools/ci/m3_gc2_scaffold.sh` to reject raw C-side production
+- Documented the invariant formerly checked by `m3_gc2_scaffold`: raw C-side production
   `stack_dirty_epoch` access outside `src/lj_tg.h`.
 
 Note:

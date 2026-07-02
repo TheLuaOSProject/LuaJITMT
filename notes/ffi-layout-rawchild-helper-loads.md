@@ -9,11 +9,10 @@ with the M7 rule that shared ctype payloads are read through helper APIs.
 
 Guardrail:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects raw `->info` / `->size` reads
+- `m7_ffi_typeinfo_snapshot` invariant: raw `->info` / `->size` reads
   in `ffi_layout_rawchild()`.
 
 Validation:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

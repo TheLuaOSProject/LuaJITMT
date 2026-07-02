@@ -25,5 +25,4 @@ Validation:
 
 - `tools/ci/m3_gc2_worker_scheduler.sh`
 - `tools/ci/m9_gc_stats.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

@@ -30,7 +30,7 @@ paths, finalizer/weak-table ordering, benchmark drift, and CI guard quality.
   `lua_objlen`.
 - Converted `string.gmatch` hidden upvalue reads to full `TValue` acquire
   snapshots and its position update to a full primitive `TValue` release store.
-- Replaced the old helper-name source guard with behavior coverage in
+- Replaced the old helper-name source-text check with behavior coverage in
   `tests/t-cclosure-upvalue-snapshot.c`.
 - Kept only narrow static tripwires for raw partial `string.gmatch` position
   writes that are hard to observe deterministically.
@@ -117,7 +117,7 @@ Refactored now:
   handling. The behavior fixture carries the real contract.
 
 Resolved by the current source-search policy:
-- Per-case shell wrappers and `m0_source_guard` are gone; `tools/ci/lua_test.sh`
+- Per-case shell wrappers and are gone; `tools/ci/lua_test.sh`
   is the supported CI entrypoint.
 - M4/M5/M6/M7/M8 source-shape checks were removed from aggregate suites.
 - The Lua harness no longer exposes a source-file guard API, rejects
@@ -135,7 +135,7 @@ Short term, 1-3 days:
   remaining C-closure pseudo-index edge cases.
 - Add a bounded timeout/split for `m4_threading_capi`.
 - Replace any newly discovered source-shape assertion with behavior coverage or
-  documentation; do not move source guards into Lua suite cases.
+  documentation; do not move source-text checks into Lua suite cases.
 
 Medium term, 1-2 weeks:
 - Reduce FFI snapshot fallback locks and add stronger rollback/abandoned-entry

@@ -11,7 +11,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
 - Most scripts call `tools/ci/lua_test.sh` after doing real guard or orchestration
   work; zero pure alias wrappers remain.
 - At the time of this audit, about 60 scripts still embedded local
-  `awk`/`grep`/`sed` source guards before calling the Lua suite. Those source
+  `awk`/`grep`/`sed` source-text checks before calling the Lua suite. Those source
   guards have since been removed or replaced; do not reintroduce them.
 - `tools/ci/lua_test.sh --list` exposes 100+ named Lua-suite cases.
 - The Lua suites/helpers still contain many explicit clean-build calls.
@@ -61,7 +61,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
 - `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
   forced clean builds. Cases that need profile isolation can still pass
   `clean = true`.
-- Removed the FFI C-call fresh-STOPREQ source guard from the M3 shell wrapper.
+- Removed the FFI C-call fresh-STOPREQ source-text check from the M3 shell wrapper.
   The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
   native entry/leave restoration, nested callbacks, stale callback returns,
   callback blacklisting, and fresh STOPREQ delivery.
@@ -71,7 +71,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
 ## Follow-up Landed Later On 2026-06-28
 
 - The pure `m4_threading_capi` and `m4_threading_api` shell aliases were
-  removed. Their join-result wait, mutex wait, and attach-order source guards
+  removed. Their join-result wait, mutex wait, and attach-order source-text checks
   moved to C API behavior coverage.
 - `tests/t-threading-capi.c` now covers fresh STOPREQ delivery for a join
   blocked on a done child with a busy owner and for a blocked
@@ -129,10 +129,10 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
   of `lj_gc2_minor_roots_skip_bridge_mark()`, which describes the actual
   policy: minor-root cycles skip only the arena-to-GC2 bridge mark, not legacy
   marking itself.
-- Duplicate legacy source guards in weak/worker CI were a temporary migration
-  problem; exact-name repository source guards should be deleted, not
+- Duplicate legacy source-text checks in weak/worker CI were a temporary migration
+  problem; exact-name repository source-text checks should be deleted, not
   collapsed, once behavior fixtures or documentation own the contract.
-- The duplicate M8 sweep/finalizer source guard block was removed, while M8
+- The duplicate M8 sweep/finalizer source-text check block was removed, while M8
   still owns weak/finalizer behavior fixtures.
 - The internal sweep-close bridge helper was renamed to
   `lj_gc2_sweep_bridge_close()`, keeping the behavior boundary while removing
@@ -162,7 +162,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
   process cannot silently reuse a previous alternate-XCFLAGS build, such as the
   JIT-disabled tail left by `m3_gc2_scaffold`, for default/JIT fixture cases.
   The new `m0_build_profile_switch` behavior test covers disabled-JIT to default
-  profile recovery without relying on a source guard.
+  profile recovery without relying on a source-text check.
 - Removed remaining stale old-name tombstones for deleted root/trace/finalizer
   wrapper names from CI guard scripts where behavior tests already cover the
   publication/finalizer paths. Active `src`, `tests`, and `tools` now avoid
@@ -177,7 +177,6 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
 Verification for the alias removal:
 
 - `tools/ci/lua_test.sh --list`
-- `tools/ci/lua_test.sh m0_source_guard`
 - `tools/ci/lua_test.sh m5_profile_stop_native`
 - `tools/ci/lua_test.sh m4_threading_api m4_threading_capi`
 - `tools/ci/lua_test.sh m7_ffi_blocking m7_ffi_callback_runtime`
@@ -186,7 +185,7 @@ Verification for the alias removal:
 
 ## Next Refactors
 
-1. Keep converting any remaining historical source-guard contracts into
+1. Keep converting any remaining historical source-text-check contracts into
    behavior fixtures, generated dump/ASM checks, or documentation. Do not keep
    repository source searches as tests, even for invariants that cannot be
    observed directly.

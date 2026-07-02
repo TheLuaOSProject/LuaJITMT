@@ -40,7 +40,7 @@ the traversal through the generation-aware runtime path. Single-threaded stock
 LuaJIT traversal recording remains enabled.
 
 This preserves Lua-visible table behavior during concurrent resize without
-adding source-search tests. The invariant is covered behaviorally by
+adding source-text tests. The invariant is covered behaviorally by
 `m5_tab_forward_filter`: the fixture withholds publication of the successor root
 until the successor slot is initialized, then verifies readers observe the
 migrated value rather than a transient nil or the internal `FORWARD` sentinel.

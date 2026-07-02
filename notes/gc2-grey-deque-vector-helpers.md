@@ -16,7 +16,7 @@ existing `gc2_queue_slot_*()` release/acquire helpers, and `grey_top` /
 ## Guardrail
 
 `tools/ci/m3_gc2_worker_scheduler.sh` now requires the vector helper surface and
-rejects raw production access to `grey_stack`, `grey_capacity`, `grey_top`, and
+documents why raw production access to `grey_stack`, `grey_capacity`, `grey_top`, and
 `grey_bottom` in `src/lj_gc2.c`.
 
 ## Follow-Up

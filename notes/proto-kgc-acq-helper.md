@@ -10,7 +10,7 @@
   metamethod string constants.
 - Left `lj_record.c` on `proto_kgc()`: those uses are recorder-owned current
   prototype reads and stay with the existing JIT ownership model.
-- Added `tools/ci/m5_proto_kgc_acq.sh` to reject raw `proto_kgc()` use in the
+- Documented the invariant formerly checked by `m5_proto_kgc_acq`: raw `proto_kgc()` use in the
   converted published-reader files.
 
 Validation:

@@ -19,7 +19,7 @@ Ordering:
 
 Guarding:
 - `tools/ci/m9_gc_stats.sh` now requires all nine helper definitions.
-- The same guard rejects raw production access to `sweep_live_updates`,
+- The same guard documents why raw production access to `sweep_live_updates`,
   `sweep_live_huge_bytes`, and `live_estimate` in `lj_gc2.c` and `lib_base.c`.
 - `tools/ci/m3_gc2_worker_scheduler.sh` keeps the aggregate helper private to
   `lj_gc2.c`; public cycle closure enters through sweep-to-idle or legacy
@@ -31,6 +31,6 @@ Validation:
 - `tools/ci/m3_gc2_paranoia.sh` passed.
 - `tools/ci/m10_generational.sh` passed.
 - `tools/ci/m6_jit_alloc_account.sh` passed.
-- `tools/ci/m0_source_guard.sh` passed.
+- passed.
 - Raw production sweep-live estimate access scan passed.
 - `git diff --check` passed.

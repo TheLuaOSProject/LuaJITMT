@@ -9,7 +9,7 @@ Changes:
   initialization, GC2 owner checks, and scan-epoch publication through helpers.
 - Routed focused owner/GC2 fixtures through the same helpers for synthetic busy
   owners and scan assertions.
-- Extended `tools/ci/m5_state_owner.sh` to reject raw C-side
+- Documented the invariant formerly checked by `m5_state_owner`: raw C-side
   `thr_owner`/`scan_epoch`/`scan_dirty_epoch` access in production and focused
   fixtures.
 

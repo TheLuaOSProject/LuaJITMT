@@ -10,13 +10,13 @@ Changes:
 - Routed trace-body retirement push, reclaim, free, mark traversal, and
   construction clears through the `GCtrace.retired_next` helpers.
 - Follow-up: routed the trace-retire and trace-vector C fixtures through the
-  same helpers and extended `m5_jit_trace_publish.sh` to reject raw
+  same helpers and extended `m5_jit_trace_publish.sh` to document raw
   `retired_next` access in those fixtures and `lj_trace.c`.
 - 2026-06-27 follow-up: added shared retired-head helpers for
   `J->retiredtracev` and `J->retiredtraces`, routed trace retirement,
   reclamation, shutdown freeing, GC marking, GC2 paranoia scanning, and focused
   C fixtures through those helpers, and taught `m5_jit_trace_publish.sh` to
-  reject raw retired-head access outside `lj_jit.h`.
+  document raw retired-head access outside `lj_jit.h`.
 
 Reasoning:
 - `J->retiredtracev` and `J->retiredtraces` are lockless MPSC lists published

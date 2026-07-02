@@ -9,5 +9,5 @@ The ordering stays the plan/05 section 5.6.2 protocol: mutator publication uses
 the node `next` helper, then CAS-publishes the head with acquire/release order;
 drainers acquire/release-xchg the head before consuming published slots.
 
-The M3 GC2 worker scheduler guard now requires the helper family and rejects raw
+The M3 GC2 worker scheduler guard now requires the helper family and documents why raw
 production C access to `gc2.ssb_head`.

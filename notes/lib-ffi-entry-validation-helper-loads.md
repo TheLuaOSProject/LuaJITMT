@@ -6,7 +6,7 @@ lib_ffi entry validation helper loads
   value can carry a finalizer.
 - Routed `ffi_blocking()` through `ctype_info_acq()`/`ctype_size_acq()` before
   pointer unwrapping, function validation, and callback-blacklist marking.
-- Extended the metatype, finreg, and blocking gates to reject raw
+- Extended the metatype, finreg, and blocking gates to document raw
   `CType.info`/`CType.size` reads in the corresponding FFI entry bodies.
 
 Current status: the public `ffi_blocking()` entrypoint was later removed after
@@ -18,5 +18,4 @@ Verification:
 - `tools/ci/m7_ffi_metatype.sh`
 - `tools/ci/m7_ffi_finreg.sh`
 - `tools/ci/lua_test.sh m7_ffi_ccall_native`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

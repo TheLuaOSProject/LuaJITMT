@@ -14,6 +14,6 @@ metadata, so reintroducing traced stdio requires an explicit IR-call table
 change.
 
 `tests/t-jit-io-native-stopreq.lua` heats all four write/flush variants; the
-M6 suite captures the generated IR and rejects raw stdio calls while no
+M6 suite captures the generated IR and documents why raw stdio calls while no
 native-state JIT helper exists. Trace stitching around the interpreter call
 boundary is acceptable.

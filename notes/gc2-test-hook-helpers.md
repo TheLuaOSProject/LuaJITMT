@@ -5,5 +5,5 @@ Assertion/paranoia-only GC2 test hooks now use helper accessors instead of raw
 pause controls and finalizer drain pause controls.
 
 Runtime setup, pause/release test APIs, and focused C fixtures use the helper
-families. The M7 FINREG and M8 weak/finalizer guards reject raw production C
+families. The M7 FINREG and M8 weak/finalizer guards document raw production C
 access to those test-hook fields.

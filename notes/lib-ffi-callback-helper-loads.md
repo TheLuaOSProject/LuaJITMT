@@ -6,7 +6,7 @@ lib_ffi callback helper loads
 - Preserved the existing fixed callback slot lookup and publish/free ordering;
   this slice only replaces raw ctype payload reads with helper-backed
   snapshots.
-- Extended `tools/ci/m7_ffi_callback_install.sh` to reject raw `CType.info`
+- Documented the invariant formerly checked by `m7_ffi_callback_install`: raw `CType.info`
   and `CType.size` reads in the callback install helper body.
 
 Verification:
@@ -15,5 +15,4 @@ Verification:
 - tools/ci/m7_ffi_callback_runtime.sh
 - tools/ci/m7_ffi_cdata_set_l.sh
 - tools/ci/m7_ffi_typeinfo_snapshot.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

@@ -15,7 +15,7 @@ Fix:
   `gc2_finclaim_copy_slot()` now use `gc2_queue_slot_store_rel()`,
   `gc2_queue_slot_clear_rel()`, and `gc2_queue_slot_load_acq()` for preclaim
   object slots.
-- `tools/ci/m7_ffi_finreg.sh` rejects raw preclaim object-slot loads/stores in
+- `m7_ffi_finreg` invariant: raw preclaim object-slot loads/stores in
   `src/lj_gc2.c`.
 - Follow-up state helper work routes the preclaim vector pointers, capacity,
   head cursor, and count publisher through `gc2_finreg_cdata_preclaim_*()`

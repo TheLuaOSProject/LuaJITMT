@@ -20,4 +20,4 @@ Coverage lives in `tests/t-ffi-layout-snapshot.c` and
 parse-sequence movement for string `offsetof`, `alignof`, `sizeof`, VLA
 `sizeof`, VLA `new`, `istype`, and `cast`, and verify that a string cast cannot
 surface fields from an abandoned failed cdef.  These are behavior checks rather
-than source-search guards.
+than source-text checks.

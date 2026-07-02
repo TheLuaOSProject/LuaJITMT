@@ -37,4 +37,4 @@ error cleanup, false reloads, module recursion, and loader recursion before the
 sentinel. `tests/t-loadlib-cache-race.c` and `m4_loadlib_cache_race` wrap
 `dlopen()` and assert concurrent `package.loadlib()` calls open the target
 shared object once. These are intentionally behavior fixtures rather than
-source-search guards.
+source-text checks.

@@ -13,8 +13,8 @@ instead of falling through into the parser-lock layout fallback.
 Follow-up: the layout-lock ctype helper now rejects non-string CType arguments
 before acquiring the parser token. Stable CType-backed `ffi.new(ct, ...)`,
 `ffi.sizeof(ct)`, and `ffi.alignof(ct)` abandoned/invalid misses are covered by
-the fixture and source guard so they cannot reacquire the parser token through
-the string-layout fallback.
+the fixture so they cannot reacquire the parser token through the string-layout
+fallback. The helper comments own that parser-token boundary.
 
 String declarations still use the serialized parser path because they actually
 mutate the C type graph. The new behavior is guarded by
@@ -26,5 +26,5 @@ Verification:
 
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
 - `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `tools/ci/lua_test.sh m7_ffi_cparse_rollback`

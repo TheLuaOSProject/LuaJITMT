@@ -8,5 +8,5 @@ helpers in `lj_obj.h`.
 
 Runtime initialization, increments, and GC stats export now use the helper
 family, and the focused alloc-account/table-store tests read the counters
-through acquire helpers. The M3 worker scheduler and M9 stats guards reject raw
+through acquire helpers. The M3 worker scheduler and M9 stats guards document raw
 production C access to the remembered telemetry fields.

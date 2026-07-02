@@ -6,12 +6,12 @@
 - Latest pushed commit before this CI/test-audit slice:
   `81265e77 notes: refresh lockless opportunities`
 - Current in-progress slice: CI/test cleanup, behavior-first replacement of
-  legacy source guards, and FFI C-call native-state helper refactoring.
+  legacy source-text checks, and FFI C-call native-state helper refactoring.
 - Safety priority: language semantics, memory safety, GC visibility, and stability remain higher priority than LuaJIT performance parity.
 
 The production table resize-forward slice is landed, and the follow-up x64
 closed-upvalue publication slice is also pushed. The current work is tightening
-the test harness so source guards do not block better implementation patterns
+the test harness so source-text checks do not block better implementation patterns
 when behavior fixtures can cover the same semantics. The previous audit
 blockers addressed in recent slices include:
 
@@ -43,7 +43,7 @@ Recent completed and pushed slices:
 
 The broader project already has landed ownership/facade work across tables,
 GC2, weak tables, traces, ctype, FFI, finalizers, hooks, and native-state
-boundaries. Earlier CI source guards are now obsolete under the no-source-guards
+boundaries. Earlier CI source-text checks are now obsolete under the no-source-text-checks
 policy.
 
 ## Completed In This Slice
@@ -101,7 +101,6 @@ Tests and documentation:
 - `tools/ci/m10_generational.sh`
 - `tools/ci/m9_m10_gc.sh`
 - `git diff --check`
-- `tools/ci/m0_source_guard.sh`
 - `tools/ci/m5_tab_resize_stress.sh`
 - `tools/ci/lua_test.sh m5_tab_keylock_lookup`
 - `tools/ci/lua_test.sh m5_concurrent_objects`
@@ -151,7 +150,7 @@ Probably not worth making more lockless:
 - Table semantics and resize forwarding: 65-75%
 - JIT safety and trace/native-state handling: 60-70%
 - FFI safety excluding mutable cdef concurrency: 55-65%
-- Test and source-guard infrastructure: 80-88%
+- Test and source-text-check infrastructure: 80-88%
 - Performance parity with LuaJIT: 35-45%
 - Overall safety/stability objective: 65-75%
 - Overall safety/stability plus near-LuaJIT performance: 50-60%
@@ -171,7 +170,7 @@ If safety/stability stays ahead of LuaJIT-level speed, the credible path is shor
 ## Immediate Next Steps
 
 1. Finish validating and push the CI/test cleanup slice.
-2. Keep source guards retired; add behavior fixtures where the semantic path is
+2. Keep source-text checks retired; add behavior fixtures where the semantic path is
    observable at runtime.
 3. Add the `lua_getlocal()` local-cell acquire-read follow-up.
 4. Continue the traced FFI native-state protocol behind disabled traced calls.

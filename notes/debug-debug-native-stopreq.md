@@ -22,5 +22,5 @@
   state is still delivered.
 - Added a sticky `debug.debug()` regression to `t-safepoint-handshake.c`.
 - Documented that the debugger native I/O path must use fresh STOPREQ helper
-  semantics. The old CI source guard for helper spelling is obsolete; behavior
+  semantics. The old CI source-text check for helper spelling is obsolete; behavior
   coverage owns the sticky/fresh STOPREQ distinction.

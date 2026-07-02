@@ -4,11 +4,10 @@ CType table retire epoch helpers
   the safepoint epoch attached to retired CTypeTab generations.
 - Routed table allocation initialization, table retirement publication, and
   epoch reclaim checks through the helper API.
-- Extended `tools/ci/m7_ffi_ctype_tab_retire.sh` to reject raw
+- Documented the invariant formerly checked by `m7_ffi_ctype_tab_retire`: raw
   implementation-side `retire_epoch` access.
 
 Verification:
 
 - tools/ci/m7_ffi_ctype_tab_retire.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

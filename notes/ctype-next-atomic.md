@@ -6,9 +6,10 @@
   hash-chain link.
 - Routed shared ctype hash walkers, snapshot readers, FFI snapshot helpers, and
   focused ctype fixtures through the helper.
-- Extended `tools/ci/m7_ffi_ctype_hash_publish.sh` with a focused grep guard
-  over the ctype/FFI files and fixtures that should not spell direct
-  `ct->next`/`dst->next`/`basect->next` hash-chain access.
+- Documented the rule that shared `CType.next` hash-chain links must use the
+  acquire/release helper. Ctype publication, lookup, snapshot, and rollback
+  fixtures cover the behavior; CI must not enforce helper spelling by source
+  search.
 
 ## Deliberate exclusions
 
@@ -18,5 +19,5 @@
   ctypes; the focused guard does not match those comments.
 - Whole-`CType` struct copies remain part of the existing ctype publication and
   parser rollback machinery. This slice only centralizes explicit hash-chain
-  link loads/stores and guards against direct field regressions in the shared
-  ctype hash publication paths.
+  link loads/stores; comments beside the helper layer document that shared
+  ctype hash publication paths should not use raw link access.

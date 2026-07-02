@@ -8,27 +8,29 @@ Changes:
 - Routed live-node allocation initialization, CAS publication, shutdown
   traversal, free-all traversal, and legacy GC live-thread root marking through
   the helpers.
-- Extended `tools/ci/m4_threading_shutdown.sh` to reject direct
-  `LJThreadLive.next` access in `lib_threading.c` and in the scoped
-  `gc_mark_threading_live()` body.
+- Documented the rule that `LJThreadLive.next` is a shared live-root
+  publication link and must use the helper. Shutdown traversal and GC marking
+  fixtures cover the behavior; CI must not enforce helper spelling by source
+  search.
 - Follow-up: routed the GC2 pending-root scan `gc2_scan_threading_live_roots()`
-  through `lj_thread_live_next_acq()` and extended the same shutdown guard to
-  cover that scoped function body.
+  through `lj_thread_live_next_acq()` and documented the same helper discipline
+  for that scoped function body.
 - Follow-up: added helper coverage for the live-root list head and per-thread
   node backpointer. `lj_thread_live_head_*()` now owns
   `global_State.threading_live` acquire/CAS/xchg operations, and
   `lj_thread_live_node_*()` owns `LJThread.live_node` publication/clearing.
-  `lib_threading.c`, legacy GC, and GC2 route through those helpers, and the
-  shutdown guard rejects raw covered access to both fields.
+  `lib_threading.c`, legacy GC, and GC2 route through those helpers, with the
+  allowed raw-field sites documented beside the helper layer.
 - Follow-up validation: `git diff --check`,
-  `tools/ci/m4_threading_shutdown.sh`, `tools/ci/m4_threading_api.sh`, and
-  `tools/ci/m3_gc2_scaffold.sh` passed.
+  `tools/ci/lua_test.sh m4_threading_shutdown`,
+  `tools/ci/lua_test.sh m4_threading_api`, and
+  `tools/ci/lua_test.sh m3_gc2_scaffold` passed.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
-- `tools/ci/m4_threading_shutdown.sh`
-- `tools/ci/m4_threading_api.sh`
-- `tools/ci/m9_gc_stats.sh`
+- `tools/ci/lua_test.sh m4_threading_shutdown`
+- `tools/ci/lua_test.sh m4_threading_api`
+- `tools/ci/lua_test.sh m9_gc_stats`
 
 Notes:
 - Live-root list head, node link, and per-thread backpointer operations are

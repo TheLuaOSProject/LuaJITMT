@@ -11,7 +11,7 @@
   filenames, and perf-map trace names.
 - Updated the GC2 traversal fixture to validate the release-published chunkname
   through the same acquire helper.
-- Added `tools/ci/m5_proto_chunkname_acq.sh` to reject raw
+- Documented the invariant formerly checked by `m5_proto_chunkname_acq`: raw
   `proto_chunkname()`/`proto_chunknamestr()` use outside the macro definitions.
 
 Validation:

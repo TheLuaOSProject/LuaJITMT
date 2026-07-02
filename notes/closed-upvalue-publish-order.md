@@ -8,6 +8,7 @@ This removes the old `lj_mem_newgco()` window where a pending-root flusher could
 observe an untyped or partially initialized closed upvalue. Open upvalues still
 use their separate open-upvalue list protocol.
 
-Guard: `m5_upvalue_publish_gc` source-checks `lj_func.c` so closed upvalues do
-not return to immediate-link allocation and the initialization/barrier/link
-ordering remains explicit.
+`m5_upvalue_publish_gc` owns the behavior coverage for publication order.
+Closed upvalues must not return to immediate-link allocation: initialization,
+barrier repair, and pending-root publication stay ordered by the constructor
+comments and the focused fixture rather than by source-text checks.

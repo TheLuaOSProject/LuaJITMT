@@ -17,7 +17,7 @@ initialization and worker progress publication. `threading.gcstats()`
 reads the same counters through acquire helpers.
 
 `tools/ci/m3_gc2_worker_scheduler.sh` now requires the helper triplets and
-rejects raw production access to these worker counter fields in `lj_gc2.c` and
+documents why raw production access to these worker counter fields in `lj_gc2.c` and
 `lib_base.c`.
 
 This is scheduler state hygiene for the current parked-worker bridge. True

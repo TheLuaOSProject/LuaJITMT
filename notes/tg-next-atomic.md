@@ -9,7 +9,7 @@ Slice
   lookup, GC arena sweep traversal, GC2 accounting/root/sweep traversals,
   safepoint handshake scans, and threading registration checks through the
   helpers.
-- Added a scoped guard in `tools/ci/m3_safepoint_handshake.sh` to reject raw
+- Added a scoped guard in `tools/ci/m3_safepoint_handshake.sh` to document raw
   `TGState.next_tg` access in production TG-list users.
 - Follow-up registry-helper slice routes the global `GC2State.tg_list` root
   and `GC2State.n_threads` live count through `gc2_tg_*`/`gc2_n_threads_*`

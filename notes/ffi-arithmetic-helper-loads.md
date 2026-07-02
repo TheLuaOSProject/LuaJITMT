@@ -18,9 +18,9 @@ FFI arithmetic helper loads
   `bit.band`/`bit.bor`/`bit.bxor` before converting each TValue operand,
   avoiding a live `ctype_get(cts, id)` table pointer in the n-ary cdata bit-op
   loop.
-- Extended `tools/ci/m7_ffi_carith_l.sh` to reject raw `CType.info` and
+- Documented the invariant formerly checked by `m7_ffi_carith_l`: raw `CType.info` and
   `CType.size` reads in `src/lj_carith.c`.
-- Extended `tests/suites/m7_ffi.lua` to reject raw arithmetic `ctype_get(cts,
+- Extended `tests/suites/m7_ffi.lua` to document raw arithmetic `ctype_get(cts,
   ...)` live-pointer reuse outside immediate local CType copies in
   `src/lj_carith.c` and `src/lib_bit.c`.
 

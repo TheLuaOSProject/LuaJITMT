@@ -30,7 +30,7 @@
 ## Estimated progress
 
 - Legacy/compat public/runtime surface removal: 80-85%.
-- CI migration away from stale source guards: 65-75%.
+- CI migration away from stale source-text checks: 65-75%.
 - Lockless FFI recorder read-only ctype paths: 75-85%.
 
 ## Remaining work

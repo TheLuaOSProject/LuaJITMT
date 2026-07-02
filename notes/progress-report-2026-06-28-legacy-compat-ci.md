@@ -10,7 +10,7 @@ Overall safety/stability completion: 66-76%.
 
 - Runtime lockless substrate: 72-82%.
 - Threading/channel/shutdown behavior coverage: 78-88%.
-- CI migration from legacy shell/source guards to behavior tests: 60-70%.
+- CI migration from legacy shell/source-text checks to behavior tests: 60-70%.
 - FFI concurrency excluding mutable `ffi.cdef`: 58-68%.
 - Weak/finalizer/generational GC: 55-68%.
 - Release-quality soak and benchmark readiness: 45-55%.
@@ -67,7 +67,7 @@ Not worth removing now:
 
 ## Test and CI audit
 
-Current policy keeps no source guards. Memory-order contracts, ABI fences, and
+Current policy keeps no source-text checks. Memory-order contracts, ABI fences, and
 temporary migration rules must be comments or notes, with behavior/generated
 artifact coverage where the failure is observable. Best near-term cleanup:
 

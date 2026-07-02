@@ -67,7 +67,7 @@ builds, and console builds are intentionally unsupported by this fork.
 <li>GCC or Clang/LLVM with pthread, dl, and math libraries.</li>
 </ul>
 <p>
-The source guard in <tt>src/lj_arch.h</tt> rejects unsupported targets so
+The platform checks in <tt>src/lj_arch.h</tt> reject unsupported targets so
 stale target builds fail at compile time instead of producing a partial runtime.
 </p>
 

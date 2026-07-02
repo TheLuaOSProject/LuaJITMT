@@ -12,7 +12,7 @@ atomics against `g->gc2`.
 ## Guardrail
 
 `tools/ci/m7_ffi_finreg.sh` now requires the cdata FINREG counter helper
-surface and rejects raw production access to these counter fields in
+surface and documents why raw production access to these counter fields in
 `src/lj_gc.c`, `src/lj_gc2.c`, `src/lj_cdata.c`, and `src/lib_base.c`.
 
 ## Follow-Up

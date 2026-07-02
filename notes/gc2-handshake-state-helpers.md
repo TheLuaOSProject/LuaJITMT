@@ -26,5 +26,4 @@ Validation:
 - `tools/ci/m3_safepoint_handshake.sh`
 - `tools/ci/m3_vm_safepoint.sh`
 - `tools/ci/m9_gc_stats.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

@@ -6,5 +6,5 @@ those counters through `gc2_smr_*()` helpers in `lj_obj.h`.
 
 Runtime initialization and increments now use the helper family, and the
 string-table CAS fixture reads the counters through acquire helpers. The M5
-string-table guard rejects raw access to the SMR reclaim counters in the
+string-table guard documents why raw access to the SMR reclaim counters in the
 runtime and focused fixture.

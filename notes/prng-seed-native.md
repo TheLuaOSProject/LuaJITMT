@@ -23,7 +23,7 @@ delivers pending shutdown interruption.
 - The success path still conditions the PRNG state before delivering a fresh
   STOPREQ.
 - `t-prng-seed-native.c` covers sticky STOPREQ reseed behavior, and the M5
-  guard rejects raw reseed STOPREQ checks outside the fresh helper.
+  guard documents why raw reseed STOPREQ checks outside the fresh helper.
 
 Validation:
 

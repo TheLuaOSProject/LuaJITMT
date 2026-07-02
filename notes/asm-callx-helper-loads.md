@@ -10,7 +10,7 @@ has a native-state protocol. This helper remains for the eventual native bridge.
 
 Guardrail:
 
-- `tools/ci/m7_ffi_cdata_set_l.sh` rejects raw `->info` / `->size` reads in
+- `m7_ffi_cdata_set_l` invariant: raw `->info` / `->size` reads in
   `asm_callx_flags()`.
 
 Validation:
@@ -19,5 +19,4 @@ Validation:
 - Historical direct `-jdump=ir` traced `ffi.C.abs()` / vararg
   `ffi.C.snprintf()` probe with `CALLXS` IR and `callx ok`; default validation
   now expects ordinary FFI C calls to stay off trace.
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

@@ -11,7 +11,7 @@ Changes:
   decisions.
 - Routed safepoint phase application, attach catch-up phase adoption, C-side GC2
   barrier predicates, and table bulk-store barrier checks through helpers.
-- Extended `tools/ci/m3_safepoint_handshake.sh` to reject raw C-side
+- Documented the invariant formerly checked by `m3_safepoint_handshake`: raw C-side
   production access to `TGState.mark_active` and `TGState.alloc.alloc_black`
   outside `src/lj_tg.h`.
 

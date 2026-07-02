@@ -15,12 +15,11 @@ Converted paths:
 
 Guardrail:
 
-- `tools/ci/m7_ffi_clib_cache.sh` rejects raw `->info`, `->size`, or `->sib`
+- `m7_ffi_clib_cache` invariant: raw `->info`, `->size`, or `->sib`
   reads in these runtime C library namespace helpers.
 
 Validation:
 
 - `tools/ci/m7_ffi_clib_cache.sh`
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

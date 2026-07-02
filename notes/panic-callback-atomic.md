@@ -10,7 +10,7 @@ model instead of raw field access:
 - `panicf_xchg()` atomically exchanges the callback for `lua_atpanic()`, so
   concurrent callers receive a real previous value instead of racing a plain
   load/store pair.
-- The M5 publication suite rejects raw target-runtime `->panic` access outside
+- The M5 publication suite documents why raw target-runtime `->panic` access outside
   these accessor definitions and checks the stock `lua_atpanic()` exchange
   contract with a C fixture.
 

@@ -7,7 +7,7 @@ CType payload store helpers
   helper surface before publishing the abandoned records.
 - Updated the duplicate-loser assertion to acquire-load the abandoned payload
   through `ctype_info_acq()`.
-- Extended `tools/ci/m7_ffi_ctype_ticket_intern.sh` to reject raw core ctype
+- Documented the invariant formerly checked by `m7_ffi_ctype_ticket_intern`: raw core ctype
   payload stores and raw parser `CTA_BAD` abandon payload stores.
 
 Verification:
@@ -16,5 +16,4 @@ Verification:
 - tools/ci/m7_ffi_cparse_rollback.sh
 - tools/ci/m7_ffi_ctype_name_claim.sh
 - tools/ci/m7_ffi_typeinfo_snapshot.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

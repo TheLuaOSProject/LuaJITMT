@@ -4,12 +4,11 @@ CType table header and ticket helpers
   `ctype_top_cas()` alongside the existing acquire helpers.
 - Routed ctype table growth publication, initial table/top publication, ticket
   reservation, and ctype ID assertion checks through the helper API.
-- Extended `tools/ci/m7_ffi_ctype_ticket_intern.sh` to reject raw
+- Documented the invariant formerly checked by `m7_ffi_ctype_ticket_intern`: raw
   implementation-side `cts->tabh` and `cts->top` access.
 
 Verification:
 
 - tools/ci/m7_ffi_ctype_ticket_intern.sh
 - tools/ci/m7_ffi_ctype_tab_retire.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

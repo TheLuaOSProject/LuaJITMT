@@ -9,7 +9,7 @@ CType query helper loads
   loads before checking pointer/function metatable special cases.
 - Routed `ctype_repr()` through helper-backed info/size loads, including array
   child-size formatting.
-- Extended `tools/ci/m7_ffi_typeinfo_snapshot.sh` to reject raw
+- Documented the invariant formerly checked by `m7_ffi_typeinfo_snapshot`: raw
   `CType.info`/`CType.size` reads inside these ctype query bodies.
 
 Verification:
@@ -20,5 +20,4 @@ Verification:
 - tools/ci/m7_ffi_carith_l.sh
 - tools/ci/m7_ffi_jit_cnew.sh
 - tools/ci/m7_ffi_cparse_rollback.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

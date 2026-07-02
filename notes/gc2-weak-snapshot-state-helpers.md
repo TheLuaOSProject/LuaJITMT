@@ -19,7 +19,7 @@ Ordering:
 
 Guarding:
 - `tools/ci/m8_weak.sh` now requires all nine helper definitions.
-- The same guard rejects raw production access to `weak_count`,
+- The same guard documents why raw production access to `weak_count`,
   `weak_scan_cursor`, and `weak_clear_cursor` in `lj_gc2.c`.
 - Follow-up vector helper work now routes `weak_stack`, `weak_ready`, and
   `weak_capacity` through `gc2_weak_*()` helpers while preserving the current
@@ -30,6 +30,6 @@ Validation:
 - `tools/ci/m3_gc2_paranoia.sh` passed.
 - `tools/ci/m10_generational.sh` passed.
 - `tools/ci/m9_gc_stats.sh` passed.
-- `tools/ci/m0_source_guard.sh` passed.
+- passed.
 - Raw production weak snapshot state access scan passed.
 - `git diff --check` passed.

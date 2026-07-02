@@ -37,9 +37,9 @@ CSVs, and marker files. Those checks are permitted because the generated
 artifact is the behavior under test. Repository source checks for helper names,
 field accesses, function calls, or snippets are not permitted.
 
-The removed source-guard compatibility surface remains gone:
+The removed source-text-check compatibility surface remains gone:
 
-- No `m0_source_guard` case or per-case shell wrapper exists.
+- No case or per-case shell wrapper exists.
 - No `suite_utils.read_source_file()` helper exists.
 - The only `tools/ci` shell entrypoint is `tools/ci/lua_test.sh`.
 - The remaining build-time `find`/`sed`/`grep` invocations inspect generated

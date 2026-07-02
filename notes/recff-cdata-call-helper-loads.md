@@ -10,12 +10,11 @@ the call.
 
 Guardrail:
 
-- `tools/ci/m7_ffi_metatype.sh` rejects raw `->info` / `->size` reads in
+- `m7_ffi_metatype` invariant: raw `->info` / `->size` reads in
   `recff_cdata_call()`.
 
 Validation:
 
 - `tools/ci/m7_ffi_metatype.sh`
 - `tools/ci/m7_ffi_jit_cnew.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

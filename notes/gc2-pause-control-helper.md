@@ -15,13 +15,13 @@ Ordering:
 
 Guarding:
 - `tools/ci/m5_gc2_pacing_atomic.sh` now requires the three helper definitions.
-- The same guard rejects raw C-side `gcpause_pct` field access outside helper
+- The same guard documents why raw C-side `gcpause_pct` field access outside helper
   definitions, alongside the existing GC2 pacing byte counters.
 
 Validation:
 - `tools/ci/m5_gc2_pacing_atomic.sh` passed.
 - `tools/ci/m6_jit_alloc_account.sh` passed.
 - `tools/ci/m9_gc_stats.sh` passed.
-- `tools/ci/m0_source_guard.sh` passed.
+- passed.
 - Raw C-side GC2 pacing access scan reports only helper definitions.
 - `git diff --check` passed.

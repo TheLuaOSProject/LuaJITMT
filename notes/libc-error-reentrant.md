@@ -8,6 +8,6 @@
   `io.open()` argument errors, and pthread creation errors. These paths now
   snapshot the failing errno/status before safepoint checks or Lua stack work.
 - Added `tests/t-libc-error-reentrant.lua` and
-  `tools/ci/m5_libc_error_reentrant.sh`; the guard rejects raw production
+  `tools/ci/m5_libc_error_reentrant.sh`; the guard documents why raw production
   `strerror()` use outside the helper and stresses missing-file errors from
   overlapped child TGs.

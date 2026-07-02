@@ -7,5 +7,5 @@ and when preserve aborts return an active phase to idle. This slice routes
 
 Runtime initialization and increments now use the helper family, while the
 focused phase and arena sweep tests read the counters through acquire helpers.
-The M3 worker scheduler guard rejects raw production C access to the
+The M3 worker scheduler guard documents why raw production C access to the
 sweep-close telemetry fields.

@@ -32,7 +32,7 @@ the cache bit is stale or the registry entry is missing.
 
 ## Guard
 
-`tools/ci/m3_vmevent_native_stdio.sh` rejects raw VM-event stdio outside the
+`m3_vmevent_native_stdio` invariant: raw VM-event stdio outside the
 `vmevent_report_failure()` native boundary and runs the behavior smoke
 `m3_vmevent_native_stdio`, which triggers an erroring `jit.attach(..., "bc")`
 handler and verifies the reporter still fires. The same guard now also requires

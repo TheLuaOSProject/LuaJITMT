@@ -6,7 +6,7 @@ CType stale-slot copy helper
 - Replaced raw `*dst = *src` stale-slot refreshes in `ctype_hash_setnext()`,
   `ctype_publish_current()`, and parser `cp_ctype_publish()` with
   `ctype_copy_rel()`.
-- Extended `tools/ci/m7_ffi_ctype_name_claim.sh` to reject raw ctype
+- Documented the invariant formerly checked by `m7_ffi_ctype_name_claim`: raw ctype
   stale-slot structure copies in the ctype/parser publication paths.
 
 Verification:
@@ -16,5 +16,4 @@ Verification:
 - tools/ci/m7_ffi_ctype_ticket_intern.sh
 - tools/ci/m7_ffi_ctype_tab_retire.sh
 - tools/ci/m7_ffi_typeinfo_snapshot.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

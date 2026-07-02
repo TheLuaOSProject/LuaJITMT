@@ -20,5 +20,4 @@ Validation:
 - `tools/ci/m3_gc2_worker_scheduler.sh`
 - `tools/ci/m6_jit_alloc_account.sh`
 - `tools/ci/m10_generational.sh`
-- `tools/ci/m0_source_guard.sh`
 - `git diff --check`

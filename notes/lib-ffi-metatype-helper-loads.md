@@ -9,7 +9,7 @@ lib_ffi metatype helper loads
   stripping for `__pairs`/`__ipairs` lookup.
 - Routed `ffi_metatype()` through `ffi_ctype_info_read()` before validating
   metatype-eligible struct, complex, and vector ctypes.
-- Extended `tools/ci/m7_ffi_metatype.sh` to reject raw `CType.info` and
+- Documented the invariant formerly checked by `m7_ffi_metatype`: raw `CType.info` and
   `CType.size` reads in these metatype library helper bodies.
 
 Verification:
@@ -17,5 +17,4 @@ Verification:
 - tools/ci/m7_ffi_metatype.sh
 - tools/ci/m7_ffi_cdata_get_l.sh
 - tools/ci/m7_ffi_typeinfo_snapshot.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

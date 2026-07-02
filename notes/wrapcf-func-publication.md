@@ -11,7 +11,7 @@ data race on `global_State.wrapf`.
 
 Guard:
 
-- `m5_wrapcf_func_publish` rejects raw C-side `->wrapf` access outside the
+- `m5_wrapcf_func_publish` documents why raw C-side `->wrapf` access outside the
   accessor definition and verifies that `luaJIT_setmode()` claims the target
   stack slot, stores the wrapper, drops the claim, and then publishes
   `BC_FUNCCW`.

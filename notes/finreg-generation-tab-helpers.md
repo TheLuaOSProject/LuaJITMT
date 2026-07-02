@@ -6,12 +6,11 @@ FINREG generation table helper slice
   close-time disable through the helpers.
 - Added `fin_gen_tab_disable_rel()` for the release-store generation disable
   path used by close-time GC2 FINREG disable.
-- Extended `tools/ci/m7_ffi_finreg.sh` to reject raw generation table access
+- Documented the invariant formerly checked by `m7_ffi_finreg`: raw generation table access
   in FINREG implementation code.
 
 Verification:
 
 - tools/ci/m7_ffi_finreg.sh
 - tools/ci/m8_weak.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

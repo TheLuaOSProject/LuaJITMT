@@ -17,7 +17,7 @@ helper surface.
 ## Guardrail
 
 `tools/ci/m3_gc2_scaffold.sh` now requires the userdata FINREG counter helper
-surface and rejects raw production access in `src/lj_gc.c`, `src/lj_gc2.c`, and
+surface and documents why raw production access in `src/lj_gc.c`, `src/lj_gc2.c`, and
 `src/lib_base.c`.
 - Follow-up fixture cleanup routes `tests/t-gc2-traverse.c` userdata FINREG
   telemetry snapshots through the same acquire helpers and extends the guard

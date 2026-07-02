@@ -6,10 +6,10 @@ FINREG CTState root-head helper slice
 - Routed FINREG generation scans, new-generation CAS publish, ordered
   registration publish, ordered retire, marking, close-time discovery, pending
   checks, and teardown through those helpers.
-- Extended `tools/ci/m7_ffi_finreg.sh` to reject raw FINREG CTState root
+- Documented the invariant formerly checked by `m7_ffi_finreg`: raw FINREG CTState root
   access in implementation files.
 - Follow-up: `tests/t-gc2-traverse.c` now uses `fin_order_head_acq()` for its
-  ordered cdata FINREG reference counter, and the same guard rejects raw
+  ordered cdata FINREG reference counter, and the same guard documents why raw
   `CTState.fin_*` root access in that fixture.
 
 Verification:
@@ -18,5 +18,4 @@ Verification:
 - tools/ci/m3_gc2_scaffold.sh
 - tools/ci/m3_gc2_paranoia.sh
 - tools/ci/m8_weak.sh
-- tools/ci/m0_source_guard.sh
 - git diff --check

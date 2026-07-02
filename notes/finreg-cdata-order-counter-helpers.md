@@ -26,9 +26,9 @@ counter add behind `lj_gc2.c`.
 ## Guardrail
 
 `tools/ci/m7_ffi_finreg.sh` now requires the ordered-counter helper surface and
-rejects raw production access to the ordered FINREG counter fields in
+documents why raw production access to the ordered FINREG counter fields in
 `src/lj_ctype.c`, `src/lj_gc.c`, `src/lj_gc2.c`, and `src/lib_base.c`.
-`tools/ci/m9_gc_stats.sh` also rejects raw FINREG ordered stat aliases.
+`tools/ci/m9_gc_stats.sh` also documents why raw FINREG ordered stat aliases.
 
 ## Follow-Up
 

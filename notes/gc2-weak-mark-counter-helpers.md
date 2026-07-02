@@ -6,4 +6,4 @@ through `gc2_weak_keys_marked_*` and `gc2_weak_values_marked_*` helpers.
 
 Runtime initialization and increments now use helper accessors. GC stats and
 the weak barrier fixtures read through acquire helpers, and the M8 weak guard
-rejects raw production C access to these telemetry fields.
+documents why raw production C access to these telemetry fields.

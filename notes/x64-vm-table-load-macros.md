@@ -9,7 +9,7 @@
   those macros. On x86-64 this still lowers to the same `mov`, but the source
   now names the acquire-load contract used by the C helpers.
 - Documented that x64 VM table-link/size loads should go through the helper
-  macros. The old source guard rejecting direct field loads is obsolete.
+  macros. The old source-text check rejecting direct field loads is obsolete.
 - The remaining x64 metatable/gcroot GCRef loads/stores are a separate
   follow-up with a different helper vocabulary.
 - Follow-up: legacy `GCtab.asize` fallback loads in x64 table fast paths now

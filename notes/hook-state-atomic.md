@@ -18,13 +18,13 @@ matches the hookmask helper model:
 
 The non-x64 DASC paths remain out of scope for this x86-64 Linux pass.
 
-Guard: `tools/ci/m5_hook_state_atomic.sh` rejects raw C-side `hookf`/`hookcount`
+Guard: `m5_hook_state_atomic` invariant: raw C-side `hookf`/`hookcount`
 field access outside the helper definitions, requires the x64 locked
 decrements, and runs the `m5_hook_state_atomic` Lua smoke.
 
 Validation:
 - `tools/ci/m5_hook_state_atomic.sh` passed.
 - `tools/ci/m5_hookmask_atomic.sh` passed.
-- `tools/ci/m0_source_guard.sh` passed.
+- passed.
 - `tools/ci/m5_concurrent_objects.sh` passed.
 - `git diff --check` passed before staging.
