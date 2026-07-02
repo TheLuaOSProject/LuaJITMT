@@ -2802,7 +2802,20 @@ static void build_subroutines(BuildCtx *ctx)
   |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
   |  load_J RA
   |  mov RA, [RA+J_OFS(tracev)]
+  |  test RA, RA
+  |  jz >7
   |  mov TRACE:RA, [RA+RD*8+TRACEV_SLOT_OFS]
+  |  cmp TRACE:RA, 1
+  |  ja >6
+  |7:
+  |  mov RCd, [PC-4]
+  |  movzx RAd, RCH
+  |  movzx OP, RCL
+  |  shr RCd, 16
+  |  cmp OP, BC_JLOOP
+  |  je ->cont_nop
+  |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
+  |6:
   |  mov RCd, TRACE:RA->startins
   |  movzx RAd, RCH
   |  movzx OP, RCL
@@ -5172,8 +5185,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |6:  // Unpatch JLOOP.
     |  load_J RA
     |  mov RA, [RA+J_OFS(tracev)]
+    |  test RA, RA
+    |  jz <1
     |  movzx RCd, word [PC+2]
     |  mov TRACE:RA, [RA+RC*8+TRACEV_SLOT_OFS]
+    |  cmp TRACE:RA, 1
+    |  ja >7
+    |  jmp <1
+    |7:
     |  mov eax, TRACE:RA->startins
     |  mov al, BC_ITERC
     |  mov RB, BASE			// Save BASE.
@@ -5562,7 +5581,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov L:RB, SAVE_L
     |  load_J RA
     |  mov RA, [RA+J_OFS(tracev)]
+    |  test RA, RA
+    |  jz >3
     |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]
+    |  cmp TRACE:RD, 1
+    |  ja >2
+    |3:
+    |  cmp OP, BC_JLOOP
+    |  jne >4
+    |  mov RCd, [PC-4]
+    |  movzx RAd, RCH
+    |  movzx OP, RCL
+    |  shr RCd, 16
+    |  cmp OP, BC_JLOOP
+    |  je >4
+    |  jmp aword [DISPATCH+OP*8]
+    |4:
+    |  ins_next
+    |2:
     |  mov RD, TRACE:RD->mcode
     |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
     |  mov [DISPATCH+DISPATCH_TG(tmpbuf.L)], L:RB
@@ -5594,7 +5630,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
     |  load_J RA
     |  mov RA, [RA+J_OFS(tracev)]
+    |  test RA, RA
+    |  jz >7
     |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]
+    |  cmp TRACE:RD, 1
+    |  ja >6
+    |7:
+    |  mov RCd, [PC-4]
+    |  movzx RAd, RCH
+    |  movzx OP, RCL
+    |  shr RCd, 16
+    |  cmp OP, BC_JLOOP
+    |  je ->cont_nop
+    |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
+    |6:
     |  mov RCd, TRACE:RD->startins
     |  movzx RAd, RCH
     |  movzx OP, RCL
@@ -5657,9 +5706,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  movzx RDd, PC_RD
       |  load_J RA
       |  mov RA, [RA+J_OFS(tracev)]
+      |  test RA, RA
+      |  jz >5
       |  mov RA, [RA+RD*8+TRACEV_SLOT_OFS]
       |  cmp RA, 1
       |  ja >4
+      |5:
       |  ins_next
       |4:
       |  jmp =>BC_JLOOP

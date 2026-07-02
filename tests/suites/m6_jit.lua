@@ -525,6 +525,86 @@ END {
                         " src/lj_record.c")
 end
 
+local function assert_x64_jloop_stale_slot_guards(t)
+  local vm = t:read(t:path("src", "vm_x64.dasc"))
+  checks.assert_text_all_contains("x64 JLOOP stale-slot guard", vm, {
+    "mov RA, [RA+J_OFS(tracev)]\n" ..
+    "  |  test RA, RA\n" ..
+    "  |  jz >7\n" ..
+    "  |  mov TRACE:RA, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
+    "  |  cmp TRACE:RA, 1\n" ..
+    "  |  ja >6\n" ..
+    "  |7:\n" ..
+    "  |  mov RCd, [PC-4]\n" ..
+    "  |  movzx RAd, RCH\n" ..
+    "  |  movzx OP, RCL\n" ..
+    "  |  shr RCd, 16\n" ..
+    "  |  cmp OP, BC_JLOOP\n" ..
+    "  |  je ->cont_nop\n" ..
+    "  |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]",
+
+    "mov RA, [RA+J_OFS(tracev)]\n" ..
+    "    |  test RA, RA\n" ..
+    "    |  jz <1\n" ..
+    "    |  movzx RCd, word [PC+2]\n" ..
+    "    |  mov TRACE:RA, [RA+RC*8+TRACEV_SLOT_OFS]\n" ..
+    "    |  cmp TRACE:RA, 1\n" ..
+    "    |  ja >7\n" ..
+    "    |  jmp <1",
+
+    "mov RA, [RA+J_OFS(tracev)]\n" ..
+    "    |  test RA, RA\n" ..
+    "    |  jz >3\n" ..
+    "    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
+    "    |  cmp TRACE:RD, 1\n" ..
+    "    |  ja >2\n" ..
+    "    |3:\n" ..
+    "    |  cmp OP, BC_JLOOP\n" ..
+    "    |  jne >4\n" ..
+    "    |  mov RCd, [PC-4]\n" ..
+    "    |  movzx RAd, RCH\n" ..
+    "    |  movzx OP, RCL\n" ..
+    "    |  shr RCd, 16\n" ..
+    "    |  cmp OP, BC_JLOOP\n" ..
+    "    |  je >4\n" ..
+    "    |  jmp aword [DISPATCH+OP*8]\n" ..
+    "    |4:\n" ..
+    "    |  ins_next",
+
+    "mov RA, [RA+J_OFS(tracev)]\n" ..
+    "    |  test RA, RA\n" ..
+    "    |  jz >7\n" ..
+    "    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
+    "    |  cmp TRACE:RD, 1\n" ..
+    "    |  ja >6\n" ..
+    "    |7:\n" ..
+    "    |  mov RCd, [PC-4]\n" ..
+    "    |  movzx RAd, RCH\n" ..
+    "    |  movzx OP, RCL\n" ..
+    "    |  shr RCd, 16\n" ..
+    "    |  cmp OP, BC_JLOOP\n" ..
+    "    |  je ->cont_nop\n" ..
+    "    |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]",
+
+    "      |  mov RA, [RA+J_OFS(tracev)]\n" ..
+    "      |  test RA, RA\n" ..
+    "      |  jz >5\n" ..
+    "      |  mov RA, [RA+RD*8+TRACEV_SLOT_OFS]\n" ..
+    "      |  cmp RA, 1\n" ..
+    "      |  ja >4\n" ..
+    "      |5:\n" ..
+    "      |  ins_next"
+  }, "DynASM fallback")
+
+  local tracec = t:read(t:path("src", "lj_trace.c"))
+  checks.assert_text_all_contains("lj_trace_exit JLOOP stale-slot guard",
+                                  tracec, {
+    "GCtrace *target = traceref(J, bc_d(*pc));",
+    "if (!target)\n      return 0;",
+    "startins = trace_startins_acq(target);"
+  }, "C trace-exit guard")
+end
+
 local function jit_tmpbuf_concat_append_smoke()
   return [=[
 local util = require("jit.util")
@@ -2013,6 +2093,7 @@ assert(live >= 8, live)
     description = "JIT flush safepoint-scoped publication and retirement",
     run = function(t)
       build_default(t)
+      assert_x64_jloop_stale_slot_guards(t)
       run_lua_test_case(t, "m5_jit_trace_publish")
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
