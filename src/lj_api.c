@@ -1320,13 +1320,24 @@ LUA_API lua_State *lua_newthread(lua_State *L)
 
 LUA_API void *lua_newuserdata(lua_State *L, size_t size)
 {
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
+  GCtab *env;
   GCudata *ud;
-  lj_gc_check(L);
+  api_checkclaim(L, &preclaim);
+  env = getcurrenv(L);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
   if (size > LJ_MAX_UDATA)
-    lj_err_msg(L, LJ_ERR_UDATAOV);
-  ud = lj_udata_new(L, (MSize)size, getcurrenv(L));
+    lj_err_msg(errL, LJ_ERR_UDATAOV);
+  ud = lj_udata_new(errL, (MSize)size, env);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setudataV(L, L->top, ud);
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
   return uddata(ud);
 }
 
