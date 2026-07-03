@@ -447,6 +447,40 @@ static TRef fori_arg(jit_State *J, const BCIns *fori, BCReg slot,
   return tr;
 }
 
+static TRef rec_for_ext_cget(jit_State *J, BCReg slotno, TRef slotref)
+{
+  const BCIns *pc = J->pc;
+  const BCIns *start = proto_bc(J->pt);
+  for (; pc > start; pc--) {
+    BCIns ins = pc[-1];
+    BCOp op = bc_op(ins);
+    if (op == BC_FORI || op == BC_JFORI) {
+      BCReg ra = bc_a(ins);
+      const BCIns *exitpc = pc - 1 + bc_j(ins) + 1;
+      if (J->pc >= exitpc)
+	continue;
+      if (slotno == ra + FORL_EXT && J->pc > pc - 1) {
+	cTValue *tv = &J->L->base[ra];
+	if (tvisnumber(&tv[FORL_IDX]) && tvisnumber(&tv[FORL_STOP]) &&
+	    tvisnumber(&tv[FORL_STEP]) && !tvismzero(&tv[FORL_STEP]) &&
+	    lj_opt_narrow_forl(J, tv) == IRT_INT) {
+	  /*
+	  ** Source-local CGET decouples the visible loop variable from the
+	  ** hidden FORL slots. Side traces that start inside the loop body may
+	  ** therefore miss rec_for_loop(), so recover stock's narrowed integer
+	  ** shape from the already-recorded CGET value. Do not reload the raw
+	  ** stack slot here: exits inside the loop can observe the interpreter's
+	  ** advanced FORL slot while slotref still names the visible value.
+	  */
+	  return fori_conv(J, slotref, IRT_INT);
+	}
+      }
+      return 0;
+    }
+  }
+  return 0;
+}
+
 /* Return the direction of the FOR loop iterator.
 ** It's important to exactly reproduce the semantics of the interpreter.
 */
@@ -2520,8 +2554,10 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
     if (rec_celluv_will_promote(J, slotno)) {
       slotref = rec_celluv_promote_slot(J, slotno, 0);
     } else {
-      if (val == 0)
-	return slotref;
+      if (val == 0) {
+	TRef forref = rec_for_ext_cget(J, slotno, slotref);
+	return forref ? forref : slotref;
+      }
       J->base[slotno] = val;
       if (slotno >= J->maxslot) J->maxslot = (BCReg)(slotno+1);
       return 0;

@@ -1731,6 +1731,35 @@ end
           error("tmpbuf concat trace still calls generic buffer-finalize helper", 2)
         end
       end
+      local cget_for_dump = t:tmp("lj-m6-cget-for-tostr-int-ir.dump")
+      luajit_dump(t, cget_for_dump, "-jdump=ir", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function loop(n)
+  local h = {}
+  for i = 1, n do
+    h["k" .. (i % 8192)] = i
+  end
+  return h
+end
+local h = loop(20000)
+assert(h.k1)
+]=])
+      do
+        local data = t:read(cget_for_dump)
+        if not data:match("%-%-%-%- TRACE 2 IR.-TOSTR%s+%d+%s+INT") then
+          error("source-local FORL side trace did not preserve TOSTR INT:\n" ..
+                data, 2)
+        end
+        if not contains(data, " BAND ") then
+          error("source-local FORL modulo did not narrow to integer BAND:\n" ..
+                data, 2)
+        end
+        if contains(data, " FPMATH ") or data:match("TOSTR%s+%d+%s+NUM") then
+          error("source-local FORL integer loop widened to numeric modulo:\n" ..
+                data, 2)
+        end
+      end
       luajit_code(t, jit_tmpbuf_concat_append_smoke())
       luajit_code(t, jit_tmpbuf_thread_format_smoke(), { timeout = "30s" })
       build_and_run_c(t, t:tmp("lj_t-jit-tg-tmpbuf-reset"),
