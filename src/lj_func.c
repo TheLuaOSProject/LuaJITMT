@@ -266,6 +266,7 @@ void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
 static uint32_t func_test_gc1num_bump_fast_calls;
 static uint32_t func_test_gc1num_bump_fallback_calls;
 static uint32_t func_test_gc1num_bump_interp_calls;
+static uint32_t func_test_gc1uv_chain_calls;
 
 static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
 {
@@ -280,6 +281,11 @@ static LJ_AINLINE void func_test_gc1num_bump_fallback_call(void)
 static LJ_AINLINE void func_test_gc1num_bump_interp_call(void)
 {
   (void)la_add32_acqrel(&func_test_gc1num_bump_interp_calls, 1);
+}
+
+static LJ_AINLINE void func_test_gc1uv_chain_call(void)
+{
+  (void)la_add32_acqrel(&func_test_gc1uv_chain_calls, 1);
 }
 
 uint32_t lj_func_test_gc1num_bump_fast_calls(void)
@@ -311,10 +317,21 @@ void lj_func_test_reset_gc1num_bump_interp_calls(void)
 {
   la_store32_rel(&func_test_gc1num_bump_interp_calls, 0);
 }
+
+uint32_t lj_func_test_gc1uv_chain_calls(void)
+{
+  return la_load32_acq(&func_test_gc1uv_chain_calls);
+}
+
+void lj_func_test_reset_gc1uv_chain_calls(void)
+{
+  la_store32_rel(&func_test_gc1uv_chain_calls, 0);
+}
 #else
 #define func_test_gc1num_bump_fast_call()	((void)0)
 #define func_test_gc1num_bump_fallback_call()	((void)0)
 #define func_test_gc1num_bump_interp_call()	((void)0)
+#define func_test_gc1uv_chain_call()		((void)0)
 #endif
 
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
@@ -479,6 +496,27 @@ static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
   return fn;
 }
 
+static GCfunc *func_newL_gc1uv_chain(lua_State *L, TValue *base, GCproto *pt,
+				     GCfuncL *parent, int32_t slotno,
+				     const TValue *slot, uint32_t v)
+{
+  GCfunc *fn;
+  GCupval *uv;
+
+  fn = func_newL_unlinked(L, pt, lj_funcL_env_acq(parent));
+  uv = func_snapshotuv_unlinked(L, slot);
+  if (!(v & PROTO_UV_IMMUTABLE))
+    setgcV(L, base + slotno, obj2gco(uv), LJ_TUPVAL);
+  func_uvmeta(uv, parent, v);
+  setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
+  lj_gc_pubobjobj(L, fn, uv);
+  fn->l.nupvalues = 1;
+  lj_obj_setgcwrel(obj2gco(fn), obj2gco(uv));
+  lj_gc_linkobj_new_chain(G(L), obj2gco(fn), obj2gco(uv));
+  func_test_gc1uv_chain_call();
+  return fn;
+}
+
 /* Create a new Lua function with empty upvalues. */
 GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env)
 {
@@ -502,10 +540,19 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 {
   GCfunc *fn;
   MSize i, nuv;
-  fn = func_newL(L, pt, lj_funcL_env_acq(parent));
-  nuv = pt->sizeuv;
   if (base == NULL)
     base = L->base;
+  nuv = pt->sizeuv;
+  if (nuv == 1 && proto_celluv(pt)) {
+    uint32_t v = proto_uv(pt)[0];
+    if ((v & PROTO_UV_LOCAL)) {
+      int32_t slotno = (int32_t)(v & 0xffu);
+      TValue *slot = base + slotno;
+      if (itype(slot) != LJ_TUPVAL)
+	return func_newL_gc1uv_chain(L, base, pt, parent, slotno, slot, v);
+    }
+  }
+  fn = func_newL(L, pt, lj_funcL_env_acq(parent));
   for (i = 0; i < nuv; i++) {
     uint32_t v = proto_uv(pt)[i];
     GCupval *uv;

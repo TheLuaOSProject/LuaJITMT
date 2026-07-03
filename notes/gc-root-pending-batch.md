@@ -55,6 +55,14 @@
   until both payloads and edges have been release-published. The helper uses the
   known tail directly, so fallback/global-root publication does not walk
   uninitialized tail links.
+- 2026-07-03 generic one-upvalue follow-up: the generic `FNEW` fallback now uses
+  the same chain publication when the callee prototype has exactly one
+  source/v4 local cell upvalue and the parent frame slot is still raw. This
+  covers nonnumeric captures and numeric fallback cases without changing
+  inherited-cell behavior: if the slot already contains `LJ_TUPVAL`, the normal
+  shared-cell path still reuses that cell. The chain is release-published only
+  after the fresh `GCfunc`, fresh `GCupval`, upvalue payload, function uv slot,
+  and parent-slot promotion are initialized.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

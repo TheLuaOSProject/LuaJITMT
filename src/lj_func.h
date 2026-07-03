@@ -47,6 +47,8 @@ LJ_FUNC uint32_t lj_func_test_gc1num_bump_fallback_calls(void);
 LJ_FUNC void lj_func_test_reset_gc1num_bump_fallback_calls(void);
 LJ_FUNC uint32_t lj_func_test_gc1num_bump_interp_calls(void);
 LJ_FUNC void lj_func_test_reset_gc1num_bump_interp_calls(void);
+LJ_FUNC uint32_t lj_func_test_gc1uv_chain_calls(void);
+LJ_FUNC void lj_func_test_reset_gc1uv_chain_calls(void);
 #endif
 LJ_FUNC void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *c);
 

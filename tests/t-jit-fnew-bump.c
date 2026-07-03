@@ -1,5 +1,5 @@
 /*
-** Focused regression test for the numeric one-upvalue FNEW bump-pair path.
+** Focused regression test for one-upvalue FNEW allocation/publication paths.
 */
 
 #include <assert.h>
@@ -159,6 +159,7 @@ static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  la_store64_rel(&tg->local_total, 0);
   lj_tg_mark_active_rel(tg, 0);
   lj_tg_alloc_black_rel(tg, 1);
 
@@ -257,6 +258,43 @@ static void test_interpreter_numeric_fast_path(lua_State *L)
   assert(lj_func_test_gc1num_bump_interp_calls() > interp0);
 }
 
+static void test_interpreter_generic_oneuv_chain(lua_State *L)
+{
+  uint32_t chain0, chain1;
+  const char *code =
+    "jit.off()\n"
+    "local s = {}\n"
+    "for i = 1, 40 do\n"
+    "  local x = 'v' .. i\n"
+    "  s[i] = function()\n"
+    "    return x\n"
+    "  end\n"
+    "end\n"
+    "assert(s[1]() == 'v1')\n"
+    "assert(s[40]() == 'v40')\n"
+    "assert(debug.upvalueid(s[1], 1) ~= debug.upvalueid(s[2], 1))\n"
+    "local name = debug.setupvalue(s[1], 1, 'changed')\n"
+    "assert(name == 'x', name)\n"
+    "assert(s[1]() == 'changed')\n"
+    "assert(s[2]() == 'v2')\n"
+    "local a, b\n"
+    "do\n"
+    "  local x = { n = 10 }\n"
+    "  a = function() x = { n = x.n + 1 }; return x.n end\n"
+    "  b = function() x = { n = x.n + 1 }; return x.n end\n"
+    "end\n"
+    "assert(debug.upvalueid(a, 1) == debug.upvalueid(b, 1))\n"
+    "assert(a() == 11)\n"
+    "assert(b() == 12)\n"
+    "jit.on()\n";
+
+  lj_func_test_reset_gc1uv_chain_calls();
+  chain0 = lj_func_test_gc1uv_chain_calls();
+  run_script(L, code, "interpreter generic one-upvalue FNEW chain");
+  chain1 = lj_func_test_gc1uv_chain_calls();
+  assert(chain1 > chain0);
+}
+
 static void test_accounting_fast_direct(lua_State *L, global_State *g,
 					TGState *tg)
 {
@@ -330,6 +368,7 @@ int main(void)
   test_accounting_fallback(L, g, tg);
   test_traced_mark_active_fallback(L, g, tg);
   test_traced_alloc_black_inline(L, g, tg);
+  test_interpreter_generic_oneuv_chain(L);
 
   lua_close(L);
   puts("t-jit-fnew-bump OK");
