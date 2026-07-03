@@ -346,7 +346,7 @@ static GCfunc *func_newL_gc1num_bump_forjit(lua_State *L, global_State *g,
   GCupval *uv;
   TValue tv, *slot;
   GCobj *oldhead;
-  uint32_t cell, uvcell, end, next, i, black;
+  uint32_t cell, uvcell, end, next, black;
 
   if (g == NULL || tg == NULL ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
@@ -359,14 +359,13 @@ static GCfunc *func_newL_gc1num_bump_forjit(lua_State *L, global_State *g,
 
   /*
   ** Match the empty-table fast path: only consume the current bump run when
-  ** no traversable free-run bin could satisfy either object. That preserves
-  ** allocator reuse order and keeps this helper a pure no-contention bump
-  ** specialization for the freshly allocated function/upvalue pair.
+  ** the owner-local free-run mask says no bin could satisfy either object.
+  ** That preserves allocator reuse order and keeps this helper a pure
+  ** no-contention bump specialization for the fresh function/upvalue pair.
   */
-  for (i = (fncells < uvcells ? fncells : uvcells) - 1u;
-       i < LJ_ALLOC_NBINS; i++)
-    if (tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] != NULL)
-      return NULL;
+  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
+				fncells < uvcells ? fncells : uvcells))
+    return NULL;
 
   b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   a = b->a;

@@ -2671,7 +2671,13 @@ void *lj_mem_grow(lua_State *L, void *p, MSize *szp, MSize lim, MSize esz)
   return p;
 }
 
-/* Account a dead traversable GC object body for later arena bitmap reclaim. */
+/*
+** Account a dead traversable GC object body for later arena bitmap reclaim.
+** A successful deferral means the type-specific destructor has finished and
+** the body is only waiting for bitmap reuse. Stamp gct=0 here as well as in
+** the legacy sweep callers so arena scans do not mistake stale header bytes in
+** reused cells for a live object that still needs a destructor.
+*/
 int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
 {
   TGState *tg = G2TG(g);
@@ -2688,5 +2694,6 @@ int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
       !lj_arena_bm_get(a->block, cell))
     return 0;
   lj_gc_total_sub(g, osize);
+  ((GCobj *)p)->gch.gct = 0;
   return 1;
 }

@@ -32,6 +32,23 @@
   (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP|LJ_AF_FULL)
 #define LJ_AF_HUGE_MAGIC	0x4c4a4800u
 
+static LJ_AINLINE uint32_t lj_arena_bin_from_ncells(uint32_t ncells)
+{
+  if (ncells == 0)
+    return LJ_ALLOC_NBINS;
+  return ncells < LJ_ALLOC_NBINS ? ncells - 1u : LJ_ALLOC_NBINS - 1u;
+}
+
+static LJ_AINLINE uint32_t lj_arena_binmask_from_bin(uint32_t bin)
+{
+  return bin < LJ_ALLOC_NBINS ? (~(uint32_t)0 << bin) : 0;
+}
+
+static LJ_AINLINE uint32_t lj_arena_binmask_from_ncells(uint32_t ncells)
+{
+  return lj_arena_binmask_from_bin(lj_arena_bin_from_ncells(ncells));
+}
+
 typedef struct GCArena GCArena;
 typedef struct GreyStack GreyStack;
 typedef struct LJArenaFreeRun LJArenaFreeRun;
@@ -93,6 +110,7 @@ struct LJArenaBump {
 struct TGAlloc {
   LJArenaBump bump[LJ_ARENA_NKINDS];
   LJArenaFreeRun *bins[LJ_ARENA_NKINDS][LJ_ALLOC_NBINS];
+  uint32_t binmask[LJ_ARENA_NKINDS];
   GCArena *owned[LJ_ARENA_NKINDS];
   GCArena *needsweep[LJ_ARENA_NKINDS];
   uint32_t sweep_epoch;
@@ -121,6 +139,19 @@ static LJ_AINLINE void lj_arena_alloc_black_rel(TGAlloc *alloc,
 						uint8_t alloc_black)
 {
   la_store8_rel(&alloc->alloc_black, alloc_black);  /* 05 section 5.5. */
+}
+
+static LJ_AINLINE uint32_t lj_arena_alloc_binmask(const TGAlloc *alloc,
+						  uint32_t kind)
+{
+  return kind < LJ_ARENA_NKINDS ? alloc->binmask[kind] : 0;
+}
+
+static LJ_AINLINE int lj_arena_alloc_has_run_ge(const TGAlloc *alloc,
+						uint32_t kind, uint32_t ncells)
+{
+  return (lj_arena_alloc_binmask(alloc, kind) &
+	  lj_arena_binmask_from_ncells(ncells)) != 0;
 }
 
 struct HugeTab {

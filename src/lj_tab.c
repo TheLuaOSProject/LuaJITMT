@@ -1060,7 +1060,7 @@ static GCtab *tab_new0_bump_forjit(lua_State *L, global_State *g, TGState *tg)
   GCArena *a;
   GCtab *t;
   GCobj *head;
-  uint32_t cell, end, next, i;
+  uint32_t cell, end, next;
   UNUSED(L);
   if (g == NULL || tg == NULL ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
@@ -1071,9 +1071,8 @@ static GCtab *tab_new0_bump_forjit(lua_State *L, global_State *g, TGState *tg)
       lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - sizeof(GCtab))
     return NULL;
   b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
-  for (i = ncells - 1u; i < LJ_ALLOC_NBINS; i++)
-    if (tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] != NULL)
-      return NULL;
+  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
+    return NULL;
   a = b->a;
   if (a == NULL)
     return NULL;

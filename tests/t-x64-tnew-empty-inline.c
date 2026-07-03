@@ -99,6 +99,8 @@ static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
   for (i = 4; i < LJ_ALLOC_NBINS; i++)
     assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
+  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
+				    TNEW_EMPTY_NCELLS));
   assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
 
   ljt_lua_pcall(L, 0, 1, "empty TNEW inline pcall");
@@ -143,6 +145,8 @@ static void test_jit_helper_inline_empty_tnew(lua_State *L, global_State *g,
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
   for (i = 4; i < LJ_ALLOC_NBINS; i++)
     assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
+  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
+				    TNEW_EMPTY_NCELLS));
   assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
 
   t = lj_tab_new0_forjit(L);

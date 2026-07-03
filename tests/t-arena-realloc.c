@@ -28,15 +28,35 @@ static void check_seq(const uint8_t *p, size_t n, uint8_t base)
 int main(void)
 {
   PRNGState rs;
-  TGAlloc alloc;
+  TGAlloc alloc, alloc2;
   void *p1, *p2, *p3, *p4, *p5, *p6, *hp, *hp2, *hp3;
+  void *q1, *q2, *q3;
   GCArena *a;
-  uint32_t c1, c3, c4, c5;
+  uint32_t c1, c3, c4, c5, qmask;
   size_t hsize = LJ_HUGE_THRESHOLD + 100u;
   size_t hsize2 = (size_t)LJ_ARENA_SIZE * 2u + 257u;
 
   lj_prng_seed_fixed(&rs);
   lj_arena_alloc_init(&alloc);
+  lj_arena_alloc_init(&alloc2);
+
+  q1 = lj_arena_alloc(&alloc2, &rs, 32, 0);
+  q2 = lj_arena_alloc(&alloc2, &rs, 32, 0);
+  assert(q1 != NULL && q2 != NULL);
+  assert(alloc2.binmask[LJ_ARENAK_PLAIN] == 0);
+  lj_arena_free(&alloc2, q1, 32);
+  qmask = (uint32_t)1u << lj_arena_bin_from_ncells(lj_arena_ncells(32));
+  assert(alloc2.binmask[LJ_ARENAK_PLAIN] == qmask);
+  assert(lj_arena_alloc_has_run_ge(&alloc2, LJ_ARENAK_PLAIN,
+				   lj_arena_ncells(32)));
+  assert(!lj_arena_alloc_has_run_ge(&alloc2, LJ_ARENAK_PLAIN,
+				    lj_arena_ncells(48)));
+  q3 = lj_arena_alloc(&alloc2, &rs, 32, 0);
+  assert(q3 == q1);
+  assert(alloc2.binmask[LJ_ARENAK_PLAIN] == 0);
+  lj_arena_free(&alloc2, q2, 32);
+  lj_arena_free(&alloc2, q3, 32);
+  lj_arena_alloc_fini(&alloc2);
 
   p1 = lj_arena_alloc(&alloc, &rs, 64, 0);
   p2 = lj_arena_alloc(&alloc, &rs, 32, 0);

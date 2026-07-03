@@ -331,6 +331,7 @@
 #define TAB_COLO_SLOTS		((int)sizeof(GCtab))
 #define TAB_EMPTY_SIZE		((int)sizeof(GCtab))
 #define TAB_EMPTY_NCELLS	((int)((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT))
+#define TAB_EMPTY_BINMASK	((int32_t)(~((1u << (TAB_EMPTY_NCELLS-1))-1u)))
 #define ARENA_BLOCK_OFS		((int)offsetof(GCArena, block))
 #define ARENA_MARK_OFS		((int)offsetof(GCArena, mark))
 #define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
@@ -4210,61 +4211,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov r9, [DISPATCH+DISPATCH_TG(local_total)]
     |  cmp r9, LJ_GC2_ACCT_FLUSH-TAB_EMPTY_SIZE
     |  jae >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][4])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][5])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][6])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][7])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][8])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][9])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][10])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][11])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][12])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][13])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][14])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][15])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][16])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][17])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][18])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][19])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][20])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][21])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][22])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][23])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][24])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][25])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][26])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][27])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][28])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][29])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][30])], 0
-    |  jne >7
-    |  cmp aword [DISPATCH+DISPATCH_TG(alloc.bins[LJ_ARENAK_TRAVERSABLE][31])], 0
+    |  test dword [DISPATCH+DISPATCH_TG(alloc.binmask[LJ_ARENAK_TRAVERSABLE])], TAB_EMPTY_BINMASK
     |  jne >7
     |  mov r8, [DISPATCH+DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].a)]
     |  test r8, r8
