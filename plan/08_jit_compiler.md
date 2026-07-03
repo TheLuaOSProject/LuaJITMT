@@ -289,9 +289,13 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   barriers or handshake actions. A narrow M6 bridge records table-slot stores
   on Linux/x64 and lowers them through release-store hash/array helpers with
   the AREF/HREF-derived table parent. Numeric `NEWREF` stores use a generic
-  returned-slot helper because the slot may be in the array part. The helpers
-  run the parent-aware value barrier, and existing weak table stores also call
-  the P_WEAK weak-write bridge. When a helper receives a visible
+  returned-slot helper because the slot may be in the array part. Pre-MT
+  nonnumeric `NEWREF` hash stores with primitive/non-GC values use the
+  `lj_tab_newkey()` returned value slot directly; insertion still owns key
+  publication and the weak-key barrier, while active/entering-MT and GC-object
+  value stores keep helper routing. The helpers run the parent-aware value
+  barrier, and existing weak table stores also call the P_WEAK weak-write
+  bridge. When a helper receives a visible
   `LJ_TFORWARD` destination from the parent's current generation, it resolves
   the destination through `TabArrayHdr.next_gen` or `TabNodeHdr.next_gen`
   before publishing. Previous-nil in-bounds array slots, existing hash slots

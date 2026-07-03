@@ -2170,6 +2170,15 @@ static int asm_ahstore_premt_direct_ok(ASMState *as, IRIns *ir)
   xref = IR(ir->op1);
   if (ir->o == IR_ASTORE)
     return xref->o == IR_AREF;
+  if (xref->o == IR_NEWREF) {
+    IRType1 kt = IR(xref->op2)->t;
+    /* Non-numeric NEWREF returns a hash value slot. Before MT activation,
+    ** lj_tab_newkey() cannot race a secondary resize and already publishes the
+    ** key/weak-key edge; primitive values can use the returned slot directly.
+    ** Numeric NEWREF may resolve to the array part and keeps helper routing.
+    */
+    return !(irt_isnum(kt) || (LJ_DUALNUM && irt_isinteger(kt)));
+  }
   return xref->o == IR_HREF || xref->o == IR_HREFK;
 }
 

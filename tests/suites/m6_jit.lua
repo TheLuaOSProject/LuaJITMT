@@ -895,6 +895,37 @@ assert(out.stable == 40)
 assert(util.traceinfo(1), "trace-local new hash store did not trace")
 ]=], { "TNEW", "NEWREF", "HSTORE", "XPOLL" }, "trace-local new hash store")
 
+      local newref_direct_dump =
+        t:tmp("lj-m6-premt-newref-hstore-direct.dump")
+      luajit_dump(t, newref_direct_dump, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+jit.off()
+local keys = {}
+for i = 1, 128 do keys[i] = "k" .. i end
+jit.on()
+local h = {}
+for i = 1, 80 do
+  h[keys[(i % 128) + 1]] = i
+end
+assert(h.k1 == nil and h.k80 == 79)
+]=], { timeout = "20s" })
+      do
+        local data = t:read(newref_direct_dump)
+        if not (contains(data, " NEWREF ") and contains(data, " HSTORE ")) then
+          error("pre-MT new hash store dump missed NEWREF/HSTORE:\n" ..
+                data, 0)
+        end
+        if not contains(data, "lj_tab_newkey") then
+          error("pre-MT new hash store did not call lj_tab_newkey:\n" ..
+                data, 0)
+        end
+        if contains(data, "lj_tab_storetv_forjit_hash") then
+          error("pre-MT primitive NEWREF hash store used helper route:\n" ..
+                data, 0)
+        end
+      end
+
       assert_ir_dump_probe_all_contains(t, "lj-m6-oldnil-hstore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
