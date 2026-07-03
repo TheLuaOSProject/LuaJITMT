@@ -158,12 +158,13 @@ Safepoint native acknowledgement was also tightened: remote native acks do not
 consume `HS_SCAN_ROOTS` for TGs that own a Lua stack, and owner-side native-leave
 scans walk frame headers before raw slots when the owner is in an interpreter
 frame. If the owner TG is still in a trace/native helper (`jit_base` or positive
-trace `vmstate`), GC2 now preserves the whole stack storage and does not decode
-`L->base` as an interpreter frame chain. The executing trace is kept through the
-per-TG trace root, which preserves its prototype/IR graph without trusting a
-JIT-owned frame layout. The assembler's unpublished `J->curfinal` trace copy is
-also preserved as raw arena memory during root scans; it is not a semantic trace
-root until `trace_save()` publishes it.
+trace `vmstate`), both legacy GC and GC2 now preserve the whole stack storage and
+do not decode `L->base` as an interpreter frame chain. The executing trace is
+kept through `gc_traverse_curtrace()` and the per-TG trace root, which preserve
+its prototype/IR graph without trusting a JIT-owned frame layout. GC2 also
+preserves the assembler's unpublished `J->curfinal` trace copy as raw arena
+memory during root scans; it is not a semantic trace root until `trace_save()`
+publishes it.
 
 Validation:
 

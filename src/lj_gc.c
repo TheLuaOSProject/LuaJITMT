@@ -1198,6 +1198,34 @@ static int gc_thread_is_remote_current(global_State *g, lua_State *th)
 	 lj_tg_load_cur_L(tg) == th && th != lj_tg_cur_L(g);
 }
 
+static int gc_thread_is_jit_current(global_State *g, lua_State *th)
+{
+#if LJ_HASJIT
+  uint32_t owner;
+  TGState *tg = NULL;
+  if (!g || !th)
+    return 0;
+  owner = lj_state_owner_acq(th);
+  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
+    tg = lj_tg_find_owner(g, owner);
+  else if (th == lj_tg_cur_L(g))
+    tg = G2TG(g);
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != th)
+    return 0;
+  /*
+  ** Trace/native helpers own the current frame layout until jit_base and the
+  ** positive trace vmstate are cleared. Legacy root marking mirrors GC2 here:
+  ** preserve raw stack storage and let gc_traverse_curtrace() mark the trace
+  ** graph instead of decoding JIT-owned frame headers as interpreter frames.
+  */
+  return lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0;
+#else
+  UNUSED(g); UNUSED(th);
+  return 0;
+#endif
+}
+
 /* Traverse the frame structure of a stack. */
 static MSize gc_traverse_frames(global_State *g, lua_State *th)
 {
@@ -1313,19 +1341,21 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   uint32_t owner;
   int owned;
   int remote_current;
+  int jit_current;
   lua_State *cur_L;
   lj_gc_arena_markmem(g, tvref(th->stack));
   cur_L = lj_tg_cur_L(g);
   owner = lj_state_owner_acq(th);
   owned = owner != 0 && owner != LJ_THREAD_GCSCAN && th != cur_L;
   remote_current = gc_thread_is_remote_current(g, th);
-  if (owned || remote_current) {
+  jit_current = gc_thread_is_jit_current(g, th);
+  if (owned || remote_current || jit_current) {
     top = tvref(th->maxstack);
     used = (MSize)(top - tvref(th->stack));
   } else {
     used = gc_traverse_frames(g, th);
   }
-  if (!remote_current && th == cur_L &&
+  if (!remote_current && !jit_current && th == cur_L &&
       th->base > tvref(th->stack) + 1 + LJ_FR2) {
     top = gc_active_thread_top(th, top);
   } else if (tvref(th->stack) + used > top) {
@@ -1335,7 +1365,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     lj_tv_load_acq(&tv, o);
     gc_mark_thread_root_tv(g, &tv);
   }
-  if (!owned && !remote_current && g->gc.state == GCSatomic) {
+  if (!owned && !remote_current && !jit_current && g->gc.state == GCSatomic) {
     top = tvref(th->stack) + th->stacksize;
     for (; o < top; o++)  /* Clear unmarked slots. */
       setnilV(o);
