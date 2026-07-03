@@ -315,4 +315,8 @@ repatching the claims above:
   The stress now reports recent worker/churn progress, live trace count, and GC2
   telemetry before surfacing a timeout/error.
 - GC root publication stress across pending-root drains, active `mt_entering`,
-  and GC2 worker activity.
+  and GC2 worker activity. Follow-up coverage extends
+  `t-gc-active-thread-roots.lua`: spawned workers keep table/closure roots live
+  while parked, the main thread drives collection with parked GC2 workers
+  enabled, and short-lived spawn/join churn exercises real `mt_entering`
+  windows while weak observers verify worker-owned roots survive.
