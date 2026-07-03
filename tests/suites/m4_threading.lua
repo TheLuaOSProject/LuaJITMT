@@ -85,15 +85,15 @@ return function(add)
 
           for _, path in ipairs({ marker, spin_marker }) do
             local data = t:read(path)
-            local first = checks.artifact_lines(data)[1]
+            local first = checks.public_text_lines(data)[1]
             if first ~= "false" then
               error("shutdown marker first line: expected false, got " ..
                     tostring(first), 2)
             end
-            checks.assert_artifact_contains("shutdown interruption marker",
-                                            data,
-                                            "thread interrupted: VM shutdown",
-                                            "marker text")
+            checks.assert_public_text_contains("shutdown interruption marker",
+                                               data,
+                                               "thread interrupted: VM shutdown",
+                                               "marker text")
           end
         end)
     end

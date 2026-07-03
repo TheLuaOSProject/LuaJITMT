@@ -122,8 +122,8 @@ return function(add)
       capture_luajit(t, { "-e", vmevent_native_stdio_smoke() }, out, {
         stderr_to_stdout = true
       })
-      checks.assert_artifact_all_contains("VM-event native stdio output",
-                                          t:read(out), {
+      checks.assert_public_text_all_contains("VM-event native stdio output",
+                                             t:read(out), {
         "VM handler failed: ",
         "vmevent native stdio smoke"
       }, "captured output")
