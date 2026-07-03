@@ -1016,8 +1016,10 @@ assert(util.traceinfo(1), "numeric array store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
+jit.off()
 local b = {}
 for i = 1, 256 do b[i] = 0 end
+jit.on()
 for i = 1, 80 do
   local j = (i % 256) + 1
   b[j] = i + 0.5
@@ -1036,10 +1038,13 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
 ]=], { timeout = "20s" })
       do
         local data = t:read(single_dump)
-        if not (contains(data, "lock cmpxchg") and
-                contains(data, "lj_tab_storetv_forjit_array_nogc") and
-                contains(data, "lj_tab_storetv_forjit_hash")) then
-          error("single-thread published table stores missed helper/CAS route:\n" ..
+        if not (contains(data, " ASTORE ") and contains(data, " HSTORE ")) then
+          error("single-thread published table store dump missed stores:\n" ..
+                data, 0)
+        end
+        if contains(data, "lock cmpxchg") or
+           contains(data, "lj_tab_storetv_forjit") then
+          error("single-thread primitive table stores used helper/CAS route:\n" ..
                 data, 0)
         end
       end

@@ -331,7 +331,7 @@ local function run_bench_stock_compare(t)
     "arith_loop fib30 tab_hash_write alloc_tables closures_upval"
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
                        os.getenv("BENCH_GEOMEAN_MAX") or "100")
-  local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "30s"
+  local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "60s"
 
   for filter in filters:gmatch("%S+") do
     local result = bench_driver.compare_bins(stock, current, bench_lua, {

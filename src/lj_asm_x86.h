@@ -2160,6 +2160,19 @@ static int asm_ahstore_can_inline_hash_tvalue(ASMState *as, IRIns *ir)
 	 (xref->o == IR_HREF || xref->o == IR_HREFK);
 }
 
+static int asm_ahstore_premt_direct_ok(ASMState *as, IRIns *ir)
+{
+  IRIns *xref;
+  if (mt_active_or_entering_acq(J2G(as->J)) || !asm_ahstore_can_inline_tvalue(ir->t))
+    return 0;
+  if (ir->o != IR_ASTORE && ir->o != IR_HSTORE)
+    return 0;
+  xref = IR(ir->op1);
+  if (ir->o == IR_ASTORE)
+    return xref->o == IR_AREF;
+  return xref->o == IR_HREF || xref->o == IR_HREFK;
+}
+
 static IRRef asm_ahstore_hash_tabref(ASMState *as, IRIns *xref)
 {
   if (xref->o == IR_HREFK)
@@ -2370,13 +2383,18 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
     asm_ustore_forjit(as, ir);
     return;
   }
-  if (asm_ahstore_trace_local_direct_ok(as, ir) && !irt_isgcv(ir->t)) {
+  if ((asm_ahstore_trace_local_direct_ok(as, ir) ||
+       asm_ahstore_premt_direct_ok(as, ir)) && !irt_isgcv(ir->t)) {
     /* Non-GC values cannot become missing arena edges. GC-object stores into a
     ** trace-local table still use helpers: the table can escape later in the
-    ** same trace, after the store has already happened. Published ASTORE/HSTORE
-    ** paths use helpers even without active MT because GC2 arena marks and
-    ** weak/remembered barriers are required in ordinary single-thread JIT code
-    ** as soon as an incremental/generational mark can overlap a trace.
+    ** same trace, after the store has already happened. Published pre-MT
+    ** primitive/number stores can use the stock lowering: they do not create
+    ** GC-object value edges, the recorder still emits table/metamethod/barrier
+    ** guards such as TBAR where needed, and the first MT activation flushes all
+    ** existing traces before secondary Lua threads run. Once mt_entering or
+    ** mt_active is visible, published table stores keep the lock-free CAS/helper
+    ** route so concurrent resize, weak-table, and retired-node validation stay
+    ** outside raw trace stores.
     */
   } else if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
     asm_ahstore_inline_array_tvalue(as, ir);
