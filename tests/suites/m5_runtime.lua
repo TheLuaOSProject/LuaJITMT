@@ -263,6 +263,8 @@ return function(add)
     name = "m5_os_reentrant",
     description = "os.date/tmpname reentrancy and setlocale behavior",
     run = function(t)
+      build_and_run_c(t, t:tmp("lj_t-os-setlocale-entering"),
+                      "t-os-setlocale-entering.c")
       build_and_run_luajit_script(t, "t-os-reentrant.lua", nil, {
         joff = true,
         env = {

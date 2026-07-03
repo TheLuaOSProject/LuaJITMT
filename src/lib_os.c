@@ -384,15 +384,27 @@ static void os_setlocale_leaveexclusive(global_State *g)
   mt_gc_exclusive_futex_wake(g, INT_MAX);
 }
 
+static int os_setlocale_threading_active(global_State *g)
+{
+  /*
+  ** Process-global locale mutation is only stock-safe before any concurrent
+  ** VM entry is active or in progress. An mt_entering thread has not yet
+  ** published mt_live, but it has crossed the attach/spawn boundary and must
+  ** not overlap a process-wide C library locale change.
+  */
+  return mt_active_acq(g) != 0 || mt_live_acq(g) != 0 ||
+	 mt_entering_acq(g) != 0;
+}
+
 static int os_setlocale_enterexclusive(lua_State *L)
 {
   global_State *g = G(L);
   for (;;) {
     uint32_t expect = 0;
-    if (mt_active_acq(g) != 0 || mt_live_acq(g) != 0)
+    if (os_setlocale_threading_active(g))
       return 0;
     if (mt_gc_exclusive_cas(g, &expect, 1)) {
-      if (mt_active_acq(g) == 0 && mt_live_acq(g) == 0)
+      if (!os_setlocale_threading_active(g))
 	return 1;
       os_setlocale_leaveexclusive(g);
       return 0;
