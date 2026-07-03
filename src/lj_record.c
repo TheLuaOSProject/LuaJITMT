@@ -2553,21 +2553,24 @@ have_uref:
 /* Find the latest traced CNEW helper for this cell slot, if any. */
 static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
 {
-  IRRef ref;
-  IRIns *ir;
-  for (ref = J->chain[IR_CALLS]; ref; ref = ir->prev) {
-    IRIns *arg;
-    ir = IR(ref);
-    if (ir->op2 != IRCALL_lj_func_newuvcell_forjit || ir->op1 < REF_FIRST)
-      continue;
-    arg = IR(ir->op1);
-    if (arg->o == IR_CARG && arg->op1 == REF_BASE && irref_isk(arg->op2)) {
-      IRIns *slot = IR(arg->op2);
-      if (slot->o == IR_KINT && slot->i == (int32_t)slotno)
-	return TREF(ref, IRT_PGC);
+  IRRef ref, chain, best = 0;
+  for (chain = 0; chain < 2; chain++) {
+    IRIns *ir;
+    ref = J->chain[chain == 0 ? IR_CALLA : IR_CALLS];
+    for (; ref; ref = ir->prev) {
+      IRIns *arg;
+      ir = IR(ref);
+      if (ir->op2 != IRCALL_lj_func_newuvcell_forjit || ir->op1 < REF_FIRST)
+	continue;
+      arg = IR(ir->op1);
+      if (arg->o == IR_CARG && arg->op1 == REF_BASE && irref_isk(arg->op2)) {
+	IRIns *slot = IR(arg->op2);
+	if (slot->o == IR_KINT && slot->i == (int32_t)slotno)
+	  best = ref > best ? ref : best;
+      }
     }
   }
-  return 0;
+  return best ? TREF(best, IRT_PGC) : 0;
 }
 
 /* Emit TMPREF for a value helper argument. */

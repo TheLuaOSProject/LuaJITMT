@@ -166,7 +166,12 @@ GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base, int32_t slot,
 
 GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
 {
-  GCupval *uv = lj_func_newuvcell(L);
+  /*
+  ** Trace assembly records BC_CNEW as an allocation call and owns the pacing
+  ** check before the helper runs. Keep the interpreter helper as the owner of
+  ** lj_gc_check_fixtop().
+  */
+  GCupval *uv = func_newuvclosed(L);
   setgcV(L, base + slot, obj2gco(uv), LJ_TUPVAL);
   return uv;
 }

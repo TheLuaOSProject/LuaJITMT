@@ -90,6 +90,16 @@ int main(void)
     "for i=1,200 do x = ct(i) end\n"
     "assert(x.x == 200)\n");
 
+  run_hard_alloc_trace(L, g, "CELL_CNEW",
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
+    "local keep\n"
+    "for i=1,200 do\n"
+    "  local function f() return f end\n"
+    "  keep = f\n"
+    "end\n"
+    "assert(type(keep) == 'function' and keep() == keep)\n");
+
   run_hard_alloc_trace(L, g, "SNEW",
     "jit.flush()\n"
     "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
@@ -101,6 +111,6 @@ int main(void)
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   lj_gc2_cycle_to_idle(g);
   lua_close(L);
-  puts("t-gc2-jit-hard-check OK: TNEW/CNEW/SNEW x64 GC checks enter GC2 hard assist");
+  puts("t-gc2-jit-hard-check OK: TNEW/CNEW/CELL_CNEW/SNEW x64 GC checks enter GC2 hard assist");
   return 0;
 }
