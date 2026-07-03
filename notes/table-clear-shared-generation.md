@@ -9,6 +9,10 @@
   `mt_active` is still zero. After threading activation it enters the table
   structural token, clears array and hash values through current-slot/keyed CAS,
   and leaves keys/chains intact as dead-key style tombstones.
+- Follow-up: `mt_entering != 0` also takes the shared clear path before the
+  one-way `mt_active` latch is published. A secondary attach/spawn handoff is
+  already in progress in that window, so `table.clear` must not use the private
+  raw-clear path.
 - The shared path waits out transient key locks and FFI finalizer publication
   claims, and does not overwrite `FORWARD` markers. JIT-recorded `table.clear`
   now calls the same helper with the implicit `lua_State *`, so traces compiled
@@ -22,3 +26,4 @@ Verification:
 
 - `make clean && make -j$(nproc)`
 - `LJ_TEST_DISABLE_BUILD_CACHE=1 LJ_M5_TAB_RESIZE_STRESS_CASES=tableclear LJ_M5_TAB_RESIZE_STRESS_REPS=192 LJ_M5_TAB_RESIZE_STRESS_THREADS=2 LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS=64 tools/ci/lua_test.sh m5_tab_resize_stress`
+- `tools/ci/lua_test.sh m5_tab_clear_entering`

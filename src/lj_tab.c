@@ -96,6 +96,7 @@ static uint32_t tab_struct_tid(lua_State *L)
 #ifdef LJ_TAB_TEST_HELPERS
 static uint32_t tab_test_struct_owner_no_l_futex_waits;
 static uint32_t tab_test_new0_calls;
+static uint32_t tab_test_clear_shared_calls;
 
 static LJ_AINLINE void tab_test_struct_owner_no_l_futex_wait(void)
 {
@@ -105,6 +106,11 @@ static LJ_AINLINE void tab_test_struct_owner_no_l_futex_wait(void)
 static LJ_AINLINE void tab_test_new0_call(void)
 {
   (void)la_add32_acqrel(&tab_test_new0_calls, 1);
+}
+
+static LJ_AINLINE void tab_test_clear_shared_call(void)
+{
+  (void)la_add32_acqrel(&tab_test_clear_shared_calls, 1);
 }
 
 uint32_t lj_tab_test_struct_owner_no_l_futex_waits(void)
@@ -126,9 +132,20 @@ void lj_tab_test_reset_new0_calls(void)
 {
   la_store32_rel(&tab_test_new0_calls, 0);
 }
+
+uint32_t lj_tab_test_clear_shared_calls(void)
+{
+  return la_load32_acq(&tab_test_clear_shared_calls);
+}
+
+void lj_tab_test_reset_clear_shared_calls(void)
+{
+  la_store32_rel(&tab_test_clear_shared_calls, 0);
+}
 #else
 #define tab_test_struct_owner_no_l_futex_wait()		((void)0)
 #define tab_test_new0_call()				((void)0)
+#define tab_test_clear_shared_call()			((void)0)
 #endif
 
 static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
@@ -2500,6 +2517,7 @@ static void tab_clear_shared(lua_State *L, GCtab *t)
   Node *node;
   MSize asize, hmask, i;
   int guard = lj_tab_struct_enter(L, t);
+  tab_test_clear_shared_call();
   asize = lj_tab_array_snapshot_acq(t, &array);
   if (array)
     tab_clear_array_shared(L, t, array, asize);
@@ -2514,7 +2532,12 @@ static void tab_clear_shared(lua_State *L, GCtab *t)
 /* Clear a table. */
 void LJ_FASTCALL lj_tab_clear(lua_State *L, GCtab *t)
 {
-  if (mt_active_acq(G(L)))
+  /*
+  ** mt_entering has not published mt_active yet, but a secondary VM entry is
+  ** already in progress. Avoid private raw clearing while the attach/spawn
+  ** handoff can make the table visible to another thread.
+  */
+  if (mt_active_acq(G(L)) || mt_entering_acq(G(L)) != 0)
     tab_clear_shared(L, t);
   else
     tab_clear_raw(t);

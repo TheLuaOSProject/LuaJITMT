@@ -91,6 +91,21 @@ return function(add)
   })
 
   add({
+    name = "m5_tab_clear_entering",
+    description = "table.clear uses shared path during mt_entering",
+    run = function(t)
+      build.build_and_run_c(t, t:tmp("lj_t-tab-clear-entering"),
+                            "t-tab-clear-entering.c", {
+        clean = true,
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s",
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
+      print("M5 table.clear mt_entering route passed")
+    end
+  })
+
+  add({
     name = "m5_tab_finreg_newkey_stale",
     description = "FINREG new-key helpers abandon stale table generations",
     run = function(t)
