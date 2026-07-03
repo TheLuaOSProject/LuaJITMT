@@ -132,20 +132,38 @@ Looped timing after one warm `fib(30)` still shows a current fork gap:
 
 ## JIT traversal stress
 
-The table traversal stress has a separate JIT recorder failure that predates the
-KEYLOCK/nonblocking-`next()` change. Both current worktree and previous pushed
-commit `4b2c26cb` abort an assertion-build run of:
+The table traversal stress exposed a `BC_KSTR` recorder assertion that predated
+the KEYLOCK/nonblocking-`next()` change. Both current worktree and previous
+pushed commit `4b2c26cb` aborted an assertion-build run of:
 
 - `LJ_M5_TAB_RESIZE_STRESS_CASES=traversal`
 - `LJ_M5_TAB_RESIZE_TRAVERSAL_MODES=next`
 - `LJ_M5_TAB_RESIZE_STRESS_REPS=256`
 - `LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS=64`
 
-The assertion is in `lj_record_ins()` while recording `BC_KSTR`, checking that a
-negative constant index names a string KGC entry. The same traversal case passes
-with `-joff`, and `nextchurn` passes with a heavier `next`-only run. Treat this
-as a JIT recorder stability target rather than a table traversal semantic
-failure.
+The assertion was in `lj_record_ins()` while recording `BC_KSTR`, checking that
+a negative constant index names a string KGC entry. The bytecode and proto KGC
+slot were valid; the referenced `GCstr` had been swept by the legacy string
+intern-table path and its cell reused. GC2 proto traversal had marked the string
+in arena bits, but the legacy string sweeper still uses the classic color byte.
+
+`lj_gc2_markobj()` and the worker mark path now clear the legacy white bits for
+`GCstr` objects marked by GC2. Safepoint native acknowledgement was also tightened:
+remote native acks do not consume `HS_SCAN_ROOTS` for TGs that own a Lua stack,
+and owner-side native-leave scans walk frame headers before raw slots. This keeps
+frame functions/protos and proto KGC strings live without adding a runtime lock.
+
+Validation:
+
+- exact `next`-only traversal reproducer above: passed under an assertion build
+- `tools/ci/lua_test.sh m3_safepoint_handshake`: passed
+- `tools/ci/lua_test.sh m3_gc_active_thread_roots`: passed
+- focused `pairs` traversal and `ipairs` traversal with 512 resize rounds: passed
+
+Residual follow-up: a heavier assertion-build `next` traversal
+(`reps=1024`, `threads=4`, `rounds=256`) now reaches a separate crash, and one
+mixed traversal run exposed a different recorder slot type assertion. Treat those
+as the next stability targets rather than the fixed KGC string-lifetime bug.
 
 ## Benchmark guard
 

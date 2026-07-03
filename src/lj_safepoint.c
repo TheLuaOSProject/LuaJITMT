@@ -378,6 +378,18 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
 
 static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
 {
+  if ((actions & LJ_GC2_HS_SCAN_ROOTS)) {
+    lua_State *L = lj_tg_load_cur_L(tg);
+    /*
+    ** Remote native acknowledgements may apply phase bits and flush buffers, but
+    ** root scans for a TG with a Lua stack must be owner-applied. Lua frame
+    ** functions/protos live in frame headers, not ordinary TValue slots; scanning
+    ** a remote native stack as raw slots can miss the closure/proto edge and free
+    ** live KGC constants.
+    */
+    if (L && tvref(L->stack) != NULL)
+      return 0;
+  }
 #if LJ_HASJIT
   /* A TG leaving mcode keeps jit_base set until vm_exit_interp has restored
   ** from the trace snapshot. Trace-flush boundaries must not remotely ack that

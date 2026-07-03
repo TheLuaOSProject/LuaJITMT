@@ -2873,20 +2873,6 @@ static int gc2_thread_is_remote_current(global_State *g, lua_State *L)
 	 lj_tg_load_cur_L(tg) == L && L != lj_tg_cur_L(g);
 }
 
-static int gc2_thread_is_native_current(global_State *g, lua_State *L)
-{
-  uint32_t owner;
-  TGState *tg;
-  if (!g || !L)
-    return 0;
-  owner = lj_state_owner_acq(L);
-  if (owner == 0 || owner == LJ_THREAD_GCSCAN)
-    return 0;
-  tg = lj_tg_find_owner(g, owner);
-  return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
-	 lj_tg_load_cur_L(tg) == L && lj_tg_in_native_acq(tg) != 0;
-}
-
 static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
 {
   TValue *bot = tvref(L->stack);
@@ -2928,9 +2914,8 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used, *max = tvref(L->maxstack);
-  if (gc2_thread_is_remote_current(g, L) ||
-      gc2_thread_is_native_current(g, L))
-    return max;  /* Current native/remote frame chains are unstable. */
+  if (gc2_thread_is_remote_current(g, L))
+    return max;  /* Remote current frame chains are owner-private. */
   used = L->top - 1;
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
@@ -5957,6 +5942,17 @@ static void *gc2_mark_base(GCobj *o)
   return o;
 }
 
+static LJ_AINLINE void gc2_mark_legacy_string(GCobj *o)
+{
+  /*
+  ** Strings still retire through the intern-table sweep, which uses the legacy
+  ** color byte rather than arena mark bits. A GC2 edge to a string therefore
+  ** has to publish liveness to both collectors.
+  */
+  if (o->gch.gct == ~LJ_TSTR)
+    lj_obj_cleargcflags_atomic(o, LJ_GC_WHITES);
+}
+
 int lj_gc2_markmem(global_State *g, void *p)
 {
   TGState *tg = gc2_tg_for_mem(g, p);
@@ -5994,6 +5990,7 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
+  gc2_mark_legacy_string(o);
   if (marked) {
     uint32_t phase = gc2_phase_acq(g);
     traversable = gc2_mark_base_traversable(g, base);
@@ -6020,6 +6017,7 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
+  gc2_mark_legacy_string(o);
   traversable = gc2_mark_base_traversable(g, base);
   if (marked && (traversable || o->gch.gct == ~LJ_TUDATA)) {
     if (traversable) {
