@@ -775,10 +775,17 @@ return function(add)
     name = "m5_tab_value_publish",
     description = "C-side table value release-publication guards",
     run = function(t)
-      t:build({ clean = true, quiet = true })
+      t:build({
+        clean = true,
+        quiet = true,
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
       run_luajit(t, { "-e", table_value_smoke() })
       build_and_run_c(t, t:tmp("lj_t-tab-cas-store-value"),
-                      "t-tab-cas-store.c", { timeout = "20s" })
+                      "t-tab-cas-store.c", {
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s"
+      })
       print("M5 table value publication guard passed")
     end
   })

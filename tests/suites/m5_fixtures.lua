@@ -79,4 +79,26 @@ return function(add)
       print("M5 string table CAS publication tests passed")
     end
   })
+
+  runtime.add_luajit_script_cases(add, {
+    {
+      name = "m5_strtab_gc_stress",
+      description = "string interning under concurrent legacy string sweep",
+      script = "t-strtab-gc-stress.lua",
+      opts = {
+	timeout = os.getenv("LJ_M5_STRTAB_GC_TIMEOUT") or "30s",
+	env = {
+	  LJ_M5_STRTAB_GC_THREADS =
+	    os.getenv("LJ_M5_STRTAB_GC_THREADS") or "4",
+	  LJ_M5_STRTAB_GC_ITERS =
+	    os.getenv("LJ_M5_STRTAB_GC_ITERS") or "5000",
+	  LJ_M5_STRTAB_GC_SHARED =
+	    os.getenv("LJ_M5_STRTAB_GC_SHARED") or "384",
+	  LJ_M5_STRTAB_GC_ROUNDS =
+	    os.getenv("LJ_M5_STRTAB_GC_ROUNDS") or "384"
+	}
+      },
+      message = "M5 string-table GC/interner stress passed"
+    }
+  })
 end

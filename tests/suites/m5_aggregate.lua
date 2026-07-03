@@ -22,6 +22,7 @@ local m5_concurrent_cases = {
   "m5_tab_value_publish",
   "m5_strtab_prep",
   "m5_strtab_cas",
+  "m5_strtab_gc_stress",
   "m5_itype_nan",
   "m5_itype_sentinel",
   "m5_math_random_tg",
