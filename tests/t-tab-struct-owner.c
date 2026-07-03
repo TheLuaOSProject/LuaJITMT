@@ -231,8 +231,8 @@ static void exercise_direct_owner(lua_State *L)
   same_l.no_l = 0;
   same_l.status = -1;
 
-  lj_tab_test_reset_struct_owner_l_futex_waits();
-  lj_tab_test_reset_struct_owner_no_l_futex_waits();
+  lj_tab_test_reset_struct_owner_l_waits();
+  lj_tab_test_reset_struct_owner_no_l_waits();
 
   assert(pthread_create(&owner_thr, NULL, struct_owner_worker, &owner) == 0);
   assert(pthread_create(&other_thr, NULL, struct_owner_worker, &other) == 0);
@@ -250,9 +250,9 @@ static void exercise_direct_owner(lua_State *L)
 
   store_flag(&same_no_l_start, 1);
   store_flag(&same_l_start, 1);
-  assert(wait_for_count(lj_tab_test_struct_owner_no_l_futex_waits, 1,
+  assert(wait_for_count(lj_tab_test_struct_owner_no_l_waits, 1,
 			1000000));
-  assert(wait_for_count(lj_tab_test_struct_owner_l_futex_waits, 1,
+  assert(wait_for_count(lj_tab_test_struct_owner_l_waits, 1,
 			1000000));
   assert(!load_flag(&same_no_l_entered));
   assert(!load_flag(&same_l_entered));
@@ -268,8 +268,8 @@ static void exercise_direct_owner(lua_State *L)
   assert(other.status == 0);
   assert(same_no_l.status == 0);
   assert(same_l.status == 0);
-  assert(lj_tab_test_struct_owner_l_futex_waits() > 0);
-  assert(lj_tab_test_struct_owner_no_l_futex_waits() > 0);
+  assert(lj_tab_test_struct_owner_l_waits() > 0);
+  assert(lj_tab_test_struct_owner_no_l_waits() > 0);
 }
 
 static void exercise_resize_owner(lua_State *L)

@@ -11,18 +11,18 @@
   A secondary VM entry is already in the lifecycle handoff before `mt_active`
   is visible, so `table.insert()` append/pre-grow and positional shifts must
   acquire the table-local structural owner in that window.
-- Same-table contenders now park on `GCtab.struct_owner` through the existing
-  cross-platform `la_futex_wait()` / `la_futex_wake()` substrate instead of
-  sleeping through the generic fixed 1 ms retry helper. Waiters enter native
-  state around the timed futex wait so safepoint/STOPREQ visibility follows the
-  existing blocking bridge convention.
+- Same-table contenders now use the table retry-yield helpers instead of a
+  fixed timed park on `GCtab.struct_owner`. A Lua-state caller remains
+  native/safepoint visible through `lj_tab_wait_l()`, while TLS-only VM/internal
+  callers use `lj_tab_wait_no_l()` and retry on the next acquire load of the
+  owner word.
 - The earlier direct table-local prototype failed because active-MT shared
   `next()`/optimized `pairs()` tracing was still unsafe under concurrent
   resize/value churn. Current HEAD keeps those shared traversal paths
   interpreted under active MT; with that recorder fence restored, the per-table
   owner stress is stable.
 - Transient `KEYLOCK`, value-publication, and generic FORWARD/generation retry
-  waits now use the table retry-yield helper rather than the old fixed 1 ms
+  waits also use the table retry-yield helper rather than the old fixed 1 ms
   sleep. They remain a bridge because resize/copy progress is still owner-driven
   rather than cooperative; the final design still needs per-generation resize
   ownership, bounded copy cursors, writer helping, and reader hop/retry.

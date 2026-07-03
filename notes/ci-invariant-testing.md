@@ -13,8 +13,8 @@ broken behavior or broken artifacts, not on implementation spelling.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read captured logs, temporary files, imported-suite inputs,
-CSVs, package manifests, release artifacts, bytecode compatibility blobs, and
-other public test artifacts. The harness intentionally has no repository source
+CSVs, package manifests, release artifacts, opaque bytecode round-trip artifacts,
+and other public test artifacts. The harness intentionally has no repository source
 enumeration helper.
 
 Use one of these forms for new coverage:
@@ -25,16 +25,18 @@ Use one of these forms for new coverage:
   native regions, STOPREQ handling, or multithreaded races.
 - A generated artifact check when the artifact itself is the product or
   compatibility surface under test, such as a release archive, install manifest,
-  benchmark CSV, captured process output, or LuaJIT bytecode blob.
+  benchmark CSV, captured process output, or a LuaJIT bytecode blob that is
+  loaded and executed as an opaque artifact.
 - A comment beside the constrained helper, plus a note in `notes/`, when the
   invariant is design guidance that cannot be observed directly. The comment
   should explain the ownership, ordering, or nonblocking reason.
 
 String matching remains useful for public artifacts and process output:
-captured stdout/stderr, generated CSVs, package manifests, release metadata, and
-bytecode compatibility payloads. Generated JIT IR, generated ASM, objdump
-output, and mcode bytes are compiler-internal implementation spelling and are
-not active test gates.
+captured stdout/stderr, generated CSVs, package manifests, and release
+metadata. Bytecode compatibility tests should load and execute dumps rather
+than compare byte spelling. Generated JIT IR, generated ASM, objdump output,
+and mcode bytes are compiler-internal implementation spelling and are not active
+test gates.
 
 Historical entries that mention old wrapper scripts or implementation-detail
 requirements are audit history only. They are not tests to preserve, port,
@@ -66,7 +68,7 @@ validate runtime behavior rather than machine-code byte spelling.
 
 2026-07-03 audit: the active `tools/ci` layer is only the Lua launcher and
 platform build smoke script, and Lua suite file reads are captured logs,
-temporary outputs, benchmark CSVs, bytecode compatibility blobs, or
+temporary outputs, benchmark CSVs, opaque bytecode round-trip artifacts, or
 release/build artifacts. C fixtures may still compile against internal headers
 because they execute lifetime, publication, native-state, and race behavior.
 

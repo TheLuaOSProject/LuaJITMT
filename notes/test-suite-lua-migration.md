@@ -256,9 +256,9 @@ Validation:
 - Historical state: this pass added as a first-class Lua
   suite case and added a thin CI compatibility wrapper.
 - That case and wrapper were removed by the 2026-06-28 legacy wrapper
-  cleanup. Current policy keeps bytecode compatibility blobs as public
-  artifacts, but generated JIT IR/ASM and mcode text are implementation
-  spelling and must not be pass/fail gates.
+  cleanup. Current policy treats bytecode dumps as opaque load/execute
+  artifacts rather than exact byte strings; generated JIT IR/ASM and mcode text
+  are implementation spelling and must not be pass/fail gates.
 
 Validation:
 

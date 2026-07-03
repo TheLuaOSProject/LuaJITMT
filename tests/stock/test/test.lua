@@ -58,12 +58,6 @@ local function default_tags()
     if abi"win" then tags.winabi = true end
     if abi"32bit" then tags.abi32 = true end
     if abi"64bit" then tags.abi64 = true end
-  else
-    local bytecode = string.dump(function()end)
-    if bytecode:find"^\27Lua[\80-\89]" then
-      tags[bytecode:byte(7, 7) == 0 and "be" or "le"] = true
-      tags["abi".. (bytecode:byte(9, 9) * 8)] = true
-    end
   end
   
   return tags

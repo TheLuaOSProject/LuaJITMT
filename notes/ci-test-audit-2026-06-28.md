@@ -101,9 +101,10 @@ to the constrained code.
 - Follow-up stock-behavior correction: bytecode-dump compatibility support for
   stock v2 and transitional v3 dumps was restored. That path is not a
   threading-only legacy entrypoint; it affects `load`, `luaL_loadbuffer*`, and
-  precompiled chunk interoperability. The active `m5_bcdump_compat` fixture
-  mutates bytecode blobs to verify v2/v3 loading while still rejecting
-  lockless-only cell opcodes in old dump versions.
+  precompiled chunk interoperability. Later generated-artifact cleanup removed
+  active bytecode-blob mutation from `m5_bcdump_compat`; current coverage treats
+  dumps as opaque load/execute artifacts and documents malformed-layout rules
+  beside the bytecode reader/writer.
 - Reverted the removal of stock LuaJIT C header aliases such as
   `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
   `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; these are stock

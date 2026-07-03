@@ -6,7 +6,8 @@ Two reported warm-path claims were stale in their strongest form on current
 - Table resize ownership is per table, not universe-global. `GCtab.struct_owner`
   still serializes same-table structural mutation (`lj_tab_resize()`,
   active-MT `table.insert()`, and `table.clear()`), but different tables do not
-  share one global owner word.
+  share one global owner word. Same-table contenders now use the regular table
+  retry-yield discipline, not a fixed 1 ms timed park.
 - Table readers hitting `KEYLOCK` no longer sleep for 1 ms and now avoid the
   no-`lua_State` wait helper on the read-only lookup/traversal surfaces. Direct
   string/integer getters, generic `lj_tab_get()`, and `lj_tab_next()` retry or

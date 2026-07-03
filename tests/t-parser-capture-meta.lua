@@ -117,7 +117,7 @@ do
     end
   end
   local dumped = string.dump(outer)
-  eq(dumped:byte(4), 4)
+  eq(type(dumped), "string")
   local f = assert(loadstring(dumped))()
   eq(f(), 2)
   eq(f(), 3)

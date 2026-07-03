@@ -23,8 +23,6 @@
 #include "lj_cdata.h"
 #endif
 
-#include <limits.h>
-
 #define LJ_TAB_MAXCHAIN		8u
 
 /* -- Object hashing ------------------------------------------------------ */
@@ -107,8 +105,8 @@ static uint32_t tab_struct_tid(lua_State *L)
 }
 
 #ifdef LJ_TAB_TEST_HELPERS
-static uint32_t tab_test_struct_owner_l_futex_waits;
-static uint32_t tab_test_struct_owner_no_l_futex_waits;
+static uint32_t tab_test_struct_owner_l_waits;
+static uint32_t tab_test_struct_owner_no_l_waits;
 static uint32_t tab_test_struct_enter_acquires;
 static uint32_t tab_test_new0_calls;
 static uint32_t tab_test_clear_shared_calls;
@@ -116,14 +114,14 @@ static uint32_t tab_test_tsetm_fast_calls;
 static uint32_t tab_test_vm_array_store_calls;
 static uint32_t tab_test_vm_strhash_store_calls;
 
-static LJ_AINLINE void tab_test_struct_owner_l_futex_wait(void)
+static LJ_AINLINE void tab_test_struct_owner_l_wait(void)
 {
-  (void)la_add32_acqrel(&tab_test_struct_owner_l_futex_waits, 1);
+  (void)la_add32_acqrel(&tab_test_struct_owner_l_waits, 1);
 }
 
-static LJ_AINLINE void tab_test_struct_owner_no_l_futex_wait(void)
+static LJ_AINLINE void tab_test_struct_owner_no_l_wait(void)
 {
-  (void)la_add32_acqrel(&tab_test_struct_owner_no_l_futex_waits, 1);
+  (void)la_add32_acqrel(&tab_test_struct_owner_no_l_waits, 1);
 }
 
 static LJ_AINLINE void tab_test_struct_enter_acquire(void)
@@ -156,24 +154,24 @@ static LJ_AINLINE void tab_test_vm_strhash_store_call(void)
   (void)la_add32_acqrel(&tab_test_vm_strhash_store_calls, 1);
 }
 
-uint32_t lj_tab_test_struct_owner_l_futex_waits(void)
+uint32_t lj_tab_test_struct_owner_l_waits(void)
 {
-  return la_load32_acq(&tab_test_struct_owner_l_futex_waits);
+  return la_load32_acq(&tab_test_struct_owner_l_waits);
 }
 
-void lj_tab_test_reset_struct_owner_l_futex_waits(void)
+void lj_tab_test_reset_struct_owner_l_waits(void)
 {
-  la_store32_rel(&tab_test_struct_owner_l_futex_waits, 0);
+  la_store32_rel(&tab_test_struct_owner_l_waits, 0);
 }
 
-uint32_t lj_tab_test_struct_owner_no_l_futex_waits(void)
+uint32_t lj_tab_test_struct_owner_no_l_waits(void)
 {
-  return la_load32_acq(&tab_test_struct_owner_no_l_futex_waits);
+  return la_load32_acq(&tab_test_struct_owner_no_l_waits);
 }
 
-void lj_tab_test_reset_struct_owner_no_l_futex_waits(void)
+void lj_tab_test_reset_struct_owner_no_l_waits(void)
 {
-  la_store32_rel(&tab_test_struct_owner_no_l_futex_waits, 0);
+  la_store32_rel(&tab_test_struct_owner_no_l_waits, 0);
 }
 
 uint32_t lj_tab_test_struct_enter_acquires(void)
@@ -246,8 +244,8 @@ void lj_tab_test_reset_wait_no_l_calls(void)
   la_store32_rel(&tab_test_wait_no_l_calls, 0);
 }
 #else
-#define tab_test_struct_owner_l_futex_wait()		((void)0)
-#define tab_test_struct_owner_no_l_futex_wait()		((void)0)
+#define tab_test_struct_owner_l_wait()			((void)0)
+#define tab_test_struct_owner_no_l_wait()		((void)0)
 #define tab_test_struct_enter_acquire()			((void)0)
 #define tab_test_new0_call()				((void)0)
 #define tab_test_clear_shared_call()			((void)0)
@@ -258,21 +256,14 @@ void lj_tab_test_reset_wait_no_l_calls(void)
 
 static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
 {
+  UNUSED(t);
+  UNUSED(owner);
   if (L) {
-    uint32_t actions;
-    lj_native_enter(L2TG(L));
-    tab_test_struct_owner_l_futex_wait();
-    lj_tab_struct_owner_futex_wait(t, owner, 1000000);
-    actions = lj_native_leave(L);
-    lj_safepoint_checkstop(L, actions);
+    tab_test_struct_owner_l_wait();
+    lj_tab_wait_l(L);
   } else {
-    TGState *tg = lj_thr_get_tg();
-    if (tg)
-      lj_native_enter(tg);
-    tab_test_struct_owner_no_l_futex_wait();
-    lj_tab_struct_owner_futex_wait(t, owner, 1000000);
-    if (tg)
-      (void)lj_tg_in_native_dec_rel(tg);  /* No Lua stack is available to poll. */
+    tab_test_struct_owner_no_l_wait();
+    lj_tab_wait_no_l();
   }
 }
 
@@ -305,8 +296,11 @@ int lj_tab_struct_enter(lua_State *L, GCtab *t)
 void lj_tab_struct_leave(GCtab *t, int acquired)
 {
   if (acquired) {
+    /*
+    ** Waiters retry with acquire loads after cooperative yield. The release
+    ** store publishes the structural mutation without a timed park/wake path.
+    */
     lj_tab_struct_owner_rel(t, 0);
-    lj_tab_struct_owner_futex_wake(t, INT_MAX);
   }
 }
 

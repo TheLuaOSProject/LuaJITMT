@@ -38,10 +38,10 @@ return function(add)
     },
     {
       name = "m5_bcdump_compat",
-      description = "bytecode dump compatibility C fixture",
+      description = "bytecode dump/load behavior C fixture",
       output = "lj_t-bcdump-current",
       cfile = "t-bcdump-current.c",
-      message = "M5 bytecode dump compatibility tests passed"
+      message = "M5 bytecode dump/load behavior tests passed"
     },
     {
       name = "m5_registry_root",

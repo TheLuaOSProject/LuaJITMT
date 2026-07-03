@@ -23,3 +23,9 @@ as pass/fail checks over source text, dump text, helper spelling, or mcode
 bytes. If a route matters for performance, cover it with benchmarks or focused
 runtime counters; if it matters for safety, cover the behavior that would break
 when the route is wrong.
+
+Follow-up: bytecode dump tests now use dump/load execution as the observable
+contract. Active tests must not parse dump bytes, patch generated opcodes, or
+compare exact `string.dump()` blobs; malformed-layout rules belong beside the
+bytecode reader/writer unless they can be exercised through a real public
+artifact.

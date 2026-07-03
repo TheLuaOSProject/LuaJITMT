@@ -16,6 +16,6 @@
   text for pass/fail.
 - 2026-07-03 follow-up: removed the unused repository source enumerator from
   the Lua harness. `Test:read()` remains for logs, fixture outputs,
-  imported-suite inputs, CSVs, bytecode blobs, and packaging artifacts;
-  implementation rules belong in code comments and notes, with observable
-  behavior covered by fixtures or public artifacts.
+  imported-suite inputs, CSVs, opaque bytecode round-trip artifacts, and
+  packaging artifacts; implementation rules belong in code comments and notes,
+  with observable behavior covered by fixtures or public artifacts.

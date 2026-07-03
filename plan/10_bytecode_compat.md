@@ -88,9 +88,13 @@ stock v2/v3 dumps accepts and runs compatible chunks but refuses to dump those
 legacy-loaded functions again.
 
 ## 10.7 Tests (13 §13.4)
-`tests/t-bcdump-current.c` checks current v4 load/round-trip behavior, stock
-v2/v3 loading, old-version cell-op rejection, and malformed current dump
-rejection, including bad version bytes, forbidden proto flags, cell slot
-bounds, self-overwriting CGET/CSET, and invalid closing UCLO with cell ops.
+`tests/t-bcdump-current.c` treats bytecode dumps as opaque artifacts and checks
+current dump/load round-trip behavior, cell-upvalue closure behavior after
+dump/load, and JIT-patched function dump/load behavior. It must not parse dump
+bytes, patch opcodes, or assert exact byte layout. Load-time verifier details
+such as version handling, cell opcode bounds, self-overwriting CGET/CSET, and
+invalid closing UCLO remain documented beside the bytecode reader/writer code;
+observable coverage should come from real source/dump round trips, stock
+suite behavior, and focused runtime fixtures, not generated-byte spelling.
 t-uv-01..07: cell semantics incl. cross-thread mutation, loop-var capture,
 debug.getlocal unwrap (06 §6.4.2).

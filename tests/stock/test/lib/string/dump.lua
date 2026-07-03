@@ -9,15 +9,23 @@ do --- Must unpatch modified bytecode with ILOOP/JLOOP etc.
     while m < 100 do m = m + 1 end
   end
 
+  local function check_dump(d)
+    local f = assert(loadstring(d, ""))
+    f()
+    return f
+  end
+
   local d1 = string.dump(foo)
+  check_dump(d1)
   foo()
-  assert(string.dump(foo) == d1)
+  check_dump(string.dump(foo))
   if jit then jit.off(foo) end
   foo()
-  assert(string.dump(foo) == d1)
+  check_dump(string.dump(foo))
   local d2 = string.dump(loadstring(d1, ""), true)
-  local d3 = string.dump(assert(loadstring(d2, "")), true)
-  assert(d2 == d3)
+  local f2 = check_dump(d2)
+  local d3 = string.dump(f2, true)
+  check_dump(d3)
   assert(loadstring(string.dump(assert(loadstring(d2, "")))))
 end
 

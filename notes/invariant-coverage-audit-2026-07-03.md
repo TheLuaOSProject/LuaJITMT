@@ -16,12 +16,13 @@ regressions.
 Replacement: keep the rationale beside the constrained code as a short comment,
 and add a note when the reason spans multiple files. Cover observable effects
 through Lua behavior tests, C race/lifetime fixtures, public API/ABI checks,
-bytecode compatibility checks, benchmark comparisons, or release packaging
+bytecode dump/load execution, benchmark comparisons, or release packaging
 checks.
 
 Current audit: active tests and CI should read captured process output,
-temporary files, benchmark CSVs, build outputs, bytecode compatibility blobs,
-and release manifests. No active suite should read repository implementation
+temporary files, benchmark CSVs, build outputs, and release manifests. Bytecode
+dumps may be loaded and executed as opaque artifacts, but exact dump bytes are
+not a pass/fail contract. No active suite should read repository implementation
 text, generated IR/ASM/mcode text, or machine-code byte patterns for pass/fail,
 and there is no exception for older milestone wrappers. Manual `rg`/`grep` and
 dump inspections remain review tools only, never gates.
