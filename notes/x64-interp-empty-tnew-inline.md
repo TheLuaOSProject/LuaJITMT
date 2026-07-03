@@ -18,3 +18,11 @@ initialization, arena block/mark bit updates, GC total accounting, local GC2
 allocation accounting, and pending-root publication order. JIT empty `TNEW`
 now uses a JIT-specific C helper that attempts the same conservative bump path;
 the final no-call x64 mcode inline allocator remains pending.
+
+2026-07-03 follow-up: `lj_tab_new0()` itself now shares the same conservative
+arena-bump helper, and `lj_tab_new_ah(0, 0)` routes through it. This extends the
+single-producer empty-table fast path to direct runtime users and the public
+`lua_newtable()`/`lua_createtable(L, 0, 0)` path without changing non-empty table
+construction. The helper still falls back to `newtab()` for active or entering
+MT, GC workers, custom allocators, free runs that should be reused, exhausted
+bump arenas, and local GC2 accounting flushes.

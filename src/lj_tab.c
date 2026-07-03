@@ -1034,20 +1034,12 @@ GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits)
   return newtab(L, asize, hbits);
 }
 
-GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L)
-{
-  tab_test_new0_call();
-  return newtab(L, 0, 0);
-}
-
-/* The API of this function conforms to lua_createtable(). */
-GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h)
-{
-  return lj_tab_new(L, a ? a+1 : 0, hsize2hbits(h));
-}
-
-#if LJ_HASJIT
-static GCtab *tab_new0_bump_forjit(lua_State *L, global_State *g, TGState *tg)
+/*
+** Empty-table bump allocation is only valid for the single-producer main-TG
+** window. Otherwise use newtab(), which owns allocator fallback, free-run reuse,
+** MT publication, worker, and accounting-flush cases.
+*/
+static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
 {
   const uint32_t ncells = lj_arena_ncells(sizeof(GCtab));
   LJArenaBump *b;
@@ -1095,11 +1087,28 @@ static GCtab *tab_new0_bump_forjit(lua_State *L, global_State *g, TGState *tg)
   return t;
 }
 
+GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L)
+{
+  GCtab *t;
+  tab_test_new0_call();
+  t = tab_new0_bump(L, G(L), L2TG(L));
+  return t ? t : newtab(L, 0, 0);
+}
+
+/* The API of this function conforms to lua_createtable(). */
+GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h)
+{
+  if (a == 0 && h == 0)
+    return lj_tab_new0(L);
+  return lj_tab_new(L, a ? a+1 : 0, hsize2hbits(h));
+}
+
+#if LJ_HASJIT
 GCtab * LJ_FASTCALL lj_tab_new0_forjit(lua_State *L)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
-  GCtab *t = tab_new0_bump_forjit(L, g, tg);
+  GCtab *t = tab_new0_bump(L, g, tg);
   return t ? t : lj_tab_new0(L);
 }
 
