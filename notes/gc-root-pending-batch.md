@@ -63,6 +63,13 @@
   shared-cell path still reuses that cell. The chain is release-published only
   after the fresh `GCfunc`, fresh `GCupval`, upvalue payload, function uv slot,
   and parent-slot promotion are initialized.
+- 2026-07-03 multi-upvalue follow-up: when the generic `FNEW` path has already
+  rooted the fresh function, newly snapshotted local upvalue cells are linked
+  after that function instead of being pushed individually to the TG pending
+  root head. This keeps allocation-failure safety because the function is
+  already visible before later cell allocations can fail, while avoiding
+  extra pending-head contention for multi-upvalue closures. Reused inherited
+  cells and open legacy upvalues stay on their existing chains.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

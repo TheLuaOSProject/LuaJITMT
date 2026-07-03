@@ -211,24 +211,6 @@ static LJ_AINLINE int func_legacyuv_snapshot(global_State *g, const GCproto *pt)
   return proto_legacyuv(pt) && mt_active_or_entering_acq(g);
 }
 
-/* Promote a source local slot to a closed upvalue cell, or inherit one. */
-static GCupval *func_celluv(lua_State *L, TValue *slot, uint32_t v,
-			    GCfuncL *parent)
-{
-  GCupval *uv;
-  if (itype(slot) == LJ_TUPVAL) {
-    uv = gco2uv(gcV(slot));
-    lj_assertL(uv->closed && uvval(uv) == &uv->tv,
-	       "bad local cell upvalue");
-  } else {
-    uv = func_snapshotuv(L, slot);
-    if (!(v & PROTO_UV_IMMUTABLE))
-      setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
-  }
-  func_uvmeta(uv, parent, v);
-  return uv;
-}
-
 /* Close all open upvalues pointing to some stack level or above. */
 void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
 {
@@ -267,6 +249,7 @@ static uint32_t func_test_gc1num_bump_fast_calls;
 static uint32_t func_test_gc1num_bump_fallback_calls;
 static uint32_t func_test_gc1num_bump_interp_calls;
 static uint32_t func_test_gc1uv_chain_calls;
+static uint32_t func_test_uv_afterfn_calls;
 
 static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
 {
@@ -286,6 +269,11 @@ static LJ_AINLINE void func_test_gc1num_bump_interp_call(void)
 static LJ_AINLINE void func_test_gc1uv_chain_call(void)
 {
   (void)la_add32_acqrel(&func_test_gc1uv_chain_calls, 1);
+}
+
+static LJ_AINLINE void func_test_uv_afterfn_call(void)
+{
+  (void)la_add32_acqrel(&func_test_uv_afterfn_calls, 1);
 }
 
 uint32_t lj_func_test_gc1num_bump_fast_calls(void)
@@ -327,11 +315,22 @@ void lj_func_test_reset_gc1uv_chain_calls(void)
 {
   la_store32_rel(&func_test_gc1uv_chain_calls, 0);
 }
+
+uint32_t lj_func_test_uv_afterfn_calls(void)
+{
+  return la_load32_acq(&func_test_uv_afterfn_calls);
+}
+
+void lj_func_test_reset_uv_afterfn_calls(void)
+{
+  la_store32_rel(&func_test_uv_afterfn_calls, 0);
+}
 #else
 #define func_test_gc1num_bump_fast_call()	((void)0)
 #define func_test_gc1num_bump_fallback_call()	((void)0)
 #define func_test_gc1num_bump_interp_call()	((void)0)
 #define func_test_gc1uv_chain_call()		((void)0)
+#define func_test_uv_afterfn_call()		((void)0)
 #endif
 
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
@@ -517,6 +516,32 @@ static GCfunc *func_newL_gc1uv_chain(lua_State *L, TValue *base, GCproto *pt,
   return fn;
 }
 
+static GCupval *func_snapshotuv_afterfn(lua_State *L, const TValue *slot,
+					GCfunc *fn)
+{
+  GCupval *uv = func_snapshotuv_unlinked(L, slot);
+  lj_gc_linkobj_after(obj2gco(fn), obj2gco(uv));
+  func_test_uv_afterfn_call();
+  return uv;
+}
+
+static GCupval *func_celluv_afterfn(lua_State *L, TValue *slot, uint32_t v,
+				    GCfuncL *parent, GCfunc *fn)
+{
+  GCupval *uv;
+  if (itype(slot) == LJ_TUPVAL) {
+    uv = gco2uv(gcV(slot));
+    lj_assertL(uv->closed && uvval(uv) == &uv->tv,
+	       "bad local cell upvalue");
+  } else {
+    uv = func_snapshotuv_afterfn(L, slot, fn);
+    if (!(v & PROTO_UV_IMMUTABLE))
+      setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
+  }
+  func_uvmeta(uv, parent, v);
+  return uv;
+}
+
 /* Create a new Lua function with empty upvalues. */
 GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env)
 {
@@ -559,10 +584,10 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
     if ((v & PROTO_UV_LOCAL)) {
       TValue *slot = base + (v & 0xff);
       if (proto_celluv(pt)) {
-	uv = func_celluv(L, slot, v, parent);
+	uv = func_celluv_afterfn(L, slot, v, parent, fn);
       } else {
 	uv = func_legacyuv_snapshot(G(L), pt) ?
-	     func_snapshotuv(L, slot) : func_finduv(L, slot);
+	     func_snapshotuv_afterfn(L, slot, fn) : func_finduv(L, slot);
 	func_uvmeta(uv, parent, v);
       }
     } else {

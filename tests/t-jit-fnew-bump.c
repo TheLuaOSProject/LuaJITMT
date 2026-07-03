@@ -295,6 +295,38 @@ static void test_interpreter_generic_oneuv_chain(lua_State *L)
   assert(chain1 > chain0);
 }
 
+static void test_interpreter_multiuv_afterfn(lua_State *L)
+{
+  uint32_t after0, after1;
+  const char *code =
+    "jit.off()\n"
+    "local t = {}\n"
+    "for i = 1, 40 do\n"
+    "  local a = 'a' .. i\n"
+    "  local b = { n = i }\n"
+    "  t[i] = function()\n"
+    "    a = a .. '!'\n"
+    "    b = { n = b.n + 1 }\n"
+    "    return a, b.n\n"
+    "  end\n"
+    "end\n"
+    "local a1, b1 = t[1](); assert(a1 == 'a1!' and b1 == 2)\n"
+    "local a2, b2 = t[2](); assert(a2 == 'a2!' and b2 == 3)\n"
+    "assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))\n"
+    "assert(debug.upvalueid(t[1], 2) ~= debug.upvalueid(t[2], 2))\n"
+    "local name = debug.setupvalue(t[1], 1, 'z')\n"
+    "assert(name == 'a', name)\n"
+    "a1, b1 = t[1](); assert(a1 == 'z!' and b1 == 3)\n"
+    "a2, b2 = t[2](); assert(a2 == 'a2!!' and b2 == 4)\n"
+    "jit.on()\n";
+
+  lj_func_test_reset_uv_afterfn_calls();
+  after0 = lj_func_test_uv_afterfn_calls();
+  run_script(L, code, "interpreter multi-upvalue FNEW after-function links");
+  after1 = lj_func_test_uv_afterfn_calls();
+  assert(after1 > after0);
+}
+
 static void test_accounting_fast_direct(lua_State *L, global_State *g,
 					TGState *tg)
 {
@@ -369,6 +401,7 @@ int main(void)
   test_traced_mark_active_fallback(L, g, tg);
   test_traced_alloc_black_inline(L, g, tg);
   test_interpreter_generic_oneuv_chain(L);
+  test_interpreter_multiuv_afterfn(L);
 
   lua_close(L);
   puts("t-jit-fnew-bump OK");
