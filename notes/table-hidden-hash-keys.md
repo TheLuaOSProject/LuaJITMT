@@ -23,6 +23,11 @@ resize/rehash accounting treat an unpublished slot as a real entry.
   paths.
 - Extended `t-tab-keylock-lookup` with a nil-key/non-nil-value placeholder that
   must be invisible to `next()` and must not force a hash part during resize.
+- Extended the same fixture to assert that `lj_tab_getstr()`,
+  `lj_tab_getinth()`, generic `lj_tab_get()`, and `lj_tab_next()` do not call
+  the no-`lua_State` wait helper when they observe transient `KEYLOCK`. Readers
+  retry/snapshot and filter; writer/resize paths still wait when they require
+  publication or migration completion.
 - Follow-up coverage hides an integer hash key behind `KEYLOCK` while resize
   migrates it into an array-only successor; the old hash value must be
   forwarded and the successor array must contain the released value.
@@ -33,6 +38,7 @@ Passed:
 
 - `tools/ci/m5_tab_keylock_lookup.sh`
 - `tools/ci/lua_test.sh m5_tab_keylock_lookup`
+- `tools/ci/lua_test.sh m5_tab_struct_owner m5_tab_clear_entering m5_table_insert_entering m5_tab_resize_stress`
 - `tools/ci/lua_test.sh m5_tab_forward_filter`
 - `tools/ci/lua_test.sh m5_tab_cas_store`
 - `tools/ci/lua_test.sh m7_ffi_finreg`

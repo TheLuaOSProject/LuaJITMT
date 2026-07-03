@@ -64,6 +64,64 @@ static void assert_next_empty(GCtab *t)
   assert(lj_tab_next(t, &key, out) == 0);
 }
 
+static void assert_no_wait_no_l_calls(void)
+{
+  assert(lj_tab_test_wait_no_l_calls() == 0);
+}
+
+static void exercise_keylock_readers_do_not_wait(lua_State *L)
+{
+  GCtab *t;
+  GCstr *anchor, *displaced;
+  Node *node, *nint;
+  TValue keyv;
+  uint32_t seq = 0;
+  int32_t intkey = 17;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  assert(t->asize == 0);
+  assert(t->hmask == 7);
+
+  anchor = tabfwd_find_sid_bucket(L, "tab-keylock-readers", t->hmask, 0,
+				  &seq);
+  displaced = tabfwd_find_sid_bucket(L, "tab-keylock-readers", t->hmask, 0,
+				     &seq);
+  tabfwd_set_str_i32(L, t, anchor, 11);
+  tabfwd_set_str_i32(L, t, displaced, 22);
+  lj_tab_storeint(L, lj_tab_setinth(L, t, intkey), 33);
+
+  node = lj_tab_node_acq(t);
+  assert(strV(&node[0].key) == anchor);
+  store_keylock(&node[0]);
+  assert(tviskeylock(&node[0].key));
+
+  setnumV(&keyv, (lua_Number)intkey);
+  nint = tabfwd_find_num_node(node, lj_tab_node_hmask_acq(node), &keyv);
+  assert(nint != NULL);
+  store_keylock(nint);
+  assert(tviskeylock(&nint->key));
+
+  lj_tab_test_reset_wait_no_l_calls();
+  assert(lj_tab_getstr(t, anchor) == NULL);
+  setstrV(L, &keyv, anchor);
+  assert(tvisnil(lj_tab_get(L, t, &keyv)));
+  assert(lj_tab_getinth(t, intkey) == NULL);
+  setintV(&keyv, intkey);
+  assert(tvisnil(lj_tab_get(L, t, &keyv)));
+  assert(tabfwd_count_next_visible(t) == 1);
+  assert_no_wait_no_l_calls();
+
+  store_strkey(L, &node[0], anchor);
+  setnumV(&keyv, (lua_Number)intkey);
+  tv_rawstore_rel(&nint->key, tv_rawload(&keyv));
+  tabfwd_assert_str_i32(t, anchor, 11);
+  tabfwd_assert_str_i32(t, displaced, 22);
+  tabfwd_assert_i32(lj_tab_getinth(t, intkey), 33);
+  assert(tabfwd_count_next_visible(t) == 3);
+}
+
 static void exercise_unpublished_nil_key_value(lua_State *L)
 {
   GCtab *t;
@@ -270,12 +328,13 @@ int main(void)
   tabfwd_assert_str_i32(t, displaced, 22);
   lj_tab_test_reset_wait_no_l_calls();
   assert(tabfwd_count_next_visible(t) == 1);
-  assert(lj_tab_test_wait_no_l_calls() == 0);
+  assert_no_wait_no_l_calls();
 
   store_strkey(L, &node[0], anchor);
   tabfwd_assert_str_i32(t, anchor, 11);
   tabfwd_assert_str_i32(t, displaced, 22);
   assert(tabfwd_count_next_visible(t) == 2);
+  exercise_keylock_readers_do_not_wait(L);
   exercise_unpublished_nil_key_value(L);
   exercise_tombstone_anchor_insert(L);
   exercise_resize_waits_for_keylock(L);

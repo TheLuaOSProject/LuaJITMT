@@ -7,11 +7,11 @@ Two reported warm-path claims were stale in their strongest form on current
   still serializes same-table structural mutation (`lj_tab_resize()`,
   active-MT `table.insert()`, and `table.clear()`), but different tables do not
   share one global owner word.
-- Table readers hitting `KEYLOCK` no longer sleep for 1 ms. The shared wait
-  helper retries with CPU pauses and then scheduler yield. Read-only table
-  lookups now use a no-yield one-shot retry before filtering unpublished keys;
-  writer/resize paths keep the wait because they still need publication or
-  migration completion.
+- Table readers hitting `KEYLOCK` no longer sleep for 1 ms and now avoid the
+  no-`lua_State` wait helper on the read-only lookup/traversal surfaces. Direct
+  string/integer getters, generic `lj_tab_get()`, and `lj_tab_next()` retry or
+  snapshot and then filter unpublished keys if they remain hidden. Writer/resize
+  paths keep waits where they still require publication or migration completion.
 - String interning no longer takes a shared-header reader-count pin per intern.
   The hot path uses a TG-local active marker plus per-bucket CAS. Remaining
   shared contention is `g->str.id`, `g->str.num`, and resize/rehash ownership.
@@ -26,3 +26,5 @@ Current temporary bridges remain:
 Focused regression tests for the table read cleanup:
 
 - `tools/ci/lua_test.sh m5_tab_keylock_lookup m5_tab_next_snapshot m5_tab_forward_filter`
+- Current `m5_tab_keylock_lookup` additionally checks the no-L wait counter for
+  string, integer, generic, and `next()` readers.
