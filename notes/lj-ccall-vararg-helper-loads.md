@@ -4,7 +4,7 @@ lj_ccall vararg helper loads
   `ctype_size_acq()` when inferring vararg destination ctypes for cdata values.
 - Covered cdata float-to-double vararg promotion and array-to-pointer vararg
   inference with a small `snprintf()` call in `tests/t-ffi-cdata-set-l.lua`.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

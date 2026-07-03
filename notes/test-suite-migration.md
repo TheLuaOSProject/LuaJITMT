@@ -362,7 +362,7 @@ Lua test-suite migration notes:
   already covered by dispatch and mcode behavior.
 - Removed duplicate/low-risk M5 publication implementation inspections from
   trace, table-array, and table-value guards; kept behavior fixtures.
-- Removed additional M5 exact source inventories for bytecode helper names, x64
+- Removed additional M5 exact implementation-text inventories for bytecode helper names, x64
   exitstub scaffolding, table-access macro definitions, and serializer call
   spelling. The suite keeps runtime behavior plus MT publication guards.
 - Removed the redundant `string.gmatch` C-closure upvalue legacy wrapper from

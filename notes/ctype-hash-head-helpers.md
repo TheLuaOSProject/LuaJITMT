@@ -4,7 +4,7 @@ CType hash head helpers
   bucket heads.
 - Routed the local ctype hash load/CAS helpers through the shared helper API,
   preserving the low-16-bit CTypeID payload and CAS-prepend semantics.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_hash_publish` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_hash_publish` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

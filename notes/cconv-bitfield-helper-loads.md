@@ -4,7 +4,7 @@ CConv bitfield helper loads
   bitfield container size, position, signedness, and bool flags.
 - Routed `lj_cconv_bf_tv_l()` through `ctype_info_acq()` before converting and
   masking bitfield writes.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

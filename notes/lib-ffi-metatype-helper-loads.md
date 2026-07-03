@@ -9,7 +9,7 @@ lib_ffi metatype helper loads
   stripping for `__pairs`/`__ipairs` lookup.
 - Routed `ffi_metatype()` through `ffi_ctype_info_read()` before validating
   metatype-eligible struct, complex, and vector ctypes.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_metatype` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_metatype` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

@@ -10,7 +10,7 @@
   metamethod string constants.
 - Left `lj_record.c` on `proto_kgc()`: those uses are recorder-owned current
   prototype reads and stay with the existing JIT ownership model.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m5_proto_kgc_acq` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m5_proto_kgc_acq` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Validation:
 - `tools/ci/m5_proto_kgc_acq.sh`

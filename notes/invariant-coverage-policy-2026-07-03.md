@@ -25,7 +25,7 @@ searches in release tooling inspect install metadata, object/generated output,
 or packaging manifests, not repository implementation text.
 
 Historical milestone wrapper suites are not exempt. The old repository-text
-suite is not a backlog of checks to preserve: old source inventories,
+suite is not a backlog of checks to preserve: old implementation-text inventories,
 helper-name lists, serialized bytecode spelling checks, generated IR/ASM dumps,
 and mcode encoding checks must stay out of CI even when they once caught a
 migration mistake. If an old wrapper described a real invariant, delete the

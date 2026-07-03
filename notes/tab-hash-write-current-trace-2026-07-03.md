@@ -1,0 +1,22 @@
+Table hash-write current trace evidence, 2026-07-03:
+
+- The pre-MT `tab.meta` XPOLL forwarding change is active. Current traced
+  benchmark-shaped hash writes no longer carry a repeated post-XPOLL metatable
+  load.
+- The steady-state traced store is a direct numeric `HSTORE` after `HREF` and a
+  nil-slot guard. It is not routed through `lj_tab_storetv_forjit_hash`, and the
+  hot existing-slot trace does not pay the table-store CAS helper path.
+- The remaining gap against stock is currently attributed to lockless runtime
+  overhead outside the final store: loop XPOLL/TG polling, the larger GC2
+  allocation/assist check sequence, TG-owned tmpbuf/string construction for the
+  benchmark key path, node-header hash-mask loads, string-table publication, and
+  first-fill/resize publication work.
+- Do not reintroduce implementation-text checks for this. The durable coverage
+  is `m6_jit_table_store_helper`, `m6_jit_tbar_gc2_black_gate`,
+  `m6_jit_tmpbuf_thread_format`, `m6_jit_barrier_xpoll`,
+  `t-jit-forward-store`, `t-jit-entering-table-store`,
+  `t-jit-tg-tmpbuf-reset`, and stock/bench comparison runs.
+- A future pre-MT-only tmpbuf or node-header optimization may be possible, but
+  it needs behavior tests for MT activation flush, TG tmpbuf ownership, table
+  resize generation changes, and stock Lua table/string semantics before any
+  implementation change.

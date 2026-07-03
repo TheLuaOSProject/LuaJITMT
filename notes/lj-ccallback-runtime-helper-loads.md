@@ -5,7 +5,7 @@ lj_ccallback runtime helper loads
   register/stack argument storage, and preserving x86 stack-adjust metadata.
 - Routed `callback_conv_result()` through helper-backed return ctype snapshots
   for result destination selection and integer/FP return extension.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_runtime` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_runtime` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

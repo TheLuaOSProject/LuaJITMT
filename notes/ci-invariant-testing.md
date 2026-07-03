@@ -91,7 +91,7 @@ code plus behavioral or generated-artifact coverage where the failure can be
 observed.
 
 2026-07-03 historical-suite follow-up: the old repository-text checks are gone
-as tests, including old wrapper names, old source inventories, old bytecode
+as tests, including old wrapper names, old implementation-text inventories, old bytecode
 golden comparisons, and old generated IR/ASM/mcode checks. Do not port them
 forward, keep them as dormant tests, or recreate them under a new runner. If one
 described a real invariant, document the invariant beside the code that depends

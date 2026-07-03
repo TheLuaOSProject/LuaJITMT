@@ -7,7 +7,7 @@ CType hash payload helpers
   abandoned state and type masks.
 - Routed `ctype_addtype()` through `ctype_info_acq()`/`ctype_size_acq()` when
   computing the type hash for publication.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_hash_publish` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_hash_publish` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

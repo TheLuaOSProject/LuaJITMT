@@ -6,7 +6,7 @@ Callback side-array helper slice
 - Routed callback slot initialization, slot claiming, callback free, runtime
   entry lookup, legacy GC/GC2 side-root scans, GC2 paranoia checks, and CTState
   teardown through the helper API.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_install` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_install` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

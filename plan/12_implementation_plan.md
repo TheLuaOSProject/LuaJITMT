@@ -27,7 +27,7 @@ Tasks: drop in `aux/lj_atomic.h` as src/lj_atomic.h (verify it compiles
 with gcc/clang on x86-64). Create lj_tg.h/.c with TGState (03
 §3.2) embedded in GG_State; `g->jitp`; move tmpbuf/tmptv/tmptv2/prng/
 cur_L/jit_base accessors through `G2TG`-style macros that resolve to the
-embedded TG. Historical one-off source inventories located the original
+embedded TG. Historical one-off implementation-text inventories located the original
 tmpbuf/cur_L/jit_base sites; do not recreate those spelling checks as tests.
 The lasting requirement is documented beside the helper/accessor layer.
 02 §2.4 tv_rawstore macro

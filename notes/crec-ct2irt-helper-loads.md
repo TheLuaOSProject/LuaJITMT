@@ -5,7 +5,7 @@ crec_ct2irt helper loads
   and complex IR types.
 - Refreshed the helper-backed info snapshot after enum child resolution so the
   final IR mapping uses the resolved child ctype payload.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_jit_cnew` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_jit_cnew` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

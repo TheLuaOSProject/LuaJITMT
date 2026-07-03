@@ -7,7 +7,7 @@ lj_ccall result helper loads
   helper-backed return-size reads.
 - Routed the active x86_64/POSIX register argument vector check through a
   helper-backed info load.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_get_l` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_get_l` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Verification:
 

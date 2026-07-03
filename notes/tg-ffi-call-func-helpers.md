@@ -10,7 +10,7 @@ Changes:
   native calls and acquire reads on callback entry.
 - Routed FFI call setup/restore, callback unwind clear, nested callback
   blacklist reads, and TG detach clear through the helper layer.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_runtime` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_runtime` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
 
 Validation:
 

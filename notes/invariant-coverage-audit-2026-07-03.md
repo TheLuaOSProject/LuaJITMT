@@ -5,7 +5,7 @@ Date: 2026-07-03
 Policy: the test harness, CI, and release workflows must not fail based on
 repository implementation text. That includes helper-name inventories,
 raw-field spelling checks, broad implementation-shape grep rules, and old
-milestone wrapper source inventories.
+milestone wrapper implementation-text inventories.
 
 Why: implementation spelling is not the contract. The contracts in this fork
 are memory ordering, ownership, publication, native-state boundaries, runtime

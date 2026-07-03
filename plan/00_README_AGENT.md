@@ -46,7 +46,7 @@ process output, benchmark CSVs, bytecode load/execute payloads, release metadata
 or packaging output. Repository source text, helper names, generated IR/ASM,
 generated mcode encoding, dump-token spelling, and other compiler-internal text
 are not pass/fail contracts. This includes the original
-milestone wrapper suite and any old local/release-only source inventories:
+milestone wrapper suite and any old local/release-only implementation-text inventories:
 delete those checks instead of preserving them in another runner. Implementation
 constraints belong in code-adjacent comments and notes that explain the
 ordering, ownership, nonblocking, or ABI reason.
