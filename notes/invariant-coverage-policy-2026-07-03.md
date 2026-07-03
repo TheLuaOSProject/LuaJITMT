@@ -20,8 +20,9 @@ install metadata, object/generated output, or packaging manifests, not
 repository implementation text.
 
 Historical milestone wrapper suites are not exempt. If an old wrapper described
-a real invariant, keep the reason as code-adjacent comments and notes, then
-cover the observable part through the current harness.
+a real invariant, delete the source-text check, keep the reason as
+code-adjacent comments and notes, then cover the observable part through the
+current harness.
 
 Manual implementation searches remain useful while developing or reviewing a
 slice, but their result is an engineering observation, not a CI contract. A

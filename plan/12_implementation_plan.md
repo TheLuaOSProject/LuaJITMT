@@ -10,12 +10,13 @@ invariant check without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
 github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). CI must prove
 builds, runtime behavior, generated artifacts, benchmark data, or packaging
-output. Source guards are not allowed. Old implementation inventories were
-one-off engineering archaeology, not tests, and old milestone wrapper suites
-do not get an exception. Keep lasting invariants in behavior fixtures, C
-race/lifetime fixtures, generated dump/ASM checks when code generation is the
-observable artifact, and code-adjacent comments plus notes when the rule is
-design guidance rather than observable behavior. Run
+output. Repository source-text pass/fail checks are not allowed. Old
+implementation inventories were one-off engineering archaeology, not tests,
+and old milestone wrapper suites do not get an exception. Keep lasting
+invariants in behavior fixtures, C race/lifetime fixtures, generated dump/ASM
+checks when code generation is the observable artifact, and code-adjacent
+comments plus notes when the rule is design guidance rather than observable
+behavior. Run
 `aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.

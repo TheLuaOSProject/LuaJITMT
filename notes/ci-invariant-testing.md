@@ -5,10 +5,11 @@ compiler/artifact output, benchmark data, or release packaging. This is a
 blanket rule, including old milestone wrapper suites and one-off historical
 wrappers. Repository implementation-text checks are not allowed: no source
 matching, helper-name inventories, raw-field spelling checks, or
-implementation-shape grep rules as pass/fail criteria. Implementation-only
-rules must be documented beside the code they constrain and, when the context
-is broader than a local comment, in `notes/`. Tests should fail on broken
-behavior or broken artifacts, not on implementation spelling.
+implementation-shape grep rules as pass/fail criteria. This applies to the old
+historical wrapper suites too. Implementation-only rules must be documented
+beside the code they constrain and, when the context is broader than a local
+comment, in `notes/`. Tests should fail on broken behavior or broken
+artifacts, not on implementation spelling.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read generated dumps, captured logs, temporary files,

@@ -20,5 +20,6 @@ mcode/ASM artifacts, benchmark comparisons, or release packaging checks.
 
 Current audit: active tests and CI read generated dumps, captured process
 output, temporary files, benchmark CSVs, build outputs, and release manifests.
-No active suite should read `src/*` implementation text for pass/fail. Manual
-`rg`/`grep` searches remain review tools only, never gates.
+No active suite should read repository implementation text for pass/fail, and
+there is no exception for older milestone wrappers. Manual `rg`/`grep`
+searches remain review tools only, never gates.

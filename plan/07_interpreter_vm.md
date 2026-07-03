@@ -219,23 +219,15 @@ non-x86-64 dasc work until the x86-64 Linux runtime is green.
 - [x] interp-only build (`-joff`) passes the stock suite
 
 Current coverage: `m3_vm_safepoint` validates the safepoint behavior through
-the compiled VM fixture. Historical x64 VM implementation-shape checks were
-replaced by runtime/generated-artifact coverage; the desired invariants remain
-no inline GC loads on the migrated dispatch path, no inline `barrierback`, and
-both the empty-table `lj_tab_new0` and non-empty `lj_tab_new` `BC_TNEW` paths
-remaining reachable.
-
-Current stock guard: `m3_interp_stock_joff` builds the default x64 VM and runs
-the vendored stock suite as `luajit -joff test.lua --quiet`; the current pass
-reports `386 passed`.
-
-Current store-publication guard: `m5_x64_vm_store_publication` asserts the x64
-VM cannot reintroduce legacy inline `barrierback`/`lj_gc_barrieruv` paths,
-keeps `TSETV`/`TSETB`/`TSETR` array stores on
-`lj_tab_storetv_forvm_array()`, keeps `TSETM` range stores on
-`lj_tab_storetvn_forvm_array()`, keeps `TSETS` on the C fallback instead of a
-direct hash-slot store, and keeps closed `CSET`/`USETx` paths on
-`lj_func_storeuv_*_pub()` release-copy helpers.
+the compiled VM fixture, stock `-joff` coverage runs through
+`run_stock_tests -- -joff --quiet`, and the x64 table-store/load surfaces are
+covered by the M5 x64 FORWARD fixtures plus `m5_x64_tset_nil_snapshot` and
+`m6_jit_table_store_helper` generated-output probes. Historical x64 VM
+implementation-shape checks were removed; the desired invariants remain
+documented beside the constrained VM/helper code: migrated dispatch must avoid
+inline GC root loads, table stores must publish through the C helper layer
+rather than legacy inline `barrierback`, and both empty-table and non-empty
+`BC_TNEW` paths must remain reachable.
 
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before
