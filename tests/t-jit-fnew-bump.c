@@ -349,6 +349,30 @@ static void test_interpreter_no_upvalue_fast_path(lua_State *L)
   assert(fast1 > fast0);
 }
 
+static void test_traced_no_upvalue_fast_path(lua_State *L)
+{
+  uint32_t fast0, fast1;
+  const char *code =
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1', '-sink')\n"
+    "local t = {}\n"
+    "for i = 1, 120 do\n"
+    "  t[i] = function() return 42 end\n"
+    "end\n"
+    "assert(util.traceinfo(1), 'no-upvalue FNEW loop did not trace')\n"
+    "assert(t[1]() == 42)\n"
+    "assert(t[120]() == 42)\n"
+    "assert(t[1] ~= t[2])\n"
+    "assert(debug.getupvalue(t[1], 1) == nil)\n";
+
+  lj_func_test_reset_gc0_bump_trace_calls();
+  fast0 = lj_func_test_gc0_bump_trace_calls();
+  run_script(L, code, "traced no-upvalue FNEW fast path");
+  fast1 = lj_func_test_gc0_bump_trace_calls();
+  assert(fast1 > fast0);
+}
+
 static void test_accounting_fast_direct(lua_State *L, global_State *g,
 					TGState *tg)
 {
@@ -425,6 +449,7 @@ int main(void)
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);
+  test_traced_no_upvalue_fast_path(L);
 
   lua_close(L);
   puts("t-jit-fnew-bump OK");

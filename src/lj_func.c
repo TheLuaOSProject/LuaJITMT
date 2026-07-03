@@ -251,6 +251,7 @@ static uint32_t func_test_gc1num_bump_interp_calls;
 static uint32_t func_test_gc1uv_chain_calls;
 static uint32_t func_test_uv_afterfn_calls;
 static uint32_t func_test_gc0_bump_interp_calls;
+static uint32_t func_test_gc0_bump_trace_calls;
 
 static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
 {
@@ -280,6 +281,11 @@ static LJ_AINLINE void func_test_uv_afterfn_call(void)
 static LJ_AINLINE void func_test_gc0_bump_interp_call(void)
 {
   (void)la_add32_acqrel(&func_test_gc0_bump_interp_calls, 1);
+}
+
+static LJ_AINLINE void func_test_gc0_bump_trace_call(void)
+{
+  (void)la_add32_acqrel(&func_test_gc0_bump_trace_calls, 1);
 }
 
 uint32_t lj_func_test_gc1num_bump_fast_calls(void)
@@ -341,6 +347,16 @@ void lj_func_test_reset_gc0_bump_interp_calls(void)
 {
   la_store32_rel(&func_test_gc0_bump_interp_calls, 0);
 }
+
+uint32_t lj_func_test_gc0_bump_trace_calls(void)
+{
+  return la_load32_acq(&func_test_gc0_bump_trace_calls);
+}
+
+void lj_func_test_reset_gc0_bump_trace_calls(void)
+{
+  la_store32_rel(&func_test_gc0_bump_trace_calls, 0);
+}
 #else
 #define func_test_gc1num_bump_fast_call()	((void)0)
 #define func_test_gc1num_bump_fallback_call()	((void)0)
@@ -348,6 +364,7 @@ void lj_func_test_reset_gc0_bump_interp_calls(void)
 #define func_test_gc1uv_chain_call()		((void)0)
 #define func_test_uv_afterfn_call()		((void)0)
 #define func_test_gc0_bump_interp_call()	((void)0)
+#define func_test_gc0_bump_trace_call()		((void)0)
 #endif
 
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
@@ -485,7 +502,8 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
 }
 
 static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
-				  GCproto *pt, GCfuncL *parent)
+				  GCproto *pt, GCfuncL *parent,
+				  int count_kind)
 {
   const GCSize nbytes = (GCSize)sizeLfunc(0);
   const uint32_t ncells = lj_arena_ncells(nbytes);
@@ -506,9 +524,10 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
     return NULL;
 
   /*
-  ** Interpreter BC_FNEW already ran lj_gc_check_fixtop(). This helper only
-  ** replaces the allocation/root-publication body for no-upvalue closures in
-  ** the same single-producer window used by empty TNEW and one-upvalue FNEW.
+  ** The caller already owns the allocation pacing check: interpreter BC_FNEW
+  ** runs lj_gc_check_fixtop(), while trace assembly emits the CALLA check.
+  ** This helper only replaces allocation/root publication for no-upvalue
+  ** closures in the same single-producer window as empty TNEW/one-upvalue FNEW.
   */
   if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
     return NULL;
@@ -549,7 +568,10 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   else
     lj_obj_setgcwnullrel(obj2gco(fn));
   lj_tg_gcroot_pending_store_rel(tg, obj2gco(fn));
-  func_test_gc0_bump_interp_call();
+  if (count_kind == 1)
+    func_test_gc0_bump_interp_call();
+  else if (count_kind == 2)
+    func_test_gc0_bump_trace_call();
   return fn;
 }
 #endif
@@ -691,7 +713,7 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
   lj_gc_check_fixtop(L);
 #if LJ_HASJIT
   if (pt->sizeuv == 0) {
-    GCfunc *fn = func_newL_gc0_bump(L, G(L), L2TG(L), pt, parent);
+    GCfunc *fn = func_newL_gc0_bump(L, G(L), L2TG(L), pt, parent, 1);
     if (fn)
       return fn;
   }
@@ -716,6 +738,13 @@ GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base, GCproto *pt,
 			       GCfuncL *parent)
 {
   /* Trace assembly emits the allocation GC check before CALLA helpers. */
+#if LJ_HASJIT
+  if (pt->sizeuv == 0) {
+    GCfunc *fn = func_newL_gc0_bump(L, G(L), L2TG(L), pt, parent, 2);
+    if (fn)
+      return fn;
+  }
+#endif
   return func_newL_gc_base(L, base, pt, parent);
 }
 

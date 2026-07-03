@@ -71,18 +71,20 @@ Coroutine×thread matrix: t-co-01 resume/yield storms while markers scan
 (exercises thr_owner GCSCAN spin); t-co-02 cross-thread resume handoff of
 the same coroutine through a channel.
 Current M6 scaffold gates include dispatch redispatch, recorder-token
-ownership, local-cell recorder IR shape including self-cell CNEW/FNEW creation,
-mixed raw-local FNEW sync-helper traces, promoted-cell update loops,
-first-promotion FNEW traces, XPOLL barriers, XBAR/XPOLL aliasing, allocation
-   accounting, TNEW/CNEW/SNEW GC2 hard-check readiness, pre-MT direct AREF and
-   active-MT read-helper routing, GC-step bridging, mcode publication, public and
+ownership, local-cell recorder behavior including self-cell CNEW/FNEW creation,
+mixed raw-local FNEW synchronization, promoted-cell update loops, first-promotion
+FNEW traces, XPOLL barriers, XBAR/XPOLL aliasing, allocation accounting,
+TNEW/CNEW/SNEW GC2 hard-check readiness, pre-MT direct AREF and active-MT
+read-helper routing, GC-step bridging, mcode publication, public and
 recorder-internal scoped flush handshake coverage, and numeric side-trace
-flush slot-retirement coverage. The table-store helper gate also rejects
+flush slot-retirement coverage. The table-store coverage also exercises
 same-trace closed-upvalue and nested heap escapes before a `TNEW`/`TDUP` slot
-update. The M10 generational gate includes interpreted VM-fast and traced
-helper-backed table-store regressions that confirm the remembered SSB entry is
-the old parent table and that the next minor cycle marks the young child
-through that parent.
+update. The helper-route rationale is documented beside the recorder and table
+store implementation; tests must not assert source spelling, generated IR/ASM,
+or mcode bytes. The M10 generational gate includes interpreted VM-fast and
+traced helper-backed table-store regressions that confirm the remembered SSB
+entry is the old parent table and that the next minor cycle marks the young
+child through that parent.
 The x64 `TSET` nil-snapshot regression test catches pre-store `barrierback`
 repairs through runtime behavior and requires the post-store VM value/range
 publication helpers by observing the effects of a hook-driven real-bytecode

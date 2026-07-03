@@ -2810,7 +2810,11 @@ static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
   }
 }
 
-/* Record local-cell function creation. */
+/* Record helper-backed function creation.
+** No-upvalue closures need no local-cell synchronization; all other traced
+** FNEW paths still require the child prototype's local cell captures to be
+** synchronized before the allocation helper can publish the closure.
+*/
 static TRef rec_fnew(jit_State *J, GCproto *pt)
 {
   TRef fn;
@@ -2819,7 +2823,7 @@ static TRef rec_fnew(jit_State *J, GCproto *pt)
     rec_fnew_promoted_slots(J, pt);
     return fn;
   }
-  if (!rec_fnew_celluv(J, pt)) {
+  if (pt->sizeuv != 0 && !rec_fnew_celluv(J, pt)) {
     setintV(&J->errinfo, BC_FNEW);
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }
