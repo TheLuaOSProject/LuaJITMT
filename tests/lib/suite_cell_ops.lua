@@ -30,26 +30,31 @@ local function assert_dump_not_contains(t, dump, needle, label)
   end
 end
 
-local function assert_fnew_call_loads_prototype(t, dump)
+local function assert_same_trace_fnew_helper_fastpath(t, dump)
   local data = t:read(dump)
   local callref
   for line in (data .. "\n"):gmatch("(.-)\n") do
-    local ref = line:match("^(%d+).-CALLA%s+lj_func_newL_gc[%w_]*_forjit")
+    local ref = line:match("^(%d+).-CALLA%s+lj_func_newL_gc1num_forjit")
     if ref then
       callref = ref
       break
     end
   end
   if not callref then
-    error("same-trace FNEW call: missing FNEW helper call", 2)
+    error("same-trace FNEW call: missing numeric FNEW helper call", 2)
   end
   for line in (data .. "\n"):gmatch("(.-)\n") do
     if line:match("FLOAD%s+" .. callref .. "%s+func%.pc") then
-      return
+      error("same-trace FNEW call: redundant prototype guard for CALLA ref " ..
+            callref, 2)
     end
   end
-  error("same-trace FNEW call: missing prototype guard for CALLA ref " ..
-        callref, 2)
+  if data:match("%f[%w]ULOAD%f[%W]") then
+    error("same-trace FNEW call: initial numeric upvalue used heap ULOAD", 2)
+  end
+  if not data:match("%f[%w]USTORE%f[%W]") then
+    error("same-trace FNEW call: missing heap USTORE for mutable upvalue", 2)
+  end
 end
 
 function M.run_bytecode_checks(t, tmpname)
@@ -208,6 +213,11 @@ function M.run_jit_dump_checks(t, dump)
   assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc1num_forjit", "assigned-before-FNEW numeric FNEW helper")
   assert_dump_not_contains(t, dump, "lj_func_promoteuv_forjit",
 			   "assigned-before-FNEW discarded promotion")
+  assert_dump_not_contains(t, dump, "func.pc",
+			   "assigned-before-FNEW fresh closure prototype reload")
+  assert_dump_not_contains(t, dump, "ULOAD",
+			   "assigned-before-FNEW initial heap upvalue load")
+  assert_dump_contains(t, dump, "USTORE", "assigned-before-FNEW heap upvalue store")
 
   dump_im(t, dump, probes.assigned_before_fnew({
     hotexit = true,
@@ -230,7 +240,7 @@ for i = 1, 80 do
 end
 assert(s > 0)
 ]=])
-  assert_fnew_call_loads_prototype(t, dump)
+  assert_same_trace_fnew_helper_fastpath(t, dump)
 end
 
 function M.run_jit_runtime_checks(t)
@@ -242,6 +252,46 @@ function M.run_jit_runtime_checks(t)
     hotexit = true,
     trace_assert = "post-FNEW promoted local update should trace"
   }))
+  luajit_code(t, [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local s = 0
+local last
+for i = 1, 80 do
+  local x = i
+  local function f()
+    x = x + 1
+    return x + x
+  end
+  s = s + f()
+  last = f
+end
+assert(s == 6640, s)
+assert(last() == 164, last())
+]=])
+  luajit_code(t, [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+_G.__lc_target = nil
+_G.__lc_reset = function()
+  local name = debug.setupvalue(_G.__lc_target, 1, 100)
+  assert(name == "x", name)
+end
+local s = 0
+for i = 1, 80 do
+  local x = i
+  local function f()
+    __lc_reset()
+    x = x + 1
+    return x
+  end
+  _G.__lc_target = f
+  s = s + f()
+end
+_G.__lc_target = nil
+_G.__lc_reset = nil
+assert(s == 8080, s)
+]=])
 end
 
 return M

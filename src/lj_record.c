@@ -899,17 +899,140 @@ static int rec_call_same_trace_fnew(jit_State *J, GCproto *pt, TRef tr)
   return 0;
 }
 
+/* Collect a C call's argument refs from the right-associated IR_CARG tree. */
+static int rec_call_argrefs(jit_State *J, IRRef ref, IRRef *args, int maxargs)
+{
+  IRRef rev[8];
+  int n = 0, i;
+  for (;;) {
+    if (ref >= REF_FIRST) {
+      IRIns *ir = IR(ref);
+      if (ir->o == IR_CARG) {
+	if (n >= maxargs)
+	  return -1;
+	rev[n++] = ir->op2;
+	ref = ir->op1;
+	continue;
+      }
+    }
+    if (n >= maxargs)
+      return -1;
+    rev[n++] = ref;
+    break;
+  }
+  for (i = 0; i < n; i++)
+    args[i] = rev[n-1-i];
+  return n;
+}
+
+typedef struct RecFnew1NumUV {
+  IRRef callref;
+  TRef value;
+} RecFnew1NumUV;
+
+/* Decode the narrow helper used for one numeric local-cell upvalue. */
+static int rec_fnew1num_call_info(jit_State *J, GCproto *pt, TRef tr,
+				  IRRef *callrefp, TRef *valuep)
+{
+  IRRef ref = tref_ref(tr);
+  IRRef args[5];
+  IRIns *call, *ptref, *slotref, *valref;
+  uint32_t v;
+  if (ref < REF_FIRST)
+    return 0;
+  call = IR(ref);
+  if (call->o != IR_CALLA ||
+      call->op2 != IRCALL_lj_func_newL_gc1num_forjit)
+    return 0;
+  if (rec_call_argrefs(J, call->op1, args, 5) != 5)
+    return 0;
+  if (args[0] != REF_BASE || !irref_isk(args[1]) || !irref_isk(args[3]))
+    return 0;
+  ptref = IR(args[1]);
+  if (!((ptref->o == IR_KPTR || ptref->o == IR_KKPTR) &&
+	ir_kptr(ptref) == pt))
+    return 0;
+  if (pt->sizeuv != 1 || !proto_celluv(pt))
+    return 0;
+  v = proto_uv(pt)[0];
+  if (!(v & PROTO_UV_LOCAL) || (v & PROTO_UV_IMMUTABLE))
+    return 0;
+  slotref = IR(args[3]);
+  if (slotref->o != IR_KINT || (BCReg)slotref->i != (BCReg)(v & 0xff))
+    return 0;
+  valref = IR(args[4]);
+  if (!irt_isnum(valref->t))
+    return 0;
+  *callrefp = ref;
+  *valuep = TREF(args[4], IRT_NUM);
+  return 1;
+}
+
+static int rec_fnew1num_ir_call_after(jit_State *J, IRRef callref)
+{
+  int op;
+  for (op = IR_CALLN; op <= IR_CALLXS; op++) {
+    IRRef ref;
+    for (ref = J->chain[op]; ref; ref = IR(ref)->prev)
+      if (ref > callref)
+	return 1;
+  }
+  return 0;
+}
+
+static int rec_fnew1num_bc_call_before_pc(jit_State *J)
+{
+  const BCIns *pc, *start = proto_bc(J->pt);
+  for (pc = start; pc < J->pc; pc++) {
+    BCOp op = bc_op(*pc);
+    if (op >= BC_CALLM && op <= BC_ITERN)
+      return 1;
+  }
+  return 0;
+}
+
+static int rec_fnew1num_ustore_after(jit_State *J, IRRef callref)
+{
+  IRRef ref;
+  for (ref = J->chain[IR_USTORE]; ref; ref = IR(ref)->prev)
+    if (ref > callref)
+      return 1;
+  return 0;
+}
+
+static int rec_fnew1num_current_uv(jit_State *J, uint32_t uv, GCupval *uvp,
+				   RecFnew1NumUV *out)
+{
+  IRRef callref;
+  TRef value;
+  if (uv != 0 || !uvp->closed || uvval(uvp) != &uvp->tv)
+    return 0;
+  if (!rec_fnew1num_call_info(J, J->pt, getcurrf(J),
+			      &callref, &value))
+    return 0;
+  if (rec_fnew1num_bc_call_before_pc(J) ||
+      rec_fnew1num_ir_call_after(J, callref))
+    return 0;
+  out->callref = callref;
+  out->value = value;
+  return 1;
+}
+
 /* Specialize to the runtime value of the called function or its prototype. */
 static TRef rec_call_specialize(jit_State *J, GCfunc *fn, TRef tr)
 {
   TRef kfunc;
   if (isluafunc(fn)) {
     GCproto *pt = funcproto(fn);
-    /* Too many closures created, or this exact trace just created the callee?
-    ** The latter is intentionally non-monomorphic by identity: every FNEW
-    ** returns a fresh closure, but the prototype/upvalue layout is stable.
+    /* Same-trace FNEW helpers carry the prototype as a constant argument, so
+    ** every runtime closure produced by that helper has this layout. Keep the
+    ** dynamic function TRef for closure identity and upvalue cell semantics, but
+    ** do not reload func.pc just to prove what the helper call already fixes.
     */
-    if (pt->flags >= PROTO_CLC_POLY || rec_call_same_trace_fnew(J, pt, tr)) {
+    if (rec_call_same_trace_fnew(J, pt, tr))
+      return tr;
+    /* Too many closures created: specialize only by prototype, not identity. */
+    if (pt->flags >= PROTO_CLC_POLY) {
       TRef trpt = emitir(IRT(IR_FLOAD, IRT_PGC), tr, IRFL_FUNC_PC);
       emitir(IRTG(IR_EQ, IRT_PGC), trpt, lj_ir_kptr(J, proto_bc(pt)));
       (void)lj_ir_kgc(J, obj2gco(pt), IRT_PROTO);  /* Prevent GC of proto. */
@@ -2323,6 +2446,7 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
   GCupval *uvp = func_uv_acq(&J->fn->l, uv);
   TRef fn = getcurrf(J);
   IRRef uref;
+  RecFnew1NumUV fnew1num;
   int needbarrier = 0;
   if (val == 0 && proto_celluv(J->pt) &&
       (proto_uv(J->pt)[uv] & PROTO_UV_LOCAL) && tvisfunc(uvval(uvp)))
@@ -2351,6 +2475,17 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
   }
 noconstify:
   /* Note: this effectively limits LJ_MAX_UPVAL to 127. */
+  if (rec_fnew1num_current_uv(J, uv, uvp, &fnew1num)) {
+    /* The helper has already created the real GCfunc/GCupval pair and promoted
+    ** the parent stack slot to that cell. Before any child call boundary and
+    ** before any earlier USTORE in the child, the first load can use the
+    ** helper's numeric argument directly. Stores still fall through to the
+    ** ordinary heap-cell path, preserving side exits, escaped closures and
+    ** debug visibility.
+    */
+    if (val == 0 && !rec_fnew1num_ustore_after(J, fnew1num.callref))
+      return fnew1num.value;
+  }
   uv = (uv << 8) | (hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff);
   if (!uvp->closed) {
     /* In current stack? */
