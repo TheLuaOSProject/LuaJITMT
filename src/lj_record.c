@@ -2302,8 +2302,13 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
     else if (keybarrier)
       emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
-    /* Invalidate neg. metamethod cache for stores with certain string keys. */
-    if (!nommstr(J, ix->key)) {
+    /*
+    ** Invalidate the negative metamethod cache only when the recorded table
+    ** has a metatable. If mt is NULL, the trace already guards tab.meta==NULL;
+    ** installing a metatable exits this trace and the runtime publication path
+    ** clears nomm before the metatable can be observed.
+    */
+    if (mt && !nommstr(J, ix->key)) {
       TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab, IRFL_TAB_NOMM);
       emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
     }
