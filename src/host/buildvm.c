@@ -89,12 +89,6 @@ void owrite(BuildCtx *ctx, const void *ptr, size_t sz)
 
 /* ------------------------------------------------------------------------ */
 
-/* Emit code as raw bytes. Only used for DynASM debugging. */
-static void emit_raw(BuildCtx *ctx)
-{
-  owrite(ctx, ctx->code, ctx->codesz);
-}
-
 /* -- Build machine code -------------------------------------------------- */
 
 static const char *sym_decorate(BuildCtx *ctx,
@@ -464,7 +458,6 @@ int main(int argc, char **argv)
 
   switch (ctx->mode) {
   case BUILD_peobj:
-  case BUILD_raw:
     binmode = 1;
     break;
   default:
@@ -493,9 +486,6 @@ int main(int argc, char **argv)
     break;
   case BUILD_peobj:
     emit_peobj(ctx);
-    break;
-  case BUILD_raw:
-    emit_raw(ctx);
     break;
   case BUILD_bcdef:
     emit_bcdef(ctx);

@@ -39,7 +39,7 @@ struct dasm_State;
 
 /* Build modes. */
 #define BUILDDEF(_) \
-  _(elfasm) _(coffasm) _(machasm) _(peobj) _(raw) \
+  _(elfasm) _(coffasm) _(machasm) _(peobj) \
   _(bcdef) _(ffdef) _(libdef) _(recdef) _(vmdef) \
   _(folddef)
 
