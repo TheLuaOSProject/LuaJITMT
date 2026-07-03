@@ -155,6 +155,8 @@ LJ_FUNC int lj_str_haspattern(GCstr *s);
 
 /* String interning. */
 LJ_FUNC void lj_str_resize(lua_State *L, MSize newmask);
+LJ_FUNC int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr);
+LJ_FUNC void lj_str_sweep_release(StrTabHdr *hdr);
 LJ_FUNCA GCstr *lj_str_new(lua_State *L, const char *str, size_t len);
 LJ_FUNC void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);

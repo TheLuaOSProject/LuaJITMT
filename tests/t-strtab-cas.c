@@ -223,6 +223,24 @@ int main(void)
 		    strlen("m5-strtab-cas-same")) == s1);
 
   hdr = lj_str_tabh_acq(g);
+  lj_tg_strtab_active_hdr_rel(tg, hdr);
+  lj_tg_strtab_active_depth_rel(tg, 1);
+  ctx.tg = tg;
+  ctx.hdr = hdr;
+  ctx.delay_ns = 0;
+  ctx.claimed = 0;
+  ctx.cleared = 0;
+  assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);
+  assert(lj_str_sweep_claim(L, hdr) == 1);
+  assert(lj_thr_join(&release_thr, NULL) == 0);
+  assert(la_load32_acq(&ctx.claimed) != 0);
+  assert(la_load32_acq(&ctx.cleared) != 0);
+  assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
+  assert(lj_tg_strtab_active_depth_acq(tg) == 0);
+  lj_str_sweep_release(hdr);
+  assert(hdr->resize == 0);
+
+  hdr = lj_str_tabh_acq(g);
   oldmask = g->str.mask;
   wantmask = (oldmask << 1) + 1u;
   lj_tg_init_thread(g, &extra, NULL, 0);

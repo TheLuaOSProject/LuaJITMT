@@ -1895,8 +1895,13 @@ static size_t gc_onestep(lua_State *L)
   case GCSsweepstring: {
     GCSize old = lj_gc_total_load(g);
     StrTabHdr *hdr = lj_str_tabh_acq(g);
-    if (hdr)
-      gc_sweepstr(g, &hdr->bucket[g->gc.sweepstr++]);  /* Sweep one chain. */
+    if (hdr && g->gc.sweepstr <= hdr->mask) {
+      if (lj_str_sweep_claim(L, hdr)) {
+	gc_sweepstr(g, &hdr->bucket[g->gc.sweepstr]);  /* Sweep one chain. */
+	g->gc.sweepstr++;
+	lj_str_sweep_release(hdr);
+      }
+    }
     if (!hdr || g->gc.sweepstr > hdr->mask)
       g->gc.state = GCSsweep;  /* All string hash chains sweeped. */
     {

@@ -15,13 +15,18 @@ Two reported warm-path claims were stale in their strongest form on current
 - String interning no longer takes a shared-header reader-count pin per intern.
   The hot path uses a TG-local active marker plus per-bucket CAS. Remaining
   shared contention is `g->str.id`, `g->str.num`, and resize/rehash ownership.
+  Legacy string sweep now also claims the current header before destructive
+  bucket relink/free, so sweep does not race active lockless intern walks on the
+  current bridge.
 
 Current temporary bridges remain:
 
 - Table resize is still not the final cooperative per-generation helper-copy
   protocol from `plan/06_concurrent_objects.md`.
-- String resize/secondary rehash still relies on TG-local active markers because
-  current resize destructively reuses `GCstr.gcw` chain links.
+- String resize/secondary rehash and legacy string sweep still rely on the
+  current header claim plus TG-local active markers because those paths
+  destructively reuse `GCstr.gcw` chain links. The final target remains
+  bitmap/dead-link sweep plus deferred string-body reclamation.
 
 Focused regression tests for the table read cleanup:
 

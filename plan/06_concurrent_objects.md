@@ -595,6 +595,11 @@ bit before retrying the pending insert. The original full helping protocol
 above is still the target; bounded helper copy, cross-table resize
 participation, generic deferred-free buckets for all raw gens, and Harris
 dead-link sweep remain follow-up work.
+Current legacy string sweep bridge claims the active header before relinking a
+bucket and freeing dead string bodies, using the same resize bit and TG-local
+active marker drain as resize/secondary rehash. This prevents current lockless
+intern readers from racing destructive sweep, but it is still a bridge until
+Harris dead-link sweep and deferred string-body reclamation replace it.
 ### 6.5.3 sid / idreseed: StrID wraps are handled as today at full-resize
 points (lj_str.c:129+ logic) under the resize claim.
 ### 6.5.4 Sweep

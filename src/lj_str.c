@@ -267,6 +267,27 @@ static void strtab_release(StrTabHdr *hdr)
   la_store32_rel(&hdr->resize, 0);
 }
 
+int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr)
+{
+  /*
+  ** Legacy string sweep rewrites bucket links and frees dead string bodies.
+  ** Reuse the string-table resize claim so lockless interners cannot enter the
+  ** header while a bucket is being destructively swept.
+  */
+  if (!hdr || !strtab_claim(L, hdr))
+    return 0;
+  if (LJ_UNLIKELY(lj_str_tabh_acq(G(L)) != hdr)) {
+    strtab_release(hdr);
+    return 0;
+  }
+  return 1;
+}
+
+void lj_str_sweep_release(StrTabHdr *hdr)
+{
+  strtab_release(hdr);
+}
+
 static LJ_AINLINE void strtab_leave(lua_State *L, StrTabHdr *hdr)
 {
   strtab_active_leave(L2TG(L), hdr);
