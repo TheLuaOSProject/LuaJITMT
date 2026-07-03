@@ -12,6 +12,8 @@ local finalizer_objects =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS", 192)
 local key_objects =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS", 192)
+local gc_workers =
+  harness.env_number("LJ_M5_TAB_RESIZE_STRESS_GCWORKERS", 2)
 local selected_cases = os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES")
 local selected_traversal_modes =
   os.getenv("LJ_M5_TAB_RESIZE_TRAVERSAL_MODES")
@@ -41,6 +43,14 @@ local enabled_traversal_modes =
 
 local function run_case(name, fn)
   if enabled_cases == nil or enabled_cases[name] then
+    fn()
+    return 1
+  end
+  return 0
+end
+
+local function run_case_optin(name, fn)
+  if enabled_cases ~= nil and enabled_cases[name] then
     fn()
     return 1
   end
@@ -399,6 +409,135 @@ local function exercise_finalizer_resize()
 	   "GC missed table-held finalizer cdata during resize forwarding")
     assert(finalized[i] ~= true,
 	   "table-held finalizer cdata was finalized during resize")
+  end
+end
+
+local function weak_finalizer_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local key = { kind = "weak-fin-jit-transient", owner = id, round = i }
+    tbl[key] = { owner = id, round = i }
+    tbl["weak-fin-jit-grow:" .. id .. ":" .. i] = i
+    tbl[id * 1000000 + i] = { owner = id, round = i }
+    if i > 64 and i % 5 == 0 then
+      tbl["weak-fin-jit-grow:" .. id .. ":" .. (i - 32)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function weak_finalizer_jit_reader(tbl, keys, vals, ready, start, id,
+					 rounds)
+  local okjit, jitmod = pcall(require, "jit")
+  if okjit and jitmod.status() then
+    jitmod.flush()
+    jitmod.opt.start("hotloop=1", "hotexit=1")
+  end
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, rounds do
+    local slot = ((i + id) % #keys) + 1
+    local key = keys[slot]
+    local val = tbl[key]
+    if val ~= vals[slot] then
+      return nil, "traced weak-key finalizer read changed across resize"
+    end
+    if type(val) ~= "cdata" then
+      return nil, "traced weak-key finalizer read lost cdata value"
+    end
+    if i % 64 == 0 then
+      local probe = tbl["weak-fin-jit-root:" .. slot]
+      if probe ~= slot then
+	return nil, "weak-key string probe changed across resize"
+      end
+    end
+    if i % 257 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function exercise_weak_finalizer_jit_resize()
+  local okffi, ffi = pcall(require, "ffi")
+  if not okffi then return end
+
+  ffi.cdef[[
+  typedef struct { int id; } lj_m5_tab_resize_weak_fin_jit_t;
+  ]]
+
+  local ctype = ffi.typeof("lj_m5_tab_resize_weak_fin_jit_t")
+  local weak = setmetatable({}, { __mode = "k" })
+  local weak_vals = setmetatable({}, { __mode = "v" })
+  local root_keys = {}
+  local root_vals = {}
+  local root_ids = {}
+  local finalized = {}
+  local n = math.min(finalizer_objects, key_objects, 128)
+  local old_gcworkers
+
+  for i = 1, n do
+    local key = { kind = "weak-fin-jit-key", id = i }
+    local val = ffi.gc(ctype(i), function(cd)
+      finalized[tonumber(cd.id)] = true
+    end)
+    weak[key] = val
+    weak_vals[i] = val
+    if i % 2 == 1 then
+      root_keys[#root_keys + 1] = key
+      root_vals[#root_vals + 1] = val
+      root_ids[#root_ids + 1] = i
+      weak["weak-fin-jit-root:" .. #root_keys] = #root_keys
+    end
+  end
+
+  if gc_workers > 0 then
+    local ok, old = pcall(th.gcworkers, math.min(gc_workers, 2))
+    if ok then old_gcworkers = old end
+  end
+
+  local readers = 2
+  local nworkers = writers + readers
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(weak_finalizer_resize_writer, weak, ready, start, i, reps)
+  end
+  for i = 1, readers do
+    workers[#workers + 1] =
+      th.spawn(weak_finalizer_jit_reader, weak, root_keys, root_vals,
+	       ready, start, i, jit_read_reps)
+  end
+
+  harness.wait_ready(ready, nworkers, 10, "weak finalizer JIT resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(160)
+  harness.join_each(workers, function(result, _, msg)
+    assert(result == true, tostring(msg or result))
+  end, 30)
+
+  if old_gcworkers ~= nil then
+    assert(th.gcworkers(old_gcworkers) >= 0)
+  end
+
+  harness.fullgc(4)
+  for i = 1, #root_keys do
+    local key = root_keys[i]
+    local val = root_vals[i]
+    local id = root_ids[i]
+    assert(weak[key] == val,
+	   "weak-key finalizer table lost rooted entry across JIT resize")
+    assert(weak_vals[id] == val,
+	   "weak-key finalizer value was not kept live by rooted key")
+    assert(finalized[id] ~= true,
+	   "rooted finalizer cdata was finalized during weak-key resize")
+  end
+  for i = 2, n, 2 do
+    assert(weak_vals[i] == nil,
+	   "weak-key finalizer table kept value for unrooted key")
   end
 end
 
@@ -1348,6 +1487,7 @@ ran = ran + run_case("gckey", exercise_gc_key_resize)
 ran = ran + run_case("weakkey", exercise_weak_key_resize)
 ran = ran + run_case("weakmeta", exercise_weak_key_metatable_resize)
 ran = ran + run_case("finalizer", exercise_finalizer_resize)
+ran = ran + run_case_optin("weakfinjit", exercise_weak_finalizer_jit_resize)
 ran = ran + run_case("metatable", exercise_metatable_resize)
 ran = ran + run_case("jitstore", exercise_jit_store_resize)
 ran = ran + run_case("jitread", exercise_jit_read_resize)

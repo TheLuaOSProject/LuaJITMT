@@ -302,7 +302,11 @@ The remaining high-value stability work is stress expansion rather than
 repatching the claims above:
 
 - Heavier table resize/retire stress around weak keys, finalizers, and traced
-  reads/writes.
+  reads/writes. Follow-up coverage now adds the `weakfinjit` case to
+  `t-tab-resize-stress.lua`, exposed as
+  `m5_tab_resize_weakfinjit_stress`: weak-key table entries whose values are
+  finalizable cdata, traced readers over rooted object keys, concurrent resize
+  writers, and parked GC2 workers.
 - JIT trace flush/side-trace stress under concurrent thread activation and
   shutdown. `tests/t-jit-flush-thread-stress.lua` is wired as
   `m6_jit_flush_thread_stress` and passes at suite scale; future work should

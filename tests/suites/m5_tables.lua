@@ -185,6 +185,8 @@ return function(add)
 	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS") or "192",
 	  LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS =
 	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS") or "192",
+	  LJ_M5_TAB_RESIZE_STRESS_GCWORKERS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_GCWORKERS") or "2",
 	  LJ_M5_TAB_RESIZE_STRESS_CASES =
 	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES") or "",
 	  LJ_M5_TAB_RESIZE_TRAVERSAL_MODES =
@@ -192,6 +194,36 @@ return function(add)
 	}
       },
       message = "M5 table resize forwarding stress passed"
+    },
+    {
+      name = "m5_tab_resize_weakfinjit_stress",
+      description = "weak-key finalizer values survive traced reads and resize under GC2 workers",
+      script = "t-tab-resize-stress.lua",
+      opts = {
+	timeout = os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_TIMEOUT") or "20s",
+	env = {
+	  LJ_M5_TAB_RESIZE_STRESS_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_REPS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_REPS") or "768",
+	  LJ_M5_TAB_RESIZE_STRESS_THREADS =
+	    os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_THREADS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_THREADS") or "3",
+	  LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_JIT_READ_REPS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS") or "2200",
+	  LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS =
+	    os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_FIN_OBJECTS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS") or "192",
+	  LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS =
+	    os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_KEY_OBJECTS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS") or "192",
+	  LJ_M5_TAB_RESIZE_STRESS_GCWORKERS =
+	    os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_GCWORKERS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_GCWORKERS") or "2",
+	  LJ_M5_TAB_RESIZE_STRESS_CASES = "weakfinjit"
+	}
+      },
+      message = "M5 weak-key finalizer JIT resize stress passed"
     }
   })
 end
