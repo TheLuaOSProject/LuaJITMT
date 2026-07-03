@@ -119,3 +119,33 @@ accounting fallback. Repeated same-session stock comparisons put
 `closures_upval` around 2.30x stock, down from the pre-slice 2.66x sample but
 not at the earlier unstable 1.47x best sample; the other M9 comparison rows
 remain under threshold.
+
+2026-07-03 x64 JIT inline follow-up: `IRCALL_lj_func_newL_gc1num_forjit` now
+lowers to a bounded x64 inline bump-pair path in `lj_asm_x86.h` when the
+recorder shape is the strict one-upvalue numeric local-cell case. Every
+predicate miss jumps to the existing C helper fallback. A focused `-jdump=im`
+still shows the `CALLA` marker in IR, but the loop mcode's straight-line path
+allocates and initializes the fresh `GCfunc`/`GCupval`, performs the heap slot
+store, publishes the pending-root chain, and jumps over the helper call; the
+helper call remains only in the fallback block.
+
+The inline path is intentionally narrower than the C helper: it requires
+`mark_active == 0`. If active marking or generational remembering is visible,
+the trace jumps to the C helper so the existing GC2 and legacy barriers own
+`fn -> pt/env/uv` and `uv -> tv` publication. Sweep-time black allocation does
+not imply active barriers, so the inline path handles it by setting the arena
+mark bits while still fully initializing fields and edges before the TG
+pending-root release publication. The focused C fixture covers the fallback
+boundary by forcing mark-active state around a traced numeric FNEW loop and
+checking that the C helper path is used while closure/upvalue identity remains
+ordinary Lua identity. It also forces `alloc_black` without active marking and
+checks that traced allocation stays inline, protecting the sweep-time mark-bit
+case.
+
+Focused validation after the inline follow-up:
+
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m6_jit_fnew_bump m6_jit_cell_ops m3_gc_root_pending`
+- `tools/ci/lua_test.sh run_stock_tests -- --quiet`
+- `LJ_BENCH_STOCK_FILTERS=closures_upval LJ_BENCH_STOCK_SCALE=0.02 tools/ci/lua_test.sh m9_bench_stock_compare`
+
+The final stock comparison guard reported `closures_upval` geomean `2.116886`.

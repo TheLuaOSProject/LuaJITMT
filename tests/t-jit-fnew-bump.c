@@ -84,6 +84,96 @@ static void test_traced_behavior(lua_State *L)
   assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
 }
 
+static void test_traced_mark_active_fallback(lua_State *L, global_State *g,
+					     TGState *tg)
+{
+  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
+  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
+  uint32_t helper0, helper1;
+  const char *code =
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local t = {}\n"
+    "for i = 1, 100 do\n"
+    "  local x = i\n"
+    "  t[i] = function()\n"
+    "    x = x + 1\n"
+    "    return x\n"
+    "  end\n"
+    "end\n"
+    "assert(util.traceinfo(1), 'numeric FNEW loop did not trace')\n"
+    "assert(t[1]() == 2)\n"
+    "assert(t[2]() == 3)\n"
+    "assert(t[100]() == 101)\n"
+    "assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))\n";
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  helper0 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  lj_tg_mark_active_rel(tg, 1);
+  lj_tg_alloc_black_rel(tg, 1);
+
+  run_script(L, code, "numeric FNEW traced mark-active fallback");
+
+  lj_tg_alloc_black_rel(tg, old_alloc_black);
+  lj_tg_mark_active_rel(tg, old_mark_active);
+
+  helper1 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+  assert(helper1 > helper0);
+}
+
+static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
+					   TGState *tg)
+{
+  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
+  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
+  uint32_t helper0, helper1;
+  const char *code =
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local t = {}\n"
+    "for i = 1, 100 do\n"
+    "  local x = i\n"
+    "  t[i] = function()\n"
+    "    x = x + 1\n"
+    "    return x\n"
+    "  end\n"
+    "end\n"
+    "assert(util.traceinfo(1), 'numeric FNEW loop did not trace')\n"
+    "assert(t[1]() == 2)\n"
+    "assert(t[2]() == 3)\n"
+    "assert(t[100]() == 101)\n"
+    "assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))\n";
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  helper0 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  lj_tg_mark_active_rel(tg, 0);
+  lj_tg_alloc_black_rel(tg, 1);
+
+  run_script(L, code, "numeric FNEW traced alloc-black inline");
+
+  lj_tg_alloc_black_rel(tg, old_alloc_black);
+  lj_tg_mark_active_rel(tg, old_mark_active);
+
+  helper1 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+  assert(helper1 == helper0);
+}
+
 static void load_one_upvalue_fixture(lua_State *L, GCfunc **parentp,
 				     GCproto **childp, int32_t *slotnop)
 {
@@ -193,6 +283,8 @@ int main(void)
   test_traced_behavior(L);
   test_accounting_fast_direct(L, g, tg);
   test_accounting_fallback(L, g, tg);
+  test_traced_mark_active_fallback(L, g, tg);
+  test_traced_alloc_black_inline(L, g, tg);
 
   lua_close(L);
   puts("t-jit-fnew-bump OK");

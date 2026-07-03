@@ -3,6 +3,8 @@
 ** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 */
 
+#include "lj_gc2.h"
+
 /* -- Guard handling ------------------------------------------------------ */
 
 #if LJ_TARGET_X64 && (defined(__linux__) || LJ_TARGET_OSX)
@@ -938,12 +940,275 @@ static int asm_syncslot_numeric_args(ASMState *as, IRIns *ir, IRRef *valrefp,
   return 1;
 }
 
+#if LJ_HAS_X64_MT_JIT_HELPERS && LJ_GC64
+typedef struct ASMCallFnew1Num {
+  IRRef args[CCI_NARGS_MAX];
+  GCproto *pt;
+  IRRef parentref;
+  IRRef valref;
+  int32_t slot;
+  uint32_t uvspec;
+} ASMCallFnew1Num;
+
+static void asm_fnew1num_arena_bmop(ASMState *as, x86Op xo, Reg bit,
+				    Reg arena, size_t field)
+{
+  emit_rmro(as, xo, bit|REX_64, arena, (int32_t)field);
+}
+
+static void asm_fnew1num_movi8(ASMState *as, Reg base, int32_t ofs, int32_t k)
+{
+  emit_i8(as, k);
+  emit_rmro(as, XO_MOVmib, 0, base, ofs);
+}
+
+static void asm_fnew1num_cmpi32(ASMState *as, Reg base, int32_t ofs,
+				int32_t k, int cc, MCLabel target)
+{
+  emit_jcc(as, cc, target);
+  emit_gmroi(as, XG_ARITHi(XOg_CMP), base, ofs, k);
+}
+
+static void asm_fnew1num_testi8(ASMState *as, Reg base, int32_t ofs,
+				int32_t k, int cc, MCLabel target)
+{
+  emit_jcc(as, cc, target);
+  emit_i8(as, k);
+  emit_rmro(as, XO_GROUP3b, XOg_TEST, base, ofs);
+}
+
+static int asm_fnew1num_args_x64(ASMState *as, IRIns *ir,
+				 ASMCallFnew1Num *ci)
+{
+  IRIns *ptir, *slotir, *valir;
+  uint32_t v;
+  if (ir->o != IR_CALLA || ir->op2 != IRCALL_lj_func_newL_gc1num_forjit)
+    return 0;
+  asm_collectargs(as, ir, &lj_ir_callinfo[IRCALL_lj_func_newL_gc1num_forjit],
+		  ci->args);
+  if (ci->args[0] != ASMREF_L || ci->args[1] != REF_BASE ||
+      !irref_isk(ci->args[2]) || !irref_isk(ci->args[4]))
+    return 0;
+  ptir = IR(ci->args[2]);
+  if (ptir->o != IR_KPTR && ptir->o != IR_KKPTR)
+    return 0;
+  ci->pt = (GCproto *)ir_kptr(ptir);
+  if (ci->pt->sizeuv != 1 || !proto_celluv(ci->pt))
+    return 0;
+  v = proto_uv(ci->pt)[0];
+  if (!(v & PROTO_UV_LOCAL) || (v & PROTO_UV_IMMUTABLE))
+    return 0;
+  slotir = IR(ci->args[4]);
+  if (slotir->o != IR_KINT || slotir->i < 0 ||
+      slotir->i != (int32_t)(v & 0xff))
+    return 0;
+  valir = IR(ci->args[5]);
+  if (!irt_isnum(valir->t))
+    return 0;
+  ci->parentref = ci->args[3];
+  ci->valref = ci->args[5];
+  ci->slot = slotir->i;
+  ci->uvspec = v;
+  return 1;
+}
+
+static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
+{
+  const CCallInfo *callci =
+    &lj_ir_callinfo[IRCALL_lj_func_newL_gc1num_forjit];
+  ASMCallFnew1Num fi;
+  const uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
+  const uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
+  const uint32_t bincell = (fncells < uvcells ? fncells : uvcells) - 1u;
+  const uint32_t ncells = fncells + uvcells;
+  const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
+  const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
+  MCLabel l_done, l_fallback, l_markclear, l_markdone;
+  Reg base, parent, val, pt, g, arena, cell, next, uv, tmp;
+  RegSet allow;
+  uint32_t i;
+
+  if (!asm_fnew1num_args_x64(as, ir, &fi))
+    return 0;
+
+  asm_setupresult(as, ir, callci);  /* GCfunc * */
+  l_done = emit_label(as);
+  asm_gencall(as, callci, fi.args);
+  l_fallback = emit_label(as);
+  checkmclim(as);
+
+  allow = RSET_GPR & ~RID2RSET(RID_RET);
+  base = ra_alloc1(as, REF_BASE, allow);
+  rset_clear(allow, base);
+  parent = ra_alloc1(as, fi.parentref, allow);
+  rset_clear(allow, parent);
+  val = ra_alloc1(as, fi.valref, RSET_FPR);
+  pt = ra_scratch(as, allow);
+  rset_clear(allow, pt);
+  g = ra_scratch(as, allow);
+  rset_clear(allow, g);
+  arena = ra_scratch(as, allow);
+  rset_clear(allow, arena);
+  cell = ra_scratch(as, allow);
+  rset_clear(allow, cell);
+  next = ra_scratch(as, allow);
+  rset_clear(allow, next);
+  uv = ra_scratch(as, allow);
+  rset_clear(allow, uv);
+  tmp = ra_scratch(as, allow);
+
+  /* Success: publish the initialized pair, then continue with CALL result use. */
+  emit_jmp(as, l_done);
+  emit_settg(as, RID_RET, gcroot_pending);
+  emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GChead, nextgc));
+  emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
+  emit_gettg(as, tmp, gcroot_pending);
+
+  emit_settg(as, tmp, local_total);
+  emit_gri(as, XG_ARITHi(XOg_ADD), tmp|REX_64, (int32_t)nbytes);
+  emit_gettg(as, tmp, local_total);
+  emit_movtomro(as, tmp|REX_64, g, offsetof(global_State, gc.total));
+  emit_gri(as, XG_ARITHi(XOg_ADD), tmp|REX_64, (int32_t)nbytes);
+  emit_rmro(as, XO_MOV, tmp|REX_64, g, offsetof(global_State, gc.total));
+  checkmclim(as);
+
+  asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, nupvalues), 1);
+  emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GCfuncL, uvptr));
+
+  emit_movtomro(as, tmp|REX_64, base, 8 * fi.slot);
+  emit_rr(as, XO_ARITH(XOg_OR), tmp|REX_64, next|REX_64);
+  emit_loadu64(as, next, uvtag);
+  emit_rr(as, XO_MOV, tmp|REX_64, uv);
+
+  emit_movtomro(as, tmp, uv, offsetof(GCupval, dhash));
+  emit_gri(as, XG_ARITHi(XOg_XOR), tmp, (int32_t)(fi.uvspec << 24));
+  emit_rmro(as, XO_MOV, tmp|REX_64, parent, offsetof(GCfuncL, pc));
+
+  asm_fnew1num_movi8(as, uv, offsetof(GCupval, immutable), 0);
+  emit_movtomro(as, tmp|REX_64, uv, offsetof(GCupval, v));
+  emit_rmro(as, XO_LEA, tmp|REX_64, uv, offsetof(GCupval, tv));
+  emit_rmro(as, XO_MOVSDto, val, uv, offsetof(GCupval, tv));
+  asm_fnew1num_movi8(as, uv, offsetof(GCupval, closed), 1);
+  asm_fnew1num_movi8(as, uv, offsetof(GCupval, gct), ~LJ_TUPVAL);
+  checkmclim(as);
+
+  emit_rmro(as, XO_MOVtob, tmp|FORCE_REX, uv, offsetof(GCupval, marked));
+  emit_rmro(as, XO_MOVtob, tmp|FORCE_REX, RID_RET,
+	    offsetof(GCfuncL, marked));
+  emit_gri(as, XG_ARITHi(XOg_AND), tmp, LJ_GC_WHITES);
+  emit_rmro(as, XO_MOVZXb, tmp, g, offsetof(global_State, gc.currentwhite));
+
+  emit_movtomro(as, tmp|REX_64, RID_RET, offsetof(GCfuncL, pc));
+  emit_loadu64(as, tmp, (uint64_t)(uintptr_t)proto_bc(fi.pt));
+  emit_movtomro(as, tmp|REX_GC64, RID_RET, offsetof(GCfuncL, env));
+  emit_rmro(as, XO_MOV, tmp|REX_GC64, parent, offsetof(GCfuncL, env));
+  asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, ffid), FF_LUA);
+  asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, gct), ~LJ_TFUNC);
+
+  emit_rmro(as, XO_MOVtob, tmp|FORCE_REX, pt, offsetof(GCproto, flags));
+  emit_rr(as, XO_ARITH(XOg_SUB), tmp, next);
+  emit_gri(as, XG_ARITHi(XOg_AND), next, PROTO_CLCOUNT);
+  emit_shifti(as, XOg_SHR, next, PROTO_CLC_BITS);
+  emit_rr(as, XO_MOV, next, tmp);
+  emit_gri(as, XG_ARITHi(XOg_ADD), tmp, PROTO_CLCOUNT);
+  emit_rmro(as, XO_MOVZXb, tmp, pt, offsetof(GCproto, flags));
+  emit_loadu64(as, pt, (uint64_t)(uintptr_t)fi.pt);
+  checkmclim(as);
+
+  emit_rr(as, XO_ARITH(XOg_ADD), uv|REX_64, arena|REX_64);
+  emit_shifti(as, XOg_SHL|REX_64, uv, LJ_CELL_SHIFT);
+  emit_gri(as, XG_ARITHi(XOg_ADD), uv, (int32_t)fncells);
+  emit_rr(as, XO_MOV, uv, cell);
+  emit_rr(as, XO_ARITH(XOg_ADD), RID_RET|REX_64, arena|REX_64);
+  emit_shifti(as, XOg_SHL|REX_64, RID_RET, LJ_CELL_SHIFT);
+  emit_rr(as, XO_MOV, RID_RET, cell);
+
+  l_markdone = emit_label(as);
+  asm_fnew1num_arena_bmop(as, XO_BTR, uv, arena, offsetof(GCArena, mark));
+  asm_fnew1num_arena_bmop(as, XO_BTR, cell, arena, offsetof(GCArena, mark));
+  l_markclear = emit_label(as);
+  emit_jmp(as, l_markdone);
+  asm_fnew1num_arena_bmop(as, XO_BTS, uv, arena, offsetof(GCArena, mark));
+  asm_fnew1num_arena_bmop(as, XO_BTS, cell, arena, offsetof(GCArena, mark));
+  emit_jcc(as, CC_E, l_markclear);
+  emit_i8(as, 0);
+  emit_rmro(as, XO_ARITHib, XOg_CMP, RID_DISPATCH,
+	    DISPATCH_TG(alloc.alloc_black));
+  asm_fnew1num_arena_bmop(as, XO_BTS, uv, arena, offsetof(GCArena, block));
+  asm_fnew1num_arena_bmop(as, XO_BTS, cell, arena, offsetof(GCArena, block));
+  emit_gri(as, XG_ARITHi(XOg_ADD), uv, (int32_t)fncells);
+  emit_rr(as, XO_MOV, uv, cell);
+  emit_movtomro(as, next, RID_DISPATCH,
+		DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell));
+  checkmclim(as);
+
+  emit_jcc(as, CC_A, l_fallback);
+  emit_rr(as, XO_CMP, next, tmp);
+  emit_jcc(as, CC_B, l_fallback);
+  emit_rr(as, XO_CMP, next, cell);
+  emit_gri(as, XG_ARITHi(XOg_ADD), next, (int32_t)ncells);
+  emit_rr(as, XO_MOV, next, cell);
+  emit_rmro(as, XO_MOV, tmp, RID_DISPATCH,
+	    DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].end));
+  emit_rmro(as, XO_MOV, cell, RID_DISPATCH,
+	    DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell));
+  emit_jcc(as, CC_Z, l_fallback);
+  emit_rr(as, XO_TEST, arena|REX_64, arena|REX_64);
+  emit_gettg(as, arena, alloc.bump[LJ_ARENAK_TRAVERSABLE].a);
+  checkmclim(as);
+
+  for (i = LJ_ALLOC_NBINS; i-- > bincell; ) {
+    emit_jcc(as, CC_NZ, l_fallback);
+    emit_rr(as, XO_TEST, tmp|REX_64, tmp|REX_64);
+    emit_gettg(as, tmp, alloc.bins[LJ_ARENAK_TRAVERSABLE][i]);
+  }
+  checkmclim(as);
+
+  emit_jcc(as, CC_AE, l_fallback);
+  emit_gri(as, XG_ARITHi(XOg_CMP), tmp|REX_64,
+	   (int32_t)(LJ_GC2_ACCT_FLUSH - nbytes));
+  emit_gettg(as, tmp, local_total);
+  emit_jcc(as, CC_NE, l_fallback);
+  emit_rmro(as, XO_CMP, tmp|REX_64, g, offsetof(global_State, allocd));
+  emit_leatg(as, tmp, allocd);
+  asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(tg_flags),
+		      TGF_ARENA_INTERNAL, CC_Z, l_fallback);
+  asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(tg_flags),
+		      TGF_DEAD, CC_NZ, l_fallback);
+  emit_jcc(as, CC_NE, l_fallback);
+  emit_rmro(as, XO_CMP, tmp|REX_64, g, offsetof(global_State, main_tg));
+  /* DISPATCH points at TGState.dispatch; hotcount is the first TG field. */
+  emit_leatg(as, tmp, hotcount);
+  /*
+  ** The inlined path initializes and root-publishes a fresh pair. Active
+  ** marking needs the C helper's GC2 and legacy barriers. Sweep-time black
+  ** allocation is safe here because we set the arena mark bits inline.
+  */
+  asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
+		      CC_NE, l_fallback);
+  asm_fnew1num_cmpi32(as, g, offsetof(global_State, allocf_arena), 0,
+		      CC_E, l_fallback);
+  asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.n_workers), 0,
+		      CC_NE, l_fallback);
+  asm_fnew1num_cmpi32(as, g, offsetof(global_State, mt_entering), 0,
+		      CC_NE, l_fallback);
+  asm_fnew1num_cmpi32(as, g, offsetof(global_State, mt_active), 0,
+		      CC_NE, l_fallback);
+  emit_gettg(as, g, gl);
+  return 1;
+}
+#endif
+
 /* Inline the traced FNEW slot-sync helper for plain numeric values. */
 static int asm_call_inline_x86(ASMState *as, IRIns *ir)
 {
   IRRef valref, tmpref;
   int32_t slot;
   Reg base, src;
+#if LJ_HAS_X64_MT_JIT_HELPERS && LJ_GC64
+  if (asm_fnew1num_inline_x64(as, ir))
+    return 1;
+#endif
   if (!asm_syncslot_numeric_args(as, ir, &valref, &slot, &tmpref))
     return 0;
   UNUSED(tmpref);

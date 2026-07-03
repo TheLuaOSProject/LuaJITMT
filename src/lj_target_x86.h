@@ -288,6 +288,8 @@ typedef enum {
   XO_MOVSXw =	XO_0f(bf),
   XO_MOVSXd =	XO_(63),
   XO_CMPXCHG =	XO_0f(b1),
+  XO_BTS =	XO_0f(ab),
+  XO_BTR =	XO_0f(b3),
   XO_BSWAP =	XO_0f(c8),
   XO_CMOV =	XO_0f(40),
 
