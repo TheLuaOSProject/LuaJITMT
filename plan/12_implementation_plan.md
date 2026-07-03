@@ -65,8 +65,9 @@ add always-on C-side GC2 insertion hooks to the existing legacy barrier
 macros first, preserving the legacy color barriers until their oracle role is
 finished. Historical barrier-owner inventories covered the C API, table/meta,
 function/state, cdata/callback, vmevent, library, VM, and JIT paths; keep the
-lasting proof in behavior fixtures and generated-code checks rather than in a
-old wrapper check. Add the dasc `wbarrier_tv` macro plus TSET*/USET*
+lasting proof in behavior fixtures, runtime stress, and comments beside the
+constrained helpers rather than in an old wrapper check. Add the dasc
+`wbarrier_tv` macro plus TSET*/USET*
 wiring (07 §7.4). Weak tables + finalizer queue minimal (full in M8).
 collectgarbage mapping (05 §5.10).
 Tests: stock under torture; paranoia build over the whole stock suite;

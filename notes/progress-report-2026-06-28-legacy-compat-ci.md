@@ -68,11 +68,13 @@ Not worth removing now:
 ## Test and CI audit
 
 Current policy keeps no legacy wrappers. Memory-order contracts, ABI fences, and
-temporary migration rules must be comments or notes, with behavior/generated
-artifact coverage where the failure is observable. Best near-term cleanup:
+temporary migration rules must be comments or notes, with behavior,
+public-artifact, benchmark, packaging, or process-output coverage where the
+failure is observable. Best near-term cleanup:
 
-- Keep M5 x64, M7 FFI, and M6 JIT coverage tied to generated output or runtime
-  behavior where those already prove the contract.
+- Keep M5 x64, M7 FFI, and M6 JIT coverage tied to runtime behavior,
+  process-output checks, or public artifacts where those already prove the
+  contract.
 - Split `t-gc2-traverse.c` or add selectors; it is still a monolithic mixed
   fixture used by M3 and M8.
 - Deduplicate overlapping finalizer ownership coverage between M3 and M8

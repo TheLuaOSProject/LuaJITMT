@@ -80,21 +80,21 @@ Historical high-priority legacy/static assertion areas:
 - `tools/ci/m7_ffi_blocking.sh`: behavior coverage exists for callback
   blacklist and blocking API outcomes; the wrapper assertion was part of the
   old static cleanup.
-- `tools/ci/m5_profile_stop_native.sh`: C fixture covers most semantics; keep
-  at most a narrow cleanup-order lint.
+- `tools/ci/m5_profile_stop_native.sh`: C fixture coverage replaced the
+  wrapper-level cleanup/order assertions. Do not restore a lint check for
+  helper spelling or source order.
 - Historical `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`,
   and `m5_gc_waits.sh` helper-name rules are documented; keep expanding
   contention behavior tests for the same risks.
 - M6 mcode/native STOPREQ and JIT IO wrappers that once pinned helper names
-  have been superseded by behavior and generated-output checks.
+  have been superseded by behavior fixtures and runtime process-output checks.
 - Large GC/finalizer wrapper behavior belongs in suite cases and C fixtures,
   not lint helpers.
 
-Current rule: observable semantics belong in behavior/generated-artifact tests.
-Non-observable memory-order, ABI, or temporary migration contracts must be
-documented near the helper or in notes.
-and reviewed there; observable failures need behavior, stress, or generated
-artifact coverage.
+Current rule: observable semantics belong in behavior, public-artifact,
+benchmark, packaging, or process-output tests. Non-observable memory-order,
+ABI, or temporary migration contracts must be documented near the helper or in
+notes and reviewed there; observable failures need behavior or stress coverage.
 
 ## Locks outside `ffi.cdef`
 

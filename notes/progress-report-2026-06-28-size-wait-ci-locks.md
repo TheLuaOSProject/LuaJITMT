@@ -30,7 +30,7 @@ Overall correctness/stability progress: 69-79%.
   `t-ffi-element-size-snapshot.c` now holds the parser token, runs cdata
   indexing, pointer add, and pointer diff, confirms native wait, and checks the
   parser sequence only advances by the helper release.
-- Added narrow behavior/generated-artifact checks for the removed fallback path
+- Added narrow behavior and process-output checks for the removed fallback path
   and stale-pointer helper shape.
 - Removed a redundant exact legacy wrapper from `m7_ffi_cdef_token`; the C
   STOPREQ fixture owns that behavior contract.
@@ -67,8 +67,8 @@ Overall correctness/stability progress: 69-79%.
 Good next lockless targets:
 
 - FFI read paths that can snapshot, wait/retry, and refetch by stable ID.
-- Repository legacy wrappers that can become active-token, rollback, trace-abort, or
-  generated-code behavior tests.
+- Repository legacy wrappers that can become active-token, rollback, or
+  trace-abort behavior tests.
 - GC2 weak/finalizer bridges once behavior coverage proves GC2 owns the same
   liveness and ordering semantics.
 
@@ -80,7 +80,7 @@ Bad removal targets right now:
 - Legacy-GC exclusion until the specific `lua_gc` modes have concurrent-safe
   GC2 equivalents.
 
-## Verification so far
+## Historical verification at the time
 
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
@@ -89,3 +89,7 @@ Bad removal targets right now:
 - `tools/ci/lua_test.sh m7_ffi`
 - `tools/ci/m7_ffi_finreg.sh`
 - `git diff --check`
+
+The shell wrapper entries above no longer exist. Current verification uses
+`tools/ci/lua_test.sh <case...>` and behavior fixtures; source-text and
+generated-implementation-text checks are not valid gates.

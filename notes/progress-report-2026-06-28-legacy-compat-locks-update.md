@@ -75,8 +75,8 @@ Worth making more lockless:
   language failures.
 - Interpreter FFI readers only when a snapshot path can preserve normal success
   behavior or a documented busy-result contract exists.
-- Historical legacy wrappers with equivalent runtime or generated-code behavior
-  coverage should stay retired.
+- Historical legacy wrappers with equivalent runtime behavior coverage should
+  stay retired.
 
 Not worth forcing right now:
 

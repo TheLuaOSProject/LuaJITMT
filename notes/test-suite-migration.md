@@ -371,7 +371,8 @@ Lua test-suite migration notes:
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
 - Long-term runner case types should include Lua subprocess tests, C fixtures,
-  stock-suite aliases, benchmark gates, generated-output checks, and aggregates.
+  stock-suite aliases, benchmark gates, public-artifact/process-output checks,
+  and aggregates.
   Profile-changing builds need named serial profiles such as default, assert,
   paranoia, no-JIT, ctype-anchor, and TSan.
 
