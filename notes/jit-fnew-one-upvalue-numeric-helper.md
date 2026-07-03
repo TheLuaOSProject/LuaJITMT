@@ -98,3 +98,24 @@ heads. Focused same-session `BENCH_SCALE=0.05` samples still stayed around
 100 ns/op versus stock around 40 ns/op, so the remaining gap is still the
 expected allocation/cell cost until a future snapshot-aware closure-sinking or
 batch allocation design exists.
+
+2026-07-03 follow-up: the JIT numeric helper now has a strict bump-pair fast
+path for the fresh `GCfunc` plus fresh closed `GCupval`. It runs only for the
+main arena-internal TG, before MT activation, with no GC2 workers, no custom
+allocator, enough local accounting headroom, no traversable free-run bin that
+could satisfy either object, and enough room in the current traversable bump
+run. Otherwise it falls back to the existing generic helper path.
+
+The fast path preserves stock Lua closure semantics: every `FNEW` still creates
+a distinct closure and distinct upvalue cell, mutable captures republish the
+fresh cell into the parent slot, and `debug.upvalueid()`/`debug.setupvalue()`
+observe ordinary per-closure identity. It only avoids the helper allocator
+round trips and publishes the initialized pair as one pending-root chain under
+the same single-thread predicates as the empty-table inline bump path.
+
+Focused coverage: `m6_jit_fnew_bump` exercises the traced escaped-closure fast
+path, distinct upvalue identities, debug mutation isolation, and deterministic
+accounting fallback. Repeated same-session stock comparisons put
+`closures_upval` around 2.30x stock, down from the pre-slice 2.66x sample but
+not at the earlier unstable 1.47x best sample; the other M9 comparison rows
+remain under threshold.

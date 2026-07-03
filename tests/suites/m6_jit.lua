@@ -32,6 +32,7 @@ local m6_cases = {
   "m6_jit_token",
   "m6_jit_recursive_call_unroll",
   "m6_jit_cell_ops",
+  "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
   "m6_jit_table_store_helper",
@@ -616,6 +617,21 @@ assert(s==2720)
       cellops.run_jit_dump_checks(t, dump)
       cellops.run_jit_runtime_checks(t)
       print("M6 JIT local-cell behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_fnew_bump",
+    description = "JIT numeric FNEW bump-pair allocation behavior",
+    run = function(t)
+      clean_build(t, { quiet = true, xcflags = "-DLJ_FUNC_TEST_HELPERS" })
+      build_and_run_c(t, t:tmp("lj_t-jit-fnew-bump"),
+                      "t-jit-fnew-bump.c", {
+        cflags = "-DLJ_FUNC_TEST_HELPERS",
+        build = false,
+        timeout = "20s"
+      })
+      print("M6 JIT numeric FNEW bump-pair allocation behavior passed")
     end
   })
 

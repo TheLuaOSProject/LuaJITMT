@@ -40,6 +40,12 @@ LJ_FUNCA GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base,
 LJ_FUNCA GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base,
 					    GCproto *pt, GCfuncL *parent,
 					    int32_t slot, lua_Number n);
+#ifdef LJ_FUNC_TEST_HELPERS
+LJ_FUNC uint32_t lj_func_test_gc1num_bump_fast_calls(void);
+LJ_FUNC void lj_func_test_reset_gc1num_bump_fast_calls(void);
+LJ_FUNC uint32_t lj_func_test_gc1num_bump_fallback_calls(void);
+LJ_FUNC void lj_func_test_reset_gc1num_bump_fallback_calls(void);
+#endif
 LJ_FUNC void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *c);
 
 #endif

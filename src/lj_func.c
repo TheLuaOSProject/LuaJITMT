@@ -16,6 +16,7 @@
 #include "lj_gc2.h"
 #include "lj_func.h"
 #include "lj_trace.h"
+#include "lj_tg.h"
 #include "lj_vm.h"
 
 /* -- Prototypes ---------------------------------------------------------- */
@@ -261,6 +262,44 @@ void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
 
 /* -- Functions (closures) ------------------------------------------------ */
 
+#ifdef LJ_FUNC_TEST_HELPERS
+static uint32_t func_test_gc1num_bump_fast_calls;
+static uint32_t func_test_gc1num_bump_fallback_calls;
+
+static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
+{
+  (void)la_add32_acqrel(&func_test_gc1num_bump_fast_calls, 1);
+}
+
+static LJ_AINLINE void func_test_gc1num_bump_fallback_call(void)
+{
+  (void)la_add32_acqrel(&func_test_gc1num_bump_fallback_calls, 1);
+}
+
+uint32_t lj_func_test_gc1num_bump_fast_calls(void)
+{
+  return la_load32_acq(&func_test_gc1num_bump_fast_calls);
+}
+
+void lj_func_test_reset_gc1num_bump_fast_calls(void)
+{
+  la_store32_rel(&func_test_gc1num_bump_fast_calls, 0);
+}
+
+uint32_t lj_func_test_gc1num_bump_fallback_calls(void)
+{
+  return la_load32_acq(&func_test_gc1num_bump_fallback_calls);
+}
+
+void lj_func_test_reset_gc1num_bump_fallback_calls(void)
+{
+  la_store32_rel(&func_test_gc1num_bump_fallback_calls, 0);
+}
+#else
+#define func_test_gc1num_bump_fast_call()	((void)0)
+#define func_test_gc1num_bump_fallback_call()	((void)0)
+#endif
+
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
 {
   global_State *g = G(L);
@@ -279,6 +318,121 @@ GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
   lj_gc_pubobjobj(L, fn, env);
   return fn;
 }
+
+#if LJ_HASJIT
+static void func_arena_set_alloc(GCArena *a, uint32_t cell, int black)
+{
+  lj_arena_bm_set(a->block, cell);
+  if (black)
+    lj_arena_bm_set(a->mark, cell);
+  else
+    lj_arena_bm_clear(a->mark, cell);
+}
+
+static GCfunc *func_newL_gc1num_bump_forjit(lua_State *L, global_State *g,
+					    TGState *tg, GCproto *pt,
+					    GCfuncL *parent, TValue *base,
+					    int32_t slotno, lua_Number n,
+					    uint32_t uvspec)
+{
+  const uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
+  const uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
+  const uint32_t ncells = fncells + uvcells;
+  const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
+  LJArenaBump *b;
+  GCArena *a;
+  GCfunc *fn;
+  GCtab *env;
+  GCupval *uv;
+  TValue tv, *slot;
+  GCobj *oldhead;
+  uint32_t cell, uvcell, end, next, i, black;
+
+  if (g == NULL || tg == NULL ||
+      mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
+      g->allocf_arena == 0 || tg != g->main_tg ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocd != &tg->allocd ||
+      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+    return NULL;
+
+  /*
+  ** Match the empty-table fast path: only consume the current bump run when
+  ** no traversable free-run bin could satisfy either object. That preserves
+  ** allocator reuse order and keeps this helper a pure no-contention bump
+  ** specialization for the freshly allocated function/upvalue pair.
+  */
+  for (i = (fncells < uvcells ? fncells : uvcells) - 1u;
+       i < LJ_ALLOC_NBINS; i++)
+    if (tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] != NULL)
+      return NULL;
+
+  b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  a = b->a;
+  if (a == NULL)
+    return NULL;
+  cell = b->cell;
+  end = b->end;
+  next = cell + ncells;
+  if (next < cell || next > end)
+    return NULL;
+
+  b->cell = next;
+  uvcell = cell + fncells;
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  func_arena_set_alloc(a, cell, black);
+  func_arena_set_alloc(a, uvcell, black);
+
+  fn = (GCfunc *)lj_arena_cellptr(a, cell);
+  uv = (GCupval *)lj_arena_cellptr(a, uvcell);
+
+  fn->l.gct = ~LJ_TFUNC;
+  fn->l.ffid = FF_LUA;
+  fn->l.nupvalues = 0;
+  setmref(fn->l.pc, proto_bc(pt));
+  env = lj_funcL_env_acq(parent);
+  lj_func_env_rel(fn, env);
+  newwhite(g, obj2gco(fn));
+  lj_gc_pubobjobj(L, fn, pt);
+  lj_gc_pubobjobj(L, fn, env);
+  {
+    uint32_t count = (uint32_t)pt->flags + PROTO_CLCOUNT;
+    pt->flags = (uint8_t)(count - ((count >> PROTO_CLC_BITS) &
+				    PROTO_CLCOUNT));
+  }
+
+  setnumV(&tv, n);
+  uv->gct = ~LJ_TUPVAL;
+  uv->closed = 1;
+  copyTVrel(L, &uv->tv, &tv);
+  setmref(uv->v, &uv->tv);
+  uv->immutable = 0;
+  uv->dhash = 0;
+  newwhite(g, uv);
+  lj_gc_pubobjtv(L, uv, &uv->tv);
+
+  slot = (base ? base : L->base) + slotno;
+  if (!(uvspec & PROTO_UV_IMMUTABLE))
+    setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
+  func_uvmeta(uv, parent, uvspec);
+  setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
+  lj_gc_pubobjobj(L, fn, uv);
+  fn->l.nupvalues = 1;
+  lj_obj_setgcwrel(obj2gco(fn), obj2gco(uv));
+
+  lj_gc_total_add(g, nbytes);
+  (void)lj_tg_local_total_add_rlx(tg, nbytes);
+  oldhead = lj_tg_gcroot_pending_acq(tg);
+  if (oldhead)
+    lj_obj_setgcwrel(obj2gco(uv), oldhead);
+  else
+    lj_obj_setgcwnullrel(obj2gco(uv));
+  lj_tg_gcroot_pending_store_rel(tg, obj2gco(fn));
+  func_test_gc1num_bump_fast_call();
+  return fn;
+}
+#endif
 
 static GCfunc *func_newL_unlinked(lua_State *L, GCproto *pt, GCtab *env)
 {
@@ -384,6 +538,13 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   v = proto_uv(pt)[0];
   lj_assertL((v & PROTO_UV_LOCAL) && (int32_t)(v & 0xff) == slotno,
 	     "bad one-upvalue FNEW slot");
+#if LJ_HASJIT
+  fn = func_newL_gc1num_bump_forjit(L, G(L), L2TG(L), pt, parent, base,
+				    slotno, n, v);
+  if (fn)
+    return fn;
+  func_test_gc1num_bump_fallback_call();
+#endif
   fn = func_newL_unlinked(L, pt, lj_funcL_env_acq(parent));
   slot = base + slotno;
   /*
