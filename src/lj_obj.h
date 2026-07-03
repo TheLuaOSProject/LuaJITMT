@@ -1339,6 +1339,7 @@ typedef struct TabState {
 typedef struct TGState TGState;
 typedef struct LJThreadLive LJThreadLive;
 typedef struct GC2SSBNode GC2SSBNode;
+typedef struct GC2WeakOverflow GC2WeakOverflow;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
   uint32_t cycle;	/* Monotonically increasing classic-GC cycle id. */
@@ -1377,6 +1378,7 @@ typedef struct GC2State {
   uint32_t minor_survival_threshold_pct;  /* Survival pct forcing a major. */
   uint64_t minor_survival_major_requests;  /* High-survival major requests. */
   uint32_t force_major;  /* One-shot full-GC major-cycle override. */
+  uint32_t legacy_mark_bridge;  /* GC2 marks feed an active legacy mark cycle. */
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */
   uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */
@@ -1462,6 +1464,7 @@ typedef struct GC2State {
   uint64_t live_estimate;  /* GC2 live bytes from swept traversable memory. */
   GCRef *weak_stack;	/* GC2-owned weak-table discovery vector. */
   uint8_t *weak_ready;	/* Published weak discovery slots. */
+  GC2WeakOverflow *weak_overflow;  /* Weak tables past vector capacity. */
   MSize weak_capacity;	/* Allocated weak discovery slots. */
   uint32_t weak_drain_active;  /* Cursor-reserved weak clears in flight. */
   uint32_t weak_write_active;  /* Mutator weak-table stores in flight. */
@@ -2324,6 +2327,23 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
   return next;
 }
 
+static LJ_AINLINE uint32_t gc2_legacy_mark_bridge_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.legacy_mark_bridge);
+}
+
+static LJ_AINLINE void gc2_legacy_mark_bridge_store_rlx(global_State *g,
+							uint32_t enabled)
+{
+  la_store32_rlx(&g->gc2.legacy_mark_bridge, enabled);
+}
+
+static LJ_AINLINE void gc2_legacy_mark_bridge_rel(global_State *g,
+						  uint32_t enabled)
+{
+  la_store32_rel(&g->gc2.legacy_mark_bridge, enabled);
+}
+
 static LJ_AINLINE uint64_t gc2_cycle_requests_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.cycle_requests);
@@ -2653,6 +2673,33 @@ static LJ_AINLINE void gc2_weak_ready_store_rlx(global_State *g,
 static LJ_AINLINE void gc2_weak_ready_rel(global_State *g, uint8_t *ready)
 {
   la_storeptr_rel((void **)&g->gc2.weak_ready, ready);
+}
+
+static LJ_AINLINE GC2WeakOverflow *gc2_weak_overflow_acq(global_State *g)
+{
+  return (GC2WeakOverflow *)la_loadptr_acq(
+    (void *const *)&g->gc2.weak_overflow);
+}
+
+static LJ_AINLINE void gc2_weak_overflow_store_rlx(global_State *g,
+						   GC2WeakOverflow *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.weak_overflow, head);
+}
+
+static LJ_AINLINE GC2WeakOverflow *
+gc2_weak_overflow_xchg_acqrel(global_State *g, GC2WeakOverflow *head)
+{
+  return (GC2WeakOverflow *)la_xchgptr_acqrel(
+    (void **)&g->gc2.weak_overflow, head);
+}
+
+static LJ_AINLINE int gc2_weak_overflow_cas(global_State *g,
+					    GC2WeakOverflow **oldp,
+					    GC2WeakOverflow *head)
+{
+  return la_casptr((void **)&g->gc2.weak_overflow, (void **)oldp, head,
+		   LA_REL, LA_ACQ);
 }
 
 static LJ_AINLINE MSize gc2_weak_capacity_acq(global_State *g)

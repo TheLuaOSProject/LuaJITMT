@@ -381,9 +381,9 @@ Lua test-suite migration notes:
 
 Current follow-up:
 
-- Keep new tests behavior-first. Direct `src/` predicates should stay out
-  of runnable suites unless a future migration explicitly replaces them with a
-  stronger runtime fixture.
+- Keep new tests behavior-first. Direct `src/` predicates stay out of runnable
+  suites; use runtime fixtures, generated artifacts, or documentation/comments
+  for implementation-only invariants.
 - Build-owning tests should remain serial unless the Lua runner grows a shared
   build cache/lock. Cases that clean/build can still race `host/buildvm` or
   `libluajit.a` creation when run concurrently in one checkout.

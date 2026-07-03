@@ -97,6 +97,31 @@ only; it preserves stock table semantics without adding a warm-path lock.
 Close-time FFI callback owner disowning now tolerates a `lua_State` whose
 `glref` has already been cleared during shutdown cleanup.
 
+Standalone GC2 mark cycles no longer mutate legacy color bits. `GC2State` now
+has a `legacy_mark_bridge` latch that is enabled only by legacy
+`gc_mark_start()` after `lj_gc2_mark_begin()`. GC2 marks clear legacy white bits
+only while that latch is set; true minor cycles and manual active-GC2 cycles
+therefore keep arena liveness separate from legacy sweep colors. Sweep-boundary
+root preservation still forces the preserved root legacy-live because that path
+is explicitly protecting the legacy root-list close boundary. This fixed
+paranoia failures where dead conservative stack hits such as temporary
+`"dead..."` strings, and a stale standalone-cycle `"child"` string key, looked
+legacy-live without corresponding GC2 marks.
+
+GC2 weak-table discovery now owns an overflow node list for tables that do not
+fit the bounded weak snapshot vector. Weak completion first drains the vector,
+then clears overflow nodes and finally uses the legacy weak-list bridge as an
+additional source. This preserves weak-value/all-weak semantics even when stale
+legacy colors keep a reachable weak table out of `g->gc.weak`, and avoids
+borrowing `GCtab.gclist` for a second GC2 list. Overflow metadata uses the raw
+non-throwing allocator path so parked GC2 workers do not unwind through a
+borrowed Lua stack on allocation failure.
+
+The same paranoia harness also now covers the static no-JIT build path:
+trace-scope retire actions are no-ops when `LJ_HASJIT=0`, matching the existing
+trace flush/hasany macros instead of leaving an implicit declaration in
+`lj_safepoint.c`.
+
 ## Recursive `fib30`
 
 Current focused benchmark probes no longer reproduce the old "TRACE 1 forever"

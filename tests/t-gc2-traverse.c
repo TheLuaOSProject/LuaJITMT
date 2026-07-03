@@ -1893,6 +1893,7 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
 {
   GCtab *weak, *val;
   GCstr *keystr, *modestr;
+  uint8_t keystr_white0, modestr_white0;
   uint64_t clear_cleared0;
 
   lua_settop(L, 0);
@@ -1910,6 +1911,8 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
   keystr = strV(L->top - 1);
   lua_pushvalue(L, 2);
   lua_settable(L, 1);
+  keystr_white0 = (uint8_t)(lj_obj_gcflags(obj2gco(keystr)) & LJ_GC_WHITES);
+  modestr_white0 = (uint8_t)(lj_obj_gcflags(obj2gco(modestr)) & LJ_GC_WHITES);
   clear_cleared0 = gc2_weak_clear_cleared_acq(g);
 
   lj_gc2_mark_begin(g);
@@ -1924,8 +1927,8 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(keystr)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(modestr)) == 1);
-  assert(!iswhite(obj2gco(keystr)));
-  assert(!iswhite(obj2gco(modestr)));
+  assert((lj_obj_gcflags(obj2gco(keystr)) & LJ_GC_WHITES) == keystr_white0);
+  assert((lj_obj_gcflags(obj2gco(modestr)) & LJ_GC_WHITES) == modestr_white0);
   assert(gc2_weak_clear_cleared_acq(g) == clear_cleared0 + 1u);
   setstrV(L, L->top, keystr);
   L->top++;

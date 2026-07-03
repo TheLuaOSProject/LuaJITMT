@@ -862,6 +862,13 @@ static void gc_mark_start(global_State *g)
   ptrdiff_t i;
   (void)lj_gc_flush_root_pending(g);
   lj_gc2_mark_begin(g);
+  /*
+  ** This is the only path where GC2 marks intentionally feed legacy color
+  ** state. Standalone GC2 cycles leave the latch clear, because their arena
+  ** marks are not a legacy sweep frontier and must not make conservative
+  ** temporary roots look legacy-live.
+  */
+  lj_gc2_legacy_mark_bridge_enable(g);
   gc_normalize_legacy_colors(g);
   lj_gc_list_clear_rel(&g->gc.gray);
   lj_gc_list_clear_rel(&g->gc.grayagain);

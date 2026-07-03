@@ -1035,13 +1035,45 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
 ]=], { timeout = "20s" })
       do
         local data = t:read(single_dump)
-        if contains(data, "lock cmpxchg") or
-           contains(data, "lj_tab_storetv_forjit_array") or
-           contains(data, "lj_tab_storetv_forjit_hash") then
-          error("single-thread table stores used MT helper/CAS route:\n" ..
+        if not (contains(data, "lock cmpxchg") and
+                contains(data, "lj_tab_storetv_forjit_array_nogc") and
+                contains(data, "lj_tab_storetv_forjit_hash")) then
+          error("single-thread published table stores missed helper/CAS route:\n" ..
                 data, 0)
         end
       end
+
+      local gc_single_dump = t:tmp("lj-m6-table-store-single-gc.dump")
+      luajit_dump(t, gc_single_dump, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+jit.off()
+local values = {}
+for i = 1, 128 do values[i] = { i } end
+jit.on()
+local a = { false }
+for i = 1, 80 do
+  a[1] = values[i]
+end
+assert(a[1][1] == 80)
+assert(util.traceinfo(1), "single-thread GC array store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local h = { stable = false }
+for i = 1, 80 do
+  h.stable = values[i]
+end
+assert(h.stable[1] == 80)
+assert(util.traceinfo(1), "single-thread GC hash store did not trace")
+]=], { timeout = "20s" })
+      assert_dump_contains(t, gc_single_dump,
+                           "lj_tab_storetv_forjit_array",
+                           "single-thread GC ASTORE helper")
+      assert_dump_contains(t, gc_single_dump,
+                           "lj_tab_storetv_forjit_hash",
+                           "single-thread GC HSTORE helper")
 
       local trace_local_direct_dump =
         t:tmp("lj-m6-table-store-trace-local-direct.dump")
@@ -1091,6 +1123,53 @@ assert(util.traceinfo(1), "trace-local array store did not trace")
                 data, 0)
         end
       end
+
+      local trace_local_gc_dump =
+        t:tmp("lj-m6-table-store-trace-local-gc.dump")
+      luajit_dump(t, trace_local_gc_dump, "-jdump=im", [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+local util = require("jit.util")
+jit.off()
+local values = {}
+for i = 1, 128 do values[i] = { i } end
+jit.on()
+local function hash(n)
+  local out
+  for i = 1, n do
+    local t = { stable = false }
+    t.stable = values[i]
+    out = t
+  end
+  return out
+end
+local h = hash(80)
+assert(h.stable[1] == 80)
+assert(util.traceinfo(1), "trace-local GC hash store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+local function array(n)
+  local out
+  for i = 1, n do
+    local t = { false }
+    t[1] = values[i]
+    out = t
+  end
+  return out
+end
+local a = array(80)
+assert(a[1][1] == 80)
+assert(util.traceinfo(1), "trace-local GC array store did not trace")
+]=], { timeout = "20s" })
+      assert_dump_contains(t, trace_local_gc_dump,
+                           "lj_tab_storetv_forjit_hash",
+                           "trace-local GC HSTORE helper")
+      assert_dump_contains(t, trace_local_gc_dump,
+                           "lj_tab_storetv_forjit_array",
+                           "trace-local GC ASTORE helper")
 
       local route_dump = t:tmp("lj-m6-table-store-helper-routes.dump")
       luajit_dump(t, route_dump, "-jdump=im", [=[

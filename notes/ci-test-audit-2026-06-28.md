@@ -7,9 +7,11 @@ to the constrained code.
 
 ## Inventory
 
-- `tools/ci` currently has 66 shell scripts.
-- Most scripts call `tools/ci/lua_test.sh` after doing real validation or
-  orchestration work; zero pure alias wrappers remain.
+- 2026-07-03 status: `tools/ci` has only `lua_test.sh` and
+  `platform_build.sh`. The old per-case shell guard suite is gone.
+- Historical state at the time of this audit: most scripts called
+  `tools/ci/lua_test.sh` after doing real validation or orchestration work;
+  zero pure alias wrappers remained.
 - At the time of this audit, about 60 scripts still embedded local
   shell legacy wrappers before calling the Lua
   suite. Those have since been removed or replaced with behavior fixtures,
@@ -30,11 +32,10 @@ to the constrained code.
    file should exist only when it performs real lint, orchestration, or
    non-suite setup that has not yet moved into Lua.
 
-3. Aggregate cases can bypass wrapper-only checks.
+3. Aggregate cases could bypass wrapper-only checks.
    `m7_ffi`, `m9_m10_gc`, and similar aggregate cases call Lua case names, not
-   the shell wrappers. Any guard that only exists in `tools/ci/<case>.sh` is not
-   covered by the aggregate path unless it is moved into the Lua suite or into a
-   separately invoked static-lint entrypoint.
+   the shell wrappers. The resolution was to remove wrapper-only source checks,
+   not to preserve them as separate lint entrypoints.
 
 4. Repository legacy wrappers often pinned exact helper names.
    Broad string matches blocked better implementations that preserved the same
@@ -189,10 +190,9 @@ Verification for the alias removal:
 
 ## Next Refactors
 
-1. Keep converting any remaining historical text-check contracts into
-   behavior fixtures, generated dump/ASM checks, or documentation. Do not keep
-   helper comments as tests, even for invariants that cannot be
-   observed directly.
+1. Do not restore historical text-check contracts. If an old note still matters,
+   keep the reason as a code comment or design note, and cover observable
+   behavior through fixtures or generated artifacts.
 2. Do not add new pure shell aliases. If a case is fully Lua-owned, run it
    through `tools/ci/lua_test.sh <case...>`.
 3. Split any large remaining GC/finalizer orchestration into suite-local helper

@@ -32,11 +32,14 @@ process output, and generated CSVs. Repository DynASM source is source code;
 generated ASM/mcode output is the artifact to inspect.
 
 Historical entries that mention static helper-name wrappers, per-case
-wrapper scripts, or the old explicit source-reading helper document why a
-helper or fixture was added. They are historical context only and are not a
-backlog of checks to preserve. When one still matters, carry forward the
-invariant itself: memory ordering, ownership, publication, native-state
-discipline, or ABI shape.
+wrapper scripts, source-marker lists, raw-access rejection, helper-name
+requirements, or the old explicit source-reading helper are historical
+context only. They are not tests to preserve, port, restore, or emulate. When
+one still matters, carry forward the invariant itself: memory ordering,
+ownership, publication, native-state discipline, or ABI shape. The durable
+record belongs in comments beside the constrained code and in notes that
+explain why the rule exists; CI must prove it through behavior, C fixtures,
+generated artifacts, or packaging outputs.
 
 Examples:
 
@@ -62,3 +65,8 @@ files to decide pass/fail. Remaining file reads are generated dumps, captured
 logs, temporary outputs, benchmark CSVs, or release/build artifacts. C fixtures
 may still compile against internal headers because they execute lifetime,
 publication, native-state, and race behavior rather than grepping source text.
+
+2026-07-03 follow-up: this policy has no historical-suite exception. Old notes
+may still describe how deleted shell wrappers once "required" helper spelling
+or "rejected" raw field access. Treat that wording as an audit trail for why
+the helper/comment exists, not as an active or desired source guard.

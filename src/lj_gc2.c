@@ -58,6 +58,11 @@ typedef struct GC2FinalizerNode {
   GCobj *obj;
 } GC2FinalizerNode;
 
+struct GC2WeakOverflow {
+  GC2WeakOverflow *next;
+  GCtab *tab;
+};
+
 typedef struct GC2FinalizerDispatchCtx {
   GC2FinalizerDispatchFunc dispatch;
 } GC2FinalizerDispatchCtx;
@@ -110,9 +115,31 @@ static void gc2_finalizer_node_obj_rel(GC2FinalizerNode *fn, GCobj *o)
   la_storeptr_rel((void **)&fn->obj, o);
 }
 
+static GC2WeakOverflow *gc2_weak_overflow_next_acq(GC2WeakOverflow *node)
+{
+  return (GC2WeakOverflow *)la_loadptr_acq((void *const *)&node->next);
+}
+
+static void gc2_weak_overflow_next_rel(GC2WeakOverflow *node,
+				       GC2WeakOverflow *next)
+{
+  la_storeptr_rel((void **)&node->next, next);
+}
+
+static GCtab *gc2_weak_overflow_tab_acq(GC2WeakOverflow *node)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&node->tab);
+}
+
+static void gc2_weak_overflow_tab_rel(GC2WeakOverflow *node, GCtab *tab)
+{
+  la_storeptr_rel((void **)&node->tab, tab);
+}
+
 static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
 static int gc2_weak_resize(global_State *g, MSize cap);
+static void gc2_weak_overflow_free(global_State *g, GC2WeakOverflow *node);
 static void gc2_weak_reset(global_State *g);
 static int gc2_finclaim_ensure(global_State *g);
 static void gc2_finclaim_reset(global_State *g);
@@ -215,6 +242,7 @@ void lj_gc2_init(global_State *g)
     g, LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
   gc2_minor_survival_major_requests_store_rlx(g, 0);
   gc2_force_major_store_rlx(g, 0);
+  gc2_legacy_mark_bridge_store_rlx(g, 0);
   gc2_remembered_barriers_store_rlx(g, 0);
   gc2_remembered_pushed_store_rlx(g, 0);
   gc2_remembered_overflows_store_rlx(g, 0);
@@ -299,6 +327,7 @@ void lj_gc2_init(global_State *g)
   gc2_live_estimate_store_rlx(g, 0);
   gc2_weak_stack_store_rlx(g, NULL);
   gc2_weak_ready_store_rlx(g, NULL);
+  gc2_weak_overflow_store_rlx(g, NULL);
   gc2_weak_capacity_store_rlx(g, 0);
   gc2_weak_drain_active_store_rlx(g, 0);
   gc2_weak_write_active_store_rlx(g, 0);
@@ -414,6 +443,12 @@ void lj_gc2_fini(global_State *g)
       lj_mem_freevec(g, weak_ready, gc2_weak_capacity_acq(g), uint8_t);
       gc2_weak_ready_store_rlx(g, NULL);
     }
+  }
+  if (g) {
+    GC2WeakOverflow *weak_overflow =
+      gc2_weak_overflow_xchg_acqrel(g, NULL);
+    if (weak_overflow)
+      gc2_weak_overflow_free(g, weak_overflow);
   }
   if (g) {
     gc2_weak_capacity_store_rlx(g, 0);
@@ -1424,6 +1459,13 @@ void lj_gc2_mark_begin(global_State *g)
     gc2_minor_cycle_starts_add(g, 1);
   else
     gc2_major_cycle_starts_add(g, 1);
+  /*
+  ** A fresh GC2 cycle is arena-mark-only by default. The legacy collector sets
+  ** legacy_mark_bridge after lj_gc2_mark_begin() when this mark pass feeds a
+  ** legacy sweep. Publish this before MARK so standalone workers never observe
+  ** stale bridge state from the previous cycle.
+  */
+  gc2_legacy_mark_bridge_rel(g, 0);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   gc2_phase_rel(g, LJ_GC2_MARK);
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
@@ -1462,6 +1504,11 @@ void lj_gc2_mark_begin(global_State *g)
 		     LJ_GC2_HS_RESET_ALLOC);
   }
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
+}
+
+void lj_gc2_legacy_mark_bridge_enable(global_State *g)
+{
+  gc2_legacy_mark_bridge_rel(g, 1);
 }
 
 void lj_gc2_force_major(global_State *g)
@@ -2522,6 +2569,7 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   gc2_sweep_bridge_ready_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
+  gc2_legacy_mark_bridge_rel(g, 0);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
     gc2_preserve_abort_to_idle_add(g, 1);
@@ -2559,6 +2607,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   live = lj_gc2_sweep_live_aggregate(g);
   lj_gc2_update_minor_survival_policy(g, live);
   gc2_update_public_minor_gates(g);
+  gc2_legacy_mark_bridge_rel(g, 0);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_SWEEP) {
     gc2_cycle_leader_rel(g, 0);
@@ -2586,6 +2635,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
     live = lj_gc2_sweep_live_aggregate(g);
     lj_gc2_update_minor_survival_policy(g, live);
   }
+  gc2_legacy_mark_bridge_rel(g, 0);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
     gc2_sweep_to_idle_add(g, 1);
@@ -3604,6 +3654,46 @@ static int gc2_weak_resize(global_State *g, MSize cap)
   return 1;
 }
 
+static void gc2_weak_overflow_free(global_State *g, GC2WeakOverflow *node)
+{
+  while (node) {
+    GC2WeakOverflow *next = gc2_weak_overflow_next_acq(node);
+    lj_mem_free(g, node, sizeof(*node));
+    node = next;
+  }
+}
+
+static int gc2_weak_overflow_push(global_State *g, GCtab *t)
+{
+  GC2WeakOverflow *node, *head;
+  if (!g || !t)
+    return 0;
+  if (g->allocf == lj_arena_allocf) {
+    node = (GC2WeakOverflow *)lj_arena_allocd_alloc(
+      (LJArenaAllocD *)g->allocd, sizeof(*node), 0);
+  } else {
+    node = (GC2WeakOverflow *)g->allocf(g->allocd, NULL, 0, sizeof(*node));
+  }
+  if (!node)
+    return 0;
+  lj_assertG(checkptrGC(node),
+	     "allocated memory address %p outside required range", node);
+  lj_gc_total_add(g, sizeof(*node));
+  gc2_weak_overflow_tab_rel(node, t);
+  head = gc2_weak_overflow_acq(g);
+  do {
+    gc2_weak_overflow_next_rel(node, head);
+    /*
+    ** Weak snapshot overflow is a semantic slow path, not a warm mutator path.
+    ** Allocate with the raw allocator so a parked GC2 worker never longjmps
+    ** through a borrowed Lua stack. If allocation fails, the legacy weak bridge
+    ** still participates in completion and the overflow counter records the
+    ** gap.
+    */
+  } while (!gc2_weak_overflow_cas(g, &head, node));
+  return 1;
+}
+
 static void gc2_weak_reset(global_State *g)
 {
   MSize i;
@@ -3613,6 +3703,7 @@ static void gc2_weak_reset(global_State *g)
   if (!g)
     return;
   prior_count = gc2_weak_count_acq(g);
+  gc2_weak_overflow_free(g, gc2_weak_overflow_xchg_acqrel(g, NULL));
   (void)gc2_weak_ensure(g);
   cap = gc2_weak_capacity_acq(g);
   if (prior_count > (uint64_t)cap) {
@@ -3754,6 +3845,7 @@ static void gc2_weak_record(global_State *g, GCtab *t)
   stack = gc2_weak_stack_acq(g);
   ready = gc2_weak_ready_acq(g);
   if (!stack || !ready || cap == 0) {
+    (void)gc2_weak_overflow_push(g, t);
     gc2_weak_tables_overflow_add(g, 1);
     return;
   }
@@ -3764,6 +3856,7 @@ static void gc2_weak_record(global_State *g, GCtab *t)
     la_store8_rel(&ready[(MSize)idx], 1);
     gc2_weak_tables_queued_add(g, 1);
   } else {
+    (void)gc2_weak_overflow_push(g, t);
     gc2_weak_tables_overflow_add(g, 1);
   }
 }
@@ -3810,7 +3903,14 @@ static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
     if (tvisstr(o)) {
       if (markstr) {
 	(void)lj_gc2_markobj(g, gcV(o));
-	lj_obj_cleargcflags_atomic(gcV(o), LJ_GC_WHITES);
+	/*
+	** Weak processing marks string slots because strings are not weak-cleared.
+	** Standalone GC2 cycles must keep that reachability in the GC2 bitmap only;
+	** legacy white bits are updated only while the legacy collector has opted
+	** into using GC2 marks for its own sweep.
+	*/
+	if (gc2_legacy_mark_bridge_acq(g))
+	  lj_obj_cleargcflags_atomic(gcV(o), LJ_GC_WHITES);
       }
       return 0;  /* 05 section 5.8: strings are not weak-cleared. */
     }
@@ -4137,6 +4237,27 @@ static int gc2_weak_backfill_bridge(global_State *g, GCobj *bridge_head)
   return 1;  /* 05 section 5.8: owner-cleared bridge weak snapshot gaps. */
 }
 
+static uint64_t gc2_weak_clear_overflow(global_State *g, uint64_t *slotsp,
+					uint64_t *clearedp)
+{
+  GC2WeakOverflow *node;
+  uint64_t tables = 0, slots = 0, cleared = 0;
+  for (node = gc2_weak_overflow_acq(g);
+       node != NULL;
+       node = gc2_weak_overflow_next_acq(node)) {
+    GCtab *t = gc2_weak_overflow_tab_acq(node);
+    if (!t)
+      continue;
+    gc2_weak_process_tab(g, t, 1, &slots, &cleared);
+    tables++;
+  }
+  if (slotsp)
+    *slotsp += slots;
+  if (clearedp)
+    *clearedp += cleared;
+  return tables;
+}
+
 static int gc2_weak_overflow_clear_bridge(global_State *g, GCobj *bridge_head)
 {
   uint64_t reserved, tables = 0, slots = 0, cleared = 0;
@@ -4148,11 +4269,19 @@ static int gc2_weak_overflow_clear_bridge(global_State *g, GCobj *bridge_head)
   cap = gc2_weak_capacity_acq(g);
   stack = gc2_weak_stack_acq(g);
   ready = gc2_weak_ready_acq(g);
-  if (!stack || !ready)
+  if ((!stack || !ready) && gc2_weak_overflow_acq(g) == NULL)
     return 0;
   reserved = gc2_weak_count_acq(g);
-  if (reserved <= (uint64_t)cap)
+  if (stack && ready && reserved <= (uint64_t)cap &&
+      gc2_weak_overflow_acq(g) == NULL)
     return 0;
+  /*
+  ** The bounded vector remains the common case. Overflow nodes are the GC2
+  ** ownership record for tables that did not fit it; the legacy weak list is
+  ** only an additional bridge source because stale legacy colors can keep
+  ** reachable weak tables out of that list.
+  */
+  tables += gc2_weak_clear_overflow(g, &slots, &cleared);
   while (bridge_head) {
     GCtab *t;
     uint8_t flags;
@@ -5979,18 +6108,28 @@ static void *gc2_mark_base(GCobj *o)
   return o;
 }
 
-static LJ_AINLINE void gc2_mark_legacy_live(GCobj *o)
+static LJ_AINLINE void gc2_mark_legacy_live_force(GCobj *o)
 {
-  /*
-  ** During the bridge period the legacy collector still owns the root-list and
-  ** string-table sweep decisions, while GC2 owns arena mark bits. Any object
-  ** reached only by a GC2 edge must therefore clear legacy white as well; this
-  ** keeps legacy sweep from reclaiming live trace prototypes, IR constants,
-  ** interned strings and other root-list objects before arena-only sweeping
-  ** replaces the root-list path.
-  */
   if (LJ_LIKELY(o->gch.gct != 0))
     lj_obj_cleargcflags_atomic(o, LJ_GC_WHITES);
+}
+
+static LJ_AINLINE void gc2_mark_legacy_live(global_State *g, GCobj *o)
+{
+  /*
+  ** GC2 mark bits and legacy color bits are intentionally separate. Standalone
+  ** GC2 cycles, including true minor cycles and manual active-GC2 cycles, must
+  ** not clear legacy white bits: conservative stack hits from those passes can
+  ** otherwise turn unreachable temporaries into legacy-live gray objects that
+  ** survive until the next major paranoia check.
+  **
+  ** The legacy collector enables legacy_mark_bridge only when its own mark pass
+  ** delegates reachability to GC2. During that coupled window, objects reached
+  ** by GC2 edges must clear legacy white too, because legacy string/root-list
+  ** sweep still owns reclamation for those objects.
+  */
+  if (gc2_legacy_mark_bridge_acq(g))
+    gc2_mark_legacy_live_force(o);
 }
 
 int lj_gc2_markmem(global_State *g, void *p)
@@ -6030,7 +6169,7 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  gc2_mark_legacy_live(o);
+  gc2_mark_legacy_live(g, o);
   if (marked) {
     uint32_t phase = gc2_phase_acq(g);
     traversable = gc2_mark_base_traversable(g, base);
@@ -6057,7 +6196,7 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  gc2_mark_legacy_live(o);
+  gc2_mark_legacy_live(g, o);
   traversable = gc2_mark_base_traversable(g, base);
   if (marked && (traversable || o->gch.gct == ~LJ_TUDATA)) {
     if (traversable) {
@@ -6565,7 +6704,7 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
   */
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  gc2_mark_legacy_live(o);
+  gc2_mark_legacy_live_force(o);
   if (marked &&
       (gc2_mark_base_traversable(g, base) || o->gch.gct == ~LJ_TUDATA)) {
     gc2_traverse_obj(g, o);

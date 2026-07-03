@@ -14,6 +14,9 @@
 - Switched output-file checks to read the captured output and assert text
   directly.
 - Invariant-testing guidance now lives in `notes/ci-invariant-testing.md`.
+- There is no historical-wrapper exception: deleted source guards stay deleted.
+  Preserve the reason in comments/notes, and test only behavior, generated
+  artifacts, or release/build outputs.
 
 Validation:
 
