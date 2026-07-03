@@ -50,9 +50,9 @@ static GCfunc *top_lfunc(lua_State *L)
   return fn;
 }
 
-static void test_fast_path(lua_State *L)
+static void test_traced_behavior(lua_State *L)
 {
-  uint32_t fast0, fallback0;
+  uint32_t fallback0;
   const char *code =
     "local util = require'jit.util'\n"
     "jit.flush()\n"
@@ -76,32 +76,20 @@ static void test_fast_path(lua_State *L)
     "assert(t[1]() == 51)\n"
     "assert(t[2]() == 4)\n";
 
-  lj_func_test_reset_gc1num_bump_fast_calls();
   lj_func_test_reset_gc1num_bump_fallback_calls();
-  fast0 = lj_func_test_gc1num_bump_fast_calls();
   fallback0 = lj_func_test_gc1num_bump_fallback_calls();
 
-  run_script(L, code, "numeric FNEW bump fast path");
+  run_script(L, code, "numeric FNEW traced behavior");
 
-  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
   assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
 }
 
-static void test_accounting_fallback(lua_State *L, global_State *g,
-				     TGState *tg)
+static void load_one_upvalue_fixture(lua_State *L, GCfunc **parentp,
+				     GCproto **childp, int32_t *slotnop)
 {
-  uint32_t fast0, fallback0;
-  TValue slots[256];
-  GCfunc *parent, *fn;
+  GCfunc *parent;
   GCproto *child;
-  GCupval *uv;
   uint32_t uvdesc;
-  int32_t slotno;
-
-  lj_func_test_reset_gc1num_bump_fast_calls();
-  lj_func_test_reset_gc1num_bump_fallback_calls();
-  fast0 = lj_func_test_gc1num_bump_fast_calls();
-  fallback0 = lj_func_test_gc1num_bump_fallback_calls();
 
   assert(luaL_loadstring(L,
     "return function()\n"
@@ -118,7 +106,65 @@ static void test_accounting_fallback(lua_State *L, global_State *g,
   assert(proto_celluv(child));
   uvdesc = proto_uv(child)[0];
   assert((uvdesc & PROTO_UV_LOCAL) != 0);
-  slotno = (int32_t)(uvdesc & 0xffu);
+  *slotnop = (int32_t)(uvdesc & 0xffu);
+  *parentp = parent;
+  *childp = child;
+}
+
+static void assert_one_upvalue_result(GCfunc *fn, TValue *slot, int32_t value)
+{
+  GCupval *uv;
+  assert(fn->l.nupvalues == 1);
+  uv = func_uv_acq(&fn->l, 0);
+  assert(uv->closed);
+  assert(uvval(uv) == &uv->tv);
+  assert(tvisnumber(&uv->tv));
+  assert((int32_t)numberVnum(&uv->tv) == value);
+  assert(tvisgcv(slot) && gcV(slot) == obj2gco(uv));
+}
+
+static void test_accounting_fast_direct(lua_State *L, global_State *g,
+					TGState *tg)
+{
+  uint32_t fast0, fallback0;
+  TValue slots[256];
+  GCfunc *parent, *fn;
+  GCproto *child;
+  int32_t slotno;
+  UNUSED(g);
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  fast0 = lj_func_test_gc1num_bump_fast_calls();
+  fallback0 = lj_func_test_gc1num_bump_fallback_calls();
+
+  load_one_upvalue_fixture(L, &parent, &child, &slotno);
+  la_store64_rel(&tg->local_total, 0);
+  setnumV(&slots[slotno], 123);
+
+  fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 123);
+  assert_one_upvalue_result(fn, &slots[slotno], 123);
+  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
+  assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
+  assert(lj_tg_local_total_acq(tg) > 0);
+  lua_pop(L, 1);
+}
+
+static void test_accounting_fallback(lua_State *L, global_State *g,
+				     TGState *tg)
+{
+  uint32_t fast0, fallback0;
+  TValue slots[256];
+  GCfunc *parent, *fn;
+  GCproto *child;
+  int32_t slotno;
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  fast0 = lj_func_test_gc1num_bump_fast_calls();
+  fallback0 = lj_func_test_gc1num_bump_fallback_calls();
+
+  load_one_upvalue_fixture(L, &parent, &child, &slotno);
   setnumV(&slots[slotno], 123);
 
   lj_gc_threshold_store(g, lj_gc_total_load(g) + 4u * LJ_GC2_ACCT_FLUSH);
@@ -126,13 +172,7 @@ static void test_accounting_fallback(lua_State *L, global_State *g,
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
   la_store64_rel(&tg->local_total, LJ_GC2_ACCT_FLUSH - 1u);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 123);
-  assert(fn->l.nupvalues == 1);
-  uv = func_uv_acq(&fn->l, 0);
-  assert(uv->closed);
-  assert(uvval(uv) == &uv->tv);
-  assert(tvisnumber(&uv->tv));
-  assert((int32_t)numberVnum(&uv->tv) == 123);
-  assert(tvisgcv(&slots[slotno]) && gcV(&slots[slotno]) == obj2gco(uv));
+  assert_one_upvalue_result(fn, &slots[slotno], 123);
   assert(lj_func_test_gc1num_bump_fallback_calls() > fallback0);
   assert(lj_func_test_gc1num_bump_fast_calls() == fast0);
   assert(lj_tg_local_total_acq(tg) < LJ_GC2_ACCT_FLUSH);
@@ -150,7 +190,8 @@ int main(void)
   g = G(L);
   tg = L2TG(L);
 
-  test_fast_path(L);
+  test_traced_behavior(L);
+  test_accounting_fast_direct(L, g, tg);
   test_accounting_fallback(L, g, tg);
 
   lua_close(L);
