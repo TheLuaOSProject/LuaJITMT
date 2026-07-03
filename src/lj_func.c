@@ -470,16 +470,19 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   GCArena *a;
   GCupval *uv;
   GCobj *oldhead;
+  uint64_t local_total;
   uint32_t cell, end, next, black;
+  int account_now;
 
   if (g == NULL || tg == NULL ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
       g->allocf_arena == 0 || tg != g->main_tg ||
       lj_tg_flags_test_acq(tg, TGF_DEAD) ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocd != &tg->allocd ||
-      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+      g->allocd != &tg->allocd)
     return NULL;
+  local_total = lj_tg_local_total_acq(tg);
+  account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;
 
   /*
   ** Closed nil local cells are leaf objects, so the bump path only replaces
@@ -514,7 +517,15 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   newwhite(g, uv);
 
   lj_gc_total_add(g, nbytes);
-  (void)lj_tg_local_total_add_rlx(tg, nbytes);
+  /*
+  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
+  ** update gc.total before flushing the TG batch. These pre-MT helpers link
+  ** the initialized object to pending roots immediately after accounting.
+  */
+  if (account_now)
+    lj_gc2_account_alloc(g, tg, nbytes);
+  else
+    (void)lj_tg_local_total_add_rlx(tg, nbytes);
   oldhead = lj_tg_gcroot_pending_acq(tg);
   if (oldhead)
     lj_obj_setgcwrel(obj2gco(uv), oldhead);
@@ -542,16 +553,19 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   GCupval *uv;
   TValue *slot;
   GCobj *oldhead;
+  uint64_t local_total;
   uint32_t cell, uvcell, end, next, black;
+  int account_now;
 
   if (g == NULL || tg == NULL ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
       g->allocf_arena == 0 || tg != g->main_tg ||
       lj_tg_flags_test_acq(tg, TGF_DEAD) ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocd != &tg->allocd ||
-      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+      g->allocd != &tg->allocd)
     return NULL;
+  local_total = lj_tg_local_total_acq(tg);
+  account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;
 
   /*
   ** Match the empty-table fast path: only consume the current bump run when
@@ -616,7 +630,15 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   lj_obj_setgcwrel(obj2gco(fn), obj2gco(uv));
 
   lj_gc_total_add(g, nbytes);
-  (void)lj_tg_local_total_add_rlx(tg, nbytes);
+  /*
+  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
+  ** update gc.total before flushing the TG batch. These pre-MT helpers link
+  ** the initialized object to pending roots immediately after accounting.
+  */
+  if (account_now)
+    lj_gc2_account_alloc(g, tg, nbytes);
+  else
+    (void)lj_tg_local_total_add_rlx(tg, nbytes);
   oldhead = lj_tg_gcroot_pending_acq(tg);
   if (oldhead)
     lj_obj_setgcwrel(obj2gco(uv), oldhead);
@@ -641,16 +663,19 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   GCfunc *fn;
   GCtab *env;
   GCobj *oldhead;
+  uint64_t local_total;
   uint32_t count, cell, end, next, black;
+  int account_now;
 
   if (g == NULL || tg == NULL ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
       g->allocf_arena == 0 || tg != g->main_tg ||
       lj_tg_flags_test_acq(tg, TGF_DEAD) ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocd != &tg->allocd ||
-      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+      g->allocd != &tg->allocd)
     return NULL;
+  local_total = lj_tg_local_total_acq(tg);
+  account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;
 
   /*
   ** The caller already owns the allocation pacing check: interpreter BC_FNEW
@@ -690,7 +715,15 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
 				  PROTO_CLCOUNT));
 
   lj_gc_total_add(g, nbytes);
-  (void)lj_tg_local_total_add_rlx(tg, nbytes);
+  /*
+  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
+  ** update gc.total before flushing the TG batch. These pre-MT helpers link
+  ** the initialized object to pending roots immediately after accounting.
+  */
+  if (account_now)
+    lj_gc2_account_alloc(g, tg, nbytes);
+  else
+    (void)lj_tg_local_total_add_rlx(tg, nbytes);
   oldhead = lj_tg_gcroot_pending_acq(tg);
   if (oldhead)
     lj_obj_setgcwrel(obj2gco(fn), oldhead);

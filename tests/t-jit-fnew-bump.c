@@ -459,8 +459,8 @@ static void test_accounting_fallback(lua_State *L, global_State *g,
   la_store64_rel(&tg->local_total, LJ_GC2_ACCT_FLUSH - 1u);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 123);
   assert_one_upvalue_result(fn, &slots[slotno], 123);
-  assert(lj_func_test_gc1num_bump_fallback_calls() > fallback0);
-  assert(lj_func_test_gc1num_bump_fast_calls() == fast0);
+  assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
+  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
   assert(lj_tg_local_total_acq(tg) < LJ_GC2_ACCT_FLUSH);
   lua_pop(L, 1);
 }

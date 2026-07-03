@@ -1048,16 +1048,19 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   GCArena *a;
   GCtab *t;
   GCobj *head;
+  uint64_t local_total;
   uint32_t cell, end, next;
+  int account_now;
   UNUSED(L);
   if (g == NULL || tg == NULL ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
       g->allocf_arena == 0 || tg != g->main_tg ||
       lj_tg_flags_test_acq(tg, TGF_DEAD) ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocd != &tg->allocd ||
-      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - sizeof(GCtab))
+      g->allocd != &tg->allocd)
     return NULL;
+  local_total = lj_tg_local_total_acq(tg);
+  account_now = local_total >= LJ_GC2_ACCT_FLUSH - sizeof(GCtab);
   b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
     return NULL;
@@ -1079,7 +1082,15 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   tab_init_empty(g, t);
   newwhite(g, t);
   lj_gc_total_add(g, sizeof(GCtab));
-  (void)lj_tg_local_total_add_rlx(tg, sizeof(GCtab));
+  /*
+  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
+  ** update gc.total before flushing the TG batch. This pre-MT helper links
+  ** the initialized table to pending roots immediately after accounting.
+  */
+  if (account_now)
+    lj_gc2_account_alloc(g, tg, sizeof(GCtab));
+  else
+    (void)lj_tg_local_total_add_rlx(tg, sizeof(GCtab));
   head = lj_tg_gcroot_pending_acq(tg);
   if (head)
     lj_obj_setgcwrel(obj2gco(t), head);
