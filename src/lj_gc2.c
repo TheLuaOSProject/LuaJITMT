@@ -6544,6 +6544,36 @@ static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
   return n;
 }
 
+uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
+{
+  void *base;
+  int marked;
+  uint32_t phase;
+  uint32_t drained = 0;
+  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+    return 0;
+  phase = gc2_phase_acq(g);
+  if (phase != LJ_GC2_SWEEP)
+    return (uint32_t)lj_gc2_markobj(g, o);
+  /*
+  ** Root-list preservation runs after MARK/WEAK have closed but before arena
+  ** owner sweep reclaims unmarked cells. If a root is first found here, marking
+  ** only its own cell is not enough: the regular mark path no longer enqueues
+  ** traversable objects once phase is SWEEP, so child strings/protos/tables can
+  ** be reused while the root table still contains their tagged pointers. Trace
+  ** the newly preserved root immediately and drain any children it publishes.
+  */
+  base = gc2_mark_base(o);
+  marked = lj_gc2_markmem(g, base);
+  gc2_mark_legacy_live(o);
+  if (marked &&
+      (gc2_mark_base_traversable(g, base) || o->gch.gct == ~LJ_TUDATA)) {
+    gc2_traverse_obj(g, o);
+    drained = 1 + gc2_drain_grey(g, ~(uint32_t)0);
+  }
+  return drained;
+}
+
 static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
 {
   TGState *tg;

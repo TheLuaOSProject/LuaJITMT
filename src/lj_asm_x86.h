@@ -2370,21 +2370,23 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
     asm_ustore_forjit(as, ir);
     return;
   }
-  if (mt_active_or_entering_acq(J2G(as->J))) {
-    if (asm_ahstore_trace_local_direct_ok(as, ir)) {
-      /* The table has not escaped the trace yet, so stock direct lowering
-      ** cannot race another TG. Shared/NEWREF/published cases stay below.
-      */
-    } else if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
-      asm_ahstore_inline_array_tvalue(as, ir);
-      return;
-    } else if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
-      asm_ahstore_inline_hash_tvalue(as, ir);
-      return;
-    } else if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
-      asm_ahstore_forjit(as, ir);
-      return;
-    }
+  if (asm_ahstore_trace_local_direct_ok(as, ir) && !irt_isgcv(ir->t)) {
+    /* Non-GC values cannot become missing arena edges. GC-object stores into a
+    ** trace-local table still use helpers: the table can escape later in the
+    ** same trace, after the store has already happened. Published ASTORE/HSTORE
+    ** paths use helpers even without active MT because GC2 arena marks and
+    ** weak/remembered barriers are required in ordinary single-thread JIT code
+    ** as soon as an incremental/generational mark can overlap a trace.
+    */
+  } else if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
+    asm_ahstore_inline_array_tvalue(as, ir);
+    return;
+  } else if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
+    asm_ahstore_inline_hash_tvalue(as, ir);
+    return;
+  } else if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
+    asm_ahstore_forjit(as, ir);
+    return;
   }
 #endif
   if (irt_isnum(ir->t)) {

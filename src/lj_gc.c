@@ -164,7 +164,14 @@ static void gc_arena_preserve_root_chain(global_State *g)
   uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    lj_gc_arena_markobj(g, o);
+    /*
+    ** The root list is still the legacy ownership spine while GC2 owns arena
+    ** liveness. At the sweep boundary a root object can be discovered after
+    ** MARK/WEAK have closed; preserving only the root cell would leave its
+    ** table/proto/closure children reclaimable. Newly preserved traversable
+    ** roots are therefore traced immediately before owner sweep reuses cells.
+    */
+    (void)lj_gc2_preserve_sweep_root(g, o);
     if (++n == 1000000u) {
       lj_assertG(0, "root list cycle at arena sweep boundary");
       break;

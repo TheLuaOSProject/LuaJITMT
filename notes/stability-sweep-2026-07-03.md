@@ -184,6 +184,35 @@ from `tab_struct_owner_wait()` leaving native and applying `HS_SCAN_ROOTS` while
 the TG still had trace state published. That path is covered by the JIT/native
 stack-scan rule above.
 
+## Stock runner stale table edge
+
+`tools/ci/lua_test.sh run_stock_tests -- --quiet` exposed a stale table slot in
+the generated stock-suite test plan. A reachable 4-slot table still held a
+string-tagged TValue for `tostring/typeof semi-roundtrip`, but the arena cell had
+already been reused by a `GCtrace`/cdata object. The reduced repro was:
+
+- `cd tests/stock/test`
+- `LUA_PATH=... src/luajit test.lua --quiet 75`
+
+`-joff` passed, which pointed at JIT-side table publication rather than stock
+semantics. The root cause was x64 JIT table stores using stock direct lowering
+when MT was inactive, and also allowing GC-object stores into trace-local tables
+that later escaped the trace. GC2 arena marking and weak/remembered barriers are
+required even for ordinary single-thread JIT code whenever an incremental or
+generational mark can overlap the trace. The fix routes published ASTORE/HSTORE
+through the GC2-aware helpers regardless of MT activation and keeps the
+trace-local direct path only for non-GC TValue stores. A sweep-boundary preserve
+hook now also traces any root first discovered at SWEEP time so preserving a root
+cell cannot leave its children reclaimable.
+
+Verification after the fix:
+
+- Assertion build: `test.lua --quiet 75`: passed
+- Assertion build: `tools/ci/lua_test.sh run_stock_tests -- --quiet`: 509 passed
+- Optimized build: `tools/ci/lua_test.sh run_stock_tests -- --quiet`: 509 passed
+- `tools/ci/lua_test.sh m3_safepoint_handshake m3_gc_active_thread_roots m5_tab_resize_stress m6_jit_recursive_call_unroll`: passed
+- Heavy table traversal stress with `threads=4`, `reps=1024`, `rounds=256`: passed
+
 ## Benchmark guard
 
 The benchmark-regression coverage is no longer purely self-referential in current
