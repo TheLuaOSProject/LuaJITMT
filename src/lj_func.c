@@ -171,6 +171,18 @@ GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
   return uv;
 }
 
+static LJ_AINLINE void func_pubuv_payload(lua_State *L, GCupval *uv)
+{
+  /*
+  ** A closed upvalue containing a primitive has no child edge to repair or
+  ** remember. Keep the publication barrier on actual GC payloads, where GC2
+  ** and the legacy incremental collector must see uv->tv before the upvalue is
+  ** linked into the pending root chain.
+  */
+  if (tvisgcv(&uv->tv))
+    lj_gc_pubobjtv(L, uv, &uv->tv);
+}
+
 /* Create a closed upvalue initialized from a stack slot. */
 static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
 {
@@ -183,7 +195,7 @@ static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
   uv->immutable = 0;
   uv->dhash = 0;
   newwhite(g, uv);
-  lj_gc_pubobjtv(L, uv, &uv->tv);
+  func_pubuv_payload(L, uv);
   return uv;
 }
 
@@ -475,7 +487,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   uv->immutable = 0;
   uv->dhash = 0;
   newwhite(g, uv);
-  lj_gc_pubobjtv(L, uv, &uv->tv);
+  func_pubuv_payload(L, uv);
 
   slot = (base ? base : L->base) + slotno;
   if (!(uvspec & PROTO_UV_IMMUTABLE))

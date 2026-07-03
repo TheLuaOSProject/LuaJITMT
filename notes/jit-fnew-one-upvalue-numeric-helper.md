@@ -149,3 +149,11 @@ Focused validation after the inline follow-up:
 - `LJ_BENCH_STOCK_FILTERS=closures_upval LJ_BENCH_STOCK_SCALE=0.02 tools/ci/lua_test.sh m9_bench_stock_compare`
 
 The final stock comparison guard reported `closures_upval` geomean `2.116886`.
+
+2026-07-03 follow-up: generic closed-upvalue construction and the one-upvalue
+bump helper now skip the upvalue-payload publication helper when the copied
+payload is non-GC. This does not change Lua closure or upvalue identity and does
+not remove any collector edge: numeric captures such as `closures_upval` have no
+`uv->tv` child object, while table/string/cdata/thread/function captures still
+run the GC2 and legacy publication barrier before the upvalue is linked into
+the pending root chain.
