@@ -205,16 +205,39 @@ static void strtab_active_leave(TGState *tg, StrTabHdr *hdr)
     lj_tg_strtab_active_hdr_rel(tg, NULL);
 }
 
+static LJ_AINLINE int strtab_active_on_tg(global_State *g, TGState *tg,
+					  StrTabHdr *hdr)
+{
+  return tg && tg->gl == g &&
+    lj_tg_strtab_active_depth_acq(tg) != 0 &&
+    lj_tg_strtab_active_hdr_acq(tg) == hdr;
+}
+
 static int strtab_active_on_hdr(global_State *g, StrTabHdr *hdr)
 {
-  TGState *tg;
+  TGState *tg, *main_tg, *self;
+  int saw_main = 0, saw_self = 0;
+  main_tg = g->main_tg;
+  self = lj_thr_get_tg();
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
-    if (lj_tg_strtab_active_depth_acq(tg) != 0 &&
-	lj_tg_strtab_active_hdr_acq(tg) == hdr)
+    if (tg == main_tg)
+      saw_main = 1;
+    if (tg == self)
+      saw_self = 1;
+    if (strtab_active_on_tg(g, tg, hdr))
       return 1;
   }
+  /*
+  ** Attach/detach-adjacent code can have a same-state TG that is not yet, or
+  ** no longer, reachable from gc2.tg_list. A resize claim must still honor
+  ** those active pins before publishing and retiring the old header.
+  */
+  if (!saw_main && strtab_active_on_tg(g, main_tg, hdr))
+    return 1;
+  if (!saw_self && self != main_tg && strtab_active_on_tg(g, self, hdr))
+    return 1;
   return 0;
 }
 

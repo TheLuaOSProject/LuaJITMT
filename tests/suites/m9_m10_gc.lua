@@ -358,8 +358,11 @@ local function run_bench_stock_compare(t)
   local bench_lua = t:path("aux", "bench", "bench.lua")
   local filters = os.getenv("LJ_BENCH_STOCK_FILTERS") or
     "arith_loop fib30 tab_hash_write alloc_tables closures_upval"
+  -- The stock guard is meant to catch real throughput cliffs, not only
+  -- accounting mistakes. Keep the default loose enough for current focused
+  -- gaps and CI variance, but far below the historical 50x+ regressions.
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
-                       os.getenv("BENCH_GEOMEAN_MAX") or "100")
+                       os.getenv("BENCH_GEOMEAN_MAX") or "3.0")
   local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "60s"
   local scale = os.getenv("LJ_BENCH_STOCK_SCALE") or
     os.getenv("BENCH_SCALE") or "0.001"

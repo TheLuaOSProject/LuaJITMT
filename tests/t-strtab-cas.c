@@ -23,6 +23,9 @@
 typedef struct ActiveReleaseCtx {
   TGState *tg;
   StrTabHdr *hdr;
+  int64_t delay_ns;
+  uint32_t claimed;
+  uint32_t cleared;
 } ActiveReleaseCtx;
 
 typedef struct FailAllocCtx {
@@ -61,10 +64,14 @@ static void *release_active_after_claim(void *arg)
   ActiveReleaseCtx *ctx = (ActiveReleaseCtx *)arg;
   while ((la_load32_acq(&ctx->hdr->resize) & TEST_STRTAB_RESIZE) == 0)
     (void)lj_thr_sleep_ns(NULL, 100000);
+  la_store32_rel(&ctx->claimed, 1);
+  if (ctx->delay_ns > 0)
+    (void)lj_thr_sleep_ns(NULL, ctx->delay_ns);
   assert(lj_tg_strtab_active_hdr_acq(ctx->tg) == ctx->hdr);
   assert(lj_tg_strtab_active_depth_acq(ctx->tg) == 1u);
   lj_tg_strtab_active_depth_rel(ctx->tg, 0);
   lj_tg_strtab_active_hdr_rel(ctx->tg, NULL);
+  la_store32_rel(&ctx->cleared, 1);
   return NULL;
 }
 
@@ -120,7 +127,8 @@ int main(void)
   lua_State *L = luaL_newstate();
   global_State *g;
   StrTabHdr *hdr;
-  TGState *tg;
+  TGState *tg, *oldtls;
+  TGState extra;
   MSize oldmask, wantmask;
   uint64_t retire_epoch;
   uint64_t smr_runs0, smr_reclaimed0;
@@ -156,9 +164,14 @@ int main(void)
   lj_tg_strtab_active_depth_rel(tg, 1);
   ctx.tg = tg;
   ctx.hdr = hdr;
+  ctx.delay_ns = 0;
+  ctx.claimed = 0;
+  ctx.cleared = 0;
   assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);
   lj_str_resize(L, wantmask);
   assert(lj_thr_join(&release_thr, NULL) == 0);
+  assert(la_load32_acq(&ctx.claimed) != 0);
+  assert(la_load32_acq(&ctx.cleared) != 0);
   assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
   assert(lj_tg_strtab_active_depth_acq(tg) == 0);
   assert(lj_str_tabh_acq(g) != hdr);
@@ -209,6 +222,36 @@ int main(void)
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
 
+  hdr = lj_str_tabh_acq(g);
+  oldmask = g->str.mask;
+  wantmask = (oldmask << 1) + 1u;
+  lj_tg_init_thread(g, &extra, NULL, 0);
+  lj_tg_tid_rel(&extra, lj_thr_newid());
+  oldtls = lj_thr_get_tg();
+  lj_thr_set_tg(&extra);
+  lj_tg_strtab_active_hdr_rel(&extra, hdr);
+  lj_tg_strtab_active_depth_rel(&extra, 1);
+  ctx.tg = &extra;
+  ctx.hdr = hdr;
+  ctx.delay_ns = 20000000;
+  ctx.claimed = 0;
+  ctx.cleared = 0;
+  assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);
+  lj_str_resize(L, wantmask);
+  assert(lj_thr_join(&release_thr, NULL) == 0);
+  assert(la_load32_acq(&ctx.claimed) != 0);
+  assert(la_load32_acq(&ctx.cleared) != 0);
+  assert(lj_tg_strtab_active_hdr_acq(&extra) == NULL);
+  assert(lj_tg_strtab_active_depth_acq(&extra) == 0);
+  assert(lj_str_tabh_acq(g) != hdr);
+  assert(g->str.mask == wantmask);
+  assert(lj_str_retired_head_acq(g) == hdr);
+  lj_thr_set_tg(oldtls);
+  lj_tg_fini_thread(g, &extra);
+  retire_epoch = gc2_hs_epoch_acq(g);
+  assert(lj_gc2_reclaim_retired(g, retire_epoch + 1u) >= 1u);
+  assert(lj_str_retired_head_acq(g) == NULL);
+
   for (i = 0; i < 8192; i++) {
     char buf[64];
     snprintf(buf, sizeof(buf), "m5-strtab-cas-%d-%d", i, i * 31);
@@ -222,6 +265,6 @@ int main(void)
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
   lua_close(L);
-  printf("t-strtab-cas OK: resize OOM, active-drain claim, GC2 epoch retire, and duplicate intern guard verified\n");
+  printf("t-strtab-cas OK: resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, and duplicate intern guard verified\n");
   return 0;
 }
