@@ -56,8 +56,9 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
   while debugging the harness itself.
 - `tests/lib/suite_utils.lua` temporarily gave generic `read_file()` the same
   source-file rejection used by `Test:read()` and result-file assertions. The
-  later cleanup removed both the deliberate source-read API and the source
-  guards themselves.
+  later cleanup removed the deliberate source-read API, the source guards
+  themselves, and eventually the path-based read rejection. Current policy is
+  documentation plus review, not a harness source-path guard.
 - `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
   forced clean builds. Cases that need profile isolation can still pass
   `clean = true`.
