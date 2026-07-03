@@ -212,6 +212,8 @@ Verification after the fix:
 - Optimized build: `tools/ci/lua_test.sh run_stock_tests -- --quiet`: 509 passed
 - `tools/ci/lua_test.sh m3_safepoint_handshake m3_gc_active_thread_roots m5_tab_resize_stress m6_jit_recursive_call_unroll`: passed
 - Heavy table traversal stress with `threads=4`, `reps=1024`, `rounds=256`: passed
+- Optimized threaded flush stress with `LJ_M6_JIT_FLUSH_THREAD_ROUNDS=128`
+  and `LJ_M6_JIT_FLUSH_THREAD_CHURN=256`: passed
 
 ## Benchmark guard
 
@@ -277,8 +279,9 @@ repatching the claims above:
 - Heavier table resize/retire stress around weak keys, finalizers, and traced
   reads/writes.
 - JIT trace flush/side-trace stress under concurrent thread activation and
-  shutdown. `tests/t-jit-flush-thread-stress.lua` remains a manual reducer for
-  this: it still finds a GC propagation crash under small settings and is not
-  wired into the M6 suite until that failure is fixed.
+  shutdown. `tests/t-jit-flush-thread-stress.lua` is wired as
+  `m6_jit_flush_thread_stress` and passes at suite scale; future work should
+  raise the monitored stress limits and capture live thread stacks if a long
+  unmonitored run hits the outer timeout.
 - GC root publication stress across pending-root drains, active `mt_entering`,
   and GC2 worker activity.
