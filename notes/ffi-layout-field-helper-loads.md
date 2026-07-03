@@ -8,13 +8,15 @@ The `ffi_layout_offsetof_snapshot()` caller also snapshots the raw type's
 `CType.info` / `CType.size` values before deciding whether the field walker can
 run.
 
-Invariant check:
+Coverage:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `ct.info`,
-  `ct.size`, `ct.sib`, `cct.info`, `cct.size`, or `cct.sib` reads in the field
-  layout snapshot path.
+- `m7_ffi_typeinfo_snapshot` exercises the field layout snapshot path through
+  `ffi.offsetof()` behavior and active-parser snapshot fixtures.
+- Local field-layout `CType` copies must use the documented helper-load
+  surface; that rule lives here and beside the helpers instead of in a
+  source-text predicate.
 
 Validation:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `git diff --check`

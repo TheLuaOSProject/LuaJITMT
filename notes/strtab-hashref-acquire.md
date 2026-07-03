@@ -22,6 +22,8 @@ the same published bucket word.
 
 ## Coverage
 
-`tools/ci/m5_strtab_cas.sh` now rejects `gcrefu()` in `src/lj_str.h` and the
-focused string-table fixtures. This intentionally does not cover the unrelated
-generic table hash macros in `lj_tab.h`.
+`m5_strtab_cas` owns the observable string-table coverage through the focused
+CAS, preparation, and rehash fixtures. The acquire-load requirement is
+documented here and beside the helper surface instead of being enforced by a
+source-text grep. This intentionally does not cover the unrelated generic table
+hash macros in `lj_tab.h`.

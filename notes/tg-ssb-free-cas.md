@@ -10,5 +10,6 @@ GC2 workers and assisting drains only push recycled nodes back to the owner. SSB
 node `next` publication continues to use `lj_gc2_ssb_next_*()`, so the node link
 and the head publish use matching acquire/release ordering.
 
-The M3 GC2 worker scheduler coverage now requires the helper family and documents why raw
-production C access to `ssb_free`.
+`m3_gc2_worker_scheduler` owns the observable SSB recycle behavior. Production
+C access to `ssb_free` must stay behind the documented helper family instead
+of source-text matching.

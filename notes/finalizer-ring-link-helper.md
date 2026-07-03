@@ -14,8 +14,9 @@ Fix:
   `lj_obj_setgcwrel(oldtail, rev)`.
 - `lj_gc2_finalizer_dequeue_owned()` acquire-loads the dequeued node's successor
   and release-publishes it through `lj_obj_setgcwrel(tail, next)`.
-- `tools/ci/m3_gc2_worker_scheduler.sh` rejects reintroducing direct
-  finalizer-ring next-link release stores for `oldtail` or `tail`.
+- Finalizer-ring next-link release stores for `oldtail` and `tail` must stay
+  behind the documented helper surface; observable coverage lives in the GC2
+  worker and weak/finalizer fixtures instead of source-text matching.
 
 Verification:
-- `tools/ci/m3_gc2_worker_scheduler.sh` and `tools/ci/m8_weak.sh` passed.
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler m8_weak` passed.

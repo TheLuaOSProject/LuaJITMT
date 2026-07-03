@@ -14,14 +14,14 @@ Ordering:
 - `lj_gc2_update_pacing()` uses an acquire load to pair with public updates.
 
 Coverage:
-- `tools/ci/m5_gc2_pacing_atomic.sh` now requires the three helper definitions.
-- The same notes document why raw C-side `gcpause_pct` field access outside helper
-  definitions, alongside the existing GC2 pacing byte counters.
+- `m5_gc2_pacing_atomic`, `m6_jit_alloc_account`, and `m9_gc_stats` own the
+  observable pacing behavior.
+- Raw C-side `gcpause_pct` field access outside helper definitions must stay
+  behind the documented helper surface, alongside the existing GC2 pacing byte
+  counters.
 
 Validation:
-- `tools/ci/m5_gc2_pacing_atomic.sh` passed.
-- `tools/ci/m6_jit_alloc_account.sh` passed.
-- `tools/ci/m9_gc_stats.sh` passed.
-- passed.
-- Raw C-side GC2 pacing access scan reports only helper definitions.
+- `tools/ci/lua_test.sh m5_gc2_pacing_atomic` passed.
+- `tools/ci/lua_test.sh m6_jit_alloc_account` passed.
+- `tools/ci/lua_test.sh m9_gc_stats` passed.
 - `git diff --check` passed.

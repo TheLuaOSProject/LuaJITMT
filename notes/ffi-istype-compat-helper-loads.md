@@ -8,14 +8,16 @@ The covered decisions include pointer qualifier compatibility, numeric/void
 equivalence, recursive pointer compatibility, raw-ref id equality, and
 struct-vs-pointer comparison.
 
-Invariant check:
+Coverage:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local
-  `ct1.info` / `ct2.info` / `d.info` / `s.info` and matching size reads in
+- `m7_ffi_typeinfo_snapshot` and the stock `lib/ffi/istype.lua` case exercise
   these compatibility helpers.
+- Local `CType` copies in `ffi.istype()` compatibility decisions must use the
+  documented helper-load surface; that rule lives here and beside the helpers
+  instead of in a source-text predicate.
 
 Validation:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - stock `lib/ffi/istype.lua`
 - `git diff --check`

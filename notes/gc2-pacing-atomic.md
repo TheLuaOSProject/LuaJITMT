@@ -26,9 +26,11 @@ The x86-64 VM now reaches GC2 hard-limit checks through
 `lj_gc_should_step_vm()`, keeping allocation-check pacing reads in C helper code
 instead of generated interpreter assembly.
 
-Coverage: `m5_gc2_pacing_atomic` invariant: raw C-side access to the GC2
-pacing fields outside helper definitions in `lj_gc.h`/`lj_obj.h` and documents why raw
-x64 VM GC2 hard-check memory operands or reintroduced load macros.
+Coverage: `m5_gc2_pacing_atomic` owns the observable pacing behavior. Raw
+C-side access to the GC2 pacing fields outside helper definitions in
+`lj_gc.h`/`lj_obj.h` must stay behind the documented helper surface; x64 VM
+GC2 hard-check memory operands and load macros are documented here instead of
+being enforced by source-text matching.
 
 Test-design note: an earlier Lua smoke used four workers doing 2000
 `string.format()` allocations each while reading stats. That crashes on
@@ -38,9 +40,7 @@ focused on the pacing counters and uses the same table/string allocation shape
 as the existing GC total smoke.
 
 Validation:
-- `tools/ci/m5_gc2_pacing_atomic.sh` passed.
-- `tools/ci/m6_jit_alloc_account.sh` passed.
-- `tools/ci/m9_gc_stats.sh` passed.
-- passed.
-- Raw C-side GC2 pacing access scan passed.
+- `tools/ci/lua_test.sh m5_gc2_pacing_atomic` passed.
+- `tools/ci/lua_test.sh m6_jit_alloc_account` passed.
+- `tools/ci/lua_test.sh m9_gc_stats` passed.
 - `git diff --check` passed before staging.

@@ -14,15 +14,15 @@ This slice routes the parked-worker lifecycle words through helper accessors:
 Runtime users in `lj_gc2.c` and the `threading.gcworkers()` query in
 `lib_base.c` no longer spell ad hoc atomics or futex operations against
 `GC2State.n_workers`, `worker_stop`, `worker_wake`, `worker_started`, or
-`worker_exited`. `tools/ci/m3_gc2_worker_scheduler.sh` rejects future raw
-production and focused-fixture access to those lifecycle fields. The focused
-fixtures also route worker activity and worker telemetry assertions through the
-same helper surface, so the test harness exercises the contract it guards. The
-separate `worker_wakes` telemetry counter is covered by the follow-up worker
-counter helper slice.
+`worker_exited`. Production and focused-fixture access to those lifecycle
+fields must stay behind the documented helper surface. The focused fixtures
+also route worker activity and worker telemetry assertions through the same
+helper surface, so the test harness exercises the ownership contract through
+behavior rather than source-text matching. The separate `worker_wakes`
+telemetry counter is covered by the follow-up worker counter helper slice.
 
 Validation:
 
-- `tools/ci/m3_gc2_worker_scheduler.sh`
-- `tools/ci/m9_gc_stats.sh`
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler`
+- `tools/ci/lua_test.sh m9_gc_stats`
 - `git diff --check`

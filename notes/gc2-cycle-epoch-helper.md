@@ -16,19 +16,18 @@ progress, the old epoch is published and later worker-owner freshness checks
 will reject it instead of treating a stale scan as current-cycle coverage.
 
 Coverage:
-- `m3_gc2_worker_scheduler` invariant: raw production access to
-  `GC2State.cycle` in `lj_gc.c`, `lj_gc2.c`, and `lj_safepoint.c`.
-- The guard intentionally does not match `cycle_requests`, `cycle_starts`, or
+- `m3_gc2_worker_scheduler` owns the observable cycle-epoch behavior.
+- Production access to `GC2State.cycle` in `lj_gc.c`, `lj_gc2.c`, and
+  `lj_safepoint.c` must stay behind the documented helper surface.
+- This note intentionally does not cover `cycle_requests`, `cycle_starts`, or
   the minor-cycle latch fields.
 
 Validation:
-- `tools/ci/m3_gc2_worker_scheduler.sh` passed.
-- `tools/ci/m3_safepoint_handshake.sh` passed.
-- `tools/ci/m3_vm_safepoint.sh` passed.
-- `tools/ci/m3_gc2_paranoia.sh` passed.
-- `tools/ci/m10_generational.sh` passed.
-- `tools/ci/m8_weak.sh` passed.
-- `tools/ci/m6_jit_alloc_account.sh` passed.
-- passed.
-- Raw production `GC2State.cycle` access scan passed.
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler` passed.
+- `tools/ci/lua_test.sh m3_safepoint_handshake` passed.
+- `tools/ci/lua_test.sh m3_vm_safepoint` passed.
+- `tools/ci/lua_test.sh m3_gc2_paranoia` passed.
+- `tools/ci/lua_test.sh m10_generational` passed.
+- `tools/ci/lua_test.sh m8_weak` passed.
+- `tools/ci/lua_test.sh m6_jit_alloc_account` passed.
 - `git diff --check` passed.

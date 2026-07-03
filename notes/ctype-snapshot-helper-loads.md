@@ -13,13 +13,15 @@ Converted helpers:
 - `lj_ctype_ptrstruct_snapshot()`
 - `lj_ctype_info_snapshot()`
 
-Invariant check:
+Coverage:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `ct.info`,
-  `ct.size`, `ct.sib`, `cct.info`, `cct.size`, or `cct.sib` reads in these
-  ctype snapshot helpers.
+- `m7_ffi_typeinfo_snapshot` exercises the ctype snapshot helpers through FFI
+  typeinfo, layout, pointer-struct, and rollback-reader paths.
+- Local `CType` record access in these helpers must use the documented
+  snapshot load helpers; that rule lives here and beside the helper surface
+  instead of in a source-text predicate.
 
 Validation:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `git diff --check`

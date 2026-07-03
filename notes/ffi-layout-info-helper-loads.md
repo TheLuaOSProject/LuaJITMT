@@ -5,12 +5,14 @@
 returning size information for `ffi.sizeof()`, `ffi.alignof()`, and
 `ffi.offsetof()`.
 
-Invariant check:
+Coverage:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `ct.info` /
-  `ct.size` reads in these layout info helpers.
+- `m7_ffi_typeinfo_snapshot` exercises these layout info helpers through
+  `ffi.sizeof()`, `ffi.alignof()`, and `ffi.offsetof()` behavior.
+- Local `CType.info` / `CType.size` reads in these helpers must use the
+  documented helper-load surface instead of source-text enforcement.
 
 Validation:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `git diff --check`

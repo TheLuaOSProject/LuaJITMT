@@ -14,11 +14,11 @@ This slice moves the mutator-assist scheduler state behind helper accessors:
 
 Production runtime users in `lj_api.c` and `lj_gc2.c` no longer spell ad hoc
 loads, stores, or CAS operations against `GC2State.assist_shift` or
-`GC2State.assist_active`. `tools/ci/m3_gc2_worker_scheduler.sh` rejects future
-raw production access to those fields.
+`GC2State.assist_active`. Production access to those fields must stay behind
+the documented helper surface instead of source-text matching.
 
 Validation:
 
-- `tools/ci/m3_gc2_worker_scheduler.sh`
-- `tools/ci/m6_jit_alloc_account.sh`
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler`
+- `tools/ci/lua_test.sh m6_jit_alloc_account`
 - `git diff --check`

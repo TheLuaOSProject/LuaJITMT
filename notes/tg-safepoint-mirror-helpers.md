@@ -13,14 +13,15 @@ instead of spelling ad hoc atomics against `TGState.poll`, `reqmask`, or
 `hs_epoch_ack`. Test fixtures still inspect these words directly to assert
 handshake state transitions.
 
-`tools/ci/m3_safepoint_handshake.sh` rejects future raw production access to
-the TG-local safepoint mirror while leaving the helper bodies as the single
-raw-access point.
+Production access to the TG-local safepoint mirror must stay behind the helper
+surface, with helper bodies as the single raw-access point. `m3_safepoint_handshake`,
+`m3_vm_safepoint`, and threading fixture cases own the observable behavior
+instead of source-text matching.
 
 Validation:
 
-- `tools/ci/m3_safepoint_handshake.sh`
-- `tools/ci/m3_vm_safepoint.sh`
-- `tools/ci/m4_thr_substrate.sh`
-- `tools/ci/m4_threading_capi.sh`
+- `tools/ci/lua_test.sh m3_safepoint_handshake`
+- `tools/ci/lua_test.sh m3_vm_safepoint`
+- `tools/ci/lua_test.sh m4_thr_substrate`
+- `tools/ci/lua_test.sh m4_threading_api`
 - `git diff --check`

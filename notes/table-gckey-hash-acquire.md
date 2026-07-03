@@ -21,7 +21,8 @@ compiled and exercised.
 
 ## Coverage
 
-`tools/ci/m5_tab_node_publish.sh` now rejects `gcrefu()` inside the
-`hashgcref*` macro bodies. This keeps raw unsigned GCRef reads out of table
-GC-key hashing while leaving construction-owned and non-x64 backend raw users
-for their separate audits.
+`m5_tab_node_publish` owns the observable collectable-key hash path by building
+and exercising table-as-key rawget/rawset behavior. The acquire-load
+requirement for `hashgcref*` is documented here and beside the helper surface
+instead of being enforced by source-text matching. Construction-owned and
+non-x64 backend raw users remain separate audits.

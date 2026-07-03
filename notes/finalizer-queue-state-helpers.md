@@ -12,12 +12,13 @@ Routed users:
 - idle worker finalizer-drain polling/accounting.
 - phase/traversal fixtures that inspect queue and owner state.
 
-Invariant check:
+Coverage:
 
-- `tools/ci/m3_gc2_worker_scheduler.sh` rejects direct runtime access to
-  `g->gc2.finalizer_mpsc`, `finalizer_tail`, `finalizer_active`,
-  `finalizer_owner_tid`, and `finalizer_mpsc_drained` in `lj_gc.c`,
-  `lj_gc2.c`, `tests/t-gc2-phase.c`, and `tests/t-gc2-traverse.c`.
+- `m3_gc2_worker_scheduler` and `m8_weak` own the observable finalizer queue
+  behavior. Direct runtime access to `g->gc2.finalizer_mpsc`,
+  `finalizer_tail`, `finalizer_active`, `finalizer_owner_tid`, and
+  `finalizer_mpsc_drained` must stay behind the documented helper surface in
+  production code and fixtures.
 - Follow-up counter helper work now routes queue, dequeue, guard, sweep-block,
   spawn-deferral, and release-wake telemetry through `gc2_finalizer_*()`
   helpers, and extends the worker-scheduler note documenting raw counter access
@@ -25,6 +26,6 @@ Invariant check:
 
 Validation:
 
-- `tools/ci/m3_gc2_worker_scheduler.sh`
-- `tools/ci/m8_weak.sh`
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler`
+- `tools/ci/lua_test.sh m8_weak`
 - `git diff --check`

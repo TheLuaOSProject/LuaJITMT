@@ -8,8 +8,8 @@ Changes:
   from trace-vector publish/shutdown.
 - Updated `tests/t-jit-tracevec.c` to assert only the RCU-published vector and
   acquired size mirror.
-- Extended `tools/ci/m5_jit_trace_publish.sh` to reject reintroducing
-  `GCRef *trace;` or direct `J->trace` uses under `src/`.
+- The retired mirror must not be reintroduced; that rule is documented here and
+  covered through trace-vector behavior instead of source-text matching.
 
 Reasoning:
 - C trace-slot mutation now goes through `tracevec_acq()` via `traceslot_*`.
@@ -20,5 +20,5 @@ Reasoning:
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
-- `tools/ci/m5_jit_trace_publish.sh`
-- `tools/ci/m6_jit_flush_hs.sh`
+- `tools/ci/lua_test.sh m5_jit_trace_publish`
+- `tools/ci/lua_test.sh m6_jit_flush_hs`

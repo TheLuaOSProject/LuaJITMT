@@ -15,8 +15,9 @@ helper accessors:
 - `gc2_thread_scan_dirty_misses_*()`
 
 `lj_gc2.c` now initializes and updates those counters through relaxed helper
-stores/adds. The M3 GC2 scaffold coverage requires the helper triplets and rejects
-raw production access in `lj_gc2.c` and `lib_base.c`.
+stores/adds. `m3_gc2_scaffold` and `m9_gc_stats` own the observable coverage.
+Production access in `lj_gc2.c` and `lib_base.c` must stay behind the
+documented helper surface instead of source-text matching.
 
 This is concurrent-GC root-scan hygiene for the current owner-side coroutine
 scan handoff and per-TG root bridge. It does not change the semantics of the

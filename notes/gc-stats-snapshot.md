@@ -12,9 +12,11 @@ inside `lj_gc2.c`.
 `lj_gc2_workers_count()` instead of reading the raw worker counter helper from
 `lib_base.c`.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m9_gc_stats.sh` is the stats-table owner: it requires the snapshot
-API and rejects direct GC2 helper reads in the stats table builder.
-`tools/ci/m10_generational.sh` still checks that the snapshot records
-`cycle_roots_minor` through `lj_gc2_minor_roots_active()`.
+`m9_gc_stats` is the stats-table owner: it exercises the public
+`threading.gcstats()` result, including the snapshot-populated fields and
+latency buckets. `m10_generational` checks that generational mode exposes the
+minor-root accounting expected by the snapshot. The snapshot API requirement is
+documented here and beside `lj_gc2_stats_snapshot()` instead of being enforced
+by source-text matching.

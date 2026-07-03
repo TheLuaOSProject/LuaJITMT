@@ -12,12 +12,12 @@ accessors:
   sweep-to-idle, and legacy cycle-end paths.
 
 Production runtime users in `lj_gc2.c` no longer spell ad hoc atomics against
-`GC2State.cycle_leader`. `tools/ci/m3_gc2_worker_scheduler.sh` rejects future
-raw production access to the token.
+`GC2State.cycle_leader`. Production access to the token must stay behind the
+documented helper surface instead of source-text matching.
 
 Validation:
 
-- `tools/ci/m3_gc2_worker_scheduler.sh`
-- `tools/ci/m6_jit_alloc_account.sh`
-- `tools/ci/m10_generational.sh`
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler`
+- `tools/ci/lua_test.sh m6_jit_alloc_account`
+- `tools/ci/lua_test.sh m10_generational`
 - `git diff --check`

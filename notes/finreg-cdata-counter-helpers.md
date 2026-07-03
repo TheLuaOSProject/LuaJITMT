@@ -9,11 +9,13 @@ Stats reads now use acquire helper loads, GC2 initialization uses relaxed helper
 stores, and producers use helper add wrappers instead of spelling ad hoc
 atomics against `g->gc2`.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m7_ffi_finreg.sh` now requires the cdata FINREG counter helper
-surface and documents why raw production access to these counter fields in
-`src/lj_gc.c`, `src/lj_gc2.c`, `src/lj_cdata.c`, and `src/lib_base.c`.
+`m7_ffi_finreg` owns the observable cdata FINREG behavior and `m9_gc_stats`
+owns the public telemetry surface. Cdata FINREG counter publication must stay
+behind the helper surface in `lj_gc.c`, `lj_gc2.c`, `lj_cdata.c`, and
+`lib_base.c`; that rule is documented here and beside the helpers instead of in
+a source-text predicate.
 
 ## Follow-Up
 

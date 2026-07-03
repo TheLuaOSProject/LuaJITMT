@@ -12,12 +12,12 @@ through helper accessors:
   sweep-to-idle, finalizer draining, and worker draining.
 
 The runtime users in `lj_gc2.c` no longer spell ad hoc atomics against
-`GC2State.worker_active`. `tools/ci/m3_gc2_worker_scheduler.sh` rejects future
-raw runtime access to that field so the scheduler ownership token stays behind
-the helper surface.
+`GC2State.worker_active`. Runtime access to that scheduler ownership token must
+stay behind the helper surface; the rule is documented here and covered through
+worker/weak behavior instead of source-text matching.
 
 Validation:
 
-- `tools/ci/m3_gc2_worker_scheduler.sh`
-- `tools/ci/m8_weak.sh`
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler`
+- `tools/ci/lua_test.sh m8_weak`
 - `git diff --check`

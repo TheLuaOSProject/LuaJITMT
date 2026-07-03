@@ -8,13 +8,15 @@ raw VLA array type, reading element size metadata, and computing the final size.
 `CType.size` values before deciding whether `ffi.sizeof()` needs an element
 count or can return a direct size.
 
-Invariant check:
+Coverage:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `cur.info`,
-  `cur.size`, `cur.sib`, `elem.info`, `elem.size`, `elem.sib`, `ct.info`,
-  `ct.size`, or `ct.sib` reads in the layout size snapshot path.
+- `m7_ffi_typeinfo_snapshot` exercises the layout size snapshot path through
+  `ffi.sizeof()` behavior and active-parser snapshot fixtures.
+- Local layout `CType` copies in this path must use the documented helper-load
+  surface; that rule lives here and beside the helpers instead of in a
+  source-text predicate.
 
 Validation:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `git diff --check`

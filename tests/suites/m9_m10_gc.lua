@@ -383,7 +383,7 @@ return function(add)
 
   add({
     name = "m9_bench_smoke",
-    description = "benchmark harness smoke and drift guard",
+    description = "benchmark harness smoke",
     run = run_bench_smoke
   })
 

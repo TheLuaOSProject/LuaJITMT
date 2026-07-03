@@ -14,15 +14,15 @@ Runtime users in `lj_tg.c`, `lj_gc2.c`, `lj_gc.c`, `lj_safepoint.c`,
 spelling ad hoc atomics against `GC2State.tg_list` or `GC2State.n_threads`.
 Per-node `TGState.next_tg` remains covered by `lj_tg_next_*()` helpers.
 
-`tools/ci/m3_safepoint_handshake.sh` rejects future raw production access to
-the global registry fields while leaving the helper bodies as the single
-raw-access point.
+Production access to the global registry fields must stay behind the helper
+surface, with helper bodies as the single raw-access point. The safepoint,
+threading, and VM safepoint cases own the observable behavior instead of
+source-text matching.
 
 Validation:
 
-- `tools/ci/m3_safepoint_handshake.sh`
-- `tools/ci/m4_threading_api.sh`
-- `tools/ci/m4_threading_capi.sh`
-- `tools/ci/m4_threading_shutdown.sh`
-- `tools/ci/m3_vm_safepoint.sh`
+- `tools/ci/lua_test.sh m3_safepoint_handshake`
+- `tools/ci/lua_test.sh m4_threading_api`
+- `tools/ci/lua_test.sh m4_threading_shutdown`
+- `tools/ci/lua_test.sh m3_vm_safepoint`
 - `git diff --check`

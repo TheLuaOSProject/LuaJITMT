@@ -13,11 +13,12 @@ non-owner steal now use the helper surface instead of direct
 existing `gc2_queue_slot_*()` release/acquire helpers, and `grey_top` /
 `grey_bottom` keep the Chase-Lev ordering from the earlier index-helper slice.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m3_gc2_worker_scheduler.sh` now requires the vector helper surface and
-documents why raw production access to `grey_stack`, `grey_capacity`, `grey_top`, and
-`grey_bottom` in `src/lj_gc2.c`.
+`m3_gc2_worker_scheduler` owns the observable grey-deque behavior. Production
+access to `grey_stack`, `grey_capacity`, `grey_top`, and `grey_bottom` in
+`lj_gc2.c` must stay behind the documented helper surface instead of a
+source-text predicate.
 
 ## Follow-Up
 

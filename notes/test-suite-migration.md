@@ -224,20 +224,20 @@ Lua test-suite migration notes:
   closed-upvalue publication legacy wrappers. It stores fresh GC objects through
   closed upvalues in interpreter, threaded, and hot JIT paths, forces GC/GC2,
   and proves the stored values remain reachable without scanning `src/`.
-- Removed the remaining M4 threading source-marker checks. `m4_threading_api`,
+- Removed the remaining M4 threading implementation-text checks. `m4_threading_api`,
   `m4_threading_capi`, and `m4_threading_shutdown` now rely on their Lua/C
   behavior fixtures instead of reading `src/lib_threading.c`, safepoint sources,
   or x64 VM text.
 - Added shared `compile_luajit_c_fixture` and `run_luajit_c_fixture` methods to
   the Lua test harness, then moved the repeated M4, M5 fixture, and M5 table C
   fixture build/link/run boilerplate onto those helpers.
-- Removed the `m2_arena_gcsweep` source-marker list. The case now relies on the
+- Removed the `m2_arena_gcsweep` implementation-text list. The case now relies on the
   runtime arena sweep C fixture itself, and the M2 LuaJIT-linked fixtures share
   the central C-fixture helper.
 - Standalone M2 arena fixtures build with `-DLUAJIT_SECURITY_PRNG=0` because
   they compile selected runtime sources without linking the VM native/safepoint
   objects used by the secure PRNG path.
-- Removed source-marker checks from the M5 sentinel, bytecode dump compatibility,
+- Removed implementation-text checks from the M5 sentinel, bytecode dump compatibility,
   registry root, and nomm-cache fixture cases. Those cases now rely on their C
   behavior fixtures instead of asserting implementation text in `src/`.
 - Generated-output matching is still valid behavior coverage. JIT dumps,
@@ -300,15 +300,15 @@ Lua test-suite migration notes:
   Lua smoke tests and C forward/snapshot fixtures instead of direct
   `vm_x64.dasc` source inspections.
 - Converted `m6_jit_hrefk_nodehdr` and `m6_jit_href_nodehdr` to generated
-  IR/runtime behavior coverage instead of direct JIT source marker checks.
+  IR/runtime behavior coverage instead of direct JIT implementation-text checks.
 - Converted `m6_jit_cell_ops`, `m6_jit_barrier_xpoll`, and
   `m6_jit_aref_pair_guard` to generated dump/runtime behavior coverage,
-  removing their direct JIT source marker checks.
+  removing their direct JIT implementation-text checks.
 - Converted `m6_jit_table_store_helper` to rely on its C forward-store fixture,
-  Lua smoke, and generated IR checks instead of direct helper source markers.
+  Lua smoke, and generated IR checks instead of direct helper spelling checks.
 - Converted `m6_jit_alloc_account`, `m6_jit_gc2_readiness`, and
   `m6_jit_gcstep_guard` to C fixture/generated dump behavior coverage instead
-  of direct GC/JIT source marker checks.
+  of direct GC/JIT implementation-text checks.
 - Converted `m6_jit_token` to its C/Lua recorder-token regressions and
   generated XPOLL dump checks instead of direct recorder/x64 legacy wrappers.
 - Converted `m5_tab_cas_store` to rely on the compiled CAS/FORWARD behavior
@@ -326,12 +326,12 @@ Lua test-suite migration notes:
   generational mode; those cases now rely on Lua/C behavior checks.
 - Removed M8 broad marker and fixture-source ordering checks; the weak,
   FINREG, and finalizer behavior matrix still runs through behavior fixtures.
-- Removed the M3 worker-scheduler source marker check; the case now relies on
+- Removed the M3 worker-scheduler implementation-text check; the case now relies on
   the worker scheduler C fixture plus the Lua `collectgarbage("workers")`
   behavior test.
 - Removed the M3 paranoia marker scan; the case now relies on the paranoia
   build, oracle fixtures, and stock tests.
-- Removed low-risk M6 positive source marker baskets from dispatch
+- Removed low-risk M6 positive implementation-text baskets from dispatch
   redispatch, mcode publication, and flush handshakes; replacement coverage now
   uses C fixtures, runtime probes, and generated dump/result checks.
 - Removed the M3 GC2 scaffold marker inventory; the scaffold case now relies
@@ -354,7 +354,7 @@ Lua test-suite migration notes:
 - Removed low-risk M8 finalizer dispatch and legacy FINREG/mmudata source
   scans; the weak/finalizer matrix and GC2 C fixtures cover those behaviors
   without direct source inspection.
-- Replaced the M6 XBAR/XPOLL optimizer source marker checks with generated IR
+- Replaced the M6 XBAR/XPOLL optimizer implementation-text checks with generated IR
   dump probes for `ffi.copy`, FFI loads, and FFI stores after loop `XPOLL`;
   also removed duplicate M6 scaffold-name and reserve-order checks already
   covered by dispatch and mcode behavior.

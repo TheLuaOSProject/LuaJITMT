@@ -9,5 +9,6 @@ The ordering remains the plan/05 section 5.6.2 protocol: stores release-publish
 cursor resets and cursor movement after slot writes or clears; readers use
 acquire loads before computing SSB occupancy.
 
-The M3 GC2 worker scheduler coverage now requires the helper family and documents why raw
-production C access to the active cursor fields.
+`m3_gc2_worker_scheduler` owns the observable SSB cursor behavior. Production C
+access to the active cursor fields must stay behind the documented helper
+family instead of source-text matching.

@@ -14,14 +14,14 @@ stores, and producers use helper add wrappers. This keeps the userdata FINREG
 side-list telemetry publication contract beside the existing root and node-link
 helper surface.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m3_gc2_scaffold.sh` now requires the userdata FINREG counter helper
-surface and documents why raw production access in `src/lj_gc.c`, `src/lj_gc2.c`, and
-`src/lib_base.c`.
+`m3_gc2_scaffold`, `m8_weak`, and `m9_gc_stats` own the observable userdata
+FINREG behavior and telemetry. Counter publication in `lj_gc.c`, `lj_gc2.c`,
+and `lib_base.c` must stay behind the documented helper surface instead of
+source-text matching.
 - Follow-up fixture cleanup routes `tests/t-gc2-traverse.c` userdata FINREG
-  telemetry snapshots through the same acquire helpers and extends the guard
-  over that fixture.
+  telemetry snapshots through the same acquire helpers.
 
 ## Follow-Up
 

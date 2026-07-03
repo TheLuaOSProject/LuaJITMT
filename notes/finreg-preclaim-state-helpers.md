@@ -22,14 +22,15 @@ marking preclaimed cdata/finalizers. Collector-specific callbacks still provide
 the actual object/value/memory marking semantics, and finalizer dispatch
 advances `head` through helper stores after clearing consumed slots.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m7_ffi_finreg.sh` now requires the helper surface and documents why raw
-production access to `finreg_cdata_preclaim_obj`, `finreg_cdata_preclaim_fin`,
+`m7_ffi_finreg` and `m8_weak` own the observable cdata FINREG/finalizer
+behavior. The helper-surface and root-scan ownership rules for
+`finreg_cdata_preclaim_obj`, `finreg_cdata_preclaim_fin`,
 `finreg_cdata_preclaim_capacity`, `finreg_cdata_preclaim_head`, and
-`finreg_cdata_preclaim_count` in `lj_gc.c`/`lj_gc2.c`. It also rejects legacy
-`lj_ctype_fin_mark()` or direct preclaim root scans in `lj_gc.c`; those must
-stay behind `lj_gc2_finreg_cdata_mark_roots()`.
+`finreg_cdata_preclaim_count` live here and beside the helper surface instead
+of in source-text predicates. Legacy root scans must stay behind
+`lj_gc2_finreg_cdata_mark_roots()`.
 
 ## Follow-Up
 

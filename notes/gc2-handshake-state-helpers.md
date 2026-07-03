@@ -17,13 +17,14 @@ atomics or futex operations against those `GC2State` words. A follow-up
 TG-local mirror helper slice routes `reqmask`, `poll`, and `hs_epoch_ack`
 through `lj_tg_*` safepoint helpers.
 
-`tools/ci/m3_safepoint_handshake.sh` rejects future raw production access to
-the global GC2 handshake fields while leaving the helper bodies as the single
-raw-access point.
+The global GC2 handshake fields should only be accessed through this helper
+surface outside the helper bodies. That ownership rule is documented here and
+beside the helpers; `m3_safepoint_handshake`, `m3_vm_safepoint`, and
+`m9_gc_stats` cover the observable behavior instead of source-text matching.
 
 Validation:
 
-- `tools/ci/m3_safepoint_handshake.sh`
-- `tools/ci/m3_vm_safepoint.sh`
-- `tools/ci/m9_gc_stats.sh`
+- `tools/ci/lua_test.sh m3_safepoint_handshake`
+- `tools/ci/lua_test.sh m3_vm_safepoint`
+- `tools/ci/lua_test.sh m9_gc_stats`
 - `git diff --check`

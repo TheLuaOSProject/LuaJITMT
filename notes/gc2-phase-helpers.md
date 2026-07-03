@@ -12,14 +12,16 @@ helper accessors:
   cycle-end IDLE exchanges.
 
 Runtime users in `lj_gc2.c`, `lj_gc.c`, and `lj_tg.c` no longer spell ad hoc
-atomics against `GC2State.phase`. `tools/ci/m3_gc2_worker_scheduler.sh` rejects
-future raw production access to the phase word in those files while leaving the
-helper bodies as the single raw-access point.
+atomics against `GC2State.phase`. Production access to the phase word in those
+files must stay behind the documented helper surface, with helper bodies as the
+single raw-access point. Runtime behavior is covered by the GC2 worker,
+allocation-accounting, weak, and generational cases instead of source-text
+matching.
 
 Validation:
 
-- `tools/ci/m3_gc2_worker_scheduler.sh`
-- `tools/ci/m6_jit_alloc_account.sh`
-- `tools/ci/m8_weak.sh`
-- `tools/ci/m10_generational.sh`
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler`
+- `tools/ci/lua_test.sh m6_jit_alloc_account`
+- `tools/ci/lua_test.sh m8_weak`
+- `tools/ci/lua_test.sh m10_generational`
 - `git diff --check`

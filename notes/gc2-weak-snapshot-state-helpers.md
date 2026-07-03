@@ -18,18 +18,17 @@ Ordering:
   cursor ranges with acquire-release CAS.
 
 Coverage:
-- `tools/ci/m8_weak.sh` now requires all nine helper definitions.
-- The same notes document why raw production access to `weak_count`,
-  `weak_scan_cursor`, and `weak_clear_cursor` in `lj_gc2.c`.
+- `m8_weak` owns the observable weak snapshot behavior.
+- Production access to `weak_count`, `weak_scan_cursor`, and
+  `weak_clear_cursor` in `lj_gc2.c` must stay behind the documented helper
+  surface instead of source-text matching.
 - Follow-up vector helper work now routes `weak_stack`, `weak_ready`, and
   `weak_capacity` through `gc2_weak_*()` helpers while preserving the current
   owner-quiesced resize invariant.
 
 Validation:
-- `tools/ci/m8_weak.sh` passed.
-- `tools/ci/m3_gc2_paranoia.sh` passed.
-- `tools/ci/m10_generational.sh` passed.
-- `tools/ci/m9_gc_stats.sh` passed.
-- passed.
-- Raw production weak snapshot state access scan passed.
+- `tools/ci/lua_test.sh m8_weak` passed.
+- `tools/ci/lua_test.sh m3_gc2_paranoia` passed.
+- `tools/ci/lua_test.sh m10_generational` passed.
+- `tools/ci/lua_test.sh m9_gc_stats` passed.
 - `git diff --check` passed.

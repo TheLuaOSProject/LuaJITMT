@@ -18,19 +18,18 @@ Ordering:
   helper-backed snapshot.
 
 Coverage:
-- `tools/ci/m9_gc_stats.sh` now requires all nine helper definitions.
-- The same notes document why raw production access to `sweep_live_updates`,
-  `sweep_live_huge_bytes`, and `live_estimate` in `lj_gc2.c` and `lib_base.c`.
-- `tools/ci/m3_gc2_worker_scheduler.sh` keeps the aggregate helper private to
+- `m9_gc_stats` owns the public sweep-live telemetry behavior.
+- Production access to `sweep_live_updates`, `sweep_live_huge_bytes`, and
+  `live_estimate` in `lj_gc2.c` and `lib_base.c` must stay behind the
+  documented helper surface instead of source-text matching.
+- `m3_gc2_worker_scheduler` keeps the aggregate helper private to
   `lj_gc2.c`; public cycle closure enters through sweep-to-idle or legacy
   cycle-end.
 - Test internals still inspect the fields directly when asserting fixture state.
 
 Validation:
-- `tools/ci/m9_gc_stats.sh` passed.
-- `tools/ci/m3_gc2_paranoia.sh` passed.
-- `tools/ci/m10_generational.sh` passed.
-- `tools/ci/m6_jit_alloc_account.sh` passed.
-- passed.
-- Raw production sweep-live estimate access scan passed.
+- `tools/ci/lua_test.sh m9_gc_stats` passed.
+- `tools/ci/lua_test.sh m3_gc2_paranoia` passed.
+- `tools/ci/lua_test.sh m10_generational` passed.
+- `tools/ci/lua_test.sh m6_jit_alloc_account` passed.
 - `git diff --check` passed.

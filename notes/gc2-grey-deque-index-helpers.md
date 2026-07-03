@@ -14,11 +14,11 @@ the existing Chase-Lev ordering:
 - owner single-item and thief steal claims use the existing seq-cst top CAS
   with acquire failure ordering.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m3_gc2_worker_scheduler.sh` now requires the helper surface and rejects
-raw production access to `g->gc2.grey_top` or `g->gc2.grey_bottom` in
-`lj_gc2.c`.
+`m3_gc2_worker_scheduler` owns the observable grey-deque behavior. Production
+access to `g->gc2.grey_top` or `g->gc2.grey_bottom` in `lj_gc2.c` must stay
+behind the documented helper surface instead of source-text matching.
 
 This is intentionally separate from the queue-slot guard in
 `m3_gc2_scaffold.sh`: slot publication helpers protect the `GCRef` entries,

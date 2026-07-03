@@ -15,9 +15,9 @@ The low-level `gc2_finreg_cdata_*_add()` counter helpers remain the storage
 primitive inside `lj_gc2.c`; cdata and ctype producers no longer own those
 counter writes directly.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m7_ffi_finreg.sh` requires both notification helpers and rejects
-direct `gc2_finreg_cdata_sweep_queued_add()` or
-`gc2_finreg_cdata_order_retired_add()` calls from `src/lj_cdata.c` and
-`src/lj_ctype.c`.
+`m7_ffi_finreg` owns the observable FINREG behavior. Cdata and ctype producers
+must enter through the public notification helpers rather than writing the
+low-level counters directly; that ownership rule is documented here and beside
+the helper surface instead of in a source-text predicate.

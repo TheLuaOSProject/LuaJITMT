@@ -15,19 +15,18 @@ fixpoint predicate. This preserves the existing 05 section 5.7.1 protocol while
 making the raw access boundary explicit.
 
 Coverage:
-- `tools/ci/m3_gc2_paranoia.sh` now requires all four helper definitions.
-- The same notes document why raw production access to `GC2State.marks_this_round`
-  in `lj_gc2.c`.
-- `tools/ci/m3_gc2_worker_scheduler.sh` keeps the repeated bounded fixpoint
+- `m3_gc2_paranoia` and `m3_gc2_worker_scheduler` own the observable mark
+  fixpoint behavior.
+- Production access to `GC2State.marks_this_round` in `lj_gc2.c` must stay
+  behind the documented helper surface instead of source-text matching.
+- `m3_gc2_worker_scheduler` keeps the repeated bounded fixpoint
   driver private to `lj_gc2.c`; public mark completion enters through
   `lj_gc2_mark_complete()`.
 - C tests still inspect the field directly for fixture assertions.
 
 Validation:
-- `tools/ci/m3_gc2_paranoia.sh` passed.
-- `tools/ci/m3_safepoint_handshake.sh` passed.
-- `tools/ci/m3_gc2_worker_scheduler.sh` passed.
-- `tools/ci/m10_generational.sh` passed.
-- passed.
-- Raw production `marks_this_round` access scan passed.
+- `tools/ci/lua_test.sh m3_gc2_paranoia` passed.
+- `tools/ci/lua_test.sh m3_safepoint_handshake` passed.
+- `tools/ci/lua_test.sh m3_gc2_worker_scheduler` passed.
+- `tools/ci/lua_test.sh m10_generational` passed.
 - `git diff --check` passed.

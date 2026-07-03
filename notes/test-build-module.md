@@ -16,5 +16,5 @@
   text predicates were found.
 - 2026-07-03 follow-up: removed the unused repository-source enumerator from
   the Lua harness. `Test:read()` remains for generated dumps, logs, fixture
-  outputs, imported-suite inputs, and CSVs; repository source rules belong in
-  code comments and notes, not CI predicates.
+  outputs, imported-suite inputs, CSVs, and packaging artifacts; implementation
+  rules belong in code comments and notes, not source-text CI predicates.

@@ -23,12 +23,13 @@ The CTState ordered-node producer now reports retire events through
 `lj_gc2_finreg_cdata_note_order_retired()`, leaving the low-level ordered
 counter add behind `lj_gc2.c`.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m7_ffi_finreg.sh` now requires the ordered-counter helper surface and
-documents why raw production access to the ordered FINREG counter fields in
-`src/lj_ctype.c`, `src/lj_gc.c`, `src/lj_gc2.c`, and `src/lib_base.c`.
-`tools/ci/m9_gc_stats.sh` also documents why raw FINREG ordered stat aliases.
+`m7_ffi_finreg` owns the ordered FINREG behavior and `m9_gc_stats` owns the
+public telemetry surface. Ordered FINREG counter publication must stay behind
+the helper surface in `lj_ctype.c`, `lj_gc.c`, `lj_gc2.c`, and `lib_base.c`;
+that rule is documented here and beside the helpers instead of in source-text
+predicates.
 
 ## Follow-Up
 

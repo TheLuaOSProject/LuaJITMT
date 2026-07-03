@@ -16,9 +16,10 @@ Runtime producers in `lj_gc2.c` use relaxed helper stores/adds for
 initialization and worker progress publication. `threading.gcstats()`
 reads the same counters through acquire helpers.
 
-`tools/ci/m3_gc2_worker_scheduler.sh` now requires the helper triplets and
-documents why raw production access to these worker counter fields in `lj_gc2.c` and
-`lib_base.c`.
+`m3_gc2_worker_scheduler` and `m9_gc_stats` own the observable worker telemetry.
+Worker counter publication must stay behind the helper surface in `lj_gc2.c`
+and `lib_base.c`; that rule is documented here and beside the helpers instead
+of in a source-text predicate.
 
 This is scheduler state hygiene for the current parked-worker bridge. True
 multi-worker marking, per-worker deque ownership, and scheduler-owned phase

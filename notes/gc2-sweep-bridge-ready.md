@@ -20,6 +20,7 @@ safepoint handshake, and parked GC workers are not attached TGs with their own
 handshake identity. Worker-owned idle publication should wait until the worker
 pool has a real scheduler/TG identity instead of relying on main-TG fallback.
 
-`tools/ci/m3_gc2_worker_scheduler.sh` now requires the latch helpers, rejects
-raw production access to the latch field, and rejects direct legacy-GC calls to
-the raw latch publication helper.
+`m3_gc2_worker_scheduler` owns the observable sweep bridge behavior. The latch
+field and raw latch publication helper must stay behind the documented GC2
+helper surface; that ownership rule is documented here instead of source-text
+matching.

@@ -11,10 +11,11 @@ This slice removes the remaining C-side `volatile` dependency from
   vmstate mirrors, but Linux/x64 trace heads now publish positive trace numbers
   only to `TGState.vmstate`. Trace exit/unwind, GC trace-root marking, and the
   profiler native-state sampler read the TG vmstate first.
-- `tools/ci/m3_vm_safepoint.sh` now rejects reintroducing volatile global
-  vmstate or raw C-side vmstate access in the GC/profiler/JIT root readers.
+- `m3_vm_safepoint` owns the observable safepoint behavior. The C-side
+  vmstate access rule is documented here and beside the helper surface instead
+  of being enforced by source-text matching.
 
 Validation:
 
-- `tools/ci/m3_vm_safepoint.sh`
-- `tools/ci/m3_gc2_scaffold.sh`
+- `tools/ci/lua_test.sh m3_vm_safepoint`
+- `tools/ci/lua_test.sh m3_gc2_scaffold`

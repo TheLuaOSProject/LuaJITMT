@@ -50,10 +50,11 @@ end
 
 function M.read_file(path)
   -- Intentionally plain: callers use this for generated dumps, logs,
-  -- fixtures, and other artifacts. Implementation-only invariants belong next
-  -- to the code they constrain; observable invariants belong in behavior,
-  -- fixture, or generated-artifact tests. Do not revive repository-source
-  -- pass/fail checks through this helper.
+  -- fixtures, benchmark data, package manifests, and other artifacts produced
+  -- or consumed by a test. Implementation-only invariants belong in comments
+  -- beside the constrained code and in notes. Observable invariants belong in
+  -- behavior, fixture, generated-artifact, or packaging tests. Do not use this
+  -- helper to make pass/fail decisions from repository source text.
   return read_raw_file(path)
 end
 

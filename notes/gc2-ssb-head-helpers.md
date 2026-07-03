@@ -9,5 +9,6 @@ The ordering stays the plan/05 section 5.6.2 protocol: mutator publication uses
 the node `next` helper, then CAS-publishes the head with acquire/release order;
 drainers acquire/release-xchg the head before consuming published slots.
 
-The M3 GC2 worker scheduler coverage now requires the helper family and documents why raw
-production C access to `gc2.ssb_head`.
+`m3_gc2_worker_scheduler` owns the observable SSB-drain behavior. Production C
+access to `gc2.ssb_head` must stay behind the documented helper family instead
+of source-text matching.

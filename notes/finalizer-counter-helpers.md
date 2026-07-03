@@ -16,12 +16,14 @@ is now used by stats as well as worker-drain accounting.
 Phase and traversal fixtures read finalizer telemetry through the same acquire
 helpers.
 
-## Invariant check
+## Coverage
 
-`tools/ci/m3_gc2_worker_scheduler.sh` now requires the finalizer counter helper
-surface and documents why raw production access in `src/lj_gc.c`, `src/lj_gc2.c`,
-`src/lib_base.c`, and `src/lib_threading.c`, plus raw fixture access in
-`tests/t-gc2-phase.c` and `tests/t-gc2-traverse.c`.
+`m3_gc2_worker_scheduler`, `m8_weak`, and `m9_gc_stats` own the observable
+finalizer behavior and telemetry. Finalizer counter publication must stay
+behind the helper surface in `lj_gc.c`, `lj_gc2.c`, `lib_base.c`, and
+`lib_threading.c`, with fixtures using the same acquire helpers when they need
+snapshots. That rule is documented here and beside the helpers instead of in a
+source-text predicate.
 
 ## Follow-Up
 

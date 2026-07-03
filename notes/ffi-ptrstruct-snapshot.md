@@ -12,5 +12,6 @@ raw `ctype_get()` struct test only under the parser-lock fallback and otherwise
 uses the snapshot result directly, including carrying that resolved `cid` into
 the auto-deref retry.
 
-`tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects the old
-snapshot-then-raw-reread pattern in `src/lj_cdata.c`.
+Coverage lives in `m7_ffi_typeinfo_snapshot`, which exercises the pointer
+auto-deref snapshot path. The no-reread invariant is documented here and beside
+the snapshot helper instead of being enforced by source-text matching.

@@ -8,11 +8,11 @@ The macro still emits a plain `movzx` byte load. On x86-64 this is the intended
 TSO acquire-compatible load, matching the existing table/header acquire macros
 in `vm_x64.dasc`, while keeping the generated instruction sequence unchanged.
 
-Coverage: `tools/ci/m5_hookmask_atomic.sh` now requires the macro and documents why raw
-`byte GL:*->hookmask` loads in `src/vm_x64.dasc`.
+Coverage: `m5_hookmask_atomic` and `m5_concurrent_objects` own the observable
+hook-mask behavior. Raw `byte GL:*->hookmask` loads in `vm_x64.dasc` must stay
+behind the documented macro instead of source-text matching.
 
 Validation:
-- `tools/ci/m5_hookmask_atomic.sh` passed.
-- `tools/ci/m5_concurrent_objects.sh` passed.
-- passed.
+- `tools/ci/lua_test.sh m5_hookmask_atomic` passed.
+- `tools/ci/lua_test.sh m5_concurrent_objects` passed.
 - `git diff --check` passed before staging.

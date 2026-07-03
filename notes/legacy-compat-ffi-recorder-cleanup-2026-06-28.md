@@ -25,7 +25,7 @@
 - GC2 `legacy_*` bridge names and weak/sweep counters: these describe active
   safety bridges while GC2 still coordinates with the classic collector.
 - Structural raw-field/accessor ownership rules as documentation or behavior
-  fixtures. Do not keep CI scans that grep source for implementation spelling.
+  fixtures. Do not keep source-text CI predicates for implementation spelling.
 
 ## Estimated progress
 
