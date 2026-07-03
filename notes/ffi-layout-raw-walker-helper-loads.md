@@ -7,7 +7,7 @@ from sequence-checked layout snapshots.
 This extends the raw-child layout guard so the local raw layout walker group no
 longer contains direct `->info` / `->size` reads.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_typeinfo_snapshot` invariant: raw `->info` / `->size` reads
   in the FFI layout raw walker helpers.

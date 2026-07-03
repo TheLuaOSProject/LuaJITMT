@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 string table CAS publication scaffolding.
+** Focused regression test for M5 string table CAS publication scaffolding.
 */
 
 #include <assert.h>

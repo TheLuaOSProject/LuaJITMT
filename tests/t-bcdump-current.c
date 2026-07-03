@@ -1,5 +1,5 @@
 /*
-** Focused guard for lockless bytecode dump compatibility.
+** Focused regression test for lockless bytecode dump compatibility.
 */
 
 #include <assert.h>

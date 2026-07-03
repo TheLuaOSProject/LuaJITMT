@@ -11,4 +11,4 @@ use their separate open-upvalue list protocol.
 `m5_upvalue_publish_gc` owns the behavior coverage for publication order.
 Closed upvalues must not return to immediate-link allocation: initialization,
 barrier repair, and pending-root publication stay ordered by the constructor
-comments and the focused fixture rather than by implementation-text assertions.
+comments and the focused fixture rather than by legacy wrappers.

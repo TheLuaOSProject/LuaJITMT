@@ -7,5 +7,5 @@ slice routes `minor_sweep_arenas`, `sweep_owner_runs`, `sweep_owner_arenas`, and
 
 Runtime initialization and increments now use the helper family. GC stats export
 and the focused allocation, worker-scheduler, and arena sweep fixtures read the
-same counters through acquire helpers. The M3 worker-scheduler guard documents why raw
+same counters through acquire helpers. The M3 worker-scheduler notes document why raw
 production C access to these sweep telemetry fields.

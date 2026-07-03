@@ -8,5 +8,5 @@
   successful `ffi.C.*` call when no new STOPREQ action was acknowledged by the
   native call.
 - Added M3 handshake coverage for sticky `ffi.C.getpid()`. The old source
-  guard rejecting raw `lj_safepoint_checkstop(L, actions)` in `lj_ccall.c` is
+  notes document why we avoiding raw `lj_safepoint_checkstop(L, actions)` in `lj_ccall.c` is
   obsolete; helper comments document the fresh STOPREQ rule.

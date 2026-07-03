@@ -250,8 +250,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   preserving RX-space decoding and the existing `lj_mcode_patch()`
   protection/sync protocol while routing the actual writes through the RW view.
   The M9 cleanup/perf pass removed the temporary fresh-area allocation bridge;
-  the publication guard now rejects those symbols and verifies low-`maxmcode`
-  trace reuse under the dual-map write view.
+  publication coverage now verifies low-`maxmcode` trace reuse under the
+  dual-map write view and the code comments document why the fresh-area bridge
+  must not return.
   Recorder aborts that hit the recursive call-unroll limit now use an
   unlink-only trace flush for the compiled return trace, matching stock
   LuaJIT's behavior: the trace is removed from the proto chain and unpatched,
@@ -442,8 +443,8 @@ scoped-flush target.
    the legacy node base before pairing it with a separately computed hmask
    index from the loaded node header, so trace hash lookups do not combine a
    fresh hmask with an older node pointer during the current publish/retire
-   phase, and they exit if the paired header is already retiring. The M6 guard
-   suite now covers both dynamic `HREF` and constant-key `HREFK` node-header
+   phase, and they exit if the paired header is already retiring. The M6 JIT
+   coverage now covers both dynamic `HREF` and constant-key `HREFK` node-header
    pairing and retiring-generation checks. Constant-key `HREFK`
    recording snapshots the legacy node/hmask shape around `lj_tab_get()` and
    falls back to regular `HREF` if the shape changes while recording. x64
@@ -508,7 +509,7 @@ scoped-flush target.
    `PROTO_NOJIT`; after audit and the first M6 CNEW/FNEW slice, self-captured
    local-function source protos and loaded v4 protos containing only the
    self-cell CNEW/FNEW/CSET shape no longer need that gate.
-   Current M6 guard coverage requires IR dumps for owner numeric cells,
+   Current M6 invariant coverage requires IR dumps for owner numeric cells,
    GC-valued CSET with `OBAR`, loaded v4 CGET/CSET traces, source/loaded
    self-cell CNEW/FNEW helper traces, mixed raw-local sync-helper FNEW traces,
    mutable pre/post FNEW update loops after promotion at trace entry, and

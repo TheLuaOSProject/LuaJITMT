@@ -11,7 +11,7 @@ Slice
 - Added a guard in `tools/ci/m3_gc2_worker_scheduler.sh` to document raw
   `GC2SSBNode.next` access in `src/lj_gc2.c`.
 - Follow-up: routed embedded `TGState.ssb_node[]` initialization in
-  `src/lj_tg.c` through `lj_gc2_ssb_next_rel()` and extended the same guard to
+  `src/lj_tg.c` through `lj_gc2_ssb_next_rel()` and extended the same coverage to
   document raw `ssb_node[].next` initialization.
 
 Validation

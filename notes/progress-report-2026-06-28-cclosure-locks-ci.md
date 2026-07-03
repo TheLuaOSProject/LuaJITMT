@@ -30,7 +30,7 @@ paths, finalizer/weak-table ordering, benchmark drift, and CI guard quality.
   `lua_objlen`.
 - Converted `string.gmatch` hidden upvalue reads to full `TValue` acquire
   snapshots and its position update to a full primitive `TValue` release store.
-- Replaced the old helper-name implementation-text assertion with behavior coverage in
+- Replaced the helper-name legacy wrapper with behavior coverage in
   `tests/t-cclosure-upvalue-snapshot.c`.
 - Kept only narrow static tripwires for raw partial `string.gmatch` position
   writes that are hard to observe deterministically.
@@ -119,7 +119,7 @@ Refactored now:
 Resolved by the current invariant-testing guidance:
 - Per-case shell wrappers and are gone; `tools/ci/lua_test.sh`
   is the supported CI entrypoint.
-- M4/M5/M6/M7/M8 implementation-shape assertions were removed from aggregate suites.
+- M4/M5/M6/M7/M8 implementation-shape notes were removed from aggregate suites.
 - The Lua harness file helpers are neutral primitives for generated artifacts,
   imported inputs, and temporary files.
 
@@ -134,7 +134,7 @@ Short term, 1-3 days:
   remaining C-closure pseudo-index edge cases.
 - Add a bounded timeout/split for `m4_threading_capi`.
 - Replace any newly discovered implementation-shape assertion with behavior coverage or
-  documentation; do not move implementation-text assertions into Lua suite cases.
+  documentation; do not move legacy wrappers into Lua suite cases.
 
 Medium term, 1-2 weeks:
 - Reduce FFI snapshot fallback locks and add stronger rollback/abandoned-entry

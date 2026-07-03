@@ -16,7 +16,7 @@ Allocator, free, stack rehome, GC step, GC2 pacing, `collectgarbage()`, and
 call `lj_gc_should_step_vm()` before the existing step helpers, so the shared GC
 pacing reads stay in C helper code instead of interpreter assembly.
 
-Guard: `m5_gc_total_atomic` invariant: raw C-side `g->gc.total`
+Coverage: `m5_gc_total_atomic` invariant: raw C-side `g->gc.total`
 access outside the helper definitions and documents why raw x64 VM allocation-check
 loads or reintroduced allocation-check load macros for the GC total/threshold
 and GC2 hard-limit fields.

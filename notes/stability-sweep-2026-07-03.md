@@ -13,10 +13,9 @@ flush, and trace-number reuse under concurrent full/scoped flush.
 The active Lua harness and CI no longer predicate pass/fail on repository
 source text.
 The old repository-source enumerator was removed from `tests/lib/ljtest.lua`;
-artifact reads remain
-available through `Test:read()` and `suite_utils.read_file()`. Current scans
-only find documentation/historical notes or generated-output/source-path build
-usage, not active repository-text tests.
+artifact reads remain available through `Test:read()` and
+`suite_utils.read_file()`. Generated-output tests inspect artifacts produced by
+the build/runtime, not repository source files.
 This policy also covers the old milestone guard wrappers: they are historical
 notes, not checks to reintroduce. If one described a real lockless invariant,
 the invariant belongs in code comments/notes and in behavior, fixture, or
@@ -48,6 +47,26 @@ available for stale `startins` recovery until the legacy GC root link is gone.
 Retired mcode areas now check live trace slots, retired bodies, and heap
 exit-target tables before freeing. The final trace-quiescence wait treats
 either non-null `jit_base` or positive TG `vmstate` as active trace state.
+
+## Final cleanup pass
+
+The temporary error-path and trace-exit diagnostics used while reducing the
+flush race were removed. The assembly-time snapshot-PC owner scan was also
+removed: it was a costly compiler-path rejection and the lasting lifetime rule
+now lives in trace marking/retirement, where retired trace start and snapshot
+prototype owners are preserved through the grace period.
+
+Validation after the cleanup:
+
+- clean assertion build: `make -C src -j$(nproc) CCDEBUG='-g -DLUA_USE_ASSERT'`
+- focused JIT/flush suite:
+  `tools/ci/lua_test.sh m5_jit_trace_publish m6_jit_mcode_publish
+  m6_jit_flush_hs m6_jit_util_flush_race m6_jit_mt_activation_flush
+  m6_jit_flush_thread_stress`
+- five assertion-build heavy stress runs with
+  `LJ_M6_JIT_FLUSH_THREAD_ROUNDS=128` and
+  `LJ_M6_JIT_FLUSH_THREAD_CHURN=256`
+- stock suite: `tools/ci/lua_test.sh run_stock_tests -- --quiet` (`509 passed`)
 
 `tests/t-jit-flush-thread-stress.lua` is now wired into M6 as
 `m6_jit_flush_thread_stress` to cover concurrent full flush, per-trace flush,
@@ -99,7 +118,7 @@ re-recording correctness failure. The existing `lj_trace_flush_unlink()` path
 must not be replaced by scoped trace retirement: it exists so `trace_abort()`
 can still self-link the unlinked return trace as the stock blacklist entry.
 
-Independent 50-process samples with the same guard shape also stayed bounded:
+Independent 50-process samples with the same coverage shape also stayed bounded:
 
 - Fork: first run 17..36 traces, second run 21..40, second-run delta 3..4,
   up-recursion at trace 2..21, bad runs 0/50.
@@ -113,7 +132,7 @@ Looped timing after one warm `fib(30)` still shows a current fork gap:
 
 ## Benchmark guard
 
-The benchmark-regression guard is no longer purely self-referential in current
+The benchmark-regression coverage is no longer purely self-referential in current
 state. `m9_bench_stock_compare` autodetected `/usr/bin/luajit` and compared the
 fork against stock:
 

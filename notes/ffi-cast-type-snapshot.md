@@ -14,7 +14,7 @@ Coverage added:
 
 - stable enum ctype-object casts now cover numeric enum casts as well as cdata
   enum casts;
-- the typeinfo snapshot guard rejects stable ctype-object casts that reach a
+- the typeinfo snapshot notes document why we avoid stable ctype-object casts that reach a
   parser-lock fallback before the snapshot wait/retry path;
 - cparser rollback reader now races failed enum cdefs against numeric enum
   casts and checks the failed declaration does not leave a usable rolled-back

@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free ffi.C namespace snapshots.
+** Focused regression test for lock-free ffi.C namespace snapshots.
 */
 
 #include <assert.h>

@@ -9,4 +9,4 @@
 - Added sticky regressions for `threading.sleep()`, delayed `mutex:lock()`, and
   `thread:join()`.
 - Helper comments document why threading waits must use the fresh STOPREQ
-  helper. The old implementation-text assertion rejecting raw checks is obsolete.
+  helper. The helper comment and behavior coverage own the invariant.

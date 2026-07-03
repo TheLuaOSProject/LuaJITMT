@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free cdata arithmetic argument snapshots.
+** Focused regression test for lock-free cdata arithmetic argument snapshots.
 */
 
 #include <assert.h>

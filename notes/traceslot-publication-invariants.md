@@ -5,7 +5,7 @@ Slice: trace-slot publication helper documentation.
 Changes:
 - Historical state: `tools/ci/m5_jit_trace_publish.sh` once rejected raw
   `->trace[` indexing under `src/` before running the behavioral M5 trace
-  publication suite. The implementation-text assertion part was removed with the CI
+  publication suite. The legacy wrapper part was removed with the CI
   invariant-testing cleanup; keep the rationale below as documentation.
 
 Reasoning:

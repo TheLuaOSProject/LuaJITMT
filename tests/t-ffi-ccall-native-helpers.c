@@ -1,5 +1,5 @@
 /*
-** Focused guard for exported FFI C-call native-state helpers.
+** Focused regression test for exported FFI C-call native-state helpers.
 */
 
 #include <assert.h>

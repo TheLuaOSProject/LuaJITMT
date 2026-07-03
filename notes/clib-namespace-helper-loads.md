@@ -13,7 +13,7 @@ Converted paths:
   `CType`, then uses helper-backed metadata for constants, unsigned widening,
   extern/function classification, and x86 decorated symbol fallback.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_clib_cache` invariant: raw `->info`, `->size`, or `->sib`
   reads in these runtime C library namespace helpers.

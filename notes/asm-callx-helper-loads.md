@@ -8,7 +8,7 @@ convention bits used by traced FFI calls. Default builds no longer record FFI
 C calls, and `LJ_FFI_RECORD_CALLS` hard-fails at compile time until `IR_CALLXS`
 has a native-state protocol. This helper remains for the eventual native bridge.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_cdata_set_l` invariant: raw `->info` / `->size` reads in
   `asm_callx_flags()`.

@@ -6,12 +6,12 @@ diff sizes are for sanity-checking scope, not deadlines.
 
 ## M0 — Harness & invariant coverage (≈300 lines)
 Tasks: pin the commit (00 §0.2). Add the ADR-1 x86-64/GC64 `#error`
-guardrail without creating a compatibility flag wall. CI scripts: build
+invariant check without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
 github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). Do not add CI
 that passes or fails by grepping repository source for call names or snippets;
 source inventory is one-off engineering archaeology, not a test. This applies
-to old milestone source-check suites too: remove those checks instead of
+to old milestone wrapper suites too: remove those checks instead of
 porting them. Keep the invariant in behavior fixtures, C race/lifetime
 fixtures, generated dump/ASM checks when code generation is the observable
 artifact, and code-adjacent comments plus notes when the rule is design
@@ -64,7 +64,7 @@ macros first, preserving the legacy color barriers until their oracle role is
 finished. Historical barrier-owner inventories covered the C API, table/meta,
 function/state, cdata/callback, vmevent, library, VM, and JIT paths; keep the
 lasting proof in behavior fixtures and generated-code checks rather than in a
-repository implementation-text assertion. Add the dasc `wbarrier_tv` macro plus TSET*/USET*
+old wrapper check. Add the dasc `wbarrier_tv` macro plus TSET*/USET*
 wiring (07 §7.4). Weak tables + finalizer queue minimal (full in M8).
 collectgarbage mapping (05 §5.10).
 Tests: stock under torture; paranoia build over the whole stock suite;
@@ -208,7 +208,7 @@ Gate: green; ffi_struct bench within 10% of M0.
 Current implementation note: the original M7 target above remains intact.
 FINREG uses CAS-published weak-key generations for cdata finalizer registry
 growth, and recorded `ffi.gc()`/ctype `__gc` now emits the FINREG mutation
-helper instead of falling back to NYI. The current guard covers direct
+helper instead of falling back to NYI. The current behavior coverage exercises direct
 registration, nil clear, metatype registration, and multi-threaded default-JIT
 FINREG stress; the broader final FINREG/finqueue execution design remains M8
 follow-up rather than M9 performance cleanup. x64 callback runtime scratch is
@@ -334,7 +334,7 @@ and reports approximate owner-side poll-ack P99 latency from histogram deltas;
 synthetic leader and remote-native acknowledgements do not contribute to the
 poll-latency histogram.
 Run `tools/ci/lua_test.sh m9_m10_gc` to aggregate the M9 stats smoke, M9
-benchmark smoke, and M10 generational guard.
+benchmark smoke, and M10 generational coverage.
 
 ## M10 — Generational mode (≈800)
 Tasks: 05 §5.12 (minor sweep identity already in arena code from M2;

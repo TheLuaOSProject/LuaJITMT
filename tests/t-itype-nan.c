@@ -1,5 +1,5 @@
 /*
-** Focused guard for NaN TValue tag classification.
+** Focused regression test for NaN TValue tag classification.
 */
 
 #include <assert.h>

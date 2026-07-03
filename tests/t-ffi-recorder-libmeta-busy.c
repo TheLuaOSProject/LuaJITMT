@@ -1,5 +1,5 @@
 /*
-** Focused guard for nonblocking recorder FFI library ctype metadata reads.
+** Focused regression test for nonblocking recorder FFI library ctype metadata reads.
 */
 
 #include <assert.h>

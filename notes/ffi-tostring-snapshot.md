@@ -24,4 +24,4 @@ Coverage:
   reference cdata `tostring()` wait from a native region until a consistent
   ctype snapshot is available.
 - The fixture is wired into `m7_ffi_typeinfo_snapshot`; this is behavior
-  coverage rather than implementation-text assertion coverage.
+  coverage rather than runtime coverage.

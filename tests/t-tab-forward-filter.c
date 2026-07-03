@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 table FORWARD value filtering.
+** Focused regression test for M5 table FORWARD value filtering.
 */
 
 #include <assert.h>

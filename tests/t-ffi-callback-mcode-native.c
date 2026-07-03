@@ -1,5 +1,5 @@
 /*
-** Focused guard for FFI callback mcode native STOPREQ handling.
+** Focused regression test for FFI callback mcode native STOPREQ handling.
 */
 
 #include <assert.h>

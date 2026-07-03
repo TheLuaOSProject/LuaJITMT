@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free tonumber(cdata) ctype snapshots.
+** Focused regression test for lock-free tonumber(cdata) ctype snapshots.
 */
 
 #include <assert.h>

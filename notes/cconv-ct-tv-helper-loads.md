@@ -23,7 +23,7 @@ CConv TValue-to-C helper loads
 - Routed enum string fallback constants and string-to-array child checks
   through helper-backed `CType.info`/`CType.size` reads.
 - `src/lj_cconv.c` now has no raw `CType.info` or `CType.size` reads; the
-  cdata-set guard covers all converted conversion helper bodies.
+  cdata-set coverage covers all converted conversion helper bodies.
 
 Verification:
 

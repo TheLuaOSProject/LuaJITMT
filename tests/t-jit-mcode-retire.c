@@ -1,5 +1,5 @@
 /*
-** Focused guard for JIT mcode SMR retirement after trace flush.
+** Focused regression test for JIT mcode SMR retirement after trace flush.
 */
 
 #include <assert.h>

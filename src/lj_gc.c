@@ -1095,6 +1095,41 @@ static void gc_marktrace(global_State *g, TraceNo traceno)
   }
 }
 
+void lj_gc_mark_trace_slot(global_State *g, uint32_t traceno)
+{
+  gc_marktrace(g, (TraceNo)traceno);
+}
+
+static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc)
+{
+  GCobj *o;
+  if (!pc)
+    return;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TPROTO) {
+      GCproto *pt = gco2pt(o);
+      const BCIns *bc = proto_bc(pt);
+      if (pc >= bc && pc < bc + pt->sizebc) {
+	gc_markobj(g, o);
+	return;
+      }
+    }
+  }
+}
+
+static void gc_mark_trace_snapshot_pcs(global_State *g, GCtrace *T)
+{
+  SnapShot *snap = trace_snap_acq(T);
+  SnapEntry *snapmap = trace_snapmap_acq(T);
+  SnapNo i, nsnap = trace_nsnap_acq(T);
+  for (i = 0; i < nsnap; i++) {
+    SnapShot *s = &snap[i];
+    SnapEntry *map = &snapmap[snap_mapofs_acq(s)];
+    gc_mark_proto_for_trace_pc(g, snap_pc_acq(&map[snap_nent_acq(s)]));
+  }
+}
+
 /* Traverse a trace. */
 static void gc_traverse_trace(global_State *g, GCtrace *T)
 {
@@ -1119,6 +1154,7 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
     if (nextside) gc_marktrace(g, nextside);
   }
   gc_markobj(g, trace_startptgco_acq(T));
+  gc_mark_trace_snapshot_pcs(g, T);
 }
 
 /* The current trace is a GC root while not anchored in the prototype (yet). */

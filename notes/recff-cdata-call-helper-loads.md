@@ -8,7 +8,7 @@ This removes the remaining direct `CType.info` read from the recorded cdata call
 path after constructor handling and direct C-call recording decline to handle
 the call.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_metatype` invariant: raw `->info` / `->size` reads in
   `recff_cdata_call()`.

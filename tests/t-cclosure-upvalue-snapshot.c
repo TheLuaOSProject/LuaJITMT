@@ -1,5 +1,5 @@
 /*
-** Focused guard for C closure upvalue publication snapshots.
+** Focused regression test for C closure upvalue publication snapshots.
 */
 
 #include <assert.h>

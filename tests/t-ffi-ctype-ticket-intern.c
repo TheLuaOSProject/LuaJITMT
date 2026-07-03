@@ -1,5 +1,5 @@
 /*
-** Focused guard for M7 FFI ctype ticket allocation and duplicate interning.
+** Focused regression test for M7 FFI ctype ticket allocation and duplicate interning.
 */
 
 #include <assert.h>

@@ -1,5 +1,5 @@
 /*
-** Focused guard for lua_atpanic() exchange semantics.
+** Focused regression test for lua_atpanic() exchange semantics.
 */
 
 #include <assert.h>

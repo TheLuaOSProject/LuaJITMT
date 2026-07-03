@@ -14,7 +14,7 @@ the existing Chase-Lev ordering:
 - owner single-item and thief steal claims use the existing seq-cst top CAS
   with acquire failure ordering.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m3_gc2_worker_scheduler.sh` now requires the helper surface and rejects
 raw production access to `g->gc2.grey_top` or `g->gc2.grey_bottom` in
@@ -28,7 +28,7 @@ while these helpers protect the shared deque index protocol.
 
 Follow-up vector helper work routes `grey_stack` and `grey_capacity` through
 `gc2_grey_stack_*()` and `gc2_grey_capacity_*()` helpers and extends the same
-M3 guard to document raw production access. Deque growth is still intentionally
+M3 note documenting raw production access. Deque growth is still intentionally
 owner-quiesced under the current single-worker bridge; a later scheduler slice
 must add a retirement/epoch scheme before allowing steals to race vector
 replacement.

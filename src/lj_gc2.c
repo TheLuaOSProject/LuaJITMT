@@ -1349,6 +1349,41 @@ static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
   lj_gc2_markobj(g, obj2gco(T));
   return 1;
 }
+
+void lj_gc2_mark_trace_slot(global_State *g, uint32_t traceno)
+{
+  (void)gc2_mark_trace_root(g, (TraceNo)traceno);
+}
+
+static void gc2_mark_proto_for_trace_pc_root(global_State *g, const BCIns *pc)
+{
+  GCobj *o;
+  if (!pc)
+    return;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TPROTO) {
+      GCproto *pt = gco2pt(o);
+      const BCIns *bc = proto_bc(pt);
+      if (pc >= bc && pc < bc + pt->sizebc) {
+	lj_gc2_markobj(g, o);
+	return;
+      }
+    }
+  }
+}
+
+static void gc2_mark_trace_snapshot_pcs_root(global_State *g, GCtrace *T)
+{
+  SnapShot *snap = trace_snap_acq(T);
+  SnapEntry *snapmap = trace_snapmap_acq(T);
+  SnapNo i, nsnap = trace_nsnap_acq(T);
+  for (i = 0; i < nsnap; i++) {
+    SnapShot *s = &snap[i];
+    SnapEntry *map = &snapmap[snap_mapofs_acq(s)];
+    gc2_mark_proto_for_trace_pc_root(g, snap_pc_acq(&map[snap_nent_acq(s)]));
+  }
+}
 #endif
 
 static int gc2_tg_list_contains(global_State *g, TGState *needle)
@@ -3256,6 +3291,7 @@ static void gc2_scan_current_trace_root(global_State *g)
   (void)gc2_mark_trace_root(g, trace_nextroot_acq(T));
   (void)gc2_mark_trace_root(g, trace_nextside_acq(T));
   lj_gc2_markobj(g, trace_startptgco_acq(T));
+  gc2_mark_trace_snapshot_pcs_root(g, T);
 }
 #endif
 
@@ -6030,6 +6066,38 @@ static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
   if (T)
     gc2_markobj_worker(g, obj2gco(T));
 }
+
+static void gc2_mark_proto_for_trace_pc_worker(global_State *g,
+					       const BCIns *pc)
+{
+  GCobj *o;
+  if (!pc)
+    return;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TPROTO) {
+      GCproto *pt = gco2pt(o);
+      const BCIns *bc = proto_bc(pt);
+      if (pc >= bc && pc < bc + pt->sizebc) {
+	gc2_markobj_worker(g, o);
+	return;
+      }
+    }
+  }
+}
+
+static void gc2_mark_trace_snapshot_pcs_worker(global_State *g, GCtrace *T)
+{
+  SnapShot *snap = trace_snap_acq(T);
+  SnapEntry *snapmap = trace_snapmap_acq(T);
+  SnapNo i, nsnap = trace_nsnap_acq(T);
+  for (i = 0; i < nsnap; i++) {
+    SnapShot *s = &snap[i];
+    SnapEntry *map = &snapmap[snap_mapofs_acq(s)];
+    gc2_mark_proto_for_trace_pc_worker(g,
+				       snap_pc_acq(&map[snap_nent_acq(s)]));
+  }
+}
 #endif
 
 static int gc2_traverse_tab(global_State *g, GCtab *t)
@@ -6253,6 +6321,7 @@ static void gc2_traverse_trace(global_State *g, GCtrace *T)
   gc2_marktrace_worker(g, trace_nextroot_acq(T));
   gc2_marktrace_worker(g, trace_nextside_acq(T));
   gc2_markobj_worker(g, trace_startptgco_acq(T));
+  gc2_mark_trace_snapshot_pcs_worker(g, T);
 }
 #endif
 

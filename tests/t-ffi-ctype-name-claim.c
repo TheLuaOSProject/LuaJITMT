@@ -1,5 +1,5 @@
 /*
-** Focused guard for M7 FFI ctype duplicate-name publication.
+** Focused regression test for M7 FFI ctype duplicate-name publication.
 */
 
 #include <assert.h>

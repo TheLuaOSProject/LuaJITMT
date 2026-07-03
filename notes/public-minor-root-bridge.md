@@ -22,7 +22,7 @@ from bridge callbacks only when:
 Legacy marking still runs. Direct GC2 minor root scans, remembered-set scans,
 thread/TG roots, and major-cycle bridge marking are unchanged. `src/lj_gc.c`
 only calls the GC2 predicate from `lj_gc_arena_markobj()` /
-`lj_gc_arena_markmem()`; the M10 guard rejects reintroducing the local
+`lj_gc_arena_markmem()`; the M10 notes document why we avoid reintroducing the local
 phase/minor-root test there.
 
 `LJ_GC2_PARANOIA` full-root fixpoint checks now return early for true minor

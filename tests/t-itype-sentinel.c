@@ -1,5 +1,5 @@
 /*
-** Focused guard for internal table sentinel TValue classification.
+** Focused regression test for internal table sentinel TValue classification.
 */
 
 #include <assert.h>

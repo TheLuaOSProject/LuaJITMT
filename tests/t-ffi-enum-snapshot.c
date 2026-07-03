@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free enum string constant snapshots.
+** Focused regression test for lock-free enum string constant snapshots.
 */
 
 #include <assert.h>

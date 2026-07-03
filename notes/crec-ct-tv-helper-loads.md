@@ -12,7 +12,7 @@ The enum string fallback now snapshots matched constant value metadata before
 using `ctype_size_acq()`. If the ctype parser is publishing, the recorder
 aborts with `CTBUSY` instead of walking the live ctype table.
 
-Guardrail:
+Invariant check:
 
 - `tests/t-ffi-recorder-libmeta-busy.c` covers enum string stores, cdata
   arithmetic/conversion sources, aggregate copies, and fixed C calls while a

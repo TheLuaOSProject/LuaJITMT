@@ -9,7 +9,7 @@ release-stored through `wrapf_store()` before publishing `BC_FUNCCW`. This
 preserves the existing generated x64 VM load shape while removing the raw C-side
 data race on `global_State.wrapf`.
 
-Guard:
+Coverage:
 
 - `m5_wrapcf_func_publish` documents why raw C-side `->wrapf` access outside the
   accessor definition and verifies that `luaJIT_setmode()` claims the target

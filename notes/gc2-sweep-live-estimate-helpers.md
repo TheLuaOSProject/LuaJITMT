@@ -17,9 +17,9 @@ Ordering:
 - `lj_gc2_update_pacing()` and `threading.gcstats()` acquire-load the
   helper-backed snapshot.
 
-Guarding:
+Coverage:
 - `tools/ci/m9_gc_stats.sh` now requires all nine helper definitions.
-- The same guard documents why raw production access to `sweep_live_updates`,
+- The same notes document why raw production access to `sweep_live_updates`,
   `sweep_live_huge_bytes`, and `live_estimate` in `lj_gc2.c` and `lib_base.c`.
 - `tools/ci/m3_gc2_worker_scheduler.sh` keeps the aggregate helper private to
   `lj_gc2.c`; public cycle closure enters through sweep-to-idle or legacy

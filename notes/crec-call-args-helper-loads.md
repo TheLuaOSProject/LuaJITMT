@@ -12,7 +12,7 @@ later conversion and vararg inference cannot invalidate a `CType *` and then
 leave subsequent recorder decisions reading the stale payload directly. If the
 parser is publishing, the recorder aborts with `CTBUSY`.
 
-Guardrail:
+Invariant check:
 
 - `tests/t-ffi-recorder-libmeta-busy.c` covers traced fixed-argument C calls
   under a held ctype parser token and the normal hot-loop path that must still

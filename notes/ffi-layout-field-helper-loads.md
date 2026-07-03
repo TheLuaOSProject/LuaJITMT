@@ -8,7 +8,7 @@ The `ffi_layout_offsetof_snapshot()` caller also snapshots the raw type's
 `CType.info` / `CType.size` values before deciding whether the field walker can
 run.
 
-Guardrail:
+Invariant check:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `ct.info`,
   `ct.size`, `ct.sib`, `cct.info`, `cct.size`, or `cct.sib` reads in the field

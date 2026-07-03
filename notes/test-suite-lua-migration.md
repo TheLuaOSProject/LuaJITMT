@@ -1,6 +1,6 @@
 # Lua test-suite migration
 
-## 2026-06-28 implementation-text assertion removal
+## 2026-06-28 legacy wrapper removal
 
 - Removed the old source-file content assertion API and generic `assert_file_*`
   compatibility wrappers from the Lua test harness.
@@ -83,7 +83,7 @@ Validation:
 - Historical state: this pass left compatibility exports in `suite_utils.lua`
   while routing dump and file-result suites to `suite_assert` directly.
 - Historical state: this pass added source-file content assertions to
-  `suite_assert` and raw `Test:read()`. Those implementation-text assertions were removed
+  `suite_assert` and raw `Test:read()`. Those legacy wrappers were removed
   on 2026-06-28; current policy is behavior fixtures, generated artifact
   assertions, or documentation.
 - Confirmed JIT/bytecode dump matching remains supported as result matching.
@@ -101,19 +101,19 @@ Validation:
 - Historical state: this pass added path-based source-file special handling to
   `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
   `suite_utils.read_source_file()` helper. Both the explicit source-reading
-  helper and those source-text tests were removed in the later 2026-06-28
-  implementation-text assertion removal. The remaining path-based read behavior was removed
+  helper and those legacy wrappers were removed in the later 2026-06-28
+  legacy wrapper removal. The remaining path-based read behavior was removed
   on 2026-07-03 so the harness now treats file access as a neutral primitive.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
   `tools/test.lua` process. Set `LJ_TEST_DISABLE_BUILD_CACHE=1` for the old
   always-clean behavior while debugging the harness.
-- Removed implementation-shape assertions from `m7_ffi_callback_runtime.sh` and kept the
+- Removed implementation-shape notes from `m7_ffi_callback_runtime.sh` and kept the
   public wrapper as a thin launcher. The callback runtime case now relies on
   its C/Lua behavior fixtures for native-state restoration, stale callback
   returns, callback blacklisting, and fresh STOPREQ behavior.
-- Removed the M3 shell wrapper's FFI C-call implementation-text assertion because the same
+- Removed the M3 shell wrapper's FFI C-call legacy wrapper because the same
   native-entry STOPREQ path is now covered by the M7 callback STOPREQ fixture.
 
 Validation:
@@ -193,7 +193,7 @@ Validation:
 - Direct Lua metadata smoke over aggregate `deps` entries.
 - `tools/ci/lua_test.sh m2_arena_all`
 
-## 2026-06-20 implementation-text assertion and aggregate execution tightening
+## 2026-06-20 legacy wrapper and aggregate execution tightening
 
 - Historical state: broadened source-content path handling so behavior
   assertions could not read test, wrapper, tool, aux, bench, or `src/` source
@@ -242,11 +242,11 @@ Validation:
 - `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot m5_tab_value_publish m6_jit_table_store_helper`
 - `git diff --check`
 
-## 2026-06-20 implementation-text assertion behavior case
+## 2026-06-20 legacy wrapper behavior case
 
 - Historical state: this pass added as a first-class Lua
   suite case and added a thin CI compatibility wrapper.
-- That case and wrapper were removed by the 2026-06-28 implementation-text assertion
+- That case and wrapper were removed by the 2026-06-28 legacy wrapper
   cleanup. Generated result-file matching remains supported because generated
   IR/bytecode/ASM output is an allowed behavior surface.
 

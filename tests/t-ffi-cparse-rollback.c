@@ -1,5 +1,5 @@
 /*
-** Focused guard for M7 FFI cparser rollback without CTState top/hash rewind.
+** Focused regression test for M7 FFI cparser rollback without CTState top/hash rewind.
 */
 
 #include <assert.h>

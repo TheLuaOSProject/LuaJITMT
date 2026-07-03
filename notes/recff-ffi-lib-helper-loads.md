@@ -23,7 +23,7 @@ Converted paths:
 - `lj_crecord_tonumber()` snapshots enum child metadata and size before
   selecting int32 vs. double conversion.
 
-Guardrail:
+Invariant check:
 
 - `tests/t-ffi-layout-snapshot.c` now holds the ctype parse token while the JIT
   records ctype-object `ffi.sizeof(ct)`. The recorder must abort with CTBUSY
@@ -35,7 +35,7 @@ Guardrail:
   Predefined `void *` / `const void *` / `const char *` traces for
   `ffi.fill()`, `ffi.copy()`, and `ffi.string()` must record without CTBUSY
   under an unrelated parser token.
-- Do not replace this with an implementation-text assertion. The project policy in
+- Do not replace this with a legacy wrapper. The project policy in
   `notes/ci-invariant-testing.md` requires behavior fixtures or generated
   artifact checks for CI coverage.
 

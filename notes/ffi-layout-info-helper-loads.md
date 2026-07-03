@@ -5,7 +5,7 @@
 returning size information for `ffi.sizeof()`, `ffi.alignof()`, and
 `ffi.offsetof()`.
 
-Guardrail:
+Invariant check:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `ct.info` /
   `ct.size` reads in these layout info helpers.

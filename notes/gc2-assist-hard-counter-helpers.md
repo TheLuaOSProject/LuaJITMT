@@ -10,7 +10,7 @@ tests. This slice routes `assist_runs`, `assist_grey_drained`,
 Runtime initialization and increments now use the helper family, Lua GC stats
 read assist counters through acquire helpers, and the focused allocation,
 interpreter-hard-check, JIT-hard-check, and VM-safepoint fixtures read the same
-counters through the helper surface. The M6 allocation-account guard now rejects
+counters through the helper surface. The M6 allocation-account tests now catch
 raw production C access to these assist and hard-check telemetry fields.
 
 While touching stats export, the M6 cycle/root telemetry guard was tightened to

@@ -9,7 +9,7 @@ FINREG CTState root-head helper slice
 - Documented the invariant formerly checked by `m7_ffi_finreg`: raw FINREG CTState root
   access in implementation files.
 - Follow-up: `tests/t-gc2-traverse.c` now uses `fin_order_head_acq()` for its
-  ordered cdata FINREG reference counter, and the same guard documents why raw
+  ordered cdata FINREG reference counter, and the same notes document why raw
   `CTState.fin_*` root access in that fixture.
 
 Verification:

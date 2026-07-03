@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free aggregate conversion/init snapshots.
+** Focused regression test for lock-free aggregate conversion/init snapshots.
 */
 
 #include <assert.h>

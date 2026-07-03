@@ -18,7 +18,7 @@ matches the hookmask helper model:
 
 The non-x64 DASC paths remain out of scope for this x86-64 Linux pass.
 
-Guard: `m5_hook_state_atomic` invariant: raw C-side `hookf`/`hookcount`
+Coverage: `m5_hook_state_atomic` invariant: raw C-side `hookf`/`hookcount`
 field access outside the helper definitions, requires the x64 locked
 decrements, and runs the `m5_hook_state_atomic` Lua smoke.
 

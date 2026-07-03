@@ -1,5 +1,5 @@
 /*
-** Focused guard for direct registry root replacement.
+** Focused regression test for direct registry root replacement.
 */
 
 #include <assert.h>

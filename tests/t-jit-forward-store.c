@@ -1,5 +1,5 @@
 /*
-** Focused guard for helper-backed JIT stores over forwarded table slots.
+** Focused regression test for helper-backed JIT stores over forwarded table slots.
 */
 
 #include <assert.h>

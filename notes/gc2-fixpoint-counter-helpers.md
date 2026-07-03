@@ -9,5 +9,5 @@ completion, and the mark fixpoint bridge. This slice routes `fixpoint_rounds`,
 
 Runtime initialization and increments now use the helper family, while the
 focused phase/traverse C tests read the same counters through acquire helpers.
-The M3 worker scheduler guard documents why raw production C access to these
+The M3 worker scheduler notes document why raw production C access to these
 fixpoint/phase telemetry fields.

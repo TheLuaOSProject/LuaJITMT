@@ -6,7 +6,7 @@ LuaJIT API behavior.
 
 Refresh note: the 2026-06-29 re-audit after removing the non-stock `ffi.pin`
 entrypoint, and again after adding shared-cdata race coverage, found no active
-implementation-text-only tests and no public stock LuaJIT API removals. The remaining
+removed wrapper tests and no public stock LuaJIT API removals. The remaining
 string checks in active tests are over generated dumps or runtime output,
 matching the policy exception for generated ASM/mcode and other generated
 artifacts.
@@ -25,19 +25,19 @@ macOS, and Windows release binaries run stock-suite checks during release
 packaging.
 
 At the time of the original 2026-06-29 audit, no active forbidden
-implementation-text-only tests were found under `tools/ci`, `tools/test.lua`,
+removed wrapper tests were found under `tools/ci`, `tools/test.lua`,
 `tests/suites`, `tests/lib`, top-level `tests/*.lua`, or top-level `tests/*.c`.
-Later narrow implementation-text assertions must not be treated as stock compatibility
+Later narrow legacy wrappers must not be treated as stock compatibility
 coverage; stock parity is enforced by runtime behavior tests, vendored stock
 tests, C fixtures, bytecode/generator output checks, and release binary checks.
 
 Allowed remaining searches are over generated artifacts or runtime output: JIT
 dumps, bytecode listings, generated mcode/ASM dumps, captured stdout/stderr,
 CSVs, and marker files. Those checks are permitted because the generated
-artifact is the behavior under test. Repository source checks for helper names,
+artifact is the behavior under test. Helper-name checks for helper names,
 field accesses, function calls, or snippets are not permitted.
 
-The removed source-text-check compatibility surface remains gone:
+The removed text-check compatibility surface remains gone:
 
 - No case or per-case shell wrapper exists.
 - No `suite_utils.read_source_file()` helper exists.

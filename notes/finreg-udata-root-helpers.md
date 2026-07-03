@@ -17,12 +17,12 @@ physical unlink, retired nodes remain retained until GC2 teardown, and readers
 that already acquired an active-list node continue through helper-backed node
 links.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m3_gc2_scaffold.sh` now requires the userdata FINREG root helper
 surface and documents why raw production access to `finreg_udata_head` and
 `finreg_udata_retired` in `src/lj_gc.c` and `src/lj_gc2.c`.
-- Follow-up: the same guard now covers `tests/t-gc2-traverse.c`, whose active
+- Follow-up: the same coverage now covers `tests/t-gc2-traverse.c`, whose active
   userdata FINREG counters use `gc2_finreg_udata_head_acq()`.
 
 ## Follow-Up

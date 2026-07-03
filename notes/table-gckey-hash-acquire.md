@@ -19,7 +19,7 @@ through it. The focused table-node publication fixture now includes a
 table-as-key rawget/rawset smoke so the generic collectable-key hash path is
 compiled and exercised.
 
-## Guard
+## Coverage
 
 `tools/ci/m5_tab_node_publish.sh` now rejects `gcrefu()` inside the
 `hashgcref*` macro bodies. This keeps raw unsigned GCRef reads out of table

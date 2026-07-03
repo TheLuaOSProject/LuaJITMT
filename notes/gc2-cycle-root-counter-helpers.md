@@ -9,5 +9,5 @@ root scan selection. This slice routes `cycle_requests`, `cycle_starts`,
 
 Runtime initialization and increments now use the helper family. The focused
 allocation-account and traverse fixtures read the same counters through acquire
-helpers, and the M6 allocation-account guard documents why raw production C access to
+helpers, and the M6 allocation-account notes document why raw production C access to
 the cycle/root telemetry fields.

@@ -1,7 +1,7 @@
 # Invariant Tests And Documentation
 
 The Lua test harness and CI do not predicate pass/fail on repository source
-text. This is a blanket rule, including old milestone source-check suites and
+text. This is a blanket rule, including old milestone wrapper suites and
 one-off historical wrappers: do not port them forward. Tests should prove
 observable VM behavior, generated compiler/artifact output, or release
 packaging. Implementation-only rules should be documented beside the code they
@@ -31,7 +31,7 @@ listings, objdump output, generated mcode dumps, generated assembly, captured
 process output, and generated CSVs. Repository DynASM source is source code;
 generated ASM/mcode output is the artifact to inspect.
 
-Historical entries that mention static repository-text assertions, per-case
+Historical entries that mention static helper-name wrappers, per-case
 wrapper scripts, or the old explicit source-reading helper document why a
 helper or fixture was added. They are historical context only and are not a
 backlog of checks to preserve. When one still matters, carry forward the

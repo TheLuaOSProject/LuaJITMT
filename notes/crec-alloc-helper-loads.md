@@ -12,7 +12,7 @@ offsets, union size decisions, exact aggregate copy decisions, and aggregate
 fallback selection. If a parser publish is active, the recorder aborts with
 `CTBUSY` instead of touching live ctype payloads or waiting.
 
-Guardrail:
+Invariant check:
 
 - `tests/t-ffi-recorder-libmeta-busy.c` now covers traced struct and array
   aggregate `ffi.new` initializers, including exact aggregate copy

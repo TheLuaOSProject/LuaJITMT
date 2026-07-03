@@ -1,5 +1,5 @@
 /*
-** Focused guard for atomic GC total accounting helpers.
+** Focused regression test for atomic GC total accounting helpers.
 */
 
 #include <assert.h>

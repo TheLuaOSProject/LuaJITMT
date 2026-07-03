@@ -15,7 +15,7 @@ Overall completion remains roughly 65-75%.
 
 - Runtime lockless substrate: 70-80%.
 - Threading/channel/shutdown behavior coverage: 75-85%.
-- Test/CI migration from implementation-text assertions to behavior fixtures:
+- Test/CI migration from legacy wrappers to behavior fixtures:
   50-60%.
 - FFI concurrency and fallback-lock cleanup: 55-65%.
 - Weak/finalizer/generational GC completion: 50-65%.
@@ -83,12 +83,12 @@ Historical high-priority legacy/static assertion areas:
 - `tools/ci/m5_profile_stop_native.sh`: C fixture covers most semantics; keep
   at most a narrow cleanup-order lint.
 - Historical `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`,
-  and `m5_gc_waits.sh` helper-name checks are obsolete; keep expanding
+  and `m5_gc_waits.sh` helper-name rules are documented; keep expanding
   contention behavior tests for the same risks.
 - M6 mcode/native STOPREQ and JIT IO wrappers that once pinned helper names
   have been superseded by behavior and generated-output checks.
 - Large GC/finalizer wrapper behavior belongs in suite cases and C fixtures,
-  not source-text lint helpers.
+  not lint helpers.
 
 Current rule: observable semantics belong in behavior/generated-artifact tests.
 Non-observable memory-order, ABI, or temporary migration contracts must be

@@ -20,7 +20,7 @@ Coverage:
 - The same fixture keeps a hot-loop path after abort for enum arithmetic,
   enum-string equality, and pointer add/diff.
 
-Guardrail:
+Invariant check:
 
 - `tools/ci/lua_test.sh m7_ffi_carith_l` covers arithmetic behavior and the
   interpreter-side ctype snapshot fixtures.

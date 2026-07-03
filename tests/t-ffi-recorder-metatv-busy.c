@@ -1,5 +1,5 @@
 /*
-** Focused guard for nonblocking recorder ctype metamethod lookup.
+** Focused regression test for nonblocking recorder ctype metamethod lookup.
 */
 
 #include <assert.h>

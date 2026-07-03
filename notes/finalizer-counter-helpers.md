@@ -16,7 +16,7 @@ is now used by stats as well as worker-drain accounting.
 Phase and traversal fixtures read finalizer telemetry through the same acquire
 helpers.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m3_gc2_worker_scheduler.sh` now requires the finalizer counter helper
 surface and documents why raw production access in `src/lj_gc.c`, `src/lj_gc2.c`,

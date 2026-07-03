@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 secondary string-table rehash gating.
+** Focused regression test for M5 secondary string-table rehash gating.
 */
 
 #include <assert.h>

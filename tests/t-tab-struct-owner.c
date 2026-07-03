@@ -1,5 +1,5 @@
 /*
-** Focused guard for per-table structural ownership.
+** Focused regression test for per-table structural ownership.
 */
 
 #include <assert.h>

@@ -26,7 +26,7 @@ created or torn down. Mark-begin reset uses acquired vector snapshots before
 clearing ready bytes and then resets the reservation/count cursors for the new
 cycle.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m8_weak.sh` now requires the vector helper surface and documents why raw
 production access to `weak_stack`, `weak_ready`, or `weak_capacity` in

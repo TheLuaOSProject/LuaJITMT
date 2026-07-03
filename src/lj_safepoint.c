@@ -66,6 +66,15 @@ static int safepoint_wait_consumed_ack(TGState *tg)
   ** publication wakes poll waiters after storing reqmask, so this can wait for
   ** either poll clear or a late request without a timeout. */
   while ((poll = lj_tg_poll_acq(tg)) != 0) {
+    global_State *g = tg->gl;
+    uint32_t tid = lj_tg_tid_acq(tg);
+    /* A trace-flush leader can re-enter native boundaries while it runs
+    ** leader-owned actions such as JIT dump events. It must not wait for its
+    ** own consumed poll: only the leader can clear that poll after the action
+    ** finishes.
+    */
+    if (g && tid != 0 && gc2_hs_leader_acq(g) == tid)
+      return 0;
     if (lj_tg_reqmask_acq(tg) != 0)
       return 1;
     lj_tg_poll_futex_wait(tg, poll, -1);
@@ -171,25 +180,20 @@ retry:
   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
   if (!safepoint_claim_epoch(tg, epoch)) {
     int hold;
-    lj_safepoint_apply_tg(g, tg, actions);
-    if (note_latency)
-      safepoint_note_ack_latency(g);
+    /* A nonzero reqmask consumed here owns a pending-count slot even when the
+    ** epoch was already caught up by attach or by an earlier ack race. Do not
+    ** apply actions twice, but do release the counted slot.
+    */
     hold = safepoint_hold_poll_until_leader(g, actions);
     if (!hold)
       safepoint_clear_poll(tg);
     oldpending = gc2_hs_pending_sub_acqrel(g, 1);
     if (oldpending == 1)
       gc2_hs_pending_futex_wake(g, 1);
-    /* VM-owned acks must not resume with a consumed trace-flush poll. Drop
-    ** pending first so the leader can retire/unlink traces and clear poll.
-    */
-    /* Trace exit CP frames acknowledge before vm_exit_interp can clear
-    ** jit_base. Defer their consumed-poll wait to the VM exit poll.
-    */
     if (hold && wait_consumed && lj_tg_load_jit_base(tg) == NULL &&
 	safepoint_wait_consumed_ack(tg))
       goto retry;
-    return actions;
+    return 0;
   }
   lj_safepoint_apply_tg(g, tg, actions);
   if (note_latency)
@@ -221,13 +225,15 @@ uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg)
   if (!g || !tg || !lj_tg_flags_test_acq(tg, TGF_DEAD))
     return 0;
   pending = lj_tg_reqmask_xchg_acqrel(tg, 0);
-  if (lj_tg_poll_acq(tg) != 0)
-    pending = 1;
   safepoint_clear_poll(tg);
   if (!pending)
     return 0;
   epoch = gc2_hs_epoch_acq(g);
   if (!safepoint_claim_epoch(tg, epoch)) {
+    /* The nonzero reqmask means the handshake counted this TG. The already
+    ** acknowledged epoch means attach/self-ack or a racing owner already
+    ** applied the actions, but this retire path still owns the counted slot.
+    */
     oldpending = gc2_hs_pending_sub_acqrel(g, 1);
     if (oldpending == 1)
       gc2_hs_pending_futex_wake(g, 1);

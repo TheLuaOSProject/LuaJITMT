@@ -7,7 +7,7 @@ threading namespace primitive.
 The fork now removes that public API surface and its dedicated handle userdata.
 The stock-visible lifetime mechanisms remain `ffi.gc`, ordinary Lua references,
 and the existing finalizer machinery. Tests should validate those behaviors
-directly instead of carrying a non-stock helper or an implementation-text assertion for it.
+directly instead of carrying a non-stock helper or a legacy wrapper for it.
 
 Validation:
 

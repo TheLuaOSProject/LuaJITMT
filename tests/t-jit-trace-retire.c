@@ -1,5 +1,5 @@
 /*
-** Focused guard for JIT trace body/exittab SMR retirement.
+** Focused regression test for JIT trace body/exittab SMR retirement.
 */
 
 #include <assert.h>

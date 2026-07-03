@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 table hash-node TValue snapshots.
+** Focused regression test for M5 table hash-node TValue snapshots.
 */
 
 #include <assert.h>

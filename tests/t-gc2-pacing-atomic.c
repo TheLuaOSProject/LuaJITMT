@@ -1,5 +1,5 @@
 /*
-** Focused guard for atomic GC2 pacing helpers.
+** Focused regression test for atomic GC2 pacing helpers.
 */
 
 #include <assert.h>

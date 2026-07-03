@@ -7,7 +7,7 @@ walker.
 This keeps the `ffi.sizeof()` / `ffi.offsetof()` layout snapshot path aligned
 with the M7 rule that shared ctype payloads are read through helper APIs.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_typeinfo_snapshot` invariant: raw `->info` / `->size` reads
   in `ffi_layout_rawchild()`.

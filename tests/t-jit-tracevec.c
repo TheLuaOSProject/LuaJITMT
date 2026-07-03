@@ -1,5 +1,5 @@
 /*
-** Focused guard for JIT trace-vector RCU growth and SMR retirement.
+** Focused regression test for JIT trace-vector RCU growth and SMR retirement.
 */
 
 #include <assert.h>

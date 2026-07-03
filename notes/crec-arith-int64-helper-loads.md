@@ -9,7 +9,7 @@ The snapshots drive numeric operand checks, unsigned 64-bit result selection,
 operands. This removes direct shared `CType.info` / `CType.size` reads from the
 recorder's int64 arithmetic helper.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_carith_l` invariant: raw `->info` / `->size` reads in
   `crec_arith_int64()`.

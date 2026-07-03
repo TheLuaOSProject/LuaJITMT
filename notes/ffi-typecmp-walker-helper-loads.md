@@ -8,7 +8,7 @@ The covered decisions include attribute stripping, reference stripping, child
 id selection, and qualifier accumulation during sequence-checked ctype
 comparison snapshots.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_typeinfo_snapshot` invariant: raw `->info` / `->size` reads
   in these `ffi.istype()` typecmp walker helpers.

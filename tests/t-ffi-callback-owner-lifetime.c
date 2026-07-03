@@ -1,5 +1,5 @@
 /*
-** Focused guard for FFI callback carrier lifetime on worker detach.
+** Focused regression test for FFI callback carrier lifetime on worker detach.
 */
 
 #include <assert.h>

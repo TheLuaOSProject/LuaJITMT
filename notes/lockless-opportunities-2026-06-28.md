@@ -21,7 +21,7 @@ safety, stability, and language behavior over LuaJIT performance parity.
    publication, weak clearing, GC traversal, JIT fast paths, and VM stores.
    More stress, table-forwarding probes, generated dump/ASM checks where the
    invariant is emitted code, and design notes are worth it. Repository
-   implementation-text assertions are not. Removing the transient `KEYLOCK`/`FORWARD`
+   legacy wrappers are not. Removing the transient `KEYLOCK`/`FORWARD`
    waits is not the goal; bounding and proving them is.
 
 3. C-closure upvalue and direct API mutation surfaces.

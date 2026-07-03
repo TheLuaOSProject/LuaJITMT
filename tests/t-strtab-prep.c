@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 string table representation prep.
+** Focused regression test for M5 string table representation prep.
 */
 
 #include <assert.h>

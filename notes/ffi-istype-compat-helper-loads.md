@@ -8,7 +8,7 @@ The covered decisions include pointer qualifier compatibility, numeric/void
 equivalence, recursive pointer compatibility, raw-ref id equality, and
 struct-vs-pointer comparison.
 
-Guardrail:
+Invariant check:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local
   `ct1.info` / `ct2.info` / `d.info` / `s.info` and matching size reads in

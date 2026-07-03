@@ -13,9 +13,9 @@ Ordering:
 - `lua_gc(LUA_GCSETPAUSE)` uses a release store before recomputing pacing.
 - `lj_gc2_update_pacing()` uses an acquire load to pair with public updates.
 
-Guarding:
+Coverage:
 - `tools/ci/m5_gc2_pacing_atomic.sh` now requires the three helper definitions.
-- The same guard documents why raw C-side `gcpause_pct` field access outside helper
+- The same notes document why raw C-side `gcpause_pct` field access outside helper
   definitions, alongside the existing GC2 pacing byte counters.
 
 Validation:

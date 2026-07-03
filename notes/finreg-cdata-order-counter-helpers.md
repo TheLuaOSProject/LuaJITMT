@@ -23,7 +23,7 @@ The CTState ordered-node producer now reports retire events through
 `lj_gc2_finreg_cdata_note_order_retired()`, leaving the low-level ordered
 counter add behind `lj_gc2.c`.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m7_ffi_finreg.sh` now requires the ordered-counter helper surface and
 documents why raw production access to the ordered FINREG counter fields in

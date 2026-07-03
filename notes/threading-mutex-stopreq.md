@@ -7,4 +7,4 @@
 - `tests/t-safepoint-handshake.c` covers the behavior with a worker blocked in
   `mutex:lock()`: after a global STOPREQ handshake, the worker must report the
   VM-shutdown interruption before the main thread unlocks the mutex.
-- The M4 threading guards reject reintroducing the indefinite mutex futex wait.
+- The M4 threading notes document why we avoid reintroducing the indefinite mutex futex wait.

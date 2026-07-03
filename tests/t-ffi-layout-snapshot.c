@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free ffi.sizeof/alignof/offsetof layout snapshots.
+** Focused regression test for lock-free ffi.sizeof/alignof/offsetof layout snapshots.
 */
 
 #include <assert.h>

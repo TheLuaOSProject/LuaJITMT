@@ -25,7 +25,7 @@ M6 x64 dispatch localization inventory:
   scanning for `GG_OFS_TGDISP`.
 - The transitional `GG_OFS_TGDISP`/`GG_G2TGDISP` and
   `TG_DISP2G`/`TG_DISP2J` macros have been removed from `lj_dispatch.h`; x64
-  guardrails now reject their return in live headers.
+  invariant checks now reject their return in live headers.
 - Secondary TGs may now acquire the recorder token and enter `BC_JLOOP` mcode.
   The old x64/POSIX validation guards were removed after `RID_DISPATCH`
   addressing was limited to fixed `DISPATCH_TG(...)` fields.

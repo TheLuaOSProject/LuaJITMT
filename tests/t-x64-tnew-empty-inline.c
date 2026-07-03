@@ -1,5 +1,5 @@
 /*
-** Focused guard for the x64 interpreter empty-table TNEW inline bump path.
+** Focused regression test for the x64 interpreter empty-table TNEW inline bump path.
 */
 
 #include <assert.h>

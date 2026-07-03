@@ -1,5 +1,5 @@
 /*
-** Focused guard for lua_upvaluejoin() trace invalidation.
+** Focused regression test for lua_upvaluejoin() trace invalidation.
 */
 
 #include <assert.h>

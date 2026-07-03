@@ -17,9 +17,9 @@ Ordering:
 - Snapshot readers acquire the count and ready prefix. Scan/clear workers claim
   cursor ranges with acquire-release CAS.
 
-Guarding:
+Coverage:
 - `tools/ci/m8_weak.sh` now requires all nine helper definitions.
-- The same guard documents why raw production access to `weak_count`,
+- The same notes document why raw production access to `weak_count`,
   `weak_scan_cursor`, and `weak_clear_cursor` in `lj_gc2.c`.
 - Follow-up vector helper work now routes `weak_stack`, `weak_ready`, and
   `weak_capacity` through `gc2_weak_*()` helpers while preserving the current

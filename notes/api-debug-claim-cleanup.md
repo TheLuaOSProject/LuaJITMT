@@ -120,7 +120,7 @@ Regression coverage:
 - `m5_api_debug_claim_cleanup` documents the helper/root/drop ordering, the
   stack/getter/load/call/metamethod resume-claim boundaries, and the
   allocation-free claimed metafield and string-conversion helper shapes. Runtime
-  C fixtures cover the observable claim and API behavior; implementation-shape assertions
+  C fixtures cover the observable claim and API behavior; implementation-shape notes
   are obsolete.
 - `m5_state_owner` covers public C API `lua_getinfo()` on an unowned yielded
   coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,

@@ -1,5 +1,5 @@
 /*
-** Focused guard for FFI callback native STOPREQ freshness.
+** Focused regression test for FFI callback native STOPREQ freshness.
 */
 
 #include <assert.h>

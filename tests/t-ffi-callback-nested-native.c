@@ -1,5 +1,5 @@
 /*
-** Focused guard for nested FFI callback native-state restoration.
+** Focused regression test for nested FFI callback native-state restoration.
 */
 
 #include <assert.h>

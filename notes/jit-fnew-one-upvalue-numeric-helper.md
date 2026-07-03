@@ -35,7 +35,7 @@ This is not closure sinking. Side exits continue to see ordinary heap objects.
 Non-numeric captures, inherited upvalues, multiple upvalues, already promoted
 cells, and generic/local-cell cases keep using the existing path.
 
-## Guardrails
+## Invariant checks
 
 - Same-trace calls from either FNEW helper are recognized by prototype, not by a
   single runtime closure identity.

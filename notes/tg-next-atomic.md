@@ -13,8 +13,8 @@ Slice
   `TGState.next_tg` access in production TG-list users.
 - Follow-up registry-helper slice routes the global `GC2State.tg_list` root
   and `GC2State.n_threads` live count through `gc2_tg_*`/`gc2_n_threads_*`
-  helpers, with the same guard rejecting raw production registry access.
-- Extended that guard over the C fixtures that intentionally walk or manually
+  helpers, with the same notes document why we avoiding raw production registry access.
+- Extended that invariant coverage for the C fixtures that intentionally walk or manually
   publish TG-list nodes, and routed their `next_tg` reads/writes through the
   helpers too.
 - While touching `t-thr-substrate`, made its attach-during-handshake fixture

@@ -30,10 +30,10 @@ exists before acquire-snapshotting it, and uses the snapshot for the event table
 lookup. This keeps VM-event dispatch on the live-slot snapshot rule even when
 the cache bit is stale or the registry entry is missing.
 
-## Guard
+## Coverage
 
 `m3_vmevent_native_stdio` invariant: raw VM-event stdio outside the
 `vmevent_report_failure()` native boundary and runs the behavior smoke
 `m3_vmevent_native_stdio`, which triggers an erroring `jit.attach(..., "bc")`
-handler and verifies the reporter still fires. The same guard now also requires
+handler and verifies the reporter still fires. The same coverage now also requires
 the `_VMEVENTS` registry slot to be checked before it is acquire-snapshotted.

@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 table array publication and SMR retirement.
+** Focused regression test for M5 table array publication and SMR retirement.
 */
 
 #include <assert.h>

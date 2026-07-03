@@ -20,4 +20,4 @@ Coverage:
   `CTState.parse_token`, const writes still fail, and cached extern read/write
   operations wait from a native region while the parser token is held.
 - The fixture is wired into `m7_ffi_clib_cache`; this is behavior coverage,
-  not an implementation-text assertion.
+  not a legacy wrapper.

@@ -20,7 +20,7 @@ route through acquire helpers. The prep fixture's direct bucket snapshot uses
 `lj_str_ref_load_acq()` as well, so marker-bit checks and head decoding observe
 the same published bucket word.
 
-## Guard
+## Coverage
 
 `tools/ci/m5_strtab_cas.sh` now rejects `gcrefu()` in `src/lj_str.h` and the
 focused string-table fixtures. This intentionally does not cover the unrelated

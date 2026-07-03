@@ -261,14 +261,60 @@ static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 	 completed_epoch - retire_epoch >= LJ_FLUSH_EPOCHS;
 }
 
+static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
+{
+  if (!o)
+    return;
+  if (gc2)
+    lj_gc2_markobj(g, o);
+  else
+    lj_gc_preserveobj_legacy(g, o);
+}
+
+static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
+					int gc2)
+{
+  GCobj *o;
+  if (!pc)
+    return;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TPROTO) {
+      GCproto *pt = gco2pt(o);
+      const BCIns *bc = proto_bc(pt);
+      if (pc >= bc && pc < bc + pt->sizebc) {
+	trace_preserve_proto_obj(g, o, gc2);
+	return;
+      }
+    }
+  }
+}
+
+static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T, int gc2)
+{
+  SnapShot *snap = trace_snap_acq(T);
+  SnapEntry *snapmap = trace_snapmap_acq(T);
+  SnapNo i, nsnap = trace_nsnap_acq(T);
+  if (!snap || !snapmap)
+    return;
+  for (i = 0; i < nsnap; i++) {
+    SnapShot *s = &snap[i];
+    SnapEntry *map = &snapmap[snap_mapofs_acq(s)];
+    trace_preserve_proto_for_pc(g, snap_pc_acq(&map[snap_nent_acq(s)]), gc2);
+  }
+}
+
 static void trace_preservebody(global_State *g, GCtrace *T, int gc2)
 {
-  /* Retired traces are SMR-protected bodies, not semantic roots. Preserve the
-  ** body allocation and auxiliary exit table until the grace period completes;
-  ** live traces mark IR constants and start prototypes through GC traversal.
+  /* Retired traces are SMR-protected bodies, but stale bytecode readers can
+  ** still redispatch through their start/snapshot PCs until the grace period
+  ** completes. Preserve those prototype owners along with the body and
+  ** auxiliary exit table; published live traces mark them through traversal.
   */
   if (gc2) lj_gc2_markmem(g, T);
   else lj_gc_preserveobj_legacy(g, obj2gco(T));
+  trace_preserve_proto_obj(g, trace_startptgco_acq(T), gc2);
+  trace_preserve_snapshot_pcs(g, T, gc2);
   {
     MCode **exittab = trace_exittab_acq(T);
     if (exittab && !trace_exittab_ismcode(T)) {
@@ -369,13 +415,22 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
   return reclaimed;
 }
 
-static int trace_ptr_in_mcode_area(const void *ptr, uintptr_t lo, uintptr_t hi)
+static int trace_ptr_in_mcode_span(const void *ptr, uintptr_t lo, uintptr_t hi)
 {
   uintptr_t p = (uintptr_t)ptr;
   return p >= lo && p < hi;
 }
 
-static int trace_mcode_area_refs(GCtrace *T, uintptr_t lo, uintptr_t hi)
+static int trace_ptr_in_mcode_area(const void *ptr, uintptr_t rxlo,
+				   uintptr_t rxhi, uintptr_t rwlo,
+				   uintptr_t rwhi)
+{
+  return trace_ptr_in_mcode_span(ptr, rxlo, rxhi) ||
+	 trace_ptr_in_mcode_span(ptr, rwlo, rwhi);
+}
+
+static int trace_mcode_area_refs(GCtrace *T, uintptr_t rxlo, uintptr_t rxhi,
+				 uintptr_t rwlo, uintptr_t rwhi)
 {
   MCode *mcode;
   MCode *exitstub;
@@ -386,17 +441,17 @@ static int trace_mcode_area_refs(GCtrace *T, uintptr_t lo, uintptr_t hi)
   mcode = trace_mcode_acq(T);
   exitstub = trace_exitstub_acq(T);
   exittab = trace_exittab_acq(T);
-  if (trace_ptr_in_mcode_area(mcode, lo, hi) ||
-      trace_ptr_in_mcode_area(exitstub, lo, hi))
+  if (trace_ptr_in_mcode_area(mcode, rxlo, rxhi, rwlo, rwhi) ||
+      trace_ptr_in_mcode_area(exitstub, rxlo, rxhi, rwlo, rwhi))
     return 1;
   if (!exittab)
     return 0;
   if (trace_exittab_ismcode(T))
-    return trace_ptr_in_mcode_area(exittab, lo, hi);
+    return trace_ptr_in_mcode_area(exittab, rxlo, rxhi, rwlo, rwhi);
   nsnap = trace_nsnap_acq(T);
   for (i = 0; i < nsnap; i++)
     if (trace_ptr_in_mcode_area(la_loadptr_acq((void *const *)&exittab[i]),
-				lo, hi))
+				rxlo, rxhi, rwlo, rwhi))
       return 1;
   return 0;
 }
@@ -405,22 +460,26 @@ int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
 {
   jit_State *J;
   GCtrace *T;
-  uintptr_t lo, hi;
+  MCode *rwarea;
+  uintptr_t rxlo, rxhi, rwlo, rwhi;
   if (!g || !area || size == 0)
     return 0;
   J = G2J(g);
-  lo = (uintptr_t)area;
-  hi = lo + size;
+  rwarea = lj_mcode_area_rw(area);
+  rxlo = (uintptr_t)area;
+  rxhi = rxlo + size;
+  rwlo = (uintptr_t)rwarea;
+  rwhi = rwlo + size;
   {
     TraceNo i, sizetrace = trace_sizetrace_acq(J);
     for (i = 1; i < sizetrace; i++)
-      if (trace_mcode_area_refs(traceref(J, i), lo, hi))
+      if (trace_mcode_area_refs(traceref(J, i), rxlo, rxhi, rwlo, rwhi))
 	return 1;
   }
   for (T = trace_retired_head_acq(J);
        T != NULL;
        T = trace_retired_next_acq(T)) {
-    if (trace_mcode_area_refs(T, lo, hi))
+    if (trace_mcode_area_refs(T, rxlo, rxhi, rwlo, rwhi))
       return 1;
   }
   return 0;
@@ -451,7 +510,20 @@ void lj_trace_markvecs(global_State *g, int gc2)
   TraceVec *tv = tracevec_acq(J);
   GCtrace *rt;
   if (tv) {
+    MSize i;
     if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
+    /* Published trace slots are VM roots: patched bytecode and exit tables
+    ** name them by trace number, outside the ordinary object graph. Mark the
+    ** live slot contents directly so trace traversal keeps IR constants,
+    ** linked traces, start prototypes and snapshot PC owners alive.
+    */
+    for (i = 1; i < tv->sizetrace; i++) {
+      GCtrace *T = traceref_fromgco(gcref_acq(tv->slot[i]));
+      if (T && trace_traceno_acq(T) == (TraceNo)i) {
+	if (gc2) lj_gc2_mark_trace_slot(g, i);
+	else lj_gc_mark_trace_slot(g, i);
+      }
+    }
   }
   for (tv = tracevec_retired_head_acq(J);
        tv != NULL;
@@ -755,7 +827,16 @@ static uint32_t trace_flushroot(jit_State *J, GCtrace *T, int scoped)
   if (LJ_UNLIKELY(pt == NULL))
     return 0;
   if (scoped) {
-    return trace_scope_mark_pending(T);
+    uint32_t marked = trace_scope_mark_pending(T);
+    /* A scoped root flush keeps the trace body and trace slot alive until the
+    ** safepoint boundary, but no new interpreter dispatch should enter the
+    ** pending body. The caller holds the JIT token until the boundary, so
+    ** restoring the original bytecode here cannot race a replacement recorder;
+    ** peers that already fetched JLOOP still take the pending-trace fallback.
+    */
+    if (marked)
+      trace_unpatch(J, T);
+    return marked;
   }
   head = proto_trace_acq(pt);
   trace_exittab_resetroot(J, traceno);
@@ -805,7 +886,16 @@ static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
   ExitNo exitno = (ExitNo)base.op2;
   lj_assertJ(trace_root_acq(T) != 0, "not a side trace");
   if (scoped) {
-    return trace_scope_mark_pending(T);
+    uint32_t marked = trace_scope_mark_pending(T);
+    /* Once a scoped side trace is pending, no parent exit may enter it as a
+    ** runnable body. The body and slot are still retired only after the
+    ** safepoint boundary, but the inbound exit table edge must be disconnected
+    ** at mark time to close the pending-but-enterable window.
+    */
+    if (marked && parent && trace_traceno_acq(parent) == parentno &&
+	trace_exittab_acq(parent) && exitno < trace_nsnap_acq(parent))
+      trace_exittarget_rel(parent, exitno, exitstub_addr(J, exitno));
+    return marked;
   }
   trace_exittab_reset(J, T);
   if (parent && trace_traceno_acq(parent) == parentno &&
@@ -887,26 +977,48 @@ uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno)
   return 0;
 }
 
-static BCIns trace_stale_startins_match(GCtrace *T, const BCIns *pc)
+static int trace_stale_startins_valid(GCproto *pt, const BCIns *pc,
+				      BCIns startins)
+{
+  BCOp op = bc_op(startins);
+  const BCIns *bc;
+  if (!pt)
+    return 1;
+  bc = proto_bc(pt);
+  if (pc < bc || pc >= bc + pt->sizebc)
+    return 0;
+  if (op == BC_FORL || op == BC_ITERL) {
+    const BCIns *target = pc + 1 + ((int32_t)bc_d(startins) - BCBIAS_J);
+    if (target < bc || target >= bc + pt->sizebc)
+      return 0;
+  }
+  return 1;
+}
+
+static BCIns trace_stale_startins_match(GCtrace *T, const BCIns *pc,
+					GCproto *owner)
 {
   if (T && trace_startpc_acq(T) == pc) {
     BCIns startins = trace_startins_acq(T);
     BCOp op = bc_op(startins);
     if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
-	op == BC_FUNCF || op == BC_ITERN || bc_isret(op))
-      return startins;
+	op == BC_FUNCF || op == BC_ITERN || bc_isret(op)) {
+      if (trace_stale_startins_valid(owner, pc, startins))
+	return startins;
+    }
   }
   return 0;
 }
 
-static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc)
+static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc,
+				       GCproto *owner)
 {
   GCobj *o;
   uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o->gch.gct == ~LJ_TTRACE) {
-      BCIns startins = trace_stale_startins_match(gco2trace(o), pc);
+      BCIns startins = trace_stale_startins_match(gco2trace(o), pc, owner);
       if (startins != 0)
 	return startins;
     }
@@ -917,17 +1029,18 @@ static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc)
 }
 
 BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
-					  TraceNo traceno)
+					  TraceNo traceno, lua_State *L)
 {
   global_State *g = J2G(J);
   BCIns startins = 0;
+  GCproto *owner = L && curr_funcisL(L) ? curr_proto(L) : NULL;
   lj_gc2_smr_read_enter(g);
   if (traceno > 0 && traceno < trace_sizetrace_acq(J))
-    startins = trace_stale_startins_match(traceref(J, traceno), pc);
+    startins = trace_stale_startins_match(traceref(J, traceno), pc, owner);
   if (startins == 0) {
     TraceNo i, sizetrace = trace_sizetrace_acq(J);
     for (i = 1; i < sizetrace; i++) {
-      startins = trace_stale_startins_match(traceref(J, i), pc);
+      startins = trace_stale_startins_match(traceref(J, i), pc, owner);
       if (startins != 0)
 	break;
     }
@@ -937,13 +1050,13 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
     for (T = trace_retired_head_acq(J);
 	 T != NULL;
 	 T = trace_retired_next_acq(T)) {
-      startins = trace_stale_startins_match(T, pc);
+      startins = trace_stale_startins_match(T, pc, owner);
       if (startins != 0)
 	break;
     }
   }
   if (startins == 0)
-    startins = trace_stale_startins_root(g, pc);
+    startins = trace_stale_startins_root(g, pc, owner);
   lj_gc2_smr_read_leave(g);
   return startins;
 }
@@ -2047,7 +2160,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     TraceNo targetno = bc_d(*pc);
     GCtrace *target = traceref(J, targetno);
     BCIns startins;
-    if (!trace_runnable_acq(target, targetno))
+    if (!trace_runnable_acq(target, targetno) || trace_startpc_acq(target) != pc)
       return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
     startins = trace_startins_acq(target);
     if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {

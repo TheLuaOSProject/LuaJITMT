@@ -14,7 +14,7 @@ Changes:
 - Documented the rule that FINREG generation/order next links are shared
   publication links and must be accessed through the acquire/release helpers.
   Runtime and GC fixtures exercise creation, lookup, marking, and disable
-  paths; CI must not enforce the helper spelling by repository text assertion.
+  paths; CI must not enforce the helper spelling by helper comment.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

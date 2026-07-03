@@ -26,7 +26,7 @@ The x86-64 VM now reaches GC2 hard-limit checks through
 `lj_gc_should_step_vm()`, keeping allocation-check pacing reads in C helper code
 instead of generated interpreter assembly.
 
-Guard: `m5_gc2_pacing_atomic` invariant: raw C-side access to the GC2
+Coverage: `m5_gc2_pacing_atomic` invariant: raw C-side access to the GC2
 pacing fields outside helper definitions in `lj_gc.h`/`lj_obj.h` and documents why raw
 x64 VM GC2 hard-check memory operands or reintroduced load macros.
 

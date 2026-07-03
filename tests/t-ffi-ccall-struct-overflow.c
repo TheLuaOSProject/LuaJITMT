@@ -1,5 +1,5 @@
 /*
-** Focused guard for ccall small-struct stack overflow ctype snapshots.
+** Focused regression test for ccall small-struct stack overflow ctype snapshots.
 */
 
 #include <assert.h>

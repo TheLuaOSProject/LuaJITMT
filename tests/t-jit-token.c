@@ -1,5 +1,5 @@
 /*
-** Focused guard for the M6 JIT recorder token.
+** Focused regression test for the M6 JIT recorder token.
 */
 
 #include <assert.h>

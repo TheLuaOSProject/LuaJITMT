@@ -1,5 +1,5 @@
 /*
-** Focused guard for cdata FINREG sweep/free ownership.
+** Focused regression test for cdata FINREG sweep/free ownership.
 */
 
 #include <assert.h>

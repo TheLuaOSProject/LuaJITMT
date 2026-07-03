@@ -1,5 +1,5 @@
 /*
-** Focused guard for os.setlocale() mutation during mt_entering.
+** Focused regression test for os.setlocale() mutation during mt_entering.
 */
 
 #include <assert.h>

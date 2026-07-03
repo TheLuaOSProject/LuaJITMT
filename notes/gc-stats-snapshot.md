@@ -12,7 +12,7 @@ inside `lj_gc2.c`.
 `lj_gc2_workers_count()` instead of reading the raw worker counter helper from
 `lib_base.c`.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m9_gc_stats.sh` is the stats-table owner: it requires the snapshot
 API and rejects direct GC2 helper reads in the stats table builder.

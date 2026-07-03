@@ -14,5 +14,5 @@ not treated as a new failure by this lower-level helper.
 
 `tests/t-ffi-callback-mcode-native.c` verifies this behavior by wrapping the
 generated runtime `mmap()` and `mprotect()` calls and pausing only while the TG
-is already native. This keeps the behavioral and avoids implementation-text assertion
+is already native. This keeps the behavioral path focused and avoids legacy wrapper
 assertions.

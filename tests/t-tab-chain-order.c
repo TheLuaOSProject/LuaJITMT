@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 stable table nodes and hash-chain publication.
+** Focused regression test for M5 stable table nodes and hash-chain publication.
 */
 
 #include <assert.h>

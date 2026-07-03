@@ -1,5 +1,5 @@
 /*
-** Focused guard for ffi.typeinfo() ctype snapshots.
+** Focused regression test for ffi.typeinfo() ctype snapshots.
 */
 
 #include <assert.h>

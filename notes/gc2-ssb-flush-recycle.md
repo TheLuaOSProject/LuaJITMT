@@ -8,4 +8,4 @@ overflow path, because the grey deque has a single logical owner at a time.
 
 This is an internal GC2/threading rule. It does not change stock LuaJIT API
 behavior, and it is covered by runtime GC2 traversal and worker-scheduler
-fixtures rather than by source-text tests.
+fixtures rather than by legacy wrappers.

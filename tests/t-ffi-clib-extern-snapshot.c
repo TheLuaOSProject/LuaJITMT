@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free C library extern variable snapshots.
+** Focused regression test for lock-free C library extern variable snapshots.
 */
 
 #include <assert.h>

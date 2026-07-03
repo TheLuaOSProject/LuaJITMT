@@ -81,20 +81,20 @@ update. The M10 generational gate includes interpreted VM-fast and traced
 helper-backed table-store regressions that confirm the remembered SSB entry is
 the old parent table and that the next minor cycle marks the young child
 through that parent.
-The x64 `TSET` nil-snapshot guard also rejects pre-store `barrierback` repairs
-and requires the post-store VM value/range publication helpers, including a
-hook-driven real-bytecode `BC_TSETM` constructor case over an old forwarded
-array generation.
+The x64 `TSET` nil-snapshot regression test catches pre-store `barrierback`
+repairs and requires the post-store VM value/range publication helpers,
+including a hook-driven real-bytecode `BC_TSETM` constructor case over an old
+forwarded array generation.
 `tools/ci/lua_test.sh m9_m10_gc` chains the current M9 stats/benchmark smokes
-with the M10 generational guard.
-The CSV/geomean accounting guard remains a harness self-test. A separate
+with the M10 generational coverage.
+The CSV/geomean accounting check remains a harness self-test. A separate
 `m9_bench_stock_compare` case compares selected benchmark filters against an
 installed stock LuaJIT when `LJ_BENCH_STOCK_BIN` is set; Linux CI wires this to
 `/usr/bin/luajit` with a deliberately broad catastrophic-regression threshold,
 while local/release runs can tighten `LJ_BENCH_STOCK_MAX` and
 `LJ_BENCH_STOCK_FILTERS`.
 These are milestone
-guardrails, not the final M9 performance matrix.
+invariant checks, not the final M9 performance matrix.
 
 ## 13.5 GC-specific unit tests (C, tests/c/)
 gc2_fixpoint_test.c: detector unit (05 §5.7.1) — mock workers inject

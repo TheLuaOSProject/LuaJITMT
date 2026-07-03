@@ -11,5 +11,5 @@ and bridge fallback/backfill outcomes. This slice routes
 
 Runtime initialization and increments use the helper family. GC stats export
 and focused weak/phase/allocation/worker fixtures read these counters through
-acquire helpers, and the M8 weak guard documents why raw production C access to
+acquire helpers, and the M8 weak notes document why raw production C access to
 these telemetry fields.

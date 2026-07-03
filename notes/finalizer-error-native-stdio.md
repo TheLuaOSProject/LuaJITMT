@@ -22,7 +22,7 @@ callback, and converting STOPREQ into an error there would make
 event-call state. The native leave still acknowledges the handshake and records
 the sticky STOPREQ flag on the TG.
 
-## Guard
+## Coverage
 
 `m8_finalizer_error_native_stdio` invariant: raw finalizer-error stdio
 outside `aux_finalizer_error_report()`, verifies that the helper enters/leaves

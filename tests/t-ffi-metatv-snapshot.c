@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free ctype metamethod lookup snapshots.
+** Focused regression test for lock-free ctype metamethod lookup snapshots.
 */
 
 #include <assert.h>

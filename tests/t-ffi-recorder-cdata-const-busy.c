@@ -1,5 +1,5 @@
 /*
-** Focused guard for nonblocking recorder cdata constant ctype reads.
+** Focused regression test for nonblocking recorder cdata constant ctype reads.
 */
 
 #include <assert.h>

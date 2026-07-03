@@ -11,5 +11,5 @@ upvalue value as SSA across the poll and still emits the `USTORE`, so side
 exits and later interpreter code observe the heap cell update. GC-valued loads,
 post-MT traces, and all `XBAR` regions stay conservative.
 
-Focused guard: `m6_jit_barrier_xpoll` keeps the GC-valued upvalue barrier
+Focused regression test: `m6_jit_barrier_xpoll` keeps the GC-valued upvalue barrier
 ordering check and now also rejects a loop-body numeric `ULOAD` after `XPOLL`.

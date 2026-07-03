@@ -8,7 +8,7 @@ raw VLA array type, reading element size metadata, and computing the final size.
 `CType.size` values before deciding whether `ffi.sizeof()` needs an element
 count or can return a direct size.
 
-Guardrail:
+Invariant check:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `cur.info`,
   `cur.size`, `cur.sib`, `elem.info`, `elem.size`, `elem.sib`, `ct.info`,

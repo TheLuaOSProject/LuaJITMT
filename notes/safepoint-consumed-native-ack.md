@@ -30,4 +30,4 @@ request by claiming the current epoch and decrementing the pending count once.
 consumed-request state and clearing the poll word from another pthread after a
 short delay, waking the poll futex address, and by detaching an extra TG with an
 outstanding request. This is intentionally runtime synchronization coverage, not
-an implementation-text assertion.
+a legacy wrapper.

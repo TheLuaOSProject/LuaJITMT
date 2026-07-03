@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free cdata __tostring type snapshots.
+** Focused regression test for lock-free cdata __tostring type snapshots.
 */
 
 #include <assert.h>

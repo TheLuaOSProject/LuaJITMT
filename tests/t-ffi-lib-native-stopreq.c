@@ -1,5 +1,5 @@
 /*
-** Focused guard for FFI library memory helpers' native STOPREQ behavior.
+** Focused regression test for FFI library memory helpers' native STOPREQ behavior.
 */
 
 #include <assert.h>

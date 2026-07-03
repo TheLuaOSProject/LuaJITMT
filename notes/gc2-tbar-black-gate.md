@@ -28,7 +28,7 @@ existing weak-write path when the store helper has to preserve entries during
 P_WEAK. The JIT barrier must not turn a weak key into a strong edge merely
 because the traced value store was numeric or nil.
 
-The regression guard is `tools/ci/lua_test.sh m6_jit_tbar_gc2_black_gate`.
+The regression coverage is `tools/ci/lua_test.sh m6_jit_tbar_gc2_black_gate`.
 
 Assert-build follow-up:
 

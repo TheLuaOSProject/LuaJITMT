@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free callback set/free type snapshots.
+** Focused regression test for lock-free callback set/free type snapshots.
 */
 
 #include <assert.h>

@@ -1,5 +1,5 @@
 /*
-** Focused guard for ffi.metatype() string-type validation snapshots.
+** Focused regression test for ffi.metatype() string-type validation snapshots.
 */
 
 #include <assert.h>

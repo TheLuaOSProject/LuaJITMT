@@ -13,7 +13,7 @@ Overall correctness/stability progress: 70-80%.
 - Interpreter-side FFI parser fallback removal: 58-68%.
 - FFI recorder read-only ctype paths: 82-90%.
 - Legacy/compat bridge removal, excluding public API semantics: 90-94%.
-- CI migration from implementation-text assertions to behavior tests: 74-84%.
+- CI migration from legacy wrappers to behavior tests: 74-84%.
 - Release-quality soak and benchmark readiness: 47-57%.
 - Performance parity with stock LuaJIT: 35-45%, intentionally secondary.
 
@@ -55,7 +55,7 @@ Overall correctness/stability progress: 70-80%.
 - Renamed local/diagnostic legacy wording in GC pacing and GC2 paranoia tests:
   `legacy_live` / `legacy_step` are now current-purpose local names, and the
   paranoia reverse oracle is exposed as `lj_gc2_test_paranoia_root_diff()`.
-- Removed duplicate/tombstone-only implementation-text assertions: M3 no longer duplicates M5's
+- Removed duplicate/tombstone-only legacy wrappers: M3 no longer duplicates M5's
   x64 `barrierback` guard, M10 no longer duplicates M9's stats-builder guard,
   and old removed-helper tombstones were dropped where current helper checks and
   behavior coverage already protect the boundary.
@@ -65,7 +65,7 @@ Overall correctness/stability progress: 70-80%.
 - Removed tombstone-only M3 CI guards for old weak/sweep phase aliases and old
   paranoia diff aliases; behavior fixtures and current helper guards now own
   those contracts.
-- Removed another duplicate set of M3 finalizer repository-text checks. M8 remains the
+- Removed another duplicate set of M3 finalizer helper-name wrappers. M8 remains the
   owner for close-time finalizer, callback-stack, and finalizer-spawn behavior
   gates, while M3 keeps its positive scheduler ownership checks.
 - Renamed the remaining GC2 lifecycle helper surface from fork-era legacy names

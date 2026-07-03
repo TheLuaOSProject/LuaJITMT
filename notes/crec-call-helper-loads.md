@@ -11,7 +11,7 @@ void/number/pointer/enum, and box pointer, enum, and 64-bit integer results.
 The snapshots are taken before `crec_call_args()` can invalidate local CType
 pointers by inferring vararg ctypes.
 
-Guardrail:
+Invariant check:
 
 - `tests/t-ffi-recorder-libmeta-busy.c` covers traced C calls under a held
   ctype parser token and the normal hot-loop path that must still record.

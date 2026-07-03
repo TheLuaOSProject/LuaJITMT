@@ -210,7 +210,8 @@ Out of scope for this implementation pass. Do not spend milestone time on
 non-x86-64 dasc work until the x86-64 Linux runtime is green.
 
 ## 7.9 Audit checklist for this document's changes
-- [x] `grep -c "vm_safepoint" vm_x64.dasc` ≥ 4 sites + stub
+- [x] x64 VM safepoint polling exists on loop, function-entry, and return-to-C
+      paths, with behavior covered by `tests/t-vm-safepoint.c`
 - [x] no remaining `DISPATCH_GL(gc\.` after M2
 - [x] x64 `barrierback` macro deleted; TSETV/TSETS/TSETB/TSETM and closed
       USETx/CSET stores route through helper-backed publication barriers

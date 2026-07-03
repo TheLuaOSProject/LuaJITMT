@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 table KEYLOCK lookup filtering.
+** Focused regression test for M5 table KEYLOCK lookup filtering.
 */
 
 #include <assert.h>

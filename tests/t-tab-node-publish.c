@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 table hash-vector pointer publication.
+** Focused regression test for M5 table hash-vector pointer publication.
 */
 
 #include <assert.h>

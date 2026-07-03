@@ -1,5 +1,5 @@
 /*
-** Focused guard for concurrent FFI callback/blocking blacklist insertion.
+** Focused regression test for concurrent FFI callback/blocking blacklist insertion.
 */
 
 #include <assert.h>

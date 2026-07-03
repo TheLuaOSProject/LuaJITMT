@@ -46,7 +46,7 @@ Coverage:
 
 - `m7_ffi_callback_install` documents callback owner/function cleanup before
   rethrow and `cbid` publication after the protected store. Behavior coverage
-  owns the observable callback installation contract; implementation-text assertions are
+  owns the observable callback installation contract; legacy wrappers are
   obsolete.
 - `m4_threading_claim_cleanup` guards spawn, worker, attach, detach, and heap
   TG reclaim cleanup boundaries.

@@ -1,5 +1,5 @@
 /*
-** Focused guard for nonblocking recorder string ctype parsing.
+** Focused regression test for nonblocking recorder string ctype parsing.
 */
 
 #include <assert.h>

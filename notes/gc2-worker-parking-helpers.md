@@ -6,4 +6,4 @@ does not need the platform thread type.
 
 Worker initialization, start failure cleanup, TG slot release, worker stop, and
 the worker scheduler fixture now use the helper surface. The M3 worker
-scheduler guard documents why raw production/fixture access to those parking slots.
+scheduler notes document why raw production/fixture access to those parking slots.

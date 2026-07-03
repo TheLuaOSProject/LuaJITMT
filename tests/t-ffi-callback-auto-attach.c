@@ -1,5 +1,5 @@
 /*
-** Focused guard for TLS-less foreign-thread FFI callback auto-attach.
+** Focused regression test for TLS-less foreign-thread FFI callback auto-attach.
 */
 
 #include <assert.h>

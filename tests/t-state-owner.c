@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 lua_State owner claims on foreign-state APIs.
+** Focused regression test for M5 lua_State owner claims on foreign-state APIs.
 */
 
 #include <assert.h>

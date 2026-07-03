@@ -1,5 +1,5 @@
 /*
-** Focused guard for M7 FFI ctype-table RCU retirement.
+** Focused regression test for M7 FFI ctype-table RCU retirement.
 */
 
 #include <assert.h>

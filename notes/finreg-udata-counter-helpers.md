@@ -14,7 +14,7 @@ stores, and producers use helper add wrappers. This keeps the userdata FINREG
 side-list telemetry publication contract beside the existing root and node-link
 helper surface.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m3_gc2_scaffold.sh` now requires the userdata FINREG counter helper
 surface and documents why raw production access in `src/lj_gc.c`, `src/lj_gc2.c`, and

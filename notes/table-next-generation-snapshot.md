@@ -14,6 +14,6 @@ The change is still a bridge, not the final AHdr/NHdr iterator protocol: raw
 The important invariant is crash freedom and no exposure of internal
 `FORWARD`/`KEYLOCK` sentinels while a resize publishes successor generations.
 
-Focused guard:
+Focused regression test:
 
 - `m5_tab_next_snapshot`

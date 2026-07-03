@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 metatable negative-cache policy.
+** Focused regression test for M5 metatable negative-cache policy.
 */
 
 #include <assert.h>

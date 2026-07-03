@@ -11,6 +11,6 @@ argument tree carries the same prototype pointer as the runtime callee. The
 frame still keeps the dynamic closure TRef, so `UREFC` and later upvalue loads
 use the fresh closure instance and preserve Lua closure semantics.
 
-Focused guard: `m6_jit_cell_ops` now requires same-trace `FNEW` immediate
+Focused regression test: `m6_jit_cell_ops` now requires same-trace `FNEW` immediate
 calls to contain `FLOAD <callee> func.pc`, proving prototype specialization
 instead of fresh object identity specialization.

@@ -15,7 +15,7 @@ epoch with `scan_epoch`. If a new cycle starts while a stack scan is in
 progress, the old epoch is published and later worker-owner freshness checks
 will reject it instead of treating a stale scan as current-cycle coverage.
 
-Guarding:
+Coverage:
 - `m3_gc2_worker_scheduler` invariant: raw production access to
   `GC2State.cycle` in `lj_gc.c`, `lj_gc2.c`, and `lj_safepoint.c`.
 - The guard intentionally does not match `cycle_requests`, `cycle_starts`, or

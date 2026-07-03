@@ -10,7 +10,7 @@ FFI library memory helpers. It checks the TG request mask first, then the
 poll/global-action pair, and calls `lj_safepoint_poll()` only when the leave
 actions did not already include STOPREQ.
 
-Focused guard:
+Focused regression test:
 
 - `tools/ci/lua_test.sh m7_ffi_ccall_native`
 

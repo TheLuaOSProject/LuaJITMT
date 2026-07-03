@@ -1,5 +1,5 @@
 /*
-** Focused guard for CAS-published table slot stores.
+** Focused regression test for CAS-published table slot stores.
 */
 
 #include <assert.h>

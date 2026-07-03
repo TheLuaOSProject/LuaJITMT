@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 table hash-vector SMR retirement.
+** Focused regression test for M5 table hash-vector SMR retirement.
 */
 
 #include <assert.h>

@@ -10,7 +10,7 @@ extension/truncation widths, complex half offsets, pointer sizing, and aggregate
 copy lengths. This keeps the trace recorder from reading shared ctype payloads
 directly while CTState publication continues moving toward lockless readers.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_jit_cnew` invariant: raw `->info` / `->size` reads in
   `crec_isnonzero()` and `crec_ct_ct()`.

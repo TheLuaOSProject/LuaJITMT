@@ -45,4 +45,4 @@ Coverage:
   same. Ctype `__call`, `__add`, table-backed `__index`, and `ffi.new()`/`__gc`
   lookup on parser-created metatypes still abort recording rather than waiting.
 - The fixtures are wired into `m7_ffi_metatype`; this is behavior coverage,
-  not an implementation-text assertion.
+  not a legacy wrapper.

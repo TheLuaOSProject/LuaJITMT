@@ -12,7 +12,7 @@ Changes:
 - Documented the rule that `StrTabHdr.retired_next` is a shared retired-list
   publication link and must use the helper. String retirement, GC scans, and
   focused fixtures cover the observable behavior; CI must not enforce helper
-  spelling by repository text assertion.
+  spelling by helper comment.
 - Follow-up: added helper coverage for the string table heads and retirement
   epoch too. `lj_str_tabh_*()` now owns current table acquire/release/xchg,
   `lj_str_retired_head_*()` owns the retired-list head acquire/CAS/xchg/init

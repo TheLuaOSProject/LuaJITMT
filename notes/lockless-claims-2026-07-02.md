@@ -23,6 +23,6 @@ Current temporary bridges remain:
 - String resize/secondary rehash still relies on TG-local active markers because
   current resize destructively reuses `GCstr.gcw` chain links.
 
-Focused guards for the table read cleanup:
+Focused regression tests for the table read cleanup:
 
 - `tools/ci/lua_test.sh m5_tab_keylock_lookup m5_tab_next_snapshot m5_tab_forward_filter`

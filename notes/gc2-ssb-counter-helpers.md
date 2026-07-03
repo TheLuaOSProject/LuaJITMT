@@ -7,4 +7,4 @@ worker/assist drain paths. This slice routes `ssb_published`, `ssb_drained`,
 
 Runtime initialization and increments now use the helper family, and the focused
 C tests read the counters through the same acquire helpers. The M3 worker
-scheduler guard documents why raw production C access to the counter fields.
+scheduler notes document why raw production C access to the counter fields.

@@ -1,5 +1,5 @@
 /*
-** Focused guard for interpreted FFI C-call native STOPREQ freshness.
+** Focused regression test for interpreted FFI C-call native STOPREQ freshness.
 */
 
 #include <assert.h>

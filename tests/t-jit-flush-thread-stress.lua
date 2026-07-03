@@ -75,10 +75,13 @@ for id = 1, nthreads do
   workers[id] = th.spawn(function(ready_ch, start_ch, worker, count)
     assert(type(worker) == "number", "missing worker id")
     assert(type(count) == "number", "missing worker round count")
-    heat_pair(worker * 100000)
-    assert(live_trace_count() > 0,
-	   "worker did not publish traces before flush race")
-    assert(ready_ch:send(worker, ready_timeout) == true)
+    local preheat_ok, preheat_err = pcall(function()
+      heat_pair(worker * 100000)
+      assert(live_trace_count() > 0,
+	     "worker did not publish traces before flush race")
+    end)
+    assert(ready_ch:send(preheat_ok and worker or -worker, ready_timeout) == true)
+    if not preheat_ok then error(preheat_err, 0) end
     local token, ok = start_ch:recv(ready_timeout)
     assert(ok == true and token == "go")
 

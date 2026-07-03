@@ -11,7 +11,7 @@ This removes direct `CType.info` reads from:
 - cdata pointer equality fallback that checks whether both operands share the
   numeric/non-numeric class.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_carith_l` invariant: raw `->info` / `->size` reads in
   `crec_arith_meta()`.

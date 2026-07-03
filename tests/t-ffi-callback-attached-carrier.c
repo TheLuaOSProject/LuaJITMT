@@ -1,5 +1,5 @@
 /*
-** Focused guard for attached-thread FFI callback carrier selection.
+** Focused regression test for attached-thread FFI callback carrier selection.
 */
 
 #include <assert.h>

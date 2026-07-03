@@ -9,7 +9,7 @@ Slice
 - Routed `GC2FinRegUDataNode.next` traversal and publication through the
   helpers in the legacy userdata separator, GC2 fini drain, register, and
   forget paths.
-- Added a scoped `m3_gc2_scaffold.sh` guard over only those FINREG userdata
+- Added a scoped `m3_gc2_scaffold.sh` invariant coverage for only those FINREG userdata
   functions, avoiding unrelated GC2 node lists in `lj_gc2.c`.
 
 Related build fix

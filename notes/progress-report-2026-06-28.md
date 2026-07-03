@@ -6,7 +6,7 @@
 - Latest pushed commit before this CI/test-audit slice:
   `81265e77 notes: refresh lockless opportunities`
 - Current in-progress slice: CI/test cleanup, behavior-first replacement of
-  legacy implementation-text assertions, and FFI C-call native-state helper
+  legacy wrappers, and FFI C-call native-state helper
   refactoring.
 - Safety priority: language semantics, memory safety, GC visibility, and stability remain higher priority than LuaJIT performance parity.
 
@@ -44,7 +44,7 @@ Recent completed and pushed slices:
 
 The broader project already has landed ownership/facade work across tables,
 GC2, weak tables, traces, ctype, FFI, finalizers, hooks, and native-state
-boundaries. Earlier CI implementation-text assertions are now obsolete under the invariant-testing guidance
+boundaries. Earlier CI legacy wrappers are retired under the invariant-testing guidance
 policy.
 
 ## Completed In This Slice
@@ -150,7 +150,7 @@ Probably not worth making more lockless:
 - Table semantics and resize forwarding: 65-75%
 - JIT safety and trace/native-state handling: 60-70%
 - FFI safety excluding mutable cdef concurrency: 55-65%
-- Test and source-text-check infrastructure: 80-88%
+- Test and text-check infrastructure: 80-88%
 - Performance parity with LuaJIT: 35-45%
 - Overall safety/stability objective: 65-75%
 - Overall safety/stability plus near-LuaJIT performance: 50-60%

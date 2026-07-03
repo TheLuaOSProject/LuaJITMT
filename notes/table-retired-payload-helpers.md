@@ -12,7 +12,7 @@ Slice: table node/array retired-record payload discipline.
 - Documented the rule that retired-record payload/state access must use the
   helper layer because records are published to reclamation and GC walkers.
   Retirement and array-publication fixtures cover the behavior; CI must not
-  enforce helper spelling by repository text assertion.
+  enforce helper spelling by helper comment.
 
 Verification:
 

@@ -1,5 +1,5 @@
 /*
-** Focused guard for cdata get/set conversion ctype snapshots.
+** Focused regression test for cdata get/set conversion ctype snapshots.
 */
 
 #include <assert.h>

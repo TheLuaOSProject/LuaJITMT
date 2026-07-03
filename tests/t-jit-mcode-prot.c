@@ -1,5 +1,5 @@
 /*
-** Focused guard for mcode execute-stable protection.
+** Focused regression test for mcode execute-stable protection.
 */
 
 #include <assert.h>

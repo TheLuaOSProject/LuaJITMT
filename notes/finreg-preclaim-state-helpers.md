@@ -22,7 +22,7 @@ marking preclaimed cdata/finalizers. Collector-specific callbacks still provide
 the actual object/value/memory marking semantics, and finalizer dispatch
 advances `head` through helper stores after clearing consumed slots.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m7_ffi_finreg.sh` now requires the helper surface and documents why raw
 production access to `finreg_cdata_preclaim_obj`, `finreg_cdata_preclaim_fin`,

@@ -2810,6 +2810,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp <2
   |
   |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
+  |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
   |  load_J RA
   |  mov RA, [RA+J_OFS(tracev)]
   |  test RA, RA
@@ -2824,8 +2825,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp aword TRACE:RA->retire_epoch, 0
   |  jne >7
   |  test byte TRACE:RA->unused1, TRACE_SCOPE_FLUSH_PENDING
-  |  jz >6
+  |  jnz >7
+  |  lea RC, [PC-4]
+  |  cmp aword TRACE:RA->startpc, RC
+  |  je >6
 |7:
+  |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  mov RCd, [PC-4]
   |  movzx RAd, RCH
   |  movzx OP, RCL
@@ -2835,14 +2840,25 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
   |6:
   |  mov RCd, TRACE:RA->startins
+  |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  movzx RAd, RCH
   |  movzx OP, RCL
   |  shr RCd, 16
   |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
   |
   |9:  // Rethrow error from the right C frame.
+  |  mov L:RB, SAVE_L
+  |  mov L:RB->base, BASE
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
-  |  mov CARG2d, RDd
+  |  set_vmstate INTERP
+  |  mov SAVE_ERRF, RDd
+  |  cmp TGPOLL, 0
+  |  jz >8
+  |  mov CARG1, L:RB
+  |  call extern lj_safepoint_ack_check
+  |  mov L:RB, SAVE_L
+  |8:
+  |  mov CARG2d, SAVE_ERRF
   |  mov CARG1, L:RB
   |  neg CARG2d
   |  call extern lj_err_trace		// (lua_State *L, int errcode)
@@ -5633,12 +5649,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne >3
     |  cmp aword TRACE:RD->retire_epoch, 0
     |  jne >8
-    |  test byte TRACE:RD->unused1, TRACE_SCOPE_FLUSH_PENDING
-    |  jnz >8
-    |  lea RA, [PC-4]
-    |  cmp aword TRACE:RD->startpc, RA
-    |  jne >3
-    |  jmp >2
+  |  test byte TRACE:RD->unused1, TRACE_SCOPE_FLUSH_PENDING
+  |  jnz >8
+  |  lea RA, [PC-4]
+  |  cmp aword TRACE:RD->startpc, RA
+  |  jne >3
+  |  // Null mcode is a stale trace body observation; redispatch safely.
+  |  mov RA, TRACE:RD->mcode
+  |  test RA, RA
+  |  jz >3
+  |  mov RD, RA
+  |  jmp >2
 |8:
     |  lea RA, [PC-4]
     |  cmp aword TRACE:RD->startpc, RA
@@ -5675,10 +5696,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp aword [DISPATCH+OP*8]
 |6:
     |  mov RB, BASE
+    |  mov L:CARG4, SAVE_L
+    |  mov L:CARG4->base, BASE
     |  mov CARG2, PC
     |  sub CARG2, 4
     |  load_J CARG1
-    |  mov CARG3d, RDd
+    |  mov CARG3d, RCd
     |  call extern lj_trace_stale_startins
     |  mov BASE, RB
     |  test eax, eax
@@ -5695,6 +5718,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
 |5:
     |  mov RB, BASE
+    |  mov L:CARG4, SAVE_L
+    |  mov L:CARG4->base, BASE
     |  mov CARG2, PC
     |  sub CARG2, 4
     |  load_J CARG1
@@ -5712,7 +5737,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  branchPC RC
     |  ins_next
 |2:
-    |  mov RD, TRACE:RD->mcode
     |  mov [DISPATCH+DISPATCH_TG(tmpbuf.L)], L:RB
     |  // Save additional callee-save registers only used in compiled code.
     |.if X64WIN

@@ -15,7 +15,7 @@ The low-level `gc2_finreg_cdata_*_add()` counter helpers remain the storage
 primitive inside `lj_gc2.c`; cdata and ctype producers no longer own those
 counter writes directly.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m7_ffi_finreg.sh` requires both notification helpers and rejects
 direct `gc2_finreg_cdata_sweep_queued_add()` or

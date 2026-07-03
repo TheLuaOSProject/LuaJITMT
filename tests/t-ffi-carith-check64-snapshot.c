@@ -1,5 +1,5 @@
 /*
-** Focused guard for bit.* cdata ctype snapshots.
+** Focused regression test for bit.* cdata ctype snapshots.
 */
 
 #include <assert.h>

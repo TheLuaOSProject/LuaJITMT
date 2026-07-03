@@ -31,7 +31,7 @@ Coverage:
 - `tests/t-ffi-element-size-snapshot.c` continues to guard the predefined
   `int *` no-busy trace path.
 
-Guardrail:
+Invariant check:
 
 - `tools/ci/lua_test.sh m7_ffi_cdata_get_l` covers behavior for cdata reads.
 

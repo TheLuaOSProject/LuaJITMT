@@ -11,6 +11,6 @@ slice still needs the exact arena bitmap block/mark update, allocation color,
 GC/GC2 accounting, table body initialization, and `lj_gc_linkobj_new()`
 publication semantics before it can replace C allocation.
 
-Focused guard: `m6_jit_gc2_readiness` now checks that escaped empty-table
+Focused regression test: `m6_jit_gc2_readiness` now checks that escaped empty-table
 `TNEW` traces route to `lj_tab_new0()` and that non-empty table constructors
 continue to route through `lj_tab_new1()`.

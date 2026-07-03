@@ -7,7 +7,7 @@
   `__metatable` name root load, and function environment loads through the
   helpers. On x86-64 these still lower to ordinary `mov` instructions, but the
   source now names the acquire/release contract for shared GCRef edges.
-- Extended `tools/ci/m5_x64_getmetatable_node_order.sh` with a static guard
+- Extended `tools/ci/m5_x64_getmetatable_node_order.sh` with a documented invariant
   rejecting raw `->metatable`, `->env`, and `gcroot` access in `vm_x64.dasc`
   outside the helper calls.
 - Expanded the x64 getmetatable smoke to cover the setmetatable fast path,

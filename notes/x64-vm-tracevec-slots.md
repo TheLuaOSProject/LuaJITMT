@@ -9,7 +9,7 @@ Changes:
 - x64 static fallback/unpatch paths that recover `startins` for a `BC_JLOOP`
   also load the trace body from `J->tracev->slot[traceno]`.
 - The trace publication docs now treat direct `J->trace`/`J_OFS(trace)` VM
-  access as an obsolete pattern. The old implementation-text assertion rejection was removed
+  access as an obsolete pattern. The legacy wrapper was removed
   with the CI invariant-testing cleanup; behavior and generated VM output checks own
   the observable contract.
 

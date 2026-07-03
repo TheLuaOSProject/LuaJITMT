@@ -14,7 +14,7 @@ TG poll word is set and the current handshake action mask contains STOPREQ. The
 normal sticky STOPREQ behavior still depends on the caller's `had_stopreq`
 snapshot.
 
-Focused guards:
+Focused regression tests:
 
 - `tools/ci/lua_test.sh m3_safepoint_handshake`
 - `tools/ci/lua_test.sh m7_ffi_ccall_native`

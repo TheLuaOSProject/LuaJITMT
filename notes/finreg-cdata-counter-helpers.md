@@ -9,7 +9,7 @@ Stats reads now use acquire helper loads, GC2 initialization uses relaxed helper
 stores, and producers use helper add wrappers instead of spelling ad hoc
 atomics against `g->gc2`.
 
-## Guardrail
+## Invariant check
 
 `tools/ci/m7_ffi_finreg.sh` now requires the cdata FINREG counter helper
 surface and documents why raw production access to these counter fields in
@@ -18,4 +18,4 @@ surface and documents why raw production access to these counter fields in
 ## Follow-Up
 
 Follow-up fixture cleanup routes `tests/t-gc2-traverse.c` counter snapshots
-through the same acquire helpers and extends the M7 guard over that fixture.
+through the same acquire helpers and extends the M7 invariant coverage for that fixture.

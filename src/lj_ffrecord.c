@@ -175,9 +175,16 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
   case FF_threading_gcworkers:
   case FF_threading_gcmode:
   case FF_threading_spawn:
-  case FF_threading_current:
   case FF_threading_mutex:
   case FF_threading_channel:
+    /* Blocking or mutating threading primitives enter native waits, safepoint
+    ** handshakes, or publication paths. Do not stitch traces across them: the
+    ** surrounding trace could otherwise survive a concurrent trace-flush
+    ** boundary while the primitive parks or acknowledges it.
+    */
+    lj_trace_err_info(J, LJ_TRERR_NYIFFU);
+    break;
+  case FF_threading_current:
     lj_trace_err_info(J, LJ_TRERR_NYIFFU);
     break;
   default:

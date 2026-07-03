@@ -1,5 +1,5 @@
 /*
-** Focused guard for lock-free JIT snapshot cdata restore ctype reads.
+** Focused regression test for lock-free JIT snapshot cdata restore ctype reads.
 */
 
 #include <assert.h>

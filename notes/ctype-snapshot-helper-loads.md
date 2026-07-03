@@ -13,7 +13,7 @@ Converted helpers:
 - `lj_ctype_ptrstruct_snapshot()`
 - `lj_ctype_info_snapshot()`
 
-Guardrail:
+Invariant check:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects direct local `ct.info`,
   `ct.size`, `ct.sib`, `cct.info`, `cct.size`, or `cct.sib` reads in these

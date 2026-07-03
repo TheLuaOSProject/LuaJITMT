@@ -9,7 +9,7 @@ classification, pointer-pointer difference and comparison checks, numeric index
 validation, swapped `number + pointer` handling, fallback element-size reads,
 and result pointer ctype interning.
 
-Guardrail:
+Invariant check:
 
 - `m7_ffi_carith_l` invariant: raw `->info` / `->size` reads in
   `crec_arith_ptr()`.

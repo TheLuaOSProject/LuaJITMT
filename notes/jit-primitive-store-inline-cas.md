@@ -13,6 +13,6 @@ unchanged: stale generations, retiring arrays/nodes, colocated arrays, weak
 tables, active metatables, and CAS failure continue to route through the
 existing C helpers.
 
-Focused guard: `m6_jit_table_store_helper` now includes a boolean-only
+Focused regression test: `m6_jit_table_store_helper` now includes a boolean-only
 array/hash route dump and requires the x64 `lock cmpxchg` marker plus the same
 helper fallback names.

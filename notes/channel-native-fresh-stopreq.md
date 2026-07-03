@@ -10,4 +10,4 @@
   `channel:send(value, timeout)`, so a stale shutdown flag does not turn normal
   channel timeout semantics into an interruption.
 - Helper comments document why channel waits must use the fresh STOPREQ helper.
-  The old implementation-text assertion rejecting raw checks is obsolete.
+  The helper comment and behavior coverage own the invariant.
