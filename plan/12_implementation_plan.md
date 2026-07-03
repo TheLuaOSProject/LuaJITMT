@@ -129,15 +129,16 @@ canonical target. The current x86-64 bridge has implemented guarded `IR_XPOLL`
 for LOOP-backedge trace safepoint polls and inlined FUNCF-depth entries. The
 first TGMARK invalidation slice keeps `TBAR`/`OBAR` inside XPOLL-delimited
 poll regions; broader XBAR invalidation work remains pending. The CGET/CSET
-recording subtask is covered for the current x64 bridge by explicit IR guards
-over raw-slot fallback, promoted-cell `UREFC`/`ULOAD`/`USTORE`, and GC-valued
-`OBAR`; the first `BC_CNEW`/`BC_FNEW` helper-backed slice covers source and
-loaded v4 self-cell creation traces and removes the CNEW-specific `PROTO_NOJIT`
-gates. Mixed raw-local FNEW traces are now covered for source/loaded immutable
-raw captures through stack-value synchronization, mutable captures once the
-cell is promoted at trace entry, and source/loaded first-promotion loops where
-the hot trace performs the first mutable raw-slot promotion with otherwise
-type-stable loop slots. A narrow helper-backed table-store bridge now records
+recording subtask is covered for the current x64 bridge by behavior fixtures
+over raw-slot fallback, promoted-cell load/store behavior, GC-valued
+publication, and source/loaded self-cell creation traces. The first
+`BC_CNEW`/`BC_FNEW` helper-backed slice removed the CNEW-specific
+`PROTO_NOJIT` gates. Mixed raw-local FNEW traces are now covered for
+source/loaded immutable raw captures through stack-value synchronization,
+mutable captures once the cell is promoted at trace entry, and source/loaded
+first-promotion loops where the hot trace performs the first mutable raw-slot
+promotion with otherwise type-stable loop slots. A narrow helper-backed
+table-store bridge now records
 in-bounds `ASTORE`/`HSTORE` updates on Linux/x64, including existing non-nil
 slots, previous-nil slots, trace-local new string-key hash slots, and
 trace-local new numeric slots, plus shared, PHI-carried, upvalue-carried,
