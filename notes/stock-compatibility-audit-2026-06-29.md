@@ -23,27 +23,13 @@ request, and manual dispatch. Rolling release jobs also set
 macOS, and Windows release binaries run stock-suite checks during release
 packaging.
 
-At the time of the original 2026-06-29 audit, no active forbidden
-removed wrapper tests were found under `tools/ci`, `tools/test.lua`,
-`tests/suites`, `tests/lib`, top-level `tests/*.lua`, or top-level `tests/*.c`.
-Later narrow legacy wrappers must not be treated as stock compatibility
-coverage; stock parity is enforced by runtime behavior tests, vendored stock
-tests, C fixtures, bytecode compatibility checks, and release binary checks.
-
-Allowed remaining checks are over runtime output and public artifacts: bytecode
-compatibility blobs, captured stdout/stderr, CSVs, marker files, and release
-artifacts. Implementation-spelling checks are not permitted; preserve the
-reason in comments/notes, and prove the observable part through behavior, C
-fixtures, public artifacts, benchmarks, or packaging outputs.
-
-The removed text-check compatibility surface remains gone:
-
-- No case or per-case shell wrapper exists.
-- No dedicated repository-text reader exists in the suite helpers.
-- The only `tools/ci` shell entrypoint is `tools/ci/lua_test.sh`.
-- The remaining build-time `find`/`sed`/`grep` invocations inspect generated
-  dependencies, object files, or install-metadata output, not implementation
-  snippets.
+Stock parity is enforced by runtime behavior tests, vendored stock tests, C
+fixtures, bytecode compatibility checks, and release binary checks. Checks over
+runtime output and public artifacts remain valid for bytecode compatibility
+blobs, captured stdout/stderr, CSVs, marker files, and release artifacts.
+Implementation rationale belongs in comments/notes, with the observable part
+proved through behavior, C fixtures, public artifacts, benchmarks, or packaging
+outputs.
 
 ## Public C API surface
 

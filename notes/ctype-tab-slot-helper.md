@@ -5,7 +5,7 @@ CType table slot helper
 - Routed `lj_ctype.c` snapshot readers, reservation result publication, and FFI
   type/layout snapshot readers through the helper instead of direct
   `CTypeTab.tab[]` indexing.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_tab_retire` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_tab_retire` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

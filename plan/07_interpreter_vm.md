@@ -227,7 +227,7 @@ invariants remain documented beside the constrained VM/helper code: migrated
 dispatch must avoid inline GC root loads, table stores must publish through the
 C helper layer rather than legacy inline `barrierback`, and both empty-table
 and non-empty `BC_TNEW` paths must remain reachable. Tests cover the observable
-runtime effects rather than VM source spelling.
+runtime effects.
 
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before

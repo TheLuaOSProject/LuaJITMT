@@ -12,10 +12,9 @@ first up-recursive trace. The current test keeps the observable parts: the
 recursive function returns correct results, records at least one trace, and
 continues to run repeated recursive calls within the normal timeout. The
 timeout is a coarse behavioral smoke for the old pathological re-recording
-failure; exact `-jv` topology remains a manual performance diagnostic, not an
-active test contract.
+failure; exact `-jv` topology remains a manual performance diagnostic.
 
 When recursive trace retention changes, document the reason beside the recorder
 or trace-retirement code and use benchmark data for throughput regressions.
-Do not reintroduce trace graph topology, generated dump text, or trace-number
-windows as test gates.
+Trace graph topology, generated dumps, and trace-number windows remain local
+diagnostics.

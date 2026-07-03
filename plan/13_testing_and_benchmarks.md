@@ -9,11 +9,8 @@
 4. **Hammer/stress** (§13.4): hours-scale soak under torture.
 5. **C unit drivers** (§13.6.2): lock-free structures isolated, TSAN-clean.
 6. **Oracles**: LJ_GC2_PARANOIA STW diff (05 §5.13); string identity
-   checker; bytecode dump/load execution as an opaque artifact. Serialized
-   bytecode spelling, generated IR/ASM text, objdump output, generated mcode
-   encoding, helper-name inventories, and repository source text are not test
-   contracts, including historical milestone wrappers. Keep the invariant
-   explanation in comments and notes; keep tests on behavior or product
+   checker; bytecode dump/load execution as an opaque artifact. Keep invariant
+   explanations in comments and notes; keep tests on behavior or product
    artifacts.
 7. **Fuzzing** (§13.7).
 
@@ -77,14 +74,14 @@ Current M6 scaffold gates include dispatch redispatch, recorder-token
 ownership, local-cell recorder behavior including self-cell CNEW/FNEW creation,
 mixed raw-local FNEW synchronization, promoted-cell update loops, first-promotion
 FNEW traces, XPOLL barriers, XBAR/XPOLL aliasing, allocation accounting,
-TNEW/CNEW/SNEW GC2 hard-check readiness, pre-MT direct AREF and active-MT
-read-helper routing, GC-step bridging, mcode publication, public and
+TNEW/CNEW/SNEW GC2 hard-check readiness, pre-MT direct AREF, active-MT
+shared table read-helper routing, active-MT helper-backed previous-nil and
+new-key table stores, GC-step bridging, mcode publication, public and
 recorder-internal scoped flush handshake coverage, and numeric side-trace
 flush slot-retirement coverage. The table-store coverage also exercises
 same-trace closed-upvalue and nested heap escapes before a `TNEW`/`TDUP` slot
 update. The helper-route rationale is documented beside the recorder and table
-store implementation; tests must not assert source spelling, generated IR/ASM,
-or generated mcode encoding. The M10 generational gate includes interpreted VM-fast and
+store implementation. The M10 generational gate includes interpreted VM-fast and
 traced helper-backed table-store regressions that confirm the remembered SSB
 entry is the old parent table and that the next minor cycle marks the young
 child through that parent.
@@ -93,7 +90,7 @@ repairs through runtime behavior and requires the post-store VM value/range
 publication helpers by observing the effects of a hook-driven real-bytecode
 `BC_TSETM` constructor case over an old forwarded array generation. The helper
 route itself is documented next to the VM/table code; the test does not inspect
-`vm_x64.dasc` or generated machine-code spelling.
+internal VM/backend output.
 `tools/ci/lua_test.sh m9_m10_gc` chains the current M9 stats/benchmark smokes
 with the M10 generational coverage.
 The CSV/geomean accounting check remains a harness self-test. A separate

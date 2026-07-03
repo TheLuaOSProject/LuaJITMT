@@ -26,9 +26,9 @@ Remove only stale fork-local compatibility shims. Stock LuaJIT compatibility
 entry points, optional Lua 5.2 compatibility, standard FFI behavior, and
 standard `lua*`/`luaL*` C API symbols stay intact.
 
-The policy in `notes/ci-invariant-testing.md` applies here: test behavior with
-Lua/C fixtures, public artifacts, benchmarks, and packaging, and document
-ownership/API boundaries in notes like this one.
+The guidance in `notes/invariant-documentation-2026-07-03.md` applies here:
+test behavior with Lua/C fixtures, public artifacts, benchmarks, and packaging,
+and document ownership/API boundaries in notes like this one.
 
 ## 2026-06-29 stock-compatibility boundary
 

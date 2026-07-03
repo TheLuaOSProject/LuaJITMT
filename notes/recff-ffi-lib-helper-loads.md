@@ -35,9 +35,8 @@ Coverage model:
   Predefined `void *` / `const void *` / `const char *` traces for
   `ffi.fill()`, `ffi.copy()`, and `ffi.string()` must record without CTBUSY
   under an unrelated parser token.
-- Do not replace this with a legacy wrapper. The project policy in
-  `notes/ci-invariant-testing.md` requires behavior fixtures or generated
-  artifact checks for CI coverage.
+- Keep this as helper-surface rationale. Behavior fixtures and generated
+  artifact checks cover the observable outcomes.
 
 Validation:
 

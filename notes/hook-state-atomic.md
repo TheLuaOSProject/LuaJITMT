@@ -20,8 +20,7 @@ The non-x64 DASC paths remain out of scope for this x86-64 Linux pass.
 
 Coverage model: `m5_hook_state_atomic` covers hook function/count behavior and
 x64 locked-decrement behavior through the helper surface and Lua smoke. Direct
-field spelling is documented beside the helper/backend code, not tested as a
-source-text contract.
+field-access rationale is documented beside the helper/backend code.
 
 Validation:
 - `tools/ci/m5_hook_state_atomic.sh` passed.

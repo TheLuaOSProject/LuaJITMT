@@ -9,7 +9,7 @@ FINREG generation liveness helper slice
   disabled-generation sentinels and active generation tables both flow through
   metatable slots, so lookup and close-time scans need one acquire/release
   vocabulary. The runnable coverage stays in FINREG and weak/finalizer
-  behavior fixtures, not in implementation-text inventories.
+  behavior fixtures; helper comments carry the implementation rationale.
 
 Verification:
 

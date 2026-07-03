@@ -5,7 +5,7 @@ ffi.istype fallback helper loads
   pointer, and struct-pointer branch decisions.
 - Kept the existing raw/ref-stripped ID comparisons and `lj_cconv_compatptr()`
   call shape unchanged.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

@@ -20,7 +20,7 @@ the writer.
 
 This is behavior coverage for the table forwarding protocol. Implementation
 ordering requirements that are not directly observable belong in comments and
-notes like this one, not in repository text-matching tests.
+notes like this one, backed by behavior coverage where observable.
 
 Validation:
 

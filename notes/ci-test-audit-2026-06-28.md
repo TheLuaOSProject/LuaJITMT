@@ -1,16 +1,15 @@
 # CI/Test Harness Audit - 2026-06-28
 
-Historical note: this audit predates the current invariant-testing model. The
-current guidance is `notes/ci-invariant-testing.md`: CI and tests prove
-behavior, counters, public artifacts, release metadata, or opaque bytecode
-execution; implementation-only rules are documented next to the constrained
-code.
+Historical note: this audit predates the current invariant-documentation model.
+Use `notes/invariant-documentation-2026-07-03.md` for current guidance:
+implementation-only rules are documented next to the constrained code, and
+tests cover behavior, counters, public artifacts, release metadata, or opaque
+bytecode execution.
 
 ## Inventory
 
 - 2026-07-03 status: `tools/ci` has only `lua_test.sh` and
-  `platform_build.sh`. The old per-case shell spelling-check suite is gone
-  and must not be rebuilt under a different name.
+  `platform_build.sh`.
 - Historical state at the time of this audit: most scripts called
   `tools/ci/lua_test.sh` after doing real validation or orchestration work;
   zero pure alias wrappers remained.
@@ -43,8 +42,7 @@ code.
 4. Repository legacy wrappers often pinned implementation details.
    Broad string matches blocked better implementations that preserved the same
    safety invariant with a new helper boundary. New tests must use behavior,
-   C fixtures, public artifacts, benchmarks, packaging, or documentation
-   instead of spelling assertions.
+   C fixtures, public artifacts, benchmarks, packaging, or documentation.
 
 5. Large shell wrapper files are hard to review.
    `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
@@ -72,8 +70,8 @@ code.
   The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
   native entry/leave restoration, nested callbacks, stale callback returns,
   callback blacklisting, and fresh STOPREQ delivery.
-- Removed the old implementation-detail checks from `m7_ffi_callback_runtime`;
-  the behavior fixture now carries that contract.
+- `m7_ffi_callback_runtime` now carries the relevant contract through behavior
+  fixtures.
 
 ## Follow-up Landed Later On 2026-06-28
 
@@ -144,7 +142,7 @@ code.
   owns weak/finalizer behavior fixtures.
 - The internal sweep-close bridge helper was renamed to
   `lj_gc2_sweep_bridge_close()`, keeping the behavior boundary while removing
-  another exact legacy helper name from production source.
+  stale production helper naming.
 - The GC2 sweep close-readiness latch/helper surface was renamed to
   `sweep_bridge_ready` / `lj_gc2_sweep_bridge_*`, and the scheduler guard now
   checks the current bridge ownership surface without carrying old-name

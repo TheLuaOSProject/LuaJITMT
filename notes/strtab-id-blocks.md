@@ -31,5 +31,4 @@ live `sid` values for uniqueness, verifies duplicate interning still returns
 the original object, confirms the ID and count reserve paths refill far less
 often than one global operation per string allocation, and verifies flushing
 unused count credits restores `g->str.num` to the exact live-string count. The
-test does not inspect source text, helper names, generated IR/ASM, objdump
-output, or generated mcode encoding.
+helper comments carry the ownership rationale for the shared counters.

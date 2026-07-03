@@ -6,7 +6,7 @@ CType stale-slot copy helper
 - Replaced raw `*dst = *src` stale-slot refreshes in `ctype_hash_setnext()`,
   `ctype_publish_current()`, and parser `cp_ctype_publish()` with
   `ctype_copy_rel()`.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_name_claim` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_name_claim` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

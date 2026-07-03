@@ -6,7 +6,7 @@ lib_ffi callback helper loads
 - Preserved the existing fixed callback slot lookup and publish/free ordering;
   this slice only replaces raw ctype payload reads with helper-backed
   snapshots.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_install` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_install` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

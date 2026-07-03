@@ -10,5 +10,4 @@ x86 lock-prefix emitter cleanup
 - Verification at the time used `make -C src -j2`, a temporary local diagnostic
   dump, a temporary DynASM x64 `lock; cmpxchg qword` preprocessing smoke, and
   `tools/ci/lua_test.sh m6_jit_table_store_helper`. The dump was diagnostic
-  only; current active tests must use behavior, runtime counters, or public
-  output rather than generated mcode text.
+  only; current active tests use behavior, runtime counters, or public output.

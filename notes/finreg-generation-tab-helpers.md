@@ -9,7 +9,7 @@ FINREG generation table helper slice
 - Documented why FINREG generation table access is owned by the helper surface:
   close-time disable and lookup visibility share a publication edge, so readers
   must use a single acquire path. The runnable coverage stays in FINREG and
-  weak/finalizer behavior fixtures, not in implementation-text inventories.
+  weak/finalizer behavior fixtures; helper comments carry the implementation rationale.
 
 Verification:
 

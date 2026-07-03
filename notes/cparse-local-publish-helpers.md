@@ -16,9 +16,8 @@ Changed:
 - `ffi.istype()` now retries the sequence-checked snapshot comparison when a
   parser mutation is active instead of taking the parser token after it clears.
   String declarations still parse under the parser lock before comparison.
-- Removed the stale exact legacy wrapper in `m7_ffi_typeinfo_snapshot.sh` that
-  looked for an old pointer auto-deref spelling already covered by behavior
-  fixtures and this documented parser-publication invariant.
+- `m7_ffi_typeinfo_snapshot` now relies on behavior fixtures and this documented
+  parser-publication invariant.
 - Removed the now-dead `ffi_istype_raw()` fallback and its legacy wrapper.
 - Extended `t-ffi-istype-snapshot.c` with an active-token behavior test. It
   holds the parser token, releases it from a helper thread, asserts the normal

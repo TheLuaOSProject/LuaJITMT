@@ -1158,6 +1158,59 @@ end
 assert(h.stable == true)
 assert(util.traceinfo(1), "boolean hash store did not trace")
 ]=], { timeout = "20s" })
+
+      luajit_code(t, [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local h = { stable = 0 }
+h.stable = nil
+for i = 1, 80 do
+  h.stable = i
+  h.stable = nil
+end
+assert(h.stable == nil)
+assert(util.traceinfo(1), "active-MT previous-nil hash store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local a = { 0, nil, 0 }
+for i = 1, 80 do
+  a[2] = i
+  a[2] = nil
+end
+assert(a[2] == nil)
+assert(util.traceinfo(1), "active-MT previous-nil array store did not trace")
+]=], { timeout = "20s" })
+
+      luajit_code(t, [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+jit.off()
+local keys = {}
+for i = 1, 128 do keys[i] = "k" .. i end
+jit.on()
+local h = {}
+for i = 1, 80 do
+  h[keys[(i % 128) + 1]] = i
+end
+assert(h.k80 == 79)
+assert(util.traceinfo(1), "active-MT new hash store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local a = {}
+for i = 1, 80 do
+  a[i] = i
+end
+assert(a[80] == 80)
+assert(util.traceinfo(1), "active-MT new numeric array store did not trace")
+]=], { timeout = "20s" })
       print("M6 JIT table-store helper behavior passed")
     end
   })
@@ -1264,6 +1317,31 @@ for i = 1, 80 do
 end
 assert(s > 0)
 assert(util.traceinfo(1), "active-MT shared array read did not trace")
+]=], { timeout = "20s" })
+
+      luajit_code(t, [=[
+local threading = require("threading")
+local util = require("jit.util")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local h = { stable = 7 }
+local s = 0
+for i = 1, 80 do
+  s = s + h.stable
+end
+assert(s == 560)
+assert(util.traceinfo(1), "active-MT shared hash read did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local k = "stable"
+s = 0
+for i = 1, 80 do
+  s = s + h[k]
+end
+assert(s == 560)
+assert(util.traceinfo(1), "active-MT shared dynamic hash read did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[

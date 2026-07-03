@@ -14,7 +14,7 @@ phase.
 The remaining runtime coverage is behavior-based: HREF/HREFK traceability,
 resize-after-trace reads, table forwarding fixtures, active-MT helper routing,
 and stock-suite semantics. The assembler comment carries the implementation
-reason because the exact instruction spelling is not a test contract.
+reason.
 
 Local validation:
 

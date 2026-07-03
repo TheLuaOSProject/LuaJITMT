@@ -18,8 +18,8 @@ pacing reads stay in C helper code instead of interpreter assembly.
 
 Coverage model: `m5_gc_total_atomic` covers GC accounting behavior through the
 helper surface. The remaining x64 VM allocation-check operands are documented
-beside the backend code because they are implementation details, not source-text
-or generated-code pass/fail contracts.
+beside the backend code because they are implementation details; observable GC
+accounting behavior stays in the fixture.
 
 Validation:
 - `tools/ci/m5_gc_total_atomic.sh` passed.

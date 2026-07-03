@@ -1,9 +1,9 @@
 # Progress report - 2026-06-28 threading CI behavior
 
-Historical note: this report predates the current invariant-testing model. The
-current guidance is `notes/ci-invariant-testing.md`: behavior fixtures,
-counters, public artifacts, and stock semantics cover observable requirements;
-implementation-only rules live in comments and notes.
+Historical note: this report predates the current invariant-documentation model.
+Use `notes/invariant-documentation-2026-07-03.md` for current guidance:
+behavior fixtures, counters, public artifacts, and stock semantics cover
+observable requirements; implementation-only rules live in comments and notes.
 
 Scope: x86_64/Linux `v2.1` lockless LuaJIT fork. Project priority remains
 safety, stability, and Lua semantics over LuaJIT performance parity when those
@@ -80,8 +80,8 @@ Historical high-priority legacy/static assertion areas:
   blacklist and blocking API outcomes; the wrapper assertion was part of the
   old static cleanup.
 - `tools/ci/m5_profile_stop_native.sh`: C fixture coverage replaced the
-  wrapper-level cleanup/order assertions. Do not restore a lint check for
-  helper spelling or source order.
+  wrapper-level cleanup/order assertions. Keep helper/order rationale in
+  comments and notes.
 - Historical `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`,
   and `m5_gc_waits.sh` wait-path rules are documented; keep expanding
   contention behavior tests for the same risks.

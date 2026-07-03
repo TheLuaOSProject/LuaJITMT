@@ -91,5 +91,5 @@ Bad removal targets right now:
 - `git diff --check`
 
 The shell wrapper entries above no longer exist. Current verification uses
-`tools/ci/lua_test.sh <case...>` and behavior fixtures; source-text and
-generated-implementation-text checks are not valid gates.
+`tools/ci/lua_test.sh <case...>` and behavior fixtures; implementation-only
+rationale belongs in code comments and notes.

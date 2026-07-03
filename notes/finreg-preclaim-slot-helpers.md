@@ -17,7 +17,7 @@ Fix:
   object slots.
 - `m7_ffi_finreg` keeps behavior coverage for preclaim traversal and finalizer
   registration. The helper surface documents the allowed preclaim slot access;
-  raw field spelling is not a source-text gate.
+  the helper comment explains the field ownership rationale.
 - Follow-up state helper work routes the preclaim vector pointers, capacity,
   head cursor, and count publisher through `gc2_finreg_cdata_preclaim_*()`
   helpers in both `lj_gc.c` and `lj_gc2.c`, while keeping the slot publication

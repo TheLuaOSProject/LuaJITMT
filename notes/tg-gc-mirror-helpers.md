@@ -13,7 +13,7 @@ Changes:
   barrier predicates, and table bulk-store barrier checks through helpers.
 - Documented why `TGState.mark_active` and `TGState.alloc.alloc_black` are owned
   by the TG helper surface. `m3_safepoint_handshake` keeps behavior coverage;
-  raw field spelling is not a source-text gate.
+  the helper comment explains the field ownership rationale.
 
 Note:
 

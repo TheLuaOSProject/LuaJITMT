@@ -10,8 +10,8 @@ Changes:
 - Routed focused owner/GC2 fixtures through the same helpers for synthetic busy
   owners and scan assertions.
 - Documented why `thr_owner`, `scan_epoch`, and `scan_dirty_epoch` are owned by
-  state helper APIs. `m5_state_owner` keeps behavior/counter coverage; raw field
-  spelling is not a source-text gate.
+  state helper APIs. `m5_state_owner` keeps behavior/counter coverage; the
+  helper comments carry the field ownership rationale.
 
 Note:
 - The x64 VM still has intentional inline stores for interpreter ownership

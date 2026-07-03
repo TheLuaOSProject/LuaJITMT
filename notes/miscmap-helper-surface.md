@@ -4,7 +4,7 @@ FFI miscmap helper surface
   CTState misc table root.
 - Routed function-pointer metamethod lookup, miscmap slot storage, and
   `luaopen_ffi()` miscmap publication through the helper API.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_metatype` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_metatype` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

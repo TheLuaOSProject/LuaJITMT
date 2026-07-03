@@ -3,7 +3,7 @@
 **
 ** This fixture intentionally treats bytecode as an opaque public artifact:
 ** it exercises dump/load round trips and observable closure behavior, but does
-** not parse bytes, patch opcodes, or assert exact dump spelling.
+** not parse bytes, patch opcodes, or compare exact dump blobs.
 */
 
 #include <assert.h>

@@ -11,8 +11,8 @@ Changes:
   ownership changes and acquire reads for GC2 thread-root scan decisions.
 - Routed the C-side owner increment and GC2 scan read through the helper layer.
 - Documented why `stack_dirty_epoch` is owned by the TG helper surface.
-  `m3_gc2_scaffold` keeps behavior/counter coverage; raw field spelling is not a
-  source-text gate.
+  `m3_gc2_scaffold` keeps behavior/counter coverage; the helper comments carry
+  the field ownership rationale.
 
 Note:
 

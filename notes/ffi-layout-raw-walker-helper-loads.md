@@ -9,7 +9,7 @@ longer contains direct `->info` / `->size` reads.
 
 Coverage model:
 
-- Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field implementation-text inventories are not pass/fail contracts.
+- Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures. Direct helper/backend sites carry comments for the ordering rationale.
 
 Validation:
 

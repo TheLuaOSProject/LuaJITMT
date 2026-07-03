@@ -9,8 +9,8 @@ explicit `(node, hmask)` snapshots, but `hashgcref_node()` and `hashgcref()`
 still decoded collectable-key pointer bits with raw `gcrefu()`.
 
 Most callers pass local key snapshots, but the helper names define the table
-GC-key hashing contract. Keeping the raw spelling there made it easy for future
-hash probes to bypass the acquire GCRef vocabulary.
+GC-key hashing contract. The helper layer keeps future hash probes on the
+acquire GCRef vocabulary.
 
 ## Fix
 

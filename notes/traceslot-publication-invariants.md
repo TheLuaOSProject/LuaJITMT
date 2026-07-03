@@ -2,21 +2,14 @@
 
 Slice: trace-slot publication helper documentation.
 
-Changes:
-- Historical state: a legacy wrapper once matched raw `->trace[` indexing
-  before running the behavioral M5 trace publication suite. That wrapper was
-  removed with the CI invariant-testing cleanup; keep the rationale below as
-  documentation.
-
 Reasoning:
 - `traceslot_pending()`, `traceslot_publish()`, and `traceslot_clear()` now
   route slot mutation through `tracevec_acq()`.
 - Direct `J->trace[n]`-style slot mutation is unsafe because readers acquire
   the trace-vector snapshot and distinguish pending sentinels from published
   traces. Future changes should preserve that publication rule and cover
-  observable trace behavior; the source-level constraint is documented here and
-  beside the helper surface instead of being enforced by repository text
-  matching.
+  observable trace behavior; this note and the helper comments carry the
+  publication rationale.
 - The cached mirror assignment `J->trace = tv->slot` is not a publication
   boundary; production slot writes must still use the trace-slot helpers.
 

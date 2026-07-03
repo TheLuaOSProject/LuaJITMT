@@ -95,6 +95,6 @@ bytes, patch opcodes, or assert exact byte layout. Load-time verifier details
 such as version handling, cell opcode bounds, self-overwriting CGET/CSET, and
 invalid closing UCLO remain documented beside the bytecode reader/writer code;
 observable coverage should come from real source/dump round trips, stock
-suite behavior, and focused runtime fixtures, not generated-byte spelling.
+suite behavior, and focused runtime fixtures.
 t-uv-01..07: cell semantics incl. cross-thread mutation, loop-var capture,
 debug.getlocal unwrap (06 §6.4.2).

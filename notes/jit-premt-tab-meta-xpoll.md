@@ -16,5 +16,5 @@ This recovers the common no-metatable table-store loop shape after the
 not repeated after each loop `XPOLL` in pre-MT traces. Active-MT and
 entering-MT traces keep the conservative post-poll metatable load.
 
-Coverage remains behavioral and traceability-based. Generated IR dumps are useful
-for local diagnosis, but they are not pass/fail contracts.
+Coverage remains behavioral and traceability-based. The XPOLL/metatable
+rationale is documented here and beside the optimizer rule.

@@ -43,13 +43,9 @@ historical orientation and re-derive the affected worklist from the current
 code before editing. Lasting coverage must be behavioral, fixture-based,
 counter-based, stock-suite based, or tied to public artifacts such as captured
 process output, benchmark CSVs, bytecode load/execute payloads, release metadata,
-or packaging output. Repository source text, helper names, generated IR/ASM,
-generated mcode encoding, dump-token spelling, and other compiler-internal text
-are not pass/fail contracts. This includes the original
-milestone wrapper suite and any old local/release-only implementation-text inventories:
-delete those checks instead of preserving them in another runner. Implementation
-constraints belong in code-adjacent comments and notes that explain the
-ordering, ownership, nonblocking, or ABI reason.
+or packaging output. Implementation constraints belong in code-adjacent
+comments and notes that explain the ordering, ownership, nonblocking, or ABI
+reason.
 
 ### 0.3 Reading order
 
@@ -104,8 +100,8 @@ executable form of the trickiest algorithms. Port them, do not reinvent them.
    cover any allocation, table operation, string interning, barrier, or any
    code reachable from the interpreter dispatch loop. Document any permitted
    blocking boundary in the code that owns it and cover observable behavior
-   with fixtures. Do not encode this rule as source-text or CI grep checks;
-   document the allowed blocking boundaries beside the code that owns them.
+   with fixtures. Document the allowed blocking boundaries beside the code that
+   owns them.
 4. **Every shared-memory access goes through `lj_atomic.h`.** No raw
    `volatile`, no bare loads/stores of shared fields. This both defines the
    semantics and makes ThreadSanitizer meaningful.

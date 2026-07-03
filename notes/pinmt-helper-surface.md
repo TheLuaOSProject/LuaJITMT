@@ -4,7 +4,7 @@ FFI pin metatable helper surface
   metatable root.
 - Routed pin construction, `luaopen_ffi()` pin metatable publication, legacy
   GC/GC2 root marking, and GC2 paranoia checks through the helper API.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_pin` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_pin` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

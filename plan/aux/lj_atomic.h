@@ -162,8 +162,7 @@ LA_INLINE int la_membarrier_synccore(void)
 
 /* ---- compile-time checks ------------------------------------------- */
 typedef char la_assert_ptr8[sizeof(void *) == 8 ? 1 : -1];
-/* x86-64: build with -mcx16 so la_cas128 can lower to cmpxchg16b. Generated
-** object-code checks may validate this, but repository spelling is not a
-** correctness boundary. */
+/* x86-64: build with -mcx16 so la_cas128 can lower to cmpxchg16b. Runtime
+** lock-free behavior depends on the target supporting this instruction. */
 
 #endif /* _LJ_ATOMIC_H */

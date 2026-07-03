@@ -2,9 +2,9 @@
 
 `GCtab.struct_owner` is a per-table owner token for resize publication and
 compound table-library structural mutation. Same-table contenders must wait for
-that token, but the wait must not be a fixed sleep or an implementation-spelling
-gate. `tab_struct_owner_wait()` records test-only wait counters and then uses
-the shared table retry-yield helpers.
+that token, but the wait must not be a fixed sleep. `tab_struct_owner_wait()`
+records test-only wait counters and then uses the shared table retry-yield
+helpers.
 
 When a Lua stack is available, `lj_tab_wait_l()` enters native state for the
 short yield and polls safepoints on leave, so STOPREQ remains observable before
@@ -22,4 +22,4 @@ cooperative per-generation resize/helper-copy target replaces the token.
 `m5_tab_struct_owner` owns the behavior coverage: independent tables must not
 serialize with each other, same-table structural contenders must wait until the
 owner is released, and both L-aware and TLS-only callers must make retry
-progress without making implementation spelling a test contract.
+progress.

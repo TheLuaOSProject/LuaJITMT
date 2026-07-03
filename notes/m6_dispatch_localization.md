@@ -24,10 +24,9 @@ M6 x64 dispatch localization:
   depending on a main-TG dispatch offset.
 - The removed main-TG-relative macros are intentionally absent from
   `lj_dispatch.h`. Keep that invariant documented beside any future dispatch
-  macro additions rather than reintroducing implementation-text checks.
+  macro additions.
 - Secondary TGs may acquire the recorder token and enter `BC_JLOOP` mcode.
-  The old implementation-text validation checks were removed once `RID_DISPATCH`
-  addressing was limited to fixed `DISPATCH_TG(...)` fields.
+  `RID_DISPATCH` addressing is now limited to fixed `DISPATCH_TG(...)` fields.
 - `lj_dispatch_update()` requests `HS_REDISPATCH` when more than one TG is live,
   so attached TG dispatch tables refresh through their own safepoint
   acknowledgement instead of remote copying.

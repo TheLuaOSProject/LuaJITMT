@@ -5,7 +5,7 @@ CType name object helper
 - Routed ctype snapshots, name lookup snapshots, field snapshots, enum-constant
   snapshots, and FFI typeinfo/layout snapshots through the helper instead of
   direct `gcref_acq(ct->name)` loads.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

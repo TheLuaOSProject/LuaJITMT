@@ -12,4 +12,4 @@ the existing global hook/profiler design.
 
 Coverage model: profiler start/stop behavior and STOPREQ freshness are covered
 by behavior fixtures. The profiler abort flag ownership is documented beside the
-helper/code path; raw field spelling is not a test contract.
+helper/code path.

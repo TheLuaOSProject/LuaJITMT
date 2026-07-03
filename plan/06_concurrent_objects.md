@@ -414,13 +414,14 @@ remains a temporary safety bridge until cooperative per-generation resize
 ownership/helper-copy replaces it. Same-table contenders now use cooperative
 retry-yield and acquire-load the owner token on each retry; fixed timed sleeps
 are not part of the structural-owner bridge. New trace recording is enabled for
-non-table code and fresh table allocation under secondary TGs, but
-non-trace-local table loads/stores and
-`next()` traversal still fall back to the interpreter after MT activation;
-stock single-threaded JIT behavior is unchanged. The remaining M5/M6 work is to
-teach the recorder/JIT shared table load/store/traversal helpers
-generation-following guards so traced shared-table mutation can be re-enabled
-under MT.
+non-table code and fresh table allocation under secondary TGs. Current
+helper-backed shared table loads and stores also trace after MT activation for
+the covered raw-slot, previous-nil, new-key, array, and hash cases; direct
+`next()`/optimized `pairs()` traversal over non-trace-local shared tables still
+falls back to the interpreter. Stock single-threaded JIT behavior is unchanged.
+The remaining M5/M6 table work is to give shared traversal a versioned or
+generation-following runtime contract and finish the broader generation-aware
+table write protocol.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

@@ -1,10 +1,10 @@
 Generated-artifact test cleanup
 ================================
 
-Removed the active test layer that failed CI based on LuaJIT dump text,
-generated IR markers, helper names, or x64 mcode snippets. Those checks were
-useful while bringing individual JIT paths online, but they made the suite
-enforce implementation details instead of the lockless invariant itself.
+Removed the active test layer that compared LuaJIT internal generated output.
+Those checks were useful while bringing individual JIT paths online, but they
+made the suite enforce implementation details instead of the lockless invariant
+itself.
 
 Current coverage keeps the observable requirements:
 
@@ -18,11 +18,10 @@ Current coverage keeps the observable requirements:
 
 Implementation-route requirements such as why a path uses a helper, an acquire
 load, a poll boundary, a TG-local buffer, or an inline allocation predicate
-belong beside the implementation and in notes. They should not be reintroduced
-as pass/fail checks over source text, dump text, helper spelling, or mcode
-bytes. If a route matters for performance, cover it with benchmarks or focused
-runtime counters; if it matters for safety, cover the behavior that would break
-when the route is wrong.
+belong beside the implementation and in notes. If a route matters for
+performance, cover it with benchmarks or focused runtime counters; if it
+matters for safety, cover the behavior that would break when the route is
+wrong.
 
 Follow-up: bytecode dump tests now use dump/load execution as the observable
 contract. Active tests must not parse dump bytes, patch generated opcodes, or

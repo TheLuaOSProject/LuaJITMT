@@ -12,8 +12,8 @@ Slice
 - Documented why `GCArena.hdr.next` is owned by the arena helper surface:
   arena chains are published between allocator, GC, and GC2 code, so list-head
   and next-link accesses need one acquire/release vocabulary. The runnable
-  coverage stays in arena sweep and GC2 scaffold behavior fixtures, not in
-  implementation-text inventories.
+  coverage stays in arena sweep and GC2 scaffold behavior fixtures, with this
+  note and the helper comments carrying the ownership rationale.
 
 Validation
 ----------

@@ -21,8 +21,8 @@ Validation:
 2026-07-03 follow-up:
 
 - Active `m6_jit_mcode_publish` no longer inspects generated exit-stub encoding
-  or asserts a specific x64 jump form. That route is documented instead of being
-  enforced through generated-code spelling.
+  or asserts a specific x64 jump form. That route is documented beside the
+  relevant backend code.
 - The durable invariant is that published mcode metadata is acquired before
   readers use it, mcode protection remains W^X/execute-stable where the target
   requires it, and traces continue to execute under small-mcode pressure. Those

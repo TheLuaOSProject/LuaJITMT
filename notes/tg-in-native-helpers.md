@@ -11,7 +11,7 @@ Changes:
 - Routed production native enter/leave, channel/sleep clear paths, GC2 worker
   joins, safepoint remote native ack, and FFI callback re-entry checks through
   the helper layer.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m3_safepoint_handshake` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m3_safepoint_handshake` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Validation:
 

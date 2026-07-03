@@ -8,17 +8,13 @@ fixes for scoped trace retirement, stale x64 loop bytecode fallback, legacy
 GC mark-cycle roots, table-generation reclamation, single-TG emergency trace
 flush, and trace-number reuse under concurrent full/scoped flush.
 
-## Invariant Coverage Policy
+## Invariant Documentation
 
 The active Lua harness and CI prove invariants through runtime behavior,
 counters, benchmark data, public runtime artifacts, packaging output, release
-metadata, or code-adjacent documentation. The old repository text enumerator was
-removed from
-`tests/lib/ljtest.lua`; artifact reads remain available through `Test:read()`
-and `suite_utils.read_file()`. Generated-output tests inspect artifacts
-produced by the build/runtime. Old milestone wrappers are historical notes, not
-checks to reintroduce. If one described a real lockless invariant,
-the invariant belongs in code comments/notes and in behavior, fixture, counter,
+metadata, or code-adjacent documentation. Artifact reads remain available
+through `Test:read()` and `suite_utils.read_file()`. A real lockless invariant
+belongs in code comments/notes and in behavior, fixture, counter,
 stock-semantics, public-artifact, or release coverage when it is observable.
 
 ## Scoped trace flush and stale loop fallback

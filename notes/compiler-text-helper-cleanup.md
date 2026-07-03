@@ -4,16 +4,15 @@ Compiler-Text Helper Cleanup
 Context
 -------
 
-Historical context: the Lua test suite previously matched generated JIT text and
-bytecode spelling. Those checks have since been removed from active tests because
-they pinned implementation spelling instead of behavior.
+Historical context: the Lua test suite previously matched generated compiler
+text. That coverage moved to runtime behavior, trace existence, C fixtures, and
+code-adjacent comments.
 
 Fix
 ---
 
 Superseded: the shared generated-text helper module and repeated marker probes
-were deleted. The same invariants now use runtime behavior, trace existence, C
-fixtures, and code-adjacent comments.
+were deleted.
 
 Validation
 ----------

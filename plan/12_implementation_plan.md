@@ -10,14 +10,10 @@ invariant check without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
 github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). CI must prove
 builds, runtime behavior, public API/ABI compatibility, benchmark data, or
-packaging output. Repository source-text and generated IR/ASM/mcode pass/fail
-checks are not allowed. Old implementation inventories were one-off engineering
-orientation, not tests, and old milestone wrapper suites do not get an
-exception. Do not keep them as disabled, local-only, or release-only checks.
-Keep lasting invariants in behavior fixtures, C race/lifetime fixtures,
-release/bytecode artifact checks where the artifact is the public product, and
-code-adjacent comments plus notes when the rule is design guidance rather than
-observable behavior. Run
+packaging output. Keep lasting invariants in behavior fixtures, C race/lifetime
+fixtures, release/bytecode artifact checks where the artifact is the public
+product, and code-adjacent comments plus notes when the rule is design guidance
+rather than observable behavior. Run
 `aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.
@@ -27,9 +23,8 @@ Tasks: drop in `aux/lj_atomic.h` as src/lj_atomic.h (verify it compiles
 with gcc/clang on x86-64). Create lj_tg.h/.c with TGState (03
 §3.2) embedded in GG_State; `g->jitp`; move tmpbuf/tmptv/tmptv2/prng/
 cur_L/jit_base accessors through `G2TG`-style macros that resolve to the
-embedded TG. Historical one-off implementation-text inventories located the original
-tmpbuf/cur_L/jit_base sites; do not recreate those spelling checks as tests.
-The lasting requirement is documented beside the helper/accessor layer.
+embedded TG. Document the lasting tmpbuf/cur_L/jit_base ownership requirement
+beside the helper/accessor layer.
 02 §2.4 tv_rawstore macro
 layer routes final 64-bit moves through `lj_atomic`. lj_mtfields.md seeded
 (02 §2.5).
@@ -64,10 +59,10 @@ leader loop, lazy+worker sweep, defer_free epochs, pacing, torture,
 LJ_GC2_PARANOIA STW-diff oracle (05 §5.13 — build this FIRST). Barrier:
 add always-on C-side GC2 insertion hooks to the existing legacy barrier
 macros first, preserving the legacy color barriers until their oracle role is
-finished. Historical barrier-owner inventories covered the C API, table/meta,
-function/state, cdata/callback, vmevent, library, VM, and JIT paths; keep the
-lasting proof in behavior fixtures, runtime stress, and comments beside the
-constrained helpers rather than in an old wrapper check. Add the dasc
+finished. Barrier ownership spans the C API, table/meta, function/state,
+cdata/callback, vmevent, library, VM, and JIT paths; keep the lasting proof in
+behavior fixtures, runtime stress, and comments beside the constrained helpers.
+Add the dasc
 `wbarrier_tv` macro plus TSET*/USET*
 wiring (07 §7.4). Weak tables + finalizer queue minimal (full in M8).
 collectgarbage mapping (05 §5.10).
@@ -153,10 +148,12 @@ branches, preserving the `TSETM` table barrier while the stored value snapshot
 drives GC2 and legacy repair.
 Active-MT recording no longer disables all new traces: secondary TGs can still
 record numeric/non-table root and side traces, plus fresh table allocations,
-under the recorder token. The current temporary table boundary is narrower and
-recorder-local: after `mt_active`, non-trace-local table loads/stores and
-`next()` traversal stay interpreted until the table generation-following guards
-cover those trace shapes.
+under the recorder token. Helper-backed non-trace-local table loads/stores now
+trace after `mt_active` for the covered raw-slot, previous-nil, new-key, array,
+and hash cases. The remaining recorder-local table boundary is direct
+`next()`/optimized `pairs()` traversal over non-trace-local shared tables, which
+stays interpreted until traversal has a versioned or generation-following
+runtime contract.
 The original generation-aware table write protocol and broader
 AHdr/NHdr table-generation port remain pending.
 Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror

@@ -4,7 +4,7 @@ CType retired table head helpers
   `ctype_retiredtab_xchg_acqrel()` for the CTState retired CTypeTab list head.
 - Routed table retirement push, epoch reclaim, final free, legacy GC memory
   marking, GC2 memory marking, and GC2 paranoia scans through the helper API.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_tab_retire` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_tab_retire` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

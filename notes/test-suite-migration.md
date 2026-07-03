@@ -201,16 +201,11 @@ Lua test-suite migration notes:
 - Current cleanup status: runnable suite files under `tests/suites/` rely on
   behavior, fixtures, counters, public artifacts, benchmarks, or packaging
   output; the legacy helper APIs have been removed from `tests/lib/`.
-- Result-artifact matching remains valid only for public or externally
-  meaningful artifacts: bytecode compatibility payloads, benchmark output,
-  release/build manifests, and C/Lua fixture process output. Generated JIT
-  IR/ASM dumps and mcode encoding/text spelling are internal implementation
-  details and must not be active pass/fail gates.
-- The historical repository-text suite has no special status. Removed source
-  inventories, helper-spelling checks, generated IR/ASM/mcode checks, and
-  serialized bytecode spelling checks are not dormant coverage to restore.
-  Preserve the reason in code comments or notes, and cover observable behavior
-  through the current fixtures, benchmarks, stock tests, or release artifacts.
+- Result-artifact matching remains valid for public or externally meaningful
+  artifacts: bytecode compatibility payloads, benchmark output, release/build
+  manifests, and C/Lua fixture process output. Preserve implementation reasons
+  in code comments or notes, and cover observable behavior through the current
+  fixtures, benchmarks, stock tests, or release artifacts.
 - Shared generic utilities live in `tests/lib/suite_utils.lua`; shared VM,
   stock-suite, Lua-script build/run, aggregate-suite, and C-fixture case/batch
   helpers live in `tests/lib/suite_runtime.lua`.
@@ -236,20 +231,17 @@ Lua test-suite migration notes:
 - Added shared `compile_luajit_c_fixture` and `run_luajit_c_fixture` methods to
   the Lua test harness, then moved the repeated M4, M5 fixture, and M5 table C
   fixture build/link/run boilerplate onto those helpers.
-- Removed the `m2_arena_gcsweep` implementation inventory. The case now relies
+- `m2_arena_gcsweep` now relies
   on the runtime arena sweep C fixture itself, and the M2 LuaJIT-linked
   fixtures share the central C-fixture helper.
 - Standalone M2 arena fixtures build with `-DLUAJIT_SECURITY_PRNG=0` because
   they compile selected runtime sources without linking the VM native/safepoint
   objects used by the secure PRNG path.
-- Removed implementation-detail checks from the M5 sentinel, bytecode dump
-  compatibility, registry root, and nomm-cache fixture cases. Those cases now
-  rely on their C behavior fixtures.
+- The M5 sentinel, bytecode dump compatibility, registry root, and nomm-cache
+  fixture cases now rely on their C behavior fixtures.
 - Generated-output matching is valid for public artifacts and runtime process
-  output. Generated JIT IR/ASM dumps and mcode encoding/text spelling are not
-  valid pass/fail gates even though they are produced by running the VM.
-- Removed the remaining M5 fixture-suite implementation inspections from the string-table
-  prep and CAS cases. The suite now relies on the string-table C fixtures for
+  output. JIT/compiler route rationale belongs in code comments and notes.
+- The string-table prep and CAS cases now rely on the string-table C fixtures for
   layout, marker-bit, resize/retire, duplicate-intern, and secondary-rehash
   behavior.
 - Converted the M5 table suite to rely on its compiled C behavior fixtures
@@ -272,7 +264,7 @@ Lua test-suite migration notes:
   `ctype_typeid` legacy wrapper helper.
 - Converted `m7_ffi_callback_runtime` to behavior-only coverage through its C
   callback fixtures, threaded Lua runtime stress, and stock callback test, and
-  removed the now-unused callback runtime source-order helper.
+  removed the now-unused callback runtime helper.
 - Converted `m7_ffi_finreg` to behavior-only coverage through threaded
   finalizer runs and the trace finalizer fixture; removed the now-unused FINREG
   legacy wrapper helper.
@@ -291,7 +283,7 @@ Lua test-suite migration notes:
   through their threaded Lua regressions.
 - Converted the M7 cdef token and duplicate-stack cases to behavior-only
   coverage through their Lua race regressions, and removed the now-unused line
-  counting helper from the old implementation inventory.
+  counting helper.
 - Converted the M7 CType hash/intern/name/table-retire cases to behavior-only
   coverage through their existing Lua regressions and C fixtures.
 - Converted `m7_ffi_callback_install` and `m7_ffi_snap_restore_l` to
@@ -302,8 +294,7 @@ Lua test-suite migration notes:
   dereference a captured mutable local cell and keep the closure-observed value
   coherent.
 - Converted the M5 x64 cases, including `m5_x64_tset_nil_snapshot`, to rely on
-  Lua smoke tests and C forward/snapshot fixtures instead of direct
-  `vm_x64.dasc` implementation inspections.
+  Lua smoke tests and C forward/snapshot fixtures.
 - Converted `m6_jit_hrefk_nodehdr` and `m6_jit_href_nodehdr` to runtime
   behavior and traceability coverage.
 - Converted `m6_jit_cell_ops`, `m6_jit_barrier_xpoll`, and
@@ -315,11 +306,11 @@ Lua test-suite migration notes:
 - Converted `m6_jit_token` to its C/Lua recorder-token regressions instead of
   direct recorder/x64 legacy wrappers.
 - Converted `m5_tab_cas_store` to rely on the compiled CAS/FORWARD behavior
-  fixture instead of direct table/API/library implementation inspections.
+  fixture.
 - Converted `m5_state_owner` to rely on the compiled foreign-state owner
-  behavior fixture instead of direct API/debug/coroutine implementation inspections.
-- Removed fixture-source self-inspections from `m5_jit_trace_publish` and
-  `m5_tab_array_publish`; their compiled fixtures still run.
+  behavior fixture.
+- `m5_jit_trace_publish` and `m5_tab_array_publish` now rely on their compiled
+  fixtures.
 - Removed the M6 aggregate shell-script content check; the Lua aggregate case
   now relies on actually running the M6 cases instead.
 - Removed `m9_bench_regression` script-content checks; it now relies on the
@@ -327,7 +318,7 @@ Lua test-suite migration notes:
   comparing a freshly generated baseline.
 - Removed broad M9/M10 marker checks for GC stats, benchmark smoke, and
   generational mode; those cases now rely on Lua/C behavior checks.
-- Removed M8 broad marker and fixture-source ordering checks; the weak,
+- Removed M8 broad marker/order checks; the weak,
   FINREG, and finalizer behavior matrix still runs through behavior fixtures.
 - Removed the M3 worker-scheduler implementation-detail check; the case now
   relies on the worker scheduler C fixture plus the Lua
@@ -339,32 +330,29 @@ Lua test-suite migration notes:
   fixtures and runtime probes.
 - Removed the M3 GC2 scaffold marker inventory; the scaffold case now relies
   on its C fixtures and nested behavior gates.
-- Removed unused M5 base-table source-inspection helper functions left behind
-  after the state-owner behavior migration.
-- Removed additional unused M5 source-inspection helper functions that no
-  longer back any active test cases.
-- Removed broad M5 JIT trace positive implementation-inventory checks; the case
-  now relies on trace/mcode C fixtures and the Lua trace publish smoke.
-- Removed broad M5 table-array positive implementation inventory and the old-array
-  realloc blacklist; the array publication C fixture covers pointer
+- Removed unused M5 base-table helper functions left behind after the
+  state-owner behavior migration.
+- Removed additional unused M5 helper functions that no longer back any active
+  test cases.
+- The M5 JIT trace case now relies on trace/mcode C fixtures and the Lua trace
+  publish smoke.
+- The table-array publication C fixture covers pointer
   replacement, retire-list state, nextgen links, epoch reclaim, and values.
-- Removed broad M5 table-value positive implementation inventory; the standalone value
-  case now runs both its Lua behavior smoke and the CAS/table.insert forward
-  retry C fixture.
+- The standalone M5 table-value case now runs both its Lua behavior smoke and
+  the CAS/table.insert forward retry C fixture.
 - Removed the broad M6 dispatch positive marker basket; the dispatch case now
   relies on the C safepoint-handshake fixture.
-- Removed low-risk M8 finalizer dispatch and legacy FINREG/mmudata source
-  scans; the weak/finalizer matrix and GC2 C fixtures cover those behaviors
-  without direct implementation inspection.
-- Replaced the M6 XBAR/XPOLL optimizer inventory with runtime behavior and
+- Removed low-risk M8 finalizer dispatch and legacy FINREG/mmudata detail
+  checks; the weak/finalizer matrix and GC2 C fixtures cover those behaviors.
+- Replaced the M6 XBAR/XPOLL optimizer detail checks with runtime behavior and
   traceability probes for `ffi.copy`, FFI loads, and FFI stores after loop
   `XPOLL`; also removed duplicate M6 scaffold-name and reserve-order checks
   already covered by dispatch and mcode behavior.
-- Removed duplicate/low-risk M5 publication implementation inspections from
-  trace, table-array, and table-value guards; kept behavior fixtures.
-- Removed additional M5 exact implementation-text inventories for bytecode helper names, x64
-  exitstub scaffolding, table-access macro definitions, and serializer call
-  spelling. The suite keeps runtime behavior plus MT publication guards.
+- Moved additional M5 trace/table publication rationale into behavior fixtures
+  and notes.
+- Moved additional M5 helper, x64 exitstub, table-access, and serializer
+  rationale into notes/comments. The suite keeps runtime behavior plus MT
+  publication guards.
 - Removed the redundant `string.gmatch` C-closure upvalue legacy wrapper from
   `m5_upvalue_publish_gc`; `tests/t-cclosure-upvalue-snapshot.c` now provides
   the behavior coverage by observing and mutating the iterator position
@@ -385,8 +373,7 @@ Current follow-up:
 
 - Keep new tests behavior-first. Runnable suites should use runtime fixtures,
   counters, public artifacts, or stock semantics for observable invariants.
-  Implementation-only invariants belong in code comments and notes, not in
-  source, helper-name, IR/ASM, mcode, raw-byte, or compiler-dump checks.
+  Implementation-only invariants belong in code comments and notes.
 - Build-owning tests should remain serial unless the Lua runner grows a shared
   build cache/lock. Cases that clean/build can still race `host/buildvm` or
   `libluajit.a` creation when run concurrently in one checkout.

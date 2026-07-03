@@ -16,7 +16,7 @@ CData core helper loads
 - Routed `cdata_getconst()`, `lj_cdata_get_l()`, and `lj_cdata_set_l()` through
   helper-backed info/size loads for const/bitfield, child, ref, attribute, and
   write-const checks.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_get_l` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_get_l` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

@@ -11,8 +11,8 @@ Table hash-write current trace evidence, 2026-07-03:
   allocation/assist check sequence, TG-owned tmpbuf/string construction for the
   benchmark key path, node-header hash-mask loads, string-table publication, and
   first-fill/resize publication work.
-- Do not reintroduce implementation-text checks for this. The durable coverage
-  is `m6_jit_table_store_helper`, `m6_jit_tbar_gc2_black_gate`,
+- The durable coverage is `m6_jit_table_store_helper`,
+  `m6_jit_tbar_gc2_black_gate`,
   `m6_jit_tmpbuf_thread_format`, `m6_jit_barrier_xpoll`,
   `t-jit-forward-store`, `t-jit-entering-table-store`,
   `t-jit-tg-tmpbuf-reset`, and stock/bench comparison runs.

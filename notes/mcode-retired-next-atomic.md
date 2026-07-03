@@ -12,8 +12,7 @@ Changes:
   links through the helper.
 - Documented why mcode retired-record `next` is a shared publication link and
   must use acquire/release helper access. Mcode retirement, GC scan, and
-  focused fixtures cover behavior; comments and notes carry the rationale
-  instead of repository text matching.
+  focused fixtures cover behavior; comments and notes carry the rationale.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

@@ -5,7 +5,7 @@ CConv C-to-TValue helper loads
   copy-out conversion paths.
 - Reused the acquired size for integer copy-out, bool normalization, and cdata
   allocation size decisions.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

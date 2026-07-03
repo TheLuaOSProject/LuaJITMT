@@ -7,7 +7,7 @@ CType payload store helpers
   helper surface before publishing the abandoned records.
 - Updated the duplicate-loser assertion to acquire-load the abandoned payload
   through `ctype_info_acq()`.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_ticket_intern` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_ticket_intern` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

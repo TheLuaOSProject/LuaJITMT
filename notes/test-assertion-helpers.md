@@ -5,9 +5,8 @@ Context
 -------
 
 Some Lua suites still hand-rolled checks for generated files, captured output,
-and expected command failures. These checks are behavior-oriented, but broad
-text-pattern helpers made it too easy to recreate source/dump spelling gates
-under a different name.
+and expected command failures. The shared helpers now name the public artifact
+being checked so the test intent stays explicit.
 
 Fix
 ---
@@ -18,11 +17,9 @@ Fix
 * exact/plain text containment checks
 * expected command failure checks
 
-Generic Lua-pattern and generic source-text assertion helpers were removed from
-the active harness. If an invariant needs a constrained implementation shape,
-document why beside the code and in a note; tests should cover the observable
-behavior or public artifact, not source text, generated IR/ASM text, bytecode
-spelling, or generated mcode encoding.
+If an invariant needs a constrained implementation shape, document why beside
+the code and in a note; tests should cover the observable behavior or public
+artifact.
 
 M4 shutdown markers, M5 bytecode dump/load behavior checks, and M9 benchmark
 regression failure checks use concrete artifact assertions.

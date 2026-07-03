@@ -15,7 +15,7 @@
   and requires a trace abort instead of a parser-lock wait.
 - Removed stale legacy wrappers and duplicate implementation-detail tests.
   Observable compatibility is now covered by runtime behavior and stock
-  semantics instead of recorder/helper spelling.
+  semantics, with recorder/helper rationale in comments and notes.
 
 ## Kept deliberately
 

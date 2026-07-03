@@ -8,7 +8,7 @@ CConv aggregate helper loads
   subtype, and union behavior.
 - Routed `lj_cconv_multi_init()` and `lj_cconv_ct_init_l()` aggregate decisions
   through helper-backed destination info loads.
-- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field implementation-text inventories are not pass/fail contracts.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:
 

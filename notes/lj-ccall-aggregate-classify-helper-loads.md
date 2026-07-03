@@ -16,8 +16,8 @@ lj_ccall aggregate classification helper loads
   converted-payload accesses behind the helper surface: a wait-capable
   conversion may park on parser ownership, so later classifier reads need a
   stable acquisition model. The runnable coverage stays in C-call/native
-  behavior fixtures and typeinfo snapshot tests, not in implementation-text
-  inventories.
+  behavior fixtures and typeinfo snapshot tests; this note and the helper
+  comments carry the classifier rationale.
 - `tests/t-ffi-ccall-struct-overflow.c` forces six integer arguments followed
   by a parser-owned small struct argument so SysV x64 spills the converted
   struct to the stack after waiting in native time.

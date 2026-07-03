@@ -13,7 +13,7 @@ M6 helper-backed NEWREF key resolution:
 - Coverage model: the M6 JIT table-store behavior fixtures check
   resolve-before-CAS ordering, the key-aware weak bridge, and both retiring
   regression cases. The helper ordering rationale belongs next to the helper
-  code; tests should exercise the behavior rather than source spelling.
+code; tests should exercise the behavior.
 
 Follow-up: key-aware ASTORE/HSTORE helper routing:
 - Extended the same idea to existing helper-backed array/hash stores.

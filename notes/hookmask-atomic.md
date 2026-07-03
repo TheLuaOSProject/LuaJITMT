@@ -22,13 +22,12 @@ follow-up.
 
 Coverage model: `m5_hookmask_atomic` covers hookmask behavior through the helper
 surface and Lua smoke. The recorder field-address exception and backend memory
-operands are documented beside the code because they are implementation details,
-not source-text or generated-code pass/fail contracts.
+operands are documented beside the code, with observable behavior covered by
+fixtures.
 
 Validation:
 
 - `tools/ci/m5_hookmask_atomic.sh`: passed.
 - `tools/ci/m5_state_owner.sh`: passed.
--: passed.
 - `tools/ci/m5_concurrent_objects.sh`: passed.
 - `git diff --check`: passed.

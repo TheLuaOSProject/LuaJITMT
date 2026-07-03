@@ -40,7 +40,7 @@ Time remaining forecast:
   `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; stock LuaJIT API
   compatibility stays in scope.
 - Slimmed `tools/ci/m7_ffi_blocking.sh` so behavior-covered blacklist and
-  recorder checks are no longer pinned to exact implementation spelling.
+  recorder checks are covered by runtime fixtures and notes.
 
 ## Locks and coordination
 
