@@ -1,11 +1,12 @@
 # Invariant Tests And Documentation
 
 The Lua test harness and CI do not predicate pass/fail on repository source
-text. Tests should prove observable VM behavior, generated compiler/artifact
-output, or release packaging. Implementation-only rules should be documented
-beside the code they constrain. Matching helper names, function calls, field
-accesses, or snippets freezes spelling rather than the concurrency property we
-care about.
+text. This is a blanket rule, including old milestone source-check suites and
+one-off historical wrappers: do not port them forward. Tests should prove
+observable VM behavior, generated compiler/artifact output, or release
+packaging. Implementation-only rules should be documented beside the code they
+constrain. Matching helper names, function calls, field accesses, or snippets
+freezes spelling rather than the concurrency property we care about.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read generated dumps, captured logs, temporary files,
@@ -32,9 +33,10 @@ generated ASM/mcode output is the artifact to inspect.
 
 Historical entries that mention static repository-text assertions, per-case
 wrapper scripts, or the old explicit source-reading helper document why a
-helper or fixture was added. They are historical context only. The useful rule
-from those entries is the invariant itself: memory ordering, ownership,
-publication, native-state discipline, or ABI shape.
+helper or fixture was added. They are historical context only and are not a
+backlog of checks to preserve. When one still matters, carry forward the
+invariant itself: memory ordering, ownership, publication, native-state
+discipline, or ABI shape.
 
 Examples:
 

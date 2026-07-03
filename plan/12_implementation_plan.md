@@ -4,14 +4,18 @@ Your task list. Each milestone: goal → tasks (with spec refs) → tests →
 acceptance gate. Do not start Mn+1 before Mn's gate is green. Estimated
 diff sizes are for sanity-checking scope, not deadlines.
 
-## M0 — Harness & guardrails (≈300 lines)
+## M0 — Harness & invariant coverage (≈300 lines)
 Tasks: pin the commit (00 §0.2). Add the ADR-1 x86-64/GC64 `#error`
 guardrail without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
 github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). Do not add CI
 that passes or fails by grepping repository source for call names or snippets;
-source inventory is one-off engineering archaeology, not a test. Use behavior
-fixtures, generated dump/ASM checks, or design notes for guardrails. Run
+source inventory is one-off engineering archaeology, not a test. This applies
+to old milestone source-check suites too: remove those checks instead of
+porting them. Keep the invariant in behavior fixtures, C race/lifetime
+fixtures, generated dump/ASM checks when code generation is the observable
+artifact, and code-adjacent comments plus notes when the rule is design
+guidance rather than observable behavior. Run
 `aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.

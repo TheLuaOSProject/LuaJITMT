@@ -17,6 +17,10 @@ artifact reads remain
 available through `Test:read()` and `suite_utils.read_file()`. Current scans
 only find documentation/historical notes or generated-output/source-path build
 usage, not active repository-text tests.
+This policy also covers the old milestone guard wrappers: they are historical
+notes, not checks to reintroduce. If one described a real lockless invariant,
+the invariant belongs in code comments/notes and in behavior, fixture, or
+generated-artifact coverage when it is observable.
 
 ## Scoped trace flush and stale loop fallback
 

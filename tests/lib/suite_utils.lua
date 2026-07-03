@@ -51,8 +51,9 @@ end
 function M.read_file(path)
   -- Intentionally plain: callers use this for generated dumps, logs,
   -- fixtures, and other artifacts. Implementation-only invariants belong next
-  -- to the code they constrain; observable invariants belong in behavior or
-  -- generated-artifact tests.
+  -- to the code they constrain; observable invariants belong in behavior,
+  -- fixture, or generated-artifact tests. Do not revive repository-source
+  -- pass/fail checks through this helper.
   return read_raw_file(path)
 end
 
