@@ -7,16 +7,16 @@ architecture boundaries, or temporary migration contracts. Those rules belong
 in comments, design notes, review checklists, behavior fixtures, or generated
 artifact checks.
 
-This policy supersedes older notes that mention deliberate static source-text checks,
-per-case guard scripts, or `suite_utils.read_source_file()`.
+This policy supersedes older notes that mention deliberate static source-text
+checks, per-case source-search scripts, or `suite_utils.read_source_file()`.
 Treat those older entries as historical context for why a helper exists, not as
 instructions to recreate any historical guard suite.
 
-The old source-file guard compatibility APIs have been removed from the Lua test
-harness. `Test:read()` and `suite_utils.read_file()` are plain artifact readers,
-and `Test:files()` is not a supported test oracle. Do not reintroduce generic
-helpers that read repository source and search for snippets; use behavior
-fixtures, generated dump assertions, or documentation instead.
+The old source-file oracle compatibility APIs have been removed from the Lua
+test harness. `Test:read()`, `suite_utils.read_file()`, and `Test:files()` are
+plain artifact/file helpers. Do not reintroduce generic helpers that read
+repository source and search for snippets; use behavior fixtures, generated
+dump assertions, or documentation instead.
 
 2026-06-29 audit result: active `tools/ci`, `tools/test.lua`, `tests/suites`,
 `tests/lib`, top-level `tests/*.lua`, and top-level `tests/*.c` have no
@@ -41,10 +41,10 @@ behavior, C fixtures, and generated JIT/bytecode/runtime dumps where behavior
 is observable. Non-observable ordering requirements belong in comments near the
 helper or in `notes/`, not in CI source-text predicates.
 
-2026-07-03 follow-up: removed the path-based source-read rejection from
-`suite_utils.read_file()` and `Test:read()`. Source guards are no longer kept as
-harness machinery. The rule is documented here and enforced by code review:
-active tests must not pass or fail by reading repository source text.
+2026-07-03 follow-up: removed the path-based source-read hardening from
+`suite_utils.read_file()` and `Test:read()`, and restored `Test:files()` as a
+plain enumeration helper. The rule is documented here and enforced by code
+review: active tests must not pass or fail by reading repository source text.
 
 The only supported shell entrypoint under `tools/ci/` is
 `tools/ci/lua_test.sh`. Run focused cases as

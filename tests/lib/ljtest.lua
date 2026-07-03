@@ -51,6 +51,18 @@ local function append_flags(parts, flags)
   end
 end
 
+local function has_extension(path, extensions)
+  if not extensions then return true end
+  if type(extensions) == "string" then
+    return path:sub(-#extensions) == extensions
+  end
+  for i = 1, #extensions do
+    local ext = extensions[i]
+    if path:sub(-#ext) == ext then return true end
+  end
+  return false
+end
+
 function M.new(root)
   local self = {
     root = root,
@@ -80,8 +92,27 @@ function Test:read(path)
 end
 
 function Test:files(dir, opts)
-  error("repository file enumeration is not a supported test oracle; use " ..
-        "behavior fixtures or generated artifacts", 2)
+  -- Plain file enumeration is useful for generated fixture directories and
+  -- imported suites. Repository source-text oracle tests are excluded by
+  -- policy and review, not by making the harness reject ordinary file access.
+  opts = opts or {}
+  local cmd = "find " .. shell_quote(dir)
+  if opts.recursive == false then cmd = cmd .. " -maxdepth 1" end
+  cmd = cmd .. " -type f -print"
+  local p, err = io.popen(cmd)
+  if not p then error("find failed: " .. tostring(err), 2) end
+  local files = {}
+  for path in p:lines() do
+    if has_extension(path, opts.extensions) then
+      files[#files + 1] = path
+    end
+  end
+  local ok, why, code = p:close()
+  if not ok then
+    error("find failed (" .. tostring(code or why or ok) .. "): " .. cmd, 2)
+  end
+  table.sort(files)
+  return files
 end
 
 function Test:remove(path)
