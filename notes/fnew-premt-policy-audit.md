@@ -1,0 +1,30 @@
+# FNEW pre-MT tracing policy audit
+
+Date: 2026-07-03
+
+The remaining `closures_upval` gap is not just GC pacing. An isolated loop that
+creates a closure over one numeric local and immediately calls it measured about
+70 ns/op with GC enabled and 47 ns/op with GC stopped on the fork, versus about
+39 ns/op and 18 ns/op on stock LuaJIT in the same container.
+
+`-jdump=im` shows why the shapes differ:
+
+- Stock LuaJIT aborts the outer trace on `BC_FNEW` and traces the inner closure
+  body (`UREFO`/`ULOAD`/`USTORE`) separately.
+- The fork traces the outer loop and emits
+  `CALLA lj_func_newL_gc1num_forjit` for each closure allocation, followed by
+  prototype/upvalue guards and closed-cell loads/stores.
+
+A tempting performance policy is to make pre-MT `FNEW` stock-like and only
+record helper-backed `FNEW` once `mt_entering || mt_active` is visible. That is
+not a small mechanical cleanup in the current tree: `m6_jit_cell_ops` explicitly
+asserts source and loaded local-cell `CNEW/FNEW` creation traces before MT
+activation, including the one-upvalue numeric helper. Changing the policy would
+need a matching test rewrite that proves active-MT FNEW creation still traces
+and that pre-MT fallback remains stock-semantics compatible.
+
+Current conclusion: keep the helper-backed FNEW tracing policy until the next
+closure slice can either implement real trace-local closure/upvalue sinking or
+deliberately move the FNEW tracing requirement to the active-MT phase with
+equivalent coverage. Do not silently remove pre-MT FNEW traces as a benchmark
+shortcut.
