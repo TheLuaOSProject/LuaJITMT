@@ -48,6 +48,7 @@ local m6_cases = {
   "m6_jit_flush_hs",
   "m6_jit_util_flush_race",
   "m6_jit_flush_thread_stress",
+  "m6_jit_flush_thread_heavy_stress",
   "m6_jit_mt_activation_flush",
   "m6_jit_vmevent_flush",
   "m6_jit_gdbjit_publish",
@@ -1978,6 +1979,29 @@ assert(live >= 8, live)
       luajit_file(t, t:path("tests", "t-jit-flush-thread-stress.lua"),
                   { lua_path = true, timeout = "60s" })
       print("M6 JIT threaded flush stress passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_flush_thread_heavy_stress",
+    description = "heavier threaded JIT flush stress with progress diagnostics",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-flush-thread-stress.lua"), {
+        lua_path = true,
+        timeout = os.getenv("LJ_M6_JIT_FLUSH_THREAD_HEAVY_TIMEOUT") or "90s",
+        env = {
+          LJ_M6_JIT_FLUSH_THREAD_THREADS =
+            os.getenv("LJ_M6_JIT_FLUSH_THREAD_HEAVY_THREADS") or "4",
+          LJ_M6_JIT_FLUSH_THREAD_ROUNDS =
+            os.getenv("LJ_M6_JIT_FLUSH_THREAD_HEAVY_ROUNDS") or "96",
+          LJ_M6_JIT_FLUSH_THREAD_CHURN =
+            os.getenv("LJ_M6_JIT_FLUSH_THREAD_HEAVY_CHURN") or "192",
+          LJ_M6_JIT_FLUSH_THREAD_JOIN_TIMEOUT =
+            os.getenv("LJ_M6_JIT_FLUSH_THREAD_HEAVY_JOIN_TIMEOUT") or "60"
+        }
+      })
+      print("M6 JIT threaded flush heavy stress passed")
     end
   })
 

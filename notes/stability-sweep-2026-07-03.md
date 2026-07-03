@@ -309,8 +309,10 @@ repatching the claims above:
   writers, and parked GC2 workers.
 - JIT trace flush/side-trace stress under concurrent thread activation and
   shutdown. `tests/t-jit-flush-thread-stress.lua` is wired as
-  `m6_jit_flush_thread_stress` and passes at suite scale; future work should
-  raise the monitored stress limits and capture live thread stacks if a long
-  unmonitored run hits the outer timeout.
+  `m6_jit_flush_thread_stress`. Follow-up coverage adds
+  `m6_jit_flush_thread_heavy_stress` with 4 long-lived workers, 96 flush rounds,
+  192 short-lived thread activations, and progress snapshots on join failure.
+  The stress now reports recent worker/churn progress, live trace count, and GC2
+  telemetry before surfacing a timeout/error.
 - GC root publication stress across pending-root drains, active `mt_entering`,
   and GC2 worker activity.
