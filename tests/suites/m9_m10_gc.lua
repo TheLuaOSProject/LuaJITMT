@@ -105,7 +105,7 @@ local function run_gc_stats(t)
   t:build({ clean = true, quiet = true })
 
   run_luajit_script_jit_modes(t, "t-gc-stats.lua")
-  print("M9 GC stats guard passed")
+  print("M9 GC stats behavior passed")
 end
 
 local function run_trace_hard_assist_cadence(t)
@@ -145,7 +145,7 @@ local function run_trace_hard_assist_cadence(t)
       "assist_delta=",
       { timeout = "20s", stderr = true })
   end)
-  print("M9 trace hard-assist cadence guard passed")
+  print("M9 trace hard-assist cadence behavior passed")
 end
 
 local function run_bench_smoke(t)
@@ -178,7 +178,7 @@ local function run_bench_smoke(t)
       " closures_upval",
     { "closures_upval", "ns/op" },
     { timeout = "20s" })
-  print("M9 benchmark smoke guard passed")
+  print("M9 benchmark smoke passed")
 end
 
 local function run_bench_regression(t)
@@ -342,14 +342,14 @@ local function run_bench_regression(t)
       { timeout = "20s", stderr = true })
     assert(aux_compare:find("geomean", 1, true))
   end)
-  print("M9 benchmark regression accounting guard passed")
+  print("M9 benchmark regression accounting behavior passed")
 end
 
 local function run_bench_stock_compare(t)
   local current = t:path("src", "luajit")
   local stock, explicit = find_stock_luajit(current)
   if not stock then
-    print("M9 stock benchmark guard skipped; no stock luajit found")
+    print("M9 stock benchmark check skipped; no stock luajit found")
     return
   end
 
@@ -358,7 +358,7 @@ local function run_bench_stock_compare(t)
   local bench_lua = t:path("aux", "bench", "bench.lua")
   local filters = os.getenv("LJ_BENCH_STOCK_FILTERS") or
     "arith_loop fib30 tab_hash_write alloc_tables closures_upval"
-  -- The stock guard is meant to catch real throughput cliffs, not only
+  -- The stock comparison is meant to catch real throughput cliffs, not only
   -- accounting mistakes. Keep the default loose enough for current focused
   -- gaps and CI variance, but far below the historical 50x+ regressions.
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
@@ -384,7 +384,7 @@ local function run_bench_stock_compare(t)
     io.write("stock benchmark ", filter, " geomean ",
              ("%.6f"):format(result.geomean or 0), "\n")
   end
-  print("M9 stock benchmark guard passed with " .. stock ..
+  print("M9 stock benchmark check passed with " .. stock ..
         (explicit and "" or " (autodetected)"))
 end
 
@@ -393,7 +393,7 @@ local function run_generational(t)
 
   run_luajit_script_jit_modes(t, "t-gc-generational-mode.lua")
   build_and_run_alloc_account(t)
-  print("M10 generational mode guard passed")
+  print("M10 generational mode behavior passed")
 end
 
 local m9_m10_deps = {
@@ -414,7 +414,7 @@ return function(add)
 
   add({
     name = "m9_trace_hard_assist_cadence",
-    description = "trace allocation hard-assist cadence guard",
+    description = "trace allocation hard-assist cadence behavior",
     run = run_trace_hard_assist_cadence
   })
 
@@ -426,19 +426,19 @@ return function(add)
 
   add({
     name = "m9_bench_regression",
-    description = "benchmark CSV/geomean accounting guard",
+    description = "benchmark CSV/geomean accounting behavior",
     run = run_bench_regression
   })
 
   add({
     name = "m9_bench_stock_compare",
-    description = "optional stock LuaJIT performance guard",
+    description = "optional stock LuaJIT performance check",
     run = run_bench_stock_compare
   })
 
   add({
     name = "m10_generational",
-    description = "fork-local generational GC mode and accounting guard",
+    description = "fork-local generational GC mode and accounting behavior",
     run = run_generational
   })
 

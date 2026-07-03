@@ -582,7 +582,7 @@ return function(add)
 
   add({
     name = "m5_jit_trace_publish",
-    description = "JIT trace-slot and trace-link publication guards",
+    description = "JIT trace-slot and trace-link publication behavior",
     run = function(t)
       t:build({ quiet = true })
       run_c_fixture_specs(t, {
@@ -591,7 +591,7 @@ return function(add)
         { output = "lj_t-jit-trace-retire", cfile = "t-jit-trace-retire.c" }
       }, { timeout = "20s" })
       run_luajit(t, { "-e", jit_trace_publish_smoke() })
-      print("M5 JIT trace publication guard passed")
+      print("M5 JIT trace publication behavior passed")
     end
   })
 
@@ -628,10 +628,10 @@ return function(add)
 
   add({
     name = "m5_wrapcf_func_publish",
-    description = "C wrapper callback release-publication guard",
+    description = "C wrapper callback release-publication behavior",
     run = function(t)
       t:build({ quiet = true })
-      print("M5 C wrapper callback publication guard passed")
+      print("M5 C wrapper callback publication behavior passed")
     end
   })
 
@@ -725,7 +725,7 @@ return function(add)
 
   add({
     name = "m5_tab_array_publish",
-    description = "table array publication and retirement guards",
+    description = "table array publication and retirement behavior",
     run = function(t)
       t:build({ clean = true, quiet = true })
       build_and_run_c(t, t:tmp("lj_t-tab-array-publish"),
@@ -749,7 +749,7 @@ return function(add)
         cflags = "-DLJ_TAB_TEST_HELPERS",
         timeout = "20s"
       })
-      print("M5 colocated array resize freeze guard passed")
+      print("M5 colocated array resize freeze behavior passed")
     end
   })
 
@@ -773,7 +773,7 @@ return function(add)
 
   add({
     name = "m5_tab_value_publish",
-    description = "C-side table value release-publication guards",
+    description = "C-side table value release-publication behavior",
     run = function(t)
       t:build({
         clean = true,
@@ -786,7 +786,7 @@ return function(add)
         cflags = "-DLJ_TAB_TEST_HELPERS",
         timeout = "20s"
       })
-      print("M5 table value publication guard passed")
+      print("M5 table value publication behavior passed")
     end
   })
 

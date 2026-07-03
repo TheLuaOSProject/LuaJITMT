@@ -140,7 +140,7 @@ return function(add)
         cflags = "-DLJ_TAB_TEST_HELPERS",
         timeout = "20s"
       })
-      print("M5 FINREG new-key stale-generation guard passed")
+      print("M5 FINREG new-key stale-generation behavior passed")
     end
   })
 
@@ -159,7 +159,7 @@ return function(add)
         cflags = "-DLJ_TAB_TEST_HELPERS",
         timeout = "20s"
       })
-      print("M5 table next snapshot guard passed")
+      print("M5 table next snapshot behavior passed")
     end
   })
 

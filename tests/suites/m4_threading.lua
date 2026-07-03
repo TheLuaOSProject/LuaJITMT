@@ -85,8 +85,11 @@ return function(add)
 
           for _, path in ipairs({ marker, spin_marker }) do
             local data = t:read(path)
-            checks.assert_text_match("shutdown marker first line", data,
-                                     "^false\n", "marker text")
+            local first = checks.lines(data)[1]
+            if first ~= "false" then
+              error("shutdown marker first line: expected false, got " ..
+                    tostring(first), 2)
+            end
             checks.assert_text_contains("shutdown interruption marker", data,
                                         "thread interrupted: VM shutdown",
                                         "marker text")

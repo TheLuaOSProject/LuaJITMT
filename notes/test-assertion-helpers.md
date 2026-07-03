@@ -5,20 +5,27 @@ Context
 -------
 
 Some Lua suites still hand-rolled checks for generated files, captured output,
-and expected command failures. These checks are behavior-oriented, but the local
-assertion code made the suites harder to read.
+and expected command failures. These checks are behavior-oriented, but broad
+text-pattern helpers made it too easy to recreate source/dump spelling gates
+under a different name.
 
 Fix
 ---
 
-`suite_utils` now has helpers for:
+`suite_utils`/`suite_assert` now keep only artifact-oriented helpers for:
 
 * any-of text marker checks
-* file contains/match checks
+* exact/plain text containment checks
 * expected command failure checks
 
+Generic Lua-pattern assertion helpers were removed from the active harness. If
+an invariant needs a constrained implementation shape, document why beside the
+code and in a note; tests should cover the observable behavior or public
+artifact, not source text, generated IR/ASM text, bytecode spelling, or mcode
+bytes.
+
 M4 shutdown markers, M5 bytecode dump/load behavior checks, and M9 benchmark
-regression failure checks now use the shared helpers.
+regression failure checks use concrete artifact assertions.
 
 Validation
 ----------

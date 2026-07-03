@@ -251,7 +251,7 @@ return function(add)
 
   add({
     name = "m5_prng_seed_native",
-    description = "no-argument math.randomseed native entropy guard",
+    description = "no-argument math.randomseed native entropy behavior",
     run = function(t)
       build_and_run_c(t, t:tmp("lj_t-prng-seed-native"),
                       "t-prng-seed-native.c")

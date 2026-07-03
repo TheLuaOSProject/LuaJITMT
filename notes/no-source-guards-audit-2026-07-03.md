@@ -25,3 +25,6 @@ platform build smoke script; GitHub CI builds/runs platform binaries and does
 not grep repository source; Lua suite file reads target temporary outputs,
 benchmark CSVs, bytecode/load artifacts, and release/build artifacts. Historical
 notes that mention old grep/source/dump checks are audit history, not a backlog.
+The active Lua assertion helper layer no longer exposes generic pattern-match
+assertions; exact/plain text checks remain for public artifacts and captured
+process output.

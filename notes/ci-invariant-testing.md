@@ -38,6 +38,11 @@ than compare byte spelling. Generated JIT IR, generated ASM, objdump output,
 and mcode bytes are compiler-internal implementation spelling and are not active
 test gates.
 
+The active assertion helpers intentionally avoid generic regex/pattern
+assertions. Plain containment/count checks are enough for public artifact
+markers and make it harder to turn source, generated dump, or mcode spelling
+back into a CI contract.
+
 Historical entries that mention old wrapper scripts or implementation-detail
 requirements are audit history only. They are not tests to preserve, port,
 restore, or emulate. When one still matters, carry forward the invariant

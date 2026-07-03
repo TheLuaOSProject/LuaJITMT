@@ -58,7 +58,7 @@ return function(add)
 
   register({
     name = "m3_gc2_worker_scheduler",
-    description = "staged GC2 parked-worker scheduler guard and fixtures",
+    description = "staged GC2 parked-worker scheduler behavior and fixtures",
     run = function(t)
       local pthread = os.getenv("PTHREAD") or "-pthread"
       make_clean(t)

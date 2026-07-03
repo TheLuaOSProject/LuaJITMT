@@ -14,12 +14,6 @@ function M.count_plain(s, needle)
   end
 end
 
-function M.count_match(s, pattern)
-  local count = 0
-  for _ in s:gmatch(pattern) do count = count + 1 end
-  return count
-end
-
 function M.lines(s)
   local out = {}
   for line in (s .. "\n"):gmatch("(.-)\n") do
@@ -36,13 +30,6 @@ function M.assert_text_contains(label, data, needle, what)
   what = what or "text"
   if not M.contains(data, needle) then
     error(label .. ": missing " .. what .. ": " .. needle, 2)
-  end
-end
-
-function M.assert_text_match(label, data, pattern, what)
-  what = what or "pattern"
-  if not data:match(pattern) then
-    error(label .. ": missing " .. what .. ": " .. pattern, 2)
   end
 end
 
@@ -66,16 +53,6 @@ function M.assert_text_contains_count(label, data, needle, mincount, what)
   if n < mincount then
     error(label .. ": expected at least " .. mincount .. " " .. what ..
           " occurrences of " .. needle .. ", saw " .. n, 2)
-  end
-  return n
-end
-
-function M.assert_text_match_count(label, data, pattern, mincount, what)
-  what = what or "pattern"
-  local n = M.count_match(data, pattern)
-  if n < mincount then
-    error(label .. ": expected at least " .. mincount .. " " .. what ..
-          " matches for " .. pattern .. ", saw " .. n, 2)
   end
   return n
 end

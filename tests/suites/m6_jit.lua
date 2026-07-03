@@ -487,7 +487,7 @@ end
 return function(add)
   add({
     name = "m6_dispatch_redispatch",
-    description = "M6 dispatch redispatch and x64 TG-local dispatch guards",
+    description = "M6 dispatch redispatch and x64 TG-local dispatch behavior",
     run = function(t)
       t:build({ clean = true, quiet = true })
       build_and_run_c(t, t:tmp("lj_t_safepoint_handshake"),
@@ -496,7 +496,7 @@ return function(add)
         build = false,
         cflags = "-DLJ_GC2_TEST_HELPERS"
       })
-      print("M6 dispatch redispatch guard passed")
+      print("M6 dispatch redispatch behavior passed")
     end
   })
 
@@ -704,7 +704,7 @@ assert(s == 240)
 assert(util.traceinfo(1), "table length loop did not trace")
 ]=])
       run_lua_test_case(t, "m5_jit_hash_store_nyi")
-      print("M6 JIT XBAR/XPOLL alias guard passed")
+      print("M6 JIT XBAR/XPOLL alias behavior passed")
     end
   })
 
@@ -1679,7 +1679,7 @@ for tr = 1, 64 do
 end
 assert(live >= 8, live)
 ]=], { timeout = os.getenv("M6_MCODE_TIMEOUT") or "60s" })
-      print("M6 JIT mcode native boundary guard passed")
+      print("M6 JIT mcode native boundary behavior passed")
     end
   })
 
@@ -1723,7 +1723,7 @@ assert(live >= 8, live)
 ]=], { timeout = timeout })
       luajit_file(t, t:path("tests", "t-jit-mcode-fresh.lua"),
                   { lua_path = true, timeout = timeout })
-      print("M6 JIT mcode publication guard passed")
+      print("M6 JIT mcode publication behavior passed")
     end
   })
 
@@ -1735,7 +1735,7 @@ assert(live >= 8, live)
       run_lua_test_case(t, "m5_jit_trace_publish")
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
-      print("M6 JIT flush handshake guard passed")
+      print("M6 JIT flush handshake behavior passed")
     end
   })
 
@@ -1746,7 +1746,7 @@ assert(live >= 8, live)
       build_default(t)
       luajit_file(t, t:path("tests", "t-jit-util-flush-race.lua"),
                   { lua_path = true, timeout = "30s" })
-      print("M6 jit.util concurrent flush reader guard passed")
+      print("M6 jit.util concurrent flush reader behavior passed")
     end
   })
 
@@ -1807,7 +1807,7 @@ local worker = threading.spawn(function() return true end)
 assert(({ worker:join(5) })[1] == true)
 assert(trace_count(200) == 0, "first thread activation did not flush traces")
 ]=], { timeout = "20s" })
-      print("M6 JIT MT activation flush guard passed")
+      print("M6 JIT MT activation flush behavior passed")
     end
   })
 
@@ -1818,7 +1818,7 @@ assert(trace_count(200) == 0, "first thread activation did not flush traces")
       build_default(t)
       luajit_file(t, t:path("tests", "t-jit-vmevent-flush.lua"),
                   { lua_path = true, timeout = "20s" })
-      print("M6 JIT VM event flush hook guard passed")
+      print("M6 JIT VM event flush hook behavior passed")
     end
   })
 
@@ -1940,7 +1940,7 @@ end
         env = { LUA_PATH = runtime.lua_path(t) },
         timeout = "20s"
       })
-      print("M6 JIT upvalue mutation flush guard passed")
+      print("M6 JIT upvalue mutation flush behavior passed")
     end
   })
 
@@ -1950,7 +1950,7 @@ end
     run = function(t)
       build_default(t)
       luajit_code(t, env_mutation_flush_smoke(), { timeout = "20s" })
-      print("M6 JIT environment mutation flush guard passed")
+      print("M6 JIT environment mutation flush behavior passed")
     end
   })
 
