@@ -1,7 +1,10 @@
 local M = {}
 
--- Public text means command output or test-owned files, not source, IR, ASM or
--- mcode spelling. Use behavioral fixtures or runtime counters for those.
+-- Public text is command output or a test-owned artifact: logs, benchmark CSVs,
+-- manifests, release metadata, and similar product-facing text. Internal
+-- implementation constraints are documented beside the constrained code and
+-- covered through behavior fixtures, runtime counters, benchmarks, or package
+-- artifacts.
 
 local function text_contains(s, needle)
   return s:find(needle, 1, true) ~= nil

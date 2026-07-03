@@ -24,3 +24,9 @@
   into another runner. If a historical check described a real requirement, keep
   the requirement as a code-adjacent explanation and cover only the observable
   behavior or product artifact.
+- 2026-07-03 follow-up after the full historical-suite scope was clarified:
+  the harness keeps only ordinary artifact readers. Source-text pass/fail
+  wrappers, including disabled, local-only, release-only, and historical
+  milestone variants, are not part of the runnable suite. The real invariants
+  are documented at the helper or subsystem that owns them and are tested only
+  where they have observable behavior or product artifacts.
