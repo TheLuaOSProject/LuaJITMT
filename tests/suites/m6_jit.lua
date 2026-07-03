@@ -323,6 +323,44 @@ assert(util.traceinfo(1), "tmpbuf vararg concat loop did not trace")
 ]=]
 end
 
+local function assert_existing_href_store_omits_tbar(t, dump)
+  local data = t:read(dump)
+  local inir = false
+  local href, ne, hstore, tbar, newref = false, false, false, false, false
+  local found = false
+
+  local function finish_trace()
+    if href and ne and hstore and not newref then
+      if tbar then
+        io.stderr:write(data)
+        error("existing dynamic HREF primitive store emitted TBAR", 2)
+      end
+      found = true
+    end
+  end
+
+  for line in lines(data) do
+    if contains(line, "---- TRACE") and contains(line, " IR") then
+      inir = true
+      href, ne, hstore, tbar, newref = false, false, false, false, false
+    elseif inir and contains(line, "---- TRACE") and contains(line, " stop") then
+      finish_trace()
+      inir = false
+    elseif inir then
+      if contains(line, " HREF ") then href = true end
+      if contains(line, " NE ") then ne = true end
+      if contains(line, " HSTORE ") then hstore = true end
+      if contains(line, " TBAR ") then tbar = true end
+      if contains(line, " NEWREF ") then newref = true end
+    end
+  end
+
+  if not found then
+    io.stderr:write(data)
+    error("existing dynamic HREF primitive store trace not found", 2)
+  end
+end
+
 local function cclosure_upvalue_flush_smoke()
   return [=[
 local trace_count = require"jit_harness".trace_count
@@ -1489,7 +1527,7 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
 
   add({
     name = "m6_jit_tbar_gc2_black_gate",
-    description = "M6 JIT numeric table barriers do not flood GC2 grey work",
+    description = "M6 JIT numeric table barriers only cover required edges",
     run = function(t)
       build_default(t)
       luajit_code(t, [=[
@@ -1525,6 +1563,19 @@ end
 collectgarbage("collect")
 assert(next(weak) == nil, "key-only TBAR kept a weak key alive")
 ]=], { timeout = "20s" })
+      local existing_dump = t:tmp("lj-m6-existing-href-store-tbar.dump")
+      luajit_dump(t, existing_dump, "-jdump=i", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local t = {}
+for i = 1, 128 do t["k" .. i] = 0 end
+for i = 1, 80 do
+  local k = "k" .. ((i % 128) + 1)
+  t[k] = i
+end
+assert(t.k1 == 0 and t.k81 == 80)
+]=], { timeout = "20s" })
+      assert_existing_href_store_omits_tbar(t, existing_dump)
       build.with_default_build_restore(t, function()
         build.make_clean(t)
         build_default(t, {

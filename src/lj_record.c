@@ -2100,8 +2100,15 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       }
     } else if (!lj_opt_fwd_wasnonnil(J, loadop, tref_ref(xref))) {
       /* Cannot derive that the previous value was non-nil, must do checks. */
-      if (xrefop == IR_HREF)  /* Guard against store to niltv. */
+      if (xrefop == IR_HREF) {  /* Guard against store to niltv. */
 	emitir(IRTG(IR_NE, IRT_PGC), xref, lj_ir_kkptr(J, niltvg(J2G(J))));
+	/* The runtime guard proves this is an existing non-nil slot. For
+	** strong keys, the key edge was established by the original insertion.
+	** Weak-key tables must not get a synthetic strong edge from a numeric
+	** update.
+	*/
+	keybarrier = 0;
+      }
       if (ix->idxchain) {  /* Metamethod lookup required? */
 	/* A check for NULL metatable is cheaper (hoistable) than a load. */
 	if (!mt) {
