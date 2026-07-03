@@ -873,6 +873,20 @@ int main(void)
   assert(g->gc2.hs_actions == actions);
   assert((lj_trace_state_load(G2J(g)) & LJ_TRACE_ACTIVE) == 0);
   lj_trace_state_store(G2J(g), LJ_TRACE_IDLE);
+
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  lj_tg_store_jit_base(tg, L->base ? L->base : L->top);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_EXIT_TRACES;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(tg->reqmask == 0);
+  assert(tg->poll == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(lj_tg_load_jit_base(tg) != NULL);
+  lj_tg_store_jit_base(tg, NULL);
 #endif
 
   lua_newtable(L);

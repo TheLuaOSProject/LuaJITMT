@@ -426,10 +426,22 @@ static int safepoint_trace_tg_active(global_State *g)
 {
 #if LJ_HASJIT
   TGState *tg;
+  TGState *self = lj_thr_get_tg_fallback(g);
+  uint32_t leader = gc2_hs_leader_acq(g);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+      continue;
+    /*
+    ** Trace quiescence protects peer TGs that may still need trace slots or
+    ** mcode while leaving compiled code. The leader can legitimately start a
+    ** trace-flush handshake from trace-exit C code before vm_exit_interp has
+    ** cleared its own jit_base; waiting for that self-published edge would be
+    ** a self-deadlock. The leader still applies its own safepoint action
+    ** synchronously before this quiescence check.
+    */
+    if (tg == self && leader != 0 && lj_tg_tid_acq(tg) == leader)
       continue;
     if (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0)
       return 1;
