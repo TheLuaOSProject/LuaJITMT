@@ -15,6 +15,7 @@ local m5_concurrent_cases = {
   "m5_tab_next_snapshot",
   "m5_tab_forward_filter",
   "m5_tab_resize_stress",
+  "m5_tab_resize_weakfinjit_stress",
   "m5_tab_capi_resize_stress",
   "m5_tab_cas_store",
   "m5_tab_clear_entering",

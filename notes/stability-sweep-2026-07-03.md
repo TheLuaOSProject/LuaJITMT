@@ -312,6 +312,9 @@ repatching the claims above:
   `m5_tab_resize_weakfinjit_stress`: weak-key table entries whose values are
   finalizable cdata, traced readers over rooted object keys, concurrent resize
   writers, and parked GC2 workers.
+  2026-07-03 aggregate follow-up: `m5_concurrent_objects` now includes the
+  focused `weakfinjit` case so local M5 aggregate validation exercises this
+  cross-product instead of only the broader default resize stress.
 - JIT trace flush/side-trace stress under concurrent thread activation and
   shutdown. `tests/t-jit-flush-thread-stress.lua` is wired as
   `m6_jit_flush_thread_stress`. Follow-up coverage adds
