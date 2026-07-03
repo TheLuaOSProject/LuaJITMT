@@ -414,8 +414,9 @@ static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
 
 /*
 ** M5 publication wrappers. These preserve current incremental-GC behavior
-** while moving runtime call sites away from raw barrier macro names counted by
-** the milestone guard.
+** while naming the publication boundary shared by GC2 and the legacy
+** incremental barrier. Callers use these wrappers when publishing references
+** that can be observed by another thread or by a concurrent GC traversal.
 */
 #define lj_gc_pubtab(L, t) \
   { lj_gc2_barrier_tab((L), (t)); \

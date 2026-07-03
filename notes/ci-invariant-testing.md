@@ -55,7 +55,7 @@ Examples:
 - Native entropy and mcode paths need behavioral fixtures for STOPREQ/native
   boundary handling.
 
-Raw-byte/codegen work follows the same split. VM DynASM source should use
+Opcode/codegen work follows the same split. VM DynASM source should use
 mnemonic DynASM syntax for active instructions. Low-level x86 JIT emitter
 helpers may centralize opcode constants such as lock-prefixed CAS, but tests
 validate the generated mcode and runtime behavior.

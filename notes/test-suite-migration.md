@@ -285,7 +285,7 @@ Lua test-suite migration notes:
   through their threaded Lua regressions.
 - Converted the M7 cdef token and duplicate-stack cases to behavior-only
   coverage through their Lua race regressions, and removed the now-unused line
-  counting source helper.
+  counting helper from the old implementation inventory.
 - Converted the M7 CType hash/intern/name/table-retire cases to behavior-only
   coverage through their existing Lua regressions and C fixtures.
 - Converted `m7_ffi_callback_install` and `m7_ffi_snap_restore_l` to

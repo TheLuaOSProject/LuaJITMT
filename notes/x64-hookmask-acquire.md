@@ -9,8 +9,9 @@ TSO acquire-compatible load, matching the existing table/header acquire macros
 in `vm_x64.dasc`, while keeping the generated instruction sequence unchanged.
 
 Coverage: `m5_hookmask_atomic` and `m5_concurrent_objects` own the observable
-hook-mask behavior. Raw `byte GL:*->hookmask` loads in `vm_x64.dasc` must stay
-behind the documented macro; observable behavior is covered by the named fixtures.
+hook-mask behavior. Direct `byte GL:*->hookmask` loads in `vm_x64.dasc` go
+through the documented macro so the generated VM load has an explicit
+publication contract; observable behavior is covered by the named fixtures.
 
 Validation:
 - `tools/ci/lua_test.sh m5_hookmask_atomic` passed.
