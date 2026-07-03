@@ -59,3 +59,28 @@ Validation:
 Validation:
 
 - `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot`
+
+## 2026-07-03 single-thread current-array fast path
+
+- Added a narrow fast path inside `lj_tab_storetvn_forvm_array()` for the common
+  single-thread/current-array case.
+- The helper still remains the x64 VM entry point for `BC_TSETM`; DynASM does
+  not bypass the parent-aware helper. The helper now direct release-copies the
+  range only when:
+  - no Lua thread is active or entering MT execution,
+  - the destination range fits in the currently published array,
+  - the separated array is not retiring,
+  - none of the destination slots contains `FORWARD`, and
+  - the table does not need weak-write handling.
+- If any condition fails, the helper keeps the existing per-key resolver and
+  keyed CAS path, so racy resizes and forwarded slots still republish into the
+  logical table.
+- The direct path still runs the existing post-copy table/range barrier when
+  marking is active or the parent table is black.
+- Added `LJ_TAB_TEST_HELPERS` counters to `t-tab-cas-store.c` so coverage proves
+  the current-array path is taken and `mt_entering` forces the fallback without
+  relying on source text.
+
+Validation:
+
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m5_tab_cas_store`

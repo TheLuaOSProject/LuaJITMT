@@ -412,6 +412,8 @@
 |  load_G r8
 |  cmp dword GL:r8->mt_active, 0
 |  jne target
+|  cmp dword GL:r8->mt_entering, 0
+|  jne target
 |.endmacro
 |.macro x64_vm_basemt_acq, dst, g, itype
 |  mov dst, [g+itype*8+GL_OFS(gcroot[GCROOT_BASEMT])]	// x64_vm_basemt_acq.

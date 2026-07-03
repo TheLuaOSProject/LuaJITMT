@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -14,6 +15,10 @@
 #include "lj_tab.h"
 
 #include "lib/tab_forward_helpers.h"
+
+#ifndef LJ_TAB_TEST_HELPERS
+#error "t-x64-tset-forward requires LJ_TAB_TEST_HELPERS"
+#endif
 
 enum {
   TSETM_FORWARD_START = 21,
@@ -160,6 +165,35 @@ static void exercise_vm_tsetm_forward_retry(lua_State *L)
   lua_setglobal(L, "tsetm_forward_result");
 }
 
+static void exercise_vm_tset_entering_helpers(lua_State *L)
+{
+  global_State *g = G(L);
+  uint32_t array_calls0, hash_calls0;
+
+  lua_settop(L, 0);
+  lj_tab_test_reset_vm_array_store_calls();
+  lj_tab_test_reset_vm_strhash_store_calls();
+  array_calls0 = lj_tab_test_vm_array_store_calls();
+  hash_calls0 = lj_tab_test_vm_strhash_store_calls();
+
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  tabfwd_load_lua(L,
+    "local t = { 0, 0, 0, stable = 0 }\n"
+    "local k = 2\n"
+    "t[1] = 1101\n"
+    "t[k] = 2202\n"
+    "for i = 3, 3 do t[i] = 3303 end\n"
+    "t.stable = 4404\n"
+    "assert(t[1] == 1101 and t[2] == 2202 and t[3] == 3303)\n"
+    "assert(t.stable == 4404)\n");
+  tabfwd_run_loaded(L);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, INT_MAX);
+
+  assert(lj_tab_test_vm_array_store_calls() >= array_calls0 + 3u);
+  assert(lj_tab_test_vm_strhash_store_calls() >= hash_calls0 + 1u);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -272,6 +306,7 @@ int main(void)
   assert(tabfwd_get_i32(t, key_r) == val_r);
   assert(tabfwd_get_i32(t, key_helper) == val_helper);
 
+  exercise_vm_tset_entering_helpers(L);
   exercise_vm_tsetm_forward_retry(L);
 
   lua_close(L);

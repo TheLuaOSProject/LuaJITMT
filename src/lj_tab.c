@@ -112,6 +112,9 @@ static uint32_t tab_test_struct_owner_no_l_futex_waits;
 static uint32_t tab_test_struct_enter_acquires;
 static uint32_t tab_test_new0_calls;
 static uint32_t tab_test_clear_shared_calls;
+static uint32_t tab_test_tsetm_fast_calls;
+static uint32_t tab_test_vm_array_store_calls;
+static uint32_t tab_test_vm_strhash_store_calls;
 
 static LJ_AINLINE void tab_test_struct_owner_l_futex_wait(void)
 {
@@ -136,6 +139,21 @@ static LJ_AINLINE void tab_test_new0_call(void)
 static LJ_AINLINE void tab_test_clear_shared_call(void)
 {
   (void)la_add32_acqrel(&tab_test_clear_shared_calls, 1);
+}
+
+static LJ_AINLINE void tab_test_tsetm_fast_call(void)
+{
+  (void)la_add32_acqrel(&tab_test_tsetm_fast_calls, 1);
+}
+
+static LJ_AINLINE void tab_test_vm_array_store_call(void)
+{
+  (void)la_add32_acqrel(&tab_test_vm_array_store_calls, 1);
+}
+
+static LJ_AINLINE void tab_test_vm_strhash_store_call(void)
+{
+  (void)la_add32_acqrel(&tab_test_vm_strhash_store_calls, 1);
 }
 
 uint32_t lj_tab_test_struct_owner_l_futex_waits(void)
@@ -188,6 +206,36 @@ void lj_tab_test_reset_clear_shared_calls(void)
   la_store32_rel(&tab_test_clear_shared_calls, 0);
 }
 
+uint32_t lj_tab_test_tsetm_fast_calls(void)
+{
+  return la_load32_acq(&tab_test_tsetm_fast_calls);
+}
+
+void lj_tab_test_reset_tsetm_fast_calls(void)
+{
+  la_store32_rel(&tab_test_tsetm_fast_calls, 0);
+}
+
+uint32_t lj_tab_test_vm_array_store_calls(void)
+{
+  return la_load32_acq(&tab_test_vm_array_store_calls);
+}
+
+void lj_tab_test_reset_vm_array_store_calls(void)
+{
+  la_store32_rel(&tab_test_vm_array_store_calls, 0);
+}
+
+uint32_t lj_tab_test_vm_strhash_store_calls(void)
+{
+  return la_load32_acq(&tab_test_vm_strhash_store_calls);
+}
+
+void lj_tab_test_reset_vm_strhash_store_calls(void)
+{
+  la_store32_rel(&tab_test_vm_strhash_store_calls, 0);
+}
+
 uint32_t lj_tab_test_wait_no_l_calls(void)
 {
   return la_load32_acq(&tab_test_wait_no_l_calls);
@@ -203,6 +251,9 @@ void lj_tab_test_reset_wait_no_l_calls(void)
 #define tab_test_struct_enter_acquire()			((void)0)
 #define tab_test_new0_call()				((void)0)
 #define tab_test_clear_shared_call()			((void)0)
+#define tab_test_tsetm_fast_call()			((void)0)
+#define tab_test_vm_array_store_call()			((void)0)
+#define tab_test_vm_strhash_store_call()		((void)0)
 #endif
 
 static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
@@ -2970,6 +3021,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
   TValue *orig = dst;
   TValue keytv;
   int weakwr = lj_gc2_weak_write_begin(L, parent);
+  tab_test_vm_array_store_call();
   /* The x64 VM runs its existing table barrier sequence after this helper. */
   setintV(&keytv, (int32_t)key);
   if (weakwr) {
@@ -2999,6 +3051,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_strhash(lua_State *L, GCtab *parent,
   TValue *orig = dst;
   cTValue *barrier_key;
   int weakwr;
+  tab_test_vm_strhash_store_call();
   setstrV(L, &keytv, key);
   barrier_key = &keytv;
   weakwr = lj_gc2_weak_write_begin(L, parent);
@@ -3166,15 +3219,51 @@ static void tab_tsetm_barrier_range(lua_State *L, GCtab *parent, uint32_t start,
   }
 }
 
+static LJ_AINLINE TValue *tab_tsetm_fast_range(GCtab *parent, uint32_t start,
+					       uint32_t n)
+{
+  TValue *array;
+  MSize asize;
+  uint32_t i;
+  if (n == 0)
+    return NULL;
+  asize = tab_store_array_snapshot_acq(parent, &array);
+  if (!array || start > asize || n > asize - start)
+    return NULL;
+  if (!lj_tab_array_is_colocated(parent, array) &&
+      lj_tab_array_is_retiring(parent, array))
+    return NULL;
+  for (i = 0; i < n; i++) {
+    TValue old;
+    lj_tv_load_acq(&old, &array[start + i]);
+    if (tvisforward(&old))
+      return NULL;
+  }
+  return &array[start];
+}
+
 LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
 					  uint32_t start, cTValue *src,
 					  uint32_t n)
 {
+  global_State *g;
   uint32_t i;
   int weakwr;
   if (!L || !parent || !src || n == 0)
     return;
+  g = G(L);
   weakwr = lj_gc2_weak_write_begin(L, parent);
+  if (!weakwr && !mt_active_or_entering_acq(g)) {
+    TValue *dst = tab_tsetm_fast_range(parent, start, n);
+    if (dst) {
+      tab_test_tsetm_fast_call();
+      (void)lj_tab_storetvn(L, dst, src, n);
+      if (tab_tsetm_barrier_needed(L, parent))
+	lj_gc_pubtabtvn_vm(L, parent, dst, n);
+      lj_gc2_weak_write_end(L, weakwr);
+      return;
+    }
+  }
   for (i = 0; i < n; i++) {
     TValue *dst;
     TValue key;

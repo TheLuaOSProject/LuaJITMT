@@ -758,9 +758,16 @@ return function(add)
     name = "m5_tab_cas_store",
     description = "table CAS store behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
+      t:build({
+        clean = true,
+        quiet = true,
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
       build_and_run_c(t, t:tmp("lj_t-tab-cas-store"),
-                      "t-tab-cas-store.c", { timeout = "20s" })
+                      "t-tab-cas-store.c", {
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s"
+      })
       print("M5 table CAS store behavior passed")
     end
   })
@@ -781,10 +788,16 @@ return function(add)
     name = "m5_x64_tset_nil_snapshot",
     description = "x64 TSET previous-value nil behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
+      t:build({
+        clean = true,
+        quiet = true,
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
       run_luajit(t, { "-joff", "-e", tset_nil_smoke() })
       build_and_run_c(t, t:tmp("lj_t-x64-tset-forward"),
-                      "t-x64-tset-forward.c")
+                      "t-x64-tset-forward.c", {
+        cflags = "-DLJ_TAB_TEST_HELPERS"
+      })
       print("M5 x64 TSET previous-value nil behavior passed")
     end
   })

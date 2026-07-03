@@ -21,6 +21,10 @@
 
 #include "lib/tab_forward_helpers.h"
 
+#ifndef LJ_TAB_TEST_HELPERS
+#error "t-tab-cas-store requires LJ_TAB_TEST_HELPERS"
+#endif
+
 #define WRITER_ITERS 40000
 
 typedef struct WriterArg {
@@ -543,6 +547,57 @@ static void exercise_tsetm_helper_forward_retry(lua_State *L)
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
 }
 
+static void exercise_tsetm_helper_current_fast(lua_State *L)
+{
+  GCtab *t;
+  TValue src[3];
+  uint32_t calls0;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+
+  setintV(&src[0], 1111);
+  setintV(&src[1], 2222);
+  setintV(&src[2], 3333);
+
+  lj_tab_test_reset_tsetm_fast_calls();
+  calls0 = lj_tab_test_tsetm_fast_calls();
+  lj_tab_storetvn_forvm_array(L, t, 4, src, 3);
+  assert(lj_tab_test_tsetm_fast_calls() == calls0 + 1u);
+  tabfwd_assert_i32(lj_tab_getint(t, 4), 1111);
+  tabfwd_assert_i32(lj_tab_getint(t, 5), 2222);
+  tabfwd_assert_i32(lj_tab_getint(t, 6), 3333);
+}
+
+static void exercise_tsetm_helper_entering_fallback(lua_State *L)
+{
+  global_State *g = G(L);
+  GCtab *t;
+  TValue src[2];
+  uint32_t calls0;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+
+  setintV(&src[0], 4444);
+  setintV(&src[1], 5555);
+
+  lj_tab_test_reset_tsetm_fast_calls();
+  calls0 = lj_tab_test_tsetm_fast_calls();
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  lj_tab_storetvn_forvm_array(L, t, 7, src, 2);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+
+  assert(lj_tab_test_tsetm_fast_calls() == calls0);
+  tabfwd_assert_i32(lj_tab_getint(t, 7), 4444);
+  tabfwd_assert_i32(lj_tab_getint(t, 8), 5555);
+}
+
 static void exercise_tsetm_helper_current_retiring(lua_State *L)
 {
   GCtab *t;
@@ -692,6 +747,8 @@ int main(void)
   exercise_capi_rawset_forward_retry(L);
   exercise_capi_setfield_forward_retry(L);
   exercise_table_insert_forward_retry(L);
+  exercise_tsetm_helper_current_fast(L);
+  exercise_tsetm_helper_entering_fallback(L);
   exercise_tsetm_helper_forward_retry(L);
   exercise_tsetm_helper_current_retiring(L);
   exercise_tsetm_helper_post_barrier(L);

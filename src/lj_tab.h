@@ -292,6 +292,12 @@ LJ_FUNC uint32_t lj_tab_test_new0_calls(void);
 LJ_FUNC void lj_tab_test_reset_new0_calls(void);
 LJ_FUNC uint32_t lj_tab_test_clear_shared_calls(void);
 LJ_FUNC void lj_tab_test_reset_clear_shared_calls(void);
+LJ_FUNC uint32_t lj_tab_test_tsetm_fast_calls(void);
+LJ_FUNC void lj_tab_test_reset_tsetm_fast_calls(void);
+LJ_FUNC uint32_t lj_tab_test_vm_array_store_calls(void);
+LJ_FUNC void lj_tab_test_reset_vm_array_store_calls(void);
+LJ_FUNC uint32_t lj_tab_test_vm_strhash_store_calls(void);
+LJ_FUNC void lj_tab_test_reset_vm_strhash_store_calls(void);
 LJ_FUNC uint32_t lj_tab_test_wait_no_l_calls(void);
 LJ_FUNC void lj_tab_test_reset_wait_no_l_calls(void);
 #endif
