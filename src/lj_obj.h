@@ -1747,6 +1747,11 @@ static LJ_AINLINE void mt_entering_futex_wake(global_State *g, int n)
   la_futex_wake(&g->mt_entering, n);
 }
 
+static LJ_AINLINE int mt_active_or_entering_acq(global_State *g)
+{
+  return mt_active_acq(g) != 0 || mt_entering_acq(g) != 0;
+}
+
 static LJ_AINLINE uint32_t mt_gc_exclusive_acq(global_State *g)
 {
   return la_load32_acq(&g->mt_gc_exclusive);

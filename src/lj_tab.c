@@ -2556,7 +2556,7 @@ void LJ_FASTCALL lj_tab_clear(lua_State *L, GCtab *t)
   ** already in progress. Avoid private raw clearing while the attach/spawn
   ** handoff can make the table visible to another thread.
   */
-  if (mt_active_acq(G(L)) || mt_entering_acq(G(L)) != 0)
+  if (mt_active_or_entering_acq(G(L)))
     tab_clear_shared(L, t);
   else
     tab_clear_raw(t);

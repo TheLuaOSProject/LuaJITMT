@@ -200,8 +200,7 @@ static LJ_AINLINE int func_legacyuv_snapshot(global_State *g, const GCproto *pt)
   ** is visible. Legacy-loaded protos do not have source cell-upvalue bytecode,
   ** so local captures must snapshot across that handoff window too.
   */
-  return proto_legacyuv(pt) &&
-	 (mt_active_acq(g) != 0 || mt_entering_acq(g) != 0);
+  return proto_legacyuv(pt) && mt_active_or_entering_acq(g);
 }
 
 /* Promote a source local slot to a closed upvalue cell, or inherit one. */

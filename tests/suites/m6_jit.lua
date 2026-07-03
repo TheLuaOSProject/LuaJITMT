@@ -35,6 +35,7 @@ local m6_cases = {
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
   "m6_jit_table_store_helper",
+  "m6_jit_entering_table_store",
   "m6_jit_tbar_gc2_black_gate",
   "m6_jit_aref_pair_guard",
   "m6_jit_hrefk_nodehdr",
@@ -1250,6 +1251,19 @@ assert(util.traceinfo(1), "boolean hash store did not trace")
                            "lj_tab_storetv_forjit_hash",
                            "boolean HSTORE helper fallback")
       print("M6 JIT table-store helper behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_entering_table_store",
+    description = "JIT table stores use shared route during mt_entering",
+    run = function(t)
+      build_and_run_c(t, t:tmp("lj_t-jit-entering-table-store"),
+                      "t-jit-entering-table-store.c", {
+        clean = true,
+        timeout = "20s"
+      })
+      print("M6 JIT mt_entering table-store route passed")
     end
   })
 

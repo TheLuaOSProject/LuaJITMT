@@ -50,7 +50,7 @@ static LJ_AINLINE int uload_type_can_cross_xpoll(IRType1 t)
 static LJ_AINLINE IRRef uload_alias_limit(jit_State *J, IRRef lim, IRType1 t)
 {
   if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
-  if ((!uload_type_can_cross_xpoll(t) || mt_active_acq(J2G(J)) != 0) &&
+  if ((!uload_type_can_cross_xpoll(t) || mt_active_or_entering_acq(J2G(J))) &&
       J->chain[IR_XPOLL] > lim)
     lim = J->chain[IR_XPOLL];
   return lim;

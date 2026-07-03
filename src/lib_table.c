@@ -29,8 +29,7 @@
 
 static LJ_AINLINE int table_mt_concurrent(lua_State *L)
 {
-  global_State *g = G(L);
-  return mt_active_acq(g) != 0 || mt_entering_acq(g) != 0;
+  return mt_active_or_entering_acq(G(L));
 }
 
 static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)

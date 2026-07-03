@@ -2370,7 +2370,7 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
     asm_ustore_forjit(as, ir);
     return;
   }
-  if (mt_active_acq(J2G(as->J)) != 0) {
+  if (mt_active_or_entering_acq(J2G(as->J))) {
     if (asm_ahstore_trace_local_direct_ok(as, ir)) {
       /* The table has not escaped the trace yet, so stock direct lowering
       ** cannot race another TG. Shared/NEWREF/published cases stay below.

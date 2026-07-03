@@ -1470,7 +1470,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 {
   RBCHashEntry *rbc = &J->rbchash[(ix->tab & (RBCHASH_SLOTS-1))];
   global_State *g = J2G(J);
-  if (mt_active_acq(g))
+  if (mt_active_or_entering_acq(g))
     return;
   if (tref_ref(ix->tab) == rec_rbchash_ref_acq(rbc)) {
     const BCIns *pc = rec_rbchash_pc_acq(rbc);
@@ -1605,7 +1605,7 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
 
 int lj_record_mt_shared_tab(jit_State *J, TRef tab)
 {
-  return mt_active_acq(J2G(J)) && !rec_idx_tab_trace_local(J, tab);
+  return mt_active_or_entering_acq(J2G(J)) && !rec_idx_tab_trace_local(J, tab);
 }
 
 static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
