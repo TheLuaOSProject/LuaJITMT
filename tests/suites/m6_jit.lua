@@ -9,6 +9,7 @@ local build_default = build.build_default
 local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
+local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
 
 local m6_cases = {
   "m6_dispatch_redispatch",
@@ -1516,11 +1517,21 @@ assert(util.traceinfo(1), "empty-hash miss loop did not trace")
     name = "m6_jit_alloc_account",
     description = "M6 allocator accounting behavior",
     run = function(t)
-      build_default(t)
+      clean_build(t, { xcflags = gc2_test_cflags })
       build_and_run_c(t, t:tmp("lj_t-gc2-alloc-account"),
-                      "t-gc2-alloc-account.c", { build = false, timeout = "20s" })
+                      "t-gc2-alloc-account.c",
+                      {
+                        build = false,
+                        timeout = "20s",
+                        cflags = gc2_test_cflags
+                      })
       build_and_run_c(t, t:tmp("lj_t-gc2-interp-hard-check"),
-                      "t-gc2-interp-hard-check.c", { build = false, timeout = "20s" })
+                      "t-gc2-interp-hard-check.c",
+                      {
+                        build = false,
+                        timeout = "20s",
+                        cflags = gc2_test_cflags
+                      })
       print("M6 JIT allocator accounting behavior passed")
     end
   })

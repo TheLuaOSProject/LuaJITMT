@@ -301,6 +301,36 @@ Current entering-window coverage includes table clear/insert, legacy upvalue
 snapshotting, explicit GC routing, os.setlocale rejection, JIT table-store
 routing, and x64 empty `TNEW` fallback.
 
+## x64 interpreter hard-assist batch predicate
+
+The x64 VM allocation check now mirrors `gc_hard_assist_due_interp()`: classic
+threshold work remains immediate, tiny forced hard limits remain immediate, and
+normal GC2 hard-assist checks wait until the current thread group has at least
+`LJ_GC2_ACCT_FLUSH` bytes of local allocation debt. This removes an unnecessary
+`lj_gc_step_fixtop()` call on hot interpreter allocation opcodes when the global
+hard counter is over its limit but the C helper would only return without
+assisting.
+
+Coverage added to `tests/t-gc2-interp-hard-check.c` counts `lj_gc_step_fixtop()`
+entries under `LJ_GC2_TEST_HELPERS` and verifies that an interpreted empty
+`TNEW` with normal hard debt below the local batch size does not enter the
+helper, run an interpreter hard check, or assist. The existing forced tiny hard
+limit cases continue to verify immediate hard assists.
+
+Validation:
+
+- `make -C src -j$(nproc)`
+- `tools/ci/lua_test.sh m6_jit_alloc_account`
+- `tools/ci/lua_test.sh m6_jit_gc2_readiness`
+- `tools/ci/lua_test.sh m5_x64_tnew_empty_inline`
+- `tools/ci/lua_test.sh run_stock_tests -- --quiet`
+
+The quick `tab_hash_write` stock comparison improved from the earlier 1.167x
+probe to 1.124x with `BENCH_SCALE=0.1`, but it still misses the 1.10 marker.
+The remaining gap is therefore not just the now-skipped interpreter hard-helper
+entry; string/key construction, table lookup/newkey, and allocation accounting
+remain the next performance suspects.
+
 ## Next useful work
 
 The remaining high-value stability work is stress expansion rather than

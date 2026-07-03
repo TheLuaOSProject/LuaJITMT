@@ -13,6 +13,7 @@
 #include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_tg.h"
 
 #include "lib/lua_fixture_helpers.h"
 
@@ -23,6 +24,16 @@ static void arm_gc2_hard_mark(global_State *g)
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   la_store64_rel(&g->gc2.alloc_since_trigger, 2);
+}
+
+static void arm_gc2_normal_hard_mark(global_State *g)
+{
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
+  lj_gc2_mark_begin(g);
+  la_store64_rel(&g->gc2.hard_bytes, 2u * LJ_GC2_ACCT_FLUSH);
+  la_store32_rel(&g->gc2.assist_shift, 0);
+  la_store64_rel(&g->gc2.alloc_since_trigger,
+		 2u * LJ_GC2_ACCT_FLUSH + 1u);
 }
 
 static void finish_gc2_mark(global_State *g)
@@ -58,6 +69,41 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
     assert(0);
   }
   finish_gc2_mark(g);
+}
+
+static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
+{
+  uint64_t interp_checks0, assist_runs0;
+  uint32_t fixtop_calls0;
+
+  ljt_lua_loadstring(L,
+    "local x = {}\n"
+    "assert(type(x) == 'table')\n");
+  arm_gc2_normal_hard_mark(g);
+  lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
+  lj_gc_test_reset_step_fixtop_calls();
+  fixtop_calls0 = lj_gc_test_step_fixtop_calls();
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
+
+  ljt_lua_pcall(L, 0, 0, "lua_pcall");
+
+  if (lj_gc_test_step_fixtop_calls() != fixtop_calls0) {
+    fputs("normal hard-only TNEW entered the fixtop helper before local batch debt\n",
+	  stderr);
+    assert(0);
+  }
+  if (gc2_interp_hard_checks_acq(g) != interp_checks0) {
+    fputs("normal hard-only TNEW ran an interpreter hard check before local batch debt\n",
+	  stderr);
+    assert(0);
+  }
+  if (gc2_assist_runs_acq(g) != assist_runs0) {
+    fputs("normal hard-only TNEW assisted before local batch debt\n", stderr);
+    assert(0);
+  }
+  finish_gc2_mark(g);
+  lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
 }
 
 static void test_hard_only_c_check(lua_State *L, global_State *g)
@@ -137,6 +183,8 @@ int main(void)
   assert(gc2_interp_hard_checks_acq(g) == 0);
 
   ljt_lua_dostring(L, "if jit then jit.off() end\n");
+  test_normal_hard_tnew_batch_gate(L, g);
+
   ljt_lua_loadstring(L,
     "local x = {}\n"
     "assert(type(x) == 'table')\n");

@@ -2016,6 +2016,27 @@ int lj_gc_step_explicit(lua_State *L)
   return gc_step_limited(L, GCSTEPSIZE, 0);
 }
 
+#ifdef LJ_GC2_TEST_HELPERS
+static uint32_t gc_test_step_fixtop_calls;
+
+static LJ_AINLINE void gc_test_step_fixtop_call(void)
+{
+  (void)la_add32_acqrel(&gc_test_step_fixtop_calls, 1);
+}
+
+uint32_t lj_gc_test_step_fixtop_calls(void)
+{
+  return la_load32_acq(&gc_test_step_fixtop_calls);
+}
+
+void lj_gc_test_reset_step_fixtop_calls(void)
+{
+  la_store32_rel(&gc_test_step_fixtop_calls, 0);
+}
+#else
+#define gc_test_step_fixtop_call()	((void)0)
+#endif
+
 static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step)
 {
   TGState *tg = L2TG(L);
@@ -2034,6 +2055,7 @@ static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step
 void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
 {
   global_State *g = G(L);
+  gc_test_step_fixtop_call();
   if (curr_funcisL(L)) L->top = curr_topL(L);
   gc_step_assist_top(L, g, lj_gc_total_load(g) >= lj_gc_threshold_load(g));
 }

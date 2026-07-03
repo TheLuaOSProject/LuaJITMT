@@ -87,6 +87,10 @@ LJ_FUNCA void LJ_FASTCALL lj_gc_step_top(lua_State *L);
 LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
 #endif
 LJ_FUNC void lj_gc_fullgc(lua_State *L);
+#ifdef LJ_GC2_TEST_HELPERS
+LJ_FUNC uint32_t lj_gc_test_step_fixtop_calls(void);
+LJ_FUNC void lj_gc_test_reset_step_fixtop_calls(void);
+#endif
 
 static LJ_AINLINE GCSize lj_gcsize_load_acq(const GCSize *p)
 {

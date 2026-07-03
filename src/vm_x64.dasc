@@ -400,7 +400,14 @@
 |  jae target
 |  mov tmp, [g+GL_OFS(gc2.alloc_since_trigger)]  // TSO acquire load.
 |  cmp tmp, [g+GL_OFS(gc2.hard_bytes)]  // lj_gc2_hard_limit_reached().
-|  ja target
+|  jbe >7
+|  cmp qword [g+GL_OFS(gc2.hard_bytes)], LJ_GC2_ACCT_FLUSH
+|  jb target
+|  // Mirror gc_hard_assist_due_interp(): normal hard assists wait until the
+|  // current thread group has enough local allocation debt to flush.
+|  cmp qword [DISPATCH+DISPATCH_TG(local_total)], LJ_GC2_ACCT_FLUSH
+|  jae target
+|7:
 |.endmacro
 |.macro x64_vm_tstore_direct_ok, target
 |  cmp TGMARK, 0
