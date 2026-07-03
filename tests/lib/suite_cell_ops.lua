@@ -30,7 +30,7 @@ local function assert_dump_not_contains(t, dump, needle, label)
   end
 end
 
-local function assert_fnew_call_prototype_guard(t, dump)
+local function assert_fnew_call_loads_prototype(t, dump)
   local data = t:read(dump)
   local callref
   for line in (data .. "\n"):gmatch("(.-)\n") do
@@ -52,7 +52,7 @@ local function assert_fnew_call_prototype_guard(t, dump)
         callref, 2)
 end
 
-function M.run_bytecode_guards(t, tmpname)
+function M.run_bytecode_checks(t, tmpname)
   local out = t:tmp(tmpname)
   luajit_capture(t, { "-bl", "-e", probes.parser_capture() }, out)
   local bc = t:read(out)
@@ -66,7 +66,7 @@ function M.run_bytecode_guards(t, tmpname)
   t:remove(out)
 end
 
-function M.run_publication_behavior_guards(t)
+function M.run_publication_behavior_checks(t)
   luajit(t, { "-e", probes.dumped_closure_behavior() })
   luajit(t, { "-e", probes.debug_local_behavior() })
   luajit(t, { "-e", probes.owner_numeric({
@@ -102,7 +102,7 @@ function M.run_publication_behavior_guards(t)
   }) })
 end
 
-function M.run_jit_dump_guards(t, dump)
+function M.run_jit_dump_checks(t, dump)
   dump_i(t, dump, probes.owner_numeric({ flush = false, hotexit = true }))
   assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "owner numeric trace")
   assert_dump_contains(t, dump, "UREFC", "owner numeric UREFC")
@@ -135,13 +135,13 @@ function M.run_jit_dump_guards(t, dump)
   assert_dump_contains(t, dump, "USTORE", "loaded v4 CGET/CSET USTORE")
 
   dump_i(t, dump, probes.source_cnew_fnew({
-    trace_assert = "source CNEW/FNEW creation should trace"
+    trace_assert = "parsed-chunk CNEW/FNEW creation should trace"
   }))
-  assert_dump_match(t, dump, "CALLS.*lj_func_newuvcell_forjit", "source CNEW helper call")
-  assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "source FNEW helper call")
-  assert_dump_contains(t, dump, "UREFC", "source CNEW/FNEW UREFC")
-  assert_dump_contains(t, dump, "USTORE", "source CNEW/FNEW USTORE")
-  assert_dump_contains(t, dump, "OBAR", "source CNEW/FNEW OBAR")
+  assert_dump_match(t, dump, "CALLS.*lj_func_newuvcell_forjit", "parsed-chunk CNEW helper call")
+  assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "parsed-chunk FNEW helper call")
+  assert_dump_contains(t, dump, "UREFC", "parsed-chunk CNEW/FNEW UREFC")
+  assert_dump_contains(t, dump, "USTORE", "parsed-chunk CNEW/FNEW USTORE")
+  assert_dump_contains(t, dump, "OBAR", "parsed-chunk CNEW/FNEW OBAR")
 
   dump_i(t, dump, probes.loaded_cnew_fnew({
     trace_assert = "loaded CNEW/FNEW creation should trace"
@@ -162,14 +162,14 @@ function M.run_jit_dump_guards(t, dump)
 
   dump_i(t, dump, probes.source_mixed_raw_local({
     hotexit = true,
-    trace_assert = "source mixed raw-local CNEW/FNEW should trace"
+    trace_assert = "parsed-chunk mixed raw-local CNEW/FNEW should trace"
   }))
-  assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "source mixed raw-local FNEW trace")
-  assert_dump_contains(t, dump, "TMPREF", "source mixed raw-local TMPREF")
-  assert_dump_match(t, dump, "CALLS.*lj_func_syncslot_forjit", "source mixed raw-local sync helper")
-  assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "source mixed raw-local FNEW helper")
-  assert_dump_contains(t, dump, "UREFC", "source mixed raw-local UREFC")
-  assert_dump_contains(t, dump, "USTORE", "source mixed raw-local USTORE")
+  assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "parsed-chunk mixed raw-local FNEW trace")
+  assert_dump_contains(t, dump, "TMPREF", "parsed-chunk mixed raw-local TMPREF")
+  assert_dump_match(t, dump, "CALLS.*lj_func_syncslot_forjit", "parsed-chunk mixed raw-local sync helper")
+  assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "parsed-chunk mixed raw-local FNEW helper")
+  assert_dump_contains(t, dump, "UREFC", "parsed-chunk mixed raw-local UREFC")
+  assert_dump_contains(t, dump, "USTORE", "parsed-chunk mixed raw-local USTORE")
 
   dump_i(t, dump, probes.loaded_mixed_raw_local({
     hotexit = true,
@@ -181,14 +181,14 @@ function M.run_jit_dump_guards(t, dump)
 
   dump_i(t, dump, probes.source_first_promotion({
     hotexit = true,
-    trace_assert = "source first-promotion FNEW should trace"
+    trace_assert = "parsed-chunk first-promotion FNEW should trace"
   }))
-  assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "source first-promotion FNEW trace")
-  assert_dump_match(t, dump, "CALLS.*lj_func_promoteuv_forjit", "source first-promotion helper")
-  assert_dump_contains(t, dump, "NULL", "source first-promotion stack snapshot argument")
-  assert_dump_match(t, dump, "SLOAD.*I", "source first-promotion inherited cell reload")
-  assert_dump_contains(t, dump, "UREFC", "source first-promotion UREFC")
-  assert_dump_contains(t, dump, "USTORE", "source first-promotion USTORE")
+  assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "parsed-chunk first-promotion FNEW trace")
+  assert_dump_match(t, dump, "CALLS.*lj_func_promoteuv_forjit", "parsed-chunk first-promotion helper")
+  assert_dump_contains(t, dump, "NULL", "parsed-chunk first-promotion stack snapshot argument")
+  assert_dump_match(t, dump, "SLOAD.*I", "parsed-chunk first-promotion inherited cell reload")
+  assert_dump_contains(t, dump, "UREFC", "parsed-chunk first-promotion UREFC")
+  assert_dump_contains(t, dump, "USTORE", "parsed-chunk first-promotion USTORE")
 
   dump_i(t, dump, probes.loaded_first_promotion({
     hotexit = true,
@@ -230,10 +230,10 @@ for i = 1, 80 do
 end
 assert(s > 0)
 ]=])
-  assert_fnew_call_prototype_guard(t, dump)
+  assert_fnew_call_loads_prototype(t, dump)
 end
 
-function M.run_jit_runtime_guards(t)
+function M.run_jit_runtime_checks(t)
   luajit_code(t, probes.pre_fnew_update({
     hotexit = true,
     trace_assert = "pre-FNEW promoted local update should trace"
