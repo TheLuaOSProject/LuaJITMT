@@ -1164,7 +1164,7 @@ static void asm_tnew(ASMState *as, IRIns *ir)
   args[0] = ASMREF_L;     /* lua_State *L    */
   as->gcsteps++;
   if (ir->op1 == 0 && ir->op2 == 0) {
-    ci = &lj_ir_callinfo[IRCALL_lj_tab_new0];
+    ci = &lj_ir_callinfo[IRCALL_lj_tab_new0_forjit];
     asm_setupresult(as, ir, ci);  /* GCtab * */
     asm_gencall(as, ci, args);
     return;

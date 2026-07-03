@@ -16,4 +16,5 @@ GC2 accounting flushes, active MT, and GC workers.
 This keeps the permanent `lj_tab_new0()` semantics: empty table body
 initialization, arena block/mark bit updates, GC total accounting, local GC2
 allocation accounting, and pending-root publication order. JIT empty `TNEW`
-remains helper-backed for now.
+now uses a JIT-specific C helper that attempts the same conservative bump path;
+the final no-call x64 mcode inline allocator remains pending.

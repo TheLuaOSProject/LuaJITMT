@@ -14,6 +14,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_arena.h"
 #include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
@@ -1001,6 +1002,63 @@ GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h)
 }
 
 #if LJ_HASJIT
+static GCtab *tab_new0_bump_forjit(lua_State *L, global_State *g, TGState *tg)
+{
+  const uint32_t ncells = lj_arena_ncells(sizeof(GCtab));
+  LJArenaBump *b;
+  GCArena *a;
+  GCtab *t;
+  GCobj *head;
+  uint32_t cell, end, next, i;
+  UNUSED(L);
+  if (g == NULL || tg == NULL ||
+      mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
+      g->allocf_arena == 0 || tg != g->main_tg ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocd != &tg->allocd ||
+      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - sizeof(GCtab))
+    return NULL;
+  b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  for (i = ncells - 1u; i < LJ_ALLOC_NBINS; i++)
+    if (tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] != NULL)
+      return NULL;
+  a = b->a;
+  if (a == NULL)
+    return NULL;
+  cell = b->cell;
+  end = b->end;
+  next = cell + ncells;
+  if (next < cell || next > end)
+    return NULL;
+  b->cell = next;
+  lj_arena_bm_set(a->block, cell);
+  if (lj_arena_alloc_black_acq(&tg->alloc))
+    lj_arena_bm_set(a->mark, cell);
+  else
+    lj_arena_bm_clear(a->mark, cell);
+  t = (GCtab *)lj_arena_cellptr(a, cell);
+  tab_init_empty(g, t);
+  newwhite(g, t);
+  lj_gc_total_add(g, sizeof(GCtab));
+  (void)lj_tg_local_total_add_rlx(tg, sizeof(GCtab));
+  head = lj_tg_gcroot_pending_acq(tg);
+  if (head)
+    lj_obj_setgcwrel(obj2gco(t), head);
+  else
+    lj_obj_setgcwnullrel(obj2gco(t));
+  lj_tg_gcroot_pending_store_rel(tg, obj2gco(t));
+  return t;
+}
+
+GCtab * LJ_FASTCALL lj_tab_new0_forjit(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  GCtab *t = tab_new0_bump_forjit(L, g, tg);
+  return t ? t : lj_tab_new0(L);
+}
+
 GCtab * LJ_FASTCALL lj_tab_new1(lua_State *L, uint32_t ahsize)
 {
   return newtab(L, ahsize & 0xffffff, ahsize >> 24);

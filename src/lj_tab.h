@@ -236,6 +236,7 @@ LJ_FUNCA GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits);
 LJ_FUNCA GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L);
 LJ_FUNC GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h);
 #if LJ_HASJIT
+LJ_FUNC GCtab * LJ_FASTCALL lj_tab_new0_forjit(lua_State *L);
 LJ_FUNC GCtab * LJ_FASTCALL lj_tab_new1(lua_State *L, uint32_t ahsize);
 #endif
 LJ_FUNCA GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt);

@@ -119,6 +119,69 @@ static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 1);
 }
 
+#if LJ_HASJIT
+static void test_jit_helper_inline_empty_tnew(lua_State *L, global_State *g,
+					      TGState *tg)
+{
+  LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  GCArena *a0;
+  GCobj *pending0;
+  GCSize total0;
+  uint64_t local0;
+  uint32_t cell0, black, calls0, i;
+  GCtab *t;
+
+  a0 = b->a;
+  cell0 = b->cell;
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  total0 = lj_gc_total_load(g);
+  local0 = lj_tg_local_total_acq(tg);
+  calls0 = lj_tab_test_new0_calls();
+
+  assert(a0 != NULL);
+  assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
+  for (i = 4; i < LJ_ALLOC_NBINS; i++)
+    assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
+  assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
+
+  t = lj_tab_new0_forjit(L);
+
+  assert(lj_tab_test_new0_calls() == calls0);
+  assert_empty_table_body(g, t);
+  assert((void *)t == lj_arena_cellptr(a0, cell0));
+  assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
+  assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
+  for (i = 1; i < TNEW_EMPTY_NCELLS; i++)
+    assert(lj_arena_state(a0, cell0 + i) == 0);
+  assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
+  assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_chain_contains(g, obj2gco(t)));
+}
+
+static void test_jit_helper_entering_fallback(lua_State *L, global_State *g)
+{
+  uint32_t calls0;
+  GCtab *t;
+
+  lj_tab_test_reset_new0_calls();
+  calls0 = lj_tab_test_new0_calls();
+
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  t = lj_tab_new0_forjit(L);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+
+  assert(lj_tab_test_new0_calls() == calls0 + 1u);
+  assert_empty_table_body(g, t);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_chain_contains(g, obj2gco(t)));
+}
+#endif
+
 static void test_entering_uses_helper(lua_State *L, global_State *g,
 				      TGState *tg)
 {
@@ -206,6 +269,10 @@ int main(void)
   ljt_lua_dostring(L, "if jit then jit.off(true, true) end\n");
 
   test_inline_empty_tnew(L, g, tg);
+#if LJ_HASJIT
+  test_jit_helper_inline_empty_tnew(L, g, tg);
+  test_jit_helper_entering_fallback(L, g);
+#endif
   test_entering_uses_helper(L, g, tg);
   test_local_accounting_fallback(L, g, tg);
   test_custom_allocator_fallback(L, g);

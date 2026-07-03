@@ -364,8 +364,10 @@ local function run_bench_stock_compare(t)
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
                        os.getenv("BENCH_GEOMEAN_MAX") or "3.0")
   local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "60s"
+  -- Keep enough iterations for allocation-heavy probes like closures_upval;
+  -- smaller samples are dominated by timer and scheduler noise.
   local scale = os.getenv("LJ_BENCH_STOCK_SCALE") or
-    os.getenv("BENCH_SCALE") or "0.001"
+    os.getenv("BENCH_SCALE") or "0.01"
 
   for filter in filters:gmatch("%S+") do
     local result = bench_driver.compare_bins(stock, current, bench_lua, {

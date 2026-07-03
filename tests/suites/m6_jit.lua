@@ -1893,12 +1893,13 @@ assert(type(keep[80]) == "table")
 assert(util.traceinfo(1), "empty-table TNEW did not trace")
 ]=], { timeout = "20s" })
       assert_dump_contains(t, empty_tnew_route,
-                           "lj_tab_new0",
-                           "empty TNEW helper route")
+                           "lj_tab_new0_forjit",
+                           "empty TNEW JIT helper route")
       do
         local data = t:read(empty_tnew_route)
-        if contains(data, "lj_tab_new1") then
-          error("empty TNEW route used packed-size helper:\n" .. data, 0)
+        if contains(data, "lj_tab_new1") or
+           contains(data, "->lj_tab_new0\n") then
+          error("empty TNEW route missed JIT fast helper:\n" .. data, 0)
         end
       end
 

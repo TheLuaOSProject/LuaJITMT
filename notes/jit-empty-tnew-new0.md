@@ -1,16 +1,19 @@
 # JIT empty TNEW helper split
 
-Linux/x64 traced `TNEW(0, 0)` now uses the existing `lj_tab_new0()` helper
-instead of packing a zero `ahsize` argument for `lj_tab_new1()`. This mirrors
-the x64 interpreter `BC_TNEW` helper split and keeps the current trace-side
-GC-step pacing, `lj_tab_new0()` body initialization, GC2 allocation accounting,
-and pending-root publication order unchanged.
+Linux/x64 traced `TNEW(0, 0)` now uses the JIT-specific
+`lj_tab_new0_forjit()` helper instead of packing a zero `ahsize` argument for
+`lj_tab_new1()`. The helper first tries the same conservative empty-table arena
+bump conditions as the x64 interpreter fast path: main TG, no active/entering
+MT, no GC workers, internal arena allocator, empty traversable free-run bins
+that could satisfy the allocation, available bump space, and local GC2
+accounting capacity. If any predicate fails, it falls back to `lj_tab_new0()`.
 
-This is intentionally not the final inline TG bump allocator. The full inline
-slice still needs the exact arena bitmap block/mark update, allocation color,
-GC/GC2 accounting, table body initialization, and `lj_gc_linkobj_new()`
-publication semantics before it can replace C allocation.
+This is intentionally not the final no-call x64 mcode inline TG bump allocator.
+It removes the generic table-constructor helper path for escaped traced empty
+tables while keeping the GC-step check, table body initialization, arena
+block/mark update, allocation color, GC/GC2 accounting, and pending-root
+publication semantics in auditable C.
 
-Focused regression test: `m6_jit_gc2_readiness` now checks that escaped empty-table
-`TNEW` traces route to `lj_tab_new0()` and that non-empty table constructors
-continue to route through `lj_tab_new1()`.
+Focused regression test: `m6_jit_gc2_readiness` now checks that escaped
+empty-table `TNEW` traces route to `lj_tab_new0_forjit()` and that non-empty
+table constructors continue to route through `lj_tab_new1()`.
