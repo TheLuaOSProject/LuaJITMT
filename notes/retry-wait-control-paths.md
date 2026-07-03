@@ -14,7 +14,11 @@ Retry wait control-path pass
   state. This removes blind sleeping, wakes promptly on state/callback release,
   and keeps the control path separate from warm mutator/JIT/FFI retry loops.
 - Table structural ownership is per-table, not universe-global. Same-table
-  structural contention still serializes resize/compound array mutation, but
-  the retry path now uses `lj_thr_retry_yield(L)` instead of a 1ms futex park,
-  so independent tables do not serialize and contested same-table waits no
-  longer carry fixed millisecond latency.
+  structural contention still serializes resize/compound array mutation, and
+  the wait parks on the table's `GCtab.struct_owner` futex word. Independent
+  tables do not serialize with each other; contested same-table waits use the
+  concrete owner-release wake instead of blind sleeping.
+- Table `next()` skips transient hidden hash keys (`KEYLOCK` or unpublished nil
+  key) with a second acquire snapshot rather than calling the generic table retry
+  helper. This keeps traversal read-side behavior nonblocking while preserving
+  the rule that internal sentinels are never exposed to Lua.

@@ -22,7 +22,12 @@ return function(add)
       description = "table KEYLOCK lookup filtering C fixture",
       output = "lj_t-tab-keylock-lookup",
       cfile = "t-tab-keylock-lookup.c",
-      opts = { timeout = "20s" },
+      opts = {
+        clean = true,
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s",
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      },
       message = "M5 table KEYLOCK lookup filtering tests passed"
     },
     {

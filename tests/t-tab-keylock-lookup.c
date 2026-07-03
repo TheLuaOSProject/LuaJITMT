@@ -18,6 +18,10 @@
 
 #include "lib/tab_forward_helpers.h"
 
+#ifndef LJ_TAB_TEST_HELPERS
+#error "t-tab-keylock-lookup requires LJ_TAB_TEST_HELPERS"
+#endif
+
 typedef struct KeylockReleaseCtx {
   Node *node;
   TValue key;
@@ -266,7 +270,9 @@ int main(void)
   assert(tviskeylock(&node[0].key));
   assert(lj_tab_getstr(t, anchor) == NULL);
   tabfwd_assert_str_i32(t, displaced, 22);
+  lj_tab_test_reset_wait_no_l_calls();
   assert(tabfwd_count_next_visible(t) == 1);
+  assert(lj_tab_test_wait_no_l_calls() == 0);
 
   store_strkey(L, &node[0], anchor);
   tabfwd_assert_str_i32(t, anchor, 11);

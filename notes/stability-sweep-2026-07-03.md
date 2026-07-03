@@ -130,6 +130,23 @@ Looped timing after one warm `fib(30)` still shows a current fork gap:
 - Fork: about 7.26..7.45 ms per call across three 50-call process samples.
 - Stock: about 5.33..5.60 ms per call across three 50-call process samples.
 
+## JIT traversal stress
+
+The table traversal stress has a separate JIT recorder failure that predates the
+KEYLOCK/nonblocking-`next()` change. Both current worktree and previous pushed
+commit `4b2c26cb` abort an assertion-build run of:
+
+- `LJ_M5_TAB_RESIZE_STRESS_CASES=traversal`
+- `LJ_M5_TAB_RESIZE_TRAVERSAL_MODES=next`
+- `LJ_M5_TAB_RESIZE_STRESS_REPS=256`
+- `LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS=64`
+
+The assertion is in `lj_record_ins()` while recording `BC_KSTR`, checking that a
+negative constant index names a string KGC entry. The same traversal case passes
+with `-joff`, and `nextchurn` passes with a heavier `next`-only run. Treat this
+as a JIT recorder stability target rather than a table traversal semantic
+failure.
+
 ## Benchmark guard
 
 The benchmark-regression coverage is no longer purely self-referential in current

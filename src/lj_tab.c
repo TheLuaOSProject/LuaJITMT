@@ -71,8 +71,20 @@ static LJ_AINLINE int tab_key_islocked(cTValue *key)
   return tviskeylock(key);
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
+static uint32_t tab_test_wait_no_l_calls;
+
+static LJ_AINLINE void tab_test_wait_no_l_call(void)
+{
+  (void)la_add32_acqrel(&tab_test_wait_no_l_calls, 1);
+}
+#else
+#define tab_test_wait_no_l_call()	((void)0)
+#endif
+
 LJ_FUNCA void lj_tab_wait_no_l(void)
 {
+  tab_test_wait_no_l_call();
   (void)lj_thr_retry_yield(NULL);
 }
 
@@ -157,6 +169,16 @@ uint32_t lj_tab_test_clear_shared_calls(void)
 void lj_tab_test_reset_clear_shared_calls(void)
 {
   la_store32_rel(&tab_test_clear_shared_calls, 0);
+}
+
+uint32_t lj_tab_test_wait_no_l_calls(void)
+{
+  return la_load32_acq(&tab_test_wait_no_l_calls);
+}
+
+void lj_tab_test_reset_wait_no_l_calls(void)
+{
+  la_store32_rel(&tab_test_wait_no_l_calls, 0);
 }
 #else
 #define tab_test_struct_owner_no_l_futex_wait()		((void)0)
@@ -3335,7 +3357,14 @@ retry_next:
       if (!tab_val_absent(&val)) {
 	lj_tv_load_acq(&key, &n->key);
 	if (tab_hash_key_hidden(&key)) {
-	  lj_tab_wait_no_l();
+	  /*
+	  ** A writer publishes hash insertions as value first, then key.
+	  ** next() must not expose KEYLOCK/nil internal keys, but it also
+	  ** must not park a reader behind that publication. A second
+	  ** acquire snapshot is enough: if the key is still hidden, skip
+	  ** this slot for the current traversal; if it was published, the
+	  ** value snapshot remains a normal racy Lua table observation.
+	  */
 	  lj_tv_load_acq(&val, &n->val);
 	  lj_tv_load_acq(&key, &n->key);
 	  if (tab_hash_key_hidden(&key) || tab_val_absent(&val))

@@ -12,6 +12,12 @@ cursor bridge: while a secondary Lua thread is live/entering, an invalid
 not throw from another thread's stale cursor. After the secondary exits, the same
 invalid cursor must again raise stock `invalid key to 'next'`.
 
+The KEYLOCK fixture also verifies that hash traversal filters an unpublished key
+without using the generic table retry wait. Writers publish a hash insertion as
+value first and key second; `next()` is allowed to miss that in-flight entry in a
+racy traversal, but it must never expose the internal key marker or park behind
+the writer.
+
 This is behavior coverage for the table forwarding protocol. It deliberately
 does not search source text for helper names or field accesses; implementation
 ordering requirements that are not directly observable belong in notes like
