@@ -49,6 +49,11 @@ either non-null `jit_base` or positive TG `vmstate` as active trace state.
 `m6_jit_flush_thread_stress` to cover concurrent full flush, per-trace flush,
 short-lived thread churn, and stale loop bytecode recovery as behavior.
 
+Residual follow-up: a standalone unmonitored 100-iteration run of the stress
+script has intermittently hit the outer timeout, while the M6 case and a
+live-monitored 80-iteration run completed. Treat future timeouts as a diagnostic
+target; capture live thread stacks before changing runtime behavior.
+
 ## Legacy GC bridge
 
 Forced full GC no longer clears partial gray/weak state and jumps straight to
