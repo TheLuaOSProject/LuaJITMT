@@ -164,6 +164,11 @@ LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 LJ_FUNC void lj_str_freetab(global_State *g);
 
+#ifdef LJ_STR_TEST_HELPERS
+LJ_FUNC uint32_t lj_str_test_id_refills(void);
+LJ_FUNC void lj_str_test_reset_id_refills(void);
+#endif
+
 #define lj_str_newz(L, s)	(lj_str_new(L, s, strlen(s)))
 #define lj_str_newlit(L, s)	(lj_str_new(L, "" s, sizeof(s)-1))
 #define lj_str_size(len)	(sizeof(GCstr) + (((len)+4) & ~(MSize)3))

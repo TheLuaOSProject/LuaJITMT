@@ -44,6 +44,47 @@ typedef struct ReclaimReaderCtx {
   uint32_t reclaimed;
 } ReclaimReaderCtx;
 
+static int cmp_strid(const void *a, const void *b)
+{
+  StrID x = *(const StrID *)a;
+  StrID y = *(const StrID *)b;
+  return (x > y) - (x < y);
+}
+
+static void exercise_string_id_blocks(lua_State *L)
+{
+  enum { N = 192 };
+  GCstr *s[N];
+  StrID ids[N];
+  uint32_t refills0, refills1;
+  int i;
+
+  lj_str_test_reset_id_refills();
+  refills0 = lj_str_test_id_refills();
+
+  for (i = 0; i < N; i++) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "m5-strtab-id-block-%03d", i);
+    s[i] = lj_str_new(L, buf, strlen(buf));
+    assert(s[i] != NULL);
+    ids[i] = s[i]->sid;
+  }
+
+  refills1 = lj_str_test_id_refills();
+  assert(refills1 > refills0);
+  assert(refills1 - refills0 < N / 4);
+
+  qsort(ids, N, sizeof(ids[0]), cmp_strid);
+  for (i = 1; i < N; i++)
+    assert(ids[i] != ids[i - 1]);
+
+  for (i = 0; i < N; i++) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "m5-strtab-id-block-%03d", i);
+    assert(lj_str_new(L, buf, strlen(buf)) == s[i]);
+  }
+}
+
 static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   FailAllocCtx *ctx = (FailAllocCtx *)ud;
@@ -155,6 +196,7 @@ int main(void)
   s1 = lj_str_new(L, "m5-strtab-cas-same", strlen("m5-strtab-cas-same"));
   s2 = lj_str_new(L, "m5-strtab-cas-same", strlen("m5-strtab-cas-same"));
   assert(s1 == s2);
+  exercise_string_id_blocks(L);
 
   oldmask = g->str.mask;
   wantmask = (oldmask << 1) + 1u;
@@ -283,6 +325,6 @@ int main(void)
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
   lua_close(L);
-  printf("t-strtab-cas OK: resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, and duplicate intern guard verified\n");
+  printf("t-strtab-cas OK: resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID block reservation verified\n");
   return 0;
 }

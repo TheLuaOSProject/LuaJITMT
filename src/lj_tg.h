@@ -69,6 +69,8 @@ struct TGState {
   uint32_t in_native;
   StrTabHdr *strtab_active_hdr;
   uint32_t strtab_active_depth;
+  StrID strid_next;
+  StrID strid_end;
   uint8_t gc_assist;
   uint8_t hookmask_th;
   uint8_t tg_flags;

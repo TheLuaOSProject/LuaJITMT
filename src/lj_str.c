@@ -128,6 +128,28 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 
 #define LJ_STR_MAXCOLL		32
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
+#define LJ_STRID_BLOCK		64u
+
+#ifdef LJ_STR_TEST_HELPERS
+static uint32_t str_test_id_refills;
+
+uint32_t lj_str_test_id_refills(void)
+{
+  return la_load32_acq(&str_test_id_refills);
+}
+
+void lj_str_test_reset_id_refills(void)
+{
+  la_store32_rel(&str_test_id_refills, 0);
+}
+
+static LJ_AINLINE void str_test_id_refill(void)
+{
+  (void)la_add32_acqrel(&str_test_id_refills, 1);
+}
+#else
+#define str_test_id_refill()	((void)0)
+#endif
 
 static void strtab_wait(lua_State *L)
 {
@@ -154,6 +176,33 @@ static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want
   *expect = (uintptr_t)exp;
   return ok;
 #endif
+}
+
+static LJ_NOINLINE StrID strid_refill(global_State *g, TGState *tg)
+{
+  /*
+  ** `sid` is a unique hash discriminator for table string keys. IDs do not
+  ** need to be dense: duplicate-intern CAS losers already consume IDs before
+  ** freeing their unpublished string. Reserve a small per-TG range to remove
+  ** the global `g->str.id` cache-line hit from every successful string
+  ** allocation while preserving atomic uniqueness and normal uint32 wrap.
+  */
+  StrID base = (StrID)la_add32_rlx(&g->str.id, LJ_STRID_BLOCK);
+  tg->strid_next = base + 1u;
+  tg->strid_end = base + LJ_STRID_BLOCK;
+  str_test_id_refill();
+  return base;
+}
+
+static LJ_AINLINE StrID strid_next(lua_State *L, global_State *g)
+{
+  TGState *tg = L2TG(L);
+  StrID sid = tg->strid_next;
+  if (sid != tg->strid_end) {
+    tg->strid_next = sid + 1u;
+    return sid;
+  }
+  return strid_refill(g, tg);
 }
 
 static void strtab_retired_push(global_State *g, StrTabHdr *hdr)
@@ -506,7 +555,7 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   s->gct = ~LJ_TSTR;
   s->len = len;
   s->hash = hash;
-  s->sid = (StrID)la_add32_rlx(&g->str.id, 1);
+  s->sid = strid_next(L, g);
   s->reserved = 0;
   s->hashalg = (uint8_t)hashalg;
   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */

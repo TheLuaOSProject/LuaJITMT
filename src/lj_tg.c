@@ -70,6 +70,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->prng = g->prng;
   tg->strtab_active_hdr = NULL;
   tg->strtab_active_depth = 0;
+  tg->strid_next = 0;
+  tg->strid_end = 0;
   lj_tg_gcroot_pending_store_rlx(tg, NULL);
   lj_tg_gcroot_pending_after_main_store_rlx(tg, NULL);
   tg_init_ssb(tg);

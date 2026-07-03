@@ -72,8 +72,12 @@ return function(add)
     run = function(t)
       local out = t:tmp("lj_t-strtab-cas")
       local out_rehash = t:tmp("lj_t-strtab-rehash")
-      t:build({ clean = true, quiet = true })
-      compile_and_run_c(t, out, "t-strtab-cas.c", { timeout = "20s" })
+      t:build({ clean = true, quiet = true,
+                xcflags = "-DLJ_STR_TEST_HELPERS" })
+      compile_and_run_c(t, out, "t-strtab-cas.c", {
+        cflags = "-DLJ_STR_TEST_HELPERS",
+        timeout = "20s"
+      })
       compile_and_run_c(t, out_rehash, "t-strtab-rehash.c",
                         { timeout = "20s" })
       print("M5 string table CAS publication tests passed")
