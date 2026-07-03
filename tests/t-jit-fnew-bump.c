@@ -327,6 +327,28 @@ static void test_interpreter_multiuv_afterfn(lua_State *L)
   assert(after1 > after0);
 }
 
+static void test_interpreter_no_upvalue_fast_path(lua_State *L)
+{
+  uint32_t fast0, fast1;
+  const char *code =
+    "jit.off()\n"
+    "local t = {}\n"
+    "for i = 1, 80 do\n"
+    "  t[i] = function() return 42 end\n"
+    "end\n"
+    "assert(t[1]() == 42)\n"
+    "assert(t[80]() == 42)\n"
+    "assert(t[1] ~= t[2])\n"
+    "assert(debug.getupvalue(t[1], 1) == nil)\n"
+    "jit.on()\n";
+
+  lj_func_test_reset_gc0_bump_interp_calls();
+  fast0 = lj_func_test_gc0_bump_interp_calls();
+  run_script(L, code, "interpreter no-upvalue FNEW fast path");
+  fast1 = lj_func_test_gc0_bump_interp_calls();
+  assert(fast1 > fast0);
+}
+
 static void test_accounting_fast_direct(lua_State *L, global_State *g,
 					TGState *tg)
 {
@@ -402,6 +424,7 @@ int main(void)
   test_traced_alloc_black_inline(L, g, tg);
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
+  test_interpreter_no_upvalue_fast_path(L);
 
   lua_close(L);
   puts("t-jit-fnew-bump OK");

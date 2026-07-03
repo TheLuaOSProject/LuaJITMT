@@ -250,6 +250,7 @@ static uint32_t func_test_gc1num_bump_fallback_calls;
 static uint32_t func_test_gc1num_bump_interp_calls;
 static uint32_t func_test_gc1uv_chain_calls;
 static uint32_t func_test_uv_afterfn_calls;
+static uint32_t func_test_gc0_bump_interp_calls;
 
 static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
 {
@@ -274,6 +275,11 @@ static LJ_AINLINE void func_test_gc1uv_chain_call(void)
 static LJ_AINLINE void func_test_uv_afterfn_call(void)
 {
   (void)la_add32_acqrel(&func_test_uv_afterfn_calls, 1);
+}
+
+static LJ_AINLINE void func_test_gc0_bump_interp_call(void)
+{
+  (void)la_add32_acqrel(&func_test_gc0_bump_interp_calls, 1);
 }
 
 uint32_t lj_func_test_gc1num_bump_fast_calls(void)
@@ -325,12 +331,23 @@ void lj_func_test_reset_uv_afterfn_calls(void)
 {
   la_store32_rel(&func_test_uv_afterfn_calls, 0);
 }
+
+uint32_t lj_func_test_gc0_bump_interp_calls(void)
+{
+  return la_load32_acq(&func_test_gc0_bump_interp_calls);
+}
+
+void lj_func_test_reset_gc0_bump_interp_calls(void)
+{
+  la_store32_rel(&func_test_gc0_bump_interp_calls, 0);
+}
 #else
 #define func_test_gc1num_bump_fast_call()	((void)0)
 #define func_test_gc1num_bump_fallback_call()	((void)0)
 #define func_test_gc1num_bump_interp_call()	((void)0)
 #define func_test_gc1uv_chain_call()		((void)0)
 #define func_test_uv_afterfn_call()		((void)0)
+#define func_test_gc0_bump_interp_call()	((void)0)
 #endif
 
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
@@ -464,6 +481,75 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
     func_test_gc1num_bump_fast_call();
   else if (count_kind == 2)
     func_test_gc1num_bump_interp_call();
+  return fn;
+}
+
+static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
+				  GCproto *pt, GCfuncL *parent)
+{
+  const GCSize nbytes = (GCSize)sizeLfunc(0);
+  const uint32_t ncells = lj_arena_ncells(nbytes);
+  LJArenaBump *b;
+  GCArena *a;
+  GCfunc *fn;
+  GCtab *env;
+  GCobj *oldhead;
+  uint32_t count, cell, end, next, black;
+
+  if (g == NULL || tg == NULL ||
+      mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
+      g->allocf_arena == 0 || tg != g->main_tg ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocd != &tg->allocd ||
+      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+    return NULL;
+
+  /*
+  ** Interpreter BC_FNEW already ran lj_gc_check_fixtop(). This helper only
+  ** replaces the allocation/root-publication body for no-upvalue closures in
+  ** the same single-producer window used by empty TNEW and one-upvalue FNEW.
+  */
+  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
+    return NULL;
+
+  b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  a = b->a;
+  if (a == NULL)
+    return NULL;
+  cell = b->cell;
+  end = b->end;
+  next = cell + ncells;
+  if (next < cell || next > end)
+    return NULL;
+
+  b->cell = next;
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  func_arena_set_alloc(a, cell, black);
+
+  fn = (GCfunc *)lj_arena_cellptr(a, cell);
+  fn->l.gct = ~LJ_TFUNC;
+  fn->l.ffid = FF_LUA;
+  fn->l.nupvalues = 0;
+  setmref(fn->l.pc, proto_bc(pt));
+  env = lj_funcL_env_acq(parent);
+  lj_func_env_rel(fn, env);
+  newwhite(g, obj2gco(fn));
+  lj_gc_pubobjobj(L, fn, pt);
+  lj_gc_pubobjobj(L, fn, env);
+  count = (uint32_t)pt->flags + PROTO_CLCOUNT;
+  pt->flags = (uint8_t)(count - ((count >> PROTO_CLC_BITS) &
+				  PROTO_CLCOUNT));
+
+  lj_gc_total_add(g, nbytes);
+  (void)lj_tg_local_total_add_rlx(tg, nbytes);
+  oldhead = lj_tg_gcroot_pending_acq(tg);
+  if (oldhead)
+    lj_obj_setgcwrel(obj2gco(fn), oldhead);
+  else
+    lj_obj_setgcwnullrel(obj2gco(fn));
+  lj_tg_gcroot_pending_store_rel(tg, obj2gco(fn));
+  func_test_gc0_bump_interp_call();
   return fn;
 }
 #endif
@@ -604,6 +690,11 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
 {
   lj_gc_check_fixtop(L);
 #if LJ_HASJIT
+  if (pt->sizeuv == 0) {
+    GCfunc *fn = func_newL_gc0_bump(L, G(L), L2TG(L), pt, parent);
+    if (fn)
+      return fn;
+  }
   if (pt->sizeuv == 1 && proto_celluv(pt)) {
     uint32_t v = proto_uv(pt)[0];
     if ((v & PROTO_UV_LOCAL)) {
