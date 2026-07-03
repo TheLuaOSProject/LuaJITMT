@@ -2309,15 +2309,27 @@ static GCSize api_gc_restart_threshold(global_State *g)
   return (total/100) * lj_gc_pause_load(g);
 }
 
+static int api_gc_concurrent_entering(global_State *g)
+{
+  /*
+  ** A secondary entrant between attach/spawn begin and mt_live publication can
+  ** already own runtime state that the legacy single-thread collector must not
+  ** race. Treat it like live MT for explicit collect/step and use GC2 instead
+  ** of the legacy exclusive collector.
+  */
+  return mt_live_acq(g) != 0 || mt_entering_acq(g) != 0;
+}
+
 static int api_gc_enterexclusive(global_State *g)
 {
   uint32_t expect = 0;
-  if (mt_live_acq(g) != 0)
+  if (api_gc_concurrent_entering(g))
     return 0;
   if (!mt_gc_exclusive_cas(g, &expect, 1))
     return 0;
-  if (mt_live_acq(g) != 0) {
+  if (api_gc_concurrent_entering(g)) {
     mt_gc_exclusive_rel(g, 0);
+    mt_gc_exclusive_futex_wake(g, INT_MAX);
     return 0;
   }
   return 1;
@@ -2348,7 +2360,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
       lj_gc_fullgc(L);
       api_gc_setlogical(g, api_gc_restart_threshold(g));
       api_gc_leaveexclusive(g);
-    } else if (mt_live_acq(g) != 0) {
+    } else if (api_gc_concurrent_entering(g)) {
       (void)lj_gc2_collect_active(L);
       api_gc_setlogical(g, api_gc_restart_threshold(g));
     }
@@ -2363,7 +2375,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     GCSize a = (GCSize)data << 10;
     GCSize total;
     if (!api_gc_enterexclusive(g)) {
-      if (mt_live_acq(g) != 0) {
+      if (api_gc_concurrent_entering(g)) {
 	if (lj_gc2_request_cycle_explicit(g, L2TG(L)))
 	  lj_gc2_mark_begin(g);
 	(void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);

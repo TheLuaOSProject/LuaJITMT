@@ -29,3 +29,10 @@ Follow-up: active-thread `collectgarbage("collect")` now also bypasses the
 automatic-trigger stop gate and restarts the logical GC threshold before
 returning. This matches stock LuaJIT: `collectgarbage("collect")` after
 `collectgarbage("stop")` leaves `collectgarbage("isrunning") == true`.
+
+Follow-up: explicit `collect` / `step` also use the GC2 route while
+`mt_entering != 0`, even if `mt_live == 0`. An entering secondary can already
+own runtime transition state but has not yet published itself as live, so the
+legacy single-thread collector must not claim the exclusive full-GC path in
+that window. `tests/t-gc-active-collect-assist.c` now forces this state and
+checks that both operations start/complete GC2 work instead.

@@ -61,6 +61,20 @@ static void leave_synthetic_active_peer(global_State *g)
   assert(mt_live_acq(g) == 0);
 }
 
+static void enter_synthetic_entering_peer(global_State *g)
+{
+  assert(mt_live_acq(g) == 0);
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  assert(mt_entering_acq(g) == 1);
+}
+
+static void leave_synthetic_entering_peer(global_State *g)
+{
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, INT_MAX);
+  assert(mt_entering_acq(g) == 0);
+}
+
 static void seed_table_graph(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *parent;
@@ -237,6 +251,42 @@ static void test_active_step_starts_stopped_cycle(lua_State *L,
   reset_gc2(L, g);
 }
 
+static void test_entering_collect_uses_gc2(lua_State *L, global_State *g)
+{
+  uint64_t starts0 = gc2_cycle_starts_acq(g);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(mt_live_acq(g) == 0);
+
+  enter_synthetic_entering_peer(g);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  leave_synthetic_entering_peer(g);
+
+  assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  lua_settop(L, 0);
+}
+
+static void test_entering_step_starts_gc2(lua_State *L, global_State *g)
+{
+  uint64_t starts0 = gc2_cycle_starts_acq(g);
+
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(mt_live_acq(g) == 0);
+
+  enter_synthetic_entering_peer(g);
+  assert(lua_gc(L, LUA_GCSTEP, 0) == 0);
+  leave_synthetic_entering_peer(g);
+
+  assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+
+  lua_gc(L, LUA_GCRESTART, -1);
+  reset_gc2(L, g);
+}
+
 static void test_attached_step_while_host_native_join(lua_State *L,
 						     global_State *g)
 {
@@ -292,6 +342,8 @@ int main(void)
   test_active_collect_restarts_stopped_cycle(L, g);
   test_active_step_returns_false(L, g, tg);
   test_active_step_starts_stopped_cycle(L, g);
+  test_entering_collect_uses_gc2(L, g);
+  test_entering_step_starts_gc2(L, g);
   test_attached_step_while_host_native_join(L, g);
 
   lua_close(L);
