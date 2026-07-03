@@ -10,6 +10,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_func.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -65,6 +66,57 @@ static int after_main_contains(global_State *g, GCobj *needle)
   }
   return 0;
 }
+
+#if LJ_GC64
+static const char legacy_probe_src[] =
+  "return function()\n"
+  "  local x = 0\n"
+  "  return function() return x end\n"
+  "end\n";
+
+static GCproto *first_child_proto(GCproto *pt)
+{
+  MSize i;
+  assert((pt->flags & PROTO_CHILD) != 0);
+  for (i = 0; i < pt->sizekgc; i++) {
+    GCobj *o = proto_kgc(pt, ~(ptrdiff_t)i);
+    if (o->gch.gct == ~LJ_TPROTO)
+      return gco2pt(o);
+  }
+  assert(0 && "missing child proto");
+  return NULL;
+}
+
+static GCfunc *top_lfunc(lua_State *L)
+{
+  GCfunc *fn;
+  assert(tvisfunc(L->top - 1));
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn));
+  return fn;
+}
+
+static GCproto *load_legacy_child_proto(lua_State *L)
+{
+  GCproto *child;
+  assert(luaL_loadstring(L, legacy_probe_src) == LUA_OK);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  child = first_child_proto(funcproto(top_lfunc(L)));
+  child->flags2 &= ~(uint32_t)PROTO2_CELLUV;
+  proto_setlegacyuv(child);
+  assert(proto_legacyuv(child));
+  assert(!proto_celluv(child));
+  return child;
+}
+
+static GCupval *new_legacy_capture(lua_State *L, GCproto *pt, TValue *base)
+{
+  GCfunc *parent = top_lfunc(L);
+  GCfunc *fn = lj_func_newL_gc_forjit(L, base, pt, &parent->l);
+  assert(fn->l.nupvalues == 1);
+  return func_uv_acq(&fn->l, 0);
+}
+#endif
 
 static void test_explicit_flush(lua_State *L)
 {
@@ -215,6 +267,50 @@ static void test_attach_flushes_pending(lua_State *L)
   lj_tg_fini_thread(g, &extra);
 }
 
+static void test_closed_upvalue_relink_pending(lua_State *L)
+{
+#if LJ_GC64
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  GCproto *child;
+  TValue slots[256];
+  TValue *slot;
+  GCupval *uv;
+  uint32_t uvdesc;
+  assert(tg != NULL);
+  (void)lj_gc_flush_root_pending(g);
+
+  child = load_legacy_child_proto(L);
+  (void)lj_gc_flush_root_pending(g);
+  child->flags2 &= ~(uint32_t)PROTO2_CELLUV;
+  proto_setlegacyuv(child);
+  uvdesc = proto_uv(child)[0];
+  assert((uvdesc & PROTO_UV_LOCAL) != 0);
+  slot = &slots[uvdesc & 0xffu];
+
+  setintV(slot, 17);
+  uv = new_legacy_capture(L, child, slots);
+  assert(!uv->closed);
+  assert(uvval(uv) == slot);
+  assert(!pending_contains(tg, obj2gco(uv)));
+  assert(!root_contains(g, obj2gco(uv)));
+  (void)lj_gc_flush_root_pending(g);
+
+  lj_func_closeuv(L, slot);
+  assert(uv->closed);
+  assert(uvval(uv) == &uv->tv);
+  assert(pending_contains(tg, obj2gco(uv)));
+  assert(!root_contains(g, obj2gco(uv)));
+
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+  assert(root_contains(g, obj2gco(uv)));
+  lua_settop(L, 0);
+#else
+  UNUSED(L);
+#endif
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -224,6 +320,7 @@ int main(void)
   test_fullgc_flush(L);
   test_tls_only_tg_flush(L);
   test_attach_flushes_pending(L);
+  test_closed_upvalue_relink_pending(L);
   lua_close(L);
   return 0;
 }

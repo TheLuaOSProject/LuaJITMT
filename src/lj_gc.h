@@ -72,6 +72,7 @@ LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_mark_trace_slot(global_State *g, uint32_t traceno);
 #endif
 LJ_FUNC void lj_gc_linkobj(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_linkobj_pending(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_new(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_new_chain(global_State *g, GCobj *head,
 				     GCobj *tail);

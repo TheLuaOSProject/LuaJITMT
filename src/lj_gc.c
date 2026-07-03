@@ -2257,7 +2257,15 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
   copyTVrel(mainthread_acq(g), &uv->tv, uvval(uv));
   setmref(uv->v, &uv->tv);
   uv->closed = 1;
-  lj_gc_linkobj(g, o);  /* CAS-publish closed upvalue on root list. */
+  /*
+  ** lj_func_closeuv() has already removed the upvalue from the thread-open
+  ** chain and g->uvhead, so its nextgc link is available for object-list
+  ** publication. Liveness is still discovered through closures that reference
+  ** the GCupval; the object list is the sweep/free spine and every consumer of
+  ** that spine flushes pending roots first. Queueing here avoids a global
+  ** root-list CAS on the close-upvalue path without changing collector reach.
+  */
+  lj_gc_linkobj_pending(g, o);
   if (isgray(o)) {  /* A closed upvalue is never gray, so fix this. */
     if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
       TValue tv;
@@ -2531,7 +2539,7 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
   return n;
 }
 
-void lj_gc_linkobj_new(global_State *g, GCobj *o)
+static void gc_linkobj_pending(global_State *g, GCobj *o)
 {
   TGState *tg = lj_thr_get_tg();
   GCobj *head;
@@ -2562,6 +2570,16 @@ void lj_gc_linkobj_new(global_State *g, GCobj *o)
     else
       lj_obj_setgcwnullrel(o);
   } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
+}
+
+void lj_gc_linkobj_pending(global_State *g, GCobj *o)
+{
+  gc_linkobj_pending(g, o);
+}
+
+void lj_gc_linkobj_new(global_State *g, GCobj *o)
+{
+  gc_linkobj_pending(g, o);
 }
 
 void lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)

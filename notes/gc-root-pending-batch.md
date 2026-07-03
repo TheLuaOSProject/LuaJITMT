@@ -9,10 +9,12 @@
   TG pending stack and CAS-prepends the whole drained chain to the legacy root
   list. This keeps legacy sweep/finalizer visibility while removing the global
   root-list cache-line from normal new-object allocation.
-- Existing-object relinks stay immediate through `lj_gc_linkobj()` or
-  `lj_gc_linkobj_after()`: closed-upvalue relinks and finalizer requeues do not
-  use the pending stack because those paths may already be using `nextgc` for
-  another chain or need immediate root placement.
+- Existing-object relinks may use the pending stack only after the caller has
+  released ownership of any previous `nextgc` chain. Closed upvalues qualify
+  after `lj_func_closeuv()` removes them from both open-upvalue lists.
+  Finalizer requeues stay immediate because they are already moving through
+  finalization-specific chains and need precise replacement in the legacy
+  finalization topology.
 - Converted new-object sites include `lj_mem_newgco()`, C/Lua closures, tables,
   cdata, saved traces, and child lua_State objects. Open upvalues remain on the
   open-upvalue list until closed, as before.
@@ -70,6 +72,12 @@
   already visible before later cell allocations can fail, while avoiding
   extra pending-head contention for multi-upvalue closures. Reused inherited
   cells and open legacy upvalues stay on their existing chains.
+- 2026-07-03 closed-upvalue follow-up: `lj_gc_closeuv()` now queues the closed
+  `GCupval` through the same pending object-list bridge after unlinking it from
+  the thread-open chain and `g->uvhead`. The object list is the sweep/free
+  spine, not the semantic liveness root set; reachable closures still mark the
+  upvalue directly. The pending fixture now closes a legacy open upvalue and
+  verifies the closed cell is pending until the next explicit flush.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object
