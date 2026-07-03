@@ -12,11 +12,12 @@ github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). CI must prove
 builds, runtime behavior, public API/ABI compatibility, benchmark data, or
 packaging output. Repository source-text and generated IR/ASM/mcode pass/fail
 checks are not allowed. Old implementation inventories were one-off engineering
-archaeology, not tests, and old milestone wrapper suites do not get an
-exception. Keep lasting invariants in behavior fixtures, C race/lifetime
-fixtures, release/bytecode artifact checks where the artifact is the public
-product, and code-adjacent comments plus notes when the rule is design guidance
-rather than observable behavior. Run
+orientation, not tests, and old milestone wrapper suites do not get an
+exception. Do not keep them as disabled, local-only, or release-only checks.
+Keep lasting invariants in behavior fixtures, C race/lifetime fixtures,
+release/bytecode artifact checks where the artifact is the public product, and
+code-adjacent comments plus notes when the rule is design guidance rather than
+observable behavior. Run
 `aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.

@@ -83,12 +83,12 @@ behavioral, fixture, public-artifact, benchmark, or packaging case that owns the
 observable part of the invariant.
 
 2026-07-03 removal follow-up: active tests, CI, and release workflows keep no
-repository text-matching suite. Broad `rg`/`grep` audits are allowed as manual
-engineering archaeology while working, but they must not become pass/fail
-rules. If a future cleanup discovers an old repository text-matching gate,
-remove it and replace it with a comment/note that explains the reason for the
-constrained code plus behavioral or generated-artifact coverage where the
-failure can be observed.
+repository text-matching suite. Do not keep source inspections as dormant
+scripts, local-only gates, release-only gates, or historical wrapper cases. If
+a future cleanup discovers an old repository text-matching gate, remove it and
+replace it with a comment/note that explains the reason for the constrained
+code plus behavioral or generated-artifact coverage where the failure can be
+observed.
 
 2026-07-03 historical-suite follow-up: the old repository-text checks are gone
 as tests, including old wrapper names, old source inventories, old bytecode

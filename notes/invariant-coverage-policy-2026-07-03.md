@@ -32,10 +32,10 @@ mistake. If an old wrapper described a real invariant, delete the source-text
 check, keep the reason as code-adjacent comments and notes, then cover the
 observable part through the current harness.
 
-Manual implementation searches and generated dumps remain useful while
-developing or reviewing a slice, but their result is an engineering
-observation, not a CI contract. A release or regression test should fail on
-wrong behavior, API/ABI incompatibility, a broken artifact, or a benchmark
-regression. If a constrained source or generated-code shape is required,
-explain why in the code comment and supporting note instead of pinning the
-spelling in a test.
+Implementation searches and generated dumps may inform a developer while
+working, but the repository must not carry them as checks. Do not keep them as
+disabled tests, local scripts, release gates, or historical wrappers. A release
+or regression test should fail on wrong behavior, API/ABI incompatibility, a
+broken artifact, or a benchmark regression. If a constrained source or
+generated-code shape is required, explain why in the code comment and
+supporting note instead of pinning the spelling in a test.

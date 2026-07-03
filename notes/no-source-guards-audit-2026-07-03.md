@@ -30,8 +30,9 @@ pattern-match assertions; the remaining exact/plain checks are artifact-named
 and are for public artifacts and captured process output.
 
 Follow-up scope clarification: there is no grandfathered historical guard
-suite. When old milestone notes mention source inventories, helper spelling,
-bytecode golden strings, IR/ASM dump markers, or mcode byte snippets, the
-active task is to document the real invariant and keep or add behavior,
-stock-suite, benchmark, C-fixture, or release-artifact coverage only where the
-failure is observable.
+suite, and no source guard should remain as a dormant test, local-only script,
+release-only gate, or wrapper preserved for audit nostalgia. When old milestone
+notes mention source inventories, helper spelling, bytecode golden strings,
+IR/ASM dump markers, or mcode byte snippets, the active task is to document the
+real invariant and keep or add behavior, stock-suite, benchmark, C-fixture, or
+release-artifact coverage only where the failure is observable.
