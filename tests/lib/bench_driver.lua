@@ -10,9 +10,26 @@ local function status_ok(ok, why, code)
   return ok == true and (code == nil or code == 0), code or why or ok
 end
 
+local function add_env(parts, env)
+  if not env then return end
+  local names = {}
+  for name in pairs(env) do
+    if not tostring(name):match("^[A-Za-z_][A-Za-z0-9_]*$") then
+      error("invalid environment variable name: " .. tostring(name), 3)
+    end
+    names[#names + 1] = name
+  end
+  table.sort(names)
+  for i = 1, #names do
+    local name = names[i]
+    parts[#parts + 1] = name .. "=" .. shell_quote(env[name])
+  end
+end
+
 local function argv_command(argv, opts)
   opts = opts or {}
   local parts = {}
+  add_env(parts, opts.env)
   if opts.timeout then
     parts[#parts + 1] = utils.timeout_prefix(opts.timeout)
   end
@@ -66,7 +83,11 @@ function M.bench_text(bin, bench_lua, jitflag, opts)
   if jitflag and jitflag ~= "" then argv[#argv + 1] = jitflag end
   argv[#argv + 1] = bench_lua
   if opts.filter and opts.filter ~= "" then argv[#argv + 1] = opts.filter end
-  return M.command_output(argv, { timeout = opts.timeout, stderr = opts.stderr })
+  return M.command_output(argv, {
+    timeout = opts.timeout,
+    stderr = opts.stderr,
+    env = opts.env
+  })
 end
 
 function M.baseline_csv(bin, bench_lua, opts)

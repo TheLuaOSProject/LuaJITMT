@@ -30,6 +30,14 @@ local function assert_dump_not_contains(t, dump, needle, label)
   end
 end
 
+local function assert_dump_not_match(t, dump, pattern, label)
+  local data = t:read(dump)
+  label = label or dump
+  if data:match(pattern) then
+    error(label .. ": unexpected dump pattern: " .. pattern, 2)
+  end
+end
+
 local function assert_same_trace_fnew_helper_fastpath(t, dump)
   local data = t:read(dump)
   local callref
@@ -46,6 +54,10 @@ local function assert_same_trace_fnew_helper_fastpath(t, dump)
   for line in (data .. "\n"):gmatch("(.-)\n") do
     if line:match("FLOAD%s+" .. callref .. "%s+func%.pc") then
       error("same-trace FNEW call: redundant prototype guard for CALLA ref " ..
+            callref, 2)
+    end
+    if line:match(">%s+p%d+%s+UREFC%s+" .. callref .. "%s") then
+      error("same-trace FNEW call: redundant closed-upvalue guard for CALLA ref " ..
             callref, 2)
     end
   end
@@ -217,6 +229,8 @@ function M.run_jit_dump_checks(t, dump)
 			   "assigned-before-FNEW fresh closure prototype reload")
   assert_dump_not_contains(t, dump, "ULOAD",
 			   "assigned-before-FNEW initial heap upvalue load")
+  assert_dump_not_match(t, dump, ">%s+p%d+%s+UREFC",
+			"assigned-before-FNEW closed-upvalue guard")
   assert_dump_contains(t, dump, "USTORE", "assigned-before-FNEW heap upvalue store")
 
   dump_im(t, dump, probes.assigned_before_fnew({
@@ -291,6 +305,29 @@ end
 _G.__lc_target = nil
 _G.__lc_reset = nil
 assert(s == 8080, s)
+]=])
+  luajit_code(t, [=[
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local t = {}
+for i = 1, 100 do
+  local x = i
+  t[i] = function()
+    x = x + 1
+    return x
+  end
+end
+assert(util.traceinfo(1), "escaped numeric FNEW creation should trace")
+assert(t[1]() == 2)
+assert(t[2]() == 3)
+assert(t[100]() == 101)
+assert(t[1]() == 3)
+assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))
+local name = debug.setupvalue(t[1], 1, 50)
+assert(name == "x", name)
+assert(t[1]() == 51)
+assert(t[2]() == 4)
 ]=])
 end
 

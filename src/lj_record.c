@@ -928,6 +928,7 @@ static int rec_call_argrefs(jit_State *J, IRRef ref, IRRef *args, int maxargs)
 typedef struct RecFnew1NumUV {
   IRRef callref;
   TRef value;
+  uint32_t uv;
 } RecFnew1NumUV;
 
 /* Decode the narrow helper used for one numeric local-cell upvalue. */
@@ -1015,6 +1016,7 @@ static int rec_fnew1num_current_uv(jit_State *J, uint32_t uv, GCupval *uvp,
     return 0;
   out->callref = callref;
   out->value = value;
+  out->uv = (uv << 8) | (hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff);
   return 1;
 }
 
@@ -2479,12 +2481,18 @@ noconstify:
     /* The helper has already created the real GCfunc/GCupval pair and promoted
     ** the parent stack slot to that cell. Before any child call boundary and
     ** before any earlier USTORE in the child, the first load can use the
-    ** helper's numeric argument directly. Stores still fall through to the
-    ** ordinary heap-cell path, preserving side exits, escaped closures and
-    ** debug visibility.
+    ** helper's numeric argument directly. Other immediate child accesses still
+    ** use the ordinary heap cell, but the helper guarantees a closed upvalue for
+    ** this prototype, so the dynamic closedness guard is redundant. Stores still
+    ** write the heap cell, preserving side exits, escaped closures and debug
+    ** visibility.
     */
     if (val == 0 && !rec_fnew1num_ustore_after(J, fnew1num.callref))
       return fnew1num.value;
+    uv = fnew1num.uv;
+    uref = tref_ref(emitir(IRT(IR_UREFC, IRT_PGC), fn, uv));
+    needbarrier = 1;
+    goto have_uref;
   }
   uv = (uv << 8) | (hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff);
   if (!uvp->closed) {
@@ -2524,6 +2532,7 @@ noconstify:
     uref = tref_ref(emitir(IRT(IR_UREFC, t), fn, uv));
     needbarrier = 1;
   }
+have_uref:
   if (val == 0) {  /* Upvalue load */
     IRType t = itype2irt(uvval(uvp));
     TRef res = emitir(IRTG(IR_ULOAD, t), uref, 0);

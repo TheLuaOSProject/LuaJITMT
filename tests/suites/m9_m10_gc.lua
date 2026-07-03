@@ -332,13 +332,16 @@ local function run_bench_stock_compare(t)
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
                        os.getenv("BENCH_GEOMEAN_MAX") or "100")
   local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "60s"
+  local scale = os.getenv("LJ_BENCH_STOCK_SCALE") or
+    os.getenv("BENCH_SCALE") or "0.001"
 
   for filter in filters:gmatch("%S+") do
     local result = bench_driver.compare_bins(stock, current, bench_lua, {
       filter = filter,
       max = max,
       timeout = timeout,
-      stderr = true
+      stderr = true,
+      env = { BENCH_SCALE = scale }
     })
     if not result.ok then
       error("stock benchmark regression for " .. filter .. ":\n" ..

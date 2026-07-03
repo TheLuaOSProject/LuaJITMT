@@ -48,9 +48,11 @@ cells, and generic/local-cell cases keep using the existing path.
   assigned-before-FNEW traces and absence of the old sync helper in that IR.
 - The first `UGET` in an immediate one-upvalue numeric helper call forwards the
   numeric helper argument only before any child call boundary and before any
-  earlier child `USTORE`. Mutable updates still emit a real heap `USTORE`, so
-  side exits, escaped closures, `debug.setupvalue`, and later reads observe the
-  ordinary heap upvalue cell.
+  earlier child `USTORE`. The same proof also removes the closed-upvalue guard
+  from the immediate child `UREFC`: `lj_func_newL_gc1num_forjit()` always
+  creates a fresh closed cell for this prototype. Mutable updates still
+  emit a real heap `USTORE`, so side exits, escaped closures,
+  `debug.setupvalue`, and later reads observe the ordinary heap upvalue cell.
 
 ## Local result
 
@@ -69,3 +71,21 @@ prototype reload removal:
 
 This slice reduces the traced IR/mcode shape (`mcode` 537 -> 492 bytes in the
 local dump) but does not solve the larger allocation/GC-side closure gap.
+
+2026-07-03 follow-up: the same helper proof now removes the dynamic
+closed-upvalue guard on immediate child `UREFC`. The focused dump shrank again
+from 492 to 465 bytes of mcode.
+
+The same audit found a correctness bug in the original numeric helper: if the
+trace stored closures from multiple loop iterations, `BASE[slot]` could still
+hold the previous iteration's promoted cell and the helper reused it. That made
+escaped closures alias incorrectly (`t[100]()` returned `4`-shape state instead
+of `101`). `lj_func_newL_gc1num_forjit()` now always snapshots the numeric
+argument into a fresh `GCupval` and republishes that cell to the parent slot for
+mutable captures. `m6_jit_cell_ops` covers escaped closures, distinct
+`debug.upvalueid()`, and `debug.setupvalue()` isolation.
+
+The correctness fix restores required per-closure upvalue allocation cost:
+same-session `BENCH_SCALE=0.05 ... closures_upval` measured 100.64 ns/op versus
+stock 44.04 ns/op. The remaining gap is therefore real allocation/GC publication
+work, not an optional guard.

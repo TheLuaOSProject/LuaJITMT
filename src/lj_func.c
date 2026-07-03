@@ -373,16 +373,17 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
 	     "bad one-upvalue FNEW slot");
   fn = func_newL(L, pt, lj_funcL_env_acq(parent));
   slot = base + slotno;
-  if (itype(slot) == LJ_TUPVAL) {
-    uv = gco2uv(gcV(slot));
-    lj_assertL(uv->closed && uvval(uv) == &uv->tv,
-	       "bad local cell upvalue");
-  } else {
-    setnumV(&tv, n);
-    uv = func_snapshotuv(L, &tv);
-    if (!(v & PROTO_UV_IMMUTABLE))
-      setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
-  }
+  /*
+  ** The recorder selects this helper for a raw numeric slot, but the generated
+  ** trace may leave the previous iteration's promoted cell in BASE[slot].
+  ** Each FNEW still has ordinary Lua closure identity, so allocate a fresh
+  ** closed upvalue from the numeric SSA value and republish that cell to the
+  ** parent slot for mutable captures.
+  */
+  setnumV(&tv, n);
+  uv = func_snapshotuv(L, &tv);
+  if (!(v & PROTO_UV_IMMUTABLE))
+    setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
   func_uvmeta(uv, parent, v);
   setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
   lj_gc_pubobjobj(L, fn, uv);
