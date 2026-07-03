@@ -9,7 +9,9 @@
 - Added `asm_href_tab_node_flags_test_acq()` plus
   `asm_href_tab_node_hmask_{load,and,cmpi}_acq()` so x64 HREF/HREFK
   node-header flag and mask reads are named at the backend helper boundary.
-- Documented that HREF table-link and node-header reads should go through the
-  named acquire helpers. The legacy wrapper for open-coded offsets is
-  obsolete; generated/backend behavior is covered by
-  `tools/ci/lua_test.sh m6_jit_href_nodehdr m6_jit_hrefk_nodehdr`.
+- Documented why HREF table-link and node-header reads go through the named
+  acquire helpers. Active-MT traces must not walk a retiring hash generation;
+  pre-MT traces may omit that guard because first threading activation flushes
+  them before secondary Lua can run. Runtime coverage stays in
+  `tools/ci/lua_test.sh m6_jit_href_nodehdr m6_jit_hrefk_nodehdr` plus the
+  table forwarding and active-MT behavior fixtures.

@@ -1669,7 +1669,14 @@ static LJ_AINLINE void asm_href_tab_node_flags_test_acq(ASMState *as,
 
 static void asm_tabnode_retiring_guard(ASMState *as, Reg node)
 {
-  /* M6: JIT hash readers leave retiring hash generations like the VM. */
+  /* Pre-MT traces cannot race a secondary table resize. The first transition
+  ** into threading sets mt_entering and flushes existing traces before worker
+  ** Lua code can run; traces assembled after that boundary keep the retiring
+  ** generation guard.
+  */
+  if (!mt_active_or_entering_acq(J2G(as->J)))
+    return;
+  /* M6: active-MT JIT hash readers leave retiring hash generations like the VM. */
   asm_guardcc(as, CC_NE);
   asm_href_tab_node_flags_test_acq(as, node, (int32_t)TABNODE_FLAG_RETIRING);
 }
