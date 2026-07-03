@@ -69,6 +69,17 @@ static int wait_for_flag(volatile int *p, int want, uint32_t spins)
   return load_flag(p) == want;
 }
 
+static int wait_for_count(uint32_t (*read_count)(void), uint32_t want,
+			  uint32_t spins)
+{
+  while (spins-- > 0) {
+    if (read_count() >= want)
+      return 1;
+    sched_yield();
+  }
+  return read_count() >= want;
+}
+
 static GCtab *thread_table(lua_State *L)
 {
   if (!tvistab(L->top - 1))
@@ -161,18 +172,20 @@ static lua_State *new_child_with_table(lua_State *L, int table_index)
 
 static void exercise_direct_owner(lua_State *L)
 {
-  lua_State *ownerL, *otherL, *sameL;
-  pthread_t owner_thr, other_thr, same_thr;
-  WorkerCtx owner, other, same;
+  lua_State *ownerL, *otherL, *sameNoLL, *sameLL;
+  pthread_t owner_thr, other_thr, same_no_l_thr, same_l_thr;
+  WorkerCtx owner, other, same_no_l, same_l;
   volatile int ready = 0;
   volatile int owner_start = 0;
   volatile int other_start = 0;
-  volatile int same_start = 0;
+  volatile int same_no_l_start = 0;
+  volatile int same_l_start = 0;
   volatile int owner_release = 0;
   volatile int no_release = 0;
   volatile int owner_entered = 0;
   volatile int other_entered = 0;
-  volatile int same_entered = 0;
+  volatile int same_no_l_entered = 0;
+  volatile int same_l_entered = 0;
 
   lua_settop(L, 0);
   lua_newtable(L);  /* table A */
@@ -181,7 +194,8 @@ static void exercise_direct_owner(lua_State *L)
 
   ownerL = new_child_with_table(L, 1);
   otherL = new_child_with_table(L, 2);
-  sameL = new_child_with_table(L, 1);
+  sameNoLL = new_child_with_table(L, 1);
+  sameLL = new_child_with_table(L, 1);
 
   owner.L = ownerL;
   owner.ready = &ready;
@@ -201,39 +215,62 @@ static void exercise_direct_owner(lua_State *L)
   other.no_l = 0;
   other.status = -1;
 
-  same.L = sameL;
-  same.ready = &ready;
-  same.start = &same_start;
-  same.release = &no_release;
-  same.entered = &same_entered;
-  same.hold = 0;
-  same.no_l = 1;
-  same.status = -1;
+  same_no_l.L = sameNoLL;
+  same_no_l.ready = &ready;
+  same_no_l.start = &same_no_l_start;
+  same_no_l.release = &no_release;
+  same_no_l.entered = &same_no_l_entered;
+  same_no_l.hold = 0;
+  same_no_l.no_l = 1;
+  same_no_l.status = -1;
 
+  same_l.L = sameLL;
+  same_l.ready = &ready;
+  same_l.start = &same_l_start;
+  same_l.release = &no_release;
+  same_l.entered = &same_l_entered;
+  same_l.hold = 0;
+  same_l.no_l = 0;
+  same_l.status = -1;
+
+  lj_tab_test_reset_struct_owner_l_futex_waits();
   lj_tab_test_reset_struct_owner_no_l_futex_waits();
 
   assert(pthread_create(&owner_thr, NULL, struct_owner_worker, &owner) == 0);
   assert(pthread_create(&other_thr, NULL, struct_owner_worker, &other) == 0);
-  assert(pthread_create(&same_thr, NULL, struct_owner_worker, &same) == 0);
+  assert(pthread_create(&same_no_l_thr, NULL, struct_owner_worker,
+			&same_no_l) == 0);
+  assert(pthread_create(&same_l_thr, NULL, struct_owner_worker,
+			&same_l) == 0);
 
-  assert(wait_for_flag(&ready, 3, 1000000));
+  assert(wait_for_flag(&ready, 4, 1000000));
   store_flag(&owner_start, 1);
   assert(wait_for_flag(&owner_entered, 1, 1000000));
 
   store_flag(&other_start, 1);
   assert(wait_for_flag(&other_entered, 1, 1000000));
 
-  store_flag(&same_start, 1);
-  assert(!wait_for_flag(&same_entered, 1, 10000));
+  store_flag(&same_no_l_start, 1);
+  store_flag(&same_l_start, 1);
+  assert(wait_for_count(lj_tab_test_struct_owner_no_l_futex_waits, 1,
+			1000000));
+  assert(wait_for_count(lj_tab_test_struct_owner_l_futex_waits, 1,
+			1000000));
+  assert(!load_flag(&same_no_l_entered));
+  assert(!load_flag(&same_l_entered));
   store_flag(&owner_release, 1);
-  assert(wait_for_flag(&same_entered, 1, 1000000));
+  assert(wait_for_flag(&same_no_l_entered, 1, 1000000));
+  assert(wait_for_flag(&same_l_entered, 1, 1000000));
 
   assert(pthread_join(owner_thr, NULL) == 0);
   assert(pthread_join(other_thr, NULL) == 0);
-  assert(pthread_join(same_thr, NULL) == 0);
+  assert(pthread_join(same_no_l_thr, NULL) == 0);
+  assert(pthread_join(same_l_thr, NULL) == 0);
   assert(owner.status == 0);
   assert(other.status == 0);
-  assert(same.status == 0);
+  assert(same_no_l.status == 0);
+  assert(same_l.status == 0);
+  assert(lj_tab_test_struct_owner_l_futex_waits() > 0);
   assert(lj_tab_test_struct_owner_no_l_futex_waits() > 0);
 }
 

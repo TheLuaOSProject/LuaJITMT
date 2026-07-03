@@ -281,6 +281,8 @@ LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
   LJTabNextAfterKeyindexHook hook);
+LJ_FUNC uint32_t lj_tab_test_struct_owner_l_futex_waits(void);
+LJ_FUNC void lj_tab_test_reset_struct_owner_l_futex_waits(void);
 LJ_FUNC uint32_t lj_tab_test_struct_owner_no_l_futex_waits(void);
 LJ_FUNC void lj_tab_test_reset_struct_owner_no_l_futex_waits(void);
 LJ_FUNC uint32_t lj_tab_test_struct_enter_acquires(void);

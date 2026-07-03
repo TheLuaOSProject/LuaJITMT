@@ -21,10 +21,11 @@
   resize/value churn. Current HEAD keeps those shared traversal paths
   interpreted under active MT; with that recorder fence restored, the per-table
   owner stress is stable.
-- The fixed 1 ms wait helper remains a pending bridge gap for transient
-  `KEYLOCK`, value-publication, and generic FORWARD/generation retry waits. The
-  final design still needs per-generation resize ownership, bounded copy
-  cursors, writer helping, and reader hop/retry.
+- Transient `KEYLOCK`, value-publication, and generic FORWARD/generation retry
+  waits now use the table retry-yield helper rather than the old fixed 1 ms
+  sleep. They remain a bridge because resize/copy progress is still owner-driven
+  rather than cooperative; the final design still needs per-generation resize
+  ownership, bounded copy cursors, writer helping, and reader hop/retry.
 
 Verification:
 
