@@ -2859,6 +2859,34 @@ static int gc2_thread_is_current(global_State *g, lua_State *L)
   return L == lj_tg_cur_L(g);
 }
 
+static int gc2_thread_is_jit_current(global_State *g, lua_State *L)
+{
+#if LJ_HASJIT
+  uint32_t owner;
+  TGState *tg = NULL;
+  if (!g || !L)
+    return 0;
+  owner = lj_state_owner_acq(L);
+  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
+    tg = lj_tg_find_owner(g, owner);
+  else if (L == lj_tg_cur_L(g))
+    tg = G2TG(g);
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != L)
+    return 0;
+  /*
+  ** A trace/native helper owns the live frame layout while jit_base or a
+  ** positive trace vmstate is published. In that window L->base is not a stable
+  ** interpreter frame chain, so root scans preserve the whole stack storage and
+  ** let the per-TG trace root keep the executing trace/prototype graph alive.
+  */
+  return lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0;
+#else
+  UNUSED(g); UNUSED(L);
+  return 0;
+#endif
+}
+
 static int gc2_thread_is_remote_current(global_State *g, lua_State *L)
 {
   uint32_t owner;
@@ -2914,8 +2942,8 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used, *max = tvref(L->maxstack);
-  if (gc2_thread_is_remote_current(g, L))
-    return max;  /* Remote current frame chains are owner-private. */
+  if (gc2_thread_is_remote_current(g, L) || gc2_thread_is_jit_current(g, L))
+    return max;  /* Current trace/native frame chains are owner-private. */
   used = L->top - 1;
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
@@ -3255,6 +3283,15 @@ static void gc2_scan_current_trace_root(global_State *g)
   GCtrace *T = &J->cur;
   IRIns *irbase;
   IRRef ref;
+  /*
+  ** J->curfinal is the assembler's unpublished compact trace body. It is not
+  ** in the trace vector or legacy root list until trace_save() publishes it,
+  ** but the assembler uses it across allocation and GC safepoints. Preserve the
+  ** raw body here; J->cur below remains the semantic root for KGC constants,
+  ** start prototype and snapshot PC owners until publication.
+  */
+  if (J->curfinal)
+    lj_gc2_markmem(g, J->curfinal);
   if (trace_traceno_acq(T) == 0)
     return;
   irbase = trace_ir_acq(T);
@@ -5942,14 +5979,17 @@ static void *gc2_mark_base(GCobj *o)
   return o;
 }
 
-static LJ_AINLINE void gc2_mark_legacy_string(GCobj *o)
+static LJ_AINLINE void gc2_mark_legacy_live(GCobj *o)
 {
   /*
-  ** Strings still retire through the intern-table sweep, which uses the legacy
-  ** color byte rather than arena mark bits. A GC2 edge to a string therefore
-  ** has to publish liveness to both collectors.
+  ** During the bridge period the legacy collector still owns the root-list and
+  ** string-table sweep decisions, while GC2 owns arena mark bits. Any object
+  ** reached only by a GC2 edge must therefore clear legacy white as well; this
+  ** keeps legacy sweep from reclaiming live trace prototypes, IR constants,
+  ** interned strings and other root-list objects before arena-only sweeping
+  ** replaces the root-list path.
   */
-  if (o->gch.gct == ~LJ_TSTR)
+  if (LJ_LIKELY(o->gch.gct != 0))
     lj_obj_cleargcflags_atomic(o, LJ_GC_WHITES);
 }
 
@@ -5990,7 +6030,7 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  gc2_mark_legacy_string(o);
+  gc2_mark_legacy_live(o);
   if (marked) {
     uint32_t phase = gc2_phase_acq(g);
     traversable = gc2_mark_base_traversable(g, base);
@@ -6017,7 +6057,7 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  gc2_mark_legacy_string(o);
+  gc2_mark_legacy_live(o);
   traversable = gc2_mark_base_traversable(g, base);
   if (marked && (traversable || o->gch.gct == ~LJ_TUDATA)) {
     if (traversable) {
@@ -6338,6 +6378,8 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used = L->top - 1, *max = tvref(L->maxstack);
+  if (gc2_thread_is_remote_current(g, L) || gc2_thread_is_jit_current(g, L))
+    return max;  /* Current trace/native frame chains are owner-private. */
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     GCproto *pt = gc2_func_proto_if_lua(fn);
@@ -6351,9 +6393,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
   used++;
   if (used > max)
     used = max;
-  if (gc2_thread_is_remote_current(g, L)) {
-    top = max;
-  } else if (gc2_thread_is_current(g, L) && L->base > bot + 1 + LJ_FR2) {
+  if (gc2_thread_is_current(g, L) && L->base > bot + 1 + LJ_FR2) {
     top = gc2_active_thread_top(L, top);
   } else {
     TValue *ctop = curr_top(L);

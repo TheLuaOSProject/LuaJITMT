@@ -148,10 +148,22 @@ intern-table path and its cell reused. GC2 proto traversal had marked the string
 in arena bits, but the legacy string sweeper still uses the classic color byte.
 
 `lj_gc2_markobj()` and the worker mark path now clear the legacy white bits for
-`GCstr` objects marked by GC2. Safepoint native acknowledgement was also tightened:
-remote native acks do not consume `HS_SCAN_ROOTS` for TGs that own a Lua stack,
-and owner-side native-leave scans walk frame headers before raw slots. This keeps
-frame functions/protos and proto KGC strings live without adding a runtime lock.
+all GC objects marked by GC2. The original fix only covered interned strings, but
+the legacy root-list sweeper still uses the same classic color byte for traces,
+prototypes, closures, tables, and other root-list objects. A GC2-only edge must
+therefore publish liveness to both collectors until arena-only sweeping replaces
+that root-list path.
+
+Safepoint native acknowledgement was also tightened: remote native acks do not
+consume `HS_SCAN_ROOTS` for TGs that own a Lua stack, and owner-side native-leave
+scans walk frame headers before raw slots when the owner is in an interpreter
+frame. If the owner TG is still in a trace/native helper (`jit_base` or positive
+trace `vmstate`), GC2 now preserves the whole stack storage and does not decode
+`L->base` as an interpreter frame chain. The executing trace is kept through the
+per-TG trace root, which preserves its prototype/IR graph without trusting a
+JIT-owned frame layout. The assembler's unpublished `J->curfinal` trace copy is
+also preserved as raw arena memory during root scans; it is not a semantic trace
+root until `trace_save()` publishes it.
 
 Validation:
 
@@ -159,11 +171,17 @@ Validation:
 - `tools/ci/lua_test.sh m3_safepoint_handshake`: passed
 - `tools/ci/lua_test.sh m3_gc_active_thread_roots`: passed
 - focused `pairs` traversal and `ipairs` traversal with 512 resize rounds: passed
+- repeated aggressive `next` traversal with `hotloop=1,hotexit=1`,
+  `threads=4`, `reps=256`, and `rounds=64`: passed
+- heavy `next` traversal with `threads=4`, `reps=1024`, and `rounds=256`: passed
+- mixed `pairs,ipairs,next` traversal with `threads=4`, `reps=512`, and
+  `rounds=128`: passed
 
-Residual follow-up: a heavier assertion-build `next` traversal
-(`reps=1024`, `threads=4`, `rounds=256`) now reaches a separate crash, and one
-mixed traversal run exposed a different recorder slot type assertion. Treat those
-as the next stability targets rather than the fixed KGC string-lifetime bug.
+The heavier assertion-build `next` traversal crash reduced to a self-applied GC2
+root scan from a JIT/native table resize helper. The crashing frame walk came
+from `tab_struct_owner_wait()` leaving native and applying `HS_SCAN_ROOTS` while
+the TG still had trace state published. That path is covered by the JIT/native
+stack-scan rule above.
 
 ## Benchmark guard
 
