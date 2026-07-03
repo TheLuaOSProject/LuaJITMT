@@ -1017,7 +1017,7 @@ assert(s == 3280 and a[81] == 80.5)
                        "same-slot array store/read must forward ASTORE",
                        function(st)
         return st.astore and st.aref and not st.aload and st.xpoll and
-               st.array == 2 and st.xload == 2
+               st.array == 2 and st.asize == 2 and st.xload == 0
       end)
 
       local hash_forward_dump = t:tmp("lj-m6-hstore-forward-read.dump")
@@ -1393,7 +1393,7 @@ assert(util.traceinfo(1), "boolean hash store did not trace")
 
   add({
     name = "m6_jit_aref_pair_guard",
-    description = "M6 x64 shared-array AREF generation-pair behavior",
+    description = "M6 x64 pre-MT direct AREF and active-MT read-helper behavior",
     run = function(t)
       build_default(t)
       local dump = t:tmp("lj-m6-aref-pair.dump")
@@ -1412,10 +1412,11 @@ end
 assert(s > 0)
 ]=], { timeout = "20s" })
       assert_trace1_ir(t, dump,
-                       "separated shared array reads must load bounds from TabArrayHdr",
+                       "pre-MT separated array reads must use direct bounds",
                        function(st)
-        return st.array >= 2 and st.hdradd >= 2 and st.xload >= 2 and
-               st.asize == 0 and st.eq == 0 and st.aref and st.aload and st.xpoll
+        return st.array >= 2 and st.asize >= 2 and st.hdradd == 0 and
+               st.xload == 0 and st.eq == 0 and st.aref and st.aload and
+               st.xpoll
       end)
 
       local split = t:tmp("lj-m6-aref-pair-split.dump")
@@ -1434,10 +1435,11 @@ end
 assert(s > 0)
 ]=], { timeout = "20s" })
       assert_trace1_ir(t, split,
-                       "split-from-colocated arrays must use header bounds after publish",
+                       "pre-MT split arrays must use direct bounds after publish",
                        function(st)
-        return st.array >= 2 and st.hdradd >= 2 and st.xload >= 2 and
-               st.asize == 0 and st.eq == 0 and st.aref and st.aload and st.xpoll
+        return st.array >= 2 and st.asize >= 2 and st.hdradd == 0 and
+               st.xload == 0 and st.eq == 0 and st.aref and st.aload and
+               st.xpoll
       end)
 
       local colo = t:tmp("lj-m6-aref-pair-colo.dump")
@@ -1455,9 +1457,9 @@ end
 assert(s > 0)
 ]=], { timeout = "20s" })
       assert_trace1_ir(t, colo,
-                       "colocated shared array reads must keep the shared pair guard",
+                       "pre-MT colocated array reads must use direct bounds",
                        function(st)
-        return st.array >= 4 and st.asize >= 2 and st.eq >= 2 and
+        return st.array >= 2 and st.asize >= 2 and st.eq == 0 and
                st.xload == 0 and st.aref and st.aload and st.xpoll
       end)
 
@@ -1477,11 +1479,32 @@ end
 assert(s == 80)
 ]=], { timeout = "20s" })
       assert_trace1_ir(t, miss,
-                       "separated shared out-of-array guards must load bounds from TabArrayHdr",
+                       "pre-MT out-of-array guards must use direct bounds",
                        function(st)
-        return st.array >= 2 and st.hdradd >= 2 and st.xload >= 2 and
-               st.asize == 0 and st.ule and st.href and not st.aref and st.xpoll
+        return st.array == 0 and st.hdradd == 0 and st.xload == 0 and
+               st.asize >= 2 and st.ule and st.href and not st.aref and
+               st.xpoll
       end)
+
+      local active = t:tmp("lj-m6-aref-active-helper.dump")
+      luajit_dump(t, active, "-jdump=ir", [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+jit.off()
+local t = {}
+for i = 1, 128 do t[i] = i end
+jit.on()
+local s = 0
+for i = 1, 80 do
+  local k = (i % 128) + 1
+  s = s + (t[k] or 0)
+end
+assert(s > 0)
+]=], { timeout = "20s" })
+      assert_dump_contains(t, active, "lj_tab_gettv_forjit",
+                           "active-MT shared table read helper route")
 
       luajit_code(t, [=[
 local util = require("jit.util")
@@ -1521,7 +1544,7 @@ for i = 1, 120 do
 end
 assert(#keep == 120 and keep[120][80] == "value-120-80")
 ]=], { timeout = "20s" })
-      print("M6 JIT shared AREF generation-pair behavior passed")
+      print("M6 JIT pre-MT AREF and active-MT read-helper behavior passed")
     end
   })
 

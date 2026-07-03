@@ -1602,6 +1602,18 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
+static int rec_idx_tab_direct_array(jit_State *J, TRef tab)
+{
+  if (rec_idx_tab_trace_local(J, tab))
+    return 1;
+  /* Pre-MT traces cannot race a secondary table resize, and first activation
+  ** flushes all existing traces before secondary Lua code can run. After
+  ** mt_entering or mt_active is visible, published arrays keep the shared
+  ** header/generation guards.
+  */
+  return !mt_active_or_entering_acq(J2G(J));
+}
+
 int lj_record_mt_shared_tab(jit_State *J, TRef tab)
 {
   return mt_active_or_entering_acq(J2G(J)) && !rec_idx_tab_trace_local(J, tab);
@@ -1667,9 +1679,9 @@ static void rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)
 }
 
 static TRef rec_idx_array_asize_ref(jit_State *J, GCtab *t, TRef tab,
-				    TValue *record_array, int trace_local)
+				    TValue *record_array, int direct_array)
 {
-  if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
+  if (!direct_array && rec_idx_tab_array_has_hdr(t, record_array)) {
     TRef arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), tab, IRFL_TAB_ARRAY);
     /* M6: shared separated non-array bounds use TabArrayHdr.asize. */
     rec_idx_array_hdr_guards(J, tab, arrayref);
@@ -1707,7 +1719,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       TValue *record_array;
       MSize asize = lj_tab_array_snapshot_acq(t, &record_array);
 #if LJ_HAS_X64_MT_JIT_HELPERS
-      int trace_local = rec_idx_tab_trace_local(J, ix->tab);
+      int direct_array = rec_idx_tab_direct_array(J, ix->tab);
 #else
       UNUSED(record_array);
 #endif
@@ -1715,7 +1727,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 	TRef arrayref;
 #if LJ_HAS_X64_MT_JIT_HELPERS
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
-	if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
+	if (!direct_array && rec_idx_tab_array_has_hdr(t, record_array)) {
 	  /* M6: shared separated AREF pairs slots with TabArrayHdr.asize. */
 	  rec_idx_array_hdr_guards(J, ix->tab, arrayref);
 	  asizeref = rec_idx_array_hdr_asize(J, arrayref);
@@ -1725,7 +1737,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 	  asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
 	  rec_idx_abc(J, asizeref, ikey, asize);
 #if LJ_HAS_X64_MT_JIT_HELPERS
-	  if (!trace_local) {
+	  if (!direct_array) {
 	    TRef arrayref2 = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab,
 				    IRFL_TAB_ARRAY);
 	    /* M6: shared AREF guards TAB_ARRAY pair stability. */
@@ -1739,7 +1751,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       } else {  /* Currently not in array (may be an array extension)? */
 #if LJ_HAS_X64_MT_JIT_HELPERS
 	asizeref = rec_idx_array_asize_ref(J, t, ix->tab, record_array,
-					   trace_local);
+					   direct_array);
 #else
 	asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
 #endif
@@ -1758,8 +1770,9 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 	/* Guard that the array part stays empty. */
 	TRef tmp;
 #if LJ_HAS_X64_MT_JIT_HELPERS
-	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
-	tmp = rec_idx_array_asize_ref(J, t, ix->tab, record_array, trace_local);
+	int direct_array = rec_idx_tab_direct_array(J, ix->tab);
+	tmp = rec_idx_array_asize_ref(J, t, ix->tab, record_array,
+				      direct_array);
 #else
 	UNUSED(record_array);
 	tmp = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);

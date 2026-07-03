@@ -450,29 +450,19 @@ scoped-flush target.
    falls back to regular `HREF` if the shape changes while recording. x64
    empty-hash misses also fall through to regular `HREF` instead of recording
    the legacy `TAB_HMASK == 0` shortcut, so even empty hash generations take the
-   mask from `TabNodeHdr`. Legacy
-   shared array reads now have an interim x64 pair-stability guard: the recorder
-   emits a `TAB_ARRAY` FLOAD before `TAB_ASIZE`, then emits a second fresh
-   `TAB_ARRAY` FLOAD and guards it equal before `AREF`/`ALOAD`, while trace-local
-   `TNEW`/`TDUP` arrays skip the extra guard. This is not the final `AHdr`
-   design, but it prevents the current shared-array trace from combining an old
-   array pointer with a newer size check. Separated shared array reads now use
-   the recoverable `TabArrayHdr`: the x64 recorder loads `GCtab.array` once,
-   derives the header address, `XLOAD`s `TabArrayHdr.asize` for the bounds
-   guard, and uses the same slots pointer for `AREF`/`ALOAD`. Colocated shared
-   arrays keep the legacy paired `TAB_ARRAY` equality guard. The header path is
-   gated on the currently acquired array pointer and guarded at runtime against
-   `NULL` and `tab + sizeof(GCtab)`, so empty or colocated tables that enter a
-   separated-array trace exit before the header load. Separated visible-size
-   changes now publish fresh array-header generations, so `TabArrayHdr.asize` is
-   immutable after publish; shrink generations preserve stale-reader capacity
-   while clearing hidden tail slots. The same x64 recorder helper now uses
-   `TabArrayHdr.asize` for separated shared numeric keys that are currently
-   outside the array part before continuing to `HREF`, and for sparse-table
-   empty-array guards, so those miss/extension guards no longer depend only on
-   legacy `TAB_ASIZE`. This is still an `AHdr`-lite bridge, not the
-   final table-generation model, because legacy mirrors, C-side mirror readers,
-   and helper-backed table stores remain.
+   mask from `TabNodeHdr`. Legacy shared array reads now split at the MT
+   activation boundary. Before `mt_entering`/`mt_active`, traced table reads use
+   the stock-like direct `TAB_ARRAY`/`TAB_ASIZE` shape; secondary Lua code cannot
+   race those traces yet, and first activation flushes existing traces before
+   worker code runs. Once MT is entering or active, non-trace-local table reads
+   route through `lj_tab_gettv_forjit()`, which retries forwarded slots and
+   avoids carrying retired array/hash generation pointers in mcode. The earlier
+   x64 `TabArrayHdr`/pair-guard bridge remains relevant to internal
+   shared-array recording paths that are not helper-routed: separated arrays
+   pair the loaded slots with immutable header size, and colocated arrays use an
+   equality guard on the loaded table array pointer. This is still an
+   `AHdr`-lite bridge, not the final table-generation model, because legacy
+   mirrors, C-side mirror readers, and helper-backed table stores remain.
    Existing non-nil table-slot stores are
    now recorded on Linux/x64 for shared tables as well as PHI/upvalue/escaped
    table references, previous-nil in-bounds array slots, existing nil-value

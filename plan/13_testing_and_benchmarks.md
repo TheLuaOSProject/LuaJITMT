@@ -72,8 +72,8 @@ Current M6 scaffold gates include dispatch redispatch, recorder-token
 ownership, local-cell recorder IR shape including self-cell CNEW/FNEW creation,
 mixed raw-local FNEW sync-helper traces, promoted-cell update loops,
 first-promotion FNEW traces, XPOLL barriers, XBAR/XPOLL aliasing, allocation
-accounting, TNEW/CNEW/SNEW GC2 hard-check readiness, shared AREF
-pair-stability, GC-step bridging, mcode publication, public and
+   accounting, TNEW/CNEW/SNEW GC2 hard-check readiness, pre-MT direct AREF and
+   active-MT read-helper routing, GC-step bridging, mcode publication, public and
 recorder-internal scoped flush handshake coverage, and numeric side-trace
 flush slot-retirement coverage. The table-store helper gate also rejects
 same-trace closed-upvalue and nested heap escapes before a `TNEW`/`TDUP` slot
