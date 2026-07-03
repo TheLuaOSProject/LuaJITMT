@@ -25,10 +25,11 @@
   `mainthread->nextgc` topology.
 - The main-thread pre-MT fast path now links fresh objects onto
   `TGState.gcroot_pending` with a release store instead of a CAS loop while no
-  secondary Lua thread has existed and no GC2 worker is running. Once
-  `mt_active` is latched or GC workers are enabled, allocation uses the CAS
-  pending stack again. This removes a single-thread allocation RMW without
-  changing the active-MT publication protocol.
+  secondary Lua thread has existed, no secondary attach path is entering, and
+  no GC2 worker is running. Once `mt_active`, `mt_entering`, or GC workers are
+  visible, allocation uses the CAS pending stack again. This removes a
+  single-thread allocation RMW without changing the active-MT publication
+  protocol.
 - Fresh child lua_State objects and regular userdata now use
   `TGState.gcroot_pending_after_main` and `lj_gc_linkobj_new_after_main()`.
   This removes the direct `mainthread->nextgc` CAS from coroutine/thread-state
@@ -42,6 +43,11 @@
   pre-attach publication gap for any future path that queues objects before its
   TG is globally discoverable. The root-pending fixture now synthesizes that
   state with the TG no longer TLS-current.
+- 2026-07-02 entering-window follow-up: x64 inline empty-table `TNEW` uses the
+  same single-producer predicate. During `mt_entering` it routes through
+  `lj_tab_new0()`, whose pending-root publication then takes the atomic path.
+  `m5_x64_tnew_empty_inline` verifies this with a runtime helper-call counter,
+  not by inspecting DynASM source.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

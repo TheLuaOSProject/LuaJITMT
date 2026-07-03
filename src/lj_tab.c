@@ -95,10 +95,16 @@ static uint32_t tab_struct_tid(lua_State *L)
 
 #ifdef LJ_TAB_TEST_HELPERS
 static uint32_t tab_test_struct_owner_no_l_futex_waits;
+static uint32_t tab_test_new0_calls;
 
 static LJ_AINLINE void tab_test_struct_owner_no_l_futex_wait(void)
 {
   (void)la_add32_acqrel(&tab_test_struct_owner_no_l_futex_waits, 1);
+}
+
+static LJ_AINLINE void tab_test_new0_call(void)
+{
+  (void)la_add32_acqrel(&tab_test_new0_calls, 1);
 }
 
 uint32_t lj_tab_test_struct_owner_no_l_futex_waits(void)
@@ -110,8 +116,19 @@ void lj_tab_test_reset_struct_owner_no_l_futex_waits(void)
 {
   la_store32_rel(&tab_test_struct_owner_no_l_futex_waits, 0);
 }
+
+uint32_t lj_tab_test_new0_calls(void)
+{
+  return la_load32_acq(&tab_test_new0_calls);
+}
+
+void lj_tab_test_reset_new0_calls(void)
+{
+  la_store32_rel(&tab_test_new0_calls, 0);
+}
 #else
 #define tab_test_struct_owner_no_l_futex_wait()		((void)0)
+#define tab_test_new0_call()				((void)0)
 #endif
 
 static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
@@ -869,6 +886,7 @@ GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits)
 
 GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L)
 {
+  tab_test_new0_call();
   return newtab(L, 0, 0);
 }
 

@@ -4168,6 +4168,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jnz >6
     |  cmp dword GL:TMPR->mt_active, 0
     |  jne >7
+    |  cmp dword GL:TMPR->mt_entering, 0
+    |  jne >7
     |  cmp dword GL:TMPR->gc2.n_workers, 0
     |  jne >7
     |  cmp dword GL:TMPR->allocf_arena, 0

@@ -14,9 +14,14 @@
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_tab.h"
 #include "lj_tg.h"
 
 #include "lib/lua_fixture_helpers.h"
+
+#ifndef LJ_TAB_TEST_HELPERS
+#error "t-x64-tnew-empty-inline requires LJ_TAB_TEST_HELPERS"
+#endif
 
 #define TNEW_EMPTY_SIZE		((GCSize)sizeof(GCtab))
 #define TNEW_EMPTY_NCELLS	((uint32_t)((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT))
@@ -114,6 +119,37 @@ static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 1);
 }
 
+static void test_entering_uses_helper(lua_State *L, global_State *g,
+				      TGState *tg)
+{
+  LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  GCobj *pending0;
+  uint32_t cell0;
+  uint32_t calls0;
+  GCtab *t;
+
+  load_empty_table_chunk(L);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  cell0 = b->cell;
+  lj_tab_test_reset_new0_calls();
+  calls0 = lj_tab_test_new0_calls();
+
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  ljt_lua_pcall(L, 0, 1, "entering empty TNEW helper pcall");
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+
+  t = tabV(L->top - 1);
+  assert(lj_tab_test_new0_calls() == calls0 + 1u);
+  assert_empty_table_body(g, t);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
+  assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
+  assert(b->cell >= cell0);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_chain_contains(g, obj2gco(t)));
+  lua_pop(L, 1);
+}
+
 static void test_local_accounting_fallback(lua_State *L, global_State *g,
 					   TGState *tg)
 {
@@ -170,6 +206,7 @@ int main(void)
   ljt_lua_dostring(L, "if jit then jit.off(true, true) end\n");
 
   test_inline_empty_tnew(L, g, tg);
+  test_entering_uses_helper(L, g, tg);
   test_local_accounting_fallback(L, g, tg);
   test_custom_allocator_fallback(L, g);
 

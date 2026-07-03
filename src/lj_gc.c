@@ -2333,12 +2333,12 @@ void lj_gc_linkobj_new(global_State *g, GCobj *o)
     return;
   }
   if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
-		gc2_n_workers_acq(g) == 0)) {
+		mt_entering_acq(g) == 0 && gc2_n_workers_acq(g) == 0)) {
     /*
-    ** Before secondary Lua threads or GC workers exist, the main TG is the
-    ** only pending-root producer and flusher. Avoid the CAS/RMW allocation
-    ** tax, but keep release publication so a later activation sees a complete
-    ** pending chain.
+    ** Before secondary Lua threads, entering secondary attachers, or GC
+    ** workers exist, the main TG is the only pending-root producer and
+    ** flusher. Avoid the CAS/RMW allocation tax, but keep release publication
+    ** so a later activation sees a complete pending chain.
     */
     head = lj_tg_gcroot_pending_acq(tg);
     if (head)
@@ -2366,7 +2366,7 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
     return;
   }
   if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
-		gc2_n_workers_acq(g) == 0)) {
+		mt_entering_acq(g) == 0 && gc2_n_workers_acq(g) == 0)) {
     head = lj_tg_gcroot_pending_after_main_acq(tg);
     if (head)
       lj_obj_setgcwrel(o, head);
