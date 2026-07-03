@@ -9,7 +9,7 @@ checks, implementation-shape grep rules, generated IR marker checks, generated
 ASM checks, or mcode byte/pattern checks as pass/fail criteria. Implementation-
 only rules must be documented beside the code they constrain and, when the
 context is broader than a local comment, in `notes/`. Tests should fail on
-broken behavior or broken artifacts, not on implementation spelling.
+broken behavior or broken public artifacts, not on implementation spelling.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read captured logs, temporary files, imported-suite inputs,
@@ -23,7 +23,7 @@ Use one of these forms for new coverage:
   Lua behavior.
 - A C fixture when the invariant is about object lifetime, publication order,
   native regions, STOPREQ handling, or multithreaded races.
-- A generated artifact check when the artifact itself is the product or
+- Public artifact coverage when the artifact itself is the product or
   compatibility surface under test, such as a release archive, install manifest,
   benchmark CSV, captured process output, or a LuaJIT bytecode blob that is
   loaded and executed as an opaque artifact.

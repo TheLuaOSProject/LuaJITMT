@@ -12,7 +12,7 @@
 
 The production table resize-forward slice is landed, and the follow-up x64
 closed-upvalue publication slice is also pushed. The current work is tightening
-the test harness so behavior fixtures and generated artifacts own observable
+the test harness so behavior fixtures and public artifacts own observable
 semantics, while implementation-only constraints stay in comments and notes.
 The previous audit blockers addressed in recent slices include:
 

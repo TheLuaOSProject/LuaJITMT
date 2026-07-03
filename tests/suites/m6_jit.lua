@@ -833,7 +833,7 @@ for k in pairs(package) do
   local s = tostring(k)
   t[#t+1] = s
   assert(t[#t] == s and type(t[#t]) == "string",
-         "numeric NEWREF helper crossed src/key TValue temps")
+         "numeric NEWREF helper crossed value/key TValue temps")
 end
 assert(util.traceinfo(1), "numeric NEWREF append did not trace")
 ]=])
