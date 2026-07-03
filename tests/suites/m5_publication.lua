@@ -561,6 +561,8 @@ return function(add)
     run = function(t)
       build_and_run_luajit_script(t, "t-threading-upvalue.lua", nil,
                                   { joff = true })
+      build_and_run_c(t, t:tmp("lj_t-legacy-upvalue-entering"),
+                      "t-legacy-upvalue-entering.c")
       build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-snapshot"),
                       "t-cclosure-upvalue-snapshot.c")
       build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-race"),

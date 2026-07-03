@@ -193,6 +193,17 @@ static void func_uvmeta(GCupval *uv, GCfuncL *parent, uint32_t v)
   uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
 }
 
+static LJ_AINLINE int func_legacyuv_snapshot(global_State *g, const GCproto *pt)
+{
+  /*
+  ** A secondary VM can already be entering before the one-way mt_active latch
+  ** is visible. Legacy-loaded protos do not have source cell-upvalue bytecode,
+  ** so local captures must snapshot across that handoff window too.
+  */
+  return proto_legacyuv(pt) &&
+	 (mt_active_acq(g) != 0 || mt_entering_acq(g) != 0);
+}
+
 /* Promote a source local slot to a closed upvalue cell, or inherit one. */
 static GCupval *func_celluv(lua_State *L, TValue *slot, uint32_t v,
 			    GCfuncL *parent)
@@ -319,7 +330,7 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
       if (proto_celluv(pt)) {
 	uv = func_celluv(L, slot, v, parent);
       } else {
-	uv = proto_legacyuv(pt) && mt_active_acq(G(L)) ?
+	uv = func_legacyuv_snapshot(G(L), pt) ?
 	     func_snapshotuv(L, slot) : func_finduv(L, slot);
 	func_uvmeta(uv, parent, v);
       }
