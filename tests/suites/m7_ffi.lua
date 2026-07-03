@@ -501,10 +501,10 @@ assert(cl.lj_clib_ldscript_value() == 42)
       luajit_code(t, [[
 local ffi = require"ffi"
 local util = require"jit.util"
-ffi.cdef"typedef struct { int x; double y; } lj_m7_jit_dump_t;"
+ffi.cdef"typedef struct { int x; double y; } lj_m7_jit_cnew_t;"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
-local struct_t = ffi.typeof("lj_m7_jit_dump_t")
+local struct_t = ffi.typeof("lj_m7_jit_cnew_t")
 local int64_t = ffi.typeof("int64_t")
 local function make(n)
   local sum = 0
@@ -517,7 +517,7 @@ local function make(n)
 end
 for _ = 1, 30 do assert(make(80) == 6480) end
 assert(util.traceinfo(1), "CNEW allocation loop did not trace")
-print("dump cnew ok")
+print("jit cnew ok")
 ]])
       luajit_code(t, [[
 local ffi = require"ffi"
@@ -532,15 +532,15 @@ local function make(n)
 end
 for _ = 1, 30 do assert(tonumber(make(80)) == 80) end
 assert(util.traceinfo(1), "CNEWI allocation loop did not trace")
-print("dump cnewi ok")
+print("jit cnewi ok")
 ]])
       luajit_code(t, [[
 local ffi = require"ffi"
 local util = require"jit.util"
-ffi.cdef"typedef struct { uint8_t x[1024]; } lj_m7_jit_dump_big_t;"
+ffi.cdef"typedef struct { uint8_t x[1024]; } lj_m7_jit_cnew_big_t;"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local big_t = ffi.typeof("lj_m7_jit_dump_big_t")
+local big_t = ffi.typeof("lj_m7_jit_cnew_big_t")
 local sink
 local function make(n)
   for i = 1, n do
@@ -552,7 +552,7 @@ local function make(n)
 end
 for _ = 1, 30 do assert(make(80) == 80) end
 assert(util.traceinfo(1), "large CNEW allocation loop did not trace")
-print("dump big cnew ok")
+print("jit big cnew ok")
 ]])
 
       clean_build(t, { xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" })

@@ -11,9 +11,9 @@ so active CI should not pin link types, trace counts, or the position of the
 first up-recursive trace. The current test keeps the observable parts: the
 recursive function returns correct results, records at least one trace, and
 continues to run repeated recursive calls within the normal timeout. The
-timeout is the coarse guard against returning to the old pathological
-re-recording behavior; exact `-jv` topology remains a manual performance
-diagnostic, not a pass/fail source-shape check.
+timeout is a coarse behavioral smoke for the old pathological re-recording
+failure; exact `-jv` topology remains a manual performance diagnostic, not an
+active test contract.
 
 When recursive trace retention changes, document the reason beside the recorder
 or trace-retirement code and use benchmark data for throughput regressions.

@@ -170,12 +170,12 @@ static void assert_jit_patched_roundtrip(lua_State *L)
   ljt_lua_assert_ok(L, luaL_dostring(L,
     "jit.flush(); jit.opt.start('hotloop=1','hotexit=1')"),
     "enable hot JIT");
-  ljt_lua_assert_ok(L, luaL_loadstring(L, src), "load JIT dump function");
-  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "create JIT dump function");
+  ljt_lua_assert_ok(L, luaL_loadstring(L, src), "load traced roundtrip function");
+  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "create traced roundtrip function");
   for (i = 0; i < 40; i++) {
     lua_pushvalue(L, -1);
     lua_pushinteger(L, 100);
-    ljt_lua_assert_ok(L, lua_pcall(L, 1, 1, 0), "run JIT dump function");
+    ljt_lua_assert_ok(L, lua_pcall(L, 1, 1, 0), "run traced roundtrip function");
     assert(lua_tointeger(L, -1) == 5050);
     lua_pop(L, 1);
   }

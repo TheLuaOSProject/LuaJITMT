@@ -29,6 +29,10 @@ The active Lua assertion helper layer no longer exposes generic source-text or
 pattern-match assertions; the remaining exact/plain checks are artifact-named
 and are for public artifacts and captured process output.
 
+The old raw M1 x64 disassembly snapshot was removed for the same reason:
+generated disassembly is a review aid, not a maintained invariant.
+The M1 TG-addressing requirement is retained in prose and behavior coverage.
+
 Follow-up scope clarification: there is no grandfathered historical guard
 suite, and no source guard should remain as a dormant test, local-only script,
 release-only gate, or wrapper preserved for audit nostalgia. When old milestone
