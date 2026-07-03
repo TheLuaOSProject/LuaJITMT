@@ -178,6 +178,20 @@ function M.timeout_prefix(timeout)
     " " .. M.shell_quote(timeout_seconds(timeout))
 end
 
+local function command_status_wrapper(cmd)
+  local script = "( " .. cmd .. " ); __lj_status=$?; " ..
+    "printf '\\n__LJ_CAPTURE_STATUS__%d\\n' \"$__lj_status\""
+  return "sh -c " .. M.shell_quote(script)
+end
+
+local function split_capture_status(cmd, data)
+  local out, status = data:match("^(.*)\n__LJ_CAPTURE_STATUS__(%d+)\n$")
+  if not status then
+    error("command status marker missing: " .. cmd .. "\n" .. data, 3)
+  end
+  return out, tonumber(status)
+end
+
 function M.capture_command(cmd, opts)
   opts = opts or {}
   local full = cmd
@@ -185,12 +199,14 @@ function M.capture_command(cmd, opts)
   if opts.timeout then
     full = M.timeout_prefix(opts.timeout) .. " sh -c " .. M.shell_quote(full)
   end
-  local p, err = io.popen(full)
+  local p, err = io.popen(command_status_wrapper(full))
   if not p then error("command failed to start: " .. tostring(err), 2) end
   local out = p:read("*a")
-  local ok, why, code = p:close()
-  if not ok then
-    error("command failed (" .. tostring(code or why or ok) .. "): " ..
+  p:close()
+  local status
+  out, status = split_capture_status(full, out)
+  if status ~= 0 then
+    error("command failed (" .. tostring(status) .. "): " ..
           full .. "\n" .. out, 2)
   end
   return out
@@ -215,13 +231,18 @@ function M.assert_command_fails(cmd)
 end
 
 function M.capture_lines(cmd)
-  local p, err = io.popen(cmd)
-  if not p then error("command failed to start: " .. tostring(err), 2) end
   local out = {}
-  for line in p:lines() do out[#out + 1] = line end
-  local ok, why, code = p:close()
-  if not ok then
-    error("command failed (" .. tostring(code or why or ok) .. "): " .. cmd, 2)
+  local data = M.capture_command(cmd)
+  local pos = 1
+  while pos <= #data do
+    local nl = data:find("\n", pos, true)
+    if nl then
+      out[#out + 1] = data:sub(pos, nl - 1)
+      pos = nl + 1
+    else
+      out[#out + 1] = data:sub(pos)
+      break
+    end
   end
   return out
 end

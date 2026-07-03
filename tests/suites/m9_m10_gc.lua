@@ -218,6 +218,35 @@ local function run_bench_regression(t)
                        bench_csv.compare(base_csv, zero_csv),
                        "non-positive benchmark value")
 
+  do
+    local ok, err = pcall(function()
+      capture_command("sh -c " .. shell_quote("printf capture-failed; exit 7"),
+                      { stderr = true })
+    end)
+    err = tostring(err)
+    assert(not ok and err:find("command failed %(7%)") and
+           err:find("capture%-failed"),
+           "capture_command must report failing child status and output")
+
+    ok, err = pcall(function()
+      bench_driver.command_output({
+        "/bin/sh", "-c", "printf bench-failed; exit 7"
+      }, { stderr = true })
+    end)
+    err = tostring(err)
+    assert(not ok and err:find("command failed %(7%)") and
+           err:find("bench%-failed"),
+           "bench_driver must report failing child status and output")
+
+    ok, err = pcall(function()
+      capture_command("sh -c " .. shell_quote("sleep 2"),
+                      { timeout = "1s", stderr = true })
+    end)
+    err = tostring(err)
+    assert(not ok and err:find("command failed %("),
+           "capture_command must report timeout child status")
+  end
+
   with_temp_paths(t, { "lj-bench-mini.lua" },
     function(mini)
       local luajit = shell_quote(t:path("src", "luajit"))

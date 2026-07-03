@@ -164,6 +164,34 @@ local function run_m0_combo(t, name, xcflags, stock_tags)
   runtime.luajit_code(t, "require'ffi'; assert(2^31 == 2147483648)")
 end
 
+local function assert_lua51_popen_close(t)
+  runtime.luajit_code(t, [[
+    local function close_status(cmd)
+      local p = assert(io.popen(cmd, "r"))
+      p:read("*a")
+      return p:close()
+    end
+    local ok, why, code = close_status("false")
+    assert(ok == true and why == nil and code == nil)
+    ok, why, code = close_status("sh -c 'exit 7'")
+    assert(ok == true and why == nil and code == nil)
+  ]])
+end
+
+local function assert_lua52_popen_close(t)
+  runtime.luajit_code(t, [[
+    local function close_status(cmd)
+      local p = assert(io.popen(cmd, "r"))
+      p:read("*a")
+      return p:close()
+    end
+    local ok, why, code = close_status("false")
+    assert(ok == nil and why == "exit" and code == 1)
+    ok, why, code = close_status("sh -c 'exit 7'")
+    assert(ok == nil and why == "exit" and code == 7)
+  ]])
+end
+
 return function(add)
   add({
     name = "run_stock_tests",
@@ -197,7 +225,9 @@ return function(add)
     run = function(t)
       build.with_default_build_restore(t, function()
         run_m0_combo(t, "lockless JIT=1", "", {})
+        assert_lua51_popen_close(t)
         run_m0_combo(t, "lockless JIT=0", "-DLUAJIT_DISABLE_JIT", { "-jit" })
+        assert_lua51_popen_close(t)
       end)
       print("M0 matrix passed")
     end
@@ -210,6 +240,7 @@ return function(add)
       build.with_default_build_restore(t, function()
         run_m0_combo(t, "lockless Lua 5.2 compat",
                      "-DLUAJIT_ENABLE_LUA52COMPAT", {})
+        assert_lua52_popen_close(t)
         runtime.luajit_code(t, [[
           assert(table.pack and table.unpack == unpack)
           local packed = table.pack("x", nil)

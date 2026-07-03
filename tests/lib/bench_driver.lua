@@ -43,16 +43,7 @@ end
 
 function M.command_output(argv, opts)
   local cmd = argv_command(argv, opts)
-  local p, err = io.popen(cmd)
-  if not p then error("command failed to start: " .. tostring(err), 2) end
-  local out = p:read("*a")
-  local ok, why, code = p:close()
-  local success, status = status_ok(ok, why, code)
-  if not success then
-    error("command failed (" .. tostring(status) .. "): " .. cmd ..
-          "\n" .. out, 2)
-  end
-  return out
+  return utils.capture_command(cmd)
 end
 
 function M.write_file(path, data)
