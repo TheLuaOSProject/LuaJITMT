@@ -56,6 +56,21 @@ static LJ_AINLINE IRRef uload_alias_limit(jit_State *J, IRRef lim, IRType1 t)
   return lim;
 }
 
+static LJ_AINLINE IRRef fload_alias_limit(jit_State *J, IRRef lim, IRRef fid)
+{
+  if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
+  /*
+  ** Pre-MT tab.meta loads may cross a successful XPOLL: no secondary Lua
+  ** thread can mutate metatables yet, and first MT activation sets mt_entering
+  ** and flushes existing traces before worker Lua code can run. Active/entering
+  ** MT traces keep XPOLL as an alias boundary.
+  */
+  if ((fid != IRFL_TAB_META || mt_active_or_entering_acq(J2G(J))) &&
+      J->chain[IR_XPOLL] > lim)
+    lim = J->chain[IR_XPOLL];
+  return lim;
+}
+
 /*
 ** Caveat #1: return value is not always a TRef -- only use with tref_ref().
 ** Caveat #2: FWD relies on active CSE for xREF operands -- see lj_opt_fold().
@@ -644,7 +659,7 @@ TRef LJ_FASTCALL lj_opt_fwd_fload(jit_State *J)
 {
   IRRef oref = fins->op1;  /* Object reference. */
   IRRef fid = fins->op2;  /* Field ID. */
-  IRRef lim = poll_alias_limit(J, oref);  /* Search limit. */
+  IRRef lim = fload_alias_limit(J, oref, fid);  /* Search limit. */
   IRRef ref;
 
   /* Search for conflicting stores. */
