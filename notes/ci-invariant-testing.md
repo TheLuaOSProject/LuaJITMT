@@ -55,3 +55,10 @@ Raw-byte/codegen work follows the same split. VM DynASM source should use
 mnemonic DynASM syntax for active instructions. Low-level x86 JIT emitter
 helpers may centralize opcode constants such as lock-prefixed CAS, but tests
 validate the generated mcode and runtime behavior.
+
+2026-07-03 audit: the active `tools/ci` layer is only the Lua launcher and
+platform build smoke script, and the Lua suites do not open repository source
+files to decide pass/fail. Remaining file reads are generated dumps, captured
+logs, temporary outputs, benchmark CSVs, or release/build artifacts. C fixtures
+may still compile against internal headers because they execute lifetime,
+publication, native-state, and race behavior rather than grepping source text.
