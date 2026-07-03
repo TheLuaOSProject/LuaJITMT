@@ -26,6 +26,18 @@ re-recording correctness failure. The existing `lj_trace_flush_unlink()` path
 must not be replaced by scoped trace retirement: it exists so `trace_abort()`
 can still self-link the unlinked return trace as the stock blacklist entry.
 
+Independent 50-process samples with the same guard shape also stayed bounded:
+
+- Fork: first run 17..36 traces, second run 21..40, second-run delta 3..4,
+  up-recursion at trace 2..21, bad runs 0/50.
+- Stock: first run 17..41 traces, second run 21..45, second-run delta 3..4,
+  up-recursion at trace 2..26, bad runs 0/50.
+
+Looped timing after one warm `fib(30)` still shows a current fork gap:
+
+- Fork: about 7.26..7.45 ms per call across three 50-call process samples.
+- Stock: about 5.33..5.60 ms per call across three 50-call process samples.
+
 ## Benchmark guard
 
 The benchmark-regression guard is no longer purely self-referential in current
