@@ -6,6 +6,7 @@ jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=2048")
 
 local rounds = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_ROUNDS", 48)
+local trace_limit = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_TRACE_LIMIT", 512)
 local ready, start = harness.channels(1)
 local done = th.channel(1)
 
@@ -83,7 +84,7 @@ while not finished do
     finished = true
   end
   publish_trace(900000 + probes)
-  for tr = 1, 96 do
+  for tr = 1, trace_limit do
     live_seen = live_seen + probe_trace(tr)
   end
   probes = probes + 1

@@ -5,16 +5,18 @@ Scope: follow up on older catastrophic-regression claims against current
 The first benchmark-only pass found several claims stale, but the later
 flush/GC reducer exposed real stability bugs. This sweep now includes runtime
 fixes for scoped trace retirement, stale x64 loop bytecode fallback, legacy
-GC mark-cycle roots, table-generation reclamation, and single-TG emergency
-trace flush.
+GC mark-cycle roots, table-generation reclamation, single-TG emergency trace
+flush, and trace-number reuse under concurrent full/scoped flush.
 
-## Source guards
+## Repository Text Policy
 
-The active Lua harness and CI no longer contain repository source guards.
-`Test:files()` was removed from `tests/lib/ljtest.lua`; artifact reads remain
+The active Lua harness and CI no longer predicate pass/fail on repository
+source text.
+The old repository-source enumerator was removed from `tests/lib/ljtest.lua`;
+artifact reads remain
 available through `Test:read()` and `suite_utils.read_file()`. Current scans
 only find documentation/historical notes or generated-output/source-path build
-usage, not active source-text predicates.
+usage, not active repository-text tests.
 
 ## Scoped trace flush and stale loop fallback
 
@@ -31,6 +33,21 @@ iteration, while avoiding the earlier wrong-PC branch that could recurse in the
 VM. Single-TG recorder emergency full flushes use the direct flush path instead
 of waiting for their own safepoint acknowledgement; public/full handshakes still
 advance the safepoint epoch.
+
+The VM now publishes `TG(jit_base)` before holding a trace body or mcode pointer
+across the final entry checks, then revalidates the slot, retire epoch, pending
+bit, and start PC before jumping. If the trace is no longer runnable, it clears
+the entry publication and falls back to interpreter dispatch. Full/scoped flush
+reserves retired trace slots with the existing pending sentinel through the
+trace grace period, then releases the number while keeping the retired body
+available for stale `startins` recovery until the legacy GC root link is gone.
+Retired mcode areas now check live trace slots, retired bodies, and heap
+exit-target tables before freeing. The final trace-quiescence wait treats
+either non-null `jit_base` or positive TG `vmstate` as active trace state.
+
+`tests/t-jit-flush-thread-stress.lua` is now wired into M6 as
+`m6_jit_flush_thread_stress` to cover concurrent full flush, per-trace flush,
+short-lived thread churn, and stale loop bytecode recovery as behavior.
 
 ## Legacy GC bridge
 

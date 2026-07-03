@@ -65,7 +65,7 @@ Overall correctness/stability progress: 70-80%.
 - Removed tombstone-only M3 CI guards for old weak/sweep phase aliases and old
   paranoia diff aliases; behavior fixtures and current helper guards now own
   those contracts.
-- Removed another duplicate set of M3 finalizer source scans. M8 remains the
+- Removed another duplicate set of M3 finalizer repository-text checks. M8 remains the
   owner for close-time finalizer, callback-stack, and finalizer-spawn behavior
   gates, while M3 keeps its positive scheduler ownership checks.
 - Renamed the remaining GC2 lifecycle helper surface from fork-era legacy names

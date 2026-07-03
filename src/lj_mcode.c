@@ -676,7 +676,8 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (ret) {
     MCodeRetire *next = mcode_retired_next_acq(ret);
     mcode_retired_next_rel(ret, NULL);
-    if (mcode_retire_ready(ret, completed_epoch)) {
+    if (mcode_retire_ready(ret, completed_epoch) &&
+	!lj_trace_retired_mcode_refs(g, ret->area, ret->size)) {
       mcode_freearea(g, ret);
       reclaimed++;
     } else {

@@ -47,6 +47,7 @@ local m6_cases = {
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
   "m6_jit_util_flush_race",
+  "m6_jit_flush_thread_stress",
   "m6_jit_mt_activation_flush",
   "m6_jit_vmevent_flush",
   "m6_jit_gdbjit_publish",
@@ -1887,6 +1888,17 @@ assert(live >= 8, live)
       luajit_file(t, t:path("tests", "t-jit-util-flush-race.lua"),
                   { lua_path = true, timeout = "30s" })
       print("M6 jit.util concurrent flush reader guard passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_flush_thread_stress",
+    description = "threaded JIT flush preserves stale bytecode and trace slots",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-flush-thread-stress.lua"),
+                  { lua_path = true, timeout = "60s" })
+      print("M6 JIT threaded flush stress passed")
     end
   })
 

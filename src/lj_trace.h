@@ -51,6 +51,8 @@ LJ_FUNC void lj_trace_initstate(global_State *g);
 LJ_FUNC void lj_trace_freestate(global_State *g);
 LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
 					  uint64_t completed_epoch);
+LJ_FUNC int lj_trace_retired_mcode_refs(global_State *g, MCode *area,
+					size_t size);
 LJ_FUNC void lj_trace_freeretired(global_State *g);
 LJ_FUNC void lj_trace_markvecs(global_State *g, int gc2);
 
@@ -132,6 +134,8 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 #define lj_trace_initstate(g)	UNUSED(g)
 #define lj_trace_freestate(g)	UNUSED(g)
 #define lj_trace_reclaim_retired(g, e)	(UNUSED(g), UNUSED(e), 0)
+#define lj_trace_retired_mcode_refs(g, area, size) \
+  (UNUSED(g), UNUSED(area), UNUSED(size), 0)
 #define lj_trace_freeretired(g)	UNUSED(g)
 #define lj_trace_markvecs(g, gc2)	(UNUSED(g), UNUSED(gc2))
 #define lj_trace_abort(g)	UNUSED(g)

@@ -413,7 +413,7 @@ static int safepoint_trace_tg_active(global_State *g)
        tg = lj_tg_next_acq(tg)) {
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))
       continue;
-    if (lj_tg_load_jit_base(tg) != NULL)
+    if (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0)
       return 1;
   }
 #else

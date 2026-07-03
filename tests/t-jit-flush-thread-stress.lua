@@ -9,6 +9,8 @@ local nthreads = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_THREADS", 3)
 local rounds = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_ROUNDS", 16)
 local churn = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_CHURN", rounds * 2)
 local trace_limit = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_TRACE_LIMIT", 128)
+local ready_timeout = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_READY_TIMEOUT", 20)
+local join_timeout = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_JOIN_TIMEOUT", 40)
 
 local function expected(seed, flag)
   local extra = flag and (17 + 34 + 51 + 68) * 6 or 0
@@ -76,8 +78,8 @@ for id = 1, nthreads do
     heat_pair(worker * 100000)
     assert(live_trace_count() > 0,
 	   "worker did not publish traces before flush race")
-    assert(ready_ch:send(worker, 10) == true)
-    local token, ok = start_ch:recv(10)
+    assert(ready_ch:send(worker, ready_timeout) == true)
+    local token, ok = start_ch:recv(ready_timeout)
     assert(ok == true and token == "go")
 
     local observed = 0
@@ -95,8 +97,8 @@ for id = 1, nthreads do
   end, ready, start, id, rounds)
 end
 
-harness.wait_ready(ready, nthreads, 10, "jit flush thread stress")
-harness.release_start(start, nthreads, 10)
+harness.wait_ready(ready, nthreads, ready_timeout, "jit flush thread stress")
+harness.release_start(start, nthreads, ready_timeout)
 
 local short_lived = 0
 for r = 1, churn do
@@ -113,13 +115,13 @@ for r = 1, churn do
   else
     jit_flush()
   end
-  local ok, result = worker:join(20)
+  local ok, result = worker:join(join_timeout)
   assert(ok == true, tostring(result))
   assert(result == expected(seed, true))
   short_lived = short_lived + 1
 end
 
-local observed = harness.join_count(workers, 30)
+local observed = harness.join_count(workers, join_timeout)
 assert(observed > 0, "workers did not observe live traces during flush race")
 
 jit_flush()

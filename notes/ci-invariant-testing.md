@@ -1,16 +1,17 @@
 # Invariant Tests And Documentation
 
-The Lua test harness and CI do not carry source guards. Tests should prove
-observable VM behavior, generated compiler/artifact output, or release
-packaging. Implementation-only rules should be documented beside the code they
-constrain. Matching helper names, function calls, field accesses, or snippets
-freezes spelling rather than the concurrency property we care about.
+The Lua test harness and CI do not predicate pass/fail on repository source
+text. Tests should prove observable VM behavior, generated compiler/artifact
+output, or release packaging. Implementation-only rules should be documented
+beside the code they constrain. Matching helper names, function calls, field
+accesses, or snippets freezes spelling rather than the concurrency property we
+care about.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read generated dumps, captured logs, temporary files,
 imported-suite inputs, CSVs, and other runtime artifacts. Do not use them to
 predicate a test on repository source text. The harness intentionally has no
-source-tree enumeration helper.
+repository-source enumeration helper.
 
 Use one of these forms for new coverage:
 
@@ -22,8 +23,7 @@ Use one of these forms for new coverage:
   bytecode, machine code, or another generated build/runtime artifact.
 - A comment beside the constrained helper, plus a note in `notes/`, when the
   invariant is design guidance that cannot be observed directly. The comment
-  should explain the ownership, ordering, or nonblocking reason; it should not
-  point to a source guard.
+  should explain the ownership, ordering, or nonblocking reason.
 
 String matching remains useful for generated artifacts: JIT dumps, bytecode
 listings, objdump output, generated mcode dumps, generated assembly, captured

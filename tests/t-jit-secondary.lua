@@ -2,6 +2,7 @@ local th = require"threading"
 
 local worker = th.spawn(function()
   local trace_count = require"jit_harness".trace_count
+  local trace_limit = tonumber(os.getenv("LJ_M6_JIT_SECONDARY_TRACE_LIMIT")) or 512
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1")
@@ -21,13 +22,13 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(branch(80, false) == 3240)
   end
-  local root_traces = trace_count(32)
+  local root_traces = trace_count(trace_limit)
   assert(root_traces > 0)
 
   for _ = 1, 20 do
     assert(branch(80, true) == 4230)
   end
-  local side_traces = trace_count(32)
+  local side_traces = trace_count(trace_limit)
   assert(side_traces > root_traces)
 
   jit.flush()
@@ -46,7 +47,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_alloc(80) == 6560)
   end
-  local table_traces = trace_count(32)
+  local table_traces = trace_count(trace_limit)
   assert(table_traces > 0)
 
   jit.flush()
@@ -65,7 +66,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_read(80) == 1440)
   end
-  local read_traces = trace_count(32)
+  local read_traces = trace_count(trace_limit)
   assert(read_traces > 0)
 
   jit.flush()
@@ -84,7 +85,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_index_read(80) == 1040)
   end
-  local index_traces = trace_count(32)
+  local index_traces = trace_count(trace_limit)
   assert(index_traces > 0)
 
   jit.flush()
@@ -103,7 +104,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_write(80) == 161)
   end
-  local write_traces = trace_count(32)
+  local write_traces = trace_count(trace_limit)
   assert(write_traces > 0)
 
   jit.flush()
@@ -128,7 +129,7 @@ local worker = th.spawn(function()
     assert(table_meta_write(80) == 161)
     assert(meta_hits == 0)
   end
-  local meta_write_traces = trace_count(32)
+  local meta_write_traces = trace_count(trace_limit)
   assert(meta_write_traces > 0)
 
   jit.flush()
@@ -148,7 +149,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_meta_nil_hash_write(80) == nil)
   end
-  local meta_nil_hash_traces = trace_count(32)
+  local meta_nil_hash_traces = trace_count(trace_limit)
   assert(meta_nil_hash_traces > 0)
 
   jit.flush()
@@ -167,7 +168,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_meta_nil_array_write(80) == nil)
   end
-  local meta_nil_array_traces = trace_count(32)
+  local meta_nil_array_traces = trace_count(trace_limit)
   assert(meta_nil_array_traces > 0)
 
   jit.flush()
@@ -218,7 +219,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_ipairs(80) == 960)
   end
-  local ipairs_traces = trace_count(32)
+  local ipairs_traces = trace_count(trace_limit)
   assert(ipairs_traces > 0)
 
   jit.flush()
@@ -238,7 +239,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(table_next(80) == 3240)
   end
-  local next_traces = trace_count(32)
+  local next_traces = trace_count(trace_limit)
   assert(next_traces > 0)
 
   jit.flush()
@@ -268,7 +269,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(shared_table_next(80) == 1200)
   end
-  local shared_next_traces = trace_count(32)
+  local shared_next_traces = trace_count(trace_limit)
   assert(shared_next_traces == 0)
 
   jit.flush()
@@ -292,7 +293,7 @@ local worker = th.spawn(function()
   for _ = 1, 20 do
     assert(shared_table_pairs(80) == 1200)
   end
-  local shared_pairs_traces = trace_count(32)
+  local shared_pairs_traces = trace_count(trace_limit)
   assert(shared_pairs_traces == 0)
 
   return root_traces, side_traces, table_traces, read_traces, index_traces,

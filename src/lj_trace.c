@@ -52,6 +52,17 @@ static int trace_scope_mark_pending(GCtrace *T)
   return 0;
 }
 
+static int trace_retired_mark_listed(GCtrace *T)
+{
+  uint8_t flags = la_load8_acq(&T->unused1);
+  while ((flags & TRACE_RETIRED_LISTED) == 0) {
+    uint8_t next = (uint8_t)(flags | TRACE_RETIRED_LISTED);
+    if (la_cas8(&T->unused1, &flags, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+  return 0;
+}
+
 /* -- Error handling ------------------------------------------------------ */
 
 int lj_jit_token_try(jit_State *J)
@@ -209,11 +220,19 @@ static void trace_retire(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
   uint64_t epoch = la_load64_acq(&T->retire_epoch);
-  if (epoch == 0)
-    epoch = lj_gc2_retire_epoch(g);
+  if (epoch != 0) {
+    trace_preservebody(g, T, 0);
+    if (trace_retired_mark_listed(T)) {
+      trace_retired_next_rel(T, NULL);
+      trace_retired_push(J, T);
+    }
+    return;
+  }
+  epoch = lj_gc2_retire_epoch(g);
   la_store64_rel(&T->retire_epoch, epoch);
   trace_retired_next_rel(T, NULL);
   trace_preservebody(g, T, 0);
+  (void)trace_retired_mark_listed(T);
   trace_retired_push(J, T);
 }
 
@@ -259,6 +278,56 @@ static void trace_preservebody(global_State *g, GCtrace *T, int gc2)
   }
 }
 
+static int trace_body_still_rooted(global_State *g, const GCtrace *T)
+{
+  GCobj *target = obj2gco((GCtrace *)T);
+  GCobj *o;
+  uint32_t n = 0;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o == target)
+      return 1;
+    if (++n >= 1000000u)
+      break;
+  }
+  return 0;
+}
+
+static void trace_retired_slot_release(jit_State *J, GCtrace *T)
+{
+  TraceNo traceno = trace_traceno_acq(T);
+  if (traceno == 0 && la_load64_acq(&T->retire_epoch) != 0)
+    traceno = trace_nextroot_acq(T);
+  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
+    GCobj *slot = gcref_acq(*traceslot_ref_acq(J, traceno));
+    if ((uintptr_t)slot == LJ_TRACE_PENDING || slot == obj2gco(T)) {
+      traceslot_clear(J, traceno);
+      if (J->freetrace == 0 || traceno < J->freetrace)
+	J->freetrace = traceno;
+    }
+  }
+  trace_nextroot_rel(T, 0);
+  trace_traceno_rel(T, 0);
+}
+
+static void trace_slot_retire(jit_State *J, GCtrace *T, TraceNo traceno)
+{
+  if (gc2_n_threads_acq(J2G(J)) > 1) {
+    /*
+    ** Keep the public trace slot reserved with a pending sentinel until stale
+    ** bytecode readers have aged out, but clear T->traceno so GC traversal
+    ** does not treat this retired body as a semantic trace root. While
+    ** retire_epoch is non-zero, nextroot is private slot-reservation metadata;
+    ** normal root chains were unlinked before retiring the trace.
+    */
+    trace_nextroot_rel(T, traceno);
+    trace_traceno_rel(T, 0);
+    traceslot_pending(J, traceno);
+  } else {
+    trace_retired_slot_release(J, T);
+  }
+}
+
 uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   jit_State *J;
@@ -285,14 +354,76 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
     GCtrace *next = trace_retired_next_acq(rt);
     trace_retired_next_rel(rt, NULL);
     if (trace_body_retire_ready(rt, completed_epoch)) {
-      trace_freebody(g, rt);
-      reclaimed++;
+      trace_retired_slot_release(J, rt);
+      if (!trace_body_still_rooted(g, rt)) {
+	trace_freebody(g, rt);
+	reclaimed++;
+      } else {
+	trace_retired_push(J, rt);
+      }
     } else {
       trace_retired_push(J, rt);
     }
     rt = next;
   }
   return reclaimed;
+}
+
+static int trace_ptr_in_mcode_area(const void *ptr, uintptr_t lo, uintptr_t hi)
+{
+  uintptr_t p = (uintptr_t)ptr;
+  return p >= lo && p < hi;
+}
+
+static int trace_mcode_area_refs(GCtrace *T, uintptr_t lo, uintptr_t hi)
+{
+  MCode *mcode;
+  MCode *exitstub;
+  MCode **exittab;
+  SnapNo i, nsnap;
+  if (!T)
+    return 0;
+  mcode = trace_mcode_acq(T);
+  exitstub = trace_exitstub_acq(T);
+  exittab = trace_exittab_acq(T);
+  if (trace_ptr_in_mcode_area(mcode, lo, hi) ||
+      trace_ptr_in_mcode_area(exitstub, lo, hi))
+    return 1;
+  if (!exittab)
+    return 0;
+  if (trace_exittab_ismcode(T))
+    return trace_ptr_in_mcode_area(exittab, lo, hi);
+  nsnap = trace_nsnap_acq(T);
+  for (i = 0; i < nsnap; i++)
+    if (trace_ptr_in_mcode_area(la_loadptr_acq((void *const *)&exittab[i]),
+				lo, hi))
+      return 1;
+  return 0;
+}
+
+int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
+{
+  jit_State *J;
+  GCtrace *T;
+  uintptr_t lo, hi;
+  if (!g || !area || size == 0)
+    return 0;
+  J = G2J(g);
+  lo = (uintptr_t)area;
+  hi = lo + size;
+  {
+    TraceNo i, sizetrace = trace_sizetrace_acq(J);
+    for (i = 1; i < sizetrace; i++)
+      if (trace_mcode_area_refs(traceref(J, i), lo, hi))
+	return 1;
+  }
+  for (T = trace_retired_head_acq(J);
+       T != NULL;
+       T = trace_retired_next_acq(T)) {
+    if (trace_mcode_area_refs(T, lo, hi))
+      return 1;
+  }
+  return 0;
 }
 
 void lj_trace_freeretired(global_State *g)
@@ -308,6 +439,7 @@ void lj_trace_freeretired(global_State *g)
   rt = trace_retired_head_xchg_acqrel(J, NULL);
   while (rt) {
     GCtrace *next = trace_retired_next_acq(rt);
+    trace_retired_slot_release(J, rt);
     trace_freebody(g, rt);
     rt = next;
   }
@@ -340,7 +472,7 @@ static TraceNo trace_findfree(jit_State *J)
   if (J->freetrace == 0)
     J->freetrace = 1;
   for (; J->freetrace < trace_sizetrace_acq(J); J->freetrace++)
-    if (traceref(J, J->freetrace) == NULL)
+    if (gcref_acq(*traceslot_ref_acq(J, J->freetrace)) == NULL)
       return J->freetrace++;
   /* Need to grow trace array. */
   lim = (MSize)jit_param_acq(J, JIT_P_maxtrace) + 1;
@@ -539,11 +671,10 @@ void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
 	     "unpublished trace body retired");
   if (traceno) {
     lj_gdbjit_deltrace(J, T);
-    if (traceno < J->freetrace)
-      J->freetrace = traceno;
-    traceslot_clear(J, traceno);
+    trace_slot_retire(J, T, traceno);
   }
   if (g->gc.currentwhite & LJ_GC_SFIXED) {
+    trace_retired_slot_release(J, T);
     trace_free_immediate(g, T);
     return;
   }
@@ -761,8 +892,26 @@ static BCIns trace_stale_startins_match(GCtrace *T, const BCIns *pc)
   if (T && trace_startpc_acq(T) == pc) {
     BCIns startins = trace_startins_acq(T);
     BCOp op = bc_op(startins);
-    if (op == BC_FORL || op == BC_ITERL)
+    if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
+	op == BC_FUNCF || op == BC_ITERN || bc_isret(op))
       return startins;
+  }
+  return 0;
+}
+
+static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc)
+{
+  GCobj *o;
+  uint32_t n = 0;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TTRACE) {
+      BCIns startins = trace_stale_startins_match(gco2trace(o), pc);
+      if (startins != 0)
+	return startins;
+    }
+    if (++n >= 1000000u)
+      break;
   }
   return 0;
 }
@@ -793,6 +942,8 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
 	break;
     }
   }
+  if (startins == 0)
+    startins = trace_stale_startins_root(g, pc);
   lj_gc2_smr_read_leave(g);
   return startins;
 }
@@ -847,17 +998,16 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   lj_gdbjit_deltrace(J, T);
   if (trace_root_acq(T) == 0)
     trace_unpatch(J, T);
-  trace_traceno_rel(T, 0);  /* Scoped slot retired after HS_EXIT_TRACES grace. */
+  /* Keep the trace number reserved until the retired body is reclaimable. */
   trace_link_rel(T, 0);
   trace_nextroot_rel(T, 0);
   trace_nextside_rel(T, 0);
   la_store64_rel(&T->retire_epoch, epoch);
-  traceslot_clear(J, traceno);
+  trace_slot_retire(J, T, traceno);
   trace_retired_next_rel(T, NULL);
   trace_preservebody(J2G(J), T, 0);
+  (void)trace_retired_mark_listed(T);
   trace_retired_push(J, T);
-  if (J->freetrace == 0 || traceno < J->freetrace)
-    J->freetrace = traceno;
 }
 
 uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
@@ -925,9 +1075,17 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
 	trace_unpatch(J, T);
       }
       lj_gdbjit_deltrace(J, T);
-      trace_traceno_rel(T, 0);  /* Blacklist the link for cont_stitch. */
+      /* Keep the trace number reserved until the retired body is reclaimable. */
       trace_link_rel(T, 0);
-      traceslot_clear(J, i);
+      trace_nextroot_rel(T, 0);
+      trace_nextside_rel(T, 0);
+      trace_slot_retire(J, T, (TraceNo)i);
+      /*
+      ** A peer may have fetched a patched JFORL/JITERL before this flush
+      ** unpatched bytecode. Keep the body reachable through the retired list
+      ** so the interpreter fallback can recover the original loop offset.
+      */
+      trace_retire(J2G(J), T);
     }
   }
   J->cur.traceno = 0;

@@ -62,6 +62,7 @@ LJ_STATIC_ASSERT(LJ_GC_NEEDSCAN == 0x80);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
+LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_freeall(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_preserveobj_legacy(global_State *g, GCobj *o);

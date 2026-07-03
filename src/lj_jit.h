@@ -401,6 +401,7 @@ typedef struct GCtrace {
 
 #define TRACE_EXITTAB_MCODE		0x01
 #define TRACE_SCOPE_FLUSH_PENDING	0x02
+#define TRACE_RETIRED_LISTED		0x04
 
 static LJ_AINLINE int trace_exittab_ismcode(const GCtrace *T)
 {

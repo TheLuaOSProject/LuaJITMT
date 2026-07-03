@@ -1444,10 +1444,12 @@ static int gc2_deferred_body_pending(global_State *g, GCobj *o)
 	 lj_arena_bm_get(a->block, cell);
 }
 
-static void gc2_unlink_root_obj(global_State *g, GCobj *dead)
+void lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
 {
   GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
+  if (!g || !dead)
+    return;
   (void)lj_gc_flush_root_pending(g);
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == dead) {
@@ -1507,7 +1509,7 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
 	continue;
       }
       if ((!unmarked_only || isdead(g, o)) && gc2_valid_freeable_obj(o)) {
-	gc2_unlink_root_obj(g, o);
+	lj_gc_unlink_root_obj(g, o);
 	if (!gc2_free_unmarked_obj(g, o))
 	  continue;
 	n++;

@@ -15,7 +15,7 @@
   and requires a trace abort instead of a parser-lock wait.
 - Removed stale implementation-text assertions and duplicate tests:
   `m5_tab_emptyhash.sh` test grep, the `m6_jit_buffer_method_shared_nyi`
-  recorder-name grep, and duplicate libc `strerror()` source scans.
+  recorder-name grep, and duplicate libc `strerror()` repository-text checks.
 
 ## Kept deliberately
 

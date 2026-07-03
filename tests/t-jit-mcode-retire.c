@@ -11,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_jit.h"
+#include "lj_gc.h"
 #include "lj_mcode.h"
 #include "lj_trace.h"
 
@@ -74,6 +75,20 @@ int main(void)
   assert(J->szallmcarea == szall);
   assert(lj_mcode_reclaim_retired(g, epoch + 1u) == 0);
   assert(retired_find(J, oldmc) != NULL);
+  assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) == 0);
+  /*
+  ** Retired trace bodies hold mcode pointers until their own SMR grace and
+  ** legacy-GC root unlink have completed. This preserves stale bytecode
+  ** recovery: a patched loop or return can still need startins from the body.
+  */
+  {
+    GCtrace *rt;
+    for (rt = trace_retired_head_acq(J);
+	 rt != NULL;
+	 rt = trace_retired_next_acq(rt))
+      lj_gc_unlink_root_obj(g, obj2gco(rt));
+  }
+  assert(lj_trace_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
   assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
   assert(mcode_retired_head_acq(J) == NULL);
   assert(J->szallmcarea == 0);
