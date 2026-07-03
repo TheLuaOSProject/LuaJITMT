@@ -87,11 +87,22 @@ static void func_publishuv(global_State *g, GCupval *uv)
   lj_gc_linkobj_new(g, obj2gco(uv));
 }
 
+#if LJ_HASJIT
+static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
+				      TGState *tg);
+#endif
+
 /* Create an empty and closed upvalue. */
 static GCupval *func_newuvclosed(lua_State *L)
 {
   global_State *g = G(L);
-  GCupval *uv = (GCupval *)lj_mem_newgco_unlinked(L, sizeof(GCupval));
+  GCupval *uv;
+#if LJ_HASJIT
+  uv = func_newuvclosed_bump(L, g, L2TG(L));
+  if (uv)
+    return uv;
+#endif
+  uv = (GCupval *)lj_mem_newgco_unlinked(L, sizeof(GCupval));
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
   setnilV(&uv->tv);
@@ -289,6 +300,7 @@ static uint32_t func_test_gc1uv_chain_calls;
 static uint32_t func_test_uv_afterfn_calls;
 static uint32_t func_test_gc0_bump_interp_calls;
 static uint32_t func_test_gc0_bump_trace_calls;
+static uint32_t func_test_uvcell_bump_calls;
 
 static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
 {
@@ -323,6 +335,11 @@ static LJ_AINLINE void func_test_gc0_bump_interp_call(void)
 static LJ_AINLINE void func_test_gc0_bump_trace_call(void)
 {
   (void)la_add32_acqrel(&func_test_gc0_bump_trace_calls, 1);
+}
+
+static LJ_AINLINE void func_test_uvcell_bump_call(void)
+{
+  (void)la_add32_acqrel(&func_test_uvcell_bump_calls, 1);
 }
 
 uint32_t lj_func_test_gc1num_bump_fast_calls(void)
@@ -394,6 +411,16 @@ void lj_func_test_reset_gc0_bump_trace_calls(void)
 {
   la_store32_rel(&func_test_gc0_bump_trace_calls, 0);
 }
+
+uint32_t lj_func_test_uvcell_bump_calls(void)
+{
+  return la_load32_acq(&func_test_uvcell_bump_calls);
+}
+
+void lj_func_test_reset_uvcell_bump_calls(void)
+{
+  la_store32_rel(&func_test_uvcell_bump_calls, 0);
+}
 #else
 #define func_test_gc1num_bump_fast_call()	((void)0)
 #define func_test_gc1num_bump_fallback_call()	((void)0)
@@ -402,6 +429,7 @@ void lj_func_test_reset_gc0_bump_trace_calls(void)
 #define func_test_uv_afterfn_call()		((void)0)
 #define func_test_gc0_bump_interp_call()	((void)0)
 #define func_test_gc0_bump_trace_call()		((void)0)
+#define func_test_uvcell_bump_call()		((void)0)
 #endif
 
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
@@ -431,6 +459,70 @@ static void func_arena_set_alloc(GCArena *a, uint32_t cell, int black)
     lj_arena_bm_set(a->mark, cell);
   else
     lj_arena_bm_clear(a->mark, cell);
+}
+
+static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
+				      TGState *tg)
+{
+  const GCSize nbytes = (GCSize)sizeof(GCupval);
+  const uint32_t ncells = lj_arena_ncells(nbytes);
+  LJArenaBump *b;
+  GCArena *a;
+  GCupval *uv;
+  GCobj *oldhead;
+  uint32_t cell, end, next, black;
+
+  if (g == NULL || tg == NULL ||
+      mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
+      g->allocf_arena == 0 || tg != g->main_tg ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocd != &tg->allocd ||
+      lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+    return NULL;
+
+  /*
+  ** Closed nil local cells are leaf objects, so the bump path only replaces
+  ** arena allocation and pending-root publication. The caller still owns GC
+  ** pacing: interpreter BC_CNEW runs lj_gc_check_fixtop(), while traced BC_CNEW
+  ** is recorded as an allocation helper and gets the trace CALLA check.
+  */
+  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
+    return NULL;
+
+  b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  a = b->a;
+  if (a == NULL)
+    return NULL;
+  cell = b->cell;
+  end = b->end;
+  next = cell + ncells;
+  if (next < cell || next > end)
+    return NULL;
+
+  b->cell = next;
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  func_arena_set_alloc(a, cell, black);
+
+  uv = (GCupval *)lj_arena_cellptr(a, cell);
+  uv->gct = ~LJ_TUPVAL;
+  uv->closed = 1;
+  setnilV(&uv->tv);
+  setmref(uv->v, &uv->tv);
+  uv->immutable = 0;
+  uv->dhash = 0;
+  newwhite(g, uv);
+
+  lj_gc_total_add(g, nbytes);
+  (void)lj_tg_local_total_add_rlx(tg, nbytes);
+  oldhead = lj_tg_gcroot_pending_acq(tg);
+  if (oldhead)
+    lj_obj_setgcwrel(obj2gco(uv), oldhead);
+  else
+    lj_obj_setgcwnullrel(obj2gco(uv));
+  lj_tg_gcroot_pending_store_rel(tg, obj2gco(uv));
+  func_test_uvcell_bump_call();
+  return uv;
 }
 
 static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,

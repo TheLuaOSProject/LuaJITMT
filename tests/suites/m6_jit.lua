@@ -554,7 +554,7 @@ assert(util.traceinfo(1), "deep inlined FUNCF loop did not trace")
 
   add({
     name = "m6_jit_fnew_bump",
-    description = "one-upvalue FNEW allocation and publication behavior",
+    description = "local-cell CNEW/FNEW allocation and publication behavior",
     run = function(t)
       clean_build(t, { quiet = true, xcflags = "-DLJ_FUNC_TEST_HELPERS" })
       build_and_run_c(t, t:tmp("lj_t-jit-fnew-bump"),
@@ -563,7 +563,7 @@ assert(util.traceinfo(1), "deep inlined FUNCF loop did not trace")
         build = false,
         timeout = "20s"
       })
-      print("M6 one-upvalue FNEW allocation behavior passed")
+      print("M6 local-cell CNEW/FNEW allocation behavior passed")
     end
   })
 

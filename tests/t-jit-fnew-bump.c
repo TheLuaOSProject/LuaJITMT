@@ -212,6 +212,42 @@ static void assert_one_upvalue_result(GCfunc *fn, TValue *slot, int32_t value)
   assert(tvisgcv(slot) && gcV(slot) == obj2gco(uv));
 }
 
+static void assert_nil_closed_cell(GCupval *uv)
+{
+  assert(uv != NULL);
+  assert(uv->closed);
+  assert(uvval(uv) == &uv->tv);
+  assert(tvisnil(&uv->tv));
+  assert(uv->immutable == 0);
+}
+
+static void test_uvcell_bump_direct(lua_State *L, global_State *g, TGState *tg)
+{
+  uint32_t bump0, bump1, bump2;
+  TValue slots[8];
+  GCupval *uv;
+
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  la_store64_rel(&tg->local_total, 0);
+
+  lj_func_test_reset_uvcell_bump_calls();
+  bump0 = lj_func_test_uvcell_bump_calls();
+  uv = lj_func_newuvcell(L);
+  assert_nil_closed_cell(uv);
+  bump1 = lj_func_test_uvcell_bump_calls();
+  assert(bump1 > bump0);
+  assert(lj_tg_local_total_acq(tg) > 0);
+
+  setnilV(&slots[3]);
+  uv = lj_func_newuvcell_forjit(L, slots, 3);
+  assert_nil_closed_cell(uv);
+  assert(tvisgcv(&slots[3]) && gcV(&slots[3]) == obj2gco(uv));
+  bump2 = lj_func_test_uvcell_bump_calls();
+  assert(bump2 > bump1);
+}
+
 static void test_interpreter_numeric_fast_path(lua_State *L)
 {
   uint32_t interp0;
@@ -440,6 +476,7 @@ int main(void)
   g = G(L);
   tg = L2TG(L);
 
+  test_uvcell_bump_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);
   test_traced_behavior(L);
   test_accounting_fast_direct(L, g, tg);
