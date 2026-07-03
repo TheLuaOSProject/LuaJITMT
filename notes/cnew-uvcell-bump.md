@@ -23,4 +23,4 @@ Coverage is behavior-based. `m6_jit_fnew_bump` builds with
 `LJ_FUNC_TEST_HELPERS` and directly exercises both interpreter and traced helper
 entry points, checking that they produce closed nil upvalue cells and publish the
 cell through the destination slot where required. It does not inspect source,
-generated IR, assembly, or mcode bytes.
+generated IR, assembly, or generated mcode encoding.

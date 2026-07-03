@@ -5,7 +5,7 @@ API/ABI compatibility, benchmark data, or release packaging. There must be no
 repository implementation-text checks and no generated implementation-text
 checks: no source matching, helper-name inventories, raw-field spelling checks,
 implementation-shape grep rules, generated IR marker checks, generated ASM
-checks, or mcode byte/pattern checks as pass/fail criteria. The invariant still
+checks, or mcode encoding checks as pass/fail criteria. The invariant still
 matters, but the durable record belongs beside the constrained code and in
 notes that explain the ownership, ordering, nonblocking, or ABI reason.
 
@@ -26,11 +26,11 @@ or packaging manifests, not repository implementation text.
 
 Historical milestone wrapper suites are not exempt. The old repository-text
 suite is not a backlog of checks to preserve: old source inventories,
-helper-name lists, bytecode golden comparisons, generated IR/ASM dumps, and
-mcode byte patterns must stay out of CI even when they once caught a migration
-mistake. If an old wrapper described a real invariant, delete the source-text
-check, keep the reason as code-adjacent comments and notes, then cover the
-observable part through the current harness.
+helper-name lists, serialized bytecode spelling checks, generated IR/ASM dumps,
+and mcode encoding checks must stay out of CI even when they once caught a
+migration mistake. If an old wrapper described a real invariant, delete the
+source-text check, keep the reason as code-adjacent comments and notes, then
+cover the observable part through the current harness.
 
 Implementation searches and generated dumps may inform a developer while
 working, but the repository must not carry them as checks. Do not keep them as

@@ -2,8 +2,9 @@
 
 Active tests, CI, and release automation must not fail based on repository
 implementation text, helper names, raw-field spelling, generated IR/ASM text,
-objdump output, or mcode byte patterns. This applies to the historical milestone
-wrapper suite too; old source inventories are not dormant tests to restore.
+objdump output, or generated mcode encoding details. This applies to the
+historical milestone wrapper suite too; old source inventories are not dormant
+tests to restore.
 
 The durable form for these invariants is:
 
@@ -37,7 +38,7 @@ Follow-up scope clarification: there is no grandfathered historical wrapper
 suite. Implementation-text checks must not remain as dormant tests, local-only
 scripts, release-only gates, or wrappers preserved for audit nostalgia. When
 old milestone notes mention source inventories, helper spelling, bytecode
-golden strings, IR/ASM dump markers, or mcode byte snippets, the active task is
-to document the real invariant and keep or add behavior, stock-suite,
-benchmark, C-fixture, or release-artifact coverage only where the failure is
-observable.
+spelling checks, IR/ASM dump markers, or generated mcode encoding snippets, the
+active task is to document the real invariant and keep or add behavior,
+stock-suite, benchmark, C-fixture, or release-artifact coverage only where the
+failure is observable.

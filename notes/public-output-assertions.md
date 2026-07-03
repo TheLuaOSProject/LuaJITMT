@@ -3,7 +3,7 @@
 Active tests should assert observable behavior, public CLI output, structured
 archives, or runtime counters. They should not assert repository source text,
 generated IR text, generated assembly text, objdump output, helper-name spelling,
-or mcode bytes.
+or generated mcode encoding.
 
 The Lua suite helpers now expose this distinction directly:
 

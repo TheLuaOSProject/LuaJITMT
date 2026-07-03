@@ -22,7 +22,7 @@ Generic Lua-pattern and generic source-text assertion helpers were removed from
 the active harness. If an invariant needs a constrained implementation shape,
 document why beside the code and in a note; tests should cover the observable
 behavior or public artifact, not source text, generated IR/ASM text, bytecode
-spelling, or mcode bytes.
+spelling, or generated mcode encoding.
 
 M4 shutdown markers, M5 bytecode dump/load behavior checks, and M9 benchmark
 regression failure checks use concrete artifact assertions.

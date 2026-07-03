@@ -204,13 +204,13 @@ Lua test-suite migration notes:
 - Result-artifact matching remains valid only for public or externally
   meaningful artifacts: bytecode compatibility payloads, benchmark output,
   release/build manifests, and C/Lua fixture process output. Generated JIT
-  IR/ASM dumps and mcode byte/text spelling are internal implementation
+  IR/ASM dumps and mcode encoding/text spelling are internal implementation
   details and must not be active pass/fail gates.
 - The historical repository-text suite has no special status. Removed source
   inventories, helper-spelling checks, generated IR/ASM/mcode checks, and
-  bytecode golden comparisons are not dormant coverage to restore. Preserve the
-  reason in code comments or notes, and cover observable behavior through the
-  current fixtures, benchmarks, stock tests, or release artifacts.
+  serialized bytecode spelling checks are not dormant coverage to restore.
+  Preserve the reason in code comments or notes, and cover observable behavior
+  through the current fixtures, benchmarks, stock tests, or release artifacts.
 - Shared generic utilities live in `tests/lib/suite_utils.lua`; shared VM,
   stock-suite, Lua-script build/run, aggregate-suite, and C-fixture case/batch
   helpers live in `tests/lib/suite_runtime.lua`.
@@ -246,7 +246,7 @@ Lua test-suite migration notes:
   compatibility, registry root, and nomm-cache fixture cases. Those cases now
   rely on their C behavior fixtures.
 - Generated-output matching is valid for public artifacts and runtime process
-  output. Generated JIT IR/ASM dumps and mcode byte/text spelling are not
+  output. Generated JIT IR/ASM dumps and mcode encoding/text spelling are not
   valid pass/fail gates even though they are produced by running the VM.
 - Removed the remaining M5 fixture-suite implementation inspections from the string-table
   prep and CAS cases. The suite now relies on the string-table C fixtures for

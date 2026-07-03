@@ -21,9 +21,10 @@ checks.
 
 Current audit: active tests and CI should read captured process output,
 temporary files, benchmark CSVs, build outputs, and release manifests. Bytecode
-dumps may be loaded and executed as opaque artifacts, but exact dump bytes are
+dumps may be loaded and executed as opaque artifacts, but exact dump spelling is
 not a pass/fail contract. No suite should read repository implementation text,
-generated IR/ASM/mcode text, or machine-code byte patterns for pass/fail, and
-there is no exception for older milestone wrappers, release preparation, or
-local-only scripts. If such a check is found, delete it and preserve only the
-reason as code-adjacent documentation plus observable coverage where possible.
+generated IR/ASM/mcode text, or generated machine-code encoding details for
+pass/fail, and there is no exception for older milestone wrappers, release
+preparation, or local-only scripts. If such a check is found, delete it and
+preserve only the reason as code-adjacent documentation plus observable coverage
+where possible.

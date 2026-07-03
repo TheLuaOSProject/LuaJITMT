@@ -9,11 +9,12 @@
 4. **Hammer/stress** (§13.4): hours-scale soak under torture.
 5. **C unit drivers** (§13.6.2): lock-free structures isolated, TSAN-clean.
 6. **Oracles**: LJ_GC2_PARANOIA STW diff (05 §5.13); string identity
-   checker; bytecode dump/load execution as an opaque artifact. Bytecode byte
-   spelling, generated IR/ASM text, objdump output, mcode bytes, helper-name
-   inventories, and repository source text are not test contracts, including
-   historical milestone wrappers. Keep the invariant explanation in comments
-   and notes; keep tests on behavior or product artifacts.
+   checker; bytecode dump/load execution as an opaque artifact. Serialized
+   bytecode spelling, generated IR/ASM text, objdump output, generated mcode
+   encoding, helper-name inventories, and repository source text are not test
+   contracts, including historical milestone wrappers. Keep the invariant
+   explanation in comments and notes; keep tests on behavior or product
+   artifacts.
 7. **Fuzzing** (§13.7).
 
 ## 13.2 Baseline numbers (reference machine)
@@ -83,7 +84,7 @@ flush slot-retirement coverage. The table-store coverage also exercises
 same-trace closed-upvalue and nested heap escapes before a `TNEW`/`TDUP` slot
 update. The helper-route rationale is documented beside the recorder and table
 store implementation; tests must not assert source spelling, generated IR/ASM,
-or mcode bytes. The M10 generational gate includes interpreted VM-fast and
+or generated mcode encoding. The M10 generational gate includes interpreted VM-fast and
 traced helper-backed table-store regressions that confirm the remembered SSB
 entry is the old parent table and that the next minor cycle marks the young
 child through that parent.

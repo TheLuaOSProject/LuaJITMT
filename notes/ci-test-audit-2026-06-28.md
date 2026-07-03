@@ -172,10 +172,10 @@ code.
   The new `m0_build_profile_switch` behavior test covers disabled-JIT to default
   profile recovery without relying on a legacy wrapper.
 - Removed remaining stale old-name tombstones for deleted root/trace/finalizer
-  wrapper names from CI invariant scripts where behavior tests already cover the
-  publication/finalizer paths. Active `src`, `tests`, and `tools` now avoid
-  standalone old-compat wording; the remaining `compatptr` identifiers are FFI
-  type-conversion semantics and are intentionally retained.
+  wrappers where behavior tests already cover the publication/finalizer paths.
+  Active `src`, `tests`, and `tools` now avoid standalone old-compat wording;
+  the remaining `compatptr` identifiers are FFI type-conversion semantics and
+  are intentionally retained.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy wrappers that merely prevent reintroducing already-removed wrapper

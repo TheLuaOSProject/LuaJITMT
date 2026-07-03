@@ -4,7 +4,8 @@ Historical source-text pass/fail checks are retired for the whole repository,
 including old milestone wrappers and any disabled, local-only, or release-only
 variants. Active tests, CI, and release automation should not decide pass/fail
 from repository implementation spelling, helper-name inventories, generated
-IR/ASM text, objdump output, bytecode byte spelling, or mcode byte patterns.
+IR/ASM text, objdump output, serialized bytecode spelling, or generated mcode
+encoding checks.
 
 The replacement is documentation plus observable coverage:
 

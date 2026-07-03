@@ -6,7 +6,7 @@ including old milestone wrapper suites and one-off historical wrappers.
 Repository implementation-text and generated compiler-internal text checks are
 not allowed: no source matching, helper-name inventories, raw-field spelling
 checks, implementation-shape grep rules, generated IR marker checks, generated
-ASM checks, or mcode byte/pattern checks as pass/fail criteria. Implementation-
+ASM checks, or generated mcode encoding checks as pass/fail criteria. Implementation-
 only rules must be documented beside the code they constrain and, when the
 context is broader than a local comment, in `notes/`. Tests should fail on
 broken behavior or broken public artifacts, not on implementation spelling.
@@ -35,8 +35,8 @@ String matching remains useful for public artifacts and process output:
 captured stdout/stderr, generated CSVs, package manifests, and release
 metadata. Bytecode compatibility tests should load and execute dumps rather
 than compare byte spelling. Generated JIT IR, generated ASM, objdump output,
-and mcode bytes are compiler-internal implementation spelling and are not active
-test gates.
+and generated mcode encoding are compiler-internal implementation spelling and
+are not active test gates.
 
 The active assertion helpers intentionally avoid generic regex/pattern
 assertions and expose artifact-named containment/count checks only. That keeps
@@ -69,7 +69,7 @@ Examples:
 Opcode/codegen work follows the same split. VM DynASM source should use
 mnemonic DynASM syntax for active instructions. Low-level x86 JIT emitter
 helpers may centralize opcode constants such as lock-prefixed CAS, but tests
-validate runtime behavior rather than machine-code byte spelling.
+validate runtime behavior rather than generated machine-code encoding.
 
 2026-07-03 audit: the active `tools/ci` layer is only the Lua launcher and
 platform build smoke script, and Lua suite file reads are captured logs,
