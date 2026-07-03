@@ -7,7 +7,7 @@ lj_ccall result helper loads
   helper-backed return-size reads.
 - Routed the active x86_64/POSIX register argument vector check through a
   helper-backed info load.
-- Documented the invariant formerly checked by `m7_ffi_cdata_get_l`: raw `CType.info` and
+- Documented the implementation invariant associated with `m7_ffi_cdata_get_l`: raw `CType.info` and
   `CType.size` reads in `ccall_get_results()` and the x86_64/POSIX C-call
   macro block.
 

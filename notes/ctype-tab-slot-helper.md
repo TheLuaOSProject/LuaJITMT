@@ -5,7 +5,7 @@ CType table slot helper
 - Routed `lj_ctype.c` snapshot readers, reservation result publication, and FFI
   type/layout snapshot readers through the helper instead of direct
   `CTypeTab.tab[]` indexing.
-- Documented the invariant formerly checked by `m7_ffi_ctype_tab_retire`: raw implementation
+- Documented the implementation invariant associated with `m7_ffi_ctype_tab_retire`: raw implementation
   indexing through `CTypeTab.tab[]` in the guarded ctype/FFI implementation
   files.
 

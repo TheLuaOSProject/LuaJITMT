@@ -7,7 +7,7 @@ CType hash payload helpers
   abandoned state and type masks.
 - Routed `ctype_addtype()` through `ctype_info_acq()`/`ctype_size_acq()` when
   computing the type hash for publication.
-- Documented the invariant formerly checked by `m7_ffi_ctype_hash_publish`: raw
+- Documented the implementation invariant associated with `m7_ffi_ctype_hash_publish`: raw
   `CType.info`/`CType.size` reads in these hash-walker patterns.
 
 Verification:

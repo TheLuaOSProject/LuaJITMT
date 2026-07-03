@@ -51,10 +51,11 @@ end
 function M.read_file(path)
   -- Intentionally plain: callers use this for generated dumps, logs,
   -- fixtures, benchmark data, package manifests, and other artifacts produced
-  -- or consumed by a test. Do not use it as a repository source guard. Source
-  -- constraints belong beside the constrained code and in notes that explain
-  -- the ordering, ownership, nonblocking, or ABI reason; tests should cover
-  -- observable behavior, generated artifacts, benchmarks, or packaging.
+  -- or consumed by a test. Do not use it for repository implementation-text
+  -- pass/fail checks. Source constraints belong beside the constrained code
+  -- and in notes that explain the ordering, ownership, nonblocking, or ABI
+  -- reason; tests should cover observable behavior, generated artifacts,
+  -- benchmarks, or packaging.
   return read_raw_file(path)
 end
 

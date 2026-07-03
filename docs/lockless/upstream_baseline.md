@@ -1,6 +1,6 @@
-# Lockless LuaJIT Source Pin
+# Lockless LuaJIT Upstream Baseline
 
-The lockless runtime plan was verified against this upstream source point:
+The lockless runtime plan was started from this upstream baseline:
 
 - LuaJIT repository: https://github.com/LuaJIT/LuaJIT.git
 - Branch: `v2.1`

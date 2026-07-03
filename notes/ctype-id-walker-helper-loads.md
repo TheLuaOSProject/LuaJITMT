@@ -6,7 +6,7 @@ CType ID walker helper loads
   walking attribute/reference chains.
 - Routed `ctype_rawchildid()` through helper-backed child extraction and a
   helper-backed attribute check for the child record.
-- Documented the invariant formerly checked by `m7_ffi_ctype_pointer_ids`: raw `CType.info`
+- Documented the implementation invariant associated with `m7_ffi_ctype_pointer_ids`: raw `CType.info`
   reads inside the inline ctype ID walker bodies.
 
 Verification:

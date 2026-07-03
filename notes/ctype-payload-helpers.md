@@ -5,7 +5,7 @@ CType payload helpers
 - Routed ctype snapshots, name/field/size/enum snapshots, and FFI
   typeinfo/typecmp/layout snapshots through the helper API instead of raw
   `la_load32_acq(&ct->info)` / `la_load32_acq(&ct->size)` calls.
-- Documented the invariant formerly checked by `m7_ffi_typeinfo_snapshot`: raw shared
+- Documented the implementation invariant associated with `m7_ffi_typeinfo_snapshot`: raw shared
   `CType.info`/`CType.size` acquire-loads in the guarded ctype/FFI/parser
   files.
 

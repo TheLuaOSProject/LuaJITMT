@@ -5,7 +5,7 @@ lj_ccallback runtime helper loads
   register/stack argument storage, and preserving x86 stack-adjust metadata.
 - Routed `callback_conv_result()` through helper-backed return ctype snapshots
   for result destination selection and integer/FP return extension.
-- Documented the invariant formerly checked by `m7_ffi_callback_runtime`: raw `CType.info`,
+- Documented the implementation invariant associated with `m7_ffi_callback_runtime`: raw `CType.info`,
   `CType.size`, and `CType.sib` reads in the callback runtime conversion
   helpers.
 

@@ -11,7 +11,7 @@ Changes:
   into global GC2 pacing counters.
 - Routed production allocation-accounting add/flush paths through the helper
   layer.
-- Documented the invariant formerly checked by `m6_jit_alloc_account`: raw production
+- Documented the implementation invariant associated with `m6_jit_alloc_account`: raw production
   `local_total` access outside `src/lj_tg.h`.
 
 Validation:

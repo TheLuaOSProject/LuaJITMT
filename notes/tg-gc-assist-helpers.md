@@ -9,7 +9,7 @@ Changes:
 - Kept the latch as a TG-owned reentry guard: acquire-load before entering
   `lj_gc2_assist()` and relaxed owner-local stores for set/clear.
 - Routed production GC2 bounded-assist entry and exit through the helper layer.
-- Documented the invariant formerly checked by `m3_gc2_worker_scheduler`: raw production
+- Documented the implementation invariant associated with `m3_gc2_worker_scheduler`: raw production
   `gc_assist` access outside `src/lj_tg.h`.
 
 Validation:

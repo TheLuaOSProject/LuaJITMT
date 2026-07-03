@@ -4,7 +4,7 @@ lj_ccall vararg helper loads
   `ctype_size_acq()` when inferring vararg destination ctypes for cdata values.
 - Covered cdata float-to-double vararg promotion and array-to-pointer vararg
   inference with a small `snprintf()` call in `tests/t-ffi-cdata-set-l.lua`.
-- Documented the invariant formerly checked by `m7_ffi_cdata_set_l`: raw `CType.info` and
+- Documented the implementation invariant associated with `m7_ffi_cdata_set_l`: raw `CType.info` and
   `CType.size` reads in `lj_ccall_ctid_vararg()`.
 
 Verification:

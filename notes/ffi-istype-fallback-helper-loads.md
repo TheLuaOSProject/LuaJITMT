@@ -5,7 +5,7 @@ ffi.istype fallback helper loads
   pointer, and struct-pointer branch decisions.
 - Kept the existing raw/ref-stripped ID comparisons and `lj_cconv_compatptr()`
   call shape unchanged.
-- Documented the invariant formerly checked by `m7_ffi_typeinfo_snapshot`: raw
+- Documented the implementation invariant associated with `m7_ffi_typeinfo_snapshot`: raw
   `CType.info`/`CType.size` reads inside `ffi_istype_raw()`.
 
 Verification:

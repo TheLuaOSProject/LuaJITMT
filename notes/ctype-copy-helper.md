@@ -6,7 +6,7 @@ CType stale-slot copy helper
 - Replaced raw `*dst = *src` stale-slot refreshes in `ctype_hash_setnext()`,
   `ctype_publish_current()`, and parser `cp_ctype_publish()` with
   `ctype_copy_rel()`.
-- Documented the invariant formerly checked by `m7_ffi_ctype_name_claim`: raw ctype
+- Documented the implementation invariant associated with `m7_ffi_ctype_name_claim`: raw ctype
   stale-slot structure copies in the ctype/parser publication paths.
 
 Verification:

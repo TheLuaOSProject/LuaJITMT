@@ -9,7 +9,7 @@ Changes:
 - Routed production STOPREQ, DEAD, arena-internal, and hugetab flag tests
   through acquire helper reads.
 - Routed production flag set/clear operations through atomic helper operations.
-- Documented the invariant formerly checked by `m3_safepoint_handshake`: raw production
+- Documented the implementation invariant associated with `m3_safepoint_handshake`: raw production
   `tg_flags` access outside `src/lj_tg.h`.
 
 Validation:

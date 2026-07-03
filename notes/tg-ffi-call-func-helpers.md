@@ -10,7 +10,7 @@ Changes:
   native calls and acquire reads on callback entry.
 - Routed FFI call setup/restore, callback unwind clear, nested callback
   blacklist reads, and TG detach clear through the helper layer.
-- Documented the invariant formerly checked by `m7_ffi_callback_runtime`: raw production
+- Documented the implementation invariant associated with `m7_ffi_callback_runtime`: raw production
   `ffi_call_func` access outside `src/lj_tg.h`.
 
 Validation:

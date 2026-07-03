@@ -16,7 +16,7 @@ CData core helper loads
 - Routed `cdata_getconst()`, `lj_cdata_get_l()`, and `lj_cdata_set_l()` through
   helper-backed info/size loads for const/bitfield, child, ref, attribute, and
   write-const checks.
-- Documented the invariant formerly checked by `m7_ffi_cdata_get_l`: raw `CType.info` and
+- Documented the implementation invariant associated with `m7_ffi_cdata_get_l`: raw `CType.info` and
   `CType.size` reads inside the cdata core helper bodies.
 
 Verification:

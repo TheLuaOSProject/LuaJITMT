@@ -8,7 +8,7 @@ CConv aggregate helper loads
   subtype, and union behavior.
 - Routed `lj_cconv_multi_init()` and `lj_cconv_ct_init_l()` aggregate decisions
   through helper-backed destination info loads.
-- Documented the invariant formerly checked by `m7_ffi_cdata_set_l`: raw `CType.info` and
+- Documented the implementation invariant associated with `m7_ffi_cdata_set_l`: raw `CType.info` and
   `CType.size` reads in these guarded aggregate conversion helper bodies.
 
 Verification:

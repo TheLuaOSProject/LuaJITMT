@@ -5,7 +5,7 @@ CType name object helper
 - Routed ctype snapshots, name lookup snapshots, field snapshots, enum-constant
   snapshots, and FFI typeinfo/layout snapshots through the helper instead of
   direct `gcref_acq(ct->name)` loads.
-- Documented the invariant formerly checked by `m7_ffi_typeinfo_snapshot`: raw shared
+- Documented the implementation invariant associated with `m7_ffi_typeinfo_snapshot`: raw shared
   `CType.name` acquire-loads in the guarded ctype/FFI/parser files.
 
 Verification:

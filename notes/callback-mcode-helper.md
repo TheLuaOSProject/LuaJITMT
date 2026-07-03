@@ -4,7 +4,7 @@ Callback mcode helper slice
   trampoline page pointer.
 - Routed callback slot pointer conversion, callback pointer-to-slot lookup,
   mcode publication, and mcode free through the helper API.
-- Documented the invariant formerly checked by `m7_ffi_callback_install`: raw
+- Documented the implementation invariant associated with `m7_ffi_callback_install`: raw
   implementation-side `cts->cb.mcode` access alongside the existing callback
   side arrays.
 

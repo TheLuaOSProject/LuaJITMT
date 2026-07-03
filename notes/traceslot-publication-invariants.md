@@ -15,7 +15,8 @@ Reasoning:
   the trace-vector snapshot and distinguish pending sentinels from published
   traces. Future changes should preserve that publication rule and cover
   observable trace behavior; the source-level constraint is documented here and
-  beside the helper surface instead of being enforced by a source guard.
+  beside the helper surface instead of being enforced by repository text
+  matching.
 - The cached mirror assignment `J->trace = tv->slot` is not a publication
   boundary; production slot writes must still use the trace-slot helpers.
 

@@ -9,7 +9,7 @@ Slice
 - Routed arena owned/needsweep traversal, prepare/restore/sweep splicing,
   allocator transfer, GC/GC2 arena scans, and the C fixtures that inspect or
   seed arena chains through the helpers.
-- Documented the invariant formerly checked by `m3_gc2_scaffold`: raw `GCArena.hdr.next`
+- Documented the implementation invariant associated with `m3_gc2_scaffold`: raw `GCArena.hdr.next`
   access in the production arena/GC files and the focused C fixtures.
 
 Validation

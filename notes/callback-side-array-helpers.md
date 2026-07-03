@@ -6,7 +6,7 @@ Callback side-array helper slice
 - Routed callback slot initialization, slot claiming, callback free, runtime
   entry lookup, legacy GC/GC2 side-root scans, GC2 paranoia checks, and CTState
   teardown through the helper API.
-- Documented the invariant formerly checked by `m7_ffi_callback_install`: raw
+- Documented the implementation invariant associated with `m7_ffi_callback_install`: raw
   implementation-side `cts->cb.cbid`, `cts->cb.owner`, `cts->cb.func`, and
   `cts->cb.sizeid` access outside the helper definitions.
 

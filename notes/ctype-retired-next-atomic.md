@@ -11,7 +11,8 @@ Changes:
   test through the same acquire reader helper.
 - Documented why `CTypeTab.retired_next` is a shared retired-list publication
   link and must use acquire/release helper access. CType retirement and GC
-  walker fixtures cover the behavior; no source guard pins the helper spelling.
+  walker fixtures cover the behavior; comments and notes carry the helper
+  discipline.
 - Left `CTState.retiredtab` head operations as explicit acquire/CAS/xchg sites;
   this slice only centralizes the per-node retired link.
 

@@ -6,7 +6,7 @@ lj_ccall entry helper loads
 - Refreshed the helper-backed info snapshot after the call for the Windows
   stdcall convention check while leaving the existing declaration patch write
   intact.
-- Documented the invariant formerly checked by `m7_ffi_cdata_set_l`: raw `CType.info` and
+- Documented the implementation invariant associated with `m7_ffi_cdata_set_l`: raw `CType.info` and
   `CType.size` reads in `lj_ccall_func()`, excluding the Windows stdcall patch
   write.
 

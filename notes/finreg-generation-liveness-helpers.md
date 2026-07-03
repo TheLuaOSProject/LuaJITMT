@@ -5,7 +5,7 @@ FINREG generation liveness helper slice
 - Routed FINREG table construction, lookup visibility, new-generation
   disabled-head checks, FINREG table classification, and ordered
   P_WEAK/close-time/pending discovery through the helper API.
-- Documented the invariant formerly checked by `m7_ffi_finreg`: raw FINREG generation
+- Documented the implementation invariant associated with `m7_ffi_finreg`: raw FINREG generation
   liveness access through implementation-side `t->metatable`, `ft->metatable`,
   or `headtab->metatable` operations.
 

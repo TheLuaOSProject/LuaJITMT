@@ -5,7 +5,7 @@ crec_ct2irt helper loads
   and complex IR types.
 - Refreshed the helper-backed info snapshot after enum child resolution so the
   final IR mapping uses the resolved child ctype payload.
-- Documented the invariant formerly checked by `m7_ffi_jit_cnew`: raw `CType.info` and
+- Documented the implementation invariant associated with `m7_ffi_jit_cnew`: raw `CType.info` and
   `CType.size` reads in `crec_ct2irt()`.
 
 Verification:

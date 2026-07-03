@@ -3,12 +3,12 @@
 The Lua test harness and CI must prove observable VM behavior, generated
 compiler/artifact output, benchmark data, or release packaging. This is a
 blanket rule, including old milestone wrapper suites and one-off historical
-wrappers. Source guards are not allowed: no repository source text matching,
-helper-name inventories, raw-field spelling checks, or implementation-shape
-grep rules as pass/fail criteria. Implementation-only rules must be documented
-beside the code they constrain and, when the context is broader than a local
-comment, in `notes/`. Tests should fail on broken behavior or broken
-artifacts, not on implementation spelling.
+wrappers. Repository implementation-text checks are not allowed: no source
+matching, helper-name inventories, raw-field spelling checks, or
+implementation-shape grep rules as pass/fail criteria. Implementation-only
+rules must be documented beside the code they constrain and, when the context
+is broader than a local comment, in `notes/`. Tests should fail on broken
+behavior or broken artifacts, not on implementation spelling.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read generated dumps, captured logs, temporary files,
@@ -73,6 +73,7 @@ the observable part of the invariant.
 2026-07-03 removal follow-up: active tests, CI, and release workflows keep no
 repository text-matching suite. Broad `rg`/`grep` audits are allowed as manual
 engineering archaeology while working, but they must not become pass/fail
-rules. If a future cleanup discovers an old source guard, remove it and replace
-it with a comment/note that explains the reason for the constrained code plus
-behavioral or generated-artifact coverage where the failure can be observed.
+rules. If a future cleanup discovers an old repository text-matching gate,
+remove it and replace it with a comment/note that explains the reason for the
+constrained code plus behavioral or generated-artifact coverage where the
+failure can be observed.

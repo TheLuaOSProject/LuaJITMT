@@ -4,7 +4,7 @@ CType hash head helpers
   bucket heads.
 - Routed the local ctype hash load/CAS helpers through the shared helper API,
   preserving the low-16-bit CTypeID payload and CAS-prepend semantics.
-- Documented the invariant formerly checked by `m7_ffi_ctype_hash_publish`: raw
+- Documented the implementation invariant associated with `m7_ffi_ctype_hash_publish`: raw
   implementation-side `cts->hash` access.
 
 Verification:

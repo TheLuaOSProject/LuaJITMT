@@ -5,7 +5,7 @@ CConv C-to-TValue helper loads
   copy-out conversion paths.
 - Reused the acquired size for integer copy-out, bool normalization, and cdata
   allocation size decisions.
-- Documented the invariant formerly checked by `m7_ffi_cdata_set_l`: raw `CType.info` and
+- Documented the implementation invariant associated with `m7_ffi_cdata_set_l`: raw `CType.info` and
   `CType.size` reads in this guarded conversion helper body.
 
 Verification:

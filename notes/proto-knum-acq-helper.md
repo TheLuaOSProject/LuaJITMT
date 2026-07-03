@@ -10,7 +10,7 @@
 - Left recorder-owned `proto_knumtv()` reads in `lj_record.c` unchanged; those
   operate under the current recorder ownership model and are handled separately
   from published-prototype readers.
-- Documented the invariant formerly checked by `m5_proto_knum_acq`: raw numeric-constant reads in
+- Documented the implementation invariant associated with `m5_proto_knum_acq`: raw numeric-constant reads in
   the converted files.
 
 Validation:

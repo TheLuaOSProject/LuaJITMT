@@ -4,7 +4,7 @@ FFI miscmap helper surface
   CTState misc table root.
 - Routed function-pointer metamethod lookup, miscmap slot storage, and
   `luaopen_ffi()` miscmap publication through the helper API.
-- Documented the invariant formerly checked by `m7_ffi_metatype`: raw implementation-side
+- Documented the implementation invariant associated with `m7_ffi_metatype`: raw implementation-side
   `cts->miscmap` access alongside the metatype side-map fields.
 
 Verification:

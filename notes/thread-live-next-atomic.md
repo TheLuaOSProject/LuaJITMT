@@ -10,7 +10,7 @@ Changes:
   the helpers.
 - Documented why `LJThreadLive.next` is a shared live-root publication link
   and must use acquire/release helper access. Shutdown traversal and GC marking
-  fixtures cover the behavior; no source guard pins the helper spelling.
+  fixtures cover the behavior; comments and notes carry the helper discipline.
 - Follow-up: routed the GC2 pending-root scan `gc2_scan_threading_live_roots()`
   through `lj_thread_live_next_acq()` and documented the same helper discipline
   for that scoped function body.

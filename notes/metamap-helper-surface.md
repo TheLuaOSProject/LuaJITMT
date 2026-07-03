@@ -4,7 +4,7 @@ Metatype side-map helper slice
   size publication, slot acquire loads, and one-shot slot CAS publication.
 - Routed `ffi.metatype()` publication, metatype lookup, legacy GC marking, GC2
   marking, paranoia memory checks, and CTState teardown through the helper API.
-- Documented the invariant formerly checked by `m7_ffi_metatype`: raw implementation-side
+- Documented the implementation invariant associated with `m7_ffi_metatype`: raw implementation-side
   `cts->metamap` and `cts->sizemeta` access.
 
 Verification:

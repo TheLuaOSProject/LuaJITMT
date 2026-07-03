@@ -2,10 +2,10 @@
 
 Current policy: tests and CI must decide pass/fail through behavior,
 generated artifacts, benchmark data, or release packaging. There must be no
-source guards: no repository source text matching, helper-name inventories,
-raw-field spelling checks, or implementation-shape grep rules as pass/fail
-criteria. The invariant still matters, but the durable record belongs beside
-the constrained code and in notes that explain the ownership, ordering,
+repository implementation-text checks: no source matching, helper-name
+inventories, raw-field spelling checks, or implementation-shape grep rules as
+pass/fail criteria. The invariant still matters, but the durable record belongs
+beside the constrained code and in notes that explain the ownership, ordering,
 nonblocking, or ABI reason.
 
 Coverage should use behavior, C race/lifetime fixtures, generated artifacts,
