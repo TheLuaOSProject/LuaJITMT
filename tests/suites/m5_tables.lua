@@ -106,6 +106,21 @@ return function(add)
   })
 
   add({
+    name = "m5_table_insert_entering",
+    description = "table.insert owns structure during mt_entering",
+    run = function(t)
+      build.build_and_run_c(t, t:tmp("lj_t-table-insert-entering"),
+                            "t-table-insert-entering.c", {
+        clean = true,
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s",
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
+      print("M5 table.insert mt_entering route passed")
+    end
+  })
+
+  add({
     name = "m5_tab_finreg_newkey_stale",
     description = "FINREG new-key helpers abandon stale table generations",
     run = function(t)

@@ -27,6 +27,12 @@
 
 #define LJLIB_MODULE_table
 
+static LJ_AINLINE int table_mt_concurrent(lua_State *L)
+{
+  global_State *g = G(L);
+  return mt_active_acq(g) != 0 || mt_entering_acq(g) != 0;
+}
+
 static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)
 {
   for (;;) {
@@ -67,7 +73,7 @@ static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
 
 static MSize table_insert_len(lua_State *L, GCtab *t)
 {
-  if (!mt_active_acq(G(L)))
+  if (!table_mt_concurrent(L))
     return lj_tab_len(t);
   for (;;) {
     TValue *array0, *array1;
@@ -194,7 +200,7 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     if (nargs != 3*sizeof(TValue))
       lj_err_caller(L, LJ_ERR_TABINS);
     n = lj_lib_checkint(L, 2);
-    if (mt_active_acq(G(L))) {
+    if (table_mt_concurrent(L)) {
       (void)lj_tab_setint(L, t, n > i ? n : i);
       guard = lj_tab_struct_enter(L, t);
     }
@@ -202,7 +208,7 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     for (; i > n; i--)
       table_insert_shift_store(L, t, i);
     i = n;
-  } else if (mt_active_acq(G(L))) {
+  } else if (table_mt_concurrent(L)) {
     (void)lj_tab_setint(L, t, i);
     guard = lj_tab_struct_enter(L, t);
   }

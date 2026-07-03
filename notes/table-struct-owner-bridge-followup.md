@@ -7,6 +7,10 @@
 - Same-table structural mutation is still serialized by the per-table owner.
   This preserves the current resize/copy safety bridge while narrowing the
   bottleneck to the table being changed.
+- Table-library compound operations also treat `mt_entering` as concurrent.
+  A secondary VM entry is already in the lifecycle handoff before `mt_active`
+  is visible, so `table.insert()` append/pre-grow and positional shifts must
+  acquire the table-local structural owner in that window.
 - Same-table contenders now park on `GCtab.struct_owner` through the existing
   cross-platform `la_futex_wait()` / `la_futex_wake()` substrate instead of
   sleeping through the generic fixed 1 ms retry helper. Waiters enter native
@@ -25,6 +29,7 @@
 Verification:
 
 - `tools/ci/lua_test.sh m5_tab_struct_owner`
+- `tools/ci/lua_test.sh m5_table_insert_entering`
 - `tools/ci/lua_test.sh m6_jit_token m6_jit_cell_ops m5_tab_next_snapshot m5_x64_table_next_snapshot`
 - `LJ_M5_TAB_RESIZE_TRAVERSAL_MODES=pairs LJ_M5_TAB_RESIZE_STRESS_CASES=traversal,nextchurn tools/ci/lua_test.sh m5_tab_resize_stress`, 20/20 runs
 - `tools/ci/lua_test.sh m5_tab_keylock_lookup m5_tab_next_snapshot m5_tab_colocated_resize m5_tab_capi_resize_stress m5_tab_resize_stress m5_tab_struct_owner`

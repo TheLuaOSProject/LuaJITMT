@@ -95,12 +95,18 @@ static uint32_t tab_struct_tid(lua_State *L)
 
 #ifdef LJ_TAB_TEST_HELPERS
 static uint32_t tab_test_struct_owner_no_l_futex_waits;
+static uint32_t tab_test_struct_enter_acquires;
 static uint32_t tab_test_new0_calls;
 static uint32_t tab_test_clear_shared_calls;
 
 static LJ_AINLINE void tab_test_struct_owner_no_l_futex_wait(void)
 {
   (void)la_add32_acqrel(&tab_test_struct_owner_no_l_futex_waits, 1);
+}
+
+static LJ_AINLINE void tab_test_struct_enter_acquire(void)
+{
+  (void)la_add32_acqrel(&tab_test_struct_enter_acquires, 1);
 }
 
 static LJ_AINLINE void tab_test_new0_call(void)
@@ -121,6 +127,16 @@ uint32_t lj_tab_test_struct_owner_no_l_futex_waits(void)
 void lj_tab_test_reset_struct_owner_no_l_futex_waits(void)
 {
   la_store32_rel(&tab_test_struct_owner_no_l_futex_waits, 0);
+}
+
+uint32_t lj_tab_test_struct_enter_acquires(void)
+{
+  return la_load32_acq(&tab_test_struct_enter_acquires);
+}
+
+void lj_tab_test_reset_struct_enter_acquires(void)
+{
+  la_store32_rel(&tab_test_struct_enter_acquires, 0);
 }
 
 uint32_t lj_tab_test_new0_calls(void)
@@ -144,6 +160,7 @@ void lj_tab_test_reset_clear_shared_calls(void)
 }
 #else
 #define tab_test_struct_owner_no_l_futex_wait()		((void)0)
+#define tab_test_struct_enter_acquire()			((void)0)
 #define tab_test_new0_call()				((void)0)
 #define tab_test_clear_shared_call()			((void)0)
 #endif
@@ -183,8 +200,10 @@ int lj_tab_struct_enter(lua_State *L, GCtab *t)
       return 0;
     if (owner == 0) {
       uint32_t expect = 0;
-      if (lj_tab_struct_owner_cas(t, &expect, tid))
+      if (lj_tab_struct_owner_cas(t, &expect, tid)) {
+	tab_test_struct_enter_acquire();
 	return 1;
+      }
       owner = expect;
     }
     tab_struct_owner_wait(L, t, owner);
