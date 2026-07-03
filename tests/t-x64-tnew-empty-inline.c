@@ -163,6 +163,50 @@ static void test_plain_new0_inline_empty(lua_State *L, global_State *g,
   assert(root_chain_contains(g, obj2gco(t)));
 }
 
+static void test_plain_new_inline_empty(lua_State *L, global_State *g,
+					TGState *tg)
+{
+  LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  GCArena *a0;
+  GCobj *pending0;
+  GCSize total0;
+  uint64_t local0;
+  uint32_t cell0, black, calls0, i;
+  GCtab *t;
+
+  a0 = b->a;
+  cell0 = b->cell;
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  total0 = lj_gc_total_load(g);
+  local0 = lj_tg_local_total_acq(tg);
+  calls0 = lj_tab_test_new0_calls();
+
+  assert(a0 != NULL);
+  assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
+  for (i = 4; i < LJ_ALLOC_NBINS; i++)
+    assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
+  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
+				    TNEW_EMPTY_NCELLS));
+  assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
+
+  t = lj_tab_new(L, 0, 0);
+
+  assert(lj_tab_test_new0_calls() == calls0 + 1u);
+  assert_empty_table_body(g, t);
+  assert((void *)t == lj_arena_cellptr(a0, cell0));
+  assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
+  assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
+  for (i = 1; i < TNEW_EMPTY_NCELLS; i++)
+    assert(lj_arena_state(a0, cell0 + i) == 0);
+  assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
+  assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_chain_contains(g, obj2gco(t)));
+}
+
 static void test_capi_newtable_inline_empty(lua_State *L, global_State *g,
 					    TGState *tg)
 {
@@ -362,6 +406,7 @@ int main(void)
 
   test_inline_empty_tnew(L, g, tg);
   test_plain_new0_inline_empty(L, g, tg);
+  test_plain_new_inline_empty(L, g, tg);
   test_capi_newtable_inline_empty(L, g, tg);
 #if LJ_HASJIT
   test_jit_helper_inline_empty_tnew(L, g, tg);

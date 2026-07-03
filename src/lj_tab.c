@@ -1031,6 +1031,8 @@ static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
 */
 GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits)
 {
+  if (asize == 0 && hbits == 0)
+    return lj_tab_new0(L);
   return newtab(L, asize, hbits);
 }
 

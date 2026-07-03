@@ -26,3 +26,7 @@ single-producer empty-table fast path to direct runtime users and the public
 construction. The helper still falls back to `newtab()` for active or entering
 MT, GC workers, custom allocators, free runs that should be reused, exhausted
 bump arenas, and local GC2 accounting flushes.
+
+2026-07-03 direct-constructor follow-up: `lj_tab_new(L, 0, 0)` now also routes
+through `lj_tab_new0()`. This covers internal exact-empty constructor users
+without changing array/hash constructors or their publication paths.
