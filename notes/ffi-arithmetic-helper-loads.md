@@ -18,8 +18,7 @@ FFI arithmetic helper loads
   `bit.band`/`bit.bor`/`bit.bxor` before converting each TValue operand,
   avoiding a live `ctype_get(cts, id)` table pointer in the n-ary cdata bit-op
   loop.
-- Documented the implementation invariant associated with `m7_ffi_carith_l`: raw `CType.info` and
-  `CType.size` reads in `src/lj_carith.c`.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_carith_l` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 - Extended `tests/suites/m7_ffi.lua` to document raw arithmetic `ctype_get(cts,
   ...)` live-pointer reuse outside immediate local CType copies in
   `src/lj_carith.c` and `src/lib_bit.c`.

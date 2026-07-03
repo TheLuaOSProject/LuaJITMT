@@ -222,12 +222,12 @@ Current coverage: `m3_vm_safepoint` validates the safepoint behavior through
 the compiled VM fixture, stock `-joff` coverage runs through
 `run_stock_tests -- -joff --quiet`, and the x64 table-store/load surfaces are
 covered by the M5 x64 FORWARD fixtures plus `m5_x64_tset_nil_snapshot` and
-`m6_jit_table_store_helper` runtime traceability probes. Historical x64 VM
-implementation-shape checks were removed; the desired invariants remain
-documented beside the constrained VM/helper code: migrated dispatch must avoid
-inline GC root loads, table stores must publish through the C helper layer
-rather than legacy inline `barrierback`, and both empty-table and non-empty
-`BC_TNEW` paths must remain reachable.
+`m6_jit_table_store_helper` runtime traceability probes. The desired x64 VM
+invariants remain documented beside the constrained VM/helper code: migrated
+dispatch must avoid inline GC root loads, table stores must publish through the
+C helper layer rather than legacy inline `barrierback`, and both empty-table
+and non-empty `BC_TNEW` paths must remain reachable. Tests cover the observable
+runtime effects rather than VM source spelling.
 
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before

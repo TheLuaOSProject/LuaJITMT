@@ -9,10 +9,9 @@ classification, pointer-pointer difference and comparison checks, numeric index
 validation, swapped `number + pointer` handling, fallback element-size reads,
 and result pointer ctype interning.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_carith_l` invariant: raw `->info` / `->size` reads in
-  `crec_arith_ptr()`.
+- Active coverage stays in `m7_ffi_carith_l` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

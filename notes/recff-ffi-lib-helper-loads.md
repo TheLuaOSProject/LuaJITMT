@@ -23,7 +23,7 @@ Converted paths:
 - `lj_crecord_tonumber()` snapshots enum child metadata and size before
   selecting int32 vs. double conversion.
 
-Invariant check:
+Coverage model:
 
 - `tests/t-ffi-layout-snapshot.c` now holds the ctype parse token while the JIT
   records ctype-object `ffi.sizeof(ct)`. The recorder must abort with CTBUSY

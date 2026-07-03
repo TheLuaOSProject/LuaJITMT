@@ -10,10 +10,9 @@ extension/truncation widths, complex half offsets, pointer sizing, and aggregate
 copy lengths. This keeps the trace recorder from reading shared ctype payloads
 directly while CTState publication continues moving toward lockless readers.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_jit_cnew` invariant: raw `->info` / `->size` reads in
-  `crec_isnonzero()` and `crec_ct_ct()`.
+- Active coverage stays in `m7_ffi_jit_cnew` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

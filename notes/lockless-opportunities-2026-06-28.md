@@ -20,9 +20,10 @@ safety, stability, and language behavior over LuaJIT performance parity.
    riskiest shared objects because it combines replacement generation
    publication, weak clearing, GC traversal, JIT fast paths, and VM stores.
    More stress, table-forwarding probes, runtime counters where the invariant
-   is emitted-code behavior, and design notes are worth it. Repository legacy
-   wrappers and generated implementation-text gates are not. Removing the transient
-   `KEYLOCK`/`FORWARD` waits is not the goal; bounding and proving them is.
+   is emitted-code behavior, and design notes are worth it. Runtime behavior
+   should be the gate; implementation text should explain the ownership and
+   ordering rules. Removing the transient `KEYLOCK`/`FORWARD` waits is not the
+   goal; bounding and proving them is.
 
 3. C-closure upvalue and direct API mutation surfaces.
    This is worth a focused audit now that the closed Lua-upvalue path is sealed,

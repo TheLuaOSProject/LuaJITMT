@@ -21,7 +21,8 @@ Validation:
 2026-07-03 follow-up:
 
 - Active `m6_jit_mcode_publish` no longer reads generated exit-stub bytes or
-  asserts a specific x64 jump encoding. That was an implementation-shape gate.
+  asserts a specific x64 jump encoding. That route is documented instead of
+  being enforced through generated-code spelling.
 - The durable invariant is that published mcode metadata is acquired before
   readers use it, mcode protection remains W^X/execute-stable where the target
   requires it, and traces continue to execute under small-mcode pressure. Those

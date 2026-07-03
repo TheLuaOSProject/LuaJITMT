@@ -10,9 +10,10 @@ M6 helper-backed NEWREF key resolution:
 - `tests/t-jit-forward-store.c` now covers retiring-but-not-forwarded old array
   and hash slots. The old helper would publish into those stale slots; the new
   helper keeps them nil and writes through the current generation.
-- Invariant check: `tools/ci/m6_jit_table_store_helper.sh` checks
+- Coverage model: the M6 JIT table-store behavior fixtures check
   resolve-before-CAS ordering, the key-aware weak bridge, and both retiring
-  regression cases.
+  regression cases. The helper ordering rationale belongs next to the helper
+  code; tests should exercise the behavior rather than source spelling.
 
 Follow-up: key-aware ASTORE/HSTORE helper routing:
 - Extended the same idea to existing helper-backed array/hash stores.

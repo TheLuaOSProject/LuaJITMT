@@ -9,10 +9,9 @@ The snapshots drive numeric operand checks, unsigned 64-bit result selection,
 operands. This removes direct shared `CType.info` / `CType.size` reads from the
 recorder's int64 arithmetic helper.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_carith_l` invariant: raw `->info` / `->size` reads in
-  `crec_arith_int64()`.
+- Active coverage stays in `m7_ffi_carith_l` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

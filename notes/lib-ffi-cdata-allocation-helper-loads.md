@@ -7,8 +7,7 @@ lib_ffi cdata allocation helper loads
   `ctype_info_acq()`/`ctype_size_acq()` snapshots before validation and cdata
   allocation.
 - Reused the helper-backed size snapshot for cast destination cdata allocation.
-- Documented the implementation invariant associated with `m7_ffi_cdata_alloc`: raw `CType.info` and
-  `CType.size` reads in these allocation helper bodies.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_alloc` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

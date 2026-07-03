@@ -16,8 +16,8 @@
   directly.
 - Invariant-testing guidance now lives in `notes/ci-invariant-testing.md`.
 - There is no historical-wrapper exception: deleted helper-spelling checks stay
-  deleted. Preserve the reason in comments/notes, and test only behavior,
-  generated artifacts, or release/build outputs.
+deleted. Preserve the reason in comments/notes, and test only behavior,
+public artifacts, release/build outputs, counters, or stock semantics.
 
 Validation:
 
@@ -89,8 +89,8 @@ Validation:
 - Historical state: this pass added implementation-file content assertions to
   `suite_assert` and raw `Test:read()`. Those legacy wrappers were removed
   on 2026-06-28; they are not a model to recreate. Current policy is
-  behavior fixtures, generated artifact assertions, and code-adjacent comments
-  or notes for implementation-only invariants.
+  behavior fixtures, public-artifact assertions, and code-adjacent comments or
+  notes for implementation-only invariants.
 - Historical state: this pass still treated JIT dump matching as result
   matching. That exception is gone. Bytecode compatibility blobs remain valid
   public-artifact checks; generated JIT IR/ASM/mcode text is implementation
@@ -100,9 +100,9 @@ Validation:
 
 - `tools/ci/lua_test.sh --list`
 - Direct `suite_assert`/`ljtest` smoke checks for the then-current
-  implementation-read rejection and dump result matching. Both were later
-  removed for generated JIT/internal compiler dumps; bytecode compatibility
-  checks remain as public-artifact coverage.
+  implementation-read rejection and dump result matching. The generated
+  JIT/internal compiler-dump portion was later removed; bytecode compatibility
+  remains public-artifact coverage by loading and executing opaque dumps.
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops m7_ffi_jit_cnew`
 
 ## 2026-06-28 explicit implementation-reading helper
@@ -119,7 +119,7 @@ Validation:
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
   `tools/test.lua` process. Set `LJ_TEST_DISABLE_BUILD_CACHE=1` for the old
   always-clean behavior while debugging the harness.
-- Removed implementation-shape checks from `m7_ffi_callback_runtime.sh`
+- Removed implementation-detail checks from `m7_ffi_callback_runtime.sh`
   and kept the public wrapper as a thin launcher. The callback runtime case now
   relies on its C/Lua behavior fixtures for native-state restoration, stale
   callback returns, callback blacklisting, and fresh STOPREQ behavior.

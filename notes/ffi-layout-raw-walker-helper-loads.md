@@ -7,10 +7,9 @@ from sequence-checked layout snapshots.
 This extends the raw-child layout guard so the local raw layout walker group no
 longer contains direct `->info` / `->size` reads.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_typeinfo_snapshot` invariant: raw `->info` / `->size` reads
-  in the FFI layout raw walker helpers.
+- Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

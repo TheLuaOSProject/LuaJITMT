@@ -5,8 +5,7 @@ FFI parse token helper surface
   `ctype_parse_token_wake()` for the accepted cparse mutation-token bridge.
 - Routed `lj_ctype_parse_lock()`, `lj_ctype_parse_unlock()`, ctype snapshot
   readers, and FFI type/layout snapshot readers through the helper API.
-- Documented the implementation invariant associated with `m7_ffi_cdef_token`: raw implementation-side
-  `cts->parse_token` access.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdef_token` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 - Follow-up safety cleanup: the non-Linux `lj_ctype_parse_lock()` fallback now
   sleeps through `lj_thr_sleep_ns(L, ...)` and processes STOPREQ instead of
   spinning on `la_cpu_pause()`. The token guard also documents why raw pause waits in

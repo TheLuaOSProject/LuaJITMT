@@ -40,11 +40,14 @@ documents were verified against:
 
 If you work from a different commit, treat every cited line number as
 historical orientation and re-derive the affected worklist from the current
-code before editing. Lasting coverage must be behavioral, fixture-based, or
-generated-artifact based. Repository source-text pass/fail checks are not
-allowed: implementation constraints belong in code-adjacent comments and notes
-that explain the ordering, ownership, nonblocking, or ABI reason, while tests
-exercise observable behavior or generated artifacts.
+code before editing. Lasting coverage must be behavioral, fixture-based,
+counter-based, stock-suite based, or tied to public artifacts such as captured
+process output, benchmark CSVs, bytecode load/execute payloads, release metadata,
+or packaging output. Repository source text, helper names, generated IR/ASM,
+mcode bytes, raw byte patterns, dump-token spelling, and other
+compiler-internal text are not pass/fail contracts. Implementation constraints
+belong in code-adjacent comments and notes that explain the ordering, ownership,
+nonblocking, or ABI reason.
 
 ### 0.3 Reading order
 

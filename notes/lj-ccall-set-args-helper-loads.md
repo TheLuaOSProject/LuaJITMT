@@ -7,8 +7,7 @@ lj_ccall argument setup helper loads
 - Kept the existing mutable ABI pass-size variable separate from immutable
   source ctype snapshots so pointer-sized fallback arguments still lay out the
   same way while sign/zero extension decisions use the original ctype size.
-- Documented the implementation invariant associated with `m7_ffi_cdata_set_l`: raw payload reads in the
-  common C-call argument setup walk.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

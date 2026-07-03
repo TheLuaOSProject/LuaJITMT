@@ -7,9 +7,7 @@ lj_ccall result helper loads
   helper-backed return-size reads.
 - Routed the active x86_64/POSIX register argument vector check through a
   helper-backed info load.
-- Documented the implementation invariant associated with `m7_ffi_cdata_get_l`: raw `CType.info` and
-  `CType.size` reads in `ccall_get_results()` and the x86_64/POSIX C-call
-  macro block.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_get_l` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

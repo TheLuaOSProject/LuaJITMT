@@ -9,10 +9,9 @@ still stays interpreted because it lacks a native-state protocol; that boundary
 is documented in `lj_crecord.c` instead of enforced by an opt-in build guard.
 This helper remains for the eventual native bridge.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_cdata_set_l` invariant: raw `->info` / `->size` reads in
-  `asm_callx_flags()`.
+- Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

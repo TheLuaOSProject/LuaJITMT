@@ -10,8 +10,7 @@ CConv compatibility helper loads
   equal-size checks. Struct/union exact-type compatibility now compares the
   resolved CType IDs instead of raw `CType *` table-slot addresses, preserving
   stock struct-to-pointer conversions with local snapshots.
-- Documented the implementation invariant associated with `m7_ffi_cdata_set_l`: raw `CType.info` and
-  `CType.size` reads in those conversion compatibility helper bodies.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_cdata_set_l` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

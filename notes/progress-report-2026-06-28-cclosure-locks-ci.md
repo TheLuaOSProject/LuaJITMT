@@ -30,7 +30,7 @@ paths, finalizer/weak-table ordering, benchmark drift, and CI guard quality.
   `lua_objlen`.
 - Converted `string.gmatch` hidden upvalue reads to full `TValue` acquire
   snapshots and its position update to a full primitive `TValue` release store.
-- Replaced the helper-name legacy wrapper with behavior coverage in
+- Replaced the legacy wrapper with behavior coverage in
   `tests/t-cclosure-upvalue-snapshot.c`.
 - Kept only narrow static tripwires for raw partial `string.gmatch` position
   writes that are hard to observe deterministically.
@@ -119,14 +119,16 @@ Refactored now:
 Resolved by the current invariant-testing guidance:
 - Per-case shell wrappers are gone; `tools/ci/lua_test.sh`
   is the supported CI entrypoint.
-- M4/M5/M6/M7/M8 aggregate suites now rely on behavior, dumps, mcode, stress,
-  and stock-semantics fixtures.
-- The Lua harness file helpers are neutral primitives for generated artifacts,
+- M4/M5/M6/M7/M8 aggregate suites now rely on behavior, counters, stress,
+  stock-semantics fixtures, and public artifacts such as captured process
+  output, benchmark CSVs, bytecode load/execute payloads, and release metadata.
+- The Lua harness file helpers are neutral primitives for public artifacts,
   imported inputs, and temporary files.
 
-Remaining CI work must use behavior, dump, mcode, stress, or stock-semantics
-fixtures. Non-observable memory-order and ABI constraints should be documented
-near the helper or in notes, then reviewed as engineering/design contracts.
+Remaining CI work must use behavior, counters, stress, stock-semantics fixtures,
+or public artifacts. Non-observable memory-order and ABI constraints should be
+documented near the helper or in notes, then reviewed as engineering/design
+contracts.
 
 ## Remaining work and time prediction
 
@@ -134,8 +136,8 @@ Short term, 1-3 days:
 - Finish C API/upvalue audit follow-ups and land more behavior tests for any
   remaining C-closure pseudo-index edge cases.
 - Add a bounded timeout/split for `m4_threading_capi`.
-- Replace any newly discovered implementation-shape assertion with behavior coverage or
-  documentation; do not move legacy wrappers into Lua suite cases.
+- Replace any newly discovered implementation-detail assertion with behavior
+  coverage or documentation; do not move legacy wrappers into Lua suite cases.
 
 Medium term, 1-2 weeks:
 - Reduce FFI snapshot fallback locks and add stronger rollback/abandoned-entry

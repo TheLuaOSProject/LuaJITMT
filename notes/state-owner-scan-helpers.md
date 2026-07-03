@@ -9,11 +9,10 @@ Changes:
   initialization, GC2 owner checks, and scan-epoch publication through helpers.
 - Routed focused owner/GC2 fixtures through the same helpers for synthetic busy
   owners and scan assertions.
-- Documented the implementation invariant associated with `m5_state_owner`: raw C-side
-  `thr_owner`/`scan_epoch`/`scan_dirty_epoch` access in production and focused
-  fixtures.
+- Documented why `thr_owner`, `scan_epoch`, and `scan_dirty_epoch` are owned by
+  state helper APIs. `m5_state_owner` keeps behavior/counter coverage; raw field
+  spelling is not a source-text gate.
 
 Note:
 - The x64 VM still has intentional inline stores for interpreter ownership
   transitions; this slice guards C-side access only.
-

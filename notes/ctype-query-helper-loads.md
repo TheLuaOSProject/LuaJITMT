@@ -9,8 +9,7 @@ CType query helper loads
   loads before checking pointer/function metatable special cases.
 - Routed `ctype_repr()` through helper-backed info/size loads, including array
   child-size formatting.
-- Documented the implementation invariant associated with `m7_ffi_typeinfo_snapshot`: raw
-  `CType.info`/`CType.size` reads inside these ctype query bodies.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

@@ -6,8 +6,10 @@ FINREG generation table helper slice
   close-time disable through the helpers.
 - Added `fin_gen_tab_disable_rel()` for the release-store generation disable
   path used by close-time GC2 FINREG disable.
-- Documented the implementation invariant associated with `m7_ffi_finreg`: raw generation table access
-  in FINREG implementation code.
+- Documented why FINREG generation table access is owned by the helper surface:
+  close-time disable and lookup visibility share a publication edge, so readers
+  must use a single acquire path. The runnable coverage stays in FINREG and
+  weak/finalizer behavior fixtures, not in implementation-text inventories.
 
 Verification:
 

@@ -26,7 +26,7 @@ Overall correctness/stability progress: 69-79%.
 - Fixed stale-pointer risk after native waits:
   `lj_cdata_index_l()` refetches `ct/info/size`, and `carith_ptr()` refreshes
   `CDArith` cached `CType *` values before falling through to meta/error paths.
-- Converted the old element-size implementation-shape expectation into behavior:
+- Converted the old element-size snapshot requirement into behavior:
   `t-ffi-element-size-snapshot.c` now holds the parser token, runs cdata
   indexing, pointer add, and pointer diff, confirms native wait, and checks the
   parser sequence only advances by the helper release.
@@ -48,7 +48,7 @@ Overall correctness/stability progress: 69-79%.
   pacing/threshold bridge behavior, and explicit legacy-GC exclusion.
 - CI scripts must not contain legacy wrappers. Keep unobservable memory ordering
   and static ownership rules in comments/notes; convert observable failures
-  into behavior or generated-artifact tests.
+  into behavior, counter, stock-semantics, or public-artifact tests.
 - Release confidence still needs long stress/soak, TSan-style runs where
   possible, and benchmark review after semantic closure.
 

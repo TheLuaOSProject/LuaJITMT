@@ -5,8 +5,7 @@ CType table capacity helpers
 - Routed table allocation, free sizing, growth sizing, snapshot bounds checks,
   FFI type/layout snapshot bounds checks, and table-retire test assertions
   through the helper API.
-- Documented the implementation invariant associated with `m7_ffi_ctype_tab_retire`: raw
-  implementation-side `sizetab` access.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_tab_retire` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

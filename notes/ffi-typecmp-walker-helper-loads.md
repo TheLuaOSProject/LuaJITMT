@@ -8,10 +8,9 @@ The covered decisions include attribute stripping, reference stripping, child
 id selection, and qualifier accumulation during sequence-checked ctype
 comparison snapshots.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_typeinfo_snapshot` invariant: raw `->info` / `->size` reads
-  in these `ffi.istype()` typecmp walker helpers.
+- Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

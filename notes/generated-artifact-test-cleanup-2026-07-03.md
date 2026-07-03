@@ -4,7 +4,7 @@ Generated-artifact test cleanup
 Removed the active test layer that failed CI based on LuaJIT dump text,
 generated IR markers, helper names, or x64 mcode snippets. Those checks were
 useful while bringing individual JIT paths online, but they made the suite
-enforce implementation shape instead of the lockless invariant itself.
+enforce implementation details instead of the lockless invariant itself.
 
 Current coverage keeps the observable requirements:
 

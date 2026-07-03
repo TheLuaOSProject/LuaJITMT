@@ -11,8 +11,7 @@ Changes:
 - Routed production native enter/leave, channel/sleep clear paths, GC2 worker
   joins, safepoint remote native ack, and FFI callback re-entry checks through
   the helper layer.
-- Documented the implementation invariant associated with `m3_safepoint_handshake`: raw production
-  `in_native` access outside `src/lj_tg.h`.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m3_safepoint_handshake` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

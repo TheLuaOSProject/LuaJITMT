@@ -10,5 +10,6 @@ timer-thread shutdown flag.
 keeps profile shutdown in the repository's shared-memory model without changing
 the existing global hook/profiler design.
 
-`m5_state_owner` invariant: raw `ps->abort` tests or assignments in
-`src/lj_profile.c`.
+Coverage model: profiler start/stop behavior and STOPREQ freshness are covered
+by behavior fixtures. The profiler abort flag ownership is documented beside the
+helper/code path; raw field spelling is not a test contract.

@@ -1,9 +1,9 @@
 # Progress report - 2026-06-28 threading CI behavior
 
 Historical note: this report predates the current invariant-testing model. The
-current guidance is `notes/ci-invariant-testing.md`: behavior fixtures and
-generated artifacts cover observable semantics; implementation-only rules live
-in comments and notes.
+current guidance is `notes/ci-invariant-testing.md`: behavior fixtures,
+counters, public artifacts, and stock semantics cover observable requirements;
+implementation-only rules live in comments and notes.
 
 Scope: x86_64/Linux `v2.1` lockless LuaJIT fork. Project priority remains
 safety, stability, and Lua semantics over LuaJIT performance parity when those
@@ -29,7 +29,7 @@ add 1-3 weeks.
 ## Done in this slice
 
 - Fixed the `m4_threading_capi` baseline hang.
-- Converted the join-result STOPREQ implementation-shape assertion into behavior coverage:
+- Converted the join-result STOPREQ ordering contract into behavior coverage:
   `tests/t-threading-capi.c` now publishes a fresh STOPREQ from a helper thread
   only after the joining thread has entered the native wait.
 - Added behavior coverage for blocked `threading.mutex:lock()` fresh STOPREQ
@@ -74,9 +74,8 @@ Removed/refactored now:
 
 Historical high-priority legacy/static assertion areas:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`: broad raw `CType` implementation-shape
-  assertions; superseded by snapshot behavior fixtures and documented
-  invariants.
+- `tools/ci/m7_ffi_typeinfo_snapshot.sh`: broad raw `CType` access rules;
+  superseded by snapshot behavior fixtures and documented invariants.
 - `tools/ci/m7_ffi_blocking.sh`: behavior coverage exists for callback
   blacklist and blocking API outcomes; the wrapper assertion was part of the
   old static cleanup.
@@ -84,7 +83,7 @@ Historical high-priority legacy/static assertion areas:
   wrapper-level cleanup/order assertions. Do not restore a lint check for
   helper spelling or source order.
 - Historical `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`,
-  and `m5_gc_waits.sh` helper-name rules are documented; keep expanding
+  and `m5_gc_waits.sh` wait-path rules are documented; keep expanding
   contention behavior tests for the same risks.
 - M6 mcode/native STOPREQ and JIT IO wrappers that once pinned helper names
   have been superseded by behavior fixtures and runtime process-output checks.

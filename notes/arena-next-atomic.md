@@ -9,8 +9,11 @@ Slice
 - Routed arena owned/needsweep traversal, prepare/restore/sweep splicing,
   allocator transfer, GC/GC2 arena scans, and the C fixtures that inspect or
   seed arena chains through the helpers.
-- Documented the implementation invariant associated with `m3_gc2_scaffold`: raw `GCArena.hdr.next`
-  access in the production arena/GC files and the focused C fixtures.
+- Documented why `GCArena.hdr.next` is owned by the arena helper surface:
+  arena chains are published between allocator, GC, and GC2 code, so list-head
+  and next-link accesses need one acquire/release vocabulary. The runnable
+  coverage stays in arena sweep and GC2 scaffold behavior fixtures, not in
+  implementation-text inventories.
 
 Validation
 ----------

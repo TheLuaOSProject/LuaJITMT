@@ -8,10 +8,9 @@ This removes the remaining direct `CType.info` read from the recorded cdata call
 path after constructor handling and direct C-call recording decline to handle
 the call.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_metatype` invariant: raw `->info` / `->size` reads in
-  `recff_cdata_call()`.
+- Active coverage stays in `m7_ffi_metatype` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

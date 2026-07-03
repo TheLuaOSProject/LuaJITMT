@@ -65,9 +65,10 @@ Overall correctness/stability progress: 70-80%.
 - Removed tombstone-only M3 CI checks for old weak/sweep phase aliases and old
   paranoia diff aliases; behavior fixtures and current helper boundaries now
   own those contracts.
-- Removed another duplicate set of M3 finalizer helper-name checks. M8 remains the
-  owner for close-time finalizer, callback-stack, and finalizer-spawn behavior
-  gates, while M3 keeps its positive scheduler ownership checks.
+- Removed another duplicate set of M3 finalizer implementation-detail checks.
+  M8 remains the owner for close-time finalizer, callback-stack, and
+  finalizer-spawn behavior gates, while M3 keeps its positive scheduler
+  ownership coverage.
 - Renamed the remaining GC2 lifecycle helper surface from fork-era legacy names
   to purpose names: `lj_gc2_mark_begin()`,
   `lj_gc2_preserve_abort_to_idle()`, and `lj_gc2_cycle_to_idle()`. The
@@ -92,10 +93,10 @@ Overall correctness/stability progress: 70-80%.
 - GC2 bridge names remain in finalizer areas. The highest-value cleanup is to
   cover finalizer behavior semantically, then rename or remove old bridge names
   where the names are only fork-era scaffolding.
-- Aggregate CI should cover observable behavior and generated artifacts. Keep
-  memory ordering, ABI, and generated-code boundary rules as comments/notes,
-  and use behavior or generated-artifact checks when the invariant is
-  observable.
+- Aggregate CI should cover observable behavior, counters, stock semantics, and
+  public artifacts. Keep memory ordering, ABI, and generated-code boundary
+  rules as comments/notes, and use behavior, counters, or public-artifact checks
+  only when the invariant is observable.
 - Release confidence still needs long stress/soak, sanitizer-style runs where
   practical, and benchmark review after semantic closure.
 

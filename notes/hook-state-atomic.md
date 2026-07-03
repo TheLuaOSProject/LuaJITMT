@@ -18,9 +18,10 @@ matches the hookmask helper model:
 
 The non-x64 DASC paths remain out of scope for this x86-64 Linux pass.
 
-Coverage: `m5_hook_state_atomic` invariant: raw C-side `hookf`/`hookcount`
-field access outside the helper definitions, requires the x64 locked
-decrements, and runs the `m5_hook_state_atomic` Lua smoke.
+Coverage model: `m5_hook_state_atomic` covers hook function/count behavior and
+x64 locked-decrement behavior through the helper surface and Lua smoke. Direct
+field spelling is documented beside the helper/backend code, not tested as a
+source-text contract.
 
 Validation:
 - `tools/ci/m5_hook_state_atomic.sh` passed.

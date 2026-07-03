@@ -7,8 +7,7 @@ CType hash payload helpers
   abandoned state and type masks.
 - Routed `ctype_addtype()` through `ctype_info_acq()`/`ctype_size_acq()` when
   computing the type hash for publication.
-- Documented the implementation invariant associated with `m7_ffi_ctype_hash_publish`: raw
-  `CType.info`/`CType.size` reads in these hash-walker patterns.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_hash_publish` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

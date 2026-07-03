@@ -155,12 +155,12 @@ Lua test-suite migration notes:
 - The fourth batch turns the focused M2 arena shell scripts into launchers only.
   `ljtest.cc()` now accepts per-fixture compile flags for assertion fixtures.
 - The fifth batch was later retired from the runnable suite because it asserted
-  implementation shape rather than behavior.
+  implementation details rather than behavior.
 - The sixth batch migrates the remaining non-TSan M4 C fixtures. These keep the
   original clean-build/link-against-`libluajit.a` behavior and preserve the C
   threading API shutdown marker guard in Lua.
 - The seventh batch migrates small M5 runtime/table fixtures and their
-  implementation-shape notes. `ljtest.cc()` can now opt out of default flags and `-I src` for
+  implementation notes. `ljtest.cc()` can now opt out of default flags and `-I src` for
   standalone models that intentionally do not link LuaJIT.
 - The eighth batch migrates the M2 GC-header accessor guard plus focused M5
   runtime smoke wrappers for string.buffer publication, CType.name publication,
@@ -199,8 +199,8 @@ Lua test-suite migration notes:
   cleanup removed pure shell aliases entirely; test logic is owned by Lua and
   canonical execution is `tools/ci/lua_test.sh <case...>`.
 - Current cleanup status: runnable suite files under `tests/suites/` rely on
-  behavior, fixtures, generated artifacts, benchmarks, or packaging output; the
-  legacy helper APIs have been removed from `tests/lib/`.
+  behavior, fixtures, counters, public artifacts, benchmarks, or packaging
+  output; the legacy helper APIs have been removed from `tests/lib/`.
 - Result-artifact matching remains valid only for public or externally
   meaningful artifacts: bytecode compatibility payloads, benchmark output,
   release/build manifests, and C/Lua fixture process output. Generated JIT
@@ -384,8 +384,9 @@ Lua test-suite migration notes:
 Current follow-up:
 
 - Keep new tests behavior-first. Runnable suites should use runtime fixtures,
-  generated artifacts, or documentation/comments for implementation-only
-  invariants.
+  counters, public artifacts, or stock semantics for observable invariants.
+  Implementation-only invariants belong in code comments and notes, not in
+  source, helper-name, IR/ASM, mcode, raw-byte, or compiler-dump checks.
 - Build-owning tests should remain serial unless the Lua runner grows a shared
   build cache/lock. Cases that clean/build can still race `host/buildvm` or
   `libluajit.a` creation when run concurrently in one checkout.

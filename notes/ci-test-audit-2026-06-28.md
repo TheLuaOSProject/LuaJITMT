@@ -2,8 +2,9 @@
 
 Historical note: this audit predates the current invariant-testing model. The
 current guidance is `notes/ci-invariant-testing.md`: CI and tests prove
-behavior or generated artifacts; implementation-only rules are documented next
-to the constrained code.
+behavior, counters, public artifacts, release metadata, or opaque bytecode
+execution; implementation-only rules are documented next to the constrained
+code.
 
 ## Inventory
 
@@ -16,7 +17,7 @@ to the constrained code.
 - At the time of this audit, about 60 scripts still embedded local
   shell legacy wrappers before calling the Lua
   suite. Those have since been removed or replaced with behavior fixtures,
-  generated-artifact checks, and documentation.
+  public-artifact checks, and documentation.
 - `tools/ci/lua_test.sh --list` exposes 100+ named Lua-suite cases.
 - The Lua suites/helpers still contain many explicit clean-build calls.
 
@@ -36,8 +37,8 @@ to the constrained code.
 3. Aggregate cases could bypass wrapper-only checks.
    `m7_ffi`, `m9_m10_gc`, and similar aggregate cases call Lua case names, not
    the shell wrappers. The resolution was to move the invariant into behavior,
-   fixture, generated-artifact, or documentation coverage rather than preserve
-   separate lint entrypoints.
+   fixture, counter, public-artifact, or documentation coverage rather than
+   preserve separate lint entrypoints.
 
 4. Repository legacy wrappers often pinned implementation details.
    Broad string matches blocked better implementations that preserved the same
@@ -71,8 +72,8 @@ to the constrained code.
   The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
   native entry/leave restoration, nested callbacks, stale callback returns,
   callback blacklisting, and fresh STOPREQ delivery.
-- Removed the old helper-name and implementation-shape checks from
-  `m7_ffi_callback_runtime`; the behavior fixture now carries that contract.
+- Removed the old implementation-detail checks from `m7_ffi_callback_runtime`;
+  the behavior fixture now carries that contract.
 
 ## Follow-up Landed Later On 2026-06-28
 
@@ -84,12 +85,12 @@ to the constrained code.
   `threading.mutex:lock()` call.
 - `m4_threading_capi` has a `20s` timeout to turn future hangs into diagnostic
   failures.
-- The pure `m5_profile_stop_native` shell alias was removed. Its old
-  profiler-stop helper-name/order assertions moved to
-  `tests/t-profile-stop-native.c` behavior assertions for sticky STOPREQ
-  cleanup, fresh STOPREQ during native timer-thread join, callback-error
-  containment, busy callback coroutine ownership, and registry-anchor cleanup
-  before interrupted `profile.stop()` unwinds.
+- The pure `m5_profile_stop_native` shell alias was removed. Its profiler-stop
+  ordering contract is now covered by `tests/t-profile-stop-native.c` behavior
+  assertions for sticky STOPREQ cleanup, fresh STOPREQ during native
+  timer-thread join, callback-error containment, busy callback coroutine
+  ownership, and registry-anchor cleanup before interrupted `profile.stop()`
+  unwinds.
 - Removed 76 pure shell aliases in this pass. Use
   `tools/ci/lua_test.sh <case...>` for those cases.
 - The old `m7_ffi_blocking` wrapper was folded into the Lua-owned
@@ -97,7 +98,7 @@ to the constrained code.
   reconciliation, absence of the removed `ffi.blocking` public marker, default
   recorder abort behavior, and native-state blocking progress are covered by
   `tests/t-ffi-cbblack-race.c`, `tests/t-ffi-ccall-native.lua`, and the
-  recorder-off fixture rather than implementation-shape notes.
+  recorder-off fixture rather than implementation-detail notes.
 - Follow-up stock-behavior correction: bytecode-dump compatibility support for
   stock v2 and transitional v3 dumps was restored. That path is not a
   threading-only legacy entrypoint; it affects `load`, `luaL_loadbuffer*`, and
@@ -112,7 +113,7 @@ to the constrained code.
 - Moved `t-ffi-finreg-free-invariant.c` into the `m7_ffi_finreg` Lua-suite
   case and removed the ad hoc hardcoded `/tmp` compile from
   `tools/ci/m7_ffi_finreg.sh`.
-- Removed the exact parser-token STOPREQ helper-name rule from
+- Removed the parser-token STOPREQ implementation-detail rule from
   `m7_ffi_cdef_token`; `t-ffi-cdef-token-stopreq.c` now owns the behavior
   contract for sticky STOPREQ cleanup and fresh STOPREQ while parked.
 - Converted the element-size parser-lock-fallback expectation into active-token
@@ -150,8 +151,8 @@ to the constrained code.
   tombstones for the removed `sweep_legacy_ready` names.
 - Removed more duplicate or tombstone-only legacy wrappers: M3 no longer duplicates the
   x64 `barrierback` check owned by M5, M10 no longer duplicates the stats-table
-  checks owned by M9, and M10/M3 no longer carry old-helper-name tombstones for
-  already-removed mark/sweep bridge wrappers.
+  checks owned by M9, and M10/M3 no longer carry tombstones for already-removed
+  mark/sweep bridge wrappers.
 - Migrated weak completion telemetry and tests to `weak_bridge_*`, including
   `collectgarbage("stats")`, benchmark stat output, M8 weak behavior checks, and M3
   weak-helper visibility checks. No old developer-stat aliases are kept.
@@ -194,7 +195,8 @@ Verification for the alias removal:
 
 1. Do not restore historical text-check contracts. If an old note still matters,
    keep the reason as a code comment or design note, and cover observable
-   behavior through fixtures or generated artifacts.
+   behavior through fixtures, counters, public artifacts, stock semantics, or
+   release metadata.
 2. Do not add new pure shell aliases. If a case is fully Lua-owned, run it
    through `tools/ci/lua_test.sh <case...>`.
 3. Split any large remaining GC/finalizer orchestration into suite-local helper

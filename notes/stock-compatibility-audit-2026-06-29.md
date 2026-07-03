@@ -8,7 +8,7 @@ Refresh note: the 2026-06-29 re-audit after removing the non-stock `ffi.pin`
 entrypoint, and again after adding shared-cdata race coverage, found no active
 removed wrapper tests and no public stock LuaJIT API removals. The active suite
 now keeps runtime behavior, stock-suite, bytecode compatibility, and release
-artifact checks without generated IR/ASM/mcode text gates.
+artifact checks as the durable coverage.
 
 ## Compatibility Tests And CI
 
@@ -32,8 +32,7 @@ tests, C fixtures, bytecode compatibility checks, and release binary checks.
 
 Allowed remaining checks are over runtime output and public artifacts: bytecode
 compatibility blobs, captured stdout/stderr, CSVs, marker files, and release
-artifacts. Generated JIT IR, generated ASM, and mcode byte/pattern checks are
-not active gates. Implementation-spelling checks are not permitted; preserve the
+artifacts. Implementation-spelling checks are not permitted; preserve the
 reason in comments/notes, and prove the observable part through behavior, C
 fixtures, public artifacts, benchmarks, or packaging outputs.
 

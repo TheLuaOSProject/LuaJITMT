@@ -11,8 +11,7 @@ Changes:
   into global GC2 pacing counters.
 - Routed production allocation-accounting add/flush paths through the helper
   layer.
-- Documented the implementation invariant associated with `m6_jit_alloc_account`: raw production
-  `local_total` access outside `src/lj_tg.h`.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m6_jit_alloc_account` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

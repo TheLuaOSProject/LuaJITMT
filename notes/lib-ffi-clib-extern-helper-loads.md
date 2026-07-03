@@ -5,8 +5,7 @@ lib_ffi C library extern helper loads
 - Routed `ffi_clib___newindex` through helper-backed info/size loads while
   detecting extern entries, stripping attributes, collecting qualifiers, and
   checking constness before conversion.
-- Documented the implementation invariant associated with `m7_ffi_clib_cache`: raw `CType.info` and
-  `CType.size` reads in these C library extern helper bodies.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_clib_cache` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

@@ -11,10 +11,9 @@ This removes direct `CType.info` reads from:
 - cdata pointer equality fallback that checks whether both operands share the
   numeric/non-numeric class.
 
-Invariant check:
+Coverage model:
 
-- `m7_ffi_carith_l` invariant: raw `->info` / `->size` reads in
-  `crec_arith_meta()`.
+- Active coverage stays in `m7_ffi_carith_l` behavior/counter fixtures and code-adjacent helper docs. Direct helper/backend sites are documented by the implementation; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 

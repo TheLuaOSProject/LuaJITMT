@@ -20,9 +20,10 @@ IR records a volatile memory load of the hookmask byte for generated code.
 generated traces. VM/dasc hookmask byte loads remain a separate generated-code
 follow-up.
 
-Coverage: `m5_hookmask_atomic` invariant: raw C-side `->hookmask` access
-outside `lj_obj.h`, the recorder field-address exception, and backend
-generated-code operands, then runs the `m5_hookmask_atomic` Lua smoke.
+Coverage model: `m5_hookmask_atomic` covers hookmask behavior through the helper
+surface and Lua smoke. The recorder field-address exception and backend memory
+operands are documented beside the code because they are implementation details,
+not source-text or generated-code pass/fail contracts.
 
 Validation:
 

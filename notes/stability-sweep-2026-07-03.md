@@ -11,14 +11,15 @@ flush, and trace-number reuse under concurrent full/scoped flush.
 ## Invariant Coverage Policy
 
 The active Lua harness and CI prove invariants through runtime behavior,
-generated artifacts, benchmark data, packaging output, or code-adjacent
-documentation. The old repository text enumerator was removed from
+counters, benchmark data, public runtime artifacts, packaging output, release
+metadata, or code-adjacent documentation. The old repository text enumerator was
+removed from
 `tests/lib/ljtest.lua`; artifact reads remain available through `Test:read()`
 and `suite_utils.read_file()`. Generated-output tests inspect artifacts
 produced by the build/runtime. Old milestone wrappers are historical notes, not
 checks to reintroduce. If one described a real lockless invariant,
-the invariant belongs in code comments/notes and in behavior, fixture, or
-generated-artifact coverage when it is observable.
+the invariant belongs in code comments/notes and in behavior, fixture, counter,
+stock-semantics, public-artifact, or release coverage when it is observable.
 
 ## Scoped trace flush and stale loop fallback
 

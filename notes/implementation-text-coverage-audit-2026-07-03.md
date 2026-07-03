@@ -1,4 +1,4 @@
-# No Source Guards Audit, 2026-07-03
+# Implementation Text Coverage Audit, 2026-07-03
 
 Active tests, CI, and release automation must not fail based on repository
 implementation text, helper names, raw-field spelling, generated IR/ASM text,
@@ -33,10 +33,11 @@ The old raw M1 x64 disassembly snapshot was removed for the same reason:
 generated disassembly is a review aid, not a maintained invariant.
 The M1 TG-addressing requirement is retained in prose and behavior coverage.
 
-Follow-up scope clarification: there is no grandfathered historical guard
-suite, and no source guard should remain as a dormant test, local-only script,
-release-only gate, or wrapper preserved for audit nostalgia. When old milestone
-notes mention source inventories, helper spelling, bytecode golden strings,
-IR/ASM dump markers, or mcode byte snippets, the active task is to document the
-real invariant and keep or add behavior, stock-suite, benchmark, C-fixture, or
-release-artifact coverage only where the failure is observable.
+Follow-up scope clarification: there is no grandfathered historical wrapper
+suite. Implementation-text checks must not remain as dormant tests, local-only
+scripts, release-only gates, or wrappers preserved for audit nostalgia. When
+old milestone notes mention source inventories, helper spelling, bytecode
+golden strings, IR/ASM dump markers, or mcode byte snippets, the active task is
+to document the real invariant and keep or add behavior, stock-suite,
+benchmark, C-fixture, or release-artifact coverage only where the failure is
+observable.

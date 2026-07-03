@@ -6,8 +6,7 @@ lib_ffi callback helper loads
 - Preserved the existing fixed callback slot lookup and publish/free ordering;
   this slice only replaces raw ctype payload reads with helper-backed
   snapshots.
-- Documented the implementation invariant associated with `m7_ffi_callback_install`: raw `CType.info`
-  and `CType.size` reads in the callback install helper body.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_callback_install` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

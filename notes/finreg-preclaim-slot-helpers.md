@@ -15,15 +15,16 @@ Fix:
   `gc2_finclaim_copy_slot()` now use `gc2_queue_slot_store_rel()`,
   `gc2_queue_slot_clear_rel()`, and `gc2_queue_slot_load_acq()` for preclaim
   object slots.
-- `m7_ffi_finreg` invariant: raw preclaim object-slot loads/stores in
-  `src/lj_gc2.c`.
+- `m7_ffi_finreg` keeps behavior coverage for preclaim traversal and finalizer
+  registration. The helper surface documents the allowed preclaim slot access;
+  raw field spelling is not a source-text gate.
 - Follow-up state helper work routes the preclaim vector pointers, capacity,
   head cursor, and count publisher through `gc2_finreg_cdata_preclaim_*()`
   helpers in both `lj_gc.c` and `lj_gc2.c`, while keeping the slot publication
   order unchanged.
 - Follow-up fixture cleanup routes the traversal harness capacity assertion
-  through `gc2_finreg_cdata_preclaim_capacity_acq()` and extends the M7 guard
-  over `tests/t-gc2-traverse.c` for raw preclaim state/test-hook access.
+  through `gc2_finreg_cdata_preclaim_capacity_acq()` and keeps active coverage
+  behavior-based for preclaim state and test-hook access.
 
 Verification:
 - `tools/ci/m7_ffi_finreg.sh` and `tools/ci/m8_weak.sh` passed.

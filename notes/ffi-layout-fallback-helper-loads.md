@@ -5,9 +5,7 @@ FFI layout fallback helper loads
 - Routed the parser-lock `ffi.offsetof()` fallback through `ctype_info_acq()`
   and `ctype_size_acq()` for struct eligibility and field/bitfield result
   classification.
-- Documented the implementation invariant associated with `m7_ffi_typeinfo_snapshot`: raw
-  `CType.info`/`CType.size` reads in the `ffi.sizeof()` and `ffi.offsetof()`
-  API bodies.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_typeinfo_snapshot` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Verification:
 

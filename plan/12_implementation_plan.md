@@ -107,8 +107,9 @@ intern rewrite 06 §6.5 (+ sweep wave ordering); parser cell model +
 CNEW/CGET/CSET (06 §6.4, 07 §7.6, 10 §10.2–10.3); bcread/bcwrite v4 (10
 §10.1, 10.5, 10.6); long tail 06 §6.8; per-TG math.random.
 Tests: stock (the parser change touches *everything* — expect a long
-debug tail here; the v4-vs-v2 golden comparisons t-bc-01..03 and t-uv-01..
-07 are your instruments); t-tab-01..08 (8-thread hammer suites: insert/
+debug tail here; use opaque bytecode dump/load execution, stock behavior
+fixtures, and local-cell/upvalue behavior checks for v4-vs-v2 compatibility);
+t-tab-01..08 (8-thread hammer suites: insert/
 lookup/delete/resize/iterate/array-grow/mixed/len), t-str-01..03 (intern
 storm, sweep-resurrect, resize race); nbtab_model + its in-tree port
 share a fuzz seed corpus.
@@ -370,7 +371,7 @@ new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h
 lj_safepoint.{h,c} lj_thr.{h,c} lj_chan.{h,c} lib_threading.c
 lj_exittab.{h,c} tsan.supp tests/* bench/*
 modified (review each against its spec doc; local search is an engineering aid,
-not a committed implementation-shape test): lj_obj.h(02,03,04,06)
+not durable coverage): lj_obj.h(02,03,04,06)
 lj_arch.h(01) lj_def.h lj_gc.{h,c}(05: retired/replaced by lj_gc2) lj_alloc.{h,c}(04)
 lj_tab.{h,c}(06) lj_str.{h,c}(06) lj_buf.{h,c}(06) lj_func.{h,c}(06,10)
 lj_state.c(03,09) lj_api.c(05,06,09) lj_meta.c lj_debug.c(06)

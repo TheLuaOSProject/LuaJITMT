@@ -10,8 +10,7 @@
 - Left recorder-owned `proto_knumtv()` reads in `lj_record.c` unchanged; those
   operate under the current recorder ownership model and are handled separately
   from published-prototype readers.
-- Documented the implementation invariant associated with `m5_proto_knum_acq`: raw numeric-constant reads in
-  the converted files.
+- Documented why this shared state is owned by the helper surface. Active coverage stays in `m5_proto_knum_acq` behavior/counter fixtures and code-adjacent helper docs; raw-field source inventories are not pass/fail contracts.
 
 Validation:
 - `tools/ci/m5_proto_knum_acq.sh`

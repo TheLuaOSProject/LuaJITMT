@@ -11,9 +11,9 @@ Changes:
   decisions.
 - Routed safepoint phase application, attach catch-up phase adoption, C-side GC2
   barrier predicates, and table bulk-store barrier checks through helpers.
-- Documented the implementation invariant associated with `m3_safepoint_handshake`: raw C-side
-  production access to `TGState.mark_active` and `TGState.alloc.alloc_black`
-  outside `src/lj_tg.h`.
+- Documented why `TGState.mark_active` and `TGState.alloc.alloc_black` are owned
+  by the TG helper surface. `m3_safepoint_handshake` keeps behavior coverage;
+  raw field spelling is not a source-text gate.
 
 Note:
 
