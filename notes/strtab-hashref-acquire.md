@@ -24,6 +24,6 @@ the same published bucket word.
 
 `m5_strtab_cas` owns the observable string-table coverage through the focused
 CAS, preparation, and rehash fixtures. The acquire-load requirement is
-documented here and beside the helper surface instead of being enforced by a
-text-matching check. This intentionally does not cover the unrelated generic table
-hash macros in `lj_tab.h`.
+documented here and beside the helper surface instead of being pinned by a
+source guard. This intentionally does not cover the unrelated generic table hash
+macros in `lj_tab.h`.

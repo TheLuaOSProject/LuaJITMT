@@ -9,10 +9,9 @@ Changes:
   and final free through the helper in `src/lj_ctype.c`.
 - Routed legacy GC, GC2, paranoia raw-root scans, and the focused retirement C
   test through the same acquire reader helper.
-- Documented the rule that `CTypeTab.retired_next` is a shared retired-list
-publication link and must use the helper. CType retirement and GC walker
-fixtures cover the behavior; CI must not enforce helper names through text
-search.
+- Documented why `CTypeTab.retired_next` is a shared retired-list publication
+  link and must use acquire/release helper access. CType retirement and GC
+  walker fixtures cover the behavior; no source guard pins the helper spelling.
 - Left `CTState.retiredtab` head operations as explicit acquire/CAS/xchg sites;
   this slice only centralizes the per-node retired link.
 

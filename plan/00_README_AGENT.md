@@ -41,8 +41,10 @@ documents were verified against:
 If you work from a different commit, treat every cited line number as
 historical orientation and re-derive the affected worklist from the current
 code before editing. Lasting coverage must be behavioral, fixture-based, or
-generated-artifact based; implementation-text inventories are engineering
-notes, not tests.
+generated-artifact based. Source guards are not allowed: implementation
+constraints belong in code-adjacent comments and notes that explain the
+ordering, ownership, nonblocking, or ABI reason, while tests exercise
+observable behavior or generated artifacts.
 
 ### 0.3 Reading order
 
@@ -97,7 +99,8 @@ executable form of the trickiest algorithms. Port them, do not reinvent them.
    cover any allocation, table operation, string interning, barrier, or any
    code reachable from the interpreter dispatch loop. Document any permitted
    blocking boundary in the code that owns it and cover observable behavior
-   with fixtures; do not encode this rule as CI grep checks.
+   with fixtures. Do not encode this rule as source-text or CI grep checks;
+   document the allowed blocking boundaries beside the code that owns them.
 4. **Every shared-memory access goes through `lj_atomic.h`.** No raw
    `volatile`, no bare loads/stores of shared fields. This both defines the
    semantics and makes ThreadSanitizer meaningful.

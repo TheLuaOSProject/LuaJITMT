@@ -51,11 +51,10 @@ end
 function M.read_file(path)
   -- Intentionally plain: callers use this for generated dumps, logs,
   -- fixtures, benchmark data, package manifests, and other artifacts produced
-  -- or consumed by a test. Implementation-only invariants belong beside the
-  -- constrained code and in notes that explain why the property matters.
-  -- Observable invariants belong in behavior, fixture, generated-artifact,
-  -- benchmark, or packaging tests. Do not add pass/fail checks for helper-name
-  -- or raw field-access spelling.
+  -- or consumed by a test. Do not use it as a repository source guard. Source
+  -- constraints belong beside the constrained code and in notes that explain
+  -- the ordering, ownership, nonblocking, or ABI reason; tests should cover
+  -- observable behavior, generated artifacts, benchmarks, or packaging.
   return read_raw_file(path)
 end
 

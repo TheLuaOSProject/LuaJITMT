@@ -25,8 +25,8 @@
 - GC2 `legacy_*` bridge names and weak/sweep counters: these describe active
   safety bridges while GC2 still coordinates with the classic collector.
 - Structural raw-field/accessor ownership rules as documentation or behavior
-  fixtures. Keep implementation spelling rules in comments/notes, with
-  observable behavior covered by runtime fixtures.
+  fixtures. Keep the ownership rationale in comments/notes, with observable
+  behavior covered by runtime fixtures.
 
 ## Estimated progress
 

@@ -14,7 +14,7 @@
 - Banach audited tests after the user clarified that generated result matching,
   including JIT dumps, is acceptable. No remaining runnable tests were found
   that inspect `src/*` implementation text for pass/fail.
-- 2026-07-03 follow-up: removed the unused repository text enumerator from
+- 2026-07-03 follow-up: removed the unused repository source enumerator from
   the Lua harness. `Test:read()` remains for generated dumps, logs, fixture
   outputs, imported-suite inputs, CSVs, and packaging artifacts; implementation
   rules belong in code comments and notes, with observable behavior covered by

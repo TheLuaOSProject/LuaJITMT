@@ -14,7 +14,8 @@ Reasoning:
 - Direct `J->trace[n]`-style slot mutation is unsafe because readers acquire
   the trace-vector snapshot and distinguish pending sentinels from published
   traces. Future changes should preserve that publication rule and cover
-  observable trace behavior, not grep for helper names.
+  observable trace behavior; the source-level constraint is documented here and
+  beside the helper surface instead of being enforced by a source guard.
 - The cached mirror assignment `J->trace = tv->slot` is not a publication
   boundary; production slot writes must still use the trace-slot helpers.
 

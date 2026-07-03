@@ -10,9 +10,10 @@ Changes:
   paranoia raw-root traversal through the helpers.
 - Updated `t-jit-mcode-retire` to acquire-load the retired head and traverse
   links through the helper.
-- Documented the rule that mcode retired-record `next` is a shared
-  publication link and must use the helper. Mcode retirement, GC scan, and
-  focused fixtures cover behavior; helper-name rules live in comments and notes.
+- Documented why mcode retired-record `next` is a shared publication link and
+  must use acquire/release helper access. Mcode retirement, GC scan, and
+  focused fixtures cover behavior; comments and notes carry the rationale
+  instead of source guards.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

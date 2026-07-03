@@ -10,12 +10,12 @@ invariant check without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
 github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). CI must prove
 builds, runtime behavior, generated artifacts, benchmark data, or packaging
-output. Implementation inventories are one-off engineering archaeology, not
-tests, and old milestone wrapper suites do not get an exception. Keep lasting
-invariants in behavior fixtures, C race/lifetime fixtures, generated dump/ASM
-checks when code generation is the observable artifact, and code-adjacent
-comments plus notes when the rule is design guidance rather than observable
-behavior. Run
+output. Source guards are not allowed. Old implementation inventories were
+one-off engineering archaeology, not tests, and old milestone wrapper suites
+do not get an exception. Keep lasting invariants in behavior fixtures, C
+race/lifetime fixtures, generated dump/ASM checks when code generation is the
+observable artifact, and code-adjacent comments plus notes when the rule is
+design guidance rather than observable behavior. Run
 `aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.
@@ -26,7 +26,8 @@ with gcc/clang on x86-64). Create lj_tg.h/.c with TGState (03
 §3.2) embedded in GG_State; `g->jitp`; move tmpbuf/tmptv/tmptv2/prng/
 cur_L/jit_base accessors through `G2TG`-style macros that resolve to the
 embedded TG. Historical one-off source inventories located the original
-tmpbuf/cur_L/jit_base sites; do not encode those spelling checks as tests.
+tmpbuf/cur_L/jit_base sites; do not recreate those spelling checks as tests.
+The lasting requirement is documented beside the helper/accessor layer.
 02 §2.4 tv_rawstore macro
 layer routes final 64-bit moves through `lj_atomic`. lj_mtfields.md seeded
 (02 §2.5).

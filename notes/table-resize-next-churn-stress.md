@@ -18,10 +18,9 @@ value first and key second; `next()` is allowed to miss that in-flight entry in 
 racy traversal, but it must never expose the internal key marker or park behind
 the writer.
 
-This is behavior coverage for the table forwarding protocol. It deliberately
-does not read implementation text for helper names or field accesses;
-implementation ordering requirements that are not directly observable belong in
-notes like this one.
+This is behavior coverage for the table forwarding protocol. Implementation
+ordering requirements that are not directly observable belong in comments and
+notes like this one, not in source guards.
 
 Validation:
 
