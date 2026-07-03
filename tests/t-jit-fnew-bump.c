@@ -211,6 +211,52 @@ static void assert_one_upvalue_result(GCfunc *fn, TValue *slot, int32_t value)
   assert(tvisgcv(slot) && gcV(slot) == obj2gco(uv));
 }
 
+static void test_interpreter_numeric_fast_path(lua_State *L)
+{
+  uint32_t interp0;
+  const char *code =
+    "jit.off()\n"
+    "local t = {}\n"
+    "for i = 1, 40 do\n"
+    "  local x = i + 0.25\n"
+    "  t[i] = function()\n"
+    "    x = x + 1\n"
+    "    return x\n"
+    "  end\n"
+    "end\n"
+    "assert(t[1]() == 2.25)\n"
+    "assert(t[2]() == 3.25)\n"
+    "assert(t[40]() == 41.25)\n"
+    "assert(t[1]() == 3.25)\n"
+    "assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))\n"
+    "local name = debug.setupvalue(t[1], 1, 50.5)\n"
+    "assert(name == 'x', name)\n"
+    "assert(t[1]() == 51.5)\n"
+    "assert(t[2]() == 4.25)\n"
+    "local r = {}\n"
+    "for i = 1, 40 do\n"
+    "  local x = i + 0.5\n"
+    "  r[i] = function() return x end\n"
+    "end\n"
+    "assert(r[1]() == 1.5)\n"
+    "assert(r[40]() == 40.5)\n"
+    "local a, b\n"
+    "do\n"
+    "  local x = 10.25\n"
+    "  a = function() x = x + 1; return x end\n"
+    "  b = function() x = x + 1; return x end\n"
+    "end\n"
+    "assert(debug.upvalueid(a, 1) == debug.upvalueid(b, 1))\n"
+    "assert(a() == 11.25)\n"
+    "assert(b() == 12.25)\n"
+    "jit.on()\n";
+
+  lj_func_test_reset_gc1num_bump_interp_calls();
+  interp0 = lj_func_test_gc1num_bump_interp_calls();
+  run_script(L, code, "interpreter numeric FNEW fast path");
+  assert(lj_func_test_gc1num_bump_interp_calls() > interp0);
+}
+
 static void test_accounting_fast_direct(lua_State *L, global_State *g,
 					TGState *tg)
 {
@@ -278,6 +324,7 @@ int main(void)
   g = G(L);
   tg = L2TG(L);
 
+  test_interpreter_numeric_fast_path(L);
   test_traced_behavior(L);
   test_accounting_fast_direct(L, g, tg);
   test_accounting_fallback(L, g, tg);

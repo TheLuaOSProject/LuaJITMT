@@ -265,6 +265,7 @@ void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
 #ifdef LJ_FUNC_TEST_HELPERS
 static uint32_t func_test_gc1num_bump_fast_calls;
 static uint32_t func_test_gc1num_bump_fallback_calls;
+static uint32_t func_test_gc1num_bump_interp_calls;
 
 static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
 {
@@ -274,6 +275,11 @@ static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
 static LJ_AINLINE void func_test_gc1num_bump_fallback_call(void)
 {
   (void)la_add32_acqrel(&func_test_gc1num_bump_fallback_calls, 1);
+}
+
+static LJ_AINLINE void func_test_gc1num_bump_interp_call(void)
+{
+  (void)la_add32_acqrel(&func_test_gc1num_bump_interp_calls, 1);
 }
 
 uint32_t lj_func_test_gc1num_bump_fast_calls(void)
@@ -295,9 +301,20 @@ void lj_func_test_reset_gc1num_bump_fallback_calls(void)
 {
   la_store32_rel(&func_test_gc1num_bump_fallback_calls, 0);
 }
+
+uint32_t lj_func_test_gc1num_bump_interp_calls(void)
+{
+  return la_load32_acq(&func_test_gc1num_bump_interp_calls);
+}
+
+void lj_func_test_reset_gc1num_bump_interp_calls(void)
+{
+  la_store32_rel(&func_test_gc1num_bump_interp_calls, 0);
+}
 #else
 #define func_test_gc1num_bump_fast_call()	((void)0)
 #define func_test_gc1num_bump_fallback_call()	((void)0)
+#define func_test_gc1num_bump_interp_call()	((void)0)
 #endif
 
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
@@ -329,11 +346,11 @@ static void func_arena_set_alloc(GCArena *a, uint32_t cell, int black)
     lj_arena_bm_clear(a->mark, cell);
 }
 
-static GCfunc *func_newL_gc1num_bump_forjit(lua_State *L, global_State *g,
-					    TGState *tg, GCproto *pt,
-					    GCfuncL *parent, TValue *base,
-					    int32_t slotno, lua_Number n,
-					    uint32_t uvspec)
+static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
+				    TGState *tg, GCproto *pt,
+				    GCfuncL *parent, TValue *base,
+				    int32_t slotno, const TValue *src,
+				    uint32_t uvspec, int count_kind)
 {
   const uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
   const uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
@@ -344,7 +361,7 @@ static GCfunc *func_newL_gc1num_bump_forjit(lua_State *L, global_State *g,
   GCfunc *fn;
   GCtab *env;
   GCupval *uv;
-  TValue tv, *slot;
+  TValue *slot;
   GCobj *oldhead;
   uint32_t cell, uvcell, end, next, black;
 
@@ -401,10 +418,9 @@ static GCfunc *func_newL_gc1num_bump_forjit(lua_State *L, global_State *g,
 				    PROTO_CLCOUNT));
   }
 
-  setnumV(&tv, n);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
-  copyTVrel(L, &uv->tv, &tv);
+  copyTVrel(L, &uv->tv, src);
   setmref(uv->v, &uv->tv);
   uv->immutable = 0;
   uv->dhash = 0;
@@ -428,7 +444,10 @@ static GCfunc *func_newL_gc1num_bump_forjit(lua_State *L, global_State *g,
   else
     lj_obj_setgcwnullrel(obj2gco(uv));
   lj_tg_gcroot_pending_store_rel(tg, obj2gco(fn));
-  func_test_gc1num_bump_fast_call();
+  if (count_kind == 1)
+    func_test_gc1num_bump_fast_call();
+  else if (count_kind == 2)
+    func_test_gc1num_bump_interp_call();
   return fn;
 }
 #endif
@@ -512,6 +531,21 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
 {
   lj_gc_check_fixtop(L);
+#if LJ_HASJIT
+  if (pt->sizeuv == 1 && proto_celluv(pt)) {
+    uint32_t v = proto_uv(pt)[0];
+    if ((v & PROTO_UV_LOCAL)) {
+      int32_t slotno = (int32_t)(v & 0xffu);
+      TValue *slot = L->base + slotno;
+      if (tvisnumber(slot)) {
+	GCfunc *fn = func_newL_gc1tv_bump(L, G(L), L2TG(L), pt, parent,
+					  L->base, slotno, slot, v, 2);
+	if (fn)
+	  return fn;
+      }
+    }
+  }
+#endif
   return func_newL_gc_base(L, NULL, pt, parent);
 }
 
@@ -537,9 +571,10 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   v = proto_uv(pt)[0];
   lj_assertL((v & PROTO_UV_LOCAL) && (int32_t)(v & 0xff) == slotno,
 	     "bad one-upvalue FNEW slot");
+  setnumV(&tv, n);
 #if LJ_HASJIT
-  fn = func_newL_gc1num_bump_forjit(L, G(L), L2TG(L), pt, parent, base,
-				    slotno, n, v);
+  fn = func_newL_gc1tv_bump(L, G(L), L2TG(L), pt, parent, base,
+			    slotno, &tv, v, 1);
   if (fn)
     return fn;
   func_test_gc1num_bump_fallback_call();
@@ -553,7 +588,6 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   ** closed upvalue from the numeric SSA value and republish that cell to the
   ** parent slot for mutable captures.
   */
-  setnumV(&tv, n);
   uv = func_snapshotuv_unlinked(L, &tv);
   if (!(v & PROTO_UV_IMMUTABLE))
     setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
