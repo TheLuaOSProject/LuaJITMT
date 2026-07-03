@@ -19,3 +19,8 @@
   imported-suite inputs, CSVs, opaque bytecode round-trip artifacts, and
   packaging artifacts; implementation rules belong in code comments and notes,
   with observable behavior covered by fixtures or public artifacts.
+- 2026-07-03 clarification: the same rule covers the old milestone wrapper
+  suite and any historical local/release-only checks. Do not move those checks
+  into another runner. If a historical check described a real requirement, keep
+  the requirement as a code-adjacent explanation and cover only the observable
+  behavior or product artifact.

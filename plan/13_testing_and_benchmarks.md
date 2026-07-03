@@ -11,7 +11,9 @@
 6. **Oracles**: LJ_GC2_PARANOIA STW diff (05 §5.13); string identity
    checker; bytecode dump/load execution as an opaque artifact. Bytecode byte
    spelling, generated IR/ASM text, objdump output, mcode bytes, helper-name
-   inventories, and repository source text are not test contracts.
+   inventories, and repository source text are not test contracts, including
+   historical milestone wrappers. Keep the invariant explanation in comments
+   and notes; keep tests on behavior or product artifacts.
 7. **Fuzzing** (§13.7).
 
 ## 13.2 Baseline numbers (reference machine)

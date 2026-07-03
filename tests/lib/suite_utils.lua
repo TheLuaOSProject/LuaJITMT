@@ -51,11 +51,12 @@ end
 function M.read_file(path)
   -- Intentionally plain: callers use this for logs, fixture outputs, benchmark
   -- data, package manifests, opaque bytecode round-trip artifacts, and other
-  -- artifacts produced or consumed by a test. Do not use it for repository
-  -- implementation-text or generated compiler-internal pass/fail checks.
-  -- Source constraints belong beside the constrained code and in notes; tests
-  -- should cover observable behavior, public artifacts, benchmarks, or
-  -- packaging.
+  -- artifacts produced or consumed by a test. It must not become a repository
+  -- implementation-text or generated compiler-internal oracle, including for
+  -- old milestone wrappers. Implementation constraints belong beside the code
+  -- that depends on them and in notes explaining the ordering, ownership,
+  -- nonblocking, or ABI reason. Tests cover observable behavior, public
+  -- artifacts, benchmarks, stock semantics, or packaging.
   return read_raw_file(path)
 end
 

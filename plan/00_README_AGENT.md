@@ -45,9 +45,11 @@ counter-based, stock-suite based, or tied to public artifacts such as captured
 process output, benchmark CSVs, bytecode load/execute payloads, release metadata,
 or packaging output. Repository source text, helper names, generated IR/ASM,
 mcode bytes, raw byte patterns, dump-token spelling, and other
-compiler-internal text are not pass/fail contracts. Implementation constraints
-belong in code-adjacent comments and notes that explain the ordering, ownership,
-nonblocking, or ABI reason.
+compiler-internal text are not pass/fail contracts. This includes the original
+milestone wrapper suite and any old local/release-only source inventories:
+delete those checks instead of preserving them in another runner. Implementation
+constraints belong in code-adjacent comments and notes that explain the
+ordering, ownership, nonblocking, or ABI reason.
 
 ### 0.3 Reading order
 
