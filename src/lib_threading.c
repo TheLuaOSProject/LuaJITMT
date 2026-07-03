@@ -289,6 +289,15 @@ static int64_t threading_remaining_ns(int64_t deadline)
   return deadline > now ? deadline - now : 0;
 }
 
+#define THREADING_NATIVE_WAIT_SLICE_NS 1000000ll
+
+static int64_t threading_native_wait_slice(int has_timeout, int64_t ns)
+{
+  if (has_timeout && ns < THREADING_NATIVE_WAIT_SLICE_NS)
+    return ns;
+  return THREADING_NATIVE_WAIT_SLICE_NS;
+}
+
 static void threading_wake_thread(LJThread *th)
 {
   la_add32_rlx(&th->futex, 1);
@@ -898,8 +907,15 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
 	continue;
       lj_native_enter(L2TG(L));
+      /* Join waiters still own their Lua stack. Root-scan handshakes cannot
+      ** remotely acknowledge them, and the handshake wakes the TG poll futex
+      ** rather than the thread-completion futex. Bounded waits let the owner
+      ** leave native state and apply safepoints without changing join timeout
+      ** semantics.
+      */
       if (la_load32_acq(&th->state) != LJ_THREAD_DONE)
-	(void)la_futex_wait(&th->futex, futex, ns);
+	(void)la_futex_wait(&th->futex, futex,
+			    threading_native_wait_slice(has_timeout, ns));
       actions = lj_native_leave(L);
       threading_checkstop_fresh(L, actions, had_stopreq);
     }
