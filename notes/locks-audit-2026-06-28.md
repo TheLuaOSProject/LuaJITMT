@@ -60,7 +60,7 @@ snapshots instead of table-owned `CType *` values acquired before a wait.
    only retain scalar IDs/sizes across waits and refetch `CType *` afterward.
 2. Reduce remaining layout fallback locks in `lib_ffi.c` where a stable
    snapshot can preserve normal errors and size/alignment semantics.
-3. Collapse bridge source-text checks into behavior tests when behavior can observe
+3. Collapse bridge implementation-text assertions into behavior tests when behavior can observe
    the invariant. Architecture, visibility, and memory-ordering boundaries that
    behavior cannot reliably prove belong in comments or notes, not CI source
    predicates.

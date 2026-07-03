@@ -93,8 +93,9 @@ end
 
 function Test:files(dir, opts)
   -- Plain file enumeration is useful for generated fixture directories and
-  -- imported suites. Repository source-text oracle tests are excluded by
-  -- policy and review, not by making the harness reject ordinary file access.
+  -- imported suites. The harness stays neutral; implementation-only invariants
+  -- are documented beside the constrained code, while tests exercise behavior
+  -- or generated artifacts.
   opts = opts or {}
   local cmd = "find " .. shell_quote(dir)
   if opts.recursive == false then cmd = cmd .. " -maxdepth 1" end

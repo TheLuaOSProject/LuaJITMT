@@ -10,7 +10,7 @@ Overall safety/stability completion: 66-76%.
 
 - Runtime lockless substrate: 72-82%.
 - Threading/channel/shutdown behavior coverage: 78-88%.
-- CI migration from legacy shell/source-text checks to behavior tests: 60-70%.
+- CI migration from legacy shell/implementation-text assertions to behavior tests: 60-70%.
 - FFI concurrency excluding mutable `ffi.cdef`: 58-68%.
 - Weak/finalizer/generational GC: 55-68%.
 - Release-quality soak and benchmark readiness: 45-55%.
@@ -67,11 +67,11 @@ Not worth removing now:
 
 ## Test and CI audit
 
-Current policy keeps no source-text checks. Memory-order contracts, ABI fences, and
+Current policy keeps no implementation-text assertions. Memory-order contracts, ABI fences, and
 temporary migration rules must be comments or notes, with behavior/generated
 artifact coverage where the failure is observable. Best near-term cleanup:
 
-- Delete any newly discovered source-shape checks in M5 x64, M7 FFI, and M6 JIT
+- Delete any newly discovered implementation-shape assertions in M5 x64, M7 FFI, and M6 JIT
   where generated output or runtime behavior already proves the contract.
 - Split `t-gc2-traverse.c` or add selectors; it is still a monolithic mixed
   fixture used by M3 and M8.

@@ -11,6 +11,6 @@
   m3_gc2_worker_scheduler m4_thr_substrate m5_nbtab_model
   m5_x64_tget_array_header m6_jit_token m7_ffi_cdef_token m8_weak
   m9_gc_stats`.
-- Banach audited tests for source-text assertions after the user clarified
+- Banach audited tests for implementation-text assertions after the user clarified
   that generated result matching, including JIT dumps, is acceptable. No
-  remaining direct `src/*` source-text assertions were found.
+  remaining direct `src/*` implementation-text assertions were found.

@@ -35,8 +35,8 @@ Guardrail:
   Predefined `void *` / `const void *` / `const char *` traces for
   `ffi.fill()`, `ffi.copy()`, and `ffi.string()` must record without CTBUSY
   under an unrelated parser token.
-- Do not replace this with a source-text check. The project policy in
-  `notes/ci-source-search-policy.md` requires behavior fixtures or generated
+- Do not replace this with an implementation-text assertion. The project policy in
+  `notes/ci-invariant-testing.md` requires behavior fixtures or generated
   artifact checks for CI coverage.
 
 Validation:

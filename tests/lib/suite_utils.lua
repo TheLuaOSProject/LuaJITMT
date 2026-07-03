@@ -49,10 +49,10 @@ local function read_raw_file(path)
 end
 
 function M.read_file(path)
-  -- Intentionally plain: callers use this for generated dumps, logs, fixtures,
-  -- and other artifacts. The project forbids source-text oracle tests by
-  -- policy and review, not by a path-based harness guard that would become
-  -- another implementation-shape test.
+  -- Intentionally plain: callers use this for generated dumps, logs,
+  -- fixtures, and other artifacts. Implementation-only invariants belong next
+  -- to the code they constrain; observable invariants belong in behavior or
+  -- generated-artifact tests.
   return read_raw_file(path)
 end
 

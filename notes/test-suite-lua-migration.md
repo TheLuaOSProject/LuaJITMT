@@ -1,8 +1,8 @@
 # Lua test-suite migration
 
-## 2026-06-28 source-text check removal
+## 2026-06-28 implementation-text assertion removal
 
-- Removed the old source-file content guard API and generic `assert_file_*`
+- Removed the old source-file content assertion API and generic `assert_file_*`
   compatibility wrappers from the Lua test harness.
 - Removed the old `suite_runtime` build/C-fixture compatibility exports; suites
   now import `suite_build` directly for those helpers.
@@ -13,7 +13,7 @@
   generated behavior surface, not repository source.
 - Switched output-file checks to read the captured output and assert text
   directly.
-- Source-search policy now lives in `notes/ci-source-search-policy.md`.
+- Invariant-testing guidance now lives in `notes/ci-invariant-testing.md`.
 
 Validation:
 
@@ -82,8 +82,8 @@ Validation:
   `tests/lib/suite_assert.lua`.
 - Historical state: this pass left compatibility exports in `suite_utils.lua`
   while routing dump and file-result suites to `suite_assert` directly.
-- Historical state: this pass added source-file content guards to
-  `suite_assert` and raw `Test:read()`. Those source-text checks were removed
+- Historical state: this pass added source-file content assertions to
+  `suite_assert` and raw `Test:read()`. Those implementation-text assertions were removed
   on 2026-06-28; current policy is behavior fixtures, generated artifact
   assertions, or documentation.
 - Confirmed JIT/bytecode dump matching remains supported as result matching.
@@ -96,24 +96,24 @@ Validation:
   removed; dump result matching remains.
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops m7_ffi_jit_cnew`
 
-## 2026-06-28 explicit source-read API
+## 2026-06-28 explicit source-reading helper
 
-- Historical state: this pass added source-file rejection to
+- Historical state: this pass added path-based source-file special handling to
   `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
-  `suite_utils.read_source_file()` escape hatch. Both the explicit source-read
-  API and those source-text tests were removed in the later 2026-06-28
-  source-text check removal. The remaining path-based read rejection was removed
-  on 2026-07-03 so the harness no longer implements a source guard.
+  `suite_utils.read_source_file()` helper. Both the explicit source-reading
+  helper and those source-text tests were removed in the later 2026-06-28
+  implementation-text assertion removal. The remaining path-based read behavior was removed
+  on 2026-07-03 so the harness now treats file access as a neutral primitive.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
   `tools/test.lua` process. Set `LJ_TEST_DISABLE_BUILD_CACHE=1` for the old
   always-clean behavior while debugging the harness.
-- Removed source-shape guards from `m7_ffi_callback_runtime.sh` and kept the
+- Removed implementation-shape assertions from `m7_ffi_callback_runtime.sh` and kept the
   public wrapper as a thin launcher. The callback runtime case now relies on
   its C/Lua behavior fixtures for native-state restoration, stale callback
   returns, callback blacklisting, and fresh STOPREQ behavior.
-- Removed the M3 shell wrapper's FFI C-call source-text check because the same
+- Removed the M3 shell wrapper's FFI C-call implementation-text assertion because the same
   native-entry STOPREQ path is now covered by the M7 callback STOPREQ fixture.
 
 Validation:
@@ -156,8 +156,7 @@ Validation:
 ## 2026-06-20 assertion public surface
 
 - Removed transitional assertion re-exports from `suite_utils.lua`.
-- `suite_assert.lua` is now the public module for text/file/dump assertions and
-  source-content path guards.
+- `suite_assert.lua` is now the public module for text/file/dump assertions.
 - `suite_utils.lua` still uses `suite_assert` internally for command-output
   assertions.
 
@@ -194,10 +193,11 @@ Validation:
 - Direct Lua metadata smoke over aggregate `deps` entries.
 - `tools/ci/lua_test.sh m2_arena_all`
 
-## 2026-06-20 source-text check and aggregate execution tightening
+## 2026-06-20 implementation-text assertion and aggregate execution tightening
 
-- Broadened source-content guards so behavior assertions cannot read test,
-  wrapper, tool, aux, bench, or `src/` source files directly.
+- Historical state: broadened source-content path handling so behavior
+  assertions could not read test, wrapper, tool, aux, bench, or `src/` source
+  files directly. That path-based behavior was later removed.
 - Fixed `run_stock_tests` passthrough parsing so options like `--quiet` are not
   mistaken for an explicit LuaJIT binary, while explicit binaries still work.
 - Made `m9_m10_gc` run its declared dependency list as the single source of
@@ -242,11 +242,11 @@ Validation:
 - `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot m5_tab_value_publish m6_jit_table_store_helper`
 - `git diff --check`
 
-## 2026-06-20 source-text check behavior case
+## 2026-06-20 implementation-text assertion behavior case
 
 - Historical state: this pass added as a first-class Lua
   suite case and added a thin CI compatibility wrapper.
-- That case and wrapper were removed by the 2026-06-28 source-text check
+- That case and wrapper were removed by the 2026-06-28 implementation-text assertion
   cleanup. Generated result-file matching remains supported because generated
   IR/bytecode/ASM output is an allowed behavior surface.
 

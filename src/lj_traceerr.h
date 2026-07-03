@@ -58,5 +58,5 @@ TREDEF(NYICOAL,	"NYI: register coalescing too complex")
 #undef TREDEF
 
 /* When adding/removing trace errors, keep this catalog synchronized with
-** TraceErr uses. Do not add source-search CI for this bookkeeping-only
-** invariant. */
+** TraceErr uses. This is a bookkeeping contract for the enum users, not
+** runtime behavior. */

@@ -11,7 +11,7 @@ Each replacement upvalue is a fully populated table with redundant fields and a
 self-reference. Readers accept any old or new sequence number, but they require
 the table, nested table, checksum, tag, and self-reference to agree. This keeps
 the check behavioral: the public API must only expose fully formed upvalue
-payloads after publication, without relying on repository source searches.
+payloads after publication, without relying on repository repository text assertions.
 
 The fixture keeps periodic explicit GC out of the attached worker hot loop so it
 stays focused on C-closure publication. Explicit active-thread `lua_gc()` from a

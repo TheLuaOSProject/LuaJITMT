@@ -61,7 +61,7 @@ cdata indexing, pointer addition, and pointer difference without parking. It
 also holds the token during trace recording of the same predefined operations
 and verifies no parser-busy trace abort is reported. Parser-created struct
 pointer operations still park in native wait until release or abort recording
-instead of waiting from the recorder. This turns the old no-lock source-shape
+instead of waiting from the recorder. This turns the old no-lock implementation
 expectation into behavior.
 The existing rollback reader remains in the same suite and still covers
 numeric indexing and pointer arithmetic during failed parser rollback.

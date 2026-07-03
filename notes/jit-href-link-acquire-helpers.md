@@ -10,6 +10,6 @@
   `asm_href_tab_node_hmask_{load,and,cmpi}_acq()` so x64 HREF/HREFK
   node-header flag and mask reads are named at the backend helper boundary.
 - Documented that HREF table-link and node-header reads should go through the
-  named acquire helpers. The old static source-text check for open-coded offsets is
+  named acquire helpers. The old static implementation-text assertion for open-coded offsets is
   obsolete; generated/backend behavior is covered by
   `tools/ci/lua_test.sh m6_jit_href_nodehdr m6_jit_hrefk_nodehdr`.

@@ -30,7 +30,7 @@ paths, finalizer/weak-table ordering, benchmark drift, and CI guard quality.
   `lua_objlen`.
 - Converted `string.gmatch` hidden upvalue reads to full `TValue` acquire
   snapshots and its position update to a full primitive `TValue` release store.
-- Replaced the old helper-name source-text check with behavior coverage in
+- Replaced the old helper-name implementation-text assertion with behavior coverage in
   `tests/t-cclosure-upvalue-snapshot.c`.
 - Kept only narrow static tripwires for raw partial `string.gmatch` position
   writes that are hard to observe deterministically.
@@ -116,13 +116,12 @@ Refactored now:
 - `m5_upvalue_publish_gc` no longer pins C helper names for C-closure upvalue
   handling. The behavior fixture carries the real contract.
 
-Resolved by the current source-search policy:
+Resolved by the current invariant-testing guidance:
 - Per-case shell wrappers and are gone; `tools/ci/lua_test.sh`
   is the supported CI entrypoint.
-- M4/M5/M6/M7/M8 source-shape checks were removed from aggregate suites.
-- The Lua harness no longer exposes a source-file guard API, rejects
-  repository-source `t:read()` paths, and does not support repository file
-  enumeration as a test oracle.
+- M4/M5/M6/M7/M8 implementation-shape assertions were removed from aggregate suites.
+- The Lua harness file helpers are neutral primitives for generated artifacts,
+  imported inputs, and temporary files.
 
 Remaining CI work must use behavior, dump, mcode, stress, or stock-semantics
 fixtures. Non-observable memory-order and ABI constraints should be documented
@@ -134,8 +133,8 @@ Short term, 1-3 days:
 - Finish C API/upvalue audit follow-ups and land more behavior tests for any
   remaining C-closure pseudo-index edge cases.
 - Add a bounded timeout/split for `m4_threading_capi`.
-- Replace any newly discovered source-shape assertion with behavior coverage or
-  documentation; do not move source-text checks into Lua suite cases.
+- Replace any newly discovered implementation-shape assertion with behavior coverage or
+  documentation; do not move implementation-text assertions into Lua suite cases.
 
 Medium term, 1-2 weeks:
 - Reduce FFI snapshot fallback locks and add stronger rollback/abandoned-entry

@@ -13,7 +13,7 @@
   aborts for read-only ctype snapshot races.
 - Added behavior coverage that holds the ctype parse token only while recording
   and requires a trace abort instead of a parser-lock wait.
-- Removed stale source/test guards:
+- Removed stale implementation-text assertions and duplicate tests:
   `m5_tab_emptyhash.sh` test grep, the `m6_jit_buffer_method_shared_nyi`
   recorder-name grep, and duplicate libc `strerror()` source scans.
 
@@ -30,7 +30,7 @@
 ## Estimated progress
 
 - Legacy/compat public/runtime surface removal: 80-85%.
-- CI migration away from stale source-text checks: 65-75%.
+- CI migration away from stale implementation-text assertions: 65-75%.
 - Lockless FFI recorder read-only ctype paths: 75-85%.
 
 ## Remaining work

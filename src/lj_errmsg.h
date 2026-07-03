@@ -197,4 +197,4 @@ ERRDEF(BUFFER_LEFTOV,	"left-over data in buffer")
 #undef ERRDEF
 
 /* When adding/removing errors, keep this catalog synchronized with ErrMsg uses.
-** Do not add source-search CI for this bookkeeping-only invariant. */
+** This is a bookkeeping contract for the enum users, not runtime behavior. */

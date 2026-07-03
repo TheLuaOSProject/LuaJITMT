@@ -13,7 +13,7 @@ Changes:
 - Documented the rule that retired table node/array links are SMR publication
   links and must be accessed through the acquire/release helpers. Retirement,
   marking, paranoia, and focused fixtures cover the observable behavior; CI must
-  not enforce the helper spelling by source search.
+  not enforce the helper spelling by repository text assertion.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

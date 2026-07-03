@@ -9,7 +9,7 @@ Overall correctness/stability progress: 68-78%.
 
 - Runtime lockless substrate: 73-83%.
 - Legacy/compat public/runtime surface removal: 82-88%.
-- CI migration away from shell aliases and stale source-text checks: 68-78%.
+- CI migration away from shell aliases and stale implementation-text assertions: 68-78%.
 - FFI concurrency outside mutable `ffi.cdef`: 65-75%.
 - FFI recorder read-only ctype paths: 80-88%.
 - Interpreter-side FFI parser fallback removal: 45-55%.
@@ -75,7 +75,7 @@ Worth making more lockless:
   language failures.
 - Interpreter FFI readers only when a snapshot path can preserve normal success
   behavior or a documented busy-result contract exists.
-- Historical source-text checks with equivalent runtime or generated-code behavior
+- Historical implementation-text assertions with equivalent runtime or generated-code behavior
   coverage should stay retired.
 
 Not worth forcing right now:

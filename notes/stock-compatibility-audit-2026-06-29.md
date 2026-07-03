@@ -1,12 +1,12 @@
 # Stock compatibility audit, 2026-06-29
 
 Scope: active `v2.1` commits through `767ec6f911aa`, with emphasis on
-source-search test removal, legacy/fork-local entrypoint cleanup, and stock
+generated-or-behavior test removal, legacy/fork-local entrypoint cleanup, and stock
 LuaJIT API behavior.
 
 Refresh note: the 2026-06-29 re-audit after removing the non-stock `ffi.pin`
 entrypoint, and again after adding shared-cdata race coverage, found no active
-source-search-only tests and no public stock LuaJIT API removals. The remaining
+implementation-text-only tests and no public stock LuaJIT API removals. The remaining
 string checks in active tests are over generated dumps or runtime output,
 matching the policy exception for generated ASM/mcode and other generated
 artifacts.
@@ -25,9 +25,9 @@ macOS, and Windows release binaries run stock-suite checks during release
 packaging.
 
 At the time of the original 2026-06-29 audit, no active forbidden
-source-search-only tests were found under `tools/ci`, `tools/test.lua`,
+implementation-text-only tests were found under `tools/ci`, `tools/test.lua`,
 `tests/suites`, `tests/lib`, top-level `tests/*.lua`, or top-level `tests/*.c`.
-Later narrow source-text checks must not be treated as stock compatibility
+Later narrow implementation-text assertions must not be treated as stock compatibility
 coverage; stock parity is enforced by runtime behavior tests, vendored stock
 tests, C fixtures, bytecode/generator output checks, and release binary checks.
 
@@ -102,7 +102,7 @@ searches:
 
 The `m7_ffi_cdata_shared_hammer` coverage added after the pin removal is stock
 API coverage: it uses `ffi`, `require("threading")`, and ordinary cdata field
-accesses. It intentionally does not add a source-search test for helper names.
+accesses. It intentionally does not add a generated-or-behavior test for helper names.
 
 Past cleanup commits temporarily removed stock compatibility symbols and the
 optional `LUAJIT_ENABLE_LUA52COMPAT` profile. Current branch state restored

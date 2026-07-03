@@ -154,24 +154,25 @@ Lua test-suite migration notes:
   validation and POSIX `os.*` reentrancy guards without shell `awk`/`grep`.
 - The fourth batch turns the focused M2 arena shell scripts into launchers only.
   `ljtest.cc()` now accepts per-fixture compile flags for assertion fixtures.
-- The fifth batch was later retired from the runnable suite because it was
-  source-shape coverage rather than behavior coverage.
+- The fifth batch was later retired from the runnable suite because it asserted
+  implementation shape rather than behavior.
 - The sixth batch migrates the remaining non-TSan M4 C fixtures. These keep the
   original clean-build/link-against-`libluajit.a` behavior and preserve the C
   threading API shutdown marker guard in Lua.
-- The seventh batch migrates small M5 runtime/table fixtures and their source
-  guards. `ljtest.cc()` can now opt out of default flags and `-I src` for
+- The seventh batch migrates small M5 runtime/table fixtures and their
+  implementation-shape assertions. `ljtest.cc()` can now opt out of default flags and `-I src` for
   standalone models that intentionally do not link LuaJIT.
 - The eighth batch migrates the M2 GC-header accessor guard plus focused M5
   runtime smoke wrappers for string.buffer publication, CType.name publication,
   and JIT table-store bridge coverage.
 - The ninth batch migrates two focused M5 table hash-node fixtures while
-  preserving the timeout-wrapped C fixture runs and source-text check predicates for
-  slot snapshots and KEYLOCK free-node reservation.
+  preserving the timeout-wrapped C fixture runs and assertions for slot
+  snapshots and KEYLOCK free-node reservation.
 - The tenth batch migrates table allocation publication guardrails and the x64
   JIT HREF node-header hmask smoke/marker guard.
 - The eleventh batch migrates stable hash-chain ordering, hash-vector
-  publication, and hash-vector retirement fixtures with their source-text checks.
+  publication, and hash-vector retirement fixtures with their implementation
+  assertions.
 - The twelfth batch migrates the userdata type acquire/release publication
   guard, including constructor order checks and the Lua smoke test.
 - The thirteenth batch migrates the HREFK recorder snapshot guard plus table
@@ -179,7 +180,7 @@ Lua test-suite migration notes:
 - The fourteenth batch migrates the mutable table FLOAD guard and per-TG
   threading allocator routing smoke.
 - The fifteenth batch migrates the string table CAS/rehash fixtures and
-  publication source-text checks.
+  publication assertions.
 - The sixteenth batch migrates the M3 GC2/safepoint guards into Lua. The
   paranoia aggregate still preserves the existing stock-test assertion failure.
 - The seventeenth batch migrates the focused x64 snapshot/publication guards,
@@ -199,17 +200,17 @@ Lua test-suite migration notes:
   canonical execution is `tools/ci/lua_test.sh <case...>`.
 - Current cleanup status: runnable suite files under `tests/suites/` no longer
   directly inspect implementation text under `src/`, and the old
-  source-predicate helper surface has been removed from `tests/lib/`.
+  implementation-predicate helper surface has been removed from `tests/lib/`.
 - Result-artifact matching remains valid behavior coverage. Generated JIT
   dumps, bytecode listings, benchmark output, and C/Lua fixture output can keep
   targeted assertions because they are produced by running the VM.
 - Shared generic utilities live in `tests/lib/suite_utils.lua`; shared VM,
   stock-suite, JIT-dump, Lua-script build/run, aggregate-suite, and C-fixture
   case/batch helpers live in `tests/lib/suite_runtime.lua`.
-- Source-shape-only cases were removed from the runnable suite: M0 guardrails,
-  M2 GC header accessor grep, the M5 source publication guards, M5 x64 upvalue
-  publication, and M7 no-CTState-L. These should be replaced by behavior tests
-  or C/Lua fixtures if the invariant is important.
+- Implementation-shape-only cases were removed from the runnable suite: M0
+  guardrails, M2 GC header accessor grep, the M5 source publication assertions,
+  M5 x64 upvalue publication, and M7 no-CTState-L. These should be replaced by
+  behavior tests or C/Lua fixtures if the invariant is important.
 - Shared suite helpers now live in `tests/lib/suite_utils.lua`. The migrated
   suites use that module for shell quoting, environment defaults, substring
   scans, plain/pattern occurrence counts, dump assertions, command-output
@@ -220,7 +221,7 @@ Lua test-suite migration notes:
   C fixture case registration, and repeated C fixture batches. M3/M4/M5/M6/M7
   and M8 suites use those helpers for common runner mechanics.
 - Added `m5_upvalue_publish_gc` as a behavior replacement for the deleted
-  closed-upvalue publication source-text checks. It stores fresh GC objects through
+  closed-upvalue publication implementation-text assertions. It stores fresh GC objects through
   closed upvalues in interpreter, threaded, and hot JIT paths, forces GC/GC2,
   and proves the stored values remain reachable without scanning `src/`.
 - Removed the remaining M4 threading source-marker checks. `m4_threading_api`,
@@ -250,9 +251,9 @@ Lua test-suite migration notes:
 - Converted the M5 table suite to rely on its compiled C behavior fixtures
   instead of checking implementation markers in `src/` or fixture source text.
 - Converted the M5 runtime suite to behavior-only smoke/regression tests,
-  removing source-text guards around buffer, CType, JIT table, userdata,
+  removing implementation-text assertions around buffer, CType, JIT table, userdata,
   allocator, OS, and parser checks.
-- Removed `m7_ffi_jit_cnew` source/assembly text guards while keeping its
+- Removed `m7_ffi_jit_cnew` implementation/assembly text assertions while keeping its
   allocation stress, generated JIT dump checks, and stock FFI regression run.
 - Converted `m3_safepoint_handshake` to rely on the compiled handshake
   fixture instead of checking safepoint/native-call implementation markers.
@@ -260,16 +261,16 @@ Lua test-suite migration notes:
   rollback fixture, Lua reader stress, anchor build, and cdef-token regression.
 - Converted `m7_ffi_ctype_ticket_intern` to behavior-only coverage through its
   C ticket fixture and threaded Lua intern-race test, and removed the now-unused
-  parser allocation source-text check helper.
+  parser allocation implementation-text assertion helper.
 - Converted `m7_ffi_ctype_pointer_ids` to behavior-only coverage through the
   pointer-ID and cdata-set Lua regressions, and removed the now-unused
-  `ctype_typeid` source-text check helper.
+  `ctype_typeid` implementation-text assertion helper.
 - Converted `m7_ffi_callback_runtime` to behavior-only coverage through its C
   callback fixtures, threaded Lua runtime stress, and stock callback test, and
   removed the now-unused callback runtime source-order helper.
 - Converted `m7_ffi_finreg` to behavior-only coverage through threaded
   finalizer runs, the trace finalizer fixture, and a generated IR dump check;
-  removed the now-unused FINREG source-text check helper.
+  removed the now-unused FINREG implementation-text assertion helper.
 - Converted `m7_ffi_pin` to behavior-only coverage through the threaded
   `ffi.pin` Lua regression.
 - Converted `m7_ffi_metatype` to behavior-only coverage through the threaded
@@ -290,8 +291,8 @@ Lua test-suite migration notes:
   coverage through their existing Lua regressions and C fixtures.
 - Converted `m7_ffi_callback_install` and `m7_ffi_snap_restore_l` to
   behavior-only coverage through their Lua regressions, removing the last M7
-  direct source-text checks and unused source-text assertion helpers.
-- Converted the local-cell `lua_getlocal()` source-text check to behavior coverage:
+  direct implementation-text assertions and unused implementation-text assertion helpers.
+- Converted the local-cell `lua_getlocal()` implementation-text assertion to behavior coverage:
   a suspended coroutine now verifies `debug.getlocal()` and `debug.setlocal()`
   dereference a captured mutable local cell and keep the closure-observed value
   coherent.
@@ -309,7 +310,7 @@ Lua test-suite migration notes:
   `m6_jit_gcstep_guard` to C fixture/generated dump behavior coverage instead
   of direct GC/JIT source marker checks.
 - Converted `m6_jit_token` to its C/Lua recorder-token regressions and
-  generated XPOLL dump checks instead of direct recorder/x64 source-text checks.
+  generated XPOLL dump checks instead of direct recorder/x64 implementation-text assertions.
 - Converted `m5_tab_cas_store` to rely on the compiled CAS/FORWARD behavior
   fixture instead of direct table/API/library source inspections.
 - Converted `m5_state_owner` to rely on the compiled foreign-state owner
@@ -363,11 +364,11 @@ Lua test-suite migration notes:
 - Removed additional M5 exact source inventories for bytecode helper names, x64
   exitstub scaffolding, table-access macro definitions, and serializer call
   spelling. The suite keeps generated-result checks plus MT publication guards.
-- Removed the redundant `string.gmatch` C-closure upvalue source-text check from
+- Removed the redundant `string.gmatch` C-closure upvalue implementation-text assertion from
   `m5_upvalue_publish_gc`; `tests/t-cclosure-upvalue-snapshot.c` now provides
   the behavior coverage by observing and mutating the iterator position
   upvalue through the debug API.
-- Removed the remaining local-cell x64 source-text check from the shared cell-op
+- Removed the remaining local-cell x64 implementation-text assertion from the shared cell-op
   helper; bytecode, generated JIT dump, and runtime probes cover the cell
   paths without reading `lj_asm_x86.h`.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
@@ -380,7 +381,7 @@ Lua test-suite migration notes:
 
 Current follow-up:
 
-- Keep new tests behavior-first. Direct `src/` source-text predicates should stay out
+- Keep new tests behavior-first. Direct `src/` implementation-text predicates should stay out
   of runnable suites unless a future migration explicitly replaces them with a
   stronger runtime fixture.
 - Build-owning tests should remain serial unless the Lua runner grows a shared

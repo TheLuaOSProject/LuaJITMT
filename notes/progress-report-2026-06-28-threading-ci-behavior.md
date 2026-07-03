@@ -1,9 +1,9 @@
 # Progress report - 2026-06-28 threading CI behavior
 
-Historical note: this report predates the final source-search cleanup. The
-current rule is `notes/ci-source-search-policy.md`: source-shape checks over
-repository files are not CI tests; keep behavior fixtures, generated dump/ASM
-checks, or documentation instead.
+Historical note: this report predates the current invariant-testing model. The
+current guidance is `notes/ci-invariant-testing.md`: behavior fixtures and
+generated artifacts cover observable semantics; implementation-only rules live
+in comments and notes.
 
 Scope: x86_64/Linux `v2.1` lockless LuaJIT fork. Project priority remains
 safety, stability, and Lua semantics over LuaJIT performance parity when those
@@ -15,7 +15,8 @@ Overall completion remains roughly 65-75%.
 
 - Runtime lockless substrate: 70-80%.
 - Threading/channel/shutdown behavior coverage: 75-85%.
-- Test/CI migration from source-text checks to behavior fixtures: 50-60%.
+- Test/CI migration from implementation-text assertions to behavior fixtures:
+  50-60%.
 - FFI concurrency and fallback-lock cleanup: 55-65%.
 - Weak/finalizer/generational GC completion: 50-65%.
 - Release-quality soak and benchmark readiness: 45-55%.
@@ -28,7 +29,7 @@ add 1-3 weeks.
 ## Done in this slice
 
 - Fixed the `m4_threading_capi` baseline hang.
-- Converted the join-result STOPREQ source-shape guard into behavior coverage:
+- Converted the join-result STOPREQ implementation-shape assertion into behavior coverage:
   `tests/t-threading-capi.c` now publishes a fresh STOPREQ from a helper thread
   only after the joining thread has entered the native wait.
 - Added behavior coverage for blocked `threading.mutex:lock()` fresh STOPREQ
@@ -66,18 +67,19 @@ repo can race build outputs when clean/building tests share a checkout.
 
 Removed/refactored now:
 
-- M4 threading join-result wait source-text checks.
-- M4 threading mutex bounded-wait source-text check.
-- M4 C API attach-order source-text check, now covered by the existing entering
+- M4 threading join-result wait assertions.
+- M4 threading mutex bounded-wait assertion.
+- M4 C API attach-order assertion, now covered by the existing entering
   attach/lua_close behavior fixture.
 
-Historical high-priority legacy/static guard areas:
+Historical high-priority legacy/static assertion areas:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`: broad raw `CType` source-shape bans;
-  superseded by snapshot behavior fixtures and the source-search policy.
+- `tools/ci/m7_ffi_typeinfo_snapshot.sh`: broad raw `CType` implementation-shape
+  assertions; superseded by snapshot behavior fixtures and documented
+  invariants.
 - `tools/ci/m7_ffi_blocking.sh`: behavior coverage exists for callback
-  blacklist and blocking API outcomes; the source-search wrapper was part of
-  the old static-guard cleanup.
+  blacklist and blocking API outcomes; the wrapper assertion was part of the
+  old static cleanup.
 - `tools/ci/m5_profile_stop_native.sh`: C fixture covers most semantics; keep
   at most a narrow cleanup-order lint.
 - Historical `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`,
@@ -88,8 +90,9 @@ Historical high-priority legacy/static guard areas:
 - Large GC/finalizer wrapper behavior belongs in suite cases and C fixtures,
   not source-text lint helpers.
 
-Current rule: source-text checks are not allowed. Non-observable memory-order, ABI,
-or temporary migration contracts must be documented near the helper or in notes
+Current rule: observable semantics belong in behavior/generated-artifact tests.
+Non-observable memory-order, ABI, or temporary migration contracts must be
+documented near the helper or in notes.
 and reviewed there; observable failures need behavior, stress, or generated
 artifact coverage.
 

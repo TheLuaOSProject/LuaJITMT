@@ -15,4 +15,4 @@
 - Replaced pre-published regular-file read probes with blocking `io.popen()`
   read probes, so fresh STOPREQ is published while the read is in native state.
 - Helper comments document why `lib_io.c` native leaves must use the fresh
-  STOPREQ helper. The old source-text check rejecting raw checks is obsolete.
+  STOPREQ helper. The old implementation-text assertion rejecting raw checks is obsolete.

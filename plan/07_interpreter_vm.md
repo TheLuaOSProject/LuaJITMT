@@ -217,11 +217,12 @@ non-x86-64 dasc work until the x86-64 Linux runtime is green.
 - [x] BC_TNEW slow-path label still reachable for asize>0 templates
 - [x] interp-only build (`-joff`) passes the stock suite
 
-Current guard: `m3_vm_safepoint` now asserts the migrated x64 VM source
-invariants before running `t-vm-safepoint`: at least five `vm_safepoint`
-references, no x64 `DISPATCH_GL(gc.*)` loads, no x64 inline `barrierback`, and
+Current coverage: `m3_vm_safepoint` validates the safepoint behavior through
+the compiled VM fixture. Historical x64 VM implementation-shape checks were
+replaced by runtime/generated-artifact coverage; the desired invariants remain
+no inline GC loads on the migrated dispatch path, no inline `barrierback`, and
 both the empty-table `lj_tab_new0` and non-empty `lj_tab_new` `BC_TNEW` paths
-remain present.
+remaining reachable.
 
 Current stock guard: `m3_interp_stock_joff` builds the default x64 VM and runs
 the vendored stock suite as `luajit -joff test.lua --quiet`; the current pass

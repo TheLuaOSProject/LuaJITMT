@@ -13,7 +13,7 @@ Changes:
 - Documented the rule that mcode retired-record `next` is a shared
   publication link and must use the helper. Mcode retirement, GC scan, and
   focused fixtures cover behavior; CI must not enforce helper spelling by
-  source search.
+  repository text assertion.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

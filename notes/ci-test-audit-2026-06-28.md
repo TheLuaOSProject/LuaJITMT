@@ -1,18 +1,19 @@
 # CI/Test Harness Audit - 2026-06-28
 
-Historical note: this audit predates the final source-search cleanup. The
-current policy is `notes/ci-source-search-policy.md`: CI and tests must not
-grep repository source for call names or implementation snippets. Keep only
-behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
+Historical note: this audit predates the current invariant-testing model. The
+current guidance is `notes/ci-invariant-testing.md`: CI and tests prove
+behavior or generated artifacts; implementation-only rules are documented next
+to the constrained code.
 
 ## Inventory
 
 - `tools/ci` currently has 66 shell scripts.
-- Most scripts call `tools/ci/lua_test.sh` after doing real guard or orchestration
-  work; zero pure alias wrappers remain.
+- Most scripts call `tools/ci/lua_test.sh` after doing real validation or
+  orchestration work; zero pure alias wrappers remain.
 - At the time of this audit, about 60 scripts still embedded local
-  `awk`/`grep`/`sed` source-text checks before calling the Lua suite. Those source
-  guards have since been removed or replaced; do not reintroduce them.
+  `awk`/`grep`/`sed` implementation-text assertions before calling the Lua
+  suite. Those have since been removed or replaced with behavior fixtures,
+  generated-artifact checks, and documentation.
 - `tools/ci/lua_test.sh --list` exposes 100+ named Lua-suite cases.
 - The Lua suites/helpers still contain many explicit clean-build calls.
 
@@ -29,7 +30,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
    file should exist only when it performs real lint, orchestration, or
    non-suite setup that has not yet moved into Lua.
 
-3. Aggregate cases can bypass wrapper-only guards.
+3. Aggregate cases can bypass wrapper-only checks.
    `m7_ffi`, `m9_m10_gc`, and similar aggregate cases call Lua case names, not
    the shell wrappers. Any guard that only exists in `tools/ci/<case>.sh` is not
    covered by the aggregate path unless it is moved into the Lua suite or into a
@@ -39,7 +40,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
    Broad string matches blocked better implementations that preserved the same
    safety invariant with a new helper boundary. New tests must use behavior,
    C fixtures, generated dump/ASM checks, or documentation instead of
-   repository source searches.
+   repository repository text assertions.
 
 5. Large shell guard files are hard to review.
    `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
@@ -55,24 +56,25 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
 - Set `LJ_TEST_DISABLE_BUILD_CACHE=1` to recover the old always-clean behavior
   while debugging the harness itself.
 - `tests/lib/suite_utils.lua` temporarily gave generic `read_file()` the same
-  source-file rejection used by `Test:read()` and result-file assertions. The
-  later cleanup removed the deliberate source-read API, the source guards
-  themselves, and eventually the path-based read rejection. Current policy is
-  documentation plus review, not a harness source-path guard.
+  path-based source access behavior used by `Test:read()` and result-file
+  assertions. The later cleanup removed that behavior, the deliberate
+  source-reading helper, and eventually all path-based source access special
+  cases. Current coverage is documentation plus behavior/generated-artifact
+  tests, not harness source-path checks.
 - `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
   forced clean builds. Cases that need profile isolation can still pass
   `clean = true`.
-- Removed the FFI C-call fresh-STOPREQ source-text check from the M3 shell wrapper.
+- Removed the FFI C-call fresh-STOPREQ implementation-text assertion from the M3 shell wrapper.
   The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
   native entry/leave restoration, nested callbacks, stale callback returns,
   callback blacklisting, and fresh STOPREQ delivery.
-- Removed the old helper-name and source-shape checks from
+- Removed the old helper-name and implementation-shape assertions from
   `m7_ffi_callback_runtime`; the behavior fixture now carries that contract.
 
 ## Follow-up Landed Later On 2026-06-28
 
 - The pure `m4_threading_capi` and `m4_threading_api` shell aliases were
-  removed. Their join-result wait, mutex wait, and attach-order source-text checks
+  removed. Their join-result wait, mutex wait, and attach-order implementation-text assertions
   moved to C API behavior coverage.
 - `tests/t-threading-capi.c` now covers fresh STOPREQ delivery for a join
   blocked on a done child with a busy owner and for a blocked
@@ -80,7 +82,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
 - `m4_threading_capi` has a `20s` timeout to turn future hangs into diagnostic
   failures.
 - The pure `m5_profile_stop_native` shell alias was removed. Its old
-  profiler-stop helper-name/source-order guards moved to
+  profiler-stop helper-name/order assertions moved to
   `tests/t-profile-stop-native.c` behavior assertions for sticky STOPREQ
   cleanup, fresh STOPREQ during native timer-thread join, callback-error
   containment, busy callback coroutine ownership, and registry-anchor cleanup
@@ -92,7 +94,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
   reconciliation, absence of the removed `ffi.blocking` public marker, default
   recorder abort behavior, and native-state blocking progress are covered by
   `tests/t-ffi-cbblack-race.c`, `tests/t-ffi-ccall-native.lua`, and the
-  recorder-off fixture rather than source-shape checks.
+  recorder-off fixture rather than implementation-shape assertions.
 - Follow-up stock-behavior correction: bytecode-dump compatibility support for
   stock v2 and transitional v3 dumps was restored. That path is not a
   threading-only legacy entrypoint; it affects `load`, `luaL_loadbuffer*`, and
@@ -124,17 +126,18 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
 ## Legacy/Compat Audit Findings
 
 - Highest-priority legacy cleanup is in GC2 bridge scaffolding, not FFI pointer
-  compatibility. Exact-name guards around `legacy_*` sweep/finalizer/weak
+  compatibility. Exact-name assertions around `legacy_*` sweep/finalizer/weak
   helpers should become semantic behavior tests before the names are removed.
 - The old internal M10 legacy mark-suppression helper name was removed in favor
   of `lj_gc2_minor_roots_skip_bridge_mark()`, which describes the actual
   policy: minor-root cycles skip only the arena-to-GC2 bridge mark, not legacy
   marking itself.
-- Duplicate legacy source-text checks in weak/worker CI were a temporary migration
-  problem; exact-name repository source-text checks should be deleted, not
-  collapsed, once behavior fixtures or documentation own the contract.
-- The duplicate M8 sweep/finalizer source-text check block was removed, while M8
-  still owns weak/finalizer behavior fixtures.
+- Duplicate legacy implementation-text assertions in weak/worker CI were a
+  temporary migration problem; exact-name repository assertions should be
+  deleted, not collapsed, once behavior fixtures or documentation own the
+  contract.
+- The duplicate M8 sweep/finalizer assertion block was removed, while M8 still
+  owns weak/finalizer behavior fixtures.
 - The internal sweep-close bridge helper was renamed to
   `lj_gc2_sweep_bridge_close()`, keeping the behavior boundary while removing
   another exact legacy helper name from production source.
@@ -151,7 +154,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
   weak-helper visibility checks. No old developer-stat aliases are kept.
 - Removed two tombstone-only M3 CI guards for already-deleted weak/sweep phase
   aliases and old paranoia diff aliases. Current transition/root-diff behavior
-  remains covered by C fixtures and documentation rather than source searches.
+  remains covered by C fixtures and documentation rather than repository text assertions.
 - Removed duplicate M3 finalizer negative scans that M8 already owns through its
   close-time finalizer, callback-stack, and finalizer-spawn behavior gates. M3
   still keeps the positive worker-scheduler ownership checks.
@@ -163,7 +166,7 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
   process cannot silently reuse a previous alternate-XCFLAGS build, such as the
   JIT-disabled tail left by `m3_gc2_scaffold`, for default/JIT fixture cases.
   The new `m0_build_profile_switch` behavior test covers disabled-JIT to default
-  profile recovery without relying on a source-text check.
+  profile recovery without relying on an implementation-text assertion.
 - Removed remaining stale old-name tombstones for deleted root/trace/finalizer
   wrapper names from CI guard scripts where behavior tests already cover the
   publication/finalizer paths. Active `src`, `tests`, and `tools` now avoid
@@ -188,7 +191,7 @@ Verification for the alias removal:
 
 1. Keep converting any remaining historical source-text-check contracts into
    behavior fixtures, generated dump/ASM checks, or documentation. Do not keep
-   repository source searches as tests, even for invariants that cannot be
+   repository repository text assertions as tests, even for invariants that cannot be
    observed directly.
 2. Do not add new pure shell aliases. If a case is fully Lua-owned, run it
    through `tools/ci/lua_test.sh <case...>`.

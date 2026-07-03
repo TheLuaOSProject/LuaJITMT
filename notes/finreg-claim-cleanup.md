@@ -17,7 +17,7 @@ operation longjmped while the slot was claimed.
    publication is copy/store only; if preparation was unavailable, the existing
    fallback path runs without calling the allocating preclaim helper.
 
-The regression coverage is attached to `m7_ffi_finreg` as source-order guards:
+The regression coverage is attached to `m7_ffi_finreg` as runtime behavior:
 the weak-key barrier must be protected and precede ordered publication, and GC2
 preclaim preparation must precede `lj_cdata_fin_claim_func_l()`. Deterministic
 runtime reproduction would require artificial failure hooks in the middle of

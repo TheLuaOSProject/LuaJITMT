@@ -17,10 +17,9 @@ field-specific helper accessors:
 Runtime users in `lj_gc2.c`, the legacy GC bridge, TG attach catch-up, the
 fork-local `threading.gcmode()` controls, and `threading.gcstats()` now
 call helper accessors instead of spelling ad hoc atomics against those
-`GC2State` words. This is a documented ownership boundary rather than a
-source-shape CI guard; behavior coverage exercises the Lua-visible transitions,
-and the stock C API fixture keeps the non-stock `lua_gc()` numeric modes
-rejected.
+`GC2State` words. This is a documented ownership boundary; behavior coverage
+exercises the Lua-visible transitions, and the stock C API fixture keeps the
+non-stock `lua_gc()` numeric modes rejected.
 
 Validation:
 

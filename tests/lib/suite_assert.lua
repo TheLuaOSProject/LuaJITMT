@@ -81,8 +81,7 @@ function M.assert_text_match_count(label, data, pattern, mincount, what)
 end
 
 function M.assert_dump_contains(t, dump, needle, label)
-  -- Dump assertions are the one allowed search-style check: the input must be
-  -- a generated artifact, not repository source text.
+  -- Dump assertions inspect generated runtime/compiler artifacts.
   local data = t:read(dump)
   label = label or dump
   M.assert_text_contains(label, data, needle, "dump text")

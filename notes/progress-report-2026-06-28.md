@@ -6,14 +6,15 @@
 - Latest pushed commit before this CI/test-audit slice:
   `81265e77 notes: refresh lockless opportunities`
 - Current in-progress slice: CI/test cleanup, behavior-first replacement of
-  legacy source-text checks, and FFI C-call native-state helper refactoring.
+  legacy implementation-text assertions, and FFI C-call native-state helper
+  refactoring.
 - Safety priority: language semantics, memory safety, GC visibility, and stability remain higher priority than LuaJIT performance parity.
 
 The production table resize-forward slice is landed, and the follow-up x64
 closed-upvalue publication slice is also pushed. The current work is tightening
-the test harness so source-text checks do not block better implementation patterns
-when behavior fixtures can cover the same semantics. The previous audit
-blockers addressed in recent slices include:
+the test harness so behavior fixtures and generated artifacts own observable
+semantics, while implementation-only constraints stay in comments and notes.
+The previous audit blockers addressed in recent slices include:
 
 - Hash replacement sizing now accounts for visible hash keys even when their current value is nil, and resize publication uses a retry path with generation/flags CAS checks.
 - Legacy GC and GC2 now resolve forwarded table slots during mark traversal and weak clearing.
@@ -43,7 +44,7 @@ Recent completed and pushed slices:
 
 The broader project already has landed ownership/facade work across tables,
 GC2, weak tables, traces, ctype, FFI, finalizers, hooks, and native-state
-boundaries. Earlier CI source-text checks are now obsolete under the no-source-text-checks
+boundaries. Earlier CI implementation-text assertions are now obsolete under the invariant-testing guidance
 policy.
 
 ## Completed In This Slice
@@ -85,9 +86,8 @@ Tests and documentation:
   observable forwarding contract.
 - Documented the intended GC2 weak fields; M8 weak behavior fixtures own the
   observable weak-table/finalizer contract.
-- Current CI/test cleanup blocks repository source reads through aggregate
-  result helpers, caches repeated same-profile clean builds inside a single Lua
-  test process, and thins the M7
+- Current CI/test cleanup keeps repository file helpers neutral, caches repeated
+  same-profile clean builds inside a single Lua test process, and thins the M7
   callback-runtime wrapper to behavior coverage.
 
 ## Validation Passed
@@ -170,8 +170,8 @@ If safety/stability stays ahead of LuaJIT-level speed, the credible path is shor
 ## Immediate Next Steps
 
 1. Finish validating and push the CI/test cleanup slice.
-2. Keep source-text checks retired; add behavior fixtures where the semantic path is
-   observable at runtime.
+2. Add behavior fixtures where the semantic path is observable at runtime; keep
+   implementation-only constraints in comments and notes.
 3. Add the `lua_getlocal()` local-cell acquire-read follow-up.
 4. Continue the traced FFI native-state protocol behind disabled traced calls.
 5. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.

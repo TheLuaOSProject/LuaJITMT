@@ -280,8 +280,8 @@ LA_INLINE int la_futex_wake(uint32_t *p, int n)
 /* ---- compile-time checks ------------------------------------------- */
 typedef char la_assert_ptr8[sizeof(void *) == 8 ? 1 : -1];
 /* x86-64: build with -mcx16 so la_cas128 lowers to cmpxchg16b; without it
-** the builtin routes through libatomic, which uses a lock. Verify this
-** contract through generated disassembly or ASM artifact checks (12 §M0),
-** not by grepping repository source. */
+** the builtin routes through libatomic, which uses a lock. The required
+** observable result is the cmpxchg16b instruction in generated code/artifacts;
+** this comment documents why the flag is part of the x86-64 build contract. */
 
 #endif /* _LJ_ATOMIC_H */

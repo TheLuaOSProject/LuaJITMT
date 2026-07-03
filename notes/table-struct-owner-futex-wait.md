@@ -16,4 +16,4 @@ structural owner path whose release side already issued a futex wake.
 contention must park through the futex/native/STOPREQ-aware wait when a Lua
 state is present, and through the futex/native/no-poll path when only TLS
 ownership is present. The threaded C fixture verifies the latter with a
-test-only runtime counter rather than a source-text oracle.
+test-only runtime counter rather than an implementation-text oracle.
