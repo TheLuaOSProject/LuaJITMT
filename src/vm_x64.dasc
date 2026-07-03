@@ -2706,14 +2706,16 @@ static void build_subroutines(BuildCtx *ctx)
   |.endif
   |.if X64WIN
   |  load_J CARG1
-  |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
+  |  // Keep jit_base set across snapshot restore; trace-flush handshakes use
+  |  // it to avoid remotely acknowledging a TG that still depends on mcode.
   |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex)
   |.else
   |  mov CARG3, L:RB
   |  mov CARG5d, RCd
   |  mov CARG4d, RAd
   |  load_J CARG1
-  |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
+  |  // Keep jit_base set across snapshot restore; trace-flush handshakes use
+  |  // it to avoid remotely acknowledging a TG that still depends on mcode.
   |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex, lua_State *L, TraceNo parent, ExitNo exitno)
   |.endif
   |  // MULTRES or negated error code returned in eax (RD).
@@ -2820,7 +2822,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp RDd, TMPRd
   |  jne >7
   |  cmp aword TRACE:RA->retire_epoch, 0
-  |  je >6
+  |  jne >7
+  |  test byte TRACE:RA->unused1, TRACE_SCOPE_FLUSH_PENDING
+  |  jz >6
 |7:
   |  mov RCd, [PC-4]
   |  movzx RAd, RCH
@@ -2837,6 +2841,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
   |
   |9:  // Rethrow error from the right C frame.
+  |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  mov CARG2d, RDd
   |  mov CARG1, L:RB
   |  neg CARG2d
@@ -5221,8 +5226,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RCd, TMPRd
     |  jne <1
     |  cmp aword TRACE:RA->retire_epoch, 0
-    |  je >7
-    |  jmp <1
+    |  jne <1
+    |  test byte TRACE:RA->unused1, TRACE_SCOPE_FLUSH_PENDING
+    |  jnz <1
 |7:
     |  mov eax, TRACE:RA->startins
     |  mov al, BC_ITERC
@@ -5622,8 +5628,34 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RAd, TMPRd
     |  jne >3
     |  cmp aword TRACE:RD->retire_epoch, 0
-    |  je >2
+    |  jne >8
+    |  test byte TRACE:RD->unused1, TRACE_SCOPE_FLUSH_PENDING
+    |  jnz >8
+    |  jmp >2
+|8:
+    |  lea RA, [PC-4]
+    |  cmp aword TRACE:RD->startpc, RA
+    |  jne >3
+    |  mov RCd, TRACE:RD->startins
+    |  movzx TMPRd, RCL
+    |  shr RCd, 16
+    |  cmp TMPRd, BC_FORL
+    |  je >9
+    |  cmp TMPRd, BC_ITERL
+    |  je >9
+    |  jmp >3
 |3:
+    |  mov RCd, [PC-4]
+    |  movzx TMPRd, RCL
+    |  shr RCd, 16
+    |  cmp TMPRd, BC_FORL
+    |  je >7
+    |  cmp TMPRd, BC_ITERL
+    |  je >7
+    |  cmp TMPRd, BC_JFORL
+    |  je >5
+    |  cmp TMPRd, BC_JITERL
+    |  je >5
     |  cmp OP, BC_JLOOP
     |  jne >4
     |  mov RCd, [PC-4]
@@ -5633,9 +5665,29 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp OP, BC_JLOOP
     |  je >4
     |  jmp aword [DISPATCH+OP*8]
-    |4:
+|4:
     |  ins_next
-    |2:
+|7:
+    |  branchPC RC
+    |  ins_next
+|5:
+    |  mov RB, BASE
+    |  mov CARG2, PC
+    |  sub CARG2, 4
+    |  load_J CARG1
+    |  mov CARG3d, RCd
+    |  call extern lj_trace_stale_startins
+    |  mov BASE, RB
+    |  test eax, eax
+    |  jz <4
+    |  mov RCd, eax
+    |  shr RCd, 16
+    |  branchPC RC
+    |  ins_next
+|9:
+    |  branchPC RC
+    |  ins_next
+|2:
     |  mov RD, TRACE:RD->mcode
     |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
     |  mov [DISPATCH+DISPATCH_TG(tmpbuf.L)], L:RB
@@ -5677,7 +5729,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RAd, TMPRd
     |  jne >7
     |  cmp aword TRACE:RD->retire_epoch, 0
-    |  je >6
+    |  jne >7
+    |  test byte TRACE:RD->unused1, TRACE_SCOPE_FLUSH_PENDING
+    |  jz >6
 |7:
     |  mov RCd, [PC-4]
     |  movzx RAd, RCH

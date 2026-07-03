@@ -1230,11 +1230,15 @@ MSize lj_ccallback_maxslot(void)
 void lj_ccallback_disown_state(lua_State *L)
 {
   CTState *cts;
+  global_State *g;
   lua_State **owner;
   MSize slot, sizeid;
   if (L == NULL)
     return;
-  cts = ctype_ctsG(G(L));
+  g = G(L);
+  if (g == NULL)
+    return;
+  cts = ctype_ctsG(g);
   if (cts == NULL)
     return;
   owner = ctype_cb_owner_acq(cts);

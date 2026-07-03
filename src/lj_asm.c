@@ -2237,8 +2237,7 @@ static BCReg asm_baseslot(ASMState *as, SnapShot *snap, int *gotframe)
 static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)
 {
   GCtrace *T = traceref(as->J, traceno);
-  if (LJ_UNLIKELY(T == NULL || trace_traceno_acq(T) != traceno ||
-		  la_load64_acq(&T->retire_epoch) != 0))
+  if (LJ_UNLIKELY(!trace_runnable_acq(T, traceno)))
     lj_trace_err(as->J, LJ_TRERR_RETRY);
   return T;
 }
@@ -2261,8 +2260,7 @@ static void asm_tail_link(ASMState *as)
     int32_t mres;
     if (bc_op(*pc) == BC_JLOOP) {  /* NYI: find a better way to do this. */
       GCtrace *target = traceref(as->J, bc_d(*pc));
-      if (target && trace_traceno_acq(target) == bc_d(*pc) &&
-	  la_load64_acq(&target->retire_epoch) == 0) {
+      if (trace_runnable_acq(target, bc_d(*pc))) {
 	BCIns *retpc = &target->startins;
 	if (bc_isret(bc_op(*retpc)))
 	  pc = retpc;

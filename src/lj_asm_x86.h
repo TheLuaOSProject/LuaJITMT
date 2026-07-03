@@ -3735,8 +3735,7 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
       target = as->T->mcode;
     else {
       GCtrace *targetT = traceref(as->J, lnk);
-      if (LJ_LIKELY(targetT != NULL && trace_traceno_acq(targetT) == lnk &&
-		    la_load64_acq(&targetT->retire_epoch) == 0 &&
+      if (LJ_LIKELY(trace_runnable_acq(targetT, lnk) &&
 		    (target = trace_mcode_acq(targetT)) != NULL)) {
 	/* Link to a live published trace. */
       } else {

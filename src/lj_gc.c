@@ -512,6 +512,60 @@ static void gc_traverse_thread(global_State *g, lua_State *th);
   (lj_gc_arena_markobj((g), obj2gco(s)), \
    lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
 
+static void gc_mark_primary_root(global_State *g, GCobj *o)
+{
+  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  /* Lock-free SMR preservation can leave a primary root non-white between
+  ** cycles. At mark-cycle start the gray lists have just been reset, so force
+  ** primary roots into the new frontier even if their legacy color is stale.
+  */
+  lj_gc_arena_markobj(g, o);
+  if (!iswhite(o))
+    makewhite(g, o);
+  gc_mark(g, o);
+}
+
+static void gc_mark_primary_root_unique(global_State *g, GCobj *o,
+					GCobj **seen, MSize *nseen)
+{
+  MSize i;
+  if (!o)
+    return;
+  for (i = 0; i < *nseen; i++)
+    if (seen[i] == o)
+      return;
+  seen[(*nseen)++] = o;
+  gc_mark_primary_root(g, o);
+}
+
+static void gc_normalize_legacy_colors(global_State *g)
+{
+  GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (LJ_LIKELY(o->gch.gct != 0) && !iswhite(o)) {
+      /* Legacy marking assumes sweep returned every collectable object to
+      ** white. SMR-preserved bodies can intentionally survive outside that
+      ** path, so normalize colors before rebuilding the mark frontier from
+      ** roots. This is a mark-cycle start pass, not a mutator fast path.
+      */
+      makewhite(g, o);
+    }
+  }
+}
+
+void lj_gc_preserveobj_legacy(global_State *g, GCobj *o)
+{
+  /* SMR-retired GC bodies can outlive their semantic reachability. Preserve
+  ** the body itself from legacy list sweep without recursively marking the
+  ** object's references; stale lock-free readers may hold this exact body, but
+  ** the body is not a root for the Lua object graph.
+  */
+  lj_gc_arena_markobj(g, o);
+  lj_obj_cleargcflags(o, LJ_GC_WHITES);
+}
+
 #if LJ_HASFFI
 static void gc_mark_clib_retired_cache(global_State *g)
 {
@@ -796,19 +850,32 @@ static void gc_mark_start(global_State *g)
 {
   lua_State *mainL = mainthread_acq(g);
   lua_State *vmL = vmthread_acq(g);
+  GCobj *seen[GCROOT_MAX + 4];
+  MSize nseen = 0;
+  ptrdiff_t i;
   (void)lj_gc_flush_root_pending(g);
   lj_gc2_mark_begin(g);
+  gc_normalize_legacy_colors(g);
   lj_gc_list_clear_rel(&g->gc.gray);
   lj_gc_list_clear_rel(&g->gc.grayagain);
   lj_gc_list_clear_rel(&g->gc.weak);
-  gc_markobj(g, mainL);
+  gc_mark_primary_root_unique(g, obj2gco(mainL), seen, &nseen);
   {
     GCtab *env = lj_state_env_acq(mainL);
     if (env)
-      gc_markobj(g, env);
+      gc_mark_primary_root_unique(g, obj2gco(env), seen, &nseen);
   }
-  gc_markobj(g, vmL);
-  gc_marktv(g, lj_registry_ref(g));
+  if (vmL != mainL)
+    gc_mark_primary_root_unique(g, obj2gco(vmL), seen, &nseen);
+  {
+    TValue tv;
+    lj_tv_load_acq(&tv, lj_registry_ref(g));
+    if (tvisgcv(&tv))
+      gc_mark_primary_root_unique(g, gcV(&tv), seen, &nseen);
+  }
+  for (i = 0; i < GCROOT_MAX; i++)
+    gc_mark_primary_root_unique(g, lj_gcroot_acq(g, (GCRootID)i),
+				seen, &nseen);
   gc_mark_gcroot(g);
   g->gc.state = GCSpropagate;
 }
@@ -1179,7 +1246,7 @@ static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
   lj_gc_arena_markobj(g, o);
   if (iswhite(o)) {
     gc_mark(g, o);
-  } else if (tvistab(tv) && isblack(o)) {
+  } else if (tvistab(tv)) {
     if (gc_traverse_tab(g, tabV(tv)) > 0)
       black2gray(o);
   }
@@ -1194,7 +1261,7 @@ static void gc_mark_thread_root_tab(global_State *g, GCtab *t)
   lj_gc_arena_markobj(g, o);
   if (iswhite(o))
     gc_mark(g, o);
-  else if (isblack(o)) {
+  else {
     if (gc_traverse_tab(g, t) > 0)
       black2gray(o);
   }
@@ -1929,14 +1996,17 @@ void lj_gc_fullgc(lua_State *L)
   int32_t ostate = vmstate_load_acq(g);
   setvmstate(g, GC);
   (void)lj_gc_flush_root_pending(g);
-  if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
-    lj_gc2_preserve_abort_to_idle(g);
-    setmref(g->gc.sweep, lj_gc_root_ref(g));  /* Sweep everything, preserving it. */
-    lj_gc_list_clear_rel(&g->gc.gray);  /* Reset partial propagation lists. */
-    lj_gc_list_clear_rel(&g->gc.grayagain);
-    lj_gc_list_clear_rel(&g->gc.weak);
-    g->gc.state = GCSsweepstring;  /* Fast forward to the sweep phase. */
-    g->gc.sweepstr = 0;
+  while (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+    /* A forced full collection may arrive while a concurrent/scoped JIT flush
+    ** has left additional roots on the gray lists. Finish the mark fixpoint
+    ** before sweeping; clearing partial propagation state would preserve a
+    ** table body while letting its key/value objects be collected.
+    */
+    gc_onestep(L);
+    if (lj_gc2_finalizer_fullgc_deferred(g)) {
+      vmstate_store_rel(g, ostate);
+      return;
+    }
   }
   while (g->gc.state == GCSsweepstring || g->gc.state == GCSsweep)
     gc_onestep(L);  /* Finish sweep. */

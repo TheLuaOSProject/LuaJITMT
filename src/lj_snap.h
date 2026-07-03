@@ -19,7 +19,8 @@ LJ_FUNC void lj_snap_replay(jit_State *J, GCtrace *T);
 LJ_FUNC const BCIns *lj_snap_restore(jit_State *J, void *exptr);
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
 LJ_FUNC const BCIns *lj_snap_restore_exit(jit_State *J, void *exptr,
-					  lua_State *L, TraceNo parent,
+					  lua_State *L, GCtrace *T,
+					  TraceNo parent,
 					  ExitNo exitno);
 #endif
 LJ_FUNC void lj_snap_grow_buf_(jit_State *J, MSize need);

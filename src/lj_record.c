@@ -665,8 +665,7 @@ static int innerloopleft(jit_State *J, const BCIns *pc)
 static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)
 {
   GCtrace *T = traceref(J, traceno);
-  if (LJ_UNLIKELY(T == NULL || trace_traceno_acq(T) != traceno ||
-		  la_load64_acq(&T->retire_epoch) != 0))
+  if (LJ_UNLIKELY(!trace_runnable_acq(T, traceno)))
     lj_trace_err(J, LJ_TRERR_RETRY);
   return T;
 }

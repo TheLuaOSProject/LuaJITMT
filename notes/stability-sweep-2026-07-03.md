@@ -2,8 +2,55 @@
 
 Scope: follow up on older catastrophic-regression claims against current
 `v2.1` after the entering-window table/JIT fixes and invariant-guidance cleanup.
-No runtime changes were made in this sweep because the checked claims were
-already fixed, covered, or not reproducible in current state.
+The first benchmark-only pass found several claims stale, but the later
+flush/GC reducer exposed real stability bugs. This sweep now includes runtime
+fixes for scoped trace retirement, stale x64 loop bytecode fallback, legacy
+GC mark-cycle roots, table-generation reclamation, and single-TG emergency
+trace flush.
+
+## Source guards
+
+The active Lua harness and CI no longer contain repository source guards.
+`Test:files()` was removed from `tests/lib/ljtest.lua`; artifact reads remain
+available through `Test:read()` and `suite_utils.read_file()`. Current scans
+only find documentation/historical notes or generated-output/source-path build
+usage, not active source-text predicates.
+
+## Scoped trace flush and stale loop fallback
+
+Scoped flush now marks traces with `TRACE_SCOPE_FLUSH_PENDING` and treats that
+bit as part of trace runnability. Side-trace publication uses the parent exit
+target as the final runnable gate, and x64 trace exit keeps `jit_base` live
+through snapshot restore so trace-flush handshakes do not reclaim mcode while a
+TG is still unwinding.
+
+x64 `BC_JLOOP` fallback recovers original `FORL`/`ITERL` loop offsets from the
+matched or retired trace body only when `PC-4` is still the trace start PC. This
+prevents a stale `JFORL`/`JITERL` bytecode from falling through after one
+iteration, while avoiding the earlier wrong-PC branch that could recurse in the
+VM. Single-TG recorder emergency full flushes use the direct flush path instead
+of waiting for their own safepoint acknowledgement; public/full handshakes still
+advance the safepoint epoch.
+
+## Legacy GC bridge
+
+Forced full GC no longer clears partial gray/weak state and jumps straight to
+sweep. It finishes any active mark fixpoint first; otherwise a root table can
+survive while its keys, values, or backing arrays are collected.
+
+Retired traces are now treated as SMR-protected bodies, not semantic roots. The
+retired-list marker preserves the trace body and exit table from physical free
+without recursively marking stale IR constants or start prototypes. Legacy
+mark-cycle start normalizes colors and forces primary/explicit roots into the
+fresh frontier once, so SMR-preserved non-white bodies cannot cause reachable
+tables or metatables to be skipped by the next cycle.
+
+Table-generation reclamation now checks that a retired node/array is not still
+the table-published root before freeing it. The check is bounded and cold-path
+only; it preserves stock table semantics without adding a warm-path lock.
+
+Close-time FFI callback owner disowning now tolerates a `lua_State` whose
+`glref` has already been cleared during shutdown cleanup.
 
 ## Recursive `fib30`
 
@@ -102,6 +149,8 @@ repatching the claims above:
 - Heavier table resize/retire stress around weak keys, finalizers, and traced
   reads/writes.
 - JIT trace flush/side-trace stress under concurrent thread activation and
-  shutdown.
+  shutdown. `tests/t-jit-flush-thread-stress.lua` remains a manual reducer for
+  this: it still finds a GC propagation crash under small settings and is not
+  wired into the M6 suite until that failure is fixed.
 - GC root publication stress across pending-root drains, active `mt_entering`,
   and GC2 worker activity.

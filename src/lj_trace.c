@@ -41,7 +41,16 @@
 #include "lj_target.h"
 #include "lj_prng.h"
 
-#define LJ_TRACE_SCOPE_FLUSHING		(~(uint64_t)0)
+static int trace_scope_mark_pending(GCtrace *T)
+{
+  uint8_t flags = la_load8_acq(&T->unused1);
+  while ((flags & TRACE_SCOPE_FLUSH_PENDING) == 0) {
+    uint8_t next = (uint8_t)(flags | TRACE_SCOPE_FLUSH_PENDING);
+    if (la_cas8(&T->unused1, &flags, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+  return 0;
+}
 
 /* -- Error handling ------------------------------------------------------ */
 
@@ -175,6 +184,7 @@ static void tracevec_retire(jit_State *J, TraceVec *tv)
 }
 
 static void trace_exittab_free(global_State *g, GCtrace *T);
+static void trace_preservebody(global_State *g, GCtrace *T, int gc2);
 
 static GCSize trace_size(GCtrace *T)
 {
@@ -199,16 +209,11 @@ static void trace_retire(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
   uint64_t epoch = la_load64_acq(&T->retire_epoch);
-  if (epoch == 0 || epoch == LJ_TRACE_SCOPE_FLUSHING)
+  if (epoch == 0)
     epoch = lj_gc2_retire_epoch(g);
   la_store64_rel(&T->retire_epoch, epoch);
   trace_retired_next_rel(T, NULL);
-  lj_gc_arena_markmem(g, T);
-  {
-    MCode **exittab = trace_exittab_acq(T);
-    if (exittab && !trace_exittab_ismcode(T))
-      lj_gc_arena_markmem(g, exittab);
-  }
+  trace_preservebody(g, T, 0);
   trace_retired_push(J, T);
 }
 
@@ -237,35 +242,20 @@ static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 	 completed_epoch - retire_epoch >= LJ_FLUSH_EPOCHS;
 }
 
-static void trace_markbody(global_State *g, GCtrace *T, int gc2)
+static void trace_preservebody(global_State *g, GCtrace *T, int gc2)
 {
-  IRIns *irbase;
-  IRRef ref;
-  GCobj *startpt;
-  if (gc2) lj_gc2_markmem(g, T); else lj_gc_arena_markmem(g, T);
+  /* Retired traces are SMR-protected bodies, not semantic roots. Preserve the
+  ** body allocation and auxiliary exit table until the grace period completes;
+  ** live traces mark IR constants and start prototypes through GC traversal.
+  */
+  if (gc2) lj_gc2_markmem(g, T);
+  else lj_gc_preserveobj_legacy(g, obj2gco(T));
   {
     MCode **exittab = trace_exittab_acq(T);
     if (exittab && !trace_exittab_ismcode(T)) {
       if (gc2) lj_gc2_markmem(g, exittab);
       else lj_gc_arena_markmem(g, exittab);
     }
-  }
-  irbase = trace_ir_acq(T);
-  for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
-    IRIns *ir = &irbase[ref];
-    IRIns irs = ir_load_acq(ir);
-    if (irs.o == IR_KGC) {
-      GCobj *o = ir_kgc_load_acq(ir);
-      if (gc2) lj_gc2_markobj(g, o);
-      else lj_gc_arena_markobj(g, o);
-    }
-    if (irt_is64(irs.t) && irs.o != IR_KNULL)
-      ref++;
-  }
-  startpt = trace_startptgco_acq(T);
-  if (startpt) {
-    if (gc2) lj_gc2_markobj(g, startpt);
-    else lj_gc_arena_markobj(g, startpt);
   }
 }
 
@@ -339,7 +329,7 @@ void lj_trace_markvecs(global_State *g, int gc2)
   for (rt = trace_retired_head_acq(J);
        rt != NULL;
        rt = trace_retired_next_acq(rt))
-    trace_markbody(g, rt, gc2);
+    trace_preservebody(g, rt, gc2);
 }
 
 /* Find a free trace number. */
@@ -593,10 +583,14 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
     if (bc_d(cur) != traceno)
       break;
     lj_assertJ(traceref(J, bc_d(cur)) == T, "JFORL references other trace");
-    bc_publish(pc, startins);
-    pc += bc_j(startins);
-    lj_assertJ(bc_op(*pc) == BC_JFORI, "FORL does not point to JFORI");
-    bc_publish_op(pc, BC_FORI);
+    {
+      BCIns *foripc = pc + bc_j(startins);
+      lj_assertJ(bc_op(*foripc) == BC_JFORI || bc_op(*foripc) == BC_FORI,
+		 "FORL does not point to JFORI");
+      /* Restore the branch target before exposing the original FORL. */
+      bc_publish_op(foripc, BC_FORI);
+      bc_publish(pc, startins);
+    }
     break;
   case BC_JITERL:
   case BC_JLOOP:
@@ -629,10 +623,11 @@ static uint32_t trace_flushroot(jit_State *J, GCtrace *T, int scoped)
   lj_assertJ(pt != NULL, "trace has no prototype");
   if (LJ_UNLIKELY(pt == NULL))
     return 0;
+  if (scoped) {
+    return trace_scope_mark_pending(T);
+  }
   head = proto_trace_acq(pt);
   trace_exittab_resetroot(J, traceno);
-  if (scoped)
-    la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
   /* Unlink root trace from chain anchored in prototype. */
   if (head == traceno) {  /* Trace is first in chain. Easy. */
     proto_trace_rel(pt, nextroot);
@@ -666,7 +661,7 @@ static int trace_scope_flushing(jit_State *J, TraceNo traceno)
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
     GCtrace *T = traceref(J, traceno);
     return T && trace_traceno_acq(T) == traceno &&
-	   la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING;
+	   trace_scope_pending_acq(T);
   }
   return 0;
 }
@@ -678,12 +673,13 @@ static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
   GCtrace *parent = traceref(J, parentno);
   ExitNo exitno = (ExitNo)base.op2;
   lj_assertJ(trace_root_acq(T) != 0, "not a side trace");
+  if (scoped) {
+    return trace_scope_mark_pending(T);
+  }
   trace_exittab_reset(J, T);
   if (parent && trace_traceno_acq(parent) == parentno &&
       trace_exittab_acq(parent) && exitno < trace_nsnap_acq(parent))
     trace_exittarget_rel(parent, exitno, exitstub_addr(J, exitno));
-  if (scoped)
-    la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
   return 1;
 }
 
@@ -713,8 +709,8 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
     for (i = 1; i < sizetrace; i++) {
       GCtrace *T = traceref(J, i);
       if (T && trace_traceno_acq(T) == i &&
-	  la_load64_acq(&T->retire_epoch) != LJ_TRACE_SCOPE_FLUSHING &&
-	  trace_scope_flush_dependency(J, T)) {
+		  !trace_scope_pending_acq(T) &&
+		  trace_scope_flush_dependency(J, T)) {
 	if (trace_root_acq(T) == 0) {
 	  if (!trace_flushroot(J, T, 1))
 	    continue;
@@ -760,15 +756,57 @@ uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno)
   return 0;
 }
 
+static BCIns trace_stale_startins_match(GCtrace *T, const BCIns *pc)
+{
+  if (T && trace_startpc_acq(T) == pc) {
+    BCIns startins = trace_startins_acq(T);
+    BCOp op = bc_op(startins);
+    if (op == BC_FORL || op == BC_ITERL)
+      return startins;
+  }
+  return 0;
+}
+
+BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
+					  TraceNo traceno)
+{
+  global_State *g = J2G(J);
+  BCIns startins = 0;
+  lj_gc2_smr_read_enter(g);
+  if (traceno > 0 && traceno < trace_sizetrace_acq(J))
+    startins = trace_stale_startins_match(traceref(J, traceno), pc);
+  if (startins == 0) {
+    TraceNo i, sizetrace = trace_sizetrace_acq(J);
+    for (i = 1; i < sizetrace; i++) {
+      startins = trace_stale_startins_match(traceref(J, i), pc);
+      if (startins != 0)
+	break;
+    }
+  }
+  if (startins == 0) {
+    GCtrace *T;
+    for (T = trace_retired_head_acq(J);
+	 T != NULL;
+	 T = trace_retired_next_acq(T)) {
+      startins = trace_stale_startins_match(T, pc);
+      if (startins != 0)
+	break;
+    }
+  }
+  lj_gc2_smr_read_leave(g);
+  return startins;
+}
+
 /* Flush all traces associated with a prototype. */
 uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
 {
   TraceNo trace;
   uint32_t flushed = 0;
-  while ((trace = proto_trace_acq(pt)) != 0) {
+  for (trace = proto_trace_acq(pt); trace != 0; ) {
     GCtrace *T = traceref(G2J(g), trace);
     if (!T)
       break;
+    trace = trace_nextroot_acq(T);
     if (!trace_flushroot(G2J(g), T, 1))
       break;
     flushed++;
@@ -780,6 +818,10 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
 				   uint64_t epoch)
 {
   TraceNo rootno = trace_root_acq(T);
+  if (rootno == 0)
+    (void)trace_flushroot(J, T, 0);
+  else
+    (void)trace_flushside(J, T, 0);
   if (rootno != 0) {
     GCtrace *root = traceref(J, rootno);
     if (root && trace_traceno_acq(root) == rootno) {
@@ -811,11 +853,14 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   trace_nextside_rel(T, 0);
   la_store64_rel(&T->retire_epoch, epoch);
   traceslot_clear(J, traceno);
+  trace_retired_next_rel(T, NULL);
+  trace_preservebody(J2G(J), T, 0);
+  trace_retired_push(J, T);
   if (J->freetrace == 0 || traceno < J->freetrace)
     J->freetrace = traceno;
 }
 
-static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
+uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
 {
   jit_State *J = G2J(g);
   TraceNo i;
@@ -826,9 +871,9 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
     if (T && trace_root_acq(T) != 0 && trace_traceno_acq(T) == i) {
       TraceNo rootno = trace_root_acq(T);
       GCtrace *root = traceref(J, rootno);
-      if (la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING ||
+      if (trace_scope_pending_acq(T) ||
 	  (root && trace_traceno_acq(root) == rootno &&
-	   la_load64_acq(&root->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING)) {
+	   trace_scope_pending_acq(root))) {
 	trace_scope_clear_slot(J, i, T, epoch);
 	retired++;
       }
@@ -837,7 +882,7 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
   for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref(J, i);
     if (T && trace_root_acq(T) == 0 && trace_traceno_acq(T) == i &&
-	la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING) {
+	trace_scope_pending_acq(T)) {
       trace_scope_clear_slot(J, i, T, epoch);
       retired++;
     }
@@ -920,6 +965,13 @@ int lj_trace_flushall_hs(lua_State *L)
   int token;
   if ((hookmask_load(g) & HOOK_GC))
     return 1;
+  if (gc2_n_threads_acq(g) <= 1 && lj_trace_state_load(J) != LJ_TRACE_IDLE) {
+    /* With one TG there is no remote trace user to quiesce. Use the direct
+    ** flush path so recorder-side emergency flushes cannot wait for their own
+    ** safepoint acknowledgement.
+    */
+    return trace_flushall_direct(L, 0, 1);
+  }
   token = lj_jit_token_acquire_wait(J);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
   if (token)
@@ -934,7 +986,6 @@ void lj_trace_flushscope_hs(global_State *g, uint32_t work)
     int token = lj_jit_token_acquire_wait(J);
     (void)trace_flushscope_mark_deps(G2J(g));
     (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);  /* 08 section 8.7 scoped boundary. */
-    (void)lj_trace_flushscope_retire(g, lj_gc2_retire_epoch(g));
     if (token)
       lj_jit_token_release(J);
   }
@@ -1217,7 +1268,10 @@ static void trace_stop(jit_State *J)
 
   switch (op) {
   case BC_FORL:
-    bc_publish_op(pc+bc_j(J->cur.startins), BC_JFORI);
+    /* Leave FORI unpatched. JFORL carries the trace number by itself; avoiding
+    ** the paired JFORI/JFORL publication race preserves numeric-for semantics
+    ** when another TG is currently executing the first-iteration opcode.
+    */
     /* fallthrough */
   case BC_LOOP:
   case BC_ITERL:
@@ -1233,12 +1287,16 @@ static void trace_stop(jit_State *J)
     break;
   case BC_JMP:
     lj_assertJ(trace_exittab_acq(parent) != NULL, "missing parent exit table");
-    trace_exittarget_rel(parent, J->exitno, trace_mcode_acq(T));
-    snap_count_rel(snap, SNAPCOUNT_DONE);
     topslot = trace_topslot_acq(T);
     if (topslot > snap_topslot_acq(snap)) snap_topslot_rel(snap, topslot);
     trace_nchild_inc_acqrel(root);
     trace_nextside_rel(root, traceno);
+    snap_count_rel(snap, SNAPCOUNT_DONE);
+    /*
+    ** The parent exit target is the runnable side-trace gate. Publish it only
+    ** after the parent/root metadata above can be observed by other threads.
+    */
+    trace_exittarget_rel(parent, J->exitno, trace_mcode_acq(T));
     break;
   case BC_CALLM:
   case BC_CALL:
@@ -1370,8 +1428,7 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 	  op == BC_JFUNCF) {
 	TraceNo traceno = bc_d(patchins);
 	GCtrace *T = traceref(J, traceno);
-	if (T && trace_traceno_acq(T) == traceno &&
-	    la_load64_acq(&T->retire_epoch) == 0)
+	if (trace_runnable_acq(T, traceno))
 	  bc_publish(J->patchpc, patchins);
       } else {
 	bc_publish(J->patchpc, patchins);
@@ -1504,6 +1561,18 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
     lj_trace_state_store_active(J, LJ_TRACE_ERR);
 }
 
+static int trace_hot_root_start_valid(const BCIns *pc)
+{
+  /* Hotcount events are edge-triggered against mutable bytecode. Another
+  ** thread may publish a JIT or disabled variant while this TG is reaching
+  ** the recorder. Only unpatched root-start bytecodes may enter
+  ** rec_setup_root(); patched bytecode should redispatch normally.
+  */
+  BCOp op = bc_op((BCIns)la_load32_acq((uint32_t *)pc));
+  return op == BC_FORL || op == BC_ITERL || op == BC_ITERN ||
+	 op == BC_LOOP || op == BC_FUNCF;
+}
+
 /* A hotcount triggered. Start recording a root trace. */
 #if LJ_TARGET_X64
 void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
@@ -1522,6 +1591,11 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
 #if LJ_TARGET_X64
     J->L = L;
 #endif
+    if (!trace_hot_root_start_valid(pc-1)) {
+      lj_jit_token_release(J);
+      ERRNO_RESTORE
+      return;
+    }
     J->parent = 0;  /* Root trace. */
     J->exitno = 0;
     if (!lj_trace_state_aborted(
@@ -1541,9 +1615,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   SnapShot *snap;
   uint32_t hotexit = (uint32_t)jit_param_acq(J, JIT_P_hotexit);
   uint8_t count;
-  if (!parentT || trace_traceno_acq(parentT) != parent ||
-      la_load64_acq(&parentT->retire_epoch) != 0 ||
-      exitno >= trace_nsnap_acq(parentT))
+  if (!trace_runnable_acq(parentT, parent) || exitno >= trace_nsnap_acq(parentT))
     return;
   snap = &trace_snap_acq(parentT)[exitno];
   if (!(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
@@ -1562,8 +1634,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     if (!lj_jit_token_try(J))
       return;
     parentT = traceref(J, parent);
-    if (!parentT || trace_traceno_acq(parentT) != parent ||
-	la_load64_acq(&parentT->retire_epoch) != 0 ||
+    if (!trace_runnable_acq(parentT, parent) ||
 	exitno >= trace_nsnap_acq(parentT)) {
       lj_jit_token_release(J);
       return;
@@ -1606,7 +1677,7 @@ uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)
     return 0;
   traceno = trace_traceno_acq(T);
   if (traceno == 0 || traceref(J, traceno) != T ||
-      la_load64_acq(&T->retire_epoch) != 0)
+      !trace_runnable_acq(T, traceno))
     return 0;
   link = trace_link_acq(T);
   if (link == traceno)
@@ -1645,6 +1716,7 @@ typedef struct ExitDataCP {
   jit_State *J;
   lua_State *L;
   void *exptr;		/* Pointer to exit state. */
+  GCtrace *T;		/* Exited trace body resolved before flush races. */
   TraceNo parent;	/* Exited trace. */
   ExitNo exitno;	/* Exited snapshot. */
   const BCIns *pc;	/* Restart interpreter at this PC. */
@@ -1659,7 +1731,7 @@ static TValue *trace_exit_cp(lua_State *L, lua_CFunction dummy, void *ud)
   cframe_nres(L->cframe) = -2*LUAI_MAXSTACK*(int)sizeof(TValue);
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
   exd->pc = lj_snap_restore_exit(exd->J, exd->exptr, exd->L,
-				 exd->parent, exd->exitno);
+				 exd->T, exd->parent, exd->exitno);
 #else
   exd->pc = lj_snap_restore(exd->J, exd->exptr);
 #endif
@@ -1725,7 +1797,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   TraceNo parent = J->parent;
   ExitNo exitno = J->exitno;
 #else
-  TGState *tg = J2TG(J);
+  TGState *tg = L2TG(L);
 #endif
   ExitState *ex = (ExitState *)exptr;
   ExitDataCP exd;
@@ -1770,6 +1842,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   exd.J = J;
   exd.L = L;
   exd.exptr = exptr;
+  exd.T = T;
   exd.parent = parent;
   exd.exitno = exitno;
   errcode = lj_vm_cpcall(L, NULL, &exd, trace_exit_cp);
@@ -1816,8 +1889,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     TraceNo targetno = bc_d(*pc);
     GCtrace *target = traceref(J, targetno);
     BCIns startins;
-    if (!target || trace_traceno_acq(target) != targetno ||
-	la_load64_acq(&target->retire_epoch) != 0)
+    if (!trace_runnable_acq(target, targetno))
       return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
     startins = trace_startins_acq(target);
     if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {

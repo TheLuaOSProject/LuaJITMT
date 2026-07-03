@@ -684,6 +684,9 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
     ptrdiff_t delta = L->top - L->base;
 #endif
     pc = (const BCIns *)((uintptr_t)pc & ~(uintptr_t)1);
+    op = bc_op(pc[-1]);
+    if (op != BC_FUNCF && op != BC_FUNCV)
+      goto out;  /* Another thread patched this function header first. */
 #if LJ_TARGET_X64
     lj_trace_hot(J, pc, L);
 #else

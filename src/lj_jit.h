@@ -399,7 +399,8 @@ typedef struct GCtrace {
 #endif
 } GCtrace;
 
-#define TRACE_EXITTAB_MCODE	0x01
+#define TRACE_EXITTAB_MCODE		0x01
+#define TRACE_SCOPE_FLUSH_PENDING	0x02
 
 static LJ_AINLINE int trace_exittab_ismcode(const GCtrace *T)
 {
@@ -475,6 +476,24 @@ static LJ_AINLINE void traceno16_rel(uint16_t *p, TraceNo traceno)
 #define trace_nextroot_rel(T, tr)	traceno16_rel(&(T)->nextroot, (tr))
 #define trace_nextside_acq(T)	traceno16_acq(&(T)->nextside)
 #define trace_nextside_rel(T, tr)	traceno16_rel(&(T)->nextside, (tr))
+
+static LJ_AINLINE int trace_scope_pending_acq(const GCtrace *T)
+{
+  return (la_load8_acq(&T->unused1) & TRACE_SCOPE_FLUSH_PENDING) != 0;
+}
+
+static LJ_AINLINE int trace_runnable_acq(const GCtrace *T, TraceNo traceno)
+{
+  /* Scoped flushes retire trace slots only after an HS_EXIT_TRACES boundary.
+  ** The pending bit is therefore the publication gate: once set, no new VM,
+  ** recorder, or assembler path may treat the trace as runnable even though
+  ** retire_epoch remains zero until the boundary leader unlinks it.
+  */
+  return T && trace_traceno_acq(T) == traceno &&
+	 la_load64_acq(&T->retire_epoch) == 0 &&
+	 !trace_scope_pending_acq(T);
+}
+
 static LJ_AINLINE IRRef trace_nins_acq(const GCtrace *T)
 {
   return (IRRef)la_load32_acq(&T->nins);

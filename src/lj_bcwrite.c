@@ -337,8 +337,7 @@ static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)
   } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
     TraceNo traceno = bc_d(ins);
     GCtrace *T = traceref(J, traceno);
-    if (T && trace_traceno_acq(T) == traceno &&
-	la_load64_acq(&T->retire_epoch) == 0) {
+    if (trace_runnable_acq(T, traceno)) {
       *out = trace_startins_acq(T);
       return 1;
     }

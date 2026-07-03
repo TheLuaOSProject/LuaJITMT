@@ -971,11 +971,12 @@ static void snap_unsink(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
 
 /* Restore interpreter state from exit state with the help of a snapshot. */
 static const BCIns *snap_restore(jit_State *J, void *exptr, lua_State *L,
-				 TraceNo parent, ExitNo exitno)
+				 GCtrace *T, TraceNo parent, ExitNo exitno)
 {
   ExitState *ex = (ExitState *)exptr;
   SnapNo snapno = exitno;  /* For now, snapno == exitno. */
-  GCtrace *T = traceref(J, parent);
+  if (T == NULL)
+    T = traceref(J, parent);
   IRIns *irbase = trace_ir_acq(T);
   SnapShot *snap = &trace_snap_acq(T)[snapno];
   MSize n, nent = snap_nent_acq(snap);
@@ -1068,14 +1069,14 @@ static const BCIns *snap_restore(jit_State *J, void *exptr, lua_State *L,
 
 const BCIns *lj_snap_restore(jit_State *J, void *exptr)
 {
-  return snap_restore(J, exptr, J->L, J->parent, J->exitno);
+  return snap_restore(J, exptr, J->L, NULL, J->parent, J->exitno);
 }
 
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
 const BCIns *lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,
-				  TraceNo parent, ExitNo exitno)
+				  GCtrace *T, TraceNo parent, ExitNo exitno)
 {
-  return snap_restore(J, exptr, L, parent, exitno);
+  return snap_restore(J, exptr, L, T, parent, exitno);
 }
 #endif
 

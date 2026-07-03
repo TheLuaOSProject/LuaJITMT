@@ -795,6 +795,34 @@ static LJ_AINLINE int tab_retire_epoch_elapsed(uint64_t completed_epoch,
 	 completed_epoch - retire_epoch >= LJ_TAB_RETIRE_EPOCHS;
 }
 
+static int tab_node_still_published(global_State *g, const Node *node)
+{
+  GCobj *o;
+  uint32_t n = 0;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TTAB && lj_tab_node_acq(gco2tab(o)) == node)
+      return 1;
+    if (++n >= 1000000u)
+      break;
+  }
+  return 0;
+}
+
+static int tab_array_still_published(global_State *g, const TValue *array)
+{
+  GCobj *o;
+  uint32_t n = 0;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TTAB && lj_tab_array_acq(gco2tab(o)) == array)
+      return 1;
+    if (++n >= 1000000u)
+      break;
+  }
+  return 0;
+}
+
 /*
 ** Q: Why all of these copies of t->hmask, t->node etc. to local variables?
 ** A: Because alias analysis for C is _really_ tough.
@@ -1309,6 +1337,10 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   ** more than one TG is live, epoch completion only proves that safepoints
   ** moved forward; it does not prove that no peer still holds such a snapshot.
   ** Defer physical free until the VM is back to a single live TG.
+  ** Even then, the retired generation must not still be the table-published
+  ** root. The root-list scan below is cold-path validation before free, not a
+  ** warm-path lock; it preserves stock table semantics if retirement raced with
+  ** publication or reclamation observes an in-flight generation change.
   */
   if (gc2_n_threads_acq(g) > 1)
     return 0;
@@ -1319,7 +1351,8 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     if (!lj_tab_node_retired_armed_acq(ret)) {
       tab_retired_push(g, ret);
     } else if (tab_retire_epoch_elapsed(completed_epoch,
-					lj_tab_node_retired_epoch_acq(ret))) {
+					lj_tab_node_retired_epoch_acq(ret)) &&
+	       !tab_node_still_published(g, lj_tab_node_retired_node_acq(ret))) {
       tab_node_free(g, lj_tab_node_retired_node_acq(ret),
 		    lj_tab_node_retired_hmask_acq(ret));
       lj_mem_freet(g, ret);
@@ -1336,7 +1369,9 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     if (!lj_tab_array_retired_armed_acq(aret)) {
       tab_array_retired_push(g, aret);
     } else if (tab_retire_epoch_elapsed(completed_epoch,
-					lj_tab_array_retired_epoch_acq(aret))) {
+					lj_tab_array_retired_epoch_acq(aret)) &&
+	       !tab_array_still_published(g,
+					  lj_tab_array_retired_array_acq(aret))) {
       tab_array_free(g, lj_tab_array_retired_array_acq(aret),
 		     lj_tab_array_retired_acap_acq(aret));
       lj_mem_freet(g, aret);

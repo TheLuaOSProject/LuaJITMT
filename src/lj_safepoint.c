@@ -79,6 +79,32 @@ static void safepoint_clear_poll(TGState *tg)
   lj_tg_poll_futex_wake(tg, 1);
 }
 
+static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
+{
+  /* Trace flush boundaries mutate trace slots and patched bytecode after all
+  ** TGs have acknowledged. Keep acknowledged TGs from re-entering trace
+  ** dispatch while the leader is between the grace boundary and that retire
+  ** action. Epochs without a live leader cannot complete that consumed-poll
+  ** phase, so they clear at acknowledgement like ordinary safepoints.
+  */
+  return (actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
+	 gc2_hs_leader_acq(g) != 0;
+}
+
+static void safepoint_clear_consumed_polls(global_State *g, uint64_t epoch)
+{
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+      continue;
+    if (lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+	lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) != 0)
+      safepoint_clear_poll(tg);
+  }
+}
+
 static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
 {
   uint64_t oldepoch = lj_tg_hs_epoch_ack_acq(tg);
@@ -144,22 +170,47 @@ retry:
   }
   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
   if (!safepoint_claim_epoch(tg, epoch)) {
+    int hold;
     lj_safepoint_apply_tg(g, tg, actions);
     if (note_latency)
       safepoint_note_ack_latency(g);
-    safepoint_clear_poll(tg);
+    hold = safepoint_hold_poll_until_leader(g, actions);
+    if (!hold)
+      safepoint_clear_poll(tg);
     oldpending = gc2_hs_pending_sub_acqrel(g, 1);
     if (oldpending == 1)
       gc2_hs_pending_futex_wake(g, 1);
+    /* VM-owned acks must not resume with a consumed trace-flush poll. Drop
+    ** pending first so the leader can retire/unlink traces and clear poll.
+    */
+    /* Trace exit CP frames acknowledge before vm_exit_interp can clear
+    ** jit_base. Defer their consumed-poll wait to the VM exit poll.
+    */
+    if (hold && wait_consumed && lj_tg_load_jit_base(tg) == NULL &&
+	safepoint_wait_consumed_ack(tg))
+      goto retry;
     return actions;
   }
   lj_safepoint_apply_tg(g, tg, actions);
   if (note_latency)
     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
-  safepoint_clear_poll(tg);
-  oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
-  if (oldpending == 1)
-    gc2_hs_pending_futex_wake(g, 1);
+  {
+    int hold = safepoint_hold_poll_until_leader(g, actions);
+    if (!hold)
+      safepoint_clear_poll(tg);
+    oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
+    if (oldpending == 1)
+      gc2_hs_pending_futex_wake(g, 1);
+    /* VM-owned acks must not resume with a consumed trace-flush poll. Drop
+    ** pending first so the leader can retire/unlink traces and clear poll.
+    */
+    /* Trace exit CP frames acknowledge before vm_exit_interp can clear
+    ** jit_base. Defer their consumed-poll wait to the VM exit poll.
+    */
+    if (hold && wait_consumed && lj_tg_load_jit_base(tg) == NULL &&
+	safepoint_wait_consumed_ack(tg))
+      goto retry;
+  }
   return actions;
 }
 
@@ -301,11 +352,16 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
       continue;
     if (lj_tg_hs_epoch_ack_acq(tg) == epoch)
       continue;  /* 09 section 9.3: attach self-caught this epoch. */
-    if (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0)
+    if (lj_tg_reqmask_acq(tg) != 0)
       continue;  /* Already counted by this handshake. */
     (void)gc2_hs_pending_add_rlx(g, 1);
     signaled++;
     lj_tg_reqmask_rel(tg, actions);  /* 05 section 5.4.2. */
+    /* A consumed trace-flush poll can remain set after the TG has acked an
+    ** earlier epoch, keeping that TG parked until the leader retires trace
+    ** slots. A later handshake must still publish a fresh reqmask and count
+    ** the TG for this epoch; the waiter will see reqmask and retry.
+    */
     lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
     lj_tg_poll_futex_wake(tg, 1);
     if (lj_safepoint_retire_dead_tg(g, tg) && signaled != 0)
@@ -314,7 +370,24 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
   return signaled;
 }
 
-static void safepoint_ack_native(global_State *g)
+static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
+{
+#if LJ_HASJIT
+  /* A TG leaving mcode keeps jit_base set until vm_exit_interp has restored
+  ** from the trace snapshot. Trace-flush boundaries must not remotely ack that
+  ** native/C window, otherwise the leader can clear the trace slot needed by
+  ** lj_snap_restore_exit().
+  */
+  if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
+      (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0))
+    return 0;
+#else
+  UNUSED(tg); UNUSED(actions);
+#endif
+  return 1;
+}
+
+static void safepoint_ack_native(global_State *g, uint32_t actions)
 {
   TGState *tg;
   TGState *self = lj_thr_get_tg_fallback(g);
@@ -325,8 +398,40 @@ static void safepoint_ack_native(global_State *g)
       continue;
     if (tg == self)
       safepoint_ack_tg(g, tg, 0, 0);  /* Leader owns this synthetic ack. */
-    else if (lj_tg_in_native_acq(tg))
+    else if (lj_tg_in_native_acq(tg) &&
+	     safepoint_native_ack_allowed(tg, actions))
       safepoint_ack_tg(g, tg, 0, 0);  /* 05 section 5.4.3 remote native ack. */
+  }
+}
+
+static int safepoint_trace_tg_active(global_State *g)
+{
+#if LJ_HASJIT
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+      continue;
+    if (lj_tg_load_jit_base(tg) != NULL)
+      return 1;
+  }
+#else
+  UNUSED(g);
+#endif
+  return 0;
+}
+
+static void safepoint_wait_trace_quiescent(global_State *g, uint32_t actions)
+{
+  if (!(actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)))
+    return;
+  while (safepoint_trace_tg_active(g)) {
+    /* The pending count is the primary boundary. This final quiescence check
+    ** closes attach/native-observation races before trace slots are unlinked.
+    */
+    safepoint_ack_native(g, actions);
+    (void)lj_thr_retry_yield(NULL);
   }
 }
 
@@ -344,7 +449,10 @@ static uint32_t safepoint_leader_enter(global_State *g)
     uint32_t expect = 0;
     if (gc2_hs_leader_cas(g, &expect, id))
       return id;
-    safepoint_ack_native(g);  /* Avoid leader-wait vs ack-wait deadlock. */
+    /* Avoid leader-wait vs ack-wait deadlock while preserving current action
+    ** semantics for native acknowledgements.
+    */
+    safepoint_ack_native(g, gc2_hs_actions_acq(g));
     if (expect == 0)
       continue;
     gc2_hs_leader_futex_wait(g, expect, 1000000);
@@ -379,7 +487,7 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   signaled = safepoint_signal_late(g, actions, epoch);
   for (;;) {
     uint32_t late;
-    safepoint_ack_native(g);
+    safepoint_ack_native(g, actions);
     late = safepoint_signal_late(g, actions, epoch);
     if (late == 0)
       break;
@@ -391,14 +499,18 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
     gc2_hs_pending_futex_wake(g, 1);
   while (gc2_hs_pending_acq(g) != 0) {
     signaled += safepoint_signal_late(g, actions, epoch);
-    safepoint_ack_native(g);
+    safepoint_ack_native(g, actions);
     if (gc2_hs_pending_acq(g) == 0)
       break;
     gc2_hs_pending_futex_wait(g, gc2_hs_pending_rlx(g), 1000000);
   }
+  safepoint_wait_trace_quiescent(g, actions);
+  if (actions & LJ_GC2_HS_EXIT_TRACES)
+    (void)lj_trace_flushscope_retire_hs(g, epoch);
   if (actions & LJ_GC2_HS_FLUSHJ)
     (void)lj_trace_flushall(mainthread_acq(g));  /* 08 section 8.7 leader action. */
   (void)lj_gc2_reclaim_retired(g, epoch);  /* 05 section 5.9 grace drain. */
+  safepoint_clear_consumed_polls(g, epoch);
   safepoint_leader_leave(g, leader);
   return signaled;
 }

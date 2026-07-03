@@ -1,15 +1,16 @@
 # Invariant Tests And Documentation
 
-The Lua test harness and CI stay neutral about ordinary repository-file access.
-Tests should prove observable VM behavior, generated compiler/artifact output,
-or release packaging. Implementation-only rules should be documented beside the
-code they constrain. Matching helper names, function calls, field accesses, or
-snippets freezes spelling rather than the concurrency property we care about.
+The Lua test harness and CI do not carry source guards. Tests should prove
+observable VM behavior, generated compiler/artifact output, or release
+packaging. Implementation-only rules should be documented beside the code they
+constrain. Matching helper names, function calls, field accesses, or snippets
+freezes spelling rather than the concurrency property we care about.
 
-`Test:read()`, `suite_utils.read_file()`, and `Test:files()` are intentionally
-plain file/artifact helpers. They exist so tests can read generated dumps,
-captured logs, temporary files, imported-suite inputs, CSVs, and other runtime
-artifacts. They do not special-case repository paths.
+`Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
+exist so tests can read generated dumps, captured logs, temporary files,
+imported-suite inputs, CSVs, and other runtime artifacts. Do not use them to
+predicate a test on repository source text. The harness intentionally has no
+source-tree enumeration helper.
 
 Use one of these forms for new coverage:
 
@@ -20,7 +21,9 @@ Use one of these forms for new coverage:
 - A generated dump/output check when the invariant is about emitted IR,
   bytecode, machine code, or another generated build/runtime artifact.
 - A comment beside the constrained helper, plus a note in `notes/`, when the
-  invariant is design guidance that cannot be observed directly.
+  invariant is design guidance that cannot be observed directly. The comment
+  should explain the ownership, ordering, or nonblocking reason; it should not
+  point to a source guard.
 
 String matching remains useful for generated artifacts: JIT dumps, bytecode
 listings, objdump output, generated mcode dumps, generated assembly, captured

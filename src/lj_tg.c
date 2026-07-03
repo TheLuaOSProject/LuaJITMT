@@ -169,6 +169,27 @@ static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
   }
 }
 
+static int tg_attach_trace_boundary_live(global_State *g)
+{
+  return gc2_hs_leader_acq(g) != 0 &&
+	 (gc2_hs_actions_acq(g) &
+	  (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) != 0;
+}
+
+static void tg_attach_wait_trace_boundary(global_State *g, TGState *tg)
+{
+  uint32_t leader;
+  lua_State *L = lj_tg_load_thread_L(tg);
+  while (tg_attach_trace_boundary_live(g) &&
+	 (leader = gc2_hs_leader_acq(g)) != 0) {
+    if (L && (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0)) {
+      (void)lj_safepoint_ack(L);
+      continue;
+    }
+    gc2_hs_leader_futex_wait(g, leader, 1000000);
+  }
+}
+
 static void tg_attach_catchup(global_State *g, TGState *tg)
 {
   uint64_t epoch = gc2_hs_epoch_acq(g);
@@ -180,6 +201,8 @@ static void tg_attach_catchup(global_State *g, TGState *tg)
     lj_tg_reqmask_rel(tg, 0);
     lj_tg_poll_rel(tg, 0);
     lj_tg_hs_epoch_ack_rel(tg, epoch);  /* 09 section 9.3 self-ack. */
+    if (actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ))
+      tg_attach_wait_trace_boundary(g, tg);
   }
 }
 
@@ -198,6 +221,7 @@ void lj_tg_attach(global_State *g, TGState *tg)
     lj_tg_next_rel(tg, head);
   } while (!gc2_tg_list_cas(g, &head, tg));  /* 05 section 5.4.1 CAS-prepend. */
   gc2_n_threads_add_rlx(g, 1);  /* Live TG count; list keeps dead nodes. */
+  tg_attach_wait_trace_boundary(g, tg);
   (void)lj_gc_flush_root_pending(g);
 }
 
