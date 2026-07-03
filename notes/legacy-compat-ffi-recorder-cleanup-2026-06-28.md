@@ -15,7 +15,7 @@
   and requires a trace abort instead of a parser-lock wait.
 - Removed stale legacy wrappers and duplicate tests:
   `m5_tab_emptyhash.sh` test grep, the `m6_jit_buffer_method_shared_nyi`
-  recorder-name grep, and duplicate libc `strerror()` helper-name wrappers.
+  recorder-name grep, and duplicate libc `strerror()` helper-name predicates.
 
 ## Kept deliberately
 

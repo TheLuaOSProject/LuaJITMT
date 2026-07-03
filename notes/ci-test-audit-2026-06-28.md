@@ -8,8 +8,8 @@ to the constrained code.
 ## Inventory
 
 - 2026-07-03 status: `tools/ci` has only `lua_test.sh` and
-  `platform_build.sh`. The old per-case shell source-guard suite is gone and
-  must not be rebuilt under a different name.
+  `platform_build.sh`. The old per-case shell source-predicate suite is gone
+  and must not be rebuilt under a different name.
 - Historical state at the time of this audit: most scripts called
   `tools/ci/lua_test.sh` after doing real validation or orchestration work;
   zero pure alias wrappers remained.

@@ -55,7 +55,7 @@ function M.read_file(path)
   -- constrained code and in notes that explain why the property matters.
   -- Observable invariants belong in behavior, fixture, generated-artifact,
   -- benchmark, or packaging tests. Do not add pass/fail checks over repository
-  -- source text, including old milestone helper-name wrappers.
+  -- source text, including old milestone helper-name predicates.
   return read_raw_file(path)
 end
 

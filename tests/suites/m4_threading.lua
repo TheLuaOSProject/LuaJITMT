@@ -151,6 +151,19 @@ return function(add)
       opts = { joff = true }
     },
     {
+      name = "m4_threading_join_gcscan",
+      description = "thread join makes progress while workers force GC root scans",
+      script = "t-threading-join-gcscan.lua",
+      opts = {
+        joff = true,
+        timeout = "45s",
+        env = {
+          LJ_M4_JOIN_GCSCAN_REPS =
+            getenv("LJ_M4_JOIN_GCSCAN_REPS", "300")
+        }
+      }
+    },
+    {
       name = "m4_threading_require_once",
       description = "concurrent require executes one module body and " ..
         "preserves stock recursion behavior",

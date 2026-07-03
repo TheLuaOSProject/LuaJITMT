@@ -43,7 +43,7 @@ packaging outputs.
 The removed text-check compatibility surface remains gone:
 
 - No case or per-case shell wrapper exists.
-- No `suite_utils.read_source_file()` helper exists.
+- No dedicated repository-source reader exists in the suite helpers.
 - The only `tools/ci` shell entrypoint is `tools/ci/lua_test.sh`.
 - The remaining build-time `find`/`sed`/`grep` invocations inspect generated
   dependencies, object files, or install-metadata output, not repository source

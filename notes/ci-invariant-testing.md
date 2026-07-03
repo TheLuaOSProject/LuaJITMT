@@ -3,12 +3,12 @@
 The Lua test harness and CI do not predicate pass/fail on repository source
 text. This is a blanket rule, including old milestone wrapper suites,
 one-off historical wrappers, and "this helper name must exist" checks. Do not
-port, emulate, or preserve source guards. Tests should prove observable VM
-behavior, generated compiler/artifact output, benchmark data, or release
-packaging. Implementation-only rules must be documented beside the code they
-constrain and, when the context is broader than a local comment, in `notes/`.
-Matching helper names, function calls, field accesses, or snippets freezes
-spelling rather than the concurrency property we care about.
+port, emulate, or preserve source-text predicates. Tests should prove
+observable VM behavior, generated compiler/artifact output, benchmark data, or
+release packaging. Implementation-only rules must be documented beside the
+code they constrain and, when the context is broader than a local comment, in
+`notes/`. Matching helper names, function calls, field accesses, or snippets
+freezes spelling rather than the concurrency property we care about.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read generated dumps, captured logs, temporary files,
@@ -33,15 +33,14 @@ listings, objdump output, generated mcode dumps, generated assembly, captured
 process output, and generated CSVs. Repository DynASM source is source code;
 generated ASM/mcode output is the artifact to inspect.
 
-Historical entries that mention static helper-name wrappers, per-case wrapper
-scripts, marker lists, raw-access spelling lists, exact-helper requirements, or
-the old explicit source-reading helper are historical context only. They are
-not tests to preserve, port, restore, or emulate. When one still matters, carry
-forward the invariant itself: memory ordering, ownership, publication,
-native-state discipline, or ABI shape. The durable record is a code-adjacent
-comment explaining why the implementation must keep that property, plus a note
-when the rationale spans multiple files. CI must prove the observable part
-through behavior, C fixtures, generated artifacts, benchmark data, or packaging
+Historical entries that mention old wrapper scripts, spelling lists, or
+implementation-name requirements are audit history only. They are not tests to
+preserve, port, restore, or emulate. When one still matters, carry forward the
+invariant itself: memory ordering, ownership, publication, native-state
+discipline, or ABI shape. The durable record is a code-adjacent comment
+explaining why the implementation must keep that property, plus a note when the
+rationale spans multiple files. CI must prove the observable part through
+behavior, C fixtures, generated artifacts, benchmark data, or packaging
 outputs.
 
 Examples:
@@ -71,16 +70,15 @@ publication, native-state, and race behavior rather than grepping source text.
 
 2026-07-03 follow-up: this policy has no historical-suite exception. Old notes
 may still describe deleted shell wrappers that once "required" helper spelling
-or "rejected" raw field access. Treat that wording as an audit trail for why
-the helper/comment exists, not as an active or desired check. When touching
-those notes, rewrite the coverage section to name the current behavioral,
-fixture, generated-artifact, benchmark, or packaging case that owns the
-observable part of the invariant.
+or "rejected" raw field access. Treat that wording as audit history, not as an
+active or desired check. When touching those notes, rewrite the coverage
+section to name the current behavioral, fixture, generated-artifact, benchmark,
+or packaging case that owns the observable part of the invariant.
 
-2026-07-03 source-guard removal: active tests, CI, and release workflows keep
-no repository-source guard suite at all. Broad `rg`/`grep` audits are allowed as
-manual engineering archaeology while working, but they must not become pass/fail
-rules. If a future cleanup discovers an old source guard, remove the predicate
-and replace it with a comment/note that explains the reason for the constrained
-code plus behavioral or generated-artifact coverage where the failure can be
-observed.
+2026-07-03 source-predicate removal: active tests, CI, and release workflows
+keep no repository-source predicate suite at all. Broad `rg`/`grep` audits are
+allowed as manual engineering archaeology while working, but they must not
+become pass/fail rules. If a future cleanup discovers an old source predicate,
+remove it and replace it with a comment/note that explains the reason for the
+constrained code plus behavioral or generated-artifact coverage where the
+failure can be observed.

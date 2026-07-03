@@ -3,7 +3,7 @@
 Current policy: tests and CI must not decide pass/fail by reading repository
 source files and matching helper names, field accesses, calls, raw-byte
 snippets, or other implementation spelling. There is no active or desired
-repository-source guard suite. The invariant still matters, but the durable
+repository-source predicate suite. The invariant still matters, but the durable
 record belongs beside the constrained code and in notes that explain the
 ownership, ordering, nonblocking, or ABI reason.
 

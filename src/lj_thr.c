@@ -297,8 +297,13 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
       continue;
     }
     if (owner == LJ_THREAD_GCSCAN) {
-      state_gcscan_wait_no_l();  /* 05 section 5.7.2: scan claim handoff. */
-      continue;
+      /*
+      ** The scan sentinel intentionally carries no owner id. A GC scanner can
+      ** rediscover the same lua_State through another grey edge while it owns
+      ** that sentinel, so waiting here can self-deadlock. Report the state as
+      ** busy; GC2 will requeue it or let the owning thread satisfy NEEDSCAN.
+      */
+      return 0;  /* 05 section 5.7.2: scan claim handoff. */
     }
     return 0;
   }

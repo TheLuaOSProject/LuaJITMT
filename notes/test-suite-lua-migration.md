@@ -104,11 +104,10 @@ Validation:
 
 - Historical state: this pass added path-based source-file special handling to
   `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
-  `suite_utils.read_source_file()` helper. Both the explicit source-reading
-  helper and those legacy wrappers were removed in the later 2026-06-28
-  legacy wrapper removal. The remaining path-based read behavior was removed
-  on 2026-07-03 so the harness now treats file access as a neutral primitive;
-  no source guard layer remains.
+  source-only reader. Both the explicit source reader and those legacy wrappers
+  were removed in the later 2026-06-28 legacy wrapper removal. The remaining
+  path-based read behavior was removed on 2026-07-03 so the harness now treats
+  file access as a neutral primitive; no source-predicate layer remains.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
