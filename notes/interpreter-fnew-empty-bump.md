@@ -18,3 +18,10 @@ accounting flushes, and any closure with upvalues.
 `lj_func_newL_gc_forjit()`. Trace assembly owns the allocation check before
 CALLA helpers, matching the existing traced one-upvalue FNEW split; the helper
 still falls back to the generic closure path under the same predicates above.
+
+2026-07-03 follow-up: the bump helper no longer runs the object-edge
+publication wrapper for the fresh closure's `proto` and `env` edges while
+`TG.mark_active` is clear. The closure body is initialized while still white and
+unpublished, then release-published through the pending-root chain; an inactive
+collector will discover those edges from that root later. If the mark/remember
+mirror is active, the helper uses the normal GC2/legacy publication path.

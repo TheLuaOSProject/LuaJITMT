@@ -183,6 +183,26 @@ static LJ_AINLINE void func_pubuv_payload(lua_State *L, GCupval *uv)
     lj_gc_pubobjtv(L, uv, &uv->tv);
 }
 
+static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
+					    GCobj *parent, GCobj *child)
+{
+  /*
+  ** Bump FNEW helpers initialize a fresh white closure before linking it into
+  ** the pending-root chain. With no active mark/remember barrier, those edges
+  ** will be discovered when the new root is first traversed. If the barrier
+  ** mirror is active, use the normal publication path so GC2/legacy marking
+  ** observes the child immediately.
+  */
+  if ((tg && lj_tg_mark_active_acq(tg)) || isblack(parent)) {
+    lj_gc2_barrier_obj_pair(L, parent, child);
+    if (iswhite(child) && isblack(parent))
+      lj_gc_barrierf(G(L), parent, child);
+  }
+}
+
+#define func_pubfreshobjobj(L, tg, p, o) \
+  func_pubfreshobjobj_((L), (tg), obj2gco(p), obj2gco(o))
+
 /* Create a closed upvalue initialized from a stack slot. */
 static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
 {
@@ -472,8 +492,8 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   env = lj_funcL_env_acq(parent);
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
-  lj_gc_pubobjobj(L, fn, pt);
-  lj_gc_pubobjobj(L, fn, env);
+  func_pubfreshobjobj(L, tg, fn, pt);
+  func_pubfreshobjobj(L, tg, fn, env);
   {
     uint32_t count = (uint32_t)pt->flags + PROTO_CLCOUNT;
     pt->flags = (uint8_t)(count - ((count >> PROTO_CLC_BITS) &
@@ -494,7 +514,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
     setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
   func_uvmeta(uv, parent, uvspec);
   setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
-  lj_gc_pubobjobj(L, fn, uv);
+  func_pubfreshobjobj(L, tg, fn, uv);
   fn->l.nupvalues = 1;
   lj_obj_setgcwrel(obj2gco(fn), obj2gco(uv));
 
@@ -566,8 +586,8 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   env = lj_funcL_env_acq(parent);
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
-  lj_gc_pubobjobj(L, fn, pt);
-  lj_gc_pubobjobj(L, fn, env);
+  func_pubfreshobjobj(L, tg, fn, pt);
+  func_pubfreshobjobj(L, tg, fn, env);
   count = (uint32_t)pt->flags + PROTO_CLCOUNT;
   pt->flags = (uint8_t)(count - ((count >> PROTO_CLC_BITS) &
 				  PROTO_CLCOUNT));

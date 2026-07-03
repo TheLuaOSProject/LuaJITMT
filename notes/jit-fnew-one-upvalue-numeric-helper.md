@@ -157,3 +157,20 @@ not remove any collector edge: numeric captures such as `closures_upval` have no
 `uv->tv` child object, while table/string/cdata/thread/function captures still
 run the GC2 and legacy publication barrier before the upvalue is linked into
 the pending root chain.
+
+The C bump helper now also skips fresh-closure object-edge publication wrappers
+for `fn -> proto`, `fn -> env`, and `fn -> uv` while `TG.mark_active` is clear.
+The helper initializes the closure and upvalue before pending-root publication,
+so an inactive collector observes the complete edge set when it later traverses
+that new root. With active marking or generational remembering, the helper
+falls back to the normal GC2/legacy publication behavior for each edge.
+
+Focused validation after this C-helper edge cleanup:
+
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m6_jit_fnew_bump`
+- `tools/ci/lua_test.sh m5_upvalue_publish_gc m6_jit_cell_ops m3_gc_root_pending`
+- `tools/ci/lua_test.sh run_stock_tests -- --quiet`
+- `LJ_BENCH_STOCK_FILTERS=closures_upval LJ_BENCH_STOCK_SCALE=0.02
+  tools/ci/lua_test.sh m9_bench_stock_compare`
+
+The focused stock comparison reported `closures_upval` geomean `1.901021`.
