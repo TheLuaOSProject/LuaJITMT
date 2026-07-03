@@ -89,3 +89,12 @@ The correctness fix restores required per-closure upvalue allocation cost:
 same-session `BENCH_SCALE=0.05 ... closures_upval` measured 100.64 ns/op versus
 stock 44.04 ns/op. The remaining gap is therefore real allocation/GC publication
 work, not an optional guard.
+
+2026-07-03 follow-up: the helper now initializes the fresh `GCfunc` and its
+fresh closed `GCupval` before publishing them as one root-pending chain. This
+does not change closure or upvalue identity and does not remove the required
+heap `USTORE`; it only avoids publishing the pair as two independent new root
+heads. Focused same-session `BENCH_SCALE=0.05` samples still stayed around
+100 ns/op versus stock around 40 ns/op, so the remaining gap is still the
+expected allocation/cell cost until a future snapshot-aware closure-sinking or
+batch allocation design exists.

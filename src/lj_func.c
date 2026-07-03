@@ -171,7 +171,7 @@ GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
 }
 
 /* Create a closed upvalue initialized from a stack slot. */
-static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
+static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
 {
   global_State *g = G(L);
   GCupval *uv = (GCupval *)lj_mem_newgco_unlinked(L, sizeof(GCupval));
@@ -183,6 +183,13 @@ static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
   uv->dhash = 0;
   newwhite(g, uv);
   lj_gc_pubobjtv(L, uv, &uv->tv);
+  return uv;
+}
+
+static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
+{
+  global_State *g = G(L);
+  GCupval *uv = func_snapshotuv_unlinked(L, slot);
   lj_gc_linkobj_new(g, obj2gco(uv));
   return uv;
 }
@@ -273,7 +280,7 @@ GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
   return fn;
 }
 
-static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
+static GCfunc *func_newL_unlinked(lua_State *L, GCproto *pt, GCtab *env)
 {
   global_State *g = G(L);
   uint32_t count;
@@ -285,12 +292,18 @@ static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
   setmref(fn->l.pc, proto_bc(pt));
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
-  lj_gc_linkobj_new(g, obj2gco(fn));
   lj_gc_pubobjobj(L, fn, pt);
   lj_gc_pubobjobj(L, fn, env);
   /* Saturating 3 bit counter (0..7) for created closures. */
   count = (uint32_t)pt->flags + PROTO_CLCOUNT;
   pt->flags = (uint8_t)(count - ((count >> PROTO_CLC_BITS) & PROTO_CLCOUNT));
+  return fn;
+}
+
+static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
+{
+  GCfunc *fn = func_newL_unlinked(L, pt, env);
+  lj_gc_linkobj_new(G(L), obj2gco(fn));
   return fn;
 }
 
@@ -371,7 +384,7 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   v = proto_uv(pt)[0];
   lj_assertL((v & PROTO_UV_LOCAL) && (int32_t)(v & 0xff) == slotno,
 	     "bad one-upvalue FNEW slot");
-  fn = func_newL(L, pt, lj_funcL_env_acq(parent));
+  fn = func_newL_unlinked(L, pt, lj_funcL_env_acq(parent));
   slot = base + slotno;
   /*
   ** The recorder selects this helper for a raw numeric slot, but the generated
@@ -381,13 +394,15 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   ** parent slot for mutable captures.
   */
   setnumV(&tv, n);
-  uv = func_snapshotuv(L, &tv);
+  uv = func_snapshotuv_unlinked(L, &tv);
   if (!(v & PROTO_UV_IMMUTABLE))
     setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
   func_uvmeta(uv, parent, v);
   setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
   lj_gc_pubobjobj(L, fn, uv);
   fn->l.nupvalues = 1;
+  lj_obj_setgcwrel(obj2gco(fn), obj2gco(uv));
+  lj_gc_linkobj_new_chain(G(L), obj2gco(fn), obj2gco(uv));
   return fn;
 }
 

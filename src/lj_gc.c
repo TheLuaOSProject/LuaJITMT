@@ -2403,6 +2403,34 @@ static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
   return n;
 }
 
+static void gc_root_prepend_known_chain(global_State *g, GCobj *head,
+					GCobj *tail)
+{
+#if LJ_GC64
+  {
+    uint64_t oldhead;
+    GCRef nextref;
+    do {
+      oldhead = la_load64_acq(&lj_gc_root_ref(g)->gcptr64);
+      setgcrefp(nextref, (void *)(uintptr_t)oldhead);
+      lj_obj_setgcwrrel(tail, nextref);
+    } while (!la_cas64(&lj_gc_root_ref(g)->gcptr64, &oldhead,
+		       (uint64_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
+  }
+#else
+  {
+    uint32_t oldhead;
+    GCRef nextref;
+    do {
+      oldhead = la_load32_acq(&lj_gc_root_ref(g)->gcptr32);
+      setgcrefp(nextref, (void *)(uintptr_t)oldhead);
+      lj_obj_setgcwrrel(tail, nextref);
+    } while (!la_cas32(&lj_gc_root_ref(g)->gcptr32, &oldhead,
+		       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
+  }
+#endif
+}
+
 static uint32_t gc_root_prepend_chain_after(GCobj *anchor, GCobj *head)
 {
   GCRef *p;
@@ -2507,6 +2535,41 @@ void lj_gc_linkobj_new(global_State *g, GCobj *o)
     else
       lj_obj_setgcwnullrel(o);
   } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
+}
+
+void lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)
+{
+  TGState *tg;
+  GCobj *oldhead;
+  if (!head || !tail)
+    return;
+  tg = lj_thr_get_tg();
+  if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+    gc_root_prepend_known_chain(g, head, tail);
+    return;
+  }
+  if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
+		mt_entering_acq(g) == 0 && gc2_n_workers_acq(g) == 0)) {
+    /*
+    ** Publish a freshly initialized object run with one release store. The
+    ** caller owns head..tail until this point; after the store, a later MT
+    ** activation or root flush observes every object and edge in the run.
+    */
+    oldhead = lj_tg_gcroot_pending_acq(tg);
+    if (oldhead)
+      lj_obj_setgcwrel(tail, oldhead);
+    else
+      lj_obj_setgcwnullrel(tail);
+    lj_tg_gcroot_pending_store_rel(tg, head);
+    return;
+  }
+  oldhead = lj_tg_gcroot_pending_acq(tg);
+  do {
+    if (oldhead)
+      lj_obj_setgcwrel(tail, oldhead);
+    else
+      lj_obj_setgcwnullrel(tail);
+  } while (!lj_tg_gcroot_pending_cas(tg, &oldhead, head));
 }
 
 void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)

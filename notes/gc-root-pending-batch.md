@@ -48,6 +48,13 @@
   `lj_tab_new0()`, whose pending-root publication then takes the atomic path.
   `m5_x64_tnew_empty_inline` verifies this with a runtime helper-call counter,
   not by inspecting DynASM source.
+- 2026-07-03 follow-up: `lj_gc_linkobj_new_chain()` publishes a caller-owned
+  run of freshly initialized objects with one pending-root operation. The first
+  use is the traced one-numeric-upvalue `FNEW` helper, where the `GCfunc` and
+  its fresh closed `GCupval` are born together and neither object is reachable
+  until both payloads and edges have been release-published. The helper uses the
+  known tail directly, so fallback/global-root publication does not walk
+  uninitialized tail links.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object
