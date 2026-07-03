@@ -17,3 +17,13 @@ Validation:
 - direct small-mcode tracemc stress smoke
 - direct t-jit-mcode-fresh.lua x3 with CI LUA_PATH
 - tools/ci/m6_jit_mcode_publish.sh
+
+2026-07-03 follow-up:
+
+- Active `m6_jit_mcode_publish` no longer reads generated exit-stub bytes or
+  asserts a specific x64 jump encoding. That was an implementation-shape gate.
+- The durable invariant is that published mcode metadata is acquired before
+  readers use it, mcode protection remains W^X/execute-stable where the target
+  requires it, and traces continue to execute under small-mcode pressure. Those
+  parts are covered by `t-jit-mcode-prot.c`, runtime traceability checks, and
+  `t-jit-mcode-fresh.lua`.

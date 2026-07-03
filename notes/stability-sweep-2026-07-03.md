@@ -141,6 +141,10 @@ remaining performance/trace-shape difference, but not the previous endless
 re-recording correctness failure. The existing `lj_trace_flush_unlink()` path
 must not be replaced by scoped trace retirement: it exists so `trace_abort()`
 can still self-link the unlinked return trace as the stock blacklist entry.
+Follow-up: the active `m6_jit_recursive_call_unroll` case no longer asserts
+this trace topology. It remains useful as manual performance/debug evidence,
+while CI covers result correctness, basic traceability, and timeout-bounded
+repeated execution.
 
 Independent 50-process samples with the same coverage shape also stayed bounded:
 
