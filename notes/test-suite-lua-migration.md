@@ -2,7 +2,7 @@
 
 ## 2026-06-28 legacy wrapper removal
 
-- Removed the old source-file content assertion API and generic `assert_file_*`
+- Removed the old implementation-file content assertion API and generic `assert_file_*`
   compatibility wrappers from the Lua test harness.
 - Removed the old `suite_runtime` build/C-fixture compatibility exports; suites
   now import `suite_build` directly for those helpers.
@@ -10,11 +10,11 @@
   directly so fixture registration no longer depends on the removed runtime
   build helper export.
 - Kept generated dump assertions because JIT/bytecode/ASM dump text is a
-  generated behavior surface, not repository source.
+  generated behavior surface, not repository implementation text.
 - Switched output-file checks to read the captured output and assert text
   directly.
 - Invariant-testing guidance now lives in `notes/ci-invariant-testing.md`.
-- There is no historical-wrapper exception: deleted source-text predicates stay
+- There is no historical-wrapper exception: deleted helper-spelling checks stay
   deleted. Preserve the reason in comments/notes, and test only behavior,
   generated artifacts, or release/build outputs.
 
@@ -25,8 +25,9 @@ Validation:
 
 ## 2026-06-20
 
-- Audited active `tests/suites` and `tools/ci` Lua tests for source-content
-  assertions. No active test was found that reads `src/` and checks source text.
+- Audited active `tests/suites` and `tools/ci` Lua tests for implementation-text
+  assertions. No active test was found that reads `src/` and checks
+  implementation text.
 - Runtime output, bytecode output, and JIT dump matching are kept as behavior
   checks.
 - Moved shared JIT dump parsing helpers from `m6_jit.lua` into
@@ -72,7 +73,7 @@ Validation:
 
 - Added a duplicate-name assertion to `tests/suites/init.lua` so a new suite
   case cannot silently overwrite an existing Lua test registration.
-- Kept this as a framework invariant; it does not inspect source files.
+- Kept this as a framework invariant; it does not inspect implementation files.
 
 Validation:
 
@@ -85,7 +86,7 @@ Validation:
   `tests/lib/suite_assert.lua`.
 - Historical state: this pass left compatibility exports in `suite_utils.lua`
   while routing dump and file-result suites to `suite_assert` directly.
-- Historical state: this pass added source-file content assertions to
+- Historical state: this pass added implementation-file content assertions to
   `suite_assert` and raw `Test:read()`. Those legacy wrappers were removed
   on 2026-06-28; they are not a model to recreate. Current policy is
   behavior fixtures, generated artifact assertions, and code-adjacent comments
@@ -95,25 +96,26 @@ Validation:
 Validation:
 
 - `tools/ci/lua_test.sh --list`
-- Direct `suite_assert`/`ljtest` smoke checks for the then-current source-read
-  rejection and dump result matching. The source-read rejection was later
+- Direct `suite_assert`/`ljtest` smoke checks for the then-current implementation-read
+  rejection and dump result matching. The implementation-read rejection was later
   removed; dump result matching remains.
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops m7_ffi_jit_cnew`
 
-## 2026-06-28 explicit source-reading helper
+## 2026-06-28 explicit implementation-reading helper
 
-- Historical state: this pass added path-based source-file special handling to
+- Historical state: this pass added path-based implementation-file handling to
   `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
-  source-only reader. Both the explicit source reader and those legacy wrappers
-  were removed in the later 2026-06-28 legacy wrapper removal. The remaining
-  path-based read behavior was removed on 2026-07-03 so the harness now treats
-  file access as a neutral primitive; no source-predicate layer remains.
+  implementation-only reader. Both the explicit implementation reader and those
+  legacy wrappers were removed in the later 2026-06-28 legacy wrapper removal.
+  The remaining path-based read behavior was removed on 2026-07-03 so the
+  harness now treats file access as a neutral primitive; no spelling-check
+  layer remains.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
   `tools/test.lua` process. Set `LJ_TEST_DISABLE_BUILD_CACHE=1` for the old
   always-clean behavior while debugging the harness.
-- Removed implementation-shape source checks from `m7_ffi_callback_runtime.sh`
+- Removed implementation-shape checks from `m7_ffi_callback_runtime.sh`
   and kept the public wrapper as a thin launcher. The callback runtime case now
   relies on its C/Lua behavior fixtures for native-state restoration, stale
   callback returns, callback blacklisting, and fresh STOPREQ behavior.
@@ -167,7 +169,7 @@ Validation:
 Validation:
 
 - `tools/ci/lua_test.sh --list`
-- Direct `ljtest` smoke check for the then-current source-read rejection and
+- Direct `ljtest` smoke check for the then-current implementation-read rejection and
   normal file reads. The rejection was later removed.
 - `make -C src clean && tools/ci/lua_test.sh m9_bench_regression`
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops`
@@ -199,9 +201,9 @@ Validation:
 
 ## 2026-06-20 legacy wrapper and aggregate execution tightening
 
-- Historical state: broadened source-content path handling so behavior
-  assertions could not read test, wrapper, tool, aux, bench, or `src/` source
-  files directly. That path-based behavior was later removed.
+- Historical state: broadened path handling so behavior assertions could not
+  read test, wrapper, tool, aux, bench, or `src/` implementation files
+  directly. That path-based behavior was later removed.
 - Fixed `run_stock_tests` passthrough parsing so options like `--quiet` are not
   mistaken for an explicit LuaJIT binary, while explicit binaries still work.
 - Made `m9_m10_gc` run its declared dependency list as the single source of
@@ -218,7 +220,7 @@ Validation:
 - `tools/ci/run_stock_tests.sh --quiet lang/andor.lua`
 - `tools/ci/run_stock_tests.sh src/luajit --quiet lang/andor.lua`
 - Direct `suite_assert`/`ljtest` smoke check for the then-current broader
-  source-read rejection and result-file matching. The rejection was later
+  implementation-read rejection and result-file matching. The rejection was later
   removed.
 - `tools/ci/lua_test.sh m9_bench_regression`
 - `tools/ci/lua_test.sh m9_m10_gc`

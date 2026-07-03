@@ -8,7 +8,7 @@ to the constrained code.
 ## Inventory
 
 - 2026-07-03 status: `tools/ci` has only `lua_test.sh` and
-  `platform_build.sh`. The old per-case shell source-predicate suite is gone
+  `platform_build.sh`. The old per-case shell spelling-check suite is gone
   and must not be rebuilt under a different name.
 - Historical state at the time of this audit: most scripts called
   `tools/ci/lua_test.sh` after doing real validation or orchestration work;
@@ -35,14 +35,14 @@ to the constrained code.
 
 3. Aggregate cases could bypass wrapper-only checks.
    `m7_ffi`, `m9_m10_gc`, and similar aggregate cases call Lua case names, not
-   the shell wrappers. The resolution was to remove wrapper-only source checks,
+   the shell wrappers. The resolution was to remove wrapper-only text checks,
    not to preserve them as separate lint entrypoints.
 
 4. Repository legacy wrappers often pinned exact helper names.
    Broad string matches blocked better implementations that preserved the same
    safety invariant with a new helper boundary. New tests must use behavior,
    C fixtures, generated dump/ASM checks, or documentation instead of
-   source predicates.
+   helper-name text checks.
 
 5. Large shell wrapper files are hard to review.
    `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
@@ -58,9 +58,9 @@ to the constrained code.
 - Set `LJ_TEST_DISABLE_BUILD_CACHE=1` to recover the old always-clean behavior
   while debugging the harness itself.
 - `tests/lib/suite_utils.lua` temporarily gave generic `read_file()` the same
-  path-based source access behavior used by `Test:read()` and result-file
+  path-based implementation-file access behavior used by `Test:read()` and result-file
   assertions. The later cleanup removed that behavior, the deliberate
-  source-reading helper, and eventually all path-based source access special
+  implementation-reading helper, and eventually all path-based implementation-file access special
   cases. Current coverage is documentation plus behavior/generated-artifact
   tests, not harness path-based checks.
 - `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
@@ -70,7 +70,7 @@ to the constrained code.
   The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
   native entry/leave restoration, nested callbacks, stale callback returns,
   callback blacklisting, and fresh STOPREQ delivery.
-- Removed the old helper-name and implementation-shape source checks from
+- Removed the old helper-name and implementation-shape checks from
   `m7_ffi_callback_runtime`; the behavior fixture now carries that contract.
 
 ## Follow-up Landed Later On 2026-06-28
@@ -110,7 +110,7 @@ to the constrained code.
 - Moved `t-ffi-finreg-free-invariant.c` into the `m7_ffi_finreg` Lua-suite
   case and removed the ad hoc hardcoded `/tmp` compile from
   `tools/ci/m7_ffi_finreg.sh`.
-- Removed the exact parser-token STOPREQ helper-spelling rule from
+- Removed the exact parser-token STOPREQ helper-name rule from
   `m7_ffi_cdef_token`; `t-ffi-cdef-token-stopreq.c` now owns the behavior
   contract for sticky STOPREQ cleanup and fresh STOPREQ while parked.
 - Converted the element-size parser-lock-fallback expectation into active-token
@@ -120,7 +120,7 @@ to the constrained code.
   pointer auto-deref, misses, metatype dispatch, and constructor constants.
 - Extended `t-ffi-cparse-rollback-reader.lua` so failed cdefs cannot leak
   constructor constants or constructor fields.
-- Added narrow field-helper guards in `m7_ffi_typeinfo_snapshot.sh` for the
+- Recorded narrow field-helper expectations in `m7_ffi_typeinfo_snapshot.sh` for the
   remaining non-observable implementation shape: ID-rooted field waits, no
   parser-lock acquisition in `lj_cdata_index_l()`, and no sequence-free field
   snapshot misses.
@@ -152,9 +152,9 @@ to the constrained code.
   checks owned by M9, and M10/M3 no longer carry old-helper-name tombstones for
   already-removed mark/sweep bridge wrappers.
 - Migrated weak completion telemetry and tests to `weak_bridge_*`, including
-  `collectgarbage("stats")`, benchmark stat output, M8 weak guards, and M3
+  `collectgarbage("stats")`, benchmark stat output, M8 weak behavior checks, and M3
   weak-helper visibility checks. No old developer-stat aliases are kept.
-- Removed two tombstone-only M3 CI guards for already-deleted weak/sweep phase
+- Removed two tombstone-only M3 CI checks for already-deleted weak/sweep phase
   aliases and old paranoia diff aliases. Current transition/root-diff behavior
   remains covered by C fixtures and documentation rather than helper comments.
 - Removed duplicate M3 finalizer negative scans that M8 already owns through its

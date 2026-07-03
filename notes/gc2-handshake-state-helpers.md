@@ -20,7 +20,7 @@ through `lj_tg_*` safepoint helpers.
 The global GC2 handshake fields should only be accessed through this helper
 surface outside the helper bodies. That ownership rule is documented here and
 beside the helpers; `m3_safepoint_handshake`, `m3_vm_safepoint`, and
-`m9_gc_stats` cover the observable behavior instead of source-text matching.
+`m9_gc_stats` cover the observable behavior; observable behavior is covered by the named fixtures.
 
 Validation:
 

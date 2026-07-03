@@ -13,7 +13,7 @@ This slice removes the remaining C-side `volatile` dependency from
   profiler native-state sampler read the TG vmstate first.
 - `m3_vm_safepoint` owns the observable safepoint behavior. The C-side
   vmstate access rule is documented here and beside the helper surface instead
-  of being enforced by source-text matching.
+  of being enforced by the named fixtures.
 
 Validation:
 

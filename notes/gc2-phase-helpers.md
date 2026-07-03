@@ -15,8 +15,7 @@ Runtime users in `lj_gc2.c`, `lj_gc.c`, and `lj_tg.c` no longer spell ad hoc
 atomics against `GC2State.phase`. Production access to the phase word in those
 files must stay behind the documented helper surface, with helper bodies as the
 single raw-access point. Runtime behavior is covered by the GC2 worker,
-allocation-accounting, weak, and generational cases instead of source-text
-matching.
+allocation-accounting, weak, and generational cases; observable behavior is covered by the named fixtures.
 
 Validation:
 

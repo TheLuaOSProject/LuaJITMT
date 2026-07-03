@@ -13,8 +13,8 @@ Coverage:
 - `m7_ffi_typeinfo_snapshot` exercises the layout size snapshot path through
   `ffi.sizeof()` behavior and active-parser snapshot fixtures.
 - Local layout `CType` copies in this path must use the documented helper-load
-  surface; that rule lives here and beside the helpers instead of in a
-  source-text predicate.
+  surface; that rule lives here and beside the helpers. The named fixtures
+  cover the observable behavior.
 
 Validation:
 

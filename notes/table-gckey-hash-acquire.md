@@ -24,5 +24,5 @@ compiled and exercised.
 `m5_tab_node_publish` owns the observable collectable-key hash path by building
 and exercising table-as-key rawget/rawset behavior. The acquire-load
 requirement for `hashgcref*` is documented here and beside the helper surface
-instead of being enforced by source-text matching. Construction-owned and
+instead of being enforced by the named fixtures. Construction-owned and
 non-x64 backend raw users remain separate audits.

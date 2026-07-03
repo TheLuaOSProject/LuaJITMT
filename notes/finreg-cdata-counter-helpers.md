@@ -14,8 +14,8 @@ atomics against `g->gc2`.
 `m7_ffi_finreg` owns the observable cdata FINREG behavior and `m9_gc_stats`
 owns the public telemetry surface. Cdata FINREG counter publication must stay
 behind the helper surface in `lj_gc.c`, `lj_gc2.c`, `lj_cdata.c`, and
-`lib_base.c`; that rule is documented here and beside the helpers instead of in
-a source-text predicate.
+`lib_base.c`; that rule is documented here and beside the helpers. The named
+fixtures cover the observable behavior.
 
 ## Follow-Up
 

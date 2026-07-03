@@ -11,4 +11,4 @@ acquire loads before computing SSB occupancy.
 
 `m3_gc2_worker_scheduler` owns the observable SSB cursor behavior. Production C
 access to the active cursor fields must stay behind the documented helper
-family instead of source-text matching.
+family; observable behavior is covered by the named fixtures.

@@ -14,7 +14,7 @@ Coverage:
   these compatibility helpers.
 - Local `CType` copies in `ffi.istype()` compatibility decisions must use the
   documented helper-load surface; that rule lives here and beside the helpers
-  instead of in a source-text predicate.
+ ; observable behavior is covered by the named fixtures.
 
 Validation:
 

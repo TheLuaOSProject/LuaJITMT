@@ -18,8 +18,7 @@ reads the same counters through acquire helpers.
 
 `m3_gc2_worker_scheduler` and `m9_gc_stats` own the observable worker telemetry.
 Worker counter publication must stay behind the helper surface in `lj_gc2.c`
-and `lib_base.c`; that rule is documented here and beside the helpers instead
-of in a source-text predicate.
+and `lib_base.c`; that rule is documented here and beside the helpers; observable behavior is covered by the named fixtures.
 
 This is scheduler state hygiene for the current parked-worker bridge. True
 multi-worker marking, per-worker deque ownership, and scheduler-owned phase

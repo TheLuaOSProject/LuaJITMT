@@ -28,8 +28,7 @@ advances `head` through helper stores after clearing consumed slots.
 behavior. The helper-surface and root-scan ownership rules for
 `finreg_cdata_preclaim_obj`, `finreg_cdata_preclaim_fin`,
 `finreg_cdata_preclaim_capacity`, `finreg_cdata_preclaim_head`, and
-`finreg_cdata_preclaim_count` live here and beside the helper surface instead
-of in source-text predicates. Legacy root scans must stay behind
+`finreg_cdata_preclaim_count` live here and beside the helper surface; observable behavior is covered by the named fixtures. Legacy root scans must stay behind
 `lj_gc2_finreg_cdata_mark_roots()`.
 
 ## Follow-Up

@@ -16,8 +16,7 @@ Per-node `TGState.next_tg` remains covered by `lj_tg_next_*()` helpers.
 
 Production access to the global registry fields must stay behind the helper
 surface, with helper bodies as the single raw-access point. The safepoint,
-threading, and VM safepoint cases own the observable behavior instead of
-source-text matching.
+threading, and VM safepoint cases own the observable behavior.
 
 Validation:
 

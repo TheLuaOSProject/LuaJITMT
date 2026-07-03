@@ -14,7 +14,7 @@ through helper accessors:
 The runtime users in `lj_gc2.c` no longer spell ad hoc atomics against
 `GC2State.worker_active`. Runtime access to that scheduler ownership token must
 stay behind the helper surface; the rule is documented here and covered through
-worker/weak behavior instead of source-text matching.
+worker/weak behavior; observable behavior is covered by the named fixtures.
 
 Validation:
 

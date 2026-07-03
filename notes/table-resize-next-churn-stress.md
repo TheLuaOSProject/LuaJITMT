@@ -19,9 +19,9 @@ racy traversal, but it must never expose the internal key marker or park behind
 the writer.
 
 This is behavior coverage for the table forwarding protocol. It deliberately
-does not search source text for helper names or field accesses; implementation
-ordering requirements that are not directly observable belong in notes like
-this one.
+does not read implementation text for helper names or field accesses;
+implementation ordering requirements that are not directly observable belong in
+notes like this one.
 
 Validation:
 

@@ -11,5 +11,4 @@ node `next` publication continues to use `lj_gc2_ssb_next_*()`, so the node link
 and the head publish use matching acquire/release ordering.
 
 `m3_gc2_worker_scheduler` owns the observable SSB recycle behavior. Production
-C access to `ssb_free` must stay behind the documented helper family instead
-of source-text matching.
+C access to `ssb_free` must stay behind the documented helper family; observable behavior is covered by the named fixtures.

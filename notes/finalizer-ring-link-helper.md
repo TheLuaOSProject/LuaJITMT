@@ -16,7 +16,7 @@ Fix:
   and release-publishes it through `lj_obj_setgcwrel(tail, next)`.
 - Finalizer-ring next-link release stores for `oldtail` and `tail` must stay
   behind the documented helper surface; observable coverage lives in the GC2
-  worker and weak/finalizer fixtures instead of source-text matching.
+  worker and weak/finalizer fixtures; observable behavior is covered by the named fixtures.
 
 Verification:
 - `tools/ci/lua_test.sh m3_gc2_worker_scheduler m8_weak` passed.

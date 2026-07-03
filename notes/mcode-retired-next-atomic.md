@@ -12,8 +12,7 @@ Changes:
   links through the helper.
 - Documented the rule that mcode retired-record `next` is a shared
   publication link and must use the helper. Mcode retirement, GC scan, and
-  focused fixtures cover behavior; CI must not enforce helper spelling by
-  helper comment.
+  focused fixtures cover behavior; helper-name rules live in comments and notes.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

@@ -119,7 +119,8 @@ Refactored now:
 Resolved by the current invariant-testing guidance:
 - Per-case shell wrappers are gone; `tools/ci/lua_test.sh`
   is the supported CI entrypoint.
-- M4/M5/M6/M7/M8 source predicates were removed from aggregate suites.
+- M4/M5/M6/M7/M8 aggregate suites now rely on behavior, dumps, mcode, stress,
+  and stock-semantics fixtures.
 - The Lua harness file helpers are neutral primitives for generated artifacts,
   imported inputs, and temporary files.
 

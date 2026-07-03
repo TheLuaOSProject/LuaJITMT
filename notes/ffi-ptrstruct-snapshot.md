@@ -14,4 +14,4 @@ the auto-deref retry.
 
 Coverage lives in `m7_ffi_typeinfo_snapshot`, which exercises the pointer
 auto-deref snapshot path. The no-reread invariant is documented here and beside
-the snapshot helper instead of being enforced by source-text matching.
+the snapshot helper; observable behavior is covered by the named fixtures.

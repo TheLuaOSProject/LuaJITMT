@@ -9,7 +9,7 @@ Changes:
 - Updated `tests/t-jit-tracevec.c` to assert only the RCU-published vector and
   acquired size mirror.
 - The retired mirror must not be reintroduced; that rule is documented here and
-  covered through trace-vector behavior instead of source-text matching.
+  covered through trace-vector behavior; observable behavior is covered by the named fixtures.
 
 Reasoning:
 - C trace-slot mutation now goes through `tracevec_acq()` via `traceslot_*`.

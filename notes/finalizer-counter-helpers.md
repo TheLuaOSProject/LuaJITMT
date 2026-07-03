@@ -22,8 +22,8 @@ helpers.
 finalizer behavior and telemetry. Finalizer counter publication must stay
 behind the helper surface in `lj_gc.c`, `lj_gc2.c`, `lib_base.c`, and
 `lib_threading.c`, with fixtures using the same acquire helpers when they need
-snapshots. That rule is documented here and beside the helpers instead of in a
-source-text predicate.
+snapshots. That rule is documented here and beside the helpers. The named
+fixtures cover the observable behavior.
 
 ## Follow-Up
 

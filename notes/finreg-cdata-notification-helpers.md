@@ -20,4 +20,4 @@ counter writes directly.
 `m7_ffi_finreg` owns the observable FINREG behavior. Cdata and ctype producers
 must enter through the public notification helpers rather than writing the
 low-level counters directly; that ownership rule is documented here and beside
-the helper surface instead of in a source-text predicate.
+the helper surface; observable behavior is covered by the named fixtures.

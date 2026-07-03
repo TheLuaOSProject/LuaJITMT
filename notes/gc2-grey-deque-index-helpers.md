@@ -18,7 +18,7 @@ the existing Chase-Lev ordering:
 
 `m3_gc2_worker_scheduler` owns the observable grey-deque behavior. Production
 access to `g->gc2.grey_top` or `g->gc2.grey_bottom` in `lj_gc2.c` must stay
-behind the documented helper surface instead of source-text matching.
+behind the documented helper surface; observable behavior is covered by the named fixtures.
 
 This is intentionally separate from the queue-slot guard in
 `m3_gc2_scaffold.sh`: slot publication helpers protect the `GCRef` entries,

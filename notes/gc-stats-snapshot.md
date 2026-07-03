@@ -18,5 +18,4 @@ inside `lj_gc2.c`.
 `threading.gcstats()` result, including the snapshot-populated fields and
 latency buckets. `m10_generational` checks that generational mode exposes the
 minor-root accounting expected by the snapshot. The snapshot API requirement is
-documented here and beside `lj_gc2_stats_snapshot()` instead of being enforced
-by source-text matching.
+documented here and beside `lj_gc2_stats_snapshot()` instead of being enforced by the named fixtures.

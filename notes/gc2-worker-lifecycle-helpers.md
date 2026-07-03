@@ -18,7 +18,7 @@ Runtime users in `lj_gc2.c` and the `threading.gcworkers()` query in
 fields must stay behind the documented helper surface. The focused fixtures
 also route worker activity and worker telemetry assertions through the same
 helper surface, so the test harness exercises the ownership contract through
-behavior rather than source-text matching. The separate `worker_wakes`
+behavior; observable behavior is covered by the named fixtures. The separate `worker_wakes`
 telemetry counter is covered by the follow-up worker counter helper slice.
 
 Validation:

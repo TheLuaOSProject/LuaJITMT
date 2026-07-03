@@ -18,8 +18,8 @@ helper surface.
 
 `m3_gc2_scaffold`, `m8_weak`, and `m9_gc_stats` own the observable userdata
 FINREG behavior and telemetry. Counter publication in `lj_gc.c`, `lj_gc2.c`,
-and `lib_base.c` must stay behind the documented helper surface instead of
-source-text matching.
+and `lib_base.c` must stay behind the documented helper surface. The named
+fixtures cover the observable behavior.
 - Follow-up fixture cleanup routes `tests/t-gc2-traverse.c` userdata FINREG
   telemetry snapshots through the same acquire helpers.
 

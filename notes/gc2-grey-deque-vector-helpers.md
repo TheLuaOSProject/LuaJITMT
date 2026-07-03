@@ -17,8 +17,8 @@ existing `gc2_queue_slot_*()` release/acquire helpers, and `grey_top` /
 
 `m3_gc2_worker_scheduler` owns the observable grey-deque behavior. Production
 access to `grey_stack`, `grey_capacity`, `grey_top`, and `grey_bottom` in
-`lj_gc2.c` must stay behind the documented helper surface instead of a
-source-text predicate.
+`lj_gc2.c` must stay behind the documented helper surface. The named fixtures
+cover the observable behavior.
 
 ## Follow-Up
 

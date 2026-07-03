@@ -22,5 +22,4 @@ pool has a real scheduler/TG identity instead of relying on main-TG fallback.
 
 `m3_gc2_worker_scheduler` owns the observable sweep bridge behavior. The latch
 field and raw latch publication helper must stay behind the documented GC2
-helper surface; that ownership rule is documented here instead of source-text
-matching.
+helper surface; that ownership rule is documented here; observable behavior is covered by the named fixtures.

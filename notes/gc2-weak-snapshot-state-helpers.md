@@ -21,7 +21,7 @@ Coverage:
 - `m8_weak` owns the observable weak snapshot behavior.
 - Production access to `weak_count`, `weak_scan_cursor`, and
   `weak_clear_cursor` in `lj_gc2.c` must stay behind the documented helper
-  surface instead of source-text matching.
+  surface; observable behavior is covered by the named fixtures.
 - Follow-up vector helper work now routes `weak_stack`, `weak_ready`, and
   `weak_capacity` through `gc2_weak_*()` helpers while preserving the current
   owner-quiesced resize invariant.

@@ -15,7 +15,7 @@ This slice moves the mutator-assist scheduler state behind helper accessors:
 Production runtime users in `lj_api.c` and `lj_gc2.c` no longer spell ad hoc
 loads, stores, or CAS operations against `GC2State.assist_shift` or
 `GC2State.assist_active`. Production access to those fields must stay behind
-the documented helper surface instead of source-text matching.
+the documented helper surface; observable behavior is covered by the named fixtures.
 
 Validation:
 

@@ -30,7 +30,7 @@ cycle.
 
 `m8_weak` owns the observable weak-table behavior. Production access to
 `weak_stack`, `weak_ready`, or `weak_capacity` in `lj_gc2.c` must stay behind
-the documented helper surface instead of source-text matching.
+the documented helper surface; observable behavior is covered by the named fixtures.
 
 ## Follow-Up
 

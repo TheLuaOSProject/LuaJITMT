@@ -1,9 +1,9 @@
-# Repository-source predicate audit, 2026-07-03
+# Invariant coverage policy, 2026-07-03
 
 Current policy: tests and CI must not decide pass/fail by reading repository
-source files and matching helper names, field accesses, calls, raw-byte
+implementation files and matching helper names, field accesses, calls, raw-byte
 snippets, or other implementation spelling. There is no active or desired
-repository-source predicate suite. The invariant still matters, but the durable
+helper-spelling check suite. The invariant still matters, but the durable
 record belongs beside the constrained code and in notes that explain the
 ownership, ordering, nonblocking, or ABI reason.
 
@@ -13,18 +13,17 @@ dumps are still valid artifacts to inspect when the generated output is the
 behavior under test.
 
 Audit result: active `tests/`, `tools/ci`, and GitHub workflow checks do not
-open `src/` or DynASM source files to make source-text assertions. Remaining
+open `src/` or DynASM implementation files to make spelling assertions. Remaining
 file reads in the Lua harness cover generated dumps, captured process output,
 temporary marker files, benchmark CSVs, and release/build artifacts. Shell
 searches in release tooling inspect install metadata, object/generated output,
-or packaging manifests, not implementation source snippets.
+or packaging manifests, not implementation snippets.
 
 Historical milestone wrapper suites are not exempt. If an old wrapper described
-a real invariant, delete the source predicate, keep the reason as
-code-adjacent comments and notes, then cover the observable part through the
-current harness.
+a real invariant, delete the text check, keep the reason as code-adjacent
+comments and notes, then cover the observable part through the current harness.
 
-Manual source searches remain useful while developing or reviewing a slice, but
-their result is an engineering observation, not a CI contract. A release or
+Manual implementation searches remain useful while developing or reviewing a
+slice, but their result is an engineering observation, not a CI contract. A release or
 regression test should fail on wrong behavior, wrong generated output, a broken
 artifact, or a benchmark regression, not on a helper spelling.

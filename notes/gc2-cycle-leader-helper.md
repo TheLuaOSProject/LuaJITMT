@@ -13,7 +13,7 @@ accessors:
 
 Production runtime users in `lj_gc2.c` no longer spell ad hoc atomics against
 `GC2State.cycle_leader`. Production access to the token must stay behind the
-documented helper surface instead of source-text matching.
+documented helper surface; observable behavior is covered by the named fixtures.
 
 Validation:
 

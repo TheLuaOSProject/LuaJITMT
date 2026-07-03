@@ -10,7 +10,8 @@ Coverage:
 - `m7_ffi_typeinfo_snapshot` exercises these layout info helpers through
   `ffi.sizeof()`, `ffi.alignof()`, and `ffi.offsetof()` behavior.
 - Local `CType.info` / `CType.size` reads in these helpers must use the
-  documented helper-load surface instead of source-text enforcement.
+  documented helper-load surface. The named fixtures cover the observable
+  behavior.
 
 Validation:
 

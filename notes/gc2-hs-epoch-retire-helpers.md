@@ -10,4 +10,4 @@ The retire-epoch ownership rule is documented here and beside
 `lj_gc2_retire_epoch()`: SMR retire producers must use GC2's public retire API
 instead of reading `g->gc2.hs_epoch` or calling the low-level handshake helper
 directly. Safepoint and retire behavior remains covered by the GC2/JIT/FFI
-fixture cases rather than source-text matching.
+fixture cases; observable behavior is covered by the named fixtures.

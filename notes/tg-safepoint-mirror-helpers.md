@@ -15,8 +15,7 @@ handshake state transitions.
 
 Production access to the TG-local safepoint mirror must stay behind the helper
 surface, with helper bodies as the single raw-access point. `m3_safepoint_handshake`,
-`m3_vm_safepoint`, and threading fixture cases own the observable behavior
-instead of source-text matching.
+`m3_vm_safepoint`, and threading fixture cases own the observable behavior; observable behavior is covered by the named fixtures.
 
 Validation:
 

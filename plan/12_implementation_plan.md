@@ -9,8 +9,8 @@ Tasks: pin the commit (00 §0.2). Add the ADR-1 x86-64/GC64 `#error`
 invariant check without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
 github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). CI must not
-pass or fail by grepping repository source for call names, helper spellings, or
-snippets. Source inventory is one-off engineering archaeology, not a test, and
+pass or fail by grepping implementation files for call names, helper spellings,
+or snippets. Implementation inventory is one-off engineering archaeology, not a test, and
 old milestone wrapper suites do not get an exception. Keep lasting invariants
 in behavior fixtures, C race/lifetime fixtures, generated dump/ASM checks when
 code generation is the observable artifact, and code-adjacent comments plus

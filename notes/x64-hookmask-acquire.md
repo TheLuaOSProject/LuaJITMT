@@ -10,7 +10,7 @@ in `vm_x64.dasc`, while keeping the generated instruction sequence unchanged.
 
 Coverage: `m5_hookmask_atomic` and `m5_concurrent_objects` own the observable
 hook-mask behavior. Raw `byte GL:*->hookmask` loads in `vm_x64.dasc` must stay
-behind the documented macro instead of source-text matching.
+behind the documented macro; observable behavior is covered by the named fixtures.
 
 Validation:
 - `tools/ci/lua_test.sh m5_hookmask_atomic` passed.

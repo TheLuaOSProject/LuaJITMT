@@ -34,19 +34,18 @@ tests, C fixtures, bytecode/generator output checks, and release binary checks.
 Allowed remaining searches are over generated artifacts or runtime output: JIT
 dumps, bytecode listings, generated mcode/ASM dumps, captured stdout/stderr,
 CSVs, and marker files. Those checks are permitted because the generated
-artifact is the behavior under test. Repository-source predicates for helper
-names, field accesses, function calls, or snippets are not permitted; remove
-the predicate, preserve the reason in comments/notes, and prove the observable
-part through behavior, C fixtures, generated artifacts, benchmarks, or
-packaging outputs.
+artifact is the behavior under test. Helper-name, field-access, function-call,
+and snippet text checks are not permitted; remove that check, preserve the
+reason in comments/notes, and prove the observable part through behavior, C
+fixtures, generated artifacts, benchmarks, or packaging outputs.
 
 The removed text-check compatibility surface remains gone:
 
 - No case or per-case shell wrapper exists.
-- No dedicated repository-source reader exists in the suite helpers.
+- No dedicated implementation-file reader exists in the suite helpers.
 - The only `tools/ci` shell entrypoint is `tools/ci/lua_test.sh`.
 - The remaining build-time `find`/`sed`/`grep` invocations inspect generated
-  dependencies, object files, or install-metadata output, not repository source
+  dependencies, object files, or install-metadata output, not implementation
   snippets.
 
 ## Public C API surface
@@ -110,7 +109,7 @@ accesses. It intentionally does not add a generated-or-behavior test for helper 
 Past cleanup commits temporarily removed stock compatibility symbols and the
 optional `LUAJIT_ENABLE_LUA52COMPAT` profile. Current branch state restored
 those stock surfaces; `tests/t-stock-api-surface.c` covers representative
-legacy stock C API entry points without searching implementation source text.
+legacy stock C API entry points without searching implementation text.
 
 Future legacy cleanup should remove only stale fork-local compatibility shims
 that exist for the threading/lockless migration. It should not remove stock

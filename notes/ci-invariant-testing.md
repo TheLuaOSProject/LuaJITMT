@@ -1,9 +1,9 @@
 # Invariant Tests And Documentation
 
-The Lua test harness and CI do not predicate pass/fail on repository source
+The Lua test harness and CI do not base pass/fail on repository implementation
 text. This is a blanket rule, including old milestone wrapper suites,
 one-off historical wrappers, and "this helper name must exist" checks. Do not
-port, emulate, or preserve source-text predicates. Tests should prove
+port, emulate, or preserve those old checks. Tests should prove
 observable VM behavior, generated compiler/artifact output, benchmark data, or
 release packaging. Implementation-only rules must be documented beside the
 code they constrain and, when the context is broader than a local comment, in
@@ -13,8 +13,8 @@ freezes spelling rather than the concurrency property we care about.
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read generated dumps, captured logs, temporary files,
 imported-suite inputs, CSVs, package manifests, and other test artifacts. Do
-not use them to predicate a test on repository source text. The harness
-intentionally has no repository-source enumeration helper.
+not use them to make pass/fail decisions about implementation text. The harness
+intentionally has no repository text enumeration helper.
 
 Use one of these forms for new coverage:
 
@@ -62,11 +62,12 @@ helpers may centralize opcode constants such as lock-prefixed CAS, but tests
 validate the generated mcode and runtime behavior.
 
 2026-07-03 audit: the active `tools/ci` layer is only the Lua launcher and
-platform build smoke script, and the Lua suites do not open repository source
+platform build smoke script, and the Lua suites do not open repository implementation
 files to decide pass/fail. Remaining file reads are generated dumps, captured
 logs, temporary outputs, benchmark CSVs, or release/build artifacts. C fixtures
 may still compile against internal headers because they execute lifetime,
-publication, native-state, and race behavior rather than grepping source text.
+publication, native-state, and race behavior rather than grepping implementation
+text.
 
 2026-07-03 follow-up: this policy has no historical-suite exception. Old notes
 may still describe deleted shell wrappers that once "required" helper spelling
@@ -75,10 +76,10 @@ active or desired check. When touching those notes, rewrite the coverage
 section to name the current behavioral, fixture, generated-artifact, benchmark,
 or packaging case that owns the observable part of the invariant.
 
-2026-07-03 source-predicate removal: active tests, CI, and release workflows
-keep no repository-source predicate suite at all. Broad `rg`/`grep` audits are
-allowed as manual engineering archaeology while working, but they must not
-become pass/fail rules. If a future cleanup discovers an old source predicate,
-remove it and replace it with a comment/note that explains the reason for the
-constrained code plus behavioral or generated-artifact coverage where the
-failure can be observed.
+2026-07-03 removal follow-up: active tests, CI, and release workflows keep no
+suite that checks helper spelling by reading implementation files. Broad
+`rg`/`grep` audits are allowed as manual engineering archaeology while working,
+but they must not become pass/fail rules. If a future cleanup discovers an old
+text-matching check, remove it and replace it with a comment/note that explains
+the reason for the constrained code plus behavioral or generated-artifact
+coverage where the failure can be observed.

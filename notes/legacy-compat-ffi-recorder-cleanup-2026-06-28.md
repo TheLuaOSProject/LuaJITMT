@@ -15,7 +15,7 @@
   and requires a trace abort instead of a parser-lock wait.
 - Removed stale legacy wrappers and duplicate tests:
   `m5_tab_emptyhash.sh` test grep, the `m6_jit_buffer_method_shared_nyi`
-  recorder-name grep, and duplicate libc `strerror()` helper-name predicates.
+  recorder-name grep, and duplicate libc `strerror()` helper-name checks.
 
 ## Kept deliberately
 
@@ -25,7 +25,8 @@
 - GC2 `legacy_*` bridge names and weak/sweep counters: these describe active
   safety bridges while GC2 still coordinates with the classic collector.
 - Structural raw-field/accessor ownership rules as documentation or behavior
-  fixtures. Do not keep source-text CI predicates for implementation spelling.
+  fixtures. Keep implementation spelling rules in comments/notes, with
+  observable behavior covered by runtime fixtures.
 
 ## Estimated progress
 

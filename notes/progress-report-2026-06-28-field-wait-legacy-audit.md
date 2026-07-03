@@ -62,10 +62,10 @@ Overall correctness/stability progress: 70-80%.
 - Renamed GC2 weak completion telemetry and helper/test surfaces to
   `weak_bridge_*`, including the public developer stats keys and benchmark/stat
   smoke coverage. No old stat aliases are kept.
-- Removed tombstone-only M3 CI guards for old weak/sweep phase aliases and old
-  paranoia diff aliases; behavior fixtures and current helper guards now own
-  those contracts.
-- Removed another duplicate set of M3 finalizer helper-name predicates. M8 remains the
+- Removed tombstone-only M3 CI checks for old weak/sweep phase aliases and old
+  paranoia diff aliases; behavior fixtures and current helper boundaries now
+  own those contracts.
+- Removed another duplicate set of M3 finalizer helper-name checks. M8 remains the
   owner for close-time finalizer, callback-stack, and finalizer-spawn behavior
   gates, while M3 keeps its positive scheduler ownership checks.
 - Renamed the remaining GC2 lifecycle helper surface from fork-era legacy names

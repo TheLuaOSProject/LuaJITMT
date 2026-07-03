@@ -40,7 +40,7 @@ Time remaining forecast:
   `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; stock LuaJIT API
   compatibility stays in scope.
 - Slimmed `tools/ci/m7_ffi_blocking.sh` so behavior-covered blacklist and
-  recorder checks are no longer pinned to exact source shape.
+  recorder checks are no longer pinned to exact implementation spelling.
 
 ## Locks and coordination
 
@@ -71,8 +71,8 @@ Current policy keeps no legacy wrappers. Memory-order contracts, ABI fences, and
 temporary migration rules must be comments or notes, with behavior/generated
 artifact coverage where the failure is observable. Best near-term cleanup:
 
-- Delete any newly discovered source predicates in M5 x64, M7 FFI, and M6 JIT
-  where generated output or runtime behavior already proves the contract.
+- Keep M5 x64, M7 FFI, and M6 JIT coverage tied to generated output or runtime
+  behavior where those already prove the contract.
 - Split `t-gc2-traverse.c` or add selectors; it is still a monolithic mixed
   fixture used by M3 and M8.
 - Deduplicate overlapping finalizer ownership coverage between M3 and M8

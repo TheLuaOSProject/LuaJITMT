@@ -10,5 +10,4 @@ the node `next` helper, then CAS-publishes the head with acquire/release order;
 drainers acquire/release-xchg the head before consuming published slots.
 
 `m3_gc2_worker_scheduler` owns the observable SSB-drain behavior. Production C
-access to `gc2.ssb_head` must stay behind the documented helper family instead
-of source-text matching.
+access to `gc2.ssb_head` must stay behind the documented helper family; observable behavior is covered by the named fixtures.

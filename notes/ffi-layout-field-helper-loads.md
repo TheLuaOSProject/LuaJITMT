@@ -13,8 +13,8 @@ Coverage:
 - `m7_ffi_typeinfo_snapshot` exercises the field layout snapshot path through
   `ffi.offsetof()` behavior and active-parser snapshot fixtures.
 - Local field-layout `CType` copies must use the documented helper-load
-  surface; that rule lives here and beside the helpers instead of in a
-  source-text predicate.
+  surface; that rule lives here and beside the helpers. The named fixtures
+  cover the observable behavior.
 
 Validation:
 

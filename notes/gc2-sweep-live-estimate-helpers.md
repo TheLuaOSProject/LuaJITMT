@@ -21,7 +21,7 @@ Coverage:
 - `m9_gc_stats` owns the public sweep-live telemetry behavior.
 - Production access to `sweep_live_updates`, `sweep_live_huge_bytes`, and
   `live_estimate` in `lj_gc2.c` and `lib_base.c` must stay behind the
-  documented helper surface instead of source-text matching.
+  documented helper surface; observable behavior is covered by the named fixtures.
 - `m3_gc2_worker_scheduler` keeps the aggregate helper private to
   `lj_gc2.c`; public cycle closure enters through sweep-to-idle or legacy
   cycle-end.

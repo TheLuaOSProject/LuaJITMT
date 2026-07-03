@@ -18,7 +18,7 @@ Coverage:
 - `m3_gc2_paranoia` and `m3_gc2_worker_scheduler` own the observable mark
   fixpoint behavior.
 - Production access to `GC2State.marks_this_round` in `lj_gc2.c` must stay
-  behind the documented helper surface instead of source-text matching.
+  behind the documented helper surface; observable behavior is covered by the named fixtures.
 - `m3_gc2_worker_scheduler` keeps the repeated bounded fixpoint
   driver private to `lj_gc2.c`; public mark completion enters through
   `lj_gc2_mark_complete()`.

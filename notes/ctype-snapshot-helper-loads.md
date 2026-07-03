@@ -19,7 +19,7 @@ Coverage:
   typeinfo, layout, pointer-struct, and rollback-reader paths.
 - Local `CType` record access in these helpers must use the documented
   snapshot load helpers; that rule lives here and beside the helper surface
-  instead of in a source-text predicate.
+ ; observable behavior is covered by the named fixtures.
 
 Validation:
 
