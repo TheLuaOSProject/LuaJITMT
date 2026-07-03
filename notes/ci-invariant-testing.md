@@ -84,3 +84,11 @@ rules. If a future cleanup discovers an old repository text-matching gate,
 remove it and replace it with a comment/note that explains the reason for the
 constrained code plus behavioral or generated-artifact coverage where the
 failure can be observed.
+
+2026-07-03 historical-suite follow-up: the whole historical guard suite follows
+the same rule. Old wrapper names, old source inventories, old bytecode golden
+comparisons, and old generated IR/ASM/mcode checks are audit history only. Do
+not port them forward, keep them as dormant tests, or recreate them under a new
+runner. If one described a real invariant, document the invariant beside the
+code that depends on it and cover the externally visible failure mode through
+the current Lua/C fixture, stock-suite, benchmark, or release-artifact harness.

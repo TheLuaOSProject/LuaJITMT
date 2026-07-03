@@ -9,7 +9,9 @@
 4. **Hammer/stress** (§13.4): hours-scale soak under torture.
 5. **C unit drivers** (§13.6.2): lock-free structures isolated, TSAN-clean.
 6. **Oracles**: LJ_GC2_PARANOIA STW diff (05 §5.13); string identity
-   checker; bytecode golden files.
+   checker; bytecode dump/load execution as an opaque artifact. Bytecode byte
+   spelling, generated IR/ASM text, objdump output, mcode bytes, helper-name
+   inventories, and repository source text are not test contracts.
 7. **Fuzzing** (§13.7).
 
 ## 13.2 Baseline numbers (reference machine)
@@ -82,9 +84,11 @@ helper-backed table-store regressions that confirm the remembered SSB entry is
 the old parent table and that the next minor cycle marks the young child
 through that parent.
 The x64 `TSET` nil-snapshot regression test catches pre-store `barrierback`
-repairs and requires the post-store VM value/range publication helpers,
-including a hook-driven real-bytecode `BC_TSETM` constructor case over an old
-forwarded array generation.
+repairs through runtime behavior and requires the post-store VM value/range
+publication helpers by observing the effects of a hook-driven real-bytecode
+`BC_TSETM` constructor case over an old forwarded array generation. The helper
+route itself is documented next to the VM/table code; the test does not inspect
+`vm_x64.dasc` or generated machine-code spelling.
 `tools/ci/lua_test.sh m9_m10_gc` chains the current M9 stats/benchmark smokes
 with the M10 generational coverage.
 The CSV/geomean accounting check remains a harness self-test. A separate

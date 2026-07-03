@@ -206,6 +206,11 @@ Lua test-suite migration notes:
   release/build manifests, and C/Lua fixture process output. Generated JIT
   IR/ASM dumps and mcode byte/text spelling are internal implementation
   details and must not be active pass/fail gates.
+- The historical source-guard suite has no special status. Removed source
+  inventories, helper-spelling checks, generated IR/ASM/mcode checks, and
+  bytecode golden comparisons are not dormant coverage to restore. Preserve the
+  reason in code comments or notes, and cover observable behavior through the
+  current fixtures, benchmarks, stock tests, or release artifacts.
 - Shared generic utilities live in `tests/lib/suite_utils.lua`; shared VM,
   stock-suite, Lua-script build/run, aggregate-suite, and C-fixture case/batch
   helpers live in `tests/lib/suite_runtime.lua`.

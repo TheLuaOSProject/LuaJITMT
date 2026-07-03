@@ -22,10 +22,13 @@ benchmark CSVs, bytecode compatibility, and release/build artifacts. Shell
 searches in release tooling inspect install metadata, object/generated output,
 or packaging manifests, not repository implementation text.
 
-Historical milestone wrapper suites are not exempt. If an old wrapper described
-a real invariant, delete the source-text check, keep the reason as
-code-adjacent comments and notes, then cover the observable part through the
-current harness.
+Historical milestone wrapper suites are not exempt. The old guard suite is not
+a backlog of checks to preserve: old source inventories, helper-name lists,
+bytecode golden comparisons, generated IR/ASM dumps, and mcode byte patterns
+must stay out of CI even when they once caught a migration mistake. If an old
+wrapper described a real invariant, delete the source-text check, keep the
+reason as code-adjacent comments and notes, then cover the observable part
+through the current harness.
 
 Manual implementation searches and generated dumps remain useful while
 developing or reviewing a slice, but their result is an engineering
