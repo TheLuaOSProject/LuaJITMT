@@ -2,10 +2,11 @@
 
 The Lua test harness and CI do not predicate pass/fail on repository source
 text. This is a blanket rule, including old milestone wrapper suites,
-one-off historical wrappers, and "this helper name must exist" checks: do not
-port them forward. Tests should prove observable VM behavior, generated
-compiler/artifact output, benchmark data, or release packaging.
-Implementation-only rules should be documented beside the code they constrain.
+one-off historical wrappers, and "this helper name must exist" checks. Do not
+port, emulate, or preserve source guards. Tests should prove observable VM
+behavior, generated compiler/artifact output, benchmark data, or release
+packaging. Implementation-only rules must be documented beside the code they
+constrain and, when the context is broader than a local comment, in `notes/`.
 Matching helper names, function calls, field accesses, or snippets freezes
 spelling rather than the concurrency property we care about.
 
@@ -37,10 +38,11 @@ scripts, marker lists, raw-access spelling lists, exact-helper requirements, or
 the old explicit source-reading helper are historical context only. They are
 not tests to preserve, port, restore, or emulate. When one still matters, carry
 forward the invariant itself: memory ordering, ownership, publication,
-native-state discipline, or ABI shape. The durable record belongs in comments
-beside the constrained code and in notes that explain why the rule exists; CI
-must prove it through behavior, C fixtures, generated artifacts, benchmark
-data, or packaging outputs.
+native-state discipline, or ABI shape. The durable record is a code-adjacent
+comment explaining why the implementation must keep that property, plus a note
+when the rationale spans multiple files. CI must prove the observable part
+through behavior, C fixtures, generated artifacts, benchmark data, or packaging
+outputs.
 
 Examples:
 
@@ -74,3 +76,11 @@ the helper/comment exists, not as an active or desired check. When touching
 those notes, rewrite the coverage section to name the current behavioral,
 fixture, generated-artifact, benchmark, or packaging case that owns the
 observable part of the invariant.
+
+2026-07-03 source-guard removal: active tests, CI, and release workflows keep
+no repository-source guard suite at all. Broad `rg`/`grep` audits are allowed as
+manual engineering archaeology while working, but they must not become pass/fail
+rules. If a future cleanup discovers an old source guard, remove the predicate
+and replace it with a comment/note that explains the reason for the constrained
+code plus behavioral or generated-artifact coverage where the failure can be
+observed.

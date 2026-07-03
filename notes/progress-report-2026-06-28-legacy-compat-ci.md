@@ -71,12 +71,12 @@ Current policy keeps no legacy wrappers. Memory-order contracts, ABI fences, and
 temporary migration rules must be comments or notes, with behavior/generated
 artifact coverage where the failure is observable. Best near-term cleanup:
 
-- Delete any newly discovered implementation-shape notes in M5 x64, M7 FFI, and M6 JIT
+- Delete any newly discovered source predicates in M5 x64, M7 FFI, and M6 JIT
   where generated output or runtime behavior already proves the contract.
 - Split `t-gc2-traverse.c` or add selectors; it is still a monolithic mixed
   fixture used by M3 and M8.
-- Deduplicate overlapping finalizer ownership lints between M3 and M8 shell
-  guards.
+- Deduplicate overlapping finalizer ownership coverage between M3 and M8
+  fixtures.
 - Add explicit timeouts to remaining intentionally blocking threading cases.
 
 ## Verification

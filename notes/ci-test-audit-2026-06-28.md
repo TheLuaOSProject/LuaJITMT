@@ -8,7 +8,8 @@ to the constrained code.
 ## Inventory
 
 - 2026-07-03 status: `tools/ci` has only `lua_test.sh` and
-  `platform_build.sh`. The old per-case shell guard suite is gone.
+  `platform_build.sh`. The old per-case shell source-guard suite is gone and
+  must not be rebuilt under a different name.
 - Historical state at the time of this audit: most scripts called
   `tools/ci/lua_test.sh` after doing real validation or orchestration work;
   zero pure alias wrappers remained.
@@ -41,7 +42,7 @@ to the constrained code.
    Broad string matches blocked better implementations that preserved the same
    safety invariant with a new helper boundary. New tests must use behavior,
    C fixtures, generated dump/ASM checks, or documentation instead of
-   helper comments.
+   source predicates.
 
 5. Large shell wrapper files are hard to review.
    `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
@@ -69,7 +70,7 @@ to the constrained code.
   The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
   native entry/leave restoration, nested callbacks, stale callback returns,
   callback blacklisting, and fresh STOPREQ delivery.
-- Removed the old helper-name and implementation-shape notes from
+- Removed the old helper-name and implementation-shape source checks from
   `m7_ffi_callback_runtime`; the behavior fixture now carries that contract.
 
 ## Follow-up Landed Later On 2026-06-28

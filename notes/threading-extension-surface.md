@@ -10,8 +10,7 @@ Keep these active extension entry points:
   `threading.mutex()`, and `threading.channel()` are the user-facing threading
   substrate.
 - `threading.gcstats()` exposes runtime telemetry for behavior tests and
-  benchmarks. It replaces old implementation-shape notes with observable
-  counters.
+  benchmarks. It replaces old source predicates with observable counters.
 - `threading.gcworkers()` controls parked GC2 worker threads for lockless GC
   experiments and tests.
 - `threading.gcmode()` keeps GC2 incremental/generational controls out of

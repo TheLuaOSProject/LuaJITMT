@@ -87,8 +87,9 @@ Validation:
   while routing dump and file-result suites to `suite_assert` directly.
 - Historical state: this pass added source-file content assertions to
   `suite_assert` and raw `Test:read()`. Those legacy wrappers were removed
-  on 2026-06-28; current policy is behavior fixtures, generated artifact
-  assertions, or documentation.
+  on 2026-06-28; they are not a model to recreate. Current policy is
+  behavior fixtures, generated artifact assertions, and code-adjacent comments
+  or notes for implementation-only invariants.
 - Confirmed JIT/bytecode dump matching remains supported as result matching.
 
 Validation:
@@ -106,16 +107,17 @@ Validation:
   `suite_utils.read_source_file()` helper. Both the explicit source-reading
   helper and those legacy wrappers were removed in the later 2026-06-28
   legacy wrapper removal. The remaining path-based read behavior was removed
-  on 2026-07-03 so the harness now treats file access as a neutral primitive.
+  on 2026-07-03 so the harness now treats file access as a neutral primitive;
+  no source guard layer remains.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
   `tools/test.lua` process. Set `LJ_TEST_DISABLE_BUILD_CACHE=1` for the old
   always-clean behavior while debugging the harness.
-- Removed implementation-shape notes from `m7_ffi_callback_runtime.sh` and kept the
-  public wrapper as a thin launcher. The callback runtime case now relies on
-  its C/Lua behavior fixtures for native-state restoration, stale callback
-  returns, callback blacklisting, and fresh STOPREQ behavior.
+- Removed implementation-shape source checks from `m7_ffi_callback_runtime.sh`
+  and kept the public wrapper as a thin launcher. The callback runtime case now
+  relies on its C/Lua behavior fixtures for native-state restoration, stale
+  callback returns, callback blacklisting, and fresh STOPREQ behavior.
 - Removed the M3 shell wrapper's FFI C-call legacy wrapper because the same
   native-entry STOPREQ path is now covered by the M7 callback STOPREQ fixture.
 

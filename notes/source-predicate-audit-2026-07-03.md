@@ -2,9 +2,10 @@
 
 Current policy: tests and CI must not decide pass/fail by reading repository
 source files and matching helper names, field accesses, calls, raw-byte
-snippets, or other implementation spelling. The invariant still matters, but
-the durable record belongs beside the constrained code and in notes that explain
-the ownership, ordering, nonblocking, or ABI reason.
+snippets, or other implementation spelling. There is no active or desired
+repository-source guard suite. The invariant still matters, but the durable
+record belongs beside the constrained code and in notes that explain the
+ownership, ordering, nonblocking, or ABI reason.
 
 Coverage should use behavior, C race/lifetime fixtures, generated artifacts,
 benchmark output, or release packaging output. Generated JIT/bytecode/mcode/ASM
@@ -19,5 +20,11 @@ searches in release tooling inspect install metadata, object/generated output,
 or packaging manifests, not implementation source snippets.
 
 Historical milestone wrapper suites are not exempt. If an old wrapper described
-a real invariant, keep the reason as code-adjacent comments and notes, then
-cover the observable part through the current harness.
+a real invariant, delete the source predicate, keep the reason as
+code-adjacent comments and notes, then cover the observable part through the
+current harness.
+
+Manual source searches remain useful while developing or reviewing a slice, but
+their result is an engineering observation, not a CI contract. A release or
+regression test should fail on wrong behavior, wrong generated output, a broken
+artifact, or a benchmark regression, not on a helper spelling.

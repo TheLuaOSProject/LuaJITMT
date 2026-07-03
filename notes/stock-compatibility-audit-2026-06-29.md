@@ -35,9 +35,10 @@ Allowed remaining searches are over generated artifacts or runtime output: JIT
 dumps, bytecode listings, generated mcode/ASM dumps, captured stdout/stderr,
 CSVs, and marker files. Those checks are permitted because the generated
 artifact is the behavior under test. Repository-source predicates for helper
-names, field accesses, function calls, or snippets are not permitted; preserve
-the reason in comments/notes and prove the observable part through behavior,
-C fixtures, generated artifacts, benchmarks, or packaging outputs.
+names, field accesses, function calls, or snippets are not permitted; remove
+the predicate, preserve the reason in comments/notes, and prove the observable
+part through behavior, C fixtures, generated artifacts, benchmarks, or
+packaging outputs.
 
 The removed text-check compatibility surface remains gone:
 

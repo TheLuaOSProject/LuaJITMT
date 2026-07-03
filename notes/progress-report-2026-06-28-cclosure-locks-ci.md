@@ -117,9 +117,9 @@ Refactored now:
   handling. The behavior fixture carries the real contract.
 
 Resolved by the current invariant-testing guidance:
-- Per-case shell wrappers and are gone; `tools/ci/lua_test.sh`
+- Per-case shell wrappers are gone; `tools/ci/lua_test.sh`
   is the supported CI entrypoint.
-- M4/M5/M6/M7/M8 implementation-shape notes were removed from aggregate suites.
+- M4/M5/M6/M7/M8 source predicates were removed from aggregate suites.
 - The Lua harness file helpers are neutral primitives for generated artifacts,
   imported inputs, and temporary files.
 
