@@ -149,7 +149,7 @@ FINREG/finqueue dispatch lands.
   native-state path. Generic `IR_CALLXS` recording stays disabled in code
   because it does not yet have an explicit native-state enter/leave protocol.
   The reason is documented beside `crec_call()` instead of enforced by a
-  build-time source guard. This removes
+  build-time source-text check. This removes
   the previous requirement that users identify blocking functions with
   `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked. The
   obsolete public marker entry point has been removed from the supported FFI

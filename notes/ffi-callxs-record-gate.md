@@ -5,7 +5,7 @@ Broad ordinary FFI C calls keep falling back to the interpreted
 performs fresh STOPREQ handling. Generic x64 `IR_CALLXS` lowering remains
 unsupported until it can preserve ABI results and run the same native
 enter/leave protocol. This is documented in `lj_crecord.c`; active tests cover
-the fallback behavior instead of enforcing a compile-time source guard.
+the fallback behavior instead of enforcing a compile-time source-text check.
 
 The narrow integer/pointer GPR trampoline family in
 `lj_ccall_jit_{void,i32,ptr}_gpr()` is a separate helper-call bridge for 0, 1,

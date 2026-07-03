@@ -201,12 +201,14 @@ Lua test-suite migration notes:
 - Current cleanup status: runnable suite files under `tests/suites/` rely on
   behavior, fixtures, generated artifacts, benchmarks, or packaging output; the
   legacy helper APIs have been removed from `tests/lib/`.
-- Result-artifact matching remains valid behavior coverage. Generated JIT
-  dumps, bytecode listings, benchmark output, and C/Lua fixture output can keep
-  targeted assertions because they are produced by running the VM.
+- Result-artifact matching remains valid only for public or externally
+  meaningful artifacts: bytecode compatibility payloads, benchmark output,
+  release/build manifests, and C/Lua fixture process output. Generated JIT
+  IR/ASM dumps and mcode byte/text spelling are internal implementation
+  details and must not be active pass/fail gates.
 - Shared generic utilities live in `tests/lib/suite_utils.lua`; shared VM,
-  stock-suite, JIT-dump, Lua-script build/run, aggregate-suite, and C-fixture
-  case/batch helpers live in `tests/lib/suite_runtime.lua`.
+  stock-suite, Lua-script build/run, aggregate-suite, and C-fixture case/batch
+  helpers live in `tests/lib/suite_runtime.lua`.
 - Implementation-detail-only cases were removed from the runnable suite: M0
   invariant checks, M2 GC header accessor inventory, the M5 publication
   assertions, M5 x64 upvalue publication, and M7 no-CTState-L. Important
@@ -238,9 +240,9 @@ Lua test-suite migration notes:
 - Removed implementation-detail checks from the M5 sentinel, bytecode dump
   compatibility, registry root, and nomm-cache fixture cases. Those cases now
   rely on their C behavior fixtures.
-- Generated-output matching is still valid behavior coverage. JIT dumps,
-  bytecode listings, benchmark output, and other artifacts produced by running
-  the VM can keep targeted assertions.
+- Generated-output matching is valid for public artifacts and runtime process
+  output. Generated JIT IR/ASM dumps and mcode byte/text spelling are not
+  valid pass/fail gates even though they are produced by running the VM.
 - Removed the remaining M5 fixture-suite implementation inspections from the string-table
   prep and CAS cases. The suite now relies on the string-table C fixtures for
   layout, marker-bit, resize/retire, duplicate-intern, and secondary-rehash
@@ -336,9 +338,8 @@ Lua test-suite migration notes:
   after the state-owner behavior migration.
 - Removed additional unused M5 source-inspection helper functions that no
   longer back any active test cases.
-- Removed broad M5 JIT trace positive implementation-inventory checks; the case now
-  relies on trace/mcode C fixtures, the Lua trace publish smoke, and generated
-  assembler/JIT result checks.
+- Removed broad M5 JIT trace positive implementation-inventory checks; the case
+  now relies on trace/mcode C fixtures and the Lua trace publish smoke.
 - Removed broad M5 table-array positive implementation inventory and the old-array
   realloc blacklist; the array publication C fixture covers pointer
   replacement, retire-list state, nextgen links, epoch reclaim, and values.
