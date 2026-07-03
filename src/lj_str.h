@@ -159,6 +159,7 @@ LJ_FUNC int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr);
 LJ_FUNC void lj_str_sweep_release(StrTabHdr *hdr);
 LJ_FUNCA GCstr *lj_str_new(lua_State *L, const char *str, size_t len);
 LJ_FUNC void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s);
+LJ_FUNC void lj_str_flush_num_credit(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);
 LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
@@ -167,6 +168,8 @@ LJ_FUNC void lj_str_freetab(global_State *g);
 #ifdef LJ_STR_TEST_HELPERS
 LJ_FUNC uint32_t lj_str_test_id_refills(void);
 LJ_FUNC void lj_str_test_reset_id_refills(void);
+LJ_FUNC uint32_t lj_str_test_num_refills(void);
+LJ_FUNC void lj_str_test_reset_num_refills(void);
 #endif
 
 #define lj_str_newz(L, s)	(lj_str_new(L, s, strlen(s)))

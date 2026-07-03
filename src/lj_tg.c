@@ -17,6 +17,7 @@
 #include "lj_profile.h"
 #include "lj_prng.h"
 #include "lj_safepoint.h"
+#include "lj_str.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
@@ -72,6 +73,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strtab_active_depth = 0;
   tg->strid_next = 0;
   tg->strid_end = 0;
+  tg->strnum_credit = 0;
   lj_tg_gcroot_pending_store_rlx(tg, NULL);
   lj_tg_gcroot_pending_after_main_store_rlx(tg, NULL);
   tg_init_ssb(tg);
@@ -109,6 +111,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
 void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
+    lj_str_flush_num_credit(g, g->main_tg);
     lj_tg_fini_ssb(g->main_tg);
     lj_buf_free(g, &g->main_tg->tmpbuf);
     if (lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB))
@@ -149,6 +152,7 @@ void lj_tg_fini_thread(global_State *g, TGState *tg)
 {
   if (!tg)
     return;
+  lj_str_flush_num_credit(g, tg);
   lj_tg_fini_ssb(tg);
   lj_buf_free(g, &tg->tmpbuf);
   if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
@@ -240,6 +244,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc2_flush_ssb(g, tg);  /* 09 section 9.3 detach publishes SSB. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
+  lj_str_flush_num_credit(g, tg);
   la_fence_rel();
   oldflags = lj_tg_flags_or_rlx(tg, TGF_DEAD);  /* 05 section 5.4.1. */
   (void)lj_safepoint_retire_dead_tg(g, tg);

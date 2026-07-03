@@ -129,9 +129,11 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 #define LJ_STR_MAXCOLL		32
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
 #define LJ_STRID_BLOCK		64u
+#define LJ_STRNUM_BLOCK		64u
 
 #ifdef LJ_STR_TEST_HELPERS
 static uint32_t str_test_id_refills;
+static uint32_t str_test_num_refills;
 
 uint32_t lj_str_test_id_refills(void)
 {
@@ -143,12 +145,28 @@ void lj_str_test_reset_id_refills(void)
   la_store32_rel(&str_test_id_refills, 0);
 }
 
+uint32_t lj_str_test_num_refills(void)
+{
+  return la_load32_acq(&str_test_num_refills);
+}
+
+void lj_str_test_reset_num_refills(void)
+{
+  la_store32_rel(&str_test_num_refills, 0);
+}
+
 static LJ_AINLINE void str_test_id_refill(void)
 {
   (void)la_add32_acqrel(&str_test_id_refills, 1);
 }
+
+static LJ_AINLINE void str_test_num_refill(void)
+{
+  (void)la_add32_acqrel(&str_test_num_refills, 1);
+}
 #else
 #define str_test_id_refill()	((void)0)
+#define str_test_num_refill()	((void)0)
 #endif
 
 static void strtab_wait(lua_State *L)
@@ -203,6 +221,45 @@ static LJ_AINLINE StrID strid_next(lua_State *L, global_State *g)
     return sid;
   }
   return strid_refill(g, tg);
+}
+
+static LJ_NOINLINE MSize strnum_refill(global_State *g, TGState *tg)
+{
+  /*
+  ** `g->str.num` is the shared resize/shrink and close-time string count.
+  ** Successful interns reserve a small count block per TG and consume one
+  ** credit only after the bucket CAS linearizes a new string. The global count
+  ** is therefore conservative until unused credits are flushed on TG exit or
+  ** close, removing a contended RMW from the common successful-intern path
+  ** while preserving exact final accounting.
+  */
+  MSize n = la_add32_rlx(&g->str.num, LJ_STRNUM_BLOCK) + LJ_STRNUM_BLOCK;
+  tg->strnum_credit = LJ_STRNUM_BLOCK - 1u;
+  str_test_num_refill();
+  return n;
+}
+
+static LJ_AINLINE int strnum_publish_success(global_State *g, TGState *tg,
+					     MSize mask)
+{
+  uint32_t credit = tg->strnum_credit;
+  if (credit != 0) {
+    tg->strnum_credit = credit - 1u;
+    return 0;
+  }
+  return strnum_refill(g, tg) > mask;
+}
+
+void lj_str_flush_num_credit(global_State *g, TGState *tg)
+{
+  uint32_t credit;
+  if (!g || !tg)
+    return;
+  credit = tg->strnum_credit;
+  if (credit != 0) {
+    tg->strnum_credit = 0;
+    (void)la_sub32_acqrel(&g->str.num, credit);
+  }
 }
 
 static void strtab_retired_push(global_State *g, StrTabHdr *hdr)
@@ -658,8 +715,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	lj_str_next_store_rel(obj2gco(news), u);
 	want = (uintptr_t)news | (u & LJ_STRHASH_SECONDARY);
 	if (strref_cas_rel(head, &u, want)) {  /* 06 section 6.5 intern linearization. */
-	  MSize n = la_add32_rlx(&g->str.num, 1) + 1u;
-	  grow = n > mask;
+	  grow = strnum_publish_success(g, L2TG(L), mask);
 	  break;
 	}
       }

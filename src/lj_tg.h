@@ -71,6 +71,7 @@ struct TGState {
   uint32_t strtab_active_depth;
   StrID strid_next;
   StrID strid_end;
+  uint32_t strnum_credit;  /* Unused string-count reservations. */
   uint8_t gc_assist;
   uint8_t hookmask_th;
   uint8_t tg_flags;

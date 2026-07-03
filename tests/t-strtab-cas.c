@@ -85,6 +85,50 @@ static void exercise_string_id_blocks(lua_State *L)
   }
 }
 
+static void exercise_string_count_blocks(lua_State *L)
+{
+  enum { N = 96 };
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  GCstr *s[N];
+  MSize before, published, exact;
+  uint32_t refills0, refills1;
+  int i;
+
+  lj_str_flush_num_credit(g, tg);
+  assert(tg->strnum_credit == 0);
+  before = la_load32_acq(&g->str.num);
+  lj_str_test_reset_num_refills();
+  refills0 = lj_str_test_num_refills();
+
+  for (i = 0; i < N; i++) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "m5-strtab-num-block-%03d", i);
+    s[i] = lj_str_new(L, buf, strlen(buf));
+    assert(s[i] != NULL);
+  }
+
+  refills1 = lj_str_test_num_refills();
+  assert(refills1 > refills0);
+  assert(refills1 - refills0 < N / 4);
+  published = la_load32_acq(&g->str.num);
+  assert(published >= before + N);
+  assert(published == before + N + tg->strnum_credit);
+
+  lj_str_flush_num_credit(g, tg);
+  exact = la_load32_acq(&g->str.num);
+  assert(tg->strnum_credit == 0);
+  assert(exact == before + N);
+
+  for (i = 0; i < N; i++) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "m5-strtab-num-block-%03d", i);
+    assert(lj_str_new(L, buf, strlen(buf)) == s[i]);
+  }
+  assert(lj_str_test_num_refills() == refills1);
+  assert(la_load32_acq(&g->str.num) == exact);
+}
+
 static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   FailAllocCtx *ctx = (FailAllocCtx *)ud;
@@ -197,6 +241,13 @@ int main(void)
   s2 = lj_str_new(L, "m5-strtab-cas-same", strlen("m5-strtab-cas-same"));
   assert(s1 == s2);
   exercise_string_id_blocks(L);
+  exercise_string_count_blocks(L);
+  retire_epoch = gc2_hs_epoch_acq(g);
+  (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
+  assert(lj_str_retired_head_acq(g) == NULL);
+  hdr = lj_str_tabh_acq(g);
+  assert(hdr != NULL);
+  assert(hdr->resize == 0);
 
   oldmask = g->str.mask;
   wantmask = (oldmask << 1) + 1u;
@@ -325,6 +376,6 @@ int main(void)
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
   lua_close(L);
-  printf("t-strtab-cas OK: resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID block reservation verified\n");
+  printf("t-strtab-cas OK: resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
   return 0;
 }
