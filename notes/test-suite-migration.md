@@ -213,13 +213,12 @@ Lua test-suite migration notes:
   invariants should be covered by behavior tests or C/Lua fixtures.
 - Shared suite helpers now live in `tests/lib/suite_utils.lua`. The migrated
   suites use that module for shell quoting, environment defaults, substring
-  scans, plain/pattern occurrence counts, dump assertions, command-output
-  assertions, list append, and aggregate case registration instead of carrying
-  per-suite copies.
-- Shared runtime helpers now cover stock-suite execution, generated JIT-dump
-  capture, child Lua test-script execution, nested aggregate suite execution,
-  C fixture case registration, and repeated C fixture batches. M3/M4/M5/M6/M7
-  and M8 suites use those helpers for common runner mechanics.
+  scans over public output, command-output assertions, list append, and
+  aggregate case registration instead of carrying per-suite copies.
+- Shared runtime helpers now cover stock-suite execution, child Lua test-script
+  execution, nested aggregate suite execution, C fixture case registration, and
+  repeated C fixture batches. M3/M4/M5/M6/M7 and M8 suites use those helpers for
+  common runner mechanics.
 - Added `m5_upvalue_publish_gc` as a behavior replacement for the deleted
   closed-upvalue publication legacy wrappers. It stores fresh GC objects through
   closed upvalues in interpreter, threaded, and hot JIT paths, forces GC/GC2,
@@ -252,8 +251,8 @@ Lua test-suite migration notes:
 - Converted the M5 runtime suite to behavior-only smoke/regression tests,
   removing legacy wrappers around buffer, CType, JIT table, userdata,
   allocator, OS, and parser checks.
-- Removed `m7_ffi_jit_cnew` implementation/assembly text assertions while keeping its
-  allocation stress, generated JIT dump checks, and stock FFI regression run.
+- Removed `m7_ffi_jit_cnew` implementation/assembly text assertions while
+  keeping its allocation stress and stock FFI regression run.
 - Converted `m3_safepoint_handshake` to rely on the compiled handshake
   fixture instead of checking safepoint/native-call implementation markers.
 - Converted `m7_ffi_cparse_rollback` to behavior-only coverage through its C
@@ -268,8 +267,8 @@ Lua test-suite migration notes:
   callback fixtures, threaded Lua runtime stress, and stock callback test, and
   removed the now-unused callback runtime source-order helper.
 - Converted `m7_ffi_finreg` to behavior-only coverage through threaded
-  finalizer runs, the trace finalizer fixture, and a generated IR dump check;
-  removed the now-unused FINREG legacy wrapper helper.
+  finalizer runs and the trace finalizer fixture; removed the now-unused FINREG
+  legacy wrapper helper.
 - Converted `m7_ffi_pin` to behavior-only coverage through the threaded
   `ffi.pin` Lua regression.
 - Converted `m7_ffi_metatype` to behavior-only coverage through the threaded
@@ -298,16 +297,16 @@ Lua test-suite migration notes:
 - Converted the M5 x64 cases, including `m5_x64_tset_nil_snapshot`, to rely on
   Lua smoke tests and C forward/snapshot fixtures instead of direct
   `vm_x64.dasc` implementation inspections.
-- Converted `m6_jit_hrefk_nodehdr` and `m6_jit_href_nodehdr` to generated
-  IR/runtime behavior coverage.
+- Converted `m6_jit_hrefk_nodehdr` and `m6_jit_href_nodehdr` to runtime
+  behavior and traceability coverage.
 - Converted `m6_jit_cell_ops`, `m6_jit_barrier_xpoll`, and
-  `m6_jit_aref_pair_guard` to generated dump/runtime behavior coverage.
-- Converted `m6_jit_table_store_helper` to rely on its C forward-store fixture,
-  Lua smoke, and generated IR checks.
+  `m6_jit_aref_pair_guard` to runtime behavior and traceability coverage.
+- Converted `m6_jit_table_store_helper` to rely on its C forward-store fixture
+  and Lua smoke.
 - Converted `m6_jit_alloc_account`, `m6_jit_gc2_readiness`, and
-  `m6_jit_gcstep_guard` to C fixture/generated dump behavior coverage.
-- Converted `m6_jit_token` to its C/Lua recorder-token regressions and
-  generated XPOLL dump checks instead of direct recorder/x64 legacy wrappers.
+  `m6_jit_gcstep_guard` to C fixture and runtime behavior coverage.
+- Converted `m6_jit_token` to its C/Lua recorder-token regressions instead of
+  direct recorder/x64 legacy wrappers.
 - Converted `m5_tab_cas_store` to rely on the compiled CAS/FORWARD behavior
   fixture instead of direct table/API/library implementation inspections.
 - Converted `m5_state_owner` to rely on the compiled foreign-state owner
@@ -330,7 +329,7 @@ Lua test-suite migration notes:
   build, oracle fixtures, and stock tests.
 - Removed low-risk M6 implementation-detail baskets from dispatch redispatch,
   mcode publication, and flush handshakes; replacement coverage now uses C
-  fixtures, runtime probes, and generated dump/result checks.
+  fixtures and runtime probes.
 - Removed the M3 GC2 scaffold marker inventory; the scaffold case now relies
   on its C fixtures and nested behavior gates.
 - Removed unused M5 base-table source-inspection helper functions left behind
@@ -351,23 +350,22 @@ Lua test-suite migration notes:
 - Removed low-risk M8 finalizer dispatch and legacy FINREG/mmudata source
   scans; the weak/finalizer matrix and GC2 C fixtures cover those behaviors
   without direct implementation inspection.
-- Replaced the M6 XBAR/XPOLL optimizer inventory with generated IR dump probes
-  for `ffi.copy`, FFI loads, and FFI stores after loop `XPOLL`;
-  also removed duplicate M6 scaffold-name and reserve-order checks already
-  covered by dispatch and mcode behavior.
-- Removed duplicate/low-risk M5 publication implementation inspections from trace,
-  table-array, and table-value guards; kept generated assembler/JIT result
-  matching.
+- Replaced the M6 XBAR/XPOLL optimizer inventory with runtime behavior and
+  traceability probes for `ffi.copy`, FFI loads, and FFI stores after loop
+  `XPOLL`; also removed duplicate M6 scaffold-name and reserve-order checks
+  already covered by dispatch and mcode behavior.
+- Removed duplicate/low-risk M5 publication implementation inspections from
+  trace, table-array, and table-value guards; kept behavior fixtures.
 - Removed additional M5 exact source inventories for bytecode helper names, x64
   exitstub scaffolding, table-access macro definitions, and serializer call
-  spelling. The suite keeps generated-result checks plus MT publication guards.
+  spelling. The suite keeps runtime behavior plus MT publication guards.
 - Removed the redundant `string.gmatch` C-closure upvalue legacy wrapper from
   `m5_upvalue_publish_gc`; `tests/t-cclosure-upvalue-snapshot.c` now provides
   the behavior coverage by observing and mutating the iterator position
   upvalue through the debug API.
 - Removed the remaining local-cell x64 legacy wrapper from the shared cell-op
-  helper; bytecode, generated JIT dump, and runtime probes cover the cell
-  paths without reading `lj_asm_x86.h`.
+  helper; bytecode compatibility and runtime probes cover the cell paths
+  without reading `lj_asm_x86.h`.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

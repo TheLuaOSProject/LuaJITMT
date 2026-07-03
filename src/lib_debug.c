@@ -477,7 +477,7 @@ static void debug_checkstop_fresh(lua_State *L, uint32_t actions,
 				  int had_stopreq)
 {
   if (debug_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 static void debug_native_fputs(lua_State *L, const char *s, FILE *fp)

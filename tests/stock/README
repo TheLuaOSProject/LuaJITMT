@@ -37,7 +37,7 @@ Many issues need to be resolved before the merge can be performed:
   Most others should be run from the same state for performance resons
 
 - Hard to check that the JIT compiler actually generates the intended code
-  Maybe use a test matching variant of the jit.dump module
+  Prefer behavior, traceability, and benchmark tests over dump-text matching
 
 - Portability concerns
 
@@ -74,4 +74,3 @@ removed, please open an issue.
 There are some benchmarks that bear other copyrights, probably public
 domain, BSD or MIT licensed. If the status cannot be determined, they
 need to be replaced or removed before merging with the LuaJIT repo.
-

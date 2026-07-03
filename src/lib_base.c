@@ -594,7 +594,7 @@ static void print_checkstop_fresh(lua_State *L, uint32_t actions,
 				  int had_stopreq)
 {
   if (print_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 static void print_native_write(lua_State *L, const char *str, size_t size)

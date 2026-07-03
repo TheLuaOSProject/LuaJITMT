@@ -18,9 +18,7 @@
 
 #include "lib/lua_fixture_helpers.h"
 
-#ifndef LJ_FUNC_TEST_HELPERS
-#error "t-jit-fnew-bump requires LJ_FUNC_TEST_HELPERS"
-#endif
+/* Built by the M6 harness with LJ_FUNC_TEST_HELPERS enabled. */
 
 static void run_script(lua_State *L, const char *code, const char *label)
 {

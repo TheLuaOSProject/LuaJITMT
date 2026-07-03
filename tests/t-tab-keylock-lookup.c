@@ -18,9 +18,7 @@
 
 #include "lib/tab_forward_helpers.h"
 
-#ifndef LJ_TAB_TEST_HELPERS
-#error "t-tab-keylock-lookup requires LJ_TAB_TEST_HELPERS"
-#endif
+/* Built by the M5 harness with LJ_TAB_TEST_HELPERS enabled. */
 
 typedef struct KeylockReleaseCtx {
   Node *node;

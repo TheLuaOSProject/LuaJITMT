@@ -96,7 +96,7 @@ static void io_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq)
 {
   actions = io_poll_pending_stopreq(L, actions);
   if (io_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,

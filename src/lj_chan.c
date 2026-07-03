@@ -115,7 +115,7 @@ static void chan_checkstop_fresh(lua_State *L, uint32_t actions,
 {
   actions = chan_poll_pending_stopreq(L, actions);
   if (chan_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 static void chan_wait(lua_State *L, LJChan *ch)

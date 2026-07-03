@@ -42,8 +42,8 @@ to the constrained code.
 4. Repository legacy wrappers often pinned implementation details.
    Broad string matches blocked better implementations that preserved the same
    safety invariant with a new helper boundary. New tests must use behavior,
-   C fixtures, generated dump/ASM checks, or documentation instead of
-   spelling assertions.
+   C fixtures, public artifacts, benchmarks, packaging, or documentation
+   instead of spelling assertions.
 
 5. Large shell wrapper files are hard to review.
    `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
@@ -102,7 +102,7 @@ to the constrained code.
   stock v2 and transitional v3 dumps was restored. That path is not a
   threading-only legacy entrypoint; it affects `load`, `luaL_loadbuffer*`, and
   precompiled chunk interoperability. The active `m5_bcdump_compat` fixture
-  mutates generated dumps to verify v2/v3 loading while still rejecting
+  mutates bytecode blobs to verify v2/v3 loading while still rejecting
   lockless-only cell opcodes in old dump versions.
 - Reverted the removal of stock LuaJIT C header aliases such as
   `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,

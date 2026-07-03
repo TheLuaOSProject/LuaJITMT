@@ -53,7 +53,7 @@ static void ctype_checkstop_fresh(lua_State *L, uint32_t actions,
 				  int had_stopreq)
 {
   if (ctype_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 /* -- C type definitions -------------------------------------------------- */

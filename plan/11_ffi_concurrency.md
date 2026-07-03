@@ -146,8 +146,10 @@ FINREG/finqueue dispatch lands.
   `HS_STOPREQ` after callback blacklist handling and result conversion have
   restored local FFI bookkeeping. Safety-first default: cdata function calls do
   not record `IR_CALLXS`, so ordinary FFI calls naturally use the interpreted
-  native-state path. `LJ_FFI_RECORD_CALLS` hard-fails at compile time until
-  `IR_CALLXS` has an explicit native-state enter/leave protocol. This removes
+  native-state path. Generic `IR_CALLXS` recording stays disabled in code
+  because it does not yet have an explicit native-state enter/leave protocol.
+  The reason is documented beside `crec_call()` instead of enforced by a
+  build-time source guard. This removes
   the previous requirement that users identify blocking functions with
   `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked. The
   obsolete public marker entry point has been removed from the supported FFI
@@ -155,9 +157,8 @@ FINREG/finqueue dispatch lands.
   Callback entry applies the same freshness rule: pre-existing sticky
   `TGF_STOPREQ` is tolerated, but a STOPREQ newly acknowledged while the
   carrier was native interrupts before the Lua callback body runs.
-  Traced C-call throughput stays deferred behind the native-state protocol, and
-  `m7_ffi_ccall_native` now asserts the opt-in `LJ_FFI_RECORD_CALLS` build gate
-  still fails until that bridge exists.
+  Traced C-call throughput stays deferred behind the native-state protocol,
+  with narrow helper-backed C-call shapes covered by behavior tests.
 - **FFI library C spans**: `ffi.copy()`, `ffi.fill()`, and the unbounded
   `strlen()` scan behind `ffi.string(ptr)` enter native state for the raw C
   library work, then apply the same fresh-STOPREQ rule as interpreted C calls.

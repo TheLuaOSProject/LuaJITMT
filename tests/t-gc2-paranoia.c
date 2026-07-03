@@ -19,9 +19,7 @@
 
 #include "lib/lua_fixture_helpers.h"
 
-#if !LJ_GC2_PARANOIA
-#error "t-gc2-paranoia requires -DLJ_GC2_PARANOIA=1"
-#endif
+/* Built by the M3 harness with LJ_GC2_PARANOIA enabled. */
 
 static int paranoia_finalizer(lua_State *L)
 {

@@ -80,35 +80,4 @@ function M.assert_text_match_count(label, data, pattern, mincount, what)
   return n
 end
 
-function M.assert_dump_contains(t, dump, needle, label)
-  -- Dump assertions inspect generated runtime/compiler artifacts.
-  local data = t:read(dump)
-  label = label or dump
-  M.assert_text_contains(label, data, needle, "dump text")
-end
-
-function M.assert_dump_match(t, dump, pattern, label)
-  local data = t:read(dump)
-  label = label or dump
-  M.assert_text_match(label, data, pattern, "dump pattern")
-end
-
-function M.assert_dump_all_contains(t, dump, needles, label)
-  local data = t:read(dump)
-  label = label or dump
-  M.assert_text_all_contains(label, data, needles, "dump text")
-end
-
-function M.assert_dump_contains_count(t, dump, needle, mincount, label)
-  local data = t:read(dump)
-  label = label or dump
-  return M.assert_text_contains_count(label, data, needle, mincount, "dump text")
-end
-
-function M.assert_dump_match_count(t, dump, pattern, mincount, label)
-  local data = t:read(dump)
-  label = label or dump
-  return M.assert_text_match_count(label, data, pattern, mincount, "dump pattern")
-end
-
 return M

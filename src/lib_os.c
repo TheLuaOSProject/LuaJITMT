@@ -67,7 +67,7 @@ static void os_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq,
   if (had_pending_stopreq && !(actions & LJ_GC2_HS_STOPREQ))
     actions |= lj_safepoint_poll(L);
   if (os_fresh_stopreq(L, actions, had_stopreq, had_pending_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 static int os_native_remove_action(lua_State *L, const char *filename,

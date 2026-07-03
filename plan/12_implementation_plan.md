@@ -9,14 +9,14 @@ Tasks: pin the commit (00 §0.2). Add the ADR-1 x86-64/GC64 `#error`
 invariant check without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
 github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). CI must prove
-builds, runtime behavior, generated artifacts, benchmark data, or packaging
-output. Repository source-text pass/fail checks are not allowed. Old
-implementation inventories were one-off engineering archaeology, not tests,
-and old milestone wrapper suites do not get an exception. Keep lasting
-invariants in behavior fixtures, C race/lifetime fixtures, generated dump/ASM
-checks when code generation is the observable artifact, and code-adjacent
-comments plus notes when the rule is design guidance rather than observable
-behavior. Run
+builds, runtime behavior, public API/ABI compatibility, benchmark data, or
+packaging output. Repository source-text and generated IR/ASM/mcode pass/fail
+checks are not allowed. Old implementation inventories were one-off engineering
+archaeology, not tests, and old milestone wrapper suites do not get an
+exception. Keep lasting invariants in behavior fixtures, C race/lifetime
+fixtures, release/bytecode artifact checks where the artifact is the public
+product, and code-adjacent comments plus notes when the rule is design guidance
+rather than observable behavior. Run
 `aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.
@@ -32,8 +32,8 @@ The lasting requirement is documented beside the helper/accessor layer.
 02 §2.4 tv_rawstore macro
 layer routes final 64-bit moves through `lj_atomic`. lj_mtfields.md seeded
 (02 §2.5).
-Gate: stock tests green; zero unintended asm diffs in vm_x64.o before the
-dasc migration (objdump diff).
+Gate: stock tests green; x64 VM behavior fixtures green before the dasc
+migration.
 
 ## M2 — dasc migration + allocator swap, still single-thread (≈3000)
 Tasks: vm_x64.dasc TG addressing per 03 §3.5 dispositions A–F. lj_arena.{h,c}

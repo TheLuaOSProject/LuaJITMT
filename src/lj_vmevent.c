@@ -87,7 +87,7 @@ static void vmevent_checkstop_fresh(lua_State *L, uint32_t actions,
 				    int had_stopreq)
 {
   if (vmevent_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)

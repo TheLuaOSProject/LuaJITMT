@@ -69,8 +69,7 @@ host ABI's `unsigned long` width at the final C call; the shared-library test
 also passes a signed narrow cdata value through the regular unsigned-long
 conversion path. Exact two-argument `pointer,int64_t` and `pointer,uint64_t`
 span-style shapes are covered by the shared GPR helper matrix, while broader
-pointer/size families still fall back. Broad traced
-ordinary FFI C calls remain disabled by
-`LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering still needs explicit
-result preservation and carefully ordered native entry relative to ABI argument
-setup before direct mcode calls are safe.
+pointer/size families still fall back. Broad traced ordinary FFI C calls remain
+interpreted because x64 `IR_CALLXS` lowering still needs explicit result
+preservation and carefully ordered native entry relative to ABI argument setup
+before direct mcode calls are safe.

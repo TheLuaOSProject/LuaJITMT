@@ -75,7 +75,7 @@ static void package_checkstop_fresh(lua_State *L, uint32_t actions,
 				    int had_stopreq)
 {
   if (package_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 #if LJ_TARGET_DLOPEN
@@ -123,7 +123,7 @@ static void *ll_load(lua_State *L, const char *path, int gl)
     lua_pushstring(L, err);
   } else if (package_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = ll_unloadlib(L, lib);
-    lj_safepoint_checkstop(L, actions | close_actions);
+    lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
   return lib;
 }
@@ -473,7 +473,7 @@ static int readable(lua_State *L, const char *filename)
   }
   if (package_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = pkg_native_fclose(L, f);
-    lj_safepoint_checkstop(L, actions | close_actions);
+    lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
   actions = pkg_native_fclose(L, f);
   package_checkstop_fresh(L, actions, had_stopreq);

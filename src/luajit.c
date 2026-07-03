@@ -109,7 +109,7 @@ static void frontend_checkstop_fresh(lua_State *L, uint32_t actions,
 				     int had_stopreq)
 {
   if (frontend_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 static void frontend_fwrite(lua_State *L, const void *p, size_t size,

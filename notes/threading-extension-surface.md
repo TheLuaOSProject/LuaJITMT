@@ -27,8 +27,8 @@ entry points, optional Lua 5.2 compatibility, standard FFI behavior, and
 standard `lua*`/`luaL*` C API symbols stay intact.
 
 The policy in `notes/ci-invariant-testing.md` applies here: test behavior with
-Lua/C fixtures, inspect generated dump/ASM output when code generation is the
-observable result, and document ownership/API boundaries in notes like this one.
+Lua/C fixtures, public artifacts, benchmarks, and packaging, and document
+ownership/API boundaries in notes like this one.
 
 ## 2026-06-29 stock-compatibility boundary
 

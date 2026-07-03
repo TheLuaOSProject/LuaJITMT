@@ -119,7 +119,7 @@ static void load_checkstop_fresh(lua_State *L, uint32_t actions,
 				 int had_stopreq)
 {
   if (load_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 static void load_pop1_claimed(lua_State *L)
@@ -251,7 +251,7 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
     if (load_fresh_stopreq(L, actions, ctx.had_stopreq)) {
       uint32_t close_actions;
       (void)load_native_fclose(L, ctx.fp, &close_actions);
-      lj_safepoint_checkstop(L, actions | close_actions);
+      lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
     }
   } else {
     ctx.fp = stdin;

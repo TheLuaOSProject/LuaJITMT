@@ -20,8 +20,8 @@ LuaJIT public API, language behavior, or generally supported stock entry points.
   `lua_strlen`, `lua_open`, `lua_getregistry`, `lua_getgccount`,
   `lua_Chunkreader`, and `lua_Chunkwriter`. These are part of the stock LuaJIT
   API surface and are not old fork-specific compatibility wrappers.
-- Removed redundant `string.gmatch` C-closure and local-cell x64 legacy wrappers;
-  behavior fixtures, bytecode checks, and generated JIT dump checks cover the
+- Removed redundant `string.gmatch` C-closure and local-cell x64 legacy
+  wrappers; behavior fixtures and bytecode compatibility checks cover the
   observable semantics.
 - Removed the public `ffi.blocking()` compatibility marker after ordinary FFI
   calls were made native-state safe by default. Internal callback blacklisting

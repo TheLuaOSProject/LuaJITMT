@@ -6,10 +6,9 @@ LuaJIT API behavior.
 
 Refresh note: the 2026-06-29 re-audit after removing the non-stock `ffi.pin`
 entrypoint, and again after adding shared-cdata race coverage, found no active
-removed wrapper tests and no public stock LuaJIT API removals. The remaining
-string checks in active tests are over generated dumps or runtime output,
-matching the policy exception for generated ASM/mcode and other generated
-artifacts.
+removed wrapper tests and no public stock LuaJIT API removals. The active suite
+now keeps runtime behavior, stock-suite, bytecode compatibility, and release
+artifact checks without generated IR/ASM/mcode text gates.
 
 ## Compatibility Tests And CI
 
@@ -29,15 +28,14 @@ removed wrapper tests were found under `tools/ci`, `tools/test.lua`,
 `tests/suites`, `tests/lib`, top-level `tests/*.lua`, or top-level `tests/*.c`.
 Later narrow legacy wrappers must not be treated as stock compatibility
 coverage; stock parity is enforced by runtime behavior tests, vendored stock
-tests, C fixtures, bytecode/generator output checks, and release binary checks.
+tests, C fixtures, bytecode compatibility checks, and release binary checks.
 
-Allowed remaining checks are over generated artifacts or runtime output: JIT
-dumps, bytecode listings, generated mcode/ASM dumps, captured stdout/stderr,
-CSVs, and marker files. Those checks are permitted because the generated
-artifact is the behavior under test. Implementation-spelling checks are not
-permitted; preserve the reason in comments/notes, and prove the observable part
-through behavior, C fixtures, generated artifacts, benchmarks, or packaging
-outputs.
+Allowed remaining checks are over runtime output and public artifacts: bytecode
+compatibility blobs, captured stdout/stderr, CSVs, marker files, and release
+artifacts. Generated JIT IR, generated ASM, and mcode byte/pattern checks are
+not active gates. Implementation-spelling checks are not permitted; preserve the
+reason in comments/notes, and prove the observable part through behavior, C
+fixtures, public artifacts, benchmarks, or packaging outputs.
 
 The removed text-check compatibility surface remains gone:
 

@@ -278,8 +278,14 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
   if (!L)
     return;
   tg = L2TG(L);
+  /* TGF_STOPREQ is sticky bookkeeping: native regions use it to decide
+  ** whether a shutdown request was already pending on entry. The fresh bit is
+  ** the one-shot interrupt edge for VM dispatch checks. Otherwise a Lua pcall
+  ** that catches a STOPREQ would immediately rethrow from the next dispatch
+  ** boundary while the sticky bit is still intentionally set.
+  */
   if ((actions & LJ_GC2_HS_STOPREQ) ||
-      (tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ))) {
+      (tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH))) {
     if (tg)
       (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ_FRESH);
     lj_err_callermsg(L, "thread interrupted: VM shutdown");
@@ -378,18 +384,12 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
 
 static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
 {
-  if ((actions & LJ_GC2_HS_SCAN_ROOTS)) {
-    lua_State *L = lj_tg_load_cur_L(tg);
-    /*
-    ** Remote native acknowledgements may apply phase bits and flush buffers, but
-    ** root scans for a TG with a Lua stack must be owner-applied. Lua frame
-    ** functions/protos live in frame headers, not ordinary TValue slots; scanning
-    ** a remote native stack as raw slots can miss the closure/proto edge and free
-    ** live KGC constants.
-    */
-    if (L && tvref(L->stack) != NULL)
-      return 0;
-  }
+  /* GC2 root scans may remotely acknowledge native-suspended Lua stacks. The
+  ** scanner detects that the stack belongs to another current TG and preserves
+  ** the whole stack storage instead of decoding an owner-private frame chain.
+  ** Trace-flush actions below are different: they can retire trace slots or
+  ** mcode that an active trace/native exit still needs.
+  */
 #if LJ_HASJIT
   /* A TG leaving mcode keeps jit_base set until vm_exit_interp has restored
   ** from the trace snapshot. Trace-flush boundaries must not remotely ack that

@@ -13,7 +13,6 @@ The raw libc stdio call targets are also absent from generated `jit.vmdef`
 metadata, so reintroducing traced stdio requires an explicit IR-call table
 change.
 
-`tests/t-jit-io-native-stopreq.lua` heats all four write/flush variants; the
-M6 suite captures the generated IR and documents why raw stdio calls while no
-native-state JIT helper exists. Trace stitching around the interpreter call
-boundary is acceptable.
+`tests/t-jit-io-native-stopreq.lua` heats all four write/flush variants and
+documents why raw stdio calls stay NYI while no native-state JIT helper exists.
+Trace stitching around the interpreter call boundary is acceptable.

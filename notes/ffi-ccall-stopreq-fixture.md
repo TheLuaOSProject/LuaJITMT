@@ -12,5 +12,6 @@ The fixture covers two cases:
   leaves native state, restores `TGState.ffi_call_func`, and reports the
   shutdown interruption through Lua `pcall()`.
 
-This strengthens the default safety bridge while `LJ_FFI_RECORD_CALLS` remains
-off and `IR_CALLXS` awaits an explicit native-state protocol.
+This strengthens the default safety bridge while broad generic `IR_CALLXS`
+recording remains disabled in code and awaits an explicit native-state
+protocol.

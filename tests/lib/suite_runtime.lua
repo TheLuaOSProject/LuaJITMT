@@ -123,31 +123,6 @@ function M.build_and_run_luajit_script_jit_modes(t, script, args, opts)
   M.run_luajit_script_jit_modes(t, script, args, opts)
 end
 
-function M.luajit_dump(t, dump, dumpopt, code, opts)
-  opts = opts or {}
-  t:run({ t:path("src", "luajit"), dumpopt, "-e", code }, {
-    env = M.lua_path_env(t, opts.env),
-    timeout = opts.timeout,
-    stdout = dump,
-    stderr_to_stdout = opts.stderr ~= false,
-    quiet = opts.quiet
-  })
-end
-
-function M.luajit_dump_file(t, dump, dumpopt, file, args, opts)
-  args = args or {}
-  opts = opts or {}
-  local argv = { t:path("src", "luajit"), dumpopt, file }
-  for i = 1, #args do argv[#argv + 1] = args[i] end
-  t:run(argv, {
-    env = M.lua_path_env(t, opts.env),
-    timeout = opts.timeout,
-    stdout = dump,
-    stderr_to_stdout = opts.stderr ~= false,
-    quiet = opts.quiet
-  })
-end
-
 function M.capture_luajit(t, args, out, opts)
   opts = opts or {}
   local argv = { t:path("src", "luajit") }

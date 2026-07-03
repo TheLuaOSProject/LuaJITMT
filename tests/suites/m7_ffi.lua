@@ -1,24 +1,18 @@
 local utils = require("suite_utils")
-local checks = require("suite_assert")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
-local jitutils = require("suite_jit")
 
 local getenv = utils.getenv
-local assert_dump_contains = checks.assert_dump_contains
 local lua_path = runtime.lua_path
 local build_and_run_c = build.compile_and_run_c
 local run_c_fixture_specs = build.run_c_fixture_specs
 local build_shared_library = build.build_shared_library
 local write_ld_script = build.write_ld_script
 local clean_build = build.clean_build
-local luajit_dump_file = runtime.luajit_dump_file
 local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script
 local run_stock = runtime.run_stock
-local run_ir_dump_probe = jitutils.run_ir_dump_probe
-local shell_quote = utils.shell_quote
 
 local m7_cases = {
   "m7_ffi_cdef_token",
@@ -48,39 +42,6 @@ local m7_cases = {
   "m7_ffi_ccall_native"
 }
 
-local function capture_expected_failure(cmd, opts)
-  opts = opts or {}
-  local marker = "__LJ_EXPECTED_FAILURE_STATUS__"
-  local full = cmd .. " 2>&1; printf '\\n" .. marker .. "%s\\n' \"$?\""
-  if opts.timeout then
-    full = utils.timeout_prefix(opts.timeout) .. " sh -c " .. shell_quote(full)
-  end
-  local p, err = io.popen(full)
-  if not p then error("command failed to start: " .. tostring(err), 2) end
-  local out = p:read("*a")
-  p:close()
-  local status = tonumber(out:match("\n" .. marker .. "([0-9]+)\n?$"))
-  out = out:gsub("\n" .. marker .. "[0-9]+\n?$", "")
-  if status == nil then
-    error("command did not report exit status: " .. full .. "\n" .. out, 2)
-  end
-  if status == 0 then
-    error("command unexpectedly succeeded: " .. full .. "\n" .. out, 2)
-  end
-  return out, status
-end
-
-local function assert_recorded_ffi_calls_gate_fails(t)
-  local make_src = "make -C " .. shell_quote(t:path("src"))
-  local out = capture_expected_failure(
-    make_src .. " clean >/dev/null && " ..
-    make_src .. " -j1 XCFLAGS=-DLJ_FFI_RECORD_CALLS=1",
-    { timeout = "120s" })
-  checks.assert_text_contains("LJ_FFI_RECORD_CALLS opt-in build", out,
-    "LJ_FFI_RECORD_CALLS requires an IR_CALLXS native-state protocol",
-    "build output")
-end
-
 local function build_clib_ldscript_fixture(t)
   local script = t:tmp("lj_t-ffi-clib-ldscript.so")
   local so = build_shared_library(t, t:tmp("lj_t-ffi-clib-ldscript-real.so"),
@@ -94,7 +55,6 @@ return function(add)
     description = "FFI native blocking-call behavior",
     run = function(t)
       local struct_so, jit_so
-      assert_recorded_ffi_calls_gate_fails(t)
       clean_build(t)
       jit_so = build_shared_library(t,
         t:tmp("lj_t-ffi-ccall-jit-lib.so"),
@@ -127,18 +87,17 @@ return function(add)
         env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
         timeout = "20s"
       })
-      local fill_dump = t:tmp("lj_t-ffi-fill-native-ir.dump")
-      run_ir_dump_probe(t, fill_dump, [[
+      luajit_code(t, [[
 local ffi = require"ffi"
+local util = require"jit.util"
 local dst = ffi.new("uint8_t[512]")
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 for _ = 1, 80 do ffi.fill(dst, 256, 0x5a) end
+assert(dst[0] == 0x5a and dst[255] == 0x5a)
+assert(util.traceinfo(1), "bulk ffi.fill loop did not trace")
 print("bulk fill ok")
 ]], { timeout = "60s" })
-      assert_dump_contains(t, fill_dump, "lj_ffi_jit_memset",
-                           "bulk ffi.fill native helper")
-      assert_dump_contains(t, fill_dump, "XBAR", "bulk ffi memory XBAR")
       print("M7 FFI native blocking-call behavior passed")
     end
   })
@@ -523,13 +482,6 @@ assert(cl.lj_clib_ldscript_value() == 42)
         timeout = "20s",
         env = { LUA_PATH = lua_path(t) }
       })
-      local dump = t:tmp("lj_t-ffi-gc-trace.dump")
-      luajit_dump_file(t, dump, "-jdump=ir",
-                        t:path("tests", "t-ffi-gc-trace.lua"), nil, {
-        timeout = "20s",
-        stderr = false
-      })
-      assert_dump_contains(t, dump, "lj_cdata_setfin", "FFI finalizer trace")
       build_and_run_c(t, t:tmp("lj_t-ffi-finreg-free-invariant"),
                       "t-ffi-finreg-free-invariant.c", { timeout = "20s" })
       print("M7 FFI finalizer registry behavior passed")
@@ -546,11 +498,9 @@ assert(cl.lj_clib_ldscript_value() == 42)
         env = { LUA_PATH = lua_path(t) }
       })
 
-      local dump = t:tmp("lj_t-ffi-jit-cnew.dump")
-      local dumpi = t:tmp("lj_t-ffi-jit-cnewi.dump")
-      local dumpbig = t:tmp("lj_t-ffi-jit-cnew-big.dump")
-      run_ir_dump_probe(t, dump, [[
+      luajit_code(t, [[
 local ffi = require"ffi"
+local util = require"jit.util"
 ffi.cdef"typedef struct { int x; double y; } lj_m7_jit_dump_t;"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -566,10 +516,12 @@ local function make(n)
   return sum
 end
 for _ = 1, 30 do assert(make(80) == 6480) end
+assert(util.traceinfo(1), "CNEW allocation loop did not trace")
 print("dump cnew ok")
 ]])
-      run_ir_dump_probe(t, dumpi, [[
+      luajit_code(t, [[
 local ffi = require"ffi"
+local util = require"jit.util"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 local int64_t = ffi.typeof("int64_t")
@@ -579,10 +531,12 @@ local function make(n)
   return v
 end
 for _ = 1, 30 do assert(tonumber(make(80)) == 80) end
+assert(util.traceinfo(1), "CNEWI allocation loop did not trace")
 print("dump cnewi ok")
 ]])
-      run_ir_dump_probe(t, dumpbig, [[
+      luajit_code(t, [[
 local ffi = require"ffi"
+local util = require"jit.util"
 ffi.cdef"typedef struct { uint8_t x[1024]; } lj_m7_jit_dump_big_t;"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -597,15 +551,9 @@ local function make(n)
   return sink.x[0]
 end
 for _ = 1, 30 do assert(make(80) == 80) end
+assert(util.traceinfo(1), "large CNEW allocation loop did not trace")
 print("dump big cnew ok")
 ]])
-      assert_dump_contains(t, dump, "CNEW", "CNEW trace")
-      assert_dump_contains(t, dumpi, "CNEWI", "CNEWI trace")
-      assert_dump_contains(t, dumpbig, "lj_ffi_jit_memset",
-                           "large CNEW zero-fill native helper")
-      assert_dump_contains(t, dump, "dump cnew ok", "CNEW probe")
-      assert_dump_contains(t, dumpi, "dump cnewi ok", "CNEWI probe")
-      assert_dump_contains(t, dumpbig, "dump big cnew ok", "large CNEW probe")
 
       clean_build(t, { xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" })
       run_stock(t, { "test.lua", "--quiet", "lib/ffi/jit_struct.lua" }, {

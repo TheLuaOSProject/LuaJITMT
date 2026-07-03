@@ -250,7 +250,7 @@ static void prng_checkstop_fresh(lua_State *L, uint32_t actions,
 				 int had_stopreq)
 {
   if (prng_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 /* Securely seed PRNG from system entropy. Returns 0 on failure. */

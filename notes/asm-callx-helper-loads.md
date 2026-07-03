@@ -4,9 +4,10 @@
 `ctype_info_acq()` before reconstructing `CALLX*` call flags.
 
 The helper-backed snapshot covers vararg flag reconstruction and x86 calling
-convention bits used by traced FFI calls. Default builds no longer record FFI
-C calls, and `LJ_FFI_RECORD_CALLS` hard-fails at compile time until `IR_CALLXS`
-has a native-state protocol. This helper remains for the eventual native bridge.
+convention bits used by traced FFI calls. Broad generic `IR_CALLXS` recording
+still stays interpreted because it lacks a native-state protocol; that boundary
+is documented in `lj_crecord.c` instead of enforced by an opt-in build guard.
+This helper remains for the eventual native bridge.
 
 Invariant check:
 

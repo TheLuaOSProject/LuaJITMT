@@ -178,14 +178,15 @@ prototypes, closures, tables, and other root-list objects. A GC2-only edge must
 therefore publish liveness to both collectors until arena-only sweeping replaces
 that root-list path.
 
-Safepoint native acknowledgement was also tightened: remote native acks do not
-consume `HS_SCAN_ROOTS` for TGs that own a Lua stack, and owner-side native-leave
-scans walk frame headers before raw slots when the owner is in an interpreter
-frame. If the owner TG is still in a trace/native helper (`jit_base` or positive
-trace `vmstate`), both legacy GC and GC2 now preserve the whole stack storage and
-do not decode `L->base` as an interpreter frame chain. The executing trace is
-kept through `gc_traverse_curtrace()` and the per-TG trace root, which preserve
-its prototype/IR graph without trusting a JIT-owned frame layout. GC2 also
+Safepoint native acknowledgement was also tightened: remote native acks may
+consume `HS_SCAN_ROOTS` for TGs that own a Lua stack because GC2 recognizes the
+remote-current case and scans the whole stack storage instead of decoding the
+owner-private frame chain. Trace-flush handshakes remain owner-side only. If
+the owner TG is still in a trace/native helper (`jit_base` or positive trace
+`vmstate`), both legacy GC and GC2 preserve the whole stack storage and do not
+decode `L->base` as an interpreter frame chain. The executing trace is kept
+through `gc_traverse_curtrace()` and the per-TG trace root, which preserve its
+prototype/IR graph without trusting a JIT-owned frame layout. GC2 also
 preserves the assembler's unpublished `J->curfinal` trace copy as raw arena
 memory during root scans; it is not a semantic trace root until `trace_save()`
 publishes it.

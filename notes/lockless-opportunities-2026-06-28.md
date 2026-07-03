@@ -9,20 +9,20 @@ safety, stability, and language behavior over LuaJIT performance parity.
 ## Best Next Targets
 
 1. Traced FFI call native-state protocol.
-   Ordinary traced FFI calls are currently disabled with
-   `LJ_FFI_RECORD_CALLS=0`. Before re-enabling them, `IR_CALLXS` needs the same
-   native enter/leave protocol as interpreted `lj_ccall()`. This is worth doing
-   only as a staged x64 slice with explicit result-preservation and STOPREQ
-   tests; direct traced foreign calls must stay disabled until then.
+   Broad generic traced FFI calls currently stay interpreted. Before enabling
+   them, `IR_CALLXS` needs the same native enter/leave protocol as interpreted
+   `lj_ccall()`. This is worth doing only as a staged x64 slice with explicit
+   result-preservation and STOPREQ tests; direct traced foreign calls must stay
+   disabled until then.
 
 2. Table resize follow-up stress/proofs.
    Resize forwarding is now production-shaped, but it is still one of the
    riskiest shared objects because it combines replacement generation
    publication, weak clearing, GC traversal, JIT fast paths, and VM stores.
-   More stress, table-forwarding probes, generated dump/ASM checks where the
-   invariant is emitted code, and design notes are worth it. Repository
-   legacy wrappers are not. Removing the transient `KEYLOCK`/`FORWARD`
-   waits is not the goal; bounding and proving them is.
+   More stress, table-forwarding probes, runtime counters where the invariant
+   is emitted-code behavior, and design notes are worth it. Repository legacy
+   wrappers and generated source-shape gates are not. Removing the transient
+   `KEYLOCK`/`FORWARD` waits is not the goal; bounding and proving them is.
 
 3. C-closure upvalue and direct API mutation surfaces.
    This is worth a focused audit now that the closed Lua-upvalue path is sealed,

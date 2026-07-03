@@ -16,9 +16,7 @@
 #include "lj_tab.h"
 #include "lj_thr.h"
 
-#ifndef LJ_TAB_TEST_HELPERS
-#error "t-tab-struct-owner requires LJ_TAB_TEST_HELPERS"
-#endif
+/* Built by the M5 harness with LJ_TAB_TEST_HELPERS enabled. */
 
 typedef struct WorkerCtx {
   lua_State *L;

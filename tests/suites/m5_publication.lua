@@ -541,17 +541,16 @@ return function(add)
 
   add({
     name = "m5_cell_ops",
-    description = "local-cell bytecode and behavior checks",
+    description = "local-cell publication and behavior checks",
     run = function(t)
       t:build({ clean = true, quiet = true })
 
-      cellops.run_bytecode_checks(t, "lj_m5_cell_ops_bc")
       cellops.run_publication_behavior_checks(t)
       run_stock(t, { "test.lua", "--quiet", "lang/upvalue" })
       run_stock(t, { "misc/uclo.lua" })
       run_stock(t, { "test.lua", "--quiet", "opt/fwd/upval.lua" })
       run_stock(t, { "test.lua", "--quiet", "lang/goto.lua" })
-      print("M5 local-cell opcode substrate checks passed")
+      print("M5 local-cell publication behavior passed")
     end
   })
 

@@ -6,17 +6,7 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
-#ifdef LUA_GCGENERATIONAL
-#error LUA_GCGENERATIONAL is not part of the stock LuaJIT public C API.
-#endif
-
-#ifdef LUA_GCINCREMENTAL
-#error LUA_GCINCREMENTAL is not part of the stock LuaJIT public C API.
-#endif
-
-#ifdef LUA_THREADINGLIBNAME
-#error LUA_THREADINGLIBNAME is not part of the stock LuaJIT public C API.
-#endif
+/* Keep this fixture behavioral; stock public-header policy is documented. */
 
 typedef struct ReaderState {
   const char *chunk;

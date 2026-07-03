@@ -40,7 +40,7 @@ static void clib_checkstop_fresh(lua_State *L, uint32_t actions,
 				 int had_stopreq)
 {
   if (clib_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
 /* -- OS-specific functions ----------------------------------------------- */
@@ -150,7 +150,7 @@ static void clib_lds_checkstop(lua_State *L, FILE *fp, uint32_t actions,
 {
   if (clib_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = clib_native_fclose(L, fp);
-    lj_safepoint_checkstop(L, actions | close_actions);
+    lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
 }
 
@@ -164,7 +164,7 @@ static const char *clib_resolve_lds(lua_State *L, const char *name)
   if (clib_fresh_stopreq(L, actions, had_stopreq)) {
     if (fp) {
       uint32_t close_actions = clib_native_fclose(L, fp);
-      lj_safepoint_checkstop(L, actions | close_actions);
+      lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
     } else {
       clib_checkstop_fresh(L, actions, had_stopreq);
     }
@@ -241,7 +241,7 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
       if (h) {
 	if (clib_fresh_stopreq(L, actions, had_stopreq)) {
 	  uint32_t close_actions = clib_native_dlclose(L, h);
-	  lj_safepoint_checkstop(L, actions | close_actions);
+	  lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
 	}
 	return h;
       }
@@ -252,7 +252,7 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
     lj_err_callermsg(L, err);
   } else if (clib_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = clib_native_dlclose(L, h);
-    lj_safepoint_checkstop(L, actions | close_actions);
+    lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
   return h;
 }
@@ -372,7 +372,7 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
     clib_error(L, "cannot load module " LUA_QS ": %s", name);
   } else if (clib_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = clib_native_freelib(L, h);
-    lj_safepoint_checkstop(L, actions | close_actions);
+    lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
   SetLastError(oldwerr);
   UNUSED(global);

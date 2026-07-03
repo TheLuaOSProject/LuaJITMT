@@ -44,8 +44,9 @@ of value type. `IR_OBAR` remains GC-only because only GC values need the
 - `m5_cell_ops` documents the closed-upvalue helper condition and the
   `lua_getlocal()` acquire load through comments near the implementation.
 - `m5_cell_ops` now has a traced primitive closed-local-cell behavior probe.
-- `m6_jit_cell_ops` now checks mcode dumps for `->lj_func_storeuv_forjit` on
-  numeric and primitive closed-upvalue stores.
+- `m6_jit_cell_ops` now checks traced numeric and primitive closed-upvalue store
+  behavior; implementation comments document why the shared helper stores a
+  full TValue.
 - `m6_jit_barrier_xpoll` remains the ordering guard for GC-valued stores:
   helper call first, then `lj_gc_pubuv`.
 

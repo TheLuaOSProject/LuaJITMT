@@ -1,22 +1,18 @@
-# FFI CALLXS record gate
+# FFI CALLXS native-state boundary
 
-`m7_ffi_ccall_native` now attempts an opt-in build with
-`XCFLAGS=-DLJ_FFI_RECORD_CALLS=1` and requires the compile-time
-`IR_CALLXS native-state protocol` error.
-
-This pins the direct-`IR_CALLXS` safety boundary: broad ordinary FFI C calls
-must keep falling back to the interpreted `lj_ccall_func()` path, which enters
-native state around `lj_vm_ffi_call()` and performs fresh STOPREQ handling,
-until x64 `IR_CALLXS` lowering can preserve ABI results and run the same native
-enter/leave protocol.
+Broad ordinary FFI C calls keep falling back to the interpreted
+`lj_ccall_func()` path, which enters native state around `lj_vm_ffi_call()` and
+performs fresh STOPREQ handling. Generic x64 `IR_CALLXS` lowering remains
+unsupported until it can preserve ABI results and run the same native
+enter/leave protocol. This is documented in `lj_crecord.c`; active tests cover
+the fallback behavior instead of enforcing a compile-time source guard.
 
 The narrow integer/pointer GPR trampoline family in
 `lj_ccall_jit_{void,i32,ptr}_gpr()` is a separate helper-call bridge for 0, 1,
 or 2 exact signed 32-bit integer and pointer arguments, plus exact
 `pointer,int64_t` and `pointer,uint64_t` span-style argument pairs, with
 zero-result void, signed 32-bit integer, or pointer returns. It traces through
-`IRCALL`, not `IR_CALLXS`, and keeps the compile-time `LJ_FFI_RECORD_CALLS`
-gate intact.
+`IRCALL`, not `IR_CALLXS`, and leaves unmatched shapes interpreted.
 The sibling `lj_ccall_jit_i64_gpr()` helper traces exact zero-argument signed
 64-bit integer returns, preserving stock boxed int64 cdata results. Signed
 64-bit returns with exact signed 32-bit integer or pointer arguments trace

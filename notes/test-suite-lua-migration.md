@@ -9,8 +9,9 @@
 - Routed `suite_runtime.add_luajit_c_fixture_cases()` through `suite_build`
   directly so fixture registration no longer depends on the removed runtime
   build helper export.
-- Kept generated dump assertions because JIT/bytecode/ASM dump text is a
-  generated behavior surface, not repository implementation text.
+- Superseded generated JIT/ASM dump assertions: compiler-internal text is not a
+  test gate. Bytecode compatibility and release/package artifacts remain valid
+  public-artifact checks.
 - Switched output-file checks to read the captured output and assert text
   directly.
 - Invariant-testing guidance now lives in `notes/ci-invariant-testing.md`.
@@ -28,11 +29,10 @@ Validation:
 - Audited active `tests/suites` and `tools/ci` Lua tests for implementation-text
   assertions. No active test was found that reads `src/` and checks
   implementation text.
-- Runtime output, bytecode output, and JIT dump matching are kept as behavior
-  checks.
-- Moved shared JIT dump parsing helpers from `m6_jit.lua` into
-  `tests/lib/suite_jit.lua`.
-- Moved the M7 IR dump probe helper into `suite_jit.lua`.
+- Superseded: runtime output and bytecode compatibility remain valid behavior
+  checks, while generated JIT dump matching has been removed from active tests.
+- Superseded: shared JIT dump parsing helpers were later deleted.
+- Superseded: the M7 IR dump probe helper was later deleted.
 - Centralized generic text assertions in `suite_utils.lua` and removed unused
   path-based text assertion methods from `ljtest.lua`.
 

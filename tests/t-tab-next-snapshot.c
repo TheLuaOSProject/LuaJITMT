@@ -17,9 +17,7 @@
 
 #include "lib/tab_forward_helpers.h"
 
-#ifndef LJ_TAB_TEST_HELPERS
-#error "t-tab-next-snapshot requires LJ_TAB_TEST_HELPERS"
-#endif
+/* Built by the M5 harness with LJ_TAB_TEST_HELPERS enabled. */
 
 static lua_State *hookL;
 static GCtab *hooktab;

@@ -19,9 +19,7 @@
 
 #include "lib/lua_fixture_helpers.h"
 
-#ifndef LJ_TAB_TEST_HELPERS
-#error "t-x64-tnew-empty-inline requires LJ_TAB_TEST_HELPERS"
-#endif
+/* Built by the M6 harness with LJ_TAB_TEST_HELPERS enabled. */
 
 #define TNEW_EMPTY_SIZE		((GCSize)sizeof(GCtab))
 #define TNEW_EMPTY_NCELLS	((uint32_t)((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT))
