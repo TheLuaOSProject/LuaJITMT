@@ -477,7 +477,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
   global_State *g = G(L);
   if (lenx-1 < LJ_MAX_STR-1) {
     MSize len = (MSize)lenx;
-    StrHash hash = hash_sparse(g->str.seed, str, len);
+    StrHash hash;
     GCstr *news = NULL;
     int hashalg = 0;
     for (;;) {
@@ -490,6 +490,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       if (LJ_UNLIKELY(hdr == NULL)) {
 	if (news)
 	  lj_mem_free(g, news, lj_str_size(news->len));
+	hash = hash_sparse(g->str.seed, str, len);
 	return lj_str_alloc(L, str, len, hash, 0);
       }
 
