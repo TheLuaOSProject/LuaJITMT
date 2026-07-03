@@ -1,20 +1,17 @@
 # Invariant Tests And Documentation
 
-The Lua test harness and CI do not base pass/fail on repository implementation
-text. This is a blanket rule, including old milestone wrapper suites,
-one-off historical wrappers, and "this helper name must exist" checks. Do not
-port, emulate, or preserve those old checks. Tests should prove
-observable VM behavior, generated compiler/artifact output, benchmark data, or
-release packaging. Implementation-only rules must be documented beside the
-code they constrain and, when the context is broader than a local comment, in
-`notes/`. Matching helper names, function calls, field accesses, or snippets
-freezes spelling rather than the concurrency property we care about.
+The Lua test harness and CI must prove observable VM behavior, generated
+compiler/artifact output, benchmark data, or release packaging. This is a
+blanket rule, including old milestone wrapper suites and one-off historical
+wrappers. Implementation-only rules must be documented beside the code they
+constrain and, when the context is broader than a local comment, in `notes/`.
+Tests should fail on broken behavior or broken artifacts, not on implementation
+spelling.
 
 `Test:read()` and `suite_utils.read_file()` are plain artifact readers. They
 exist so tests can read generated dumps, captured logs, temporary files,
-imported-suite inputs, CSVs, package manifests, and other test artifacts. Do
-not use them to make pass/fail decisions about implementation text. The harness
-intentionally has no repository text enumeration helper.
+imported-suite inputs, CSVs, package manifests, and other test artifacts. The
+harness intentionally has no repository text enumeration helper.
 
 Use one of these forms for new coverage:
 
@@ -33,15 +30,14 @@ listings, objdump output, generated mcode dumps, generated assembly, captured
 process output, and generated CSVs. Repository DynASM source is source code;
 generated ASM/mcode output is the artifact to inspect.
 
-Historical entries that mention old wrapper scripts, spelling lists, or
-implementation-name requirements are audit history only. They are not tests to
-preserve, port, restore, or emulate. When one still matters, carry forward the
-invariant itself: memory ordering, ownership, publication, native-state
-discipline, or ABI shape. The durable record is a code-adjacent comment
-explaining why the implementation must keep that property, plus a note when the
-rationale spans multiple files. CI must prove the observable part through
-behavior, C fixtures, generated artifacts, benchmark data, or packaging
-outputs.
+Historical entries that mention old wrapper scripts or implementation-detail
+requirements are audit history only. They are not tests to preserve, port,
+restore, or emulate. When one still matters, carry forward the invariant
+itself: memory ordering, ownership, publication, native-state discipline, or
+ABI shape. The durable record is a code-adjacent comment explaining why the
+implementation must keep that property, plus a note when the rationale spans
+multiple files. CI must prove the observable part through behavior, C fixtures,
+generated artifacts, benchmark data, or packaging outputs.
 
 Examples:
 
@@ -62,24 +58,20 @@ helpers may centralize opcode constants such as lock-prefixed CAS, but tests
 validate the generated mcode and runtime behavior.
 
 2026-07-03 audit: the active `tools/ci` layer is only the Lua launcher and
-platform build smoke script, and the Lua suites do not open repository implementation
-files to decide pass/fail. Remaining file reads are generated dumps, captured
-logs, temporary outputs, benchmark CSVs, or release/build artifacts. C fixtures
-may still compile against internal headers because they execute lifetime,
-publication, native-state, and race behavior rather than grepping implementation
-text.
+platform build smoke script, and Lua suite file reads are generated dumps,
+captured logs, temporary outputs, benchmark CSVs, or release/build artifacts.
+C fixtures may still compile against internal headers because they execute
+lifetime, publication, native-state, and race behavior.
 
-2026-07-03 follow-up: this policy has no historical-suite exception. Old notes
-may still describe deleted shell wrappers that once "required" helper spelling
-or "rejected" raw field access. Treat that wording as audit history, not as an
-active or desired check. When touching those notes, rewrite the coverage
-section to name the current behavioral, fixture, generated-artifact, benchmark,
-or packaging case that owns the observable part of the invariant.
+2026-07-03 follow-up: this policy has no historical-suite exception. When
+touching old notes, rewrite the coverage section to name the current
+behavioral, fixture, generated-artifact, benchmark, or packaging case that owns
+the observable part of the invariant.
 
 2026-07-03 removal follow-up: active tests, CI, and release workflows keep no
-suite that checks helper spelling by reading implementation files. Broad
-`rg`/`grep` audits are allowed as manual engineering archaeology while working,
-but they must not become pass/fail rules. If a future cleanup discovers an old
-text-matching check, remove it and replace it with a comment/note that explains
-the reason for the constrained code plus behavioral or generated-artifact
-coverage where the failure can be observed.
+repository text-matching suite. Broad `rg`/`grep` audits are allowed as manual
+engineering archaeology while working, but they must not become pass/fail
+rules. If a future cleanup discovers an old text-matching check, remove it and
+replace it with a comment/note that explains the reason for the constrained
+code plus behavioral or generated-artifact coverage where the failure can be
+observed.

@@ -94,7 +94,7 @@ cache-line padded between `poll` and write-mostly allocator fields.
 | str (StrInternState) | reworked: `tab+mask` become one RCU `StrTabHdr*` (06 §6.5); `num` atomic; `id/idreseed` atomic; `seed` immutable |
 | vmstate | becomes per-thread: TG.vmstate (profiler reads per-TG) |
 | mainthref, vmthref, registrytv, gcroot[], nilnode | stay in g; gcroot writes via la_*; nilnode is read-only fallback (val must stay nil — a racy write into nilnode would be catastrophic; 06 §6.2.7 removes the nilnode-as-freetop trick) |
-| tmpbuf, tmptv, tmptv2 | → TG (every C user gets `tg` via `G2TG(L)`; grep `g->tmpbuf\|G(L)->tmpbuf` ≈ 40 sites: lj_str.c, lj_strfmt*.c, lj_buf.c, lib_string.c, lj_cconv.c, lj_bcwrite.c, lj_debug.c …; mechanical sed + compile) |
+| tmpbuf, tmptv, tmptv2 | → TG. Every C user gets `tg` via `G2TG(L)` or an explicit TG argument. This is required because these buffers carry transient per-mutator state; sharing them would corrupt formatting, conversion, bytecode writing, and debug paths under concurrent execution. |
 | uvhead | DELETED (no global open-uv list; legacy per-L lists remain on L->openupval during migration; GC walks per-thread, 05 §5.7.4) |
 | cur_L, jit_base | → TG (asm sites listed in §3.5) |
 | ctype_state | stays (11) |
@@ -118,9 +118,11 @@ template→TG. 4) Every `setsbufL`-style tmpbuf use: pass tg.
 
 ## 3.5 dasc migration (vm_x64.dasc)
 
-Generate the worklist:
-`grep -n "DISPATCH_GL(\|GG_DISP2G\|GG_DISP2J\|GG_DISP2HOT" src/vm_x64.dasc`
-(45 hits at the pinned commit). Dispositions:
+The pinned upstream had 45 dispatch-template sites in this area. Re-derive the
+current worklist from the active DynASM code while editing; do not preserve a
+repository-text check for this. The durable rule is that mutator-local state
+loads from TG, while immutable or universe-owned state remains in `global_State`.
+Dispositions:
 
 A. `GG_DISP2HOT` (hotloop/hotcall macros, dasc:332–345 and vm_hotloop/
    vm_hotcall): UNCHANGED — TG keeps hotcounts at the same relative offset.

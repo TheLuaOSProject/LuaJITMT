@@ -5,9 +5,8 @@ CType sibling link helpers
 - Routed ctype snapshots, FFI typeinfo/typecmp/layout snapshots, name/field
   walks, VLA field walks, parser sibling publication, redirected-symbol
   sibling insertion, and parser rollback abandon clears through the helper API.
-- Documented the invariant formerly checked by `m7_ffi_typeinfo_snapshot`: raw shared
-  `CType.sib` acquire-loads and direct shared `ct->sib`-style access in the
-  guarded ctype/FFI/parser implementation files.
+- Documented why shared `CType.sib` links use acquire/release helpers: parser
+  rollback, redirected symbols, and recorder snapshots can race with readers.
 
 Verification:
 

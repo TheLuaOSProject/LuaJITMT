@@ -34,8 +34,8 @@ Overall correctness/stability progress: 70-80%.
   pointer auto-deref, misses, metatype dispatch, and constructor constants.
 - Extended rollback coverage so failed cdefs cannot leak constructor constants
   or constructor fields.
-- Added narrow implementation guards only for the non-observable safety shape:
-  no parser lock/direct field lookup in `lj_cdata_index_l()`, no sequence-free
+- Documented the non-observable safety shape near the constrained code: no
+  parser lock/direct field lookup in `lj_cdata_index_l()`, no sequence-free
   field snapshot miss, and ID-rooted wait helpers.
 - Completed a legacy/compat audit pass. Real removal targets are old
   `legacy_*` GC2 bridge assertions and duplicate scripts. FFI pointer
@@ -89,10 +89,9 @@ Overall correctness/stability progress: 70-80%.
   queries where errors, VLA/VLS size, and rollback behavior need careful
   snapshot equivalents.
 - `lj_clib.c` namespace lookup still has a parser fallback path.
-- GC2 bridge names and tests remain in finalizer areas. The highest-value
-  cleanup is to convert exact-name assertions around finalizer behavior into
-  semantic tests, then rename or remove old bridge names where the names are
-  only fork-era scaffolding.
+- GC2 bridge names remain in finalizer areas. The highest-value cleanup is to
+  cover finalizer behavior semantically, then rename or remove old bridge names
+  where the names are only fork-era scaffolding.
 - Aggregate CI should cover observable behavior and generated artifacts. Keep
   memory ordering, ABI, and generated-code boundary rules as comments/notes,
   and use behavior or generated-artifact checks when the invariant is

@@ -11,7 +11,7 @@ string checks in active tests are over generated dumps or runtime output,
 matching the policy exception for generated ASM/mcode and other generated
 artifacts.
 
-## Source-search tests and CI
+## Compatibility Tests And CI
 
 2026-06-30 CI update: stock Lua/LuaJIT semantics are now a normal GitHub
 Actions gate, not only a local or release-time convention. `.github/workflows/ci.yml`
@@ -31,18 +31,18 @@ Later narrow legacy wrappers must not be treated as stock compatibility
 coverage; stock parity is enforced by runtime behavior tests, vendored stock
 tests, C fixtures, bytecode/generator output checks, and release binary checks.
 
-Allowed remaining searches are over generated artifacts or runtime output: JIT
+Allowed remaining checks are over generated artifacts or runtime output: JIT
 dumps, bytecode listings, generated mcode/ASM dumps, captured stdout/stderr,
 CSVs, and marker files. Those checks are permitted because the generated
-artifact is the behavior under test. Helper-name, field-access, function-call,
-and snippet text checks are not permitted; remove that check, preserve the
-reason in comments/notes, and prove the observable part through behavior, C
-fixtures, generated artifacts, benchmarks, or packaging outputs.
+artifact is the behavior under test. Implementation-spelling checks are not
+permitted; preserve the reason in comments/notes, and prove the observable part
+through behavior, C fixtures, generated artifacts, benchmarks, or packaging
+outputs.
 
 The removed text-check compatibility surface remains gone:
 
 - No case or per-case shell wrapper exists.
-- No dedicated implementation-file reader exists in the suite helpers.
+- No dedicated repository-text reader exists in the suite helpers.
 - The only `tools/ci` shell entrypoint is `tools/ci/lua_test.sh`.
 - The remaining build-time `find`/`sed`/`grep` invocations inspect generated
   dependencies, object files, or install-metadata output, not implementation
@@ -79,8 +79,7 @@ attached-thread fixtures and runtime integration.
 ## Stock behavior boundary
 
 Single-threaded stock behavior should remain the default compatibility target.
-Threading-only deviations are documented rather than enforced with source
-searches:
+Threading-only deviations are documented and covered through behavior:
 
 - Explicit GC keeps stock behavior when no secondary Lua thread is live. With
   live secondary Lua threads, `lua_gc(L, LUA_GCCOLLECT, ...)` uses the GC2
@@ -104,12 +103,12 @@ searches:
 
 The `m7_ffi_cdata_shared_hammer` coverage added after the pin removal is stock
 API coverage: it uses `ffi`, `require("threading")`, and ordinary cdata field
-accesses. It intentionally does not add a generated-or-behavior test for helper names.
+accesses.
 
 Past cleanup commits temporarily removed stock compatibility symbols and the
 optional `LUAJIT_ENABLE_LUA52COMPAT` profile. Current branch state restored
 those stock surfaces; `tests/t-stock-api-surface.c` covers representative
-legacy stock C API entry points without searching implementation text.
+legacy stock C API entry points through compiled behavior.
 
 Future legacy cleanup should remove only stale fork-local compatibility shims
 that exist for the threading/lockless migration. It should not remove stock

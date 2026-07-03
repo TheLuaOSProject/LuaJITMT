@@ -8,10 +8,10 @@ the public `lua_gc()` API while GC step/pacing code reads them. They now use
   API still returns the previous value while avoiding a data race on the shared
   control word.
 - Restart-threshold calculation, incremental step-limit calculation, GC2 init,
-  and state initialization all use the same helper spelling.
-- The existing `m5_gc2_pacing_atomic` coverage now covers these legacy controls as
-  well as the GC2 pacing counters. It documents why raw runtime access to
-  `g->gc.pause` and `g->gc.stepmul` outside the helper definitions.
+  and state initialization all use the same helper boundary.
+- The existing `m5_gc2_pacing_atomic` coverage now covers these legacy controls
+  as well as the GC2 pacing counters. Comments document why the shared control
+  words use helper access outside local initialization.
 
 Verification:
 

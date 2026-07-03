@@ -54,8 +54,8 @@ function M.read_file(path)
   -- or consumed by a test. Implementation-only invariants belong beside the
   -- constrained code and in notes that explain why the property matters.
   -- Observable invariants belong in behavior, fixture, generated-artifact,
-  -- benchmark, or packaging tests. Do not add pass/fail checks that read
-  -- implementation files for helper names or raw field access.
+  -- benchmark, or packaging tests. Do not add pass/fail checks for helper-name
+  -- or raw field-access spelling.
   return read_raw_file(path)
 end
 

@@ -38,9 +38,11 @@ documents were verified against:
     commit: b925b3e3fc6771171602323b45fbe9fb8fc90369
     ident:  "LuaJIT 2.1.1780076327"
 
-If you work from a different commit, re-verify every cited symbol with grep
-before editing; the documents tell you the grep to run wherever a list is
-long or likely to drift. Never trust a line number over a symbol name.
+If you work from a different commit, treat every cited line number as
+historical orientation and re-derive the affected worklist from the current
+code before editing. Lasting coverage must be behavioral, fixture-based, or
+generated-artifact based; implementation-text inventories are engineering
+notes, not tests.
 
 ### 0.3 Reading order
 

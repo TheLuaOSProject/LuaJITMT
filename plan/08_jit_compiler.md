@@ -308,8 +308,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   in v1 (DECIDED — inline-alloc IR is an M9 optimization). Original report
   target retained: the C allocator polls/assists, satisfying pacing, then
   remove `lj_gc_step_jit` (lj_gc.c) and the `IR_GCSTEP`-ish machinery /
-  `J->ircall` gc check emission — grep `gc_step_jit|GCSTEP` and excise with
-  the legacy GC step path once replacement trace pacing is complete.
+  `J->ircall` gc check emission once replacement trace pacing is complete.
+  The required invariant is that traced allocations account into GC2 and can
+  perform bounded assists without reviving legacy incremental stepping.
   Current M6 bridge: allocation calls still update legacy `g->gc.total` and
   now also accumulate positive allocation growth into `TG.local_total`, which
   flushes into `GC2State.alloc_since_trigger` at 32 KiB boundaries, safepoint
@@ -347,8 +348,8 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   invalidated by XPOLL — gives loop-hoisted barrier checks reloaded each
   backedge: exactly right.
 - **Executing-trace root**: vmstate already holds −traceno while in mcode
-  (set in trace head, see lj_vm.h conventions / dasc vm_exit; verify file:
-  `grep -n vmstate vm_x64.dasc`). TG.vmstate per 03 §3.3; GC reads it per
+  (set in trace head, see lj_vm.h conventions / dasc vm_exit). TG.vmstate per
+  03 §3.3; GC reads it per
   05 §5.7.4. Traces additionally reachable via proto chains as today.
 
 ## 8.7 Flush protocol (jit.flush, blacklist-all, GC of traces)

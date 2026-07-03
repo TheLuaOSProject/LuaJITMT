@@ -35,14 +35,15 @@ to the constrained code.
 
 3. Aggregate cases could bypass wrapper-only checks.
    `m7_ffi`, `m9_m10_gc`, and similar aggregate cases call Lua case names, not
-   the shell wrappers. The resolution was to remove wrapper-only text checks,
-   not to preserve them as separate lint entrypoints.
+   the shell wrappers. The resolution was to move the invariant into behavior,
+   fixture, generated-artifact, or documentation coverage rather than preserve
+   separate lint entrypoints.
 
-4. Repository legacy wrappers often pinned exact helper names.
+4. Repository legacy wrappers often pinned implementation details.
    Broad string matches blocked better implementations that preserved the same
    safety invariant with a new helper boundary. New tests must use behavior,
    C fixtures, generated dump/ASM checks, or documentation instead of
-   helper-name text checks.
+   spelling assertions.
 
 5. Large shell wrapper files are hard to review.
    `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
@@ -128,16 +129,15 @@ to the constrained code.
 ## Legacy/Compat Audit Findings
 
 - Highest-priority legacy cleanup is in GC2 bridge scaffolding, not FFI pointer
-  compatibility. Exact-name assertions around `legacy_*` sweep/finalizer/weak
-  helpers should become semantic behavior tests before the names are removed.
+  compatibility. Sweep/finalizer/weak bridge constraints should be owned by
+  semantic behavior tests before bridge names are removed.
 - The old internal M10 legacy mark-suppression helper name was removed in favor
   of `lj_gc2_minor_roots_skip_bridge_mark()`, which describes the actual
   policy: minor-root cycles skip only the arena-to-GC2 bridge mark, not legacy
   marking itself.
-- Duplicate legacy wrappers in weak/worker CI were a
-  temporary migration problem; exact-name repository assertions should be
-  deleted, not collapsed, once behavior fixtures or documentation own the
-  contract.
+- Duplicate legacy wrappers in weak/worker CI were a temporary migration
+  problem; once behavior fixtures or documentation own the contract, the
+  wrapper should be deleted rather than collapsed into another lint step.
 - The duplicate M8 sweep/finalizer assertion block was removed, while M8 still
   owns weak/finalizer behavior fixtures.
 - The internal sweep-close bridge helper was renamed to
@@ -198,6 +198,6 @@ Verification for the alias removal:
    through `tools/ci/lua_test.sh <case...>`.
 3. Split any large remaining GC/finalizer orchestration into suite-local helper
    modules so behavior tests live near the milestone cases they protect.
-4. Revisit exact-name historical assertions after each implementation slice; when
-   a contract is semantic rather than a required ABI, rewrite it around the
-   semantic boundary or document it instead of checking source spelling.
+4. Revisit historical wrapper contracts after each implementation slice; when a
+   contract is semantic rather than a required ABI, rewrite it around the
+   semantic boundary or document it.

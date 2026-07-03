@@ -11,10 +11,9 @@ Changes:
   through the helpers.
 - Routed GC ordered cdata finalizer scans and FINREG disable scans through the
   same helpers.
-- Documented the rule that FINREG generation/order next links are shared
-  publication links and must be accessed through the acquire/release helpers.
-  Runtime and GC fixtures exercise creation, lookup, marking, and disable
-  paths; CI must not enforce the helper spelling by helper comment.
+- Documented that FINREG generation/order next links are shared publication
+  links. Runtime and GC fixtures exercise creation, lookup, marking, and
+  disable paths; comments explain the acquire/release boundary.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

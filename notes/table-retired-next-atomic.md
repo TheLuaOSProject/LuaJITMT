@@ -10,10 +10,9 @@ Changes:
   raw-root traversal through the helpers.
 - Updated `t-tab-retire` and `t-tab-array-publish` to acquire-load retired-list
   heads and traverse record links through the helpers.
-- Documented the rule that retired table node/array links are SMR publication
-  links and must be accessed through the acquire/release helpers. Retirement,
-  marking, paranoia, and focused fixtures cover the observable behavior; CI must
-  not enforce the helper spelling by helper comment.
+- Documented that retired table node/array links are SMR publication links.
+  Retirement, marking, paranoia, and focused fixtures cover the observable
+  behavior; comments explain the acquire/release boundary.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

@@ -73,8 +73,9 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   entering the parser-token path. If the parser token is busy, recording aborts
   with CTBUSY; anonymous declarations, functions, VLA, and other full C
   grammar still fall back to the parser path to preserve stock semantics.
-- `cts->L` field: delete; pass L explicitly (it's already threaded through
-  most call paths; grep `cts->L` ≈ 15 sites, mechanical).
+- `cts->L` field: delete; pass L explicitly. Parser and recorder work can run
+  from different attached states, so the active `lua_State` must be a call
+  argument rather than ambient CTState state.
 - **cparse (ffi.cdef)** mutates parser state + tab: the original sketch
   serialized the whole cdef through a tiny CAS token (`cts->parse_token`)
   because cdef is an initialization-time API. Current implementation decision:
@@ -100,10 +101,9 @@ offsets. Interior pointers held by C are invisible to GC — unchanged
 contract (anchor the cdata).
 
 ## 11.4 ffi.gc finalizers
-Today: setting a finalizer flips LJ_GC_CDATA_FIN in marked and registers
-in `ctype_state finalizer table` (lj_cdata.c / cdata_setfin via miscmap-
-adjacent tab `GCRoot CTFIN`? verify: `grep -n finalizer lj_cdata.c
-lj_clib.c lib_ffi.c`). Under MT: gcflags bit LJ_GCF_FINREG (04 §4.7) +
+Today: setting a finalizer flips LJ_GC_CDATA_FIN in marked and registers it in
+the ctype-state finalizer table adjacent to the FFI misc roots. Under MT:
+gcflags bit LJ_GCF_FINREG (04 §4.7) +
 insert into the global FINREG registry consumed by P_WEAK (05 §5.8).
 Registry = the same concurrent-table machinery (a hidden GCtab keyed by
 cdata, value=finalizer) — reuse, don't invent. Order: registration order

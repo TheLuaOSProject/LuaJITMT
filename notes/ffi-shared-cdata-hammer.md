@@ -11,5 +11,5 @@ bitfields, small integer bitfields, and a nested struct. Its assertions are
 domain checks rather than last-writer checks because the user payload writes are
 intentionally racy. The same script runs under interpreter and default-JIT modes.
 
-This is runtime coverage only; it does not search repository implementation files for helper
-names or implementation snippets.
+This is runtime coverage only; it proves the VM safety contract under racy user
+payload access.

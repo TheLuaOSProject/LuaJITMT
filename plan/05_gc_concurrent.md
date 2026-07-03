@@ -691,8 +691,8 @@ lj_gc2_barrier.h: the C store-barrier inline used by lj_tab/lj_func/api:
 static LJ_AINLINE void lj_gc2_wbarrier(TGState *tg, cTValue *v) {
   if (LJ_UNLIKELY(tg->mark_active) && tvisgcv(v)) gc2_mark(tg, gcV(v));
 }
-/* and the obj/GCRef variants; every legacy lj_gc_barrier* call site maps
-   to one of these — grep list in 12 §M3 (≈35 sites in lj_api.c, lj_tab.c,
-   lj_meta.c, lj_func.c, lj_state.c, lj_cdata.c, lj_ccallback.c, lib_*) */
+/* and the obj/GCRef variants. Any heap edge publication that can make a
+   white object reachable from an already-marked owner must route through one
+   of these helpers so concurrent mark never misses the edge. */
 ```
 Asm barrier: 07 §7.4. JIT barrier: 08 §8.8.

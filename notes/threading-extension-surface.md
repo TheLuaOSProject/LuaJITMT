@@ -26,11 +26,9 @@ Remove only stale fork-local compatibility shims. Stock LuaJIT compatibility
 entry points, optional Lua 5.2 compatibility, standard FFI behavior, and
 standard `lua*`/`luaL*` C API symbols stay intact.
 
-Do not add CI or test cases that read repository implementation files to prove these rules.
-The policy in `notes/ci-invariant-testing.md` applies here: test behavior
-with Lua/C fixtures, inspect generated dump/ASM output when code generation is
-the observable result, and document ownership/API boundaries in notes like this
-one.
+The policy in `notes/ci-invariant-testing.md` applies here: test behavior with
+Lua/C fixtures, inspect generated dump/ASM output when code generation is the
+observable result, and document ownership/API boundaries in notes like this one.
 
 ## 2026-06-29 stock-compatibility boundary
 
@@ -58,7 +56,7 @@ The visible deviations that remain are tied to the threading experiment:
 Legacy removals should stay limited to stale fork-local threading or diagnostic
 entry points. Do not remove or rename stock LuaJIT C API symbols, stock library
 options, standard FFI behavior, or stock single-threaded behavior to simplify
-the threading implementation.
+the threading runtime.
 
 ## Attached Host Native Waits
 

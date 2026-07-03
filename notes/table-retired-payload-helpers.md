@@ -9,10 +9,9 @@ Slice: table node/array retired-record payload discipline.
   through those helpers.
 - Updated `t-tab-retire` and `t-tab-array-publish` to inspect retired-record
   payload and state through the helpers.
-- Documented the rule that retired-record payload/state access must use the
-  helper layer because records are published to reclamation and GC walkers.
-  Retirement and array-publication fixtures cover the behavior; CI must not
-  enforce helper spelling by helper comment.
+- Documented why retired-record payload/state access uses the helper layer:
+  records are published to reclamation and GC walkers. Retirement and
+  array-publication fixtures cover the behavior.
 
 Verification:
 

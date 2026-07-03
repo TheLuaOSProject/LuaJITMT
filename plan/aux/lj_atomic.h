@@ -65,9 +65,9 @@ typedef struct la_u128 { uint64_t lo, hi; } __attribute__((aligned(16))) la_u128
 LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
 {
 #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
-  /* gcc ≥7 routes the 16-byte builtin through libatomic even with -mcx16
-  ** (PR80878). libatomic is lock-free here, but the PLT call costs and
-  ** the CI instruction grep wants the real thing: inline it. */
+  /* gcc >=7 routes the 16-byte builtin through libatomic even with -mcx16
+  ** (PR80878). libatomic is lock-free here, but the PLT call costs enough
+  ** that the hot path keeps the x86-64 instruction inline. */
   uint8_t ok;
   __asm__ __volatile__("lock cmpxchg16b %1"
                        : "=@ccz"(ok), "+m"(*p), "+a"(exp->lo), "+d"(exp->hi)
@@ -162,8 +162,8 @@ LA_INLINE int la_membarrier_synccore(void)
 
 /* ---- compile-time checks ------------------------------------------- */
 typedef char la_assert_ptr8[sizeof(void *) == 8 ? 1 : -1];
-/* x86-64: build with -mcx16 so la_cas128 lowers to cmpxchg16b; without it
-** the builtin routes through libatomic, which uses a lock — CI verifies
-** by grepping the disassembly for cmpxchg16b (12 §M0). */
+/* x86-64: build with -mcx16 so la_cas128 can lower to cmpxchg16b. Generated
+** object-code checks may validate this, but repository spelling is not a
+** correctness boundary. */
 
 #endif /* _LJ_ATOMIC_H */

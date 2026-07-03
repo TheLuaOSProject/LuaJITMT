@@ -73,7 +73,7 @@ Validation:
 
 - Added a duplicate-name assertion to `tests/suites/init.lua` so a new suite
   case cannot silently overwrite an existing Lua test registration.
-- Kept this as a framework invariant; it does not inspect implementation files.
+- Kept this as a framework invariant; it is enforced through suite metadata.
 
 Validation:
 
@@ -201,9 +201,8 @@ Validation:
 
 ## 2026-06-20 legacy wrapper and aggregate execution tightening
 
-- Historical state: broadened path handling so behavior assertions could not
-  read test, wrapper, tool, aux, bench, or `src/` implementation files
-  directly. That path-based behavior was later removed.
+- Historical state: broadened path handling while migrating wrapper logic into
+  Lua-owned behavior cases. That path-based behavior was later removed.
 - Fixed `run_stock_tests` passthrough parsing so options like `--quiet` are not
   mistaken for an explicit LuaJIT binary, while explicit binaries still work.
 - Made `m9_m10_gc` run its declared dependency list as the single source of

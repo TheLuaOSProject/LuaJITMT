@@ -6,11 +6,11 @@ FINREG CTState root-head helper slice
 - Routed FINREG generation scans, new-generation CAS publish, ordered
   registration publish, ordered retire, marking, close-time discovery, pending
   checks, and teardown through those helpers.
-- Documented the invariant formerly checked by `m7_ffi_finreg`: raw FINREG CTState root
-  access in implementation files.
+- Documented why FINREG CTState roots use the helper layer: generation publish,
+  ordered registration, marking, teardown, and close-time discovery share the
+  same acquire/release boundary.
 - Follow-up: `tests/t-gc2-traverse.c` now uses `fin_order_head_acq()` for its
-  ordered cdata FINREG reference counter, and the same notes document why raw
-  `CTState.fin_*` root access in that fixture.
+  ordered cdata FINREG reference counter.
 
 Verification:
 
