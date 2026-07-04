@@ -804,7 +804,7 @@ static TValue *tab_rehash_slot(lua_State *L, TValue *array, uint32_t asize,
 					 freecountp, key);
 }
 
-static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
+static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask,
 				     uint32_t oldasize, uint32_t asize)
 {
   uint32_t count = 0;
@@ -817,13 +817,13 @@ static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
     retry_node:
       lj_tv_load_acq(&key, &n->key);
       if (tab_key_islocked(&key)) {
-	lj_tab_wait_no_l();
+	lj_tab_wait_l(L);
 	goto retry_node;
       }
       lj_tv_load_acq(&val, &n->val);
       if (tvisnil(&key)) {
 	if (tab_val_is_publish_claim(&val)) {
-	  lj_tab_wait_no_l();
+	  lj_tab_wait_l(L);
 	  goto retry_node;
 	}
 	continue;
@@ -1318,7 +1318,7 @@ restart_resize:
     lj_tab_wait_l(L);
     goto restart_resize;
   }
-  hashcount = tab_rehash_hashcount(oldnode, oldhmask, oldasize, asize);
+  hashcount = tab_rehash_hashcount(L, oldnode, oldhmask, oldasize, asize);
   if (hashcount) {
     uint32_t needhbits = hsize2hbits(hashcount);
     if (hbits < needhbits)
@@ -1356,6 +1356,13 @@ restart_resize:
   if (newarray && oldarray_separated && oldacap > 0)
     oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
   struct_acq = lj_tab_struct_enter(L, t);
+  /*
+  ** From here until lj_tab_struct_leave(), retry waits must not raise a fresh
+  ** STOPREQ: a longjmp would leak the per-table structural owner and the
+  ** replacement arrays/nodes reserved for this attempt. Use yield-only waits
+  ** inside the critical publication window; the retry path below releases all
+  ** claims and then performs the L-aware STOPREQ-visible wait.
+  */
   {
     TValue *curarray;
     MSize curasize = lj_tab_array_snapshot_acq(t, &curarray);
