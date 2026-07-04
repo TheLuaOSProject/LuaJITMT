@@ -624,6 +624,37 @@ static void arena_insert_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
   alloc->binmask[k] |= (uint32_t)1u << b;
 }
 
+static LJ_AINLINE int arena_free_run_ptr_ok(const LJArenaFreeRun *run)
+{
+  uintptr_t addr = (uintptr_t)run;
+  return checkptrGC(run) && (addr & (LJ_CELL_SIZE-1u)) == 0 &&
+	 (addr & LJ_ARENA_MASK) >=
+	 ((uintptr_t)LJ_AFIRST_CELL << LJ_CELL_SHIFT);
+}
+
+static LJ_AINLINE int arena_free_run_valid_knownptr(const LJArenaFreeRun *run,
+						    uint32_t *lenp)
+{
+  GCArena *a;
+  uint32_t start, len;
+  a = lj_arena_of(run);
+  start = run->start;
+  len = run->len;
+  /*
+  ** Free-run bin nodes live in the first cell of the free run they describe.
+  ** Allocating from a bin can leave old payload bytes in cells that later sit
+  ** behind a defensive bin pointer. Keep the exact-address duplicate scrub,
+  ** but also drop any node whose bitmap state no longer says "free run start".
+  */
+  if (start < LJ_AFIRST_CELL || start >= LJ_ARENA_CELLS || len == 0 ||
+      len > LJ_ARENA_CELLS - start ||
+      lj_arena_cellptr(a, start) != (void *)run ||
+      lj_arena_state(a, start) != 1)
+    return 0;
+  if (lenp) *lenp = len;
+  return 1;
+}
+
 static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
 					     uint32_t len)
 {
@@ -632,12 +663,11 @@ static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
   LJArenaFreeRun **pp = &alloc->bins[k][b];
   uint32_t steps = 0;
+  int scrub_head = 1;
   while (*pp) {
     LJArenaFreeRun *cur = *pp;
     LJArenaFreeRun *next;
-    uintptr_t addr = (uintptr_t)cur;
-    if (!checkptrGC(cur) || (addr & (LJ_CELL_SIZE-1u)) != 0 ||
-	(addr & LJ_ARENA_MASK) < ((uintptr_t)LJ_AFIRST_CELL << LJ_CELL_SHIFT)) {
+    if (!arena_free_run_ptr_ok(cur)) {
       *pp = NULL;
       break;
     }
@@ -650,6 +680,17 @@ static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
       *pp = NULL;
       break;
     }
+    /*
+    ** Scrub stale leading nodes before publishing a new run, but leave full
+    ** per-node validation to arena_find_run(), which must validate before
+    ** reuse anyway. This keeps insertion from turning long valid bins into a
+    ** bitmap-walking hot path.
+    */
+    if (scrub_head && !arena_free_run_valid_knownptr(cur, NULL)) {
+      *pp = next;
+      continue;
+    }
+    scrub_head = 0;
     pp = &cur->next;
   }
   arena_insert_run_head(alloc, a, start, len);
@@ -694,14 +735,13 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
     while (*pp) {
       LJArenaFreeRun *run = *pp;
       LJArenaFreeRun *next;
-      uintptr_t addr = (uintptr_t)run;
+      uint32_t len;
       if (++steps > LJ_ARENA_BIN_WALK_LIMIT) {
 	alloc->bins[k][b] = NULL;
 	arena_refresh_binmask(alloc, k, b);
 	break;
       }
-      if (!checkptrGC(run) || (addr & (LJ_CELL_SIZE-1u)) != 0 ||
-	  (addr & LJ_ARENA_MASK) < ((uintptr_t)LJ_AFIRST_CELL << LJ_CELL_SHIFT)) {
+      if (!arena_free_run_ptr_ok(run)) {
 	*pp = NULL;
 	arena_refresh_binmask(alloc, k, b);
 	break;
@@ -712,24 +752,16 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
 	arena_refresh_binmask(alloc, k, b);
 	break;
       }
-      {
-	GCArena *a = lj_arena_of(run);
-	uint32_t start = run->start;
-	uint32_t len = run->len;
-	if (start < LJ_AFIRST_CELL || start >= LJ_ARENA_CELLS || len == 0 ||
-	    len > LJ_ARENA_CELLS - start ||
-	    lj_arena_cellptr(a, start) != (void *)run ||
-	    lj_arena_state(a, start) != 1) {
-	  *pp = next;
-	  arena_refresh_binmask(alloc, k, b);
-	  continue;
-	}
-	if (len >= ncells) {
-	  *binp = b;
-	  return pp;
-	}
-	pp = &run->next;
+      if (!arena_free_run_valid_knownptr(run, &len)) {
+	*pp = next;
+	arena_refresh_binmask(alloc, k, b);
+	continue;
       }
+      if (len >= ncells) {
+	*binp = b;
+	return pp;
+      }
+      pp = &run->next;
     }
     arena_refresh_binmask(alloc, k, b);
   }

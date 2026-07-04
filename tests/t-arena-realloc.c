@@ -32,7 +32,7 @@ int main(void)
   void *p1, *p2, *p3, *p4, *p5, *p6, *hp, *hp2, *hp3;
   void *q1, *q2, *q3;
   GCArena *a;
-  uint32_t c1, c3, c4, c5, qmask;
+  uint32_t c1, c3, c4, c5, qbin, qcells, qmask;
   size_t hsize = LJ_HUGE_THRESHOLD + 100u;
   size_t hsize2 = (size_t)LJ_ARENA_SIZE * 2u + 257u;
 
@@ -45,16 +45,29 @@ int main(void)
   assert(q1 != NULL && q2 != NULL);
   assert(alloc2.binmask[LJ_ARENAK_PLAIN] == 0);
   lj_arena_free(&alloc2, q1, 32);
-  qmask = (uint32_t)1u << lj_arena_bin_from_ncells(lj_arena_ncells(32));
+  qcells = lj_arena_ncells(32);
+  qbin = lj_arena_bin_from_ncells(qcells);
+  qmask = (uint32_t)1u << qbin;
   assert(alloc2.binmask[LJ_ARENAK_PLAIN] == qmask);
   assert(lj_arena_alloc_has_run_ge(&alloc2, LJ_ARENAK_PLAIN,
-				   lj_arena_ncells(32)));
+				   qcells));
   assert(!lj_arena_alloc_has_run_ge(&alloc2, LJ_ARENAK_PLAIN,
 				    lj_arena_ncells(48)));
   q3 = lj_arena_alloc(&alloc2, &rs, 32, 0);
   assert(q3 == q1);
   assert(alloc2.binmask[LJ_ARENAK_PLAIN] == 0);
+  {
+    LJArenaFreeRun *stale = (LJArenaFreeRun *)q3;
+    stale->next = NULL;
+    stale->start = lj_arena_cellof(q3);
+    stale->len = qcells;
+    alloc2.bins[LJ_ARENAK_PLAIN][qbin] = stale;
+    alloc2.binmask[LJ_ARENAK_PLAIN] = qmask;
+  }
   lj_arena_free(&alloc2, q2, 32);
+  assert(alloc2.bins[LJ_ARENAK_PLAIN][qbin] == (LJArenaFreeRun *)q2);
+  assert(alloc2.bins[LJ_ARENAK_PLAIN][qbin]->next == NULL);
+  assert(alloc2.binmask[LJ_ARENAK_PLAIN] == qmask);
   lj_arena_free(&alloc2, q3, 32);
   lj_arena_alloc_fini(&alloc2);
 
