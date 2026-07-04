@@ -1921,6 +1921,87 @@ static LJ_AINLINE int tab_hash_generation_current(GCtab *t, const Node *nodebase
   return lj_tab_node_acq(t) == nodebase && !lj_tab_node_is_retiring(nodebase);
 }
 
+static LJ_AINLINE int tab_private_mutation_allowed(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  /*
+  ** KEYLOCK/CAS publication is needed once another Lua thread, an attaching
+  ** thread, or GC2 workers can observe the hash vector. Outside those windows,
+  ** and outside active marking, the mutator is the only table observer; direct
+  ** publication keeps stock single-thread costs while retaining freecount and
+  ** key-barrier accounting.
+  */
+  return !mt_active_or_entering_acq(g) && gc2_n_workers_acq(g) == 0 &&
+	 !lj_tg_mark_active_acq(tg);
+}
+
+static LJ_AINLINE int tab_node_free_take_private(Node *node)
+{
+  TabNodeHdr *hdr = lj_tab_node_hdrw(node);
+  uint32_t old = hdr->flags;
+  uint32_t count = old & (uint32_t)TABNODE_FREECOUNT_MASK;
+  if ((old & (uint32_t)TABNODE_FLAG_RETIRING) || count == 0)
+    return 0;
+  hdr->flags = (old & (uint32_t)TABNODE_FLAGS_MASK) | (count - 1u);
+  return 1;
+}
+
+static Node *tab_find_free_node_private(Node *nodebase, MSize hmask,
+					const Node *anchor)
+{
+  MSize start = (MSize)(anchor - nodebase);
+  MSize i;
+  for (i = 1; i <= hmask; i++) {
+    MSize idx = (start + i) & hmask;
+    Node *n = &nodebase[idx];
+    TValue nk, nv;
+    lj_tv_load_acq(&nk, &n->key);
+    if (!tvisnil(&nk))
+      continue;
+    lj_tv_load_acq(&nv, &n->val);
+    if (tvisnil(&nv))
+      return n;
+  }
+  return NULL;
+}
+
+static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
+				  Node *nodebase, MSize hmask, Node *anchor)
+{
+  TValue nk, nv;
+  if (!tab_hash_generation_current(t, nodebase))
+    return NULL;
+  lj_tv_load_acq(&nk, &anchor->key);
+  lj_tv_load_acq(&nv, &anchor->val);
+  if (tvisnil(&nk) && tvisnil(&nv)) {
+    if (!tab_node_free_take_private(nodebase))
+      return NULL;
+    tab_storekeyrel(L, &anchor->key, key);
+    lj_gc2_barrier_weak_key(L, t, key);
+    lj_gc_pubtabkey(L, t, key);
+    lj_assertL(lj_tv_isnil_acq(&anchor->val), "new hash slot is not empty");
+    return &anchor->val;
+  } else {
+    Node *freenode;
+    if (!tab_node_free_take_private(nodebase))
+      return NULL;
+    freenode = tab_find_free_node_private(nodebase, hmask, anchor);
+    if (!freenode) {
+      lj_tab_node_free_release(nodebase);
+      return NULL;
+    }
+    lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(anchor));
+    lj_tab_nextnode_set(anchor, freenode);
+    tab_storekeyrel(L, &freenode->key, key);
+    lj_gc2_barrier_weak_key(L, t, key);
+    lj_gc_pubtabkey(L, t, key);
+    lj_assertL(lj_tv_isnil_acq(&freenode->val),
+	       "new hash slot is not empty");
+    return &freenode->val;
+  }
+}
+
 #ifdef LJ_TAB_TEST_HELPERS
 static LJTabNewkeyReserveHook tab_test_newkey_anchor_after_reserve_hook;
 static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
@@ -2065,6 +2146,11 @@ retry_insert:
     if (chainlen >= LJ_TAB_MAXCHAIN) {
       tab_rehash_chain_overflow(L, t, key, hmask);
       return lj_tab_set(L, t, key);
+    }
+    if (tab_private_mutation_allowed(L)) {
+      TValue *slot = tab_newkey_private(L, t, key, nodebase, hmask, n);
+      if (slot)
+	return slot;
     }
   }
   {
