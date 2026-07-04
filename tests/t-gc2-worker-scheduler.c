@@ -145,6 +145,12 @@ typedef struct WorkerStartStopReq {
   uint32_t published;
 } WorkerStartStopReq;
 
+typedef struct NoTLSWorkerDrain {
+  global_State *g;
+  TGState *saw_tg;
+  uint32_t drained;
+} NoTLSWorkerDrain;
+
 static int scheduler_udata_finalizer(lua_State *L)
 {
   int *id = (int *)lua_touserdata(L, 1);
@@ -180,6 +186,15 @@ static void *finalizer_owner_hold_thread(void *arg)
   lj_gc2_test_finalizer_leave(ctx->g);
   lj_tg_detach(ctx->g, tg);
   lj_thr_set_tg(saved_tg);
+  return NULL;
+}
+
+static void *no_tls_worker_drain_thread(void *arg)
+{
+  NoTLSWorkerDrain *ctx = (NoTLSWorkerDrain *)arg;
+  lj_thr_set_tg(NULL);
+  ctx->saw_tg = lj_thr_get_tg();
+  ctx->drained = lj_gc2_worker_drain(ctx->g, LJ_GC2_WORKER_DRAIN_BATCH);
   return NULL;
 }
 
@@ -326,6 +341,7 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   runs0 = gc2_worker_runs_acq(g);
   async0 = gc2_worker_async_progress_acq(g);
 
+  gc2_worker_active_rel(g, 1);
   lj_gc2_test_finalizer_enqueue(g, a);
   lj_gc2_test_finalizer_enqueue(g, b);
   assert(wait_gc2_counter_at_least(g, gc2_finalizer_mpsc_drained_acq,
@@ -334,6 +350,8 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   assert(gc2_finalizer_tail_acq(g) != NULL);
   assert(gc2_worker_runs_acq(g) > runs0);
   assert(wait_gc2_counter_at_least(g, gc2_worker_async_progress_acq, async0 + 2u));
+  assert(gc2_worker_active_acq(g) == 1);
+  gc2_worker_active_rel(g, 0);
   assert(gc2_worker_active_acq(g) == 0);
 
   assert(lj_gc2_test_finalizer_dequeue(g) == a);
@@ -344,6 +362,62 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   relink_root_object(g, b);
   relink_root_object(g, a);
   lua_settop(L, 0);
+}
+
+static void test_worker_finalizer_requires_real_tg(lua_State *L,
+						   global_State *g)
+{
+  NoTLSWorkerDrain ctx;
+  pthread_t thread;
+  GCobj *a, *b;
+  uint64_t drained0;
+
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+  lua_settop(L, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  lua_newtable(L);
+  a = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  b = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, a));
+  assert(unlink_root_object(g, b));
+
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  lj_gc2_test_finalizer_enqueue(g, a);
+  lj_gc2_test_finalizer_enqueue(g, b);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  ctx.g = g;
+  ctx.saw_tg = (TGState *)g;
+  ctx.drained = 1;
+  assert(pthread_create(&thread, NULL, no_tls_worker_drain_thread,
+			&ctx) == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(ctx.saw_tg == NULL);
+  assert(ctx.drained == 0);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  assert(lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) == 2u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 2u);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
+  assert(lj_gc2_test_finalizer_dequeue(g) == a);
+  assert(lj_gc2_test_finalizer_dequeue(g) == b);
+  assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
+
+  relink_root_object(g, b);
+  relink_root_object(g, a);
+  lua_settop(L, 0);
+
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(gc2_n_workers_acq(g) == 2);
 }
 
 static void push_scheduler_udata(lua_State *L, int id)
@@ -838,6 +912,7 @@ int main(void)
 
   test_two_worker_contention(g);
   test_worker_finalizer_mpsc_drain(L, g);
+  test_worker_finalizer_requires_real_tg(L, g);
   test_worker_real_finalizer_dispatch(L, g);
   test_finalizer_dispatch_all_waits_native(L, g, tg);
   test_finalizer_owner_leave_rewakes_worker(L, g);

@@ -61,9 +61,11 @@ Change:
   drain the producer MPSC stack into the existing consumer ring.
 - Worker-side finalizer draining is limited to `LJ_GC2_IDLE`, so it cannot hide
   pending finalizer roots from a concurrent GC2 mark root scan.
-- Worker-side finalizer draining also holds `worker_active`, so TLS-less GC
-  workers cannot use the shared fallback finalizer owner as a multi-consumer
-  ring-splice path.
+- Worker-side finalizer draining originally held `worker_active` to avoid
+  letting TLS-less callers use the shared fallback finalizer owner as a
+  multi-consumer ring-splice path. The 2026-07-04 decoupling slice removed that
+  `worker_active` claim for idle MPSC draining and replaced it with an explicit
+  real-TG-owner requirement in the worker path.
 - The worker does not dequeue objects and does not execute callbacks.
 - If another finalizer owner is active, the worker backs off and preserves the
   existing legacy callback path.

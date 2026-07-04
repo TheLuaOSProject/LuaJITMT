@@ -7002,29 +7002,30 @@ static uint32_t gc2_worker_progress_add(uint32_t a, uint32_t b)
 
 static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
 {
-  uint32_t expect = 0;
+  uint32_t owner;
   uint64_t before, after, delta;
   if (!g || limit == 0 || gc2_phase_acq(g) != LJ_GC2_IDLE ||
       gc2_finalizer_mpsc_acq(g) == NULL)
     return 0;
-  if (!gc2_worker_active_cas(g, &expect, 1)) {
-    gc2_worker_busy_retries_add(g, 1);
+  /*
+  ** The idle MPSC-to-ring splice is guarded by finalizer_active/finalizer_owner.
+  ** worker_active remains the single-owner token for grey deque, weak, sweep,
+  ** and phase-close state; idle finalizer draining does not touch those paths.
+  */
+  owner = gc2_finalizer_current_owner(g);
+  if (owner == 0 || owner == ~(uint32_t)0)
+    return 0;  /* Do not share the TLS-less pseudo-owner across workers. */
+  if (!lj_gc2_finalizer_try_enter(g))
     return 0;
-  }
   if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
       gc2_finalizer_mpsc_acq(g) == NULL) {
-    gc2_worker_active_rel(g, 0);
-    return 0;
-  }
-  if (!lj_gc2_finalizer_try_enter(g)) {
-    gc2_worker_active_rel(g, 0);
+    lj_gc2_finalizer_leave(g);
     return 0;
   }
   before = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc2_finalizer_drain_owned(g);
   after = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc2_finalizer_leave(g);
-  gc2_worker_active_rel(g, 0);
   delta = after - before;
   return delta > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)delta;
 }
