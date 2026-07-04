@@ -1853,12 +1853,40 @@ static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
   lj_tab_resize(L, t, asize, hsize2hbits(total));
 }
 
+static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key,
+			       int key_anchored);
+
+static TValue *tab_set_current_key(lua_State *L, GCtab *t, cTValue *key)
+{
+  /*
+  ** Retry paths already hold a stack-anchored key. Dispatching back through
+  ** lj_tab_set() would rebuild a fresh C-local key for string/numeric fast
+  ** paths and can recurse indefinitely if each stale-generation retry lands on
+  ** another post-publication generation hand-off. Go straight to the current
+  ** generation insert/lookup helper; only integral keys need the array-aware
+  ** setter because tab_newkey_impl() handles the hash part.
+  */
+  if (tvisint(key)) {
+    return lj_tab_setint(L, t, intV(key));
+  } else if (tvisnum(key)) {
+    int64_t i64;
+    int32_t k;
+    if (lj_num2int_check(numV(key), i64, k))
+      return lj_tab_setint(L, t, k);
+    if (tvisnan(key))
+      lj_err_msg(L, LJ_ERR_NANIDX);
+  } else if (tvisnil(key)) {
+    lj_err_msg(L, LJ_ERR_NILIDX);
+  }
+  return tab_newkey_impl(L, t, key, 1);
+}
+
 static TValue *tab_set_anchored_key(lua_State *L, GCtab *t, cTValue *key)
 {
   ptrdiff_t oldtop;
   TValue *slot;
   key = tab_anchor_rehash_key(L, key, &oldtop);
-  slot = lj_tab_set(L, t, key);
+  slot = tab_set_current_key(L, t, key);
   L->top = restorestack(L, oldtop);
   return slot;
 }
@@ -1869,7 +1897,41 @@ static TValue *tab_rehash_forwarded_key(lua_State *L, GCtab *t, cTValue *key)
   TValue *slot;
   key = tab_anchor_rehash_key(L, key, &oldtop);
   rehashtab(L, t, key);
-  slot = lj_tab_set(L, t, key);
+  slot = tab_set_current_key(L, t, key);
+  L->top = restorestack(L, oldtop);
+  return slot;
+}
+
+static void tab_rehash_no_free(lua_State *L, GCtab *t, cTValue *ek,
+			       MSize oldhmask)
+{
+  MSize hmask;
+  Node *node;
+  /*
+  ** A full hash vector may only need compaction if deleted/forwarded values
+  ** are present. Rebuild first and force growth only when the current rebuilt
+  ** vector still has no insert capacity; this avoids unneeded generation churn
+  ** while guaranteeing no-free insertion makes progress.
+  */
+  rehashtab(L, t, ek);
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  if (hmask <= oldhmask && (hmask == 0 || lj_tab_node_freecount_acq(node) == 0)) {
+    TValue *array;
+    uint32_t growhbits = oldhmask > 0 ?
+      lj_fls((uint32_t)oldhmask) + 2u : 1u;
+    lj_tab_resize(L, t, (uint32_t)lj_tab_array_snapshot_acq(t, &array),
+		  growhbits);
+  }
+}
+
+static TValue *tab_rehash_no_free_key(lua_State *L, GCtab *t, cTValue *key,
+				      MSize oldhmask)
+{
+  ptrdiff_t oldtop;
+  TValue *slot;
+  key = tab_anchor_rehash_key(L, key, &oldtop);
+  tab_rehash_no_free(L, t, key, oldhmask);
+  slot = tab_set_current_key(L, t, key);
   L->top = restorestack(L, oldtop);
   return slot;
 }
@@ -1921,7 +1983,7 @@ static TValue *tab_rehash_chain_overflow_key(lua_State *L, GCtab *t,
   TValue *slot;
   key = tab_anchor_rehash_key(L, key, &oldtop);
   tab_rehash_chain_overflow(L, t, key, oldhmask);
-  slot = lj_tab_set(L, t, key);
+  slot = tab_set_current_key(L, t, key);
   L->top = restorestack(L, oldtop);
   return slot;
 }
@@ -2291,7 +2353,8 @@ static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
 }
 
 /* Insert new key. Nodes are never moved within a hash generation. */
-static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key)
+static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key,
+			       int key_anchored)
 {
   Node *nodebase;
   MSize hmask;
@@ -2299,6 +2362,10 @@ static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key)
 retry_insert:
   nodebase = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0) {
+    if (key_anchored) {
+      rehashtab(L, t, key);
+      goto retry_insert;
+    }
     return tab_rehash_forwarded_key(L, t, key);
   }
   n = hashkey_node(nodebase, hmask, key);
@@ -2313,6 +2380,10 @@ retry_insert:
       goto retry_insert;
     }
     if (chainlen >= LJ_TAB_MAXCHAIN) {
+      if (key_anchored) {
+	tab_rehash_chain_overflow(L, t, key, hmask);
+	goto retry_insert;
+      }
       return tab_rehash_chain_overflow_key(L, t, key, hmask);
     }
     if (tab_private_mutation_allowed(L)) {
@@ -2336,7 +2407,11 @@ retry_insert:
 	goto retry_insert;
       }
       if (reserved == 0) {
-	return tab_rehash_forwarded_key(L, t, key);
+	if (key_anchored) {
+	  tab_rehash_no_free(L, t, key, hmask);
+	  goto retry_insert;
+	}
+	return tab_rehash_no_free_key(L, t, key, hmask);
       }
       {
 	int claimed = tab_try_claim_nil_key(&n->key);
@@ -2357,6 +2432,8 @@ retry_insert:
 	  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
 	  if (!tab_hash_generation_current(t, nodebase)) {
 	    lj_tab_wait_no_l();
+	    if (key_anchored)
+	      goto retry_insert;
 	    return tab_set_anchored_key(L, t, key);
 	  }
 	  return &n->val;
@@ -2375,7 +2452,11 @@ retry_insert:
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
-      return tab_rehash_forwarded_key(L, t, key);
+      if (key_anchored) {
+	tab_rehash_no_free(L, t, key, hmask);
+	goto retry_insert;
+      }
+      return tab_rehash_no_free_key(L, t, key, hmask);
     }
     {
       MSize chainlen;
@@ -2391,6 +2472,10 @@ retry_insert:
       }
       if (chainlen >= LJ_TAB_MAXCHAIN) {
 	tab_release_claimed_free(nodebase, freenode);
+	if (key_anchored) {
+	  tab_rehash_chain_overflow(L, t, key, hmask);
+	  goto retry_insert;
+	}
 	return tab_rehash_chain_overflow_key(L, t, key, hmask);
       }
     }
@@ -2417,6 +2502,8 @@ retry_insert:
 	       "new hash slot is not empty");
     if (!tab_hash_generation_current(t, nodebase)) {
       lj_tab_wait_no_l();
+      if (key_anchored)
+	goto retry_insert;
       return tab_set_anchored_key(L, t, key);
     }
     return &freenode->val;
@@ -2443,7 +2530,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     if (L->top < top)
       L->top = top;
   }
-  slot = tab_newkey_impl(L, t, key);
+  slot = tab_newkey_impl(L, t, key, 0);
   if (stack_key)
     L->top = restorestack(L, oldtop);
   return slot;
@@ -3092,6 +3179,14 @@ void LJ_FASTCALL lj_tab_clear(lua_State *L, GCtab *t)
 LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
 						cTValue *key, cTValue *src)
 {
+  /*
+  ** Traced values may still live only in registers/spill slots when a
+  ** concurrent GC phase is active. Mark the source before any table retry can
+  ** wait, resize, or otherwise give GC a chance to observe the world without
+  ** this edge.
+  */
+  lj_gc2_barrier_weak_write(L, parent, key, src);
+  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
   for (;;) {
     TValue *dst = (TValue *)lj_tab_get(L, parent, key);
     TValue old, expect;
@@ -3120,8 +3215,8 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
 	  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
 	  lj_gc2_weak_write_end(L, weakwr);
 	} else {
-	  lj_gc2_barrier_weak_write(L, parent, key, dst);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);
+	  lj_gc2_barrier_weak_write(L, parent, key, src);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
 	}
 	return 1;
       }
@@ -3338,10 +3433,17 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src,
 					     MSize key)
 {
-  int weakwr = lj_gc2_weak_write_begin(L, parent);
   TValue keytv;
+  int weakwr;
+  setintV(&keytv, (int32_t)key);
+  /*
+  ** The source can be trace-only until this helper publishes it. Barrier it
+  ** before any stale-slot retry path can yield to concurrent GC work.
+  */
+  lj_gc2_barrier_weak_write(L, parent, &keytv, src);
+  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  weakwr = lj_gc2_weak_write_begin(L, parent);
   if (weakwr) {
-    setintV(&keytv, (int32_t)key);
     lj_gc2_barrier_weak_write(L, parent, &keytv, src);
     lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
   }
@@ -3351,8 +3453,13 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
     lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
     lj_gc2_weak_write_end(L, weakwr);
   } else {
-    lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+    /*
+    ** A resize can forward dst immediately after the CAS-published store. The
+    ** source TValue is the stable edge the trace just wrote; barrier that
+    ** snapshot rather than rereading a potentially stale slot.
+    */
+    lj_gc2_barrier_weak_write(L, parent, NULL, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
   }
   return dst;
 }
@@ -3433,7 +3540,14 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
   TValue keycopy;
   TValue *orig = dst;
   cTValue *barrier_key = key;
-  int weakwr = lj_gc2_weak_write_begin(L, parent);
+  int weakwr;
+  /*
+  ** A traced source may be invisible to the stack scanner until the helper
+  ** completes. Publish the GC edge before any retry wait or resize can run.
+  */
+  lj_gc2_barrier_weak_write(L, parent, key, src);
+  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  weakwr = lj_gc2_weak_write_begin(L, parent);
   if (weakwr) {
     lj_gc2_barrier_weak_write(L, parent, key, src);
     lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
@@ -3458,8 +3572,8 @@ done:
     lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
     lj_gc2_weak_write_end(L, weakwr);
   } else {
-    lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+    lj_gc2_barrier_weak_write(L, parent, barrier_key, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
   }
   return dst;
 }
@@ -3468,7 +3582,15 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
 					      TValue *dst, cTValue *src,
 					      cTValue *key)
 {
-  int weakwr = lj_gc2_weak_write_begin(L, parent);
+  int weakwr;
+  /*
+  ** NEWREF commonly stores freshly allocated trace values. Mark src before
+  ** insertion retries, since the value may not be visible from an interpreter
+  ** frame until this helper returns.
+  */
+  lj_gc2_barrier_weak_write(L, parent, key, src);
+  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  weakwr = lj_gc2_weak_write_begin(L, parent);
   if (weakwr) {
     lj_gc2_barrier_weak_write(L, parent, key, src);
     lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
@@ -3485,8 +3607,8 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
     lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
     lj_gc2_weak_write_end(L, weakwr);
   } else {
-    lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced NEWREF weak write. */
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+    lj_gc2_barrier_weak_write(L, parent, key, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
   }
   return dst;
 }

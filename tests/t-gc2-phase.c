@@ -494,7 +494,8 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
   lua_settop(L, 0);
 }
 
-static void test_phase_transition_guards(global_State *g, TGState *tg)
+static void test_phase_transition_guards(lua_State *L, global_State *g,
+					 TGState *tg)
 {
   uint64_t mark_to_weak0, weak_to_sweep0;
 
@@ -504,12 +505,12 @@ static void test_phase_transition_guards(global_State *g, TGState *tg)
   lj_gc2_mark_to_weak(g);
   assert(g->gc2.phase == LJ_GC2_IDLE);
   assert(gc2_mark_to_weak_acq(g) == mark_to_weak0);
-  lj_gc2_weak_to_sweep(g);
+  lj_gc2_weak_to_sweep(g, L);
   assert(g->gc2.phase == LJ_GC2_IDLE);
   assert(gc2_weak_to_sweep_acq(g) == weak_to_sweep0);
 
   la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
-  lj_gc2_weak_to_sweep(g);
+  lj_gc2_weak_to_sweep(g, L);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(gc2_weak_to_sweep_acq(g) == weak_to_sweep0);
 
@@ -889,7 +890,7 @@ int main(void)
 #endif
   test_finalizer_mpsc_concurrent_producers(L, g);
   test_finalizer_step_defers_busy_callback_state(L, g);
-  test_phase_transition_guards(g, tg);
+  test_phase_transition_guards(L, g, tg);
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);
   test_mark_complete_waits_for_peer(L, g, tg);
@@ -946,7 +947,7 @@ int main(void)
   assert(g->gc2.phase == LJ_GC2_WEAK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
-  lj_gc2_weak_to_sweep(g);
+  lj_gc2_weak_to_sweep(g, L);
   assert(g->gc2.phase == LJ_GC2_SWEEP);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 1);

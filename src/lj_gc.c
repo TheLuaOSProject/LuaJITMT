@@ -538,6 +538,25 @@ static void gc_traverse_thread(global_State *g, lua_State *th);
   (lj_gc_arena_markobj((g), obj2gco(s)), \
    lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
 
+static void gc_mark_tg_roots(global_State *g, TGState *tg)
+{
+  TValue tv;
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return;
+  /*
+  ** x64 JIT helpers materialize TValue arguments in these per-TG slots before
+  ** entering C. They are part of the trace/native root set: a concurrent
+  ** collector can otherwise miss freshly allocated keys or values while they are
+  ** between machine registers and helper publication.
+  */
+  if (lj_tg_load_jit_base(tg) == NULL && lj_tg_vmstate_load_acq(tg) <= 0)
+    return;
+  lj_tv_load_acq(&tv, &tg->tmptv);
+  gc_marktv(g, &tv);
+  lj_tv_load_acq(&tv, &tg->tmptv2);
+  gc_marktv(g, &tv);
+}
+
 static void gc_mark_primary_root(global_State *g, GCobj *o)
 {
   if (!o || LJ_UNLIKELY(o->gch.gct == 0))
@@ -659,20 +678,38 @@ static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
 }
 #endif
 
+static int gc_mark_claim_white(global_State *g, GCobj *o)
+{
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next;
+    if (!(old & LJ_GC_WHITES))
+      return 0;
+    /*
+    ** Stock LuaJIT has one legacy marker, so callers assert that an object is
+    ** still white after their pre-check. Lockless root publication and helper
+    ** barriers can race to the same white object. The first marker atomically
+    ** clears the white bits and owns traversal; later markers observe the
+    ** already-claimed color and return.
+    **
+    ** Dead-white resurrection also ends gray after stock flipwhite()+white2gray(),
+    ** so clearing the white bits directly preserves the resulting color.
+    */
+    next = (uint8_t)(old & (uint8_t)~LJ_GC_WHITES);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
 /* Mark a white GCobj. */
 static void gc_mark(global_State *g, GCobj *o)
 {
   int gct = o->gch.gct;
   if (LJ_UNLIKELY(gct == 0))
     return;  /* Body destructor already ran via GC2 arena sweep. */
-  if (LJ_UNLIKELY(!iswhite(o))) {
-    lj_assertG(0, "mark of non-white object");
+  if (LJ_UNLIKELY(!gc_mark_claim_white(g, o)))
     return;
-  }
-  if (isdead(g, o))
-    flipwhite(o);
   lj_gc_arena_markobj(g, o);
-  white2gray(o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
     GCudata *ud = gco2ud(o);
     uint8_t udtype = lj_udata_udtype_acq(ud);
@@ -841,10 +878,15 @@ static void gc_mark_gcroot(global_State *g)
   lj_gc_arena_markmem(g, g->tmpbuf.b);
   {
     TGState *tg = gc2_tg_list_acq(g);
+    int listed = tg != NULL;
     if (!tg)
       tg = G2TG(g);
-    for (; tg != NULL; tg = lj_tg_next_acq(tg))
+    for (; tg != NULL; tg = lj_tg_next_acq(tg)) {
       lj_gc_arena_markmem(g, tg->tmpbuf.b);
+      gc_mark_tg_roots(g, tg);
+    }
+    if (listed && g->main_tg)
+      gc_mark_tg_roots(g, g->main_tg);
   }
 #if LJ_HASFFI
   {
@@ -2288,6 +2330,8 @@ static int atomic(global_State *g, lua_State *L)
     return 0;
   gc2_mark_legacy_live_root_spine(g);
   gc2_paranoia_check_fixpoint(g);
+  if (lj_tg_any_jit_active(g))
+    return 0;
 
   /* All marking done, clear weak tables. */
   lj_gc2_mark_to_weak(g);
@@ -2297,10 +2341,17 @@ static int atomic(global_State *g, lua_State *L)
 #endif
   {
     GCobj *weak = lj_gc_list_head_acq(&g->gc.weak);
-    if (!lj_gc2_weak_complete(g, L, weak, LJ_GC2_WEAK_DRAIN_BATCH))
+    if (!lj_gc2_weak_complete(g, L, weak, LJ_GC2_WEAK_DRAIN_BATCH)) {
+      if (lj_tg_any_jit_active(g))
+	return 0;
       lj_gc_clearweak_bridge(g, weak);
+    }
   }
+  if (lj_tg_any_jit_active(g))
+    return 0;
   lj_gc2_weak_to_sweep(g, L);
+  if (gc2_phase_acq(g) == LJ_GC2_WEAK)
+    return 0;
 
   lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */
 
@@ -2316,7 +2367,7 @@ static int atomic(global_State *g, lua_State *L)
 #if LJ_HASJIT
 int lj_gc_jit_defer_fixpoint(global_State *g)
 {
-  return lj_tg_jit_base(g) != NULL &&
+  return lj_tg_any_jit_active(g) &&
 	 g->gc.state == GCSpropagate &&
 	 lj_gc_list_head_acq(&g->gc.gray) == NULL &&
 	 lj_gc2_mark_phase_active(g);
@@ -2348,7 +2399,7 @@ static size_t gc_onestep(lua_State *L)
     g->gc.state = GCSatomic;  /* End of mark phase. */
     return 0;
   case GCSatomic:
-    if (lj_tg_jit_base(g))  /* Don't run atomic phase on trace. */
+    if (lj_tg_any_jit_active(g))  /* Don't run atomic phase on trace. */
       return LJ_MAX_MEM;
     if (!atomic(g, L))
       return GCSWEEPCOST;

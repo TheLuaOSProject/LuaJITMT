@@ -6,6 +6,12 @@ local M = {}
 local luajit_fixture_libs = utils.luajit_fixture_libs
 local shell_quote = utils.shell_quote
 
+local function copy_run_opts(opts)
+  local out = optutils.copy(opts)
+  if opts and opts.env then out.env = optutils.copy(opts.env) end
+  return out
+end
+
 function M.make_clean(t, opts)
   opts = opts or {}
   local quiet = opts.quiet
@@ -69,6 +75,7 @@ end
 
 function M.compile_and_run_sources(t, out, sources, opts)
   opts = opts or {}
+  local run_opts = copy_run_opts(opts)
   t:cc(out, sources, {
     cflags = opts.cflags,
     default_cflags = opts.default_cflags,
@@ -79,14 +86,15 @@ function M.compile_and_run_sources(t, out, sources, opts)
     quiet = opts.quiet
   })
   t:run({ out }, {
-    env = opts.env,
-    timeout = opts.timeout,
-    quiet = opts.quiet
+    env = run_opts.env,
+    timeout = run_opts.timeout,
+    quiet = run_opts.quiet
   })
 end
 
 function M.build_and_run_c(t, out, cfile, opts)
   opts = opts or {}
+  local run_opts = copy_run_opts(opts)
   if opts.build ~= false then
     if opts.clean then
       M.clean_build(t, opts)
@@ -94,7 +102,7 @@ function M.build_and_run_c(t, out, cfile, opts)
       M.build_default(t)
     end
   end
-  M.compile_and_run_c(t, out, cfile, opts)
+  M.compile_and_run_c(t, out, cfile, run_opts)
 end
 
 function M.run_c_fixtures(t, names, opts)

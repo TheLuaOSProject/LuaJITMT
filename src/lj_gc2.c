@@ -1692,7 +1692,8 @@ int lj_gc2_minor_roots_skip_bridge_mark(global_State *g)
 void lj_gc2_mark_to_weak(global_State *g)
 {
   uint32_t expect = LJ_GC2_MARK;
-  if (!g || !gc2_phase_cas(g, &expect, LJ_GC2_WEAK))
+  if (!g || lj_tg_any_jit_active(g) ||
+      !gc2_phase_cas(g, &expect, LJ_GC2_WEAK))
     return;
   gc2_mark_to_weak_add(g, 1);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
@@ -1734,10 +1735,14 @@ static void gc2_weak_to_sweep_drain_boundary(global_State *g, lua_State *L)
 void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
 {
   uint32_t active_expect = 0, expect = LJ_GC2_WEAK;
-  if (!g)
+  if (!g || lj_tg_any_jit_active(g))
     return;
   if (!gc2_worker_active_cas(g, &active_expect, 1))
     return;  /* Serialize transition handshakes with sweep prepare/close. */
+  if (lj_tg_any_jit_active(g)) {
+    gc2_worker_active_rel(g, 0);
+    return;
+  }
   if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP)) {
     gc2_worker_active_rel(g, 0);
     return;
@@ -2025,7 +2030,7 @@ static int lj_gc2_finalizer_step_ctx(lua_State *L,
   if (gc2_finalizer_queue_pending(g)) {
     GCSize old, total;
     int finrc;
-    if (lj_tg_jit_base(g)) {
+    if (lj_tg_any_jit_active(g)) {
       if (cost)
 	*cost = LJ_MAX_MEM;
       return -1;  /* 05 section 5.8: do not run finalizers on trace. */
@@ -3247,6 +3252,7 @@ static void gc2_thread_set_needscan(global_State *g, lua_State *L)
   if (!(old & LJ_GC_NEEDSCAN)) {
     lj_state_scan_handoff_epoch_rel(L, gc2_cycle_acq(g));
     gc2_thread_scan_needscan_add(g, 1);
+    gc2_thread_scan_requeues_add(g, 1);
     gc2_thread_scan_needscan_pending_inc(g);
   }
 }
@@ -3531,6 +3537,13 @@ static void gc2_scan_tg_roots(global_State *g)
     lj_gc2_markmem(g, tg->tmpbuf.b);
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))
       continue;
+    if (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &tg->tmptv);
+      gc2_mark_tv(g, &tv);
+      lj_tv_load_acq(&tv, &tg->tmptv2);
+      gc2_mark_tv(g, &tv);
+    }
     thread_L = lj_tg_load_thread_L(tg);
     cur_L = lj_tg_load_cur_L(tg);
     if (thread_L) {
@@ -3747,6 +3760,11 @@ void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)
 void lj_gc2_test_scan_roots(global_State *g, lua_State *L)
 {
   lj_gc2_scan_roots(g, L);
+}
+
+void lj_gc2_test_scan_owned_needscan(global_State *g, lua_State *owner_L)
+{
+  gc2_scan_owned_needscan(g, owner_L);
 }
 
 void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L)
@@ -4667,8 +4685,12 @@ int lj_gc2_weak_complete(global_State *g, lua_State *L, GCobj *bridge_head,
   uint64_t progress = 0;
   if (!g || drain_limit == 0 || gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
+  if (lj_tg_any_jit_active(g))
+    return 0;
   gc2_weak_complete_runs_add(g, 1);
   for (;;) {
+    if (lj_tg_any_jit_active(g))
+      return 0;
     weakdrain = lj_gc2_worker_drain(g, drain_limit);
     if (weakdrain) {
       progress += (uint64_t)weakdrain;
@@ -4680,6 +4702,8 @@ int lj_gc2_weak_complete(global_State *g, lua_State *L, GCobj *bridge_head,
   }
   if (progress)
     gc2_weak_complete_progress_add(g, progress);
+  if (lj_tg_any_jit_active(g))
+    return 0;
   if (lj_gc2_weak_snapshot_covers_bridge(g, bridge_head)) {
 #if LJ_GC2_PARANOIA
     gc2_weak_paranoia_zero_diff(g, bridge_head);
@@ -7520,6 +7544,8 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
 {
   uint32_t hit;
   if (!g || gc2_phase_acq(g) != LJ_GC2_MARK)
+    return 0;
+  if (lj_tg_any_jit_active(g))
     return 0;
   gc2_mark_complete_runs_add(g, 1);
   for (;;) {

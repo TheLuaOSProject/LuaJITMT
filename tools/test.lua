@@ -3,6 +3,18 @@ package.path = root .. "/tests/lib/?.lua;" ..
                root .. "/tests/suites/?.lua;" ..
                package.path
 
+do
+  local ok, jitmod = pcall(require, "jit")
+  if ok and jitmod and jitmod.off then
+    -- The suite runner is control-plane Lua: it builds command lines, carries
+    -- env tables, and rebuilds the VM under test. Keep it interpreted so
+    -- aggregate gates do not depend on the current branch's in-process JIT
+    -- stability. Individual tests still launch child LuaJIT processes with the
+    -- requested JIT mode.
+    jitmod.off(true, true)
+  end
+end
+
 local ljtest = require("ljtest")
 local utils = require("suite_utils")
 local tests = require("init")

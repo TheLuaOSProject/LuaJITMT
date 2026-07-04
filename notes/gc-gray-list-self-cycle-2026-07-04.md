@@ -13,13 +13,24 @@ blackened and popped the head, but `lj_gc_list_pop_head_rel()` restored the same
 object as the head from its self-link, so the full collection never reached
 `GCSpause`.
 
-The fix hardens the intrusive legacy GC list helpers:
+The fix hardens duplicate marking from both directions:
 
 - pushing an object that is already the list head is a no-op, preventing a
   same-head duplicate mark from forming `o->gclist = o`;
 - popping a self-linked head clears the list instead of preserving the cycle;
-- `gc_mark()` now returns in release builds if an invalid non-white mark slips
-  through, while assertion builds still report the invariant violation.
+- `gc_mark()` atomically claims the white bits before traversal. The first
+  marker owns the object; concurrent duplicate markers observe that the object
+  is already claimed and return in release and assertion builds.
+
+This keeps the stock single-marker invariant for ordinary paths while accepting
+the new lockless reality: root publication and helper barriers can legitimately
+race to the same white object.
 
 The M7 cdata-set wrappers now run the hang-prone script under an explicit
 timeout, so future regressions fail instead of blocking the aggregate suite.
+
+Current verification:
+
+- `tools/ci/lua_test.sh m3_gc2_paranoia`
+- `tools/ci/lua_test.sh m8_weak`
+- `tools/ci/lua_test.sh m7_ffi`

@@ -74,6 +74,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strid_next = 0;
   tg->strid_end = 0;
   tg->strnum_credit = 0;
+  setnilV(&tg->tmptv);
+  setnilV(&tg->tmptv2);
   lj_tg_gcroot_pending_store_rlx(tg, NULL);
   lj_tg_gcroot_pending_after_main_store_rlx(tg, NULL);
   tg_init_ssb(tg);
@@ -335,6 +337,49 @@ TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
   }
   return g->main_tg && lj_tg_tid_acq(g->main_tg) == owner_tid ?
 	 g->main_tg : NULL;
+}
+
+int lj_tg_any_jit_active(global_State *g)
+{
+#if LJ_HASJIT
+  TGState *tg;
+  int saw_tg = 0;
+  if (!g)
+    return 0;
+  /*
+  ** GC phase completion is global, while lj_tg_jit_base(g) intentionally reads
+  ** only the caller's TG. A different TG may be executing trace code with live
+  ** values only in machine registers or trace spill slots; stack scanners cannot
+  ** prove those roots until the trace reaches an exit/safepoint. Cold GC gates
+  ** therefore scan the registered TG list and defer final mark/weak/finalizer
+  ** transitions while any live TG has a published trace base or positive trace
+  ** vmstate.
+  */
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    saw_tg = 1;
+    if (!lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	(lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0))
+      return 1;
+  }
+  if (!saw_tg) {
+    tg = g->main_tg;
+    if (tg && !lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+      if (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0)
+	return 1;
+      saw_tg = 1;
+    }
+  }
+  /*
+  ** The global jit_base/vmstate fields are a bootstrap mirror for code that has
+  ** no TG yet. Once a TG is registered, x64 trace entry/exit updates TG-local
+  ** state directly and the mirror may retain an old non-NULL base.
+  */
+  return !saw_tg &&
+	 (mref_acq(g->jit_base, TValue) != NULL || vmstate_load_acq(g) > 0);
+#else
+  UNUSED(g);
+  return 0;
+#endif
 }
 
 #if LJ_PROFILE_TGLOCAL

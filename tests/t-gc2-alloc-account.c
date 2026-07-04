@@ -510,7 +510,7 @@ int main(void)
   lj_gc2_mark_to_weak(g);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_WEAK);
   assert_late_attach_color(g, tg, &late_tg, 7002u, 1, 1);
-  lj_gc2_weak_to_sweep(g);
+  lj_gc2_weak_to_sweep(g, L);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(tg->alloc.alloc_black == 0);
   assert_late_attach_color(g, tg, &late_tg, 7003u, 0, 0);
@@ -525,7 +525,7 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 0);
   lj_gc2_mark_to_weak(g);
-  lj_gc2_weak_to_sweep(g);
+  lj_gc2_weak_to_sweep(g, L);
   assert(lj_gc2_test_sweep_owner_progress(g, tg, 64) == 0);
   /*
   ** Owner sweep starts only after the bridge boundary moves traversable owned

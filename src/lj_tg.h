@@ -718,6 +718,8 @@ static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
   setmrefrel(g->jit_base, base);  /* Transitional mirror for VM asm. */
 }
 
+LJ_FUNC int lj_tg_any_jit_active(global_State *g);
+
 #define TG_DISP2HOT	(-(int)(HOTCOUNT_SIZE*sizeof(HotCount)))
 #define TG_OFS(f) \
   ((int)(offsetof(TGState, f) - offsetof(TGState, dispatch)))

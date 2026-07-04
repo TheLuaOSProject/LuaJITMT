@@ -279,6 +279,7 @@ LJ_FUNC int lj_gc2_test_finreg_cdata_preclaim_take(lua_State *L,
 						   GCobj *o, TValue *fin);
 LJ_FUNC void lj_gc2_test_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_test_scan_roots(global_State *g, lua_State *L);
+LJ_FUNC void lj_gc2_test_scan_owned_needscan(global_State *g, lua_State *owner_L);
 LJ_FUNC void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L);
 LJ_FUNC GCobj *lj_gc2_test_grey_steal(global_State *g);
 LJ_FUNC void lj_gc2_test_worker_wake(global_State *g);

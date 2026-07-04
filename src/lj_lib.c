@@ -76,12 +76,25 @@ static TValue *lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
 static TValue *lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
 			       cTValue *val)
 {
+  TValue keytv, valtv;
   TValue *dst;
+  /*
+  ** SET records in generated library definitions commonly store stack values
+  ** after popping them back to L->top. Lockless table insertion may need L->top
+  ** as a temporary root for a stack key during resize/retry, so snapshot both
+  ** operands before looking up or creating the destination slot.
+  */
+  copyTV(L, &keytv, key);
+  copyTV(L, &valtv, val);
+  lj_gc_pubroot(L, &keytv);
+  lj_gc_pubroot(L, &valtv);
   for (;;) {
-    dst = lj_tab_set(L, tab, key);
-    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, key, val) ==
-	LJ_TAB_STORE_CAS_OK)
+    dst = lj_tab_set(L, tab, &keytv);
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &valtv) ==
+	LJ_TAB_STORE_CAS_OK) {
+      lj_gc2_barrier_weak_write(L, tab, &keytv, &valtv);
       return dst;
+    }
     lj_tab_store_wait_l(L);  /* Library generic store saw stale/FORWARD slot. */
   }
 }
@@ -171,9 +184,8 @@ void lj_lib_register(lua_State *L, const char *libname,
 	L->top -= 2;
 	if (tvisstr(L->top+1) && strV(L->top+1)->len == 0)
 	  env = tabV(L->top);
-	else {  /* NOBARRIER: See above for common barrier. */
+	else {  /* Store helper snapshots stack operands and emits the barrier. */
 	  lib_storetv_key(L, tab, L->top+1, L->top);
-	  lj_gc2_barrier_weak_write(L, tab, L->top+1, L->top);
 	}
 	break;
       case LIBINIT_NUMBER:
