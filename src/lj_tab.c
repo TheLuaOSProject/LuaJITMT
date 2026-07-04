@@ -805,9 +805,11 @@ static TValue *tab_rehash_slot(lua_State *L, TValue *array, uint32_t asize,
 }
 
 static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask,
-				     uint32_t oldasize, uint32_t asize)
+				     uint32_t oldasize, uint32_t asize,
+				     int *deadkeyp)
 {
   uint32_t count = 0;
+  int deadkey = 0;
   if (oldhmask > 0) {
     uint32_t i;
     for (i = 0; i <= oldhmask; i++) {
@@ -830,12 +832,16 @@ static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask
       }
       if (tab_hash_key_hidden(&key))
 	continue;
+      if (tab_val_absent(&val))
+	deadkey = 1;
       if (!tab_rehash_arrayindex(asize, &key, &idx))
 	count++;
     }
   }
   if (asize < oldasize)
     count += oldasize - asize;
+  if (deadkeyp)
+    *deadkeyp = deadkey;
   return count;
 }
 
@@ -1287,12 +1293,14 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   Node *newfreetop;
   MSize newfreecount;
   uint32_t hashcount;
+  MSize target_hmask;
   uint32_t hash_flags0;
   TabNodeRetire *oldret;
   TabArrayRetire *oldaret;
   int array_next_claimed;
   int struct_acq;
   Node *node_succ;
+  int deadkey;
 
 restart_resize:
   oldnode = lj_tab_node_snapshot_acq(t, &oldhmask);
@@ -1313,17 +1321,22 @@ restart_resize:
   array_next_claimed = 0;
   struct_acq = 0;
   node_succ = NULL;
+  deadkey = 0;
   hash_flags0 = oldhmask > 0 ? lj_tab_node_hdr_flags_word_acq(oldnode) : 0;
   if (oldhmask > 0 && (hash_flags0 & (uint32_t)TABNODE_FLAG_RETIRING)) {
     lj_tab_wait_l(L);
     goto restart_resize;
   }
-  hashcount = tab_rehash_hashcount(L, oldnode, oldhmask, oldasize, asize);
+  hashcount = tab_rehash_hashcount(L, oldnode, oldhmask, oldasize, asize,
+				   &deadkey);
   if (hashcount) {
     uint32_t needhbits = hsize2hbits(hashcount);
     if (hbits < needhbits)
       hbits = needhbits;
   }
+  if (hbits > LJ_MAX_HBITS)
+    lj_err_msg(L, LJ_ERR_TABOV);
+  target_hmask = hbits ? (((MSize)1u << hbits) - 1u) : 0;
   if (asize > oldasize && asize > LJ_MAX_ASIZE)
     lj_err_msg(L, LJ_ERR_TABOV);
   if (array_changed) {
@@ -1335,6 +1348,14 @@ restart_resize:
       newacap = asize;
     }
   }
+  /*
+  ** A resize request can be redundant after another mutator has already
+  ** published the requested generation. Still rebuild same-sized hash parts
+  ** when dead value slots are present: that compaction is observable as future
+  ** insert capacity and cannot be skipped safely.
+  */
+  if (!array_changed && oldhmask == target_hmask && !deadkey)
+    return;
   if (newarray) {
     uint32_t i;
     array = tab_array_new(L, asize, newacap);

@@ -385,6 +385,42 @@ static void exercise_resize_owner(lua_State *L)
   assert(other.status == 0);
 }
 
+static void exercise_resize_noop_owner(lua_State *L)
+{
+  GCtab *t;
+  TValue *array;
+  MSize asize, hmask;
+  uint32_t hbits;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "a");
+  lua_pushinteger(L, 2);
+  lua_setfield(L, -2, "b");
+  t = tabV(L->top - 1);
+
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  (void)array;
+  (void)lj_tab_node_snapshot_acq(t, &hmask);
+  assert(hmask > 0);
+  hbits = lj_fls((uint32_t)hmask) + 1u;
+
+  lj_tab_test_reset_struct_enter_acquires();
+  lj_tab_resize(L, t, (uint32_t)asize, hbits);
+  assert(lj_tab_test_struct_enter_acquires() == 0);
+
+  lua_pushnil(L);
+  lua_setfield(L, -2, "b");
+  lj_tab_test_reset_struct_enter_acquires();
+  lj_tab_resize(L, t, (uint32_t)asize, hbits);
+  assert(lj_tab_test_struct_enter_acquires() == 1);
+
+  lj_tab_test_reset_struct_enter_acquires();
+  lj_tab_resize(L, t, (uint32_t)asize, hbits);
+  assert(lj_tab_test_struct_enter_acquires() == 0);
+}
+
 static void exercise_wait_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
@@ -422,6 +458,7 @@ int main(void)
 
   exercise_direct_owner(L);
   exercise_resize_owner(L);
+  exercise_resize_noop_owner(L);
   exercise_wait_stopreq(L);
 
   lua_close(L);
