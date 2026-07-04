@@ -894,7 +894,6 @@ static int tab_node_still_published(global_State *g, const Node *node)
 {
   GCobj *o;
   uint32_t n = 0;
-  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o->gch.gct == ~LJ_TTAB && lj_tab_node_acq(gco2tab(o)) == node)
       return 1;
@@ -908,7 +907,6 @@ static int tab_array_still_published(global_State *g, const TValue *array)
 {
   GCobj *o;
   uint32_t n = 0;
-  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o->gch.gct == ~LJ_TTAB && lj_tab_array_acq(gco2tab(o)) == array)
       return 1;
@@ -1518,6 +1516,13 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   */
   if (gc2_n_threads_acq(g) > 1)
     return 0;
+  /*
+  ** Flush pending table roots once before the conservative published-root
+  ** checks below. Each retired generation still gets its own root-list scan,
+  ** but repeated pending-root drains are unnecessary and can be expensive when
+  ** reclaiming a batch of old table generations.
+  */
+  (void)lj_gc_flush_root_pending(g);
   ret = lj_tab_node_retired_head_xchg_acqrel(g, NULL);
   while (ret) {
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);

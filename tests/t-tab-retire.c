@@ -69,6 +69,7 @@ int main(void)
   global_State *g;
   GCtab *t;
   Node *oldnode;
+  Node *newnode;
   MSize oldhmask;
   uint64_t retire_epoch;
   TabNodeRetire *ret;
@@ -90,7 +91,8 @@ int main(void)
   assert(oldhmask == t->hmask);
   assert(lj_tab_node_hdr_flags_acq(oldnode) == 0);
   lj_tab_resize(L, t, 8, lj_fls(t->hmask) + 2u);
-  assert(lj_tab_node_acq(t) != oldnode);
+  newnode = lj_tab_node_acq(t);
+  assert(newnode != oldnode);
   assert(lj_tab_node_hmask_acq(oldnode) == oldhmask);
   assert(lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING);
   ret = find_retired(g, oldnode);
@@ -102,6 +104,10 @@ int main(void)
   assert(find_retired(g, oldnode) != NULL);
   assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 0);
   assert(find_retired(g, oldnode) != NULL);
+  lj_tab_node_rel(t, oldnode);
+  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 0);
+  assert(find_retired(g, oldnode) != NULL);
+  lj_tab_node_rel(t, newnode);
   assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 1);
   assert(find_retired(g, oldnode) == NULL);
   for (i = 0; i < 4; i++)

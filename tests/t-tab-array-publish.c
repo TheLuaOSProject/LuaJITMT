@@ -103,6 +103,10 @@ int main(void)
   assert(find_retired_array(g, oldarray) != NULL);
   assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 0);
   assert(find_retired_array(g, oldarray) != NULL);
+  lj_tab_array_rel(t, oldarray);
+  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 0);
+  assert(find_retired_array(g, oldarray) != NULL);
+  lj_tab_array_rel(t, array);
   assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 1);
   assert(find_retired_array(g, oldarray) == NULL);
   for (i = 0; i < (int)oldasize; i += 3)
