@@ -1291,7 +1291,7 @@ restart_resize:
   node_succ = NULL;
   hash_flags0 = oldhmask > 0 ? lj_tab_node_hdr_flags_word_acq(oldnode) : 0;
   if (oldhmask > 0 && (hash_flags0 & (uint32_t)TABNODE_FLAG_RETIRING)) {
-    lj_tab_wait_no_l();
+    lj_tab_wait_l(L);
     goto restart_resize;
   }
   hashcount = tab_rehash_hashcount(oldnode, oldhmask, oldasize, asize);
@@ -1495,7 +1495,7 @@ retry_resize:
   tab_retire_discard(g, oldret);
   tab_array_retire_discard(g, oldaret);
   lj_tab_struct_leave(t, struct_acq);
-  lj_tab_wait_no_l();
+  lj_tab_wait_l(L);
   goto restart_resize;
 }
 

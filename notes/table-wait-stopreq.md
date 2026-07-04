@@ -9,6 +9,11 @@
   the wait boundary.
 - The no-`lua_State` helper remains a yield-only retry path because it cannot
   throw through a protected Lua frame.
+- 2026-07-04 follow-up: resize retries that already own `L` and are outside
+  the structural mutation window now use `lj_tab_wait_l(L)`: the pre-mutation
+  RETIRING snapshot retry and the post-cleanup retry after abandoning a failed
+  resize attempt. In-mutation waits still use the no-state helper until the
+  generation-copy protocol can make those windows throw-safe.
 
 Coverage: `m5_tab_struct_owner` exercises sticky and fresh STOPREQ behavior via
 the exported table retry wait helper under `LJ_TAB_TEST_HELPERS`.
