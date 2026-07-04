@@ -12,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_ctype.h"
 
+#include "lib/ctype_growth_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
 
 int main(void)
@@ -26,6 +27,7 @@ int main(void)
   ljt_lua_dostring(L, "require('ffi')");
   cts = ctype_ctsG(g);
   assert(cts != NULL);
+  ljt_ctype_force_table_growth(L, cts, "lj_m7_cparse_rollback_grow");
   top0 = ctype_top_acq(cts);
 
   ljt_lua_dostring(L,

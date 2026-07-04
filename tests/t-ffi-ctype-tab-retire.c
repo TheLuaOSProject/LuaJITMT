@@ -12,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_ctype.h"
 
+#include "lib/ctype_growth_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
 
 static CTypeTab *find_retired(CTState *cts, CTypeTab *tabh)
@@ -43,9 +44,7 @@ int main(void)
   assert(oldh != NULL);
   assert(ctype_retiredtab_acq(cts) == NULL);
 
-  ljt_lua_dostring(L,
-    "local ffi = require('ffi')\n"
-    "ffi.typeof('struct { int m7_ctype_tab_retire; }')\n");
+  ljt_ctype_force_table_growth(L, cts, "lj_m7_ctype_tab_retire");
 
   newh = ctype_tabh_acq(cts);
   assert(newh != NULL);
@@ -56,7 +55,7 @@ int main(void)
   retire_epoch = ctype_tab_retire_epoch_acq(ret);
   assert(lj_ctype_reclaim_retired(g, retire_epoch) == 0);
   assert(find_retired(cts, oldh) != NULL);
-  assert(lj_ctype_reclaim_retired(g, retire_epoch + 1u) == 1);
+  assert(lj_ctype_reclaim_retired(g, retire_epoch + 1u) >= 1);
   assert(find_retired(cts, oldh) == NULL);
   assert(ctype_tabh_acq(cts) == newh);
 

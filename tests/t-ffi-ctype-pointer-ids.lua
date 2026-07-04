@@ -1,5 +1,9 @@
 local ffi = require"ffi"
 
+if os.getenv("LJ_M7_FORCE_CTYPE_GROW") then
+  require("ffi_ctype_growth").force("lj_m7_ptrid_pregrow", 512)
+end
+
 ffi.cdef[[
 typedef struct { int x; } lj_m7_ptrid_base_t;
 typedef lj_m7_ptrid_base_t lj_m7_ptrid_alias_t;

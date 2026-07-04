@@ -319,12 +319,13 @@ assert(cl.lj_clib_ldscript_value() == 42)
                       "t-ffi-cparse-rollback.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua")
-
-      clean_build(t, { xcflags = "-DLUAJIT_CTYPE_CHECK_ANCHOR" })
-      build_and_run_c(t, t:tmp("lj_t-ffi-cparse-rollback-anchor"),
-                      "t-ffi-cparse-rollback.c", { timeout = "20s" })
-      run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
-      run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua")
+      run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, {
+        joff = true,
+        env = { LJ_M7_FORCE_CTYPE_GROW = "1" }
+      })
+      run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, {
+        env = { LJ_M7_FORCE_CTYPE_GROW = "1" }
+      })
       run_luajit_script(t, "t-ffi-cdef-token.lua", { "2", "20" }, { joff = true })
       print("M7 FFI cparser rollback behavior passed")
     end
@@ -428,8 +429,10 @@ assert(cl.lj_clib_ldscript_value() == 42)
     run = function(t)
       clean_build(t)
       run_luajit_script(t, "t-ffi-ctype-pointer-ids.lua", nil, { joff = true })
-      clean_build(t, { xcflags = "-DLUAJIT_CTYPE_CHECK_ANCHOR" })
-      run_luajit_script(t, "t-ffi-ctype-pointer-ids.lua", nil, { joff = true })
+      run_luajit_script(t, "t-ffi-ctype-pointer-ids.lua", nil, {
+        joff = true,
+        env = { LJ_M7_FORCE_CTYPE_GROW = "1" }
+      })
       run_luajit_script(t, "t-ffi-cdata-set-l.lua", {
         "1",
         getenv("LJ_M7_FFI_SET_ITERS", "80")
@@ -442,7 +445,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
     name = "m7_ffi_ctype_tab_retire",
     description = "FFI ctype-table retirement behavior",
     run = function(t)
-      clean_build(t, { xcflags = "-DLUAJIT_CTYPE_CHECK_ANCHOR" })
+      clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-ctype-tab-retire"),
                       "t-ffi-ctype-tab-retire.c", { timeout = "20s" })
       print("M7 FFI ctype table-retirement behavior passed")

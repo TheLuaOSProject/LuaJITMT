@@ -1,6 +1,10 @@
 local ffi = require("ffi")
 local th = require("threading")
 
+if os.getenv("LJ_M7_FORCE_CTYPE_GROW") then
+  require("ffi_ctype_growth").force("lj_m7_rollback_pregrow", 512)
+end
+
 ffi.cdef("struct lj_m7_rollback_reader;")
 ffi.cdef("struct lj_m7_rollback_ctor;")
 ffi.cdef("enum lj_m7_rollback_enum;")

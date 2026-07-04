@@ -311,11 +311,12 @@ int lj_ctype_predefined_string(const char *p, MSize len, CTypeID *idp)
 #undef ctype_string_match
 
 #define CTTYPEINFO_NUM		(sizeof(lj_ctype_typeinfo)/sizeof(CTInfo)-1)
-#ifdef LUAJIT_CTYPE_CHECK_ANCHOR
-#define CTTYPETAB_MIN		CTTYPEINFO_NUM
-#else
+/*
+** Keep the production initial table size fixed. Tests that need to cover
+** CTState table moves now force them by declaring enough ordinary ctypes at
+** runtime, so the runtime has no build-only narrow-table path.
+*/
 #define CTTYPETAB_MIN		128
-#endif
 #define CTCBBLACK_SIZE		4096u
 
 /* -- C type interning ---------------------------------------------------- */
