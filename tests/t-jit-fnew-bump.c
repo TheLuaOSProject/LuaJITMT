@@ -82,6 +82,42 @@ static void test_traced_behavior(lua_State *L)
   assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
 }
 
+static void test_traced_immutable_numeric_inline(lua_State *L)
+{
+  uint32_t helper0, helper1;
+  const char *code =
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local t = {}\n"
+    "for i = 1, 100 do\n"
+    "  local x = i + 0.5\n"
+    "  t[i] = function()\n"
+    "    return x\n"
+    "  end\n"
+    "end\n"
+    "assert(util.traceinfo(1), 'immutable numeric FNEW loop did not trace')\n"
+    "assert(t[1]() == 1.5)\n"
+    "assert(t[2]() == 2.5)\n"
+    "assert(t[100]() == 100.5)\n"
+    "assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))\n"
+    "local name = debug.setupvalue(t[1], 1, 50.5)\n"
+    "assert(name == 'x', name)\n"
+    "assert(t[1]() == 50.5)\n"
+    "assert(t[2]() == 2.5)\n";
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  helper0 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+
+  run_script(L, code, "immutable numeric FNEW traced inline behavior");
+
+  helper1 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+  assert(helper1 == helper0);
+}
+
 static void test_traced_mark_active_fallback(lua_State *L, global_State *g,
 					     TGState *tg)
 {
@@ -479,6 +515,7 @@ int main(void)
   test_uvcell_bump_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);
   test_traced_behavior(L);
+  test_traced_immutable_numeric_inline(L);
   test_accounting_fast_direct(L, g, tg);
   test_accounting_fallback(L, g, tg);
   test_traced_mark_active_fallback(L, g, tg);

@@ -1004,7 +1004,7 @@ static int asm_fnew1num_args_x64(ASMState *as, IRIns *ir,
   if (ci->pt->sizeuv != 1 || !proto_celluv(ci->pt))
     return 0;
   v = proto_uv(ci->pt)[0];
-  if (!(v & PROTO_UV_LOCAL) || (v & PROTO_UV_IMMUTABLE))
+  if (!(v & PROTO_UV_LOCAL))
     return 0;
   slotir = IR(ci->args[4]);
   if (slotir->o != IR_KINT || slotir->i < 0 ||
@@ -1046,8 +1046,12 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   checkmclim(as);
 
   allow = RSET_GPR & ~RID2RSET(RID_RET);
-  base = ra_alloc1(as, REF_BASE, allow);
-  rset_clear(allow, base);
+  if (fi.uvspec & PROTO_UV_IMMUTABLE) {
+    base = RID_NONE;
+  } else {
+    base = ra_alloc1(as, REF_BASE, allow);
+    rset_clear(allow, base);
+  }
   parent = ra_alloc1(as, fi.parentref, allow);
   rset_clear(allow, parent);
   val = ra_alloc1(as, fi.valref, RSET_FPR);
@@ -1083,16 +1087,19 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, nupvalues), 1);
   emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GCfuncL, uvptr));
 
-  emit_movtomro(as, tmp|REX_64, base, 8 * fi.slot);
-  emit_rr(as, XO_ARITH(XOg_OR), tmp|REX_64, next|REX_64);
-  emit_loadu64(as, next, uvtag);
-  emit_rr(as, XO_MOV, tmp|REX_64, uv);
+  if (!(fi.uvspec & PROTO_UV_IMMUTABLE)) {
+    emit_movtomro(as, tmp|REX_64, base, 8 * fi.slot);
+    emit_rr(as, XO_ARITH(XOg_OR), tmp|REX_64, next|REX_64);
+    emit_loadu64(as, next, uvtag);
+    emit_rr(as, XO_MOV, tmp|REX_64, uv);
+  }
 
   emit_movtomro(as, tmp, uv, offsetof(GCupval, dhash));
   emit_gri(as, XG_ARITHi(XOg_XOR), tmp, (int32_t)(fi.uvspec << 24));
   emit_rmro(as, XO_MOV, tmp|REX_64, parent, offsetof(GCfuncL, pc));
 
-  asm_fnew1num_movi8(as, uv, offsetof(GCupval, immutable), 0);
+  asm_fnew1num_movi8(as, uv, offsetof(GCupval, immutable),
+		     (fi.uvspec & PROTO_UV_IMMUTABLE) ? 1 : 0);
   emit_movtomro(as, tmp|REX_64, uv, offsetof(GCupval, v));
   emit_rmro(as, XO_LEA, tmp|REX_64, uv, offsetof(GCupval, tv));
   emit_rmro(as, XO_MOVSDto, val, uv, offsetof(GCupval, tv));

@@ -174,3 +174,16 @@ Focused validation after this C-helper edge cleanup:
   tools/ci/lua_test.sh m9_bench_stock_compare`
 
 The focused stock comparison reported `closures_upval` geomean `1.901021`.
+
+2026-07-04 follow-up: the x64 inline allocation path now also accepts immutable
+numeric local-cell captures. The recorder already selected
+`lj_func_newL_gc1num_forjit()` for this shape and the C helper preserved the
+semantics, but the assembler rejected immutable upvalue specs and routed the
+trace through the helper call. The inline path now initializes
+`GCupval.immutable` from the proto upvalue metadata and skips the parent-frame
+slot publication for immutable captures, matching the C helper and ordinary Lua
+semantics. Mutable captures still publish the fresh cell to `BASE[slot]`.
+
+Focused coverage: `m6_jit_fnew_bump` stores escaped immutable numeric closures,
+checks distinct upvalue identities and `debug.setupvalue()` isolation, and
+asserts that the traced loop does not call either C helper counter.
