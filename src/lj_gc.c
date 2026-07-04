@@ -941,6 +941,10 @@ static void gc_mark_start(global_State *g)
   GCobj *seen[GCROOT_MAX + 4];
   MSize nseen = 0;
   ptrdiff_t i;
+  /* The root scan cannot make progress without the required main thread. */
+  lj_assertG(mainL != NULL, "missing main thread root");
+  if (LJ_UNLIKELY(mainL == NULL))
+    return;
   (void)lj_gc_flush_root_pending(g);
   lj_gc2_mark_begin(g);
   /*

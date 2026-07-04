@@ -3582,6 +3582,10 @@ static void gc2_scan_global_roots(global_State *g)
   lua_State *mainL = mainthread_acq(g);
   lua_State *vmL = vmthread_acq(g);
   ptrdiff_t i;
+  /* The root scan cannot make progress without the required main thread. */
+  lj_assertG(mainL != NULL, "missing main thread root");
+  if (LJ_UNLIKELY(mainL == NULL))
+    return;
   /*
   ** Object allocation publishes freshly initialized bodies through per-TG
   ** pending root chains. A major GC2 root scan owns the same global root
