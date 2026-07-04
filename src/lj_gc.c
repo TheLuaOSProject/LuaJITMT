@@ -87,19 +87,22 @@ static void gc_root_wait_no_l(void)
 /* -- Mark phase ---------------------------------------------------------- */
 
 /*
-** Legacy marking still runs during public minor cycles. Only the GC2 bridge is
-** suppressed, otherwise legacy callbacks would turn a minor-root cycle into a
-** full-root GC2 mark before the GC2 scanner owns the root policy.
+** Legacy marking can overlap standalone minor-root GC2 cycles. Suppress the
+** GC2 bridge only while the legacy collector has not explicitly opened its
+** full-GC mark bridge; once legacy is blackening objects for a real mark pass,
+** the exact same objects and raw allocations must be mirrored into GC2.
 */
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
-  if (!lj_gc2_minor_roots_skip_bridge_mark(g))
+  if (!lj_gc2_minor_roots_skip_bridge_mark(g) ||
+      gc2_legacy_mark_bridge_acq(g))
     lj_gc2_markobj(g, o);
 }
 
 void lj_gc_arena_markmem(global_State *g, void *p)
 {
-  if (!lj_gc2_minor_roots_skip_bridge_mark(g))
+  if (!lj_gc2_minor_roots_skip_bridge_mark(g) ||
+      gc2_legacy_mark_bridge_acq(g))
     (void)lj_gc2_markmem(g, p);
 }
 
@@ -761,6 +764,14 @@ static void gc_mark_threading_states(global_State *g)
        th != NULL;
        th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
     gc_markobj(g, th);
+    /*
+    ** Joined/suspended registry states can already be gray from an earlier
+    ** root path. Classic propagation then may not be the point that mirrors
+    ** their raw stack allocation into GC2's arena bitmap. Ownerless stacks are
+    ** stable here, so scan them at the registry root edge as well.
+    */
+    if (lj_state_owner_acq(th) == 0)
+      gc_traverse_thread(g, th);
     if (++n >= 1000000u)
       break;
   }
@@ -857,6 +868,51 @@ static void gc_mark_gcroot(global_State *g)
   lj_gc2_smr_read_leave(g);
 }
 
+static void gc2_mark_legacy_live_root_spine(global_State *g)
+{
+  GCobj *o;
+  StrTabHdr *hdr;
+  uint32_t n = 0;
+  (void)lj_gc_flush_root_pending(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    uint8_t flags;
+    if (LJ_UNLIKELY(o->gch.gct == 0))
+      goto next;
+    flags = lj_obj_gcflags(o);
+    if (iswhite(o) && !(flags & (LJ_GC_FIXED|LJ_GC_SFIXED)))
+      goto next;
+    (void)lj_gc2_markobj_nolegacy(g, o);
+    if (o->gch.gct == ~LJ_TTAB) {
+      GCtab *t = gco2tab(o);
+      void *arraymem = lj_tab_array_mem_acq(t);
+      MSize hmask;
+      Node *node;
+      if (arraymem)
+	(void)lj_gc2_markmem(g, arraymem);
+      node = lj_tab_node_snapshot_acq(t, &hmask);
+      if (hmask > 0)
+	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+    }
+next:
+    if (++n >= 1000000u)
+      break;
+  }
+  hdr = lj_str_tabh_acq(g);
+  if (hdr) {
+    MSize i;
+    GCRef *strtab = hdr->bucket;
+    (void)lj_gc2_markmem(g, hdr);
+    for (i = 0; i <= hdr->mask; i++) {
+      for (o = lj_str_hashhead_acq(&strtab[i]); o != NULL;
+	   o = lj_str_next_acq(o)) {
+	uint8_t flags = lj_obj_gcflags(o);
+	if (!iswhite(o) || (flags & (LJ_GC_FIXED|LJ_GC_SFIXED)))
+	  (void)lj_gc2_markobj_nolegacy(g, o);
+      }
+    }
+  }
+}
+
 /* Start a GC cycle and mark the root set. */
 static void gc_mark_start(global_State *g)
 {
@@ -919,6 +975,7 @@ static void gc_mark_uv(global_State *g)
 static void gc_mark_finalizer_obj(global_State *g, GCobj *o)
 {
   makewhite(g, o);  /* Could be from previous GC. */
+  (void)lj_gc2_markobj_nolegacy(g, o);
   gc_mark(g, o);
 }
 
@@ -970,12 +1027,12 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   GCtab *mt = lj_tab_metatable_acq(t);
   arraymem = lj_tab_array_mem_acq(t);
   if (arraymem)
-    lj_gc_arena_markmem(g, arraymem);
+    (void)lj_gc2_markmem(g, arraymem);
   {
     MSize hmask;
     Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask > 0)
-      lj_gc_arena_markmem(g, lj_tab_node_hdrw(node));
+      (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
   }
   if (mt)
     gc_markobj(g, mt);
@@ -1411,6 +1468,13 @@ static size_t propagatemark(global_State *g)
   GCobj *o = lj_gc_list_head_acq(&g->gc.gray);
   int gct = o->gch.gct;
   lj_assertG(isgray(o), "propagation of non-gray object");
+  /*
+  ** A forced full collection may first finish an already-active legacy mark
+  ** cycle before it can start a fresh major GC2 cycle. Objects left gray by a
+  ** mutator publication in that older cycle still become legacy-live here, so
+  ** mirror the object itself into GC2 at the blackening edge.
+  */
+  (void)lj_gc2_markobj_nolegacy(g, o);
   gray2black(o);
   lj_gc_list_pop_head_rel(&g->gc.gray, o);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
@@ -1842,6 +1906,7 @@ static int atomic(global_State *g, lua_State *L)
   /* 05 section 5.7.1 classic-GC atomic fixpoint-round bridge. */
   if (!gc2_legacy_mark_complete(g, L))
     return 0;
+  gc2_mark_legacy_live_root_spine(g);
   gc2_paranoia_check_fixpoint(g);
 
   /* All marking done, clear weak tables. */
@@ -2172,17 +2237,21 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
     GCobj *o = gcV(&snap);
-    lj_gc2_barrier_tv_g(g, &snap);
     if (isdead(g, o)) {
       makewhite(g, o);
+      (void)lj_gc2_markobj_nolegacy(g, o);
       gc_mark(g, o);
       (void)gc_propagate_gray(g);
       return;
     }
+    if (iswhite(o) && (g->gc.state == GCSpropagate ||
+		       g->gc.state == GCSatomic)) {
+      (void)lj_gc2_markobj_nolegacy(g, o);
+      gc_mark(g, o);
+      return;
+    }
+    lj_gc2_barrier_tv_g(g, &snap);
   }
-  if (tviswhite(&snap) && (g->gc.state == GCSpropagate ||
-			   g->gc.state == GCSatomic))
-    gc_mark(g, gcV(&snap));
 }
 
 /* Publish a GC object that is becoming reachable from a native root list. */
@@ -2204,10 +2273,12 @@ void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v)
 	     "bad GC state");
   lj_assertG(o->gch.gct != ~LJ_TTAB, "barrier object is not a table");
   /* Preserve invariant during propagation. Otherwise it doesn't matter. */
-  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
+  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+    (void)lj_gc2_markobj_nolegacy(g, v);
     gc_mark(g, v);  /* Move frontier forward. */
-  else
+  } else {
     makewhite(g, o);  /* Make it white to avoid the following barrier. */
+  }
 }
 
 /* VM-callable table black-to-gray repair. */
@@ -2220,10 +2291,12 @@ void lj_gc_barrierback_tab_g(global_State *g, GCtab *t)
 /* Publication wrapper for x64 VM table -> object stores. */
 void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
 {
+  int white;
   if (!L || !t || !o)
     return;
+  white = iswhite(o);
   lj_gc2_barrier_obj_pair(L, obj2gco(t), o);
-  if (iswhite(o) && isblack(obj2gco(t)))
+  if (white && isblack(obj2gco(t)))
     lj_gc_barrierback(G(L), t);
 }
 
@@ -2264,15 +2337,19 @@ void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
   (*((uint8_t *)(x) - offsetof(GCupval, tv) + offsetof(GCupval, marked)))
   GCupval *uv = (GCupval *)((char *)tv - offsetof(GCupval, tv));
   TValue snap;
+  int white;
   lj_tv_load_acq(&snap, tv);
   if (!tvisgcv(&snap))
     return;
+  white = tviswhite(&snap);
   lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap);
-  if ((TV2MARKED(tv) & LJ_GC_BLACK) && tviswhite(&snap)) {
-    if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
+  if ((TV2MARKED(tv) & LJ_GC_BLACK) && white) {
+    if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+      (void)lj_gc2_markobj_nolegacy(g, gcV(&snap));
       gc_mark(g, gcV(&snap));
-    else
+    } else {
       TV2MARKED(tv) = (TV2MARKED(tv) & (uint8_t)~LJ_GC_COLORS) | curwhite(g);
+    }
   }
 #undef TV2MARKED
 }

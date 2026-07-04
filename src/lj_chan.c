@@ -214,7 +214,8 @@ static int chan_full_at(LJChan *ch, uint64_t pos)
   return (int64_t)(pos - deq) >= (int64_t)ch->cap;
 }
 
-static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
+static int chan_try_send_pos(lua_State *L, LJChan *ch, cTValue *tv,
+			     uint64_t *ppos)
 {
   uint64_t pos;
   if (!ch || !tv)
@@ -235,6 +236,13 @@ static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
       if (la_cas64(&ch->enq, &expect, pos + 1u,
 		   LA_ACQ_REL, LA_ACQ)) {  /* 09 section 9.5 enqueue ticket. */
 	chan_storetv_rel(slot, tv);
+	/*
+	** Channel slots are raw native storage, not a Lua stack/table field.
+	** Publish the value before the sequence release exposes the slot to
+	** receivers or GC traversal.
+	*/
+	if (L)
+	  lj_gc_pubroot(L, tv);
 	la_store64_rel(&slot->seq, pos + 1u);
 	if (ppos)
 	  *ppos = pos;
@@ -299,7 +307,7 @@ static int chan_wait_rendezvous_send(lua_State *L, LJChan *ch, uint64_t pos,
 
 int lj_chan_try_send(LJChan *ch, cTValue *tv)
 {
-  return chan_try_send_pos(ch, tv, NULL);
+  return chan_try_send_pos(NULL, ch, tv, NULL);
 }
 
 static int chan_try_recv_pub(lua_State *L, LJChan *ch, TValue *out)
@@ -355,7 +363,7 @@ int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv)
   for (;;) {
     uint64_t pos = 0;
     cTValue *curtv = stack_tv ? restorestack(L, tvofs) : tv;
-    int rc = chan_try_send_pos(ch, curtv, &pos);
+    int rc = chan_try_send_pos(L, ch, curtv, &pos);
     if (rc == LJ_CHAN_OK) {
       if (ch->rendezvous) {
 	while ((rc = chan_rendezvous_send_status(ch, pos)) == LJ_CHAN_FULL)
@@ -402,7 +410,7 @@ int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv, int64_t ns)
     int64_t waitns;
     int rc;
     cTValue *curtv = stack_tv ? restorestack(L, tvofs) : tv;
-    rc = chan_try_send_pos(ch, curtv, &pos);
+    rc = chan_try_send_pos(L, ch, curtv, &pos);
     if (rc == LJ_CHAN_OK) {
       if (ch->rendezvous)
 	return chan_wait_rendezvous_send(L, ch, pos, deadline);

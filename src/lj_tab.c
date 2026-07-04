@@ -646,12 +646,21 @@ static LJ_AINLINE Node *newhpart_alloc(lua_State *L, uint32_t hbits,
   return node;
 }
 
-static LJ_AINLINE void newhpart_publish(GCtab *t, Node *node, MSize hmask,
-					Node *freetop)
+static LJ_AINLINE void tab_pub_node_mem(lua_State *L, GCtab *t, Node *node)
+{
+  global_State *g = G(L);
+  UNUSED(t);
+  if (node)
+    (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+}
+
+static LJ_AINLINE void newhpart_publish(lua_State *L, GCtab *t, Node *node,
+					MSize hmask, Node *freetop)
 {
   setfreetop(t, node, freetop);
   lj_tab_node_rel(t, node);
   lj_tab_hmask_rel(t, hmask);
+  tab_pub_node_mem(L, t, node);
 }
 
 /* Create new hash part for table. */
@@ -659,7 +668,7 @@ static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
 {
   MSize hmask;
   Node *node = newhpart_alloc(L, hbits, &hmask);
-  newhpart_publish(t, node, hmask, &node[hmask+1]);
+  newhpart_publish(L, t, node, hmask, &node[hmask+1]);
 }
 
 static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
@@ -1454,7 +1463,7 @@ restart_resize:
   }
   /* Publish the rebuilt hash part. */
   if (hbits) {
-    newhpart_publish(t, newnode, newhmask, newfreetop);
+    newhpart_publish(L, t, newnode, newhmask, newfreetop);
     if (oldret)
       tab_retire_arm(G(L), oldret);
   } else {

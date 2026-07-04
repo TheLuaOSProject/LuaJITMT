@@ -3387,7 +3387,16 @@ static void gc2_scan_threading_states(global_State *g)
   for (th = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
        th != NULL;
        th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
-    lj_gc2_markobj(g, obj2gco(th));
+    /*
+    ** Ownerless registry states are suspended or already joined. They may have
+    ** been marked through another root before this pass, so relying on grey
+    ** traversal would not necessarily mark their stack storage. Scan them here;
+    ** live owned states keep the normal claim/retry path.
+    */
+    if (lj_state_owner_acq(th) == 0)
+      gc2_scan_thread_stack(g, th);
+    else
+      lj_gc2_markobj(g, obj2gco(th));
     if (++n >= GC2_ROOT_SCAN_LIMIT)
       break;
   }
@@ -3469,6 +3478,12 @@ static void gc2_scan_global_roots(global_State *g)
   lua_State *mainL = mainthread_acq(g);
   lua_State *vmL = vmthread_acq(g);
   ptrdiff_t i;
+  /*
+  ** Object allocation publishes freshly initialized bodies through per-TG
+  ** pending root chains. A major GC2 root scan owns the same global root
+  ** frontier as the legacy root pass, so flush those chains before walking it.
+  */
+  (void)lj_gc_flush_root_pending(g);
   lj_gc2_smr_read_enter(g);
   lj_gc2_markobj(g, obj2gco(mainL));
   {
@@ -6016,7 +6031,7 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
       if (gc2_barrier_active_g(g))
-	lj_gc2_markobj(g, gcV(&snap));
+	lj_gc2_markobj_nolegacy(g, gcV(&snap));
       else
 	gc2_remember_pair(g, NULL, gcV(&snap));
     }
@@ -6049,7 +6064,7 @@ void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child)
     return;
   g = G(L);
   if (gc2_barrier_active_g(g))
-    lj_gc2_markobj(g, child);
+    lj_gc2_markobj_nolegacy(g, child);
   else
     gc2_remember_pair(g, parent, child);
 }
@@ -6061,7 +6076,7 @@ void lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent, cTValue *tv)
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
       if (gc2_barrier_active_g(g))
-	lj_gc2_markobj(g, gcV(&snap));
+	lj_gc2_markobj_nolegacy(g, gcV(&snap));
       else
 	gc2_remember_pair(g, parent, gcV(&snap));
     }
@@ -6085,7 +6100,7 @@ static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
     lj_assertG(pushed, "gc2 table barrier SSB push failed");
     UNUSED(pushed);
   } else if (marked == 0) {
-    (void)lj_gc2_markobj(g, o);
+    (void)lj_gc2_markobj_nolegacy(g, o);
   }
 }
 
@@ -6108,7 +6123,7 @@ void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
     return;
   child = gcV(key);
   if (gc2_barrier_active_g(g))
-    (void)lj_gc2_markobj(g, child);
+    (void)lj_gc2_markobj_nolegacy(g, child);
   else
     gc2_remember_pair(g, obj2gco(t), child);
 }
@@ -6205,10 +6220,20 @@ static void *gc2_mark_base(GCobj *o)
   return o;
 }
 
-static LJ_AINLINE void gc2_mark_legacy_live_force(GCobj *o)
+static LJ_AINLINE void gc2_mark_legacy_live_force(global_State *g, GCobj *o)
 {
-  if (LJ_LIKELY(o->gch.gct != 0))
-    lj_obj_cleargcflags_atomic(o, LJ_GC_WHITES);
+  uint8_t old;
+  if (LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next;
+    if (!(old & LJ_GC_WHITES))
+      return;  /* Already gray/black and owned by the legacy frontier. */
+    next = (uint8_t)((old & (uint8_t)~LJ_GC_COLORS) | curwhite(g));
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
 }
 
 static LJ_AINLINE void gc2_mark_legacy_live(global_State *g, GCobj *o)
@@ -6222,11 +6247,11 @@ static LJ_AINLINE void gc2_mark_legacy_live(global_State *g, GCobj *o)
   **
   ** The legacy collector enables legacy_mark_bridge only when its own mark pass
   ** delegates reachability to GC2. During that coupled window, objects reached
-  ** by GC2 edges must clear legacy white too, because legacy string/root-list
-  ** sweep still owns reclamation for those objects.
+  ** only by GC2 edges must become current-white for the legacy sweeper. Making
+  ** them gray would create a legacy frontier entry that was never queued.
   */
   if (gc2_legacy_mark_bridge_acq(g))
-    gc2_mark_legacy_live_force(o);
+    gc2_mark_legacy_live_force(g, o);
 }
 
 int lj_gc2_markmem(global_State *g, void *p)
@@ -6274,6 +6299,32 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
 	(traversable || o->gch.gct == ~LJ_TUDATA)) {
       if (traversable) {
 	int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
+	lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
+	UNUSED(pushed);
+      } else {
+	gc2_traverse_udata(g, gco2ud(o));
+      }
+    }
+  }
+  return marked;
+}
+
+int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
+{
+  void *base;
+  int marked;
+  int traversable;
+  if (!o)
+    return 0;
+  base = gc2_mark_base(o);
+  marked = lj_gc2_markmem(g, base);
+  if (marked) {
+    uint32_t phase = gc2_phase_acq(g);
+    traversable = gc2_mark_base_traversable(g, base);
+    if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
+	(traversable || o->gch.gct == ~LJ_TUDATA)) {
+      if (traversable) {
+	int pushed = lj_gc2_ssb_push(g, o);
 	lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
 	UNUSED(pushed);
       } else {
@@ -6801,7 +6852,7 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
   */
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  gc2_mark_legacy_live_force(o);
+  gc2_mark_legacy_live_force(g, o);
   if (marked &&
       (gc2_mark_base_traversable(g, base) || o->gch.gct == ~LJ_TUDATA)) {
     gc2_traverse_obj(g, o);

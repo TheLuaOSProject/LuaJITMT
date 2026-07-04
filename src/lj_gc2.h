@@ -306,6 +306,7 @@ LJ_FUNCA void lj_gc2_barrier_tab_g(global_State *g, GCtab *t);
 LJ_FUNCA void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
 LJ_FUNC uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o);
 #if LJ_HASJIT

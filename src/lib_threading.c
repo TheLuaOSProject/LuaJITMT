@@ -700,6 +700,11 @@ static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
     status = lua_pcall(L, (int)th->nargs, LUA_MULTRET, 0);
     th->status = (uint32_t)status;
     th->nresults = (uint32_t)(L->top - L->base);
+    /*
+    ** Results become join-visible after DONE. Mirror freshly produced stack
+    ** refs into GC2 before releasing ownership to the joiner.
+    */
+    lj_state_stack_pubrange(L, L);
   }
   return NULL;
 }
@@ -713,7 +718,9 @@ static void threading_worker_error_result(ThreadingWorkerCtx *ctx, int errcode)
     TValue err;
     copyTV(L, &err, L->top - 1);
     L->top = L->base;
-    copyTV(L, L->top++, &err);
+    copyTV(L, L->top, &err);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
     th->nresults = 1;
   } else {
     th->nresults = 0;
@@ -946,8 +953,11 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     uint32_t i;
     lua_State *child = lj_thread_state_load_acq(th);
     join_actions |= threading_join_claim_results(L, child, tid);
-    for (i = 0; i < th->nresults; i++)
-      copyTV(L, L->top++, child->base + i);
+    for (i = 0; i < th->nresults; i++) {
+      copyTV(L, L->top, child->base + i);
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
+    }
     lj_state_release(child, tid);
   }
   threading_start_roots_clear(L, th);
@@ -1126,7 +1136,9 @@ static LJChan *threading_tochan(lua_State *L)
 static void threading_push_recv(lua_State *L, int rc, TValue *out)
 {
   if (rc == LJ_CHAN_OK) {
-    copyTV(L, L->top++, out);
+    copyTV(L, L->top, out);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
     setboolV(L->top++, 1);
   } else if (rc == LJ_CHAN_CLOSED) {
     setnilV(L->top++);
