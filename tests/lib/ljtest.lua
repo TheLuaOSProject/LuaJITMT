@@ -163,7 +163,7 @@ function Test:build(opts)
     self.build_signature = signature
     return
   end
-  if opts.clean or (have_outputs and disk_signature ~= signature) then
+  if opts.clean or disk_signature ~= signature then
     self:make({ "clean" }, { quiet = opts.quiet, jobs = false })
   end
   if opts.xcflags then args[#args + 1] = "XCFLAGS=" .. opts.xcflags end

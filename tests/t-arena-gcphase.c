@@ -51,8 +51,14 @@ int main(void)
   lj_arena_free(&tg->alloc, p, 64);
 
   g->gc.stepmul = 200;
+  /*
+  ** The automatic mutator step path is intentionally bounded to one
+  ** state-machine step while GC2 is active. This fixture is checking the phase
+  ** invariant after a manually driven cycle, so use the explicit/public step
+  ** path for the completion drain.
+  */
   for (i = 0; i < 20000 && g->gc.state != GCSpause; i++)
-    lj_gc_step(L);
+    lj_gc_step_explicit(L);
   assert(g->gc.state == GCSpause);
   assert(tg->alloc.alloc_black == 0);
 

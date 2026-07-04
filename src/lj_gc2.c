@@ -1362,7 +1362,14 @@ static void gc2_reset_alloc_trigger(global_State *g)
 
 static TGState *gc2_tg_for_mem(global_State *g, const void *p)
 {
-  if (p) {
+  /*
+  ** Only the internal arena allocator gives raw allocations a GCArena header.
+  ** Stock LuaJIT permits lua_newstate()/lua_setallocf() custom allocators, and
+  ** those can return any checkptrGC-valid address. Use the atomic allocator
+  ** mode flag before deriving an arena base so GC2 raw-memory marking never
+  ** probes outside custom allocator storage.
+  */
+  if (p && g && la_load32_acq(&g->allocf_arena) != 0) {
     GCArena *a = lj_arena_of(p);
     uint32_t owner_tid = lj_arena_owner_acq(a);
     TGState *mtg = G2TG(g);
@@ -1371,7 +1378,7 @@ static TGState *gc2_tg_for_mem(global_State *g, const void *p)
     if (owner)
       return owner;
   }
-  return G2TG(g);
+  return p ? NULL : G2TG(g);
 }
 
 static void gc2_clear_marks(TGState *tg)
@@ -6554,7 +6561,7 @@ static LJ_AINLINE int gc2_markmem_worker_fast(global_State *g, void *p)
   GCArena *a;
   uint32_t cell;
   int marked;
-  if (!p || g->allocf != lj_arena_allocf)
+  if (!p || la_load32_acq(&g->allocf_arena) == 0)
     return lj_gc2_markmem(g, p);
   a = lj_arena_of(p);
   if (LJ_UNLIKELY(lj_arena_ishuge(a)))
