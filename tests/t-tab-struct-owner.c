@@ -13,8 +13,11 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_thr.h"
+#include "lj_tg.h"
 
 /* Built by the M5 harness with LJ_TAB_TEST_HELPERS enabled. */
 
@@ -76,6 +79,48 @@ static int wait_for_count(uint32_t (*read_count)(void), uint32_t want,
     sched_yield();
   }
   return read_count() >= want;
+}
+
+static void assert_lua_ok(lua_State *L, int rc)
+{
+  if (rc != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "Lua error: %s\n", err ? err : "(nil)");
+  }
+  assert(rc == LUA_OK);
+}
+
+static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
+{
+  uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
+  la_store32_rel(&g->gc2.hs_actions, actions);
+  la_store32_rel(&g->gc2.hs_pending, 1);
+  la_store64_rel(&g->gc2.hs_epoch, epoch);
+  la_store32_rel(&tg->reqmask, actions);
+  la_store32_rel(&tg->poll, 1);
+}
+
+static void mark_sticky_stopreq(TGState *tg)
+{
+  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ);
+}
+
+static void clear_stopreq(TGState *tg)
+{
+  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+}
+
+static int tab_wait_l_lua(lua_State *L)
+{
+  lj_tab_wait_l(L);
+  return 0;
+}
+
+static int publish_stopreq_and_tab_wait_l_lua(lua_State *L)
+{
+  publish_manual(G(L), L2TG(L), LJ_GC2_HS_STOPREQ);
+  lj_tab_wait_l(L);
+  return 0;
 }
 
 static GCtab *thread_table(lua_State *L)
@@ -340,6 +385,34 @@ static void exercise_resize_owner(lua_State *L)
   assert(other.status == 0);
 }
 
+static void exercise_wait_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  int rc;
+
+  lua_pushcfunction(L, tab_wait_l_lua);
+  lua_setglobal(L, "lj_m5_tab_wait_l");
+  lua_pushcfunction(L, publish_stopreq_and_tab_wait_l_lua);
+  lua_setglobal(L, "lj_m5_publish_stopreq_and_tab_wait_l");
+
+  mark_sticky_stopreq(tg);
+  rc = luaL_dostring(L,
+    "local ok, err = pcall(lj_m5_tab_wait_l)\n"
+    "assert(ok, tostring(err))\n");
+  assert_lua_ok(L, rc);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  clear_stopreq(tg);
+
+  rc = luaL_dostring(L,
+    "local ok, err = pcall(lj_m5_publish_stopreq_and_tab_wait_l)\n"
+    "assert(not ok, 'fresh STOPREQ did not interrupt table wait')\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
+    "       tostring(err))\n");
+  assert_lua_ok(L, rc);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  clear_stopreq(tg);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -349,6 +422,7 @@ int main(void)
 
   exercise_direct_owner(L);
   exercise_resize_owner(L);
+  exercise_wait_stopreq(L);
 
   lua_close(L);
   printf("t-tab-struct-owner OK: table structure ownership is per-table\n");
