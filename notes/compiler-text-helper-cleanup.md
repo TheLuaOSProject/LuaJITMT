@@ -17,6 +17,6 @@ were deleted.
 Validation
 ----------
 
-* `tools/ci/lua_test.sh m6_jit_xbar_xpoll m6_jit_table_store_helper m6_jit_gc2_readiness m6_jit_gcstep_guard`
+* `tools/ci/lua_test.sh m6_jit_xbar_xpoll m6_jit_table_store_helper m6_jit_gc2_readiness m6_jit_gcstep_pacing`
 * `tools/ci/lua_test.sh m6_jit`
 * `tools/ci/lua_test.sh m7_ffi_jit_cnew`

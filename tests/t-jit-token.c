@@ -13,6 +13,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_gc2.h"
 #include "lj_jit.h"
 #include "lj_safepoint.h"
 #include "lj_trace.h"
@@ -41,6 +42,52 @@ static uint32_t foreign_token_owner(lua_State *L)
 {
   uint32_t self = lj_tg_tid_acq(L2TG(L));
   return self == 0x7fffffffu ? 0x7ffffffeu : 0x7fffffffu;
+}
+
+static GCtrace *first_live_trace(jit_State *J)
+{
+  TraceNo i;
+  for (i = 1; i < trace_sizetrace_acq(J); i++) {
+    GCtrace *T = traceref(J, i);
+    if (T && T->traceno == i)
+      return T;
+  }
+  return NULL;
+}
+
+static uint32_t trace_ir_op_count(GCtrace *T, IROp op)
+{
+  IRIns *ir = trace_ir_acq(T);
+  IRRef i, nins = trace_nins_acq(T);
+  uint32_t n = 0;
+  for (i = REF_FIRST; i < nins; i++)
+    if (ir[i].o == op)
+      n++;
+  return n;
+}
+
+static void expect_loop_xpoll_shape(lua_State *L, int want_xpoll)
+{
+  jit_State *J = G2J(G(L));
+  GCtrace *T;
+  ljt_lua_dostring(L,
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function lj_m6_xpoll_shape(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(lj_m6_xpoll_shape(80) == 3240) end\n"
+    "assert(util.traceinfo(1), 'expected loop trace')\n");
+  T = first_live_trace(J);
+  assert(T != NULL);
+  assert(trace_ir_op_count(T, IR_LOOP) > 0);
+  if (want_xpoll)
+    assert(trace_ir_op_count(T, IR_XPOLL) > 0);
+  else
+    assert(trace_ir_op_count(T, IR_XPOLL) == 0);
 }
 
 static void *release_jit_token_after_delay(void *arg)
@@ -250,6 +297,19 @@ int main(void)
     "for _ = 1, 20 do assert(f(80) == 3240) end\n"
     "assert(tracecount() > 0, 'expected token-owned recording')\n");
   assert(jit_token_acq(g) == 0);
+
+  assert(gc2_n_threads_acq(g) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+  expect_loop_xpoll_shape(L, 0);
+  {
+    uint32_t actions = 0;
+    assert(lj_gc2_workers_set_l(L, 1, &actions) == 1);
+    assert((actions & LJ_GC2_HS_STOPREQ) == 0);
+    assert(gc2_n_workers_acq(g) == 1);
+    expect_loop_xpoll_shape(L, 1);
+    assert(lj_gc2_workers_set_l(L, 0, &actions) == 1);
+    assert(gc2_n_workers_acq(g) == 0);
+  }
 
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"

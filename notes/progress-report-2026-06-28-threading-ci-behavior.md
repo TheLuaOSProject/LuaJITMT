@@ -1,7 +1,7 @@
 # Progress report - 2026-06-28 threading CI behavior
 
 Historical note: this report predates the current invariant-documentation model.
-Use `notes/invariant-documentation-2026-07-03.md` for current guidance:
+Use `notes/lockless-docs-and-coverage-2026-07-03.md` for current guidance:
 behavior fixtures, counters, public artifacts, and stock semantics cover
 observable requirements; implementation-only rules live in comments and notes.
 

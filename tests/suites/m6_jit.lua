@@ -22,12 +22,12 @@ local m6_cases = {
   "m6_jit_table_store_helper",
   "m6_jit_entering_table_store",
   "m6_jit_tbar_gc2_black_gate",
-  "m6_jit_aref_pair_guard",
+  "m6_jit_aref_pair_boundary",
   "m6_jit_hrefk_nodehdr",
   "m6_jit_href_nodehdr",
   "m6_jit_alloc_account",
   "m6_jit_gc2_readiness",
-  "m6_jit_gcstep_guard",
+  "m6_jit_gcstep_pacing",
   "m6_jit_mcode_native",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
@@ -600,25 +600,30 @@ print("jit-recursive-call-unroll OK")
     run = function(t)
       build_default(t)
       luajit_code(t, [=[
+local threading = require("threading")
 local util = require("jit.util")
 jit.opt.start("hotloop=1","hotexit=1")
 jit.off()
 local t={}
 local mts={}
 for i=1,80 do mts[i]={} end
+assert(threading.gcworkers(1) == 0)
 jit.on()
 for i=1,64 do setmetatable(t, mts[i]) end
 assert(getmetatable(t) == mts[64])
 assert(util.traceinfo(1), "setmetatable loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
+local threading = require("threading")
 local util = require("jit.util")
 jit.opt.start("hotloop=1","hotexit=1")
 jit.off()
 local uv
 local vals={}
 for i=1,80 do vals[i]={} end
+assert(threading.gcworkers(1) == 0)
 jit.on()
 local function f()
   for i=1,64 do uv=vals[i] end
@@ -626,9 +631,11 @@ end
 f()
 assert(uv==vals[64])
 assert(util.traceinfo(1), "upvalue barrier loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
+local threading = require("threading")
 local util = require("jit.util")
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -636,9 +643,11 @@ local x = 0
 local function inc()
   x = x + 1
 end
+assert(threading.gcworkers(1) == 0)
 for i = 1, 80 do inc() end
 assert(x == 80)
 assert(util.traceinfo(1), "numeric upvalue loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=], { timeout = "20s" })
       print("M6 JIT XPOLL barrier behavior passed")
     end
@@ -651,59 +660,74 @@ assert(util.traceinfo(1), "numeric upvalue loop did not trace")
       build_default(t)
       luajit_code(t, [=[
 local ffi = require("ffi")
+local threading = require("threading")
 local util = require("jit.util")
 local dst = ffi.new("uint8_t[512]")
 local src = ffi.new("uint8_t[512]")
 jit.opt.start("hotloop=1", "hotexit=1")
+assert(threading.gcworkers(1) == 0)
 for i = 1, 80 do ffi.copy(dst, src, 512) end
 assert(util.traceinfo(1), "FFI copy loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=])
 
       luajit_code(t, [=[
 local ffi = require("ffi")
+local threading = require("threading")
 local util = require("jit.util")
 local a = ffi.new("int[256]")
 jit.opt.start("hotloop=1", "hotexit=1")
 local s = 0
+assert(threading.gcworkers(1) == 0)
 for i = 1, 120 do s = s + a[i % 128] end
 assert(s == 0)
 assert(util.traceinfo(1), "FFI indexed load loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=])
 
       luajit_code(t, [=[
 local ffi = require("ffi")
+local threading = require("threading")
 local util = require("jit.util")
 ffi.cdef("typedef struct { double x, y; } xpoll_point_t;")
 local p = ffi.new("xpoll_point_t", 1, 2)
 jit.opt.start("hotloop=1", "hotexit=1")
 local s = 0
+assert(threading.gcworkers(1) == 0)
 for i = 1, 120 do
   p.x = p.x + 1
   s = s + p.y
 end
 assert(s == 240 and p.x == 121)
 assert(util.traceinfo(1), "FFI scalar load/store loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=])
 
       luajit_code(t, [=[
 local ffi = require("ffi")
+local threading = require("threading")
 local util = require("jit.util")
 local a = ffi.new("int[256]")
 jit.opt.start("hotloop=1", "hotexit=1")
+assert(threading.gcworkers(1) == 0)
 for i = 1, 120 do a[i % 128] = i end
 assert(a[119 % 128] == 119)
 assert(util.traceinfo(1), "FFI indexed store loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=])
 
       luajit_code(t, [=[
+local threading = require("threading")
 local util = require("jit.util")
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local t = { 1, 2, 3 }
 local s = 0
+assert(threading.gcworkers(1) == 0)
 for _ = 1, 80 do s = s + #t end
 assert(s == 240)
 assert(util.traceinfo(1), "table length loop did not trace")
+assert(threading.gcworkers(0) == 1)
 ]=])
       run_lua_test_case(t, "m5_jit_hash_store_nyi")
       print("M6 JIT XBAR/XPOLL alias behavior passed")
@@ -1230,7 +1254,7 @@ assert(util.traceinfo(1), "active-MT new numeric array store did not trace")
   })
 
   add({
-    name = "m6_jit_aref_pair_guard",
+    name = "m6_jit_aref_pair_boundary",
     description = "M6 x64 pre-MT direct AREF and active-MT read-helper behavior",
     run = function(t)
       build_default(t)
@@ -1682,7 +1706,7 @@ assert(util.traceinfo(1), "SNEW readiness loop did not trace")
   })
 
   add({
-    name = "m6_jit_gcstep_guard",
+    name = "m6_jit_gcstep_pacing",
     description = "classic JIT GC-step pacing behavior",
     run = function(t)
       clean_build(t)

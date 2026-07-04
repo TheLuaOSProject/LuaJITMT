@@ -482,8 +482,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
         timeout = "20s",
         env = { LUA_PATH = lua_path(t) }
       })
-      build_and_run_c(t, t:tmp("lj_t-ffi-finreg-free-invariant"),
-                      "t-ffi-finreg-free-invariant.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-finreg-free-path"),
+                      "t-ffi-finreg-free-path.c", { timeout = "20s" })
       print("M7 FFI finalizer registry behavior passed")
     end
   })

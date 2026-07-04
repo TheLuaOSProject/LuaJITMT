@@ -31,4 +31,4 @@ Passed:
 - `tools/ci/lua_test.sh m5_x64_table_next_snapshot`
 - `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot`
 - `tools/ci/lua_test.sh m5_x64_tgets_node_order`
-- `tools/ci/lua_test.sh m6_jit_aref_pair_guard`
+- `tools/ci/lua_test.sh m6_jit_aref_pair_boundary`

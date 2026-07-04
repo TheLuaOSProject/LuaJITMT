@@ -61,9 +61,9 @@ int main(void)
   assert(WTERMSIG(status) == SIGABRT);
 
   lua_close(L);
-  printf("t-ffi-finreg-free-invariant OK: finalizable cdata free path aborts\n");
+  printf("t-ffi-finreg-free-path OK: finalizable cdata free path aborts\n");
 #else
-  printf("t-ffi-finreg-free-invariant SKIP: FFI disabled\n");
+  printf("t-ffi-finreg-free-path SKIP: FFI disabled\n");
 #endif
   return 0;
 }

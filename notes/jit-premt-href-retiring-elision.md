@@ -19,7 +19,7 @@ reason.
 Local validation:
 
 - `tools/ci/lua_test.sh m6_jit_hrefk_nodehdr m6_jit_href_nodehdr
-  m6_jit_mt_activation_flush m6_jit_aref_pair_guard m6_jit_table_store_helper`
+  m6_jit_mt_activation_flush m6_jit_aref_pair_boundary m6_jit_table_store_helper`
 - `tools/ci/lua_test.sh m6_jit_threading_nyi_boundary`
 - `tools/ci/lua_test.sh run_stock_tests -- --quiet`
 - A tight prebuilt-key HREF microbench was effectively flat in this container;

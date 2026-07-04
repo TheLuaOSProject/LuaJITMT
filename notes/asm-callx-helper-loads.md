@@ -6,7 +6,7 @@
 The helper-backed snapshot covers vararg flag reconstruction and x86 calling
 convention bits used by traced FFI calls. Broad generic `IR_CALLXS` recording
 still stays interpreted because it lacks a native-state protocol; that boundary
-is documented in `lj_crecord.c` instead of enforced by an opt-in build guard.
+is documented in `lj_crecord.c` instead of enforced by an opt-in build check.
 This helper remains for the eventual native bridge.
 
 Coverage model:

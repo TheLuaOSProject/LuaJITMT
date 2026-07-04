@@ -109,12 +109,12 @@ Lua test-suite migration notes:
   - `tools/ci/m6_jit_barrier_xpoll.sh` -> `m6_jit_barrier_xpoll`
   - `tools/ci/m6_jit_xbar_xpoll.sh` -> `m6_jit_xbar_xpoll`
   - `tools/ci/m6_jit_table_store_helper.sh` -> `m6_jit_table_store_helper`
-  - `tools/ci/m6_jit_aref_pair_guard.sh` -> `m6_jit_aref_pair_guard`
+  - `tools/ci/lua_test.sh m6_jit_aref_pair_boundary` -> `m6_jit_aref_pair_boundary`
   - `tools/ci/m6_jit_hrefk_nodehdr.sh` -> `m6_jit_hrefk_nodehdr`
   - `tools/ci/m6_jit_href_nodehdr.sh` -> `m6_jit_href_nodehdr`
   - `tools/ci/m6_jit_alloc_account.sh` -> `m6_jit_alloc_account`
   - `tools/ci/m6_jit_gc2_readiness.sh` -> `m6_jit_gc2_readiness`
-  - `tools/ci/m6_jit_gcstep_guard.sh` -> `m6_jit_gcstep_guard`
+  - `tools/ci/lua_test.sh m6_jit_gcstep_pacing` -> `m6_jit_gcstep_pacing`
   - `tools/ci/m6_jit_mcode_publish.sh` -> `m6_jit_mcode_publish`
   - `tools/ci/m6_jit_flush_hs.sh` -> `m6_jit_flush_hs`
   - `tools/ci/m6_jit.sh` -> `m6_jit`
@@ -298,11 +298,11 @@ Lua test-suite migration notes:
 - Converted `m6_jit_hrefk_nodehdr` and `m6_jit_href_nodehdr` to runtime
   behavior and traceability coverage.
 - Converted `m6_jit_cell_ops`, `m6_jit_barrier_xpoll`, and
-  `m6_jit_aref_pair_guard` to runtime behavior and traceability coverage.
+  `m6_jit_aref_pair_boundary` to runtime behavior and traceability coverage.
 - Converted `m6_jit_table_store_helper` to rely on its C forward-store fixture
   and Lua smoke.
 - Converted `m6_jit_alloc_account`, `m6_jit_gc2_readiness`, and
-  `m6_jit_gcstep_guard` to C fixture and runtime behavior coverage.
+  `m6_jit_gcstep_pacing` to C fixture and runtime behavior coverage.
 - Converted `m6_jit_token` to its C/Lua recorder-token regressions instead of
   direct recorder/x64 legacy wrappers.
 - Converted `m5_tab_cas_store` to rely on the compiled CAS/FORWARD behavior

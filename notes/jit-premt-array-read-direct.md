@@ -14,6 +14,6 @@ old direct-array traces do not survive into the shared-table phase.
 
 This removes the pre-MT separated-array `TabArrayHdr.asize`/`XLOAD` cost from
 ordinary stock-shaped single-threaded traces without weakening active-MT table
-semantics. `m6_jit_aref_pair_guard` now checks both sides of the boundary:
+semantics. `m6_jit_aref_pair_boundary` now checks both sides of the boundary:
 direct `TAB_ARRAY`/`TAB_ASIZE`/`ALOAD` IR before activation and
 `lj_tab_gettv_forjit()` routing after activation.

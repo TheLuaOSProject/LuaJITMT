@@ -22,12 +22,12 @@ Clean gates:
 - `tools/ci/lua_test.sh m9_gc_stats m9_trace_hard_assist_cadence
   m9_bench_smoke m9_bench_regression m10_generational m9_m10_gc`
 - JIT stability group:
-  `m6_jit_recursive_call_unroll m6_jit_token m6_jit_gcstep_guard
+  `m6_jit_recursive_call_unroll m6_jit_token m6_jit_gcstep_pacing
   m6_jit_table_store_helper m6_jit_mcode_publish`
 - Corrected continuation of the JIT group:
   `m5_jit_trace_publish m6_jit_mcode_native m6_jit_gc2_readiness
   m6_jit_xbar_xpoll m6_jit_barrier_xpoll m6_jit_flush_hs
-  m6_jit_alloc_account m6_jit_aref_pair_guard m6_jit_href_nodehdr
+  m6_jit_alloc_account m6_jit_aref_pair_boundary m6_jit_href_nodehdr
   m6_jit_hrefk_nodehdr m6_dispatch_redispatch m6_jit`
 - `tools/ci/lua_test.sh run_stock_tests` passed 509/509 vendored stock tests.
 - 5-run flake loop over `m5_gc_total_atomic m3_safepoint_handshake

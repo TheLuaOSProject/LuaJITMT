@@ -261,6 +261,20 @@ typedef struct LoopState {
   MSize sizesubst;
 } LoopState;
 
+#if LJ_TARGET_X64 && LJ_GC64
+static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
+{
+  global_State *g = J2G(J);
+  /* A loop poll is needed only after another TG can participate in a
+  ** safepoint handshake. First Lua-thread activation and GC-worker activation
+  ** flush existing traces before publishing that state, so pre-activation
+  ** loop traces cannot survive into a remotely-polled runtime.
+  */
+  return gc2_n_threads_acq(g) > 1 || gc2_n_workers_acq(g) != 0 ||
+	 mt_active_or_entering_acq(g);
+}
+#endif
+
 /* Unroll loop. */
 static void loop_unroll(LoopState *lps)
 {
@@ -285,7 +299,8 @@ static void loop_unroll(LoopState *lps)
   /* LOOP separates the pre-roll from the loop body. */
   emitir_raw(IRTG(IR_LOOP, IRT_NIL), 0, 0);
 #if LJ_TARGET_X64 && LJ_GC64
-  emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0);
+  if (loop_needs_xpoll(J))
+    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0);
 #endif
 
   /* Grow snapshot buffer and map for copy-substituted snapshots.

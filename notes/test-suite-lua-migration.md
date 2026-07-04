@@ -15,7 +15,7 @@
 - Switched output-file checks to read the captured output and assert text
   directly.
 - Invariant documentation guidance now lives in
-  `notes/invariant-documentation-2026-07-03.md`.
+  `notes/lockless-docs-and-coverage-2026-07-03.md`.
 - Preserve implementation reasons in comments/notes, and test behavior, public
 artifacts, release/build outputs, counters, or stock semantics.
 
@@ -37,7 +37,7 @@ Validation:
 
 Validation:
 
-- `tools/ci/lua_test.sh m6_jit_barrier_xpoll m6_jit_xbar_xpoll m6_jit_aref_pair_guard m6_jit_table_store_helper`
+- `tools/ci/lua_test.sh m6_jit_barrier_xpoll m6_jit_xbar_xpoll m6_jit_aref_pair_boundary m6_jit_table_store_helper`
 - `tools/ci/lua_test.sh m7_ffi_finreg m7_ffi_jit_cnew`
 
 ## 2026-06-20 runtime/helper cleanup
@@ -422,7 +422,7 @@ Validation:
 
 Validation:
 
-- `timeout 360s tools/ci/lua_test.sh m5_cell_ops m6_jit_cell_ops m6_jit_barrier_xpoll m6_jit_xbar_xpoll m6_jit_aref_pair_guard m6_jit_hrefk_nodehdr m7_ffi_finreg`
+- `timeout 360s tools/ci/lua_test.sh m5_cell_ops m6_jit_cell_ops m6_jit_barrier_xpoll m6_jit_xbar_xpoll m6_jit_aref_pair_boundary m6_jit_hrefk_nodehdr m7_ffi_finreg`
 - `tools/ci/lua_test.sh --list`
 - `git diff --check`
 

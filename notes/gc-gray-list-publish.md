@@ -15,4 +15,4 @@ Verification:
 - tools/ci/lua_test.sh m8_weak
 - tools/ci/lua_test.sh m9_m10_gc
 - tools/ci/lua_test.sh m5_jit_trace_publish
-- tools/ci/lua_test.sh m6_jit_gcstep_guard
+- tools/ci/lua_test.sh m6_jit_gcstep_pacing

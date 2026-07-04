@@ -12,5 +12,5 @@
   unchanged.
 - Verification:
   - `make -C src -j2`
-  - `tools/ci/lua_test.sh m6_jit_alloc_account m6_jit_gcstep_guard m2_arena_alloc m2_arena_gcphase`
+  - `tools/ci/lua_test.sh m6_jit_alloc_account m6_jit_gcstep_pacing m2_arena_alloc m2_arena_gcphase`
   - `tools/ci/lua_test.sh m9_bench_smoke`

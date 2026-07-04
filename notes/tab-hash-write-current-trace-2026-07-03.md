@@ -6,11 +6,12 @@ Table hash-write current trace evidence, 2026-07-03:
 - The steady-state traced store is a direct numeric `HSTORE` after `HREF` and a
   nil-slot guard. It is not routed through `lj_tab_storetv_forjit_hash`, and the
   hot existing-slot trace does not pay the table-store CAS helper path.
-- The remaining gap against stock is currently attributed to lockless runtime
-  overhead outside the final store: loop XPOLL/TG polling, the larger GC2
-  allocation/assist check sequence, TG-owned tmpbuf/string construction for the
-  benchmark key path, node-header hash-mask loads, string-table publication, and
-  first-fill/resize publication work.
+- Pre-activation loop XPOLL elision removes the loop TG-poll component from
+  single-thread benchmark-shaped traces. The remaining gap against stock is
+  currently attributed to lockless runtime overhead outside the final store:
+  the larger GC2 allocation/assist check sequence, TG-owned tmpbuf/string
+  construction for the benchmark key path, node-header hash-mask loads,
+  string-table publication, and first-fill/resize publication work.
 - The benchmark harness now keeps the historical `tab_hash_write` row intact,
   but adds split rows for attribution:
   `tab_store_existing` uses prebuilt string keys and prefilled slots so it

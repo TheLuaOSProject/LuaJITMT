@@ -1,7 +1,7 @@
 # CI/Test Harness Audit - 2026-06-28
 
 Historical note: this audit predates the current invariant-documentation model.
-Use `notes/invariant-documentation-2026-07-03.md` for current guidance:
+Use `notes/lockless-docs-and-coverage-2026-07-03.md` for current guidance:
 implementation-only rules are documented next to the constrained code, and
 tests cover behavior, counters, public artifacts, release metadata, or opaque
 bytecode execution.
@@ -108,7 +108,7 @@ bytecode execution.
   `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
   `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; these are stock
   LuaJIT public API compatibility macros and should remain available.
-- Moved `t-ffi-finreg-free-invariant.c` into the `m7_ffi_finreg` Lua-suite
+- Moved `t-ffi-finreg-free-path.c` into the `m7_ffi_finreg` Lua-suite
   case and removed the ad hoc hardcoded `/tmp` compile from
   `tools/ci/m7_ffi_finreg.sh`.
 - Removed the parser-token STOPREQ implementation-detail rule from

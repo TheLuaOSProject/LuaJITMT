@@ -18,4 +18,4 @@ Observed effect:
   measures at stock speed in focused local probes.
 - `m6_jit_xbar_xpoll` covers both variable-index FFI loads that still remain
   after `XPOLL` and scalar struct loads that should not.
-- `m6_jit_aref_pair_guard` covers the poll-bound table-array header path.
+- `m6_jit_aref_pair_boundary` covers the poll-bound table-array header path.

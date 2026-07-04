@@ -1,4 +1,4 @@
-# Invariant Documentation And Observable Coverage
+# Lockless Documentation And Observable Coverage
 
 Lockless invariants need an owner that a future maintainer can find quickly.
 Use the narrowest durable home for the reason:

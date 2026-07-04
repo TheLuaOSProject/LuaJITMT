@@ -34,7 +34,7 @@ Overall correctness/stability progress: 69-79%.
   and stale-pointer helper shape.
 - Removed a redundant exact legacy wrapper from `m7_ffi_cdef_token`; the C
   STOPREQ fixture owns that behavior contract.
-- Moved `t-ffi-finreg-free-invariant.c` into `m7_ffi_finreg` and removed the
+- Moved `t-ffi-finreg-free-path.c` into `m7_ffi_finreg` and removed the
   hardcoded `/tmp` compile from `tools/ci/m7_ffi_finreg.sh`.
 - Recorded lock and legacy/compat audits in notes.
 

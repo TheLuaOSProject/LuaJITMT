@@ -78,10 +78,12 @@ dead transitional `GG_OFS_TGDISP`/`GG_G2TGDISP` and
 Secondary TGs may now acquire the recorder token and enter `BC_JLOOP` mcode
 through their own TG-local dispatch table. Record dispatch itself is localized
 to the token holder's TG table instead of being exposed through the global
-dispatch template. x64 LOOP-backedge traces now emit guarded `IR_XPOLL`,
-lowered to a current-TG `poll` check that exits through the normal
-trace-exit/VM safepoint path when a handshake is pending; hot-side recording is
-skipped while that poll is pending.
+dispatch template. x64 LOOP-backedge traces now emit guarded `IR_XPOLL` once
+another TG/worker can participate in safepoint handshakes, lowered to a
+current-TG `poll` check that exits through the normal trace-exit/VM safepoint
+path when a handshake is pending; hot-side recording is skipped while that poll
+is pending. Pre-activation loop traces omit this poll and are flushed before
+thread or worker activation can make them unsafe.
 
 ## 8.3 Trace registry & publication
 
@@ -263,23 +265,28 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
 ## 8.6 GC interaction of running traces
 
 - **Polls on trace**: emit IR `XPOLL` (new IR op, no result, GUARD-like) at
-  every LOOP backedge and at FUNCF-entry of inlined frames ≥ depth K(=8).
+  LOOP backedges when another TG/worker can participate in safepoint handshakes
+  and at FUNCF-entry of inlined frames ≥ depth K(=8).
   Codegen: `cmp dword [DISPATCH+TG_OFS(poll)],0; jnz exit_i` — i.e. a
   guard whose exit restores via the snapshot then lands in the interpreter,
   which immediately polls (07 §7.3). No special exit kind needed: reuse the
   nearest snapshot (force a snapshot at backedge — already the case).
   Loads of TG.poll must NOT be CSE'd/hoisted: mark XPOLL as having load
   effects (IRM ref to a new memory class) — fold rules: none.
-  Current M6 bridge: x86-64 emits guarded `IR_XPOLL` after `IR_LOOP` and at
-  inlined Lua function entries once framedepth reaches 8, lowering both with
-  `RID_DISPATCH` addressing the current TG-local dispatch table. This covers
-  the LOOP-backedge and FUNCF-depth parts of the original requirement. The
-  first TGMARK invalidation slice keeps `TBAR`/`OBAR` CSE inside poll-free
-  regions and gates their x64 GC2 helper calls on the current TG's
-  `mark_active` mirror, so a trace poll can enable the GC2 barrier before
-  later heap stores. The broader XBAR/TGMARK alias model remains the follow-up
-  target rather than being silently deleted. Existing FFI/raw-memory
-  `IR_XBAR` alias limits now also treat `IR_XPOLL` as a poll-region boundary
+  Current M6 bridge: x86-64 emits guarded `IR_XPOLL` after `IR_LOOP` only
+  after the activation boundary (`gc2.n_threads > 1`, workers active, or
+  `mt_entering || mt_active`) and at inlined Lua function entries once
+  framedepth reaches 8, lowering both with `RID_DISPATCH` addressing the
+  current TG-local dispatch table. Pre-activation loop traces omit the loop poll
+  because first Lua-thread and GC-worker activation flush existing traces
+  before a remote TG can run. This covers the LOOP-backedge and FUNCF-depth
+  parts of the original requirement. The first TGMARK invalidation slice keeps
+  `TBAR`/`OBAR` CSE inside poll-free regions and gates their x64 GC2 helper
+  calls on the current TG's `mark_active` mirror, so a trace poll can enable the
+  GC2 barrier before later heap stores. The broader XBAR/TGMARK alias model
+  remains the follow-up target rather than being silently deleted. Existing
+  FFI/raw-memory `IR_XBAR` alias limits now also treat `IR_XPOLL` as a
+  poll-region boundary
   for `XLOAD` forwarding/CSE and `XSTORE` DSE; this advances the current XBAR
   surface. The helper-backed table-store bridge also makes `ASTORE`/`HSTORE`
   DSE stop at `IR_XPOLL`, so a trace poll cannot be crossed while deciding that
