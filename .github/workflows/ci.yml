@@ -62,6 +62,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          sparse-checkout-cone-mode: false
+          # Git for Windows refuses to materialize paths with reserved DOS
+          # device names. The benchmark-only aux/ tree is not needed by the
+          # native Windows platform build/run smoke, so exclude it at checkout
+          # while keeping the rest of the source tree complete.
+          sparse-checkout: |
+            /*
+            !/aux/
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
