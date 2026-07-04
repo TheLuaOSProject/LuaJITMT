@@ -233,6 +233,51 @@ static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
   assert(helper1 == helper0);
 }
 
+static void test_traced_post_sweep_bump_refill(lua_State *L)
+{
+  uint32_t fallback0, fallback1;
+  uint32_t fast0, fast1;
+  const char *setup =
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "function __fnew_refill_run(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do\n"
+    "    local x = i\n"
+    "    local f = function()\n"
+    "      x = x + 1\n"
+    "      return x\n"
+    "    end\n"
+    "    s = s + f()\n"
+    "  end\n"
+    "  return s\n"
+    "end\n"
+    "local n = 20000\n"
+    "assert(__fnew_refill_run(n) == n * (n + 3) / 2)\n"
+    "assert(util.traceinfo(1), 'numeric FNEW refill loop did not trace')\n"
+    "collectgarbage('collect')\n";
+  const char *rerun =
+    "local n = 20000\n"
+    "assert(__fnew_refill_run(n) == n * (n + 3) / 2)\n";
+
+  run_script(L, setup, "numeric FNEW post-sweep refill setup");
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  fast0 = lj_func_test_gc1num_bump_fast_calls();
+  fallback0 = lj_func_test_gc1num_bump_fallback_calls();
+
+  run_script(L, rerun, "numeric FNEW post-sweep refill rerun");
+
+  fast1 = lj_func_test_gc1num_bump_fast_calls();
+  fallback1 = lj_func_test_gc1num_bump_fallback_calls();
+  assert(fallback1 == fallback0);
+  assert(fast1 > fast0);
+  lua_pushnil(L);
+  lua_setglobal(L, "__fnew_refill_run");
+}
+
 static void load_one_upvalue_fixture(lua_State *L, GCfunc **parentp,
 				     GCproto **childp, int32_t *slotnop)
 {
@@ -544,6 +589,7 @@ int main(void)
   test_accounting_fallback(L, g, tg);
   test_traced_mark_active_fallback(L, g, tg);
   test_traced_alloc_black_inline(L, g, tg);
+  test_traced_post_sweep_bump_refill(L);
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);

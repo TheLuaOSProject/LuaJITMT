@@ -1052,6 +1052,55 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   return a;
 }
 
+int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
+			  uint32_t ncells, GCArena **ap, uint32_t *cellp)
+{
+  uint32_t k = arena_kind(flags);
+  LJArenaBump *b;
+  uint32_t cell;
+  if (!alloc || !ap || !cellp || ncells == 0 ||
+      ncells > LJ_ARENA_CELLS - LJ_AFIRST_CELL)
+    return 0;
+  b = &alloc->bump[k];
+  if (!b->a || b->cell + ncells > b->end) {
+    uint32_t bin = 0;
+    LJArenaFreeRun **pp;
+    arena_publish_bump_run(alloc, k);
+    pp = arena_find_run(alloc, k, ncells, &bin);
+    if (pp && *pp) {
+      LJArenaFreeRun *run = *pp;
+      GCArena *a = lj_arena_of(run);
+      uint32_t start = run->start;
+      uint32_t len = run->len;
+      *pp = run->next;
+      arena_refresh_binmask(alloc, k, bin);
+      b->a = NULL;
+      b->cell = 0;
+      b->end = 0;
+      /*
+      ** Specialized bump callers do not need generic free-run reuse order.
+      ** Reserve the first cells for the caller and keep the remaining run as
+      ** the unpublished bump window, matching sweep's largest-run protocol.
+      */
+      if (len > ncells) {
+	b->a = a;
+	b->cell = start + ncells;
+	b->end = start + len;
+      }
+      *ap = a;
+      *cellp = start;
+      return 1;
+    }
+    if (!arena_alloc_fresh(alloc, rs, flags))
+      return 0;
+  }
+  cell = b->cell;
+  b->cell = cell + ncells;
+  *ap = b->a;
+  *cellp = cell;
+  return 1;
+}
+
 void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 		     uint32_t flags)
 {

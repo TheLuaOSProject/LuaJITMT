@@ -466,12 +466,11 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
 {
   const GCSize nbytes = (GCSize)sizeof(GCupval);
   const uint32_t ncells = lj_arena_ncells(nbytes);
-  LJArenaBump *b;
   GCArena *a;
   GCupval *uv;
   GCobj *oldhead;
   uint64_t local_total;
-  uint32_t cell, end, next, black;
+  uint32_t cell, black;
   int account_now;
 
   if (g == NULL || tg == NULL ||
@@ -488,22 +487,12 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   ** Closed nil local cells are leaf objects, so the bump path only replaces
   ** arena allocation and pending-root publication. The caller still owns GC
   ** pacing: interpreter BC_CNEW runs lj_gc_check_fixtop(), while traced BC_CNEW
-  ** is recorded as an allocation helper and gets the trace CALLA check.
+  ** is recorded as an allocation helper and gets the trace CALLA check. After
+  ** sweep, a reusable free run can become the next private bump window.
   */
-  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
+  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
+			     ncells, &a, &cell))
     return NULL;
-
-  b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
-  a = b->a;
-  if (a == NULL)
-    return NULL;
-  cell = b->cell;
-  end = b->end;
-  next = cell + ncells;
-  if (next < cell || next > end)
-    return NULL;
-
-  b->cell = next;
   black = lj_arena_alloc_black_acq(&tg->alloc);
   func_arena_set_alloc(a, cell, black);
 
@@ -546,7 +535,6 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   const uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
   const uint32_t ncells = fncells + uvcells;
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
-  LJArenaBump *b;
   GCArena *a;
   GCfunc *fn;
   GCtab *env;
@@ -554,7 +542,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   TValue *slot;
   GCobj *oldhead;
   uint64_t local_total;
-  uint32_t cell, uvcell, end, next, black;
+  uint32_t cell, uvcell, black;
   int account_now;
 
   if (g == NULL || tg == NULL ||
@@ -568,22 +556,13 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;
 
   /*
-  ** Use the current bump window whenever it can satisfy the fresh pair. Other
-  ** free-run bins stay reusable by the generic allocator; closure identity,
+  ** Use or refill the private bump window for the fresh pair. Closure identity,
   ** publication, and accounting are independent of arena address reuse order.
   */
 
-  b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
-  a = b->a;
-  if (a == NULL)
+  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
+			     ncells, &a, &cell))
     return NULL;
-  cell = b->cell;
-  end = b->end;
-  next = cell + ncells;
-  if (next < cell || next > end)
-    return NULL;
-
-  b->cell = next;
   uvcell = cell + fncells;
   black = lj_arena_alloc_black_acq(&tg->alloc);
   func_arena_set_alloc(a, cell, black);
@@ -654,13 +633,12 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
 {
   const GCSize nbytes = (GCSize)sizeLfunc(0);
   const uint32_t ncells = lj_arena_ncells(nbytes);
-  LJArenaBump *b;
   GCArena *a;
   GCfunc *fn;
   GCtab *env;
   GCobj *oldhead;
   uint64_t local_total;
-  uint32_t count, cell, end, next, black;
+  uint32_t count, cell, black;
   int account_now;
 
   if (g == NULL || tg == NULL ||
@@ -676,21 +654,13 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   /*
   ** The caller already owns the allocation pacing check: interpreter BC_FNEW
   ** runs lj_gc_check_fixtop(), while trace assembly emits the CALLA check.
-  ** Use the current bump window when available; generic allocation still owns
-  ** free-run reuse after the bump window is exhausted.
+  ** Use or refill the private bump window when available; function identity is
+  ** ordinary Lua identity, but address reuse order is not observable.
   */
 
-  b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
-  a = b->a;
-  if (a == NULL)
+  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
+			     ncells, &a, &cell))
     return NULL;
-  cell = b->cell;
-  end = b->end;
-  next = cell + ncells;
-  if (next < cell || next > end)
-    return NULL;
-
-  b->cell = next;
   black = lj_arena_alloc_black_acq(&tg->alloc);
   func_arena_set_alloc(a, cell, black);
 

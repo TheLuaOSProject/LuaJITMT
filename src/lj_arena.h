@@ -220,6 +220,9 @@ LJ_FUNC void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,
 				    uint32_t epoch, int minor);
 LJ_FUNC uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
+LJ_FUNC int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs,
+				  uint32_t flags, uint32_t ncells,
+				  GCArena **ap, uint32_t *cellp);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 			     uint32_t flags);
 LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
