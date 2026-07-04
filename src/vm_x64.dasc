@@ -4225,8 +4225,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov r9, [DISPATCH+DISPATCH_TG(local_total)]
     |  cmp r9, LJ_GC2_ACCT_FLUSH-TAB_EMPTY_SIZE
     |  jae >7
-    |  test dword [DISPATCH+DISPATCH_TG(alloc.binmask[LJ_ARENAK_TRAVERSABLE])], TAB_EMPTY_BINMASK
-    |  jne >7
     |  mov r8, [DISPATCH+DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].a)]
     |  test r8, r8
     |  jz >7

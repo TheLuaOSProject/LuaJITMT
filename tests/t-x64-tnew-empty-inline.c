@@ -30,6 +30,11 @@ typedef struct TestAllocCtx {
   uint32_t calls;
 } TestAllocCtx;
 
+typedef struct ReusableRun {
+  GCArena *a;
+  uint32_t cell;
+} ReusableRun;
+
 static void *counting_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   TestAllocCtx *ctx = (TestAllocCtx *)ud;
@@ -73,6 +78,21 @@ static void assert_empty_table_body(global_State *g, GCtab *t)
 #if LJ_GC64
   assert(mref(t->freetop, Node) == &g->nilnode);
 #endif
+}
+
+static ReusableRun create_reusable_empty_table_run(TGState *tg)
+{
+  void *p = lj_arena_alloc(&tg->alloc, &tg->prng, TNEW_EMPTY_SIZE,
+			   LJ_AF_TRAVERSABLE);
+  ReusableRun r;
+  assert(p != NULL);
+  r.a = lj_arena_of(p);
+  r.cell = lj_arena_cellof(p);
+  lj_arena_free(&tg->alloc, p, TNEW_EMPTY_SIZE);
+  assert(lj_arena_state(r.a, r.cell) == 1);
+  assert(lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
+				    TNEW_EMPTY_NCELLS));
+  return r;
 }
 
 static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
@@ -388,6 +408,99 @@ static void test_custom_allocator_fallback(lua_State *L, global_State *g)
   assert(g->allocf_arena == 1);
 }
 
+static void test_inline_empty_tnew_uses_bump_with_free_run(lua_State *L,
+							   global_State *g,
+							   TGState *tg)
+{
+  LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  GCArena *a0;
+  GCobj *pending0;
+  GCSize total0;
+  uint64_t local0;
+  uint32_t cell0, black, calls0, i;
+  ReusableRun run;
+  GCtab *t;
+
+  load_empty_table_chunk(L);
+  run = create_reusable_empty_table_run(tg);
+  a0 = b->a;
+  cell0 = b->cell;
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  total0 = lj_gc_total_load(g);
+  local0 = lj_tg_local_total_acq(tg);
+  calls0 = lj_tab_test_new0_calls();
+
+  assert(a0 != NULL);
+  assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
+  assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
+
+  ljt_lua_pcall(L, 0, 1, "empty TNEW inline free-run pcall");
+  t = tabV(L->top - 1);
+
+  assert(lj_tab_test_new0_calls() == calls0);
+  assert_empty_table_body(g, t);
+  assert((void *)t == lj_arena_cellptr(a0, cell0));
+  assert((void *)t != lj_arena_cellptr(run.a, run.cell));
+  assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
+  assert(lj_arena_state(run.a, run.cell) == 1);
+  assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
+  for (i = 1; i < TNEW_EMPTY_NCELLS; i++)
+    assert(lj_arena_state(a0, cell0 + i) == 0);
+  assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
+  assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_chain_contains(g, obj2gco(t)));
+  lua_pop(L, 1);
+}
+
+static void test_plain_new0_uses_bump_with_free_run(lua_State *L,
+						    global_State *g,
+						    TGState *tg)
+{
+  LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  GCArena *a0;
+  GCobj *pending0;
+  GCSize total0;
+  uint64_t local0;
+  uint32_t cell0, black, calls0, i;
+  ReusableRun run;
+  GCtab *t;
+
+  run = create_reusable_empty_table_run(tg);
+  a0 = b->a;
+  cell0 = b->cell;
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  total0 = lj_gc_total_load(g);
+  local0 = lj_tg_local_total_acq(tg);
+  calls0 = lj_tab_test_new0_calls();
+
+  assert(a0 != NULL);
+  assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
+  assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
+
+  t = lj_tab_new0(L);
+
+  assert(lj_tab_test_new0_calls() == calls0 + 1u);
+  assert_empty_table_body(g, t);
+  assert((void *)t == lj_arena_cellptr(a0, cell0));
+  assert((void *)t != lj_arena_cellptr(run.a, run.cell));
+  assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
+  assert(lj_arena_state(run.a, run.cell) == 1);
+  assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
+  for (i = 1; i < TNEW_EMPTY_NCELLS; i++)
+    assert(lj_arena_state(a0, cell0 + i) == 0);
+  assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
+  assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_chain_contains(g, obj2gco(t)));
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -415,6 +528,8 @@ int main(void)
   test_entering_uses_helper(L, g, tg);
   test_local_accounting_fallback(L, g, tg);
   test_custom_allocator_fallback(L, g);
+  test_inline_empty_tnew_uses_bump_with_free_run(L, g, tg);
+  test_plain_new0_uses_bump_with_free_run(L, g, tg);
 
   lua_close(L);
   puts("t-x64-tnew-empty-inline OK: interpreter empty TNEW inline/fallback paths verified");

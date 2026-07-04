@@ -1047,8 +1047,11 @@ GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits)
 
 /*
 ** Empty-table bump allocation is only valid for the single-producer main-TG
-** window. Otherwise use newtab(), which owns allocator fallback, free-run reuse,
-** MT publication, worker, and accounting-flush cases.
+** window. Otherwise use newtab(), which owns allocator fallback, MT
+** publication, worker, and non-empty-table construction. Generic allocation
+** still prefers reusable free-run bins. This leaf empty-table specialization may
+** consume the active bump window first: Lua does not expose table address reuse
+** order, and the active bump window is never present in the reusable-bin lists.
 */
 static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
 {
@@ -1071,8 +1074,6 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   local_total = lj_tg_local_total_acq(tg);
   account_now = local_total >= LJ_GC2_ACCT_FLUSH - sizeof(GCtab);
   b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
-  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
-    return NULL;
   a = b->a;
   if (a == NULL)
     return NULL;
