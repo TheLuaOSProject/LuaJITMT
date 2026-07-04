@@ -147,6 +147,10 @@ static void load_jloop_flush_after_publish(lua_State *L)
 static void load_trace_stopreq_loop(lua_State *L)
 {
   int status = luaL_loadstring(L,
+    "-- Pre-activation loop traces intentionally omit XPOLL; activating\n"
+    "-- threading first exercises the remotely-polled trace contract.\n"
+    "local threading = require('threading')\n"
+    "assert(({ threading.spawn(function() return true end):join(5) })[1] == true)\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function f(n)\n"

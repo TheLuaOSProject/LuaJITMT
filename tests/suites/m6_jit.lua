@@ -578,16 +578,35 @@ assert(util.traceinfo(1), "deep inlined FUNCF loop did not trace")
 local util = require("jit.util")
 jit.flush()
 jit.opt.start("hotloop=56", "hotexit=10")
+local function trace_count()
+  local n = 0
+  for i = 1, 256 do
+    if util.traceinfo(i) then n = n + 1 end
+  end
+  return n
+end
 local function fib(n)
   if n < 2 then return n end
   return fib(n-1) + fib(n-2)
 end
 assert(fib(30) == 832040)
 assert(util.traceinfo(1), "recursive fib workload did not trace")
+local after_first = trace_count()
 assert(fib(30) == 832040)
+local after_second = trace_count()
 for _ = 1, 4 do
   assert(fib(24) == 46368)
 end
+for _ = 1, 8 do
+  assert(fib(30) == 832040)
+end
+local after_warm = trace_count()
+assert(after_second >= after_first,
+       "recursive fib trace count regressed during warmup")
+assert(after_warm <= after_second + 4,
+       "recursive fib kept recording after warmup: " ..
+       after_second .. " -> " .. after_warm)
+assert(after_warm < 64, "recursive fib trace graph grew unexpectedly")
 print("jit-recursive-call-unroll OK")
 ]=], { timeout = "20s" })
       print("M6 JIT recursive workload behavior passed")
