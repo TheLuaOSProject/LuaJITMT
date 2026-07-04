@@ -2179,23 +2179,55 @@ static LJ_AINLINE int tab_node_free_take_private(Node *node)
   return 1;
 }
 
-static Node *tab_find_free_node_private(Node *nodebase, MSize hmask,
-					const Node *anchor)
+static LJ_AINLINE int tab_node_free_private(Node *n)
+{
+  TValue nk, nv;
+  lj_tv_load_acq(&nk, &n->key);
+  if (!tvisnil(&nk))
+    return 0;
+  lj_tv_load_acq(&nv, &n->val);
+  return tvisnil(&nv);
+}
+
+static Node *tab_find_free_node_scan_private(Node *nodebase, MSize hmask,
+					     const Node *anchor)
 {
   MSize start = (MSize)(anchor - nodebase);
   MSize i;
   for (i = 1; i <= hmask; i++) {
     MSize idx = (start + i) & hmask;
     Node *n = &nodebase[idx];
-    TValue nk, nv;
-    lj_tv_load_acq(&nk, &n->key);
-    if (!tvisnil(&nk))
-      continue;
-    lj_tv_load_acq(&nv, &n->val);
-    if (tvisnil(&nv))
+    if (tab_node_free_private(n))
       return n;
   }
   return NULL;
+}
+
+static Node *tab_find_free_node_private(GCtab *t, Node *nodebase, MSize hmask,
+					const Node *anchor)
+{
+  Node *limit = &nodebase[hmask+1];
+  Node *top = getfreetop(t, nodebase);
+  /*
+  ** In the private single-mutator window, freetop is a cheap cursor over the
+  ** currently published hash vector. It is only a hint: shared insertions and
+  ** abandoned claims do not maintain it, so keep the old full scan as the
+  ** correctness fallback. A reusable hash node must have both key and value
+  ** nil; tombstone anchors and unpublished value claims are not free nodes.
+  */
+  if (top > nodebase && top <= limit) {
+    while (top > nodebase) {
+      Node *n = top - 1;
+      top = n;
+      if (n == anchor)
+	continue;
+      if (tab_node_free_private(n)) {
+	setfreetop(t, nodebase, n);
+	return n;
+      }
+    }
+  }
+  return tab_find_free_node_scan_private(nodebase, hmask, anchor);
 }
 
 static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
@@ -2218,7 +2250,9 @@ static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
     Node *freenode;
     if (!tab_node_free_take_private(nodebase))
       return NULL;
-    freenode = tab_find_free_node_private(nodebase, hmask, anchor);
+    freenode = tvisnil(&nv) ?
+	       tab_find_free_node_scan_private(nodebase, hmask, anchor) :
+	       tab_find_free_node_private(t, nodebase, hmask, anchor);
     if (!freenode) {
       lj_tab_node_free_release(nodebase);
       return NULL;
