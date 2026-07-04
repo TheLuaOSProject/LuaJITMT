@@ -212,13 +212,21 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
   **
   ** During active black allocation the fresh parent is not yet published and
   ** its children are either established roots or freshly black-allocated in
-  ** the same constructor. If the child is already marked, the edge is already
-  ** owned by GC2 and repeating the mark as a locked test-and-set only adds
-  ** allocation-loop contention. Keep the normal barrier for active white
-  ** allocation, unmarked/custom children, and idle remembered-set publication.
+  ** the same constructor. If a non-proto child is already marked, the edge is
+  ** already owned by GC2 and repeating the mark as a locked test-and-set only
+  ** adds allocation-loop contention. Protos are different: parser allocation
+  ** can birth-mark a proto before any traversal is queued, so an already-marked
+  ** proto still needs a one-per-proto SSB traversal handoff.
+  ** Keep the normal barrier for active white allocation, unmarked/custom
+  ** children, and idle remembered-set publication.
   */
   if (tg && lj_tg_mark_active_acq(tg)) {
-    if (!lj_tg_alloc_black_acq(tg) || lj_gc2_ismarked(g, child) <= 0)
+    int marked = lj_gc2_ismarked(g, child);
+    if (!lj_tg_alloc_black_acq(tg))
+      lj_gc2_barrier_obj_pair(L, parent, child);
+    else if (child->gch.gct == ~LJ_TPROTO)
+      lj_gc2_barrier_marked_proto(L, gco2pt(child));
+    else if (marked <= 0)
       lj_gc2_barrier_obj_pair(L, parent, child);
   } else if (isblack(parent)) {
     lj_gc2_barrier_obj_pair(L, parent, child);
@@ -472,6 +480,60 @@ static void func_arena_set_alloc(GCArena *a, uint32_t cell, int black)
     lj_arena_bm_clear(a->mark, cell);
 }
 
+static LJ_AINLINE int func_bump_arena_owned_active(global_State *g,
+						   TGState *tg)
+{
+  return tg && lj_tg_mark_active_acq(tg) && lj_tg_alloc_black_acq(tg) &&
+	 !gc2_legacy_mark_bridge_acq(g);
+}
+
+static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
+					     GCobj *o)
+{
+  GCobj *oldhead;
+  if (func_bump_arena_owned_active(g, tg)) {
+    /*
+    ** Active black bump allocation sets the arena mark bit at birth. FNEW
+    ** closures/upvalues have no finalizer-side legacy ownership requirement.
+    ** Standalone GC2 can therefore own them through the arena bitmap instead
+    ** of publishing each allocation to the global legacy root spine. Coupled
+    ** legacy mark cycles still use pending roots because the legacy sweeper
+    ** remains authoritative for graph ownership until that collector is gone.
+    */
+    lj_obj_setgcwnullrel(o);
+    return;
+  }
+  oldhead = lj_tg_gcroot_pending_acq(tg);
+  if (oldhead)
+    lj_obj_setgcwrel(o, oldhead);
+  else
+    lj_obj_setgcwnullrel(o);
+  lj_tg_gcroot_pending_store_rel(tg, o);
+}
+
+static LJ_AINLINE void func_bump_publish_pair(global_State *g, TGState *tg,
+					      GCobj *head, GCobj *tail)
+{
+  GCobj *oldhead;
+  if (func_bump_arena_owned_active(g, tg)) {
+    /*
+    ** Both cells were reserved from one traversable arena run and marked black
+    ** before publication. Clearing next links keeps the object headers clean
+    ** while avoiding one pending-root push per traced one-upvalue closure.
+    */
+    lj_obj_setgcwnullrel(head);
+    lj_obj_setgcwnullrel(tail);
+    return;
+  }
+  lj_obj_setgcwrel(head, tail);
+  oldhead = lj_tg_gcroot_pending_acq(tg);
+  if (oldhead)
+    lj_obj_setgcwrel(tail, oldhead);
+  else
+    lj_obj_setgcwnullrel(tail);
+  lj_tg_gcroot_pending_store_rel(tg, head);
+}
+
 static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
 				      TGState *tg)
 {
@@ -479,7 +541,6 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   const uint32_t ncells = lj_arena_ncells(nbytes);
   GCArena *a;
   GCupval *uv;
-  GCobj *oldhead;
   uint64_t local_total;
   uint32_t cell, black;
   int account_now;
@@ -526,12 +587,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
     lj_gc2_account_alloc(g, tg, nbytes);
   else
     (void)lj_tg_local_total_add_rlx(tg, nbytes);
-  oldhead = lj_tg_gcroot_pending_acq(tg);
-  if (oldhead)
-    lj_obj_setgcwrel(obj2gco(uv), oldhead);
-  else
-    lj_obj_setgcwnullrel(obj2gco(uv));
-  lj_tg_gcroot_pending_store_rel(tg, obj2gco(uv));
+  func_bump_publish_obj(g, tg, obj2gco(uv));
   func_test_uvcell_bump_call();
   return uv;
 }
@@ -551,7 +607,6 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   GCtab *env;
   GCupval *uv;
   TValue *slot;
-  GCobj *oldhead;
   uint64_t local_total;
   uint32_t cell, uvcell, black;
   int account_now;
@@ -613,7 +668,6 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
   func_pubfreshobjobj(L, tg, fn, uv);
   fn->l.nupvalues = 1;
-  lj_obj_setgcwrel(obj2gco(fn), obj2gco(uv));
 
   lj_gc_total_add(g, nbytes);
   /*
@@ -625,12 +679,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
     lj_gc2_account_alloc(g, tg, nbytes);
   else
     (void)lj_tg_local_total_add_rlx(tg, nbytes);
-  oldhead = lj_tg_gcroot_pending_acq(tg);
-  if (oldhead)
-    lj_obj_setgcwrel(obj2gco(uv), oldhead);
-  else
-    lj_obj_setgcwnullrel(obj2gco(uv));
-  lj_tg_gcroot_pending_store_rel(tg, obj2gco(fn));
+  func_bump_publish_pair(g, tg, obj2gco(fn), obj2gco(uv));
   if (count_kind == 1)
     func_test_gc1num_bump_fast_call();
   else if (count_kind == 2)
@@ -647,7 +696,6 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   GCArena *a;
   GCfunc *fn;
   GCtab *env;
-  GCobj *oldhead;
   uint64_t local_total;
   uint32_t count, cell, black;
   int account_now;
@@ -699,12 +747,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
     lj_gc2_account_alloc(g, tg, nbytes);
   else
     (void)lj_tg_local_total_add_rlx(tg, nbytes);
-  oldhead = lj_tg_gcroot_pending_acq(tg);
-  if (oldhead)
-    lj_obj_setgcwrel(obj2gco(fn), oldhead);
-  else
-    lj_obj_setgcwnullrel(obj2gco(fn));
-  lj_tg_gcroot_pending_store_rel(tg, obj2gco(fn));
+  func_bump_publish_obj(g, tg, obj2gco(fn));
   if (count_kind == 1)
     func_test_gc0_bump_interp_call();
   else if (count_kind == 2)

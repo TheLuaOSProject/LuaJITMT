@@ -6549,6 +6549,40 @@ static LJ_AINLINE void gc2_rescan_pending_clear(GCobj *o)
   (void)la_and8_rlx(&o->gch.marked, (uint8_t)~LJ_GC_NEEDSCAN);
 }
 
+void lj_gc2_barrier_marked_proto(lua_State *L, GCproto *pt)
+{
+  global_State *g;
+  GCobj *o;
+  uint32_t phase;
+  int pushed;
+  if (!L || !pt)
+    return;
+  g = G(L);
+  o = obj2gco(pt);
+  phase = gc2_phase_acq(g);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
+    return;
+  if (gc2_legacy_mark_bridge_acq(g))
+    lj_gc_markobj_legacy(g, o);
+  if (lj_gc2_ismarked(g, o) <= 0) {
+    (void)lj_gc2_markobj_nolegacy(g, o);
+    return;
+  }
+  /*
+  ** Active black allocation sets a proto's arena mark bit before constructor
+  ** edges publish. A normal barrier then sees "already marked" and would not
+  ** queue traversal, so immutable proto children can be swept while the fresh
+  ** closure survives by its birth mark. Queue each such proto once; the bit can
+  ** remain set after traversal because protos are immutable and future cycles
+  ** with cleared arena marks take the ordinary mark-and-queue path.
+  */
+  if (!gc2_rescan_pending_set(o))
+    return;
+  pushed = lj_gc2_ssb_push(g, o);
+  lj_assertG(pushed, "gc2 SSB push failed for marked proto");
+  UNUSED(pushed);
+}
+
 static LJ_AINLINE void gc2_rescan_pending_clear_if_table(GCobj *o)
 {
   if (o && o->gch.gct == ~LJ_TTAB)

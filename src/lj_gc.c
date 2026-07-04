@@ -581,6 +581,23 @@ void lj_gc_preserveobj_legacy(global_State *g, GCobj *o)
   lj_obj_cleargcflags(o, LJ_GC_WHITES);
 }
 
+void lj_gc_markobj_legacy(global_State *g, GCobj *o)
+{
+  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  /*
+  ** Active GC2 birth marking can make a proto non-white before constructor
+  ** edges queue its traversal. When the legacy mark bridge is also active,
+  ** feed that proto into the legacy frontier instead of only preserving its
+  ** body from sweep.
+  */
+  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+    gc_mark_primary_root(g, o);
+  } else {
+    lj_gc_preserveobj_legacy(g, o);
+  }
+}
+
 #if LJ_HASFFI
 static void gc_mark_clib_retired_cache(global_State *g)
 {

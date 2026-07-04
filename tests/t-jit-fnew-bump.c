@@ -587,6 +587,47 @@ static void test_accounting_fast_direct(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
+static void test_active_black_direct_skips_pending_root(lua_State *L,
+							global_State *g,
+							TGState *tg)
+{
+  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
+  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
+  uint32_t fast0;
+  TValue slots[256];
+  GCfunc *parent, *fn;
+  GCproto *child;
+  GCobj *pending0;
+  int32_t slotno;
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  fast0 = lj_func_test_gc1num_bump_fast_calls();
+
+  load_one_upvalue_fixture(L, &parent, &child, &slotno);
+  (void)lj_gc_flush_root_pending(g);
+  lj_gcroot_pending_hint_rel(g, 0);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  assert(pending0 == NULL);
+
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  la_store64_rel(&tg->local_total, 0);
+  lj_tg_mark_active_rel(tg, 1);
+  lj_tg_alloc_black_rel(tg, 1);
+
+  setnumV(&slots[slotno], 321);
+  fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 321);
+  assert_one_upvalue_result(fn, &slots[slotno], 321);
+  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
+  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+
+  lj_tg_alloc_black_rel(tg, old_alloc_black);
+  lj_tg_mark_active_rel(tg, old_mark_active);
+  lua_pop(L, 1);
+}
+
 static void test_accounting_fallback(lua_State *L, global_State *g,
 				     TGState *tg)
 {
@@ -632,6 +673,7 @@ int main(void)
   test_traced_behavior(L);
   test_traced_immutable_numeric_inline(L, g);
   test_accounting_fast_direct(L, g, tg);
+  test_active_black_direct_skips_pending_root(L, g, tg);
   test_accounting_fallback(L, g, tg);
   test_traced_mark_active_fallback(L, g, tg);
   test_traced_mark_active_white_fallback(L, g, tg);

@@ -66,6 +66,7 @@ LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_freeall(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_preserveobj_legacy(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_markobj_legacy(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 #if LJ_HASJIT
@@ -352,6 +353,7 @@ LJ_FUNCA void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
 					cTValue *tv, uint32_t n);
 LJ_FUNCA void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent,
 				      GCobj *child);
+LJ_FUNC void lj_gc2_barrier_marked_proto(lua_State *L, GCproto *pt);
 LJ_FUNCA void lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent,
 				       cTValue *tv);
 LJ_FUNC void lj_gc2_barrier_tv_pair(lua_State *L, GCobj *parent, cTValue *tv);
