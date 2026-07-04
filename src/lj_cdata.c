@@ -322,6 +322,12 @@ done:
 
 /* -- C data indexing ----------------------------------------------------- */
 
+/*
+** Cdata objects carry already-published ctype IDs. Container snapshots stay
+** shallow so numeric indexing of stable int*-style records does not serialize
+** with an unrelated cdef. Child/layout walks that can observe rollback state
+** use the ID-rooted sequence-checked helpers below.
+*/
 static int cdata_ctype_snapshot_shallow(CTState *cts, CTypeID id, CType *out)
 {
   CTypeID top;

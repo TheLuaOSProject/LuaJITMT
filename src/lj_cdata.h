@@ -42,7 +42,9 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
   global_State *g = G(L);
 #ifdef LUA_USE_ASSERT
   CType *ct = ctype_raw(cts, id);
-  lj_assertCTS((ctype_hassize(ct->info) ? ct->size : CTSIZE_PTR) == sz,
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size = ctype_size_acq(ct);
+  lj_assertCTS((ctype_hassize(info) ? size : CTSIZE_PTR) == sz,
 	       "inconsistent size of fixed-size cdata alloc");
 #endif
   checked = ctype_check(cts, id);

@@ -1128,7 +1128,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
 	rinfo = ctype_info_acq(rt);
 	rgco = ctype_nameobj_acq(rt);
 	if (ctype_isabandoned(rinfo))
-	  return 0;
+	  return ctype_snapshot_done(cts, seq0, 0);
 	if (ctype_isxattrib(rinfo, CTA_REDIR)) {
 	  if (rgco == NULL)
 	    return -1;
