@@ -296,6 +296,64 @@ local worker = th.spawn(function()
   local shared_pairs_traces = trace_count(trace_limit)
   assert(shared_pairs_traces == 0)
 
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local shared_pairs_churn = { alpha = 3, beta = 5, gamma = 7 }
+  for i = 1, 32 do
+    shared_pairs_churn[i] = i
+    shared_pairs_churn["seed:" .. i] = i
+  end
+
+  local ready = th.channel(1)
+  local start = th.channel(1)
+  local writer = th.spawn(function(tbl, ready_ch, start_ch)
+    assert(ready_ch:send(true, 10) == true)
+    local _, ok = start_ch:recv(10)
+    assert(ok == true)
+
+    for i = 1, 320 do
+      tbl[i + 64] = i
+      tbl["jit-secondary-churn:" .. i] = i
+      if i > 24 and i % 3 == 0 then
+	tbl[i + 40] = nil
+      end
+      if i > 24 and i % 5 == 0 then
+	tbl["jit-secondary-churn:" .. (i - 16)] = nil
+      end
+      if i % 64 == 0 then
+	collectgarbage("step")
+      end
+    end
+
+    return true
+  end, shared_pairs_churn, ready, start)
+
+  local _, ready_ok = ready:recv(10)
+  assert(ready_ok == true)
+  assert(start:send("go", 10) == true)
+
+  for round = 1, 128 do
+    local count = 0
+    for k, v in pairs(shared_pairs_churn) do
+      assert(type(count) == "number",
+	     "active-MT shared pairs() corrupted an observer local")
+      assert(k ~= nil and v ~= nil)
+      count = count + 1
+      if count >= 96 then break end
+    end
+    shared_pairs_churn["observer:" .. round] = round
+    if round > 16 then
+      shared_pairs_churn["observer:" .. (round - 12)] = nil
+    end
+    if round % 32 == 0 then
+      collectgarbage("step")
+    end
+  end
+
+  local writer_ok, writer_result = writer:join(10)
+  assert(writer_ok == true and writer_result == true, tostring(writer_result))
+
   return root_traces, side_traces, table_traces, read_traces, index_traces,
 	 write_traces, meta_write_traces, meta_nil_hash_traces,
 	 meta_nil_array_traces, ipairs_traces, next_traces, shared_next_traces,
@@ -322,4 +380,4 @@ assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
 assert(type(shared_pairs_traces) == "number" and shared_pairs_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), traces trace-local and shared next(), keeps active-MT shared pairs() interpreted, and preserves __index/__newindex semantics in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), traces trace-local and shared next(), keeps active-MT shared pairs() interpreted and resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")

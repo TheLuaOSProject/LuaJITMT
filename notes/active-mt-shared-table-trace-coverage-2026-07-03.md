@@ -26,3 +26,10 @@ Active-MT shared table trace coverage, 2026-07-03:
   hidden `LJ_KEYINDEX` cursor across loop iterations, and reopening that path
   still fails the `traversal,nextchurn` stress without a generation/version
   guard.
+- 2026-07-04 reducer: a helper-only optimized `pairs()`/BC_ITERN reopening
+  traced `m6_jit_token`, but `m5_tab_resize_stress` with `traversal,nextchurn`
+  corrupted an observer loop local (`count` became a function value). Adding
+  array/node/asize/hmask root guards avoided the immediate corruption but
+  timed out under stress from exit/re-record churn. The required contract is
+  therefore a versioned cursor/epoch or equivalent result contract, not a
+  naked helper call plus structural root guards.
