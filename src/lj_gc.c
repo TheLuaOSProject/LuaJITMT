@@ -3133,7 +3133,7 @@ static int gc_root_pending_tg_nonempty(TGState *tg)
 uint32_t lj_gc_flush_root_pending(global_State *g)
 {
   TGState *tg, *main_tg, *self;
-  uint32_t n = 0, saw_main = 0;
+  uint32_t n = 0, saw_main = 0, saw_self = 0;
   if (!g)
     return 0;
   main_tg = g->main_tg;
@@ -3144,19 +3144,29 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
   ** covered for the two TGs that can publish without already being visible in
   ** gc2.tg_list: the main TG and the TLS-current TG during attach/detach edges.
   */
-  if (lj_gcroot_pending_hint_xchg(g, 0) == 0 &&
+  if (lj_gcroot_pending_hint_acq(g) == 0 &&
       !gc_root_pending_tg_nonempty(main_tg) &&
       (self == NULL || self == main_tg ||
        !gc_root_pending_tg_nonempty(self)))
     return 0;
+  /*
+  ** Once the hint is non-zero, clear it before scanning so a concurrent
+  ** publisher can republish a new non-empty state. The zero-hint fast return
+  ** above intentionally avoids a global RMW on the overwhelmingly common empty
+  ** flush path; concurrent remote publishers that set the hint after the load
+  ** are covered by the next flush, matching the old xchg-after-zero race.
+  */
+  (void)lj_gcroot_pending_hint_xchg(g, 0);
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
     if (tg == main_tg)
       saw_main = 1;
+    if (tg == self)
+      saw_self = 1;
     n += gc_flush_root_pending_tg(g, tg);
   }
   if (main_tg && !saw_main)
     n += gc_flush_root_pending_tg(g, main_tg);
-  if (self && self != main_tg)
+  if (self && self != main_tg && !saw_self)
     n += gc_flush_root_pending_tg(g, self);
   return n;
 }
