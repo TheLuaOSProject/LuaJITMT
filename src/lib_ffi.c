@@ -999,12 +999,12 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
   if (!tv) {
     const char *s;
   err_index:
-    s = strdata(lj_ctype_repr(L, id, NULL));
+    s = strdata(lj_ctype_repr_wait(L, id, NULL));
     if (tvisstr(L->base+1)) {
       lj_err_callerv(L, LJ_ERR_FFI_BADMEMBER, s, strVdata(L->base+1));
     } else {
       const char *key = tviscdata(L->base+1) ?
-	strdata(lj_ctype_repr(L, cdataV(L->base+1)->ctypeid, NULL)) :
+	strdata(lj_ctype_repr_wait(L, cdataV(L->base+1)->ctypeid, NULL)) :
 	lj_typename(L->base+1);
       lj_err_callerv(L, LJ_ERR_FFI_BADIDXW, s, key);
     }
@@ -1147,7 +1147,7 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
     int ok = ffi_ctype_info_read(L, cts, id, &info, &size, &rid, &snap);
     if (ok <= 0)
       lj_err_callerv(L, LJ_ERR_FFI_BADCALL,
-		     strdata(lj_ctype_repr(L, id, NULL)));
+		     strdata(lj_ctype_repr_wait(L, id, NULL)));
     info = ctype_info_acq(&snap);
     if (ctype_isptr(info)) id = ctype_cid(info);
   }
@@ -1155,7 +1155,8 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
   if (tv)
     return lj_meta_tailcall(L, tv);
   else if (mm == MM_call)
-    lj_err_callerv(L, LJ_ERR_FFI_BADCALL, strdata(lj_ctype_repr(L, id, NULL)));
+    lj_err_callerv(L, LJ_ERR_FFI_BADCALL,
+		   strdata(lj_ctype_repr_wait(L, id, NULL)));
   return lj_cf_ffi_new(L);
 }
 
@@ -1256,7 +1257,7 @@ LJLIB_CF(ffi_meta___tostring)
       }
     }
   }
-  lj_strfmt_pushf(L, msg, strdata(lj_ctype_repr(L, id, NULL)), p);
+  lj_strfmt_pushf(L, msg, strdata(lj_ctype_repr_wait(L, id, NULL)), p);
 checkgc:
   lj_gc_check(L);
   return 1;
@@ -1281,7 +1282,8 @@ static int ffi_pairs(lua_State *L, MMS mm)
   }
   tv = ffi_ctype_metatv_read(L, cts, &metatv, id, mm);
   if (!tv)
-    lj_err_callerv(L, LJ_ERR_FFI_BADMM, strdata(lj_ctype_repr(L, id, NULL)),
+    lj_err_callerv(L, LJ_ERR_FFI_BADMM,
+		   strdata(lj_ctype_repr_wait(L, id, NULL)),
 		   strdata(mmname_str(G(L), mm)));
   return lj_meta_tailcall(L, tv);
 }

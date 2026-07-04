@@ -76,8 +76,10 @@ static void assert_predefined_tostring_avoids_wait(lua_State *L, CTState *cts)
   uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
 
   ljt_lua_dostring(L,
-    "assert(tostring(lj_m7_tostring_i64):find('-42', 1, true))\n"
-    "assert(tostring(lj_m7_tostring_u64):find('42', 1, true))\n");
+    "assert(tostring(lj_m7_tostring_int_ct) == 'ctype<int>')\n"
+    "assert(tostring(lj_m7_tostring_voidp_ct) == 'ctype<void *>')\n"
+    "assert(tostring(lj_m7_tostring_int_obj):find("
+    "'cdata<int>:', 1, true))\n");
 
   ljt_ctype_release_parse_token(cts, release_seq);
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
@@ -94,6 +96,8 @@ int main(void)
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "typedef struct { int x; } lj_m7_tostring_snapshot_t;\n"
+    "struct lj_m7_tostring_plain_s { int y; };\n"
+    "typedef struct lj_m7_tostring_plain_s lj_m7_tostring_plain_t;\n"
     "typedef int64_t lj_m7_tostring_i64_t;\n"
     "typedef lj_m7_tostring_i64_t &lj_m7_tostring_i64_ref_t;\n"
     "typedef complex lj_m7_tostring_complex_t;\n"
@@ -102,6 +106,11 @@ int main(void)
     "]]\n"
     "lj_m7_tostring_i64 = ffi.new('int64_t', -42)\n"
     "lj_m7_tostring_u64 = ffi.new('uint64_t', 42)\n"
+    "lj_m7_tostring_int_ct = ffi.typeof('int')\n"
+    "lj_m7_tostring_voidp_ct = ffi.typeof('void *')\n"
+    "lj_m7_tostring_int_obj = ffi.new('int', -42)\n"
+    "lj_m7_tostring_plain_ct = ffi.typeof('lj_m7_tostring_plain_t')\n"
+    "lj_m7_tostring_plain_obj = lj_m7_tostring_plain_ct(11)\n"
     "lj_m7_tostring_i64_slot = ffi.new('lj_m7_tostring_i64_t[1]', -77)\n"
     "lj_m7_tostring_i64_ref = "
     "ffi.new('lj_m7_tostring_i64_ref_t', lj_m7_tostring_i64_slot)\n"
@@ -130,6 +139,10 @@ int main(void)
     "assert(tostring(lj_m7_tostring_i64_ref):find('-77', 1, true))\n"
     "assert(tostring(lj_m7_tostring_complex_ref) == '1+2i')\n"
     "assert(tostring(lj_m7_tostring_enum):find(': 7', 1, true))\n"
+    "assert(tostring(lj_m7_tostring_plain_ct) == "
+    "'ctype<struct lj_m7_tostring_plain_s>')\n"
+    "assert(tostring(lj_m7_tostring_plain_obj):find("
+    "'cdata<struct lj_m7_tostring_plain_s>:', 1, true))\n"
     "assert(tostring(lj_m7_tostring_obj) == 'snap:42')\n"
     "assert(tostring(lj_m7_tostring_ptr) == 'snap:42')\n");
   seq1 = ljt_ctype_parse_seq(cts);
@@ -142,6 +155,14 @@ int main(void)
     "assert(tostring(lj_m7_tostring_i64_ref):find('-77', 1, true))\n");
   assert_tostring_waits_without_lock(L, cts, tg,
     "assert(tostring(lj_m7_tostring_complex_ref) == '1+2i')\n");
+  assert_tostring_waits_without_lock(L, cts, tg,
+    "assert(tostring(lj_m7_tostring_plain_ct) == "
+    "'ctype<struct lj_m7_tostring_plain_s>')\n");
+  assert_tostring_waits_without_lock(L, cts, tg,
+    "assert(tostring(lj_m7_tostring_plain_obj):find("
+    "'cdata<struct lj_m7_tostring_plain_s>:', 1, true))\n");
+  assert_tostring_waits_without_lock(L, cts, tg,
+    "assert(tostring(lj_m7_tostring_enum):find(': 7', 1, true))\n");
 
   lua_close(L);
   printf("t-ffi-tostring-snapshot OK: cdata tostring waits on ctype snapshots\n");

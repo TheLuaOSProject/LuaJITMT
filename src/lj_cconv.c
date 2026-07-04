@@ -22,7 +22,7 @@ LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts,
 				      CTypeID did, CTypeID sid, CType *s,
 				      CTInfo flags)
 {
-  const char *dst = strdata(lj_ctype_repr(L, did, NULL));
+  const char *dst = strdata(lj_ctype_repr_wait(L, did, NULL));
   const char *src;
   UNUSED(cts);
   if ((flags & CCF_FROMTV)) {
@@ -30,7 +30,7 @@ LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts,
     src = lj_obj_typename[1+(ctype_isnum(sinfo) ? LUA_TNUMBER :
 			     ctype_isarray(sinfo) ? LUA_TSTRING : LUA_TNIL)];
   } else {
-    src = strdata(lj_ctype_repr(L, sid, NULL));
+    src = strdata(lj_ctype_repr_wait(L, sid, NULL));
   }
   if (CCF_GETARG(flags))
     lj_err_argv(L, CCF_GETARG(flags), LJ_ERR_FFI_BADCONV, src, dst);
@@ -42,7 +42,7 @@ LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts,
 LJ_NORET static void cconv_err_convtv_l(lua_State *L, CTState *cts,
 					CTypeID did, TValue *o, CTInfo flags)
 {
-  const char *dst = strdata(lj_ctype_repr(L, did, NULL));
+  const char *dst = strdata(lj_ctype_repr_wait(L, did, NULL));
   const char *src = lj_typename(o);
   UNUSED(cts);
   if (CCF_GETARG(flags))
@@ -55,7 +55,7 @@ LJ_NORET static void cconv_err_convtv_l(lua_State *L, CTState *cts,
 LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
 					CTypeID did)
 {
-  const char *dst = strdata(lj_ctype_repr(L, did, NULL));
+  const char *dst = strdata(lj_ctype_repr_wait(L, did, NULL));
   UNUSED(cts);
   lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
 }

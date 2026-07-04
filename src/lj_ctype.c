@@ -2266,6 +2266,30 @@ GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name)
   return lj_str_new(L, ctr.pb, ctr.pe - ctr.pb);
 }
 
+GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name)
+{
+  CTState *cts = ctype_ctsG(G(L));
+  /*
+  ** Predefined ctypes are immutable and live below the parser allocation
+  ** boundary. They must remain usable by no-wait FFI fast paths while another
+  ** thread owns the parser token.
+  */
+  if (id <= CTID_CTYPEID)
+    return lj_ctype_repr(L, id, name);
+  for (;;) {
+    uint32_t seq0 = ctype_parse_token_acq(cts);
+    GCstr *s;
+    if (seq0 & 1u) {
+      lj_ctype_parse_wait(cts, L, seq0);
+      continue;
+    }
+    s = lj_ctype_repr(L, id, name);
+    if (ctype_snapshot_done(cts, seq0, 1) > 0)
+      return s;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 /* Convert int64_t/uint64_t to string with 'LL' or 'ULL' suffix. */
 GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned)
 {

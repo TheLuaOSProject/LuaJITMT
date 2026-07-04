@@ -1268,6 +1268,7 @@ LJ_FUNC int lj_ctype_metatv_snapshot(CTState *cts, TValue *out,
 LJ_FUNC cTValue *lj_ctype_metatv_wait(lua_State *L, CTState *cts,
 				      TValue *out, CTypeID id, MMS mm);
 LJ_FUNC GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name);
+LJ_FUNC GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned);
 LJ_FUNC GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size);
 LJ_FUNC uint32_t lj_ctype_reclaim_retired(global_State *g,

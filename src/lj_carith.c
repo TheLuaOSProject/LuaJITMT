@@ -487,7 +487,7 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     for (i = 0; i < 2; i++) {
       if (ca->ct[i] && tviscdata(L->base+i)) {
 	if (ctype_isenum(ctype_info_acq(ca->ct[i]))) isenum = i;
-	repr[i] = strdata(lj_ctype_repr(L, ca->id[i], NULL));
+	repr[i] = strdata(lj_ctype_repr_wait(L, ca->id[i], NULL));
       } else {
 	if (tvisstr(&L->base[i])) isstr = i;
 	repr[i] = lj_typename(&L->base[i]);
