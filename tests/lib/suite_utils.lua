@@ -177,20 +177,6 @@ function M.timeout_prefix(timeout)
     " " .. M.shell_quote(timeout_seconds(timeout))
 end
 
-local function command_status_wrapper(cmd)
-  local script = "( " .. cmd .. " ); __lj_status=$?; " ..
-    "printf '\\n__LJ_CAPTURE_STATUS__%d\\n' \"$__lj_status\""
-  return "sh -c " .. M.shell_quote(script)
-end
-
-local function split_capture_status(cmd, data)
-  local out, status = data:match("^(.*)\n__LJ_CAPTURE_STATUS__(%d+)\n$")
-  if not status then
-    error("command status marker missing: " .. cmd .. "\n" .. data, 3)
-  end
-  return out, tonumber(status)
-end
-
 function M.capture_command(cmd, opts)
   opts = opts or {}
   local full = cmd
@@ -198,12 +184,31 @@ function M.capture_command(cmd, opts)
   if opts.timeout then
     full = M.timeout_prefix(opts.timeout) .. " sh -c " .. M.shell_quote(full)
   end
-  local p, err = io.popen(command_status_wrapper(full))
-  if not p then error("command failed to start: " .. tostring(err), 2) end
-  local out = p:read("*a")
-  p:close()
-  local status
-  out, status = split_capture_status(full, out)
+  local outpath = os.tmpname()
+  local statuspath = os.tmpname()
+  os.remove(outpath)
+  os.remove(statuspath)
+
+  -- Capture through files, not io.popen(). Some release runners, notably
+  -- Darling, may keep inherited stdout/stderr descriptors open in a server
+  -- process after the checked command exits. A pipe-backed capture then waits
+  -- forever for EOF even though the command status is already known.
+  local script = "( " .. full .. " ) >" .. M.shell_quote(outpath) ..
+    "; __lj_status=$?; printf '%d\\n' \"$__lj_status\" >" ..
+    M.shell_quote(statuspath)
+  local ok, why, code = os.execute("sh -c " .. M.shell_quote(script))
+  local out = read_raw_file(outpath) or ""
+  local statustext = read_raw_file(statuspath)
+  os.remove(outpath)
+  os.remove(statuspath)
+  if not statustext then
+    error("command status missing (" .. tostring(why or code or ok) .. "): " ..
+          full .. "\n" .. out, 2)
+  end
+  local status = tonumber(statustext:match("^(%d+)"))
+  if not status then
+    error("command status malformed: " .. full .. "\n" .. statustext .. out, 2)
+  end
   if status ~= 0 then
     error("command failed (" .. tostring(status) .. "): " ..
           full .. "\n" .. out, 2)
