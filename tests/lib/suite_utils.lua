@@ -51,10 +51,10 @@ end
 function M.read_file(path)
   -- Artifact reader for logs, fixture outputs, benchmark data, package
   -- manifests, opaque bytecode round-trip payloads, and other files produced or
-  -- consumed by a test. Implementation constraints are documented beside the
-  -- constrained code, with notes for cross-file rationale, while tests cover
-  -- observable behavior, public artifacts, benchmarks, stock semantics, or
-  -- packaging.
+  -- consumed by a test. Do not use this to guard repository source text.
+  -- Implementation constraints belong beside the constrained code, with notes
+  -- for cross-file rationale; tests cover observable behavior, public artifacts,
+  -- benchmarks, stock semantics, or packaging.
   return read_raw_file(path)
 end
 

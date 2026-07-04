@@ -96,20 +96,20 @@ Validation:
 Validation:
 
 - `tools/ci/lua_test.sh --list`
-- Direct `suite_assert`/`ljtest` smoke checks for the then-current
-  implementation-read rejection and dump result matching. The generated
-  JIT/internal dump portion was later removed; bytecode compatibility
-  remains public-artifact coverage by loading and executing opaque dumps.
+- Direct `suite_assert`/`ljtest` smoke checks for dump result matching. The
+  generated JIT/internal dump portion and the temporary repository-source
+  filtering were later removed; bytecode compatibility remains public-artifact
+  coverage by loading and executing opaque dumps.
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops m7_ffi_jit_cnew`
 
-## 2026-06-28 explicit implementation-reading helper
+## 2026-06-28 temporary source-reader cleanup
 
-- Historical state: this pass added path-based implementation-file handling to
-  `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
-  implementation-only reader. Both the explicit implementation reader and those
-  legacy wrappers were removed in the later 2026-06-28 legacy wrapper removal.
-  The remaining path-based read behavior was removed on 2026-07-03 so the
-  harness now treats file access as a neutral primitive.
+- Historical state: this pass added path-based handling for repository source
+  files to `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
+  internal-file reader. Both that reader and those legacy wrappers were removed
+  in the later 2026-06-28 legacy wrapper removal. The remaining path-based read
+  behavior was removed on 2026-07-03 so the harness now treats file access as a
+  neutral primitive for test-owned artifacts.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
@@ -168,8 +168,8 @@ Validation:
 Validation:
 
 - `tools/ci/lua_test.sh --list`
-- Direct `ljtest` smoke check for the then-current implementation-read rejection and
-  normal file reads. The rejection was later removed.
+- Direct `ljtest` smoke check for normal file reads after the temporary
+  repository-source filtering was removed.
 - `make -C src clean && tools/ci/lua_test.sh m9_bench_regression`
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops`
 
@@ -217,9 +217,8 @@ Validation:
 - `tools/ci/lua_test.sh --list`
 - `tools/ci/run_stock_tests.sh --quiet lang/andor.lua`
 - `tools/ci/run_stock_tests.sh src/luajit --quiet lang/andor.lua`
-- Direct `suite_assert`/`ljtest` smoke check for the then-current broader
-  implementation-read rejection and result-file matching. The rejection was later
-  removed.
+- Direct `suite_assert`/`ljtest` smoke check for result-file matching after the
+  temporary repository-source filtering was removed.
 - `tools/ci/lua_test.sh m9_bench_regression`
 - `tools/ci/lua_test.sh m9_m10_gc`
 - `git diff --check`
@@ -297,8 +296,8 @@ Validation:
 - Direct `t-weak-modes.lua` and `t-ffi-gc-finreg.lua` runs under JIT-off and
   JIT-on with `LUA_PATH=tests/lib/?.lua;src/?.lua;src/jit/?.lua;;`.
 - `tools/ci/lua_test.sh --list`
-- Duplicate helper scan for removed local `grow_stack` and repeated numeric
-  environment parsing.
+- Manual helper-audit note for removed local `grow_stack` duplication and
+  repeated numeric environment parsing.
 - `git diff --check`
 
 - `tools/ci/lua_test.sh --list`
@@ -318,7 +317,7 @@ Validation:
 
 - `tools/ci/lua_test.sh m5_jit_hash_store_nyi m5_jit_trace_publish m6_jit_token m7_ffi_ccall_native m7_ffi_finreg m7_ffi_jit_cnew`
 - `tools/ci/lua_test.sh --list`
-- Historical local audit for duplicate trace-count helpers over migrated files
+- Historical local audit for duplicate trace-count helpers over migrated files.
 - `git diff --check`
 
 ## 2026-06-20 shared C table-forward helpers
@@ -336,7 +335,7 @@ Validation:
 
 - `timeout 360s tools/ci/lua_test.sh m5_tab_forward_filter m5_tab_cas_store m5_tab_value_publish m5_x64_tset_nil_snapshot m5_x64_tget_array_header m5_x64_tgets_node_order m5_x64_ipairs_snapshot m5_x64_itern_snapshot m5_x64_table_next_snapshot m6_jit_table_store_helper`
 - `tools/ci/lua_test.sh --list`
-- duplicate helper scan over migrated C fixtures
+- Historical local audit for duplicate helper code in migrated C fixtures.
 - `git diff --check`
 
 ## 2026-06-20 stock runner cwd plumbing
@@ -391,7 +390,8 @@ Validation:
 
 - `timeout 240s tools/ci/lua_test.sh m6_jit_token m5_jit_trace_publish m7_ffi_cparse_rollback m7_ffi_ctype_name_claim m7_ffi_ctype_tab_retire m7_ffi_ctype_ticket_intern`
 - `tools/ci/lua_test.sh --list`
-- duplicate local Lua helper scan over migrated C fixtures
+- Historical local audit for duplicate local Lua helper code in migrated C
+  fixtures.
 - `git diff --check`
 
 ## 2026-06-20 shared Lua GC and arg helpers
@@ -408,7 +408,8 @@ Validation:
 - Direct `t-weak-modes.lua` runs under JIT-off and JIT-on with
   `LUA_PATH=tests/lib/?.lua;src/?.lua;src/jit/?.lua;;`.
 - `tools/ci/lua_test.sh --list`
-- Duplicate helper scan for local `fullgc` and direct `arg` numeric parsing.
+- Historical local audit for duplicate local `fullgc` helpers and direct `arg`
+  numeric parsing.
 - `git diff --check`
 
 ## 2026-06-20 structured LuaJIT result capture
@@ -437,7 +438,8 @@ Validation:
 
 - `timeout 240s tools/ci/lua_test.sh m5_bcdump_current m5_itype_nan m5_nomm_cache m5_state_owner`
 - `tools/ci/lua_test.sh --list`
-- Duplicate local status-helper scan over migrated fixtures.
+- Historical local audit for duplicate local status-helper code in migrated
+  fixtures.
 - `git diff --check`
 
 ## 2026-06-20 shared table fixture primitives
@@ -454,7 +456,8 @@ Validation:
 
 - `timeout 300s tools/ci/lua_test.sh m5_tab_chain_order m5_tab_keylock_lookup m5_tab_slot_snapshot m5_tab_forward_filter`
 - `tools/ci/lua_test.sh --list`
-- Duplicate local table-helper scan over migrated fixtures.
+- Historical local audit for duplicate local table-helper code in migrated
+  fixtures.
 - `git diff --check`
 
 ## 2026-06-20 Lua benchmark driver
@@ -496,5 +499,6 @@ Validation:
 - Direct focused compile/run of `t-gc2-paranoia.c` with paranoia flags and
   `t-jit-mcode-prot.c`.
 - `tools/ci/lua_test.sh --list`
-- Duplicate local chunk-helper scan over migrated fixtures.
+- Historical local audit for duplicate local chunk-helper code in migrated
+  fixtures.
 - `git diff --check`

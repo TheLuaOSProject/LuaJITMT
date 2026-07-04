@@ -57,12 +57,12 @@ bytecode execution.
   clean && make`.
 - Set `LJ_TEST_DISABLE_BUILD_CACHE=1` to recover the old always-clean behavior
   while debugging the harness itself.
-- `tests/lib/suite_utils.lua` temporarily gave generic `read_file()` the same
-  path-based implementation-file access behavior used by `Test:read()` and result-file
-  assertions. The later cleanup removed that behavior, the deliberate
-  implementation-reading helper, and eventually all path-based implementation-file access special
-  cases. Current coverage is documentation plus behavior, public-artifact,
-  benchmark, packaging, or process-output tests, not harness path-based checks.
+- `tests/lib/suite_utils.lua` temporarily gave generic `read_file()` special
+  handling for repository source files. The later cleanup removed that behavior,
+  the deliberate internal-file reader, and all path-based implementation-file
+  special cases. Current coverage is documentation plus behavior,
+  public-artifact, benchmark, packaging, or process-output tests, not harness
+  path-based checks.
 - `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
   forced clean builds. Cases that need profile isolation can still pass
   `clean = true`.

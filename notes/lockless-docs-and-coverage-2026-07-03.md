@@ -12,6 +12,14 @@ Use the narrowest durable home for the reason:
   runtime counters, benchmark comparisons, or release/package artifact checks
   when the failure has an observable surface.
 
+Do not add repository-source text checks. A test must not read `src/`,
+`dynasm/`, or other repository implementation files just to assert that a helper
+name, field access, instruction spelling, or forbidden text is present or
+absent. Those checks make safe rewrites harder and do not prove the runtime
+contract. Put the "why" next to the constrained code, add a note when the
+invariant spans subsystems, and use observable behavior coverage when the
+invariant can fail at runtime.
+
 Text checks are appropriate only for public artifacts whose text is the product:
 captured process output, benchmark CSVs, install manifests, release metadata,
 and opaque bytecode dumps that are loaded and executed. Internal implementation
