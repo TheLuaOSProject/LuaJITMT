@@ -6355,8 +6355,21 @@ void lj_gc2_barrier_tab_g(global_State *g, GCtab *t)
 
 void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
 {
+  TGState *tg;
   GCobj *child;
   if (!t || !key || !tvisgcv(key))
+    return;
+  /*
+  ** Key publication always passes through this helper so weak-table and
+  ** legacy-GC boundaries stay in one place. GC2 only has work when a thread
+  ** group is actively marking: both the mark barrier and the idle remembered
+  ** pair path are gated by mark_active. Keep the common inactive path out of
+  ** phase/generational checks without moving the publication callsite.
+  */
+  if (!g)
+    return;
+  tg = G2TG(g);
+  if (!tg || !lj_tg_mark_active_acq(tg))
     return;
   if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAKKEY))
     return;
