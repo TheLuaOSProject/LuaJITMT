@@ -2337,13 +2337,12 @@ int lj_record_next(jit_State *J, RecordIndex *ix)
 {
   IRType t, tkey, tval;
   TRef trvk;
-  int mt_shared = lj_record_mt_shared_tab(J, ix->tab);
-  if (mt_shared) {
+  if (lj_record_mt_shared_tab(J, ix->tab) && ix->mobj) {
     /*
-    ** Active-MT shared traversal traces still need a runtime guard for cursor
-    ** validity across concurrent table mutation. Type prediction is now
-    ** helper-backed, but generated code can still carry a stale traversal
-    ** cursor through nextchurn-style value and generation churn.
+    ** Optimized pairs()/BC_ITERN carries the hidden LJ_KEYINDEX cursor across
+    ** loop iterations. Direct next() re-derives the cursor from the returned
+    ** Lua key at each call, but BC_ITERN still needs a generation/version
+    ** guard before shared active-MT tracing can be reopened safely.
     */
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }

@@ -20,7 +20,9 @@ Active-MT shared table trace coverage, 2026-07-03:
 - Follow-up: recorder type prediction for `next()` now uses
   `lj_tab_vmnext_forward()` instead of scanning raw array/hash storage. This
   removes the local KEYLOCK/FORWARD/retiring-generation prediction hazard.
-  Reopening active-MT shared traversal still requires a runtime cursor-validity
-  guard: removing the fence after this change still fails the
-  `traversal,nextchurn` stress, so shared `next()`/optimized `pairs()` remain
-  interpreted under active MT.
+  Direct `next(shared, key)` now records under active MT because every call
+  re-derives the cursor from the returned Lua key. Optimized `pairs()`/BC_ITERN
+  still remains interpreted for non-trace-local shared tables: it carries the
+  hidden `LJ_KEYINDEX` cursor across loop iterations, and reopening that path
+  still fails the `traversal,nextchurn` stress without a generation/version
+  guard.
