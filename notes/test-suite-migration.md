@@ -6,7 +6,7 @@ Lua test-suite migration notes:
 - Test definitions live under `tests/suites/*.lua`; C files remain fixtures.
   The current target is no pure `tools/ci/*.sh` compatibility launchers. Use
   `tools/ci/lua_test.sh <case...>` directly for Lua-owned cases; keep a shell
-  script only when it still performs real guard, orchestration, or setup work.
+  script only when it still performs real orchestration or platform setup work.
 - Current inventory from Parfit: active custom tests are roughly 68 C fixtures
   and 37 top-level Lua tests, with 129 `tools/ci/*.sh` entrypoints. The stock
   LuaJIT suite already has a Lua runner at `tests/stock/test/test.lua`; keep
@@ -151,45 +151,45 @@ Lua test-suite migration notes:
 - The second batch adds repeated Lua child-process tests with environment
   defaults and assertion-build coverage.
 - The third batch adds temporary-file helpers for shutdown marker-file
-  validation and POSIX `os.*` reentrancy guards without shell `awk`/`grep`.
+  validation and POSIX `os.*` reentrancy coverage without shell `awk`/`grep`.
 - The fourth batch turns the focused M2 arena shell scripts into launchers only.
   `ljtest.cc()` now accepts per-fixture compile flags for assertion fixtures.
 - The fifth batch was later retired from the runnable suite because it asserted
   implementation details rather than behavior.
 - The sixth batch migrates the remaining non-TSan M4 C fixtures. These keep the
   original clean-build/link-against-`libluajit.a` behavior and preserve the C
-  threading API shutdown marker guard in Lua.
+  threading API shutdown marker check in Lua.
 - The seventh batch migrates small M5 runtime/table fixtures and their
   implementation notes. `ljtest.cc()` can now opt out of default flags and `-I src` for
   standalone models that intentionally do not link LuaJIT.
-- The eighth batch migrates the M2 GC-header accessor guard plus focused M5
+- The eighth batch migrates the M2 GC-header accessor coverage plus focused M5
   runtime smoke wrappers for string.buffer publication, CType.name publication,
   and JIT table-store bridge coverage.
 - The ninth batch migrates two focused M5 table hash-node fixtures while
   preserving the timeout-wrapped C fixture runs and assertions for slot
   snapshots and KEYLOCK free-node reservation.
-- The tenth batch migrates table allocation publication invariant checks and the x64
-  JIT HREF node-header hmask smoke/marker guard.
+- The tenth batch migrates table allocation publication invariant checks and the
+  x64 JIT HREF node-header hmask smoke/marker coverage.
 - The eleventh batch migrates stable hash-chain ordering, hash-vector
   publication, and hash-vector retirement fixtures with their implementation
   assertions.
 - The twelfth batch migrates the userdata type acquire/release publication
-  guard, including constructor order checks and the Lua smoke test.
-- The thirteenth batch migrates the HREFK recorder snapshot guard plus table
+  coverage, including constructor order checks and the Lua smoke test.
+- The thirteenth batch migrates the HREFK recorder snapshot coverage plus table
   node-header and FORWARD-value filtering fixtures.
-- The fourteenth batch migrates the mutable table FLOAD guard and per-TG
+- The fourteenth batch migrates the mutable table FLOAD coverage and per-TG
   threading allocator routing smoke.
 - The fifteenth batch migrates the string table CAS/rehash fixtures and
   publication assertions.
-- The sixteenth batch migrates the M3 GC2/safepoint guards into Lua. The
+- The sixteenth batch migrates the M3 GC2/safepoint coverage into Lua. The
   paranoia aggregate still preserves the existing stock-test assertion failure.
-- The seventeenth batch migrates the focused x64 snapshot/publication guards,
-  leaving the larger TSET nil-snapshot guard for a dedicated pass.
+- The seventeenth batch migrates the focused x64 snapshot/publication coverage,
+  leaving the larger TSET nil-snapshot case for a dedicated pass.
 - The eighteenth batch migrates the benchmark/GC telemetry wrappers and the
   M9/M10 aggregate. The focused benchmark-regression wrapper remains the
   authoritative expensive CSV generation check.
 - The nineteenth batch migrates the remaining focused M5 publication and
-  local-cell/x64 TSET guards into a dedicated Lua suite.
+  local-cell/x64 TSET coverage into a dedicated Lua suite.
 - The twentieth batch migrates the M6 JIT scaffold wrappers and aggregate,
   keeping the aggregate as Lua orchestration over the focused cases.
 - The twenty-first batch migrates the M7 FFI wrappers and aggregate.
@@ -201,6 +201,10 @@ Lua test-suite migration notes:
 - Current cleanup status: runnable suite files under `tests/suites/` rely on
   behavior, fixtures, counters, public artifacts, benchmarks, or packaging
   output; the legacy helper APIs have been removed from `tests/lib/`.
+- Source-text assertions are not part of the active test contract. Required
+  implementation constraints are documented next to the constrained code or in
+  `notes/`, then covered by behavior tests, runtime counters, stock semantics,
+  benchmarks, or release/package artifacts.
 - Result-artifact matching remains valid for public or externally meaningful
   artifacts: bytecode compatibility payloads, benchmark output, release/build
   manifests, and C/Lua fixture process output. Preserve implementation reasons
