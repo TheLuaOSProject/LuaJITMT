@@ -245,18 +245,17 @@ path now also runs the GC2 hard-threshold assist from `lj_gc_step_fixtop()` once
 the current legacy VM threshold check branches there, with
 `GC2State.interp_hard_checks` telemetry. `lj_gc_step_fixtop()` now also splits
 GC2-hard and legacy-threshold work. x64 `BC_TNEW`/`BC_TDUP` and the
-fast-function `ffgccheck` path call the C-owned `lj_gc_should_step_vm()`
-predicate before entering the existing step helpers, so legacy total/threshold
-and GC2 hard-threshold reads no longer live in VM assembly. C-side allocation
-checks use the same `lj_gc_should_step()` predicate and split helpers.
+fast-function `ffgccheck` path use the VM-local predicate documented in
+`notes/x64-gc-predicate-inline.md`, mirroring the C-side `lj_gc_should_step()`
+decision without a no-work C call.
 `lj_tab_new()` now constructs `GCtab` bodies from unlinked raw GC storage,
 initializes the empty/colocated table shape, nil-clears new array slots, then
 CAS-publishes the table root with `lj_gc_linkobj()`. This removes the
-publish-before-body-init blocker for future `BC_TNEW` inline allocation; the
-empty-table x64 `BC_TNEW` case now branches to the one-argument
-`lj_tab_new0()` helper. Fresh table arrays use the same publication order as
+publish-before-body-init blocker for future non-empty `BC_TNEW` inline
+allocation. The exact-empty x64 `BC_TNEW` path now performs inline arena-bump
+allocation, legacy color setup, GC total/local accounting, and pending-root
+publication under the single-producer main-TG predicates, with `lj_tab_new0()`
+owning all fallback cases. Fresh table arrays use the same publication order as
 resize (`acap` mirror, release array pointer, release `asize` mirror), so a
 concurrent reader does not pair a new size with an unpublished array pointer.
-The remaining x64 fast path still needs inline legacy color setup, root-list
-publication, and GC2 allocation accounting before it can bypass the C helper
-entirely.
+The remaining x64 table-allocation fast path is for non-empty table templates.

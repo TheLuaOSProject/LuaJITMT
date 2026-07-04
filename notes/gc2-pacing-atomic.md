@@ -22,9 +22,10 @@ Cycle-start reset uses `lj_gc2_alloc_since_xchg()` so the snapshot and zeroing
 cannot lose a concurrent flushed allocation. Pacing publication stores use
 release ordering so helper-side acquire readers see complete threshold updates.
 
-The x86-64 VM now reaches GC2 hard-limit checks through
-`lj_gc_should_step_vm()`, keeping allocation-check pacing reads in C helper code
-instead of generated interpreter assembly.
+The x86-64 VM now mirrors the GC2 hard-limit check in its VM-local allocation
+predicate, as documented in `notes/x64-gc-predicate-inline.md`, avoiding a
+no-work C call while keeping the observable pacing decision matched to
+`lj_gc_should_step()`.
 
 Coverage: `m5_gc2_pacing_atomic` owns the observable pacing behavior. Raw
 C-side access to the GC2 pacing fields outside helper definitions in

@@ -13,8 +13,9 @@ free concurrently, so the counter now has a helper layer in `lj_gc.h`:
 
 Allocator, free, stack rehome, GC step, GC2 pacing, `collectgarbage()`, and
 `gcinfo()` readers now go through these helpers. x86-64 VM allocation checks
-call `lj_gc_should_step_vm()` before the existing step helpers, so the shared GC
-pacing reads stay in C helper code instead of interpreter assembly.
+use the VM-local predicate documented in `notes/x64-gc-predicate-inline.md`,
+which mirrors the shared C `lj_gc_should_step()` decision without a no-work C
+call.
 
 Coverage model: `m5_gc_total_atomic` covers GC accounting behavior through the
 helper surface. The remaining x64 VM allocation-check operands are documented
