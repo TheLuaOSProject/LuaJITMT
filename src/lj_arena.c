@@ -610,6 +610,20 @@ static void arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
     arena_set_extent(a, start + i);
 }
 
+static void arena_insert_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
+				  uint32_t len)
+{
+  uint32_t k = arena_kind(a->hdr.flags);
+  uint32_t b = arena_bin(len);
+  LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
+  arena_set_free_run(a, start, len);
+  run->start = start;
+  run->len = len;
+  run->next = alloc->bins[k][b];
+  alloc->bins[k][b] = run;
+  alloc->binmask[k] |= (uint32_t)1u << b;
+}
+
 static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
 					     uint32_t len)
 {
@@ -638,12 +652,26 @@ static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
     }
     pp = &cur->next;
   }
-  arena_set_free_run(a, start, len);
-  run->start = start;
-  run->len = len;
-  run->next = alloc->bins[k][b];
-  alloc->bins[k][b] = run;
-  alloc->binmask[k] |= (uint32_t)1u << b;
+  arena_insert_run_head(alloc, a, start, len);
+}
+
+static void arena_publish_bump_run(TGAlloc *alloc, uint32_t k)
+{
+  LJArenaBump *b;
+  if (!alloc || k >= LJ_ARENA_NKINDS)
+    return;
+  b = &alloc->bump[k];
+  if (!b->a || b->cell >= b->end)
+    return;
+  /*
+  ** The active bump window is absent from the reusable free-run bins. Publish
+  ** its unused tail before the window is replaced, otherwise lazy sweeping can
+  ** strand one large free run per swept arena and force fresh arena mapping.
+  */
+  arena_insert_run_head(alloc, b->a, b->cell, b->end - b->cell);
+  b->a = NULL;
+  b->cell = 0;
+  b->end = 0;
 }
 
 static void arena_refresh_binmask(TGAlloc *alloc, uint32_t k, uint32_t b)
@@ -774,7 +802,7 @@ static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
   if (rr->bump.len >= LJ_BUMP_MIN &&
       start == rr->bump.start && len == rr->bump.len)
     return;
-  arena_insert_run(rr->alloc, rr->a, start, len);
+  arena_insert_run_head(rr->alloc, rr->a, start, len);
 }
 
 static void arena_rebuild_free_run(uint32_t start, uint32_t len, void *ud)
@@ -953,6 +981,7 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   rr.bump = lr;
   lj_arena_scan_free_runs(a, arena_rebuild_run, &rr);
   if (lr.len >= LJ_BUMP_MIN) {
+    arena_publish_bump_run(alloc, kind);
     alloc->bump[kind].a = a;
     alloc->bump[kind].cell = lr.start;
     alloc->bump[kind].end = lr.start + lr.len;
@@ -1057,6 +1086,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
     }
   }
   if (!b->a || b->cell + ncells > b->end) {
+    arena_publish_bump_run(alloc, k);
     if (!arena_alloc_fresh(alloc, rs, flags))
       return NULL;
   }

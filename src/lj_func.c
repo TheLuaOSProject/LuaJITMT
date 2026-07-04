@@ -568,14 +568,10 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;
 
   /*
-  ** Match the empty-table fast path: only consume the current bump run when
-  ** the owner-local free-run mask says no bin could satisfy either object.
-  ** That preserves allocator reuse order and keeps this helper a pure
-  ** no-contention bump specialization for the fresh function/upvalue pair.
+  ** Use the current bump window whenever it can satisfy the fresh pair. Other
+  ** free-run bins stay reusable by the generic allocator; closure identity,
+  ** publication, and accounting are independent of arena address reuse order.
   */
-  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				fncells < uvcells ? fncells : uvcells))
-    return NULL;
 
   b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   a = b->a;
@@ -680,11 +676,9 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   /*
   ** The caller already owns the allocation pacing check: interpreter BC_FNEW
   ** runs lj_gc_check_fixtop(), while trace assembly emits the CALLA check.
-  ** This helper only replaces allocation/root publication for no-upvalue
-  ** closures in the same single-producer window as empty TNEW/one-upvalue FNEW.
+  ** Use the current bump window when available; generic allocation still owns
+  ** free-run reuse after the bump window is exhausted.
   */
-  if (lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE, ncells))
-    return NULL;
 
   b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   a = b->a;

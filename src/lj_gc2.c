@@ -1543,13 +1543,12 @@ void lj_gc2_mark_begin(global_State *g)
     gc2_clear_marks_all(g);
   if (minor_requested) {
     lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
-		     LJ_GC2_HS_FLUSH_SSB|LJ_GC2_HS_RESET_ALLOC);
+		     LJ_GC2_HS_FLUSH_SSB);
     drained = lj_gc2_drain_ssb(g);
     if (drained)
       gc2_remembered_drained_add(g, drained);
   } else {
-    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
-		     LJ_GC2_HS_RESET_ALLOC);
+    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
   }
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
@@ -2600,6 +2599,38 @@ static uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
   return bytes;
 }
 
+static void gc2_root_spine_counts(global_State *g, uint64_t *objectsp,
+				  uint64_t *tombstonesp)
+{
+  GCobj *o;
+  uint64_t objects = 0, tombstones = 0;
+  if (!g) {
+    *objectsp = 0;
+    *tombstonesp = 0;
+    return;
+  }
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    objects++;
+    if (o->gch.gct == 0)
+      tombstones++;
+    if (objects == 1000000u)
+      break;
+  }
+  *objectsp = objects;
+  *tombstonesp = tombstones;
+}
+
+static uint64_t gc2_arena_list_count(GCArena *a)
+{
+  uint64_t n = 0;
+  for (; a != NULL; a = lj_arena_next_acq(a)) {
+    n++;
+    if (n == 1000000u)
+      break;
+  }
+  return n;
+}
+
 void lj_gc2_sweep_bridge_ready(global_State *g)
 {
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
@@ -2783,6 +2814,20 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->sweep_live_updates = gc2_sweep_live_updates_acq(g);
   s->sweep_live_huge_bytes = gc2_sweep_live_huge_bytes_acq(g);
   s->live_estimate = gc2_live_estimate_acq(g);
+  gc2_root_spine_counts(g, &s->root_spine_objects,
+			&s->root_spine_tombstones);
+  if (g && g->main_tg) {
+    TGAlloc *alloc = &g->main_tg->alloc;
+    s->arena_traversable_owned =
+      gc2_arena_list_count(alloc->owned[LJ_ARENAK_TRAVERSABLE]);
+    s->arena_traversable_needsweep =
+      gc2_arena_list_count(alloc->needsweep[LJ_ARENAK_TRAVERSABLE]);
+    s->arena_traversable_binmask = alloc->binmask[LJ_ARENAK_TRAVERSABLE];
+  } else {
+    s->arena_traversable_owned = 0;
+    s->arena_traversable_needsweep = 0;
+    s->arena_traversable_binmask = 0;
+  }
   s->weak_clear_tables = gc2_weak_clear_tables_acq(g);
   s->weak_clear_cleared = gc2_weak_clear_cleared_acq(g);
   s->weak_bridge_skipped = gc2_weak_bridge_skipped_acq(g);

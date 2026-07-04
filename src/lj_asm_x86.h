@@ -977,14 +977,6 @@ static void asm_fnew1num_testi8(ASMState *as, Reg base, int32_t ofs,
   emit_rmro(as, XO_GROUP3b, XOg_TEST, base, ofs);
 }
 
-static void asm_fnew1num_testi32(ASMState *as, Reg base, int32_t ofs,
-				 int32_t k, int cc, MCLabel target)
-{
-  emit_jcc(as, cc, target);
-  emit_i32(as, k);
-  emit_rmro(as, XO_GROUP3, XOg_TEST, base, ofs);
-}
-
 static int asm_fnew1num_args_x64(ASMState *as, IRIns *ir,
 				 ASMCallFnew1Num *ci)
 {
@@ -1027,8 +1019,6 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   ASMCallFnew1Num fi;
   const uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
   const uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
-  const uint32_t bincell = (fncells < uvcells ? fncells : uvcells) - 1u;
-  const int32_t binmask = (int32_t)lj_arena_binmask_from_bin(bincell);
   const uint32_t ncells = fncells + uvcells;
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
@@ -1170,11 +1160,6 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_jcc(as, CC_Z, l_fallback);
   emit_rr(as, XO_TEST, arena|REX_64, arena|REX_64);
   emit_gettg(as, arena, alloc.bump[LJ_ARENAK_TRAVERSABLE].a);
-  checkmclim(as);
-
-  asm_fnew1num_testi32(as, RID_DISPATCH,
-		       DISPATCH_TG(alloc.binmask[LJ_ARENAK_TRAVERSABLE]),
-		       binmask, CC_NZ, l_fallback);
   checkmclim(as);
 
   emit_jcc(as, CC_AE, l_fallback);

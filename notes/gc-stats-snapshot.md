@@ -12,6 +12,14 @@ inside `lj_gc2.c`.
 `lj_gc2_workers_count()` instead of reading the raw worker counter helper from
 `lib_base.c`.
 
+2026-07-04 follow-up: `threading.gcstats()` also exposes bounded diagnostic
+counts for the legacy root spine and the main TG traversable arena lists:
+`root_spine_objects`, `root_spine_tombstones`, `arena_traversable_owned`,
+`arena_traversable_needsweep`, and `arena_traversable_binmask`. These are not a
+hot-path API; they exist so stability and benchmark probes can distinguish
+root-spine growth, mark-entry arena reset mistakes, and free-run publication
+state without reading runtime structs directly.
+
 ## Coverage
 
 `m9_gc_stats` is the stats-table owner: it exercises the public

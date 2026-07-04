@@ -187,3 +187,20 @@ semantics. Mutable captures still publish the fresh cell to `BASE[slot]`.
 Focused coverage: `m6_jit_fnew_bump` stores escaped immutable numeric closures,
 checks distinct upvalue identities and `debug.setupvalue()` isolation, and
 asserts that the traced loop does not call either C helper counter.
+
+2026-07-04 sweep-reuse follow-up: the FNEW bump helpers and the x64 inline path
+now consume the active traversable bump window even when reusable free-run bins
+exist. The generic allocator still searches bins before bump allocation, but the
+FNEW fast paths are a closure-specific single-producer specialization: they do
+not publish a partially initialized object, they preserve one fresh closure and
+one fresh upvalue per `FNEW`, and Lua does not define address reuse order.
+
+This matters after lazy sweep starts republishing previous bump tails into
+free-run bins. Keeping the old binmask predicate made traced closure allocation
+fall back to helper/generic allocation for long stretches after sweep, even
+when the active bump window was immediately usable. Focused validation:
+
+- `tools/ci/lua_test.sh m6_jit_fnew_bump`
+- `LJ_BENCH_STOCK_FILTERS=closures_upval LJ_BENCH_STOCK_SCALE=0.02 tools/ci/lua_test.sh m9_bench_stock_compare`
+
+The focused stock comparison reported `closures_upval` geomean `1.473975`.

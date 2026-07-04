@@ -862,7 +862,8 @@ int main(void)
   uint64_t finalizer_enters0, finalizer_leaves0, finalizer_blocks0;
   uint64_t finalizer_queued0, finalizer_dequeued0, finalizer_mpsc_drained0;
   MSize weak_n;
-  void *phase_plain, *phase_trav;
+  void *pre_mark_plain, *pre_mark_trav, *phase_plain, *phase_trav;
+  GCArena *pre_mark_plain_a, *pre_mark_trav_a;
   GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
 
@@ -901,6 +902,13 @@ int main(void)
   phase_child = tabV(L->top - 1);
   lua_pushvalue(L, -1);
   lua_setfield(L, -3, "child");
+  pre_mark_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  pre_mark_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
+				 LJ_AF_TRAVERSABLE);
+  assert(pre_mark_plain != NULL);
+  assert(pre_mark_trav != NULL);
+  pre_mark_plain_a = lj_arena_of(pre_mark_plain);
+  pre_mark_trav_a = lj_arena_of(pre_mark_trav);
   cycle0 = g->gc2.cycle;
   lj_gc2_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
@@ -908,6 +916,16 @@ int main(void)
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
+			     pre_mark_plain_a));
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+			     pre_mark_trav_a));
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert((pre_mark_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert((pre_mark_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  lj_arena_free(&tg->alloc, pre_mark_plain, 64);
+  lj_arena_free(&tg->alloc, pre_mark_trav, 64);
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(phase_tab)) == 1);
@@ -948,11 +966,13 @@ int main(void)
 				     phase_trav_a));
   assert((phase_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((phase_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
-  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+  lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
+  while (lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH) != 0)
+    ;
+  assert(!lj_gc2_sweep_needs_prepare(g));
+  assert(!lj_gc2_sweep_pending(g));
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
-  tg->alloc.sweep_epoch = g->gc2.cycle;  /* Synthetic close boundary. */
   sweep_to_idle0 = gc2_sweep_to_idle_acq(g);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
   finalizer_blocks0 = gc2_finalizer_sweep_blocks_acq(g);

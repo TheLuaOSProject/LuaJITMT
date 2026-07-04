@@ -1380,6 +1380,16 @@ static void threading_gc_stats_push(lua_State *L)
   threading_gc_stats_setnum(L, t, "sweep_live_huge_bytes",
 			    s.sweep_live_huge_bytes);
   threading_gc_stats_setnum(L, t, "live_estimate", s.live_estimate);
+  threading_gc_stats_setnum(L, t, "root_spine_objects",
+			    s.root_spine_objects);
+  threading_gc_stats_setnum(L, t, "root_spine_tombstones",
+			    s.root_spine_tombstones);
+  threading_gc_stats_setnum(L, t, "arena_traversable_owned",
+			    s.arena_traversable_owned);
+  threading_gc_stats_setnum(L, t, "arena_traversable_needsweep",
+			    s.arena_traversable_needsweep);
+  threading_gc_stats_setint(L, t, "arena_traversable_binmask",
+			    s.arena_traversable_binmask);
   threading_gc_stats_setnum(L, t, "weak_clear_tables", s.weak_clear_tables);
   threading_gc_stats_setnum(L, t, "weak_clear_cleared", s.weak_clear_cleared);
   threading_gc_stats_setnum(L, t, "weak_bridge_skipped",

@@ -9,10 +9,13 @@ before consuming the bump run, and the x64 inline allocation paths still fall
 back whenever any free-run bin could satisfy the requested object.
 
 The mask replaces repeated hot-path loads of `alloc.bins[kind][i]` with one
-`test` against `lj_arena_binmask_from_ncells(ncells)`. That matters for the
-current x64 empty `TNEW` path and the traced one-numeric-upvalue `FNEW` bump
-pair path, both of which intentionally avoid bump allocation when a reusable
-free run might preserve allocator reuse order.
+`test` against `lj_arena_binmask_from_ncells(ncells)`. The x64 empty `TNEW`
+path still uses this as a strict predicate before consuming the bump window.
+The traced one-numeric-upvalue `FNEW` path no longer does: every closure still
+has ordinary identity, and its address reuse order is not a Lua-visible
+semantic. That path now consumes the active bump window when it can satisfy the
+fresh closure/upvalue pair, while generic arena allocation remains responsible
+for free-run reuse when the bump window is exhausted.
 
 The mask is TG-owner-local state, like the bins themselves. It is maintained
 when runs are inserted, consumed exactly, split, rebuilt after sweep, cleared
@@ -27,5 +30,6 @@ Focused coverage:
   size-threshold queries, exact consumption, and bit clearing.
 - `t-x64-tnew-empty-inline` checks that the empty-table inline path sees no
   satisfying traversable run through the mask before using the bump run.
-- `m6_jit_fnew_bump` still checks that traced numeric FNEW allocation bypasses
-  the C helper only under the strict inline predicates.
+- `m6_jit_fnew_bump` checks that traced numeric FNEW allocation bypasses the C
+  helper under the remaining strict inline predicates, with active marking
+  still routed to the C helper for publication barriers.

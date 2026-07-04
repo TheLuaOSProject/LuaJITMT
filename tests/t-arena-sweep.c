@@ -254,6 +254,41 @@ int main(void)
   }
 
   {
+    TGAlloc publish;
+    void *first, *fill1, *fill2, *fill3, *second, *reuse, *expected_reuse;
+    GCArena *a1, *a2, *swept1, *swept2;
+    lj_arena_alloc_init(&publish);
+    publish.alloc_black = 0;
+    first = lj_arena_alloc(&publish, &rs, 16000, 0);
+    fill1 = lj_arena_alloc(&publish, &rs, 16000, 0);
+    fill2 = lj_arena_alloc(&publish, &rs, 16000, 0);
+    fill3 = lj_arena_alloc(&publish, &rs, 16000, 0);
+    second = lj_arena_alloc(&publish, &rs, 16000, 0);
+    assert(first != NULL && fill1 != NULL && fill2 != NULL &&
+	   fill3 != NULL && second != NULL);
+    a1 = lj_arena_of(first);
+    assert(lj_arena_of(fill1) == a1);
+    assert(lj_arena_of(fill2) == a1);
+    assert(lj_arena_of(fill3) == a1);
+    a2 = lj_arena_of(second);
+    assert(a1 != a2);
+    lj_arena_alloc_prepare_sweep_kind(&publish, LJ_ARENAK_PLAIN);
+    assert_no_bins(&publish, LJ_ARENAK_PLAIN);
+    swept1 = lj_arena_sweep_one(&publish, LJ_ARENAK_PLAIN, 21, 0);
+    assert(swept1 == a1 || swept1 == a2);
+    assert(publish.bump[LJ_ARENAK_PLAIN].a == swept1);
+    assert(bin_count(&publish, LJ_ARENAK_PLAIN) == 0);
+    swept2 = lj_arena_sweep_one(&publish, LJ_ARENAK_PLAIN, 21, 0);
+    assert(swept2 == (swept1 == a1 ? a2 : a1));
+    assert(publish.bump[LJ_ARENAK_PLAIN].a == swept2);
+    assert(bin_count(&publish, LJ_ARENAK_PLAIN) >= 1);
+    expected_reuse = swept1 == a1 ? first : second;
+    reuse = lj_arena_alloc(&publish, &rs, 16000, 0);
+    assert(reuse == expected_reuse);
+    lj_arena_alloc_fini(&publish);
+  }
+
+  {
     TGAlloc dst, src;
     void *freep, *livep, *travp;
     GCArena *plaina, *trava;
