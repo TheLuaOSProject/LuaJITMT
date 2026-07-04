@@ -2647,10 +2647,58 @@ static void asm_ustore_forjit(ASMState *as, IRIns *ir)
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }
 
+static int asm_ustore_cell_can_inline_tvalue(ASMState *as, IRIns *ir)
+{
+  /* Closed upvalue cells are shared TValue slots. Primitive and exact integer
+  ** values fit in one aligned word and cannot create GC edges, so the JIT can
+  ** publish the whole TValue directly. GC-valued stores stay on the helper path
+  ** so their release copy remains ordered before the `lj_gc_pubuv` barrier.
+  */
+  return ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC &&
+	 (irt_ispri(ir->t) || (LJ_DUALNUM && irt_isint(ir->t)));
+}
+
+static void asm_ustore_cell_inline_tvalue(ASMState *as, IRIns *ir)
+{
+  RegSet allow = RSET_GPR;
+  Reg src, isrc = RID_NONE;
+
+  if (LJ_DUALNUM && irt_isint(ir->t) && !irref_isk(ir->op2)) {
+    isrc = ra_alloc1(as, ir->op2, allow);
+    rset_clear(allow, isrc);
+  }
+  src = ra_scratch(as, allow);
+  rset_clear(allow, src);
+
+  if (LJ_DUALNUM && irt_isint(ir->t) && ra_hasreg(isrc)) {
+    Reg tag = ra_scratch(as, allow);
+    rset_clear(allow, tag);
+    asm_fuseahuref(as, ir->op1, allow);
+    emit_mrm(as, XO_MOVto, src|REX_64, RID_MRM);
+    emit_rr(as, XO_ARITH(XOg_OR), src|REX_64, tag|REX_64);
+    emit_loadu64(as, tag, asm_ahstore_int_tvalue_tag());
+    emit_rr(as, XO_MOV, src, isrc);
+  } else {
+    uint64_t bits;
+    if (irt_ispri(ir->t)) {
+      bits = asm_ahstore_pri_tvalue_bits(ir->t);
+    } else {
+      TValue tv;
+      lj_assertA(LJ_DUALNUM && irt_isint(ir->t) && irref_isk(ir->op2),
+		 "expected primitive or constant DUALNUM integer upvalue store");
+      setintV(&tv, IR(ir->op2)->i);
+      bits = tv_rawload(&tv);
+    }
+    asm_fuseahuref(as, ir->op1, allow);
+    emit_mrm(as, XO_MOVto, src|REX_64, RID_MRM);
+    emit_loadu64(as, src, bits);
+  }
+}
+
 static int asm_ustore_cell_needs_helper(ASMState *as, IRIns *ir)
 {
   return ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC &&
-	 !irt_isnum(ir->t);
+	 !irt_isnum(ir->t) && !asm_ustore_cell_can_inline_tvalue(as, ir);
 }
 
 static void asm_ahustore(ASMState *as, IRIns *ir)
@@ -2658,6 +2706,10 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
   if (ir->r == RID_SINK)
     return;
 #if LJ_HAS_X64_MT_JIT_HELPERS
+  if (asm_ustore_cell_can_inline_tvalue(as, ir)) {
+    asm_ustore_cell_inline_tvalue(as, ir);
+    return;
+  }
   if (asm_ustore_cell_needs_helper(as, ir)) {
     asm_ustore_forjit(as, ir);
     return;

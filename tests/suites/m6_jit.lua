@@ -560,6 +560,7 @@ assert(util.traceinfo(1), "deep inlined FUNCF loop did not trace")
     run = function(t)
       build_default(t)
       cellops.run_jit_trace_behavior_checks(t)
+      cellops.run_jit_closed_upvalue_store_shape_checks(t)
       cellops.run_jit_runtime_checks(t)
       print("M6 JIT local-cell behavior passed")
     end
