@@ -62,26 +62,24 @@ return function(add)
       struct_so = build_shared_library(t,
         t:tmp("lj_t-ffi-ccall-struct-overflow.so"),
         "t-ffi-ccall-struct-overflow-lib.c")
-      run_c_fixture_specs(t, {
-        { output = "lj_t-ffi-cbblack-race",
-          cfile = "t-ffi-cbblack-race.c" },
-        { output = "lj_t-ffi-ccall-native-helpers",
-          cfile = "t-ffi-ccall-native-helpers.c" },
-        { output = "lj_t-ffi-ccall-struct-overflow",
-          cfile = "t-ffi-ccall-struct-overflow.c",
-          opts = {
-            env = { LJ_M7_FFI_CCALL_STRUCT_SO = struct_so },
-            timeout = "20s"
-          } },
-        { output = "lj_t-ffi-lib-native-stopreq",
-          cfile = "t-ffi-lib-native-stopreq.c",
-          opts = { timeout = "20s" } },
-        { output = "lj_t-ffi-ccall-stopreq",
-          cfile = "t-ffi-ccall-stopreq.c",
-          opts = {
-            env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
-            timeout = "20s"
-          } }
+      build_and_run_c(t, t:tmp("lj_t-ffi-cbblack-race"),
+                      "t-ffi-cbblack-race.c")
+      build_and_run_c(t, t:tmp("lj_t-ffi-ccall-native-helpers"),
+                      "t-ffi-ccall-native-helpers.c")
+      -- Keep env-sensitive native FFI probes as explicit calls. The aggregate
+      -- M7 run must show the required library env/timeout at the callsite,
+      -- matching the focused m7_ffi_ccall_native command transcript.
+      build_and_run_c(t, t:tmp("lj_t-ffi-ccall-struct-overflow"),
+                      "t-ffi-ccall-struct-overflow.c", {
+        env = { LJ_M7_FFI_CCALL_STRUCT_SO = struct_so },
+        timeout = "20s"
+      })
+      build_and_run_c(t, t:tmp("lj_t-ffi-lib-native-stopreq"),
+                      "t-ffi-lib-native-stopreq.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-ccall-stopreq"),
+                      "t-ffi-ccall-stopreq.c", {
+        env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
+        timeout = "20s"
       })
       run_luajit_script(t, "t-ffi-ccall-native.lua", nil, {
         env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
