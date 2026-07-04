@@ -804,6 +804,15 @@ return function(add)
                       "t-x64-tset-forward.c", {
         cflags = "-DLJ_TAB_TEST_HELPERS"
       })
+      build_and_run_c(t, t:tmp("lj_t-x64-tset-nongc-barrier"),
+                      "t-x64-tset-nongc-barrier.c", {
+        libs = {
+          "-Wl,--wrap=lj_gc_pubtabtv_vm",
+          "-lm",
+          "-ldl",
+          "-pthread"
+        }
+      })
       print("M5 x64 TSET previous-value nil behavior passed")
     end
   })

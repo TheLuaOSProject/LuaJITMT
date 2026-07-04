@@ -423,6 +423,13 @@
 |  cmp dword GL:r8->mt_entering, 0
 |  jne target
 |.endmacro
+|.macro x64_vm_tvalue_isgcv, val, scratch, scratchd, target
+|  mov scratch, val
+|  sar scratch, 47
+|  sub scratchd, LJ_TISGCV
+|  cmp scratchd, LJ_TNUMX - LJ_TISGCV
+|  ja target				// tvisgcv(val)
+|.endmacro
 |.macro x64_vm_basemt_acq, dst, g, itype
 |  mov dst, [g+itype*8+GL_OFS(gcroot[GCROOT_BASEMT])]	// x64_vm_basemt_acq.
 |.endmacro
@@ -4562,6 +4569,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [RC], ITYPE
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jz >8
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, >9
+    |  jmp >8				// Non-GC value needs no table barrier.
+    |9:
     |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
@@ -4643,6 +4653,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RC, TMPR
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jz >8
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, >9
+    |  jmp >8				// Non-GC value needs no table barrier.
+    |9:
     |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
@@ -4729,6 +4742,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [RC], ITYPE
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jz >8
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, >9
+    |  jmp >8				// Non-GC value needs no table barrier.
+    |9:
     |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
@@ -4817,6 +4833,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [RC], ITYPE
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jz >8
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, >9
+    |  jmp >8				// Non-GC value needs no table barrier.
+    |9:
     |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
