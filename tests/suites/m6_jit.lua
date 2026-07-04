@@ -42,6 +42,7 @@ local m6_cases = {
   "m6_jit_mcode_native",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
+  "m6_jit_flush_gc_current_stack",
   "m6_jit_util_flush_race",
   "m6_jit_flush_thread_stress",
   "m6_jit_flush_thread_heavy_stress",
@@ -317,6 +318,143 @@ end
 local shorter = path("", "x", "y")
 assert(shorter == "/x/y", "JIT vararg concat arity change failed: " .. shorter)
 assert(util.traceinfo(1), "tmpbuf vararg concat loop did not trace")
+]=]
+end
+
+local function jit_flush_gc_current_stack_smoke()
+  return [=[
+local th = require("threading")
+local floor = math.floor
+local scale = tonumber(os.getenv("LJ_M6_JIT_GC_STACK_SCALE")) or 0.02
+local nclosure = floor(5e6 * scale + 0.5)
+if nclosure < 1 then nclosure = 1 end
+
+local function make_hash_keys(n, first)
+  local keys = {}
+  first = first or 0
+  for i = 1, n do keys[i] = "k" .. (first + i - 1) end
+  return keys
+end
+
+local benches = {
+  arith_loop = function(n)
+    local x = 0
+    for i = 1, n do x = x + i * 0.5 end
+    return x
+  end,
+  fib30 = function()
+    local function fib(n)
+      if n < 2 then return n end
+      return fib(n - 1) + fib(n - 2)
+    end
+    return fib(30)
+  end,
+  tab_hash_write = function(n)
+    local t = {}
+    for i = 1, n do t["k" .. (i % 8192)] = i end
+    return t
+  end,
+  tab_store_existing = function(n)
+    local keys = make_hash_keys(8192, 0)
+    local t = {}
+    for i = 1, 8192 do t[keys[i]] = 0 end
+    for i = 1, n do t[keys[(i % 8192) + 1]] = i end
+    return t
+  end,
+  tab_insert_newkey = function(n)
+    local t = {}
+    for i = 1, n do t["newk" .. i] = i end
+    return t
+  end,
+}
+
+local iters = {
+  arith_loop = 5e7,
+  fib30 = 1,
+  tab_hash_write = 2e6,
+  tab_store_existing = 2e7,
+  tab_insert_newkey = 2e5,
+}
+
+local function closure(n)
+  local s = 0
+  for i = 1, n do
+    local x = i
+    local f = function()
+      x = x + 1
+      return x
+    end
+    s = s + f()
+  end
+  return s
+end
+
+local function scaled(name)
+  return math.max(1, floor((iters[name] or 1) * scale + 0.5))
+end
+
+local function stat(label)
+  local s = th.gcstats()
+  assert(type(s) == "table")
+  assert(type(s.phase) == "number")
+  assert(type(s.total_kbytes) == "number")
+  print(label,
+        "phase=" .. s.phase,
+        "kb=" .. s.total_kbytes,
+        "roots=" .. s.root_spine_objects,
+        "sweep=" .. s.sweep_owner_runs,
+        "arenas=" .. s.sweep_owner_arenas,
+        "since=" .. s.alloc_since_trigger,
+        "cycle_alloc=" .. s.cycle_alloc_bytes,
+        "trigger=" .. s.trigger_bytes,
+        "hard=" .. s.hard_bytes,
+        "live=" .. s.live_estimate)
+end
+
+collectgarbage("collect")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+for _, name in ipairs({
+  "arith_loop",
+  "fib30",
+  "tab_hash_write",
+  "tab_store_existing",
+  "tab_insert_newkey",
+}) do
+  collectgarbage("collect")
+  local n = scaled(name)
+  local t0 = os.clock()
+  benches[name](n)
+  local dt = os.clock() - t0
+  local line = string.format("ns=%.2f", dt / n * 1e9)
+  assert(line:sub(1, 3) == "ns=", "pre format corrupt: " .. line)
+  print("pre", name, line)
+  io.stdout:flush()
+end
+
+collectgarbage("collect")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+stat("before_closure")
+
+local best = math.huge
+for r = 1, 5 do
+  collectgarbage("collect")
+  local t0 = os.clock()
+  local sum = closure(nclosure)
+  local dt = os.clock() - t0
+  best = math.min(best, dt)
+  local line = string.format("ns=%.2f", dt / nclosure * 1e9)
+  assert(line:sub(1, 3) == "ns=", "closure format corrupt: " .. line)
+  print("closure_run", r, line, sum)
+  io.stdout:flush()
+end
+
+stat("after_closure")
+local line = string.format("best_ns=%.2f", best / nclosure * 1e9)
+assert(line:sub(1, 8) == "best_ns=", "best format corrupt: " .. line)
+print(line)
+print("jit-flush-gc-current-stack OK")
 ]=]
 end
 
@@ -1905,6 +2043,17 @@ assert(live >= 8, live)
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
       print("M6 JIT flush handshake behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_flush_gc_current_stack",
+    description = "JIT flush and full GC preserve the active stack roots",
+    run = function(t)
+      build_default(t)
+      luajit_code(t, jit_flush_gc_current_stack_smoke(),
+                  { timeout = "45s" })
+      print("M6 JIT flush active-stack GC behavior passed")
     end
   })
 

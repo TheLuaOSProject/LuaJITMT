@@ -1181,8 +1181,9 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_leatg(as, tmp, hotcount);
   /*
   ** The inlined path initializes and root-publishes a fresh pair. Active
-  ** marking needs the C helper's GC2 and legacy barriers. Sweep-time black
-  ** allocation is safe here because we set the arena mark bits inline.
+  ** marking needs the C helper's GC2 and legacy barriers for prototype and
+  ** environment children. Sweep-time black allocation is safe here because we
+  ** set the arena mark bits inline.
   */
   asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
 		      CC_NE, l_fallback);

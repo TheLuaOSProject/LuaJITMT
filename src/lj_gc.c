@@ -1260,6 +1260,70 @@ static GCproto *gc_func_proto_if_lua(GCfunc *fn)
 	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
+static TGState *gc_thread_active_tg(global_State *g, lua_State *th)
+{
+  uint32_t owner;
+  TGState *tg = NULL;
+  if (!g || !th)
+    return NULL;
+  owner = lj_state_owner_acq(th);
+  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
+    tg = lj_tg_find_owner(g, owner);
+  else if (th == lj_tg_cur_L(g))
+    tg = G2TG(g);
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != th)
+    return NULL;
+  return tg;
+}
+
+static TValue *gc_thread_jit_base(global_State *g, lua_State *th)
+{
+#if LJ_HASJIT
+  TGState *tg = gc_thread_active_tg(g, th);
+  return tg ? lj_tg_load_jit_base(tg) : NULL;
+#else
+  UNUSED(g); UNUSED(th);
+  return NULL;
+#endif
+}
+
+static void gc_mark_thread_root_func(global_State *g, GCfunc *fn);
+
+static void gc_mark_jit_frame_funcs(global_State *g, lua_State *th)
+{
+#if LJ_HASJIT
+  TValue *base = gc_thread_jit_base(g, th);
+  TValue *bot, *max, *frame;
+  uint32_t n = 0;
+  if (!base || !th || tvref(th->stack) == NULL)
+    return;
+  bot = tvref(th->stack);
+  max = tvref(th->maxstack);
+  if (base <= bot + 1 + LJ_FR2 || base > max)
+    return;
+  /*
+  ** JIT C helpers keep jit_base published while vmstate is C, so no positive
+  ** trace-number root exists for gc_mark_gcroot() to follow. The raw stack scan
+  ** below keeps value slots live, but frame headers are not normal tagged
+  ** values. Mark their function/prototype chain explicitly.
+  */
+  for (frame = base - 1; frame > bot + LJ_FR2 && frame < max; ) {
+    GCobj *fo = frame_gc(frame);
+    TValue *prev = frame_prev(frame);
+    if (fo && fo->gch.gct == ~LJ_TFUNC)
+      gc_mark_thread_root_func(g, &fo->fn);
+    if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
+      break;
+    frame = prev;
+    if (++n >= 1000000u)
+      break;
+  }
+#else
+  UNUSED(g); UNUSED(th);
+#endif
+}
+
 static int gc_thread_is_remote_current(global_State *g, lua_State *th)
 {
   uint32_t owner;
@@ -1277,25 +1341,17 @@ static int gc_thread_is_remote_current(global_State *g, lua_State *th)
 static int gc_thread_is_jit_current(global_State *g, lua_State *th)
 {
 #if LJ_HASJIT
-  uint32_t owner;
-  TGState *tg = NULL;
-  if (!g || !th)
-    return 0;
-  owner = lj_state_owner_acq(th);
-  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
-    tg = lj_tg_find_owner(g, owner);
-  else if (th == lj_tg_cur_L(g))
-    tg = G2TG(g);
-  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
-      lj_tg_load_cur_L(tg) != th)
-    return 0;
   /*
   ** Trace/native helpers own the current frame layout until jit_base and the
   ** positive trace vmstate are cleared. Legacy root marking mirrors GC2 here:
-  ** preserve raw stack storage and let gc_traverse_curtrace() mark the trace
-  ** graph instead of decoding JIT-owned frame headers as interpreter frames.
+  ** preserve raw stack storage and explicitly preserve frame-header function
+  ** roots when jit_base is the only published edge.
   */
-  return lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0;
+  {
+    TGState *tg = gc_thread_active_tg(g, th);
+    return tg &&
+      (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0);
+  }
 #else
   UNUSED(g); UNUSED(th);
   return 0;
@@ -1313,7 +1369,7 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
     TValue *ftop = frame;
     if (pt) ftop += pt->framesize;
     if (ftop > top) top = ftop;
-    gc_markobj(g, fn);  /* Preserve frame function under concurrent scans. */
+    gc_mark_thread_root_func(g, fn);
   }
   top++;  /* Correct bias of -1 (frame == base-1). */
   if (top > tvref(th->maxstack)) top = tvref(th->maxstack);
@@ -1377,6 +1433,60 @@ static TValue *gc_active_thread_top(lua_State *th, TValue *top)
   return top > max ? max : top;
 }
 
+static void gc_mark_thread_root_tv(global_State *g, cTValue *tv);
+static void gc_mark_thread_root_tab(global_State *g, GCtab *t);
+
+static void gc_mark_thread_root_proto(global_State *g, GCproto *pt)
+{
+  GCobj *o;
+  if (!pt)
+    return;
+  o = obj2gco(pt);
+  lj_gc_arena_markobj(g, o);
+  if (iswhite(o))
+    gc_mark(g, o);
+  else
+    gc_traverse_proto(g, pt);
+}
+
+static void gc_mark_thread_root_func(global_State *g, GCfunc *fn)
+{
+  GCobj *o;
+  if (!fn)
+    return;
+  o = obj2gco(fn);
+  lj_gc_arena_markobj(g, o);
+  if (iswhite(o)) {
+    gc_mark(g, o);
+  } else {
+    /*
+    ** Stack frame functions are primary roots for their prototype graph. SMR
+    ** preservation can leave a root non-white without proving its children
+    ** were visited in this legacy cycle, so traverse root function edges here
+    ** instead of relying on color alone. This keeps live proto string constants
+    ** interned and preserves pointer-equality string semantics.
+    */
+    GCtab *env = lj_func_env_acq(fn);
+    if (env)
+      gc_mark_thread_root_tab(g, env);
+    if (isluafunc(fn)) {
+      uint32_t i;
+      lj_assertG(fn->l.nupvalues <= funcproto(fn)->sizeuv,
+		 "function upvalues out of range");
+      gc_mark_thread_root_proto(g, funcproto(fn));
+      for (i = 0; i < fn->l.nupvalues; i++)
+	gc_markobj(g, func_uv_acq(&fn->l, i));
+    } else {
+      uint32_t i;
+      for (i = 0; i < fn->c.nupvalues; i++) {
+	TValue tv;
+	lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
+	gc_marktv(g, &tv);
+      }
+    }
+  }
+}
+
 static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
 {
   GCobj *o;
@@ -1389,6 +1499,10 @@ static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
   } else if (tvistab(tv)) {
     if (gc_traverse_tab(g, tabV(tv)) > 0)
       black2gray(o);
+  } else if (tvisfunc(tv)) {
+    gc_mark_thread_root_func(g, funcV(tv));
+  } else if (tvisproto(tv)) {
+    gc_mark_thread_root_proto(g, protoV(tv));
   }
 }
 
@@ -1426,6 +1540,8 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   remote_current = gc_thread_is_remote_current(g, th);
   jit_current = gc_thread_is_jit_current(g, th);
   if (owned || remote_current || jit_current) {
+    if (!owned && !remote_current && jit_current)
+      gc_mark_jit_frame_funcs(g, th);
     top = tvref(th->maxstack);
     used = (MSize)(top - tvref(th->stack));
   } else {

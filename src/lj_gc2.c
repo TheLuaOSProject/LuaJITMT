@@ -1311,6 +1311,16 @@ void lj_gc2_update_pacing(global_State *g)
 	    ((live % 100u) * (uint64_t)pct) / 100u;
   if (trigger < LJ_GC2_TRIGGER_MIN)
     trigger = LJ_GC2_TRIGGER_MIN;
+  /*
+  ** Fresh GC objects are published through per-TG pending-root chains until a
+  ** GC2 root scan folds them into the root spine. The root scan is bounded
+  ** only by allocation since the previous cycle, not by live heap size, so cap
+  ** the automatic trigger while this bridge exists. This keeps cycle-start
+  ** root work non-blocking even after a larger live heap raises the ordinary
+  ** pause-derived trigger.
+  */
+  if (trigger > LJ_GC2_PENDING_ROOT_TRIGGER_MAX)
+    trigger = LJ_GC2_PENDING_ROOT_TRIGGER_MAX;
   hard = trigger > ~(uint64_t)0 / 2u ? ~(uint64_t)0 : trigger * 2u;
   lj_gc2_trigger_store(g, trigger);  /* 05 section 5.11. */
   lj_gc2_hard_store(g, hard);  /* 05 section 5.11. */
@@ -2990,6 +3000,69 @@ static GCproto *gc2_func_proto_if_lua(GCfunc *fn)
 	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
+static TGState *gc2_thread_active_tg(global_State *g, lua_State *L)
+{
+  uint32_t owner;
+  TGState *tg = NULL;
+  if (!g || !L)
+    return NULL;
+  owner = lj_state_owner_acq(L);
+  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
+    tg = lj_tg_find_owner(g, owner);
+  else if (L == lj_tg_cur_L(g))
+    tg = G2TG(g);
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != L)
+    return NULL;
+  return tg;
+}
+
+static TValue *gc2_thread_jit_base(global_State *g, lua_State *L)
+{
+#if LJ_HASJIT
+  TGState *tg = gc2_thread_active_tg(g, L);
+  return tg ? lj_tg_load_jit_base(tg) : NULL;
+#else
+  UNUSED(g); UNUSED(L);
+  return NULL;
+#endif
+}
+
+static void gc2_mark_jit_frame_funcs(global_State *g, lua_State *L)
+{
+#if LJ_HASJIT
+  TValue *base = gc2_thread_jit_base(g, L);
+  TValue *bot, *max, *frame;
+  uint32_t n = 0;
+  if (!base || !L || tvref(L->stack) == NULL)
+    return;
+  bot = tvref(L->stack);
+  max = tvref(L->maxstack);
+  if (base <= bot + 1 + LJ_FR2 || base > max)
+    return;
+  /*
+  ** JIT C helpers keep jit_base published while vmstate is C, so there is no
+  ** positive trace-number root for the scanner to follow. The value slots are
+  ** still conservatively scanned below, but frame headers are not ordinary
+  ** tagged values. Preserve the Lua function/prototype chain explicitly so
+  ** caller constants remain live across full collections entered from traces.
+  */
+  for (frame = base - 1; frame > bot + LJ_FR2 && frame < max; ) {
+    GCobj *fo = frame_gc(frame);
+    TValue *prev = frame_prev(frame);
+    if (fo && fo->gch.gct == ~LJ_TFUNC)
+      lj_gc2_markobj(g, fo);
+    if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
+      break;
+    frame = prev;
+    if (++n >= 1000000u)
+      break;
+  }
+#else
+  UNUSED(g); UNUSED(L);
+#endif
+}
+
 static int gc2_thread_is_current(global_State *g, lua_State *L)
 {
   uint32_t owner;
@@ -3009,25 +3082,18 @@ static int gc2_thread_is_current(global_State *g, lua_State *L)
 static int gc2_thread_is_jit_current(global_State *g, lua_State *L)
 {
 #if LJ_HASJIT
-  uint32_t owner;
-  TGState *tg = NULL;
-  if (!g || !L)
-    return 0;
-  owner = lj_state_owner_acq(L);
-  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
-    tg = lj_tg_find_owner(g, owner);
-  else if (L == lj_tg_cur_L(g))
-    tg = G2TG(g);
-  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
-      lj_tg_load_cur_L(tg) != L)
-    return 0;
   /*
   ** A trace/native helper owns the live frame layout while jit_base or a
   ** positive trace vmstate is published. In that window L->base is not a stable
-  ** interpreter frame chain, so root scans preserve the whole stack storage and
-  ** let the per-TG trace root keep the executing trace/prototype graph alive.
+  ** interpreter frame chain, so root scans preserve the whole stack storage.
+  ** When jit_base is the only published edge, gc2_mark_jit_frame_funcs() marks
+  ** frame-header function roots before the raw slot scan.
   */
-  return lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0;
+  {
+    TGState *tg = gc2_thread_active_tg(g, L);
+    return tg &&
+      (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0);
+  }
 #else
   UNUSED(g); UNUSED(L);
   return 0;
@@ -3089,8 +3155,13 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used, *max = tvref(L->maxstack);
-  if (gc2_thread_is_remote_current(g, L) || gc2_thread_is_jit_current(g, L))
+  int remote_current = gc2_thread_is_remote_current(g, L);
+  int jit_current = gc2_thread_is_jit_current(g, L);
+  if (remote_current || jit_current) {
+    if (!remote_current && jit_current)
+      gc2_mark_jit_frame_funcs(g, L);
     return max;  /* Current trace/native frame chains are owner-private. */
+  }
   used = L->top - 1;
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
@@ -3433,6 +3504,26 @@ static void gc2_scan_tg_roots(global_State *g)
 }
 
 #if LJ_HASJIT
+static void gc2_scan_current_trace_root(global_State *g);
+
+static void gc2_scan_jit_roots(global_State *g)
+{
+  jit_State *J = G2J(g);
+  /*
+  ** Published and retired JIT state is outside the ordinary Lua root graph, but
+  ** stale patched bytecode, exit restore, and mcode retirement may still name it
+  ** until the SMR grace period completes. Both major and minor root scans must
+  ** retain the same JIT-side roots; otherwise a minor cycle after jit.flush()
+  ** can recycle retired trace/mcode metadata while stale readers still hold it.
+  */
+  lj_trace_markvecs(g, 1);
+  gc2_scan_current_trace_root(g);
+  lj_mcode_markretired(g, 1);
+  lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
+  lj_gc2_markmem(g, J->snapbuf);
+  lj_gc2_markmem(g, J->snapmapbuf);
+}
+
 static void gc2_scan_current_trace_root(global_State *g)
 {
   jit_State *J = G2J(g);
@@ -3562,15 +3653,7 @@ static void gc2_scan_global_roots(global_State *g)
   }
 #endif
 #if LJ_HASJIT
-  {
-    jit_State *J = G2J(g);
-    lj_trace_markvecs(g, 1);
-    gc2_scan_current_trace_root(g);
-    lj_mcode_markretired(g, 1);
-    lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
-    lj_gc2_markmem(g, J->snapbuf);
-    lj_gc2_markmem(g, J->snapmapbuf);
-  }
+  gc2_scan_jit_roots(g);
 #endif
   lj_gc2_smr_read_leave(g);
 }
@@ -3593,7 +3676,9 @@ static void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
   gc2_scan_tg_roots(g);
   gc2_scan_thread_roots(g, L);
 #if LJ_HASJIT
-  gc2_scan_current_trace_root(g);
+  lj_gc2_smr_read_enter(g);
+  gc2_scan_jit_roots(g);
+  lj_gc2_smr_read_leave(g);
 #endif
 }
 
@@ -6665,8 +6750,13 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used = L->top - 1, *max = tvref(L->maxstack);
-  if (gc2_thread_is_remote_current(g, L) || gc2_thread_is_jit_current(g, L))
+  int remote_current = gc2_thread_is_remote_current(g, L);
+  int jit_current = gc2_thread_is_jit_current(g, L);
+  if (remote_current || jit_current) {
+    if (!remote_current && jit_current)
+      gc2_mark_jit_frame_funcs(g, L);
     return max;  /* Current trace/native frame chains are owner-private. */
+  }
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     GCproto *pt = gc2_func_proto_if_lua(fn);

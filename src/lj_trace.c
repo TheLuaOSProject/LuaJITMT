@@ -186,11 +186,27 @@ static void tracevec_retired_push(jit_State *J, TraceVec *tv)
   /* 08 section 8.3 RCU retire. */
 }
 
+static void tracevec_preserve_retired(global_State *g, TraceVec *tv)
+{
+  if (tv)
+    (void)lj_gc2_markmem(g, tv);
+}
+
 static void tracevec_retire(jit_State *J, TraceVec *tv)
 {
   if (tv) {
+    global_State *g = J2G(J);
     la_store64_rel(&tv->retire_epoch, lj_gc2_retire_epoch(J2G(J)));
+    /*
+    ** Retired trace vectors are raw arena records, not ordinary Lua roots.
+    ** Preserve both sides of publication: the first mark protects against an
+    ** in-progress sweep, the second covers a GC2 root scan that starts between
+    ** the mark and the CAS push. A later idle cycle clears stale marks before
+    ** it starts tracing.
+    */
+    tracevec_preserve_retired(g, tv);
     tracevec_retired_push(J, tv);
+    tracevec_preserve_retired(g, tv);
   }
 }
 
@@ -216,24 +232,44 @@ static void trace_retired_push(jit_State *J, GCtrace *T)
   /* 08 section 8.7 trace SMR. */
 }
 
+static void trace_preserve_retired_publish(global_State *g, GCtrace *T)
+{
+  trace_preservebody(g, T, 0);
+  trace_preservebody(g, T, 1);
+}
+
+static void trace_retired_push_preserved(jit_State *J, GCtrace *T)
+{
+  global_State *g = J2G(J);
+  /*
+  ** Retired trace bodies can be named by stale patched bytecode, exit restore,
+  ** or mcode until their SMR epoch completes. Preserve before and after list
+  ** publication for the same race covered by tracevec_retire(): active sweep
+  ** may already be running, or a root scan may begin between the local mark and
+  ** the CAS push.
+  */
+  trace_preserve_retired_publish(g, T);
+  trace_retired_push(J, T);
+  trace_preservebody(g, T, 1);
+}
+
 static void trace_retire(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
   uint64_t epoch = la_load64_acq(&T->retire_epoch);
   if (epoch != 0) {
-    trace_preservebody(g, T, 0);
+    trace_preserve_retired_publish(g, T);
     if (trace_retired_mark_listed(T)) {
       trace_retired_next_rel(T, NULL);
-      trace_retired_push(J, T);
+      trace_retired_push_preserved(J, T);
     }
     return;
   }
   epoch = lj_gc2_retire_epoch(g);
   la_store64_rel(&T->retire_epoch, epoch);
   trace_retired_next_rel(T, NULL);
-  trace_preservebody(g, T, 0);
   (void)trace_retired_mark_listed(T);
-  trace_retired_push(J, T);
+  trace_retired_push_preserved(J, T);
 }
 
 static void trace_freebody(global_State *g, GCtrace *T)
@@ -266,7 +302,7 @@ static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
   if (!o)
     return;
   if (gc2)
-    lj_gc2_markobj(g, o);
+    (void)lj_gc2_preserve_sweep_root(g, o);
   else
     lj_gc_preserveobj_legacy(g, o);
 }
@@ -304,15 +340,40 @@ static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T, int gc2)
   }
 }
 
+static void trace_preserve_kgc(global_State *g, GCtrace *T, int gc2)
+{
+  IRIns *irbase = trace_ir_acq(T);
+  IRRef ref;
+  if (!irbase)
+    return;
+  for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
+    IRIns *ir = &irbase[ref];
+    IRIns irs = ir_load_acq(ir);
+    if (irs.o == IR_KGC) {
+      GCobj *o = ir_kgc_load_acq(ir);
+      if (gc2)
+	(void)lj_gc2_preserve_sweep_root(g, o);
+      else
+	lj_gc_preserveobj_legacy(g, o);
+    }
+    if (irt_is64(irs.t) && irs.o != IR_KNULL)
+      ref++;
+  }
+}
+
 static void trace_preservebody(global_State *g, GCtrace *T, int gc2)
 {
   /* Retired traces are SMR-protected bodies, but stale bytecode readers can
   ** still redispatch through their start/snapshot PCs until the grace period
   ** completes. Preserve those prototype owners along with the body and
-  ** auxiliary exit table; published live traces mark them through traversal.
+  ** auxiliary exit table. The compact body can also contain GC operands that
+  ** stale machine-code readers/snapshot restorers may still load, so preserve
+  ** those object bodies without treating the retired trace as a live trace slot.
+  ** Published live traces mark the same graph through traversal.
   */
   if (gc2) lj_gc2_markmem(g, T);
   else lj_gc_preserveobj_legacy(g, obj2gco(T));
+  trace_preserve_kgc(g, T, gc2);
   trace_preserve_proto_obj(g, trace_startptgco_acq(T), gc2);
   trace_preserve_snapshot_pcs(g, T, gc2);
   {
@@ -1118,9 +1179,8 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   la_store64_rel(&T->retire_epoch, epoch);
   trace_slot_retire(J, T, traceno);
   trace_retired_next_rel(T, NULL);
-  trace_preservebody(J2G(J), T, 0);
   (void)trace_retired_mark_listed(T);
-  trace_retired_push(J, T);
+  trace_retired_push_preserved(J, T);
 }
 
 uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)

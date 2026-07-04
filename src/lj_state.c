@@ -160,10 +160,16 @@ void lj_state_shrinkstack(lua_State *L, MSize used)
 {
   if (L->stacksize > LJ_STACK_MAXEX)
     return;  /* Avoid stack shrinking while handling stack overflow. */
+  /*
+  ** The running thread may enter GC through a C/JIT helper with saved VM return
+  ** state that still names its current stack range. Relocate only stacks that
+  ** are not the active TG stack; the active one can shrink after it yields or
+  ** becomes a non-current coroutine.
+  */
+  if (L == lj_tg_cur_L(G(L)))
+    return;
   if (4*used < L->stacksize &&
-      2*(LJ_STACK_START+LJ_STACK_EXTRA) < L->stacksize &&
-      /* Don't shrink stack of live trace. */
-      (lj_tg_jit_base(G(L)) == NULL || L != lj_tg_cur_L(G(L))))
+      2*(LJ_STACK_START+LJ_STACK_EXTRA) < L->stacksize)
     resizestack(L, L->stacksize >> 1);
 }
 

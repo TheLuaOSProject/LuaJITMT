@@ -594,6 +594,12 @@ static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
   /* 08 section 8.7 mcode SMR. */
 }
 
+static void mcode_preserve_retired(global_State *g, MCodeRetire *ret)
+{
+  for (; ret != NULL; ret = mcode_retired_next_acq(ret))
+    (void)lj_gc2_markmem(g, ret);
+}
+
 static void mcode_freearea_direct(global_State *g, MCode *area, size_t size)
 {
   jit_State *J = G2J(g);
@@ -619,12 +625,13 @@ static LJ_AINLINE int mcode_retire_ready(MCodeRetire *ret,
 /* Retire all active MCode areas. */
 void lj_mcode_free(jit_State *J)
 {
+  global_State *g = J2G(J);
   MCode *mc = J->mcarea;
   MCodeRetire *retired = NULL, *retired_tail = NULL;
   uint64_t epoch;
   if (!mc)
     return;
-  epoch = lj_gc2_retire_epoch(J2G(J));
+  epoch = lj_gc2_retire_epoch(g);
   while (mc) {
     MCode *next = mcode_area_next_acq(mc);
     MCodeRetire *ret = lj_mem_newt(J->L, sizeof(MCodeRetire), MCodeRetire);
@@ -642,7 +649,14 @@ void lj_mcode_free(jit_State *J)
   J->mcarea = NULL;
   J->mctop = J->mcbot = NULL;
   J->szmcarea = 0;
+  /*
+  ** MCodeRetire records are raw arena nodes published only through the SMR
+  ** retire stack. Mark before and after publication so concurrent sweep and a
+  ** root scan racing with the CAS push both retain the list nodes.
+  */
+  mcode_preserve_retired(g, retired);
   mcode_retired_push(J, retired);
+  mcode_preserve_retired(g, retired);
 }
 
 void lj_mcode_freeall(global_State *g)
