@@ -78,6 +78,15 @@
   spine, not the semantic liveness root set; reachable closures still mark the
   upvalue directly. The pending fixture now closes a legacy open upvalue and
   verifies the closed cell is pending until the next explicit flush.
+- 2026-07-04 hint follow-up: `global_State.gcroot_pending_hint` is a
+  conservative non-empty hint for `lj_gc_flush_root_pending()`. Pending-root
+  C publishers set it before and after publishing a non-null pending stack head;
+  x64 interpreter empty `TNEW` and traced one-numeric-upvalue `FNEW` do the
+  same around their direct inline stores. The flusher clears the hint before
+  scanning so concurrent producers can republish it, and it still checks the
+  main TG and TLS-current TG pending fields directly before taking an empty
+  return. This avoids repeated empty TG-list scans without making the hint an
+  ownership or reachability authority.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

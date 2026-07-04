@@ -132,9 +132,11 @@ static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
     assert(lj_arena_state(a0, cell0 + i) == 0);
   assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
   lua_pop(L, 1);
 }
@@ -177,9 +179,11 @@ static void test_plain_new0_inline_empty(lua_State *L, global_State *g,
     assert(lj_arena_state(a0, cell0 + i) == 0);
   assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
 }
 
@@ -221,9 +225,11 @@ static void test_plain_new_inline_empty(lua_State *L, global_State *g,
     assert(lj_arena_state(a0, cell0 + i) == 0);
   assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
 }
 
@@ -266,9 +272,11 @@ static void test_capi_newtable_inline_empty(lua_State *L, global_State *g,
     assert(lj_arena_state(a0, cell0 + i) == 0);
   assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
   lua_pop(L, 1);
 }
@@ -312,9 +320,11 @@ static void test_jit_helper_inline_empty_tnew(lua_State *L, global_State *g,
     assert(lj_arena_state(a0, cell0 + i) == 0);
   assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
 }
 
@@ -363,8 +373,10 @@ static void test_entering_uses_helper(lua_State *L, global_State *g,
   assert_empty_table_body(g, t);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(b->cell >= cell0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
   lua_pop(L, 1);
 }
@@ -449,9 +461,11 @@ static void test_inline_empty_tnew_uses_bump_with_free_run(lua_State *L,
     assert(lj_arena_state(a0, cell0 + i) == 0);
   assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
   lua_pop(L, 1);
 }
@@ -495,9 +509,11 @@ static void test_plain_new0_uses_bump_with_free_run(lua_State *L,
     assert(lj_arena_state(a0, cell0 + i) == 0);
   assert(lj_gc_total_load(g) == total0 + TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + TNEW_EMPTY_SIZE);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_chain_contains(g, obj2gco(t)));
 }
 

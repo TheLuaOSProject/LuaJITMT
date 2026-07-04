@@ -4263,7 +4263,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add qword [DISPATCH+DISPATCH_TG(local_total)], TAB_EMPTY_SIZE
     |  mov r9, [DISPATCH+DISPATCH_TG(gcroot_pending)]
     |  mov TAB:RC->nextgc, r9
+    |  mov dword [TMPR+GL_OFS(gcroot_pending_hint)], 1
     |  mov [DISPATCH+DISPATCH_TG(gcroot_pending)], RC
+    |  mov dword [TMPR+GL_OFS(gcroot_pending_hint)], 1
     |  jmp >4
     |7:
     |  mov L:CARG1, L:RB

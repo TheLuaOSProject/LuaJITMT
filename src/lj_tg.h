@@ -437,6 +437,13 @@ static LJ_AINLINE GCobj *lj_tg_gcroot_pending_acq(const TGState *tg)
   return (GCobj *)la_loadptr_acq((void *const *)&tg->gcroot_pending);
 }
 
+static LJ_AINLINE void lj_tg_gcroot_pending_hint(TGState *tg, GCobj *head)
+{
+  global_State *g = tg ? tg->gl : NULL;
+  if (head && g)
+    lj_gcroot_pending_hint_rel(g, 1);
+}
+
 static LJ_AINLINE void lj_tg_gcroot_pending_store_rlx(TGState *tg,
 						      GCobj *head)
 {
@@ -446,14 +453,21 @@ static LJ_AINLINE void lj_tg_gcroot_pending_store_rlx(TGState *tg,
 static LJ_AINLINE void lj_tg_gcroot_pending_store_rel(TGState *tg,
 						      GCobj *head)
 {
+  lj_tg_gcroot_pending_hint(tg, head);
   la_storeptr_rel((void **)&tg->gcroot_pending, head);
+  lj_tg_gcroot_pending_hint(tg, head);
 }
 
 static LJ_AINLINE int lj_tg_gcroot_pending_cas(TGState *tg, GCobj **oldp,
 					       GCobj *head)
 {
-  return la_casptr((void **)&tg->gcroot_pending, (void **)oldp, head,
-		   LA_ACQ_REL, LA_ACQ);  /* Pending root stack publication. */
+  int ok;
+  lj_tg_gcroot_pending_hint(tg, head);
+  ok = la_casptr((void **)&tg->gcroot_pending, (void **)oldp, head,
+		 LA_ACQ_REL, LA_ACQ);  /* Pending root stack publication. */
+  if (ok)
+    lj_tg_gcroot_pending_hint(tg, head);
+  return ok;
 }
 
 static LJ_AINLINE GCobj *lj_tg_gcroot_pending_xchg_acqrel(TGState *tg,
@@ -478,15 +492,22 @@ static LJ_AINLINE void lj_tg_gcroot_pending_after_main_store_rlx(
 static LJ_AINLINE void lj_tg_gcroot_pending_after_main_store_rel(
   TGState *tg, GCobj *head)
 {
+  lj_tg_gcroot_pending_hint(tg, head);
   la_storeptr_rel((void **)&tg->gcroot_pending_after_main, head);
+  lj_tg_gcroot_pending_hint(tg, head);
 }
 
 static LJ_AINLINE int lj_tg_gcroot_pending_after_main_cas(TGState *tg,
 							  GCobj **oldp,
 							  GCobj *head)
 {
-  return la_casptr((void **)&tg->gcroot_pending_after_main, (void **)oldp,
-		   head, LA_ACQ_REL, LA_ACQ);
+  int ok;
+  lj_tg_gcroot_pending_hint(tg, head);
+  ok = la_casptr((void **)&tg->gcroot_pending_after_main, (void **)oldp,
+		 head, LA_ACQ_REL, LA_ACQ);
+  if (ok)
+    lj_tg_gcroot_pending_hint(tg, head);
+  return ok;
 }
 
 static LJ_AINLINE GCobj *lj_tg_gcroot_pending_after_main_xchg_acqrel(

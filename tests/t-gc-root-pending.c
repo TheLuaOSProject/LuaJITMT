@@ -127,17 +127,22 @@ static void test_explicit_flush(lua_State *L)
   (void)lj_gc_flush_root_pending(g);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
   assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(lj_gc_flush_root_pending(g) == 0);
 
   t = lj_tab_new(L, 0, 0);
   t2 = lj_tab_new(L, 0, 0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_contains(tg, obj2gco(t)));
   assert(pending_contains(tg, obj2gco(t2)));
   assert(!root_contains(g, obj2gco(t)));
   assert(!root_contains(g, obj2gco(t2)));
 
+  lj_gcroot_pending_hint_rel(g, 0);
   assert(lj_gc_flush_root_pending(g) >= 2u);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
   assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_contains(g, obj2gco(t)));
   assert(root_contains(g, obj2gco(t2)));
 }
@@ -156,6 +161,7 @@ static void test_after_main_flush(lua_State *L)
   L1 = lua_newthread(L);
   L2 = lua_newthread(L);
   assert(L1 != NULL && L2 != NULL);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_after_main_contains(tg, obj2gco(L1)));
   assert(pending_after_main_contains(tg, obj2gco(L2)));
   assert(!after_main_contains(g, obj2gco(L1)));
@@ -163,11 +169,13 @@ static void test_after_main_flush(lua_State *L)
 
   lua_newuserdata(L, 16);
   ud = udataV(L->top - 1);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_after_main_contains(tg, obj2gco(ud)));
   assert(!after_main_contains(g, obj2gco(ud)));
 
   assert(lj_gc_flush_root_pending(g) >= 3u);
   assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(after_main_contains(g, obj2gco(L1)));
   assert(after_main_contains(g, obj2gco(L2)));
   assert(after_main_contains(g, obj2gco(ud)));
@@ -186,12 +194,14 @@ static void test_fullgc_flush(lua_State *L)
 
   lua_newtable(L);
   t = tabV(L->top - 1);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_contains(tg, obj2gco(t)));
   assert(!root_contains(g, obj2gco(t)));
 
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
   assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_contains(g, obj2gco(t)));
 
   lua_pop(L, 1);
@@ -215,14 +225,17 @@ static void test_tls_only_tg_flush(lua_State *L)
 
   t = lj_tab_new(L, 0, 0);
   ud = lj_udata_new(L, 16, NULL);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_contains(&extra, obj2gco(t)));
   assert(pending_after_main_contains(&extra, obj2gco(ud)));
   assert(!root_contains(g, obj2gco(t)));
   assert(!after_main_contains(g, obj2gco(ud)));
 
+  lj_gcroot_pending_hint_rel(g, 0);
   assert(lj_gc_flush_root_pending(g) >= 2u);
   assert(lj_tg_gcroot_pending_acq(&extra) == NULL);
   assert(lj_tg_gcroot_pending_after_main_acq(&extra) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_contains(g, obj2gco(t)));
   assert(after_main_contains(g, obj2gco(ud)));
 
@@ -248,6 +261,7 @@ static void test_attach_flushes_pending(lua_State *L)
 
   t = lj_tab_new(L, 0, 0);
   ud = lj_udata_new(L, 16, NULL);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_contains(&extra, obj2gco(t)));
   assert(pending_after_main_contains(&extra, obj2gco(ud)));
   assert(!root_contains(g, obj2gco(t)));
@@ -259,6 +273,7 @@ static void test_attach_flushes_pending(lua_State *L)
   lj_tg_attach(g, &extra);
   assert(lj_tg_gcroot_pending_acq(&extra) == NULL);
   assert(lj_tg_gcroot_pending_after_main_acq(&extra) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_contains(g, obj2gco(t)));
   assert(after_main_contains(g, obj2gco(ud)));
 
@@ -299,11 +314,13 @@ static void test_closed_upvalue_relink_pending(lua_State *L)
   lj_func_closeuv(L, slot);
   assert(uv->closed);
   assert(uvval(uv) == &uv->tv);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_contains(tg, obj2gco(uv)));
   assert(!root_contains(g, obj2gco(uv)));
 
   assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_contains(g, obj2gco(uv)));
   lua_settop(L, 0);
 #else

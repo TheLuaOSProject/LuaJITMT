@@ -1061,7 +1061,9 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
 
   /* Success: publish the initialized pair, then continue with CALL result use. */
   emit_jmp(as, l_done);
+  emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
   emit_settg(as, RID_RET, gcroot_pending);
+  emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
   emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GChead, nextgc));
   emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_gettg(as, tmp, gcroot_pending);

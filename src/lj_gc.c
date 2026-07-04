@@ -2547,6 +2547,13 @@ static uint32_t gc_flush_root_pending_tg(global_State *g, TGState *tg)
   return n;
 }
 
+static int gc_root_pending_tg_nonempty(TGState *tg)
+{
+  return tg &&
+    (lj_tg_gcroot_pending_acq(tg) != NULL ||
+     lj_tg_gcroot_pending_after_main_acq(tg) != NULL);
+}
+
 uint32_t lj_gc_flush_root_pending(global_State *g)
 {
   TGState *tg, *main_tg, *self;
@@ -2554,6 +2561,18 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
   if (!g)
     return 0;
   main_tg = g->main_tg;
+  self = lj_thr_get_tg();
+  /*
+  ** This is only a non-empty hint. Publishers set it before and after pending
+  ** stack publication; false positives are harmless and false negatives are
+  ** covered for the two TGs that can publish without already being visible in
+  ** gc2.tg_list: the main TG and the TLS-current TG during attach/detach edges.
+  */
+  if (lj_gcroot_pending_hint_xchg(g, 0) == 0 &&
+      !gc_root_pending_tg_nonempty(main_tg) &&
+      (self == NULL || self == main_tg ||
+       !gc_root_pending_tg_nonempty(self)))
+    return 0;
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
     if (tg == main_tg)
       saw_main = 1;
@@ -2561,7 +2580,6 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
   }
   if (main_tg && !saw_main)
     n += gc_flush_root_pending_tg(g, main_tg);
-  self = lj_thr_get_tg();
   if (self && self != main_tg)
     n += gc_flush_root_pending_tg(g, self);
   return n;

@@ -1588,6 +1588,7 @@ typedef struct global_State {
   uint32_t jit_mcode_synccore;  /* Sync-core membarrier is registered. */
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
+  uint32_t gcroot_pending_hint;  /* Conservative non-empty pending-root hint. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
   lua_State *threading_states;  /* All non-main lua_State objects. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
@@ -1606,6 +1607,23 @@ LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
   check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
 #define niltvg(g) \
   check_exp(tvisnil(&(g)->nilnode.val), &(g)->nilnode.val)
+
+static LJ_AINLINE uint32_t lj_gcroot_pending_hint_acq(global_State *g)
+{
+  return la_load32_acq(&g->gcroot_pending_hint);
+}
+
+static LJ_AINLINE void lj_gcroot_pending_hint_rel(global_State *g,
+						  uint32_t hint)
+{
+  la_store32_rel(&g->gcroot_pending_hint, hint);
+}
+
+static LJ_AINLINE uint32_t lj_gcroot_pending_hint_xchg(global_State *g,
+						       uint32_t hint)
+{
+  return la_xchg32_acqrel(&g->gcroot_pending_hint, hint);
+}
 
 static LJ_AINLINE int32_t vmstate_load_acq(global_State *g)
 {
