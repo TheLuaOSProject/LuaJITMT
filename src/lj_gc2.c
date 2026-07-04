@@ -183,6 +183,7 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					GCobj *o);
 static uint32_t gc2_discard_remembered_ssb(global_State *g);
+static void gc2_clear_table_rescan_grey(global_State *g);
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
@@ -1538,6 +1539,7 @@ void lj_gc2_mark_begin(global_State *g)
   gc2_marks_this_round_store_rlx(g, 0);
   if (!minor_requested) {
     (void)gc2_discard_remembered_ssb(g);
+    gc2_clear_table_rescan_grey(g);
     gc2_grey_top_store_rlx(g, 0);
     gc2_grey_bottom_store_rlx(g, 0);
   } else {
@@ -3715,6 +3717,10 @@ void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L)
 
 static void *gc2_mark_base(GCobj *o);
 static int gc2_mark_base_traversable(global_State *g, void *p);
+static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o);
+static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
+static LJ_AINLINE void gc2_rescan_pending_clear(GCobj *o);
+static LJ_AINLINE void gc2_rescan_pending_clear_if_table(GCobj *o);
 static int gc2_grey_push(global_State *g, GCobj *o);
 static uint32_t gc2_drain_grey(global_State *g, uint32_t limit);
 static void gc2_traverse_udata(global_State *g, GCudata *ud);
@@ -3802,6 +3808,28 @@ static int gc2_grey_empty(global_State *g)
   if (!g)
     return 1;
   return gc2_grey_top_acq(g) == gc2_grey_bottom_acq(g);
+}
+
+static void gc2_clear_table_rescan_grey(global_State *g)
+{
+  GCRef *stack;
+  uint64_t top, bottom, n, count;
+  MSize cap;
+  if (!g)
+    return;
+  stack = gc2_grey_stack_acq(g);
+  cap = gc2_grey_capacity_acq(g);
+  if (!stack || cap == 0)
+    return;
+  top = gc2_grey_top_acq(g);
+  bottom = gc2_grey_bottom_acq(g);
+  count = bottom > top ? bottom - top : 0;
+  if (count > cap)
+    count = cap;
+  for (n = 0; n < count; n++) {
+    GCobj *o = gc2_queue_slot_load_acq(&stack[(MSize)((top + n) % cap)]);
+    gc2_rescan_pending_clear_if_table(o);
+  }
 }
 
 static int gc2_weak_ensure(global_State *g)
@@ -5686,7 +5714,7 @@ static void gc2_ssb_mark_one(global_State *g, GCobj *o)
       return;
     if (marked == 0)
       (void)lj_gc2_markmem(g, base);
-    if (gc2_mark_base_traversable(g, base)) {
+    if (gc2_obj_may_traverse(o) && gc2_mark_base_traversable(g, base)) {
       int pushed = gc2_grey_push(g, o);
       lj_assertG(pushed, "gc2 grey push failed for SSB object");
       UNUSED(pushed);
@@ -5721,6 +5749,8 @@ static uint32_t gc2_discard_published_ssb(global_State *g)
     uint32_t count = lj_gc2_ssb_count_acq(node);
     while (count > 0) {
       GCRef *slot = &node->slot[count - 1u];
+      GCobj *o = gc2_queue_slot_load_acq(slot);
+      gc2_rescan_pending_clear_if_table(o);
       gc2_queue_slot_clear_rel(slot);
       count--;
       nitems++;
@@ -5753,6 +5783,8 @@ static uint32_t gc2_discard_active_ssb(global_State *g)
       continue;
     while (next > base) {
       GCRef *slot = next - 1;
+      GCobj *o = gc2_queue_slot_load_acq(slot);
+      gc2_rescan_pending_clear_if_table(o);
       gc2_queue_slot_clear_rel(slot);
       next = slot;
       nitems++;
@@ -6191,8 +6223,10 @@ static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
   int marked;
   o = obj2gco(t);
   marked = lj_gc2_ismarked(g, o);
-  if (marked > 0) {
+  if (marked > 0 && gc2_rescan_pending_set(o)) {
     int pushed = lj_gc2_ssb_push(g, o);
+    if (!pushed)
+      gc2_rescan_pending_clear(o);
     lj_assertG(pushed, "gc2 table barrier SSB push failed");
     UNUSED(pushed);
   } else if (marked == 0) {
@@ -6334,9 +6368,10 @@ static LJ_AINLINE void gc2_mark_legacy_live_force(global_State *g, GCobj *o)
     return;
   old = la_load8_acq(&o->gch.marked);
   for (;;) {
+    uint8_t white = (uint8_t)(old & LJ_GC_WHITES);
     uint8_t next;
-    if (!(old & LJ_GC_WHITES))
-      return;  /* Already gray/black and owned by the legacy frontier. */
+    if (!white || white == curwhite(g))
+      return;  /* Already legacy-live for this cycle, or on the frontier. */
     next = (uint8_t)((old & (uint8_t)~LJ_GC_COLORS) | curwhite(g));
     if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
       return;
@@ -6386,6 +6421,26 @@ int lj_gc2_markmem(global_State *g, void *p)
 				  cell & 63);  /* 05 section 5.6.1. */
   if (marked)
     gc2_marks_this_round_add(g, 1);  /* 05 section 5.7.1. */
+  return marked;
+}
+
+static LJ_AINLINE int gc2_markmem_worker_fast(global_State *g, void *p)
+{
+  GCArena *a;
+  uint32_t cell;
+  int marked;
+  if (!p || g->allocf != lj_arena_allocf)
+    return lj_gc2_markmem(g, p);
+  a = lj_arena_of(p);
+  if (LJ_UNLIKELY(lj_arena_ishuge(a)))
+    return lj_gc2_markmem(g, p);
+  cell = lj_arena_cellof(p);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+      !lj_arena_bm_get(a->block, cell))
+    return 0;
+  marked = !la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);
+  if (marked)
+    gc2_marks_this_round_add(g, 1);
   return marked;
 }
 
@@ -6451,8 +6506,13 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
   int traversable;
   if (!o)
     return 0;
+  if (o->gch.gct == ~LJ_TSTR) {
+    marked = gc2_markmem_worker_fast(g, o);
+    gc2_mark_legacy_live(g, o);
+    return marked;
+  }
   base = gc2_mark_base(o);
-  marked = lj_gc2_markmem(g, base);
+  marked = gc2_markmem_worker_fast(g, base);
   gc2_mark_legacy_live(g, o);
   if (marked && gc2_obj_may_traverse(o)) {
     traversable = o->gch.gct == ~LJ_TUDATA ? 0 :
@@ -6476,6 +6536,23 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
 	     "TValue and GC type mismatch");
   if (tvisgcv(tv))
     gc2_markobj_worker(g, gcV(tv));
+}
+
+static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o)
+{
+  uint8_t old = la_or8_rlx(&o->gch.marked, LJ_GC_NEEDSCAN);
+  return (old & LJ_GC_NEEDSCAN) == 0;
+}
+
+static LJ_AINLINE void gc2_rescan_pending_clear(GCobj *o)
+{
+  (void)la_and8_rlx(&o->gch.marked, (uint8_t)~LJ_GC_NEEDSCAN);
+}
+
+static LJ_AINLINE void gc2_rescan_pending_clear_if_table(GCobj *o)
+{
+  if (o && o->gch.gct == ~LJ_TTAB)
+    gc2_rescan_pending_clear(o);
 }
 
 static void gc2_note_weak_table(global_State *g, GCtab *t, int weak)
@@ -6543,6 +6620,12 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   int weak = gc2_tab_weak_mode(g, t, mt, 1);
   int ffi_fin = gc2_tab_is_ffi_fin(g, t);
   void *arraymem;
+  /*
+  ** Active table barriers set NEEDSCAN when queueing a rescan. Clear it when
+  ** worker traversal starts, so writes racing with this scan can publish one
+  ** more rescan without letting repeated stores flood the SSB.
+  */
+  gc2_rescan_pending_clear(obj2gco(t));
   gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */
   arraymem = lj_tab_array_mem_acq(t);
   if (arraymem)

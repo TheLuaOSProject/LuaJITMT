@@ -239,6 +239,46 @@ local function run_newkey_barrier_scope(t)
   print("M9 fresh-key barrier scope behavior passed")
 end
 
+local function run_table_rescan_pressure(t)
+  t:build({ clean = true, quiet = true })
+
+  with_temp_paths(t, { "lj-table-rescan-pressure.lua" }, function(script)
+    local luajit = shell_quote(t:path("src", "luajit"))
+    local lua_path = "LUA_PATH=" .. shell_quote(runtime.lua_path(t))
+    write_file(script, table.concat({
+      'local th = require"threading"',
+      'local rounds = 5',
+      'local n = 10000',
+      'local keep = {}',
+      'collectgarbage("collect")',
+      'local before = th.gcstats()',
+      'for r = 1, rounds do',
+      '  local t = {}',
+      '  local prefix = "table_rescan_pressure_" .. r .. "_"',
+      '  for i = 1, n do t[i] = prefix .. i end',
+      '  keep[r] = t',
+      'end',
+      'local mid = th.gcstats()',
+      'collectgarbage("collect")',
+      'local after = th.gcstats()',
+      'assert(keep[rounds][n] == "table_rescan_pressure_" .. rounds .. "_" .. n)',
+      'local build_ssb = mid.worker_ssb_converted - before.worker_ssb_converted',
+      'local total_ssb = after.worker_ssb_converted - before.worker_ssb_converted',
+      'local total_grey = after.worker_grey_drained - before.worker_grey_drained',
+      'assert(total_ssb < 4096, "table stores flooded SSB: " .. total_ssb)',
+      'assert(total_grey < 4096, "table stores flooded grey rescans: " .. total_grey)',
+      'print("table_rescan_build_ssb=" .. build_ssb ..',
+      '      " total_ssb=" .. total_ssb .. " total_grey=" .. total_grey)',
+      ""
+    }, "\n"))
+    assert_command_output_contains(
+      lua_path .. " " .. luajit .. " " .. shell_quote(script),
+      "table_rescan_build_ssb=",
+      { timeout = "20s", stderr = true })
+  end)
+  print("M9 active table rescan pressure behavior passed")
+end
+
 local function run_bench_smoke(t)
   t:build({ clean = true, quiet = true })
 
@@ -493,6 +533,7 @@ local m9_m10_deps = {
   "m9_trace_hard_assist_cadence",
   "m9_fullgc_smr_reclaim",
   "m9_newkey_barrier_scope",
+  "m9_table_rescan_pressure",
   "m9_bench_smoke",
   "m9_bench_regression",
   "m9_bench_stock_compare",
@@ -522,6 +563,12 @@ return function(add)
     name = "m9_newkey_barrier_scope",
     description = "fresh hash-key barrier does not requeue the whole table",
     run = run_newkey_barrier_scope
+  })
+
+  add({
+    name = "m9_table_rescan_pressure",
+    description = "active table rescans are coalesced while stores continue",
+    run = run_table_rescan_pressure
   })
 
   add({
