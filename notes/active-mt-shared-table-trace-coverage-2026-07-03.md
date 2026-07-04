@@ -17,3 +17,10 @@ Active-MT shared table trace coverage, 2026-07-03:
   the current table generation, and never expose KEYLOCK/FORWARD/internal table
   sentinels. The recorder still deliberately falls back for active-MT shared
   traversal until it is routed through that helper-shaped contract.
+- Follow-up: recorder type prediction for `next()` now uses
+  `lj_tab_vmnext_forward()` instead of scanning raw array/hash storage. This
+  removes the local KEYLOCK/FORWARD/retiring-generation prediction hazard.
+  Reopening active-MT shared traversal still requires a runtime cursor-validity
+  guard: removing the fence after this change still fails the
+  `traversal,nextchurn` stress, so shared `next()`/optimized `pairs()` remain
+  interpreted under active MT.

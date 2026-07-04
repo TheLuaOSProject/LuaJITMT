@@ -2320,28 +2320,15 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 /* Determine result type of table traversal. */
 static IRType rec_next_types(GCtab *t, uint32_t idx)
 {
-  TValue *array;
-  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
-  for (; idx < asize; idx++) {
-    TValue val;
-    lj_tv_load_acq(&val, &array[idx]);
-    if (LJ_LIKELY(!tvisnil(&val)))
-      return (LJ_DUALNUM ? IRT_INT : IRT_NUM) + (itype2irt(&val) << 8);
-  }
-  idx -= asize;
-  {
-    MSize hmask;
-    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
-    for (; idx <= hmask; idx++) {
-      Node *n = &node[idx];
-      TValue key, val;
-      lj_tv_load_acq(&val, &n->val);
-      if (!tvisnil(&val)) {
-	lj_tv_load_acq(&key, &n->key);
-	return itype2irt(&key) + (itype2irt(&val) << 8);
-      }
-    }
-  }
+  TValue out[2];
+  /*
+  ** Predict from the same copied cursor-helper snapshot used by the VM slow
+  ** path. Raw array/hash scans can observe KEYLOCK/FORWARD or retiring table
+  ** generations that generated code must never bake into key/value guards.
+  */
+  int32_t next = lj_tab_vmnext_forward(t, idx, out);
+  if (next > 0)
+    return itype2irt(&out[1]) + (itype2irt(&out[0]) << 8);
   return IRT_NIL + (IRT_NIL << 8);
 }
 
@@ -2353,10 +2340,10 @@ int lj_record_next(jit_State *J, RecordIndex *ix)
   int mt_shared = lj_record_mt_shared_tab(J, ix->tab);
   if (mt_shared) {
     /*
-    ** Active-MT shared traversal traces are not stable yet: concurrent resize
-    ** and value churn can invalidate the recorder's predicted key/value result
-    ** slots across helper exits. Keep non-trace-local shared next()/pairs()
-    ** interpreted until traversal recording has a generic or versioned contract.
+    ** Active-MT shared traversal traces still need a runtime guard for cursor
+    ** validity across concurrent table mutation. Type prediction is now
+    ** helper-backed, but generated code can still carry a stale traversal
+    ** cursor through nextchurn-style value and generation churn.
     */
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }
