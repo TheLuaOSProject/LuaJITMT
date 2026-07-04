@@ -4,7 +4,7 @@ Your task list. Each milestone: goal → tasks (with spec refs) → tests →
 acceptance gate. Do not start Mn+1 before Mn's gate is green. Estimated
 diff sizes are for sanity-checking scope, not deadlines.
 
-## M0 — Harness & invariant coverage (≈300 lines)
+## M0 — Harness & Behavior Coverage (≈300 lines)
 Tasks: pin the commit (00 §0.2). Add the ADR-1 x86-64/GC64 `#error`
 invariant check without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import

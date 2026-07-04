@@ -504,7 +504,7 @@ scoped-flush target.
    `PROTO_NOJIT`; after audit and the first M6 CNEW/FNEW slice, self-captured
    local-function source protos and loaded v4 protos containing only the
    self-cell CNEW/FNEW/CSET shape no longer need that gate.
-   Current M6 invariant coverage requires runtime behavior and traceability for
+   Current M6 tests require runtime behavior and traceability for
    owner numeric cells, GC-valued CSET barriers, loaded v4 CGET/CSET traces,
    source/loaded self-cell CNEW/FNEW helper traces, mixed raw-local sync-helper
    FNEW traces, mutable pre/post FNEW update loops after promotion at trace

@@ -16,6 +16,13 @@ local function bench(name, iters, fn)
   benches[#benches+1] = { name = name, iters = iters, fn = fn }
 end
 
+local function make_hash_keys(n, first)
+  local keys = {}
+  first = first or 0
+  for i = 1, n do keys[i] = "k" .. (first + i - 1) end
+  return keys
+end
+
 -- 1. Pure arithmetic loop (interpreter+JIT loop perf, hotcount path)
 bench("arith_loop", 5e7, function(n)
   local x = 0
@@ -36,7 +43,23 @@ bench("tab_hash_write", 2e6, function(n)
   return t
 end)
 
--- 4. Table hash reads (HREF/HREFK path)
+-- 4. Existing hash writes with prebuilt string keys (HREF/HSTORE path)
+bench("tab_store_existing", 2e7, function(n)
+  local keys = make_hash_keys(8192, 0)
+  local t = {}
+  for i = 1, 8192 do t[keys[i]] = 0 end
+  for i = 1, n do t[keys[(i % 8192) + 1]] = i end
+  return t
+end)
+
+-- 5. New string-key insertion and table growth path
+bench("tab_insert_newkey", 2e5, function(n)
+  local t = {}
+  for i = 1, n do t["newk" .. i] = i end
+  return t
+end)
+
+-- 6. Table hash reads (HREF/HREFK path)
 bench("tab_hash_read", 2e7, function(n)
   local t = {}
   for i = 1, 4096 do t["k"..i] = i end
@@ -45,7 +68,17 @@ bench("tab_hash_read", 2e7, function(n)
   return s
 end)
 
--- 5. Array part write/read (M5: writes fall back before traced ASTORE)
+-- 7. Existing hash reads with prebuilt string keys (HREF/HLOAD path)
+bench("tab_read_existing", 3e7, function(n)
+  local keys = make_hash_keys(4096, 1)
+  local t = {}
+  for i = 1, 4096 do t[keys[i]] = i end
+  local s = 0
+  for i = 1, n do s = s + t[keys[(i % 4096) + 1]] end
+  return s
+end)
+
+-- 8. Array part write/read (M5: writes fall back before traced ASTORE)
 bench("tab_array", 3e7, function(n)
   local t = {}
   local s = 0
@@ -57,7 +90,7 @@ bench("tab_array", 3e7, function(n)
   return s
 end)
 
--- 6. Allocation churn: short-lived tables (allocator + GC throughput)
+-- 9. Allocation churn: short-lived tables (allocator + GC throughput)
 bench("alloc_tables", 5e6, function(n)
   local s = 0
   for i = 1, n do
@@ -67,7 +100,7 @@ bench("alloc_tables", 5e6, function(n)
   return s
 end)
 
--- 7. String interning churn (strtab contention point in MT build)
+-- 10. String interning churn (strtab contention point in MT build)
 bench("string_intern", 2e6, function(n)
   local s = 0
   for i = 1, n do
@@ -77,7 +110,7 @@ bench("string_intern", 2e6, function(n)
   return s
 end)
 
--- 8. Closure creation + upvalue mutation (cell-model cost in MT build)
+-- 11. Closure creation + upvalue mutation (cell-model cost in MT build)
 bench("closures_upval", 5e6, function(n)
   local s = 0
   for i = 1, n do
@@ -88,7 +121,7 @@ bench("closures_upval", 5e6, function(n)
   return s
 end)
 
--- 9. Shared upvalue mutation in a loop (ULOAD/USTORE hot path)
+-- 12. Shared upvalue mutation in a loop (ULOAD/USTORE hot path)
 bench("upval_hot", 5e7, function(n)
   local x = 0
   local function inc() x = x + 1 end
@@ -96,7 +129,7 @@ bench("upval_hot", 5e7, function(n)
   return x
 end)
 
--- 10. FFI struct field access (CNEW/cdata load-store path)
+-- 13. FFI struct field access (CNEW/cdata load-store path)
 bench("ffi_struct", 3e7, function(n)
   local ffi = require("ffi")
   ffi.cdef("typedef struct { double x, y; } point_t;")
@@ -109,7 +142,7 @@ bench("ffi_struct", 3e7, function(n)
   return s + p.x
 end)
 
--- 11. Coroutine switch (frame save/restore; per-thread state in MT build)
+-- 14. Coroutine switch (frame save/restore; per-thread state in MT build)
 bench("coroutine_switch", 3e6, function(n)
   local co = coroutine.wrap(function()
     while true do coroutine.yield(1) end
@@ -119,7 +152,7 @@ bench("coroutine_switch", 3e6, function(n)
   return s
 end)
 
--- 12. string.format via tmpbuf (per-thread SBuf in MT build)
+-- 15. string.format via tmpbuf (per-thread SBuf in MT build)
 bench("sbuf_format", 2e6, function(n)
   local s = 0
   for i = 1, n do

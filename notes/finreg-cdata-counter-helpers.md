@@ -20,4 +20,4 @@ fixtures cover the observable behavior.
 ## Follow-Up
 
 Follow-up fixture cleanup routes `tests/t-gc2-traverse.c` counter snapshots
-through the same acquire helpers and extends the M7 invariant coverage for that fixture.
+through the same acquire helpers and extends the M7 behavior coverage for that fixture.

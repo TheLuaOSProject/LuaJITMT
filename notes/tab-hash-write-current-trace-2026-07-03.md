@@ -11,6 +11,13 @@ Table hash-write current trace evidence, 2026-07-03:
   allocation/assist check sequence, TG-owned tmpbuf/string construction for the
   benchmark key path, node-header hash-mask loads, string-table publication, and
   first-fill/resize publication work.
+- The benchmark harness now keeps the historical `tab_hash_write` row intact,
+  but adds split rows for attribution:
+  `tab_store_existing` uses prebuilt string keys and prefilled slots so it
+  measures the steady-state `HREF`/`HSTORE` path, and `tab_insert_newkey` uses
+  unique string keys so insertion/growth costs are visible separately. This
+  keeps the stock comparison from treating a mixed keybuild/insert/store row as
+  evidence about one primitive.
 - The durable coverage is `m6_jit_table_store_helper`,
   `m6_jit_tbar_gc2_black_gate`,
   `m6_jit_tmpbuf_thread_format`, `m6_jit_barrier_xpoll`,

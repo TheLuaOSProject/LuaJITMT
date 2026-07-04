@@ -357,7 +357,8 @@ local function run_bench_stock_compare(t)
 
   local bench_lua = t:path("aux", "bench", "bench.lua")
   local filters = os.getenv("LJ_BENCH_STOCK_FILTERS") or
-    "arith_loop fib30 tab_hash_write alloc_tables closures_upval"
+    "arith_loop fib30 tab_hash_write tab_store_existing " ..
+    "tab_insert_newkey alloc_tables closures_upval"
   -- The stock comparison is meant to catch real throughput cliffs, not only
   -- accounting mistakes. Keep the default loose enough for current focused
   -- gaps and CI variance, but far below the historical 50x+ regressions.
