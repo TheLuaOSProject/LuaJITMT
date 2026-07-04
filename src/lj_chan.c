@@ -18,6 +18,10 @@
 #include <errno.h>
 #include <limits.h>
 
+enum {
+  LJ_CHAN_SPINS = 64  /* 09 section 9.5: short handoff spin before park. */
+};
+
 static LJ_AINLINE void chan_storetv_rel(LJChanSlot *slot, cTValue *tv)
 {
   tv_rawstore_rel(&slot->tv, tv_rawload(tv));
@@ -118,6 +122,17 @@ static void chan_checkstop_fresh(lua_State *L, uint32_t actions,
     lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
 }
 
+static int chan_spin_changed(LJChan *ch, uint32_t f)
+{
+  uint32_t i;
+  for (i = 0; i < LJ_CHAN_SPINS; i++) {
+    if (la_load32_acq(&ch->futex) != f)
+      return 1;
+    la_cpu_pause();
+  }
+  return 0;
+}
+
 static void chan_wait(lua_State *L, LJChan *ch)
 {
   uint32_t f = la_load32_acq(&ch->futex);
@@ -125,6 +140,10 @@ static void chan_wait(lua_State *L, LJChan *ch)
   LJNativeFrame frame;
   uint32_t actions = 0;
   int had_stopreq = chan_had_stopreq(L);
+  if (chan_spin_changed(ch, f)) {
+    chan_checkstop_fresh(L, 0, had_stopreq);
+    return;
+  }
   if (L)
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: channel park is native. */
   else if (tg)
@@ -170,6 +189,10 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     ns = 1000000;
   f = la_load32_acq(&ch->futex);
   tg = L ? L2TG(L) : NULL;
+  if (chan_spin_changed(ch, f)) {
+    chan_checkstop_fresh(L, 0, had_stopreq);
+    return 0;
+  }
   if (L)
     lj_state_stack_pubrange(L, L);
   if (L)
