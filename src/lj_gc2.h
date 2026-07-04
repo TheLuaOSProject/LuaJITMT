@@ -80,6 +80,8 @@ typedef struct GC2StatsSnapshot {
   uint64_t sweep_live_updates;
   uint64_t sweep_live_huge_bytes;
   uint64_t live_estimate;
+  uint64_t smr_reclaim_runs;
+  uint64_t smr_reclaimed;
   uint64_t root_spine_objects;
   uint64_t root_spine_tombstones;
   uint64_t arena_traversable_owned;

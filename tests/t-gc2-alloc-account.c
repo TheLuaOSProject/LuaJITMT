@@ -69,9 +69,7 @@ static void test_public_minor_skips_classic_registry_roots(lua_State *L,
 {
   GCtab *registry, *reg_only;
   TValue key, val, nilv;
-  MSize old_stepmul = g->gc.stepmul;
   uint64_t major0, minor_req0, minor_start0;
-  int i;
 
   UNUSED(tg);
   lua_settop(L, 0);
@@ -98,11 +96,13 @@ static void test_public_minor_skips_classic_registry_roots(lua_State *L,
   major0 = gc2_major_cycle_starts_acq(g);
   minor_req0 = gc2_minor_cycle_requests_acq(g);
   minor_start0 = gc2_minor_cycle_starts_acq(g);
-  g->gc.stepmul = 1;
-  la_store32_rel(&g->gc2.assist_shift, lj_gc2_assist_shift_from_stepmul(1));
-  (void)lj_gc_step(L);
-  for (i = 0; i < 10000 && g->gc.state == GCSpropagate; i++)
-    (void)lj_gc_step(L);
+  /*
+  ** Exercise the public minor-root set directly. Driving this through the
+  ** legacy GC step can open the classic mark bridge, which deliberately mirrors
+  ** classic registry roots into GC2 for safety.
+  */
+  lj_gc2_mark_begin(g);
+  lj_gc2_test_scan_minor_roots(g, L);
   assert(gc2_major_cycle_starts_acq(g) == major0);
   assert(gc2_minor_cycle_requests_acq(g) == minor_req0 + 1u);
   assert(gc2_minor_cycle_starts_acq(g) == minor_start0 + 1u);
@@ -110,9 +110,7 @@ static void test_public_minor_skips_classic_registry_roots(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(reg_only)) == 0);
 
   copyTVrel(L, lj_tab_set(L, registry, &key), &nilv);
-  g->gc.stepmul = old_stepmul;
-  la_store32_rel(&g->gc2.assist_shift,
-		 lj_gc2_assist_shift_from_stepmul((uint32_t)old_stepmul));
+  lj_gc2_cycle_to_idle(g);
   lj_gc_fullgc(L);
   lj_gc2_set_generational(g, 0);
   lua_settop(L, 0);
@@ -529,7 +527,11 @@ int main(void)
   lj_gc2_mark_to_weak(g);
   lj_gc2_weak_to_sweep(g);
   assert(lj_gc2_test_sweep_owner_progress(g, tg, 64) == 0);
-  lj_gc2_sweep_bridge_ready(g);
+  /*
+  ** Owner sweep starts only after the bridge boundary moves traversable owned
+  ** arenas to the sweep list and then publishes bridge readiness.
+  */
+  lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
   assert(lj_gc2_test_sweep_owner_progress(g, tg, 64) > 0);
   assert(!root_contains(g, obj2gco(active_child)));
   lj_gc2_cycle_to_idle(g);

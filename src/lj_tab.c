@@ -654,9 +654,22 @@ static LJ_AINLINE void tab_pub_node_mem(lua_State *L, GCtab *t, Node *node)
     (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
 }
 
-static LJ_AINLINE void newhpart_publish(lua_State *L, GCtab *t, Node *node,
-					MSize hmask, Node *freetop)
+static LJ_AINLINE void tab_node_freecount_set_private(Node *node,
+						      MSize freecount)
 {
+  lj_tab_node_hdrw(node)->flags = freecount & TABNODE_FREECOUNT_MASK;
+}
+
+static LJ_AINLINE void newhpart_publish(lua_State *L, GCtab *t, Node *node,
+					MSize hmask, Node *freetop,
+					MSize freecount)
+{
+  /*
+  ** Replacement hash vectors are private until the table root is release-pub-
+  ** lished below. Rehash migration keeps the remaining capacity in a local
+  ** counter and publishes it once, avoiding one CAS per migrated key.
+  */
+  tab_node_freecount_set_private(node, freecount);
   setfreetop(t, node, freetop);
   lj_tab_node_rel(t, node);
   lj_tab_hmask_rel(t, hmask);
@@ -668,7 +681,7 @@ static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
 {
   MSize hmask;
   Node *node = newhpart_alloc(L, hbits, &hmask);
-  newhpart_publish(L, t, node, hmask, &node[hmask+1]);
+  newhpart_publish(L, t, node, hmask, &node[hmask+1], hmask + 1u);
 }
 
 static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
@@ -735,12 +748,13 @@ static void tab_migrate_store_if_absent(lua_State *L, GCtab *t, TValue *dst,
 }
 
 static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
-				 Node **freetopp, cTValue *key)
+				 Node **freetopp, MSize *freecountp,
+				 cTValue *key)
 {
   /* Destination belongs to an unpublished replacement hash vector. */
   Node *n = hashkey_node(nodebase, hmask, key);
-  if (lj_tab_node_free_reserve(nodebase) != 1)
-    lj_assertL(0, "no free node during rehash");
+  lj_assertL(*freecountp != 0, "no free node during rehash");
+  (*freecountp)--;
   if (!lj_tv_isnil_acq(&n->val)) {
     Node *freenode = *freetopp;
     do {
@@ -783,10 +797,11 @@ static TValue *tab_rehash_arrayslot(TValue *array, uint32_t asize,
 
 static TValue *tab_rehash_slot(lua_State *L, TValue *array, uint32_t asize,
 			       Node *nodebase, MSize hmask, Node **freetopp,
-			       cTValue *key)
+			       MSize *freecountp, cTValue *key)
 {
   TValue *slot = tab_rehash_arrayslot(array, asize, key);
-  return slot ? slot : tab_rehash_insert(L, nodebase, hmask, freetopp, key);
+  return slot ? slot : tab_rehash_insert(L, nodebase, hmask, freetopp,
+					 freecountp, key);
 }
 
 static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
@@ -1270,6 +1285,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   MSize newhmask;
   Node *newnode;
   Node *newfreetop;
+  MSize newfreecount;
   uint32_t hashcount;
   uint32_t hash_flags0;
   TabNodeRetire *oldret;
@@ -1291,6 +1307,7 @@ restart_resize:
   newhmask = 0;
   newnode = NULL;
   newfreetop = NULL;
+  newfreecount = 0;
   oldret = NULL;
   oldaret = NULL;
   array_next_claimed = 0;
@@ -1332,6 +1349,7 @@ restart_resize:
   if (hbits) {
     newnode = newhpart_alloc(L, hbits, &newhmask);
     newfreetop = &newnode[newhmask+1];
+    newfreecount = newhmask + 1u;
   }
   if (oldhmask > 0)
     oldret = tab_retire_reserve(L, oldnode, oldhmask);
@@ -1392,7 +1410,8 @@ restart_resize:
 	  TValue *slot;
 	  lj_assertL(hbits != 0, "missing hash part during array tail rehash");
 	  setnumV(&key, (lua_Number)i);
-	  slot = tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key);
+	  slot = tab_rehash_insert(L, newnode, newhmask, &newfreetop,
+				   &newfreecount, &key);
 	  tab_migrate_store_if_absent(L, t, slot, &key, &val);
 	}
       }
@@ -1421,7 +1440,7 @@ restart_resize:
 	  continue;
 	if (hbits) {
 	  slot = tab_rehash_slot(L, array, asize, newnode, newhmask,
-				 &newfreetop, &key);
+				 &newfreetop, &newfreecount, &key);
 	} else {
 	  slot = tab_rehash_arrayslot(array, asize, &key);
 	  lj_assertL(slot != NULL, "missing hash part during rehash");
@@ -1440,7 +1459,8 @@ restart_resize:
 	  !tab_val_absent(&val)) {
 	setnumV(&key, (lua_Number)i);
 	tab_migrate_store_if_absent(L, t,
-	  tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
+	  tab_rehash_insert(L, newnode, newhmask, &newfreetop,
+			    &newfreecount, &key),
 	  &key, &val);
       }
     }
@@ -1463,7 +1483,7 @@ restart_resize:
   }
   /* Publish the rebuilt hash part. */
   if (hbits) {
-    newhpart_publish(L, t, newnode, newhmask, newfreetop);
+    newhpart_publish(L, t, newnode, newhmask, newfreetop, newfreecount);
     if (oldret)
       tab_retire_arm(G(L), oldret);
   } else {
@@ -2073,7 +2093,7 @@ retry_insert:
 	  }
 	  tab_storekeyrel(L, &n->key, key);
 	  lj_gc2_barrier_weak_key(L, t, key);
-	  lj_gc_pubtab(L, t);
+	  lj_gc_pubtabkey(L, t, key);
 	  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
 	  if (!tab_hash_generation_current(t, nodebase)) {
 	    lj_tab_wait_no_l();
@@ -2134,7 +2154,7 @@ retry_insert:
     }
     tab_storekeyrel(L, &freenode->key, key);
     lj_gc2_barrier_weak_key(L, t, key);
-    lj_gc_pubtab(L, t);
+    lj_gc_pubtabkey(L, t, key);
     lj_assertL(lj_tv_isnil_acq(&freenode->val),
 	       "new hash slot is not empty");
     if (!tab_hash_generation_current(t, nodebase)) {

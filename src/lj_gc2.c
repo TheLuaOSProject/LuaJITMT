@@ -1362,8 +1362,11 @@ static void gc2_reset_alloc_trigger(global_State *g)
 static TGState *gc2_tg_for_mem(global_State *g, const void *p)
 {
   if (p) {
-    uint32_t owner_tid = lj_arena_owner_acq(lj_arena_of(p));
-    TGState *owner = lj_tg_find_owner(g, owner_tid);
+    GCArena *a = lj_arena_of(p);
+    uint32_t owner_tid = lj_arena_owner_acq(a);
+    TGState *mtg = G2TG(g);
+    TGState *owner = mtg && lj_tg_tid_acq(mtg) == owner_tid ?
+      mtg : lj_tg_find_owner(g, owner_tid);
     if (owner)
       return owner;
   }
@@ -2708,11 +2711,17 @@ int lj_gc2_sweep_to_idle(global_State *g)
     return 0;
   }
   gc2_sweep_to_idle_add(g, 1);
+  /*
+  ** The close owner has finished the SWEEP->IDLE transition, and cycle_leader
+  ** remains set until pacing is republished below. Release worker_active before
+  ** the grace handshake so lj_gc2_reclaim_retired() can drain retired strtab,
+  ** table, trace, mcode, and ctype/clib state at the completed epoch.
+  */
+  gc2_worker_active_rel(g, 0);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
   gc2_cycle_leader_rel(g, 0);
-  gc2_worker_active_rel(g, 0);
   return 1;
 }
 
@@ -2824,8 +2833,10 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->sweep_live_updates = gc2_sweep_live_updates_acq(g);
   s->sweep_live_huge_bytes = gc2_sweep_live_huge_bytes_acq(g);
   s->live_estimate = gc2_live_estimate_acq(g);
+  s->smr_reclaim_runs = gc2_smr_reclaim_runs_acq(g);
+  s->smr_reclaimed = gc2_smr_reclaimed_acq(g);
   gc2_root_spine_counts(g, &s->root_spine_objects,
-			&s->root_spine_tombstones);
+				&s->root_spine_tombstones);
   if (g && g->main_tg) {
     TGAlloc *alloc = &g->main_tg->alloc;
     s->arena_traversable_owned =
@@ -6305,6 +6316,17 @@ static void *gc2_mark_base(GCobj *o)
   return o;
 }
 
+static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o)
+{
+  int gct = o->gch.gct;
+  return gct == ~LJ_TTAB || gct == ~LJ_TFUNC || gct == ~LJ_TPROTO ||
+	 gct == ~LJ_TTHREAD || gct == ~LJ_TUPVAL || gct == ~LJ_TUDATA
+#if LJ_HASJIT
+	 || gct == ~LJ_TTRACE
+#endif
+	 ;
+}
+
 static LJ_AINLINE void gc2_mark_legacy_live_force(global_State *g, GCobj *o)
 {
   uint8_t old;
@@ -6377,9 +6399,10 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
   gc2_mark_legacy_live(g, o);
-  if (marked) {
+  if (marked && gc2_obj_may_traverse(o)) {
     uint32_t phase = gc2_phase_acq(g);
-    traversable = gc2_mark_base_traversable(g, base);
+    traversable = o->gch.gct == ~LJ_TUDATA ? 0 :
+      gc2_mark_base_traversable(g, base);
     if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
 	(traversable || o->gch.gct == ~LJ_TUDATA)) {
       if (traversable) {
@@ -6403,9 +6426,10 @@ int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  if (marked) {
+  if (marked && gc2_obj_may_traverse(o)) {
     uint32_t phase = gc2_phase_acq(g);
-    traversable = gc2_mark_base_traversable(g, base);
+    traversable = o->gch.gct == ~LJ_TUDATA ? 0 :
+      gc2_mark_base_traversable(g, base);
     if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
 	(traversable || o->gch.gct == ~LJ_TUDATA)) {
       if (traversable) {
@@ -6430,8 +6454,11 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
   gc2_mark_legacy_live(g, o);
-  traversable = gc2_mark_base_traversable(g, base);
-  if (marked && (traversable || o->gch.gct == ~LJ_TUDATA)) {
+  if (marked && gc2_obj_may_traverse(o)) {
+    traversable = o->gch.gct == ~LJ_TUDATA ? 0 :
+      gc2_mark_base_traversable(g, base);
+    if (!(traversable || o->gch.gct == ~LJ_TUDATA))
+      return marked;
     if (traversable) {
       int pushed = gc2_grey_push(g, o);  /* 05 section 5.6.3. */
       lj_assertG(pushed, "gc2 worker grey push failed for marked object");

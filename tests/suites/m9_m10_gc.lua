@@ -148,6 +148,78 @@ local function run_trace_hard_assist_cadence(t)
   print("M9 trace hard-assist cadence behavior passed")
 end
 
+local function run_fullgc_smr_reclaim(t)
+  t:build({ clean = true, quiet = true })
+
+  with_temp_paths(t, { "lj-fullgc-smr-reclaim.lua" }, function(script)
+    local luajit = shell_quote(t:path("src", "luajit"))
+    local lua_path = "LUA_PATH=" .. shell_quote(runtime.lua_path(t))
+    write_file(script, table.concat({
+      'local th = require"threading"',
+      'assert(jit and jit.status())',
+      'local function churn(n)',
+      '  local t = {}',
+      '  for i = 1, n do t["fullgc_smr_" .. i] = i end',
+      'end',
+      'collectgarbage("collect")',
+      'local before = th.gcstats()',
+      'churn(20000)',
+      'for _ = 1, 5 do collectgarbage("collect") end',
+      'local after = th.gcstats()',
+      'local reclaim_runs = after.smr_reclaim_runs - before.smr_reclaim_runs',
+      'local reclaimed = after.smr_reclaimed - before.smr_reclaimed',
+      'assert(reclaim_runs > 0, "full GC did not run an SMR reclaim drain")',
+      'assert(reclaimed > 0, "full GC did not reclaim retired side tables")',
+      'local before_flush_kb = collectgarbage("count")',
+      'jit.flush()',
+      'local after_flush_kb = collectgarbage("count")',
+      'assert(before_flush_kb - after_flush_kb < 512,',
+      '       "SMR-retired tables were left for a later safepoint")',
+      'print("smr_reclaimed_delta=" .. reclaimed .. " reclaim_runs_delta=" .. reclaim_runs)',
+      ""
+    }, "\n"))
+    assert_command_output_contains(
+      lua_path .. " " .. luajit .. " " .. shell_quote(script),
+      "smr_reclaimed_delta=",
+      { timeout = "20s", stderr = true })
+  end)
+  print("M9 full-GC SMR reclaim behavior passed")
+end
+
+local function run_newkey_barrier_scope(t)
+  t:build({ clean = true, quiet = true })
+
+  with_temp_paths(t, { "lj-newkey-barrier-scope.lua" }, function(script)
+    local luajit = shell_quote(t:path("src", "luajit"))
+    local lua_path = "LUA_PATH=" .. shell_quote(runtime.lua_path(t))
+    write_file(script, table.concat({
+      'local th = require"threading"',
+      'local n = 12000',
+      'collectgarbage("collect")',
+      'local before = th.gcstats()',
+      'local t = {}',
+      'for i = 1, n do t["newkey_barrier_" .. i] = i end',
+      'local after_insert = th.gcstats()',
+      'local insert_ssb = after_insert.worker_ssb_converted - before.worker_ssb_converted',
+      'local insert_grey = after_insert.worker_grey_drained - before.worker_grey_drained',
+      'assert(insert_ssb < 1024, "fresh-key insert requeued the table via SSB")',
+      'assert(insert_grey < 1024, "fresh-key insert rescanned the table")',
+      'before = th.gcstats()',
+      'collectgarbage("collect")',
+      'local after_collect = th.gcstats()',
+      'local collect_grey = after_collect.worker_grey_drained - before.worker_grey_drained',
+      'assert(collect_grey < 4096, "full GC drained one table traversal per key")',
+      'print("insert_ssb=" .. insert_ssb .. " collect_grey=" .. collect_grey)',
+      ""
+    }, "\n"))
+    assert_command_output_contains(
+      lua_path .. " " .. luajit .. " " .. shell_quote(script),
+      "insert_ssb=",
+      { timeout = "20s", stderr = true })
+  end)
+  print("M9 fresh-key barrier scope behavior passed")
+end
+
 local function run_bench_smoke(t)
   t:build({ clean = true, quiet = true })
 
@@ -400,6 +472,8 @@ end
 local m9_m10_deps = {
   "m9_gc_stats",
   "m9_trace_hard_assist_cadence",
+  "m9_fullgc_smr_reclaim",
+  "m9_newkey_barrier_scope",
   "m9_bench_smoke",
   "m9_bench_regression",
   "m9_bench_stock_compare",
@@ -417,6 +491,18 @@ return function(add)
     name = "m9_trace_hard_assist_cadence",
     description = "trace allocation hard-assist cadence behavior",
     run = run_trace_hard_assist_cadence
+  })
+
+  add({
+    name = "m9_fullgc_smr_reclaim",
+    description = "full GC drains SMR-retired side tables",
+    run = run_fullgc_smr_reclaim
+  })
+
+  add({
+    name = "m9_newkey_barrier_scope",
+    description = "fresh hash-key barrier does not requeue the whole table",
+    run = run_newkey_barrier_scope
   })
 
   add({

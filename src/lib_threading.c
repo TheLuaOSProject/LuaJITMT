@@ -1298,7 +1298,7 @@ static void threading_gc_stats_push(lua_State *L)
   GC2StatsSnapshot s;
   GCtab *t;
   lj_gc2_stats_snapshot(g, &s);
-  lua_createtable(L, 0, 86);
+  lua_createtable(L, 0, 88);
   t = tabV(L->top - 1);
   threading_gc_stats_setnum(L, t, "total_bytes", s.total_bytes);
   threading_gc_stats_setnum(L, t, "total_kbytes", s.total_bytes >> 10);
@@ -1392,6 +1392,8 @@ static void threading_gc_stats_push(lua_State *L)
   threading_gc_stats_setnum(L, t, "sweep_live_huge_bytes",
 			    s.sweep_live_huge_bytes);
   threading_gc_stats_setnum(L, t, "live_estimate", s.live_estimate);
+  threading_gc_stats_setnum(L, t, "smr_reclaim_runs", s.smr_reclaim_runs);
+  threading_gc_stats_setnum(L, t, "smr_reclaimed", s.smr_reclaimed);
   threading_gc_stats_setnum(L, t, "root_spine_objects",
 			    s.root_spine_objects);
   threading_gc_stats_setnum(L, t, "root_spine_tombstones",

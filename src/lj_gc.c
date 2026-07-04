@@ -2330,6 +2330,12 @@ void lj_gc_fullgc(lua_State *L)
       return;
     }
   } while (g->gc.state != GCSpause);
+  /*
+  ** Full collection may shrink lockless side tables during the final sweep.
+  ** Those old headers are SMR-retired, so advance one grace epoch here instead
+  ** of making callers wait for an unrelated later safepoint to reclaim them.
+  */
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   lj_gc2_publish_idle_threshold(g);
   vmstate_store_rel(g, ostate);
 }

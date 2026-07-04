@@ -854,7 +854,7 @@ int main(void)
   uint64_t mark_complete_runs0, mark_complete_hits0, mark_to_weak0;
   uint64_t weak_complete_runs0, weak_complete_progress0, weak_to_sweep0;
   uint64_t sweep_to_idle0, preserve_abort_to_idle0;
-  uint64_t sweep_live_updates0, live_estimate;
+  uint64_t sweep_live_updates0, live_estimate, trigger_bytes;
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
   uint64_t weak_bridge_fallbacks0;
   uint64_t weak_bridge_skipped0, weak_bridge_backfills0;
@@ -1086,9 +1086,18 @@ int main(void)
   assert(gc2_weak_to_sweep_acq(g) > weak_to_sweep0);
   assert(la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0);
   live_estimate = la_load64_acq(&g->gc2.live_estimate);
+  trigger_bytes = la_load64_acq(&g->gc2.trigger_bytes);
   assert(live_estimate > 0);
-  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_TRIGGER_MIN);
-  assert(la_load64_acq(&g->gc2.trigger_bytes) >= live_estimate);
+  assert(trigger_bytes >= LJ_GC2_TRIGGER_MIN);
+  /*
+  ** Pending-root scans are bounded by allocation since the previous cycle, so
+  ** pacing deliberately caps the automatic trigger even when the live heap is
+  ** larger than that cap.
+  */
+  if (live_estimate <= LJ_GC2_PENDING_ROOT_TRIGGER_MAX)
+    assert(trigger_bytes >= live_estimate);
+  else
+    assert(trigger_bytes == LJ_GC2_PENDING_ROOT_TRIGGER_MAX);
   assert_idle(g, tg);
 
   assert(luaL_dostring(L,

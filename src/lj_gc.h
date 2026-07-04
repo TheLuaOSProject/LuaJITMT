@@ -425,6 +425,22 @@ static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
     if (lj_gc_white_ && isblack(obj2gco(p))) \
       lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
 
+static LJ_AINLINE void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key)
+{
+  int white;
+  global_State *g = G(L);
+  /*
+  ** Publishing a fresh hash key only exposes that key edge. A full-table GC2
+  ** barrier would requeue and rescan the whole growing table for every insert;
+  ** the legacy incremental collector still needs the normal table back barrier
+  ** when the table is black and the key is white.
+  */
+  white = tviswhite(key);
+  lj_gc2_barrier_key_g(g, t, key);
+  if (white && isblack(obj2gco(t)))
+    lj_gc_barrierback(g, t);
+}
+
 /*
 ** M5 publication wrappers. These preserve current incremental-GC behavior
 ** while naming the publication boundary shared by GC2 and the legacy
@@ -436,6 +452,8 @@ static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
     if (LJ_UNLIKELY(isblack(obj2gco(t)))) lj_gc_barrierback(G(L), (t)); }
 #define lj_gc_pubtabtv(L, t, tv) \
   lj_gc_barriertv_((L), (t), (tv))
+#define lj_gc_pubtabkey(L, t, key) \
+  lj_gc_pubtabkey_((L), (t), (key))
 #define lj_gc_pubtabobj(L, t, o) \
   { int lj_gc_white_ = iswhite(obj2gco(o)); \
     lj_gc2_barrier_obj_pair((L), obj2gco(t), obj2gco(o)); \
