@@ -21,10 +21,6 @@ jobs:
     env:
       LUA: luajit
     steps:
-      - name: Allow sparse checkout around reserved benchmark paths
-        shell: pwsh
-        run: |
-          git config --global core.protectNTFS false
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -63,6 +59,10 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
+      - name: Allow sparse checkout around reserved benchmark paths
+        shell: pwsh
+        run: |
+          git config --global core.protectNTFS false
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
