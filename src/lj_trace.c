@@ -2201,11 +2201,20 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   } else if (lj_profile_pending(L)) {
     /* Just exit to interpreter. */
 #endif
-  } else if (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize) {
-    if (!(hookmask_load(G(L)) & HOOK_GC))
-      lj_gc_step(L);  /* Exited because of GC: drive GC forward. */
-  } else if ((jit_flags_acq(J) & JIT_F_ON) && !trace_poll_pending(L)) {
-    trace_hotside(J, pc, L, parent, exitno);
+  } else {
+    global_State *g = G(L);
+    int gcdefer = lj_gc_jit_defer_fixpoint(g);
+    if (g->gc.state == GCSatomic || g->gc.state == GCSfinalize || gcdefer) {
+      /* GC-step exits must resume in the interpreter instead of recording a
+      ** hot side trace that can stitch back to the same still-due GC check.
+      */
+      if (gcdefer)
+	(void)lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH);
+      if (!(hookmask_load(g) & HOOK_GC))
+	lj_gc_step(L);  /* Exited because of GC: drive GC forward. */
+    } else if ((jit_flags_acq(J) & JIT_F_ON) && !trace_poll_pending(L)) {
+      trace_hotside(J, pc, L, parent, exitno);
+    }
   }
   /* Return MULTRES or 0 or -17. */
   ERRNO_RESTORE

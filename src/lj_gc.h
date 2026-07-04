@@ -86,6 +86,7 @@ LJ_FUNCA void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_gc_step_top(lua_State *L);
 #if LJ_HASJIT
 LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
+LJ_FUNC int lj_gc_jit_defer_fixpoint(global_State *g);
 #endif
 LJ_FUNC void lj_gc_fullgc(lua_State *L);
 #ifdef LJ_GC2_TEST_HELPERS

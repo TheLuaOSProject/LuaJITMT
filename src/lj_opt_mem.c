@@ -686,6 +686,57 @@ cselim:
   return lj_opt_cselim(J, lim);
 }
 
+static IRRef ahstore_tabref(jit_State *J, IRIns *store)
+{
+  IRIns *xref = IR(store->op1);
+  if (xref->o == IR_AREF || xref->o == IR_HREFK)
+    return IR(xref->op1)->op1;
+  lj_assertJ(xref->o == IR_HREF || xref->o == IR_NEWREF,
+	     "expected table store ref");
+  return xref->op1;
+}
+
+static int fwd_aa_tab_ahstores(jit_State *J, IRRef lim, IRRef tab)
+{
+  IRRef ref;
+  ref = J->chain[IR_ASTORE];
+  while (ref > lim) {
+    IRRef storetab = ahstore_tabref(J, IR(ref));
+    if (tab == storetab || aa_table(J, tab, storetab) != ALIAS_NO)
+      return 0;
+    ref = IR(ref)->prev;
+  }
+  ref = J->chain[IR_HSTORE];
+  while (ref > lim) {
+    IRRef storetab = ahstore_tabref(J, IR(ref));
+    if (tab == storetab || aa_table(J, tab, storetab) != ALIAS_NO)
+      return 0;
+    ref = IR(ref)->prev;
+  }
+  return 1;
+}
+
+TRef LJ_FASTCALL lj_opt_fwd_tab_fload(jit_State *J)
+{
+  IRRef tab = fins->op1;
+  IRRef fid = fins->op2;
+  IRRef lim = fload_alias_limit(J, tab, fid);
+
+  /* Table storage headers are release-published and retired by resize. A
+  ** matching load is reusable within the current poll region only if no
+  ** NEWREF/table.clear can resize or replace storage for the same table. Plain
+  ** pre-MT ASTORE/HSTORE updates cannot change table storage; active-MT traces
+  ** keep them as boundaries because helper revalidation may republish after a
+  ** concurrent shape change.
+  */
+  if (!lj_opt_fwd_tptr(J, lim))
+    return lj_ir_emit(J);
+  if (mt_active_or_entering_acq(J2G(J)) &&
+      !fwd_aa_tab_ahstores(J, lim, tab))
+    return lj_ir_emit(J);
+  return lj_opt_fwd_fload(J);
+}
+
 /* FSTORE elimination. */
 TRef LJ_FASTCALL lj_opt_dse_fstore(jit_State *J)
 {

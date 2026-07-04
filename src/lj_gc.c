@@ -2050,7 +2050,7 @@ static int atomic(global_State *g, lua_State *L)
 }
 
 #if LJ_HASJIT
-static int gc_jit_defer_fixpoint(global_State *g)
+int lj_gc_jit_defer_fixpoint(global_State *g)
 {
   return lj_tg_jit_base(g) != NULL &&
 	 g->gc.state == GCSpropagate &&
@@ -2058,7 +2058,7 @@ static int gc_jit_defer_fixpoint(global_State *g)
 	 lj_gc2_mark_phase_active(g);
 }
 #else
-#define gc_jit_defer_fixpoint(g)	0
+#define lj_gc_jit_defer_fixpoint(g)	0
 #endif
 
 /* GC state machine. Returns a cost estimate for each step performed. */
@@ -2076,7 +2076,7 @@ static size_t gc_onestep(lua_State *L)
     if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
       return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
     if (lj_gc2_mark_phase_active(g)) {
-      if (gc_jit_defer_fixpoint(g))
+      if (lj_gc_jit_defer_fixpoint(g))
 	return LJ_MAX_MEM;  /* Root handshakes are run after trace exit. */
       if (lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH) == 0)
 	return GCSWEEPCOST;  /* 05 section 5.7.1 bounded propagation fixpoint bridge. */
@@ -2292,7 +2292,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
       ;
   }
   /* Return 1 to force a trace exit. */
-  return gc_jit_defer_fixpoint(g) ||
+  return lj_gc_jit_defer_fixpoint(g) ||
 	 (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize);
 }
 #endif

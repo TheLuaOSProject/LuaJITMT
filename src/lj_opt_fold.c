@@ -2308,10 +2308,11 @@ LJFOLDF(href_ah)
   return lj_opt_fwd_tptr(J, tref_ref(tr)) ? tr : EMITFOLD;
 }
 
-/* Table shape/storage fields are mutable in the lockless runtime: array/node
-** vectors are release-published and retired, and asize/hmask can change on
-** resize. Keep each recorded access as a fresh load instead of CSE'ing it
-** under the old "no corresponding stores" assumption.
+/* Table storage fields are mutable in the lockless runtime, but they are
+** stable within a poll region unless this trace performs a structural table
+** operation. Reuse them under lj_opt_fwd_tab_fload()'s NEWREF/table.clear and
+** active-MT store boundaries so array/asize and node/hmask pairs stay coherent
+** without forcing unrelated table stores to reload invariant headers.
 */
 LJFOLD(FLOAD any IRFL_TAB_ARRAY)
 LJFOLD(FLOAD any IRFL_TAB_NODE)
@@ -2319,7 +2320,7 @@ LJFOLD(FLOAD any IRFL_TAB_ASIZE)
 LJFOLD(FLOAD any IRFL_TAB_HMASK)
 LJFOLDF(fload_tab_mut)
 {
-  return EMITFOLD;
+  return lj_opt_fwd_tab_fload(J);
 }
 
 /* Strings are immutable, so we can safely FOLD/CSE the related FLOAD. */
