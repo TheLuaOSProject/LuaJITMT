@@ -1461,6 +1461,19 @@ static size_t gc_propagate_gray(global_State *g)
   return m;
 }
 
+static int gc2_legacy_mark_complete(global_State *g, lua_State *L)
+{
+  /*
+  ** A late native root can ask GC2 to abort its arena-mark cycle while the
+  ** classic collector is already in its mark/atomic phase. Classic colors remain
+  ** authoritative for this legacy full collection, so an idle GC2 phase is an
+  ** already-closed bridge, not a reason to rerun atomic forever.
+  */
+  if (!lj_gc2_mark_phase_active(g))
+    return 1;
+  return lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0);
+}
+
 /* -- Sweep phase --------------------------------------------------------- */
 
 /* Type of GC free functions. */
@@ -1814,7 +1827,7 @@ static int atomic(global_State *g, lua_State *L)
   gc_propagate_gray(g);  /* Propagate it. */
 
   /* 05 section 5.7.1 classic-GC atomic fixpoint-round bridge. */
-  if (!lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0))
+  if (!gc2_legacy_mark_complete(g, L))
     return 0;
 
   /* Separate userdata to be finalized. */
@@ -1822,7 +1835,7 @@ static int atomic(global_State *g, lua_State *L)
   gc_mark_finalizers(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
   /* 05 section 5.7.1 classic-GC atomic fixpoint-round bridge. */
-  if (!lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0))
+  if (!gc2_legacy_mark_complete(g, L))
     return 0;
   gc2_paranoia_check_fixpoint(g);
 
@@ -2165,6 +2178,16 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
   if (tviswhite(&snap) && (g->gc.state == GCSpropagate ||
 			   g->gc.state == GCSatomic))
     gc_mark(g, gcV(&snap));
+}
+
+/* Publish a GC object that is becoming reachable from a native root list. */
+void lj_gc_pubobjroot(lua_State *L, GCobj *o)
+{
+  TValue tv;
+  if (!L || !o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  setgcV(L, &tv, o, ~o->gch.gct);
+  lj_gc_pubroot(L, &tv);
 }
 
 /* Move the GC propagation frontier forward. */

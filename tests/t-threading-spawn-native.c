@@ -14,6 +14,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
@@ -112,6 +113,25 @@ static void require_threading(lua_State *L)
   assert(lua_istable(L, -1));
 }
 
+static void start_legacy_cycle(lua_State *L)
+{
+  global_State *g = G(L);
+  int i;
+  assert(luaL_dostring(L, "jit.off()") == LUA_OK);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(luaL_dostring(L,
+    "local hold = {}\n"
+    "for i=1,2000 do hold[i] = { i, tostring(i), i % 17 } end\n"
+    "_G.__spawn_gc_hold = hold\n") == LUA_OK);
+  lua_gc(L, LUA_GCRESTART, 0);
+  g->gc.stepmul = 1;
+  g->gc.threshold = 0;
+  for (i = 0; i < 1000 && g->gc.state == GCSpause; i++)
+    lj_gc_step(L);
+  assert(g->gc.state != GCSpause);
+  g->gc.threshold = LJ_MAX_MEM;
+}
+
 static void test_sticky_stopreq_spawn_ok(void)
 {
   lua_State *L = new_open_state();
@@ -179,10 +199,39 @@ static void test_fresh_stopreq_aborts_before_child_runs(void)
   lua_close(L);
 }
 
+static void test_spawn_preserves_active_legacy_cycle(void)
+{
+  lua_State *L = new_open_state();
+  global_State *g = G(L);
+  uint8_t state;
+  static const char script[] =
+    "local threading = require('threading')\n"
+    "local th = threading.spawn(function() return true end)\n"
+    "local ok, v = th:join(5)\n"
+    "assert(ok == true and v == true)\n";
+
+  require_threading(L);
+  lua_pop(L, 1);
+  start_legacy_cycle(L);
+  state = g->gc.state;
+  assert(luaL_loadbuffer(L, script, sizeof(script) - 1, "spawn-active-gc") ==
+	 LUA_OK);
+  assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  assert(g->gc.state == state);
+
+  g->gc.stepmul = 200;
+  g->gc.threshold = 0;
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.state == GCSpause);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_close(L);
+}
+
 int main(void)
 {
   test_sticky_stopreq_spawn_ok();
   test_fresh_stopreq_aborts_before_child_runs();
+  test_spawn_preserves_active_legacy_cycle();
   printf("t-threading-spawn-native OK: spawn native STOPREQ verified\n");
   return 0;
 }

@@ -250,8 +250,15 @@ static void threading_start_roots_clear(lua_State *L, LJThread *th)
 static void threading_spawn_gc_handoff(lua_State *L, GCudata *ud)
 {
   global_State *g = G(L);
-  if (g->gc.state != GCSpause)
-    lj_gc_fullgc(L);
+  /*
+  ** The thread userdata is published to the live-thread list before the child
+  ** can run. If a legacy cycle is already active, use the same root publication
+  ** barrier as other native root lists so the cycle sees the userdata and its
+  ** startup roots without completing the whole collector synchronously. GC2 has
+  ** a snapshot-style root set, so preserving a late root may still abort the
+  ** current GC2 cycle to idle and let the next cycle rescan from roots.
+  */
+  lj_gc_pubobjroot(L, obj2gco(ud));
   lj_gc2_preserve_root(g, obj2gco(ud));
 }
 
