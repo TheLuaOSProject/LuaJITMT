@@ -88,6 +88,21 @@ static int cconv_ctype_snapshot_wait(lua_State *L, CTState *cts,
   }
 }
 
+static int cconv_rawref_snapshot_wait(lua_State *L, CTState *cts,
+				      CTypeID id, CTypeID *ridp,
+				      CType *out)
+{
+  int ok = lj_ctype_rawref_predefined(cts, id, ridp, out);
+  if (ok >= 0)
+    return ok;
+  for (;;) {
+    ok = lj_ctype_rawref_snapshot(cts, id, ridp, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 static CTypeID cconv_rawid_wait(lua_State *L, CTState *cts, CTypeID id,
 				CTypeID errid, CType *out,
 				CTInfo *infop, CTSize *sizep)
@@ -957,15 +972,20 @@ static void cconv_struct_init_l(lua_State *L, CTState *cts, CType *d,
 ** This is true if an aggregate is to be initialized with a value.
 ** Valarrays are treated as values here so ct_tv handles (V|C, I|F).
 */
-int lj_cconv_multi_init(CTState *cts, CTypeID did, CType *d, TValue *o)
+int lj_cconv_multi_init_l(lua_State *L, CTState *cts, CTypeID did,
+			  CType *d, TValue *o)
 {
   CTInfo dinfo = ctype_info_acq(d);
   if (!(ctype_isrefarray(dinfo) || ctype_isstruct(dinfo)))
     return 0;  /* Destination is not an aggregate. */
   if (tvistab(o) || (tvisstr(o) && !ctype_isstruct(dinfo)))
     return 0;  /* Initializer is not a value. */
-  if (tviscdata(o) && ctype_rawrefid(cts, cdataV(o)->ctypeid) == did)
-    return 0;  /* Source and destination are identical aggregates. */
+  if (tviscdata(o)) {
+    CTypeID sid;
+    if (cconv_rawref_snapshot_wait(L, cts, cdataV(o)->ctypeid, &sid, NULL) &&
+	sid == did)
+      return 0;  /* Source and destination are identical aggregates. */
+  }
   return 1;  /* Otherwise the initializer is a value. */
 }
 
@@ -981,7 +1001,7 @@ void lj_cconv_ct_init_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
     if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
       cconv_err_initov_l(L, cts, did);
     dinfo = ctype_info_acq(&dsnap);
-    if (len == 1 && !lj_cconv_multi_init(cts, did, &dsnap, o))
+    if (len == 1 && !lj_cconv_multi_init_l(L, cts, did, &dsnap, o))
       lj_cconv_ct_tv_l(L, cts, &dsnap, did, dp, o, 0);
     else if (ctype_isarray(dinfo))  /* Also handles valarray init with len>1. */
       cconv_array_init_l(L, cts, &dsnap, did, sz, dp, o, len);
