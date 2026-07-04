@@ -2635,6 +2635,7 @@ static int asm_bufput_const_tg_inline(ASMState *as, IRIns *ir, GCstr *s)
 }
 #endif
 
+#if LJ_HAS_X64_MT_JIT_HELPERS
 static void asm_ustore_forjit(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_func_storeuv_forjit];
@@ -2700,6 +2701,7 @@ static int asm_ustore_cell_needs_helper(ASMState *as, IRIns *ir)
   return ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC &&
 	 !irt_isnum(ir->t) && !asm_ustore_cell_can_inline_tvalue(as, ir);
 }
+#endif
 
 static void asm_ahustore(ASMState *as, IRIns *ir)
 {
