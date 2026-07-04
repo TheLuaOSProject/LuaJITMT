@@ -2230,6 +2230,36 @@ static Node *tab_find_free_node_private(GCtab *t, Node *nodebase, MSize hmask,
   return tab_find_free_node_scan_private(nodebase, hmask, anchor);
 }
 
+static TValue *tab_newkey_private_empty_anchor(lua_State *L, GCtab *t,
+					       cTValue *key,
+					       Node *nodebase, Node *anchor)
+{
+  TValue nk, nv;
+  /*
+  ** A private empty anchor with no collision chain can be claimed before the
+  ** generic duplicate scan: no chain means there is no duplicate key to skip.
+  ** Reload everything after the private/current-generation predicate so active
+  ** MT, GC workers, active marking, KEYLOCK claims, resize, tombstones, and
+  ** collision chains still fall through to the normal protocol below.
+  */
+  if (!tab_private_mutation_allowed(L) ||
+      !tab_hash_generation_current(t, nodebase))
+    return NULL;
+  lj_tv_load_acq(&nk, &anchor->key);
+  if (!tvisnil(&nk))
+    return NULL;
+  lj_tv_load_acq(&nv, &anchor->val);
+  if (!tvisnil(&nv) || lj_tab_nextnode_acq(anchor) != NULL)
+    return NULL;
+  if (!tab_node_free_take_private(nodebase))
+    return NULL;
+  tab_storekeyrel(L, &anchor->key, key);
+  lj_gc2_barrier_weak_key(L, t, key);
+  lj_gc_pubtabkey(L, t, key);
+  lj_assertL(lj_tv_isnil_acq(&anchor->val), "new hash slot is not empty");
+  return &anchor->val;
+}
+
 static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
 				  Node *nodebase, MSize hmask, Node *anchor)
 {
@@ -2403,6 +2433,11 @@ retry_insert:
     return tab_rehash_forwarded_key(L, t, key);
   }
   n = hashkey_node(nodebase, hmask, key);
+  {
+    TValue *slot = tab_newkey_private_empty_anchor(L, t, key, nodebase, n);
+    if (slot)
+      return slot;
+  }
   {
     int locked;
     MSize chainlen;
