@@ -23,7 +23,7 @@ roots.
 `m5_upvalue_publish_gc` owns the behavior coverage for publication order.
 Closed upvalues must not return to immediate-link allocation: initialization,
 barrier repair, and pending-root publication stay ordered by the constructor
-comments and the focused fixture rather than by legacy wrappers.
+comments and the focused fixture.
 `m3_gc_root_pending` also covers the legacy-open close path and checks that the
 closed `GCupval` reaches the pending queue before the next flush publishes it to
 the legacy sweep spine.

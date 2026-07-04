@@ -14,5 +14,4 @@ Coverage:
   `CTState.parse_token` for stable callback cdata.
 - The same fixture holds the parser token and verifies both `set()` and
   `free()` wait from a native region before touching callback slots.
-- The fixture is wired into `m7_ffi_callback_install`; this is behavior
-  coverage, not a legacy wrapper.
+- The fixture is wired into `m7_ffi_callback_install` as behavior coverage.

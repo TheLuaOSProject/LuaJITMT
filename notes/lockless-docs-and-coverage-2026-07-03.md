@@ -12,14 +12,18 @@ Use the narrowest durable home for the reason:
   runtime counters, benchmark comparisons, or release/package artifact checks
   when the failure has an observable surface.
 
-Do not add repository-source text checks. A test must not read `src/`,
-`dynasm/`, or other repository implementation files just to assert that a helper
-name, field access, instruction spelling, or forbidden text is present or
-absent. Those checks make safe rewrites harder and do not prove the runtime
+Do not keep repository-source text checks as coverage. A test must not read
+`src/`, `dynasm/`, or other repository implementation files just to assert that
+a helper name, field access, instruction spelling, or forbidden text is present
+or absent. Those checks make safe rewrites harder and do not prove the runtime
 contract. Put the "why" next to the constrained code, add a note when the
 invariant spans subsystems, and use observable behavior coverage when the
 invariant can fail at runtime. Keep release, CI, and local harness gates on
 behavioral results or product artifacts.
+
+Historical implementation-text cleanup notes are not current design artifacts.
+When cleanup history is needed, use git history; current notes should describe
+the live invariant and the coverage that exercises it.
 
 Text checks are appropriate only for public artifacts whose text is the product:
 captured process output, benchmark CSVs, install manifests, release metadata,

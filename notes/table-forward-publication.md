@@ -39,11 +39,11 @@ more than one TG is live, traversal recording is NYI and the interpreter handles
 the traversal through the generation-aware runtime path. Single-threaded stock
 LuaJIT traversal recording remains enabled.
 
-This preserves Lua-visible table behavior during concurrent resize without
-adding legacy wrappers. The invariant is covered behaviorally by
-`m5_tab_forward_filter`: the fixture withholds publication of the successor root
-until the successor slot is initialized, then verifies readers observe the
-migrated value rather than a transient nil or the internal `FORWARD` sentinel.
+This preserves Lua-visible table behavior during concurrent resize. The
+invariant is covered behaviorally by `m5_tab_forward_filter`: the fixture
+withholds publication of the successor root until the successor slot is
+initialized, then verifies readers observe the migrated value rather than a
+transient nil or the internal `FORWARD` sentinel.
 It also covers the A->B->C case where a stale snapshot starts at an older
 generation after a later resize has already published.
 

@@ -2,9 +2,8 @@ Generated-artifact test cleanup
 ================================
 
 Removed the active test layer that compared LuaJIT internal generated output.
-Those checks were useful while bringing individual JIT paths online, but they
-made the suite enforce implementation details instead of the lockless invariant
-itself.
+Those checks were useful while bringing individual JIT paths online, but the
+suite now covers the lockless invariant itself.
 
 Current coverage keeps the observable requirements:
 

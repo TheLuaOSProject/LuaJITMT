@@ -7,6 +7,5 @@
   GC that rooted weak-key entries survive while unrooted values disappear. It
   also nils local references to the metatable and fallback table so the only
   strong edge is the resized weak table's metatable chain.
-- This replaces the old implementation-detail assertion style with a runtime
-  probe for the resize/weak/metatable edge that must stay safe under racy Lua
-  code.
+- This is a runtime probe for the resize/weak/metatable edge that must stay
+  safe under racy Lua code.

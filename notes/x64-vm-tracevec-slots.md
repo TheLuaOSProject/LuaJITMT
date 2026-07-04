@@ -9,9 +9,8 @@ Changes:
 - x64 static fallback/unpatch paths that recover `startins` for a `BC_JLOOP`
   also load the trace body from `J->tracev->slot[traceno]`.
 - The trace publication docs now treat direct `J->trace`/`J_OFS(trace)` VM
-  access as an obsolete pattern. The legacy wrapper was removed
-  with the CI invariant-testing cleanup; behavior and generated VM output checks own
-  the observable contract.
+  access as an obsolete pattern. Behavior coverage owns the observable
+  contract.
 
 Reasoning:
 - `TraceVec` is the RCU-published vector. C `traceref()` already acquires

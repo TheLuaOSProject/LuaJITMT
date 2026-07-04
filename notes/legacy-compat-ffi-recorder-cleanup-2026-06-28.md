@@ -13,8 +13,7 @@
   aborts for read-only ctype snapshot races.
 - Added behavior coverage that holds the ctype parse token only while recording
   and requires a trace abort instead of a parser-lock wait.
-- Removed stale legacy wrappers and duplicate implementation-detail tests.
-  Observable compatibility is now covered by runtime behavior and stock
+- Observable compatibility is now covered by runtime behavior and stock
   semantics, with recorder/helper rationale in comments and notes.
 
 ## Kept deliberately
@@ -31,7 +30,7 @@
 ## Estimated progress
 
 - Legacy/compat public/runtime surface removal: 80-85%.
-- CI migration away from stale legacy wrappers: 65-75%.
+- CI migration to Lua-owned behavior cases: 65-75%.
 - Lockless FFI recorder read-only ctype paths: 75-85%.
 
 ## Remaining work

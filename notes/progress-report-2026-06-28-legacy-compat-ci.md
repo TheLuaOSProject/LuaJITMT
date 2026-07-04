@@ -1,93 +1,39 @@
-# Progress report - 2026-06-28 legacy/compat and CI cleanup
+# Progress Report - 2026-06-28 Compatibility And CI
 
-Scope: x86_64/Linux `v2.1` lockless LuaJIT fork. Current policy is safety,
-stability, and Lua semantics first; LuaJIT performance parity is secondary when
-those goals conflict.
+Scope: stock LuaJIT compatibility plus lockless runtime CI cleanup.
 
-## Current estimate
+## Current Compatibility Boundary
 
-Overall safety/stability completion: 66-76%.
+- Stock LuaJIT public C API symbols and library behavior stay in scope.
+- Fork-local threading APIs stay isolated under `require("threading")`.
+- Bytecode compatibility with stock LuaJIT chunks is language/runtime behavior,
+  not a threading-only migration detail.
+- Mutable `ffi.cdef` remains serialized.
 
-- Runtime lockless substrate: 72-82%.
-- Threading/channel/shutdown behavior coverage: 78-88%.
-- CI migration from legacy shell wrappers to behavior tests: 60-70%.
-- FFI concurrency excluding mutable `ffi.cdef`: 58-68%.
-- Weak/finalizer/generational GC: 55-68%.
-- Release-quality soak and benchmark readiness: 45-55%.
-- Performance parity with LuaJIT: 35-45%.
+## Landed In This Area
 
-Time remaining forecast:
+- Current bytecode dump coverage checks load/execute behavior for supported
+  stock and lockless dump versions, plus rejection of incompatible layouts.
+- Public C compatibility aliases such as `luaL_putchar`, `lua_strlen`,
+  `lua_open`, `lua_getregistry`, `lua_getgccount`, `lua_Chunkreader`, and
+  `lua_Chunkwriter` remain available.
+- FFI native-state and callback behavior moved into Lua/C fixtures.
 
-- Correctness alpha: about 2-4 focused weeks.
-- Strong beta with broader stress and JIT/FFI closure: about 6-10 focused weeks.
-- Performance pass: about 4-10 additional weeks after semantic closure.
-- Production-confidence soak: about 3-6 months of workload validation.
+## Coordination Inventory
 
-## Done in this slice
+Kept intentionally:
 
-- Removed pre-lockless bytecode dump compatibility: the loader now accepts only
-  the current lockless dump version.
-- Deleted the `proto_legacyuv` compatibility path and the writer-side legacy
-  upvalue walk.
-- Renamed the old bytecode fixture to `m5_bcdump_current`; it now verifies
-  current-format loading and malformed current dump rejection.
-- Superseded follow-up: stock LuaJIT bytecode compatibility is restored because
-  v2 chunk loading is stock behavior, not a threading-only legacy entrypoint.
-  The active suite case is again `m5_bcdump_compat`; it checks v2/v3 generated
-  dump loading and old-version rejection of lockless-only cell opcodes.
-- Reverted the removal of stock LuaJIT public C compatibility aliases such as
-  `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
-  `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; stock LuaJIT API
-  compatibility stays in scope.
-- Slimmed `tools/ci/m7_ffi_blocking.sh` so behavior-covered blacklist and
-  recorder checks are covered by runtime fixtures and notes.
+- User-facing synchronization APIs.
+- Per-state owner claims.
+- Safepoint leadership and GC2 worker lifecycle control.
+- GDBJIT descriptor publication lock.
+- FFI parser mutation serialization and conservative fallback waits around
+  rollback windows.
 
-## Locks and coordination
-
-No broad global VM lock has been found outside intentionally exposed sync APIs.
-Remaining locks/waits are mostly good-faith safety mechanisms:
-
-- `threading.mutex`, channels, and joins: user-visible blocking semantics.
-- Per-state owner claims: prevent concurrent mutation of one Lua state.
-- Safepoint leadership and GC2 worker lifecycle control: shutdown/GC safety.
-- GDBJIT descriptor lock: debugger publication, low hot-path value.
-- FFI parser mutation serialization and conservative fallback locks: still
-  needed around rollback and abandoned-entry windows.
-
-Worth making more lockless:
-
-- FFI read fallback locks, one snapshot helper at a time.
-- Table resize/wait stress and proof coverage before simplifying waits.
-- Traced FFI native-state protocol, while traced calls remain disabled.
-
-Not worth removing now:
-
-- Explicit synchronization APIs, safepoint leadership, GC2 lifecycle parking,
-  GDBJIT locking, and mutable `ffi.cdef` serialization.
-
-## Test and CI audit
-
-Current policy keeps no legacy wrappers. Memory-order contracts, ABI fences, and
-temporary migration rules must be comments or notes, with behavior,
-public-artifact, benchmark, packaging, or process-output coverage where the
-failure is observable. Best near-term cleanup:
-
-- Keep M5 x64, M7 FFI, and M6 JIT coverage tied to runtime behavior,
-  process-output checks, or public artifacts where those already prove the
-  contract.
-- Split `t-gc2-traverse.c` or add selectors; it is still a monolithic mixed
-  fixture used by M3 and M8.
-- Deduplicate overlapping finalizer ownership coverage between M3 and M8
-  fixtures.
-- Add explicit timeouts to remaining intentionally blocking threading cases.
-
-## Verification
-
-Passed:
+## Verification At The Time
 
 - `tools/ci/lua_test.sh m5_bcdump_current m5_registry_root`
 - `tools/ci/lua_test.sh m5_parser_capture_meta m5_cell_ops m5_upvalue_publish_gc`
 - `tools/ci/lua_test.sh m3_gc2_worker_scheduler`
 - `tools/ci/lua_test.sh m8_weak`
-- `tools/ci/m7_ffi_blocking.sh`
 - `git diff --check`

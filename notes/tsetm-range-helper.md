@@ -79,7 +79,7 @@ Validation:
   marking is active or the parent table is black.
 - Added `LJ_TAB_TEST_HELPERS` counters to `t-tab-cas-store.c` so coverage proves
   the current-array path is taken and `mt_entering` forces the fallback through
-  observed helper behavior rather than repository implementation text.
+  observed helper behavior.
 
 Validation:
 

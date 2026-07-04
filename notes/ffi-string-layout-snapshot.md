@@ -19,5 +19,4 @@ Coverage lives in `tests/t-ffi-layout-snapshot.c` and
 `tests/t-ffi-cparse-rollback-reader.lua`.  The fixtures check exact ctype
 parse-sequence movement for string `offsetof`, `alignof`, `sizeof`, VLA
 `sizeof`, VLA `new`, `istype`, and `cast`, and verify that a string cast cannot
-surface fields from an abandoned failed cdef.  These are behavior checks rather
-than legacy wrappers.
+surface fields from an abandoned failed cdef.

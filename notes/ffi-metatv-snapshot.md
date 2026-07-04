@@ -44,5 +44,4 @@ Coverage:
   parser-busy abort, and that predefined arithmetic fallback misses do the
   same. Ctype `__call`, `__add`, table-backed `__index`, and `ffi.new()`/`__gc`
   lookup on parser-created metatypes still abort recording rather than waiting.
-- The fixtures are wired into `m7_ffi_metatype`; this is behavior coverage,
-  not a legacy wrapper.
+- The fixtures are wired into `m7_ffi_metatype` as behavior coverage.

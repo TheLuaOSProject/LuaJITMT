@@ -18,7 +18,7 @@ Changed:
   String declarations still parse under the parser lock before comparison.
 - `m7_ffi_typeinfo_snapshot` now relies on behavior fixtures and this documented
   parser-publication invariant.
-- Removed the now-dead `ffi_istype_raw()` fallback and its legacy wrapper.
+- Removed the now-dead `ffi_istype_raw()` fallback.
 - Extended `t-ffi-istype-snapshot.c` with an active-token behavior test. It
   holds the parser token, releases it from a helper thread, asserts the normal
   `ffi.istype()` boolean result, and checks the parser sequence advanced only

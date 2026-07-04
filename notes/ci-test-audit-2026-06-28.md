@@ -1,201 +1,34 @@
 # CI/Test Harness Audit - 2026-06-28
 
-Historical note: this audit predates the current invariant-documentation model.
-Use `notes/lockless-docs-and-coverage-2026-07-03.md` for current guidance:
-implementation-only rules are documented next to the constrained code, and
-tests cover behavior, counters, public artifacts, release metadata, or opaque
-bytecode execution.
+Current guidance for tests and CI:
 
-## Inventory
+- `tools/ci/lua_test.sh <case...>` is the canonical way to run named suite
+  cases.
+- `tools/ci/platform_build.sh` owns platform build smoke.
+- Release packaging validation lives in `tests/suites/release.lua` and
+  `tools/release/verify_artifacts.sh`.
+- A shell script should remain only when it performs real platform setup,
+  release orchestration, or non-suite work.
 
-- 2026-07-03 status: `tools/ci` has only `lua_test.sh` and
-  `platform_build.sh`.
-- Historical state at the time of this audit: most scripts called
-  `tools/ci/lua_test.sh` after doing real validation or orchestration work;
-  zero pure alias wrappers remained.
-- At the time of this audit, about 60 scripts still embedded local
-  shell legacy wrappers before calling the Lua
-  suite. Those have since been removed or replaced with behavior fixtures,
-  public-artifact checks, and documentation.
-- `tools/ci/lua_test.sh --list` exposes 100+ named Lua-suite cases.
-- The Lua suites/helpers still contain many explicit clean-build calls.
+Implementation-only rules are documented beside the constrained code or in a
+focused note. Tests should cover behavior, counters, public artifacts, release
+metadata, benchmarks, packaging, stock semantics, or process output.
 
-## Problems Found
+## Current Harness Shape
 
-1. Repeated clean builds in aggregate runs.
-   Many migrated Lua cases call `clean_build(t)` even when they use the same
-   default flags as the previous case. This slows aggregate runs and increases
-   the chance of conflicting build artifacts when multiple CI commands run in
-   the same checkout.
+- `tests/lib/ljtest.lua` caches repeated same-profile clean builds in one
+  runner process and persists build-profile signatures across processes.
+- `tests/lib/suite_build.lua` owns LuaJIT-linked and standalone C fixture
+  compilation.
+- `tests/lib/suite_runtime.lua` owns stock-suite, LuaJIT subprocess, and
+  aggregate-case runner plumbing.
+- `tests/lib/suite_assert.lua` owns assertions over process output and
+  test-owned artifacts.
 
-2. Pure shell compatibility wrappers are unwanted legacy surface.
-   Canonical execution is `tools/ci/lua_test.sh <case...>`. A `tools/ci/*.sh`
-   file should exist only when it performs real lint, orchestration, or
-   non-suite setup that has not yet moved into Lua.
+## Operational Notes
 
-3. Aggregate cases could bypass wrapper-only checks.
-   `m7_ffi`, `m9_m10_gc`, and similar aggregate cases call Lua case names, not
-   the shell wrappers. The resolution was to move the invariant into behavior,
-   fixture, counter, public-artifact, or documentation coverage rather than
-   preserve separate lint entrypoints.
-
-4. Repository legacy wrappers often pinned implementation details.
-   Broad string matches blocked better implementations that preserved the same
-   safety invariant with a new helper boundary. New tests must use behavior,
-   C fixtures, public artifacts, benchmarks, packaging, or documentation.
-
-5. Large shell wrapper files are hard to review.
-   `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
-   and `m8_weak.sh` are large enough that future legacy wrappers should usually
-   go into Lua suite helper modules or focused shared shell helpers.
-
-## Cleanup Landed In This Slice
-
-- `tests/lib/ljtest.lua` now caches clean builds within one `tools/test.lua`
-  process. The first clean build still runs, and changing `XCFLAGS` still forces
-  a clean rebuild. Repeated same-flag clean builds skip the redundant `make
-  clean && make`.
-- Set `LJ_TEST_DISABLE_BUILD_CACHE=1` to recover the old always-clean behavior
-  while debugging the harness itself.
-- `tests/lib/suite_utils.lua` keeps file reads as a neutral primitive for
-  test-owned artifacts: captured output, bytecode blobs, benchmark CSVs,
-  package metadata, and fixture-owned files. Implementation-only constraints
-  belong in code comments and notes, with behavior/public-artifact coverage
-  where there is an observable surface.
-- `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
-  forced clean builds. Cases that need profile isolation can still pass
-  `clean = true`.
-- Removed the FFI C-call fresh-STOPREQ legacy wrapper from the M3 shell wrapper.
-  The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
-  native entry/leave restoration, nested callbacks, stale callback returns,
-  callback blacklisting, and fresh STOPREQ delivery.
-- `m7_ffi_callback_runtime` now carries the relevant contract through behavior
-  fixtures.
-
-## Follow-up Landed Later On 2026-06-28
-
-- The pure `m4_threading_capi` and `m4_threading_api` shell aliases were
-  removed. Their join-result wait, mutex wait, and attach-order legacy wrappers
-  moved to C API behavior coverage.
-- `tests/t-threading-capi.c` now covers fresh STOPREQ delivery for a join
-  blocked on a done child with a busy owner and for a blocked
-  `threading.mutex:lock()` call.
-- `m4_threading_capi` has a `20s` timeout to turn future hangs into diagnostic
-  failures.
-- The pure `m5_profile_stop_native` shell alias was removed. Its profiler-stop
-  ordering contract is now covered by `tests/t-profile-stop-native.c` behavior
-  assertions for sticky STOPREQ cleanup, fresh STOPREQ during native
-  timer-thread join, callback-error containment, busy callback coroutine
-  ownership, and registry-anchor cleanup before interrupted `profile.stop()`
-  unwinds.
-- Removed 76 pure shell aliases in this pass. Use
-  `tools/ci/lua_test.sh <case...>` for those cases.
-- The old `m7_ffi_blocking` wrapper was folded into the Lua-owned
-  `m7_ffi_ccall_native` behavior case. Duplicate callback-blacklist
-  reconciliation, absence of the removed `ffi.blocking` public marker, default
-  recorder abort behavior, and native-state blocking progress are covered by
-  `tests/t-ffi-cbblack-race.c`, `tests/t-ffi-ccall-native.lua`, and the
-  recorder-off fixture rather than implementation-detail notes.
-- Follow-up stock-behavior correction: bytecode-dump compatibility support for
-  stock v2 and transitional v3 dumps was restored. That path is not a
-  threading-only legacy entrypoint; it affects `load`, `luaL_loadbuffer*`, and
-  precompiled chunk interoperability. Later generated-artifact cleanup removed
-  active bytecode-blob mutation from `m5_bcdump_compat`; current coverage treats
-  dumps as opaque load/execute artifacts and documents malformed-layout rules
-  beside the bytecode reader/writer.
-- Reverted the removal of stock LuaJIT C header aliases such as
-  `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
-  `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; these are stock
-  LuaJIT public API compatibility macros and should remain available.
-- Moved `t-ffi-finreg-free-path.c` into the `m7_ffi_finreg` Lua-suite
-  case and removed the ad hoc hardcoded `/tmp` compile from
-  `tools/ci/m7_ffi_finreg.sh`.
-- Removed the parser-token STOPREQ implementation-detail rule from
-  `m7_ffi_cdef_token`; `t-ffi-cdef-token-stopreq.c` now owns the behavior
-  contract for sticky STOPREQ cleanup and fresh STOPREQ while parked.
-- Converted the element-size parser-lock-fallback expectation into active-token
-  behavior coverage in `t-ffi-element-size-snapshot.c`.
-- Converted the cdata field parser-lock-fallback expectation into active-token
-  behavior coverage in `t-ffi-field-snapshot.c`, including direct fields,
-  pointer auto-deref, misses, metatype dispatch, and constructor constants.
-- Extended `t-ffi-cparse-rollback-reader.lua` so failed cdefs cannot leak
-  constructor constants or constructor fields.
-- Documented the field-helper expectations for ID-rooted waits, parser-token
-  ownership in `lj_cdata_index_l()`, and sequenced field snapshot misses.
-
-## Legacy/Compat Audit Findings
-
-- Highest-priority legacy cleanup is in GC2 bridge scaffolding, not FFI pointer
-  compatibility. Sweep/finalizer/weak bridge constraints should be owned by
-  semantic behavior tests before bridge names are removed.
-- The old internal M10 legacy mark-suppression helper name was removed in favor
-  of `lj_gc2_minor_roots_skip_bridge_mark()`, which describes the actual
-  policy: minor-root cycles skip only the arena-to-GC2 bridge mark, not legacy
-  marking itself.
-- Duplicate legacy wrappers in weak/worker CI were a temporary migration
-  problem; once behavior fixtures or documentation own the contract, the
-  wrapper should be deleted rather than collapsed into another lint step.
-- The duplicate M8 sweep/finalizer assertion block was removed, while M8 still
-  owns weak/finalizer behavior fixtures.
-- The internal sweep-close bridge helper was renamed to
-  `lj_gc2_sweep_bridge_close()`, keeping the behavior boundary while removing
-  stale production helper naming.
-- The GC2 sweep close-readiness latch/helper surface was renamed to
-  `sweep_bridge_ready` / `lj_gc2_sweep_bridge_*`, and the scheduler guard now
-  checks the current bridge ownership surface without carrying old-name
-  tombstones for the removed `sweep_legacy_ready` names.
-- Removed more duplicate or tombstone-only legacy wrappers: M3 no longer duplicates the
-  x64 `barrierback` check owned by M5, M10 no longer duplicates the stats-table
-  checks owned by M9, and M10/M3 no longer carry tombstones for already-removed
-  mark/sweep bridge wrappers.
-- Migrated weak completion telemetry and tests to `weak_bridge_*`, including
-  `collectgarbage("stats")`, benchmark stat output, M8 weak behavior checks, and M3
-  weak-helper visibility checks. No old developer-stat aliases are kept.
-- Removed two tombstone-only M3 CI checks for already-deleted weak/sweep phase
-  aliases and old paranoia diff aliases. Current transition/root-diff behavior
-  remains covered by C fixtures and documentation rather than helper comments.
-- Removed duplicate M3 finalizer negative scans that M8 already owns through its
-  close-time finalizer, callback-stack, and finalizer-spawn behavior gates. M3
-  still keeps the positive worker-scheduler ownership checks.
-- Renamed the GC2 lifecycle helper surface to purpose names:
-  `lj_gc2_mark_begin()`, `lj_gc2_preserve_abort_to_idle()`, and
-  `lj_gc2_cycle_to_idle()`. The remaining M3 notes describe the current lower-level
-  cycle-close helper name instead of the removed fork-era label.
-- Added persistent Lua-suite build-profile tracking so a new `lua_test.sh`
-  process cannot silently reuse a previous alternate-XCFLAGS build, such as the
-  JIT-disabled tail left by `m3_gc2_scaffold`, for default/JIT fixture cases.
-  The new `m0_build_profile_switch` behavior test covers disabled-JIT to default
-  profile recovery without relying on a legacy wrapper.
-- Removed remaining stale old-name tombstones for deleted root/trace/finalizer
-  wrappers where behavior tests already cover the publication/finalizer paths.
-  Active `src`, `tests`, and `tools` now avoid standalone old-compat wording;
-  the remaining `compatptr` identifiers are FFI type-conversion semantics and
-  are intentionally retained.
-- Public or semantic compatibility helpers such as FFI pointer compatibility
-  checks are not removal targets unless the language/API contract changes.
-- Anti-legacy wrappers that merely prevent reintroducing already-removed wrapper
-  names should be deleted once compile, replacement-surface, and behavior
-  coverage make them redundant.
-
-Verification for the alias removal:
-
-- `tools/ci/lua_test.sh --list`
-- `tools/ci/lua_test.sh m5_profile_stop_native`
-- `tools/ci/lua_test.sh m4_threading_api m4_threading_capi`
-- `tools/ci/lua_test.sh m7_ffi_blocking m7_ffi_callback_runtime`
-- `tools/ci/lua_test.sh m5_bcdump_current`
-- `git diff --check`
-
-## Next Refactors
-
-1. Do not restore historical text-check contracts. If an old note still matters,
-   keep the reason as a code comment or design note, and cover observable
-   behavior through fixtures, counters, public artifacts, stock semantics, or
-   release metadata.
-2. Do not add new pure shell aliases. If a case is fully Lua-owned, run it
-   through `tools/ci/lua_test.sh <case...>`.
-3. Split any large remaining GC/finalizer orchestration into suite-local helper
-   modules so behavior tests live near the milestone cases they protect.
-4. Revisit historical wrapper contracts after each implementation slice; when a
-   contract is semantic rather than a required ABI, rewrite it around the
-   semantic boundary or document it.
+- Build-owning tests are serialized by the runner lock in one checkout.
+- Use separate worktrees for parallel runs with different build profiles.
+- Keep stock LuaJIT API compatibility checks in behavior/C fixtures; do not
+  remove public stock symbols merely because they are not part of the threading
+  experiment.
