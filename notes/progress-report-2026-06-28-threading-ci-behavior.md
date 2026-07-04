@@ -33,7 +33,8 @@ add 1-3 weeks.
   `tests/t-threading-capi.c` now publishes a fresh STOPREQ from a helper thread
   only after the joining thread has entered the native wait.
 - Added behavior coverage for blocked `threading.mutex:lock()` fresh STOPREQ
-  delivery, replacing the old shell grep for bounded mutex futex waits.
+  delivery. The bounded-wait requirement is now documented at the wait helpers
+  and covered by runtime STOPREQ behavior, not by shell text checks.
 - Added a `20s` timeout to `m4_threading_capi` so a future regression fails
   diagnostically instead of hanging CI.
 - Later cleanup removed the pure `tools/ci/m4_threading_capi.sh` and

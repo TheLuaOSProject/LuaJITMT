@@ -1,23 +1,22 @@
 # Lua test-suite migration
 
-## 2026-06-28 legacy wrapper removal
+## 2026-06-28 harness cleanup
 
-- Removed the old implementation-file content assertion API and generic `assert_file_*`
-  compatibility wrappers from the Lua test harness.
+- Removed generic `assert_file_*` compatibility wrappers from the Lua test
+  harness.
 - Removed the old `suite_runtime` build/C-fixture compatibility exports; suites
   now import `suite_build` directly for those helpers.
 - Routed `suite_runtime.add_luajit_c_fixture_cases()` through `suite_build`
   directly so fixture registration no longer depends on the removed runtime
   build helper export.
-- Superseded generated JIT/ASM dump assertions: compiler-internal text is not a
-  test gate. Bytecode compatibility and release/package artifacts remain valid
-  public-artifact checks.
+- Superseded generated JIT/ASM dump assertions. Bytecode compatibility and
+  release/package artifacts remain valid public-artifact checks.
 - Switched output-file checks to read the captured output and assert text
   directly.
 - Invariant documentation guidance now lives in
   `notes/lockless-docs-and-coverage-2026-07-03.md`.
 - Preserve implementation reasons in comments/notes, and test behavior, public
-artifacts, release/build outputs, counters, or stock semantics.
+  artifacts, release/build outputs, counters, or stock semantics.
 
 Validation:
 
@@ -85,31 +84,24 @@ Validation:
   `tests/lib/suite_assert.lua`.
 - Historical state: this pass left compatibility exports in `suite_utils.lua`
   while routing dump and file-result suites to `suite_assert` directly.
-- Historical state: this pass added implementation-file content assertions to
-  `suite_assert` and raw `Test:read()`. Those legacy wrappers were removed
-  on 2026-06-28; they are not a model to recreate. Current policy is
-  behavior fixtures, public-artifact assertions, and code-adjacent comments or
-  notes for implementation-only invariants.
+- Current policy is behavior fixtures, public-artifact assertions, and
+  code-adjacent comments or notes for implementation-only invariants.
 - Bytecode compatibility blobs remain valid public-artifact checks; JIT/compiler
   implementation rationale belongs in code comments and notes.
 
 Validation:
 
 - `tools/ci/lua_test.sh --list`
-- Direct `suite_assert`/`ljtest` smoke checks for dump result matching. The
-  generated JIT/internal dump portion and the temporary repository-source
-  filtering were later removed; bytecode compatibility remains public-artifact
-  coverage by loading and executing opaque dumps.
+- Direct `suite_assert`/`ljtest` smoke checks for dump result matching. Bytecode
+  compatibility remains public-artifact coverage by loading and executing opaque
+  dumps.
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops m7_ffi_jit_cnew`
 
-## 2026-06-28 temporary source-reader cleanup
+## 2026-06-28 build/cache cleanup
 
-- Historical state: this pass added path-based handling for repository source
-  files to `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
-  internal-file reader. Both that reader and those legacy wrappers were removed
-  in the later 2026-06-28 legacy wrapper removal. The remaining path-based read
-  behavior was removed on 2026-07-03 so the harness now treats file access as a
-  neutral primitive for test-owned artifacts.
+- The harness treats file access as a neutral primitive for test-owned
+  artifacts: captured output, bytecode blobs, benchmark CSVs, package metadata,
+  and fixture-owned files.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
@@ -168,8 +160,7 @@ Validation:
 Validation:
 
 - `tools/ci/lua_test.sh --list`
-- Direct `ljtest` smoke check for normal file reads after the temporary
-  repository-source filtering was removed.
+- Direct `ljtest` smoke check for normal file reads.
 - `make -C src clean && tools/ci/lua_test.sh m9_bench_regression`
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops`
 
@@ -217,8 +208,7 @@ Validation:
 - `tools/ci/lua_test.sh --list`
 - `tools/ci/run_stock_tests.sh --quiet lang/andor.lua`
 - `tools/ci/run_stock_tests.sh src/luajit --quiet lang/andor.lua`
-- Direct `suite_assert`/`ljtest` smoke check for result-file matching after the
-  temporary repository-source filtering was removed.
+- Direct `suite_assert`/`ljtest` smoke check for result-file matching.
 - `tools/ci/lua_test.sh m9_bench_regression`
 - `tools/ci/lua_test.sh m9_m10_gc`
 - `git diff --check`

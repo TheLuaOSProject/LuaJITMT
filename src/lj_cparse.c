@@ -416,6 +416,12 @@ static void cp_rollback_log(CPState *cp, CTypeID id)
   cp->rollback = rb;
 }
 
+/*
+** cdef parsing owns the parse token, but readers can still snapshot published
+** CType entries. Mutations to pre-existing entries are logged and restored on
+** parse failure; new entries are abandoned with CTA_BAD while preserving hash
+** links so lock-free walkers can skip through them.
+*/
 static CType *cp_ctype_mut(CPState *cp, CTypeID id)
 {
   cp_rollback_log(cp, id);

@@ -57,12 +57,11 @@ bytecode execution.
   clean && make`.
 - Set `LJ_TEST_DISABLE_BUILD_CACHE=1` to recover the old always-clean behavior
   while debugging the harness itself.
-- `tests/lib/suite_utils.lua` temporarily gave generic `read_file()` special
-  handling for repository source files. The later cleanup removed that behavior,
-  the deliberate internal-file reader, and all path-based implementation-file
-  special cases. Current coverage is documentation plus behavior,
-  public-artifact, benchmark, packaging, or process-output tests, not harness
-  path-based checks.
+- `tests/lib/suite_utils.lua` keeps file reads as a neutral primitive for
+  test-owned artifacts: captured output, bytecode blobs, benchmark CSVs,
+  package metadata, and fixture-owned files. Implementation-only constraints
+  belong in code comments and notes, with behavior/public-artifact coverage
+  where there is an observable surface.
 - `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
   forced clean builds. Cases that need profile isolation can still pass
   `clean = true`.
@@ -121,10 +120,8 @@ bytecode execution.
   pointer auto-deref, misses, metatype dispatch, and constructor constants.
 - Extended `t-ffi-cparse-rollback-reader.lua` so failed cdefs cannot leak
   constructor constants or constructor fields.
-- Recorded narrow field-helper expectations in `m7_ffi_typeinfo_snapshot.sh` for the
-  remaining non-observable implementation shape: ID-rooted field waits, no
-  parser-lock acquisition in `lj_cdata_index_l()`, and no sequence-free field
-  snapshot misses.
+- Documented the field-helper expectations for ID-rooted waits, parser-token
+  ownership in `lj_cdata_index_l()`, and sequenced field snapshot misses.
 
 ## Legacy/Compat Audit Findings
 

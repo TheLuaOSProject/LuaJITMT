@@ -119,9 +119,9 @@ template→TG. 4) Every `setsbufL`-style tmpbuf use: pass tg.
 ## 3.5 dasc migration (vm_x64.dasc)
 
 The pinned upstream had 45 dispatch-template sites in this area. Re-derive the
-current worklist from the active DynASM code while editing; do not preserve a
-repository-text check for this. The durable rule is that mutator-local state
-loads from TG, while immutable or universe-owned state remains in `global_State`.
+current worklist from the active DynASM code while editing. The durable rule is
+that mutator-local state loads from TG, while immutable or universe-owned state
+remains in `global_State`; document each boundary in the edited VM/helper code.
 Dispositions:
 
 A. `GG_DISP2HOT` (hotloop/hotcall macros, dasc:332–345 and vm_hotloop/

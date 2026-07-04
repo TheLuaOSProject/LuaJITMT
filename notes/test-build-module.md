@@ -14,5 +14,5 @@
 - 2026-07-03 follow-up: the Lua harness keeps ordinary artifact readers only.
   `Test:read()` remains for logs, fixture outputs, imported-suite inputs, CSVs,
   opaque bytecode round-trip artifacts, and packaging artifacts. Implementation
-  rules belong in code comments and notes, with observable behavior covered by
-  fixtures or public artifacts.
+  files are not harness artifacts. Implementation rules belong in code comments
+  and notes, with observable behavior covered by fixtures or public artifacts.

@@ -86,6 +86,11 @@ static void gc_root_wait_no_l(void)
 
 /* -- Mark phase ---------------------------------------------------------- */
 
+/*
+** Legacy marking still runs during public minor cycles. Only the GC2 bridge is
+** suppressed, otherwise legacy callbacks would turn a minor-root cycle into a
+** full-root GC2 mark before the GC2 scanner owns the root policy.
+*/
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
   if (!lj_gc2_minor_roots_skip_bridge_mark(g))

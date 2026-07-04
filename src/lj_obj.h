@@ -1182,6 +1182,12 @@ static LJ_AINLINE void lj_tab_hmask_rel(GCtab *t, MSize hmask)
   la_store32_rel(&t->hmask, (uint32_t)hmask);
 }
 
+/*
+** Node.next is a shared publication edge once hash nodes can be observed by
+** another TG. Table walkers that can race with resize/forwarding must acquire
+** through this helper so a published chain link also exposes the initialized
+** target node.
+*/
 static LJ_AINLINE Node *lj_tab_nextnode_acq(const Node *n)
 {
 #if LJ_GC64

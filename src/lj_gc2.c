@@ -1661,6 +1661,10 @@ int lj_gc2_mark_phase_active(global_State *g)
   return g && gc2_phase_acq(g) == LJ_GC2_MARK;
 }
 
+/*
+** The phase/minor-root bits are a GC2-owned protocol. Non-GC2 code asks these
+** helpers so the bridge policy stays with the scanner that defines the cycle.
+*/
 int lj_gc2_minor_roots_active(global_State *g)
 {
   return g && gc2_cycle_roots_minor_acq(g) != 0;

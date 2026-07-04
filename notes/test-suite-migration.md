@@ -37,8 +37,8 @@ Lua test-suite migration notes:
   - `tools/ci/m2_arena_gcclose.sh` -> `m2_arena_gcclose`
   - `tools/ci/m2_arena_gcsweep.sh` -> `m2_arena_gcsweep`
   - `tools/ci/m2_arena_gcphase.sh` -> `m2_arena_gcphase`
-- Fifth batch was later removed from the runnable suite because it only
-  asserted implementation-file shape, not behavior.
+- Fifth batch was later removed from the runnable suite because it did not cover
+  observable behavior.
 - Sixth migrated scripts:
   - `tools/ci/m4_thr_substrate.sh` -> `m4_thr_substrate`
   - `tools/ci/m4_chan_stress.sh` -> `m4_chan_stress`

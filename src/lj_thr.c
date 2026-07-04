@@ -351,6 +351,10 @@ uint32_t lj_state_owner_wait(lua_State *L, lua_State *target, uint32_t owner,
   uint32_t actions = 0;
   if (!target || owner == 0)
     return 0;
+  /*
+  ** State-owner waits are native waits, not VM stalls. Mark the TG native so
+  ** safepoint/STOPREQ handshakes can observe it while the futex wait blocks.
+  */
   if (tg)
     lj_native_enter(tg);
   lj_state_owner_futex_wait(target, owner, ns);

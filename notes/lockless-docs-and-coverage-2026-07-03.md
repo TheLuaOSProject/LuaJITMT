@@ -18,7 +18,8 @@ name, field access, instruction spelling, or forbidden text is present or
 absent. Those checks make safe rewrites harder and do not prove the runtime
 contract. Put the "why" next to the constrained code, add a note when the
 invariant spans subsystems, and use observable behavior coverage when the
-invariant can fail at runtime.
+invariant can fail at runtime. Keep release, CI, and local harness gates on
+behavioral results or product artifacts.
 
 Text checks are appropriate only for public artifacts whose text is the product:
 captured process output, benchmark CSVs, install manifests, release metadata,

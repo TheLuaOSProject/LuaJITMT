@@ -123,7 +123,11 @@ static LJ_AINLINE void hotcount_setg(global_State *g, const BCIns *pc, HotCount 
 {
   HotCount v = (HotCount)val;
   uint32_t i = (u32ptr(pc)>>2) & (HOTCOUNT_SIZE-1);
-  G2GG(g)->hotcount[i] = v;  /* Transitional mirror until VM uses TG dispatch. */
+  /*
+  ** Keep GG and main-TG hotcount mirrors synced while the x64 VM still enters
+  ** through the stock GG dispatch shape and MT code records through TG state.
+  */
+  G2GG(g)->hotcount[i] = v;
   if (G2TG(g))
     G2TG(g)->hotcount[i] = v;
 }

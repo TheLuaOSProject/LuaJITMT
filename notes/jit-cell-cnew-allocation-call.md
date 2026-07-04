@@ -13,5 +13,6 @@ Recorder CNEW reuse now scans both allocation-call and side-effect-call chains,
 so same-trace `CGET`/`CSET` after a freshly emitted `BC_CNEW` still reuses the
 new cell reference. Coverage is behavioral: `m6_jit_cell_ops` exercises parsed
 and loaded `CNEW`/`FNEW` traces, and `m6_jit_gc2_readiness` includes a
-local-cell creation trace in the GC2 hard-threshold fixture. No source, IR dump,
-ASM dump, or mcode-byte guard is used.
+local-cell creation trace in the GC2 hard-threshold fixture. The allocation-call
+invariant is documented at the recorder/helper boundary and in the x64 trace
+assembly path.

@@ -7,6 +7,6 @@
 - A pre-existing sticky shutdown flag no longer interrupts an otherwise
   successful `ffi.C.*` call when no new STOPREQ action was acknowledged by the
   native call.
-- Added M3 handshake coverage for sticky `ffi.C.getpid()`. The old source
-  notes document why we avoiding raw `lj_safepoint_checkstop(L, actions)` in `lj_ccall.c` is
-  obsolete; helper comments document the fresh STOPREQ rule.
+- Added M3 handshake coverage for sticky `ffi.C.getpid()`. Helper comments
+  document why `lj_ccall.c` must route through the fresh-STOPREQ helper after
+  native cleanup has completed.

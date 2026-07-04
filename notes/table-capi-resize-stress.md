@@ -9,8 +9,7 @@ while their writes force array/hash growth and deletion churn.
 The fixture verifies final per-thread keys and a table-owned sentinel value
 after full GC. This keeps the invariant behavioral: public C setters must route
 through the forwarding/resize publication protocol without exposing sentinels,
-losing final writes, or dropping table-owned objects. No implementation-file
-search is part of the check.
+losing final writes, or dropping table-owned objects.
 
 Validation:
 
