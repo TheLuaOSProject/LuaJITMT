@@ -1917,7 +1917,7 @@ static void ffi_istype_snapshot_wait(lua_State *L, CTState *cts,
     int ok = ffi_istype_snapshot(cts, id1, id2, bp);
     if (ok >= 0)
       return;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+    ffi_ctype_wait_or_record_ctbusy(L, cts);
   }
 }
 
