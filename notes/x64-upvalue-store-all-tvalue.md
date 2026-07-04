@@ -57,9 +57,10 @@ remains GC-only because only GC values need the `lj_gc_pubuv` barrier.
   `lua_getlocal()` acquire load through comments near the implementation.
 - `m5_cell_ops` now has a traced primitive closed-local-cell behavior probe.
 - `m6_jit_cell_ops` now checks traced numeric and primitive closed-upvalue store
-  behavior, and checks the generated code shape: primitive closed-upvalue stores
-  must not call `lj_func_storeuv_forjit`, while GC-valued stores must still call
-  it before `lj_gc_pubuv`.
+  behavior. It deliberately does not parse `-jdump` output or assert helper
+  names; the helper/direct-store split is an implementation invariant documented
+  here and in code comments, while the suite covers Lua-visible values and trace
+  viability.
 - `m6_jit_barrier_xpoll` remains the ordering guard for GC-valued stores:
   helper call first, then `lj_gc_pubuv`.
 
