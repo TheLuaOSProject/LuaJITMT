@@ -256,6 +256,13 @@ LJ_FUNC cTValue *lj_tab_getstr(GCtab *t, const GCstr *key);
 LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 				     TValue *out);
+/*
+** Cursor traversal helpers for VM/JIT paths that hold an LJ_KEYINDEX cursor.
+** They copy visible key/value snapshots into caller-owned TValue slots and
+** recompute the next cursor from the current generation before returning.
+** Callers must not keep raw table slots across the helper boundary; helpers
+** never publish KEYLOCK/FORWARD/internal sentinels as Lua-visible results.
+*/
 LJ_FUNCA int32_t LJ_FASTCALL lj_tab_itern_forward(GCtab *t, uint32_t idx,
 							  TValue *ctrl);
 LJ_FUNCA int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx,

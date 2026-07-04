@@ -10,3 +10,10 @@ Active-MT shared table trace coverage, 2026-07-03:
   `next()`/optimized `pairs()` traversal. That path still needs a versioned or
   generation-following runtime contract before it can safely trace under
   concurrent resize/value churn.
+- 2026-07-04: the first contract slice is pinned in `m5_tab_next_snapshot`.
+  `lj_tab_vmnext_forward()` and `lj_tab_itern_forward()` now have an explicit
+  cursor-helper contract: take an `LJ_KEYINDEX` cursor, copy visible key/value
+  snapshots into caller-owned `TValue` storage, recompute the next cursor from
+  the current table generation, and never expose KEYLOCK/FORWARD/internal table
+  sentinels. The recorder still deliberately falls back for active-MT shared
+  traversal until it is routed through that helper-shaped contract.
