@@ -10,6 +10,14 @@ quantum after a bounded `lj_gc_step()` does not finish a cycle.  This keeps GC
 progress visible without making allocation-heavy loops run the collector on
 nearly every object.
 
+While a GC2 cycle is active, an automatic allocation-triggered step runs only
+one GC state-machine step before republishing the legacy threshold at the helper
+quantum and clearing classic debt.  That prevents trace-side allocation helpers
+from spending an entire LuaJIT `stepmul` budget draining concurrent GC2 work on
+the mutator.  Explicit `collectgarbage("step")` remains on the separate explicit
+path below, so API-visible stock step/debt behavior is not folded into this
+automatic pacing shortcut.
+
 Public explicit `collectgarbage("step", n)` calls keep stock-style threshold
 republish through `lj_gc_step_explicit()`.  This separates API-visible GC-step
 semantics from the automatic allocation pacing batch: large explicit steps still

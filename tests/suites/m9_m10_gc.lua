@@ -138,6 +138,25 @@ local function run_trace_hard_assist_cadence(t)
       'assert(allocated > 4 * 1024 * 1024, allocated)',
       'assert(assists <= 64, assists)',
       'print("assist_delta=" .. assists .. " allocated=" .. allocated)',
+      'local unique_seed = 0',
+      'local function unique_keys(n)',
+      '  unique_seed = unique_seed + 1',
+      '  local prefix = "trace_unique_" .. unique_seed .. "_"',
+      '  local t = {}',
+      '  for i = 1, n do',
+      '    t[prefix .. i] = i',
+      '  end',
+      '  return t, prefix',
+      'end',
+      'unique_keys(1000)',
+      'collectgarbage("collect")',
+      'local before_unique = th.gcstats()',
+      'local keep, prefix = unique_keys(40000)',
+      'local after_unique = th.gcstats()',
+      'assert(keep[prefix .. 40000] == 40000)',
+      'local worker_delta = after_unique.worker_runs - before_unique.worker_runs',
+      'assert(worker_delta <= 160, worker_delta)',
+      'print("unique_worker_delta=" .. worker_delta)',
       ""
     }, "\n"))
     assert_command_output_contains(
@@ -440,7 +459,7 @@ local function run_bench_stock_compare(t)
   -- Keep enough iterations for allocation-heavy probes like closures_upval;
   -- smaller samples are dominated by timer and scheduler noise.
   local scale = os.getenv("LJ_BENCH_STOCK_SCALE") or
-    os.getenv("BENCH_SCALE") or "0.01"
+    os.getenv("BENCH_SCALE") or "0.2"
 
   for filter in filters:gmatch("%S+") do
     local result = bench_driver.compare_bins(stock, current, bench_lua, {

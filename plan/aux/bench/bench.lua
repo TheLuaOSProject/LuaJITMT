@@ -44,10 +44,14 @@ bench("tab_hash_write", 2e6, function(n)
 end)
 
 -- 4. Existing hash writes with prebuilt string keys (HREF/HSTORE path)
+local tab_store_existing_keys = make_hash_keys(8192, 0)
+local tab_store_existing_table = {}
+for i = 1, 8192 do
+  tab_store_existing_table[tab_store_existing_keys[i]] = 0
+end
 bench("tab_store_existing", 2e7, function(n)
-  local keys = make_hash_keys(8192, 0)
-  local t = {}
-  for i = 1, 8192 do t[keys[i]] = 0 end
+  local keys = tab_store_existing_keys
+  local t = tab_store_existing_table
   for i = 1, n do t[keys[(i % 8192) + 1]] = i end
   return t
 end)

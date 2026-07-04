@@ -2192,7 +2192,22 @@ static int gc_step_limited(lua_State *L, GCSize quantum, int batch_threshold)
       vmstate_store_rel(g, ostate);
       return 1;  /* Finished a GC cycle. */
     }
+    if (batch_threshold && gc2_phase_acq(g) != LJ_GC2_IDLE)
+      break;
   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
+  if (batch_threshold && gc2_phase_acq(g) != LJ_GC2_IDLE) {
+    /*
+    ** Automatic allocation checks must make one bounded GC2 state-machine step
+    ** without carrying classic single-thread debt through an active concurrent
+    ** phase. Otherwise trace-side helpers repeatedly catch up that debt by
+    ** draining GC2 work on the mutator. Public collectgarbage("step") uses the
+    ** explicit path and keeps the stock debt accounting contract.
+    */
+    g->gc.debt = 0;
+    lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
+    vmstate_store_rel(g, ostate);
+    return -1;
+  }
   {
     if (g->gc.debt < quantum) {
       lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
