@@ -201,7 +201,7 @@ static uint32_t gc2_flush_and_drain_ssb(global_State *g)
 void lj_gc2_init(global_State *g)
 {
   uint32_t i;
-  gc2_gcpause_pct_store_rlx(g, 100);
+  gc2_gcpause_pct_store_rlx(g, (uint32_t)lj_gc_pause_load(g));
   gc2_assist_shift_store_rlx(g,
     lj_gc2_assist_shift_from_stepmul(lj_gc_stepmul_load(g)));
   gc2_phase_store_rlx(g, LJ_GC2_IDLE);

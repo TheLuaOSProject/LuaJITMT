@@ -344,7 +344,7 @@ int main(void)
   tg = L2TG(L);
   assert(g != NULL);
   assert(tg != NULL);
-  assert(la_load32_acq(&g->gc2.gcpause_pct) == 100);
+  assert(gc2_gcpause_pct_acq(g) == lj_gc_pause_load(g));
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
   assert(gc2_cycle_requests_acq(g) == 0);
   assert(gc2_cycle_starts_acq(g) == 0);

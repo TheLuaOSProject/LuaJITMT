@@ -25,3 +25,17 @@ Validation:
 - `tools/ci/lua_test.sh m6_jit_alloc_account` passed.
 - `tools/ci/lua_test.sh m9_gc_stats` passed.
 - `git diff --check` passed.
+
+2026-07-04 follow-up:
+
+- `lj_gc2_init()` now seeds `gc2.gcpause_pct` from the already-initialized
+  legacy `g->gc.pause` instead of a separate constant. This keeps GC2's public
+  pause mirror aligned with LuaJIT's stock `LUAI_GCPAUSE` default and with
+  embedders that initialize the legacy field before GC2 comes online.
+- The automatic pending-root trigger cap is unchanged. That cap is a bounded
+  root-publication bridge while new objects still enter the legacy root spine;
+  the init fix only removes the independent default so future cap changes and
+  larger heaps do not inherit a silent 100% pause value.
+- `t-gc2-pacing-atomic.c` now asserts the GC2 init mirror directly, because
+  small heaps can hit the pending-root trigger cap and mask the pause value in
+  runtime `trigger_bytes` telemetry.

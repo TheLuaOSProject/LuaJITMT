@@ -12,6 +12,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 
 #define GC2_PACING_THREADS 8
 #define GC2_PACING_ITERS 100000
@@ -31,6 +32,17 @@ static void check_legacy_controls(void)
   assert(lj_gc_stepmul_load(&Gs) == 400);
 }
 
+static void check_gc2_init_controls(void)
+{
+  memset(&Gs, 0, sizeof(Gs));
+  lj_gc_pause_store(&Gs, 200);
+  lj_gc_stepmul_store(&Gs, 300);
+  lj_gc2_init(&Gs);
+  assert(gc2_gcpause_pct_acq(&Gs) == 200);
+  assert(gc2_assist_shift_acq(&Gs) ==
+	 lj_gc2_assist_shift_from_stepmul(300));
+}
+
 static void *worker_main(void *arg)
 {
   intptr_t id = (intptr_t)arg;
@@ -48,6 +60,7 @@ int main(void)
   int i;
 
   check_legacy_controls();
+  check_gc2_init_controls();
 
   memset(&Gs, 0, sizeof(Gs));
   lj_gc2_alloc_since_store(&Gs, 0);
