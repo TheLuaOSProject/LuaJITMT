@@ -202,18 +202,29 @@ static LJ_AINLINE void func_pubuv_payload(lua_State *L, GCupval *uv)
 static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
 					    GCobj *parent, GCobj *child)
 {
+  global_State *g = G(L);
   /*
   ** Bump FNEW helpers initialize a fresh white closure before linking it into
   ** the pending-root chain. With no active mark/remember barrier, those edges
   ** will be discovered when the new root is first traversed. If the barrier
   ** mirror is active, use the normal publication path so GC2/legacy marking
   ** observes the child immediately.
+  **
+  ** During active black allocation the fresh parent is not yet published and
+  ** its children are either established roots or freshly black-allocated in
+  ** the same constructor. If the child is already marked, the edge is already
+  ** owned by GC2 and repeating the mark as a locked test-and-set only adds
+  ** allocation-loop contention. Keep the normal barrier for active white
+  ** allocation, unmarked/custom children, and idle remembered-set publication.
   */
-  if ((tg && lj_tg_mark_active_acq(tg)) || isblack(parent)) {
+  if (tg && lj_tg_mark_active_acq(tg)) {
+    if (!lj_tg_alloc_black_acq(tg) || lj_gc2_ismarked(g, child) <= 0)
+      lj_gc2_barrier_obj_pair(L, parent, child);
+  } else if (isblack(parent)) {
     lj_gc2_barrier_obj_pair(L, parent, child);
-    if (iswhite(child) && isblack(parent))
-      lj_gc_barrierf(G(L), parent, child);
   }
+  if (iswhite(child) && isblack(parent))
+    lj_gc_barrierf(g, parent, child);
 }
 
 #define func_pubfreshobjobj(L, tg, p, o) \
