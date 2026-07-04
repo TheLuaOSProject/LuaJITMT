@@ -1750,15 +1750,19 @@ static int ffi_typecmp_rawid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
 static int ffi_typecmp_rawrefid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
 				CType *out)
 {
-  int ok = ffi_typecmp_get(ts, id, out);
-  if (ok <= 0)
-    return ok;
-  {
-    CTInfo info = ctype_info_acq(out);
-    if (ctype_isref(info))
-      id = ctype_cid(info);
+  int ok;
+  for (;;) {
+    CTInfo info;
+    ok = ffi_typecmp_get(ts, id, out);
+    if (ok <= 0)
+      return ok;
+    info = ctype_info_acq(out);
+    if (!(ctype_isattrib(info) || ctype_isref(info))) {
+      *ridp = id;
+      return 1;
+    }
+    id = ctype_cid(info);
   }
-  return ffi_typecmp_rawid(ts, id, ridp, out);
 }
 
 static int ffi_typecmp_childqual(FFITypeCmpSnap *ts, const CType *root,

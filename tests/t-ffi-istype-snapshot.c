@@ -166,7 +166,19 @@ int main(void)
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "ffi.cdef('typedef struct { int x; } lj_m7_istype_snapshot_t;')\n"
+    "ffi.cdef[[\n"
+    "typedef struct { int x; } lj_m7_istype_snapshot_t;\n"
+    "typedef int lj_m7_istype_snapshot_ref_base_t;\n"
+    "typedef lj_m7_istype_snapshot_ref_base_t & "
+    "lj_m7_istype_snapshot_ref_t;\n"
+    "typedef const lj_m7_istype_snapshot_ref_t "
+    "lj_m7_istype_snapshot_cref_t;\n"
+    "typedef volatile lj_m7_istype_snapshot_ref_t "
+    "lj_m7_istype_snapshot_vref_t;\n"
+    "typedef const int lj_m7_istype_snapshot_cint_t;\n"
+    "typedef lj_m7_istype_snapshot_cint_t & "
+    "lj_m7_istype_snapshot_cint_ref_t;\n"
+    "]]\n"
     "lj_m7_istype_snapshot_ct = ffi.typeof('lj_m7_istype_snapshot_t')\n"
     "lj_m7_istype_snapshot_pct = ffi.typeof('lj_m7_istype_snapshot_t *')\n"
     "lj_m7_istype_snapshot_arr = ffi.typeof('lj_m7_istype_snapshot_t[1]')\n"
@@ -201,6 +213,12 @@ int main(void)
     "  assert(ffi.istype(int_t, ival) == true)\n"
     "  assert(ffi.istype(int_t, uval) == false)\n"
     "  assert(ffi.istype(int_t, int_t) == true)\n"
+    "  assert(ffi.istype(int_t, "
+    "ffi.typeof('lj_m7_istype_snapshot_ref_t')) == true)\n"
+    "  assert(ffi.istype('lj_m7_istype_snapshot_cref_t', int_t) == true)\n"
+    "  assert(ffi.istype('lj_m7_istype_snapshot_vref_t', int_t) == true)\n"
+    "  assert(ffi.istype('lj_m7_istype_snapshot_cint_ref_t', "
+    "ffi.typeof('lj_m7_istype_snapshot_ref_t')) == true)\n"
     "end\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
