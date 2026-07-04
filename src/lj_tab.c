@@ -284,6 +284,20 @@ static LJ_AINLINE int tab_mt_concurrent(void)
   return g && (mt_live_acq(g) != 0 || mt_entering_acq(g) != 0);
 }
 
+static LJ_AINLINE int tab_private_mutation_allowed(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  /*
+  ** KEYLOCK/CAS publication and structural ownership are needed once another
+  ** Lua thread, an attaching thread, or GC2 workers can observe table vectors.
+  ** Active marking also keeps the shared path responsible for publication
+  ** barriers. Outside those windows the mutator is the only table observer.
+  */
+  return !mt_active_or_entering_acq(g) && gc2_n_workers_acq(g) == 0 &&
+	 !lj_tg_mark_active_acq(tg);
+}
+
 int lj_tab_struct_enter(lua_State *L, GCtab *t)
 {
   uint32_t tid = tab_struct_tid(L);
@@ -1447,7 +1461,8 @@ restart_resize:
     oldret = tab_retire_reserve(L, oldnode, oldhmask);
   if (newarray && oldarray_separated && oldacap > 0)
     oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
-  struct_acq = lj_tab_struct_enter(L, t);
+  struct_acq = tab_private_mutation_allowed(L) ? 0 :
+	       lj_tab_struct_enter(L, t);
   /*
   ** From here until lj_tab_struct_leave(), retry waits must not raise a fresh
   ** STOPREQ: a longjmp would leak the per-table structural owner and the
@@ -2151,21 +2166,6 @@ static int tab_try_claim_nil_key(TValue *dst)
 static LJ_AINLINE int tab_hash_generation_current(GCtab *t, const Node *nodebase)
 {
   return lj_tab_node_acq(t) == nodebase && !lj_tab_node_is_retiring(nodebase);
-}
-
-static LJ_AINLINE int tab_private_mutation_allowed(lua_State *L)
-{
-  global_State *g = G(L);
-  TGState *tg = L2TG(L);
-  /*
-  ** KEYLOCK/CAS publication is needed once another Lua thread, an attaching
-  ** thread, or GC2 workers can observe the hash vector. Outside those windows,
-  ** and outside active marking, the mutator is the only table observer; direct
-  ** publication keeps stock single-thread costs while retaining freecount and
-  ** key-barrier accounting.
-  */
-  return !mt_active_or_entering_acq(g) && gc2_n_workers_acq(g) == 0 &&
-	 !lj_tg_mark_active_acq(tg);
 }
 
 static LJ_AINLINE int tab_node_free_take_private(Node *node)

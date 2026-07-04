@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <limits.h>
 #include <pthread.h>
 #include <sched.h>
 #include <stdint.h>
@@ -387,6 +388,7 @@ static void exercise_resize_owner(lua_State *L)
 
 static void exercise_resize_noop_owner(lua_State *L)
 {
+  global_State *g = G(L);
   GCtab *t;
   TValue *array;
   MSize asize, hmask;
@@ -414,6 +416,15 @@ static void exercise_resize_noop_owner(lua_State *L)
   lua_setfield(L, -2, "b");
   lj_tab_test_reset_struct_enter_acquires();
   lj_tab_resize(L, t, (uint32_t)asize, hbits);
+  assert(lj_tab_test_struct_enter_acquires() == 0);
+
+  lua_pushnil(L);
+  lua_setfield(L, -2, "a");
+  lj_tab_test_reset_struct_enter_acquires();
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  lj_tab_resize(L, t, (uint32_t)asize, hbits);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, INT_MAX);
   assert(lj_tab_test_struct_enter_acquires() == 1);
 
   lj_tab_test_reset_struct_enter_acquires();
@@ -456,9 +467,9 @@ int main(void)
   assert(L != NULL);
   luaL_openlibs(L);
 
+  exercise_resize_noop_owner(L);
   exercise_direct_owner(L);
   exercise_resize_owner(L);
-  exercise_resize_noop_owner(L);
   exercise_wait_stopreq(L);
 
   lua_close(L);
