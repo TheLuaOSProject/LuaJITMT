@@ -204,3 +204,22 @@ when the active bump window was immediately usable. Focused validation:
 - `LJ_BENCH_STOCK_FILTERS=closures_upval LJ_BENCH_STOCK_SCALE=0.02 tools/ci/lua_test.sh m9_bench_stock_compare`
 
 The focused stock comparison reported `closures_upval` geomean `1.473975`.
+
+2026-07-04 fallback argument follow-up: the x64 inline path's helper fallback now
+materializes `TG.cur_L` through an explicit temporary argument before the C call.
+The inline lowering emits its own fallback block instead of using the ordinary
+CALLA lowering path, so passing `ASMREF_L` directly to `asm_gencall()` could leave
+the first C argument register holding an unrelated live loop value. In
+`m6_jit_fnew_bump`, forcing mark-active state around the traced numeric FNEW loop
+made the fallback call `lj_func_newL_gc1num_forjit()` with a small integer in
+place of `lua_State *L` and crash immediately. Loading `TG.cur_L` into
+`ASMREF_TMP1` keeps the fallback helper call's ABI state explicit while leaving
+the straight-line inline allocator unchanged.
+
+Focused validation after the fallback fix:
+
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m6_jit_fnew_bump`
+- `tools/ci/lua_test.sh m6_jit_cell_ops`
+- `LJ_BENCH_STOCK_FILTERS=closures_upval LJ_BENCH_STOCK_SCALE=0.2 tools/ci/lua_test.sh m9_bench_stock_compare`
+
+The focused stock comparison reported `closures_upval` geomean `2.366980`.

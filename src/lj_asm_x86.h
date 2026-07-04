@@ -1024,14 +1024,25 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
   MCLabel l_done, l_fallback, l_markclear, l_markdone;
   Reg base, parent, val, pt, g, arena, cell, next, uv, tmp;
+  IRRef fallback_args[CCI_NARGS_MAX];
   RegSet allow;
+  uint32_t i;
 
   if (!asm_fnew1num_args_x64(as, ir, &fi))
     return 0;
+  for (i = 0; i < CCI_NARGS_MAX; i++)
+    fallback_args[i] = fi.args[i];
+  /*
+  ** This custom inline path emits the helper call itself, so keep L out of
+  ** normal argument rematerialization and load TG.cur_L into the call register
+  ** explicitly. Otherwise the fallback can inherit a live loop value as arg 0.
+  */
+  fallback_args[0] = ASMREF_TMP1;
 
   asm_setupresult(as, ir, callci);  /* GCfunc * */
   l_done = emit_label(as);
-  asm_gencall(as, callci, fi.args);
+  asm_gencall(as, callci, fallback_args);
+  emit_gettg(as, ra_releasetmp(as, ASMREF_TMP1), cur_L);
   l_fallback = emit_label(as);
   checkmclim(as);
 
