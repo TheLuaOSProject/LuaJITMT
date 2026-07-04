@@ -35,6 +35,7 @@ local m6_cases = {
   "m6_jit_flush_thread_stress",
   "m6_jit_flush_thread_heavy_stress",
   "m6_jit_mt_activation_flush",
+  "m6_jit_gcworkers_activation_flush",
   "m6_jit_vmevent_flush",
   "m6_jit_gdbjit_publish",
   "m6_jit_tmpbuf_thread_format",
@@ -1897,6 +1898,34 @@ assert(({ worker:join(5) })[1] == true)
 assert(trace_count(200) == 0, "first thread activation did not flush traces")
 ]=], { timeout = "20s" })
       print("M6 JIT MT activation flush behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_gcworkers_activation_flush",
+    description = "pre-worker JIT traces are flushed before GC worker activation",
+    run = function(t)
+      build_default(t)
+      luajit_code(t, [=[
+local threading = require("threading")
+local trace_count = require("jit_harness").trace_count
+
+assert(threading.gcworkers(0) >= 0)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function hot(n)
+  local s = 0
+  for i = 1, n do s = s + i end
+  return s
+end
+for _ = 1, 20 do assert(hot(80) == 3240) end
+assert(trace_count(200) > 0, "pre-worker loop did not trace")
+
+assert(threading.gcworkers(1) == 0)
+assert(trace_count(200) == 0, "GC worker activation did not flush traces")
+assert(threading.gcworkers(0) == 1)
+]=], { timeout = "20s" })
+      print("M6 JIT GC-worker activation flush behavior passed")
     end
   })
 

@@ -629,6 +629,50 @@ static int gc2_worker_prepare_tg_slots(global_State *g)
   return gc2_worker_release_tg_slots(g);
 }
 
+#if LJ_HASJIT
+static int gc2_worker_prepare_traces_l(lua_State *L, int *tokenp)
+{
+  global_State *g;
+  jit_State *J;
+  int token;
+  if (tokenp)
+    *tokenp = 0;
+  if (!L)
+    return 1;
+  g = G(L);
+  J = L2J(L);
+  token = lj_jit_token_acquire_wait(J);
+  if (tokenp)
+    *tokenp = token;
+  if (!lj_trace_hasany(g))
+    return 1;
+  if ((hookmask_load(g) & HOOK_GC)) {
+    lj_trace_abort(g);
+    (void)lj_trace_flushall_gc(L);
+    return 1;
+  }
+  if (lj_trace_flushall_hs(L)) {
+    if (token)
+      lj_jit_token_release(J);
+    if (tokenp)
+      *tokenp = 0;
+    return 0;
+  }
+  return 1;
+}
+
+static void gc2_worker_finish_traces_l(lua_State *L, int token)
+{
+  if (token && L)
+    lj_jit_token_release(L2J(L));
+}
+#else
+#define gc2_worker_prepare_traces_l(L, tokenp) \
+  (UNUSED(L), (tokenp ? (*(tokenp) = 0) : 0), 1)
+#define gc2_worker_finish_traces_l(L, token) \
+  (UNUSED(L), UNUSED(token))
+#endif
+
 static int gc2_worker_had_stopreq_l(lua_State *L)
 {
   TGState *tg = L ? L2TG(L) : NULL;
@@ -739,6 +783,7 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
   uint32_t i;
   int rc, wait;
   int had_stopreq = gc2_worker_had_stopreq_l(waitL);
+  int trace_token = 0;
   if (!g || n == 0)
     return 1;
   if (n > LJ_GC2_WORKER_MAX)
@@ -750,10 +795,13 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
     return 0;
   if (!gc2_worker_prepare_tg_slots(g))
     return 0;
+  if (!gc2_worker_prepare_traces_l(waitL, &trace_token))
+    return 0;
   gc2_worker_stop_rel(g, 0);
   gc2_worker_started_rel(g, 0);
   gc2_worker_exited_rel(g, 0);
   gc2_n_workers_rel(g, n);  /* 05 section 5.6.3 parked pool. */
+  gc2_worker_finish_traces_l(waitL, trace_token);
   for (i = 0; i < n; i++) {
     LJThr *thr = (LJThr *)lj_mem_new(L, sizeof(LJThr));
     TGState *tg = lj_mem_newt(L, sizeof(TGState), TGState);

@@ -16,10 +16,12 @@
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_dispatch.h"
 #include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lj_trace.h"
 
 static void sleep_ns(long ns)
 {
@@ -33,6 +35,23 @@ static void sleep_ns(long ns)
 static uint32_t worker_start_create_pause;
 static uint32_t worker_start_create_paused;
 static uint32_t worker_start_create_release;
+static global_State *worker_start_expect_no_traces_g;
+
+static uint32_t scheduler_trace_count(global_State *g)
+{
+#if LJ_HASJIT
+  jit_State *J = G2J(g);
+  TraceNo i;
+  uint32_t n = 0;
+  for (i = 1; i < trace_sizetrace_acq(J); i++)
+    if (traceref(J, i) != NULL)
+      n++;
+  return n;
+#else
+  UNUSED(g);
+  return 0;
+#endif
+}
 
 extern int __real_pthread_create(pthread_t *thread,
 				 const pthread_attr_t *attr,
@@ -42,6 +61,8 @@ int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 			  void *(*start_routine)(void *), void *arg)
 {
   uint32_t expect = 1;
+  if (worker_start_expect_no_traces_g)
+    assert(scheduler_trace_count(worker_start_expect_no_traces_g) == 0);
   if (la_cas32(&worker_start_create_pause, &expect, 2, LA_ACQ_REL, LA_ACQ)) {
     la_store32_rel(&worker_start_create_paused, 1);
     while (la_load32_acq(&worker_start_create_release) == 0)
@@ -453,6 +474,47 @@ static void test_finalizer_dispatch_all_waits_native(lua_State *L,
   assert(lj_gc2_workers_set(g, 2) == 1);
 }
 
+static void heat_pre_worker_trace(lua_State *L, global_State *g)
+{
+  int status;
+  luaL_openlibs(L);
+  status = luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local util = require('jit.util')\n"
+    "local function hot(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for i = 1, 20 do assert(hot(80) == 3240) end\n"
+    "assert(util.traceinfo(1), 'pre-worker loop did not trace')\n");
+  if (status != 0)
+    fprintf(stderr, "%s\n", lua_tostring(L, -1));
+  assert(status == 0);
+  assert(scheduler_trace_count(g) > 0);
+}
+
+static void test_worker_start_l_flushes_prestart_traces(lua_State *L,
+							global_State *g)
+{
+  uint32_t actions = 0;
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+
+  heat_pre_worker_trace(L, g);
+  worker_start_expect_no_traces_g = g;
+  assert(lj_gc2_workers_set_l(L, 1, &actions) == 1);
+  worker_start_expect_no_traces_g = NULL;
+  assert(actions == 0);
+  assert(gc2_n_workers_acq(g) == 1);
+  assert(scheduler_trace_count(g) == 0);
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(gc2_n_workers_acq(g) == 2);
+}
+
 static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
 						      global_State *g)
 {
@@ -784,6 +846,7 @@ int main(void)
   test_async_mark(L, g, tg);
   test_async_weak(L, g, tg);
   test_async_sweep_and_stop(L, g, tg);
+  test_worker_start_l_flushes_prestart_traces(L, g);
 
   lua_close(L);
   printf("t-gc2-worker-scheduler OK: parked worker wake/drain/finalizer handoff verified\n");
