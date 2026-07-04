@@ -202,7 +202,7 @@ print("bulk fill ok")
       run_luajit_script(t, "t-ffi-cdata-set-l.lua", {
         getenv("LJ_M7_FFI_SET_THREADS", "6"),
         getenv("LJ_M7_FFI_SET_ITERS", "320")
-      }, { joff = true })
+      }, { joff = true, timeout = "20s" })
       print("M7 FFI cdata write behavior passed")
     end
   })
@@ -381,7 +381,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
       run_luajit_script(t, "t-ffi-cdata-set-l.lua", {
         getenv("LJ_M7_FFI_SET_THREADS", "6"),
         getenv("LJ_M7_FFI_SET_ITERS", "320")
-      }, { joff = true })
+      }, { joff = true, timeout = "20s" })
       run_luajit_script(t, "t-ffi-metatype-miscmap.lua", {
         getenv("LJ_M7_FFI_META_THREADS", "6"),
         getenv("LJ_M7_FFI_META_ITERS", "60")
@@ -402,7 +402,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
       run_luajit_script(t, "t-ffi-cdata-set-l.lua", {
         getenv("LJ_M7_FFI_SET_THREADS", "6"),
         getenv("LJ_M7_FFI_SET_ITERS", "320")
-      }, { joff = true })
+      }, { joff = true, timeout = "20s" })
       run_luajit_script(t, "t-ffi-carith-l.lua", nil, { joff = true })
       print("M7 FFI ctype allocation/interning behavior passed")
     end
@@ -436,7 +436,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
       run_luajit_script(t, "t-ffi-cdata-set-l.lua", {
         "1",
         getenv("LJ_M7_FFI_SET_ITERS", "80")
-      }, { joff = true })
+      }, { joff = true, timeout = "20s" })
       print("M7 FFI ctype pointer-stability behavior passed")
     end
   })

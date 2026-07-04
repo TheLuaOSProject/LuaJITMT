@@ -303,6 +303,8 @@ static LJ_AINLINE void lj_gc_list_clear_rel(GCRef *head)
 static LJ_AINLINE void lj_gc_list_push_rel(GCRef *head, GCobj *o)
 {
   GCobj *next = lj_gc_list_head_acq(head);
+  if (LJ_UNLIKELY(next == o))
+    return;  /* Already at the frontier head; do not self-link the list. */
   if (next)
     setgcrefrel(o->gch.gclist, next);
   else
@@ -313,7 +315,7 @@ static LJ_AINLINE void lj_gc_list_push_rel(GCRef *head, GCobj *o)
 static LJ_AINLINE void lj_gc_list_pop_head_rel(GCRef *head, GCobj *o)
 {
   GCobj *next = gcref_acq(o->gch.gclist);
-  if (next)
+  if (next && LJ_LIKELY(next != o))
     setgcrefrel(*head, next);
   else
     setgcrefnullrel(*head);

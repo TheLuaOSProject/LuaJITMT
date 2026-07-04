@@ -624,7 +624,10 @@ static void gc_mark(global_State *g, GCobj *o)
   int gct = o->gch.gct;
   if (LJ_UNLIKELY(gct == 0))
     return;  /* Body destructor already ran via GC2 arena sweep. */
-  lj_assertG(iswhite(o), "mark of non-white object");
+  if (LJ_UNLIKELY(!iswhite(o))) {
+    lj_assertG(0, "mark of non-white object");
+    return;
+  }
   if (isdead(g, o))
     flipwhite(o);
   lj_gc_arena_markobj(g, o);
