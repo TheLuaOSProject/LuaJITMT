@@ -40,6 +40,14 @@ static void unlinkuv(global_State *g, GCupval *uv)
   lj_uv_setnext_rel(prev, next);
 }
 
+static int upval_ring_linked(GCupval *uv)
+{
+  GCupval *next = lj_uv_next_acq(uv);
+  GCupval *prev = lj_uv_prev_acq(uv);
+  return next != NULL && prev != NULL &&
+	 lj_uv_prev_acq(next) == uv && lj_uv_next_acq(prev) == uv;
+}
+
 /* Find existing open upvalue for a stack slot or create a new one. */
 static GCupval *func_finduv(lua_State *L, TValue *slot)
 {
@@ -302,7 +310,18 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
 void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
 {
   if (!uv->closed) {
-    unlinkuv(g, uv);
+    if (LJ_LIKELY(upval_ring_linked(uv))) {
+      unlinkuv(g, uv);
+    } else if (lj_mem_freegco_defer(g, uv, sizeof(GCupval))) {
+      /*
+      ** A normal open upvalue is always linked in the global open-upvalue ring.
+      ** Lock-free legacy-root sweep can still observe an arena-retained body
+      ** after a close/free race has cleared the ring links but before bitmap
+      ** reuse is allowed. There is no ring ownership left to unlink; preserve
+      ** the body through the deferred arena path just like closed upvalues.
+      */
+      return;
+    }
   } else if (lj_mem_freegco_defer(g, uv, sizeof(GCupval))) {
     return;
   }
@@ -490,7 +509,6 @@ static LJ_AINLINE int func_bump_arena_owned_active(global_State *g,
 static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
 					     GCobj *o)
 {
-  GCobj *oldhead;
   if (func_bump_arena_owned_active(g, tg)) {
     /*
     ** Active black bump allocation sets the arena mark bit at birth. FNEW
@@ -503,18 +521,12 @@ static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
     lj_obj_setgcwnullrel(o);
     return;
   }
-  oldhead = lj_tg_gcroot_pending_acq(tg);
-  if (oldhead)
-    lj_obj_setgcwrel(o, oldhead);
-  else
-    lj_obj_setgcwnullrel(o);
-  lj_tg_gcroot_pending_store_rel(tg, o);
+  lj_gc_linkobj_new(g, o);
 }
 
 static LJ_AINLINE void func_bump_publish_pair(global_State *g, TGState *tg,
 					      GCobj *head, GCobj *tail)
 {
-  GCobj *oldhead;
   if (func_bump_arena_owned_active(g, tg)) {
     /*
     ** Both cells were reserved from one traversable arena run and marked black
@@ -526,12 +538,7 @@ static LJ_AINLINE void func_bump_publish_pair(global_State *g, TGState *tg,
     return;
   }
   lj_obj_setgcwrel(head, tail);
-  oldhead = lj_tg_gcroot_pending_acq(tg);
-  if (oldhead)
-    lj_obj_setgcwrel(tail, oldhead);
-  else
-    lj_obj_setgcwnullrel(tail);
-  lj_tg_gcroot_pending_store_rel(tg, head);
+  lj_gc_linkobj_new_chain(g, head, tail);
 }
 
 static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
@@ -579,15 +586,15 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
 
   lj_gc_total_add(g, nbytes);
   /*
-  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
-  ** update gc.total before flushing the TG batch. These pre-MT helpers link
-  ** the initialized object to pending roots immediately after accounting.
+  ** Arena bump cells become visible to bitmap sweep as soon as their block bit
+  ** is set. Publish the fully initialized object before an accounting flush can
+  ** assist GC; malloc-backed unlinked objects do not have this bitmap visibility.
   */
+  func_bump_publish_obj(g, tg, obj2gco(uv));
   if (account_now)
     lj_gc2_account_alloc(g, tg, nbytes);
   else
     (void)lj_tg_local_total_add_rlx(tg, nbytes);
-  func_bump_publish_obj(g, tg, obj2gco(uv));
   func_test_uvcell_bump_call();
   return uv;
 }
@@ -671,15 +678,15 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
 
   lj_gc_total_add(g, nbytes);
   /*
-  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
-  ** update gc.total before flushing the TG batch. These pre-MT helpers link
-  ** the initialized object to pending roots immediately after accounting.
+  ** The pair is fully initialized before publication. Publish before a possible
+  ** accounting assist because arena bitmap sweep can see allocated cells even
+  ** before they enter the legacy root spine.
   */
+  func_bump_publish_pair(g, tg, obj2gco(fn), obj2gco(uv));
   if (account_now)
     lj_gc2_account_alloc(g, tg, nbytes);
   else
     (void)lj_tg_local_total_add_rlx(tg, nbytes);
-  func_bump_publish_pair(g, tg, obj2gco(fn), obj2gco(uv));
   if (count_kind == 1)
     func_test_gc1num_bump_fast_call();
   else if (count_kind == 2)
@@ -739,15 +746,14 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
 
   lj_gc_total_add(g, nbytes);
   /*
-  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
-  ** update gc.total before flushing the TG batch. These pre-MT helpers link
-  ** the initialized object to pending roots immediately after accounting.
+  ** Publish the initialized arena object before a possible accounting assist.
+  ** This keeps bitmap sweep from treating a still-C-owned bump cell as garbage.
   */
+  func_bump_publish_obj(g, tg, obj2gco(fn));
   if (account_now)
     lj_gc2_account_alloc(g, tg, nbytes);
   else
     (void)lj_tg_local_total_add_rlx(tg, nbytes);
-  func_bump_publish_obj(g, tg, obj2gco(fn));
   if (count_kind == 1)
     func_test_gc0_bump_interp_call();
   else if (count_kind == 2)

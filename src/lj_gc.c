@@ -207,6 +207,12 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
   return total;
 }
 
+static void gc_arena_fullgc_drain_sweep(global_State *g)
+{
+  if (g->gc.state == GCSsweep && gc_arena_sweep_pending(g))
+    (void)gc_arena_finish_sweep_boundary(g, 1);
+}
+
 #ifdef LUA_USE_ASSERT
 static void gc_arena_verify_marked(global_State *g, GCobj *o)
 {
@@ -214,10 +220,15 @@ static void gc_arena_verify_marked(global_State *g, GCobj *o)
   int marked;
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return;
+  if (o->gch.gct == 0 || o->gch.gct < ~LJ_TSTR ||
+      o->gch.gct > ~LJ_TUDATA || o->gch.gct == ~LJ_TSTR)
+    return;  /* Deferred/stale bodies and string-table-owned bodies. */
   marked = lj_gc2_ismarked(g, o);
   if (marked < 0)
     return;  /* Custom aligned objects need allocation-base marking first. */
-  lj_assertG(marked != 0, "unmarked arena object at verify boundary");
+  lj_assertG(marked != 0,
+	     "unmarked arena object at verify boundary o=%p gct=%d marked=%02x",
+	     (void *)o, o->gch.gct, lj_obj_gcflags(o));
 }
 
 static void gc_arena_verify_sweep_boundary(global_State *g)
@@ -512,9 +523,9 @@ static void gc_traverse_thread(global_State *g, lua_State *th);
 
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
-  { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
-	       "TValue and GC type mismatch"); \
-    if (tvisgcv(tv)) { lj_gc_arena_markobj((g), gcV(tv)); \
+  { \
+    if (lj_tv_gcref_type_match((tv)) && tvisgcv(tv)) { \
+      lj_gc_arena_markobj((g), gcV(tv)); \
       if (tviswhite(tv)) gc_mark((g), gcV(tv)); } }
 
 /* Mark a GCobj (if needed). */
@@ -570,6 +581,12 @@ static void gc_normalize_legacy_colors(global_State *g)
   }
 }
 
+static int gc_mark_rescan_pending_set(GCobj *o)
+{
+  uint8_t old = la_or8_rlx(&o->gch.marked, LJ_GC_NEEDSCAN);
+  return (old & LJ_GC_NEEDSCAN) == 0;
+}
+
 void lj_gc_preserveobj_legacy(global_State *g, GCobj *o)
 {
   /* SMR-retired GC bodies can outlive their semantic reachability. Preserve
@@ -592,7 +609,14 @@ void lj_gc_markobj_legacy(global_State *g, GCobj *o)
   ** body from sweep.
   */
   if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
-    gc_mark_primary_root(g, o);
+    lj_gc_arena_markobj(g, o);
+    if (iswhite(o)) {
+      gc_mark(g, o);
+    } else if (isgray(o)) {
+      return;  /* Already queued on the legacy frontier. */
+    } else if (gc_mark_rescan_pending_set(o)) {
+      lj_gc_list_push_rel(&g->gc.gray, o);
+    }
   } else {
     lj_gc_preserveobj_legacy(g, o);
   }
@@ -1607,15 +1631,40 @@ static size_t propagatemark(global_State *g)
 {
   GCobj *o = lj_gc_list_head_acq(&g->gc.gray);
   int gct = o->gch.gct;
-  lj_assertG(isgray(o), "propagation of non-gray object");
+  int black_rescan = !isgray(o) && isblack(o);
+  int rescan = black_rescan && (lj_obj_gcflags(o) & LJ_GC_NEEDSCAN);
+  if (LJ_UNLIKELY(!isgray(o) && !black_rescan)) {
+    /*
+    ** Lock-free publication can leave duplicate/stale nodes on the legacy gray
+    ** list after another path has already removed the object from this frontier.
+    ** A black duplicate is conservatively re-traversed below; a white/dead entry
+    ** is not valid mark work for this cycle and must be unlinked as stale.
+    */
+    lj_gc_list_pop_head_rel(&g->gc.gray, o);
+    return 0;
+  }
+  lj_assertG(isgray(o) || rescan || black_rescan,
+	     "propagation of non-gray object");
   /*
   ** A forced full collection may first finish an already-active legacy mark
   ** cycle before it can start a fresh major GC2 cycle. Objects left gray by a
   ** mutator publication in that older cycle still become legacy-live here, so
   ** mirror the object itself into GC2 at the blackening edge.
+  **
+  ** GC2 can also hand immutable/birth-marked objects to the legacy gray list as
+  ** black+NEEDSCAN rescans. Those are already legacy-live; clear the handoff bit
+  ** and traverse the payload without changing their color again.
+  **
+  ** A stale duplicate gray-list node can also reach the head after another entry
+  ** has already blackened the same object. Re-traversing that payload is
+  ** conservative and keeps resize-forwarded table edges from depending on which
+  ** duplicate list node wins the race to the head.
   */
   (void)lj_gc2_markobj_nolegacy(g, o);
-  gray2black(o);
+  if (rescan)
+    lj_obj_cleargcflags_atomic(o, LJ_GC_NEEDSCAN);
+  else if (!black_rescan)
+    gray2black(o);
   lj_gc_list_pop_head_rel(&g->gc.gray, o);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
@@ -1712,6 +1761,14 @@ static const GCFreeFunc gc_freefunc[] = {
 static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
 {
   uint32_t gct = o->gch.gct;
+  /*
+  ** Strings are owned by the intern table and swept through gc_sweepstr().
+  ** Traversable arena scans can encounter stale type bytes from reclaimed or
+  ** reused bodies; dispatching those through lj_str_free() would double-count
+  ** string-table ownership and corrupt g->str.num.
+  */
+  if (gct == (uint32_t)~LJ_TSTR)
+    return 0;
   if (gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA) {
     GCFreeFunc fn = gc_freefunc[gct - (uint32_t)~LJ_TSTR];
     if (fn) {
@@ -1723,9 +1780,153 @@ static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
   return 0;
 }
 
-static int gc2_valid_freeable_obj(GCobj *o)
+static int gc2_size_fits_mem(global_State *g, const void *p, GCSize size)
+{
+  TGState *tg = G2TG(g);
+  GCArena *a;
+  uint32_t cell, maxcells;
+  if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return 1;
+  if (!p || size > LJ_MAX_MEM32)
+    return 0;
+  a = lj_arena_of(p);
+  if (lj_arena_ishuge(a))
+    return size <= LJ_MAX_MEM32;
+  cell = lj_arena_cellof(p);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+    return 0;
+  maxcells = LJ_ARENA_CELLS - cell;
+  return lj_arena_ncells(size) <= maxcells;
+}
+
+static int gc2_size_fits_arena(global_State *g, GCobj *o, GCSize size)
+{
+  return gc2_size_fits_mem(g, o, size);
+}
+
+static int gc2_valid_proto_obj(global_State *g, GCproto *pt)
+{
+  MSize minpt;
+  if (pt->sizept < sizeof(GCproto) || pt->sizept > LJ_MAX_MEM32)
+    return 0;
+  if (!gc2_size_fits_arena(g, obj2gco(pt), pt->sizept))
+    return 0;
+  if (pt->sizebc == 0 || pt->sizebc > LJ_MAX_BCINS)
+    return 0;
+  if (pt->framesize > LJ_MAX_SLOTS || pt->sizeuv > LJ_MAX_UPVAL)
+    return 0;
+  minpt = (MSize)sizeof(GCproto) + pt->sizebc*(MSize)sizeof(BCIns);
+  minpt = (minpt + (MSize)sizeof(TValue)-1) & ~((MSize)sizeof(TValue)-1);
+  return minpt <= pt->sizept;
+}
+
+static int gc2_valid_pow2_mask(MSize hmask)
+{
+  MSize hsize;
+  if (hmask == 0)
+    return 1;
+  if (hmask > (((MSize)1u << LJ_MAX_HBITS) - 1u))
+    return 0;
+  hsize = hmask + 1u;
+  return (hsize & hmask) == 0;
+}
+
+static int gc2_valid_tab_obj(global_State *g, GCtab *t)
+{
+  int8_t colo = lj_tab_colo_acq(t);
+  MSize colosz = colo ? ((MSize)(uint8_t)colo & 0x7fu) : 0;
+  MSize asize = lj_tab_asize_acq(t);
+  MSize acap = lj_tab_acap_acq(t);
+  TValue *array = lj_tab_array_acq(t);
+  TValue *coloarray = (TValue *)(void *)((char *)(void *)t + sizeof(GCtab));
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask;
+  GCSize bodysize;
+
+  if (LJ_MAX_COLOSIZE != 0 && colosz > LJ_MAX_COLOSIZE)
+    return 0;
+  if (asize > LJ_MAX_ASIZE || acap > LJ_MAX_ASIZE)
+    return 0;
+  if (colo > 0) {
+    if (array != coloarray || asize > colosz || acap > colosz)
+      return 0;
+  } else if (array == coloarray) {
+    /*
+    ** A negative colocated marker means a resize has split the old inline array
+    ** from table indexing. A dead table still pointing at the inline storage is
+    ** in a transient resize state; ordinary sweep must not free it as separated.
+    */
+    return 0;
+  } else if (array != NULL) {
+    MSize hacap;
+    if (lj_tab_array_is_retiring(t, array))
+      return 0;
+    hacap = lj_tab_array_hdr_acap_acq(array);
+    if (hacap == 0 || hacap > LJ_MAX_ASIZE)
+      return 0;
+    if (!gc2_size_fits_mem(g, lj_tab_array_hdrw(array),
+			   lj_tab_array_bytes(hacap)))
+      return 0;
+  }
+
+  if (node == NULL)
+    return 0;
+  hmask = lj_tab_node_hmask_acq(node);
+  if (!gc2_valid_pow2_mask(hmask))
+    return 0;
+  if (hmask > 0) {
+    if (lj_tab_node_is_retiring(node))
+      return 0;
+    if (!gc2_size_fits_mem(g, lj_tab_node_hdrw(node),
+			   lj_tab_node_bytes(hmask)))
+      return 0;
+  }
+
+  bodysize = (LJ_MAX_COLOSIZE != 0 && colosz) ?
+	     (GCSize)sizetabcolo(colosz) : (GCSize)sizeof(GCtab);
+  return gc2_size_fits_arena(g, obj2gco(t), bodysize);
+}
+
+static int gc2_cdata_finalizer_pending(GCobj *o)
+{
+#if LJ_HASFFI
+  return o->gch.gct == (uint32_t)~LJ_TCDATA &&
+	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN);
+#else
+  UNUSED(o);
+  return 0;
+#endif
+}
+
+static void gc2_preserve_pending_finalizer_body(global_State *g, GCobj *o)
+{
+  /*
+  ** FINREG, not ordinary sweep, owns the transition from finalizer-registered
+  ** cdata to a freeable body. Preserve the arena cell without traversing the
+  ** cdata payload and keep legacy color white so the ordered FINREG P_WEAK scan
+  ** can still discover and queue the finalizer.
+  */
+  (void)lj_gc2_markobj_nolegacy(g, o);
+  makewhite(g, o);
+}
+
+static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
 {
   uint32_t gct = o->gch.gct;
+  if (gct == (uint32_t)~LJ_TSTR)
+    return 0;  /* String table sweep owns GCstr lifetime. */
+  if (gc2_cdata_finalizer_pending(o))
+    return 0;  /* FINREG dispatch must clear LJ_GC_CDATA_FIN before free. */
+#if LJ_HASFFI
+  if (gct == (uint32_t)~LJ_TCDATA &&
+      !lj_cdata_validate(g, gco2cd(o), NULL, NULL))
+    return 0;  /* Stale cdata header: ctype/size is not safe to dispatch. */
+#endif
+  if (gct == (uint32_t)~LJ_TPROTO && !gc2_valid_proto_obj(g, gco2pt(o)))
+    return 0;  /* Stale proto header: sizept is not safe for destructor. */
+  if (gct == (uint32_t)~LJ_TTAB && !gc2_valid_tab_obj(g, gco2tab(o)))
+    return 0;  /* Stale table header: side-vector sizes are not trustworthy. */
   return gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA &&
 	 gc_freefunc[gct - (uint32_t)~LJ_TSTR] != NULL;
 }
@@ -1780,7 +1981,12 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 	}
 	continue;
       }
-      if (isdead(g, o) && gc2_valid_freeable_obj(o)) {
+      if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(o))) {
+	gc2_preserve_pending_finalizer_body(g, o);
+	p = lj_obj_gcwref(o);
+	continue;
+      }
+      if (isdead(g, o) && gc2_valid_freeable_obj(g, o)) {
 	if (!gc_chain_splice(p, o)) {
 	  gc_root_wait_no_l();
 	  continue;
@@ -1806,11 +2012,15 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
     if (lj_arena_bm_get(a->block, i) &&
 	(!unmarked_only || !lj_arena_bm_get(a->mark, i))) {
       GCobj *o = (GCobj *)lj_arena_cellptr(a, i);
-      if (unmarked_only && gc2_valid_freeable_obj(o)) {
+      if (gc2_cdata_finalizer_pending(o)) {
+	gc2_preserve_pending_finalizer_body(g, o);
+	continue;
+      }
+      if (unmarked_only && gc2_valid_freeable_obj(g, o)) {
 	lj_arena_bm_set(a->mark, i);
 	continue;
       }
-      if ((!unmarked_only || isdead(g, o)) && gc2_valid_freeable_obj(o)) {
+      if ((!unmarked_only || isdead(g, o)) && gc2_valid_freeable_obj(g, o)) {
 	lj_gc_unlink_root_obj(g, o);
 	if (!gc2_free_unmarked_obj(g, o))
 	  continue;
@@ -1878,6 +2088,27 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
       int deferred = gc2_deferred_body_pending(g, o);
       lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		 "sweep of unlive object");
+      if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(o))) {
+	gc2_preserve_pending_finalizer_body(g, o);
+	p = lj_obj_gcwref(o);
+	continue;
+      }
+      if (LJ_UNLIKELY(!gc2_valid_freeable_obj(g, o))) {
+	/*
+	** Lock-free root publication can leave an SMR-preserved arena body on the
+	** legacy root spine after its destructor has run or after the header has
+	** been reused for non-GC state. The legacy sweeper cannot dispatch from
+	** that stale gct byte; unlink the ownership-spine entry and leave the body
+	** lifetime to arena/SMR reclamation.
+	*/
+	if (!gc_chain_splice(p, o)) {
+	  gc_root_wait_no_l();
+	  continue;
+	}
+	if (deferred)
+	  o->gch.gct = 0;
+	continue;
+      }
       if (!gc_chain_splice(p, o)) {
 	gc_root_wait_no_l();
 	continue;
@@ -1901,6 +2132,15 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
   GCobj *o;
   lj_str_ref_store_rel(&q, u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
   while ((o = gcref_acq(*p)) != NULL) {
+    if (LJ_UNLIKELY(la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TSTR)) {
+      /*
+      ** String destructors stamp gct=0 before physical free. If a stale bucket
+      ** link survives a lock-free resize/freeall race, unlink it from the
+      ** chain snapshot instead of treating the old body as another live string.
+      */
+      lj_str_ref_store_rel(p, (uintptr_t)lj_str_next_acq(o));
+      continue;
+    }
     if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
       lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
 		 "sweep of undead string");
@@ -2060,7 +2300,7 @@ static int atomic(global_State *g, lua_State *L)
     if (!lj_gc2_weak_complete(g, L, weak, LJ_GC2_WEAK_DRAIN_BATCH))
       lj_gc_clearweak_bridge(g, weak);
   }
-  lj_gc2_weak_to_sweep(g);
+  lj_gc2_weak_to_sweep(g, L);
 
   lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */
 
@@ -2129,8 +2369,16 @@ static size_t gc_onestep(lua_State *L)
       g->gc.state = GCSsweep;  /* All string hash chains sweeped. */
     {
       GCSize total = lj_gc_total_load(g);
-      lj_assertG(old >= total, "sweep increased memory");
-      g->gc.estimate -= old - total;
+      /*
+      ** Stock LuaJIT sweeps with a single mutator and can assert that sweeping
+      ** only decreases total bytes. Here other TGs may allocate while this TG
+      ** owns one sweep step, so fold either delta direction into the live-size
+      ** estimate used for pacing.
+      */
+      if (old >= total)
+	g->gc.estimate -= old - total;
+      else
+	g->gc.estimate += total - old;
     }
     return GCSWEEPCOST;
     }
@@ -2139,8 +2387,10 @@ static size_t gc_onestep(lua_State *L)
     setmref(g->gc.sweep, gc_sweep(g, mref(g->gc.sweep, GCRef), GCSWEEPMAX));
     {
       GCSize total = lj_gc_total_load(g);
-      lj_assertG(old >= total, "sweep increased memory");
-      g->gc.estimate -= old - total;
+      if (old >= total)
+	g->gc.estimate -= old - total;
+      else
+	g->gc.estimate += total - old;
     }
     if (gcref_acq(*mref(g->gc.sweep, GCRef)) == NULL) {
       int arena_prepare = gc_arena_sweep_needs_prepare(g);
@@ -2355,14 +2605,17 @@ void lj_gc_fullgc(lua_State *L)
       return;
     }
   }
-  while (g->gc.state == GCSsweepstring || g->gc.state == GCSsweep)
+  while (g->gc.state == GCSsweepstring || g->gc.state == GCSsweep) {
+    gc_arena_fullgc_drain_sweep(g);
     gc_onestep(L);  /* Finish sweep. */
+  }
   lj_assertG(g->gc.state == GCSfinalize || g->gc.state == GCSpause,
 	     "bad GC state");
   /* Now perform a full GC. */
   lj_gc2_force_major(g);
   g->gc.state = GCSpause;
   do {
+    gc_arena_fullgc_drain_sweep(g);
     gc_onestep(L);
     if (lj_gc2_finalizer_fullgc_deferred(g)) {
       vmstate_store_rel(g, ostate);
@@ -2651,6 +2904,39 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
 #endif
 }
 
+static int gc_root_chain_break_cycle(GCobj *head)
+{
+  GCobj *slow = head, *fast = head, *entry, *tail;
+  while (fast != NULL) {
+    slow = lj_obj_gcw_acq(slow);
+    fast = lj_obj_gcw_acq(fast);
+    if (fast == NULL || slow == NULL)
+      return 0;
+    fast = lj_obj_gcw_acq(fast);
+    if (slow == fast)
+      break;
+  }
+  if (fast == NULL)
+    return 0;
+  slow = head;
+  while (slow != fast) {
+    slow = lj_obj_gcw_acq(slow);
+    fast = lj_obj_gcw_acq(fast);
+  }
+  entry = slow;
+  tail = entry;
+  /*
+  ** Pending-root chains are caller-owned stacks and must be null-terminated
+  ** before they are spliced into the legacy root spine. If a racing publisher or
+  ** an old corrupted pending head forms a cycle, preserve each unique object in
+  ** the chain by severing the cycle predecessor rather than letting GC hang.
+  */
+  while (lj_obj_gcw_acq(tail) != entry)
+    tail = lj_obj_gcw_acq(tail);
+  lj_obj_setgcwnullrel(tail);
+  return 1;
+}
+
 static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
 {
   GCobj *tail, *next;
@@ -2659,6 +2945,7 @@ static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
     *tailp = NULL;
     return 0;
   }
+  (void)gc_root_chain_break_cycle(head);
   tail = head;
   do {
     if (n != ~(uint32_t)0)

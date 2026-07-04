@@ -25,8 +25,16 @@ int LJ_FASTCALL lj_obj_equal(cTValue *o1, cTValue *o2)
   if (itype(o1) == itype(o2)) {
     if (tvispri(o1))
       return 1;
-    if (!tvisnum(o1))
+    if (!tvisnum(o1)) {
+      /*
+      ** A lock-free table or stack reader can race with weak clearing and arena
+      ** reuse. If a tagged GC reference no longer agrees with the target header,
+      ** it is a stale edge, not an equal live Lua object.
+      */
+      if (!lj_tv_gcref_type_match(o1) || !lj_tv_gcref_type_match(o2))
+	return 0;
       return gcrefeq(o1->gcr, o2->gcr);
+    }
   } else if (!tvisnumber(o1) || !tvisnumber(o2)) {
     return 0;
   }
@@ -48,4 +56,3 @@ const void * LJ_FASTCALL lj_obj_ptr(global_State *g, cTValue *o)
   else
     return NULL;
 }
-

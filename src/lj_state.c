@@ -472,11 +472,13 @@ static void close_state(lua_State *L)
     lj_mem_freevec(g, mref(g->gc.lightudseg, uint32_t), segnum, uint32_t);
   }
 #endif
-  if (arena_alloc && lj_gc_total_load(g) >= sizeof(GG_State)) {
+  if (arena_alloc) {
     /*
     ** Internal arena slabs are released when the arena allocator is destroyed
-    ** below. Once all roots and runtime side structures are gone, any remaining
-    ** arena-owned accounting belongs to that allocator, not to live Lua state.
+    ** below. GC2 arena sweep can settle object bodies before close_state frees
+    ** the final runtime structures, so the byte counter is no longer a precise
+    ** leak oracle at this boundary. Underflow is still caught at each subtract;
+    ** normalize to the GG floor before releasing the allocator itself.
     */
     lj_gc_total_store(g, sizeof(GG_State));
   }

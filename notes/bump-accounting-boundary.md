@@ -6,9 +6,12 @@ predicates. They no longer treat a full `TG.local_total` batch as a reason to
 fall all the way back to generic allocation.
 
 When the next bump allocation would cross `LJ_GC2_ACCT_FLUSH`, the helper
-allocates from the current bump run, updates `gc.total`, then accounts that
-allocation through `lj_gc2_account_alloc()`. That preserves the existing GC2
-trigger and hard-assist behavior for the allocation itself while avoiding a
+allocates from the current bump run, updates `gc.total`, publishes the fully
+initialized object to its GC ownership path, then accounts that allocation
+through `lj_gc2_account_alloc()`. Arena bump cells set their block bit before
+publication; publishing before a possible accounting assist keeps bitmap sweep
+from observing an allocated but still unrooted cell. This preserves the existing
+GC2 trigger and hard-assist behavior for the allocation itself while avoiding a
 generic allocator round trip on a deterministic accounting-boundary miss.
 
 The x64 inline paths still jump to the C helper at this boundary. The C helper

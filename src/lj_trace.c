@@ -210,17 +210,95 @@ static void tracevec_retire(jit_State *J, TraceVec *tv)
   }
 }
 
-static void trace_exittab_free(global_State *g, GCtrace *T);
+static void trace_exittab_free(global_State *g, GCtrace *T, SnapNo nsnap);
 static void trace_preservebody(global_State *g, GCtrace *T, int gc2);
 
-static GCSize trace_size(GCtrace *T)
+static LJArenaAllocD *trace_arena_allocd_for_tg(global_State *g, TGState *tg)
 {
-  IRRef nins = trace_nins_acq(T);
-  IRRef nk = trace_nk_acq(T);
-  return (GCSize)(((sizeof(GCtrace)+7)&~7) +
-    (nins-nk)*sizeof(IRIns) +
-    trace_nsnap_acq(T)*sizeof(SnapShot) +
-    trace_nsnapmap_acq(T)*sizeof(SnapEntry));
+  if (tg && lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+    return &tg->allocd;
+  return (LJArenaAllocD *)g->allocd;
+}
+
+static LJArenaAllocD *trace_arena_allocd_for_ptr(global_State *g, const void *p)
+{
+  if (p) {
+    uint32_t owner_tid = lj_arena_owner_acq(lj_arena_of(p));
+    TGState *tg = lj_tg_find_owner(g, owner_tid);
+    if (tg)
+      return trace_arena_allocd_for_tg(g, tg);
+  }
+  return (LJArenaAllocD *)g->allocd;
+}
+
+static int trace_body_fits_alloc(global_State *g, GCtrace *T, GCSize size)
+{
+  GCArena *a;
+  uint32_t cell, maxcells;
+  if (g->allocf != lj_arena_allocf)
+    return 1;
+  if (!T || size > LJ_MAX_MEM32)
+    return 0;
+  a = lj_arena_of(T);
+  if (lj_arena_ishuge(a)) {
+    LJArenaAllocD *ad = trace_arena_allocd_for_ptr(g, T);
+    LJHugeInfo hi;
+    return ad && ad->huge &&
+	   lj_arena_hugetab_lookup(ad->huge, T, &hi) == 1 &&
+	   hi.size == size;
+  }
+  cell = lj_arena_cellof(T);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+    return 0;
+  maxcells = LJ_ARENA_CELLS - cell;
+  return lj_arena_ncells(size) <= maxcells;
+}
+
+static int trace_size_checked(global_State *g, GCtrace *T, GCSize *sizep,
+			      SnapNo *nsnapp)
+{
+  IRRef nins, nk;
+  SnapNo nsnap;
+  MSize nsnapmap;
+  GCSize size = (GCSize)((sizeof(GCtrace)+7)&~7);
+  GCSize nref;
+  const MSize snapmap_per_snap =
+    (MSize)LJ_MAX_JSLOTS + (MSize)LJ_STACK_EXTRA + 32u;
+  if (!T || T->gct != (uint32_t)~LJ_TTRACE)
+    return 0;
+  nins = trace_nins_acq(T);
+  nk = trace_nk_acq(T);
+  nsnap = trace_nsnap_acq(T);
+  nsnapmap = trace_nsnapmap_acq(T);
+  /*
+  ** A trace body's allocation size is reconstructed from its geometry at free
+  ** time. Retired traces are still visible to stale exits and bytecode readers
+  ** until their SMR epoch expires, so close/reclaim can observe a stale body if a
+  ** duplicate retire entry slipped through. Validate the format invariants before
+  ** using the header as an allocator contract.
+  */
+  if (nins < REF_BASE || nins > 0xffffu || nk > REF_BIAS || nk > nins)
+    return 0;
+  if ((nsnap == 0 && nsnapmap != 0) ||
+      (nsnap != 0 && nsnapmap > (MSize)nsnap * snapmap_per_snap))
+    return 0;
+  nref = (GCSize)(nins - nk);
+  if (nref > ((GCSize)LJ_MAX_MEM32 - size) / (GCSize)sizeof(IRIns))
+    return 0;
+  size += nref * (GCSize)sizeof(IRIns);
+  if ((GCSize)nsnap > ((GCSize)LJ_MAX_MEM32 - size) /
+			(GCSize)sizeof(SnapShot))
+    return 0;
+  size += (GCSize)nsnap * (GCSize)sizeof(SnapShot);
+  if ((GCSize)nsnapmap > ((GCSize)LJ_MAX_MEM32 - size) /
+			   (GCSize)sizeof(SnapEntry))
+    return 0;
+  size += (GCSize)nsnapmap * (GCSize)sizeof(SnapEntry);
+  if (!trace_body_fits_alloc(g, T, size))
+    return 0;
+  *sizep = size;
+  *nsnapp = nsnap;
+  return 1;
 }
 
 static void trace_retired_push(jit_State *J, GCtrace *T)
@@ -274,14 +352,24 @@ static void trace_retire(global_State *g, GCtrace *T)
 
 static void trace_freebody(global_State *g, GCtrace *T)
 {
-  trace_exittab_free(g, T);
-  lj_mem_free(g, T, trace_size(T));
+  GCSize size;
+  SnapNo nsnap;
+  if (LJ_UNLIKELY(!trace_size_checked(g, T, &size, &nsnap)))
+    return;
+  trace_exittab_free(g, T, nsnap);
+  T->gct = 0;  /* Retired duplicates must not reconstruct a second free size. */
+  lj_mem_free(g, T, size);
 }
 
 static void trace_free_immediate(global_State *g, GCtrace *T)
 {
-  trace_exittab_free(g, T);
-  lj_mem_free(g, T, trace_size(T));
+  GCSize size;
+  SnapNo nsnap;
+  if (LJ_UNLIKELY(!trace_size_checked(g, T, &size, &nsnap)))
+    return;
+  trace_exittab_free(g, T, nsnap);
+  T->gct = 0;  /* Unpublished aborts may race with preserved retired scans. */
+  lj_mem_free(g, T, size);
 }
 
 void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T)
@@ -311,6 +399,7 @@ static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
 					int gc2)
 {
   GCobj *o;
+  uint32_t n = 0;
   if (!pc)
     return;
   (void)lj_gc_flush_root_pending(g);
@@ -323,6 +412,14 @@ static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
 	return;
       }
     }
+    /*
+    ** Retired traces preserve snapshot PCs during GC2 handshakes. This is an
+    ** advisory retention walk over the legacy ownership spine, so it must stay
+    ** bounded if lock-free pending-root publication leaves a malformed cycle
+    ** for the root flusher/sweeper to repair.
+    */
+    if (LJ_UNLIKELY(++n >= 1000000u))
+      return;
   }
 }
 
@@ -729,13 +826,13 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   return T2;
 }
 
-static void trace_exittab_free(global_State *g, GCtrace *T)
+static void trace_exittab_free(global_State *g, GCtrace *T, SnapNo nsnap)
 {
   MCode **exittab = trace_exittab_acq(T);
   if (exittab) {
     trace_exittab_rel(T, NULL);
     if (!trace_exittab_ismcode(T))
-      lj_mem_freevec(g, exittab, trace_nsnap_acq(T), MCode *);
+      lj_mem_freevec(g, exittab, nsnap, MCode *);
   }
   trace_exittab_mcode_clear(T);
   trace_exitstub_rel(T, NULL);
@@ -1677,7 +1774,7 @@ static int trace_abort(jit_State *J)
   if (tvisnumber(L->top-1))
     e = (TraceError)numberVint(L->top-1);
   /* MCODELM retries rebuild per-trace exit stubs in a fresh mcode area. */
-  trace_exittab_free(J2G(J), &J->cur);
+  trace_exittab_free(J2G(J), &J->cur, J->cur.nsnap);
   if (e == LJ_TRERR_MCODELM) {
     L->top--;  /* Remove error object */
     if (lj_trace_state_aborted(lj_trace_state_store_active(J, LJ_TRACE_ASM)))

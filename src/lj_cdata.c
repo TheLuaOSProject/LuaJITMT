@@ -75,20 +75,93 @@ static LJ_NORET LJ_NOINLINE void cdata_free_finalizer_invariant(global_State *g)
   abort();
 }
 
+static int cdata_raw_info_safe(CTState *cts, CTypeID id, CTInfo *infop,
+			       CTSize *sizep)
+{
+  CTypeTab *tabh;
+  CTypeID top;
+  MSize sizetab;
+  uint32_t guard = 0;
+  if (!cts || id == 0)
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if (!tabh)
+    return 0;
+  top = ctype_top_acq(cts);
+  sizetab = ctype_tab_sizetab_acq(tabh);
+  for (;;) {
+    CType *ct;
+    CTInfo info;
+    if (id == 0 || id >= top || id >= sizetab || ++guard > CTID_MAX)
+      return 0;
+    ct = ctype_tab_slot(tabh, id);
+    info = ctype_info_acq(ct);
+    if (ctype_isabandoned(info))
+      return 0;
+    if (!ctype_isattrib(info)) {
+      if (infop) *infop = info;
+      if (sizep) *sizep = ctype_size_acq(ct);
+      return 1;
+    }
+    id = ctype_cid(info);
+  }
+}
+
+int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
+		      GCSize *sizep)
+{
+  CTState *cts;
+  CTInfo info;
+  CTSize sz;
+  void *base;
+  GCSize size;
+  if (!g || !cd || cd->gct != ~LJ_TCDATA)
+    return 0;
+  cts = ctype_ctsG(g);
+  if (!cdata_raw_info_safe(cts, cd->ctypeid, &info, &sz))
+    return 0;
+  if (cdataisv(cd)) {
+    GCcdataVar *cv = cdatav(cd);
+    MSize offset = cv->offset;
+    MSize extra = cv->extra;
+    MSize len = cv->len;
+    if (extra < sizeof(GCcdataVar) + sizeof(GCcdata) ||
+	offset < sizeof(GCcdataVar) ||
+	offset > extra - sizeof(GCcdata) ||
+	len > LJ_MAX_MEM32 - extra)
+      return 0;
+    base = (void *)((char *)cd - offset);
+    size = (GCSize)(len + extra);
+  } else {
+    if (ctype_hassize(info)) {
+      if (sz > LJ_MAX_MEM32 - sizeof(GCcdata))
+	return 0;
+      size = (GCSize)(sizeof(GCcdata) + sz);
+    } else if (ctype_isfunc(info) || ctype_isextern(info)) {
+      size = (GCSize)(sizeof(GCcdata) + CTSIZE_PTR);
+    } else {
+      return 0;
+    }
+    base = cd;
+  }
+  if (basep) *basep = base;
+  if (sizep) *sizep = size;
+  return 1;
+}
+
 /* Free a C data object. */
 void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
 {
   if (LJ_UNLIKELY(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
     cdata_free_finalizer_invariant(g);
-  } else if (LJ_LIKELY(!cdataisv(cd))) {
-    CType *ct = ctype_raw(ctype_ctsG(g), cd->ctypeid);
-    CTInfo info = ctype_info_acq(ct);
-    CTSize sz = ctype_hassize(info) ? ctype_size_acq(ct) : CTSIZE_PTR;
-    lj_assertG(ctype_hassize(info) || ctype_isfunc(info) ||
-	       ctype_isextern(info), "free of ctype without a size");
-    lj_mem_free(g, cd, sizeof(GCcdata) + sz);
   } else {
-    lj_mem_free(g, memcdatav(cd), sizecdatav(cd));
+    void *base;
+    GCSize size;
+    if (LJ_UNLIKELY(!lj_cdata_validate(g, cd, &base, &size))) {
+      obj2gco(cd)->gch.gct = 0;
+      return;
+    }
+    lj_mem_free(g, base, size);
   }
 }
 

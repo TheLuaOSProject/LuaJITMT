@@ -135,10 +135,21 @@ static LJ_AINLINE void lj_gc_total_add(global_State *g, GCSize bytes)
 
 static LJ_AINLINE void lj_gc_total_sub(global_State *g, GCSize bytes)
 {
+#if LUA_USE_ASSERT
+#if LJ_GC64
+  GCSize old = (GCSize)la_sub64_rlx(&g->gc.total, bytes);
+#else
+  GCSize old = (GCSize)la_sub32_rlx(&g->gc.total, (uint32_t)bytes);
+#endif
+  lj_assertG(old >= bytes, "gc total underflow old=%llu bytes=%llu caller=%p",
+	     (unsigned long long)old, (unsigned long long)bytes,
+	     __builtin_return_address(0));
+#else
 #if LJ_GC64
   (void)la_sub64_rlx(&g->gc.total, bytes);
 #else
   (void)la_sub32_rlx(&g->gc.total, (uint32_t)bytes);
+#endif
 #endif
   /* 04 section 4.8 accounting: atomicity matters, ordering is counter-only. */
 }

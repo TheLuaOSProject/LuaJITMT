@@ -405,17 +405,17 @@ typedef struct GCtrace {
 
 static LJ_AINLINE int trace_exittab_ismcode(const GCtrace *T)
 {
-  return (T->unused1 & TRACE_EXITTAB_MCODE) != 0;
+  return (la_load8_acq(&T->unused1) & TRACE_EXITTAB_MCODE) != 0;
 }
 
 static LJ_AINLINE void trace_exittab_mcode_set(GCtrace *T)
 {
-  T->unused1 |= TRACE_EXITTAB_MCODE;
+  (void)la_or8_rlx(&T->unused1, TRACE_EXITTAB_MCODE);
 }
 
 static LJ_AINLINE void trace_exittab_mcode_clear(GCtrace *T)
 {
-  T->unused1 &= (uint8_t)~TRACE_EXITTAB_MCODE;
+  (void)la_and8_rlx(&T->unused1, (uint8_t)~TRACE_EXITTAB_MCODE);
 }
 
 #define gco2trace(o)	check_exp((o)->gch.gct == ~LJ_TTRACE, (GCtrace *)(o))

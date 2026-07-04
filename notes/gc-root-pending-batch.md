@@ -87,6 +87,14 @@
   main TG and TLS-current TG pending fields directly before taking an empty
   return. This avoids repeated empty TG-list scans without making the hint an
   ownership or reachability authority.
+- 2026-07-04 stability follow-up: specialized C bump helpers now publish through
+  the shared `lj_gc_linkobj_new()` / `lj_gc_linkobj_new_chain()` path instead of
+  open-coding a local release-store pending push. The helper still keeps the
+  single-producer fast path when the common linker can prove it, but the proof is
+  evaluated at publication time after object initialization and before any
+  accounting assist. Pending-chain flush also severs malformed cycles while
+  preserving the unique objects ahead of the cycle, so a corrupted pending stack
+  cannot hang GC root publication.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

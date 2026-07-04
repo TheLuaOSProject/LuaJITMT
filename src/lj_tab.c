@@ -14,6 +14,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_state.h"
 #include "lj_arena.h"
 #include "lj_safepoint.h"
 #include "lj_tab.h"
@@ -342,6 +343,18 @@ static LJ_AINLINE int tab_val_absent(cTValue *val)
   return tvisnil(val) || tvisforward(val);
 }
 
+static LJ_AINLINE int tab_tv_snapshot_valid(cTValue *tv)
+{
+  /*
+  ** Resize and weak-clear scans read table slots without owning the old array or
+  ** node generation. A racing clear/retire/reuse can leave a TValue whose tag
+  ** names the old occupant while the acquired body header already belongs to a
+  ** different GC type. Such a tag/header mismatch is not a live Lua edge and
+  ** must not be copied into a new generation.
+  */
+  return lj_tv_gcref_type_match(tv);
+}
+
 static LJ_AINLINE int tab_val_is_publish_claim(cTValue *val)
 {
 #if LJ_HASFFI
@@ -608,8 +621,33 @@ static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
   return node;
 }
 
+static LJ_AINLINE int tab_valid_hmask(MSize hmask)
+{
+  MSize hsize;
+  if (hmask == 0)
+    return 0;
+  if (hmask > (((MSize)1u << LJ_MAX_HBITS) - 1u))
+    return 0;
+  hsize = hmask + 1u;
+  return (hsize & hmask) == 0;
+}
+
+static LJ_AINLINE int tab_node_free_ready(const Node *node, MSize hmask)
+{
+  /*
+  ** The hash-vector header is the physical allocation contract. Retired
+  ** generations can outlive their publishing table, so the free boundary checks
+  ** that the retire record and the vector header still describe the same valid
+  ** allocation before subtracting the vector from GC accounting.
+  */
+  return node != NULL && tab_valid_hmask(hmask) &&
+	 lj_tab_node_hmask_acq(node) == hmask;
+}
+
 static LJ_AINLINE void tab_node_free(global_State *g, Node *node, MSize hmask)
 {
+  if (LJ_UNLIKELY(!tab_node_free_ready(node, hmask)))
+    return;
   lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(hmask));
 }
 
@@ -620,8 +658,27 @@ static LJ_AINLINE TValue *tab_array_new(lua_State *L, MSize asize, MSize acap)
   return lj_tab_array_slots(hdr);
 }
 
+static LJ_AINLINE int tab_valid_acap(MSize acap)
+{
+  return acap > 0 && acap <= LJ_MAX_ASIZE;
+}
+
+static LJ_AINLINE int tab_array_free_ready(const TValue *array, MSize acap)
+{
+  /*
+  ** Array capacity is stored beside the slots instead of in the table header
+  ** once a table has split from colocated storage. Match the retire/free size
+  ** against that slot header so stale side-vector observations cannot turn into
+  ** a bogus multi-gigabyte lj_mem_free().
+  */
+  return array != NULL && tab_valid_acap(acap) &&
+	 lj_tab_array_hdr_acap_acq(array) == acap;
+}
+
 static LJ_AINLINE void tab_array_free(global_State *g, TValue *array, MSize acap)
 {
+  if (LJ_UNLIKELY(!tab_array_free_ready(array, acap)))
+    return;
   lj_mem_free(g, lj_tab_array_hdrw(array), lj_tab_array_bytes(acap));
 }
 
@@ -688,6 +745,8 @@ static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
 				       cTValue *key)
 {
   TValue k;
+  if (LJ_UNLIKELY(!tab_tv_snapshot_valid(key)))
+    lj_err_msg(L, LJ_ERR_NILIDX);
   copyTV(L, &k, key);
   if (LJ_UNLIKELY(tvismzero(&k)))
     k.u64 = 0;
@@ -744,6 +803,8 @@ static void tab_migrate_store_if_absent(lua_State *L, GCtab *t, TValue *dst,
 					cTValue *key, cTValue *val)
 {
   UNUSED(t); UNUSED(key);
+  if (LJ_UNLIKELY(!tab_tv_snapshot_valid(val)))
+    return;
   (void)tab_store_if_absent_cas(L, dst, val);
 }
 
@@ -830,7 +891,8 @@ static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask
 	}
 	continue;
       }
-      if (tab_hash_key_hidden(&key))
+      if (!tab_tv_snapshot_valid(&key) || !tab_tv_snapshot_valid(&val) ||
+	  tab_hash_key_hidden(&key))
 	continue;
       if (tab_val_absent(&val))
 	deadkey = 1;
@@ -858,6 +920,8 @@ static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
 					 MSize hmask)
 {
   TabNodeRetire *ret = lj_mem_newt(L, sizeof(TabNodeRetire), TabNodeRetire);
+  lj_assertL(tab_node_free_ready(node, hmask),
+	     "mismatched retired table node size");
   lj_tab_node_retired_node_rel(ret, node);
   lj_tab_node_retired_hmask_rel(ret, hmask);
   lj_tab_node_retired_epoch_rel(ret, 0);
@@ -891,10 +955,10 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
 						MSize acap)
 {
   TabArrayRetire *ret = lj_mem_newt(L, sizeof(TabArrayRetire), TabArrayRetire);
+  lj_assertL(tab_array_free_ready(array, acap),
+	     "mismatched retired table array capacity");
   lj_tab_array_retired_array_rel(ret, array);
   lj_tab_array_retired_acap_rel(ret, acap);
-  lj_assertL(!array || acap == lj_tab_array_hdr_acap_acq(array),
-	     "mismatched retired table array capacity");
   lj_tab_array_retired_epoch_rel(ret, 0);
   lj_tab_array_retired_armed_rel(ret, 0);
   lj_tab_array_retired_next_rel(ret, NULL);
@@ -1087,7 +1151,6 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   LJArenaBump *b;
   GCArena *a;
   GCtab *t;
-  GCobj *head;
   uint64_t local_total;
   uint32_t cell, end, next;
   int account_now;
@@ -1121,20 +1184,15 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   newwhite(g, t);
   lj_gc_total_add(g, sizeof(GCtab));
   /*
-  ** At the local accounting batch boundary, mirror lj_mem_newgco_raw():
-  ** update gc.total before flushing the TG batch. This pre-MT helper links
-  ** the initialized table to pending roots immediately after accounting.
+  ** The arena block bit is visible to bitmap sweep before this helper returns.
+  ** Publish the initialized table before an accounting flush can assist GC, so
+  ** a sweep bridge never sees an unrooted allocated table cell.
   */
+  lj_gc_linkobj_new(g, obj2gco(t));
   if (account_now)
     lj_gc2_account_alloc(g, tg, sizeof(GCtab));
   else
     (void)lj_tg_local_total_add_rlx(tg, sizeof(GCtab));
-  head = lj_tg_gcroot_pending_acq(tg);
-  if (head)
-    lj_obj_setgcwrel(obj2gco(t), head);
-  else
-    lj_obj_setgcwnullrel(obj2gco(t));
-  lj_tg_gcroot_pending_store_rel(tg, obj2gco(t));
   return t;
 }
 
@@ -1308,6 +1366,19 @@ restart_resize:
   oldarray_separated = oldarray && !lj_tab_array_is_colocated(t, oldarray);
   oldacap = oldarray_separated ?
     (uint32_t)lj_tab_array_hdr_acap_acq(oldarray) : oldasize;
+  /*
+  ** Resize uses old vector metadata both for bounded migration loops and for
+  ** delayed physical free. A concurrent generation hand-off may leave a mutator
+  ** with an old snapshot; consume it only while the side-vector headers still
+  ** describe valid LuaJIT table allocations.
+  */
+  if ((oldhmask > 0 && !tab_node_free_ready(oldnode, oldhmask)) ||
+      oldasize > LJ_MAX_ASIZE ||
+      (oldarray_separated &&
+       (!tab_array_free_ready(oldarray, oldacap) || oldasize > oldacap))) {
+    lj_tab_wait_l(L);
+    goto restart_resize;
+  }
   array = oldarray;
   newacap = oldacap;
   array_changed = asize != oldasize;
@@ -1416,21 +1487,22 @@ restart_resize:
     tab_array_retired_push(g, oldaret);
   }
   if (newarray && !oldarray_separated && oldarray) {
-    uint32_t i;
-    uint32_t copy = oldasize < newacap ? oldasize : newacap;
-    for (i = 0; i < copy; i++) {
-      TValue val;
-      if (tab_freeze_forward_any(&oldarray[i], &val) &&
-	  !tab_val_absent(&val))
-	tab_migrate_store_if_absent(L, t, &array[i], NULL, &val);
-    }
+	  uint32_t i;
+	  uint32_t copy = oldasize < newacap ? oldasize : newacap;
+	  for (i = 0; i < copy; i++) {
+	    TValue val;
+	    if (tab_freeze_forward_any(&oldarray[i], &val) &&
+		!tab_val_absent(&val) && tab_tv_snapshot_valid(&val))
+	      tab_migrate_store_if_absent(L, t, &array[i], NULL, &val);
+	  }
     tab_test_resize_colocated_after_freeze(L, t, oldarray, oldasize);
   }
   if (newarray && oldarray_separated) {
-    uint32_t i;
-    for (i = 0; i < oldasize; i++) {
-      TValue val;
-      if (tab_freeze_forward(&oldarray[i], &val) && !tab_val_absent(&val)) {
+	  uint32_t i;
+	  for (i = 0; i < oldasize; i++) {
+	    TValue val;
+	    if (tab_freeze_forward(&oldarray[i], &val) &&
+		!tab_val_absent(&val) && tab_tv_snapshot_valid(&val)) {
 	if (i < asize) {
 	  tab_migrate_store_if_absent(L, t, &array[i], NULL, &val);
 	} else {
@@ -1462,7 +1534,8 @@ restart_resize:
       } else {
 	lj_tv_load_acq(&val, &n->val);
       }
-      if (!tab_val_absent(&val)) {
+	      if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val) &&
+		  tab_tv_snapshot_valid(&key)) {
 	TValue *slot;
 	if (tab_hash_key_hidden(&key))
 	  continue;
@@ -1479,12 +1552,12 @@ restart_resize:
   }
   if (!oldarray_separated && oldarray && asize < oldasize) {
     /* Freeze and reinsert old colocated array tail off-table. */
-    uint32_t i;
-    lj_assertL(hbits != 0, "missing hash part during colocated array tail rehash");
-    for (i = asize; i < oldasize; i++) {
-      TValue key, val;
-      if (tab_freeze_forward_any(&oldarray[i], &val) &&
-	  !tab_val_absent(&val)) {
+	  uint32_t i;
+	  lj_assertL(hbits != 0, "missing hash part during colocated array tail rehash");
+	  for (i = asize; i < oldasize; i++) {
+	    TValue key, val;
+	    if (tab_freeze_forward_any(&oldarray[i], &val) &&
+		!tab_val_absent(&val) && tab_tv_snapshot_valid(&val)) {
 	setnumV(&key, (lua_Number)i);
 	tab_migrate_store_if_absent(L, t,
 	  tab_rehash_insert(L, newnode, newhmask, &newfreetop,
@@ -1675,7 +1748,7 @@ static uint32_t countarray(const GCtab *t, uint32_t *bins)
     for (n = 0; i <= top; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
-      if (!tab_val_absent(&val))
+      if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val))
 	n++;
     }
     bins[b] += n;
@@ -1693,9 +1766,9 @@ static uint32_t counthash(const GCtab *t, uint32_t *bins, uint32_t *narray)
     Node *n = &node[i];
     TValue key, val;
     lj_tv_load_acq(&val, &n->val);
-    if (!tab_val_absent(&val)) {
+    if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val)) {
       lj_tv_load_acq(&key, &n->key);
-      if (!tab_hash_key_hidden(&key)) {
+      if (tab_tv_snapshot_valid(&key) && !tab_hash_key_hidden(&key)) {
 	na += countint(&key, bins);
 	total++;
       }
@@ -1717,6 +1790,55 @@ static uint32_t bestasize(uint32_t bins[], uint32_t *narray)
   return na;
 }
 
+static LJ_AINLINE int tab_key_on_stack(lua_State *L, cTValue *key)
+{
+  return L && key && key >= tvref(L->stack) && key < tvref(L->maxstack);
+}
+
+static TValue *tab_anchor_stack_top(lua_State *L)
+{
+  TValue *top = L->top;
+  TValue *framefunc = L->base - 2;
+  if (framefunc >= tvref(L->stack) && framefunc < tvref(L->maxstack) &&
+      tvisfunc(framefunc)) {
+    GCfunc *fn = funcV(framefunc);
+    if (isluafunc(fn)) {
+      TValue *ftop = L->base + funcproto(fn)->framesize;
+      if (top < ftop)
+	top = ftop;
+    }
+  }
+  return top;
+}
+
+static cTValue *tab_anchor_rehash_key(lua_State *L, cTValue *key,
+				      ptrdiff_t *oldtop)
+{
+  int stack_key = tab_key_on_stack(L, key);
+  ptrdiff_t keyofs = stack_key ? savestack(L, (TValue *)(void *)key) : 0;
+  TValue *top;
+  /*
+  ** Rehash and stale-generation retry paths can allocate or step the GC before
+  ** the key reaches a published table slot. VM/JIT helpers may pass a C-local
+  ** TValue, so copy the key to a real Lua stack root for that slow path only.
+  ** VM helpers update L->base but may leave L->top below the active Lua frame;
+  ** raise the temporary root slot above curr_top before publishing it.
+  */
+  if (LJ_UNLIKELY(!tab_tv_snapshot_valid(key)))
+    lj_err_msg(L, LJ_ERR_NILIDX);
+  *oldtop = savestack(L, L->top);
+  lj_gc_pubroot(L, key);
+  L->top = tab_anchor_stack_top(L);
+  lj_state_checkstack(L, 1);
+  if (stack_key)
+    key = restorestack(L, keyofs);
+  top = L->top;
+  copyTVrel(L, top, key);
+  L->top = top + 1;
+  lj_state_stack_pubtv(L, L, top);
+  return top;
+}
+
 static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
 {
   uint32_t bins[LJ_MAX_ABITS];
@@ -1731,10 +1853,25 @@ static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
   lj_tab_resize(L, t, asize, hsize2hbits(total));
 }
 
+static TValue *tab_set_anchored_key(lua_State *L, GCtab *t, cTValue *key)
+{
+  ptrdiff_t oldtop;
+  TValue *slot;
+  key = tab_anchor_rehash_key(L, key, &oldtop);
+  slot = lj_tab_set(L, t, key);
+  L->top = restorestack(L, oldtop);
+  return slot;
+}
+
 static TValue *tab_rehash_forwarded_key(lua_State *L, GCtab *t, cTValue *key)
 {
+  ptrdiff_t oldtop;
+  TValue *slot;
+  key = tab_anchor_rehash_key(L, key, &oldtop);
   rehashtab(L, t, key);
-  return lj_tab_set(L, t, key);
+  slot = lj_tab_set(L, t, key);
+  L->top = restorestack(L, oldtop);
+  return slot;
 }
 
 TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key)
@@ -1775,6 +1912,18 @@ static void tab_rehash_chain_overflow(lua_State *L, GCtab *t, cTValue *ek,
   if (hmask <= oldhmask)
     lj_tab_resize(L, t, (uint32_t)lj_tab_array_snapshot_acq(t, &array),
 		  growhbits);
+}
+
+static TValue *tab_rehash_chain_overflow_key(lua_State *L, GCtab *t,
+					     cTValue *key, MSize oldhmask)
+{
+  ptrdiff_t oldtop;
+  TValue *slot;
+  key = tab_anchor_rehash_key(L, key, &oldtop);
+  tab_rehash_chain_overflow(L, t, key, oldhmask);
+  slot = lj_tab_set(L, t, key);
+  L->top = restorestack(L, oldtop);
+  return slot;
 }
 
 void lj_tab_reasize(lua_State *L, GCtab *t, uint32_t nasize)
@@ -2142,7 +2291,7 @@ static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
 }
 
 /* Insert new key. Nodes are never moved within a hash generation. */
-TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
+static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key)
 {
   Node *nodebase;
   MSize hmask;
@@ -2150,8 +2299,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 retry_insert:
   nodebase = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0) {
-    rehashtab(L, t, key);
-    return lj_tab_set(L, t, key);
+    return tab_rehash_forwarded_key(L, t, key);
   }
   n = hashkey_node(nodebase, hmask, key);
   {
@@ -2165,8 +2313,7 @@ retry_insert:
       goto retry_insert;
     }
     if (chainlen >= LJ_TAB_MAXCHAIN) {
-      tab_rehash_chain_overflow(L, t, key, hmask);
-      return lj_tab_set(L, t, key);
+      return tab_rehash_chain_overflow_key(L, t, key, hmask);
     }
     if (tab_private_mutation_allowed(L)) {
       TValue *slot = tab_newkey_private(L, t, key, nodebase, hmask, n);
@@ -2189,8 +2336,7 @@ retry_insert:
 	goto retry_insert;
       }
       if (reserved == 0) {
-	rehashtab(L, t, key);
-	return lj_tab_set(L, t, key);
+	return tab_rehash_forwarded_key(L, t, key);
       }
       {
 	int claimed = tab_try_claim_nil_key(&n->key);
@@ -2211,7 +2357,7 @@ retry_insert:
 	  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
 	  if (!tab_hash_generation_current(t, nodebase)) {
 	    lj_tab_wait_no_l();
-	    return lj_tab_set(L, t, key);
+	    return tab_set_anchored_key(L, t, key);
 	  }
 	  return &n->val;
 	}
@@ -2229,8 +2375,7 @@ retry_insert:
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
-      rehashtab(L, t, key);
-      return lj_tab_set(L, t, key);
+      return tab_rehash_forwarded_key(L, t, key);
     }
     {
       MSize chainlen;
@@ -2246,8 +2391,7 @@ retry_insert:
       }
       if (chainlen >= LJ_TAB_MAXCHAIN) {
 	tab_release_claimed_free(nodebase, freenode);
-	tab_rehash_chain_overflow(L, t, key, hmask);
-	return lj_tab_set(L, t, key);
+	return tab_rehash_chain_overflow_key(L, t, key, hmask);
       }
     }
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
@@ -2273,10 +2417,36 @@ retry_insert:
 	       "new hash slot is not empty");
     if (!tab_hash_generation_current(t, nodebase)) {
       lj_tab_wait_no_l();
-      return lj_tab_set(L, t, key);
+      return tab_set_anchored_key(L, t, key);
     }
     return &freenode->val;
   }
+}
+
+TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
+{
+  int stack_key = tab_key_on_stack(L, key);
+  ptrdiff_t oldtop = 0;
+  TValue *slot;
+  /*
+   ** Missing-key insertion can wait on a key lock, publish weak-key barriers, or
+  ** lose a generation race before the key reaches the table. VM helpers may pass
+  ** a live frame slot above L->top; keep that frame range published while the
+  ** insertion owns no table slot yet. C-local keys are anchored by the existing
+  ** rehash/retry slow paths that can allocate or recursively call lj_tab_set().
+   */
+  if (LJ_UNLIKELY(!tab_tv_snapshot_valid(key)))
+    lj_err_msg(L, LJ_ERR_NILIDX);
+  if (stack_key) {
+    TValue *top = tab_anchor_stack_top(L);
+    oldtop = savestack(L, L->top);
+    if (L->top < top)
+      L->top = top;
+  }
+  slot = tab_newkey_impl(L, t, key);
+  if (stack_key)
+    L->top = restorestack(L, oldtop);
+  return slot;
 }
 
 int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,

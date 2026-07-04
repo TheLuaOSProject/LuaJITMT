@@ -1180,7 +1180,7 @@ int lj_gc2_collect_active(lua_State *L)
     }
     if (phase == LJ_GC2_WEAK) {
       if (lj_gc2_weak_complete(g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH)) {
-	lj_gc2_weak_to_sweep(g);
+	lj_gc2_weak_to_sweep(g, L);
 	continue;
       }
       gc2_peer_wait_l(L);
@@ -1698,7 +1698,40 @@ void lj_gc2_mark_to_weak(global_State *g)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
-void lj_gc2_weak_to_sweep(global_State *g)
+static void gc2_weak_to_sweep_drain_boundary(global_State *g, lua_State *L)
+{
+  TGState *tg;
+  if (!g)
+    return;
+  tg = L ? L2TG(L) : G2TG(g);
+  for (;;) {
+    uint32_t acked, progress = 0;
+    if (tg)
+      progress += lj_gc2_flush_ssb(g, tg);
+    progress += gc2_drain_ssb_owned(g);
+    if (gc2_thread_scan_needscan_pending_acq(g) != 0) {
+      /*
+      ** A busy owned lua_State removed from the grey queue is represented by
+      ** NEEDSCAN until its owner acknowledges a root scan. The weak-to-sweep
+      ** boundary is the last point before arenas can reclaim unmarked cells, so
+      ** close those handoffs here and then drain the stack marks they publish.
+      */
+      acked = lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
+      if (acked == 0 && L) {
+	lj_gc2_scan_cycle_roots(g, L);
+	progress += lj_gc2_flush_ssb(g, L2TG(L));
+      }
+      continue;
+    }
+    if (lj_gc2_ssb_empty(g))
+      return;
+    acked = lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+    if (acked == 0 && progress == 0)
+      return;
+  }
+}
+
+void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
 {
   uint32_t active_expect = 0, expect = LJ_GC2_WEAK;
   if (!g)
@@ -1714,7 +1747,7 @@ void lj_gc2_weak_to_sweep(global_State *g)
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
 		   (gc2_cycle_sweep_minor_acq(g) ?
 		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
-  (void)gc2_drain_ssb_owned(g);  /* Temporary worker-consume stand-in. */
+  gc2_weak_to_sweep_drain_boundary(g, L);
   (void)lj_tg_reclaim_dead(g);
   gc2_worker_active_rel(g, 0);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
@@ -2966,6 +2999,8 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
 
 static void gc2_mark_tv(global_State *g, cTValue *tv)
 {
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)))
+    return;
   if (tvisgcv(tv))
     lj_gc2_markobj(g, gcV(tv));
 }
@@ -3719,7 +3754,7 @@ void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L)
   lj_gc2_scan_minor_roots(g, L);
 }
 
-static void *gc2_mark_base(GCobj *o);
+static void *gc2_mark_base(global_State *g, GCobj *o);
 static int gc2_mark_base_traversable(global_State *g, void *p);
 static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o);
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
@@ -3744,6 +3779,25 @@ static LJ_AINLINE void gc2_queue_slot_clear_rel(GCRef *slot)
   setgcrefnullrel(*slot);
 }
 
+static uint64_t gc2_grey_repair_span(global_State *g, MSize cap,
+				     uint64_t top, uint64_t bottom)
+{
+  if (cap != 0 && bottom > top && bottom - top > (uint64_t)cap) {
+    uint64_t repaired = bottom - (uint64_t)cap;
+    uint64_t expect = top;
+    /*
+    ** The ring has only cap distinct slots. If cursors drift farther apart
+    ** than that, older indices alias newer slots and cannot represent distinct
+    ** work. Keep the newest full ring and let stale duplicate payloads be
+    ** filtered by traversal/type validation.
+    */
+    if (!gc2_grey_top_cas(g, &expect, repaired))
+      repaired = gc2_grey_top_acq(g);
+    top = repaired;
+  }
+  return top;
+}
+
 static int gc2_grey_grow(global_State *g)
 {
   GCRef *oldstack = gc2_grey_stack_acq(g);
@@ -3752,6 +3806,7 @@ static int gc2_grey_grow(global_State *g)
   MSize newcap = oldcap ? oldcap << 1 : GC2_GREY_INIT;
   uint64_t top = gc2_grey_top_acq(g);
   uint64_t bottom = gc2_grey_bottom_rlx(g);
+  top = gc2_grey_repair_span(g, oldcap, top, bottom);
   MSize count = bottom > top ? (MSize)(bottom - top) : 0;
   lua_State *L = lj_tg_cur_L(g);
   if (!L) {
@@ -3793,6 +3848,16 @@ static int gc2_grey_push(global_State *g, GCobj *o)
   bottom = gc2_grey_bottom_rlx(g);
   top = gc2_grey_top_acq(g);
   cap = gc2_grey_capacity_acq(g);
+  top = gc2_grey_repair_span(g, cap, top, bottom);
+  if (top > bottom) {
+    /*
+    ** Chase-Lev indexes describe an empty deque when the steal side catches or
+    ** passes the owner side. Normalize before owner push so unsigned capacity
+    ** math cannot interpret the empty state as a full ring.
+    */
+    gc2_grey_bottom_rel(g, top);
+    bottom = top;
+  }
   if ((cap == 0 || bottom - top >= cap) && !gc2_grey_grow(g))
     return 0;
   bottom = gc2_grey_bottom_rlx(g);
@@ -3809,9 +3874,15 @@ static int gc2_grey_push(global_State *g, GCobj *o)
 
 static int gc2_grey_empty(global_State *g)
 {
+  uint64_t top, bottom;
+  MSize cap;
   if (!g)
     return 1;
-  return gc2_grey_top_acq(g) == gc2_grey_bottom_acq(g);
+  cap = gc2_grey_capacity_acq(g);
+  top = gc2_grey_top_acq(g);
+  bottom = gc2_grey_bottom_acq(g);
+  top = gc2_grey_repair_span(g, cap, top, bottom);
+  return top >= bottom;
 }
 
 static void gc2_clear_table_rescan_grey(global_State *g)
@@ -3958,7 +4029,11 @@ static void gc2_weak_reset(global_State *g)
       la_store8_rlx(&ready[i], 0);
   gc2_weak_count_store_rlx(g, 0);  /* 05 section 5.8 side vector. */
   gc2_weak_drain_active_store_rlx(g, 0);
-  gc2_weak_write_active_store_rlx(g, 0);
+  /*
+  ** weak_write_active is a cross-thread in-flight counter, not phase-local
+  ** scratch. Mutators may span a weak-vector reset while publishing protected
+  ** weak entries, and the matching end must observe its begin increment.
+  */
   gc2_weak_scan_cursor_store_rlx(g, 0);
   gc2_weak_clear_cursor_store_rlx(g, 0);
 }
@@ -5526,7 +5601,9 @@ static GCobj *gc2_grey_pop(global_State *g)
   if (!stack || cap == 0)
     return NULL;
   bottom = gc2_grey_bottom_rlx(g);
-  if (bottom == 0)
+  top = gc2_grey_top_acq(g);
+  top = gc2_grey_repair_span(g, cap, top, bottom);
+  if (top >= bottom)
     return NULL;
   bottom--;
   gc2_grey_bottom_store_rlx(g, bottom);
@@ -5539,8 +5616,11 @@ static GCobj *gc2_grey_pop(global_State *g)
       /* 05 section 5.6.3: single item is claimed through top. */
       if (!gc2_grey_top_cas(g, &expect, top + 1)) {
 	o = NULL;
+	top = expect;
+	gc2_grey_bottom_rel(g, top);
+      } else {
+	gc2_grey_bottom_rel(g, top + 1);
       }
-      gc2_grey_bottom_rel(g, top + 1);
     }
     return o;
   }
@@ -5564,6 +5644,7 @@ static GCobj *lj_gc2_grey_steal(global_State *g)
   top = gc2_grey_top_acq(g);
   la_fence_seq();  /* 05 section 5.6.3: order top before bottom snapshot. */
   bottom = gc2_grey_bottom_acq(g);
+  top = gc2_grey_repair_span(g, cap, top, bottom);
   if (top >= bottom)
     return NULL;
   o = gc2_queue_slot_load_acq(&stack[(MSize)(top % cap)]);
@@ -5712,7 +5793,7 @@ static int lj_gc2_ssb_push(global_State *g, GCobj *o)
 static void gc2_ssb_mark_one(global_State *g, GCobj *o)
 {
   if (o) {
-    void *base = gc2_mark_base(o);
+    void *base = gc2_mark_base(g, o);
     int marked = lj_gc2_ismarkedmem(g, base);
     if (marked < 0 || o->gch.gct == 0)
       return;
@@ -6342,14 +6423,17 @@ static int gc2_mark_base_traversable(global_State *g, void *p)
   return (a->hdr.flags & LJ_AF_TRAVERSABLE) != 0;
 }
 
-static void *gc2_mark_base(GCobj *o)
+static void *gc2_mark_base(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
     GCcdata *cd = gco2cd(o);
-    if (cdataisv(cd))
-      return memcdatav(cd);
+    void *base;
+    if (cdataisv(cd) && lj_cdata_validate(g, cd, &base, NULL))
+      return base;
   }
+#else
+  UNUSED(g);
 #endif
   return o;
 }
@@ -6455,7 +6539,7 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
   int traversable;
   if (!o)
     return 0;
-  base = gc2_mark_base(o);
+  base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
   gc2_mark_legacy_live(g, o);
   if (marked && gc2_obj_may_traverse(o)) {
@@ -6483,7 +6567,7 @@ int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
   int traversable;
   if (!o)
     return 0;
-  base = gc2_mark_base(o);
+  base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
   if (marked && gc2_obj_may_traverse(o)) {
     uint32_t phase = gc2_phase_acq(g);
@@ -6515,7 +6599,7 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
     gc2_mark_legacy_live(g, o);
     return marked;
   }
-  base = gc2_mark_base(o);
+  base = gc2_mark_base(g, o);
   marked = gc2_markmem_worker_fast(g, base);
   gc2_mark_legacy_live(g, o);
   if (marked && gc2_obj_may_traverse(o)) {
@@ -6536,8 +6620,8 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
 
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
 {
-  lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct),
-	     "TValue and GC type mismatch");
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)))
+    return;
   if (tvisgcv(tv))
     gc2_markobj_worker(g, gcV(tv));
 }
@@ -6832,9 +6916,51 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
 
 static void gc2_traverse_upval(global_State *g, GCupval *uv)
 {
+  TValue *slot = uvval(uv);
   TValue tv;
-  lj_tv_load_acq(&tv, uvval(uv));
+  /*
+  ** Live closed and open upvalues publish uv->v before any edge can name the
+  ** GCupval. A NULL payload pointer can only come from an acquired stale edge
+  ** to an arena body that is no longer a valid upvalue payload owner.
+  */
+  if (LJ_UNLIKELY(slot == NULL))
+    return;
+  lj_tv_load_acq(&tv, slot);
   gc2_mark_tv_worker(g, &tv);
+}
+
+static int gc2_valid_proto_for_traverse(global_State *g, GCproto *pt)
+{
+  MSize minpt;
+  UNUSED(g);
+  if (!pt || !checkptrGC(pt) || pt->gct != ~LJ_TPROTO)
+    return 0;
+  if (pt->sizept < sizeof(GCproto) || pt->sizept > LJ_MAX_MEM32)
+    return 0;
+  if (pt->sizebc == 0 || pt->sizebc > LJ_MAX_BCINS)
+    return 0;
+  if (pt->framesize > LJ_MAX_SLOTS || pt->sizeuv > LJ_MAX_UPVAL)
+    return 0;
+  minpt = (MSize)sizeof(GCproto) + pt->sizebc*(MSize)sizeof(BCIns);
+  minpt = (minpt + (MSize)sizeof(TValue)-1) & ~((MSize)sizeof(TValue)-1);
+  return minpt <= pt->sizept;
+}
+
+static GCproto *gc2_func_proto_for_traverse(global_State *g, GCfunc *fn)
+{
+  const char *pc;
+  GCproto *pt;
+  if (!fn || !isluafunc(fn) || fn->l.nupvalues > LJ_MAX_UPVAL)
+    return NULL;
+  pc = mref(fn->l.pc, const char);
+  if (!pc || !checkptrGC(pc))
+    return NULL;
+  pt = (GCproto *)(void *)(pc - sizeof(GCproto));
+  if (!gc2_valid_proto_for_traverse(g, pt))
+    return NULL;
+  if (fn->l.nupvalues > pt->sizeuv)
+    return NULL;
+  return pt;
 }
 
 static void gc2_traverse_func(global_State *g, GCfunc *fn)
@@ -6843,12 +6969,16 @@ static void gc2_traverse_func(global_State *g, GCfunc *fn)
   if (env)
     gc2_markobj_worker(g, obj2gco(env));
   if (isluafunc(fn)) {
+    GCproto *pt = gc2_func_proto_for_traverse(g, fn);
     uint32_t i;
-    lj_assertG(fn->l.nupvalues <= funcproto(fn)->sizeuv,
-	       "function upvalues out of range");
-    gc2_markobj_worker(g, obj2gco(funcproto(fn)));
-    for (i = 0; i < fn->l.nupvalues; i++)
-      gc2_markobj_worker(g, obj2gco(func_uv_acq(&fn->l, i)));
+    if (LJ_UNLIKELY(!pt))
+      return;
+    gc2_markobj_worker(g, obj2gco(pt));
+    for (i = 0; i < fn->l.nupvalues; i++) {
+      GCobj *uv = obj2gco(func_uv_acq(&fn->l, i));
+      if (uv && uv->gch.gct == ~LJ_TUPVAL)
+	gc2_markobj_worker(g, uv);
+    }
   } else {
     uint32_t i;
     for (i = 0; i < fn->c.nupvalues; i++) {
@@ -6969,6 +7099,66 @@ static int gc2_thread_has_live_owner(global_State *g, lua_State *th)
   return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD);
 }
 
+static int gc2_stack_in_arena_list(GCArena *head, GCArena *want,
+				   uint32_t cell, uint32_t ncells)
+{
+  GCArena *a;
+  for (a = head; a != NULL; a = lj_arena_next_acq(a)) {
+    if (a == want) {
+      return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+	     ncells <= LJ_ARENA_CELLS - cell &&
+	     lj_arena_bm_get(a->block, cell);
+    }
+  }
+  return 0;
+}
+
+static int gc2_stack_mem_valid(global_State *g, TValue *st, MSize stacksize)
+{
+  TGState *tg;
+  GCArena *a;
+  uint32_t cell, ncells, k;
+  if (!st || stacksize == 0 || !checkptrGC(st))
+    return 0;
+  if (g->allocf != lj_arena_allocf)
+    return 1;
+  a = lj_arena_of(st);
+  cell = lj_arena_cellof(st);
+  ncells = lj_arena_ncells((size_t)stacksize * sizeof(TValue));
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+      if (gc2_stack_in_arena_list(tg->alloc.owned[k], a, cell, ncells) ||
+	  gc2_stack_in_arena_list(tg->alloc.needsweep[k], a, cell, ncells))
+	return 1;
+    }
+  }
+  return 0;
+}
+
+static int gc2_valid_thread_for_traverse(global_State *g, lua_State *th)
+{
+  TValue *st, *end, *maxstack;
+  MSize stacksize;
+  if (!g || !th || th->gct != ~LJ_TTHREAD ||
+      mref(th->glref, global_State) != g)
+    return 0;
+  stacksize = th->stacksize;
+  if (stacksize < 1 + LJ_STACK_EXTRA ||
+      stacksize > LUAI_MAXSTACK + 1 + LJ_STACK_EXTRA)
+    return 0;
+  st = tvref(th->stack);
+  maxstack = tvref(th->maxstack);
+  if (!gc2_stack_mem_valid(g, st, stacksize) || !checkptrGC(maxstack) ||
+      !checkptrGC(th->base) || !checkptrGC(th->top))
+    return 0;
+  end = st + stacksize;
+  if (maxstack != end - LJ_STACK_EXTRA - 1)
+    return 0;
+  if (th->base < st || th->base > end || th->top < st || th->top > end)
+    return 0;
+  return 1;
+}
+
 static void gc2_traverse_thread(global_State *g, lua_State *th)
 {
   LJStateClaim claim;
@@ -6976,23 +7166,50 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
   TValue *o, *top;
   TValue tv;
   uint32_t cycle;
-  if (!th || tvref(th->stack) == NULL)
+  uint32_t owner, current_tid;
+  if (!gc2_valid_thread_for_traverse(g, th))
     return;
-  if (!lj_state_gcscan_claim(th, &claim)) {
+  claim.L = NULL;
+  claim.tg_hint = NULL;
+  claim.tid = 0;
+  claim.release = 0;
+  owner = lj_state_owner_acq(th);
+  current_tid = lj_thr_current_id(g);
+  if (owner != current_tid || current_tid == 0 ||
+      current_tid == LJ_THREAD_GCSCAN) {
+    if (lj_state_gcscan_claim(th, &claim))
+      goto scan_thread;
     gc2_thread_scan_busy_add(g, 1);
     if (gc2_thread_owner_scans(g, th)) {
       lj_state_scan_handoff_epoch_rel(th, 0);
       gc2_thread_scan_owner_scans_add(g, 1);
     } else {
-      int pushed = gc2_grey_push(g, obj2gco(th));
-      lj_assertG(pushed, "gc2 busy thread requeue failed");
-      UNUSED(pushed);
-      if (gc2_thread_has_live_owner(g, th))
+      if (!gc2_thread_has_live_owner(g, th)) {
+	/*
+	** A state left owned by a dead TG has no mutator that can acknowledge a
+	** NEEDSCAN handoff. The dead owner cannot mutate the stack, so the collector
+	** scans it as a quiescent suspended state instead of requeueing forever.
+	*/
+	lj_state_scan_handoff_epoch_rel(th, 0);
+	goto scan_thread;
+      } else {
+	/*
+	** Once NEEDSCAN is set, the pending counter is the work item. Keeping a
+	** duplicate copy on the grey deque lets the collector repeatedly pop the
+	** same busy state while the owner is the only thread that can scan it.
+	*/
 	gc2_thread_set_needscan(g, th);
-      gc2_thread_scan_requeues_add(g, 1);
+      }
     }
     return;  /* 05 section 5.7.2: owner scan or retry preserves work. */
   }
+  /*
+  ** collectgarbage("collect") can traverse the running lua_State while the C API
+  ** holds its ordinary owner claim. Requeueing that state waits for the same OS
+  ** thread to perform an owner scan, but the owner is already inside the collector.
+  ** Same-owner traversal is stable and preserves the ordinary stack claim.
+  */
+scan_thread:
   cycle = gc2_cycle_acq(g);
   gc2_thread_scan_claims_add(g, 1);
   lj_gc2_markmem(g, tvref(th->stack));
@@ -7028,14 +7245,21 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
 static void gc2_traverse_obj(global_State *g, GCobj *o)
 {
   int gct = o->gch.gct;
-  if (LJ_UNLIKELY(gct == 0)) {
-    return;  /* Body destructor already ran via GC2 arena sweep. */
+  if (LJ_UNLIKELY(gct == 0 || gct < ~LJ_TSTR || gct > ~LJ_TUDATA)) {
+    /*
+    ** Grey queues are lock-free handoff lists. A queued arena body can be
+    ** reclaimed and reused before a duplicate/stale entry drains; non-GC type
+    ** bytes are not traversable payloads for the current cycle.
+    */
+    return;
   } else if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     (void)gc2_traverse_tab(g, gco2tab(o));
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
     gc2_traverse_func(g, gco2func(o));
   } else if (LJ_LIKELY(gct == ~LJ_TPROTO)) {
-    gc2_traverse_proto(g, gco2pt(o));
+    GCproto *pt = gco2pt(o);
+    if (gc2_valid_proto_for_traverse(g, pt))
+      gc2_traverse_proto(g, pt);
   } else if (LJ_LIKELY(gct == ~LJ_TTHREAD)) {
     gc2_traverse_thread(g, gco2th(o));
   } else if (gct == ~LJ_TUPVAL) {
@@ -7088,7 +7312,7 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
   ** be reused while the root table still contains their tagged pointers. Trace
   ** the newly preserved root immediately and drain any children it publishes.
   */
-  base = gc2_mark_base(o);
+  base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
   gc2_mark_legacy_live_force(g, o);
   if (marked &&
@@ -7335,7 +7559,7 @@ int lj_gc2_ismarkedmem(global_State *g, void *p)
 
 int lj_gc2_ismarked(global_State *g, GCobj *o)
 {
-  return o ? lj_gc2_ismarkedmem(g, gc2_mark_base(o)) : -1;
+  return o ? lj_gc2_ismarkedmem(g, gc2_mark_base(g, o)) : -1;
 }
 
 #if LJ_GC2_PARANOIA
@@ -7350,13 +7574,13 @@ static int gc2_root_oracle_has_base(global_State *g, void *p)
   GCobj *o;
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    if (gc2_root_oracle_liveobj(o) && gc2_mark_base(o) == p)
+    if (gc2_root_oracle_liveobj(o) && gc2_mark_base(g, o) == p)
       return 1;
     if (o->gch.gct == ~LJ_TTHREAD) {
       GCobj *uv;
       for (uv = lj_state_openupval_acq(gco2th(o)); uv != NULL;
 	   uv = lj_obj_gcw_acq(uv))
-	if (gc2_root_oracle_liveobj(uv) && gc2_mark_base(uv) == p)
+	if (gc2_root_oracle_liveobj(uv) && gc2_mark_base(g, uv) == p)
 	  return 1;
     }
   }

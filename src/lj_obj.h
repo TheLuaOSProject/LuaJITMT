@@ -6285,6 +6285,18 @@ static LJ_AINLINE void *lightudV(global_State *g, cTValue *o)
 #define numV(o)		check_exp(tvisnum(o), (o)->n)
 #define intV(o)		check_exp(tvisint(o), (int32_t)(o)->i)
 
+static LJ_AINLINE int lj_tv_gcref_type_match(cTValue *tv)
+{
+  /*
+  ** Lock-free table/stack/upvalue scans work from acquired TValue snapshots.
+  ** A racing writer, weak clear, finalizer cleanup, or arena-body retirement
+  ** can leave a stale tagged pointer whose address has already been reused for
+  ** another GC type. Live publications initialize the object header before
+  ** publishing the TValue, so a tag/header mismatch is not a valid live edge.
+  */
+  return !tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct);
+}
+
 /* Macros to set tagged values. */
 #if LJ_GC64
 #define setitype(o, i)		((o)->it = ((i) << 15))

@@ -733,7 +733,28 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 
 void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
 {
+  uint8_t gct = la_load8_acq(&s->gct);
+  for (;;) {
+    if (LJ_UNLIKELY(gct != (uint8_t)~LJ_TSTR))
+      return;
+    if (la_cas8(&s->gct, &gct, 0, LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+  /*
+  ** Current-header string sweep owns the strtab claim, but close-time and
+  ** retired-header races can still expose stale bucket links. Claiming the
+  ** destructor through the type byte keeps the string count tied to the first
+  ** successful free of a published string body; later stale observations are
+  ** unlinked by their caller without consuming another count slot.
+  */
+  #if LUA_USE_ASSERT
+  {
+    MSize old = la_sub32_acqrel(&g->str.num, 1);
+    lj_assertG(old != 0, "string count underflow");
+  }
+  #else
   (void)la_sub32_acqrel(&g->str.num, 1);
+  #endif
   lj_mem_free(g, s, lj_str_size(s->len));
 }
 

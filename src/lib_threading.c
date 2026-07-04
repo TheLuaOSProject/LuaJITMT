@@ -640,8 +640,7 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
   lj_state_stack_pubrange(L, L1);
-  lj_gc_total_sub(g, (GCSize)sz);
-  (void)lj_arena_allocf(&tg->allocd, oldst, sz, 0);
+  lj_mem_free(g, oldst, sz);
 }
 
 typedef struct ThreadingWorkerCtx {

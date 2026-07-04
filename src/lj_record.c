@@ -53,6 +53,22 @@
 /* Emit raw IR without passing through optimizations. */
 #define emitir_raw(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_ir_emit(J))
 
+static LJ_AINLINE void rec_copy_runtime_tv(jit_State *J, TValue *dst,
+					   const TValue *src)
+{
+  TValue snap;
+  /*
+  ** The recorder samples live VM slots while other threads and GC2 may retire
+  ** table/stack objects. If an acquired GC TValue no longer matches the body
+  ** header type, the value is a stale race snapshot and cannot be specialized
+  ** into IR. Retry recording after the interpreter reaches a coherent value.
+  */
+  lj_tv_load_acq(&snap, src);
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(&snap)))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  copyTV(J->L, dst, &snap);
+}
+
 /* -- Sanity checks ------------------------------------------------------- */
 
 #ifdef LUA_USE_ASSERT
@@ -3319,7 +3335,7 @@ void lj_record_ins(jit_State *J)
   ix.val = 0;
   switch (bcmode_a(op)) {
   case BCMvar:
-    copyTV(J->L, rav, &lbase[ra]); ix.val = ra = getslot(J, ra); break;
+    rec_copy_runtime_tv(J, rav, &lbase[ra]); ix.val = ra = getslot(J, ra); break;
   default: break;  /* Handled later. */
   }
   rb = bc_b(ins);
@@ -3327,12 +3343,12 @@ void lj_record_ins(jit_State *J)
   switch (bcmode_b(op)) {
   case BCMnone: rb = 0; rc = bc_d(ins); break;  /* Upgrade rc to 'rd'. */
   case BCMvar:
-    copyTV(J->L, rbv, &lbase[rb]); ix.tab = rb = getslot(J, rb); break;
+    rec_copy_runtime_tv(J, rbv, &lbase[rb]); ix.tab = rb = getslot(J, rb); break;
   default: break;  /* Handled later. */
   }
   switch (bcmode_c(op)) {
   case BCMvar:
-    copyTV(J->L, rcv, &lbase[rc]); ix.key = rc = getslot(J, rc); break;
+    rec_copy_runtime_tv(J, rcv, &lbase[rc]); ix.key = rc = getslot(J, rc); break;
   case BCMpri: setpriV(rcv, ~rc); ix.key = rc = TREF_PRI(IRT_NIL+rc); break;
   case BCMnum: { cTValue *tv = proto_knumtv(J->pt, rc);
     copyTV(J->L, rcv, tv); ix.key = rc = tvisint(tv) ? lj_ir_kint(J, intV(tv)) :
