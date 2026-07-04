@@ -10,6 +10,17 @@ local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
 local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
+local shell_quote = utils.shell_quote
+
+local function plain_count(s, needle)
+  local n, pos = 0, 1
+  while true do
+    local first, last = s:find(needle, pos, true)
+    if not first then return n end
+    n = n + 1
+    pos = last + 1
+  end
+end
 
 local m6_cases = {
   "m6_dispatch_redispatch",
@@ -609,6 +620,30 @@ assert(after_warm <= after_second + 4,
 assert(after_warm < 64, "recursive fib trace graph grew unexpectedly")
 print("jit-recursive-call-unroll OK")
 ]=], { timeout = "20s" })
+      utils.with_temp_paths(t, { "m6-fib30-jv.lua" }, function(script)
+        utils.write_file(script, table.concat({
+          'jit.opt.start("hotloop=1", "hotexit=1")',
+          'local function fib(n)',
+          '  if n < 2 then return n end',
+          '  return fib(n-1) + fib(n-2)',
+          'end',
+          'for i = 1, 3 do assert(fib(30) == 832040) end',
+          ''
+        }, "\n"))
+        local out = utils.capture_command(
+          "LUA_PATH=" .. shell_quote(runtime.lua_path(t)) .. " " ..
+          shell_quote(t:path("src", "luajit")) .. " -jv " ..
+          shell_quote(script),
+          { timeout = "20s", stderr = true })
+        local trace1 = plain_count(out, "[TRACE   1 ")
+        local traces = plain_count(out, "[TRACE")
+        assert(trace1 == 1, "recursive fib re-recorded trace 1: " .. trace1)
+        assert(out:find("[TRACE   1 ", 1, true) and
+               out:find(" up-recursion]", 1, true),
+               "recursive fib did not record the up-recursion root")
+        assert(traces >= 5 and traces < 64,
+               "recursive fib trace transcript size out of range: " .. traces)
+      end)
       print("M6 JIT recursive workload behavior passed")
     end
   })
