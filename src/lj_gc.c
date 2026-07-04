@@ -3192,7 +3192,7 @@ static void gc_linkobj_pending(global_State *g, GCobj *o)
       lj_obj_setgcwrel(o, head);
     else
       lj_obj_setgcwnullrel(o);
-    lj_tg_gcroot_pending_store_rel(tg, o);
+    lj_tg_gcroot_pending_store_transition_rel(tg, head, o);
     return;
   }
   head = lj_tg_gcroot_pending_acq(tg);
@@ -3237,7 +3237,7 @@ void lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)
       lj_obj_setgcwrel(tail, oldhead);
     else
       lj_obj_setgcwnullrel(tail);
-    lj_tg_gcroot_pending_store_rel(tg, head);
+    lj_tg_gcroot_pending_store_transition_rel(tg, oldhead, head);
     return;
   }
   oldhead = lj_tg_gcroot_pending_acq(tg);
@@ -3264,7 +3264,7 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
       lj_obj_setgcwrel(o, head);
     else
       lj_obj_setgcwnullrel(o);
-    lj_tg_gcroot_pending_after_main_store_rel(tg, o);
+    lj_tg_gcroot_pending_after_main_store_transition_rel(tg, head, o);
     return;
   }
   head = lj_tg_gcroot_pending_after_main_acq(tg);

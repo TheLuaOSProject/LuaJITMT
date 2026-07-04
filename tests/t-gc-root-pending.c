@@ -147,6 +147,38 @@ static void test_explicit_flush(lua_State *L)
   assert(root_contains(g, obj2gco(t2)));
 }
 
+static void test_hint_only_on_empty_transition(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  GCtab *t, *t2;
+  assert(tg != NULL);
+  (void)lj_gc_flush_root_pending(g);
+  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+
+  t = lj_tab_new(L, 0, 0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
+  assert(pending_contains(tg, obj2gco(t)));
+
+  /*
+  ** A flusher can clear the global hint while a same-TG pending stack remains
+  ** observable through the direct main/self checks. Appending to that non-empty
+  ** stack must not republish the global hint on the allocation fast path.
+  */
+  lj_gcroot_pending_hint_rel(g, 0);
+  t2 = lj_tab_new(L, 0, 0);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(pending_contains(tg, obj2gco(t)));
+  assert(pending_contains(tg, obj2gco(t2)));
+
+  assert(lj_gc_flush_root_pending(g) >= 2u);
+  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(root_contains(g, obj2gco(t)));
+  assert(root_contains(g, obj2gco(t2)));
+}
+
 static void test_after_main_flush(lua_State *L)
 {
   global_State *g = G(L);
@@ -333,6 +365,7 @@ int main(void)
   lua_State *L = luaL_newstate();
   assert(L != NULL);
   test_explicit_flush(L);
+  test_hint_only_on_empty_transition(L);
   test_after_main_flush(L);
   test_fullgc_flush(L);
   test_tls_only_tg_flush(L);

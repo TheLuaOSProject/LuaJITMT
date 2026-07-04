@@ -444,29 +444,46 @@ static LJ_AINLINE void lj_tg_gcroot_pending_hint(TGState *tg, GCobj *head)
     lj_gcroot_pending_hint_rel(g, 1);
 }
 
+static LJ_AINLINE void lj_tg_gcroot_pending_transition_hint(TGState *tg,
+							    GCobj *oldhead,
+							    GCobj *head)
+{
+  /*
+  ** The global hint only needs publication when a TG-local pending-root stack
+  ** transitions from empty to non-empty. Appends to an already non-empty stack
+  ** are covered by the earlier transition hint, while before/after hints around
+  ** the transition preserve the race coverage against a concurrent flusher that
+  ** clears the hint between the local stack publication steps.
+  */
+  if (oldhead == NULL)
+    lj_tg_gcroot_pending_hint(tg, head);
+}
+
 static LJ_AINLINE void lj_tg_gcroot_pending_store_rlx(TGState *tg,
 						      GCobj *head)
 {
   la_storeptr_rlx((void **)&tg->gcroot_pending, head);
 }
 
-static LJ_AINLINE void lj_tg_gcroot_pending_store_rel(TGState *tg,
-						      GCobj *head)
+static LJ_AINLINE void lj_tg_gcroot_pending_store_transition_rel(TGState *tg,
+								 GCobj *oldhead,
+								 GCobj *head)
 {
-  lj_tg_gcroot_pending_hint(tg, head);
+  lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
   la_storeptr_rel((void **)&tg->gcroot_pending, head);
-  lj_tg_gcroot_pending_hint(tg, head);
+  lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
 }
 
 static LJ_AINLINE int lj_tg_gcroot_pending_cas(TGState *tg, GCobj **oldp,
 					       GCobj *head)
 {
   int ok;
-  lj_tg_gcroot_pending_hint(tg, head);
+  GCobj *oldhead = *oldp;
+  lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
   ok = la_casptr((void **)&tg->gcroot_pending, (void **)oldp, head,
 		 LA_ACQ_REL, LA_ACQ);  /* Pending root stack publication. */
   if (ok)
-    lj_tg_gcroot_pending_hint(tg, head);
+    lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
   return ok;
 }
 
@@ -489,12 +506,12 @@ static LJ_AINLINE void lj_tg_gcroot_pending_after_main_store_rlx(
   la_storeptr_rlx((void **)&tg->gcroot_pending_after_main, head);
 }
 
-static LJ_AINLINE void lj_tg_gcroot_pending_after_main_store_rel(
-  TGState *tg, GCobj *head)
+static LJ_AINLINE void lj_tg_gcroot_pending_after_main_store_transition_rel(
+  TGState *tg, GCobj *oldhead, GCobj *head)
 {
-  lj_tg_gcroot_pending_hint(tg, head);
+  lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
   la_storeptr_rel((void **)&tg->gcroot_pending_after_main, head);
-  lj_tg_gcroot_pending_hint(tg, head);
+  lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
 }
 
 static LJ_AINLINE int lj_tg_gcroot_pending_after_main_cas(TGState *tg,
@@ -502,11 +519,12 @@ static LJ_AINLINE int lj_tg_gcroot_pending_after_main_cas(TGState *tg,
 							  GCobj *head)
 {
   int ok;
-  lj_tg_gcroot_pending_hint(tg, head);
+  GCobj *oldhead = *oldp;
+  lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
   ok = la_casptr((void **)&tg->gcroot_pending_after_main, (void **)oldp,
 		 head, LA_ACQ_REL, LA_ACQ);
   if (ok)
-    lj_tg_gcroot_pending_hint(tg, head);
+    lj_tg_gcroot_pending_transition_hint(tg, oldhead, head);
   return ok;
 }
 
