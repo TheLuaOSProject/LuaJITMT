@@ -54,3 +54,8 @@ Follow-up fix:
   self-link use for the recursive workload. A `-jv aux/bench/bench.lua fib30`
   sample showed trace slot 3 reused for the up-recursion trace after two
   call-unroll aborts, instead of retaining a run of live return roots.
+- Follow-up coverage tightened `tests/t-jit-recursive-retention.c` so the
+  fixture now requires this workload to release every unlinked return slot,
+  reuse at least one released trace slot, avoid the stock self-link branch, and
+  finish warmup with zero live `LJ_TRLINK_RETURN` roots. Those are behavioral
+  assertions over helper counters, not source-shape checks.

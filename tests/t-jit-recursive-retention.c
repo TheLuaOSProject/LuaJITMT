@@ -72,12 +72,15 @@ int main(void)
   assert(unlinks >= aborts);
   assert(return_unlinks > 0);
   assert(lj_trace_test_slot_release_clears() > 0);
+  assert(lj_trace_test_abort_selflinks() == 0);
+  assert(lj_trace_test_slot_release_clears() == return_unlinks);
   assert(findfree > 0);
+  assert(reuses > 0);
   assert(reuses + grows == findfree);
   assert(lj_trace_test_last_unlinked() > 0);
   assert(lj_trace_test_last_findfree() > 0);
   assert(live > 0);
-  assert(returns < return_unlinks);
+  assert(returns == 0);
 
   printf("t-jit-recursive-retention OK: aborts=%u unlinks=%u "
 	 "return_unlinks=%u selflinks=%u slot_clears=%u live=%u "
