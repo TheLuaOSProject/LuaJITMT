@@ -48,7 +48,14 @@
 
 static GCSize gc_step_debt_quantum(global_State *g)
 {
-  UNUSED(g);
+  /*
+  ** Idle threshold publication stays close to the GC2 allocation trigger so a
+  ** cycle starts promptly. Once GC2 is active, automatic allocation checks are
+  ** only a bounded progress hook; use a larger quantum so mark fixpoint root
+  ** snapshots are not retried at the idle trigger cadence.
+  */
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    return (GCSize)LJ_GC2_ACTIVE_AUTO_STEP;
   return (GCSize)LJ_GC2_HELPER_IDLE_STEP;
 }
 
@@ -1145,9 +1152,24 @@ static int gc_root_chain_break_cycle(GCobj *head)
 
 uint32_t lj_gc_repair_root_spine(global_State *g)
 {
+  uint64_t epoch, repaired;
+  int fixed;
   if (!g)
     return 0;
-  return (uint32_t)gc_root_chain_break_cycle(lj_gc_root_acq(g));
+  epoch = lj_gcroot_repair_epoch_acq(g);
+  repaired = lj_gcroot_repaired_epoch_acq(g);
+  if (repaired == epoch)
+    return 0;
+  fixed = gc_root_chain_break_cycle(lj_gc_root_acq(g));
+  /*
+  ** Root-spine cycles can only be introduced by legacy-root publication. The
+  ** publish CAS/release store orders the links themselves; this epoch is only a
+  ** conservative cache of whether a scan has already covered that publication.
+  ** If another publisher bumps the epoch while this scan runs, storing the old
+  ** epoch leaves the newer publication visible to the next repair.
+  */
+  lj_gcroot_repaired_epoch_rel(g, epoch);
+  return (uint32_t)fixed;
 }
 
 /* Mark userdata/cdata in finalizer queues. */
@@ -3089,8 +3111,9 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
     setgcrefp(next, (void *)(uintptr_t)head);
     lj_obj_setgcwr(o, next);
   } while (!la_cas32(&lj_gc_root_ref(g)->gcptr32, &head,
-		     (uint32_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
+			     (uint32_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
 #endif
+  lj_gcroot_repair_epoch_add(g);
 }
 
 static LJ_AINLINE void gc_root_set_next(GCobj *o, GCobj *next)
@@ -3146,7 +3169,8 @@ static int gc_root_chain_contains_to_tail(GCobj *head, GCobj *tail,
   return 0;
 }
 
-static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
+static void gc_root_prepend_chain_at(global_State *g, GCRef *p, GCobj *head,
+				     GCobj *tail)
 {
 #if LJ_GC64
   {
@@ -3189,12 +3213,13 @@ static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
 			       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
   }
 #endif
+  lj_gcroot_repair_epoch_add(g);
 }
 
 static void gc_root_prepend_known_chain(global_State *g, GCobj *head,
 					GCobj *tail)
 {
-  gc_root_prepend_chain_at(lj_gc_root_ref(g), head, tail);
+  gc_root_prepend_chain_at(g, lj_gc_root_ref(g), head, tail);
 }
 
 static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
@@ -3207,13 +3232,14 @@ static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
   return n;
 }
 
-static uint32_t gc_root_prepend_chain_after(GCobj *anchor, GCobj *head)
+static uint32_t gc_root_prepend_chain_after(global_State *g, GCobj *anchor,
+					    GCobj *head)
 {
   GCobj *tail;
   uint32_t n = gc_root_chain_tail(head, &tail);
   if (!anchor || !n)
     return 0;
-  gc_root_prepend_chain_at(lj_obj_gcwref(anchor), head, tail);
+  gc_root_prepend_chain_at(g, lj_obj_gcwref(anchor), head, tail);
   return n;
 }
 
@@ -3226,7 +3252,7 @@ static uint32_t gc_flush_root_pending_tg(global_State *g, TGState *tg)
   head = lj_tg_gcroot_pending_xchg_acqrel(tg, NULL);
   n = gc_root_prepend_chain(g, head);
   head = lj_tg_gcroot_pending_after_main_xchg_acqrel(tg, NULL);
-  n += gc_root_prepend_chain_after(obj2gco(mainthread_acq(g)), head);
+  n += gc_root_prepend_chain_after(g, obj2gco(mainthread_acq(g)), head);
   return n;
 }
 
@@ -3368,7 +3394,7 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
   TGState *tg = lj_thr_get_tg();
   GCobj *head;
   if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
-    lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
+    lj_gc_linkobj_after(g, obj2gco(mainthread_acq(g)), o);
     return;
   }
   if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
@@ -3384,7 +3410,7 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
   } while (!lj_tg_gcroot_pending_after_main_cas(tg, &head, o));
 }
 
-void lj_gc_linkobj_after(GCobj *anchor, GCobj *o)
+void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o)
 {
   GCRef *p;
   GCobj *head;
@@ -3414,6 +3440,8 @@ void lj_gc_linkobj_after(GCobj *anchor, GCobj *o)
 		       LA_REL, LA_ACQ));
   }
 #endif
+  if (g)
+    lj_gcroot_repair_epoch_add(g);
 }
 
 /* Allocate new GC object and link it to the root set. */

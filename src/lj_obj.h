@@ -1647,6 +1647,8 @@ typedef struct global_State {
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
   uint32_t gcroot_pending_hint;  /* Conservative non-empty pending-root hint. */
+  uint64_t gcroot_repair_epoch;  /* Root-spine publications needing repair. */
+  uint64_t gcroot_repaired_epoch;  /* Last root-spine repair scan epoch. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
   lua_State *threading_states;  /* All non-main lua_State objects. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
@@ -1681,6 +1683,27 @@ static LJ_AINLINE uint32_t lj_gcroot_pending_hint_xchg(global_State *g,
 						       uint32_t hint)
 {
   return la_xchg32_acqrel(&g->gcroot_pending_hint, hint);
+}
+
+static LJ_AINLINE uint64_t lj_gcroot_repair_epoch_acq(global_State *g)
+{
+  return la_load64_acq(&g->gcroot_repair_epoch);
+}
+
+static LJ_AINLINE void lj_gcroot_repair_epoch_add(global_State *g)
+{
+  la_add64_rlx(&g->gcroot_repair_epoch, 1);
+}
+
+static LJ_AINLINE uint64_t lj_gcroot_repaired_epoch_acq(global_State *g)
+{
+  return la_load64_acq(&g->gcroot_repaired_epoch);
+}
+
+static LJ_AINLINE void lj_gcroot_repaired_epoch_rel(global_State *g,
+						    uint64_t epoch)
+{
+  la_store64_rel(&g->gcroot_repaired_epoch, epoch);
 }
 
 static LJ_AINLINE int32_t vmstate_load_acq(global_State *g)

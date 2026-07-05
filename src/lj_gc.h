@@ -78,7 +78,7 @@ LJ_FUNC void lj_gc_linkobj_new(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_new_chain(global_State *g, GCobj *head,
 				     GCobj *tail);
 LJ_FUNC void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_linkobj_after(GCobj *anchor, GCobj *o);
+LJ_FUNC void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o);
 LJ_FUNC uint32_t lj_gc_flush_root_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc_repair_root_spine(global_State *g);
 LJ_FUNC void *lj_mem_newgco_unlinked(lua_State *L, GCSize size);

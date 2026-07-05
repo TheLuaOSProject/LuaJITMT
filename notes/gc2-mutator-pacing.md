@@ -5,18 +5,20 @@ LuaJIT GC-step semantics continue to make progress, including stock guards that
 expect allocation bursts to trigger collection.  The mutator no longer drains
 that debt at the legacy 1 KiB threshold cadence once a GC2 cycle is active.
 
-The current bridge uses `LJ_GC2_HELPER_IDLE_STEP` as the automatic republish
-quantum after a bounded `lj_gc_step()` does not finish a cycle.  This keeps GC
-progress visible without making allocation-heavy loops run the collector on
-nearly every object.
+The current bridge uses `LJ_GC2_HELPER_IDLE_STEP` as the idle automatic
+republish quantum after a bounded `lj_gc_step()` does not finish a cycle.  This
+keeps cycle starts prompt without making allocation-heavy loops run the
+collector on nearly every object.
 
 While a GC2 cycle is active, an automatic allocation-triggered step runs only
-one GC state-machine step before republishing the legacy threshold at the helper
-quantum and clearing classic debt.  That prevents trace-side allocation helpers
-from spending an entire LuaJIT `stepmul` budget draining concurrent GC2 work on
-the mutator.  Explicit `collectgarbage("step")` remains on the separate explicit
-path below, so API-visible stock step/debt behavior is not folded into this
-automatic pacing shortcut.
+one GC state-machine step before republishing the legacy threshold at
+`LJ_GC2_ACTIVE_AUTO_STEP` and clearing classic debt.  That prevents trace-side
+allocation helpers from spending an entire LuaJIT `stepmul` budget draining
+concurrent GC2 work on the mutator, and it also avoids re-running mark-fixpoint
+root snapshots at the idle trigger cadence while older grey work remains.
+Explicit `collectgarbage("step")` remains on the separate explicit path below,
+so API-visible stock step/debt behavior is not folded into this automatic
+pacing shortcut.
 
 Public explicit `collectgarbage("step", n)` calls keep stock-style threshold
 republish through `lj_gc_step_explicit()`.  This separates API-visible GC-step

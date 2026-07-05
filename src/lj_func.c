@@ -436,8 +436,8 @@ static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
     ** lifetime instead of pushing every allocation through the global root
     ** spine. The type-local arena-owned marker distinguishes that narrow state
     ** from root-spine objects whose nextgc link can legitimately be NULL.
-    ** Coupled legacy mark cycles still publish roots until legacy
-    ** preservation/normalization can also cover non-spine arena-owned bodies.
+    ** Coupled legacy mark cycles still publish roots because the classic mark
+    ** bridge must see these freshly constructed bodies through the root spine.
     */
     func_bump_mark_arena_owned(o);
     lj_obj_setgcwnullrel(o);
@@ -724,7 +724,7 @@ static GCupval *func_snapshotuv_afterfn(lua_State *L, const TValue *slot,
 					GCfunc *fn)
 {
   GCupval *uv = func_snapshotuv_unlinked(L, slot);
-  lj_gc_linkobj_after(obj2gco(fn), obj2gco(uv));
+  lj_gc_linkobj_after(G(L), obj2gco(fn), obj2gco(uv));
   func_test_uv_afterfn_call();
   return uv;
 }

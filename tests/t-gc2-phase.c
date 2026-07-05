@@ -659,6 +659,7 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
 {
   GCtab *parent, *child, *grandchild;
   uint64_t worker_runs0, worker_grey0, worker_ssb0;
+  GCSize total_after;
   uint32_t old_stepmul = g->gc.stepmul;
 
   lua_settop(L, 0);
@@ -689,6 +690,10 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   g->gc.debt = 0;
   lj_gc_threshold_store(g, g->gc.total);
   assert(lj_gc_step(L) <= 0);
+  total_after = lj_gc_total_load(g);
+  assert(lj_gc_threshold_load(g) >= total_after);
+  assert((uint64_t)(lj_gc_threshold_load(g) - total_after) >=
+	 LJ_GC2_ACTIVE_AUTO_STEP);
   assert(g->gc.state == GCSpropagate);
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);

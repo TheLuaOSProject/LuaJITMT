@@ -310,6 +310,7 @@ static void close_state_reanchor_root(global_State *g, GCobj *target)
   }
   lj_obj_setgcwrel(target, lj_gc_root_acq(g));
   lj_gc_root_rel(g, target);
+  lj_gcroot_repair_epoch_add(g);
 }
 
 static int close_state_unlink_root(global_State *g, GCobj *target)

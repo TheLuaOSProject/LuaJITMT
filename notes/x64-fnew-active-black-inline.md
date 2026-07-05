@@ -2,22 +2,25 @@
 
 Date: 2026-07-05
 
-The traced x64 one-numeric-upvalue `FNEW` allocator now mirrors the C bump
-helper's standalone active-black arena-owned case. It stays inline when:
+The traced x64 one-numeric-upvalue `FNEW` allocator mirrors the C bump helper's
+standalone active-black arena-owned case. It stays inline when:
 
 - `TG.mark_active != 0`
 - `TG.alloc.alloc_black != 0`
 - `global_State.gc2.legacy_mark_bridge == 0`
 
 The inline path still falls back to `lj_func_newL_gc1num_forjit()` for active
-white allocation and for coupled legacy mark cycles. Those states need the C
-helper's ordinary GC2/legacy publication barriers for constructor edges.
+white allocation and for coupled legacy mark cycles. The bridge case must keep
+the C helper publication path because stock-suite GC rechain/TSETM tests can
+force a full collection before the next closure-heavy metatable test; fresh
+closures created while the bridge is active need the root-spine publication
+seen by the classic mark side.
 
-For the active-black standalone case, both fresh traversable arena cells have
-their mark bits set before Lua-visible publication. The inline path initializes
-the closure and closed upvalue, clears both `nextgc` links, and skips the
-pending-root push just like `func_bump_publish_pair()`. Inactive allocation
-continues to publish the initialized pair through `TG.gcroot_pending`.
+For the active-black case, both fresh traversable arena cells have their mark
+bits set before Lua-visible publication. The inline path initializes the closure
+and closed upvalue, clears both `nextgc` links, and skips the pending-root push
+just like `func_bump_publish_pair()`. Inactive allocation continues to publish
+the initialized pair through `TG.gcroot_pending`.
 
 Focused coverage:
 

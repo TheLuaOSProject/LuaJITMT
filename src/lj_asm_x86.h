@@ -1023,7 +1023,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
   MCLabel l_done, l_fallback, l_markclear, l_markdone;
-  MCLabel l_publish_root, l_mark_ok;
+  MCLabel l_arena_owned, l_publish_root, l_mark_ok;
   Reg base, parent, val, pt, g, arena, cell, next, uv, tmp;
   IRRef fallback_args[CCI_NARGS_MAX];
   RegSet allow;
@@ -1080,6 +1080,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_movtomro(as, tmp|REX_GC64, RID_RET, offsetof(GChead, nextgc));
   emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_loadi(as, tmp, 0);
+  l_arena_owned = emit_label(as);
   emit_jmp(as, l_done);
   emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
   emit_settg(as, RID_RET, gcroot_pending);
@@ -1088,10 +1089,11 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_gettg(as, tmp, gcroot_pending);
   l_publish_root = emit_label(as);
+  emit_jmp(as, l_arena_owned);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.legacy_mark_bridge),
 		      0, CC_NE, l_publish_root);
   asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(alloc.alloc_black),
-		      1, CC_Z, l_publish_root);
+			      1, CC_Z, l_publish_root);
   asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
 		      CC_E, l_publish_root);
 
@@ -1218,7 +1220,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.legacy_mark_bridge),
 		      0, CC_NE, l_fallback);
   asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(alloc.alloc_black),
-		      1, CC_Z, l_fallback);
+			      1, CC_Z, l_fallback);
   asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
 		      CC_E, l_mark_ok);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, allocf_arena), 0,

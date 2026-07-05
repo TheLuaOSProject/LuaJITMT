@@ -3110,7 +3110,6 @@ static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
     return;
   switch (o->gch.gct) {
   case ~LJ_TTAB:
-  case ~LJ_TFUNC:
   case ~LJ_TPROTO:
     /*
     ** Thread stacks are mutable roots. Active allocation and root preservation
@@ -3120,6 +3119,17 @@ static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
     ** container edges for this cycle, matching the legacy root-TV path.
     */
     gc2_traverse_obj(g, o);
+    break;
+  case ~LJ_TFUNC:
+    /*
+    ** Active-black FNEW bump closures carry a type-local arena-owned marker only
+    ** after the constructor has published the fixed proto/env/upvalue edges. A
+    ** repeated stack-root hit for the same already-marked closure does not add a
+    ** new edge snapshot; later upvalue payload mutations use the normal upvalue
+    ** store barrier.
+    */
+    if (!(isluafunc(gco2func(o)) && lj_funcL_arenaowned(&gco2func(o)->l)))
+      gc2_traverse_obj(g, o);
     break;
   default:
     break;
@@ -3918,14 +3928,42 @@ static LJ_AINLINE void gc2_queue_slot_clear_rel(GCRef *slot)
   setgcrefnullrel(*slot);
 }
 
+static LJ_AINLINE int gc2_queue_obj_in_known_arena(GCArena *a, GCArena *want,
+						   uint32_t cell)
+{
+  return a != NULL && a == want &&
+	 cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+	 lj_arena_bm_get(a->block, cell);
+}
+
 static int gc2_queue_obj_in_arena_list(GCArena *head, GCArena *want,
 				       uint32_t cell)
 {
   GCArena *a;
   for (a = head; a != NULL; a = lj_arena_next_acq(a))
-    if (a == want)
-      return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
-	     lj_arena_bm_get(a->block, cell);
+    if (gc2_queue_obj_in_known_arena(a, want, cell))
+      return 1;
+  return 0;
+}
+
+static LJ_AINLINE int gc2_queue_obj_in_alloc_heads(TGAlloc *alloc,
+						   GCArena *want,
+						   uint32_t cell)
+{
+  uint32_t k;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    /*
+    ** Racy TValue snapshots can contain arbitrary checkptr-shaped values, so
+    ** validity checks must not dereference the candidate arena base directly.
+    ** The bump arena and list heads are trusted allocator-owned bases; if the
+    ** masked object pointer matches one of them, the bitmap check is exact.
+    ** Older arenas still use the full list walk below.
+    */
+    if (gc2_queue_obj_in_known_arena(alloc->bump[k].a, want, cell) ||
+	gc2_queue_obj_in_known_arena(alloc->owned[k], want, cell) ||
+	gc2_queue_obj_in_known_arena(alloc->needsweep[k], want, cell))
+      return 1;
+  }
   return 0;
 }
 
@@ -3942,6 +3980,8 @@ static int gc2_queue_obj_valid(global_State *g, GCobj *o)
   want = lj_arena_of(o);
   cell = lj_arena_cellof(o);
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (gc2_queue_obj_in_alloc_heads(&tg->alloc, want, cell))
+      return 1;
     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
       LJHugeInfo hi;
       if (lj_arena_hugetab_lookup(&tg->huge, o, &hi) == 1)
@@ -5414,7 +5454,7 @@ static void gc2_finreg_dispatch_requeue(global_State *g, GCobj *o)
   } else
 #endif
   if (o->gch.gct == ~LJ_TUDATA) {
-    lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
+    lj_gc_linkobj_after(g, obj2gco(mainthread_acq(g)), o);
   } else {
     return;
   }
@@ -7775,6 +7815,16 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
     return 0;
   (void)gc2_marks_this_round_xchg_acqrel(g, 0);
   (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 pre-round drain. */
+  if (!gc2_grey_empty(g) && gc2_thread_scan_needscan_pending_acq(g) == 0) {
+    /*
+    ** A root snapshot cannot close the mark fixpoint while older grey work is
+    ** still queued. Defer the global root handshake until the queue is drained;
+    ** NEEDSCAN handoffs are the exception because only the owner root scan can
+    ** make that work item visible again.
+    */
+    gc2_fixpoint_rounds_add(g, 1);
+    return 0;
+  }
   acked = lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
   if (acked == 0 && L) {
     lj_gc2_scan_cycle_roots(g, L);

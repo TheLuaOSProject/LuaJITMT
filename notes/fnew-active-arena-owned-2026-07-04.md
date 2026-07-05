@@ -11,9 +11,10 @@ Why this is valid for this narrow path:
 - FNEW closures and closed local-cell upvalues have no finalizer-side legacy
   ownership requirement; GC2 arena mark/sweep can own their lifetime.
 - Idle allocation, active white allocation, and coupled legacy mark cycles still
-  publish to the pending root chain. Coupled legacy cycles need their own
-  preservation/normalization coverage before non-spine FNEW bodies are safe in
-  that window.
+  publish to the pending root chain. The stock runner's `lang/gc.lua` rechain
+  and TSETM cases can force a full collection before closure-heavy metatable
+  tests; allowing bridge-active FNEW elision there caused later table creation
+  to see corrupted state.
 - Constructor proto edges use a proto-specific SSB handoff even when the proto
   is already marked. Parser allocation can birth-mark a proto before traversal
   is queued, so "marked" alone is not enough proof for a fresh FNEW edge.
