@@ -1436,7 +1436,7 @@ static CTSize cp_field_align(CPState *cp, CType *ct, CTInfo info)
     if (ctype_isarray(info) && !(info & CTF_VECTOR)) {
       do {
 	ct = ctype_rawchild(cp->cts, ct);
-	info = ct->info;
+	info = ctype_info_acq(ct);
       } while (ctype_isarray(info) && !(info & CTF_VECTOR));
     }
     if (ctype_isnum(info) || ctype_isenum(info))
@@ -1459,13 +1459,14 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
   fieldid = ctype_sib_acq(&sct);
   while (fieldid) {
     CType *ct = ctype_get(cp->cts, fieldid);
-    CTInfo attr = ct->size;  /* Field declaration attributes (temp.). */
+    CTInfo ctinfo = ctype_info_acq(ct);
+    CTInfo attr = ctype_size_acq(ct);  /* Field declaration attributes (temp.). */
 
-    if (ctype_isfield(ct->info) ||
-	(ctype_isxattrib(ct->info, CTA_SUBTYPE) && attr)) {
+    if (ctype_isfield(ctinfo) ||
+	(ctype_isxattrib(ctinfo, CTA_SUBTYPE) && attr)) {
       CTSize align, amask;  /* Alignment (pow2) and alignment mask (bits). */
       CTSize sz;
-      CTInfo info = lj_ctype_info(cp->cts, ctype_cid(ct->info), &sz);
+      CTInfo info = lj_ctype_info(cp->cts, ctype_cid(ctinfo), &sz);
       CTSize bsz, csz = 8*sz;  /* Field size and container size (in bits). */
       sinfo |= (info & (CTF_QUAL|CTF_VLA));  /* Merge pseudo-qualifiers. */
 
@@ -1482,11 +1483,11 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
 	align = ctype_align(attr);
       if (cp->packstack[cp->curpack] < align)
 	align = cp->packstack[cp->curpack];
-      bsz = ctype_bitcsz(ct->info);  /* Bitfield size (temp.). */
+      bsz = ctype_bitcsz(ctinfo);  /* Bitfield size (temp.). */
       if (align > maxalign && bsz) maxalign = align;
       amask = (8u << align) - 1;
 
-      if (bsz == CTBSZ_FIELD || !ctype_isfield(ct->info)) {
+      if (bsz == CTBSZ_FIELD || !ctype_isfield(ctinfo)) {
 	bsz = csz;  /* Regular fields or subtypes always fill the container. */
 	bofs = (bofs + amask) & ~amask;  /* Start new aligned field. */
 	{

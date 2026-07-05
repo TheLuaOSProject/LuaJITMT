@@ -29,6 +29,9 @@ Changed:
   fixture now completes a forward-declared struct and enum, forces a later parse
   error, verifies both public ctype objects roll back to incomplete state, and
   then defines them successfully.
+- Follow-up: the `cp_struct_layout()` field walk now acquire-loads field
+  `info`/temporary `size` values before deciding layout and before publishing
+  the mutated field snapshot.
 
 Why this matters:
 
