@@ -39,6 +39,14 @@ for tid = 1, nthreads do
     local token, ok = start_ch:recv(10)
     assert(ok == true and token == "go")
 
+    local ids = {}
+    for i = 1, shapes do
+      local ptr = ffi.typeof(("lj_m7_intern_outer_%d_t *"):format(i))
+      local arr = ffi.typeof(("lj_m7_intern_outer_%d_t[2]"):format(i))
+      ids[#ids + 1] = ("%d:%d"):format(tonumber(ptr), tonumber(arr))
+    end
+    local signature = table.concat(ids, ",")
+
     for pass = 1, passes do
       for i = 1, shapes do
 	local seed = id * 1000000 + pass * 1000 + i
@@ -62,16 +70,27 @@ for tid = 1, nthreads do
       end
     end
 
-    return shapes * passes
+    return shapes * passes, signature
   end, ready, start, tid, nshapes, rounds)
 end
 
 harness.wait_ready(ready, nthreads)
 harness.release_start(start, nthreads)
-local total = harness.join_count(workers)
+local total = 0
+local signature
+harness.join_each(workers, function(result, _, sig)
+  assert(type(result) == "number")
+  assert(type(sig) == "string" and sig ~= "")
+  if signature == nil then
+    signature = sig
+  else
+    assert(sig == signature, "derived ctype interning produced divergent IDs")
+  end
+  total = total + result
+end)
 
 collectgarbage("restart")
 harness.fullgc()
 
-print(("t-ffi-ctype-intern-race OK: %d threads, %d fresh shapes, %d ref reads"):format(
+print(("t-ffi-ctype-intern-race OK: %d threads, %d fresh shapes, %d ref reads, stable derived IDs"):format(
   nthreads, nshapes, total * 2))

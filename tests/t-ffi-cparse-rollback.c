@@ -15,6 +15,15 @@
 #include "lib/ctype_growth_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
 
+static void assert_new_range_abandoned(CTState *cts, CTypeID first, CTypeID last)
+{
+  CTypeID id;
+  for (id = first; id < last; id++) {
+    CType snap;
+    assert(lj_ctype_snapshot(cts, id, &snap) == 0);
+  }
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -37,6 +46,7 @@ int main(void)
 
   top1 = ctype_top_acq(cts);
   assert(top1 > top0);
+  assert_new_range_abandoned(cts, top0, top1);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -72,6 +82,23 @@ int main(void)
     "assert(ffi.offsetof(st, 'y') == 8)\n"
     "assert(ffi.sizeof(st) >= 12)\n"
     "assert(tonumber(ffi.cast(et, 'M7_ENUMROLLBACK_OK')) == 5)\n");
+
+  top0 = ctype_top_acq(cts);
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local ok = pcall(ffi.cdef, [[\n"
+    "extern int lj_m7_rb_redir_gap __asm__(\"lj_m7_rb_redir_real\");\n"
+    "@\n"
+    "]])\n"
+    "assert(not ok)\n");
+  top1 = ctype_top_acq(cts);
+  assert(top1 > top0);
+  assert_new_range_abandoned(cts, top0, top1);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('typedef int lj_m7_rb_redir_gap;')\n"
+    "assert(ffi.sizeof('lj_m7_rb_redir_gap') == 4)\n");
 
   lua_close(L);
   printf("t-ffi-cparse-rollback OK: failed parses abandon new ctype records\n");

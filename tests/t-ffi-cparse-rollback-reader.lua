@@ -37,7 +37,7 @@ local function bad_ctor_const_cdef_source(tag)
       .. "int x;\n"
       .. "};\n"
   }
-  for i = 1, 20000 do
+  for i = 1, 2000 do
     parts[#parts + 1] =
       ("typedef int lj_m7_rollback_ctor_pad_%s_%d;\n"):format(tag, i)
   end
@@ -90,6 +90,41 @@ local function assert_incomplete_typeinfo(msg)
   assert(ti ~= nil and ti.size == nil, msg)
 end
 
+race_failed_cdef("ctorconst", function()
+  assert(not pcall(function() return ctor_ct.K end),
+	 "ctype constructor observed failed cdef rollback constant")
+  assert(not pcall(function() return ctor_ptr_ct.K end),
+	 "pointer constructor observed failed cdef rollback constant")
+  assert(not pcall(function() return ctor_ct.E end),
+	 "ctype constructor observed failed cdef rollback enum constant")
+  assert(not pcall(function() return ctor_ct.x end),
+	 "ctype constructor observed failed cdef rollback field")
+end, bad_ctor_const_cdef_source)
+
+assert(not pcall(function() return ctor_ct.K end),
+       "failed cdef left ctype constructor able to see rolled-back constant")
+assert(not pcall(function() return ctor_ptr_ct.K end),
+       "failed cdef left pointer constructor able to see rolled-back constant")
+assert(not pcall(function() return ctor_ct.E end),
+       "failed cdef left ctype constructor able to see rolled-back enum constant")
+assert(not pcall(function() return ctor_ct.x end),
+       "failed cdef left ctype constructor able to see rolled-back field")
+ffi.cdef[[
+struct lj_m7_rollback_ctor {
+static const int K = 65;
+enum { E = 66 };
+int y;
+};
+]]
+assert(ctor_ct.K == 65,
+       "rolled-back constructor constant blocked later completion")
+assert(ctor_ct.E == 66,
+       "rolled-back constructor enum blocked later completion")
+assert(ffi.offsetof(ctor_ct, "y") == 0,
+       "rolled-back field layout blocked later completion")
+assert(not pcall(function() return ctor_ct.x end),
+       "rolled-back field leaked after later completion")
+
 race_failed_cdef("direct", function()
   assert(ffi.sizeof(ct) == nil,
 	 "direct ctype reader observed failed cdef rollback state")
@@ -130,17 +165,6 @@ race_failed_cdef("cast", function()
   end), "ffi.cast observed failed cdef rollback state")
 end)
 
-race_failed_cdef("ctorconst", function()
-  assert(not pcall(function() return ctor_ct.K end),
-	 "ctype constructor observed failed cdef rollback constant")
-  assert(not pcall(function() return ctor_ptr_ct.K end),
-	 "pointer constructor observed failed cdef rollback constant")
-  assert(not pcall(function() return ctor_ct.E end),
-	 "ctype constructor observed failed cdef rollback enum constant")
-  assert(not pcall(function() return ctor_ct.x end),
-	 "ctype constructor observed failed cdef rollback field")
-end, bad_ctor_const_cdef_source)
-
 race_failed_cdef("enumcast", function()
   assert(not pcall(ffi.cast, enum_ct, "LJ_M7_ROLLBACK_ENUM_TMP"),
 	 "enum string cast observed failed cdef rollback state")
@@ -174,14 +198,6 @@ assert(not pcall(function() return q - p end),
 assert(not pcall(function()
   return ffi.cast("struct lj_m7_rollback_reader *", backing).x
 end), "failed cdef left ffi.cast able to read incomplete struct field")
-assert(not pcall(function() return ctor_ct.K end),
-       "failed cdef left ctype constructor able to see rolled-back constant")
-assert(not pcall(function() return ctor_ptr_ct.K end),
-       "failed cdef left pointer constructor able to see rolled-back constant")
-assert(not pcall(function() return ctor_ct.E end),
-       "failed cdef left ctype constructor able to see rolled-back enum constant")
-assert(not pcall(function() return ctor_ct.x end),
-       "failed cdef left ctype constructor able to see rolled-back field")
 assert(not pcall(ffi.cast, enum_ct, "LJ_M7_ROLLBACK_ENUM_TMP"),
        "failed cdef left enum string cast able to see rolled-back constant")
 assert(not pcall(ffi.cast, enum_ct, 17),

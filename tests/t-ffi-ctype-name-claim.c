@@ -34,6 +34,16 @@ static CTypeID new_named(CTState *cts, lua_State *L, CTInfo info, CTSize size,
   return id;
 }
 
+static void assert_name_snapshot(CTState *cts, GCstr *name, uint32_t ns,
+				 CTypeID want, CTInfo want_info)
+{
+  CType snap;
+  CTypeID id = 0;
+  assert(lj_ctype_getname_snapshot(cts, name, ns, &id, &snap, NULL) == 1);
+  assert(id == want);
+  assert(ctype_info_acq(&snap) == want_info);
+}
+
 static void force_table_move_after_reserve(lua_State *L, CTState *cts)
 {
   CTypeTab *before = ctype_tabh_acq(cts);
@@ -71,6 +81,8 @@ int main(void)
   assert(winner == id1);
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
   assert(found == ctype_get(cts, id1));
+  assert_name_snapshot(cts, name, default_ns, id1,
+		       CTINFO(CT_TYPEDEF, CTID_INT32));
 
   id2 = new_named(cts, L, CTINFO(CT_TYPEDEF, CTID_INT32), 0, name, &ct2);
   winner = lj_ctype_addname_unique(cts, ct2, id2, default_ns);
@@ -81,6 +93,8 @@ int main(void)
     assert(lj_ctype_snapshot(cts, id2, &snap) == 0);
   }
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+  assert_name_snapshot(cts, name, default_ns, id1,
+		       CTINFO(CT_TYPEDEF, CTID_INT32));
 
   id3 = new_named(cts, L, CTINFO(CT_STRUCT, CTALIGN(2)), 4, name, &ct3);
   force_table_move_after_reserve(L, cts);
@@ -89,6 +103,10 @@ int main(void)
   assert(winner == id3);
   assert(lj_ctype_getname(cts, &found, name, struct_ns) == id3);
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+  assert_name_snapshot(cts, name, struct_ns, id3,
+		       CTINFO(CT_STRUCT, CTALIGN(2)));
+  assert_name_snapshot(cts, name, default_ns, id1,
+		       CTINFO(CT_TYPEDEF, CTID_INT32));
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -118,6 +136,10 @@ int main(void)
     assert(lj_ctype_snapshot(cts, id4, &snap) == 0);
   }
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+  assert_name_snapshot(cts, name, default_ns, id1,
+		       CTINFO(CT_TYPEDEF, CTID_INT32));
+  assert_name_snapshot(cts, name, struct_ns, id3,
+		       CTINFO(CT_STRUCT, CTALIGN(2)));
 
   lua_close(L);
   printf("t-ffi-ctype-name-claim OK: duplicate names pick one winner and abandon losers\n");
