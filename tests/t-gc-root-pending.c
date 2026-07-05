@@ -10,6 +10,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_func.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
@@ -122,7 +123,9 @@ static void test_explicit_flush(lua_State *L)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
+  GC2StatsSnapshot before, after;
   GCtab *t, *t2;
+  uint32_t flushed;
   assert(tg != NULL);
   (void)lj_gc_flush_root_pending(g);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
@@ -139,7 +142,13 @@ static void test_explicit_flush(lua_State *L)
   assert(!root_contains(g, obj2gco(t2)));
 
   lj_gcroot_pending_hint_rel(g, 0);
-  assert(lj_gc_flush_root_pending(g) >= 2u);
+  lj_gc2_stats_snapshot(g, &before);
+  flushed = lj_gc_flush_root_pending(g);
+  assert(flushed >= 2u);
+  lj_gc2_stats_snapshot(g, &after);
+  assert(after.pending_root_flushes >= before.pending_root_flushes + 1u);
+  assert(after.pending_root_flushed >= before.pending_root_flushed + flushed);
+  assert(after.pending_root_flush_max >= flushed);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
   assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
   assert(lj_gcroot_pending_hint_acq(g) == 0);

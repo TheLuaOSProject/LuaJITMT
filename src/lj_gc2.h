@@ -27,6 +27,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 typedef struct GC2StatsSnapshot {
   GCSize total_bytes;
   uint32_t phase;
+  uint32_t legacy_gc_state;
   uint32_t generational;
   uint32_t cycle_minor_requested;
   uint32_t cycle_sweep_minor;
@@ -43,6 +44,9 @@ typedef struct GC2StatsSnapshot {
   uint64_t minor_roots_deferred;
   uint64_t major_root_scans;
   uint64_t minor_root_scans;
+  uint64_t pending_root_flushes;
+  uint64_t pending_root_flushed;
+  uint64_t pending_root_flush_max;
   uint64_t minor_survival_base_live;
   uint64_t minor_survival_bytes;
   uint32_t minor_survival_pct;
@@ -86,6 +90,8 @@ typedef struct GC2StatsSnapshot {
   uint64_t smr_reclaimed;
   uint64_t root_spine_objects;
   uint64_t root_spine_tombstones;
+  uint64_t root_spine_count_cap;
+  uint32_t root_spine_count_capped;
   uint64_t arena_traversable_owned;
   uint64_t arena_traversable_needsweep;
   uint32_t arena_traversable_binmask;

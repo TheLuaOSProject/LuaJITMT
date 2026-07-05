@@ -1366,6 +1366,9 @@ typedef struct GC2State {
   uint64_t minor_roots_deferred;  /* Minor requests kept on full roots. */
   uint64_t major_root_scans;  /* Full/global root scans selected. */
   uint64_t minor_root_scans;  /* Minor root scans selected. */
+  uint64_t pending_root_flushes;  /* Pending-root drains with work. */
+  uint64_t pending_root_flushed;  /* Objects moved from pending-root stacks. */
+  uint64_t pending_root_flush_max;  /* Largest pending-root drain batch. */
   uint64_t minor_survival_base_live;  /* Previous live estimate for survival. */
   uint64_t minor_survival_bytes;  /* Last estimated young bytes kept by minor. */
   uint32_t minor_survival_pct;  /* Last minor survival percentage. */
@@ -2519,6 +2522,59 @@ static LJ_AINLINE void gc2_minor_root_scans_store_rlx(global_State *g,
 static LJ_AINLINE void gc2_minor_root_scans_add(global_State *g, uint64_t n)
 {
   la_add64_rlx(&g->gc2.minor_root_scans, n);
+}
+
+static LJ_AINLINE uint64_t gc2_pending_root_flushes_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.pending_root_flushes);
+}
+
+static LJ_AINLINE void gc2_pending_root_flushes_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.pending_root_flushes, n);
+}
+
+static LJ_AINLINE void gc2_pending_root_flushes_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.pending_root_flushes, n);
+}
+
+static LJ_AINLINE uint64_t gc2_pending_root_flushed_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.pending_root_flushed);
+}
+
+static LJ_AINLINE void gc2_pending_root_flushed_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.pending_root_flushed, n);
+}
+
+static LJ_AINLINE void gc2_pending_root_flushed_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.pending_root_flushed, n);
+}
+
+static LJ_AINLINE uint64_t gc2_pending_root_flush_max_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.pending_root_flush_max);
+}
+
+static LJ_AINLINE void gc2_pending_root_flush_max_store_rlx(global_State *g,
+							    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.pending_root_flush_max, n);
+}
+
+static LJ_AINLINE int gc2_pending_root_flush_max_cas(global_State *g,
+						     uint64_t *oldp,
+						     uint64_t n)
+{
+  return la_cas64(&g->gc2.pending_root_flush_max, oldp, n,
+		  LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE GCRef *gc2_grey_stack_acq(global_State *g)

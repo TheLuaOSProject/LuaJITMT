@@ -3123,6 +3123,22 @@ static uint32_t gc_flush_root_pending_tg(global_State *g, TGState *tg)
   return n;
 }
 
+static void gc_pending_root_stats(global_State *g, uint32_t n)
+{
+  uint64_t old;
+  if (n == 0)
+    return;
+  gc2_pending_root_flushes_add(g, 1);
+  gc2_pending_root_flushed_add(g, n);
+  old = gc2_pending_root_flush_max_acq(g);
+  while (old < (uint64_t)n) {
+    uint64_t expect = old;
+    if (gc2_pending_root_flush_max_cas(g, &expect, (uint64_t)n))
+      break;
+    old = expect;
+  }
+}
+
 static int gc_root_pending_tg_nonempty(TGState *tg)
 {
   return tg &&
@@ -3168,6 +3184,7 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
     n += gc_flush_root_pending_tg(g, main_tg);
   if (self && self != main_tg && !saw_self)
     n += gc_flush_root_pending_tg(g, self);
+  gc_pending_root_stats(g, n);
   return n;
 }
 

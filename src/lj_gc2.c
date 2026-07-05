@@ -236,6 +236,9 @@ void lj_gc2_init(global_State *g)
   gc2_minor_roots_deferred_store_rlx(g, 0);
   gc2_major_root_scans_store_rlx(g, 0);
   gc2_minor_root_scans_store_rlx(g, 0);
+  gc2_pending_root_flushes_store_rlx(g, 0);
+  gc2_pending_root_flushed_store_rlx(g, 0);
+  gc2_pending_root_flush_max_store_rlx(g, 0);
   gc2_minor_survival_base_live_store_rlx(g, 0);
   gc2_minor_survival_bytes_store_rlx(g, 0);
   gc2_minor_survival_pct_store_rlx(g, 0);
@@ -2660,24 +2663,31 @@ static uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
 }
 
 static void gc2_root_spine_counts(global_State *g, uint64_t *objectsp,
-				  uint64_t *tombstonesp)
+				  uint64_t *tombstonesp, uint32_t *cappedp)
 {
   GCobj *o;
   uint64_t objects = 0, tombstones = 0;
+  uint32_t capped = 0;
   if (!g) {
     *objectsp = 0;
     *tombstonesp = 0;
+    *cappedp = 0;
     return;
   }
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL; ) {
+    GCobj *next = lj_obj_gcw_acq(o);
     objects++;
     if (o->gch.gct == 0)
       tombstones++;
-    if (objects == 1000000u)
+    if (objects == GC2_ROOT_SCAN_LIMIT) {
+      capped = next != NULL;
       break;
+    }
+    o = next;
   }
   *objectsp = objects;
   *tombstonesp = tombstones;
+  *cappedp = capped;
 }
 
 static uint64_t gc2_arena_list_count(GCArena *a)
@@ -2826,6 +2836,7 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   }
   s->total_bytes = lj_gc_total_load(g);
   s->phase = gc2_phase_acq(g);
+  s->legacy_gc_state = la_load8_acq(&g->gc.state);
   s->generational = gc2_generational_acq(g);
   s->cycle_minor_requested = gc2_cycle_minor_requested_acq(g);
   s->cycle_sweep_minor = gc2_cycle_sweep_minor_acq(g);
@@ -2842,6 +2853,9 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->minor_roots_deferred = gc2_minor_roots_deferred_acq(g);
   s->major_root_scans = gc2_major_root_scans_acq(g);
   s->minor_root_scans = gc2_minor_root_scans_acq(g);
+  s->pending_root_flushes = gc2_pending_root_flushes_acq(g);
+  s->pending_root_flushed = gc2_pending_root_flushed_acq(g);
+  s->pending_root_flush_max = gc2_pending_root_flush_max_acq(g);
   s->minor_survival_base_live = gc2_minor_survival_base_live_acq(g);
   s->minor_survival_bytes = gc2_minor_survival_bytes_acq(g);
   s->minor_survival_pct = gc2_minor_survival_pct_acq(g);
@@ -2885,7 +2899,9 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->smr_reclaim_runs = gc2_smr_reclaim_runs_acq(g);
   s->smr_reclaimed = gc2_smr_reclaimed_acq(g);
   gc2_root_spine_counts(g, &s->root_spine_objects,
-				&s->root_spine_tombstones);
+				&s->root_spine_tombstones,
+				&s->root_spine_count_capped);
+  s->root_spine_count_cap = GC2_ROOT_SCAN_LIMIT;
   if (g && g->main_tg) {
     TGAlloc *alloc = &g->main_tg->alloc;
     s->arena_traversable_owned =

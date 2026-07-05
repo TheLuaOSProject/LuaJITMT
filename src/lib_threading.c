@@ -1297,11 +1297,12 @@ static void threading_gc_stats_push(lua_State *L)
   GC2StatsSnapshot s;
   GCtab *t;
   lj_gc2_stats_snapshot(g, &s);
-  lua_createtable(L, 0, 90);
+  lua_createtable(L, 0, 96);
   t = tabV(L->top - 1);
   threading_gc_stats_setnum(L, t, "total_bytes", s.total_bytes);
   threading_gc_stats_setnum(L, t, "total_kbytes", s.total_bytes >> 10);
   threading_gc_stats_setint(L, t, "phase", s.phase);
+  threading_gc_stats_setint(L, t, "legacy_gc_state", s.legacy_gc_state);
   threading_gc_stats_setint(L, t, "generational", s.generational);
   threading_gc_stats_setint(L, t, "cycle_minor_requested",
 			    s.cycle_minor_requested);
@@ -1329,6 +1330,12 @@ static void threading_gc_stats_push(lua_State *L)
 			    s.minor_roots_deferred);
   threading_gc_stats_setnum(L, t, "major_root_scans", s.major_root_scans);
   threading_gc_stats_setnum(L, t, "minor_root_scans", s.minor_root_scans);
+  threading_gc_stats_setnum(L, t, "pending_root_flushes",
+			    s.pending_root_flushes);
+  threading_gc_stats_setnum(L, t, "pending_root_flushed",
+			    s.pending_root_flushed);
+  threading_gc_stats_setnum(L, t, "pending_root_flush_max",
+			    s.pending_root_flush_max);
   threading_gc_stats_setnum(L, t, "minor_survival_base_live",
 			    s.minor_survival_base_live);
   threading_gc_stats_setnum(L, t, "minor_survival_bytes",
@@ -1400,6 +1407,10 @@ static void threading_gc_stats_push(lua_State *L)
 			    s.root_spine_objects);
   threading_gc_stats_setnum(L, t, "root_spine_tombstones",
 			    s.root_spine_tombstones);
+  threading_gc_stats_setnum(L, t, "root_spine_count_cap",
+			    s.root_spine_count_cap);
+  threading_gc_stats_setint(L, t, "root_spine_count_capped",
+			    s.root_spine_count_capped);
   threading_gc_stats_setnum(L, t, "arena_traversable_owned",
 			    s.arena_traversable_owned);
   threading_gc_stats_setnum(L, t, "arena_traversable_needsweep",
