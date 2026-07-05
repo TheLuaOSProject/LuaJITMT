@@ -7,10 +7,11 @@ covers raw/ref resolution, attribute chains, qualifier collection, pointer
 child compatibility, numeric/void equality, and the struct-vs-pointer special
 case.
 
-String declarations still use the parser-backed path. User-defined or
-parser-created ctype comparisons still wait/retry if their sequence-checked
-snapshot overlaps an active parser mutation, so rollback and in-progress type
-publication remain hidden from readers.
+Recognized direct string ctypes resolve before parser entry. Declaration-heavy
+strings still use the parser-backed path. User-defined or parser-created ctype
+comparisons still wait/retry if their sequence-checked snapshot overlaps an
+active parser mutation, so rollback and in-progress type publication remain
+hidden from readers.
 The runtime API keeps the stock wait/retry behavior. The trace recorder
 preflights snapshot-dependent comparisons and raises `CTBUSY` like the other FFI
 layout/type snapshot readers instead of parking behind a parser token that is

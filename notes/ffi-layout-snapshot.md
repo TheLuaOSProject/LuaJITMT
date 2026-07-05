@@ -6,22 +6,24 @@
 ctype/cdata layout reads through the cparser token. That was safe, but it kept
 stable layout queries on the parser lock path even when no parsing was needed.
 
-String type expressions still need the parser unless they resolve to one of the
-recognized immutable predefined names. `ffi.offsetof()` parses non-predefined
-strings under the parser lock, then uses the same sequence-checked layout
-snapshot for the read-only field walk.
+String type expressions first try the direct resolver for predefined/numeric
+names, published typedef/tag names, and derived pointer/array spellings. Strings
+outside that direct grammar still use the parser. `ffi.offsetof()` parses
+anonymous or otherwise non-direct strings under the parser token, then uses the
+same sequence-checked layout snapshot for the read-only field walk.
 
 ## Change
 
 `lib_ffi.c` now has a sequence-checked layout snapshot reader for stable ctype
 layout arguments:
 
-- Begin by acquire-loading `CTState.parse_token`; odd means retry under lock.
+- Begin by acquire-loading `CTState.parse_token`; odd means retry after parser
+  publication, or abort recording with `CTBUSY`.
 - Snapshot `top` and the RCU-published CType table header.
 - Bounded-walk raw/ref/attribute, VLA/VLS, info/alignment, and field/subtype
   chains through acquired CType field loads.
-- Recheck `parse_token`; any overlap with parser mutation retries under the
-  existing locked path.
+- Recheck `parse_token`; any overlap with parser mutation retries through the
+  native wait helper.
 
 Predefined immutable type IDs now take the same acquired field snapshot without
 waiting for an unrelated active parser token. This covers predefined
@@ -30,11 +32,10 @@ waiting for an unrelated active parser token. This covers predefined
 If the walk leaves the predefined range, it falls back to the existing
 sequence-checked retry path.
 
-The existing locked path remains the fallback for active parser windows,
-racing table growth, inconsistent chains, and string `sizeof`/`alignof`
-queries. The locked `ffi.sizeof()` and `ffi.offsetof()` fallbacks mirror the
-snapshot path's payload discipline by reading branch-critical `CType.info` and
-`CType.size` values through `ctype_info_acq()`/`ctype_size_acq()`.
+Parser-backed strings remain the fallback for declaration forms outside the
+direct resolver. Runtime active-parser windows, racing table growth, and
+inconsistent chains retry through native waits; recorder paths abort with
+`CTBUSY` instead of parking.
 
 ## Coverage
 

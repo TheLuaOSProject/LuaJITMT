@@ -5,10 +5,11 @@ Stable non-string `ffi.cast(ct, value)` now snapshots the destination ctype
 metadata before conversion. The fast path uses `lj_ctype_info_snapshot()` to
 copy the raw type record, type info, size, and raw ID into a local `CType`.
 
-String declarations still use the parser-backed path, preserving declaration
-parsing behavior. If the stable ctype-object snapshot overlaps an active parser
-mutation, `ffi.cast` waits via `lj_ctype_info_wait()` and refetches by ctype ID
-before conversion instead of falling through to the parser-lock string path.
+Recognized direct string ctypes resolve before parser entry, while declaration
+forms still use the parser-backed path. If the stable ctype-object snapshot
+overlaps an active parser mutation, `ffi.cast` waits via
+`lj_ctype_info_wait()` and refetches by ctype ID before conversion instead of
+falling through to the parser-lock string path.
 
 Coverage added:
 

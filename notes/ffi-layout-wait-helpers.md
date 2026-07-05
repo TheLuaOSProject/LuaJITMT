@@ -16,8 +16,9 @@ before acquiring the parser token. Stable CType-backed `ffi.new(ct, ...)`,
 the fixture so they cannot reacquire the parser token through the string-layout
 fallback. The helper comments own that parser-token boundary.
 
-String declarations still use the serialized parser path because they actually
-mutate the C type graph. The new behavior is guarded by
+Recognized direct string ctypes resolve before parser entry. Declaration-heavy
+string forms still use the serialized parser path because they actually mutate
+the C type graph. The new behavior is guarded by
 `tests/t-ffi-layout-snapshot.c`, which holds the parse token from a helper
 thread and verifies each stable layout/type operation waits natively without
 advancing the parser sequence through a lock/unlock pair.
@@ -25,6 +26,5 @@ advancing the parser sequence through a lock/unlock pair.
 Verification:
 
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
-- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `tools/ci/lua_test.sh m7_ffi_cparse_rollback`
