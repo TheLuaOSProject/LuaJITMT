@@ -673,7 +673,7 @@ typedef struct GC2FinRegUDataNode {
 typedef struct GCtab {
   GCHeader;
   uint8_t nomm;		/* Negative cache for fast metamethods. */
-  int8_t colo;		/* Array colocation. */
+  int8_t colo;		/* Array colocation, or 0x80 for arena-owned empty TNEW. */
   MRef array;		/* Array part. */
   GCRef gclist;
   GCRef metatable;	/* Must be at same offset in GCudata. */
@@ -702,9 +702,32 @@ static LJ_AINLINE int8_t lj_tab_colo_acq(const GCtab *t)
   return (int8_t)la_load8_acq((const uint8_t *)&t->colo);
 }
 
+static LJ_AINLINE uint8_t lj_tab_colo_raw_acq(const GCtab *t)
+{
+  return la_load8_acq((const uint8_t *)&t->colo);
+}
+
 static LJ_AINLINE void lj_tab_colo_rel(GCtab *t, int8_t colo)
 {
   la_store8_rel((uint8_t *)&t->colo, (uint8_t)colo);
+}
+
+#define LJ_TAB_COLO_MASK	0x7fu
+#define LJ_TAB_ARENA_OWNED	0x80u
+
+static LJ_AINLINE MSize lj_tab_colo_size(const GCtab *t)
+{
+  return (MSize)(lj_tab_colo_raw_acq(t) & LJ_TAB_COLO_MASK);
+}
+
+static LJ_AINLINE int lj_tab_arenaowned(const GCtab *t)
+{
+  return lj_tab_colo_raw_acq(t) == LJ_TAB_ARENA_OWNED;
+}
+
+static LJ_AINLINE void lj_tab_setarenaowned(GCtab *t)
+{
+  lj_tab_colo_rel(t, (int8_t)LJ_TAB_ARENA_OWNED);
 }
 
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))

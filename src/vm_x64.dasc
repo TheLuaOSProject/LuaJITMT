@@ -4267,6 +4267,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  je ->BC_TNEW_ROOT_PUBLISH
     |  cmp dword GL:TMPR->gc2.legacy_mark_bridge, 0
     |  jne ->BC_TNEW_ROOT_PUBLISH
+    |  mov byte TAB:RC->colo, LJ_TAB_ARENA_OWNED
     |  mov aword TAB:RC->nextgc, 0
     |  jmp >4
     |->BC_TNEW_ROOT_PUBLISH:

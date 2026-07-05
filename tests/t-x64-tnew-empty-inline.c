@@ -61,13 +61,16 @@ static int root_chain_contains(global_State *g, GCobj *needle)
   return 0;
 }
 
-static void assert_empty_table_body(global_State *g, GCtab *t)
+static void assert_empty_table_body(global_State *g, GCtab *t, int arena_owned)
 {
   assert(t != NULL);
   assert(t->gct == (uint8_t)~LJ_TTAB);
   assert((t->marked & LJ_GC_WHITES) == (g->gc.currentwhite & LJ_GC_WHITES));
   assert(t->nomm == (uint8_t)~0u);
-  assert(t->colo == 0);
+  if (arena_owned)
+    assert(lj_tab_arenaowned(t));
+  else
+    assert(t->colo == 0);
   assert(mref(t->array, TValue) == NULL);
   assert(gcref_acq(t->metatable) == NULL);
   assert(t->asize == 0);
@@ -124,7 +127,7 @@ static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
   ljt_lua_pcall(L, 0, 1, "empty TNEW inline pcall");
   t = tabV(L->top - 1);
 
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -171,7 +174,7 @@ static void test_plain_new0_inline_empty(lua_State *L, global_State *g,
   t = lj_tab_new0(L);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -217,7 +220,7 @@ static void test_plain_new_inline_empty(lua_State *L, global_State *g,
   t = lj_tab_new(L, 0, 0);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -264,7 +267,7 @@ static void test_capi_newtable_inline_empty(lua_State *L, global_State *g,
   t = tabV(L->top - 1);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -291,8 +294,10 @@ static void test_active_black_empty_tables_skip_pending(lua_State *L,
   GCSize total0;
   uint64_t local0;
   uint32_t old_mark_active, old_bridge, cell0, calls0, i;
+  uint32_t swept;
   uint8_t old_alloc_black;
   GCtab *t_inline, *t_helper;
+  GCobj *inlineo, *helpero;
 
   load_empty_table_chunk(L);
   (void)lj_gc_flush_root_pending(g);
@@ -320,14 +325,16 @@ static void test_active_black_empty_tables_skip_pending(lua_State *L,
   ljt_lua_pcall(L, 0, 1, "active-black empty TNEW pcall");
   t_inline = tabV(L->top - 1);
   t_helper = lj_tab_new0(L);
+  inlineo = obj2gco(t_inline);
+  helpero = obj2gco(t_helper);
 
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
   gc2_legacy_mark_bridge_rel(g, old_bridge);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t_inline);
-  assert_empty_table_body(g, t_helper);
+  assert_empty_table_body(g, t_inline, 1);
+  assert_empty_table_body(g, t_helper, 1);
   assert((void *)t_inline == lj_arena_cellptr(a0, cell0));
   assert((void *)t_helper ==
 	 lj_arena_cellptr(a0, cell0 + TNEW_EMPTY_NCELLS));
@@ -346,6 +353,15 @@ static void test_active_black_empty_tables_skip_pending(lua_State *L,
   assert(!root_chain_contains(g, obj2gco(t_inline)));
   assert(!root_chain_contains(g, obj2gco(t_helper)));
   lua_pop(L, 1);
+
+  lj_arena_bm_clear(a0->mark, cell0);
+  lj_arena_bm_clear(a0->mark, cell0 + TNEW_EMPTY_NCELLS);
+  swept = lj_gc_sweep_gc2_arena_unmarked(g, a0);
+  assert(swept >= 2u);
+  assert(inlineo->gch.gct == 0);
+  assert(helpero->gch.gct == 0);
+  assert(!lj_arena_bm_get(a0->mark, cell0));
+  assert(!lj_arena_bm_get(a0->mark, cell0 + TNEW_EMPTY_NCELLS));
 }
 
 #if LJ_HASJIT
@@ -379,7 +395,7 @@ static void test_jit_helper_inline_empty_tnew(lua_State *L, global_State *g,
   t = lj_tab_new0_forjit(L);
 
   assert(lj_tab_test_new0_calls() == calls0);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -409,7 +425,7 @@ static void test_jit_helper_entering_fallback(lua_State *L, global_State *g)
   mt_entering_futex_wake(g, 0x7fffffff);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(root_chain_contains(g, obj2gco(t)));
 }
@@ -437,7 +453,7 @@ static void test_entering_uses_helper(lua_State *L, global_State *g,
 
   t = tabV(L->top - 1);
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gcroot_pending_hint_acq(g) != 0);
@@ -464,7 +480,7 @@ static void test_local_accounting_fallback(lua_State *L, global_State *g,
   assert(lj_tg_local_total_acq(tg) == 0);
   assert(lj_gc2_alloc_since_load(g) >=
 	 since0 + LJ_GC2_ACCT_FLUSH);
-  assert_empty_table_body(g, tabV(L->top - 1));
+  assert_empty_table_body(g, tabV(L->top - 1), 0);
   lua_pop(L, 1);
 }
 
@@ -480,7 +496,7 @@ static void test_custom_allocator_fallback(lua_State *L, global_State *g)
 
   ljt_lua_pcall(L, 0, 1, "empty TNEW custom allocator fallback pcall");
   assert(ctx.calls > 0);
-  assert_empty_table_body(g, tabV(L->top - 1));
+  assert_empty_table_body(g, tabV(L->top - 1), 0);
   lua_pop(L, 1);
 
   lua_setallocf(L, ctx.oldf, ctx.oldud);
@@ -518,7 +534,7 @@ static void test_inline_empty_tnew_uses_bump_with_free_run(lua_State *L,
   t = tabV(L->top - 1);
 
   assert(lj_tab_test_new0_calls() == calls0);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert((void *)t != lj_arena_cellptr(run.a, run.cell));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
@@ -566,7 +582,7 @@ static void test_plain_new0_uses_bump_with_free_run(lua_State *L,
   t = lj_tab_new0(L);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t);
+  assert_empty_table_body(g, t, 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert((void *)t != lj_arena_cellptr(run.a, run.cell));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);

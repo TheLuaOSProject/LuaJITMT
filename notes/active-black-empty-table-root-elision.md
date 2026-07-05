@@ -7,6 +7,18 @@ no child edges to retain. In that state the arena bitmap is the ownership record
 so adding the object to the legacy root spine only adds avoidable pending-root
 traffic.
 
+The table body carries a type-local arena-owned marker while it is off the root
+spine: `GCtab.colo == 0x80`. Normal colocated arrays use a nonzero low seven-bit
+size payload, and split colocated arrays set the high bit while retaining that
+payload. The bare `0x80` encoding therefore means "arena-owned table body with
+no colocated slots" and still sizes as `sizeof(GCtab)`. If the table later grows,
+the marker remains on the body while the separated array and hash vectors use
+their normal publication, retirement, and validation paths.
+
+`nextgc` stays reserved for root chains. Arena-body sweep may destruct an
+unmarked off-spine empty-table body only after the header validates as a table
+and the arena-owned marker proves that the missing root-chain link is intentional.
+
 The elision is deliberately narrow:
 
 - `tg->mark_active` must be set.
@@ -21,5 +33,6 @@ C helper in DynASM source; it does not use raw instruction bytes.
 Focused verification:
 
 - `LJ_TEST_DISABLE_BUILD_CACHE=1 LUA=luajit tools/ci/lua_test.sh m5_x64_tnew_empty_inline`
-- `LJ_TEST_DISABLE_BUILD_CACHE=1 LUA=luajit tools/ci/lua_test.sh m3_gc_root_pending m2_arena_gcsweep m6_jit_fnew_bump`
-- `LUA=luajit tools/ci/lua_test.sh m5_tab_struct_owner m5_tab_resize_stress`
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 LUA=luajit tools/ci/lua_test.sh m3_gc_root_pending m2_arena_gcsweep`
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 LUA=luajit tools/ci/lua_test.sh m5_tab_colocated_resize m5_tab_resize_stress`
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 LUA=luajit tools/ci/lua_test.sh m8_weak`

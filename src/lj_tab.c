@@ -1345,6 +1345,7 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
     ** spine to avoid pending-root traffic; coupled legacy mark cycles still
     ** publish through pending roots because legacy sweep remains authoritative.
     */
+    lj_tab_setarenaowned(t);
     lj_obj_setgcwnullrel(obj2gco(t));
   } else {
     lj_gc_linkobj_new(g, obj2gco(t));
@@ -1459,9 +1460,9 @@ static void tab_clear_raw(GCtab *t)
 /* Free a table. */
 void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 {
-  int8_t colo = lj_tab_colo_acq(t);
-  MSize size = LJ_MAX_COLOSIZE != 0 && colo ?
-	       sizetabcolo((uint32_t)colo & 0x7f) : sizeof(GCtab);
+  MSize colosz = lj_tab_colo_size(t);
+  MSize size = LJ_MAX_COLOSIZE != 0 && colosz ?
+	       sizetabcolo(colosz) : sizeof(GCtab);
   MSize hmask;
   Node *node = lj_tab_node_snapshot_acq(t, &hmask);
   TValue *array;

@@ -1703,14 +1703,14 @@ static size_t propagatemark(global_State *g)
   lj_gc_list_pop_head_rel(&g->gc.gray, o);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
-    int8_t colo = lj_tab_colo_acq(t);
+    MSize colosz = lj_tab_colo_size(t);
     MSize acap = lj_tab_array_separated_acap_acq(t);
     MSize hmask;
     (void)lj_tab_node_snapshot_acq(t, &hmask);
     if (gc_traverse_tab(g, t) > 0)
       black2gray(o);  /* Keep weak tables gray. */
-    return (LJ_MAX_COLOSIZE != 0 && colo ?
-	    sizetabcolo((uint32_t)colo & 0x7f) : sizeof(GCtab)) +
+    return (LJ_MAX_COLOSIZE != 0 && colosz ?
+	    sizetabcolo(colosz) : sizeof(GCtab)) +
 	   (acap ? lj_tab_array_bytes(acap) : 0) +
 	   (hmask ? lj_tab_node_bytes(hmask) : 0);
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
@@ -1870,7 +1870,7 @@ static int gc2_valid_pow2_mask(MSize hmask)
 static int gc2_valid_tab_obj(global_State *g, GCtab *t)
 {
   int8_t colo = lj_tab_colo_acq(t);
-  MSize colosz = colo ? ((MSize)(uint8_t)colo & 0x7fu) : 0;
+  MSize colosz = lj_tab_colo_size(t);
   MSize asize = lj_tab_asize_acq(t);
   MSize acap = lj_tab_acap_acq(t);
   TValue *array = lj_tab_array_acq(t);
@@ -1986,6 +1986,18 @@ static int gc2_arena_owned_fnew_body(GCobj *o)
   return 0;
 }
 
+static int gc2_arena_owned_tab_body(GCobj *o)
+{
+  /*
+  ** Empty active-black TNEW can skip the legacy root spine. Its table body is
+  ** then owned by the arena bitmap and tagged with the otherwise impossible
+  ** colocated-size encoding 0x80. If the table later grows, the tag remains the
+  ** body ownership marker while side vectors keep their normal validation.
+  */
+  return o->gch.gct == (uint32_t)~LJ_TTAB &&
+	 lj_tab_arenaowned(gco2tab(o));
+}
+
 static int gc2_deferred_body_pending(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
@@ -2071,7 +2083,8 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
 	gc2_preserve_pending_finalizer_body(g, o);
 	continue;
       }
-      if (unmarked_only && gc2_arena_owned_fnew_body(o) &&
+      if (unmarked_only &&
+	  (gc2_arena_owned_fnew_body(o) || gc2_arena_owned_tab_body(o)) &&
 	  gc2_valid_freeable_obj(g, o)) {
 	if (!gc2_free_unmarked_obj(g, o))
 	  continue;
