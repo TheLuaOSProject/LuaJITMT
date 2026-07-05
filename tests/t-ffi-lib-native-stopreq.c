@@ -12,6 +12,8 @@
 #include "lualib.h"
 
 #include "lib/test_sleep.h"
+#include "lib/lua_fixture_helpers.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
 
 #include "lj_obj.h"
 #include "lj_safepoint.h"
@@ -23,17 +25,6 @@ typedef struct FFILibStopReqCtx {
   uint32_t published;
   uint32_t saw_native;
 } FFILibStopReqCtx;
-
-
-static void clear_stopreq(TGState *tg)
-{
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
-}
-
-static void set_stopreq(TGState *tg)
-{
-  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ);
-}
 
 static void *publish_stopreq_while_native(void *arg)
 {
@@ -52,20 +43,10 @@ static void *publish_stopreq_while_native(void *arg)
   return NULL;
 }
 
-static void run_lua_ok(lua_State *L, const char *chunk)
-{
-  int rc = luaL_dostring(L, chunk);
-  if (rc != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "unexpected Lua error: %s\n", err ? err : "(nil)");
-  }
-  assert(rc == LUA_OK);
-}
-
 static void run_sticky_stopreq_ok(lua_State *L, TGState *tg)
 {
-  set_stopreq(tg);
-  run_lua_ok(L,
+  ljt_tg_set_stopreq(tg);
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local dst = ffi.new('char[16]')\n"
     "local src = ffi.new('char[16]')\n"
@@ -76,9 +57,9 @@ static void run_sticky_stopreq_ok(lua_State *L, TGState *tg)
     "assert(ffi.string(dst) == 'sticky')\n"
     "ffi.copy(dst, 'stock')\n"
     "assert(ffi.string(dst) == 'stock')\n");
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(ljt_tg_has_stopreq(tg));
   assert(lj_tg_in_native_acq(tg) == 0);
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
 }
 
 static void run_fresh_stopreq_interrupt(lua_State *L, global_State *g,
@@ -112,19 +93,17 @@ static void run_fresh_stopreq_interrupt(lua_State *L, global_State *g,
   }
   assert(rc == LUA_OK);
   assert(lj_tg_in_native_acq(tg) == 0);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-  clear_stopreq(tg);
+  assert(ljt_tg_has_stopreq(tg));
+  ljt_tg_clear_stopreq(tg);
 }
 
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   TGState *tg;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
-  run_lua_ok(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "jit.off()\n"
     "assert(ffi.abi('64bit'))\n");

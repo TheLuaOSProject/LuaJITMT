@@ -12,6 +12,8 @@
 #include "lualib.h"
 
 #include "lib/test_sleep.h"
+#include "lib/lua_fixture_helpers.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
 
 #include "lj_obj.h"
 #include "lj_ccall.h"
@@ -38,12 +40,6 @@ static void dummy_foreign(void)
 
 static void dummy_callback_foreign(void)
 {
-}
-
-
-static void clear_stopreq(TGState *tg)
-{
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
 }
 
 static void queue_stopreq_request(global_State *g, TGState *tg)
@@ -75,16 +71,6 @@ static void *publish_stopreq_while_native(void *arg)
   return NULL;
 }
 
-static void run_lua_ok(lua_State *L, const char *chunk)
-{
-  int rc = luaL_dostring(L, chunk);
-  if (rc != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "unexpected Lua error: %s\n", err ? err : "(nil)");
-  }
-  assert(rc == LUA_OK);
-}
-
 static int checkstop_from_lua(lua_State *L)
 {
   lj_ccall_native_checkstop(L, pending_actions, &pending_native);
@@ -105,7 +91,7 @@ static void run_restore_state(lua_State *L, CTState *cts, TGState *tg)
   void *func = (void *)(uintptr_t)&dummy_foreign;
   uint32_t actions;
 
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   lj_tg_ffi_call_func_rel(tg, old_func);
   ccallback_slot_rel(&tg->cb, 17);
   ccallback_native_had_stopreq_rel(&tg->cb, 1);
@@ -134,7 +120,7 @@ static void run_callback_blacklist(lua_State *L, CTState *cts, TGState *tg)
   CCallNativeState native;
   void *func = (void *)(uintptr_t)&dummy_callback_foreign;
 
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   ccallback_slot_rel(&tg->cb, 23);
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
@@ -157,7 +143,7 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   pthread_t thread;
   void *func = (void *)(uintptr_t)&dummy_foreign;
 
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   ctx.g = g;
   ctx.tg = tg;
   ctx.published = 0;
@@ -174,17 +160,17 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == NULL);
   assert(ccallback_slot_acq(&tg->cb) == 0);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(ljt_tg_has_stopreq(tg));
 
   pending_native = native;
   lua_pushcfunction(L, checkstop_from_lua);
   lua_setglobal(L, "ccall_native_checkstop_probe");
-  run_lua_ok(L,
+  ljt_lua_dostring(L,
     "local ok, err = pcall(ccall_native_checkstop_probe)\n"
     "assert(ok == false, 'fresh STOPREQ helper check did not interrupt')\n"
     "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
     "       tostring(err))\n");
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
 }
 
 static void run_post_leave_stopreq_check(lua_State *L, CTState *cts,
@@ -193,19 +179,19 @@ static void run_post_leave_stopreq_check(lua_State *L, CTState *cts,
   CCallNativeState native;
   void *func = (void *)(uintptr_t)&dummy_foreign;
 
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
   pending_actions = lj_ccall_native_leave(L, cts, &native, func);
   assert(pending_actions == 0);
-  assert(!lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(!ljt_tg_has_stopreq(tg));
 
   pending_native = native;
   pending_g = g;
   pending_tg = tg;
   lua_pushcfunction(L, queue_then_checkstop_from_lua);
   lua_setglobal(L, "ccall_post_leave_checkstop_probe");
-  run_lua_ok(L,
+  ljt_lua_dostring(L,
     "local ok, err = pcall(ccall_post_leave_checkstop_probe)\n"
     "assert(ok == false, 'post-leave STOPREQ helper check did not poll')\n"
     "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
@@ -213,20 +199,18 @@ static void run_post_leave_stopreq_check(lua_State *L, CTState *cts,
   assert(lj_tg_reqmask_acq(tg) == 0);
   assert(lj_tg_poll_acq(tg) == 0);
   assert(gc2_hs_pending_acq(g) == 0);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-  clear_stopreq(tg);
+  assert(ljt_tg_has_stopreq(tg));
+  ljt_tg_clear_stopreq(tg);
 }
 
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   TGState *tg;
   CTState *cts;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
-  run_lua_ok(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "jit.off()\n"
     "ffi.cdef'int getpid(void);'\n");

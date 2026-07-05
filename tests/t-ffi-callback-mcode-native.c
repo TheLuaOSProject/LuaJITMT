@@ -14,6 +14,8 @@
 #include "lualib.h"
 
 #include "lib/test_sleep.h"
+#include "lib/lua_fixture_helpers.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -105,14 +107,6 @@ static void *publish_stopreq_while_paused(void *arg)
   return NULL;
 }
 
-static lua_State *new_open_state(void)
-{
-  lua_State *L = luaL_newstate();
-  assert(L != NULL);
-  luaL_openlibs(L);
-  return L;
-}
-
 static int require_ffi(lua_State *L)
 {
   return luaL_dostring(L,
@@ -120,32 +114,27 @@ static int require_ffi(lua_State *L)
     "assert(type(ffi.os) == 'string')\n");
 }
 
-static void clear_stopreq(TGState *tg)
-{
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
-}
-
 static void test_sticky_stopreq_ok(void)
 {
-  lua_State *L = new_open_state();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g = G(L);
   TGState *tg = L2TG(L);
   CTState *cts;
   assert(tg != NULL);
 
-  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ);
+  ljt_tg_set_stopreq(tg);
   assert(require_ffi(L) == LUA_OK);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(ljt_tg_has_stopreq(tg));
   cts = ctype_ctsG(g);
   assert(cts != NULL);
   assert(ctype_cb_mcode_acq(cts) != NULL);
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   lua_close(L);
 }
 
 static void test_fresh_stopreq_interrupts(uint32_t kind)
 {
-  lua_State *L = new_open_state();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g = G(L);
   TGState *tg = L2TG(L);
   MCodeStopReqCtx ctx;
@@ -173,10 +162,10 @@ static void test_fresh_stopreq_interrupts(uint32_t kind)
   assert(lua_tostring(L, -1) != NULL);
   assert(strstr(lua_tostring(L, -1), "thread interrupted: VM shutdown") != NULL);
   assert(lj_tg_in_native_acq(tg) == 0);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(ljt_tg_has_stopreq(tg));
   if (ctype_ctsG(g) != NULL)
     assert(ctype_cb_mcode_acq(ctype_ctsG(g)) == NULL);
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   pause_tg = NULL;
   lua_close(L);
 }
