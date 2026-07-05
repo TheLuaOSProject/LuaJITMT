@@ -331,134 +331,30 @@ void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
 /* -- Functions (closures) ------------------------------------------------ */
 
 #ifdef LJ_FUNC_TEST_HELPERS
-static uint32_t func_test_gc1num_bump_fast_calls;
-static uint32_t func_test_gc1num_bump_fallback_calls;
-static uint32_t func_test_gc1num_bump_interp_calls;
-static uint32_t func_test_gc1uv_chain_calls;
-static uint32_t func_test_uv_afterfn_calls;
-static uint32_t func_test_gc0_bump_interp_calls;
-static uint32_t func_test_gc0_bump_trace_calls;
-static uint32_t func_test_uvcell_bump_calls;
-
-static LJ_AINLINE void func_test_gc1num_bump_fast_call(void)
-{
-  (void)la_add32_acqrel(&func_test_gc1num_bump_fast_calls, 1);
+#define FUNC_TEST_COUNTER(name, hitfn) \
+static uint32_t func_test_##name; \
+static LJ_AINLINE void func_test_##hitfn(void) \
+{ \
+  (void)la_add32_acqrel(&func_test_##name, 1); \
+} \
+uint32_t lj_func_test_##name(void) \
+{ \
+  return la_load32_acq(&func_test_##name); \
+} \
+void lj_func_test_reset_##name(void) \
+{ \
+  la_store32_rel(&func_test_##name, 0); \
 }
 
-static LJ_AINLINE void func_test_gc1num_bump_fallback_call(void)
-{
-  (void)la_add32_acqrel(&func_test_gc1num_bump_fallback_calls, 1);
-}
-
-static LJ_AINLINE void func_test_gc1num_bump_interp_call(void)
-{
-  (void)la_add32_acqrel(&func_test_gc1num_bump_interp_calls, 1);
-}
-
-static LJ_AINLINE void func_test_gc1uv_chain_call(void)
-{
-  (void)la_add32_acqrel(&func_test_gc1uv_chain_calls, 1);
-}
-
-static LJ_AINLINE void func_test_uv_afterfn_call(void)
-{
-  (void)la_add32_acqrel(&func_test_uv_afterfn_calls, 1);
-}
-
-static LJ_AINLINE void func_test_gc0_bump_interp_call(void)
-{
-  (void)la_add32_acqrel(&func_test_gc0_bump_interp_calls, 1);
-}
-
-static LJ_AINLINE void func_test_gc0_bump_trace_call(void)
-{
-  (void)la_add32_acqrel(&func_test_gc0_bump_trace_calls, 1);
-}
-
-static LJ_AINLINE void func_test_uvcell_bump_call(void)
-{
-  (void)la_add32_acqrel(&func_test_uvcell_bump_calls, 1);
-}
-
-uint32_t lj_func_test_gc1num_bump_fast_calls(void)
-{
-  return la_load32_acq(&func_test_gc1num_bump_fast_calls);
-}
-
-void lj_func_test_reset_gc1num_bump_fast_calls(void)
-{
-  la_store32_rel(&func_test_gc1num_bump_fast_calls, 0);
-}
-
-uint32_t lj_func_test_gc1num_bump_fallback_calls(void)
-{
-  return la_load32_acq(&func_test_gc1num_bump_fallback_calls);
-}
-
-void lj_func_test_reset_gc1num_bump_fallback_calls(void)
-{
-  la_store32_rel(&func_test_gc1num_bump_fallback_calls, 0);
-}
-
-uint32_t lj_func_test_gc1num_bump_interp_calls(void)
-{
-  return la_load32_acq(&func_test_gc1num_bump_interp_calls);
-}
-
-void lj_func_test_reset_gc1num_bump_interp_calls(void)
-{
-  la_store32_rel(&func_test_gc1num_bump_interp_calls, 0);
-}
-
-uint32_t lj_func_test_gc1uv_chain_calls(void)
-{
-  return la_load32_acq(&func_test_gc1uv_chain_calls);
-}
-
-void lj_func_test_reset_gc1uv_chain_calls(void)
-{
-  la_store32_rel(&func_test_gc1uv_chain_calls, 0);
-}
-
-uint32_t lj_func_test_uv_afterfn_calls(void)
-{
-  return la_load32_acq(&func_test_uv_afterfn_calls);
-}
-
-void lj_func_test_reset_uv_afterfn_calls(void)
-{
-  la_store32_rel(&func_test_uv_afterfn_calls, 0);
-}
-
-uint32_t lj_func_test_gc0_bump_interp_calls(void)
-{
-  return la_load32_acq(&func_test_gc0_bump_interp_calls);
-}
-
-void lj_func_test_reset_gc0_bump_interp_calls(void)
-{
-  la_store32_rel(&func_test_gc0_bump_interp_calls, 0);
-}
-
-uint32_t lj_func_test_gc0_bump_trace_calls(void)
-{
-  return la_load32_acq(&func_test_gc0_bump_trace_calls);
-}
-
-void lj_func_test_reset_gc0_bump_trace_calls(void)
-{
-  la_store32_rel(&func_test_gc0_bump_trace_calls, 0);
-}
-
-uint32_t lj_func_test_uvcell_bump_calls(void)
-{
-  return la_load32_acq(&func_test_uvcell_bump_calls);
-}
-
-void lj_func_test_reset_uvcell_bump_calls(void)
-{
-  la_store32_rel(&func_test_uvcell_bump_calls, 0);
-}
+FUNC_TEST_COUNTER(gc1num_bump_fast_calls, gc1num_bump_fast_call)
+FUNC_TEST_COUNTER(gc1num_bump_fallback_calls, gc1num_bump_fallback_call)
+FUNC_TEST_COUNTER(gc1num_bump_interp_calls, gc1num_bump_interp_call)
+FUNC_TEST_COUNTER(gc1uv_chain_calls, gc1uv_chain_call)
+FUNC_TEST_COUNTER(uv_afterfn_calls, uv_afterfn_call)
+FUNC_TEST_COUNTER(gc0_bump_interp_calls, gc0_bump_interp_call)
+FUNC_TEST_COUNTER(gc0_bump_trace_calls, gc0_bump_trace_call)
+FUNC_TEST_COUNTER(uvcell_bump_calls, uvcell_bump_call)
+#undef FUNC_TEST_COUNTER
 #else
 #define func_test_gc1num_bump_fast_call()	((void)0)
 #define func_test_gc1num_bump_fallback_call()	((void)0)

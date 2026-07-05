@@ -72,12 +72,22 @@ static LJ_AINLINE int tab_key_islocked(cTValue *key)
 }
 
 #ifdef LJ_TAB_TEST_HELPERS
-static uint32_t tab_test_wait_no_l_calls;
-
-static LJ_AINLINE void tab_test_wait_no_l_call(void)
-{
-  (void)la_add32_acqrel(&tab_test_wait_no_l_calls, 1);
+#define TAB_TEST_COUNTER(name, hitfn) \
+static uint32_t tab_test_##name; \
+static LJ_AINLINE void tab_test_##hitfn(void) \
+{ \
+  (void)la_add32_acqrel(&tab_test_##name, 1); \
+} \
+uint32_t lj_tab_test_##name(void) \
+{ \
+  return la_load32_acq(&tab_test_##name); \
+} \
+void lj_tab_test_reset_##name(void) \
+{ \
+  la_store32_rel(&tab_test_##name, 0); \
 }
+
+TAB_TEST_COUNTER(wait_no_l_calls, wait_no_l_call)
 #else
 #define tab_test_wait_no_l_call()	((void)0)
 #endif
@@ -109,144 +119,15 @@ static uint32_t tab_struct_tid(lua_State *L)
 }
 
 #ifdef LJ_TAB_TEST_HELPERS
-static uint32_t tab_test_struct_owner_l_waits;
-static uint32_t tab_test_struct_owner_no_l_waits;
-static uint32_t tab_test_struct_enter_acquires;
-static uint32_t tab_test_new0_calls;
-static uint32_t tab_test_clear_shared_calls;
-static uint32_t tab_test_tsetm_fast_calls;
-static uint32_t tab_test_vm_array_store_calls;
-static uint32_t tab_test_vm_strhash_store_calls;
-
-static LJ_AINLINE void tab_test_struct_owner_l_wait(void)
-{
-  (void)la_add32_acqrel(&tab_test_struct_owner_l_waits, 1);
-}
-
-static LJ_AINLINE void tab_test_struct_owner_no_l_wait(void)
-{
-  (void)la_add32_acqrel(&tab_test_struct_owner_no_l_waits, 1);
-}
-
-static LJ_AINLINE void tab_test_struct_enter_acquire(void)
-{
-  (void)la_add32_acqrel(&tab_test_struct_enter_acquires, 1);
-}
-
-static LJ_AINLINE void tab_test_new0_call(void)
-{
-  (void)la_add32_acqrel(&tab_test_new0_calls, 1);
-}
-
-static LJ_AINLINE void tab_test_clear_shared_call(void)
-{
-  (void)la_add32_acqrel(&tab_test_clear_shared_calls, 1);
-}
-
-static LJ_AINLINE void tab_test_tsetm_fast_call(void)
-{
-  (void)la_add32_acqrel(&tab_test_tsetm_fast_calls, 1);
-}
-
-static LJ_AINLINE void tab_test_vm_array_store_call(void)
-{
-  (void)la_add32_acqrel(&tab_test_vm_array_store_calls, 1);
-}
-
-static LJ_AINLINE void tab_test_vm_strhash_store_call(void)
-{
-  (void)la_add32_acqrel(&tab_test_vm_strhash_store_calls, 1);
-}
-
-uint32_t lj_tab_test_struct_owner_l_waits(void)
-{
-  return la_load32_acq(&tab_test_struct_owner_l_waits);
-}
-
-void lj_tab_test_reset_struct_owner_l_waits(void)
-{
-  la_store32_rel(&tab_test_struct_owner_l_waits, 0);
-}
-
-uint32_t lj_tab_test_struct_owner_no_l_waits(void)
-{
-  return la_load32_acq(&tab_test_struct_owner_no_l_waits);
-}
-
-void lj_tab_test_reset_struct_owner_no_l_waits(void)
-{
-  la_store32_rel(&tab_test_struct_owner_no_l_waits, 0);
-}
-
-uint32_t lj_tab_test_struct_enter_acquires(void)
-{
-  return la_load32_acq(&tab_test_struct_enter_acquires);
-}
-
-void lj_tab_test_reset_struct_enter_acquires(void)
-{
-  la_store32_rel(&tab_test_struct_enter_acquires, 0);
-}
-
-uint32_t lj_tab_test_new0_calls(void)
-{
-  return la_load32_acq(&tab_test_new0_calls);
-}
-
-void lj_tab_test_reset_new0_calls(void)
-{
-  la_store32_rel(&tab_test_new0_calls, 0);
-}
-
-uint32_t lj_tab_test_clear_shared_calls(void)
-{
-  return la_load32_acq(&tab_test_clear_shared_calls);
-}
-
-void lj_tab_test_reset_clear_shared_calls(void)
-{
-  la_store32_rel(&tab_test_clear_shared_calls, 0);
-}
-
-uint32_t lj_tab_test_tsetm_fast_calls(void)
-{
-  return la_load32_acq(&tab_test_tsetm_fast_calls);
-}
-
-void lj_tab_test_reset_tsetm_fast_calls(void)
-{
-  la_store32_rel(&tab_test_tsetm_fast_calls, 0);
-}
-
-uint32_t lj_tab_test_vm_array_store_calls(void)
-{
-  return la_load32_acq(&tab_test_vm_array_store_calls);
-}
-
-void lj_tab_test_reset_vm_array_store_calls(void)
-{
-  la_store32_rel(&tab_test_vm_array_store_calls, 0);
-}
-
-uint32_t lj_tab_test_vm_strhash_store_calls(void)
-{
-  return la_load32_acq(&tab_test_vm_strhash_store_calls);
-}
-
-void lj_tab_test_reset_vm_strhash_store_calls(void)
-{
-  la_store32_rel(&tab_test_vm_strhash_store_calls, 0);
-}
-
-uint32_t lj_tab_test_wait_no_l_calls(void)
-{
-  return la_load32_acq(&tab_test_wait_no_l_calls);
-}
-
-void lj_tab_test_reset_wait_no_l_calls(void)
-{
-  la_store32_rel(&tab_test_wait_no_l_calls, 0);
-}
+TAB_TEST_COUNTER(struct_owner_l_waits, struct_owner_l_wait)
+TAB_TEST_COUNTER(struct_owner_no_l_waits, struct_owner_no_l_wait)
+TAB_TEST_COUNTER(struct_enter_acquires, struct_enter_acquire)
+TAB_TEST_COUNTER(new0_calls, new0_call)
+TAB_TEST_COUNTER(clear_shared_calls, clear_shared_call)
+TAB_TEST_COUNTER(tsetm_fast_calls, tsetm_fast_call)
+TAB_TEST_COUNTER(vm_array_store_calls, vm_array_store_call)
+TAB_TEST_COUNTER(vm_strhash_store_calls, vm_strhash_store_call)
+#undef TAB_TEST_COUNTER
 #else
 #define tab_test_struct_owner_l_wait()			((void)0)
 #define tab_test_struct_owner_no_l_wait()		((void)0)
