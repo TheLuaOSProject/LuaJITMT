@@ -1587,6 +1587,23 @@ restart_resize:
   */
   if (!array_changed && oldhmask == target_hmask && !deadkey)
     return;
+  /*
+  ** Another mutator may publish the requested generation after the snapshot
+  ** above has been sized and counted. Recheck before allocating replacement
+  ** storage; the owner-side recheck below remains the authoritative guard for
+  ** the publication window.
+  */
+  {
+    TValue *curarray;
+    MSize curasize, curhmask;
+    Node *curnode = lj_tab_node_snapshot_acq(t, &curhmask);
+    curasize = lj_tab_array_snapshot_acq(t, &curarray);
+    if (curnode != oldnode || curhmask != oldhmask ||
+	curarray != oldarray || (uint32_t)curasize != oldasize) {
+      lj_tab_wait_l(L);
+      goto restart_resize;
+    }
+  }
   if (newarray) {
     uint32_t i;
     array = tab_array_new(L, asize, newacap);
