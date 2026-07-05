@@ -25,7 +25,9 @@ VM-event failure reporting, JIT-token waits, the FFI CLibrary loader,
 `debug.debug` native console I/O, FFI native-call helpers, profiling stop, and
 the CLI frontend, I/O library native stdio wrappers, channel parks, and FFI
 callback native boundaries. Threading join/spawn/mutex/sleep waits now use the
-same shared helpers while preserving the explicit join pre-poll.
+same shared helpers while preserving the explicit join pre-poll. CType parser
+token waits and secure-PRNG native entropy reads now use those shared nullable
+helpers too.
 
 Site-specific wrappers were intentionally left in place when they carry behavior
 beyond the common helper, such as extra pending-poll handling or additional

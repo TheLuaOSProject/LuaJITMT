@@ -229,35 +229,11 @@ int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs)
 
 #else
 
-static int prng_had_stopreq(lua_State *L)
-{
-  TGState *tg;
-  if (!L)
-    return 0;
-  tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int prng_fresh_stopreq(lua_State *L, uint32_t actions,
-			      int had_stopreq)
-{
-  if (!L)
-    return 0;
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void prng_checkstop_fresh(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  if (prng_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 /* Securely seed PRNG from system entropy. Returns 0 on failure. */
 static int prng_seed_secure(lua_State *L, PRNGState *rs)
 {
   uint32_t actions = 0;
-  int had_stopreq = prng_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
 #if LJ_TARGET_XBOX360
 
   if (XNetRandom(rs->u, (unsigned int)sizeof(rs->u)) == 0)
@@ -303,7 +279,7 @@ static int prng_seed_secure(lua_State *L, PRNGState *rs)
   if (prng_native_getrandom(L, rs->u, sizeof(rs->u), &actions) ==
       (long)sizeof(rs->u))
     goto ok;
-  prng_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 
 #elif LJ_TARGET_HAS_GETENTROPY
 
@@ -315,7 +291,7 @@ static int prng_seed_secure(lua_State *L, PRNGState *rs)
   if (prng_native_getentropy(L, rs->u, sizeof(rs->u), &actions) == 0)
     goto ok;
 #endif
-  prng_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 
 #endif
 
@@ -326,7 +302,7 @@ static int prng_seed_secure(lua_State *L, PRNGState *rs)
   if (prng_native_urandom(L, rs->u, sizeof(rs->u), &actions) ==
       (ssize_t)sizeof(rs->u))
     goto ok;
-  prng_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 
 #else
 
@@ -339,13 +315,13 @@ static int prng_seed_secure(lua_State *L, PRNGState *rs)
 #error "Missing secure PRNG seed for this OS"
 
 #endif
-  prng_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return 0;  /* Fail. */
 
 ok:
   lj_prng_condition(rs);
   (void)lj_prng_u64(rs);
-  prng_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return 1;  /* Success. */
 }
 

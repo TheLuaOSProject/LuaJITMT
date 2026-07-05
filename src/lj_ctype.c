@@ -32,30 +32,6 @@ static void ctype_fin_claim_wait(lua_State *L)
   (void)lj_thr_retry_yield(L);
 }
 
-static int ctype_had_stopreq(lua_State *L)
-{
-  TGState *tg;
-  if (!L)
-    return 0;
-  tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int ctype_fresh_stopreq(lua_State *L, uint32_t actions,
-			       int had_stopreq)
-{
-  if (!L)
-    return 0;
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void ctype_checkstop_fresh(lua_State *L, uint32_t actions,
-				  int had_stopreq)
-{
-  if (ctype_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 /* -- C type definitions -------------------------------------------------- */
 
 /* Predefined typedefs. */
@@ -332,20 +308,21 @@ void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
 #if defined(LA_HAS_FUTEX)
   {
     uint32_t actions;
-    int had_stopreq = ctype_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     if (L) {
       lj_state_stack_pubrange(L, L);
       lj_native_enter(L2TG(L));
     }
     (void)ctype_parse_token_wait(cts, seq, 1000000);
     actions = L ? lj_native_leave(L) : 0;
-    ctype_checkstop_fresh(L, actions, had_stopreq);  /* 11.2: ctype wait may park. */
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+    /* 11.2: ctype waits may park in native state. */
   }
 #else
   {
-    int had_stopreq = ctype_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     uint32_t actions = lj_thr_sleep_ns(L, 1000000);
-    ctype_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   }
 #endif
 }
