@@ -59,25 +59,6 @@ static int package_claim_try(lua_State *L, GCtab *claims, GCstr *key,
 static void package_claim_clear(lua_State *L, GCtab *claims, GCstr *key,
 				uint32_t tid, uint32_t *epochp);
 
-static int package_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int package_fresh_stopreq(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void package_checkstop_fresh(lua_State *L, uint32_t actions,
-				    int had_stopreq)
-{
-  if (package_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 #if LJ_TARGET_DLOPEN
 
 #include <dlfcn.h>
@@ -114,14 +95,14 @@ static void *ll_native_dlsym(lua_State *L, void *lib, const char *sym,
 static void *ll_load(lua_State *L, const char *path, int gl)
 {
   uint32_t actions;
-  int had_stopreq = package_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   void *lib = ll_native_dlopen(L, path,
     RTLD_NOW | (gl ? RTLD_GLOBAL : RTLD_LOCAL), &actions);
   if (lib == NULL) {
     const char *err = dlerror();
-    package_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     lua_pushstring(L, err);
-  } else if (package_fresh_stopreq(L, actions, had_stopreq)) {
+  } else if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = ll_unloadlib(L, lib);
     lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
@@ -131,14 +112,14 @@ static void *ll_load(lua_State *L, const char *path, int gl)
 static lua_CFunction ll_sym(lua_State *L, void *lib, const char *sym)
 {
   uint32_t actions;
-  int had_stopreq = package_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   lua_CFunction f = (lua_CFunction)ll_native_dlsym(L, lib, sym, &actions);
   if (f == NULL) {
     const char *err = dlerror();
-    package_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     lua_pushstring(L, err);
   } else {
-    package_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   }
   return f;
 }
@@ -146,7 +127,7 @@ static lua_CFunction ll_sym(lua_State *L, void *lib, const char *sym)
 static const char *ll_bcsym(lua_State *L, void *lib, const char *sym)
 {
   uint32_t actions;
-  int had_stopreq = package_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
 #if defined(RTLD_DEFAULT) && !defined(NO_RTLD_DEFAULT)
   if (lib == NULL) lib = RTLD_DEFAULT;
 #elif LJ_TARGET_OSX || LJ_TARGET_BSD
@@ -154,7 +135,7 @@ static const char *ll_bcsym(lua_State *L, void *lib, const char *sym)
 #endif
   {
     const char *p = (const char *)ll_native_dlsym(L, lib, sym, &actions);
-    package_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     return p;
   }
 }
@@ -434,10 +415,10 @@ static int lj_cf_package_unloadlib(lua_State *L)
 {
   void **lib = (void **)luaL_checkudata(L, 1, "_LOADLIB");
   uint32_t actions = 0;
-  int had_stopreq = package_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   if (*lib) actions = ll_unloadlib(L, *lib);
   *lib = NULL;  /* mark library as closed */
-  package_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return 0;
 }
 
@@ -465,18 +446,18 @@ static uint32_t pkg_native_fclose(lua_State *L, FILE *f)
 static int readable(lua_State *L, const char *filename)
 {
   uint32_t actions;
-  int had_stopreq = package_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   FILE *f = pkg_native_fopen(L, filename, &actions);  /* Try to open file. */
   if (f == NULL) {
-    package_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     return 0;  /* open failed */
   }
-  if (package_fresh_stopreq(L, actions, had_stopreq)) {
+  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = pkg_native_fclose(L, f);
     lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
   actions = pkg_native_fclose(L, f);
-  package_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return 1;
 }
 
@@ -708,9 +689,9 @@ static void package_claim_wait(lua_State *L, GCtab *claims, GCstr *key,
 {
   while (package_claim_peer(claims, key, tid)) {
     uint32_t epoch = la_load32_acq(epochp);
-    int had_stopreq = package_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     uint32_t actions = package_claim_epoch_wait(L, epochp, epoch);
-    package_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   }
 }
 

@@ -2599,55 +2599,36 @@ LJLIB_CF(ffi_errno)	LJLIB_REC(.)
   return 1;
 }
 
-static int ffi_lib_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int ffi_lib_fresh_stopreq(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void ffi_lib_checkstop_fresh(lua_State *L, uint32_t actions,
-				    int had_stopreq)
-{
-  if (ffi_lib_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 static size_t ffi_lib_strlen(lua_State *L, const char *p)
 {
   uint32_t actions;
-  int had_stopreq = ffi_lib_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   size_t len;
   lj_native_enter(L2TG(L));
   len = strlen(p);
   actions = lj_native_leave(L);
-  ffi_lib_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return len;
 }
 
 static void ffi_lib_memcpy(lua_State *L, void *dp, const void *sp, CTSize len)
 {
   uint32_t actions;
-  int had_stopreq = ffi_lib_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   memcpy(dp, sp, (size_t)len);
   actions = lj_native_leave(L);
-  ffi_lib_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static void ffi_lib_memset(lua_State *L, void *dp, int32_t fill, CTSize len)
 {
   uint32_t actions;
-  int had_stopreq = ffi_lib_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   memset(dp, fill, (size_t)len);
   actions = lj_native_leave(L);
-  ffi_lib_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 LJLIB_CF(ffi_string)	LJLIB_REC(.)

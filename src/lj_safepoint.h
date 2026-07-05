@@ -39,6 +39,12 @@ static LJ_AINLINE int lj_safepoint_pending_stopreq(lua_State *L)
     (gc2_hs_actions_acq(G(L)) & LJ_GC2_HS_STOPREQ);
 }
 
+static LJ_AINLINE int lj_safepoint_had_stopreq(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
 static LJ_AINLINE uint32_t lj_safepoint_poll_pending_stopreq(lua_State *L,
 							     uint32_t actions)
 {

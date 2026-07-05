@@ -425,16 +425,21 @@ static void assert_nil_closed_cell(GCupval *uv)
   assert(uv->immutable == 0);
 }
 
+static void quiet_gc_for_bump(global_State *g, TGState *tg)
+{
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  la_store64_rel(&tg->local_total, 0);
+}
+
 static void test_uvcell_bump_direct(lua_State *L, global_State *g, TGState *tg)
 {
   uint32_t bump0, bump1, bump2;
   TValue slots[8];
   GCupval *uv;
 
-  lj_gc_threshold_store(g, UINT64_MAX / 2u);
-  lj_gc2_hard_store(g, UINT64_MAX / 2u);
-  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
-  la_store64_rel(&tg->local_total, 0);
+  quiet_gc_for_bump(g, tg);
 
   lj_func_test_reset_uvcell_bump_calls();
   bump0 = lj_func_test_uvcell_bump_calls();
@@ -450,6 +455,100 @@ static void test_uvcell_bump_direct(lua_State *L, global_State *g, TGState *tg)
   assert(tvisgcv(&slots[3]) && gcV(&slots[3]) == obj2gco(uv));
   bump2 = lj_func_test_uvcell_bump_calls();
   assert(bump2 > bump1);
+}
+
+static void assert_gc1num_bump_blocked(lua_State *L, TValue *slots,
+				       GCproto *child, GCfuncL *parent,
+				       int32_t slotno, int32_t value)
+{
+  uint32_t fast0 = lj_func_test_gc1num_bump_fast_calls();
+  uint32_t fallback0 = lj_func_test_gc1num_bump_fallback_calls();
+  GCfunc *fn;
+
+  setnumV(&slots[slotno], value);
+  fn = lj_func_newL_gc1num_forjit(L, slots, child, parent, slotno, value);
+  assert_one_upvalue_result(fn, &slots[slotno], value);
+  assert(lj_func_test_gc1num_bump_fast_calls() == fast0);
+  assert(lj_func_test_gc1num_bump_fallback_calls() > fallback0);
+}
+
+static void load_no_upvalue_fixture(lua_State *L, GCfunc **parentp,
+				    GCproto **childp)
+{
+  GCfunc *parent;
+  GCproto *child;
+
+  assert(luaL_loadstring(L,
+    "return function()\n"
+    "  return function()\n"
+    "    return 42\n"
+    "  end\n"
+    "end\n") == LUA_OK);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  parent = top_lfunc(L);
+  child = first_child_proto(funcproto(parent));
+  assert(child->sizeuv == 0);
+  *parentp = parent;
+  *childp = child;
+}
+
+static void test_bump_allocator_gate_direct(lua_State *L, global_State *g,
+					    TGState *tg)
+{
+  uint32_t old_workers = gc2_n_workers_acq(g);
+  uint32_t old_allocf_arena = la_load32_acq(&g->allocf_arena);
+  uint32_t fast0;
+  TValue slots[256];
+  GCfunc *parent, *fn;
+  GCproto *child;
+  GCupval *uv;
+  int32_t slotno;
+
+  assert(mt_entering_acq(g) == 0);
+  assert(old_workers == 0);
+  assert(old_allocf_arena != 0);
+
+  load_one_upvalue_fixture(L, &parent, &child, &slotno);
+  quiet_gc_for_bump(g, tg);
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  assert_gc1num_bump_blocked(L, slots, child, &parent->l, slotno, 11);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+
+  gc2_n_workers_rel(g, 1);
+  assert_gc1num_bump_blocked(L, slots, child, &parent->l, slotno, 22);
+  gc2_n_workers_rel(g, old_workers);
+
+  la_store32_rel(&g->allocf_arena, 0);
+  assert_gc1num_bump_blocked(L, slots, child, &parent->l, slotno, 33);
+  la_store32_rel(&g->allocf_arena, old_allocf_arena);
+  lua_pop(L, 1);
+
+  quiet_gc_for_bump(g, tg);
+  lj_func_test_reset_uvcell_bump_calls();
+  fast0 = lj_func_test_uvcell_bump_calls();
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  uv = lj_func_newuvcell(L);
+  assert_nil_closed_cell(uv);
+  assert(lj_func_test_uvcell_bump_calls() == fast0);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+
+  load_no_upvalue_fixture(L, &parent, &child);
+  quiet_gc_for_bump(g, tg);
+  lj_func_test_reset_gc0_bump_trace_calls();
+  fast0 = lj_func_test_gc0_bump_trace_calls();
+  assert(mt_entering_add_rlx(g, 1) == 0);
+  fn = lj_func_newL_gc_forjit(L, NULL, child, &parent->l);
+  assert(isluafunc(fn));
+  assert(fn->l.nupvalues == 0);
+  assert(lj_func_test_gc0_bump_trace_calls() == fast0);
+  assert(mt_entering_sub_acqrel(g, 1) == 1);
+  mt_entering_futex_wake(g, 0x7fffffff);
+  lua_pop(L, 1);
 }
 
 static void test_interpreter_numeric_fast_path(lua_State *L)
@@ -722,6 +821,7 @@ int main(void)
   tg = L2TG(L);
 
   test_uvcell_bump_direct(L, g, tg);
+  test_bump_allocator_gate_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);
   test_traced_behavior(L);
   test_traced_immutable_numeric_inline(L, g);

@@ -506,6 +506,21 @@ static LJ_AINLINE int func_bump_arena_owned_active(global_State *g,
 	 !gc2_legacy_mark_bridge_acq(g);
 }
 
+static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)
+{
+  /*
+  ** The closure/upvalue bump fast paths only own the main-TG arena while no
+  ** attaching threads or GC2 workers can observe allocator state. Outside that
+  ** single-producer window, use the regular allocator and publication path.
+  */
+  return g != NULL && tg != NULL &&
+	 !mt_active_or_entering_acq(g) && gc2_n_workers_acq(g) == 0 &&
+	 g->allocf_arena != 0 && tg == g->main_tg &&
+	 !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	 lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) &&
+	 g->allocd == &tg->allocd;
+}
+
 static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
 					     GCobj *o)
 {
@@ -552,12 +567,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   uint32_t cell, black;
   int account_now;
 
-  if (g == NULL || tg == NULL ||
-      mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
-      g->allocf_arena == 0 || tg != g->main_tg ||
-      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
-      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocd != &tg->allocd)
+  if (!func_bump_alloc_ready(g, tg))
     return NULL;
   local_total = lj_tg_local_total_acq(tg);
   account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;
@@ -618,12 +628,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   uint32_t cell, uvcell, black;
   int account_now;
 
-  if (g == NULL || tg == NULL ||
-      mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
-      g->allocf_arena == 0 || tg != g->main_tg ||
-      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
-      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocd != &tg->allocd)
+  if (!func_bump_alloc_ready(g, tg))
     return NULL;
   local_total = lj_tg_local_total_acq(tg);
   account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;
@@ -707,12 +712,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   uint32_t count, cell, black;
   int account_now;
 
-  if (g == NULL || tg == NULL ||
-      mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
-      g->allocf_arena == 0 || tg != g->main_tg ||
-      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
-      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocd != &tg->allocd)
+  if (!func_bump_alloc_ready(g, tg))
     return NULL;
   local_total = lj_tg_local_total_acq(tg);
   account_now = local_total >= LJ_GC2_ACCT_FLUSH - nbytes;

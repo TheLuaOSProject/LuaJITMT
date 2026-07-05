@@ -667,25 +667,6 @@ LJLIB_CF(jit_opt_start)
 #define KEY_PROFILE_THREAD	(U64x(81000000,00000000)|'t')
 #define KEY_PROFILE_FUNC	(U64x(81000000,00000000)|'f')
 
-static int jit_profile_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int jit_profile_fresh_stopreq(lua_State *L, uint32_t actions,
-				     int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void jit_profile_checkstop_fresh(lua_State *L, uint32_t actions,
-					int had_stopreq)
-{
-  if (jit_profile_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 static TValue *jit_profile_registry_store(lua_State *L, GCtab *registry,
 					  cTValue *key, cTValue *tv)
 {
@@ -810,10 +791,10 @@ LJLIB_CF(jit_profile_start)
 /* profile.stop() */
 LJLIB_CF(jit_profile_stop)
 {
-  int had_stopreq = jit_profile_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   uint32_t actions = lj_profile_stop_hs(L);
   jit_profile_registry_clear(L);
-  jit_profile_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return 0;
 }
 

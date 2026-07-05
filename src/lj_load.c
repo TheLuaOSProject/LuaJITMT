@@ -104,24 +104,6 @@ typedef struct FileReaderCtx {
   char buf[LUAL_BUFFERSIZE];
 } FileReaderCtx;
 
-static int load_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int load_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void load_checkstop_fresh(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  if (load_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 static void load_pop1_claimed(lua_State *L)
 {
   LJStateClaim claim;
@@ -208,14 +190,14 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
     return NULL;
   }
   ctx->actions |= actions;
-  if (load_fresh_stopreq(L, actions, ctx->had_stopreq)) {
+  if (lj_safepoint_fresh_stopreq(L, actions, ctx->had_stopreq)) {
     ctx->stop = 1;
     *size = 0;
     return NULL;
   }
   *size = load_native_fread(L, ctx->buf, sizeof(ctx->buf), ctx->fp, &actions);
   ctx->actions |= actions;
-  if (load_fresh_stopreq(L, actions, ctx->had_stopreq)) {
+  if (lj_safepoint_fresh_stopreq(L, actions, ctx->had_stopreq)) {
     ctx->stop = 1;
     *size = 0;
     return NULL;
@@ -231,7 +213,7 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
   const char *chunkname;
   int err = 0;
   ctx.actions = 0;
-  ctx.had_stopreq = load_had_stopreq(L);
+  ctx.had_stopreq = lj_safepoint_had_stopreq(L);
   ctx.stop = 0;
   if (filename) {
     uint32_t actions;
@@ -243,12 +225,12 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
 	char errbuf[LJ_ERR_ERRNO_BUFSZ];
 	const char *emsg = lj_err_strerrno(err, errbuf, sizeof(errbuf));
 	load_pop1_claimed(L);
-	load_checkstop_fresh(L, actions, ctx.had_stopreq);
+	lj_safepoint_checkstop_fresh(L, actions, ctx.had_stopreq);
 	lua_pushfstring(L, "cannot open %s: %s", filename, emsg);
       }
       return LUA_ERRFILE;
     }
-    if (load_fresh_stopreq(L, actions, ctx.had_stopreq)) {
+    if (lj_safepoint_fresh_stopreq(L, actions, ctx.had_stopreq)) {
       uint32_t close_actions;
       (void)load_native_fclose(L, ctx.fp, &close_actions);
       lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
@@ -269,7 +251,7 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
     ctx.actions |= actions;
     load_remove_chunkname_claimed(L);
   }
-  load_checkstop_fresh(L, ctx.actions, ctx.had_stopreq);
+  lj_safepoint_checkstop_fresh(L, ctx.actions, ctx.had_stopreq);
   if (err) {
     const char *fname = filename ? filename : "stdin";
     char errbuf[LJ_ERR_ERRNO_BUFSZ];
