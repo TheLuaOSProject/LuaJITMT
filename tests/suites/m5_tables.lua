@@ -71,6 +71,19 @@ return function(add)
       message = "M5 table hash-vector retirement tests passed"
     },
     {
+      name = "m5_tab_resize_copy_helper",
+      description = "table resize hash-slot copy helper idempotence C fixture",
+      output = "lj_t-tab-resize-copy-helper",
+      cfile = "t-tab-resize-copy-helper.c",
+      opts = {
+        clean = true,
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s",
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      },
+      message = "M5 table resize copy helper tests passed"
+    },
+    {
       name = "m5_tab_capi_resize_stress",
       description = "public C API table setter stress across concurrent resize",
       output = "lj_t-tab-capi-resize-stress",

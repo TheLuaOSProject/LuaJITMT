@@ -879,6 +879,77 @@ static TValue *tab_rehash_slot(lua_State *L, TValue *array, uint32_t asize,
 					 freecountp, key);
 }
 
+static int tab_resize_copy_hash_slot(lua_State *L, GCtab *t, Node *oldnode,
+				     MSize oldhmask, MSize idx,
+				     TValue *array, uint32_t asize,
+				     Node *newnode, MSize newhmask,
+				     Node **newfreetopp,
+				     MSize *newfreecountp, int freeze_old)
+{
+  Node *n;
+  TValue key, val;
+  TValue *slot;
+  lj_assertL(oldhmask > 0 && idx <= oldhmask, "bad resize hash copy slot");
+  n = &oldnode[idx];
+  /*
+  ** This helper is intentionally idempotent at the slot level: copied values
+  ** are installed with put-if-absent semantics and old-generation FORWARD/nil
+  ** values are clean no-ops. It is still called by the owner-driven resize path
+  ** today, but it is the unit a future cooperative copy cursor can hand to
+  ** helpers without changing publication semantics.
+  */
+  do {
+    lj_tv_load_acq(&key, &n->key);
+    if (!tab_key_islocked(&key))
+      break;
+    lj_tab_wait_no_l();
+  } while (1);
+  if (freeze_old) {
+    if (!tab_freeze_forward(&n->val, &val))
+      return 0;
+  } else {
+    lj_tv_load_acq(&val, &n->val);
+  }
+  if (tab_val_absent(&val) || !tab_tv_snapshot_valid(&val) ||
+      !tab_tv_snapshot_valid(&key) || tab_hash_key_hidden(&key))
+    return 0;
+  if (newhmask > 0) {
+    slot = tab_rehash_slot(L, array, asize, newnode, newhmask,
+			   newfreetopp, newfreecountp, &key);
+  } else {
+    slot = tab_rehash_arrayslot(array, asize, &key);
+    lj_assertL(slot != NULL, "missing hash part during rehash");
+  }
+  tab_migrate_store_if_absent(L, t, slot, &key, &val);
+  return 1;
+}
+
+#ifdef LJ_TAB_TEST_HELPERS
+int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src, MSize idx,
+				      GCtab *dst, int freeze_old)
+{
+  MSize oldhmask, newhmask, newfreecount = 0;
+  Node *oldnode = lj_tab_node_snapshot_acq(src, &oldhmask);
+  Node *newnode = lj_tab_node_snapshot_acq(dst, &newhmask);
+  Node *newfreetop = NULL;
+  TValue *array;
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(dst, &array);
+  int copied;
+  if (newhmask > 0) {
+    newfreetop = getfreetop(dst, newnode);
+    newfreecount = lj_tab_node_freecount_acq(newnode);
+  }
+  copied = tab_resize_copy_hash_slot(L, dst, oldnode, oldhmask, idx, array,
+				     asize, newnode, newhmask, &newfreetop,
+				     &newfreecount, freeze_old);
+  if (newhmask > 0) {
+    setfreetop(dst, newnode, newfreetop);
+    lj_tab_node_freecount_set_rel(newnode, newfreecount);
+  }
+  return copied;
+}
+#endif
+
 static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask,
 				     uint32_t oldasize, uint32_t asize,
 				     int *deadkeyp)
@@ -1534,36 +1605,10 @@ restart_resize:
   }
   if (oldhmask > 0) {  /* Reinsert pairs from old hash part. */
     uint32_t i;
-    for (i = 0; i <= oldhmask; i++) {
-      Node *n = &oldnode[i];
-      TValue key, val;
-      do {
-	lj_tv_load_acq(&key, &n->key);
-	if (!tab_key_islocked(&key))
-	  break;
-	lj_tab_wait_no_l();
-      } while (1);
-      if (oldret) {
-	if (!tab_freeze_forward(&n->val, &val))
-	  continue;
-      } else {
-	lj_tv_load_acq(&val, &n->val);
-      }
-	      if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val) &&
-		  tab_tv_snapshot_valid(&key)) {
-	TValue *slot;
-	if (tab_hash_key_hidden(&key))
-	  continue;
-	if (hbits) {
-	  slot = tab_rehash_slot(L, array, asize, newnode, newhmask,
-				 &newfreetop, &newfreecount, &key);
-	} else {
-	  slot = tab_rehash_arrayslot(array, asize, &key);
-	  lj_assertL(slot != NULL, "missing hash part during rehash");
-	}
-	tab_migrate_store_if_absent(L, t, slot, &key, &val);
-      }
-    }
+    for (i = 0; i <= oldhmask; i++)
+      (void)tab_resize_copy_hash_slot(L, t, oldnode, oldhmask, i, array,
+				      asize, newnode, newhmask, &newfreetop,
+				      &newfreecount, oldret != NULL);
   }
   if (!oldarray_separated && oldarray && asize < oldasize) {
     /* Freeze and reinsert old colocated array tail off-table. */
