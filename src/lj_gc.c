@@ -3043,32 +3043,43 @@ static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
   return n;
 }
 
-static void gc_root_prepend_known_chain(global_State *g, GCobj *head,
-					GCobj *tail)
+static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
 {
 #if LJ_GC64
   {
-    uint64_t oldhead;
-    GCRef nextref;
+    uint64_t expect;
+    GCobj *oldhead;
     do {
-      oldhead = la_load64_acq(&lj_gc_root_ref(g)->gcptr64);
-      setgcrefp(nextref, (void *)(uintptr_t)oldhead);
-      lj_obj_setgcwrrel(tail, nextref);
-    } while (!la_cas64(&lj_gc_root_ref(g)->gcptr64, &oldhead,
+      oldhead = gcref_acq(*p);
+      if (oldhead)
+	lj_obj_setgcwrel(tail, oldhead);
+      else
+	lj_obj_setgcwnullrel(tail);
+      expect = oldhead ? (uint64_t)(uintptr_t)&oldhead->gch : 0;
+    } while (!la_cas64(&p->gcptr64, &expect,
 		       (uint64_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
   }
 #else
   {
-    uint32_t oldhead;
-    GCRef nextref;
+    uint32_t expect;
+    GCobj *oldhead;
     do {
-      oldhead = la_load32_acq(&lj_gc_root_ref(g)->gcptr32);
-      setgcrefp(nextref, (void *)(uintptr_t)oldhead);
-      lj_obj_setgcwrrel(tail, nextref);
-    } while (!la_cas32(&lj_gc_root_ref(g)->gcptr32, &oldhead,
+      oldhead = gcref_acq(*p);
+      if (oldhead)
+	lj_obj_setgcwrel(tail, oldhead);
+      else
+	lj_obj_setgcwnullrel(tail);
+      expect = oldhead ? (uint32_t)(uintptr_t)&oldhead->gch : 0;
+    } while (!la_cas32(&p->gcptr32, &expect,
 		       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
   }
 #endif
+}
+
+static void gc_root_prepend_known_chain(global_State *g, GCobj *head,
+					GCobj *tail)
+{
+  gc_root_prepend_chain_at(lj_gc_root_ref(g), head, tail);
 }
 
 static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
@@ -3083,41 +3094,11 @@ static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
 
 static uint32_t gc_root_prepend_chain_after(GCobj *anchor, GCobj *head)
 {
-  GCRef *p;
-  GCobj *tail, *oldhead;
+  GCobj *tail;
   uint32_t n = gc_root_chain_tail(head, &tail);
   if (!anchor || !n)
     return 0;
-  p = lj_obj_gcwref(anchor);
-#if LJ_GC64
-  {
-    uint64_t expect;
-    do {
-      oldhead = gcref_acq(*p);
-      if (oldhead)
-	lj_obj_setgcwrel(tail, oldhead);
-      else
-	lj_obj_setgcwnullrel(tail);
-      expect = oldhead ? (uint64_t)(uintptr_t)&oldhead->gch : 0;
-    } while (!la_cas64(&p->gcptr64, &expect,
-		       (uint64_t)(uintptr_t)&head->gch,
-		       LA_REL, LA_ACQ));
-  }
-#else
-  {
-    uint32_t expect;
-    do {
-      oldhead = gcref_acq(*p);
-      if (oldhead)
-	lj_obj_setgcwrel(tail, oldhead);
-      else
-	lj_obj_setgcwnullrel(tail);
-      expect = oldhead ? (uint32_t)(uintptr_t)&oldhead->gch : 0;
-    } while (!la_cas32(&p->gcptr32, &expect,
-		       (uint32_t)(uintptr_t)&head->gch,
-		       LA_REL, LA_ACQ));
-  }
-#endif
+  gc_root_prepend_chain_at(lj_obj_gcwref(anchor), head, tail);
   return n;
 }
 

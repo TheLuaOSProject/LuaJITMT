@@ -99,6 +99,9 @@
   now share the same root-spine CAS prepend helper. `m3_gc_root_pending` also
   constructs a two-object pending cycle and verifies that flush preserves both
   unique objects while breaking the cycle before publication.
+- Follow-up in the same cleanup pass: global-root and after-main chain publication
+  share the same slot-level prepend helper; the call sites still make the legacy
+  topology choice explicit.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object
