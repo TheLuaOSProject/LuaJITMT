@@ -471,18 +471,6 @@ LJ_NORET static void callback_err(lua_State *L)
   lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
 }
 
-static int callback_mcode_had_stopreq(lua_State *L)
-{
-  TGState *tg = L ? L2TG(L) : NULL;
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int callback_mcode_fresh_stopreq(lua_State *L, uint32_t actions,
-					int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
 static void callback_mcode_discard(lua_State *L, void *p, size_t sz)
 {
   if (p == NULL)
@@ -502,7 +490,7 @@ static void callback_mcode_discard(lua_State *L, void *p, size_t sz)
 static void callback_mcode_checkstop(lua_State *L, uint32_t actions,
 				     int had_stopreq, void *p, size_t sz)
 {
-  if (callback_mcode_fresh_stopreq(L, actions, had_stopreq)) {
+  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     callback_mcode_discard(L, p, sz);
     lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
   }
@@ -512,7 +500,7 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
 {
   size_t sz = (size_t)CALLBACK_MCODE_SIZE;
   void *p, *pe;
-  int had_stopreq = callback_mcode_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   uint32_t actions;
   if (CALLBACK_MAX_SLOT == 0)
     callback_err(L);
@@ -521,7 +509,7 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
   p = LJ_WIN_VALLOC(NULL, sz, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
   actions = lj_native_leave(L);
   if (!p) {
-    if (callback_mcode_fresh_stopreq(L, actions, had_stopreq))
+    if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq))
       lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
     callback_err(L);
   }
@@ -532,7 +520,7 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
 	   MAP_PRIVATE|MAP_ANONYMOUS|CCMAP_CREATE, -1, 0);
   actions = lj_native_leave(L);
   if (p == MAP_FAILED) {
-    if (callback_mcode_fresh_stopreq(L, actions, had_stopreq))
+    if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq))
       lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
     callback_err(L);
   }
@@ -1125,12 +1113,6 @@ static int ccallback_had_stopreq(CCallbackRuntime *cb)
   return ccallback_native_had_stopreq_acq(cb) != 0;
 }
 
-static int ccallback_fresh_stopreq(lua_State *L, uint32_t actions,
-				   int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
 /* Enter callback. */
 lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 					   CCallbackRuntime *cb)
@@ -1173,7 +1155,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   callback_frame_push(L, cb, L->base-1, native_depth, auto_detach);
   ccallback_auto_detach_rel(cb, 0);
   if (native_depth != 0) {
-    if (ccallback_fresh_stopreq(L, actions, had_stopreq)) {
+    if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
       callback_frame_top(cb)->native_depth = 0;
       lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
     }
