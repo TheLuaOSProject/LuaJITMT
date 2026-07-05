@@ -95,6 +95,10 @@
   accounting assist. Pending-chain flush also severs malformed cycles while
   preserving the unique objects ahead of the cycle, so a corrupted pending stack
   cannot hang GC root publication.
+- 2026-07-05 cleanup follow-up: the counted-chain and known-tail chain flush paths
+  now share the same root-spine CAS prepend helper. `m3_gc_root_pending` also
+  constructs a two-object pending cycle and verifies that flush preserves both
+  unique objects while breaking the cycle before publication.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

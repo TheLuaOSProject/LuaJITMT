@@ -188,6 +188,35 @@ static void test_hint_only_on_empty_transition(lua_State *L)
   assert(root_contains(g, obj2gco(t2)));
 }
 
+static void test_pending_cycle_breaker(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  GCtab *t, *t2;
+  assert(tg != NULL);
+  (void)lj_gc_flush_root_pending(g);
+  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+
+  t = lj_tab_new(L, 0, 0);
+  t2 = lj_tab_new(L, 0, 0);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t2));
+  assert(lj_obj_gcw_acq(obj2gco(t2)) == obj2gco(t));
+
+  /*
+  ** A malformed publisher-owned pending chain must not hang the collector. The
+  ** flusher preserves the unique objects ahead of the cycle and splices a finite
+  ** chain into the legacy root spine.
+  */
+  lj_obj_setgcwrel(obj2gco(t), obj2gco(t2));
+  assert(lj_gc_flush_root_pending(g) == 2u);
+  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(root_contains(g, obj2gco(t)));
+  assert(root_contains(g, obj2gco(t2)));
+  assert(lj_obj_gcw_acq(obj2gco(t)) != obj2gco(t2));
+}
+
 static void test_after_main_flush(lua_State *L)
 {
   global_State *g = G(L);
@@ -375,6 +404,7 @@ int main(void)
   assert(L != NULL);
   test_explicit_flush(L);
   test_hint_only_on_empty_transition(L);
+  test_pending_cycle_breaker(L);
   test_after_main_flush(L);
   test_fullgc_flush(L);
   test_tls_only_tg_flush(L);
