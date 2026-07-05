@@ -32,6 +32,31 @@ local function clear_build_signature(self)
   os.remove(build_signature_path(self))
 end
 
+local function command_first_line(cmd)
+  local f = io.popen(cmd, "r")
+  if not f then return nil end
+  local line = f:read("*l")
+  f:close()
+  return line
+end
+
+local function tracked_build_input_newer_than(self, output)
+  local script =
+    "ref=$1; shift; " ..
+    "for f do " ..
+      "if [ \"$f\" -nt \"$ref\" ]; then printf '%s\\n' \"$f\"; exit 0; fi; " ..
+    "done"
+  local cmd = "cd " .. shell_quote(self.root) ..
+    " && git ls-files -z -- src dynasm | xargs -0 sh -c " ..
+    shell_quote(script) .. " sh " .. shell_quote(output)
+  return command_first_line(cmd) ~= nil
+end
+
+local function build_outputs_current(self)
+  return not tracked_build_input_newer_than(self, self:path("src", "luajit")) and
+    not tracked_build_input_newer_than(self, self:path("src", "libluajit.a"))
+end
+
 local function append(parts, value)
   if value == nil or value == "" then return end
   parts[#parts + 1] = value
@@ -159,6 +184,7 @@ function Test:build(opts)
     file_exists(self:path("src", "libluajit.a"))
   if disk_signature == nil then disk_signature = read_raw_file(stamp) end
   if opts.clean and disk_signature == signature and have_outputs and
+     build_outputs_current(self) and
      not getenv("LJ_TEST_DISABLE_BUILD_CACHE", nil) then
     self.build_signature = signature
     return
