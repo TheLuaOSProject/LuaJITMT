@@ -642,7 +642,7 @@ static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
   copyTVrel(L, dst, &k);
 }
 
-static int tab_freeze_forward(TValue *slot, TValue *oldp)
+static int tab_freeze_forward(lua_State *L, TValue *slot, TValue *oldp)
 {
   TValue forward;
   setforwardV(&forward);
@@ -652,13 +652,19 @@ static int tab_freeze_forward(TValue *slot, TValue *oldp)
       return 0;
     if (tvisnil(oldp))
       return 0;
+    /*
+    ** Freezing hides the old table edge until the replacement generation is
+    ** published. Mark the value before the CAS so a concurrent collector cannot
+    ** observe a temporary gap between old and new generations.
+    */
+    lj_gc_pubroot(L, oldp);
     if (lj_tv_cas(slot, oldp, &forward))
       return 1;  /* M5: old slot ownership moved to its next generation. */
     lj_tab_wait_no_l();
   }
 }
 
-static int tab_freeze_forward_any(TValue *slot, TValue *oldp)
+static int tab_freeze_forward_any(lua_State *L, TValue *slot, TValue *oldp)
 {
   TValue forward;
   setforwardV(&forward);
@@ -666,6 +672,8 @@ static int tab_freeze_forward_any(TValue *slot, TValue *oldp)
     lj_tv_load_acq(oldp, slot);
     if (tvisforward(oldp))
       return 0;
+    if (!tvisnil(oldp))
+      lj_gc_pubroot(L, oldp);
     if (lj_tv_cas(slot, oldp, &forward))
       return 1;
     lj_tab_wait_no_l();
@@ -691,10 +699,12 @@ static int tab_store_if_absent_cas(lua_State *L, TValue *dst, cTValue *src)
 static void tab_migrate_store_if_absent(lua_State *L, GCtab *t, TValue *dst,
 					cTValue *key, cTValue *val)
 {
-  UNUSED(t); UNUSED(key);
+  UNUSED(key);
   if (LJ_UNLIKELY(!tab_tv_snapshot_valid(val)))
     return;
-  (void)tab_store_if_absent_cas(L, dst, val);
+  lj_gc_pubroot(L, val);
+  if (tab_store_if_absent_cas(L, dst, val))
+    lj_gc_pubtabtv(L, t, dst);
 }
 
 static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
@@ -780,7 +790,7 @@ static int tab_resize_copy_hash_slot(lua_State *L, GCtab *t, Node *oldnode,
     lj_tab_wait_no_l();
   } while (1);
   if (freeze_old) {
-    if (!tab_freeze_forward(&n->val, &val))
+    if (!tab_freeze_forward(L, &n->val, &val))
       return 0;
   } else {
     lj_tv_load_acq(&val, &n->val);
@@ -816,10 +826,21 @@ static int tab_resize_copy_array_slot(lua_State *L, GCtab *t,
   ** shrunk. Keep that semantic choice explicit at each call site.
   */
   if (freeze_nil_slots) {
-    if (!tab_freeze_forward_any(&oldarray[idx], &val))
+    if (!tab_freeze_forward_any(L, &oldarray[idx], &val))
       return 0;
-  } else if (!tab_freeze_forward(&oldarray[idx], &val)) {
-    return 0;
+  } else {
+    /*
+    ** Separated arrays are marked RETIRING before owner migration starts.
+    ** Writers that race with the copy use the next-generation array, so the
+    ** owner does not need to replace the old value with FORWARD here. Keeping
+    ** the old edge visible until the new array is published prevents GC cycles
+    ** that start mid-resize from missing values held only by this table.
+    */
+    lj_tv_load_acq(&val, &oldarray[idx]);
+    if (tvisforward(&val))
+      return 0;
+    if (!tab_val_absent(&val))
+      lj_gc_pubroot(L, &val);
   }
   if (tab_val_absent(&val) || !tab_tv_snapshot_valid(&val))
     return 0;
@@ -844,7 +865,7 @@ static TValue *tab_resize_assist_array_slot(lua_State *L, GCtab *t,
 {
   TValue *nextarray, *dst;
   MSize nextasize;
-  TValue val, forward;
+  TValue val;
   if (!oldarray || idx >= oldasize || lj_tab_array_is_colocated(t, oldarray) ||
       !lj_tab_array_is_retiring(t, oldarray))
     return NULL;
@@ -862,17 +883,17 @@ static TValue *tab_resize_assist_array_slot(lua_State *L, GCtab *t,
   if (idx >= nextasize)
     return NULL;  /* Tail migration still belongs to the resize owner. */
   dst = &nextarray[idx];
-  setforwardV(&forward);
   for (;;) {
     lj_tv_load_acq(&val, &oldarray[idx]);
-    if (tvisforward(&val))
+    if (tvisforward(&val) || tab_val_absent(&val))
       return dst;
-    if (lj_tv_cas(&oldarray[idx], &val, &forward)) {
-      if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val))
-	(void)tab_store_if_absent_cas(L, dst, &val);
+    if (tab_tv_snapshot_valid(&val)) {
+      lj_gc_pubroot(L, &val);
+      if (tab_store_if_absent_cas(L, dst, &val))
+	lj_gc_pubtabtv(L, t, dst);
       return dst;
     }
-    lj_tab_store_wait_l(L);
+    return dst;
   }
 }
 
@@ -2180,14 +2201,28 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
   return niltv(L);
 }
 
+static LJ_AINLINE void tab_publish_storage(lua_State *L, GCtab *t);
+
 LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 				     TValue *out)
 {
   for (;;) {
     cTValue *src = lj_tab_get(L, t, key);
     lj_tv_load_acq(out, src);
-    if (!tvisforward(out))
+    if (!tvisforward(out)) {
+      /*
+      ** Helper-backed trace reads return through a temporary TValue, not a Lua
+      ** stack slot. Publish GC values and the source table before later trace
+      ** helpers can allocate or assist GC with only the temporary live.
+      */
+      if (tvisgcv(out)) {
+	lj_gc_pubroot(L, out);
+	tab_publish_storage(L, t);
+	lj_gc_pubtabtv(L, t, out);
+	lj_gc_pubtab(L, t);
+      }
       return out;
+    }
     lj_tab_wait_l(L);
   }
 }
@@ -2993,8 +3028,38 @@ LJ_FUNCA void lj_tab_store_wait_l(lua_State *L)
 static LJ_AINLINE void tab_store_barrier_write(lua_State *L, GCtab *parent,
 					       cTValue *key, cTValue *src)
 {
+  TValue snap;
   lj_gc2_barrier_weak_write(L, parent, key, src);
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  lj_gc_pubroot(L, src);
+  /*
+  ** Helper-backed JIT/VM stores can be the only publication point for a fresh
+  ** trace value. Use the shared table-value publication wrapper so the value is
+  ** visible to both GC2 and the legacy incremental barrier; fresh-table traces
+  ** do not always emit a separate TBAR after the helper call.
+  */
+  lj_gc_pubtabtv(L, parent, src);
+  if (!src)
+    return;
+  lj_tv_load_acq(&snap, src);
+  if (tvisgcv(&snap)) {
+    tab_publish_storage(L, parent);
+    lj_gc_pubtab(L, parent);
+  }
+}
+
+static LJ_AINLINE void tab_publish_storage(lua_State *L, GCtab *t)
+{
+  void *arraymem;
+  MSize hmask;
+  Node *node;
+  if (!L || !t)
+    return;
+  arraymem = lj_tab_array_mem_acq(t);
+  if (arraymem)
+    (void)lj_gc2_markmem(G(L), arraymem);
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  if (hmask > 0)
+    (void)lj_gc2_markmem(G(L), lj_tab_node_hdrw(node));
 }
 
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
@@ -3617,14 +3682,24 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
 {
   TValue *orig = dst;
   TValue keytv;
+  int stack_src = tab_key_on_stack(L, src);
+  ptrdiff_t srcofs = stack_src ? savestack(L, (TValue *)(void *)src) : 0;
   int weakwr = lj_gc2_weak_write_begin(L, parent);
   tab_test_vm_array_store_call();
-  /* The x64 VM runs its existing table barrier sequence after this helper. */
   setintV(&keytv, (int32_t)key);
+  if (stack_src) src = restorestack(L, srcofs);
+  /*
+  ** Active-MT VM stores publish with CAS and run the legacy VM table barrier
+  ** only after the helper returns. Publish the source before the CAS so a
+  ** concurrent collector cannot observe the new slot without its value edge.
+  */
+  tab_store_barrier_write(L, parent, &keytv, src);
   if (weakwr)
     tab_store_barrier_write(L, parent, &keytv, src);
   for (;;) {
+    if (stack_src) src = restorestack(L, srcofs);
     dst = tab_current_jit_array_slot(L, parent, orig, key);
+    if (stack_src) src = restorestack(L, srcofs);
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
@@ -3644,12 +3719,20 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_strhash(lua_State *L, GCtab *parent,
   TValue keytv, keycopy;
   TValue *orig = dst;
   cTValue *barrier_key;
+  int stack_src = tab_key_on_stack(L, src);
+  ptrdiff_t srcofs = stack_src ? savestack(L, (TValue *)(void *)src) : 0;
   int weakwr;
   tab_test_vm_strhash_store_call();
   setstrV(L, &keytv, key);
   barrier_key = &keytv;
   weakwr = lj_gc2_weak_write_begin(L, parent);
-  /* The x64 VM runs its existing table barrier sequence after this helper. */
+  if (stack_src) src = restorestack(L, srcofs);
+  /*
+  ** The x64 VM reaches this helper when direct stores are unsafe. Mirror the
+  ** traced-store rule: publish the source before any CAS or retry can expose a
+  ** slot update to concurrent GC.
+  */
+  tab_store_barrier_write(L, parent, &keytv, src);
   if (weakwr)
     tab_store_barrier_write(L, parent, &keytv, src);
   if (tab_jit_hash_current_match(parent, orig) &&
@@ -3659,8 +3742,10 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_strhash(lua_State *L, GCtab *parent,
     goto done;
   }
   for (;;) {
+    if (stack_src) src = restorestack(L, srcofs);
     dst = tab_current_jit_hash_slot(L, parent, orig, &keytv, &keycopy,
 				    &barrier_key);
+    if (stack_src) src = restorestack(L, srcofs);
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, barrier_key, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
@@ -3982,6 +4067,18 @@ static int tab_keyindex_snapshot_current(GCtab *t,
 	 !lj_tab_node_is_retiring(snap->node);
 }
 
+static LJ_AINLINE int tab_next_array_retry(GCtab *t, TValue *array)
+{
+  return lj_tab_array_acq(t) != array ||
+	 lj_tab_array_is_retiring(t, array) ||
+	 lj_tab_array_is_colocated(t, array);
+}
+
+static LJ_AINLINE int tab_next_node_retry(GCtab *t, Node *node)
+{
+  return lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node);
+}
+
 /* Get the successor traversal index of a key with its generation snapshot. */
 static uint32_t tab_keyindex_snapshot(GCtab *t, cTValue *origkey,
 				      TabKeyIndexSnapshot *snap)
@@ -4074,14 +4171,19 @@ retry_next:
 	  if (tv)
 	    lj_tv_load_acq(&val, tv);
 	}
-      } else if (lj_tab_array_acq(t) != snap.array ||
-		 lj_tab_array_is_retiring(t, snap.array) ||
-		 lj_tab_array_is_colocated(t, snap.array)) {
+      } else if (tab_next_array_retry(t, snap.array)) {
 	lj_tab_wait_no_l();
 	goto retry_next;
       }
     }
     if (LJ_LIKELY(!tab_val_absent(&val))) {
+      if (LJ_UNLIKELY(!tab_tv_snapshot_valid(&val))) {
+	if (tab_next_array_retry(t, snap.array)) {
+	  lj_tab_wait_no_l();
+	  goto retry_next;
+	}
+	continue;
+      }
       setintV(o, idx);
       o[1] = val;
       return 1;
@@ -4098,22 +4200,40 @@ retry_next:
       lj_tv_load_acq(&val, &n->val);
       if (tvisforward(&val)) {
 	lj_tv_load_acq(&key, &n->key);
+	if (LJ_UNLIKELY(!tab_tv_snapshot_valid(&key))) {
+	  if (tab_next_node_retry(t, node)) {
+	    lj_tab_wait_no_l();
+	    goto retry_next;
+	  }
+	  continue;
+	}
 	if (!tab_hash_key_hidden(&key)) {
 	  Node *hopnode = node;
 	  MSize hophmask = hmask;
 	  if (tab_forwarded_hash_value(t, &hopnode, &hophmask, &key, &val)) {
+	    if (LJ_UNLIKELY(!tab_tv_snapshot_valid(&val))) {
+	      lj_tab_wait_no_l();
+	      goto retry_next;
+	    }
 	    o[0] = key;
 	    o[1] = val;
 	    return 1;
 	  }
 	}
-	if (lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node)) {
+	if (tab_next_node_retry(t, node)) {
 	  lj_tab_wait_no_l();
 	  goto retry_next;
 	}
 	continue;
       }
       if (!tab_val_absent(&val)) {
+	if (LJ_UNLIKELY(!tab_tv_snapshot_valid(&val))) {
+	  if (tab_next_node_retry(t, node)) {
+	    lj_tab_wait_no_l();
+	    goto retry_next;
+	  }
+	  continue;
+	}
 	lj_tv_load_acq(&key, &n->key);
 	if (tab_hash_key_hidden(&key)) {
 	  /*
@@ -4128,6 +4248,14 @@ retry_next:
 	  lj_tv_load_acq(&key, &n->key);
 	  if (tab_hash_key_hidden(&key) || tab_val_absent(&val))
 	    continue;
+	}
+	if (LJ_UNLIKELY(!tab_tv_snapshot_valid(&key) ||
+			!tab_tv_snapshot_valid(&val))) {
+	  if (tab_next_node_retry(t, node)) {
+	    lj_tab_wait_no_l();
+	    goto retry_next;
+	  }
+	  continue;
 	}
 	o[0] = key;
 	o[1] = val;

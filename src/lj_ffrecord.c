@@ -603,6 +603,17 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
   if (tref_istab(tab)) {
     RecordIndex ix;
     cTValue *keyv;
+    if (lj_record_mt_shared_tab(J, tab)) {
+      /*
+      ** Direct next() re-derives the cursor from the Lua key, but a shared
+      ** active-MT table can still change generation while exits/side traces
+      ** carry the traversal result through ordinary Lua calls. Use the normal
+      ** fast-function NYI path so abort/stop handling preserves the caller's
+      ** stack state before later bytecodes prepare fixed call arguments.
+      */
+      recff_nyi(J, rd);
+      return;
+    }
     ix.tab = tab;
     if (tref_isnil(J->base[1])) {  /* Shortcut for start of traversal. */
       ix.key = lj_ir_kint(J, 0);

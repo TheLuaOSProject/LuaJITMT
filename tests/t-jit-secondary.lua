@@ -380,4 +380,4 @@ assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
 assert(type(shared_pairs_traces) == "number" and shared_pairs_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), traces trace-local and shared next(), keeps active-MT shared pairs() interpreted and resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), traces trace-local next(), stitches around active-MT shared next(), keeps active-MT shared pairs() interpreted and resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")

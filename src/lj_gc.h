@@ -80,6 +80,7 @@ LJ_FUNC void lj_gc_linkobj_new_chain(global_State *g, GCobj *head,
 LJ_FUNC void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_after(GCobj *anchor, GCobj *o);
 LJ_FUNC uint32_t lj_gc_flush_root_pending(global_State *g);
+LJ_FUNC uint32_t lj_gc_repair_root_spine(global_State *g);
 LJ_FUNC void *lj_mem_newgco_unlinked(lua_State *L, GCSize size);
 LJ_FUNCA int LJ_FASTCALL lj_gc_step(lua_State *L);
 LJ_FUNC int lj_gc_step_explicit(lua_State *L);

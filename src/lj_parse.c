@@ -1482,6 +1482,17 @@ static int fs_has_celluv(FuncState *fs)
   return 0;
 }
 
+static int fs_has_cellops(FuncState *fs)
+{
+  BCPos pc;
+  for (pc = 1; pc < fs->pc; pc++) {
+    BCOp op = bc_op(fs->bcbase[pc].ins);
+    if (op == BC_CGET || op == BC_CSET)
+      return 1;
+  }
+  return 0;
+}
+
 #ifndef LUAJIT_DISABLE_DEBUGINFO
 /* Prepare lineinfo for prototype. */
 static size_t fs_prep_line(FuncState *fs, BCLine numline)
@@ -1649,6 +1660,8 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   pt->trace = 0;
   pt->flags = (uint8_t)(fs->flags & ~(PROTO_HAS_RETURN|PROTO_FIXUP_RETURN));
   proto_initflags2(pt);
+  if (fs_has_cellops(fs))
+    proto_setcellops(pt);
   if (fs_has_celluv(fs)) {
     proto_setcelluv(pt);
   }

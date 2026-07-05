@@ -463,6 +463,7 @@ GCproto *lj_bcread_proto(LexState *ls)
   if (cellops) {
     if (proto_legacyuv(pt))
       bcread_error(ls, LJ_ERR_BCBAD);
+    proto_setcellops(pt);
     proto_setcelluv(pt);
   }
   bcread_uv(ls, pt, sizeuv);

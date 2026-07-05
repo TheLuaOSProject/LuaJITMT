@@ -183,6 +183,7 @@ static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					GCobj *o);
 static uint32_t gc2_discard_remembered_ssb(global_State *g);
 static void gc2_clear_table_rescan_grey(global_State *g);
+static void gc2_traverse_obj(global_State *g, GCobj *o);
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
@@ -1473,6 +1474,37 @@ static GCtrace *gc2_traceref_safe(global_State *g, TraceNo traceno)
   return traceref_fromgco(gcref_acq(tv->slot[traceno]));
 }
 
+static int gc2_trace_geometry_valid(GCtrace *T)
+{
+  IRIns *irbase;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  IRRef nins, nk;
+  SnapNo nsnap;
+  MSize nsnapmap;
+  const MSize snapmap_per_snap =
+    (MSize)LJ_MAX_JSLOTS + (MSize)LJ_STACK_EXTRA + 32u;
+  if (!T || !checkptrGC(T) || T->gct != (uint32_t)~LJ_TTRACE)
+    return 0;
+  nins = trace_nins_acq(T);
+  nk = trace_nk_acq(T);
+  nsnap = trace_nsnap_acq(T);
+  nsnapmap = trace_nsnapmap_acq(T);
+  if (nins < REF_BASE || nins > 0xffffu || nk > REF_BIAS || nk > nins)
+    return 0;
+  if ((nsnap == 0 && nsnapmap != 0) ||
+      (nsnap != 0 && nsnapmap > (MSize)nsnap * snapmap_per_snap))
+    return 0;
+  irbase = trace_ir_acq(T);
+  if (nk < REF_TRUE && (!irbase || !checkptrGC(&irbase[nk])))
+    return 0;
+  snap = trace_snap_acq(T);
+  snapmap = trace_snapmap_acq(T);
+  if (nsnap == 0)
+    return 1;
+  return snap && snapmap && checkptrGC(snap) && checkptrGC(snapmap);
+}
+
 static void gc2_traverse_trace(global_State *g, GCtrace *T);
 static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
 {
@@ -1494,6 +1526,7 @@ static void gc2_mark_proto_for_trace_pc_root(global_State *g, const BCIns *pc)
   if (!pc)
     return;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o->gch.gct == ~LJ_TPROTO) {
       GCproto *pt = gco2pt(o);
@@ -1510,11 +1543,17 @@ static void gc2_mark_trace_snapshot_pcs_root(global_State *g, GCtrace *T)
 {
   SnapShot *snap = trace_snap_acq(T);
   SnapEntry *snapmap = trace_snapmap_acq(T);
+  MSize nsnapmap = trace_nsnapmap_acq(T);
   SnapNo i, nsnap = trace_nsnap_acq(T);
   for (i = 0; i < nsnap; i++) {
     SnapShot *s = &snap[i];
-    SnapEntry *map = &snapmap[snap_mapofs_acq(s)];
-    gc2_mark_proto_for_trace_pc_root(g, snap_pc_acq(&map[snap_nent_acq(s)]));
+    MSize ofs = snap_mapofs_acq(s);
+    MSize nent = snap_nent_acq(s);
+    SnapEntry *map;
+    if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
+      return;
+    map = &snapmap[ofs];
+    gc2_mark_proto_for_trace_pc_root(g, snap_pc_acq(&map[nent]));
   }
 }
 #endif
@@ -2699,6 +2738,7 @@ static void gc2_root_spine_counts(global_State *g, uint64_t *objectsp,
     *cappedp = 0;
     return;
   }
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; ) {
     GCobj *next = lj_obj_gcw_acq(o);
     objects++;
@@ -3060,6 +3100,50 @@ static void gc2_mark_tv(global_State *g, cTValue *tv)
     lj_gc2_markobj(g, gcV(tv));
 }
 
+static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
+{
+  uint32_t phase;
+  if (!o)
+    return;
+  phase = gc2_phase_acq(g);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
+    return;
+  switch (o->gch.gct) {
+  case ~LJ_TTAB:
+  case ~LJ_TFUNC:
+  case ~LJ_TPROTO:
+    /*
+    ** Thread stacks are mutable roots. Active allocation and root preservation
+    ** can leave a root container already marked before all of its child edges
+    ** are published. A stack-root hit therefore proves more than liveness of
+    ** the container: it is also a fresh root snapshot that must rescan the
+    ** container edges for this cycle, matching the legacy root-TV path.
+    */
+    gc2_traverse_obj(g, o);
+    break;
+  default:
+    break;
+  }
+}
+
+static void gc2_mark_thread_root_obj(global_State *g, GCobj *o)
+{
+  if (!o)
+    return;
+  if (lj_gc2_markobj(g, o))
+    return;
+  if (lj_gc2_ismarked(g, o) > 0)
+    gc2_thread_root_rescan_marked_obj(g, o);
+}
+
+static void gc2_mark_thread_root_tv(global_State *g, cTValue *tv)
+{
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)))
+    return;
+  if (tvisgcv(tv))
+    gc2_mark_thread_root_obj(g, gcV(tv));
+}
+
 static void gc2_mark_fixedstr(global_State *g)
 {
   MSize i;
@@ -3222,8 +3306,14 @@ static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
 	const BCIns *pc = cf ? cframe_pc(cf) : NULL;
 	const BCIns *bc = proto_bc(pt);
 	if (pc && pc > bc && pc <= bc + pt->sizebc) {
-	  TValue *ctop = prev + 1 + gc2_cur_topslot(pt, pc,
-						    cframe_multres_n(cf));
+	  /*
+	  ** Cell-op frames keep source locals live outside the narrow call
+	  ** argument/result window. During a C call, scan the full Lua frame so
+	  ** owner-side GC2 scans preserve those locals.
+	  */
+	  TValue *ctop = prev + 1 + (proto_cellops(pt) ? pt->framesize :
+				    gc2_cur_topslot(pt, pc,
+						    cframe_multres_n(cf)));
 	  if (ctop > top)
 	    top = ctop;
 	}
@@ -3333,12 +3423,12 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
   top = gc2_stack_scan_top(g, L);
   for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
-    gc2_mark_tv(g, &tv);
+    gc2_mark_thread_root_tv(g, &tv);
   }
   {
     GCtab *env = lj_state_env_acq(L);
     if (env)
-      lj_gc2_markobj(g, obj2gco(env));
+      gc2_mark_thread_root_obj(g, obj2gco(env));
   }
   mt = lj_state_mt_thread_acq(L);
   if (mt != NULL)
@@ -3374,6 +3464,7 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
   if (gc2_thread_scan_needscan_pending_acq(g) == 0)
     return;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL;) {
     GCobj *next = lj_obj_gcw_acq(o);
     lua_State *th;
@@ -3669,6 +3760,7 @@ static void gc2_scan_global_roots(global_State *g)
   ** frontier as the legacy root pass, so flush those chains before walking it.
   */
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   lj_gc2_smr_read_enter(g);
   lj_gc2_markobj(g, obj2gco(mainL));
   {
@@ -3824,6 +3916,44 @@ static LJ_AINLINE GCobj *gc2_queue_slot_load_acq(const GCRef *slot)
 static LJ_AINLINE void gc2_queue_slot_clear_rel(GCRef *slot)
 {
   setgcrefnullrel(*slot);
+}
+
+static int gc2_queue_obj_in_arena_list(GCArena *head, GCArena *want,
+				       uint32_t cell)
+{
+  GCArena *a;
+  for (a = head; a != NULL; a = lj_arena_next_acq(a))
+    if (a == want)
+      return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+	     lj_arena_bm_get(a->block, cell);
+  return 0;
+}
+
+static int gc2_queue_obj_valid(global_State *g, GCobj *o)
+{
+  TGState *tg;
+  GCArena *want;
+  uint32_t cell, k;
+  if (!g || !o || !checkptrGC(o) ||
+      (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0))
+    return 0;
+  if (g->allocf != lj_arena_allocf)
+    return 1;
+  want = lj_arena_of(o);
+  cell = lj_arena_cellof(o);
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+      LJHugeInfo hi;
+      if (lj_arena_hugetab_lookup(&tg->huge, o, &hi) == 1)
+	return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
+    }
+    for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+      if (gc2_queue_obj_in_arena_list(tg->alloc.owned[k], want, cell) ||
+	  gc2_queue_obj_in_arena_list(tg->alloc.needsweep[k], want, cell))
+	return 1;
+    }
+  }
+  return 0;
 }
 
 static uint64_t gc2_grey_repair_span(global_State *g, MSize cap,
@@ -4261,6 +4391,13 @@ static GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
 static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
 			     int markstr)
 {
+  /*
+  ** Weak processing scans racy table snapshots. A tag/header mismatch means the
+  ** slot snapshot is stale, not a GC object whose mark/finalizer state can be
+  ** safely inspected. It is therefore clearable as a weak edge.
+  */
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(o)))
+    return 1;
   if (tvisgcv(o)) {
     if (tvisstr(o)) {
       if (markstr) {
@@ -4887,6 +5024,7 @@ static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
   GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
       if (gc2_finreg_root_splice(p, o))
@@ -5496,6 +5634,7 @@ static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target)
 {
   GCRef *p = lj_obj_gcwref(obj2gco(mainthread_acq(g)));
   GCobj *o;
+  (void)lj_gc_repair_root_spine(g);
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
       if (gc2_finreg_root_splice(p, o))
@@ -5645,6 +5784,7 @@ static GCobj *gc2_grey_pop(global_State *g)
 {
   GCRef *stack;
   uint64_t top, bottom;
+  GCRef *slot;
   GCobj *o;
   MSize cap;
   if (!g)
@@ -5663,7 +5803,8 @@ static GCobj *gc2_grey_pop(global_State *g)
   la_fence_seq();  /* Chase-Lev owner pop: order bottom before top load. */
   top = gc2_grey_top_acq(g);
   if (top <= bottom) {
-    o = gc2_queue_slot_load_acq(&stack[(MSize)(bottom % cap)]);
+    slot = &stack[(MSize)(bottom % cap)];
+    o = gc2_queue_slot_load_acq(slot);
     if (top == bottom) {
       uint64_t expect = top;
       /* 05 section 5.6.3: single item is claimed through top. */
@@ -5675,7 +5816,9 @@ static GCobj *gc2_grey_pop(global_State *g)
 	gc2_grey_bottom_rel(g, top + 1);
       }
     }
-    return o;
+    if (o)
+      gc2_queue_slot_clear_rel(slot);
+    return gc2_queue_obj_valid(g, o) ? o : NULL;
   }
   gc2_grey_bottom_rel(g, top);
   return NULL;
@@ -5685,6 +5828,7 @@ static GCobj *lj_gc2_grey_steal(global_State *g)
 {
   GCRef *stack;
   uint64_t top, bottom, expect;
+  GCRef *slot;
   GCobj *o;
   MSize cap;
   if (!g)
@@ -5700,12 +5844,15 @@ static GCobj *lj_gc2_grey_steal(global_State *g)
   top = gc2_grey_repair_span(g, cap, top, bottom);
   if (top >= bottom)
     return NULL;
-  o = gc2_queue_slot_load_acq(&stack[(MSize)(top % cap)]);
+  slot = &stack[(MSize)(top % cap)];
+  o = gc2_queue_slot_load_acq(slot);
   expect = top;
   /* 05 section 5.6.3: steal claim linearizes through top. */
   if (!gc2_grey_top_cas(g, &expect, top + 1))
     return NULL;
-  return o;
+  if (o)
+    gc2_queue_slot_clear_rel(slot);
+  return gc2_queue_obj_valid(g, o) ? o : NULL;
 }
 
 GCobj *lj_gc2_test_grey_steal(global_State *g)
@@ -6687,6 +6834,24 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
     gc2_markobj_worker(g, gcV(tv));
 }
 
+static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o)
+{
+  if (!o)
+    return;
+  if (gc2_markobj_worker(g, o))
+    return;
+  if (lj_gc2_ismarked(g, o) > 0)
+    gc2_thread_root_rescan_marked_obj(g, o);
+}
+
+static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv)
+{
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)))
+    return;
+  if (tvisgcv(tv))
+    gc2_mark_thread_root_obj_worker(g, gcV(tv));
+}
+
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o)
 {
   uint8_t old = la_or8_rlx(&o->gch.marked, LJ_GC_NEEDSCAN);
@@ -6696,6 +6861,55 @@ static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o)
 static LJ_AINLINE void gc2_rescan_pending_clear(GCobj *o)
 {
   (void)la_and8_rlx(&o->gch.marked, (uint8_t)~LJ_GC_NEEDSCAN);
+}
+
+static int gc2_table_storage_unmarked(global_State *g, GCtab *t)
+{
+  void *arraymem;
+  MSize hmask;
+  Node *node;
+  if (!g || !t)
+    return 0;
+  arraymem = lj_tab_array_mem_acq(t);
+  if (arraymem && lj_gc2_ismarkedmem(g, arraymem) == 0)
+    return 1;
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  if (hmask > 0 && lj_gc2_ismarkedmem(g, lj_tab_node_hdrw(node)) == 0)
+    return 1;
+  return 0;
+}
+
+static void gc2_mark_table_child_tv_worker(global_State *g, cTValue *tv)
+{
+  GCobj *o;
+  uint32_t phase;
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)))
+    return;
+  if (!tvisgcv(tv))
+    return;
+  o = gcV(tv);
+  if (gc2_markobj_worker(g, o))
+    return;
+  if (o->gch.gct != ~LJ_TTAB || lj_gc2_ismarked(g, o) <= 0)
+    return;
+  phase = gc2_phase_acq(g);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
+    return;
+  if (!gc2_table_storage_unmarked(g, gco2tab(o)))
+    return;
+  /*
+  ** A marked table object is not enough: separately allocated array/hash
+  ** storage has its own arena mark bits. If a strong table edge rediscovers an
+  ** already-marked child whose backing storage is still unmarked in this cycle,
+  ** queue a table rescan so the object cannot survive with reclaimed slots.
+  */
+  if (gc2_rescan_pending_set(o)) {
+    int pushed = gc2_grey_push(g, o);
+    if (!pushed)
+      gc2_rescan_pending_clear(o);
+    lj_assertG(pushed, "gc2 child table rescan push failed");
+    UNUSED(pushed);
+  }
 }
 
 void lj_gc2_barrier_marked_proto(lua_State *L, GCproto *pt)
@@ -6771,6 +6985,7 @@ static void gc2_mark_proto_for_trace_pc_worker(global_State *g,
   if (!pc)
     return;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o->gch.gct == ~LJ_TPROTO) {
       GCproto *pt = gco2pt(o);
@@ -6787,12 +7002,18 @@ static void gc2_mark_trace_snapshot_pcs_worker(global_State *g, GCtrace *T)
 {
   SnapShot *snap = trace_snap_acq(T);
   SnapEntry *snapmap = trace_snapmap_acq(T);
+  MSize nsnapmap = trace_nsnapmap_acq(T);
   SnapNo i, nsnap = trace_nsnap_acq(T);
   for (i = 0; i < nsnap; i++) {
     SnapShot *s = &snap[i];
-    SnapEntry *map = &snapmap[snap_mapofs_acq(s)];
+    MSize ofs = snap_mapofs_acq(s);
+    MSize nent = snap_nent_acq(s);
+    SnapEntry *map;
+    if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
+      return;
+    map = &snapmap[ofs];
     gc2_mark_proto_for_trace_pc_worker(g,
-				       snap_pc_acq(&map[snap_nent_acq(s)]));
+				       snap_pc_acq(&map[nent]));
   }
 }
 #endif
@@ -6832,7 +7053,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
       if (tvisforward(&val) &&
 	  !lj_tab_forwarded_array_slot(t, array, asize, i, &val))
 	continue;
-      gc2_mark_tv_worker(g, &val);
+      gc2_mark_table_child_tv_worker(g, &val);
     }
   }
   {
@@ -6874,8 +7095,10 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 	  lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
 	  lj_assertG(!tviskeylock(&key),
 		     "mark of key lock in non-empty slot");
-	  if (!(weak & LJ_GC_WEAKKEY)) gc2_mark_tv_worker(g, &key);
-	  if (!(weak & LJ_GC_WEAKVAL)) gc2_mark_tv_worker(g, &val);
+	  if (!(weak & LJ_GC_WEAKKEY))
+	    gc2_mark_table_child_tv_worker(g, &key);
+	  if (!(weak & LJ_GC_WEAKVAL))
+	    gc2_mark_table_child_tv_worker(g, &val);
 	}
       }
     }
@@ -7056,6 +7279,8 @@ static void gc2_traverse_trace(global_State *g, GCtrace *T)
   IRIns *irbase;
   IRRef ref;
   if (trace_traceno_acq(T) == 0)
+    return;
+  if (!gc2_trace_geometry_valid(T))
     return;
   irbase = trace_ir_acq(T);
   for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
@@ -7277,12 +7502,12 @@ scan_thread:
   top = gc2_stack_scan_top_worker(g, th);
   for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
-    gc2_mark_tv_worker(g, &tv);
+    gc2_mark_thread_root_tv_worker(g, &tv);
   }
   {
     GCtab *env = lj_state_env_acq(th);
     if (env)
-      gc2_markobj_worker(g, obj2gco(env));
+      gc2_mark_thread_root_obj_worker(g, obj2gco(env));
   }
   mt = lj_state_mt_thread_acq(th);
   if (mt != NULL)
@@ -7305,7 +7530,10 @@ scan_thread:
 
 static void gc2_traverse_obj(global_State *g, GCobj *o)
 {
-  int gct = o->gch.gct;
+  int gct;
+  if (LJ_UNLIKELY(!gc2_queue_obj_valid(g, o)))
+    return;
+  gct = o->gch.gct;
   if (LJ_UNLIKELY(gct == 0 || gct < ~LJ_TSTR || gct > ~LJ_TUDATA)) {
     /*
     ** Grey queues are lock-free handoff lists. A queued arena body can be
@@ -7634,6 +7862,7 @@ static int gc2_root_oracle_has_base(global_State *g, void *p)
 {
   GCobj *o;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (gc2_root_oracle_liveobj(o) && gc2_mark_base(g, o) == p)
       return 1;

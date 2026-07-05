@@ -2353,12 +2353,12 @@ int lj_record_next(jit_State *J, RecordIndex *ix)
 {
   IRType t, tkey, tval;
   TRef trvk;
-  if (lj_record_mt_shared_tab(J, ix->tab) && ix->mobj) {
+  if (lj_record_mt_shared_tab(J, ix->tab)) {
     /*
-    ** Optimized pairs()/BC_ITERN carries the hidden LJ_KEYINDEX cursor across
-    ** loop iterations. Direct next() re-derives the cursor from the returned
-    ** Lua key at each call, but BC_ITERN still needs a generation/version
-    ** guard before shared active-MT tracing can be reopened safely.
+    ** Shared active-MT traversal must not be traced until generated code can
+    ** guard the table generation/version it is walking. BC_ITERN carries the
+    ** hidden LJ_KEYINDEX cursor across iterations, and direct next() still
+    ** lets side exits carry traversal results through arbitrary Lua code.
     */
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }
@@ -2695,6 +2695,41 @@ static void rec_celluv_promote_pending(jit_State *J)
       break;
     }
   }
+}
+
+static int rec_celluv_materialize_cget_sources(jit_State *J)
+{
+  const BCIns *pc, *end;
+  BCReg maxslot;
+  int materialized = 0;
+  if (!mt_active_or_entering_acq(J2G(J)) || J->pt == NULL)
+    return 0;
+  pc = J->pc;
+  end = proto_bc(J->pt) + J->pt->sizebc;
+  maxslot = J->maxslot;
+  while (pc < end) {
+    BCIns ins = *pc++;
+    BCOp op = bc_op(ins);
+    if (op == BC_CGET) {
+      BCReg slot = bc_d(ins);
+      if (slot < maxslot && J->base[slot] == 0) {
+	(void)getslot(J, slot);
+	materialized = 1;
+      }
+    }
+    /*
+    ** Branch exits can resume before a later CGET has copied an argument into
+    ** its temporary destination. Preserve raw local-cell sources for the
+    ** straight-line region up to the next call/loop boundary.
+    */
+    if ((op >= BC_CALLM && op <= BC_CALLT) || bc_isret(op) || op == BC_UCLO ||
+	op == BC_FORI || op == BC_JFORI || op == BC_FORL || op == BC_LOOP ||
+	op == BC_ITERC || op == BC_ITERN || op == BC_ITERL ||
+	(op == BC_JMP && bc_j(ins) < 0) ||
+	op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP)
+      break;
+  }
+  return materialized;
 }
 
 /* Record local cell load/store. */
@@ -3584,10 +3619,21 @@ void lj_record_ins(jit_State *J)
     rc = sloadt(J, (int32_t)ra, IRT_P32, 0);
     break;
   case BC_CGET:
-    rc = rec_celluv(J, rcv, rc, 0, bc_c(ins));
+    rc = rec_celluv(J, rcv, rc, 0, bc_d(ins));
+    /*
+    ** CGET writes a Lua register even when the recorder represents it as an
+    ** SSA alias. Compiled code does not store the destination slot, so exits
+    ** after this bytecode need a snapshot that can reconstruct it.
+    */
+    J->needsnap = 1;
     break;
   case BC_CSET:
     rec_celluv(J, rav, ra, rc, bc_a(ins));
+    /*
+    ** CSET updates a raw local slot or a closed cell. Keep following exits
+    ** aligned with the interpreter-visible local value.
+    */
+    J->needsnap = 1;
     break;
   case BC_FNEW:
     rc = rec_fnew(J, gco2pt(proto_kgc(J->pt, ~(ptrdiff_t)rc)));
@@ -3857,6 +3903,16 @@ static const BCIns *rec_setup_root(jit_State *J)
     break;
   case BC_FUNCF:
     /* No bytecode range check for root traces started by a hot call. */
+    if (J->pt && proto_cellops(J->pt) && mt_active_or_entering_acq(J2G(J))) {
+      /*
+      ** Active-MT local-cell functions keep fixed arguments as canonical
+      ** interpreter stack state across calls and exits. Function-entry traces
+      ** specialize before later CGET users have necessarily materialized every
+      ** argument, so keep hot-call entry interpreted and let loop/straight-line
+      ** traces cover the body once arguments are explicit.
+      */
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
     J->maxslot = J->pt->numparams;
     pc++;
     break;
@@ -3934,7 +3990,24 @@ void lj_record_setup(jit_State *J)
     } else {
       J->startpc = NULL;  /* Prevent forming an extra loop. */
     }
+    if (J->pt && proto_cellops(J->pt) &&
+	mt_active_or_entering_acq(J2G(J))) {
+      GCtrace *rootT = rec_traceref_live(J, root);
+      BCOp startop = bc_op(trace_startins_acq(rootT));
+      if (startop == BC_FUNCF || startop == BC_JFUNCF) {
+	/*
+	** Side traces under a function-entry root can start on branches that do
+	** not read every fixed argument. If such a side trace later fails its
+	** own entry guard, it can resume in the interpreter without
+	** reconstructing those arguments. Keep this active-MT entry path
+	** interpreted; loop and stitched traces still handle explicit arguments.
+	*/
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);
+      }
+    }
     lj_snap_replay(J, T);
+    if (rec_celluv_materialize_cget_sources(J))
+      lj_snap_add(J);
   sidecheck:
     if ((trace_nchild_acq(rec_traceref_live(J, J->cur.root)) >=
 	 jit_param_acq(J, JIT_P_maxside) ||
@@ -3958,6 +4031,8 @@ void lj_record_setup(jit_State *J)
     ** The one exception is BC_ITERN, which sets LJ_TRACE_RECORD_1ST.
     */
     lj_snap_add(J);
+    if (rec_celluv_materialize_cget_sources(J))
+      lj_snap_add(J);
     if (bc_op(J->cur.startins) == BC_FORL)
       rec_for_loop(J, J->pc-1, &J->scev, 1);
     else if (bc_op(J->cur.startins) == BC_ITERC)

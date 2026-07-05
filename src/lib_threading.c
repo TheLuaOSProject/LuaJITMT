@@ -224,6 +224,28 @@ static void threading_spawn_gc_handoff(lua_State *L, GCudata *ud)
   lj_gc2_preserve_root(g, obj2gco(ud));
 }
 
+static void threading_result_gc_handoff(lua_State *L, LJThread *th)
+{
+  GCudata *ud;
+  if (!L || !th)
+    return;
+  ud = th->ud;
+  if (!ud)
+    return;
+  /*
+  ** Completing a worker mutates the child stack after the thread userdata may
+  ** already have been marked through the live-thread list. Requeue the userdata
+  ** for legacy traversal, mark the stack dirty for owner-scan freshness, and
+  ** preserve the GC2 root so join-visible result graphs are scanned from the
+  ** completed child stack instead of relying on a stale thread mark.
+  */
+  (void)lj_tg_stack_dirty_epoch_add_rlx(L2TG(L), 1);
+  lj_gc_markobj_legacy(G(L), obj2gco(ud));
+  lj_gc_markobj_legacy(G(L), obj2gco(L));
+  lj_gc2_preserve_root(G(L), obj2gco(ud));
+  lj_gc2_preserve_root(G(L), obj2gco(L));
+}
+
 static int64_t threading_timeout_ns(lua_State *L, int narg, int has_default,
 				    int64_t def)
 {
@@ -680,6 +702,7 @@ static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
     ** refs into GC2 before releasing ownership to the joiner.
     */
     lj_state_stack_pubrange(L, L);
+    threading_result_gc_handoff(L, th);
   }
   return NULL;
 }
@@ -697,8 +720,10 @@ static void threading_worker_error_result(ThreadingWorkerCtx *ctx, int errcode)
     lj_state_stack_pubtv(L, L, L->top);
     L->top++;
     th->nresults = 1;
+    threading_result_gc_handoff(L, th);
   } else {
     th->nresults = 0;
+    threading_result_gc_handoff(L, th);
   }
 }
 

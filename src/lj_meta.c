@@ -13,6 +13,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_state.h"
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -253,14 +254,39 @@ TValue *lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
   return meta_tset(L, o, k, owner);
 }
 
+static LJ_AINLINE int meta_tv_on_stack(lua_State *L, cTValue *tv)
+{
+  return L && tv && tv >= tvref(L->stack) && tv < tvref(L->maxstack);
+}
+
 /* VM helper that resolves the target table, stores the value and barriers it. */
 TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
 {
+  int stack_o = meta_tv_on_stack(L, o);
+  int stack_k = meta_tv_on_stack(L, k);
+  int stack_v = meta_tv_on_stack(L, v);
+  ptrdiff_t oofs = stack_o ? savestack(L, (TValue *)(void *)o) : 0;
+  ptrdiff_t kofs = stack_k ? savestack(L, (TValue *)(void *)k) : 0;
+  ptrdiff_t vofs = stack_v ? savestack(L, (TValue *)(void *)v) : 0;
   for (;;) {
     GCtab *owner = NULL;
-    TValue *dst = meta_tset(L, o, k, &owner);
+    TValue *dst;
     int weakwr;
     int rc;
+    if (stack_o) o = restorestack(L, oofs);
+    if (stack_k) k = restorestack(L, kofs);
+    if (stack_v) v = restorestack(L, vofs);
+    /*
+    ** Missing-key resolution may allocate, wait for a table generation, or
+    ** move the Lua stack before the value edge reaches the table. Keys are
+    ** anchored by lj_tab_newkey(); the source value needs an explicit root
+    ** until the CAS publishes the real edge.
+    */
+    lj_gc_pubroot(L, v);
+    dst = meta_tset(L, o, k, &owner);
+    if (stack_o) o = restorestack(L, oofs);
+    if (stack_k) k = restorestack(L, kofs);
+    if (stack_v) v = restorestack(L, vofs);
     if (!dst)
       return NULL;
     weakwr = lj_gc2_weak_write_begin(L, owner);

@@ -276,6 +276,15 @@ static BCReg snap_usedef(jit_State *J, uint8_t *udf,
     case BCMfunc: return maxslot;  /* NYI: will abort, anyway. */
     default: break;
     }
+    if (op == BC_CGET || op == BC_CSET) {
+      /*
+      ** Local-cell ops use AD encoding. CGET reads D as the raw local-cell
+      ** source slot; CSET reads D as the value source. The operand mode table
+      ** only exposes C for ordinary var operands, so mark D explicitly for
+      ** snapshot liveness.
+      */
+      USE_SLOT(bc_d(ins));
+    }
     switch (bcmode_a(op)) {
     case BCMvar: USE_SLOT(bc_a(ins)); break;
     case BCMdst:
@@ -338,6 +347,31 @@ static void snap_useuv(GCproto *pt, uint8_t *udf)
   }
 }
 
+/* Mark raw local-cell sources as used for the whole frame lifetime. */
+static void snap_usecellsrc(GCproto *pt, uint8_t *udf, BCReg maxslot)
+{
+  const BCIns *pc, *end;
+  if (!proto_cellops(pt))
+    return;
+  pc = proto_bc(pt);
+  end = pc + pt->sizebc;
+  for (; pc < end; pc++) {
+    BCIns ins = *pc;
+    if (bc_op(ins) == BC_CGET) {
+      BCReg slot = bc_d(ins);
+      /*
+      ** CGET copies from the canonical raw local/cell slot into a temporary
+      ** destination, but exits from nested calls resume in the interpreter,
+      ** which will execute later CGETs against the original source slot. Keep
+      ** that source restorable even when local use/def scanning stops at the
+      ** call boundary.
+      */
+      if (slot < maxslot)
+	udf[slot] = 0;
+    }
+  }
+}
+
 /* Purge dead slots before the next snapshot. */
 void lj_snap_purge(jit_State *J)
 {
@@ -348,6 +382,7 @@ void lj_snap_purge(jit_State *J)
   s = snap_usedef(J, udf, J->pc, maxslot);
   if (s < maxslot) {
     snap_useuv(J->pt, udf);
+    snap_usecellsrc(J->pt, udf, maxslot);
     for (; s < maxslot; s++)
       if (udf[s] != 0)
 	J->base[s] = 0;  /* Purge dead slots. */
@@ -364,7 +399,10 @@ void lj_snap_shrink(jit_State *J)
   BCReg maxslot = J->maxslot;
   BCReg baseslot = J->baseslot;
   BCReg minslot = snap_usedef(J, udf, snap_pc(&map[nent]), maxslot);
-  if (minslot < maxslot) snap_useuv(J->pt, udf);
+  if (minslot < maxslot) {
+    snap_useuv(J->pt, udf);
+    snap_usecellsrc(J->pt, udf, maxslot);
+  }
   maxslot += baseslot;
   minslot += baseslot;
   snap->nslots = (uint8_t)maxslot;

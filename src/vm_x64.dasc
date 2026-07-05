@@ -3045,6 +3045,13 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_next:
   |.if JIT
   |  endbr
+  |  // Shared active-MT traversal must use the generation-following C path;
+  |  // the raw VM fast path below cannot validate racy GC tag/header snapshots.
+  |  load_G r8
+  |  cmp dword GL:r8->mt_active, 0
+  |  jne >8
+  |  cmp dword GL:r8->mt_entering, 0
+  |  jne >8
   |  x64_vm_tab_asize_acq NEXT_ASIZE, NEXT_TAB
   |  x64_vm_tab_array_acq r10, NEXT_TAB
   |  test r10, r10; jz >1
@@ -4038,15 +4045,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov BASE, L:RB->base
     |  ins_next
     |
-    |3:
-    |  mov RB, [BASE+RD*8]
-    |  mov [BASE+RA*8], RB
-    |  ins_next
-    |
-    |4:  // Defensive open-cell fallback.
-    |  mov RA, [BASE+RD*8]
-    |  mov [RB], RA
-    |  ins_next
+  |3:
+  |  mov RB, [BASE+RD*8]
+  |  mov [BASE+RA*8], RB
+  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+  |  ins_next
+  |
+  |4:  // Defensive open-cell fallback.
+  |  mov RA, [BASE+RD*8]
+  |  mov [RB], RA
+  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+  |  ins_next
     break;
   case BC_USETV:
     |  ins_AD	// RA = upvalue #, RD = src
@@ -5084,6 +5093,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RCd, [BASE+RA*8-8]		// Get index from control var.
     |  x64_vm_tab_asize_acq TMPRd, TAB:RB
     |  add PC, 4
+    |  // Shared active-MT traversal must use the generation-following C path;
+    |  // the raw VM fast path below cannot validate racy GC tag/header snapshots.
+    |  load_G r8
+    |  cmp dword GL:r8->mt_active, 0
+    |  jne >8
+    |  cmp dword GL:r8->mt_entering, 0
+    |  jne >8
     |  x64_vm_tab_array_acq ITYPE, TAB:RB
     |  test ITYPE, ITYPE; jz >1
     |  lea r8, [RB+TAB_COLO_SLOTS]

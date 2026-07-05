@@ -496,6 +496,7 @@ typedef struct GCproto {
 /* Extended prototype flags. */
 #define PROTO2_LEGACYUV		0x00000001u  /* Loaded from v2 bytecode. */
 #define PROTO2_CELLUV		0x00000002u  /* Local upvalues are cell slots. */
+#define PROTO2_CELLOPS		0x00000004u  /* Prototype uses CGET/CSET. */
 
 #if LJ_GC64
 #define proto_initflags2(pt)	((pt)->flags2 = 0)
@@ -503,12 +504,16 @@ typedef struct GCproto {
 #define proto_setlegacyuv(pt)	((pt)->flags2 |= PROTO2_LEGACYUV)
 #define proto_celluv(pt)	(((pt)->flags2 & PROTO2_CELLUV) != 0)
 #define proto_setcelluv(pt)	((pt)->flags2 |= PROTO2_CELLUV)
+#define proto_cellops(pt)	(((pt)->flags2 & PROTO2_CELLOPS) != 0)
+#define proto_setcellops(pt)	((pt)->flags2 |= PROTO2_CELLOPS)
 #else
 #define proto_initflags2(pt)	((void)0)
 #define proto_legacyuv(pt)	0
 #define proto_setlegacyuv(pt)	((void)0)
 #define proto_celluv(pt)	0
 #define proto_setcelluv(pt)	((void)0)
+#define proto_cellops(pt)	0
+#define proto_setcellops(pt)	((void)0)
 #endif
 
 #define PROTO_UV_LOCAL		0x8000	/* Upvalue for local slot. */

@@ -170,6 +170,7 @@ static void gc_arena_preserve_root_chain(global_State *g)
 {
   GCobj *o;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     /*
     ** The root list is still the legacy ownership spine while GC2 owns arena
@@ -234,6 +235,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
       !gc_arena_sweep_ready(g))
     return;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     gc_arena_verify_marked(g, o);
     if (o->gch.gct == ~LJ_TTHREAD) {
@@ -390,6 +392,7 @@ static void gc2_paranoia_check_roots(global_State *g)
 {
   GCobj *o;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o))
     gc2_paranoia_checkone(g, o);
   lj_gc2_finalizer_mark_all(g, gc2_paranoia_check_finalizer_obj);
@@ -583,6 +586,7 @@ static void gc_normalize_legacy_colors(global_State *g)
 {
   GCobj *o;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (LJ_LIKELY(o->gch.gct != 0) && !iswhite(o)) {
       /* Legacy marking assumes sweep returned every collectable object to
@@ -954,6 +958,7 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
   GCobj *o;
   StrTabHdr *hdr;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   /*
   ** This is a semantic mark bridge, not a diagnostic count. Walk the full
   ** legacy ownership spine so large heaps do not lose live objects merely
@@ -1081,6 +1086,68 @@ static int gc_chain_splice(GCRef *p, GCobj *o)
   return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
 		  LA_ACQ_REL, LA_ACQ);
 #endif
+}
+
+static int gc_ref_cas_obj(GCRef *p, GCobj *old, GCobj *next)
+{
+#if LJ_GC64
+  uint64_t expect = old ? (uint64_t)(uintptr_t)&old->gch : 0;
+  uint64_t want = next ? (uint64_t)(uintptr_t)&next->gch : 0;
+  return la_cas64(&p->gcptr64, &expect, want, LA_ACQ_REL, LA_ACQ);
+#else
+  uint32_t expect = old ? (uint32_t)(uintptr_t)&old->gch : 0;
+  uint32_t want = next ? (uint32_t)(uintptr_t)&next->gch : 0;
+  return la_cas32(&p->gcptr32, &expect, want, LA_ACQ_REL, LA_ACQ);
+#endif
+}
+
+static int gc_root_chain_break_cycle(GCobj *head)
+{
+  GCobj *slow = head, *fast = head, *entry, *tail, *next;
+  while (fast != NULL) {
+    slow = lj_obj_gcw_acq(slow);
+    fast = lj_obj_gcw_acq(fast);
+    if (fast == NULL || slow == NULL)
+      return 0;
+    fast = lj_obj_gcw_acq(fast);
+    if (slow == fast)
+      break;
+  }
+  if (fast == NULL)
+    return 0;
+  slow = head;
+  while (slow != fast) {
+    slow = lj_obj_gcw_acq(slow);
+    fast = lj_obj_gcw_acq(fast);
+  }
+  entry = slow;
+  tail = entry;
+  /*
+  ** Arena cells can be reused while an old legacy-root entry for the same
+  ** address is still visible to lock-free publishers. Splicing a pending chain
+  ** that contains the reused address back to the old spine forms
+  ** head..tail -> oldhead..entry. Sever the cycle predecessor with the same
+  ** GCRef CAS discipline used by root unlinking, preserving each unique object
+  ** reachable from head exactly once.
+  */
+  while ((next = lj_obj_gcw_acq(tail)) != entry) {
+    if (next == NULL)
+      return 0;
+    tail = next;
+  }
+  while (lj_obj_gcw_acq(tail) == entry) {
+    if (gc_ref_cas_obj(lj_obj_gcwref(tail), entry, NULL))
+      return 1;
+    gc_root_wait_no_l();
+  }
+  return 0;
+}
+
+uint32_t lj_gc_repair_root_spine(global_State *g)
+{
+  if (!g)
+    return 0;
+  return (uint32_t)gc_root_chain_break_cycle(lj_gc_root_acq(g));
 }
 
 /* Mark userdata/cdata in finalizer queues. */
@@ -1241,6 +1308,37 @@ static GCtrace *gc_traceref_safe(global_State *g, TraceNo traceno)
   return traceref_fromgco(gcref_acq(tv->slot[traceno]));
 }
 
+static int gc_trace_geometry_valid(GCtrace *T)
+{
+  IRIns *irbase;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  IRRef nins, nk;
+  SnapNo nsnap;
+  MSize nsnapmap;
+  const MSize snapmap_per_snap =
+    (MSize)LJ_MAX_JSLOTS + (MSize)LJ_STACK_EXTRA + 32u;
+  if (!T || !checkptrGC(T) || T->gct != (uint32_t)~LJ_TTRACE)
+    return 0;
+  nins = trace_nins_acq(T);
+  nk = trace_nk_acq(T);
+  nsnap = trace_nsnap_acq(T);
+  nsnapmap = trace_nsnapmap_acq(T);
+  if (nins < REF_BASE || nins > 0xffffu || nk > REF_BIAS || nk > nins)
+    return 0;
+  if ((nsnap == 0 && nsnapmap != 0) ||
+      (nsnap != 0 && nsnapmap > (MSize)nsnap * snapmap_per_snap))
+    return 0;
+  irbase = trace_ir_acq(T);
+  if (nk < REF_TRUE && (!irbase || !checkptrGC(&irbase[nk])))
+    return 0;
+  snap = trace_snap_acq(T);
+  snapmap = trace_snapmap_acq(T);
+  if (nsnap == 0)
+    return 1;
+  return snap && snapmap && checkptrGC(snap) && checkptrGC(snapmap);
+}
+
 /* Mark a trace. */
 static void gc_marktrace(global_State *g, TraceNo traceno)
 {
@@ -1268,6 +1366,7 @@ static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc)
   if (!pc)
     return;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o->gch.gct == ~LJ_TPROTO) {
       GCproto *pt = gco2pt(o);
@@ -1284,11 +1383,17 @@ static void gc_mark_trace_snapshot_pcs(global_State *g, GCtrace *T)
 {
   SnapShot *snap = trace_snap_acq(T);
   SnapEntry *snapmap = trace_snapmap_acq(T);
+  MSize nsnapmap = trace_nsnapmap_acq(T);
   SnapNo i, nsnap = trace_nsnap_acq(T);
   for (i = 0; i < nsnap; i++) {
     SnapShot *s = &snap[i];
-    SnapEntry *map = &snapmap[snap_mapofs_acq(s)];
-    gc_mark_proto_for_trace_pc(g, snap_pc_acq(&map[snap_nent_acq(s)]));
+    MSize ofs = snap_mapofs_acq(s);
+    MSize nent = snap_nent_acq(s);
+    SnapEntry *map;
+    if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
+      return;
+    map = &snapmap[ofs];
+    gc_mark_proto_for_trace_pc(g, snap_pc_acq(&map[nent]));
   }
 }
 
@@ -1298,6 +1403,7 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
   IRIns *irbase;
   IRRef ref;
   if (trace_traceno_acq(T) == 0) return;
+  if (T != &G2J(g)->cur && !gc_trace_geometry_valid(T)) return;
   irbase = trace_ir_acq(T);
   for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
     IRIns *ir = &irbase[ref];
@@ -1487,8 +1593,14 @@ static TValue *gc_active_thread_top(lua_State *th, TValue *top)
 	const BCIns *pc = cf ? cframe_pc(cf) : NULL;
 	const BCIns *bc = proto_bc(pt);
 	if (pc && pc > bc && pc <= bc + pt->sizebc) {
-	  TValue *ctop = prev + 1 + gc_cur_topslot(pt, pc,
-						   cframe_multres_n(cf));
+	  /*
+	  ** Cell-op frames keep source locals live outside the narrow call
+	  ** argument/result window. During a C call, scan the full Lua frame so
+	  ** collectgarbage(), metamethods and library calls cannot hide them.
+	  */
+	  TValue *ctop = prev + 1 + (proto_cellops(pt) ? pt->framesize :
+				    gc_cur_topslot(pt, pc,
+						   cframe_multres_n(cf)));
 	  if (ctop > top)
 	    top = ctop;
 	}
@@ -2003,6 +2115,7 @@ void lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
   if (!g || !dead)
     return;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == dead) {
       if (gc_chain_splice(p, o))
@@ -2020,6 +2133,7 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
   GCobj *o;
   uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   while ((o = gcref_acq(*p)) != NULL) {
     int marked = lj_gc2_ismarked(g, o);
     if (marked == 0) {
@@ -2124,8 +2238,10 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   /* Mask with other white and LJ_GC_FIXED. Or LJ_GC_SFIXED on shutdown. */
   int ow = otherwhite(g);
   GCobj *o;
-  if (p == lj_gc_root_ref(g))
+  if (p == lj_gc_root_ref(g)) {
     (void)lj_gc_flush_root_pending(g);
+    (void)lj_gc_repair_root_spine(g);
+  }
   while ((o = gcref_acq(*p)) != NULL && lim-- > 0) {
     if (LJ_UNLIKELY(o->gch.gct == 0)) {
       if (!gc_chain_splice(p, o)) {
@@ -2217,6 +2333,13 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
 /* Check whether we can clear a key or a value slot from a table. */
 static int gc_mayclear(global_State *g, cTValue *o, int val)
 {
+  /*
+  ** Weak clearing reads slots without owning their table generation. A stale
+  ** tagged GC pointer whose header has been reused is not a live weak edge.
+  ** Clear it instead of dereferencing reclaimed header state.
+  */
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(o)))
+    return 1;
   if (tvisgcv(o)) {  /* Only collectable objects can be weak references. */
     if (tvisstr(o)) {  /* But strings cannot be used as weak references. */
       gc_mark_str(g, strV(o));  /* And need to be marked. */
@@ -2986,39 +3109,6 @@ static LJ_AINLINE void gc_root_set_next_rel(GCobj *o, const GCobj *next)
     lj_obj_setgcwnullrel(o);
 }
 
-static int gc_root_chain_break_cycle(GCobj *head)
-{
-  GCobj *slow = head, *fast = head, *entry, *tail;
-  while (fast != NULL) {
-    slow = lj_obj_gcw_acq(slow);
-    fast = lj_obj_gcw_acq(fast);
-    if (fast == NULL || slow == NULL)
-      return 0;
-    fast = lj_obj_gcw_acq(fast);
-    if (slow == fast)
-      break;
-  }
-  if (fast == NULL)
-    return 0;
-  slow = head;
-  while (slow != fast) {
-    slow = lj_obj_gcw_acq(slow);
-    fast = lj_obj_gcw_acq(fast);
-  }
-  entry = slow;
-  tail = entry;
-  /*
-  ** Pending-root chains are caller-owned stacks and must be null-terminated
-  ** before they are spliced into the legacy root spine. If a racing publisher or
-  ** an old corrupted pending head forms a cycle, preserve each unique object in
-  ** the chain by severing the cycle predecessor rather than letting GC hang.
-  */
-  while (lj_obj_gcw_acq(tail) != entry)
-    tail = lj_obj_gcw_acq(tail);
-  lj_obj_setgcwnullrel(tail);
-  return 1;
-}
-
 static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
 {
   GCobj *tail, *next;
@@ -3041,6 +3131,21 @@ static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
   return n;
 }
 
+static int gc_root_chain_contains_to_tail(GCobj *head, GCobj *tail,
+					  GCobj *needle)
+{
+  GCobj *o;
+  if (!needle)
+    return 0;
+  for (o = head; o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o == needle)
+      return 1;
+    if (o == tail)
+      return 0;
+  }
+  return 0;
+}
+
 static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
 {
 #if LJ_GC64
@@ -3049,10 +3154,19 @@ static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
     GCobj *oldhead;
     do {
       oldhead = gcref_acq(*p);
-      gc_root_set_next_rel(tail, oldhead);
+      /*
+      ** Pending-root publication owns head..tail, but address reuse can make a
+      ** freshly published pending chain overlap the existing legacy spine at
+      ** the insertion point. Linking tail back to that old head would create a
+      ** cycle; null-terminating instead preserves every unique object already
+      ** reachable from head.
+      */
+      gc_root_set_next_rel(tail,
+			   gc_root_chain_contains_to_tail(head, tail, oldhead) ?
+			   NULL : oldhead);
       expect = oldhead ? (uint64_t)(uintptr_t)&oldhead->gch : 0;
     } while (!la_cas64(&p->gcptr64, &expect,
-		       (uint64_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
+			       (uint64_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
   }
 #else
   {
@@ -3060,10 +3174,19 @@ static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
     GCobj *oldhead;
     do {
       oldhead = gcref_acq(*p);
-      gc_root_set_next_rel(tail, oldhead);
+      /*
+      ** Pending-root publication owns head..tail, but address reuse can make a
+      ** freshly published pending chain overlap the existing legacy spine at
+      ** the insertion point. Linking tail back to that old head would create a
+      ** cycle; null-terminating instead preserves every unique object already
+      ** reachable from head.
+      */
+      gc_root_set_next_rel(tail,
+			   gc_root_chain_contains_to_tail(head, tail, oldhead) ?
+			   NULL : oldhead);
       expect = oldhead ? (uint32_t)(uintptr_t)&oldhead->gch : 0;
     } while (!la_cas32(&p->gcptr32, &expect,
-		       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
+			       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
   }
 #endif
 }
@@ -3168,6 +3291,8 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
     n += gc_flush_root_pending_tg(g, main_tg);
   if (self && self != main_tg && !saw_self)
     n += gc_flush_root_pending_tg(g, self);
+  if (n != 0)
+    (void)lj_gc_repair_root_spine(g);
   gc_pending_root_stats(g, n);
   return n;
 }
