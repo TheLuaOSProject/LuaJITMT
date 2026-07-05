@@ -55,7 +55,12 @@ Follow-up fix:
   sample showed trace slot 3 reused for the up-recursion trace after two
   call-unroll aborts, instead of retaining a run of live return roots.
 - Follow-up coverage tightened `tests/t-jit-recursive-retention.c` so the
-  fixture now requires this workload to release every unlinked return slot,
-  reuse at least one released trace slot, avoid the stock self-link branch, and
-  finish warmup with zero live `LJ_TRLINK_RETURN` roots. Those are behavioral
-  assertions over helper counters, not source-shape checks.
+  fixture now checks both a static recursive local function and the
+  `aux/bench/bench.lua fib30` shape where the recursive closure is rebuilt
+  around each measured run. The assertions are deliberately stock-shaped:
+  call-unroll aborts may vary with hotcount jitter, but they must stay bounded
+  at 32, every unlinked return trace must clear its public slot, at least one
+  released trace slot must be reused, and the stock self-link branch must remain
+  unused. The benchmark-shaped case may leave a small live return trace for the
+  wrapper; the static recursive body still finishes with zero live
+  `LJ_TRLINK_RETURN` roots.

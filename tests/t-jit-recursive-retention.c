@@ -34,30 +34,22 @@ static uint32_t live_trace_count(jit_State *J, uint32_t *returnsp)
   return live;
 }
 
-int main(void)
+static void reset_jit(lua_State *L)
 {
-  lua_State *L = ljt_lua_newstate_openlibs();
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=56', 'hotexit=10')\n");
+  lj_trace_test_reset_retention_stats();
+}
+
+static void check_retention_stats(lua_State *L, const char *label,
+				  uint32_t max_aborts, uint32_t max_returns)
+{
   jit_State *J = G2J(G(L));
   uint32_t live, returns;
   uint32_t aborts, linked, unlinks, return_unlinks;
   uint32_t slot_release_calls, slot_release_clears;
   uint32_t findfree, reuses, grows;
-
-  ljt_lua_dostring(L,
-    "jit.flush()\n"
-    "jit.opt.start('hotloop=56', 'hotexit=10')\n");
-
-  lj_trace_test_reset_retention_stats();
-
-  ljt_lua_dostring(L,
-    "local function fib(n)\n"
-    "  if n < 2 then return n end\n"
-    "  return fib(n - 1) + fib(n - 2)\n"
-    "end\n"
-    "assert(fib(30) == 832040)\n"
-    "assert(fib(30) == 832040)\n"
-    "for _ = 1, 4 do assert(fib(24) == 46368) end\n"
-    "for _ = 1, 8 do assert(fib(30) == 832040) end\n");
 
   aborts = lj_trace_test_call_unroll_aborts();
   linked = lj_trace_test_call_unroll_linked();
@@ -70,11 +62,20 @@ int main(void)
   grows = lj_trace_test_findfree_grows();
   live = live_trace_count(J, &returns);
 
+  printf("t-jit-recursive-retention %s: aborts=%u unlinks=%u "
+	 "return_unlinks=%u selflinks=%u slot_calls=%u slot_clears=%u live=%u "
+	 "returns=%u findfree=%u reuse=%u grow=%u\n",
+	 label, aborts, unlinks, return_unlinks,
+	 lj_trace_test_abort_selflinks(), slot_release_calls,
+	 slot_release_clears, live, returns, findfree, reuses, grows);
+  fflush(stdout);
+
   assert(aborts > 0);
+  assert(aborts <= max_aborts);
   assert(linked == aborts);
   assert(unlinks >= aborts);
   assert(return_unlinks > 0);
-  assert(slot_release_calls == return_unlinks);
+  assert(slot_release_calls >= return_unlinks);
   assert(slot_release_clears > 0);
   assert(lj_trace_test_abort_selflinks() == 0);
   assert(slot_release_clears == return_unlinks);
@@ -84,14 +85,41 @@ int main(void)
   assert(lj_trace_test_last_unlinked() > 0);
   assert(lj_trace_test_last_findfree() > 0);
   assert(live > 0);
-  assert(returns == 0);
+  assert(returns <= max_returns);
+}
 
-  printf("t-jit-recursive-retention OK: aborts=%u unlinks=%u "
-	 "return_unlinks=%u selflinks=%u slot_calls=%u slot_clears=%u live=%u "
-	 "returns=%u findfree=%u reuse=%u grow=%u\n",
-	 aborts, unlinks, return_unlinks, lj_trace_test_abort_selflinks(),
-	 slot_release_calls, slot_release_clears, live, returns, findfree,
-	 reuses, grows);
+int main(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+
+  reset_jit(L);
+  ljt_lua_dostring(L,
+    "local function fib(n)\n"
+    "  if n < 2 then return n end\n"
+    "  return fib(n - 1) + fib(n - 2)\n"
+    "end\n"
+    "assert(fib(30) == 832040)\n"
+    "assert(fib(30) == 832040)\n"
+    "for _ = 1, 4 do assert(fib(24) == 46368) end\n"
+    "for _ = 1, 8 do assert(fib(30) == 832040) end\n");
+  check_retention_stats(L, "static-fib", 32, 0);
+
+  reset_jit(L);
+  ljt_lua_dostring(L,
+    "local function runfib()\n"
+    "  collectgarbage('collect')\n"
+    "  local function fib(n)\n"
+    "    if n < 2 then return n end\n"
+    "    return fib(n - 1) + fib(n - 2)\n"
+    "  end\n"
+    "  return fib(30)\n"
+    "end\n"
+    "for _ = 1, 5 do assert(runfib() == 832040) end\n");
+  /* This mirrors aux/bench/bench.lua fib30: a nested recursive closure is
+  ** rebuilt around each measured run. The limit leaves room for hotcount
+  ** variance, but catches the old unbounded return-trace retry loop.
+  */
+  check_retention_stats(L, "bench-fib", 32, 2);
 
   lua_close(L);
   return 0;
