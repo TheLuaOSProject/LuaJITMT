@@ -541,7 +541,7 @@ restart:
   }
 
   /* Retire old table and replace with new table. */
-  g->str.mask = newmask;
+  lj_str_mask_rel(g, newmask);
   lj_str_tabh_rel(g, newhdr);
   if (oldhdr)
     strtab_retire(g, oldhdr);

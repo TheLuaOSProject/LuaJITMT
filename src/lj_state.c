@@ -585,7 +585,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_uv_setnext_rel(&g->uvhead, &g->uvhead);
   lj_str_tabh_store_rlx(g, NULL);
   lj_str_retired_head_store_rlx(g, NULL);
-  g->str.mask = ~(MSize)0;
+  lj_str_mask_store_rlx(g, ~(MSize)0);
   g->tab.retired_nodes = NULL;
   g->tab.retired_arrays = NULL;
   lj_registry_setnil_rel(L);

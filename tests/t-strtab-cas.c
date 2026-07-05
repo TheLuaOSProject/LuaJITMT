@@ -269,7 +269,7 @@ int main(void)
   assert(hdr != NULL);
   assert(hdr->resize == 0);
 
-  oldmask = g->str.mask;
+  oldmask = lj_str_mask_acq(g);
   wantmask = (oldmask << 1) + 1u;
 
   /* Simulate the last active interner leaving after resize claims the header. */
@@ -288,7 +288,7 @@ int main(void)
   assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
   assert(lj_tg_strtab_active_depth_acq(tg) == 0);
   assert(lj_str_tabh_acq(g) != hdr);
-  assert(g->str.mask == wantmask);
+  assert(lj_str_mask_acq(g) == wantmask);
   assert_resize_idle(lj_str_tabh_acq(g));
   assert_resize_claimed(hdr);
   assert(lj_str_retired_head_acq(g) == hdr);
@@ -356,7 +356,7 @@ int main(void)
   assert_resize_idle(hdr);
 
   hdr = lj_str_tabh_acq(g);
-  oldmask = g->str.mask;
+  oldmask = lj_str_mask_acq(g);
   wantmask = (oldmask << 1) + 1u;
   lj_tg_init_thread(g, &extra, NULL, 0);
   lj_tg_tid_rel(&extra, lj_thr_newid());
@@ -377,7 +377,7 @@ int main(void)
   assert(lj_tg_strtab_active_hdr_acq(&extra) == NULL);
   assert(lj_tg_strtab_active_depth_acq(&extra) == 0);
   assert(lj_str_tabh_acq(g) != hdr);
-  assert(g->str.mask == wantmask);
+  assert(lj_str_mask_acq(g) == wantmask);
   assert_resize_idle(lj_str_tabh_acq(g));
   assert_resize_claimed(hdr);
   assert(lj_str_retired_head_acq(g) == hdr);

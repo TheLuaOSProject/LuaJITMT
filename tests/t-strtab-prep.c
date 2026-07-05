@@ -18,20 +18,22 @@ static void check_strtab(global_State *g)
 {
   StrTabHdr *hdr = lj_str_tabh_acq(g);
   GCRef *bucket;
+  MSize mask;
   MSize i;
 
   assert(hdr != NULL);
-  assert(g->str.mask != ~(MSize)0);
-  assert(hdr->mask == g->str.mask);
+  mask = lj_str_mask_acq(g);
+  assert(mask != ~(MSize)0);
+  assert(hdr->mask == mask);
   assert(hdr->resize == 0);
   assert(hdr->copy_cursor == 0);
   assert(lj_str_retire_epoch_acq(hdr) == 0);
   assert(lj_str_retired_next_acq(hdr) == NULL);
   assert(((uintptr_t)lj_str_buckets(g) & (sizeof(GCRef)-1u)) == 0);
-  assert(offsetof(StrTabHdr, bucket) < lj_str_tabsize(g->str.mask));
+  assert(offsetof(StrTabHdr, bucket) < lj_str_tabsize(mask));
 
   bucket = hdr->bucket;
-  for (i = 0; i <= g->str.mask; i++) {
+  for (i = 0; i <= mask; i++) {
     uintptr_t u = lj_str_ref_load_acq(&bucket[i]);
     GCobj *head = lj_str_hashhead(bucket[i]);
     assert((u & LJ_STRHASH_DEAD) == 0);
@@ -57,7 +59,7 @@ int main(void)
   assert(L != NULL);
   g = G(L);
   check_strtab(g);
-  initial_mask = g->str.mask;
+  initial_mask = lj_str_mask_acq(g);
 
   for (i = 0; i < 4096; i++) {
     char buf[64];
@@ -65,7 +67,7 @@ int main(void)
     assert(lj_str_new(L, buf, strlen(buf)) != NULL);
   }
 
-  assert(g->str.mask > initial_mask);
+  assert(lj_str_mask_acq(g) > initial_mask);
   check_strtab(g);
   lua_gc(L, LUA_GCCOLLECT, 0);
   check_strtab(g);

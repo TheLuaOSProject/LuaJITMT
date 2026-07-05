@@ -53,7 +53,7 @@ int main(void)
   lj_str_resize(L, TARGET_MASK);
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
-  assert(g->str.mask == TARGET_MASK);
+  assert(lj_str_mask_acq(g) == TARGET_MASK);
 
   for (n = 0; found < TARGET_STRINGS; n++) {
     char buf[64];

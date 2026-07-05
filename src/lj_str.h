@@ -39,6 +39,26 @@ static LJ_AINLINE void lj_str_tabh_rel(global_State *g, StrTabHdr *hdr)
   la_storeptr_rel((void **)&g->str.tabh, hdr);
 }
 
+static LJ_AINLINE MSize lj_str_mask_acq(const global_State *g)
+{
+  return la_load32_acq(&g->str.mask);
+}
+
+static LJ_AINLINE void lj_str_mask_store_rlx(global_State *g, MSize mask)
+{
+  la_store32_rlx(&g->str.mask, mask);
+}
+
+static LJ_AINLINE void lj_str_mask_rel(global_State *g, MSize mask)
+{
+  /*
+  ** The header remains the authoritative string-table snapshot. This mirror is
+  ** retained for legacy fast paths and diagnostics, so update it atomically with
+  ** the same publication discipline as the header replacement.
+  */
+  la_store32_rel(&g->str.mask, mask);
+}
+
 static LJ_AINLINE StrTabHdr *lj_str_tabh_xchg_acqrel(global_State *g,
 						     StrTabHdr *hdr)
 {
