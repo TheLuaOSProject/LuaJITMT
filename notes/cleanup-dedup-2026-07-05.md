@@ -53,6 +53,6 @@ release the token, then assert the sequence advanced. The shared
 keep the same nonblocking wait assertion without local copies.
 
 The follow-up pass routed the remaining exact-match metadata, conversion,
-namespace, metatable, and arithmetic snapshot fixtures through the same helper.
-CDEF-token, callback, native-stopreq, and parser-release-only tests keep local
-workers because they assert different cleanup or observation semantics.
+namespace, metatable, arithmetic, and ccall snapshot fixtures through the same
+helper. CDEF-token, callback, native-stopreq, and parser-release-only tests keep
+local workers because they assert different cleanup or observation semantics.
