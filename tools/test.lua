@@ -89,5 +89,9 @@ local function run_selected()
   end
 end
 
-utils.with_directory_lock(root .. "/src/.lj-test-run.lock", "Lua test runner",
-                          run_selected)
+if os.getenv("LJ_TEST_RUN_LOCK_HELD") == "1" then
+  run_selected()
+else
+  utils.with_directory_lock(root .. "/src/.lj-test-run.lock", "Lua test runner",
+                            run_selected)
+end
