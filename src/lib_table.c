@@ -32,7 +32,21 @@ static LJ_AINLINE int table_mt_concurrent(lua_State *L)
   return mt_active_or_entering_acq(G(L));
 }
 
-static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)
+static LJ_AINLINE void table_insert_store_wait(lua_State *L, int guarded)
+{
+  /*
+  ** A fresh STOPREQ-visible wait can longjmp. While table.insert owns the
+  ** per-table structural slot, retry waits must only yield to competing
+  ** resizers and then unwind through the normal leave path below.
+  */
+  if (guarded)
+    lj_tab_wait_no_l();
+  else
+    lj_tab_store_wait_l(L);
+}
+
+static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i,
+				     int guarded)
 {
   for (;;) {
     TValue *dst = lj_tab_setint(L, t, i);
@@ -51,12 +65,12 @@ static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)
       }
       return;
     }
-    lj_tab_store_wait_l(L);  /* table.insert shift saw stale/FORWARD slot. */
+    table_insert_store_wait(L, guarded);
   }
 }
 
 static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
-					cTValue *src)
+					cTValue *src, int guarded)
 {
   TValue *dst;
   TValue key;
@@ -66,7 +80,7 @@ static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
 	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_l(L);  /* table.insert value saw stale/FORWARD slot. */
+    table_insert_store_wait(L, guarded);
   }
 }
 
@@ -205,14 +219,14 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     }
     /* Shifted weak-table writes still need the P_WEAK bridge. */
     for (; i > n; i--)
-      table_insert_shift_store(L, t, i);
+      table_insert_shift_store(L, t, i, guard);
     i = n;
   } else if (table_mt_concurrent(L)) {
     (void)lj_tab_setint(L, t, i);
     guard = lj_tab_struct_enter(L, t);
   }
   {
-    TValue *dst = table_insert_value_store(L, t, i, L->top-1);
+    TValue *dst = table_insert_value_store(L, t, i, L->top-1, guard);
     TValue key;
     setintV(&key, i);
     lj_gc2_barrier_weak_write(L, t, &key, L->top-1);

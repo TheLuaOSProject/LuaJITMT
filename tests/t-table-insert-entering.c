@@ -49,15 +49,31 @@ static void assert_i(lua_State *L, int tabidx, int32_t key, int32_t expect)
   lua_pop(L, 1);
 }
 
-int main(void)
+static void exercise_private_insert(lua_State *L)
 {
-  lua_State *L = luaL_newstate();
-  global_State *g;
+  lua_settop(L, 0);
+  lua_createtable(L, 32, 0);
+  rawseti(L, 1, 1, 11);
+  rawseti(L, 1, 2, 22);
+  rawseti(L, 1, 3, 33);
 
-  assert(L != NULL);
-  luaL_openlibs(L);
-  g = G(L);
+  lj_tab_test_reset_struct_enter_acquires();
+  call_insert_append(L, 1, 44);
+  call_insert_pos(L, 1, 2, 99);
+  assert(lj_tab_test_struct_enter_acquires() == 0);
 
+  assert_i(L, 1, 1, 11);
+  assert_i(L, 1, 2, 99);
+  assert_i(L, 1, 3, 22);
+  assert_i(L, 1, 4, 33);
+  assert_i(L, 1, 5, 44);
+}
+
+static void exercise_entering_insert(lua_State *L)
+{
+  global_State *g = G(L);
+
+  lua_settop(L, 0);
   lua_createtable(L, 32, 0);
   rawseti(L, 1, 1, 11);
   rawseti(L, 1, 2, 22);
@@ -76,6 +92,17 @@ int main(void)
   assert_i(L, 1, 3, 22);
   assert_i(L, 1, 4, 33);
   assert_i(L, 1, 5, 44);
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+
+  exercise_private_insert(L);
+  exercise_entering_insert(L);
 
   lua_close(L);
   return 0;
