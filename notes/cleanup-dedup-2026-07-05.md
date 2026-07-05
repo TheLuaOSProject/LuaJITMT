@@ -20,8 +20,9 @@ The FNEW bump fixture now covers the predicate directly:
 Several native-call sites repeated identical `had_stopreq`/fresh-stop wrappers.
 `lj_safepoint_had_stopreq()` now lives next to the existing fresh-stop helpers,
 and exact duplicate local wrappers were removed from base `print`, `loadfile`,
-package loader paths, `jit.profile.stop`, and FFI string/copy/fill helpers.
+package loader paths, `jit.profile.stop`, FFI string/copy/fill helpers,
+VM-event failure reporting, JIT-token waits, and the FFI CLibrary loader.
 
-Nullable or site-specific wrappers were intentionally left in place when they
-carry behavior beyond the common helper, such as extra pending-poll handling or
-`L == NULL` tolerance.
+Site-specific wrappers were intentionally left in place when they carry behavior
+beyond the common helper, such as extra pending-poll handling or additional
+cleanup before throwing a fresh STOPREQ.

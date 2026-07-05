@@ -197,37 +197,18 @@ void lj_jit_token_release(jit_State *J)
     jit_token_rel(g, 0);
 }
 
-static int jit_token_had_stopreq(lua_State *L)
-{
-  TGState *tg = L ? L2TG(L) : NULL;
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int jit_token_fresh_stopreq(lua_State *L, uint32_t actions,
-				   int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void jit_token_checkstop_fresh(lua_State *L, uint32_t actions,
-				      int had_stopreq)
-{
-  if (jit_token_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 int lj_jit_token_acquire_wait(jit_State *J)
 {
   TGState *tg = J2TG(J);
   lua_State *L = tg ? lj_tg_load_cur_L(tg) : NULL;
-  int had_stopreq = jit_token_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   if (lj_jit_token_held(J))
     return 0;
   for (;;) {
     if (lj_jit_token_try(J))
       return 1;
     lj_trace_state_abort(J);
-    jit_token_checkstop_fresh(L, lj_thr_retry_yield(L), had_stopreq);
+    lj_safepoint_checkstop_fresh(L, lj_thr_retry_yield(L), had_stopreq);
   }
 }
 

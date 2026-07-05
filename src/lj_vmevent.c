@@ -66,30 +66,6 @@ static uint32_t vmevent_report_failure(lua_State *L)
   return actions;
 }
 
-static int vmevent_had_stopreq(lua_State *L)
-{
-  TGState *tg;
-  if (!L)
-    return 0;
-  tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int vmevent_fresh_stopreq(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  if (!L)
-    return 0;
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void vmevent_checkstop_fresh(lua_State *L, uint32_t actions,
-				    int had_stopreq)
-{
-  if (vmevent_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
 {
   global_State *g = G(L);
@@ -108,7 +84,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   if (LJ_UNLIKELY(status)) {
     /* Really shouldn't use stderr here, but where else to complain? */
     L->top--;
-    had_stopreq = vmevent_had_stopreq(L);
+    had_stopreq = lj_safepoint_had_stopreq(L);
     actions = vmevent_report_failure(L);
   }
   lj_tg_setcur_L(g, oldL);
@@ -119,5 +95,5 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   hook_restore(g, oldh);
   vmevmask_restore_if_cached(g, oldmask);
   if (LJ_UNLIKELY(status))
-    vmevent_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
