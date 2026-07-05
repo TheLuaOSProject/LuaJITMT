@@ -11,8 +11,6 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
-#include "lib/test_sleep.h"
-
 #include "lj_obj.h"
 #include "lj_cconv.h"
 #include "lj_ctype.h"
@@ -22,48 +20,16 @@
 #include "lib/ctype_parse_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
 
-typedef struct ParseReleaseCtx {
-  CTState *cts;
-  TGState *tg;
-  uint32_t release_seq;
-  int saw_native;
-} ParseReleaseCtx;
-
-
-static void *release_parse_token(void *arg)
-{
-  ParseReleaseCtx *ctx = (ParseReleaseCtx *)arg;
-  int spins;
-  for (spins = 0; spins < 1000; spins++) {
-    if (lj_tg_in_native_acq(ctx->tg)) {
-      ctx->saw_native = 1;
-      break;
-    }
-    sleep_ns(1000000);
-  }
-  ljt_ctype_release_parse_token(ctx->cts, ctx->release_seq);
-  return NULL;
-}
-
 static void assert_cconv_init_waits_without_lock(lua_State *L, CTState *cts,
 						 TGState *tg,
 						 const char *chunk)
 {
-  ParseReleaseCtx ctx;
+  LJTCTypeParseReleaseCtx ctx;
   pthread_t thread;
-  uint32_t seq0 = ljt_ctype_parse_seq(cts);
 
-  ctx.cts = cts;
-  ctx.tg = tg;
-  ctx.release_seq = ljt_ctype_hold_parse_token(cts);
-  ctx.saw_native = 0;
-  assert(ctx.release_seq == seq0 + 2u);
-
-  assert(pthread_create(&thread, NULL, release_parse_token, &ctx) == 0);
+  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
   ljt_lua_dostring(L, chunk);
-  assert(pthread_join(thread, NULL) == 0);
-  assert(ctx.saw_native);
-  assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
+  ljt_ctype_release_when_native_join(&ctx, thread);
 }
 
 static void assert_predefined_init_avoids_wait(lua_State *L, CTState *cts)
@@ -139,25 +105,16 @@ static void assert_ct_ct_pointer_waits_without_lock(lua_State *L,
 						    CTypeID did, CType *d,
 						    CTypeID sid, CType *s)
 {
-  ParseReleaseCtx ctx;
+  LJTCTypeParseReleaseCtx ctx;
   pthread_t thread;
   int anchor = 0x5150;
   void *src = &anchor, *dst = NULL;
-  uint32_t seq0 = ljt_ctype_parse_seq(cts);
 
-  ctx.cts = cts;
-  ctx.tg = tg;
-  ctx.release_seq = ljt_ctype_hold_parse_token(cts);
-  ctx.saw_native = 0;
-  assert(ctx.release_seq == seq0 + 2u);
-
-  assert(pthread_create(&thread, NULL, release_parse_token, &ctx) == 0);
+  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
   lj_cconv_ct_ct_l(L, cts, d, did, s, sid, (uint8_t *)&dst,
 		   (uint8_t *)&src, 0);
-  assert(pthread_join(thread, NULL) == 0);
-  assert(ctx.saw_native);
+  ljt_ctype_release_when_native_join(&ctx, thread);
   assert(dst == src);
-  assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
 static void assert_multi_init_source_cdata_waits_without_lock(lua_State *L,
@@ -166,27 +123,18 @@ static void assert_multi_init_source_cdata_waits_without_lock(lua_State *L,
 							      CTypeID did,
 							      CType *d)
 {
-  ParseReleaseCtx ctx;
+  LJTCTypeParseReleaseCtx ctx;
   pthread_t thread;
   int rc;
-  uint32_t seq0 = ljt_ctype_parse_seq(cts);
 
   lua_getglobal(L, "lj_m7_cconv_init_str_arr_src");
   assert(tviscdata(L->top - 1));
 
-  ctx.cts = cts;
-  ctx.tg = tg;
-  ctx.release_seq = ljt_ctype_hold_parse_token(cts);
-  ctx.saw_native = 0;
-  assert(ctx.release_seq == seq0 + 2u);
-
-  assert(pthread_create(&thread, NULL, release_parse_token, &ctx) == 0);
+  ljt_ctype_release_when_native_start(&ctx, &thread, cts, tg);
   rc = lj_cconv_multi_init_l(L, cts, did, d, L->top - 1);
-  assert(pthread_join(thread, NULL) == 0);
+  ljt_ctype_release_when_native_join(&ctx, thread);
   L->top--;
-  assert(ctx.saw_native);
   assert(rc == 0);
-  assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
 int main(void)

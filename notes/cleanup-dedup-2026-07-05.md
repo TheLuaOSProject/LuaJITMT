@@ -51,3 +51,8 @@ hold `CTState.parse_token`, wait until the tested thread reaches native wait,
 release the token, then assert the sequence advanced. The shared
 `ctype_parse_fixture_helpers.h` helper now owns that pattern, so snapshot tests
 keep the same nonblocking wait assertion without local copies.
+
+The follow-up pass routed the remaining exact-match metadata, conversion,
+namespace, metatable, and arithmetic snapshot fixtures through the same helper.
+CDEF-token, callback, native-stopreq, and parser-release-only tests keep local
+workers because they assert different cleanup or observation semantics.
