@@ -1249,8 +1249,25 @@ static LJ_AINLINE void lj_tab_nextnode_rel(Node *n, const Node *next)
 #endif
 }
 #if LJ_GC64
-#define getfreetop(t, n)	(noderef((t)->freetop))
-#define setfreetop(t, n, v)	(setmref((t)->freetop, (v)))
+/*
+** GC64 keeps the hash free cursor in the table header, not in Node[0]. The
+** cursor is only a hint, but it crosses the same resize/publication boundary
+** as the node vector, so name the acquire/release edge instead of open-coding
+** the MRef access at each table mutation site.
+*/
+static LJ_AINLINE Node *lj_tab_freetop_acq(const GCtab *t)
+{
+  return (Node *)(void *)(uintptr_t)la_load64_acq(&t->freetop.ptr64);
+}
+
+static LJ_AINLINE void lj_tab_freetop_rel(GCtab *t, const Node *freetop)
+{
+  la_store64_rel(&t->freetop.ptr64,
+		 (uint64_t)(uintptr_t)(const void *)freetop);
+}
+
+#define getfreetop(t, n)	(lj_tab_freetop_acq((t)))
+#define setfreetop(t, n, v)	(lj_tab_freetop_rel((t), (v)))
 #else
 #define getfreetop(t, n)	(noderef((n)->freetop))
 #define setfreetop(t, n, v)	(setmref((n)->freetop, (v)))

@@ -80,7 +80,9 @@ static uint32_t ptr_state(void *p)
 
 static void assert_empty_table_body(global_State *g, GCtab *t, int arena_owned)
 {
+  Node *node;
   assert(t != NULL);
+  node = lj_tab_node_acq(t);
   assert(t->gct == (uint8_t)~LJ_TTAB);
   assert((t->marked & LJ_GC_WHITES) == (g->gc.currentwhite & LJ_GC_WHITES));
   assert(t->nomm == (uint8_t)~0u);
@@ -94,9 +96,9 @@ static void assert_empty_table_body(global_State *g, GCtab *t, int arena_owned)
   assert(t->hmask == 0);
   assert(t->acap == 0);
   assert(t->struct_owner == 0);
-  assert(mref(t->node, Node) == &g->nilnode);
+  assert(node == &g->nilnode);
 #if LJ_GC64
-  assert(mref(t->freetop, Node) == &g->nilnode);
+  assert(getfreetop(t, node) == &g->nilnode);
 #endif
 }
 

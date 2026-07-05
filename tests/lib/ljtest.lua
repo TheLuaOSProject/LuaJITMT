@@ -11,6 +11,7 @@ local read_file = utils.read_file
 local read_file_or_nil = utils.read_file_or_nil
 local write_file = utils.write_file
 local file_exists = utils.file_exists
+local command_succeeded = utils.command_succeeded
 
 local function build_profile_signature(xcflags)
   return "default\nXCFLAGS=" .. (xcflags or "") .. "\n"
@@ -48,6 +49,19 @@ end
 local function build_outputs_current(self)
   return not tracked_build_input_newer_than(self, self:path("src", "luajit")) and
     not tracked_build_input_newer_than(self, self:path("src", "libluajit.a"))
+end
+
+local function build_signature_covers_outputs(self, stamp)
+  local luajit = self:path("src", "luajit")
+  local libluajit = self:path("src", "libluajit.a")
+  -- The stamp is written after Test:build completes. If a developer runs make
+  -- outside the harness, the outputs become newer than the stamp and the cached
+  -- XCFLAGS profile can no longer describe the archive being linked.
+  return file_exists(stamp) and
+    not command_succeeded("test " .. shell_quote(luajit) .. " -nt " ..
+                          shell_quote(stamp)) and
+    not command_succeeded("test " .. shell_quote(libluajit) .. " -nt " ..
+                          shell_quote(stamp))
 end
 
 local function append(parts, value)
@@ -177,6 +191,7 @@ function Test:build(opts)
     file_exists(self:path("src", "libluajit.a"))
   if disk_signature == nil then disk_signature = read_file_or_nil(stamp) end
   if opts.clean and disk_signature == signature and have_outputs and
+     build_signature_covers_outputs(self, stamp) and
      build_outputs_current(self) and
      not getenv("LJ_TEST_DISABLE_BUILD_CACHE", nil) then
     self.build_signature = signature

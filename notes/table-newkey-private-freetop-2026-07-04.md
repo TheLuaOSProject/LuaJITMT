@@ -24,3 +24,8 @@ are nil, skips the collision anchor, and falls back to the previous full scan if
 the cursor cannot find a node. Tombstone anchors and nil-key/non-nil-value
 anchors keep the old full-scan path so insertion does not perturb their
 existing freetop behavior.
+
+On GC64 the cursor lives in `GCtab.freetop`. Access is routed through
+`lj_tab_freetop_acq()` / `lj_tab_freetop_rel()` so the hint follows the same
+named publication convention as `GCtab.node`, while non-GC64 keeps the stock
+Node[0] cursor layout.

@@ -6,9 +6,14 @@ whenever a shared field is introduced or migrated.
 | field | class | ordering |
 |---|---|---|
 | TValue in table array/hash, upvalue cell, registry, gcroot | shared slot | rlx (store: rlx; structural publish: rel) |
-| GCtab.arrayhdr / nodehdr (new MRefs, 06) | RCU pointer | load acq / store rel |
+| GCtab.array / node | RCU pointer | load acq / store rel; readers pair with header snapshots |
+| GCtab.arrayhdr / nodehdr (new MRefs, 06) | side-vector header | load acq / store rel; flags CAS acq_rel |
+| GCtab.asize / hmask / acap | size/capacity mirrors | load acq / store rel; snapshot against array/node headers where needed |
+| GCtab.freetop | hash free-cursor hint | load acq / store rel on GC64; correctness revalidates nodes or scans |
+| GCtab.colo | colocated-array/advisory byte | load acq / store rel |
+| GCtab.struct_owner | structural mutation claim | CAS acq_rel; owner reads acq; private bootstrap store rlx |
 | GCtab.metatable, GCudata.metatable | shared ptr | rlx; publish rel |
-| GCtab.nomm | advisory byte | rlx; construction masks and explicit clears only |
+| GCtab.nomm | advisory byte | load acq / store rel; construction masks and explicit clears only |
 | GCobj.gch.gct | immutable after publish | plain read; written pre-publish |
 | arena bitmaps (block/mark) | atomic bitset | fetch_or rlx; sweep owns exclusive |
 | g->gc2.phase | phase word | load rlx in fast paths; transitions rel + handshake |

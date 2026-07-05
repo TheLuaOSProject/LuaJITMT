@@ -1175,7 +1175,7 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   lj_tab_node_set(t, nilnode);
   lj_tab_struct_owner_store_rlx(t, 0);
 #if LJ_GC64
-  setmref(t->freetop, nilnode);
+  lj_tab_freetop_rel(t, nilnode);
 #endif
 }
 
@@ -1683,7 +1683,7 @@ restart_resize:
     global_State *g = G(L);
     lj_tab_hmask_rel(t, 0);
 #if LJ_GC64
-    setmref(t->freetop, &g->nilnode);
+    lj_tab_freetop_rel(t, &g->nilnode);
 #endif
     lj_tab_node_rel(t, &g->nilnode);
     if (oldret) {
