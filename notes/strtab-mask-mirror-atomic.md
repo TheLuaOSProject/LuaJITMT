@@ -11,3 +11,9 @@ boundary explicit. Bootstrap stores the unavailable sentinel with relaxed
 ordering before the state is shared. Resize publication release-stores the
 mirror before publishing the replacement header, and tests acquire-load the
 mirror when checking compatibility state.
+
+The same helper boundary now covers the other mutable `StrInternState` scalars:
+`lj_str_num_*()` owns conservative live-string accounting, `lj_str_id_add_rlx()`
+owns range reservation for `GCstr.sid`, and `lj_str_second_*()` owns the
+secondary-hash flag. The string seed remains a plain field because it is written
+before the state is shared and then immutable.

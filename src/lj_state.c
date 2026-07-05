@@ -447,7 +447,11 @@ static void close_state(lua_State *L)
   }
   lj_assertG(o == obj2gco(L), "main thread missing after freeall");
   lj_str_flush_num_credit(g, g->main_tg);
-  lj_assertG(g->str.num == 0, "leaked %d strings", g->str.num);
+  {
+    MSize strnum = lj_str_num_acq(g);
+    lj_assertG(strnum == 0, "leaked %d strings", strnum);
+    UNUSED(strnum);
+  }
   lj_trace_freestate(g);
 #if LJ_HASFFI
   lj_ctype_freestate(g);

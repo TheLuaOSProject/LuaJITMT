@@ -206,7 +206,7 @@ static LJ_NOINLINE StrID strid_refill(global_State *g, TGState *tg)
   ** the global `g->str.id` cache-line hit from every successful string
   ** allocation while preserving atomic uniqueness and normal uint32 wrap.
   */
-  StrID base = (StrID)la_add32_rlx(&g->str.id, LJ_STRID_BLOCK);
+  StrID base = lj_str_id_add_rlx(g, LJ_STRID_BLOCK);
   tg->strid_next = base + 1u;
   tg->strid_end = base + LJ_STRID_BLOCK;
   str_test_id_refill();
@@ -234,7 +234,7 @@ static LJ_NOINLINE MSize strnum_refill(global_State *g, TGState *tg)
   ** close, removing a contended RMW from the common successful-intern path
   ** while preserving exact final accounting.
   */
-  MSize n = la_add32_rlx(&g->str.num, LJ_STRNUM_BLOCK) + LJ_STRNUM_BLOCK;
+  MSize n = lj_str_num_add_rlx(g, LJ_STRNUM_BLOCK) + LJ_STRNUM_BLOCK;
   tg->strnum_credit = LJ_STRNUM_BLOCK - 1u;
   str_test_num_refill();
   return n;
@@ -259,7 +259,7 @@ void lj_str_flush_num_credit(global_State *g, TGState *tg)
   credit = tg->strnum_credit;
   if (credit != 0) {
     tg->strnum_credit = 0;
-    (void)la_sub32_acqrel(&g->str.num, credit);
+    (void)lj_str_num_sub_acqrel(g, credit);
   }
 }
 
@@ -470,7 +470,7 @@ restart:
 
 #if LUAJIT_SECURITY_STRHASH
   /* Check which chains need secondary hashes. */
-  if (g->str.second) {
+  if (lj_str_second_acq(g)) {
     int newsecond = 0;
     /* Compute primary chain lengths. */
     for (i = oldmask; i != ~(MSize)0; i--) {
@@ -492,7 +492,7 @@ restart:
       lj_str_ref_store_rel(&newtab[i],
 			   secondary ? LJ_STRHASH_SECONDARY : (uintptr_t)0);
     }
-    g->str.second = newsecond;
+    lj_str_second_rel(g, (uint8_t)newsecond);
   }
 #endif
 
@@ -568,7 +568,7 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
   strmask = hdr->mask;
   o = lj_str_hashhead_acq(&strtab[hashc & strmask]);
   lj_str_ref_store_rel(&strtab[hashc & strmask], LJ_STRHASH_SECONDARY);
-  g->str.second = 1;
+  lj_str_second_rel(g, 1);
   while (o) {
     uintptr_t u;
     GCobj *next = lj_str_next_acq(o);
@@ -753,11 +753,11 @@ void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
   */
   #if LUA_USE_ASSERT
   {
-    MSize old = la_sub32_acqrel(&g->str.num, 1);
+    MSize old = lj_str_num_sub_acqrel(g, 1);
     lj_assertG(old != 0, "string count underflow");
   }
   #else
-  (void)la_sub32_acqrel(&g->str.num, 1);
+  (void)lj_str_num_sub_acqrel(g, 1);
   #endif
   lj_mem_free(g, s, lj_str_size(s->len));
 }

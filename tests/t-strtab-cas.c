@@ -116,7 +116,7 @@ static void exercise_string_count_blocks(lua_State *L)
 
   lj_str_flush_num_credit(g, tg);
   assert(tg->strnum_credit == 0);
-  before = la_load32_acq(&g->str.num);
+  before = lj_str_num_acq(g);
   lj_str_test_reset_num_refills();
   refills0 = lj_str_test_num_refills();
 
@@ -130,12 +130,12 @@ static void exercise_string_count_blocks(lua_State *L)
   refills1 = lj_str_test_num_refills();
   assert(refills1 > refills0);
   assert(refills1 - refills0 < N / 4);
-  published = la_load32_acq(&g->str.num);
+  published = lj_str_num_acq(g);
   assert(published >= before + N);
   assert(published == before + N + tg->strnum_credit);
 
   lj_str_flush_num_credit(g, tg);
-  exact = la_load32_acq(&g->str.num);
+  exact = lj_str_num_acq(g);
   assert(tg->strnum_credit == 0);
   assert(exact == before + N);
 
@@ -145,7 +145,7 @@ static void exercise_string_count_blocks(lua_State *L)
     assert(lj_str_new(L, buf, strlen(buf)) == s[i]);
   }
   assert(lj_str_test_num_refills() == refills1);
-  assert(la_load32_acq(&g->str.num) == exact);
+  assert(lj_str_num_acq(g) == exact);
 }
 
 static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)

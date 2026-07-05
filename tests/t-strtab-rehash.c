@@ -72,7 +72,7 @@ int main(void)
     assert(interned[i] != NULL);
   }
 
-  assert(g->str.second == 1);
+  assert(lj_str_second_acq(g) == 1);
   hdr = lj_str_tabh_acq(g);
   assert(hdr->resize == 0);
   assert(lj_str_hashsecondary(hdr->bucket[TARGET_BUCKET]) != 0);

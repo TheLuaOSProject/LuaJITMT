@@ -59,6 +59,36 @@ static LJ_AINLINE void lj_str_mask_rel(global_State *g, MSize mask)
   la_store32_rel(&g->str.mask, mask);
 }
 
+static LJ_AINLINE MSize lj_str_num_acq(const global_State *g)
+{
+  return (MSize)la_load32_acq(&g->str.num);
+}
+
+static LJ_AINLINE MSize lj_str_num_add_rlx(global_State *g, MSize n)
+{
+  return (MSize)la_add32_rlx(&g->str.num, (uint32_t)n);
+}
+
+static LJ_AINLINE MSize lj_str_num_sub_acqrel(global_State *g, MSize n)
+{
+  return (MSize)la_sub32_acqrel(&g->str.num, (uint32_t)n);
+}
+
+static LJ_AINLINE StrID lj_str_id_add_rlx(global_State *g, StrID n)
+{
+  return (StrID)la_add32_rlx(&g->str.id, n);
+}
+
+static LJ_AINLINE uint8_t lj_str_second_acq(const global_State *g)
+{
+  return la_load8_acq(&g->str.second);
+}
+
+static LJ_AINLINE void lj_str_second_rel(global_State *g, uint8_t second)
+{
+  la_store8_rel(&g->str.second, second);
+}
+
 static LJ_AINLINE StrTabHdr *lj_str_tabh_xchg_acqrel(global_State *g,
 						     StrTabHdr *hdr)
 {

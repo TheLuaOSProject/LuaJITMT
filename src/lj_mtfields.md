@@ -16,6 +16,10 @@ whenever a shared field is introduced or migrated.
 | Node.key | write-once | CAS rlx claim; read rlx and re-check |
 | Node.next | chain link | CAS rel insert; load acq walk |
 | strtab bucket head | chain link | CAS rel insert; load acq walk; bit0 = Harris mark, bit1 = secondary hash |
+| g->str.mask | compatibility mirror | bootstrap store rlx; resize publish rel; diagnostic readers acq |
+| g->str.num | conservative string count | range fetch_add rlx; free/credit flush fetch_sub acq_rel; readers acq |
+| g->str.id | string ID range allocator | range fetch_add rlx; gaps are allowed |
+| g->str.second | secondary-hash table flag | store rel under table claim; readers acq |
 | J->tracev / TraceVec.slot[i] | RCU vector + publish-once slots | vector store rel / load acq; slot store rel after mcode sync / load acq |
 | J->retiredmcode | retired mcode records | CAS rel/acq; free after `LJ_FLUSH_EPOCHS` completed epochs |
 | J->retiredtraces / GCtrace.retired_next | retired trace bodies | CAS rel/acq; free after `LJ_FLUSH_EPOCHS` completed epochs |

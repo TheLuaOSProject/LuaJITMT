@@ -2586,7 +2586,7 @@ static size_t gc_onestep(lua_State *L)
       if (!gc_arena_sweep_pending(g) || arena_prepare) {
 	StrTabHdr *hdr = lj_str_tabh_acq(g);
 	MSize mask = hdr ? hdr->mask : ~(MSize)0;
-	if (la_load32_acq(&g->str.num) <= (mask >> 2) &&
+	if (lj_str_num_acq(g) <= (mask >> 2) &&
 	    mask > LJ_MIN_STRTAB*2-1)
 	  lj_str_resize(L, mask >> 1);  /* Shrink string table. */
       }
