@@ -321,7 +321,12 @@ void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
 #else
   {
     int had_stopreq = lj_safepoint_had_stopreq(L);
-    uint32_t actions = lj_thr_sleep_ns(L, 1000000);
+    /*
+    ** Non-futex platforms use the same short native-visible retry/yield
+    ** discipline as the other FFI publication waits instead of parking for a
+    ** fixed timer tick. The caller rechecks the parse sequence after return.
+    */
+    uint32_t actions = lj_thr_retry_yield(L);
     lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   }
 #endif
