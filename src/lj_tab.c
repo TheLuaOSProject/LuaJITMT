@@ -924,6 +924,45 @@ static int tab_resize_copy_hash_slot(lua_State *L, GCtab *t, Node *oldnode,
   return 1;
 }
 
+static int tab_resize_copy_array_slot(lua_State *L, GCtab *t,
+				      TValue *oldarray, uint32_t idx,
+				      TValue *array, uint32_t asize,
+				      Node *newnode, MSize newhmask,
+				      Node **newfreetopp,
+				      MSize *newfreecountp,
+				      int freeze_nil_slots)
+{
+  TValue key, val;
+  TValue *slot;
+  /*
+  ** Separated arrays keep nil slots nil while retiring only live slots.
+  ** Colocated arrays must freeze every copied/tail slot, including nil, so a
+  ** stale array snapshot cannot accept a write after the table has split or
+  ** shrunk. Keep that semantic choice explicit at each call site.
+  */
+  if (freeze_nil_slots) {
+    if (!tab_freeze_forward_any(&oldarray[idx], &val))
+      return 0;
+  } else if (!tab_freeze_forward(&oldarray[idx], &val)) {
+    return 0;
+  }
+  if (tab_val_absent(&val) || !tab_tv_snapshot_valid(&val))
+    return 0;
+  if (idx < asize) {
+    lj_assertL(array != NULL, "missing array part during resize copy");
+    slot = &array[idx];
+    tab_migrate_store_if_absent(L, t, slot, NULL, &val);
+  } else {
+    lj_assertL(newhmask > 0 && newnode != NULL,
+	       "missing hash part during array tail rehash");
+    setnumV(&key, (lua_Number)idx);
+    slot = tab_rehash_insert(L, newnode, newhmask, newfreetopp,
+			     newfreecountp, &key);
+    tab_migrate_store_if_absent(L, t, slot, &key, &val);
+  }
+  return 1;
+}
+
 #ifdef LJ_TAB_TEST_HELPERS
 int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src, MSize idx,
 				      GCtab *dst, int freeze_old)
@@ -942,6 +981,30 @@ int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src, MSize idx,
   copied = tab_resize_copy_hash_slot(L, dst, oldnode, oldhmask, idx, array,
 				     asize, newnode, newhmask, &newfreetop,
 				     &newfreecount, freeze_old);
+  if (newhmask > 0) {
+    setfreetop(dst, newnode, newfreetop);
+    lj_tab_node_freecount_set_rel(newnode, newfreecount);
+  }
+  return copied;
+}
+
+int lj_tab_test_resize_copy_array_slot(lua_State *L, GCtab *src, uint32_t idx,
+				       GCtab *dst, int freeze_nil_slots)
+{
+  MSize newhmask, newfreecount = 0;
+  Node *newnode = lj_tab_node_snapshot_acq(dst, &newhmask);
+  Node *newfreetop = NULL;
+  TValue *oldarray = lj_tab_array_acq(src);
+  TValue *array;
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(dst, &array);
+  int copied;
+  if (newhmask > 0) {
+    newfreetop = getfreetop(dst, newnode);
+    newfreecount = lj_tab_node_freecount_acq(newnode);
+  }
+  copied = tab_resize_copy_array_slot(L, dst, oldarray, idx, array, asize,
+				      newnode, newhmask, &newfreetop,
+				      &newfreecount, freeze_nil_slots);
   if (newhmask > 0) {
     setfreetop(dst, newnode, newfreetop);
     lj_tab_node_freecount_set_rel(newnode, newfreecount);
@@ -1573,35 +1636,20 @@ restart_resize:
     tab_array_retired_push(g, oldaret);
   }
   if (newarray && !oldarray_separated && oldarray) {
-	  uint32_t i;
-	  uint32_t copy = oldasize < newacap ? oldasize : newacap;
-	  for (i = 0; i < copy; i++) {
-	    TValue val;
-	    if (tab_freeze_forward_any(&oldarray[i], &val) &&
-		!tab_val_absent(&val) && tab_tv_snapshot_valid(&val))
-	      tab_migrate_store_if_absent(L, t, &array[i], NULL, &val);
-	  }
+    uint32_t i;
+    uint32_t copy = oldasize < newacap ? oldasize : newacap;
+    for (i = 0; i < copy; i++)
+      (void)tab_resize_copy_array_slot(L, t, oldarray, i, array, asize,
+				       newnode, newhmask, &newfreetop,
+				       &newfreecount, 1);
     tab_test_resize_colocated_after_freeze(L, t, oldarray, oldasize);
   }
   if (newarray && oldarray_separated) {
-	  uint32_t i;
-	  for (i = 0; i < oldasize; i++) {
-	    TValue val;
-	    if (tab_freeze_forward(&oldarray[i], &val) &&
-		!tab_val_absent(&val) && tab_tv_snapshot_valid(&val)) {
-	if (i < asize) {
-	  tab_migrate_store_if_absent(L, t, &array[i], NULL, &val);
-	} else {
-	  TValue key;
-	  TValue *slot;
-	  lj_assertL(hbits != 0, "missing hash part during array tail rehash");
-	  setnumV(&key, (lua_Number)i);
-	  slot = tab_rehash_insert(L, newnode, newhmask, &newfreetop,
-				   &newfreecount, &key);
-	  tab_migrate_store_if_absent(L, t, slot, &key, &val);
-	}
-      }
-    }
+    uint32_t i;
+    for (i = 0; i < oldasize; i++)
+      (void)tab_resize_copy_array_slot(L, t, oldarray, i, array, asize,
+				       newnode, newhmask, &newfreetop,
+				       &newfreecount, 0);
   }
   if (oldhmask > 0) {  /* Reinsert pairs from old hash part. */
     uint32_t i;
@@ -1612,19 +1660,11 @@ restart_resize:
   }
   if (!oldarray_separated && oldarray && asize < oldasize) {
     /* Freeze and reinsert old colocated array tail off-table. */
-	  uint32_t i;
-	  lj_assertL(hbits != 0, "missing hash part during colocated array tail rehash");
-	  for (i = asize; i < oldasize; i++) {
-	    TValue key, val;
-	    if (tab_freeze_forward_any(&oldarray[i], &val) &&
-		!tab_val_absent(&val) && tab_tv_snapshot_valid(&val)) {
-	setnumV(&key, (lua_Number)i);
-	tab_migrate_store_if_absent(L, t,
-	  tab_rehash_insert(L, newnode, newhmask, &newfreetop,
-			    &newfreecount, &key),
-	  &key, &val);
-      }
-    }
+    uint32_t i;
+    for (i = asize; i < oldasize; i++)
+      (void)tab_resize_copy_array_slot(L, t, oldarray, i, array, asize,
+				       newnode, newhmask, &newfreetop,
+				       &newfreecount, 1);
     tab_test_resize_colocated_after_freeze(L, t, oldarray, oldasize);
   }
   if (newarray) {

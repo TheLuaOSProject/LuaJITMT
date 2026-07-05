@@ -292,6 +292,9 @@ LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
 LJ_FUNC int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src,
 					      MSize idx, GCtab *dst,
 					      int freeze_old);
+LJ_FUNC int lj_tab_test_resize_copy_array_slot(lua_State *L, GCtab *src,
+					       uint32_t idx, GCtab *dst,
+					       int freeze_nil_slots);
 LJ_FUNC uint32_t lj_tab_test_struct_owner_l_waits(void);
 LJ_FUNC void lj_tab_test_reset_struct_owner_l_waits(void);
 LJ_FUNC uint32_t lj_tab_test_struct_owner_no_l_waits(void);

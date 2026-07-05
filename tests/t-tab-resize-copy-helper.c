@@ -87,6 +87,20 @@ static void assert_slot_forwarded(Node *n)
   assert(tvisforward(&val));
 }
 
+static void assert_array_slot_forwarded(TValue *slot)
+{
+  TValue val;
+  lj_tv_load_acq(&val, slot);
+  assert(tvisforward(&val));
+}
+
+static void assert_array_slot_nil(TValue *slot)
+{
+  TValue val;
+  lj_tv_load_acq(&val, slot);
+  assert(tvisnil(&val));
+}
+
 static void test_put_if_absent_does_not_clobber(lua_State *L)
 {
   GCtab *src, *dst;
@@ -158,6 +172,60 @@ static void test_keylock_waits_for_published_key(lua_State *L)
   assert_str_value(dst, key, 33);
 }
 
+static void test_array_copy_is_idempotent(lua_State *L)
+{
+  GCtab *src, *dst;
+  TValue *oldarray;
+
+  lua_settop(L, 0);
+  src = push_table(L, 4, 0);
+  dst = push_table(L, 4, 0);
+  oldarray = lj_tab_array_acq(src);
+  lj_tab_storeint(L, lj_tab_setint(L, src, 1), 44);
+
+  assert(lj_tab_test_resize_copy_array_slot(L, src, 1, dst, 1) == 1);
+  assert_array_slot_forwarded(&oldarray[1]);
+  assert(tv_i32(lj_tab_getint(dst, 1)) == 44);
+
+  assert(lj_tab_test_resize_copy_array_slot(L, src, 1, dst, 1) == 0);
+  assert_array_slot_forwarded(&oldarray[1]);
+  assert(tv_i32(lj_tab_getint(dst, 1)) == 44);
+}
+
+static void test_array_tail_rehash(lua_State *L)
+{
+  GCtab *src, *dst;
+  TValue *oldarray;
+
+  lua_settop(L, 0);
+  src = push_table(L, 5, 0);
+  dst = push_table(L, 2, 8);
+  oldarray = lj_tab_array_acq(src);
+  lj_tab_storeint(L, lj_tab_setint(L, src, 4), 55);
+
+  assert(lj_tab_test_resize_copy_array_slot(L, src, 4, dst, 1) == 1);
+  assert_array_slot_forwarded(&oldarray[4]);
+  assert(tv_i32(lj_tab_getint(dst, 4)) == 55);
+}
+
+static void test_array_nil_freeze_modes(lua_State *L)
+{
+  GCtab *src, *dst;
+  TValue *oldarray;
+
+  lua_settop(L, 0);
+  src = push_table(L, 4, 0);
+  dst = push_table(L, 4, 0);
+  oldarray = lj_tab_array_acq(src);
+  assert_array_slot_nil(&oldarray[2]);
+
+  assert(lj_tab_test_resize_copy_array_slot(L, src, 2, dst, 0) == 0);
+  assert_array_slot_nil(&oldarray[2]);
+
+  assert(lj_tab_test_resize_copy_array_slot(L, src, 2, dst, 1) == 0);
+  assert_array_slot_forwarded(&oldarray[2]);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -165,7 +233,10 @@ int main(void)
   test_put_if_absent_does_not_clobber(L);
   test_freeze_copy_is_idempotent(L);
   test_keylock_waits_for_published_key(L);
+  test_array_copy_is_idempotent(L);
+  test_array_tail_rehash(L);
+  test_array_nil_freeze_modes(L);
   lua_close(L);
-  printf("t-tab-resize-copy-helper OK: hash copy helper is idempotent\n");
+  printf("t-tab-resize-copy-helper OK: resize copy helpers are idempotent\n");
   return 0;
 }

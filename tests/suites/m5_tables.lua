@@ -72,7 +72,7 @@ return function(add)
     },
     {
       name = "m5_tab_resize_copy_helper",
-      description = "table resize hash-slot copy helper idempotence C fixture",
+      description = "table resize copy helper idempotence C fixture",
       output = "lj_t-tab-resize-copy-helper",
       cfile = "t-tab-resize-copy-helper.c",
       opts = {
