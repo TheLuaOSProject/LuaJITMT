@@ -19,6 +19,7 @@
 #include "lj_thr.h"
 
 #define TEST_STRTAB_RESIZE	((MSize)0x80000000u)
+#define TEST_STRTAB_RESIZE_LOBITS	(TEST_STRTAB_RESIZE - 1u)
 
 typedef struct ActiveReleaseCtx {
   TGState *tg;
@@ -43,6 +44,24 @@ typedef struct ReclaimReaderCtx {
   uint32_t done;
   uint32_t reclaimed;
 } ReclaimReaderCtx;
+
+static MSize assert_resize_state(StrTabHdr *hdr)
+{
+  MSize state = la_load32_acq(&hdr->resize);
+  assert((state & TEST_STRTAB_RESIZE_LOBITS) == 0);
+  assert(state == 0 || state == TEST_STRTAB_RESIZE);
+  return state;
+}
+
+static void assert_resize_idle(StrTabHdr *hdr)
+{
+  assert(assert_resize_state(hdr) == 0);
+}
+
+static void assert_resize_claimed(StrTabHdr *hdr)
+{
+  assert(assert_resize_state(hdr) == TEST_STRTAB_RESIZE);
+}
 
 static int cmp_strid(const void *a, const void *b)
 {
@@ -147,8 +166,9 @@ static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 static void *release_active_after_claim(void *arg)
 {
   ActiveReleaseCtx *ctx = (ActiveReleaseCtx *)arg;
-  while ((la_load32_acq(&ctx->hdr->resize) & TEST_STRTAB_RESIZE) == 0)
+  while (assert_resize_state(ctx->hdr) == 0)
     (void)lj_thr_sleep_ns(NULL, 100000);
+  assert_resize_claimed(ctx->hdr);
   la_store32_rel(&ctx->claimed, 1);
   if (ctx->delay_ns > 0)
     (void)lj_thr_sleep_ns(NULL, ctx->delay_ns);
@@ -188,7 +208,7 @@ static void exercise_resize_oom_does_not_claim(void)
   g = G(L);
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
-  assert(hdr->resize == 0);
+  assert_resize_idle(hdr);
 
   resizectx.newmask = (hdr->mask << 1) + 1u;
   lua_pushcfunction(L, protected_resize);
@@ -199,7 +219,7 @@ static void exercise_resize_oom_does_not_claim(void)
   assert(rc == LUA_ERRMEM);
   assert(allocctx.fail_next == 0);
   assert(lj_str_tabh_acq(g) == hdr);
-  assert(hdr->resize == 0);
+  assert_resize_idle(hdr);
   lua_settop(L, 0);
   assert(lj_str_new(L, "m5-strtab-resize-oom",
 		    strlen("m5-strtab-resize-oom")) != NULL);
@@ -233,7 +253,7 @@ int main(void)
 
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
-  assert(hdr->resize == 0);
+  assert_resize_idle(hdr);
   assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
   assert(lj_tg_strtab_active_depth_acq(tg) == 0);
 
@@ -269,7 +289,8 @@ int main(void)
   assert(lj_tg_strtab_active_depth_acq(tg) == 0);
   assert(lj_str_tabh_acq(g) != hdr);
   assert(g->str.mask == wantmask);
-  assert(lj_str_tabh_acq(g)->resize == 0);
+  assert_resize_idle(lj_str_tabh_acq(g));
+  assert_resize_claimed(hdr);
   assert(lj_str_retired_head_acq(g) == hdr);
   assert(lj_str_retired_next_acq(hdr) == NULL);
   retire_epoch = gc2_hs_epoch_acq(g);
@@ -330,8 +351,9 @@ int main(void)
   assert(la_load32_acq(&ctx.cleared) != 0);
   assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
   assert(lj_tg_strtab_active_depth_acq(tg) == 0);
+  assert_resize_claimed(hdr);
   lj_str_sweep_release(hdr);
-  assert(hdr->resize == 0);
+  assert_resize_idle(hdr);
 
   hdr = lj_str_tabh_acq(g);
   oldmask = g->str.mask;
@@ -356,6 +378,8 @@ int main(void)
   assert(lj_tg_strtab_active_depth_acq(&extra) == 0);
   assert(lj_str_tabh_acq(g) != hdr);
   assert(g->str.mask == wantmask);
+  assert_resize_idle(lj_str_tabh_acq(g));
+  assert_resize_claimed(hdr);
   assert(lj_str_retired_head_acq(g) == hdr);
   lj_thr_set_tg(oldtls);
   lj_tg_fini_thread(g, &extra);
@@ -368,7 +392,7 @@ int main(void)
     snprintf(buf, sizeof(buf), "m5-strtab-cas-%d-%d", i, i * 31);
     assert(lj_str_new(L, buf, strlen(buf)) != NULL);
   }
-  assert(lj_str_tabh_acq(g)->resize == 0);
+  assert_resize_idle(lj_str_tabh_acq(g));
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   assert(gc2_hs_epoch_acq(g) > retire_epoch);
   assert(lj_str_retired_head_acq(g) == NULL);

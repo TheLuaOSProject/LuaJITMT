@@ -128,6 +128,7 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 
 #define LJ_STR_MAXCOLL		32
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
+#define LJ_STRTAB_RESIZE_LOBITS	(LJ_STRTAB_RESIZE - 1u)
 #define LJ_STRID_BLOCK		64u
 #define LJ_STRNUM_BLOCK		64u
 
@@ -279,12 +280,15 @@ static void strtab_retire(global_State *g, StrTabHdr *hdr)
 
 static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
 {
-  return la_load32_acq(&hdr->resize);
+  MSize state = la_load32_acq(&hdr->resize);
+  lj_assertX((state & LJ_STRTAB_RESIZE_LOBITS) == 0,
+	     "stale string table reader-count bits");
+  return state;
 }
 
 static LJ_AINLINE int strtab_resizing(StrTabHdr *hdr)
 {
-  return (strtab_resize_acq(hdr) & LJ_STRTAB_RESIZE) != 0;
+  return strtab_resize_acq(hdr) != 0;
 }
 
 static void strtab_active_enter(TGState *tg, StrTabHdr *hdr)
@@ -351,17 +355,17 @@ static int strtab_claim(lua_State *L, StrTabHdr *hdr)
 {
   global_State *g = G(L);
   for (;;) {
-    MSize state = strtab_resize_acq(hdr);
-    MSize expect = state;
-    if (state & LJ_STRTAB_RESIZE)
+    MSize expect = 0;
+    if (strtab_resize_acq(hdr) != 0)
       return 0;
-    if (state != 0) {
-      strtab_wait(L);
-      continue;
-    }
     if (la_cas32(&hdr->resize, &expect, LJ_STRTAB_RESIZE,
 		 LA_ACQ_REL, LA_ACQ))
       break;
+    lj_assertX((expect & LJ_STRTAB_RESIZE_LOBITS) == 0,
+	       "stale string table reader-count bits");
+    if (expect != 0)
+      return 0;
+    strtab_wait(L);
   }
   while (strtab_active_on_hdr(g, hdr))
     strtab_wait(L);
