@@ -210,18 +210,60 @@ static uint32_t ll_unloadlib(lua_State *L, void *lib)
   return actions;
 }
 
+static void *ll_native_loadlib(lua_State *L, const char *path, DWORD *errp,
+			       uint32_t *actionsp)
+{
+  HINSTANCE lib;
+  lj_native_enter(L2TG(L));
+  lib = LJ_WIN_LOADLIBA(path);
+  *errp = lib ? 0 : GetLastError();
+  *actionsp = lj_native_leave(L);
+  return lib;
+}
+
 static void *ll_load(lua_State *L, const char *path, int gl)
 {
-  HINSTANCE lib = LJ_WIN_LOADLIBA(path);
-  if (lib == NULL) pusherror(L);
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  DWORD err = 0;
+  HINSTANCE lib = ll_native_loadlib(L, path, &err, &actions);
+  if (lib == NULL) {
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+    SetLastError(err);
+    pusherror(L);
+  } else if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
+    uint32_t close_actions = ll_unloadlib(L, lib);
+    lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
+  }
   UNUSED(gl);
   return lib;
 }
 
+static lua_CFunction ll_native_getproc(lua_State *L, void *lib,
+				       const char *sym, DWORD *errp,
+				       uint32_t *actionsp)
+{
+  lua_CFunction f;
+  lj_native_enter(L2TG(L));
+  f = (lua_CFunction)GetProcAddress((HINSTANCE)lib, sym);
+  *errp = f ? 0 : GetLastError();
+  *actionsp = lj_native_leave(L);
+  return f;
+}
+
 static lua_CFunction ll_sym(lua_State *L, void *lib, const char *sym)
 {
-  lua_CFunction f = (lua_CFunction)GetProcAddress((HINSTANCE)lib, sym);
-  if (f == NULL) pusherror(L);
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  DWORD err = 0;
+  lua_CFunction f = ll_native_getproc(L, lib, sym, &err, &actions);
+  if (f == NULL) {
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+    SetLastError(err);
+    pusherror(L);
+  } else {
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  }
   return f;
 }
 
@@ -231,21 +273,26 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
 static const char *ll_bcsym(lua_State *L, void *lib, const char *sym)
 {
-  UNUSED(L);
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  const char *p;
+  lj_native_enter(L2TG(L));
   if (lib) {
-    return (const char *)GetProcAddress((HINSTANCE)lib, sym);
+    p = (const char *)GetProcAddress((HINSTANCE)lib, sym);
   } else {
 #if LJ_TARGET_UWP
-    return (const char *)GetProcAddress((HINSTANCE)&__ImageBase, sym);
+    p = (const char *)GetProcAddress((HINSTANCE)&__ImageBase, sym);
 #else
     HINSTANCE h = GetModuleHandleA(NULL);
-    const char *p = (const char *)GetProcAddress(h, sym);
+    p = (const char *)GetProcAddress(h, sym);
     if (p == NULL && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 					(const char *)ll_bcsym, &h))
       p = (const char *)GetProcAddress(h, sym);
-    return p;
 #endif
   }
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return p;
 }
 
 #else
