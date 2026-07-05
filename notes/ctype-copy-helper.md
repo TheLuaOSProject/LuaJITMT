@@ -6,6 +6,9 @@ CType stale-slot copy helper
 - Replaced raw `*dst = *src` stale-slot refreshes in `ctype_hash_setnext()`,
   `ctype_publish_current()`, and parser `cp_ctype_publish()` with
   `ctype_copy_rel()`.
+- Replaced ctype table growth's raw `memcpy()` of published rows with a
+  `ctype_copy_rel()` loop. Newly allocated tail rows remain zero-filled before
+  the table header is published.
 - Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_ctype_name_claim` behavior/counter fixtures; the helper comments carry the ordering rationale.
 
 Verification:

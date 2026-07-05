@@ -928,11 +928,13 @@ static CType *ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
     MSize nsz;
     CTypeTab *newh;
     CTypeTab *expect;
+    MSize i;
     if ((MSize)id < osz)
       return oldh->tab;
     nsz = ctype_tab_growsize(osz, id);
     newh = ctype_tab_new(L, nsz);
-    memcpy(newh->tab, oldh->tab, osz*sizeof(CType));
+    for (i = 0; i < osz; i++)
+      ctype_copy_rel(&newh->tab[i], &oldh->tab[i]);
     memset(newh->tab + osz, 0, (nsz - osz)*sizeof(CType));
     expect = oldh;
     if (ctype_tabh_cas(cts, &expect, newh)) {
