@@ -100,7 +100,7 @@ static void exercise_keyed_cas_array_stale(lua_State *L)
   setintV(&src, 12345);
   assert(lj_tab_trystoretv_cas_keyed(L, t, &oldarray[k], &key, &src) ==
 	 LJ_TAB_STORE_CAS_STALE);
-  tabfwd_assert_forward(&oldarray[k]);
+  tabfwd_assert_i32(&oldarray[k], k + 12000);
   tabfwd_assert_i32(&newarray[k], k + 12000);
   assert(lj_tab_trystoretv_cas_keyed(L, t, lj_tab_setint(L, t, k),
 				     &key, &src) == LJ_TAB_STORE_CAS_OK);
@@ -602,6 +602,7 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   TValue *oldarray, *newarray;
   TValue src[3], srcjit, oldval;
   TValue *stored;
+  uint32_t wait0;
   MSize oldasize, newasize;
   int32_t start = 5;
   int32_t jitkey = start + 3;
@@ -634,7 +635,10 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   setintV(&src[0], 8181);
   setintV(&src[1], 8282);
   setintV(&src[2], 8383);
+  lj_tab_test_reset_wait_no_l_calls();
   lj_tab_storetvn_forvm_array(L, t, (uint32_t)start, src, 3);
+  wait0 = lj_tab_test_wait_no_l_calls();
+  assert(wait0 == 0);
   for (i = 0; i < 3; i++) {
     lj_tv_load_acq(&oldval, &oldarray[start + i]);
     assert(tvisforward(&oldval));
@@ -648,6 +652,7 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   setintV(&srcjit, 8484);
   stored = lj_tab_storetv_forjit_array_nogc(L, t, &oldarray[jitkey],
 					    &srcjit, (MSize)jitkey);
+  assert(lj_tab_test_wait_no_l_calls() == wait0);
   assert(stored == &newarray[jitkey]);
   tabfwd_assert_forward(&oldarray[jitkey]);
   tabfwd_assert_i32(&newarray[jitkey], 8484);

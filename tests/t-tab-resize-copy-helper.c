@@ -243,16 +243,19 @@ static void test_array_assist_same_index(lua_State *L)
 
   lj_tab_storeint(L, &oldarray[1], 66);
   lj_tab_storenilraw(&newarray[1]);
+  lj_tab_test_reset_wait_no_l_calls();
   slot = lj_tab_test_resize_assist_array_slot(L, src, 1);
   assert(slot == &newarray[1]);
   assert_array_slot_forwarded(&oldarray[1]);
   assert(tv_i32(&newarray[1]) == 66);
+  assert(lj_tab_test_wait_no_l_calls() == 0);
 
   lj_tab_storeint(L, &newarray[1], 99);
   slot = lj_tab_test_resize_assist_array_slot(L, src, 1);
   assert(slot == &newarray[1]);
   assert_array_slot_forwarded(&oldarray[1]);
   assert(tv_i32(&newarray[1]) == 99);
+  assert(lj_tab_test_wait_no_l_calls() == 0);
 
   lj_tab_storenilraw(&oldarray[2]);
   lj_tab_storenilraw(&newarray[2]);
@@ -260,6 +263,7 @@ static void test_array_assist_same_index(lua_State *L)
   assert(slot == &newarray[2]);
   assert_array_slot_forwarded(&oldarray[2]);
   assert_array_slot_nil(&newarray[2]);
+  assert(lj_tab_test_wait_no_l_calls() == 0);
 
   lj_tab_array_rel(src, newarray);
   lj_tab_asize_rel(src, newasize);

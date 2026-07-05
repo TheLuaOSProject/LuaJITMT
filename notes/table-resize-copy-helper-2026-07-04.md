@@ -12,8 +12,12 @@
   `FORWARD`, invalid/dead snapshots are skipped, and successor writes use
   put-if-absent semantics.
 - Array copy keeps separated-array and colocated-array behavior distinct.
-  Separated arrays freeze only live slots; colocated arrays freeze nil slots too
-  so stale snapshots cannot accept writes after a split or shrink.
+  Owner-side separated-array copy keeps old live slots visible while the
+  generation is marked retiring. Same-index helpers that catch the retiring
+  generation copy into the successor and then best-effort forward the old slot,
+  so later stale readers/writers can hop instead of parking on the retiring
+  generation. Colocated arrays freeze copied/tail slots, including nil slots, so
+  stale snapshots cannot accept writes after a split or shrink.
 - This is not a new lock or temporary path. It extracts the unit that a future
   cooperative resize cursor/helper can run independently while preserving the
   current publication order.
@@ -22,6 +26,10 @@
   on a second helper call, a `KEYLOCK` source key is copied only after
   publication, array copy is idempotent, array-tail values rehash correctly, and
   nil-freeze mode stays explicit.
+- `m5_tab_forward_filter` covers the matching reader side: owner-side
+  separated-array resize snapshots retain old values until publication, while
+  explicit `FORWARD` handoff markers still make readers follow/wait for the
+  successor.
 
 Follow-up:
 

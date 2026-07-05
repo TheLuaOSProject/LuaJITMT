@@ -84,7 +84,8 @@ static void exercise_forward_waits_for_published_successor(lua_State *L)
   newarray = lj_tab_array_acq(t);
   newasize = lj_tab_asize_acq(t);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
-  tabfwd_assert_forward(&oldarray[5]);
+  tabfwd_assert_i32(&oldarray[5], 505);
+  tabfwd_store_forward(&oldarray[5]);
   lj_tab_storenilraw(&newarray[5]);
   lj_tab_array_rel(t, oldarray);
   lj_tab_asize_rel(t, oldasize);
@@ -159,8 +160,10 @@ static void exercise_forward_hops_after_later_publish(lua_State *L)
   assert(array_b != array_c);
   assert(lj_tab_array_nextgen_acq(array_a) == array_b);
   assert(lj_tab_array_nextgen_acq(array_b) == array_c);
-  tabfwd_assert_forward(&array_a[5]);
-  tabfwd_assert_forward(&array_b[5]);
+  tabfwd_assert_i32(&array_a[5], 505);
+  tabfwd_assert_i32(&array_b[5], 505);
+  tabfwd_store_forward(&array_a[5]);
+  tabfwd_store_forward(&array_b[5]);
   tabfwd_assert_i32(lj_tab_forwarded_array_slot(t, array_a, asize_a, 5,
 						&val), 505);
 
@@ -215,7 +218,7 @@ static void exercise_array_forward_hop(lua_State *L)
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
   tabfwd_assert_i32(lj_tab_getint(t, 5), 505);
-  tabfwd_assert_forward(&oldarray[5]);
+  tabfwd_assert_i32(&oldarray[5], 505);
 
   tabfwd_store_forward(&oldarray[5]);
   tabfwd_assert_i32(lj_tab_forwarded_array_slot(t, oldarray, oldasize, 5,
@@ -244,7 +247,7 @@ static void exercise_array_forward_hop(lua_State *L)
   assert(newasize == 6);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
   tabfwd_assert_i32(lj_tab_getint(t, tail), 606);
-  tabfwd_assert_forward(&oldarray[tail]);
+  tabfwd_assert_i32(&oldarray[tail], 606);
 
   tabfwd_store_forward(&oldarray[tail]);
   tabfwd_assert_i32(lj_tab_forwarded_array_slot(t, oldarray, oldasize,

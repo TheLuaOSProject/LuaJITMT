@@ -885,12 +885,27 @@ static TValue *tab_resize_assist_array_slot(lua_State *L, GCtab *t,
   dst = &nextarray[idx];
   for (;;) {
     lj_tv_load_acq(&val, &oldarray[idx]);
-    if (tvisforward(&val) || tab_val_absent(&val))
+    if (tvisforward(&val))
       return dst;
+    if (tab_val_absent(&val)) {
+      TValue forward, expect = val;
+      setforwardV(&forward);
+      (void)lj_tv_cas(&oldarray[idx], &expect, &forward);
+      return dst;
+    }
     if (tab_tv_snapshot_valid(&val)) {
+      TValue forward, expect = val;
       lj_gc_pubroot(L, &val);
       if (tab_store_if_absent_cas(L, dst, &val))
 	lj_gc_pubtabtv(L, t, dst);
+      /*
+      ** Once the successor has the value or a newer owner, the old slot can
+      ** become a handoff marker. This is best-effort: losing the CAS leaves the
+      ** old snapshot visible and the existing retry paths still preserve Lua
+      ** semantics, but winning it lets later readers/writers hop without a wait.
+      */
+      setforwardV(&forward);
+      (void)lj_tv_cas(&oldarray[idx], &expect, &forward);
       return dst;
     }
     return dst;
