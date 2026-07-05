@@ -885,6 +885,39 @@ static CTSize crec_ctype_size(jit_State *J, CTState *cts, CTypeID id)
   return ok ? sz : CTSIZE_INVALID;
 }
 
+static CTSize crec_ctype_vlsize(jit_State *J, CTState *cts,
+				const CType *ct, CTSize nelem)
+{
+  CType cur = *ct, elem;
+  CTInfo info = ctype_info_acq(&cur);
+  CTSize size = ctype_size_acq(&cur);
+  uint64_t xsz = 0;
+  if (ctype_isstruct(info)) {
+    CTypeID arrid = 0, fid = ctype_sib_acq(&cur);
+    xsz = size;
+    while (fid) {
+      crec_ctype_snapshot(J, cts, fid, &cur);
+      info = ctype_info_acq(&cur);
+      if (ctype_type(info) == CT_FIELD)
+	arrid = ctype_cid(info);
+      fid = ctype_sib_acq(&cur);
+    }
+    if (arrid == 0)
+      lj_trace_err(J, LJ_TRERR_BADTYPE);
+    crec_ctype_rawid(J, cts, arrid, NULL, &cur);
+    info = ctype_info_acq(&cur);
+  }
+  if (!ctype_isvlarray(info))
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  crec_ctype_rawchild(J, cts, &cur, &elem);
+  info = ctype_info_acq(&elem);
+  size = ctype_size_acq(&elem);
+  if (!ctype_hassize(info))
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  xsz += (uint64_t)size * nelem;
+  return xsz < 0x80000000u ? (CTSize)xsz : CTSIZE_INVALID;
+}
+
 static IRType crec_ct2irt_snapshot(jit_State *J, CTState *cts, CType *ct)
 {
   CTInfo info = ctype_info_acq(ct);
@@ -1990,8 +2023,8 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 	lj_trace_err(J, LJ_TRERR_NYICONV);  /* NYI: init VLA/VLS. */
       trsz = crec_ct_tv_id(J, cts, CTID_INT32, 0, J->base[1],
 			   &rd->argv[1]);
-      sz0 = lj_ctype_vlsize(cts, d, 0);
-      sz1 = lj_ctype_vlsize(cts, d, 1);
+      sz0 = crec_ctype_vlsize(J, cts, d, 0);
+      sz1 = crec_ctype_vlsize(J, cts, d, 1);
       trsz = emitir(IRTGI(IR_MULOV), trsz, lj_ir_kint(J, (int32_t)(sz1-sz0)));
       trsz = emitir(IRTGI(IR_ADDOV), trsz, lj_ir_kint(J, (int32_t)sz0));
       J->base[1] = 0;  /* Simplify logic below. */

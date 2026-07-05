@@ -9,15 +9,17 @@ struct field nodes, field child ctypes, and exact-cdata initializer source
 types before using `ctype_info_acq()`, `ctype_size_acq()`, and
 `ctype_sib_acq()` for element types, field lists, named-field checks, field
 offsets, union size decisions, exact aggregate copy decisions, and aggregate
-fallback selection. If a parser publish is active, the recorder aborts with
-`CTBUSY` instead of touching live ctype payloads or waiting.
+fallback selection. VLA/VLS size planning now uses a recorder-local size walker
+over the same snapshot helpers instead of calling the interpreter's live-table
+`lj_ctype_vlsize()` helper. If a parser publish is active, the recorder aborts
+with `CTBUSY` instead of touching live ctype payloads or waiting.
 
 Coverage model:
 
 - `tests/t-ffi-recorder-libmeta-busy.c` now covers traced struct and array
   aggregate `ffi.new` initializers, including exact aggregate copy
-  constructors, under parser-busy trace hooks, plus the normal hot-loop path
-  that should still record successfully.
+  constructors and VLA allocation, under parser-busy trace hooks, plus the
+  normal hot-loop path that should still record successfully.
 
 Validation:
 

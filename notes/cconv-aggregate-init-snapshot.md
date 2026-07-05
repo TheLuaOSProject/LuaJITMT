@@ -23,9 +23,10 @@ forms, and separately verifies predefined scalar initialization plus direct
 string-to-array conversion from raw destination snapshots do not wait when the
 array element resolves to predefined `char`.
 
-Still separate follow-up work: recorder aggregate initialization paths in
-`lj_crecord.c` need CTBUSY snapshot/abort discipline rather than interpreter
-waiting.
+Recorder aggregate initialization is covered separately in
+`notes/crec-alloc-helper-loads.md`: `crec_alloc()` snapshots aggregate fields,
+children, exact-copy source types, and VLA/VLS size walks through recorder-local
+helpers, aborting with `CTBUSY` if parser publication overlaps recording.
 
 Validation:
 
