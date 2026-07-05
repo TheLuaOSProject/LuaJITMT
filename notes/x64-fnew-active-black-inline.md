@@ -26,7 +26,7 @@ Focused coverage:
 
 - `m6_jit_fnew_bump` now checks active-black traced inline allocation, active
   white fallback, legacy-bridge fallback, and direct C-helper pending-root
-  elision.
+  elision/publication.
 - `m6_jit_cell_ops` keeps the stock Lua closure/upvalue identity checks on the
   traced FNEW path.
 - `m8_weak m7_ffi_finreg m3_gc2_worker_scheduler m3_gc_root_pending` passed,

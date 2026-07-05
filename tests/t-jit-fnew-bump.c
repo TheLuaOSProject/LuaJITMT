@@ -840,6 +840,52 @@ static void test_active_black_direct_skips_pending_root(lua_State *L,
   lua_pop(L, 1);
 }
 
+static void test_active_black_direct_bridge_publishes_root(
+  lua_State *L, global_State *g, TGState *tg)
+{
+  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
+  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
+  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
+  uint32_t fast0, fallback0;
+  TValue slots[256];
+  GCfunc *parent, *fn;
+  GCproto *child;
+  GCupval *uv;
+  int32_t slotno;
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  fast0 = lj_func_test_gc1num_bump_fast_calls();
+  fallback0 = lj_func_test_gc1num_bump_fallback_calls();
+
+  load_one_upvalue_fixture(L, &parent, &child, &slotno);
+  (void)lj_gc_flush_root_pending(g);
+  lj_gcroot_pending_hint_rel(g, 0);
+  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+
+  quiet_gc_for_bump(g, tg);
+  lj_tg_mark_active_rel(tg, 1);
+  lj_tg_alloc_black_rel(tg, 1);
+  gc2_legacy_mark_bridge_rel(g, 1);
+
+  setnumV(&slots[slotno], 987);
+  fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 987);
+  assert_one_upvalue_result(fn, &slots[slotno], 987);
+  uv = func_uv_acq(&fn->l, 0);
+  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
+  assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
+  assert(!lj_funcL_arenaowned(&fn->l));
+  assert(!lj_uv_arenaowned(uv));
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
+  assert(lj_gc_flush_root_pending(g) > 0);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+
+  gc2_legacy_mark_bridge_rel(g, old_bridge);
+  lj_tg_alloc_black_rel(tg, old_alloc_black);
+  lj_tg_mark_active_rel(tg, old_mark_active);
+  lua_pop(L, 1);
+}
+
 static void test_active_black_direct_sweeps_arena_owned(
   lua_State *L, global_State *g, TGState *tg)
 {
@@ -956,6 +1002,7 @@ int main(void)
   test_traced_immutable_numeric_inline(L, g);
   test_accounting_fast_direct(L, g, tg);
   test_active_black_direct_skips_pending_root(L, g, tg);
+  test_active_black_direct_bridge_publishes_root(L, g, tg);
   test_active_black_direct_sweeps_arena_owned(L, g, tg);
   test_accounting_fallback(L, g, tg);
   test_traced_active_black_inline(L, g, tg);
