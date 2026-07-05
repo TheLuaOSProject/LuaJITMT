@@ -107,6 +107,11 @@
   must stay immediately after `mainthread` until the legacy object spine is
   replaced, so this queue has a separate anchor from the regular pending stack
   and needs its own regression coverage.
+- 2026-07-05 cleanup follow-up: root publication now shares the small
+  next-link helper used by pending-stack, after-main, and direct legacy anchor
+  publishers. Separate relaxed and release variants keep the existing memory
+  ordering visible at each call site while removing repeated old-head/null
+  branches.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

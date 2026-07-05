@@ -2988,6 +2988,22 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
 #endif
 }
 
+static LJ_AINLINE void gc_root_set_next(GCobj *o, GCobj *next)
+{
+  if (next)
+    lj_obj_setgcw(o, next);
+  else
+    lj_obj_setgcwnull(o);
+}
+
+static LJ_AINLINE void gc_root_set_next_rel(GCobj *o, const GCobj *next)
+{
+  if (next)
+    lj_obj_setgcwrel(o, next);
+  else
+    lj_obj_setgcwnullrel(o);
+}
+
 static int gc_root_chain_break_cycle(GCobj *head)
 {
   GCobj *slow = head, *fast = head, *entry, *tail;
@@ -3051,10 +3067,7 @@ static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
     GCobj *oldhead;
     do {
       oldhead = gcref_acq(*p);
-      if (oldhead)
-	lj_obj_setgcwrel(tail, oldhead);
-      else
-	lj_obj_setgcwnullrel(tail);
+      gc_root_set_next_rel(tail, oldhead);
       expect = oldhead ? (uint64_t)(uintptr_t)&oldhead->gch : 0;
     } while (!la_cas64(&p->gcptr64, &expect,
 		       (uint64_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
@@ -3065,10 +3078,7 @@ static void gc_root_prepend_chain_at(GCRef *p, GCobj *head, GCobj *tail)
     GCobj *oldhead;
     do {
       oldhead = gcref_acq(*p);
-      if (oldhead)
-	lj_obj_setgcwrel(tail, oldhead);
-      else
-	lj_obj_setgcwnullrel(tail);
+      gc_root_set_next_rel(tail, oldhead);
       expect = oldhead ? (uint32_t)(uintptr_t)&oldhead->gch : 0;
     } while (!la_cas32(&p->gcptr32, &expect,
 		       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
@@ -3197,19 +3207,13 @@ static void gc_linkobj_pending(global_State *g, GCobj *o)
     ** so a later activation sees a complete pending chain.
     */
     head = lj_tg_gcroot_pending_acq(tg);
-    if (head)
-      lj_obj_setgcwrel(o, head);
-    else
-      lj_obj_setgcwnullrel(o);
+    gc_root_set_next_rel(o, head);
     lj_tg_gcroot_pending_store_transition_rel(tg, head, o);
     return;
   }
   head = lj_tg_gcroot_pending_acq(tg);
   do {
-    if (head)
-      lj_obj_setgcwrel(o, head);
-    else
-      lj_obj_setgcwnullrel(o);
+    gc_root_set_next_rel(o, head);
   } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
 }
 
@@ -3242,19 +3246,13 @@ void lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)
     ** activation or root flush observes every object and edge in the run.
     */
     oldhead = lj_tg_gcroot_pending_acq(tg);
-    if (oldhead)
-      lj_obj_setgcwrel(tail, oldhead);
-    else
-      lj_obj_setgcwnullrel(tail);
+    gc_root_set_next_rel(tail, oldhead);
     lj_tg_gcroot_pending_store_transition_rel(tg, oldhead, head);
     return;
   }
   oldhead = lj_tg_gcroot_pending_acq(tg);
   do {
-    if (oldhead)
-      lj_obj_setgcwrel(tail, oldhead);
-    else
-      lj_obj_setgcwnullrel(tail);
+    gc_root_set_next_rel(tail, oldhead);
   } while (!lj_tg_gcroot_pending_cas(tg, &oldhead, head));
 }
 
@@ -3269,19 +3267,13 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
   if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
 		mt_entering_acq(g) == 0 && gc2_n_workers_acq(g) == 0)) {
     head = lj_tg_gcroot_pending_after_main_acq(tg);
-    if (head)
-      lj_obj_setgcwrel(o, head);
-    else
-      lj_obj_setgcwnullrel(o);
+    gc_root_set_next_rel(o, head);
     lj_tg_gcroot_pending_after_main_store_transition_rel(tg, head, o);
     return;
   }
   head = lj_tg_gcroot_pending_after_main_acq(tg);
   do {
-    if (head)
-      lj_obj_setgcwrel(o, head);
-    else
-      lj_obj_setgcwnullrel(o);
+    gc_root_set_next_rel(o, head);
   } while (!lj_tg_gcroot_pending_after_main_cas(tg, &head, o));
 }
 
@@ -3297,10 +3289,7 @@ void lj_gc_linkobj_after(GCobj *anchor, GCobj *o)
     uint64_t expect;
     do {
       head = gcref_acq(*p);
-      if (head)
-	lj_obj_setgcw(o, head);
-      else
-	lj_obj_setgcwnull(o);
+      gc_root_set_next(o, head);
       expect = head ? (uint64_t)(uintptr_t)&head->gch : 0;
     } while (!la_cas64(&p->gcptr64, &expect,
 		       (uint64_t)(uintptr_t)&o->gch,
@@ -3311,10 +3300,7 @@ void lj_gc_linkobj_after(GCobj *anchor, GCobj *o)
     uint32_t expect;
     do {
       head = gcref_acq(*p);
-      if (head)
-	lj_obj_setgcw(o, head);
-      else
-	lj_obj_setgcwnull(o);
+      gc_root_set_next(o, head);
       expect = head ? (uint32_t)(uintptr_t)&head->gch : 0;
     } while (!la_cas32(&p->gcptr32, &expect,
 		       (uint32_t)(uintptr_t)&o->gch,
