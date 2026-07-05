@@ -22,6 +22,7 @@
 #include "lj_target.h"
 
 #include "lib/lua_fixture_helpers.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
 
 typedef struct TokenReleaseCtx {
   global_State *g;
@@ -185,11 +186,6 @@ static void expect_opt_start_waits_for_token(lua_State *L)
   assert(jit_param_acq(G2J(g), JIT_P_hotloop) == 5);
 }
 
-static void clear_stopreq(TGState *tg)
-{
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
-}
-
 static void expect_token_wait_stopreq(lua_State *L, const char *code)
 {
   TokenStopReqCtx ctx;
@@ -201,7 +197,7 @@ static void expect_token_wait_stopreq(lua_State *L, const char *code)
   ctx.g = g;
   ctx.tg = L2TG(L);
   ctx.owner = foreign_token_owner(L);
-  clear_stopreq(ctx.tg);
+  ljt_tg_clear_stopreq(ctx.tg);
   jit_token_rel(g, ctx.owner);
 
   assert(pthread_create(&th, NULL, publish_stopreq_while_token_waits,
@@ -212,7 +208,7 @@ static void expect_token_wait_stopreq(lua_State *L, const char *code)
   assert(la_load32_acq(&ctx.signaled) >= 1u);
   assert(la_load32_acq(&ctx.released) != 0);
   assert(jit_token_acq(g) == 0);
-  clear_stopreq(ctx.tg);
+  ljt_tg_clear_stopreq(ctx.tg);
 
   if (status != LUA_OK) {
     const char *err = lua_tostring(L, -1);

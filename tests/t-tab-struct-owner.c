@@ -13,6 +13,8 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#include "lib/tg_stopreq_fixture_helpers.h"
+
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_safepoint.h"
@@ -99,16 +101,6 @@ static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
   la_store64_rel(&g->gc2.hs_epoch, epoch);
   la_store32_rel(&tg->reqmask, actions);
   la_store32_rel(&tg->poll, 1);
-}
-
-static void mark_sticky_stopreq(TGState *tg)
-{
-  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ);
-}
-
-static void clear_stopreq(TGState *tg)
-{
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
 }
 
 static int tab_wait_l_lua(lua_State *L)
@@ -442,13 +434,13 @@ static void exercise_wait_stopreq(lua_State *L)
   lua_pushcfunction(L, publish_stopreq_and_tab_wait_l_lua);
   lua_setglobal(L, "lj_m5_publish_stopreq_and_tab_wait_l");
 
-  mark_sticky_stopreq(tg);
+  ljt_tg_set_stopreq(tg);
   rc = luaL_dostring(L,
     "local ok, err = pcall(lj_m5_tab_wait_l)\n"
     "assert(ok, tostring(err))\n");
   assert_lua_ok(L, rc);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-  clear_stopreq(tg);
+  assert(ljt_tg_has_stopreq(tg));
+  ljt_tg_clear_stopreq(tg);
 
   rc = luaL_dostring(L,
     "local ok, err = pcall(lj_m5_publish_stopreq_and_tab_wait_l)\n"
@@ -456,8 +448,8 @@ static void exercise_wait_stopreq(lua_State *L)
     "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
     "       tostring(err))\n");
   assert_lua_ok(L, rc);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-  clear_stopreq(tg);
+  assert(ljt_tg_has_stopreq(tg));
+  ljt_tg_clear_stopreq(tg);
 }
 
 int main(void)

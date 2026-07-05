@@ -15,6 +15,8 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#include "lib/tg_stopreq_fixture_helpers.h"
+
 #include "lj_atomic.h"
 #include "lj_gc2.h"
 #include "lj_obj.h"
@@ -52,7 +54,7 @@ static void *perf_reader_thread(void *arg)
   la_store32_rel(&ctx->signaled,
 		 lj_safepoint_handshake(ctx->g, LJ_GC2_HS_STOPREQ));
   la_store32_rel(&ctx->stopreq_seen,
-		 (la_load8_acq(&ctx->tg->tg_flags) & TGF_STOPREQ) != 0);
+		 ljt_tg_has_stopreq(ctx->tg));
   la_store32_rel(&ctx->handshook, 1);
 
   fd = open(ctx->path, O_RDONLY);
@@ -114,7 +116,7 @@ int main(void)
   assert(err && strstr(err, "thread interrupted: VM shutdown"));
   lua_pop(L, 1);
 
-  tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
+  ljt_tg_clear_stopreq(tg);
   lua_close(L);
   unlink(ctx.path);
   printf("t-jit-perftools-native OK: perf map writer acks STOPREQ as native\n");

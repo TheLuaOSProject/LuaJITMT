@@ -12,6 +12,7 @@
 #include "luajit.h"
 
 #include "lj_obj.h"
+#include "lib/lua_fixture_helpers.h"
 
 #if LJ_HASPROFILE
 
@@ -22,30 +23,10 @@
 #include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
 
 #define KEY_PROFILE_THREAD	(U64x(81000000,00000000)|'t')
 #define KEY_PROFILE_FUNC	(U64x(81000000,00000000)|'f')
-
-static void clear_stopreq(TGState *tg)
-{
-  uint8_t flags = la_load8_acq(&tg->tg_flags);
-  la_store8_rel(&tg->tg_flags, (uint8_t)(flags & ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
-}
-
-static void set_stopreq(TGState *tg)
-{
-  (void)la_or8_rlx(&tg->tg_flags, TGF_STOPREQ);
-}
-
-static void run_ok(lua_State *L, const char *chunk)
-{
-  int rc = luaL_dostring(L, chunk);
-  if (rc != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "unexpected Lua error: %s\n", err ? err : "(nil)");
-  }
-  assert(rc == LUA_OK);
-}
 
 static void profile_noop_cb(void *data, lua_State *L, int samples, int vmstate)
 {
@@ -69,19 +50,19 @@ static void assert_profile_registry_clear(lua_State *L)
 
 static void run_sticky_cleanup_test(lua_State *L, TGState *tg)
 {
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "profile.start('i1000', function() end)\n");
-  set_stopreq(tg);
-  run_ok(L,
+  ljt_tg_set_stopreq(tg);
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "profile.stop()\n");
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   luaJIT_profile_start(L, "i1000", profile_noop_cb, NULL);
-  set_stopreq(tg);
+  ljt_tg_set_stopreq(tg);
   luaJIT_profile_stop(L);
-  clear_stopreq(tg);
-  run_ok(L,
+  ljt_tg_clear_stopreq(tg);
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "profile.start('i1', function() end)\n"
     "profile.stop()\n");
@@ -89,7 +70,7 @@ static void run_sticky_cleanup_test(lua_State *L, TGState *tg)
 
 static void run_callback_error_test(lua_State *L)
 {
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "local clock = os.clock\n"
     "local seen = 0\n"
@@ -104,7 +85,7 @@ static void run_callback_error_test(lua_State *L)
     "end\n"
     "assert(seen > 0, 'profile callback did not run')\n");
   assert_profile_registry_clear(L);
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "local seen = 0\n"
     "profile.start('i1', function() seen = seen + 1 end)\n"
@@ -114,7 +95,7 @@ static void run_callback_error_test(lua_State *L)
 
 static void run_concurrent_lifecycle_test(lua_State *L)
 {
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local th = require('threading')\n"
     "local profile = require('jit.profile')\n"
     "local n = 6\n"
@@ -193,7 +174,7 @@ static void *stopreq_thread(void *arg)
   la_store32_rel(&ctx->signaled,
 		 lj_safepoint_handshake(ctx->g, LJ_GC2_HS_STOPREQ));
   la_store32_rel(&ctx->stopreq_seen,
-		 (la_load8_acq(&ctx->tg->tg_flags) & TGF_STOPREQ) != 0);
+		 ljt_tg_has_stopreq(ctx->tg));
   la_store32_rel(&ctx->handshook, 1);
   return NULL;
 }
@@ -225,12 +206,12 @@ static void run_native_join_test(lua_State *L, global_State *g, TGState *tg)
   expect_stopreq_error(L, rc);
   assert_profile_registry_clear(L);
 
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   assert(g->gc2.hs_pending == 0);
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
 
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "profile.start('i1', function() end)\n"
     "profile.stop()\n");
@@ -252,7 +233,7 @@ static void run_busy_callback_state_test(lua_State *L, global_State *g)
   lua_State *L2;
   uint32_t saved_owner, fake_owner;
 
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "profile.start('i1', function() end)\n");
 
@@ -264,14 +245,14 @@ static void run_busy_callback_state_test(lua_State *L, global_State *g)
     fake_owner = 7000u;
 
   lj_state_owner_rel(L2, fake_owner);
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local x = 0\n"
     "for i = 1, 2000000 do x = x + i end\n"
     "assert(x > 0)\n");
   assert(lj_state_owner_acq(L2) == fake_owner);
   lj_state_owner_rel(L2, saved_owner);
 
-  run_ok(L,
+  ljt_lua_dostring(L,
     "local profile = require('jit.profile')\n"
     "profile.stop()\n"
     "profile.start('i1', function() end)\n"
@@ -282,17 +263,15 @@ static void run_busy_callback_state_test(lua_State *L, global_State *g)
 
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   TGState *tg;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
 
-  run_ok(L, "assert(require('jit.profile'))");
+  ljt_lua_dostring(L, "assert(require('jit.profile'))");
   run_sticky_cleanup_test(L, tg);
   run_callback_error_test(L);
   run_concurrent_lifecycle_test(L);

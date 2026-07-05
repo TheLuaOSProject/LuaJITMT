@@ -11,6 +11,7 @@
 #include "lualib.h"
 
 #include "lib/test_sleep.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -108,14 +109,6 @@ static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
   la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
   la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
-}
-
-static void clear_stopreq(TGState *tg)
-{
-  uint8_t flags = lj_tg_flags_acq(tg);
-  assert((flags & TGF_STOPREQ) != 0);
-  (void)lj_tg_flags_and_rlx(tg,
-			    (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
 }
 
 static lua_State *finalizer_expected_L;
@@ -639,14 +632,14 @@ static void test_worker_stop_l_delivers_stopreq(lua_State *L, global_State *g,
   publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
   assert(lj_gc2_workers_set_l(L, 0, &actions) == 1);
   assert((actions & LJ_GC2_HS_STOPREQ) != 0);
-  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) != 0);
+  assert(ljt_tg_has_stopreq(tg));
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(gc2_n_workers_acq(g) == 0);
   assert(gc2_worker_thread_acq(g, 0) == NULL);
   assert(la_load32_acq(&g->gc2.hs_pending) == 0);
   assert(lj_tg_poll_acq(tg) == 0);
   assert(lj_tg_reqmask_acq(tg) == 0);
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   assert(lj_gc2_workers_set(g, 2) == 1);
   assert(gc2_n_workers_acq(g) == 2);
 }
@@ -661,11 +654,11 @@ static void test_worker_start_l_native_stopreq(lua_State *L, global_State *g,
   assert(lj_gc2_workers_set(g, 0) == 1);
   assert(gc2_n_workers_acq(g) == 0);
 
-  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ);
+  ljt_tg_set_stopreq(tg);
   assert(lj_gc2_workers_set_l(L, 1, &actions) == 1);
   assert(actions == 0);
   assert(gc2_n_workers_acq(g) == 1);
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   assert(lj_gc2_workers_set(g, 0) == 1);
   assert(gc2_n_workers_acq(g) == 0);
 
@@ -685,11 +678,11 @@ static void test_worker_start_l_native_stopreq(lua_State *L, global_State *g,
   assert(la_load32_acq(&ctx.saw_native) == 1);
   assert(la_load32_acq(&ctx.published) == 1);
   assert(lj_tg_in_native_acq(tg) == 0);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(ljt_tg_has_stopreq(tg));
   assert(gc2_n_workers_acq(g) == 0);
   assert(gc2_worker_thread_acq(g, 0) == NULL);
   assert(la_load32_acq(&worker_start_create_paused) == 0);
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   assert(lj_gc2_workers_set(g, 2) == 1);
   assert(gc2_n_workers_acq(g) == 2);
 }

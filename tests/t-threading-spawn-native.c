@@ -12,6 +12,8 @@
 #include "lualib.h"
 
 #include "lib/test_sleep.h"
+#include "lib/lua_fixture_helpers.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -76,20 +78,6 @@ static void *publish_stopreq_while_paused(void *arg)
   return NULL;
 }
 
-static lua_State *new_open_state(void)
-{
-  lua_State *L = luaL_newstate();
-  assert(L != NULL);
-  luaL_openlibs(L);
-  return L;
-}
-
-static void clear_stopreq(TGState *tg)
-{
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
-}
-
 static int child_marker(lua_State *L)
 {
   UNUSED(L);
@@ -127,7 +115,7 @@ static void start_legacy_cycle(lua_State *L)
 
 static void test_sticky_stopreq_spawn_ok(void)
 {
-  lua_State *L = new_open_state();
+  lua_State *L = ljt_lua_newstate_openlibs();
   TGState *tg = L2TG(L);
   static const char script[] =
     "local threading = require('threading')\n"
@@ -136,18 +124,18 @@ static void test_sticky_stopreq_spawn_ok(void)
     "assert(ok == true and v == 41)\n";
 
   assert(tg != NULL);
-  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ);
+  ljt_tg_set_stopreq(tg);
   assert(luaL_loadbuffer(L, script, sizeof(script) - 1, "sticky-spawn") ==
 	 LUA_OK);
   assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-  clear_stopreq(tg);
+  assert(ljt_tg_has_stopreq(tg));
+  ljt_tg_clear_stopreq(tg);
   lua_close(L);
 }
 
 static void test_fresh_stopreq_aborts_before_child_runs(void)
 {
-  lua_State *L = new_open_state();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g = G(L);
   TGState *tg = L2TG(L);
   SpawnStopReqCtx ctx;
@@ -184,17 +172,17 @@ static void test_fresh_stopreq_aborts_before_child_runs(void)
 	 NULL);
   assert(la_load32_acq(&child_ran) == 0);
   assert(lj_tg_in_native_acq(tg) == 0);
-  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(ljt_tg_has_stopreq(tg));
   assert(mt_live_acq(g) == 0);
   assert(la_load32_acq(&pause_seen) == 0);
-  clear_stopreq(tg);
+  ljt_tg_clear_stopreq(tg);
   pause_tg = NULL;
   lua_close(L);
 }
 
 static void test_spawn_preserves_active_legacy_cycle(void)
 {
-  lua_State *L = new_open_state();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g = G(L);
   uint8_t state;
   static const char script[] =
