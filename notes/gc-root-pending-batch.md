@@ -102,6 +102,11 @@
 - Follow-up in the same cleanup pass: global-root and after-main chain publication
   share the same slot-level prepend helper; the call sites still make the legacy
   topology choice explicit.
+- 2026-07-05 coverage follow-up: `m3_gc_root_pending` now covers malformed-cycle
+  recovery on the after-main pending queue too. Child states and regular userdata
+  must stay immediately after `mainthread` until the legacy object spine is
+  replaced, so this queue has a separate anchor from the regular pending stack
+  and needs its own regression coverage.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object

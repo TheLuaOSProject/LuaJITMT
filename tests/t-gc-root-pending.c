@@ -252,6 +252,39 @@ static void test_after_main_flush(lua_State *L)
   lua_pop(L, 3);
 }
 
+static void test_after_main_cycle_breaker(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  lua_State *L1, *L2;
+  assert(tg != NULL);
+  (void)lj_gc_flush_root_pending(g);
+  assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+
+  L1 = lua_newthread(L);
+  L2 = lua_newthread(L);
+  assert(L1 != NULL && L2 != NULL);
+  assert(lj_tg_gcroot_pending_after_main_acq(tg) == obj2gco(L2));
+  assert(lj_obj_gcw_acq(obj2gco(L2)) == obj2gco(L1));
+  assert(!after_main_contains(g, obj2gco(L1)));
+  assert(!after_main_contains(g, obj2gco(L2)));
+
+  /*
+  ** Child states and userdata publish after mainthread to preserve LuaJIT's
+  ** legacy object-list layout. This queue has a different insertion anchor
+  ** from the regular pending stack, so keep explicit malformed-cycle coverage.
+  */
+  lj_obj_setgcwrel(obj2gco(L1), obj2gco(L2));
+  assert(lj_gc_flush_root_pending(g) == 2u);
+  assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(after_main_contains(g, obj2gco(L1)));
+  assert(after_main_contains(g, obj2gco(L2)));
+  assert(lj_obj_gcw_acq(obj2gco(L1)) != obj2gco(L2));
+  lua_pop(L, 2);
+}
+
 static void test_fullgc_flush(lua_State *L)
 {
   global_State *g = G(L);
@@ -406,6 +439,7 @@ int main(void)
   test_hint_only_on_empty_transition(L);
   test_pending_cycle_breaker(L);
   test_after_main_flush(L);
+  test_after_main_cycle_breaker(L);
   test_fullgc_flush(L);
   test_tls_only_tg_flush(L);
   test_attach_flushes_pending(L);
