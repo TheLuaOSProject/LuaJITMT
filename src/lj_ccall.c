@@ -587,7 +587,7 @@
 
 #ifndef CCALL_HANDLE_STRUCTRET2
 #define CCALL_HANDLE_STRUCTRET2 \
-  memcpy(dp, sp, ctr->size);  /* Copy struct return value from GPRs. */
+  memcpy(dp, sp, ctype_size_acq(ctr));  /* Copy struct return value from GPRs. */
 #endif
 
 /* -- x86 OSX ABI struct classification ----------------------------------- */
