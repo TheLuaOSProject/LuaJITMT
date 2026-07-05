@@ -191,17 +191,17 @@ Current bridge note: `lj_gc2_worker_drain()` now provides a bounded non-owner
 worker entrypoint that converts published SSB entries to grey work, steals
 from the Chase-Lev top side, and traverses stolen objects. The full worker
 pool, grow-safe per-worker deque ownership, idle declaration, and scheduling
-remain the original target above. The current global grey deque has a temporary
-single-worker ownership token (`worker_active`) around this drain surface, plus
-busy/idle telemetry, so overlapping helper calls do not both act as the staged
-worker owner. `lj_gc2_worker_drain()` returns total progress, including
+remain the original target above. The current global grey/weak/sweep bridge has
+a staged single-owner token (`worker_active`) around this drain surface, plus
+busy/idle telemetry, so overlapping helper calls do not both mutate owner-only
+GC2 state. `lj_gc2_worker_drain()` returns total progress, including
 leaf-only SSB conversions that do not traverse a grey object, so future
 idle/fixpoint loops do not need to infer progress from telemetry counters.
 The temporary `_progress()` compatibility alias has been removed. During
 `P_WEAK`, any remaining worker budget can also advance `lj_gc2_weak_drain()`
 through the published weak snapshot, with `worker_weak_drained` attributing
 that bounded work; the full scheduler-owned weak drain remains staged. During
-`P_SWEEP`, the same temporary worker owner can spend its budget on bounded
+`P_SWEEP`, the same staged owner can spend its budget on bounded
 traversable arena sweep batches through GC2's internal sweep-owner helper after
 the legacy sweep boundary prepares the arena lists and restores plain arenas.
 This keeps the previous boundary-lazy sweep bridge but removes its direct sweep
@@ -294,9 +294,9 @@ each live TG's active SSB cursor, read through acquire loads while walking the
 shared TG list. Active SSB producers publish cursor advances with release
 stores after writing the slot; active SSB drains release-publish cursor
 retreats only after marking/enqueuing the popped slot. The original final
-mark-completion bridge could return a miss while another worker held the
-temporary `worker_active` drain token; `lj_gc2_mark_complete()` now waits for
-that peer drain to finish and retries before the legacy bridge can publish
+mark-completion bridge could return a miss while another worker held the staged
+`worker_active` drain token; `lj_gc2_mark_complete()` now waits for that peer
+drain to finish and retries before the legacy bridge can publish
 `P_WEAK`, recording `mark_complete_peer_waits` telemetry. The `MARK -> WEAK`
 and `WEAK -> SWEEP` publication helpers are now CAS-gated from their expected
 source phase, so stale helper calls cannot force an idle or wrong-phase

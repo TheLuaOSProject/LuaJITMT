@@ -7686,7 +7686,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
       phase != LJ_GC2_SWEEP)
     return 0;
   if (!gc2_worker_claim_count_busy(g))
-    return 0;  /* 05 section 5.6.3 temporary single-worker bridge. */
+    return 0;  /* 05 section 5.6.3 staged grey/weak/sweep owner token. */
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP) {
