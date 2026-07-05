@@ -98,12 +98,17 @@ static int ffi_ident_string(const char *p, MSize len)
   return 1;
 }
 
+static void ffi_ctype_wait_or_record_ctbusy(lua_State *L, CTState *cts);
+
 static int ffi_lookup_named_ctype(lua_State *L, CTState *cts, GCstr *name,
 				  uint32_t tmask, CTypeID *idp, CType *out)
 {
   int ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, NULL);
-  if (ok < 0)
-    ok = lj_ctype_getname_wait(L, cts, name, tmask, idp, out, NULL);
+  while (ok < 0) {
+    /* Name hash is cparser-published; recorders abort, readers wait. */
+    ffi_ctype_wait_or_record_ctbusy(L, cts);
+    ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, NULL);
+  }
   return ok;
 }
 

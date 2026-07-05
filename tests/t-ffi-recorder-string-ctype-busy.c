@@ -215,6 +215,21 @@ int main(void)
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function run(n)\n"
     "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + tonumber(ffi.new('lj_m7_rec_named_int_t', i)) end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 36) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() >= 1)\n");
+
+  assert_busy_trace_releases(L, cts,
+    "local ffi = require('ffi')\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
     "  for i = 1, n do\n"
     "    sum = sum + ffi.sizeof('struct { int x; }')\n"
     "  end\n"
