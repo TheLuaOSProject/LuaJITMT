@@ -40,6 +40,7 @@ int main(void)
   jit_State *J = G2J(G(L));
   uint32_t live, returns;
   uint32_t aborts, linked, unlinks, return_unlinks;
+  uint32_t slot_release_calls, slot_release_clears;
   uint32_t findfree, reuses, grows;
 
   ljt_lua_dostring(L,
@@ -62,6 +63,8 @@ int main(void)
   linked = lj_trace_test_call_unroll_linked();
   unlinks = lj_trace_test_flush_unlink_calls();
   return_unlinks = lj_trace_test_flush_unlink_returns();
+  slot_release_calls = lj_trace_test_slot_release_calls();
+  slot_release_clears = lj_trace_test_slot_release_clears();
   findfree = lj_trace_test_findfree_calls();
   reuses = lj_trace_test_findfree_reuses();
   grows = lj_trace_test_findfree_grows();
@@ -71,9 +74,10 @@ int main(void)
   assert(linked == aborts);
   assert(unlinks >= aborts);
   assert(return_unlinks > 0);
-  assert(lj_trace_test_slot_release_clears() > 0);
+  assert(slot_release_calls == return_unlinks);
+  assert(slot_release_clears > 0);
   assert(lj_trace_test_abort_selflinks() == 0);
-  assert(lj_trace_test_slot_release_clears() == return_unlinks);
+  assert(slot_release_clears == return_unlinks);
   assert(findfree > 0);
   assert(reuses > 0);
   assert(reuses + grows == findfree);
@@ -83,11 +87,11 @@ int main(void)
   assert(returns == 0);
 
   printf("t-jit-recursive-retention OK: aborts=%u unlinks=%u "
-	 "return_unlinks=%u selflinks=%u slot_clears=%u live=%u "
+	 "return_unlinks=%u selflinks=%u slot_calls=%u slot_clears=%u live=%u "
 	 "returns=%u findfree=%u reuse=%u grow=%u\n",
 	 aborts, unlinks, return_unlinks, lj_trace_test_abort_selflinks(),
-	 lj_trace_test_slot_release_clears(), live, returns, findfree, reuses,
-	 grows);
+	 slot_release_calls, slot_release_clears, live, returns, findfree,
+	 reuses, grows);
 
   lua_close(L);
   return 0;
