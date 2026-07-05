@@ -411,7 +411,7 @@ static void cp_rollback_log(CPState *cp, CTypeID id)
       return;
   rb = lj_mem_newt(cp->L, sizeof(CPRollback), CPRollback);
   rb->id = id;
-  rb->old = *ctype_get(cp->cts, id);
+  ctype_copy_rel(&rb->old, ctype_get(cp->cts, id));
   rb->next = cp->rollback;
   cp->rollback = rb;
 }

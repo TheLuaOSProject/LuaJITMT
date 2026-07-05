@@ -861,10 +861,11 @@ static CTypeID ctype_hash_findname(CTState *cts, CTypeID id, GCstr *name,
 
 static void ctype_abandon(CTState *cts, CTypeID id)
 {
-  CType tmp = *ctype_get(cts, id);
-  tmp.info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
-  tmp.size = 0;
-  tmp.sib = 0;
+  CType tmp;
+  ctype_copy_rel(&tmp, ctype_get(cts, id));
+  ctype_info_rel(&tmp, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
+  ctype_size_rel(&tmp, 0);
+  ctype_sib_rel(&tmp, 0);
   ctype_clearname(&tmp);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
   lj_ctype_publish(cts, id, &tmp);
