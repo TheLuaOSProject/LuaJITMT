@@ -191,8 +191,11 @@ static CPToken cp_ident(CPState *cp)
   do { cp_save(cp, cp->c); } while (lj_char_isident(cp_get(cp)));
   cp->str = lj_buf_str(cp->L, &cp->sb);
   cp->val.id = lj_ctype_getname(cp->cts, &cp->ct, cp->str, cp->tmask);
-  if (ctype_type(cp->ct->info) == CT_KW)
-    return ctype_cid(cp->ct->info);
+  {
+    CTInfo info = ctype_info_acq(cp->ct);
+    if (ctype_type(info) == CT_KW)
+      return ctype_cid(info);
+  }
   return CTOK_IDENT;
 }
 
@@ -578,7 +581,8 @@ static void cp_check(CPState *cp, CPToken tok)
 static int cp_istypedecl(CPState *cp)
 {
   if (cp->tok >= CTOK_FIRSTDECL && cp->tok <= CTOK_LASTDECL) return 1;
-  if (cp->tok == CTOK_IDENT && ctype_istypedef(cp->ct->info)) return 1;
+  if (cp->tok == CTOK_IDENT && ctype_istypedef(ctype_info_acq(cp->ct)))
+    return 1;
   if (cp->tok == '$') return 1;
   return 0;
 }
@@ -657,9 +661,12 @@ static void cp_expr_prefix(CPState *cp, CPValue *k)
     cp_expr_unary(cp, k);
     id = ctype_rawrefid(cp->cts, k->id);
     ct = ctype_get(cp->cts, id);
-    if (!ctype_ispointer(ct->info))
-      cp_err_badidx(cp, id);
-    k->u32 = 0; k->id = ctype_cid(ct->info);
+    {
+      CTInfo info = ctype_info_acq(ct);
+      if (!ctype_ispointer(info))
+	cp_err_badidx(cp, id);
+      k->u32 = 0; k->id = ctype_cid(info);
+    }
   } else if (cp_opt(cp, '&')) {  /* Address operator. */
     cp_expr_unary(cp, k);
     k->id = cp_ctype_intern(cp, CTINFO(CT_PTR, CTALIGN_PTR+k->id),
@@ -669,11 +676,12 @@ static void cp_expr_prefix(CPState *cp, CPValue *k)
   } else if (cp_opt(cp, CTOK_ALIGNOF)) {
     cp_expr_sizeof(cp, k, 0);
   } else if (cp->tok == CTOK_IDENT) {
-    if (ctype_type(cp->ct->info) == CT_CONSTVAL) {
-      k->u32 = cp->ct->size; k->id = ctype_cid(cp->ct->info);
-    } else if (ctype_type(cp->ct->info) == CT_EXTERN) {
-      k->u32 = cp->val.id; k->id = ctype_cid(cp->ct->info);
-    } else if (ctype_type(cp->ct->info) == CT_FUNC) {
+    CTInfo info = ctype_info_acq(cp->ct);
+    if (ctype_type(info) == CT_CONSTVAL) {
+      k->u32 = ctype_size_acq(cp->ct); k->id = ctype_cid(info);
+    } else if (ctype_type(info) == CT_EXTERN) {
+      k->u32 = cp->val.id; k->id = ctype_cid(info);
+    } else if (ctype_type(info) == CT_FUNC) {
       k->u32 = cp->val.id; k->id = cp->val.id;
     } else {
       goto err_expr;
@@ -699,13 +707,16 @@ static void cp_expr_postfix(CPState *cp, CPValue *k)
     if (cp_opt(cp, '[')) {  /* Array/pointer index. */
       CPValue k2;
       CTypeID id;
+      CTInfo info;
       cp_expr_comma(cp, &k2);
       id = ctype_rawrefid(cp->cts, k->id);
       ct = ctype_get(cp->cts, id);
-      if (!ctype_ispointer(ct->info)) {
+      info = ctype_info_acq(ct);
+      if (!ctype_ispointer(info)) {
 	id = ctype_rawrefid(cp->cts, k2.id);
 	ct = ctype_get(cp->cts, id);
-	if (!ctype_ispointer(ct->info))
+	info = ctype_info_acq(ct);
+	if (!ctype_ispointer(info))
 	  cp_err_badidx(cp, id);
       }
       cp_check(cp, ']');
@@ -714,28 +725,32 @@ static void cp_expr_postfix(CPState *cp, CPValue *k)
       CTSize ofs;
       CType *fct;
       CTypeID id = ctype_rawrefid(cp->cts, k->id);
+      CTInfo info;
       ct = ctype_get(cp->cts, id);
+      info = ctype_info_acq(ct);
       if (cp->tok == CTOK_DEREF) {
-	if (!ctype_ispointer(ct->info))
+	if (!ctype_ispointer(info))
 	  cp_err_badidx(cp, id);
-	id = ctype_rawrefid(cp->cts, ctype_cid(ct->info));
+	id = ctype_rawrefid(cp->cts, ctype_cid(info));
 	ct = ctype_get(cp->cts, id);
+	info = ctype_info_acq(ct);
       }
       cp_next(cp);
       if (cp->tok != CTOK_IDENT) cp_err_token(cp, CTOK_IDENT);
-      if (!ctype_isstruct(ct->info) || ct->size == CTSIZE_INVALID ||
+      if (!ctype_isstruct(info) || ctype_size_acq(ct) == CTSIZE_INVALID ||
 	  !(fct = lj_ctype_getfield(cp->cts, ct, cp->str, &ofs)) ||
-	  ctype_isbitfield(fct->info)) {
+	  ctype_isbitfield(ctype_info_acq(fct))) {
 	GCstr *s = lj_ctype_repr(cp->L, id, NULL);
 	cp_errmsg(cp, 0, LJ_ERR_FFI_BADMEMBER, strdata(s), strdata(cp->str));
       }
       ct = fct;
-      k->u32 = ctype_isconstval(ct->info) ? ct->size : 0;
+      info = ctype_info_acq(ct);
+      k->u32 = ctype_isconstval(info) ? ctype_size_acq(ct) : 0;
       cp_next(cp);
     } else {
       return;
     }
-    k->id = ctype_cid(ct->info);
+    k->id = ctype_cid(ctype_info_acq(ct));
   }
 }
 
@@ -905,7 +920,7 @@ static void cp_expr_kint(CPState *cp, CPValue *k)
   CType *ct;
   cp_expr_sub(cp, k, 0);
   ct = ctype_raw(cp->cts, k->id);
-  if (!ctype_isinteger(ct->info)) cp_err(cp, LJ_ERR_BADVAL);
+  if (!ctype_isinteger(ctype_info_acq(ct))) cp_err(cp, LJ_ERR_BADVAL);
 }
 
 /* Parse (non-negative) size expression. */
@@ -961,8 +976,8 @@ static void cp_push_attributes(CPDecl *decl)
 static void cp_push_type(CPDecl *decl, CTypeID id)
 {
   CType *ct = ctype_get(decl->cp->cts, id);
-  CTInfo info = ct->info;
-  CTSize size = ct->size;
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size = ctype_size_acq(ct);
   switch (ctype_type(info)) {
   case CT_STRUCT: case CT_ENUM:
     cp_push(decl, CTINFO(CT_TYPEDEF, id), 0);  /* Don't copy unique types. */
@@ -979,7 +994,7 @@ static void cp_push_type(CPDecl *decl, CTypeID id)
     cp_push(decl, info & ~CTMASK_CID, size);  /* Copy type. */
     break;
   case CT_ARRAY:
-    if ((ct->info & (CTF_VECTOR|CTF_COMPLEX))) {
+    if ((info & (CTF_VECTOR|CTF_COMPLEX))) {
       info |= (decl->attr & CTF_QUAL);
       decl->attr &= ~CTF_QUAL;
     }
@@ -1017,8 +1032,11 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
       lj_assertCP(id == 0, "typedef not at toplevel");
       id = ctype_cid(info);
       /* Always refetch info/size, since struct/enum may have been completed. */
-      cinfo = ctype_get(cp->cts, id)->info;
-      csize = ctype_get(cp->cts, id)->size;
+      {
+	CType *rct = ctype_get(cp->cts, id);
+	cinfo = ctype_info_acq(rct);
+	csize = ctype_size_acq(rct);
+      }
       lj_assertCP(ctype_isstruct(cinfo) || ctype_isenum(cinfo),
 		  "typedef of bad type");
     } else if (ctype_isfunc(info)) {  /* Intern function. */
@@ -1027,8 +1045,9 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
       CTypeID sib;
       if (id) {
 	CType *refct = ctype_raw(cp->cts, id);
+	CTInfo refinfo = ctype_info_acq(refct);
 	/* Reject function or refarray return types. */
-	if (ctype_isfunc(refct->info) || ctype_isrefarray(refct->info))
+	if (ctype_isfunc(refinfo) || ctype_isrefarray(refinfo))
 	  cp_err(cp, LJ_ERR_FFI_INVTYPE);
       }
       /* No intervening attributes allowed, skip forward. */
@@ -1081,7 +1100,7 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
 	}
       } else if (ctype_isptr(info)) {
 	/* Reject pointer/ref to ref. */
-	if (id && ctype_isref(ctype_raw(cp->cts, id)->info))
+	if (id && ctype_isref(ctype_info_acq(ctype_raw(cp->cts, id))))
 	  cp_err(cp, LJ_ERR_FFI_INVTYPE);
 	if (ctype_isref(info)) {
 	  info &= ~CTF_VOLATILE;  /* Refs are always const, never volatile. */
@@ -1144,12 +1163,13 @@ static CTypeID cp_decl_constinit(CPState *cp, CType **ctp, CTypeID ctypeid)
   CTSize size;
   CPValue k;
   CTypeID constid;
-  while (ctype_isattrib(ctt->info)) {  /* Skip attributes. */
-    ctypeid = ctype_cid(ctt->info);  /* Update ID, too. */
+  info = ctype_info_acq(ctt);
+  while (ctype_isattrib(info)) {  /* Skip attributes. */
+    ctypeid = ctype_cid(info);  /* Update ID, too. */
     ctt = ctype_get(cp->cts, ctypeid);
+    info = ctype_info_acq(ctt);
   }
-  info = ctt->info;
-  size = ctt->size;
+  size = ctype_size_acq(ctt);
   if (!ctype_isinteger(info) || !(info & CTF_CONST) || size > 4)
     cp_err(cp, LJ_ERR_FFI_INVTYPE);
   cp_check(cp, '=');
@@ -1360,13 +1380,13 @@ static void cp_decl_attributes(CPState *cp, CPDecl *decl)
     case CTOK_DECLSPEC: cp_decl_msvcattribute(cp, decl); continue;
     case CTOK_CCDECL:
 #if LJ_TARGET_X86
-      CTF_INSERT(decl->fattr, CCONV, cp->ct->size);
+      CTF_INSERT(decl->fattr, CCONV, ctype_size_acq(cp->ct));
       decl->fattr |= CTFP_CCONV;
 #endif
       break;
     case CTOK_PTRSZ:
 #if LJ_64
-      CTF_INSERT(decl->attr, MSIZEP, cp->ct->size);
+      CTF_INSERT(decl->attr, MSIZEP, ctype_size_acq(cp->ct));
 #endif
       break;
     default: return;
@@ -1589,19 +1609,21 @@ static CTypeID cp_decl_struct(CPState *cp, CPDecl *sdecl, CTInfo sinfo)
 	  CType *ct;
 	  CTypeID fieldid = cp_ctype_new(cp, &ct);  /* Do this first. */
 	  CType *tct = ctype_raw(cp->cts, ctypeid);
+	  CTInfo tinfo = ctype_info_acq(tct);
+	  CTSize tsize = ctype_size_acq(tct);
 
 	  if (decl.bits == CTSIZE_INVALID) {  /* Regular field. */
-	    if (ctype_isarray(tct->info) && tct->size == CTSIZE_INVALID)
+	    if (ctype_isarray(tinfo) && tsize == CTSIZE_INVALID)
 	      lastdecl = 1;  /* a[] or a[?] must be the last declared field. */
 
 	    /* Accept transparent struct/union/enum. */
 	    if (!decl.name) {
-	      if (!((ctype_isstruct(tct->info) && !(tct->info & CTF_VLA)) ||
-		    ctype_isenum(tct->info)))
+	      if (!((ctype_isstruct(tinfo) && !(tinfo & CTF_VLA)) ||
+		    ctype_isenum(tinfo)))
 		cp_err_token(cp, CTOK_IDENT);
 	      ctype_info_rel(ct, CTINFO(CT_ATTRIB,
 				 CTATTRIB(CTA_SUBTYPE) + ctypeid));
-	      ctype_size_rel(ct, ctype_isstruct(tct->info) ?
+	      ctype_size_rel(ct, ctype_isstruct(tinfo) ?
 			     (decl.attr|0x80000000u) : 0);
 	      /* Size is used temporarily by the layout phase. */
 	      ct = cp_ctype_publish(cp, fieldid, ct);
@@ -1609,9 +1631,9 @@ static CTypeID cp_decl_struct(CPState *cp, CPDecl *sdecl, CTInfo sinfo)
 	    }
 	  } else {  /* Bitfield. */
 	    bsz = decl.bits;
-	    if (!ctype_isinteger_or_bool(tct->info) ||
-		(bsz == 0 && decl.name) || 8*tct->size > CTBSZ_MAX ||
-		bsz > ((tct->info & CTF_BOOL) ? 1 : 8*tct->size))
+	    if (!ctype_isinteger_or_bool(tinfo) ||
+		(bsz == 0 && decl.name) || 8*tsize > CTBSZ_MAX ||
+		bsz > ((tinfo & CTF_BOOL) ? 1 : 8*tsize))
 	      cp_errmsg(cp, ':', LJ_ERR_BADVAL);
 	  }
 
@@ -1721,9 +1743,10 @@ static CPscl cp_decl_spec(CPState *cp, CPDecl *decl, CPscl scl)
     cp_decl_attributes(cp, decl);
     if (cp->tok >= CTOK_FIRSTDECL && cp->tok <= CTOK_LASTDECLFLAG) {
       uint32_t cbit;
-      if (cp->ct->size) {
+      CTSize csize = ctype_size_acq(cp->ct);
+      if (csize) {
 	if (sz) goto end_decl;
-	sz = cp->ct->size;
+	sz = csize;
       }
       cbit = (1u << (cp->tok - CTOK_FIRSTDECL));
       cds = cds | cbit | ((cbit & cds & CDF_LONG) << 1);
@@ -1749,10 +1772,13 @@ static CPscl cp_decl_spec(CPState *cp, CPDecl *decl, CPscl scl)
       tdef = cp_decl_enum(cp, decl);
       continue;
     case CTOK_IDENT:
-      if (ctype_istypedef(cp->ct->info)) {
-	tdef = ctype_cid(cp->ct->info);  /* Get typedef. */
-	cp_next(cp);
-	continue;
+      {
+	CTInfo info = ctype_info_acq(cp->ct);
+	if (ctype_istypedef(info)) {
+	  tdef = ctype_cid(info);  /* Get typedef. */
+	  cp_next(cp);
+	  continue;
+	}
       }
       break;
     case '$':
@@ -1851,14 +1877,17 @@ static void cp_decl_func(CPState *cp, CPDecl *fdecl)
       cp_declarator(cp, &decl);
       ctypeid = cp_decl_intern(cp, &decl);
       ct = ctype_raw(cp->cts, ctypeid);
-      if (ctype_isvoid(ct->info))
-	break;
-      else if (ctype_isrefarray(ct->info))
-	ctypeid = cp_ctype_intern(cp,
-	  CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ct->info)), CTSIZE_PTR);
-      else if (ctype_isfunc(ct->info))
-	ctypeid = cp_ctype_intern(cp,
-	  CTINFO(CT_PTR, CTALIGN_PTR|ctypeid), CTSIZE_PTR);
+      {
+	CTInfo info = ctype_info_acq(ct);
+	if (ctype_isvoid(info))
+	  break;
+	else if (ctype_isrefarray(info))
+	  ctypeid = cp_ctype_intern(cp,
+	    CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(info)), CTSIZE_PTR);
+	else if (ctype_isfunc(info))
+	  ctypeid = cp_ctype_intern(cp,
+	    CTINFO(CT_PTR, CTALIGN_PTR|ctypeid), CTSIZE_PTR);
+      }
       /* Add new parameter. */
       fieldid = cp_ctype_new(cp, &ct);
       if (decl.name) ct = cp_ctype_setname(cp, fieldid, decl.name);
@@ -2047,7 +2076,7 @@ static void cp_decl_multi(CPState *cp)
     scl = cp_decl_spec(cp, &decl, CDF_TYPEDEF|CDF_EXTERN|CDF_STATIC);
     if ((cp->tok == ';' || cp->tok == CTOK_EOF) &&
 	ctype_istypedef(decl.stack[0].info)) {
-      CTInfo info = ctype_rawchild(cp->cts, &decl.stack[0])->info;
+      CTInfo info = ctype_info_acq(ctype_rawchild(cp->cts, &decl.stack[0]));
       if (ctype_isstruct(info) || ctype_isenum(info))
 	goto decl_end;  /* Accept empty declaration of struct/union/enum. */
     }
@@ -2064,9 +2093,10 @@ static void cp_decl_multi(CPState *cp)
 	  ctype_info_rel(ct, CTINFO(CT_TYPEDEF, ctypeid));
 	  ct = cp_ctype_publish(cp, id, ct);
 	  goto noredir;
-	} else if (ctype_isfunc(ctype_get(cp->cts, ctypeid)->info)) {
+	}
+	ct = ctype_get(cp->cts, ctypeid);
+	if (ctype_isfunc(ctype_info_acq(ct))) {
 	  /* Treat both static and extern function declarations as extern. */
-	  ct = ctype_get(cp->cts, ctypeid);
 	  /* We always get new anonymous functions (typedefs are copied). */
 	  lj_assertCP(ctype_name_acq(ct) == NULL, "unexpected named function");
 	  id = ctypeid;  /* Just name it. */

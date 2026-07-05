@@ -100,6 +100,17 @@ int main(void)
     "ffi.cdef('typedef int lj_m7_rb_redir_gap;')\n"
     "assert(ffi.sizeof('lj_m7_rb_redir_gap') == 4)\n");
 
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef[[\n"
+    "struct lj_m7_empty_typedef_decl;\n"
+    "typedef struct lj_m7_empty_typedef_decl lj_m7_empty_typedef_decl_t;\n"
+    "lj_m7_empty_typedef_decl_t;\n"
+    "struct lj_m7_empty_typedef_decl { int x; };\n"
+    "lj_m7_empty_typedef_decl_t;\n"
+    "]]\n"
+    "assert(ffi.sizeof('lj_m7_empty_typedef_decl_t') == 4)\n");
+
   lua_close(L);
   printf("t-ffi-cparse-rollback OK: failed parses abandon new ctype records\n");
   return 0;

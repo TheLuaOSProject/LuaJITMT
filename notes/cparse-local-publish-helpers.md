@@ -32,6 +32,11 @@ Changed:
 - Follow-up: the `cp_struct_layout()` field walk now acquire-loads field
   `info`/temporary `size` values before deciding layout and before publishing
   the mutated field snapshot.
+- Follow-up: parser expression, declaration-specifier, constant-initializer,
+  field-validation, function-parameter, and top-level declaration checks now
+  acquire-load shared `CType` payloads. Parser-local declaration-stack entries
+  remain plain fields. The rollback fixture also pins empty typedef
+  declarations of forward-declared structs through this helper-load path.
 
 Why this matters:
 
