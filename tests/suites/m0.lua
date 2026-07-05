@@ -152,6 +152,7 @@ end
 
 local function run_m0_combo(t, name, xcflags, stock_tags)
   print("== " .. name .. " ==")
+  xcflags = xcflags == "" and "-Werror" or "-Werror " .. xcflags
   t:build({ clean = true, xcflags = xcflags })
 
   local stock_args = { "test.lua", "--quiet" }
@@ -221,7 +222,7 @@ return function(add)
 
   add({
     name = "m0_matrix",
-    description = "M0 default and no-JIT stock-test build matrix",
+    description = "M0 warning-clean default and no-JIT stock-test build matrix",
     run = function(t)
       build.with_default_build_restore(t, function()
         run_m0_combo(t, "lockless JIT=1", "", {})
