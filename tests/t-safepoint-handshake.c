@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "lua.h"
@@ -26,6 +25,8 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
+
+#include "lib/test_sleep.h"
 
 typedef struct NativeStopReqCtx {
   global_State *g;
@@ -170,10 +171,7 @@ static int mkfifo_test_c(lua_State *L)
 static void *consumed_ack_clear_thread(void *arg)
 {
   ConsumedAckCtx *ctx = (ConsumedAckCtx *)arg;
-  struct timespec delay;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 20000000;
-  (void)nanosleep(&delay, NULL);
+  sleep_ns(20000000L);
   la_store32_rel(&ctx->cleared, 1);
   lj_tg_poll_rel(ctx->tg, 0);
   lj_tg_poll_futex_wake(ctx->tg, 1);
@@ -184,10 +182,7 @@ static void *consumed_ack_reqmask_thread(void *arg)
 {
   ConsumedAckCtx *ctx = (ConsumedAckCtx *)arg;
   uint64_t epoch = la_load64_rlx(&ctx->g->gc2.hs_epoch) + 1u;
-  struct timespec delay;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 20000000;
-  (void)nanosleep(&delay, NULL);
+  sleep_ns(20000000L);
   la_store32_rel(&ctx->g->gc2.hs_actions, ctx->actions);
   la_store32_rel(&ctx->g->gc2.hs_pending, 1);
   la_store64_rel(&ctx->g->gc2.hs_epoch, epoch);
@@ -240,12 +235,9 @@ static void test_consumed_ack_reqmask_wake(lua_State *L, TGState *tg)
 static void *native_stopreq_thread(void *arg)
 {
   NativeStopReqCtx *ctx = (NativeStopReqCtx *)arg;
-  struct timespec delay;
   int i;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 1000000;
   for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
-    (void)nanosleep(&delay, NULL);
+    sleep_ns(1000000L);
   publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
   if (ctx->open_fifo) {
     int fd = open(ctx->path, O_WRONLY);
@@ -316,24 +308,21 @@ static int assert_not_native_c(lua_State *L);
 static void *print_stopreq_thread(void *arg)
 {
   PrintStopReqCtx *ctx = (PrintStopReqCtx *)arg;
-  struct timespec delay;
   char buf[4096];
   int i;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 1000000;
   for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
-    (void)nanosleep(&delay, NULL);
+    sleep_ns(1000000L);
   publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
   while (la_load32_acq(&ctx->done) == 0) {
     ssize_t n = read(ctx->fd, buf, sizeof(buf));
     if (n > 0)
       continue;
     if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-      (void)nanosleep(&delay, NULL);
+      sleep_ns(1000000L);
       continue;
     }
     if (n == 0) {
-      (void)nanosleep(&delay, NULL);
+      sleep_ns(1000000L);
       continue;
     }
     ctx->err = errno;
@@ -345,14 +334,11 @@ static void *print_stopreq_thread(void *arg)
 static void *input_stopreq_thread(void *arg)
 {
   InputStopReqCtx *ctx = (InputStopReqCtx *)arg;
-  struct timespec delay;
   const char msg[] = "cont\n";
   ssize_t n;
   int i;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 1000000;
   for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
-    (void)nanosleep(&delay, NULL);
+    sleep_ns(1000000L);
   publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
   n = write(ctx->fd, msg, sizeof(msg) - 1u);
   if (n != (ssize_t)(sizeof(msg) - 1u))
@@ -362,10 +348,7 @@ static void *input_stopreq_thread(void *arg)
 
 static void dispatch_test_sleep_1ms(void)
 {
-  struct timespec delay;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 1000000;
-  (void)nanosleep(&delay, NULL);
+  sleep_ns(1000000L);
 }
 
 #define DISPMODE_UPDATE_TEST 0x80

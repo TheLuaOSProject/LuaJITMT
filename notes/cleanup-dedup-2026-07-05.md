@@ -104,6 +104,10 @@ library, the loadlib cache race wrapper, and the FFI callback STOPREQ worker.
 This removes local `struct timespec` spellings and gives those waits the same
 EINTR retry behavior as the rest of the fixture suite.
 
+The C safepoint-handshake fixture now uses the same helper for its fixed-delay
+threads and polling loops, removing the last multi-site raw `nanosleep()`
+spelling in that fixture while keeping the existing wait durations.
+
 The M9/M10 suite now routes repeated default clean builds through
 `suite_build.clean_build()`, matching the earlier harness build-profile
 centralization without changing test ordering or build flags.
