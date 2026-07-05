@@ -36,3 +36,21 @@ Next attempt:
   return-trace unlink, self-link blacklist, slot release, and immediate next
   `trace_findfree()` choice. Fix the trace-number reuse only after that sequence
   is observable in one C fixture.
+
+Follow-up fix:
+
+- Added `LJ_TRACE_TEST_HELPERS` telemetry plus
+  `tests/t-jit-recursive-retention.c`. The first measurement showed the
+  workload had `return_unlinks=55`, `abort_selflinks=0`, `slot_clears=0`, and
+  55 live return traces after warmup. In other words, the call-unroll aborts
+  were not using the root stitched-call self-link path that needs the old return
+  trace to stay in its public slot.
+- `check_call_unroll()` now keeps the unlinked return trace only for the exact
+  `trace_abort()` branch that can install the stock self-link blacklist:
+  root recording, non-return start bytecode, and a nonzero invoking trace. Other
+  call-unroll aborts use `lj_trace_flush_unlink_retire_return()`, which unlinks
+  the return trace and retires its slot through the normal trace SMR path.
+- The focused fixture now reports `slot_clears=9`, `returns=0`, and no
+  self-link use for the recursive workload. A `-jv aux/bench/bench.lua fib30`
+  sample showed trace slot 3 reused for the up-recursion trace after two
+  call-unroll aborts, instead of retaining a run of live return roots.

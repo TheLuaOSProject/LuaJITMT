@@ -16,6 +16,7 @@ local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
   "m6_jit_recursive_call_unroll",
+  "m6_jit_recursive_retention",
   "m6_jit_cell_ops",
   "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
@@ -751,6 +752,22 @@ assert(after_warm < 64, "recursive fib trace graph grew unexpectedly")
 print("jit-recursive-call-unroll OK")
 ]=], { timeout = "20s" })
       print("M6 JIT recursive workload behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_recursive_retention",
+    description = "recursive call-unroll trace retention instrumentation",
+    run = function(t)
+      clean_build(t, { quiet = true, xcflags = "-DLJ_TRACE_TEST_HELPERS" })
+      build_and_run_c(t, t:tmp("lj_t-jit-recursive-retention"),
+                      "t-jit-recursive-retention.c", {
+        cflags = "-DLJ_TRACE_TEST_HELPERS",
+        build = false,
+        timeout = "20s",
+        xcflags = "-DLJ_TRACE_TEST_HELPERS"
+      })
+      print("M6 JIT recursive trace-retention instrumentation passed")
     end
   })
 

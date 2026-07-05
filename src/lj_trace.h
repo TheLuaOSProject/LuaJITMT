@@ -31,6 +31,8 @@ LJ_FUNC void lj_trace_reenableproto(GCproto *pt);
 LJ_FUNC uint32_t lj_trace_flushproto(global_State *g, GCproto *pt);
 LJ_FUNC uint32_t lj_trace_flush(jit_State *J, TraceNo traceno);
 LJ_FUNC uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno);
+LJ_FUNC uint32_t lj_trace_flush_unlink_retire_return(jit_State *J,
+						     TraceNo traceno);
 LJ_FUNCA BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J,
 						   const BCIns *pc,
 						   TraceNo traceno,
@@ -56,6 +58,26 @@ LJ_FUNC int lj_trace_retired_mcode_refs(global_State *g, MCode *area,
 					size_t size);
 LJ_FUNC void lj_trace_freeretired(global_State *g);
 LJ_FUNC void lj_trace_markvecs(global_State *g, int gc2);
+
+#ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC void lj_trace_test_reset_retention_stats(void);
+LJ_FUNC void lj_trace_test_note_call_unroll_abort(TraceNo lnk);
+LJ_FUNC uint32_t lj_trace_test_call_unroll_aborts(void);
+LJ_FUNC uint32_t lj_trace_test_call_unroll_linked(void);
+LJ_FUNC uint32_t lj_trace_test_flush_unlink_calls(void);
+LJ_FUNC uint32_t lj_trace_test_flush_unlink_returns(void);
+LJ_FUNC uint32_t lj_trace_test_abort_selflinks(void);
+LJ_FUNC uint32_t lj_trace_test_slot_release_calls(void);
+LJ_FUNC uint32_t lj_trace_test_slot_release_clears(void);
+LJ_FUNC uint32_t lj_trace_test_findfree_calls(void);
+LJ_FUNC uint32_t lj_trace_test_findfree_reuses(void);
+LJ_FUNC uint32_t lj_trace_test_findfree_grows(void);
+LJ_FUNC uint32_t lj_trace_test_last_unlinked(void);
+LJ_FUNC uint32_t lj_trace_test_last_findfree(void);
+LJ_FUNC uint32_t lj_trace_test_last_released(void);
+#else
+#define lj_trace_test_note_call_unroll_abort(lnk)	((void)(lnk))
+#endif
 
 /* Event handling. */
 LJ_FUNC void lj_trace_ins(jit_State *J, const BCIns *pc);

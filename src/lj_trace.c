@@ -41,6 +41,110 @@
 #include "lj_target.h"
 #include "lj_prng.h"
 
+#ifdef LJ_TRACE_TEST_HELPERS
+static uint32_t trace_test_call_unroll_aborts;
+static uint32_t trace_test_call_unroll_linked;
+static uint32_t trace_test_flush_unlink_calls;
+static uint32_t trace_test_flush_unlink_returns;
+static uint32_t trace_test_abort_selflinks;
+static uint32_t trace_test_slot_release_calls;
+static uint32_t trace_test_slot_release_clears;
+static uint32_t trace_test_findfree_calls;
+static uint32_t trace_test_findfree_reuses;
+static uint32_t trace_test_findfree_grows;
+static uint32_t trace_test_last_unlinked;
+static uint32_t trace_test_last_findfree;
+static uint32_t trace_test_last_released;
+
+#define TRACE_TEST_COUNTER(name) \
+uint32_t lj_trace_test_##name(void) \
+{ \
+  return la_load32_acq(&trace_test_##name); \
+}
+
+void lj_trace_test_reset_retention_stats(void)
+{
+  la_store32_rel(&trace_test_call_unroll_aborts, 0);
+  la_store32_rel(&trace_test_call_unroll_linked, 0);
+  la_store32_rel(&trace_test_flush_unlink_calls, 0);
+  la_store32_rel(&trace_test_flush_unlink_returns, 0);
+  la_store32_rel(&trace_test_abort_selflinks, 0);
+  la_store32_rel(&trace_test_slot_release_calls, 0);
+  la_store32_rel(&trace_test_slot_release_clears, 0);
+  la_store32_rel(&trace_test_findfree_calls, 0);
+  la_store32_rel(&trace_test_findfree_reuses, 0);
+  la_store32_rel(&trace_test_findfree_grows, 0);
+  la_store32_rel(&trace_test_last_unlinked, 0);
+  la_store32_rel(&trace_test_last_findfree, 0);
+  la_store32_rel(&trace_test_last_released, 0);
+}
+
+void lj_trace_test_note_call_unroll_abort(TraceNo lnk)
+{
+  (void)la_add32_acqrel(&trace_test_call_unroll_aborts, 1);
+  if (lnk)
+    (void)la_add32_acqrel(&trace_test_call_unroll_linked, 1);
+}
+
+TRACE_TEST_COUNTER(call_unroll_aborts)
+TRACE_TEST_COUNTER(call_unroll_linked)
+TRACE_TEST_COUNTER(flush_unlink_calls)
+TRACE_TEST_COUNTER(flush_unlink_returns)
+TRACE_TEST_COUNTER(abort_selflinks)
+TRACE_TEST_COUNTER(slot_release_calls)
+TRACE_TEST_COUNTER(slot_release_clears)
+TRACE_TEST_COUNTER(findfree_calls)
+TRACE_TEST_COUNTER(findfree_reuses)
+TRACE_TEST_COUNTER(findfree_grows)
+TRACE_TEST_COUNTER(last_unlinked)
+TRACE_TEST_COUNTER(last_findfree)
+TRACE_TEST_COUNTER(last_released)
+
+static LJ_AINLINE void trace_test_note_flush_unlink(GCtrace *T,
+						    TraceNo traceno)
+{
+  (void)la_add32_acqrel(&trace_test_flush_unlink_calls, 1);
+  if (trace_linktype_acq(T) == LJ_TRLINK_RETURN)
+    (void)la_add32_acqrel(&trace_test_flush_unlink_returns, 1);
+  la_store32_rel(&trace_test_last_unlinked, (uint32_t)traceno);
+}
+
+static LJ_AINLINE void trace_test_note_abort_selflink(TraceNo traceno)
+{
+  (void)la_add32_acqrel(&trace_test_abort_selflinks, 1);
+  la_store32_rel(&trace_test_last_released, (uint32_t)traceno);
+}
+
+static LJ_AINLINE void trace_test_note_slot_release(TraceNo traceno,
+						   int cleared)
+{
+  (void)la_add32_acqrel(&trace_test_slot_release_calls, 1);
+  if (cleared)
+    (void)la_add32_acqrel(&trace_test_slot_release_clears, 1);
+  la_store32_rel(&trace_test_last_released, (uint32_t)traceno);
+}
+
+static LJ_AINLINE void trace_test_note_findfree_reuse(TraceNo traceno)
+{
+  (void)la_add32_acqrel(&trace_test_findfree_reuses, 1);
+  la_store32_rel(&trace_test_last_findfree, (uint32_t)traceno);
+}
+
+static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
+{
+  (void)la_add32_acqrel(&trace_test_findfree_grows, 1);
+  la_store32_rel(&trace_test_last_findfree, (uint32_t)traceno);
+}
+#else
+#define trace_test_note_flush_unlink(T, traceno) \
+  ((void)(T), (void)(traceno))
+#define trace_test_note_abort_selflink(traceno)		((void)(traceno))
+#define trace_test_note_slot_release(traceno, cleared) \
+  ((void)(traceno), (void)(cleared))
+#define trace_test_note_findfree_reuse(traceno)		((void)(traceno))
+#define trace_test_note_findfree_grow(traceno)		((void)(traceno))
+#endif
+
 static int trace_scope_mark_pending(GCtrace *T)
 {
   uint8_t flags = la_load8_acq(&T->unused1);
@@ -500,6 +604,7 @@ static int trace_body_still_rooted(global_State *g, const GCtrace *T)
 static void trace_retired_slot_release(jit_State *J, GCtrace *T)
 {
   TraceNo traceno = trace_traceno_acq(T);
+  int cleared = 0;
   if (traceno == 0 && la_load64_acq(&T->retire_epoch) != 0)
     traceno = trace_nextroot_acq(T);
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
@@ -508,8 +613,10 @@ static void trace_retired_slot_release(jit_State *J, GCtrace *T)
       traceslot_clear(J, traceno);
       if (J->freetrace == 0 || traceno < J->freetrace)
 	J->freetrace = traceno;
+      cleared = 1;
     }
   }
+  trace_test_note_slot_release(traceno, cleared);
   trace_nextroot_rel(T, 0);
   trace_traceno_rel(T, 0);
 }
@@ -699,11 +806,16 @@ static TraceNo trace_findfree(jit_State *J)
 {
   MSize osz, lim;
   TraceVec *oldtv, *newtv;
+#ifdef LJ_TRACE_TEST_HELPERS
+  (void)la_add32_acqrel(&trace_test_findfree_calls, 1);
+#endif
   if (J->freetrace == 0)
     J->freetrace = 1;
   for (; J->freetrace < trace_sizetrace_acq(J); J->freetrace++)
-    if (gcref_acq(*traceslot_ref_acq(J, J->freetrace)) == NULL)
+    if (gcref_acq(*traceslot_ref_acq(J, J->freetrace)) == NULL) {
+      trace_test_note_findfree_reuse(J->freetrace);
       return J->freetrace++;
+    }
   /* Need to grow trace array. */
   lim = (MSize)jit_param_acq(J, JIT_P_maxtrace) + 1;
   if (lim < 2) lim = 2; else if (lim > 65535) lim = 65535;
@@ -716,6 +828,7 @@ static TraceNo trace_findfree(jit_State *J)
     memcpy(newtv->slot, oldtv->slot, osz*sizeof(GCRef));
   tracevec_publish(J, newtv);
   tracevec_retire(J, oldtv);
+  trace_test_note_findfree_grow(J->freetrace);
   return J->freetrace;
 }
 
@@ -1127,12 +1240,41 @@ uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno)
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
     GCtrace *T = traceref(J, traceno);
     if (T && trace_traceno_acq(T) == traceno) {
+      trace_test_note_flush_unlink(T, traceno);
       if (trace_root_acq(T) == 0)
 	return trace_flushroot(J, T, 0);
       return trace_flushside(J, T, 0);
     }
   }
   return 0;
+}
+
+uint32_t lj_trace_flush_unlink_retire_return(jit_State *J, TraceNo traceno)
+{
+  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
+    GCtrace *T = traceref(J, traceno);
+    if (T && trace_traceno_acq(T) == traceno &&
+	trace_root_acq(T) == 0 &&
+	trace_linktype_acq(T) == LJ_TRLINK_RETURN) {
+      uint32_t work = lj_trace_flush_unlink(J, traceno);
+      /*
+      ** Return-bytecode call-unroll aborts never reach trace_abort()'s
+      ** stitched-call self-link branch, so keeping the unlinked return trace
+      ** live only burns trace slots and delays the up-recursion tree. The
+      ** normal slot-retire path still protects stale entry when peer TGs exist.
+      */
+      if (work) {
+	lj_gdbjit_deltrace(J, T);
+	trace_link_rel(T, 0);
+	trace_nextroot_rel(T, 0);
+	trace_nextside_rel(T, 0);
+	trace_slot_retire(J, T, traceno);
+	trace_retire(J2G(J), T);
+      }
+      return work;
+    }
+  }
+  return lj_trace_flush_unlink(J, traceno);
 }
 
 static int trace_stale_startins_valid(GCproto *pt, const BCIns *pc,
@@ -1791,8 +1933,10 @@ static int trace_abort(jit_State *J)
 	penalty_pc(J, trace_startpt_acq(&J->cur), startpc, e);
     } else {
       GCtrace *T = traceref(J, J->exitno);
-      if (T)
+      if (T) {
+	trace_test_note_abort_selflink((TraceNo)J->exitno);
 	trace_link_rel(T, J->exitno);  /* Self-link is blacklisted. */
+      }
     }
   }
 

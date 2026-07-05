@@ -2871,7 +2871,15 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
   } else {
     if (count > jit_param_acq(J, JIT_P_callunroll)) {
       if (lnk) {  /* Possible tail- or up-recursion. */
-	(void)lj_trace_flush_unlink(J, lnk);  /* Keep slot for abort blacklist. */
+	int keep_for_abort_blacklist = J->parent == 0 && J->exitno != 0 &&
+				       !bc_isret(bc_op(J->cur.startins));
+	lj_trace_test_note_call_unroll_abort(lnk);
+	if (keep_for_abort_blacklist) {
+	  /* Keep slot until trace_abort() can install the stock blacklist edge. */
+	  (void)lj_trace_flush_unlink(J, lnk);
+	} else {
+	  (void)lj_trace_flush_unlink_retire_return(J, lnk);
+	}
 	/* Set a small, pseudo-random hotcount for a quick retry of JFUNC*. */
 	hotcount_setg(J2G(J), J->pc+1, lj_prng_u64(&J2TG(J)->prng) & 15u);
       }
