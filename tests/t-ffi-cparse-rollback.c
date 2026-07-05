@@ -50,6 +50,29 @@ int main(void)
     "v.a = 42\n"
     "assert(v.a == 42)\n");
 
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('struct m7_layoutrollback; enum m7_enumrollback;')\n"
+    "local st = ffi.typeof('struct m7_layoutrollback')\n"
+    "local et = ffi.typeof('enum m7_enumrollback')\n"
+    "local ok = pcall(ffi.cdef, [[\n"
+    "struct m7_layoutrollback { char c; int x; unsigned b:3; };\n"
+    "enum m7_enumrollback { M7_ENUMROLLBACK_TMP = -4 };\n"
+    "@\n"
+    "]])\n"
+    "assert(not ok)\n"
+    "assert(ffi.sizeof(st) == nil)\n"
+    "assert(ffi.sizeof(et) == nil)\n"
+    "assert(ffi.offsetof(st, 'x') == nil)\n"
+    "assert(not pcall(ffi.cast, et, 'M7_ENUMROLLBACK_TMP'))\n"
+    "ffi.cdef[[\n"
+    "struct m7_layoutrollback { double d; int y; };\n"
+    "enum m7_enumrollback { M7_ENUMROLLBACK_OK = 5 };\n"
+    "]]\n"
+    "assert(ffi.offsetof(st, 'y') == 8)\n"
+    "assert(ffi.sizeof(st) >= 12)\n"
+    "assert(tonumber(ffi.cast(et, 'M7_ENUMROLLBACK_OK')) == 5)\n");
+
   lua_close(L);
   printf("t-ffi-cparse-rollback OK: failed parses abandon new ctype records\n");
   return 0;

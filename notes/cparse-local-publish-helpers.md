@@ -23,6 +23,12 @@ Changed:
   holds the parser token, releases it from a helper thread, asserts the normal
   `ffi.istype()` boolean result, and checks the parser sequence advanced only
   from that helper release.
+- Follow-up: `cp_struct_layout()` and enum completion no longer mutate shared
+  `CType` records through a live pointer. They snapshot the parent/field/enum
+  record, update the local copy, and publish the complete record. The rollback
+  fixture now completes a forward-declared struct and enum, forces a later parse
+  error, verifies both public ctype objects roll back to incomplete state, and
+  then defines them successfully.
 
 Why this matters:
 
@@ -38,8 +44,6 @@ Why this matters:
 
 Not done:
 
-- The larger struct/enum completion paths still use `cp_ctype_mut()` and need a
-  separate copy-publish pass with focused rollback/reader coverage.
 - Layout APIs, `ffi.new`, `ffi.cast`, cdata indexing, enum conversion,
   arithmetic, and `ffi.C` still keep their fallback waits until their snapshot
   helpers distinguish transient parser state from real misses everywhere.

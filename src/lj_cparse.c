@@ -422,12 +422,6 @@ static void cp_rollback_log(CPState *cp, CTypeID id)
 ** parse failure; new entries are abandoned with CTA_BAD while preserving hash
 ** links so lock-free walkers can skip through them.
 */
-static CType *cp_ctype_mut(CPState *cp, CTypeID id)
-{
-  cp_rollback_log(cp, id);
-  return ctype_get(cp->cts, id);
-}
-
 static void cp_ctype_snapshot_mut(CPState *cp, CTypeID id, CType *out)
 {
   cp_rollback_log(cp, id);
@@ -1456,9 +1450,12 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
 {
   CTSize bofs = 0, bmaxofs = 0;  /* Bit offset and max. bit offset. */
   CTSize maxalign = ctype_align(sattr);
-  CType *sct = cp_ctype_mut(cp, sid);
-  CTInfo sinfo = sct->info;
-  CTypeID fieldid = ctype_sib_acq(sct);
+  CType sct;
+  CTInfo sinfo;
+  CTypeID fieldid;
+  cp_ctype_snapshot_mut(cp, sid, &sct);
+  sinfo = ctype_info_acq(&sct);
+  fieldid = ctype_sib_acq(&sct);
   while (fieldid) {
     CType *ct = ctype_get(cp->cts, fieldid);
     CTInfo attr = ct->size;  /* Field declaration attributes (temp.). */
@@ -1491,11 +1488,17 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
       if (bsz == CTBSZ_FIELD || !ctype_isfield(ct->info)) {
 	bsz = csz;  /* Regular fields or subtypes always fill the container. */
 	bofs = (bofs + amask) & ~amask;  /* Start new aligned field. */
-	ct = cp_ctype_mut(cp, fieldid);
-	ct->size = (bofs >> 3);  /* Store field offset. */
-	if (ctype_isfield(ct->info))
-	  ct->info = CTINFO(CT_FIELD, ctype_cid(ct->info)) + CTALIGN(align);
-	ct = cp_ctype_publish(cp, fieldid, ct);
+	{
+	  CType tmp;
+	  CTInfo finfo;
+	  cp_ctype_snapshot_mut(cp, fieldid, &tmp);
+	  finfo = ctype_info_acq(&tmp);
+	  ctype_size_rel(&tmp, (bofs >> 3));  /* Store field offset. */
+	  if (ctype_isfield(finfo))
+	    ctype_info_rel(&tmp, CTINFO(CT_FIELD, ctype_cid(finfo)) +
+				 CTALIGN(align));
+	  ct = cp_ctype_publish(cp, fieldid, &tmp);
+	}
       } else {  /* Bitfield. */
 	if (bsz == 0 || (attr & CTFP_ALIGNED) ||
 	    (!((attr|sattr) & CTFP_PACKED) && (bofs & amask) + bsz > csz))
@@ -1503,25 +1506,31 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
 
 	/* Prefer regular field over bitfield. */
 	if (bsz == csz && (bofs & amask) == 0) {
-	  ct = cp_ctype_mut(cp, fieldid);
-	  ct->info = CTINFO(CT_FIELD, ctype_cid(ct->info)) +
-		     CTALIGN(lj_fls(sz));
-	  ct->size = (bofs >> 3);  /* Store field offset. */
-	  ct = cp_ctype_publish(cp, fieldid, ct);
+	  CType tmp;
+	  CTInfo finfo;
+	  cp_ctype_snapshot_mut(cp, fieldid, &tmp);
+	  finfo = ctype_info_acq(&tmp);
+	  ctype_info_rel(&tmp, CTINFO(CT_FIELD, ctype_cid(finfo)) +
+			       CTALIGN(lj_fls(sz)));
+	  ctype_size_rel(&tmp, (bofs >> 3));  /* Store field offset. */
+	  ct = cp_ctype_publish(cp, fieldid, &tmp);
 	} else {
+	  CType tmp;
+	  CTInfo finfo;
 	  if (csz > amask+1 && bsz <= amask+1)
 	    csz = amask+1;  /* Shrink container of packed bitfield. */
-	  ct = cp_ctype_mut(cp, fieldid);
-	  ct->info = CTINFO(CT_BITFIELD,
+	  cp_ctype_snapshot_mut(cp, fieldid, &tmp);
+	  finfo = CTINFO(CT_BITFIELD,
 	    (info & (CTF_QUAL|CTF_UNSIGNED|CTF_BOOL)) +
 	    (csz << (CTSHIFT_BITCSZ-3)) + (bsz << CTSHIFT_BITBSZ));
 #if LJ_BE
-	  ct->info += ((csz - (bofs & (csz-1)) - bsz) << CTSHIFT_BITPOS);
+	  finfo += ((csz - (bofs & (csz-1)) - bsz) << CTSHIFT_BITPOS);
 #else
-	  ct->info += ((bofs & (csz-1)) << CTSHIFT_BITPOS);
+	  finfo += ((bofs & (csz-1)) << CTSHIFT_BITPOS);
 #endif
-	  ct->size = ((bofs & ~(csz-1)) >> 3);  /* Store container offset. */
-	  ct = cp_ctype_publish(cp, fieldid, ct);
+	  ctype_info_rel(&tmp, finfo);
+	  ctype_size_rel(&tmp, ((bofs & ~(csz-1)) >> 3));
+	  ct = cp_ctype_publish(cp, fieldid, &tmp);
 	}
       }
 
@@ -1537,11 +1546,11 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
   }
 
   /* Complete struct/union. */
-  sct->info = sinfo + CTALIGN(maxalign);
+  ctype_info_rel(&sct, sinfo + CTALIGN(maxalign));
   bofs = (sinfo & CTF_UNION) ? bmaxofs : bofs;
   maxalign = (8u << maxalign) - 1;
-  sct->size = (((bofs + maxalign) & ~maxalign) >> 3);
-  cp_ctype_publish(cp, sid, sct);
+  ctype_size_rel(&sct, (((bofs + maxalign) & ~maxalign) >> 3));
+  cp_ctype_publish(cp, sid, &sct);
 }
 
 /* Parse struct/union declaration. */
@@ -1678,10 +1687,11 @@ static CTypeID cp_decl_enum(CPState *cp, CPDecl *sdecl)
     cp_check(cp, '}');
     /* Complete enum. */
     {
-      CType *ect = cp_ctype_mut(cp, eid);
-      ect->info = einfo;
-      ect->size = esize;
-      cp_ctype_publish(cp, eid, ect);
+      CType ect;
+      cp_ctype_snapshot_mut(cp, eid, &ect);
+      ctype_info_rel(&ect, einfo);
+      ctype_size_rel(&ect, esize);
+      cp_ctype_publish(cp, eid, &ect);
     }
   }
   return eid;
