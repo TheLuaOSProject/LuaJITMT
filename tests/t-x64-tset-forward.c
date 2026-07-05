@@ -282,9 +282,9 @@ int main(void)
   tabfwd_load_lua(L, tset_forward_src);
   tabfwd_run_loaded(L);
 
-  tabfwd_assert_i32(&oldarray[key_b], key_b + 9700);
-  tabfwd_assert_i32(&oldarray[key_v], key_v + 9700);
-  tabfwd_assert_i32(&oldarray[key_r], key_r + 9700);
+  tabfwd_assert_forward(&oldarray[key_b]);
+  tabfwd_assert_forward(&oldarray[key_v]);
+  tabfwd_assert_forward(&oldarray[key_r]);
   tabfwd_assert_i32(&newarray[key_b], val_b);
   tabfwd_assert_i32(&newarray[key_v], val_v);
   tabfwd_assert_i32(&newarray[key_r], val_r);
@@ -297,7 +297,7 @@ int main(void)
     stored = lj_tab_storetv_forvm_array(L, t, &oldarray[key_helper], &src,
 					(MSize)key_helper);
     assert(stored == &newarray[key_helper]);
-    tabfwd_assert_i32(&oldarray[key_helper], key_helper + 9700);
+    tabfwd_assert_forward(&oldarray[key_helper]);
     tabfwd_assert_i32(&newarray[key_helper], val_helper);
   }
 

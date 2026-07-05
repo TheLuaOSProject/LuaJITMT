@@ -838,6 +838,44 @@ static int tab_resize_copy_array_slot(lua_State *L, GCtab *t,
   return 1;
 }
 
+static TValue *tab_resize_assist_array_slot(lua_State *L, GCtab *t,
+					    TValue *oldarray, MSize oldasize,
+					    MSize idx)
+{
+  TValue *nextarray, *dst;
+  MSize nextasize;
+  TValue val, forward;
+  if (!oldarray || idx >= oldasize || lj_tab_array_is_colocated(t, oldarray) ||
+      !lj_tab_array_is_retiring(t, oldarray))
+    return NULL;
+  /*
+  ** Writers that catch a retiring separated array can help copy their exact
+  ** slot before publishing into the successor. Restrict this helper to
+  ** same-index array slots: tail-to-hash migration still needs the resize
+  ** owner's free-node accounting and key materialization.
+  */
+  nextarray = lj_tab_array_nextgen_acq(oldarray);
+  if (!nextarray || nextarray == oldarray ||
+      lj_tab_array_is_colocated(t, nextarray))
+    return NULL;
+  nextasize = lj_tab_array_hdr_asize_acq(nextarray);
+  if (idx >= nextasize)
+    return NULL;  /* Tail migration still belongs to the resize owner. */
+  dst = &nextarray[idx];
+  setforwardV(&forward);
+  for (;;) {
+    lj_tv_load_acq(&val, &oldarray[idx]);
+    if (tvisforward(&val))
+      return dst;
+    if (lj_tv_cas(&oldarray[idx], &val, &forward)) {
+      if (!tab_val_absent(&val) && tab_tv_snapshot_valid(&val))
+	(void)tab_store_if_absent_cas(L, dst, &val);
+      return dst;
+    }
+    lj_tab_store_wait_l(L);
+  }
+}
+
 #ifdef LJ_TAB_TEST_HELPERS
 int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src, MSize idx,
 				      GCtab *dst, int freeze_old)
@@ -885,6 +923,14 @@ int lj_tab_test_resize_copy_array_slot(lua_State *L, GCtab *src, uint32_t idx,
     lj_tab_node_freecount_set_rel(newnode, newfreecount);
   }
   return copied;
+}
+
+TValue *lj_tab_test_resize_assist_array_slot(lua_State *L, GCtab *src,
+					     uint32_t idx)
+{
+  TValue *array = lj_tab_array_acq(src);
+  MSize asize = lj_tab_asize_acq(src);
+  return tab_resize_assist_array_slot(L, src, array, asize, idx);
 }
 #endif
 
@@ -3352,6 +3398,11 @@ static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
     if (!tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
 		       asize, &idx))
       return dst;
+    if (retiring) {
+      TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize, idx);
+      if (slot)
+	return slot;
+    }
     if (tvisforward(&val) ?
 	lj_tab_array_forward_hop_forward(parent, &array, &asize) :
 	tab_array_forward_hop_writer(parent, &array, &asize)) {
@@ -3440,6 +3491,10 @@ static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
       if (lj_tab_array_is_retiring(parent, array)) {
 	TValue *next = array;
 	MSize nextasize = asize;
+	TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize,
+						    idx);
+	if (slot)
+	  return slot;
 	if (tab_array_forward_hop_writer(parent, &next, &nextasize)) {
 	  if (idx < nextasize)
 	    return &next[idx];
@@ -3744,6 +3799,12 @@ static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
       if (key < asize) {
 	lj_tv_load_acq(&val, &array[key]);
 	observed_forward = tvisforward(&val);
+      }
+      if (key < asize) {
+	TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize,
+						    key);
+	if (slot)
+	  return slot;
       }
       if (observed_forward ?
 	  lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :

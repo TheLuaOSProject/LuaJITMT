@@ -219,6 +219,52 @@ static void test_array_nil_freeze_modes(lua_State *L)
   assert_array_slot_forwarded(&oldarray[2]);
 }
 
+static void test_array_assist_same_index(lua_State *L)
+{
+  GCtab *src;
+  TValue *oldarray, *newarray, *slot;
+  MSize oldasize, newasize;
+
+  lua_settop(L, 0);
+  src = push_table(L, LJ_MAX_COLOSIZE + 16, 0);
+  oldarray = lj_tab_array_acq(src);
+  oldasize = lj_tab_asize_acq(src);
+  lj_tab_storeint(L, lj_tab_setint(L, src, 1), 66);
+
+  lj_tab_resize(L, src, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(src);
+  newasize = lj_tab_asize_acq(src);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert(lj_tab_array_is_retiring(src, oldarray));
+
+  lj_tab_array_rel(src, oldarray);
+  lj_tab_asize_rel(src, oldasize);
+
+  lj_tab_storeint(L, &oldarray[1], 66);
+  lj_tab_storenilraw(&newarray[1]);
+  slot = lj_tab_test_resize_assist_array_slot(L, src, 1);
+  assert(slot == &newarray[1]);
+  assert_array_slot_forwarded(&oldarray[1]);
+  assert(tv_i32(&newarray[1]) == 66);
+
+  lj_tab_storeint(L, &newarray[1], 99);
+  slot = lj_tab_test_resize_assist_array_slot(L, src, 1);
+  assert(slot == &newarray[1]);
+  assert_array_slot_forwarded(&oldarray[1]);
+  assert(tv_i32(&newarray[1]) == 99);
+
+  lj_tab_storenilraw(&oldarray[2]);
+  lj_tab_storenilraw(&newarray[2]);
+  slot = lj_tab_test_resize_assist_array_slot(L, src, 2);
+  assert(slot == &newarray[2]);
+  assert_array_slot_forwarded(&oldarray[2]);
+  assert_array_slot_nil(&newarray[2]);
+
+  lj_tab_array_rel(src, newarray);
+  lj_tab_asize_rel(src, newasize);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -229,6 +275,7 @@ int main(void)
   test_array_copy_is_idempotent(L);
   test_array_tail_rehash(L);
   test_array_nil_freeze_modes(L);
+  test_array_assist_same_index(L);
   lua_close(L);
   printf("t-tab-resize-copy-helper OK: resize copy helpers are idempotent\n");
   return 0;

@@ -627,6 +627,10 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   lj_tab_array_rel(t, oldarray);
   lj_tab_asize_rel(t, oldasize);
 
+  for (i = 0; i < 3; i++) {
+    lj_tab_storeint(L, &oldarray[start + i], (int32_t)(start + i) + 8100);
+    lj_tab_storenilraw(&newarray[start + i]);
+  }
   setintV(&src[0], 8181);
   setintV(&src[1], 8282);
   setintV(&src[2], 8383);
@@ -640,11 +644,12 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   tabfwd_assert_i32(&newarray[start + 2], 8383);
 
   lj_tab_storeint(L, &oldarray[jitkey], jitkey + 9000);
+  lj_tab_storenilraw(&newarray[jitkey]);
   setintV(&srcjit, 8484);
   stored = lj_tab_storetv_forjit_array_nogc(L, t, &oldarray[jitkey],
 					    &srcjit, (MSize)jitkey);
   assert(stored == &newarray[jitkey]);
-  tabfwd_assert_i32(&oldarray[jitkey], jitkey + 9000);
+  tabfwd_assert_forward(&oldarray[jitkey]);
   tabfwd_assert_i32(&newarray[jitkey], 8484);
 
   lj_tab_array_rel(t, newarray);
