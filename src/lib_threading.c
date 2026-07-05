@@ -267,6 +267,20 @@ static int64_t threading_native_wait_slice(int has_timeout, int64_t ns)
   return THREADING_NATIVE_WAIT_SLICE_NS;
 }
 
+static uint32_t threading_futex_wait_l(lua_State *L, uint32_t *addr,
+				       uint32_t expect, int64_t ns)
+{
+  uint32_t actions;
+  /*
+  ** Thread join, spawn, and close waits are public blocking semantics, but the
+  ** waiting TG must still be visible to soft handshakes while parked.
+  */
+  lj_native_enter(L2TG(L));
+  (void)la_futex_wait(addr, expect, ns);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
 static void threading_wake_thread(LJThread *th)
 {
   la_add32_rlx(&th->futex, 1);
@@ -414,13 +428,13 @@ static int threading_entering_begin(global_State *g)
   return 1;
 }
 
-static void threading_wait_entering(global_State *g)
+static void threading_wait_entering(lua_State *L, global_State *g)
 {
   while (mt_entering_acq(g) != 0) {
     uint32_t entering = mt_entering_acq(g);
     if (entering == 0)
       break;
-    mt_entering_futex_wait(g, entering, 1000000);
+    (void)threading_futex_wait_l(L, &g->mt_entering, entering, 1000000);
   }
 }
 
@@ -438,14 +452,14 @@ void lj_threading_shutdown(lua_State *L)
   lj_assertG(cur == NULL || cur == g->main_tg,
 	     "lua_close called from non-main OS thread");
   UNUSED(cur);
-  threading_wait_entering(g);
+  threading_wait_entering(L, g);
   if (mt_live_acq(g) != 0) {
     (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
     while (mt_live_acq(g) != 0) {
       uint32_t live = mt_live_acq(g);
       if (live == 0)
 	break;
-      mt_live_futex_wait(g, live, 1000000);
+      (void)threading_futex_wait_l(L, &g->mt_live, live, 1000000);
     }
   }
   for (node = lj_thread_live_head_acq(g); node != NULL;
@@ -460,7 +474,7 @@ void lj_threading_shutdown(lua_State *L)
       uint32_t futex = la_load32_acq(&th->futex);
       if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
 	break;
-      (void)la_futex_wait(&th->futex, futex, 1000000);
+      (void)threading_futex_wait_l(L, &th->futex, futex, 1000000);
     }
     if (la_load32_acq(&th->joined) == 0) {
       uint32_t expect = 0;
@@ -881,7 +895,6 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       int had_stopreq = lj_safepoint_had_stopreq(L);
       if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
 	continue;
-      lj_native_enter(L2TG(L));
       /* Join waiters still own their Lua stack. Root-scan handshakes cannot
       ** remotely acknowledge them, and the handshake wakes the TG poll futex
       ** rather than the thread-completion futex. Bounded waits let the owner
@@ -889,9 +902,11 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       ** semantics.
       */
       if (la_load32_acq(&th->state) != LJ_THREAD_DONE)
-	(void)la_futex_wait(&th->futex, futex,
-			    threading_native_wait_slice(has_timeout, ns));
-      actions = lj_native_leave(L);
+	actions = threading_futex_wait_l(L, &th->futex, futex,
+					 threading_native_wait_slice(has_timeout,
+								     ns));
+      else
+	actions = 0;
       lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     }
   }
@@ -1620,11 +1635,9 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
       if (la_load32_acq(&th->start_ready) != 0 ||
 	  la_load32_acq(&th->state) != LJ_THREAD_STARTING)
 	break;
-      lj_native_enter(L2TG(L));
       if (la_load32_acq(&th->start_ready) == 0 &&
 	  la_load32_acq(&th->state) == LJ_THREAD_STARTING)
-	(void)la_futex_wait(&th->futex, futex, 1000000);
-      actions |= lj_native_leave(L);
+	actions |= threading_futex_wait_l(L, &th->futex, futex, 1000000);
       if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
 	threading_join_aborted_start(L, th, &actions);
 	lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
@@ -1656,11 +1669,11 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     if (la_load32_acq(&th->start_ready) >= 2 ||
 	la_load32_acq(&th->state) != LJ_THREAD_RUNNING)
       break;
-    lj_native_enter(L2TG(L));
     if (la_load32_acq(&th->start_ready) < 2 &&
 	la_load32_acq(&th->state) == LJ_THREAD_RUNNING)
-      (void)la_futex_wait(&th->futex, futex, 1000000);
-    actions = lj_native_leave(L);
+      actions = threading_futex_wait_l(L, &th->futex, futex, 1000000);
+    else
+      actions = 0;
     lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   }
   return L1;
