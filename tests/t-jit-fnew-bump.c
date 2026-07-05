@@ -142,11 +142,12 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
   lua_setglobal(L, "__fnew_hint_run");
 }
 
-static void test_traced_mark_active_fallback(lua_State *L, global_State *g,
-					     TGState *tg)
+static void test_traced_active_black_inline(lua_State *L, global_State *g,
+					    TGState *tg)
 {
   uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
   uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
+  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
   uint32_t helper0, helper1;
   const char *code =
     "local util = require'jit.util'\n"
@@ -174,17 +175,20 @@ static void test_traced_mark_active_fallback(lua_State *L, global_State *g,
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  la_store64_rel(&tg->local_total, 0);
+  gc2_legacy_mark_bridge_rel(g, 0);
   lj_tg_mark_active_rel(tg, 1);
   lj_tg_alloc_black_rel(tg, 1);
 
-  run_script(L, code, "numeric FNEW traced mark-active fallback");
+  run_script(L, code, "numeric FNEW traced active-black inline");
 
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
+  gc2_legacy_mark_bridge_rel(g, old_bridge);
 
   helper1 = lj_func_test_gc1num_bump_fast_calls() +
 	    lj_func_test_gc1num_bump_fallback_calls();
-  assert(helper1 > helper0);
+  assert(helper1 == helper0);
 }
 
 static void test_traced_mark_active_white_fallback(lua_State *L,
@@ -225,6 +229,55 @@ static void test_traced_mark_active_white_fallback(lua_State *L,
 
   run_script(L, code, "numeric FNEW traced active-white fallback");
 
+  lj_tg_alloc_black_rel(tg, old_alloc_black);
+  lj_tg_mark_active_rel(tg, old_mark_active);
+
+  helper1 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+  assert(helper1 > helper0);
+}
+
+static void test_traced_active_black_bridge_fallback(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
+{
+  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
+  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
+  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
+  uint32_t helper0, helper1;
+  const char *code =
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local t = {}\n"
+    "for i = 1, 100 do\n"
+    "  local x = i\n"
+    "  t[i] = function()\n"
+    "    x = x + 1\n"
+    "    return x\n"
+    "  end\n"
+    "end\n"
+    "assert(util.traceinfo(1), 'numeric FNEW loop did not trace')\n"
+    "assert(t[1]() == 2)\n"
+    "assert(t[2]() == 3)\n"
+    "assert(t[100]() == 101)\n"
+    "assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))\n";
+
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+  helper0 = lj_func_test_gc1num_bump_fast_calls() +
+	    lj_func_test_gc1num_bump_fallback_calls();
+
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
+  lj_tg_mark_active_rel(tg, 1);
+  lj_tg_alloc_black_rel(tg, 1);
+  gc2_legacy_mark_bridge_rel(g, 1);
+
+  run_script(L, code, "numeric FNEW traced active-black bridge fallback");
+
+  gc2_legacy_mark_bridge_rel(g, old_bridge);
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
 
@@ -675,8 +728,9 @@ int main(void)
   test_accounting_fast_direct(L, g, tg);
   test_active_black_direct_skips_pending_root(L, g, tg);
   test_accounting_fallback(L, g, tg);
-  test_traced_mark_active_fallback(L, g, tg);
+  test_traced_active_black_inline(L, g, tg);
   test_traced_mark_active_white_fallback(L, g, tg);
+  test_traced_active_black_bridge_fallback(L, g, tg);
   test_traced_alloc_black_inline(L, g, tg);
   test_traced_post_sweep_bump_refill(L);
   test_interpreter_generic_oneuv_chain(L);
