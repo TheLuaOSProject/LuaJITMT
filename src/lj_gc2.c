@@ -670,10 +670,18 @@ static void gc2_worker_finish_traces_l(lua_State *L, int token)
     lj_jit_token_release(L2J(L));
 }
 #else
-#define gc2_worker_prepare_traces_l(L, tokenp) \
-  (UNUSED(L), (tokenp ? (*(tokenp) = 0) : 0), 1)
-#define gc2_worker_finish_traces_l(L, token) \
-  (UNUSED(L), UNUSED(token))
+static LJ_AINLINE int gc2_worker_prepare_traces_l(lua_State *L, int *tokenp)
+{
+  UNUSED(L);
+  if (tokenp)
+    *tokenp = 0;
+  return 1;
+}
+
+static LJ_AINLINE void gc2_worker_finish_traces_l(lua_State *L, int token)
+{
+  UNUSED(L); UNUSED(token);
+}
 #endif
 
 static int gc2_worker_had_stopreq_l(lua_State *L)
@@ -3077,6 +3085,7 @@ static GCproto *gc2_func_proto_if_lua(GCfunc *fn)
 	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
+#if LJ_HASJIT
 static TGState *gc2_thread_active_tg(global_State *g, lua_State *L)
 {
   uint32_t owner;
@@ -3096,14 +3105,10 @@ static TGState *gc2_thread_active_tg(global_State *g, lua_State *L)
 
 static TValue *gc2_thread_jit_base(global_State *g, lua_State *L)
 {
-#if LJ_HASJIT
   TGState *tg = gc2_thread_active_tg(g, L);
   return tg ? lj_tg_load_jit_base(tg) : NULL;
-#else
-  UNUSED(g); UNUSED(L);
-  return NULL;
-#endif
 }
+#endif
 
 static void gc2_mark_jit_frame_funcs(global_State *g, lua_State *L)
 {

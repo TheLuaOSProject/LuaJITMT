@@ -1346,6 +1346,7 @@ static GCproto *gc_func_proto_if_lua(GCfunc *fn)
 	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
+#if LJ_HASJIT
 static TGState *gc_thread_active_tg(global_State *g, lua_State *th)
 {
   uint32_t owner;
@@ -1365,14 +1366,10 @@ static TGState *gc_thread_active_tg(global_State *g, lua_State *th)
 
 static TValue *gc_thread_jit_base(global_State *g, lua_State *th)
 {
-#if LJ_HASJIT
   TGState *tg = gc_thread_active_tg(g, th);
   return tg ? lj_tg_load_jit_base(tg) : NULL;
-#else
-  UNUSED(g); UNUSED(th);
-  return NULL;
-#endif
 }
+#endif
 
 static void gc_mark_thread_root_func(global_State *g, GCfunc *fn);
 

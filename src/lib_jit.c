@@ -194,6 +194,7 @@ static TValue *jit_util_storetv_str(lua_State *L, GCtab *t, GCstr *key,
   }
 }
 
+#if LJ_HASJIT
 static TValue *jit_util_storetv_int(lua_State *L, GCtab *t, int32_t key,
 				    cTValue *src)
 {
@@ -207,6 +208,7 @@ static TValue *jit_util_storetv_int(lua_State *L, GCtab *t, int32_t key,
     lj_tab_store_wait_l(L);  /* jit.util int store saw stale/FORWARD slot. */
   }
 }
+#endif
 
 static void setintfield(lua_State *L, GCtab *t, const char *name, int32_t val)
 {
@@ -230,12 +232,14 @@ static void setprotofield(lua_State *L, GCtab *t, GCstr *key, GCproto *pt)
   lj_gc_pubtabobj(L, t, pt);
 }
 
+#if LJ_HASJIT
 static void setintindex(lua_State *L, GCtab *t, int32_t key, int32_t val)
 {
   TValue tv;
   setintV(&tv, val);
   jit_util_storetv_int(L, t, key, &tv);
 }
+#endif
 
 /* local info = jit.util.funcinfo(func [,pc]) */
 LJLIB_CF(jit_util_funcinfo)
