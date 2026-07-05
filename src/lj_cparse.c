@@ -1040,8 +1040,9 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
       sib = ctype_sib_acq(ct);  /* Next line may reallocate the C type table. */
       fid = cp_ctype_new(cp, &fct);
       csize = CTSIZE_INVALID;
-      fct->info = cinfo = info + id;
-      fct->size = size;
+      cinfo = info + id;
+      ctype_info_rel(fct, cinfo);
+      ctype_size_rel(fct, size);
       ctype_sib_rel(fct, sib);
       fct = cp_ctype_publish(cp, fid, fct);
       id = fid;
@@ -1154,13 +1155,13 @@ static CTypeID cp_decl_constinit(CPState *cp, CType **ctp, CTypeID ctypeid)
   cp_check(cp, '=');
   cp_expr_sub(cp, &k, 0);
   constid = cp_ctype_new(cp, ctp);
-  (*ctp)->info = CTINFO(CT_CONSTVAL, CTF_CONST|ctypeid);
+  ctype_info_rel(*ctp, CTINFO(CT_CONSTVAL, CTF_CONST|ctypeid));
   k.u32 <<= 8*(4-size);
   if ((info & CTF_UNSIGNED))
     k.u32 >>= 8*(4-size);
   else
     k.u32 = (uint32_t)((int32_t)k.u32 >> 8*(4-size));
-  (*ctp)->size = k.u32;
+  ctype_size_rel(*ctp, k.u32);
   *ctp = cp_ctype_publish(cp, constid, *ctp);
   return constid;
 }
@@ -1597,9 +1598,11 @@ static CTypeID cp_decl_struct(CPState *cp, CPDecl *sdecl, CTInfo sinfo)
 	      if (!((ctype_isstruct(tct->info) && !(tct->info & CTF_VLA)) ||
 		    ctype_isenum(tct->info)))
 		cp_err_token(cp, CTOK_IDENT);
-	      ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_SUBTYPE) + ctypeid);
-	      ct->size = ctype_isstruct(tct->info) ?
-			 (decl.attr|0x80000000u) : 0;  /* For layout phase. */
+	      ctype_info_rel(ct, CTINFO(CT_ATTRIB,
+				 CTATTRIB(CTA_SUBTYPE) + ctypeid));
+	      ctype_size_rel(ct, ctype_isstruct(tct->info) ?
+			     (decl.attr|0x80000000u) : 0);
+	      /* Size is used temporarily by the layout phase. */
 	      ct = cp_ctype_publish(cp, fieldid, ct);
 	      goto add_field;
 	    }
@@ -1612,8 +1615,9 @@ static CTypeID cp_decl_struct(CPState *cp, CPDecl *sdecl, CTInfo sinfo)
 	  }
 
 	  /* Create temporary field for layout phase. */
-	  ct->info = CTINFO(CT_FIELD, ctypeid + (bsz << CTSHIFT_BITCSZ));
-	  ct->size = decl.attr;
+	  ctype_info_rel(ct, CTINFO(CT_FIELD,
+				    ctypeid + (bsz << CTSHIFT_BITCSZ)));
+	  ctype_size_rel(ct, decl.attr);
 	  ct = cp_ctype_publish(cp, fieldid, ct);
 	  if (decl.name) ct = cp_ctype_setname(cp, fieldid, decl.name);
 
@@ -1672,8 +1676,8 @@ static CTypeID cp_decl_enum(CPState *cp, CPDecl *sdecl)
 	CType *ct;
 	CTypeID constid = cp_ctype_new(cp, &ct);
 	ct = cp_ctype_setname(cp, constid, name);
-	ct->info = CTINFO(CT_CONSTVAL, CTF_CONST|k.id);
-	ct->size = k.u32++;
+	ctype_info_rel(ct, CTINFO(CT_CONSTVAL, CTF_CONST|k.id));
+	ctype_size_rel(ct, k.u32++);
 	ct = cp_ctype_publish(cp, constid, ct);
 	if (k.u32 == 0x80000000u) k.id = CTID_UINT32;
 	if (lj_ctype_addname_unique(cp->cts, ct, constid, CPNS_DEFAULT) !=
@@ -1857,8 +1861,8 @@ static void cp_decl_func(CPState *cp, CPDecl *fdecl)
       /* Add new parameter. */
       fieldid = cp_ctype_new(cp, &ct);
       if (decl.name) ct = cp_ctype_setname(cp, fieldid, decl.name);
-      ct->info = CTINFO(CT_FIELD, ctypeid);
-      ct->size = nargs++;
+      ctype_info_rel(ct, CTINFO(CT_FIELD, ctypeid));
+      ctype_size_rel(ct, nargs++);
       ct = cp_ctype_publish(cp, fieldid, ct);
       if (anchor)
 	cp_ctype_setsib(cp, lastid, fieldid);
@@ -2056,7 +2060,7 @@ static void cp_decl_multi(CPState *cp)
 	CTypeID aid = 0;
 	if ((scl & CDF_TYPEDEF)) {  /* Create new typedef. */
 	  id = cp_ctype_new(cp, &ct);
-	  ct->info = CTINFO(CT_TYPEDEF, ctypeid);
+	  ctype_info_rel(ct, CTINFO(CT_TYPEDEF, ctypeid));
 	  ct = cp_ctype_publish(cp, id, ct);
 	  goto noredir;
 	} else if (ctype_isfunc(ctype_get(cp->cts, ctypeid)->info)) {
@@ -2070,14 +2074,14 @@ static void cp_decl_multi(CPState *cp)
 	  goto noredir;
 	} else {  /* External references have extern or no storage class. */
 	  id = cp_ctype_new(cp, &ct);
-	  ct->info = CTINFO(CT_EXTERN, ctypeid);
+	  ctype_info_rel(ct, CTINFO(CT_EXTERN, ctypeid));
 	  ct = cp_ctype_publish(cp, id, ct);
 	}
 	if (decl.redir) {  /* Add attribute for redirected symbol name. */
 	  CType *cta;
 	  aid = cp_ctype_new(cp, &cta);
 	  ct = ctype_get(cp->cts, id);  /* Table may have been reallocated. */
-	  cta->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_REDIR));
+	  ctype_info_rel(cta, CTINFO(CT_ATTRIB, CTATTRIB(CTA_REDIR)));
 	  ctype_sib_rel(cta, ctype_sib_acq(ct));
 	  cta = cp_ctype_publish(cp, aid, cta);
 	  cp_ctype_setname(cp, aid, decl.redir);
