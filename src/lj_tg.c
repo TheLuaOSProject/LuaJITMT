@@ -12,6 +12,7 @@
 #include "lj_atomic.h"
 #include "lj_buf.h"
 #include "lj_dispatch.h"
+#include "lj_err.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_profile.h"
@@ -21,6 +22,92 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
+
+static void tg_root_anchor_block_init(TGRootAnchorBlock *block)
+{
+  uint32_t i;
+  lj_tg_root_anchor_next_rel(block, NULL);
+  for (i = 0; i < TG_ROOT_ANCHOR_SLOTS; i++)
+    setnilV(&block->slot[i]);
+}
+
+static TValue *tg_root_anchor_slot_create(lua_State *L, TGState *tg,
+					  uint32_t idx)
+{
+  TGRootAnchorBlock *block = &tg->root_anchor;
+  uint32_t blockidx = idx / TG_ROOT_ANCHOR_SLOTS;
+  while (blockidx-- != 0) {
+    TGRootAnchorBlock *next = lj_tg_root_anchor_next_acq(block);
+    if (!next) {
+      next = lj_mem_newt(L, sizeof(TGRootAnchorBlock), TGRootAnchorBlock);
+      tg_root_anchor_block_init(next);
+      lj_tg_root_anchor_next_rel(block, next);
+    }
+    block = next;
+  }
+  return &block->slot[idx % TG_ROOT_ANCHOR_SLOTS];
+}
+
+TValue *lj_tg_root_anchor_slot_acq(TGState *tg, uint32_t idx)
+{
+  TGRootAnchorBlock *block;
+  uint32_t blockidx;
+  if (!tg)
+    return NULL;
+  block = &tg->root_anchor;
+  blockidx = idx / TG_ROOT_ANCHOR_SLOTS;
+  while (blockidx-- != 0) {
+    block = lj_tg_root_anchor_next_acq(block);
+    if (!block)
+      return NULL;
+  }
+  return &block->slot[idx % TG_ROOT_ANCHOR_SLOTS];
+}
+
+TValue *lj_tg_root_anchor_push(lua_State *L, TGState *tg, cTValue *tv,
+			       uint32_t *idxp)
+{
+  uint32_t idx;
+  TValue *slot;
+  if (!tg)
+    return NULL;
+  idx = lj_tg_root_anchor_top_acq(tg);
+  if (LJ_UNLIKELY(idx == ~(uint32_t)0))
+    lj_err_mem(L);
+  slot = tg_root_anchor_slot_create(L, tg, idx);
+  copyTVrel(L, slot, tv);
+  lj_tg_root_anchor_top_rel(tg, idx + 1);
+  if (idxp)
+    *idxp = idx;
+  return slot;
+}
+
+void lj_tg_root_anchor_pop(TGState *tg, uint32_t idx)
+{
+  TValue *slot = lj_tg_root_anchor_slot_acq(tg, idx);
+  uint32_t top;
+  if (!slot)
+    return;
+  setnilV(slot);
+  top = lj_tg_root_anchor_top_acq(tg);
+  if (top == idx + 1)
+    lj_tg_root_anchor_top_rel(tg, idx);
+}
+
+static void tg_root_anchor_fini(global_State *g, TGState *tg)
+{
+  TGRootAnchorBlock *block, *next;
+  if (!tg)
+    return;
+  block = lj_tg_root_anchor_next_acq(&tg->root_anchor);
+  lj_tg_root_anchor_next_rel(&tg->root_anchor, NULL);
+  while (block) {
+    next = lj_tg_root_anchor_next_acq(block);
+    lj_mem_freet(g, block);
+    block = next;
+  }
+  lj_tg_root_anchor_top_rel(tg, 0);
+}
 
 static void tg_init_ssb(TGState *tg)
 {
@@ -76,6 +163,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strnum_credit = 0;
   setnilV(&tg->tmptv);
   setnilV(&tg->tmptv2);
+  tg_root_anchor_block_init(&tg->root_anchor);
+  lj_tg_root_anchor_top_rel(tg, 0);
   lj_tg_gcroot_pending_store_rlx(tg, NULL);
   lj_tg_gcroot_pending_after_main_store_rlx(tg, NULL);
   tg_init_ssb(tg);
@@ -114,6 +203,7 @@ void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
     lj_str_flush_num_credit(g, g->main_tg);
+    tg_root_anchor_fini(g, g->main_tg);
     lj_tg_fini_ssb(g->main_tg);
     lj_buf_free(g, &g->main_tg->tmpbuf);
     if (lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB))
@@ -155,6 +245,7 @@ void lj_tg_fini_thread(global_State *g, TGState *tg)
   if (!tg)
     return;
   lj_str_flush_num_credit(g, tg);
+  tg_root_anchor_fini(g, tg);
   lj_tg_fini_ssb(tg);
   lj_buf_free(g, &tg->tmpbuf);
   if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))

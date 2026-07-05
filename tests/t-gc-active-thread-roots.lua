@@ -22,6 +22,63 @@ local function churn_closures(n)
   return s
 end
 
+local function native_leave_gc_preserves_caller_frame()
+  local ready = th.channel(1)
+  local requests = th.channel(1)
+  local replies = th.channel(1)
+  local sleep = th.sleep
+  local worker = th.spawn(function(ready_ch, request_ch, reply_ch)
+    assert(ready_ch:send("ready", 10) == true)
+    while true do
+      local token, ok = request_ch:recv(10)
+      assert(ok == true, "native GC worker request timeout")
+      if token == "stop" then break end
+      for i = 1, 3 do
+	local garbage = {}
+	for j = 1, 64 do
+	  garbage[j] = { token, i, j, "native-leave-gc" }
+	end
+	collectgarbage(i == 3 and "collect" or "step")
+      end
+      assert(reply_ch:send(token, 10) == true)
+    end
+    return true
+  end, ready, requests, replies)
+
+  do
+    local token, ok = ready:recv(10)
+    assert(ok == true and token == "ready")
+  end
+
+  for round = 1, 24 do
+    local k01 = { round, 1 }
+    local k02 = { round, 2 }
+    local k03 = { round, 3 }
+    local k04 = { round, 4 }
+    local k05 = { round, 5 }
+    local k06 = { round, 6 }
+    local k07 = { round, 7 }
+    local k08 = { round, 8 }
+    assert(requests:send(round, 10) == true)
+    sleep(0.003)
+    local ack, ok = replies:recv(10)
+    assert(ok == true and ack == round, "native GC worker reply timeout")
+    assert(k01[1] == round and k01[2] == 1)
+    assert(k02[1] == round and k02[2] == 2)
+    assert(k03[1] == round and k03[2] == 3)
+    assert(k04[1] == round and k04[2] == 4)
+    assert(k05[1] == round and k05[2] == 5)
+    assert(k06[1] == round and k06[2] == 6)
+    assert(k07[1] == round and k07[2] == 7)
+    assert(k08[1] == round and k08[2] == 8)
+  end
+
+  assert(requests:send("stop", 10) == true)
+  harness.join_each({ worker }, function(result)
+    assert(result == true)
+  end, 30)
+end
+
 local function active_worker_root_stress()
   local nworkers = harness.env_number("LJ_M3_ACTIVE_ROOT_WORKERS", 4)
   local payload = harness.env_number("LJ_M3_ACTIVE_ROOT_PAYLOAD", 96)
@@ -108,6 +165,7 @@ assert_stdlib_roots()
 local sum = churn_closures(5000)
 collectgarbage("collect")
 assert_stdlib_roots()
+native_leave_gc_preserves_caller_frame()
 
 assert(sum == 12507500)
 active_worker_root_stress()

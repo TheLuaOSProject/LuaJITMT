@@ -1520,6 +1520,7 @@ typedef struct GC2State {
   MSize weak_capacity;	/* Allocated weak discovery slots. */
   uint32_t weak_drain_active;  /* Cursor-reserved weak clears in flight. */
   uint32_t weak_write_active;  /* Mutator weak-table stores in flight. */
+  uint32_t weak_mark_closed;  /* WEAK root/SSB/grey closure before clears. */
   uint64_t weak_count;	/* Weak discovery slots reserved this cycle. */
   uint64_t weak_tables_seen;  /* Weak table traversals found by GC2. */
   uint64_t weak_tables_weakkey;  /* Weak-key table traversals. */
@@ -2956,6 +2957,23 @@ static LJ_AINLINE uint32_t gc2_weak_write_active_sub(global_State *g,
 						     uint32_t n)
 {
   return la_sub32_acqrel(&g->gc2.weak_write_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_mark_closed_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.weak_mark_closed);
+}
+
+static LJ_AINLINE void gc2_weak_mark_closed_store_rlx(global_State *g,
+						      uint32_t closed)
+{
+  la_store32_rlx(&g->gc2.weak_mark_closed, closed);
+}
+
+static LJ_AINLINE void gc2_weak_mark_closed_rel(global_State *g,
+						uint32_t closed)
+{
+  la_store32_rel(&g->gc2.weak_mark_closed, closed);
 }
 
 static LJ_AINLINE uint64_t gc2_weak_tables_seen_acq(global_State *g)

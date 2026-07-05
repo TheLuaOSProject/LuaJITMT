@@ -42,9 +42,16 @@ typedef uint16_t HotCount;
 #define TG_GC2_SSB_BYTES	8192u
 #define TG_GC2_SSB_SLOTS	(TG_GC2_SSB_BYTES / sizeof(GCRef))
 #define TG_GC2_SSB_DYNAMIC	0x01u
+#define TG_ROOT_ANCHOR_SLOTS	16u
 
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
+typedef struct TGRootAnchorBlock TGRootAnchorBlock;
+
+struct TGRootAnchorBlock {
+  TGRootAnchorBlock *next;
+  TValue slot[TG_ROOT_ANCHOR_SLOTS];
+};
 
 struct GC2SSBNode {
   GC2SSBNode *next;
@@ -87,6 +94,8 @@ struct TGState {
   GCobj *gcroot_pending_after_main;
   SBuf tmpbuf;
   TValue tmptv, tmptv2;
+  TGRootAnchorBlock root_anchor;
+  uint32_t root_anchor_top;
   PRNGState prng;
 #if LJ_HASFFI
   void *ffi_call_func;
@@ -653,6 +662,28 @@ static LJ_AINLINE uint64_t lj_tg_stack_dirty_epoch_add_rlx(TGState *tg,
   return la_add64_rlx(&tg->stack_dirty_epoch, n);  /* 05 section 5.7.3. */
 }
 
+static LJ_AINLINE uint32_t lj_tg_root_anchor_top_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->root_anchor_top);
+}
+
+static LJ_AINLINE void lj_tg_root_anchor_top_rel(TGState *tg, uint32_t top)
+{
+  la_store32_rel(&tg->root_anchor_top, top);
+}
+
+static LJ_AINLINE TGRootAnchorBlock *lj_tg_root_anchor_next_acq(
+  const TGRootAnchorBlock *block)
+{
+  return (TGRootAnchorBlock *)la_loadptr_acq((void *const *)&block->next);
+}
+
+static LJ_AINLINE void lj_tg_root_anchor_next_rel(TGRootAnchorBlock *block,
+						  TGRootAnchorBlock *next)
+{
+  la_storeptr_rel((void **)&block->next, next);
+}
+
 static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)
 {
   return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
@@ -742,6 +773,10 @@ static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
 }
 
 LJ_FUNC int lj_tg_any_jit_active(global_State *g);
+LJ_FUNC TValue *lj_tg_root_anchor_push(lua_State *L, TGState *tg,
+				       cTValue *tv, uint32_t *idxp);
+LJ_FUNC void lj_tg_root_anchor_pop(TGState *tg, uint32_t idx);
+LJ_FUNC TValue *lj_tg_root_anchor_slot_acq(TGState *tg, uint32_t idx);
 
 #define TG_DISP2HOT	(-(int)(HOTCOUNT_SIZE*sizeof(HotCount)))
 #define TG_OFS(f) \

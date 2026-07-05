@@ -1402,6 +1402,12 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
     }
     lj_tab_node_freecount_set_rel(node, freecount);
   }
+  /*
+  ** newtab() publishes the header before the template payload is copied. An
+  ** active-black duplicate can therefore be marked before its child edges are
+  ** visible; publish the completed table so GC2 rescans the copied payload.
+  */
+  lj_gc_pubtab(L, t);
   return t;
 }
 
@@ -1887,48 +1893,44 @@ static LJ_AINLINE int tab_key_on_stack(lua_State *L, cTValue *key)
   return L && key && key >= tvref(L->stack) && key < tvref(L->maxstack);
 }
 
-static TValue *tab_anchor_stack_top(lua_State *L)
-{
-  TValue *top = L->top;
-  TValue *framefunc = L->base - 2;
-  if (framefunc >= tvref(L->stack) && framefunc < tvref(L->maxstack) &&
-      tvisfunc(framefunc)) {
-    GCfunc *fn = funcV(framefunc);
-    if (isluafunc(fn)) {
-      TValue *ftop = L->base + funcproto(fn)->framesize;
-      if (top < ftop)
-	top = ftop;
-    }
-  }
-  return top;
-}
+typedef struct TabRootAnchor {
+  TGState *tg;
+  uint32_t idx;
+} TabRootAnchor;
 
 static cTValue *tab_anchor_rehash_key(lua_State *L, cTValue *key,
-				      ptrdiff_t *oldtop)
+				      TabRootAnchor *anchor)
 {
-  int stack_key = tab_key_on_stack(L, key);
-  ptrdiff_t keyofs = stack_key ? savestack(L, (TValue *)(void *)key) : 0;
-  TValue *top;
+  TGState *tg;
+  TValue *slot;
   /*
   ** Rehash and stale-generation retry paths can allocate or step the GC before
-  ** the key reaches a published table slot. VM/JIT helpers may pass a C-local
-  ** TValue, so copy the key to a real Lua stack root for that slow path only.
-  ** VM helpers update L->base but may leave L->top below the active Lua frame;
-  ** raise the temporary root slot above curr_top before publishing it.
+  ** the key reaches a published table slot. VM helpers can enter with the exact
+  ** Lua frame top still held in registers, so L->top is not safe temporary
+  ** storage here. Use TG-owned anchor slots instead; both collectors mark them
+  ** directly and the storage survives allocation longjmps.
   */
   if (LJ_UNLIKELY(!tab_tv_snapshot_valid(key)))
     lj_err_msg(L, LJ_ERR_NILIDX);
-  *oldtop = savestack(L, L->top);
+  anchor->tg = NULL;
+  anchor->idx = 0;
   lj_gc_pubroot(L, key);
-  L->top = tab_anchor_stack_top(L);
-  lj_state_checkstack(L, 1);
-  if (stack_key)
-    key = restorestack(L, keyofs);
-  top = L->top;
-  copyTVrel(L, top, key);
-  L->top = top + 1;
-  lj_state_stack_pubtv(L, L, top);
-  return top;
+  tg = L2TG(L);
+  if (LJ_UNLIKELY(!tg))
+    tg = G(L)->main_tg;
+  lj_assertL(tg != NULL, "table rehash key anchor without TG");
+  slot = lj_tg_root_anchor_push(L, tg, key, &anchor->idx);
+  if (LJ_UNLIKELY(!slot))
+    return key;
+  anchor->tg = tg;
+  lj_gc_pubroot(L, slot);
+  return slot;
+}
+
+static void tab_unanchor_rehash_key(TabRootAnchor *anchor)
+{
+  if (anchor->tg)
+    lj_tg_root_anchor_pop(anchor->tg, anchor->idx);
 }
 
 static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
@@ -1951,7 +1953,7 @@ static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key,
 static TValue *tab_set_current_key(lua_State *L, GCtab *t, cTValue *key)
 {
   /*
-  ** Retry paths already hold a stack-anchored key. Dispatching back through
+  ** Retry paths already hold a root-anchored key. Dispatching back through
   ** lj_tab_set() would rebuild a fresh C-local key for string/numeric fast
   ** paths and can recurse indefinitely if each stale-generation retry lands on
   ** another post-publication generation hand-off. Go straight to the current
@@ -1975,22 +1977,22 @@ static TValue *tab_set_current_key(lua_State *L, GCtab *t, cTValue *key)
 
 static TValue *tab_set_anchored_key(lua_State *L, GCtab *t, cTValue *key)
 {
-  ptrdiff_t oldtop;
+  TabRootAnchor anchor;
   TValue *slot;
-  key = tab_anchor_rehash_key(L, key, &oldtop);
+  key = tab_anchor_rehash_key(L, key, &anchor);
   slot = tab_set_current_key(L, t, key);
-  L->top = restorestack(L, oldtop);
+  tab_unanchor_rehash_key(&anchor);
   return slot;
 }
 
 static TValue *tab_rehash_forwarded_key(lua_State *L, GCtab *t, cTValue *key)
 {
-  ptrdiff_t oldtop;
+  TabRootAnchor anchor;
   TValue *slot;
-  key = tab_anchor_rehash_key(L, key, &oldtop);
+  key = tab_anchor_rehash_key(L, key, &anchor);
   rehashtab(L, t, key);
   slot = tab_set_current_key(L, t, key);
-  L->top = restorestack(L, oldtop);
+  tab_unanchor_rehash_key(&anchor);
   return slot;
 }
 
@@ -2019,12 +2021,12 @@ static void tab_rehash_no_free(lua_State *L, GCtab *t, cTValue *ek,
 static TValue *tab_rehash_no_free_key(lua_State *L, GCtab *t, cTValue *key,
 				      MSize oldhmask)
 {
-  ptrdiff_t oldtop;
+  TabRootAnchor anchor;
   TValue *slot;
-  key = tab_anchor_rehash_key(L, key, &oldtop);
+  key = tab_anchor_rehash_key(L, key, &anchor);
   tab_rehash_no_free(L, t, key, oldhmask);
   slot = tab_set_current_key(L, t, key);
-  L->top = restorestack(L, oldtop);
+  tab_unanchor_rehash_key(&anchor);
   return slot;
 }
 
@@ -2071,12 +2073,12 @@ static void tab_rehash_chain_overflow(lua_State *L, GCtab *t, cTValue *ek,
 static TValue *tab_rehash_chain_overflow_key(lua_State *L, GCtab *t,
 					     cTValue *key, MSize oldhmask)
 {
-  ptrdiff_t oldtop;
+  TabRootAnchor anchor;
   TValue *slot;
-  key = tab_anchor_rehash_key(L, key, &oldtop);
+  key = tab_anchor_rehash_key(L, key, &anchor);
   tab_rehash_chain_overflow(L, t, key, oldhmask);
   slot = tab_set_current_key(L, t, key);
-  L->top = restorestack(L, oldtop);
+  tab_unanchor_rehash_key(&anchor);
   return slot;
 }
 
@@ -2706,27 +2708,19 @@ retry_insert:
 
 TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 {
-  int stack_key = tab_key_on_stack(L, key);
-  ptrdiff_t oldtop = 0;
+  TabRootAnchor anchor;
   TValue *slot;
   /*
-   ** Missing-key insertion can wait on a key lock, publish weak-key barriers, or
-  ** lose a generation race before the key reaches the table. VM helpers may pass
-  ** a live frame slot above L->top; keep that frame range published while the
-  ** insertion owns no table slot yet. C-local keys are anchored by the existing
-  ** rehash/retry slow paths that can allocate or recursively call lj_tab_set().
-   */
-  if (LJ_UNLIKELY(!tab_tv_snapshot_valid(key)))
-    lj_err_msg(L, LJ_ERR_NILIDX);
-  if (stack_key) {
-    TValue *top = tab_anchor_stack_top(L);
-    oldtop = savestack(L, L->top);
-    if (L->top < top)
-      L->top = top;
-  }
+  ** Missing-key insertion can wait on a key lock, publish weak-key barriers, or
+  ** lose a generation race before the key reaches the table. Keep the key in
+  ** TG-owned root storage for the whole slow path; L->top can lag the running
+  ** interpreter frame and is not reliable scratch storage here. Keep the old
+  ** retry control flow: integer keys in a zero-hash table may resize into the
+  ** array part and must dispatch through the forwarded-key path.
+  */
+  key = tab_anchor_rehash_key(L, key, &anchor);
   slot = tab_newkey_impl(L, t, key, 0);
-  if (stack_key)
-    L->top = restorestack(L, oldtop);
+  tab_unanchor_rehash_key(&anchor);
   return slot;
 }
 

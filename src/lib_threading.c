@@ -1060,13 +1060,6 @@ LJLIB_PUSH(top-1) LJLIB_SET(__index)
 
 /* -- Mutex methods ------------------------------------------------------- */
 
-#define LJ_MUTEX_UNLOCKED	0u
-#define LJ_MUTEX_LOCKED		1u
-
-typedef struct LJMutex {
-  uint32_t state;
-} LJMutex;
-
 static LJMutex *threading_tomutex(lua_State *L)
 {
   if (!(L->base < L->top && tvisudata(L->base) &&

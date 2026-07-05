@@ -103,7 +103,7 @@ void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
   if (!lj_gc2_minor_roots_skip_bridge_mark(g) ||
       gc2_legacy_mark_bridge_acq(g))
-    lj_gc2_markobj(g, o);
+    (void)lj_gc2_markobj_nolegacy(g, o);
 }
 
 void lj_gc_arena_markmem(global_State *g, void *p)
@@ -525,6 +525,7 @@ static void gc2_paranoia_check_fixpoint(global_State *g)
 
 static void gc_mark(global_State *g, GCobj *o);
 static void gc_traverse_thread(global_State *g, lua_State *th);
+static void gc_mark_thread_root_tv(global_State *g, cTValue *tv);
 
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
@@ -546,8 +547,40 @@ static void gc_traverse_thread(global_State *g, lua_State *th);
 static void gc_mark_tg_roots(global_State *g, TGState *tg)
 {
   TValue tv;
+  lua_State *thread_L, *cur_L;
   if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
     return;
+  thread_L = lj_tg_load_thread_L(tg);
+  cur_L = lj_tg_load_cur_L(tg);
+  /*
+  ** Lua stack slots are mutable roots and do not have write barriers. Rescan
+  ** every live TG stack at each legacy root snapshot, including atomic, so
+  ** locals published after mark-start cannot be swept before the next cycle.
+  */
+  if (thread_L && tvref(thread_L->stack) != NULL) {
+    gc_markobj(g, obj2gco(thread_L));
+    gc_traverse_thread(g, thread_L);
+  }
+  if (cur_L && cur_L != thread_L && tvref(cur_L->stack) != NULL) {
+    gc_markobj(g, obj2gco(cur_L));
+    gc_traverse_thread(g, cur_L);
+  }
+  {
+    uint32_t i, n = lj_tg_root_anchor_top_acq(tg);
+    /*
+    ** Table resize/retry helpers cannot use L->top as scratch storage while
+    ** the interpreter owns the exact frame top in registers. Their TG-local
+    ** anchors are stable across allocation longjmps and are mutable roots, so
+    ** rescan the published prefix at every legacy TG root snapshot.
+    */
+    for (i = 0; i < n; i++) {
+      TValue *slot = lj_tg_root_anchor_slot_acq(tg, i);
+      if (!slot)
+	break;
+      lj_tv_load_acq(&tv, slot);
+      gc_mark_thread_root_tv(g, &tv);
+    }
+  }
   /*
   ** x64 JIT helpers materialize TValue arguments in these per-TG slots before
   ** entering C. They are part of the trace/native root set: a concurrent
@@ -612,6 +645,93 @@ static int gc_mark_rescan_pending_set(GCobj *o)
   return (old & LJ_GC_NEEDSCAN) == 0;
 }
 
+#if LJ_HASFFI
+static void gc_mark_clib_cache(global_State *g, CLibrary *cl);
+#endif
+
+static MSize gc_udata_io_file_size(void)
+{
+  /*
+  ** UDTYPE_IO_FILE has a private payload in the I/O library:
+  ** { FILE *fp; uint32_t type; }.  The collector only needs the allocation
+  ** size, and FILE is stored as an opaque pointer there.
+  */
+  return (MSize)((sizeof(void *) + sizeof(uint32_t) + sizeof(void *) - 1u) &
+		 ~(sizeof(void *) - 1u));
+}
+
+static int gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
+{
+  MSize len;
+  GCSize size;
+  uint8_t udtype;
+  if (!ud || ud->gct != ~LJ_TUDATA)
+    return 0;
+  len = ud->len;
+  if (len > LJ_MAX_UDATA || len > LJ_MAX_MEM32 - sizeof(GCudata))
+    return 0;
+  udtype = lj_udata_udtype_acq(ud);
+  if (udtype >= UDTYPE__MAX)
+    return 0;
+  switch (udtype) {
+  case UDTYPE_USERDATA:
+    break;
+  case UDTYPE_IO_FILE:
+    if (len != gc_udata_io_file_size())
+      return 0;
+    break;
+  case UDTYPE_FFI_CLIB:
+#if LJ_HASFFI
+    if (len != sizeof(CLibrary))
+      return 0;
+    break;
+#else
+    return 0;
+#endif
+  case UDTYPE_BUFFER:
+#if LJ_HASBUFFER
+    if (len != sizeof(SBufExt))
+      return 0;
+    break;
+#else
+    return 0;
+#endif
+  case UDTYPE_CHANNEL:
+    {
+      LJChan *ch = (LJChan *)uddata(ud);
+      uint32_t cap = la_load32_acq(&ch->cap);
+      uint32_t mask = la_load32_acq(&ch->mask);
+      uint32_t rendezvous = la_load32_acq(&ch->rendezvous);
+      uint64_t bytes;
+      if (cap == 0 || (cap & (cap - 1u)) != 0 || mask != cap - 1u ||
+	  rendezvous > 1u)
+	return 0;
+      bytes = sizeof(LJChan) + ((uint64_t)cap - 1u) * sizeof(LJChanSlot);
+      if (bytes > LJ_MAX_UDATA || len != (MSize)bytes)
+	return 0;
+    }
+    break;
+  case UDTYPE_THREAD:
+    {
+      LJThread *th = (LJThread *)uddata(ud);
+      if (len != sizeof(LJThread) ||
+	  (GCudata *)la_loadptr_acq((void *const *)&th->ud) != ud)
+	return 0;
+    }
+    break;
+  case UDTYPE_MUTEX:
+    if (len != sizeof(LJMutex))
+      return 0;
+    break;
+  default:
+    return 0;
+  }
+  size = sizeof(GCudata) + (GCSize)len;
+  if (sizep)
+    *sizep = size;
+  return 1;
+}
+
 void lj_gc_preserveobj_legacy(global_State *g, GCobj *o)
 {
   /* SMR-retired GC bodies can outlive their semantic reachability. Preserve
@@ -645,6 +765,68 @@ void lj_gc_markobj_legacy(global_State *g, GCobj *o)
   } else {
     lj_gc_preserveobj_legacy(g, o);
   }
+}
+
+static size_t gc_traverse_udata(global_State *g, GCudata *ud)
+{
+  GCSize size;
+  uint8_t udtype;
+  GCtab *mt;
+  GCtab *env;
+  if (LJ_UNLIKELY(!gc_udata_payload_valid(ud, &size)))
+    return 0;
+  udtype = lj_udata_udtype_acq(ud);
+  mt = lj_udata_metatable_acq(ud);
+  env = lj_udata_env_acq(ud);
+  if (mt) gc_markobj(g, mt);
+  if (env) gc_markobj(g, env);
+#if LJ_HASFFI
+  if (udtype == UDTYPE_FFI_CLIB) {
+    CLibrary *cl = (CLibrary *)uddata(ud);
+    gc_mark_clib_cache(g, cl);
+  }
+#endif
+  if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
+    SBufExt *sbx = (SBufExt *)uddata(ud);
+    GCobj *ref;
+    if (!sbufiscoworborrow(sbx))
+      lj_gc_arena_markmem(g, lj_buf_bptr_acq((SBuf *)sbx));
+    ref = gcref_acq(sbx->cowref);
+    if (sbufiscow(sbx) && ref)
+      gc_markobj(g, ref);
+    ref = gcref_acq(sbx->dict_str);
+    if (ref)
+      gc_markobj(g, ref);
+    ref = gcref_acq(sbx->dict_mt);
+    if (ref)
+      gc_markobj(g, ref);
+  }
+  if (udtype == UDTYPE_CHANNEL) {
+    LJChan *ch = (LJChan *)uddata(ud);
+    uint32_t i;
+    for (i = 0; i < ch->cap; i++) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &ch->slot[i].tv);
+      gc_marktv(g, &tv);  /* 09 section 9.5 channel slots. */
+    }
+  }
+  if (udtype == UDTYPE_THREAD) {
+    LJThread *th = (LJThread *)uddata(ud);
+    TValue *roots = lj_thread_start_roots_acq(th);
+    uint32_t i, n = lj_thread_start_root_count_acq(th);
+    lua_State *child = lj_thread_state_load_acq(th);
+    lj_gc_arena_markmem(g, roots);
+    if (roots) {
+      for (i = 0; i < n; i++) {
+	TValue tv;
+	lj_tv_load_acq(&tv, &roots[i]);
+	gc_marktv(g, &tv);
+      }
+    }
+    if (child)
+      gc_markobj(g, obj2gco(child));  /* 09 section 9.2 child stack. */
+  }
+  return size;
 }
 
 #if LJ_HASFFI
@@ -718,58 +900,8 @@ static void gc_mark(global_State *g, GCobj *o)
   lj_gc_arena_markobj(g, o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
     GCudata *ud = gco2ud(o);
-    uint8_t udtype = lj_udata_udtype_acq(ud);
-    GCtab *mt = lj_udata_metatable_acq(ud);
-    GCtab *env = lj_udata_env_acq(ud);
     gray2black(o);  /* Userdata are never gray. */
-    if (mt) gc_markobj(g, mt);
-    if (env) gc_markobj(g, env);
-#if LJ_HASFFI
-    if (udtype == UDTYPE_FFI_CLIB) {
-      CLibrary *cl = (CLibrary *)uddata(ud);
-      gc_mark_clib_cache(g, cl);
-    }
-#endif
-    if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
-      SBufExt *sbx = (SBufExt *)uddata(ud);
-      GCobj *ref;
-      if (!sbufiscoworborrow(sbx))
-	lj_gc_arena_markmem(g, lj_buf_bptr_acq((SBuf *)sbx));
-      ref = gcref_acq(sbx->cowref);
-      if (sbufiscow(sbx) && ref)
-	gc_markobj(g, ref);
-      ref = gcref_acq(sbx->dict_str);
-      if (ref)
-	gc_markobj(g, ref);
-      ref = gcref_acq(sbx->dict_mt);
-      if (ref)
-	gc_markobj(g, ref);
-    }
-    if (udtype == UDTYPE_CHANNEL) {
-      LJChan *ch = (LJChan *)uddata(ud);
-      uint32_t i;
-      for (i = 0; i < ch->cap; i++) {
-	TValue tv;
-	lj_tv_load_acq(&tv, &ch->slot[i].tv);
-	gc_marktv(g, &tv);  /* 09 section 9.5 channel slots. */
-      }
-    }
-    if (udtype == UDTYPE_THREAD) {
-      LJThread *th = (LJThread *)uddata(ud);
-      TValue *roots = lj_thread_start_roots_acq(th);
-      uint32_t i, n = lj_thread_start_root_count_acq(th);
-      lua_State *child = lj_thread_state_load_acq(th);
-      lj_gc_arena_markmem(g, roots);
-      if (roots) {
-	for (i = 0; i < n; i++) {
-	  TValue tv;
-	  lj_tv_load_acq(&tv, &roots[i]);
-	  gc_marktv(g, &tv);
-	}
-      }
-      if (child)
-	gc_markobj(g, obj2gco(child));  /* 09 section 9.2 child stack. */
-    }
+    (void)gc_traverse_udata(g, ud);
   } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
     GCupval *uv = gco2uv(o);
     TValue tv;
@@ -1191,8 +1323,63 @@ static int gc_weak_list_has(global_State *g, GCtab *t)
   return 0;
 }
 
+#define GC_TAB_RESCAN_MAX	256
+
+static int gc_traverse_tab_rec(global_State *g, GCtab *t, GCtab **seen,
+			       MSize nseen);
+
+static int gc_tab_rescan_seen(GCtab *t, GCtab **seen, MSize nseen)
+{
+  MSize i;
+  for (i = 0; i < nseen; i++)
+    if (seen[i] == t)
+      return 1;
+  return 0;
+}
+
+static void gc_mark_tab_edge_obj(global_State *g, GCtab *t, GCtab **seen,
+				 MSize nseen)
+{
+  GCobj *o;
+  if (!t)
+    return;
+  o = obj2gco(t);
+  lj_gc_arena_markobj(g, o);
+  if (iswhite(o)) {
+    gc_mark(g, o);
+  } else if (isblack(o) && gc2_legacy_mark_bridge_acq(g) &&
+	     !gc_tab_rescan_seen(t, seen, nseen)) {
+    /*
+    ** GC2/SMR can make a table body non-white before this legacy cycle has
+    ** traversed its payload. Strong table edges must still preserve stock Lua
+    ** reachability: a live metatable keeps its __index table live, and strong
+    ** values keep their descendants live even if the body was birth-marked.
+    ** Traverse immediately with a local seen set so metatable/table cycles do
+    ** not repeatedly requeue each other through NEEDSCAN.
+    */
+    if (nseen < GC_TAB_RESCAN_MAX) {
+      if (gc_traverse_tab_rec(g, t, seen, nseen) > 0)
+	black2gray(o);
+    } else if (gc_mark_rescan_pending_set(o)) {
+      lj_gc_list_push_rel(&g->gc.gray, o);
+    }
+  }
+}
+
+static void gc_mark_tab_edge_tv(global_State *g, cTValue *tv, GCtab **seen,
+				MSize nseen)
+{
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)) || !tvisgcv(tv))
+    return;
+  if (tvistab(tv))
+    gc_mark_tab_edge_obj(g, tabV(tv), seen, nseen);
+  else
+    gc_marktv(g, tv);
+}
+
 /* Traverse a table. */
-static int gc_traverse_tab(global_State *g, GCtab *t)
+static int gc_traverse_tab_rec(global_State *g, GCtab *t, GCtab **seen,
+			       MSize nseen)
 {
   int weak = 0;
   int ffi_fin = 0;
@@ -1200,6 +1387,8 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   TValue modev;
   cTValue *mode;
   GCtab *mt = lj_tab_metatable_acq(t);
+  if (nseen < GC_TAB_RESCAN_MAX)
+    seen[nseen++] = t;
   arraymem = lj_tab_array_mem_acq(t);
   if (arraymem)
     (void)lj_gc2_markmem(g, arraymem);
@@ -1209,8 +1398,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     if (hmask > 0)
       (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
   }
-  if (mt)
-    gc_markobj(g, mt);
+  gc_mark_tab_edge_obj(g, mt, seen, nseen);
   mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
   if (mode && tvisstr(mode)) {  /* Valid __mode field? */
     const char *modestr = strVdata(mode);
@@ -1244,7 +1432,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
       if (tvisforward(&val) &&
 	  !lj_tab_forwarded_array_slot(t, array, asize, i, &val))
 	continue;
-      gc_marktv(g, &val);
+      gc_mark_tab_edge_tv(g, &val, seen, nseen);
     }
   }
   {  /* Mark hash part. */
@@ -1286,13 +1474,21 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 	  lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
 	  lj_assertG(!tviskeylock(&key),
 		     "mark of key lock in non-empty slot");
-	  if (!(weak & LJ_GC_WEAKKEY)) gc_marktv(g, &key);
-	  if (!(weak & LJ_GC_WEAKVAL)) gc_marktv(g, &val);
+	  if (!(weak & LJ_GC_WEAKKEY))
+	    gc_mark_tab_edge_tv(g, &key, seen, nseen);
+	  if (!(weak & LJ_GC_WEAKVAL))
+	    gc_mark_tab_edge_tv(g, &val, seen, nseen);
 	}
       }
     }
   }
   return weak;
+}
+
+static int gc_traverse_tab(global_State *g, GCtab *t)
+{
+  GCtab *seen[GC_TAB_RESCAN_MAX];
+  return gc_traverse_tab_rec(g, t, seen, 0);
 }
 
 /* Traverse a function. */
@@ -1532,6 +1728,18 @@ static int gc_thread_is_remote_current(global_State *g, lua_State *th)
 	 lj_tg_load_cur_L(tg) == th && th != lj_tg_cur_L(g);
 }
 
+static int gc_thread_is_native_current(global_State *g, lua_State *th)
+{
+  TGState *tg = lj_tg_thread_active(g, th);
+  /*
+  ** Native boundaries can acknowledge safepoints before the VM has returned
+  ** through the C frame. Preserve the raw stack range there: frame headers are
+  ** not ordinary TValue slots, and the owner may still rely on the exact frame
+  ** chain when the native call resumes.
+  */
+  return tg && lj_tg_in_native_acq(tg) != 0;
+}
+
 static int gc_thread_is_jit_current(global_State *g, lua_State *th)
 {
 #if LJ_HASJIT
@@ -1575,9 +1783,12 @@ static BCReg gc_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
   BCIns ins = pc[-1];
   if (bc_op(ins) == BC_UCLO)
     ins = pc[bc_j(ins)];
+  /*
+  ** Match the dispatch hook's variable-top cases. Fixed CALL/ITERC frames keep
+  ** their ordinary Lua frame slots live while a C callee runs; narrowing them to
+  ** the argument window lets atomic GC clear still-live caller slots.
+  */
   switch (bc_op(ins)) {
-  case BC_CALL: case BC_ITERC:
-    return bc_a(ins) + bc_c(ins) + LJ_FR2;
   case BC_CALLM: case BC_CALLMT:
     return bc_a(ins) + bc_c(ins) + nres-1+1+LJ_FR2;
   case BC_RETM:
@@ -1632,7 +1843,6 @@ static TValue *gc_active_thread_top(lua_State *th, TValue *top)
   return top > max ? max : top;
 }
 
-static void gc_mark_thread_root_tv(global_State *g, cTValue *tv);
 static void gc_mark_thread_root_tab(global_State *g, GCtab *t);
 
 static void gc_mark_thread_root_proto(global_State *g, GCproto *pt)
@@ -1730,23 +1940,34 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   uint32_t owner;
   int owned;
   int remote_current;
+  int native_current;
   int jit_current;
+  int vm_current;
   lua_State *cur_L;
   lj_gc_arena_markmem(g, tvref(th->stack));
   cur_L = lj_tg_cur_L(g);
   owner = lj_state_owner_acq(th);
   owned = owner != 0 && owner != LJ_THREAD_GCSCAN && th != cur_L;
+  vm_current = th == cur_L;
   remote_current = gc_thread_is_remote_current(g, th);
+  native_current = gc_thread_is_native_current(g, th);
   jit_current = gc_thread_is_jit_current(g, th);
-  if (owned || remote_current || jit_current) {
-    if (!owned && !remote_current && jit_current)
+  if (owned || vm_current || remote_current || native_current || jit_current) {
+    if (!owned && !remote_current && !native_current && jit_current)
       gc_mark_jit_frame_funcs(g, th);
+    /*
+    ** The interpreter keeps the exact BASE in a register between C/VM helper
+    ** calls. L->base can still name the last C frame, so the frame chain is not
+    ** a precise root map for the running VM thread. Preserve the raw stack
+    ** storage; frame function slots are tagged values and are marked by the
+    ** conservative pass below.
+    */
     top = tvref(th->maxstack);
     used = (MSize)(top - tvref(th->stack));
   } else {
     used = gc_traverse_frames(g, th);
   }
-  if (!remote_current && !jit_current && th == cur_L &&
+  if (!remote_current && !native_current && !jit_current && th == cur_L &&
       th->base > tvref(th->stack) + 1 + LJ_FR2) {
     top = gc_active_thread_top(th, top);
   } else if (tvref(th->stack) + used > top) {
@@ -1756,7 +1977,8 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     lj_tv_load_acq(&tv, o);
     gc_mark_thread_root_tv(g, &tv);
   }
-  if (!owned && !remote_current && !jit_current && g->gc.state == GCSatomic) {
+  if (!owned && !vm_current && !remote_current && !native_current && !jit_current &&
+      g->gc.state == GCSatomic) {
     top = tvref(th->stack) + th->stacksize;
     for (; o < top; o++)  /* Clear unmarked slots. */
       setnilV(o);
@@ -1844,6 +2066,20 @@ static size_t propagatemark(global_State *g)
     black2gray(o);  /* Threads are never black. */
     gc_traverse_thread(g, th);
     return sizeof(lua_State) + sizeof(TValue) * th->stacksize;
+  } else if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
+    /*
+    ** GC2-to-legacy rescan handoff can enqueue an already-black userdata when
+    ** its side roots change during an active legacy cycle. Userdata are marked
+    ** eagerly on the white path and are normally never gray, but the rescan node
+    ** still needs to traverse metatables, environments and native root payloads.
+    */
+    return gc_traverse_udata(g, gco2ud(o));
+  } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
+    TValue tv;
+    GCupval *uv = gco2uv(o);
+    lj_tv_load_acq(&tv, uvval(uv));
+    gc_marktv(g, &tv);
+    return sizeof(GCupval);
   } else {
 #if LJ_HASJIT
     GCtrace *T = gco2trace(o);
@@ -2078,6 +2314,12 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
     return 0;  /* Stale proto header: sizept is not safe for destructor. */
   if (gct == (uint32_t)~LJ_TTAB && !gc2_valid_tab_obj(g, gco2tab(o)))
     return 0;  /* Stale table header: side-vector sizes are not trustworthy. */
+  if (gct == (uint32_t)~LJ_TUDATA) {
+    GCSize size;
+    if (!gc_udata_payload_valid(gco2ud(o), &size) ||
+	!gc2_size_fits_arena(g, o, size))
+      return 0;  /* Stale userdata header: payload size is not trustworthy. */
+  }
   return gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA &&
 	 gc_freefunc[gct - (uint32_t)~LJ_TSTR] != NULL;
 }
@@ -2395,8 +2637,9 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 	  if (!slot)
 	    continue;
 	}
-	if (gc_mayclear(g, &val, 1))
+	if (gc_mayclear(g, &val, 1)) {
 	  lj_tab_storenilraw(slot);
+	}
       }
     }
     {

@@ -142,6 +142,13 @@ return function(add)
 
   runtime.add_luajit_script_cases(add, {
     {
+      name = "m5_gc2_legacy_weakmeta",
+      description = "GC2-discovered weak metatable chains survive legacy sweep",
+      script = "t-gc2-legacy-weakmeta.lua",
+      opts = { timeout = "20s" },
+      message = "M5 GC2 legacy weak metatable bridge passed"
+    },
+    {
       name = "m5_tab_resize_stress",
       description = "table resize forwarding stress across GC, traversal, length, weak clear, metatables, metamethod dispatch, table-library shifts, and JIT reads/stores/iterators",
       script = "t-tab-resize-stress.lua",

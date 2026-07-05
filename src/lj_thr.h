@@ -48,6 +48,13 @@ typedef struct LJStateClaim {
 #define LJ_THREAD_ABORTING	3u
 #define LJ_THREAD_GCSCAN	0xffffffffu
 
+#define LJ_MUTEX_UNLOCKED	0u
+#define LJ_MUTEX_LOCKED		1u
+
+typedef struct LJMutex {
+  uint32_t state;
+} LJMutex;
+
 struct LJThreadLive {
   struct LJThreadLive *next;
   GCRef ud;

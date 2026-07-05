@@ -49,8 +49,18 @@ void lj_meta_init(lua_State *L)
 cTValue *lj_meta_cache(GCtab *mt, MMS mm, GCstr *name)
 {
   cTValue *mo = lj_tab_getstr(mt, name);
+  TValue snap;
   lj_assertX(mm <= MM_FAST, "bad metamethod %d", mm);
-  if (!mo || tvisnil(mo)) {  /* No metamethod? */
+  if (!mo)
+    return NULL;
+  lj_tv_load_acq(&snap, mo);
+  /*
+  ** Lock-free table snapshots can race with retired storage reuse. A tagged GC
+  ** value whose header no longer matches its tag is not a callable/effective
+  ** metamethod for this lookup; treating it as absent preserves safety without
+  ** exposing internal forwarding or reuse artifacts to VM dispatch.
+  */
+  if (!lj_tv_gcref_type_match(&snap) || tvisnil(&snap)) {
     return NULL;
   }
   return mo;
@@ -63,7 +73,7 @@ cTValue *lj_meta_cachetv(GCtab *mt, MMS mm, GCstr *name, TValue *out)
   if (!mo)
     return NULL;
   lj_tv_load_acq(out, mo);
-  return tvisnil(out) ? NULL : out;
+  return (!lj_tv_gcref_type_match(out) || tvisnil(out)) ? NULL : out;
 }
 
 /* Lookup metamethod for object. */

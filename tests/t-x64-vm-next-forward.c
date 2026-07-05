@@ -17,6 +17,7 @@
 #include "lj_obj.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_tg.h"
 #include "lj_vm.h"
 
 #include "lib/tab_forward_helpers.h"
@@ -44,23 +45,49 @@ static void *vmnext_publish_array_after_delay(void *arg)
   return NULL;
 }
 
-static uint32_t call_vm_next(GCtab *t, uint32_t idx, TValue *val, TValue *key)
+static uint32_t call_vm_next(lua_State *L, GCtab *t, uint32_t idx,
+			     TValue *val, TValue *key)
 {
+  TGState *tg = L2TG(L);
+  void *dispatch;
+  GCtab *tab_arg = t;
+  uint32_t idx_arg = idx;
   uint64_t valu, keyu;
   uint32_t next;
+  assert(tg != NULL);
+  dispatch = (void *)tg->dispatch;
+#if LJ_ABI_WIN
   __asm__(
-    "subq $40, %%rsp\n\t"
-    "movq %[tab], %%rdi\n\t"
-    "movl %k[start], %%esi\n\t"
+    "subq $64, %%rsp\n\t"
+    "movq %%rbx, 56(%%rsp)\n\t"
+    "movq %[dispatch], %%rbx\n\t"
     "call " LJ_ASM_SYM(lj_vm_next) "\n\t"
     "movq (%%rax), %[valu]\n\t"
     "movq 8(%%rax), %[keyu]\n\t"
     "movl %%edx, %[next]\n\t"
-    "addq $40, %%rsp\n\t"
-    : [valu] "=r"(valu), [keyu] "=r"(keyu), [next] "=r"(next)
-    : [tab] "r"(t), [start] "r"(idx)
-    : "rax", "rcx", "rdx", "rdi", "rsi", "r8", "r9", "r10", "r11",
+    "movq 56(%%rsp), %%rbx\n\t"
+    "addq $64, %%rsp\n\t"
+    : [valu] "=&r"(valu), [keyu] "=&r"(keyu), [next] "=&r"(next),
+      "+c"(tab_arg), "+d"(idx_arg)
+    : [dispatch] "r"(dispatch)
+    : "rax", "r8", "r9", "r10", "r11", "rbx", "memory", "cc");
+#else
+  __asm__(
+    "subq $48, %%rsp\n\t"
+    "movq %%r14, 40(%%rsp)\n\t"
+    "movq %[dispatch], %%r14\n\t"
+    "call " LJ_ASM_SYM(lj_vm_next) "\n\t"
+    "movq (%%rax), %[valu]\n\t"
+    "movq 8(%%rax), %[keyu]\n\t"
+    "movl %%edx, %[next]\n\t"
+    "movq 40(%%rsp), %%r14\n\t"
+    "addq $48, %%rsp\n\t"
+    : [valu] "=&r"(valu), [keyu] "=&r"(keyu), [next] "=&r"(next),
+      "+D"(tab_arg), "+S"(idx_arg)
+    : [dispatch] "r"(dispatch)
+    : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "r14",
       "memory", "cc");
+#endif
   val->u64 = valu;
   key->u64 = keyu;
   return next;
@@ -101,7 +128,7 @@ static void exercise_array_forward(lua_State *L)
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
-  next = call_vm_next(t, (uint32_t)target, &val, &key);
+  next = call_vm_next(L, t, (uint32_t)target, &val, &key);
   assert(next != (uint32_t)-1);
   assert(tvisnumber(&val));
   assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) ==
@@ -122,7 +149,7 @@ static void exercise_array_forward(lua_State *L)
     ctx.asize = newasize;
     assert(pthread_create(&ctx.thread, NULL,
 			  vmnext_publish_array_after_delay, &ctx) == 0);
-    next = call_vm_next(t, (uint32_t)target, &val, &key);
+    next = call_vm_next(L, t, (uint32_t)target, &val, &key);
     assert(pthread_join(ctx.thread, NULL) == 0);
     assert(next != (uint32_t)-1);
     assert(tvisnumber(&val));
@@ -135,7 +162,7 @@ static void exercise_array_forward(lua_State *L)
   lj_tab_asize_rel(t, newasize);
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
   lj_tab_asize_rel(t, 0);
-  next = call_vm_next(t, (uint32_t)target, &val, &key);
+  next = call_vm_next(L, t, (uint32_t)target, &val, &key);
   assert(next != (uint32_t)-1);
   assert(tvisnumber(&val));
   assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) ==
@@ -177,7 +204,7 @@ static void exercise_hash_forward(lua_State *L)
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
   idx = lj_tab_asize_acq(t) + (uint32_t)(oldn - oldnode);
-  next = call_vm_next(t, idx, &val, &key);
+  next = call_vm_next(L, t, idx, &val, &key);
   assert(next != (uint32_t)-1);
   assert(tvisnumber(&val));
   assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) == 8181);
