@@ -196,6 +196,29 @@ static void exercise_vm_tset_entering_helpers(lua_State *L)
   assert(lj_tab_test_vm_strhash_store_calls() >= hash_calls0 + 2u);
 }
 
+static void exercise_vm_tsets_single_thread_direct(lua_State *L)
+{
+  uint32_t array_calls0, hash_calls0;
+
+  lua_settop(L, 0);
+  lj_tab_test_reset_vm_array_store_calls();
+  lj_tab_test_reset_vm_strhash_store_calls();
+  array_calls0 = lj_tab_test_vm_array_store_calls();
+  hash_calls0 = lj_tab_test_vm_strhash_store_calls();
+
+  tabfwd_load_lua(L,
+    "local t = { fast = 1, nilslot = 2 }\n"
+    "t.nilslot = nil\n"
+    "t.fast = 4404\n"
+    "t.nilslot = 5505\n"
+    "assert(t.fast == 4404)\n"
+    "assert(t.nilslot == 5505)\n");
+  tabfwd_run_loaded(L);
+
+  assert(lj_tab_test_vm_array_store_calls() == array_calls0);
+  assert(lj_tab_test_vm_strhash_store_calls() == hash_calls0);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -308,6 +331,7 @@ int main(void)
   assert(tabfwd_get_i32(t, key_r) == val_r);
   assert(tabfwd_get_i32(t, key_helper) == val_helper);
 
+  exercise_vm_tsets_single_thread_direct(L);
   exercise_vm_tset_entering_helpers(L);
   exercise_vm_tsetm_forward_retry(L);
 

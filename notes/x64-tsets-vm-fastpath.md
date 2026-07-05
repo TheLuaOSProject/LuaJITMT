@@ -3,11 +3,12 @@
 - Restored a bounded x64 VM fast path for `BC_TSETS_Z` existing string-key
   stores. The path probes the current hash generation with acquire loads and
   only handles matching keys whose value is non-nil and not `FORWARD`.
-- The actual publication still goes through
-  `lj_tab_storetv_forvm_strhash()`, which uses keyed CAS/revalidation and weak
-  write coordination. This deliberately avoids restoring stock LuaJIT's raw
-  `mov [slot], value` store, because concurrent resize can stale or forward the
-  slot.
+- The actual publication uses a direct `mov [slot], value` only while the VM can
+  prove the table is single-thread private: no active/entering secondary TG, no
+  active mark barrier, no weak mode, no metatable, a current non-retiring hash
+  generation, and no observed `FORWARD`. Once that predicate fails, publication
+  goes through `lj_tab_storetv_forvm_strhash()`, which uses keyed
+  CAS/revalidation and weak-write coordination.
 - Misses, nil slots, retired node generations, forwarded values, non-table
   operands, and metatable-sensitive cases still fall back to `vmeta_tsets` and
   `lj_meta_tsettv_pair()`.

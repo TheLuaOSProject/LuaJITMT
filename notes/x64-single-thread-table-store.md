@@ -27,4 +27,5 @@ Verification guard:
 - `m6_jit_mt_activation_flush` checks that pre-MT traces are flushed by the
   first `threading.spawn()` activation.
 - `m5_x64_tset_nil_snapshot` covers interpreter `__newindex`, nil-slot helper
-  fallback, and forwarded-slot rerouting for the affected TSET bytecodes.
+  fallback, forwarded-slot rerouting, and the single-thread `TSETS` direct
+  store path that must avoid the VM string-hash helper.
