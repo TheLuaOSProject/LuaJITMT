@@ -965,7 +965,6 @@ assert(threading.gcworkers(0) == 1)
     name = "m6_jit_table_store_helper",
     description = "M6 helper-backed table store behavior",
     run = function(t)
-      build.make_clean(t, { quiet = true })
       t:build(build.tab_helper_build_opts({ quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-jit-forward-store"),
                       "t-jit-forward-store.c", build.tab_helper_c_opts({
@@ -1690,7 +1689,6 @@ assert(t.k1 == 0 and t.k81 == 80)
 assert(util.traceinfo(1), "existing hash-store TBAR probe did not trace")
 ]=], { timeout = "20s" })
       build.with_default_build_restore(t, function()
-        build.make_clean(t)
         build_default(t, {
           args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
         })

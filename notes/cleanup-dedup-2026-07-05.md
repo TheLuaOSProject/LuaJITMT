@@ -56,3 +56,12 @@ The follow-up pass routed the remaining exact-match metadata, conversion,
 namespace, metatable, arithmetic, and ccall snapshot fixtures through the same
 helper. CDEF-token, callback, native-stopreq, and parser-release-only tests keep
 local workers because they assert different cleanup or observation semantics.
+
+## M6 Build Profile Cleans
+
+`m6_jit_table_store_helper` and the M6 TBAR paranoia sub-check no longer call
+`make clean` immediately before a profile-aware harness build. `Test:build()`
+already cleans when the requested `XCFLAGS` signature differs, and
+`with_default_build_restore()` still restores the default profile after the
+paranoia sub-check. Removing the extra clean keeps the isolation semantics while
+avoiding duplicate full source-tree rebuilds.
