@@ -6,11 +6,12 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_str.h"
@@ -36,19 +37,10 @@ typedef struct IterNArrayReleaseCtx {
 
 static IterNArrayReleaseCtx *itern_release_ctx;
 
-static void itern_sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = ns / 1000000000L;
-  ts.tv_nsec = ns % 1000000000L;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
-
 static void *itern_publish_array_after_delay(void *arg)
 {
   IterNArrayReleaseCtx *ctx = (IterNArrayReleaseCtx *)arg;
-  itern_sleep_ns(5000000L);
+  sleep_ns(5000000L);
   lj_tab_array_rel(ctx->t, ctx->array);
   lj_tab_asize_rel(ctx->t, ctx->asize);
   return NULL;

@@ -7,11 +7,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_str.h"
@@ -30,19 +31,10 @@ typedef struct ForwardPublishCtx {
   int publish_array;
 } ForwardPublishCtx;
 
-static void tabfwd_sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = ns / 1000000000l;
-  ts.tv_nsec = ns % 1000000000l;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
-
 static void *tabfwd_publish_successor(void *arg)
 {
   ForwardPublishCtx *ctx = (ForwardPublishCtx *)arg;
-  tabfwd_sleep_ns(5000000);
+  sleep_ns(5000000);
   tv_rawstore_rel(ctx->slot, tv_rawload(&ctx->val));
   if (ctx->publish_array) {
     lj_tab_array_rel(ctx->t, ctx->array);

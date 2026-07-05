@@ -7,11 +7,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_str.h"
@@ -34,19 +35,10 @@ typedef struct VMNextArrayReleaseCtx {
   pthread_t thread;
 } VMNextArrayReleaseCtx;
 
-static void vmnext_sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = ns / 1000000000L;
-  ts.tv_nsec = ns % 1000000000L;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
-
 static void *vmnext_publish_array_after_delay(void *arg)
 {
   VMNextArrayReleaseCtx *ctx = (VMNextArrayReleaseCtx *)arg;
-  vmnext_sleep_ns(5000000L);
+  sleep_ns(5000000L);
   lj_tab_array_rel(ctx->t, ctx->array);
   lj_tab_asize_rel(ctx->t, ctx->asize);
   return NULL;

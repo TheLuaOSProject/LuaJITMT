@@ -6,10 +6,11 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_state.h"
@@ -26,19 +27,11 @@ typedef struct KeylockReleaseCtx {
   int delay_ms;
 } KeylockReleaseCtx;
 
-static void sleep_ms(int ms)
-{
-  struct timespec ts;
-  ts.tv_sec = ms / 1000;
-  ts.tv_nsec = (long)(ms % 1000) * 1000000L;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
-
 static void *release_keylock_after_delay(void *arg)
 {
   KeylockReleaseCtx *ctx = (KeylockReleaseCtx *)arg;
-  sleep_ms(ctx->delay_ms);
+  if (ctx->delay_ms > 0)
+    sleep_ns((long)ctx->delay_ms * 1000000L);
   tv_rawstore_rel(&ctx->node->key, tv_rawload(&ctx->key));
   return NULL;
 }

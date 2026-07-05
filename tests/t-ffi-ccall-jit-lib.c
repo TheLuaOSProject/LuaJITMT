@@ -3,25 +3,16 @@
 */
 
 #include <stdint.h>
-#include <time.h>
+
+#include "lib/test_sleep.h"
 
 static int lj_m7_ccall_jit_values[4] = { 11, 22, 33, 44 };
 static int lj_m7_ccall_jit_void_count;
 
-static void sleep_ms(int ms)
-{
-  struct timespec ts;
-  if (ms <= 0)
-    return;
-  ts.tv_sec = ms / 1000;
-  ts.tv_nsec = (long)(ms % 1000) * 1000000L;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
-
 int lj_m7_ccall_jit_sleep_i32(int ms)
 {
-  sleep_ms(ms);
+  if (ms > 0)
+    sleep_ns((long)ms * 1000000L);
   return ms + 7;
 }
 
