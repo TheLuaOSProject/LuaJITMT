@@ -397,7 +397,7 @@ static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
   ** lj_snap_restore_exit().
   */
   if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
-      (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0))
+      lj_tg_jit_active_acq(tg))
     return 0;
 #else
   UNUSED(tg); UNUSED(actions);
@@ -443,7 +443,7 @@ static int safepoint_trace_tg_active(global_State *g)
     */
     if (tg == self && leader != 0 && lj_tg_tid_acq(tg) == leader)
       continue;
-    if (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0)
+    if (lj_tg_jit_active_acq(tg))
       return 1;
   }
 #else

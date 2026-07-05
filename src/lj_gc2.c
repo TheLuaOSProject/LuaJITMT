@@ -3191,8 +3191,7 @@ static int gc2_thread_is_jit_current(global_State *g, lua_State *L)
   */
   {
     TGState *tg = gc2_thread_active_tg(g, L);
-    return tg &&
-      (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0);
+    return tg && lj_tg_jit_active_acq(tg);
   }
 #else
   UNUSED(g); UNUSED(L);
@@ -3584,7 +3583,7 @@ static void gc2_scan_tg_roots(global_State *g)
     lj_gc2_markmem(g, tg->tmpbuf.b);
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))
       continue;
-    if (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0) {
+    if (lj_tg_jit_active_acq(tg)) {
       TValue tv;
       lj_tv_load_acq(&tv, &tg->tmptv);
       gc2_mark_tv(g, &tv);

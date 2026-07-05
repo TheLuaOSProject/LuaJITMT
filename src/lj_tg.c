@@ -358,13 +358,13 @@ int lj_tg_any_jit_active(global_State *g)
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
     saw_tg = 1;
     if (!lj_tg_flags_test_acq(tg, TGF_DEAD) &&
-	(lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0))
+	lj_tg_jit_active_acq(tg))
       return 1;
   }
   if (!saw_tg) {
     tg = g->main_tg;
     if (tg && !lj_tg_flags_test_acq(tg, TGF_DEAD)) {
-      if (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0)
+      if (lj_tg_jit_active_acq(tg))
 	return 1;
       saw_tg = 1;
     }

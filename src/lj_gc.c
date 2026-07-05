@@ -544,7 +544,7 @@ static void gc_mark_tg_roots(global_State *g, TGState *tg)
   ** collector can otherwise miss freshly allocated keys or values while they are
   ** between machine registers and helper publication.
   */
-  if (lj_tg_load_jit_base(tg) == NULL && lj_tg_vmstate_load_acq(tg) <= 0)
+  if (!lj_tg_jit_active_acq(tg))
     return;
   lj_tv_load_acq(&tv, &tg->tmptv);
   gc_marktv(g, &tv);
@@ -1432,8 +1432,7 @@ static int gc_thread_is_jit_current(global_State *g, lua_State *th)
   */
   {
     TGState *tg = gc_thread_active_tg(g, th);
-    return tg &&
-      (lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0);
+    return tg && lj_tg_jit_active_acq(tg);
   }
 #else
   UNUSED(g); UNUSED(th);

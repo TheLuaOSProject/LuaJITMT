@@ -678,6 +678,11 @@ static LJ_AINLINE TValue *lj_tg_load_jit_base(TGState *tg)
   return (TValue *)la_loadptr_acq((void *const *)&tg->jit_base);
 }
 
+static LJ_AINLINE int lj_tg_jit_active_acq(TGState *tg)
+{
+  return lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0;
+}
+
 static LJ_AINLINE void lj_tg_store_jit_base(TGState *tg, TValue *base)
 {
   la_storeptr_rel((void **)&tg->jit_base, base);  /* 08 section 8.7 exit root. */
