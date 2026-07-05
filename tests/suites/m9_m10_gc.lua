@@ -78,7 +78,13 @@ end
 
 local function find_stock_luajit(current)
   local explicit = os.getenv("LJ_BENCH_STOCK_BIN")
-  if explicit and explicit ~= "" then return explicit, true end
+  if explicit and explicit ~= "" then
+    if same_file(explicit, current) then
+      error("LJ_BENCH_STOCK_BIN must name stock LuaJIT, not current build: " ..
+            explicit, 2)
+    end
+    return explicit, true
+  end
 
   local candidates = {
     "/usr/bin/luajit",
@@ -478,13 +484,13 @@ end
 
 local function run_bench_stock_compare(t)
   local current = t:path("src", "luajit")
+  t:build({ clean = true, quiet = true })
+
   local stock, explicit = find_stock_luajit(current)
   if not stock then
     print("M9 stock benchmark check skipped; no stock luajit found")
     return
   end
-
-  t:build({ clean = true, quiet = true })
 
   local bench_lua = t:path("aux", "bench", "bench.lua")
   local filters = os.getenv("LJ_BENCH_STOCK_FILTERS") or

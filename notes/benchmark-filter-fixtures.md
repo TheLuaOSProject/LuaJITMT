@@ -25,3 +25,11 @@ Fresh-build local checks after the change:
 - Default `LJ_TEST_DISABLE_BUILD_CACHE=1 LUA=luajit tools/ci/lua_test.sh m9_bench_stock_compare`
   reported `closures_upval` geomean `2.028078` and all default rows under the
   guard ceiling.
+
+2026-07-05 guard follow-up:
+
+- `m9_bench_stock_compare` now builds the current binary before resolving the
+  stock comparator and rejects an explicit `LJ_BENCH_STOCK_BIN` that is the same
+  file as `src/luajit`. This prevents an accidental current-vs-current
+  comparison while preserving autodetected `/usr/bin/luajit` and Homebrew stock
+  binaries.
