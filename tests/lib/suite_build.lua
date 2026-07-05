@@ -5,6 +5,7 @@ local M = {}
 
 local luajit_fixture_libs = utils.luajit_fixture_libs
 local shell_quote = utils.shell_quote
+local tab_test_helper_flag = "-DLJ_TAB_TEST_HELPERS"
 
 local function copy_run_opts(opts)
   local out = optutils.copy(opts)
@@ -46,7 +47,31 @@ end
 
 function M.clean_build(t, opts)
   opts = opts or {}
-  t:build({ clean = true, quiet = true, xcflags = opts.xcflags })
+  local quiet = opts.quiet
+  if quiet == nil then quiet = true end
+  t:build({
+    clean = true,
+    quiet = quiet,
+    jobs = opts.jobs,
+    xcflags = opts.xcflags
+  })
+end
+
+function M.tab_helper_build_opts(opts)
+  local out = optutils.copy(opts)
+  if out.clean == nil then out.clean = true end
+  if out.xcflags == nil then out.xcflags = tab_test_helper_flag end
+  return out
+end
+
+function M.tab_helper_c_opts(opts)
+  local out = optutils.copy(opts)
+  if out.cflags == nil then out.cflags = tab_test_helper_flag end
+  return out
+end
+
+function M.tab_helper_opts(opts)
+  return M.tab_helper_c_opts(M.tab_helper_build_opts(opts))
 end
 
 function M.with_default_build_restore(t, fn, opts)

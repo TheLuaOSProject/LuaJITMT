@@ -757,17 +757,10 @@ return function(add)
     name = "m5_tab_colocated_resize",
     description = "colocated array resize freezes old inline slots",
     run = function(t)
-      t:build({
-        clean = true,
-        jobs = false,
-        quiet = true,
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+      t:build(build.tab_helper_build_opts({ jobs = false, quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-tab-colocated-resize"),
-                      "t-tab-colocated-resize.c", {
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s"
-      })
+                      "t-tab-colocated-resize.c",
+                      build.tab_helper_c_opts({ timeout = "20s" }))
       print("M5 colocated array resize freeze behavior passed")
     end
   })
@@ -776,16 +769,10 @@ return function(add)
     name = "m5_tab_cas_store",
     description = "table CAS store behavior",
     run = function(t)
-      t:build({
-        clean = true,
-        quiet = true,
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+      t:build(build.tab_helper_build_opts({ quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-tab-cas-store"),
-                      "t-tab-cas-store.c", {
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s"
-      })
+                      "t-tab-cas-store.c",
+                      build.tab_helper_c_opts({ timeout = "20s" }))
       print("M5 table CAS store behavior passed")
     end
   })
@@ -794,17 +781,11 @@ return function(add)
     name = "m5_tab_value_publish",
     description = "C-side table value release-publication behavior",
     run = function(t)
-      t:build({
-        clean = true,
-        quiet = true,
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+      t:build(build.tab_helper_build_opts({ quiet = true }))
       run_luajit(t, { "-e", table_value_smoke() })
       build_and_run_c(t, t:tmp("lj_t-tab-cas-store-value"),
-                      "t-tab-cas-store.c", {
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s"
-      })
+                      "t-tab-cas-store.c",
+                      build.tab_helper_c_opts({ timeout = "20s" }))
       print("M5 table value publication behavior passed")
     end
   })
@@ -813,16 +794,11 @@ return function(add)
     name = "m5_x64_tset_nil_snapshot",
     description = "x64 TSET previous-value nil behavior",
     run = function(t)
-      t:build({
-        clean = true,
-        quiet = true,
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+      t:build(build.tab_helper_build_opts({ quiet = true }))
       run_luajit(t, { "-joff", "-e", tset_nil_smoke() })
       build_and_run_c(t, t:tmp("lj_t-x64-tset-forward"),
-                      "t-x64-tset-forward.c", {
-        cflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+                      "t-x64-tset-forward.c",
+                      build.tab_helper_c_opts())
       build_and_run_c(t, t:tmp("lj_t-x64-tset-nongc-barrier"),
                       "t-x64-tset-nongc-barrier.c", {
         libs = {

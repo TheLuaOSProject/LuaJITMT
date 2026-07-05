@@ -22,12 +22,7 @@ return function(add)
       description = "table KEYLOCK lookup filtering C fixture",
       output = "lj_t-tab-keylock-lookup",
       cfile = "t-tab-keylock-lookup.c",
-      opts = {
-        clean = true,
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s",
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      },
+      opts = build.tab_helper_opts({ timeout = "20s" }),
       message = "M5 table KEYLOCK lookup filtering tests passed"
     },
     {
@@ -75,12 +70,7 @@ return function(add)
       description = "table resize copy helper idempotence C fixture",
       output = "lj_t-tab-resize-copy-helper",
       cfile = "t-tab-resize-copy-helper.c",
-      opts = {
-        clean = true,
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s",
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      },
+      opts = build.tab_helper_opts({ timeout = "20s" }),
       message = "M5 table resize copy helper tests passed"
     },
     {
@@ -98,12 +88,8 @@ return function(add)
     description = "table structural ownership is per-table",
     run = function(t)
       build.build_and_run_c(t, t:tmp("lj_t-tab-struct-owner"),
-                            "t-tab-struct-owner.c", {
-        clean = true,
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s",
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+                            "t-tab-struct-owner.c",
+                            build.tab_helper_opts({ timeout = "20s" }))
       print("M5 per-table structural owner tests passed")
     end
   })
@@ -113,12 +99,8 @@ return function(add)
     description = "table.clear uses shared path during mt_entering",
     run = function(t)
       build.build_and_run_c(t, t:tmp("lj_t-tab-clear-entering"),
-                            "t-tab-clear-entering.c", {
-        clean = true,
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s",
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+                            "t-tab-clear-entering.c",
+                            build.tab_helper_opts({ timeout = "20s" }))
       print("M5 table.clear mt_entering route passed")
     end
   })
@@ -128,12 +110,8 @@ return function(add)
     description = "table.insert owns structure during mt_entering",
     run = function(t)
       build.build_and_run_c(t, t:tmp("lj_t-table-insert-entering"),
-                            "t-table-insert-entering.c", {
-        clean = true,
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s",
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+                            "t-table-insert-entering.c",
+                            build.tab_helper_opts({ timeout = "20s" }))
       print("M5 table.insert mt_entering route passed")
     end
   })
@@ -142,17 +120,10 @@ return function(add)
     name = "m5_tab_finreg_newkey_stale",
     description = "FINREG new-key helpers abandon stale table generations",
     run = function(t)
-      t:build({
-        clean = true,
-        jobs = false,
-        quiet = true,
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+      t:build(build.tab_helper_build_opts({ jobs = false, quiet = true }))
       build.compile_and_run_c(t, t:tmp("lj_t-tab-finreg-newkey-stale"),
-                              "t-tab-finreg-newkey-stale.c", {
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s"
-      })
+                              "t-tab-finreg-newkey-stale.c",
+                              build.tab_helper_c_opts({ timeout = "20s" }))
       print("M5 FINREG new-key stale-generation behavior passed")
     end
   })
@@ -161,17 +132,10 @@ return function(add)
     name = "m5_tab_next_snapshot",
     description = "table next cursor scans stay generation-bound across resize",
     run = function(t)
-      t:build({
-        clean = true,
-        jobs = false,
-        quiet = true,
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      })
+      t:build(build.tab_helper_build_opts({ jobs = false, quiet = true }))
       build.compile_and_run_c(t, t:tmp("lj_t-tab-next-snapshot"),
-                              "t-tab-next-snapshot.c", {
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s"
-      })
+                              "t-tab-next-snapshot.c",
+                              build.tab_helper_c_opts({ timeout = "20s" }))
       print("M5 table next snapshot behavior passed")
     end
   })

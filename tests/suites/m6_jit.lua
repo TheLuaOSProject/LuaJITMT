@@ -966,13 +966,12 @@ assert(threading.gcworkers(0) == 1)
     description = "M6 helper-backed table store behavior",
     run = function(t)
       build.make_clean(t, { quiet = true })
-      t:build({ clean = true, quiet = true, xcflags = "-DLJ_TAB_TEST_HELPERS" })
+      t:build(build.tab_helper_build_opts({ quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-jit-forward-store"),
-                      "t-jit-forward-store.c", {
+                      "t-jit-forward-store.c", build.tab_helper_c_opts({
                         build = false,
-                        cflags = "-DLJ_TAB_TEST_HELPERS",
                         timeout = "20s"
-      })
+                      }))
       luajit_code(t, table_store_smoke())
       luajit_code(t, table_read_pubroot_smoke(), { timeout = "20s" })
 
