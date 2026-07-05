@@ -165,6 +165,7 @@ enum {
 #define LJ_GC2_WORKER_DRAIN_BATCH	64u
 #define LJ_GC2_WEAK_DRAIN_BATCH		64u
 #define LJ_GC2_SWEEP_BATCH		64u
+#define LJ_GC2_ROOT_SCAN_LIMIT		1000000u
 #define LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT	80u
 
 LJ_FUNC void lj_gc2_init(global_State *g);

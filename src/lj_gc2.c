@@ -51,7 +51,6 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define GC2_WEAK_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
 #define GC2_FINCLAIM_FIXED	4096u
 #define GC2_ACTIVE_FINALIZE_COST	100
-#define GC2_ROOT_SCAN_LIMIT	1000000u
 
 typedef struct GC2FinalizerNode {
   struct GC2FinalizerNode *next;
@@ -2679,7 +2678,7 @@ static void gc2_root_spine_counts(global_State *g, uint64_t *objectsp,
     objects++;
     if (o->gch.gct == 0)
       tombstones++;
-    if (objects == GC2_ROOT_SCAN_LIMIT) {
+    if (objects == LJ_GC2_ROOT_SCAN_LIMIT) {
       capped = next != NULL;
       break;
     }
@@ -2695,7 +2694,7 @@ static uint64_t gc2_arena_list_count(GCArena *a)
   uint64_t n = 0;
   for (; a != NULL; a = lj_arena_next_acq(a)) {
     n++;
-    if (n == 1000000u)
+    if (n == LJ_GC2_ROOT_SCAN_LIMIT)
       break;
   }
   return n;
@@ -2901,7 +2900,7 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   gc2_root_spine_counts(g, &s->root_spine_objects,
 				&s->root_spine_tombstones,
 				&s->root_spine_count_capped);
-  s->root_spine_count_cap = GC2_ROOT_SCAN_LIMIT;
+  s->root_spine_count_cap = LJ_GC2_ROOT_SCAN_LIMIT;
   if (g && g->main_tg) {
     TGAlloc *alloc = &g->main_tg->alloc;
     s->arena_traversable_owned =
@@ -3133,7 +3132,7 @@ static void gc2_mark_jit_frame_funcs(global_State *g, lua_State *L)
     if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
       break;
     frame = prev;
-    if (++n >= 1000000u)
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
   }
 #else
@@ -3383,7 +3382,7 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
     gc2_scan_thread_stack(g, th);
     gc2_thread_scan_owner_needscans_add(g, 1);
 next_root:
-    if (next == o || ++n >= GC2_ROOT_SCAN_LIMIT)
+    if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
     o = next;
   }
@@ -3547,7 +3546,7 @@ static void gc2_scan_threading_states(global_State *g)
       gc2_scan_thread_stack(g, th);
     else
       lj_gc2_markobj(g, obj2gco(th));
-    if (++n >= GC2_ROOT_SCAN_LIMIT)
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
   }
 }

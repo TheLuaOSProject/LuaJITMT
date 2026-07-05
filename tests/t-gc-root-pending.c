@@ -24,7 +24,7 @@ static int root_contains(global_State *g, GCobj *needle)
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o == needle)
       return 1;
-    assert(++n < 1000000u);
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
   }
   return 0;
 }
@@ -36,7 +36,7 @@ static int pending_contains(TGState *tg, GCobj *needle)
   for (o = lj_tg_gcroot_pending_acq(tg); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o == needle)
       return 1;
-    assert(++n < 1000000u);
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
   }
   return 0;
 }
@@ -50,7 +50,7 @@ static int pending_after_main_contains(TGState *tg, GCobj *needle)
        o = lj_obj_gcw_acq(o)) {
     if (o == needle)
       return 1;
-    assert(++n < 1000000u);
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
   }
   return 0;
 }
@@ -63,7 +63,7 @@ static int after_main_contains(global_State *g, GCobj *needle)
   for (o = lj_obj_gcw_acq(main); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o == needle)
       return 1;
-    assert(++n < 1000000u);
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
   }
   return 0;
 }

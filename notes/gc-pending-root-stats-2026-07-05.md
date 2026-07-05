@@ -18,3 +18,8 @@ legacy collector is still coupled into a workload. Before changing that path,
 These fields are intentionally observability-only. They do not add locking or a
 new collection path; they make pending-root pressure and legacy-root-spine
 growth measurable before replacing the underlying bottleneck.
+
+The `LJ_GC2_ROOT_SCAN_LIMIT` ceiling is for diagnostics and defensive scans
+where returning a capped count is acceptable. Semantic walks that preserve or
+mark live objects must walk the entire legacy ownership spine; otherwise a large
+but valid heap could lose objects past the diagnostic limit.

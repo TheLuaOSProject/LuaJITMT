@@ -169,7 +169,6 @@ static int gc_arena_sweep_pending(global_State *g)
 static void gc_arena_preserve_root_chain(global_State *g)
 {
   GCobj *o;
-  uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     /*
@@ -180,10 +179,6 @@ static void gc_arena_preserve_root_chain(global_State *g)
     ** roots are therefore traced immediately before owner sweep reuses cells.
     */
     (void)lj_gc2_preserve_sweep_root(g, o);
-    if (++n == 1000000u) {
-      lj_assertG(0, "root list cycle at arena sweep boundary");
-      break;
-    }
   }
 }
 
@@ -853,7 +848,7 @@ static void gc_mark_threading_states(global_State *g)
     */
     if (lj_state_owner_acq(th) == 0)
       gc_traverse_thread(g, th);
-    if (++n >= 1000000u)
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
   }
 }
@@ -958,15 +953,19 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
 {
   GCobj *o;
   StrTabHdr *hdr;
-  uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
+  /*
+  ** This is a semantic mark bridge, not a diagnostic count. Walk the full
+  ** legacy ownership spine so large heaps do not lose live objects merely
+  ** because the stats path caps its root-spine count.
+  */
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     uint8_t flags;
     if (LJ_UNLIKELY(o->gch.gct == 0))
-      goto next;
+      continue;
     flags = lj_obj_gcflags(o);
     if (iswhite(o) && !(flags & (LJ_GC_FIXED|LJ_GC_SFIXED)))
-      goto next;
+      continue;
     (void)lj_gc2_markobj_nolegacy(g, o);
     if (o->gch.gct == ~LJ_TTAB) {
       GCtab *t = gco2tab(o);
@@ -979,9 +978,6 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
       if (hmask > 0)
 	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
     }
-next:
-    if (++n >= 1000000u)
-      break;
   }
   hdr = lj_str_tabh_acq(g);
   if (hdr) {
@@ -1406,7 +1402,7 @@ static void gc_mark_jit_frame_funcs(global_State *g, lua_State *th)
     if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
       break;
     frame = prev;
-    if (++n >= 1000000u)
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
   }
 #else
