@@ -84,3 +84,10 @@ do not change test ordering, rebuild policy, runtime behavior, or stock
 semantics expectations. `m0_build_profile_helpers` covers the helper contracts
 directly, while the downstream M2/M3/M5/M6/M7/M8 cases continue to cover the
 actual profile builds.
+
+## Harness Output Helpers
+
+Removed the unused `suite_utils.capture_lines()` splitter. Command-output tests
+already use `suite_assert.output_lines()` or the `assert_command_output_*`
+helpers, so keeping a second splitter only made future harness behavior harder
+to audit. No test behavior changes; this removes dead harness surface area.

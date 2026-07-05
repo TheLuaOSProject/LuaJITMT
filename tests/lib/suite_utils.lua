@@ -236,23 +236,6 @@ function M.assert_command_fails(cmd)
   end
 end
 
-function M.capture_lines(cmd)
-  local out = {}
-  local data = M.capture_command(cmd)
-  local pos = 1
-  while pos <= #data do
-    local nl = data:find("\n", pos, true)
-    if nl then
-      out[#out + 1] = data:sub(pos, nl - 1)
-      pos = nl + 1
-    else
-      out[#out + 1] = data:sub(pos)
-      break
-    end
-  end
-  return out
-end
-
 function M.lua_path(root)
   return root .. "/src/?.lua;" .. root .. "/src/jit/?.lua;;"
 end
