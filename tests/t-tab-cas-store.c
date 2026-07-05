@@ -600,7 +600,7 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
 {
   GCtab *t;
   TValue *oldarray, *newarray;
-  TValue src[3], srcjit, oldval;
+  TValue src[3], srcjit;
   TValue *stored;
   uint32_t wait0;
   MSize oldasize, newasize;
@@ -639,10 +639,8 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   lj_tab_storetvn_forvm_array(L, t, (uint32_t)start, src, 3);
   wait0 = lj_tab_test_wait_no_l_calls();
   assert(wait0 == 0);
-  for (i = 0; i < 3; i++) {
-    lj_tv_load_acq(&oldval, &oldarray[start + i]);
-    assert(tvisforward(&oldval));
-  }
+  for (i = 0; i < 3; i++)
+    tabfwd_assert_i32(&oldarray[start + i], (int32_t)(start + i) + 8100);
   tabfwd_assert_i32(&newarray[start], 8181);
   tabfwd_assert_i32(&newarray[start + 1], 8282);
   tabfwd_assert_i32(&newarray[start + 2], 8383);
@@ -654,7 +652,7 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
 					    &srcjit, (MSize)jitkey);
   assert(lj_tab_test_wait_no_l_calls() == wait0);
   assert(stored == &newarray[jitkey]);
-  tabfwd_assert_forward(&oldarray[jitkey]);
+  tabfwd_assert_i32(&oldarray[jitkey], jitkey + 9000);
   tabfwd_assert_i32(&newarray[jitkey], 8484);
 
   lj_tab_array_rel(t, newarray);

@@ -3477,17 +3477,21 @@ static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
     if (!tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
 		       asize, &idx))
       return dst;
-    if (retiring) {
-      TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize, idx);
-      if (slot)
-	return slot;
-    }
+    /*
+    ** Store helpers try the successor hop before resize assist so an ordinary
+    ** old slot can remain a GC-visible edge; assist may turn it into FORWARD.
+    */
     if (tvisforward(&val) ?
 	lj_tab_array_forward_hop_forward(parent, &array, &asize) :
 	tab_array_forward_hop_writer(parent, &array, &asize)) {
       if (idx < asize)
 	return &array[idx];
       return lj_tab_setinth(L, parent, (int32_t)key);
+    }
+    if (retiring) {
+      TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize, idx);
+      if (slot)
+	return slot;
     }
     if (retiring && lj_tab_array_acq(parent) == array) {
       lj_tab_store_wait_l(L);
@@ -3570,14 +3574,17 @@ static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
       if (lj_tab_array_is_retiring(parent, array)) {
 	TValue *next = array;
 	MSize nextasize = asize;
-	TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize,
-						    idx);
-	if (slot)
-	  return slot;
+	/* Keep the writer-hop-before-assist ordering from above. */
 	if (tab_array_forward_hop_writer(parent, &next, &nextasize)) {
 	  if (idx < nextasize)
 	    return &next[idx];
 	  return lj_tab_setinth(L, parent, (int32_t)key);
+	}
+	{
+	  TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize,
+						      idx);
+	  if (slot)
+	    return slot;
 	}
 	lj_tab_store_wait_l(L);
 	continue;
@@ -3872,18 +3879,19 @@ static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
 	lj_tv_load_acq(&val, &array[key]);
 	observed_forward = tvisforward(&val);
       }
+      /* Store helpers preserve ordinary old slots; assist may forward them. */
+      if (observed_forward ?
+	  lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
+	  tab_array_forward_hop_writer(parent, &next, &nextasize)) {
+	if (key < nextasize)
+	  return &next[key];
+	return lj_tab_setinth(L, parent, (int32_t)key);
+      }
       if (key < asize) {
 	TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize,
 						    key);
 	if (slot)
 	  return slot;
-      }
-      if (observed_forward ?
-	  lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
-	  lj_tab_array_forward_hop(parent, &next, &nextasize)) {
-	if (key < nextasize)
-	  return &next[key];
-	return lj_tab_setinth(L, parent, (int32_t)key);
       }
     }
   }

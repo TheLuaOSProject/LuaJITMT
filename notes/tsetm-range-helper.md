@@ -84,3 +84,22 @@ Validation:
 Validation:
 
 - `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m5_tab_cas_store`
+
+## 2026-07-05 current-retiring writer-hop ordering
+
+- `tab_current_vm_array_key_slot()` now follows the same rule as the JIT array
+  store helpers: for a current RETIRING separated array, try the writer-only
+  `next_gen` hop before resize assist.
+- This matters because resize assist may replace an ordinary old live slot with
+  `FORWARD`. Store helpers do not need that handoff marker to publish into the
+  successor; they can write the successor slot directly and keep the old slot as
+  a GC-visible edge.
+- `t-tab-cas-store.c` and `t-x64-tset-forward.c` now distinguish explicit
+  `FORWARD` old slots from ordinary old slots. Explicit `FORWARD` slots remain
+  forwarded; ordinary old slots remain unchanged while the successor receives
+  the VM/JIT store.
+
+Validation:
+
+- `tools/ci/lua_test.sh m5_tab_cas_store`
+- `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot m6_jit_table_store_helper`
