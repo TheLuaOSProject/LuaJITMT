@@ -17,6 +17,7 @@
 #include "lj_ctype.h"
 #include "lj_cdata.h"
 #include "lj_cconv.h"
+#include "lj_str.h"
 #include "lj_tg.h"
 
 #include "lib/ctype_parse_fixture_helpers.h"
@@ -143,6 +144,34 @@ static void assert_enum_cconv_waits_without_lock(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
+static void assert_enum_snapshot_direct(lua_State *L, CTState *cts)
+{
+  CTypeID id, rid, cid = 0;
+  CType *ct;
+  CTSize val = 0;
+  GCstr *hit = lj_str_newz(L, "LJ_M7_ENUM_B");
+  GCstr *miss = lj_str_newz(L, "NO_SUCH_ENUM_CONSTANT");
+  uint32_t release_seq;
+
+  lua_getglobal(L, "lj_m7_enum_snapshot_ct");
+  assert(tviscdata(L->top - 1));
+  id = *(CTypeID *)cdataptr(cdataV(L->top - 1));
+  L->top--;
+  rid = ctype_rawid(cts, id);
+  ct = ctype_get(cts, rid);
+
+  assert(lj_ctype_enumconst_snapshot(cts, ct, hit, &val, &cid) == 1);
+  assert(val == 7);
+  assert(cid != 0);
+  val = 123;
+  cid = 456;
+  assert(lj_ctype_enumconst_snapshot(cts, ct, miss, &val, &cid) == 0);
+
+  release_seq = ljt_ctype_hold_parse_token(cts);
+  assert(lj_ctype_enumconst_snapshot(cts, ct, hit, &val, &cid) == -1);
+  ljt_ctype_release_parse_token(cts, release_seq);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -163,6 +192,10 @@ int main(void)
   tg = L2TG(L);
   assert(tg != NULL);
   seq0 = ljt_ctype_parse_seq(cts);
+  assert_enum_snapshot_direct(L, cts);
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 2u);
+  seq0 = seq1;
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"

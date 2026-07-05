@@ -1830,70 +1830,12 @@ int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id, CTSize *szp)
   }
 }
 
-/* Sequence-checked enum string constant lookup for stable readers. */
-int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
-				GCstr *name, CTSize *valp, CTypeID *cidp)
+static int ctype_enumconst_snapshot_chain(CTState *cts, CTypeTab *tabh,
+					  CTypeID top, CTypeID id,
+					  uint32_t seq0, GCstr *name,
+					  CTSize *valp, CTypeID *cidp)
 {
-  uint32_t seq0 = ctype_parse_token_acq(cts);
-  CTypeTab *tabh;
-  CTypeID top, id;
-  MSize budget;
-  if (seq0 & 1u)
-    return -1;
-  if (!ctype_isenum(ctype_info_acq(root)))
-    return ctype_snapshot_done(cts, seq0, 0);
-  id = ctype_sib_acq(root);
-  top = ctype_top_acq(cts);
-  tabh = ctype_tabh_acq(cts);
-  budget = top ? (MSize)top * 2u : 1u;
-  while (id) {
-    CType *ct;
-    CTInfo info;
-    CTSize size;
-    GCobj *gco;
-    if (id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
-      return -1;
-    if (budget-- == 0)
-      return -1;
-    ct = ctype_tab_slot(tabh, id);
-    info = ctype_info_acq(ct);
-    size = ctype_size_acq(ct);
-    gco = ctype_nameobj_acq(ct);
-    if (ctype_isabandoned(info))
-      return ctype_snapshot_done(cts, seq0, 0);
-    if (gco == obj2gco(name) && ctype_isconstval(info)) {
-      uint32_t seq1;
-      *valp = size;
-      *cidp = ctype_cid(info);
-      seq1 = ctype_parse_token_acq(cts);
-      return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
-    }
-    id = ctype_sib_acq(ct);
-  }
-  {
-    return ctype_snapshot_done(cts, seq0, 0);
-  }
-}
-
-static int ctype_enumconst_snapshot_id(CTState *cts, CTypeID rootid,
-				       GCstr *name, CTSize *valp,
-				       CTypeID *cidp)
-{
-  uint32_t seq0 = ctype_parse_token_acq(cts);
-  CTypeTab *tabh;
-  CTypeID top, id;
-  CType root;
-  MSize budget;
-  if (seq0 & 1u)
-    return -1;
-  top = ctype_top_acq(cts);
-  tabh = ctype_tabh_acq(cts);
-  if (!ctype_snapshot_copy(tabh, top, rootid, &root))
-    return ctype_snapshot_done(cts, seq0, 0);
-  if (!ctype_isenum(ctype_info_acq(&root)))
-    return ctype_snapshot_done(cts, seq0, 0);
-  id = ctype_sib_acq(&root);
-  budget = top ? (MSize)top * 2u : 1u;
+  MSize budget = top ? (MSize)top * 2u : 1u;
   while (id) {
     CType *ct;
     CTInfo info;
@@ -1917,6 +1859,45 @@ static int ctype_enumconst_snapshot_id(CTState *cts, CTypeID rootid,
     id = ctype_sib_acq(ct);
   }
   return ctype_snapshot_done(cts, seq0, 0);
+}
+
+/* Sequence-checked enum string constant lookup for stable readers. */
+int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
+				GCstr *name, CTSize *valp, CTypeID *cidp)
+{
+  uint32_t seq0 = ctype_parse_token_acq(cts);
+  CTypeTab *tabh;
+  CTypeID top, id;
+  if (seq0 & 1u)
+    return -1;
+  if (!ctype_isenum(ctype_info_acq(root)))
+    return ctype_snapshot_done(cts, seq0, 0);
+  id = ctype_sib_acq(root);
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  return ctype_enumconst_snapshot_chain(cts, tabh, top, id, seq0, name,
+					valp, cidp);
+}
+
+static int ctype_enumconst_snapshot_id(CTState *cts, CTypeID rootid,
+				       GCstr *name, CTSize *valp,
+				       CTypeID *cidp)
+{
+  uint32_t seq0 = ctype_parse_token_acq(cts);
+  CTypeTab *tabh;
+  CTypeID top, id;
+  CType root;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  if (!ctype_snapshot_copy(tabh, top, rootid, &root))
+    return ctype_snapshot_done(cts, seq0, 0);
+  if (!ctype_isenum(ctype_info_acq(&root)))
+    return ctype_snapshot_done(cts, seq0, 0);
+  id = ctype_sib_acq(&root);
+  return ctype_enumconst_snapshot_chain(cts, tabh, top, id, seq0, name,
+					valp, cidp);
 }
 
 int lj_ctype_enumconst_wait(lua_State *L, CTState *cts, CTypeID rootid,
