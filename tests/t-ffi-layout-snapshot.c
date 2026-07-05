@@ -5,11 +5,12 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -36,14 +37,6 @@ static void init_abandoned_ctype(CType *ct)
   ctype_clearname(ct);
 }
 
-static void sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = ns / 1000000000l;
-  ts.tv_nsec = ns % 1000000000l;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
 
 static void *release_parse_token(void *arg)
 {

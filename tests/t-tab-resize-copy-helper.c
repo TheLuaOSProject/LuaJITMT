@@ -7,10 +7,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_str.h"
@@ -21,14 +22,6 @@ typedef struct KeyPublishCtx {
   TValue key;
 } KeyPublishCtx;
 
-static void sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = ns / 1000000000l;
-  ts.tv_nsec = ns % 1000000000l;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
 
 static void *publish_key_after_delay(void *arg)
 {

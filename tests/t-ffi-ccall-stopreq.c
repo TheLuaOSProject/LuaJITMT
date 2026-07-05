@@ -7,11 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_safepoint.h"
@@ -24,14 +25,6 @@ typedef struct CCallStopReqCtx {
   uint32_t saw_native;
 } CCallStopReqCtx;
 
-static void sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = ns / 1000000000L;
-  ts.tv_nsec = ns % 1000000000L;
-  while (nanosleep(&ts, &ts) != 0)
-    ;
-}
 
 static void clear_stopreq(TGState *tg)
 {

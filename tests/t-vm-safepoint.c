@@ -6,11 +6,12 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -104,14 +105,6 @@ typedef struct TracePollPublisher {
   uint32_t start;
 } TracePollPublisher;
 
-static void sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = 0;
-  ts.tv_nsec = ns;
-  while (nanosleep(&ts, &ts) != 0) {
-  }
-}
 
 static void *trace_poll_publisher(void *arg)
 {

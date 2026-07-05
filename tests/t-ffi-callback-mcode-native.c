@@ -8,11 +8,12 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/types.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -39,14 +40,6 @@ static uint32_t pause_kind;
 static uint32_t pause_seen;
 static uint32_t pause_release;
 
-static void sleep_ns(long ns)
-{
-  struct timespec ts;
-  ts.tv_sec = ns / 1000000000L;
-  ts.tv_nsec = ns % 1000000000L;
-  while (nanosleep(&ts, &ts) != 0) {
-  }
-}
 
 static void maybe_pause_native(uint32_t kind)
 {
