@@ -43,3 +43,11 @@ retired head, next link, retire epoch, and armed bit. The typed accessors and
 push loops now use local macro generators for those identical parts, while the
 payload fields, free checks, and reclaim loops stay explicit for node and array
 ownership semantics.
+
+## FFI Parser-Token Fixtures
+
+Several M7 FFI snapshot fixtures repeated the same parser-token release worker:
+hold `CTState.parse_token`, wait until the tested thread reaches native wait,
+release the token, then assert the sequence advanced. The shared
+`ctype_parse_fixture_helpers.h` helper now owns that pattern, so snapshot tests
+keep the same nonblocking wait assertion without local copies.

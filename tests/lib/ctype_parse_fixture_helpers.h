@@ -6,6 +6,7 @@
 #define TESTS_LIB_CTYPE_PARSE_FIXTURE_HELPERS_H
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -13,7 +14,10 @@
 
 #include "lj_atomic.h"
 #include "lj_ctype.h"
+#include "lj_tg.h"
 #include "lj_trace.h"
+
+#include "test_sleep.h"
 
 static CTState *ljt_ctype_release_cts;
 static uint32_t ljt_ctype_release_seq;
@@ -45,6 +49,49 @@ static inline void ljt_ctype_release_parse_token(CTState *cts, uint32_t seq)
   ctype_parse_token_rel(cts, seq);
   (void)ctype_parse_token_wake(cts, 0x7fffffff);
   assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
+typedef struct LJTCTypeParseReleaseCtx {
+  CTState *cts;
+  TGState *tg;
+  uint32_t release_seq;
+  int saw_native;
+} LJTCTypeParseReleaseCtx;
+
+static inline void *ljt_ctype_release_parse_token_when_native(void *arg)
+{
+  LJTCTypeParseReleaseCtx *ctx = (LJTCTypeParseReleaseCtx *)arg;
+  int spins;
+  for (spins = 0; spins < 1000; spins++) {
+    if (lj_tg_in_native_acq(ctx->tg)) {
+      ctx->saw_native = 1;
+      break;
+    }
+    sleep_ns(1000000);
+  }
+  ljt_ctype_release_parse_token(ctx->cts, ctx->release_seq);
+  return NULL;
+}
+
+static inline void ljt_ctype_release_when_native_start(
+  LJTCTypeParseReleaseCtx *ctx, pthread_t *thread, CTState *cts, TGState *tg)
+{
+  uint32_t seq0 = ljt_ctype_parse_seq(cts);
+  ctx->cts = cts;
+  ctx->tg = tg;
+  ctx->release_seq = ljt_ctype_hold_parse_token(cts);
+  ctx->saw_native = 0;
+  assert(ctx->release_seq == seq0 + 2u);
+  assert(pthread_create(thread, NULL, ljt_ctype_release_parse_token_when_native,
+			ctx) == 0);
+}
+
+static inline void ljt_ctype_release_when_native_join(
+  LJTCTypeParseReleaseCtx *ctx, pthread_t thread)
+{
+  assert(pthread_join(thread, NULL) == 0);
+  assert(ctx->saw_native);
+  assert(ljt_ctype_parse_seq(ctx->cts) == ctx->release_seq);
 }
 
 static inline void ljt_ctype_arm_release_hook(CTState *cts, uint32_t seq)
