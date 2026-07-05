@@ -65,7 +65,7 @@ static GCupval *new_legacy_capture(lua_State *L, GCproto *pt, TValue *base)
 {
   GCfunc *parent = top_lfunc(L);
   GCfunc *fn = lj_func_newL_gc_forjit(L, base, pt, &parent->l);
-  assert(fn->l.nupvalues == 1);
+  assert(lj_funcL_nupvalues(&fn->l) == 1);
   return func_uv_acq(&fn->l, 0);
 }
 #endif

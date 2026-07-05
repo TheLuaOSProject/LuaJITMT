@@ -66,7 +66,8 @@ static TValue *index2adr(lua_State *L, int idx)
       return o;
     } else {
       idx = LUA_GLOBALSINDEX - idx;
-      return idx <= fn->c.nupvalues ? &fn->c.upvalue[idx-1] : niltv(L);
+      return (uint32_t)idx <= lj_funcC_nupvalues(&fn->c) ?
+	     &fn->c.upvalue[idx-1] : niltv(L);
     }
   }
 }
@@ -1685,10 +1686,12 @@ LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
   fn = funcV(index2adr_read(L, idx, &snap));
   n--;
   if (isluafunc(fn)) {
-    lj_checkapi((uint32_t)n < fn->l.nupvalues, "bad upvalue %d", n+1);
+    lj_checkapi((uint32_t)n < lj_funcL_nupvalues(&fn->l),
+		"bad upvalue %d", n+1);
     id = (void *)func_uvptr_acq(&fn->l, (uint32_t)n);
   } else {
-    lj_checkapi((uint32_t)n < fn->c.nupvalues, "bad upvalue %d", n+1);
+    lj_checkapi((uint32_t)n < lj_funcC_nupvalues(&fn->c),
+		"bad upvalue %d", n+1);
     id = (void *)&fn->c.upvalue[n];
   }
   lj_state_dropclaim(&claim);
@@ -1708,8 +1711,10 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
   n1--; n2--;
   lj_checkapi(isluafunc(fn1), "stack slot %d is not a Lua function", idx1);
   lj_checkapi(isluafunc(fn2), "stack slot %d is not a Lua function", idx2);
-  lj_checkapi((uint32_t)n1 < fn1->l.nupvalues, "bad upvalue %d", n1+1);
-  lj_checkapi((uint32_t)n2 < fn2->l.nupvalues, "bad upvalue %d", n2+1);
+  lj_checkapi((uint32_t)n1 < lj_funcL_nupvalues(&fn1->l),
+	      "bad upvalue %d", n1+1);
+  lj_checkapi((uint32_t)n2 < lj_funcL_nupvalues(&fn2->l),
+	      "bad upvalue %d", n2+1);
   {
     GCobj *uv = func_uvptr_acq(&fn2->l, (uint32_t)n2);
     GCobj *old = func_uvptr_acq(&fn1->l, (uint32_t)n1);

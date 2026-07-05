@@ -272,7 +272,7 @@ static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
 
 static void func_uvmeta(GCupval *uv, GCfuncL *parent, uint32_t v)
 {
-  uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
+  uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1) ? LJ_UV_IMMUTABLE : 0;
   uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
 }
 
@@ -521,18 +521,29 @@ static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)
 	 g->allocd == &tg->allocd;
 }
 
+static LJ_AINLINE void func_bump_mark_arena_owned(GCobj *o)
+{
+  if (o->gch.gct == ~LJ_TFUNC)
+    lj_funcL_setarenaowned(&gco2func(o)->l);
+  else if (o->gch.gct == ~LJ_TUPVAL)
+    lj_uv_setarenaowned(gco2uv(o));
+}
+
 static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
 					     GCobj *o)
 {
   if (func_bump_arena_owned_active(g, tg)) {
     /*
-    ** Active black bump allocation sets the arena mark bit at birth. FNEW
-    ** closures/upvalues have no finalizer-side legacy ownership requirement.
-    ** Standalone GC2 can therefore own them through the arena bitmap instead
-    ** of publishing each allocation to the global legacy root spine. Coupled
-    ** legacy mark cycles still use pending roots because the legacy sweeper
-    ** remains authoritative for graph ownership until that collector is gone.
+    ** Active black bump allocation sets the arena mark bit at birth. Fresh
+    ** FNEW closures/upvalues are ordinary graph objects with no finalizer-side
+    ** legacy ownership requirement, so the arena bitmap can own their body
+    ** lifetime instead of pushing every allocation through the global root
+    ** spine. The type-local arena-owned marker distinguishes that narrow state
+    ** from root-spine objects whose nextgc link can legitimately be NULL.
+    ** Coupled legacy mark cycles still publish roots until legacy
+    ** preservation/normalization can also cover non-spine arena-owned bodies.
     */
+    func_bump_mark_arena_owned(o);
     lj_obj_setgcwnullrel(o);
     return;
   }
@@ -545,9 +556,12 @@ static LJ_AINLINE void func_bump_publish_pair(global_State *g, TGState *tg,
   if (func_bump_arena_owned_active(g, tg)) {
     /*
     ** Both cells were reserved from one traversable arena run and marked black
-    ** before publication. Clearing next links keeps the object headers clean
-    ** while avoiding one pending-root push per traced one-upvalue closure.
+    ** before publication. Each body carries its own arena-owned marker so
+    ** unmarked GC2 arena sweep can destruct dead FNEW cells without touching
+    ** the legacy root spine.
     */
+    func_bump_mark_arena_owned(head);
+    func_bump_mark_arena_owned(tail);
     lj_obj_setgcwnullrel(head);
     lj_obj_setgcwnullrel(tail);
     return;
@@ -844,7 +858,7 @@ GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env)
   for (i = 0; i < nuv; i++) {
     GCupval *uv = func_newuvclosed(L);
     int32_t v = proto_uv(pt)[i];
-    uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
+    uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1) ? LJ_UV_IMMUTABLE : 0;
     uv->dhash = (uint32_t)(uintptr_t)pt ^ (v << 24);
     setgcrefrel(fn->l.uvptr[i], obj2gco(uv));
     lj_gc_pubobjobj(L, fn, uv);
@@ -980,8 +994,8 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
 
 void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *fn)
 {
-  MSize size = isluafunc(fn) ? sizeLfunc((MSize)fn->l.nupvalues) :
-			       sizeCfunc((MSize)fn->c.nupvalues);
+  MSize size = isluafunc(fn) ? sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)) :
+				       sizeCfunc((MSize)lj_funcC_nupvalues(&fn->c));
   if (!lj_mem_freegco_defer(g, fn, size))
     lj_mem_free(g, fn, size);
 }

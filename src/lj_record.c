@@ -2429,7 +2429,7 @@ static int rec_cdata_constify(jit_State *J, GCcdata *cd)
 /* Check whether upvalue is immutable and ok to constify. */
 static int rec_upvalue_constify(jit_State *J, GCupval *uvp)
 {
-  if (uvp->immutable) {
+  if (lj_uv_immutable(uvp)) {
     cTValue *o = uvval(uvp);
     /* Don't constify objects that may retain large amounts of memory. */
 #if LJ_HASFFI
@@ -2460,7 +2460,7 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
   if (val == 0 && proto_celluv(J->pt) &&
       (proto_uv(J->pt)[uv] & PROTO_UV_LOCAL) && tvisfunc(uvval(uvp)))
     goto noconstify;
-  if (val == 0 && uvp->immutable && tvisfunc(uvval(uvp)) &&
+  if (val == 0 && lj_uv_immutable(uvp) && tvisfunc(uvval(uvp)) &&
       funcV(uvval(uvp)) == J->fn)
     return fn;
   if (rec_upvalue_constify(J, uvp)) {  /* Try to constify immutable upvalue. */

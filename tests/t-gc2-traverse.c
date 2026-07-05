@@ -580,7 +580,7 @@ static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
   fn = funcV(L->top - 2);
   old = tabV(L->top - 1);
   assert(isluafunc(fn));
-  assert(fn->l.nupvalues == 1);
+  assert(lj_funcL_nupvalues(&fn->l) == 1);
   uv = gco2uv(gcref(fn->l.uvptr[0]));
   assert(uv->closed);
   assert(uvval(uv) == &uv->tv);
@@ -893,7 +893,7 @@ static void test_lua_closure_constructor_publish_barrier(lua_State *L,
   assert(isluafunc(fn));
   assert(lj_gc2_ismarked(g, obj2gco(fn)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(funcproto(fn))) == 1);
-  assert(fn->l.nupvalues == 1);
+  assert(lj_funcL_nupvalues(&fn->l) == 1);
   uv = &gcref(fn->l.uvptr[0])->uv;
   assert(lj_gc2_ismarked(g, obj2gco(uv)) == 1);
   flush_and_drain(g, tg);
@@ -1224,7 +1224,7 @@ static void test_jit_upvalue_barrier(lua_State *L, global_State *g,
   fn = funcV(L->top - 2);
   old = tabV(L->top - 1);
   assert(isluafunc(fn));
-  assert(fn->l.nupvalues == 1);
+  assert(lj_funcL_nupvalues(&fn->l) == 1);
   uv = gco2uv(gcref(fn->l.uvptr[0]));
   assert(uv->closed);
   assert(tabV(uvval(uv)) == old);

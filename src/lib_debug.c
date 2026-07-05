@@ -321,7 +321,7 @@ LJLIB_CF(debug_upvalueid)
 {
   GCfunc *fn = lj_lib_checkfunc(L, 1);
   int32_t n = lj_lib_checkint(L, 2) - 1;
-  MSize nupvalues = isluafunc(fn) ? fn->l.nupvalues : fn->c.nupvalues;
+  MSize nupvalues = (MSize)lj_func_nupvalues(fn);
   if ((uint32_t)n >= nupvalues)
     lj_err_arg(L, 2, LJ_ERR_IDXRNG);
   lua_pushlightuserdata(L, isluafunc(fn) ?
@@ -341,7 +341,7 @@ LJLIB_CF(debug_upvaluejoin)
     if (!isluafunc(fn[i]))
       lj_err_arg(L, 2*i+1, LJ_ERR_NOLFUNC);
     n = lj_lib_checkint(L, 2*i+2) - 1;
-    if ((uint32_t)n >= fn[i]->l.nupvalues)
+    if ((uint32_t)n >= lj_funcL_nupvalues(&fn[i]->l))
       lj_err_arg(L, 2*i+2, LJ_ERR_IDXRNG);
     p[i] = &fn[i]->l.uvptr[n];
   }

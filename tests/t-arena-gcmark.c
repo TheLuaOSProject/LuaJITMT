@@ -212,7 +212,7 @@ int main(void)
   assert(tvisfunc(tv));
   fn = funcV(tv);
   assert(isluafunc(fn));
-  assert(fn->l.nupvalues == 1);
+  assert(lj_funcL_nupvalues(&fn->l) == 1);
   uv = gco2uv(gcref(fn->l.uvptr[0]));
   assert(uv->closed);
   assert(uvval(uv) == &uv->tv);

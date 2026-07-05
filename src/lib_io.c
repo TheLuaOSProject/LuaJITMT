@@ -504,7 +504,7 @@ static int io_file_iter(lua_State *L)
   GCfunc *fn = curr_func(L);
   TValue fileuv;
   IOFileUD *iof;
-  int n = fn->c.nupvalues - 1;
+  int n = (int)lj_funcC_nupvalues(&fn->c) - 1;
   int i;
   lj_tv_load_acq(&fileuv, &fn->c.upvalue[0]);
   if (!tvisudata(&fileuv) ||

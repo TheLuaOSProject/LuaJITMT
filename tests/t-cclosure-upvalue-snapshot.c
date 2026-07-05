@@ -56,6 +56,13 @@ static int dummy_c(lua_State *L)
   return 0;
 }
 
+static int high_count_probe_c(lua_State *L)
+{
+  int idx = (int)luaL_checkinteger(L, 1);
+  lua_pushvalue(L, lua_upvalueindex(idx));
+  return 1;
+}
+
 static int meta_tostring_c(lua_State *L)
 {
   (void)L;
@@ -606,6 +613,37 @@ static void exercise_nested_upvalue_apis(lua_State *L)
   lua_settop(L, base);
 }
 
+static void exercise_high_count_cclosure(lua_State *L)
+{
+  enum { HIGH_C_NUP = 130 };
+  int base = lua_gettop(L);
+  int i;
+
+  assert(lua_checkstack(L, HIGH_C_NUP + 8));
+  for (i = 1; i <= HIGH_C_NUP; i++)
+    lua_pushinteger(L, i);
+  lua_pushcclosure(L, high_count_probe_c, HIGH_C_NUP);
+  lua_pushvalue(L, -1);
+  lua_setglobal(L, "lj_m5_high_cclosure");
+
+  check_lua(L, luaL_dostring(L,
+    "local f = assert(lj_m5_high_cclosure)\n"
+    "assert(debug.getinfo(f, 'u').nups == 130)\n"
+    "assert(f(1) == 1)\n"
+    "assert(f(128) == 128)\n"
+    "assert(f(130) == 130)\n"
+    "local name, value = debug.getupvalue(f, 130)\n"
+    "assert(name == '' and value == 130)\n"
+    "assert(debug.getupvalue(f, 131) == nil)\n"
+    "assert(debug.upvalueid(f, 130) ~= nil)\n"
+    "assert(not pcall(debug.upvalueid, f, 131))\n"),
+    "high-count C closure upvalues");
+
+  lua_pushnil(L);
+  lua_setglobal(L, "lj_m5_high_cclosure");
+  lua_settop(L, base);
+}
+
 static void exercise_upvalue_store_apis(lua_State *L)
 {
   int base = lua_gettop(L);
@@ -771,6 +809,7 @@ int main(void)
   exercise_metatable_apis(L);
   exercise_function_env_apis(L);
   exercise_nested_upvalue_apis(L);
+  exercise_high_count_cclosure(L);
   exercise_upvalue_store_apis(L);
   exercise_udata_api(L);
   exercise_callmeta_api(L);

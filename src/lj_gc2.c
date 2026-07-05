@@ -7011,7 +7011,7 @@ static GCproto *gc2_func_proto_for_traverse(global_State *g, GCfunc *fn)
 {
   const char *pc;
   GCproto *pt;
-  if (!fn || !isluafunc(fn) || fn->l.nupvalues > LJ_MAX_UPVAL)
+  if (!fn || !isluafunc(fn) || lj_funcL_nupvalues(&fn->l) > LJ_MAX_UPVAL)
     return NULL;
   pc = mref(fn->l.pc, const char);
   if (!pc || !checkptrGC(pc))
@@ -7019,7 +7019,7 @@ static GCproto *gc2_func_proto_for_traverse(global_State *g, GCfunc *fn)
   pt = (GCproto *)(void *)(pc - sizeof(GCproto));
   if (!gc2_valid_proto_for_traverse(g, pt))
     return NULL;
-  if (fn->l.nupvalues > pt->sizeuv)
+  if (lj_funcL_nupvalues(&fn->l) > pt->sizeuv)
     return NULL;
   return pt;
 }
@@ -7031,18 +7031,18 @@ static void gc2_traverse_func(global_State *g, GCfunc *fn)
     gc2_markobj_worker(g, obj2gco(env));
   if (isluafunc(fn)) {
     GCproto *pt = gc2_func_proto_for_traverse(g, fn);
-    uint32_t i;
+    uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
     if (LJ_UNLIKELY(!pt))
       return;
     gc2_markobj_worker(g, obj2gco(pt));
-    for (i = 0; i < fn->l.nupvalues; i++) {
+    for (i = 0; i < nup; i++) {
       GCobj *uv = obj2gco(func_uv_acq(&fn->l, i));
       if (uv && uv->gch.gct == ~LJ_TUPVAL)
 	gc2_markobj_worker(g, uv);
     }
   } else {
-    uint32_t i;
-    for (i = 0; i < fn->c.nupvalues; i++) {
+    uint32_t i, nup = lj_funcC_nupvalues(&fn->c);
+    for (i = 0; i < nup; i++) {
       TValue tv;
       lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
       gc2_mark_tv_worker(g, &tv);

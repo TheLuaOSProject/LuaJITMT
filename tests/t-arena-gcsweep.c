@@ -474,7 +474,7 @@ int main(void)
   fn = funcV(tv);
   assert(isluafunc(fn));
   deadchunk = fn;
-  deadchunk_size = sizeLfunc((MSize)deadchunk->l.nupvalues);
+  deadchunk_size = sizeLfunc((MSize)lj_funcL_nupvalues(&deadchunk->l));
   deadpt = funcproto(fn);
   deadpt_size = deadpt->sizept;
   assert(ptr_state(deadchunk) == 2);
@@ -486,7 +486,7 @@ int main(void)
   assert(tvisfunc(tv));
   deadfn = funcV(tv);
   assert(isluafunc(deadfn));
-  deadfn_size = sizeLfunc((MSize)deadfn->l.nupvalues);
+  deadfn_size = sizeLfunc((MSize)lj_funcL_nupvalues(&deadfn->l));
   deadfnpt = funcproto(deadfn);
   assert(ptr_state(deadfn) == 2);
   assert(ptr_state(deadfnpt) == 2);
@@ -506,8 +506,8 @@ int main(void)
   assert(tvisfunc(tv));
   uvfn = funcV(tv);
   assert(isluafunc(uvfn));
-  assert(uvfn->l.nupvalues == 1);
-  uvfn_size = sizeLfunc((MSize)uvfn->l.nupvalues);
+  assert(lj_funcL_nupvalues(&uvfn->l) == 1);
+  uvfn_size = sizeLfunc((MSize)lj_funcL_nupvalues(&uvfn->l));
   deaduv = func_uv_acq(&uvfn->l, 0);
   uv_size = sizeof(GCupval);
   assert(deaduv->closed);
@@ -661,8 +661,8 @@ int main(void)
   assert(tvisfunc(tv));
   deadcf = funcV(tv);
   assert(!isluafunc(deadcf));
-  assert(deadcf->c.nupvalues == 1);
-  deadcf_size = sizeCfunc((MSize)deadcf->c.nupvalues);
+  assert(lj_funcC_nupvalues(&deadcf->c) == 1);
+  deadcf_size = sizeCfunc((MSize)lj_funcC_nupvalues(&deadcf->c));
   assert(tvistab(&deadcf->c.upvalue[0]));
   assert(tabV(&deadcf->c.upvalue[0]) == arrtab);
   assert((lj_arena_of(deadcf)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
@@ -691,7 +691,7 @@ int main(void)
   assert(tvisfunc(tv));
   bcfn = funcV(tv);
   assert(isluafunc(bcfn));
-  bcfn_size = sizeLfunc((MSize)bcfn->l.nupvalues);
+  bcfn_size = sizeLfunc((MSize)lj_funcL_nupvalues(&bcfn->l));
   bcpt = funcproto(bcfn);
   bcpt_size = bcpt->sizept;
   assert((lj_arena_of(bcpt)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
@@ -720,7 +720,7 @@ int main(void)
   assert(tvisfunc(tv));
   hugefn = funcV(tv);
   assert(isluafunc(hugefn));
-  hugefn_size = sizeLfunc((MSize)hugefn->l.nupvalues);
+  hugefn_size = sizeLfunc((MSize)lj_funcL_nupvalues(&hugefn->l));
   hugept = funcproto(hugefn);
   hugept_size = hugept->sizept;
   assert(hugept_size > LJ_HUGE_THRESHOLD);
@@ -753,7 +753,7 @@ int main(void)
   fn = funcV(tv);
   assert(isluafunc(fn));
   finchunk = fn;
-  finchunk_size = sizeLfunc((MSize)finchunk->l.nupvalues);
+  finchunk_size = sizeLfunc((MSize)lj_funcL_nupvalues(&finchunk->l));
   finpt = funcproto(fn);
   finpt_size = finpt->sizept;
   assert(ptr_state(finchunk) == 2);
@@ -765,7 +765,7 @@ int main(void)
   assert(tvisfunc(tv));
   finfn = funcV(tv);
   assert(isluafunc(finfn));
-  finfn_size = sizeLfunc((MSize)finfn->l.nupvalues);
+  finfn_size = sizeLfunc((MSize)lj_funcL_nupvalues(&finfn->l));
   assert(funcproto(finfn) == deadfnpt);
   assert(ptr_state(finfn) == 2);
   L->top--;

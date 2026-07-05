@@ -1073,6 +1073,10 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
 
   /* Success: publish the initialized pair, then continue with CALL result use. */
   emit_jmp(as, l_done);
+  emit_i8(as, (int8_t)LJ_UV_ARENA_OWNED);
+  emit_rmro(as, XO_ARITHib, XOg_OR, uv, offsetof(GCupval, immutable));
+  emit_i8(as, (int8_t)LJ_FUNC_ARENA_OWNED);
+  emit_rmro(as, XO_ARITHib, XOg_OR, RID_RET, offsetof(GCfuncL, nupvalues));
   emit_movtomro(as, tmp|REX_GC64, RID_RET, offsetof(GChead, nextgc));
   emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_loadi(as, tmp, 0);
@@ -1206,8 +1210,9 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   ** The inlined path initializes a fresh pair and normally root-publishes it.
   ** The only active-marking case kept inline is the same standalone active
   ** black arena-owned case as the C FNEW bump helper: both fresh cells have
-  ** arena mark bits set and no legacy mark bridge is active. Active white
-  ** allocation and coupled legacy cycles still use the C helper's barriers.
+  ** arena mark bits and type-local arena-owned markers. Active white allocation
+  ** and coupled legacy mark cycles still use the C helper's publication
+  ** barriers.
   */
   l_mark_ok = emit_label(as);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.legacy_mark_bridge),

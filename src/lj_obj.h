@@ -539,7 +539,7 @@ typedef struct GCproto {
 typedef struct GCupval {
   GCHeader;
   uint8_t closed;	/* Set if closed (i.e. uv->v == &uv->u.value). */
-  uint8_t immutable;	/* Immutable value. */
+  uint8_t immutable;	/* Low bit: immutable. High bit: arena-owned FNEW. */
   union {
     TValue tv;		/* If closed: the value itself. */
     struct {		/* If open: double linked list, anchored at thread. */
@@ -554,6 +554,9 @@ typedef struct GCupval {
 #define uvprev(uv_)	(&gcref((uv_)->prev)->uv)
 #define uvnext(uv_)	(&gcref((uv_)->next)->uv)
 #define uvval(uv_)	(mref((uv_)->v, TValue))
+
+#define LJ_UV_IMMUTABLE	0x01u
+#define LJ_UV_ARENA_OWNED	0x80u
 
 /* -- Function object (closures) ------------------------------------------ */
 
@@ -587,6 +590,13 @@ typedef union GCfunc {
   check_exp(isluafunc(fn), (GCproto *)(mref((fn)->l.pc, char)-sizeof(GCproto)))
 #define sizeCfunc(n)	(sizeof(GCfuncC)-sizeof(TValue)+sizeof(TValue)*(n))
 #define sizeLfunc(n)	(sizeof(GCfuncL)-sizeof(GCRef)+sizeof(GCRef)*(n))
+
+/* Lua closures reserve the high nupvalues bit for arena-owned FNEW bodies.
+** C closures keep the full byte as their upvalue count.
+*/
+#define LJ_FUNC_NUPVALUES_MASK	0x7fu
+#define LJ_FUNC_ARENA_OWNED	0x80u
+LJ_STATIC_ASSERT(LJ_MAX_UPVAL < LJ_FUNC_ARENA_OWNED);
 
 /* -- Table object -------------------------------------------------------- */
 
@@ -2173,6 +2183,48 @@ static LJ_AINLINE void lj_obj_setgcwr(GCobj *o, GCRef next)
 static LJ_AINLINE void lj_obj_setgcwnull(GCobj *o)
 {
   setgcrefnull(o->gch.nextgc);
+}
+
+static LJ_AINLINE uint32_t lj_func_nupvalues(const GCfunc *fn)
+{
+  uint8_t nup = la_load8_acq(&fn->c.nupvalues);
+  return isluafunc(fn) ? (uint32_t)(nup & LJ_FUNC_NUPVALUES_MASK) :
+			 (uint32_t)nup;
+}
+
+static LJ_AINLINE uint32_t lj_funcL_nupvalues(const GCfuncL *fn)
+{
+  return (uint32_t)(la_load8_acq(&fn->nupvalues) & LJ_FUNC_NUPVALUES_MASK);
+}
+
+static LJ_AINLINE uint32_t lj_funcC_nupvalues(const GCfuncC *fn)
+{
+  return (uint32_t)la_load8_acq(&fn->nupvalues);
+}
+
+static LJ_AINLINE int lj_funcL_arenaowned(const GCfuncL *fn)
+{
+  return (la_load8_acq(&fn->nupvalues) & LJ_FUNC_ARENA_OWNED) != 0;
+}
+
+static LJ_AINLINE void lj_funcL_setarenaowned(GCfuncL *fn)
+{
+  fn->nupvalues = (uint8_t)(fn->nupvalues | LJ_FUNC_ARENA_OWNED);
+}
+
+static LJ_AINLINE int lj_uv_immutable(const GCupval *uv)
+{
+  return (la_load8_acq(&uv->immutable) & LJ_UV_IMMUTABLE) != 0;
+}
+
+static LJ_AINLINE int lj_uv_arenaowned(const GCupval *uv)
+{
+  return (la_load8_acq(&uv->immutable) & LJ_UV_ARENA_OWNED) != 0;
+}
+
+static LJ_AINLINE void lj_uv_setarenaowned(GCupval *uv)
+{
+  uv->immutable = (uint8_t)(uv->immutable | LJ_UV_ARENA_OWNED);
 }
 
 static LJ_AINLINE GCobj *func_uvptr_acq(const GCfuncL *fn, uint32_t idx)

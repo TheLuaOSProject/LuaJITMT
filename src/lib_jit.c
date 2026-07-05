@@ -274,7 +274,7 @@ LJLIB_CF(jit_util_funcinfo)
     if (!iscfunc(fn))
       setintfield(L, t, "ffid", fn->c.ffid);
     setintptrfield(L, t, lj_str_newlit(L, "addr"), (intptr_t)(void *)fn->c.f);
-    setintfield(L, t, "upvalues", fn->c.nupvalues);
+    setintfield(L, t, "upvalues", lj_func_nupvalues(fn));
     lj_gc_pubtab(L, t);
   }
   return 1;

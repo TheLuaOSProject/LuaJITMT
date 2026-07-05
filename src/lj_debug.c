@@ -264,7 +264,7 @@ const char *lj_debug_uvnamev(cTValue *o, uint32_t idx, TValue **tvp, GCobj **op)
 	return lj_debug_uvname(pt, idx);
       }
     } else {
-      if (idx < fn->c.nupvalues) {
+      if (idx < lj_funcC_nupvalues(&fn->c)) {
 	*tvp = &fn->c.upvalue[idx];
 	*op = obj2gco(fn);
 	return "";
@@ -695,7 +695,7 @@ int lj_debug_getinfo_claimed(lua_State *L, const char *what, lj_Debug *ar,
     } else if (*what == 'l') {
       ar->currentline = frame ? debug_frameline(L, fn, nextframe) : -1;
     } else if (*what == 'u') {
-      ar->nups = fn->c.nupvalues;
+      ar->nups = (uint8_t)lj_func_nupvalues(fn);
       if (ext) {
 	if (isluafunc(fn)) {
 	  GCproto *pt = funcproto(fn);
@@ -771,7 +771,7 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
     } else if (*what == 'l') {
       ar->currentline = frame ? debug_frameline(L, fn, nextframe) : -1;
     } else if (*what == 'u') {
-      ar->nups = fn->c.nupvalues;
+      ar->nups = (uint8_t)lj_func_nupvalues(fn);
       if (ext) {
 	if (isluafunc(fn)) {
 	  GCproto *pt = funcproto(fn);

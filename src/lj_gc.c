@@ -1215,15 +1215,15 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
       gc_markobj(g, env);
   }
   if (isluafunc(fn)) {
-    uint32_t i;
-    lj_assertG(fn->l.nupvalues <= funcproto(fn)->sizeuv,
+    uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
+    lj_assertG(nup <= funcproto(fn)->sizeuv,
 	       "function upvalues out of range");
     gc_markobj(g, funcproto(fn));
-    for (i = 0; i < fn->l.nupvalues; i++)  /* Mark Lua function upvalues. */
+    for (i = 0; i < nup; i++)  /* Mark Lua function upvalues. */
       gc_markobj(g, func_uv_acq(&fn->l, i));
   } else {
-    uint32_t i;
-    for (i = 0; i < fn->c.nupvalues; i++) {  /* Mark C function upvalues. */
+    uint32_t i, nup = lj_funcC_nupvalues(&fn->c);
+    for (i = 0; i < nup; i++) {  /* Mark C function upvalues. */
       TValue tv;
       lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
       gc_marktv(g, &tv);
@@ -1556,15 +1556,15 @@ static void gc_mark_thread_root_func(global_State *g, GCfunc *fn)
     if (env)
       gc_mark_thread_root_tab(g, env);
     if (isluafunc(fn)) {
-      uint32_t i;
-      lj_assertG(fn->l.nupvalues <= funcproto(fn)->sizeuv,
+      uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
+      lj_assertG(nup <= funcproto(fn)->sizeuv,
 		 "function upvalues out of range");
       gc_mark_thread_root_proto(g, funcproto(fn));
-      for (i = 0; i < fn->l.nupvalues; i++)
+      for (i = 0; i < nup; i++)
 	gc_markobj(g, func_uv_acq(&fn->l, i));
     } else {
-      uint32_t i;
-      for (i = 0; i < fn->c.nupvalues; i++) {
+      uint32_t i, nup = lj_funcC_nupvalues(&fn->c);
+      for (i = 0; i < nup; i++) {
 	TValue tv;
 	lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
 	gc_marktv(g, &tv);
@@ -1719,8 +1719,8 @@ static size_t propagatemark(global_State *g)
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
     GCfunc *fn = gco2func(o);
     gc_traverse_func(g, fn);
-    return isluafunc(fn) ? sizeLfunc((MSize)fn->l.nupvalues) :
-			   sizeCfunc((MSize)fn->c.nupvalues);
+    return isluafunc(fn) ? sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)) :
+			   sizeCfunc((MSize)lj_funcC_nupvalues(&fn->c));
   } else if (LJ_LIKELY(gct == ~LJ_TPROTO)) {
     GCproto *pt = gco2pt(o);
     gc_traverse_proto(g, pt);
@@ -1969,6 +1969,26 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
 	 gc_freefunc[gct - (uint32_t)~LJ_TSTR] != NULL;
 }
 
+static int gc2_arena_owned_fnew_body(GCobj *o)
+{
+  /*
+  ** FNEW active-black bump allocation can skip the legacy root spine for fresh
+  ** Lua closures and closed local-cell upvalues. Type-local marker bits prove
+  ** that narrow body-lifetime ownership state without overloading nextgc, which
+  ** remains reserved for root/open-upvalue chains.
+  */
+  if (o->gch.gct == (uint32_t)~LJ_TFUNC) {
+    GCfunc *fn = gco2func(o);
+    return isluafunc(fn) && lj_funcL_arenaowned(&fn->l) &&
+	   lj_funcL_nupvalues(&fn->l) <= LJ_MAX_UPVAL;
+  }
+  if (o->gch.gct == (uint32_t)~LJ_TUPVAL) {
+    GCupval *uv = gco2uv(o);
+    return lj_uv_arenaowned(uv) && uv->closed && uvval(uv) == &uv->tv;
+  }
+  return 0;
+}
+
 static int gc2_deferred_body_pending(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
@@ -2052,6 +2072,13 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
       GCobj *o = (GCobj *)lj_arena_cellptr(a, i);
       if (gc2_cdata_finalizer_pending(o)) {
 	gc2_preserve_pending_finalizer_body(g, o);
+	continue;
+      }
+      if (unmarked_only && gc2_arena_owned_fnew_body(o) &&
+	  gc2_valid_freeable_obj(g, o)) {
+	if (!gc2_free_unmarked_obj(g, o))
+	  continue;
+	n++;
 	continue;
       }
       if (unmarked_only && gc2_valid_freeable_obj(g, o)) {
