@@ -1297,7 +1297,7 @@ static void threading_gc_stats_push(lua_State *L)
   GC2StatsSnapshot s;
   GCtab *t;
   lj_gc2_stats_snapshot(g, &s);
-  lua_createtable(L, 0, 88);
+  lua_createtable(L, 0, 90);
   t = tabV(L->top - 1);
   threading_gc_stats_setnum(L, t, "total_bytes", s.total_bytes);
   threading_gc_stats_setnum(L, t, "total_kbytes", s.total_bytes >> 10);
@@ -1366,6 +1366,9 @@ static void threading_gc_stats_push(lua_State *L)
 			    s.assist_ssb_converted);
   threading_gc_stats_setnum(L, t, "assist_weak_drained",
 			    s.assist_weak_drained);
+  threading_gc_stats_setnum(L, t, "jit_hard_checks", s.jit_hard_checks);
+  threading_gc_stats_setnum(L, t, "interp_hard_checks",
+			    s.interp_hard_checks);
   threading_gc_stats_setnum(L, t, "worker_runs", s.worker_runs);
   threading_gc_stats_setnum(L, t, "worker_grey_drained",
 			    s.worker_grey_drained);

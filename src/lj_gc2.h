@@ -65,6 +65,8 @@ typedef struct GC2StatsSnapshot {
   uint64_t assist_grey_drained;
   uint64_t assist_ssb_converted;
   uint64_t assist_weak_drained;
+  uint64_t jit_hard_checks;
+  uint64_t interp_hard_checks;
   uint64_t worker_runs;
   uint64_t worker_grey_drained;
   uint64_t worker_ssb_converted;

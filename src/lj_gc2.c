@@ -2865,6 +2865,8 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->assist_grey_drained = gc2_assist_grey_drained_acq(g);
   s->assist_ssb_converted = gc2_assist_ssb_converted_acq(g);
   s->assist_weak_drained = gc2_assist_weak_drained_acq(g);
+  s->jit_hard_checks = gc2_jit_hard_checks_acq(g);
+  s->interp_hard_checks = gc2_interp_hard_checks_acq(g);
   s->worker_runs = gc2_worker_runs_acq(g);
   s->worker_grey_drained = gc2_worker_grey_drained_acq(g);
   s->worker_ssb_converted = gc2_worker_ssb_converted_acq(g);
