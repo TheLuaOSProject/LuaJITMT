@@ -2990,6 +2990,13 @@ LJ_FUNCA void lj_tab_store_wait_l(lua_State *L)
   lj_tab_wait_l(L);
 }
 
+static LJ_AINLINE void tab_store_barrier_write(lua_State *L, GCtab *parent,
+					       cTValue *key, cTValue *src)
+{
+  lj_gc2_barrier_weak_write(L, parent, key, src);
+  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+}
+
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
 {
   TValue old;
@@ -3329,8 +3336,7 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
   ** wait, resize, or otherwise give GC a chance to observe the world without
   ** this edge.
   */
-  lj_gc2_barrier_weak_write(L, parent, key, src);
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  tab_store_barrier_write(L, parent, key, src);
   for (;;) {
     TValue *dst = (TValue *)lj_tab_get(L, parent, key);
     TValue old, expect;
@@ -3347,21 +3353,14 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
       continue;
     }
     weakwr = lj_gc2_weak_write_begin(L, parent);
-    if (weakwr) {
-      lj_gc2_barrier_weak_write(L, parent, key, src);
-      lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-    }
+    if (weakwr)
+      tab_store_barrier_write(L, parent, key, src);
     expect = old;
     if (lj_tv_cas(dst, &expect, src)) {
       if (tab_current_slot_for_key(parent, dst, key)) {
-	if (weakwr) {
-	  lj_gc2_barrier_weak_write(L, parent, key, src);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+	tab_store_barrier_write(L, parent, key, src);
+	if (weakwr)
 	  lj_gc2_weak_write_end(L, weakwr);
-	} else {
-	  lj_gc2_barrier_weak_write(L, parent, key, src);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-	}
 	return 1;
       }
       lj_gc_pubtabtv(L, parent, dst);
@@ -3593,17 +3592,13 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
   ** The source can be trace-only until this helper publishes it. Barrier it
   ** before any stale-slot retry path can yield to concurrent GC work.
   */
-  lj_gc2_barrier_weak_write(L, parent, &keytv, src);
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  tab_store_barrier_write(L, parent, &keytv, src);
   weakwr = lj_gc2_weak_write_begin(L, parent);
-  if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-  }
+  if (weakwr)
+    tab_store_barrier_write(L, parent, &keytv, src);
   dst = lj_tab_storetv_forjit_array_nogc(L, parent, dst, src, key);
   if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    tab_store_barrier_write(L, parent, &keytv, src);
     lj_gc2_weak_write_end(L, weakwr);
   } else {
     /*
@@ -3611,8 +3606,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
     ** source TValue is the stable edge the trace just wrote; barrier that
     ** snapshot rather than rereading a potentially stale slot.
     */
-    lj_gc2_barrier_weak_write(L, parent, NULL, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    tab_store_barrier_write(L, parent, NULL, src);
   }
   return dst;
 }
@@ -3627,10 +3621,8 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
   tab_test_vm_array_store_call();
   /* The x64 VM runs its existing table barrier sequence after this helper. */
   setintV(&keytv, (int32_t)key);
-  if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-  }
+  if (weakwr)
+    tab_store_barrier_write(L, parent, &keytv, src);
   for (;;) {
     dst = tab_current_jit_array_slot(L, parent, orig, key);
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
@@ -3639,8 +3631,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
     lj_tab_store_wait_l(L);  /* VM array store saw stale/FORWARD slot. */
   }
   if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    tab_store_barrier_write(L, parent, &keytv, src);
     lj_gc2_weak_write_end(L, weakwr);
   }
   return dst;
@@ -3659,10 +3650,8 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_strhash(lua_State *L, GCtab *parent,
   barrier_key = &keytv;
   weakwr = lj_gc2_weak_write_begin(L, parent);
   /* The x64 VM runs its existing table barrier sequence after this helper. */
-  if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-  }
+  if (weakwr)
+    tab_store_barrier_write(L, parent, &keytv, src);
   if (tab_jit_hash_current_match(parent, orig) &&
       lj_tab_trystoretv_cas_keyed(L, parent, orig, &keytv, src) ==
       LJ_TAB_STORE_CAS_OK) {
@@ -3679,8 +3668,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_strhash(lua_State *L, GCtab *parent,
   }
 done:
   if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, barrier_key, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    tab_store_barrier_write(L, parent, barrier_key, src);
     lj_gc2_weak_write_end(L, weakwr);
   }
   return dst;
@@ -3698,13 +3686,10 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
   ** A traced source may be invisible to the stack scanner until the helper
   ** completes. Publish the GC edge before any retry wait or resize can run.
   */
-  lj_gc2_barrier_weak_write(L, parent, key, src);
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  tab_store_barrier_write(L, parent, key, src);
   weakwr = lj_gc2_weak_write_begin(L, parent);
-  if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, key, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-  }
+  if (weakwr)
+    tab_store_barrier_write(L, parent, key, src);
   if (tab_jit_hash_current_match(parent, orig) &&
       lj_tab_trystoretv_cas_keyed(L, parent, orig, key, src) ==
       LJ_TAB_STORE_CAS_OK) {
@@ -3720,14 +3705,9 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
     lj_tab_store_wait_l(L);  /* JIT hash store saw stale/FORWARD slot. */
   }
 done:
-  if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, barrier_key, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  tab_store_barrier_write(L, parent, barrier_key, src);
+  if (weakwr)
     lj_gc2_weak_write_end(L, weakwr);
-  } else {
-    lj_gc2_barrier_weak_write(L, parent, barrier_key, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-  }
   return dst;
 }
 
@@ -3741,13 +3721,10 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
   ** insertion retries, since the value may not be visible from an interpreter
   ** frame until this helper returns.
   */
-  lj_gc2_barrier_weak_write(L, parent, key, src);
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  tab_store_barrier_write(L, parent, key, src);
   weakwr = lj_gc2_weak_write_begin(L, parent);
-  if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, key, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-  }
+  if (weakwr)
+    tab_store_barrier_write(L, parent, key, src);
   for (;;) {
     dst = lj_tab_set(L, parent, key);
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, key, src) ==
@@ -3755,14 +3732,9 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
       break;
     lj_tab_store_wait_l(L);  /* JIT NEWREF store saw stale/FORWARD slot. */
   }
-  if (weakwr) {
-    lj_gc2_barrier_weak_write(L, parent, key, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  tab_store_barrier_write(L, parent, key, src);
+  if (weakwr)
     lj_gc2_weak_write_end(L, weakwr);
-  } else {
-    lj_gc2_barrier_weak_write(L, parent, key, src);
-    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
-  }
   return dst;
 }
 
@@ -3892,10 +3864,8 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
     TValue *dst;
     TValue key;
     setintV(&key, (int32_t)(start + i));
-    if (weakwr) {
-      lj_gc2_barrier_weak_write(L, parent, &key, &src[i]);
-      lj_gc2_barrier_tv_pair(L, obj2gco(parent), &src[i]);
-    }
+    if (weakwr)
+      tab_store_barrier_write(L, parent, &key, &src[i]);
     for (;;) {
       dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
       if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &key, &src[i]) ==
