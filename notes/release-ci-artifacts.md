@@ -23,7 +23,7 @@
   inspects each archive for the `make install DESTDIR` layout plus BUILDINFO
   tag/platform/layout fields before publishing.
 - Normal GitHub CI now uses `tools/ci/platform_build.sh` for each platform to
-  build, run the binary directly, and dispatch the matching platform binary
+  build and dispatch the matching platform binary
   harness check (`jit.os`, `jit.arch`, and the threading module). It does not
   run release archive extraction checks or stock semantics suites. Windows CI
   dispatches the same release binary harness natively through `src/luajit.exe`;

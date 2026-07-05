@@ -10,9 +10,9 @@ platform:
   macos-x86_64
   windows-x86_64-ucrt
 
-Builds the requested platform target, runs it directly on the matching host,
-and executes the matching platform binary smoke test. Release install-tree
-archive checks and Wine/Darling validation live in tools/release/build_artifact.sh.
+Builds the requested platform target and executes the matching platform binary
+smoke test. Release install-tree archive checks and Wine/Darling validation live
+in tools/release/build_artifact.sh.
 USAGE
   exit 2
 }
@@ -46,37 +46,6 @@ build_make() {
   make -C "$root" -j"$jobs" "$@"
 }
 
-smoke_code='print(jit.os, jit.arch); local threading = require("threading"); assert(type(threading.spawn) == "function"); assert(type(threading.gcstats) == "function"); if jit.os == "Windows" then local ffi = require("ffi"); ffi.cdef("unsigned long GetCurrentProcessId(void);"); local k = ffi.load("kernel32"); assert(k.GetCurrentProcessId() ~= 0) end'
-
-assert_platform_output() {
-  local label=$1
-  local out=$2
-  local osname=$3
-  if ! printf '%s\n' "$out" |
-      grep -Eq "(^|[[:space:]])${osname}[[:space:]]+x64($|[[:space:]])"; then
-    printf '%s\n' "$out" >&2
-    printf 'CI %s smoke did not report %s x64\n' "$label" "$osname" >&2
-    exit 1
-  fi
-}
-
-run_direct_smoke() {
-  local label=$1
-  local bin=$2
-  local osname=$3
-  local out
-  if [ ! -x "$bin" ]; then
-    printf 'CI %s smoke binary is not executable: %s\n' "$label" "$bin" >&2
-    exit 1
-  fi
-  if ! out=$("$bin" -e "$smoke_code" 2>&1); then
-    printf '%s\n' "$out" >&2
-    exit 1
-  fi
-  assert_platform_output "$label" "$out" "$osname"
-  printf 'CI %s binary smoke passed\n' "$label"
-}
-
 run_platform_test() {
   local case_name=$1
   local require=$2
@@ -97,7 +66,6 @@ case "$platform" in
   linux-x86_64)
     make_clean
     build_make
-    run_direct_smoke "Linux" "$root/src/luajit" "Linux"
     run_platform_test \
       release_linux_binary linux LJ_RELEASE_LINUX_BIN "$root/src/luajit"
     ;;
@@ -118,7 +86,6 @@ case "$platform" in
     fi
     make_clean
     build_make "${macos_make_args[@]}"
-    run_direct_smoke "macOS" "$root/src/luajit" "OSX"
     run_platform_test \
       release_macos_binary macos LJ_RELEASE_MACOS_BIN "$root/src/luajit"
     ;;
