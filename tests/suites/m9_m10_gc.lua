@@ -11,6 +11,7 @@ local assert_command_output_all_contains = utils.assert_command_output_all_conta
 local write_file = utils.write_file
 local with_temp_paths = utils.with_temp_paths
 local compile_and_run_c = build.compile_and_run_c
+local clean_build = build.clean_build
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
@@ -108,14 +109,14 @@ local function build_and_run_alloc_account(t)
 end
 
 local function run_gc_stats(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   run_luajit_script_jit_modes(t, "t-gc-stats.lua")
   print("M9 GC stats behavior passed")
 end
 
 local function run_trace_hard_assist_cadence(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   with_temp_paths(t, { "lj-gc2-hard-cadence.lua" }, function(script)
     local luajit = shell_quote(t:path("src", "luajit"))
@@ -174,7 +175,7 @@ local function run_trace_hard_assist_cadence(t)
 end
 
 local function run_fullgc_smr_reclaim(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   with_temp_paths(t, { "lj-fullgc-smr-reclaim.lua" }, function(script)
     local luajit = shell_quote(t:path("src", "luajit"))
@@ -212,7 +213,7 @@ local function run_fullgc_smr_reclaim(t)
 end
 
 local function run_newkey_barrier_scope(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   with_temp_paths(t, { "lj-newkey-barrier-scope.lua" }, function(script)
     local luajit = shell_quote(t:path("src", "luajit"))
@@ -246,7 +247,7 @@ local function run_newkey_barrier_scope(t)
 end
 
 local function run_table_rescan_pressure(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   with_temp_paths(t, { "lj-table-rescan-pressure.lua" }, function(script)
     local luajit = shell_quote(t:path("src", "luajit"))
@@ -286,7 +287,7 @@ local function run_table_rescan_pressure(t)
 end
 
 local function run_bench_smoke(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   luajit_script(t, "t-threading-api.lua")
 
@@ -319,7 +320,7 @@ local function run_bench_smoke(t)
 end
 
 local function run_bench_regression(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   local base = t:path("bench", "baseline_372b369b9afd_.csv")
   local base_csv = t:read(base)
@@ -489,7 +490,7 @@ end
 
 local function run_bench_stock_compare(t)
   local current = t:path("src", "luajit")
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   local stock, explicit = find_stock_luajit(current)
   if not stock then
@@ -532,7 +533,7 @@ local function run_bench_stock_compare(t)
 end
 
 local function run_generational(t)
-  t:build({ clean = true, quiet = true })
+  clean_build(t)
 
   run_luajit_script_jit_modes(t, "t-gc-generational-mode.lua")
   build_and_run_alloc_account(t)

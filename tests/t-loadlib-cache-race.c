@@ -3,11 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lib/test_sleep.h"
 
 void *__real_dlopen(const char *filename, int flags);
 
@@ -21,14 +22,11 @@ void *__wrap_dlopen(const char *filename, int flags)
   int match = target_path && filename && strcmp(filename, target_path) == 0;
   void *ret;
   if (match) {
-    struct timespec ts;
     int active = __sync_add_and_fetch(&target_dlopen_active, 1);
     if (active > 1)
       target_dlopen_overlap = 1;
     __sync_add_and_fetch(&target_dlopen_calls, 1);
-    ts.tv_sec = 0;
-    ts.tv_nsec = 50000000;
-    (void)nanosleep(&ts, NULL);
+    sleep_ns(50000000L);
   }
   ret = __real_dlopen(filename, flags);
   if (match)

@@ -6,7 +6,6 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -20,6 +19,7 @@
 #include "lj_tg.h"
 
 #include "lib/lua_fixture_helpers.h"
+#include "lib/test_sleep.h"
 #include "lib/tg_stopreq_fixture_helpers.h"
 
 typedef int (*CallbackStopReqFn)(int);
@@ -36,20 +36,12 @@ typedef struct CallbackStopReqCtx {
 static global_State *test_g;
 static TGState *test_tg;
 
-static void callback_stopreq_sleep(void)
-{
-  struct timespec delay;
-  delay.tv_sec = 0;
-  delay.tv_nsec = 1000000;
-  (void)nanosleep(&delay, NULL);
-}
-
 static void *callback_stopreq_worker(void *arg)
 {
   CallbackStopReqCtx *ctx = (CallbackStopReqCtx *)arg;
   int i;
   for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
-    callback_stopreq_sleep();
+    sleep_ns(1000000L);
   if (lj_tg_in_native_acq(ctx->tg) == 0) {
     ctx->err = 1;
     la_store32_rel(&ctx->handshook, 1);

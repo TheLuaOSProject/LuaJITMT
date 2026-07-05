@@ -654,16 +654,20 @@ int main(void)
   remembered_pushed0 = gc2_remembered_pushed_acq(g);
   remembered_filtered0 = gc2_remembered_filtered_acq(g);
   setintV(&vals[0], 1);
+  /*
+  ** Direct meta stores use the same public table-store publication route as
+  ** VM fallback stores: the owner is remembered once, and the helper also
+  ** observes two already-old edges while resolving/publishing the slot.
+  */
   settabV(L, &vals[1], grandchild);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
   assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
-  assert(gc2_remembered_filtered_acq(g) ==
-	 remembered_filtered0 + 1u);
+  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0 + 2u);
   assert(active_ssb_last(tg) == obj2gco(parent));
   settabV(L, &vals[1], child);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
   assert(gc2_remembered_filtered_acq(g) ==
-	 remembered_filtered0 + 2u);
+	 remembered_filtered0 + 4u);
   assert(gc2_remembered_pushed_acq(g) ==
 	 remembered_pushed0 + 2u);
   assert(active_ssb_last(tg) == obj2gco(parent));

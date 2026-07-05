@@ -27,6 +27,18 @@ static void run_script(lua_State *L, const char *code, const char *label)
   ljt_lua_dostring(L, code);
 }
 
+static void reset_gc1num_bump_counters(void)
+{
+  lj_func_test_reset_gc1num_bump_fast_calls();
+  lj_func_test_reset_gc1num_bump_fallback_calls();
+}
+
+static uint32_t gc1num_bump_helper_calls(void)
+{
+  return lj_func_test_gc1num_bump_fast_calls() +
+	 lj_func_test_gc1num_bump_fallback_calls();
+}
+
 static GCproto *first_child_proto(GCproto *pt)
 {
   MSize i;
@@ -118,10 +130,8 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
   la_store64_rel(&tg->local_total, 0);
   lj_gcroot_pending_hint_rel(g, 0);
-  lj_func_test_reset_gc1num_bump_fast_calls();
-  lj_func_test_reset_gc1num_bump_fallback_calls();
-  helper0 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  reset_gc1num_bump_counters();
+  helper0 = gc1num_bump_helper_calls();
 
   lua_getglobal(L, "__fnew_hint_run");
   assert(lua_isfunction(L, -1));
@@ -131,8 +141,7 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
   assert(lua_tonumber(L, -1) == 1100.5);
   lua_pop(L, 2);
 
-  helper1 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  helper1 = gc1num_bump_helper_calls();
   assert(helper1 == helper0);
   assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_gc_flush_root_pending(g) > 0);
@@ -178,10 +187,8 @@ static void test_traced_active_black_inline(lua_State *L, global_State *g,
   lj_gcroot_pending_hint_rel(g, 0);
   pending0 = lj_tg_gcroot_pending_acq(tg);
   assert(pending0 == NULL);
-  lj_func_test_reset_gc1num_bump_fast_calls();
-  lj_func_test_reset_gc1num_bump_fallback_calls();
-  helper0 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  reset_gc1num_bump_counters();
+  helper0 = gc1num_bump_helper_calls();
 
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
@@ -203,8 +210,7 @@ static void test_traced_active_black_inline(lua_State *L, global_State *g,
   lj_tg_mark_active_rel(tg, old_mark_active);
   gc2_legacy_mark_bridge_rel(g, old_bridge);
 
-  helper1 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  helper1 = gc1num_bump_helper_calls();
   assert(helper1 == helper0);
   assert(lj_tg_gcroot_pending_acq(tg) == pending0);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
@@ -237,10 +243,8 @@ static void test_traced_mark_active_white_fallback(lua_State *L,
     "assert(t[100]() == 101)\n"
     "assert(debug.upvalueid(t[1], 1) ~= debug.upvalueid(t[2], 1))\n";
 
-  lj_func_test_reset_gc1num_bump_fast_calls();
-  lj_func_test_reset_gc1num_bump_fallback_calls();
-  helper0 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  reset_gc1num_bump_counters();
+  helper0 = gc1num_bump_helper_calls();
 
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
@@ -253,8 +257,7 @@ static void test_traced_mark_active_white_fallback(lua_State *L,
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
 
-  helper1 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  helper1 = gc1num_bump_helper_calls();
   assert(helper1 > helper0);
 }
 
@@ -292,10 +295,8 @@ static void test_traced_active_black_bridge_fallback(lua_State *L,
   (void)lj_gc_flush_root_pending(g);
   lj_gcroot_pending_hint_rel(g, 0);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
-  lj_func_test_reset_gc1num_bump_fast_calls();
-  lj_func_test_reset_gc1num_bump_fallback_calls();
-  helper0 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  reset_gc1num_bump_counters();
+  helper0 = gc1num_bump_helper_calls();
 
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
@@ -316,8 +317,7 @@ static void test_traced_active_black_bridge_fallback(lua_State *L,
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
 
-  helper1 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  helper1 = gc1num_bump_helper_calls();
   assert(helper1 > helper0);
   assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_gc_flush_root_pending(g) > 0);
@@ -357,10 +357,8 @@ static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
   run_script(L, warm, "numeric FNEW traced alloc-black inline warmup");
   (void)lj_gc_flush_root_pending(g);
   lj_gcroot_pending_hint_rel(g, 0);
-  lj_func_test_reset_gc1num_bump_fast_calls();
-  lj_func_test_reset_gc1num_bump_fallback_calls();
-  helper0 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  reset_gc1num_bump_counters();
+  helper0 = gc1num_bump_helper_calls();
 
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
@@ -380,8 +378,7 @@ static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
 
-  helper1 = lj_func_test_gc1num_bump_fast_calls() +
-	    lj_func_test_gc1num_bump_fallback_calls();
+  helper1 = gc1num_bump_helper_calls();
   assert(helper1 == helper0);
   lua_pushnil(L);
   lua_setglobal(L, "__fnew_allocblack_run");

@@ -91,3 +91,19 @@ Removed the unused `suite_utils.capture_lines()` splitter. Command-output tests
 already use `suite_assert.output_lines()` or the `assert_command_output_*`
 helpers, so keeping a second splitter only made future harness behavior harder
 to audit. No test behavior changes; this removes dead harness surface area.
+
+## Fixture Helper Follow-Ups
+
+`tests/t-jit-fnew-bump.c` now uses local helpers for the repeated GC1 numeric
+FNEW fast/fallback counter reset and total read. Assertions that care about a
+specific fast-only or fallback-only counter stay explicit.
+
+Three remaining one-shot nanosleep fixtures now include
+`tests/lib/test_sleep.h` and call `sleep_ns()`: the loadlib STOPREQ shared
+library, the loadlib cache race wrapper, and the FFI callback STOPREQ worker.
+This removes local `struct timespec` spellings and gives those waits the same
+EINTR retry behavior as the rest of the fixture suite.
+
+The M9/M10 suite now routes repeated default clean builds through
+`suite_build.clean_build()`, matching the earlier harness build-profile
+centralization without changing test ordering or build flags.
