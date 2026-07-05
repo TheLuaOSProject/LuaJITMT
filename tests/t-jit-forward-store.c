@@ -17,6 +17,18 @@
 
 #include "lib/tab_forward_helpers.h"
 
+static void assert_retiring_array_old_i32(cTValue *slot, int32_t want)
+{
+  TValue old;
+  /*
+  ** Retiring separated arrays keep their old live values as GC-visible edges.
+  ** JIT helpers must publish the write into the successor generation without
+  ** overwriting the retired slot.
+  */
+  lj_tv_load_acq(&old, slot);
+  tabfwd_assert_i32(&old, want);
+}
+
 #ifdef LJ_TAB_TEST_HELPERS
 LJ_FUNCA TValue *lj_tab_test_storetv_forjit_array_observed(lua_State *L,
 							   GCtab *parent,
@@ -83,7 +95,7 @@ static void exercise_array_retiring_jit(lua_State *L)
 {
   GCtab *t;
   TValue *oldarray, *newarray;
-  TValue src, oldval;
+  TValue src;
   MSize oldasize, newasize;
   int32_t key = 6;
 
@@ -105,8 +117,7 @@ static void exercise_array_retiring_jit(lua_State *L)
 
   setintV(&src, 201);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
-  lj_tv_load_acq(&oldval, &oldarray[key]);
-  assert(tvisforward(&oldval));
+  assert_retiring_array_old_i32(&oldarray[key], 16000);
   tabfwd_assert_i32(&newarray[key], 201);
   tabfwd_assert_i32(lj_tab_getint(t, key), 201);
 
@@ -119,7 +130,7 @@ static void exercise_array_current_retiring_jit(lua_State *L)
 {
   GCtab *t;
   TValue *oldarray, *newarray;
-  TValue src, oldval;
+  TValue src;
   MSize oldasize, newasize;
   int32_t key = 7;
 
@@ -143,8 +154,7 @@ static void exercise_array_current_retiring_jit(lua_State *L)
   lj_tab_asize_rel(t, oldasize);
   setintV(&src, 204);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
-  lj_tv_load_acq(&oldval, &oldarray[key]);
-  assert(tvisforward(&oldval));
+  assert_retiring_array_old_i32(&oldarray[key], 18000);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -159,7 +169,7 @@ static void exercise_array_retiring_observed_jit(lua_State *L)
 {
   GCtab *t;
   TValue *oldarray, *newarray;
-  TValue src, oldval;
+  TValue src;
   TValue *slot;
   MSize oldasize, newasize;
   int32_t key = 8;
@@ -185,8 +195,7 @@ static void exercise_array_retiring_observed_jit(lua_State *L)
 						   oldasize, &oldarray[key],
 						   &src, (MSize)key);
   assert(slot == &newarray[key]);
-  lj_tv_load_acq(&oldval, &oldarray[key]);
-  assert(tvisforward(&oldval));
+  assert_retiring_array_old_i32(&oldarray[key], 18100);
   tabfwd_assert_i32(&newarray[key], 207);
   tabfwd_assert_i32(lj_tab_getint(t, key), 207);
 

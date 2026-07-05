@@ -236,6 +236,56 @@ assert(util.traceinfo(1), "nested escaped existing table store did not trace")
 ]=]
 end
 
+local function table_read_pubroot_smoke()
+  return [=[
+local th = require("threading")
+local util = require("jit.util")
+
+local nmarkers = tonumber(os.getenv("LJ_M6_JIT_TABLE_READ_PUBROOT_N")) or 192
+local rounds = tonumber(os.getenv("LJ_M6_JIT_TABLE_READ_PUBROOT_ROUNDS")) or 8
+local passes = tonumber(os.getenv("LJ_M6_JIT_TABLE_READ_PUBROOT_PASSES")) or 64
+
+local function producer(n)
+  jit.opt.start("hotloop=1", "hotexit=1")
+  local out = {}
+  for i = 1, n do
+    local marker = { kind = "readpub", token = "readpub:" .. i }
+    out[#out + 1] = marker
+    if i % 32 == 0 then collectgarbage("step") end
+  end
+  return out
+end
+
+for _ = 1, rounds do
+  local ok, result = th.spawn(producer, nmarkers):join(30)
+  assert(ok == true)
+  local tokens = {}
+  local weak = setmetatable({}, { __mode = "v" })
+  collectgarbage("collect")
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  for pass = 1, passes do
+    for i = 1, #result do
+      local marker = result[i]
+      assert(marker.kind == "readpub")
+      local token = marker.token
+      assert(type(token) == "string")
+      tokens[#tokens + 1] = token
+      assert(type(marker.token) == "string")
+      weak[marker.token] = marker
+    end
+    if pass % 4 == 0 then collectgarbage("step") end
+  end
+  assert(util.traceinfo(1), "helper-backed marker-token read loop did not trace")
+  collectgarbage("collect")
+  for i = 1, #result do
+    assert(type(result[i].token) == "string")
+    assert(weak[result[i].token] == result[i])
+  end
+end
+]=]
+end
+
 local function jit_tmpbuf_thread_format_smoke()
   return [=[
 local th = require"threading"
@@ -922,8 +972,9 @@ assert(threading.gcworkers(0) == 1)
                         build = false,
                         cflags = "-DLJ_TAB_TEST_HELPERS",
                         timeout = "20s"
-                      })
+      })
       luajit_code(t, table_store_smoke())
+      luajit_code(t, table_read_pubroot_smoke(), { timeout = "20s" })
 
       luajit_code(t, [=[
 jit.flush()
