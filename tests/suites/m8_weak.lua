@@ -39,8 +39,8 @@ local function run_finalizer_error_native_stdio(t, opts)
   capture_luajit(t, { "-e", finalizer_error_native_stdio_smoke() }, out, {
     stderr_to_stdout = true
   })
-  checks.assert_public_text_all_contains("finalizer error native stdio output",
-                                         t:read(out), {
+  checks.assert_output_all_contains("finalizer error native stdio output",
+                                    t:read(out), {
     "ERROR in finalizer: ",
     "finalizer native stdio smoke"
   }, "captured output")

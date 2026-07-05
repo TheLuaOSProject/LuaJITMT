@@ -218,13 +218,13 @@ end
 
 function M.assert_command_output_contains(cmd, needle, opts)
   local out = M.capture_command(cmd, opts)
-  checks.assert_public_text_contains(cmd, out, needle, "command output")
+  checks.assert_output_contains(cmd, out, needle, "command output")
   return out
 end
 
 function M.assert_command_output_all_contains(cmd, needles, opts)
   local out = M.capture_command(cmd, opts)
-  checks.assert_public_text_all_contains(cmd, out, needles, "command output")
+  checks.assert_output_all_contains(cmd, out, needles, "command output")
   return out
 end
 
