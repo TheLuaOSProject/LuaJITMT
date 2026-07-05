@@ -197,6 +197,25 @@ static uint32_t gc2_flush_and_drain_ssb(global_State *g)
   return lj_gc2_drain_ssb(g);
 }
 
+static int gc2_worker_claim(global_State *g)
+{
+  uint32_t expect = 0;
+  return gc2_worker_active_cas(g, &expect, 1);
+}
+
+static int gc2_worker_claim_count_busy(global_State *g)
+{
+  if (gc2_worker_claim(g))
+    return 1;
+  gc2_worker_busy_retries_add(g, 1);
+  return 0;
+}
+
+static void gc2_worker_release(global_State *g)
+{
+  gc2_worker_active_rel(g, 0);
+}
+
 void lj_gc2_init(global_State *g)
 {
   uint32_t i;
@@ -1751,17 +1770,17 @@ static void gc2_weak_to_sweep_drain_boundary(global_State *g, lua_State *L)
 
 void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
 {
-  uint32_t active_expect = 0, expect = LJ_GC2_WEAK;
+  uint32_t expect = LJ_GC2_WEAK;
   if (!g || lj_tg_any_jit_active(g))
     return;
-  if (!gc2_worker_active_cas(g, &active_expect, 1))
+  if (!gc2_worker_claim(g))
     return;  /* Serialize transition handshakes with sweep prepare/close. */
   if (lj_tg_any_jit_active(g)) {
-    gc2_worker_active_rel(g, 0);
+    gc2_worker_release(g);
     return;
   }
   if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP)) {
-    gc2_worker_active_rel(g, 0);
+    gc2_worker_release(g);
     return;
   }
   gc2_sweep_bridge_ready_rel(g, 0);
@@ -1771,7 +1790,7 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
 		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
   gc2_weak_to_sweep_drain_boundary(g, L);
   (void)lj_tg_reclaim_dead(g);
-  gc2_worker_active_rel(g, 0);
+  gc2_worker_release(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -2525,13 +2544,12 @@ int lj_gc2_sweep_needs_prepare(global_State *g)
 void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 					  GC2SweepBridgePreserveFunc preserve)
 {
-  uint32_t expect = 0;
   if (!lj_gc2_sweep_bridge_can_progress(g))
     return;
-  if (!gc2_worker_active_cas(g, &expect, 1))
+  if (!gc2_worker_claim(g))
     return;  /* Serialize list mutation with sweep batches and close. */
   if (!lj_gc2_sweep_bridge_can_progress(g)) {
-    gc2_worker_active_rel(g, 0);
+    gc2_worker_release(g);
     return;
   }
   /*
@@ -2546,7 +2564,7 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
       preserve(g);
     lj_gc2_sweep_bridge_ready(g);
   }
-  gc2_worker_active_rel(g, 0);
+  gc2_worker_release(g);
 }
 
 int lj_gc2_sweep_pending(global_State *g)
@@ -2749,17 +2767,17 @@ void lj_gc2_preserve_root(global_State *g, GCobj *o)
 
 int lj_gc2_sweep_to_idle(global_State *g)
 {
-  uint32_t expect = 0, phase;
+  uint32_t phase;
   uint64_t live;
   if (!g)
     return 0;
-  if (!gc2_worker_active_cas(g, &expect, 1))
+  if (!gc2_worker_claim(g))
     return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_SWEEP || gc2_sweep_blocked_by_finalizer(g) ||
       !gc2_sweep_bridge_ready_acq(g) ||
       lj_gc2_sweep_needs_prepare(g) || lj_gc2_sweep_pending(g)) {
-    gc2_worker_active_rel(g, 0);
+    gc2_worker_release(g);
     return 0;
   }
   gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
@@ -2771,7 +2789,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_SWEEP) {
     gc2_cycle_leader_rel(g, 0);
-    gc2_worker_active_rel(g, 0);
+    gc2_worker_release(g);
     return 0;
   }
   gc2_sweep_to_idle_add(g, 1);
@@ -2781,7 +2799,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   ** the grace handshake so lj_gc2_reclaim_retired() can drain retired strtab,
   ** table, trace, mcode, and ctype/clib state at the completed epoch.
   */
-  gc2_worker_active_rel(g, 0);
+  gc2_worker_release(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
@@ -5748,16 +5766,14 @@ static GC2SSBNode *gc2_ssb_new_dynamic(void)
 static uint32_t gc2_recycle_published_ssb_for_flush(global_State *g,
 						    TGState *tg)
 {
-  uint32_t phase, expect = 0, moved;
+  uint32_t phase, moved;
   if (!g || !tg || lj_tg_ssb_free_acq(tg) != NULL)
     return 0;
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
     return 0;
-  if (!gc2_worker_active_cas(g, &expect, 1)) {
-    gc2_worker_busy_retries_add(g, 1);
+  if (!gc2_worker_claim_count_busy(g))
     return 0;
-  }
   /*
   ** SSB flush needs a fresh node before it can publish the active node. Convert
   ** one published SSB node while holding the grey-deque owner gate; do not drain
@@ -5768,7 +5784,7 @@ static uint32_t gc2_recycle_published_ssb_for_flush(global_State *g,
     gc2_worker_runs_add(g, 1);
     gc2_worker_ssb_converted_add(g, moved);
   }
-  gc2_worker_active_rel(g, 0);
+  gc2_worker_release(g);
   return moved;
 }
 
@@ -6037,21 +6053,19 @@ static uint32_t gc2_drain_ssb_owned(global_State *g)
 
 static uint32_t lj_gc2_drain_ssb(global_State *g)
 {
-  uint32_t expect = 0, nitems;
+  uint32_t nitems;
   if (!g)
     return 0;
-  if (!gc2_worker_active_cas(g, &expect, 1)) {
-    gc2_worker_busy_retries_add(g, 1);
+  if (!gc2_worker_claim_count_busy(g))
     return 0;
-  }
   nitems = gc2_drain_ssb_owned(g);
-  gc2_worker_active_rel(g, 0);
+  gc2_worker_release(g);
   return nitems;
 }
 
 uint32_t lj_gc2_assist(global_State *g, TGState *tg)
 {
-  uint32_t phase, shift, limit, assist_expect = 0, worker_expect = 0;
+  uint32_t phase, shift, limit, assist_expect = 0;
   uint32_t n = 0, converted = 0, weak = 0;
   if (!g || !tg || lj_tg_gc_assist_acq(tg))
     return 0;
@@ -6068,14 +6082,13 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   ** growth and bottom-side pop/push remain single-owner while completion can
   ** still observe this as assist work through assist_active.
   */
-  if (!gc2_worker_active_cas(g, &worker_expect, 1)) {
-    gc2_worker_busy_retries_add(g, 1);
+  if (!gc2_worker_claim_count_busy(g)) {
     gc2_assist_active_rel(g, 0);
     return 0;
   }
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK) {
-    gc2_worker_active_rel(g, 0);
+    gc2_worker_release(g);
     gc2_assist_active_rel(g, 0);
     return 0;
   }
@@ -6112,7 +6125,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   if (weak)
     gc2_assist_weak_drained_add(g, weak);
   lj_tg_gc_assist_store_rlx(tg, 0);
-  gc2_worker_active_rel(g, 0);
+  gc2_worker_release(g);
   gc2_assist_active_rel(g, 0);
   return n + weak;
 }
@@ -7444,7 +7457,7 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
 static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
 				       uint32_t *progress)
 {
-  uint32_t phase, expect = 0, n = 0, converted = 0, weak = 0, sweep = 0;
+  uint32_t phase, n = 0, converted = 0, weak = 0, sweep = 0;
   uint32_t finalizer = 0;
   uint32_t total;
   if (progress)
@@ -7462,14 +7475,12 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP)
     return 0;
-  if (!gc2_worker_active_cas(g, &expect, 1)) {
-    gc2_worker_busy_retries_add(g, 1);
+  if (!gc2_worker_claim_count_busy(g))
     return 0;  /* 05 section 5.6.3 temporary single-worker bridge. */
-  }
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP) {
-    gc2_worker_active_rel(g, 0);
+    gc2_worker_release(g);
     return 0;
   }
   if (phase == LJ_GC2_SWEEP) {
@@ -7518,7 +7529,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
     gc2_worker_idle_declares_add(g, 1);
   if (progress)
     *progress = total;
-  gc2_worker_active_rel(g, 0);
+  gc2_worker_release(g);
   return total;  /* 05 section 5.6.3 total worker progress contract. */
 }
 
