@@ -18,6 +18,8 @@ their normal publication, retirement, and validation paths.
 `nextgc` stays reserved for root chains. Arena-body sweep may destruct an
 unmarked off-spine empty-table body only after the header validates as a table
 and the arena-owned marker proves that the missing root-chain link is intentional.
+The x64 fixture also grows such a table through ordinary Lua stores before
+sweeping it, so the side-vector destructor path is covered with the same marker.
 
 The elision is deliberately narrow:
 
