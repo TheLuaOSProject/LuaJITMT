@@ -23,7 +23,7 @@ and exact duplicate local wrappers were removed from base `print`, `loadfile`,
 package loader paths, `jit.profile.stop`, FFI string/copy/fill helpers,
 VM-event failure reporting, JIT-token waits, the FFI CLibrary loader,
 `debug.debug` native console I/O, FFI native-call helpers, profiling stop, and
-the CLI frontend's native stdio wrappers.
+the CLI frontend and I/O library native stdio wrappers.
 
 Site-specific wrappers were intentionally left in place when they carry behavior
 beyond the common helper, such as extra pending-poll handling or additional

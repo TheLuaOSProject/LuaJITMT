@@ -68,42 +68,10 @@ static int io_native_fclose(lua_State *L, FILE *fp, uint32_t *actionsp)
   return ok;
 }
 
-static int io_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int io_pending_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ);
-}
-
-static uint32_t io_poll_pending_stopreq(lua_State *L, uint32_t actions)
-{
-  if (!(actions & LJ_GC2_HS_STOPREQ) && io_pending_stopreq(L))
-    actions |= lj_safepoint_poll(L);
-  return actions;
-}
-
-static int io_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void io_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq)
-{
-  actions = io_poll_pending_stopreq(L, actions);
-  if (io_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,
 			       int had_stopreq)
 {
-  actions = io_poll_pending_stopreq(L, actions);
-  if (io_fresh_stopreq(L, actions, had_stopreq)) {
+  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     if (iof->fp != NULL) {
       uint32_t close_actions;
       FILE *fp = iof->fp;
@@ -112,80 +80,80 @@ static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,
       actions |= close_actions;
     }
   }
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static int io_native_fflush(lua_State *L, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int ok;
   lj_native_enter(L2TG(L));
   ok = fflush(fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return ok;
 }
 
 static int io_native_setvbuf(lua_State *L, FILE *fp, int mode, size_t size)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int ok;
   lj_native_enter(L2TG(L));
   ok = setvbuf(fp, NULL, mode, size);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return ok;
 }
 
 static void io_native_clearerr(lua_State *L, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   clearerr(fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static int io_native_ferror(lua_State *L, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int err;
   lj_native_enter(L2TG(L));
   err = ferror(fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return err;
 }
 
 static int io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int ok;
-  io_checkstop_fresh(L, 0, had_stopreq);
-  had_stopreq = io_had_stopreq(L);
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   ok = fscanf(fp, LUA_NUMBER_SCAN, dp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return ok;
 }
 
 static char *io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   char *p;
-  io_checkstop_fresh(L, 0, had_stopreq);
-  had_stopreq = io_had_stopreq(L);
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   p = fgets(buf, size, fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return p;
 }
 
@@ -193,34 +161,34 @@ static size_t io_native_fread(lua_State *L, void *buf, size_t size,
 			      size_t n, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   size_t nr;
-  io_checkstop_fresh(L, 0, had_stopreq);
-  had_stopreq = io_had_stopreq(L);
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   nr = fread(buf, size, n, fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return nr;
 }
 
 static int io_native_ungetc(lua_State *L, int c, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int rc;
   lj_native_enter(L2TG(L));
   rc = ungetc(c, fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return rc;
 }
 
 static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
 {
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int c;
-  io_checkstop_fresh(L, 0, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
   lj_native_enter(L2TG(L));
   c = getc(fp);
   *actionsp = lj_native_leave(L);
@@ -230,9 +198,9 @@ static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
 static size_t io_native_fwrite(lua_State *L, const void *buf, size_t size,
 			       size_t n, FILE *fp, uint32_t *actionsp)
 {
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   size_t nw;
-  io_checkstop_fresh(L, 0, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
   lj_native_enter(L2TG(L));
   nw = fwrite(buf, size, n, fp);
   *actionsp = lj_native_leave(L);
@@ -313,7 +281,7 @@ static IOFileUD *io_file_new(lua_State *L)
 static IOFileUD *io_file_open(lua_State *L, const char *mode)
 {
   const char *fname = strdata(lj_lib_checkstr(L, 1));
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   IOFileUD *iof = io_file_new(L);
   uint32_t actions;
   int err = 0;
@@ -333,20 +301,20 @@ static int io_file_close(lua_State *L, IOFileUD *iof)
 {
   int ok;
   if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_FILE) {
-    int had_stopreq = io_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     uint32_t actions;
     ok = (io_native_fclose(L, iof->fp, &actions) == 0);
     iof->fp = NULL;
-    io_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   } else if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_PIPE) {
-    int had_stopreq = io_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     uint32_t actions = 0;
     int stat = -1;
 #if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
     stat = io_native_pclose(L, iof->fp, &actions);
 #endif
     iof->fp = NULL;
-    io_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #if LJ_52
     return luaL_execresult(L, stat);
 #else
@@ -426,10 +394,10 @@ static int io_file_readlen(lua_State *L, FILE *fp, MSize m)
     return n > 0;
   } else {
     uint32_t actions;
-    int had_stopreq = io_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     int c = io_native_getc(L, fp, &actions);
     (void)io_native_ungetc(L, c, fp);
-    io_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     setstrV(L, L->top++, &G(L)->strempty);
     return (c != EOF);
   }
@@ -476,7 +444,7 @@ static int io_file_read(lua_State *L, IOFileUD *iof, int start)
 static int io_file_write(lua_State *L, IOFileUD *iof, int start)
 {
   FILE *fp = iof->fp;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   cTValue *tv;
   int status = 1;
   for (tv = L->base+start; tv < L->top; tv++) {
@@ -487,7 +455,7 @@ static int io_file_write(lua_State *L, IOFileUD *iof, int start)
     if (status) {
       uint32_t actions;
       status = (io_native_fwrite(L, p, 1, len, fp, &actions) == len);
-      io_checkstop_fresh(L, actions, had_stopreq);
+      lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     }
   }
   if (LJ_52 && status) {
@@ -586,7 +554,7 @@ LJLIB_CF(io_method_seek)
   int64_t ofs = 0;
   TValue *o;
   uint32_t actions;
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int res;
   if (opt == 0) opt = SEEK_SET;
   else if (opt == 1) opt = SEEK_CUR;
@@ -605,22 +573,22 @@ LJLIB_CF(io_method_seek)
   lj_native_enter(L2TG(L));
   res = fseeko(fp, ofs, opt);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #elif _MSC_VER >= 1400
   lj_native_enter(L2TG(L));
   res = _fseeki64(fp, ofs, opt);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #elif defined(__MINGW32__)
   lj_native_enter(L2TG(L));
   res = fseeko64(fp, ofs, opt);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #else
   lj_native_enter(L2TG(L));
   res = fseek(fp, (long)ofs, opt);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #endif
   if (res)
     return luaL_fileresult(L, 0, NULL);
@@ -628,22 +596,22 @@ LJLIB_CF(io_method_seek)
   lj_native_enter(L2TG(L));
   ofs = ftello(fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #elif _MSC_VER >= 1400
   lj_native_enter(L2TG(L));
   ofs = _ftelli64(fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #elif defined(__MINGW32__)
   lj_native_enter(L2TG(L));
   ofs = ftello64(fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #else
   lj_native_enter(L2TG(L));
   ofs = (int64_t)ftell(fp);
   actions = lj_native_leave(L);
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #endif
   setint64V(L->top-1, ofs);
   return 1;
@@ -699,7 +667,7 @@ LJLIB_CF(io_open)
   const char *fname = strdata(lj_lib_checkstr(L, 1));
   GCstr *s = lj_lib_optstr(L, 2);
   const char *mode = s ? strdata(s) : "r";
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   IOFileUD *iof = io_file_new(L);
   uint32_t actions;
   iof->fp = io_native_fopen(L, fname, mode, &actions);
@@ -713,7 +681,7 @@ LJLIB_CF(io_popen)
   const char *fname = strdata(lj_lib_checkstr(L, 1));
   GCstr *s = lj_lib_optstr(L, 2);
   const char *mode = s ? strdata(s) : "r";
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   IOFileUD *iof = io_file_new(L);
   uint32_t actions;
   iof->type = IOFILE_TYPE_PIPE;
@@ -723,8 +691,7 @@ LJLIB_CF(io_popen)
 #else
   iof->fp = io_native_popen(L, fname, mode, &actions);
 #endif
-  actions = io_poll_pending_stopreq(L, actions);
-  if (io_fresh_stopreq(L, actions, had_stopreq)) {
+  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     if (iof->fp != NULL) {
       uint32_t close_actions;
       FILE *fp = iof->fp;
@@ -733,7 +700,7 @@ LJLIB_CF(io_popen)
       actions |= close_actions;
     }
   }
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, fname);
 #else
   return luaL_error(L, LUA_QL("popen") " not supported");
@@ -748,21 +715,20 @@ LJLIB_CF(io_tmpfile)
   iof->fp = NULL; errno = ENOSYS;
 #else
   TGState *tg = L2TG(L);
-  int had_stopreq = io_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   uint32_t actions;
   iof = io_file_new(L);
   lj_native_enter(tg);
   iof->fp = tmpfile();
   actions = lj_native_leave(L);
-  actions = io_poll_pending_stopreq(L, actions);
-  if (iof->fp != NULL && io_fresh_stopreq(L, actions, had_stopreq)) {
+  if (iof->fp != NULL && lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions;
     FILE *fp = iof->fp;
     iof->fp = NULL;
     (void)io_native_fclose(L, fp, &close_actions);
     actions |= close_actions;
   }
-  io_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 #endif
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, NULL);
 }
