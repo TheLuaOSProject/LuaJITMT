@@ -96,6 +96,26 @@ static void assert_direct_name_waits_without_lock(lua_State *L, CTState *cts,
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.saw_native);
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
+
+  seq0 = ljt_ctype_parse_seq(cts);
+  ctx.release_seq = ljt_ctype_hold_parse_token(cts);
+  ctx.saw_native = 0;
+  assert(ctx.release_seq == seq0 + 2u);
+
+  assert(pthread_create(&thread, NULL, release_parse_token, &ctx) == 0);
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local obj = ffi.new('lj_m7_typeinfo_snapshot_t', { x = 17 })\n"
+    "assert(obj.x == 17)\n"
+    "local p = ffi.cast('lj_m7_typeinfo_snapshot_t *', obj)\n"
+    "assert(p[0].x == 17)\n"
+    "local tag = ffi.new('struct lj_m7_typeinfo_snapshot_tag', { x = 23 })\n"
+    "assert(tag.x == 23)\n"
+    "local ptag = ffi.cast('struct lj_m7_typeinfo_snapshot_tag *', tag)\n"
+    "assert(ptag[0].x == 23)\n");
+  assert(pthread_join(thread, NULL) == 0);
+  assert(ctx.saw_native);
+  assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
 static void assert_deep_suffixes_without_lock(lua_State *L, CTState *cts)
@@ -592,11 +612,11 @@ int main(void)
 
   assert_direct_name_waits_without_lock(L, cts, tg);
   seq1 = ljt_ctype_parse_seq(cts);
-  assert(seq1 == seq0 + 2u);
+  assert(seq1 == seq0 + 4u);
 
   assert_typeinfo_waits_without_lock(L, cts, tg);
   seq1 = ljt_ctype_parse_seq(cts);
-  assert(seq1 == seq0 + 4u);
+  assert(seq1 == seq0 + 6u);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"

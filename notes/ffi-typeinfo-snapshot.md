@@ -16,8 +16,9 @@
   fixture asserts `ffi.typeinfo()` and stable public readers such as
   `ffi.typeof()`, `ffi.sizeof()`, and `ffi.alignof()` do not advance parse_token
   while `ffi.cdef()` still does, asserts `ffi.typeinfo()` parks in native time
-  rather than returning a transient `nil` for stable IDs, and the suite also
-  runs the rollback-reader race against stock-visible FFI operations.
+  rather than returning a transient `nil` for stable IDs, and covers
+  named-string `ffi.new()` / `ffi.cast()` during an active parser sequence. The
+  suite also runs the rollback-reader race against stock-visible FFI operations.
 
 Verification:
 
