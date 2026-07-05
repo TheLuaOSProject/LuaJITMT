@@ -2375,9 +2375,34 @@ static TValue *tab_newkey_private_empty_anchor(lua_State *L, GCtab *t,
 }
 
 static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
-				  Node *nodebase, MSize hmask, Node *anchor)
+				  Node *nodebase, MSize hmask, Node *anchor,
+				  int *chain_overflow)
 {
   TValue nk, nv;
+  Node *n;
+  MSize chainlen = 0;
+  *chain_overflow = 0;
+  if (!tab_private_mutation_allowed(L) ||
+      !tab_hash_generation_current(t, nodebase))
+    return NULL;
+  /*
+  ** Private single-mutator insertion has no racing key publisher, so scan the
+  ** stable collision chain here instead of entering the shared KEYLOCK/CAS
+  ** lookup first. Still reload after the private predicate and keep the normal
+  ** chain limit, generation check, key canonicalization, and GC key barriers.
+  */
+  for (n = anchor; n != NULL; n = lj_tab_nextnode_acq(n)) {
+    chainlen++;
+    lj_tv_load_acq(&nk, &n->key);
+    if (lj_obj_equal(&nk, key))
+      return &n->val;
+    if (tab_key_islocked(&nk))
+      return NULL;
+  }
+  if (chainlen >= LJ_TAB_MAXCHAIN) {
+    *chain_overflow = 1;
+    return NULL;
+  }
   if (!tab_hash_generation_current(t, nodebase))
     return NULL;
   lj_tv_load_acq(&nk, &anchor->key);
@@ -2552,6 +2577,20 @@ retry_insert:
     if (slot)
       return slot;
   }
+  if (tab_private_mutation_allowed(L)) {
+    int chain_overflow;
+    TValue *slot = tab_newkey_private(L, t, key, nodebase, hmask, n,
+				      &chain_overflow);
+    if (slot)
+      return slot;
+    if (chain_overflow) {
+      if (key_anchored) {
+	tab_rehash_chain_overflow(L, t, key, hmask);
+	goto retry_insert;
+      }
+      return tab_rehash_chain_overflow_key(L, t, key, hmask);
+    }
+  }
   {
     int locked;
     MSize chainlen;
@@ -2568,11 +2607,6 @@ retry_insert:
 	goto retry_insert;
       }
       return tab_rehash_chain_overflow_key(L, t, key, hmask);
-    }
-    if (tab_private_mutation_allowed(L)) {
-      TValue *slot = tab_newkey_private(L, t, key, nodebase, hmask, n);
-      if (slot)
-	return slot;
     }
   }
   {
