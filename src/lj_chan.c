@@ -90,38 +90,6 @@ static void chan_wake_all(LJChan *ch)
   chan_wake_n(ch, INT_MAX);
 }
 
-static int chan_had_stopreq(lua_State *L)
-{
-  TGState *tg = L ? L2TG(L) : NULL;
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int chan_pending_stopreq(lua_State *L)
-{
-  TGState *tg = L ? L2TG(L) : NULL;
-  return tg && (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ);
-}
-
-static uint32_t chan_poll_pending_stopreq(lua_State *L, uint32_t actions)
-{
-  if (!(actions & LJ_GC2_HS_STOPREQ) && chan_pending_stopreq(L))
-    actions |= lj_safepoint_poll(L);
-  return actions;
-}
-
-static int chan_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void chan_checkstop_fresh(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  actions = chan_poll_pending_stopreq(L, actions);
-  if (chan_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 static int chan_spin_changed(LJChan *ch, uint32_t f)
 {
   uint32_t i;
@@ -139,9 +107,9 @@ static void chan_wait(lua_State *L, LJChan *ch)
   TGState *tg = L ? L2TG(L) : NULL;
   LJNativeFrame frame;
   uint32_t actions = 0;
-  int had_stopreq = chan_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   if (chan_spin_changed(ch, f)) {
-    chan_checkstop_fresh(L, 0, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
     return;
   }
   if (L)
@@ -153,7 +121,7 @@ static void chan_wait(lua_State *L, LJChan *ch)
     actions = lj_native_leave_l(L, &frame);
   else if (tg)
     lj_tg_in_native_store_rlx(tg, 0);
-  chan_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static int64_t chan_now_ns(void)
@@ -181,7 +149,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
   TGState *tg;
   LJNativeFrame frame;
   uint32_t actions = 0;
-  int had_stopreq = chan_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int rc;
   if (ns <= 0)
     return 1;
@@ -190,7 +158,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
   f = la_load32_acq(&ch->futex);
   tg = L ? L2TG(L) : NULL;
   if (chan_spin_changed(ch, f)) {
-    chan_checkstop_fresh(L, 0, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
     return 0;
   }
   if (L)
@@ -204,7 +172,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     actions = lj_native_leave_l(L, &frame);
   else if (tg)
     lj_tg_in_native_store_rlx(tg, 0);
-  chan_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return rc != 0 && errno == ETIMEDOUT;
 }
 
