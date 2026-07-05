@@ -294,7 +294,7 @@ return function(add)
     description = "parser captured-local metadata behavior",
     run = function(t)
       build_and_run_luajit_script(t, "t-parser-capture-meta.lua", nil,
-        { xcflags = "-DLUA_USE_ASSERT" })
+        { xcflags = build.assert_flag })
     end
   })
 end

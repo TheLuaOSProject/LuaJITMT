@@ -6,7 +6,7 @@ local utils = require("suite_utils")
 local capture_luajit = runtime.capture_luajit
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
-local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
+local gc2_test_cflags = build.gc2_test_helper_flag
 
 local M8_C_FIXTURES = {
   "t-gc2-phase",
@@ -61,7 +61,7 @@ local function run_default_matrix(t)
 end
 
 local function run_paranoia_matrix(t)
-  local xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
+  local xcflags = build.gc2_paranoia_flags
   t:build({ clean = true, quiet = true, xcflags = xcflags })
   luajit_script(t, "t-weak-modes.lua", nil, {
     joff = true,

@@ -57,7 +57,7 @@ namespace, metatable, arithmetic, and ccall snapshot fixtures through the same
 helper. CDEF-token, callback, native-stopreq, and parser-release-only tests keep
 local workers because they assert different cleanup or observation semantics.
 
-## M6 Build Profile Cleans
+## Build Profile Cleans
 
 `m6_jit_table_store_helper` and the M6 TBAR paranoia sub-check no longer call
 `make clean` immediately before a profile-aware harness build. `Test:build()`
@@ -65,3 +65,22 @@ already cleans when the requested `XCFLAGS` signature differs, and
 `with_default_build_restore()` still restores the default profile after the
 paranoia sub-check. Removing the extra clean keeps the isolation semantics while
 avoiding duplicate full source-tree rebuilds.
+
+The first `m3_gc2_paranoia` profile switch uses the same profile-aware build
+path now. Its later static no-JIT sub-build still keeps an explicit clean
+because it passes `BUILDMODE=static` through raw `make` rather than
+`Test:build()`.
+
+## Harness Build Profiles
+
+Repeated assertion, GC2-paranoia, table-helper, function-helper, and
+trace-helper flag strings now live in `tests/lib/suite_build.lua`. Test suites
+request named profile helpers instead of spelling `XCFLAGS`/C fixture flags at
+each callsite.
+
+This keeps the linked LuaJIT binary and helper fixture compilation in sync for
+profile-sensitive tests. It is intentionally harness-only: the profile helpers
+do not change test ordering, rebuild policy, runtime behavior, or stock
+semantics expectations. `m0_build_profile_helpers` covers the helper contracts
+directly, while the downstream M2/M3/M5/M6/M7/M8 cases continue to cover the
+actual profile builds.

@@ -556,7 +556,7 @@ assert(util.traceinfo(1), "large CNEW allocation loop did not trace")
 print("jit big cnew ok")
 ]])
 
-      clean_build(t, { xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" })
+      clean_build(t, build.gc2_paranoia_opts())
       run_stock(t, { "test.lua", "--quiet", "lib/ffi/jit_struct.lua" }, {
         timeout = "20s"
       })

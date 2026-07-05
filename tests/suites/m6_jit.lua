@@ -9,7 +9,7 @@ local build_default = build.build_default
 local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
-local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
+local gc2_test_cflags = build.gc2_test_helper_flag
 local shell_quote = utils.shell_quote
 
 local m6_cases = {
@@ -686,7 +686,7 @@ return function(add)
                       "t-safepoint-handshake.c",
                       {
         build = false,
-        cflags = "-DLJ_GC2_TEST_HELPERS"
+        cflags = gc2_test_cflags
       })
       print("M6 dispatch redispatch behavior passed")
     end
@@ -749,13 +749,12 @@ assert(util.traceinfo(1), "deep inlined FUNCF loop did not trace")
     name = "m6_jit_fnew_bump",
     description = "local-cell CNEW/FNEW allocation and publication behavior",
     run = function(t)
-      clean_build(t, { quiet = true, xcflags = "-DLJ_FUNC_TEST_HELPERS" })
+      clean_build(t, build.func_helper_build_opts({ quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-jit-fnew-bump"),
-                      "t-jit-fnew-bump.c", {
-        cflags = "-DLJ_FUNC_TEST_HELPERS",
+                      "t-jit-fnew-bump.c", build.func_helper_c_opts({
         build = false,
         timeout = "20s"
-      })
+      }))
       print("M6 local-cell CNEW/FNEW allocation behavior passed")
     end
   })
@@ -809,14 +808,12 @@ print("jit-recursive-call-unroll OK")
     name = "m6_jit_recursive_retention",
     description = "recursive call-unroll trace retention instrumentation",
     run = function(t)
-      clean_build(t, { quiet = true, xcflags = "-DLJ_TRACE_TEST_HELPERS" })
+      clean_build(t, build.trace_helper_build_opts({ quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-jit-recursive-retention"),
-                      "t-jit-recursive-retention.c", {
-        cflags = "-DLJ_TRACE_TEST_HELPERS",
+                      "t-jit-recursive-retention.c", build.trace_helper_c_opts({
         build = false,
-        timeout = "20s",
-        xcflags = "-DLJ_TRACE_TEST_HELPERS"
-      })
+        timeout = "20s"
+      }))
       print("M6 JIT recursive trace-retention instrumentation passed")
     end
   })
@@ -1690,7 +1687,7 @@ assert(util.traceinfo(1), "existing hash-store TBAR probe did not trace")
 ]=], { timeout = "20s" })
       build.with_default_build_restore(t, function()
         build_default(t, {
-          args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
+          args = { "XCFLAGS=" .. build.gc2_paranoia_flags }
         })
         luajit_code(t, [=[
 jit.flush()

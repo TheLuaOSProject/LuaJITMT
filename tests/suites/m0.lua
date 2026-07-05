@@ -221,6 +221,34 @@ return function(add)
   })
 
   add({
+    name = "m0_build_profile_helpers",
+    description = "Lua test harness build profiles stay internally consistent",
+    run = function()
+      local assert_opts = build.assert_opts({ clean = false })
+      local paranoia_opts = build.gc2_paranoia_opts({ timeout = "1s" })
+      local tab_opts = build.tab_helper_opts()
+      local func_opts = build.func_helper_opts()
+      local trace_opts = build.trace_helper_opts()
+      assert(assert_opts.clean == false)
+      assert(assert_opts.xcflags == build.assert_flag)
+      assert(assert_opts.cflags == build.assert_flag)
+      assert(paranoia_opts.clean == true)
+      assert(paranoia_opts.timeout == "1s")
+      assert(paranoia_opts.xcflags == build.gc2_paranoia_flags)
+      assert(paranoia_opts.cflags == build.gc2_paranoia_flags)
+      assert(build.gc2_paranoia_nojit_flags:find(build.gc2_paranoia_flags,
+                                                 1, true) == 1)
+      assert(tab_opts.clean == true and tab_opts.xcflags == tab_opts.cflags)
+      assert(func_opts.clean == true and func_opts.xcflags == func_opts.cflags)
+      assert(trace_opts.clean == true and
+             trace_opts.xcflags == trace_opts.cflags)
+      assert(tab_opts.xcflags ~= func_opts.xcflags)
+      assert(func_opts.xcflags ~= trace_opts.xcflags)
+      print("M0 build profile helpers passed")
+    end
+  })
+
+  add({
     name = "m0_matrix",
     description = "M0 warning-clean default and no-JIT stock-test build matrix",
     run = function(t)

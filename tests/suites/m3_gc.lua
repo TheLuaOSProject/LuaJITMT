@@ -11,7 +11,7 @@ local build_shared_library = build.build_shared_library
 local capture_luajit = runtime.capture_luajit
 local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
-local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
+local gc2_test_cflags = build.gc2_test_helper_flag
 
 local function build_loadlib_stopreq_so(t)
   return build_shared_library(t, t:tmp("lj_t-loadlib-stopreq.so"),
@@ -166,9 +166,8 @@ return function(add)
     description = "GC2 paranoia build, oracle fixtures, and stock tests",
     run = function(t)
       build.with_default_build_restore(t, function()
-        make_clean(t)
         make_default(t, {
-          args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
+          args = { "XCFLAGS=" .. build.gc2_paranoia_flags }
         })
         run_c_fixtures(t, {
           "t-gc2-paranoia",
@@ -177,7 +176,7 @@ return function(add)
           "t-gc2-traverse"
         }, {
           output_suffix = "_paranoia",
-          cflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
+          cflags = build.gc2_paranoia_flags
         })
         runtime.run_stock(t, { "test.lua", "--quiet" })
 
@@ -185,7 +184,7 @@ return function(add)
         make_default(t, {
           args = {
             "BUILDMODE=static",
-            "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -DLUAJIT_DISABLE_JIT"
+            "XCFLAGS=" .. build.gc2_paranoia_nojit_flags
           }
         })
         runtime.run_stock(t, { "test.lua", "--quiet", "-jit" })

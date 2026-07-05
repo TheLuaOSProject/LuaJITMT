@@ -117,10 +117,7 @@ return function(add)
     description = "arena GC metadata verifier path under assertions",
     run = function(t)
       run_luajit_fixture(t, t:tmp("lj_t_arena_gcverify"),
-                         "t-arena-gcmark.c", {
-        xcflags = "-DLUA_USE_ASSERT",
-        cflags = "-DLUA_USE_ASSERT"
-      })
+                         "t-arena-gcmark.c", build.assert_opts())
     end
   })
 
@@ -129,10 +126,7 @@ return function(add)
     description = "lua_close proto/closure churn under assertions",
     run = function(t)
       run_luajit_fixture(t, t:tmp("lj_t_arena_gcclose"),
-                         "t-arena-gcclose.c", {
-        xcflags = "-DLUA_USE_ASSERT",
-        cflags = "-DLUA_USE_ASSERT"
-      })
+                         "t-arena-gcclose.c", build.assert_opts())
     end
   })
 

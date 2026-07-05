@@ -6,6 +6,16 @@ local M = {}
 local luajit_fixture_libs = utils.luajit_fixture_libs
 local shell_quote = utils.shell_quote
 local tab_test_helper_flag = "-DLJ_TAB_TEST_HELPERS"
+local func_test_helper_flag = "-DLJ_FUNC_TEST_HELPERS"
+local trace_test_helper_flag = "-DLJ_TRACE_TEST_HELPERS"
+local gc2_test_helper_flag = "-DLJ_GC2_TEST_HELPERS"
+local assert_flag = "-DLUA_USE_ASSERT"
+local gc2_paranoia_flags = assert_flag .. " -DLJ_GC2_PARANOIA=1"
+
+M.assert_flag = assert_flag
+M.gc2_test_helper_flag = gc2_test_helper_flag
+M.gc2_paranoia_flags = gc2_paranoia_flags
+M.gc2_paranoia_nojit_flags = gc2_paranoia_flags .. " -DLUAJIT_DISABLE_JIT"
 
 local function copy_run_opts(opts)
   local out = optutils.copy(opts)
@@ -57,21 +67,66 @@ function M.clean_build(t, opts)
   })
 end
 
-function M.tab_helper_build_opts(opts)
+local function helper_build_opts(opts, flag)
   local out = optutils.copy(opts)
   if out.clean == nil then out.clean = true end
-  if out.xcflags == nil then out.xcflags = tab_test_helper_flag end
+  if out.xcflags == nil then out.xcflags = flag end
   return out
+end
+
+local function helper_c_opts(opts, flag)
+  local out = optutils.copy(opts)
+  if out.cflags == nil then out.cflags = flag end
+  return out
+end
+
+local function helper_opts(opts, flag)
+  return helper_c_opts(helper_build_opts(opts, flag), flag)
+end
+
+function M.assert_opts(opts)
+  return helper_c_opts(helper_build_opts(opts, assert_flag), assert_flag)
+end
+
+function M.gc2_paranoia_opts(opts)
+  return helper_c_opts(helper_build_opts(opts, gc2_paranoia_flags),
+                       gc2_paranoia_flags)
+end
+
+function M.tab_helper_build_opts(opts)
+  return helper_build_opts(opts, tab_test_helper_flag)
 end
 
 function M.tab_helper_c_opts(opts)
-  local out = optutils.copy(opts)
-  if out.cflags == nil then out.cflags = tab_test_helper_flag end
-  return out
+  return helper_c_opts(opts, tab_test_helper_flag)
 end
 
 function M.tab_helper_opts(opts)
-  return M.tab_helper_c_opts(M.tab_helper_build_opts(opts))
+  return helper_opts(opts, tab_test_helper_flag)
+end
+
+function M.func_helper_build_opts(opts)
+  return helper_build_opts(opts, func_test_helper_flag)
+end
+
+function M.func_helper_c_opts(opts)
+  return helper_c_opts(opts, func_test_helper_flag)
+end
+
+function M.func_helper_opts(opts)
+  return helper_opts(opts, func_test_helper_flag)
+end
+
+function M.trace_helper_build_opts(opts)
+  return helper_build_opts(opts, trace_test_helper_flag)
+end
+
+function M.trace_helper_c_opts(opts)
+  return helper_c_opts(opts, trace_test_helper_flag)
+end
+
+function M.trace_helper_opts(opts)
+  return helper_opts(opts, trace_test_helper_flag)
 end
 
 function M.with_default_build_restore(t, fn, opts)
