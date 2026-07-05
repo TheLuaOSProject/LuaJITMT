@@ -21,7 +21,9 @@ Several native-call sites repeated identical `had_stopreq`/fresh-stop wrappers.
 `lj_safepoint_had_stopreq()` now lives next to the existing fresh-stop helpers,
 and exact duplicate local wrappers were removed from base `print`, `loadfile`,
 package loader paths, `jit.profile.stop`, FFI string/copy/fill helpers,
-VM-event failure reporting, JIT-token waits, and the FFI CLibrary loader.
+VM-event failure reporting, JIT-token waits, the FFI CLibrary loader,
+`debug.debug` native console I/O, FFI native-call helpers, profiling stop, and
+the CLI frontend's native stdio wrappers.
 
 Site-specific wrappers were intentionally left in place when they carry behavior
 beyond the common helper, such as extra pending-poll handling or additional

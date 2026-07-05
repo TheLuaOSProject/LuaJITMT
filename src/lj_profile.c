@@ -675,31 +675,12 @@ uint32_t lj_profile_stop_hs(lua_State *L)
   return actions;
 }
 
-static int profile_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int profile_fresh_stopreq(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void profile_checkstop_fresh(lua_State *L, uint32_t actions,
-				    int had_stopreq)
-{
-  if (profile_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 /* Stop profiling. */
 LUA_API void luaJIT_profile_stop(lua_State *L)
 {
-  int had_stopreq = profile_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   uint32_t actions = lj_profile_stop_hs(L);
-  profile_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 typedef struct ProfileDumpstackCtx {

@@ -93,35 +93,16 @@ static char *frontend_fgets(lua_State *L, char *buf, int size, FILE *fp)
   return fgets(buf, size, fp);
 }
 #else
-static int frontend_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int frontend_fresh_stopreq(lua_State *L, uint32_t actions,
-				  int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void frontend_checkstop_fresh(lua_State *L, uint32_t actions,
-				     int had_stopreq)
-{
-  if (frontend_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 static void frontend_fwrite(lua_State *L, const void *p, size_t size,
 			    size_t n, FILE *fp)
 {
   if (L) {
     uint32_t actions;
-    int had_stopreq = frontend_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     lj_native_enter(L2TG(L));
     (void)fwrite(p, size, n, fp);
     actions = lj_native_leave(L);
-    frontend_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   } else {
     (void)fwrite(p, size, n, fp);
   }
@@ -142,11 +123,11 @@ static void frontend_fflush(lua_State *L, FILE *fp)
 {
   if (L) {
     uint32_t actions;
-    int had_stopreq = frontend_had_stopreq(L);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
     lj_native_enter(L2TG(L));
     (void)fflush(fp);
     actions = lj_native_leave(L);
-    frontend_checkstop_fresh(L, actions, had_stopreq);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   } else {
     (void)fflush(fp);
   }
@@ -159,11 +140,11 @@ static char *frontend_fgets(lua_State *L, char *buf, int size, FILE *fp)
   int had_stopreq;
   if (!L)
     return fgets(buf, size, fp);
-  had_stopreq = frontend_had_stopreq(L);
+  had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   p = fgets(buf, size, fp);
   actions = lj_native_leave(L);
-  frontend_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return p;
 }
 #endif

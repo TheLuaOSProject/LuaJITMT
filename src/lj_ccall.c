@@ -1248,25 +1248,6 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
   return lj_cconv_tv_ct_l(L, cts, ctr, rid, L->top-1, sp);
 }
 
-static int ccall_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int ccall_fresh_stopreq(lua_State *L, uint32_t actions,
-			       int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void ccall_checkstop_fresh(lua_State *L, uint32_t actions,
-				  int had_stopreq)
-{
-  if (ccall_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 void lj_ccall_native_save(lua_State *L, CCallNativeState *st)
 {
   TGState *tg = L2TG(L);
@@ -1286,7 +1267,7 @@ void lj_ccall_native_enter(lua_State *L, CCallNativeState *st, void *func)
   int had_stopreq;
   ccallback_slot_rel(cb, ~0u);
   lj_tg_ffi_call_func_rel(tg, func);
-  had_stopreq = ccall_had_stopreq(L);
+  had_stopreq = lj_safepoint_had_stopreq(L);
   st->had_stopreq = had_stopreq;
   ccallback_native_had_stopreq_rel(cb, (uint8_t)had_stopreq);
   lj_native_enter(tg);
@@ -1310,7 +1291,7 @@ uint32_t lj_ccall_native_leave(lua_State *L, CTState *cts,
 void lj_ccall_native_checkstop(lua_State *L, uint32_t actions,
 			       const CCallNativeState *st)
 {
-  ccall_checkstop_fresh(L, actions, st->had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, st->had_stopreq);
 }
 
 void lj_ccall_jit_void_gpr(lua_State *L, void *func, uintptr_t a,
@@ -2441,34 +2422,34 @@ void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func, uintptr_t a,
 void *lj_ffi_jit_memcpy(lua_State *L, void *dp, const void *sp, CTSize len)
 {
   uint32_t actions;
-  int had_stopreq = ccall_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   memcpy(dp, sp, (size_t)len);
   actions = lj_native_leave(L);
-  ccall_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return dp;
 }
 
 void *lj_ffi_jit_memset(lua_State *L, void *dp, int32_t fill, CTSize len)
 {
   uint32_t actions;
-  int had_stopreq = ccall_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   memset(dp, fill, (size_t)len);
   actions = lj_native_leave(L);
-  ccall_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return dp;
 }
 
 size_t lj_ffi_jit_strlen(lua_State *L, const char *p)
 {
   uint32_t actions;
-  int had_stopreq = ccall_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   size_t len;
   lj_native_enter(L2TG(L));
   len = strlen(p);
   actions = lj_native_leave(L);
-  ccall_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return len;
 }
 

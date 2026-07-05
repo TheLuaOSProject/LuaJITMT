@@ -461,44 +461,25 @@ LJLIB_CF(debug_gethook)
 
 /* ------------------------------------------------------------------------ */
 
-static int debug_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int debug_fresh_stopreq(lua_State *L, uint32_t actions,
-			       int had_stopreq)
-{
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
-}
-
-static void debug_checkstop_fresh(lua_State *L, uint32_t actions,
-				  int had_stopreq)
-{
-  if (debug_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
-}
-
 static void debug_native_fputs(lua_State *L, const char *s, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = debug_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   lj_native_enter(L2TG(L));
   (void)fputs(s, fp);
   actions = lj_native_leave(L);
-  debug_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static char *debug_native_fgets(lua_State *L, char *buf, int size, FILE *fp)
 {
   uint32_t actions;
-  int had_stopreq = debug_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   char *p;
   lj_native_enter(L2TG(L));
   p = fgets(buf, size, fp);
   actions = lj_native_leave(L);
-  debug_checkstop_fresh(L, actions, had_stopreq);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return p;
 }
 
