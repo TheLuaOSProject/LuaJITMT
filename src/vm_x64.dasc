@@ -4261,6 +4261,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov TAB:RC->freetop, r9
     |  add qword [TMPR+GL_OFS(gc.total)], TAB_EMPTY_SIZE
     |  add qword [DISPATCH+DISPATCH_TG(local_total)], TAB_EMPTY_SIZE
+    |  cmp dword [DISPATCH+DISPATCH_TG(mark_active)], 0
+    |  je ->BC_TNEW_ROOT_PUBLISH
+    |  cmp byte [DISPATCH+DISPATCH_TG(alloc.alloc_black)], 0
+    |  je ->BC_TNEW_ROOT_PUBLISH
+    |  cmp dword GL:TMPR->gc2.legacy_mark_bridge, 0
+    |  jne ->BC_TNEW_ROOT_PUBLISH
+    |  mov aword TAB:RC->nextgc, 0
+    |  jmp >4
+    |->BC_TNEW_ROOT_PUBLISH:
     |  mov r9, [DISPATCH+DISPATCH_TG(gcroot_pending)]
     |  mov TAB:RC->nextgc, r9
     |  mov dword [TMPR+GL_OFS(gcroot_pending_hint)], 1

@@ -1301,7 +1301,7 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   GCtab *t;
   uint64_t local_total;
   uint32_t cell, end, next;
-  int account_now;
+  int account_now, black;
   UNUSED(L);
   if (g == NULL || tg == NULL ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
@@ -1323,7 +1323,8 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
     return NULL;
   b->cell = next;
   lj_arena_bm_set(a->block, cell);
-  if (lj_arena_alloc_black_acq(&tg->alloc))
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  if (black)
     lj_arena_bm_set(a->mark, cell);
   else
     lj_arena_bm_clear(a->mark, cell);
@@ -1333,10 +1334,21 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   lj_gc_total_add(g, sizeof(GCtab));
   /*
   ** The arena block bit is visible to bitmap sweep before this helper returns.
-  ** Publish the initialized table before an accounting flush can assist GC, so
-  ** a sweep bridge never sees an unrooted allocated table cell.
+  ** Publish the initialized table, or prove standalone GC2 arena ownership,
+  ** before an accounting flush can assist GC. A coupled legacy sweep bridge
+  ** must never see an unrooted allocated table cell.
   */
-  lj_gc_linkobj_new(g, obj2gco(t));
+  if (lj_tg_mark_active_acq(tg) && black && !gc2_legacy_mark_bridge_acq(g)) {
+    /*
+    ** Standalone GC2 active-black empty tables are already owned by the arena
+    ** mark bit at birth and have no child edges. Keep them off the legacy root
+    ** spine to avoid pending-root traffic; coupled legacy mark cycles still
+    ** publish through pending roots because legacy sweep remains authoritative.
+    */
+    lj_obj_setgcwnullrel(obj2gco(t));
+  } else {
+    lj_gc_linkobj_new(g, obj2gco(t));
+  }
   if (account_now)
     lj_gc2_account_alloc(g, tg, sizeof(GCtab));
   else
