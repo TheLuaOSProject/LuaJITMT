@@ -8,6 +8,8 @@ if [ -n "${LUA:-}" ]; then
   LUA_BIN=$LUA
 elif [ -x "$ROOT/src/luajit" ]; then
   LUA_BIN="$ROOT/src/luajit"
+elif [ -x "$ROOT/src/luajit.exe" ]; then
+  LUA_BIN="$ROOT/src/luajit.exe"
 elif command -v luajit >/dev/null 2>&1; then
   LUA_BIN=luajit
 else

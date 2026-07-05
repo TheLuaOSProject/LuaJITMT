@@ -77,25 +77,6 @@ run_direct_smoke() {
   printf 'CI %s binary smoke passed\n' "$label"
 }
 
-run_windows_direct_smoke() {
-  local bin=$1
-  local out
-  if ! is_windows_host; then
-    printf 'CI Windows smoke must run on a Windows host; use tools/release/build_artifact.sh for Wine release validation\n' >&2
-    exit 1
-  fi
-  if [ ! -f "$bin" ]; then
-    printf 'CI Windows smoke binary is missing: %s\n' "$bin" >&2
-    exit 1
-  fi
-  if ! out=$("$bin" -e "$smoke_code" 2>&1); then
-    printf '%s\n' "$out" >&2
-    exit 1
-  fi
-  assert_platform_output "Windows" "$out" "Windows"
-  printf 'CI Windows binary smoke passed\n'
-}
-
 run_platform_test() {
   local case_name=$1
   local require=$2
@@ -156,6 +137,9 @@ case "$platform" in
     )
     make_clean
     build_make "${windows_make_args[@]}"
-    run_windows_direct_smoke "$root/src/luajit.exe"
+    run_platform_test \
+      release_windows_binary windows LJ_RELEASE_WINDOWS_BIN "$root/src/luajit.exe" \
+      LUA="$root/src/luajit.exe" \
+      LJ_RELEASE_WINDOWS_RUNNER=direct
     ;;
 esac

@@ -47,6 +47,10 @@ local function command_exists(cmd)
   return exe and utils.command_ok("command -v " .. shell_quote(exe))
 end
 
+local function native_windows_runner()
+  return jit and jit.os == "Windows"
+end
+
 local function smoke_code()
   return table.concat({
     "print(jit.os, jit.arch)",
@@ -98,9 +102,13 @@ local function run_linux_binary(t)
 end
 
 local function run_windows_binary_at(t, bin)
-  local runner = env("LJ_RELEASE_WINDOWS_RUNNER") or "wine"
+  local runner = env("LJ_RELEASE_WINDOWS_RUNNER")
   if not bin then return maybe_skip("windows", "LJ_RELEASE_WINDOWS_BIN unset") end
   if not utils.file_exists(bin) then return maybe_skip("windows", bin .. " not found") end
+  if native_windows_runner() and (not runner or runner == "direct") then
+    return run_direct_binary(t, "windows", bin, "Windows")
+  end
+  runner = runner or "wine"
   if not command_exists(runner) then return maybe_skip("windows", runner .. " not in PATH") end
 
   local prefix = "WINEDEBUG=-all " .. runner .. " " .. shell_quote(bin)

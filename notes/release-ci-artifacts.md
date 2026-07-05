@@ -25,7 +25,9 @@
 - Normal GitHub CI now uses `tools/ci/platform_build.sh` for each platform to
   build, run the binary directly, and dispatch the matching platform binary
   harness check (`jit.os`, `jit.arch`, and the threading module). It does not
-  run release archive extraction checks or stock semantics suites.
+  run release archive extraction checks or stock semantics suites. Windows CI
+  dispatches the same release binary harness natively through `src/luajit.exe`;
+  Wine remains the release-archive validation path for cross-host checks.
 - GitHub-hosted `macos-13` was retired; CI and rolling-release macOS jobs use
   the current x64-hosted `macos-26-intel` runner while keeping
   `MACOSX_DEPLOYMENT_TARGET=13.0` for produced binaries.
