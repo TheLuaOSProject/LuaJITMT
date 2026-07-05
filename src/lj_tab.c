@@ -1055,14 +1055,20 @@ static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask
   return count;
 }
 
-static void tab_retired_push(global_State *g, TabNodeRetire *ret)
-{
-  TabNodeRetire *head = lj_tab_node_retired_head_acq(g);
-  do {
-    lj_tab_node_retired_next_rel(ret, head);
-  } while (!lj_tab_node_retired_head_cas(g, &head, ret));
-  /* 06 section 6.3.5 raw retire. */
+#define TAB_RETIRE_PUSH(name, type, head_acq, next_rel, head_cas) \
+static void name(global_State *g, type *ret) \
+{ \
+  type *head = head_acq(g); \
+  do { \
+    next_rel(ret, head); \
+  } while (!head_cas(g, &head, ret)); \
 }
+
+/* 06 section 6.3.5 raw node retire. */
+TAB_RETIRE_PUSH(tab_retired_push, TabNodeRetire,
+		lj_tab_node_retired_head_acq,
+		lj_tab_node_retired_next_rel,
+		lj_tab_node_retired_head_cas)
 
 static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
 					 MSize hmask)
@@ -1090,14 +1096,13 @@ static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
   lj_tab_node_retired_armed_rel(ret, 1);
 }
 
-static void tab_array_retired_push(global_State *g, TabArrayRetire *ret)
-{
-  TabArrayRetire *head = lj_tab_array_retired_head_acq(g);
-  do {
-    lj_tab_array_retired_next_rel(ret, head);
-  } while (!lj_tab_array_retired_head_cas(g, &head, ret));
-  /* 06 section 6.3.1 raw retire. */
-}
+/* 06 section 6.3.1 raw array retire. */
+TAB_RETIRE_PUSH(tab_array_retired_push, TabArrayRetire,
+		lj_tab_array_retired_head_acq,
+		lj_tab_array_retired_next_rel,
+		lj_tab_array_retired_head_cas)
+
+#undef TAB_RETIRE_PUSH
 
 static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
 						MSize acap)

@@ -28,3 +28,11 @@ the CLI frontend and I/O library native stdio wrappers.
 Site-specific wrappers were intentionally left in place when they carry behavior
 beyond the common helper, such as extra pending-poll handling or additional
 cleanup before throwing a fresh STOPREQ.
+
+## Table Retire Helpers
+
+`lj_tab` node and array retirement records share the same Treiber-list metadata:
+retired head, next link, retire epoch, and armed bit. The typed accessors and
+push loops now use local macro generators for those identical parts, while the
+payload fields, free checks, and reclaim loops stay explicit for node and array
+ownership semantics.

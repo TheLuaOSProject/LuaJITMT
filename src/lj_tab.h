@@ -71,39 +71,57 @@ static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 #define hsize2hbits(s)	((s) ? ((s)==1 ? 1 : 1+lj_fls((uint32_t)((s)-1))) : 0)
 #define LJ_TAB_RETIRE_EPOCHS	2u
 
-static LJ_AINLINE TabNodeRetire *
-lj_tab_node_retired_head_acq(const global_State *g)
-{
-  return (TabNodeRetire *)la_loadptr_acq(
-    (void *const *)&g->tab.retired_nodes);
+/* Node and array retire records share the same Treiber-list metadata. */
+#define LJ_TAB_RETIRE_HEAD_ACCESSORS(name, type, field) \
+static LJ_AINLINE type *name##_head_acq(const global_State *g) \
+{ \
+  return (type *)la_loadptr_acq((void *const *)&g->tab.field); \
+} \
+\
+static LJ_AINLINE int name##_head_cas(global_State *g, type **oldp, type *ret) \
+{ \
+  return la_casptr((void **)&g->tab.field, (void **)oldp, ret, \
+		   LA_ACQ_REL, LA_ACQ); \
+} \
+\
+static LJ_AINLINE type *name##_head_xchg_acqrel(global_State *g, type *ret) \
+{ \
+  return (type *)la_xchgptr_acqrel((void **)&g->tab.field, ret); \
 }
 
-static LJ_AINLINE int lj_tab_node_retired_head_cas(global_State *g,
-						   TabNodeRetire **oldp,
-						   TabNodeRetire *ret)
-{
-  return la_casptr((void **)&g->tab.retired_nodes, (void **)oldp, ret,
-		   LA_ACQ_REL, LA_ACQ);
+#define LJ_TAB_RETIRE_RECORD_ACCESSORS(name, type) \
+static LJ_AINLINE type *name##_next_acq(const type *ret) \
+{ \
+  return (type *)la_loadptr_acq((void *const *)&ret->next); \
+} \
+\
+static LJ_AINLINE void name##_next_rel(type *ret, type *next) \
+{ \
+  la_storeptr_rel((void **)&ret->next, next); \
+} \
+\
+static LJ_AINLINE uint64_t name##_epoch_acq(const type *ret) \
+{ \
+  return la_load64_acq(&ret->retire_epoch); \
+} \
+\
+static LJ_AINLINE void name##_epoch_rel(type *ret, uint64_t epoch) \
+{ \
+  la_store64_rel(&ret->retire_epoch, epoch); \
+} \
+\
+static LJ_AINLINE uint32_t name##_armed_acq(const type *ret) \
+{ \
+  return la_load32_acq(&ret->armed); \
+} \
+\
+static LJ_AINLINE void name##_armed_rel(type *ret, uint32_t armed) \
+{ \
+  la_store32_rel(&ret->armed, armed); \
 }
 
-static LJ_AINLINE TabNodeRetire *
-lj_tab_node_retired_head_xchg_acqrel(global_State *g, TabNodeRetire *ret)
-{
-  return (TabNodeRetire *)la_xchgptr_acqrel(
-    (void **)&g->tab.retired_nodes, ret);
-}
-
-static LJ_AINLINE TabNodeRetire *
-lj_tab_node_retired_next_acq(const TabNodeRetire *ret)
-{
-  return (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next);
-}
-
-static LJ_AINLINE void lj_tab_node_retired_next_rel(TabNodeRetire *ret,
-						    TabNodeRetire *next)
-{
-  la_storeptr_rel((void **)&ret->next, next);
-}
+LJ_TAB_RETIRE_HEAD_ACCESSORS(lj_tab_node_retired, TabNodeRetire, retired_nodes)
+LJ_TAB_RETIRE_RECORD_ACCESSORS(lj_tab_node_retired, TabNodeRetire)
 
 static LJ_AINLINE Node *lj_tab_node_retired_node_acq(const TabNodeRetire *ret)
 {
@@ -127,63 +145,9 @@ static LJ_AINLINE void lj_tab_node_retired_hmask_rel(TabNodeRetire *ret,
   la_store32_rel(&ret->hmask, hmask);
 }
 
-static LJ_AINLINE uint64_t
-lj_tab_node_retired_epoch_acq(const TabNodeRetire *ret)
-{
-  return la_load64_acq(&ret->retire_epoch);
-}
-
-static LJ_AINLINE void lj_tab_node_retired_epoch_rel(TabNodeRetire *ret,
-						     uint64_t epoch)
-{
-  la_store64_rel(&ret->retire_epoch, epoch);
-}
-
-static LJ_AINLINE uint32_t
-lj_tab_node_retired_armed_acq(const TabNodeRetire *ret)
-{
-  return la_load32_acq(&ret->armed);
-}
-
-static LJ_AINLINE void lj_tab_node_retired_armed_rel(TabNodeRetire *ret,
-						     uint32_t armed)
-{
-  la_store32_rel(&ret->armed, armed);
-}
-
-static LJ_AINLINE TabArrayRetire *
-lj_tab_array_retired_head_acq(const global_State *g)
-{
-  return (TabArrayRetire *)la_loadptr_acq(
-    (void *const *)&g->tab.retired_arrays);
-}
-
-static LJ_AINLINE int lj_tab_array_retired_head_cas(global_State *g,
-						    TabArrayRetire **oldp,
-						    TabArrayRetire *ret)
-{
-  return la_casptr((void **)&g->tab.retired_arrays, (void **)oldp, ret,
-		   LA_ACQ_REL, LA_ACQ);
-}
-
-static LJ_AINLINE TabArrayRetire *
-lj_tab_array_retired_head_xchg_acqrel(global_State *g, TabArrayRetire *ret)
-{
-  return (TabArrayRetire *)la_xchgptr_acqrel(
-    (void **)&g->tab.retired_arrays, ret);
-}
-
-static LJ_AINLINE TabArrayRetire *
-lj_tab_array_retired_next_acq(const TabArrayRetire *ret)
-{
-  return (TabArrayRetire *)la_loadptr_acq((void *const *)&ret->next);
-}
-
-static LJ_AINLINE void lj_tab_array_retired_next_rel(TabArrayRetire *ret,
-						     TabArrayRetire *next)
-{
-  la_storeptr_rel((void **)&ret->next, next);
-}
+LJ_TAB_RETIRE_HEAD_ACCESSORS(lj_tab_array_retired, TabArrayRetire,
+			     retired_arrays)
+LJ_TAB_RETIRE_RECORD_ACCESSORS(lj_tab_array_retired, TabArrayRetire)
 
 static LJ_AINLINE TValue *
 lj_tab_array_retired_array_acq(const TabArrayRetire *ret)
@@ -208,29 +172,8 @@ static LJ_AINLINE void lj_tab_array_retired_acap_rel(TabArrayRetire *ret,
   la_store32_rel(&ret->acap, acap);
 }
 
-static LJ_AINLINE uint64_t
-lj_tab_array_retired_epoch_acq(const TabArrayRetire *ret)
-{
-  return la_load64_acq(&ret->retire_epoch);
-}
-
-static LJ_AINLINE void lj_tab_array_retired_epoch_rel(TabArrayRetire *ret,
-						      uint64_t epoch)
-{
-  la_store64_rel(&ret->retire_epoch, epoch);
-}
-
-static LJ_AINLINE uint32_t
-lj_tab_array_retired_armed_acq(const TabArrayRetire *ret)
-{
-  return la_load32_acq(&ret->armed);
-}
-
-static LJ_AINLINE void lj_tab_array_retired_armed_rel(TabArrayRetire *ret,
-						      uint32_t armed)
-{
-  la_store32_rel(&ret->armed, armed);
-}
+#undef LJ_TAB_RETIRE_RECORD_ACCESSORS
+#undef LJ_TAB_RETIRE_HEAD_ACCESSORS
 
 LJ_FUNCA GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits);
 LJ_FUNCA GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L);
