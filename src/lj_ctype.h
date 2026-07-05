@@ -1246,6 +1246,8 @@ LJ_FUNC CType *lj_ctype_rawref(CTState *cts, CTypeID id);
 LJ_FUNC CTSize lj_ctype_size(CTState *cts, CTypeID id);
 LJ_FUNC int lj_ctype_rawref_snapshot(CTState *cts, CTypeID id,
 				     CTypeID *ridp, CType *out);
+LJ_FUNC int lj_ctype_rawref_wait(lua_State *L, CTState *cts, CTypeID id,
+				 CTypeID *ridp, CType *out);
 LJ_FUNC int lj_ctype_info_snapshot(CTState *cts, CTypeID id,
 				   CTInfo *infop, CTSize *szp,
 				   CTypeID *ridp, CType *rawp);

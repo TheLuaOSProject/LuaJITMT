@@ -290,27 +290,13 @@ LJLIB_CF(select)		LJLIB_REC(.)
 /* -- Base library: conversions ------------------------------------------- */
 
 #if LJ_HASFFI
-static int lib_base_ctype_rawref_wait(lua_State *L, CTState *cts, CTypeID id,
-				      CTypeID *ridp, CType *out)
-{
-  int ok = lj_ctype_rawref_predefined(cts, id, ridp, out);
-  if (ok >= 0)
-    return ok;
-  for (;;) {
-    ok = lj_ctype_rawref_snapshot(cts, id, ridp, out);
-    if (ok >= 0)
-      return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
-  }
-}
-
 static int lib_base_tonumber_cdata(lua_State *L, CTState *cts, TValue *o,
 				   CTInfo *infop, CTSize *szp)
 {
   CType ct;
   CTInfo info;
   CTSize size;
-  if (!lib_base_ctype_rawref_wait(L, cts, cdataV(o)->ctypeid, NULL, &ct))
+  if (!lj_ctype_rawref_wait(L, cts, cdataV(o)->ctypeid, NULL, &ct))
     return 0;
   info = ctype_info_acq(&ct);
   size = ctype_size_acq(&ct);

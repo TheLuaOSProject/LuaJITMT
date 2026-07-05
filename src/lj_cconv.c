@@ -88,21 +88,6 @@ static int cconv_ctype_snapshot_wait(lua_State *L, CTState *cts,
   }
 }
 
-static int cconv_rawref_snapshot_wait(lua_State *L, CTState *cts,
-				      CTypeID id, CTypeID *ridp,
-				      CType *out)
-{
-  int ok = lj_ctype_rawref_predefined(cts, id, ridp, out);
-  if (ok >= 0)
-    return ok;
-  for (;;) {
-    ok = lj_ctype_rawref_snapshot(cts, id, ridp, out);
-    if (ok >= 0)
-      return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
-  }
-}
-
 static CTypeID cconv_rawid_wait(lua_State *L, CTState *cts, CTypeID id,
 				CTypeID errid, CType *out,
 				CTInfo *infop, CTSize *sizep)
@@ -982,7 +967,7 @@ int lj_cconv_multi_init_l(lua_State *L, CTState *cts, CTypeID did,
     return 0;  /* Initializer is not a value. */
   if (tviscdata(o)) {
     CTypeID sid;
-    if (cconv_rawref_snapshot_wait(L, cts, cdataV(o)->ctypeid, &sid, NULL) &&
+    if (lj_ctype_rawref_wait(L, cts, cdataV(o)->ctypeid, &sid, NULL) &&
 	sid == did)
       return 0;  /* Source and destination are identical aggregates. */
   }

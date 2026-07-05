@@ -1593,6 +1593,20 @@ int lj_ctype_rawref_snapshot(CTState *cts, CTypeID id, CTypeID *ridp,
   }
 }
 
+int lj_ctype_rawref_wait(lua_State *L, CTState *cts, CTypeID id,
+			 CTypeID *ridp, CType *out)
+{
+  int ok = lj_ctype_rawref_predefined(cts, id, ridp, out);
+  if (ok >= 0)
+    return ok;
+  for (;;) {
+    ok = lj_ctype_rawref_snapshot(cts, id, ridp, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 /* Get size for a C type ID. Does NOT support VLA/VLS. */
 CTSize lj_ctype_size(CTState *cts, CTypeID id)
 {

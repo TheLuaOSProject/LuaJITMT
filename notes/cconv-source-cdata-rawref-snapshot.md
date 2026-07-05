@@ -1,8 +1,10 @@
 # CConv source cdata raw-ref snapshot
 
 `lj_cconv_multi_init_l()` now resolves a cdata initializer's raw source type
-with `lj_ctype_rawref_snapshot()` and waits through `lj_ctype_parse_wait()` if
-the ctype parser owns the mutation token.
+with the shared `lj_ctype_rawref_wait()` helper. The helper tries the no-wait
+predefined raw-ref path, falls back to `lj_ctype_rawref_snapshot()`, and waits
+through `lj_ctype_parse_wait()` only if the ctype parser owns the mutation
+token.
 
 The destination aggregate snapshot already waited before aggregate
 initialization, but another thread can start `ffi.cdef()` before the
@@ -13,6 +15,10 @@ state instead of the published sequence boundary.
 Predefined ctype IDs still use the no-wait predefined raw-ref fast path. Parser
 created IDs use the sequence-checked snapshot and only park when the ctype
 mutation token is actively held.
+
+`lib_base_tonumber_cdata()` uses the same helper for cdata numeric conversion,
+so raw-ref retry/wait policy is not duplicated across the base and conversion
+libraries.
 
 Coverage:
 
