@@ -88,15 +88,9 @@ LJ_FUNCA void lj_tab_wait_no_l(void)
   (void)lj_thr_retry_yield(NULL);
 }
 
-static LJ_AINLINE int tab_had_stopreq(lua_State *L)
-{
-  TGState *tg = L ? L2TG(L) : NULL;
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
 LJ_FUNCA void lj_tab_wait_l(lua_State *L)
 {
-  int had_stopreq = tab_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   uint32_t actions;
   /*
   ** L-aware table retry waits make C/API callers native and safepoint-visible

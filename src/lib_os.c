@@ -42,23 +42,10 @@
 
 /* -- Native-state wrappers ---------------------------------------------- */
 
-static int os_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
 static int os_had_pending_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
   return tg && (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ);
-}
-
-static int os_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq,
-			    int had_pending_stopreq)
-{
-  UNUSED(had_pending_stopreq);
-  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
 }
 
 static void os_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq,
@@ -66,8 +53,7 @@ static void os_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq,
 {
   if (had_pending_stopreq && !(actions & LJ_GC2_HS_STOPREQ))
     actions |= lj_safepoint_poll(L);
-  if (os_fresh_stopreq(L, actions, had_stopreq, had_pending_stopreq))
-    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static int os_native_remove_action(lua_State *L, const char *filename,
@@ -83,7 +69,7 @@ static int os_native_remove_action(lua_State *L, const char *filename,
 static int os_native_remove(lua_State *L, const char *filename)
 {
   uint32_t actions;
-  int had_stopreq = os_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int had_pending_stopreq = os_had_pending_stopreq(L);
   int ok = os_native_remove_action(L, filename, &actions);
   os_checkstop_fresh(L, actions, had_stopreq, had_pending_stopreq);
@@ -93,7 +79,7 @@ static int os_native_remove(lua_State *L, const char *filename)
 static int os_native_rename(lua_State *L, const char *fromname,
 			    const char *toname)
 {
-  int had_stopreq = os_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int had_pending_stopreq = os_had_pending_stopreq(L);
   uint32_t actions;
   int ok;
@@ -109,7 +95,7 @@ static int os_native_rename(lua_State *L, const char *fromname,
 static int os_native_mkstemp(lua_State *L, char *buf)
 {
   TGState *tg = L2TG(L);
-  int had_stopreq = os_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int had_pending_stopreq = os_had_pending_stopreq(L);
   uint32_t actions;
   int fd;
@@ -119,7 +105,7 @@ static int os_native_mkstemp(lua_State *L, char *buf)
     close(fd);
   actions = lj_native_leave(L);
   if (fd != -1 &&
-      os_fresh_stopreq(L, actions, had_stopreq, had_pending_stopreq)) {
+      lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t remove_actions;
     (void)os_native_remove_action(L, buf, &remove_actions);
     actions |= remove_actions;
@@ -130,7 +116,7 @@ static int os_native_mkstemp(lua_State *L, char *buf)
 #else
 static char *os_native_tmpnam(lua_State *L, char *buf)
 {
-  int had_stopreq = os_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int had_pending_stopreq = os_had_pending_stopreq(L);
   uint32_t actions;
   char *p;
@@ -156,7 +142,7 @@ LJLIB_CF(os_execute)
 #else
   const char *cmd = luaL_optstring(L, 1, NULL);
   TGState *tg = L2TG(L);
-  int had_stopreq = os_had_stopreq(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
   int had_pending_stopreq = os_had_pending_stopreq(L);
   uint32_t actions;
   int stat;

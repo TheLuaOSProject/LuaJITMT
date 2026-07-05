@@ -27,7 +27,10 @@ the CLI frontend, I/O library native stdio wrappers, channel parks, and FFI
 callback native boundaries. Threading join/spawn/mutex/sleep waits now use the
 same shared helpers while preserving the explicit join pre-poll. CType parser
 token waits and secure-PRNG native entropy reads now use those shared nullable
-helpers too.
+helpers too. Table resize/retry waits and OS-library native wrappers also share
+the common had/fresh helper path; OS keeps only its explicit pending-STOPREQ
+pre-poll because successful `os.tmpname()` must remove a just-created temporary
+file before throwing.
 
 Site-specific wrappers were intentionally left in place when they carry behavior
 beyond the common helper, such as extra pending-poll handling or additional
