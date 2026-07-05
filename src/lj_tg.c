@@ -339,6 +339,28 @@ TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
 	 g->main_tg : NULL;
 }
 
+TGState *lj_tg_thread_active(global_State *g, lua_State *L)
+{
+  uint32_t owner;
+  TGState *tg = NULL;
+  /*
+  ** Resolve the live TG that currently owns L before a collector or safepoint
+  ** treats its stack as owner-current. Claimed GC scans and dead TGs are not
+  ** current mutators, and the TG must still publish L as cur_L.
+  */
+  if (!g || !L)
+    return NULL;
+  owner = lj_state_owner_acq(L);
+  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
+    tg = lj_tg_find_owner(g, owner);
+  else if (L == lj_tg_cur_L(g))
+    tg = G2TG(g);
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != L)
+    return NULL;
+  return tg;
+}
+
 int lj_tg_any_jit_active(global_State *g)
 {
 #if LJ_HASJIT

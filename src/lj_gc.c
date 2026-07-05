@@ -1347,26 +1347,9 @@ static GCproto *gc_func_proto_if_lua(GCfunc *fn)
 }
 
 #if LJ_HASJIT
-static TGState *gc_thread_active_tg(global_State *g, lua_State *th)
-{
-  uint32_t owner;
-  TGState *tg = NULL;
-  if (!g || !th)
-    return NULL;
-  owner = lj_state_owner_acq(th);
-  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
-    tg = lj_tg_find_owner(g, owner);
-  else if (th == lj_tg_cur_L(g))
-    tg = G2TG(g);
-  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
-      lj_tg_load_cur_L(tg) != th)
-    return NULL;
-  return tg;
-}
-
 static TValue *gc_thread_jit_base(global_State *g, lua_State *th)
 {
-  TGState *tg = gc_thread_active_tg(g, th);
+  TGState *tg = lj_tg_thread_active(g, th);
   return tg ? lj_tg_load_jit_base(tg) : NULL;
 }
 #endif
@@ -1431,7 +1414,7 @@ static int gc_thread_is_jit_current(global_State *g, lua_State *th)
   ** roots when jit_base is the only published edge.
   */
   {
-    TGState *tg = gc_thread_active_tg(g, th);
+    TGState *tg = lj_tg_thread_active(g, th);
     return tg && lj_tg_jit_active_acq(tg);
   }
 #else
