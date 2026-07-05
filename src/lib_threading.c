@@ -272,8 +272,8 @@ static uint32_t threading_futex_wait_l(lua_State *L, uint32_t *addr,
 {
   uint32_t actions;
   /*
-  ** Thread join, spawn, and close waits are public blocking semantics, but the
-  ** waiting TG must still be visible to soft handshakes while parked.
+  ** Public blocking waits are native parks, but the waiting TG must still be
+  ** visible to soft handshakes while parked.
   */
   lj_native_enter(L2TG(L));
   (void)la_futex_wait(addr, expect, ns);
@@ -1062,9 +1062,8 @@ LJLIB_CF(threading_mutex_lock)
     {
       uint32_t actions;
       int had_stopreq = lj_safepoint_had_stopreq(L);
-      lj_native_enter(L2TG(L));
-      (void)la_futex_wait(&m->state, LJ_MUTEX_LOCKED, 1000000);
-      actions = lj_native_leave(L);
+      actions = threading_futex_wait_l(L, &m->state, LJ_MUTEX_LOCKED,
+				       THREADING_NATIVE_WAIT_SLICE_NS);
       lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     }
   }
