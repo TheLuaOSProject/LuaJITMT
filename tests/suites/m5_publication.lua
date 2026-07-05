@@ -133,6 +133,25 @@ t.a = 2
 assert(t.a == 2 and t.hit == nil)
 t.b = 3
 assert(t.hit == "b:3")
+local no_mt = { a = 1 }
+no_mt.a = nil
+no_mt.a = 4
+assert(no_mt.a == 4)
+local cached_nomm = setmetatable({ a = 1 }, {})
+cached_nomm.seed = true
+cached_nomm.a = nil
+cached_nomm.a = 5
+assert(cached_nomm.a == 5)
+local hit_count = 0
+local with_newindex = setmetatable({ a = 1 }, {
+  __newindex = function(_, k, v)
+    assert(k == "a" and v == 6)
+    hit_count = hit_count + 1
+  end
+})
+with_newindex.a = nil
+with_newindex.a = 6
+assert(with_newindex.a == nil and hit_count == 1)
 local a = { 1, 2 }
 a[1] = 10
 local k = 2

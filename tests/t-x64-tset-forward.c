@@ -182,14 +182,18 @@ static void exercise_vm_tset_entering_helpers(lua_State *L)
     "t[k] = 2202\n"
     "for i = 3, 3 do t[i] = 3303 end\n"
     "t.stable = 4404\n"
+    "local h = { nilslot = 1 }\n"
+    "h.nilslot = nil\n"
+    "h.nilslot = 5505\n"
     "assert(t[1] == 1101 and t[2] == 2202 and t[3] == 3303)\n"
-    "assert(t.stable == 4404)\n");
+    "assert(t.stable == 4404)\n"
+    "assert(h.nilslot == 5505)\n");
   tabfwd_run_loaded(L);
   assert(mt_entering_sub_acqrel(g, 1) == 1);
   mt_entering_futex_wake(g, INT_MAX);
 
   assert(lj_tab_test_vm_array_store_calls() >= array_calls0 + 3u);
-  assert(lj_tab_test_vm_strhash_store_calls() >= hash_calls0 + 1u);
+  assert(lj_tab_test_vm_strhash_store_calls() >= hash_calls0 + 2u);
 }
 
 int main(void)

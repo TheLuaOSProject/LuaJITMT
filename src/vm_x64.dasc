@@ -4655,7 +4655,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp r8, r9
     |  je ->vmeta_tsets
     |  cmp r8, LJ_TNIL
-    |  je ->vmeta_tsets
+    |  je >3				// Previous value is nil?
+    |2:
     |  x64_vm_tstore_direct_ok >6
     |  mov ITYPE, [BASE+RA*8]
     |  mov NODE:TMPR->val, ITYPE
@@ -4713,6 +4714,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test NODE:TMPR, NODE:TMPR
     |  jnz <1
     |  jmp ->vmeta_tsets
+    |
+    |3:  // Check for __newindex if previous value is nil.
+    |  x64_vm_gcref_acq r8, TAB:RB->metatable
+    |  test r8, r8
+    |  jz <2				// No metatable: no __newindex possible.
+    |  test byte TAB:r8->nomm, 1<<MM_newindex
+    |  jz ->vmeta_tsets			// 'no __newindex' flag NOT set: check.
+    |  jmp <6
     break;
   case BC_TSETB:
     |  ins_ABC	// RA = src, RB = table, RC = byte literal
