@@ -40,8 +40,9 @@ function M.run_cases(cases, t, names)
   end
 end
 
-local function read_raw_file(path)
+local function read_raw_file(path, missing_ok)
   local f, err = io.open(path, "rb")
+  if not f and missing_ok then return nil, err end
   if not f then error(path .. ": " .. err, 2) end
   local data = f:read("*a")
   f:close()
@@ -56,6 +57,10 @@ function M.read_file(path)
   -- notes for cross-file rationale. Tests cover observable behavior, public
   -- artifacts, benchmarks, stock semantics, or packaging.
   return read_raw_file(path)
+end
+
+function M.read_file_or_nil(path)
+  return read_raw_file(path, true)
 end
 
 function M.write_file(path, data, mode)
@@ -94,11 +99,8 @@ function M.with_directory_lock(path, label, fn, opts)
   while not M.command_succeeded("mkdir " .. quoted .. " 2>/dev/null") do
     if timeout >= 0 and os.time() - started >= timeout then
       local detail = ""
-      local f = io.open(owner, "rb")
-      if f then
-        detail = "\nowner:\n" .. f:read("*a")
-        f:close()
-      end
+      local owner_text = M.read_file_or_nil(owner)
+      if owner_text then detail = "\nowner:\n" .. owner_text end
       error(label .. " lock timed out: " .. path .. detail, 2)
     end
     if not announced then
@@ -197,8 +199,8 @@ function M.capture_command(cmd, opts)
     "; __lj_status=$?; printf '%d\\n' \"$__lj_status\" >" ..
     M.shell_quote(statuspath)
   local ok, why, code = os.execute("sh -c " .. M.shell_quote(script))
-  local out = read_raw_file(outpath) or ""
-  local statustext = read_raw_file(statuspath)
+  local out = M.read_file_or_nil(outpath) or ""
+  local statustext = M.read_file_or_nil(statuspath)
   os.remove(outpath)
   os.remove(statuspath)
   if not statustext then

@@ -8,16 +8,9 @@ Test.__index = Test
 local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local read_file = utils.read_file
+local read_file_or_nil = utils.read_file_or_nil
 local write_file = utils.write_file
 local file_exists = utils.file_exists
-
-local function read_raw_file(path)
-  local f = io.open(path, "rb")
-  if not f then return nil end
-  local data = f:read("*a")
-  f:close()
-  return data
-end
 
 local function build_profile_signature(xcflags)
   return "default\nXCFLAGS=" .. (xcflags or "") .. "\n"
@@ -182,7 +175,7 @@ function Test:build(opts)
   local disk_signature = self.build_signature
   local have_outputs = file_exists(self:path("src", "luajit")) and
     file_exists(self:path("src", "libluajit.a"))
-  if disk_signature == nil then disk_signature = read_raw_file(stamp) end
+  if disk_signature == nil then disk_signature = read_file_or_nil(stamp) end
   if opts.clean and disk_signature == signature and have_outputs and
      build_outputs_current(self) and
      not getenv("LJ_TEST_DISABLE_BUILD_CACHE", nil) then

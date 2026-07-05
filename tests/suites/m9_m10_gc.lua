@@ -356,6 +356,11 @@ local function run_bench_regression(t)
                        "non-positive benchmark value")
 
   do
+    local missing = t:tmp("lj-suite-utils-missing")
+    t:remove(missing)
+    assert(utils.read_file_or_nil(missing) == nil,
+           "read_file_or_nil must tolerate absent helper artifacts")
+
     local ok, err = pcall(function()
       capture_command("sh -c " .. shell_quote("printf capture-failed; exit 7"),
                       { stderr = true })
