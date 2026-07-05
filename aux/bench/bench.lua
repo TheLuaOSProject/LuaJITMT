@@ -10,10 +10,11 @@ local floor = math.floor
 local benches = {}
 local scale = tonumber(getenv("BENCH_SCALE")) or 1
 if scale <= 0 then scale = 1 end
-local function bench(name, iters, fn)
+local function bench(name, iters, fn, setup)
   iters = floor(iters * scale + 0.5)
   if iters < 1 then iters = 1 end
-  benches[#benches+1] = { name = name, iters = iters, fn = fn }
+  benches[#benches+1] = { name = name, iters = iters, fn = fn,
+                          setup = setup }
 end
 
 local function make_hash_keys(n, first)
@@ -44,16 +45,18 @@ bench("tab_hash_write", 2e6, function(n)
 end)
 
 -- 4. Existing hash writes with prebuilt string keys (HREF/HSTORE path)
-local tab_store_existing_keys = make_hash_keys(8192, 0)
-local tab_store_existing_table = {}
-for i = 1, 8192 do
-  tab_store_existing_table[tab_store_existing_keys[i]] = 0
-end
-bench("tab_store_existing", 2e7, function(n)
-  local keys = tab_store_existing_keys
-  local t = tab_store_existing_table
+bench("tab_store_existing", 2e7, function(n, fixture)
+  local keys = fixture.keys
+  local t = fixture.tab
   for i = 1, n do t[keys[(i % 8192) + 1]] = i end
   return t
+end, function()
+  local keys = make_hash_keys(8192, 0)
+  local t = {}
+  for i = 1, 8192 do
+    t[keys[i]] = 0
+  end
+  return { keys = keys, tab = t }
 end)
 
 -- 5. New string-key insertion and table growth path
@@ -175,10 +178,14 @@ print(string.format("%-18s %12s %10s", "benchmark", "total_s", "ns/op"))
 for _, b in ipairs(benches) do
   if not filter or b.name:find(filter, 1, true) then
     local best = math.huge
+    -- Build benchmark-local fixtures only for selected cases. Filtered runs are
+    -- used for focused stock comparisons, so unrelated live objects and traces
+    -- must not change the measured GC/JIT state.
+    local fixture = b.setup and b.setup() or nil
     for run = 1, 5 do
       collectgarbage("collect")
       local t0 = clock()
-      b.fn(b.iters)
+      b.fn(b.iters, fixture)
       local dt = clock() - t0
       if dt < best then best = dt end
     end
