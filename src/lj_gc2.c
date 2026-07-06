@@ -175,7 +175,7 @@ static void gc2_worker_reclaim_retired_tgs(global_State *g);
 void lj_gc2_trace_sweep_roots(global_State *g);
 uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
-					 GCobj *o, cTValue *fin);
+					GCobj *o, cTValue *fin);
 static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o);
 static int gc2_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o);
@@ -183,6 +183,7 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
 					GCobj *o);
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					GCobj *o);
+static uint32_t gc2_clear_thread_needscan_all(global_State *g);
 static uint32_t gc2_discard_remembered_ssb(global_State *g);
 static void gc2_clear_table_rescan_grey(global_State *g);
 static void gc2_traverse_obj(global_State *g, GCobj *o);
@@ -2873,12 +2874,28 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
     return;
   gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   gc2_sweep_bridge_ready_rel(g, 0);
-  (void)gc2_flush_and_drain_ssb(g);
   gc2_legacy_mark_bridge_rel(g, 0);
+  /*
+  ** A mutator can publish a late preserve root while another thread is closing
+  ** WEAK. Do not start with an SSB-flush handshake: the collector may be inside
+  ** a synchronous weak-table walk and cannot acknowledge until it observes the
+  ** abort. Publish IDLE first; stale SSB entries are conservative and are flushed
+  ** by the next cycle's normal start/transition handshakes.
+  */
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
     gc2_preserve_abort_to_idle_add(g, 1);
+  lj_gc2_worker_wake(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+  /*
+  ** NEEDSCAN and grey entries are work for the aborted cycle. Once IDLE is
+  ** visible and the idle barrier has made every mutator observe barriers-off,
+  ** stale owner handoffs can be dropped without suppressing the next cycle's
+  ** fresh handoff publication.
+  */
+  (void)gc2_clear_thread_needscan_all(g);
+  gc2_clear_table_rescan_grey(g);
+  gc2_grey_top_store_rlx(g, gc2_grey_bottom_acq(g));
   (void)lj_tg_reclaim_dead(g);
   gc2_cycle_leader_rel(g, 0);
 }
@@ -2928,6 +2945,8 @@ int lj_gc2_sweep_to_idle(global_State *g)
   */
   gc2_worker_release(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+  lj_assertG(gc2_thread_scan_needscan_pending_acq(g) == 0,
+	     "NEEDSCAN leaked to normal sweep close");
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
   gc2_cycle_leader_rel(g, 0);
@@ -2954,6 +2973,15 @@ void lj_gc2_cycle_to_idle(global_State *g)
   gc2_sweep_bridge_ready_rel(g, 0);
   gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+  /*
+  ** Forced test/debug cycle close may skip the normal NEEDSCAN owner-root
+  ** closure. Once IDLE is published these handoffs no longer name live mark
+  ** work, so clear their thread flags and abandon grey work before the next
+  ** cycle observes it.
+  */
+  (void)gc2_clear_thread_needscan_all(g);
+  gc2_clear_table_rescan_grey(g);
+  gc2_grey_top_store_rlx(g, gc2_grey_bottom_acq(g));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
   gc2_cycle_leader_rel(g, 0);
@@ -3203,8 +3231,10 @@ static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
   switch (o->gch.gct) {
   case ~LJ_TTAB:
   case ~LJ_TPROTO:
+  case ~LJ_TTHREAD:
     /*
-    ** Thread stacks are mutable roots. Active allocation and root preservation
+    ** Thread stacks and other root containers are mutable roots. Active
+    ** allocation and root preservation
     ** can leave a root container already marked before all of its child edges
     ** are published. A stack-root hit therefore proves more than liveness of
     ** the container: it is also a fresh root snapshot that must rescan the
@@ -3213,15 +3243,19 @@ static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
     gc2_traverse_obj(g, o);
     break;
   case ~LJ_TFUNC:
+    gc2_traverse_obj(g, o);
+    break;
+  case ~LJ_TUDATA:
+    gc2_traverse_obj(g, o);
+    break;
+  case ~LJ_TUPVAL:
     /*
-    ** Active-black FNEW bump closures carry a type-local arena-owned marker only
-    ** after the constructor has published the fixed proto/env/upvalue edges. A
-    ** repeated stack-root hit for the same already-marked closure does not add a
-    ** new edge snapshot; later upvalue payload mutations use the normal upvalue
-    ** store barrier.
+    ** Local-cell roots are mutable containers. If the cell body was already
+    ** marked by an allocation or preservation path, a root hit still has to
+    ** resample the current payload so userdata metatables, tables and closures
+    ** remain live under ordinary Lua stack semantics.
     */
-    if (!(isluafunc(gco2func(o)) && lj_funcL_arenaowned(&gco2func(o)->l)))
-      gc2_traverse_obj(g, o);
+    gc2_traverse_obj(g, o);
     break;
   default:
     break;
@@ -3248,6 +3282,19 @@ static void gc2_mark_thread_root_tv(global_State *g, cTValue *tv)
     return;
   if (tvisgcv(tv))
     gc2_mark_thread_root_obj(g, gcV(tv));
+}
+
+static void gc2_mark_upval_payload_tv(global_State *g, cTValue *tv)
+{
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)))
+    return;
+  if (!tvisgcv(tv))
+    return;
+  if (tvistab(tv) || tvisfunc(tv)) {
+    gc2_mark_tv(g, tv);
+    return;
+  }
+  gc2_mark_thread_root_tv(g, tv);
 }
 
 static void gc2_mark_fixedstr(global_State *g)
@@ -3515,8 +3562,42 @@ static void gc2_thread_set_needscan(global_State *g, lua_State *L)
 static void gc2_thread_clear_needscan(global_State *g, lua_State *L)
 {
   uint8_t old = la_and8_rlx(gc2_thread_flagp(L), (uint8_t)~LJ_GC_NEEDSCAN);
-  if (g && (old & LJ_GC_NEEDSCAN))
+  if (g && (old & LJ_GC_NEEDSCAN) &&
+      gc2_thread_scan_needscan_pending_acq(g) != 0)
     gc2_thread_scan_needscan_pending_dec(g);
+}
+
+static uint32_t gc2_clear_thread_needscan_all(global_State *g)
+{
+  GCobj *o;
+  uint32_t cleared = 0;
+  if (!g || gc2_thread_scan_needscan_pending_acq(g) == 0)
+    return 0;
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next = lj_obj_gcw_acq(o);
+    if (o->gch.gct == ~LJ_TTHREAD) {
+      lua_State *th = gco2th(o);
+      uint8_t old = la_and8_rlx(gc2_thread_flagp(th),
+				 (uint8_t)~LJ_GC_NEEDSCAN);
+      if (old & LJ_GC_NEEDSCAN) {
+	lj_state_scan_handoff_epoch_rel(th, 0);
+	cleared++;
+      }
+    }
+    if (next == o)
+      break;
+    o = next;
+  }
+  /*
+  ** A NEEDSCAN bit is only meaningful for the currently active MARK/WEAK/SWEEP
+  ** cycle. Forced and preserve-abort IDLE transitions deliberately abandon that
+  ** work item; leave the historical counters intact, but reset the live pending
+  ** count after every reachable thread header has been scrubbed.
+  */
+  gc2_thread_scan_needscan_pending_store_rlx(g, 0);
+  return cleared;
 }
 
 static int gc2_thread_needscan(lua_State *L)
@@ -3575,7 +3656,7 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
     if (uv->gch.gct == ~LJ_TUPVAL) {
       TValue tv;
       lj_tv_load_acq(&tv, uvval(gco2uv(uv)));
-      gc2_mark_tv(g, &tv);
+      gc2_mark_upval_payload_tv(g, &tv);
     }
   }
   dirty_epoch = gc2_thread_owner_dirty(g, L, NULL);
@@ -3740,8 +3821,13 @@ static void gc2_scan_threading_live_roots(global_State *g)
 	for (i = 0; i < n; i++) {
 	  TValue tv;
 	  lj_tv_load_acq(&tv, &roots[i]);
-	  gc2_mark_tv(g, &tv);
+	  gc2_mark_thread_root_tv(g, &tv);
 	}
+      }
+      {
+	lua_State *child = lj_thread_state_load_acq(th);
+	if (child)
+	  gc2_mark_thread_root_obj(g, obj2gco(child));
       }
     }
   }
@@ -5068,7 +5154,8 @@ int lj_gc2_test_weak_snapshot_covers_bridge(global_State *g,
 
 static int gc2_weak_trace_table_strong(global_State *g, GCtab *t)
 {
-  if (!g || !t || obj2gco(t)->gch.gct != ~LJ_TTAB)
+  if (!g || gc2_phase_acq(g) != LJ_GC2_WEAK ||
+      !t || obj2gco(t)->gch.gct != ~LJ_TTAB)
     return 0;
   (void)gc2_traverse_tab_norecord(g, t);
   return 1;
@@ -7108,7 +7195,7 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
   void *base;
   int marked;
   int traversable;
-  if (!o)
+  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
     return 0;
   base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
@@ -7136,7 +7223,7 @@ int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
   void *base;
   int marked;
   int traversable;
-  if (!o)
+  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
     return 0;
   base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
@@ -7160,7 +7247,7 @@ int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
 
 int lj_gc2_markobj_nolegacy_nogrey(global_State *g, GCobj *o)
 {
-  if (!o)
+  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
     return 0;
   return lj_gc2_markmem(g, gc2_mark_base(g, o));
 }
@@ -7220,6 +7307,19 @@ static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv)
     return;
   if (tvisgcv(tv))
     gc2_mark_thread_root_obj_worker(g, gcV(tv));
+}
+
+static void gc2_mark_upval_payload_tv_worker(global_State *g, cTValue *tv)
+{
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)))
+    return;
+  if (!tvisgcv(tv))
+    return;
+  if (tvistab(tv) || tvisfunc(tv)) {
+    gc2_mark_tv_worker(g, tv);
+    return;
+  }
+  gc2_mark_thread_root_tv_worker(g, tv);
 }
 
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o)
@@ -7605,12 +7705,15 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
     lua_State *child = lj_thread_state_load_acq(th);
     lj_gc2_markmem(g, roots);
     if (roots) {
-      for (i = 0; i < n; i++) {
-	TValue tv;
-	lj_tv_load_acq(&tv, &roots[i]);
-	gc2_mark_tv_worker(g, &tv);
+	for (i = 0; i < n; i++) {
+	  TValue tv;
+	  lj_tv_load_acq(&tv, &roots[i]);
+	  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+	    gc2_mark_thread_root_tv(g, &tv);
+	  else
+	    gc2_mark_thread_root_tv_worker(g, &tv);
+	}
       }
-    }
     if (child)
       gc2_markobj_worker(g, obj2gco(child));  /* 09 section 9.2. */
   }
@@ -7628,7 +7731,10 @@ static void gc2_traverse_upval(global_State *g, GCupval *uv)
   if (LJ_UNLIKELY(slot == NULL))
     return;
   lj_tv_load_acq(&tv, slot);
-  gc2_mark_tv_worker(g, &tv);
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    gc2_mark_upval_payload_tv(g, &tv);
+  else
+    gc2_mark_upval_payload_tv_worker(g, &tv);
 }
 
 static int gc2_valid_proto_for_traverse(global_State *g, GCproto *pt)
@@ -7983,9 +8089,9 @@ scan_thread:
       TValue tv;
       lj_tv_load_acq(&tv, uvval(gco2uv(uv)));
       if (sweep)
-	gc2_mark_tv(g, &tv);
+	gc2_mark_upval_payload_tv(g, &tv);
       else
-	gc2_mark_tv_worker(g, &tv);
+	gc2_mark_upval_payload_tv_worker(g, &tv);
     }
   }
   lj_state_scan_dirty_epoch_rel(th, 0);

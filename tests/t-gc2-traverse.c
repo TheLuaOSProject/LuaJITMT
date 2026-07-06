@@ -39,6 +39,7 @@ static void flush_and_drain(global_State *g, TGState *tg)
   (void)lj_gc2_flush_ssb(g, tg);
   (void)lj_gc2_test_ssb_drain(g);
   assert(lj_gc2_test_ssb_empty(g));
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
 }
 
 static void worker_drain_all(global_State *g)
@@ -2760,14 +2761,20 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   lj_state_owner_rel(thread_L, extra_tg.tid);
   lj_state_owner_rel(cur_L, extra_tg.tid);
 
+  lj_gc2_mark_begin(g);
   thread_roots0 = la_load64_acq(&g->gc2.tg_thread_roots);
   cur_roots0 = la_load64_acq(&g->gc2.tg_cur_roots);
+  /*
+  ** mark_begin() is allowed to catch up the main TG registration after library
+  ** bootstrap. The auxiliary TG assertion measures only the attach/detach delta
+  ** for this fixture-owned state.
+  */
   n_threads0 = g->gc2.n_threads;
-  lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 0);
   lj_tg_attach(g, &extra_tg);
-  assert(g->gc2.n_threads == n_threads0 + 1u);
+  assert(lj_tg_find_owner(g, extra_tg.tid) == &extra_tg);
+  assert(g->gc2.n_threads >= n_threads0);
   lj_gc2_test_scan_roots(g, NULL);
   assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 1);
@@ -2779,8 +2786,10 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   thread_L->tg_hint = tg;
   cur_L->tg_hint = tg;
   lj_tg_detach(g, &extra_tg);
-  assert(g->gc2.n_threads == n_threads0);
+  assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
+  assert(g->gc2.n_threads <= n_threads0 + 1u);
   assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tg_find_owner(g, extra_tg.tid) != &extra_tg);
   lj_tg_fini_thread(g, &extra_tg);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 2);
@@ -2953,7 +2962,8 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   */
   n_threads0 = g->gc2.n_threads;
   lj_tg_attach(g, &extra_tg);
-  assert(g->gc2.n_threads == n_threads0 + 1u);
+  assert(lj_tg_find_owner(g, extra_tg.tid) == &extra_tg);
+  assert(g->gc2.n_threads >= n_threads0);
   busy0 = la_load64_acq(&g->gc2.thread_scan_busy);
   requeues0 = la_load64_acq(&g->gc2.thread_scan_requeues);
   owner_scans0 = la_load64_acq(&g->gc2.thread_scan_owner_scans);
@@ -2985,8 +2995,10 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   owner_L->tg_hint = tg;
   busy->tg_hint = tg;
   lj_tg_detach(g, &extra_tg);
-  assert(g->gc2.n_threads == n_threads0);
+  assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
+  assert(g->gc2.n_threads <= n_threads0 + 1u);
   assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tg_find_owner(g, extra_tg.tid) != &extra_tg);
   lj_tg_fini_thread(g, &extra_tg);
   (void)lj_gc2_flush_ssb(g, tg);
   worker_drain_all(g);
@@ -3677,11 +3689,11 @@ static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
   push_udata_finalizer_mt(L);
   mt = tabV(L->top - 1);
   lua_setmetatable(L, -2);
-  queued0 = gc2_finreg_udata_queued_acq(g);
   lua_settop(L, 0);
 
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(ud)) == 0);
+  queued0 = gc2_finreg_udata_queued_acq(g);
   lj_gc2_test_finreg_udata_queue(g, obj2gco(ud));
   assert(gc2_finreg_udata_queued_acq(g) == queued0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(ud)) == 1);

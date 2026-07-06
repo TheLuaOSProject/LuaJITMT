@@ -19,3 +19,12 @@ The test now checks the intended invariant directly: the recorder leaves no
 pending safepoint work behind, no additional scoped JIT slots are retired, and
 no traces remain in the scoped-flushing state.  It no longer treats unrelated
 GC2 sweep handshakes as a failure.
+
+The recursive hotcall poll test has the same shape.  It publishes a manual
+enable-barrier poll before entering a recorder-heavy recursive call.  By the
+time the Lua callback observes the state, recorder-side GC may already have
+advanced to a later sweep handshake such as weak-to-sweep.  That still satisfies
+the VM safepoint contract if the original epoch was consumed, the current epoch
+is acknowledged, and no `poll`/`reqmask` residue remains.  Exact barrier mirror
+checks stay on the simple interpreter cases where no later GC2 phase handshake
+is expected.

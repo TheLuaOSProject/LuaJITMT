@@ -642,6 +642,8 @@ int main(void)
   raw = lj_mem_newgco_raw(L, 64, LJ_AF_TRAVERSABLE);
   assert(g->gc.total == before_raw + 64);
   assert(ptr_state(raw) == 2);
+  assert(lj_gc2_markmem(g, raw) == 1);
+  assert(ptr_state(raw) == 3);
   assert(lj_mem_freegco_defer(g, raw, 64) == 1);
   assert(g->gc.total == before_raw);
   assert(ptr_state(raw) == 2);

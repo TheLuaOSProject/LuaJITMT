@@ -492,9 +492,6 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
 			     ncells, &a, &cell))
     return NULL;
-  black = lj_arena_alloc_black_acq(&tg->alloc);
-  func_arena_set_alloc(a, cell, black);
-
   uv = (GCupval *)lj_arena_cellptr(a, cell);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
@@ -504,11 +501,14 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   uv->dhash = 0;
   newwhite(g, uv);
 
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  func_arena_set_alloc(a, cell, black);
   lj_gc_total_add(g, nbytes);
   /*
   ** Arena bump cells become visible to bitmap sweep as soon as their block bit
-  ** is set. Publish the fully initialized object before an accounting flush can
-  ** assist GC; malloc-backed unlinked objects do not have this bitmap visibility.
+  ** is set. Set that bit only after the header is initialized, then publish the
+  ** root before an accounting flush can assist GC; malloc-backed unlinked objects
+  ** do not have this bitmap visibility.
   */
   func_bump_publish_obj(g, tg, obj2gco(uv));
   if (account_now)
@@ -552,10 +552,6 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
 			     ncells, &a, &cell))
     return NULL;
   uvcell = cell + fncells;
-  black = lj_arena_alloc_black_acq(&tg->alloc);
-  func_arena_set_alloc(a, cell, black);
-  func_arena_set_alloc(a, uvcell, black);
-
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   uv = (GCupval *)lj_arena_cellptr(a, uvcell);
 
@@ -566,6 +562,8 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   env = lj_funcL_env_acq(parent);
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  func_arena_set_alloc(a, cell, black);
   func_pubfreshobjobj(L, tg, fn, pt);
   func_pubfreshobjobj(L, tg, fn, env);
   {
@@ -581,6 +579,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   uv->immutable = 0;
   uv->dhash = 0;
   newwhite(g, uv);
+  func_arena_set_alloc(a, uvcell, black);
   func_pubuv_payload(L, uv);
 
   slot = (base ? base : L->base) + slotno;
@@ -593,9 +592,10 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
 
   lj_gc_total_add(g, nbytes);
   /*
-  ** The pair is fully initialized before publication. Publish before a possible
-  ** accounting assist because arena bitmap sweep can see allocated cells even
-  ** before they enter the legacy root spine.
+  ** Each arena cell is made visible only after the corresponding object body is
+  ** safe for marker traversal. Publish before a possible accounting assist
+  ** because bitmap sweep can see allocated cells before they enter the legacy
+  ** root spine.
   */
   func_bump_publish_pair(g, tg, obj2gco(fn), obj2gco(uv));
   if (account_now)
@@ -637,9 +637,6 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
 			     ncells, &a, &cell))
     return NULL;
-  black = lj_arena_alloc_black_acq(&tg->alloc);
-  func_arena_set_alloc(a, cell, black);
-
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   fn->l.gct = ~LJ_TFUNC;
   fn->l.ffid = FF_LUA;
@@ -648,6 +645,8 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   env = lj_funcL_env_acq(parent);
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  func_arena_set_alloc(a, cell, black);
   func_pubfreshobjobj(L, tg, fn, pt);
   func_pubfreshobjobj(L, tg, fn, env);
   count = (uint32_t)pt->flags + PROTO_CLCOUNT;

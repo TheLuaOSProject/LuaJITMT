@@ -351,8 +351,10 @@ static void snap_useuv(GCproto *pt, uint8_t *udf)
 static void snap_usecellsrc(GCproto *pt, uint8_t *udf, BCReg maxslot)
 {
   const BCIns *pc, *end;
-  if (!proto_cellops(pt))
-    return;
+  /*
+  ** Non-GC64 prototypes do not carry flags2, but local-cell bytecode still
+  ** needs its raw CGET source slots preserved for side exits.
+  */
   pc = proto_bc(pt);
   end = pc + pt->sizebc;
   for (; pc < end; pc++) {

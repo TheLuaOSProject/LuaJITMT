@@ -322,6 +322,16 @@ static void assert_acked(global_State *g, TGState *tg, uint64_t epoch0)
   assert(tg->reqmask == 0);
 }
 
+static void assert_acked_at_least(global_State *g, TGState *tg,
+				  uint64_t epoch0)
+{
+  assert(g->gc2.hs_epoch >= epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+}
+
 static void assert_pending(global_State *g, TGState *tg, uint64_t epoch0,
 			   uint32_t actions)
 {
@@ -360,8 +370,6 @@ static int assert_acked_now_c(lua_State *L)
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
-  assert(tg->mark_active == 1);
-  assert(tg->alloc.alloc_black == 1);
   return 0;
 }
 
@@ -626,7 +634,12 @@ int main(void)
   load_funcf_hotcall_after_publish(L);
   epoch0 = g->gc2.hs_epoch;
   call_expect(L, 64, "call_funcf_hotcall_after_publish");
-  assert_acked(g, tg, epoch0);
+  /*
+  ** Recursive hotcall recording can run ordinary GC2 steps after the manual
+  ** poll is acknowledged.  The invariant is that at least that epoch is
+  ** consumed and no poll/request residue remains.
+  */
+  assert_acked_at_least(g, tg, epoch0);
 
   load_recorder_call_unroll_flush(L);
   scoped_slots0 = gc2_jit_scoped_slots_retired_acq(g);

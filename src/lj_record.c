@@ -148,12 +148,42 @@ static int rec_check_may_pending_celluv(jit_State *J, BCReg slotno)
   return 0;
 }
 
+static int rec_check_cellsrc_slot(GCproto *pt, BCReg slotno)
+{
+  const BCIns *pc, *end;
+  if (!pt)
+    return 0;
+  /*
+  ** Non-GC64 prototypes do not carry flags2, but the parser can still emit
+  ** CGET/CSET.  This assertion-only path scans bytecode directly instead of
+  ** trusting proto_cellops().
+  */
+  pc = proto_bc(pt);
+  end = pc + pt->sizebc;
+  for (; pc < end; pc++)
+    if (bc_op(*pc) == BC_CGET && bc_d(*pc) == slotno)
+      return 1;
+  return 0;
+}
+
+static GCproto *rec_check_frame_pt(cTValue *frame)
+{
+  if (frame_islua(frame)) {
+    GCfunc *fn = frame_func(frame);
+    if (isluafunc(fn))
+      return funcproto(fn);
+  }
+  return NULL;
+}
+
 /* Compare stack slots and frames of the recorder and the VM. */
 static void rec_check_slots(jit_State *J)
 {
   BCReg s, nslots = J->baseslot + J->maxslot;
   int32_t depth = 0;
   cTValue *base = J->L->base - J->baseslot;
+  GCproto *slotpt = rec_check_frame_pt(base + LJ_FR2);
+  BCReg slotbase = 1+LJ_FR2;
   lj_assertJ(J->baseslot >= 1+LJ_FR2, "bad baseslot");
   lj_assertJ(J->baseslot == 1+LJ_FR2 || (J->slot[J->baseslot-1] & TREF_FRAME),
 	     "baseslot does not point to frame");
@@ -193,6 +223,8 @@ static void rec_check_slots(jit_State *J)
 	lj_assertJ(s > delta + LJ_FR2 ? (J->slot[s-delta] & TREF_FRAME)
 				      : (s == delta + LJ_FR2),
 		   "frame slot %d broken chain", s-LJ_FR2);
+	slotpt = isluafunc(fn) ? funcproto(fn) : NULL;
+	slotbase = s + 1u;
 	depth++;
       } else if ((tr & TREF_CONT)) {
 #if LJ_FR2
@@ -212,14 +244,22 @@ static void rec_check_slots(jit_State *J)
 	/* Number repr. may differ, but other types must be the same.
 	** Pending local-cell promotion records a P32 cell before the
 	** interpreter stack slot is physically promoted by compiled code.
+	** Local-cell source slots are canonical recorder values.  The VM may
+	** keep only the cell storage there, or nil-clear a temporary raw slot,
+	** while CGET materializes the value used by later bytecode and exits.
 	*/
+	int cellsrc = s >= J->baseslot &&
+		      rec_check_cellsrc_slot(J->pt, (BCReg)(s - J->baseslot));
+	if (!cellsrc && s >= slotbase)
+	  cellsrc = rec_check_cellsrc_slot(slotpt, (BCReg)(s - slotbase));
 	lj_assertJ((tvisnumber(tv) ? tref_isnumber(tr) :
 		    itype2irt(tv) == tref_type(tr)) ||
+		   cellsrc ||
 		   (tref_istype(tr, IRT_P32) && s >= J->baseslot &&
 		    rec_check_may_pending_celluv(J, (BCReg)(s - J->baseslot))),
 		   "slot %d type mismatch: stack type %d vs IR type %d",
 		   s, itypemap(tv), tref_type(tr));
-	if (tref_isk(tr)) {  /* Compare constants. */
+	if (!cellsrc && tref_isk(tr)) {  /* Compare constants. */
 	  TValue tvk;
 	  lj_ir_kvalue(J->L, &tvk, ir);
 	  lj_assertJ((tvisnum(&tvk) && tvisnan(&tvk)) ?
@@ -2750,7 +2790,7 @@ static int rec_celluv_materialize_cget_sources(jit_State *J)
   const BCIns *pc, *end;
   BCReg framesize;
   int materialized = 0;
-  if (J->pt == NULL || !proto_cellops(J->pt))
+  if (J->pt == NULL)
     return 0;
   pc = J->pc;
   end = proto_bc(J->pt) + J->pt->sizebc;

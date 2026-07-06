@@ -70,9 +70,14 @@ static void test_minor_major_paranoia(void)
     "for i = 1, 120 do __gc2_minor_live[i] = {i, 'live'..i} end\n"
     "for i = 1, 400 do local t = {i, 'dead'..i}; t[3] = {i} end\n");
   run_true_minor_cycle(L, g, tg);
+  /*
+  ** The reverse mark oracle expects a non-preserving sweep.  Generational mode
+  ** intentionally keeps old-generation arena marks, so disable it before using
+  ** the oracle as a zero-diff check.
+  */
+  lj_gc2_set_generational(g, 0);
   lj_gc_fullgc(L);
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
-  lj_gc2_set_generational(g, 0);
   lua_close(L);
 }
 

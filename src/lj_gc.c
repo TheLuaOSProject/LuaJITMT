@@ -540,6 +540,7 @@ static void gc2_paranoia_check_fixpoint(global_State *g)
 static void gc_mark(global_State *g, GCobj *o);
 static void gc_traverse_thread(global_State *g, lua_State *th);
 static void gc_mark_thread_root_tv(global_State *g, cTValue *tv);
+static void gc_mark_thread_root_upval(global_State *g, GCupval *uv);
 
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
@@ -833,12 +834,12 @@ static size_t gc_traverse_udata(global_State *g, GCudata *ud)
     lua_State *child = lj_thread_state_load_acq(th);
     lj_gc_arena_markmem(g, roots);
     if (roots) {
-      for (i = 0; i < n; i++) {
-	TValue tv;
-	lj_tv_load_acq(&tv, &roots[i]);
-	gc_marktv(g, &tv);
+	for (i = 0; i < n; i++) {
+	  TValue tv;
+	  lj_tv_load_acq(&tv, &roots[i]);
+	  gc_mark_thread_root_tv(g, &tv);
+	}
       }
-    }
     if (child)
       gc_markobj(g, obj2gco(child));  /* 09 section 9.2 child stack. */
   }
@@ -905,12 +906,69 @@ static int gc_mark_claim_white(global_State *g, GCobj *o)
   }
 }
 
+static GCobj *gc_plain_gcref_acq(const GCRef *ref)
+{
+#if LJ_GC64
+  uint64_t u = la_load64_acq(&ref->gcptr64);
+  if (u && LJ_UNLIKELY((u & ~LJ_GCVMASK) != 0))
+    return NULL;
+  return (GCobj *)(uintptr_t)u;
+#else
+  return (GCobj *)(uintptr_t)la_load32_acq(&ref->gcptr32);
+#endif
+}
+
+static int gc_valid_proto_for_func(global_State *g, GCproto *pt)
+{
+  MSize minpt;
+  UNUSED(g);
+  if (!pt || !checkptrGC(pt) || pt->gct != ~LJ_TPROTO)
+    return 0;
+  if (pt->sizept < sizeof(GCproto) || pt->sizept > LJ_MAX_MEM32)
+    return 0;
+  if (pt->sizebc == 0 || pt->sizebc > LJ_MAX_BCINS)
+    return 0;
+  if (pt->framesize > LJ_MAX_SLOTS || pt->sizeuv > LJ_MAX_UPVAL)
+    return 0;
+  minpt = (MSize)sizeof(GCproto) + pt->sizebc*(MSize)sizeof(BCIns);
+  minpt = (minpt + (MSize)sizeof(TValue)-1) & ~((MSize)sizeof(TValue)-1);
+  return minpt <= pt->sizept;
+}
+
+static int gc_valid_func_obj(global_State *g, GCfunc *fn)
+{
+  if (!fn || fn->c.gct != ~LJ_TFUNC)
+    return 0;
+  if (isluafunc(fn)) {
+    GCobj *env = gc_plain_gcref_acq(&fn->l.env);
+    const char *pc = mref(fn->l.pc, const char);
+    GCproto *pt;
+    uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
+    if (env && env->gch.gct != ~LJ_TTAB)
+      return 0;
+    if (nup > LJ_MAX_UPVAL || !pc || !checkptrGC(pc))
+      return 0;
+    pt = (GCproto *)(void *)(pc - sizeof(GCproto));
+    if (!gc_valid_proto_for_func(g, pt) || nup > pt->sizeuv)
+      return 0;
+    for (i = 0; i < nup; i++) {
+      GCobj *uv = gc_plain_gcref_acq(&fn->l.uvptr[i]);
+      if (!uv || uv->gch.gct != ~LJ_TUPVAL)
+	return 0;
+    }
+  }
+  return 1;
+}
+
 /* Mark a white GCobj. */
 static void gc_mark(global_State *g, GCobj *o)
 {
   int gct = o->gch.gct;
   if (LJ_UNLIKELY(gct == 0))
     return;  /* Body destructor already ran via GC2 arena sweep. */
+  if (LJ_UNLIKELY(gct == ~LJ_TFUNC &&
+		  !gc_valid_func_obj(g, gco2func(o))))
+    return;
   if (LJ_UNLIKELY(!gc_mark_claim_white(g, o)))
     return;
   lj_gc_arena_markobj(g, o);
@@ -984,7 +1042,14 @@ static void gc_mark_threading_live(global_State *g)
 	for (i = 0; i < n; i++) {
 	  TValue tv;
 	  lj_tv_load_acq(&tv, &roots[i]);
-	  gc_marktv(g, &tv);
+	  gc_mark_thread_root_tv(g, &tv);
+	}
+      }
+      {
+	lua_State *child = lj_thread_state_load_acq(th);
+	if (child) {
+	  gc_markobj(g, obj2gco(child));
+	  gc_traverse_thread(g, child);
 	}
       }
     }
@@ -1146,6 +1211,10 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
       node = lj_tab_node_snapshot_acq(t, &hmask);
       if (hmask > 0)
 	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+    } else if (o->gch.gct == ~LJ_TTHREAD) {
+      lua_State *th = gco2th(o);
+      if (lj_gc2_valid_thread_for_traverse(g, th))
+	(void)lj_gc2_markmem(g, tvref(th->stack));
     }
   }
   hdr = lj_str_tabh_acq(g);
@@ -1219,11 +1288,8 @@ static void gc_mark_uv(global_State *g)
     lj_assertG(lj_uv_prev_acq(lj_uv_next_acq(uv)) == uv &&
 	       lj_uv_next_acq(lj_uv_prev_acq(uv)) == uv,
 	       "broken upvalue chain");
-    if (isgray(obj2gco(uv))) {
-      TValue tv;
-      lj_tv_load_acq(&tv, uvval(uv));
-      gc_marktv(g, &tv);
-    }
+    if (!iswhite(obj2gco(uv)))
+      gc_mark_thread_root_upval(g, uv);
   }
 }
 
@@ -1521,6 +1587,8 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 /* Traverse a function. */
 static void gc_traverse_func(global_State *g, GCfunc *fn)
 {
+  if (LJ_UNLIKELY(!gc_valid_func_obj(g, fn)))
+    return;
   {
     GCtab *env = lj_func_env_acq(fn);
     if (env)
@@ -1532,7 +1600,7 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
 	       "function upvalues out of range");
     gc_markobj(g, funcproto(fn));
     for (i = 0; i < nup; i++)  /* Mark Lua function upvalues. */
-      gc_markobj(g, func_uv_acq(&fn->l, i));
+      gc_mark_thread_root_upval(g, func_uv_acq(&fn->l, i));
   } else {
     uint32_t i, nup = lj_funcC_nupvalues(&fn->c);
     for (i = 0; i < nup; i++) {  /* Mark C function upvalues. */
@@ -1893,10 +1961,67 @@ static void gc_mark_thread_root_proto(global_State *g, GCproto *pt)
     gc_traverse_proto(g, pt);
 }
 
+static void gc_mark_upval_payload_tv(global_State *g, cTValue *tv)
+{
+  GCobj *o;
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)) || !tvisgcv(tv))
+    return;
+  o = gcV(tv);
+  if (LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  if (LJ_UNLIKELY(itype(tv) == LJ_TUPVAL)) {
+    gc_mark_thread_root_upval(g, gco2uv(o));
+    return;
+  }
+  lj_gc_arena_markobj(g, o);
+  if (iswhite(o)) {
+    gc_mark(g, o);
+  } else if (tvistab(tv)) {
+    if (gc_traverse_tab(g, tabV(tv)) > 0)
+      black2gray(o);
+  } else if (tvisproto(tv)) {
+    gc_mark_thread_root_proto(g, protoV(tv));
+  } else if (tvisthread(tv)) {
+    gc_traverse_thread(g, threadV(tv));
+  } else if (tvisudata(tv)) {
+    (void)gc_traverse_udata(g, udataV(tv));
+  }
+  /*
+  ** Nonwhite functions are not expanded from an upvalue payload here: closures
+  ** commonly form cycles through local cells. Direct stack/frame function roots
+  ** still use gc_mark_thread_root_func(); white function payloads are queued by
+  ** gc_mark() above.
+  */
+}
+
+static void gc_mark_thread_root_upval(global_State *g, GCupval *uv)
+{
+  GCobj *o;
+  TValue tv;
+  if (!uv || uv->gct != ~LJ_TUPVAL)
+    return;
+  o = obj2gco(uv);
+  lj_gc_arena_markobj(g, o);
+  if (iswhite(o)) {
+    gc_mark(g, o);
+    return;
+  }
+  /*
+  ** Local-cell stack slots are roots whose GC object may have been preserved by
+  ** arena/SMR state before this legacy cycle saw the slot. Color alone then only
+  ** proves the cell body survives; the contained Lua value is still the semantic
+  ** root and must be sampled for this collection.
+  */
+  lj_tv_load_acq(&tv, uvval(uv));
+  if (LJ_UNLIKELY(tvisgcv(&tv) && gcV(&tv) == o))
+    return;
+  gc_mark_upval_payload_tv(g, &tv);
+}
+
 static void gc_mark_thread_root_func(global_State *g, GCfunc *fn)
 {
   GCobj *o;
-  if (!fn)
+  if (!fn || LJ_UNLIKELY(!gc_valid_func_obj(g, fn)))
     return;
   o = obj2gco(fn);
   lj_gc_arena_markobj(g, o);
@@ -1919,7 +2044,7 @@ static void gc_mark_thread_root_func(global_State *g, GCfunc *fn)
 		 "function upvalues out of range");
       gc_mark_thread_root_proto(g, funcproto(fn));
       for (i = 0; i < nup; i++)
-	gc_markobj(g, func_uv_acq(&fn->l, i));
+	gc_mark_thread_root_upval(g, func_uv_acq(&fn->l, i));
     } else {
       uint32_t i, nup = lj_funcC_nupvalues(&fn->c);
       for (i = 0; i < nup; i++) {
@@ -1937,6 +2062,12 @@ static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
   if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)) || !tvisgcv(tv))
     return;
   o = gcV(tv);
+  if (LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  if (LJ_UNLIKELY(itype(tv) == LJ_TUPVAL)) {
+    gc_mark_thread_root_upval(g, gco2uv(o));
+    return;
+  }
   lj_gc_arena_markobj(g, o);
   if (iswhite(o)) {
     gc_mark(g, o);
@@ -1947,6 +2078,10 @@ static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
     gc_mark_thread_root_func(g, funcV(tv));
   } else if (tvisproto(tv)) {
     gc_mark_thread_root_proto(g, protoV(tv));
+  } else if (tvisthread(tv)) {
+    gc_traverse_thread(g, threadV(tv));
+  } else if (tvisudata(tv)) {
+    (void)gc_traverse_udata(g, udataV(tv));
   }
 }
 
@@ -2024,9 +2159,8 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
       setnilV(o);
   }
   for (mt = lj_state_openupval_acq(th); mt != NULL; mt = lj_obj_gcw_acq(mt)) {
-    lj_gc_arena_markobj(g, mt);
-    if (iswhite(mt))
-      gc_mark(g, mt);
+    if (LJ_LIKELY(mt->gch.gct == ~LJ_TUPVAL))
+      gc_mark_thread_root_upval(g, gco2uv(mt));
   }
   {
     GCtab *env = lj_state_env_acq(th);
@@ -2073,6 +2207,11 @@ static size_t propagatemark(global_State *g)
   ** conservative and keeps resize-forwarded table edges from depending on which
   ** duplicate list node wins the race to the head.
   */
+  if (LJ_UNLIKELY(gct == ~LJ_TFUNC &&
+		  !gc_valid_func_obj(g, gco2func(o)))) {
+    lj_gc_list_pop_head_rel(&g->gc.gray, o);
+    return 0;
+  }
   (void)lj_gc2_markobj_nolegacy(g, o);
   if (rescan)
     lj_obj_cleargcflags_atomic(o, LJ_GC_NEEDSCAN);
@@ -2352,6 +2491,8 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
 #endif
   if (gct == (uint32_t)~LJ_TPROTO && !gc2_valid_proto_obj(g, gco2pt(o)))
     return 0;  /* Stale proto header: sizept is not safe for destructor. */
+  if (gct == (uint32_t)~LJ_TFUNC && !gc_valid_func_obj(g, gco2func(o)))
+    return 0;  /* Stale function header: proto/env/upvalue refs are unsafe. */
   if (gct == (uint32_t)~LJ_TTAB && !gc2_valid_tab_obj(g, gco2tab(o)))
     return 0;  /* Stale table header: side-vector sizes are not trustworthy. */
   if (gct == (uint32_t)~LJ_TUDATA) {
@@ -3812,5 +3953,11 @@ int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
     return 0;
   lj_gc_total_sub(g, osize);
   ((GCobj *)p)->gch.gct = 0;
+  /*
+  ** The object destructor has run, but the arena cell stays allocated until
+  ** bitmap sweep owns reuse. Clear the mark bit now so preserving generational
+  ** sweeps do not retain the tombstone as a fake old-generation object.
+  */
+  la_and64_rlx(&a->mark[cell >> 6], ~((uint64_t)1 << (cell & 63)));
   return 1;
 }
