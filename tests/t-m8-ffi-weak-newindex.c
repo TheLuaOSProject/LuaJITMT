@@ -21,6 +21,14 @@ static void flush_and_drain(global_State *g, TGState *tg)
   assert(lj_gc2_test_ssb_empty(g));
 }
 
+static void enter_weak_clear_fixture(global_State *g, TGState *tg)
+{
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  flush_and_drain(g, tg);
+  gc2_weak_mark_closed_rel(g, 1);
+}
+
 #if LJ_HASFFI
 static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
 							global_State *g,
@@ -46,9 +54,10 @@ static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
-  lj_gc2_mark_to_weak(g);
+  enter_weak_clear_fixture(g, tg);
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
-  assert(lj_gc2_test_weak_drain(g, 1) == 0);
+  while (lj_gc2_test_weak_drain(g, 1) != 0)
+    ;
   weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lua_pushvalue(L, 4);

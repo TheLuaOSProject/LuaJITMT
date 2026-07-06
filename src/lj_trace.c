@@ -470,14 +470,24 @@ static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 	 completed_epoch - retire_epoch >= LJ_FLUSH_EPOCHS;
 }
 
-static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
+static void trace_preserve_body_obj(global_State *g, GCobj *o, int gc2)
 {
   if (!o)
     return;
   if (gc2)
-    (void)lj_gc2_preserve_sweep_root(g, o);
+    (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
   else
     lj_gc_preserveobj_legacy(g, o);
+}
+
+static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
+{
+  /*
+  ** Retired traces preserve prototype bodies for stale PC ownership checks, not
+  ** as semantic roots. Traversing proto->trace here retains unrelated or reused
+  ** trace slots for an extra GC cycle and diverges from stock trace lifetime.
+  */
+  trace_preserve_body_obj(g, o, gc2);
 }
 
 static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
@@ -533,10 +543,7 @@ static void trace_preserve_kgc(global_State *g, GCtrace *T, int gc2)
     IRIns irs = ir_load_acq(ir);
     if (irs.o == IR_KGC) {
       GCobj *o = ir_kgc_load_acq(ir);
-      if (gc2)
-	(void)lj_gc2_preserve_sweep_root(g, o);
-      else
-	lj_gc_preserveobj_legacy(g, o);
+      trace_preserve_body_obj(g, o, gc2);
     }
     if (irt_is64(irs.t) && irs.o != IR_KNULL)
       ref++;
@@ -756,20 +763,15 @@ void lj_trace_markvecs(global_State *g, int gc2)
   TraceVec *tv = tracevec_acq(J);
   GCtrace *rt;
   if (tv) {
-    MSize i;
     if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
-    /* Published trace slots are VM roots: patched bytecode and exit tables
-    ** name them by trace number, outside the ordinary object graph. Mark the
-    ** live slot contents directly so trace traversal keeps IR constants,
-    ** linked traces, start prototypes and snapshot PC owners alive.
+    /*
+    ** The trace vector is raw VM metadata and must survive concurrent readers,
+    ** but its slots are not semantic roots. Stock LuaJIT lets a dead prototype
+    ** and its root traces die together: live prototypes, active TG vmstates and
+    ** live trace links mark the needed trace bodies. Marking every published
+    ** slot here creates a trace->prototype cycle and keeps throwaway compiled
+    ** chunks alive indefinitely.
     */
-    for (i = 1; i < tv->sizetrace; i++) {
-      GCtrace *T = traceref_fromgco(gcref_acq(tv->slot[i]));
-      if (T && trace_traceno_acq(T) == (TraceNo)i) {
-	if (gc2) lj_gc2_mark_trace_slot(g, i);
-	else lj_gc_mark_trace_slot(g, i);
-      }
-    }
   }
   for (tv = tracevec_retired_head_acq(J);
        tv != NULL;
@@ -2076,6 +2078,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       lj_trace_state_store(J, LJ_TRACE_IDLE);
       lj_dispatch_update(J2G(J), 0);
       lj_jit_token_release(J);
+      if (gc2_phase_acq(G(L)) != LJ_GC2_IDLE || lj_gc_should_step(G(L)))
+	lj_gc_step(L);
       return NULL;
 
     default:  /* Trace aborted asynchronously. */

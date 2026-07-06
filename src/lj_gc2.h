@@ -158,9 +158,15 @@ enum {
 #define LJ_GC2_HS_STOPREQ		0x00000400u
 
 #define LJ_GC2_ACCT_FLUSH		32768u
-#define LJ_GC2_TRIGGER_MIN		(LJ_GC2_ACCT_FLUSH * 8u)
+/*
+** Keep active-cycle pacing tight enough for explicit collection and short-lived
+** trace/prototype churn to reach stock LuaJIT lifetime points without waiting
+** for a large allocation burst. These are semantic pacing thresholds, not test
+** stress knobs.
+*/
+#define LJ_GC2_TRIGGER_MIN		LJ_GC2_ACCT_FLUSH
 #define LJ_GC2_HELPER_IDLE_STEP		(LJ_GC2_ACCT_FLUSH * 4u)
-#define LJ_GC2_ACTIVE_AUTO_STEP		(LJ_GC2_ACCT_FLUSH * 64u)
+#define LJ_GC2_ACTIVE_AUTO_STEP		4096u
 #define LJ_GC2_TRACE_HARD_CHECK_BATCH	(LJ_GC2_ACCT_FLUSH * 16u)
 #define LJ_GC2_PENDING_ROOT_TRIGGER_MAX	LJ_GC2_TRIGGER_MIN
 #define LJ_GC2_WORKER_DRAIN_BATCH	64u
@@ -321,6 +327,7 @@ LJ_FUNCA void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_markobj_nolegacy_nogrey(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
 LJ_FUNC uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o);
 #if LJ_HASJIT

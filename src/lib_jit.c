@@ -343,6 +343,17 @@ static GCtrace *jit_checktrace(lua_State *L)
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   jit_State *J = L2J(L);
   TraceVec *tv = tracevec_acq(J);
+  if (tr > 0 && trace_traceno_acq(&J->cur) == tr &&
+      lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+      (J->L == L || vmthread_acq(G(L)) == L) && lj_jit_token_held(J)) {
+    /*
+    ** RECORD vmevents expose the pending trace number before trace_stop()
+    ** publishes a body in the trace vector. The recorder owns J->cur under the
+    ** JIT token, so same-thread jit.util callbacks may inspect that current
+    ** body without making all trace-vector slots semantic GC roots.
+    */
+    return &J->cur;
+  }
   if (tr > 0 && tv && (MSize)tr < tv->sizetrace) {
     GCtrace *T = traceref_fromgco(gcref_acq(tv->slot[tr]));
     if (T && trace_traceno_acq(T) == tr &&

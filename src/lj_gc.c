@@ -45,6 +45,7 @@
 #define GCSWEEPMAX	40
 #define GCSWEEPCOST	10
 #define GCFINALIZECOST	100
+#define GCACTIVEAUTOSTEPS	64u
 
 static GCSize gc_step_debt_quantum(global_State *g)
 {
@@ -739,7 +740,9 @@ void lj_gc_preserveobj_legacy(global_State *g, GCobj *o)
   ** object's references; stale lock-free readers may hold this exact body, but
   ** the body is not a root for the Lua object graph.
   */
-  lj_gc_arena_markobj(g, o);
+  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
   lj_obj_cleargcflags(o, LJ_GC_WHITES);
 }
 
@@ -1110,7 +1113,16 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
     flags = lj_obj_gcflags(o);
     if (iswhite(o) && !(flags & (LJ_GC_FIXED|LJ_GC_SFIXED)))
       continue;
-    (void)lj_gc2_markobj_nolegacy(g, o);
+    if (o->gch.gct == ~LJ_TTRACE || o->gch.gct == ~LJ_TPROTO) {
+      /*
+      ** Trace/proto backedges are collectible cycles. The legacy root spine is
+      ** only their ownership/sweep list, so mirror their own body storage into
+      ** GC2 without enqueueing traversal from that non-root edge.
+      */
+      (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
+    } else {
+      (void)lj_gc2_markobj_nolegacy(g, o);
+    }
     if (o->gch.gct == ~LJ_TTAB) {
       GCtab *t = gco2tab(o);
       void *arraymem = lj_tab_array_mem_acq(t);
@@ -1783,14 +1795,21 @@ static BCReg gc_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
   BCIns ins = pc[-1];
   if (bc_op(ins) == BC_UCLO)
     ins = pc[bc_j(ins)];
-  /*
-  ** Match the dispatch hook's variable-top cases. Fixed CALL/ITERC frames keep
-  ** their ordinary Lua frame slots live while a C callee runs; narrowing them to
-  ** the argument window lets atomic GC clear still-live caller slots.
-  */
   switch (bc_op(ins)) {
   case BC_CALLM: case BC_CALLMT:
     return bc_a(ins) + bc_c(ins) + nres-1+1+LJ_FR2;
+  case BC_CALL:
+  case BC_ITERC:
+    /*
+    ** Fixed-argument calls have a stable bytecode call window. Caller slots
+    ** above A+C are dead temporaries while the C callee runs; keeping them live
+    ** preserves already-returned closures/prototypes and changes weak/trace
+    ** collection semantics. Multiple-result calls keep the full frame because
+    ** their top depends on the previous producer's result count.
+    */
+    if (bc_c(ins) != 0)
+      return bc_a(ins) + bc_c(ins) + LJ_FR2;
+    break;
   case BC_RETM:
     return bc_a(ins) + bc_d(ins) + nres-1;
   case BC_TSETM:
@@ -1798,6 +1817,7 @@ static BCReg gc_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
   default:
     return pt->framesize;
   }
+  return pt->framesize;
 }
 
 static TValue *gc_active_thread_top(lua_State *th, TValue *top)
@@ -1827,13 +1847,13 @@ static TValue *gc_active_thread_top(lua_State *th, TValue *top)
 	const BCIns *bc = proto_bc(pt);
 	if (pc && pc > bc && pc <= bc + pt->sizebc) {
 	  /*
-	  ** Cell-op frames keep source locals live outside the narrow call
-	  ** argument/result window. During a C call, scan the full Lua frame so
-	  ** collectgarbage(), metamethods and library calls cannot hide them.
+	  ** The bytecode call window is the precise same-thread C-call root set.
+	  ** Open local cells are scanned through the thread's open-upvalue list;
+	  ** broadening every cell-op frame here keeps stale temporaries alive and
+	  ** changes stock weak/trace collection semantics.
 	  */
-	  TValue *ctop = prev + 1 + (proto_cellops(pt) ? pt->framesize :
-				    gc_cur_topslot(pt, pc,
-						   cframe_multres_n(cf)));
+	  TValue *ctop = prev + 1 + gc_cur_topslot(pt, pc,
+						   cframe_multres_n(cf));
 	  if (ctop > top)
 	    top = ctop;
 	}
@@ -1899,7 +1919,7 @@ static void gc_mark_thread_root_func(global_State *g, GCfunc *fn)
 static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
 {
   GCobj *o;
-  if (!tvisgcv(tv))
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)) || !tvisgcv(tv))
     return;
   o = gcV(tv);
   lj_gc_arena_markobj(g, o);
@@ -1942,25 +1962,22 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   int remote_current;
   int native_current;
   int jit_current;
-  int vm_current;
   lua_State *cur_L;
   lj_gc_arena_markmem(g, tvref(th->stack));
   cur_L = lj_tg_cur_L(g);
   owner = lj_state_owner_acq(th);
   owned = owner != 0 && owner != LJ_THREAD_GCSCAN && th != cur_L;
-  vm_current = th == cur_L;
   remote_current = gc_thread_is_remote_current(g, th);
   native_current = gc_thread_is_native_current(g, th);
   jit_current = gc_thread_is_jit_current(g, th);
-  if (owned || vm_current || remote_current || native_current || jit_current) {
+  if (owned || remote_current || native_current || jit_current) {
     if (!owned && !remote_current && !native_current && jit_current)
       gc_mark_jit_frame_funcs(g, th);
     /*
-    ** The interpreter keeps the exact BASE in a register between C/VM helper
-    ** calls. L->base can still name the last C frame, so the frame chain is not
-    ** a precise root map for the running VM thread. Preserve the raw stack
-    ** storage; frame function slots are tagged values and are marked by the
-    ** conservative pass below.
+    ** Remote, native and JIT-owned frame chains are owner-private until their
+    ** boundary publishes a stable base/top pair. Preserve raw stack storage in
+    ** that window; ordinary same-thread VM collections use precise frame tops
+    ** so stale slots do not keep weak entries alive.
     */
     top = tvref(th->maxstack);
     used = (MSize)(top - tvref(th->stack));
@@ -1977,7 +1994,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     lj_tv_load_acq(&tv, o);
     gc_mark_thread_root_tv(g, &tv);
   }
-  if (!owned && !vm_current && !remote_current && !native_current && !jit_current &&
+  if (!owned && !remote_current && !native_current && !jit_current &&
       g->gc.state == GCSatomic) {
     top = tvref(th->stack) + th->stacksize;
     for (; o < top; o++)  /* Clear unmarked slots. */
@@ -2895,11 +2912,13 @@ static size_t gc_onestep(lua_State *L)
   }
 }
 
-static int gc_step_limited(lua_State *L, GCSize quantum, int batch_threshold)
+static int gc_step_limited(lua_State *L, GCSize quantum, int batch_threshold,
+			   uint32_t active_step_limit)
 {
   global_State *g = G(L);
   GCSize lim;
   int32_t ostate = vmstate_load_acq(g);
+  uint32_t active_steps = 0;
   setvmstate(g, GC);
   lim = (GCSTEPSIZE/100) * lj_gc_stepmul_load(g);
   if (lim == 0)
@@ -2911,13 +2930,15 @@ static int gc_step_limited(lua_State *L, GCSize quantum, int batch_threshold)
       g->gc.debt += total - threshold;
   }
   do {
+    int active = batch_threshold && gc2_phase_acq(g) != LJ_GC2_IDLE;
     lim -= (GCSize)gc_onestep(L);
     if (g->gc.state == GCSpause) {
       lj_gc2_publish_idle_threshold(g);
       vmstate_store_rel(g, ostate);
       return 1;  /* Finished a GC cycle. */
     }
-    if (batch_threshold && gc2_phase_acq(g) != LJ_GC2_IDLE)
+    if (active && active_step_limit != 0 &&
+	++active_steps >= active_step_limit)
       break;
   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
   if (batch_threshold && gc2_phase_acq(g) != LJ_GC2_IDLE) {
@@ -2950,12 +2971,13 @@ static int gc_step_limited(lua_State *L, GCSize quantum, int batch_threshold)
 /* Perform a limited amount of incremental GC steps. */
 int LJ_FASTCALL lj_gc_step(lua_State *L)
 {
-  return gc_step_limited(L, gc_step_debt_quantum(G(L)), 1);
+  return gc_step_limited(L, gc_step_debt_quantum(G(L)), 1,
+			 GCACTIVEAUTOSTEPS);
 }
 
 int lj_gc_step_explicit(lua_State *L)
 {
-  return gc_step_limited(L, GCSTEPSIZE, 0);
+  return gc_step_limited(L, GCSTEPSIZE, 0, 0);
 }
 
 #ifdef LJ_GC2_TEST_HELPERS
@@ -3031,7 +3053,8 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
     lj_gc2_hard_check_advance(g, lj_gc2_alloc_since_load(g));
   }
   if (threshold_step) {
-    while (steps-- > 0 && lj_gc_step(L) == 0)
+    while (steps-- > 0 &&
+	   gc_step_limited(L, gc_step_debt_quantum(g), 1, 1) == 0)
       ;
   }
   /* Return 1 to force a trace exit. */

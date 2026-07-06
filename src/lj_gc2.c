@@ -3179,14 +3179,21 @@ static BCReg gc2_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
   BCIns ins = pc[-1];
   if (bc_op(ins) == BC_UCLO)
     ins = pc[bc_j(ins)];
-  /*
-  ** Match the dispatch hook's variable-top cases. Fixed CALL/ITERC frames keep
-  ** their ordinary Lua frame slots live while a C callee runs; narrowing them to
-  ** the argument window lets atomic GC clear still-live caller slots.
-  */
   switch (bc_op(ins)) {
   case BC_CALLM: case BC_CALLMT:
     return bc_a(ins) + bc_c(ins) + nres-1+1+LJ_FR2;
+  case BC_CALL:
+  case BC_ITERC:
+    /*
+    ** Fixed-argument calls have a stable bytecode call window. Caller slots
+    ** above A+C are dead temporaries while the C callee runs; keeping them live
+    ** preserves already-returned closures/prototypes and changes weak/trace
+    ** collection semantics. Multiple-result calls keep the full frame because
+    ** their top depends on the previous producer's result count.
+    */
+    if (bc_c(ins) != 0)
+      return bc_a(ins) + bc_c(ins) + LJ_FR2;
+    break;
   case BC_RETM:
     return bc_a(ins) + bc_d(ins) + nres-1;
   case BC_TSETM:
@@ -3194,6 +3201,7 @@ static BCReg gc2_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
   default:
     return pt->framesize;
   }
+  return pt->framesize;
 }
 
 static GCproto *gc2_func_proto_if_lua(GCfunc *fn)
@@ -3333,13 +3341,13 @@ static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
 	const BCIns *bc = proto_bc(pt);
 	if (pc && pc > bc && pc <= bc + pt->sizebc) {
 	  /*
-	  ** Cell-op frames keep source locals live outside the narrow call
-	  ** argument/result window. During a C call, scan the full Lua frame so
-	  ** owner-side GC2 scans preserve those locals.
+	  ** The bytecode call window is the precise same-thread C-call root set.
+	  ** Open local cells are scanned through the thread's open-upvalue list;
+	  ** broadening every cell-op frame here keeps stale temporaries alive and
+	  ** changes stock weak/trace collection semantics.
 	  */
-	  TValue *ctop = prev + 1 + (proto_cellops(pt) ? pt->framesize :
-				    gc2_cur_topslot(pt, pc,
-						    cframe_multres_n(cf)));
+	  TValue *ctop = prev + 1 + gc2_cur_topslot(pt, pc,
+						    cframe_multres_n(cf));
 	  if (ctop > top)
 	    top = ctop;
 	}
@@ -3357,14 +3365,14 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
   int remote_current = gc2_thread_is_remote_current(g, L);
   int native_current = gc2_thread_is_native_current(g, L);
   int jit_current = gc2_thread_is_jit_current(g, L);
-  if (vm_current || remote_current || native_current || jit_current) {
+  if (remote_current || native_current || jit_current) {
     if (!remote_current && !native_current && jit_current)
       gc2_mark_jit_frame_funcs(g, L);
     /*
-    ** The active interpreter publishes L->base only at C/VM helper boundaries.
-    ** Between those boundaries the exact BASE lives in a register, so using
-    ** L->base as a frame-chain root can miss live Lua frames. Scan the raw
-    ** stack range; tagged frame function slots keep closure/proto graphs live.
+    ** Remote, native and JIT-owned frame chains can have owner-private layout
+    ** until their boundary publishes a stable base/top pair. Preserve raw stack
+    ** storage in that window; ordinary same-thread VM collections use precise
+    ** frame tops so dead call results do not affect weak/FINREG decisions.
     */
     return max;
   }
@@ -7024,6 +7032,13 @@ int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
   return marked;
 }
 
+int lj_gc2_markobj_nolegacy_nogrey(global_State *g, GCobj *o)
+{
+  if (!o)
+    return 0;
+  return lj_gc2_markmem(g, gc2_mark_base(g, o));
+}
+
 static int gc2_markobj_worker(global_State *g, GCobj *o)
 {
   void *base;
@@ -7594,7 +7609,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
   int remote_current = gc2_thread_is_remote_current(g, L);
   int native_current = gc2_thread_is_native_current(g, L);
   int jit_current = gc2_thread_is_jit_current(g, L);
-  if (vm_current || remote_current || native_current || jit_current) {
+  if (remote_current || native_current || jit_current) {
     if (!remote_current && !native_current && jit_current)
       gc2_mark_jit_frame_funcs(g, L);
     return max;

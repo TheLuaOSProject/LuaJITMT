@@ -17,6 +17,7 @@ local m6_cases = {
   "m6_jit_token",
   "m6_jit_recursive_call_unroll",
   "m6_jit_recursive_retention",
+  "m6_jit_trace_proto_gc",
   "m6_jit_cell_ops",
   "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
@@ -2316,6 +2317,16 @@ end
         timeout = "20s"
       })
       print("M6 JIT upvalue mutation flush behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_trace_proto_gc",
+    description = "stock trace/prototype GC lifetime and record callback reachability",
+    run = function(t)
+      build_default(t)
+      runtime.run_stock(t, { "misc/gc_trace.lua" }, { timeout = "20s" })
+      print("M6 JIT trace/prototype GC stock oracle passed")
     end
   })
 
