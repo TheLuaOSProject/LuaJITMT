@@ -162,6 +162,7 @@ end
 
 function M.run_jit_runtime_checks(t)
   luajit_code(t, probes.side_exit_cget_source_snapshot())
+  luajit_code(t, probes.call_boundary_cget_source_snapshot())
   luajit_code(t, probes.side_exit_fnew_creation_snapshot())
   luajit_code(t, probes.pre_fnew_update({
     hotexit = true,

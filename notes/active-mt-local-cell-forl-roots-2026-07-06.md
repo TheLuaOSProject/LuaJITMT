@@ -29,6 +29,12 @@ Focused verification:
 - `src/luajit tools/test.lua m6_jit_token m7_ffi_jit_cnew`
 - `LJ_M6_JIT_SECONDARY_TRACE_LIMIT=128 LUA_PATH='./tests/lib/?.lua;./src/?.lua;./src/jit/?.lua;;' timeout 20s ./src/luajit ./tests/t-jit-secondary.lua`
 
+`tests/t-jit-secondary.lua` now includes a secondary-TG local-cell numeric
+`for` loop that must record a root trace and a first-level side trace while an
+escaped closure still observes the final visible loop value. That keeps the
+coverage attached to the active-MT FORL/local-cell snapshot shape instead of
+only proving ordinary worker numeric loops.
+
 Broader GC scaffold progressed past the previous `t-gc2-traverse` trace absence
 and exposed a later `test_async_weak` assertion in `t-gc2-worker-scheduler`;
 that weak-table scheduler failure is tracked separately.

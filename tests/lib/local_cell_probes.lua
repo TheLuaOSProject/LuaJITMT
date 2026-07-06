@@ -460,6 +460,46 @@ check("dumped", dumped)
 ]=]
 end
 
+function M.call_boundary_cget_source_snapshot()
+  return [=[
+local util = require"jit.util"
+
+local function check(label, run)
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "callunroll=0")
+
+  assert(run(60, -1) == 1830, label .. " warmup")
+  assert(util.traceinfo(1), label .. " CALL/CGET loop should trace")
+
+  assert(run(60, 30) == 2830, label .. " side exit")
+  assert(run(60, 30) == 2830, label .. " side trace")
+end
+
+local function source_run(n, stop)
+  local function touch(v)
+    return v
+  end
+  local x = 0
+  local acc = 0
+  for i = 1, n do
+    x = x + 1
+    touch(i)
+    local y = x
+    if i == stop then
+      acc = acc + 1000
+    end
+    acc = acc + y
+  end
+  return acc
+end
+
+local dumped = assert(loadstring(string.dump(source_run)))
+
+check("source", source_run)
+check("dumped", dumped)
+]=]
+end
+
 function M.side_exit_fnew_creation_snapshot()
   return [=[
 local util = require"jit.util"
