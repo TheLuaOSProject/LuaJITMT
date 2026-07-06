@@ -1,5 +1,6 @@
 local th = require"threading"
 local harness = require"thread_harness"
+local jith = require"jit_harness"
 
 local reps = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_REPS", 768)
 local writers = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_THREADS", 3)
@@ -600,14 +601,17 @@ local function jit_store_worker(tbl, ready, start, key, n)
   if okjit and jitmod.status() then
     jitmod.opt.start("hotloop=1", "hotexit=1")
   end
+  local traces0 = jith.trace_count(256)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
   assert(ok == true)
-  for i = 1, n do
+  local i = 1
+  while i <= n do
     tbl[key] = i
     if i % 257 == 0 then tbl[key + 64] = nil end
+    i = i + 1
   end
-  return true
+  return true, jith.trace_count(256) - traces0
 end
 
 local function exercise_jit_store_resize()
@@ -627,7 +631,12 @@ local function exercise_jit_store_resize()
     if i % 3 == 0 then t[k - 1] = nil end
     if i % 32 == 0 then collectgarbage("step") end
   end
-  harness.join_all(workers, 30)
+  local store_traces = 0
+  harness.join_each(workers, function(result, _, traces)
+    assert(result == true, tostring(result))
+    store_traces = store_traces + (traces or 0)
+  end, 30)
+  assert(store_traces > 0, "JIT resize store workers did not trace")
   for i = 1, nworkers do
     assert(t[i] == jit_reps, "traced store lost update across resize")
     assert_lua_value(t[i], "jit resize")
@@ -640,10 +649,12 @@ local function jit_read_worker(tbl, ready, start, array_key, hash_key, want, n)
   if okjit and jitmod.status() then
     jitmod.opt.start("hotloop=1", "hotexit=1")
   end
+  local traces0 = jith.trace_count(256)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
   assert(ok == true)
-  for i = 1, n do
+  local i = 1
+  while i <= n do
     local av = tbl[array_key]
     local hv = tbl[hash_key]
     assert(av == want, "traced array read changed across resize")
@@ -653,8 +664,9 @@ local function jit_read_worker(tbl, ready, start, array_key, hash_key, want, n)
     assert(type(hv) ~= "userdata" and type(hv) ~= "cdata",
 	   "traced hash read exposed an internal sentinel")
     if i % 251 == 0 then collectgarbage("step") end
+    i = i + 1
   end
-  return true
+  return true, jith.trace_count(256) - traces0
 end
 
 local function exercise_jit_read_resize()
@@ -679,7 +691,12 @@ local function exercise_jit_read_resize()
     if i > 8 and i % 5 == 0 then t["grow:" .. (i - 4)] = nil end
     if i % 32 == 0 then collectgarbage("step") end
   end
-  harness.join_all(workers, 30)
+  local read_traces = 0
+  harness.join_each(workers, function(result, _, traces)
+    assert(result == true, tostring(result))
+    read_traces = read_traces + (traces or 0)
+  end, 30)
+  assert(read_traces > 0, "JIT resize read workers did not trace")
   for i = 1, nreaders do
     assert(t[i] == i, "stable array key changed after traced resize reads")
     assert(t["read:" .. i] == i, "stable hash key changed after traced resize reads")

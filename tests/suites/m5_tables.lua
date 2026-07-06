@@ -150,7 +150,7 @@ return function(add)
     },
     {
       name = "m5_tab_resize_stress",
-      description = "table resize forwarding stress across GC, traversal, length, weak clear, metatables, metamethod dispatch, table-library shifts, and JIT reads/stores/iterators",
+      description = "table resize forwarding stress across GC, traversal, length, weak clear, metatables, metamethod dispatch, and table-library shifts",
       script = "t-tab-resize-stress.lua",
       opts = {
 	timeout = os.getenv("LJ_M5_TAB_RESIZE_STRESS_TIMEOUT") or "30s",
@@ -172,7 +172,10 @@ return function(add)
 	  LJ_M5_TAB_RESIZE_STRESS_GCWORKERS =
 	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_GCWORKERS") or "2",
 	  LJ_M5_TAB_RESIZE_STRESS_CASES =
-	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES") or "",
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES") or
+	    "weak,gcmark,gckey,weakkey,weakmeta,finalizer,metatable," ..
+	    "len,traversal,nextchurn,nextinvalid,tableclear,tablelib," ..
+	    "tablelibshift,metadispatch",
 	  LJ_M5_TAB_RESIZE_TRAVERSAL_MODES =
 	    os.getenv("LJ_M5_TAB_RESIZE_TRAVERSAL_MODES") or ""
 	}
@@ -180,8 +183,41 @@ return function(add)
       message = "M5 table resize forwarding stress passed"
     },
     {
+      name = "m5_tab_resize_jit_stress",
+      description = "traced table resize reads, stores, and iterator observers publish real JIT traces",
+      script = "t-tab-resize-stress.lua",
+      opts = {
+	timeout = os.getenv("LJ_M5_TAB_RESIZE_JIT_TIMEOUT") or "30s",
+	env = {
+	  LJ_M5_TAB_RESIZE_STRESS_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_JIT_REPS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_REPS") or "768",
+	  LJ_M5_TAB_RESIZE_STRESS_THREADS =
+	    os.getenv("LJ_M5_TAB_RESIZE_JIT_THREADS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_THREADS") or "3",
+	  LJ_M5_TAB_RESIZE_STRESS_JIT_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_JIT_STORE_REPS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_JIT_REPS") or "2200",
+	  LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_JIT_READ_REPS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS") or "2200",
+	  LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS =
+	    os.getenv("LJ_M5_TAB_RESIZE_JIT_TRAVERSAL_ROUNDS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS") or "192",
+	  LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS") or "192",
+	  LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS") or "192",
+	  LJ_M5_TAB_RESIZE_STRESS_GCWORKERS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_GCWORKERS") or "2",
+	  LJ_M5_TAB_RESIZE_STRESS_CASES = "jitstore,jitread,jititer"
+	}
+      },
+      message = "M5 traced table resize stress passed"
+    },
+    {
       name = "m5_tab_resize_weakfinjit_stress",
-      description = "weak-key finalizer values survive traced reads and resize under GC2 workers",
+      description = "weak-key finalizer values survive resize-reader stress under GC2 workers",
       script = "t-tab-resize-stress.lua",
       opts = {
 	timeout = os.getenv("LJ_M5_TAB_RESIZE_WEAKFINJIT_TIMEOUT") or "20s",
