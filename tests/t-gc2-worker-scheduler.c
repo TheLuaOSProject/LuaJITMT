@@ -752,6 +752,15 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
   worker_weak0 = gc2_worker_weak_drained_acq(g);
   clears0 = gc2_weak_clear_tables_acq(g);
   lj_gc2_mark_to_weak(g);
+  /*
+  ** This fixture isolates parked worker weak-snapshot draining, not owner root
+  ** closure. The value remains on the C test's Lua stack so a real weak-close
+  ** root scan would correctly mark it and keep the weak-value entry alive.
+  ** Publish the closed-frontier precondition that lj_gc2_weak_drain() requires
+  ** and wake a worker to verify the async clear path itself.
+  */
+  gc2_weak_mark_closed_rel(g, 1);
+  lj_gc2_test_worker_wake(g);
   for (i = 0; i < 1000 && !weak_entry_is_nil(L, weak, key); i++)
     sleep_ns(1000000L);
   assert(weak_entry_is_nil(L, weak, key));
