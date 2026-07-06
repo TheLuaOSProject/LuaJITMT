@@ -2480,204 +2480,32 @@ static LJ_AINLINE void gc2_legacy_mark_bridge_rel(global_State *g,
   la_store32_rel(&g->gc2.legacy_mark_bridge, enabled);
 }
 
-static LJ_AINLINE uint64_t gc2_cycle_requests_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.cycle_requests);
+#define LJ_GC2_COUNTER64_ACCESSORS(name, field) \
+static LJ_AINLINE uint64_t name##_acq(global_State *g) \
+{ \
+  return la_load64_acq(&g->gc2.field); \
+} \
+static LJ_AINLINE void name##_store_rlx(global_State *g, uint64_t n) \
+{ \
+  la_store64_rlx(&g->gc2.field, n); \
+} \
+static LJ_AINLINE void name##_add(global_State *g, uint64_t n) \
+{ \
+  la_add64_rlx(&g->gc2.field, n); \
 }
 
-static LJ_AINLINE void gc2_cycle_requests_store_rlx(global_State *g,
-						    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.cycle_requests, n);
-}
-
-static LJ_AINLINE void gc2_cycle_requests_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.cycle_requests, n);
-}
-
-static LJ_AINLINE uint64_t gc2_cycle_starts_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.cycle_starts);
-}
-
-static LJ_AINLINE void gc2_cycle_starts_store_rlx(global_State *g,
-						  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.cycle_starts, n);
-}
-
-static LJ_AINLINE void gc2_cycle_starts_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.cycle_starts, n);
-}
-
-static LJ_AINLINE uint64_t gc2_major_cycle_starts_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.major_cycle_starts);
-}
-
-static LJ_AINLINE void gc2_major_cycle_starts_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.major_cycle_starts, n);
-}
-
-static LJ_AINLINE void gc2_major_cycle_starts_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.major_cycle_starts, n);
-}
-
-static LJ_AINLINE uint64_t gc2_minor_cycle_requests_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.minor_cycle_requests);
-}
-
-static LJ_AINLINE void gc2_minor_cycle_requests_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.minor_cycle_requests, n);
-}
-
-static LJ_AINLINE void gc2_minor_cycle_requests_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.minor_cycle_requests, n);
-}
-
-static LJ_AINLINE uint64_t gc2_minor_cycle_starts_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.minor_cycle_starts);
-}
-
-static LJ_AINLINE void gc2_minor_cycle_starts_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.minor_cycle_starts, n);
-}
-
-static LJ_AINLINE void gc2_minor_cycle_starts_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.minor_cycle_starts, n);
-}
-
-static LJ_AINLINE uint64_t gc2_minor_sweep_deferred_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.minor_sweep_deferred);
-}
-
-static LJ_AINLINE void gc2_minor_sweep_deferred_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.minor_sweep_deferred, n);
-}
-
-static LJ_AINLINE void gc2_minor_sweep_deferred_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.minor_sweep_deferred, n);
-}
-
-static LJ_AINLINE uint64_t gc2_minor_sweep_arenas_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.minor_sweep_arenas);
-}
-
-static LJ_AINLINE void gc2_minor_sweep_arenas_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.minor_sweep_arenas, n);
-}
-
-static LJ_AINLINE void gc2_minor_sweep_arenas_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.minor_sweep_arenas, n);
-}
-
-static LJ_AINLINE uint64_t gc2_minor_roots_deferred_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.minor_roots_deferred);
-}
-
-static LJ_AINLINE void gc2_minor_roots_deferred_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.minor_roots_deferred, n);
-}
-
-static LJ_AINLINE void gc2_minor_roots_deferred_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.minor_roots_deferred, n);
-}
-
-static LJ_AINLINE uint64_t gc2_major_root_scans_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.major_root_scans);
-}
-
-static LJ_AINLINE void gc2_major_root_scans_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.major_root_scans, n);
-}
-
-static LJ_AINLINE void gc2_major_root_scans_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.major_root_scans, n);
-}
-
-static LJ_AINLINE uint64_t gc2_minor_root_scans_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.minor_root_scans);
-}
-
-static LJ_AINLINE void gc2_minor_root_scans_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.minor_root_scans, n);
-}
-
-static LJ_AINLINE void gc2_minor_root_scans_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.minor_root_scans, n);
-}
-
-static LJ_AINLINE uint64_t gc2_pending_root_flushes_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.pending_root_flushes);
-}
-
-static LJ_AINLINE void gc2_pending_root_flushes_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.pending_root_flushes, n);
-}
-
-static LJ_AINLINE void gc2_pending_root_flushes_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.pending_root_flushes, n);
-}
-
-static LJ_AINLINE uint64_t gc2_pending_root_flushed_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.pending_root_flushed);
-}
-
-static LJ_AINLINE void gc2_pending_root_flushed_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.pending_root_flushed, n);
-}
-
-static LJ_AINLINE void gc2_pending_root_flushed_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.pending_root_flushed, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_cycle_requests, cycle_requests)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_cycle_starts, cycle_starts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_major_cycle_starts, major_cycle_starts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_cycle_requests, minor_cycle_requests)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_cycle_starts, minor_cycle_starts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_sweep_deferred, minor_sweep_deferred)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_sweep_arenas, minor_sweep_arenas)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_roots_deferred, minor_roots_deferred)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_major_root_scans, major_root_scans)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_root_scans, minor_root_scans)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_pending_root_flushes, pending_root_flushes)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_pending_root_flushed, pending_root_flushed)
 
 static LJ_AINLINE uint64_t gc2_pending_root_flush_max_acq(global_State *g)
 {
@@ -2765,51 +2593,9 @@ static LJ_AINLINE void gc2_grey_bottom_rel(global_State *g, uint64_t bottom)
   la_store64_rel(&g->gc2.grey_bottom, bottom);
 }
 
-static LJ_AINLINE uint64_t gc2_grey_pushed_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.grey_pushed);
-}
-
-static LJ_AINLINE void gc2_grey_pushed_store_rlx(global_State *g, uint64_t n)
-{
-  la_store64_rlx(&g->gc2.grey_pushed, n);
-}
-
-static LJ_AINLINE void gc2_grey_pushed_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.grey_pushed, n);
-}
-
-static LJ_AINLINE uint64_t gc2_grey_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.grey_drained);
-}
-
-static LJ_AINLINE void gc2_grey_drained_store_rlx(global_State *g, uint64_t n)
-{
-  la_store64_rlx(&g->gc2.grey_drained, n);
-}
-
-static LJ_AINLINE void gc2_grey_drained_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.grey_drained, n);
-}
-
-static LJ_AINLINE uint64_t gc2_marks_this_round_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.marks_this_round);
-}
-
-static LJ_AINLINE void gc2_marks_this_round_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.marks_this_round, n);
-}
-
-static LJ_AINLINE void gc2_marks_this_round_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.marks_this_round, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_pushed, grey_pushed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_drained, grey_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_marks_this_round, marks_this_round)
 
 static LJ_AINLINE uint64_t gc2_marks_this_round_xchg_acqrel(global_State *g,
 							    uint64_t n)
@@ -2976,285 +2762,23 @@ static LJ_AINLINE void gc2_weak_mark_closed_rel(global_State *g,
   la_store32_rel(&g->gc2.weak_mark_closed, closed);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_tables_seen_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_tables_seen);
-}
-
-static LJ_AINLINE void gc2_weak_tables_seen_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_tables_seen, n);
-}
-
-static LJ_AINLINE void gc2_weak_tables_seen_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_tables_seen, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_tables_weakkey_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_tables_weakkey);
-}
-
-static LJ_AINLINE void gc2_weak_tables_weakkey_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_tables_weakkey, n);
-}
-
-static LJ_AINLINE void gc2_weak_tables_weakkey_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_tables_weakkey, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_tables_weakval_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_tables_weakval);
-}
-
-static LJ_AINLINE void gc2_weak_tables_weakval_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_tables_weakval, n);
-}
-
-static LJ_AINLINE void gc2_weak_tables_weakval_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_tables_weakval, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_tables_allweak_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_tables_allweak);
-}
-
-static LJ_AINLINE void gc2_weak_tables_allweak_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_tables_allweak, n);
-}
-
-static LJ_AINLINE void gc2_weak_tables_allweak_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_tables_allweak, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_tables_queued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_tables_queued);
-}
-
-static LJ_AINLINE void gc2_weak_tables_queued_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_tables_queued, n);
-}
-
-static LJ_AINLINE void gc2_weak_tables_queued_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_tables_queued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_tables_overflow_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_tables_overflow);
-}
-
-static LJ_AINLINE void gc2_weak_tables_overflow_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_tables_overflow, n);
-}
-
-static LJ_AINLINE void gc2_weak_tables_overflow_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_tables_overflow, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_scan_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_scan_runs);
-}
-
-static LJ_AINLINE void gc2_weak_scan_runs_store_rlx(global_State *g,
-						    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_scan_runs, n);
-}
-
-static LJ_AINLINE void gc2_weak_scan_runs_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_scan_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_scan_tables_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_scan_tables);
-}
-
-static LJ_AINLINE void gc2_weak_scan_tables_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_scan_tables, n);
-}
-
-static LJ_AINLINE void gc2_weak_scan_tables_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_scan_tables, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_scan_slots_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_scan_slots);
-}
-
-static LJ_AINLINE void gc2_weak_scan_slots_store_rlx(global_State *g,
-						     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_scan_slots, n);
-}
-
-static LJ_AINLINE void gc2_weak_scan_slots_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_scan_slots, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_scan_clearable_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_scan_clearable);
-}
-
-static LJ_AINLINE void gc2_weak_scan_clearable_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_scan_clearable, n);
-}
-
-static LJ_AINLINE void gc2_weak_scan_clearable_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_scan_clearable, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_clear_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_clear_runs);
-}
-
-static LJ_AINLINE void gc2_weak_clear_runs_store_rlx(global_State *g,
-						     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_clear_runs, n);
-}
-
-static LJ_AINLINE void gc2_weak_clear_runs_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_clear_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_clear_tables_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_clear_tables);
-}
-
-static LJ_AINLINE void gc2_weak_clear_tables_store_rlx(global_State *g,
-						       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_clear_tables, n);
-}
-
-static LJ_AINLINE void gc2_weak_clear_tables_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_clear_tables, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_clear_slots_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_clear_slots);
-}
-
-static LJ_AINLINE void gc2_weak_clear_slots_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_clear_slots, n);
-}
-
-static LJ_AINLINE void gc2_weak_clear_slots_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_clear_slots, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_clear_cleared_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_clear_cleared);
-}
-
-static LJ_AINLINE void gc2_weak_clear_cleared_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_clear_cleared, n);
-}
-
-static LJ_AINLINE void gc2_weak_clear_cleared_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_clear_cleared, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_bridge_skipped_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_bridge_skipped);
-}
-
-static LJ_AINLINE void gc2_weak_bridge_skipped_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_bridge_skipped, n);
-}
-
-static LJ_AINLINE void gc2_weak_bridge_skipped_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_bridge_skipped, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_bridge_fallbacks_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_bridge_fallbacks);
-}
-
-static LJ_AINLINE void gc2_weak_bridge_fallbacks_store_rlx(global_State *g,
-							   uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_bridge_fallbacks, n);
-}
-
-static LJ_AINLINE void gc2_weak_bridge_fallbacks_add(global_State *g,
-						     uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_bridge_fallbacks, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_bridge_backfills_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_bridge_backfills);
-}
-
-static LJ_AINLINE void gc2_weak_bridge_backfills_store_rlx(global_State *g,
-							   uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_bridge_backfills, n);
-}
-
-static LJ_AINLINE void gc2_weak_bridge_backfills_add(global_State *g,
-						     uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_bridge_backfills, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_seen, weak_tables_seen)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_weakkey, weak_tables_weakkey)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_weakval, weak_tables_weakval)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_allweak, weak_tables_allweak)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_queued, weak_tables_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_overflow, weak_tables_overflow)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_runs, weak_scan_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_tables, weak_scan_tables)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_slots, weak_scan_slots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_clearable, weak_scan_clearable)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_runs, weak_clear_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_tables, weak_clear_tables)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_slots, weak_clear_slots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_cleared, weak_clear_cleared)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_bridge_skipped, weak_bridge_skipped)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_bridge_fallbacks, weak_bridge_fallbacks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_bridge_backfills, weak_bridge_backfills)
 
 static LJ_AINLINE uint64_t gc2_weak_bridge_backfill_tables_acq(global_State *g)
 {
@@ -3308,37 +2832,8 @@ static LJ_AINLINE void gc2_weak_bridge_backfill_cleared_add(global_State *g,
   la_add64_rlx(&g->gc2.weak_bridge_backfill_cleared, n);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_keys_marked_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_keys_marked);
-}
-
-static LJ_AINLINE void gc2_weak_keys_marked_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_keys_marked, n);
-}
-
-static LJ_AINLINE void gc2_weak_keys_marked_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_keys_marked, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_values_marked_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_values_marked);
-}
-
-static LJ_AINLINE void gc2_weak_values_marked_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_values_marked, n);
-}
-
-static LJ_AINLINE void gc2_weak_values_marked_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_values_marked, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_keys_marked, weak_keys_marked)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_values_marked, weak_values_marked)
 
 static LJ_AINLINE uint64_t gc2_weak_scan_cursor_acq(global_State *g)
 {
@@ -3423,38 +2918,8 @@ static LJ_AINLINE void gc2_sweep_bridge_ready_rel(global_State *g,
   la_store32_rel(&g->gc2.sweep_bridge_ready, ready);
 }
 
-static LJ_AINLINE uint64_t gc2_sweep_to_idle_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.sweep_to_idle);
-}
-
-static LJ_AINLINE void gc2_sweep_to_idle_store_rlx(global_State *g,
-						   uint64_t n)
-{
-  la_store64_rlx(&g->gc2.sweep_to_idle, n);
-}
-
-static LJ_AINLINE void gc2_sweep_to_idle_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.sweep_to_idle, n);
-}
-
-static LJ_AINLINE uint64_t gc2_preserve_abort_to_idle_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.preserve_abort_to_idle);
-}
-
-static LJ_AINLINE void gc2_preserve_abort_to_idle_store_rlx(global_State *g,
-							    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.preserve_abort_to_idle, n);
-}
-
-static LJ_AINLINE void gc2_preserve_abort_to_idle_add(global_State *g,
-						      uint64_t n)
-{
-  la_add64_rlx(&g->gc2.preserve_abort_to_idle, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_to_idle, sweep_to_idle)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_preserve_abort_to_idle, preserve_abort_to_idle)
 
 static LJ_AINLINE TGState *gc2_tg_list_acq(global_State *g)
 {
@@ -3530,186 +2995,17 @@ static LJ_AINLINE void gc2_ssb_drained_add(global_State *g, uint32_t n)
   la_add32_rlx(&g->gc2.ssb_drained, n);
 }
 
-static LJ_AINLINE uint64_t gc2_ssb_items_published_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.ssb_items_published);
-}
-
-static LJ_AINLINE void gc2_ssb_items_published_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.ssb_items_published, n);
-}
-
-static LJ_AINLINE void gc2_ssb_items_published_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.ssb_items_published, n);
-}
-
-static LJ_AINLINE uint64_t gc2_ssb_items_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.ssb_items_drained);
-}
-
-static LJ_AINLINE void gc2_ssb_items_drained_store_rlx(global_State *g,
-						       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.ssb_items_drained, n);
-}
-
-static LJ_AINLINE void gc2_ssb_items_drained_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.ssb_items_drained, n);
-}
-
-static LJ_AINLINE uint64_t gc2_fixpoint_rounds_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.fixpoint_rounds);
-}
-
-static LJ_AINLINE void gc2_fixpoint_rounds_store_rlx(global_State *g,
-						     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.fixpoint_rounds, n);
-}
-
-static LJ_AINLINE void gc2_fixpoint_rounds_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.fixpoint_rounds, n);
-}
-
-static LJ_AINLINE uint64_t gc2_fixpoint_hits_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.fixpoint_hits);
-}
-
-static LJ_AINLINE void gc2_fixpoint_hits_store_rlx(global_State *g,
-						   uint64_t n)
-{
-  la_store64_rlx(&g->gc2.fixpoint_hits, n);
-}
-
-static LJ_AINLINE void gc2_fixpoint_hits_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.fixpoint_hits, n);
-}
-
-static LJ_AINLINE uint64_t gc2_mark_complete_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.mark_complete_runs);
-}
-
-static LJ_AINLINE void gc2_mark_complete_runs_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.mark_complete_runs, n);
-}
-
-static LJ_AINLINE void gc2_mark_complete_runs_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.mark_complete_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_mark_complete_hits_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.mark_complete_hits);
-}
-
-static LJ_AINLINE void gc2_mark_complete_hits_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.mark_complete_hits, n);
-}
-
-static LJ_AINLINE void gc2_mark_complete_hits_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.mark_complete_hits, n);
-}
-
-static LJ_AINLINE uint64_t gc2_mark_complete_peer_waits_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.mark_complete_peer_waits);
-}
-
-static LJ_AINLINE void gc2_mark_complete_peer_waits_store_rlx(global_State *g,
-							      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.mark_complete_peer_waits, n);
-}
-
-static LJ_AINLINE void gc2_mark_complete_peer_waits_add(global_State *g,
-							uint64_t n)
-{
-  la_add64_rlx(&g->gc2.mark_complete_peer_waits, n);
-}
-
-static LJ_AINLINE uint64_t gc2_mark_to_weak_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.mark_to_weak);
-}
-
-static LJ_AINLINE void gc2_mark_to_weak_store_rlx(global_State *g, uint64_t n)
-{
-  la_store64_rlx(&g->gc2.mark_to_weak, n);
-}
-
-static LJ_AINLINE void gc2_mark_to_weak_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.mark_to_weak, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_complete_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_complete_runs);
-}
-
-static LJ_AINLINE void gc2_weak_complete_runs_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_complete_runs, n);
-}
-
-static LJ_AINLINE void gc2_weak_complete_runs_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_complete_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_complete_progress_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_complete_progress);
-}
-
-static LJ_AINLINE void gc2_weak_complete_progress_store_rlx(global_State *g,
-							    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_complete_progress, n);
-}
-
-static LJ_AINLINE void gc2_weak_complete_progress_add(global_State *g,
-						      uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_complete_progress, n);
-}
-
-static LJ_AINLINE uint64_t gc2_weak_to_sweep_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.weak_to_sweep);
-}
-
-static LJ_AINLINE void gc2_weak_to_sweep_store_rlx(global_State *g,
-						   uint64_t n)
-{
-  la_store64_rlx(&g->gc2.weak_to_sweep, n);
-}
-
-static LJ_AINLINE void gc2_weak_to_sweep_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.weak_to_sweep, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ssb_items_published, ssb_items_published)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ssb_items_drained, ssb_items_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_fixpoint_rounds, fixpoint_rounds)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_fixpoint_hits, fixpoint_hits)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_complete_runs, mark_complete_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_complete_hits, mark_complete_hits)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_complete_peer_waits, mark_complete_peer_waits)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_to_weak, mark_to_weak)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_complete_runs, weak_complete_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_complete_progress, weak_complete_progress)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_to_sweep, weak_to_sweep)
 
 static LJ_AINLINE uint32_t gc2_n_threads_acq(global_State *g)
 {
@@ -3865,22 +3161,7 @@ static LJ_AINLINE void gc2_hs_signal_ns_rel(global_State *g, uint64_t ns)
   la_store64_rel(&g->gc2.hs_signal_ns, ns);
 }
 
-static LJ_AINLINE uint64_t gc2_hs_ack_latency_samples_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.hs_ack_latency_samples);
-}
-
-static LJ_AINLINE void gc2_hs_ack_latency_samples_store_rlx(global_State *g,
-							    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.hs_ack_latency_samples, n);
-}
-
-static LJ_AINLINE void gc2_hs_ack_latency_samples_add(global_State *g,
-						      uint64_t n)
-{
-  la_add64_rlx(&g->gc2.hs_ack_latency_samples, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_hs_ack_latency_samples, hs_ack_latency_samples)
 
 static LJ_AINLINE uint64_t gc2_hs_ack_latency_sum_acq(global_State *g)
 {
@@ -3938,37 +3219,8 @@ static LJ_AINLINE void gc2_hs_ack_latency_bucket_add(global_State *g,
   la_add64_rlx(&g->gc2.hs_ack_latency_buckets[bucket], n);
 }
 
-static LJ_AINLINE uint64_t gc2_smr_reclaim_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.smr_reclaim_runs);
-}
-
-static LJ_AINLINE void gc2_smr_reclaim_runs_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.smr_reclaim_runs, n);
-}
-
-static LJ_AINLINE void gc2_smr_reclaim_runs_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.smr_reclaim_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_smr_reclaimed_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.smr_reclaimed);
-}
-
-static LJ_AINLINE void gc2_smr_reclaimed_store_rlx(global_State *g,
-						   uint64_t n)
-{
-  la_store64_rlx(&g->gc2.smr_reclaimed, n);
-}
-
-static LJ_AINLINE void gc2_smr_reclaimed_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.smr_reclaimed, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_smr_reclaim_runs, smr_reclaim_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_smr_reclaimed, smr_reclaimed)
 
 static LJ_AINLINE uint32_t gc2_smr_readers_acq(global_State *g)
 {
@@ -4049,88 +3301,11 @@ static LJ_AINLINE uint32_t gc2_force_major_xchg_acqrel(global_State *g,
   return la_xchg32_acqrel(&g->gc2.force_major, force);
 }
 
-static LJ_AINLINE uint64_t gc2_remembered_barriers_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.remembered_barriers);
-}
-
-static LJ_AINLINE void gc2_remembered_barriers_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.remembered_barriers, n);
-}
-
-static LJ_AINLINE void gc2_remembered_barriers_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.remembered_barriers, n);
-}
-
-static LJ_AINLINE uint64_t gc2_remembered_pushed_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.remembered_pushed);
-}
-
-static LJ_AINLINE void gc2_remembered_pushed_store_rlx(global_State *g,
-						       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.remembered_pushed, n);
-}
-
-static LJ_AINLINE void gc2_remembered_pushed_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.remembered_pushed, n);
-}
-
-static LJ_AINLINE uint64_t gc2_remembered_overflows_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.remembered_overflows);
-}
-
-static LJ_AINLINE void gc2_remembered_overflows_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.remembered_overflows, n);
-}
-
-static LJ_AINLINE void gc2_remembered_overflows_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.remembered_overflows, n);
-}
-
-static LJ_AINLINE uint64_t gc2_remembered_filtered_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.remembered_filtered);
-}
-
-static LJ_AINLINE void gc2_remembered_filtered_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.remembered_filtered, n);
-}
-
-static LJ_AINLINE void gc2_remembered_filtered_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.remembered_filtered, n);
-}
-
-static LJ_AINLINE uint64_t gc2_remembered_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.remembered_drained);
-}
-
-static LJ_AINLINE void gc2_remembered_drained_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.remembered_drained, n);
-}
-
-static LJ_AINLINE void gc2_remembered_drained_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.remembered_drained, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_barriers, remembered_barriers)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_pushed, remembered_pushed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_overflows, remembered_overflows)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_filtered, remembered_filtered)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_drained, remembered_drained)
 
 static LJ_AINLINE uint32_t gc2_cycle_minor_requested_acq(global_State *g)
 {
@@ -4297,71 +3472,10 @@ static LJ_AINLINE void gc2_minor_survival_major_requests_add(global_State *g,
   la_add64_rlx(&g->gc2.minor_survival_major_requests, n);
 }
 
-static LJ_AINLINE uint64_t gc2_sweep_owner_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.sweep_owner_runs);
-}
-
-static LJ_AINLINE void gc2_sweep_owner_runs_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.sweep_owner_runs, n);
-}
-
-static LJ_AINLINE void gc2_sweep_owner_runs_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.sweep_owner_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_sweep_owner_arenas_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.sweep_owner_arenas);
-}
-
-static LJ_AINLINE void gc2_sweep_owner_arenas_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.sweep_owner_arenas, n);
-}
-
-static LJ_AINLINE void gc2_sweep_owner_arenas_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.sweep_owner_arenas, n);
-}
-
-static LJ_AINLINE uint64_t gc2_sweep_owner_live_cells_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.sweep_owner_live_cells);
-}
-
-static LJ_AINLINE void gc2_sweep_owner_live_cells_store_rlx(global_State *g,
-							    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.sweep_owner_live_cells, n);
-}
-
-static LJ_AINLINE void gc2_sweep_owner_live_cells_add(global_State *g,
-						      uint64_t n)
-{
-  la_add64_rlx(&g->gc2.sweep_owner_live_cells, n);
-}
-
-static LJ_AINLINE uint64_t gc2_sweep_live_updates_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.sweep_live_updates);
-}
-
-static LJ_AINLINE void gc2_sweep_live_updates_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.sweep_live_updates, n);
-}
-
-static LJ_AINLINE void gc2_sweep_live_updates_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.sweep_live_updates, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_runs, sweep_owner_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_arenas, sweep_owner_arenas)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_live_cells, sweep_owner_live_cells)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_live_updates, sweep_live_updates)
 
 static LJ_AINLINE uint64_t gc2_sweep_live_huge_bytes_acq(global_State *g)
 {
@@ -4589,285 +3703,23 @@ static LJ_AINLINE void gc2_worker_exited_futex_wake(global_State *g, int n)
   la_futex_wake(&g->gc2.worker_exited, n);
 }
 
-static LJ_AINLINE uint64_t gc2_worker_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_runs);
-}
-
-static LJ_AINLINE void gc2_worker_runs_store_rlx(global_State *g, uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_runs, n);
-}
-
-static LJ_AINLINE void gc2_worker_runs_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_grey_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_grey_drained);
-}
-
-static LJ_AINLINE void gc2_worker_grey_drained_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_grey_drained, n);
-}
-
-static LJ_AINLINE void gc2_worker_grey_drained_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_grey_drained, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_ssb_converted_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_ssb_converted);
-}
-
-static LJ_AINLINE void gc2_worker_ssb_converted_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_ssb_converted, n);
-}
-
-static LJ_AINLINE void gc2_worker_ssb_converted_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_ssb_converted, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_weak_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_weak_drained);
-}
-
-static LJ_AINLINE void gc2_worker_weak_drained_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_weak_drained, n);
-}
-
-static LJ_AINLINE void gc2_worker_weak_drained_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_weak_drained, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_idle_declares_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_idle_declares);
-}
-
-static LJ_AINLINE void gc2_worker_idle_declares_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_idle_declares, n);
-}
-
-static LJ_AINLINE void gc2_worker_idle_declares_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_idle_declares, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_busy_retries_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_busy_retries);
-}
-
-static LJ_AINLINE void gc2_worker_busy_retries_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_busy_retries, n);
-}
-
-static LJ_AINLINE void gc2_worker_busy_retries_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_busy_retries, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_wakes_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_wakes);
-}
-
-static LJ_AINLINE void gc2_worker_wakes_store_rlx(global_State *g,
-						  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_wakes, n);
-}
-
-static LJ_AINLINE void gc2_worker_wakes_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_wakes, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_parks_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_parks);
-}
-
-static LJ_AINLINE void gc2_worker_parks_store_rlx(global_State *g, uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_parks, n);
-}
-
-static LJ_AINLINE void gc2_worker_parks_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_parks, n);
-}
-
-static LJ_AINLINE uint64_t gc2_worker_async_progress_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.worker_async_progress);
-}
-
-static LJ_AINLINE void gc2_worker_async_progress_store_rlx(global_State *g,
-							   uint64_t n)
-{
-  la_store64_rlx(&g->gc2.worker_async_progress, n);
-}
-
-static LJ_AINLINE void gc2_worker_async_progress_add(global_State *g,
-						     uint64_t n)
-{
-  la_add64_rlx(&g->gc2.worker_async_progress, n);
-}
-
-static LJ_AINLINE uint64_t gc2_tg_thread_roots_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.tg_thread_roots);
-}
-
-static LJ_AINLINE void gc2_tg_thread_roots_store_rlx(global_State *g,
-						     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.tg_thread_roots, n);
-}
-
-static LJ_AINLINE void gc2_tg_thread_roots_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.tg_thread_roots, n);
-}
-
-static LJ_AINLINE uint64_t gc2_tg_cur_roots_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.tg_cur_roots);
-}
-
-static LJ_AINLINE void gc2_tg_cur_roots_store_rlx(global_State *g,
-						  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.tg_cur_roots, n);
-}
-
-static LJ_AINLINE void gc2_tg_cur_roots_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.tg_cur_roots, n);
-}
-
-static LJ_AINLINE uint64_t gc2_tg_trace_roots_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.tg_trace_roots);
-}
-
-static LJ_AINLINE void gc2_tg_trace_roots_store_rlx(global_State *g,
-						    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.tg_trace_roots, n);
-}
-
-static LJ_AINLINE void gc2_tg_trace_roots_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.tg_trace_roots, n);
-}
-
-static LJ_AINLINE uint64_t gc2_thread_scan_claims_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.thread_scan_claims);
-}
-
-static LJ_AINLINE void gc2_thread_scan_claims_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.thread_scan_claims, n);
-}
-
-static LJ_AINLINE void gc2_thread_scan_claims_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.thread_scan_claims, n);
-}
-
-static LJ_AINLINE uint64_t gc2_thread_scan_busy_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.thread_scan_busy);
-}
-
-static LJ_AINLINE void gc2_thread_scan_busy_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.thread_scan_busy, n);
-}
-
-static LJ_AINLINE void gc2_thread_scan_busy_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.thread_scan_busy, n);
-}
-
-static LJ_AINLINE uint64_t gc2_thread_scan_requeues_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.thread_scan_requeues);
-}
-
-static LJ_AINLINE void gc2_thread_scan_requeues_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.thread_scan_requeues, n);
-}
-
-static LJ_AINLINE void gc2_thread_scan_requeues_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.thread_scan_requeues, n);
-}
-
-static LJ_AINLINE uint64_t gc2_thread_scan_owner_scans_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.thread_scan_owner_scans);
-}
-
-static LJ_AINLINE void gc2_thread_scan_owner_scans_store_rlx(global_State *g,
-							     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.thread_scan_owner_scans, n);
-}
-
-static LJ_AINLINE void gc2_thread_scan_owner_scans_add(global_State *g,
-						       uint64_t n)
-{
-  la_add64_rlx(&g->gc2.thread_scan_owner_scans, n);
-}
-
-static LJ_AINLINE uint64_t gc2_thread_scan_needscan_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.thread_scan_needscan);
-}
-
-static LJ_AINLINE void gc2_thread_scan_needscan_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.thread_scan_needscan, n);
-}
-
-static LJ_AINLINE void gc2_thread_scan_needscan_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.thread_scan_needscan, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_runs, worker_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_grey_drained, worker_grey_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_ssb_converted, worker_ssb_converted)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_weak_drained, worker_weak_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_idle_declares, worker_idle_declares)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_busy_retries, worker_busy_retries)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_wakes, worker_wakes)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_parks, worker_parks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_async_progress, worker_async_progress)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_thread_roots, tg_thread_roots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_cur_roots, tg_cur_roots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_trace_roots, tg_trace_roots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_claims, thread_scan_claims)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_busy, thread_scan_busy)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_requeues, thread_scan_requeues)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_owner_scans, thread_scan_owner_scans)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_needscan, thread_scan_needscan)
 
 static LJ_AINLINE uint64_t gc2_thread_scan_owner_needscans_acq(
   global_State *g)
@@ -4911,22 +3763,7 @@ static LJ_AINLINE void gc2_thread_scan_needscan_pending_dec(global_State *g)
   UNUSED(old);
 }
 
-static LJ_AINLINE uint64_t gc2_thread_scan_dirty_misses_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.thread_scan_dirty_misses);
-}
-
-static LJ_AINLINE void gc2_thread_scan_dirty_misses_store_rlx(global_State *g,
-							      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.thread_scan_dirty_misses, n);
-}
-
-static LJ_AINLINE void gc2_thread_scan_dirty_misses_add(global_State *g,
-							uint64_t n)
-{
-  la_add64_rlx(&g->gc2.thread_scan_dirty_misses, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_dirty_misses, thread_scan_dirty_misses)
 
 static LJ_AINLINE void *gc2_finalizer_mpsc_acq(global_State *g)
 {
@@ -5010,120 +3847,13 @@ static LJ_AINLINE void gc2_finalizer_owner_rel(global_State *g,
   la_store32_rel(&g->gc2.finalizer_owner_tid, owner);
 }
 
-static LJ_AINLINE uint64_t gc2_finalizer_queued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finalizer_queued);
-}
-
-static LJ_AINLINE void gc2_finalizer_queued_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finalizer_queued, n);
-}
-
-static LJ_AINLINE void gc2_finalizer_queued_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finalizer_queued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finalizer_dequeued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finalizer_dequeued);
-}
-
-static LJ_AINLINE void gc2_finalizer_dequeued_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finalizer_dequeued, n);
-}
-
-static LJ_AINLINE void gc2_finalizer_dequeued_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finalizer_dequeued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finalizer_mpsc_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finalizer_mpsc_drained);
-}
-
-static LJ_AINLINE void gc2_finalizer_mpsc_drained_store_rlx(global_State *g,
-							    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finalizer_mpsc_drained, n);
-}
-
-static LJ_AINLINE void gc2_finalizer_mpsc_drained_add(global_State *g,
-						      uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finalizer_mpsc_drained, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finalizer_enters_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finalizer_enters);
-}
-
-static LJ_AINLINE void gc2_finalizer_enters_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finalizer_enters, n);
-}
-
-static LJ_AINLINE void gc2_finalizer_enters_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finalizer_enters, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finalizer_leaves_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finalizer_leaves);
-}
-
-static LJ_AINLINE void gc2_finalizer_leaves_store_rlx(global_State *g,
-						      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finalizer_leaves, n);
-}
-
-static LJ_AINLINE void gc2_finalizer_leaves_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finalizer_leaves, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finalizer_sweep_blocks_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finalizer_sweep_blocks);
-}
-
-static LJ_AINLINE void gc2_finalizer_sweep_blocks_store_rlx(global_State *g,
-							    uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finalizer_sweep_blocks, n);
-}
-
-static LJ_AINLINE void gc2_finalizer_sweep_blocks_add(global_State *g,
-						      uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finalizer_sweep_blocks, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finalizer_spawn_deferrals_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finalizer_spawn_deferrals);
-}
-
-static LJ_AINLINE void gc2_finalizer_spawn_deferrals_store_rlx(global_State *g,
-							       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finalizer_spawn_deferrals, n);
-}
-
-static LJ_AINLINE void gc2_finalizer_spawn_deferrals_add(global_State *g,
-							 uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finalizer_spawn_deferrals, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_queued, finalizer_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_dequeued, finalizer_dequeued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_mpsc_drained, finalizer_mpsc_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_enters, finalizer_enters)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_leaves, finalizer_leaves)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_sweep_blocks, finalizer_sweep_blocks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_spawn_deferrals, finalizer_spawn_deferrals)
 
 static LJ_AINLINE uint64_t gc2_finalizer_spawn_release_wakes_acq(
   global_State *g)
@@ -5253,121 +3983,13 @@ static LJ_AINLINE void gc2_assist_shift_rel(global_State *g, uint32_t shift)
   la_store32_rel(&g->gc2.assist_shift, shift);
 }
 
-static LJ_AINLINE uint64_t gc2_assist_runs_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.assist_runs);
-}
-
-static LJ_AINLINE void gc2_assist_runs_store_rlx(global_State *g, uint64_t n)
-{
-  la_store64_rlx(&g->gc2.assist_runs, n);
-}
-
-static LJ_AINLINE void gc2_assist_runs_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.assist_runs, n);
-}
-
-static LJ_AINLINE uint64_t gc2_assist_grey_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.assist_grey_drained);
-}
-
-static LJ_AINLINE void gc2_assist_grey_drained_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.assist_grey_drained, n);
-}
-
-static LJ_AINLINE void gc2_assist_grey_drained_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.assist_grey_drained, n);
-}
-
-static LJ_AINLINE uint64_t gc2_assist_ssb_converted_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.assist_ssb_converted);
-}
-
-static LJ_AINLINE void gc2_assist_ssb_converted_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.assist_ssb_converted, n);
-}
-
-static LJ_AINLINE void gc2_assist_ssb_converted_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.assist_ssb_converted, n);
-}
-
-static LJ_AINLINE uint64_t gc2_assist_weak_drained_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.assist_weak_drained);
-}
-
-static LJ_AINLINE void gc2_assist_weak_drained_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.assist_weak_drained, n);
-}
-
-static LJ_AINLINE void gc2_assist_weak_drained_add(global_State *g,
-						   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.assist_weak_drained, n);
-}
-
-static LJ_AINLINE uint64_t gc2_jit_hard_checks_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.jit_hard_checks);
-}
-
-static LJ_AINLINE void gc2_jit_hard_checks_store_rlx(global_State *g,
-						     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.jit_hard_checks, n);
-}
-
-static LJ_AINLINE void gc2_jit_hard_checks_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.jit_hard_checks, n);
-}
-
-static LJ_AINLINE uint64_t gc2_interp_hard_checks_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.interp_hard_checks);
-}
-
-static LJ_AINLINE void gc2_interp_hard_checks_store_rlx(global_State *g,
-							uint64_t n)
-{
-  la_store64_rlx(&g->gc2.interp_hard_checks, n);
-}
-
-static LJ_AINLINE void gc2_interp_hard_checks_add(global_State *g,
-						  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.interp_hard_checks, n);
-}
-
-static LJ_AINLINE uint64_t gc2_jit_scoped_slots_retired_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.jit_scoped_slots_retired);
-}
-
-static LJ_AINLINE void gc2_jit_scoped_slots_retired_store_rlx(global_State *g,
-							      uint64_t n)
-{
-  la_store64_rlx(&g->gc2.jit_scoped_slots_retired, n);
-}
-
-static LJ_AINLINE void gc2_jit_scoped_slots_retired_add(global_State *g,
-							uint64_t n)
-{
-  la_add64_rlx(&g->gc2.jit_scoped_slots_retired, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_runs, assist_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_grey_drained, assist_grey_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_ssb_converted, assist_ssb_converted)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_weak_drained, assist_weak_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_jit_hard_checks, jit_hard_checks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_interp_hard_checks, interp_hard_checks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_jit_scoped_slots_retired, jit_scoped_slots_retired)
 
 static LJ_AINLINE void *gc2_clib_cache_retired_acq(global_State *g)
 {
@@ -5415,104 +4037,12 @@ static LJ_AINLINE int gc2_assist_active_cas(global_State *g, uint32_t *oldp,
   return la_cas32(&g->gc2.assist_active, oldp, active, LA_ACQ_REL, LA_ACQ);
 }
 
-static LJ_AINLINE uint64_t gc2_finreg_cdata_sets_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_sets);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_sets_store_rlx(global_State *g,
-						       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_sets, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_sets_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_sets, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_clears_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_clears);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_clears_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_clears, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_clears_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_clears, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_queued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_queued);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_queued_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_queued, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_queued_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_queued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_sweep_queued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_sweep_queued_store_rlx(global_State *g,
-							       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_sweep_queued, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_sweep_queued_add(global_State *g,
-							 uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_sweep_queued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_pweak_queued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_pweak_queued_store_rlx(global_State *g,
-							       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_pweak_queued_add(global_State *g,
-							 uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_pweak_claimed_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_pweak_claimed_store_rlx(global_State *g,
-								uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_pweak_claimed, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_pweak_claimed_add(global_State *g,
-							  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_pweak_claimed, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_sets, finreg_cdata_sets)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_clears, finreg_cdata_clears)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_queued, finreg_cdata_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_sweep_queued, finreg_cdata_sweep_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_pweak_queued, finreg_cdata_pweak_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_pweak_claimed, finreg_cdata_pweak_claimed)
 
 static LJ_AINLINE uint64_t gc2_finreg_cdata_preclaim_overflow_acq(
   global_State *g)
@@ -5550,90 +4080,11 @@ static LJ_AINLINE void gc2_finreg_cdata_preclaim_dispatched_add(
   la_add64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, n);
 }
 
-static LJ_AINLINE uint64_t gc2_finreg_cdata_order_seen_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_order_seen);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_seen_store_rlx(global_State *g,
-							     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_order_seen, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_seen_add(global_State *g,
-						       uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_order_seen, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_order_claimed_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_claimed_store_rlx(global_State *g,
-								uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_order_claimed, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_claimed_add(global_State *g,
-							  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_order_unlinked_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_order_unlinked);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_unlinked_store_rlx(global_State *g,
-								 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_order_unlinked, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_unlinked_add(global_State *g,
-							   uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_order_unlinked, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_order_queued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_queued_store_rlx(global_State *g,
-							       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_order_queued, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_queued_add(global_State *g,
-							 uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_order_queued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_cdata_order_retired_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_cdata_order_retired);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_retired_store_rlx(global_State *g,
-								uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_cdata_order_retired, n);
-}
-
-static LJ_AINLINE void gc2_finreg_cdata_order_retired_add(global_State *g,
-							  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_cdata_order_retired, n);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_seen, finreg_cdata_order_seen)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_claimed, finreg_cdata_order_claimed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_unlinked, finreg_cdata_order_unlinked)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_queued, finreg_cdata_order_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_retired, finreg_cdata_order_retired)
 
 static LJ_AINLINE uint64_t gc2_finreg_cdata_order_tombstones_acq(
   global_State *g)
@@ -5826,121 +4277,15 @@ static LJ_AINLINE void lj_udata_env_rel(GCudata *ud, GCtab *env)
   setgcrefrel(ud->env, obj2gco(env));
 }
 
-static LJ_AINLINE uint64_t gc2_finreg_udata_sets_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_udata_sets);
-}
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_sets, finreg_udata_sets)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_clears, finreg_udata_clears)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_queued, finreg_udata_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_registered, finreg_udata_registered)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_retired_nodes, finreg_udata_retired_nodes)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_discovered, finreg_udata_discovered)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_forgets, finreg_udata_forgets)
 
-static LJ_AINLINE void gc2_finreg_udata_sets_store_rlx(global_State *g,
-						       uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_udata_sets, n);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_sets_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_udata_sets, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_udata_clears_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_udata_clears);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_clears_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_udata_clears, n);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_clears_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_udata_clears, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_udata_queued_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_udata_queued);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_queued_store_rlx(global_State *g,
-							 uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_udata_queued, n);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_queued_add(global_State *g, uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_udata_queued, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_udata_registered_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_udata_registered);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_registered_store_rlx(global_State *g,
-							     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_udata_registered, n);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_registered_add(global_State *g,
-						       uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_udata_registered, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_udata_retired_nodes_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_udata_retired_nodes);
-}
-
-static LJ_AINLINE void
-gc2_finreg_udata_retired_nodes_store_rlx(global_State *g, uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_udata_retired_nodes, n);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_retired_nodes_add(global_State *g,
-							  uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_udata_retired_nodes, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_udata_discovered_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_udata_discovered);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_discovered_store_rlx(global_State *g,
-							     uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_udata_discovered, n);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_discovered_add(global_State *g,
-						       uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_udata_discovered, n);
-}
-
-static LJ_AINLINE uint64_t gc2_finreg_udata_forgets_acq(global_State *g)
-{
-  return la_load64_acq(&g->gc2.finreg_udata_forgets);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_forgets_store_rlx(global_State *g,
-							  uint64_t n)
-{
-  la_store64_rlx(&g->gc2.finreg_udata_forgets, n);
-}
-
-static LJ_AINLINE void gc2_finreg_udata_forgets_add(global_State *g,
-						    uint64_t n)
-{
-  la_add64_rlx(&g->gc2.finreg_udata_forgets, n);
-}
+#undef LJ_GC2_COUNTER64_ACCESSORS
 
 static LJ_AINLINE GC2FinRegUDataNode *
 gc2_finreg_udata_head_acq(global_State *g)

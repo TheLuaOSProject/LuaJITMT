@@ -646,6 +646,7 @@ int main(void)
   assert(ptr_state(raw) == 3);
   assert(lj_mem_freegco_defer(g, raw, 64) == 1);
   assert(g->gc.total == before_raw);
+  assert(((GCobj *)raw)->gch.gct == 0);
   assert(ptr_state(raw) == 2);
 
   before_drop = g->gc.total;

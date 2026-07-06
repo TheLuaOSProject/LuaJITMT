@@ -576,6 +576,38 @@ static void test_c_table_rescan_barrier(lua_State *L, global_State *g,
   lua_pop(L, 2);
 }
 
+static void test_table_rescan_idle_clear(lua_State *L, global_State *g,
+					 TGState *tg, int preserve_abort)
+{
+  GCtab *parent, *child;
+
+  lua_createtable(L, 1, 0);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  assert(parent->asize > 0);
+  settabV(L, &lj_tab_array_acq(parent)[0], child);
+  lj_gc_anybarriert(L, parent);
+  assert(lj_obj_gcflags(obj2gco(parent)) & LJ_GC_NEEDSCAN);
+  assert(!lj_gc2_test_ssb_empty(g));
+
+  if (preserve_abort)
+    lj_gc2_preserve_abort_to_idle(g);
+  else
+    lj_gc2_cycle_to_idle(g);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert((lj_obj_gcflags(obj2gco(parent)) & LJ_GC_NEEDSCAN) == 0);
+  lua_pop(L, 2);
+}
+
 static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
 {
   GCfunc *fn;
@@ -3133,6 +3165,82 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 1);
 }
 
+static void test_thread_needscan_idle_clear(lua_State *L, global_State *g,
+					    TGState *tg, int preserve_abort)
+{
+  lua_State *owner_L, *busy;
+  TGState extra_tg;
+  GCtab *busy_tab;
+  uint64_t needscan0, requeues0, aborts0;
+  uint32_t pending0, n_threads0;
+
+  owner_L = lua_newthread(L);
+  assert(owner_L != NULL);
+  busy = lua_newthread(L);
+  assert(busy != NULL);
+  lua_newtable(busy);
+  busy_tab = tabV(busy->top - 1);
+
+  lj_tg_init_thread(g, &extra_tg, owner_L, 1);
+  extra_tg.tid = tg->tid + (preserve_abort ? 9000u : 8000u);
+  if (extra_tg.tid == 0 || extra_tg.tid == LJ_THREAD_GCSCAN)
+    extra_tg.tid = preserve_abort ? 9000u : 8000u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  owner_L->tg_hint = &extra_tg;
+  busy->tg_hint = &extra_tg;
+  lj_state_owner_rel(owner_L, extra_tg.tid);
+  lj_state_owner_rel(busy, extra_tg.tid);
+
+  lj_gc2_mark_begin(g);
+  n_threads0 = g->gc2.n_threads;
+  lj_tg_attach(g, &extra_tg);
+  assert(lj_tg_find_owner(g, extra_tg.tid) == &extra_tg);
+  assert(g->gc2.n_threads >= n_threads0);
+  needscan0 = gc2_thread_scan_needscan_acq(g);
+  requeues0 = gc2_thread_scan_requeues_acq(g);
+  pending0 = gc2_thread_scan_needscan_pending_acq(g);
+  assert(pending0 == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(lj_gc2_worker_drain(g, 2) != 0);
+  assert(gc2_thread_scan_needscan_acq(g) == needscan0 + 1u);
+  assert(gc2_thread_scan_requeues_acq(g) == requeues0 + 1u);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0 + 1u);
+  assert(lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
+
+  /*
+  ** The synthetic owner TG only exists to make the worker publish NEEDSCAN.
+  ** Detach it before the idle handshake; the invariant under test is that the
+  ** forced close drops stale thread flags by walking the root spine.
+  */
+  lj_state_owner_rel(owner_L, 0);
+  lj_state_owner_rel(busy, 0);
+  owner_L->tg_hint = tg;
+  busy->tg_hint = tg;
+  lj_tg_detach(g, &extra_tg);
+  assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
+  (void)lj_tg_reclaim_dead(g);
+  assert(lj_tg_find_owner(g, extra_tg.tid) != &extra_tg);
+  lj_tg_fini_thread(g, &extra_tg);
+
+  aborts0 = gc2_preserve_abort_to_idle_acq(g);
+  if (preserve_abort) {
+    lj_gc2_preserve_abort_to_idle(g);
+    assert(gc2_preserve_abort_to_idle_acq(g) == aborts0 + 1u);
+  } else {
+    lj_gc2_cycle_to_idle(g);
+    assert(gc2_preserve_abort_to_idle_acq(g) == aborts0);
+  }
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+  assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == 0);
+  lua_pop(L, 2);
+}
+
 static void test_userdata(lua_State *L, global_State *g)
 {
   GCtab *env, *mt;
@@ -4474,6 +4582,8 @@ int main(void)
   test_fixpoint_round(L, g, tg);
   test_c_value_barrier(L, g, tg);
   test_c_table_rescan_barrier(L, g, tg);
+  test_table_rescan_idle_clear(L, g, tg, 0);
+  test_table_rescan_idle_clear(L, g, tg, 1);
   test_vm_upvalue_barrier(L, g, tg);
   test_vm_table_barrier(L, g, tg);
   test_vm_meta_tset_barrier(L, g, tg);
@@ -4526,6 +4636,8 @@ int main(void)
   test_tg_thread_roots(L, g, tg);
   test_minor_root_scan(L, g, tg);
   test_thread(L, g, tg);
+  test_thread_needscan_idle_clear(L, g, tg, 0);
+  test_thread_needscan_idle_clear(L, g, tg, 1);
   test_userdata(L, g);
   test_finreg_userdata_queue_mark(L, g, tg);
   test_finreg_userdata_active_unlink(L, g);

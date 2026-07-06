@@ -186,6 +186,7 @@ static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 static uint32_t gc2_clear_thread_needscan_all(global_State *g);
 static uint32_t gc2_discard_remembered_ssb(global_State *g);
 static void gc2_clear_table_rescan_grey(global_State *g);
+static void gc2_clear_table_rescan_ssb(global_State *g);
 static void gc2_traverse_obj(global_State *g, GCobj *o);
 static int lj_gc2_ssb_empty(global_State *g);
 #if LJ_HASFFI
@@ -199,6 +200,11 @@ static uint32_t gc2_flush_and_drain_ssb(global_State *g)
   if (gc2_phase_acq(g) == LJ_GC2_IDLE)
     return 0;
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  /*
+  ** The initiating mutator is not a remote handshake target. Flush its active
+  ** SSB explicitly so forced close paths do not strand local rescan work.
+  */
+  (void)lj_gc2_flush_ssb(g, G2TG(g));
   return lj_gc2_drain_ssb(g);
 }
 
@@ -2894,6 +2900,7 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   ** fresh handoff publication.
   */
   (void)gc2_clear_thread_needscan_all(g);
+  gc2_clear_table_rescan_ssb(g);
   gc2_clear_table_rescan_grey(g);
   gc2_grey_top_store_rlx(g, gc2_grey_bottom_acq(g));
   (void)lj_tg_reclaim_dead(g);
@@ -2980,6 +2987,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
   ** cycle observes it.
   */
   (void)gc2_clear_thread_needscan_all(g);
+  gc2_clear_table_rescan_ssb(g);
   gc2_clear_table_rescan_grey(g);
   gc2_grey_top_store_rlx(g, gc2_grey_bottom_acq(g));
   (void)lj_tg_reclaim_dead(g);
@@ -4361,6 +4369,44 @@ static void gc2_clear_table_rescan_grey(global_State *g)
   for (n = 0; n < count; n++) {
     GCobj *o = gc2_queue_slot_load_acq(&stack[(MSize)((top + n) % cap)]);
     gc2_rescan_pending_clear_if_table(o);
+  }
+}
+
+static void gc2_clear_table_rescan_ssb(global_State *g)
+{
+  GC2SSBNode *node;
+  TGState *tg;
+  if (!g)
+    return;
+  /*
+  ** Forced and preserve-abort IDLE transitions keep SSB entries conservative:
+  ** the next cycle may still use them as ordinary mark roots. The table
+  ** NEEDSCAN bit is cycle-local, though, and would suppress a fresh rescan
+  ** publication in the next active cycle. Clear just that bit while leaving the
+  ** queued object references intact.
+  */
+  for (node = gc2_ssb_head_acq(g); node != NULL;
+       node = lj_gc2_ssb_next_acq(node)) {
+    uint32_t count = lj_gc2_ssb_count_acq(node);
+    while (count > 0) {
+      GCobj *o = gc2_queue_slot_load_acq(&node->slot[count - 1u]);
+      gc2_rescan_pending_clear_if_table(o);
+      count--;
+    }
+  }
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    GCRef *base, *next;
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+      continue;
+    base = lj_tg_ssb_base_acq(tg);
+    next = lj_tg_ssb_next_acq(tg);
+    if (!base || !next)
+      continue;
+    while (next > base) {
+      GCobj *o = gc2_queue_slot_load_acq(next - 1);
+      gc2_rescan_pending_clear_if_table(o);
+      next--;
+    }
   }
 }
 
