@@ -3910,20 +3910,12 @@ static const BCIns *rec_setup_root(jit_State *J)
   BCReg ra = bc_a(ins);
   switch (bc_op(ins)) {
   case BC_FORL:
-    if (J->pt && proto_cellops(J->pt) &&
-	lj_record_mt_runtime_shared(J2G(J), J->L)) {
-      /*
-      ** Local-cell numeric loops have two views of the loop variable: hidden
-      ** FORL control slots and CGET-visible Lua locals. A root trace starts at
-      ** FORL with snapshot #0 already pointing at the loop body; recording the
-      ** stock FORL root shape can let exits rebuild the hidden numeric slots from
-      ** a later CGET/table slot and then re-enter the interpreter with userdata
-      ** in arithmetic/comparison operands while shared MT helpers publish table
-      ** and frame state across exits. Keep these roots interpreted in shared MT;
-      ** single-threaded numeric loops keep the stock trace shape.
-      */
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);
-    }
+    /*
+    ** rec_for_loop() initializes the hidden FORL slots and the CGET-visible
+    ** FORL_EXT slot before the body is recorded, so root numeric loops over
+    ** local-cell protos keep stock snapshot shape in secondary TGs. Side traces
+    ** that start after this setup are handled by rec_for_ext_cget().
+    */
     J->bc_extent = (MSize)(-bc_j(ins))*sizeof(BCIns);
     pc += 1+bc_j(ins);
     J->bc_min = pc;

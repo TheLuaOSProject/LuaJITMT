@@ -2284,6 +2284,22 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   uint8_t count;
   if (!trace_runnable_acq(parentT, parent) || exitno >= trace_nsnap_acq(parentT))
     return;
+  if (trace_root_acq(parentT) != 0) {
+    GCtrace *root = traceref(J, trace_root_acq(parentT));
+    GCproto *pt = root ? trace_startpt_acq(root) : NULL;
+    /*
+    ** Active-MT local-cell traces replay CGET/CSET-visible locals from
+    ** snapshots while table/FFI helpers may side-exit after publishing shared
+    ** state. Root and first-level side traces keep the stock trace shape and
+    ** cover the hot path. A side trace starting from another side trace would
+    ** replay an already replayed local-cell snapshot and tends to form long
+    ** shape-churn chains at helper/result guards, so leave that exit in the
+    ** interpreter until generated code carries a complete cell snapshot proof
+    ** across side-trace chains.
+    */
+    if (pt && proto_cellops(pt) && lj_record_mt_runtime_shared(J2G(J), L))
+      return;
+  }
   snap = &trace_snap_acq(parentT)[exitno];
   if (!(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       isluafunc(curr_func(L))) {
