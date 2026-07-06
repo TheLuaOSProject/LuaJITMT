@@ -6,10 +6,10 @@ Active-MT shared table trace coverage, 2026-07-03:
 - `m6_jit_aref_pair_boundary` now includes secondary-TG active-MT shared hash reads
   with constant and dynamic keys, alongside the existing shared array read
   coverage.
-- The remaining deliberate JIT fallback is non-trace-local shared
-  `next()`/optimized `pairs()` traversal. That path still needs a versioned or
-  generation-following runtime contract before it can safely trace under
-  concurrent resize/value churn.
+- The remaining deliberate JIT fallback is non-trace-local shared traversal:
+  direct `next()`, optimized `pairs()`, and shared `ipairs_aux`. These paths
+  need versioned/generation-following runtime contracts and result-shape
+  handling before they can trace under concurrent resize/value churn.
 - 2026-07-04: the first contract slice is pinned in `m5_tab_next_snapshot`.
   `lj_tab_vmnext_forward()` and `lj_tab_itern_forward()` now have an explicit
   cursor-helper contract: take an `LJ_KEYINDEX` cursor, copy visible key/value
@@ -33,3 +33,12 @@ Active-MT shared table trace coverage, 2026-07-03:
   timed out under stress from exit/re-record churn. The required contract is
   therefore a versioned cursor/epoch or equivalent result contract, not a
   naked helper call plus structural root guards.
+- 2026-07-06 `ipairs_aux` reopening attempt: helper-backed indexed loads are now
+  memory-safe enough to pass `tests/t-jit-secondary.lua`,
+  `LJ_M5_TAB_RESIZE_STRESS_CASES=jititer ./src/luajit tests/t-tab-resize-stress.lua`,
+  and full `tests/t-tab-resize-stress.lua` with a longer timeout. The clean
+  `m5_tab_resize_stress` 30s gate timed out, and `-jv` showed a side-trace chain
+  at `tests/t-tab-resize-stress.lua:734 -> 1` before fallback. The blocker is
+  no longer sentinel exposure; it is result type/shape churn for racy mixed
+  array values. Reopening shared `ipairs_aux` needs a result-shape contract or a
+  trace policy that avoids side-tracing every observed value type.

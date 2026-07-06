@@ -150,10 +150,11 @@ Active-MT recording no longer disables all new traces: secondary TGs can still
 record numeric/non-table root and side traces, plus fresh table allocations,
 under the recorder token. Helper-backed non-trace-local table loads/stores now
 trace after `mt_active` for the covered raw-slot, previous-nil, new-key, array,
-and hash cases. The remaining recorder-local table boundary is direct
-`next()`/optimized `pairs()` traversal over non-trace-local shared tables, which
-stays interpreted until traversal has a versioned or generation-following
-runtime contract.
+and hash cases. The remaining recorder-local table boundary is shared traversal:
+direct `next()`/optimized `pairs()` and shared `ipairs_aux` over
+non-trace-local shared tables stay interpreted until traversal has a versioned
+or generation-following runtime contract and a result-shape contract across the
+hidden cursor/result slots and exits.
 The original generation-aware table write protocol and broader
 AHdr/NHdr table-generation port remain pending.
 Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror

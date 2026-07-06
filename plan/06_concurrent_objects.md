@@ -399,10 +399,12 @@ Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.
 `tests/t-tab-resize-stress.lua` now includes a `jititer` slice that heats
-JIT-compiled `pairs`, `ipairs`, direct `next`, and stable table reads while
+iterator-heavy `pairs`, `ipairs`, direct `next`, and stable table reads while
 sibling threads grow and prune array/hash generations, asserting crash freedom,
 no exposed internal sentinels, and intact stable anchors under ordinary racy
-Lua table mutation.
+Lua table mutation. Cursor-based direct `next()`/optimized `pairs()` traversal
+and non-trace-local shared `ipairs_aux` still stay interpreted until traversal
+state has generation/version and result-shape proofs across exits.
 The same resize stress now includes a `metadispatch` slice for Lua-visible
 metamethod dispatch: inherited `__index` reads, unique-key `__newindex` writes,
 bounded traversal, GC liveness of the metatable/fallback, and sentinel filtering
@@ -417,11 +419,12 @@ are not part of the structural-owner bridge. New trace recording is enabled for
 non-table code and fresh table allocation under secondary TGs. Current
 helper-backed shared table loads and stores also trace after MT activation for
 the covered raw-slot, previous-nil, new-key, array, and hash cases; direct
-`next()`/optimized `pairs()` traversal over non-trace-local shared tables still
-falls back to the interpreter. Stock single-threaded JIT behavior is unchanged.
-The remaining M5/M6 table work is to give shared traversal a versioned or
-generation-following runtime contract and finish the broader generation-aware
-table write protocol.
+`next()`/optimized `pairs()` traversal and shared `ipairs_aux` over
+non-trace-local shared tables still fall back to the interpreter. Stock
+single-threaded JIT behavior is unchanged. The remaining M5/M6 table work is to
+give shared traversal a versioned or generation-following runtime contract,
+including result-shape handling for racy mixed-value arrays, and finish the
+broader generation-aware table write protocol.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

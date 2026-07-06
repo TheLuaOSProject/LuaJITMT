@@ -91,8 +91,12 @@ local function fmterr(err, info)
     if type(info) == "function" then info = fmtfunc(info) end
     local fmt = vmdef.traceerr[err]
     if fmt == "NYI: bytecode %s" then
-      local oidx = 6 * info
-      info = sub(vmdef.bcnames, oidx+1, oidx+6)
+      if type(info) == "number" then
+	local oidx = 6 * info
+	info = sub(vmdef.bcnames, oidx+1, oidx+6)
+      else
+	info = "?"
+      end
     end
     err = format(fmt, info)
   end
@@ -171,4 +175,3 @@ return {
   off = dumpoff,
   start = dumpon -- For -j command line option.
 }
-

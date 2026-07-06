@@ -41,6 +41,7 @@ local m6_cases = {
   "m6_jit_mt_activation_flush",
   "m6_jit_gcworkers_activation_flush",
   "m6_jit_vmevent_flush",
+  "m6_jit_traceerr_format",
   "m6_jit_gdbjit_publish",
   "m6_jit_tmpbuf_thread_format",
   "m6_jit_perftools_native",
@@ -2203,6 +2204,17 @@ assert(threading.gcworkers(0) == 1)
       luajit_file(t, t:path("tests", "t-jit-vmevent-flush.lua"),
                   { lua_path = true, timeout = "20s" })
       print("M6 JIT VM event flush hook behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_traceerr_format",
+    description = "JIT trace diagnostic formatters tolerate missing NYI bytecode info",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-traceerr-format.lua"),
+                  { lua_path = true, timeout = "20s" })
+      print("M6 JIT trace diagnostic formatter behavior passed")
     end
   })
 
