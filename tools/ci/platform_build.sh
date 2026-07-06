@@ -62,6 +62,35 @@ run_platform_test() {
     "$root/tools/ci/lua_test.sh" "$case_name"
 }
 
+run_windows_direct_smoke() {
+  local bin=$1
+  local smoke out
+
+  smoke=$(cat <<'LUA'
+print(jit.os, jit.arch)
+local threading = require("threading")
+assert(type(threading.spawn) == "function")
+assert(type(threading.gcstats) == "function")
+local ffi = require("ffi")
+ffi.cdef("unsigned long GetCurrentProcessId(void);")
+local k = ffi.load("kernel32")
+assert(k.GetCurrentProcessId() ~= 0)
+local f, err = package.loadlib("kernel32.dll", "GetCurrentProcessId")
+assert(type(f) == "function", tostring(err))
+LUA
+  )
+  out=$("$bin" -e "$smoke" 2>&1)
+  printf '%s\n' "$out"
+  case "$out" in
+    *"Windows"*"x64"*) ;;
+    *)
+      printf 'Windows platform smoke did not report Windows x64\n' >&2
+      exit 1
+      ;;
+  esac
+  printf 'release windows binary smoke passed\n'
+}
+
 case "$platform" in
   linux-x86_64)
     make_clean
@@ -104,9 +133,11 @@ case "$platform" in
     )
     make_clean
     build_make "${windows_make_args[@]}"
-    run_platform_test \
-      release_windows_binary windows LJ_RELEASE_WINDOWS_BIN "$root/src/luajit.exe" \
-      LUA="$root/src/luajit.exe" \
-      LJ_RELEASE_WINDOWS_RUNNER=direct
+    # The shared release Lua harness is POSIX-shell based. Running it inside the
+    # native Windows luajit.exe routes os.execute() through cmd.exe, which loses
+    # the harness status-file contract. CI only needs a platform-native build/run
+    # smoke here; release artifact validation exercises the full archive path
+    # under Wine from Linux.
+    run_windows_direct_smoke "$root/src/luajit.exe"
     ;;
 esac
