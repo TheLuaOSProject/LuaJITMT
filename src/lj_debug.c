@@ -385,13 +385,13 @@ void lj_debug_addloc(lua_State *L, const char *msg,
 		     cTValue *frame, cTValue *nextframe)
 {
   /*
-  ** Runtime errors raised from a trace-side or fast-function helper can arrive
-  ** with L->base pointing at the active C frame's argument/result area rather
-  ** than at a complete Lua frame. Source decoration is optional; only derive it
-  ** from a frame whose marker says "Lua" and whose function slot is a valid Lua
-  ** function. Otherwise fall back to the undecorated message below.
+  ** Runtime errors raised from trace-side or fast-function helpers can arrive
+  ** with a non-Lua frame marker even though the predecessor frame still has a
+  ** valid Lua function slot. Source decoration is optional; validate the slot
+  ** before deriving a line, then fall back to the undecorated message if the
+  ** frame cannot name a Lua source location.
   */
-  if (frame && frame_islua(frame)
+  if (frame
 #if LJ_FR2
       && tvisfunc(frame-1) && lj_tv_gcref_type_match(frame-1)
 #endif

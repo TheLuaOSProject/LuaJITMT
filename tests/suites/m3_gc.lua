@@ -147,15 +147,8 @@ return function(add)
     description = "interpreter-only stock LuaJIT suite under -joff",
     run = function(t)
       make_default(t, { jobs = false })
-      t:run({
-        t:path("src", "luajit"),
-        "-joff",
-        "test.lua",
-        "--quiet"
-      }, {
-        cwd = t:path("tests", "stock", "test"),
-        env = { LUA_PATH = runtime.lua_path(t) },
-        timeout = "240s"
+      runtime.run_stock(t, { "-joff", "test.lua", "--quiet" }, {
+	timeout = "240s"
       })
       print("M3 interpreter-only stock suite passed under -joff")
     end

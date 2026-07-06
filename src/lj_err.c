@@ -1181,6 +1181,15 @@ LJ_NOINLINE void lj_err_callermsg(lua_State *L, const char *msg)
 	}
 #endif
       }
+    } else if (frame > tvref(L->stack)+LJ_FR2 &&
+	       err_frame_func_slot_valid(frame)) {
+      /*
+      ** Fast functions and helper-backed C frames may leave L->base on the
+      ** active C frame while formatting their own argument error. Stock error
+      ** objects still carry the Lua caller location, so use the predecessor as
+      ** the optional source-decoration frame after validating the frame slot.
+      */
+      pframe = frame_prevd(frame);
     }
   }
   lj_debug_addloc(L, msg, pframe, frame);

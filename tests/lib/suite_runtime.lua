@@ -6,10 +6,22 @@ local M = {}
 
 local shell_quote = utils.shell_quote
 
+local function root_abs(t)
+  local p = io.popen("cd " .. shell_quote(t.root) .. " && pwd", "r")
+  if not p then error("unable to resolve test root", 2) end
+  local root = p:read("*l")
+  local ok = p:close()
+  if not ok or not root then error("unable to resolve test root", 2) end
+  return root
+end
+
 local function luajit_bin(t, bin)
   bin = bin or t:path("src", "luajit")
   if bin:sub(1, 1) == "/" then return bin end
-  return t:path(bin)
+  if bin == t:path("src", "luajit") then
+    return root_abs(t) .. "/src/luajit"
+  end
+  return root_abs(t) .. "/" .. bin
 end
 
 local function append_jit_mode(argv, opts)
@@ -21,7 +33,8 @@ local function append_jit_mode(argv, opts)
 end
 
 function M.lua_path(t)
-  return t:path("tests", "lib", "?.lua") .. ";" .. utils.lua_path(t.root)
+  local root = root_abs(t)
+  return root .. "/tests/lib/?.lua;" .. utils.lua_path(root)
 end
 
 function M.lua_path_env(t, env)
