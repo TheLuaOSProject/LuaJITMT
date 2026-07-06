@@ -460,6 +460,48 @@ check("dumped", dumped)
 ]=]
 end
 
+function M.side_exit_fnew_creation_snapshot()
+  return [=[
+local util = require"jit.util"
+
+local function check(label, run)
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+
+  local ok, fx, x = run(60, -1)
+  assert(ok and fx == 60 and x == 60, label .. " warmup")
+  assert(util.traceinfo(1), label .. " CNEW/FNEW creation loop should trace")
+
+  ok, fx, x = run(60, 30)
+  assert(ok and fx == 1060 and x == 1060, label .. " side exit")
+  ok, fx, x = run(60, 30)
+  assert(ok and fx == 1060 and x == 1060, label .. " side trace")
+end
+
+local function source_run(n, stop)
+  local x = 0
+  local keep
+  for i = 1, n do
+    x = x + 1
+    if i == stop then
+      x = x + 1000
+    end
+    local function f()
+      return f, x
+    end
+    keep = f
+  end
+  local self, fx = keep()
+  return self == keep, fx, x
+end
+
+local dumped = assert(loadstring(string.dump(source_run)))
+
+check("source", source_run)
+check("dumped", dumped)
+]=]
+end
+
 function M.pre_fnew_update(opts)
   opts = opts or {}
   return jit_setup(opts) .. [=[
