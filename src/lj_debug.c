@@ -384,7 +384,18 @@ void lj_debug_shortname(char *out, GCstr *str, BCLine line)
 void lj_debug_addloc(lua_State *L, const char *msg,
 		     cTValue *frame, cTValue *nextframe)
 {
-  if (frame) {
+  /*
+  ** Runtime errors raised from a trace-side or fast-function helper can arrive
+  ** with L->base pointing at the active C frame's argument/result area rather
+  ** than at a complete Lua frame. Source decoration is optional; only derive it
+  ** from a frame whose marker says "Lua" and whose function slot is a valid Lua
+  ** function. Otherwise fall back to the undecorated message below.
+  */
+  if (frame && frame_islua(frame)
+#if LJ_FR2
+      && tvisfunc(frame-1) && lj_tv_gcref_type_match(frame-1)
+#endif
+     ) {
     GCfunc *fn = frame_func(frame);
     if (isluafunc(fn)) {
       BCLine line = debug_frameline(L, fn, nextframe);

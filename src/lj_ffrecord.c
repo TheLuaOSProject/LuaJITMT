@@ -498,6 +498,18 @@ static void LJ_FASTCALL recff_ipairs_aux(jit_State *J, RecordFFData *rd)
   RecordIndex ix;
   ix.tab = J->base[0];
   if (tref_istab(ix.tab)) {
+    if (lj_record_mt_shared_tab(J, ix.tab)) {
+      /*
+      ** ipairs_aux is an indexed table read, but inside BC_ITERC/ITERL it also
+      ** defines the iterator control/result snapshot shape. A shared active-MT
+      ** array can change generations between iterations and exits; generated
+      ** code has no iterator-generation guard yet. Keep this traversal in the
+      ** VM, where each step follows the current table generation before it
+      ** returns Lua-visible values. Trace-local ipairs() and single-threaded
+      ** tables still record through the normal indexed-load path below.
+      */
+      lj_trace_err_info(J, LJ_TRERR_NYIFFU);
+    }
     if (!tvisnumber(&rd->argv[1]))  /* No support for string coercion. */
       lj_trace_err(J, LJ_TRERR_BADTYPE);
     setintV(&ix.keyv, numberVint(&rd->argv[1])+1);
@@ -607,12 +619,12 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
       /*
       ** Direct next() re-derives the cursor from the Lua key, but a shared
       ** active-MT table can still change generation while exits/side traces
-      ** carry the traversal result through ordinary Lua calls. Use the normal
-      ** fast-function NYI path so abort/stop handling preserves the caller's
-      ** stack state before later bytecodes prepare fixed call arguments.
+      ** carry the traversal result through ordinary Lua calls. Abort recording
+      ** without stitching; a stitched fast-function chain can otherwise keep
+      ** replaying the same unguarded cursor boundary instead of returning to
+      ** the VM traversal helper.
       */
-      recff_nyi(J, rd);
-      return;
+      lj_trace_err_info(J, LJ_TRERR_NYIFFU);
     }
     ix.tab = tab;
     if (tref_isnil(J->base[1])) {  /* Shortcut for start of traversal. */
@@ -1346,6 +1358,17 @@ static void LJ_FASTCALL recff_buffer_decode(jit_State *J, RecordFFData *rd)
 static void LJ_FASTCALL recff_table_insert(jit_State *J, RecordFFData *rd)
 {
   RecordIndex ix;
+  if (lj_record_mt_runtime_shared(J2G(J), J->L)) {
+    /*
+    ** After the process has entered MT mode, table.insert is no longer the
+    ** stock direct array write model: the C fast function owns the compound
+    ** length/shift/store operation and routes stores through CAS/forwarding
+    ** helpers. Recording the old direct-store shape can reconstruct loop slots
+    ** from internal table sentinels after a stitched fast-function exit.
+    */
+    recff_nyiu(J, rd);
+    return;
+  }
   ix.tab = J->base[0];
   ix.val = J->base[1];
   rd->nres = 0;

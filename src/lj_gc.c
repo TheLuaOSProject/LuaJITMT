@@ -3037,7 +3037,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
   lua_State *L = lj_tg_cur_L(g);
   TValue *jbase = lj_tg_jit_base(g);
-  int threshold_step, hard_step;
+  int threshold_step, hard_step, defer_fixpoint;
   TGState *tg;
   if (!L || !jbase)
     return 1;
@@ -3057,9 +3057,21 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 	   gc_step_limited(L, gc_step_debt_quantum(g), 1, 1) == 0)
       ;
   }
-  /* Return 1 to force a trace exit. */
-  return lj_gc_jit_defer_fixpoint(g) ||
-	 (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize);
+  defer_fixpoint = lj_gc_jit_defer_fixpoint(g);
+  /*
+  ** Return 1 to force a trace exit. Atomic/finalize states must leave JIT code
+  ** immediately. In the single-threaded trace-allocation loop, mark-fixpoint
+  ** handshakes only need a current trace snapshot often enough to keep the
+  ** concurrent cycle moving; bounded worker/legacy progress already ran above,
+  ** and exiting at every active allocation quantum rescans all roots for every
+  ** few KiB of fresh keys. Once secondary Lua threads have existed, or helper
+  ** workers are enabled, traces may carry published table/frame state across
+  ** resize and GC handshakes. Keep the immediate fixpoint exit there, matching
+  ** the rest of the MT JIT fast-path policy.
+  */
+  return (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize) ||
+	 (defer_fixpoint &&
+	  (hard_step || mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0));
 }
 #endif
 

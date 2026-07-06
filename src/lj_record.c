@@ -720,6 +720,29 @@ static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)
   return T;
 }
 
+static int rec_builtin_name_eq(GCstr *name, const char *lit, size_t len)
+{
+  const char *s;
+  size_t i;
+  if (name->len != len)
+    return 0;
+  s = strdata(name);
+  for (i = 0; i < len; i++)
+    if (s[i] != lit[i])
+      return 0;
+  return 1;
+}
+
+static int rec_proto_table_compound_shift(GCproto *pt)
+{
+  GCstr *name;
+  if (pt == NULL || pt->firstline != ~(BCLine)0)
+    return 0;
+  name = proto_chunkname_acq(pt);
+  return rec_builtin_name_eq(name, "remove", 6) ||
+	 rec_builtin_name_eq(name, "move", 4);
+}
+
 /* Handle the case when an interpreted loop op is hit. */
 static void rec_loop_interp(jit_State *J, const BCIns *pc, LoopEvent ev)
 {
@@ -1644,7 +1667,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 {
   RBCHashEntry *rbc = &J->rbchash[(ix->tab & (RBCHASH_SLOTS-1))];
   global_State *g = J2G(J);
-  if (mt_active_or_entering_acq(g))
+  if (lj_record_mt_runtime_shared(g, J->L))
     return;
   if (tref_ref(ix->tab) == rec_rbchash_ref_acq(rbc)) {
     const BCIns *pc = rec_rbchash_pc_acq(rbc);
@@ -1786,12 +1809,13 @@ static int rec_idx_tab_direct_array(jit_State *J, TRef tab)
   ** mt_entering or mt_active is visible, published arrays keep the shared
   ** header/generation guards.
   */
-  return !mt_active_or_entering_acq(J2G(J));
+  return !lj_record_mt_runtime_shared(J2G(J), J->L);
 }
 
 int lj_record_mt_shared_tab(jit_State *J, TRef tab)
 {
-  return mt_active_or_entering_acq(J2G(J)) && !rec_idx_tab_trace_local(J, tab);
+  return lj_record_mt_runtime_shared(J2G(J), J->L) &&
+	 !rec_idx_tab_trace_local(J, tab);
 }
 
 static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
@@ -1807,6 +1831,16 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
   TRef key = rec_tmpref(J, ix->key);
   TRef out = emitir(IRT(IR_TMPREF, IRT_PGC), TREF_NIL, IRTMPREF_OUT1);
   TRef res = lj_ir_call(J, IRCALL_lj_tab_gettv_forjit, ix->tab, key, out);
+  /*
+  ** The helper has side effects and copies a raced shared-table value into its
+  ** temporary result. Its following VLOAD guard belongs after those side effects,
+  ** but IR_CALLS only schedules the normal side-effect snapshot for the next
+  ** bytecode boundary. Add the guard snapshot here so a result-type exit resumes
+  ** from the post-helper Lua state, not from an older replay point.
+  */
+  J->mergesnap = 0;
+  lj_snap_add(J);
+  J->mergesnap = 1;
   return lj_record_vload(J, res, 0, t);
 }
 
@@ -2154,11 +2188,20 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       TValue oldsnap;
       ix->oldv = lj_tab_get(J->L, tabV(&ix->tabv), &ix->keyv);
       lj_tv_load_acq(&oldsnap, ix->oldv);
-      if (tvisforward(&oldsnap))
+      /*
+      ** Active-MT table lookups may sample a slot while resize/clear helpers are
+      ** moving it through internal sentinels or while a retiring generation is
+      ** still visible to the recorder. The traced helper will re-read the live
+      ** slot at runtime; only use the sampled value to choose a guard type when
+      ** it is a publishable Lua value.
+      */
+      if (tvistabinternal(&oldsnap) || !lj_tv_gcref_type_match(&oldsnap))
 	lj_trace_err_info(J, LJ_TRERR_NYIBC);
       if (tvisnil(&oldsnap) && ix->idxchain &&
 	  lj_record_mm_lookup(J, ix, MM_index))
 	goto handlemm;
+      if (tvisnil(&oldsnap))
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);
       return rec_idx_mt_shared_load(J, ix, itype2irt(&oldsnap));
     }
   } else {
@@ -2174,7 +2217,12 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   oldtv = oldv;
   if (mt_shared_store) {
     lj_tv_load_acq(&oldsnap, oldv);
-    if (tvisforward(&oldsnap))
+    /*
+    ** Store recording also uses the sampled old value for barriers and typed
+    ** checks. Do not let transient table sentinels or stale GC payloads shape
+    ** helper-backed store IR.
+    */
+    if (tvistabinternal(&oldsnap) || !lj_tv_gcref_type_match(&oldsnap))
       lj_trace_err_info(J, LJ_TRERR_NYIBC);
     oldtv = &oldsnap;
   }
@@ -2700,19 +2748,19 @@ static void rec_celluv_promote_pending(jit_State *J)
 static int rec_celluv_materialize_cget_sources(jit_State *J)
 {
   const BCIns *pc, *end;
-  BCReg maxslot;
+  BCReg framesize;
   int materialized = 0;
-  if (!mt_active_or_entering_acq(J2G(J)) || J->pt == NULL)
+  if (J->pt == NULL || !proto_cellops(J->pt))
     return 0;
   pc = J->pc;
   end = proto_bc(J->pt) + J->pt->sizebc;
-  maxslot = J->maxslot;
+  framesize = J->pt->framesize;
   while (pc < end) {
     BCIns ins = *pc++;
     BCOp op = bc_op(ins);
     if (op == BC_CGET) {
       BCReg slot = bc_d(ins);
-      if (slot < maxslot && J->base[slot] == 0) {
+      if (slot < framesize && J->base[slot] == 0) {
 	(void)getslot(J, slot);
 	materialized = 1;
       }
@@ -3862,6 +3910,20 @@ static const BCIns *rec_setup_root(jit_State *J)
   BCReg ra = bc_a(ins);
   switch (bc_op(ins)) {
   case BC_FORL:
+    if (J->pt && proto_cellops(J->pt) &&
+	lj_record_mt_runtime_shared(J2G(J), J->L)) {
+      /*
+      ** Local-cell numeric loops have two views of the loop variable: hidden
+      ** FORL control slots and CGET-visible Lua locals. A root trace starts at
+      ** FORL with snapshot #0 already pointing at the loop body; recording the
+      ** stock FORL root shape can let exits rebuild the hidden numeric slots from
+      ** a later CGET/table slot and then re-enter the interpreter with userdata
+      ** in arithmetic/comparison operands while shared MT helpers publish table
+      ** and frame state across exits. Keep these roots interpreted in shared MT;
+      ** single-threaded numeric loops keep the stock trace shape.
+      */
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
     J->bc_extent = (MSize)(-bc_j(ins))*sizeof(BCIns);
     pc += 1+bc_j(ins);
     J->bc_min = pc;
@@ -3903,7 +3965,8 @@ static const BCIns *rec_setup_root(jit_State *J)
     break;
   case BC_FUNCF:
     /* No bytecode range check for root traces started by a hot call. */
-    if (J->pt && proto_cellops(J->pt) && mt_active_or_entering_acq(J2G(J))) {
+    if (J->pt && proto_cellops(J->pt) &&
+	lj_record_mt_runtime_shared(J2G(J), J->L)) {
       /*
       ** Active-MT local-cell functions keep fixed arguments as canonical
       ** interpreter stack state across calls and exits. Function-entry traces
@@ -3971,6 +4034,19 @@ void lj_record_setup(jit_State *J)
 
   J->startpc = J->pc;
   setmref(J->cur.startpc, J->pc);
+  if (lj_record_mt_runtime_shared(J2G(J), J->L) &&
+      rec_proto_table_compound_shift(J->pt)) {
+    /*
+    ** Builtin table.remove/table.move are Lua compound shift loops. In shared
+    ** MT they copy many table slots while other threads can retire and publish
+    ** array/hash generations. The interpreter re-enters the table helpers for
+    ** every element move; generated code does not yet carry one generation
+    ** proof spanning the whole compound shift and every exit snapshot. Keep the
+    ** builtin shift loop interpreted in shared MT, even if user code explicitly
+    ** re-enables JIT for the builtin.
+    */
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  }
   if (J->parent) {  /* Side trace. */
     GCtrace *T = rec_traceref_live(J, J->parent);
     SnapShot *snap = trace_snap_acq(T);
@@ -3991,7 +4067,7 @@ void lj_record_setup(jit_State *J)
       J->startpc = NULL;  /* Prevent forming an extra loop. */
     }
     if (J->pt && proto_cellops(J->pt) &&
-	mt_active_or_entering_acq(J2G(J))) {
+	lj_record_mt_runtime_shared(J2G(J), J->L)) {
       GCtrace *rootT = rec_traceref_live(J, root);
       BCOp startop = bc_op(trace_startins_acq(rootT));
       if (startop == BC_FUNCF || startop == BC_JFUNCF) {

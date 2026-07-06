@@ -127,10 +127,12 @@ local function run_trace_hard_assist_cadence(t)
       'jit.opt.start("hotloop=1", "hotexit=1", "-sink")',
       'local function run(n)',
       '  local s = 0',
-      '  for i = 1, n do',
+      '  local i = 1',
+      '  while i <= n do',
       '    local x = i',
       '    local f = function() x = x + 1; return x end',
       '    s = s + f()',
+      '    i = i + 1',
       '  end',
       '  return s',
       'end',
@@ -150,8 +152,10 @@ local function run_trace_hard_assist_cadence(t)
       '  unique_seed = unique_seed + 1',
       '  local prefix = "trace_unique_" .. unique_seed .. "_"',
       '  local t = {}',
-      '  for i = 1, n do',
+      '  local i = 1',
+      '  while i <= n do',
       '    t[prefix .. i] = i',
+      '    i = i + 1',
       '  end',
       '  return t, prefix',
       'end',
@@ -162,8 +166,25 @@ local function run_trace_hard_assist_cadence(t)
       'local after_unique = th.gcstats()',
       'assert(keep[prefix .. 40000] == 40000)',
       'local worker_delta = after_unique.worker_runs - before_unique.worker_runs',
+      'local major_root_delta = after_unique.major_root_scans - before_unique.major_root_scans',
       'assert(worker_delta <= 160, worker_delta)',
-      'print("unique_worker_delta=" .. worker_delta)',
+      'assert(major_root_delta <= 32, major_root_delta)',
+      'print("unique_worker_delta=" .. worker_delta ..',
+      '      " unique_major_root_delta=" .. major_root_delta)',
+      'collectgarbage("collect")',
+      'collectgarbage("stop")',
+      'assert(collectgarbage("isrunning") == false)',
+      'local before_stopped = th.gcstats()',
+      'local stopped_keep, stopped_prefix = unique_keys(40000)',
+      'local after_stopped = th.gcstats()',
+      'assert(stopped_keep[stopped_prefix .. 40000] == 40000)',
+      'local stopped_cycles = after_stopped.cycle_requests - before_stopped.cycle_requests',
+      'local stopped_roots = after_stopped.major_root_scans - before_stopped.major_root_scans',
+      'assert(stopped_cycles == 0, stopped_cycles)',
+      'assert(stopped_roots == 0, stopped_roots)',
+      'collectgarbage("restart")',
+      'print("stopped_cycle_delta=" .. stopped_cycles ..',
+      '      " stopped_major_root_delta=" .. stopped_roots)',
       ""
     }, "\n"))
     assert_command_output_contains(
@@ -508,10 +529,11 @@ local function run_bench_stock_compare(t)
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
                        os.getenv("BENCH_GEOMEAN_MAX") or "3.0")
   local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "60s"
-  -- Keep enough iterations for allocation-heavy probes like closures_upval;
-  -- smaller samples are dominated by timer and scheduler noise.
+  -- Keep enough iterations for allocation-heavy probes like tab_insert_newkey
+  -- and closures_upval; smaller samples are dominated by timer and scheduler
+  -- noise and can fail the stock gate without a repeatable throughput cliff.
   local scale = os.getenv("LJ_BENCH_STOCK_SCALE") or
-    os.getenv("BENCH_SCALE") or "0.2"
+    os.getenv("BENCH_SCALE") or "0.5"
 
   for filter in filters:gmatch("%S+") do
     local result = bench_driver.compare_bins(stock, current, bench_lua, {

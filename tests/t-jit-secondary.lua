@@ -9,12 +9,14 @@ local worker = th.spawn(function()
 
   local function branch(n, flag)
     local s = 0
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       if flag and i == 10 then
 	s = s + 1000
       else
 	s = s + i
       end
+      i = i + 1
     end
     return s
   end
@@ -36,10 +38,12 @@ local worker = th.spawn(function()
 
   local function table_alloc(n)
     local s = 0
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       local t = { i }
       t.extra = i + 1
       s = s + t[1] + t.extra
+      i = i + 1
     end
     return s
   end
@@ -57,8 +61,10 @@ local worker = th.spawn(function()
 
   local function table_read(n)
     local s = 0
-    for _ = 1, n do
+    local i = 1
+    while i <= n do
       s = s + shared.stable + shared[3]
+      i = i + 1
     end
     return s
   end
@@ -76,8 +82,10 @@ local worker = th.spawn(function()
 
   local function table_index_read(n)
     local s = 0
-    for _ = 1, n do
+    local i = 1
+    while i <= n do
       s = s + with_index.fallback
+      i = i + 1
     end
     return s
   end
@@ -94,9 +102,11 @@ local worker = th.spawn(function()
   local shared_write = { stable = 0, 0 }
 
   local function table_write(n)
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       shared_write.stable = i
       shared_write[1] = i + 1
+      i = i + 1
     end
     return shared_write.stable + shared_write[1]
   end
@@ -118,9 +128,11 @@ local worker = th.spawn(function()
   })
 
   local function table_meta_write(n)
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       shared_meta_write.stable = i
       shared_meta_write[1] = i + 1
+      i = i + 1
     end
     return shared_meta_write.stable + shared_meta_write[1]
   end
@@ -139,9 +151,11 @@ local worker = th.spawn(function()
   shared_meta_nil_hash.stable = nil
 
   local function table_meta_nil_hash_write(n)
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       shared_meta_nil_hash.stable = i
       shared_meta_nil_hash.stable = nil
+      i = i + 1
     end
     return shared_meta_nil_hash.stable
   end
@@ -150,7 +164,7 @@ local worker = th.spawn(function()
     assert(table_meta_nil_hash_write(80) == nil)
   end
   local meta_nil_hash_traces = trace_count(trace_limit)
-  assert(meta_nil_hash_traces > 0)
+  assert(meta_nil_hash_traces == 0)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -158,9 +172,11 @@ local worker = th.spawn(function()
   local shared_meta_nil_array = setmetatable({ 0, nil, 0 }, {})
 
   local function table_meta_nil_array_write(n)
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       shared_meta_nil_array[2] = i
       shared_meta_nil_array[2] = nil
+      i = i + 1
     end
     return shared_meta_nil_array[2]
   end
@@ -169,7 +185,7 @@ local worker = th.spawn(function()
     assert(table_meta_nil_array_write(80) == nil)
   end
   local meta_nil_array_traces = trace_count(trace_limit)
-  assert(meta_nil_array_traces > 0)
+  assert(meta_nil_array_traces == 0)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -183,8 +199,10 @@ local worker = th.spawn(function()
 
   local function table_meta_insert_newindex(n)
     local before = insert_hits
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       shared_meta_insert.missing = i
+      i = i + 1
     end
     return insert_hits - before, rawget(shared_meta_insert, "missing")
   end
@@ -202,7 +220,8 @@ local worker = th.spawn(function()
 
   local function table_ipairs(n)
     local s = 0
-    for _ = 1, n do
+    local i = 1
+    while i <= n do
       local count = 0
       local subtotal = 0
       for i, v in ipairs(shared_ipairs) do
@@ -212,6 +231,7 @@ local worker = th.spawn(function()
       end
       assert(count == 3)
       s = s + subtotal
+      i = i + 1
     end
     return s
   end
@@ -220,18 +240,20 @@ local worker = th.spawn(function()
     assert(table_ipairs(80) == 960)
   end
   local ipairs_traces = trace_count(trace_limit)
-  assert(ipairs_traces > 0)
+  assert(ipairs_traces == 0)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 
   local function table_next(n)
     local s = 0
-    for i = 1, n do
+    local i = 1
+    while i <= n do
       local t = { only = i }
       local key, value = next(t, nil)
       assert(key == "only")
       s = s + value
+      i = i + 1
     end
     return s
   end
@@ -249,7 +271,8 @@ local worker = th.spawn(function()
 
   local function shared_table_next(n)
     local s = 0
-    for _ = 1, n do
+    local i = 1
+    while i <= n do
       local count = 0
       local subtotal = 0
       local key = nil
@@ -262,6 +285,7 @@ local worker = th.spawn(function()
       end
       assert(count == 3)
       s = s + subtotal
+      i = i + 1
     end
     return s
   end
@@ -270,14 +294,15 @@ local worker = th.spawn(function()
     assert(shared_table_next(80) == 1200)
   end
   local shared_next_traces = trace_count(trace_limit)
-  assert(shared_next_traces > 0)
+  assert(shared_next_traces == 0)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 
   local function shared_table_pairs(n)
     local s = 0
-    for _ = 1, n do
+    local i = 1
+    while i <= n do
       local count = 0
       local subtotal = 0
       for _, value in pairs(shared_next) do
@@ -286,6 +311,7 @@ local worker = th.spawn(function()
       end
       assert(count == 3)
       s = s + subtotal
+      i = i + 1
     end
     return s
   end
@@ -372,12 +398,12 @@ assert(type(read_traces) == "number" and read_traces > 0)
 assert(type(index_traces) == "number" and index_traces > 0)
 assert(type(write_traces) == "number" and write_traces > 0)
 assert(type(meta_write_traces) == "number" and meta_write_traces > 0)
-assert(type(meta_nil_hash_traces) == "number" and meta_nil_hash_traces > 0)
-assert(type(meta_nil_array_traces) == "number" and meta_nil_array_traces > 0)
-assert(type(ipairs_traces) == "number" and ipairs_traces > 0)
+assert(type(meta_nil_hash_traces) == "number" and meta_nil_hash_traces == 0)
+assert(type(meta_nil_array_traces) == "number" and meta_nil_array_traces == 0)
+assert(type(ipairs_traces) == "number" and ipairs_traces == 0)
 assert(type(next_traces) == "number" and next_traces > 0)
-assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
+assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
 assert(type(shared_pairs_traces) == "number" and shared_pairs_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), traces trace-local next(), stitches around active-MT shared next(), keeps active-MT shared pairs() interpreted and resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing metatable stores, keeps previous-nil metatable stores and active-MT shared next()/ipairs()/pairs() interpreted, traces trace-local next(), keeps resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")

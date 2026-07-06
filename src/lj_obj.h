@@ -6487,8 +6487,16 @@ static LJ_AINLINE int lj_tv_gcref_type_match(cTValue *tv)
   ** can leave a stale tagged pointer whose address has already been reused for
   ** another GC type. Live publications initialize the object header before
   ** publishing the TValue, so a tag/header mismatch is not a valid live edge.
+  ** GC64 encodes the tag and object pointer in one word; a torn or stale table
+  ** slot can retain a collectable tag with a zero payload. That is the nil/zero
+  ** payload pattern, not a live object, and must be rejected before reading the
+  ** object header.
   */
-  return !tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct);
+  if (tvisgcv(tv)) {
+    GCobj *o = gcval(tv);
+    return o != NULL && ~itype(tv) == o->gch.gct;
+  }
+  return 1;
 }
 
 /* Macros to set tagged values. */

@@ -1874,7 +1874,8 @@ assert(util.traceinfo(1), "empty-hash miss loop did not trace")
 local util = require("jit.util")
 jit.opt.start("hotloop=1","hotexit=1")
 local x
-for i=1,100 do x={} end
+local i = 1
+while i <= 100 do x = {}; i = i + 1 end
 assert(type(x)=="table")
 assert(util.traceinfo(1), "TNEW readiness loop did not trace")
 ]=])
@@ -1884,8 +1885,10 @@ jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 local util = require("jit.util")
 local keep = {}
-for i = 1, 80 do
+local i = 1
+while i <= 80 do
   keep[i] = {}
+  i = i + 1
 end
 assert(type(keep[80]) == "table")
 assert(util.traceinfo(1), "empty-table TNEW did not trace")
@@ -1896,8 +1899,10 @@ jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 local util = require("jit.util")
 local keep = {}
-for i = 1, 80 do
+local i = 1
+while i <= 80 do
   keep[i] = { i }
+  i = i + 1
 end
 assert(keep[80][1] == 80)
 assert(util.traceinfo(1), "non-empty TNEW did not trace")
@@ -1910,7 +1915,8 @@ ffi.cdef("typedef struct { int x; } lj_gc2_dump_cnew_t;")
 local ct=ffi.typeof("lj_gc2_dump_cnew_t")
 jit.opt.start("hotloop=1","hotexit=1","-sink")
 local x
-for i=1,100 do x=ct(i) end
+local i = 1
+while i <= 100 do x = ct(i); i = i + 1 end
 assert(x.x==100)
 assert(util.traceinfo(1), "CNEW readiness loop did not trace")
 ]=])
@@ -1920,7 +1926,8 @@ local util = require("jit.util")
 jit.opt.start("hotloop=1","hotexit=1","-sink")
 local s="abcdef"
 local x
-for i=1,100 do x=string.sub(s,1,3) end
+local i = 1
+while i <= 100 do x = string.sub(s,1,3); i = i + 1 end
 assert(x=="abc")
 assert(util.traceinfo(1), "SNEW readiness loop did not trace")
 ]=])
@@ -1937,7 +1944,8 @@ assert(util.traceinfo(1), "SNEW readiness loop did not trace")
 local util = require("jit.util")
 jit.opt.start("hotloop=1","hotexit=1")
 local x
-for i=1,100 do x={} end
+local i = 1
+while i <= 100 do x = {}; i = i + 1 end
 assert(type(x)=="table")
 assert(util.traceinfo(1), "GC-step allocation loop did not trace")
 ]=])

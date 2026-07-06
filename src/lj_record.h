@@ -10,6 +10,23 @@
 #include "lj_jit.h"
 
 #if LJ_HASJIT
+static LJ_AINLINE int lj_record_mt_runtime_shared(global_State *g,
+						  lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : G2TG(g);
+  /*
+  ** mt_active is the steady-state latch, but recording can also happen while a
+  ** secondary TG is live/entering or already linked into the GC2 thread set.
+  ** A worker TG may record while those counters are between publication windows;
+  ** if the current recorder does not belong to the main TG, generated code must
+  ** use the active-MT table and frame rules instead of stock single-mutator
+  ** shortcuts.
+  */
+  return (tg != NULL && tg != g->main_tg) ||
+	 mt_active_or_entering_acq(g) || mt_live_acq(g) != 0 ||
+	 gc2_n_threads_acq(g) > 1;
+}
+
 /* Context for recording an indexed load/store. */
 typedef struct RecordIndex {
   TValue tabv;		/* Runtime value of table (or indexed object). */

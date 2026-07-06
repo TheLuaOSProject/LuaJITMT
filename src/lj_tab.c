@@ -244,6 +244,28 @@ static LJ_AINLINE int tab_tv_snapshot_valid(cTValue *tv)
   return lj_tv_gcref_type_match(tv);
 }
 
+static LJ_AINLINE int tab_tv_forjit_loadable(cTValue *tv)
+{
+  /*
+  ** Helper-backed JIT reads feed a VLOAD from a temporary TValue. Never expose
+  ** table-internal sentinels or stale GC snapshots as ordinary Lua values.
+  */
+  return !tvistabinternal(tv) && tab_tv_snapshot_valid(tv);
+}
+
+static LJ_AINLINE int tab_forjit_miss_stable(GCtab *t)
+{
+  TValue *array;
+  Node *node;
+  MSize hmask;
+  (void)lj_tab_array_snapshot_acq(t, &array);
+  if (array != NULL && lj_tab_array_is_retiring(t, array))
+    return 0;
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  UNUSED(hmask);
+  return !lj_tab_node_is_retiring(node);
+}
+
 static LJ_AINLINE int tab_val_is_publish_claim(cTValue *val)
 {
 #if LJ_HASFFI
@@ -2225,8 +2247,18 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 {
   for (;;) {
     cTValue *src = lj_tab_get(L, t, key);
-    lj_tv_load_acq(out, src);
-    if (!tvisforward(out)) {
+    if (src == niltv(L)) {
+      lj_tv_load_acq(out, src);
+      if (!tab_forjit_miss_stable(t)) {
+	lj_tab_wait_l(L);
+	continue;
+      }
+    } else if (lj_tab_read_current_keyed(t, (TValue *)src, key, out) !=
+	       LJ_TAB_STORE_CAS_OK) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    if (LJ_LIKELY(tab_tv_forjit_loadable(out))) {
       /*
       ** Helper-backed trace reads return through a temporary TValue, not a Lua
       ** stack slot. Publish GC values and the source table before later trace

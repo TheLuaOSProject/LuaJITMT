@@ -149,6 +149,23 @@ const char *lj_err_strerrno(int errnum, char *buf, size_t bufsz)
 
 /* -- Internal frame unwinding -------------------------------------------- */
 
+static LJ_AINLINE int err_frame_func_slot_valid(cTValue *frame)
+{
+#if LJ_FR2
+  cTValue *func = frame-1;
+  /*
+  ** Trace-side and fast-function runtime errors can reach the formatter before
+  ** L->base has been restored to a complete Lua frame. The function slot is the
+  ** cheap invariant that distinguishes a real frame from argument/result cells:
+  ** regular frames carry a function and dummy frames carry the thread object.
+  */
+  return (tvisfunc(func) || tvisthread(func)) && lj_tv_gcref_type_match(func);
+#else
+  UNUSED(frame);
+  return 1;
+#endif
+}
+
 /* Unwind Lua stack and move error message to new top. */
 LJ_NOINLINE static void unwindstack(lua_State *L, TValue *top)
 {
@@ -180,6 +197,8 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
     }
     if (frame <= tvref(L->stack)+LJ_FR2)
       break;
+    if (!err_frame_func_slot_valid(frame))
+      return NULL;
     switch (frame_typep(frame)) {
     case FRAME_LUA:  /* Lua frame. */
     case FRAME_LUAP:
@@ -975,6 +994,8 @@ static ptrdiff_t finderrfunc(lua_State *L)
       if (cf == NULL)
 	return 0;
     }
+    if (!err_frame_func_slot_valid(frame))
+      return 0;
     switch (frame_typep(frame)) {
     case FRAME_LUA:
     case FRAME_LUAP:
