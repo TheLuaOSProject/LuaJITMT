@@ -1061,7 +1061,7 @@ static GCtrace *find_trace(global_State *g)
   MSize i;
   for (i = 1; i < J->sizetrace; i++) {
     GCtrace *T = traceref(J, i);
-    if (T != NULL)
+    if (T != NULL && trace_traceno_acq(T) > 0)
       return T;
   }
   return NULL;
@@ -1336,13 +1336,13 @@ static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
   uint32_t old_vmstate;
   uint64_t trace_roots0;
   assert(T != NULL);
-  assert(T->traceno > 0);
+  assert(trace_traceno_acq(T) > 0);
 
   old_vmstate = (uint32_t)lj_tg_vmstate_load_acq(tg);
   trace_roots0 = la_load64_acq(&g->gc2.tg_trace_roots);
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 0);
-  lj_tg_vmstate_store_rel(tg, (int32_t)T->traceno);
+  lj_tg_vmstate_store_rel(tg, (int32_t)trace_traceno_acq(T));
   lj_gc2_test_scan_roots(g, NULL);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 1);
   assert(la_load64_acq(&g->gc2.tg_trace_roots) == trace_roots0 + 1u);

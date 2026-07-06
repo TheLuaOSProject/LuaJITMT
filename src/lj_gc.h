@@ -12,7 +12,8 @@ typedef struct GCArena GCArena;
 
 /* Garbage collector states. Order matters. */
 enum {
-  GCSpause, GCSpropagate, GCSatomic, GCSsweepstring, GCSsweep, GCSfinalize
+  GCSpause, GCSstart, GCSpropagate, GCSatomic, GCSsweepstring, GCSsweep,
+  GCSfinalize
 };
 
 /* Bitmasks for marked field of GCobj. */
@@ -55,10 +56,24 @@ LJ_STATIC_ASSERT(LJ_GC_NEEDSCAN == 0x80);
   (lj_obj_masksetgcflags((x), LJ_GC_COLORS, (uint8_t)curwhite(g)))
 #define flipwhite(x)	(lj_obj_xorgcflags((x), LJ_GC_WHITES))
 #define black2gray(x)	(lj_obj_cleargcflags((x), LJ_GC_BLACK))
-#define fixstring(s)	(lj_obj_addgcflags(obj2gco(s), LJ_GC_FIXED))
+#define fixstring(g, s)	lj_gc_fixstring((g), (s))
 #define markfinalized(x)	(lj_obj_addgcflags((x), LJ_GC_FINALIZED))
 
+static LJ_AINLINE int lj_gc_claim_black_to_gray(GCobj *o)
+{
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next;
+    if (!(old & LJ_GC_BLACK) || (old & LJ_GC_WHITES))
+      return 0;
+    next = (uint8_t)(old & (uint8_t)~LJ_GC_BLACK);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
 /* Collector. */
+LJ_FUNC void lj_gc_fixstring(global_State *g, GCstr *s);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
@@ -68,6 +83,7 @@ LJ_FUNC void lj_gc_freeall(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_preserveobj_legacy(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_markobj_legacy(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_markobj_legacy_deep(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_arena_markmem_registered(global_State *g, void *p);
@@ -318,32 +334,69 @@ static LJ_AINLINE void lj_gc_list_clear_rel(GCRef *head)
 static LJ_AINLINE void lj_gc_list_push_rel(GCRef *head, GCobj *o)
 {
   GCobj *next = lj_gc_list_head_acq(head);
-  if (LJ_UNLIKELY(next == o))
-    return;  /* Already at the frontier head; do not self-link the list. */
-  if (next)
-    setgcrefrel(o->gch.gclist, next);
-  else
-    setgcrefnullrel(o->gch.gclist);
-  setgcrefrel(*head, o);
+  for (;;) {
+    GCobj *expect;
+    if (LJ_UNLIKELY(next == o))
+      return;  /* Already at the frontier head; do not self-link the list. */
+    if (next)
+      setgcrefrel(o->gch.gclist, next);
+    else
+      setgcrefnullrel(o->gch.gclist);
+    expect = next;
+    if (gcref_cas(head, &expect, o))
+      return;
+    next = expect;
+  }
 }
 
-static LJ_AINLINE void lj_gc_list_pop_head_rel(GCRef *head, GCobj *o)
+static LJ_AINLINE int lj_gc_list_pop_head_rel(GCRef *head, GCobj *o)
 {
-  GCobj *next = gcref_acq(o->gch.gclist);
-  if (next && LJ_LIKELY(next != o))
-    setgcrefrel(*head, next);
-  else
-    setgcrefnullrel(*head);
+  GCobj *expect = o;
+  GCobj *next;
+  if (LJ_UNLIKELY(o == NULL))
+    return 0;
+  if (LJ_UNLIKELY(lj_gc_list_head_acq(head) != o))
+    return 0;
+  next = gcref_acq(o->gch.gclist);
+  if (LJ_UNLIKELY(next == o))
+    next = NULL;
+  if (!gcref_cas(head, &expect, next))
+    return 0;
+  return 1;
 }
 
 static LJ_AINLINE void lj_gc_list_move_rel(GCRef *dst, GCRef *src)
 {
-  GCobj *head = lj_gc_list_head_acq(src);
-  if (head)
-    setgcrefrel(*dst, head);
-  else
-    setgcrefnullrel(*dst);
-  lj_gc_list_clear_rel(src);
+  GCobj *head = gcref_xchg_acqrel(src, NULL);
+  GCobj *tail;
+  GCobj *next;
+  if (!head)
+    return;
+  /*
+  ** Phase boundaries move stock intrusive GC lists while mutator barriers can
+  ** still publish with CAS. Detach the source atomically, then splice that
+  ** detached chain onto the destination with the same head-CAS discipline as a
+  ** push. This preserves every node published before the exchange; later source
+  ** publications remain on the source list for the next boundary.
+  */
+  tail = head;
+  for (;;) {
+    next = gcref_acq(tail->gch.gclist);
+    if (!next || next == tail)
+      break;
+    tail = next;
+  }
+  next = lj_gc_list_head_acq(dst);
+  for (;;) {
+    GCobj *expect = next;
+    if (next)
+      setgcrefrel(tail->gch.gclist, next);
+    else
+      setgcrefnullrel(tail->gch.gclist);
+    if (gcref_cas(dst, &expect, head))
+      return;
+    next = expect;
+  }
 }
 
 /* GC check: drive collector forward if classic GC or GC2 pacing asks for work. */
@@ -378,20 +431,33 @@ LJ_FUNC void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNC void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val);
 LJ_FUNC void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
 				       cTValue *val);
+LJ_FUNC int lj_gc2_weak_write_candidate(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_weak_write_begin(lua_State *L, GCtab *t);
 LJ_FUNC void lj_gc2_weak_write_end(lua_State *L, int active);
+LJ_FUNC void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNCA void lj_gc_barrierback_tab_g(global_State *g, GCtab *t);
 
 /* Move the GC propagation frontier back for tables (make it gray again). */
 static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
 {
   GCobj *o = obj2gco(t);
-  lj_assertG(isblack(o) && !isdead(g, o),
+  lj_assertG(!iswhite(o) && !isdead(g, o),
 	     "bad object states for backward barrier");
   lj_assertG(g->gc.state != GCSfinalize && g->gc.state != GCSpause,
 	     "bad GC state");
-  black2gray(o);
+  /*
+  ** The table itself owns the intrusive gclist link used by grayagain. Multiple
+  ** mutators can hit the same backward barrier, so only the thread that changes
+  ** black to gray may publish that link. Legacy mark close also observes
+  ** mark_active, because the color change is visible before the grayagain link is.
+  */
+  gc_legacy_mark_active_inc(g);
+  if (!lj_gc_claim_black_to_gray(o)) {
+    gc_legacy_mark_active_dec(g);
+    return;
+  }
   lj_gc_list_push_rel(&g->gc.grayagain, o);
+  gc_legacy_mark_active_dec(g);
 }
 
 static LJ_AINLINE void lj_gc_barriertv_(lua_State *L, GCtab *t, cTValue *tv)

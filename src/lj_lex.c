@@ -505,11 +505,11 @@ void lj_lex_error(LexState *ls, LexToken tok, ErrMsg em, ...)
 /* Initialize strings for reserved words. */
 void lj_lex_init(lua_State *L)
 {
+  global_State *g = G(L);
   uint32_t i;
   for (i = 0; i < TK_RESERVED; i++) {
     GCstr *s = lj_str_newz(L, tokennames[i]);
-    fixstring(s);  /* Reserved words are never collected. */
+    fixstring(g, s);  /* Reserved words are never collected. */
     s->reserved = (uint8_t)(i+1);
   }
 }
-

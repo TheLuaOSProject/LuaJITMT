@@ -12,8 +12,10 @@
 
 #include "lj_err.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_tab.h"
 #include "lj_state.h"
+#include "lj_tg.h"
 #include "lj_frame.h"
 #include "lj_bc.h"
 #include "lj_ir.h"
@@ -132,12 +134,27 @@ static MSize snapshot_slots(jit_State *J, SnapEntry *map, BCReg nslots)
 }
 
 /* Add frame links at the end of the snapshot. */
+static int snapshot_pc_valid(jit_State *J, const BCIns *pc)
+{
+  if (!pc)
+    return 0;
+  if (J->pt) {
+    uintptr_t p = (uintptr_t)pc;
+    uintptr_t lo = (uintptr_t)proto_bc(J->pt);
+    uintptr_t hi = lo + (uintptr_t)J->pt->sizebc * sizeof(BCIns);
+    return p >= lo && p < hi;
+  }
+  return 1;
+}
+
 static MSize snapshot_framelinks(jit_State *J, SnapEntry *map, uint8_t *topslot)
 {
   cTValue *frame = J->L->base - 1;
   cTValue *lim = J->L->base - J->baseslot + LJ_FR2;
   GCfunc *fn = frame_func(frame);
   cTValue *ftop = isluafunc(fn) ? (frame+funcproto(fn)->framesize) : J->L->top;
+  if (LJ_UNLIKELY(!snapshot_pc_valid(J, J->pc)))
+    lj_trace_err(J, LJ_TRERR_RECERR);
 #if LJ_FR2
   uint64_t pcbase = (u64ptr(J->pc) << 8) | (J->baseslot - 2);
   lj_assertJ(2 <= J->baseslot && J->baseslot <= 257, "bad baseslot");
@@ -347,7 +364,7 @@ static BCReg snap_usedef(jit_State *J, uint8_t *udf,
 }
 
 /* Mark slots used by upvalues of child prototypes as used. */
-static void snap_useuv(GCproto *pt, uint8_t *udf)
+static void snap_useuv(jit_State *J, GCproto *pt, uint8_t *udf)
 {
   /* This is a coarse check, because it's difficult to correlate the lifetime
   ** of slots and closures. But the number of false positives is quite low.
@@ -359,9 +376,17 @@ static void snap_useuv(GCproto *pt, uint8_t *udf)
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
       GCobj *o = gcref_acq(*kr);
-      if (o->gch.gct == ~LJ_TPROTO) {
-	for (j = 0; j < gco2pt(o)->sizeuv; j++) {
-	  uint32_t v = proto_uv(gco2pt(o))[j];
+      /*
+      ** Snapshot pruning is an optimization pass, not the owner of the proto
+      ** graph. Concurrent trace/proto retention can leave stale KGC snapshots
+      ** visible long enough for recording to see them, so prove the candidate
+      ** cell before reading a child-proto payload. Skipping an unproven child
+      ** only keeps fewer slots live for this optimization decision.
+      */
+      if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+	GCproto *child = gco2pt(o);
+	for (j = 0; j < child->sizeuv; j++) {
+	  uint32_t v = proto_uv(child)[j];
 	  if ((v & PROTO_UV_LOCAL)) {
 	    udf[(v & 0xff)] = 0;
 	  }
@@ -407,7 +432,7 @@ void lj_snap_purge(jit_State *J)
     maxslot = J->pt->numparams;
   s = snap_usedef(J, udf, J->pc, maxslot);
   if (s < maxslot) {
-    snap_useuv(J->pt, udf);
+      snap_useuv(J, J->pt, udf);
     snap_usecellsrc(J->pt, udf, maxslot);
     for (; s < maxslot; s++)
       if (udf[s] != 0)
@@ -424,9 +449,13 @@ void lj_snap_shrink(jit_State *J)
   uint8_t udf[SNAP_USEDEF_SLOTS];
   BCReg maxslot = J->maxslot;
   BCReg baseslot = J->baseslot;
-  BCReg minslot = snap_usedef(J, udf, snap_pc(&map[nent]), maxslot);
+  const BCIns *pc = snap_pc(&map[nent]);
+  BCReg minslot;
+  if (LJ_UNLIKELY(!snapshot_pc_valid(J, pc)))
+    lj_trace_err(J, LJ_TRERR_RECERR);
+  minslot = snap_usedef(J, udf, pc, maxslot);
   if (minslot < maxslot) {
-    snap_useuv(J->pt, udf);
+    snap_useuv(J, J->pt, udf);
     snap_usecellsrc(J->pt, udf, maxslot);
   }
   maxslot += baseslot;
@@ -1128,6 +1157,13 @@ static const BCIns *snap_restore(jit_State *J, void *exptr, lua_State *L,
     L->top = frame + snap_nslots_acq(snap);
     break;
   }
+  /*
+  ** Snapshot restore publishes interpreter stack values after the trace exit
+  ** snapshot, including KGC strings and sunk objects. Invalidate same-cycle
+  ** owner-scan proofs after base/top are stable so GC2 cannot accept a root
+  ** scan taken before these stack slots existed.
+  */
+  (void)lj_tg_stack_dirty_epoch_add_rlx(L2TG(L), 1);
   return pc;
 }
 

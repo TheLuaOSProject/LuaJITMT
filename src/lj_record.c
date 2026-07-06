@@ -970,6 +970,8 @@ static int rec_call_same_trace_fnew(jit_State *J, GCproto *pt, TRef tr)
       return 0;
     if (arg->op1 == REF_BASE && irref_isk(arg->op2)) {
       IRIns *ptref = IR(arg->op2);
+      if (ptref->o == IR_KGC)
+	return ir_kgc(ptref) == obj2gco(pt);
       return (ptref->o == IR_KPTR || ptref->o == IR_KKPTR) &&
 	     ir_kptr(ptref) == pt;
     }
@@ -1029,9 +1031,13 @@ static int rec_fnew1num_call_info(jit_State *J, GCproto *pt, TRef tr,
   if (args[0] != REF_BASE || !irref_isk(args[1]) || !irref_isk(args[3]))
     return 0;
   ptref = IR(args[1]);
-  if (!((ptref->o == IR_KPTR || ptref->o == IR_KKPTR) &&
-	ir_kptr(ptref) == pt))
+  if (ptref->o == IR_KGC) {
+    if (ir_kgc(ptref) != obj2gco(pt))
+      return 0;
+  } else if (!((ptref->o == IR_KPTR || ptref->o == IR_KKPTR) &&
+	       ir_kptr(ptref) == pt)) {
     return 0;
+  }
   if (pt->sizeuv != 1 || !proto_celluv(pt))
     return 0;
   v = proto_uv(pt)[0];
@@ -2246,6 +2252,65 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     }
   } else {
     mt_shared_store = rec_idx_mt_shared_tabop(J, ix);
+    if (mt_shared_store) {
+      GCtab *mt = lj_tab_metatable_acq(tabV(&ix->tabv));
+      int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
+      oldv = lj_tab_get(J->L, tabV(&ix->tabv), &ix->keyv);
+      lj_tv_load_acq(&oldsnap, oldv);
+      /*
+      ** Active-MT stores must not record raw HREF/AREF/NEWREF probes: a
+      ** concurrent resize can retire that generation before generated code
+      ** reaches the store. Sample the current Lua-visible state only to pick the
+      ** semantic store class, then route the runtime operation through helpers
+      ** that re-lookup the key and own resize/forwarding retries.
+      */
+      if (tvistabinternal(&oldsnap) || !lj_tv_gcref_type_match(&oldsnap))
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);
+      if (tvisnil(&oldsnap)) {
+	if (ix->idxchain && lj_record_mm_lookup(J, ix, MM_newindex))
+	  goto handlemm;
+	if (!tref_isnil(ix->val)) {
+	  TRef key = rec_tmpref_mode(J, ix->key,
+				     IRTMPREF_IN1|IRTMPREF_IN2);
+	  TRef src;
+	  if (!LJ_DUALNUM && tref_isinteger(ix->val))
+	    ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
+	  src = rec_tmpref(J, ix->val);
+	  (void)lj_ir_call(J, IRCALL_lj_tab_storetv_forjit_newref,
+			   ix->tab, lj_ir_kptr(J, NULL), src, key);
+	  if (tref_isgcv(ix->val))
+	    emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
+	  else if (keybarrier)
+	    emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
+	  if (mt && !nommstr(J, ix->key)) {
+	    TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab, IRFL_TAB_NOMM);
+	    emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
+	  }
+	}
+	J->needsnap = 1;
+	return 0;
+      } else {
+	TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN1|IRTMPREF_IN2);
+	TRef src;
+	TRef ok;
+	if (!LJ_DUALNUM && tref_isinteger(ix->val))
+	  ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
+	src = rec_tmpref(J, ix->val);
+	ok = lj_ir_call(J, IRCALL_lj_tab_storetv_existing_forjit,
+			ix->tab, key, src);
+	emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+	if (tref_isgcv(ix->val))
+	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
+	else if (keybarrier)
+	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
+	if (mt && !nommstr(J, ix->key)) {
+	  TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab, IRFL_TAB_NOMM);
+	  emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
+	}
+	J->needsnap = 1;
+	return 0;
+      }
+    }
   }
 
   /* Record the key lookup. */
@@ -2287,8 +2352,35 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   } else {  /* Indexed store. */
     GCtab *mt = lj_tab_metatable_acq(tabV(&ix->tabv));
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
-    if (mt_shared_store && ix->idxchain && mt) {
-      if (tvisnil(oldtv)) {
+    if (mt_shared_store && !tvisnil(oldtv)) {
+      TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN1|IRTMPREF_IN2);
+      TRef src;
+      TRef ok;
+      if (!LJ_DUALNUM && tref_isinteger(ix->val))
+	ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
+      src = rec_tmpref(J, ix->val);
+      /*
+      ** Existing-key stores in active MT must not carry a recorded hash/array
+      ** slot into machine code: concurrent resize can retire that generation
+      ** before the trace reaches the store. Re-lookup the key in the helper and
+      ** guard that it still names a non-nil slot; nil/new-key and metamethod
+      ** semantics continue through the normal NEWREF/MM paths below.
+      */
+      ok = lj_ir_call(J, IRCALL_lj_tab_storetv_existing_forjit,
+		      ix->tab, key, src);
+      emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+      if (tref_isgcv(ix->val))
+	emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
+      else if (keybarrier)
+	emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
+      if (!nommstr(J, ix->key)) {
+	TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab, IRFL_TAB_NOMM);
+	emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
+      }
+      J->needsnap = 1;
+      return 0;
+    }
+    if (mt_shared_store && ix->idxchain && mt && tvisnil(oldtv)) {
 	TValue motv;
 	cTValue *mo = lj_tab_getstr(mt, mmname_str(J2G(J), MM_newindex));
 	if (mo) {
@@ -2296,28 +2388,6 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	  if (!tvisnil(&motv))
 	    lj_trace_err_info(J, LJ_TRERR_NYIBC);
 	}
-      } else {
-	TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN1|IRTMPREF_IN2);
-	TRef src;
-	TRef ok;
-	if (!LJ_DUALNUM && tref_isinteger(ix->val))
-	  ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
-	src = rec_tmpref(J, ix->val);
-	ok = lj_ir_call(J, IRCALL_lj_tab_storetv_existing_forjit,
-			ix->tab, key, src);
-	emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
-	if (tref_isgcv(ix->val))
-	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
-	else if (keybarrier)
-	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
-	if (!nommstr(J, ix->key)) {
-	  TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab,
-			     IRFL_TAB_NOMM);
-	  emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
-	}
-	J->needsnap = 1;
-	return 0;
-      }
     }
 #if LJ_HAS_X64_MT_JIT_HELPERS
     /* M6: numeric NEWREF/HSTORE uses the generic returned-slot helper. */
@@ -2954,7 +3024,7 @@ static TRef rec_fnew_gc1num(jit_State *J, GCproto *pt)
     return 0;
   J->needsnap = 1;
   return lj_ir_call(J, IRCALL_lj_func_newL_gc1num_forjit, REF_BASE,
-		    lj_ir_kptr(J, pt), getcurrf(J),
+		    lj_ir_kgc(J, obj2gco(pt), IRT_PROTO), getcurrf(J),
 		    lj_ir_kint(J, (int32_t)slot), tr);
 }
 
@@ -2992,7 +3062,7 @@ static TRef rec_fnew(jit_State *J, GCproto *pt)
   }
   J->needsnap = 1;
   fn = lj_ir_call(J, IRCALL_lj_func_newL_gc_forjit, REF_BASE,
-		  lj_ir_kptr(J, pt), getcurrf(J));
+		  lj_ir_kgc(J, obj2gco(pt), IRT_PROTO), getcurrf(J));
   rec_fnew_promoted_slots(J, pt);
   return fn;
 }
@@ -3024,15 +3094,15 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
   } else {
     if (count > jit_param_acq(J, JIT_P_callunroll)) {
       if (lnk) {  /* Possible tail- or up-recursion. */
-	int keep_for_abort_blacklist = J->parent == 0 && J->exitno != 0 &&
-				       !bc_isret(bc_op(J->cur.startins));
 	lj_trace_test_note_call_unroll_abort(lnk);
-	if (keep_for_abort_blacklist) {
-	  /* Keep slot until trace_abort() can install the stock blacklist edge. */
-	  (void)lj_trace_flush_unlink(J, lnk);
-	} else {
-	  (void)lj_trace_flush_unlink_retire_return(J, lnk);
-	}
+	/*
+	** Keep the linked trace body in its slot, as stock LuaJIT does. Recursive
+	** recording uses those occupied slots and, for stitched calls, the later
+	** trace_abort() self-link to move from transient return traces to the stable
+	** up-recursive graph. Immediate slot reuse records the same return trace
+	** repeatedly and never reaches that graph.
+	*/
+	(void)lj_trace_flush_unlink(J, lnk);
 	/* Set a small, pseudo-random hotcount for a quick retry of JFUNC*. */
 	hotcount_setg(J2G(J), J->pc+1, lj_prng_u64(&J2TG(J)->prng) & 15u);
       }

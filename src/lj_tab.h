@@ -186,6 +186,14 @@ LJ_FUNCA GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt);
 LJ_FUNC void LJ_FASTCALL lj_tab_clear(lua_State *L, GCtab *t);
 LJ_FUNC void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t);
 LJ_FUNC void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits);
+#define LJ_TAB_GC_SNAPSHOT_INVALID	0
+#define LJ_TAB_GC_SNAPSHOT_OK		1
+#define LJ_TAB_GC_SNAPSHOT_TRANSIENT	2
+LJ_FUNC int lj_tab_array_snapshot_gc(global_State *g, const GCtab *t,
+				     TValue **arrayp, MSize *asizep,
+				     MSize *acapp);
+LJ_FUNC int lj_tab_node_snapshot_gc(global_State *g, const GCtab *t,
+				    Node **nodep, MSize *hmaskp);
 LJ_FUNC uint32_t lj_tab_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 LJ_FUNC void lj_tab_freeretired(global_State *g);
@@ -274,6 +282,7 @@ LJ_FUNCA void lj_tab_store_wait_l(lua_State *L);
 #define LJ_TAB_STORE_CAS_FORWARD	1
 #define LJ_TAB_STORE_CAS_STALE		2
 #define LJ_TAB_STORE_CAS_EXISTS		3
+#define LJ_TAB_STORE_CAS_CHANGED	4
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src);
 LJ_FUNCA int lj_tab_read_current_keyed(GCtab *parent, TValue *dst,
 				       cTValue *key, TValue *oldp);
@@ -283,6 +292,8 @@ LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
 LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
 					TValue *dst, cTValue *key,
 					cTValue *src, TValue *oldp);
+LJ_FUNC int lj_tab_clear_weak_slot_keyed(GCtab *parent, TValue *dst,
+					 cTValue *key, cTValue *val);
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src,
 					     MSize key);

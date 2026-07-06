@@ -344,7 +344,9 @@ static void tracevec_retire(jit_State *J, TraceVec *tv)
 }
 
 static void trace_exittab_free(global_State *g, GCtrace *T, SnapNo nsnap);
-static void trace_preservebody(global_State *g, GCtrace *T, int gc2);
+typedef struct TraceProtoPCState TraceProtoPCState;
+static void trace_preservebody(global_State *g, GCtrace *T, int gc2,
+			       TraceProtoPCState *pcstate);
 
 static LJArenaAllocD *trace_arena_allocd_for_tg(global_State *g, TGState *tg)
 {
@@ -484,10 +486,48 @@ static void trace_retired_push(jit_State *J, GCtrace *T)
   /* 08 section 8.7 trace SMR. */
 }
 
+static int trace_retired_needs_payload_preserve(GCtrace *T)
+{
+  /*
+  ** Retired traces with a public slot reservation are still named by stale
+  ** machine-code exits and need their snapshot payload graph. Once the public
+  ** name is gone, the retired list is only an SMR lifetime list for raw body
+  ** memory; preserving KGC/proto/snapshot-PC payloads would keep dead recursive
+  ** closure graphs live and can reopen GC rescan cycles.
+  */
+  return trace_traceno_acq(T) != 0 ||
+	 (la_load64_acq(&T->retire_epoch) != 0 &&
+	  trace_nextroot_acq(T) != 0);
+}
+
+static void trace_preservebody_raw(global_State *g, GCtrace *T, int gc2)
+{
+  if (gc2) lj_gc2_markmem(g, T);
+  else lj_gc_preserveobj_legacy(g, obj2gco(T));
+  if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
+    return;
+  {
+    MCode **exittab = trace_exittab_acq(T);
+    if (exittab && !trace_exittab_ismcode(T)) {
+      if (gc2) lj_gc2_markmem(g, exittab);
+      else lj_gc_arena_markmem(g, exittab);
+    }
+  }
+}
+
+static void trace_preserve_retired_body(global_State *g, GCtrace *T, int gc2,
+					TraceProtoPCState *pcstate)
+{
+  if (trace_retired_needs_payload_preserve(T))
+    trace_preservebody(g, T, gc2, pcstate);
+  else
+    trace_preservebody_raw(g, T, gc2);
+}
+
 static void trace_preserve_retired_publish(global_State *g, GCtrace *T)
 {
-  trace_preservebody(g, T, 0);
-  trace_preservebody(g, T, 1);
+  trace_preserve_retired_body(g, T, 0, NULL);
+  trace_preserve_retired_body(g, T, 1, NULL);
 }
 
 static void trace_retired_push_preserved(jit_State *J, GCtrace *T)
@@ -502,7 +542,7 @@ static void trace_retired_push_preserved(jit_State *J, GCtrace *T)
   */
   trace_preserve_retired_publish(g, T);
   trace_retired_push(J, T);
-  trace_preservebody(g, T, 1);
+  trace_preserve_retired_body(g, T, 1, NULL);
 }
 
 static void trace_retire(global_State *g, GCtrace *T)
@@ -559,6 +599,18 @@ static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 	 completed_epoch - retire_epoch >= LJ_FLUSH_EPOCHS;
 }
 
+static LJ_AINLINE int trace_retired_body_keep_public(global_State *g)
+{
+  /*
+  ** In sticky-MT mode a trace number published to bytecode and machine-code exit
+  ** stubs remains a public name after unlinking. Threads can execute old native
+  ** code until they reach an exit/poll, so epoch-based body reclaim must not
+  ** clear/reuse the slot before the exit handler can resolve that number back to
+  ** the exact snapshot body. Final VM shutdown still frees the retired list.
+  */
+  return mt_active_or_entering_acq(g) || gc2_n_threads_acq(g) > 1;
+}
+
 static void trace_preserve_body_obj(global_State *g, GCobj *o, int gc2)
 {
   int gct;
@@ -583,42 +635,89 @@ static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
   trace_preserve_body_obj(g, o, gc2);
 }
 
+#define TRACE_PROTO_PC_CACHE	256
+#define TRACE_PROTO_PC_WALK_BUDGET	8192u
+
+typedef struct TraceProtoPCCache {
+  const BCIns *start;
+  const BCIns *end;
+  GCobj *o;
+} TraceProtoPCCache;
+
+struct TraceProtoPCState {
+  TraceProtoPCCache cache[TRACE_PROTO_PC_CACHE];
+  MSize ncache;
+  uint32_t walk_budget;
+};
+
+static void trace_proto_pc_state_init(TraceProtoPCState *pcstate)
+{
+  pcstate->ncache = 0;
+  pcstate->walk_budget = TRACE_PROTO_PC_WALK_BUDGET;
+}
+
 static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
-					int gc2)
+					int gc2, TraceProtoPCCache *cache,
+					MSize *ncachep, uint32_t *budgetp)
 {
   GCobj *o;
-  uint32_t n = 0;
-  if (!pc)
+  MSize i, ncache = *ncachep;
+  if (!pc || !budgetp || *budgetp == 0)
     return;
-  (void)lj_gc_flush_root_pending(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (i = 0; i < ncache; i++) {
+    if (pc >= cache[i].start && pc < cache[i].end) {
+      trace_preserve_proto_obj(g, cache[i].o, gc2);
+      return;
+    }
+  }
+  for (o = lj_gc_root_acq(g); o != NULL && *budgetp != 0;
+       o = lj_obj_gcw_acq(o)) {
+    --*budgetp;
     if (o->gch.gct == ~LJ_TPROTO) {
       GCproto *pt = gco2pt(o);
       const BCIns *bc = proto_bc(pt);
-      if (pc >= bc && pc < bc + pt->sizebc) {
+      const BCIns *end = bc + pt->sizebc;
+      /*
+      ** Snapshot PC preservation often checks many PCs from the same generation
+      ** of protos. Populate the bounded interval cache while walking the root
+      ** spine, not only when the current PC matches, so later snapshot entries do
+      ** not repeat the same ownership walk.
+      */
+      if (ncache < TRACE_PROTO_PC_CACHE) {
+	cache[ncache].start = bc;
+	cache[ncache].end = end;
+	cache[ncache].o = o;
+	*ncachep = ++ncache;
+      }
+      if (pc >= bc && pc < end) {
 	trace_preserve_proto_obj(g, o, gc2);
 	return;
       }
     }
     /*
-    ** Retired traces preserve snapshot PCs during GC2 handshakes. This is an
-    ** advisory retention walk over the legacy ownership spine, so it must stay
-    ** bounded if lock-free pending-root publication leaves a malformed cycle
-    ** for the root flusher/sweeper to repair.
+    ** Retired traces preserve snapshot PCs during GC2 handshakes. This is
+    ** advisory body retention, not semantic reachability, so the whole trace
+    ** preservation pass shares a bounded root-spine budget. A trace with many
+    ** snapshot PCs must not repeat a long ownership-spine walk at every PC.
     */
-    if (LJ_UNLIKELY(++n >= 1000000u))
-      return;
   }
 }
 
-static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T, int gc2)
+static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T, int gc2,
+					TraceProtoPCState *pcstate)
 {
   SnapShot *snap = trace_snap_acq(T);
   SnapEntry *snapmap = trace_snapmap_acq(T);
   MSize nsnapmap = trace_nsnapmap_acq(T);
   SnapNo i, nsnap = trace_nsnap_acq(T);
+  TraceProtoPCState localstate;
   if (!snap || !snapmap)
     return;
+  if (!pcstate) {
+    trace_proto_pc_state_init(&localstate);
+    pcstate = &localstate;
+  }
+  (void)lj_gc_flush_root_pending(g);
   for (i = 0; i < nsnap; i++) {
     SnapShot *s = &snap[i];
     MSize ofs = snap_mapofs_acq(s);
@@ -627,7 +726,9 @@ static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T, int gc2)
     if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
       return;
     map = &snapmap[ofs];
-    trace_preserve_proto_for_pc(g, snap_pc_acq(&map[nent]), gc2);
+    trace_preserve_proto_for_pc(g, snap_pc_acq(&map[nent]), gc2,
+				pcstate->cache, &pcstate->ncache,
+				&pcstate->walk_budget);
   }
 }
 
@@ -649,7 +750,8 @@ static void trace_preserve_kgc(global_State *g, GCtrace *T, int gc2)
   }
 }
 
-static void trace_preservebody(global_State *g, GCtrace *T, int gc2)
+static void trace_preservebody(global_State *g, GCtrace *T, int gc2,
+			       TraceProtoPCState *pcstate)
 {
   /* Retired traces are SMR-protected bodies, but stale bytecode readers can
   ** still redispatch through their start/snapshot PCs until the grace period
@@ -665,7 +767,7 @@ static void trace_preservebody(global_State *g, GCtrace *T, int gc2)
     return;
   trace_preserve_kgc(g, T, gc2);
   trace_preserve_proto_obj(g, trace_startptgco_acq(T), gc2);
-  trace_preserve_snapshot_pcs(g, T, gc2);
+  trace_preserve_snapshot_pcs(g, T, gc2, pcstate);
   {
     MCode **exittab = trace_exittab_acq(T);
     if (exittab && !trace_exittab_ismcode(T)) {
@@ -690,19 +792,48 @@ static int trace_body_still_rooted(global_State *g, const GCtrace *T)
   return 0;
 }
 
+static int trace_retired_slot_clear(jit_State *J, TraceVec *tv, TraceNo traceno,
+				    GCtrace *T, int allow_pending)
+{
+  GCobj *slot;
+  if (traceno == 0 || tv == NULL || (MSize)traceno >= tv->sizetrace)
+    return 0;
+  slot = gcref_acq(tv->slot[traceno]);
+  if (slot == obj2gco(T) ||
+      (allow_pending && (uintptr_t)slot == LJ_TRACE_PENDING)) {
+    setgcrefrel(tv->slot[traceno], NULL);
+    if (J->freetrace == 0 || traceno < J->freetrace)
+      J->freetrace = traceno;
+    return 1;
+  }
+  return 0;
+}
+
 static void trace_retired_slot_release(jit_State *J, GCtrace *T)
 {
   TraceNo traceno = trace_traceno_acq(T);
   int cleared = 0;
+  TraceVec *tv;
   if (traceno == 0 && la_load64_acq(&T->retire_epoch) != 0)
     traceno = trace_nextroot_acq(T);
-  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
-    GCobj *slot = gcref_acq(*traceslot_ref_acq(J, traceno));
-    if ((uintptr_t)slot == LJ_TRACE_PENDING || slot == obj2gco(T)) {
-      traceslot_clear(J, traceno);
-      if (J->freetrace == 0 || traceno < J->freetrace)
-	J->freetrace = traceno;
-      cleared = 1;
+  tv = tracevec_acq(J);
+  cleared = trace_retired_slot_clear(J, tv, traceno, T, 1);
+  if (!cleared && tv) {
+    TraceNo i;
+    /*
+    ** Retired traces normally reserve their public slot number in nextroot.
+    ** Reclaim runs outside the recorder token, while trace-vector growth and
+    ** legacy root-chain unlinking are independent publications. If that compact
+    ** metadata no longer names the current slot, release by exact body identity
+    ** before the body is freed; this is a cold SMR cleanup path, not a semantic
+    ** trace root walk.
+    */
+    for (i = 1; i < tv->sizetrace; i++) {
+      if (i != traceno && trace_retired_slot_clear(J, tv, i, T, 0)) {
+	traceno = i;
+	cleared = 1;
+	break;
+      }
     }
   }
   trace_test_note_slot_release(traceno, cleared);
@@ -715,21 +846,57 @@ static void trace_slot_retire(jit_State *J, GCtrace *T, TraceNo traceno)
   global_State *g = J2G(J);
   if (mt_active_or_entering_acq(g) || gc2_n_threads_acq(g) > 1) {
     /*
-    ** Keep the public trace slot reserved with a pending sentinel until stale
-    ** bytecode readers have aged out, but clear T->traceno so GC traversal
-    ** does not treat this retired body as a semantic trace root. Sticky MT mode
-    ** uses the same rule between worker generations: trace numbers published to
-    ** bytecode, snapshots, and secondary TGs are process-lifetime public names,
-    ** even when the instantaneous live-thread count has dropped back to one.
-    ** While retire_epoch is non-zero, nextroot is private slot-reservation
-    ** metadata; normal root chains were unlinked before retiring the trace.
+    ** Keep the public trace slot reserved with the retired body until stale
+    ** bytecode readers and in-flight exits have aged out. T->traceno and
+    ** retire_epoch remain the runnable gate, so VM/recorder/assembler entry
+    ** paths reject this body, but snapshot restore can still resolve the
+    ** exiting trace after its live root/side links have been unlinked. Sticky
+    ** MT mode uses the same rule between worker generations: trace numbers
+    ** published to bytecode, snapshots, and secondary TGs are process-lifetime
+    ** public names, even when the instantaneous live-thread count has dropped
+    ** back to one. While retire_epoch is non-zero, nextroot is private
+    ** slot-reservation metadata; normal root chains were unlinked before
+    ** retiring the trace.
     */
     trace_nextroot_rel(T, traceno);
     trace_traceno_rel(T, 0);
-    traceslot_pending(J, traceno);
+    traceslot_publish(J, traceno, T);
   } else {
     trace_retired_slot_release(J, T);
   }
+}
+
+static LJ_AINLINE int trace_exit_body_match(const GCtrace *T, TraceNo traceno)
+{
+  if (T == NULL || traceno == 0)
+    return 0;
+  if (trace_traceno_acq(T) == traceno)
+    return 1;
+  /*
+  ** Retired traces stay published in their public slot until the SMR epoch
+  ** expires. They are not runnable because traceno is cleared, but in-flight
+  ** machine-code exits may still carry the public trace number and need the
+  ** preserved snapshot body to restore interpreter state.
+  */
+  return trace_traceno_acq(T) == 0 &&
+	 la_load64_acq(&T->retire_epoch) != 0 &&
+	 trace_nextroot_acq(T) == traceno;
+}
+
+static LJ_AINLINE int trace_retired_exit_body_match(const GCtrace *T,
+						    TraceNo traceno)
+{
+  if (T == NULL || traceno == 0)
+    return 0;
+  /*
+  ** Trace-vector storage is raw metadata, not a semantic root set. Only retired
+  ** traces that deliberately keep their public slot as an exit-restore name need
+  ** body preservation from this scan; ordinary live traces are retained through
+  ** prototypes, links, and active VM states.
+  */
+  return trace_traceno_acq(T) == 0 &&
+	 la_load64_acq(&T->retire_epoch) != 0 &&
+	 trace_nextroot_acq(T) == traceno;
 }
 
 uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
@@ -758,8 +925,10 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
     GCtrace *next = trace_retired_next_acq(rt);
     trace_retired_next_rel(rt, NULL);
     if (trace_body_retire_ready(rt, completed_epoch)) {
-      trace_retired_slot_release(J, rt);
-      if (!trace_body_still_rooted(g, rt)) {
+      if (trace_retired_body_keep_public(g)) {
+	trace_retired_push(J, rt);
+      } else if (!trace_body_still_rooted(g, rt)) {
+	trace_retired_slot_release(J, rt);
 	trace_freebody(g, rt);
 	reclaimed++;
       } else {
@@ -869,6 +1038,8 @@ void lj_trace_markvecs(global_State *g, int gc2)
   jit_State *J = G2J(g);
   TraceVec *tv = tracevec_acq(J);
   GCtrace *rt;
+  TraceProtoPCState pcstate;
+  trace_proto_pc_state_init(&pcstate);
   if (tv) {
     if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
     /*
@@ -879,6 +1050,21 @@ void lj_trace_markvecs(global_State *g, int gc2)
     ** slot here creates a trace->prototype cycle and keeps throwaway compiled
     ** chunks alive indefinitely.
     */
+    {
+      TraceNo i, sizetrace = trace_sizetrace_acq(J);
+      /*
+      ** Sticky-MT retired trace bodies are different from ordinary live slots:
+      ** the public slot is the stale machine-code exit's only stable name for
+      ** the snapshot body. Preserve only bodies that have been retired but kept
+      ** published under trace_exit_body_match(); live trace graph reachability
+      ** still comes from prototypes, links and active TG vmstates.
+      */
+      for (i = 1; i < sizetrace; i++) {
+	GCtrace *T = traceref(J, i);
+	if (trace_retired_exit_body_match(T, i))
+	  trace_preservebody(g, T, gc2, &pcstate);
+      }
+    }
   }
   for (tv = tracevec_retired_head_acq(J);
        tv != NULL && lj_gc2_mem_registered(g, tv);
@@ -891,7 +1077,7 @@ void lj_trace_markvecs(global_State *g, int gc2)
   for (rt = trace_retired_head_acq(J);
        rt != NULL && lj_gc2_mem_registered(g, rt);
        rt = trace_retired_next_acq(rt))
-    trace_preservebody(g, rt, gc2);
+    trace_preserve_retired_body(g, rt, gc2, &pcstate);
 }
 
 /* Find a free trace number. */
@@ -915,12 +1101,21 @@ static TraceNo trace_findfree(jit_State *J)
   osz = trace_sizetrace_acq(J);
   if (osz >= lim)
     return 0;  /* Too many traces. */
-  oldtv = tracevec_acq(J);
   newtv = tracevec_new(J->L, lim);
+  /*
+  ** Trace-body reclaim clears public slots and frees retired bodies after the
+  ** SMR grace period. Hold an SMR read section while copying and publishing the
+  ** replacement vector so reclaim cannot clear/free a copied retired slot before
+  ** the new vector becomes the current publication.
+  */
+  lj_gc2_smr_read_enter(J2G(J));
+  oldtv = tracevec_acq(J);
+  osz = trace_sizetrace_acq(J);
   if (oldtv)
     memcpy(newtv->slot, oldtv->slot, osz*sizeof(GCRef));
   tracevec_publish(J, newtv);
   tracevec_retire(J, oldtv);
+  lj_gc2_smr_read_leave(J2G(J));
   trace_test_note_findfree_grow(J->freetrace);
   return J->freetrace;
 }
@@ -1342,34 +1537,6 @@ uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno)
   return 0;
 }
 
-uint32_t lj_trace_flush_unlink_retire_return(jit_State *J, TraceNo traceno)
-{
-  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
-    GCtrace *T = traceref(J, traceno);
-    if (T && trace_traceno_acq(T) == traceno &&
-	trace_root_acq(T) == 0 &&
-	trace_linktype_acq(T) == LJ_TRLINK_RETURN) {
-      uint32_t work = lj_trace_flush_unlink(J, traceno);
-      /*
-      ** Return-bytecode call-unroll aborts never reach trace_abort()'s
-      ** stitched-call self-link branch, so keeping the unlinked return trace
-      ** live only burns trace slots and delays the up-recursion tree. The
-      ** normal slot-retire path still protects stale entry when peer TGs exist.
-      */
-      if (work) {
-	lj_gdbjit_deltrace(J, T);
-	trace_link_rel(T, 0);
-	trace_nextroot_rel(T, 0);
-	trace_nextside_rel(T, 0);
-	trace_slot_retire(J, T, traceno);
-	trace_retire(J2G(J), T);
-      }
-      return work;
-    }
-  }
-  return lj_trace_flush_unlink(J, traceno);
-}
-
 static int trace_stale_startins_valid(GCproto *pt, const BCIns *pc,
 				      BCIns startins)
 {
@@ -1571,9 +1738,15 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   if (!allow_gc_hook && (hookmask_load(J2G(J)) & HOOK_GC))
     return 1;
   token = lj_jit_token_acquire_wait(J);
+  /*
+  ** Full flush owns the recorder token on behalf of L. Retired mcode metadata is
+  ** allocated through J->L below, so publish the token owner explicitly before the
+  ** trace/mcode retirement pass.
+  */
+  J->L = L;
   for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
     GCtrace *T = traceref(J, i);
-    if (T) {
+    if (T && trace_traceno_acq(T) == (TraceNo)i) {
       trace_exittab_reset(J, T);
       if (trace_root_acq(T) == 0) {
 	trace_flushroot(J, T, 0);
@@ -1784,6 +1957,31 @@ setpenalty:
   hotcount_setg(J2G(J), pc+1, val);
 }
 
+static void trace_mark_active_startpt(jit_State *J)
+{
+  global_State *g;
+  GCobj *o;
+  if (!J || !J->L || !J->pt || !checkptrGC(J->pt) ||
+      J->pt->gct != ~LJ_TPROTO)
+    return;
+  g = J2G(J);
+  o = obj2gco(J->pt);
+  /*
+  ** The recorder starts with only J->pt; J->cur.startpt is published later after
+  ** trace-number allocation. The start prototype is already a semantic root in
+  ** that setup window, and remains one until recording publishes or aborts.
+  */
+  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic ||
+      g->gc.state == GCSsweepstring || g->gc.state == GCSsweep)
+    lj_gc_markobj_legacy_deep(g, o);
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lj_gc2_preserve_root(g, o);
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    (void)lj_gc2_trace_sweep_root(g, o);
+  else
+    lj_gc2_barrier_marked_proto(J->L, J->pt);
+}
+
 /* -- Trace compiler state machine ---------------------------------------- */
 
 /* Start tracing. */
@@ -1791,6 +1989,7 @@ static void trace_start(jit_State *J)
 {
   TraceNo traceno;
 
+  trace_mark_active_startpt(J);
   if ((J->pt->flags & PROTO_NOJIT)) {  /* JIT disabled for this proto? */
     if (J->parent == 0 && J->exitno == 0 && bc_op(*J->pc) != BC_ITERN) {
       /* Lazy bytecode patching to disable hotcount events. */
@@ -1837,6 +2036,7 @@ static void trace_start(jit_State *J)
   J->retryrec = 0;
   J->ktrace = 0;
   trace_startpt_rel(&J->cur, J->pt);
+  trace_mark_active_startpt(J);
 
   lj_vmevent_send_(J2G(J), TRACE,
     TValue savetv = J2TG(J)->tmptv;
@@ -2494,6 +2694,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   const BCIns *pc;
   void *cf;
   GCtrace *T;
+  global_State *g = G(L);
 
   setnilV(&exiterr);
   if (exitcode) {  /* Trace unwound with error code. */
@@ -2506,21 +2707,25 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   }
 
 #ifdef EXITSTATE_PCREG
+  lj_gc2_smr_read_enter(g);
   parent = trace_exit_find(J, (MCode *)(intptr_t)ex->gpr[EXITSTATE_PCREG]);
 #else
+  lj_gc2_smr_read_enter(g);
   UNUSED(ex);
 #endif
   T = traceref(J, parent); UNUSED(T);
+  lj_assertJ(trace_exit_body_match(T, parent), "bad trace number");
 #ifdef EXITSTATE_CHECKEXIT
-  if (exitno == trace_nsnap_acq(T)) {  /* Treat stack check like a parent exit. */
+  if (exitno == trace_nsnap_acq(T)) {  /* Stack check. */
     IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
     lj_assertJ(trace_root_acq(T) != 0, "stack check in root trace");
     exitno = base.op2;
     parent = base.op1;
     T = traceref(J, parent);
+    lj_assertJ(trace_exit_body_match(T, parent), "bad stack-check trace");
   }
 #endif
-  lj_assertJ(T != NULL && exitno < trace_nsnap_acq(T),
+  lj_assertJ(trace_exit_body_match(T, parent) && exitno < trace_nsnap_acq(T),
 	     "bad trace or exit number");
   exd.J = J;
   exd.L = L;
@@ -2528,7 +2733,13 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   exd.T = T;
   exd.parent = parent;
   exd.exitno = exitno;
+  /*
+  ** Trace flush/retire keeps stale slots visible until SMR reclamation. Restore
+  ** holds a reader while it walks the trace body and snapshot map, otherwise a
+  ** concurrent grace pass can free metadata still needed to compute exd.pc.
+  */
   errcode = lj_vm_cpcall(L, NULL, &exd, trace_exit_cp);
+  lj_gc2_smr_read_leave(g);
   if (errcode)
     return -errcode;  /* Return negated error code. */
 
@@ -2554,7 +2765,6 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     /* Just exit to interpreter. */
 #endif
   } else {
-    global_State *g = G(L);
     int gcdefer = lj_gc_jit_defer_fixpoint(g);
     if (g->gc.state == GCSatomic || g->gc.state == GCSfinalize || gcdefer) {
       /* GC-step exits must resume in the interpreter instead of recording a
@@ -2579,11 +2789,16 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     return (int)((BCReg)(L->top - L->base) + 1 - bc_a(*pc));
   case BC_JLOOP: {
     TraceNo targetno = bc_d(*pc);
-    GCtrace *target = traceref(J, targetno);
+    GCtrace *target;
     BCIns startins;
-    if (!trace_runnable_acq(target, targetno) || trace_startpc_acq(target) != pc)
+    lj_gc2_smr_read_enter(g);
+    target = traceref(J, targetno);
+    if (!trace_runnable_acq(target, targetno) || trace_startpc_acq(target) != pc) {
+      lj_gc2_smr_read_leave(g);
       return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
+    }
     startins = trace_startins_acq(target);
+    lj_gc2_smr_read_leave(g);
     if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {
       /* Dispatch to original ins to ensure forward progress. */
       if (lj_trace_state_load(J) != LJ_TRACE_RECORD) return -17;

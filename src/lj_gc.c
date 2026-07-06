@@ -82,6 +82,49 @@ static int gc_hard_assist_due_jit(global_State *g)
 }
 #endif
 
+static int gc_state_cas(global_State *g, uint8_t *oldp, uint8_t state)
+{
+  return la_cas8(&g->gc.state, oldp, state, LA_ACQ_REL, LA_ACQ);
+}
+
+static int gc_legacy_mark_frontier_idle(global_State *g)
+{
+  /*
+  ** Legacy color is a traversal-ownership marker and the stock gray lists are
+  ** intrusive object links. A concurrent marker can therefore be live after it
+  ** has removed an object from the visible head, or after it has cleared white
+  ** but before it has published the object link. Mark close is allowed only when
+  ** both the list head and the in-flight counter are empty.
+  */
+  return gc_legacy_mark_active_acq(g) == 0 &&
+	 lj_gc_list_head_acq(&g->gc.gray) == NULL;
+}
+
+static int gc_legacy_mark_atomic_idle(global_State *g)
+{
+  return gc_legacy_mark_frontier_idle(g) &&
+	 lj_gc_list_head_acq(&g->gc.grayagain) == NULL;
+}
+
+void lj_gc_fixstring(global_State *g, GCstr *s)
+{
+  GCobj *o;
+  if (!s)
+    return;
+  o = obj2gco(s);
+  lj_obj_addgcflags_atomic(o, LJ_GC_FIXED);
+  /*
+  ** Fixed strings can be referenced outside the string table by lexer token
+  ** state, preallocated error paths and FFI CType names. Mark at the creation
+  ** edge so GC2 does not need to rescan the whole string hash table after every
+  ** fixpoint handshake to protect late fixed strings.
+  */
+  if (g) {
+    lj_gc_arena_markobj(g, o);
+    (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
+  }
+}
+
 /* Macros to set GCobj colors and flags. */
 #define white2gray(x)		(lj_obj_cleargcflags((x), LJ_GC_WHITES))
 #define gray2black(x)		(lj_obj_addgcflags((x), LJ_GC_BLACK))
@@ -111,7 +154,7 @@ void lj_gc_arena_markmem(global_State *g, void *p)
 {
   if (!lj_gc2_minor_roots_skip_bridge_mark(g) ||
       gc2_legacy_mark_bridge_acq(g))
-    (void)lj_gc2_markmem(g, p);
+    (void)lj_gc2_markmem_registered(g, p);
 }
 
 void lj_gc_arena_markmem_registered(global_State *g, void *p)
@@ -138,13 +181,21 @@ static void gc_mark_tab_retired_mem(global_State *g)
   TabNodeRetire *ret;
   TabArrayRetire *aret;
   uint32_t n = 0;
+  /*
+  ** Retired-list heads are Treiber publications. The SMR reader keeps a
+  ** registered record stable after it is observed, but a concurrently reclaimed
+  ** or stale head/next word must not be dereferenced as a retire record.
+  */
   for (ret = lj_tab_node_retired_head_acq(g);
        ret != NULL && lj_gc2_mem_registered(g, ret);
        ret = lj_tab_node_retired_next_acq(ret)) {
-    lj_gc_arena_markmem_registered(g, ret);
-    if (lj_tab_node_retired_armed_acq(ret))
-      lj_gc_arena_markmem_registered(
-	g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
+    lj_gc_arena_markmem(g, ret);
+    /*
+    ** The armed bit is a reclaim gate, not a reachability gate. Resizers push
+    ** retire records before the successor is fully published, so collectors
+    ** must keep the old side vector live during that handoff window too.
+    */
+    lj_gc_arena_markmem(g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
     if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT))
       break;
   }
@@ -152,10 +203,12 @@ static void gc_mark_tab_retired_mem(global_State *g)
   for (aret = lj_tab_array_retired_head_acq(g);
        aret != NULL && lj_gc2_mem_registered(g, aret);
        aret = lj_tab_array_retired_next_acq(aret)) {
-    lj_gc_arena_markmem_registered(g, aret);
-    if (lj_tab_array_retired_armed_acq(aret))
-      lj_gc_arena_markmem_registered(
-	g, lj_tab_array_hdrw(lj_tab_array_retired_array_acq(aret)));
+    lj_gc_arena_markmem(g, aret);
+    /*
+    ** Arrays follow the same retire protocol as nodes: an unarmed record still
+    ** names storage that a live table snapshot can hand to a reader or writer.
+    */
+    lj_gc_arena_markmem(g, lj_tab_array_hdrw(lj_tab_array_retired_array_acq(aret)));
     if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT))
       break;
   }
@@ -304,19 +357,20 @@ static void gc2_paranoia_checkobj(global_State *g, GCobj *o, const char *what)
 
 static void gc2_paranoia_checktab(global_State *g, GCtab *t)
 {
-  void *arraymem;
+  TValue *array;
+  MSize asize, acap, hmask;
+  Node *node;
   if (!gc2_paranoia_liveobj(obj2gco(t)))
     return;
   gc2_paranoia_checkobj(g, obj2gco(t), "table");
-  arraymem = lj_tab_array_mem_acq(t);
-  if (arraymem)
-    gc2_paranoia_checkmem(g, arraymem, "table array");
-  {
-    MSize hmask;
-    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
-    if (hmask > 0)
-      gc2_paranoia_checkmem(g, lj_tab_node_hdrw(node), "table node");
-  }
+  if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
+      LJ_TAB_GC_SNAPSHOT_OK && array)
+    gc2_paranoia_checkmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+				    (void *)array, "table array");
+  UNUSED(asize);
+  if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
+      LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
+    gc2_paranoia_checkmem(g, lj_tab_node_hdrw(node), "table node");
 }
 
 static void gc2_paranoia_checkthread(global_State *g, lua_State *th)
@@ -539,13 +593,47 @@ static void gc2_paranoia_check_fixpoint(global_State *g)
 
 static void gc_mark(global_State *g, GCobj *o);
 static void gc_traverse_thread(global_State *g, lua_State *th);
+static void gc_mark_thread_root_tab(global_State *g, GCtab *t);
+static void gc_mark_thread_root_proto(global_State *g, GCproto *pt);
+static void gc_mark_thread_root_func(global_State *g, GCfunc *fn);
 static void gc_mark_thread_root_tv(global_State *g, cTValue *tv);
 static void gc_mark_thread_root_upval(global_State *g, GCupval *uv);
+static void gc_mark_upval_payload_tv(global_State *g, cTValue *tv);
+static void gc_mark_strong_edge_obj(global_State *g, GCobj *o);
+static void gc_mark_strong_edge_tv(global_State *g, cTValue *tv);
+static int gc2_valid_proto_obj(global_State *g, GCproto *pt);
+static void gc_traverse_current_trace_root(global_State *g);
+
+static int gc_tv_gcref_type_match(global_State *g, cTValue *tv)
+{
+  GCobj *o;
+  if (!tvisgcv(tv))
+    return 1;
+  o = gcval(tv);
+  if (o == NULL || !checkptrGC(o) ||
+      ((uintptr_t)o & (sizeof(void *) - 1u)) != 0)
+    return 0;
+  /*
+  ** Conservative raw-stack scans can see stale register spill words that look
+  ** like collectable TValue tags. Validate the cell through the arena registry
+  ** before reading the object header; ordinary live publications initialize the
+  ** header before publishing the TValue, so the tag/header match remains the
+  ** final semantic edge check.
+  */
+  if (!lj_gc2_obj_valid(g, o))
+    return 0;
+  return ~itype(tv) == o->gch.gct;
+}
+
+static int gc_state_is_sweep(global_State *g)
+{
+  return g->gc.state == GCSsweepstring || g->gc.state == GCSsweep;
+}
 
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
   { \
-    if (lj_tv_gcref_type_match((tv)) && tvisgcv(tv)) { \
+    if (gc_tv_gcref_type_match((g), (tv)) && tvisgcv(tv)) { \
       lj_gc_arena_markobj((g), gcV(tv)); \
       if (tviswhite(tv)) gc_mark((g), gcV(tv)); } }
 
@@ -605,14 +693,14 @@ static void gc_mark_tg_roots(global_State *g, TGState *tg)
   if (!lj_tg_jit_active_acq(tg))
     return;
   lj_tv_load_acq(&tv, &tg->tmptv);
-  gc_marktv(g, &tv);
+  gc_mark_thread_root_tv(g, &tv);
   lj_tv_load_acq(&tv, &tg->tmptv2);
-  gc_marktv(g, &tv);
+  gc_mark_thread_root_tv(g, &tv);
 }
 
 static void gc_mark_primary_root(global_State *g, GCobj *o)
 {
-  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+  if (!o || LJ_UNLIKELY(!lj_gc2_obj_valid(g, o) || o->gch.gct == 0))
     return;
   /* Lock-free SMR preservation can leave a primary root non-white between
   ** cycles. At mark-cycle start the gray lists have just been reset, so force
@@ -654,10 +742,127 @@ static void gc_normalize_legacy_colors(global_State *g)
   }
 }
 
-static int gc_mark_rescan_pending_set(GCobj *o)
+static int gc_mark_rescan_pending_set(global_State *g, GCobj *o)
 {
   uint8_t old = la_or8_rlx(&o->gch.marked, LJ_GC_NEEDSCAN);
-  return (old & LJ_GC_NEEDSCAN) == 0;
+  if (old & LJ_GC_NEEDSCAN)
+    return 0;
+  /*
+  ** NEEDSCAN is shared by the GC2 rescan queues and the legacy bridge. Keep the
+  ** pending counters paired with table/thread publications even when the legacy
+  ** side is the first publisher, so fixpoint and sweep-close predicates observe
+  ** real outstanding work instead of a bare header bit.
+  */
+  if (o->gch.gct == ~LJ_TTAB)
+    gc2_table_rescan_pending_inc(g);
+  else if (o->gch.gct == ~LJ_TTHREAD)
+    gc2_thread_scan_needscan_pending_inc(g);
+  return 1;
+}
+
+static void gc_mark_rescan_enqueue(global_State *g, GCobj *o, int force)
+{
+  if (!gc2_legacy_mark_bridge_acq(g))
+    return;
+  if (force) {
+    /*
+    ** Forced roots are semantic payload roots, not ordinary duplicate edges.
+    ** Function/proto/upvalue NEEDSCAN is a same-cycle dedupe stamp: recursive
+    ** closure graphs can point back to the closure currently being traversed.
+    ** Republishing an already-pending stamp would black-to-gray the same object
+    ** again on every self edge and prevent the gray frontier from draining.
+    */
+    if (!gc_mark_rescan_pending_set(g, o) &&
+	(o->gch.gct == ~LJ_TFUNC || o->gch.gct == ~LJ_TPROTO ||
+	 o->gch.gct == ~LJ_TUPVAL))
+      return;
+  } else if (!(lj_obj_gcflags(o) & LJ_GC_NEEDSCAN)) {
+    return;
+  }
+  if (iswhite(o)) {
+    gc_mark(g, o);
+    return;
+  }
+  /*
+  ** Legacy gray-list membership is represented by color, as in stock LuaJIT.
+  ** The same object link cannot appear on the intrusive gray list twice. Only
+  ** the thread that atomically changes black to gray owns the publication.
+  */
+  gc_legacy_mark_active_inc(g);
+  if (!lj_gc_claim_black_to_gray(o)) {
+    gc_legacy_mark_active_dec(g);
+    return;
+  }
+  lj_gc_list_push_rel(&g->gc.gray, o);
+  gc_legacy_mark_active_dec(g);
+}
+
+static void gc_mark_transient_requeue(global_State *g, GCobj *o)
+{
+  /*
+  ** Table resize publishes the retiring bit before all forwarded slots have
+  ** reached the successor generation. Legacy GC must not wait in that window:
+  ** requeue the table as ordinary gray work and let the mutator finish the
+  ** generation hand-off.
+  */
+  (void)gc_mark_rescan_pending_set(g, o);
+  gc_legacy_mark_active_inc(g);
+  if (!lj_gc_claim_black_to_gray(o)) {
+    gc_legacy_mark_active_dec(g);
+    return;
+  }
+  lj_gc_list_push_rel(&g->gc.gray, o);
+  gc_legacy_mark_active_dec(g);
+}
+
+static void gc_mark_needscan_consume(global_State *g, GCobj *o)
+{
+  uint8_t old;
+  /*
+  ** Table and thread NEEDSCAN have paired pending counters and represent a
+  ** concrete owner handoff, so consuming the legacy traversal must clear them.
+  ** Function/proto/upvalue NEEDSCAN bits are same-cycle dedupe stamps; keep
+  ** those until the existing cycle-to-idle cleanup so cyclic closure graphs
+  ** cannot force the same prototype back onto the gray list forever. Other
+  ** containers, including traces, are ordinary rescan work and must not leave a
+  ** stale bit that republishes every already-black back-edge to gray.
+  */
+  if (o->gch.gct == ~LJ_TTAB) {
+    old = la_and8_rlx(&o->gch.marked, (uint8_t)~LJ_GC_NEEDSCAN);
+    if (!(old & LJ_GC_NEEDSCAN))
+      return;
+    if (gc2_table_rescan_pending_acq(g) != 0)
+      gc2_table_rescan_pending_dec(g);
+  } else if (o->gch.gct == ~LJ_TTHREAD) {
+    old = la_and8_rlx(&o->gch.marked, (uint8_t)~LJ_GC_NEEDSCAN);
+    if (!(old & LJ_GC_NEEDSCAN))
+      return;
+    if (gc2_thread_scan_needscan_pending_acq(g) != 0)
+      gc2_thread_scan_needscan_pending_dec(g);
+  } else if (o->gch.gct == ~LJ_TFUNC || o->gch.gct == ~LJ_TPROTO ||
+	     o->gch.gct == ~LJ_TUPVAL) {
+    return;
+  } else {
+    (void)la_and8_rlx(&o->gch.marked, (uint8_t)~LJ_GC_NEEDSCAN);
+  }
+}
+
+static int gc_grayagain_thread_claim(global_State *g, lua_State *th)
+{
+  uint32_t cycle = gc2_cycle_acq(g);
+  uint32_t old = lj_state_grayagain_cycle_acq(th);
+  for (;;) {
+    if (old == cycle)
+      return 0;
+    /*
+    ** Threads intentionally remain gray in the classic collector, so color is
+    ** not a grayagain membership claim. Concurrent root scans and gray
+    ** propagation can rediscover the same lua_State in one cycle; the cycle
+    ** stamp gives the intrusive gclist link a single publisher.
+    */
+    if (lj_state_grayagain_cycle_cas(th, &old, cycle))
+      return 1;
+  }
 }
 
 #if LJ_HASFFI
@@ -758,6 +963,36 @@ void lj_gc_preserveobj_legacy(global_State *g, GCobj *o)
     return;
   (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
   lj_obj_cleargcflags(o, LJ_GC_WHITES);
+  if (o->gch.gct == ~LJ_TFUNC && isluafunc(gco2func(o))) {
+    GCfunc *fn = gco2func(o);
+    const char *pc = mref(fn->l.pc, const char);
+    uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
+    /*
+    ** A Lua closure body directly contains the executable PC and upvalue refs.
+    ** Body-only preservation must therefore keep those direct bodies present for
+    ** stale readers and active frame headers; full semantic traversal remains the
+    ** job of forced root rescans.
+    */
+    if (pc && checkptrGC(pc)) {
+      GCproto *pt = (GCproto *)(void *)(pc - sizeof(GCproto));
+      GCobj *po = obj2gco(pt);
+      if (checkptrGC(pt) && lj_gc2_obj_valid(g, po) &&
+	  pt->gct == ~LJ_TPROTO) {
+	(void)lj_gc2_markobj_nolegacy_nogrey(g, po);
+	lj_obj_cleargcflags(po, LJ_GC_WHITES);
+      }
+    }
+    if (nup <= LJ_MAX_UPVAL) {
+      for (i = 0; i < nup; i++) {
+	GCobj *uv = gcref_acq(fn->l.uvptr[i]);
+	if (uv && checkptrGC(uv) && lj_gc2_obj_valid(g, uv) &&
+	    uv->gch.gct == ~LJ_TUPVAL) {
+	  (void)lj_gc2_markobj_nolegacy_nogrey(g, uv);
+	  lj_obj_cleargcflags(uv, LJ_GC_WHITES);
+	}
+      }
+    }
+  }
 }
 
 void lj_gc_markobj_legacy(global_State *g, GCobj *o)
@@ -776,8 +1011,8 @@ void lj_gc_markobj_legacy(global_State *g, GCobj *o)
       gc_mark(g, o);
     } else if (isgray(o)) {
       return;  /* Already queued on the legacy frontier. */
-    } else if (gc_mark_rescan_pending_set(o)) {
-      lj_gc_list_push_rel(&g->gc.gray, o);
+    } else {
+      gc_mark_rescan_enqueue(g, o, 1);
     }
   } else {
     lj_gc_preserveobj_legacy(g, o);
@@ -937,7 +1172,9 @@ static int gc_valid_proto_for_func(global_State *g, GCproto *pt)
 
 static int gc_valid_func_obj(global_State *g, GCfunc *fn)
 {
-  if (!fn || fn->c.gct != ~LJ_TFUNC)
+  if (!fn || !checkptrGC(fn) ||
+      (((uintptr_t)fn & (uintptr_t)(sizeof(void *) - 1u)) != 0) ||
+      !lj_gc2_obj_valid(g, obj2gco(fn)) || fn->c.gct != ~LJ_TFUNC)
     return 0;
   if (isluafunc(fn)) {
     GCobj *env = gc_plain_gcref_acq(&fn->l.env);
@@ -969,8 +1206,11 @@ static void gc_mark(global_State *g, GCobj *o)
   if (LJ_UNLIKELY(gct == ~LJ_TFUNC &&
 		  !gc_valid_func_obj(g, gco2func(o))))
     return;
-  if (LJ_UNLIKELY(!gc_mark_claim_white(g, o)))
+  gc_legacy_mark_active_inc(g);
+  if (LJ_UNLIKELY(!gc_mark_claim_white(g, o))) {
+    gc_legacy_mark_active_dec(g);
     return;
+  }
   lj_gc_arena_markobj(g, o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
     GCudata *ud = gco2ud(o);
@@ -980,7 +1220,7 @@ static void gc_mark(global_State *g, GCobj *o)
     GCupval *uv = gco2uv(o);
     TValue tv;
     lj_tv_load_acq(&tv, uvval(uv));
-    gc_marktv(g, &tv);
+    gc_mark_upval_payload_tv(g, &tv);
     if (uv->closed)
       gray2black(o);  /* Closed upvalues are never gray. */
   } else if (gct != ~LJ_TSTR && gct != ~LJ_TCDATA) {
@@ -989,6 +1229,7 @@ static void gc_mark(global_State *g, GCobj *o)
 	       "bad GC type %d", gct);
     lj_gc_list_push_rel(&g->gc.gray, o);
   }
+  gc_legacy_mark_active_dec(g);
 }
 
 #if LJ_HASFFI
@@ -1027,8 +1268,11 @@ static void gc_mark_fixedstr(global_State *g)
 static void gc_mark_threading_live(global_State *g)
 {
   LJThreadLive *node;
+  uint32_t remaining = la_load32_acq(&g->threading_live_count);
+  if (remaining == 0)
+    return;
   for (node = lj_thread_live_head_acq(g);
-       node != NULL;
+       node != NULL && remaining != 0;
        node = lj_thread_live_next_acq(node)) {
     GCobj *o = gcref_acq(node->ud);
     if (o && o->gch.gct == ~LJ_TUDATA &&
@@ -1052,6 +1296,7 @@ static void gc_mark_threading_live(global_State *g)
 	  gc_traverse_thread(g, child);
 	}
       }
+      remaining--;
     }
   }
 }
@@ -1083,8 +1328,44 @@ static void gc_mark_gcroot(global_State *g)
   lj_gc2_smr_read_enter(g);
   for (i = 0; i < GCROOT_MAX; i++) {
     GCobj *o = lj_gcroot_acq(g, (GCRootID)i);
-    if (o != NULL)
-      gc_markobj(g, o);
+    /*
+    ** Fixed roots can be read concurrently with subsystem initialization and
+    ** teardown. Validate through the arena registry before touching the object
+    ** header; stale or transient words are not semantic roots for this cycle.
+    */
+    if (o != NULL && LJ_LIKELY(lj_gc2_obj_valid(g, o) && o->gch.gct != 0)) {
+      switch (o->gch.gct) {
+      case ~LJ_TTAB:
+	gc_mark_thread_root_tab(g, gco2tab(o));
+	break;
+      case ~LJ_TPROTO:
+	gc_mark_thread_root_proto(g, gco2pt(o));
+	break;
+      case ~LJ_TFUNC:
+	gc_mark_thread_root_func(g, gco2func(o));
+	break;
+      case ~LJ_TTHREAD:
+	lj_gc_arena_markobj(g, o);
+	if (iswhite(o))
+	  gc_mark(g, o);
+	else
+	  gc_traverse_thread(g, gco2th(o));
+	break;
+      case ~LJ_TUDATA:
+	lj_gc_arena_markobj(g, o);
+	if (iswhite(o))
+	  gc_mark(g, o);
+	else
+	  (void)gc_traverse_udata(g, gco2ud(o));
+	break;
+      case ~LJ_TUPVAL:
+	gc_mark_thread_root_upval(g, gco2uv(o));
+	break;
+      default:
+	gc_markobj(g, o);
+	break;
+      }
+    }
   }
   gc_mark_threading_live(g);
   gc_mark_threading_states(g);
@@ -1203,13 +1484,16 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
     }
     if (o->gch.gct == ~LJ_TTAB) {
       GCtab *t = gco2tab(o);
-      void *arraymem = lj_tab_array_mem_acq(t);
-      MSize hmask;
+      TValue *array;
+      MSize asize, acap, hmask;
       Node *node;
-      if (arraymem)
-	(void)lj_gc2_markmem(g, arraymem);
-      node = lj_tab_node_snapshot_acq(t, &hmask);
-      if (hmask > 0)
+      if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
+	  LJ_TAB_GC_SNAPSHOT_OK && array)
+	(void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+				      (void *)array);
+      UNUSED(asize);
+      if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
+	  LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
 	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
     } else if (o->gch.gct == ~LJ_TTHREAD) {
       lua_State *th = gco2th(o);
@@ -1233,6 +1517,35 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
   }
 }
 
+static void gc_mark_proto_string_constants(global_State *g)
+{
+  GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (LJ_UNLIKELY(o->gch.gct == 0))
+      continue;
+    if (o->gch.gct != ~LJ_TPROTO)
+      continue;
+    /*
+    ** Legacy string sweep runs before dead prototypes are unlinked from the
+    ** ownership spine. A stale but still-linked proto KGC slot can therefore be
+    ** loaded by an active frame or trace exit after its string was swept. Mark
+    ** string constants from every valid proto once before the sweep; constants
+    ** owned only by a dead proto survive at most until that proto is swept.
+    */
+    if (gc2_valid_proto_obj(g, gco2pt(o))) {
+      GCproto *pt = gco2pt(o);
+      ptrdiff_t i;
+      for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++) {
+	GCobj *ko = proto_kgc_acq(pt, i);
+	if (ko && lj_gc2_obj_valid(g, ko) && ko->gch.gct == ~LJ_TSTR)
+	  gc_mark_strong_edge_obj(g, ko);
+      }
+    }
+  }
+}
+
 /* Start a GC cycle and mark the root set. */
 static void gc_mark_start(global_State *g)
 {
@@ -1246,18 +1559,20 @@ static void gc_mark_start(global_State *g)
   if (LJ_UNLIKELY(mainL == NULL))
     return;
   (void)lj_gc_flush_root_pending(g);
-  lj_gc2_mark_begin(g);
   /*
   ** This is the only path where GC2 marks intentionally feed legacy color
   ** state. Standalone GC2 cycles leave the latch clear, because their arena
   ** marks are not a legacy sweep frontier and must not make conservative
-  ** temporary roots look legacy-live.
+  ** temporary roots look legacy-live. Reset the intrusive legacy frontier before
+  ** the bridge is published; lj_gc2_mark_begin_legacy() publishes that bridge
+  ** before mark-active mutators/workers can resume and enqueue legacy gray work.
   */
-  lj_gc2_legacy_mark_bridge_enable(g);
   gc_normalize_legacy_colors(g);
+  gc_legacy_mark_active_store_rlx(g, 0);
   lj_gc_list_clear_rel(&g->gc.gray);
   lj_gc_list_clear_rel(&g->gc.grayagain);
   lj_gc_list_clear_rel(&g->gc.weak);
+  lj_gc2_mark_begin_legacy(g);
   gc_mark_primary_root_unique(g, obj2gco(mainL), seen, &nseen);
   {
     GCtab *env = lj_state_env_acq(mainL);
@@ -1275,6 +1590,7 @@ static void gc_mark_start(global_State *g)
   for (i = 0; i < GCROOT_MAX; i++)
     gc_mark_primary_root_unique(g, lj_gcroot_acq(g, (GCRootID)i),
 				seen, &nseen);
+  gc_traverse_current_trace_root(g);
   gc_mark_gcroot(g);
   g->gc.state = GCSpropagate;
 }
@@ -1403,95 +1719,145 @@ static void gc_mark_finalizers(global_State *g)
 
 /* -- Propagation phase --------------------------------------------------- */
 
-static int gc_weak_list_has(global_State *g, GCtab *t)
+static int gc_weak_list_claim(global_State *g, GCtab *t)
 {
-  GCobj *want = obj2gco(t);
-  GCobj *o;
-  for (o = lj_gc_list_head_acq(&g->gc.weak); o != NULL;
-       o = lj_tab_gclist_acq(gco2tab(o)))
-    if (o == want)
+  uint32_t cycle = gc2_cycle_acq(g);
+  uint32_t old = lj_tab_weak_cycle_acq(t);
+  for (;;) {
+    if (old == cycle)
+      return 0;
+    /*
+    ** Weak tables use the stock intrusive gclist link while waiting for the
+    ** atomic weak pass. Walking that list is not a membership claim under
+    ** concurrent propagation: another marker can rewrite this table's gclist
+    ** between the walk and the push. The per-table cycle stamp is the claim;
+    ** only the winner may publish the table link for this cycle.
+    */
+    if (lj_tab_weak_cycle_cas(t, &old, cycle))
       return 1;
-  return 0;
+  }
 }
 
-#define GC_TAB_RESCAN_MAX	256
-
-static int gc_traverse_tab_rec(global_State *g, GCtab *t, GCtab **seen,
-			       MSize nseen);
-
-static int gc_tab_rescan_seen(GCtab *t, GCtab **seen, MSize nseen)
-{
-  MSize i;
-  for (i = 0; i < nseen; i++)
-    if (seen[i] == t)
-      return 1;
-  return 0;
-}
-
-static void gc_mark_tab_edge_obj(global_State *g, GCtab *t, GCtab **seen,
-				 MSize nseen)
+static void gc_mark_tab_edge_obj(global_State *g, GCtab *t)
 {
   GCobj *o;
   if (!t)
     return;
   o = obj2gco(t);
-  lj_gc_arena_markobj(g, o);
+  if (LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o) ||
+			  o->gch.gct != (uint32_t)~LJ_TTAB))
+    return;
   if (iswhite(o)) {
     gc_mark(g, o);
-  } else if (gc2_legacy_mark_bridge_acq(g) &&
-	     !gc_tab_rescan_seen(t, seen, nseen)) {
+  } else {
     /*
     ** GC2/SMR can make a table body non-white before this legacy cycle has
-    ** traversed its payload. The body may be black or gray without being on the
-    ** legacy gray queue. Strong table edges must still preserve stock Lua
-    ** reachability: a live metatable keeps its __index table live, package
-    ** loader arrays keep their C closures live, and strong values keep their
-    ** descendants live even if the body was birth-marked. Traverse immediately
-    ** with a local seen set so table cycles do not repeatedly requeue each other
-    ** through NEEDSCAN.
+    ** traversed its payload. Only an explicit NEEDSCAN handoff means this child
+    ** needs another legacy traversal; ordinary black back-edges are already
+    ** covered by stock mark ordering.
     */
-    if (nseen < GC_TAB_RESCAN_MAX) {
-      if (gc_traverse_tab_rec(g, t, seen, nseen) > 0)
-	black2gray(o);
-    } else if (gc_mark_rescan_pending_set(o)) {
-      lj_gc_list_push_rel(&g->gc.gray, o);
+    if (lj_obj_gcflags(o) & LJ_GC_NEEDSCAN) {
+      lj_gc_arena_markobj(g, o);
+      gc_mark_rescan_enqueue(g, o, 0);
     }
   }
 }
 
-static void gc_mark_tab_edge_tv(global_State *g, cTValue *tv, GCtab **seen,
-				MSize nseen)
+static void gc_mark_rescan_edge_obj(global_State *g, GCobj *o, int force)
 {
-  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)) || !tvisgcv(tv))
+  uint32_t gct;
+  if (!o || LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o) || o->gch.gct == 0))
     return;
-  if (tvistab(tv))
-    gc_mark_tab_edge_obj(g, tabV(tv), seen, nseen);
-  else
-    gc_marktv(g, tv);
+  gct = o->gch.gct;
+  if (iswhite(o)) {
+    gc_mark(g, o);
+    return;
+  }
+  switch (gct) {
+  case ~LJ_TTAB:
+  case ~LJ_TFUNC:
+  case ~LJ_TPROTO:
+  case ~LJ_TTHREAD:
+  case ~LJ_TUDATA:
+  case ~LJ_TUPVAL:
+#if LJ_HASJIT
+  case ~LJ_TTRACE:
+#endif
+    /*
+    ** Active GC2/SMR preservation can make a child body non-white before this
+    ** legacy cycle has traversed its payload. Queue a normal legacy rescan for
+    ** already-marked containers instead of recursively walking functions: closure
+    ** graphs can cycle through environments and upvalues, while the gray queue is
+    ** already the stock traversal boundary.
+    */
+    if (force || (lj_obj_gcflags(o) & LJ_GC_NEEDSCAN)) {
+      lj_gc_arena_markobj(g, o);
+      gc_mark_rescan_enqueue(g, o, force);
+    }
+    break;
+  default:
+    break;  /* Strings and cdata have no legacy payload traversal. */
+  }
 }
 
+static void gc_mark_strong_edge_obj(global_State *g, GCobj *o)
+{
+  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  if (o->gch.gct == ~LJ_TTAB) {
+    gc_mark_tab_edge_obj(g, gco2tab(o));
+    return;
+  }
+  gc_mark_rescan_edge_obj(g, o, 0);
+}
+
+static void gc_mark_tab_edge_tv(global_State *g, cTValue *tv)
+{
+  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, tv)) || !tvisgcv(tv))
+    return;
+  gc_mark_strong_edge_obj(g, gcV(tv));
+}
+
+static void gc_mark_strong_edge_tv(global_State *g, cTValue *tv)
+{
+  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, tv)) || !tvisgcv(tv))
+    return;
+  gc_mark_strong_edge_obj(g, gcV(tv));
+}
+
+#define GC_TRAVERSE_TAB_TRANSIENT	(-1)
+
 /* Traverse a table. */
-static int gc_traverse_tab_rec(global_State *g, GCtab *t, GCtab **seen,
-			       MSize nseen)
+static int gc_traverse_tab(global_State *g, GCtab *t)
 {
   int weak = 0;
   int ffi_fin = 0;
-  void *arraymem;
+  TValue *array = NULL;
+  MSize asize = 0, acap = 0;
+  Node *node = NULL;
+  MSize hmask = 0;
   TValue modev;
   cTValue *mode;
-  GCtab *mt = lj_tab_metatable_acq(t);
-  if (nseen < GC_TAB_RESCAN_MAX)
-    seen[nseen++] = t;
-  arraymem = lj_tab_array_mem_acq(t);
-  if (arraymem)
-    (void)lj_gc2_markmem(g, arraymem);
-  {
-    MSize hmask;
-    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
-    if (hmask > 0)
-      (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
-  }
-  gc_mark_tab_edge_obj(g, mt, seen, nseen);
+  GCtab *mt;
+  int array_status, node_status;
+  if (LJ_UNLIKELY(!lj_gc2_obj_valid(g, obj2gco(t)) ||
+		  obj2gco(t)->gch.gct != (uint32_t)~LJ_TTAB))
+    return 0;
+  array_status = lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap);
+  node_status = lj_tab_node_snapshot_gc(g, t, &node, &hmask);
+  if (LJ_UNLIKELY(array_status == LJ_TAB_GC_SNAPSHOT_TRANSIENT ||
+		  node_status == LJ_TAB_GC_SNAPSHOT_TRANSIENT))
+    return GC_TRAVERSE_TAB_TRANSIENT;
+  if (LJ_UNLIKELY(array_status != LJ_TAB_GC_SNAPSHOT_OK ||
+		  node_status != LJ_TAB_GC_SNAPSHOT_OK))
+    return 0;
+  if (array)
+    (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+				   (void *)array);
+  if (hmask > 0)
+    (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+  mt = lj_tab_metatable_acq(t);
+  gc_mark_tab_edge_obj(g, mt);
   mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
   if (mode && tvisstr(mode)) {  /* Valid __mode field? */
     const char *modestr = strVdata(mode);
@@ -1509,7 +1875,7 @@ static int gc_traverse_tab_rec(global_State *g, GCtab *t, GCtab **seen,
 #endif
       {
 	lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
-	if (!gc_weak_list_has(g, t))
+	if (gc_weak_list_claim(g, t))
 	  lj_gc_list_push_rel(&g->gc.weak, obj2gco(t));
       }
     }
@@ -1517,20 +1883,18 @@ static int gc_traverse_tab_rec(global_State *g, GCtab *t, GCtab **seen,
   if (weak == LJ_GC_WEAK)  /* Nothing to mark if both keys/values are weak. */
     return 1;
   if (!(weak & LJ_GC_WEAKVAL)) {  /* Mark array part. */
-    TValue *array;
-    MSize i, asize = lj_tab_array_snapshot_acq(t, &array);
+    MSize i;
     for (i = 0; i < asize; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
       if (tvisforward(&val) &&
 	  !lj_tab_forwarded_array_slot(t, array, asize, i, &val))
 	continue;
-      gc_mark_tab_edge_tv(g, &val, seen, nseen);
+      gc_mark_tab_edge_tv(g, &val);
     }
   }
   {  /* Mark hash part. */
-    MSize i, hmask;
-    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+    MSize i;
     if (hmask > 0) {
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];
@@ -1568,20 +1932,14 @@ static int gc_traverse_tab_rec(global_State *g, GCtab *t, GCtab **seen,
 	  lj_assertG(!tviskeylock(&key),
 		     "mark of key lock in non-empty slot");
 	  if (!(weak & LJ_GC_WEAKKEY))
-	    gc_mark_tab_edge_tv(g, &key, seen, nseen);
+	    gc_mark_tab_edge_tv(g, &key);
 	  if (!(weak & LJ_GC_WEAKVAL))
-	    gc_mark_tab_edge_tv(g, &val, seen, nseen);
+	    gc_mark_tab_edge_tv(g, &val);
 	}
       }
     }
   }
   return weak;
-}
-
-static int gc_traverse_tab(global_State *g, GCtab *t)
-{
-  GCtab *seen[GC_TAB_RESCAN_MAX];
-  return gc_traverse_tab_rec(g, t, seen, 0);
 }
 
 /* Traverse a function. */
@@ -1592,13 +1950,13 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
   {
     GCtab *env = lj_func_env_acq(fn);
     if (env)
-      gc_markobj(g, env);
+      gc_mark_thread_root_tab(g, env);
   }
   if (isluafunc(fn)) {
     uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
     lj_assertG(nup <= funcproto(fn)->sizeuv,
 	       "function upvalues out of range");
-    gc_markobj(g, funcproto(fn));
+    gc_mark_thread_root_proto(g, funcproto(fn));
     for (i = 0; i < nup; i++)  /* Mark Lua function upvalues. */
       gc_mark_thread_root_upval(g, func_uv_acq(&fn->l, i));
   } else {
@@ -1606,7 +1964,15 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
     for (i = 0; i < nup; i++) {  /* Mark C function upvalues. */
       TValue tv;
       lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
-      gc_marktv(g, &tv);
+      /*
+      ** C closure upvalues are strong function payload edges. A child table can
+      ** already be non-white because GC2/SMR preserved its body before this
+      ** legacy propagation reached the closure, so use the same strong-edge path
+      ** as local cells: mutable containers are rescanned, while non-white
+      ** functions are queued through the gray list to avoid closure-cycle
+      ** recursion.
+      */
+      gc_mark_strong_edge_tv(g, &tv);
     }
   }
 }
@@ -1661,11 +2027,7 @@ static void gc_marktrace(global_State *g, TraceNo traceno)
     return;
   o = obj2gco(T);
   lj_assertG(traceno != G2J(g)->cur.traceno, "active trace escaped");
-  if (iswhite(o)) {
-    lj_gc_arena_markobj(g, o);
-    white2gray(o);
-    lj_gc_list_push_rel(&g->gc.gray, o);
-  }
+  gc_mark(g, o);
 }
 
 void lj_gc_mark_trace_slot(global_State *g, uint32_t traceno)
@@ -1673,18 +2035,49 @@ void lj_gc_mark_trace_slot(global_State *g, uint32_t traceno)
   gc_marktrace(g, (TraceNo)traceno);
 }
 
-static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc)
+typedef struct GCTraceProtoPCCache {
+  const BCIns *start;
+  const BCIns *end;
+  GCobj *o;
+} GCTraceProtoPCCache;
+
+#define GC_TRACE_PROTO_PC_CACHE		256
+#define GC_TRACE_PROTO_PC_WALK_BUDGET	8192u
+
+static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc,
+				       GCTraceProtoPCCache *cache,
+				       MSize *ncachep, uint32_t *budgetp)
 {
   GCobj *o;
-  if (!pc)
+  MSize i, ncache = *ncachep;
+  if (!pc || !budgetp || *budgetp == 0)
     return;
-  (void)lj_gc_flush_root_pending(g);
-  (void)lj_gc_repair_root_spine(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (i = 0; i < ncache; i++) {
+    if (pc >= cache[i].start && pc < cache[i].end) {
+      gc_markobj(g, cache[i].o);
+      return;
+    }
+  }
+  for (o = lj_gc_root_acq(g); o != NULL && *budgetp != 0;
+       o = lj_obj_gcw_acq(o)) {
+    --*budgetp;
     if (o->gch.gct == ~LJ_TPROTO) {
       GCproto *pt = gco2pt(o);
       const BCIns *bc = proto_bc(pt);
-      if (pc >= bc && pc < bc + pt->sizebc) {
+      const BCIns *end = bc + pt->sizebc;
+      /*
+      ** Snapshot PC ownership is advisory trace metadata retention. Bound the
+      ** total root-spine search for one trace and cache proto bytecode ranges
+      ** already seen, so traces with many snapshots cannot turn a GC step into
+      ** repeated full root walks.
+      */
+      if (ncache < GC_TRACE_PROTO_PC_CACHE) {
+	cache[ncache].start = bc;
+	cache[ncache].end = end;
+	cache[ncache].o = o;
+	*ncachep = ++ncache;
+      }
+      if (pc >= bc && pc < end) {
 	gc_markobj(g, o);
 	return;
       }
@@ -1698,6 +2091,11 @@ static void gc_mark_trace_snapshot_pcs(global_State *g, GCtrace *T)
   SnapEntry *snapmap = trace_snapmap_acq(T);
   MSize nsnapmap = trace_nsnapmap_acq(T);
   SnapNo i, nsnap = trace_nsnap_acq(T);
+  GCTraceProtoPCCache cache[GC_TRACE_PROTO_PC_CACHE];
+  MSize ncache = 0;
+  uint32_t walk_budget = GC_TRACE_PROTO_PC_WALK_BUDGET;
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (i = 0; i < nsnap; i++) {
     SnapShot *s = &snap[i];
     MSize ofs = snap_mapofs_acq(s);
@@ -1706,7 +2104,8 @@ static void gc_mark_trace_snapshot_pcs(global_State *g, GCtrace *T)
     if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
       return;
     map = &snapmap[ofs];
-    gc_mark_proto_for_trace_pc(g, snap_pc_acq(&map[nent]));
+    gc_mark_proto_for_trace_pc(g, snap_pc_acq(&map[nent]), cache, &ncache,
+			       &walk_budget);
   }
 }
 
@@ -1722,7 +2121,7 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
     IRIns *ir = &irbase[ref];
     IRIns irs = ir_load_acq(ir);
     if (irs.o == IR_KGC)
-      gc_markobj(g, ir_kgc_load_acq(ir));
+      gc_mark_strong_edge_obj(g, ir_kgc_load_acq(ir));
     if (irt_is64(irs.t) && irs.o != IR_KNULL)
       ref++;
   }
@@ -1734,14 +2133,30 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
     if (nextroot) gc_marktrace(g, nextroot);
     if (nextside) gc_marktrace(g, nextside);
   }
-  gc_markobj(g, trace_startptgco_acq(T));
+  gc_mark_rescan_edge_obj(g, trace_startptgco_acq(T), 1);
   gc_mark_trace_snapshot_pcs(g, T);
 }
 
 /* The current trace is a GC root while not anchored in the prototype (yet). */
-#define gc_traverse_curtrace(g)	gc_traverse_trace(g, &G2J(g)->cur)
+static void gc_traverse_current_trace_root(global_State *g)
+{
+  jit_State *J = G2J(g);
+  GCproto *pt = J->pt;
+  /*
+  ** During LJ_TRACE_START the recorder has not yet published J->cur.startpt, but
+  ** J->pt is already the executing prototype. Mark it as the same semantic root
+  ** the current trace will expose once setup has allocated a trace number.
+  */
+  if (lj_trace_state_load(J) != LJ_TRACE_IDLE && pt && checkptrGC(pt) &&
+      pt->gct == ~LJ_TPROTO && gc2_valid_proto_obj(g, pt))
+    gc_mark_thread_root_proto(g, pt);
+  gc_traverse_trace(g, &J->cur);
+}
 #else
-#define gc_traverse_curtrace(g)	UNUSED(g)
+static void gc_traverse_current_trace_root(global_State *g)
+{
+  UNUSED(g);
+}
 #endif
 
 /* Traverse a prototype. */
@@ -1750,7 +2165,7 @@ static void gc_traverse_proto(global_State *g, GCproto *pt)
   ptrdiff_t i;
   gc_mark_str(g, proto_chunkname_acq(pt));
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)  /* Mark collectable consts. */
-    gc_markobj(g, proto_kgc_acq(pt, i));
+    gc_mark_strong_edge_obj(g, proto_kgc_acq(pt, i));
 #if LJ_HASJIT
   {
     TraceNo trace = proto_trace_acq(pt);
@@ -1765,6 +2180,63 @@ static GCproto *gc_func_proto_if_lua(GCfunc *fn)
 	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
+static int gc_frame_func_valid(global_State *g, TValue *frame,
+			       GCfunc **fnp, GCproto **ptp)
+{
+  GCobj *fo = frame_gc(frame);
+  GCfunc *fn;
+  if (fnp) *fnp = NULL;
+  if (ptp) *ptp = NULL;
+  if (!fo || !checkptrGC(fo) ||
+      (((uintptr_t)fo & (uintptr_t)(sizeof(void *) - 1u)) != 0) ||
+      !lj_gc2_obj_valid(g, fo) || fo->gch.gct != ~LJ_TFUNC)
+    return 0;
+  fn = &fo->fn;
+  if (!gc_valid_func_obj(g, fn))
+    return 0;
+  if (isluafunc(fn)) {
+    const char *pc = mref(fn->l.pc, const char);
+    GCproto *pt = (GCproto *)(void *)(pc - sizeof(GCproto));
+    if (!gc_valid_proto_for_func(g, pt))
+      return 0;
+    if (ptp) *ptp = pt;
+  }
+  if (fnp) *fnp = fn;
+  return 1;
+}
+
+static int gc_frame_prev_safe(global_State *g, TValue *bot, TValue *max,
+			      TValue *frame, TValue **prevp, GCfunc **fnp)
+{
+  GCfunc *fn = NULL;
+  GCproto *pt = NULL;
+  TValue *prev;
+  if (prevp) *prevp = NULL;
+  if (fnp) *fnp = NULL;
+  if (frame <= bot + LJ_FR2 || frame >= max)
+    return 0;
+  (void)gc_frame_func_valid(g, frame, &fn, &pt);
+  if (frame_islua(frame)) {
+    const BCIns *pc, *bc;
+    if (!pt)
+      return 0;
+    pc = frame_pc(frame);
+    bc = proto_bc(pt);
+    if (!pc || pc <= bc || pc > bc + pt->sizebc)
+      return 0;
+    prev = frame - (1 + LJ_FR2 + bc_a(pc[-1]));
+  } else {
+    ptrdiff_t sz = frame_sized(frame);
+    if (sz <= 0 || (uintptr_t)sz > (uintptr_t)((char *)frame -
+						(char *)(bot + LJ_FR2)))
+      return 0;
+    prev = (TValue *)((char *)frame - sz);
+  }
+  if (prevp) *prevp = prev;
+  if (fnp) *fnp = fn;
+  return 1;
+}
+
 #if LJ_HASJIT
 static TValue *gc_thread_jit_base(global_State *g, lua_State *th)
 {
@@ -1772,8 +2244,6 @@ static TValue *gc_thread_jit_base(global_State *g, lua_State *th)
   return tg ? lj_tg_load_jit_base(tg) : NULL;
 }
 #endif
-
-static void gc_mark_thread_root_func(global_State *g, GCfunc *fn);
 
 static void gc_mark_jit_frame_funcs(global_State *g, lua_State *th)
 {
@@ -1794,10 +2264,12 @@ static void gc_mark_jit_frame_funcs(global_State *g, lua_State *th)
   ** values. Mark their function/prototype chain explicitly.
   */
   for (frame = base - 1; frame > bot + LJ_FR2 && frame < max; ) {
-    GCobj *fo = frame_gc(frame);
-    TValue *prev = frame_prev(frame);
-    if (fo && fo->gch.gct == ~LJ_TFUNC)
-      gc_mark_thread_root_func(g, &fo->fn);
+    GCfunc *fn;
+    TValue *prev;
+    if (!gc_frame_prev_safe(g, bot, max, frame, &prev, &fn))
+      break;
+    if (fn)
+      gc_mark_thread_root_func(g, fn);
     if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
       break;
     frame = prev;
@@ -1854,6 +2326,58 @@ static int gc_thread_is_jit_current(global_State *g, lua_State *th)
 #endif
 }
 
+static void gc_mark_frame_chain_funcs(global_State *g, lua_State *th)
+{
+  TValue *bot, *max, *frame;
+  uint32_t n = 0;
+  if (!th || tvref(th->stack) == NULL)
+    return;
+  bot = tvref(th->stack);
+  max = tvref(th->maxstack);
+  frame = th->base - 1;
+  /*
+  ** Raw stack preservation scans TValue slots, but frame headers are not ordinary
+  ** slots on every backend/state transition. Remote, native and recorder-owned
+  ** states therefore also need a bounded header walk to keep live closure payloads
+  ** and their prototypes rooted until the owner publishes a precise scan.
+  */
+  while (frame > bot + LJ_FR2 && frame < max) {
+    GCfunc *fn;
+    TValue *prev;
+    if (!gc_frame_prev_safe(g, bot, max, frame, &prev, &fn))
+      break;
+    if (fn)
+      gc_mark_thread_root_func(g, fn);
+    if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
+      break;
+    frame = prev;
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      break;
+  }
+}
+
+static void gc_mark_stack_func_slots(global_State *g, lua_State *th)
+{
+  TValue *o, *bot, *max;
+  TValue tv;
+  if (!th || tvref(th->stack) == NULL)
+    return;
+  bot = tvref(th->stack);
+  max = tvref(th->maxstack);
+  /*
+  ** Same-thread C calls can suspend Lua callers below fast-function and cpcall
+  ** frames whose frame metadata is backend-specific. Function-valued frame slots
+  ** are not ordinary live locals, but their closure/proto payload is executable
+  ** state for the suspended call chain and must survive a full collection entered
+  ** from that C call.
+  */
+  for (o = bot + 1 + LJ_FR2; o < max; o++) {
+    lj_tv_load_acq(&tv, o);
+    if (tvisfunc(&tv) && gc_tv_gcref_type_match(g, &tv))
+      gc_mark_thread_root_func(g, funcV(&tv));
+  }
+}
+
 /* Traverse the frame structure of a stack. */
 static MSize gc_traverse_frames(global_State *g, lua_State *th)
 {
@@ -1872,38 +2396,7 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
   return (MSize)(top - bot);  /* Return minimum needed stack size. */
 }
 
-/* Calculate number of used slots in a live bytecode frame. */
-static BCReg gc_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
-{
-  BCIns ins = pc[-1];
-  if (bc_op(ins) == BC_UCLO)
-    ins = pc[bc_j(ins)];
-  switch (bc_op(ins)) {
-  case BC_CALLM: case BC_CALLMT:
-    return bc_a(ins) + bc_c(ins) + nres-1+1+LJ_FR2;
-  case BC_CALL:
-  case BC_ITERC:
-    /*
-    ** Fixed-argument calls have a stable bytecode call window. Caller slots
-    ** above A+C are dead temporaries while the C callee runs; keeping them live
-    ** preserves already-returned closures/prototypes and changes weak/trace
-    ** collection semantics. Multiple-result calls keep the full frame because
-    ** their top depends on the previous producer's result count.
-    */
-    if (bc_c(ins) != 0)
-      return bc_a(ins) + bc_c(ins) + LJ_FR2;
-    break;
-  case BC_RETM:
-    return bc_a(ins) + bc_d(ins) + nres-1;
-  case BC_TSETM:
-    return bc_a(ins) + nres-1;
-  default:
-    return pt->framesize;
-  }
-  return pt->framesize;
-}
-
-static TValue *gc_active_thread_top(lua_State *th, TValue *top)
+static TValue *gc_active_thread_top(global_State *g, lua_State *th, TValue *top)
 {
   TValue *bot = tvref(th->stack);
   TValue *max = tvref(th->maxstack);
@@ -1913,30 +2406,34 @@ static TValue *gc_active_thread_top(lua_State *th, TValue *top)
   if (th->base <= bot + 1 + LJ_FR2)
     return top;
   frame = th->base - 1;
-  if (frame > bot + LJ_FR2 && frame_islua(frame)) {
-    GCproto *pt = gc_func_proto_if_lua(frame_func(frame));
+  if (frame > bot + LJ_FR2 && frame < max && frame_islua(frame)) {
+    GCfunc *fn;
+    GCproto *pt;
+    (void)gc_frame_func_valid(g, frame, &fn, &pt);
     if (pt) {
       TValue *ltop = th->base + pt->framesize;
       if (ltop > top)
 	top = ltop;
     }
-  } else if (frame > bot + LJ_FR2 && frame_isc(frame)) {
-    TValue *prev = frame_prev(frame);
-    if (prev > bot + LJ_FR2 && frame_islua(prev)) {
-      GCproto *pt = gc_func_proto_if_lua(frame_func(prev));
+  } else if (frame > bot + LJ_FR2 && frame < max && frame_isc(frame)) {
+    TValue *prev;
+    GCfunc *fn;
+    if (gc_frame_prev_safe(g, bot, max, frame, &prev, &fn) &&
+	prev > bot + LJ_FR2 && prev < max && frame_islua(prev)) {
+      GCproto *pt;
+      (void)gc_frame_func_valid(g, prev, &fn, &pt);
       if (pt) {
 	void *cf = cframe_raw(th->cframe);
 	const BCIns *pc = cf ? cframe_pc(cf) : NULL;
 	const BCIns *bc = proto_bc(pt);
 	if (pc && pc > bc && pc <= bc + pt->sizebc) {
 	  /*
-	  ** The bytecode call window is the precise same-thread C-call root set.
-	  ** Open local cells are scanned through the thread's open-upvalue list;
-	  ** broadening every cell-op frame here keeps stale temporaries alive and
-	  ** changes stock weak/trace collection semantics.
+	  ** Same-thread Lua-to-C calls suspend the caller Lua frame. Stock LuaJIT
+	  ** keeps that frame's declared slot range live across C calls such as
+	  ** collectgarbage(), even when the call instruction itself only uses a
+	  ** smaller argument/result window.
 	  */
-	  TValue *ctop = prev + 1 + gc_cur_topslot(pt, pc,
-						   cframe_multres_n(cf));
+	  TValue *ctop = prev + 1 + pt->framesize;
 	  if (ctop > top)
 	    top = ctop;
 	}
@@ -1946,25 +2443,45 @@ static TValue *gc_active_thread_top(lua_State *th, TValue *top)
   return top > max ? max : top;
 }
 
-static void gc_mark_thread_root_tab(global_State *g, GCtab *t);
-
 static void gc_mark_thread_root_proto(global_State *g, GCproto *pt)
 {
   GCobj *o;
   if (!pt)
     return;
   o = obj2gco(pt);
-  lj_gc_arena_markobj(g, o);
-  if (iswhite(o))
-    gc_mark(g, o);
-  else
-    gc_traverse_proto(g, pt);
+  if (gc_state_is_sweep(g)) {
+    lj_gc_markobj_legacy_deep(g, o);
+    return;
+  }
+  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+    lj_gc_arena_markobj(g, o);
+    if (iswhite(o)) {
+      gc_mark(g, o);
+    } else {
+      /*
+      ** Prototype constants are immutable semantic payload of a live frame
+      ** function. A black/gray proto can carry a stale NEEDSCAN bit after a lost
+      ** intrusive-list handoff; direct traversal here keeps nested function
+      ** literals live without depending on duplicate gray publication.
+      */
+      gc_traverse_proto(g, pt);
+    }
+    return;
+  }
+  /*
+  ** Function-owned prototypes are payload roots for nested FNEW prototypes and
+  ** trace metadata. GC2/SMR can preserve or color the prototype body before the
+  ** legacy collector reaches the owning closure; the legacy pass still has to
+  ** traverse the prototype constants for this cycle so a child prototype cannot
+  ** be swept before its closure is created.
+  */
+  gc_mark_rescan_edge_obj(g, o, 1);
 }
 
 static void gc_mark_upval_payload_tv(global_State *g, cTValue *tv)
 {
   GCobj *o;
-  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)) || !tvisgcv(tv))
+  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, tv)) || !tvisgcv(tv))
     return;
   o = gcV(tv);
   if (LJ_UNLIKELY(o->gch.gct == 0))
@@ -1973,25 +2490,11 @@ static void gc_mark_upval_payload_tv(global_State *g, cTValue *tv)
     gc_mark_thread_root_upval(g, gco2uv(o));
     return;
   }
-  lj_gc_arena_markobj(g, o);
-  if (iswhite(o)) {
-    gc_mark(g, o);
-  } else if (tvistab(tv)) {
-    if (gc_traverse_tab(g, tabV(tv)) > 0)
-      black2gray(o);
-  } else if (tvisproto(tv)) {
-    gc_mark_thread_root_proto(g, protoV(tv));
-  } else if (tvisthread(tv)) {
-    gc_traverse_thread(g, threadV(tv));
-  } else if (tvisudata(tv)) {
-    (void)gc_traverse_udata(g, udataV(tv));
+  if (LJ_UNLIKELY(o->gch.gct == ~LJ_TFUNC)) {
+    gc_mark_rescan_edge_obj(g, o, 1);
+    return;
   }
-  /*
-  ** Nonwhite functions are not expanded from an upvalue payload here: closures
-  ** commonly form cycles through local cells. Direct stack/frame function roots
-  ** still use gc_mark_thread_root_func(); white function payloads are queued by
-  ** gc_mark() above.
-  */
+  gc_mark_strong_edge_obj(g, o);
 }
 
 static void gc_mark_thread_root_upval(global_State *g, GCupval *uv)
@@ -2001,6 +2504,10 @@ static void gc_mark_thread_root_upval(global_State *g, GCupval *uv)
   if (!uv || uv->gct != ~LJ_TUPVAL)
     return;
   o = obj2gco(uv);
+  if (gc_state_is_sweep(g)) {
+    lj_gc_markobj_legacy_deep(g, o);
+    return;
+  }
   lj_gc_arena_markobj(g, o);
   if (iswhite(o)) {
     gc_mark(g, o);
@@ -2024,80 +2531,72 @@ static void gc_mark_thread_root_func(global_State *g, GCfunc *fn)
   if (!fn || LJ_UNLIKELY(!gc_valid_func_obj(g, fn)))
     return;
   o = obj2gco(fn);
-  lj_gc_arena_markobj(g, o);
-  if (iswhite(o)) {
-    gc_mark(g, o);
-  } else {
-    /*
-    ** Stack frame functions are primary roots for their prototype graph. SMR
-    ** preservation can leave a root non-white without proving its children
-    ** were visited in this legacy cycle, so traverse root function edges here
-    ** instead of relying on color alone. This keeps live proto string constants
-    ** interned and preserves pointer-equality string semantics.
-    */
-    GCtab *env = lj_func_env_acq(fn);
-    if (env)
-      gc_mark_thread_root_tab(g, env);
-    if (isluafunc(fn)) {
-      uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
-      lj_assertG(nup <= funcproto(fn)->sizeuv,
-		 "function upvalues out of range");
-      gc_mark_thread_root_proto(g, funcproto(fn));
-      for (i = 0; i < nup; i++)
-	gc_mark_thread_root_upval(g, func_uv_acq(&fn->l, i));
-    } else {
-      uint32_t i, nup = lj_funcC_nupvalues(&fn->c);
-      for (i = 0; i < nup; i++) {
-	TValue tv;
-	lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
-	gc_marktv(g, &tv);
-      }
-    }
+  if (gc_state_is_sweep(g)) {
+    lj_gc_markobj_legacy_deep(g, o);
+    return;
   }
+  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+    lj_gc_arena_markobj(g, o);
+    if (iswhite(o)) {
+      gc_mark(g, o);
+    } else {
+      /*
+      ** Frame headers are executable state. If the closure body is already
+      ** non-white, traverse the payload immediately so its prototype/upvalue graph
+      ** does not rely on a same-object gray-list handoff that may have been
+      ** consumed by another publisher.
+      */
+      gc_traverse_func(g, fn);
+    }
+    return;
+  }
+  /*
+  ** Stack frame functions are primary roots for their prototype graph. White
+  ** closures enter the ordinary gray frontier; already-marked closures are still
+  ** rescanned here because frame headers are not ordinary TValue slots. A closure
+  ** body can be preserved or blackened before the current root snapshot reaches
+  ** the live frame, but the frame still semantically roots its proto/upvalues.
+  */
+  gc_mark_rescan_edge_obj(g, o, 1);
 }
 
 static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
 {
   GCobj *o;
-  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(tv)) || !tvisgcv(tv))
+  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, tv)) || !tvisgcv(tv))
     return;
   o = gcV(tv);
   if (LJ_UNLIKELY(o->gch.gct == 0))
     return;
+  if (gc_state_is_sweep(g)) {
+    lj_gc_markobj_legacy_deep(g, o);
+    return;
+  }
   if (LJ_UNLIKELY(itype(tv) == LJ_TUPVAL)) {
     gc_mark_thread_root_upval(g, gco2uv(o));
     return;
   }
-  lj_gc_arena_markobj(g, o);
-  if (iswhite(o)) {
-    gc_mark(g, o);
-  } else if (tvistab(tv)) {
-    if (gc_traverse_tab(g, tabV(tv)) > 0)
-      black2gray(o);
-  } else if (tvisfunc(tv)) {
-    gc_mark_thread_root_func(g, funcV(tv));
-  } else if (tvisproto(tv)) {
-    gc_mark_thread_root_proto(g, protoV(tv));
-  } else if (tvisthread(tv)) {
-    gc_traverse_thread(g, threadV(tv));
-  } else if (tvisudata(tv)) {
-    (void)gc_traverse_udata(g, udataV(tv));
+  if (LJ_UNLIKELY(o->gch.gct == ~LJ_TFUNC)) {
+    /*
+    ** Closure-valued stack roots are roots for the closure payload, not just the
+    ** closure header. GC2/SMR can color the closure before legacy propagation sees
+    ** this slot, so force a gray-list rescan to retain the prototype/upvalue graph.
+    */
+    gc_mark_rescan_edge_obj(g, o, 1);
+    return;
   }
+  gc_mark_rescan_edge_obj(g, o, 0);
 }
 
 static void gc_mark_thread_root_tab(global_State *g, GCtab *t)
 {
-  GCobj *o;
   if (!t)
     return;
-  o = obj2gco(t);
-  lj_gc_arena_markobj(g, o);
-  if (iswhite(o))
-    gc_mark(g, o);
-  else {
-    if (gc_traverse_tab(g, t) > 0)
-      black2gray(o);
+  if (gc_state_is_sweep(g)) {
+    lj_gc_markobj_legacy_deep(g, obj2gco(t));
+    return;
   }
+  gc_mark_rescan_edge_obj(g, obj2gco(t), 0);
 }
 
 /* Traverse a thread object. */
@@ -2129,8 +2628,11 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   native_current = gc_thread_is_native_current(g, th);
   jit_current = gc_thread_is_jit_current(g, th);
   if (owned || remote_current || native_current || jit_current) {
-    if (!owned && !remote_current && !native_current && jit_current)
+    gc_mark_frame_chain_funcs(g, th);
+#if LJ_HASJIT
+    if (jit_current)
       gc_mark_jit_frame_funcs(g, th);
+#endif
     /*
     ** Remote, native and JIT-owned frame chains are owner-private until their
     ** boundary publishes a stable base/top pair. Preserve raw stack storage in
@@ -2142,9 +2644,19 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   } else {
     used = gc_traverse_frames(g, th);
   }
+  if (th == cur_L && th->cframe != NULL)
+    gc_mark_stack_func_slots(g, th);
   if (!remote_current && !native_current && !jit_current && th == cur_L &&
       th->base > tvref(th->stack) + 1 + LJ_FR2) {
-    top = gc_active_thread_top(th, top);
+    top = gc_active_thread_top(g, th, top);
+    /*
+    ** Same-thread C calls still suspend older Lua frames below the active frame.
+    ** The PC-derived top bounds the current call window, while gc_traverse_frames()
+    ** bounds the frame chain that must resume after the C call returns. Keep both
+    ** ranges live before atomic clears stack cells.
+    */
+    if (tvref(th->stack) + used > top)
+      top = tvref(th->stack) + used;
   } else if (tvref(th->stack) + used > top) {
     top = tvref(th->stack) + used;
   }
@@ -2177,9 +2689,23 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
 static size_t propagatemark(global_State *g)
 {
   GCobj *o = lj_gc_list_head_acq(&g->gc.gray);
-  int gct = o->gch.gct;
-  int black_rescan = !isgray(o) && isblack(o);
-  int rescan = black_rescan && (lj_obj_gcflags(o) & LJ_GC_NEEDSCAN);
+  int gct;
+  int black_rescan;
+  size_t m = 0;
+  if (o == NULL)
+    return 0;
+  gc_legacy_mark_active_inc(g);
+  if (LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o))) {
+    /*
+    ** A stale duplicate can survive on the lock-free gray list after its arena
+    ** cell has been reclaimed. Drop the list head before reading object color or
+    ** type; arena validation is the only safe predicate for such candidates.
+    */
+    lj_gc_list_pop_head_rel(&g->gc.gray, o);
+    goto done;
+  }
+  gct = o->gch.gct;
+  black_rescan = !isgray(o) && isblack(o);
   if (LJ_UNLIKELY(!isgray(o) && !black_rescan)) {
     /*
     ** Lock-free publication can leave duplicate/stale nodes on the legacy gray
@@ -2188,9 +2714,9 @@ static size_t propagatemark(global_State *g)
     ** is not valid mark work for this cycle and must be unlinked as stale.
     */
     lj_gc_list_pop_head_rel(&g->gc.gray, o);
-    return 0;
+    goto done;
   }
-  lj_assertG(isgray(o) || rescan || black_rescan,
+  lj_assertG(isgray(o) || black_rescan,
 	     "propagation of non-gray object");
   /*
   ** A forced full collection may first finish an already-active legacy mark
@@ -2210,41 +2736,68 @@ static size_t propagatemark(global_State *g)
   if (LJ_UNLIKELY(gct == ~LJ_TFUNC &&
 		  !gc_valid_func_obj(g, gco2func(o)))) {
     lj_gc_list_pop_head_rel(&g->gc.gray, o);
-    return 0;
+    goto done;
   }
+  /*
+  ** Several mutators may drive incremental GC at the same time. The gray list
+  ** is lock-free, but each list node is still the object's stock intrusive
+  ** gclist link, so traversal ownership is the successful head CAS.
+  */
+  if (!lj_gc_list_pop_head_rel(&g->gc.gray, o))
+    goto done;
   (void)lj_gc2_markobj_nolegacy(g, o);
-  if (rescan)
-    lj_obj_cleargcflags_atomic(o, LJ_GC_NEEDSCAN);
-  else if (!black_rescan)
+  /*
+  ** GC2 can set NEEDSCAN before the legacy collector reaches this payload.  The
+  ** handoff is consumed by the traversal below, regardless of whether the object
+  ** arrived as an explicit black rescan or as an ordinary gray entry that GC2
+  ** tagged while it was already on the legacy frontier.
+  */
+  if (lj_obj_gcflags(o) & LJ_GC_NEEDSCAN)
+    gc_mark_needscan_consume(g, o);
+  if (!black_rescan)
     gray2black(o);
-  lj_gc_list_pop_head_rel(&g->gc.gray, o);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
     MSize colosz = lj_tab_colo_size(t);
-    MSize acap = lj_tab_array_separated_acap_acq(t);
-    MSize hmask;
-    (void)lj_tab_node_snapshot_acq(t, &hmask);
-    if (gc_traverse_tab(g, t) > 0)
+    TValue *array;
+    Node *node;
+    MSize asize, acap, hmask;
+    int tstat;
+    if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) !=
+	LJ_TAB_GC_SNAPSHOT_OK)
+      acap = 0;
+    if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) !=
+	LJ_TAB_GC_SNAPSHOT_OK)
+      hmask = 0;
+    UNUSED(array); UNUSED(asize); UNUSED(node);
+    tstat = gc_traverse_tab(g, t);
+    if (tstat == GC_TRAVERSE_TAB_TRANSIENT) {
+      gc_mark_transient_requeue(g, o);
+      m = GCSWEEPCOST;
+      goto done;
+    }
+    if (tstat > 0)
       black2gray(o);  /* Keep weak tables gray. */
-    return (LJ_MAX_COLOSIZE != 0 && colosz ?
-	    sizetabcolo(colosz) : sizeof(GCtab)) +
-	   (acap ? lj_tab_array_bytes(acap) : 0) +
-	   (hmask ? lj_tab_node_bytes(hmask) : 0);
+    m = (LJ_MAX_COLOSIZE != 0 && colosz ?
+	 sizetabcolo(colosz) : sizeof(GCtab)) +
+	(acap ? lj_tab_array_bytes(acap) : 0) +
+	(hmask ? lj_tab_node_bytes(hmask) : 0);
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
     GCfunc *fn = gco2func(o);
     gc_traverse_func(g, fn);
-    return isluafunc(fn) ? sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)) :
-			   sizeCfunc((MSize)lj_funcC_nupvalues(&fn->c));
+    m = isluafunc(fn) ? sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)) :
+			sizeCfunc((MSize)lj_funcC_nupvalues(&fn->c));
   } else if (LJ_LIKELY(gct == ~LJ_TPROTO)) {
     GCproto *pt = gco2pt(o);
     gc_traverse_proto(g, pt);
-    return pt->sizept;
+    m = pt->sizept;
   } else if (LJ_LIKELY(gct == ~LJ_TTHREAD)) {
     lua_State *th = gco2th(o);
-    lj_gc_list_push_rel(&g->gc.grayagain, o);
+    if (gc_grayagain_thread_claim(g, th))
+      lj_gc_list_push_rel(&g->gc.grayagain, o);
     black2gray(o);  /* Threads are never black. */
     gc_traverse_thread(g, th);
-    return sizeof(lua_State) + sizeof(TValue) * th->stacksize;
+    m = sizeof(lua_State) + sizeof(TValue) * th->stacksize;
   } else if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
     /*
     ** GC2-to-legacy rescan handoff can enqueue an already-black userdata when
@@ -2252,13 +2805,13 @@ static size_t propagatemark(global_State *g)
     ** eagerly on the white path and are normally never gray, but the rescan node
     ** still needs to traverse metatables, environments and native root payloads.
     */
-    return gc_traverse_udata(g, gco2ud(o));
+    m = gc_traverse_udata(g, gco2ud(o));
   } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
     TValue tv;
     GCupval *uv = gco2uv(o);
     lj_tv_load_acq(&tv, uvval(uv));
-    gc_marktv(g, &tv);
-    return sizeof(GCupval);
+    gc_mark_upval_payload_tv(g, &tv);
+    m = sizeof(GCupval);
   } else {
 #if LJ_HASJIT
     GCtrace *T = gco2trace(o);
@@ -2266,14 +2819,16 @@ static size_t propagatemark(global_State *g)
     gc_traverse_trace(g, T);
     nins = trace_nins_acq(T);
     nk = trace_nk_acq(T);
-    return ((sizeof(GCtrace)+7)&~7) + (nins-nk)*sizeof(IRIns) +
-	   trace_nsnap_acq(T)*sizeof(SnapShot) +
-	   trace_nsnapmap_acq(T)*sizeof(SnapEntry);
+    m = ((sizeof(GCtrace)+7)&~7) + (nins-nk)*sizeof(IRIns) +
+	 trace_nsnap_acq(T)*sizeof(SnapShot) +
+	 trace_nsnapmap_acq(T)*sizeof(SnapEntry);
 #else
     lj_assertG(0, "bad GC type %d", gct);
-    return 0;
 #endif
   }
+done:
+  gc_legacy_mark_active_dec(g);
+  return m;
 }
 
 /* Propagate all gray objects. */
@@ -2283,6 +2838,101 @@ static size_t gc_propagate_gray(global_State *g)
   while (lj_gc_list_head_acq(&g->gc.gray) != NULL)
     m += propagatemark(g);
   return m;
+}
+
+static int gc_has_legacy_payload(uint32_t gct)
+{
+  switch (gct) {
+  case ~LJ_TFUNC:
+  case ~LJ_TTAB:
+  case ~LJ_TTHREAD:
+  case ~LJ_TPROTO:
+  case ~LJ_TUDATA:
+  case ~LJ_TUPVAL:
+#if LJ_HASJIT
+  case ~LJ_TTRACE:
+#endif
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+void lj_gc_markobj_legacy_deep(global_State *g, GCobj *o)
+{
+  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  /*
+  ** Sweep-time VM operands are semantic roots, not stale reader bodies. FNEW
+  ** may run while the previous cycle is sweeping an other-white parent closure,
+  ** its upvalues, or the child prototype named by the bytecode. Body-only SMR
+  ** preservation would leave those payload edges for the already-closed mark
+  ** phase, so mark the operand and drain the local legacy frontier immediately.
+  */
+  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+    lj_gc_markobj_legacy(g, o);
+  } else if (gc_state_is_sweep(g) && gc_has_legacy_payload(o->gch.gct)) {
+    lj_gc_arena_markobj(g, o);
+    if (iswhite(o)) {
+      gc_mark(g, o);
+    } else if (isblack(o)) {
+      /*
+      ** A forced full collection first has to finish any old sweep already in
+      ** progress. Current VM roots discovered in that window are semantic roots
+      ** for the old cycle, even when an earlier SMR/body-preservation path made
+      ** the root header black without traversing its payload. Requeue the payload
+      ** through the stock gray frontier so cyclic closure/table graphs keep the
+      ** same traversal discipline as ordinary mark propagation.
+      */
+      gc_legacy_mark_active_inc(g);
+      if (lj_gc_claim_black_to_gray(o))
+	lj_gc_list_push_rel(&g->gc.gray, o);
+      gc_legacy_mark_active_dec(g);
+    }
+  } else {
+    lj_gc_arena_markobj(g, o);
+    if (iswhite(o))
+      gc_mark(g, o);
+    else
+      lj_gc_preserveobj_legacy(g, o);
+  }
+  (void)gc_propagate_gray(g);
+}
+
+static void gc_preserve_sweep_thread_root(global_State *g, lua_State *th)
+{
+  if (!th || !lj_gc2_valid_thread_for_traverse(g, th))
+    return;
+  lj_gc_markobj_legacy_deep(g, obj2gco(th));
+  gc_traverse_thread(g, th);
+}
+
+static void gc_preserve_forced_fullgc_sweep_roots(lua_State *L, global_State *g)
+{
+  lua_State *mainL = mainthread_acq(g);
+  lua_State *vmL = vmthread_acq(g);
+  TValue tv;
+  if (!gc_state_is_sweep(g))
+    return;
+  /*
+  ** collectgarbage("collect") may arrive after a previous incremental cycle has
+  ** already flipped whites and entered sweep. Finishing that old sweep before a
+  ** fresh full mark would otherwise free current stack/recorder roots that were
+  ** published after the old atomic point. Take a current semantic root snapshot
+  ** with the sweep-aware deep root path, then let the old sweep continue.
+  */
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  gc_preserve_sweep_thread_root(g, L);
+  if (mainL != L)
+    gc_preserve_sweep_thread_root(g, mainL);
+  if (vmL != L && vmL != mainL)
+    gc_preserve_sweep_thread_root(g, vmL);
+  lj_tv_load_acq(&tv, lj_registry_ref(g));
+  gc_mark_thread_root_tv(g, &tv);
+  gc_traverse_current_trace_root(g);
+  gc_mark_gcroot(g);
+  (void)gc_propagate_gray(g);
 }
 
 static int gc2_legacy_mark_complete(global_State *g, lua_State *L)
@@ -2402,20 +3052,24 @@ static int gc2_valid_tab_obj(global_State *g, GCtab *t)
 {
   int8_t colo = lj_tab_colo_acq(t);
   MSize colosz = lj_tab_colo_size(t);
-  MSize asize = lj_tab_asize_acq(t);
-  MSize acap = lj_tab_acap_acq(t);
-  TValue *array = lj_tab_array_acq(t);
+  MSize asize, acap;
+  TValue *array;
   TValue *coloarray = (TValue *)(void *)((char *)(void *)t + sizeof(GCtab));
-  Node *node = lj_tab_node_acq(t);
+  Node *node;
   MSize hmask;
   GCSize bodysize;
 
+  if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) !=
+      LJ_TAB_GC_SNAPSHOT_OK ||
+      lj_tab_node_snapshot_gc(g, t, &node, &hmask) !=
+      LJ_TAB_GC_SNAPSHOT_OK)
+    return 0;
   if (LJ_MAX_COLOSIZE != 0 && colosz > LJ_MAX_COLOSIZE)
     return 0;
   if (asize > LJ_MAX_ASIZE || acap > LJ_MAX_ASIZE)
     return 0;
   if (colo > 0) {
-    if (array != coloarray || asize > colosz || acap > colosz)
+    if (array != coloarray || asize > colosz || lj_tab_acap_acq(t) > colosz)
       return 0;
   } else if (array == coloarray) {
     /*
@@ -2425,25 +3079,16 @@ static int gc2_valid_tab_obj(global_State *g, GCtab *t)
     */
     return 0;
   } else if (array != NULL) {
-    MSize hacap;
-    if (lj_tab_array_is_retiring(t, array))
-      return 0;
-    hacap = lj_tab_array_hdr_acap_acq(array);
-    if (hacap == 0 || hacap > LJ_MAX_ASIZE)
-      return 0;
     if (!gc2_size_fits_mem(g, lj_tab_array_hdrw(array),
-			   lj_tab_array_bytes(hacap)))
+			   lj_tab_array_bytes(acap)))
       return 0;
   }
 
   if (node == NULL)
     return 0;
-  hmask = lj_tab_node_hmask_acq(node);
   if (!gc2_valid_pow2_mask(hmask))
     return 0;
   if (hmask > 0) {
-    if (lj_tab_node_is_retiring(node))
-      return 0;
     if (!gc2_size_fits_mem(g, lj_tab_node_hdrw(node),
 			   lj_tab_node_bytes(hmask)))
       return 0;
@@ -2783,7 +3428,7 @@ static int gc_mayclear(global_State *g, cTValue *o, int val)
   ** tagged GC pointer whose header has been reused is not a live weak edge.
   ** Clear it instead of dereferencing reclaimed header state.
   */
-  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(o)))
+  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, o)))
     return 1;
   if (tvisgcv(o)) {  /* Only collectable objects can be weak references. */
     if (tvisstr(o)) {  /* But strings cannot be used as weak references. */
@@ -2807,50 +3452,63 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 	       "clear of non-weak table");
     if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAKVAL)) {
       TValue *array;
-      MSize i, asize = lj_tab_array_snapshot_acq(t, &array);
-      for (i = 0; i < asize; i++) {
-	/* Clear array slot when value is about to be collected. */
-	TValue val;
-	TValue *slot = &array[i];
-	lj_tv_load_acq(&val, &array[i]);
-	if (tvisforward(&val)) {
-	  slot = lj_tab_forwarded_array_slot(t, array, asize, i, &val);
-	  if (!slot)
-	    continue;
-	}
-	if (gc_mayclear(g, &val, 1)) {
-	  lj_tab_storenilraw(slot);
+      MSize i, asize, acap;
+      if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
+	  LJ_TAB_GC_SNAPSHOT_OK) {
+	UNUSED(acap);
+	for (i = 0; i < asize; i++) {
+	  /* Clear array slot when value is about to be collected. */
+	  TValue val;
+	  TValue *slot = &array[i];
+	  lj_tv_load_acq(&val, &array[i]);
+	  if (tvisforward(&val)) {
+	    slot = lj_tab_forwarded_array_slot(t, array, asize, i, &val);
+	    if (!slot)
+	      continue;
+	  }
+	  if (gc_mayclear(g, &val, 1)) {
+	    TValue key;
+	    setintV(&key, (int32_t)i);
+	    (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
+	  }
 	}
       }
     }
     {
       MSize i, hmask;
-      Node *node = lj_tab_node_snapshot_acq(t, &hmask);
-      for (i = 0; i <= hmask; i++) {
-	Node *n = &node[i];
-	TValue key, val;
-	TValue *slot = &n->val;
-	int key_loaded = 0;
-	/* Clear hash slot when key or value is about to be collected. */
-	lj_tv_load_acq(&val, &n->val);
-	if (tvisforward(&val)) {
-	  lj_tv_load_acq(&key, &n->key);
-	  key_loaded = 1;
-	  while (tviskeylock(&key)) {
-	    gc_root_wait_no_l();
+      Node *node;
+      if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
+	  LJ_TAB_GC_SNAPSHOT_OK) {
+	for (i = 0; i <= hmask; i++) {
+	  Node *n = &node[i];
+	  TValue key, val;
+	  TValue *slot = &n->val;
+	  int key_loaded = 0;
+	  /* Clear hash slot when key or value is about to be collected. */
+	  lj_tv_load_acq(&val, &n->val);
+	  if (tvisforward(&val)) {
 	    lj_tv_load_acq(&key, &n->key);
+	    key_loaded = 1;
+	    while (tviskeylock(&key)) {
+	      gc_root_wait_no_l();
+	      lj_tv_load_acq(&key, &n->key);
+	    }
+	    if (tvisnil(&key))
+	      continue;
+	    slot = lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val);
+	    if (!slot)
+	      continue;
 	  }
-	  if (tvisnil(&key))
-	    continue;
-	  slot = lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val);
-	  if (!slot)
-	    continue;
-	}
-	if (!tvisnil(&val)) {
-	  if (!key_loaded)
-	    lj_tv_load_acq(&key, &n->key);
-	  if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
-	    lj_tab_storenilraw(slot);
+	  if (!tvisnil(&val)) {
+	    if (!key_loaded)
+	      lj_tv_load_acq(&key, &n->key);
+	    while (tviskeylock(&key)) {
+	      gc_root_wait_no_l();
+	      lj_tv_load_acq(&key, &n->key);
+	    }
+	    if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
+	      (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
+	  }
 	}
       }
     }
@@ -2890,29 +3548,54 @@ static int atomic(global_State *g, lua_State *L)
 
   gc_mark_uv(g);  /* Need to remark open upvalues (the thread may be dead). */
   gc_propagate_gray(g);  /* Propagate any left-overs. */
+  if (!gc_legacy_mark_frontier_idle(g))
+    return 0;
 
   lj_gc_list_move_rel(&g->gc.gray, &g->gc.weak);  /* Empty weak tables. */
   lj_assertG(!iswhite(obj2gco(mainthread_acq(g))), "main thread turned white");
   gc_markobj(g, L);  /* Mark running thread. */
-  gc_traverse_curtrace(g);  /* Traverse current trace. */
+  /*
+  ** The thread header color is not the stack root snapshot. A running thread can
+  ** already be gray/black from an earlier root edge, while its Lua stack has since
+  ** published new frame functions, closures and FNEW child prototypes. Rescan the
+  ** current stack at the atomic root point before weak clearing and sweep.
+  */
+  gc_traverse_thread(g, L);
+  gc_traverse_current_trace_root(g);  /* Traverse current trace. */
   gc_mark_gcroot(g);  /* Mark GC roots (again). */
   gc_propagate_gray(g);  /* Propagate all of the above. */
+  if (!gc_legacy_mark_frontier_idle(g))
+    return 0;
 
   lj_gc_list_move_rel(&g->gc.gray, &g->gc.grayagain);  /* Empty 2nd chance. */
   gc_propagate_gray(g);  /* Propagate it. */
+  if (!gc_legacy_mark_atomic_idle(g))
+    return 0;
 
   /* 05 section 5.7.1 classic-GC atomic fixpoint-round bridge. */
   if (!gc2_legacy_mark_complete(g, L))
+    return 0;
+  if (!gc_legacy_mark_atomic_idle(g))
     return 0;
 
   /* Separate userdata to be finalized. */
   udsize = lj_gc2_finreg_udata_finalize(g, 0);
   gc_mark_finalizers(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
+  if (!gc_legacy_mark_atomic_idle(g))
+    return 0;
   /* 05 section 5.7.1 classic-GC atomic fixpoint-round bridge. */
   if (!gc2_legacy_mark_complete(g, L))
     return 0;
   gc2_mark_legacy_live_root_spine(g);
+  gc_mark_proto_string_constants(g);
+  gc_propagate_gray(g);
+  if (!gc_legacy_mark_atomic_idle(g))
+    return 0;
+  if (!gc2_legacy_mark_complete(g, L))
+    return 0;
+  if (!gc_legacy_mark_atomic_idle(g))
+    return 0;
   gc2_paranoia_check_fixpoint(g);
   if (lj_tg_any_jit_active(g))
     return 0;
@@ -2922,6 +3605,8 @@ static int atomic(global_State *g, lua_State *L)
 #if LJ_HASFFI
   if (lj_gc2_finreg_cdata_finalize_pweak(L, g, gc_mark_finreg_tv))
     (void)gc_propagate_gray(g);
+  if (!gc_legacy_mark_atomic_idle(g))
+    return 0;
 #endif
   {
     GCobj *weak = lj_gc_list_head_acq(&g->gc.weak);
@@ -2936,7 +3621,8 @@ static int atomic(global_State *g, lua_State *L)
   lj_gc2_weak_to_sweep(g, L);
   if (gc2_phase_acq(g) == LJ_GC2_WEAK)
     return 0;
-
+  if (!gc_legacy_mark_atomic_idle(g))
+    return 0;
   {
     /*
     ** The temporary buffer is per TG. Shrink the buffer owned by the lua_State
@@ -2950,10 +3636,22 @@ static int atomic(global_State *g, lua_State *L)
 
   /* Prepare for sweep phase. */
   (void)lj_gc_flush_root_pending(g);
+  /*
+  ** Close the GC2-to-legacy bridge before flipping whites. If a peer published
+  ** one last legacy gray edge while the bridge was visible, reopen the bridge
+  ** and retry atomic after that edge is drained.
+  */
+  gc2_legacy_mark_bridge_rel(g, 0);
+  if (!gc_legacy_mark_atomic_idle(g)) {
+    lj_gc2_legacy_mark_bridge_enable(g);
+    return 0;
+  }
   g->gc.currentwhite = (uint8_t)otherwhite(g);  /* Flip current white. */
   g->strempty.marked = g->gc.currentwhite;
   setmref(g->gc.sweep, lj_gc_root_ref(g));
   g->gc.estimate = lj_gc_total_load(g) - (GCSize)udsize;  /* Initial estimate. */
+  g->gc.state = GCSsweepstring;  /* Start of sweep phase. */
+  g->gc.sweepstr = 0;
   return 1;
 }
 
@@ -2962,11 +3660,34 @@ int lj_gc_jit_defer_fixpoint(global_State *g)
 {
   return lj_tg_any_jit_active(g) &&
 	 g->gc.state == GCSpropagate &&
-	 lj_gc_list_head_acq(&g->gc.gray) == NULL &&
+	 gc_legacy_mark_frontier_idle(g) &&
 	 lj_gc2_mark_phase_active(g);
 }
 #else
 #define lj_gc_jit_defer_fixpoint(g)	0
+#endif
+
+#if LJ_HASJIT
+static int gc_fullgc_defer_active_recorder(global_State *g)
+{
+  TraceState st = lj_trace_state_load(G2J(g));
+  if (st == LJ_TRACE_IDLE)
+    return 0;
+  /*
+  ** collectgarbage("collect") is callable from JIT record/trace VM events.
+  ** Those handlers run while the recorder state and JIT token still belong to
+  ** the interrupted trace. A full GC2 fixpoint needs a safepoint root-scan
+  ** handshake, and waiting there would wait for the same recorder callback that
+  ** is currently executing. Treat the call as a recorder safepoint: request an
+  ** abort when the recorder is active and let the pending/next GC step finish
+  ** the collection after the callback unwinds.
+  */
+  if (!lj_trace_state_aborted(st))
+    lj_trace_abort(g);
+  return 1;
+}
+#else
+#define gc_fullgc_defer_active_recorder(g)	0
 #endif
 
 /* GC state machine. Returns a cost estimate for each step performed. */
@@ -2976,11 +3697,25 @@ static size_t gc_onestep(lua_State *L)
   (void)lj_safepoint_poll(L);  /* Let worker-led handshakes finish between GC steps. */
   switch (g->gc.state) {
   case GCSpause:
-    gc_mark_start(g);  /* Start a new GC cycle by marking all GC roots. */
+  {
+    uint8_t expect = GCSpause;
+    /*
+    ** Multiple mutators may notice GCSpause at the same time. The startup pass
+    ** clears and rebuilds the stock intrusive mark lists, so it must be claimed
+    ** before any list is touched. GCSstart is a non-blocking owner state: peer
+    ** steppers just retry on a later safepoint.
+    */
+    if (gc_state_cas(g, &expect, GCSstart))
+      gc_mark_start(g);  /* Start a new GC cycle by marking all GC roots. */
+    return 0;
+  }
+  case GCSstart:
     return 0;
   case GCSpropagate:
     if (lj_gc_list_head_acq(&g->gc.gray) != NULL)
       return propagatemark(g);  /* Propagate one gray object. */
+    if (gc_legacy_mark_active_acq(g) != 0)
+      return GCSWEEPCOST;  /* Peer owns an object removed from/pending on gray. */
     if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
       return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
     if (lj_gc2_mark_phase_active(g)) {
@@ -2989,6 +3724,8 @@ static size_t gc_onestep(lua_State *L)
       if (lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH) == 0)
 	return GCSWEEPCOST;  /* 05 section 5.7.1 bounded propagation fixpoint bridge. */
     }
+    if (!gc_legacy_mark_frontier_idle(g))
+      return GCSWEEPCOST;
     g->gc.state = GCSatomic;  /* End of mark phase. */
     return 0;
   case GCSatomic:
@@ -2996,8 +3733,6 @@ static size_t gc_onestep(lua_State *L)
       return LJ_MAX_MEM;
     if (!atomic(g, L))
       return GCSWEEPCOST;
-    g->gc.state = GCSsweepstring;  /* Start of sweep phase. */
-    g->gc.sweepstr = 0;
     return 0;
   case GCSsweepstring: {
     GCSize old = lj_gc_total_load(g);
@@ -3253,6 +3988,8 @@ void lj_gc_fullgc(lua_State *L)
 {
   global_State *g = G(L);
   int32_t ostate = vmstate_load_acq(g);
+  if (gc_fullgc_defer_active_recorder(g))
+    return;
   setvmstate(g, GC);
   (void)lj_gc_flush_root_pending(g);
   while (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
@@ -3268,6 +4005,7 @@ void lj_gc_fullgc(lua_State *L)
     }
   }
   while (g->gc.state == GCSsweepstring || g->gc.state == GCSsweep) {
+    gc_preserve_forced_fullgc_sweep_roots(L, g);
     gc_arena_fullgc_drain_sweep(g);
     gc_onestep(L);  /* Finish sweep. */
   }
@@ -3360,8 +4098,20 @@ void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v)
 /* VM-callable table black-to-gray repair. */
 void lj_gc_barrierback_tab_g(global_State *g, GCtab *t)
 {
-  if (g && t && isblack(obj2gco(t)))
+  if (g && t && (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) &&
+      isblack(obj2gco(t)))
     lj_gc_barrierback(g, t);
+}
+
+void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key)
+{
+  if (!g || !t)
+    return;
+  if (key)
+    lj_gc2_barrier_key_g(g, t, key);
+  else
+    lj_gc2_barrier_tab_g(g, t);
+  lj_gc_barrierback_tab_g(g, t);
 }
 
 /* Publication wrapper for x64 VM table -> object stores. */

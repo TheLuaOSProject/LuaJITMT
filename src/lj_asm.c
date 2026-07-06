@@ -139,7 +139,13 @@ typedef struct ASMState {
    (o) == IR_FLOAD || (o) == IR_XLOAD || (o) == IR_SLOAD || (o) == IR_VLOAD)
 
 /* Sparse limit checks using a red zone before the actual limit. */
-#define MCLIM_REDZONE	64
+/*
+** MT-safe x64 inline helpers and side-trace head checks can emit longer
+** straight-line sequences than stock LuaJIT between sparse limit checks. Keep a
+** larger reserve so debug red-zone assertions still prove the assembler cannot
+** cross the real mcode limit before the next explicit check.
+*/
+#define MCLIM_REDZONE	128
 
 static LJ_NORET LJ_NOINLINE void asm_mclimit(ASMState *as)
 {
@@ -151,7 +157,8 @@ static LJ_AINLINE void checkmclim(ASMState *as)
 #ifdef LUA_USE_ASSERT
   if (as->mcp + MCLIM_REDZONE < as->mcp_prev) {
     IRIns *ir = IR(as->curins+1);
-    lj_assertA(0, "red zone overflow: %p IR %04d  %02d %04d %04d\n", as->mcp,
+    lj_assertA(0, "red zone overflow: %p..%p %ld bytes IR %04d  %02d %04d %04d\n",
+      as->mcp, as->mcp_prev, (long)(as->mcp_prev - as->mcp),
       as->curins+1-REF_BIAS, ir->o, ir->op1-REF_BIAS, ir->op2-REF_BIAS);
   }
 #endif
@@ -473,7 +480,9 @@ static Reg ra_releasetmp(ASMState *as, IRRef ref)
 static Reg ra_restore(ASMState *as, IRRef ref)
 {
   if (emit_canremat(ref)) {
-    return ra_rematk(as, ref);
+    Reg r = ra_rematk(as, ref);
+    checkmclim(as);
+    return r;
   } else {
     IRIns *ir = IR(ref);
     int32_t ofs = ra_spill(as, ir);  /* Force a spill slot. */
@@ -485,6 +494,7 @@ static Reg ra_restore(ASMState *as, IRRef ref)
       ra_modified(as, r);
       RA_DBGX((as, "restore   $i $r", ir, r));
       emit_spload(as, ir, r, ofs);
+      checkmclim(as);
     }
     return r;
   }
@@ -507,6 +517,7 @@ static Reg ra_evict(ASMState *as, RegSet allow)
 {
   IRRef ref;
   RegCost cost = ~(RegCost)0;
+  Reg r;
   lj_assertA(allow != RSET_EMPTY, "evict from empty set");
   if (RID_NUM_FPR == 0 || allow < RID2RSET(RID_MAX_GPR)) {
     GPRDEF(MINCOST)
@@ -522,7 +533,9 @@ static Reg ra_evict(ASMState *as, RegSet allow)
     if (!rset_test(as->weakset, ir->r))
       ref = regcost_ref(as->cost[rset_pickbot((as->weakset & allow))]);
   }
-  return ra_restore(as, ref);
+  r = ra_restore(as, ref);
+  checkmclim(as);
+  return r;
 }
 
 /* Pick any register (marked as free). Evict on-demand. */
@@ -688,6 +701,7 @@ static Reg ra_allocref(ASMState *as, IRRef ref, RegSet allow)
       /* Rematerialization is cheaper than missing a hint. */
       if (rset_test(allow, r) && emit_canremat(regcost_ref(as->cost[r]))) {
 	ra_rematk(as, regcost_ref(as->cost[r]));
+	checkmclim(as);
 	goto found;
       }
       RA_DBGX((as, "hintmiss  $f $r", ref, r));
@@ -752,6 +766,7 @@ static void ra_rename(ASMState *as, Reg down, Reg up)
   ra_noweak(as, up);
   RA_DBGX((as, "rename    $f $r $r", regcost_ref(as->cost[up]), down, up));
   emit_movrr(as, ir, down, up);  /* Backwards codegen needs inverse move. */
+  checkmclim(as);
   if (!ra_hasspill(IR(ref)->s)) {  /* Add the rename to the IR. */
     /*
     ** The rename is effective at the subsequent (already emitted) exit
@@ -957,8 +972,17 @@ static int asm_sunk_store(ASMState *as, IRIns *ira, IRIns *irs)
 /* Allocate register or spill slot for a ref that escapes to a snapshot. */
 static void asm_snap_alloc1(ASMState *as, IRRef ref)
 {
-  IRIns *ir = IR(ref);
   if (!irref_isk(ref)) {
+    IRIns *ir;
+    /*
+    ** Snapshot maps are normally private to the trace under assembly. In MT
+    ** mode a trace can be aborted or retired around helper/safepoint exits while
+    ** the recorder is still unwinding into ASM; validate the ref before using it
+    ** as an index into the current IR buffer and abort this trace cleanly.
+    */
+    if (LJ_UNLIKELY(ref < REF_BASE || ref >= as->T->nins))
+      lj_trace_err(as->J, LJ_TRERR_BADRA);
+    ir = IR(ref);
     bloomset(as->snapfilt1, ref);
     bloomset(as->snapfilt2, hashrot(ref, ref + HASH_BIAS));
     if (ra_used(ir)) return;
@@ -1019,8 +1043,13 @@ static void asm_snap_alloc1(ASMState *as, IRRef ref)
 static void asm_snap_alloc(ASMState *as, int snapno)
 {
   SnapShot *snap = &as->T->snap[snapno];
-  SnapEntry *map = &as->T->snapmap[snap->mapofs];
+  MSize mapofs = snap->mapofs;
   MSize n, nent = snap->nent;
+  MSize nsnapmap = as->T->nsnapmap;
+  SnapEntry *map;
+  if (LJ_UNLIKELY(mapofs >= nsnapmap || nent >= nsnapmap - mapofs))
+    lj_trace_err(as->J, LJ_TRERR_BADRA);
+  map = &as->T->snapmap[mapofs];
   as->snapfilt1 = as->snapfilt2 = 0;
   for (n = 0; n < nent; n++) {
     SnapEntry sn = map[n];
@@ -1195,6 +1224,7 @@ static void asm_gcstep(ASMState *as, IRIns *ir)
   IRIns *ira;
   for (ira = IR(as->stopins+1); ira < ir; ira++)
     if ((ira->o == IR_TNEW || ira->o == IR_TDUP ||
+	 ira->o == IR_BUFSTR ||
 	 (LJ_HASFFI && (ira->o == IR_CNEW || ira->o == IR_CNEWI))) &&
 	ra_used(ira))
       as->gcsteps++;
@@ -1376,6 +1406,13 @@ static void asm_bufstr(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_buf_tostr];
   IRRef args[1];
+  /*
+  ** Converting a buffer to a string allocates and can trigger a GC step, just
+  ** like SNEW/TOSTR. Prepare snapshot spill slots before the call so fresh
+  ** trace-local values used by the following store/helper remain reconstructible
+  ** across an allocation-side exit.
+  */
+  asm_snap_prep(as);
 #if LJ_TARGET_X86ORX64
   if (asm_buf_is_tg_tmpbuf(as, ir->op1))
     ci = &lj_ir_callinfo[IRCALL_lj_buf_tostr_tg];
@@ -2142,6 +2179,7 @@ static void asm_head_side(ASMState *as)
   /* Store trace number and adjust stack frame relative to the parent. */
   emit_setvmstate(as, (int32_t)as->T->traceno);
   emit_spsub(as, spdelta);
+  checkmclim(as);
 
 #if !LJ_TARGET_X86ORX64
   /* Restore BASE register from parent spill slot. */
@@ -2186,19 +2224,22 @@ static void asm_head_side(ASMState *as)
       break;
 
     /* Break cycles by renaming one target to a temp. register. */
+    checkmclim(as);
     if (live & RSET_GPR) {
       RegSet tmpset = as->freeset & ~live & allow & RSET_GPR;
       if (tmpset == RSET_EMPTY)
 	lj_trace_err(as->J, LJ_TRERR_NYICOAL);
       ra_rename(as, rset_pickbot(live & RSET_GPR), rset_pickbot(tmpset));
+      checkmclim(as);
     }
     if (!LJ_SOFTFP && (live & RSET_FPR)) {
       RegSet tmpset = as->freeset & ~live & allow & RSET_FPR;
       if (tmpset == RSET_EMPTY)
 	lj_trace_err(as->J, LJ_TRERR_NYICOAL);
+      checkmclim(as);
       ra_rename(as, rset_pickbot(live & RSET_FPR), rset_pickbot(tmpset));
+      checkmclim(as);
     }
-    checkmclim(as);
     /* Continue with coalescing to fix up the broken cycle(s). */
   }
 
@@ -2213,7 +2254,9 @@ static void asm_head_side(ASMState *as)
     ExitNo exitno = as->J->exitno;
 #endif
     as->T->topslot = (uint8_t)as->topslot;  /* Remember for child traces. */
+    checkmclim(as);
     asm_stack_check(as, as->topslot, irp, pallow, exitno);
+    checkmclim(as);
   }
 }
 
@@ -2253,6 +2296,7 @@ static void asm_tail_link(ASMState *as)
   as->topslot = snap->topslot;
   checkmclim(as);
   ra_allocref(as, REF_BASE, RID2RSET(RID_BASE));
+  checkmclim(as);
 
   if (as->T->link == 0) {
     /* Setup fixed registers for exit to interpreter. */
@@ -2281,11 +2325,14 @@ static void asm_tail_link(ASMState *as)
     default: if (!bc_isfunc_or_ff(bc_op(*pc))) mres = 0; break;
     }
     ra_allockreg(as, mres, RID_RET);  /* Return MULTRES or 0. */
+    checkmclim(as);
   } else if (baseslot) {
     /* Save modified BASE for linking to trace with higher start frame. */
     emit_settg(as, RID_BASE, jit_base);
+    checkmclim(as);
   }
   emit_addptr(as, RID_BASE, 8*(int32_t)baseslot);
+  checkmclim(as);
 
   if (as->J->ktrace) {  /* Patch ktrace slot with the final GCtrace pointer. */
     IRIns *ir = IR(as->J->ktrace);
@@ -2294,6 +2341,7 @@ static void asm_tail_link(ASMState *as)
   }
 
   /* Sync the interpreter state with the on-trace state. */
+  checkmclim(as);
   asm_stack_restore(as, snap);
 
   /* Root traces that add frames need to check the stack at the end. */

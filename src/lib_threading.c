@@ -67,10 +67,43 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
   LJThreadLive *node = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
   TValue tv;
   lj_thread_live_next_rel(node, NULL);
+  lj_thread_live_retired_next_rel(node, NULL);
   setgcrefrel(node->ud, obj2gco(ud));
   setudataV(L, &tv, ud);
   lj_gc_pubroot(L, &tv);  /* 09 section 9.2: native live root. */
   return node;
+}
+
+static void threading_live_retire(global_State *g, LJThreadLive *node)
+{
+  LJThreadLive *head;
+  if (!g || !node)
+    return;
+  /*
+  ** Scanners can hold an unlinked node until the surrounding SMR read section
+  ** ends. Keep the active next pointer stable for those readers and use a
+  ** separate close-time list for storage reclamation.
+  */
+  do {
+    head = lj_thread_live_retired_head_acq(g);
+    lj_thread_live_retired_next_rel(node, head);
+  } while (!lj_thread_live_retired_head_cas(g, &head, node));
+}
+
+static void threading_live_trim_dead_head(global_State *g)
+{
+  LJThreadLive *head;
+  if (!g)
+    return;
+  for (;;) {
+    LJThreadLive *next;
+    head = lj_thread_live_head_acq(g);
+    if (!head || gcref_acq(head->ud) != NULL)
+      return;
+    next = lj_thread_live_next_acq(head);
+    if (lj_thread_live_head_cas(g, &head, next))
+      threading_live_retire(g, head);
+  }
 }
 
 static void threading_live_publish(lua_State *L, LJThread *th,
@@ -90,18 +123,23 @@ static void threading_live_publish(lua_State *L, LJThread *th,
       lj_gc_pubroot(L, &tv);  /* Publish against cycles started after new. */
     }
   }
+  la_add32_acqrel(&g->threading_live_count, 1);
   lj_thread_live_node_rel(th, node);
 }
 
-static void threading_live_remove(LJThread *th)
+static void threading_live_remove(global_State *g, LJThread *th)
 {
   LJThreadLive *node;
-  if (!th)
+  if (!g || !th)
     return;
-  node = lj_thread_live_node_acq(th);
+  node = lj_thread_live_node_xchg_acqrel(th, NULL);
   if (node) {
+    uint32_t old;
     setgcrefrel(node->ud, NULL);
-    lj_thread_live_node_rel(th, NULL);
+    old = la_sub32_acqrel(&g->threading_live_count, 1);
+    lj_assertG(old > 0, "threading live root count underflow");
+    UNUSED(old);
+    threading_live_trim_dead_head(g);
   }
 }
 
@@ -113,6 +151,13 @@ static void threading_live_free_all(global_State *g)
     lj_mem_freet(g, node);
     node = next;
   }
+  node = lj_thread_live_retired_head_xchg_acqrel(g, NULL);
+  while (node) {
+    LJThreadLive *next = lj_thread_live_retired_next_acq(node);
+    lj_mem_freet(g, node);
+    node = next;
+  }
+  la_store32_rlx(&g->threading_live_count, 0);
 }
 
 static GCtab *threading_env_from_module(lua_State *L, GCtab *mod)
@@ -131,6 +176,35 @@ static GCtab *threading_env_from_module(lua_State *L, GCtab *mod)
     }
   }
   return NULL;
+}
+
+static void threading_root_table(lua_State *L, GCRootID id, GCtab *t)
+{
+  /*
+  ** Threading's private library tables are not registry entries. Store them on
+  ** fixed roots before userdata/function lifetimes can separate from the
+  ** registration frame. Fixed-root stores are raw pointer publications, so also
+  ** publish the table body and side storage to both collectors for any active
+  ** cycle that has already seen the table body.
+  */
+  if (t) {
+    global_State *g = G(L);
+    GCobj *o = obj2gco(t);
+    TValue *array;
+    MSize asize, acap, hmask;
+    Node *node;
+    lj_gcroot_rel(g, id, o);
+    lj_gc_pubobjroot(L, o);
+    if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
+	LJ_TAB_GC_SNAPSHOT_OK && array)
+      (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+				      (void *)array);
+    UNUSED(asize);
+    if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
+	LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
+      (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+    lj_gc2_preserve_root(g, o);
+  }
 }
 
 static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
@@ -161,6 +235,7 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
   LJThread *th = (LJThread *)uddata(ud);
   memset(th, 0, sizeof(*th));
   lj_udata_metatable_rel(ud, env);
+  threading_root_table(L, GCROOT_THREADING_THREAD_MT, env);
   lj_gc_pubobjobj(L, ud, env);
   th->ud = ud;
   lj_udata_udtype_rel(ud, UDTYPE_THREAD);
@@ -503,7 +578,7 @@ void lj_threading_shutdown(lua_State *L)
       if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ))
 	(void)lj_thr_join(&th->thr, NULL);
     }
-    threading_live_remove(th);
+    threading_live_remove(g, th);
     (void)lj_tg_reclaim_dead(g);
   }
   threading_live_free_all(g);
@@ -963,7 +1038,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
   }
   threading_start_roots_clear(L, th);
   if (remove_live) {
-    threading_live_remove(th);
+    threading_live_remove(G(L), th);
     (void)lj_tg_reclaim_dead(G(L));
   }
   lj_safepoint_checkstop_fresh(L, join_actions, join_had_stopreq);
@@ -996,7 +1071,7 @@ static void threading_join_aborted_start(lua_State *L, LJThread *th,
     if (actionsp)
       *actionsp |= actions;
   }
-  threading_live_remove(th);
+  threading_live_remove(G(L), th);
   (void)lj_tg_reclaim_dead(G(L));
 }
 
@@ -1606,7 +1681,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lj_tg_derive_prng(G(L), tg, th->thr.tid);
   tg->thread_ud = ud;
   if (!lj_state_rehome_stack(L1)) {
-    threading_live_remove(th);
+    threading_live_remove(G(L), th);
     L1->tg_hint = L2TG(L);
     lj_tg_fini_thread(G(L), tg);
     lj_mem_freet(G(L), tg);
@@ -1615,7 +1690,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     lj_err_mem(L);
   }
   if (!threading_gc_enter(L, ud)) {
-    threading_live_remove(th);
+    threading_live_remove(G(L), th);
     threading_rehome_unstarted_stack(L, L1, tg);
     lj_tg_fini_thread(G(L), tg);
     lj_mem_freet(G(L), tg);
@@ -1631,7 +1706,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     if (rc != 0) {
       char errbuf[LJ_ERR_ERRNO_BUFSZ];
       const char *emsg = lj_err_strerrno(rc, errbuf, sizeof(errbuf));
-      threading_live_remove(th);
+      threading_live_remove(G(L), th);
       threading_rehome_unstarted_stack(L, L1, tg);
       lj_tg_fini_thread(G(L), tg);
       lj_mem_freet(G(L), tg);
@@ -1758,6 +1833,7 @@ LJLIB_CF(threading_mutex)
   GCudata *ud = lj_udata_new(L, sizeof(LJMutex), env);
   LJMutex *m = (LJMutex *)uddata(ud);
   lj_udata_metatable_rel(ud, env);
+  threading_root_table(L, GCROOT_THREADING_MUTEX_MT, env);
   lj_gc_pubobjobj(L, ud, env);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   m->state = LJ_MUTEX_UNLOCKED;
@@ -1787,6 +1863,7 @@ LJLIB_CF(threading_channel)
   env = lj_func_env_acq(curr_func(L));
   ud = lj_udata_new(L, lj_chan_memsize(cap), env);
   lj_udata_metatable_rel(ud, env);
+  threading_root_table(L, GCROOT_THREADING_CHANNEL_MT, env);
   lj_gc_pubobjobj(L, ud, env);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   lj_chan_init((LJChan *)uddata(ud), cap);
@@ -1895,13 +1972,19 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
 
 LJ_FUNC int luaopen_threading(lua_State *L)
 {
+  GCtab *thread_mt, *mutex_mt, *channel_mt;
   GCtab *env;
   LJ_LIB_REG(L, NULL, threading_thread);
+  thread_mt = tabV(L->top-1);
+  threading_root_table(L, GCROOT_THREADING_THREAD_MT, thread_mt);
   LJ_LIB_REG(L, NULL, threading_mutex);
+  mutex_mt = tabV(L->top-1);
+  threading_root_table(L, GCROOT_THREADING_MUTEX_MT, mutex_mt);
   LJ_LIB_REG(L, NULL, threading_channel);
+  channel_mt = tabV(L->top-1);
+  threading_root_table(L, GCROOT_THREADING_CHANNEL_MT, channel_mt);
   LJ_LIB_REG(L, "threading", threading);
   env = threading_env_from_module(L, tabV(L->top-1));
-  if (env)
-    lj_gcroot_rel(G(L), GCROOT_THREADING_ENV, obj2gco(env));
+  threading_root_table(L, GCROOT_THREADING_ENV, env);
   return 1;
 }

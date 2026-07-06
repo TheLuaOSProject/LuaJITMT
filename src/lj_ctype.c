@@ -2366,7 +2366,7 @@ CTState *lj_ctype_init(lua_State *L)
     if (ctype_type(info) == CT_KW || ctype_istypedef(info)) {
       size_t len = strlen(name);
       GCstr *str = lj_str_new(L, name, len);
-      ctype_setname(ct, str);
+      ctype_setname(cts->g, ct, str);
       name += len+1;
       lj_ctype_addname(cts, ct, id);
     } else {

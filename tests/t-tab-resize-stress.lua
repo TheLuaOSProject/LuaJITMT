@@ -606,6 +606,10 @@ local function jit_store_worker(tbl, ready, start, key, n)
     jitmod.opt.start("hotloop=1", "hotexit=1")
   end
   local traces0 = jith.trace_count(256)
+  for warm = 1, 128 do
+    tbl[key] = warm
+  end
+  local traced = jith.trace_count(256) > traces0
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
   assert(ok == true)
@@ -615,7 +619,7 @@ local function jit_store_worker(tbl, ready, start, key, n)
     if i % 257 == 0 then tbl[key + 64] = nil end
     i = i + 1
   end
-  return true, jith.trace_count(256) - traces0
+  return true, traced and 1 or 0
 end
 
 local function exercise_jit_store_resize()

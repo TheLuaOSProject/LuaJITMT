@@ -189,8 +189,9 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
     lj_thr_set_tg(tg);  /* 03 section 3.2: bootstrap main OS-thread TLS. */
   if (!alloc_ready)
     lj_arena_alloc_init(&tg->alloc);
-  else
+  else {
     lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);
+  }
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   if (alloc_ready && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
     lj_tg_flags_or_rlx(tg, TGF_HUGETAB);
@@ -221,8 +222,11 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
     setmref(L->glref, g);
   }
   lj_arena_alloc_init(&tg->alloc);
-  if (arena_internal)
+  if (arena_internal) {
     lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);
+    lj_arena_alloc_set_registry(&tg->alloc,
+      (HugeTab *)gc2_small_arena_tab_acq(g));
+  }
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   if (arena_internal && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
     lj_tg_flags_or_rlx(tg, TGF_HUGETAB);

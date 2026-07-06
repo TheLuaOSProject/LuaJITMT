@@ -159,6 +159,17 @@ static void recff_stitch(jit_State *J)
 static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
 {
   switch (J->fn->c.ffid) {
+  case FF_collectgarbage:
+    if (lj_record_mt_runtime_shared(J2G(J), J->L)) {
+      /*
+      ** collectgarbage() can drive GC2 safepoints, trace flushes, and weak
+      ** processing. In active MT the interpreter call boundary is the point
+      ** where the helper owns those effects; do not keep a stitched trace alive
+      ** across it.
+      */
+      lj_trace_err_info(J, LJ_TRERR_NYIFFU);
+    }
+    break;
   case FF_threading_thread_join:
   case FF_threading_thread___gc:
   case FF_threading_mutex_lock:
@@ -1363,10 +1374,12 @@ static void LJ_FASTCALL recff_table_insert(jit_State *J, RecordFFData *rd)
     ** After the process has entered MT mode, table.insert is no longer the
     ** stock direct array write model: the C fast function owns the compound
     ** length/shift/store operation and routes stores through CAS/forwarding
-    ** helpers. Recording the old direct-store shape can reconstruct loop slots
-    ** from internal table sentinels after a stitched fast-function exit.
+    ** helpers. The generic NYI fast-function path may stitch the surrounding
+    ** Lua loop across the call; that still leaves snapshots and continuations
+    ** around a helper which can wait, resize, and publish forwarded slots. Abort
+    ** this trace instead and let the interpreter call the C helper directly.
     */
-    recff_nyiu(J, rd);
+    lj_trace_err_info(J, LJ_TRERR_NYIFFU);
     return;
   }
   ix.tab = J->base[0];
@@ -1427,6 +1440,16 @@ static void LJ_FASTCALL recff_table_new(jit_State *J, RecordFFData *rd)
 static void LJ_FASTCALL recff_table_clear(jit_State *J, RecordFFData *rd)
 {
   TRef tr = J->base[0];
+  if (lj_record_mt_runtime_shared(J2G(J), J->L)) {
+    /*
+    ** In shared MT, table.clear owns table structure and may wait at the
+    ** resize/safepoint boundary before publishing cleared slots. Keep the
+    ** compound operation on the interpreter side until traced helpers can
+    ** represent that stopreq-capable ownership protocol explicitly.
+    */
+    lj_trace_err_info(J, LJ_TRERR_NYIFFU);
+    return;
+  }
   if (tref_istab(tr)) {
     rd->nres = 0;
     lj_ir_call(J, IRCALL_lj_tab_clear, tr);

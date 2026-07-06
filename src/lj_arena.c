@@ -11,6 +11,7 @@
 #endif
 
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -270,8 +271,10 @@ GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
 void lj_arena_unmap(GCArena *a)
 {
   int olderr = errno;
-  if (a)
+  if (a) {
+    free(lj_arena_gc2_tabstamp_acq(a));
     arena_unmap_aligned((void *)a, LJ_ARENA_SIZE);
+  }
   errno = olderr;
 }
 
@@ -579,6 +582,44 @@ static uint32_t arena_kind(uint32_t flags)
 				       LJ_ARENAK_PLAIN;
 }
 
+static uint32_t arena_registry_hflags(uint32_t flags)
+{
+  uint32_t hflags = 0;
+  if (flags & LJ_AF_TRAVERSABLE)
+    hflags |= LJ_HUGEF_TRAVERSABLE;
+  return hflags;
+}
+
+static void arena_registered_set(GCArena *a)
+{
+  uint32_t old;
+  if (!a)
+    return;
+  old = lj_arena_flags_acq(a);
+  while (!(old & LJ_AF_REGISTERED)) {
+    uint32_t expect = old;
+    if (la_cas32(&a->hdr.flags, &expect, old | LJ_AF_REGISTERED,
+		 LA_ACQ_REL, LA_ACQ))
+      return;
+    old = expect;
+  }
+}
+
+static void arena_registered_clear(GCArena *a)
+{
+  uint32_t old;
+  if (!a)
+    return;
+  old = lj_arena_flags_acq(a);
+  while (old & LJ_AF_REGISTERED) {
+    uint32_t expect = old;
+    if (la_cas32(&a->hdr.flags, &expect,
+		 old & (uint32_t)~LJ_AF_REGISTERED, LA_ACQ_REL, LA_ACQ))
+      return;
+    old = expect;
+  }
+}
+
 static uint32_t arena_bin(uint32_t ncells)
 {
   return lj_arena_bin_from_ncells(ncells);
@@ -774,13 +815,90 @@ static void arena_clear_bins(TGAlloc *alloc, uint32_t k)
   alloc->binmask[k] = 0;
 }
 
-static void arena_unmap_list(GCArena *a)
+void lj_arena_alloc_set_registry(TGAlloc *alloc, HugeTab *tab)
+{
+  if (alloc)
+    la_storeptr_rel((void **)&alloc->smalltab, tab);
+}
+
+HugeTab *lj_arena_alloc_registry_acq(const TGAlloc *alloc)
+{
+  return alloc ? (HugeTab *)la_loadptr_acq((void *const *)&alloc->smalltab) :
+		 NULL;
+}
+
+int lj_arena_alloc_registry_lookup(const TGAlloc *alloc, const GCArena *a,
+				   LJHugeInfo *hi)
+{
+  HugeTab *tab = lj_arena_alloc_registry_acq(alloc);
+  return tab && a ? lj_arena_hugetab_lookup(tab, a, hi) : 0;
+}
+
+static int arena_registry_insert_fresh(TGAlloc *alloc, GCArena *a,
+				       uint32_t flags)
+{
+  HugeTab *tab = lj_arena_alloc_registry_acq(alloc);
+  if (!tab)
+    return 1;
+  if (lj_arena_hugetab_insert(tab, a, LJ_ARENA_SIZE,
+			      arena_registry_hflags(flags)) != 1)
+    return 0;
+  arena_registered_set(a);
+  return 1;
+}
+
+static int arena_registry_insert_existing(TGAlloc *alloc, GCArena *a,
+					  uint32_t flags)
+{
+  int ok;
+  HugeTab *tab = lj_arena_alloc_registry_acq(alloc);
+  if (!tab)
+    return 1;
+  ok = lj_arena_hugetab_insert(tab, a, LJ_ARENA_SIZE,
+			       arena_registry_hflags(flags));
+  if (ok >= 0)
+    arena_registered_set(a);
+  return ok >= 0;
+}
+
+static void arena_registry_delete(TGAlloc *alloc, GCArena *a)
+{
+  HugeTab *tab = lj_arena_alloc_registry_acq(alloc);
+  if (tab && a) {
+    (void)lj_arena_hugetab_delete(tab, a, NULL);
+    arena_registered_clear(a);
+  }
+}
+
+static void arena_unmap_list(TGAlloc *alloc, GCArena *a)
 {
   while (a) {
     GCArena *next = lj_arena_next_acq(a);
+    arena_registry_delete(alloc, a);
     lj_arena_unmap(a);
     a = next;
   }
+}
+
+static int arena_register_list(TGAlloc *alloc, GCArena *a)
+{
+  for (; a != NULL; a = lj_arena_next_acq(a))
+    if (!arena_registry_insert_existing(alloc, a, a->hdr.flags))
+      return 0;
+  return 1;
+}
+
+int lj_arena_alloc_register_existing(TGAlloc *alloc)
+{
+  uint32_t k;
+  if (!alloc || !lj_arena_alloc_registry_acq(alloc))
+    return 1;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    if (!arena_register_list(alloc, alloc->owned[k]) ||
+	!arena_register_list(alloc, alloc->needsweep[k]))
+      return 0;
+  }
+  return 1;
 }
 
 static uint32_t arena_count_live_cells(const GCArena *a)
@@ -856,8 +974,8 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
 {
   uint32_t k;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
-    arena_unmap_list(alloc->owned[k]);
-    arena_unmap_list(alloc->needsweep[k]);
+    arena_unmap_list(alloc, alloc->owned[k]);
+    arena_unmap_list(alloc, alloc->needsweep[k]);
   }
   lj_arena_alloc_init(alloc);
 }
@@ -1063,6 +1181,7 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
     src->needsweep[k] = NULL;
     lj_arena_alloc_rebuild_free_kind(dst, k);
   }
+  lj_arena_alloc_set_registry(src, NULL);
   lj_arena_alloc_owner_rel(src, 0);
   lj_arena_alloc_black_rel(src, 0);
   return n;
@@ -1076,6 +1195,10 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   if (!a)
     return NULL;
   lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
+  if (!arena_registry_insert_fresh(alloc, a, flags)) {
+    lj_arena_unmap(a);
+    return NULL;
+  }
   lj_arena_next_rel(a, alloc->owned[k]);
   alloc->owned[k] = a;
   alloc->bump[k].a = a;

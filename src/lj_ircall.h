@@ -203,11 +203,11 @@ typedef struct CCallInfo {
   _(ANY,	lj_tab_clear,		2,  FS, NIL, CCI_L) \
   _(ANY,	lj_tab_newkey,		3,   S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_tab_gettv_forjit,	4,   S, PGC, CCI_L) \
-  _(ANY,	lj_tab_storetv_forjit_array_nogc, 5, S, PGC, CCI_L) \
-  _(ANY,	lj_tab_storetv_forjit_array, 5, S, PGC, CCI_L) \
-  _(ANY,	lj_tab_storetv_forjit_hash, 5, S, PGC, CCI_L) \
-  _(ANY,	lj_tab_storetv_forjit_newref, 5, S, PGC, CCI_L) \
-  _(ANY,	lj_tab_storetv_existing_forjit, 4, S, INT, CCI_L) \
+  _(ANY,	lj_tab_storetv_forjit_array_nogc, 5, S, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_storetv_forjit_array, 5, S, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_storetv_forjit_hash, 5, S, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_storetv_forjit_newref, 5, S, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_storetv_existing_forjit, 4, S, INT, CCI_L|CCI_T) \
   _(ANY,	lj_tab_keyindex,	2,  FL, INT, 0) \
   _(ANY,	lj_vm_next,		2,  FL, PTR, 0) \
   _(ANY,	lj_tab_len,		1,  FL, INT, 0) \
@@ -216,6 +216,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_gc_pubuv,		2,  FS, NIL, 0) \
   _(ANY,	lj_gc2_barrier_tab_g,	2,   S, NIL, 0) \
   _(ANY,	lj_gc2_barrier_key_g,	3,   S, NIL, 0) \
+  _(ANY,	lj_gc_tbar_trace_g,	3,   S, NIL, 0) \
   _(ANY,	lj_mem_newgco,		2,  FA, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_thr_cpucount,	0,   S, INT, 0) \
   _(ANY,	lj_prng_u64d,		1,  FS, NUM, CCI_CASTU64) \

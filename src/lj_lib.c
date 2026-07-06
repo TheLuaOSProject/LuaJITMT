@@ -64,11 +64,21 @@ static TValue *lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
   TValue keytv, tv, *dst;
   setfuncV(L, &tv, fn);
   setstrV(L, &keytv, key);
+  /*
+  ** Lockless table insertion may resize/retry and can run collector work before
+  ** the function becomes reachable from the destination slot. Keep the generated
+  ** key/function operands and the destination table published across lookup.
+  */
+  lj_gc_pubobjroot(L, obj2gco(tab));
+  lj_gc_pubroot(L, &keytv);
+  lj_gc_pubroot(L, &tv);
   for (;;) {
     dst = lj_tab_setstr(L, tab, key);
     if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
-	LJ_TAB_STORE_CAS_OK)
+	LJ_TAB_STORE_CAS_OK) {
+      lj_gc_pubtabtv(L, tab, dst);
       return dst;
+    }
     lj_tab_store_wait_l(L);  /* Library string store saw stale/FORWARD slot. */
   }
 }

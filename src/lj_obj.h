@@ -690,6 +690,7 @@ typedef struct GCtab {
 #endif
   uint32_t acap;	/* Allocated array capacity. */
   uint32_t struct_owner;  /* Table resize/compound array op owner tid. */
+  uint32_t weak_cycle;	/* Classic-GC weak-list membership cycle. */
 } GCtab;
 
 static LJ_AINLINE uint8_t lj_tab_nomm_acq(const GCtab *t)
@@ -803,6 +804,22 @@ static LJ_AINLINE int lj_tab_struct_owner_cas(GCtab *t, uint32_t *oldp,
 					      uint32_t owner)
 {
   return la_cas32(&t->struct_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t lj_tab_weak_cycle_acq(const GCtab *t)
+{
+  return la_load32_acq(&t->weak_cycle);
+}
+
+static LJ_AINLINE void lj_tab_weak_cycle_store_rlx(GCtab *t, uint32_t cycle)
+{
+  la_store32_rlx(&t->weak_cycle, cycle);
+}
+
+static LJ_AINLINE int lj_tab_weak_cycle_cas(GCtab *t, uint32_t *oldp,
+					    uint32_t cycle)
+{
+  return la_cas32(&t->weak_cycle, oldp, cycle, LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE int lj_tab_array_separated(const GCtab *t)
@@ -1329,6 +1346,9 @@ typedef enum {
   GCROOT_IO_INPUT,	/* Userdata for default I/O input file. */
   GCROOT_IO_OUTPUT,	/* Userdata for default I/O output file. */
   GCROOT_THREADING_ENV,	/* threading.* private function environment. */
+  GCROOT_THREADING_THREAD_MT,  /* threading.thread userdata method table. */
+  GCROOT_THREADING_MUTEX_MT,  /* threading.mutex userdata method table. */
+  GCROOT_THREADING_CHANNEL_MT,  /* threading.channel userdata method table. */
   GCROOT_MAX
 } GCRootID;
 
@@ -1354,6 +1374,7 @@ typedef struct GCState {
   GCRef gray;		/* List of gray objects. */
   GCRef grayagain;	/* List of objects for atomic traversal. */
   GCRef weak;		/* List of weak tables (to be cleared). */
+  uint32_t mark_active;	/* Legacy mark publishers/traversers in flight. */
   GCSize debt;		/* Debt (how much GC is behind schedule). */
   GCSize estimate;	/* Estimate of memory actually in use. */
   MSize stepmul;	/* Incremental GC step granularity. */
@@ -1434,10 +1455,13 @@ typedef struct GC2State {
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */
   uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */
-  uint64_t remembered_filtered;  /* Remembered pairs rejected by age filter. */
-  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
-  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
-  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
+	  uint64_t remembered_filtered;  /* Remembered pairs rejected by age filter. */
+	  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
+	  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
+	  uint32_t fixedstr_scan_cycle;  /* Last cycle that scanned fixed strings. */
+	  void *fixedstr_scan_hdr;  /* String table header scanned for that cycle. */
+	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
+	  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   uint32_t ssb_published;  /* Published SSB node count. */
   uint32_t ssb_drained;	/* Drained/recycled SSB node count. */
   uint64_t ssb_items_published;  /* Published SSB entries. */
@@ -1507,6 +1531,7 @@ typedef struct GC2State {
   uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
   uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
   uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
+  uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
@@ -1651,6 +1676,8 @@ typedef struct global_State {
   uint64_t gcroot_repair_epoch;  /* Root-spine publications needing repair. */
   uint64_t gcroot_repaired_epoch;  /* Last root-spine repair scan epoch. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
+  LJThreadLive *threading_live_retired;  /* Unlinked live-root tombstones. */
+  uint32_t threading_live_count;  /* Non-tombstone threading.thread roots. */
   lua_State *threading_states;  /* All non-main lua_State objects. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
@@ -2091,6 +2118,7 @@ struct lua_State {
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
   uint32_t thr_owner;	/* OS-thread owner tid or claim sentinel. */
+  uint32_t grayagain_cycle;  /* Classic-GC grayagain membership cycle. */
   uint64_t scan_epoch;	/* Last stack scan epoch for GC workers. */
   uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
   uint64_t scan_handoff_epoch;  /* GC2 cycle that requested owner scan. */
@@ -2122,6 +2150,24 @@ static LJ_AINLINE int lj_state_owner_cas(lua_State *L, uint32_t *oldp,
 					 uint32_t owner)
 {
   return la_cas32(&L->thr_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t lj_state_grayagain_cycle_acq(const lua_State *L)
+{
+  return la_load32_acq(&L->grayagain_cycle);
+}
+
+static LJ_AINLINE void lj_state_grayagain_cycle_store_rlx(lua_State *L,
+							  uint32_t cycle)
+{
+  la_store32_rlx(&L->grayagain_cycle, cycle);
+}
+
+static LJ_AINLINE int lj_state_grayagain_cycle_cas(lua_State *L,
+						   uint32_t *oldp,
+						   uint32_t cycle)
+{
+  return la_cas32(&L->grayagain_cycle, oldp, cycle, LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE void lj_state_owner_futex_wait(lua_State *L,
@@ -2417,6 +2463,27 @@ static LJ_AINLINE GCobj *lj_gc_root_acq(global_State *g)
   return gcref_acq(*lj_gc_root_ref(g));
 }
 
+static LJ_AINLINE uint32_t gc_legacy_mark_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc.mark_active);
+}
+
+static LJ_AINLINE void gc_legacy_mark_active_store_rlx(global_State *g,
+						       uint32_t n)
+{
+  la_store32_rlx(&g->gc.mark_active, n);
+}
+
+static LJ_AINLINE void gc_legacy_mark_active_inc(global_State *g)
+{
+  (void)la_add32_acqrel(&g->gc.mark_active, 1);
+}
+
+static LJ_AINLINE void gc_legacy_mark_active_dec(global_State *g)
+{
+  (void)la_sub32_acqrel(&g->gc.mark_active, 1);
+}
+
 static LJ_AINLINE uint32_t gc2_phase_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.phase);
@@ -2596,6 +2663,55 @@ static LJ_AINLINE void gc2_grey_bottom_rel(global_State *g, uint64_t bottom)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_pushed, grey_pushed)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_drained, grey_drained)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_marks_this_round, marks_this_round)
+
+static LJ_AINLINE uint32_t gc2_fixedstr_scan_cycle_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.fixedstr_scan_cycle);
+}
+
+static LJ_AINLINE void gc2_fixedstr_scan_cycle_store_rlx(global_State *g,
+							 uint32_t cycle)
+{
+  la_store32_rlx(&g->gc2.fixedstr_scan_cycle, cycle);
+}
+
+static LJ_AINLINE void gc2_fixedstr_scan_cycle_rel(global_State *g,
+						   uint32_t cycle)
+{
+  la_store32_rel(&g->gc2.fixedstr_scan_cycle, cycle);
+}
+
+static LJ_AINLINE void *gc2_fixedstr_scan_hdr_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.fixedstr_scan_hdr);
+}
+
+static LJ_AINLINE void gc2_fixedstr_scan_hdr_store_rlx(global_State *g,
+						       void *hdr)
+{
+  la_storeptr_rlx((void **)&g->gc2.fixedstr_scan_hdr, hdr);
+}
+
+static LJ_AINLINE void gc2_fixedstr_scan_hdr_rel(global_State *g, void *hdr)
+{
+  la_storeptr_rel((void **)&g->gc2.fixedstr_scan_hdr, hdr);
+}
+
+static LJ_AINLINE void *gc2_small_arena_tab_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.small_arena_tab);
+}
+
+static LJ_AINLINE void gc2_small_arena_tab_store_rlx(global_State *g,
+						     void *tab)
+{
+  la_storeptr_rlx((void **)&g->gc2.small_arena_tab, tab);
+}
+
+static LJ_AINLINE void gc2_small_arena_tab_rel(global_State *g, void *tab)
+{
+  la_storeptr_rel((void **)&g->gc2.small_arena_tab, tab);
+}
 
 static LJ_AINLINE uint64_t gc2_marks_this_round_xchg_acqrel(global_State *g,
 							    uint64_t n)
@@ -3763,6 +3879,29 @@ static LJ_AINLINE void gc2_thread_scan_needscan_pending_dec(global_State *g)
   UNUSED(old);
 }
 
+static LJ_AINLINE uint32_t gc2_table_rescan_pending_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.table_rescan_pending);
+}
+
+static LJ_AINLINE void gc2_table_rescan_pending_store_rlx(global_State *g,
+							  uint32_t n)
+{
+  la_store32_rlx(&g->gc2.table_rescan_pending, n);
+}
+
+static LJ_AINLINE void gc2_table_rescan_pending_inc(global_State *g)
+{
+  la_add32_rlx(&g->gc2.table_rescan_pending, 1);
+}
+
+static LJ_AINLINE void gc2_table_rescan_pending_dec(global_State *g)
+{
+  uint32_t old = la_sub32_rlx(&g->gc2.table_rescan_pending, 1);
+  lj_assertG(old > 0, "table NEEDSCAN pending underflow");
+  UNUSED(old);
+}
+
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_dirty_misses, thread_scan_dirty_misses)
 
 static LJ_AINLINE void *gc2_finalizer_mpsc_acq(global_State *g)
@@ -4153,6 +4292,20 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 {
   la_store64_rel(&r->gcptr64, 0);
 }
+static LJ_AINLINE int gcref_cas(GCRef *r, GCobj **oldp, GCobj *obj)
+{
+  uint64_t old = (uint64_t)(uintptr_t)*oldp;
+  int ok = la_cas64(&r->gcptr64, &old, (uint64_t)(uintptr_t)obj,
+		    LA_ACQ_REL, LA_ACQ);
+  if (!ok)
+    *oldp = (GCobj *)(uintptr_t)old;
+  return ok;
+}
+static LJ_AINLINE GCobj *gcref_xchg_acqrel(GCRef *r, GCobj *obj)
+{
+  return (GCobj *)(uintptr_t)la_xchg64_acqrel(&r->gcptr64,
+					       (uint64_t)(uintptr_t)obj);
+}
 #else
 static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 {
@@ -4165,6 +4318,20 @@ static LJ_AINLINE void setgcrefrrel_(GCRef *r, GCRef v)
 static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 {
   la_store32_rel(&r->gcptr32, 0);
+}
+static LJ_AINLINE int gcref_cas(GCRef *r, GCobj **oldp, GCobj *obj)
+{
+  uint32_t old = (uint32_t)(uintptr_t)*oldp;
+  int ok = la_cas32(&r->gcptr32, &old, (uint32_t)(uintptr_t)obj,
+		    LA_ACQ_REL, LA_ACQ);
+  if (!ok)
+    *oldp = (GCobj *)(uintptr_t)old;
+  return ok;
+}
+static LJ_AINLINE GCobj *gcref_xchg_acqrel(GCRef *r, GCobj *obj)
+{
+  return (GCobj *)(uintptr_t)la_xchg32_acqrel(&r->gcptr32,
+					       (uint32_t)(uintptr_t)obj);
 }
 #endif
 #define setgcrefrel(r, gc)	setgcrefrel_(&(r), (gc))
@@ -4839,7 +5006,9 @@ static LJ_AINLINE int lj_tv_gcref_type_match(cTValue *tv)
   */
   if (tvisgcv(tv)) {
     GCobj *o = gcval(tv);
-    return o != NULL && ~itype(tv) == o->gch.gct;
+    if (o == NULL || !checkptrGC(o))
+      return 0;
+    return ~itype(tv) == o->gch.gct;
   }
   return 1;
 }

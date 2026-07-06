@@ -283,8 +283,8 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   lj_str_init(L);
   lj_meta_init(L);
   lj_lex_init(L);
-  fixstring(lj_err_str(L, LJ_ERR_ERRMEM));  /* Preallocate memory error msg. */
-  fixstring(lj_err_str(L, LJ_ERR_ERRERR));  /* Preallocate err in err msg. */
+  fixstring(g, lj_err_str(L, LJ_ERR_ERRMEM));  /* Preallocate memory error msg. */
+  fixstring(g, lj_err_str(L, LJ_ERR_ERRERR));  /* Preallocate err in err msg. */
   lj_gc_threshold_store(g, 4*lj_gc_total_load(g));
   lj_mcode_init(g);
   lj_trace_initstate(g);
@@ -567,6 +567,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   L->dummy_ffid = FF_C;
   setmref(L->glref, g);
   lj_state_owner_rel(L, 0);
+  lj_state_grayagain_cycle_store_rlx(L, 0);
   lj_state_scan_epoch_rel(L, 0);
   lj_state_scan_dirty_epoch_rel(L, 0);
   lj_state_scan_handoff_epoch_rel(L, 0);
@@ -593,6 +594,10 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_str_mask_store_rlx(g, ~(MSize)0);
   g->tab.retired_nodes = NULL;
   g->tab.retired_arrays = NULL;
+  g->threading_live = NULL;
+  g->threading_live_retired = NULL;
+  g->threading_live_count = 0;
+  g->threading_states = NULL;
   lj_registry_setnil_rel(L);
   g->nilnodehdr.hmask = 0;
   g->nilnodehdr.flags = 0;
@@ -686,6 +691,7 @@ lua_State *lj_state_new_withenv(lua_State *L, GCtab *env)
   L1->tg_hint = NULL;
   L1->thread_next = NULL;
   lj_state_owner_rel(L1, 0);
+  lj_state_grayagain_cycle_store_rlx(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);
   lj_state_scan_dirty_epoch_rel(L1, 0);
   lj_state_scan_handoff_epoch_rel(L1, 0);

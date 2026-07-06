@@ -473,10 +473,19 @@
 |
 |// Move table write barrier back. Overwrites reg.
 |.macro barrierback, tab, reg
-|  and byte tab->marked, (uint8_t)~LJ_GC_BLACK	// black2gray(tab)
-|  mov reg, [DISPATCH+DISPATCH_GL(gc.grayagain)]
-|  mov [DISPATCH+DISPATCH_GL(gc.grayagain)], tab
-|  mov tab->gclist, reg
+|  mov L:reg, SAVE_L
+|  mov L:reg->base, BASE
+|.if X64
+|  lea GL:CARG1, [DISPATCH+GG_DISP2G]
+|  mov CARG2, tab
+|  call extern lj_gc_barrierback_tab_g
+|.else
+|  lea GL:FCARG1, [DISPATCH+GG_DISP2G]
+|  mov FCARG2, tab
+|  call extern lj_gc_barrierback_tab_g@8
+|.endif
+|  mov L:reg, SAVE_L
+|  mov BASE, L:reg->base
 |.endmacro
 |
 |//-----------------------------------------------------------------------

@@ -990,9 +990,15 @@ static int asm_fnew1num_args_x64(ASMState *as, IRIns *ir,
       !irref_isk(ci->args[2]) || !irref_isk(ci->args[4]))
     return 0;
   ptir = IR(ci->args[2]);
-  if (ptir->o != IR_KPTR && ptir->o != IR_KKPTR)
+  if (ptir->o == IR_KGC) {
+    if (ir_kgc(ptir)->gch.gct != ~LJ_TPROTO)
+      return 0;
+    ci->pt = gco2pt(ir_kgc(ptir));
+  } else if (ptir->o == IR_KPTR || ptir->o == IR_KKPTR) {
+    ci->pt = (GCproto *)ir_kptr(ptir);
+  } else {
     return 0;
-  ci->pt = (GCproto *)ir_kptr(ptir);
+  }
   if (ci->pt->sizeuv != 1 || !proto_celluv(ci->pt))
     return 0;
   v = proto_uv(ci->pt)[0];
@@ -1070,6 +1076,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   uv = ra_scratch(as, allow);
   rset_clear(allow, uv);
   tmp = ra_scratch(as, allow);
+  checkmclim(as);  /* Register setup may spill before the inline template. */
 
   /* Success: publish the initialized pair, then continue with CALL result use. */
   emit_jmp(as, l_done);
@@ -1080,6 +1087,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_movtomro(as, tmp|REX_GC64, RID_RET, offsetof(GChead, nextgc));
   emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_loadi(as, tmp, 0);
+  checkmclim(as);  /* Split arena-owned publication from pending-root path. */
   l_arena_owned = emit_label(as);
   emit_jmp(as, l_done);
   emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
@@ -1088,6 +1096,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GChead, nextgc));
   emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_gettg(as, tmp, gcroot_pending);
+  checkmclim(as);  /* Split pending-root link from routing predicates. */
   l_publish_root = emit_label(as);
   emit_jmp(as, l_arena_owned);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.legacy_mark_bridge),
@@ -1096,6 +1105,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
 			      1, CC_Z, l_publish_root);
   asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
 		      CC_E, l_publish_root);
+  checkmclim(as);  /* Keep accounting separate from publication checks. */
 
   emit_settg(as, tmp, local_total);
   emit_gri(as, XG_ARITHi(XOg_ADD), tmp|REX_64, (int32_t)nbytes);
@@ -1114,6 +1124,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
     emit_loadu64(as, next, uvtag);
     emit_rr(as, XO_MOV, tmp|REX_64, uv);
   }
+  checkmclim(as);  /* Split stack cell linkage from upvalue initialization. */
 
   emit_movtomro(as, tmp, uv, offsetof(GCupval, dhash));
   emit_gri(as, XG_ARITHi(XOg_XOR), tmp, (int32_t)(fi.uvspec << 24));
@@ -1140,6 +1151,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_rmro(as, XO_MOV, tmp|REX_GC64, parent, offsetof(GCfuncL, env));
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, ffid), FF_LUA);
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, gct), ~LJ_TFUNC);
+  checkmclim(as);  /* Split function fields from proto closure counter. */
 
   emit_rmro(as, XO_MOVtob, tmp|FORCE_REX, pt, offsetof(GCproto, flags));
   emit_rr(as, XO_ARITH(XOg_SUB), tmp, next);
@@ -1158,6 +1170,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_rr(as, XO_ARITH(XOg_ADD), RID_RET|REX_64, arena|REX_64);
   emit_shifti(as, XOg_SHL|REX_64, RID_RET, LJ_CELL_SHIFT);
   emit_rr(as, XO_MOV, RID_RET, cell);
+  checkmclim(as);  /* Split cell address derivation from bitmap updates. */
 
   l_markdone = emit_label(as);
   asm_fnew1num_arena_bmop(as, XO_BTR, uv, arena, offsetof(GCArena, mark));
@@ -1170,6 +1183,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_i8(as, 0);
   emit_rmro(as, XO_ARITHib, XOg_CMP, RID_DISPATCH,
 	    DISPATCH_TG(alloc.alloc_black));
+  checkmclim(as);  /* Split mark bitmap operations from block bitmap writes. */
   asm_fnew1num_arena_bmop(as, XO_BTS, uv, arena, offsetof(GCArena, block));
   asm_fnew1num_arena_bmop(as, XO_BTS, cell, arena, offsetof(GCArena, block));
   emit_gri(as, XG_ARITHi(XOg_ADD), uv, (int32_t)fncells);
@@ -1208,6 +1222,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_rmro(as, XO_CMP, tmp|REX_64, g, offsetof(global_State, main_tg));
   /* DISPATCH points at TGState.dispatch; hotcount is the first TG field. */
   emit_leatg(as, tmp, hotcount);
+  checkmclim(as);  /* Split TG state checks from active-marking predicates. */
   /*
   ** The inlined path initializes a fresh pair and normally root-publishes it.
   ** The only active-marking case kept inline is the same standalone active
@@ -1220,18 +1235,20 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.legacy_mark_bridge),
 		      0, CC_NE, l_fallback);
   asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(alloc.alloc_black),
-			      1, CC_Z, l_fallback);
+				      1, CC_Z, l_fallback);
   asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
-		      CC_E, l_mark_ok);
+			      CC_E, l_mark_ok);
+  checkmclim(as);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, allocf_arena), 0,
-		      CC_E, l_fallback);
+			      CC_E, l_fallback);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.n_workers), 0,
 		      CC_NE, l_fallback);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, mt_entering), 0,
 		      CC_NE, l_fallback);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, mt_active), 0,
-		      CC_NE, l_fallback);
+			      CC_NE, l_fallback);
   emit_gettg(as, g, gl);
+  checkmclim(as);
   return 1;
 }
 #endif
@@ -2331,6 +2348,13 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
     tabref = xref->op1;
     keyref = xref->op2;
   }
+  /*
+  ** Active-MT table store helpers can allocate, retry through safepoints, or
+  ** longjmp on STOPREQ. ASTORE/HSTORE are hand-lowered to helper calls here, so
+  ** prepare the throwing-call snapshot explicitly instead of relying on CALL*
+  ** guard metadata.
+  */
+  asm_snap_prep(as);
   ci = &lj_ir_callinfo[id];
   ra_evictset(as, RSET_SCRATCH);
   args[0] = ASMREF_L;     /* lua_State *L */
@@ -2491,6 +2515,18 @@ static int asm_ahstore_premt_direct_ok(ASMState *as, IRIns *ir)
   return xref->o == IR_HREF || xref->o == IR_HREFK;
 }
 
+static int asm_ahstore_premt_inline_ok(ASMState *as)
+{
+  /*
+  ** The x64 inline CAS templates validate the table generation after the
+  ** cmpxchg. That is fine before MT activation because activation flushes these
+  ** traces before secondary Lua threads run. Once MT is active or entering,
+  ** published table stores must use the helper path, which validates currentness
+  ** and key ownership before and after the CAS.
+  */
+  return !mt_active_or_entering_acq(J2G(as->J));
+}
+
 static IRRef asm_ahstore_hash_tabref(ASMState *as, IRIns *xref)
 {
   if (xref->o == IR_HREFK)
@@ -2518,6 +2554,7 @@ static void asm_ahstore_inline_array_tvalue(ASMState *as, IRIns *ir)
   args[3] = ASMREF_TMP1;  /* cTValue *src */
   args[4] = keyref;       /* MSize index */
 
+  asm_snap_prep(as);
   l_done = emit_label(as);
   asm_gencall(as, ci, args);
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
@@ -2572,6 +2609,7 @@ static void asm_ahstore_inline_hash_tvalue(ASMState *as, IRIns *ir)
   args[3] = ASMREF_TMP1;  /* cTValue *src */
   args[4] = ASMREF_TMP2;  /* cTValue *key */
 
+  asm_snap_prep(as);
   l_done = emit_label(as);
   asm_gencall(as, ci, args);
   {
@@ -2768,10 +2806,12 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
     ** route so concurrent resize, weak-table, and retired-node validation stay
     ** outside raw trace stores.
     */
-  } else if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
+  } else if (asm_ahstore_premt_inline_ok(as) &&
+	     asm_ahstore_can_inline_array_tvalue(as, ir)) {
     asm_ahstore_inline_array_tvalue(as, ir);
     return;
-  } else if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
+  } else if (asm_ahstore_premt_inline_ok(as) &&
+	     asm_ahstore_can_inline_hash_tvalue(as, ir)) {
     asm_ahstore_inline_hash_tvalue(as, ir);
     return;
   } else if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
@@ -3044,43 +3084,24 @@ static void asm_cnew(ASMState *as, IRIns *ir)
 static void asm_tbar(ASMState *as, IRIns *ir)
 {
   int keybarrier = ir->op2 != REF_NIL;
-  const CCallInfo *ci = keybarrier ?
-    &lj_ir_callinfo[IRCALL_lj_gc2_barrier_key_g] :
-    &lj_ir_callinfo[IRCALL_lj_gc2_barrier_tab_g];
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_tbar_trace_g];
   IRRef args[3];
-  Reg tab, tmp;
-  MCLabel l_end, l_gate;
+  Reg gtmp, keytmp;
   ra_evictset(as, RSET_SCRATCH);
   args[0] = ASMREF_TMP1;  /* global_State *g */
   args[1] = ir->op1;      /* GCtab *t       */
   args[2] = ASMREF_TMP2;  /* cTValue *key   */
-  l_end = emit_label(as);
   asm_gencall(as, ci, args);
   checkmclim(as);  /* M6: split long TBAR sequence for assert red zone. */
+  keytmp = ra_releasetmp(as, ASMREF_TMP2);
+  gtmp = ra_releasetmp(as, ASMREF_TMP1);
   if (keybarrier) {
-    Reg keytmp = ra_releasetmp(as, ASMREF_TMP2);
-    Reg gtmp = ra_releasetmp(as, ASMREF_TMP1);
     asm_tvptr_protected(as, keytmp, ir->op2, IRTMPREF_IN1|IRTMPREF_IN2,
 			RID2RSET(gtmp));
-    emit_loada(as, gtmp, J2G(as->J));
   } else {
-    emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
+    emit_loadi(as, keytmp, 0);
   }
-  emit_sjcc(as, CC_Z, l_end);
-  emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH,
-	     DISPATCH_TG(mark_active), 0);
-  checkmclim(as);  /* M6: split long TBAR sequence for assert red zone. */
-  l_gate = emit_label(as);
-  tab = ra_alloc1(as, ir->op1, RSET_GPR);
-  tmp = ra_scratch(as, rset_exclude(RSET_GPR, tab));
-  emit_movtomro(as, tmp|REX_GC64, tab, offsetof(GCtab, gclist));
-  emit_setgl(as, tab, gc.grayagain);
-  emit_getgl(as, tmp, gc.grayagain);
-  emit_i8(as, ~LJ_GC_BLACK);
-  emit_rmro(as, XO_ARITHib, XOg_AND, tab, offsetof(GCtab, marked));
-  emit_sjcc(as, CC_Z, l_gate);
-  emit_i8(as, LJ_GC_BLACK);
-  emit_rmro(as, XO_GROUP3b, XOg_TEST, tab, offsetof(GCtab, marked));
+  emit_loada(as, gtmp, J2G(as->J));
 }
 
 static void asm_obar(ASMState *as, IRIns *ir)
@@ -3229,6 +3250,7 @@ static void asm_fparith(ASMState *as, IRIns *ir, x86Op xo)
     ra_noweak(as, right);
   }
   dest = ra_dest(as, ir, allow);
+  checkmclim(as);  /* Split FP operand setup from arithmetic emission. */
   if (lref == rref) {
     right = dest;
   } else if (ra_noreg(right)) {
@@ -3236,8 +3258,10 @@ static void asm_fparith(ASMState *as, IRIns *ir, x86Op xo)
       IRRef tmp = lref; lref = rref; rref = tmp;
     }
     right = asm_fuseload(as, rref, rset_clear(allow, dest));
+    checkmclim(as);  /* Constants/spills can materialize several insns. */
   }
   emit_mrm(as, xo, dest, right);
+  checkmclim(as);  /* Keep dependency materialization in its own red zone. */
   ra_left(as, dest, lref);
 }
 
@@ -3860,11 +3884,14 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
   Reg pbase = irp ? irp->r : RID_BASE;
   Reg r = allow ? rset_pickbot(allow) : RID_EAX;
   emit_jcc(as, CC_B, exitstub_addr(as->J, exitno));
+  checkmclim(as);
   if (allow == RSET_EMPTY)  /* Restore temp. register. */
     emit_rmro(as, XO_MOV, r|REX_64, RID_ESP, 0);
   else
     ra_modified(as, r);
+  checkmclim(as);
   emit_gri(as, XG_ARITHi(XOg_CMP), r|REX_GC64, (int32_t)(8*topslot));
+  checkmclim(as);
   if (ra_hasreg(pbase) && pbase != r)
     emit_rr(as, XO_ARITH(XOg_SUB), r|REX_GC64, pbase);
   else
@@ -3875,10 +3902,14 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
     emit_rmro(as, XO_ARITH(XOg_SUB), r, RID_NONE,
 	      ptr2addr(&J2TG(as->J)->jit_base));
 #endif
+  checkmclim(as);  /* Split stack distance arithmetic from maxstack load. */
   emit_rmro(as, XO_MOV, r|REX_GC64, r, offsetof(lua_State, maxstack));
   emit_gettg(as, r, cur_L);
-  if (allow == RSET_EMPTY)  /* Spill temp. register. */
+  checkmclim(as);
+  if (allow == RSET_EMPTY) {  /* Spill temp. register. */
     emit_rmro(as, XO_MOVto, r|REX_64, RID_ESP, 0);
+    checkmclim(as);
+  }
 }
 
 /* Restore Lua stack from on-trace state. */
@@ -3890,6 +3921,7 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
 #endif
   MSize n, nent = snap->nent;
   /* Store the value of all modified slots to the Lua stack. */
+  checkmclim(as);
   for (n = 0; n < nent; n++) {
     SnapEntry sn = map[n];
     BCReg s = snap_slot(sn);
@@ -3900,14 +3932,17 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
       continue;
     if ((sn & SNAP_KEYINDEX)) {
       emit_movmroi(as, RID_BASE, ofs+4, LJ_KEYINDEX);
+      checkmclim(as);
       if (irref_isk(ref)) {
 	emit_movmroi(as, RID_BASE, ofs, ir->i);
       } else {
 	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, RID_BASE));
+	checkmclim(as);
 	emit_movtomro(as, src, RID_BASE, ofs);
       }
     } else if (irt_isnum(ir->t)) {
       Reg src = ra_alloc1(as, ref, RSET_FPR);
+      checkmclim(as);
       emit_rmro(as, XO_MOVSDto, src, RID_BASE, ofs);
     } else {
       lj_assertA(irt_ispri(ir->t) || irt_isaddr(ir->t) ||
@@ -3915,6 +3950,7 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
 		 "restore of IR type %d", irt_type(ir->t));
       if (!irref_isk(ref)) {
 	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, RID_BASE));
+	checkmclim(as);
 #if LJ_GC64
 	if (irt_is64(ir->t)) {
 	  /* TODO: 64 bit store + 32 bit load-modify-store is suboptimal. */
@@ -3925,6 +3961,7 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
 	} else {
 	  emit_movmroi(as, RID_BASE, ofs+4, (irt_toitype(ir->t)<<15)|0x7fff);
 	}
+	checkmclim(as);
 #endif
 	emit_movtomro(as, REX_64IR(ir, src), RID_BASE, ofs);
 #if LJ_GC64
@@ -3936,6 +3973,7 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
 	  emit_rmro(as, XO_MOVmi, REX_64, RID_BASE, ofs);
 	} else {
 	  emit_movmroi(as, RID_BASE, ofs+4, k.u32.hi);
+	  checkmclim(as);
 	  emit_movmroi(as, RID_BASE, ofs, k.u32.lo);
 	}
 #else

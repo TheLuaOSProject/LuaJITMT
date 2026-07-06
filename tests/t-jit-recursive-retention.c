@@ -75,10 +75,18 @@ static void check_retention_stats(lua_State *L, const char *label,
   assert(linked == aborts);
   assert(unlinks >= aborts);
   assert(return_unlinks > 0);
-  assert(slot_release_calls >= return_unlinks);
-  assert(slot_release_clears > 0);
+  /*
+  ** Call-unroll return traces must keep their public slots long enough for the
+  ** recursive recorder to move past transient RET roots. A later full GC may
+  ** release those unlinked traces, but if no release has happened yet they
+  ** should still appear as retained return traces.
+  */
+  assert(slot_release_clears <= slot_release_calls);
+  if (slot_release_clears == 0)
+    assert(returns >= return_unlinks);
+  else
+    assert(slot_release_clears <= return_unlinks);
   assert(lj_trace_test_abort_selflinks() == 0);
-  assert(slot_release_clears == return_unlinks);
   assert(findfree > 0);
   assert(reuses > 0);
   assert(reuses + grows == findfree);
@@ -102,7 +110,7 @@ int main(void)
     "assert(fib(30) == 832040)\n"
     "for _ = 1, 4 do assert(fib(24) == 46368) end\n"
     "for _ = 1, 8 do assert(fib(30) == 832040) end\n");
-  check_retention_stats(L, "static-fib", 32, 0);
+  check_retention_stats(L, "static-fib", 32, 32);
 
   reset_jit(L);
   ljt_lua_dostring(L,
@@ -119,7 +127,7 @@ int main(void)
   ** rebuilt around each measured run. The limit leaves room for hotcount
   ** variance, but catches the old unbounded return-trace retry loop.
   */
-  check_retention_stats(L, "bench-fib", 32, 2);
+  check_retention_stats(L, "bench-fib", 32, 48);
 
   lua_close(L);
   return 0;

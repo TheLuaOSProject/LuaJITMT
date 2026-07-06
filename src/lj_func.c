@@ -246,6 +246,35 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
 #define func_pubfreshobjobj(L, tg, p, o) \
   func_pubfreshobjobj_((L), (tg), obj2gco(p), obj2gco(o))
 
+static LJ_AINLINE void func_fnew_preserve_operand(global_State *g, GCobj *o)
+{
+  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+    lj_gc_markobj_legacy(g, o);
+  } else if ((g->gc.state == GCSsweepstring || g->gc.state == GCSsweep) &&
+	     isdead(g, o)) {
+    /*
+    ** FNEW can execute while a prior incremental cycle is sweeping. Its parent
+    ** closure/prototype and child prototype are VM operands, not table/upvalue
+    ** writes, so no ordinary barrier protects an other-white prototype from that
+    ** old sweep. Preserve the operand graph before the allocation check can help
+    ** sweep, so inherited upvalues and nested prototype constants survive until
+    ** the freshly published closure is visible to the next mark cycle.
+    */
+    lj_gc_markobj_legacy_deep(g, o);
+  }
+}
+
+static LJ_AINLINE void func_fnew_preserve_operands(lua_State *L, GCproto *pt,
+						   GCfuncL *parent)
+{
+  global_State *g = G(L);
+  func_fnew_preserve_operand(g, obj2gco(parent));
+  func_fnew_preserve_operand(g, obj2gco(funcproto((GCfunc *)parent)));
+  func_fnew_preserve_operand(g, obj2gco(pt));
+}
+
 /* Create a closed upvalue initialized from a stack slot. */
 static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
 {
@@ -805,6 +834,7 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 
 GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
 {
+  func_fnew_preserve_operands(L, pt, parent);
   lj_gc_check_fixtop(L);
 #if LJ_HASJIT
   if (pt->sizeuv == 0) {
@@ -833,6 +863,7 @@ GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base, GCproto *pt,
 			       GCfuncL *parent)
 {
   /* Trace assembly emits the allocation GC check before CALLA helpers. */
+  func_fnew_preserve_operands(L, pt, parent);
 #if LJ_HASJIT
   if (pt->sizeuv == 0) {
     GCfunc *fn = func_newL_gc0_bump(L, G(L), L2TG(L), pt, parent, 2);
@@ -851,6 +882,7 @@ GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base, GCproto *pt,
   GCupval *uv;
   TValue tv, *slot;
   uint32_t v;
+  func_fnew_preserve_operands(L, pt, parent);
   lj_assertL(pt->sizeuv == 1 && proto_celluv(pt),
 	     "bad one-upvalue FNEW helper");
   if (base == NULL)

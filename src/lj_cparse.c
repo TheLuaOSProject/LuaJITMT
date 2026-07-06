@@ -475,7 +475,7 @@ static CType *cp_ctype_setname(CPState *cp, CTypeID id, GCstr *name)
 {
   CType tmp;
   cp_ctype_snapshot_mut(cp, id, &tmp);
-  ctype_setname(&tmp, name);
+  ctype_setname(G(cp->L), &tmp, name);
   return cp_ctype_publish(cp, id, &tmp);
 }
 

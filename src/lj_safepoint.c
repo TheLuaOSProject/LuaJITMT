@@ -57,7 +57,7 @@ static void safepoint_note_ack_latency(global_State *g)
   }
 }
 
-static int safepoint_wait_consumed_ack(TGState *tg)
+static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
 {
   uint32_t poll;
   /* A native-ack leader clears poll only after it finishes applying actions.
@@ -74,6 +74,16 @@ static int safepoint_wait_consumed_ack(TGState *tg)
     ** finishes.
     */
     if (g && tid != 0 && gc2_hs_leader_acq(g) == tid)
+      return 0;
+    /*
+    ** A trace-exit C frame keeps jit_base published until vm_exit_interp has
+    ** restored the interpreter frame and reached its own poll check. If such a
+    ** frame waits here, the leader waits for jit_base to clear and neither side
+    ** can progress. Defer the consumed-poll wait to that VM-exit poll: the trace
+    ** slot is still protected by jit_base while this frame unwinds.
+    */
+    if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
+	lj_tg_load_jit_base(tg) != NULL)
       return 0;
     if (lj_tg_reqmask_acq(tg) != 0)
       return 1;
@@ -172,7 +182,8 @@ retry:
 	goto retry;
       /* Remote leader acks do not resume this TG's VM, so they must not
       ** block behind another leader's already-consumed poll bit. */
-      if (wait_consumed && safepoint_wait_consumed_ack(tg))
+      if (wait_consumed &&
+	  safepoint_wait_consumed_ack(tg, gc2_hs_actions_acq(g)))
 	goto retry;
     }
     return 0;
@@ -190,8 +201,8 @@ retry:
     oldpending = gc2_hs_pending_sub_acqrel(g, 1);
     if (oldpending == 1)
       gc2_hs_pending_futex_wake(g, 1);
-    if (hold && wait_consumed && lj_tg_load_jit_base(tg) == NULL &&
-	safepoint_wait_consumed_ack(tg))
+    if (hold && wait_consumed &&
+	safepoint_wait_consumed_ack(tg, actions))
       goto retry;
     return 0;
   }
@@ -211,8 +222,8 @@ retry:
     /* Trace exit CP frames acknowledge before vm_exit_interp can clear
     ** jit_base. Defer their consumed-poll wait to the VM exit poll.
     */
-    if (hold && wait_consumed && lj_tg_load_jit_base(tg) == NULL &&
-	safepoint_wait_consumed_ack(tg))
+    if (hold && wait_consumed &&
+	safepoint_wait_consumed_ack(tg, actions))
       goto retry;
   }
   return actions;
@@ -267,7 +278,12 @@ uint32_t lj_safepoint_poll(lua_State *L)
   if (!L)
     return 0;
   tg = L2TG(L);
-  if (!tg || lj_tg_poll_acq(tg) == 0)  /* 05 section 5.4.2 poll. */
+  if (!tg)
+    return 0;
+  /* reqmask owns the counted pending slot. poll is the wake/dispatch signal and
+  ** can be consumed independently when a thread catches up with the current
+  ** epoch, so a nonzero reqmask must still drive the acknowledgement path. */
+  if (lj_tg_poll_acq(tg) == 0 && lj_tg_reqmask_acq(tg) == 0)
     return 0;
   return lj_safepoint_ack(L);
 }
@@ -384,20 +400,22 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
 
 static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
 {
-  /* GC2 root scans may remotely acknowledge native-suspended Lua stacks. The
-  ** scanner detects that the stack belongs to another current TG and preserves
-  ** the whole stack storage instead of decoding an owner-private frame chain.
-  ** Trace-flush actions below are different: they can retire trace slots or
-  ** mcode that an active trace/native exit still needs.
+  /* GC2 root scans may remotely acknowledge native-suspended Lua stacks. That
+  ** acknowledgement is only the handshake boundary: GC2 leaves NEEDSCAN pending
+  ** when a raw remote/native stack sample cannot authoritatively decode the
+  ** owner-private frame chain. Trace-flush actions below are different: they can
+  ** retire trace slots or mcode that an active trace/native exit still needs.
   */
 #if LJ_HASJIT
-  /* A TG leaving mcode keeps jit_base set until vm_exit_interp has restored
-  ** from the trace snapshot. Trace-flush boundaries must not remotely ack that
-  ** native/C window, otherwise the leader can clear the trace slot needed by
-  ** lj_snap_restore_exit().
+  /* Trace entry publishes jit_base before it loads a trace body/mcode pointer,
+  ** and trace exit keeps jit_base set until vm_exit_interp has restored from
+  ** the snapshot. Trace-flush boundaries must not remotely ack that window,
+  ** otherwise the leader can retire the slot still needed by exit restore. A
+  ** positive vmstate without jit_base is only a conservative trace root for GC;
+  ** it is not a mcode/slot dependency and may be acknowledged normally.
   */
   if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
-      lj_tg_jit_active_acq(tg))
+      lj_tg_load_jit_base(tg) != NULL)
     return 0;
 #else
   UNUSED(tg); UNUSED(actions);
@@ -443,7 +461,7 @@ static int safepoint_trace_tg_active(global_State *g)
     */
     if (tg == self && leader != 0 && lj_tg_tid_acq(tg) == leader)
       continue;
-    if (lj_tg_jit_active_acq(tg))
+    if (lj_tg_load_jit_base(tg) != NULL)
       return 1;
   }
 #else
@@ -471,6 +489,25 @@ static uint32_t safepoint_leader_id(global_State *g)
   uint32_t id = self ? lj_tg_tid_acq(self) : 0;
   return id && id != LJ_THREAD_GCSCAN ? id : 1u;
 }
+
+#if LJ_HASJIT
+static lua_State *safepoint_leader_lua_state(global_State *g)
+{
+  TGState *self = lj_thr_get_tg_fallback(g);
+  lua_State *L = self ? lj_tg_load_cur_L(self) : NULL;
+  /*
+  ** FLUSHJ is executed by the safepoint leader after peer TGs have left traces,
+  ** but trace retirement still allocates raw metadata through the token owner's
+  ** lua_State. Use the leader TG's current state for that ownership; fall back to
+  ** the main state only for bootstrap/test handshakes without a published cur_L.
+  ** The eventless lj_trace_flushall_gc() path below keeps VM event stacks out of
+  ** arbitrary leader action.
+  */
+  if (L && mref(L->glref, global_State) == g)
+    return L;
+  return mainthread_acq(g);
+}
+#endif
 
 static uint32_t safepoint_leader_enter(global_State *g)
 {
@@ -537,8 +574,16 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   safepoint_wait_trace_quiescent(g, actions);
   if (actions & LJ_GC2_HS_EXIT_TRACES)
     (void)lj_trace_flushscope_retire_hs(g, epoch);
-  if (actions & LJ_GC2_HS_FLUSHJ)
-    (void)lj_trace_flushall(mainthread_acq(g));  /* 08 section 8.7 leader action. */
+#if LJ_HASJIT
+  if (actions & LJ_GC2_HS_FLUSHJ) {
+    /*
+     ** The safepoint leader can be any participating thread. Flush trace state
+     ** here, but do not emit a TRACE "flush" event through the VM event stack:
+     ** that stack belongs to vmthread and is not owned by an arbitrary leader.
+     */
+    (void)lj_trace_flushall_gc(safepoint_leader_lua_state(g));  /* 08 section 8.7 leader action. */
+  }
+#endif
   (void)lj_gc2_reclaim_retired(g, epoch);  /* 05 section 5.9 grace drain. */
   safepoint_clear_consumed_polls(g, epoch);
   safepoint_leader_leave(g, leader);

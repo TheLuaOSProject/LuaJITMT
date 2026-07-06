@@ -224,6 +224,31 @@ local worker = th.spawn(function()
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 
+  local table_clear = table.clear or require"table.clear"
+  local shared_clear = {}
+
+  local function table_clear_loop(n)
+    local i = 1
+    while i <= n do
+      shared_clear.stable = i
+      shared_clear[1] = i + 1
+      table_clear(shared_clear)
+      assert(rawget(shared_clear, "stable") == nil)
+      assert(rawget(shared_clear, 1) == nil)
+      i = i + 1
+    end
+    return true
+  end
+
+  for _ = 1, 20 do
+    assert(table_clear_loop(80) == true)
+  end
+  local table_clear_traces = trace_count(trace_limit)
+  assert(table_clear_traces == 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
   local insert_hits = 0
   local shared_meta_insert = setmetatable({}, {
     __newindex = function(_, _, v)
@@ -416,16 +441,16 @@ local worker = th.spawn(function()
 
   return root_traces, side_traces, table_traces, read_traces, index_traces,
 	 write_traces, meta_write_traces, meta_nil_hash_traces,
-	 meta_nil_array_traces, ipairs_traces, next_traces, shared_next_traces,
-	 shared_pairs_traces, local_cell_root_traces, local_cell_side_traces,
-	 th.current():id()
+	 meta_nil_array_traces, table_clear_traces, ipairs_traces, next_traces,
+	 shared_next_traces, shared_pairs_traces, local_cell_root_traces,
+	 local_cell_side_traces, th.current():id()
 end)
 
 local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
       write_traces, meta_write_traces, meta_nil_hash_traces,
-      meta_nil_array_traces, ipairs_traces, next_traces, shared_next_traces,
-      shared_pairs_traces, local_cell_root_traces, local_cell_side_traces,
-      tid = worker:join()
+      meta_nil_array_traces, table_clear_traces, ipairs_traces, next_traces,
+      shared_next_traces, shared_pairs_traces, local_cell_root_traces,
+      local_cell_side_traces, tid = worker:join()
 assert(ok == true, tostring(root_traces))
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
@@ -440,10 +465,11 @@ assert(type(write_traces) == "number" and write_traces > 0)
 assert(type(meta_write_traces) == "number" and meta_write_traces > 0)
 assert(type(meta_nil_hash_traces) == "number" and meta_nil_hash_traces == 0)
 assert(type(meta_nil_array_traces) == "number" and meta_nil_array_traces == 0)
+assert(type(table_clear_traces) == "number" and table_clear_traces == 0)
 assert(type(ipairs_traces) == "number" and ipairs_traces == 0)
 assert(type(next_traces) == "number" and next_traces > 0)
 assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
 assert(type(shared_pairs_traces) == "number" and shared_pairs_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, traces local-cell FORL roots/sides, allocates tables, reads/writes shared tables, traces existing metatable stores, keeps previous-nil metatable stores and active-MT shared next()/ipairs()/pairs() interpreted, traces trace-local next(), keeps resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, traces local-cell FORL roots/sides, allocates tables, reads/writes shared tables, traces existing metatable stores, keeps previous-nil metatable stores and active-MT shared table.clear/next()/ipairs()/pairs() interpreted, traces trace-local next(), keeps resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")

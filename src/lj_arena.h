@@ -28,8 +28,9 @@
 #define LJ_AF_TRAVERSABLE	0x00000001u
 #define LJ_AF_NEEDSWEEP		0x00000002u
 #define LJ_AF_FULL		0x00000004u
+#define LJ_AF_REGISTERED	0x00000008u
 #define LJ_AF_FLAG_MASK \
-  (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP|LJ_AF_FULL)
+  (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP|LJ_AF_FULL|LJ_AF_REGISTERED)
 #define LJ_AF_HUGE_MAGIC	0x4c4a4800u
 
 static LJ_AINLINE uint32_t lj_arena_bin_from_ncells(uint32_t ncells)
@@ -59,6 +60,10 @@ typedef struct HugeTab HugeTab;
 typedef struct LJHugeInfo LJHugeInfo;
 typedef struct TGAlloc TGAlloc;
 
+struct HugeTab {
+  LJHugeTabHdr *h;
+};
+
 typedef struct GCAhdr {
   uint32_t flags;
   uint32_t owner_tid;
@@ -66,7 +71,8 @@ typedef struct GCAhdr {
   GreyStack *grey;
   uint32_t sweep_epoch;
   uint32_t live_cells;
-  uint8_t pad[96];
+  void *gc2_tabstamp;
+  uint8_t pad[88];
 } GCAhdr;
 
 struct GCArena {
@@ -78,6 +84,11 @@ struct GCArena {
 static LJ_AINLINE uint32_t lj_arena_owner_acq(const GCArena *a)
 {
   return la_load32_acq(&a->hdr.owner_tid);  /* 04 section 4.6 owner route. */
+}
+
+static LJ_AINLINE uint32_t lj_arena_flags_acq(const GCArena *a)
+{
+  return la_load32_acq(&a->hdr.flags);
 }
 
 static LJ_AINLINE void lj_arena_owner_rel(GCArena *a, uint32_t owner_tid)
@@ -93,6 +104,18 @@ static LJ_AINLINE GCArena *lj_arena_next_acq(const GCArena *a)
 static LJ_AINLINE void lj_arena_next_rel(GCArena *a, GCArena *next)
 {
   la_storeptr_rel((void **)&a->hdr.next, next);
+}
+
+static LJ_AINLINE void *lj_arena_gc2_tabstamp_acq(const GCArena *a)
+{
+  return la_loadptr_acq((void *const *)&a->hdr.gc2_tabstamp);
+}
+
+static LJ_AINLINE int lj_arena_gc2_tabstamp_cas(GCArena *a, void **oldp,
+						void *tabstamp)
+{
+  return la_casptr((void **)&a->hdr.gc2_tabstamp, oldp, tabstamp,
+		   LA_ACQ_REL, LA_ACQ);
 }
 
 struct LJArenaFreeRun {
@@ -113,6 +136,7 @@ struct TGAlloc {
   uint32_t binmask[LJ_ARENA_NKINDS];
   GCArena *owned[LJ_ARENA_NKINDS];
   GCArena *needsweep[LJ_ARENA_NKINDS];
+  HugeTab *smalltab;
   uint32_t sweep_epoch;
   uint32_t prepare_epoch;
   uint32_t owner_tid;
@@ -154,10 +178,6 @@ static LJ_AINLINE int lj_arena_alloc_has_run_ge(const TGAlloc *alloc,
 	  lj_arena_binmask_from_ncells(ncells)) != 0;
 }
 
-struct HugeTab {
-  LJHugeTabHdr *h;
-};
-
 struct LJHugeInfo {
   size_t size;
   uint32_t flags;
@@ -175,6 +195,7 @@ struct LJArenaAllocD {
 #define LJ_HUGEF_FINALIZER	0x04u
 #define LJ_HUGEF_MASK \
   (LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FINALIZER)
+#define LJ_ARENA_REGISTRY_BITS	16u
 
 /* The header plus full block/mark bitmaps occupy 72 cells. The arena body
 ** starts after both bitmaps so the model keeps complete 4096-cell coverage. */
@@ -207,6 +228,12 @@ LJ_FUNC int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src,
 				      uint32_t owner_tid);
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
+LJ_FUNC void lj_arena_alloc_set_registry(TGAlloc *alloc, HugeTab *tab);
+LJ_FUNC HugeTab *lj_arena_alloc_registry_acq(const TGAlloc *alloc);
+LJ_FUNC int lj_arena_alloc_registry_lookup(const TGAlloc *alloc,
+					   const GCArena *a,
+					   LJHugeInfo *hi);
+LJ_FUNC int lj_arena_alloc_register_existing(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_clear_marks(TGAlloc *alloc);
