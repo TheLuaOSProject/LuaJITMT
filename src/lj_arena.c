@@ -60,14 +60,14 @@ LJ_STATIC_ASSERT((offsetof(LJHugeTabHdr, ent) & 15u) == 0);
 LJ_STATIC_ASSERT((LJ_AF_HUGE_MAGIC & LJ_AF_FLAG_MASK) == 0);
 
 /* Apply the 04_allocator.md sweep identities over the arena bitmaps. */
-void lj_arena_sweep_words(GCArena *a, int minor)
+void lj_arena_sweep_words(GCArena *a, int preserve_marks)
 {
   uint32_t w;
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
     uint64_t b = a->block[w];
     uint64_t m = a->mark[w];
     a->block[w] = b & m;
-    a->mark[w] = minor ? (b | m) : (b ^ m);
+    a->mark[w] = preserve_marks ? (b | m) : (b ^ m);
   }
 }
 
@@ -955,9 +955,9 @@ void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
 }
 
 void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
-			       uint32_t epoch, int minor)
+				       uint32_t epoch, int preserve_marks)
 {
-  while (lj_arena_sweep_one(alloc, kind, epoch, minor) != NULL)
+  while (lj_arena_sweep_one(alloc, kind, epoch, preserve_marks) != NULL)
     ;
 }
 
@@ -986,7 +986,7 @@ static void arena_unlink_owned_duplicate(TGAlloc *alloc, uint32_t kind,
 }
 
 GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
-			    int minor)
+			    int preserve_marks)
 {
   GCArena *a;
   ArenaLargestRun lr = { 0, 0 };
@@ -1004,7 +1004,7 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
     alloc->needsweep[kind] = next;
   }
   lj_arena_next_rel(a, NULL);
-  lj_arena_sweep_words(a, minor);
+  lj_arena_sweep_words(a, preserve_marks);
   lj_arena_scan_free_runs(a, arena_find_largest_run, &lr);
   if (lr.len >= LJ_BUMP_MIN)
     arena_set_free_run(a, lr.start, lr.len);

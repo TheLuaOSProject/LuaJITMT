@@ -9,6 +9,10 @@ local jit_read_reps =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS", jit_reps)
 local traversal_rounds =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS", 192)
+local remote_stack_gc_rounds =
+  harness.env_number("LJ_M5_TAB_RESIZE_REMOTE_STACK_GC_ROUNDS", 8)
+local remote_stack_jit_reps =
+  harness.env_number("LJ_M5_TAB_RESIZE_REMOTE_STACK_JIT_REPS", 96)
 local finalizer_objects =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS", 192)
 local key_objects =
@@ -808,6 +812,164 @@ local function exercise_jit_iterator_resize()
   end
 end
 
+local function remote_stack_jit_probe(tbl, id, n)
+  local total = 0
+  for i = 1, n do
+    local slot = ((i + id) % 128) + 1
+    local stable = tbl[slot]
+    if type(stable) == "table" then total = total + stable.slot end
+
+    local key = id * 1000000 + ((i % 256) + 1)
+    tbl[key] = i
+    if i > 16 and i % 4 == 0 then tbl[key - 12] = nil end
+  end
+  return total
+end
+
+local function remote_stack_jit_gc_worker(tbl, ready, stop, id, reps)
+  local okjit, jitmod = pcall(require, "jit")
+  if okjit and jitmod.status() then
+    jitmod.opt.start("hotloop=1", "hotexit=1")
+  end
+
+  local stack_root = {
+    tag = "remote-stack-jit-gc-root",
+    id = id,
+    payload = {}
+  }
+  local stack_guard = {
+    tag = "remote-stack-jit-gc-guard",
+    id = id,
+    payload = { id, "guard" }
+  }
+  for i = 1, 32 do
+    stack_root.payload[i] = {
+      owner = id,
+      slot = i,
+      text = "remote-stack-root:" .. id .. ":" .. i
+    }
+  end
+
+  local traces0 = jith.trace_count(256)
+  for _ = 1, 16 do
+    remote_stack_jit_probe(tbl, id, reps)
+  end
+  local traces1 = jith.trace_count(256)
+
+  assert(ready:send({ id, stack_root, stack_guard }, 10) == true)
+
+  local token, ok = stop:recv(20)
+  assert(ok == true and token == "stop")
+
+  assert(stack_root.payload[32].owner == id)
+  assert(stack_guard.payload[1] == id)
+  return true, 1, traces1 - traces0
+end
+
+local function exercise_remote_stack_jit_gc_resize()
+  local nworkers = writers
+  local ready = th.channel(nworkers)
+  local stop = th.channel(nworkers)
+  local weak_roots = setmetatable({}, { __mode = "v" })
+  local weak_guards = setmetatable({}, { __mode = "v" })
+  local t = {}
+  local workers = {}
+  local old_gcworkers
+  local before_stats
+
+  for i = 1, 128 do
+    t[i] = {
+      kind = "remote-stack-jit-prefix",
+      slot = i
+    }
+  end
+
+  if gc_workers > 0 then
+    local ok, old = pcall(th.gcworkers, math.min(gc_workers, 2))
+    if ok then old_gcworkers = old end
+  end
+
+  for id = 1, nworkers do
+    workers[id] =
+      th.spawn(remote_stack_jit_gc_worker, t, ready, stop, id,
+	       remote_stack_jit_reps)
+  end
+
+  for _ = 1, nworkers do
+    local msg, ok = ready:recv(10)
+    assert(ok == true, "remote stack JIT GC worker did not publish roots")
+    weak_roots[msg[1]] = msg[2]
+    weak_guards[msg[1]] = msg[3]
+    msg = nil
+  end
+
+  before_stats = th.gcstats()
+  for round = 1, remote_stack_gc_rounds do
+    for i = 1, 32 do
+      local key = 5000000 + round * 1000 + i
+      t[key] = { round = round, slot = i }
+      t["remote-stack-owner-grow:" .. round .. ":" .. i] = i
+      if round > 1 and i % 3 == 0 then t[key - 1000] = nil end
+      if round > 1 and i % 5 == 0 then
+	t["remote-stack-owner-grow:" .. (round - 1) .. ":" .. i] = nil
+      end
+    end
+
+    collectgarbage("collect")
+    for id = 1, nworkers do
+      local root = weak_roots[id]
+      local guard = weak_guards[id]
+      assert(type(root) == "table",
+	     "GC missed remote worker stack root during JIT table resize")
+      assert(type(guard) == "table",
+	     "GC missed remote worker stack guard during JIT table resize")
+      assert(root.tag == "remote-stack-jit-gc-root")
+      assert(root.payload[32].owner == id)
+      assert(guard.payload[1] == id)
+    end
+  end
+
+  do
+    local after_stats = th.gcstats()
+    assert(after_stats.major_root_scans > before_stats.major_root_scans or
+	   after_stats.minor_root_scans > before_stats.minor_root_scans,
+	   "remote stack JIT GC stress did not run a root scan")
+  end
+
+  for _ = 1, nworkers do
+    assert(stop:send("stop", 10) == true)
+  end
+
+  do
+    local traced = 0
+    local looped = 0
+    harness.join_each(workers, function(result, loops, traces)
+      assert(result == true)
+      assert(type(loops) == "number" and loops > 0,
+	     "remote stack JIT worker did not stay parked during GC")
+      looped = looped + loops
+      traced = traced + (traces or 0)
+    end, 30)
+    assert(looped >= nworkers,
+	   "remote stack JIT workers did not overlap owner GC")
+    if jit and jit.status and jit.status() then
+      assert(traced > 0, "remote stack JIT workers did not publish traces")
+    end
+  end
+
+  if old_gcworkers ~= nil then
+    assert(th.gcworkers(old_gcworkers) >= 0)
+  end
+
+  harness.fullgc(2)
+  for i = 1, 64 do
+    local v = t[i]
+    assert(type(v) == "table",
+	   "remote stack JIT resize changed stable array prefix")
+    assert_lua_value(v, "remote stack JIT resize prefix")
+  end
+end
+
 local function len_resize_writer(tbl, ready, start, id, n)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
@@ -1509,6 +1671,7 @@ ran = ran + run_case("metatable", exercise_metatable_resize)
 ran = ran + run_case("jitstore", exercise_jit_store_resize)
 ran = ran + run_case("jitread", exercise_jit_read_resize)
 ran = ran + run_case("jititer", exercise_jit_iterator_resize)
+ran = ran + run_case_optin("remotejitgc", exercise_remote_stack_jit_gc_resize)
 ran = ran + run_case("len", exercise_len_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)

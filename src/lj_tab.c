@@ -1774,7 +1774,7 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   */
   (void)lj_gc_flush_root_pending(g);
   ret = lj_tab_node_retired_head_xchg_acqrel(g, NULL);
-  while (ret) {
+  while (ret && lj_gc2_mem_registered(g, ret)) {
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
     lj_tab_node_retired_next_rel(ret, NULL);
     if (!lj_tab_node_retired_armed_acq(ret)) {
@@ -1792,7 +1792,7 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     ret = next;
   }
   aret = lj_tab_array_retired_head_xchg_acqrel(g, NULL);
-  while (aret) {
+  while (aret && lj_gc2_mem_registered(g, aret)) {
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
     lj_tab_array_retired_next_rel(aret, NULL);
     if (!lj_tab_array_retired_armed_acq(aret)) {
@@ -1820,7 +1820,7 @@ void lj_tab_freeretired(global_State *g)
   if (!g)
     return;
   ret = lj_tab_node_retired_head_xchg_acqrel(g, NULL);
-  while (ret) {
+  while (ret && lj_gc2_mem_registered(g, ret)) {
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
     if (lj_tab_node_retired_armed_acq(ret))
       tab_node_free(g, lj_tab_node_retired_node_acq(ret),
@@ -1829,7 +1829,7 @@ void lj_tab_freeretired(global_State *g)
     ret = next;
   }
   aret = lj_tab_array_retired_head_xchg_acqrel(g, NULL);
-  while (aret) {
+  while (aret && lj_gc2_mem_registered(g, aret)) {
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
     if (lj_tab_array_retired_armed_acq(aret))
       tab_array_free(g, lj_tab_array_retired_array_acq(aret),
@@ -2120,12 +2120,19 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
   MSize hmask;
   Node *n;
   int key_retry = 1;
+  int forwarded_retry = 0;
   k.n = (lua_Number)key;
 retry_lookup:
+  forwarded_retry = 0;
   node = lj_tab_node_snapshot_acq(t, &hmask);
 genlookup:
-  if (hmask == 0)
+  if (hmask == 0) {
+    if (forwarded_retry) {
+      lj_tab_wait_no_l();
+      goto retry_lookup;
+    }
     return NULL;
+  }
   n = hashnum_node(node, hmask, &k);
   do {
     TValue nk;
@@ -2135,8 +2142,15 @@ genlookup:
       lj_tv_load_acq(&val, &n->val);
       if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask)) {
 	cTValue *tv = tab_forwarded_int_arrayslot(t, key);
-	if (tv)
-	  return tv;
+	forwarded_retry = 1;
+	if (tv) {
+	  TValue fval;
+	  lj_tv_load_acq(&fval, tv);
+	  if (!tab_val_absent(&fval))
+	    return tv;
+	  lj_tab_wait_no_l();
+	  goto retry_lookup;
+	}
 	goto genlookup;
       }
       if (tab_val_forward_retry(t, &val, node))
@@ -2148,6 +2162,10 @@ genlookup:
     if (tab_key_read_retry_once(&nk, &key_retry))
       goto retry_lookup;
   } while ((n = lj_tab_nextnode_acq(n)));
+  if (forwarded_retry) {
+    lj_tab_wait_no_l();
+    goto retry_lookup;
+  }
   return NULL;
 }
 
@@ -2162,11 +2180,18 @@ cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
   MSize hmask;
   Node *n;
   int key_retry = 1;
+  int forwarded_retry = 0;
 retry_lookup:
+  forwarded_retry = 0;
   node = lj_tab_node_snapshot_acq(t, &hmask);
 genlookup:
-  if (hmask == 0)
+  if (hmask == 0) {
+    if (forwarded_retry) {
+      lj_tab_wait_no_l();
+      goto retry_lookup;
+    }
     return NULL;
+  }
   n = hashstr_node(node, hmask, key);
   do {
     TValue nk;
@@ -2174,8 +2199,10 @@ genlookup:
     if (tvisstr(&nk) && strV(&nk) == key) {
       TValue val;
       lj_tv_load_acq(&val, &n->val);
-      if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask))
+      if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask)) {
+	forwarded_retry = 1;
 	goto genlookup;
+      }
       if (tab_val_forward_retry(t, &val, node))
 	goto retry_lookup;
       if (tvisforward(&val))
@@ -2185,6 +2212,10 @@ genlookup:
     if (tab_key_read_retry_once(&nk, &key_retry))
       goto retry_lookup;
   } while ((n = lj_tab_nextnode_acq(n)));
+  if (forwarded_retry) {
+    lj_tab_wait_no_l();
+    goto retry_lookup;
+  }
   return NULL;
 }
 
@@ -2213,11 +2244,18 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
     Node *node;
     MSize hmask;
     Node *n;
+    int forwarded_retry = 0;
   retry_lookup:
+    forwarded_retry = 0;
     node = lj_tab_node_snapshot_acq(t, &hmask);
   genlookup:
-    if (hmask == 0)
+    if (hmask == 0) {
+      if (forwarded_retry) {
+	lj_tab_wait_no_l();
+	goto retry_lookup;
+      }
       return niltv(L);
+    }
     n = hashkey_node(node, hmask, key);
     do {
       TValue nk;
@@ -2225,8 +2263,10 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
       if (lj_obj_equal(&nk, key)) {
 	TValue val;
 	lj_tv_load_acq(&val, &n->val);
-	if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask))
+	if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask)) {
+	  forwarded_retry = 1;
 	  goto genlookup;
+	}
 	if (tab_val_forward_retry(t, &val, node))
 	  goto retry_lookup;
 	if (tvisforward(&val))
@@ -2236,6 +2276,10 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
       if (tab_key_read_retry_once(&nk, &key_retry))
 	goto retry_lookup;
     } while ((n = lj_tab_nextnode_acq(n)));
+    if (forwarded_retry) {
+      lj_tab_wait_no_l();
+      goto retry_lookup;
+    }
   }
   return niltv(L);
 }
@@ -3336,8 +3380,29 @@ LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
   }
 }
 
+static LJ_AINLINE void tab_clear_store_wait(lua_State *L, int guarded)
+{
+  /*
+  ** A fresh STOPREQ-visible wait can longjmp. While table.clear owns the
+  ** per-table structural slot, retry waits must only yield to competing
+  ** publishers and then unwind through the normal leave path below.
+  */
+  if (guarded)
+    lj_tab_wait_no_l();
+  else
+    lj_tab_store_wait_l(L);
+}
+
+static LJ_AINLINE void tab_clear_wait(lua_State *L, int guarded)
+{
+  if (guarded)
+    lj_tab_wait_no_l();
+  else
+    lj_tab_wait_l(L);
+}
+
 static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
-				   cTValue *key)
+				   cTValue *key, int guarded)
 {
   TValue old, expect, nilv;
   setnilV(&nilv);
@@ -3348,7 +3413,7 @@ static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
     if (tvisnil(&old))
       return 1;
     if (tab_val_is_publish_claim(&old)) {
-      lj_tab_wait_l(L);
+      tab_clear_wait(L, guarded);
       continue;
     }
     expect = old;
@@ -3357,15 +3422,15 @@ static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
     if (tvisforward(&expect))
       return 0;
     if (tab_val_is_publish_claim(&expect)) {
-      lj_tab_wait_l(L);
+      tab_clear_wait(L, guarded);
       continue;
     }
-    lj_tab_store_wait_l(L);
+    tab_clear_store_wait(L, guarded);
   }
 }
 
 static void tab_clear_array_shared(lua_State *L, GCtab *t, TValue *array,
-				   MSize asize)
+				   MSize asize, int guarded)
 {
   MSize i;
   for (i = 0; i < asize; i++) {
@@ -3373,30 +3438,31 @@ static void tab_clear_array_shared(lua_State *L, GCtab *t, TValue *array,
     if (i > (MSize)INT32_MAX)
       break;
     setintV(&key, (int32_t)i);
-    while (!tab_clear_try_nil_keyed(L, t, &array[i], &key))
-      lj_tab_store_wait_l(L);
+    while (!tab_clear_try_nil_keyed(L, t, &array[i], &key, guarded))
+      tab_clear_store_wait(L, guarded);
   }
 }
 
-static void tab_clear_hash_slot_shared(lua_State *L, GCtab *t, Node *n)
+static void tab_clear_hash_slot_shared(lua_State *L, GCtab *t, Node *n,
+				       int guarded)
 {
   for (;;) {
     TValue key, val;
     lj_tv_load_acq(&val, &n->val);
     if (tab_val_is_publish_claim(&val)) {
-      lj_tab_wait_l(L);
+      tab_clear_wait(L, guarded);
       continue;
     }
     if (tab_val_absent(&val))
       return;
     lj_tv_load_acq(&key, &n->key);
     if (tab_key_islocked(&key)) {
-      lj_tab_wait_l(L);
+      tab_clear_wait(L, guarded);
       continue;
     }
     if (tab_hash_key_hidden(&key))
       return;
-    (void)tab_clear_try_nil_keyed(L, t, &n->val, &key);
+    (void)tab_clear_try_nil_keyed(L, t, &n->val, &key, guarded);
     return;
   }
 }
@@ -3410,11 +3476,11 @@ static void tab_clear_shared(lua_State *L, GCtab *t)
   tab_test_clear_shared_call();
   asize = lj_tab_array_snapshot_acq(t, &array);
   if (array)
-    tab_clear_array_shared(L, t, array, asize);
+    tab_clear_array_shared(L, t, array, asize, guard);
   node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask > 0) {
     for (i = 0; i <= hmask; i++)
-      tab_clear_hash_slot_shared(L, t, &node[i]);
+      tab_clear_hash_slot_shared(L, t, &node[i], guard);
   }
   lj_tab_struct_leave(t, guard);
 }

@@ -63,12 +63,14 @@ LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
 LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
+LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
 LJ_FUNC void lj_gc_freeall(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_preserveobj_legacy(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_markobj_legacy(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
+LJ_FUNC void lj_gc_arena_markmem_registered(global_State *g, void *p);
 #if LJ_HASJIT
 LJ_FUNC void lj_gc_mark_trace_slot(global_State *g, uint32_t traceno);
 #endif

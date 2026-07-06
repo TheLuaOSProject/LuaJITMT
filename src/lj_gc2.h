@@ -216,6 +216,7 @@ LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
 LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
 LJ_FUNC void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s);
 LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
+LJ_FUNC void lj_gc2_trace_sweep_roots(global_State *g);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_workers_count(global_State *g);
 LJ_FUNC int lj_gc2_workers_set(global_State *g, uint32_t n);
@@ -329,7 +330,11 @@ LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markobj_nolegacy_nogrey(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
+LJ_FUNC int lj_gc2_mem_registered(global_State *g, const void *p);
+LJ_FUNC int lj_gc2_markmem_registered(global_State *g, void *p);
+LJ_FUNC int lj_gc2_valid_thread_for_traverse(global_State *g, lua_State *th);
 LJ_FUNC uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o);
+LJ_FUNC uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 #if LJ_HASJIT
 LJ_FUNC void lj_gc2_mark_trace_slot(global_State *g, uint32_t traceno);
 #endif

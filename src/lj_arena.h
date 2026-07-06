@@ -184,7 +184,7 @@ struct LJArenaAllocD {
 
 typedef void (*LJArenaRunCB)(uint32_t start, uint32_t len, void *ud);
 
-LJ_FUNC void lj_arena_sweep_words(GCArena *a, int minor);
+LJ_FUNC void lj_arena_sweep_words(GCArena *a, int preserve_marks);
 LJ_FUNC void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud);
 LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
 LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
@@ -216,9 +216,9 @@ LJ_FUNC void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_prepare_sweep(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
-				       uint32_t epoch, int minor);
+				       uint32_t epoch, int preserve_marks);
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,
-				    uint32_t epoch, int minor);
+				    uint32_t epoch, int preserve_marks);
 LJ_FUNC uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
 LJ_FUNC int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs,
 				  uint32_t flags, uint32_t ncells,

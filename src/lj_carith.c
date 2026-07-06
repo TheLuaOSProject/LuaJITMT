@@ -35,7 +35,7 @@ typedef struct CDArith {
 static jit_State *carith_active_recorder(lua_State *L)
 {
   jit_State *J = G2J(G(L));
-  return J->L == L && lj_jit_token_held(J) &&
+  return J->L == L && lj_jit_token_held_l(L, J) &&
 	 lj_trace_state_load(J) != LJ_TRACE_IDLE ? J : NULL;
 }
 #endif

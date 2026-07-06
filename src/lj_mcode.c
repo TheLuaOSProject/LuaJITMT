@@ -596,8 +596,9 @@ static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
 
 static void mcode_preserve_retired(global_State *g, MCodeRetire *ret)
 {
-  for (; ret != NULL; ret = mcode_retired_next_acq(ret))
-    (void)lj_gc2_markmem(g, ret);
+  for (; ret != NULL && lj_gc2_mem_registered(g, ret);
+       ret = mcode_retired_next_acq(ret))
+    (void)lj_gc2_markmem_registered(g, ret);
 }
 
 static void mcode_freearea_direct(global_State *g, MCode *area, size_t size)
@@ -687,7 +688,7 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
     return 0;
   J = G2J(g);
   ret = mcode_retired_head_xchg_acqrel(J, NULL);
-  while (ret) {
+  while (ret && lj_gc2_mem_registered(g, ret)) {
     MCodeRetire *next = mcode_retired_next_acq(ret);
     mcode_retired_next_rel(ret, NULL);
     if (mcode_retire_ready(ret, completed_epoch) &&
@@ -710,7 +711,7 @@ void lj_mcode_freeretired(global_State *g)
     return;
   J = G2J(g);
   ret = mcode_retired_head_xchg_acqrel(J, NULL);
-  while (ret) {
+  while (ret && lj_gc2_mem_registered(g, ret)) {
     MCodeRetire *next = mcode_retired_next_acq(ret);
     mcode_freearea(g, ret);
     ret = next;
@@ -725,9 +726,12 @@ void lj_mcode_markretired(global_State *g, int gc2)
     return;
   J = G2J(g);
   for (ret = mcode_retired_head_acq(J);
-       ret != NULL;
+       ret != NULL && lj_gc2_mem_registered(g, ret);
        ret = mcode_retired_next_acq(ret)) {
-    if (gc2) lj_gc2_markmem(g, ret); else lj_gc_arena_markmem(g, ret);
+    if (gc2)
+      lj_gc2_markmem_registered(g, ret);
+    else
+      lj_gc_arena_markmem_registered(g, ret);
   }
 }
 

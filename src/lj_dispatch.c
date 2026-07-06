@@ -179,10 +179,13 @@ static uint8_t dispatch_state_mode(global_State *g
   uint8_t hookmask = hookmask_load(g);
 #if LJ_HASJIT
   jit_State *J = G2J(g);
+  lua_State *Lrec = J->L;
+  TGState *rectg = Lrec ? lj_jit_owner_tg_l(Lrec, J) : NULL;
   *Jp = J;
-  *tgp = G2TG(g);
-  *rec_ownerp = lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-		lj_jit_token_held(J);
+  *tgp = rectg ? rectg : G2TG(g);
+  *rec_ownerp = rectg != NULL &&
+		lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+		lj_jit_token_held_l(Lrec, J);
   mode |= (jit_flags_acq(J) & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
@@ -427,7 +430,11 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
     int token = lj_jit_token_acquire_wait(G2J(g));
     cTValue *tv;
     GCproto *pt;
-    setmode_checkclaim(L, &claim);
+    if (!lj_state_tryclaim(L, lj_thr_current_id(g), &claim)) {
+      if (token)
+	lj_jit_token_release(G2J(g));
+      lj_err_callermsg(setmode_errstate(L), "thread busy");
+    }
     tv = idx == 0 ? frame_prev(L->base-1)-LJ_FR2 :
 		    setmode_stack_slot(L, idx);
     if ((idx == 0 || tvisfunc(tv)) && isluafunc(&gcval(tv)->fn))
@@ -592,13 +599,14 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
 #if LJ_HASJIT
   {
     jit_State *J = G2J(g);
-    if (lj_trace_state_load(J) != LJ_TRACE_IDLE && lj_jit_token_held(J)) {
+    if (J->L == L && lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+	lj_jit_token_held_l(L, J)) {
 #ifdef LUA_USE_ASSERT
       ptrdiff_t delta = L->top - L->base;
 #endif
-      J->L = L;
       lj_trace_ins(J, pc-1);  /* The interpreter bytecode PC is offset by 1. */
-      if (lj_trace_state_load(J) == LJ_TRACE_IDLE || !lj_jit_token_held(J))
+      if (lj_trace_state_load(J) == LJ_TRACE_IDLE ||
+	  !lj_jit_token_held_l(L, J))
 	lj_safepoint_checkstop(L, 0);
       lj_assertG(L->top - L->base == delta,
 		 "unbalanced stack after tracing of instruction");
@@ -696,14 +704,14 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
     lj_assertG(L->top - L->base == delta,
 	       "unbalanced stack after hot call");
     goto out;
-  } else if (lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-	     lj_jit_token_held(J) &&
+  } else if (J->L == L &&
+	     lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+	     lj_jit_token_held_l(L, J) &&
 	     !(hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT))) {
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
 #endif
     /* Record the FUNC* bytecodes, too. */
-    J->L = L;
     lj_trace_ins(J, pc-1);  /* The interpreter bytecode PC is offset by 1. */
     lj_assertG(L->top - L->base == delta,
 	       "unbalanced stack after hot instruction");

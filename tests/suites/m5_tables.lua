@@ -244,6 +244,31 @@ return function(add)
 	}
       },
       message = "M5 weak-key finalizer JIT resize stress passed"
+    },
+    {
+      name = "m5_tab_resize_remote_stack_gc",
+      description = "GC root scans preserve remote worker stack roots during traced table resize",
+      script = "t-tab-resize-stress.lua",
+      opts = {
+	timeout = os.getenv("LJ_M5_TAB_RESIZE_REMOTE_STACK_TIMEOUT") or "20s",
+	env = {
+	  LJ_M5_TAB_RESIZE_STRESS_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_REMOTE_STACK_REPS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_REPS") or "768",
+	  LJ_M5_TAB_RESIZE_STRESS_THREADS =
+	    os.getenv("LJ_M5_TAB_RESIZE_REMOTE_STACK_THREADS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_THREADS") or "3",
+	  LJ_M5_TAB_RESIZE_REMOTE_STACK_GC_ROUNDS =
+	    os.getenv("LJ_M5_TAB_RESIZE_REMOTE_STACK_GC_ROUNDS") or "8",
+	  LJ_M5_TAB_RESIZE_REMOTE_STACK_JIT_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_REMOTE_STACK_JIT_REPS") or "96",
+	  LJ_M5_TAB_RESIZE_STRESS_GCWORKERS =
+	    os.getenv("LJ_M5_TAB_RESIZE_REMOTE_STACK_GCWORKERS") or
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_GCWORKERS") or "2",
+	  LJ_M5_TAB_RESIZE_STRESS_CASES = "remotejitgc"
+	}
+      },
+      message = "M5 remote-stack GC table resize stress passed"
     }
   })
 end

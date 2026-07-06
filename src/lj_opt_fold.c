@@ -2529,6 +2529,7 @@ LJFOLD(CALLL any any)  /* Safeguard fallback. */
 LJFOLD(CALLS any any)
 LJFOLD(CALLXS any any)
 LJFOLD(XBAR)
+LJFOLD(XPOLL)
 LJFOLD(RETF any any)  /* Modifies BASE. */
 LJFOLD(TNEW any any)
 LJFOLD(TDUP any)

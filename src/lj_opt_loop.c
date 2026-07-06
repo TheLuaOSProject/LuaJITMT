@@ -98,6 +98,18 @@
 /* Emit raw IR without passing through optimizations. */
 #define emitir_raw(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_ir_emit(J))
 
+static IRRef loop_subst_ref(jit_State *J, IRRef1 *subst, IRRef ref,
+			    IRRef invar)
+{
+  IRRef s;
+  if (LJ_UNLIKELY(ref < REF_BIAS || ref >= invar))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  s = subst[ref];
+  if (LJ_UNLIKELY(s == REF_DROP))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  return s;
+}
+
 /* -- PHI elimination ----------------------------------------------------- */
 
 /* Emit or eliminate collected PHIs. */
@@ -206,7 +218,7 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
 
 /* Copy-substitute snapshot. */
 static void loop_subst_snap(jit_State *J, SnapShot *osnap,
-			    SnapEntry *loopmap, IRRef1 *subst)
+			    SnapEntry *loopmap, IRRef1 *subst, IRRef invar)
 {
   SnapEntry *nmap, *omap = &J->cur.snapmap[osnap->mapofs];
   SnapEntry *nextmap = &J->cur.snapmap[snap_nextofs(&J->cur, osnap)];
@@ -240,7 +252,8 @@ static void loop_subst_snap(jit_State *J, SnapShot *osnap,
     } else {  /* Copy substituted slot from snapshot map. */
       if (snap_slot(lsn) == snap_slot(osn)) ln++;  /* Shadowed loop slot. */
       if (!irref_isk(snap_ref(osn)))
-	osn = snap_setref(osn, subst[snap_ref(osn)]);
+	osn = snap_setref(osn, loop_subst_ref(J, subst, snap_ref(osn),
+					      invar));
       nmap[nn++] = osn;
       on++;
     }
@@ -331,14 +344,14 @@ static void loop_unroll(LoopState *lps)
     IRRef op1, op2;
 
     if (ins >= osnap->ref)  /* Instruction belongs to next snapshot? */
-      loop_subst_snap(J, osnap++, loopmap, subst);  /* Copy-substitute it. */
+      loop_subst_snap(J, osnap++, loopmap, subst, invar);
 
     /* Substitute instruction operands. */
     ir = IR(ins);
     op1 = ir->op1;
-    if (!irref_isk(op1)) op1 = subst[op1];
+    if (!irref_isk(op1)) op1 = loop_subst_ref(J, subst, op1, invar);
     op2 = ir->op2;
-    if (!irref_isk(op2)) op2 = subst[op2];
+    if (!irref_isk(op2)) op2 = loop_subst_ref(J, subst, op2, invar);
     if (irm_kind(lj_ir_mode[ir->o]) == IRM_N &&
 	op1 == ir->op1 && op2 == ir->op2) {  /* Regular invariant ins? */
       subst[ins] = (IRRef1)ins;  /* Shortcut. */

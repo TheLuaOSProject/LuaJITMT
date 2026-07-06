@@ -345,7 +345,8 @@ static GCtrace *jit_checktrace(lua_State *L)
   TraceVec *tv = tracevec_acq(J);
   if (tr > 0 && trace_traceno_acq(&J->cur) == tr &&
       lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-      (J->L == L || vmthread_acq(G(L)) == L) && lj_jit_token_held(J)) {
+      (J->L == L || vmthread_acq(G(L)) == L) &&
+      lj_jit_token_held_l(J->L, J) && lj_jit_token_held(J)) {
     /*
     ** RECORD vmevents expose the pending trace number before trace_stop()
     ** publishes a body in the trace vector. The recorder owns J->cur under the
