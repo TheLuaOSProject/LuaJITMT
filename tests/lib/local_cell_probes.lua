@@ -424,6 +424,42 @@ assert(run(30) == 495)
 ]=] .. trace_assert(opts)
 end
 
+function M.side_exit_cget_source_snapshot()
+  return [=[
+local util = require"jit.util"
+
+local function check(label, run)
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+
+  assert(run(60, -1) == 1830, label .. " warmup")
+  assert(util.traceinfo(1), label .. " CGET source loop should trace")
+
+  assert(run(60, 30) == 2830, label .. " side exit")
+  assert(run(60, 30) == 2830, label .. " side trace")
+end
+
+local function source_run(n, stop)
+  local x = 0
+  local acc = 0
+  for i = 1, n do
+    x = x + 1
+    local y = x
+    if i == stop then
+      acc = acc + 1000
+    end
+    acc = acc + y
+  end
+  return acc
+end
+
+local dumped = assert(loadstring(string.dump(source_run)))
+
+check("source", source_run)
+check("dumped", dumped)
+]=]
+end
+
 function M.pre_fnew_update(opts)
   opts = opts or {}
   return jit_setup(opts) .. [=[

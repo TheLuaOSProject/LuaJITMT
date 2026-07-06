@@ -60,6 +60,22 @@ void lj_snap_grow_map_(jit_State *J, MSize need)
 
 /* -- Snapshot generation ------------------------------------------------- */
 
+static int snapshot_cellref_slot(jit_State *J, BCReg slot, TRef tr)
+{
+  const BCIns *pc, *end;
+  BCReg lslot;
+  if (!J->pt || slot < J->baseslot ||
+      !(tref_istype(tr, IRT_P32) || tref_istype(tr, IRT_PGC)))
+    return 0;
+  lslot = (BCReg)(slot - J->baseslot);
+  pc = proto_bc(J->pt);
+  end = pc + J->pt->sizebc;
+  for (; pc < end; pc++)
+    if (bc_op(*pc) == BC_CGET && bc_d(*pc) == lslot)
+      return 1;
+  return 0;
+}
+
 /* Add all modified slots to the snapshot. */
 static MSize snapshot_slots(jit_State *J, SnapEntry *map, BCReg nslots)
 {
@@ -99,6 +115,14 @@ static MSize snapshot_slots(jit_State *J, SnapEntry *map, BCReg nslots)
 	    (ir->op2 & (IRSLOAD_READONLY|IRSLOAD_PARENT)) != IRSLOAD_PARENT)
 	  sn |= SNAP_NORESTORE;
       }
+      /*
+      ** Local-cell source slots may be represented by internal cell refs in the
+      ** recorder. The helper has already updated the real stack slot to a TUPVAL
+      ** before any dependent exit can fire, so restoring the pointer as a Lua
+      ** value would corrupt interpreter-visible state.
+      */
+      if (snapshot_cellref_slot(J, s, tr))
+	sn |= SNAP_NORESTORE;
       if (LJ_SOFTFP32 && irt_isnum(ir->t))
 	sn |= SNAP_SOFTFPNUM;
       map[n++] = sn;

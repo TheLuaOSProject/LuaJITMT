@@ -2668,6 +2668,11 @@ static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
   return best ? TREF(best, IRT_PGC) : 0;
 }
 
+static int rec_celluv_iscellref(TRef tr)
+{
+  return tref_istype(tr, IRT_P32) || tref_istype(tr, IRT_PGC);
+}
+
 /* Emit TMPREF for a value helper argument. */
 static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode)
 {
@@ -2720,16 +2725,16 @@ static TRef rec_celluv_promote_slot(jit_State *J, BCReg slotno, int fromstack)
   if (slotno >= J->maxslot)
     J->maxslot = (BCReg)(slotno + 1);
   slotref = J->base[slotno];
-  if (!tref_istype(slotref, IRT_P32)) {
+  if (!rec_celluv_iscellref(slotref)) {
     if (fromstack) {
       tmp = lj_ir_kptr(J, NULL);
     } else {
       slotref = getslot(J, slotno);
       tmp = rec_tmpref(J, slotref);
     }
-    lj_ir_call(J, IRCALL_lj_func_promoteuv_forjit, REF_BASE,
-	       lj_ir_kint(J, (int32_t)slotno), tmp);
-    slotref = sloadt(J, (int32_t)slotno, IRT_P32, IRSLOAD_INHERIT);
+    slotref = lj_ir_call(J, IRCALL_lj_func_promoteuv_forjit, REF_BASE,
+			 lj_ir_kint(J, (int32_t)slotno), tmp);
+    J->base[slotno] = slotref;
   }
   return slotref;
 }
@@ -2789,21 +2794,45 @@ static int rec_celluv_materialize_cget_sources(jit_State *J)
 {
   const BCIns *pc, *end;
   BCReg framesize;
+  uint8_t defined[LJ_MAX_JSLOTS];
   int materialized = 0;
   if (J->pt == NULL)
     return 0;
   pc = J->pc;
   end = proto_bc(J->pt) + J->pt->sizebc;
   framesize = J->pt->framesize;
+  memset(defined, 0, sizeof(defined));
   while (pc < end) {
     BCIns ins = *pc++;
     BCOp op = bc_op(ins);
     if (op == BC_CGET) {
       BCReg slot = bc_d(ins);
-      if (slot < framesize && J->base[slot] == 0) {
+      if (slot < framesize && !defined[slot] && J->base[slot] == 0) {
 	(void)getslot(J, slot);
 	materialized = 1;
       }
+    }
+    /*
+    ** Only preserve CGET sources that are live at the current trace entry.
+    ** A source recreated by an earlier straight-line definition, e.g. CNEW
+    ** before CGET in a loop body, must not become a false loop-carried value.
+    */
+    if (op == BC_KNIL) {
+      if (bc_a(ins) < framesize) {
+	BCReg s, last = bc_d(ins);
+	if (last >= framesize)
+	  last = (BCReg)(framesize - 1);
+	for (s = bc_a(ins); s <= last; s++)
+	  defined[s] = 1;
+      }
+    } else if (op == BC_CSET) {
+      BCReg slot = bc_a(ins);
+      if (slot < framesize)
+	defined[slot] = 1;
+    } else if (bcmode_a(op) == BCMdst) {
+      BCReg slot = bc_a(ins);
+      if (slot < framesize)
+	defined[slot] = 1;
     }
     /*
     ** Branch exits can resume before a later CGET has copied an argument into
@@ -2827,7 +2856,7 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   GCupval *uvp = NULL;
   IRRef uref;
   uint32_t uh = 0;
-  if (itype(slot) != LJ_TUPVAL && !tref_istype(slotref, IRT_P32)) {
+  if (itype(slot) != LJ_TUPVAL && !rec_celluv_iscellref(slotref)) {
     if (rec_celluv_will_promote(J, slotno)) {
       slotref = rec_celluv_promote_slot(J, slotno, 0);
     } else {
@@ -2886,7 +2915,7 @@ static int rec_fnew_celluv(jit_State *J, GCproto *pt)
       if (slot >= J->maxslot)
 	return 0;
       tr = getslot(J, slot);
-      if (tref_istype(tr, IRT_P32)) {
+      if (rec_celluv_iscellref(tr)) {
 	/* Already a cell from CNEW or an earlier promotion in this trace. */
       } else if (itype(tv) == LJ_TUPVAL) {
 	return 0;
@@ -2917,7 +2946,7 @@ static TRef rec_fnew_gc1num(jit_State *J, GCproto *pt)
   if (itype(&J->L->base[slot]) == LJ_TUPVAL)
     return 0;
   tr = getslot(J, slot);
-  if (tref_istype(tr, IRT_P32))
+  if (rec_celluv_iscellref(tr))
     return 0;
   if (tref_isinteger(tr))
     tr = emitir(IRTN(IR_CONV), tr, IRCONV_NUM_INT);
@@ -2937,7 +2966,8 @@ static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
     uint32_t v = proto_uv(pt)[i];
     if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE)) {
       BCReg slot = (BCReg)(v & 0xff);
-      if (slot < J->maxslot && itype(&J->L->base[slot]) != LJ_TUPVAL)
+      if (slot < J->maxslot && !rec_celluv_iscellref(J->base[slot]) &&
+	  itype(&J->L->base[slot]) != LJ_TUPVAL)
 	sloadt(J, (int32_t)slot, IRT_P32, IRSLOAD_INHERIT);
     }
   }
@@ -3368,6 +3398,19 @@ static void rec_comp_fixup(jit_State *J, const BCIns *pc, int cond)
   lj_snap_shrink(J);  /* Shrink last snapshot if possible. */
 }
 
+static void rec_setdst(jit_State *J, BCReg ra, TRef tr)
+{
+  if (!tr)
+    return;
+  J->base[ra] = tr;
+  if (ra >= J->maxslot) {
+#if LJ_FR2
+    if (ra > J->maxslot) J->base[ra-1] = 0;
+#endif
+    J->maxslot = ra+1;
+  }
+}
+
 /* Record the next bytecode instruction (_before_ it's executed). */
 void lj_record_ins(jit_State *J)
 {
@@ -3702,12 +3745,13 @@ void lj_record_ins(jit_State *J)
     rec_upvalue(J, ra, rc);
     break;
   case BC_CNEW:
-    lj_ir_call(J, IRCALL_lj_func_newuvcell_forjit, REF_BASE,
-	       lj_ir_kint(J, (int32_t)ra));
-    rc = sloadt(J, (int32_t)ra, IRT_P32, 0);
+    rc = lj_ir_call(J, IRCALL_lj_func_newuvcell_forjit, REF_BASE,
+		    lj_ir_kint(J, (int32_t)ra));
+    rec_setdst(J, (BCReg)ra, rc);
     break;
   case BC_CGET:
     rc = rec_celluv(J, rcv, rc, 0, bc_d(ins));
+    rec_setdst(J, (BCReg)ra, rc);
     /*
     ** CGET writes a Lua register even when the recorder represents it as an
     ** SSA alias. Compiled code does not store the destination slot, so exits
@@ -3919,15 +3963,8 @@ void lj_record_ins(jit_State *J)
   }
 
   /* rc == 0 if we have no result yet, e.g. pending __index metamethod call. */
-  if (bcmode_a(op) == BCMdst && rc) {
-    J->base[ra] = rc;
-    if (ra >= J->maxslot) {
-#if LJ_FR2
-      if (ra > J->maxslot) J->base[ra-1] = 0;
-#endif
-      J->maxslot = ra+1;
-    }
-  }
+  if (bcmode_a(op) == BCMdst)
+    rec_setdst(J, (BCReg)ra, rc);
 
 #undef rav
 #undef rbv
@@ -4139,13 +4176,13 @@ void lj_record_setup(jit_State *J)
     ** The one exception is BC_ITERN, which sets LJ_TRACE_RECORD_1ST.
     */
     lj_snap_add(J);
-    if (rec_celluv_materialize_cget_sources(J))
-      lj_snap_add(J);
     if (bc_op(J->cur.startins) == BC_FORL)
       rec_for_loop(J, J->pc-1, &J->scev, 1);
     else if (bc_op(J->cur.startins) == BC_ITERC)
       J->startpc = NULL;
     rec_celluv_promote_pending(J);
+    if (rec_celluv_materialize_cget_sources(J))
+      lj_snap_add(J);
     if (1 + J->pt->framesize >= LJ_MAX_JSLOTS)
       lj_trace_err(J, LJ_TRERR_STACKOV);
   }

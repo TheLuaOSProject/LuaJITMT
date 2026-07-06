@@ -161,6 +161,7 @@ assert(util.traceinfo(1), "GC-valued closed-upvalue store should trace")
 end
 
 function M.run_jit_runtime_checks(t)
+  luajit_code(t, probes.side_exit_cget_source_snapshot())
   luajit_code(t, probes.pre_fnew_update({
     hotexit = true,
     trace_assert = "pre-FNEW promoted local update should trace"

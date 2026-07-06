@@ -251,9 +251,22 @@ static void loop_subst_snap(jit_State *J, SnapShot *osnap,
       ln++;
     } else {  /* Copy substituted slot from snapshot map. */
       if (snap_slot(lsn) == snap_slot(osn)) ln++;  /* Shadowed loop slot. */
-      if (!irref_isk(snap_ref(osn)))
-	osn = snap_setref(osn, loop_subst_ref(J, subst, snap_ref(osn),
-					      invar));
+      if (!irref_isk(snap_ref(osn))) {
+	SnapEntry oldsn = osn;
+	IRRef ref = loop_subst_ref(J, subst, snap_ref(osn), invar);
+	osn = snap_setref(osn, ref);
+	/*
+	** Local-cell source slots use SNAP_NORESTORE for internal cell refs:
+	** the helper has already written the real TUPVAL stack slot. Loop
+	** substitution may replace the helper ref with a PHI, but it is still
+	** an internal cell ref and must not be restored as a Lua value.
+	*/
+	if ((oldsn & SNAP_NORESTORE) && !irref_isk(ref)) {
+	  IRType t = irt_type(IR(ref)->t);
+	  if (t == IRT_PGC || t == IRT_P32)
+	    osn |= SNAP_NORESTORE;
+	}
+      }
       nmap[nn++] = osn;
       on++;
     }
