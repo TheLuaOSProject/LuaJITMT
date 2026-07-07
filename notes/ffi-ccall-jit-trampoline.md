@@ -20,9 +20,10 @@ pointer returns, plus exact two-argument `pointer,int64_t` and
 `int64_t,uint32_t`, `uint64_t,int32_t`, `uint64_t,uint32_t`, `int64_t,pointer`,
 `uint64_t,pointer`, and all `int64_t`/`uint64_t` two-argument pairs are
 covered too. The FPR subset accepts 0, 1, or 2 same-kind exact float or double
-arguments. The first
-mixed one-argument subset
-accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
+arguments. The first mixed two-argument FP/GPR subset accepts exact
+`double(double, int32_t)` and `double(int32_t, double)`. The first mixed
+one-argument subset accepts exact `double(int32_t)`, `double(pointer)`,
+`double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
 `void(double)`, `void(float)`, and `float(double)`. The first exact
 three-argument subset accepts `int32_t(void *, unsigned long, int32_t)` calls,
@@ -42,12 +43,13 @@ code for the GPR argument shape, `lj_ccall_jit_u32_0()` /
 results, `lj_ccall_jit_u64_0()` / `lj_ccall_jit_u64_gpr()` /
 `lj_ccall_jit_u64_u64()` for boxed uint64 results,
 `lj_ccall_jit_narrow_0()` / `lj_ccall_jit_narrow_gpr()` for narrow
-integer results, `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
+integer results, `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_num_i32()`,
+`lj_ccall_jit_num_i32_num()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
 `lj_ccall_jit_i32_flt()`, `lj_ccall_jit_i32_i8()`,
 `lj_ccall_jit_ptr_num()`,
 `lj_ccall_jit_void_num()`, `lj_ccall_jit_void_flt()`, and
-`lj_ccall_jit_flt_num()` for the mixed one-argument shapes,
+`lj_ccall_jit_flt_num()` for the mixed one- and two-argument shapes,
 `lj_ccall_jit_i64_i32_ptr_u64()` for the exact int/pointer/size argument
 shape,
 `lj_ccall_jit_i64_i32_i64_i32()` for the exact int/signed-offset/int argument
@@ -135,6 +137,8 @@ The scope is deliberately narrow:
 - exact two-argument `int64_t`/`uint64_t` all-64 pairs for void, signed
   32-bit, unsigned 32-bit, narrow integer, and pointer return families;
 - same-kind exact float/double arguments and exact float/double returns;
+- exact two-argument `double(double, int32_t)` and
+  `double(int32_t, double)` mixed calls;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,
   `pointer(double)`, `void(double)`, `void(float)`, and `float(double)` mixed
@@ -162,10 +166,11 @@ int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, signed/unsigned 64-bit-result pointer/pointer/size loops,
 void-returning pointer/pointer/size loops, FP-only numeric call loops,
 signed-narrow-to-`unsigned long` conversion probes, and
-mixed float/double one-argument calls a traced, nonblocking native-state path,
-without risking the direct backend `IR_CALLXS` register/result ordering. The
-full direct bridge still needs x64 lowering that brackets the foreign ABI call
-without clobbering argument or result registers.
+mixed float/double one-argument calls, plus exact double/int two-argument calls,
+a traced, nonblocking native-state path, without risking the direct backend
+`IR_CALLXS` register/result ordering. The full direct bridge still needs x64
+lowering that brackets the foreign ABI call without clobbering argument or
+result registers.
 
 `tests/t-ffi-ccall-stopreq.c` also heats the shared `sleep_i32` trampoline until
 a trace exists, starts the STOPREQ publisher only after that warmup, and catches
