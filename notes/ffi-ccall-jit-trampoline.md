@@ -148,6 +148,8 @@ pointer/pointer/unsigned-int/unsigned-int/unsigned-int/pointer argument shape,
 pointer/size/pointer/pointer/unsigned-int/pointer argument shape,
 `lj_ccall_jit_ptr_ptr_i32_i32_ptr()` for the exact pointer-returning
 pointer/signed-int/signed-int/pointer argument shape,
+`lj_ccall_jit_ptr_ptr_i32_i32_ptr_u32_u32()` for the exact pointer-returning
+pointer/signed-int/signed-int/pointer/unsigned-int/unsigned-int argument shape,
 `lj_ccall_jit_ptr_ptr_i32_ptr()` for the exact pointer-returning
 pointer/signed-int/pointer argument shape,
 `lj_ccall_jit_ptr_u32_i32_ptr()` for the exact pointer-returning
@@ -315,6 +317,9 @@ The scope is deliberately narrow:
 - exact `pointer(pointer, int32_t, int32_t, pointer)` calls, preserving
   security attributes, boolean/count fields, and name pointer for
   CreateEvent/CreateSemaphore-style ABI classes;
+- exact `pointer(pointer, int32_t, int32_t, pointer, uint32_t, uint32_t)`
+  calls, preserving security attributes, counts, name pointer, flags, and
+  desired access for CreateSemaphoreEx-style ABI classes;
 - exact `pointer(pointer, int32_t, pointer)` calls, preserving security
   attributes, inherit/manual-reset-style flags, and name pointer for
   CreateMutex/CreateWaitableTimer-style ABI classes;
@@ -489,6 +494,8 @@ pointer-returning loops,
 traced CreateThread-shaped pointer/uint64/ptr/ptr/uint32/ptr
 pointer-returning loops,
 traced CreateEvent/CreateSemaphore-shaped pointer/int32/int32/pointer
+pointer-returning loops,
+traced CreateSemaphoreEx-shaped pointer/int32/int32/pointer/uint32/uint32
 pointer-returning loops,
 traced CreateMutex/CreateWaitableTimer-shaped pointer/int32/pointer
 pointer-returning loops,

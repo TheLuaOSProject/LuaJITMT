@@ -391,6 +391,18 @@ int *lj_m7_ccall_jit_ptr_ptr_i32_i32_ptr(int *security, int32_t manual,
 		      (uint64_t)(uint32_t)(name ? *name : 0)) & 3u);
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_i32_i32_ptr_u32_u32(int *security,
+						 int32_t initial,
+						 int32_t maximum, int *name,
+						 uint32_t flags,
+						 uint32_t access)
+{
+  return security + (((uint64_t)(uint32_t)initial +
+		      (uint64_t)(uint32_t)maximum +
+		      (uint64_t)(uint32_t)(name ? *name : 0) +
+		      (uint64_t)flags + (uint64_t)access) & 3u);
+}
+
 int *lj_m7_ccall_jit_ptr_ptr_i32_ptr(int *security, int32_t inherit,
 				     int *name)
 {
