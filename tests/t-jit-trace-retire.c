@@ -31,6 +31,24 @@ static void test_trace_preserve_candidates(global_State *g, GCproto *pt)
   assert(lj_trace_test_proto_pc_candidate(g, bad, proto_bc(pt)) == 0);
 }
 
+static void test_trace_complete_payload_layout(GCtrace *T)
+{
+  char *p = (char *)T + ((sizeof(GCtrace)+7)&~7);
+  p += (MSize)(T->nins - T->nk) * sizeof(IRIns);
+  T->snap = (SnapShot *)p;
+  p += (MSize)T->nsnap * sizeof(SnapShot);
+  T->snapmap = (SnapEntry *)p;
+}
+
+static void test_trace_stale_startins_candidates(global_State *g, GCproto *pt,
+						 GCtrace *T)
+{
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+  assert(lj_trace_test_stale_startins_candidate(g, obj2gco(T)) == 1);
+  assert(lj_trace_test_stale_startins_candidate(g, obj2gco(pt)) == 0);
+  assert(lj_trace_test_stale_startins_candidate(g, bad) == 0);
+}
+
 static GCtrace *retired_find(jit_State *J, GCtrace *needle)
 {
   GCtrace *T;
@@ -63,18 +81,21 @@ int main(void)
   test_trace_preserve_candidates(g, pt);
 
   memset(&tmpl, 0, sizeof(tmpl));
-  tmpl.nk = REF_TRUE;
-  tmpl.nins = REF_TRUE;
+  tmpl.nk = REF_BASE;
+  tmpl.nins = REF_BASE;
   tmpl.nsnap = 1;
   tmpl.nsnapmap = 0;
   tmpl.ir = dummyir;
 
   T = lj_trace_alloc(L, &tmpl);
+  test_trace_complete_payload_layout(T);
   assert(gcref(T->startpt) == NULL);
   lj_trace_free_unpublished(g, T);
   assert(trace_retired_head_acq(J) == NULL);
 
   T = lj_trace_alloc(L, &tmpl);
+  test_trace_complete_payload_layout(T);
+  test_trace_stale_startins_candidates(g, pt, T);
   setgcref(T->startpt, obj2gco(pt));
   exittab = lj_mem_newvec(L, 1, MCode *);
   exittab[0] = NULL;
@@ -98,6 +119,7 @@ int main(void)
   assert(retired_find(J, T) == NULL);
 
   T = lj_trace_alloc(L, &tmpl);
+  test_trace_complete_payload_layout(T);
   setgcref(T->startpt, obj2gco(pt));
   exittab = lj_mem_newvec(L, 1, MCode *);
   exittab[0] = NULL;

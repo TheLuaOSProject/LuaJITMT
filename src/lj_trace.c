@@ -1619,6 +1619,34 @@ static BCIns trace_stale_startins_match(GCtrace *T, const BCIns *pc,
   return 0;
 }
 
+static BCIns trace_stale_startins_match_valid(global_State *g, GCtrace *T,
+					      const BCIns *pc, GCproto *owner)
+{
+  if (!T || LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
+    return 0;
+  return trace_stale_startins_match(T, pc, owner);
+}
+
+static GCtrace *trace_stale_startins_root_candidate(global_State *g, GCobj *o)
+{
+  GCtrace *T;
+  uint32_t gct;
+  if (!trace_preserve_body_candidate(g, o, &gct) ||
+      gct != (uint32_t)~LJ_TTRACE)
+    return NULL;
+  T = gco2trace(o);
+  if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
+    return NULL;
+  return T;
+}
+
+#ifdef LJ_TRACE_TEST_HELPERS
+int lj_trace_test_stale_startins_candidate(global_State *g, GCobj *o)
+{
+  return trace_stale_startins_root_candidate(g, o) != NULL;
+}
+#endif
+
 static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc,
 				       GCproto *owner)
 {
@@ -1626,8 +1654,9 @@ static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc,
   uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    if (o->gch.gct == ~LJ_TTRACE) {
-      BCIns startins = trace_stale_startins_match(gco2trace(o), pc, owner);
+    GCtrace *T = trace_stale_startins_root_candidate(g, o);
+    if (T) {
+      BCIns startins = trace_stale_startins_match(T, pc, owner);
       if (startins != 0)
 	return startins;
     }
@@ -1645,11 +1674,13 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
   GCproto *owner = L && curr_funcisL(L) ? curr_proto(L) : NULL;
   lj_gc2_smr_read_enter(g);
   if (traceno > 0 && traceno < trace_sizetrace_acq(J))
-    startins = trace_stale_startins_match(traceref(J, traceno), pc, owner);
+    startins = trace_stale_startins_match_valid(g, traceref_safe(J, traceno),
+						pc, owner);
   if (startins == 0) {
     TraceNo i, sizetrace = trace_sizetrace_acq(J);
     for (i = 1; i < sizetrace; i++) {
-      startins = trace_stale_startins_match(traceref(J, i), pc, owner);
+      startins = trace_stale_startins_match_valid(g, traceref_safe(J, i), pc,
+						  owner);
       if (startins != 0)
 	break;
     }
@@ -1659,7 +1690,7 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
     for (T = trace_retired_head_acq(J);
 	 T != NULL && lj_gc2_mem_registered(g, T);
 	 T = trace_retired_next_acq(T)) {
-      startins = trace_stale_startins_match(T, pc, owner);
+      startins = trace_stale_startins_match_valid(g, T, pc, owner);
       if (startins != 0)
 	break;
     }

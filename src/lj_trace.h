@@ -80,6 +80,7 @@ LJ_FUNC uint32_t lj_trace_test_last_released(void);
 LJ_FUNC int lj_trace_test_preserve_body_candidate(global_State *g, GCobj *o);
 LJ_FUNC int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
 					     const BCIns *pc);
+LJ_FUNC int lj_trace_test_stale_startins_candidate(global_State *g, GCobj *o);
 #else
 #define lj_trace_test_note_call_unroll_abort(lnk)	((void)(lnk))
 #endif
