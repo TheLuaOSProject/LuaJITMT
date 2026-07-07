@@ -2883,6 +2883,62 @@ double lj_ccall_jit_num_u64_num(lua_State *L, void *func, uint64_t a, double b)
   return ret;
 }
 
+double lj_ccall_jit_num_flt_i64(lua_State *L, void *func, float a, int64_t b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  double ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((double (*)(float, int64_t))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+double lj_ccall_jit_num_i64_flt(lua_State *L, void *func, int64_t a, float b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  double ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((double (*)(int64_t, float))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+double lj_ccall_jit_num_flt_u64(lua_State *L, void *func, float a, uint64_t b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  double ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((double (*)(float, uint64_t))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+double lj_ccall_jit_num_u64_flt(lua_State *L, void *func, uint64_t a, float b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  double ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((double (*)(uint64_t, float))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
 float lj_ccall_jit_flt_flt_i32(lua_State *L, void *func, float a, int32_t b)
 {
   CTState *cts = ctype_cts(L);
@@ -3046,6 +3102,62 @@ float lj_ccall_jit_flt_u64_flt(lua_State *L, void *func, uint64_t a, float b)
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
   ret = ((float (*)(uint64_t, float))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+float lj_ccall_jit_flt_num_i64(lua_State *L, void *func, double a, int64_t b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  float ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((float (*)(double, int64_t))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+float lj_ccall_jit_flt_i64_num(lua_State *L, void *func, int64_t a, double b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  float ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((float (*)(int64_t, double))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+float lj_ccall_jit_flt_num_u64(lua_State *L, void *func, double a, uint64_t b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  float ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((float (*)(double, uint64_t))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+float lj_ccall_jit_flt_u64_num(lua_State *L, void *func, uint64_t a, double b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  float ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((float (*)(uint64_t, double))(uintptr_t)func)(a, b);
   actions = lj_ccall_native_leave(L, cts, &native, func);
   lj_ccall_native_checkstop(L, actions, &native);
   return ret;

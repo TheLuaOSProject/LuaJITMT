@@ -85,6 +85,10 @@ foreign call.
 `lj_ccall_jit_num_num_u64()` / `lj_ccall_jit_num_u64_num()` extend that mixed
 double-returning coverage to exact signed and unsigned 64-bit cdata arguments
 while preserving per-argument signedness.
+`lj_ccall_jit_num_flt_i64()` / `lj_ccall_jit_num_i64_flt()` and
+`lj_ccall_jit_num_flt_u64()` / `lj_ccall_jit_num_u64_flt()` extend the
+cross-precision double-returning coverage to exact signed and unsigned 64-bit
+cdata arguments while preserving the exact float C argument ABI.
 `lj_ccall_jit_flt_flt_u32()` and `lj_ccall_jit_flt_u32_flt()` do the same for
 exact float-returning `float(float, uint32_t)` and `float(uint32_t, float)`
 calls, widening the helper result back to a Lua number in the recorder.
@@ -97,6 +101,11 @@ widening the float result back to Lua number in the recorder.
 `lj_ccall_jit_flt_flt_i64()` / `lj_ccall_jit_flt_i64_flt()` and
 `lj_ccall_jit_flt_flt_u64()` / `lj_ccall_jit_flt_u64_flt()` extend exact
 float-returning mixed coverage to signed and unsigned 64-bit cdata arguments.
+`lj_ccall_jit_flt_num_i64()` / `lj_ccall_jit_flt_i64_num()` and
+`lj_ccall_jit_flt_num_u64()` / `lj_ccall_jit_flt_u64_num()` extend the
+cross-precision float-returning coverage to exact signed and unsigned 64-bit
+cdata arguments, preserving the exact double-argument ABI and widening the
+float result back to Lua number in the recorder.
 `lj_ccall_jit_i32_ptr_ulong_i32()` covers the first exact three-argument
 pointer/size/int shape, including `ffi.C.poll(nil, 0, 0)`, while preserving the
 host ABI's `unsigned long` width at the final C call; the shared-library test

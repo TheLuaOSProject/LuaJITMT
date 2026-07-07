@@ -83,6 +83,10 @@ the exact float C argument prototype instead of widening the foreign call.
 `lj_ccall_jit_num_num_u64()` / `lj_ccall_jit_num_u64_num()` extend the same
 mixed double-returning path to exact signed and unsigned 64-bit cdata
 arguments, preserving signedness in the selected helper.
+`lj_ccall_jit_num_flt_i64()` / `lj_ccall_jit_num_i64_flt()` and
+`lj_ccall_jit_num_flt_u64()` / `lj_ccall_jit_num_u64_flt()` extend the
+cross-precision double-returning path to exact signed and unsigned 64-bit
+cdata arguments, again preserving the exact float C argument prototype.
 `lj_ccall_jit_flt_flt_i32()` and `lj_ccall_jit_flt_i32_flt()` extend that
 mixed two-argument slice to exact `float(float, int32_t)` and
 `float(int32_t, float)` calls, with the recorder widening the float result to
@@ -99,6 +103,10 @@ widening the helper's float result to Lua number.
 `lj_ccall_jit_flt_flt_i64()` / `lj_ccall_jit_flt_i64_flt()` and
 `lj_ccall_jit_flt_flt_u64()` / `lj_ccall_jit_flt_u64_flt()` extend exact
 float-returning mixed calls to signed and unsigned 64-bit cdata arguments.
+`lj_ccall_jit_flt_num_i64()` / `lj_ccall_jit_flt_i64_num()` and
+`lj_ccall_jit_flt_num_u64()` / `lj_ccall_jit_flt_u64_num()` extend the
+cross-precision float-returning path to exact signed and unsigned 64-bit cdata
+arguments, with the recorder widening the helper's float result to Lua number.
 `lj_ccall_jit_i32_ptr_ulong_i32()` traces the exact poll-shaped
 `int32_t(void *, unsigned long, int32_t)` family and normalizes the
 `unsigned long` argument through the regular FFI conversion rules before the

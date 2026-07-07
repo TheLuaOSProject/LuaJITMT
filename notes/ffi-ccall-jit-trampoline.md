@@ -30,10 +30,14 @@ arguments. The first mixed two-argument FP/GPR subset accepts exact
 `double(double, uint64_t)`, `double(uint64_t, double)`,
 `double(float, int32_t)`, `double(int32_t, float)`,
 `double(float, uint32_t)`, `double(uint32_t, float)`,
+`double(float, int64_t)`, `double(int64_t, float)`,
+`double(float, uint64_t)`, `double(uint64_t, float)`,
 `float(float, int32_t)`, `float(int32_t, float)`,
 `float(float, uint32_t)`, `float(uint32_t, float)`,
 `float(double, int32_t)`, `float(int32_t, double)`,
 `float(double, uint32_t)`, `float(uint32_t, double)`,
+`float(double, int64_t)`, `float(int64_t, double)`,
+`float(double, uint64_t)`, `float(uint64_t, double)`,
 `float(float, int64_t)`, `float(int64_t, float)`,
 `float(float, uint64_t)`, and `float(uint64_t, float)`. The first mixed
 one-argument subset accepts exact `double(int32_t)`, `double(pointer)`,
@@ -77,6 +81,11 @@ mixed unsigned-int float-returning two-argument shapes,
 `lj_ccall_jit_flt_num_i32()` / `lj_ccall_jit_flt_i32_num()` /
 `lj_ccall_jit_flt_num_u32()` / `lj_ccall_jit_flt_u32_num()` for the exact
 cross-precision 32-bit mixed two-argument shapes,
+`lj_ccall_jit_num_flt_i64()` / `lj_ccall_jit_num_i64_flt()` /
+`lj_ccall_jit_num_flt_u64()` / `lj_ccall_jit_num_u64_flt()` and
+`lj_ccall_jit_flt_num_i64()` / `lj_ccall_jit_flt_i64_num()` /
+`lj_ccall_jit_flt_num_u64()` / `lj_ccall_jit_flt_u64_num()` for the exact
+cross-precision 64-bit mixed two-argument shapes,
 `lj_ccall_jit_flt_flt_i64()` / `lj_ccall_jit_flt_i64_flt()` /
 `lj_ccall_jit_flt_flt_u64()` / `lj_ccall_jit_flt_u64_flt()` for the exact
 mixed 64-bit float-returning two-argument shapes,
@@ -182,6 +191,9 @@ The scope is deliberately narrow:
 - exact two-argument `double(double, int64_t)`, `double(int64_t, double)`,
   `double(double, uint64_t)`, and `double(uint64_t, double)` mixed calls,
   preserving boxed 64-bit cdata argument signedness;
+- exact two-argument `double(float, int64_t)`, `double(int64_t, float)`,
+  `double(float, uint64_t)`, and `double(uint64_t, float)` cross-precision
+  mixed calls, preserving boxed 64-bit cdata argument signedness;
 - exact two-argument `float(float, int32_t)` and `float(int32_t, float)` mixed
   calls, widened to Lua numbers after the helper call;
 - exact two-argument `float(float, uint32_t)` and `float(uint32_t, float)`
@@ -195,6 +207,10 @@ The scope is deliberately narrow:
   `float(float, uint64_t)`, and `float(uint64_t, float)` mixed calls,
   preserving boxed 64-bit cdata argument signedness and widening the result to
   Lua number after the helper call;
+- exact two-argument `float(double, int64_t)`, `float(int64_t, double)`,
+  `float(double, uint64_t)`, and `float(uint64_t, double)` cross-precision
+  mixed calls, preserving boxed 64-bit cdata argument signedness and widening
+  the result to Lua number after the helper call;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,
   `pointer(double)`, `void(double)`, `void(float)`, and `float(double)` mixed
@@ -225,7 +241,7 @@ GPR-matrix loops, FP-only numeric call loops,
 signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls, plus exact double/int, double/uint,
 double/64-bit, float/int, float/uint, float/64-bit, and cross-precision
-float/double with int/uint two-argument calls, a
+float/double with 32-/64-bit int/uint two-argument calls, a
 traced, nonblocking native-state path, without risking the direct backend
 `IR_CALLXS` register/result ordering. The full direct bridge still needs x64
 lowering that brackets the foreign ABI call without clobbering argument or

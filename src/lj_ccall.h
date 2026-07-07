@@ -319,6 +319,14 @@ LJ_FUNC double lj_ccall_jit_num_num_u64(lua_State *L, void *func,
 					double a, uint64_t b);
 LJ_FUNC double lj_ccall_jit_num_u64_num(lua_State *L, void *func,
 					uint64_t a, double b);
+LJ_FUNC double lj_ccall_jit_num_flt_i64(lua_State *L, void *func,
+					float a, int64_t b);
+LJ_FUNC double lj_ccall_jit_num_i64_flt(lua_State *L, void *func,
+					int64_t a, float b);
+LJ_FUNC double lj_ccall_jit_num_flt_u64(lua_State *L, void *func,
+					float a, uint64_t b);
+LJ_FUNC double lj_ccall_jit_num_u64_flt(lua_State *L, void *func,
+					uint64_t a, float b);
 LJ_FUNC float lj_ccall_jit_flt_flt_i32(lua_State *L, void *func,
 				       float a, int32_t b);
 LJ_FUNC float lj_ccall_jit_flt_i32_flt(lua_State *L, void *func,
@@ -343,6 +351,14 @@ LJ_FUNC float lj_ccall_jit_flt_flt_u64(lua_State *L, void *func,
 				       float a, uint64_t b);
 LJ_FUNC float lj_ccall_jit_flt_u64_flt(lua_State *L, void *func,
 				       uint64_t a, float b);
+LJ_FUNC float lj_ccall_jit_flt_num_i64(lua_State *L, void *func,
+				       double a, int64_t b);
+LJ_FUNC float lj_ccall_jit_flt_i64_num(lua_State *L, void *func,
+				       int64_t a, double b);
+LJ_FUNC float lj_ccall_jit_flt_num_u64(lua_State *L, void *func,
+				       double a, uint64_t b);
+LJ_FUNC float lj_ccall_jit_flt_u64_num(lua_State *L, void *func,
+				       uint64_t a, double b);
 LJ_FUNC int32_t lj_ccall_jit_i32_u32(lua_State *L, void *func, uintptr_t a);
 LJ_FUNC double lj_ccall_jit_num_ptr(lua_State *L, void *func, void *a);
 LJ_FUNC double lj_ccall_jit_num_ptr_ptr(lua_State *L, void *func,
