@@ -57,6 +57,7 @@ int *lj_m7_ccall_jit_ptr_ptr_u32_u32_ptr_u32_u32_ptr(int *, uint32_t, uint32_t, 
 int *lj_m7_ccall_jit_ptr_ptr_ptr_u32_u32_u32_ptr(int *, int *, uint32_t, uint32_t, uint32_t, int *);
 int *lj_m7_ccall_jit_ptr_ptr_u64_ptr_ptr_u32_ptr(int *, uint64_t, int *, int *, uint32_t, int *);
 int *lj_m7_ccall_jit_ptr_ptr_i32_i32_ptr(int *, int32_t, int32_t, int *);
+int *lj_m7_ccall_jit_ptr_u32_i32_ptr(uint32_t, int32_t, int *);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *, int *, uint64_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u64(int *, int *, uint64_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32(int *, int *, uint32_t);
@@ -1900,6 +1901,21 @@ do
       return r
     end)(80) == 80 * 22)
     assert(trace_count() > 0, "shared ptr,int32_t,int32_t,ptr->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local access = ffi.new("uint32_t", 0x80000003)
+      local inherit = ffi.new("int32_t", -6)
+      local name = ptr0()
+      local r = 0
+      for _ = 1, n do
+	local p = lib.lj_m7_ccall_jit_ptr_u32_i32_ptr(access, inherit, name)
+	r = r + p[0]
+      end
+      return r
+    end)(80) == 80 * 22)
+    assert(trace_count() > 0, "shared uint32_t,int32_t,ptr->ptr FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
