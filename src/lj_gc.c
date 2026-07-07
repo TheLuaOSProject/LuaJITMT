@@ -1376,7 +1376,7 @@ static void gc_mark_threading_states(global_State *g)
   lua_State *th;
   uint32_t n = 0;
   for (th = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
-       th != NULL;
+       th != NULL && lj_state_thread_registry_valid(g, th);
        th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
     gc_markobj(g, th);
     /*

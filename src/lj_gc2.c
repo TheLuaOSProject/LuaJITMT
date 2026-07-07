@@ -4539,7 +4539,7 @@ static void gc2_scan_threading_states(global_State *g)
   if (!g)
     return;
   for (th = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
-       th != NULL;
+       th != NULL && lj_state_thread_registry_valid(g, th);
        th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
     /*
     ** Ownerless registry states are suspended or already joined. They may have

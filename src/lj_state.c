@@ -346,6 +346,12 @@ static int close_state_unlink_root(global_State *g, GCobj *target)
   return 0;
 }
 
+int lj_state_thread_registry_valid(global_State *g, lua_State *th)
+{
+  return g && th && lj_gc2_obj_valid_queued(g, obj2gco(th)) &&
+	 th->gct == ~LJ_TTHREAD;
+}
+
 void lj_state_thread_registry_publish(global_State *g, lua_State *th)
 {
   lua_State *head;
@@ -366,7 +372,7 @@ static void state_registry_remove(global_State *g, lua_State *th)
 restart:
   prev = NULL;
   cur = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
-  while (cur) {
+  while (cur && lj_state_thread_registry_valid(g, cur)) {
     lua_State *next =
       (lua_State *)la_loadptr_acq((void *const *)&cur->thread_next);
     if (cur == th) {
@@ -392,7 +398,7 @@ static void close_state_free_registered_states(global_State *g, lua_State *L)
   lua_State *th =
     (lua_State *)la_xchgptr_acqrel((void **)&g->threading_states, NULL);
   uint32_t n = 0;
-  while (th) {
+  while (th && lj_state_thread_registry_valid(g, th)) {
     lua_State *next =
       (lua_State *)la_loadptr_acq((void *const *)&th->thread_next);
     th->thread_next = NULL;
