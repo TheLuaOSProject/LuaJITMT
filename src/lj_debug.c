@@ -16,11 +16,13 @@
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_frame.h"
 #include "lj_bc.h"
 #include "lj_strfmt.h"
 #include "lj_vm.h"
 #if LJ_HASJIT
+#include "lj_dispatch.h"
 #include "lj_jit.h"
 #endif
 
@@ -58,18 +60,27 @@ cTValue *lj_debug_frame(lua_State *L, int level, int *size)
 static BCPos debug_jit_startpc(jit_State *J, GCproto *pt, const BCIns *ins)
 {
   GCtrace *T = (GCtrace *)((char *)(ins-1) - offsetof(GCtrace, startins));
-  TraceVec *tv = tracevec_acq(J);
+  global_State *g = J2G(J);
+  TraceVec *tv;
+  BCPos pos = NO_BCPOS;
   MSize i;
-  if (tv == NULL)
-    return NO_BCPOS;
+  lj_gc2_smr_read_enter(g);
+  tv = tracevec_acq(J);
+  if (tv == NULL) {
+    lj_gc2_smr_read_leave(g);
+    return pos;
+  }
   for (i = 1; i < tv->sizetrace; i++) {
     GCtrace *cur = traceref_fromgco_safe(gcref_acq(tv->slot[i]));
     if (cur == T && trace_traceno_acq(cur) == (TraceNo)i &&
 	la_load64_acq(&cur->retire_epoch) == 0 &&
-	trace_startpt_acq(cur) == pt && ins == &cur->startins + 1)
-      return proto_bcpos(pt, trace_startpc_acq(cur));
+	trace_startpt_acq(cur) == pt && ins == &cur->startins + 1) {
+      pos = proto_bcpos(pt, trace_startpc_acq(cur));
+      break;
+    }
   }
-  return NO_BCPOS;
+  lj_gc2_smr_read_leave(g);
+  return pos;
 }
 #endif
 
