@@ -1303,13 +1303,16 @@ static void trace_exittab_reset(jit_State *J, GCtrace *T)
 
 static void trace_exittab_resetroot(jit_State *J, TraceNo rootno)
 {
+  global_State *g = J2G(J);
   TraceNo i;
   MSize sizetrace = trace_sizetrace_acq(J);
+  lj_gc2_smr_read_enter(g);
   for (i = 1; i < sizetrace; i++) {
-    GCtrace *T = traceref(J, i);
+    GCtrace *T = traceref_safe(J, i);
     if (T && (trace_traceno_acq(T) == rootno || trace_root_acq(T) == rootno))
       trace_exittab_reset(J, T);
   }
+  lj_gc2_smr_read_leave(g);
 }
 
 /* Save current trace by copying and compacting it. */
@@ -1530,16 +1533,18 @@ static int trace_scope_flush_dependency(jit_State *J, GCtrace *T)
 
 static uint32_t trace_flushscope_mark_deps(jit_State *J)
 {
+  global_State *g = J2G(J);
   uint32_t marked = 0, changed;
   do {
     TraceNo i;
     MSize sizetrace = trace_sizetrace_acq(J);
     changed = 0;
+    lj_gc2_smr_read_enter(g);
     for (i = 1; i < sizetrace; i++) {
-      GCtrace *T = traceref(J, i);
+      GCtrace *T = traceref_safe(J, i);
       if (T && trace_traceno_acq(T) == i &&
-		  !trace_scope_pending_acq(T) &&
-		  trace_scope_flush_dependency(J, T)) {
+			  !trace_scope_pending_acq(T) &&
+			  trace_scope_flush_dependency(J, T)) {
 	if (trace_root_acq(T) == 0) {
 	  if (!trace_flushroot(J, T, 1))
 	    continue;
@@ -1550,6 +1555,7 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
 	changed = 1;
       }
     }
+    lj_gc2_smr_read_leave(g);
   } while (changed);
   return marked;
 }
@@ -1768,11 +1774,12 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
   TraceNo i;
   uint32_t retired = 0;
   MSize sizetrace = trace_sizetrace_acq(J);
+  lj_gc2_smr_read_enter(g);
   for (i = 1; i < sizetrace; i++) {
-    GCtrace *T = traceref(J, i);
+    GCtrace *T = traceref_safe(J, i);
     if (T && trace_root_acq(T) != 0 && trace_traceno_acq(T) == i) {
       TraceNo rootno = trace_root_acq(T);
-      GCtrace *root = traceref(J, rootno);
+      GCtrace *root = traceref_safe(J, rootno);
       if (trace_scope_pending_acq(T) ||
 	  (root && trace_traceno_acq(root) == rootno &&
 	   trace_scope_pending_acq(root))) {
@@ -1782,13 +1789,14 @@ uint32_t lj_trace_flushscope_retire_hs(global_State *g, uint64_t epoch)
     }
   }
   for (i = 1; i < sizetrace; i++) {
-    GCtrace *T = traceref(J, i);
+    GCtrace *T = traceref_safe(J, i);
     if (T && trace_root_acq(T) == 0 && trace_traceno_acq(T) == i &&
 	trace_scope_pending_acq(T)) {
       trace_scope_clear_slot(J, i, T, epoch);
       retired++;
     }
   }
+  lj_gc2_smr_read_leave(g);
   if (retired)
     gc2_jit_scoped_slots_retired_add(g, retired);
   return retired;
@@ -1828,8 +1836,9 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   ** trace/mcode retirement pass.
   */
   J->L = L;
+  lj_gc2_smr_read_enter(J2G(J));
   for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
-    GCtrace *T = traceref(J, i);
+    GCtrace *T = traceref_safe(J, i);
     if (T && trace_traceno_acq(T) == (TraceNo)i) {
       trace_exittab_reset(J, T);
       if (trace_root_acq(T) == 0) {
@@ -1850,6 +1859,7 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
       trace_retire(J2G(J), T);
     }
   }
+  lj_gc2_smr_read_leave(J2G(J));
   J->cur.traceno = 0;
   J->freetrace = 0;
   /* Clear penalty cache. */
