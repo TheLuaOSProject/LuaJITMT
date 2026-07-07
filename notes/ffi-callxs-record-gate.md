@@ -124,7 +124,12 @@ helpers. The pointer/signed-int/size family traces exact
 `int32_t(void *, int32_t, uint64_t)`, `uint32_t(void *, int32_t, uint64_t)`,
 `int64_t(void *, int32_t, uint64_t)`, `uint64_t(void *, int32_t, uint64_t)`,
 `void(void *, int32_t, uint64_t)`, and `void *(void *, int32_t, uint64_t)`
-calls for memset/memchr-style ABI classes. The pointer/size/signed-int family
+calls for memset/memchr-style ABI classes. The pointer/signed-int/unsigned-int
+family traces exact `int32_t(void *, int32_t, uint32_t)`,
+`uint32_t(void *, int32_t, uint32_t)`, `int64_t(void *, int32_t, uint32_t)`,
+`uint64_t(void *, int32_t, uint32_t)`, `void(void *, int32_t, uint32_t)`, and
+`void *(void *, int32_t, uint32_t)` calls for open/shm_open/sem_init-style ABI
+classes. The pointer/size/signed-int family
 traces exact `int32_t(void *, uint64_t, int32_t)`,
 `uint32_t(void *, uint64_t, int32_t)`, `int64_t(void *, uint64_t, int32_t)`,
 `uint64_t(void *, uint64_t, int32_t)`, `void(void *, uint64_t, int32_t)`, and
