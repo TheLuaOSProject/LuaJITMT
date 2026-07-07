@@ -549,7 +549,7 @@ uint32_t lj_clib_cache_reclaim_retired(global_State *g,
   if (!g || completed_epoch == 0)
     return 0;
   entry = clib_cache_retired_xchg_acqrel(g, NULL);
-  while (entry) {
+  while (entry && lj_gc2_mem_registered(g, entry)) {
     CLibCacheEntry *next = lj_clib_cache_retired_next_acq(entry);
     lj_clib_cache_retired_next_rel(entry, NULL);
     if (lj_clib_cache_retire_epoch_acq(entry) < completed_epoch) {
@@ -569,7 +569,7 @@ void lj_clib_cache_freeretired(global_State *g)
   if (!g)
     return;
   entry = clib_cache_retired_xchg_acqrel(g, NULL);
-  while (entry) {
+  while (entry && lj_gc2_mem_registered(g, entry)) {
     CLibCacheEntry *next = lj_clib_cache_retired_next_acq(entry);
     lj_mem_freet(g, entry);
     entry = next;

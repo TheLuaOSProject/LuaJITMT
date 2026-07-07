@@ -535,8 +535,9 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       }
       {
 	CLibCacheEntry *ce;
+	uint32_t n = 0;
 	for (ce = lj_clib_cache_retired_head_acq(g);
-	     ce != NULL;
+	     ce != NULL && lj_gc2_mem_registered(g, ce);
 	     ce = lj_clib_cache_retired_next_acq(ce)) {
 	  GCstr *name = lj_clib_cache_name_acq(ce);
 	  TValue tv;
@@ -548,6 +549,8 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 	  if (tvisgcv(&tv))
 	    gc2_paranoia_checkobj(g, gcV(&tv),
 				  "retired FFI CLibrary cache value");
+	  if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT))
+	    break;
 	}
       }
       gc2_paranoia_checkmem(g, ctype_cb_cbid_acq(cts), "callback ids");
@@ -1145,8 +1148,14 @@ static size_t gc_traverse_udata(global_State *g, GCudata *ud)
 static void gc_mark_clib_retired_cache(global_State *g)
 {
   CLibCacheEntry *e;
+  uint32_t n = 0;
+  /*
+  ** Retired CLibrary cache entries are raw SMR nodes. The caller's SMR read
+  ** section keeps a registered node stable while its payload and next link are
+  ** read; validate the node before dereferencing stale retired-list words.
+  */
   for (e = lj_clib_cache_retired_head_acq(g);
-       e != NULL;
+       e != NULL && lj_gc2_mem_registered(g, e);
        e = lj_clib_cache_retired_next_acq(e)) {
     GCstr *name = lj_clib_cache_name_acq(e);
     TValue tv;
@@ -1155,6 +1164,8 @@ static void gc_mark_clib_retired_cache(global_State *g)
       gc_mark_str(g, name);
     lj_clib_cache_val_acq(&tv, e);
     gc_marktv(g, &tv);
+    if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT))
+      break;
   }
 }
 
