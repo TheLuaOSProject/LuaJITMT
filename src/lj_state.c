@@ -325,19 +325,8 @@ static int close_state_unlink_root(global_State *g, GCobj *target)
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
       GCobj *next = lj_obj_gcw_acq(o);
-      GCRef oldref, nextref;
-      setgcref(oldref, o);
-      if (next)
-	setgcref(nextref, next);
-      else
-	setgcrefnull(nextref);
-#if LJ_GC64
-      return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
-		      LA_ACQ_REL, LA_ACQ);
-#else
-      return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
-		      LA_ACQ_REL, LA_ACQ);
-#endif
+      GCobj *expect = o;
+      return gcref_cas(p, &expect, next);
     }
     p = lj_obj_gcwref(o);
     if (++n >= 1000000u)

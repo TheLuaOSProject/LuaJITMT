@@ -1689,32 +1689,13 @@ static void gc_mark_finalizer_obj(global_State *g, GCobj *o)
 static int gc_chain_splice(GCRef *p, GCobj *o)
 {
   GCobj *next = lj_obj_gcw_acq(o);
-  GCRef oldref, nextref;
-  setgcref(oldref, o);
-  if (next)
-    setgcref(nextref, next);
-  else
-    setgcrefnull(nextref);
-#if LJ_GC64
-  return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
-		  LA_ACQ_REL, LA_ACQ);
-#else
-  return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
-		  LA_ACQ_REL, LA_ACQ);
-#endif
+  GCobj *expect = o;
+  return gcref_cas(p, &expect, next);
 }
 
 static int gc_ref_cas_obj(GCRef *p, GCobj *old, GCobj *next)
 {
-#if LJ_GC64
-  uint64_t expect = old ? (uint64_t)(uintptr_t)&old->gch : 0;
-  uint64_t want = next ? (uint64_t)(uintptr_t)&next->gch : 0;
-  return la_cas64(&p->gcptr64, &expect, want, LA_ACQ_REL, LA_ACQ);
-#else
-  uint32_t expect = old ? (uint32_t)(uintptr_t)&old->gch : 0;
-  uint32_t want = next ? (uint32_t)(uintptr_t)&next->gch : 0;
-  return la_cas32(&p->gcptr32, &expect, want, LA_ACQ_REL, LA_ACQ);
-#endif
+  return gcref_cas(p, &old, next);
 }
 
 static int gc_root_chain_break_cycle(GCobj *head)
@@ -4614,47 +4595,20 @@ static int gc_root_chain_contains_to_tail(GCobj *head, GCobj *tail,
 static void gc_root_prepend_chain_at(global_State *g, GCRef *p, GCobj *head,
 				     GCobj *tail)
 {
-#if LJ_GC64
-  {
-    uint64_t expect;
-    GCobj *oldhead;
-    do {
-      oldhead = gcref_acq(*p);
-      /*
-      ** Pending-root publication owns head..tail, but address reuse can make a
-      ** freshly published pending chain overlap the existing legacy spine at
-      ** the insertion point. Linking tail back to that old head would create a
-      ** cycle; null-terminating instead preserves every unique object already
-      ** reachable from head.
-      */
-      gc_root_set_next_rel(tail,
-			   gc_root_chain_contains_to_tail(head, tail, oldhead) ?
-			   NULL : oldhead);
-      expect = oldhead ? (uint64_t)(uintptr_t)&oldhead->gch : 0;
-    } while (!la_cas64(&p->gcptr64, &expect,
-			       (uint64_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
-  }
-#else
-  {
-    uint32_t expect;
-    GCobj *oldhead;
-    do {
-      oldhead = gcref_acq(*p);
-      /*
-      ** Pending-root publication owns head..tail, but address reuse can make a
-      ** freshly published pending chain overlap the existing legacy spine at
-      ** the insertion point. Linking tail back to that old head would create a
-      ** cycle; null-terminating instead preserves every unique object already
-      ** reachable from head.
-      */
-      gc_root_set_next_rel(tail,
-			   gc_root_chain_contains_to_tail(head, tail, oldhead) ?
-			   NULL : oldhead);
-      expect = oldhead ? (uint32_t)(uintptr_t)&oldhead->gch : 0;
-    } while (!la_cas32(&p->gcptr32, &expect,
-			       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
-  }
-#endif
+  GCobj *oldhead;
+  do {
+    oldhead = gcref_acq(*p);
+    /*
+    ** Pending-root publication owns head..tail, but address reuse can make a
+    ** freshly published pending chain overlap the existing legacy spine at
+    ** the insertion point. Linking tail back to that old head would create a
+    ** cycle; null-terminating instead preserves every unique object already
+    ** reachable from head.
+    */
+    gc_root_set_next_rel(tail,
+			 gc_root_chain_contains_to_tail(head, tail, oldhead) ?
+			 NULL : oldhead);
+  } while (!gcref_cas(p, &oldhead, head));
   lj_gcroot_repair_epoch_add(g);
 }
 
@@ -4859,29 +4813,10 @@ void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o)
   if (!anchor || !o)
     return;
   p = lj_obj_gcwref(anchor);
-#if LJ_GC64
-  {
-    uint64_t expect;
-    do {
-      head = gcref_acq(*p);
-      gc_root_set_next(o, head);
-      expect = head ? (uint64_t)(uintptr_t)&head->gch : 0;
-    } while (!la_cas64(&p->gcptr64, &expect,
-		       (uint64_t)(uintptr_t)&o->gch,
-		       LA_REL, LA_ACQ));
-  }
-#else
-  {
-    uint32_t expect;
-    do {
-      head = gcref_acq(*p);
-      gc_root_set_next(o, head);
-      expect = head ? (uint32_t)(uintptr_t)&head->gch : 0;
-    } while (!la_cas32(&p->gcptr32, &expect,
-		       (uint32_t)(uintptr_t)&o->gch,
-		       LA_REL, LA_ACQ));
-  }
-#endif
+  do {
+    head = gcref_acq(*p);
+    gc_root_set_next(o, head);
+  } while (!gcref_cas(p, &head, o));
   if (g)
     lj_gcroot_repair_epoch_add(g);
 }
