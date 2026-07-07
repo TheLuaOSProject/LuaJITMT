@@ -13,6 +13,7 @@
 
 #include "lj_err.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_thr.h"
@@ -754,9 +755,15 @@ static int innerloopleft(jit_State *J, const BCIns *pc)
 
 static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)
 {
-  GCtrace *T = traceref(J, traceno);
-  if (LJ_UNLIKELY(!trace_runnable_acq(T, traceno)))
+  global_State *g = J2G(J);
+  GCtrace *T;
+  lj_gc2_smr_read_enter(g);
+  T = traceref_safe(J, traceno);
+  if (LJ_UNLIKELY(!trace_runnable_acq(T, traceno))) {
+    lj_gc2_smr_read_leave(g);
     lj_trace_err(J, LJ_TRERR_RETRY);
+  }
+  lj_gc2_smr_read_leave(g);
   return T;
 }
 

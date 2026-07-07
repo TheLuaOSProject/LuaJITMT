@@ -11,6 +11,7 @@
 #if LJ_HASJIT
 
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -2279,9 +2280,16 @@ static BCReg asm_baseslot(ASMState *as, SnapShot *snap, int *gotframe)
 
 static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)
 {
-  GCtrace *T = traceref(as->J, traceno);
-  if (LJ_UNLIKELY(!trace_runnable_acq(T, traceno)))
+  jit_State *J = as->J;
+  global_State *g = J2G(J);
+  GCtrace *T;
+  lj_gc2_smr_read_enter(g);
+  T = traceref_safe(J, traceno);
+  if (LJ_UNLIKELY(!trace_runnable_acq(T, traceno))) {
+    lj_gc2_smr_read_leave(g);
     lj_trace_err(as->J, LJ_TRERR_RETRY);
+  }
+  lj_gc2_smr_read_leave(g);
   return T;
 }
 
