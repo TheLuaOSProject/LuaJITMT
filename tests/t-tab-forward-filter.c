@@ -384,6 +384,48 @@ static void exercise_hash_to_array_forward_hop(lua_State *L)
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
 }
 
+static void exercise_hash_to_array_only_forward_hop(lua_State *L)
+{
+  GCtab *t;
+  TValue *newarray;
+  Node *oldnode, *newnode;
+  MSize oldhmask, newhmask, newasize;
+  int32_t moveint = 3;
+  TValue *oldnumslot;
+  TValue key, val;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  lj_tab_storeint(L, lj_tab_setinth(L, t, moveint), 818);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldnumslot = tabfwd_find_num_slot(oldnode, oldhmask, moveint);
+  assert(oldnumslot != NULL);
+
+  lj_tab_resize(L, t, 8, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  newnode = lj_tab_node_snapshot_acq(t, &newhmask);
+  assert(newhmask == 0);
+  assert(newasize > (MSize)moveint);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  tabfwd_assert_forward(oldnumslot);
+  tabfwd_assert_i32(lj_tab_getint(t, moveint), 818);
+
+  setnumV(&key, (lua_Number)moveint);
+  tabfwd_assert_i32(lj_tab_forwarded_hash_slot(t, oldnode, oldhmask, &key,
+					       &val), 818);
+  lj_tab_storeint(L, lj_tab_setint(L, t, moveint), 919);
+  tabfwd_assert_forward(oldnumslot);
+  tabfwd_assert_i32(&newarray[moveint], 919);
+  tabfwd_assert_i32(lj_tab_getint(t, moveint), 919);
+  assert(tabfwd_count_next_visible(t) == 1);
+
+  lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -450,6 +492,7 @@ int main(void)
   exercise_array_forward_hop(L);
   exercise_hash_forward_hop(L);
   exercise_hash_to_array_forward_hop(L);
+  exercise_hash_to_array_only_forward_hop(L);
 
   lua_close(L);
   printf("t-tab-forward-filter OK: FORWARD values stay internal to table scans\n");

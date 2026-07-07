@@ -73,6 +73,23 @@ static Node *find_str_node(GCtab *t, GCstr *key, MSize *idxp)
   return NULL;
 }
 
+static Node *find_num_node(GCtab *t, int32_t key, MSize *idxp)
+{
+  MSize hmask, i;
+  Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+  assert(hmask > 0);
+  for (i = 0; i <= hmask; i++) {
+    TValue k;
+    lj_tv_load_acq(&k, &node[i].key);
+    if (tvisnum(&k) && k.n == (lua_Number)key) {
+      *idxp = i;
+      return &node[i];
+    }
+  }
+  assert(0 && "missing source numeric hash node");
+  return NULL;
+}
+
 static void assert_slot_forwarded(Node *n)
 {
   TValue val;
@@ -120,6 +137,28 @@ static void test_put_if_absent_does_not_clobber(lua_State *L)
   lj_tab_storeint(L, lj_tab_setstr(L, dst, key), 99);
   assert(lj_tab_test_resize_copy_hash_slot(L, src, idx, dst, 0) == 1);
   assert_str_value(dst, key, 99);
+}
+
+static void test_hash_to_array_copy_put_if_absent(lua_State *L)
+{
+  GCtab *src, *dst;
+  MSize idx, dsthmask;
+  int32_t key = 3;
+
+  lua_settop(L, 0);
+  src = push_table(L, 0, 8);
+  dst = push_table(L, 8, 0);
+  lj_tab_storeint(L, lj_tab_setinth(L, src, key), 77);
+  (void)find_num_node(src, key, &idx);
+  (void)lj_tab_node_snapshot_acq(dst, &dsthmask);
+  assert(dsthmask == 0);
+
+  assert(lj_tab_test_resize_copy_hash_slot(L, src, idx, dst, 0) == 1);
+  assert(tv_i32(lj_tab_getint(dst, key)) == 77);
+
+  lj_tab_storeint(L, lj_tab_setint(L, dst, key), 99);
+  assert(lj_tab_test_resize_copy_hash_slot(L, src, idx, dst, 0) == 1);
+  assert(tv_i32(lj_tab_getint(dst, key)) == 99);
 }
 
 static void test_freeze_copy_is_idempotent(lua_State *L)
@@ -317,6 +356,7 @@ int main(void)
   lua_State *L = luaL_newstate();
   assert(L != NULL);
   test_put_if_absent_does_not_clobber(L);
+  test_hash_to_array_copy_put_if_absent(L);
   test_freeze_copy_is_idempotent(L);
   test_keylock_waits_for_published_key(L);
   test_array_copy_is_idempotent(L);
