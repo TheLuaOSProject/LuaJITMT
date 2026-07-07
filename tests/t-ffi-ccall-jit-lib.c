@@ -336,6 +336,14 @@ int *lj_m7_ccall_jit_ptr_ptr_u64_ptr_ptr_u32_ptr(int *security,
 		      (uint64_t)(uint32_t)(thread_id ? *thread_id : 0)) & 3u);
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_i32_i32_ptr(int *security, int32_t manual,
+					 int32_t initial, int *name)
+{
+  return security + (((uint64_t)(uint32_t)manual +
+		      (uint64_t)(uint32_t)initial +
+		      (uint64_t)(uint32_t)(name ? *name : 0)) & 3u);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return a[n & 3u] + b[(n + UINT64_C(1)) & 3u] +

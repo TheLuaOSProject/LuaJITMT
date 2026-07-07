@@ -501,6 +501,9 @@ LJ_FUNC void *lj_ccall_jit_ptr_ptr_u64_ptr_ptr_u32_ptr(lua_State *L,
 						       uint64_t b,
 						       void *c, void *d,
 						       uint32_t e, void *f);
+LJ_FUNC void *lj_ccall_jit_ptr_ptr_i32_i32_ptr(lua_State *L, void *func,
+					       void *a, int32_t b,
+					       int32_t c, void *d);
 LJ_FUNC int32_t lj_ccall_jit_i32_ptr_ptr_u64(lua_State *L, void *func,
 					     void *a, void *b,
 					     uint64_t c);
