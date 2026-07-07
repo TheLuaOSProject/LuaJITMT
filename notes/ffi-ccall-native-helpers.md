@@ -130,7 +130,11 @@ int and final size argument. The pointer/size/signed-int family traces exact
 `int64_t(void *, uint64_t, int32_t)`, `uint64_t(void *, uint64_t, int32_t)`,
 `void(void *, uint64_t, int32_t)`, and `void *(void *, uint64_t, int32_t)`
 calls for mprotect/madvise-style ABI classes while preserving the size argument
-and trailing signed int. Exact
+and trailing signed int. The pointer/size/pointer family traces exact
+`int32_t(void *, uint64_t, void *)`, `uint32_t(void *, uint64_t, void *)`,
+`int64_t(void *, uint64_t, void *)`, `uint64_t(void *, uint64_t, void *)`,
+`void(void *, uint64_t, void *)`, and `void *(void *, uint64_t, void *)` calls
+for mincore-style pointer/size/output-buffer ABI classes. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because

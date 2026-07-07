@@ -129,7 +129,12 @@ traces exact `int32_t(void *, uint64_t, int32_t)`,
 `uint32_t(void *, uint64_t, int32_t)`, `int64_t(void *, uint64_t, int32_t)`,
 `uint64_t(void *, uint64_t, int32_t)`, `void(void *, uint64_t, int32_t)`, and
 `void *(void *, uint64_t, int32_t)` calls for mprotect/madvise-style ABI
-classes. Other multi-argument pointer/size shapes remain interpreted.
+classes. The pointer/size/pointer family traces exact
+`int32_t(void *, uint64_t, void *)`, `uint32_t(void *, uint64_t, void *)`,
+`int64_t(void *, uint64_t, void *)`, `uint64_t(void *, uint64_t, void *)`,
+`void(void *, uint64_t, void *)`, and `void *(void *, uint64_t, void *)` calls
+for mincore-style ABI classes. Other multi-argument pointer/size shapes remain
+interpreted.
 The shared GPR helper matrix separately covers exact two-argument
 `pointer,int64_t` and `pointer,uint64_t` span shapes; broader pointer/size
 families remain interpreted.
