@@ -287,6 +287,8 @@ LJ_FUNC void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func,
 				   uintptr_t a, uintptr_t b, uint32_t sig);
 LJ_FUNC double lj_ccall_jit_num_gpr(lua_State *L, void *func,
 				    uintptr_t a, uintptr_t b, uint32_t sig);
+LJ_FUNC float lj_ccall_jit_flt_gpr(lua_State *L, void *func,
+				   uintptr_t a, uintptr_t b, uint32_t sig);
 LJ_FUNC void *lj_ffi_jit_memcpy(lua_State *L, void *dp, const void *sp,
 				CTSize len);
 LJ_FUNC void *lj_ffi_jit_memset(lua_State *L, void *dp, int32_t fill,

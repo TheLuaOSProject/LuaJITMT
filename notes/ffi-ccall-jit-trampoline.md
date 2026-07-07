@@ -20,8 +20,9 @@ pointer returns, plus exact two-argument `pointer,int64_t` and
 `int64_t,uint32_t`, `uint64_t,int32_t`, `uint64_t,uint32_t`, `int64_t,pointer`,
 `uint64_t,pointer`, and all `int64_t`/`uint64_t` two-argument pairs are
 covered too. Exact double-returning calls now also accept the same one- or
-two-argument GPR signature matrix. The FPR subset accepts 0, 1, or 2
-same-kind exact float or double
+two-argument GPR signature matrix, and exact float-returning calls accept that
+same GPR matrix with the result widened to Lua number after the helper returns.
+The FPR subset accepts 0, 1, or 2 same-kind exact float or double
 arguments. The first mixed two-argument FP/GPR subset accepts exact
 `double(double, int32_t)` and `double(int32_t, double)`. The first mixed
 one-argument subset accepts exact `double(int32_t)`, `double(pointer)`,
@@ -46,7 +47,7 @@ results, `lj_ccall_jit_u64_0()` / `lj_ccall_jit_u64_gpr()` /
 `lj_ccall_jit_u64_u64()` for boxed uint64 results,
 `lj_ccall_jit_narrow_0()` / `lj_ccall_jit_narrow_gpr()` for narrow
 integer results, `lj_ccall_jit_num_gpr()`, `lj_ccall_jit_num_i32()`,
-`lj_ccall_jit_num_num_i32()`,
+`lj_ccall_jit_flt_gpr()`, `lj_ccall_jit_num_num_i32()`,
 `lj_ccall_jit_num_i32_num()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
 `lj_ccall_jit_i32_flt()`, `lj_ccall_jit_i32_i8()`,
@@ -141,6 +142,8 @@ The scope is deliberately narrow:
   32-bit, unsigned 32-bit, narrow integer, and pointer return families;
 - exact double-returning calls with the one- or two-argument GPR signature
   matrix;
+- exact float-returning calls with the one- or two-argument GPR signature
+  matrix, widened to Lua numbers after the helper call;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact two-argument `double(double, int32_t)` and
   `double(int32_t, double)` mixed calls;
@@ -169,8 +172,8 @@ return families, traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, signed/unsigned 64-bit-result pointer/pointer/size loops,
-void-returning pointer/pointer/size loops, double-returning GPR-matrix loops,
-FP-only numeric call loops,
+void-returning pointer/pointer/size loops, double- and float-returning
+GPR-matrix loops, FP-only numeric call loops,
 signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls, plus exact double/int two-argument calls,
 a traced, nonblocking native-state path, without risking the direct backend

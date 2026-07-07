@@ -59,6 +59,9 @@ integer or pointer arguments, plus exact `pointer,int64_t` and
 0, 1, or 2 same-kind exact FP arguments. `lj_ccall_jit_num_gpr()` traces exact
 double returns with the shared one- or two-argument GPR signature matrix,
 including high-bit unsigned 32-bit and boxed 64-bit cdata arguments.
+`lj_ccall_jit_flt_gpr()` traces exact float returns with the same GPR
+signature matrix and widens the float result back to a Lua number in the
+recorder.
 `lj_ccall_jit_num_i32()`,
 `lj_ccall_jit_num_ptr()`, `lj_ccall_jit_num_flt()`,
 `lj_ccall_jit_i32_num()`, `lj_ccall_jit_i32_flt()`,

@@ -53,6 +53,9 @@ two-argument GPR signature matrix used by the integer and pointer-result helper
 families, including high-bit unsigned 32-bit and boxed 64-bit cdata arguments.
 It remains a side-effecting native-state `IRCALL` helper rather than direct
 `IR_CALLXS` lowering.
+`lj_ccall_jit_flt_gpr()` traces exact float returns with the same one- or
+two-argument GPR signature matrix and widens the helper result to Lua number
+in the recorder.
 `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
 `lj_ccall_jit_i32_flt()`, `lj_ccall_jit_i32_i8()`, `lj_ccall_jit_ptr_num()`,
