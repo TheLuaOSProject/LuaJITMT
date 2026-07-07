@@ -129,6 +129,8 @@ DeviceIoControl-shaped slice traces
 calls. The exact
 GetOverlappedResult-shaped slice traces
 `int32_t(void *, void *, void *, int32_t)` calls. The
+GetOverlappedResultEx-shaped slice traces
+`int32_t(void *, void *, void *, uint32_t, int32_t)` calls. The
 pointer/signed-int/size family traces exact
 `int32_t(void *, int32_t, uint64_t)`, `uint32_t(void *, int32_t, uint64_t)`,
 `int64_t(void *, int32_t, uint64_t)`, `uint64_t(void *, int32_t, uint64_t)`,

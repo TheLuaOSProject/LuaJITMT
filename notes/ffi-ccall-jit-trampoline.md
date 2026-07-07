@@ -172,6 +172,8 @@ signed-int-result pointer/unsigned-int/pointer/unsigned-int/pointer/
 unsigned-int/pointer/pointer argument shape,
 `lj_ccall_jit_i32_ptr_ptr_ptr_i32()` for the exact signed-int-result
 pointer/pointer/pointer/signed-int argument shape,
+`lj_ccall_jit_i32_ptr_ptr_ptr_u32_i32()` for the exact signed-int-result
+pointer/pointer/pointer/unsigned-int/signed-int argument shape,
 `lj_ccall_jit_u32_ptr_ptr_i32()` for the exact unsigned 32-bit-result
 pointer/pointer/signed-length argument shape,
 `lj_ccall_jit_i64_ptr_ptr_u32()` / `lj_ccall_jit_u64_ptr_ptr_u32()` for exact
@@ -343,6 +345,9 @@ The scope is deliberately narrow:
 - exact `int32_t(pointer, pointer, pointer, int32_t)` calls, preserving the
   overlapped pointer, output pointer, and signed wait flag for
   GetOverlappedResult-style ABI classes;
+- exact `int32_t(pointer, pointer, pointer, uint32_t, int32_t)` calls,
+  preserving the overlapped pointer, output pointer, timeout, and alertable
+  flag for GetOverlappedResultEx-style ABI classes;
 - exact signed/unsigned 64-bit cdata-result `int64_t(pointer, pointer,
   uint64_t)` and `uint64_t(pointer, pointer, uint64_t)` calls, with the final
   size argument preserved before the helper casts to the exact unsigned 64-bit
@@ -491,6 +496,8 @@ signed-int-result loops,
 traced DeviceIoControl-shaped pointer/uint32/pointer/uint32/pointer/uint32/
 pointer/pointer signed-int-result loops,
 traced GetOverlappedResult-shaped pointer/pointer/pointer/int32
+signed-int-result loops,
+traced GetOverlappedResultEx-shaped pointer/pointer/pointer/uint32/int32
 signed-int-result loops,
 traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, POSIX `pread`/`pwrite`-shaped

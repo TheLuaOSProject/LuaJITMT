@@ -133,6 +133,10 @@ byte-count output pointer, and overlapped pointer. The exact
 GetOverlappedResult-shaped slice traces
 `int32_t(void *, void *, void *, int32_t)` calls while preserving the
 overlapped pointer, output pointer, and signed wait flag. The
+GetOverlappedResultEx-shaped slice traces
+`int32_t(void *, void *, void *, uint32_t, int32_t)` calls while preserving the
+overlapped pointer, output pointer, timeout, alertable flag, and signed 32-bit
+result. The
 pointer/signed-int/size family traces exact
 `int32_t(void *, int32_t, uint64_t)`, `uint32_t(void *, int32_t, uint64_t)`,
 `int64_t(void *, int32_t, uint64_t)`, `uint64_t(void *, int32_t, uint64_t)`,

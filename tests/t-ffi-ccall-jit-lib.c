@@ -515,6 +515,18 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_i32(int *handle, int *overlapped,
   return handle[0] + overlapped[1] + (out ? out[1] : 0) + wait;
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_u32_i32(int *handle,
+						int *overlapped, int *out,
+						uint32_t timeout,
+						int32_t alertable)
+{
+  uint32_t i = timeout & 3u;
+  if (out)
+    out[i] = overlapped[(i + 1u) & 3u] + (int)(timeout & 15u) + alertable;
+  return handle[i] + overlapped[(i + 2u) & 3u] + (out ? out[i] : 0) +
+	 (int32_t)(timeout >> 28) + alertable;
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_i32(int *a, int *b, int32_t n)
 {
   uint32_t u = (uint32_t)n;
