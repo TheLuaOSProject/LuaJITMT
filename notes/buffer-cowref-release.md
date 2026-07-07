@@ -19,7 +19,11 @@ Verification:
 - tools/ci/lua_test.sh m3_gc2_paranoia
 - Current helper-surface follow-up verification: clean build,
   `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m3_gc2_paranoia`, and a
-  direct dictionary/COW buffer encode/decode smoke passed. `m5_buffer_publish`
-  currently fails the same way on an unmodified detached `HEAD` at
-  `t-buffer-thread-safety.lua:16`, where cross-thread buffer concatenation
-  raises `attempt to concatenate local 'shared' (a userdata value)`.
+  direct dictionary/COW buffer encode/decode smoke passed.
+- Buffer concat owner validation follow-up: `meta_buf_sbx()` now accepts the
+  immutable `mainthread_acq(g)` root as a valid `SBufExt.L` owner, while keeping
+  queued live-thread validation for non-main owners. This restores same-state,
+  coroutine-owned, and cross-thread buffer `__concat` snapshots. Verified with
+  direct main/spawn/coroutine smokes,
+  `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m5_buffer_publish`, and
+  `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m3_gc2_paranoia`.

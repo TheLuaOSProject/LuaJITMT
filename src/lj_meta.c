@@ -335,6 +335,13 @@ static cTValue *str2num(cTValue *o, TValue *n)
 }
 
 #if LJ_HASBUFFER
+static int meta_buf_owner_valid(global_State *g, lua_State *owner)
+{
+  return owner != NULL &&
+	 (owner == mainthread_acq(g) ||
+	  lj_state_thread_registry_valid(g, owner));
+}
+
 static SBufExt *meta_buf_sbx(lua_State *L, cTValue *o)
 {
   GCobj *gco;
@@ -360,9 +367,7 @@ static SBufExt *meta_buf_sbx(lua_State *L, cTValue *o)
   sbx = (SBufExt *)uddata(ud);
   flags = mrefu(sbx->L);
   owner = (lua_State *)(void *)(uintptr_t)(flags & SBUF_MASK_L);
-  if (!(flags & SBUF_FLAG_EXT) || owner == NULL ||
-      !lj_gc2_obj_valid(G(L), obj2gco(owner)) ||
-      la_load8_acq(&obj2gco(owner)->gch.gct) != (uint8_t)~LJ_TTHREAD)
+  if (!(flags & SBUF_FLAG_EXT) || !meta_buf_owner_valid(G(L), owner))
     return NULL;
   return sbx;
 }

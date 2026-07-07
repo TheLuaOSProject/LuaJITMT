@@ -3,11 +3,14 @@ local th = require"threading"
 
 local b = buffer.new()
 b:put("main")
+assert("pre:" .. b == "pre:main")
+assert(b .. ":post" == "main:post")
 
 local reader = th.spawn(function(shared)
   assert(#shared == 4)
   assert(tostring(shared) == "main")
   assert("pre:" .. shared == "pre:main")
+  assert(shared .. ":post" == "main:post")
   assert(string.format("[%s]", shared) == "[main]")
   return #shared
 end, b)
