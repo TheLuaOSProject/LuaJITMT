@@ -176,7 +176,11 @@ preserving the access flags, split 32-bit offset, byte count, desired base
 pointer, and pointer result. The exact CreateFile-shaped slice traces
 `void *(void *, uint32_t, uint32_t, void *, uint32_t, uint32_t, void *)` calls
 while preserving desired access, share mode, security attributes, creation
-disposition, flags, template handle, and pointer result. Exact
+disposition, flags, template handle, and pointer result. The exact
+CreateFileMapping-shaped slice traces
+`void *(void *, void *, uint32_t, uint32_t, uint32_t, void *)` calls while
+preserving handle, security attributes, protection flags, max size high/low,
+mapping name, and pointer result. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because

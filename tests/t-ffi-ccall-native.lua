@@ -54,6 +54,7 @@ int *lj_m7_ccall_jit_ptr_ptr_u64_u64_i32(int *, uint64_t, uint64_t, int32_t);
 int *lj_m7_ccall_jit_ptr_ptr_u32_u32_u32_u64(int *, uint32_t, uint32_t, uint32_t, uint64_t);
 int *lj_m7_ccall_jit_ptr_ptr_u32_u32_u32_u64_ptr(int *, uint32_t, uint32_t, uint32_t, uint64_t, int *);
 int *lj_m7_ccall_jit_ptr_ptr_u32_u32_ptr_u32_u32_ptr(int *, uint32_t, uint32_t, int *, uint32_t, uint32_t, int *);
+int *lj_m7_ccall_jit_ptr_ptr_ptr_u32_u32_u32_ptr(int *, int *, uint32_t, uint32_t, uint32_t, int *);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *, int *, uint64_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u64(int *, int *, uint64_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32(int *, int *, uint32_t);
@@ -1835,6 +1836,28 @@ do
       return r
     end)(80) == 80 * 44)
     assert(trace_count() > 0, "shared ptr,uint32_t,uint32_t,ptr,uint32_t,uint32_t,ptr->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local handle = ptr0()
+      local security = ptr0()
+      local protect = ffi.new("uint32_t", 0x80000003)
+      local max_hi = ffi.new("uint32_t", 0xf0000002)
+      local max_lo = ffi.new("uint32_t", 7)
+      local name = ptr0()
+      local r = 0
+      for _ = 1, n do
+	local p = lib.lj_m7_ccall_jit_ptr_ptr_ptr_u32_u32_u32_ptr(handle,
+								  security,
+								  protect,
+								  max_hi,
+								  max_lo, name)
+	r = r + p[0]
+      end
+      return r
+    end)(80) == 80 * 33)
+    assert(trace_count() > 0, "shared ptr,ptr,uint32_t,uint32_t,uint32_t,ptr->ptr FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
