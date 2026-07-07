@@ -2338,9 +2338,9 @@ static TValue *gc_thread_jit_base(global_State *g, lua_State *th)
 }
 #endif
 
+#if LJ_HASJIT
 static void gc_mark_jit_frame_funcs(global_State *g, lua_State *th)
 {
-#if LJ_HASJIT
   TValue *base = gc_thread_jit_base(g, th);
   TValue *bot, *max, *frame;
   uint32_t n = 0;
@@ -2369,10 +2369,8 @@ static void gc_mark_jit_frame_funcs(global_State *g, lua_State *th)
     if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
   }
-#else
-  UNUSED(g); UNUSED(th);
-#endif
 }
+#endif
 
 static int gc_thread_is_remote_current(global_State *g, lua_State *th)
 {
@@ -3040,7 +3038,8 @@ static int gc_has_legacy_payload(uint32_t gct)
 
 void lj_gc_markobj_legacy_deep(global_State *g, GCobj *o)
 {
-  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+  uint32_t gct;
+  if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, o, &gct)))
     return;
   /*
   ** Sweep-time VM operands are semantic roots, not stale reader bodies. FNEW
@@ -3051,7 +3050,7 @@ void lj_gc_markobj_legacy_deep(global_State *g, GCobj *o)
   */
   if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
     lj_gc_markobj_legacy(g, o);
-  } else if (gc_state_is_sweep(g) && gc_has_legacy_payload(o->gch.gct)) {
+  } else if (gc_state_is_sweep(g) && gc_has_legacy_payload(gct)) {
     lj_gc_arena_markobj(g, o);
     if (iswhite(o)) {
       gc_mark(g, o);

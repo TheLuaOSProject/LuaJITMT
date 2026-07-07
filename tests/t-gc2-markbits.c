@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -11,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_arena.h"
+#include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_tg.h"
 
@@ -59,6 +61,16 @@ int main(void)
   lj_gc2_mark_begin(g);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(lj_gc2_markobj(g, NULL) == 0);
+  {
+    GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+    assert(lj_gc2_markobj(g, bad) == 0);
+    assert(lj_gc2_markobj_nolegacy(g, bad) == 0);
+    assert(lj_gc2_markobj_nolegacy_nogrey(g, bad) == 0);
+    assert(lj_gc2_preserve_sweep_root(g, bad) == 0);
+    assert(lj_gc2_trace_sweep_root(g, bad) == 0);
+    assert(lj_gc2_ismarked(g, bad) < 0);
+    lj_gc_markobj_legacy_deep(g, bad);
+  }
   assert(lj_gc2_test_ssb_empty(g));
 
   assert(lj_gc2_markmem(g, trav) == 1);

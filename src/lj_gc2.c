@@ -199,7 +199,10 @@ static int gc2_traverse_tab(global_State *g, GCtab *t);
 static LJ_AINLINE int gc2_table_scan_current(global_State *g, GCtab *t);
 static int gc2_table_rescan_later(global_State *g, GCtab *t);
 static int gc2_table_rescan_later_force(global_State *g, GCtab *t);
+static LJ_AINLINE int gc2_gct_may_traverse(uint32_t gct);
 static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o);
+static int gc2_markobj_base_valid(global_State *g, GCobj *o, void **basep,
+				  uint32_t *gctp);
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o);
 static int gc2_grey_push(global_State *g, GCobj *o);
@@ -3894,9 +3897,9 @@ static TValue *gc2_thread_jit_base(global_State *g, lua_State *L)
 }
 #endif
 
+#if LJ_HASJIT
 static void gc2_mark_jit_frame_funcs(global_State *g, lua_State *L)
 {
-#if LJ_HASJIT
   TValue *base = gc2_thread_jit_base(g, L);
   TValue *bot, *max, *frame;
   uint32_t n = 0;
@@ -3926,10 +3929,8 @@ static void gc2_mark_jit_frame_funcs(global_State *g, lua_State *L)
     if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
   }
-#else
-  UNUSED(g); UNUSED(L);
-#endif
 }
+#endif
 
 static int gc2_thread_is_current(global_State *g, lua_State *L)
 {
@@ -7372,15 +7373,17 @@ static int lj_gc2_ssb_push(global_State *g, GCobj *o)
 static void gc2_ssb_mark_one(global_State *g, GCobj *o)
 {
   if (o) {
-    void *base = gc2_mark_base(g, o);
-    int marked = lj_gc2_ismarkedmem(g, base);
-    if (marked < 0 || o->gch.gct == 0) {
-      gc2_rescan_pending_clear_cycle(g, o);
+    void *base;
+    uint32_t gct;
+    int marked;
+    if (!gc2_markobj_base_valid(g, o, &base, &gct))
       return;
-    }
+    marked = lj_gc2_ismarkedmem(g, base);
+    if (marked < 0)
+      return;
     if (marked == 0)
       (void)lj_gc2_markmem(g, base);
-    if (o->gch.gct == ~LJ_TTAB &&
+    if (gct == (uint32_t)~LJ_TTAB &&
 	!(lj_obj_gcflags(o) & LJ_GC_NEEDSCAN) &&
 	gc2_table_scan_current(g, gco2tab(o))) {
       /*
@@ -7393,7 +7396,7 @@ static void gc2_ssb_mark_one(global_State *g, GCobj *o)
       */
       return;
     }
-    if (gc2_obj_may_traverse(o) && gc2_mark_base_traversable(g, base)) {
+    if (gc2_gct_may_traverse(gct) && gc2_mark_base_traversable(g, base)) {
       int pushed = gc2_grey_push(g, o);
       lj_assertG(pushed, "gc2 grey push failed for SSB object");
       UNUSED(pushed);
@@ -8232,15 +8235,63 @@ static void *gc2_mark_base(global_State *g, GCobj *o)
   return o;
 }
 
-static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o)
+static LJ_AINLINE int gc2_gct_may_traverse(uint32_t gct)
 {
-  int gct = o->gch.gct;
   return gct == ~LJ_TTAB || gct == ~LJ_TFUNC || gct == ~LJ_TPROTO ||
 	 gct == ~LJ_TTHREAD || gct == ~LJ_TUPVAL || gct == ~LJ_TUDATA
 #if LJ_HASJIT
 	 || gct == ~LJ_TTRACE
 #endif
 	 ;
+}
+
+static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o)
+{
+  return gc2_gct_may_traverse(o->gch.gct);
+}
+
+static int gc2_markobj_base_valid(global_State *g, GCobj *o, void **basep,
+				  uint32_t *gctp)
+{
+  int memkind;
+  uint32_t gct;
+  void *base;
+  if (!g || !o || !checkptrGC(o) ||
+      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
+    return 0;
+  memkind = gc2_obj_mem_live_kind(g, o, NULL);
+  if (memkind == GC2_OBJMEM_INVALID && !gc2_queue_small_cell_live(g, o))
+    return 0;
+  gct = o->gch.gct;
+  if (gct == 0 || gct < (uint32_t)~LJ_TSTR ||
+      gct > (uint32_t)~LJ_TUDATA)
+    return 0;
+  base = o;
+#if LJ_HASFFI
+  if (gct == (uint32_t)~LJ_TCDATA) {
+    GCcdata *cd = gco2cd(o);
+    if (cdataisv(cd) ||
+	((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0 ||
+	memkind == GC2_OBJMEM_HUGE) {
+      if (!lj_cdata_validate(g, cd, &base, NULL))
+	return 0;
+      if (!lj_gc2_mem_registered_known(g, base))
+	return 0;
+    }
+  } else
+#endif
+  if (gct != (uint32_t)~LJ_TSTR) {
+    if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
+      return 0;
+    if (memkind == GC2_OBJMEM_HUGE && gct != (uint32_t)~LJ_TUDATA &&
+	!gc2_huge_exact_traversable(g, o))
+      return 0;
+  }
+  if (basep)
+    *basep = base;
+  if (gctp)
+    *gctp = gct;
+  return 1;
 }
 
 static void gc2_preserve_lfunc_direct_bodies(global_State *g, GCfunc *fn)
@@ -8438,18 +8489,18 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
   void *base;
   int marked;
   int traversable;
-  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+  uint32_t gct;
+  if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, &base, &gct)))
     return 0;
-  base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
   gc2_preserve_direct_bodies(g, o);
   gc2_mark_legacy_live(g, o);
-  if (marked && gc2_obj_may_traverse(o)) {
+  if (marked && gc2_gct_may_traverse(gct)) {
     uint32_t phase = gc2_phase_acq(g);
-    traversable = o->gch.gct == ~LJ_TUDATA ? 0 :
+    traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
       gc2_mark_base_traversable(g, base);
     if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
-	(traversable || o->gch.gct == ~LJ_TUDATA)) {
+	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
       if (traversable) {
 	int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
 	lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
@@ -8467,17 +8518,17 @@ int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
   void *base;
   int marked;
   int traversable;
-  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+  uint32_t gct;
+  if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, &base, &gct)))
     return 0;
-  base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
   gc2_preserve_direct_bodies(g, o);
-  if (marked && gc2_obj_may_traverse(o)) {
+  if (marked && gc2_gct_may_traverse(gct)) {
     uint32_t phase = gc2_phase_acq(g);
-    traversable = o->gch.gct == ~LJ_TUDATA ? 0 :
+    traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
       gc2_mark_base_traversable(g, base);
     if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
-	(traversable || o->gch.gct == ~LJ_TUDATA)) {
+	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
       if (traversable) {
 	int pushed = lj_gc2_ssb_push(g, o);
 	lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
@@ -8492,10 +8543,11 @@ int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o)
 
 int lj_gc2_markobj_nolegacy_nogrey(global_State *g, GCobj *o)
 {
+  void *base;
   int marked;
-  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+  if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, &base, NULL)))
     return 0;
-  marked = lj_gc2_markmem(g, gc2_mark_base(g, o));
+  marked = lj_gc2_markmem(g, base);
   gc2_preserve_direct_bodies(g, o);
   return marked;
 }
@@ -8505,21 +8557,21 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
   void *base;
   int marked;
   int traversable;
-  if (!o)
+  uint32_t gct;
+  if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, &base, &gct)))
     return 0;
-  if (o->gch.gct == ~LJ_TSTR) {
-    marked = gc2_markmem_worker_fast(g, o);
+  if (gct == (uint32_t)~LJ_TSTR) {
+    marked = gc2_markmem_worker_fast(g, base);
     gc2_mark_legacy_live(g, o);
     return marked;
   }
-  base = gc2_mark_base(g, o);
   marked = gc2_markmem_worker_fast(g, base);
   gc2_preserve_direct_bodies(g, o);
   gc2_mark_legacy_live(g, o);
-  if (marked && gc2_obj_may_traverse(o)) {
-    traversable = o->gch.gct == ~LJ_TUDATA ? 0 :
+  if (marked && gc2_gct_may_traverse(gct)) {
+    traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
       gc2_mark_base_traversable(g, base);
-    if (!(traversable || o->gch.gct == ~LJ_TUDATA))
+    if (!(traversable || gct == (uint32_t)~LJ_TUDATA))
       return marked;
     if (traversable) {
       int pushed = gc2_grey_push(g, o);  /* 05 section 5.6.3. */
@@ -8687,13 +8739,12 @@ static void gc2_table_rescan_requeue(global_State *g, GCtab *t)
 static void gc2_mark_payload_obj_worker(global_State *g, GCobj *o)
 {
   uint32_t gct;
-  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+  if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, NULL, &gct)))
     return;
   if (gc2_markobj_worker(g, o))
     return;
   if (lj_gc2_ismarked(g, o) <= 0)
     return;
-  gct = o->gch.gct;
   switch (gct) {
   case ~LJ_TFUNC:
   case ~LJ_TPROTO:
@@ -9606,7 +9657,7 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
   void *base;
   int marked;
   uint32_t phase;
-  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+  if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, &base, NULL)))
     return 0;
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_SWEEP)
@@ -9618,7 +9669,6 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
   ** lj_gc2_trace_sweep_roots(), which walks actual roots such as stacks,
   ** registry, globals, JIT/FFI side roots and thread handles.
   */
-  base = gc2_mark_base(g, o);
   marked = lj_gc2_markmem(g, base);
   gc2_preserve_direct_bodies(g, o);
   return (uint32_t)(marked != 0);
@@ -9629,15 +9679,16 @@ uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o)
   void *base;
   int traversable;
   uint32_t drained = 0;
-  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+  uint32_t gct;
+  if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, &base, &gct)))
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return (uint32_t)lj_gc2_markobj(g, o);
-  base = gc2_mark_base(g, o);
   (void)lj_gc2_markmem(g, base);
   gc2_mark_legacy_live(g, o);
-  traversable = gc2_mark_base_traversable(g, base);
-  if (traversable || o->gch.gct == ~LJ_TUDATA) {
+  traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
+    gc2_mark_base_traversable(g, base);
+  if (traversable || gct == (uint32_t)~LJ_TUDATA) {
     /*
     ** MARK/WEAK have ended, so a sweep-time semantic root cannot rely on the
     ** ordinary mark enqueue path. Trace root containers synchronously: package
@@ -10043,7 +10094,10 @@ int lj_gc2_ismarkedmem(global_State *g, void *p)
 
 int lj_gc2_ismarked(global_State *g, GCobj *o)
 {
-  return o ? lj_gc2_ismarkedmem(g, gc2_mark_base(g, o)) : -1;
+  void *base;
+  if (!gc2_markobj_base_valid(g, o, &base, NULL))
+    return -1;
+  return lj_gc2_ismarkedmem(g, base);
 }
 
 #if LJ_GC2_PARANOIA
