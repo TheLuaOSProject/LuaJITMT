@@ -2422,6 +2422,7 @@ assert(util.traceinfo(1), "threading.now/cpucount loop did not trace")
       build_default(t)
       luajit_code(t, [=[
 local buffer = require("string.buffer")
+local util = require("jit.util")
 local ffi_ok, ffi = pcall(require, "ffi")
 if ffi_ok then ffi.cdef("typedef unsigned char lj_m6_buf_u8;") end
 
@@ -2557,6 +2558,23 @@ heat("buffer.method.len", function()
   for _ = 1, 4 do n = n + #b end
   assert(n == 16)
 end)
+
+print("buffer.concat.traced")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+do
+  local b = buffer.new()
+  b:set("main")
+  local s = ""
+  local n = 0
+  for i = 1, 80 do
+    s = "pre:" .. b .. ":" .. i
+    if b .. ":post" == "main:post" then n = n + 1 end
+  end
+  assert(s == "pre:main:80")
+  assert(n == 80)
+  assert(util.traceinfo(1), "buffer concat loop did not trace")
+end
 
 heat("buffer.method.encode.decode", function(i)
   local b = buffer.new()

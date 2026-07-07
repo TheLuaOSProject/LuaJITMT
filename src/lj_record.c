@@ -3373,6 +3373,29 @@ typedef struct RecCatDataCP {
   TRef tr;
 } RecCatDataCP;
 
+#if LJ_HASBUFFER
+static int rec_cat_isbuf(TRef tr, cTValue *tv)
+{
+  return tref_isudata(tr) && tvisudata(tv) &&
+	 lj_udata_udtype_acq(udataV(tv)) == UDTYPE_BUFFER;
+}
+
+static TRef rec_cat_bufstr(jit_State *J, TRef tr)
+{
+  TRef udtype = emitir(IRT(IR_FLOAD, IRT_U8), tr, IRFL_UDATA_UDTYPE);
+  TRef sbx;
+  emitir(IRTGI(IR_EQ), udtype, lj_ir_kint(J, UDTYPE_BUFFER));
+  sbx = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCudata)));
+  return lj_ir_call(J, IRCALL_lj_bufx_tostr_forjit, sbx);
+}
+
+#define rec_cat_compat(tr, tv) \
+  (tref_isnumber_str((tr)) || rec_cat_isbuf((tr), (tv)))
+#else
+#define rec_cat_isbuf(tr, tv)	0
+#define rec_cat_compat(tr, tv)	tref_isnumber_str((tr))
+#endif
+
 static TValue *rec_mm_concat_cp(lua_State *L, lua_CFunction dummy, void *ud)
 {
   RecCatDataCP *rcd = (RecCatDataCP *)ud;
@@ -3385,13 +3408,17 @@ static TValue *rec_mm_concat_cp(lua_State *L, lua_CFunction dummy, void *ud)
   lj_assertJ(baseslot < topslot, "bad CAT arg");
   for (s = baseslot; s <= topslot; s++)
     (void)getslot(J, s);  /* Ensure all arguments have a reference. */
-  if (tref_isnumber_str(top[0]) && tref_isnumber_str(top[-1])) {
+  if (rec_cat_compat(top[0], &J->L->base[topslot]) &&
+      rec_cat_compat(top[-1], &J->L->base[topslot-1])) {
     TRef tr, hdr, *trp, *xbase, *base = &J->base[baseslot];
     /* First convert numbers to strings. */
     for (trp = top; trp >= base; trp--) {
+      cTValue *tv = &J->L->base[trp - J->base];
       if (tref_isnumber(*trp))
 	*trp = emitir(IRT(IR_TOSTR, IRT_STR), *trp,
 		      tref_isnum(*trp) ? IRTOSTR_NUM : IRTOSTR_INT);
+      else if (LJ_HASBUFFER && rec_cat_isbuf(*trp, tv))
+	*trp = rec_cat_bufstr(J, *trp);
       else if (!tref_isstr(*trp))
 	break;
     }
@@ -3456,6 +3483,9 @@ static TRef rec_cat(jit_State *J, BCReg baseslot, BCReg topslot)
   }
   return rcd.tr;
 }
+
+#undef rec_cat_compat
+#undef rec_cat_isbuf
 
 /* -- Record bytecode ops ------------------------------------------------- */
 
