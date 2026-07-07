@@ -16,3 +16,8 @@ raw production C access to these assist and hard-check telemetry fields.
 While touching stats export, the M6 cycle/root telemetry guard was tightened to
 also reject local `GC2State *gc2` aliases. The remaining cycle/root stats export
 reads now use the helper family as well.
+
+Follow-up:
+- `lj_gc2_hard_check_advance()` now uses `lj_gc2_hard_check_cas()` instead of
+  open-coding a CAS against `g->gc2.hard_check_bytes`, keeping the hard-check
+  pacing field behind the `lj_gc.h` helper surface from production C.

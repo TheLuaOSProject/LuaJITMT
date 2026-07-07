@@ -1429,8 +1429,7 @@ void lj_gc2_hard_check_advance(global_State *g, uint64_t since)
   old = lj_gc2_hard_check_load(g);
   while (old < next) {
     uint64_t expect = old;
-    if (la_cas64(&g->gc2.hard_check_bytes, &expect, next,
-		 LA_ACQ_REL, LA_ACQ))
+    if (lj_gc2_hard_check_cas(g, &expect, next))
       return;
     old = expect;
   }
