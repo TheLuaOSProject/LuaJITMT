@@ -1315,6 +1315,11 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   fn = funcV(L->top - 1);
   assert(isluafunc(fn));
   pt = funcproto(fn);
+  assert(lj_gc_test_trace_pc_proto_candidate(g, obj2gco(pt),
+					     proto_bc(pt)) == 1);
+  assert(lj_gc_test_trace_pc_proto_candidate(g, obj2gco(pt),
+					     proto_bc(pt) + pt->sizebc) == 0);
+  assert(lj_gc_test_trace_pc_proto_candidate(g, bad, proto_bc(pt)) == 0);
   assert(lj_gc2_test_trace_pc_proto_candidate(g, obj2gco(pt),
 					      proto_bc(pt)) == 1);
   assert(lj_gc2_test_trace_pc_proto_candidate(g, obj2gco(pt),

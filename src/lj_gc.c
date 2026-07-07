@@ -2129,6 +2129,34 @@ typedef struct GCTraceProtoPCCache {
 #define GC_TRACE_PROTO_PC_CACHE		256
 #define GC_TRACE_PROTO_PC_WALK_BUDGET	8192u
 
+static GCproto *gc_trace_pc_proto_candidate(global_State *g, GCobj *o,
+					    const BCIns **bcp,
+					    const BCIns **endp)
+{
+  GCproto *pt;
+  const BCIns *bc;
+  uint32_t gct;
+  if (!gc_objroot_gct_valid(g, o, &gct) || gct != (uint32_t)~LJ_TPROTO)
+    return NULL;
+  pt = gco2pt(o);
+  if (!lj_gc2_valid_proto_for_traverse(g, pt))
+    return NULL;
+  bc = proto_bc(pt);
+  if (bcp)
+    *bcp = bc;
+  if (endp)
+    *endp = bc + pt->sizebc;
+  return pt;
+}
+
+int lj_gc_test_trace_pc_proto_candidate(global_State *g, GCobj *o,
+					const BCIns *pc)
+{
+  const BCIns *bc, *end;
+  return pc && gc_trace_pc_proto_candidate(g, o, &bc, &end) &&
+	 pc >= bc && pc < end;
+}
+
 static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc,
 				       GCTraceProtoPCCache *cache,
 				       MSize *ncachep, uint32_t *budgetp)
@@ -2145,11 +2173,11 @@ static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc,
   }
   for (o = lj_gc_root_acq(g); o != NULL && *budgetp != 0;
        o = lj_obj_gcw_acq(o)) {
+    const BCIns *bc, *end;
+    GCproto *pt;
     --*budgetp;
-    if (o->gch.gct == ~LJ_TPROTO) {
-      GCproto *pt = gco2pt(o);
-      const BCIns *bc = proto_bc(pt);
-      const BCIns *end = bc + pt->sizebc;
+    pt = gc_trace_pc_proto_candidate(g, o, &bc, &end);
+    if (pt) {
       /*
       ** Snapshot PC ownership is advisory trace metadata retention. Bound the
       ** total root-spine search for one trace and cache proto bytecode ranges

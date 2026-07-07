@@ -113,6 +113,10 @@ LJ_FUNC void lj_gc_fullgc(lua_State *L);
 LJ_FUNC uint32_t lj_gc_test_step_fixtop_calls(void);
 LJ_FUNC void lj_gc_test_reset_step_fixtop_calls(void);
 #endif
+#if (defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA) && LJ_HASJIT
+LJ_FUNC int lj_gc_test_trace_pc_proto_candidate(global_State *g, GCobj *o,
+						const BCIns *pc);
+#endif
 
 static LJ_AINLINE GCSize lj_gcsize_load_acq(const GCSize *p)
 {
