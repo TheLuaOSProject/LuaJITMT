@@ -16,6 +16,10 @@
 static const char jit_entering_store_script[] =
   "package.path = 'src/?.lua;src/jit/?.lua;' .. package.path\n"
   "local util = require('jit.util')\n"
+  "local function has_trace()\n"
+  "  for i = 1, 200 do if util.traceinfo(i) then return true end end\n"
+  "  return false\n"
+  "end\n"
   "jit.on()\n"
   "jit.flush()\n"
   "jit.opt.start('hotloop=1', 'hotexit=1')\n"
@@ -24,7 +28,7 @@ static const char jit_entering_store_script[] =
   "  a[1] = i + 0.5\n"
   "end\n"
   "assert(a[1] == 80.5)\n"
-  "assert(util.traceinfo(1), 'entering array store did not trace')\n"
+  "assert(has_trace(), 'entering array store did not trace')\n"
   "jit.flush()\n"
   "jit.opt.start('hotloop=1', 'hotexit=1')\n"
   "local h = { stable = 0 }\n"
@@ -32,7 +36,7 @@ static const char jit_entering_store_script[] =
   "  h.stable = i + 0.5\n"
   "end\n"
   "assert(h.stable == 80.5)\n"
-  "assert(util.traceinfo(1), 'entering hash store did not trace')\n";
+  "assert(has_trace(), 'entering hash store did not trace')\n";
 
 int main(void)
 {

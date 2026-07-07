@@ -29,6 +29,7 @@
 #include "lj_func.h"
 #include "lj_udata.h"
 #include "lj_meta.h"
+#include "lj_debug.h"
 #include "lj_state.h"
 #include "lj_frame.h"
 #include "lj_trace.h"
@@ -2029,11 +2030,7 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
 #if LJ_HASJIT
 static GCtrace *gc_traceref_safe(global_State *g, TraceNo traceno)
 {
-  jit_State *J = G2J(g);
-  TraceVec *tv = tracevec_acq(J);
-  if (traceno == 0 || tv == NULL || (MSize)traceno >= tv->sizetrace)
-    return NULL;
-  return traceref_fromgco(gcref_acq(tv->slot[traceno]));
+  return traceref_safe(G2J(g), traceno);
 }
 
 static int gc_trace_geometry_valid(GCtrace *T)
@@ -2445,11 +2442,92 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
   return (MSize)(top - bot);  /* Return minimum needed stack size. */
 }
 
-static TValue *gc_active_thread_top(global_State *g, lua_State *th, TValue *top)
+static BCReg gc_live_local_topslot(GCproto *pt, const BCIns *ip)
+{
+  const char *p = (const char *)proto_varinfo(pt);
+  BCPos pc, lastpc = 0;
+  BCReg nactive = 0;
+  if (!p)
+    return pt->framesize;
+  pc = proto_bcpos(pt, ip);
+  for (;;) {
+    uint32_t vn = *(const uint8_t *)p;
+    BCPos startpc, endpc;
+    if (vn < VARNAME__MAX) {
+      if (vn == VARNAME_END)
+	break;
+    } else {
+      do { p++; } while (*(const uint8_t *)p);
+    }
+    p++;
+    lastpc = startpc = lastpc + lj_buf_ruleb128(&p);
+    if (startpc > pc)
+      break;
+    endpc = startpc + lj_buf_ruleb128(&p);
+    if (pc < endpc)
+      nactive++;
+  }
+  return nactive < pt->framesize ? nactive : pt->framesize;
+}
+
+/* Calculate number of used slots in a live bytecode frame. */
+static BCReg gc_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres,
+			     int *precisep)
+{
+  BCIns ins = pc[-1];
+  if (precisep)
+    *precisep = 0;
+  if (bc_op(ins) == BC_UCLO)
+    ins = pc[bc_j(ins)];
+  switch (bc_op(ins)) {
+  case BC_CALLM: case BC_CALLMT:
+    /*
+    ** Multi-result calls depend on the VM MULTRES register, which is not always
+    ** a reliable cframe source for asynchronous root snapshots. Keep the whole
+    ** frame for these variable-result windows.
+    */
+    return pt->framesize;
+  case BC_CALL:
+  case BC_ITERC:
+    /*
+    ** Fixed-argument calls have a stable bytecode call window, but true locals
+    ** can live above that window and later be captured by FNEW. Merge the call
+    ** slots with debug local ranges so stale temporaries remain collectible
+    ** without letting live locals go dead. Stripped prototypes fall back to the
+    ** full frame because there is no precise local map.
+    */
+    if (bc_c(ins) != 0) {
+      BCReg top = bc_a(ins) + bc_c(ins) + LJ_FR2;
+      BCReg ltop = gc_live_local_topslot(pt, pc-1);
+      if (ltop > top)
+	top = ltop;
+      if (precisep)
+	*precisep = top < pt->framesize;
+      return top;
+    }
+    break;
+  case BC_RETM:
+    return bc_a(ins) + bc_d(ins) + nres-1;
+  case BC_TSETM:
+    /*
+    ** TSETM consumes the same variable-result window; keep the frame live until
+    ** the VM table-store helper publishes the payload range.
+    */
+    return pt->framesize;
+  default:
+    return pt->framesize;
+  }
+  return pt->framesize;
+}
+
+static TValue *gc_active_thread_top(global_State *g, lua_State *th, TValue *top,
+				    int *precisep)
 {
   TValue *bot = tvref(th->stack);
   TValue *max = tvref(th->maxstack);
   TValue *frame;
+  if (precisep)
+    *precisep = 0;
   if (top > max)
     top = max;
   if (th->base <= bot + 1 + LJ_FR2)
@@ -2477,12 +2555,14 @@ static TValue *gc_active_thread_top(global_State *g, lua_State *th, TValue *top)
 	const BCIns *bc = proto_bc(pt);
 	if (pc && pc > bc && pc <= bc + pt->sizebc) {
 	  /*
-	  ** Same-thread Lua-to-C calls suspend the caller Lua frame. Stock LuaJIT
-	  ** keeps that frame's declared slot range live across C calls such as
-	  ** collectgarbage(), even when the call instruction itself only uses a
-	  ** smaller argument/result window.
+	  ** The bytecode call window is the precise same-thread C-call root set.
+	  ** Open local cells are scanned through the thread's open-upvalue list;
+	  ** broadening every cell-op frame here keeps stale temporaries alive and
+	  ** changes stock weak/trace collection semantics.
 	  */
-	  TValue *ctop = prev + 1 + pt->framesize;
+	  TValue *ctop = prev + 1 + gc_cur_topslot(pt, pc,
+						   cframe_multres_n(cf),
+						   precisep);
 	  if (ctop > top)
 	    top = ctop;
 	}
@@ -2697,15 +2777,12 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     gc_mark_stack_func_slots(g, th);
   if (!remote_current && !native_current && !jit_current && th == cur_L &&
       th->base > tvref(th->stack) + 1 + LJ_FR2) {
-    top = gc_active_thread_top(g, th, top);
+    top = gc_active_thread_top(g, th, top, NULL);
     /*
-    ** Same-thread C calls still suspend older Lua frames below the active frame.
-    ** The PC-derived top bounds the current call window, while gc_traverse_frames()
-    ** bounds the frame chain that must resume after the C call returns. Keep both
-    ** ranges live before atomic clears stack cells.
+    ** The PC-derived top bounds the current C-call window. Frame functions were
+    ** already marked above, and open local cells are scanned through the open-upval
+    ** list; widening back to the declared frame size revives dead lexical slots.
     */
-    if (tvref(th->stack) + used > top)
-      top = tvref(th->stack) + used;
   } else if (tvref(th->stack) + used > top) {
     top = tvref(th->stack) + used;
   }
@@ -2794,6 +2871,14 @@ static size_t propagatemark(global_State *g)
   */
   if (!lj_gc_list_pop_head_rel(&g->gc.gray, o))
     goto done;
+  /*
+  ** A stale duplicate can leave a black object still linked later in the
+  ** intrusive gray list. Treat a black rescan like an ordinary gray traversal
+  ** while its payload is being processed, so recursive edges cannot claim and
+  ** republish the same gclist link before the stale list entry is consumed.
+  */
+  if (black_rescan)
+    black2gray(o);
   (void)lj_gc2_markobj_nolegacy(g, o);
   /*
   ** GC2 can set NEEDSCAN before the legacy collector reaches this payload.  The
@@ -2803,8 +2888,7 @@ static size_t propagatemark(global_State *g)
   */
   if (lj_obj_gcflags(o) & LJ_GC_NEEDSCAN)
     gc_mark_needscan_consume(g, o);
-  if (!black_rescan)
-    gray2black(o);
+  gray2black(o);
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
     MSize colosz = lj_tab_colo_size(t);

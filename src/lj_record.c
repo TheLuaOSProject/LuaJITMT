@@ -1405,6 +1405,9 @@ static BCReg rec_mm_prep(jit_State *J, ASMFunction cont)
   return top+1+LJ_FR2;
 }
 
+static TRef rec_tmpref(jit_State *J, TRef tr);
+static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t);
+
 /* Record metamethod lookup. */
 int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
 {
@@ -1468,10 +1471,13 @@ nocheck:
   if (mt) {
     GCstr *mmstr = mmname_str(J2G(J), mm);
     cTValue *mo = lj_tab_getstr(mt, mmstr);
+    int isnil = 1;
     if (mo) {
       lj_tv_load_acq(&motv2, mo);
-      if (!tvisnil(&motv2))
+      if (!tvisnil(&motv2)) {
 	copyTV(J->L, &ix->mobjv, &motv2);
+	isnil = 0;
+      }
     }
     ix->mtv = mt;
     settabV(J->L, &mix.tabv, mt);
@@ -1479,6 +1485,15 @@ nocheck:
     mix.key = lj_ir_kstr(J, mmstr);
     mix.val = 0;
     mix.idxchain = 0;
+    if (mm == MM_metatable && isnil && lj_record_mt_shared_tab(J, mix.tab)) {
+      /*
+      ** setmetatable() only needs to guard absence of __metatable. Keep the
+      ** broader previous-nil __index/__newindex active-MT fences intact, but
+      ** let this raw metatable guard use the helper-backed stable-miss path.
+      */
+      ix->mobj = rec_idx_mt_shared_load(J, &mix, IRT_NIL);
+      return 0;
+    }
     ix->mobj = lj_record_idx(J, &mix);
     return !tref_isnil(ix->mobj);  /* 1 if metamethod found, 0 if not. */
   }
@@ -1870,7 +1885,6 @@ static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
 }
 
 static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode);
-static TRef rec_tmpref(jit_State *J, TRef tr);
 
 static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
 {

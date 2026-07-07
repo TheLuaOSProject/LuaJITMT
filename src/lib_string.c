@@ -100,6 +100,7 @@ LJLIB_CF(string_rep)		LJLIB_REC(.)
   }
   sb = lj_buf_putstr_rep(sb, s, rep);
   setstrV(L, L->top-1, lj_buf_str(L, sb));
+  lj_gc_pubroot(L, L->top-1);
   lj_gc_check(L);
   return 1;
 }

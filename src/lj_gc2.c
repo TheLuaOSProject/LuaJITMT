@@ -29,6 +29,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_meta.h"
+#include "lj_debug.h"
 #include "lj_safepoint.h"
 #include "lj_arena.h"
 #include "lj_tg.h"
@@ -1378,6 +1379,8 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
     if (lj_tg_jit_base(g) == NULL ||
 	lj_gc2_hard_load(g) < LJ_GC2_ACCT_FLUSH ||
 	since >= lj_gc2_hard_check_load(g)) {
+      if (lj_tg_jit_base(g) != NULL)
+	gc2_jit_hard_checks_add(g, 1);
       (void)lj_gc2_assist(g, tg);
       lj_gc2_hard_check_advance(g, since);
     }
@@ -1719,11 +1722,7 @@ static void gc2_mark_tab_retired_mem(global_State *g)
 #if LJ_HASJIT
 static GCtrace *gc2_traceref_safe(global_State *g, TraceNo traceno)
 {
-  jit_State *J = G2J(g);
-  TraceVec *tv = tracevec_acq(J);
-  if (traceno == 0 || tv == NULL || (MSize)traceno >= tv->sizetrace)
-    return NULL;
-  return traceref_fromgco(gcref_acq(tv->slot[traceno]));
+  return traceref_safe(G2J(g), traceno);
 }
 
 static int gc2_trace_geometry_valid(GCtrace *T)
@@ -3717,10 +3716,87 @@ static void gc2_mark_fixedstr(global_State *g)
   gc2_fixedstr_scan_cycle_rel(g, cycle);
 }
 
+static BCReg gc2_live_local_topslot(GCproto *pt, const BCIns *ip)
+{
+  const char *p = (const char *)proto_varinfo(pt);
+  BCPos pc, lastpc = 0;
+  BCReg nactive = 0;
+  if (!p)
+    return pt->framesize;
+  pc = proto_bcpos(pt, ip);
+  for (;;) {
+    uint32_t vn = *(const uint8_t *)p;
+    BCPos startpc, endpc;
+    if (vn < VARNAME__MAX) {
+      if (vn == VARNAME_END)
+	break;
+    } else {
+      do { p++; } while (*(const uint8_t *)p);
+    }
+    p++;
+    lastpc = startpc = lastpc + lj_buf_ruleb128(&p);
+    if (startpc > pc)
+      break;
+    endpc = startpc + lj_buf_ruleb128(&p);
+    if (pc < endpc)
+      nactive++;
+  }
+  return nactive < pt->framesize ? nactive : pt->framesize;
+}
+
+static BCReg gc2_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres,
+			      int *precisep)
+{
+  BCIns ins = pc[-1];
+  if (precisep)
+    *precisep = 0;
+  if (bc_op(ins) == BC_UCLO)
+    ins = pc[bc_j(ins)];
+  switch (bc_op(ins)) {
+  case BC_CALLM: case BC_CALLMT:
+    /*
+    ** Multi-result calls depend on the VM MULTRES register, which is not always
+    ** a reliable cframe source for asynchronous root snapshots. Keep the whole
+    ** frame for these variable-result windows.
+    */
+    return pt->framesize;
+  case BC_CALL:
+  case BC_ITERC:
+    /*
+    ** Fixed-argument calls have a stable bytecode call window, but true locals
+    ** can live above that window and later be captured by FNEW. Merge the call
+    ** slots with debug local ranges so stale temporaries remain collectible
+    ** without letting live locals go dead. Stripped prototypes fall back to the
+    ** full frame because there is no precise local map.
+    */
+    if (bc_c(ins) != 0) {
+      BCReg top = bc_a(ins) + bc_c(ins) + LJ_FR2;
+      BCReg ltop = gc2_live_local_topslot(pt, pc-1);
+      if (ltop > top)
+	top = ltop;
+      if (precisep)
+	*precisep = top < pt->framesize;
+      return top;
+    }
+    break;
+  case BC_RETM:
+    return bc_a(ins) + bc_d(ins) + nres-1;
+  case BC_TSETM:
+    /*
+    ** TSETM consumes the same variable-result window; keep the frame live until
+    ** the VM table-store helper publishes the payload range.
+    */
+    return pt->framesize;
+  default:
+    return pt->framesize;
+  }
+  return pt->framesize;
+}
+
 static GCproto *gc2_func_proto_if_lua(GCfunc *fn)
 {
   return fn->c.ffid == FF_LUA ?
-		 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
+			 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
 static int gc2_frame_func_valid(global_State *g, TValue *frame,
@@ -3931,11 +4007,14 @@ static int gc2_thread_stack_scan_authoritative(global_State *g, lua_State *L)
 	 !gc2_thread_is_native_current(g, L);
 }
 
-static TValue *gc2_active_thread_top(global_State *g, lua_State *L, TValue *top)
+static TValue *gc2_active_thread_top(global_State *g, lua_State *L, TValue *top,
+				     int *precisep)
 {
   TValue *bot = tvref(L->stack);
   TValue *max = tvref(L->maxstack);
   TValue *frame;
+  if (precisep)
+    *precisep = 0;
   if (top > max)
     top = max;
   if (L->base <= bot + 1 + LJ_FR2)
@@ -3963,14 +4042,15 @@ static TValue *gc2_active_thread_top(global_State *g, lua_State *L, TValue *top)
 	const BCIns *bc = proto_bc(pt);
 	if (pc && pc > bc && pc <= bc + pt->sizebc) {
 	  /*
-	  ** Lua-to-C calls suspend the caller Lua frame. Stock LuaJIT keeps that
-	  ** frame's declared slot range live across C calls such as collectgarbage(),
-	  ** even when the call instruction itself only uses a smaller argument/result
-	  ** window. Remote/native scanners use this bounded top instead of maxstack:
-	  ** owner-private frame tails are not ordinary live slots, and scanning the
-	  ** full stack capacity can keep GC2 fixpoint root snapshots busy forever.
+	  ** The bytecode call window is the precise same-thread C-call root set.
+	  ** Open local cells are scanned through the thread's open-upvalue list;
+	  ** broadening every cell-op frame here keeps stale temporaries alive and
+	  ** changes stock weak/trace collection semantics. Remote/native scanners
+	  ** still use this bounded active top instead of maxstack.
 	  */
-	  TValue *ctop = prev + 1 + pt->framesize;
+	  TValue *ctop = prev + 1 + gc2_cur_topslot(pt, pc,
+						    cframe_multres_n(cf),
+						    precisep);
 	  if (ctop > top)
 	    top = ctop;
 	}
@@ -4000,7 +4080,7 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
     ** storage in that window; ordinary same-thread VM collections use precise
     ** frame tops so dead call results do not affect weak/FINREG decisions.
     */
-    return gc2_active_thread_top(g, L, L->top);
+    return gc2_active_thread_top(g, L, L->top, NULL);
   }
   used = L->top - 1;
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
@@ -4023,14 +4103,12 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
   if (used > max)
     used = max;
   if (vm_current && L->base > bot + 1 + LJ_FR2) {
-    top = gc2_active_thread_top(g, L, top);
+    top = gc2_active_thread_top(g, L, top, NULL);
     /*
-    ** The active C-call PC gives the current call window. Older suspended Lua
-    ** frames are still resume roots, so the stack scan also has to cover the
-    ** frame-chain extent computed above.
+    ** The active C-call PC gives the current call window. Frame functions were
+    ** already marked above, and open local cells are scanned through the open-upval
+    ** list; widening back to the declared frame size revives dead lexical slots.
     */
-    if (used > top)
-      top = used;
   } else {
     TValue *ctop = curr_top(L);
     if (ctop > top)
@@ -7786,9 +7864,22 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
 {
   uint32_t i;
   int dirtied = 0;
+  int active;
   if (!tv)
     return;
-  if (gc2_barrier_active_g(g)) {
+  active = gc2_barrier_active_g(g);
+  if (!active && !gc2_remember_active_g(g) &&
+      parent && gc2_phase_acq(g) == LJ_GC2_IDLE &&
+      lj_gc2_ismarked(g, parent) > 0) {
+    /*
+    ** A VM helper can run just after an active cycle closed, while it is still
+    ** publishing values into a table born/marked during that cycle. Preserve that
+    ** range from the marked parent instead of relying on an earlier broad stack
+    ** snapshot.
+    */
+    active = 1;
+  }
+  if (active) {
     for (i = 0; i < n; i++) {
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
@@ -9030,7 +9121,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
     if (jit_current)
       gc2_mark_jit_frame_funcs(g, L);
 #endif
-    return gc2_active_thread_top(g, L, L->top);
+    return gc2_active_thread_top(g, L, L->top, NULL);
   }
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
@@ -9051,9 +9142,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
   if (used > max)
     used = max;
   if (vm_current && L->base > bot + 1 + LJ_FR2) {
-    top = gc2_active_thread_top(g, L, top);
-    if (used > top)
-      top = used;
+    top = gc2_active_thread_top(g, L, top, NULL);
   } else {
     TValue *ctop = curr_top(L);
     if (ctop > top)

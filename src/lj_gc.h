@@ -362,6 +362,12 @@ static LJ_AINLINE int lj_gc_list_pop_head_rel(GCRef *head, GCobj *o)
     next = NULL;
   if (!gcref_cas(head, &expect, next))
     return 0;
+  /*
+  ** Duplicate intrusive entries can survive concurrent rescans. Once this head
+  ** occurrence is detached, clear the object's link so any stale later
+  ** occurrence terminates the list instead of preserving an old back-edge.
+  */
+  setgcrefnullrel(o->gch.gclist);
   return 1;
 }
 

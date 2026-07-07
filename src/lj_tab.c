@@ -2521,6 +2521,73 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 
 static LJ_AINLINE void tab_publish_storage(lua_State *L, GCtab *t);
 
+static int tab_get_current_hash_forjit(GCtab *t, cTValue *key, TValue *out)
+{
+  TValue hkey;
+  cTValue *hkeyp = key;
+  Node *node;
+  MSize hmask;
+  Node *n;
+  int64_t i64;
+  int32_t ik;
+  int isnumkey = 0;
+  if (tvisint(key)) {
+    setnumV(&hkey, (lua_Number)intV(key));
+    hkeyp = &hkey;
+    isnumkey = 1;
+  } else if (tvisnum(key)) {
+    isnumkey = 1;
+    if (lj_num2int_check(numV(key), i64, ik)) {
+      TValue *array;
+      (void)lj_tab_array_snapshot_acq(t, &array);
+      UNUSED(ik);
+      if (array != NULL && lj_tab_array_is_retiring(t, array))
+	return -1;
+    }
+  } else if (tvisnil(key)) {
+    return -1;
+  }
+
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  if (lj_tab_node_is_retiring(node)) {
+    node = lj_tab_node_nextgen_acq(node);
+    if (node == NULL || lj_tab_node_is_retiring(node))
+      return -1;
+    hmask = lj_tab_node_hmask_acq(node);
+  }
+  if (hmask == 0) {
+    setnilV(out);
+    return 0;
+  }
+
+retry:
+  n = isnumkey ? hashnum_node(node, hmask, hkeyp) :
+      tvisstr(hkeyp) ? hashstr_node(node, hmask, strV(hkeyp)) :
+      hashkey_node(node, hmask, hkeyp);
+  do {
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if ((isnumkey && tvisnum(&nk) && nk.n == hkeyp->n) ||
+	(tvisstr(hkeyp) && tvisstr(&nk) && strV(&nk) == strV(hkeyp)) ||
+	(!isnumkey && !tvisstr(hkeyp) && lj_obj_equal(&nk, hkeyp))) {
+      lj_tv_load_acq(out, &n->val);
+      if (tvisforward(out)) {
+	if (!tab_node_forward_hop(t, &node, &hmask))
+	  return -1;
+	goto retry;
+      }
+      return tab_val_absent(out) ? 0 : 1;
+    }
+    if (tab_key_islocked(&nk))
+      return -1;
+  } while ((n = lj_tab_nextnode_acq(n)));
+
+  if (lj_tab_node_is_retiring(node))
+    return -1;
+  setnilV(out);
+  return 0;
+}
+
 LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 				     TValue *out)
 {
@@ -2529,13 +2596,17 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
     if (src == niltv(L)) {
       lj_tv_load_acq(out, src);
       if (!tab_forjit_miss_stable(t)) {
-	lj_tab_wait_l(L);
-	continue;
+	if (tab_get_current_hash_forjit(t, key, out) < 0) {
+	  lj_tab_wait_l(L);
+	  continue;
+	}
       }
     } else if (lj_tab_read_current_keyed(t, (TValue *)src, key, out) !=
 	       LJ_TAB_STORE_CAS_OK) {
-      lj_tab_wait_l(L);
-      continue;
+      if (tab_get_current_hash_forjit(t, key, out) < 0) {
+	lj_tab_wait_l(L);
+	continue;
+      }
     }
     if (LJ_LIKELY(tab_tv_forjit_loadable(out))) {
       /*
@@ -3976,7 +4047,6 @@ static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
   }
 }
 
-#ifdef LJ_TAB_TEST_HELPERS
 static TValue *tab_forwarded_jit_hash_slot(lua_State *L, GCtab *parent,
 					   Node *node, MSize hmask, TValue *dst,
 					   TValue *keycopy, cTValue **keyp,
@@ -4008,6 +4078,31 @@ static TValue *tab_forwarded_jit_hash_slot(lua_State *L, GCtab *parent,
   }
 }
 
+static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
+					 TValue *orig, cTValue *key,
+					 TValue *keycopy, cTValue **keyp)
+{
+  for (;;) {
+    Node *node;
+    MSize idx, hmask = tab_store_node_snapshot_acq(parent, &node);
+    if (hmask > 0 &&
+	tab_ptr_index((uintptr_t)node, (uintptr_t)orig, sizeof(Node),
+		      hmask + 1u, &idx) &&
+	orig == &node[idx].val)
+      return tab_forwarded_jit_hash_slot(L, parent, node, hmask, orig,
+					 keycopy, keyp, key);
+    if (lj_tab_node_is_retiring(node)) {
+      TValue *slot = tab_forwarded_setslot(parent, &node, &hmask, key);
+      if (slot)
+	return slot;
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    return lj_tab_set(L, parent, key);
+  }
+}
+
+#ifdef LJ_TAB_TEST_HELPERS
 LJ_FUNCA TValue *lj_tab_test_storetv_forjit_array_observed(lua_State *L,
 							   GCtab *parent,
 							   TValue *array,
@@ -4087,10 +4182,9 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
 {
   TValue *orig = dst;
   TValue keytv;
-  UNUSED(orig);
   setintV(&keytv, (int32_t)key);
   for (;;) {
-    dst = lj_tab_setint(L, parent, (int32_t)key);
+    dst = tab_current_jit_array_slot(L, parent, orig, key);
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
@@ -4105,7 +4199,6 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 {
   TValue *orig = dst;
   TValue keytv;
-  UNUSED(orig);
   setintV(&keytv, (int32_t)key);
   /*
   ** The source can be trace-only until this helper publishes it. Barrier it
@@ -4118,7 +4211,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
     ** before this helper runs, so every publish resolves the key through the
     ** current generation and lets the keyed CAS own the final validation.
     */
-    dst = lj_tab_setint(L, parent, (int32_t)key);
+    dst = tab_current_jit_array_slot(L, parent, orig, key);
     if (tab_trystoretv_cas_keyed_weak(L, parent, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
@@ -4198,8 +4291,8 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
 					    cTValue *key)
 {
   TValue *orig = dst;
+  TValue keycopy;
   cTValue *barrier_key = key;
-  UNUSED(orig);
   /*
   ** A traced source may be invisible to the stack scanner until the helper
   ** completes. Publish the GC edge before any retry wait or resize can run.
@@ -4210,7 +4303,9 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
     ** Treat the traced slot as a location hint, not as authority. Hash resizes
     ** can move the key before generated code reaches this helper.
     */
-    dst = lj_tab_set(L, parent, key);
+    barrier_key = key;
+    dst = tab_current_jit_hash_slot(L, parent, orig, key, &keycopy,
+				    &barrier_key);
     if (tab_trystoretv_cas_keyed_weak(L, parent, dst, barrier_key, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
@@ -4353,6 +4448,8 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
     return;
   g = G(L);
   weakcand = lj_gc2_weak_write_candidate(L, parent);
+  if (!weakcand)
+    lj_gc2_barrier_tvn_pair_g(g, obj2gco(parent), src, n);
   if (!weakcand && !mt_active_or_entering_acq(g)) {
     TValue *dst = tab_tsetm_fast_range(parent, start, n);
     if (dst) {

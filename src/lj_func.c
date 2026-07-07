@@ -282,6 +282,12 @@ static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
   GCupval *uv = (GCupval *)lj_mem_newgco_unlinked(L, sizeof(GCupval));
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
+  /*
+  ** FNEW may capture a C-call result slot before the next ordinary root scan.
+  ** Publish the source stack value first, so legacy/GC2 barriers repair
+  ** other-white results before the assertion-checked copy below.
+  */
+  lj_gc_pubroot(L, slot);
   copyTVrel(L, &uv->tv, slot);
   setmref(uv->v, &uv->tv);
   uv->immutable = 0;

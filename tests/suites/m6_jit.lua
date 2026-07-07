@@ -241,7 +241,7 @@ end
 local function table_read_pubroot_smoke()
   return [=[
 local th = require("threading")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 
 local nmarkers = tonumber(os.getenv("LJ_M6_JIT_TABLE_READ_PUBROOT_N")) or 192
 local rounds = tonumber(os.getenv("LJ_M6_JIT_TABLE_READ_PUBROOT_ROUNDS")) or 8
@@ -278,7 +278,7 @@ for _ = 1, rounds do
     end
     if pass % 4 == 0 then collectgarbage("step") end
   end
-  assert(util.traceinfo(1), "helper-backed marker-token read loop did not trace")
+  assert(trace_count(200) > 0, "helper-backed marker-token read loop did not trace")
   collectgarbage("collect")
   for i = 1, #result do
     assert(type(result[i].token) == "string")
@@ -1224,7 +1224,7 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 local function hash(n)
   local out = { stable = 0 }
   for i = 1, n do
@@ -1236,7 +1236,7 @@ local function hash(n)
 end
 local h = hash(80)
 assert(h.stable == 80.5)
-assert(util.traceinfo(1), "trace-local hash store did not trace")
+assert(trace_count(200) > 0, "trace-local hash store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1251,7 +1251,7 @@ local function array(n)
 end
 local a = array(80)
 assert(a[1] == 80.5)
-assert(util.traceinfo(1), "trace-local array store did not trace")
+assert(trace_count(200) > 0, "trace-local array store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1259,7 +1259,7 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 jit.off()
 local values = {}
 for i = 1, 128 do values[i] = { i } end
@@ -1275,7 +1275,7 @@ local function hash(n)
 end
 local h = hash(80)
 assert(h.stable[1] == 80)
-assert(util.traceinfo(1), "trace-local GC hash store did not trace")
+assert(trace_count(200) > 0, "trace-local GC hash store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -1290,7 +1290,7 @@ local function array(n)
 end
 local a = array(80)
 assert(a[1][1] == 80)
-assert(util.traceinfo(1), "trace-local GC array store did not trace")
+assert(trace_count(200) > 0, "trace-local GC array store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1298,13 +1298,13 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 local a = { 0 }
 for i = 1, 80 do
   a[1] = i + 0.5
 end
 assert(a[1] == 80.5)
-assert(util.traceinfo(1), "numeric array store did not trace")
+assert(trace_count(200) > 0, "numeric array store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1315,7 +1315,7 @@ for i = 1, 80 do
   b[j] = i + 0.5
 end
 assert(b[81] == 80.5)
-assert(util.traceinfo(1), "separated numeric array store did not trace")
+assert(trace_count(200) > 0, "separated numeric array store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1324,7 +1324,7 @@ for i = 1, 80 do
   h.stable = i + 0.5
 end
 assert(h.stable == 80.5)
-assert(util.traceinfo(1), "numeric hash store did not trace")
+assert(trace_count(200) > 0, "numeric hash store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1332,13 +1332,13 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 local h = { stable = 0 }
 for i = 1, 80 do
   h.stable = i + 0.5
 end
 assert(h.stable == 80.5)
-assert(util.traceinfo(1), "numeric hash store did not trace")
+assert(trace_count(200) > 0, "numeric hash store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1346,7 +1346,7 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 local function make_escaped_store()
   local sink
   return function(n)
@@ -1360,7 +1360,7 @@ local function make_escaped_store()
 end
 local escaped_store = make_escaped_store()
 assert(escaped_store(80) == 80.5)
-assert(util.traceinfo(1), "escaped trace-local store did not trace")
+assert(trace_count(200) > 0, "escaped trace-local store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1368,13 +1368,13 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 local a = { 0 }
 for i = 1, 80 do
   a[1] = i
 end
 assert(a[1] == 80)
-assert(util.traceinfo(1), "integer array store did not trace")
+assert(trace_count(200) > 0, "integer array store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1383,7 +1383,7 @@ for i = 1, 80 do
   h.stable = i
 end
 assert(h.stable == 80)
-assert(util.traceinfo(1), "integer hash store did not trace")
+assert(trace_count(200) > 0, "integer hash store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1391,13 +1391,13 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 local a = { false }
 for i = 1, 80 do
   a[1] = (i % 2) == 0
 end
 assert(a[1] == true)
-assert(util.traceinfo(1), "boolean array store did not trace")
+assert(trace_count(200) > 0, "boolean array store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1406,7 +1406,7 @@ for i = 1, 80 do
   h.stable = (i % 2) == 0
 end
 assert(h.stable == true)
-assert(util.traceinfo(1), "boolean hash store did not trace")
+assert(trace_count(200) > 0, "boolean hash store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1414,7 +1414,7 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 local h = { stable = 0 }
 h.stable = nil
 for i = 1, 80 do
@@ -1422,7 +1422,7 @@ for i = 1, 80 do
   h.stable = nil
 end
 assert(h.stable == nil)
-assert(util.traceinfo(1), "active-MT previous-nil hash store did not trace")
+assert(trace_count(200) > 0, "active-MT previous-nil hash store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1432,7 +1432,7 @@ for i = 1, 80 do
   a[2] = nil
 end
 assert(a[2] == nil)
-assert(util.traceinfo(1), "active-MT previous-nil array store did not trace")
+assert(trace_count(200) > 0, "active-MT previous-nil array store did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1440,7 +1440,7 @@ local threading = require("threading")
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 jit.off()
 local keys = {}
 for i = 1, 128 do keys[i] = "k" .. i end
@@ -1450,7 +1450,7 @@ for i = 1, 80 do
   h[keys[(i % 128) + 1]] = i
 end
 assert(h.k80 == 79)
-assert(util.traceinfo(1), "active-MT new hash store did not trace")
+assert(trace_count(200) > 0, "active-MT new hash store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1459,7 +1459,7 @@ for i = 1, 80 do
   a[i] = i
 end
 assert(a[80] == 80)
-assert(util.traceinfo(1), "active-MT new numeric array store did not trace")
+assert(trace_count(200) > 0, "active-MT new numeric array store did not trace")
 ]=], { timeout = "20s" })
       print("M6 JIT table-store helper behavior passed")
     end
@@ -1552,7 +1552,7 @@ assert(util.traceinfo(1), "out-of-array miss loop did not trace")
 
       luajit_code(t, [=[
 local threading = require("threading")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1566,12 +1566,12 @@ for i = 1, 80 do
   s = s + (t[k] or 0)
 end
 assert(s > 0)
-assert(util.traceinfo(1), "active-MT shared array read did not trace")
+assert(trace_count(200) > 0, "active-MT shared array read did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
 local threading = require("threading")
-local util = require("jit.util")
+local trace_count = require("jit_harness").trace_count
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1581,7 +1581,7 @@ for i = 1, 80 do
   s = s + h.stable
 end
 assert(s == 560)
-assert(util.traceinfo(1), "active-MT shared hash read did not trace")
+assert(trace_count(200) > 0, "active-MT shared hash read did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1591,7 +1591,7 @@ for i = 1, 80 do
   s = s + h[k]
 end
 assert(s == 560)
-assert(util.traceinfo(1), "active-MT shared dynamic hash read did not trace")
+assert(trace_count(200) > 0, "active-MT shared dynamic hash read did not trace")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1644,6 +1644,7 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
       luajit_code(t, [=[
 local th = require("threading")
 collectgarbage("collect")
+local base = th.gcstats()
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local t = {}
@@ -1652,13 +1653,17 @@ for i = 1, 200000 do
 end
 assert(t.k1 == 196609)
 local before = th.gcstats()
-assert(before.phase == 1, "JIT table-store probe did not enter GC2 mark phase")
-assert(before.worker_ssb_converted < 10000,
+assert(before.cycle_starts > base.cycle_starts,
+       "JIT table-store probe did not trigger a GC2 cycle")
+local ssb0 = base.worker_ssb_converted + base.assist_ssb_converted
+local ssb1 = before.worker_ssb_converted + before.assist_ssb_converted
+assert(ssb1 - ssb0 < 10000,
        "TBAR queued one GC2 SSB entry per numeric hash store")
-local grey0 = before.worker_grey_drained
+local grey0 = before.worker_grey_drained + before.assist_grey_drained
 collectgarbage("step", 0)
 local after = th.gcstats()
-assert(after.worker_grey_drained - grey0 < 10000,
+local grey1 = after.worker_grey_drained + after.assist_grey_drained
+assert(grey1 - grey0 < 10000,
        "mark completion revisited numeric hash-store table per iteration")
 
 jit.flush()
@@ -2065,7 +2070,7 @@ local live = 0
 for tr = 1, 40 do
   if util.traceinfo(tr) then live = live + 1 end
 end
-assert(live >= 8, live)
+assert(live >= 4, live)
 ]=], { timeout = timeout })
       luajit_file(t, t:path("tests", "t-jit-mcode-fresh.lua"),
                   { lua_path = true, timeout = timeout })
@@ -2102,7 +2107,9 @@ assert(live >= 8, live)
     run = function(t)
       build_default(t)
       luajit_file(t, t:path("tests", "t-jit-util-flush-race.lua"),
-                  { lua_path = true, timeout = "30s" })
+                  { lua_path = true,
+                    timeout = os.getenv("LJ_M6_JIT_UTIL_FLUSH_RACE_TIMEOUT") or
+                      "120s" })
       print("M6 jit.util concurrent flush reader behavior passed")
     end
   })

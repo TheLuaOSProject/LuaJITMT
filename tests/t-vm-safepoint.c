@@ -510,7 +510,7 @@ int main(void)
   assert(G2J(g)->freetrace == 0);
   epoch0 = g->gc2.hs_epoch;
   assert(luaL_dostring(L, "jit.flush()") == LUA_OK);
-  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_epoch == epoch0);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   epoch0 = g->gc2.hs_epoch;
   assert(luaL_dostring(L, "jit.flush(function() end)") == LUA_OK);

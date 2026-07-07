@@ -424,6 +424,13 @@ static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)
 {
   return (uintptr_t)o <= LJ_TRACE_PENDING ? NULL : gco2trace(o);
 }
+static LJ_AINLINE GCtrace *traceref_fromgco_safe(GCobj *o)
+{
+  if ((uintptr_t)o <= LJ_TRACE_PENDING || !checkptrGC(o) ||
+      o->gch.gct != (uint32_t)~LJ_TTRACE)
+    return NULL;
+  return (GCtrace *)o;
+}
 #define tracevec_acq(J) \
   ((TraceVec *)la_loadptr_acq((void *const *)&(J)->tracev))
 #define tracevec_rel(J, tv) \
@@ -1012,6 +1019,14 @@ static LJ_AINLINE GCtrace *traceref(jit_State *J, TraceNo n)
   TraceVec *tv = tracevec_acq(J);
   if ((n)>0 && tv != NULL && (MSize)(n)<tv->sizetrace)
     return traceref_fromgco(gcref_acq(tv->slot[(n)]));
+  return NULL;
+}
+
+static LJ_AINLINE GCtrace *traceref_safe(jit_State *J, TraceNo n)
+{
+  TraceVec *tv = tracevec_acq(J);
+  if ((n)>0 && tv != NULL && (MSize)(n)<tv->sizetrace)
+    return traceref_fromgco_safe(gcref_acq(tv->slot[(n)]));
   return NULL;
 }
 

@@ -63,7 +63,7 @@ static BCPos debug_jit_startpc(jit_State *J, GCproto *pt, const BCIns *ins)
   if (tv == NULL)
     return NO_BCPOS;
   for (i = 1; i < tv->sizetrace; i++) {
-    GCtrace *cur = traceref_fromgco(gcref_acq(tv->slot[i]));
+    GCtrace *cur = traceref_fromgco_safe(gcref_acq(tv->slot[i]));
     if (cur == T && trace_traceno_acq(cur) == (TraceNo)i &&
 	la_load64_acq(&cur->retire_epoch) == 0 &&
 	trace_startpt_acq(cur) == pt && ins == &cur->startins + 1)

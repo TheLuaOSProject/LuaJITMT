@@ -1002,7 +1002,8 @@ int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
   {
     TraceNo i, sizetrace = trace_sizetrace_acq(J);
     for (i = 1; i < sizetrace; i++)
-      if (trace_mcode_area_refs(g, traceref(J, i), rxlo, rxhi, rwlo, rwhi))
+      if (trace_mcode_area_refs(g, traceref_safe(J, i),
+				rxlo, rxhi, rwlo, rwhi))
 	return 1;
   }
   for (T = trace_retired_head_acq(J);
@@ -1060,7 +1061,7 @@ void lj_trace_markvecs(global_State *g, int gc2)
       ** still comes from prototypes, links and active TG vmstates.
       */
       for (i = 1; i < sizetrace; i++) {
-	GCtrace *T = traceref(J, i);
+	GCtrace *T = traceref_safe(J, i);
 	if (trace_retired_exit_body_match(T, i))
 	  trace_preservebody(g, T, gc2, &pcstate);
       }
@@ -1801,10 +1802,11 @@ int lj_trace_flushall_hs(lua_State *L)
   int token;
   if ((hookmask_load(g) & HOOK_GC))
     return 1;
-  if (gc2_n_threads_acq(g) <= 1 && lj_trace_state_load(J) != LJ_TRACE_IDLE) {
+  if (gc2_n_threads_acq(g) <= 1) {
     /* With one TG there is no remote trace user to quiesce. Use the direct
     ** flush path so recorder-side emergency flushes cannot wait for their own
-    ** safepoint acknowledgement.
+    ** safepoint acknowledgement and ordinary jit.flush() keeps its TRACE
+    ** "flush" vmevent.
     */
     return trace_flushall_direct(L, 0, 1);
   }
@@ -1899,7 +1901,7 @@ void lj_trace_freestate(global_State *g)
     ptrdiff_t i;
     ptrdiff_t sizetrace = (ptrdiff_t)trace_sizetrace_acq(J);
     for (i = 1; i < sizetrace; i++)
-      lj_assertG(i == (ptrdiff_t)J->cur.traceno || traceref(J, i) == NULL,
+      lj_assertG(i == (ptrdiff_t)J->cur.traceno || traceref_safe(J, i) == NULL,
 		 "trace still allocated");
   }
 #endif

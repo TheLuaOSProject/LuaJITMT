@@ -917,13 +917,15 @@ int main(void)
   assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
   assert(gc2_ssb_published_acq(g) == ssb_published0 + 1u);
   assert(tg->ssb_next == tg->ssb_base + 1);
-  assert(lj_gc2_test_ssb_drain(g) == TG_GC2_SSB_SLOTS);
+  assert(lj_gc2_test_ssb_drain(g) == TG_GC2_SSB_SLOTS + 1u);
   assert(g->gc2.ssb_head == NULL);
+  assert(tg->ssb_next == tg->ssb_base);
   assert(gc2_ssb_drained_acq(g) == ssb_drained0 + 1u);
   assert(gc2_ssb_items_drained_acq(g) ==
 	 ssb_items_drained0 + TG_GC2_SSB_SLOTS);
   ssb_drained0 = gc2_ssb_drained_acq(g);
   ssb_items_drained0 = gc2_ssb_items_drained_acq(g);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(tg->ssb_next == tg->ssb_base);
   assert(!lj_gc2_test_ssb_empty(g));

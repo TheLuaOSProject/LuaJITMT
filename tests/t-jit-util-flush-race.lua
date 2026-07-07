@@ -1,14 +1,23 @@
 local th = require"threading"
 local harness = require"thread_harness"
 local util = require"jit.util"
+local traceinfo = assert(util.traceinfo)
+local traceir = assert(util.traceir)
+local tracek = assert(util.tracek)
+local tracesnap = assert(util.tracesnap)
+local tracemc = assert(util.tracemc)
+local traceexitstub = assert(util.traceexitstub)
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=2048")
+jit.off()
 
 local rounds = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_ROUNDS", 48)
 local trace_limit = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_TRACE_LIMIT", 512)
+local max_probes = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_MAX_PROBES", 256)
 local ready, start = harness.channels(1)
 local done = th.channel(1)
+local done_recv = assert(done.recv)
 
 local function make_hot(seed)
   assert(type(seed) == "number")
@@ -18,10 +27,12 @@ local function make_hot(seed)
 end
 
 local function publish_trace(seed)
+  jit.on()
   local f = make_hot(seed)
   for _ = 1, 12 do
     assert(f(64) == seed + 2080)
   end
+  jit.off()
 end
 
 local function call_ok(fn)
@@ -30,13 +41,13 @@ local function call_ok(fn)
 end
 
 local function probe_trace(tr)
-  local info = util.traceinfo(tr)
+  local info = traceinfo(tr)
   if not info then
-    call_ok(function() util.traceir(tr, 1) end)
-    call_ok(function() util.tracek(tr, -1) end)
-    call_ok(function() util.tracesnap(tr, 0) end)
-    call_ok(function() util.tracemc(tr) end)
-    call_ok(function() util.traceexitstub(tr, 0) end)
+    call_ok(function() traceir(tr, 1) end)
+    call_ok(function() tracek(tr, -1) end)
+    call_ok(function() tracesnap(tr, 0) end)
+    call_ok(function() tracemc(tr) end)
+    call_ok(function() traceexitstub(tr, 0) end)
     return 0
   end
 
@@ -45,14 +56,14 @@ local function probe_trace(tr)
   assert(type(info.nexit) == "number")
   assert(type(info.linktype) == "string")
 
-  util.traceir(tr, 1)
-  util.traceir(tr, info.nins)
-  util.tracek(tr, -1)
-  if info.nk > 0 then util.tracek(tr, -info.nk) end
-  util.tracesnap(tr, 0)
-  if info.nexit > 0 then util.tracesnap(tr, info.nexit - 1) end
-  util.tracemc(tr)
-  util.traceexitstub(tr, 0)
+  traceir(tr, 1)
+  traceir(tr, info.nins)
+  tracek(tr, -1)
+  if info.nk > 0 then tracek(tr, -info.nk) end
+  tracesnap(tr, 0)
+  if info.nexit > 0 then tracesnap(tr, info.nexit - 1) end
+  tracemc(tr)
+  traceexitstub(tr, 0)
   return 1
 end
 jit.off(probe_trace, true)
@@ -77,8 +88,8 @@ harness.release_start(start, 1)
 local probes = 0
 local live_seen = 0
 local finished = false
-while not finished do
-  local token, ok = done:recv(0.001)
+while not finished and probes < max_probes do
+  local token, ok = done_recv(done, 0.001)
   if ok == true then
     assert(token == "done")
     finished = true
@@ -90,8 +101,10 @@ while not finished do
   probes = probes + 1
 end
 
-local ok, result = worker:join(20)
+local worker_join = assert(worker.join)
+local ok, result = worker_join(worker, 20)
 assert(ok == true and result == true)
+assert(finished, "worker joined without sending done token")
 assert(probes > 0)
 assert(live_seen > 0)
 

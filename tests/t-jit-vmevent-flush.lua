@@ -1,6 +1,6 @@
 local th = require("threading")
 
-local function exercise()
+local function exercise(expect_seen)
   local seen = 0
   local function hook(ev)
     assert(ev == "flush", ev)
@@ -12,13 +12,13 @@ local function exercise()
   jit.attach(hook, "trace")
   jit.flush()
   jit.attach(hook)
-  assert(seen == 1)
+  assert(seen == expect_seen, seen)
 end
 
-exercise()
+exercise(1)
 
 local worker = th.spawn(function()
-  exercise()
+  exercise(0)
   return true
 end)
 
