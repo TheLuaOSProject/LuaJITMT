@@ -8647,13 +8647,22 @@ static LJ_AINLINE int gc2_table_rescan_pending_set(global_State *g, GCobj *o)
   return 0;
 }
 
-static LJ_AINLINE void gc2_table_rescan_pending_clear(global_State *g,
-							      GCobj *o)
+static LJ_AINLINE void gc2_table_rescan_pending_clear_gct(global_State *g,
+							  GCobj *o,
+							  uint32_t gct)
 {
-  if (o && o->gch.gct == ~LJ_TTAB &&
+  if (gct == (uint32_t)~LJ_TTAB &&
       (gc2_rescan_pending_clear(o) & LJ_GC_NEEDSCAN) &&
       gc2_table_rescan_pending_acq(g) != 0)
     gc2_table_rescan_pending_dec(g);
+}
+
+static LJ_AINLINE void gc2_table_rescan_pending_clear(global_State *g,
+							      GCobj *o)
+{
+  uint32_t gct;
+  if (gc2_markobj_base_valid(g, o, NULL, &gct))
+    gc2_table_rescan_pending_clear_gct(g, o, gct);
 }
 
 static LJ_AINLINE int gc2_table_scan_current(global_State *g, GCtab *t)
@@ -8845,18 +8854,18 @@ void lj_gc2_barrier_marked_proto(lua_State *L, GCproto *pt)
 static LJ_AINLINE void gc2_rescan_pending_clear_if_table(global_State *g,
 							 GCobj *o)
 {
-  if (o && o->gch.gct == ~LJ_TTAB)
-    gc2_table_rescan_pending_clear(g, o);
+  gc2_table_rescan_pending_clear(g, o);
 }
 
 static LJ_AINLINE void gc2_rescan_pending_clear_cycle(global_State *g,
 						      GCobj *o)
 {
-  if (!o)
+  uint32_t gct;
+  if (!gc2_markobj_base_valid(g, o, NULL, &gct))
     return;
-  if (o->gch.gct == ~LJ_TTAB) {
-    gc2_table_rescan_pending_clear(g, o);
-  } else if (gc2_obj_may_traverse(o)) {
+  if (gct == (uint32_t)~LJ_TTAB) {
+    gc2_table_rescan_pending_clear_gct(g, o, gct);
+  } else if (gc2_gct_may_traverse(gct)) {
     /*
     ** LJ_GC_NEEDSCAN is queue membership for already-marked mutable containers.
     ** Tables pair it with a pending counter; other containers only need the bit
@@ -8864,6 +8873,16 @@ static LJ_AINLINE void gc2_rescan_pending_clear_cycle(global_State *g,
     */
     (void)gc2_rescan_pending_clear(o);
   }
+}
+
+void lj_gc2_test_rescan_pending_clear_if_table(global_State *g, GCobj *o)
+{
+  gc2_rescan_pending_clear_if_table(g, o);
+}
+
+void lj_gc2_test_rescan_pending_clear_cycle(global_State *g, GCobj *o)
+{
+  gc2_rescan_pending_clear_cycle(g, o);
 }
 
 static void gc2_note_weak_table(global_State *g, GCtab *t, int weak)
