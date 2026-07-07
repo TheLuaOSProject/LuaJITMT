@@ -389,7 +389,7 @@ static int meta_buf_data(lua_State *L, cTValue *o, const char **pp,
   flags = mrefu(sbx->L);
   if (len != 0) {
     if (flags & SBUF_FLAG_COW) {
-      GCobj *ref = gcref_acq(sbx->cowref);
+      GCobj *ref = lj_bufx_cowref_acq(sbx);
       if (ref == NULL || !lj_gc2_obj_valid(G(L), ref))
 	return 0;
     } else if (!(flags & SBUF_FLAG_BORROW) &&

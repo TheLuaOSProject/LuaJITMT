@@ -1106,13 +1106,13 @@ static size_t gc_traverse_udata(global_State *g, GCudata *ud)
     GCobj *ref;
     if (!sbufiscoworborrow(sbx))
       lj_gc_arena_markmem(g, lj_buf_bptr_acq((SBuf *)sbx));
-    ref = gcref_acq(sbx->cowref);
+    ref = lj_bufx_cowref_acq(sbx);
     if (sbufiscow(sbx) && ref)
       gc_markobj(g, ref);
-    ref = gcref_acq(sbx->dict_str);
+    ref = obj2gco(lj_bufx_dict_str_acq(sbx));
     if (ref)
       gc_markobj(g, ref);
-    ref = gcref_acq(sbx->dict_mt);
+    ref = obj2gco(lj_bufx_dict_mt_acq(sbx));
     if (ref)
       gc_markobj(g, ref);
   }

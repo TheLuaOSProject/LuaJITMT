@@ -85,6 +85,41 @@ static LJ_AINLINE void lj_buf_rptr_rel(SBufExt *sbx, char *p)
   lj_buf_ptr_store_rel(&sbx->r, p);
 }
 
+static LJ_AINLINE GCobj *lj_bufx_cowref_acq(const SBufExt *sbx)
+{
+  return gcref_acq(sbx->cowref);
+}
+
+static LJ_AINLINE void lj_bufx_cowref_rel(SBufExt *sbx, GCobj *ref)
+{
+  setgcrefrel(sbx->cowref, ref);
+}
+
+static LJ_AINLINE void lj_bufx_cowref_clear_rel(SBufExt *sbx)
+{
+  setgcrefnullrel(sbx->cowref);
+}
+
+static LJ_AINLINE GCtab *lj_bufx_dict_str_acq(const SBufExt *sbx)
+{
+  return tabref_acq(sbx->dict_str);
+}
+
+static LJ_AINLINE void lj_bufx_dict_str_rel(SBufExt *sbx, GCtab *t)
+{
+  setgcrefrel(sbx->dict_str, t ? obj2gco(t) : NULL);
+}
+
+static LJ_AINLINE GCtab *lj_bufx_dict_mt_acq(const SBufExt *sbx)
+{
+  return tabref_acq(sbx->dict_mt);
+}
+
+static LJ_AINLINE void lj_bufx_dict_mt_rel(SBufExt *sbx, GCtab *t)
+{
+  setgcrefrel(sbx->dict_mt, t ? obj2gco(t) : NULL);
+}
+
 static LJ_AINLINE int lj_buf_ptr_range(char *p, char *b, char *e)
 {
   uintptr_t up = (uintptr_t)(void *)p;
@@ -317,7 +352,7 @@ static LJ_AINLINE void lj_bufx_reset(SBufExt *sbx)
 {
   if (sbufiscow(sbx)) {
     setmrefu(sbx->L, (mrefu(sbx->L) & ~(GCSize)SBUF_FLAG_COW));
-    setgcrefnullrel(sbx->cowref);
+    lj_bufx_cowref_clear_rel(sbx);
     lj_buf_bptr_rel((SBuf *)sbx, NULL);
     lj_buf_eptr_rel((SBuf *)sbx, NULL);
   }
@@ -333,7 +368,7 @@ static LJ_AINLINE void lj_bufx_free(lua_State *L, SBufExt *sbx)
   if (!sbufiscoworborrow(sbx))
     lj_mem_free(G(L), lj_buf_bptr_acq((SBuf *)sbx), sbufsz(sbx));
   setsbufXL(sbx, L, SBUF_FLAG_EXT);
-  setgcrefnullrel(sbx->cowref);
+  lj_bufx_cowref_clear_rel(sbx);
   lj_buf_rptr_rel(sbx, NULL);
   lj_buf_bounds_rel((SBuf *)sbx, NULL, NULL, NULL);
 }

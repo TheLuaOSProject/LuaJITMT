@@ -30,7 +30,7 @@ static void buf_grow(SBuf *sb, MSize sz)
 		"bad SBuf COW");
     b = (char *)lj_mem_new(sbufL(sb), nsz);
     setsbufflag(sb, flag & ~(GCSize)SBUF_FLAG_COW);
-    setgcrefnullrel(sbufX(sb)->cowref);
+    lj_bufx_cowref_clear_rel(sbufX(sb));
     memcpy(b, oldb, osz);
   } else {
     b = (char *)lj_mem_realloc(sbufL(sb), oldb, osz, nsz);
@@ -122,7 +122,7 @@ void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *ref)
   lua_State *L = sbufL(sbx);
   lj_bufx_free(L, sbx);
   lj_bufx_set_cow(L, sbx, p, len);
-  setgcrefrel(sbx->cowref, ref);
+  lj_bufx_cowref_rel(sbx, ref);
   lj_gc_pubobjobj(L, (GCudata *)sbx - 1, ref);
 }
 

@@ -110,7 +110,7 @@ LJLIB_CF(buffer_method_set)		LJLIB_REC(.)
   lj_bufx_free(L, sbx);
   lj_bufx_set_cow(L, sbx, p, len);
   ref = gcV(L->base+1);
-  setgcrefrel(sbx->cowref, ref);
+  lj_bufx_cowref_rel(sbx, ref);
   lj_gc_pubobjobj(L, buffer_toudata(sbx), ref);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
@@ -345,10 +345,10 @@ LJLIB_CF(buffer_new)
   setudataV(L, L->top++, ud);
   sbx = (SBufExt *)uddata(ud);
   lj_bufx_init(L, sbx);
-  setgcrefrel(sbx->dict_str, obj2gco(dict_str));
+  lj_bufx_dict_str_rel(sbx, dict_str);
   if (dict_str)
     lj_gc_pubobjobj(L, ud, dict_str);
-  setgcrefrel(sbx->dict_mt, obj2gco(dict_mt));
+  lj_bufx_dict_mt_rel(sbx, dict_mt);
   if (dict_mt)
     lj_gc_pubobjobj(L, ud, dict_mt);
   lj_udata_udtype_rel(ud, UDTYPE_BUFFER);

@@ -1042,8 +1042,8 @@ static void test_buffer_constructor_dict_barrier(lua_State *L, global_State *g,
   lua_call(L, 0, 1);
   ud = udataV(L->top - 1);
   sbx = (SBufExt *)uddata(ud);
-  assert(tabref_acq(sbx->dict_str) == dict_str);
-  assert(tabref_acq(sbx->dict_mt) == dict_mt);
+  assert(lj_bufx_dict_str_acq(sbx) == dict_str);
+  assert(lj_bufx_dict_mt_acq(sbx) == dict_mt);
   assert(lj_gc2_ismarked(g, obj2gco(dict_str)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(dict_mt)) == 1);
   flush_and_drain(g, tg);

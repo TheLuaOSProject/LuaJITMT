@@ -258,7 +258,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     }
     /* Write metatable index. */
     {
-      GCtab *dict_mt = tabref_acq(sbx->dict_mt);
+      GCtab *dict_mt = lj_bufx_dict_mt_acq(sbx);
       GCtab *mt = lj_tab_metatable_acq(t);
       if (LJ_UNLIKELY(dict_mt) && mt) {
 	TValue mto;
@@ -294,7 +294,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     }
     if (nhash) {  /* Write hash entries. */
       const Node *node = hashnode + hmask;
-      GCtab *dict_str = tabref_acq(sbx->dict_str);
+      GCtab *dict_str = lj_bufx_dict_str_acq(sbx);
       if (LJ_UNLIKELY(dict_str)) {
 	for (;; node--) {
 	  TValue key, val;
@@ -456,7 +456,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     uint32_t idx;
     r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
     idx++;
-    dict_str = tabref_acq(sbx->dict_str);
+    dict_str = lj_bufx_dict_str_acq(sbx);
     if (dict_str)
       asize = lj_tab_array_snapshot_acq(dict_str, &array);
     if (idx < asize) {
@@ -482,7 +482,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       uint32_t idx;
       r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
       idx++;
-      dict_mt = tabref_acq(sbx->dict_mt);
+      dict_mt = lj_bufx_dict_mt_acq(sbx);
       if (dict_mt)
 	asize = lj_tab_array_snapshot_acq(dict_mt, &array);
       if (idx < asize) {
