@@ -171,6 +171,8 @@ The exact CreateEvent/CreateSemaphore-shaped slice traces
 `void *(void *, int32_t, int32_t, void *)` calls.
 The exact OpenEvent/OpenFileMapping-shaped slice traces
 `void *(uint32_t, int32_t, void *)` calls.
+The exact SetHandleInformation-shaped slice traces
+`int32_t(void *, uint32_t, uint32_t)` calls.
 The exact DuplicateHandle-shaped slice traces
 `int32_t(void *, void *, void *, void *, uint32_t, int32_t, uint32_t)` calls.
 Other multi-argument pointer/size shapes remain interpreted.

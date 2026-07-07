@@ -351,6 +351,14 @@ int *lj_m7_ccall_jit_ptr_u32_i32_ptr(uint32_t access, int32_t inherit,
   return base + (((uint64_t)access + (uint64_t)(uint32_t)inherit) & 3u);
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_u32_u32(int *handle, uint32_t mask,
+					uint32_t flags)
+{
+  return (int32_t)(((uint64_t)(uint32_t)(handle ? handle[0] : 0) +
+		    (uint64_t)mask + (uint64_t)flags) &
+		   UINT64_C(1023)) + 19;
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr_u32_i32_u32(int *src_proc,
 							int *src_handle,
 							int *target_proc,
