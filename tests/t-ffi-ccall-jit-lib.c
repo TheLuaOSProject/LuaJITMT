@@ -245,6 +245,13 @@ int32_t lj_m7_ccall_jit_i32_ptr_u64_u32_ptr(int *src, uint64_t n,
   return dst[i] + (int32_t)(n & UINT64_C(1023)) + (int32_t)(flags >> 28);
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_u64_u32_u32(int *base, uint64_t n,
+					 uint32_t alloc_type,
+					 uint32_t protect)
+{
+  return base + ((n + (uint64_t)alloc_type + (uint64_t)protect) & 3u);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return a[n & 3u] + b[(n + UINT64_C(1)) & 3u] +

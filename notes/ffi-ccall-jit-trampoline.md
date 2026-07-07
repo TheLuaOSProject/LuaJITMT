@@ -113,6 +113,8 @@ pointer/size/signed-int argument shapes,
 pointer/size/pointer argument shapes,
 `lj_ccall_jit_i32_ptr_u64_u32_ptr()` for the exact
 pointer/size/unsigned-int/pointer signed-int-result argument shape,
+`lj_ccall_jit_ptr_ptr_u64_u32_u32()` for the exact pointer-returning
+pointer/size/unsigned-int/unsigned-int argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
@@ -205,6 +207,9 @@ The scope is deliberately narrow:
 - exact `int32_t(pointer, uint64_t, uint32_t, pointer)` calls, preserving the
   size argument and high-bit unsigned flags for VirtualProtect-style
   pointer/size/flags/output-pointer ABI classes;
+- exact `pointer(pointer, uint64_t, uint32_t, uint32_t)` calls, preserving the
+  size argument and high-bit unsigned flag arguments for VirtualAlloc-style
+  pointer/size/allocation-flags/protection-flags ABI classes;
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
@@ -317,6 +322,7 @@ families, traced int/signed-offset and int/unsigned-size loops for the same
 return families, traced unsigned-count pointer/pointer loops,
 traced pointer/int/size, pointer/int/unsigned-int, pointer/size/int, and
 pointer/size/pointer loops, traced pointer/size/flags/output-pointer loops,
+traced pointer/size/allocation-flags/protection-flags pointer-returning loops,
 traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
