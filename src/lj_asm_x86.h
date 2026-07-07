@@ -3011,7 +3011,14 @@ static void asm_cnew(ASMState *as, IRIns *ir)
   CTState *cts = ctype_ctsG(J2G(as->J));
   CTypeID id = (CTypeID)IR(ir->op1)->i;
   CTSize sz;
-  CTInfo info = lj_ctype_info(cts, id, &sz);
+  CTInfo info;
+  int ok = lj_ctype_info_predefined(cts, id, &info, &sz, NULL, NULL);
+  if (ok <= 0)
+    ok = lj_ctype_info_snapshot(cts, id, &info, &sz, NULL, NULL);
+  if (ok < 0)
+    lj_trace_err(as->J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(as->J, LJ_TRERR_BADTYPE);
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_cdata_new_forjit];
   IRRef args[4];
   lj_assertA(sz != CTSIZE_INVALID || (ir->o == IR_CNEW && ir->op2 != REF_NIL),
