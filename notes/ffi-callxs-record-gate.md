@@ -120,7 +120,12 @@ family also traces exact `int32_t(void *, void *, uint32_t)`,
 `uint32_t(void *, void *, uint32_t)`, `int64_t(void *, void *, uint32_t)`,
 `uint64_t(void *, void *, uint32_t)`, `void(void *, void *, uint32_t)`, and
 `void *(void *, void *, uint32_t)` calls without reusing the uint64-size ABI
-helpers. Other multi-argument pointer/size shapes remain interpreted.
+helpers. The pointer/signed-int/size family traces exact
+`int32_t(void *, int32_t, uint64_t)`, `uint32_t(void *, int32_t, uint64_t)`,
+`int64_t(void *, int32_t, uint64_t)`, `uint64_t(void *, int32_t, uint64_t)`,
+`void(void *, int32_t, uint64_t)`, and `void *(void *, int32_t, uint64_t)`
+calls for memset/memchr-style ABI classes. Other multi-argument pointer/size
+shapes remain interpreted.
 The shared GPR helper matrix separately covers exact two-argument
 `pointer,int64_t` and `pointer,uint64_t` span shapes; broader pointer/size
 families remain interpreted.
