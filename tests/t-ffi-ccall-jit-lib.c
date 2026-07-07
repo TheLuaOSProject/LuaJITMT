@@ -688,6 +688,14 @@ uint64_t lj_m7_ccall_jit_u64_ptr_ptr_u64(int *a, int *b, uint64_t n)
 	 (n & UINT64_C(1023));
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr(int *callback, int *context, int *env)
+{
+  uint32_t i = ((uint32_t)callback[1] + (uint32_t)context[0] +
+		(uint32_t)env[2]) & 3u;
+  context[i] = callback[(i + 2u) & 3u] + env[(i + 1u) & 3u];
+  return context[i] + callback[0] + env[3];
+}
+
 int *lj_m7_ccall_jit_ptr_ptr_ptr_ptr(int *callback, int *context, int *env)
 {
   uint32_t i = ((uint32_t)callback[0] + (uint32_t)context[1] +
