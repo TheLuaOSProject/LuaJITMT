@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "lua.h"
@@ -14,6 +15,21 @@
 #include "lj_gc.h"
 #include "lj_jit.h"
 #include "lj_trace.h"
+
+#ifndef LJ_TRACE_TEST_HELPERS
+#error "t-jit-trace-retire requires LJ_TRACE_TEST_HELPERS"
+#endif
+
+static void test_trace_preserve_candidates(global_State *g, GCproto *pt)
+{
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+  assert(lj_trace_test_preserve_body_candidate(g, obj2gco(pt)) == 1);
+  assert(lj_trace_test_preserve_body_candidate(g, bad) == 0);
+  assert(lj_trace_test_proto_pc_candidate(g, obj2gco(pt), proto_bc(pt)) == 1);
+  assert(lj_trace_test_proto_pc_candidate(g, obj2gco(pt),
+					  proto_bc(pt) + pt->sizebc) == 0);
+  assert(lj_trace_test_proto_pc_candidate(g, bad, proto_bc(pt)) == 0);
+}
 
 static GCtrace *retired_find(jit_State *J, GCtrace *needle)
 {
@@ -44,6 +60,7 @@ int main(void)
   assert(trace_retired_head_acq(J) == NULL);
   assert(luaL_loadstring(L, "return 1") == 0);
   pt = funcproto(funcV(L->top - 1));
+  test_trace_preserve_candidates(g, pt);
 
   memset(&tmpl, 0, sizeof(tmpl));
   tmpl.nk = REF_TRUE;

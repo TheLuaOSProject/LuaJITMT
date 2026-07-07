@@ -168,7 +168,7 @@ static void *gc2_worker_main(void *arg);
 static void gc2_mark_thread_root_obj(global_State *g, GCobj *o);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
 static void gc2_mark_payload_obj_worker(global_State *g, GCobj *o);
-static int gc2_valid_proto_for_traverse(global_State *g, GCproto *pt);
+int lj_gc2_valid_proto_for_traverse(global_State *g, GCproto *pt);
 static void gc2_traverse_proto(global_State *g, GCproto *pt);
 static int lj_gc2_ssb_push(global_State *g, GCobj *o);
 static uint32_t gc2_drain_ssb_owned(global_State *g);
@@ -1786,7 +1786,7 @@ static GCproto *gc2_trace_pc_proto_candidate(global_State *g, GCobj *o,
       gct != (uint32_t)~LJ_TPROTO)
     return NULL;
   pt = gco2pt(o);
-  if (!gc2_valid_proto_for_traverse(g, pt))
+  if (!lj_gc2_valid_proto_for_traverse(g, pt))
     return NULL;
   bc = proto_bc(pt);
   return (pc >= bc && pc < bc + pt->sizebc) ? pt : NULL;
@@ -3866,7 +3866,7 @@ static int gc2_frame_func_valid(global_State *g, TValue *frame,
     if (!pc || !checkptrGC(pc) || lj_funcL_nupvalues(&fn->l) > LJ_MAX_UPVAL)
       return 0;
     pt = (GCproto *)(void *)(pc - sizeof(GCproto));
-    if (!gc2_valid_proto_for_traverse(g, pt) ||
+    if (!lj_gc2_valid_proto_for_traverse(g, pt) ||
 	lj_funcL_nupvalues(&fn->l) > pt->sizeuv)
       return 0;
     if (ptp) *ptp = pt;
@@ -4730,7 +4730,7 @@ static void gc2_scan_current_trace_root(global_State *g)
   ** setup reaching trace_startpt_rel() before a concurrent GC2 sweep closes.
   */
   if (lj_trace_state_load(J) != LJ_TRACE_IDLE && pt && checkptrGC(pt) &&
-      gc2_valid_proto_for_traverse(g, pt))
+      lj_gc2_valid_proto_for_traverse(g, pt))
     gc2_mark_thread_root_obj(g, obj2gco(pt));
   if (trace_traceno_acq(T) == 0)
     return;
@@ -8328,7 +8328,7 @@ static void gc2_preserve_lfunc_direct_bodies(global_State *g, GCfunc *fn)
   pc = mref(fn->l.pc, const char);
   if (pc && checkptrGC(pc)) {
     GCproto *pt = (GCproto *)(void *)(pc - sizeof(GCproto));
-    if (gc2_valid_proto_for_traverse(g, pt) &&
+    if (lj_gc2_valid_proto_for_traverse(g, pt) &&
 	lj_gc2_obj_valid(g, obj2gco(pt)))
       (void)lj_gc2_markmem(g, gc2_mark_base(g, obj2gco(pt)));
   }
@@ -9212,7 +9212,7 @@ static void gc2_traverse_upval(global_State *g, GCupval *uv)
     gc2_mark_upval_payload_tv_worker(g, &tv);
 }
 
-static int gc2_valid_proto_for_traverse(global_State *g, GCproto *pt)
+int lj_gc2_valid_proto_for_traverse(global_State *g, GCproto *pt)
 {
   MSize minpt;
   UNUSED(g);
@@ -9239,7 +9239,7 @@ static GCproto *gc2_func_proto_for_traverse(global_State *g, GCfunc *fn)
   if (!pc || !checkptrGC(pc))
     return NULL;
   pt = (GCproto *)(void *)(pc - sizeof(GCproto));
-  if (!gc2_valid_proto_for_traverse(g, pt))
+  if (!lj_gc2_valid_proto_for_traverse(g, pt))
     return NULL;
   if (lj_funcL_nupvalues(&fn->l) > pt->sizeuv)
     return NULL;
@@ -9654,7 +9654,7 @@ static void gc2_traverse_obj(global_State *g, GCobj *o)
     gc2_traverse_func(g, gco2func(o));
   } else if (LJ_LIKELY(gct == ~LJ_TPROTO)) {
     GCproto *pt = gco2pt(o);
-    if (gc2_valid_proto_for_traverse(g, pt))
+    if (lj_gc2_valid_proto_for_traverse(g, pt))
       gc2_traverse_proto(g, pt);
   } else if (LJ_LIKELY(gct == ~LJ_TTHREAD)) {
     gc2_traverse_thread(g, gco2th(o));

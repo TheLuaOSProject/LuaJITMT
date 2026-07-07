@@ -344,6 +344,7 @@ LJ_FUNC int lj_gc2_obj_valid_queued(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_mem_registered(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_mem_registered_known(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_markmem_registered(global_State *g, void *p);
+LJ_FUNC int lj_gc2_valid_proto_for_traverse(global_State *g, GCproto *pt);
 LJ_FUNC int lj_gc2_valid_thread_for_traverse(global_State *g, lua_State *th);
 LJ_FUNC uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);

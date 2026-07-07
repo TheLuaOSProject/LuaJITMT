@@ -611,13 +611,24 @@ static LJ_AINLINE int trace_retired_body_keep_public(global_State *g)
   return mt_active_or_entering_acq(g) || gc2_n_threads_acq(g) > 1;
 }
 
+static int trace_preserve_body_candidate(global_State *g, GCobj *o,
+					 uint32_t *gctp)
+{
+  uint32_t gct;
+  if (!lj_gc2_obj_valid_queued(g, o))
+    return 0;
+  gct = (uint32_t)la_load8_acq(&o->gch.gct);
+  if (LJ_UNLIKELY(gct == 0 || gct < (uint32_t)~LJ_TSTR ||
+		  gct > (uint32_t)~LJ_TUDATA))
+    return 0;
+  if (gctp)
+    *gctp = gct;
+  return 1;
+}
+
 static void trace_preserve_body_obj(global_State *g, GCobj *o, int gc2)
 {
-  int gct;
-  if (!o || !checkptrGC(o))
-    return;
-  gct = o->gch.gct;
-  if (LJ_UNLIKELY(gct == 0 || gct < ~LJ_TSTR || gct > ~LJ_TUDATA))
+  if (!trace_preserve_body_candidate(g, o, NULL))
     return;
   if (gc2)
     (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
@@ -656,6 +667,42 @@ static void trace_proto_pc_state_init(TraceProtoPCState *pcstate)
   pcstate->walk_budget = TRACE_PROTO_PC_WALK_BUDGET;
 }
 
+static GCproto *trace_proto_pc_candidate(global_State *g, GCobj *o,
+					 const BCIns **bcp,
+					 const BCIns **endp)
+{
+  GCproto *pt;
+  const BCIns *bc;
+  uint32_t gct;
+  if (!trace_preserve_body_candidate(g, o, &gct) ||
+      gct != (uint32_t)~LJ_TPROTO)
+    return NULL;
+  pt = gco2pt(o);
+  if (!lj_gc2_valid_proto_for_traverse(g, pt))
+    return NULL;
+  bc = proto_bc(pt);
+  if (bcp)
+    *bcp = bc;
+  if (endp)
+    *endp = bc + pt->sizebc;
+  return pt;
+}
+
+#ifdef LJ_TRACE_TEST_HELPERS
+int lj_trace_test_preserve_body_candidate(global_State *g, GCobj *o)
+{
+  return trace_preserve_body_candidate(g, o, NULL);
+}
+
+int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
+				     const BCIns *pc)
+{
+  const BCIns *bc, *end;
+  return pc && trace_proto_pc_candidate(g, o, &bc, &end) &&
+	 pc >= bc && pc < end;
+}
+#endif
+
 static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
 					int gc2, TraceProtoPCCache *cache,
 					MSize *ncachep, uint32_t *budgetp)
@@ -673,25 +720,26 @@ static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
   for (o = lj_gc_root_acq(g); o != NULL && *budgetp != 0;
        o = lj_obj_gcw_acq(o)) {
     --*budgetp;
-    if (o->gch.gct == ~LJ_TPROTO) {
-      GCproto *pt = gco2pt(o);
-      const BCIns *bc = proto_bc(pt);
-      const BCIns *end = bc + pt->sizebc;
-      /*
-      ** Snapshot PC preservation often checks many PCs from the same generation
-      ** of protos. Populate the bounded interval cache while walking the root
-      ** spine, not only when the current PC matches, so later snapshot entries do
-      ** not repeat the same ownership walk.
-      */
-      if (ncache < TRACE_PROTO_PC_CACHE) {
-	cache[ncache].start = bc;
-	cache[ncache].end = end;
-	cache[ncache].o = o;
-	*ncachep = ++ncache;
-      }
-      if (pc >= bc && pc < end) {
-	trace_preserve_proto_obj(g, o, gc2);
-	return;
+    {
+      const BCIns *bc, *end;
+      GCproto *pt = trace_proto_pc_candidate(g, o, &bc, &end);
+      if (pt) {
+	/*
+	** Snapshot PC preservation often checks many PCs from the same generation
+	** of protos. Populate the bounded interval cache while walking the root
+	** spine, not only when the current PC matches, so later snapshot entries do
+	** not repeat the same ownership walk.
+	*/
+	if (ncache < TRACE_PROTO_PC_CACHE) {
+	  cache[ncache].start = bc;
+	  cache[ncache].end = end;
+	  cache[ncache].o = o;
+	  *ncachep = ++ncache;
+	}
+	if (pc >= bc && pc < end) {
+	  trace_preserve_proto_obj(g, o, gc2);
+	  return;
+	}
       }
     }
     /*

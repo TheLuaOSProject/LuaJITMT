@@ -603,12 +603,12 @@ return function(add)
     name = "m5_jit_trace_publish",
     description = "JIT trace-slot and trace-link publication behavior",
     run = function(t)
-      t:build({ quiet = true })
+      build.clean_build(t, build.trace_helper_build_opts({ quiet = true }))
       run_c_fixture_specs(t, {
         { output = "lj_t-jit-tracevec", cfile = "t-jit-tracevec.c" },
         { output = "lj_t-jit-mcode-retire", cfile = "t-jit-mcode-retire.c" },
         { output = "lj_t-jit-trace-retire", cfile = "t-jit-trace-retire.c" }
-      }, { timeout = "20s" })
+      }, build.trace_helper_c_opts({ timeout = "20s" }))
       run_luajit(t, { "-e", jit_trace_publish_smoke() })
       print("M5 JIT trace publication behavior passed")
     end
