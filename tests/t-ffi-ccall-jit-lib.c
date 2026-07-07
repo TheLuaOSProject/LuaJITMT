@@ -916,6 +916,26 @@ float lj_m7_ccall_jit_flt_u32_flt(uint32_t a, float b)
   return (float)(a & 255u) + b + 0.625f;
 }
 
+float lj_m7_ccall_jit_flt_flt_i64(float a, int64_t b)
+{
+  return a + (float)((uint64_t)b & 255u) + 0.375f;
+}
+
+float lj_m7_ccall_jit_flt_i64_flt(int64_t a, float b)
+{
+  return (float)((uint64_t)a & 255u) + b + 0.625f;
+}
+
+float lj_m7_ccall_jit_flt_flt_u64(float a, uint64_t b)
+{
+  return a + (float)(b & 255u) + 0.875f;
+}
+
+float lj_m7_ccall_jit_flt_u64_flt(uint64_t a, float b)
+{
+  return (float)(a & 255u) + b + 0.125f;
+}
+
 int lj_m7_ccall_jit_void_count_i32(void)
 {
   return lj_m7_ccall_jit_void_count;

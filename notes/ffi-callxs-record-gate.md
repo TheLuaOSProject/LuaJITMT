@@ -84,6 +84,9 @@ Lua number after the helper call.
 `lj_ccall_jit_flt_flt_u32()` and `lj_ccall_jit_flt_u32_flt()` do the same for
 exact `float(float, uint32_t)` and `float(uint32_t, float)` calls while
 preserving high-bit unsigned arguments.
+`lj_ccall_jit_flt_flt_i64()` / `lj_ccall_jit_flt_i64_flt()` and
+`lj_ccall_jit_flt_flt_u64()` / `lj_ccall_jit_flt_u64_flt()` extend exact
+float-returning mixed calls to signed and unsigned 64-bit cdata arguments.
 `lj_ccall_jit_i32_ptr_ulong_i32()` traces the exact poll-shaped
 `int32_t(void *, unsigned long, int32_t)` family and normalizes the
 `unsigned long` argument through the regular FFI conversion rules before the
