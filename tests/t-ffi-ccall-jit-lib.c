@@ -237,6 +237,14 @@ void lj_m7_ccall_jit_void_ptr_u64_ptr(int *dst, uint64_t n, int *src)
   dst[i] += src[(n + UINT64_C(1)) & 3u] + (int)(n & UINT64_C(15));
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_u64_u32_ptr(int *src, uint64_t n,
+					    uint32_t flags, int *dst)
+{
+  uint32_t i = flags & 3u;
+  dst[i] = src[n & 3u] + (int)(flags & 15u);
+  return dst[i] + (int32_t)(n & UINT64_C(1023)) + (int32_t)(flags >> 28);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return a[n & 3u] + b[(n + UINT64_C(1)) & 3u] +

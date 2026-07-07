@@ -111,6 +111,8 @@ pointer/size/signed-int argument shapes,
 `lj_ccall_jit_i64_ptr_u64_ptr()` / `lj_ccall_jit_u64_ptr_u64_ptr()` /
 `lj_ccall_jit_void_ptr_u64_ptr()` / `lj_ccall_jit_ptr_ptr_u64_ptr()` for exact
 pointer/size/pointer argument shapes,
+`lj_ccall_jit_i32_ptr_u64_u32_ptr()` for the exact
+pointer/size/unsigned-int/pointer signed-int-result argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
@@ -142,7 +144,7 @@ save/enter/leave/checkstop protocol as the interpreted `lj_ccall_func()` path.
 The scope is deliberately narrow:
 
 - fixed arguments only;
-- exactly 0, 1, or 2 Lua arguments except for audited three-argument shapes
+- exactly 0, 1, or 2 Lua arguments except for audited three- and four-argument shapes
   listed below;
 - exact signed 32-bit integer, unsigned 32-bit integer, or pointer argument
   types in the shared GPR helper matrix;
@@ -200,6 +202,9 @@ The scope is deliberately narrow:
 - exact `void(pointer, uint64_t, pointer)` and
   `pointer(pointer, uint64_t, pointer)` calls, preserving side effects and
   pointer results for pointer/size/pointer ABI classes;
+- exact `int32_t(pointer, uint64_t, uint32_t, pointer)` calls, preserving the
+  size argument and high-bit unsigned flags for VirtualProtect-style
+  pointer/size/flags/output-pointer ABI classes;
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
@@ -311,7 +316,7 @@ integers, or pointers, traced pointer/64-bit span loops for the same return
 families, traced int/signed-offset and int/unsigned-size loops for the same
 return families, traced unsigned-count pointer/pointer loops,
 traced pointer/int/size, pointer/int/unsigned-int, pointer/size/int, and
-pointer/size/pointer loops,
+pointer/size/pointer loops, traced pointer/size/flags/output-pointer loops,
 traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int

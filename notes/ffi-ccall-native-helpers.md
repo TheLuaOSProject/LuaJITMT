@@ -140,7 +140,11 @@ and trailing signed int. The pointer/size/pointer family traces exact
 `int32_t(void *, uint64_t, void *)`, `uint32_t(void *, uint64_t, void *)`,
 `int64_t(void *, uint64_t, void *)`, `uint64_t(void *, uint64_t, void *)`,
 `void(void *, uint64_t, void *)`, and `void *(void *, uint64_t, void *)` calls
-for mincore-style pointer/size/output-buffer ABI classes. Exact
+for mincore-style pointer/size/output-buffer ABI classes. The exact
+pointer/size/unsigned-int/pointer slice traces
+`int32_t(void *, uint64_t, uint32_t, void *)` calls for
+VirtualProtect-style ABI classes while preserving high-bit unsigned flags and
+the output pointer argument. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because
