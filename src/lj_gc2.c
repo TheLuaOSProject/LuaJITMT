@@ -5342,7 +5342,7 @@ static int gc2_weak_resize(global_State *g, MSize cap)
 
 static void gc2_weak_overflow_free(global_State *g, GC2WeakOverflow *node)
 {
-  while (node) {
+  while (node && lj_gc2_mem_registered(g, node)) {
     GC2WeakOverflow *next = gc2_weak_overflow_next_acq(node);
     lj_mem_free(g, node, sizeof(*node));
     node = next;
@@ -5989,7 +5989,7 @@ static uint64_t gc2_weak_clear_overflow(global_State *g, uint64_t *slotsp,
   GC2WeakOverflow *node;
   uint64_t tables = 0, slots = 0, cleared = 0;
   for (node = gc2_weak_overflow_acq(g);
-       node != NULL;
+       node != NULL && lj_gc2_mem_registered(g, node);
        node = gc2_weak_overflow_next_acq(node)) {
     GCtab *t = gc2_weak_overflow_tab_acq(node);
     if (!t || gc2_weak_candidate_tab(g, obj2gco(t)) != t)
@@ -6114,7 +6114,7 @@ static int gc2_weak_trace_close_frontier(global_State *g, GCobj *bridge_head)
       return 0;
   }
   for (node = gc2_weak_overflow_acq(g);
-       node != NULL;
+       node != NULL && lj_gc2_mem_registered(g, node);
        node = gc2_weak_overflow_next_acq(node)) {
     GCtab *t = gc2_weak_overflow_tab_acq(node);
     if (t && !gc2_weak_trace_table_strong(g, t))
