@@ -142,6 +142,8 @@ pointer/signed-int/signed-int/pointer argument shape,
 unsigned-int/signed-int/pointer argument shape,
 `lj_ccall_jit_i32_ptr_u32_u32()` for the exact signed-int-result
 pointer/unsigned-int/unsigned-int argument shape,
+`lj_ccall_jit_u32_ptr_u32()` for the exact unsigned 32-bit-result
+pointer/unsigned-int argument shape,
 `lj_ccall_jit_i32_ptr_ptr_ptr_ptr_u32_i32_u32()` for the exact signed-int-result
 pointer/pointer/pointer/pointer/unsigned-int/signed-int/unsigned-int argument
 shape,
@@ -281,6 +283,8 @@ The scope is deliberately narrow:
   OpenFileMapping-style ABI classes;
 - exact `int32_t(pointer, uint32_t, uint32_t)` calls, preserving handle, mask,
   and flags for SetHandleInformation-style ABI classes;
+- exact `uint32_t(pointer, uint32_t)` calls, preserving handle and timeout for
+  WaitForSingleObject-style ABI classes;
 - exact `int32_t(pointer, pointer, pointer, pointer, uint32_t, int32_t,
   uint32_t)` calls, preserving source/target process and handle pointers,
   desired access, inherit flag, and options for DuplicateHandle-style ABI
@@ -427,6 +431,7 @@ traced OpenEvent/OpenFileMapping-shaped uint32/int32/pointer pointer-returning
 loops,
 traced SetHandleInformation-shaped pointer/uint32/uint32 signed-int-result
 loops,
+traced WaitForSingleObject-shaped pointer/uint32 unsigned-result loops,
 traced DuplicateHandle-shaped pointer/pointer/pointer/pointer/uint32/int32/
 uint32 signed-int-result loops,
 traced ReadFile/WriteFile-shaped pointer/pointer/uint32/pointer/pointer

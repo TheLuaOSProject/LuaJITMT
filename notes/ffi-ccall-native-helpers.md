@@ -192,7 +192,9 @@ OpenEvent/OpenFileMapping-shaped slice traces
 inherit flag, name pointer, and pointer result. The exact
 SetHandleInformation-shaped slice traces
 `int32_t(void *, uint32_t, uint32_t)` calls while preserving handle, mask,
-flags, and signed 32-bit result. The exact
+flags, and signed 32-bit result. The exact WaitForSingleObject-shaped slice
+traces `uint32_t(void *, uint32_t)` calls while preserving handle, timeout,
+and high-bit unsigned 32-bit results as Lua numbers. The exact
 DuplicateHandle-shaped slice traces
 `int32_t(void *, void *, void *, void *, uint32_t, int32_t, uint32_t)` calls
 while preserving source/target process and handle pointers, desired access,

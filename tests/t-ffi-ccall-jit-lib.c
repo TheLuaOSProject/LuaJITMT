@@ -359,6 +359,12 @@ int32_t lj_m7_ccall_jit_i32_ptr_u32_u32(int *handle, uint32_t mask,
 		   UINT64_C(1023)) + 19;
 }
 
+uint32_t lj_m7_ccall_jit_u32_ptr_u32(int *handle, uint32_t timeout)
+{
+  return UINT32_C(0x80000000) + (uint32_t)handle[timeout & 3u] +
+	 (timeout & 1023u);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr_u32_i32_u32(int *src_proc,
 							int *src_handle,
 							int *target_proc,
