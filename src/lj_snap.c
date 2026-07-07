@@ -1069,7 +1069,8 @@ static const BCIns *snap_restore(jit_State *J, void *exptr, lua_State *L,
   ExitState *ex = (ExitState *)exptr;
   SnapNo snapno = exitno;  /* For now, snapno == exitno. */
   if (T == NULL)
-    T = traceref(J, parent);
+    T = traceref_safe(J, parent);
+  lj_assertJ(T != NULL, "missing snapshot trace");
   IRIns *irbase = trace_ir_acq(T);
   SnapShot *snap = &trace_snap_acq(T)[snapno];
   MSize n, nent = snap_nent_acq(snap);
