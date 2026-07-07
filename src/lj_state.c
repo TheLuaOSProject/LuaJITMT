@@ -347,10 +347,9 @@ void lj_state_thread_registry_publish(global_State *g, lua_State *th)
   if (!g || !th)
     return;
   do {
-    head = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
-    th->thread_next = head;
-  } while (!la_casptr((void **)&g->threading_states, (void **)&head, th,
-		      LA_ACQ_REL, LA_ACQ));
+    head = lj_state_thread_registry_head_acq(g);
+    lj_state_thread_registry_next_rel(th, head);
+  } while (!lj_state_thread_registry_head_cas(g, &head, th));
 }
 
 static void state_registry_remove(global_State *g, lua_State *th)
@@ -360,21 +359,18 @@ static void state_registry_remove(global_State *g, lua_State *th)
     return;
 restart:
   prev = NULL;
-  cur = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+  cur = lj_state_thread_registry_head_acq(g);
   while (cur && lj_state_thread_registry_valid(g, cur)) {
-    lua_State *next =
-      (lua_State *)la_loadptr_acq((void *const *)&cur->thread_next);
+    lua_State *next = lj_state_thread_registry_next_acq(cur);
     if (cur == th) {
       if (prev) {
-	if (!la_casptr((void **)&prev->thread_next, (void **)&cur, next,
-		       LA_ACQ_REL, LA_ACQ))
+	if (!lj_state_thread_registry_next_cas(prev, &cur, next))
 	  goto restart;
       } else {
-	if (!la_casptr((void **)&g->threading_states, (void **)&cur, next,
-		       LA_ACQ_REL, LA_ACQ))
+	if (!lj_state_thread_registry_head_cas(g, &cur, next))
 	  goto restart;
       }
-      th->thread_next = NULL;
+      lj_state_thread_registry_next_rel(th, NULL);
       return;
     }
     prev = cur;
@@ -384,13 +380,11 @@ restart:
 
 static void close_state_free_registered_states(global_State *g, lua_State *L)
 {
-  lua_State *th =
-    (lua_State *)la_xchgptr_acqrel((void **)&g->threading_states, NULL);
+  lua_State *th = lj_state_thread_registry_head_xchg(g, NULL);
   uint32_t n = 0;
   while (th && lj_state_thread_registry_valid(g, th)) {
-    lua_State *next =
-      (lua_State *)la_loadptr_acq((void *const *)&th->thread_next);
-    th->thread_next = NULL;
+    lua_State *next = lj_state_thread_registry_next_acq(th);
+    lj_state_thread_registry_next_rel(th, NULL);
     if (th != L) {
       (void)close_state_unlink_root(g, obj2gco(th));
       lj_state_free(g, th);
@@ -592,7 +586,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->threading_live = NULL;
   g->threading_live_retired = NULL;
   g->threading_live_count = 0;
-  g->threading_states = NULL;
+  lj_state_thread_registry_head_clear(g);
   lj_registry_setnil_rel(L);
   g->nilnodehdr.hmask = 0;
   g->nilnodehdr.flags = 0;
@@ -684,7 +678,7 @@ lua_State *lj_state_new_withenv(lua_State *L, GCtab *env)
   setmref(L1->stack, NULL);
   L1->cframe = NULL;
   L1->tg_hint = NULL;
-  L1->thread_next = NULL;
+  lj_state_thread_registry_next_rel(L1, NULL);
   lj_state_owner_rel(L1, 0);
   lj_state_grayagain_cycle_store_rlx(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);

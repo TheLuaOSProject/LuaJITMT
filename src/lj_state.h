@@ -36,6 +36,49 @@ LJ_FUNC lua_State *lj_state_new(lua_State *L);
 LJ_FUNC void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L);
 LJ_FUNC int lj_state_thread_registry_valid(global_State *g, lua_State *th);
 LJ_FUNC void lj_state_thread_registry_publish(global_State *g, lua_State *th);
+
+static LJ_AINLINE lua_State *lj_state_thread_registry_head_acq(global_State *g)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+}
+
+static LJ_AINLINE void lj_state_thread_registry_head_clear(global_State *g)
+{
+  la_storeptr_rlx((void **)&g->threading_states, NULL);
+}
+
+static LJ_AINLINE int
+lj_state_thread_registry_head_cas(global_State *g, lua_State **oldp,
+				  lua_State *head)
+{
+  return la_casptr((void **)&g->threading_states, (void **)oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE lua_State *
+lj_state_thread_registry_head_xchg(global_State *g, lua_State *head)
+{
+  return (lua_State *)la_xchgptr_acqrel((void **)&g->threading_states, head);
+}
+
+static LJ_AINLINE lua_State *lj_state_thread_registry_next_acq(lua_State *th)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&th->thread_next);
+}
+
+static LJ_AINLINE void lj_state_thread_registry_next_rel(lua_State *th,
+							 lua_State *next)
+{
+  la_storeptr_rel((void **)&th->thread_next, next);
+}
+
+static LJ_AINLINE int
+lj_state_thread_registry_next_cas(lua_State *th, lua_State **oldp,
+				  lua_State *next)
+{
+  return la_casptr((void **)&th->thread_next, (void **)oldp, next,
+		   LA_ACQ_REL, LA_ACQ);
+}
 #if LJ_64 && !LJ_GC64 && !(defined(LUAJIT_USE_VALGRIND) && defined(LUAJIT_USE_SYSMALLOC))
 LJ_FUNC lua_State *lj_state_newstate(lua_Alloc f, void *ud);
 #endif

@@ -4537,9 +4537,9 @@ static void gc2_scan_threading_states(global_State *g)
   uint32_t n = 0;
   if (!g)
     return;
-  for (th = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+  for (th = lj_state_thread_registry_head_acq(g);
        th != NULL && lj_state_thread_registry_valid(g, th);
-       th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
+       th = lj_state_thread_registry_next_acq(th)) {
     /*
     ** Ownerless registry states are suspended or already joined. They may have
     ** been marked through another root before this pass, so relying on grey

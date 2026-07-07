@@ -1375,9 +1375,9 @@ static void gc_mark_threading_states(global_State *g)
 {
   lua_State *th;
   uint32_t n = 0;
-  for (th = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+  for (th = lj_state_thread_registry_head_acq(g);
        th != NULL && lj_state_thread_registry_valid(g, th);
-       th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
+       th = lj_state_thread_registry_next_acq(th)) {
     gc_markobj(g, th);
     /*
     ** Joined/suspended registry states can already be gray from an earlier

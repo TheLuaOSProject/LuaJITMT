@@ -8,6 +8,16 @@ registry entry still named a registered thread object.
 This slice adds `lj_state_thread_registry_valid()` and uses it to require a
 queued, live `LJ_TTHREAD` object before dereferencing a registry entry.
 
+Follow-up: registry head and link publication now route through
+`lj_state_thread_registry_head_*()` and
+`lj_state_thread_registry_next_*()` helpers. The publish, remove, close-time
+free, legacy GC scan, and GC2 scan paths no longer spell raw pointer
+load/CAS/xchg operations against `global_State.threading_states` or
+`lua_State.thread_next`.
+Follow-up verification: clean build, `m4_threading_live_root`,
+`m4_threading_join_gcscan`, `m4_threading_shutdown`, and `m3_gc2_scaffold`
+passed.
+
 Guarded paths:
 
 - `state_registry_remove()`;
