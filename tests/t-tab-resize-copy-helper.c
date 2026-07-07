@@ -94,6 +94,13 @@ static void assert_array_slot_nil(TValue *slot)
   assert(tvisnil(&val));
 }
 
+static void assert_array_slot_value(TValue *slot, int want)
+{
+  TValue val;
+  lj_tv_load_acq(&val, slot);
+  assert(tv_i32(&val) == want);
+}
+
 static void test_put_if_absent_does_not_clobber(lua_State *L)
 {
   GCtab *src, *dst;
@@ -269,6 +276,42 @@ static void test_array_assist_same_index(lua_State *L)
   lj_tab_asize_rel(src, newasize);
 }
 
+static void test_array_assist_refuses_tail_migration(lua_State *L)
+{
+  GCtab *src;
+  TValue *oldarray, *newarray, *slot;
+  MSize oldasize, newasize, target_asize;
+  uint32_t tail;
+
+  lua_settop(L, 0);
+  src = push_table(L, LJ_MAX_COLOSIZE + 16, 0);
+  oldarray = lj_tab_array_acq(src);
+  oldasize = lj_tab_asize_acq(src);
+  assert(oldasize > LJ_MAX_COLOSIZE + 8);
+  target_asize = oldasize - 8u;
+  tail = (uint32_t)(oldasize - 1u);
+  lj_tab_storeint(L, lj_tab_setint(L, src, (int32_t)tail), 77);
+
+  lj_tab_resize(L, src, (uint32_t)target_asize, 5);
+  newarray = lj_tab_array_acq(src);
+  newasize = lj_tab_asize_acq(src);
+  assert(newarray != oldarray);
+  assert(!lj_tab_array_is_colocated(src, newarray));
+  assert(newasize == target_asize);
+  assert(tail >= newasize);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert(lj_tab_array_is_retiring(src, oldarray));
+  assert_array_slot_value(&oldarray[tail], 77);
+  assert(tv_i32(lj_tab_getint(src, (int32_t)tail)) == 77);
+
+  lj_tab_test_reset_wait_no_l_calls();
+  slot = lj_tab_test_resize_assist_array_slot(L, src, tail);
+  assert(slot == NULL);
+  assert_array_slot_value(&oldarray[tail], 77);
+  assert(tv_i32(lj_tab_getint(src, (int32_t)tail)) == 77);
+  assert(lj_tab_test_wait_no_l_calls() == 0);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -280,6 +323,7 @@ int main(void)
   test_array_tail_rehash(L);
   test_array_nil_freeze_modes(L);
   test_array_assist_same_index(L);
+  test_array_assist_refuses_tail_migration(L);
   lua_close(L);
   printf("t-tab-resize-copy-helper OK: resize copy helpers are idempotent\n");
   return 0;
