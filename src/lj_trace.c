@@ -2341,11 +2341,15 @@ static int trace_abort(jit_State *J)
       else
 	penalty_pc(J, trace_startpt_acq(&J->cur), startpc, e);
     } else {
-      GCtrace *T = traceref(J, J->exitno);
-      if (T) {
-	trace_test_note_abort_selflink((TraceNo)J->exitno);
-	trace_link_rel(T, J->exitno);  /* Self-link is blacklisted. */
+      TraceNo selflink = (TraceNo)J->exitno;
+      GCtrace *T;
+      lj_gc2_smr_read_enter(J2G(J));
+      T = traceref_safe(J, selflink);
+      if (T && trace_traceno_acq(T) == selflink) {
+	trace_test_note_abort_selflink(selflink);
+	trace_link_rel(T, selflink);  /* Self-link is blacklisted. */
       }
+      lj_gc2_smr_read_leave(J2G(J));
     }
   }
 
@@ -2408,9 +2412,12 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
       if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP ||
 	  op == BC_JFUNCF) {
 	TraceNo traceno = bc_d(patchins);
-	GCtrace *T = traceref(J, traceno);
+	GCtrace *T;
+	lj_gc2_smr_read_enter(J2G(J));
+	T = traceref_safe(J, traceno);
 	if (trace_runnable_acq(T, traceno))
 	  bc_publish(J->patchpc, patchins);
+	lj_gc2_smr_read_leave(J2G(J));
       } else {
 	bc_publish(J->patchpc, patchins);
       }

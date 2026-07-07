@@ -11,6 +11,7 @@
 #if LJ_HASJIT
 
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_frame.h"
@@ -837,13 +838,20 @@ void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
   GCproto *pt = trace_startpt_acq(T);
   IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
   TraceNo parent = base.op1;
-  GCtrace *parentT = parent ? traceref(J, parent) : NULL;
   const BCIns *startpc = trace_startpc_acq(T);
+  MSize parentspadj = 0;
+  if (parent) {
+    GCtrace *parentT;
+    lj_gc2_smr_read_enter(J2G(J));
+    parentT = traceref_safe(J, parent);
+    if (parentT && trace_traceno_acq(parentT) == parent)
+      parentspadj = trace_spadjust_acq(parentT);
+    lj_gc2_smr_read_leave(J2G(J));
+  }
   ctx.T = T;
   ctx.mcaddr = (uintptr_t)trace_mcode_acq(T);
   ctx.szmcode = trace_szmcode_acq(T);
-  ctx.spadjp = CFRAME_SIZE_JIT +
-	       (MSize)(parentT ? trace_spadjust_acq(parentT) : 0);
+  ctx.spadjp = CFRAME_SIZE_JIT + parentspadj;
   ctx.spadj = CFRAME_SIZE_JIT + trace_spadjust_acq(T);
   lj_assertJ(startpc >= proto_bc(pt) && startpc < proto_bc(pt) + pt->sizebc,
 	     "start PC out of range");
