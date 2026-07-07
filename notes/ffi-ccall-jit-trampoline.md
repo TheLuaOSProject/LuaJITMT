@@ -167,6 +167,8 @@ shape,
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
 signed/unsigned 32-bit-result pointer/pointer/unsigned-count argument shapes,
+`lj_ccall_jit_i32_ptr_ptr_u32_u32()` for the exact signed-int-result
+pointer/pointer/unsigned-int/unsigned-int argument shape,
 `lj_ccall_jit_u32_ptr_ptr_u32_i32()` for the exact unsigned 32-bit-result
 pointer/pointer/unsigned-int/signed-int argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u32_ptr_ptr()` for the exact signed-int-result
@@ -351,6 +353,9 @@ The scope is deliberately narrow:
   `uint32_t(pointer, pointer, uint32_t)` calls, with high-bit unsigned count
   arguments preserved before the helper casts to the exact unsigned 32-bit ABI
   width;
+- exact `int32_t(pointer, pointer, uint32_t, uint32_t)` calls, preserving both
+  high-bit unsigned 32-bit arguments for SleepConditionVariableSRW-style ABI
+  classes;
 - exact `int32_t(pointer, pointer, uint32_t, pointer, pointer)` calls,
   preserving high-bit unsigned byte counts and both output/overlapped pointer
   arguments for ReadFile/WriteFile-style ABI classes;
@@ -513,6 +518,8 @@ unsigned-result loops,
 traced DuplicateHandle-shaped pointer/pointer/pointer/pointer/uint32/int32/
 uint32 signed-int-result loops,
 traced ReadFile/WriteFile-shaped pointer/pointer/uint32/pointer/pointer
+signed-int-result loops,
+traced SleepConditionVariableSRW-shaped pointer/pointer/uint32/uint32
 signed-int-result loops,
 traced DeviceIoControl-shaped pointer/uint32/pointer/uint32/pointer/uint32/
 pointer/pointer signed-int-result loops,
