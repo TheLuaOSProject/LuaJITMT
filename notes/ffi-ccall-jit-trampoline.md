@@ -140,6 +140,9 @@ pointer/size/pointer/pointer/unsigned-int/pointer argument shape,
 pointer/signed-int/signed-int/pointer argument shape,
 `lj_ccall_jit_ptr_u32_i32_ptr()` for the exact pointer-returning
 unsigned-int/signed-int/pointer argument shape,
+`lj_ccall_jit_i32_ptr_ptr_ptr_ptr_u32_i32_u32()` for the exact signed-int-result
+pointer/pointer/pointer/pointer/unsigned-int/signed-int/unsigned-int argument
+shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
@@ -274,6 +277,10 @@ The scope is deliberately narrow:
 - exact `pointer(uint32_t, int32_t, pointer)` calls, preserving desired access,
   inherit flag, and name pointer for OpenEvent/OpenMutex/OpenSemaphore and
   OpenFileMapping-style ABI classes;
+- exact `int32_t(pointer, pointer, pointer, pointer, uint32_t, int32_t,
+  uint32_t)` calls, preserving source/target process and handle pointers,
+  desired access, inherit flag, and options for DuplicateHandle-style ABI
+  classes;
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
@@ -414,6 +421,8 @@ traced CreateEvent/CreateSemaphore-shaped pointer/int32/int32/pointer
 pointer-returning loops,
 traced OpenEvent/OpenFileMapping-shaped uint32/int32/pointer pointer-returning
 loops,
+traced DuplicateHandle-shaped pointer/pointer/pointer/pointer/uint32/int32/
+uint32 signed-int-result loops,
 traced ReadFile/WriteFile-shaped pointer/pointer/uint32/pointer/pointer
 signed-int-result loops,
 traced DeviceIoControl-shaped pointer/uint32/pointer/uint32/pointer/uint32/

@@ -351,6 +351,23 @@ int *lj_m7_ccall_jit_ptr_u32_i32_ptr(uint32_t access, int32_t inherit,
   return base + (((uint64_t)access + (uint64_t)(uint32_t)inherit) & 3u);
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr_u32_i32_u32(int *src_proc,
+							int *src_handle,
+							int *target_proc,
+							int *target_handle,
+							uint32_t access,
+							int32_t inherit,
+							uint32_t options)
+{
+  uint64_t acc = (uint64_t)(uint32_t)(src_proc ? src_proc[0] : 0) +
+		 (uint64_t)(uint32_t)(src_handle ? src_handle[1] : 0) +
+		 (uint64_t)(uint32_t)(target_proc ? target_proc[2] : 0) +
+		 (uint64_t)(uint32_t)(target_handle ? target_handle[3] : 0) +
+		 (uint64_t)access + (uint64_t)(uint32_t)inherit +
+		 (uint64_t)options;
+  return (int32_t)((acc & UINT64_C(1023)) + UINT64_C(13));
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return a[n & 3u] + b[(n + UINT64_C(1)) & 3u] +

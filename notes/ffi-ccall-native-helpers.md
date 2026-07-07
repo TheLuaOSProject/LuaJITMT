@@ -189,7 +189,11 @@ CreateEvent/CreateSemaphore-shaped slice traces
 attributes, boolean/count fields, name pointer, and pointer result. The exact
 OpenEvent/OpenFileMapping-shaped slice traces
 `void *(uint32_t, int32_t, void *)` calls while preserving desired access,
-inherit flag, name pointer, and pointer result. Exact
+inherit flag, name pointer, and pointer result. The exact
+DuplicateHandle-shaped slice traces
+`int32_t(void *, void *, void *, void *, uint32_t, int32_t, uint32_t)` calls
+while preserving source/target process and handle pointers, desired access,
+inherit flag, options, and signed 32-bit result. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because
