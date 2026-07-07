@@ -220,6 +220,10 @@ and pointer result. The exact
 CreateMutex/CreateWaitableTimer-shaped slice traces
 `void *(void *, int32_t, void *)` calls while preserving security attributes,
 inherit/manual-reset-style flags, name pointer, and pointer result. The exact
+SetWaitableTimer-shaped slice traces
+`int32_t(void *, void *, int32_t, void *, void *, int32_t)` calls while
+preserving handle, due-time pointer, signed period, callback pointer, callback
+argument pointer, resume flag, and signed 32-bit result. The exact
 OpenEvent/OpenFileMapping-shaped slice traces
 `void *(uint32_t, int32_t, void *)` calls while preserving desired access,
 inherit flag, name pointer, and pointer result. The exact

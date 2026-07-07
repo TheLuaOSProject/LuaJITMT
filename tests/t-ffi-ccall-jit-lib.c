@@ -538,6 +538,20 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_u32_i32(int *port, int *entries,
 	 (int32_t)(timeout >> 28) + alertable;
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_i32_ptr_ptr_i32(int *timer,
+						    int *due_time,
+						    int32_t period,
+						    int *callback,
+						    int *callback_arg,
+						    int32_t resume)
+{
+  uint32_t i = (uint32_t)(period + resume) & 3u;
+  return timer[i] + due_time[(i + 1u) & 3u] +
+	 (callback ? callback[(i + 2u) & 3u] : 0) +
+	 (callback_arg ? callback_arg[(i + 3u) & 3u] : 0) +
+	 period + resume;
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_u32_ptr_u32_ptr_u32_ptr_ptr(
   int *handle, uint32_t code, int *inbuf, uint32_t insize, int *outbuf,
   uint32_t outsize, int *bytes_ret, int *overlapped)
