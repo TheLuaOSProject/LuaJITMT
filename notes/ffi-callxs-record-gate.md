@@ -151,7 +151,9 @@ The pointer/size/pointer family traces exact
 `int32_t(void *, uint64_t, void *)`, `uint32_t(void *, uint64_t, void *)`,
 `int64_t(void *, uint64_t, void *)`, `uint64_t(void *, uint64_t, void *)`,
 `void(void *, uint64_t, void *)`, and `void *(void *, uint64_t, void *)` calls
-for mincore-style ABI classes. The exact pointer/size/unsigned-int/pointer
+for mincore-style ABI classes. The exact CreateEventEx/CreateMutexEx-shaped
+slice traces `void *(void *, void *, uint32_t, uint32_t)` calls. The exact
+pointer/size/unsigned-int/pointer
 slice traces `int32_t(void *, uint64_t, uint32_t, void *)` calls for
 VirtualProtect-style ABI classes. The exact
 CreateIoCompletionPort-shaped slice traces

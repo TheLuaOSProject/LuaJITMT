@@ -299,6 +299,13 @@ int *lj_m7_ccall_jit_ptr_ptr_ptr_u64_u32(int *dst, int *port, uint64_t key,
   return dst + i;
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_ptr_u32_u32(int *security, int *name,
+					 uint32_t flags, uint32_t access)
+{
+  return security + (((uint64_t)(uint32_t)(name ? *name : 0) +
+		      (uint64_t)flags + (uint64_t)access) & 3u);
+}
+
 int *lj_m7_ccall_jit_ptr_ptr_u64_u32_u32(int *base, uint64_t n,
 					 uint32_t alloc_type,
 					 uint32_t protect)

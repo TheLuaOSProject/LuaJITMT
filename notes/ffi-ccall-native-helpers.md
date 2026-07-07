@@ -160,6 +160,9 @@ while preserving high-bit unsigned flags. The pointer/size/pointer family traces
 `int64_t(void *, uint64_t, void *)`, `uint64_t(void *, uint64_t, void *)`,
 `void(void *, uint64_t, void *)`, and `void *(void *, uint64_t, void *)` calls
 for mincore-style pointer/size/output-buffer ABI classes. The exact
+CreateEventEx/CreateMutexEx-shaped slice traces
+`void *(void *, void *, uint32_t, uint32_t)` calls while preserving security
+attributes, name pointer, flags, desired access, and pointer result. The exact
 pointer/size/unsigned-int/pointer slice traces
 `int32_t(void *, uint64_t, uint32_t, void *)` calls for
 VirtualProtect-style ABI classes while preserving high-bit unsigned flags and
