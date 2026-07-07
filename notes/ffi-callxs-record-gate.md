@@ -69,6 +69,10 @@ interpreted.
 mixed two-argument double-return slice: exact `double(double, int32_t)` and
 `double(int32_t, double)`. These also stay on the side-effecting `IRCALL`
 helper path and leave the generic `IR_CALLXS` backend path disabled.
+`lj_ccall_jit_num_num_u32()` and `lj_ccall_jit_num_u32_num()` extend that
+double-returning mixed slice to exact `double(double, uint32_t)` and
+`double(uint32_t, double)` calls, preserving high-bit unsigned arguments
+through the recorder's unsigned conversion path.
 `lj_ccall_jit_flt_flt_i32()` and `lj_ccall_jit_flt_i32_flt()` extend that
 mixed two-argument slice to exact `float(float, int32_t)` and
 `float(int32_t, float)` calls, with the recorder widening the float result to

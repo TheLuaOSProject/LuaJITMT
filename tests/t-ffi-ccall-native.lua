@@ -85,6 +85,8 @@ double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num_i32(int32_t);
 double lj_m7_ccall_jit_num_num_i32(double, int32_t);
 double lj_m7_ccall_jit_num_i32_num(int32_t, double);
+double lj_m7_ccall_jit_num_num_u32(double, uint32_t);
+double lj_m7_ccall_jit_num_u32_num(uint32_t, double);
 double lj_m7_ccall_jit_num_i32_i32(int32_t, int32_t);
 double lj_m7_ccall_jit_num_u32_u32(uint32_t, uint32_t);
 double lj_m7_ccall_jit_num_i64_u32(int64_t, uint32_t);
@@ -1788,6 +1790,30 @@ do
       return r
     end)(80) == (80 * 81) / 2 + 80 * (7 + 0.25 + 0.625))
     assert(trace_count() > 0, "shared int,double->double FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local b = ffi.new("uint32_t", 0xf00000f1)
+      local r = 0
+      for i = 1, n do
+	r = r + lib.lj_m7_ccall_jit_num_num_u32(i + 0.25, b)
+      end
+      return r
+    end)(80) == (80 * 81) / 2 + 80 * (241 + 0.25 + 0.875))
+    assert(trace_count() > 0, "shared double,uint32_t->double FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local a = ffi.new("uint32_t", 0xf00000f2)
+      local r = 0
+      for i = 1, n do
+	r = r + lib.lj_m7_ccall_jit_num_u32_num(a, i + 0.25)
+      end
+      return r
+    end)(80) == (80 * 81) / 2 + 80 * (242 + 0.25 + 0.625))
+    assert(trace_count() > 0, "shared uint32_t,double->double FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

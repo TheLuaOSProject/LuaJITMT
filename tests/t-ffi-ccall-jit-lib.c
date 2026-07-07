@@ -794,6 +794,16 @@ double lj_m7_ccall_jit_num_i32_num(int32_t a, double b)
   return (double)a + b + 0.625;
 }
 
+double lj_m7_ccall_jit_num_num_u32(double a, uint32_t b)
+{
+  return a + (double)(b & 255u) + 0.875;
+}
+
+double lj_m7_ccall_jit_num_u32_num(uint32_t a, double b)
+{
+  return (double)(a & 255u) + b + 0.625;
+}
+
 double lj_m7_ccall_jit_num_i32_i32(int32_t a, int32_t b)
 {
   return (double)a * 2.0 + (double)b + 0.5;
