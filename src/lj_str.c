@@ -776,7 +776,7 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
   if (!g || completed_epoch == 0)
     return 0;
   hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
-  while (hdr) {
+  while (hdr && lj_gc2_mem_registered(g, hdr)) {
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_str_retired_next_rel(hdr, NULL);
     if (lj_str_retire_epoch_acq(hdr) < completed_epoch) {
@@ -797,7 +797,7 @@ void lj_str_freetab(global_State *g)
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
   }
   hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
-  while (hdr) {
+  while (hdr && lj_gc2_mem_registered(g, hdr)) {
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
     hdr = next;

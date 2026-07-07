@@ -1676,7 +1676,7 @@ static void gc2_mark_strtab_mem(global_State *g)
   if (hdr)
     lj_gc2_markmem(g, hdr);
   for (hdr = lj_str_retired_head_acq(g);
-       hdr != NULL;
+       hdr != NULL && lj_gc2_mem_registered(g, hdr);
        hdr = lj_str_retired_next_acq(hdr))
     lj_gc2_markmem(g, hdr);
 }

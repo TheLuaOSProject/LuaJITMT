@@ -320,18 +320,15 @@ int main(void)
   lj_gc2_smr_read_enter(g);
   assert(lj_thr_create(&reclaim_thr, reclaim_retired_worker,
 		       &reclaim_ctx) == 0);
-  for (i = 0; i < 1000 &&
-	      gc2_smr_reclaiming_acq(g) == 0 &&
-	      la_load32_acq(&reclaim_ctx.done) == 0; i++)
+  for (i = 0; i < 1000 && la_load32_acq(&reclaim_ctx.done) == 0; i++)
     (void)lj_thr_sleep_ns(NULL, 100000);
-  assert(gc2_smr_reclaiming_acq(g) != 0);
-  assert(la_load32_acq(&reclaim_ctx.done) == 0);
+  assert(la_load32_acq(&reclaim_ctx.done) != 0);
+  assert(reclaim_ctx.reclaimed == 0);
   assert(lj_str_retired_head_acq(g) == hdr);
   lj_gc2_smr_read_leave(g);
   assert(lj_thr_join(&reclaim_thr, NULL) == 0);
-  assert(la_load32_acq(&reclaim_ctx.done) != 0);
-  assert(reclaim_ctx.reclaimed >= 1u);
   assert(gc2_smr_reclaiming_acq(g) == 0);
+  assert(lj_gc2_reclaim_retired(g, retire_epoch + 1u) >= 1u);
   assert(lj_str_retired_head_acq(g) == NULL);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
