@@ -512,6 +512,13 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr_u32_u32(int *wait_out,
 	 (int32_t)(timeout >> 28) + (int32_t)(flags >> 28);
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr(int *wait, int *handle,
+					    int *timeout, int *reserved)
+{
+  reserved[1] = wait[0] + handle[1] + timeout[2];
+  return reserved[1] + wait[3];
+}
+
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u32(int *a, int *b, uint32_t n)
 {
   return UINT32_C(0x80000000) + (uint32_t)a[n & 3u] +

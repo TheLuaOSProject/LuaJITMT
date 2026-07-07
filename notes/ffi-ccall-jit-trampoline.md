@@ -407,6 +407,9 @@ The scope is deliberately narrow:
   Timer-style ABI classes;
 - exact `void(pointer, pointer, pointer)` calls, preserving threadpool object,
   handle, and timeout pointers for SetThreadpoolWait/Timer-style ABI classes;
+- exact `int32_t(pointer, pointer, pointer, pointer)` calls, preserving
+  threadpool wait object, handle, timeout pointer, reserved pointer, and signed
+  32-bit result for SetThreadpoolWaitEx-style ABI classes;
 - exact `void(pointer, pointer, uint32_t)` and
   `pointer(pointer, pointer, uint32_t)` calls, with high-bit unsigned count
   arguments preserved;
@@ -506,6 +509,8 @@ traced CreateThreadpoolWait/Work/Timer-shaped pointer/pointer/pointer
 pointer-returning loops,
 traced SetThreadpoolWait/Timer-shaped pointer/pointer/pointer void-result
 loops,
+traced SetThreadpoolWaitEx-shaped pointer/pointer/pointer/pointer
+signed-int-result loops,
 traced CreateEventEx/CreateMutexEx-shaped pointer/pointer/uint32/uint32
 pointer-returning loops,
 traced PostQueuedCompletionStatus-shaped pointer/uint32/uint64/pointer

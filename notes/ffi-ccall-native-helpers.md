@@ -262,6 +262,10 @@ CreateThreadpoolWait/Work/Timer-shaped slice traces
 callback-environment pointers, and pointer result. Exact
 SetThreadpoolWait/Timer-shaped slice traces `void(void *, void *, void *)`
 calls while preserving threadpool object, handle, and timeout pointers. Exact
+SetThreadpoolWaitEx-shaped slice traces
+`int32_t(void *, void *, void *, void *)` calls while preserving threadpool
+wait object, handle, timeout pointer, reserved pointer, and signed 32-bit
+result. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because

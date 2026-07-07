@@ -173,6 +173,8 @@ CreateThreadpoolWait/Work/Timer-shaped slice traces
 `void *(void *, void *, void *)` calls. The exact
 SetThreadpoolWait/Timer-shaped slice traces
 `void(void *, void *, void *)` calls. The exact
+SetThreadpoolWaitEx-shaped slice traces
+`int32_t(void *, void *, void *, void *)` calls. The exact
 PostQueuedCompletionStatus-shaped slice traces
 `int32_t(void *, uint32_t, uint64_t, void *)` calls. The exact
 GetQueuedCompletionStatus-shaped slice traces
