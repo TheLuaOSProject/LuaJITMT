@@ -97,12 +97,18 @@ shape,
 argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
+`lj_ccall_jit_u32_ptr_ptr_i32()` for the exact unsigned 32-bit-result
+pointer/pointer/signed-length argument shape,
 `lj_ccall_jit_i64_ptr_ptr_u64()` / `lj_ccall_jit_u64_ptr_ptr_u64()` for exact
 signed/unsigned 64-bit-result pointer/pointer/size argument shapes,
-`lj_ccall_jit_void_ptr_ptr_u64()` for the exact void-returning
+`lj_ccall_jit_u64_ptr_ptr_i32()` for the exact unsigned 64-bit-result
+pointer/pointer/signed-length argument shape,
+`lj_ccall_jit_void_ptr_ptr_i32()` / `lj_ccall_jit_void_ptr_ptr_u64()` for the
+exact void-returning pointer/pointer/signed-length and
 pointer/pointer/size argument shape,
-`lj_ccall_jit_ptr_ptr_ptr_u64()` for the exact pointer-returning
-pointer/pointer/size argument shape,
+`lj_ccall_jit_ptr_ptr_ptr_i32()` / `lj_ccall_jit_ptr_ptr_ptr_u64()` for the
+exact pointer-returning pointer/pointer/signed-length and pointer/pointer/size
+argument shapes,
 `lj_ccall_jit_i32_ptr_ulong_i32()` for the exact pointer/unsigned-long/int
 shape, or
 `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR shapes.
@@ -150,6 +156,10 @@ The scope is deliberately narrow:
 - exact `pointer(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
+- exact `uint32_t(pointer, pointer, int32_t)`,
+  `uint64_t(pointer, pointer, int32_t)`, `void(pointer, pointer, int32_t)`,
+  and `pointer(pointer, pointer, int32_t)` calls, with the signed 32-bit length
+  preserved;
 - zero-argument exact signed 64-bit integer returns;
 - zero-argument exact unsigned 64-bit integer returns;
 - exact signed/unsigned 64-bit integer returns with signed 32-bit, unsigned

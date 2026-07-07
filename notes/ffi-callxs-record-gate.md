@@ -112,7 +112,11 @@ arguments, with the recorder widening the helper's float result to Lua number.
 `unsigned long` argument through the regular FFI conversion rules before the
 helper casts to the host ABI's actual `unsigned long` width. The focused test
 checks both `poll(nil, 0, 0)` and a shared-library signed-narrow-to-unsigned
-conversion probe. Other multi-argument pointer/size shapes remain interpreted.
+conversion probe. The pointer/pointer/signed-length family also traces exact
+`uint32_t(void *, void *, int32_t)`, `uint64_t(void *, void *, int32_t)`,
+`void(void *, void *, int32_t)`, and `void *(void *, void *, int32_t)` calls
+through side-effecting native-state helpers. Other multi-argument pointer/size
+shapes remain interpreted.
 The shared GPR helper matrix separately covers exact two-argument
 `pointer,int64_t` and `pointer,uint64_t` span shapes; broader pointer/size
 families remain interpreted.
