@@ -334,6 +334,14 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_ptr(int *handle, int *buf,
 	 (overlapped ? overlapped[(i + 2u) & 3u] : 0);
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_i32(int *handle, int *overlapped,
+					    int *out, int32_t wait)
+{
+  if (out)
+    out[1] = overlapped[2] + wait;
+  return handle[0] + overlapped[1] + (out ? out[1] : 0) + wait;
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_i32(int *a, int *b, int32_t n)
 {
   uint32_t u = (uint32_t)n;

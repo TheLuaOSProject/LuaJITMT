@@ -123,7 +123,9 @@ family also traces exact `int32_t(void *, void *, uint32_t)`,
 `uint64_t(void *, void *, uint32_t)`, `void(void *, void *, uint32_t)`, and
 `void *(void *, void *, uint32_t)` calls without reusing the uint64-size ABI
 helpers. The exact ReadFile/WriteFile-shaped slice traces
-`int32_t(void *, void *, uint32_t, void *, void *)` calls. The
+`int32_t(void *, void *, uint32_t, void *, void *)` calls. The exact
+GetOverlappedResult-shaped slice traces
+`int32_t(void *, void *, void *, int32_t)` calls. The
 pointer/signed-int/size family traces exact
 `int32_t(void *, int32_t, uint64_t)`, `uint32_t(void *, int32_t, uint64_t)`,
 `int64_t(void *, int32_t, uint64_t)`, `uint64_t(void *, int32_t, uint64_t)`,

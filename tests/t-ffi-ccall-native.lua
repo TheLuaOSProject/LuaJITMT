@@ -58,6 +58,7 @@ uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u64(int *, int *, uint64_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32(int *, int *, uint32_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u32(int *, int *, uint32_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_ptr(int *, int *, uint32_t, int *, int *);
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_i32(int *, int *, int *, int32_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_i32(int *, int *, int32_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_i32(int *, int *, int32_t);
 int64_t lj_m7_ccall_jit_i64_ptr_ptr_i32(const char *, char **, int32_t);
@@ -1882,6 +1883,22 @@ do
       return r
     end)(80) == 80 * 123)
     assert(trace_count() > 0, "shared ptr,ptr,uint32_t,ptr,ptr->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local handle = ptr0()
+      local overlapped = ptr0()
+      local out = ffi.new("int[4]")
+      local wait = ffi.new("int32_t", -7)
+      local r = 0
+      for _ = 1, n do
+	r = r + lib.lj_m7_ccall_jit_i32_ptr_ptr_ptr_i32(handle, overlapped,
+							out, wait)
+      end
+      return r
+    end)(80) == 80 * 52)
+    assert(trace_count() > 0, "shared ptr,ptr,ptr,int32_t->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
