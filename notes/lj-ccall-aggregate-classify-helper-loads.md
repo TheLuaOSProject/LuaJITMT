@@ -12,6 +12,11 @@ lj_ccall aggregate classification helper loads
   `lj_cconv_ct_tv_l()` conversion helper. The stack spill path no longer
   rereads the raw destination `CType *` after conversion may have parked on the
   parser token.
+- Follow-up lifetime cleanup threads `lua_State *` through the x86_64/POSIX
+  classifier and snapshots each field and raw child record with ccall-local
+  wait helpers. Recursive array/struct classification now walks stack-owned
+  `CType` copies instead of reopening sibling and child IDs through raw table
+  pointers.
 - Documented why x86_64/POSIX aggregate classification keeps its CType and
   converted-payload accesses behind the helper surface: a wait-capable
   conversion may park on parser ownership, so later classifier reads need a
@@ -24,6 +29,7 @@ lj_ccall aggregate classification helper loads
 
 Verification:
 
+- `make -C src -j$(nproc) TARGET_STRIP=:`
 - `tools/ci/lua_test.sh m7_ffi_ccall_native`
 - `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `git diff --check`

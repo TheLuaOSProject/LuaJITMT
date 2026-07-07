@@ -20,6 +20,60 @@
 #include "lj_trace.h"
 #include "lj_tg.h"
 
+static void ccall_ctype_copy(CType *out, CType *ct)
+{
+  GCobj *name;
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+}
+
+static CType *ccall_ctype_snapshot_wait(lua_State *L, CTState *cts,
+					 CTypeID id, CType *out)
+{
+  if (id <= CTID_CTYPEID) {
+    if (id == 0)
+      lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
+    ccall_ctype_copy(out, ctype_get(cts, id));
+    if (!ctype_isabandoned(ctype_info_acq(out)))
+      return out;
+    lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
+  }
+  for (;;) {
+    int ok = lj_ctype_snapshot(cts, id, out);
+    if (ok > 0)
+      return out;
+    if (ok == 0)
+      lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
+static CType *ccall_rawid_wait(lua_State *L, CTState *cts, CTypeID id,
+			       CTypeID *ridp, CType *out)
+{
+  for (;;) {
+    CTInfo info;
+    ccall_ctype_snapshot_wait(L, cts, id, out);
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info)) {
+      if (ridp) *ridp = id;
+      return out;
+    }
+    id = ctype_cid(info);
+  }
+}
+
+static CType *ccall_rawchild_wait(lua_State *L, CTState *cts, CType *ct,
+				  CTypeID *ridp, CType *out)
+{
+  CTypeID id = ctype_childid(cts, ct);
+  return ccall_rawid_wait(L, cts, id, ridp, out);
+}
+
 /* Target-specific handling of register arguments. */
 #if LJ_TARGET_X86
 /* -- x86 calling conventions --------------------------------------------- */
@@ -141,7 +195,7 @@
 
 #define CCALL_HANDLE_STRUCTRET \
   int rcl[2]; rcl[0] = rcl[1] = 0; \
-  if (ccall_classify_struct(cts, ctr, rcl, 0)) { \
+  if (ccall_classify_struct(L, cts, ctr, rcl, 0)) { \
     cc->retref = 1;  /* Return struct by reference. */ \
     cc->gpr[ngpr++] = (GPRArg)dp; \
   } else { \
@@ -150,7 +204,7 @@
 
 #define CCALL_HANDLE_STRUCTRET2 \
   int rcl[2]; rcl[0] = rcl[1] = 0; \
-  ccall_classify_struct(cts, ctr, rcl, 0); \
+  ccall_classify_struct(L, cts, ctr, rcl, 0); \
   ccall_struct_ret(cc, rcl, dp, ctype_size_acq(ctr));
 
 #define CCALL_HANDLE_COMPLEXRET \
@@ -167,7 +221,7 @@
 
 #define CCALL_HANDLE_STRUCTARG \
   int rcl[2]; rcl[0] = rcl[1] = 0; \
-  if (!ccall_classify_struct(cts, d, rcl, 0)) { \
+  if (!ccall_classify_struct(L, cts, d, rcl, 0)) { \
     cc->nsp = nsp; cc->ngpr = ngpr; cc->nfpr = nfpr; \
     if (ccall_struct_arg(cc, L, cts, d, did, rcl, o, narg)) goto err_nyi; \
     nsp = cc->nsp; ngpr = cc->ngpr; nfpr = cc->nfpr; \
@@ -636,20 +690,22 @@ static int ccall_classify_struct(CTState *cts, CType *ct)
 #define CCALL_RCL_MEM	4
 /* NYI: classify vectors. */
 
-static int ccall_classify_struct(CTState *cts, CType *ct, int *rcl, CTSize ofs);
+static int ccall_classify_struct(lua_State *L, CTState *cts, CType *ct,
+				 int *rcl, CTSize ofs);
 
 /* Classify a C type. */
-static void ccall_classify_ct(CTState *cts, CType *ct, int *rcl, CTSize ofs)
+static void ccall_classify_ct(lua_State *L, CTState *cts, CType *ct,
+			      int *rcl, CTSize ofs)
 {
   CTInfo info = ctype_info_acq(ct);
   CTSize size = ctype_size_acq(ct);
   if (ctype_isarray(info)) {
-    CType *cct = ctype_rawchild(cts, ct);
+    CType cctsnap, *cct = ccall_rawchild_wait(L, cts, ct, NULL, &cctsnap);
     CTSize eofs, esz = ctype_size_acq(cct), asz = size;
     for (eofs = 0; eofs < asz; eofs += esz)
-      ccall_classify_ct(cts, cct, rcl, ofs+eofs);
+      ccall_classify_ct(L, cts, cct, rcl, ofs+eofs);
   } else if (ctype_isstruct(info)) {
-    ccall_classify_struct(cts, ct, rcl, ofs);
+    ccall_classify_struct(L, cts, ct, rcl, ofs);
   } else {
     int cl = ctype_isfp(info) ? CCALL_RCL_SSE : CCALL_RCL_INT;
     lj_assertCTS(ctype_hassize(info),
@@ -660,23 +716,33 @@ static void ccall_classify_ct(CTState *cts, CType *ct, int *rcl, CTSize ofs)
 }
 
 /* Recursively classify a struct based on its fields. */
-static int ccall_classify_struct(CTState *cts, CType *ct, int *rcl, CTSize ofs)
+static int ccall_classify_struct(lua_State *L, CTState *cts, CType *ct,
+				 int *rcl, CTSize ofs)
 {
   CTypeID fid;
   if (ctype_size_acq(ct) > 16) return CCALL_RCL_MEM;  /* Too big. */
   for (fid = ctype_sib_acq(ct); fid; ) {
+    CType fcopy;
+    CType *field;
     CTInfo info;
     CTSize fofs;
-    ct = ctype_get(cts, fid);
-    info = ctype_info_acq(ct);
-    fid = ctype_sib_acq(ct);
-    fofs = ofs+ctype_size_acq(ct);
-    if (ctype_isfield(info))
-      ccall_classify_ct(cts, ctype_rawchild(cts, ct), rcl, fofs);
-    else if (ctype_isbitfield(info) && ctype_bitbsz(info))
+    field = ccall_ctype_snapshot_wait(L, cts, fid, &fcopy);
+    info = ctype_info_acq(field);
+    fid = ctype_sib_acq(field);
+    fofs = ofs+ctype_size_acq(field);
+    if (ctype_isfield(info)) {
+      CType child;
+      ccall_classify_ct(L, cts,
+			ccall_rawchild_wait(L, cts, field, NULL, &child),
+			rcl, fofs);
+    } else if (ctype_isbitfield(info) && ctype_bitbsz(info)) {
       rcl[(fofs >= 8)] |= CCALL_RCL_INT;  /* NYI: unaligned bitfields? */
-    else if (ctype_isxattrib(info, CTA_SUBTYPE))
-      ccall_classify_struct(cts, ctype_rawchild(cts, ct), rcl, fofs);
+    } else if (ctype_isxattrib(info, CTA_SUBTYPE)) {
+      CType child;
+      ccall_classify_struct(L, cts,
+			    ccall_rawchild_wait(L, cts, field, NULL, &child),
+			    rcl, fofs);
+    }
   }
   return ((rcl[0]|rcl[1]) & CCALL_RCL_MEM);  /* Memory class? */
 }
@@ -957,7 +1023,7 @@ CTypeID lj_ccall_ctid_vararg(lua_State *L, CTState *cts, cTValue *o)
     return CTID_DOUBLE;
   } else if (tviscdata(o)) {
     CTypeID id = cdataV(o)->ctypeid;
-    CType *s = ctype_get(cts, id);
+    CType ssnap, *s = ccall_ctype_snapshot_wait(L, cts, id, &ssnap);
     CTInfo sinfo = ctype_info_acq(s);
     CTSize ssize = ctype_size_acq(s);
     if (ctype_isrefarray(sinfo)) {
@@ -991,7 +1057,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
   TValue *o, *top = L->top;
   CTypeID fid;
   CTInfo info = ctype_info_acq(ct);  /* Vararg inference may invalidate ct. */
-  CType *ctr;
+  CType ctrsnap, *ctr;
   MSize maxgpr, ngpr = 0, nsp = 0, narg;
 #if CCALL_NARG_FPR
   MSize nfpr = 0;
@@ -1019,7 +1085,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 #endif
 
   /* Perform required setup for some result types. */
-  ctr = ctype_rawchild(cts, ct);
+  ctr = ccall_rawchild_wait(L, cts, ct, NULL, &ctrsnap);
   {
     CTInfo rinfo = ctype_info_acq(ctr);
     CTSize rsize = ctype_size_acq(ctr);
@@ -1047,7 +1113,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
   /* Skip initial attributes. */
   fid = ctype_sib_acq(ct);
   while (fid) {
-    CType *ctf = ctype_get(cts, fid);
+    CType ctfcopy, *ctf = ccall_ctype_snapshot_wait(L, cts, fid, &ctfcopy);
     CTInfo finfo = ctype_info_acq(ctf);
     if (!ctype_isattrib(finfo)) break;
     fid = ctype_sib_acq(ctf);
@@ -1072,9 +1138,10 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
     int onstack = 0;
 #endif
+    CType dsnap;
 
     if (fid) {  /* Get argument type from field. */
-      CType *ctf = ctype_get(cts, fid);
+      CType ctfcopy, *ctf = ccall_ctype_snapshot_wait(L, cts, fid, &ctfcopy);
       CTInfo finfo = ctype_info_acq(ctf);
       fid = ctype_sib_acq(ctf);
       lj_assertL(ctype_isfield(finfo), "field expected");
@@ -1085,7 +1152,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
       did = lj_ccall_ctid_vararg(L, cts, o);  /* Infer vararg type. */
       isva = 1;
     }
-    d = ctype_raw(cts, did);
+    d = ccall_rawid_wait(L, cts, did, NULL, &dsnap);
     dinfo = ctype_info_acq(d);
     dsize = ctype_size_acq(d);
     sz = dsize;
@@ -1209,8 +1276,9 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
 			     CCallState *cc, int *ret)
 {
   CTInfo info = ctype_info_acq(ct);
-  CTypeID rid = ctype_rawid(cts, ctype_cid(info));
-  CType *ctr = ctype_get(cts, rid);
+  CTypeID rid;
+  CType ctrsnap, *ctr = ccall_rawid_wait(L, cts, ctype_cid(info),
+					 &rid, &ctrsnap);
   CTInfo rinfo = ctype_info_acq(ctr);
   CTSize rsize = ctype_size_acq(ctr);
   uint8_t *sp = (uint8_t *)&cc->gpr[0];
@@ -2869,14 +2937,13 @@ float lj_ccall_jit_flt_fpr(lua_State *L, void *func, float a,
 int lj_ccall_func(lua_State *L, GCcdata *cd)
 {
   CTState *cts = ctype_cts(L);
-  CTypeID id = ctype_rawid(cts, cd->ctypeid);
-  CType *ct = ctype_get(cts, id);
+  CTypeID id;
+  CType ctsnap, *ct = ccall_rawid_wait(L, cts, cd->ctypeid, &id, &ctsnap);
   CTInfo info = ctype_info_acq(ct);
   CTSize sz = CTSIZE_PTR;
   if (ctype_isptr(info)) {
     sz = ctype_size_acq(ct);
-    id = ctype_rawid(cts, ctype_cid(info));
-    ct = ctype_get(cts, id);
+    ct = ccall_rawid_wait(L, cts, ctype_cid(info), &id, &ctsnap);
     info = ctype_info_acq(ct);
   }
   if (ctype_isfunc(info)) {
@@ -2892,14 +2959,17 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
     lj_ccall_native_enter(L, &native, func);
     lj_vm_ffi_call(&cc);
     actions = lj_ccall_native_leave(L, cts, &native, func);
-    ct = ctype_get(cts, id);  /* Table may have been reallocated. */
+    ct = ccall_ctype_snapshot_wait(L, cts, id, &ctsnap);
     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);
 #if LJ_TARGET_X86 && LJ_ABI_WIN
     /* Automatically detect __stdcall and fix up C function declaration. */
-    info = ctype_info_acq(ct);
-    if (cc.spadj && ctype_cconv(info) == CTCC_CDECL) {
-      CTF_INSERT(ct->info, CCONV, CTCC_STDCALL);
-      lj_trace_abort(G(L));
+    {
+      CType *livect = ctype_get(cts, id);
+      info = ctype_info_acq(livect);
+      if (cc.spadj && ctype_cconv(info) == CTCC_CDECL) {
+	CTF_INSERT(livect->info, CCONV, CTCC_STDCALL);
+	lj_trace_abort(G(L));
+      }
     }
 #endif
     lj_ccall_native_checkstop(L, actions, &native);
