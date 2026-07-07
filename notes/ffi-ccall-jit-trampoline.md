@@ -331,6 +331,10 @@ The scope is deliberately narrow:
   preserving handle, due-time pointer, signed period, callback pointer,
   callback argument pointer, and resume flag for SetWaitableTimer-style ABI
   classes;
+- exact `int32_t(pointer, pointer, int32_t, pointer, pointer, pointer,
+  uint32_t)` calls, preserving handle, due-time pointer, signed period,
+  callback pointer, callback argument pointer, reason-context pointer, and
+  high-bit delay for SetWaitableTimerEx-style ABI classes;
 - exact `pointer(uint32_t, int32_t, pointer)` calls, preserving desired access,
   inherit flag, and name pointer for OpenEvent/OpenMutex/OpenSemaphore and
   OpenFileMapping-style ABI classes;
@@ -530,6 +534,8 @@ traced WaitOnAddress-shaped pointer/pointer/uint64/uint32 signed-int-result
 loops,
 traced SetWaitableTimer-shaped pointer/pointer/int32/pointer/pointer/int32
 signed-int-result loops,
+traced SetWaitableTimerEx-shaped pointer/pointer/int32/pointer/pointer/
+pointer/uint32 signed-int-result loops,
 traced ReadFile/WriteFile-shaped pointer/pointer/uint32/pointer/pointer
 signed-int-result loops,
 traced SleepConditionVariableSRW-shaped pointer/pointer/uint32/uint32
