@@ -129,6 +129,9 @@ pointer/size/size/int argument shape,
 pointer/unsigned-int/unsigned-int/unsigned-int/size argument shape,
 `lj_ccall_jit_ptr_ptr_u32_u32_u32_u64_ptr()` for the exact pointer-returning
 pointer/unsigned-int/unsigned-int/unsigned-int/size/pointer argument shape,
+`lj_ccall_jit_ptr_ptr_u32_u32_ptr_u32_u32_ptr()` for the exact
+pointer-returning pointer/unsigned-int/unsigned-int/pointer/unsigned-int/
+unsigned-int/pointer argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
@@ -247,6 +250,10 @@ The scope is deliberately narrow:
 - exact `pointer(pointer, uint32_t, uint32_t, uint32_t, uint64_t, pointer)`
   calls, preserving access flags, split 32-bit file offset, byte count, and
   desired base pointer for MapViewOfFileEx-style ABI classes;
+- exact `pointer(pointer, uint32_t, uint32_t, pointer, uint32_t, uint32_t,
+  pointer)` calls, preserving desired access, share mode, security attributes,
+  creation disposition, flags, and template handle for CreateFile-style ABI
+  classes;
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
@@ -376,6 +383,8 @@ traced mremap-shaped pointer/size/size/int pointer-returning loops,
 traced MapViewOfFile-shaped pointer/uint32/uint32/uint32/size pointer-returning
 loops,
 traced MapViewOfFileEx-shaped pointer/uint32/uint32/uint32/size/pointer
+pointer-returning loops,
+traced CreateFile-shaped pointer/uint32/uint32/pointer/uint32/uint32/pointer
 pointer-returning loops,
 traced ReadFile/WriteFile-shaped pointer/pointer/uint32/pointer/pointer
 signed-int-result loops,

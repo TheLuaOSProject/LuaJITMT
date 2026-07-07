@@ -299,6 +299,21 @@ int *lj_m7_ccall_jit_ptr_ptr_u32_u32_u32_u64_ptr(int *base, uint32_t access,
 		  bytes + (uint64_t)(uint32_t)(desired ? *desired : 0)) & 3u);
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_u32_u32_ptr_u32_u32_ptr(int *name,
+						     uint32_t access,
+						     uint32_t share,
+						     int *security,
+						     uint32_t disposition,
+						     uint32_t flags,
+						     int *template_handle)
+{
+  return name + (((uint64_t)access + (uint64_t)share +
+		  (uint64_t)(uint32_t)(security ? *security : 0) +
+		  (uint64_t)disposition + (uint64_t)flags +
+		  (uint64_t)(uint32_t)(template_handle ? *template_handle : 0)) &
+		 3u);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return a[n & 3u] + b[(n + UINT64_C(1)) & 3u] +

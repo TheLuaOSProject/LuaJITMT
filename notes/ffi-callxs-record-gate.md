@@ -160,8 +160,10 @@ mremap-shaped slice traces `void *(void *, uint64_t, uint64_t, int32_t)`
 calls. The exact MapViewOfFile-shaped slice traces
 `void *(void *, uint32_t, uint32_t, uint32_t, uint64_t)` calls. The exact
 MapViewOfFileEx-shaped slice traces
-`void *(void *, uint32_t, uint32_t, uint32_t, uint64_t, void *)` calls. Other
-multi-argument pointer/size shapes remain interpreted.
+`void *(void *, uint32_t, uint32_t, uint32_t, uint64_t, void *)` calls. The
+exact CreateFile-shaped slice traces
+`void *(void *, uint32_t, uint32_t, void *, uint32_t, uint32_t, void *)` calls.
+Other multi-argument pointer/size shapes remain interpreted.
 The shared GPR helper matrix separately covers exact two-argument
 `pointer,int64_t` and `pointer,uint64_t` span shapes; broader pointer/size
 families remain interpreted.
