@@ -177,6 +177,8 @@ The exact WaitForSingleObject-shaped slice traces
 `uint32_t(void *, uint32_t)` calls.
 The exact WaitForMultipleObjects-shaped slice traces
 `uint32_t(uint32_t, void *, int32_t, uint32_t)` calls.
+The exact SignalObjectAndWait-shaped slice traces
+`uint32_t(void *, void *, uint32_t, int32_t)` calls.
 The exact DuplicateHandle-shaped slice traces
 `int32_t(void *, void *, void *, void *, uint32_t, int32_t, uint32_t)` calls.
 Other multi-argument pointer/size shapes remain interpreted.

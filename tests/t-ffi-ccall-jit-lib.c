@@ -415,6 +415,16 @@ uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u32(int *a, int *b, uint32_t n)
 	 (uint32_t)b[(n + 1u) & 3u] + (n & 1023u);
 }
 
+uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u32_i32(int *signal, int *wait,
+					     uint32_t timeout,
+					     int32_t alertable)
+{
+  uint64_t acc = (uint64_t)(uint32_t)signal[timeout & 3u] +
+		 (uint64_t)(uint32_t)wait[(timeout + 1u) & 3u] +
+		 (uint64_t)timeout + (uint64_t)(uint32_t)alertable;
+  return UINT32_C(0x80000000) + (uint32_t)(acc & UINT64_C(1023));
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_ptr(int *handle, int *buf,
 						uint32_t n, int *out,
 						int *overlapped)
