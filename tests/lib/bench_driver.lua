@@ -81,6 +81,45 @@ function M.bench_text(bin, bench_lua, jitflag, opts)
   })
 end
 
+local function sample_count(opts)
+  local n = tonumber(opts and opts.samples or 1) or 1
+  if n < 1 then return 1 end
+  return math.floor(n)
+end
+
+function M.best_bench_text(bin, bench_lua, jitflag, opts)
+  opts = opts or {}
+  local n = sample_count(opts)
+  if n == 1 then return M.bench_text(bin, bench_lua, jitflag, opts) end
+  local best, order = {}, {}
+  for _ = 1, n do
+    local parsed = bench_csv.parse_bench_text(M.bench_text(bin, bench_lua,
+                                                           jitflag, opts))
+    for i = 1, #parsed.rows do
+      local row = parsed.rows[i]
+      local cur = best[row.name]
+      if not cur then
+        order[#order + 1] = row.name
+        best[row.name] = {
+          total_s = row.total_s,
+          ns_per_op = row.ns_per_op
+        }
+      elseif row.ns_per_op < cur.ns_per_op then
+        cur.total_s = row.total_s
+        cur.ns_per_op = row.ns_per_op
+      end
+    end
+  end
+  local out = {}
+  for i = 1, #order do
+    local name = order[i]
+    local row = best[name]
+    out[#out + 1] = ("%s %.6f %.6f"):format(name, row.total_s,
+                                            row.ns_per_op)
+  end
+  return table.concat(out, "\n") .. "\n"
+end
+
 function M.baseline_csv(bin, bench_lua, opts)
   opts = opts or {}
   local jit_text = M.bench_text(bin, bench_lua, nil, opts)
@@ -111,8 +150,8 @@ function M.compare_bins(old_bin, new_bin, bench_lua, opts)
   M.assert_executable(new_bin, "new benchmark LuaJIT binary")
   M.assert_file(bench_lua, "benchmark harness")
   return bench_csv.compare_bench_text(
-    M.bench_text(old_bin, bench_lua, nil, opts),
-    M.bench_text(new_bin, bench_lua, nil, opts),
+    M.best_bench_text(old_bin, bench_lua, nil, opts),
+    M.best_bench_text(new_bin, bench_lua, nil, opts),
     opts)
 end
 

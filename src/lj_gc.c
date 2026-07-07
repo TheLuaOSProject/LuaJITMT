@@ -625,6 +625,26 @@ static int gc_tv_gcref_type_match(global_State *g, cTValue *tv)
   return ~itype(tv) == o->gch.gct;
 }
 
+static int gc_tab_tv_gcref_type_match(cTValue *tv)
+{
+  GCobj *o;
+  if (!tvisgcv(tv))
+    return 1;
+  o = gcval(tv);
+  if (o == NULL || !checkptrGC(o) ||
+      ((uintptr_t)o & (sizeof(void *) - 1u)) != 0)
+    return 0;
+  /*
+  ** Table slots are structured array/node snapshots, not conservative raw
+  ** stack words. Legacy full/step GC runs under the public GC exclusive gate
+  ** when peers could otherwise enter, so a collectable table slot names an
+  ** initialized GC header. Keep the arena-registry validation on raw stack and
+  ** root scans, but avoid doing that full registry walk for every table key and
+  ** value in large tables.
+  */
+  return ~itype(tv) == o->gch.gct;
+}
+
 static int gc_state_is_sweep(global_State *g)
 {
   return g->gc.state == GCSsweepstring || g->gc.state == GCSsweep;
@@ -1738,14 +1758,13 @@ static int gc_weak_list_claim(global_State *g, GCtab *t)
   }
 }
 
-static void gc_mark_tab_edge_obj(global_State *g, GCtab *t)
+static void gc_mark_tab_edge_obj_checked(global_State *g, GCtab *t)
 {
   GCobj *o;
   if (!t)
     return;
   o = obj2gco(t);
-  if (LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o) ||
-			  o->gch.gct != (uint32_t)~LJ_TTAB))
+  if (LJ_UNLIKELY(o->gch.gct != (uint32_t)~LJ_TTAB))
     return;
   if (iswhite(o)) {
     gc_mark(g, o);
@@ -1763,10 +1782,22 @@ static void gc_mark_tab_edge_obj(global_State *g, GCtab *t)
   }
 }
 
-static void gc_mark_rescan_edge_obj(global_State *g, GCobj *o, int force)
+static void gc_mark_tab_edge_obj(global_State *g, GCtab *t)
+{
+  GCobj *o;
+  if (!t)
+    return;
+  o = obj2gco(t);
+  if (LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o)))
+    return;
+  gc_mark_tab_edge_obj_checked(g, t);
+}
+
+static void gc_mark_rescan_edge_obj_checked(global_State *g, GCobj *o,
+					    int force)
 {
   uint32_t gct;
-  if (!o || LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o) || o->gch.gct == 0))
+  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
     return;
   gct = o->gch.gct;
   if (iswhite(o)) {
@@ -1800,6 +1831,13 @@ static void gc_mark_rescan_edge_obj(global_State *g, GCobj *o, int force)
   }
 }
 
+static void gc_mark_rescan_edge_obj(global_State *g, GCobj *o, int force)
+{
+  if (!o || LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o)))
+    return;
+  gc_mark_rescan_edge_obj_checked(g, o, force);
+}
+
 static void gc_mark_strong_edge_obj(global_State *g, GCobj *o)
 {
   if (!o || LJ_UNLIKELY(o->gch.gct == 0))
@@ -1811,11 +1849,22 @@ static void gc_mark_strong_edge_obj(global_State *g, GCobj *o)
   gc_mark_rescan_edge_obj(g, o, 0);
 }
 
+static void gc_mark_tab_slot_edge_obj(global_State *g, GCobj *o)
+{
+  if (!o || LJ_UNLIKELY(o->gch.gct == 0))
+    return;
+  if (o->gch.gct == ~LJ_TTAB) {
+    gc_mark_tab_edge_obj_checked(g, gco2tab(o));
+    return;
+  }
+  gc_mark_rescan_edge_obj_checked(g, o, 0);
+}
+
 static void gc_mark_tab_edge_tv(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, tv)) || !tvisgcv(tv))
+  if (LJ_UNLIKELY(!gc_tab_tv_gcref_type_match(tv)) || !tvisgcv(tv))
     return;
-  gc_mark_strong_edge_obj(g, gcV(tv));
+  gc_mark_tab_slot_edge_obj(g, gcV(tv));
 }
 
 static void gc_mark_strong_edge_tv(global_State *g, cTValue *tv)
@@ -4004,8 +4053,14 @@ void lj_gc_fullgc(lua_State *L)
       return;
     }
   }
+  /*
+  ** The preservation snapshot protects current roots while the previous cycle's
+  ** sweep is finished. No Lua code runs inside the sweep drain below, so taking
+  ** this snapshot once is enough; repeating it per sweep step rescans large
+  ** rooted tables many times before the new full mark even starts.
+  */
+  gc_preserve_forced_fullgc_sweep_roots(L, g);
   while (g->gc.state == GCSsweepstring || g->gc.state == GCSsweep) {
-    gc_preserve_forced_fullgc_sweep_roots(L, g);
     gc_arena_fullgc_drain_sweep(g);
     gc_onestep(L);  /* Finish sweep. */
   }

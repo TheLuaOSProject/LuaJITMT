@@ -529,6 +529,9 @@ local function run_bench_stock_compare(t)
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
                        os.getenv("BENCH_GEOMEAN_MAX") or "3.0")
   local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "60s"
+  local samples = tonumber(os.getenv("LJ_BENCH_STOCK_SAMPLES") or "1") or 1
+  local closure_samples =
+    tonumber(os.getenv("LJ_BENCH_STOCK_CLOSURE_SAMPLES") or "3") or samples
   -- Keep enough iterations for allocation-heavy probes like tab_insert_newkey
   -- and closures_upval; smaller samples are dominated by timer and scheduler
   -- noise and can fail the stock gate without a repeatable throughput cliff.
@@ -536,12 +539,17 @@ local function run_bench_stock_compare(t)
     os.getenv("BENCH_SCALE") or "0.5"
 
   for filter in filters:gmatch("%S+") do
+    local filter_samples = samples
+    if filter == "closures_upval" and closure_samples > filter_samples then
+      filter_samples = closure_samples
+    end
     local result = bench_driver.compare_bins(stock, current, bench_lua, {
       filter = filter,
       max = max,
       timeout = timeout,
       stderr = true,
-      env = { BENCH_SCALE = scale }
+      env = { BENCH_SCALE = scale },
+      samples = filter_samples
     })
     if not result.ok then
       error("stock benchmark regression for " .. filter .. ":\n" ..

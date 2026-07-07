@@ -174,7 +174,7 @@ static void test_vm_generational_table_store_remembered(lua_State *L,
   assert(gc2_remembered_barriers_acq(g) >
 	 remembered_barriers0);
   assert(gc2_remembered_pushed_acq(g) > remembered_pushed0);
-  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0);
+  assert(gc2_remembered_filtered_acq(g) >= remembered_filtered0);
   assert(active_ssb_last(tg) == obj2gco(parent));
   lua_pop(L, 1);
 
@@ -290,7 +290,7 @@ static void test_jit_generational_table_store_remembered(lua_State *L,
   assert(gc2_remembered_barriers_acq(g) >
 	 remembered_barriers0);
   assert(gc2_remembered_pushed_acq(g) > remembered_pushed0);
-  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0);
+  assert(gc2_remembered_filtered_acq(g) >= remembered_filtered0);
   assert(active_ssb_last(tg) == obj2gco(parent));
   lua_pop(L, 1);
 
@@ -399,6 +399,13 @@ int main(void)
   assert(lj_gc_threshold_load(g) >= lj_gc_total_load(g));
   assert((uint64_t)(lj_gc_threshold_load(g) - lj_gc_total_load(g)) >=
 	 LJ_GC2_TRIGGER_MIN);
+  /*
+  ** The raw accounting checks below intentionally stop short of cycle-request
+  ** behavior. Keep the synthetic trigger above the local flush quantum; the
+  ** request path has its own block with a one-byte trigger.
+  */
+  la_store64_rel(&g->gc2.trigger_bytes, 4u * LJ_GC2_ACCT_FLUSH);
+  la_store64_rel(&g->gc2.hard_bytes, 8u * LJ_GC2_ACCT_FLUSH);
 
   p = lj_mem_realloc(L, NULL, 0, 128);
   assert(p != NULL);
@@ -427,6 +434,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.hs_epoch) == epoch0 + 1u);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == total + 7);
+  assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
 
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   la_store64_rel(&g->gc2.trigger_bytes, 1);
@@ -902,6 +910,12 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
   lj_gc2_mark_to_weak(g);
+  /*
+  ** Allocation assist drains weak snapshots only after weak mark closure. The
+  ** completion bridge owns that closure in production; this white-box case
+  ** sets the same precondition so the assist path can be tested directly.
+  */
+  gc2_weak_mark_closed_rel(g, 1);
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);

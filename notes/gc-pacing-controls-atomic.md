@@ -20,10 +20,10 @@ Verification:
 - `tools/ci/lua_test.sh m5_stock_api_surface`
 - `tools/ci/lua_test.sh run_stock_tests -- --quiet`
 
-Known pre-existing failures found while widening focused coverage:
+Follow-up status:
 
-- `tools/ci/lua_test.sh m2_arena_gcsweep` fails at
-  `tests/t-arena-gcsweep.c:669` on clean `HEAD` (`602fb8aa`) and on this tree.
-- `tools/ci/lua_test.sh m6_jit_alloc_account` fails at
-  `tests/t-gc2-alloc-account.c:502` on clean `HEAD` (`602fb8aa`) and on this
-  tree.
+- `tools/ci/lua_test.sh m2_arena_gcsweep` now passes.
+- `tools/ci/lua_test.sh m6_jit_alloc_account` now passes. The fixture now keeps
+  raw allocation-accounting checks below the synthetic cycle trigger, treats
+  remembered-filtered counters as monotonic telemetry, and sets the weak mark
+  closure precondition before directly testing weak assist draining.
