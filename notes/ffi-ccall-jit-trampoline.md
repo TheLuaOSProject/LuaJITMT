@@ -195,6 +195,8 @@ pointer/pointer/signed-length argument shape,
 `lj_ccall_jit_void_ptr_ptr_i32()` / `lj_ccall_jit_void_ptr_ptr_u32()` /
 `lj_ccall_jit_void_ptr_ptr_u64()` for exact void-returning pointer/pointer
 signed-length, unsigned-count, and size argument shapes,
+`lj_ccall_jit_ptr_ptr_ptr_ptr()` for exact pointer-returning
+pointer/pointer/pointer argument shapes,
 `lj_ccall_jit_ptr_ptr_ptr_i32()` / `lj_ccall_jit_ptr_ptr_ptr_u32()` /
 `lj_ccall_jit_ptr_ptr_ptr_u64()` for exact pointer-returning pointer/pointer
 signed-length, unsigned-count, and size argument shapes,
@@ -398,6 +400,9 @@ The scope is deliberately narrow:
 - exact `pointer(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
+- exact `pointer(pointer, pointer, pointer)` calls, preserving callback,
+  context, and callback-environment pointers for CreateThreadpoolWait/Work/
+  Timer-style ABI classes;
 - exact `void(pointer, pointer, uint32_t)` and
   `pointer(pointer, pointer, uint32_t)` calls, with high-bit unsigned count
   arguments preserved;
@@ -492,6 +497,8 @@ traced pointer/int/size, pointer/int/unsigned-int, pointer/size/int,
 pointer/size/flags, and pointer/size/pointer loops,
 traced pointer/size/flags/output-pointer loops,
 traced CreateIoCompletionPort-shaped pointer/pointer/uint64/uint32
+pointer-returning loops,
+traced CreateThreadpoolWait/Work/Timer-shaped pointer/pointer/pointer
 pointer-returning loops,
 traced CreateEventEx/CreateMutexEx-shaped pointer/pointer/uint32/uint32
 pointer-returning loops,

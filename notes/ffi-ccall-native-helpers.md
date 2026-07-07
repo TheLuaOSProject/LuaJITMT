@@ -257,6 +257,9 @@ DuplicateHandle-shaped slice traces
 `int32_t(void *, void *, void *, void *, uint32_t, int32_t, uint32_t)` calls
 while preserving source/target process and handle pointers, desired access,
 inherit flag, options, and signed 32-bit result. Exact
+CreateThreadpoolWait/Work/Timer-shaped slice traces
+`void *(void *, void *, void *)` calls while preserving callback, context,
+callback-environment pointers, and pointer result. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because
