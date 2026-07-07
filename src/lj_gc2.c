@@ -9878,24 +9878,31 @@ static uint32_t gc2_worker_progress_add(uint32_t a, uint32_t b)
   return b > ~(uint32_t)0 - a ? ~(uint32_t)0 : a + b;
 }
 
+static int gc2_worker_finalizer_drain_phase(global_State *g)
+{
+  uint32_t phase = gc2_phase_acq(g);
+  return phase == LJ_GC2_IDLE || phase == LJ_GC2_SWEEP;
+}
+
 static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
 {
   uint32_t owner;
   uint64_t before, after, delta;
-  if (!g || limit == 0 || gc2_phase_acq(g) != LJ_GC2_IDLE ||
+  if (!g || limit == 0 || !gc2_worker_finalizer_drain_phase(g) ||
       gc2_finalizer_mpsc_acq(g) == NULL)
     return 0;
   /*
   ** The idle MPSC-to-ring splice is guarded by finalizer_active/finalizer_owner.
   ** worker_active remains the single-owner token for grey deque, weak, sweep,
-  ** and phase-close state; idle finalizer draining does not touch those paths.
+  ** and phase-close state; finalizer draining does not touch those paths. In
+  ** SWEEP the queue already blocks arena reclamation until callbacks run.
   */
   owner = gc2_finalizer_current_owner(g);
   if (owner == 0 || owner == ~(uint32_t)0)
     return 0;  /* Do not share the TLS-less pseudo-owner across workers. */
   if (!lj_gc2_finalizer_try_enter(g))
     return 0;
-  if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
+  if (!gc2_worker_finalizer_drain_phase(g) ||
       gc2_finalizer_mpsc_acq(g) == NULL) {
     lj_gc2_finalizer_leave(g);
     return 0;

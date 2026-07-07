@@ -88,3 +88,27 @@ Coverage:
 - The same fixture switches to one worker, publishes while the main TG owns
   finalizer dispatch, waits for the original wake to be consumed, then asserts
   owner leave wakes the worker and the queued objects drain in FIFO order.
+
+Worker-side sweep drain slice
+=============================
+
+Context:
+- Worker-side finalizer draining was initially limited to `LJ_GC2_IDLE`.
+- In `LJ_GC2_SWEEP`, finalizer queue work already blocks arena reclamation until
+  a collector caller executes callbacks on a claimed Lua stack.
+
+Change:
+- `gc2_worker_finalizer_drain()` now allows the same MPSC-to-ring splice in
+  `LJ_GC2_SWEEP` as well as `LJ_GC2_IDLE`.
+- The worker still does not dequeue objects or execute callbacks.
+
+Reason:
+- This lets parked workers perform the scheduler-owned queue handoff while sweep
+  is blocked on finalizer work, without changing callback stack ownership or Lua
+  finalizer ordering.
+
+Coverage:
+- `tests/t-gc2-worker-scheduler.c` queues two synthetic finalizer objects during
+  a synthetic `LJ_GC2_SWEEP`, waits for worker-side MPSC draining, verifies the
+  phase remains in sweep, then dequeues the objects through the normal finalizer
+  owner path after restoring idle.
