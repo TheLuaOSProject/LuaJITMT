@@ -155,7 +155,9 @@ VirtualAlloc-style ABI classes while preserving both high-bit unsigned flag
 arguments and pointer results. The exact mmap-shaped slice traces
 `void *(void *, uint64_t, int32_t, int32_t, int32_t, int64_t)` calls while
 preserving the size, protection flags, mapping flags, descriptor, signed
-offset, and pointer result. Exact
+offset, and pointer result. The exact mremap-shaped slice traces
+`void *(void *, uint64_t, uint64_t, int32_t)` calls while preserving the old
+size, new size, signed flags, and pointer result. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because
