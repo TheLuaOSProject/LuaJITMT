@@ -2185,10 +2185,13 @@ static void trace_start(jit_State *J)
 /* Stop tracing. */
 static void trace_stop(jit_State *J)
 {
+  global_State *g = J2G(J);
   BCIns *pc = mref(J->cur.startpc, BCIns);
   BCOp op = bc_op(J->cur.startins);
   GCproto *pt = trace_startpt_acq(&J->cur);
   TraceNo traceno = J->cur.traceno;
+  TraceNo parentno = 0, rootno = 0;
+  ExitNo exitno = J->exitno;
   GCtrace *T = J->curfinal;
   BCIns *patchpc = NULL;
   BCIns patchins = 0;
@@ -2220,19 +2223,25 @@ static void trace_stop(jit_State *J)
     patchins = BCINS_AD(BC_JLOOP, J->cur.snap[0].nslots, traceno);
     goto addroot;
   case BC_JMP:
-    lj_assertJ(J->parent != 0 && J->cur.root != 0, "not a side trace");
-    parent = traceref(J, J->parent);
-    root = traceref(J, J->cur.root);
+    parentno = J->parent;
+    rootno = J->cur.root;
+    lj_assertJ(parentno != 0 && rootno != 0, "not a side trace");
+    lj_gc2_smr_read_enter(g);
+    parent = traceref_safe(J, parentno);
+    root = traceref_safe(J, rootno);
     lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
     /* Avoid compiling a side trace twice (stack resizing uses parent exit). */
-    snap = &trace_snap_acq(parent)[J->exitno];
     J->cur.nextside = (TraceNo1)trace_nextside_acq(root);
+    lj_gc2_smr_read_leave(g);
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
-    parent = traceref(J, J->exitno);
+    parentno = (TraceNo)J->exitno;
+    lj_gc2_smr_read_enter(g);
+    parent = traceref_safe(J, parentno);
     lj_assertJ(parent != NULL, "missing stitched trace");
+    lj_gc2_smr_read_leave(g);
     break;
   default:
     lj_assertJ(0, "bad stop bytecode %d", op);
@@ -2265,7 +2274,12 @@ static void trace_stop(jit_State *J)
       bc_publish(patchpc, patchins);
     break;
   case BC_JMP:
+    lj_gc2_smr_read_enter(g);
+    parent = traceref_safe(J, parentno);
+    root = traceref_safe(J, rootno);
+    lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
     lj_assertJ(trace_exittab_acq(parent) != NULL, "missing parent exit table");
+    snap = &trace_snap_acq(parent)[exitno];
     topslot = trace_topslot_acq(T);
     if (topslot > snap_topslot_acq(snap)) snap_topslot_rel(snap, topslot);
     trace_nchild_inc_acqrel(root);
@@ -2275,12 +2289,17 @@ static void trace_stop(jit_State *J)
     ** The parent exit target is the runnable side-trace gate. Publish it only
     ** after the parent/root metadata above can be observed by other threads.
     */
-    trace_exittarget_rel(parent, J->exitno, trace_mcode_acq(T));
+    trace_exittarget_rel(parent, exitno, trace_mcode_acq(T));
+    lj_gc2_smr_read_leave(g);
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
+    lj_gc2_smr_read_enter(g);
+    parent = traceref_safe(J, parentno);
+    lj_assertJ(parent != NULL, "missing stitched trace");
     trace_link_rel(parent, traceno);
+    lj_gc2_smr_read_leave(g);
     break;
   default:
     break;
