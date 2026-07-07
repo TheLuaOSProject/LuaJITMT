@@ -2311,12 +2311,17 @@ static void asm_tail_link(ASMState *as)
     const BCIns *pc = snap_pc(&as->T->snapmap[snap->mapofs + snap->nent]);
     int32_t mres;
     if (bc_op(*pc) == BC_JLOOP) {  /* NYI: find a better way to do this. */
-      GCtrace *target = traceref(as->J, bc_d(*pc));
-      if (trace_runnable_acq(target, bc_d(*pc))) {
+      TraceNo targetno = bc_d(*pc);
+      global_State *g = J2G(as->J);
+      GCtrace *target;
+      lj_gc2_smr_read_enter(g);
+      target = traceref_safe(as->J, targetno);
+      if (trace_runnable_acq(target, targetno)) {
 	BCIns *retpc = &target->startins;
 	if (bc_isret(bc_op(*retpc)))
 	  pc = retpc;
       }
+      lj_gc2_smr_read_leave(g);
     }
 #if LJ_GC64
     emit_loadu64(as, RID_LPC, u64ptr(pc));

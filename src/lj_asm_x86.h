@@ -4164,20 +4164,24 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
     if (lnk == as->T->traceno)
       target = as->T->mcode;
     else {
-      GCtrace *targetT = traceref(as->J, lnk);
+      global_State *g = J2G(as->J);
+      GCtrace *targetT;
+      lj_gc2_smr_read_enter(g);
+      targetT = traceref_safe(as->J, lnk);
       if (LJ_LIKELY(trace_runnable_acq(targetT, lnk) &&
 		    (target = trace_mcode_acq(targetT)) != NULL)) {
-		/* Link to a live published trace. */
-	      } else {
-		/* A trace assembled as linked-to-trace does not set up the fixed
-		** interpreter-tail registers. Concurrent scoped flush can make
-		** the target disappear before this final patch; retry recording
-		** instead of emitting a mismatched jump to lj_vm_exit_interp.
-		*/
-		lj_trace_err(as->J, LJ_TRERR_RETRY);
-		target = NULL;  /* Unreachable, but keeps analyzers precise. */
-	      }
-	    }
+	lj_gc2_smr_read_leave(g);
+      } else {
+	lj_gc2_smr_read_leave(g);
+	/* A trace assembled as linked-to-trace does not set up the fixed
+	** interpreter-tail registers. Concurrent scoped flush can make
+	** the target disappear before this final patch; retry recording
+	** instead of emitting a mismatched jump to lj_vm_exit_interp.
+	*/
+	lj_trace_err(as->J, LJ_TRERR_RETRY);
+	target = NULL;  /* Unreachable, but keeps analyzers precise. */
+      }
+    }
   } else {
     target = (MCode *)(void *)lj_vm_exit_interp;
   }
