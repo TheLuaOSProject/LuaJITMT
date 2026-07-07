@@ -3482,8 +3482,14 @@ static int gc2_tv_gcref_type_match(global_State *g, cTValue *tv)
   ** header before publishing the TValue, so the tag/header match remains the
   ** final semantic edge check.
   */
-  if (!lj_gc2_obj_valid(g, o))
-    return 0;
+  if (!lj_gc2_obj_valid(g, o)) {
+    /*
+    ** Strings are plain allocations, not necessarily aligned traversable
+    ** object cells. Validate the containing allocation before the header read.
+    */
+    if (itype(tv) != LJ_TSTR || !lj_gc2_mem_registered_known(g, o))
+      return 0;
+  }
   return ~itype(tv) == o->gch.gct;
 }
 
@@ -3498,8 +3504,14 @@ static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
   ** the owner+bitmap fast path so root/table traversal stays proportional to
   ** the object graph, not to the number of arenas owned by the VM.
   */
-  if (!lj_gc2_obj_valid_queued(g, o))
-    return 0;
+  if (!lj_gc2_obj_valid_queued(g, o)) {
+    /*
+    ** Known edges can still name strings, whose storage is proven by the
+    ** containing allocation rather than object-cell alignment.
+    */
+    if (itype(tv) != LJ_TSTR || !lj_gc2_mem_registered_known(g, o))
+      return 0;
+  }
   return ~itype(tv) == o->gch.gct;
 }
 
@@ -3542,6 +3554,12 @@ static int gc2_tv_gcref_type_match_stack(global_State *g, cTValue *tv,
   if (!tvisgcv(tv))
     return 1;
   o = gcval(tv);
+  if (itype(tv) == LJ_TSTR) {
+    /* Stack string roots are plain allocations; prove memory before header. */
+    if (!lj_gc2_mem_registered_known(g, o))
+      return 0;
+    return o->gch.gct == ~LJ_TSTR;
+  }
   if (!gc2_obj_valid_stack_cached(g, o, cache))
     return 0;
   return ~itype(tv) == o->gch.gct;
@@ -6214,10 +6232,24 @@ int lj_gc2_weak_complete(global_State *g, lua_State *L, GCobj *bridge_head,
   return 0;  /* 05 section 5.8 conditional bridge weak fallback. */
 }
 
+#if LJ_HASFFI
+static LJ_AINLINE int gc2_finreg_cdata_obj_valid(global_State *g, GCobj *o)
+{
+  return g && o && lj_gc2_obj_valid_queued(g, o) &&
+	 o->gch.gct == ~LJ_TCDATA;
+}
+#endif
+
+static LJ_AINLINE int gc2_finreg_udata_obj_valid(global_State *g, GCobj *o)
+{
+  return g && o && lj_gc2_obj_valid_queued(g, o) &&
+	 o->gch.gct == ~LJ_TUDATA;
+}
+
 void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)
 {
 #if LJ_HASFFI
-  if (!g || !o || o->gch.gct != ~LJ_TCDATA)
+  if (!gc2_finreg_cdata_obj_valid(g, o))
     return;
   if (enabled)
     gc2_finreg_cdata_sets_add(g, 1);
@@ -6265,7 +6297,7 @@ static void gc2_finreg_queue_mark(global_State *g, GCobj *o)
 static void gc2_finreg_cdata_queue_mark(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
-  if (!g || !o || o->gch.gct != ~LJ_TCDATA)
+  if (!gc2_finreg_cdata_obj_valid(g, o))
     return;
   gc2_finreg_queue_mark(g, o);
   gc2_finreg_cdata_queued_add(g, 1);
@@ -6277,7 +6309,7 @@ static void gc2_finreg_cdata_queue_mark(global_State *g, GCobj *o)
 static void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
-  if (!g || !o || o->gch.gct != ~LJ_TCDATA)
+  if (!gc2_finreg_cdata_obj_valid(g, o))
     return;
   markfinalized(o);
   gc2_finreg_cdata_queue_mark(g, o);
@@ -6634,7 +6666,7 @@ static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   uint32_t test_fail;
 #endif
-  if (!L || !g || !o || !fin || o->gch.gct != ~LJ_TCDATA)
+  if (!L || !fin || !gc2_finreg_cdata_obj_valid(g, o))
     return 0;
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_fail = gc2_finreg_cdata_preclaim_test_fail_acq(g);
@@ -6674,7 +6706,7 @@ static int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 #if LJ_HASFFI
   MSize head, count, i;
   GCobj *claimed;
-  if (!L || !g || !o || !fin || o->gch.gct != ~LJ_TCDATA ||
+  if (!L || !fin || !gc2_finreg_cdata_obj_valid(g, o) ||
       !gc2_finreg_cdata_preclaim_ready(g))
     return 0;
   head = gc2_finreg_cdata_preclaim_head_acq(g);
@@ -6729,14 +6761,16 @@ int lj_gc2_test_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 
 static void gc2_finreg_dispatch_requeue(global_State *g, GCobj *o)
 {
-  if (!g || !o)
+  int gct;
+  if (!lj_gc2_obj_valid_queued(g, o))
     return;
+  gct = o->gch.gct;
 #if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
+  if (gct == ~LJ_TCDATA) {
     lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */
   } else
 #endif
-  if (o->gch.gct == ~LJ_TUDATA) {
+  if (gct == ~LJ_TUDATA) {
     lj_gc_linkobj_after(g, obj2gco(mainthread_acq(g)), o);
   } else {
     return;
@@ -6802,7 +6836,7 @@ static int gc2_finreg_cdata_dispatch_ffi(lua_State *L, global_State *g,
 {
   TValue key;
   TValue fin;
-  if (!L || !g || !o || o->gch.gct != ~LJ_TCDATA)
+  if (!L || !gc2_finreg_cdata_obj_valid(g, o))
     return 0;
   if (lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin))
     return gc2_finreg_cdata_dispatch_preclaimed(L, g, o, &fin);
@@ -6815,7 +6849,7 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
 					GCobj *o)
 {
 #if LJ_HASFFI
-  if (!L || !g || !o || o->gch.gct != ~LJ_TCDATA)
+  if (!L || !gc2_finreg_cdata_obj_valid(g, o))
     return 0;
   gc2_finreg_dispatch_requeue(g, o);
   return gc2_finreg_cdata_dispatch_ffi(L, g, o);
@@ -6828,7 +6862,7 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
 int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
 {
   uint8_t old;
-  if (!g || !o || o->gch.gct != ~LJ_TUDATA)
+  if (!gc2_finreg_udata_obj_valid(g, o))
     return 0;
   old = la_load8_acq(lj_obj_gcflags_ref(o));
   for (;;) {
@@ -6851,7 +6885,7 @@ int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
 void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
 {
   GC2FinRegUDataNode *node, *head;
-  if (!L || !g || !o || o->gch.gct != ~LJ_TUDATA)
+  if (!L || !gc2_finreg_udata_obj_valid(g, o))
     return;
   for (node = gc2_finreg_udata_head_acq(g);
        node != NULL;
@@ -6925,7 +6959,7 @@ void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
 {
   GC2FinRegUDataNode *prev, *node;
   int cleared = 0;
-  if (!g || !o || o->gch.gct != ~LJ_TUDATA)
+  if (!gc2_finreg_udata_obj_valid(g, o))
     return;
   prev = NULL;
   node = gc2_finreg_udata_head_acq(g);
@@ -7004,7 +7038,7 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
       node = gc2_finreg_udata_head_acq(g);
       continue;
     }
-    if (o->gch.gct != ~LJ_TUDATA) {
+    if (!gc2_finreg_udata_obj_valid(g, o)) {
       gc2_finreg_udata_obj_clear(node);
       if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
 	node = next;
@@ -7070,7 +7104,7 @@ static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 {
   cTValue *mo;
   TValue motv;
-  if (!L || !g || !o || o->gch.gct != ~LJ_TUDATA)
+  if (!L || !gc2_finreg_udata_obj_valid(g, o))
     return 0;
   gc2_finreg_dispatch_requeue(g, o);
   if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
@@ -7083,7 +7117,7 @@ static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 
 static void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
 {
-  if (!g || !o || o->gch.gct != ~LJ_TUDATA)
+  if (!gc2_finreg_udata_obj_valid(g, o))
     return;
   gc2_finreg_queue_mark(g, o);
   gc2_finreg_udata_queued_add(g, 1);
@@ -7091,7 +7125,7 @@ static void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
 
 static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o)
 {
-  if (!g || !o || o->gch.gct != ~LJ_TUDATA)
+  if (!gc2_finreg_udata_obj_valid(g, o))
     return;
   markfinalized(o);
   lj_gc2_finreg_udata_queue(g, o);

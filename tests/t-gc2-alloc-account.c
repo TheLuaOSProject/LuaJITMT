@@ -72,6 +72,47 @@ static void test_obj_valid_rejects_nonobject(global_State *g)
   assert(lj_gc2_obj_valid_queued(g, bad) == 0);
 }
 
+static void test_finreg_entry_rejects_nonobject(lua_State *L,
+						global_State *g)
+{
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+  TValue fin, out;
+  uint64_t csets0 = gc2_finreg_cdata_sets_acq(g);
+  uint64_t cclears0 = gc2_finreg_cdata_clears_acq(g);
+  uint64_t cqueued0 = gc2_finreg_cdata_queued_acq(g);
+  uint64_t cclaimed0 = gc2_finreg_cdata_pweak_claimed_acq(g);
+  uint64_t cdispatched0 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
+  uint64_t usets0 = gc2_finreg_udata_sets_acq(g);
+  uint64_t uclears0 = gc2_finreg_udata_clears_acq(g);
+  uint64_t uqueued0 = gc2_finreg_udata_queued_acq(g);
+  uint64_t uregistered0 = gc2_finreg_udata_registered_acq(g);
+  uint64_t uforgets0 = gc2_finreg_udata_forgets_acq(g);
+  setnilV(&fin);
+  setnilV(&out);
+
+  lj_gc2_finreg_cdata_set(g, bad, 1);
+  lj_gc2_finreg_cdata_set(g, bad, 0);
+  lj_gc2_test_finreg_cdata_finalizer_enqueue(g, bad);
+  assert(lj_gc2_test_finreg_cdata_preclaim(L, g, bad, &fin) == 0);
+  assert(lj_gc2_test_finreg_cdata_preclaim_take(L, g, bad, &out) == 0);
+  assert(gc2_finreg_cdata_sets_acq(g) == csets0);
+  assert(gc2_finreg_cdata_clears_acq(g) == cclears0);
+  assert(gc2_finreg_cdata_queued_acq(g) == cqueued0);
+  assert(gc2_finreg_cdata_pweak_claimed_acq(g) == cclaimed0);
+  assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) == cdispatched0);
+
+  assert(lj_gc2_finreg_udata_set(g, bad, 1) == 0);
+  assert(lj_gc2_finreg_udata_set(g, bad, 0) == 0);
+  lj_gc2_finreg_udata_register(L, g, bad);
+  lj_gc2_finreg_udata_forget(g, bad);
+  lj_gc2_test_finreg_udata_queue(g, bad);
+  assert(gc2_finreg_udata_sets_acq(g) == usets0);
+  assert(gc2_finreg_udata_clears_acq(g) == uclears0);
+  assert(gc2_finreg_udata_queued_acq(g) == uqueued0);
+  assert(gc2_finreg_udata_registered_acq(g) == uregistered0);
+  assert(gc2_finreg_udata_forgets_acq(g) == uforgets0);
+}
+
 static void test_obj_valid_accepts_variable_cdata(lua_State *L,
 						  global_State *g)
 {
@@ -378,6 +419,7 @@ int main(void)
   assert(g != NULL);
   assert(tg != NULL);
   test_obj_valid_rejects_nonobject(g);
+  test_finreg_entry_rejects_nonobject(L, g);
   assert(gc2_gcpause_pct_acq(g) == lj_gc_pause_load(g));
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
   assert(gc2_cycle_requests_acq(g) == 0);

@@ -621,8 +621,15 @@ static int gc_tv_gcref_type_match(global_State *g, cTValue *tv)
   ** header before publishing the TValue, so the tag/header match remains the
   ** final semantic edge check.
   */
-  if (!lj_gc2_obj_valid(g, o))
-    return 0;
+  if (!lj_gc2_obj_valid(g, o)) {
+    /*
+    ** Strings are allocated by the plain string path and may not be aligned as
+    ** traversable GC-object cells. Prove the containing allocation before
+    ** reading the string header.
+    */
+    if (itype(tv) != LJ_TSTR || !lj_gc2_mem_registered_known(g, o))
+      return 0;
+  }
   return ~itype(tv) == o->gch.gct;
 }
 
@@ -4198,6 +4205,8 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
     GCobj *o = gcV(&snap);
+    if (!gc_tv_gcref_type_match(g, &snap))
+      return;
     if (isdead(g, o)) {
       makewhite(g, o);
       (void)lj_gc2_markobj_nolegacy(g, o);
