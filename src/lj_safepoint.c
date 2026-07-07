@@ -150,8 +150,17 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     lua_State *L = lj_tg_load_cur_L(tg);
     lj_gc2_scan_cycle_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
   }
-  if (actions & LJ_GC2_HS_FLUSH_SSB)
-    lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
+  if (actions & LJ_GC2_HS_FLUSH_SSB) {
+    /*
+    ** Remote-native ACK may observe no-Lua-stack GC worker TGs while they are
+    ** actively draining GC2 work under their own TG. Let those workers publish
+    ** their own SSB at GC-owner boundaries; remotely swapping their active SSB
+    ** can race traversal-local rescan publication. Native mutators still carry
+    ** cur_L and are flushed here.
+    */
+    if (lj_tg_load_cur_L(tg) != NULL || tg == lj_thr_get_tg_fallback(g))
+      lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
+  }
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */
   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
       lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
