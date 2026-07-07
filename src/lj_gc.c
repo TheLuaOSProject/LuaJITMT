@@ -529,7 +529,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       gc2_paranoia_checkmem(g, meta, "ctype metatype side map");
       gc2_paranoia_checkmem(g, cbblack, "ctype callback blacklist");
       for (ctret = ctype_retiredtab_acq(cts);
-	   ctret != NULL;
+	   ctret != NULL && lj_gc2_mem_registered(g, ctret);
 	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	gc2_paranoia_checkmem(g, ctret, "retired ctype table");
       }
@@ -1470,7 +1470,7 @@ static void gc_mark_gcroot(global_State *g)
       lj_gc_arena_markmem(g, cts);
       lj_gc_arena_markmem(g, ctype_tabh_acq(cts));
       for (ctret = ctype_retiredtab_acq(cts);
-	   ctret != NULL;
+	   ctret != NULL && lj_gc2_mem_registered(g, ctret);
 	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	lj_gc_arena_markmem(g, ctret);
       }

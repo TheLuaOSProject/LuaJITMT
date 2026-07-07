@@ -2337,7 +2337,7 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
   if (!cts || completed_epoch == 0)
     return 0;
   ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
-  while (ret) {
+  while (ret && lj_gc2_mem_registered(g, ret)) {
     CTypeTab *next = ctype_tab_retired_next_acq(ret);
     ctype_tab_retired_next_rel(ret, NULL);
     if (ctype_tab_retire_epoch_acq(ret) < completed_epoch) {
@@ -2354,7 +2354,7 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 static void ctype_freeretired(global_State *g, CTState *cts)
 {
   CTypeTab *ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
-  while (ret) {
+  while (ret && lj_gc2_mem_registered(g, ret)) {
     CTypeTab *next = ctype_tab_retired_next_acq(ret);
     ctype_tab_free(g, ret);
     ret = next;

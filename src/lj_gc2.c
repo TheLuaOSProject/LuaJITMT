@@ -4808,7 +4808,7 @@ static void gc2_scan_global_roots(global_State *g)
       lj_gc2_markmem(g, cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
       for (ret = ctype_retiredtab_acq(cts);
-	   ret != NULL;
+	   ret != NULL && lj_gc2_mem_registered(g, ret);
 	   ret = ctype_tab_retired_next_acq(ret)) {
 	lj_gc2_markmem(g, ret);
       }
@@ -9808,7 +9808,7 @@ void lj_gc2_trace_sweep_roots(global_State *g)
       lj_gc2_markmem(g, cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
       for (ret = ctype_retiredtab_acq(cts);
-	   ret != NULL;
+	   ret != NULL && lj_gc2_mem_registered(g, ret);
 	   ret = ctype_tab_retired_next_acq(ret))
 	lj_gc2_markmem(g, ret);
       lj_gc2_markmem(g, meta);
