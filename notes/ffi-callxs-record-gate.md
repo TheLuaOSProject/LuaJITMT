@@ -134,7 +134,9 @@ traces exact `int32_t(void *, uint64_t, int32_t)`,
 `uint32_t(void *, uint64_t, int32_t)`, `int64_t(void *, uint64_t, int32_t)`,
 `uint64_t(void *, uint64_t, int32_t)`, `void(void *, uint64_t, int32_t)`, and
 `void *(void *, uint64_t, int32_t)` calls for mprotect/madvise-style ABI
-classes. The pointer/size/pointer family traces exact
+classes. The exact pointer/size/unsigned-int slice traces
+`int32_t(void *, uint64_t, uint32_t)` calls for VirtualFree-style ABI classes.
+The pointer/size/pointer family traces exact
 `int32_t(void *, uint64_t, void *)`, `uint32_t(void *, uint64_t, void *)`,
 `int64_t(void *, uint64_t, void *)`, `uint64_t(void *, uint64_t, void *)`,
 `void(void *, uint64_t, void *)`, and `void *(void *, uint64_t, void *)` calls

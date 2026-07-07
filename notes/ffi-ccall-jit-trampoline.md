@@ -107,6 +107,8 @@ pointer/signed-int/unsigned-int argument shapes,
 `lj_ccall_jit_i64_ptr_u64_i32()` / `lj_ccall_jit_u64_ptr_u64_i32()` /
 `lj_ccall_jit_void_ptr_u64_i32()` / `lj_ccall_jit_ptr_ptr_u64_i32()` for exact
 pointer/size/signed-int argument shapes,
+`lj_ccall_jit_i32_ptr_u64_u32()` for the exact signed-int-result
+pointer/size/unsigned-int argument shape,
 `lj_ccall_jit_i32_ptr_u64_ptr()` / `lj_ccall_jit_u32_ptr_u64_ptr()` /
 `lj_ccall_jit_i64_ptr_u64_ptr()` / `lj_ccall_jit_u64_ptr_u64_ptr()` /
 `lj_ccall_jit_void_ptr_u64_ptr()` / `lj_ccall_jit_ptr_ptr_u64_ptr()` for exact
@@ -195,6 +197,9 @@ The scope is deliberately narrow:
 - exact `void(pointer, uint64_t, int32_t)` and
   `pointer(pointer, uint64_t, int32_t)` calls, preserving side effects and
   pointer results for pointer/size/int ABI classes;
+- exact `int32_t(pointer, uint64_t, uint32_t)` calls, preserving the size
+  argument and high-bit unsigned flags for VirtualFree-style
+  pointer/size/flags ABI classes;
 - exact `int32_t(pointer, uint64_t, pointer)` and
   `uint32_t(pointer, uint64_t, pointer)` calls, preserving the middle size
   argument for mincore-style pointer/size/output-buffer ABI classes;
@@ -320,8 +325,9 @@ single-argument int64/uint64 calls returning void, int32, uint32, narrow
 integers, or pointers, traced pointer/64-bit span loops for the same return
 families, traced int/signed-offset and int/unsigned-size loops for the same
 return families, traced unsigned-count pointer/pointer loops,
-traced pointer/int/size, pointer/int/unsigned-int, pointer/size/int, and
-pointer/size/pointer loops, traced pointer/size/flags/output-pointer loops,
+traced pointer/int/size, pointer/int/unsigned-int, pointer/size/int,
+pointer/size/flags, and pointer/size/pointer loops,
+traced pointer/size/flags/output-pointer loops,
 traced pointer/size/allocation-flags/protection-flags pointer-returning loops,
 traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
