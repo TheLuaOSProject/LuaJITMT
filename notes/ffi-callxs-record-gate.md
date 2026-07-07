@@ -147,7 +147,9 @@ slice traces `int32_t(void *, uint64_t, uint32_t, void *)` calls for
 VirtualProtect-style ABI classes. The exact
 pointer/size/unsigned-int/unsigned-int slice traces
 `void *(void *, uint64_t, uint32_t, uint32_t)` calls for VirtualAlloc-style ABI
-classes. Other multi-argument pointer/size shapes remain interpreted.
+classes. The exact mmap-shaped slice traces
+`void *(void *, uint64_t, int32_t, int32_t, int32_t, int64_t)` calls. Other
+multi-argument pointer/size shapes remain interpreted.
 The shared GPR helper matrix separately covers exact two-argument
 `pointer,int64_t` and `pointer,uint64_t` span shapes; broader pointer/size
 families remain interpreted.
