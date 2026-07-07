@@ -158,6 +158,16 @@ typedef struct LJThread {
   uint32_t main_thread;
 } LJThread;
 
+static LJ_AINLINE GCudata *lj_thread_udata_acq(const LJThread *th)
+{
+  return (GCudata *)la_loadptr_acq((void *const *)&th->ud);
+}
+
+static LJ_AINLINE void lj_thread_udata_rel(LJThread *th, GCudata *ud)
+{
+  la_storeptr_rel((void **)&th->ud, ud);
+}
+
 static LJ_AINLINE LJThreadLive *
 lj_thread_live_node_acq(const LJThread *th)
 {

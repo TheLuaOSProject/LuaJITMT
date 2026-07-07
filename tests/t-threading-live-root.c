@@ -19,7 +19,7 @@ static GCudata *new_thread_ud(lua_State *L)
   GCudata *ud = lj_udata_new(L, sizeof(LJThread), NULL);
   LJThread *th = (LJThread *)uddata(ud);
   memset(th, 0, sizeof(*th));
-  th->ud = ud;
+  lj_thread_udata_rel(th, ud);
   lj_udata_udtype_rel(ud, UDTYPE_THREAD);
   return ud;
 }

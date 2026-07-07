@@ -704,6 +704,16 @@ static LJ_AINLINE void lj_tg_store_thread_L(TGState *tg, lua_State *L)
   la_storeptr_rel((void **)&tg->thread_L, L);  /* 05 section 5.7.4 TG root. */
 }
 
+static LJ_AINLINE GCudata *lj_tg_load_thread_ud(TGState *tg)
+{
+  return (GCudata *)la_loadptr_acq((void *const *)&tg->thread_ud);
+}
+
+static LJ_AINLINE void lj_tg_store_thread_ud(TGState *tg, GCudata *ud)
+{
+  la_storeptr_rel((void **)&tg->thread_ud, ud);
+}
+
 static LJ_AINLINE TValue *lj_tg_load_jit_base(TGState *tg)
 {
   return (TValue *)la_loadptr_acq((void *const *)&tg->jit_base);

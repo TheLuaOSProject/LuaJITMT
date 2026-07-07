@@ -998,7 +998,7 @@ static int gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
     {
       LJThread *th = (LJThread *)uddata(ud);
       if (len != sizeof(LJThread) ||
-	  (GCudata *)la_loadptr_acq((void *const *)&th->ud) != ud)
+	  lj_thread_udata_acq(th) != ud)
 	return 0;
     }
     break;
