@@ -1203,6 +1203,7 @@ LJ_FUNC void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC GCtab *lj_ctype_fin_head(CTState *cts);
+LJ_FUNC GCtab *lj_ctype_fin_gen_tab_valid(CTState *cts, FinRegGen *gen);
 LJ_FUNC FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L);
 LJ_FUNC void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord);
 LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,

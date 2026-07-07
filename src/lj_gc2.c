@@ -6667,9 +6667,9 @@ void lj_gc2_finreg_cdata_disable(global_State *g)
   if (!g || cts == NULL)
     return;
   for (gen = fin_gen_head_acq(cts);
-       gen != NULL;
+       gen != NULL && lj_gc2_mem_registered(g, gen);
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = fin_gen_tab_acq(gen);
+    GCtab *t = lj_ctype_fin_gen_tab_valid(cts, gen);
     if (t)
       fin_gen_tab_disable_rel(t);  /* Disable FINREG generation. */
   }

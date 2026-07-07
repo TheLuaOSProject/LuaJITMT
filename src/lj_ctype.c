@@ -432,6 +432,28 @@ static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
   return gen;
 }
 
+GCtab *lj_ctype_fin_gen_tab_valid(CTState *cts, FinRegGen *gen)
+{
+  GCtab *t;
+  GCobj *o;
+  if (!cts || !gen || !lj_gc2_mem_registered(cts->g, gen))
+    return NULL;
+  t = fin_gen_tab_acq(gen);
+  if (!t)
+    return NULL;
+  o = obj2gco(t);
+  if (!lj_gc2_obj_valid_queued(cts->g, o) ||
+      (uint32_t)la_load8_acq(&o->gch.gct) != (uint32_t)~LJ_TTAB)
+    return NULL;
+  return t;
+}
+
+static GCtab *ctype_fin_gen_tab_enabled(CTState *cts, FinRegGen *gen)
+{
+  GCtab *t = lj_ctype_fin_gen_tab_valid(cts, gen);
+  return t && fin_gen_tab_enabled_acq(t) ? t : NULL;
+}
+
 FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
 {
   FinRegOrderNode *ord = lj_mem_newt(L, sizeof(FinRegOrderNode),
@@ -519,7 +541,7 @@ size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target)
 GCtab *lj_ctype_fin_head(CTState *cts)
 {
   FinRegGen *gen = fin_gen_head_acq(cts);
-  return gen ? fin_gen_tab_acq(gen) : NULL;
+  return lj_ctype_fin_gen_tab_valid(cts, gen);
 }
 
 cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
@@ -527,10 +549,10 @@ cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 {
   FinRegGen *gen;
   for (gen = fin_gen_head_acq(cts);
-       gen != NULL;
+       gen != NULL && lj_gc2_mem_registered(cts->g, gen);
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = fin_gen_tab_acq(gen);
-    if (!t || !fin_gen_tab_enabled_acq(t))
+    GCtab *t = ctype_fin_gen_tab_enabled(cts, gen);
+    if (!t)
       continue;
     cTValue *tv = lj_tab_get(L, t, key);
     if (tv != niltv(L)) {
@@ -552,10 +574,12 @@ static int ctype_fin_has_claim(CTState *cts, cTValue *claim)
 {
   FinRegGen *gen;
   for (gen = fin_gen_head_acq(cts);
-       gen != NULL;
+       gen != NULL && lj_gc2_mem_registered(cts->g, gen);
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = fin_gen_tab_acq(gen);
+    GCtab *t = lj_ctype_fin_gen_tab_valid(cts, gen);
     MSize i, hmask;
+    if (!t)
+      continue;
     Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     for (i = 0; i <= hmask; i++) {
       TValue val;
@@ -572,7 +596,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
 {
   for (;;) {
     FinRegGen *head = fin_gen_head_acq(cts);
-    GCtab *headtab = head ? fin_gen_tab_acq(head) : NULL;
+    GCtab *headtab = head ? lj_ctype_fin_gen_tab_valid(cts, head) : NULL;
     MSize hmask = 1;
     uint32_t hbits;
     GCtab *t;
@@ -581,7 +605,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     if (headtab)
       (void)lj_tab_node_snapshot_acq(headtab, &hmask);
     hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
-    if (headtab && !fin_gen_tab_enabled_acq(headtab))
+    if (head && (!headtab || !fin_gen_tab_enabled_acq(headtab)))
       return 0;
     while (ctype_fin_has_claim(cts, claim))
       ctype_fin_claim_wait(L);
@@ -609,10 +633,10 @@ int lj_ctype_fin_istab(global_State *g, GCtab *t)
   if (!cts)
     return 0;
   for (gen = fin_gen_head_acq(cts);
-       gen != NULL;
+       gen != NULL && lj_gc2_mem_registered(cts->g, gen);
        gen = fin_gen_next_acq(gen)) {
-    GCtab *ft = fin_gen_tab_acq(gen);
-    if (ft == t && ft && fin_gen_tab_enabled_acq(ft))
+    GCtab *ft = ctype_fin_gen_tab_enabled(cts, gen);
+    if (ft == t)
       return 1;
   }
   return 0;
@@ -626,9 +650,9 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
   if (!cts)
     return;
   for (gen = fin_gen_head_acq(cts);
-       gen != NULL;
+       gen != NULL && lj_gc2_mem_registered(g, gen);
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = fin_gen_tab_acq(gen);
+    GCtab *t = lj_ctype_fin_gen_tab_valid(cts, gen);
     markmem(g, gen);
     if (t)
       mark(g, obj2gco(t));
