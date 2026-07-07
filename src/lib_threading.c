@@ -53,13 +53,21 @@ static LJThread *threading_tothread(lua_State *L)
   return (LJThread *)uddata(udataV(L->base));
 }
 
-static GCudata *threading_live_ud(LJThreadLive *node)
+GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node)
 {
-  GCobj *o = gcref_acq(node->ud);
-  if (o && o->gch.gct == ~LJ_TUDATA &&
-      lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
-    return gco2ud(o);
-  return NULL;
+  GCobj *o;
+  uint32_t gct;
+  GCudata *ud;
+  if (!node)
+    return NULL;
+  o = gcref_acq(node->ud);
+  if (!lj_gc2_obj_valid_queued(g, o))
+    return NULL;
+  gct = (uint32_t)la_load8_acq(&o->gch.gct);
+  if (gct != (uint32_t)~LJ_TUDATA)
+    return NULL;
+  ud = gco2ud(o);
+  return lj_udata_udtype_acq(ud) == UDTYPE_THREAD ? ud : NULL;
 }
 
 static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
@@ -116,7 +124,7 @@ static void threading_live_publish(lua_State *L, LJThread *th,
     lj_thread_live_next_rel(node, head);
   } while (!lj_thread_live_head_cas(g, &head, node));
   {
-    GCudata *ud = threading_live_ud(node);
+    GCudata *ud = lj_thread_live_udata_acq(g, node);
     if (ud) {
       TValue tv;
       setudataV(L, &tv, ud);
@@ -561,7 +569,7 @@ void lj_threading_shutdown(lua_State *L)
   }
   for (node = lj_thread_live_head_acq(g); node != NULL;
        node = lj_thread_live_next_acq(node)) {
-    GCudata *ud = threading_live_ud(node);
+    GCudata *ud = lj_thread_live_udata_acq(g, node);
     if (!ud)
       continue;
     th = (LJThread *)uddata(ud);

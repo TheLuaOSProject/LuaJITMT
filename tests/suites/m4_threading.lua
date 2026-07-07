@@ -50,6 +50,13 @@ return function(add)
       message = "M4 thread substrate tests passed"
     },
     {
+      name = "m4_threading_live_root",
+      description = "threading.thread live-root candidate validation fixture",
+      output = "lj_t-threading-live-root",
+      cfile = "t-threading-live-root.c",
+      message = "M4 threading live-root validation tests passed"
+    },
+    {
       name = "m4_chan_stress",
       description = "focused M4 channel substrate stress C fixture",
       output = "lj_t-chan-stress",

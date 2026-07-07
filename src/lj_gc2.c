@@ -4496,13 +4496,12 @@ static void gc2_scan_threading_live_roots(global_State *g)
   for (node = lj_thread_live_head_acq(g);
        node != NULL && remaining != 0;
        node = lj_thread_live_next_acq(node)) {
-    GCobj *o = gcref_acq(node->ud);
-    if (o && o->gch.gct == ~LJ_TUDATA &&
-	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD) {
-      LJThread *th = (LJThread *)uddata(gco2ud(o));
+    GCudata *ud = lj_thread_live_udata_acq(g, node);
+    if (ud) {
+      LJThread *th = (LJThread *)uddata(ud);
       TValue *roots = lj_thread_start_roots_acq(th);
       uint32_t i, n = lj_thread_start_root_count_acq(th);
-      gc2_mark_thread_root_obj(g, o);
+      gc2_mark_thread_root_obj(g, obj2gco(ud));
       lj_gc2_markmem(g, roots);
       if (roots) {
 	for (i = 0; i < n; i++) {
