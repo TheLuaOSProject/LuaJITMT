@@ -440,6 +440,17 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32(int *a, int *b, uint32_t n)
   return a[n & 3u] + b[(n + 1u) & 3u] + (int32_t)(n & 1023u);
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr_u32(int *port, int *bytes,
+						int *key, int *overlapped,
+						uint32_t timeout)
+{
+  uint32_t i = timeout & 3u;
+  bytes[i] = port[(timeout + 1u) & 3u] + (int)(timeout & 15u);
+  key[i] = bytes[i] + 3;
+  overlapped[i] = key[i] + 5;
+  return bytes[i] + key[i] + overlapped[i] + (int32_t)(timeout >> 28);
+}
+
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u32(int *a, int *b, uint32_t n)
 {
   return UINT32_C(0x80000000) + (uint32_t)a[n & 3u] +

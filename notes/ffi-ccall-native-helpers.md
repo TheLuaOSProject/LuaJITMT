@@ -165,7 +165,11 @@ handle, existing completion port, completion key, thread count, and pointer
 result. The exact PostQueuedCompletionStatus-shaped slice traces
 `int32_t(void *, uint32_t, uint64_t, void *)` calls while preserving completion
 port, transferred byte count, completion key, overlapped pointer, and signed
-32-bit result. The exact pointer/size/unsigned-int/unsigned-int slice traces
+32-bit result. The exact GetQueuedCompletionStatus-shaped slice traces
+`int32_t(void *, void *, void *, void *, uint32_t)` calls while preserving
+completion port, byte-count output pointer, completion-key output pointer,
+overlapped output pointer, timeout, and signed 32-bit result. The exact
+pointer/size/unsigned-int/unsigned-int slice traces
 `void *(void *, uint64_t, uint32_t, uint32_t)` calls for
 VirtualAlloc-style ABI classes while preserving both high-bit unsigned flag
 arguments and pointer results. The exact mmap-shaped slice traces
