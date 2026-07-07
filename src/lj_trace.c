@@ -1396,7 +1396,8 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
   case BC_JFORL:
     if (bc_d(cur) != traceno)
       break;
-    lj_assertJ(traceref(J, bc_d(cur)) == T, "JFORL references other trace");
+    lj_assertJ(traceref_safe(J, bc_d(cur)) == T,
+	       "JFORL references other trace");
     {
       BCIns *foripc = pc + bc_j(startins);
       lj_assertJ(bc_op(*foripc) == BC_JFORI || bc_op(*foripc) == BC_FORI,
@@ -1459,7 +1460,7 @@ unpatch:
     trace_unpatch(J, T);
     return 1;
   } else if (head) {  /* Otherwise search in chain of root traces. */
-    GCtrace *T2 = traceref(J, head);
+    GCtrace *T2 = traceref_safe(J, head);
     if (T2) {
       TraceNo next;
       for (next = trace_nextroot_acq(T2); next;
@@ -1468,7 +1469,7 @@ unpatch:
 	  trace_nextroot_rel(T2, nextroot);  /* Unlink from chain. */
 	  goto unpatch;
 	}
-	T2 = traceref(J, next);
+	T2 = traceref_safe(J, next);
       }
     }
   }
@@ -1498,7 +1499,7 @@ static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
 {
   IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
   TraceNo parentno = (TraceNo)base.op1;
-  GCtrace *parent = traceref(J, parentno);
+  GCtrace *parent = traceref_safe(J, parentno);
   ExitNo exitno = (ExitNo)base.op2;
   lj_assertJ(trace_root_acq(T) != 0, "not a side trace");
   if (scoped) {
@@ -1753,7 +1754,7 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   else
     (void)trace_flushside(J, T, 0);
   if (rootno != 0) {
-    GCtrace *root = traceref(J, rootno);
+    GCtrace *root = traceref_safe(J, rootno);
     if (root && trace_traceno_acq(root) == rootno) {
       TraceNo next = trace_nextside_acq(T);
       TraceNo head = trace_nextside_acq(root);
@@ -1761,7 +1762,7 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
 	trace_nextside_rel(root, next);
 	trace_nchild_dec_acqrel(root);
       } else if (head != 0) {
-	GCtrace *prev = traceref(J, head);
+	GCtrace *prev = traceref_safe(J, head);
 	while (prev) {
 	  TraceNo prevnext = trace_nextside_acq(prev);
 	  if (prevnext == traceno) {
@@ -1769,7 +1770,7 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
 	    trace_nchild_dec_acqrel(root);
 	    break;
 	  }
-	  prev = prevnext ? traceref(J, prevnext) : NULL;
+	  prev = prevnext ? traceref_safe(J, prevnext) : NULL;
 	}
       }
     }
