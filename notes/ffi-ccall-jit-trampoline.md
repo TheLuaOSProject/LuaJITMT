@@ -101,6 +101,8 @@ shape,
 argument shape,
 `lj_ccall_jit_u32_u32_ptr_i32_u32()` for the exact unsigned 32-bit-result
 unsigned-int/pointer/signed-int/unsigned-int argument shape,
+`lj_ccall_jit_u32_u32_ptr_i32_u32_i32()` for the exact unsigned 32-bit-result
+unsigned-int/pointer/signed-int/unsigned-int/signed-int argument shape,
 `lj_ccall_jit_i32_ptr_i32_u64()` / `lj_ccall_jit_u32_ptr_i32_u64()` /
 `lj_ccall_jit_i64_ptr_i32_u64()` / `lj_ccall_jit_u64_ptr_i32_u64()` /
 `lj_ccall_jit_void_ptr_i32_u64()` / `lj_ccall_jit_ptr_ptr_i32_u64()` for exact
@@ -292,6 +294,10 @@ The scope is deliberately narrow:
 - exact `uint32_t(uint32_t, pointer, int32_t, uint32_t)` calls, preserving
   handle count, handle-array pointer, wait-all flag, timeout, and high-bit
   results for WaitForMultipleObjects-style ABI classes;
+- exact `uint32_t(uint32_t, pointer, int32_t, uint32_t, int32_t)` calls,
+  preserving handle count, handle-array pointer, wait-all flag, timeout,
+  alertable flag, and high-bit results for WaitForMultipleObjectsEx-style ABI
+  classes;
 - exact `uint32_t(pointer, pointer, uint32_t, int32_t)` calls, preserving
   signal handle, wait handle, timeout, alertable flag, and high-bit results
   for SignalObjectAndWait-style ABI classes;
@@ -443,6 +449,8 @@ traced SetHandleInformation-shaped pointer/uint32/uint32 signed-int-result
 loops,
 traced WaitForSingleObject-shaped pointer/uint32 unsigned-result loops,
 traced WaitForMultipleObjects-shaped uint32/pointer/int32/uint32
+unsigned-result loops,
+traced WaitForMultipleObjectsEx-shaped uint32/pointer/int32/uint32/int32
 unsigned-result loops,
 traced SignalObjectAndWait-shaped pointer/pointer/uint32/int32
 unsigned-result loops,

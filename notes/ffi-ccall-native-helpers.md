@@ -199,6 +199,10 @@ WaitForMultipleObjects-shaped slice traces
 `uint32_t(uint32_t, void *, int32_t, uint32_t)` calls while preserving handle
 count, handle-array pointer, wait-all flag, timeout, and high-bit unsigned
 32-bit results as Lua numbers. The exact
+WaitForMultipleObjectsEx-shaped slice traces
+`uint32_t(uint32_t, void *, int32_t, uint32_t, int32_t)` calls while preserving
+handle count, handle-array pointer, wait-all flag, timeout, alertable flag, and
+high-bit unsigned 32-bit results as Lua numbers. The exact
 SignalObjectAndWait-shaped slice traces
 `uint32_t(void *, void *, uint32_t, int32_t)` calls while preserving signal
 handle, wait handle, timeout, alertable flag, and high-bit unsigned 32-bit

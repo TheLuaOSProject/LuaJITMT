@@ -106,6 +106,18 @@ uint32_t lj_m7_ccall_jit_u32_u32_ptr_i32_u32(uint32_t count, int *handles,
   return UINT32_C(0x80000000) + (uint32_t)(acc & UINT64_C(1023));
 }
 
+uint32_t lj_m7_ccall_jit_u32_u32_ptr_i32_u32_i32(uint32_t count,
+						 int *handles,
+						 int32_t wait_all,
+						 uint32_t timeout,
+						 int32_t alertable)
+{
+  uint64_t acc = (uint64_t)count + (uint64_t)(uint32_t)handles[timeout & 3u] +
+		 (uint64_t)(uint32_t)wait_all + (uint64_t)timeout +
+		 (uint64_t)(uint32_t)alertable;
+  return UINT32_C(0x80000000) + (uint32_t)(acc & UINT64_C(1023));
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_i32_u64(int *p, int32_t bias, uint64_t n)
 {
   return p[n & 3u] + bias + (int32_t)(n & UINT64_C(1023));
