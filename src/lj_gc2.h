@@ -299,6 +299,10 @@ LJ_FUNC void lj_gc2_test_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_test_scan_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_test_scan_owned_needscan(global_State *g, lua_State *owner_L);
 LJ_FUNC void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L);
+#if LJ_HASJIT
+LJ_FUNC int lj_gc2_test_trace_pc_proto_candidate(global_State *g, GCobj *o,
+						 const BCIns *pc);
+#endif
 LJ_FUNC void lj_gc2_test_rescan_pending_clear_if_table(global_State *g,
 						      GCobj *o);
 LJ_FUNC void lj_gc2_test_rescan_pending_clear_cycle(global_State *g,

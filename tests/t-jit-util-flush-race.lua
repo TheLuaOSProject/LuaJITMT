@@ -101,8 +101,7 @@ while not finished and probes < max_probes do
   probes = probes + 1
 end
 
-local worker_join = assert(worker.join)
-local ok, result = worker_join(worker, 20)
+local ok, result = worker:join(20)
 assert(ok == true and result == true)
 assert(finished, "worker joined without sending done token")
 assert(probes > 0)

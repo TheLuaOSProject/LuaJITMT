@@ -1776,6 +1776,28 @@ void lj_gc2_mark_trace_slot(global_State *g, uint32_t traceno)
   (void)gc2_mark_trace_root(g, (TraceNo)traceno);
 }
 
+static GCproto *gc2_trace_pc_proto_candidate(global_State *g, GCobj *o,
+					     const BCIns *pc)
+{
+  GCproto *pt;
+  const BCIns *bc;
+  uint32_t gct;
+  if (!pc || !gc2_markobj_base_valid(g, o, NULL, &gct) ||
+      gct != (uint32_t)~LJ_TPROTO)
+    return NULL;
+  pt = gco2pt(o);
+  if (!gc2_valid_proto_for_traverse(g, pt))
+    return NULL;
+  bc = proto_bc(pt);
+  return (pc >= bc && pc < bc + pt->sizebc) ? pt : NULL;
+}
+
+int lj_gc2_test_trace_pc_proto_candidate(global_State *g, GCobj *o,
+					 const BCIns *pc)
+{
+  return gc2_trace_pc_proto_candidate(g, o, pc) != NULL;
+}
+
 static void gc2_mark_proto_for_trace_pc_root(global_State *g, const BCIns *pc)
 {
   GCobj *o;
@@ -1784,16 +1806,12 @@ static void gc2_mark_proto_for_trace_pc_root(global_State *g, const BCIns *pc)
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    if (o->gch.gct == ~LJ_TPROTO) {
-      GCproto *pt = gco2pt(o);
-      const BCIns *bc = proto_bc(pt);
-      if (pc >= bc && pc < bc + pt->sizebc) {
-	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-	  (void)lj_gc2_trace_sweep_root(g, o);
-	else
-	  gc2_mark_thread_root_obj(g, o);
-	return;
-      }
+    if (gc2_trace_pc_proto_candidate(g, o, pc)) {
+      if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+	(void)lj_gc2_trace_sweep_root(g, o);
+      else
+	gc2_mark_thread_root_obj(g, o);
+      return;
     }
   }
 }
@@ -8924,13 +8942,9 @@ static void gc2_mark_proto_for_trace_pc_worker(global_State *g,
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    if (o->gch.gct == ~LJ_TPROTO) {
-      GCproto *pt = gco2pt(o);
-      const BCIns *bc = proto_bc(pt);
-      if (pc >= bc && pc < bc + pt->sizebc) {
-	gc2_mark_payload_obj_worker(g, o);
-	return;
-      }
+    if (gc2_trace_pc_proto_candidate(g, o, pc)) {
+      gc2_mark_payload_obj_worker(g, o);
+      return;
     }
   }
 }

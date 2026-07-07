@@ -1305,6 +1305,7 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
 					TGState *tg)
 {
   jit_State *J = G2J(g);
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
   GCtrace saved;
   GCfunc *fn;
   GCproto *pt;
@@ -1314,6 +1315,11 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   fn = funcV(L->top - 1);
   assert(isluafunc(fn));
   pt = funcproto(fn);
+  assert(lj_gc2_test_trace_pc_proto_candidate(g, obj2gco(pt),
+					      proto_bc(pt)) == 1);
+  assert(lj_gc2_test_trace_pc_proto_candidate(g, obj2gco(pt),
+					      proto_bc(pt) + pt->sizebc) == 0);
+  assert(lj_gc2_test_trace_pc_proto_candidate(g, bad, proto_bc(pt)) == 0);
   lua_pop(L, 1);
 
   lj_gc2_mark_begin(g);
