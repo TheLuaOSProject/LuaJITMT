@@ -77,6 +77,9 @@ through the recorder's unsigned conversion path.
 mixed two-argument slice to exact `float(float, int32_t)` and
 `float(int32_t, float)` calls, with the recorder widening the float result to
 Lua number after the helper call.
+`lj_ccall_jit_flt_flt_u32()` and `lj_ccall_jit_flt_u32_flt()` do the same for
+exact `float(float, uint32_t)` and `float(uint32_t, float)` calls while
+preserving high-bit unsigned arguments.
 `lj_ccall_jit_i32_ptr_ulong_i32()` traces the exact poll-shaped
 `int32_t(void *, unsigned long, int32_t)` family and normalizes the
 `unsigned long` argument through the regular FFI conversion rules before the
