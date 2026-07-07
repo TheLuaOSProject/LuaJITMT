@@ -75,6 +75,10 @@ float-returning `float(float, int32_t)` and `float(int32_t, float)` calls.
 `lj_ccall_jit_num_num_u32()` and `lj_ccall_jit_num_u32_num()` cover exact
 double-returning `double(double, uint32_t)` and `double(uint32_t, double)`
 calls without truncating high-bit unsigned arguments.
+`lj_ccall_jit_num_num_i64()` / `lj_ccall_jit_num_i64_num()` and
+`lj_ccall_jit_num_num_u64()` / `lj_ccall_jit_num_u64_num()` extend that mixed
+double-returning coverage to exact signed and unsigned 64-bit cdata arguments
+while preserving per-argument signedness.
 `lj_ccall_jit_flt_flt_u32()` and `lj_ccall_jit_flt_u32_flt()` do the same for
 exact float-returning `float(float, uint32_t)` and `float(uint32_t, float)`
 calls, widening the helper result back to a Lua number in the recorder.

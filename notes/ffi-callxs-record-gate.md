@@ -73,6 +73,10 @@ helper path and leave the generic `IR_CALLXS` backend path disabled.
 double-returning mixed slice to exact `double(double, uint32_t)` and
 `double(uint32_t, double)` calls, preserving high-bit unsigned arguments
 through the recorder's unsigned conversion path.
+`lj_ccall_jit_num_num_i64()` / `lj_ccall_jit_num_i64_num()` and
+`lj_ccall_jit_num_num_u64()` / `lj_ccall_jit_num_u64_num()` extend the same
+mixed double-returning path to exact signed and unsigned 64-bit cdata
+arguments, preserving signedness in the selected helper.
 `lj_ccall_jit_flt_flt_i32()` and `lj_ccall_jit_flt_i32_flt()` extend that
 mixed two-argument slice to exact `float(float, int32_t)` and
 `float(int32_t, float)` calls, with the recorder widening the float result to
