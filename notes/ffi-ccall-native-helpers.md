@@ -23,7 +23,8 @@ the interpreted path instead of duplicating private bookkeeping.
 saved TG callback state is restored after leave, a callback-observed foreign
 function is blacklisted without losing the prior callback slot, and a fresh
 `LJ_GC2_HS_STOPREQ` published while the TG is native is reported only by the
-delayed helper check.
+delayed helper check. It also calls `lj_ccall_jit_num_gpr()` directly across
+signed 32-bit, high-bit unsigned 32-bit, and mixed int64/uint32 signatures.
 
 This remains infrastructure for a future direct `IR_CALLXS` bridge. The narrow
 `lj_ccall_jit_{void,i32,ptr}_gpr()` trampoline family now traces exact void,
@@ -55,7 +56,10 @@ integer or pointer arguments, plus exact `pointer,int64_t` and
 `pointer,uint64_t` pairs. `lj_ccall_jit_u64_u64()` handles exact
 `uint64_t(uint64_t)` calls. The sibling
 `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float returns with
-0, 1, or 2 same-kind exact FP arguments. `lj_ccall_jit_num_i32()`,
+0, 1, or 2 same-kind exact FP arguments. `lj_ccall_jit_num_gpr()` traces exact
+double returns with the shared one- or two-argument GPR signature matrix,
+including high-bit unsigned 32-bit and boxed 64-bit cdata arguments.
+`lj_ccall_jit_num_i32()`,
 `lj_ccall_jit_num_ptr()`, `lj_ccall_jit_num_flt()`,
 `lj_ccall_jit_i32_num()`, `lj_ccall_jit_i32_flt()`,
 `lj_ccall_jit_i32_i8()`, `lj_ccall_jit_ptr_num()`,

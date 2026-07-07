@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -40,6 +41,21 @@ static void dummy_foreign(void)
 
 static void dummy_callback_foreign(void)
 {
+}
+
+static double dummy_num_i32_i32(int32_t a, int32_t b)
+{
+  return (double)a * 2.0 + (double)b + 0.5;
+}
+
+static double dummy_num_u32_u32(uint32_t a, uint32_t b)
+{
+  return (double)(a & 255u) + (double)(b & 255u) + 0.875;
+}
+
+static double dummy_num_i64_u32(int64_t a, uint32_t b)
+{
+  return (double)((uint64_t)a & 255u) + (double)(b & 255u) + 1.125;
 }
 
 static void queue_stopreq_request(global_State *g, TGState *tg)
@@ -203,6 +219,34 @@ static void run_post_leave_stopreq_check(lua_State *L, CTState *cts,
   ljt_tg_clear_stopreq(tg);
 }
 
+static void run_num_gpr_helper(lua_State *L, TGState *tg)
+{
+  double r;
+
+  ljt_tg_clear_stopreq(tg);
+  r = lj_ccall_jit_num_gpr(L, (void *)(uintptr_t)&dummy_num_i32_i32,
+			   (uintptr_t)3, (uintptr_t)4,
+			   LJ_CCALL_JIT_SIG_I32_I32);
+  assert(r == 10.5);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_ffi_call_func_acq(tg) == NULL);
+
+  r = lj_ccall_jit_num_gpr(L, (void *)(uintptr_t)&dummy_num_u32_u32,
+			   (uintptr_t)UINT32_C(0xfffffff0), (uintptr_t)11,
+			   LJ_CCALL_JIT_SIG_U32_U32);
+  assert(r == 240 + 11 + 0.875);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_ffi_call_func_acq(tg) == NULL);
+
+  r = lj_ccall_jit_num_gpr(L, (void *)(uintptr_t)&dummy_num_i64_u32,
+			   (uintptr_t)(int64_t)-15,
+			   (uintptr_t)UINT32_C(0xfffffff2),
+			   LJ_CCALL_JIT_SIG_I64_U32);
+  assert(r == 241 + 242 + 1.125);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_ffi_call_func_acq(tg) == NULL);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -227,6 +271,7 @@ int main(void)
   run_callback_blacklist(L, cts, tg);
   run_fresh_stopreq_check(L, cts, g, tg);
   run_post_leave_stopreq_check(L, cts, g, tg);
+  run_num_gpr_helper(L, tg);
 
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == NULL);
