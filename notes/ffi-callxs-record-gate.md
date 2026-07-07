@@ -48,6 +48,11 @@ Other unsigned 64-bit argument combinations remain interpreted.
 The separate `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float
 returns with 0, 1, or 2 same-kind exact FP arguments through the same
 native-state bridge.
+`lj_ccall_jit_num_gpr()` traces exact double returns with the same one- or
+two-argument GPR signature matrix used by the integer and pointer-result helper
+families, including high-bit unsigned 32-bit and boxed 64-bit cdata arguments.
+It remains a side-effecting native-state `IRCALL` helper rather than direct
+`IR_CALLXS` lowering.
 `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
 `lj_ccall_jit_i32_flt()`, `lj_ccall_jit_i32_i8()`, `lj_ccall_jit_ptr_num()`,

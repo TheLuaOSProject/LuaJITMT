@@ -2487,6 +2487,96 @@ void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func, uintptr_t a,
   return ret;
 }
 
+#define LJ_CCALL_JIT_NUM_GPR_CASE1(sig, t0, a0) \
+  case sig: \
+    ret = ((double (*)(t0))(uintptr_t)func)((t0)(a0)); \
+    break
+
+#define LJ_CCALL_JIT_NUM_GPR_CASE2(sig, t0, a0, t1, a1) \
+  case sig: \
+    ret = ((double (*)(t0, t1))(uintptr_t)func)((t0)(a0), (t1)(a1)); \
+    break
+
+double lj_ccall_jit_num_gpr(lua_State *L, void *func, uintptr_t a,
+			    uintptr_t b, uint32_t sig)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  double ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  switch (sig) {
+  case LJ_CCALL_JIT_SIG0:
+    ret = ((double (*)(void))(uintptr_t)func)();
+    break;
+  LJ_CCALL_JIT_NUM_GPR_CASE1(LJ_CCALL_JIT_SIG_I32, int32_t, a);
+  LJ_CCALL_JIT_NUM_GPR_CASE1(LJ_CCALL_JIT_SIG_U32, uint32_t, a);
+  LJ_CCALL_JIT_NUM_GPR_CASE1(LJ_CCALL_JIT_SIG_PTR, void *, a);
+  LJ_CCALL_JIT_NUM_GPR_CASE1(LJ_CCALL_JIT_SIG_I64, int64_t, a);
+  LJ_CCALL_JIT_NUM_GPR_CASE1(LJ_CCALL_JIT_SIG_U64, uint64_t, a);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I32_I32, int32_t, a,
+			     int32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I32_U32, int32_t, a,
+			     uint32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I32_PTR, int32_t, a,
+			     void *, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U32_I32, uint32_t, a,
+			     int32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U32_U32, uint32_t, a,
+			     uint32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U32_PTR, uint32_t, a,
+			     void *, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_PTR_I32, void *, a,
+			     int32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_PTR_U32, void *, a,
+			     uint32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_PTR_PTR, void *, a,
+			     void *, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_PTR_I64, void *, a,
+			     int64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_PTR_U64, void *, a,
+			     uint64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I32_I64, int32_t, a,
+			     int64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I32_U64, int32_t, a,
+			     uint64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U32_I64, uint32_t, a,
+			     int64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U32_U64, uint32_t, a,
+			     uint64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I64_I32, int64_t, a,
+			     int32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I64_U32, int64_t, a,
+			     uint32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U64_I32, uint64_t, a,
+			     int32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U64_U32, uint64_t, a,
+			     uint32_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I64_PTR, int64_t, a,
+			     void *, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U64_PTR, uint64_t, a,
+			     void *, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I64_I64, int64_t, a,
+			     int64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_I64_U64, int64_t, a,
+			     uint64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U64_I64, uint64_t, a,
+			     int64_t, b);
+  LJ_CCALL_JIT_NUM_GPR_CASE2(LJ_CCALL_JIT_SIG_U64_U64, uint64_t, a,
+			     uint64_t, b);
+  default:
+    ret = 0;
+    break;
+  }
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+#undef LJ_CCALL_JIT_NUM_GPR_CASE1
+#undef LJ_CCALL_JIT_NUM_GPR_CASE2
+
 void *lj_ffi_jit_memcpy(lua_State *L, void *dp, const void *sp, CTSize len)
 {
   uint32_t actions;

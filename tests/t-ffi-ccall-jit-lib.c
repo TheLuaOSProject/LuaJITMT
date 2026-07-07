@@ -794,6 +794,21 @@ double lj_m7_ccall_jit_num_i32_num(int32_t a, double b)
   return (double)a + b + 0.625;
 }
 
+double lj_m7_ccall_jit_num_i32_i32(int32_t a, int32_t b)
+{
+  return (double)a * 2.0 + (double)b + 0.5;
+}
+
+double lj_m7_ccall_jit_num_u32_u32(uint32_t a, uint32_t b)
+{
+  return (double)(a & 255u) + (double)(b & 255u) + 0.875;
+}
+
+double lj_m7_ccall_jit_num_i64_u32(int64_t a, uint32_t b)
+{
+  return (double)((uint64_t)a & 255u) + (double)(b & 255u) + 1.125;
+}
+
 double lj_m7_ccall_jit_num_ptr(int *p)
 {
   return (double)*p + 0.25;
