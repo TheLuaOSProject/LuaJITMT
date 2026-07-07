@@ -2876,7 +2876,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     GCtab *env = lj_state_env_acq(th);
     gc_mark_thread_root_tab(g, env);
   }
-  mt = lj_state_mt_thread_acq(th);
+  mt = obj2gco(lj_thread_state_udata_acq(g, th));
   if (mt != NULL)
     gc_markobj(g, mt);
   if (!owned && th != cur_L)

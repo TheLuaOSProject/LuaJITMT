@@ -4317,7 +4317,7 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
     if (env)
       gc2_mark_thread_root_obj(g, obj2gco(env));
   }
-  mt = lj_state_mt_thread_acq(L);
+  mt = obj2gco(lj_thread_state_udata_acq(g, L));
   if (mt != NULL)
     gc2_mark_thread_root_obj(g, mt);
   for (uv = lj_state_openupval_acq(L); uv != NULL;
@@ -9598,7 +9598,7 @@ scan_thread:
 	gc2_mark_thread_root_obj_worker(g, obj2gco(env));
     }
   }
-  mt = lj_state_mt_thread_acq(th);
+  mt = obj2gco(lj_thread_state_udata_acq(g, th));
   if (mt != NULL) {
     if (sweep)
       gc2_mark_thread_root_obj(g, mt);

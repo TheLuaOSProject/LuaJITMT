@@ -53,7 +53,19 @@ int main(void)
   setgcrefrel(node.ud, NULL);
   assert(lj_thread_live_udata_acq(g, &node) == NULL);
 
+  assert(lj_thread_state_udata_acq(g, NULL) == NULL);
+  assert(lj_thread_state_udata_acq(g, L) == NULL);
+  lj_state_mt_thread_rel(L, ud);
+  assert(lj_thread_state_udata_acq(g, L) == ud);
+  lj_udata_udtype_rel(ud, UDTYPE_USERDATA);
+  assert(lj_thread_state_udata_acq(g, L) == NULL);
+  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
+  setgcrefrel(L->mt_thread, bad);
+  assert(lj_thread_state_udata_acq(g, L) == NULL);
+  lj_state_mt_thread_clear_rel(L);
+  assert(lj_thread_state_udata_acq(g, L) == NULL);
+
   lua_close(L);
-  printf("t-threading-live-root OK: live-root userdata candidates validated\n");
+  printf("t-threading-live-root OK: threading userdata candidates validated\n");
   return 0;
 }

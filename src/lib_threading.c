@@ -53,14 +53,10 @@ static LJThread *threading_tothread(lua_State *L)
   return (LJThread *)uddata(udataV(L->base));
 }
 
-GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node)
+static GCudata *threading_thread_udata_candidate(global_State *g, GCobj *o)
 {
-  GCobj *o;
   uint32_t gct;
   GCudata *ud;
-  if (!node)
-    return NULL;
-  o = gcref_acq(node->ud);
   if (!lj_gc2_obj_valid_queued(g, o))
     return NULL;
   gct = (uint32_t)la_load8_acq(&o->gch.gct);
@@ -68,6 +64,20 @@ GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node)
     return NULL;
   ud = gco2ud(o);
   return lj_udata_udtype_acq(ud) == UDTYPE_THREAD ? ud : NULL;
+}
+
+GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node)
+{
+  if (!node)
+    return NULL;
+  return threading_thread_udata_candidate(g, gcref_acq(node->ud));
+}
+
+GCudata *lj_thread_state_udata_acq(global_State *g, const lua_State *L)
+{
+  if (!L)
+    return NULL;
+  return threading_thread_udata_candidate(g, lj_state_mt_thread_acq(L));
 }
 
 static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
@@ -893,7 +903,6 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
 				   void *ud)
 {
   ThreadingAttachCtx *ctx = (ThreadingAttachCtx *)ud;
-  GCobj *o;
   UNUSED(dummy);
   L->tg_hint = ctx->tg;
   lj_thr_set_tg(ctx->tg);
@@ -901,10 +910,7 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
   lj_tg_store_cur_L(ctx->tg, L);
   lj_tg_store_thread_L(ctx->tg, L);
   ctx->tg_state_set = 1;
-  o = lj_state_mt_thread_acq(L);
-  if (o && o->gch.gct == ~LJ_TUDATA &&
-      lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
-    ctx->tg->thread_ud = gco2ud(o);
+  ctx->tg->thread_ud = lj_thread_state_udata_acq(ctx->g, L);
   if (!threading_gc_enter_counted(L, NULL)) {
     ctx->entering = 0;
     return NULL;

@@ -63,6 +63,8 @@ struct LJThreadLive {
 
 LJ_FUNC GCudata *lj_thread_live_udata_acq(global_State *g,
 					  LJThreadLive *node);
+LJ_FUNC GCudata *lj_thread_state_udata_acq(global_State *g,
+					   const lua_State *L);
 
 static LJ_AINLINE LJThreadLive *
 lj_thread_live_next_acq(const LJThreadLive *node)
