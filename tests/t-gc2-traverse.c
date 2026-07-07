@@ -3918,7 +3918,7 @@ static uint32_t finreg_cdata_order_active_refs(global_State *g, GCobj *target)
   if (!cts)
     return 0;
   for (ord = fin_order_head_acq(cts);
-       ord != NULL;
+       ord != NULL && lj_gc2_mem_registered(g, ord);
        ord = fin_order_next_acq(ord))
     n += fin_order_active_acq(ord) == 1 && fin_order_obj_acq(ord) == target;
   return n;

@@ -494,7 +494,7 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
 			      FinRegOrderNode *ord, FinRegOrderNode *next)
 {
   FinRegOrderNode *head, *expect;
-  if (!cts || !ord)
+  if (!cts || !ord || !lj_gc2_mem_registered(cts->g, ord))
     return 0;
   if (!fin_order_active_retiring(ord))
     return 1;
@@ -505,9 +505,11 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
   lj_gc2_finreg_cdata_note_order_retired(cts->g);
   fin_order_active_rel(ord, 0);
   if (prev) {
-    expect = ord;
-    if (fin_order_active_acq(prev) == 1)
-      (void)fin_order_next_cas(prev, &expect, next);
+    if (lj_gc2_mem_registered(cts->g, prev)) {
+      expect = ord;
+      if (fin_order_active_acq(prev) == 1)
+	(void)fin_order_next_cas(prev, &expect, next);
+    }
   } else {
     expect = ord;
     (void)fin_order_head_cas(cts, &expect, next);
@@ -523,7 +525,7 @@ size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target)
     return 0;
   prev = NULL;
   ord = fin_order_head_acq(cts);
-  while (ord) {
+  while (ord && lj_gc2_mem_registered(cts->g, ord)) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     uint32_t active = fin_order_active_acq(ord);
     if (active == 1 && fin_order_obj_acq(ord) == target) {
@@ -660,13 +662,13 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
   {
     FinRegOrderNode *ord;
     for (ord = fin_order_head_acq(cts);
-	 ord != NULL;
+	 ord != NULL && lj_gc2_mem_registered(g, ord);
 	 ord = fin_order_next_acq(ord)) {
       if (fin_order_active_acq(ord) != 0)
 	markmem(g, ord);
     }
     for (ord = fin_order_retired_acq(cts);
-	 ord != NULL;
+	 ord != NULL && lj_gc2_mem_registered(g, ord);
 	 ord = fin_order_retired_next_acq(ord))
       markmem(g, ord);
   }
@@ -676,14 +678,14 @@ void lj_ctype_fin_freetabs(global_State *g, CTState *cts)
 {
   FinRegGen *gen = fin_gen_head_xchg_acqrel(cts, NULL);
   FinRegOrderNode *ord = fin_order_head_xchg_acqrel(cts, NULL);
-  while (ord) {
+  while (ord && lj_gc2_mem_registered(g, ord)) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     if (fin_order_active_acq(ord) != 0)
       lj_mem_freet(g, ord);
     ord = next;
   }
   ord = fin_order_retired_xchg_acqrel(cts, NULL);
-  while (ord) {
+  while (ord && lj_gc2_mem_registered(g, ord)) {
     FinRegOrderNode *next = fin_order_retired_next_acq(ord);
     lj_mem_freet(g, ord);
     ord = next;

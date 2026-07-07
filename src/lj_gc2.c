@@ -6450,7 +6450,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     return 0;
   prev = NULL;
   ord = fin_order_head_acq(cts);
-  while (ord != NULL) {
+  while (ord != NULL && lj_gc2_mem_registered(g, ord)) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     TValue *slot;
     TValue fin;
@@ -6549,7 +6549,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
   L = mainthread_acq(g);
   prev = NULL;
   ord = fin_order_head_acq(cts);
-  while (ord != NULL) {
+  while (ord != NULL && lj_gc2_mem_registered(g, ord)) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     TValue *slot;
     TValue fin;
@@ -6614,7 +6614,7 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
   L = mainthread_acq(g);
   prev = NULL;
   ord = fin_order_head_acq(cts);
-  while (ord != NULL) {
+  while (ord != NULL && lj_gc2_mem_registered(g, ord)) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     TValue *slot;
     TValue fin;
