@@ -334,6 +334,21 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_ptr(int *handle, int *buf,
 	 (overlapped ? overlapped[(i + 2u) & 3u] : 0);
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_u32_ptr_u32_ptr_u32_ptr_ptr(
+  int *handle, uint32_t code, int *inbuf, uint32_t insize, int *outbuf,
+  uint32_t outsize, int *bytes_ret, int *overlapped)
+{
+  uint32_t i = (code + insize + outsize) & 3u;
+  if (outbuf)
+    outbuf[i] = handle[i] + (int)(code & 15u);
+  if (bytes_ret)
+    bytes_ret[i] = inbuf[i] + (int)(outsize & 15u);
+  return handle[i] + inbuf[(i + 1u) & 3u] + (outbuf ? outbuf[i] : 0) +
+	 (bytes_ret ? bytes_ret[i] : 0) +
+	 (overlapped ? overlapped[(i + 2u) & 3u] : 0) +
+	 (int)(code >> 28) + (int)(insize >> 28);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_i32(int *handle, int *overlapped,
 					    int *out, int32_t wait)
 {

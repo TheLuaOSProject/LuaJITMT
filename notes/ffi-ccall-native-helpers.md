@@ -126,6 +126,10 @@ preserving high-bit unsigned count arguments without widening them to a
 different ABI shape. The exact ReadFile/WriteFile-shaped slice traces
 `int32_t(void *, void *, uint32_t, void *, void *)` calls while preserving the
 byte count, output pointer, and overlapped pointer arguments. The exact
+DeviceIoControl-shaped slice traces
+`int32_t(void *, uint32_t, void *, uint32_t, void *, uint32_t, void *, void *)`
+calls while preserving the control code, input/output byte counts, buffers,
+byte-count output pointer, and overlapped pointer. The exact
 GetOverlappedResult-shaped slice traces
 `int32_t(void *, void *, void *, int32_t)` calls while preserving the
 overlapped pointer, output pointer, and signed wait flag. The
