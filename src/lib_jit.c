@@ -13,6 +13,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_str.h"
@@ -337,10 +338,9 @@ LJLIB_CF(jit_util_funcuvname)
 
 #if LJ_HASJIT
 
-/* Check trace argument. Must not throw for non-existent trace numbers. */
-static GCtrace *jit_checktrace(lua_State *L)
+/* Check trace number. Must not throw for non-existent trace numbers. */
+static GCtrace *jit_checktrace_tr(lua_State *L, TraceNo tr)
 {
-  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   jit_State *J = L2J(L);
   TraceVec *tv = tracevec_acq(J);
   if (tr > 0 && trace_traceno_acq(&J->cur) == tr &&
@@ -362,6 +362,20 @@ static GCtrace *jit_checktrace(lua_State *L)
       return T;
   }
   return NULL;
+}
+
+static LJ_AINLINE int jit_trace_read_lock(lua_State *L, jit_State *J)
+{
+  if (lj_jit_token_held_l(L, J) || lj_jit_token_held(J))
+    return 0;
+  return lj_jit_token_try_l(L, J) ? 1 : -1;
+}
+
+static LJ_AINLINE void jit_trace_read_unlock(lua_State *L, jit_State *J,
+					     int token)
+{
+  if (token > 0)
+    lj_jit_token_release_l(L, J);
 }
 
 /* Names of link types. ORDER LJ_TRLINK */
@@ -391,18 +405,32 @@ static LJ_AINLINE MCode *jit_traceexitstub_addr_acq(const GCtrace *T,
 /* local info = jit.util.traceinfo(tr) */
 LJLIB_CF(jit_util_traceinfo)
 {
-  GCtrace *T = jit_checktrace(L);
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  IRRef nins = 0, nk = 0;
+  SnapNo nsnap = 0;
+  TraceLink linktype = LJ_TRLINK_NONE;
+  TraceNo link = 0;
+  if (token < 0)
+    return 0;
+  lj_gc2_smr_read_enter(G(L));
+  T = jit_checktrace_tr(L, tr);
   if (T) {
     GCtab *t;
-    IRRef nins = trace_nins_acq(T);
-    IRRef nk = trace_nk_acq(T);
-    SnapNo nsnap = trace_nsnap_acq(T);
-    TraceLink linktype = trace_linktype_acq(T);
+    nins = trace_nins_acq(T);
+    nk = trace_nk_acq(T);
+    nsnap = trace_nsnap_acq(T);
+    linktype = trace_linktype_acq(T);
+    link = trace_link_acq(T);
+    lj_gc2_smr_read_leave(G(L));
+    jit_trace_read_unlock(L, J, token);
     lua_createtable(L, 0, 8);  /* Increment hash size if fields are added. */
     t = tabV(L->top-1);
     setintfield(L, t, "nins", (int32_t)nins - REF_BIAS - 1);
     setintfield(L, t, "nk", REF_BIAS - (int32_t)nk);
-    setintfield(L, t, "link", (int32_t)trace_link_acq(T));
+    setintfield(L, t, "link", (int32_t)link);
     setintfield(L, t, "nexit", (int32_t)nsnap);
     setstrV(L, L->top++, lj_str_newz(L, jit_trlinkname[linktype]));
     lua_setfield(L, -2, "linktype");
@@ -410,16 +438,32 @@ LJLIB_CF(jit_util_traceinfo)
     lj_gc_pubtab(L, t);
     return 1;
   }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
   return 0;
 }
 
 /* local m, ot, op1, op2, prev = jit.util.traceir(tr, idx) */
 LJLIB_CF(jit_util_traceir)
 {
-  GCtrace *T = jit_checktrace(L);
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  IRIns ir;
+  int have = 0;
+  if (token < 0)
+    return 0;
+  lj_gc2_smr_read_enter(G(L));
+  T = jit_checktrace_tr(L, tr);
   if (T && ref >= REF_BIAS && ref < trace_nins_acq(T)) {
-    IRIns ir = ir_load_acq(&trace_ir_acq(T)[ref]);
+    ir = ir_load_acq(&trace_ir_acq(T)[ref]);
+    have = 1;
+  }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
+  if (have) {
     int32_t m = lj_ir_mode[ir.o];
     setintV(L->top-2, m);
     setintV(L->top-1, ir.ot);
@@ -434,23 +478,40 @@ LJLIB_CF(jit_util_traceir)
 /* local k, t [, slot] = jit.util.tracek(tr, idx) */
 LJLIB_CF(jit_util_tracek)
 {
-  GCtrace *T = jit_checktrace(L);
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  IRIns kir[2];
+  int32_t slot = -1;
+  int have = 0;
+  if (token < 0)
+    return 0;
+  lj_gc2_smr_read_enter(G(L));
+  T = jit_checktrace_tr(L, tr);
   if (T && ref >= trace_nk_acq(T) && ref < REF_BIAS) {
     IRIns *irbase = trace_ir_acq(T);
     IRIns *ir = &irbase[ref];
     IRIns irs = ir_load_acq(ir);
-    int32_t slot = -1;
     if (irs.o == IR_KSLOT) {
       slot = irs.op2;
       ir = &irbase[irs.op1];
       irs = ir_load_acq(ir);
     }
+    kir[0] = irs;
+    if (ir_isk64(&kir[0]))
+      kir[1] = ir_load_acq(&ir[1]);
+    have = 1;
+  }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
+  if (have) {
 #if LJ_HASFFI
-    if (irs.o == IR_KINT64) ctype_loadffi(L);
+    if (kir[0].o == IR_KINT64) ctype_loadffi(L);
 #endif
-    lj_ir_kvalue(L, L->top-2, ir);
-    setintV(L->top-1, (int32_t)irt_type(irs.t));
+    lj_ir_kvalue(L, L->top-2, &kir[0]);
+    setintV(L->top-1, (int32_t)irt_type(kir[0].t));
     if (slot == -1)
       return 2;
     setintV(L->top++, slot);
@@ -462,8 +523,15 @@ LJLIB_CF(jit_util_tracek)
 /* local snap = jit.util.tracesnap(tr, sn) */
 LJLIB_CF(jit_util_tracesnap)
 {
-  GCtrace *T = jit_checktrace(L);
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   SnapNo sn = (SnapNo)lj_lib_checkint(L, 2);
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  if (token < 0)
+    return 0;
+  lj_gc2_smr_read_enter(G(L));
+  T = jit_checktrace_tr(L, tr);
   if (T && sn < trace_nsnap_acq(T)) {
     SnapShot *snap = &trace_snap_acq(T)[sn];
     SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
@@ -477,15 +545,26 @@ LJLIB_CF(jit_util_tracesnap)
       setintindex(L, t, (int32_t)(n+2), (int32_t)snapentry_acq(&map[n]));
     setintindex(L, t, (int32_t)(nent+2), (int32_t)SNAP(255, 0, 0));
     lj_gc_pubtab(L, t);
+    lj_gc2_smr_read_leave(G(L));
+    jit_trace_read_unlock(L, J, token);
     return 1;
   }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
   return 0;
 }
 
 /* local mcode, addr, loop = jit.util.tracemc(tr) */
 LJLIB_CF(jit_util_tracemc)
 {
-  GCtrace *T = jit_checktrace(L);
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  if (token < 0)
+    return 0;
+  lj_gc2_smr_read_enter(G(L));
+  T = jit_checktrace_tr(L, tr);
   if (T) {
     MCode *mcode = trace_mcode_acq(T);
     if (mcode != NULL) {
@@ -493,9 +572,13 @@ LJLIB_CF(jit_util_tracemc)
 	      lj_str_new(L, (const char *)mcode, trace_szmcode_acq(T)));
       setintptrV(L->top++, (intptr_t)(void *)mcode);
       setintV(L->top++, trace_mcloop_acq(T));
+      lj_gc2_smr_read_leave(G(L));
+      jit_trace_read_unlock(L, J, token);
       return 3;
     }
   }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
   return 0;
 }
 
@@ -504,8 +587,16 @@ LJLIB_CF(jit_util_traceexitstub)
 {
 #if defined(exitstub_trace_addr)
   if (L->top > L->base+1) {  /* Don't throw for one-argument variant. */
-    GCtrace *T = jit_checktrace(L);
+    TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
     ExitNo exitno = (ExitNo)lj_lib_checkint(L, 2);
+    jit_State *J = L2J(L);
+    int token = jit_trace_read_lock(L, J);
+    GCtrace *T;
+    MCode *addr = NULL;
+    if (token < 0)
+      return 0;
+    lj_gc2_smr_read_enter(G(L));
+    T = jit_checktrace_tr(L, tr);
     if (T) {
 #ifdef EXITSTUBS_PER_GROUP
       ExitNo maxexit = trace_nsnap_acq(T);
@@ -515,12 +606,14 @@ LJLIB_CF(jit_util_traceexitstub)
 	maxexit++;
 #endif
       if (exitno < maxexit) {
-	MCode *addr = jit_traceexitstub_addr_acq(T, exitno);
-	if (addr != NULL) {
-	  setintptrV(L->top-1, (intptr_t)(void *)addr);
-	  return 1;
-	}
+	addr = jit_traceexitstub_addr_acq(T, exitno);
       }
+    }
+    lj_gc2_smr_read_leave(G(L));
+    jit_trace_read_unlock(L, J, token);
+    if (addr != NULL) {
+      setintptrV(L->top-1, (intptr_t)(void *)addr);
+      return 1;
     }
   }
 #endif

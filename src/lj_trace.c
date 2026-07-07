@@ -1801,11 +1801,15 @@ int lj_trace_hasany(global_State *g)
   MSize i, sizetrace = trace_sizetrace_acq(J);
   if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
     return 1;  /* Active recorder must still be aborted by the boundary. */
+  lj_gc2_smr_read_enter(g);
   for (i = 1; i < sizetrace; i++) {
-    GCtrace *T = traceref(J, i);
-    if (T && trace_traceno_acq(T) == i)
+    GCtrace *T = traceref_safe(J, i);
+    if (T && trace_traceno_acq(T) == i) {
+      lj_gc2_smr_read_leave(g);
       return 1;
+    }
   }
+  lj_gc2_smr_read_leave(g);
   return 0;
 }
 
