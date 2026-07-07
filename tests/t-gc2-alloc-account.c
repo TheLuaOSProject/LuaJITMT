@@ -113,6 +113,33 @@ static void test_finreg_entry_rejects_nonobject(lua_State *L,
   assert(gc2_finreg_udata_forgets_acq(g) == uforgets0);
 }
 
+static void test_pub_barrier_entry_rejects_nonobject(lua_State *L,
+						     global_State *g)
+{
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+  TValue badtv;
+  GCtab *parent;
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  assert(parent != NULL);
+  setgcVraw(&badtv, bad, LJ_TTAB);
+
+  lj_gc_pubroot(L, &badtv);
+  lj_gc_pubobjroot(L, bad);
+  assert(root_contains(g, bad) == 0);
+
+  lj_gc2_mark_begin(g);
+  lj_gc2_barrier_tv_g(g, &badtv);
+  lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), &badtv);
+  lj_gc2_barrier_tvn_pair_g(g, obj2gco(parent), &badtv, 1);
+  lj_gc2_barrier_key_g(g, parent, &badtv);
+  lj_gc_pubtabobj_vm(L, parent, bad);
+  lj_gc_pubtabtvn_vm(L, parent, &badtv, 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
 static void test_obj_valid_accepts_variable_cdata(lua_State *L,
 						  global_State *g)
 {
@@ -456,6 +483,7 @@ int main(void)
   assert(gc2_assist_weak_drained_acq(g) == 0);
   assert(gc2_jit_hard_checks_acq(g) == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
+  test_pub_barrier_entry_rejects_nonobject(L, g);
 
   (void)lua_gc(L, LUA_GCSETPAUSE, 150);
   assert(la_load32_acq(&g->gc2.gcpause_pct) == 150);

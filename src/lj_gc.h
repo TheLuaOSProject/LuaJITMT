@@ -440,6 +440,7 @@ LJ_FUNC void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
 LJ_FUNC int lj_gc2_weak_write_candidate(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_weak_write_begin(lua_State *L, GCtab *t);
 LJ_FUNC void lj_gc2_weak_write_end(lua_State *L, int active);
+LJ_FUNC int lj_gc_tv_gcref_valid(global_State *g, cTValue *tv);
 LJ_FUNC void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNCA void lj_gc_barrierback_tab_g(global_State *g, GCtab *t);
 
@@ -468,30 +469,38 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
 
 static LJ_AINLINE void lj_gc_barriertv_(lua_State *L, GCtab *t, cTValue *tv)
 {
+  global_State *g;
   TValue snap;
   int white;
   if (!tv)
     return;
+  g = G(L);
   lj_tv_load_acq(&snap, tv);
+  if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, &snap)))
+    return;
   white = tviswhite(&snap);
-  lj_gc2_barrier_tv_pair(L, obj2gco(t), &snap);
+  lj_gc2_barrier_tv_pair_g(g, obj2gco(t), &snap);
   lj_gc2_barrier_weak_value(L, t, &snap);
   if (white && isblack(obj2gco(t)))
-    lj_gc_barrierback(G(L), t);
+    lj_gc_barrierback(g, t);
 }
 
 static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
 					   cTValue *tv)
 {
+  global_State *g;
   TValue snap;
   int white;
   if (!tv)
     return;
+  g = G(L);
   lj_tv_load_acq(&snap, tv);
+  if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, &snap)))
+    return;
   white = tviswhite(&snap);
-  lj_gc2_barrier_tv_pair(L, p, &snap);
+  lj_gc2_barrier_tv_pair_g(g, p, &snap);
   if (white && isblack(p))
-    lj_gc_barrierf(G(L), p, gcV(&snap));
+    lj_gc_barrierf(g, p, gcV(&snap));
 }
 
 /* Barrier for stores to table objects. TValue and GCobj variant. */
@@ -525,6 +534,8 @@ static LJ_AINLINE void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key)
   ** the legacy incremental collector still needs the normal table back barrier
   ** when the table is black and the key is white.
   */
+  if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, key)))
+    return;
   white = tviswhite(key);
   lj_gc2_barrier_key_g(g, t, key);
   if (white && isblack(obj2gco(t)))

@@ -633,6 +633,38 @@ static int gc_tv_gcref_type_match(global_State *g, cTValue *tv)
   return ~itype(tv) == o->gch.gct;
 }
 
+int lj_gc_tv_gcref_valid(global_State *g, cTValue *tv)
+{
+  return gc_tv_gcref_type_match(g, tv);
+}
+
+static int gc_objroot_gct_valid(global_State *g, GCobj *o, uint32_t *gctp)
+{
+  uint32_t gct;
+  if (!g || !o || !checkptrGC(o))
+    return 0;
+  if (!lj_gc2_obj_valid_queued(g, o)) {
+    /*
+    ** Strings may be plain allocations rather than traversable object cells.
+    ** For other object roots, queued-object validation must prove the cell
+    ** before the header drives the synthetic TValue tag.
+    */
+    if (!lj_gc2_mem_registered_known(g, o))
+      return 0;
+    gct = o->gch.gct;
+    if (gct != (uint32_t)~LJ_TSTR)
+      return 0;
+  } else {
+    gct = o->gch.gct;
+  }
+  if (gct == 0 || gct < (uint32_t)~LJ_TSTR ||
+      gct > (uint32_t)~LJ_TUDATA)
+    return 0;
+  if (gctp)
+    *gctp = gct;
+  return 1;
+}
+
 static int gc_tab_tv_gcref_type_match(cTValue *tv)
 {
   GCobj *o;
@@ -4227,10 +4259,15 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
 /* Publish a GC object that is becoming reachable from a native root list. */
 void lj_gc_pubobjroot(lua_State *L, GCobj *o)
 {
+  global_State *g;
+  uint32_t gct;
   TValue tv;
-  if (!L || !o || LJ_UNLIKELY(o->gch.gct == 0))
+  if (!L)
     return;
-  setgcV(L, &tv, o, ~o->gch.gct);
+  g = G(L);
+  if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, o, &gct)))
+    return;
+  setgcV(L, &tv, o, ~gct);
   lj_gc_pubroot(L, &tv);
 }
 
@@ -4273,13 +4310,20 @@ void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key)
 /* Publication wrapper for x64 VM table -> object stores. */
 void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
 {
+  global_State *g;
+  uint32_t gct;
   int white;
   if (!L || !t || !o)
+    return;
+  g = G(L);
+  if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, obj2gco(t), &gct) ||
+		  gct != (uint32_t)~LJ_TTAB ||
+		  !gc_objroot_gct_valid(g, o, NULL)))
     return;
   white = iswhite(o);
   lj_gc2_barrier_obj_pair(L, obj2gco(t), o);
   if (white && isblack(obj2gco(t)))
-    lj_gc_barrierback(G(L), t);
+    lj_gc_barrierback(g, t);
 }
 
 /* Publication wrapper for x64 VM table -> TValue stores. */
@@ -4294,10 +4338,14 @@ void lj_gc_pubtabtv_vm(lua_State *L, GCtab *t, cTValue *tv)
 void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
 {
   global_State *g;
+  uint32_t gct;
   uint32_t i;
   if (!L || !t || !tv || n == 0)
     return;
   g = G(L);
+  if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, obj2gco(t), &gct) ||
+		  gct != (uint32_t)~LJ_TTAB))
+    return;
   lj_gc2_barrier_tvn_pair_g(g, obj2gco(t), tv, n);
   lj_gc2_barrier_tab(L, t);  /* Preserve the previous TSETM table barrier. */
   if (!isblack(obj2gco(t)))
@@ -4305,7 +4353,7 @@ void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
   for (i = 0; i < n; i++) {
     TValue snap;
     lj_tv_load_acq(&snap, &tv[i]);
-    if (tviswhite(&snap)) {
+    if (LJ_LIKELY(gc_tv_gcref_type_match(g, &snap)) && tviswhite(&snap)) {
       lj_gc_barrierback(g, t);
       return;
     }
@@ -4321,7 +4369,7 @@ void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
   TValue snap;
   int white;
   lj_tv_load_acq(&snap, tv);
-  if (!tvisgcv(&snap))
+  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, &snap)) || !tvisgcv(&snap))
     return;
   white = tviswhite(&snap);
   lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap);

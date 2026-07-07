@@ -6235,8 +6235,32 @@ int lj_gc2_weak_complete(global_State *g, lua_State *L, GCobj *bridge_head,
 #if LJ_HASFFI
 static LJ_AINLINE int gc2_finreg_cdata_obj_valid(global_State *g, GCobj *o)
 {
-  return g && o && lj_gc2_obj_valid_queued(g, o) &&
-	 o->gch.gct == ~LJ_TCDATA;
+  int memkind;
+  GCcdata *cd;
+  if (!g || !o || !checkptrGC(o) ||
+      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
+    return 0;
+  memkind = gc2_obj_mem_live_kind(g, o, NULL);
+  if (memkind == GC2_OBJMEM_INVALID && !gc2_queue_small_cell_live(g, o))
+    return 0;
+  if (o->gch.gct != ~LJ_TCDATA)
+    return 0;
+  cd = gco2cd(o);
+  /*
+  ** Fixed-size raw cdata can exist before CTState is initialized, so FINREG
+  ** entry guards cannot require full ctype validation for every cdata header.
+  ** Variable/aligned cdata still needs lj_cdata_validate() to prove the real
+  ** allocation base before the header is accepted.
+  */
+  if (cdataisv(cd) ||
+      ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0 ||
+      memkind == GC2_OBJMEM_HUGE) {
+    void *base;
+    if (!lj_cdata_validate(g, cd, &base, NULL))
+      return 0;
+    return lj_gc2_mem_registered_known(g, base);
+  }
+  return 1;
 }
 #endif
 
@@ -7850,6 +7874,8 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
   if (tv) {
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
+      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &snap)))
+	return;
       if (gc2_barrier_active_g(g))
 	lj_gc2_markobj_nolegacy(g, gcV(&snap));
       else
@@ -7964,7 +7990,8 @@ static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t)
 static LJ_AINLINE void gc2_table_dirty_bump_parent(global_State *g,
 						   GCobj *parent)
 {
-  if (parent && parent->gch.gct == ~LJ_TTAB)
+  if (parent && lj_gc2_obj_valid_queued(g, parent) &&
+      parent->gch.gct == ~LJ_TTAB)
     gc2_table_dirty_bump(g, gco2tab(parent));
 }
 
@@ -7993,6 +8020,8 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
       if (tvisgcv(&snap)) {
+	if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &snap)))
+	  continue;
 	if (!dirtied) {
 	  gc2_table_dirty_bump_parent(g, parent);
 	  dirtied = 1;
@@ -8004,7 +8033,7 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
     for (i = 0; i < n; i++) {
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
-      if (tvisgcv(&snap))
+      if (tvisgcv(&snap) && gc2_tv_gcref_type_match(g, &snap))
 	gc2_remember_pair(g, parent, gcV(&snap));
     }
   }
@@ -8030,6 +8059,8 @@ void lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent, cTValue *tv)
   if (tv) {
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
+      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &snap)))
+	return;
       if (gc2_barrier_active_g(g)) {
 	gc2_table_dirty_bump_parent(g, parent);
 	lj_gc2_markobj_nolegacy(g, gcV(&snap));
@@ -8076,6 +8107,8 @@ void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
   GCobj *child;
   if (!t || !key || !tvisgcv(key))
     return;
+  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, key)))
+    return;
   /*
   ** Key publication always passes through this helper so weak-table and
   ** legacy-GC boundaries stay in one place. GC2 only has work when a thread
@@ -8117,6 +8150,8 @@ void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
   if (!L || !t || !key || !tvisgcv(key))
     return;
   g = G(L);
+  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, key)))
+    return;
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return;
   weak = gc2_tab_weak_barrier_mode(g, t);
@@ -8132,6 +8167,8 @@ void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val)
   if (!L || !t || !val || !tvisgcv(val))
     return;
   g = G(L);
+  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, val)))
+    return;
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return;
   weak = gc2_tab_weak_barrier_mode(g, t);
@@ -8155,9 +8192,11 @@ void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
     return;
   if (gc2_tab_weak_barrier_mode(g, t) == 0)
     return;
-  if (key && tvisgcv(key) && lj_gc2_markobj(g, gcV(key)))
+  if (key && tvisgcv(key) && gc2_tv_gcref_type_match(g, key) &&
+      lj_gc2_markobj(g, gcV(key)))
     gc2_weak_keys_marked_add(g, 1);
-  if (val && tvisgcv(val) && lj_gc2_markobj(g, gcV(val)))
+  if (val && tvisgcv(val) && gc2_tv_gcref_type_match(g, val) &&
+      lj_gc2_markobj(g, gcV(val)))
     gc2_weak_values_marked_add(g, 1);
 }
 
