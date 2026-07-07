@@ -384,6 +384,13 @@ int *lj_m7_ccall_jit_ptr_ptr_i32_i32_ptr(int *security, int32_t manual,
 		      (uint64_t)(uint32_t)(name ? *name : 0)) & 3u);
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_i32_ptr(int *security, int32_t inherit,
+				     int *name)
+{
+  return security + (((uint64_t)(uint32_t)inherit +
+		      (uint64_t)(uint32_t)(name ? *name : 0)) & 3u);
+}
+
 int *lj_m7_ccall_jit_ptr_u32_i32_ptr(uint32_t access, int32_t inherit,
 				     int *name)
 {

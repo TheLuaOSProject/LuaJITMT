@@ -205,6 +205,9 @@ flags, thread-id pointer, and pointer result. The exact
 CreateEvent/CreateSemaphore-shaped slice traces
 `void *(void *, int32_t, int32_t, void *)` calls while preserving security
 attributes, boolean/count fields, name pointer, and pointer result. The exact
+CreateMutex/CreateWaitableTimer-shaped slice traces
+`void *(void *, int32_t, void *)` calls while preserving security attributes,
+inherit/manual-reset-style flags, name pointer, and pointer result. The exact
 OpenEvent/OpenFileMapping-shaped slice traces
 `void *(uint32_t, int32_t, void *)` calls while preserving desired access,
 inherit flag, name pointer, and pointer result. The exact

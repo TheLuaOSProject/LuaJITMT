@@ -179,6 +179,8 @@ The exact CreateThread-shaped slice traces
 `void *(void *, uint64_t, void *, void *, uint32_t, void *)` calls.
 The exact CreateEvent/CreateSemaphore-shaped slice traces
 `void *(void *, int32_t, int32_t, void *)` calls.
+The exact CreateMutex/CreateWaitableTimer-shaped slice traces
+`void *(void *, int32_t, void *)` calls.
 The exact OpenEvent/OpenFileMapping-shaped slice traces
 `void *(uint32_t, int32_t, void *)` calls.
 The exact SetHandleInformation-shaped slice traces
