@@ -72,6 +72,7 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr_u32(int *, int *, int *, int *, uint
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u32(int *, int *, uint32_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u32_i32(int *, int *, uint32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_ptr(int *, int *, uint32_t, int *, int *);
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_u32_i32(int *, int *, uint32_t, int *, uint32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_ptr_u32_ptr_u32_ptr_u32_ptr_ptr(int *, uint32_t, int *, uint32_t, int *, uint32_t, int *, int *);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_i32(int *, int *, int *, int32_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_i32(int *, int *, int32_t);
@@ -2128,6 +2129,25 @@ do
       return r
     end)(80) == 80 * (2147483648 + 316))
     assert(trace_count() > 0, "shared ptr,ptr,uint32_t,int32_t->uint32_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local port = ptr0()
+      local entries = ffi.new("int[4]")
+      local count = ffi.new("uint32_t", 0x80000003)
+      local removed = ffi.new("int[4]")
+      local timeout = ffi.new("uint32_t", 0xf00000f2)
+      local alertable = ffi.new("int32_t", -5)
+      local r = 0
+      for _ = 1, n do
+	r = r + lib.lj_m7_ccall_jit_i32_ptr_ptr_u32_ptr_u32_i32(
+	  port, entries, count, removed, timeout, alertable)
+      end
+      assert(entries[1] == 38 and removed[1] == 49)
+      return r
+    end)(80) == 80 * 105)
+    assert(trace_count() > 0, "shared ptr,ptr,uint32_t,ptr,uint32_t,int32_t->int32_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

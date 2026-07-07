@@ -165,6 +165,8 @@ signed/unsigned 32-bit-result pointer/pointer/unsigned-count argument shapes,
 pointer/pointer/unsigned-int/signed-int argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u32_ptr_ptr()` for the exact signed-int-result
 pointer/pointer/unsigned-count/pointer/pointer argument shape,
+`lj_ccall_jit_i32_ptr_ptr_u32_ptr_u32_i32()` for the exact signed-int-result
+pointer/pointer/unsigned-count/pointer/unsigned-int/signed-int argument shape,
 `lj_ccall_jit_i32_ptr_u32_ptr_u32_ptr_u32_ptr_ptr()` for the exact
 signed-int-result pointer/unsigned-int/pointer/unsigned-int/pointer/
 unsigned-int/pointer/pointer argument shape,
@@ -273,6 +275,10 @@ The scope is deliberately narrow:
   preserving completion port, byte-count output pointer, completion-key output
   pointer, overlapped output pointer, and timeout for
   GetQueuedCompletionStatus-style ABI classes;
+- exact `int32_t(pointer, pointer, uint32_t, pointer, uint32_t, int32_t)`
+  calls, preserving completion port, overlapped-entry buffer, entry count,
+  removed-count output pointer, timeout, and alertable flag for
+  GetQueuedCompletionStatusEx-style ABI classes;
 - exact `pointer(pointer, uint64_t, uint32_t, uint32_t)` calls, preserving the
   size argument and high-bit unsigned flag arguments for VirtualAlloc-style
   pointer/size/allocation-flags/protection-flags ABI classes;
@@ -449,6 +455,8 @@ traced PostQueuedCompletionStatus-shaped pointer/uint32/uint64/pointer
 signed-int-result loops,
 traced GetQueuedCompletionStatus-shaped pointer/pointer/pointer/pointer/uint32
 signed-int-result loops,
+traced GetQueuedCompletionStatusEx-shaped pointer/pointer/uint32/pointer/
+uint32/int32 signed-int-result loops,
 traced pointer/size/allocation-flags/protection-flags pointer-returning loops,
 traced mmap-shaped pointer/size/int/int/int/signed-offset pointer-returning
 loops,
