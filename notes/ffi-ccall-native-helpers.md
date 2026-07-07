@@ -114,7 +114,13 @@ conversion path. The pointer/pointer/signed-length family also traces exact
 `uint32_t(void *, void *, int32_t)`, `uint64_t(void *, void *, int32_t)`,
 `void(void *, void *, int32_t)`, and `void *(void *, void *, int32_t)` calls,
 preserving high-bit unsigned results, boxed uint64 results, side effects, and
-pointer results through the same native-state helper protocol. Exact
+pointer results through the same native-state helper protocol. The
+pointer/pointer/unsigned-count family now traces exact
+`int32_t(void *, void *, uint32_t)`, `uint32_t(void *, void *, uint32_t)`,
+`int64_t(void *, void *, uint32_t)`, `uint64_t(void *, void *, uint32_t)`,
+`void(void *, void *, uint32_t)`, and `void *(void *, void *, uint32_t)` calls,
+preserving high-bit unsigned count arguments without widening them to a
+different ABI shape. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because

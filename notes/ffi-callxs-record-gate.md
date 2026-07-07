@@ -115,8 +115,12 @@ checks both `poll(nil, 0, 0)` and a shared-library signed-narrow-to-unsigned
 conversion probe. The pointer/pointer/signed-length family also traces exact
 `uint32_t(void *, void *, int32_t)`, `uint64_t(void *, void *, int32_t)`,
 `void(void *, void *, int32_t)`, and `void *(void *, void *, int32_t)` calls
-through side-effecting native-state helpers. Other multi-argument pointer/size
-shapes remain interpreted.
+through side-effecting native-state helpers. The pointer/pointer/unsigned-count
+family also traces exact `int32_t(void *, void *, uint32_t)`,
+`uint32_t(void *, void *, uint32_t)`, `int64_t(void *, void *, uint32_t)`,
+`uint64_t(void *, void *, uint32_t)`, `void(void *, void *, uint32_t)`, and
+`void *(void *, void *, uint32_t)` calls without reusing the uint64-size ABI
+helpers. Other multi-argument pointer/size shapes remain interpreted.
 The shared GPR helper matrix separately covers exact two-argument
 `pointer,int64_t` and `pointer,uint64_t` span shapes; broader pointer/size
 families remain interpreted.

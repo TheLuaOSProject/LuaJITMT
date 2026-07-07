@@ -97,18 +97,22 @@ shape,
 argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
+`lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
+signed/unsigned 32-bit-result pointer/pointer/unsigned-count argument shapes,
 `lj_ccall_jit_u32_ptr_ptr_i32()` for the exact unsigned 32-bit-result
 pointer/pointer/signed-length argument shape,
+`lj_ccall_jit_i64_ptr_ptr_u32()` / `lj_ccall_jit_u64_ptr_ptr_u32()` for exact
+signed/unsigned 64-bit-result pointer/pointer/unsigned-count argument shapes,
 `lj_ccall_jit_i64_ptr_ptr_u64()` / `lj_ccall_jit_u64_ptr_ptr_u64()` for exact
 signed/unsigned 64-bit-result pointer/pointer/size argument shapes,
 `lj_ccall_jit_u64_ptr_ptr_i32()` for the exact unsigned 64-bit-result
 pointer/pointer/signed-length argument shape,
-`lj_ccall_jit_void_ptr_ptr_i32()` / `lj_ccall_jit_void_ptr_ptr_u64()` for the
-exact void-returning pointer/pointer/signed-length and
-pointer/pointer/size argument shape,
-`lj_ccall_jit_ptr_ptr_ptr_i32()` / `lj_ccall_jit_ptr_ptr_ptr_u64()` for the
-exact pointer-returning pointer/pointer/signed-length and pointer/pointer/size
-argument shapes,
+`lj_ccall_jit_void_ptr_ptr_i32()` / `lj_ccall_jit_void_ptr_ptr_u32()` /
+`lj_ccall_jit_void_ptr_ptr_u64()` for exact void-returning pointer/pointer
+signed-length, unsigned-count, and size argument shapes,
+`lj_ccall_jit_ptr_ptr_ptr_i32()` / `lj_ccall_jit_ptr_ptr_ptr_u32()` /
+`lj_ccall_jit_ptr_ptr_ptr_u64()` for exact pointer-returning pointer/pointer
+signed-length, unsigned-count, and size argument shapes,
 `lj_ccall_jit_i32_ptr_ulong_i32()` for the exact pointer/unsigned-long/int
 shape, or
 `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR shapes.
@@ -147,15 +151,26 @@ The scope is deliberately narrow:
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
+- exact `int32_t(pointer, pointer, uint32_t)` and
+  `uint32_t(pointer, pointer, uint32_t)` calls, with high-bit unsigned count
+  arguments preserved before the helper casts to the exact unsigned 32-bit ABI
+  width;
 - exact signed/unsigned 64-bit cdata-result `int64_t(pointer, pointer,
   uint64_t)` and `uint64_t(pointer, pointer, uint64_t)` calls, with the final
   size argument preserved before the helper casts to the exact unsigned 64-bit
   ABI width;
+- exact signed/unsigned 64-bit cdata-result `int64_t(pointer, pointer,
+  uint32_t)` and `uint64_t(pointer, pointer, uint32_t)` calls, with high-bit
+  unsigned count arguments preserved before the helper casts to the exact
+  unsigned 32-bit ABI width;
 - exact `void(pointer, pointer, uint64_t)` calls, with the final size argument
   preserved before the helper casts to the exact unsigned 64-bit ABI width;
 - exact `pointer(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
+- exact `void(pointer, pointer, uint32_t)` and
+  `pointer(pointer, pointer, uint32_t)` calls, with high-bit unsigned count
+  arguments preserved;
 - exact `uint32_t(pointer, pointer, int32_t)`,
   `uint64_t(pointer, pointer, int32_t)`, `void(pointer, pointer, int32_t)`,
   and `pointer(pointer, pointer, int32_t)` calls, with the signed 32-bit length
@@ -242,11 +257,13 @@ one- and two-argument int64/uint64 mixed-signedness argument/result loops, trace
 single-argument int64/uint64 calls returning void, int32, uint32, narrow
 integers, or pointers, traced pointer/64-bit span loops for the same return
 families, traced int/signed-offset and int/unsigned-size loops for the same
-return families, traced `poll(nil, 0, 0)`-style loops,
+return families, traced unsigned-count pointer/pointer loops,
+traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, signed/unsigned 64-bit-result pointer/pointer/size loops,
-void-returning pointer/pointer/size loops, double- and float-returning
+void-returning pointer/pointer/size loops, pointer-returning pointer/pointer
+unsigned-count loops, double- and float-returning
 GPR-matrix loops, FP-only numeric call loops,
 signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls, plus exact double/int, double/uint,
