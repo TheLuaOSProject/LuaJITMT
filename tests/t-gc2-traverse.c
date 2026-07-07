@@ -3551,7 +3551,7 @@ static uint32_t finreg_udata_active_nodes(global_State *g)
   GC2FinRegUDataNode *node;
   uint32_t n = 0;
   for (node = gc2_finreg_udata_head_acq(g);
-       node != NULL;
+       node != NULL && lj_gc2_mem_registered(g, node);
        node = gc2_finreg_udata_next_acq(node))
     n += gc2_finreg_udata_active_acq(node) != 0;
   return n;
@@ -3562,7 +3562,7 @@ static uint32_t finreg_udata_active_refs(global_State *g, GCobj *target)
   GC2FinRegUDataNode *node;
   uint32_t n = 0;
   for (node = gc2_finreg_udata_head_acq(g);
-       node != NULL;
+       node != NULL && lj_gc2_mem_registered(g, node);
        node = gc2_finreg_udata_next_acq(node))
     n += gc2_finreg_udata_active_acq(node) &&
 	 gc2_finreg_udata_obj_acq(node) == target;

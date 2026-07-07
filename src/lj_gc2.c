@@ -608,14 +608,14 @@ void lj_gc2_fini(global_State *g)
   if (g) {
     GC2FinRegUDataNode *node =
       gc2_finreg_udata_head_xchg_acqrel(g, NULL);
-    while (node) {
+    while (node && lj_gc2_mem_registered(g, node)) {
       GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
       if (gc2_finreg_udata_active_acq(node))
 	lj_mem_freet(g, node);
       node = next;
     }
     node = gc2_finreg_udata_retired_xchg_acqrel(g, NULL);
-    while (node) {
+    while (node && lj_gc2_mem_registered(g, node)) {
       GC2FinRegUDataNode *next = gc2_finreg_udata_retired_next_acq(node);
       lj_mem_freet(g, node);
       node = next;
@@ -6934,7 +6934,7 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
   if (!L || !gc2_finreg_udata_obj_valid(g, o))
     return;
   for (node = gc2_finreg_udata_head_acq(g);
-       node != NULL;
+       node != NULL && lj_gc2_mem_registered(g, node);
        node = gc2_finreg_udata_next_acq(node)) {
     if (gc2_finreg_udata_active_acq(node) &&
 	gc2_finreg_udata_obj_acq(node) == o)
@@ -6966,7 +6966,7 @@ static int gc2_finreg_udata_retire(global_State *g,
 				   GC2FinRegUDataNode *node)
 {
   GC2FinRegUDataNode *head;
-  if (!g || !node)
+  if (!g || !node || !lj_gc2_mem_registered(g, node))
     return 0;
   lj_assertG(gc2_finreg_udata_obj_acq(node) == NULL,
 	     "retiring live userdata FINREG node");
@@ -6986,14 +6986,16 @@ static int lj_gc2_finreg_udata_unlink(global_State *g,
 				      GC2FinRegUDataNode *next)
 {
   GC2FinRegUDataNode *expect;
-  if (!g || !node)
+  if (!g || !node || !lj_gc2_mem_registered(g, node))
     return 0;
   if (!gc2_finreg_udata_retire(g, node))
     return 1;
   if (prev) {
-    expect = node;
-    if (gc2_finreg_udata_active_acq(prev))
-      (void)gc2_finreg_udata_next_cas(prev, &expect, next);
+    if (lj_gc2_mem_registered(g, prev)) {
+      expect = node;
+      if (gc2_finreg_udata_active_acq(prev))
+	(void)gc2_finreg_udata_next_cas(prev, &expect, next);
+    }
   } else {
     expect = node;
     (void)gc2_finreg_udata_head_cas(g, &expect, next);
@@ -7009,7 +7011,7 @@ void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
     return;
   prev = NULL;
   node = gc2_finreg_udata_head_acq(g);
-  while (node) {
+  while (node && lj_gc2_mem_registered(g, node)) {
     GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
     if (!gc2_finreg_udata_active_acq(node)) {
       node = next;
@@ -7066,7 +7068,7 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
   (void)lj_gc_flush_root_pending(g);
   prev = NULL;
   node = gc2_finreg_udata_head_acq(g);
-  while (node) {
+  while (node && lj_gc2_mem_registered(g, node)) {
     GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
     GCobj *o = gc2_finreg_udata_obj_acq(node);
     uint8_t flags;
