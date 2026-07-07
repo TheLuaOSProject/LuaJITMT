@@ -66,6 +66,18 @@ LJ_FUNC GCudata *lj_thread_live_udata_acq(global_State *g,
 LJ_FUNC GCudata *lj_thread_state_udata_acq(global_State *g,
 					   const lua_State *L);
 
+static LJ_AINLINE GCobj *
+lj_thread_live_udata_ref_acq(const LJThreadLive *node)
+{
+  return gcref_acq(node->ud);
+}
+
+static LJ_AINLINE void lj_thread_live_udata_ref_rel(LJThreadLive *node,
+						    GCobj *o)
+{
+  setgcrefrel(node->ud, o);
+}
+
 static LJ_AINLINE LJThreadLive *
 lj_thread_live_next_acq(const LJThreadLive *node)
 {

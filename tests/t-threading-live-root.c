@@ -40,17 +40,17 @@ int main(void)
   assert(lj_thread_live_udata_acq(g, &node) == NULL);
 
   ud = new_thread_ud(L);
-  setgcrefrel(node.ud, obj2gco(ud));
+  lj_thread_live_udata_ref_rel(&node, obj2gco(ud));
   assert(lj_thread_live_udata_acq(g, &node) == ud);
 
   lj_udata_udtype_rel(ud, UDTYPE_USERDATA);
   assert(lj_thread_live_udata_acq(g, &node) == NULL);
   lj_udata_udtype_rel(ud, UDTYPE_THREAD);
 
-  setgcrefrel(node.ud, bad);
+  lj_thread_live_udata_ref_rel(&node, bad);
   assert(lj_thread_live_udata_acq(g, &node) == NULL);
 
-  setgcrefrel(node.ud, NULL);
+  lj_thread_live_udata_ref_rel(&node, NULL);
   assert(lj_thread_live_udata_acq(g, &node) == NULL);
 
   assert(lj_thread_state_udata_acq(g, NULL) == NULL);

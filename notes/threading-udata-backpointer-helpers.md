@@ -5,11 +5,14 @@
 Routed threading userdata backpointers through helper accessors:
 
 - `lj_thread_udata_*()` owns the `LJThread.ud` payload backpointer.
+- `lj_thread_live_udata_ref_*()` owns the `LJThreadLive.ud` live-root
+  GCRef.
 - `lj_tg_*_thread_ud()` owns the `TGState.thread_ud` per-TG cache.
 
-Thread creation, worker attach/cleanup, `threading.current()`, detach, current
-thread checks, legacy userdata validation, and the focused live-root test now
-use the helper surface instead of direct pointer loads/stores.
+Thread creation, live-root publication/removal, worker attach/cleanup,
+`threading.current()`, detach, current thread checks, legacy userdata
+validation, and the focused live-root test now use the helper surface instead
+of direct pointer loads/stores.
 
 ## Coverage
 

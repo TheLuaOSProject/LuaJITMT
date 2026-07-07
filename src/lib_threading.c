@@ -70,7 +70,7 @@ GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node)
 {
   if (!node)
     return NULL;
-  return threading_thread_udata_candidate(g, gcref_acq(node->ud));
+  return threading_thread_udata_candidate(g, lj_thread_live_udata_ref_acq(node));
 }
 
 GCudata *lj_thread_state_udata_acq(global_State *g, const lua_State *L)
@@ -86,7 +86,7 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
   TValue tv;
   lj_thread_live_next_rel(node, NULL);
   lj_thread_live_retired_next_rel(node, NULL);
-  setgcrefrel(node->ud, obj2gco(ud));
+  lj_thread_live_udata_ref_rel(node, obj2gco(ud));
   setudataV(L, &tv, ud);
   lj_gc_pubroot(L, &tv);  /* 09 section 9.2: native live root. */
   return node;
@@ -116,7 +116,7 @@ static void threading_live_trim_dead_head(global_State *g)
   for (;;) {
     LJThreadLive *next;
     head = lj_thread_live_head_acq(g);
-    if (!head || gcref_acq(head->ud) != NULL)
+    if (!head || lj_thread_live_udata_ref_acq(head) != NULL)
       return;
     next = lj_thread_live_next_acq(head);
     if (lj_thread_live_head_cas(g, &head, next))
@@ -153,7 +153,7 @@ static void threading_live_remove(global_State *g, LJThread *th)
   node = lj_thread_live_node_xchg_acqrel(th, NULL);
   if (node) {
     uint32_t old;
-    setgcrefrel(node->ud, NULL);
+    lj_thread_live_udata_ref_rel(node, NULL);
     old = la_sub32_acqrel(&g->threading_live_count, 1);
     lj_assertG(old > 0, "threading live root count underflow");
     UNUSED(old);
