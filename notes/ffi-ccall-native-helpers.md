@@ -229,6 +229,10 @@ SetWaitableTimerEx-shaped slice traces
 while preserving handle, due-time pointer, signed period, callback pointer,
 callback argument pointer, reason-context pointer, delay, and signed 32-bit
 result. The exact
+RegisterWaitForSingleObject-shaped slice traces
+`int32_t(void *, void *, void *, void *, uint32_t, uint32_t)` calls while
+preserving wait-object output pointer, object handle, callback pointer, context
+pointer, timeout, flags, and signed 32-bit result. The exact
 OpenEvent/OpenFileMapping-shaped slice traces
 `void *(uint32_t, int32_t, void *)` calls while preserving desired access,
 inherit flag, name pointer, and pointer result. The exact
