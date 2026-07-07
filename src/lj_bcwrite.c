@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_buf.h"
 #include "lj_bc.h"
 #include "lj_err.h"
@@ -336,11 +337,15 @@ static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)
     return 1;
   } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
     TraceNo traceno = bc_d(ins);
-    GCtrace *T = traceref(J, traceno);
+    GCtrace *T;
+    lj_gc2_smr_read_enter(J2G(J));
+    T = traceref_safe(J, traceno);
     if (trace_runnable_acq(T, traceno)) {
       *out = trace_startins_acq(T);
+      lj_gc2_smr_read_leave(J2G(J));
       return 1;
     }
+    lj_gc2_smr_read_leave(J2G(J));
     return 0;
   }
   *out = ins;
