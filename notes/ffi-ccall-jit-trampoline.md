@@ -134,6 +134,8 @@ pointer-returning pointer/unsigned-int/unsigned-int/pointer/unsigned-int/
 unsigned-int/pointer argument shape,
 `lj_ccall_jit_ptr_ptr_ptr_u32_u32_u32_ptr()` for the exact pointer-returning
 pointer/pointer/unsigned-int/unsigned-int/unsigned-int/pointer argument shape,
+`lj_ccall_jit_ptr_ptr_u64_ptr_ptr_u32_ptr()` for the exact pointer-returning
+pointer/size/pointer/pointer/unsigned-int/pointer argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
@@ -259,6 +261,9 @@ The scope is deliberately narrow:
 - exact `pointer(pointer, pointer, uint32_t, uint32_t, uint32_t, pointer)`
   calls, preserving handle, security attributes, protection flags, maximum size
   high/low halves, and name for CreateFileMapping-style ABI classes;
+- exact `pointer(pointer, uint64_t, pointer, pointer, uint32_t, pointer)`
+  calls, preserving security attributes, stack size, start address, parameter,
+  creation flags, and thread-id pointer for CreateThread-style ABI classes;
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
@@ -392,6 +397,8 @@ pointer-returning loops,
 traced CreateFile-shaped pointer/uint32/uint32/pointer/uint32/uint32/pointer
 pointer-returning loops,
 traced CreateFileMapping-shaped pointer/pointer/uint32/uint32/uint32/pointer
+pointer-returning loops,
+traced CreateThread-shaped pointer/uint64/ptr/ptr/uint32/ptr
 pointer-returning loops,
 traced ReadFile/WriteFile-shaped pointer/pointer/uint32/pointer/pointer
 signed-int-result loops,

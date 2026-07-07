@@ -165,6 +165,8 @@ exact CreateFile-shaped slice traces
 `void *(void *, uint32_t, uint32_t, void *, uint32_t, uint32_t, void *)` calls.
 The exact CreateFileMapping-shaped slice traces
 `void *(void *, void *, uint32_t, uint32_t, uint32_t, void *)` calls.
+The exact CreateThread-shaped slice traces
+`void *(void *, uint64_t, void *, void *, uint32_t, void *)` calls.
 Other multi-argument pointer/size shapes remain interpreted.
 The shared GPR helper matrix separately covers exact two-argument
 `pointer,int64_t` and `pointer,uint64_t` span shapes; broader pointer/size

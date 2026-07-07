@@ -180,7 +180,10 @@ disposition, flags, template handle, and pointer result. The exact
 CreateFileMapping-shaped slice traces
 `void *(void *, void *, uint32_t, uint32_t, uint32_t, void *)` calls while
 preserving handle, security attributes, protection flags, max size high/low,
-mapping name, and pointer result. Exact
+mapping name, and pointer result. The exact CreateThread-shaped slice traces
+`void *(void *, uint64_t, void *, void *, uint32_t, void *)` calls while
+preserving security attributes, stack size, start address, parameter, creation
+flags, thread-id pointer, and pointer result. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because
