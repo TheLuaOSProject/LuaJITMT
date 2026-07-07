@@ -249,6 +249,7 @@ LJ_FUNC int lj_tab_test_resize_copy_array_slot(lua_State *L, GCtab *src,
 LJ_FUNC TValue *lj_tab_test_resize_assist_array_slot(lua_State *L,
 						     GCtab *src,
 						     uint32_t idx);
+LJ_FUNC int lj_tab_test_table_candidate(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_tab_test_struct_owner_l_waits(void);
 LJ_FUNC void lj_tab_test_reset_struct_owner_l_waits(void);
 LJ_FUNC uint32_t lj_tab_test_struct_owner_no_l_waits(void);

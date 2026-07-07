@@ -591,13 +591,25 @@ static LJ_AINLINE void tab_array_free(global_State *g, TValue *array, MSize acap
   lj_mem_free(g, lj_tab_array_hdrw(array), lj_tab_array_bytes(acap));
 }
 
+static LJ_AINLINE GCtab *tab_gc_table_candidate(global_State *g, GCobj *o)
+{
+  uint32_t gct;
+  if (!lj_gc2_obj_valid_queued(g, o))
+    return NULL;
+  gct = (uint32_t)la_load8_acq(&o->gch.gct);
+  return gct == (uint32_t)~LJ_TTAB ? gco2tab(o) : NULL;
+}
+
+#ifdef LJ_TAB_TEST_HELPERS
+int lj_tab_test_table_candidate(global_State *g, GCobj *o)
+{
+  return tab_gc_table_candidate(g, o) != NULL;
+}
+#endif
+
 static LJ_AINLINE int tab_gc_table_valid(global_State *g, const GCtab *t)
 {
-  GCobj *o;
-  if (!g || !t)
-    return 0;
-  o = obj2gco((GCtab *)t);
-  return lj_gc2_obj_valid_queued(g, o) && o->gch.gct == (uint32_t)~LJ_TTAB;
+  return t && tab_gc_table_candidate(g, obj2gco((GCtab *)t)) != NULL;
 }
 
 static LJ_AINLINE int tab_gc_array_hdr_valid(global_State *g,
@@ -1316,7 +1328,8 @@ static int tab_node_still_published(global_State *g, const Node *node)
   uint32_t n = 0;
   ptrdiff_t i;
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    if (o->gch.gct == ~LJ_TTAB && lj_tab_node_acq(gco2tab(o)) == node)
+    GCtab *t = tab_gc_table_candidate(g, o);
+    if (t && lj_tab_node_acq(t) == node)
       return 1;
     if (++n >= 1000000u)
       break;
@@ -1327,8 +1340,10 @@ static int tab_node_still_published(global_State *g, const Node *node)
   ** generation while reclaim runs; treat this as a conservative no-free signal.
   */
   for (i = 0; i < GCROOT_MAX; i++) {
+    GCtab *t;
     o = lj_gcroot_acq(g, (GCRootID)i);
-    if (o && o->gch.gct == ~LJ_TTAB && lj_tab_node_acq(gco2tab(o)) == node)
+    t = tab_gc_table_candidate(g, o);
+    if (t && lj_tab_node_acq(t) == node)
       return 1;
   }
   return 0;
@@ -1340,7 +1355,8 @@ static int tab_array_still_published(global_State *g, const TValue *array)
   uint32_t n = 0;
   ptrdiff_t i;
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    if (o->gch.gct == ~LJ_TTAB && lj_tab_array_acq(gco2tab(o)) == array)
+    GCtab *t = tab_gc_table_candidate(g, o);
+    if (t && lj_tab_array_acq(t) == array)
       return 1;
     if (++n >= 1000000u)
       break;
@@ -1351,8 +1367,10 @@ static int tab_array_still_published(global_State *g, const TValue *array)
   ** validation pass.
   */
   for (i = 0; i < GCROOT_MAX; i++) {
+    GCtab *t;
     o = lj_gcroot_acq(g, (GCRootID)i);
-    if (o && o->gch.gct == ~LJ_TTAB && lj_tab_array_acq(gco2tab(o)) == array)
+    t = tab_gc_table_candidate(g, o);
+    if (t && lj_tab_array_acq(t) == array)
       return 1;
   }
   return 0;

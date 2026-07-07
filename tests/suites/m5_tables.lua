@@ -62,7 +62,7 @@ return function(add)
       description = "table hash-vector retirement C fixture",
       output = "lj_t-tab-retire",
       cfile = "t-tab-retire.c",
-      opts = { timeout = "20s" },
+      opts = build.tab_helper_opts({ timeout = "20s" }),
       message = "M5 table hash-vector retirement tests passed"
     },
     {

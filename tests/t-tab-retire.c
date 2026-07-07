@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -11,6 +12,10 @@
 
 #include "lj_obj.h"
 #include "lj_tab.h"
+
+#ifndef LJ_TAB_TEST_HELPERS
+#error "t-tab-retire requires LJ_TAB_TEST_HELPERS"
+#endif
 
 static TabNodeRetire *find_retired(global_State *g, Node *node)
 {
@@ -63,6 +68,13 @@ static void check_int_array(lua_State *L, GCtab *t, int key, int val)
   check_int_value(L, key, val);
 }
 
+static void test_table_candidate(global_State *g, GCtab *t)
+{
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+  assert(lj_tab_test_table_candidate(g, obj2gco(t)) == 1);
+  assert(lj_tab_test_table_candidate(g, bad) == 0);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -81,6 +93,7 @@ int main(void)
 
   lua_createtable(L, 0, 8);
   t = tabV(L->top-1);
+  test_table_candidate(g, t);
   assert(t->hmask > 0);
   for (i = 0; i < 4; i++)
     set_pair(L, i);
