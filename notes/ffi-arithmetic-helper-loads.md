@@ -18,6 +18,12 @@ FFI arithmetic helper loads
   `bit.band`/`bit.bor`/`bit.bxor` before converting each TValue operand,
   avoiding a live `ctype_get(cts, id)` table pointer in the n-ary cdata bit-op
   loop.
+- Follow-up cdata arithmetic lifetime cleanup routes `carith_set_operand_id()`,
+  pointer-index conversion, int64 result conversion, enum-source handoff, and
+  `lj_carith_check64()` destination conversion through a local exact-record
+  snapshot/wait helper. Parser-created IDs no longer reopen the ctype table
+  with a raw pointer after intern/snapshot work; active recorder paths still
+  abort with `CTBUSY` instead of waiting.
 - Documented why this shared state is owned by the helper surface. Active coverage stays in `m7_ffi_carith_l` behavior/counter fixtures; the helper comments carry the ordering rationale.
 - Extended `tests/suites/m7_ffi.lua` to document raw arithmetic `ctype_get(cts,
   ...)` live-pointer reuse outside immediate local CType copies in
@@ -25,6 +31,9 @@ FFI arithmetic helper loads
 
 Verification:
 
+- `make -C src -j$(nproc) TARGET_STRIP=:`
+- `tools/ci/lua_test.sh m7_ffi_carith_l`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m7_ffi_carith_l
 - LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot m7_ffi_cparse_rollback
 - git diff --check
