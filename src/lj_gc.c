@@ -4517,25 +4517,15 @@ void *lj_mem_newgco_unlinked(lua_State *L, GCSize size)
 
 void lj_gc_linkobj(global_State *g, GCobj *o)
 {
-#if LJ_GC64
-  uint64_t head;
-  GCRef next;
+  GCRef *root = lj_gc_root_ref(g);
+  GCobj *head;
   do {
-    head = la_load64_acq(&lj_gc_root_ref(g)->gcptr64);
-    setgcrefp(next, (void *)(uintptr_t)head);
-    lj_obj_setgcwr(o, next);
-  } while (!la_cas64(&lj_gc_root_ref(g)->gcptr64, &head,
-		     (uint64_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
-#else
-  uint32_t head;
-  GCRef next;
-  do {
-    head = la_load32_acq(&lj_gc_root_ref(g)->gcptr32);
-    setgcrefp(next, (void *)(uintptr_t)head);
-    lj_obj_setgcwr(o, next);
-  } while (!la_cas32(&lj_gc_root_ref(g)->gcptr32, &head,
-			     (uint32_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
-#endif
+    head = gcref_acq(*root);
+    if (head)
+      lj_obj_setgcw(o, head);
+    else
+      lj_obj_setgcwnull(o);
+  } while (!gcref_cas(root, &head, o));  /* M7 publish. */
   lj_gcroot_repair_epoch_add(g);
 }
 

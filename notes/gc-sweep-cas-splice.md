@@ -13,10 +13,10 @@ Verification:
 - tools/ci/lua_test.sh m9_m10_gc
 
 Follow-up:
-- Legacy root-list splice, prepend, after-anchor publish, and close-state unlink
-  paths now use the shared `gcref_cas()` helper instead of spelling GC64/GC32
-  pointer CASes at each call site. The retry shape is unchanged, but root-list
-  CAS publication now shares the same object-reference helper surface as FINREG
-  and pending-root helpers.
+- Legacy root-list object publish, splice, prepend, after-anchor publish, and
+  close-state unlink paths now use the shared `gcref_cas()` helper instead of
+  spelling GC64/GC32 pointer CASes at each call site. The retry shape is
+  unchanged, but root-list CAS publication now shares the same object-reference
+  helper surface as FINREG and pending-root helpers.
 - Verification: clean build, `m2_arena_gcsweep`, `m3_gc2_paranoia`, `m8_weak`,
   and `m10_generational` passed.
