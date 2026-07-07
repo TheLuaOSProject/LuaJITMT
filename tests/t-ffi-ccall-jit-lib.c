@@ -704,6 +704,16 @@ int *lj_m7_ccall_jit_ptr_ptr_ptr_ptr(int *callback, int *context, int *env)
   return context + i;
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_ptr_ptr_ptr(int *file, int *callback,
+					 int *context, int *env)
+{
+  uint32_t i = ((uint32_t)file[0] + (uint32_t)callback[1] +
+		(uint32_t)context[2] + (uint32_t)env[3]) & 3u;
+  context[i] = file[(i + 1u) & 3u] + callback[(i + 2u) & 3u] +
+	       env[(i + 3u) & 3u];
+  return context + i;
+}
+
 int *lj_m7_ccall_jit_ptr_ptr_ptr_u64(int *dst, int *src, uint64_t n)
 {
   uint64_t i = n & 3u;

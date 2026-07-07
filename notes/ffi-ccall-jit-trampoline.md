@@ -203,6 +203,8 @@ signed-length, unsigned-count, and size argument shapes,
 pointer/pointer/pointer argument shapes,
 `lj_ccall_jit_ptr_ptr_ptr_ptr()` for exact pointer-returning
 pointer/pointer/pointer argument shapes,
+`lj_ccall_jit_ptr_ptr_ptr_ptr_ptr()` for the exact pointer-returning
+pointer/pointer/pointer/pointer argument shape,
 `lj_ccall_jit_ptr_ptr_ptr_i32()` / `lj_ccall_jit_ptr_ptr_ptr_u32()` /
 `lj_ccall_jit_ptr_ptr_ptr_u64()` for exact pointer-returning pointer/pointer
 signed-length, unsigned-count, and size argument shapes,
@@ -409,6 +411,9 @@ The scope is deliberately narrow:
 - exact `pointer(pointer, pointer, pointer)` calls, preserving callback,
   context, and callback-environment pointers for CreateThreadpoolWait/Work/
   Timer-style ABI classes;
+- exact `pointer(pointer, pointer, pointer, pointer)` calls, preserving file
+  handle, callback, context, and callback-environment pointers for
+  CreateThreadpoolIo-style ABI classes;
 - exact `int32_t(pointer, pointer, pointer)` calls, preserving callback,
   context, callback-environment pointers, and signed 32-bit result for
   TrySubmitThreadpoolCallback-style ABI classes;
@@ -516,6 +521,8 @@ traced pointer/size/flags/output-pointer loops,
 traced CreateIoCompletionPort-shaped pointer/pointer/uint64/uint32
 pointer-returning loops,
 traced CreateThreadpoolWait/Work/Timer-shaped pointer/pointer/pointer
+pointer-returning loops,
+traced CreateThreadpoolIo-shaped pointer/pointer/pointer/pointer
 pointer-returning loops,
 traced TrySubmitThreadpoolCallback-shaped pointer/pointer/pointer
 signed-int-result loops,

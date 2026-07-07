@@ -260,6 +260,9 @@ inherit flag, options, and signed 32-bit result. Exact
 CreateThreadpoolWait/Work/Timer-shaped slice traces
 `void *(void *, void *, void *)` calls while preserving callback, context,
 callback-environment pointers, and pointer result. Exact
+CreateThreadpoolIo-shaped slice traces
+`void *(void *, void *, void *, void *)` calls while preserving file handle,
+callback, context, callback-environment pointers, and pointer result. Exact
 TrySubmitThreadpoolCallback-shaped slice traces
 `int32_t(void *, void *, void *)` calls while preserving callback, context,
 callback-environment pointers, and signed 32-bit result. Exact
