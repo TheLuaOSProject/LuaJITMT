@@ -123,7 +123,10 @@ pointer/pointer/unsigned-count family now traces exact
 `int64_t(void *, void *, uint32_t)`, `uint64_t(void *, void *, uint32_t)`,
 `void(void *, void *, uint32_t)`, and `void *(void *, void *, uint32_t)` calls,
 preserving high-bit unsigned count arguments without widening them to a
-different ABI shape. The pointer/signed-int/size family traces exact
+different ABI shape. The exact ReadFile/WriteFile-shaped slice traces
+`int32_t(void *, void *, uint32_t, void *, void *)` calls while preserving the
+byte count, output pointer, and overlapped pointer arguments. The
+pointer/signed-int/size family traces exact
 `int32_t(void *, int32_t, uint64_t)`, `uint32_t(void *, int32_t, uint64_t)`,
 `int64_t(void *, int32_t, uint64_t)`, `uint64_t(void *, int32_t, uint64_t)`,
 `void(void *, int32_t, uint64_t)`, and `void *(void *, int32_t, uint64_t)`

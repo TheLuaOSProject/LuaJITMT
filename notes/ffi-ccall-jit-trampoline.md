@@ -133,6 +133,8 @@ pointer/unsigned-int/unsigned-int/unsigned-int/size/pointer argument shape,
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
 signed/unsigned 32-bit-result pointer/pointer/unsigned-count argument shapes,
+`lj_ccall_jit_i32_ptr_ptr_u32_ptr_ptr()` for the exact signed-int-result
+pointer/pointer/unsigned-count/pointer/pointer argument shape,
 `lj_ccall_jit_u32_ptr_ptr_i32()` for the exact unsigned 32-bit-result
 pointer/pointer/signed-length argument shape,
 `lj_ccall_jit_i64_ptr_ptr_u32()` / `lj_ccall_jit_u64_ptr_ptr_u32()` for exact
@@ -247,6 +249,9 @@ The scope is deliberately narrow:
   `uint32_t(pointer, pointer, uint32_t)` calls, with high-bit unsigned count
   arguments preserved before the helper casts to the exact unsigned 32-bit ABI
   width;
+- exact `int32_t(pointer, pointer, uint32_t, pointer, pointer)` calls,
+  preserving high-bit unsigned byte counts and both output/overlapped pointer
+  arguments for ReadFile/WriteFile-style ABI classes;
 - exact signed/unsigned 64-bit cdata-result `int64_t(pointer, pointer,
   uint64_t)` and `uint64_t(pointer, pointer, uint64_t)` calls, with the final
   size argument preserved before the helper casts to the exact unsigned 64-bit
@@ -361,6 +366,8 @@ traced MapViewOfFile-shaped pointer/uint32/uint32/uint32/size pointer-returning
 loops,
 traced MapViewOfFileEx-shaped pointer/uint32/uint32/uint32/size/pointer
 pointer-returning loops,
+traced ReadFile/WriteFile-shaped pointer/pointer/uint32/pointer/pointer
+signed-int-result loops,
 traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, POSIX `pread`/`pwrite`-shaped
 int/pointer/size/signed-offset loops, UCRT `_write`-shaped
