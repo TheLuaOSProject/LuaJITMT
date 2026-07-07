@@ -2229,10 +2229,18 @@ static GCproto *gc_func_proto_if_lua(GCfunc *fn)
 static int gc_frame_func_valid(global_State *g, TValue *frame,
 			       GCfunc **fnp, GCproto **ptp)
 {
-  GCobj *fo = frame_gc(frame);
+#if LJ_FR2
+  cTValue *ftv = frame - 1;
+#endif
+  GCobj *fo;
   GCfunc *fn;
   if (fnp) *fnp = NULL;
   if (ptp) *ptp = NULL;
+#if LJ_FR2
+  if (!tvisfunc(ftv))
+    return 0;
+#endif
+  fo = frame_gc(frame);
   if (!fo || !checkptrGC(fo) ||
       (((uintptr_t)fo & (uintptr_t)(sizeof(void *) - 1u)) != 0) ||
       !lj_gc2_obj_valid(g, fo) || fo->gch.gct != ~LJ_TFUNC)

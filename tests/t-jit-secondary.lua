@@ -328,6 +328,27 @@ local worker = th.spawn(function()
 
   local shared_next = { alpha = 3, beta = 5, gamma = 7 }
 
+  local function shared_table_next_start(n)
+    local s = 0
+    local i = 1
+    while i <= n do
+      local key, value = next(shared_next, nil)
+      assert(key ~= nil and value ~= nil)
+      s = s + value
+      i = i + 1
+    end
+    return s
+  end
+
+  for _ = 1, 20 do
+    assert(shared_table_next_start(80) > 0)
+  end
+  local shared_next_start_traces = trace_count(trace_limit)
+  assert(shared_next_start_traces == 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
   local function shared_table_next(n)
     local s = 0
     local i = 1
@@ -442,15 +463,15 @@ local worker = th.spawn(function()
   return root_traces, side_traces, table_traces, read_traces, index_traces,
 	 write_traces, meta_write_traces, meta_nil_hash_traces,
 	 meta_nil_array_traces, table_clear_traces, ipairs_traces, next_traces,
-	 shared_next_traces, shared_pairs_traces, local_cell_root_traces,
-	 local_cell_side_traces, th.current():id()
+	 shared_next_start_traces, shared_next_traces, shared_pairs_traces,
+	 local_cell_root_traces, local_cell_side_traces, th.current():id()
 end)
 
 local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
       write_traces, meta_write_traces, meta_nil_hash_traces,
       meta_nil_array_traces, table_clear_traces, ipairs_traces, next_traces,
-      shared_next_traces, shared_pairs_traces, local_cell_root_traces,
-      local_cell_side_traces, tid = worker:join()
+      shared_next_start_traces, shared_next_traces, shared_pairs_traces,
+      local_cell_root_traces, local_cell_side_traces, tid = worker:join()
 assert(ok == true, tostring(root_traces))
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
@@ -468,6 +489,8 @@ assert(type(meta_nil_array_traces) == "number" and meta_nil_array_traces == 0)
 assert(type(table_clear_traces) == "number" and table_clear_traces == 0)
 assert(type(ipairs_traces) == "number" and ipairs_traces == 0)
 assert(type(next_traces) == "number" and next_traces > 0)
+assert(type(shared_next_start_traces) == "number" and
+       shared_next_start_traces == 0)
 assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
 assert(type(shared_pairs_traces) == "number" and shared_pairs_traces == 0)
 assert(tid == worker:id())
