@@ -2729,19 +2729,22 @@ static void trace_exit_regs(lua_State *V, ExitState *ex)
 
 #if defined(EXITSTATE_PCREG) || (LJ_UNWIND_JIT && !EXITTRACE_VMSTATE)
 /* Determine trace number from pc of exit instruction. */
-static TraceNo trace_exit_find(jit_State *J, MCode *pc)
+static TraceNo trace_exit_find(jit_State *J, MCode *pc, GCtrace **Tp)
 {
   TraceNo traceno;
   MSize sizetrace = trace_sizetrace_acq(J);
   for (traceno = 1; traceno < sizetrace; traceno++) {
-    GCtrace *T = traceref(J, traceno);
-    if (T) {
+    GCtrace *T = traceref_safe(J, traceno);
+    if (trace_exit_body_match(T, traceno)) {
       MCode *mcode = trace_mcode_acq(T);
       MSize szmcode = trace_szmcode_acq(T);
-      if (mcode && pc >= mcode && pc < (MCode *)((char *)mcode + szmcode))
+      if (mcode && pc >= mcode && pc < (MCode *)((char *)mcode + szmcode)) {
+	if (Tp) *Tp = T;
 	return traceno;
+      }
     }
   }
+  if (Tp) *Tp = NULL;
   lj_assertJ(0, "bad exit pc");
   return 0;
 }
@@ -2789,12 +2792,15 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 
 #ifdef EXITSTATE_PCREG
   lj_gc2_smr_read_enter(g);
-  parent = trace_exit_find(J, (MCode *)(intptr_t)ex->gpr[EXITSTATE_PCREG]);
+  parent = trace_exit_find(J, (MCode *)(intptr_t)ex->gpr[EXITSTATE_PCREG],
+			   &T);
 #else
   lj_gc2_smr_read_enter(g);
   UNUSED(ex);
+  T = traceref_safe(J, parent);
 #endif
-  T = traceref(J, parent); UNUSED(T);
+  if (!T)
+    T = traceref_safe(J, parent);
   lj_assertJ(trace_exit_body_match(T, parent), "bad trace number");
 #ifdef EXITSTATE_CHECKEXIT
   if (exitno == trace_nsnap_acq(T)) {  /* Stack check. */
@@ -2802,7 +2808,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     lj_assertJ(trace_root_acq(T) != 0, "stack check in root trace");
     exitno = base.op2;
     parent = base.op1;
-    T = traceref(J, parent);
+    T = traceref_safe(J, parent);
     lj_assertJ(trace_exit_body_match(T, parent), "bad stack-check trace");
   }
 #endif
@@ -2873,7 +2879,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     GCtrace *target;
     BCIns startins;
     lj_gc2_smr_read_enter(g);
-    target = traceref(J, targetno);
+    target = traceref_safe(J, targetno);
     if (!trace_runnable_acq(target, targetno) || trace_startpc_acq(target) != pc) {
       lj_gc2_smr_read_leave(g);
       return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
@@ -2920,17 +2926,29 @@ static LJ_AINLINE uintptr_t trace_unwind_exitstub_addr_acq(GCtrace *T,
 /* Given an mcode address determine trace exit address for unwinding. */
 uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
 {
+  global_State *g = J2G(J);
+  GCtrace *T = NULL;
+  uintptr_t target = 0;
 #if EXITTRACE_VMSTATE
   TGState *tg = J2TG(J);
   TraceNo traceno = tg ?
     (TraceNo)lj_tg_vmstate_load_acq(tg) :
     (TraceNo)vmstate_load_acq(J2G(J));
 #else
-  TraceNo traceno = trace_exit_find(J, (MCode *)addr);
+  TraceNo traceno;
 #endif
-  GCtrace *T = traceref(J, traceno);
-  MCode *mcode = T ? trace_mcode_acq(T) : NULL;
-  MSize szmcode = T ? trace_szmcode_acq(T) : 0;
+  MCode *mcode;
+  MSize szmcode;
+  lj_gc2_smr_read_enter(g);
+#if EXITTRACE_VMSTATE
+  T = traceref_safe(J, traceno);
+#else
+  traceno = trace_exit_find(J, (MCode *)addr, &T);
+#endif
+  if (!T)
+    T = traceref_safe(J, traceno);
+  mcode = T ? trace_mcode_acq(T) : NULL;
+  szmcode = T ? trace_szmcode_acq(T) : 0;
   if (T && mcode
 #if EXITTRACE_VMSTATE
       && addr >= (uintptr_t)mcode &&
@@ -2948,11 +2966,14 @@ uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
     exitno--;
     *ep = exitno;
 #ifdef exitstub_trace_addr
-    return trace_unwind_exitstub_addr_acq(T, exitno);
+    target = trace_unwind_exitstub_addr_acq(T, exitno);
 #elif defined(EXITSTUBS_PER_GROUP)
-    return (uintptr_t)exitstub_addr(J, exitno);
+    target = (uintptr_t)exitstub_addr(J, exitno);
 #endif
   }
+  lj_gc2_smr_read_leave(g);
+  if (target)
+    return target;
   /* Cannot correlate addr with trace/exit. This will be fatal. */
   lj_assertJ(0, "bad exit pc");
   return 0;
