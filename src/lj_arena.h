@@ -219,6 +219,8 @@ LJ_FUNC int lj_arena_hugetab_insert(HugeTab *ht, void *p, size_t size,
 				    uint32_t hflags);
 LJ_FUNC int lj_arena_hugetab_lookup(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p,
+					  void **basep, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_mark(HugeTab *ht, const void *p,
 				  LJHugeInfo *hi);
 LJ_FUNC void lj_arena_hugetab_clear_marks(HugeTab *ht);

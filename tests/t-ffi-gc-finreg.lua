@@ -14,7 +14,12 @@ collectgarbage("stop")
 
 local ready, start = harness.channels(nthreads)
 local finalized = th.channel(nthreads * iters)
+local finalized_anchor = "__lj_m7_ffi_finreg_finalized"
 local workers = {}
+
+-- Worker-created cdata finalizers run after worker stacks have unwound. Keep
+-- the shared notification channel rooted outside those stacks until drained.
+_G[finalized_anchor] = finalized
 
 for tid = 1, nthreads do
   workers[tid] = th.spawn(function(ready_ch, start_ch, finalized_ch, id, count)
@@ -80,6 +85,7 @@ do
   assert(extra == nil and why == "timeout",
          "worker finalizer fired more times than registered")
 end
+_G[finalized_anchor] = nil
 
 collectgarbage("stop")
 

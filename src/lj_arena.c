@@ -461,6 +461,35 @@ int lj_arena_hugetab_lookup(HugeTab *ht, const void *p, LJHugeInfo *hi)
   return 0;
 }
 
+int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p, void **basep,
+				  LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t target;
+  uint32_t i, cap;
+  if (!h || !p)
+    return 0;
+  target = (uint64_t)(uintptr_t)p;
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    LJHugeEnt *e = &h->ent[i];
+    uint64_t addr = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 slot state. */
+    if (addr > LJ_HUGETAB_TOMBSTONE) {
+      uint64_t meta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 metadata. */
+      if (la_load64_acq(&e->slot.lo) == addr) {  /* Stable snapshot. */
+	size_t size = (size_t)(meta >> LJ_HUGETAB_META_SHIFT);
+	if (target >= addr && target - addr < (uint64_t)size) {
+	  if (basep)
+	    *basep = (void *)(uintptr_t)addr;
+	  hugetab_decode(meta, hi);
+	  return 1;
+	}
+      }
+    }
+  }
+  return 0;
+}
+
 int lj_arena_hugetab_mark(HugeTab *ht, const void *p, LJHugeInfo *hi)
 {
   LJHugeTabHdr *h = ht ? ht->h : NULL;

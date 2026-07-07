@@ -30,7 +30,7 @@ static CTypeID new_named(CTState *cts, lua_State *L, CTInfo info, CTSize size,
   CTypeID id = lj_ctype_new_l(L, cts, ctp);
   CType *ct = *ctp;
   init_test_ctype(ct, info, size);
-  ctype_setname(ct, name);
+  ctype_setname(G(L), ct, name);
   return id;
 }
 

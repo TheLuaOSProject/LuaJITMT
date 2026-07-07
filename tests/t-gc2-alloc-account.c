@@ -7,6 +7,7 @@
 #endif
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -15,6 +16,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_cdata.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_meta.h"
@@ -61,6 +63,37 @@ static GCobj *active_ssb_last(TGState *tg)
   if (base == NULL || next == NULL || next <= base)
     return NULL;
   return gcref_acq(*(next - 1));
+}
+
+static void test_obj_valid_rejects_nonobject(global_State *g)
+{
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+  assert(lj_gc2_obj_valid(g, bad) == 0);
+  assert(lj_gc2_obj_valid_queued(g, bad) == 0);
+}
+
+static void test_obj_valid_accepts_variable_cdata(lua_State *L,
+						  global_State *g)
+{
+#if LJ_HASFFI
+  {
+    GCcdata *cd;
+    int status;
+    lua_pushcfunction(L, luaopen_ffi);
+    lua_call(L, 0, 1);
+    lua_setglobal(L, "ffi");
+    status = luaL_dostring(L, "return ffi.new('uint8_t[?]', 70000)");
+    assert(status == LUA_OK);
+    assert(tviscdata(L->top - 1));
+    cd = cdataV(L->top - 1);
+    assert(lj_gc2_obj_valid(g, obj2gco(cd)) == 1);
+    assert(lj_gc2_obj_valid_queued(g, obj2gco(cd)) == 1);
+    lua_settop(L, 0);
+  }
+#else
+  UNUSED(L);
+  UNUSED(g);
+#endif
 }
 
 static void test_public_minor_skips_classic_registry_roots(lua_State *L,
@@ -344,6 +377,7 @@ int main(void)
   tg = L2TG(L);
   assert(g != NULL);
   assert(tg != NULL);
+  test_obj_valid_rejects_nonobject(g);
   assert(gc2_gcpause_pct_acq(g) == lj_gc_pause_load(g));
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
   assert(gc2_cycle_requests_acq(g) == 0);
@@ -936,6 +970,8 @@ int main(void)
   assert(lua_isnil(L, -1));
   lua_pop(L, 1);
   lj_gc2_cycle_to_idle(g);
+
+  test_obj_valid_accepts_variable_cdata(L, g);
 
   lua_close(L);
   puts("t-gc2-alloc-account OK: allocation accounting flushes by threshold and safepoint");

@@ -2318,6 +2318,8 @@ static int gc2_finalizer_dispatch_obj(lua_State *L, global_State *g, GCobj *o,
     return 0;
   if (ctx->dispatch)
     return ctx->dispatch(L, g, o);
+  if (LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o)))
+    return 0;
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA)
     return lj_gc2_finreg_cdata_dispatch(L, g, o);
@@ -4897,81 +4899,82 @@ static LJ_AINLINE void gc2_queue_slot_clear_rel(GCRef *slot)
   setgcrefnullrel(*slot);
 }
 
-static int gc2_registered_obj_valid(global_State *g, GCobj *o)
+enum {
+  GC2_OBJMEM_INVALID,
+  GC2_OBJMEM_CUSTOM,
+  GC2_OBJMEM_SMALL,
+  GC2_OBJMEM_HUGE
+};
+
+static int gc2_obj_mem_live_kind(global_State *g, const void *p,
+				 LJHugeInfo *hip)
 {
   TGState *tg;
   GCArena *want;
   uint32_t cell;
-  if (!g || !o || !checkptrGC(o) ||
-      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
-    return 0;
-#if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
-    void *base;
-    /*
-    ** Variable-size/aligned cdata stores the GCcdata header inside a larger raw
-    ** allocation. The header cell is not the allocation cell, so validate and
-    ** mark from the computed allocation base just like gc2_mark_base().
-    */
-    if (!lj_cdata_validate(g, gco2cd(o), &base, NULL))
-      return 0;
-    return lj_gc2_mem_registered_known(g, base);
-  }
-#endif
-  if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
-    return 0;
   if (g->allocf != lj_arena_allocf)
-    return 1;
-  want = lj_arena_of(o);
-  cell = lj_arena_cellof(o);
+    return GC2_OBJMEM_CUSTOM;
+  want = lj_arena_of(p);
+  cell = lj_arena_cellof(p);
   if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS) {
     int registered = gc2_small_arena_registered(g, want, NULL);
     if (registered > 0)
-      return lj_arena_bm_get(want->block, cell) != 0;
+      return lj_arena_bm_get(want->block, cell) != 0 ?
+	     GC2_OBJMEM_SMALL : GC2_OBJMEM_INVALID;
     if (registered == 0)
-      return 0;
+      return GC2_OBJMEM_INVALID;
     for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
       if (gc2_tg_owns_small_arena(tg, want))
-	return lj_arena_bm_get(want->block, cell) != 0;
+	return lj_arena_bm_get(want->block, cell) != 0 ?
+	       GC2_OBJMEM_SMALL : GC2_OBJMEM_INVALID;
     }
     if (g->main_tg && gc2_tg_owns_small_arena(g->main_tg, want))
-      return lj_arena_bm_get(want->block, cell) != 0;
+      return lj_arena_bm_get(want->block, cell) != 0 ?
+	     GC2_OBJMEM_SMALL : GC2_OBJMEM_INVALID;
   }
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
       LJHugeInfo hi;
-      if (lj_arena_hugetab_lookup(&tg->huge, o, &hi) == 1)
+      if (lj_arena_hugetab_range_lookup(&tg->huge, p, NULL, &hi) == 1) {
+	if (hip)
+	  *hip = hi;
+	return GC2_OBJMEM_HUGE;
+      }
+    }
+  }
+  if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB)) {
+    LJHugeInfo hi;
+    if (lj_arena_hugetab_range_lookup(&g->main_tg->huge, p, NULL, &hi) == 1) {
+      if (hip)
+	*hip = hi;
+      return GC2_OBJMEM_HUGE;
+    }
+  }
+  return GC2_OBJMEM_INVALID;
+}
+
+static int gc2_huge_exact_traversable(global_State *g, const void *p)
+{
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+      LJHugeInfo hi;
+      if (lj_arena_hugetab_lookup(&tg->huge, p, &hi) == 1)
 	return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
     }
   }
   if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB)) {
     LJHugeInfo hi;
-    if (lj_arena_hugetab_lookup(&g->main_tg->huge, o, &hi) == 1)
+    if (lj_arena_hugetab_lookup(&g->main_tg->huge, p, &hi) == 1)
       return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
   }
   return 0;
 }
 
-int lj_gc2_obj_valid(global_State *g, GCobj *o)
-{
-  return gc2_registered_obj_valid(g, o);
-}
-
-static int gc2_queue_obj_valid(global_State *g, GCobj *o)
+static int gc2_queue_small_cell_live(global_State *g, GCobj *o)
 {
   GCArena *want;
   uint32_t cell, owner_tid;
-  if (!g || !o || !checkptrGC(o) ||
-      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
-    return 0;
-#if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
-    void *base;
-    if (!lj_cdata_validate(g, gco2cd(o), &base, NULL))
-      return 0;
-    return lj_gc2_mem_registered_known(g, base);
-  }
-#endif
   if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
     return 0;
   if (g->allocf != lj_arena_allocf)
@@ -5005,7 +5008,71 @@ static int gc2_queue_obj_valid(global_State *g, GCobj *o)
   owner_tid = lj_arena_owner_acq(want);
   if (owner_tid != 0)
     return lj_arena_bm_get(want->block, cell) != 0;
+  return 0;
+}
+
+static int gc2_registered_obj_valid(global_State *g, GCobj *o)
+{
+  int memkind;
+  if (!g || !o || !checkptrGC(o) ||
+      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
+    return 0;
+  memkind = gc2_obj_mem_live_kind(g, o, NULL);
+  if (memkind == GC2_OBJMEM_INVALID)
+    return 0;
+  if (memkind == GC2_OBJMEM_CUSTOM)
+    return 1;
+#if LJ_HASFFI
+  if (o->gch.gct == ~LJ_TCDATA) {
+    void *base;
+    /*
+    ** Variable-size/aligned cdata stores the GCcdata header inside a larger raw
+    ** allocation. Prove the header address is registered before reading it,
+    ** then validate and mark from the computed allocation base just like
+    ** gc2_mark_base().
+    */
+    if (!lj_cdata_validate(g, gco2cd(o), &base, NULL))
+      return 0;
+    return lj_gc2_mem_registered_known(g, base);
+  }
+#endif
+  if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
+    return 0;
+  if (memkind == GC2_OBJMEM_HUGE)
+    return gc2_huge_exact_traversable(g, o);
+  return 1;
+}
+
+int lj_gc2_obj_valid(global_State *g, GCobj *o)
+{
   return gc2_registered_obj_valid(g, o);
+}
+
+static int gc2_queue_obj_valid(global_State *g, GCobj *o)
+{
+  LJHugeInfo hi;
+  int memkind;
+  if (!g || !o || !checkptrGC(o) ||
+      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
+    return 0;
+  memkind = gc2_obj_mem_live_kind(g, o, &hi);
+  if (memkind == GC2_OBJMEM_CUSTOM)
+    return 1;
+  if (memkind == GC2_OBJMEM_INVALID)
+    return gc2_queue_small_cell_live(g, o);
+#if LJ_HASFFI
+  if (o->gch.gct == ~LJ_TCDATA) {
+    void *base;
+    if (!lj_cdata_validate(g, gco2cd(o), &base, NULL))
+      return 0;
+    return lj_gc2_mem_registered_known(g, base);
+  }
+#endif
+  if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
+    return 0;
+  if (memkind == GC2_OBJMEM_HUGE)
+    return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
+  return 1;
 }
 
 int lj_gc2_obj_valid_queued(global_State *g, GCobj *o)
@@ -6265,7 +6332,7 @@ static GCobj *gc2_finreg_cdata_order_resolve(lua_State *L, CTState *cts,
   if (!L || !cts || !ord || !slotp)
     return NULL;
   o = fin_order_obj_acq(ord);
-  if (!o || o->gch.gct != ~LJ_TCDATA)
+  if (!lj_gc2_obj_valid(cts->g, o) || o->gch.gct != ~LJ_TCDATA)
     return NULL;
   setcdataV(L, &key, gco2cd(o));
   slot = lj_ctype_fin_get(L, cts, &key, &t);
