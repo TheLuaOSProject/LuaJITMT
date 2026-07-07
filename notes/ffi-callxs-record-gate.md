@@ -73,6 +73,12 @@ helper path and leave the generic `IR_CALLXS` backend path disabled.
 double-returning mixed slice to exact `double(double, uint32_t)` and
 `double(uint32_t, double)` calls, preserving high-bit unsigned arguments
 through the recorder's unsigned conversion path.
+`lj_ccall_jit_num_flt_i32()` / `lj_ccall_jit_num_i32_flt()` and
+`lj_ccall_jit_num_flt_u32()` / `lj_ccall_jit_num_u32_flt()` cover the
+cross-precision double-returning 32-bit mixed slice: exact
+`double(float, int32_t)`, `double(int32_t, float)`,
+`double(float, uint32_t)`, and `double(uint32_t, float)`. These helpers keep
+the exact float C argument prototype instead of widening the foreign call.
 `lj_ccall_jit_num_num_i64()` / `lj_ccall_jit_num_i64_num()` and
 `lj_ccall_jit_num_num_u64()` / `lj_ccall_jit_num_u64_num()` extend the same
 mixed double-returning path to exact signed and unsigned 64-bit cdata
@@ -84,6 +90,12 @@ Lua number after the helper call.
 `lj_ccall_jit_flt_flt_u32()` and `lj_ccall_jit_flt_u32_flt()` do the same for
 exact `float(float, uint32_t)` and `float(uint32_t, float)` calls while
 preserving high-bit unsigned arguments.
+`lj_ccall_jit_flt_num_i32()` / `lj_ccall_jit_flt_i32_num()` and
+`lj_ccall_jit_flt_num_u32()` / `lj_ccall_jit_flt_u32_num()` cover the
+cross-precision float-returning 32-bit mixed slice: exact
+`float(double, int32_t)`, `float(int32_t, double)`,
+`float(double, uint32_t)`, and `float(uint32_t, double)`, with the recorder
+widening the helper's float result to Lua number.
 `lj_ccall_jit_flt_flt_i64()` / `lj_ccall_jit_flt_i64_flt()` and
 `lj_ccall_jit_flt_flt_u64()` / `lj_ccall_jit_flt_u64_flt()` extend exact
 float-returning mixed calls to signed and unsigned 64-bit cdata arguments.

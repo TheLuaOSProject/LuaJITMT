@@ -75,6 +75,12 @@ float-returning `float(float, int32_t)` and `float(int32_t, float)` calls.
 `lj_ccall_jit_num_num_u32()` and `lj_ccall_jit_num_u32_num()` cover exact
 double-returning `double(double, uint32_t)` and `double(uint32_t, double)`
 calls without truncating high-bit unsigned arguments.
+`lj_ccall_jit_num_flt_i32()` / `lj_ccall_jit_num_i32_flt()` and
+`lj_ccall_jit_num_flt_u32()` / `lj_ccall_jit_num_u32_flt()` cover exact
+cross-precision double-returning `double(float, int32_t)`,
+`double(int32_t, float)`, `double(float, uint32_t)`, and
+`double(uint32_t, float)` calls without widening the C prototype used for the
+foreign call.
 `lj_ccall_jit_num_num_i64()` / `lj_ccall_jit_num_i64_num()` and
 `lj_ccall_jit_num_num_u64()` / `lj_ccall_jit_num_u64_num()` extend that mixed
 double-returning coverage to exact signed and unsigned 64-bit cdata arguments
@@ -82,6 +88,12 @@ while preserving per-argument signedness.
 `lj_ccall_jit_flt_flt_u32()` and `lj_ccall_jit_flt_u32_flt()` do the same for
 exact float-returning `float(float, uint32_t)` and `float(uint32_t, float)`
 calls, widening the helper result back to a Lua number in the recorder.
+`lj_ccall_jit_flt_num_i32()` / `lj_ccall_jit_flt_i32_num()` and
+`lj_ccall_jit_flt_num_u32()` / `lj_ccall_jit_flt_u32_num()` cover exact
+cross-precision float-returning `float(double, int32_t)`,
+`float(int32_t, double)`, `float(double, uint32_t)`, and
+`float(uint32_t, double)` calls, preserving the exact double-argument ABI and
+widening the float result back to Lua number in the recorder.
 `lj_ccall_jit_flt_flt_i64()` / `lj_ccall_jit_flt_i64_flt()` and
 `lj_ccall_jit_flt_flt_u64()` / `lj_ccall_jit_flt_u64_flt()` extend exact
 float-returning mixed coverage to signed and unsigned 64-bit cdata arguments.

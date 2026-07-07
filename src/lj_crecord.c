@@ -4599,6 +4599,231 @@ static int crec_call_jit_flt_mixed_u32(jit_State *J, RecordFFData *rd,
   return 1;
 }
 
+static int crec_call_jit_num_mixed_flt32(jit_State *J, RecordFFData *rd,
+					 CTState *cts, CType *ct, CTInfo info,
+					 GCcdata *cd, IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did0, did1, tmpid;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg0, arg1;
+  int fp0, i320, u320, fp1, i321, u321;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 2)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isfp(ctr_info) || ctype_size_acq(ctr) != sizeof(double))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did0 = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did0, &did0, &dcopy);
+  dinfo = ctype_info_acq(d);
+  fp0 = ctype_isfp(dinfo) && ctype_size_acq(d) == sizeof(float);
+  i320 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 !(dinfo & CTF_UNSIGNED);
+  u320 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 (dinfo & CTF_UNSIGNED);
+
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did1 = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did1, &did1, &dcopy);
+  dinfo = ctype_info_acq(d);
+  fp1 = ctype_isfp(dinfo) && ctype_size_acq(d) == sizeof(float);
+  i321 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 !(dinfo & CTF_UNSIGNED);
+  u321 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 (dinfo & CTF_UNSIGNED);
+  if (fid)
+    return 0;
+  if (!((fp0 && (i321 || u321)) || ((i320 || u320) && fp1)))
+    return 0;
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  tmpid = did0;
+  d = crec_ctype_rawrefid(J, cts, did0, &tmpid, &dcopy);
+  arg0 = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  tmpid = did1;
+  d = crec_ctype_rawrefid(J, cts, did1, &tmpid, &dcopy);
+  arg1 = crec_ct_tv(J, d, 0, J->base[2], &rd->argv[2]);
+  if (fp0) {
+    if (!tref_istype(arg0, IRT_FLOAT))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+    if (u321) {
+      arg1 = crec_call_jit_u32_arg(J, arg1);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_num_flt_u32,
+			      func, arg0, arg1);
+    } else {
+      if (!tref_isint(arg1))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_num_flt_i32,
+			      func, arg0, arg1);
+    }
+  } else {
+    if (u320) {
+      arg0 = crec_call_jit_u32_arg(J, arg0);
+      if (!tref_istype(arg1, IRT_FLOAT))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_num_u32_flt,
+			      func, arg0, arg1);
+    } else {
+      if (!tref_isint(arg0) || !tref_istype(arg1, IRT_FLOAT))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_num_i32_flt,
+			      func, arg0, arg1);
+    }
+  }
+  J->needsnap = 1;
+  return 1;
+}
+
+static int crec_call_jit_flt_mixed_num32(jit_State *J, RecordFFData *rd,
+					 CTState *cts, CType *ct, CTInfo info,
+					 GCcdata *cd, IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did0, did1, tmpid;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg0, arg1;
+  int fp0, i320, u320, fp1, i321, u321;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 2)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isfp(ctr_info) || ctype_size_acq(ctr) != sizeof(float))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did0 = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did0, &did0, &dcopy);
+  dinfo = ctype_info_acq(d);
+  fp0 = ctype_isfp(dinfo) && ctype_size_acq(d) == sizeof(double);
+  i320 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 !(dinfo & CTF_UNSIGNED);
+  u320 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 (dinfo & CTF_UNSIGNED);
+
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did1 = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did1, &did1, &dcopy);
+  dinfo = ctype_info_acq(d);
+  fp1 = ctype_isfp(dinfo) && ctype_size_acq(d) == sizeof(double);
+  i321 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 !(dinfo & CTF_UNSIGNED);
+  u321 = ctype_isinteger(dinfo) && ctype_size_acq(d) == 4 &&
+	 (dinfo & CTF_UNSIGNED);
+  if (fid)
+    return 0;
+  if (!((fp0 && (i321 || u321)) || ((i320 || u320) && fp1)))
+    return 0;
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  tmpid = did0;
+  d = crec_ctype_rawrefid(J, cts, did0, &tmpid, &dcopy);
+  arg0 = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  tmpid = did1;
+  d = crec_ctype_rawrefid(J, cts, did1, &tmpid, &dcopy);
+  arg1 = crec_ct_tv(J, d, 0, J->base[2], &rd->argv[2]);
+  if (fp0) {
+    if (!tref_isnum(arg0))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+    if (u321) {
+      arg1 = crec_call_jit_u32_arg(J, arg1);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_flt_num_u32,
+			      func, arg0, arg1);
+    } else {
+      if (!tref_isint(arg1))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_flt_num_i32,
+			      func, arg0, arg1);
+    }
+  } else {
+    if (u320) {
+      arg0 = crec_call_jit_u32_arg(J, arg0);
+      if (!tref_isnum(arg1))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_flt_u32_num,
+			      func, arg0, arg1);
+    } else {
+      if (!tref_isint(arg0) || !tref_isnum(arg1))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_flt_i32_num,
+			      func, arg0, arg1);
+    }
+  }
+  J->base[0] = emitconv(J->base[0], IRT_NUM, IRT_FLOAT, 0);
+  J->needsnap = 1;
+  return 1;
+}
+
 static TRef crec_call_jit_gpr_arg(jit_State *J, int kind, TRef arg)
 {
   if (kind == CREC_CALL_JIT_KIND_I32) {
@@ -5759,6 +5984,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       return 1;
     if (crec_call_jit_flt_mixed_u32(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
+    if (crec_call_jit_flt_mixed_num32(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
     if (crec_call_jit_flt_mixed_64(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_num_i32(J, rd, cts, ct, info, cd, tp, fsz))
@@ -5768,6 +5995,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     if (crec_call_jit_num_i32_num(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_num_mixed_u32(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
+    if (crec_call_jit_num_mixed_flt32(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_num_mixed_64(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;

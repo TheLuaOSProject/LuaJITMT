@@ -804,6 +804,26 @@ double lj_m7_ccall_jit_num_u32_num(uint32_t a, double b)
   return (double)(a & 255u) + b + 0.625;
 }
 
+double lj_m7_ccall_jit_num_flt_i32(float a, int32_t b)
+{
+  return (double)a + (double)b + 0.375;
+}
+
+double lj_m7_ccall_jit_num_i32_flt(int32_t a, float b)
+{
+  return (double)a + (double)b + 0.625;
+}
+
+double lj_m7_ccall_jit_num_flt_u32(float a, uint32_t b)
+{
+  return (double)a + (double)(b & 255u) + 0.875;
+}
+
+double lj_m7_ccall_jit_num_u32_flt(uint32_t a, float b)
+{
+  return (double)(a & 255u) + (double)b + 0.125;
+}
+
 double lj_m7_ccall_jit_num_num_i64(double a, int64_t b)
 {
   return a + (double)((uint64_t)b & 255u) + 0.375;
@@ -914,6 +934,26 @@ float lj_m7_ccall_jit_flt_flt_u32(float a, uint32_t b)
 float lj_m7_ccall_jit_flt_u32_flt(uint32_t a, float b)
 {
   return (float)(a & 255u) + b + 0.625f;
+}
+
+float lj_m7_ccall_jit_flt_num_i32(double a, int32_t b)
+{
+  return (float)(a + (double)b + 0.375);
+}
+
+float lj_m7_ccall_jit_flt_i32_num(int32_t a, double b)
+{
+  return (float)((double)a + b + 0.625);
+}
+
+float lj_m7_ccall_jit_flt_num_u32(double a, uint32_t b)
+{
+  return (float)(a + (double)(b & 255u) + 0.875);
+}
+
+float lj_m7_ccall_jit_flt_u32_num(uint32_t a, double b)
+{
+  return (float)((double)(a & 255u) + b + 0.125);
 }
 
 float lj_m7_ccall_jit_flt_flt_i64(float a, int64_t b)
