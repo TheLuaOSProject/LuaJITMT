@@ -280,6 +280,15 @@ int32_t lj_m7_ccall_jit_i32_ptr_u64_u32_ptr(int *src, uint64_t n,
   return dst[i] + (int32_t)(n & UINT64_C(1023)) + (int32_t)(flags >> 28);
 }
 
+int *lj_m7_ccall_jit_ptr_ptr_ptr_u64_u32(int *dst, int *port, uint64_t key,
+					 uint32_t threads)
+{
+  uint64_t i = (key + (uint64_t)threads) & 3u;
+  dst[i] = port[(key + UINT64_C(1)) & 3u] + (int)(key & UINT64_C(15)) +
+	   (int)(threads & 15u);
+  return dst + i;
+}
+
 int *lj_m7_ccall_jit_ptr_ptr_u64_u32_u32(int *base, uint64_t n,
 					 uint32_t alloc_type,
 					 uint32_t protect)

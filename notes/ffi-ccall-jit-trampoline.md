@@ -123,6 +123,8 @@ pointer/size/unsigned-int argument shape,
 pointer/size/pointer argument shapes,
 `lj_ccall_jit_i32_ptr_u64_u32_ptr()` for the exact
 pointer/size/unsigned-int/pointer signed-int-result argument shape,
+`lj_ccall_jit_ptr_ptr_ptr_u64_u32()` for the exact pointer-returning
+pointer/pointer/size/unsigned-int argument shape,
 `lj_ccall_jit_ptr_ptr_u64_u32_u32()` for the exact pointer-returning
 pointer/size/unsigned-int/unsigned-int argument shape,
 `lj_ccall_jit_ptr_ptr_u64_i32_i32_i32_i64()` for the exact pointer-returning
@@ -257,6 +259,9 @@ The scope is deliberately narrow:
 - exact `int32_t(pointer, uint64_t, uint32_t, pointer)` calls, preserving the
   size argument and high-bit unsigned flags for VirtualProtect-style
   pointer/size/flags/output-pointer ABI classes;
+- exact `pointer(pointer, pointer, uint64_t, uint32_t)` calls, preserving file
+  handle, existing completion port, completion key, and thread count for
+  CreateIoCompletionPort-style ABI classes;
 - exact `pointer(pointer, uint64_t, uint32_t, uint32_t)` calls, preserving the
   size argument and high-bit unsigned flag arguments for VirtualAlloc-style
   pointer/size/allocation-flags/protection-flags ABI classes;
@@ -427,6 +432,8 @@ return families, traced unsigned-count pointer/pointer loops,
 traced pointer/int/size, pointer/int/unsigned-int, pointer/size/int,
 pointer/size/flags, and pointer/size/pointer loops,
 traced pointer/size/flags/output-pointer loops,
+traced CreateIoCompletionPort-shaped pointer/pointer/uint64/uint32
+pointer-returning loops,
 traced pointer/size/allocation-flags/protection-flags pointer-returning loops,
 traced mmap-shaped pointer/size/int/int/int/signed-offset pointer-returning
 loops,

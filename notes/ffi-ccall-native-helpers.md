@@ -159,8 +159,11 @@ for mincore-style pointer/size/output-buffer ABI classes. The exact
 pointer/size/unsigned-int/pointer slice traces
 `int32_t(void *, uint64_t, uint32_t, void *)` calls for
 VirtualProtect-style ABI classes while preserving high-bit unsigned flags and
-the output pointer argument. The exact pointer/size/unsigned-int/unsigned-int
-slice traces `void *(void *, uint64_t, uint32_t, uint32_t)` calls for
+the output pointer argument. The exact CreateIoCompletionPort-shaped slice
+traces `void *(void *, void *, uint64_t, uint32_t)` calls while preserving file
+handle, existing completion port, completion key, thread count, and pointer
+result. The exact pointer/size/unsigned-int/unsigned-int slice traces
+`void *(void *, uint64_t, uint32_t, uint32_t)` calls for
 VirtualAlloc-style ABI classes while preserving both high-bit unsigned flag
 arguments and pointer results. The exact mmap-shaped slice traces
 `void *(void *, uint64_t, int32_t, int32_t, int32_t, int64_t)` calls while
