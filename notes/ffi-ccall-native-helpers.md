@@ -126,7 +126,9 @@ preserving high-bit unsigned count arguments without widening them to a
 different ABI shape. The exact SleepConditionVariableSRW-shaped slice traces
 `int32_t(void *, void *, uint32_t, uint32_t)` calls while preserving both
 high-bit unsigned 32-bit arguments and signed 32-bit result. The exact
-ReadFile/WriteFile-shaped slice traces
+WaitOnAddress-shaped slice traces `int32_t(void *, void *, uint64_t, uint32_t)`
+calls while preserving the address size, timeout, and signed 32-bit result.
+The exact ReadFile/WriteFile-shaped slice traces
 `int32_t(void *, void *, uint32_t, void *, void *)` calls while preserving the
 byte count, output pointer, and overlapped pointer arguments. The exact
 DeviceIoControl-shaped slice traces

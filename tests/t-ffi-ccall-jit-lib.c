@@ -454,6 +454,16 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 	 (int32_t)(n & UINT64_C(1023));
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64_u32(int *addr, int *compare,
+					    uint64_t size,
+					    uint32_t timeout)
+{
+  uint32_t i = (uint32_t)((size + (uint64_t)timeout) & UINT64_C(3));
+  return addr[i] + compare[(i + 1u) & 3u] +
+	 (int32_t)(size & UINT64_C(1023)) + (int32_t)(timeout & 1023u) +
+	 (int32_t)(size >> 60) + (int32_t)(timeout >> 28);
+}
+
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return UINT32_C(0x80000000) + (uint32_t)a[n & 3u] +

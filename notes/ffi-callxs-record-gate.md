@@ -124,6 +124,8 @@ family also traces exact `int32_t(void *, void *, uint32_t)`,
 `void *(void *, void *, uint32_t)` calls without reusing the uint64-size ABI
 helpers. The exact SleepConditionVariableSRW-shaped slice traces
 `int32_t(void *, void *, uint32_t, uint32_t)` calls. The exact
+WaitOnAddress-shaped slice traces
+`int32_t(void *, void *, uint64_t, uint32_t)` calls. The exact
 ReadFile/WriteFile-shaped slice traces
 `int32_t(void *, void *, uint32_t, void *, void *)` calls. The exact
 DeviceIoControl-shaped slice traces
