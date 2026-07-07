@@ -2559,14 +2559,17 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
 static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
 			  TraceNo parent, ExitNo exitno)
 {
-  GCtrace *parentT = traceref(J, parent);
+  global_State *g = J2G(J);
+  GCtrace *parentT;
   SnapShot *snap;
   uint32_t hotexit = (uint32_t)jit_param_acq(J, JIT_P_hotexit);
   uint8_t count;
+  lj_gc2_smr_read_enter(g);
+  parentT = traceref_safe(J, parent);
   if (!trace_runnable_acq(parentT, parent) || exitno >= trace_nsnap_acq(parentT))
-    return;
+    goto out;
   if (trace_root_acq(parentT) != 0) {
-    GCtrace *root = traceref(J, trace_root_acq(parentT));
+    GCtrace *root = traceref_safe(J, trace_root_acq(parentT));
     GCproto *pt = root ? trace_startpt_acq(root) : NULL;
     /*
     ** Active-MT local-cell traces replay CGET/CSET-visible locals from
@@ -2578,37 +2581,37 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     ** interpreter until generated code carries a complete cell snapshot proof
     ** across side-trace chains.
     */
-    if (pt && proto_cellops(pt) && lj_record_mt_runtime_shared(J2G(J), L))
-      return;
+    if (pt && proto_cellops(pt) && lj_record_mt_runtime_shared(g, L))
+      goto out;
   }
   snap = &trace_snap_acq(parentT)[exitno];
-  if (!(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
+  if (!(hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT)) &&
       isluafunc(curr_func(L))) {
     for (;;) {
       count = (uint8_t)snap_count_acq(snap);
       if (count == SNAPCOUNT_DONE)
-	return;
+	goto out;
       if ((uint32_t)count + 1u >= hotexit)
 	break;
       if (snap_count_cas_acqrel(snap, &count, count + 1u))
-	return;
+	goto out;
     }
     if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
-      return;
+      goto out;
     if (!lj_jit_token_try_l(L, J))
-      return;
-    parentT = traceref(J, parent);
+      goto out;
+    parentT = traceref_safe(J, parent);
     if (!trace_runnable_acq(parentT, parent) ||
 	exitno >= trace_nsnap_acq(parentT)) {
       lj_jit_token_release_l(L, J);
-      return;
+      goto out;
     }
     snap = &trace_snap_acq(parentT)[exitno];
     for (;;) {
       count = (uint8_t)snap_count_acq(snap);
       if (count == SNAPCOUNT_DONE) {
 	lj_jit_token_release_l(L, J);
-	return;
+	goto out;
       }
       if (count >= SNAPCOUNT_DONE-1 ||
 	  snap_count_cas_acqrel(snap, &count, count + 1u))
@@ -2618,12 +2621,16 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     J->parent = parent;
     J->exitno = exitno;
     /* J->parent is non-zero for a side trace. */
+    lj_gc2_smr_read_leave(g);
     if (!lj_trace_state_aborted(
 	      lj_trace_state_store_active(J, LJ_TRACE_START)))
       lj_trace_ins(J, pc);
     else
       lj_jit_token_release_l(L, J);
+    return;
   }
+out:
+  lj_gc2_smr_read_leave(g);
 }
 
 static int trace_poll_pending(lua_State *L)
