@@ -29,15 +29,18 @@
 #define LJLIB_MODULE_bit
 
 #if LJ_HASFFI
-static void bit_ctype_copy(CType *out, CType *ct)
+static void bit_ctype_predef_copy(CTState *cts, CType *out, CTypeID id)
 {
-  GCobj *name;
-  out->info = ctype_info_acq(ct);
-  out->size = ctype_size_acq(ct);
-  out->sib = (CTypeID1)ctype_sib_acq(ct);
-  out->next = (CTypeID1)ctype_next_acq(ct);
-  name = ctype_nameobj_acq(ct);
-  setgcrefp(out->name, name);
+  CTInfo info;
+  CTSize size;
+  int ok = lj_ctype_info_predefined(cts, id, &info, &size, NULL, NULL);
+  lj_assertG_(cts->g, ok > 0, "bit cdata result type is not predefined");
+  UNUSED(ok);
+  out->info = info;
+  out->size = size;
+  out->sib = 0;
+  out->next = 0;
+  ctype_clearname(out);
 }
 
 static int bit_result64(lua_State *L, CTypeID id, uint64_t x)
@@ -134,7 +137,7 @@ LJLIB_ASM(bit_band)		LJLIB_REC(bit_nary IR_BAND)
     CType ctsnap;
     int op = curr_func(L)->c.ffid - (int)FF_bit_bor;
     uint64_t x, y = op >= 0 ? 0 : ~(uint64_t)0;
-    bit_ctype_copy(&ctsnap, ctype_get(cts, id));
+    bit_ctype_predef_copy(cts, &ctsnap, id);
     o = L->base;
     do {
       lj_cconv_ct_tv_l(L, cts, &ctsnap, id, (uint8_t *)&x, o, 0);

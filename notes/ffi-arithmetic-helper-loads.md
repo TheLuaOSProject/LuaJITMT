@@ -16,8 +16,10 @@ FFI arithmetic helper loads
   pointers.
 - Follow-up bit-library cleanup snapshots the selected 64-bit result CType for
   `bit.band`/`bit.bor`/`bit.bxor` before converting each TValue operand,
-  avoiding a live `ctype_get(cts, id)` table pointer in the n-ary cdata bit-op
-  loop.
+  avoiding a live ctype-table pointer in the n-ary cdata bit-op loop. A later
+  cleanup made that copy use `lj_ctype_info_predefined()` directly because
+  `lj_carith_check64()` only selects predefined `int64_t`/`uint64_t` result
+  IDs.
 - Follow-up cdata arithmetic lifetime cleanup routes `carith_set_operand_id()`,
   pointer-index conversion, int64 result conversion, enum-source handoff, and
   `lj_carith_check64()` destination conversion through a local exact-record
