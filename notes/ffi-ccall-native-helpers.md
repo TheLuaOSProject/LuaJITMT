@@ -69,7 +69,9 @@ recorder.
 `lj_ccall_jit_void_num()`,
 `lj_ccall_jit_void_flt()`, and `lj_ccall_jit_flt_num()` cover the first exact
 mixed one-argument calls, including float/double crossings and the first exact
-signed narrow argument conversion.
+signed narrow argument conversion. `lj_ccall_jit_flt_flt_i32()` and
+`lj_ccall_jit_flt_i32_flt()` extend the mixed two-argument slice to exact
+float-returning `float(float, int32_t)` and `float(int32_t, float)` calls.
 `lj_ccall_jit_i32_ptr_ulong_i32()` covers the first exact three-argument
 pointer/size/int shape, including `ffi.C.poll(nil, 0, 0)`, while preserving the
 host ABI's `unsigned long` width at the final C call; the shared-library test
