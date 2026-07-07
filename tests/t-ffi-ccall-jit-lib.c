@@ -190,6 +190,14 @@ void lj_m7_ccall_jit_void_ptr_i32_u32(int *dst, int32_t bias, uint32_t n)
   dst[i] += bias + (int)(n & 15u);
 }
 
+void lj_m7_ccall_jit_void_ptr_i32_ptr(int *group, int32_t cancel,
+				      int *context)
+{
+  uint32_t i = (uint32_t)cancel & 3u;
+  group[i] = context[(i + 1u) & 3u] + cancel;
+  context[0] = group[i] + context[2];
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_u64_i32(int *p, uint64_t n, int32_t bias)
 {
   return p[n & 3u] + bias + (int32_t)(n & UINT64_C(1023));

@@ -266,6 +266,9 @@ SetThreadpoolWaitEx-shaped slice traces
 `int32_t(void *, void *, void *, void *)` calls while preserving threadpool
 wait object, handle, timeout pointer, reserved pointer, and signed 32-bit
 result. Exact
+CloseThreadpoolCleanupGroupMembers-shaped slice traces
+`void(void *, int32_t, void *)` calls while preserving cleanup group,
+cancel-pending flag, and context/reserved pointer. Exact
 two-argument `pointer,int64_t` and `pointer,uint64_t` span-style shapes are
 covered by the shared GPR helper matrix, while broader pointer/size families
 still fall back. Broad traced ordinary FFI C calls remain interpreted because
