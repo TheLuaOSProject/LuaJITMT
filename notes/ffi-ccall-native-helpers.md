@@ -110,7 +110,10 @@ float result back to Lua number in the recorder.
 pointer/size/int shape, including `ffi.C.poll(nil, 0, 0)`, while preserving the
 host ABI's `unsigned long` width at the final C call; the shared-library test
 also passes a signed narrow cdata value through the regular unsigned-long
-conversion path. The pointer/pointer/signed-length family also traces exact
+conversion path. The int/pointer/size/signed-offset slice traces exact
+`int64_t(int32_t, void *, uint64_t, int64_t)` calls for pread/pwrite-style ABI
+classes while preserving the unsigned size and signed offset arguments. The
+pointer/pointer/signed-length family also traces exact
 `uint32_t(void *, void *, int32_t)`, `uint64_t(void *, void *, int32_t)`,
 `void(void *, void *, int32_t)`, and `void *(void *, void *, int32_t)` calls,
 preserving high-bit unsigned results, boxed uint64 results, side effects, and
