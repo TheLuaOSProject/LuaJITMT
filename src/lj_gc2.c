@@ -5557,6 +5557,15 @@ static uint32_t lj_gc2_weak_snapshot_count(global_State *g)
   return count > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)count;
 }
 
+static GCtab *gc2_weak_candidate_tab(global_State *g, GCobj *o)
+{
+  uint32_t gct;
+  if (!gc2_markobj_base_valid(g, o, NULL, &gct) ||
+      gct != (uint32_t)~LJ_TTAB)
+    return NULL;
+  return gco2tab(o);
+}
+
 static GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
 {
   GCobj *o;
@@ -5567,7 +5576,7 @@ static GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
   if (!stack)
     return NULL;
   o = gc2_queue_slot_load_acq(&stack[idx]);
-  return (o && o->gch.gct == ~LJ_TTAB) ? gco2tab(o) : NULL;
+  return gc2_weak_candidate_tab(g, o);
 }
 
 static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
@@ -5710,13 +5719,12 @@ static void gc2_weak_paranoia_zero_diff(global_State *g, GCobj *bridge_head)
 {
   uint64_t tables = 0, slots = 0, clearable = 0;
   while (bridge_head) {
-    GCtab *t;
-    if (bridge_head->gch.gct != ~LJ_TTAB) {
+    GCtab *t = gc2_weak_candidate_tab(g, bridge_head);
+    if (!t) {
       fprintf(stderr, "GC2 weak paranoia: non-table bridge weak node %p\n",
 	      (void *)bridge_head);
       abort();
     }
-    t = gco2tab(bridge_head);
     gc2_weak_process_tab(g, t, 0, &slots, &clearable);
     tables++;
     bridge_head = lj_tab_gclist_acq(t);
@@ -5891,12 +5899,11 @@ static int lj_gc2_weak_snapshot_covers_bridge(global_State *g,
   if (!gc2_weak_snapshot_complete(g, &n))
     return 0;
   while (bridge_head) {
-    GCtab *t;
+    GCtab *t = gc2_weak_candidate_tab(g, bridge_head);
     int found = 0;
     uint8_t flags;
-    if (bridge_head->gch.gct != ~LJ_TTAB)
+    if (!t)
       return 0;
-    t = gco2tab(bridge_head);
     flags = lj_obj_gcflags(obj2gco(t));
     if ((flags & LJ_GC_WEAK) == 0)
       return 0;
@@ -5935,11 +5942,10 @@ static int gc2_weak_backfill_bridge(global_State *g, GCobj *bridge_head)
   if (!gc2_weak_snapshot_complete(g, &n))
     return 0;
   while (bridge_head) {
-    GCtab *t;
+    GCtab *t = gc2_weak_candidate_tab(g, bridge_head);
     uint8_t flags;
-    if (bridge_head->gch.gct != ~LJ_TTAB)
+    if (!t)
       return 0;
-    t = gco2tab(bridge_head);
     flags = lj_obj_gcflags(obj2gco(t));
     if ((flags & LJ_GC_WEAK) == 0)
       return 0;
@@ -5969,7 +5975,7 @@ static uint64_t gc2_weak_clear_overflow(global_State *g, uint64_t *slotsp,
        node != NULL;
        node = gc2_weak_overflow_next_acq(node)) {
     GCtab *t = gc2_weak_overflow_tab_acq(node);
-    if (!t)
+    if (!t || gc2_weak_candidate_tab(g, obj2gco(t)) != t)
       continue;
     gc2_weak_process_tab(g, t, 1, &slots, &cleared);
     tables++;
@@ -6006,11 +6012,10 @@ static int gc2_weak_overflow_clear_bridge(global_State *g, GCobj *bridge_head)
   */
   tables += gc2_weak_clear_overflow(g, &slots, &cleared);
   while (bridge_head) {
-    GCtab *t;
+    GCtab *t = gc2_weak_candidate_tab(g, bridge_head);
     uint8_t flags;
-    if (bridge_head->gch.gct != ~LJ_TTAB)
+    if (!t)
       return 0;
-    t = gco2tab(bridge_head);
     flags = lj_obj_gcflags(obj2gco(t));
     if ((flags & LJ_GC_WEAK) == 0)
       return 0;
@@ -6073,7 +6078,7 @@ int lj_gc2_test_weak_snapshot_covers_bridge(global_State *g,
 static int gc2_weak_trace_table_strong(global_State *g, GCtab *t)
 {
   if (!g || gc2_phase_acq(g) != LJ_GC2_WEAK ||
-      !t || obj2gco(t)->gch.gct != ~LJ_TTAB)
+      !t || gc2_weak_candidate_tab(g, obj2gco(t)) != t)
     return 0;
   (void)gc2_traverse_tab_norecord(g, t);
   return 1;
@@ -6099,10 +6104,9 @@ static int gc2_weak_trace_close_frontier(global_State *g, GCobj *bridge_head)
       return 0;
   }
   while (bridge_head) {
-    GCtab *t;
-    if (bridge_head->gch.gct != ~LJ_TTAB)
+    GCtab *t = gc2_weak_candidate_tab(g, bridge_head);
+    if (!t)
       return 0;
-    t = gco2tab(bridge_head);
     if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK) == 0)
       return 0;
     if (!gc2_weak_trace_table_strong(g, t))

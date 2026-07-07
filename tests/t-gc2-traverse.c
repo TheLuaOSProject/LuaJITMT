@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -1624,6 +1625,28 @@ static void test_weak_snapshot_ready_publication(lua_State *L, global_State *g)
   assert(lj_gc2_test_weak_snapshot_tab(g, 0) == t);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 1);
+}
+
+static void test_weak_snapshot_rejects_nonobject(lua_State *L, global_State *g)
+{
+  GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
+  uint64_t idx;
+
+  lua_settop(L, 0);
+  lj_gc2_mark_begin(g);
+  assert(g->gc2.weak_stack != NULL);
+  assert(g->gc2.weak_ready != NULL);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 0);
+
+  idx = la_add64_rlx(&g->gc2.weak_count, 1);
+  assert(idx == 0);
+  setgcref(g->gc2.weak_stack[0], bad);
+  la_store8_rel(&g->gc2.weak_ready[0], 1);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_test_weak_snapshot_tab(g, 0) == NULL);
+  assert(lj_gc2_test_weak_snapshot_scan(g, 1) == 0);
+  assert(lj_gc2_test_weak_snapshot_clear(g, 1) == 0);
+  lj_gc2_cycle_to_idle(g);
 }
 
 static void test_weak_self_metatable_publish_barrier(lua_State *L,
@@ -4613,6 +4636,7 @@ int main(void)
   test_weak_snapshot_growth(L, g, tg);
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
+  test_weak_snapshot_rejects_nonobject(L, g);
   test_weak_self_metatable_publish_barrier(L, g, tg);
   test_weak_snapshot_bridge_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
