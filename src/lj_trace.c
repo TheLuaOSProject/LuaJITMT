@@ -1481,12 +1481,17 @@ unpatch:
 
 static int trace_scope_flushing(jit_State *J, TraceNo traceno)
 {
+  global_State *g = J2G(J);
+  int flushing = 0;
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
-    GCtrace *T = traceref(J, traceno);
-    return T && trace_traceno_acq(T) == traceno &&
-	   trace_scope_pending_acq(T);
+    GCtrace *T;
+    lj_gc2_smr_read_enter(g);
+    T = traceref_safe(J, traceno);
+    flushing = T && trace_traceno_acq(T) == traceno &&
+	       trace_scope_pending_acq(T);
+    lj_gc2_smr_read_leave(g);
   }
-  return 0;
+  return flushing;
 }
 
 static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
@@ -1563,15 +1568,21 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
 /* Flush a root or side trace. Returns non-zero iff scoped work was marked. */
 uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
 {
+  global_State *g = J2G(J);
+  uint32_t flushed = 0;
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
-    GCtrace *T = traceref(J, traceno);
+    GCtrace *T;
+    lj_gc2_smr_read_enter(g);
+    T = traceref_safe(J, traceno);
     if (T && trace_traceno_acq(T) == traceno) {
       if (trace_root_acq(T) == 0)
-	return trace_flushroot(J, T, 1);
-      return trace_flushside(J, T, 1);
+	flushed = trace_flushroot(J, T, 1);
+      else
+	flushed = trace_flushside(J, T, 1);
     }
+    lj_gc2_smr_read_leave(g);
   }
-  return 0;
+  return flushed;
 }
 
 /* Unlink a trace without retiring its slot. Recorder aborts need this for the
@@ -1580,16 +1591,22 @@ uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
 */
 uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno)
 {
+  global_State *g = J2G(J);
+  uint32_t unlinked = 0;
   if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
-    GCtrace *T = traceref(J, traceno);
+    GCtrace *T;
+    lj_gc2_smr_read_enter(g);
+    T = traceref_safe(J, traceno);
     if (T && trace_traceno_acq(T) == traceno) {
       trace_test_note_flush_unlink(T, traceno);
       if (trace_root_acq(T) == 0)
-	return trace_flushroot(J, T, 0);
-      return trace_flushside(J, T, 0);
+	unlinked = trace_flushroot(J, T, 0);
+      else
+	unlinked = trace_flushside(J, T, 0);
     }
+    lj_gc2_smr_read_leave(g);
   }
-  return 0;
+  return unlinked;
 }
 
 static int trace_stale_startins_valid(GCproto *pt, const BCIns *pc,
@@ -1710,17 +1727,20 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
 /* Flush all traces associated with a prototype. */
 uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
 {
+  jit_State *J = G2J(g);
   TraceNo trace;
   uint32_t flushed = 0;
+  lj_gc2_smr_read_enter(g);
   for (trace = proto_trace_acq(pt); trace != 0; ) {
-    GCtrace *T = traceref(G2J(g), trace);
-    if (!T)
+    GCtrace *T = traceref_safe(J, trace);
+    if (!T || trace_traceno_acq(T) != trace)
       break;
     trace = trace_nextroot_acq(T);
-    if (!trace_flushroot(G2J(g), T, 1))
+    if (!trace_flushroot(J, T, 1))
       break;
     flushed++;
   }
+  lj_gc2_smr_read_leave(g);
   return flushed;
 }
 
