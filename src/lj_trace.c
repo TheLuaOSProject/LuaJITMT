@@ -2643,17 +2643,28 @@ static int trace_poll_pending(lua_State *L)
 #if LJ_TARGET_X64
 uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)
 {
+  global_State *g = J2G(J);
   TraceNo traceno, link;
+  GCobj *o;
   if (T == NULL)
     return 0;
+  lj_gc2_smr_read_enter(g);
+  o = obj2gco(T);
+  if (!lj_gc2_obj_valid_queued(g, o) ||
+      (uint32_t)la_load8_acq(&o->gch.gct) != (uint32_t)~LJ_TTRACE)
+    goto reject;
   traceno = trace_traceno_acq(T);
-  if (traceno == 0 || traceref(J, traceno) != T ||
+  if (traceno == 0 || traceref_safe(J, traceno) != T ||
       !trace_runnable_acq(T, traceno))
-    return 0;
+    goto reject;
   link = trace_link_acq(T);
   if (link == traceno)
-    return 0;  /* Blacklisted by trace_flushall_direct(). */
+    goto reject;  /* Blacklisted by trace_flushall_direct(). */
+  lj_gc2_smr_read_leave(g);
   return ((uint32_t)link << 16) | (uint32_t)traceno;
+reject:
+  lj_gc2_smr_read_leave(g);
+  return 0;
 }
 
 void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc, lua_State *L,

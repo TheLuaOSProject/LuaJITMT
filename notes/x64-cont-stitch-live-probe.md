@@ -21,3 +21,11 @@ guarded `BC_JLOOP` path or asks C to stitch a new trace. Invalid, retired, or
 blacklisted saved traces continue through `cont_nop`. The VM saves and restores
 `BASE` through `L->base` around the helper call because x64 keeps `BASE` in a
 caller-save register.
+
+2026-07-07 update: the original helper still read `TRACE->traceno` before
+proving the raw continuation pointer was a live trace object. The probe now
+enters an SMR read section first, validates the saved pointer with
+`lj_gc2_obj_valid_queued()` plus an acquired `LJ_TTRACE` tag load, and uses
+`traceref_safe()` for the slot identity check before reading runnable/link
+metadata. This closes the remaining stale-body dereference window in the saved
+continuation pointer itself.
