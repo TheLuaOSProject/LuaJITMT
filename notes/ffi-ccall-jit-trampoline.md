@@ -99,6 +99,10 @@ argument shape,
 `lj_ccall_jit_i64_ptr_i32_u64()` / `lj_ccall_jit_u64_ptr_i32_u64()` /
 `lj_ccall_jit_void_ptr_i32_u64()` / `lj_ccall_jit_ptr_ptr_i32_u64()` for exact
 pointer/signed-int/size argument shapes,
+`lj_ccall_jit_i32_ptr_u64_i32()` / `lj_ccall_jit_u32_ptr_u64_i32()` /
+`lj_ccall_jit_i64_ptr_u64_i32()` / `lj_ccall_jit_u64_ptr_u64_i32()` /
+`lj_ccall_jit_void_ptr_u64_i32()` / `lj_ccall_jit_ptr_ptr_u64_i32()` for exact
+pointer/size/signed-int argument shapes,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
 `lj_ccall_jit_i32_ptr_ptr_u32()` / `lj_ccall_jit_u32_ptr_ptr_u32()` for exact
@@ -161,6 +165,15 @@ The scope is deliberately narrow:
 - exact `void(pointer, int32_t, uint64_t)` and
   `pointer(pointer, int32_t, uint64_t)` calls, preserving side effects and
   pointer results for pointer/int/size ABI classes;
+- exact `int32_t(pointer, uint64_t, int32_t)` and
+  `uint32_t(pointer, uint64_t, int32_t)` calls, preserving the size argument and
+  trailing signed int for mprotect/madvise-style ABI classes;
+- exact signed/unsigned 64-bit cdata-result `int64_t(pointer, uint64_t,
+  int32_t)` and `uint64_t(pointer, uint64_t, int32_t)` calls, preserving boxed
+  results for pointer/size/int ABI classes;
+- exact `void(pointer, uint64_t, int32_t)` and
+  `pointer(pointer, uint64_t, int32_t)` calls, preserving side effects and
+  pointer results for pointer/size/int ABI classes;
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
@@ -271,7 +284,8 @@ single-argument int64/uint64 calls returning void, int32, uint32, narrow
 integers, or pointers, traced pointer/64-bit span loops for the same return
 families, traced int/signed-offset and int/unsigned-size loops for the same
 return families, traced unsigned-count pointer/pointer loops,
-traced pointer/int/size loops, traced `poll(nil, 0, 0)`-style loops,
+traced pointer/int/size and pointer/size/int loops,
+traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, signed/unsigned 64-bit-result pointer/pointer/size loops,
