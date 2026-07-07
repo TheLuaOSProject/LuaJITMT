@@ -19,6 +19,12 @@ cannot bypass the GC2 finalizer dispatch boundary and invoke them directly.
 This keeps callback execution on the claimed caller `lua_State`, but moves more
 of the finalizer object lifecycle under the GC2 dispatch boundary.
 
+Follow-up:
+- `gc2_finreg_root_splice()` now uses the shared `gcref_cas()` helper instead
+  of hand-building `GCRef` CAS operands. The cdata and userdata FINREG root
+  unlink paths keep the same acquire/release CAS semantics while sharing the
+  object-reference helper surface used by the rest of root publication.
+
 Validation:
 
 - `tools/ci/m8_weak.sh`

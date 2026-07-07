@@ -6367,19 +6367,8 @@ static void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
 static int gc2_finreg_root_splice(GCRef *p, GCobj *o)
 {
   GCobj *next = lj_obj_gcw_acq(o);
-  GCRef oldref, nextref;
-  setgcref(oldref, o);
-  if (next)
-    setgcref(nextref, next);
-  else
-    setgcrefnull(nextref);
-#if LJ_GC64
-  return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
-		  LA_ACQ_REL, LA_ACQ);
-#else
-  return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
-		  LA_ACQ_REL, LA_ACQ);
-#endif
+  GCobj *expect = o;
+  return gcref_cas(p, &expect, next);
 }
 
 #if LJ_HASFFI
