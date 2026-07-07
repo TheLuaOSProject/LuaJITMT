@@ -1552,8 +1552,16 @@ static uint32_t asm_callx_flags(ASMState *as, IRIns *ir)
 #if LJ_HASFFI
   if (IR(ir->op2)->o == IR_CARG) {  /* Copy calling convention info. */
     CTypeID id = (CTypeID)IR(IR(ir->op2)->op2)->i;
-    CType *ct = ctype_get(ctype_ctsG(J2G(as->J)), id);
-    CTInfo info = ctype_info_acq(ct);
+    CTState *cts = ctype_ctsG(J2G(as->J));
+    CTInfo info;
+    CTSize size;
+    int ok = lj_ctype_info_predefined(cts, id, &info, &size, NULL, NULL);
+    if (ok <= 0)
+      ok = lj_ctype_info_snapshot(cts, id, &info, &size, NULL, NULL);
+    if (ok < 0)
+      lj_trace_err(as->J, LJ_TRERR_CTBUSY);
+    if (!ok)
+      lj_trace_err(as->J, LJ_TRERR_BADTYPE);
     nargs |= ((info & CTF_VARARG) ? CCI_VARARG : 0);
 #if LJ_TARGET_X86
     nargs |= (ctype_cconv(info) << CCI_CC_SHIFT);
