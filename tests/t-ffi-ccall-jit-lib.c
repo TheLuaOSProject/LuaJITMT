@@ -280,6 +280,16 @@ int32_t lj_m7_ccall_jit_i32_ptr_u64_u32_ptr(int *src, uint64_t n,
   return dst[i] + (int32_t)(n & UINT64_C(1023)) + (int32_t)(flags >> 28);
 }
 
+int32_t lj_m7_ccall_jit_i32_ptr_u32_u64_ptr(int *port, uint32_t bytes,
+					    uint64_t key, int *overlapped)
+{
+  uint32_t i = bytes & 3u;
+  overlapped[i] = port[key & 3u] + (int)(bytes & 15u) +
+		  (int)(key & UINT64_C(15));
+  return overlapped[i] + (int32_t)(bytes >> 28) +
+	 (int32_t)(key & UINT64_C(1023));
+}
+
 int *lj_m7_ccall_jit_ptr_ptr_ptr_u64_u32(int *dst, int *port, uint64_t key,
 					 uint32_t threads)
 {
