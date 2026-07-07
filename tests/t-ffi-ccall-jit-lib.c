@@ -722,6 +722,12 @@ void lj_m7_ccall_jit_void_ptr_ptr_u64(int *dst, int *src, uint64_t n)
   dst[i] += src[(n + UINT64_C(1)) & 3u] + (int)(n & UINT64_C(15));
 }
 
+void lj_m7_ccall_jit_void_ptr_ptr_ptr_ptr(int *wait, int *handle, int *timeout)
+{
+  wait[2] = handle[1] + timeout[3];
+  timeout[0] = wait[2] + handle[0];
+}
+
 int8_t lj_m7_ccall_jit_i8_0(void)
 {
   return -7;

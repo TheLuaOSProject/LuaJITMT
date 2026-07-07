@@ -171,6 +171,8 @@ CreateIoCompletionPort-shaped slice traces
 `void *(void *, void *, uint64_t, uint32_t)` calls. The exact
 CreateThreadpoolWait/Work/Timer-shaped slice traces
 `void *(void *, void *, void *)` calls. The exact
+SetThreadpoolWait/Timer-shaped slice traces
+`void(void *, void *, void *)` calls. The exact
 PostQueuedCompletionStatus-shaped slice traces
 `int32_t(void *, uint32_t, uint64_t, void *)` calls. The exact
 GetQueuedCompletionStatus-shaped slice traces

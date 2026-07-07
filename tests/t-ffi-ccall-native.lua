@@ -99,6 +99,7 @@ int *lj_m7_ccall_jit_ptr_ptr_ptr_u64(int *, int *, uint64_t);
 void lj_m7_ccall_jit_void_ptr_ptr_i32(int *, int *, int32_t);
 void lj_m7_ccall_jit_void_ptr_ptr_u32(int *, int *, uint32_t);
 void lj_m7_ccall_jit_void_ptr_ptr_u64(int *, int *, uint64_t);
+void lj_m7_ccall_jit_void_ptr_ptr_ptr_ptr(int *, int *, int *);
 int8_t lj_m7_ccall_jit_i8_0(void);
 int8_t lj_m7_ccall_jit_i8_i32(int32_t);
 uint8_t lj_m7_ccall_jit_u8_0(void);
@@ -2538,6 +2539,22 @@ do
       return r
     end)(80) == 80 * 46)
     assert(trace_count() > 0, "shared ptr,ptr,uint64_t->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local wait = ffi.new("int[4]", { 11, 22, 33, 44 })
+      local handle = ffi.new("int[4]", { 11, 22, 33, 44 })
+      local timeout = ffi.new("int[4]", { 11, 22, 33, 44 })
+      local r = 0
+      for _ = 1, n do
+	lib.lj_m7_ccall_jit_void_ptr_ptr_ptr_ptr(wait, handle, timeout)
+	r = r + wait[2] + timeout[0]
+      end
+      assert(wait[2] == 66 and timeout[0] == 77)
+      return r
+    end)(80) == 80 * 143)
+    assert(trace_count() > 0, "shared ptr,ptr,ptr->void FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
