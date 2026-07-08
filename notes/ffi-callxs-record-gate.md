@@ -114,6 +114,8 @@ helper casts to the host ABI's actual `unsigned long` width. The focused test
 checks both `poll(nil, 0, 0)` and a shared-library signed-narrow-to-unsigned
 conversion probe. The int/pointer/size/signed-offset slice traces exact
 `int64_t(int32_t, void *, uint64_t, int64_t)` calls for pread/pwrite-style ABI
+classes. The int/pointer/size/signed-flags slice traces exact
+`int64_t(int32_t, void *, uint64_t, int32_t)` calls for send/recv-style ABI
 classes. The pointer/pointer/signed-length family also traces exact
 `uint32_t(void *, void *, int32_t)`, `uint64_t(void *, void *, int32_t)`,
 `void(void *, void *, int32_t)`, and `void *(void *, void *, int32_t)` calls

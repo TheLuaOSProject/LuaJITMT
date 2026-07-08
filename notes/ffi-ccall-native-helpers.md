@@ -113,6 +113,9 @@ also passes a signed narrow cdata value through the regular unsigned-long
 conversion path. The int/pointer/size/signed-offset slice traces exact
 `int64_t(int32_t, void *, uint64_t, int64_t)` calls for pread/pwrite-style ABI
 classes while preserving the unsigned size and signed offset arguments. The
+int/pointer/size/signed-flags slice traces exact
+`int64_t(int32_t, void *, uint64_t, int32_t)` calls for send/recv-style ABI
+classes while preserving the unsigned size and signed flags arguments. The
 pointer/pointer/signed-length family also traces exact
 `uint32_t(void *, void *, int32_t)`, `uint64_t(void *, void *, int32_t)`,
 `void(void *, void *, int32_t)`, and `void *(void *, void *, int32_t)` calls,

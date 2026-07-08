@@ -373,6 +373,9 @@ LJ_FUNC int64_t lj_ccall_jit_i64_i32_ptr_u64(lua_State *L, void *func,
 LJ_FUNC int64_t lj_ccall_jit_i64_i32_ptr_u64_i64(lua_State *L, void *func,
 						 int32_t a, void *b,
 						 uint64_t c, int64_t d);
+LJ_FUNC int64_t lj_ccall_jit_i64_i32_ptr_u64_i32(lua_State *L, void *func,
+						 int32_t a, void *b,
+						 uint64_t c, int32_t d);
 LJ_FUNC int64_t lj_ccall_jit_i64_i32_i64_i32(lua_State *L, void *func,
 					     int32_t a, int64_t b,
 					     int32_t c);

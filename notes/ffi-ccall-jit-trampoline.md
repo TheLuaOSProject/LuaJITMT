@@ -49,7 +49,9 @@ including the common `poll(nil, 0, 0)` shape, plus the POSIX-shaped
 `int64_t(int32_t, pointer, uint64_t)` class used by calls such as
 `ssize_t write(int, void *, size_t)`, the POSIX-shaped
 `int64_t(int32_t, pointer, uint64_t, int64_t)` class used by calls such as
-`ssize_t pread(int, void *, size_t, off_t)`, and the UCRT-shaped
+`ssize_t pread(int, void *, size_t, off_t)`, the socket-shaped
+`int64_t(int32_t, pointer, uint64_t, int32_t)` class used by calls such as
+`ssize_t recv(int, void *, size_t, int)`, and the UCRT-shaped
 `int32_t(int32_t, pointer, uint32_t)` class used by calls such as
 `int _write(int, void *, unsigned int)`, plus the seek-shaped
 `int64_t(int32_t, int64_t, int32_t)` class used by calls such as
@@ -95,6 +97,8 @@ mixed 64-bit float-returning two-argument shapes,
 shape,
 `lj_ccall_jit_i64_i32_ptr_u64_i64()` for the exact
 int/pointer/size/signed-offset argument shape,
+`lj_ccall_jit_i64_i32_ptr_u64_i32()` for the exact
+int/pointer/size/signed-flags argument shape,
 `lj_ccall_jit_i64_i32_i64_i32()` for the exact int/signed-offset/int argument
 shape,
 `lj_ccall_jit_i32_i32_ptr_u32()` for the exact int/pointer/unsigned-int
@@ -244,6 +248,8 @@ The scope is deliberately narrow:
   converted before the helper casts to the unsigned 64-bit ABI width;
 - exact `int64_t(int32_t, pointer, uint64_t, int64_t)` calls for
   pread/pwrite-shaped APIs, preserving the size and signed offset arguments;
+- exact `int64_t(int32_t, pointer, uint64_t, int32_t)` calls for
+  send/recv-shaped APIs, preserving the size and signed flags arguments;
 - exact `int64_t(int32_t, int64_t, int32_t)` calls for seek-shaped APIs, with
   the signed 64-bit offset preserved as an int64 cdata argument;
 - exact `int32_t(int32_t, pointer, uint32_t)` calls, with high-bit unsigned
@@ -607,7 +613,8 @@ traced GetOverlappedResultEx-shaped pointer/pointer/pointer/uint32/int32
 signed-int-result loops,
 traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, POSIX `pread`/`pwrite`-shaped
-int/pointer/size/signed-offset loops, UCRT `_write`-shaped
+int/pointer/size/signed-offset loops, POSIX `send`/`recv`-shaped
+int/pointer/size/signed-flags loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, signed/unsigned 64-bit-result pointer/pointer/size loops,
 void-returning pointer/pointer/size loops, pointer-returning pointer/pointer
