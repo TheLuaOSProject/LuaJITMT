@@ -136,6 +136,45 @@ static void gc_root_wait_no_l(void)
   (void)lj_thr_retry_yield(NULL);
 }
 
+static int gc_root_link_valid(global_State *g, GCobj *o);
+
+static void gc_list_move_valid_rel(global_State *g, GCRef *dst, GCRef *src)
+{
+  GCobj *head = gcref_xchg_acqrel(src, NULL);
+  GCobj *tail;
+  GCobj *next;
+  uint32_t n = 0;
+  if (!head)
+    return;
+  if (LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, head) ||
+		  head->gch.gct == 0))
+    return;
+  tail = head;
+  for (;;) {
+    next = gcref_acq(tail->gch.gclist);
+    if (!next || next == tail)
+      break;
+    if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT ||
+		    !lj_gc2_obj_valid_queued(g, next) ||
+		    next->gch.gct == 0)) {
+      setgcrefnullrel(tail->gch.gclist);
+      break;
+    }
+    tail = next;
+  }
+  next = lj_gc_list_head_acq(dst);
+  for (;;) {
+    GCobj *expect = next;
+    if (next)
+      setgcrefrel(tail->gch.gclist, next);
+    else
+      setgcrefnullrel(tail->gch.gclist);
+    if (gcref_cas(dst, &expect, head))
+      return;
+    next = expect;
+  }
+}
+
 /* -- Mark phase ---------------------------------------------------------- */
 
 /*
@@ -243,18 +282,15 @@ static int gc_arena_sweep_pending(global_State *g)
 
 void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g)
 {
-  GCobj *o;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
-    /*
-    ** The root list is still the legacy ownership spine while GC2 owns arena
-    ** storage. At the sweep boundary, preserve body cells from owner-arena reuse
-    ** so the legacy sweeper remains responsible for destructors and unlinking.
-    ** Semantic root payloads are closed separately by lj_gc2_trace_sweep_roots().
-    */
-    (void)lj_gc2_preserve_sweep_root(g, o);
-  }
+  /*
+  ** The root list is still the legacy ownership spine while GC2 owns arena
+  ** storage, but it is not a semantic root set. Semantic roots are closed by
+  ** lj_gc2_trace_sweep_roots(); the arena owner sweep dispatches or preserves
+  ** unmarked valid root-spine bodies at the bridge boundary. Marking the whole
+  ** spine here would make every dead root-list object survive this collection.
+  */
 }
 
 static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
@@ -306,19 +342,35 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
 {
   TGState *tg = G2TG(g);
   GCobj *o;
+  uint32_t n = 0;
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       !gc_arena_sweep_ready(g))
     return;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
+      break;
+    next = lj_obj_gcw_acq(o);
     gc_arena_verify_marked(g, o);
     if (o->gch.gct == ~LJ_TTHREAD) {
       GCobj *uv;
-      for (uv = lj_state_openupval_acq(gco2th(o)); uv != NULL;
-	   uv = lj_obj_gcw_acq(uv))
+      uint32_t nuv = 0;
+      for (uv = lj_state_openupval_acq(gco2th(o)); uv != NULL;) {
+	GCobj *nextuv;
+	if (LJ_UNLIKELY(!gc_root_link_valid(g, uv)))
+	  break;
+	nextuv = lj_obj_gcw_acq(uv);
 	gc_arena_verify_marked(g, uv);
+	if (nextuv == uv || ++nuv >= LJ_GC2_ROOT_SCAN_LIMIT)
+	  break;
+	uv = nextuv;
+      }
     }
+    if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      break;
+    o = next;
   }
 }
 #else
@@ -467,10 +519,19 @@ static void gc2_paranoia_check_finalizer_obj(global_State *g, GCobj *o)
 static void gc2_paranoia_check_roots(global_State *g)
 {
   GCobj *o;
+  uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o))
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
+      break;
+    next = lj_obj_gcw_acq(o);
     gc2_paranoia_checkone(g, o);
+    if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      break;
+    o = next;
+  }
   lj_gc2_finalizer_mark_all(g, gc2_paranoia_check_finalizer_obj);
 }
 
@@ -791,9 +852,14 @@ static void gc_mark_primary_root_unique(global_State *g, GCobj *o,
 static void gc_normalize_legacy_colors(global_State *g)
 {
   GCobj *o;
+  uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
+      break;
+    next = lj_obj_gcw_acq(o);
     if (LJ_LIKELY(o->gch.gct != 0) && !iswhite(o)) {
       /* Legacy marking assumes sweep returned every collectable object to
       ** white. SMR-preserved bodies can intentionally survive outside that
@@ -802,6 +868,9 @@ static void gc_normalize_legacy_colors(global_State *g)
       */
       makewhite(g, o);
     }
+    if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      break;
+    o = next;
   }
 }
 
@@ -1339,11 +1408,9 @@ static void gc_mark_fixedstr(global_State *g)
 static void gc_mark_threading_live(global_State *g)
 {
   LJThreadLive *node;
-  uint32_t remaining = la_load32_acq(&g->threading_live_count);
-  if (remaining == 0)
-    return;
+  uint32_t scanned = 0;
   for (node = lj_thread_live_head_acq(g);
-       node != NULL && remaining != 0;
+       node != NULL && scanned++ < LJ_GC2_ROOT_SCAN_LIMIT;
        node = lj_thread_live_next_acq(node)) {
     GCudata *ud = lj_thread_live_udata_acq(g, node);
     if (ud) {
@@ -1366,7 +1433,6 @@ static void gc_mark_threading_live(global_State *g)
 	  gc_traverse_thread(g, child);
 	}
       }
-      remaining--;
     }
   }
 }
@@ -1528,6 +1594,7 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
 {
   GCobj *o;
   StrTabHdr *hdr;
+  uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
   /*
@@ -1535,13 +1602,21 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
   ** legacy ownership spine so large heaps do not lose live objects merely
   ** because the stats path caps its root-spine count.
   */
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
     uint8_t flags;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
+      break;
+    next = lj_obj_gcw_acq(o);
     if (LJ_UNLIKELY(o->gch.gct == 0))
-      continue;
+      goto next_root;
     flags = lj_obj_gcflags(o);
     if (iswhite(o) && !(flags & (LJ_GC_FIXED|LJ_GC_SFIXED)))
-      continue;
+      goto next_root;
+#if LJ_HASFFI
+    if (o->gch.gct == ~LJ_TCDATA && (flags & LJ_GC_CDATA_FIN))
+      goto next_root;  /* FINREG/P_WEAK owns finalizer-cdata liveness. */
+#endif
     if (o->gch.gct == ~LJ_TTRACE || o->gch.gct == ~LJ_TPROTO) {
       /*
       ** Trace/proto backedges are collectible cycles. The legacy root spine is
@@ -1570,6 +1645,10 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
       if (lj_gc2_valid_thread_for_traverse(g, th))
 	(void)lj_gc2_markmem(g, tvref(th->stack));
     }
+next_root:
+    if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      break;
+    o = next;
   }
   hdr = lj_str_tabh_acq(g);
   if (hdr) {
@@ -1590,13 +1669,18 @@ static void gc2_mark_legacy_live_root_spine(global_State *g)
 static void gc_mark_proto_string_constants(global_State *g)
 {
   GCobj *o;
+  uint32_t n = 0;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
+      break;
+    next = lj_obj_gcw_acq(o);
     if (LJ_UNLIKELY(o->gch.gct == 0))
-      continue;
+      goto next_root;
     if (o->gch.gct != ~LJ_TPROTO)
-      continue;
+      goto next_root;
     /*
     ** Legacy string sweep runs before dead prototypes are unlinked from the
     ** ownership spine. A stale but still-linked proto KGC slot can therefore be
@@ -1613,6 +1697,10 @@ static void gc_mark_proto_string_constants(global_State *g)
 	  gc_mark_strong_edge_obj(g, ko);
       }
     }
+next_root:
+    if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      break;
+    o = next;
   }
 }
 
@@ -1698,13 +1786,31 @@ static int gc_ref_cas_obj(GCRef *p, GCobj *old, GCobj *next)
   return gcref_cas(p, &old, next);
 }
 
-static int gc_root_chain_break_cycle(GCobj *head)
+static int gc_root_link_valid(global_State *g, GCobj *o)
+{
+  lua_State *th;
+  if (o == NULL)
+    return 0;
+  th = mainthread_acq(g);
+  if (th && o == obj2gco(th))
+    return 1;
+  th = vmthread_acq(g);
+  if (th && o == obj2gco(th))
+    return 1;
+  return lj_gc2_obj_valid(g, o);
+}
+
+static int gc_root_chain_break_cycle(global_State *g, GCobj *head)
 {
   GCobj *slow = head, *fast = head, *entry, *tail, *next;
   while (fast != NULL) {
+    if (!gc_root_link_valid(g, slow) || !gc_root_link_valid(g, fast))
+      return 0;
     slow = lj_obj_gcw_acq(slow);
     fast = lj_obj_gcw_acq(fast);
     if (fast == NULL || slow == NULL)
+      return 0;
+    if (!gc_root_link_valid(g, fast))
       return 0;
     fast = lj_obj_gcw_acq(fast);
     if (slow == fast)
@@ -1714,6 +1820,8 @@ static int gc_root_chain_break_cycle(GCobj *head)
     return 0;
   slow = head;
   while (slow != fast) {
+    if (!gc_root_link_valid(g, slow) || !gc_root_link_valid(g, fast))
+      return 0;
     slow = lj_obj_gcw_acq(slow);
     fast = lj_obj_gcw_acq(fast);
   }
@@ -1728,7 +1836,7 @@ static int gc_root_chain_break_cycle(GCobj *head)
   ** reachable from head exactly once.
   */
   while ((next = lj_obj_gcw_acq(tail)) != entry) {
-    if (next == NULL)
+    if (next == NULL || !gc_root_link_valid(g, next))
       return 0;
     tail = next;
   }
@@ -1750,7 +1858,7 @@ uint32_t lj_gc_repair_root_spine(global_State *g)
   repaired = lj_gcroot_repaired_epoch_acq(g);
   if (repaired == epoch)
     return 0;
-  fixed = gc_root_chain_break_cycle(lj_gc_root_acq(g));
+  fixed = gc_root_chain_break_cycle(g, lj_gc_root_acq(g));
   /*
   ** Root-spine cycles can only be introduced by legacy-root publication. The
   ** publish CAS/release store orders the links themselves; this epoch is only a
@@ -1772,19 +1880,26 @@ static void gc_mark_finalizers(global_State *g)
 
 static int gc_weak_list_claim(global_State *g, GCtab *t)
 {
-  uint32_t cycle = gc2_cycle_acq(g);
+  /*
+  ** Atomic first moves the propagation weak list back to gray, then traverses
+  ** those weak tables again so the final weak-clear list sees the completed
+  ** atomic liveness frontier. The claim epoch therefore distinguishes the two
+  ** publications within one collector cycle.
+  */
+  uint32_t epoch = (gc2_cycle_acq(g) << 1) |
+		   (g->gc.state == GCSatomic ? 1u : 0u);
   uint32_t old = lj_tab_weak_cycle_acq(t);
   for (;;) {
-    if (old == cycle)
+    if (old == epoch)
       return 0;
     /*
     ** Weak tables use the stock intrusive gclist link while waiting for the
     ** atomic weak pass. Walking that list is not a membership claim under
     ** concurrent propagation: another marker can rewrite this table's gclist
-    ** between the walk and the push. The per-table cycle stamp is the claim;
-    ** only the winner may publish the table link for this cycle.
+    ** between the walk and the push. The per-table publication epoch is the
+    ** claim; only the winner may publish the table link for this phase.
     */
-    if (lj_tab_weak_cycle_cas(t, &old, cycle))
+    if (lj_tab_weak_cycle_cas(t, &old, epoch))
       return 1;
   }
 }
@@ -1864,8 +1979,17 @@ static void gc_mark_rescan_edge_obj_checked(global_State *g, GCobj *o,
 
 static void gc_mark_rescan_edge_obj(global_State *g, GCobj *o, int force)
 {
-  if (!o || LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o)))
+  if (!o)
     return;
+  if (LJ_UNLIKELY(!lj_gc2_obj_valid_queued(g, o))) {
+    /*
+    ** Stack/upvalue roots can name strings, which are plain string-table
+    ** allocations rather than queued traversable GC2 cells. Prove the allocation
+    ** before reading the header, then let the checked path clear legacy white.
+    */
+    if (!lj_gc2_mem_registered_known(g, o) || o->gch.gct != ~LJ_TSTR)
+      return;
+  }
   gc_mark_rescan_edge_obj_checked(g, o, force);
 }
 
@@ -2158,14 +2282,17 @@ static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc,
     return;
   for (i = 0; i < ncache; i++) {
     if (pc >= cache[i].start && pc < cache[i].end) {
-      gc_markobj(g, cache[i].o);
+      gc_mark_thread_root_proto(g, gco2pt(cache[i].o));
       return;
     }
   }
-  for (o = lj_gc_root_acq(g); o != NULL && *budgetp != 0;
-       o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL && *budgetp != 0;) {
+    GCobj *next;
     const BCIns *bc, *end;
     GCproto *pt;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
+      break;
+    next = lj_obj_gcw_acq(o);
     --*budgetp;
     pt = gc_trace_pc_proto_candidate(g, o, &bc, &end);
     if (pt) {
@@ -2182,10 +2309,13 @@ static void gc_mark_proto_for_trace_pc(global_State *g, const BCIns *pc,
 	*ncachep = ++ncache;
       }
       if (pc >= bc && pc < end) {
-	gc_markobj(g, o);
+	gc_mark_thread_root_proto(g, pt);
 	return;
       }
     }
+    if (next == o)
+      break;
+    o = next;
   }
 }
 
@@ -2211,6 +2341,24 @@ static void gc_mark_trace_snapshot_pcs(global_State *g, GCtrace *T)
     gc_mark_proto_for_trace_pc(g, snap_pc_acq(&map[nent]), cache, &ncache,
 			       &walk_budget);
   }
+}
+
+static void gc_mark_active_cframe_proto(global_State *g, lua_State *th)
+{
+  void *cf;
+  const BCIns *pc;
+  GCTraceProtoPCCache cache[GC_TRACE_PROTO_PC_CACHE];
+  MSize ncache = 0;
+  uint32_t walk_budget = GC_TRACE_PROTO_PC_WALK_BUDGET;
+  if (!th || th->cframe == NULL)
+    return;
+  cf = cframe_raw(th->cframe);
+  pc = cf ? cframe_pc(cf) : NULL;
+  if (!pc)
+    return;
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  gc_mark_proto_for_trace_pc(g, pc, cache, &ncache, &walk_budget);
 }
 
 /* Traverse a trace. */
@@ -2837,8 +2985,12 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   } else {
     used = gc_traverse_frames(g, th);
   }
-  if (th == cur_L && th->cframe != NULL)
+  if (th == cur_L && th->cframe != NULL) {
+#if LJ_HASJIT
+    gc_mark_active_cframe_proto(g, th);
+#endif
     gc_mark_stack_func_slots(g, th);
+  }
   if (!remote_current && !native_current && !jit_current && th == cur_L &&
       th->base > tvref(th->stack) + 1 + LJ_FR2) {
     top = gc_active_thread_top(g, th, top, NULL);
@@ -3187,7 +3339,6 @@ static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
     GCFreeFunc fn = gc_freefunc[gct - (uint32_t)~LJ_TSTR];
     if (fn) {
       fn(g, o);
-      o->gch.gct = 0;  /* Body is awaiting bitmap reuse; destructor is done. */
       return 1;
     }
   }
@@ -3217,6 +3368,24 @@ static int gc2_size_fits_mem(global_State *g, const void *p, GCSize size)
 static int gc2_size_fits_arena(global_State *g, GCobj *o, GCSize size)
 {
   return gc2_size_fits_mem(g, o, size);
+}
+
+static int gc2_valid_func_free_obj(global_State *g, GCfunc *fn)
+{
+  GCSize size;
+  if (!fn || !checkptrGC(fn) ||
+      (((uintptr_t)fn & (uintptr_t)(sizeof(void *) - 1u)) != 0) ||
+      !lj_gc2_obj_valid(g, obj2gco(fn)) || fn->c.gct != ~LJ_TFUNC)
+    return 0;
+  if (isluafunc(fn)) {
+    uint32_t nup = lj_funcL_nupvalues(&fn->l);
+    if (nup > LJ_MAX_UPVAL)
+      return 0;
+    size = (GCSize)sizeLfunc((MSize)nup);
+  } else {
+    size = (GCSize)sizeCfunc((MSize)lj_funcC_nupvalues(&fn->c));
+  }
+  return gc2_size_fits_arena(g, obj2gco(fn), size);
 }
 
 static int gc2_valid_proto_obj(global_State *g, GCproto *pt)
@@ -3334,8 +3503,8 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
 #endif
   if (gct == (uint32_t)~LJ_TPROTO && !gc2_valid_proto_obj(g, gco2pt(o)))
     return 0;  /* Stale proto header: sizept is not safe for destructor. */
-  if (gct == (uint32_t)~LJ_TFUNC && !gc_valid_func_obj(g, gco2func(o)))
-    return 0;  /* Stale function header: proto/env/upvalue refs are unsafe. */
+  if (gct == (uint32_t)~LJ_TFUNC && !gc2_valid_func_free_obj(g, gco2func(o)))
+    return 0;  /* Free only needs a sane closure body; traversal stays strict. */
   if (gct == (uint32_t)~LJ_TTHREAD &&
       mref(gco2th(o)->glref, global_State) != g)
     return 0;  /* Stale thread header: glref is not safe for destructor. */
@@ -3418,6 +3587,26 @@ void lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
   }
 }
 
+static int gc_root_chain_contains_obj(global_State *g, GCobj *needle)
+{
+  GCobj *o;
+  uint32_t n = 0;
+  if (!g || !needle)
+    return 0;
+  for (o = lj_gc_root_acq(g); o != NULL && n++ < LJ_GC2_ROOT_SCAN_LIMIT;) {
+    GCobj *next;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
+      break;
+    if (o == needle)
+      return 1;
+    next = lj_obj_gcw_acq(o);
+    if (next == o)
+      break;
+    o = next;
+  }
+  return 0;
+}
+
 uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 {
   GCRef *p = lj_gc_root_ref(g);
@@ -3426,8 +3615,19 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
   while ((o = gcref_acq(*p)) != NULL) {
-    int marked = lj_gc2_ismarked(g, o);
-    if (marked == 0) {
+    int marked, stale_marked_dead_huge;
+    if (LJ_UNLIKELY(!lj_gc2_obj_valid(g, o))) {
+      /*
+      ** A stale link can point at memory that is no longer safe to read, so this
+      ** sweep cannot splice through it. Leave the predecessor link intact and let
+      ** later root publication repair/re-attach known semantic anchors.
+      */
+      break;
+    }
+    marked = lj_gc2_ismarked(g, o);
+    stale_marked_dead_huge = marked > 0 && isdead(g, o) &&
+			     lj_arena_ishuge(lj_arena_of(o));
+    if (marked == 0 || stale_marked_dead_huge) {
       if (o->gch.gct == 0) {
 	if (!gc_chain_splice(p, o)) {
 	  gc_root_wait_no_l();
@@ -3440,7 +3640,12 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 	p = lj_obj_gcwref(o);
 	continue;
       }
-      if (isdead(g, o) && gc2_valid_freeable_obj(g, o)) {
+      if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)) {
+	p = lj_obj_gcwref(o);
+	continue;
+      }
+      if ((isdead(g, o) || lj_arena_ishuge(lj_arena_of(o))) &&
+	  gc2_valid_freeable_obj(g, o)) {
 	if (!gc_chain_splice(p, o)) {
 	  gc_root_wait_no_l();
 	  continue;
@@ -3462,6 +3667,10 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
   uint32_t i, n = 0;
   if (!g || !a)
     return 0;
+  if (unmarked_only) {
+    (void)lj_gc_flush_root_pending(g);
+    (void)lj_gc_repair_root_spine(g);
+  }
   for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
     if (lj_arena_bm_get(a->block, i) &&
 	(!unmarked_only || !lj_arena_bm_get(a->mark, i))) {
@@ -3479,7 +3688,20 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
 	continue;
       }
       if (unmarked_only && gc2_valid_freeable_obj(g, o)) {
-	lj_arena_bm_set(a->mark, i);
+	if (gc_root_chain_contains_obj(g, o)) {
+	  if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)) {
+	    lj_arena_bm_set(a->mark, i);
+	    continue;
+	  }
+	  lj_gc_unlink_root_obj(g, o);
+	  if (!gc2_free_unmarked_obj(g, o))
+	    continue;
+	  n++;
+	  continue;
+	}
+	if (!gc2_free_unmarked_obj(g, o))
+	  continue;
+	n++;
 	continue;
       }
       if ((!unmarked_only || isdead(g, o)) && gc2_valid_freeable_obj(g, o)) {
@@ -3528,12 +3750,18 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
 {
   /* Mask with other white and LJ_GC_FIXED. Or LJ_GC_SFIXED on shutdown. */
   int ow = otherwhite(g);
+  int rootchain = p == lj_gc_root_ref(g);
   GCobj *o;
-  if (p == lj_gc_root_ref(g)) {
+  if (rootchain) {
     (void)lj_gc_flush_root_pending(g);
     (void)lj_gc_repair_root_spine(g);
   }
   while ((o = gcref_acq(*p)) != NULL && lim-- > 0) {
+    if (rootchain && LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
+      if (ow == LJ_GC_SFIXED)
+	setgcrefnullrel(*p);  /* Shutdown can truncate a stale root tail. */
+      break;
+    }
     if (LJ_UNLIKELY(o->gch.gct == 0)) {
       if (!gc_chain_splice(p, o)) {
 	gc_root_wait_no_l();
@@ -3752,7 +3980,7 @@ static int atomic(global_State *g, lua_State *L)
   if (!gc_legacy_mark_frontier_idle(g))
     return 0;
 
-  lj_gc_list_move_rel(&g->gc.gray, &g->gc.weak);  /* Empty weak tables. */
+  gc_list_move_valid_rel(g, &g->gc.gray, &g->gc.weak);  /* Empty weak tables. */
   lj_assertG(!iswhite(obj2gco(mainthread_acq(g))), "main thread turned white");
   gc_markobj(g, L);  /* Mark running thread. */
   /*
@@ -3768,7 +3996,7 @@ static int atomic(global_State *g, lua_State *L)
   if (!gc_legacy_mark_frontier_idle(g))
     return 0;
 
-  lj_gc_list_move_rel(&g->gc.gray, &g->gc.grayagain);  /* Empty 2nd chance. */
+  gc_list_move_valid_rel(g, &g->gc.gray, &g->gc.grayagain);  /* Empty 2nd chance. */
   gc_propagate_gray(g);  /* Propagate it. */
   if (!gc_legacy_mark_atomic_idle(g))
     return 0;
@@ -3797,9 +4025,9 @@ static int atomic(global_State *g, lua_State *L)
     return 0;
   if (!gc_legacy_mark_atomic_idle(g))
     return 0;
-  gc2_paranoia_check_fixpoint(g);
   if (lj_tg_any_jit_active(g))
     return 0;
+  gc2_paranoia_check_fixpoint(g);
 
   /* All marking done, clear weak tables. */
   lj_gc2_mark_to_weak(g);
@@ -4267,10 +4495,14 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
       (void)gc_propagate_gray(g);
       return;
     }
-    if (iswhite(o) && (g->gc.state == GCSpropagate ||
-		       g->gc.state == GCSatomic)) {
-      (void)lj_gc2_markobj_nolegacy(g, o);
-      gc_mark(g, o);
+    if (iswhite(o) &&
+	(g->gc.state == GCSpropagate || g->gc.state == GCSatomic)) {
+      if (gc2_phase_acq(g) != LJ_GC2_IDLE) {
+	(void)lj_gc2_markobj_nolegacy(g, o);
+	gc_mark(g, o);
+      } else if (o->gch.gct != ~LJ_TFUNC || isluafunc(gco2func(o))) {
+	gc_mark(g, o);
+      }
       return;
     }
     lj_gc2_barrier_tv_g(g, &snap);
@@ -4548,7 +4780,7 @@ static LJ_AINLINE void gc_root_set_next_rel(GCobj *o, const GCobj *next)
     lj_obj_setgcwnullrel(o);
 }
 
-static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
+static uint32_t gc_root_chain_tail(global_State *g, GCobj *head, GCobj **tailp)
 {
   GCobj *tail, *next;
   uint32_t n = 0;
@@ -4556,13 +4788,17 @@ static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
     *tailp = NULL;
     return 0;
   }
-  (void)gc_root_chain_break_cycle(head);
+  (void)gc_root_chain_break_cycle(g, head);
   tail = head;
   do {
+    if (!gc_root_link_valid(g, tail))
+      break;
     if (n != ~(uint32_t)0)
       n++;
     next = lj_obj_gcw_acq(tail);
     if (!next)
+      break;
+    if (!gc_root_link_valid(g, next))
       break;
     tail = next;
   } while (1);
@@ -4570,13 +4806,15 @@ static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
   return n;
 }
 
-static int gc_root_chain_contains_to_tail(GCobj *head, GCobj *tail,
+static int gc_root_chain_contains_to_tail(global_State *g, GCobj *head, GCobj *tail,
 					  GCobj *needle)
 {
   GCobj *o;
   if (!needle)
     return 0;
   for (o = head; o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (!gc_root_link_valid(g, o))
+      return 0;
     if (o == needle)
       return 1;
     if (o == tail)
@@ -4599,7 +4837,7 @@ static void gc_root_prepend_chain_at(global_State *g, GCRef *p, GCobj *head,
     ** reachable from head.
     */
     gc_root_set_next_rel(tail,
-			 gc_root_chain_contains_to_tail(head, tail, oldhead) ?
+			 gc_root_chain_contains_to_tail(g, head, tail, oldhead) ?
 			 NULL : oldhead);
   } while (!gcref_cas(p, &oldhead, head));
   lj_gcroot_repair_epoch_add(g);
@@ -4614,7 +4852,7 @@ static void gc_root_prepend_known_chain(global_State *g, GCobj *head,
 static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
 {
   GCobj *tail;
-  uint32_t n = gc_root_chain_tail(head, &tail);
+  uint32_t n = gc_root_chain_tail(g, head, &tail);
   if (!n)
     return 0;
   gc_root_prepend_known_chain(g, head, tail);
@@ -4625,10 +4863,12 @@ static uint32_t gc_root_prepend_chain_after(global_State *g, GCobj *anchor,
 					    GCobj *head)
 {
   GCobj *tail;
-  uint32_t n = gc_root_chain_tail(head, &tail);
+  uint32_t n = gc_root_chain_tail(g, head, &tail);
   if (!anchor || !n)
     return 0;
   gc_root_prepend_chain_at(g, lj_obj_gcwref(anchor), head, tail);
+  if (LJ_UNLIKELY(!gc_root_chain_contains_obj(g, anchor)))
+    n += gc_root_prepend_chain(g, anchor);
   return n;
 }
 

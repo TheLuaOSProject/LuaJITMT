@@ -141,6 +141,7 @@ struct TGAlloc {
   uint32_t prepare_epoch;
   uint32_t owner_tid;
   uint8_t alloc_black;
+  uint8_t free_noinsert;
 };
 
 static LJ_AINLINE uint32_t lj_arena_alloc_owner_acq(const TGAlloc *alloc)
@@ -163,6 +164,18 @@ static LJ_AINLINE void lj_arena_alloc_black_rel(TGAlloc *alloc,
 						uint8_t alloc_black)
 {
   la_store8_rel(&alloc->alloc_black, alloc_black);  /* 05 section 5.5. */
+}
+
+static LJ_AINLINE uint8_t lj_arena_alloc_free_noinsert_acq(
+  const TGAlloc *alloc)
+{
+  return la_load8_acq(&alloc->free_noinsert);
+}
+
+static LJ_AINLINE void lj_arena_alloc_free_noinsert_rel(TGAlloc *alloc,
+							uint8_t enabled)
+{
+  la_store8_rel(&alloc->free_noinsert, enabled);
 }
 
 static LJ_AINLINE uint32_t lj_arena_alloc_binmask(const TGAlloc *alloc,

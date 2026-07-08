@@ -62,19 +62,89 @@ void lj_snap_grow_map_(jit_State *J, MSize need)
 
 /* -- Snapshot generation ------------------------------------------------- */
 
-static int snapshot_cellref_slot(jit_State *J, BCReg slot, TRef tr)
+static int snapshot_child_cellslot(jit_State *J, GCproto *pt, BCReg slot)
+{
+  GCRef *kr;
+  ptrdiff_t i, n;
+  if (!(pt->flags & PROTO_CHILD))
+    return 0;
+  n = pt->sizekgc;
+  kr = mref(pt->k, GCRef) - 1;
+  for (i = 0; i < n; i++, kr--) {
+    GCobj *o = gcref_acq(*kr);
+    if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+      GCproto *child = gco2pt(o);
+      MSize j, nuv = child->sizeuv;
+#if LJ_GC64
+      if (!proto_celluv(child))
+	continue;
+#endif
+      for (j = 0; j < nuv; j++) {
+	uint32_t v = proto_uv(child)[j];
+	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	    (BCReg)(v & 0xff) == slot)
+	  return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+static int snapshot_cellref_pt(jit_State *J, GCproto *pt, BCReg slot)
 {
   const BCIns *pc, *end;
-  BCReg lslot;
-  if (!J->pt || slot < J->baseslot ||
+  if (!pt)
+    return 0;
+#if LJ_GC64
+  if (!proto_cellops(pt) && !(pt->flags & PROTO_CHILD))
+    return 0;
+#endif
+  pc = proto_bc(pt);
+  end = pc + pt->sizebc;
+  for (; pc < end; pc++) {
+    BCIns ins = *pc;
+    BCOp op = bc_op(ins);
+    if ((op == BC_CGET && bc_d(ins) == slot) ||
+	(op == BC_CSET && bc_a(ins) == slot))
+      return 1;
+  }
+  return snapshot_child_cellslot(J, pt, slot);
+}
+
+static GCproto *snapshot_frame_pt(cTValue *frame)
+{
+  if (frame_islua(frame)) {
+    GCfunc *fn = frame_func(frame);
+    if (isluafunc(fn))
+      return funcproto(fn);
+  }
+  return NULL;
+}
+
+static int snapshot_cellref_slot(jit_State *J, BCReg slot, TRef tr)
+{
+  cTValue *base;
+  GCproto *slotpt;
+  BCReg s, slotbase;
+  if ((tr & (TREF_FRAME|TREF_CONT)) ||
       !(tref_istype(tr, IRT_P32) || tref_istype(tr, IRT_PGC)))
     return 0;
-  lslot = (BCReg)(slot - J->baseslot);
-  pc = proto_bc(J->pt);
-  end = pc + J->pt->sizebc;
-  for (; pc < end; pc++)
-    if (bc_op(*pc) == BC_CGET && bc_d(*pc) == lslot)
-      return 1;
+  if (J->pt && slot >= J->baseslot)
+    return snapshot_cellref_pt(J, J->pt, (BCReg)(slot - J->baseslot));
+  base = J->L->base - J->baseslot;
+  slotpt = snapshot_frame_pt(base + LJ_FR2);
+  slotbase = 1 + LJ_FR2;
+  for (s = 0; s <= slot; s++) {
+    if (s == slot)
+      return s >= slotbase &&
+	     snapshot_cellref_pt(J, slotpt, (BCReg)(s - slotbase));
+    if ((J->slot[s] & TREF_FRAME)) {
+      cTValue *tv = &base[s];
+      GCfunc *fn = gco2func(frame_gc(tv));
+      slotpt = isluafunc(fn) ? funcproto(fn) : NULL;
+      slotbase = (BCReg)(s + 1u);
+    }
+  }
   return 0;
 }
 
@@ -396,10 +466,46 @@ static void snap_useuv(jit_State *J, GCproto *pt, uint8_t *udf)
   }
 }
 
+static void snap_usechildcellsrc(jit_State *J, GCproto *pt, uint8_t *udf,
+				 BCReg maxslot)
+{
+  GCRef *kr;
+  ptrdiff_t i, n;
+  if (!(pt->flags & PROTO_CHILD))
+    return;
+  n = pt->sizekgc;
+  kr = mref(pt->k, GCRef) - 1;
+  for (i = 0; i < n; i++, kr--) {
+    GCobj *o = gcref_acq(*kr);
+    if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+      GCproto *child = gco2pt(o);
+      MSize j, nuv = child->sizeuv;
+#if LJ_GC64
+      if (!proto_celluv(child))
+	continue;
+#endif
+      for (j = 0; j < nuv; j++) {
+	uint32_t v = proto_uv(child)[j];
+	BCReg slot = (BCReg)(v & 0xff);
+	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	    slot < maxslot)
+	  udf[slot] = 0;
+      }
+    }
+  }
+}
+
 /* Mark raw local-cell sources as used for the whole frame lifetime. */
-static void snap_usecellsrc(GCproto *pt, uint8_t *udf, BCReg maxslot)
+static void snap_usecellsrc(jit_State *J, GCproto *pt, uint8_t *udf,
+			    BCReg maxslot)
 {
   const BCIns *pc, *end;
+  if (!pt)
+    return;
+#if LJ_GC64
+  if (!proto_cellops(pt) && !(pt->flags & PROTO_CHILD))
+    return;
+#endif
   /*
   ** Non-GC64 prototypes do not carry flags2, but local-cell bytecode still
   ** needs its raw CGET source slots preserved for side exits.
@@ -408,19 +514,20 @@ static void snap_usecellsrc(GCproto *pt, uint8_t *udf, BCReg maxslot)
   end = pc + pt->sizebc;
   for (; pc < end; pc++) {
     BCIns ins = *pc;
-    if (bc_op(ins) == BC_CGET) {
-      BCReg slot = bc_d(ins);
+    BCOp op = bc_op(ins);
+    if (op == BC_CGET || op == BC_CSET) {
+      BCReg slot = op == BC_CGET ? bc_d(ins) : bc_a(ins);
       /*
-      ** CGET copies from the canonical raw local/cell slot into a temporary
-      ** destination, but exits from nested calls resume in the interpreter,
-      ** which will execute later CGETs against the original source slot. Keep
-      ** that source restorable even when local use/def scanning stops at the
-      ** call boundary.
+      ** CGET copies from, and CSET writes to, the canonical raw local/cell
+      ** slot. Exits from nested calls resume in the interpreter against that
+      ** source slot, so keep it restorable even when local use/def scanning
+      ** stops at the call boundary.
       */
       if (slot < maxslot)
 	udf[slot] = 0;
     }
   }
+  snap_usechildcellsrc(J, pt, udf, maxslot);
 }
 
 /* Purge dead slots before the next snapshot. */
@@ -432,8 +539,8 @@ void lj_snap_purge(jit_State *J)
     maxslot = J->pt->numparams;
   s = snap_usedef(J, udf, J->pc, maxslot);
   if (s < maxslot) {
-      snap_useuv(J, J->pt, udf);
-    snap_usecellsrc(J->pt, udf, maxslot);
+    snap_useuv(J, J->pt, udf);
+    snap_usecellsrc(J, J->pt, udf, maxslot);
     for (; s < maxslot; s++)
       if (udf[s] != 0)
 	J->base[s] = 0;  /* Purge dead slots. */
@@ -456,7 +563,7 @@ void lj_snap_shrink(jit_State *J)
   minslot = snap_usedef(J, udf, pc, maxslot);
   if (minslot < maxslot) {
     snap_useuv(J, J->pt, udf);
-    snap_usecellsrc(J->pt, udf, maxslot);
+    snap_usecellsrc(J, J->pt, udf, maxslot);
   }
   maxslot += baseslot;
   minslot += baseslot;

@@ -690,7 +690,7 @@ typedef struct GCtab {
 #endif
   uint32_t acap;	/* Allocated array capacity. */
   uint32_t struct_owner;  /* Table resize/compound array op owner tid. */
-  uint32_t weak_cycle;	/* Classic-GC weak-list membership cycle. */
+  uint32_t weak_cycle;	/* Classic-GC weak-list publication epoch. */
 } GCtab;
 
 static LJ_AINLINE uint8_t lj_tab_nomm_acq(const GCtab *t)

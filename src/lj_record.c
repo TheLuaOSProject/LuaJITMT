@@ -149,11 +149,43 @@ static int rec_check_may_pending_celluv(jit_State *J, BCReg slotno)
   return 0;
 }
 
-static int rec_check_cellsrc_slot(GCproto *pt, BCReg slotno)
+static int rec_check_child_cellslot(jit_State *J, GCproto *pt, BCReg slotno)
+{
+  GCRef *kr;
+  ptrdiff_t i, n;
+  if (!(pt->flags & PROTO_CHILD))
+    return 0;
+  n = pt->sizekgc;
+  kr = mref(pt->k, GCRef) - 1;
+  for (i = 0; i < n; i++, kr--) {
+    GCobj *o = gcref_acq(*kr);
+    if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+      GCproto *child = gco2pt(o);
+      MSize j, nuv = child->sizeuv;
+#if LJ_GC64
+      if (!proto_celluv(child))
+	continue;
+#endif
+      for (j = 0; j < nuv; j++) {
+	uint32_t v = proto_uv(child)[j];
+	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	    (BCReg)(v & 0xff) == slotno)
+	  return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+static int rec_check_cellsrc_slot(jit_State *J, GCproto *pt, BCReg slotno)
 {
   const BCIns *pc, *end;
   if (!pt)
     return 0;
+#if LJ_GC64
+  if (!proto_cellops(pt) && !(pt->flags & PROTO_CHILD))
+    return 0;
+#endif
   /*
   ** Non-GC64 prototypes do not carry flags2, but the parser can still emit
   ** CGET/CSET.  This assertion-only path scans bytecode directly instead of
@@ -161,10 +193,14 @@ static int rec_check_cellsrc_slot(GCproto *pt, BCReg slotno)
   */
   pc = proto_bc(pt);
   end = pc + pt->sizebc;
-  for (; pc < end; pc++)
-    if (bc_op(*pc) == BC_CGET && bc_d(*pc) == slotno)
+  for (; pc < end; pc++) {
+    BCIns ins = *pc;
+    BCOp op = bc_op(ins);
+    if ((op == BC_CGET && bc_d(ins) == slotno) ||
+	(op == BC_CSET && bc_a(ins) == slotno))
       return 1;
-  return 0;
+  }
+  return rec_check_child_cellslot(J, pt, slotno);
 }
 
 static GCproto *rec_check_frame_pt(cTValue *frame)
@@ -250,13 +286,16 @@ static void rec_check_slots(jit_State *J)
 	** while CGET materializes the value used by later bytecode and exits.
 	*/
 	int cellsrc = s >= J->baseslot &&
-		      rec_check_cellsrc_slot(J->pt, (BCReg)(s - J->baseslot));
+		      rec_check_cellsrc_slot(J, J->pt,
+					     (BCReg)(s - J->baseslot));
 	if (!cellsrc && s >= slotbase)
-	  cellsrc = rec_check_cellsrc_slot(slotpt, (BCReg)(s - slotbase));
+	  cellsrc = rec_check_cellsrc_slot(J, slotpt,
+					   (BCReg)(s - slotbase));
 	lj_assertJ((tvisnumber(tv) ? tref_isnumber(tr) :
 		    itype2irt(tv) == tref_type(tr)) ||
-		   cellsrc ||
-		   (tref_istype(tr, IRT_P32) && s >= J->baseslot &&
+		   (cellsrc && (tref_istype(tr, IRT_P32) ||
+				tref_istype(tr, IRT_PGC))) ||
+		   (tref_istype(tr, IRT_PGC) && s >= J->baseslot &&
 		    rec_check_may_pending_celluv(J, (BCReg)(s - J->baseslot))),
 		   "slot %d type mismatch: stack type %d vs IR type %d",
 		   s, itypemap(tv), tref_type(tr));
@@ -2889,6 +2928,9 @@ static int rec_celluv_materialize_cget_sources(jit_State *J)
   int materialized = 0;
   if (J->pt == NULL)
     return 0;
+  if (J->parent == 0 && bc_op(J->cur.startins) == BC_FUNCF &&
+      J->pc == proto_bc(J->pt) + 1)
+    return 0;
   pc = J->pc;
   end = proto_bc(J->pt) + J->pt->sizebc;
   framesize = J->pt->framesize;
@@ -3113,7 +3155,8 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
 	lj_record_stop(J, LJ_TRLINK_UPREC, J->cur.traceno);  /* Up-recursion. */
     }
   } else {
-    if (count > jit_param_acq(J, JIT_P_callunroll)) {
+    int32_t callunroll = jit_param_acq(J, JIT_P_callunroll);
+    if (count > callunroll) {
       if (lnk) {  /* Possible tail- or up-recursion. */
 	lj_trace_test_note_call_unroll_abort(lnk);
 	/*
@@ -3933,6 +3976,10 @@ void lj_record_ins(jit_State *J)
   /* -- Calls and vararg handling ----------------------------------------- */
 
   case BC_ITERC:
+    if (J->pt && proto_cellops(J->pt)) {
+      setintV(&J->errinfo, (int32_t)op);
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
     J->base[ra] = getslot(J, ra-3);
     J->base[ra+1+LJ_FR2] = getslot(J, ra-2);
     J->base[ra+2+LJ_FR2] = getslot(J, ra-1);
@@ -3950,6 +3997,10 @@ void lj_record_ins(jit_State *J)
     rc = (BCReg)(J->L->top - J->L->base) - ra - LJ_FR2;
     /* fallthrough */
   case BC_CALL:
+    if (J->pt && proto_cellops(J->pt)) {
+      setintV(&J->errinfo, (int32_t)op);
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
     lj_record_call(J, ra, (ptrdiff_t)rc-1);
     break;
 
@@ -3957,6 +4008,10 @@ void lj_record_ins(jit_State *J)
     rc = (BCReg)(J->L->top - J->L->base) - ra - LJ_FR2;
     /* fallthrough */
   case BC_CALLT:
+    if (J->pt && proto_cellops(J->pt)) {
+      setintV(&J->errinfo, (int32_t)op);
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
     lj_record_tailcall(J, ra, (ptrdiff_t)rc-1);
     break;
 
@@ -4155,14 +4210,11 @@ static const BCIns *rec_setup_root(jit_State *J)
     break;
   case BC_FUNCF:
     /* No bytecode range check for root traces started by a hot call. */
-    if (J->pt && proto_cellops(J->pt) &&
-	lj_record_mt_runtime_shared(J2G(J), J->L)) {
+    if (J->pt && proto_cellops(J->pt)) {
       /*
-      ** Active-MT local-cell functions keep fixed arguments as canonical
-      ** interpreter stack state across calls and exits. Function-entry traces
-      ** specialize before later CGET users have necessarily materialized every
-      ** argument, so keep hot-call entry interpreted and let loop/straight-line
-      ** traces cover the body once arguments are explicit.
+      ** Local-cell function-entry traces specialize arguments before later CGET
+      ** users have materialized every source slot. Keep hot-call entry
+      ** interpreted; loop traces cover the body once CGET/CSET state is explicit.
       */
       lj_trace_err_info(J, LJ_TRERR_NYIBC);
     }
@@ -4256,8 +4308,7 @@ void lj_record_setup(jit_State *J)
     } else {
       J->startpc = NULL;  /* Prevent forming an extra loop. */
     }
-    if (J->pt && proto_cellops(J->pt) &&
-	lj_record_mt_runtime_shared(J2G(J), J->L)) {
+    if (J->pt && proto_cellops(J->pt)) {
       GCtrace *rootT = rec_traceref_live(J, root);
       BCOp startop = bc_op(trace_startins_acq(rootT));
       if (startop == BC_FUNCF || startop == BC_JFUNCF) {
@@ -4265,7 +4316,7 @@ void lj_record_setup(jit_State *J)
 	** Side traces under a function-entry root can start on branches that do
 	** not read every fixed argument. If such a side trace later fails its
 	** own entry guard, it can resume in the interpreter without
-	** reconstructing those arguments. Keep this active-MT entry path
+	** reconstructing those arguments. Keep this local-cell entry path
 	** interpreted; loop and stitched traces still handle explicit arguments.
 	*/
 	lj_trace_err_info(J, LJ_TRERR_NYIBC);

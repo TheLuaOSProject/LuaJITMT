@@ -320,7 +320,19 @@ void lj_tg_attach(global_State *g, TGState *tg)
   tg_attach_catchup(g, tg);
   lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_DEAD);
   do {
+    TGState *cur;
     head = gc2_tg_list_acq(g);  /* 05 section 5.4.1. */
+    for (cur = head; cur != NULL;) {
+      TGState *next = lj_tg_next_acq(cur);
+      if (cur == tg) {
+	if (next == tg)
+	  lj_tg_next_rel(tg, NULL);
+	return;
+      }
+      if (next == cur)
+	break;
+      cur = next;
+    }
     lj_tg_next_rel(tg, head);
   } while (!gc2_tg_list_cas(g, &head, tg));  /* 05 section 5.4.1 CAS-prepend. */
   gc2_n_threads_add_rlx(g, 1);  /* Live TG count; list keeps dead nodes. */

@@ -1564,9 +1564,30 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
     IRType t;
     CTInfo sinfo;
     sid = argv2cdata(J, sp, sval)->ctypeid;
+    svisnz = cdataptr(cdataV(sval));
+    s = crec_ctype_rawid(J, cts, sid, &sid, &scopy);
+    sinfo = ctype_info_acq(s);
+    if (ctype_isref(sinfo)) {
+      sp = emitir(IRT(IR_FLOAD, IRT_PTR), sp, IRFL_CDATA_PTR);
+      svisnz = *(void **)svisnz;
+      sid = ctype_cid(sinfo);
+      s = crec_ctype_rawid(J, cts, sid, NULL, &scopy);
+      sinfo = ctype_info_acq(s);
+      if (ctype_isenum(sinfo)) {
+	s = crec_ctype_snapshot(J, cts, ctype_cid(sinfo), &scopy);
+	sinfo = ctype_info_acq(s);
+      }
+      t = crec_ct2irt_snapshot(J, cts, s);
+      if (ctype_isptr(sinfo)) {
+	sp = emitir(IRT(IR_XLOAD, t), sp, 0);
+      } else if (ctype_isnum(sinfo) && t != IRT_CDATA) {
+	if (t == IRT_I64 || t == IRT_U64) lj_needsplit(J);
+	sp = emitir(IRT(IR_XLOAD, t), sp, 0);
+      }
+      goto doconv;
+    }
     s = crec_ctype_rawrefid(J, cts, sid, &sid, &scopy);
     sinfo = ctype_info_acq(s);
-    svisnz = cdataptr(cdataV(sval));
     if (ctype_isfunc(sinfo)) {
       sid = lj_ctype_intern_l(J->L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
 			      CTSIZE_PTR);

@@ -1342,6 +1342,8 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
   }
   if (size > LJ_HUGE_THRESHOLD)
     return;
+  if (lj_arena_alloc_free_noinsert_acq(alloc))
+    return;
   start = lj_arena_cellof(p);
   ncells = lj_arena_ncells(size);
   if (start < LJ_AFIRST_CELL || start + ncells > LJ_ARENA_CELLS)

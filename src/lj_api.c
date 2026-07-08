@@ -407,7 +407,6 @@ LUA_API void lua_settop(lua_State *L, int idx)
     lj_checkapi(-(idx+1) <= (L->top - L->base), "bad stack slot %d", idx);
     L->top += idx+1;  /* Shrinks top (idx < 0). */
   }
-  lj_state_stack_pubrange(L, L);
   lj_state_dropresumeclaim(&claim);
 }
 

@@ -295,6 +295,20 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   return NULL;
 }
 
+static int close_state_root_link_valid(global_State *g, GCobj *o)
+{
+  lua_State *th;
+  if (o == NULL)
+    return 0;
+  th = mainthread_acq(g);
+  if (th && o == obj2gco(th))
+    return 1;
+  th = vmthread_acq(g);
+  if (th && o == obj2gco(th))
+    return 1;
+  return lj_gc2_obj_valid(g, o);
+}
+
 static void close_state_reanchor_root(global_State *g, GCobj *target)
 {
   GCobj *o;
@@ -302,11 +316,16 @@ static void close_state_reanchor_root(global_State *g, GCobj *target)
   if (!g || !target)
     return;
   (void)lj_gc_flush_root_pending(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
+    if (!close_state_root_link_valid(g, o))
+      break;
+    next = lj_obj_gcw_acq(o);
     if (o == target)
       return;
-    if (++n >= 1000000u)
+    if (next == o || ++n >= 1000000u)
       return;
+    o = next;
   }
   lj_obj_setgcwrel(target, lj_gc_root_acq(g));
   lj_gc_root_rel(g, target);
@@ -323,6 +342,8 @@ static int close_state_unlink_root(global_State *g, GCobj *target)
   (void)lj_gc_flush_root_pending(g);
   p = lj_gc_root_ref(g);
   while ((o = gcref_acq(*p)) != NULL) {
+    if (!close_state_root_link_valid(g, o))
+      break;
     if (o == target) {
       GCobj *next = lj_obj_gcw_acq(o);
       GCobj *expect = o;
@@ -395,6 +416,13 @@ static void close_state_free_registered_states(global_State *g, lua_State *L)
   }
 }
 
+static void close_state_arena_free_noinsert(global_State *g)
+{
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg))
+    lj_arena_alloc_free_noinsert_rel(&tg->alloc, 1);
+}
+
 static void close_state(lua_State *L)
 {
   global_State *g = G(L);
@@ -413,7 +441,11 @@ static void close_state(lua_State *L)
   lj_thr_fence();
   (void)lj_tg_reclaim_dead(g);
   (void)lj_gc_flush_root_pending(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
+    if (!close_state_root_link_valid(g, o))
+      break;
+    next = lj_obj_gcw_acq(o);
     if (o->gch.gct == ~LJ_TUDATA &&
 	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD) {
       LJThread *th = (LJThread *)uddata(gco2ud(o));
@@ -421,19 +453,27 @@ static void close_state(lua_State *L)
       if (child)
 	close_state_reanchor_root(g, obj2gco(child));
     }
-    if (++n >= 1000000u)
+    if (next == o || ++n >= 1000000u)
       break;
+    o = next;
   }
   n = 0;
+  if (arena_alloc)
+    close_state_arena_free_noinsert(g);
   lj_gc_freeall(g);
   (void)lj_gc_flush_root_pending(g);
-  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL;) {
+    GCobj *next;
+    if (!close_state_root_link_valid(g, o))
+      break;
+    next = lj_obj_gcw_acq(o);
     if (o == obj2gco(L))
       break;
-    if (++n >= 1000000u) {
+    if (next == o || ++n >= 1000000u) {
       lj_assertG(0, "root list cycle after freeall");
       break;
     }
+    o = next;
   }
   lj_assertG(o == obj2gco(L), "main thread missing after freeall");
   lj_str_flush_num_credit(g, g->main_tg);
