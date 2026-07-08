@@ -112,6 +112,8 @@ mixed 64-bit float-returning two-argument shapes,
 shape,
 `lj_ccall_jit_i64_i32_ptr_i32()` for the exact int/pointer/int argument
 shape,
+`lj_ccall_jit_i64_i32_ptr_i32_i64()` for the exact
+int/pointer/int/signed-offset argument shape,
 `lj_ccall_jit_i64_i32_ptr_u64_i64()` for the exact
 int/pointer/size/signed-offset argument shape,
 `lj_ccall_jit_i64_i32_ptr_u64_i32()` for the exact
