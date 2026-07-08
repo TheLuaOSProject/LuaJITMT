@@ -7998,6 +7998,9 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
 {
   int weak = 0;
   TValue modev;
+  if (!mt || !lj_gc2_obj_valid(g, obj2gco(mt)) ||
+      obj2gco(mt)->gch.gct != (uint32_t)~LJ_TTAB)
+    return 0;
   cTValue *mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
   if (mode && tvisstr(mode)) {
     const char *modestr = strVdata(mode);
@@ -9156,15 +9159,11 @@ static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak)
   cycle = gc2_cycle_acq(g);
   dirty0 = gc2_table_dirty_epoch(g, t, &stamped);
   mt = lj_tab_metatable_acq(t);
-  weak = gc2_tab_weak_mode(g, t, mt, 1);
-  ffi_fin = gc2_tab_is_ffi_fin(g, t);
   /*
   ** NEEDSCAN is queue membership, not a proof that this traversal owns all
   ** future table writes. Keep it set while scanning and clear it only after the
   ** dirty epoch proves the scan covered a stable payload.
   */
-  if (record_weak)
-    gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */
   array_status = lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap);
   node_status = lj_tab_node_snapshot_gc(g, t, &node, &hmask);
   if (LJ_UNLIKELY(array_status == LJ_TAB_GC_SNAPSHOT_TRANSIENT ||
@@ -9175,8 +9174,12 @@ static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak)
   if (LJ_UNLIKELY(array_status != LJ_TAB_GC_SNAPSHOT_OK ||
 			  node_status != LJ_TAB_GC_SNAPSHOT_OK)) {
     gc2_table_rescan_pending_clear(g, obj2gco(t));
-    return weak;
+    return 0;
   }
+  weak = gc2_tab_weak_mode(g, t, mt, 1);
+  ffi_fin = gc2_tab_is_ffi_fin(g, t);
+  if (record_weak)
+    gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */
   if (array)
     lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
 				      (void *)array);

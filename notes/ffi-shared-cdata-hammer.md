@@ -33,3 +33,10 @@ payload access.
   load/store loop records a trace, the same loop against existing cdata with a
   live worker TG records no traces, and trace-owned `ffi.new()` cdata still
   records before the shared-cdata hammer starts.
+
+2026-07-08 GC2 weak-table traversal fix:
+- The hammer also exposed a GC2 crash while worker-triggered collection was
+  reading `__mode` from a weak/self-metatable table before validating the table's
+  current node generation. GC2 now snapshots table storage before weak-mode
+  lookup, matching the legacy collector order, and validates the metatable object
+  before using the fast metamethod cache.
