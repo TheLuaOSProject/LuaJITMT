@@ -3336,6 +3336,9 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
     return 0;  /* Stale proto header: sizept is not safe for destructor. */
   if (gct == (uint32_t)~LJ_TFUNC && !gc_valid_func_obj(g, gco2func(o)))
     return 0;  /* Stale function header: proto/env/upvalue refs are unsafe. */
+  if (gct == (uint32_t)~LJ_TTHREAD &&
+      mref(gco2th(o)->glref, global_State) != g)
+    return 0;  /* Stale thread header: glref is not safe for destructor. */
   if (gct == (uint32_t)~LJ_TTAB && !gc2_valid_tab_obj(g, gco2tab(o)))
     return 0;  /* Stale table header: side-vector sizes are not trustworthy. */
   if (gct == (uint32_t)~LJ_TUDATA) {

@@ -717,5 +717,6 @@ void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
     lj_assertG(lj_state_openupval_acq(L) == NULL, "stale open upvalues");
   }
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
-  lj_mem_freet(g, L);
+  if (!lj_mem_freegco_defer(g, L, sizeof(lua_State)))
+    lj_mem_freet(g, L);
 }

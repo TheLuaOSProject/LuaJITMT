@@ -1774,6 +1774,14 @@ void LJ_FASTCALL recff_cdata_index(jit_State *J, RecordFFData *rd)
   CTSize ctsize = ctype_size_acq(ct);
   CTypeID sid = 0;
 
+  /*
+  ** Racy shared cdata payload access is VM-safe in the interpreter, but traced
+  ** C field loads/stores still need a stronger MT root/aliasing protocol before
+  ** worker-triggered GC can run concurrently with them.
+  */
+  if (gc2_n_threads_acq(J2G(J)) > 1)
+    lj_trace_err(J, LJ_TRERR_NYICONV);
+
   /* Resolve pointer or reference for cdata object. */
   if (ctype_isptr(ctinfo)) {
     IRType t = (LJ_64 && ctsize == 8) ? IRT_P64 : IRT_P32;

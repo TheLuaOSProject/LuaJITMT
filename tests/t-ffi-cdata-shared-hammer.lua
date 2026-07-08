@@ -1,6 +1,7 @@
 local th = require"threading"
 local ffi = require"ffi"
 local harness = require"thread_harness"
+local trace_count = require"jit_harness".trace_count
 
 local nthreads = harness.arg_number(1, "LJ_M7_FFI_SHARED_THREADS", 6)
 local iters = harness.arg_number(2, "LJ_M7_FFI_SHARED_ITERS", 24000)
@@ -24,6 +25,45 @@ typedef struct {
 
 local shared = ffi.new("lj_m7_shared_outer_t")
 local keepalive = { shared }
+
+local function trace_field_rw(obj, n)
+  local total = 0
+  for i = 1, n do
+    obj.owner = i % 17
+    obj.counter = i
+    obj.arr[i % 4] = i + 10
+    obj.inner.x = obj.owner
+    obj.inner.y = obj.counter
+    total = total + obj.owner + obj.counter + obj.arr[i % 4] +
+	    obj.inner.x + obj.inner.y
+  end
+  return total
+end
+
+if jit.status() then
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  assert(trace_field_rw(shared, 80) > 0)
+  assert(trace_count(200) > 0,
+	 "single-thread cdata field load/store loop should trace")
+
+  local ready, release = harness.channels(1)
+  local worker = th.spawn(function(ready_ch, release_ch)
+    ready_ch:send("ready")
+    local token, ok = release_ch:recv(10)
+    assert(ok == true and token == "go")
+    return true
+  end, ready, release)
+
+  harness.wait_ready(ready, 1)
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  assert(trace_field_rw(shared, 80) > 0)
+  assert(trace_count(200) == 0,
+	 "active-MT cdata field load/store loop must stay interpreted")
+  harness.release_start(release, 1)
+  harness.join_all({ worker })
+end
 
 local function assert_domain(obj, max_threads, max_iters)
   local owner = tonumber(obj.owner)
