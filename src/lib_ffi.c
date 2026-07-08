@@ -719,7 +719,6 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
   return ffi_direct_ctype_part(L, cts, s, p, len, idp);
 }
 
-#if LJ_HASJIT
 static int ffi_direct_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
 {
   const char *p = strdata(s);
@@ -808,7 +807,6 @@ static int ffi_direct_pointer_alignof_string(GCstr *s, CTSize *alignp)
   *alignp = CTSIZE_PTR;
   return 1;
 }
-#endif
 
 /* Check first argument for a C type and returns its ID. */
 static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
@@ -2495,11 +2493,8 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
     int isstr, neednelem = 0;
     id = ffi_checkctype_noparse(L, NULL, &isstr);
     if (isstr) {
-#if LJ_HASJIT
-      if (ffi_active_recorder(L) &&
-	  ffi_direct_sizeof_string(cts, strV(L->base), &sz))
+      if (ffi_direct_sizeof_string(cts, strV(L->base), &sz))
 	goto got_size;
-#endif
       id = ffi_checkctype(L, cts, NULL);
     }
     {
@@ -2541,11 +2536,8 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
   ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr) {
-#if LJ_HASJIT
-    if (ffi_active_recorder(L) &&
-	ffi_direct_pointer_alignof_string(strV(L->base), &align))
+    if (ffi_direct_pointer_alignof_string(strV(L->base), &align))
       goto got_align;
-#endif
     id = ffi_checkctype(L, cts, NULL);
   }
   {

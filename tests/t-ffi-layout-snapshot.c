@@ -73,6 +73,21 @@ static void assert_predefined_layout_avoids_wait(lua_State *L, CTState *cts)
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
 }
 
+static void assert_direct_xof_does_not_intern(lua_State *L, CTState *cts)
+{
+  CTypeID top0 = ctype_top_acq(cts);
+  uint32_t seq0 = ljt_ctype_parse_seq(cts);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.sizeof('uint16_t *[13][2]') == 208)\n"
+    "assert(ffi.sizeof('uint8_t[11]') == 11)\n"
+    "assert(ffi.alignof('uint32_t ** const [7]') == ffi.sizeof('void *'))\n");
+
+  assert(ctype_top_acq(cts) == top0);
+  assert(ljt_ctype_parse_seq(cts) == seq0);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -136,6 +151,10 @@ int main(void)
     "assert(ffi.offsetof(lj_m7_layout_abandoned_ct, 'a') == nil)\n"
     "local ok, err = pcall(ffi.new, lj_m7_layout_abandoned_ct)\n"
     "assert(ok == false and tostring(err):match('size'))\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0);
+
+  assert_direct_xof_does_not_intern(L, cts);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
