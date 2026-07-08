@@ -719,13 +719,80 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
   return ffi_direct_ctype_part(L, cts, s, p, len, idp);
 }
 
-static int ffi_direct_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
+static int ffi_direct_layout_base_info(lua_State *L, CTState *cts, GCstr *s,
+				       const char *p, MSize len,
+				       CTInfo *infop, CTSize *szp)
+{
+  CType ct;
+  CTypeID id;
+  CTInfo info;
+  const char *q = p;
+  MSize qlen = len;
+  CTInfo qual;
+  if (ffi_direct_qual_part(&q, &qlen, &qual)) {
+    p = q;
+    len = qlen;
+  }
+  if (len == 0)
+    return 0;
+  if (!ffi_predefined_ctype_part(p, len, &id)) {
+    while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+    while (len != 0 && ffi_cspace(p[len-1])) len--;
+    if (ffi_ident_string(p, len)) {
+      GCstr *name = (p == strdata(s) && len == s->len) ? s :
+		    lj_str_new(L, p, len);
+      int ok = ffi_lookup_named_ctype(L, cts, name, (1u << CT_TYPEDEF),
+				      &id, &ct);
+      if (ok <= 0 || !ctype_istypedef(ctype_info_acq(&ct)))
+	return 0;
+      id = ctype_cid(ctype_info_acq(&ct));
+    } else {
+      uint32_t tmask;
+      int wantunion = 0, wantenum = 0;
+      MSize kwlen;
+      if (len >= 6 && ffi_strlit(p, 6, "struct", 6)) {
+	kwlen = 6;
+	tmask = (1u << CT_STRUCT);
+      } else if (len >= 5 && ffi_strlit(p, 5, "union", 5)) {
+	kwlen = 5;
+	tmask = (1u << CT_STRUCT);
+	wantunion = 1;
+      } else if (len >= 4 && ffi_strlit(p, 4, "enum", 4)) {
+	kwlen = 4;
+	tmask = (1u << CT_ENUM);
+	wantenum = 1;
+      } else {
+	return 0;
+      }
+      if (len == kwlen || !ffi_cspace(p[kwlen]))
+	return 0;
+      p += kwlen + 1;
+      len -= kwlen + 1;
+      while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+      if (!ffi_ident_string(p, len))
+	return 0;
+      {
+	GCstr *name = lj_str_new(L, p, len);
+	int ok = ffi_lookup_named_ctype(L, cts, name, tmask, &id, &ct);
+	if (ok <= 0)
+	  return 0;
+	info = ctype_info_acq(&ct);
+	if (!(wantenum ? ctype_isenum(info) :
+	      ctype_isstruct(info) && (((info & CTF_UNION) != 0) == wantunion)))
+	  return 0;
+      }
+    }
+  }
+  return ffi_ctype_info_read(L, cts, id, infop, szp, NULL, NULL) > 0;
+}
+
+static int ffi_direct_sizeof_string(lua_State *L, CTState *cts, GCstr *s,
+				    CTSize *szp)
 {
   const char *p = strdata(s);
   MSize len = s->len, baselen, narr = 0, i;
   CTSize nelem[FFI_DIRECT_MAX_DECL_SUFFIXES], esize;
   CTInfo einfo;
-  CTypeID elemid;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   baselen = len;
@@ -753,12 +820,16 @@ static int ffi_direct_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
     }
     if (narr == 0 && nptr == 0)
       return 0;
-    if (!lj_ctype_predefined_string(p, baselen, &elemid))
-      return 0;
     if (nptr != 0) {
+      CTInfo baseinfo;
+      CTSize basesize;
+      if (!ffi_direct_layout_base_info(L, cts, s, p, baselen, &baseinfo,
+				       &basesize))
+	return 0;
       esize = CTSIZE_PTR;
     } else {
-      if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
+      if (!ffi_direct_layout_base_info(L, cts, s, p, baselen, &einfo,
+				       &esize) ||
 	  ctype_isref(einfo) || ctype_isvltype(einfo) ||
 	  esize == CTSIZE_INVALID)
 	return 0;
@@ -774,13 +845,13 @@ static int ffi_direct_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
   return 1;
 }
 
-static int ffi_direct_alignof_string(CTState *cts, GCstr *s, CTSize *alignp)
+static int ffi_direct_alignof_string(lua_State *L, CTState *cts, GCstr *s,
+				     CTSize *alignp)
 {
   const char *p = strdata(s);
   MSize len = s->len, baselen, narr = 0, nptr = 0;
   CTInfo einfo;
   CTSize esize;
-  CTypeID elemid;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   baselen = len;
@@ -804,13 +875,14 @@ static int ffi_direct_alignof_string(CTState *cts, GCstr *s, CTSize *alignp)
     nptr++;
     baselen = nextlen;
   }
-  if ((narr == 0 && nptr == 0) ||
-      !lj_ctype_predefined_string(p, baselen, &elemid))
+  if (narr == 0 && nptr == 0)
     return 0;
   if (nptr != 0) {
+    if (!ffi_direct_layout_base_info(L, cts, s, p, baselen, &einfo, &esize))
+      return 0;
     *alignp = CTSIZE_PTR;
   } else {
-    if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0)
+    if (!ffi_direct_layout_base_info(L, cts, s, p, baselen, &einfo, &esize))
       return 0;
     *alignp = (CTSize)1u << ctype_align(einfo);
   }
@@ -2502,7 +2574,7 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
     int isstr, neednelem = 0;
     id = ffi_checkctype_noparse(L, NULL, &isstr);
     if (isstr) {
-      if (ffi_direct_sizeof_string(cts, strV(L->base), &sz))
+      if (ffi_direct_sizeof_string(L, cts, strV(L->base), &sz))
 	goto got_size;
       id = ffi_checkctype(L, cts, NULL);
     }
@@ -2545,7 +2617,7 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
   ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr) {
-    if (ffi_direct_alignof_string(cts, strV(L->base), &align))
+    if (ffi_direct_alignof_string(L, cts, strV(L->base), &align))
       goto got_align;
     id = ffi_checkctype(L, cts, NULL);
   }

@@ -84,6 +84,11 @@ static void assert_direct_xof_does_not_intern(lua_State *L, CTState *cts)
     "assert(ffi.sizeof('uint8_t[11]') == 11)\n"
     "assert(ffi.alignof('uint16_t[11]') == 2)\n"
     "assert(ffi.alignof('double[3][2]') == 8)\n"
+    "assert(ffi.sizeof('lj_m7_layout_alias_t[9]') == 36)\n"
+    "assert(ffi.sizeof('lj_m7_layout_snapshot_t *[2][3]') == 48)\n"
+    "assert(ffi.alignof('lj_m7_layout_snapshot_t *[2][3]') == ffi.sizeof('void *'))\n"
+    "assert(ffi.sizeof('const struct lj_m7_layout_tag[3]') == 12)\n"
+    "assert(ffi.alignof('enum lj_m7_layout_enum[5]') == 4)\n"
     "assert(ffi.alignof('uint32_t ** const [7]') == ffi.sizeof('void *'))\n");
 
   assert(ctype_top_acq(cts) == top0);
@@ -103,6 +108,9 @@ int main(void)
     "ffi.cdef([[\n"
     "typedef struct { int a; double b; } lj_m7_layout_snapshot_t;\n"
     "typedef struct { unsigned int a; unsigned int b:5; } lj_m7_layout_bits_t;\n"
+    "typedef int lj_m7_layout_alias_t;\n"
+    "struct lj_m7_layout_tag { int x; };\n"
+    "enum lj_m7_layout_enum { LJ_M7_LAYOUT_ENUM_A = 1 };\n"
     "]])\n"
     "lj_m7_ffi = ffi\n"
     "lj_m7_layout_snapshot_ct = ffi.typeof('lj_m7_layout_snapshot_t')\n"

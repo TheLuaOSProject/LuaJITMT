@@ -22,6 +22,12 @@ queries can return size/alignment without constructing temporary CType records,
 while unsupported declarations still fall back to the normal parser path and
 preserve stock errors and VLA handling.
 
+Published typedef/tag bases now use the same direct layout path for pointer and
+fixed-array suffixes. The helper validates the name through the ctype namespace
+snapshot/wait reader, strips only layout-neutral qualifiers, and then snapshots
+the resolved base metadata; it does not intern pointer or array CType records
+just to answer a layout query.
+
 Coverage:
 
 - `tests/t-ffi-typeinfo-snapshot.c` manually holds `CTState.parse_token` odd,
@@ -41,7 +47,8 @@ Coverage:
   active-parser `nil` results for an existing stable ctype ID.
 - `tests/t-ffi-layout-snapshot.c` verifies direct primitive pointer/array
   `ffi.sizeof()` plus primitive array and pointer-array `ffi.alignof()` strings
-  do not advance either the parser sequence or ctype top.
+  do not advance either the parser sequence or ctype top. It also covers
+  published typedef/tag pointer and fixed-array suffixes on the same invariant.
 
 Verification:
 
