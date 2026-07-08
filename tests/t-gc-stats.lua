@@ -209,4 +209,16 @@ for i = 1, #finreg_stats do
   assert(after[key] >= before[key], key)
 end
 
+local explicit_before = threading.gcstats()
+local done = false
+for _ = 1, 1000 do
+  done = collectgarbage("step", 16)
+  if done then break end
+end
+assert(type(done) == "boolean")
+collectgarbage("collect")
+local explicit_after = threading.gcstats()
+assert(explicit_after.major_cycle_starts > explicit_before.major_cycle_starts,
+       "single-thread explicit GC must use GC2 major cycles")
+
 print("t-gc-stats OK")

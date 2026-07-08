@@ -143,7 +143,8 @@ static void *attached_step_worker(void *arg)
     sched_yield();
 
   for (i = 0; i < ATTACHED_GC_STEPS; i++) {
-    assert(lua_gc(L, LUA_GCSTEP, 0) == 0);
+    int done = lua_gc(L, LUA_GCSTEP, 0);
+    assert(done == 0 || done == 1);
     lua_createtable(L, 1, 0);
     lua_pushinteger(L, i);
     lua_rawseti(L, -2, 1);

@@ -97,6 +97,8 @@ install_doc() {
     printf 'commit: %s\n' "$commit"
     printf 'platform: %s\n' "$platform"
     printf 'arch: x86_64\n'
+    printf 'gc64: required\n'
+    printf 'gc: gc2-public-api\n'
     printf 'relver: %s\n' "$(cat "$root/src/luajit_relver.txt")"
     printf 'layout: %s\n' "$layout"
   } > "$docdir/BUILDINFO"

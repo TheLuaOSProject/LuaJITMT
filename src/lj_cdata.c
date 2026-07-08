@@ -318,7 +318,8 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       L->top = top + 1;
     }
   }
-  lj_gc_pubroot(L, &key);
+  if (!enabled)
+    lj_gc_pubroot(L, &key);
   for (;;) {
     tv = (TValue *)lj_ctype_fin_get(L, cts, &key, &t);
     if (tv == niltv(L)) {

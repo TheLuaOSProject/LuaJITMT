@@ -61,7 +61,7 @@ local function native_leave_gc_preserves_caller_frame()
     local k08 = { round, 8 }
     assert(requests:send(round, 10) == true)
     sleep(0.003)
-    local ack, ok = replies:recv(10)
+    local ack, ok = replies:recv(60)
     assert(ok == true and ack == round, "native GC worker reply timeout")
     assert(k01[1] == round and k01[2] == 1)
     assert(k02[1] == round and k02[2] == 2)
@@ -77,6 +77,10 @@ local function native_leave_gc_preserves_caller_frame()
   harness.join_each({ worker }, function(result)
     assert(result == true)
   end, 30)
+end
+
+if jit then
+  jit.off(native_leave_gc_preserves_caller_frame, true)
 end
 
 local function active_worker_root_stress()

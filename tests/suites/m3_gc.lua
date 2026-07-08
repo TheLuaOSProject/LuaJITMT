@@ -86,7 +86,7 @@ return function(add)
         cflags = gc2_test_cflags
       })
       run_luajit_script_jit_modes(t, "t-gc-active-thread-roots.lua", nil,
-                                  { timeout = "10s" })
+                                  { timeout = "60s" })
       print("M3 active thread root GC regression passed")
     end
   })

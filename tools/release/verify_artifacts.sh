@@ -200,6 +200,16 @@ verify_archive_layout() {
       "$name" "$platform" >&2
     failed=1
   fi
+  if ! printf '%s\n' "$buildinfo" | grep -Fxq 'gc64: required'; then
+    printf 'archive %s BUILDINFO does not declare required GC64 mode\n' \
+      "$name" >&2
+    failed=1
+  fi
+  if ! printf '%s\n' "$buildinfo" | grep -Fxq 'gc: gc2-public-api'; then
+    printf 'archive %s BUILDINFO does not declare GC2 public API mode\n' \
+      "$name" >&2
+    failed=1
+  fi
   if ! printf '%s\n' "$buildinfo" |
       grep -Eq '^layout: make install DESTDIR([[:space:]]|$)'; then
     printf 'archive %s BUILDINFO does not confirm make-install layout\n' \

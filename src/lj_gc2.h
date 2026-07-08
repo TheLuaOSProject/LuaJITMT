@@ -182,6 +182,7 @@ LJ_FUNC uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_cycle_explicit(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_major(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_collect_active(lua_State *L);
+LJ_FUNC int lj_gc2_step_explicit(lua_State *L, uint32_t budget);
 LJ_FUNC void lj_gc2_check_trigger(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_update_pacing(global_State *g);
 LJ_FUNC void lj_gc2_publish_idle_threshold(global_State *g);
