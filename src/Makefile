@@ -701,6 +701,8 @@ lj_folddef.h: $(BUILDVM_T) lj_opt_fold.c
 	$(E) "BUILDVM   $@"
 	$(Q)$(BUILDVM_X) -m folddef -o $@ lj_opt_fold.c
 
+$(LJCORE_O) $(LJVMCORE_DYNO): $(ALL_HDRGEN)
+
 ##############################################################################
 # Object file rules.
 ##############################################################################
