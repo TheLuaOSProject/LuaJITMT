@@ -4472,6 +4472,20 @@ void lj_ccall_jit_void_ptr_ptr_u32(lua_State *L, void *func, void *a,
   lj_ccall_native_checkstop(L, actions, &native);
 }
 
+void lj_ccall_jit_void_ptr_ptr_u32_u32(lua_State *L, void *func, void *a,
+				       void *b, uint32_t c, uint32_t d)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ((void (*)(void *, void *, uint32_t, uint32_t))(uintptr_t)func)
+    (a, b, c, d);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+}
+
 void lj_ccall_jit_void_ptr_ptr_u64(lua_State *L, void *func, void *a,
 				   void *b, uint64_t c)
 {

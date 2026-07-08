@@ -494,6 +494,15 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_u32_u32(int *cond, int *lock,
 	 (int32_t)(flags >> 28);
 }
 
+void lj_m7_ccall_jit_void_ptr_ptr_u32_u32(int *timer, int *due,
+					  uint32_t period, uint32_t window)
+{
+  uint32_t i = (period + window) & 3u;
+  timer[i] = due[(i + 1u) & 3u] + (int)(period & 15u) +
+	     (int)(window & 15u);
+  due[0] = timer[i] + (int)(period >> 28) + (int)(window >> 28);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_ptr_ptr_u32(int *port, int *bytes,
 						int *key, int *overlapped,
 						uint32_t timeout)

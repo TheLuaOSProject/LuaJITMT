@@ -266,6 +266,9 @@ callback, context, callback-environment pointers, and pointer result. Exact
 TrySubmitThreadpoolCallback-shaped slice traces
 `int32_t(void *, void *, void *)` calls while preserving callback, context,
 callback-environment pointers, and signed 32-bit result. Exact
+SetThreadpoolTimer-shaped slice traces
+`void(void *, void *, uint32_t, uint32_t)` calls while preserving timer object,
+due-time pointer, period, and window arguments. Exact
 SetThreadpoolWait/Timer-shaped slice traces `void(void *, void *, void *)`
 calls while preserving threadpool object, handle, and timeout pointers. Exact
 SetThreadpoolWaitEx-shaped slice traces
