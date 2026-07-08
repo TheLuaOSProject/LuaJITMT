@@ -60,7 +60,9 @@ including the common `poll(nil, 0, 0)` shape, plus the POSIX-shaped
 `int epoll_wait(int, void *, int, int)`. The exact three-signed-int subset
 also accepts socket-shaped `int32_t(int32_t, int32_t, int32_t)` calls. The
 exact descriptor/two-pointer subset accepts accept/getsockname-shaped
-`int32_t(int32_t, pointer, pointer)` calls. The
+`int32_t(int32_t, pointer, pointer)` calls. The socket-option subset accepts
+setsockopt-shaped `int32_t(int32_t, int32_t, int32_t, pointer, uint32_t)`
+calls. The
 recorder emits
 `lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`,
 `lj_ccall_jit_i64_gpr()`, or `lj_ccall_jit_ptr_gpr()` plus a tiny signature
@@ -112,6 +114,8 @@ int/pointer/int/int argument shape,
 `lj_ccall_jit_i32_i32_i32_i32()` for the exact int/int/int argument shape,
 `lj_ccall_jit_i32_i32_ptr_ptr()` for the exact int/pointer/pointer argument
 shape,
+`lj_ccall_jit_i32_i32_i32_ptr_u32()` for the exact
+int/int/int/pointer/unsigned-int argument shape,
 `lj_ccall_jit_i32_i32_ptr_u32()` for the exact int/pointer/unsigned-int
 argument shape,
 `lj_ccall_jit_u32_u32_ptr_i32_u32()` for the exact unsigned 32-bit-result
@@ -269,6 +273,8 @@ The scope is deliberately narrow:
   preserving all three signed 32-bit integer arguments;
 - exact `int32_t(int32_t, pointer, pointer)` calls for accept/getsockname-
   shaped APIs, preserving both pointer arguments;
+- exact `int32_t(int32_t, int32_t, int32_t, pointer, uint32_t)` calls for
+  setsockopt-shaped APIs, preserving high-bit unsigned option lengths;
 - exact `int32_t(int32_t, pointer, uint32_t)` calls, with high-bit unsigned
   32-bit count arguments preserved before the helper casts to the exact
   unsigned 32-bit ABI width;
@@ -636,6 +642,7 @@ int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, `epoll_wait`-shaped int/pointer/int/int loops,
 socket-shaped int/int/int loops,
 accept/getsockname-shaped int/pointer/pointer loops,
+setsockopt-shaped int/int/int/pointer/uint32 loops,
 signed/unsigned 64-bit-result pointer/pointer/size loops,
 void-returning pointer/pointer/size loops, pointer-returning pointer/pointer
 unsigned-count loops, double- and float-returning

@@ -24,6 +24,7 @@ int64_t lj_m7_ccall_jit_i64_i32_i64_i32(int32_t, int64_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_i32_i32(int32_t, int *, int32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_i32_i32(int32_t, int32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr(int32_t, int *, int *);
+int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_u32(int32_t, int32_t, int32_t, int *, uint32_t);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t, int *, uint32_t);
 uint32_t lj_m7_ccall_jit_u32_i32_ptr_u32(int32_t, int *, uint32_t);
 uint32_t lj_m7_ccall_jit_u32_u32_ptr_i32_u32(uint32_t, int *, int32_t, uint32_t);
@@ -1415,6 +1416,21 @@ do
       return r
     end)(80) == 80 * 13 + 80 * 81)
     assert(trace_count() > 0, "shared int,ptr,ptr->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local optval = ffi.new("int[4]")
+      local optlen = ffi.new("uint32_t", 0xfffffff2)
+      local r = 0
+      for fd = 1, n do
+	r = r + lib.lj_m7_ccall_jit_i32_i32_i32_ptr_u32(fd, 3, -5,
+							 optval, optlen)
+      end
+      assert(optval[2] == n + 240)
+      return r
+    end)(80) == (80 * 81) / 2 + 80 * 255)
+    assert(trace_count() > 0, "shared int,int,int,ptr,uint32_t->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

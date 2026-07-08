@@ -138,6 +138,8 @@ The exact socket-shaped slice traces `int32_t(int32_t, int32_t, int32_t)`
 calls.
 The exact accept/getsockname-shaped slice traces
 `int32_t(int32_t, void *, void *)` calls.
+The exact setsockopt-shaped slice traces
+`int32_t(int32_t, int32_t, int32_t, void *, uint32_t)` calls.
 The exact
 RegisterWaitForSingleObject-shaped slice traces
 `int32_t(void *, void *, void *, void *, uint32_t, uint32_t)` calls. The exact

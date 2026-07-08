@@ -112,6 +112,15 @@ int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr(int32_t fd, int *addr, int *addrlen)
   return fd + addr[i] + addrlen[0];
 }
 
+int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_u32(int32_t fd, int32_t level,
+					    int32_t optname, int *optval,
+					    uint32_t optlen)
+{
+  uint32_t i = optlen & 3u;
+  optval[i] = fd + level + optname + (int32_t)(optlen & 255u);
+  return optval[i] + (int32_t)(optlen >> 28);
+}
+
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t bias, int *p, uint32_t n)
 {
   return bias + p[n & 3u] + (int32_t)(n & 1023u);

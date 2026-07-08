@@ -136,6 +136,10 @@ The exact epoll_wait-shaped slice traces
 buffer pointer, max-event count, timeout, and signed 32-bit result.
 The exact socket-shaped slice traces `int32_t(int32_t, int32_t, int32_t)`
 calls while preserving domain, type, protocol, and signed 32-bit result.
+The exact setsockopt-shaped slice traces
+`int32_t(int32_t, int32_t, int32_t, void *, uint32_t)` calls while preserving
+descriptor, level, option name, option pointer, high-bit option length, and
+signed 32-bit result.
 The exact accept/getsockname-shaped slice traces
 `int32_t(int32_t, void *, void *)` calls while preserving descriptor,
 address/output pointer, length pointer, and signed 32-bit result.
