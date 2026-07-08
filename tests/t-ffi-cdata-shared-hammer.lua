@@ -24,6 +24,7 @@ typedef struct {
 ]]
 
 local shared = ffi.new("lj_m7_shared_outer_t")
+local outer_ct = ffi.typeof("lj_m7_shared_outer_t")
 local keepalive = { shared }
 
 local function trace_field_rw(obj, n)
@@ -36,6 +37,17 @@ local function trace_field_rw(obj, n)
     obj.inner.y = obj.counter
     total = total + obj.owner + obj.counter + obj.arr[i % 4] +
 	    obj.inner.x + obj.inner.y
+  end
+  return total
+end
+
+local function trace_owned_cnew(n)
+  local total = 0
+  for i = 1, n do
+    local obj = outer_ct()
+    obj.owner = i
+    obj.counter = i + 1
+    total = total + obj.owner + obj.counter
   end
   return total
 end
@@ -61,6 +73,12 @@ if jit.status() then
   assert(trace_field_rw(shared, 80) > 0)
   assert(trace_count(200) == 0,
 	 "active-MT cdata field load/store loop must stay interpreted")
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  assert(trace_owned_cnew(80) > 0)
+  assert(trace_count(200) > 0,
+	 "active-MT trace-owned cdata allocation loop should trace")
   harness.release_start(release, 1)
   harness.join_all({ worker })
 end

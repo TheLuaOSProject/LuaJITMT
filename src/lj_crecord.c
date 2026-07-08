@@ -1776,11 +1776,20 @@ void LJ_FASTCALL recff_cdata_index(jit_State *J, RecordFFData *rd)
 
   /*
   ** Racy shared cdata payload access is VM-safe in the interpreter, but traced
-  ** C field loads/stores still need a stronger MT root/aliasing protocol before
-  ** worker-triggered GC can run concurrently with them.
+  ** C field loads/stores of existing runtime cdata still need a stronger
+  ** MT root/aliasing protocol before worker-triggered GC can run concurrently
+  ** with them. Cdata allocated inside this trace remains owned by the trace and
+  ** keeps the stock CNEW/CNEWI field fast path.
   */
-  if (gc2_n_threads_acq(J2G(J)) > 1)
-    lj_trace_err(J, LJ_TRERR_NYICONV);
+  if (gc2_n_threads_acq(J2G(J)) > 1) {
+    if (tref_isk(ptr)) {
+      lj_trace_err(J, LJ_TRERR_NYICONV);
+    } else {
+      IROp op = IR(tref_ref(ptr))->o;
+      if (op != IR_CNEW && op != IR_CNEWI)
+	lj_trace_err(J, LJ_TRERR_NYICONV);
+    }
+  }
 
   /* Resolve pointer or reference for cdata object. */
   if (ctype_isptr(ctinfo)) {

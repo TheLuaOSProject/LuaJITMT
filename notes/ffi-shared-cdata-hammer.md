@@ -19,14 +19,17 @@ payload access.
   active-MT JIT recording of shared cdata field access, and a shutdown crash
   where stale duplicate root-spine entries could redispatch a freed child
   `lua_State`.
-- `recff_cdata_index()` now aborts recording while more than one VM thread is
-  live, so racy shared cdata field loads/stores use the interpreter path until
-  the traced CLOAD/CSTORE root and aliasing protocol is made MT-safe.
+- `recff_cdata_index()` now aborts recording existing runtime cdata while more
+  than one VM thread is live, so racy shared cdata field loads/stores use the
+  interpreter path until the traced CLOAD/CSTORE root and aliasing protocol is
+  made MT-safe. Cdata allocated inside the trace keeps the stock CNEW/CNEWI
+  field fast path.
 - Thread-state frees now use the deferred GC-body free path and legacy sweep
   rejects stale thread headers whose `glref` no longer names the active global
   state.
 - Single-threaded FFI cdata indexing remains recorded, preserving the stock
   fast path outside active lockless threading.
-- `t-ffi-cdata-shared-hammer.lua` now asserts both sides of that policy: a
-  single-thread field load/store loop records a trace, while the same loop with
-  a live worker TG records no traces before the shared-cdata hammer starts.
+- `t-ffi-cdata-shared-hammer.lua` now asserts the policy: a single-thread field
+  load/store loop records a trace, the same loop against existing cdata with a
+  live worker TG records no traces, and trace-owned `ffi.new()` cdata still
+  records before the shared-cdata hammer starts.
