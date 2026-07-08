@@ -14,6 +14,7 @@
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_str.h"
 #include "lj_tg.h"
 
 static uint32_t ptr_state(void *p)
@@ -24,12 +25,36 @@ static uint32_t ptr_state(void *p)
   return lj_arena_state(a, cell);
 }
 
+static void drain_marked_table(global_State *g, TGState *tg, GCtab *tab)
+{
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_flush_ssb(g, tg) >= 1);
+  assert(lj_gc2_test_ssb_drain(g) >= 1);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(tab)) == 1);
+}
+
+static void rescan_with_metatable(global_State *g, TGState *tg, GCtab *tab,
+				  GCtab *mt)
+{
+  uint64_t weak_seen = gc2_weak_tables_seen_acq(g);
+  uint32_t weak_snapshot_count = lj_gc2_test_weak_snapshot_count(g);
+
+  lj_tab_metatable_rel(tab, mt);
+  lj_gc2_barrier_tab_g(g, tab);
+  drain_marked_table(g, tg, tab);
+
+  assert(gc2_weak_tables_seen_acq(g) == weak_seen);
+  assert(lj_gc2_test_weak_snapshot_count(g) == weak_snapshot_count);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
   TGState *tg;
   GCtab *tab;
+  GCstr *not_mt;
   void *trav, *plain, *huge;
   const size_t trav_size = 64;
   const size_t plain_size = 96;
@@ -99,10 +124,17 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(tab)) == 1);
   assert(!lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markobj(g, obj2gco(tab)) == 0);
-  assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(lj_gc2_test_ssb_drain(g) == 1);
-  assert(lj_gc2_test_ssb_empty(g));
+  drain_marked_table(g, tg, tab);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 4);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 0);
+
+  not_mt = lj_str_newz(L, "gc2-not-a-table-metatable");
+  rescan_with_metatable(g, tg, tab, (GCtab *)not_mt);
+  {
+    GCtab *bad = (GCtab *)(uintptr_t)U64x(00004000,00000000);
+    rescan_with_metatable(g, tg, tab, bad);
+  }
+  rescan_with_metatable(g, tg, tab, NULL);
 
   lj_gc2_cycle_to_idle(g);
   lj_arena_free(&tg->alloc, trav, trav_size);

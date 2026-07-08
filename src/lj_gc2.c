@@ -7998,8 +7998,9 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
 {
   int weak = 0;
   TValue modev;
-  if (!mt || !lj_gc2_obj_valid(g, obj2gco(mt)) ||
-      obj2gco(mt)->gch.gct != (uint32_t)~LJ_TTAB)
+  uint32_t gct;
+  if (!mt || !gc2_markobj_base_valid(g, obj2gco(mt), NULL, &gct) ||
+      gct != (uint32_t)~LJ_TTAB)
     return 0;
   cTValue *mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
   if (mode && tvisstr(mode)) {
@@ -8981,13 +8982,16 @@ static void gc2_mark_payload_obj_worker(global_State *g, GCobj *o)
 static void gc2_mark_table_child_obj_worker(global_State *g, GCtab *t)
 {
   GCobj *o;
+  uint32_t gct;
   uint32_t phase;
   if (!t)
     return;
   o = obj2gco(t);
+  if (!gc2_markobj_base_valid(g, o, NULL, &gct))
+    return;
   if (gc2_markobj_worker(g, o))
     return;
-  if (o->gch.gct != ~LJ_TTAB || lj_gc2_ismarked(g, o) <= 0)
+  if (gct != (uint32_t)~LJ_TTAB || lj_gc2_ismarked(g, o) <= 0)
     return;
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
@@ -9146,7 +9150,7 @@ static void gc2_mark_trace_snapshot_pcs_worker(global_State *g, GCtrace *T)
 static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak)
 {
   GCtab *mt;
-  int weak, ffi_fin;
+  int weak = 0, ffi_fin = 0;
   TValue *array = NULL;
   MSize asize = 0, acap = 0, hmask = 0;
   Node *node = NULL;
@@ -9169,7 +9173,7 @@ static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak)
   if (LJ_UNLIKELY(array_status == LJ_TAB_GC_SNAPSHOT_TRANSIENT ||
 			  node_status == LJ_TAB_GC_SNAPSHOT_TRANSIENT)) {
     gc2_table_rescan_requeue(g, t);
-    return weak;
+    return 0;
   }
   if (LJ_UNLIKELY(array_status != LJ_TAB_GC_SNAPSHOT_OK ||
 			  node_status != LJ_TAB_GC_SNAPSHOT_OK)) {
