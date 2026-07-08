@@ -336,6 +336,7 @@ typedef struct CCallInfo {
   _(FFI,	lj_ccall_jit_i32_flt,	3,   S, INT, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i32_i8,	3,   S, INT, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i64_i32_ptr_u64, 5, S, I64, CCI_L|CCI_T) \
+  _(FFI,	lj_ccall_jit_i64_i32_ptr_i32, 5, S, I64, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i64_i32_ptr_u64_i64, 6, S, I64, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i64_i32_ptr_u64_i32, 6, S, I64, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i64_i32_i64_i32, 5, S, I64, CCI_L|CCI_T) \

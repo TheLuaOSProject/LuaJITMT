@@ -72,6 +72,14 @@ int64_t lj_m7_ccall_jit_i64_i32_ptr_u64(int32_t bias, int *p, uint64_t n)
 	 (int64_t)(n & UINT64_C(1023));
 }
 
+int64_t lj_m7_ccall_jit_i64_i32_ptr_i32(int32_t fd, int *iov,
+					int32_t iovcnt)
+{
+  uint32_t i = (uint32_t)iovcnt & 3u;
+  return INT64_C(0x100000000) + (int64_t)fd + (int64_t)iov[i] +
+	 (int64_t)iovcnt;
+}
+
 int64_t lj_m7_ccall_jit_i64_i32_ptr_u64_i64(int32_t fd, int *p, uint64_t n,
 					    int64_t offset)
 {
