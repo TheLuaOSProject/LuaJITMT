@@ -82,6 +82,8 @@ static void assert_direct_xof_does_not_intern(lua_State *L, CTState *cts)
     "local ffi = require('ffi')\n"
     "assert(ffi.sizeof('uint16_t *[13][2]') == 208)\n"
     "assert(ffi.sizeof('uint8_t[11]') == 11)\n"
+    "assert(ffi.alignof('uint16_t[11]') == 2)\n"
+    "assert(ffi.alignof('double[3][2]') == 8)\n"
     "assert(ffi.alignof('uint32_t ** const [7]') == ffi.sizeof('void *'))\n");
 
   assert(ctype_top_acq(cts) == top0);

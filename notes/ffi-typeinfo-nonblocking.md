@@ -16,11 +16,11 @@ that helper before consulting the parser sequence. This keeps fallback readers
 from waiting or aborting recording on unrelated parser work just to inspect an
 immutable scalar CType.
 
-`ffi.sizeof()` and pointer-shaped `ffi.alignof()` now reuse the direct string
-layout readers in the interpreter, too. Primitive pointer/array layout queries
-can return size/alignment without constructing temporary CType records, while
-unsupported declarations still fall back to the normal parser path and preserve
-stock errors and VLA handling.
+`ffi.sizeof()` and direct primitive/pointer `ffi.alignof()` now reuse the direct
+string layout readers in the interpreter, too. Primitive pointer/array layout
+queries can return size/alignment without constructing temporary CType records,
+while unsupported declarations still fall back to the normal parser path and
+preserve stock errors and VLA handling.
 
 Coverage:
 
@@ -40,8 +40,8 @@ Coverage:
   enum casts, and `ffi.C`; the `ffi.typeinfo()` path now rejects transient
   active-parser `nil` results for an existing stable ctype ID.
 - `tests/t-ffi-layout-snapshot.c` verifies direct primitive pointer/array
-  `ffi.sizeof()` and pointer `ffi.alignof()` strings do not advance either the
-  parser sequence or ctype top.
+  `ffi.sizeof()` plus primitive array and pointer-array `ffi.alignof()` strings
+  do not advance either the parser sequence or ctype top.
 
 Verification:
 

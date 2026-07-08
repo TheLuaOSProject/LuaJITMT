@@ -774,10 +774,12 @@ static int ffi_direct_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
   return 1;
 }
 
-static int ffi_direct_pointer_alignof_string(GCstr *s, CTSize *alignp)
+static int ffi_direct_alignof_string(CTState *cts, GCstr *s, CTSize *alignp)
 {
   const char *p = strdata(s);
   MSize len = s->len, baselen, narr = 0, nptr = 0;
+  CTInfo einfo;
+  CTSize esize;
   CTypeID elemid;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
@@ -802,9 +804,16 @@ static int ffi_direct_pointer_alignof_string(GCstr *s, CTSize *alignp)
     nptr++;
     baselen = nextlen;
   }
-  if (nptr == 0 || !lj_ctype_predefined_string(p, baselen, &elemid))
+  if ((narr == 0 && nptr == 0) ||
+      !lj_ctype_predefined_string(p, baselen, &elemid))
     return 0;
-  *alignp = CTSIZE_PTR;
+  if (nptr != 0) {
+    *alignp = CTSIZE_PTR;
+  } else {
+    if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0)
+      return 0;
+    *alignp = (CTSize)1u << ctype_align(einfo);
+  }
   return 1;
 }
 
@@ -2536,7 +2545,7 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
   ffi_publish_stack_args(L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr) {
-    if (ffi_direct_pointer_alignof_string(strV(L->base), &align))
+    if (ffi_direct_alignof_string(cts, strV(L->base), &align))
       goto got_align;
     id = ffi_checkctype(L, cts, NULL);
   }
