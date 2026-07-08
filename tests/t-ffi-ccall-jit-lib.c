@@ -105,6 +105,13 @@ int32_t lj_m7_ccall_jit_i32_i32_i32_i32(int32_t domain, int32_t type,
   return domain + type + protocol + 17;
 }
 
+int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr(int32_t fd, int *addr, int *addrlen)
+{
+  uint32_t i = (uint32_t)addrlen[0] & 3u;
+  addr[i] = fd + addrlen[(i + 1u) & 3u];
+  return fd + addr[i] + addrlen[0];
+}
+
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t bias, int *p, uint32_t n)
 {
   return bias + p[n & 3u] + (int32_t)(n & 1023u);
