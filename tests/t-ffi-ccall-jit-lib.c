@@ -112,6 +112,13 @@ int32_t lj_m7_ccall_jit_i32_i32_i32_i32_ptr(int32_t epfd, int32_t op,
   return event[2] + event[0];
 }
 
+int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_ptr(int32_t fd, int32_t flags,
+					    int *new_value, int *old_value)
+{
+  old_value[2] = fd + flags + new_value[3];
+  return old_value[2] + new_value[0];
+}
+
 int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr(int32_t fd, int *addr, int *addrlen)
 {
   uint32_t i = (uint32_t)addrlen[0] & 3u;

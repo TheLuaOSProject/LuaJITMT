@@ -61,6 +61,8 @@ including the common `poll(nil, 0, 0)` shape, plus the POSIX-shaped
 also accepts socket-shaped `int32_t(int32_t, int32_t, int32_t)` calls. The
 exact three-signed-int-plus-pointer subset accepts epoll_ctl-shaped
 `int32_t(int32_t, int32_t, int32_t, pointer)` calls. The
+exact descriptor/flags/two-pointer subset accepts timerfd/clock-shaped
+`int32_t(int32_t, int32_t, pointer, pointer)` calls. The
 exact descriptor/two-pointer subset accepts accept/getsockname-shaped
 `int32_t(int32_t, pointer, pointer)` calls. The socket-option subset accepts
 setsockopt-shaped `int32_t(int32_t, int32_t, int32_t, pointer, uint32_t)`
@@ -118,6 +120,8 @@ shape,
 int/pointer/int/int argument shape,
 `lj_ccall_jit_i32_i32_i32_i32()` for the exact int/int/int argument shape,
 `lj_ccall_jit_i32_i32_i32_i32_ptr()` for the exact int/int/int/pointer
+argument shape,
+`lj_ccall_jit_i32_i32_i32_ptr_ptr()` for the exact int/int/pointer/pointer
 argument shape,
 `lj_ccall_jit_i32_i32_ptr_ptr()` for the exact int/pointer/pointer argument
 shape,
@@ -284,6 +288,8 @@ The scope is deliberately narrow:
   preserving all three signed 32-bit integer arguments;
 - exact `int32_t(int32_t, int32_t, int32_t, pointer)` calls for
   epoll_ctl-shaped APIs, preserving the event pointer argument;
+- exact `int32_t(int32_t, int32_t, pointer, pointer)` calls for
+  timerfd/clock-shaped APIs, preserving both pointer arguments;
 - exact `int32_t(int32_t, pointer, pointer)` calls for accept/getsockname-
   shaped APIs, preserving both pointer arguments;
 - exact `int32_t(int32_t, int32_t, int32_t, pointer, uint32_t)` calls for
@@ -659,6 +665,7 @@ int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, `epoll_wait`-shaped int/pointer/int/int loops,
 socket-shaped int/int/int loops,
 `epoll_ctl`-shaped int/int/int/pointer loops,
+timerfd/clock-shaped int/int/pointer/pointer loops,
 accept/getsockname-shaped int/pointer/pointer loops,
 setsockopt-shaped int/int/int/pointer/uint32 loops,
 getsockopt-shaped int/int/int/pointer/pointer loops,
