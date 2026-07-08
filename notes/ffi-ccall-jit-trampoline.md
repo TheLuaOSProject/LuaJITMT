@@ -59,6 +59,8 @@ including the common `poll(nil, 0, 0)` shape, plus the POSIX-shaped
 `int32_t(int32_t, pointer, int32_t, int32_t)` class used by calls such as
 `int epoll_wait(int, void *, int, int)`. The exact three-signed-int subset
 also accepts socket-shaped `int32_t(int32_t, int32_t, int32_t)` calls. The
+exact three-signed-int-plus-pointer subset accepts epoll_ctl-shaped
+`int32_t(int32_t, int32_t, int32_t, pointer)` calls. The
 exact descriptor/two-pointer subset accepts accept/getsockname-shaped
 `int32_t(int32_t, pointer, pointer)` calls. The socket-option subset accepts
 setsockopt-shaped `int32_t(int32_t, int32_t, int32_t, pointer, uint32_t)`
@@ -113,6 +115,8 @@ shape,
 `lj_ccall_jit_i32_i32_ptr_i32_i32()` for the exact
 int/pointer/int/int argument shape,
 `lj_ccall_jit_i32_i32_i32_i32()` for the exact int/int/int argument shape,
+`lj_ccall_jit_i32_i32_i32_i32_ptr()` for the exact int/int/int/pointer
+argument shape,
 `lj_ccall_jit_i32_i32_ptr_ptr()` for the exact int/pointer/pointer argument
 shape,
 `lj_ccall_jit_i32_i32_i32_ptr_u32()` for the exact
@@ -274,6 +278,8 @@ The scope is deliberately narrow:
   epoll_wait-shaped APIs, preserving both signed 32-bit integer arguments;
 - exact `int32_t(int32_t, int32_t, int32_t)` calls for socket-shaped APIs,
   preserving all three signed 32-bit integer arguments;
+- exact `int32_t(int32_t, int32_t, int32_t, pointer)` calls for
+  epoll_ctl-shaped APIs, preserving the event pointer argument;
 - exact `int32_t(int32_t, pointer, pointer)` calls for accept/getsockname-
   shaped APIs, preserving both pointer arguments;
 - exact `int32_t(int32_t, int32_t, int32_t, pointer, uint32_t)` calls for
@@ -646,6 +652,7 @@ int/pointer/size/signed-flags loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, `epoll_wait`-shaped int/pointer/int/int loops,
 socket-shaped int/int/int loops,
+`epoll_ctl`-shaped int/int/int/pointer loops,
 accept/getsockname-shaped int/pointer/pointer loops,
 setsockopt-shaped int/int/int/pointer/uint32 loops,
 getsockopt-shaped int/int/int/pointer/pointer loops,

@@ -23,6 +23,7 @@ int64_t lj_m7_ccall_jit_i64_i32_ptr_u64_i32(int32_t, int *, uint64_t, int32_t);
 int64_t lj_m7_ccall_jit_i64_i32_i64_i32(int32_t, int64_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_i32_i32(int32_t, int *, int32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_i32_i32(int32_t, int32_t, int32_t);
+int32_t lj_m7_ccall_jit_i32_i32_i32_i32_ptr(int32_t, int32_t, int32_t, int *);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr(int32_t, int *, int *);
 int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_u32(int32_t, int32_t, int32_t, int *, uint32_t);
 int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_ptr(int32_t, int32_t, int32_t, int *, int *);
@@ -1403,6 +1404,19 @@ do
       return r
     end)(80) == 80 * (2 - 1 + 17) + (80 * 81) / 2)
     assert(trace_count() > 0, "shared int,int,int->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local event = ffi.new("int[4]", 7, 11, 13, 17)
+      local r = 0
+      for epfd = 1, n do
+	r = r + lib.lj_m7_ccall_jit_i32_i32_i32_i32_ptr(epfd, 3, -5, event)
+      end
+      assert(event[2] == n + 15)
+      return r
+    end)(80) == (80 * 81) / 2 + 80 * 22)
+    assert(trace_count() > 0, "shared int,int,int,ptr->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
