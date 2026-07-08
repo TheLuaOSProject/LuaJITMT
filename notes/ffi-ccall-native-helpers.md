@@ -134,6 +134,8 @@ calls while preserving the address size, timeout, and signed 32-bit result.
 The exact epoll_wait-shaped slice traces
 `int32_t(int32_t, void *, int32_t, int32_t)` calls while preserving event
 buffer pointer, max-event count, timeout, and signed 32-bit result.
+The exact socket-shaped slice traces `int32_t(int32_t, int32_t, int32_t)`
+calls while preserving domain, type, protocol, and signed 32-bit result.
 The exact ReadFile/WriteFile-shaped slice traces
 `int32_t(void *, void *, uint32_t, void *, void *)` calls while preserving the
 byte count, output pointer, and overlapped pointer arguments. The exact

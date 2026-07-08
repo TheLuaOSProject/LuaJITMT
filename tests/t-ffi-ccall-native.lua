@@ -22,6 +22,7 @@ int64_t lj_m7_ccall_jit_i64_i32_ptr_u64_i64(int32_t, int *, uint64_t, int64_t);
 int64_t lj_m7_ccall_jit_i64_i32_ptr_u64_i32(int32_t, int *, uint64_t, int32_t);
 int64_t lj_m7_ccall_jit_i64_i32_i64_i32(int32_t, int64_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_i32_i32(int32_t, int *, int32_t, int32_t);
+int32_t lj_m7_ccall_jit_i32_i32_i32_i32(int32_t, int32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t, int *, uint32_t);
 uint32_t lj_m7_ccall_jit_u32_i32_ptr_u32(int32_t, int *, uint32_t);
 uint32_t lj_m7_ccall_jit_u32_u32_ptr_i32_u32(uint32_t, int *, int32_t, uint32_t);
@@ -1386,6 +1387,19 @@ do
       return r
     end)(80) == 80 * (44 + 3 - 7) + (80 * 81) / 2)
     assert(trace_count() > 0, "shared int,ptr,int,int->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local socktype = ffi.new("int32_t", 2)
+      local protocol = ffi.new("int32_t", -1)
+      local r = 0
+      for domain = 1, n do
+	r = r + lib.lj_m7_ccall_jit_i32_i32_i32_i32(domain, socktype, protocol)
+      end
+      return r
+    end)(80) == 80 * (2 - 1 + 17) + (80 * 81) / 2)
+    assert(trace_count() > 0, "shared int,int,int->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

@@ -99,6 +99,12 @@ int32_t lj_m7_ccall_jit_i32_i32_ptr_i32_i32(int32_t epfd, int *events,
   return epfd + events[(uint32_t)maxevents & 3u] + maxevents + timeout;
 }
 
+int32_t lj_m7_ccall_jit_i32_i32_i32_i32(int32_t domain, int32_t type,
+					int32_t protocol)
+{
+  return domain + type + protocol + 17;
+}
+
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t bias, int *p, uint32_t n)
 {
   return bias + p[n & 3u] + (int32_t)(n & 1023u);
