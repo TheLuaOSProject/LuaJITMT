@@ -66,6 +66,8 @@ exact descriptor/two-pointer subset accepts accept/getsockname-shaped
 setsockopt-shaped `int32_t(int32_t, int32_t, int32_t, pointer, uint32_t)`
 calls and getsockopt-shaped
 `int32_t(int32_t, int32_t, int32_t, pointer, pointer)` calls. The
+select subset accepts select-shaped
+`int32_t(int32_t, pointer, pointer, pointer, pointer)` calls. The
 recorder emits
 `lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`,
 `lj_ccall_jit_i64_gpr()`, or `lj_ccall_jit_ptr_gpr()` plus a tiny signature
@@ -123,6 +125,8 @@ shape,
 int/int/int/pointer/unsigned-int argument shape,
 `lj_ccall_jit_i32_i32_i32_ptr_ptr()` for the exact
 int/int/int/pointer/pointer argument shape,
+`lj_ccall_jit_i32_i32_ptr_ptr_ptr_ptr()` for the exact
+int/pointer/pointer/pointer/pointer argument shape,
 `lj_ccall_jit_i32_i32_ptr_u32()` for the exact int/pointer/unsigned-int
 argument shape,
 `lj_ccall_jit_u32_u32_ptr_i32_u32()` for the exact unsigned 32-bit-result
@@ -286,6 +290,8 @@ The scope is deliberately narrow:
   setsockopt-shaped APIs, preserving high-bit unsigned option lengths;
 - exact `int32_t(int32_t, int32_t, int32_t, pointer, pointer)` calls for
   getsockopt-shaped APIs, preserving option-value and option-length pointers;
+- exact `int32_t(int32_t, pointer, pointer, pointer, pointer)` calls for
+  select-shaped APIs, preserving all fd-set and timeout pointers;
 - exact `int32_t(int32_t, pointer, uint32_t)` calls, with high-bit unsigned
   32-bit count arguments preserved before the helper casts to the exact
   unsigned 32-bit ABI width;
@@ -656,6 +662,7 @@ socket-shaped int/int/int loops,
 accept/getsockname-shaped int/pointer/pointer loops,
 setsockopt-shaped int/int/int/pointer/uint32 loops,
 getsockopt-shaped int/int/int/pointer/pointer loops,
+select-shaped int/pointer/pointer/pointer/pointer loops,
 signed/unsigned 64-bit-result pointer/pointer/size loops,
 void-returning pointer/pointer/size loops, pointer-returning pointer/pointer
 unsigned-count loops, double- and float-returning

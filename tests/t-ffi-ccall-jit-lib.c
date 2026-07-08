@@ -137,6 +137,14 @@ int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_ptr(int32_t fd, int32_t level,
   return optval[i] + optlen[0];
 }
 
+int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr_ptr_ptr(int32_t nfds, int *readfds,
+						int *writefds, int *exceptfds,
+						int *timeout)
+{
+  readfds[2] = nfds + writefds[1] + exceptfds[2] + timeout[3];
+  return readfds[2] + timeout[0];
+}
+
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t bias, int *p, uint32_t n)
 {
   return bias + p[n & 3u] + (int32_t)(n & 1023u);

@@ -144,6 +144,8 @@ The exact setsockopt-shaped slice traces
 `int32_t(int32_t, int32_t, int32_t, void *, uint32_t)` calls.
 The exact getsockopt-shaped slice traces
 `int32_t(int32_t, int32_t, int32_t, void *, void *)` calls.
+The exact select-shaped slice traces
+`int32_t(int32_t, void *, void *, void *, void *)` calls.
 The exact
 RegisterWaitForSingleObject-shaped slice traces
 `int32_t(void *, void *, void *, void *, uint32_t, uint32_t)` calls. The exact

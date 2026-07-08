@@ -148,6 +148,10 @@ The exact getsockopt-shaped slice traces
 `int32_t(int32_t, int32_t, int32_t, void *, void *)` calls while preserving
 descriptor, level, option name, option-value pointer, option-length pointer,
 and signed 32-bit result.
+The exact select-shaped slice traces
+`int32_t(int32_t, void *, void *, void *, void *)` calls while preserving the
+nfds argument, read/write/exception fd-set pointers, timeout pointer, and
+signed 32-bit result.
 The exact accept/getsockname-shaped slice traces
 `int32_t(int32_t, void *, void *)` calls while preserving descriptor,
 address/output pointer, length pointer, and signed 32-bit result.
