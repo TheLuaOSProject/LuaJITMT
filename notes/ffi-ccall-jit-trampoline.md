@@ -123,6 +123,8 @@ pointer/size/unsigned-int argument shape,
 `lj_ccall_jit_i64_ptr_u64_ptr()` / `lj_ccall_jit_u64_ptr_u64_ptr()` /
 `lj_ccall_jit_void_ptr_u64_ptr()` / `lj_ccall_jit_ptr_ptr_u64_ptr()` for exact
 pointer/size/pointer argument shapes,
+`lj_ccall_jit_u64_ptr_u64_u64_ptr()` for the exact unsigned 64-bit-result
+pointer/size/size/pointer argument shape,
 `lj_ccall_jit_i32_ptr_u64_u32_ptr()` for the exact
 pointer/size/unsigned-int/pointer signed-int-result argument shape,
 `lj_ccall_jit_i32_ptr_u32_u64_ptr()` for the exact signed-int-result
@@ -430,6 +432,9 @@ The scope is deliberately narrow:
 - exact `void(pointer, int32_t, pointer)` calls, preserving cleanup group,
   cancel-pending flag, and context/reserved pointer for
   CloseThreadpoolCleanupGroupMembers-style ABI classes;
+- exact `uint64_t(pointer, uint64_t, uint64_t, pointer)` calls, preserving
+  buffer pointer, element size, element count, stream pointer, and boxed
+  unsigned 64-bit result for fread/fwrite-style ABI classes;
 - exact `void(pointer, pointer, uint32_t)` and
   `pointer(pointer, pointer, uint32_t)` calls, with high-bit unsigned count
   arguments preserved;
@@ -539,6 +544,8 @@ traced SetThreadpoolWaitEx-shaped pointer/pointer/pointer/pointer
 signed-int-result loops,
 traced CloseThreadpoolCleanupGroupMembers-shaped pointer/int32/pointer
 void-result loops,
+traced fread/fwrite-shaped pointer/size/size/pointer unsigned-64-result
+loops,
 traced CreateEventEx/CreateMutexEx-shaped pointer/pointer/uint32/uint32
 pointer-returning loops,
 traced PostQueuedCompletionStatus-shaped pointer/uint32/uint64/pointer

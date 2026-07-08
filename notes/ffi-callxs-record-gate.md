@@ -162,7 +162,9 @@ The pointer/size/pointer family traces exact
 `int32_t(void *, uint64_t, void *)`, `uint32_t(void *, uint64_t, void *)`,
 `int64_t(void *, uint64_t, void *)`, `uint64_t(void *, uint64_t, void *)`,
 `void(void *, uint64_t, void *)`, and `void *(void *, uint64_t, void *)` calls
-for mincore-style ABI classes. The exact CreateEventEx/CreateMutexEx-shaped
+for mincore-style ABI classes. The exact fread/fwrite-shaped slice traces
+`uint64_t(void *, uint64_t, uint64_t, void *)` calls. The exact
+CreateEventEx/CreateMutexEx-shaped
 slice traces `void *(void *, void *, uint32_t, uint32_t)` calls. The exact
 pointer/size/unsigned-int/pointer
 slice traces `int32_t(void *, uint64_t, uint32_t, void *)` calls for

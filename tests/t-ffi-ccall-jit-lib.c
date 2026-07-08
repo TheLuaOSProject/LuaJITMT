@@ -267,6 +267,16 @@ uint64_t lj_m7_ccall_jit_u64_ptr_u64_ptr(int *a, uint64_t n, int *b)
 	 (uint64_t)(n & UINT64_C(1023));
 }
 
+uint64_t lj_m7_ccall_jit_u64_ptr_u64_u64_ptr(int *dst, uint64_t size,
+					     uint64_t n, int *stream)
+{
+  uint64_t i = (size + n) & 3u;
+  dst[i] = stream[(i + UINT64_C(1)) & 3u] + (int)(size & UINT64_C(15)) +
+	   (int)(n & UINT64_C(15));
+  return UINT64_C(0x100000000) + (uint64_t)dst[i] +
+	 (size & UINT64_C(1023)) + (n & UINT64_C(1023));
+}
+
 int *lj_m7_ccall_jit_ptr_ptr_u64_ptr(int *dst, uint64_t n, int *src)
 {
   uint64_t i = n & 3u;
