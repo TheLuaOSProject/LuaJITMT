@@ -1444,6 +1444,8 @@ static void threading_gc_stats_push(lua_State *L)
   threading_gc_stats_setnum(L, t, "poll_ack_latency_max_ns",
 			    s.poll_ack_latency_max_ns);
   threading_gc_stats_set_latency_buckets(L, t, &s);
+  threading_gc_stats_setnum(L, t, "alloc_total_bytes",
+			    s.alloc_total_bytes);
   threading_gc_stats_setnum(L, t, "alloc_since_trigger",
 			    s.alloc_since_trigger);
   threading_gc_stats_setnum(L, t, "cycle_alloc_bytes", s.cycle_alloc_bytes);

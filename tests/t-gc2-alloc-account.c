@@ -425,7 +425,7 @@ int main(void)
   TGState *tg;
   TGState late_tg;
   void *p;
-  uint64_t total;
+  uint64_t total, alloc_total0;
   uint64_t epoch0;
   uint64_t cycle_requests0, cycle_starts0;
   uint64_t major_starts0, minor_requests0, minor_starts0;
@@ -476,6 +476,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_TRIGGER_MIN);
   assert(la_load64_acq(&g->gc2.hard_bytes) ==
 	 2u * la_load64_acq(&g->gc2.trigger_bytes));
+  assert(gc2_alloc_total_bytes_acq(g) == 0);
   assert(la_load64_acq(&g->gc2.cycle_alloc_bytes) == 0);
   assert(gc2_assist_runs_acq(g) == 0);
   assert(gc2_assist_grey_drained_acq(g) == 0);
@@ -515,9 +516,11 @@ int main(void)
   assert(p != NULL);
   assert(la_load64_acq(&tg->local_total) == 128);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == 0);
+  alloc_total0 = gc2_alloc_total_bytes_acq(g);
   assert(lj_gc2_flush_alloc(g, tg) == 128);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == 128);
+  assert(gc2_alloc_total_bytes_acq(g) == alloc_total0 + 128);
 
   lj_mem_free(g, p, 128);
   assert(la_load64_acq(&tg->local_total) == 0);
@@ -530,6 +533,8 @@ int main(void)
   assert(la_load64_acq(&tg->local_total) == 0);
   total = la_load64_acq(&g->gc2.alloc_since_trigger);
   assert(total == 128 + LJ_GC2_ACCT_FLUSH);
+  assert(gc2_alloc_total_bytes_acq(g) ==
+	 alloc_total0 + 128 + LJ_GC2_ACCT_FLUSH);
 
   lj_gc2_account_alloc(g, tg, 7);
   assert(la_load64_acq(&tg->local_total) == 7);
@@ -538,6 +543,8 @@ int main(void)
   assert(la_load64_acq(&g->gc2.hs_epoch) == epoch0 + 1u);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == total + 7);
+  assert(gc2_alloc_total_bytes_acq(g) ==
+	 alloc_total0 + 128 + LJ_GC2_ACCT_FLUSH + 7);
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
 
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
@@ -565,6 +572,8 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load64_acq(&g->gc2.cycle_alloc_bytes) >=
 	 2u * LJ_GC2_ACCT_FLUSH);
+  assert(gc2_alloc_total_bytes_acq(g) >=
+	 alloc_total0 + 128 + 3u * LJ_GC2_ACCT_FLUSH + 7);
   lj_gc2_cycle_to_idle(g);
 
   la_store32_rel(&g->gc2.generational, 1);

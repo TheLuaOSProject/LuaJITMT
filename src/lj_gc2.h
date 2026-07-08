@@ -61,6 +61,7 @@ typedef struct GC2StatsSnapshot {
   uint64_t poll_ack_latency_sum_ns;
   uint64_t poll_ack_latency_max_ns;
   uint64_t poll_ack_latency_buckets[LJ_GC2_HS_LATENCY_BUCKETS];
+  uint64_t alloc_total_bytes;
   uint64_t alloc_since_trigger;
   uint64_t cycle_alloc_bytes;
   uint64_t trigger_bytes;

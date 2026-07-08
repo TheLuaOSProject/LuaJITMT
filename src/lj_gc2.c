@@ -393,6 +393,7 @@ void lj_gc2_init(global_State *g)
   gc2_sweep_bridge_ready_store_rlx(g, 0);
   gc2_sweep_to_idle_store_rlx(g, 0);
   gc2_preserve_abort_to_idle_store_rlx(g, 0);
+  gc2_alloc_total_bytes_store_rlx(g, 0);
   lj_gc2_alloc_since_store(g, 0);
   lj_gc2_cycle_alloc_store(g, 0);
   lj_gc2_trigger_store(g, 0);
@@ -1188,8 +1189,10 @@ uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
   if (!g || !tg)
     return 0;
   bytes = lj_tg_local_total_xchg_acqrel(tg, 0);
-  if (bytes != 0)
+  if (bytes != 0) {
+    gc2_alloc_total_bytes_add(g, bytes);
     lj_gc2_alloc_since_add(g, bytes);  /* 05 section 5.11. */
+  }
   return bytes;
 }
 
@@ -3452,6 +3455,7 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->poll_ack_latency_max_ns = gc2_hs_ack_latency_max_acq(g);
   for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++)
     s->poll_ack_latency_buckets[i] = gc2_hs_ack_latency_bucket_acq(g, i);
+  s->alloc_total_bytes = gc2_alloc_total_bytes_acq(g);
   s->alloc_since_trigger = lj_gc2_alloc_since_load(g);
   s->cycle_alloc_bytes = lj_gc2_cycle_alloc_load(g);
   s->trigger_bytes = lj_gc2_trigger_load(g);

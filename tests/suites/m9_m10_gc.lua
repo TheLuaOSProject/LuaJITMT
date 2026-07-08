@@ -142,7 +142,7 @@ local function run_trace_hard_assist_cadence(t)
       'local result = run(100000)',
       'local after = th.gcstats()',
       'assert(result == 5000150000)',
-      'local allocated = after.alloc_since_trigger - before.alloc_since_trigger',
+      'local allocated = after.alloc_total_bytes - before.alloc_total_bytes',
       'local assists = after.assist_runs - before.assist_runs',
       'assert(allocated > 4 * 1024 * 1024, allocated)',
       'assert(assists <= 64, assists)',

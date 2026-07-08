@@ -1478,6 +1478,7 @@ typedef struct GC2State {
   uint32_t sweep_bridge_ready;  /* Root sweep reached close boundary. */
   uint64_t sweep_to_idle;  /* SWEEP-to-IDLE phase publications. */
   uint64_t preserve_abort_to_idle;  /* Preserve aborts leaving an active phase. */
+  uint64_t alloc_total_bytes;  /* Monotonic flushed mutator allocation bytes. */
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
   uint64_t cycle_alloc_bytes;  /* Flushed allocation bytes at cycle start. */
   uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
@@ -4122,6 +4123,7 @@ static LJ_AINLINE void gc2_assist_shift_rel(global_State *g, uint32_t shift)
   la_store32_rel(&g->gc2.assist_shift, shift);
 }
 
+LJ_GC2_COUNTER64_ACCESSORS(gc2_alloc_total_bytes, alloc_total_bytes)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_runs, assist_runs)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_grey_drained, assist_grey_drained)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_ssb_converted, assist_ssb_converted)
