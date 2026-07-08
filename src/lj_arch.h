@@ -213,11 +213,10 @@
 #define LJ_TARGET_MASKROT	1
 #define LJ_TARGET_UNALIGNED	1
 #define LJ_ARCH_NUMMODE		LJ_NUMMODE_SINGLE_DUAL
-#ifndef LUAJIT_DISABLE_GC64
-#define LJ_TARGET_GC64		1
-#elif LJ_TARGET_OSX
-#error "macOS requires GC64 -- don't disable it"
+#ifdef LUAJIT_DISABLE_GC64
+#error "LUAJIT_DISABLE_GC64 is not supported by the lockless runtime"
 #endif
+#define LJ_TARGET_GC64		1
 
 #if !defined(LJ_ABI_BRANCH_TRACK) && (__CET__ & 1) && \
     LJ_TARGET_GC64 && defined(LUAJIT_ENABLE_CET_BR)

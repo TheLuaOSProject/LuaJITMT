@@ -1,12 +1,14 @@
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 local cellops = require("suite_cell_ops")
+local utils = require("suite_utils")
 
 local run_luajit = runtime.luajit
 local run_stock = runtime.run_stock
 local build_and_run_c = build.compile_and_run_c
 local run_c_fixture_specs = build.run_c_fixture_specs
 local build_and_run_luajit_script = runtime.build_and_run_luajit_script
+local shell_quote = utils.shell_quote
 
 local function api_debug_claim_cleanup_smoke()
   return [=[
@@ -52,6 +54,23 @@ assert(type(info.activelines) == "table")
 
 print("api-debug-claim-cleanup-smoke OK")
 ]=]
+end
+
+local function assert_gc64_disable_rejected(t)
+  local log = t:tmp("lj-disable-gc64-build.log")
+  t:remove(log)
+  build.with_default_build_restore(t, function()
+    build.make_clean(t, { quiet = true })
+    local cmd = "cd " .. shell_quote(t:path("src")) ..
+      " && make XCFLAGS=-DLUAJIT_DISABLE_GC64 TARGET_STRIP=: >" ..
+      shell_quote(log) .. " 2>&1"
+    assert(not utils.command_succeeded(cmd),
+           "LUAJIT_DISABLE_GC64 build unexpectedly succeeded")
+    local out = utils.read_file(log)
+    assert(out:find("LUAJIT_DISABLE_GC64 is not supported", 1, true),
+           "disable-GC64 build did not report the lockless runtime policy")
+  end)
+  t:remove(log)
 end
 
 local function table_value_smoke()
@@ -596,6 +615,15 @@ return function(add)
       build_and_run_c(t, t:tmp("lj_t-stock-api-surface"),
                       "t-stock-api-surface.c")
       print("M5 stock LuaJIT public C API surface passed")
+    end
+  })
+
+  add({
+    name = "m5_gc64_build_required",
+    description = "lockless runtime rejects non-GC64 x64 builds",
+    run = function(t)
+      assert_gc64_disable_rejected(t)
+      print("M5 GC64 build requirement passed")
     end
   })
 

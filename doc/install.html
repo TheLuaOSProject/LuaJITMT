@@ -85,8 +85,8 @@ For an amalgamated build:
 make amalg
 </pre>
 <p>
-Do not pass non-GC64 build flags; they are outside the supported lockless
-runtime surface.
+Do not pass non-GC64 build flags. <tt>LUAJIT_DISABLE_GC64</tt> is rejected by
+the lockless runtime.
 </p>
 
 <h2>Installing</h2>

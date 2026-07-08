@@ -67,6 +67,7 @@ local m5_concurrent_cases = {
   "m5_bcdump_compat",
   "m5_upvalue_publish_gc",
   "m5_stock_api_surface",
+  "m5_gc64_build_required",
   "m5_cell_ops"
 }
 
