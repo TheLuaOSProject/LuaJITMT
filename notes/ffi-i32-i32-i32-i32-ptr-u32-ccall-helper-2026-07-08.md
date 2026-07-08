@@ -3,7 +3,7 @@
 
 The native-state ccall helper matrix now records exact five-argument
 `int32_t(int32_t, int32_t, int32_t, void *, uint32_t)` ABI shapes through
-`lj_ccall_jit_i32_i32_i32_ptr_u32()`.
+`lj_ccall_jit_i32_i32_i32_i32_ptr_u32()`.
 
 This covers setsockopt-style descriptor, level, option name, option-value
 pointer, and option-length signatures. The recorder accepts only fixed

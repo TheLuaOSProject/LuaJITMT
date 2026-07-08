@@ -25,8 +25,8 @@ int32_t lj_m7_ccall_jit_i32_i32_ptr_i32_i32(int32_t, int *, int32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_i32_i32(int32_t, int32_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_i32_i32_ptr(int32_t, int32_t, int32_t, int *);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr(int32_t, int *, int *);
-int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_u32(int32_t, int32_t, int32_t, int *, uint32_t);
-int32_t lj_m7_ccall_jit_i32_i32_i32_ptr_ptr(int32_t, int32_t, int32_t, int *, int *);
+int32_t lj_m7_ccall_jit_i32_i32_i32_i32_ptr_u32(int32_t, int32_t, int32_t, int *, uint32_t);
+int32_t lj_m7_ccall_jit_i32_i32_i32_i32_ptr_ptr(int32_t, int32_t, int32_t, int *, int *);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_ptr_ptr_ptr(int32_t, int *, int *, int *, int *);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t, int *, uint32_t);
 uint32_t lj_m7_ccall_jit_u32_i32_ptr_u32(int32_t, int *, uint32_t);
@@ -1440,7 +1440,7 @@ do
       local optlen = ffi.new("uint32_t", 0xfffffff2)
       local r = 0
       for fd = 1, n do
-	r = r + lib.lj_m7_ccall_jit_i32_i32_i32_ptr_u32(fd, 3, -5,
+	r = r + lib.lj_m7_ccall_jit_i32_i32_i32_i32_ptr_u32(fd, 3, -5,
 							 optval, optlen)
       end
       assert(optval[2] == n + 240)
@@ -1455,7 +1455,7 @@ do
       local optlen = ffi.new("int[4]", 2, 5, 7, 11)
       local r = 0
       for fd = 1, n do
-	r = r + lib.lj_m7_ccall_jit_i32_i32_i32_ptr_ptr(fd, 3, -5,
+	r = r + lib.lj_m7_ccall_jit_i32_i32_i32_i32_ptr_ptr(fd, 3, -5,
 							 optval, optlen)
       end
       assert(optval[2] == n + 9)

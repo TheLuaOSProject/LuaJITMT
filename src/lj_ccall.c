@@ -3375,7 +3375,7 @@ int32_t lj_ccall_jit_i32_i32_ptr_ptr(lua_State *L, void *func, int32_t a,
   return ret;
 }
 
-int32_t lj_ccall_jit_i32_i32_i32_ptr_u32(lua_State *L, void *func,
+int32_t lj_ccall_jit_i32_i32_i32_i32_ptr_u32(lua_State *L, void *func,
 					 int32_t a, int32_t b,
 					 int32_t c, void *d, uint32_t e)
 {
@@ -3392,7 +3392,7 @@ int32_t lj_ccall_jit_i32_i32_i32_ptr_u32(lua_State *L, void *func,
   return ret;
 }
 
-int32_t lj_ccall_jit_i32_i32_i32_ptr_ptr(lua_State *L, void *func,
+int32_t lj_ccall_jit_i32_i32_i32_i32_ptr_ptr(lua_State *L, void *func,
 					 int32_t a, int32_t b,
 					 int32_t c, void *d, void *e)
 {

@@ -3976,7 +3976,7 @@ static int crec_call_jit_i32_i32_ptr_ptr(jit_State *J, RecordFFData *rd,
   return 1;
 }
 
-static int crec_call_jit_i32_i32_i32_ptr_u32(jit_State *J, RecordFFData *rd,
+static int crec_call_jit_i32_i32_i32_i32_ptr_u32(jit_State *J, RecordFFData *rd,
 					     CTState *cts, CType *ct,
 					     CTInfo info, GCcdata *cd,
 					     IRType tp, CTSize fsz)
@@ -4101,13 +4101,13 @@ static int crec_call_jit_i32_i32_i32_ptr_u32(jit_State *J, RecordFFData *rd,
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i32_i32_ptr_u32,
+  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i32_i32_i32_ptr_u32,
 			  func, arg0, arg1, arg2, arg3, arg4);
   J->needsnap = 1;
   return 1;
 }
 
-static int crec_call_jit_i32_i32_i32_ptr_ptr(jit_State *J, RecordFFData *rd,
+static int crec_call_jit_i32_i32_i32_i32_ptr_ptr(jit_State *J, RecordFFData *rd,
 					     CTState *cts, CType *ct,
 					     CTInfo info, GCcdata *cd,
 					     IRType tp, CTSize fsz)
@@ -4232,7 +4232,7 @@ static int crec_call_jit_i32_i32_i32_ptr_ptr(jit_State *J, RecordFFData *rd,
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i32_i32_ptr_ptr,
+  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i32_i32_i32_ptr_ptr,
 			  func, arg0, arg1, arg2, arg3, arg4);
   J->needsnap = 1;
   return 1;
@@ -14657,9 +14657,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       return 1;
     if (crec_call_jit_i32_i32_ptr_ptr(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
-    if (crec_call_jit_i32_i32_i32_ptr_u32(J, rd, cts, ct, info, cd, tp, fsz))
+    if (crec_call_jit_i32_i32_i32_i32_ptr_u32(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
-    if (crec_call_jit_i32_i32_i32_ptr_ptr(J, rd, cts, ct, info, cd, tp, fsz))
+    if (crec_call_jit_i32_i32_i32_i32_ptr_ptr(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_i32_i32_ptr_ptr_ptr_ptr(J, rd, cts, ct, info, cd,
 					      tp, fsz))

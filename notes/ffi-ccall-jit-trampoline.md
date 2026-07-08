@@ -121,9 +121,9 @@ int/pointer/int/int argument shape,
 argument shape,
 `lj_ccall_jit_i32_i32_ptr_ptr()` for the exact int/pointer/pointer argument
 shape,
-`lj_ccall_jit_i32_i32_i32_ptr_u32()` for the exact
+`lj_ccall_jit_i32_i32_i32_i32_ptr_u32()` for the exact
 int/int/int/pointer/unsigned-int argument shape,
-`lj_ccall_jit_i32_i32_i32_ptr_ptr()` for the exact
+`lj_ccall_jit_i32_i32_i32_i32_ptr_ptr()` for the exact
 int/int/int/pointer/pointer argument shape,
 `lj_ccall_jit_i32_i32_ptr_ptr_ptr_ptr()` for the exact
 int/pointer/pointer/pointer/pointer argument shape,
