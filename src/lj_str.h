@@ -53,7 +53,7 @@ static LJ_AINLINE void lj_str_mask_rel(global_State *g, MSize mask)
 {
   /*
   ** The header remains the authoritative string-table snapshot. This mirror is
-  ** retained for legacy fast paths and diagnostics, so update it atomically with
+  ** retained for existing fast paths and diagnostics, so update it atomically with
   ** the same publication discipline as the header replacement.
   */
   la_store32_rel(&g->str.mask, mask);
@@ -145,20 +145,12 @@ static LJ_AINLINE void lj_str_retired_next_rel(StrTabHdr *hdr,
 
 static LJ_AINLINE uintptr_t lj_str_ref_load_acq(const GCRef *r)
 {
-#if LJ_GC64
   return (uintptr_t)la_load64_acq(&r->gcptr64);
-#else
-  return (uintptr_t)la_load32_acq(&r->gcptr32);
-#endif
 }
 
 static LJ_AINLINE void lj_str_ref_store_rel(GCRef *r, uintptr_t u)
 {
-#if LJ_GC64
   la_store64_rel(&r->gcptr64, (uint64_t)u);
-#else
-  la_store32_rel(&r->gcptr32, (uint32_t)u);
-#endif
 }
 
 static LJ_AINLINE GCobj *lj_str_hashhead_acq(const GCRef *r)

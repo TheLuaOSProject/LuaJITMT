@@ -1526,9 +1526,6 @@ static Node *install_hmask0_node(lua_State *L, GCtab *t, GCtab *key, GCtab *val)
   hdr->hmask = 0;
   hdr->flags = 0;
   setmref(hdr->next_gen, NULL);
-#if !LJ_GC64
-  hdr->reserved = 0;
-#endif
   lj_tab_nextnode_set(node, NULL);
   settabV(L, &node->key, key);
   settabV(L, &node->val, val);
@@ -1802,7 +1799,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   make_weak_table(L, "v", &weak, &key, &val);
   make_weak_table(L, "v", &missing, &mkey, &mval);
   /*
-  ** As above, keep the bridge tables alive through explicit GC2/legacy links
+  ** As above, keep the bridge tables alive through explicit GC2/root links
   ** rather than through the fixture's Lua stack.
   */
   lua_settop(L, 0);

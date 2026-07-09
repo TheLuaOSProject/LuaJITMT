@@ -267,6 +267,7 @@ LJ_FUNC int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs,
 				  GCArena **ap, uint32_t *cellp);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 			     uint32_t flags);
+LJ_FUNC int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 			       size_t osize, size_t nsize, uint32_t flags);

@@ -27,7 +27,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 typedef struct GC2StatsSnapshot {
   GCSize total_bytes;
   uint32_t phase;
-  uint32_t legacy_gc_state;
+  uint32_t gc_state;
   uint32_t generational;
   uint32_t cycle_minor_requested;
   uint32_t cycle_sweep_minor;
@@ -192,8 +192,6 @@ LJ_FUNC uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul);
 LJ_FUNC uint32_t lj_gc2_assist(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_set_generational(global_State *g, int enabled);
 LJ_FUNC void lj_gc2_mark_begin(global_State *g);
-LJ_FUNC void lj_gc2_mark_begin_legacy(global_State *g);
-LJ_FUNC void lj_gc2_legacy_mark_bridge_enable(global_State *g);
 LJ_FUNC int lj_gc2_mark_phase_active(global_State *g);
 LJ_FUNC int lj_gc2_minor_roots_active(global_State *g);
 LJ_FUNC int lj_gc2_minor_roots_skip_bridge_mark(global_State *g);
@@ -266,7 +264,7 @@ LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
 				  GCSize finalize_cost, GCSize *cost);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
-LJ_FUNC int lj_gc2_finalizer_fullgc_deferred(global_State *g);
+LJ_FUNC int lj_gc2_finalizer_deferred(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_phase_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_close_pending(global_State *g);
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
@@ -338,8 +336,8 @@ LJ_FUNCA void lj_gc2_barrier_tab_g(global_State *g, GCtab *t);
 LJ_FUNCA void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
-LJ_FUNC int lj_gc2_markobj_nolegacy(global_State *g, GCobj *o);
-LJ_FUNC int lj_gc2_markobj_nolegacy_nogrey(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_markobj_direct(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_markobj_nogrey(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
 LJ_FUNC int lj_gc2_obj_valid(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_obj_valid_queued(global_State *g, GCobj *o);

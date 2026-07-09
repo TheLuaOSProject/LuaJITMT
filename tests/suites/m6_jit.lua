@@ -1943,7 +1943,7 @@ assert(util.traceinfo(1), "SNEW readiness loop did not trace")
 
   add({
     name = "m6_jit_gcstep_pacing",
-    description = "classic JIT GC-step pacing behavior",
+    description = "color-state JIT GC-step pacing behavior",
     run = function(t)
       clean_build(t)
       luajit_code(t, [=[

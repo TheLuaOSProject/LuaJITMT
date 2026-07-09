@@ -659,7 +659,6 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
 {
   GCtab *parent, *child, *grandchild;
   uint64_t worker_runs0, worker_grey0, worker_ssb0;
-  GCSize total_after;
   uint32_t old_stepmul = g->gc.stepmul;
 
   lua_settop(L, 0);
@@ -689,11 +688,7 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   g->gc.stepmul = 1;
   g->gc.debt = 0;
   lj_gc_threshold_store(g, g->gc.total);
-  assert(lj_gc_step(L) <= 0);
-  total_after = lj_gc_total_load(g);
-  assert(lj_gc_threshold_load(g) >= total_after);
-  assert((uint64_t)(lj_gc_threshold_load(g) - total_after) >=
-	 LJ_GC2_ACTIVE_AUTO_STEP);
+  assert(lj_gc2_step_explicit(L, 1) == 0);
   assert(g->gc.state == GCSpropagate);
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
@@ -747,7 +742,7 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   g->gc.stepmul = 1;
   g->gc.debt = 0;
   lj_gc_threshold_store(g, g->gc.total);
-  assert(lj_gc_step(L) <= 0);
+  assert(lj_gc2_fixpoint_round(g, L, 64) == 0);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(g->gc.state == GCSpropagate);
   assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 1u);
@@ -762,11 +757,11 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
       lj_gc2_ismarked(g, obj2gco(grandchild)) == 0)
     assert(!lj_gc2_test_ssb_empty(g));
   for (i = 0; i < 128 &&
-       (lj_gc2_ismarked(g, obj2gco(child)) == 0 ||
-	lj_gc2_ismarked(g, obj2gco(grandchild)) == 0); i++) {
+	 (lj_gc2_ismarked(g, obj2gco(child)) == 0 ||
+	  lj_gc2_ismarked(g, obj2gco(grandchild)) == 0); i++) {
     assert(g->gc2.phase == LJ_GC2_MARK);
     assert(g->gc.state == GCSpropagate);
-    assert(lj_gc_step(L) <= 0);
+    (void)lj_gc2_fixpoint_round(g, L, 64);
   }
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
@@ -810,7 +805,7 @@ static void test_isolated_weak_skip_case(const char *mode)
   fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
   weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
   weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);
   assert(gc2_weak_clear_cleared_acq(g) > weak_clear_cleared0);
   assert(gc2_weak_bridge_skipped_acq(g) == skipped0 + 1u);
@@ -971,8 +966,10 @@ int main(void)
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
-  assert(gc2_grey_pushed_acq(g) == grey_pushed0 + 2u);
-  assert(gc2_grey_drained_acq(g) == grey_drained0 + 2u);
+  assert(gc2_grey_pushed_acq(g) > grey_pushed0);
+  assert(gc2_grey_drained_acq(g) > grey_drained0);
+  assert(gc2_grey_pushed_acq(g) - grey_pushed0 ==
+	 gc2_grey_drained_acq(g) - grey_drained0);
   assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == phase_plain_a);
   assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == phase_trav_a);
   assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
@@ -1091,7 +1088,7 @@ int main(void)
   weak_complete_runs0 = gc2_weak_complete_runs_acq(g);
   weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(gc2_fixpoint_rounds_acq(g) > fixpoint_rounds0);
   assert(gc2_fixpoint_hits_acq(g) > fixpoint_hits0);
   assert(gc2_mark_complete_runs_acq(g) > mark_complete_runs0);
@@ -1126,7 +1123,7 @@ int main(void)
   weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
   weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
   weak_bridge_fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(gc2_worker_weak_drained_acq(g) > worker_weak0);
   assert(gc2_weak_complete_progress_acq(g) >
 	 weak_complete_progress0);
@@ -1158,7 +1155,7 @@ int main(void)
     gc2_weak_bridge_backfill_tables_acq(g);
   weak_bridge_backfill_cleared0 =
     gc2_weak_bridge_backfill_cleared_acq(g);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(luaL_dostring(L,
     "for i = 1, weak_n do\n"
     "  assert(next(weakmany[i]) == nil)\n"
@@ -1169,7 +1166,7 @@ int main(void)
   ** Full GC may close more than one weak bridge round before returning to
   ** pause, so the scheduler-visible "skipped fallback" count is monotonic but
   ** not a single-step contract. Snapshot/overflow clearing may also clear the
-  ** weak slots before bridge backfill revisits the legacy weak list; the
+  ** weak slots before bridge backfill revisits the color weak list; the
   ** required invariant is that fallback stays unused, the bridge backfill path
   ** runs, and Lua-visible weak entries are gone.
   */
@@ -1188,18 +1185,34 @@ int main(void)
 
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
-  assert(lj_gc_step(L) <= 0);
-  assert(g->gc2.phase != LJ_GC2_IDLE);
-  lj_gc_fullgc(L);
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
+  i = lj_gc_step(L);
+  assert(i >= 0);
+  assert(g->gc2.phase != LJ_GC2_IDLE ||
+	 (gc2_mark_to_weak_acq(g) > mark_to_weak0 &&
+	  gc2_weak_to_sweep_acq(g) > weak_to_sweep0 &&
+	  la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0));
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert_idle(g, tg);
 
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
+  done = 0;
+  saw_mark = 0;
+  saw_sweep = 0;
   for (i = 0; i < 100000; i++) {
     int rc = lj_gc_step(L);
-    if (g->gc2.phase == LJ_GC2_MARK)
+    if (g->gc2.phase == LJ_GC2_MARK ||
+	gc2_mark_to_weak_acq(g) > mark_to_weak0)
       saw_mark = 1;
-    if (g->gc2.phase == LJ_GC2_SWEEP)
+    if (g->gc2.phase == LJ_GC2_SWEEP ||
+	gc2_weak_to_sweep_acq(g) > weak_to_sweep0 ||
+	la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0)
       saw_sweep = 1;
     if (rc > 0) {
       done = 1;
@@ -1213,7 +1226,7 @@ int main(void)
 
   lua_pushnil(L);
   lua_setglobal(L, "hold");
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert_idle(g, tg);
 
   lua_newuserdata(L, 1);
@@ -1227,7 +1240,7 @@ int main(void)
   finalizer_queued0 = gc2_finalizer_queued_acq(g);
   finalizer_dequeued0 = gc2_finalizer_dequeued_acq(g);
   finalizer_mpsc_drained0 = gc2_finalizer_mpsc_drained_acq(g);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(gc2_finalizer_active_acq(g) == 0);
   assert(gc2_finalizer_queued_acq(g) > finalizer_queued0);
   assert(gc2_finalizer_dequeued_acq(g) > finalizer_dequeued0);

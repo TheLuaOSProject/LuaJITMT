@@ -78,7 +78,7 @@ int main(void)
   assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) == 0);
   /*
   ** Retired trace bodies hold mcode pointers until their own SMR grace and
-  ** legacy-GC root unlink have completed. This preserves stale bytecode
+  ** GC root unlink have completed. This preserves stale bytecode
   ** recovery: a patched loop or return can still need startins from the body.
   */
   {

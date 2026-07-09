@@ -54,7 +54,9 @@ static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
       if (c == (LJ_FR2 ? 'W' : 'X')) ls->fr2 = !LJ_FR2;
     }
     if (xmode) {
-      setstrV(L, L->top++, lj_err_str(L, LJ_ERR_XMODE));
+      setstrV(L, L->top, lj_err_str(L, LJ_ERR_XMODE));
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
       lj_err_throw(L, LUA_ERRSYNTAX);
     }
   }
@@ -62,10 +64,14 @@ static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
   if (ls->fr2 == LJ_FR2) {
     fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L));
     /* Don't combine above/below into one statement. */
-    setfuncV(L, L->top++, fn);
+    setfuncV(L, L->top, fn);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
   } else {
     /* Non-native generation returns a dumpable, but non-runnable prototype. */
-    setprotoV(L, L->top++, pt);
+    setprotoV(L, L->top, pt);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
   }
   return NULL;
 }

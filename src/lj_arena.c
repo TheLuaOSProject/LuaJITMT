@@ -455,7 +455,8 @@ int lj_arena_hugetab_lookup(HugeTab *ht, const void *p, LJHugeInfo *hi)
     return 0;
   addr = (uint64_t)(uintptr_t)p;
   if (hugetab_search(h, addr, NULL, &meta)) {
-    hugetab_decode(meta, hi);
+    if (hi)
+      hugetab_decode(meta, hi);
     return 1;
   }
   return 0;
@@ -991,7 +992,7 @@ static void arena_rebuild_free_run(uint32_t start, uint32_t len, void *ud)
     return;
   if (len > rf->limit - start)
     len = rf->limit - start;
-  arena_insert_run(rf->alloc, rf->a, start, len);
+  arena_insert_run_head(rf->alloc, rf->a, start, len);
 }
 
 void lj_arena_alloc_init(TGAlloc *alloc)
@@ -1349,6 +1350,24 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
   if (start < LJ_AFIRST_CELL || start + ncells > LJ_ARENA_CELLS)
     return;
   arena_insert_run(alloc, a, start, ncells);
+}
+
+int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size)
+{
+  GCArena *a;
+  uint32_t start, ncells;
+  UNUSED(alloc);
+  if (!p || size == 0)
+    return 0;
+  a = lj_arena_of(p);
+  if (lj_arena_ishuge(a) || size > LJ_HUGE_THRESHOLD)
+    return 0;
+  start = lj_arena_cellof(p);
+  ncells = lj_arena_ncells(size);
+  if (start < LJ_AFIRST_CELL || start + ncells > LJ_ARENA_CELLS)
+    return 0;
+  arena_set_free_run(a, start, ncells);
+  return 1;
 }
 
 void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,

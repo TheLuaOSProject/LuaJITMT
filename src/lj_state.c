@@ -255,7 +255,9 @@ static void stack_init(lua_State *L1, lua_State *L)
 
 void lj_state_stack_pubtv(lua_State *L, lua_State *target, cTValue *tv)
 {
-  UNUSED(target);
+  TGState *tg = target ? L2TG(target) : (L ? L2TG(L) : NULL);
+  if (tg)
+    lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
   tv_rawstore_rel((TValue *)tv, tv_rawload(tv));
   lj_gc_pubroot(L, tv);
 }
@@ -297,14 +299,14 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
 
 static int close_state_root_link_valid(global_State *g, GCobj *o)
 {
-  lua_State *th;
+  GCobj *th;
   if (o == NULL)
     return 0;
-  th = mainthread_acq(g);
-  if (th && o == obj2gco(th))
+  th = gcref_acq(*mainthread_ref(g));
+  if (th && th->gch.gct == ~LJ_TTHREAD && o == th)
     return 1;
-  th = vmthread_acq(g);
-  if (th && o == obj2gco(th))
+  th = gcref_acq(*vmthread_ref(g));
+  if (th && th->gch.gct == ~LJ_TTHREAD && o == th)
     return 1;
   return lj_gc2_obj_valid(g, o);
 }
@@ -542,11 +544,7 @@ static void close_state(lua_State *L)
     g->allocf(g->allocd, G2GG(g), sizeof(GG_State), 0);
 }
 
-#if LJ_64 && !LJ_GC64 && !(defined(LUAJIT_USE_VALGRIND) && defined(LUAJIT_USE_SYSMALLOC))
-lua_State *lj_state_newstate(lua_Alloc allocf, void *allocd)
-#else
 LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
-#endif
 {
   PRNGState prng;
   TGAlloc boot_alloc;
@@ -631,14 +629,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->nilnodehdr.hmask = 0;
   g->nilnodehdr.flags = 0;
   setmref(g->nilnodehdr.next_gen, NULL);
-#if !LJ_GC64
-  g->nilnodehdr.reserved = 0;
-#endif
   setnilV(&g->nilnode.val);
   setnilV(&g->nilnode.key);
-#if !LJ_GC64
-  setmref(g->nilnode.freetop, &g->nilnode);
-#endif
   lj_buf_init(NULL, &g->tmpbuf);
   g->gc.state = GCSpause;
   lj_gc_root_rel(g, obj2gco(L));

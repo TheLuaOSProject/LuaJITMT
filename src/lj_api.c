@@ -407,6 +407,7 @@ LUA_API void lua_settop(lua_State *L, int idx)
     lj_checkapi(-(idx+1) <= (L->top - L->base), "bad stack slot %d", idx);
     L->top += idx+1;  /* Shrinks top (idx < 0). */
   }
+  (void)lj_tg_stack_dirty_epoch_add_rlx(L2TG(L), 1);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -518,10 +519,6 @@ LUA_API int lua_type(lua_State *L, int idx)
   o = index2adr_read(L, idx, &snap);
   if (tvisnumber(o)) {
     tt = LUA_TNUMBER;
-#if LJ_64 && !LJ_GC64
-  } else if (tvislightud(o)) {
-    tt = LUA_TLIGHTUSERDATA;
-#endif
   } else if (o == niltv(L)) {
     tt = LUA_TNONE;
   } else {  /* Magic internal/external tag conversion. ORDER LJ_T */
@@ -652,12 +649,6 @@ LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
     int ok = o1 != niltv(L) && o2 != niltv(L);
     lj_state_dropresumeclaim(&claim);
     return ok;
-#if LJ_64 && !LJ_GC64
-  } else if (tvislightud(o1)) {
-    int ok = o1->u64 == o2->u64;
-    lj_state_dropresumeclaim(&claim);
-    return ok;
-#endif
   } else if (gcrefeq(o1->gcr, o2->gcr)) {
     lj_state_dropresumeclaim(&claim);
     return 1;
@@ -1432,9 +1423,11 @@ LUA_API void lua_concat(lua_State *L, int n)
       api_vm_call_claimed(L, top, 1+1, &claim);
       L->top -= 1+LJ_FR2;
       copyTV(L, L->top-1, L->top+LJ_FR2);
+      lj_state_stack_pubtv(L, L, L->top-1);
     } while (--n > 0);
   } else if (n == 0) {  /* Push empty string. */
     setstrV(L, L->top, &G(L)->strempty);
+    lj_state_stack_pubtv(L, L, L->top);
     incr_top(L);
   }
   /* else n == 1: nothing to do. */
@@ -1459,6 +1452,7 @@ LUA_API void lua_gettable(lua_State *L, int idx)
     v = L->top+1+LJ_FR2;
   }
   copyTV(L, L->top-1, v);
+  lj_state_stack_pubtv(L, L, L->top-1);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -1480,6 +1474,7 @@ LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
     v = L->top+1+LJ_FR2;
   }
   copyTV(L, L->top, v);
+  lj_state_stack_pubtv(L, L, L->top);
   incr_top(L);
   lj_state_dropresumeclaim(&claim);
 }
@@ -1792,10 +1787,10 @@ LUA_API void lua_settable(lua_State *L, int idx)
 	lj_gc2_weak_write_end(L, weakwr);
       }
       if (rc == LJ_TAB_STORE_CAS_OK) {
-	if (!weakwr) {
+	if (!weakwr)
 	  lj_gc2_barrier_weak_write(L, owner, key, val);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
-	}
+	lj_gc_pubtabkey(L, owner, key);
+	lj_gc_pubtabtv(L, owner, val);
 	L->top = key;
 	lj_state_dropresumeclaim(&claim);
 	return;
@@ -1841,10 +1836,10 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 	lj_gc2_weak_write_end(L, weakwr);
       }
       if (rc == LJ_TAB_STORE_CAS_OK) {
-	if (!weakwr) {
+	if (!weakwr)
 	  lj_gc2_barrier_weak_write(L, owner, &key, val);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
-	}
+	lj_gc_pubtabkey(L, owner, &key);
+	lj_gc_pubtabtv(L, owner, val);
 	L->top = val;
 	lj_state_dropresumeclaim(&claim);
 	return;
@@ -1894,10 +1889,10 @@ LUA_API void lua_rawset(lua_State *L, int idx)
       break;
     lj_tab_store_wait_l(L);  /* C API rawset saw stale/FORWARD slot. */
   }
-  if (!barrier_done) {
+  if (!barrier_done)
     lj_gc2_barrier_weak_write(L, t, key, key+1);
-    lj_gc_pubtab(L, t);
-  }
+  lj_gc_pubtabkey(L, t, key);
+  lj_gc_pubtabtv(L, t, key+1);
   L->top = key;
   lj_state_dropresumeclaim(&claim);
 }
@@ -1936,10 +1931,9 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
       break;
     lj_tab_store_wait_l(L);  /* C API rawseti saw stale/FORWARD slot. */
   }
-  if (!barrier_done) {
+  if (!barrier_done)
     lj_gc2_barrier_weak_write(L, t, &key, src);
-    lj_gc_pubtabtv(L, t, dst);
-  }
+  lj_gc_pubtabtv(L, t, src);
   L->top = src;
   lj_state_dropresumeclaim(&claim);
 }
@@ -2084,18 +2078,17 @@ LUA_API const char *lua_setupvalue(lua_State *L, int idx, int n)
 
 /* -- Calls --------------------------------------------------------------- */
 
-#if LJ_FR2
 static TValue *api_call_base(lua_State *L, int nargs)
 {
   TValue *o = L->top, *base = o - nargs;
+  TValue *p;
   L->top = o+1;
   for (; o > base; o--) copyTV(L, o, o-1);
   setnilV(o);
+  for (p = o; p < L->top; p++)
+    lj_state_stack_pubtv(L, L, p);
   return o+1;
 }
-#else
-#define api_call_base(L, nargs)	(L->top - (nargs))
-#endif
 
 LUA_API void lua_call(lua_State *L, int nargs, int nresults)
 {
@@ -2157,6 +2150,7 @@ static TValue *cpcall(lua_State *L, lua_CFunction func, void *ud)
   setrawlightudV(top++, ud);
   cframe_nres(L->cframe) = 1+0;  /* Zero results. */
   L->top = top;
+  lj_state_stack_pubrange(L, L);
   return top-1;  /* Now call the newly allocated C function. */
 }
 
@@ -2191,6 +2185,7 @@ LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
     if (LJ_FR2) setnilV(top++);
     copyTV(L, top++, index2adr_read(L, idx, &snap));
     L->top = top;
+    lj_state_stack_pubrange(L, L);
     api_vm_call_claimed(L, top-1, 1+1, &claim);
     lj_state_dropresumeclaim(&claim);
     return 1;

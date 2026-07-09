@@ -76,7 +76,8 @@ static TValue *lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
     dst = lj_tab_setstr(L, tab, key);
     if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
 	LJ_TAB_STORE_CAS_OK) {
-      lj_gc_pubtabtv(L, tab, dst);
+      lj_gc_pubtabkey(L, tab, &keytv);
+      lj_gc_pubtabtv(L, tab, &tv);
       return dst;
     }
     lj_tab_store_wait_l(L);  /* Library string store saw stale/FORWARD slot. */
@@ -103,6 +104,8 @@ static TValue *lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
     if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &valtv) ==
 	LJ_TAB_STORE_CAS_OK) {
       lj_gc2_barrier_weak_write(L, tab, &keytv, &valtv);
+      lj_gc_pubtabkey(L, tab, &keytv);
+      lj_gc_pubtabtv(L, tab, &valtv);
       return dst;
     }
     lj_tab_store_wait_l(L);  /* Library generic store saw stale/FORWARD slot. */

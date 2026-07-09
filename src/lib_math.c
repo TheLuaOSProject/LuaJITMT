@@ -129,7 +129,7 @@ static void random_seed(PRNGState *rs, double d)
 }
 
 /* PRNG extract function. */
-LJLIB_PUSH(top-2)  /* Legacy PRNG upvalue; runtime uses TG PRNG. */
+LJLIB_PUSH(top-2)  /* Reserved PRNG upvalue; runtime uses TG PRNG. */
 LJLIB_CF(math_random)		LJLIB_REC(.)
 {
   int n = (int)(L->top - L->base);
@@ -181,7 +181,7 @@ LJLIB_CF(math_random)		LJLIB_REC(.)
 }
 
 /* PRNG seed function. */
-LJLIB_PUSH(top-2)  /* Legacy PRNG upvalue; runtime uses TG PRNG. */
+LJLIB_PUSH(top-2)  /* Reserved PRNG upvalue; runtime uses TG PRNG. */
 LJLIB_CF(math_randomseed)
 {
   PRNGState *rs = &L2TG(L)->prng;

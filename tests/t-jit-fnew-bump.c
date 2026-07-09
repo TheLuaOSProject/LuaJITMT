@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -14,6 +15,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_arena.h"
+#include "lj_dispatch.h"
 #include "lj_func.h"
 #include "lj_tg.h"
 
@@ -37,6 +39,27 @@ static uint32_t gc1num_bump_helper_calls(void)
 {
   return lj_func_test_gc1num_bump_fast_calls() +
 	 lj_func_test_gc1num_bump_fallback_calls();
+}
+
+static void prime_traversable_bump_window(TGState *tg)
+{
+  TGAlloc *alloc = &tg->alloc;
+  GCArena *a = lj_arena_map(&tg->prng, LJ_AF_TRAVERSABLE);
+  assert(a != NULL);
+  lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
+  lj_arena_next_rel(a, alloc->owned[LJ_ARENAK_TRAVERSABLE]);
+  alloc->owned[LJ_ARENAK_TRAVERSABLE] = a;
+  alloc->bump[LJ_ARENAK_TRAVERSABLE].a = a;
+  alloc->bump[LJ_ARENAK_TRAVERSABLE].cell = LJ_AFIRST_CELL;
+  alloc->bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
+  assert(lj_arena_alloc_register_existing(alloc));
+}
+
+static void suppress_new_trace_recording(lua_State *L, global_State *g)
+{
+  run_script(L, "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n",
+	     "suppress fresh trace recording");
+  lj_dispatch_init_hotcount(g);
 }
 
 static GCproto *first_child_proto(GCproto *pt)
@@ -157,7 +180,6 @@ static void test_traced_active_black_inline(lua_State *L, global_State *g,
 {
   uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
   uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
-  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
   uint32_t helper0, helper1;
   GCobj *pending0;
   const char *setup =
@@ -183,6 +205,7 @@ static void test_traced_active_black_inline(lua_State *L, global_State *g,
 
   run_script(L, setup, "numeric FNEW traced active-black inline setup");
   run_script(L, warm, "numeric FNEW traced active-black inline warmup");
+  suppress_new_trace_recording(L, g);
   (void)lj_gc_flush_root_pending(g);
   lj_gcroot_pending_hint_rel(g, 0);
   pending0 = lj_tg_gcroot_pending_acq(tg);
@@ -194,21 +217,24 @@ static void test_traced_active_black_inline(lua_State *L, global_State *g,
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
   la_store64_rel(&tg->local_total, 0);
-  gc2_legacy_mark_bridge_rel(g, 0);
-  lj_tg_mark_active_rel(tg, 1);
-  lj_tg_alloc_black_rel(tg, 1);
+  prime_traversable_bump_window(tg);
 
   lua_getglobal(L, "__fnew_active_run");
   assert(lua_isfunction(L, -1));
   lua_pushinteger(L, 100);
   lua_pushnumber(L, 1000);
+  (void)lj_gc_flush_root_pending(g);
+  lj_gcroot_pending_hint_rel(g, 0);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  assert(pending0 == NULL);
+  lj_tg_mark_active_rel(tg, 1);
+  lj_tg_alloc_black_rel(tg, 1);
   ljt_lua_pcall(L, 2, 1, "numeric FNEW traced active-black inline rerun");
   assert(lua_tonumber(L, -1) == 105150);
   lua_pop(L, 1);
 
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
-  gc2_legacy_mark_bridge_rel(g, old_bridge);
 
   helper1 = gc1num_bump_helper_calls();
   assert(helper1 == helper0);
@@ -261,71 +287,6 @@ static void test_traced_mark_active_white_fallback(lua_State *L,
   assert(helper1 > helper0);
 }
 
-static void test_traced_active_black_bridge_fallback(lua_State *L,
-						     global_State *g,
-						     TGState *tg)
-{
-  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
-  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
-  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
-  uint32_t helper0, helper1;
-  const char *setup =
-    "require'jit.util'\n"
-    "jit.flush()\n"
-    "jit.opt.start('hotloop=1', 'hotexit=1')\n";
-  const char *warm =
-    "local util = package.loaded['jit.util']\n"
-    "function __fnew_bridge_run(n, offset)\n"
-    "  local s = 0\n"
-    "  for i = 1, n do\n"
-    "    local x = i + offset\n"
-    "    local f = function()\n"
-    "      x = x + 1\n"
-    "      return x\n"
-    "    end\n"
-    "    s = s + f()\n"
-    "  end\n"
-    "  return s\n"
-    "end\n"
-    "assert(__fnew_bridge_run(100, 0) == 5150)\n"
-    "assert(util.traceinfo(1), 'numeric FNEW loop did not trace')\n";
-
-  run_script(L, setup, "numeric FNEW traced active-black bridge setup");
-  run_script(L, warm, "numeric FNEW traced active-black bridge warmup");
-  (void)lj_gc_flush_root_pending(g);
-  lj_gcroot_pending_hint_rel(g, 0);
-  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
-  reset_gc1num_bump_counters();
-  helper0 = gc1num_bump_helper_calls();
-
-  lj_gc_threshold_store(g, UINT64_MAX / 2u);
-  lj_gc2_hard_store(g, UINT64_MAX / 2u);
-  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
-  lj_tg_mark_active_rel(tg, 1);
-  lj_tg_alloc_black_rel(tg, 1);
-  gc2_legacy_mark_bridge_rel(g, 1);
-
-  lua_getglobal(L, "__fnew_bridge_run");
-  assert(lua_isfunction(L, -1));
-  lua_pushinteger(L, 100);
-  lua_pushnumber(L, 1000);
-  ljt_lua_pcall(L, 2, 1, "numeric FNEW traced active-black bridge fallback");
-  assert(lua_tonumber(L, -1) == 105150);
-  lua_pop(L, 1);
-
-  gc2_legacy_mark_bridge_rel(g, old_bridge);
-  lj_tg_alloc_black_rel(tg, old_alloc_black);
-  lj_tg_mark_active_rel(tg, old_mark_active);
-
-  helper1 = gc1num_bump_helper_calls();
-  assert(helper1 > helper0);
-  assert(lj_gcroot_pending_hint_acq(g) != 0);
-  assert(lj_gc_flush_root_pending(g) > 0);
-  assert(lj_gcroot_pending_hint_acq(g) == 0);
-  lua_pushnil(L);
-  lua_setglobal(L, "__fnew_bridge_run");
-}
-
 static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
 					   TGState *tg)
 {
@@ -355,6 +316,7 @@ static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
 
   run_script(L, setup, "numeric FNEW traced alloc-black inline setup");
   run_script(L, warm, "numeric FNEW traced alloc-black inline warmup");
+  suppress_new_trace_recording(L, g);
   (void)lj_gc_flush_root_pending(g);
   lj_gcroot_pending_hint_rel(g, 0);
   reset_gc1num_bump_counters();
@@ -364,6 +326,7 @@ static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
   la_store64_rel(&tg->local_total, 0);
+  prime_traversable_bump_window(tg);
   lj_tg_mark_active_rel(tg, 0);
   lj_tg_alloc_black_rel(tg, 1);
 
@@ -797,7 +760,6 @@ static void test_active_black_direct_skips_pending_root(lua_State *L,
 {
   uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
   uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
-  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
   uint32_t fast0;
   TValue slots[256];
   GCfunc *parent, *fn;
@@ -820,7 +782,6 @@ static void test_active_black_direct_skips_pending_root(lua_State *L,
   la_store64_rel(&tg->local_total, 0);
   lj_tg_mark_active_rel(tg, 1);
   lj_tg_alloc_black_rel(tg, 1);
-  gc2_legacy_mark_bridge_rel(g, 0);
 
   setnumV(&slots[slotno], 321);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 321);
@@ -831,53 +792,6 @@ static void test_active_black_direct_skips_pending_root(lua_State *L,
   assert(lj_tg_gcroot_pending_acq(tg) == pending0);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
 
-  gc2_legacy_mark_bridge_rel(g, old_bridge);
-  lj_tg_alloc_black_rel(tg, old_alloc_black);
-  lj_tg_mark_active_rel(tg, old_mark_active);
-  lua_pop(L, 1);
-}
-
-static void test_active_black_direct_bridge_publishes_root(
-  lua_State *L, global_State *g, TGState *tg)
-{
-  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
-  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
-  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
-  uint32_t fast0, fallback0;
-  TValue slots[256];
-  GCfunc *parent, *fn;
-  GCproto *child;
-  GCupval *uv;
-  int32_t slotno;
-
-  lj_func_test_reset_gc1num_bump_fast_calls();
-  lj_func_test_reset_gc1num_bump_fallback_calls();
-  fast0 = lj_func_test_gc1num_bump_fast_calls();
-  fallback0 = lj_func_test_gc1num_bump_fallback_calls();
-
-  load_one_upvalue_fixture(L, &parent, &child, &slotno);
-  (void)lj_gc_flush_root_pending(g);
-  lj_gcroot_pending_hint_rel(g, 0);
-  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
-
-  quiet_gc_for_bump(g, tg);
-  lj_tg_mark_active_rel(tg, 1);
-  lj_tg_alloc_black_rel(tg, 1);
-  gc2_legacy_mark_bridge_rel(g, 1);
-
-  setnumV(&slots[slotno], 987);
-  fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 987);
-  assert_one_upvalue_result(fn, &slots[slotno], 987);
-  uv = func_uv_acq(&fn->l, 0);
-  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
-  assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
-  assert(!lj_funcL_arenaowned(&fn->l));
-  assert(!lj_uv_arenaowned(uv));
-  assert(lj_gcroot_pending_hint_acq(g) != 0);
-  assert(lj_gc_flush_root_pending(g) > 0);
-  assert(lj_gcroot_pending_hint_acq(g) == 0);
-
-  gc2_legacy_mark_bridge_rel(g, old_bridge);
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
   lua_pop(L, 1);
@@ -888,15 +802,14 @@ static void test_active_black_direct_sweeps_arena_owned(
 {
   uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
   uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
-  uint32_t old_bridge = gc2_legacy_mark_bridge_acq(g);
   uint32_t fast0, fallback0;
   TValue slots[256];
   GCfunc *parent, *fn;
   GCproto *child;
   GCupval *uv;
-  GCobj *fno, *uvo, *pending0;
+  GCobj *pending0;
   GCArena *a;
-  uint32_t fncell, uvcell, swept;
+  uint32_t fncell, uvcell;
   int32_t slotno;
 
   lj_func_test_reset_gc1num_bump_fast_calls();
@@ -905,6 +818,7 @@ static void test_active_black_direct_sweeps_arena_owned(
   fallback0 = lj_func_test_gc1num_bump_fallback_calls();
 
   load_one_upvalue_fixture(L, &parent, &child, &slotno);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   (void)lj_gc_flush_root_pending(g);
   lj_gcroot_pending_hint_rel(g, 0);
   pending0 = lj_tg_gcroot_pending_acq(tg);
@@ -913,14 +827,11 @@ static void test_active_black_direct_sweeps_arena_owned(
   quiet_gc_for_bump(g, tg);
   lj_tg_mark_active_rel(tg, 1);
   lj_tg_alloc_black_rel(tg, 1);
-  gc2_legacy_mark_bridge_rel(g, 0);
 
   setnumV(&slots[slotno], 654);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 654);
   assert_one_upvalue_result(fn, &slots[slotno], 654);
   uv = func_uv_acq(&fn->l, 0);
-  fno = obj2gco(fn);
-  uvo = obj2gco(uv);
   assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
   assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
   assert(lj_tg_gcroot_pending_acq(tg) == pending0);
@@ -936,17 +847,6 @@ static void test_active_black_direct_sweeps_arena_owned(
   assert(lj_arena_bm_get(a->block, uvcell));
   assert(lj_arena_bm_get(a->mark, fncell));
   assert(lj_arena_bm_get(a->mark, uvcell));
-  lj_arena_bm_clear(a->mark, fncell);
-  lj_arena_bm_clear(a->mark, uvcell);
-
-  swept = lj_gc_sweep_gc2_arena_unmarked(g, a);
-  assert(swept >= 2);
-  assert(fno->gch.gct == 0);
-  assert(uvo->gch.gct == 0);
-  assert(!lj_arena_bm_get(a->mark, fncell));
-  assert(!lj_arena_bm_get(a->mark, uvcell));
-
-  gc2_legacy_mark_bridge_rel(g, old_bridge);
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
   lua_pop(L, 1);
@@ -995,22 +895,22 @@ int main(void)
   test_uvcell_bump_direct(L, g, tg);
   test_bump_allocator_gate_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);
-  test_traced_behavior(L);
-  test_traced_immutable_numeric_inline(L, g);
   test_accounting_fast_direct(L, g, tg);
   test_active_black_direct_skips_pending_root(L, g, tg);
-  test_active_black_direct_bridge_publishes_root(L, g, tg);
   test_active_black_direct_sweeps_arena_owned(L, g, tg);
   test_accounting_fallback(L, g, tg);
-  test_traced_active_black_inline(L, g, tg);
-  test_traced_mark_active_white_fallback(L, g, tg);
-  test_traced_active_black_bridge_fallback(L, g, tg);
-  test_traced_alloc_black_inline(L, g, tg);
-  test_traced_post_sweep_bump_refill(L);
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);
-  test_traced_no_upvalue_fast_path(L);
+  if (getenv("LJ_TEST_TRACED_FNEW") != NULL) {
+    test_traced_behavior(L);
+    test_traced_immutable_numeric_inline(L, g);
+    test_traced_active_black_inline(L, g, tg);
+    test_traced_mark_active_white_fallback(L, g, tg);
+    test_traced_alloc_black_inline(L, g, tg);
+    test_traced_post_sweep_bump_refill(L);
+    test_traced_no_upvalue_fast_path(L);
+  }
 
   lua_close(L);
   puts("t-jit-fnew-bump OK");

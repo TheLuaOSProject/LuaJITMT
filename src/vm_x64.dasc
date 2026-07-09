@@ -243,6 +243,7 @@
 |// Call decode and dispatch.
 |.macro ins_callt
 |  // BASE = new base, RB = LFUNC, RD = nargs+1, [BASE-8] = PC
+|  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
 |  mov PC, LFUNC:RB->pc
 |  mov RAd, [PC]
 |  movzx OP, RAL
@@ -542,6 +543,15 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
   |
+  |->vm_gc2_pubroot:
+  |  mov RB, BASE			// Save BASE.
+  |  mov L:CARG1, SAVE_L
+  |  mov L:CARG1->base, BASE
+  |  lea CARG2, [RB+RA*8]
+  |  call extern lj_gc_pubtvroot_vm	// (lua_State *L, cTValue *tv)
+  |  mov BASE, RB			// Restore BASE.
+  |  ins_next
+  |
   |//-----------------------------------------------------------------------
   |//-- Return handling ----------------------------------------------------
   |//-----------------------------------------------------------------------
@@ -568,6 +578,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->vm_return:
   |  // BASE = base, RA = resultofs, RD = nresults+1 (= MULTRES), PC = return
+  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
   |  xor PC, FRAME_C
   |  test PCd, FRAME_TYPE
   |  jnz ->vm_returnp
@@ -957,6 +968,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  movzx RAd, PC_RA
   |  mov RB, [RC]
   |  mov [BASE+RA*8], RB
+  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+  |  x64_vm_tvalue_isgcv RB, r8, r8d, ->vm_gc2_pubroot
   |  ins_next
   |
   |3:  // Call __index metamethod.
@@ -1983,6 +1996,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  movzx RAd, PC_RA
   |  neg RA
   |  lea BASE, [BASE+RA*8-16]		// base = base - (RA+2)*8
+  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
   |  ins_next
   |
   |6:  // Fill up results with nil.
@@ -3695,6 +3709,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = dst, RD = src
     |  mov RB, [BASE+RD*8]
     |  mov [BASE+RA*8], RB
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next_
     break;
   case BC_NOT:
@@ -3924,6 +3939,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RAd, PC_RA
     |  mov RC, [BASE+RB*8]
     |  mov [BASE+RA*8], RC
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     break;
 
@@ -3934,6 +3950,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RD, [KBASE+RD*8]
     |  settp RD, LJ_TSTR
     |  mov [BASE+RA*8], RD
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     break;
   case BC_KCDATA:
@@ -3942,6 +3959,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RD, [KBASE+RD*8]
     |  settp RD, LJ_TCDATA
     |  mov [BASE+RA*8], RD
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     |.endif
     break;
@@ -3995,6 +4013,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RB, UPVAL:RB->v
     |  mov RD, [RB]
     |  mov [BASE+RA*8], RD
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     break;
   case BC_CNEW:
@@ -4008,6 +4027,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RAd, PC_RA
     |  settp UPVAL:RC, LJ_TUPVAL
     |  mov [BASE+RA*8], UPVAL:RC
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     break;
   case BC_CGET:
@@ -4022,6 +4042,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RB, [RB]
     |1:
     |  mov [BASE+RA*8], RB
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     break;
   case BC_CSET:
@@ -4202,6 +4223,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RAd, PC_RA
     |  settp LFUNC:RC, LJ_TFUNC
     |  mov [BASE+RA*8], LFUNC:RC
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     break;
 
@@ -4278,8 +4300,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  je ->BC_TNEW_ROOT_PUBLISH
     |  cmp byte [DISPATCH+DISPATCH_TG(alloc.alloc_black)], 0
     |  je ->BC_TNEW_ROOT_PUBLISH
-    |  cmp dword GL:TMPR->gc2.legacy_mark_bridge, 0
-    |  jne ->BC_TNEW_ROOT_PUBLISH
     |  mov byte TAB:RC->colo, LJ_TAB_ARENA_OWNED
     |  mov aword TAB:RC->nextgc, 0
     |  jmp >4
@@ -4310,6 +4330,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RAd, PC_RA
     |  settp TAB:RC, LJ_TTAB
     |  mov [BASE+RA*8], TAB:RC
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     |3:  // Turn 0x7ff into 0x801.
     |  mov RDd, 0x801
@@ -4337,6 +4358,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RAd, PC_RA
     |  settp TAB:RC, LJ_TTAB
     |  mov [BASE+RA*8], TAB:RC
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     |3:
     |  mov L:CARG1, L:RB
@@ -4352,7 +4374,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cleartp LFUNC:RB
     |  x64_vm_gcref_acq TAB:RB, LFUNC:RB->env
     |  mov STR:RC, [KBASE+RD*8]
-    |  jmp ->BC_TGETS_Z
+    |  jmp ->vmeta_tgets
     break;
   case BC_GSET:
     |  ins_AND	// RA = src, RD = str const (~)
@@ -4365,6 +4387,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_TGETV:
     |  ins_ABC	// RA = dst, RB = table, RC = key
+    |  jmp ->vmeta_tgetv
     |  mov TAB:RB, [BASE+RB*8]
     |  mov RC, [BASE+RC*8]
     |  checktab TAB:RB, ->vmeta_tgetv
@@ -4404,6 +4427,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  je >2
     |1:
     |  mov [BASE+RA*8], ITYPE
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, ->vm_gc2_pubroot
     |  ins_next
     |
     |2:  // Check for __index if table value is nil.
@@ -4421,6 +4446,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_TGETS:
     |  ins_ABC	// RA = dst, RB = table, RC = str const (~)
+    |  not RC
+    |  mov STR:RC, [KBASE+RC*8]
+    |  jmp ->vmeta_tgets
     |  mov TAB:RB, [BASE+RB*8]
     |  not RC
     |  mov STR:RC, [KBASE+RC*8]
@@ -4447,6 +4475,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  je >5				// Key found, but nil value?
     |2:
     |  mov [BASE+RA*8], ITYPE
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, ->vm_gc2_pubroot
     |  ins_next
     |
     |4:  // Follow hash chain.
@@ -4466,6 +4496,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_TGETB:
     |  ins_ABC	// RA = dst, RB = table, RC = byte literal
+    |  jmp ->vmeta_tgetb
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tgetb
     |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
@@ -4491,6 +4522,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  je >2
     |1:
     |  mov [BASE+RA*8], ITYPE
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, ->vm_gc2_pubroot
     |  ins_next
     |
     |2:  // Check for __index if table value is nil.
@@ -4538,6 +4571,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov ITYPE, [RC]
     |->BC_TGETR2_Z:
     |  mov [BASE+RA*8], ITYPE
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, ->vm_gc2_pubroot
     |  ins_next
     break;
 
@@ -5077,6 +5112,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [RA+8], RC
     |  mov LFUNC:RB, [RA-40]		// Copy callable. fb[-2] = fb[-5]
     |  mov [RA-16], LFUNC:RB
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  mov NARGS:RDd, 2+1		// Handle like a regular 2-arg call.
     |  checkfunc LFUNC:RB, ->vmeta_call
     |  mov BASE, RA
@@ -5131,7 +5167,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movsd qword [BASE+RA*8], xmm0
     |.endif
     |  add RCd, 1
-    |  mov [BASE+RA*8-8], RCd		// Update control var.
+    |  mov64 ITYPE, ((uint64_t)LJ_KEYINDEX << 32)
+    |  or ITYPE, RC
+    |  mov [BASE+RA*8-8], ITYPE		// Update control var.
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |2:
     |  movzx RDd, PC_RD			// Get target from ITERL.
     |  branchPC RD
@@ -5158,6 +5197,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RB, ITYPE
     |  call extern lj_tab_itern_forward	// (GCtab *t, uint32_t idx, TValue *ctrl)
     |  mov BASE, RB
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  test RDd, RDd
     |  jg <2
     |  jmp <3
@@ -5185,7 +5225,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea TMPRd, [RCd+TMPRd+1]
     |  mov [BASE+RA*8], r9
     |  mov [BASE+RA*8+8], r8
-    |  mov [BASE+RA*8-8], TMPRd
+    |  mov64 ITYPE, ((uint64_t)LJ_KEYINDEX << 32)
+    |  or ITYPE, TMPR
+    |  mov [BASE+RA*8-8], ITYPE
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  jmp <2
     |
     |7:  // Skip holes in hash part.
@@ -5206,6 +5249,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RB, ITYPE
     |  call extern lj_tab_itern_forward	// (GCtab *t, uint32_t idx, TValue *ctrl)
     |  mov BASE, RB
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  test RDd, RDd
     |  jg <2
     |  jmp <3
@@ -5389,6 +5433,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RAd, PC_RA
     |  neg RA
     |  lea BASE, [BASE+RA*8-16]		// base = base - (RA+2)*8
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  mov LFUNC:KBASE, [BASE-16]
     |  cleartp LFUNC:KBASE
     |  mov KBASE, LFUNC:KBASE->pc
@@ -5646,6 +5691,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |1:
     |  ins_AD	// RA = base (ignored), RD = traceno
     |  mov L:RB, SAVE_L
+    |  load_G RA
+    |  cmp dword GL:RA->gc2.phase, LJ_GC2_IDLE
+    |  jne >3
     |  // Publish trace-entry intent before loading a body/mcode pointer. Trace
     |  // flush handshakes wait on jit_base, so the checks below close the
     |  // validate-to-jump window without a warm-path lock.
@@ -5778,6 +5826,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp RD
     |
     |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
+    |  load_G RA
+    |  cmp dword GL:RA->gc2.phase, LJ_GC2_IDLE
+    |  jne >7
     |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
     |  load_J RA
     |  mov RA, [RA+J_OFS(tracev)]
@@ -5922,6 +5973,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov LFUNC:KBASE, [BASE-16]
     |  mov [RD-8], RB			// Store delta + FRAME_VARG.
     |  mov [RD-16], LFUNC:KBASE		// Store copy of LFUNC.
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  mov L:RB, SAVE_L
     |  lea RA, [RD+RA*8]
     |  cmp RA, L:RB->maxstack
@@ -5940,6 +5992,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [RD], KBASE
     |  add RD, 8
     |  mov aword [RA-16], LJ_TNIL	// Clear old fixarg slot (help the GC).
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  sub RBd, 1
     |  jnz <1
     |2:

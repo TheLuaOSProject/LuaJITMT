@@ -486,86 +486,17 @@
 #if (__GNUC__ < 3) || ((__GNUC__ == 3) && __GNUC_MINOR__ < 4)
 #error "Need at least GCC 3.4 or newer"
 #endif
-#elif LJ_TARGET_X64
+#else
 #if __GNUC__ < 4
 #error "Need at least GCC 4.0 or newer"
-#endif
-#elif LJ_TARGET_ARM
-#if (__GNUC__ < 4) || ((__GNUC__ == 4) && __GNUC_MINOR__ < 2)
-#error "Need at least GCC 4.2 or newer"
-#endif
-#elif LJ_TARGET_ARM64
-#if __clang__
-#if ((__clang_major__ < 3) || ((__clang_major__ == 3) && __clang_minor__ < 5)) && !defined(__NX_TOOLCHAIN_MAJOR__)
-#error "Need at least Clang 3.5 or newer"
-#endif
-#else
-#if (__GNUC__ < 4) || ((__GNUC__ == 4) && __GNUC_MINOR__ < 8)
-#error "Need at least GCC 4.8 or newer"
-#endif
-#endif
-#elif !LJ_TARGET_PS3
-#if __clang__
-#if ((__clang_major__ < 3) || ((__clang_major__ == 3) && __clang_minor__ < 5))
-#error "Need at least Clang 3.5 or newer"
-#endif
-#else
-#if (__GNUC__ < 4) || ((__GNUC__ == 4) && __GNUC_MINOR__ < 3)
-#error "Need at least GCC 4.3 or newer"
-#endif
 #endif
 #endif
 #endif
 
 /* Check target-specific constraints. */
 #ifndef _BUILDVM_H
-#if LJ_TARGET_X64
 #if __USING_SJLJ_EXCEPTIONS__
 #error "Need a C compiler with native exception handling on x64"
-#endif
-#elif LJ_TARGET_ARM
-#if defined(__ARMEB__)
-#error "No support for big-endian ARM"
-#undef LJ_TARGET_ARM
-#endif
-#if __ARM_ARCH_6M__ || __ARM_ARCH_7M__ || __ARM_ARCH_7EM__
-#error "No support for Cortex-M CPUs"
-#undef LJ_TARGET_ARM
-#endif
-#if !(__ARM_EABI__ || LJ_TARGET_IOS)
-#error "Only ARM EABI or iOS 3.0+ ABI is supported"
-#undef LJ_TARGET_ARM
-#endif
-#elif LJ_TARGET_ARM64
-#if defined(_ILP32)
-#error "No support for ILP32 model on ARM64"
-#undef LJ_TARGET_ARM64
-#endif
-#elif LJ_TARGET_PPC
-#if defined(_LITTLE_ENDIAN) && (!defined(_BYTE_ORDER) || (_BYTE_ORDER == _LITTLE_ENDIAN))
-#error "No support for little-endian PPC32"
-#undef LJ_TARGET_PPC
-#endif
-#if defined(__NO_FPRS__) && !defined(_SOFT_FLOAT)
-#error "No support for PPC/e500, use LuaJIT 2.0"
-#undef LJ_TARGET_PPC
-#endif
-#elif LJ_TARGET_MIPS32
-#if !((defined(_MIPS_SIM_ABI32) && _MIPS_SIM == _MIPS_SIM_ABI32) || (defined(_ABIO32) && _MIPS_SIM == _ABIO32))
-#error "Only o32 ABI supported for MIPS32"
-#undef LJ_TARGET_MIPS
-#endif
-#if LJ_TARGET_MIPSR6
-/* Not that useful, since most available r6 CPUs are 64 bit. */
-#error "No support for MIPS32R6"
-#undef LJ_TARGET_MIPS
-#endif
-#elif LJ_TARGET_MIPS64
-#if !((defined(_MIPS_SIM_ABI64) && _MIPS_SIM == _MIPS_SIM_ABI64) || (defined(_ABI64) && _MIPS_SIM == _ABI64))
-/* MIPS32ON64 aka n32 ABI support might be desirable, but difficult. */
-#error "Only n64 ABI supported for MIPS64"
-#undef LJ_TARGET_MIPS
-#endif
 #endif
 #endif
 
@@ -592,27 +523,19 @@
 #endif
 #endif
 
-/* 64 bit GC references. */
-#if LJ_TARGET_GC64
-#define LJ_GC64			1
-#else
-#define LJ_GC64			0
-#endif
-
 /* Lockless multithreaded runtime is the primary build path. */
 #define LJ_MT			1
 
-#if !LJ_GC64 || !LJ_TARGET_X64 || \
+#if !LJ_TARGET_GC64 || !LJ_TARGET_X64 || \
     !(LJ_TARGET_LINUX || LJ_TARGET_OSX || LJ_TARGET_WINDOWS)
 #error "lockless runtime requires GC64 on x86-64 Linux, macOS or Windows"
 #endif
 
+/* 64 bit GC references are the only runtime representation. */
+#define LJ_GC64			1
+
 /* 2-slot frame info. */
-#if LJ_GC64
 #define LJ_FR2			1
-#else
-#define LJ_FR2			0
-#endif
 
 /* Disable or enable the JIT compiler. */
 #if defined(LUAJIT_DISABLE_JIT) || defined(LJ_ARCH_NOJIT) || defined(LJ_OS_NOJIT)

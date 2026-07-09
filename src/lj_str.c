@@ -184,17 +184,10 @@ static void strtab_wait(lua_State *L)
 
 static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want)
 {
-#if LJ_GC64
   uint64_t exp = (uint64_t)*expect;
   int ok = la_cas64(&r->gcptr64, &exp, (uint64_t)want, LA_REL, LA_ACQ);
   *expect = (uintptr_t)exp;
   return ok;
-#else
-  uint32_t exp = (uint32_t)*expect;
-  int ok = la_cas32(&r->gcptr32, &exp, (uint32_t)want, LA_REL, LA_ACQ);
-  *expect = (uintptr_t)exp;
-  return ok;
-#endif
 }
 
 static LJ_NOINLINE StrID strid_refill(global_State *g, TGState *tg)
@@ -380,7 +373,7 @@ static void strtab_release(StrTabHdr *hdr)
 int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr)
 {
   /*
-  ** Legacy string sweep rewrites bucket links and frees dead string bodies.
+  ** String sweep rewrites bucket links and frees dead string bodies.
   ** Reuse the string-table resize claim so lockless interners cannot enter the
   ** header while a bucket is being destructively swept.
   */

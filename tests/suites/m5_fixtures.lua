@@ -87,7 +87,7 @@ return function(add)
   runtime.add_luajit_script_cases(add, {
     {
       name = "m5_strtab_gc_stress",
-      description = "string interning under concurrent legacy string sweep",
+      description = "string interning under concurrent string sweep",
       script = "t-strtab-gc-stress.lua",
       opts = {
 	timeout = os.getenv("LJ_M5_STRTAB_GC_TIMEOUT") or "30s",

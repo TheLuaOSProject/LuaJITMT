@@ -1,5 +1,5 @@
 /*
-** Focused test for arena allocation color during classic GC phases.
+** Focused test for arena allocation color during GC2 phases.
 */
 
 #include <assert.h>
@@ -11,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_arena.h"
 #include "lj_tg.h"
 
@@ -39,9 +40,10 @@ int main(void)
   lua_gc(L, LUA_GCRESTART, 0);
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
-  for (i = 0; i < 1000 && g->gc.state == GCSpause; i++)
+  for (i = 0; i < 1000 && g->gc2.phase == LJ_GC2_IDLE; i++)
     lj_gc_step(L);
-  assert(g->gc.state != GCSpause);
+  assert(g->gc.state == GCSpause);
+  assert(g->gc2.phase != LJ_GC2_IDLE);
   assert(tg->alloc.alloc_black == 1);
 
   p = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
@@ -51,18 +53,12 @@ int main(void)
   lj_arena_free(&tg->alloc, p, 64);
 
   g->gc.stepmul = 200;
-  /*
-  ** The automatic mutator step path is intentionally bounded to one
-  ** state-machine step while GC2 is active. This fixture is checking the phase
-  ** invariant after a manually driven cycle, so use the explicit/public step
-  ** path for the completion drain.
-  */
-  for (i = 0; i < 20000 && g->gc.state != GCSpause; i++)
-    lj_gc_step_explicit(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(g->gc.state == GCSpause);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
   assert(tg->alloc.alloc_black == 0);
 
   lua_close(L);
-  printf("t-arena-gcphase OK: allocation color follows classic GC phase\n");
+  printf("t-arena-gcphase OK: allocation color follows GC2 phase\n");
   return 0;
 }

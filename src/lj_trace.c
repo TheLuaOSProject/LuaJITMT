@@ -516,7 +516,7 @@ static int trace_retired_needs_payload_preserve(global_State *g, GCtrace *T)
 static void trace_preservebody_raw(global_State *g, GCtrace *T, int gc2)
 {
   if (gc2) lj_gc2_markmem(g, T);
-  else lj_gc_preserveobj_legacy(g, obj2gco(T));
+  else lj_gc_preserveobj(g, obj2gco(T));
   if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
     return;
   {
@@ -650,9 +650,9 @@ static void trace_preserve_body_obj(global_State *g, GCobj *o, int gc2)
     return;  /* FINREG/P_WEAK owns finalizer-cdata reachability. */
 #endif
   if (gc2)
-    (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
+    (void)lj_gc2_markobj_nogrey(g, o);
   else
-    lj_gc_preserveobj_legacy(g, o);
+    lj_gc_preserveobj(g, o);
 }
 
 static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
@@ -667,9 +667,9 @@ static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
       gct != (uint32_t)~LJ_TPROTO)
     return;
   if (gc2)
-    (void)lj_gc2_markobj_nolegacy_nogrey(g, o);
+    (void)lj_gc2_markobj_nogrey(g, o);
   else
-    lj_gc_preserveobj_legacy(g, o);
+    lj_gc_preserveobj(g, o);
 }
 
 #define TRACE_PROTO_PC_CACHE	256
@@ -842,7 +842,7 @@ static void trace_preservebody(global_State *g, GCtrace *T, int gc2,
   ** Published live traces mark the same graph through traversal.
   */
   if (gc2) lj_gc2_markmem(g, T);
-  else lj_gc_preserveobj_legacy(g, obj2gco(T));
+  else lj_gc_preserveobj(g, obj2gco(T));
   if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
     return;
   trace_preserve_kgc(g, T, gc2);
@@ -855,26 +855,6 @@ static void trace_preservebody(global_State *g, GCtrace *T, int gc2,
       else lj_gc_arena_markmem(g, exittab);
     }
   }
-}
-
-static int trace_body_still_rooted(global_State *g, const GCtrace *T)
-{
-  GCobj *target = obj2gco((GCtrace *)T);
-  GCobj *o;
-  uint32_t n = 0;
-  (void)lj_gc_flush_root_pending(g);
-  for (o = lj_gc_root_acq(g); o != NULL;) {
-    GCobj *next;
-    if (!lj_gc2_obj_valid(g, o))
-      break;
-    next = lj_obj_gcw_acq(o);
-    if (o == target)
-      return 1;
-    if (++n >= 1000000u)
-      break;
-    o = next;
-  }
-  return 0;
 }
 
 static int trace_retired_slot_clear(jit_State *J, TraceVec *tv, TraceNo traceno,
@@ -908,7 +888,7 @@ static void trace_retired_slot_release(jit_State *J, GCtrace *T)
     /*
     ** Retired traces normally reserve their public slot number in nextroot.
     ** Reclaim runs outside the recorder token, while trace-vector growth and
-    ** legacy root-chain unlinking are independent publications. If that compact
+    ** root-chain unlinking are independent publications. If that compact
     ** metadata no longer names the current slot, release by exact body identity
     ** before the body is freed; this is a cold SMR cleanup path, not a semantic
     ** trace root walk.
@@ -1011,14 +991,13 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
     trace_retired_next_rel(rt, NULL);
     if (trace_body_retire_ready(rt, completed_epoch)) {
       if (trace_retired_body_keep_public(g)) {
-	trace_retired_push(J, rt);
-      } else if (!trace_body_still_rooted(g, rt)) {
-	trace_retired_slot_release(J, rt);
-	trace_freebody(g, rt);
-	reclaimed++;
-      } else {
-	trace_retired_push(J, rt);
-      }
+		trace_retired_push(J, rt);
+	      } else {
+		trace_retired_slot_release(J, rt);
+		lj_gc_unlink_root_obj(g, obj2gco(rt));
+		trace_freebody(g, rt);
+		reclaimed++;
+	      }
     } else {
       trace_retired_push(J, rt);
     }
@@ -2010,9 +1989,7 @@ void lj_trace_initstate(global_State *g)
   tv[1].u64 = U64x(80000000,00000000);
 
   /* Initialize 32/64 bit constants. */
-#if LJ_TARGET_X64 || LJ_TARGET_MIPS64
   J->k64[LJ_K64_M2P64].u64 = U64x(c3f00000,00000000);
-#endif
 #if LJ_TARGET_X86ORX64
   J->k64[LJ_K64_TOBIT].u64 = U64x(43380000,00000000);
   J->k64[LJ_K64_2P64].u64 = U64x(43f00000,00000000);
@@ -2131,7 +2108,7 @@ static void trace_mark_active_startpt(jit_State *J)
   */
   if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic ||
       g->gc.state == GCSsweepstring || g->gc.state == GCSsweep)
-    lj_gc_markobj_legacy_deep(g, o);
+    lj_gc_markobj_deep(g, o);
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     lj_gc2_preserve_root(g, o);
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
@@ -2147,6 +2124,10 @@ static void trace_start(jit_State *J)
 {
   TraceNo traceno;
 
+  if (gc2_phase_acq(J2G(J)) != LJ_GC2_IDLE) {
+    lj_trace_state_store(J, LJ_TRACE_IDLE);
+    return;
+  }
   trace_mark_active_startpt(J);
   if ((J->pt->flags & PROTO_NOJIT)) {  /* JIT disabled for this proto? */
     if (J->parent == 0 && J->exitno == 0 && bc_op(*J->pc) != BC_ITERN) {
@@ -2621,15 +2602,25 @@ static int trace_hot_root_start_valid(const BCIns *pc)
   */
   BCOp op = bc_op((BCIns)la_load32_acq((uint32_t *)pc));
   return op == BC_FORL || op == BC_ITERL || op == BC_ITERN ||
-	 op == BC_LOOP || op == BC_FUNCF;
+	 op == BC_LOOP;
+}
+
+static int trace_current_proto_nojitroot(lua_State *L)
+{
+  GCfunc *fn;
+  GCproto *pt;
+  if (L == NULL)
+    return 0;
+  fn = curr_func(L);
+  if (!isluafunc(fn))
+    return 0;
+  pt = funcproto(fn);
+  return proto_cellops(pt) || pt->sizeuv != 0 ||
+	 pt->firstline == ~(BCLine)0;
 }
 
 /* A hotcount triggered. Start recording a root trace. */
-#if LJ_TARGET_X64
 void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
-#else
-void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
-#endif
 {
   /* Note: pc is the interpreter bytecode PC here. It's offset by 1. */
   ERRNO_SAVE
@@ -2639,10 +2630,13 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
   if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
       !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_token_try_l(L, J)) {
-#if LJ_TARGET_X64
     J->L = L;
-#endif
     if (!trace_hot_root_start_valid(pc-1)) {
+      lj_jit_token_release_l(L, J);
+      ERRNO_RESTORE
+      return;
+    }
+    if (trace_current_proto_nojitroot(L)) {
       lj_jit_token_release_l(L, J);
       ERRNO_RESTORE
       return;
@@ -2739,56 +2733,24 @@ static int trace_poll_pending(lua_State *L)
 }
 
 /* Stitch a new trace to the previous trace. */
-#if LJ_TARGET_X64
 uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)
 {
-  global_State *g = J2G(J);
-  TraceNo traceno, link;
-  GCobj *o;
-  if (T == NULL)
-    return 0;
-  lj_gc2_smr_read_enter(g);
-  o = obj2gco(T);
-  if (!lj_gc2_obj_valid_queued(g, o) ||
-      (uint32_t)la_load8_acq(&o->gch.gct) != (uint32_t)~LJ_TTRACE)
-    goto reject;
-  traceno = trace_traceno_acq(T);
-  if (traceno == 0 || traceref_safe(J, traceno) != T ||
-      !trace_runnable_acq(T, traceno))
-    goto reject;
-  link = trace_link_acq(T);
-  if (link == traceno)
-    goto reject;  /* Blacklisted by trace_flushall_direct(). */
-  lj_gc2_smr_read_leave(g);
-  return ((uint32_t)link << 16) | (uint32_t)traceno;
-reject:
-  lj_gc2_smr_read_leave(g);
+  /*
+  ** Stitched fast-function return traces restore across C/VM boundaries where
+  ** GC2 stack publication and snapshot reconstruction are still conservative.
+  ** Keep these edges interpreted until the stitched-exit state is proven as
+  ** complete as ordinary hot-loop exits.
+  */
+  UNUSED(J); UNUSED(T);
   return 0;
 }
 
 void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc, lua_State *L,
 				 TraceNo traceno)
-#else
-void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc)
-#endif
 {
-  /* Only start a new trace if not recording or inside __gc call or vmevent. */
-  if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
-      !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
-      lj_jit_token_try_l(L, J)) {
-#if LJ_TARGET_X64
-    J->L = L;
-#endif
-    J->parent = 0;  /* Have to treat it like a root trace. */
-#if LJ_TARGET_X64
-    J->exitno = traceno;  /* Invoking trace for stitching. */
-#endif
-    if (!lj_trace_state_aborted(
-		  lj_trace_state_store_active(J, LJ_TRACE_START)))
-      lj_trace_ins(J, pc);
-    else
-      lj_jit_token_release_l(L, J);
-  }
+  UNUSED(L); UNUSED(traceno);
+  UNUSED(J); UNUSED(pc);
+  return;
 }
 
 
@@ -2969,12 +2931,12 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     /* Just exit to interpreter. */
 #endif
   } else {
-    int gcdefer = lj_gc_jit_defer_fixpoint(g);
-    if (g->gc.state == GCSatomic || g->gc.state == GCSfinalize || gcdefer) {
+    int gcdefer = lj_gc2_jit_needs_exit(g);
+    if (gcdefer) {
       /* GC-step exits must resume in the interpreter instead of recording a
       ** hot side trace that can stitch back to the same still-due GC check.
       */
-      if (gcdefer)
+      if (gc2_phase_acq(g) == LJ_GC2_MARK)
 	(void)lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH);
       if (!(hookmask_load(g) & HOOK_GC))
 	lj_gc_step(L);  /* Exited because of GC: drive GC forward. */

@@ -94,7 +94,7 @@ static void require_threading(lua_State *L)
   assert(lua_istable(L, -1));
 }
 
-static void start_legacy_cycle(lua_State *L)
+static void start_active_gc_cycle(lua_State *L)
 {
   global_State *g = G(L);
   int i;
@@ -180,7 +180,7 @@ static void test_fresh_stopreq_aborts_before_child_runs(void)
   lua_close(L);
 }
 
-static void test_spawn_preserves_active_legacy_cycle(void)
+static void test_spawn_preserves_active_gc_cycle(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g = G(L);
@@ -193,7 +193,7 @@ static void test_spawn_preserves_active_legacy_cycle(void)
 
   require_threading(L);
   lua_pop(L, 1);
-  start_legacy_cycle(L);
+  start_active_gc_cycle(L);
   state = g->gc.state;
   assert(luaL_loadbuffer(L, script, sizeof(script) - 1, "spawn-active-gc") ==
 	 LUA_OK);
@@ -212,7 +212,7 @@ int main(void)
 {
   test_sticky_stopreq_spawn_ok();
   test_fresh_stopreq_aborts_before_child_runs();
-  test_spawn_preserves_active_legacy_cycle();
+  test_spawn_preserves_active_gc_cycle();
   printf("t-threading-spawn-native OK: spawn native STOPREQ verified\n");
   return 0;
 }

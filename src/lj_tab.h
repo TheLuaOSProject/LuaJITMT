@@ -54,19 +54,12 @@ static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 #define hashnum_node(n, hmask, o) \
   hashlohi_node((n), (hmask), (o)->u32.lo, ((o)->u32.hi << 1))
 #define hashnum(t, o)		hashlohi((t), (o)->u32.lo, ((o)->u32.hi << 1))
-#if LJ_GC64
 #define hashgcref_node(n, hmask, r) \
   hashlohi_node((n), (hmask), (uint32_t)gcrefu_acq(r), \
 		(uint32_t)(gcrefu_acq(r) >> 32))
 #define hashgcref(t, r) \
   hashlohi((t), (uint32_t)gcrefu_acq(r), \
 	   (uint32_t)(gcrefu_acq(r) >> 32))
-#else
-#define hashgcref_node(n, hmask, r) \
-  hashlohi_node((n), (hmask), gcrefu_acq(r), gcrefu_acq(r) + HASH_BIAS)
-#define hashgcref(t, r) \
-  hashlohi((t), gcrefu_acq(r), gcrefu_acq(r) + HASH_BIAS)
-#endif
 
 #define hsize2hbits(s)	((s) ? ((s)==1 ? 1 : 1+lj_fls((uint32_t)((s)-1))) : 0)
 #define LJ_TAB_RETIRE_EPOCHS	2u
@@ -398,7 +391,9 @@ genarray:
 	if ((MSize)key < asize) {
 	  TValue nextval;
 	  lj_tv_load_acq(&nextval, &array[key]);
-	  if (tvisnil(&nextval) && lj_tab_array_acq(t) == oldarray) {
+	  if (tvisnil(&nextval) && lj_tab_array_acq(t) == oldarray &&
+	      (lj_tab_array_is_retiring(t, oldarray) ||
+	       lj_tab_array_is_colocated(t, oldarray))) {
 	    lj_tab_wait_no_l();
 	    goto retry_array;
 	  }

@@ -15,6 +15,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_func.h"
+#include "lj_state.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
 #include "lj_vm.h"
@@ -133,6 +134,7 @@ void lj_func_syncslot_forjit(lua_State *L, TValue *base, int32_t slot,
 			     const TValue *tv)
 {
   copyTV(L, base + slot, tv);
+  lj_state_stack_pubtv(L, L, base + slot);
 }
 
 void lj_func_storeuv_pub(lua_State *L, TValue *tv, const TValue *src)
@@ -179,6 +181,7 @@ GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base, int32_t slot,
       tv = dst;
     uv = func_snapshotuv(L, tv);
     setgcV(L, dst, obj2gco(uv), LJ_TUPVAL);
+    lj_state_stack_pubtv(L, L, dst);
   }
   return uv;
 }
@@ -192,6 +195,7 @@ GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
   */
   GCupval *uv = func_newuvclosed(L);
   setgcV(L, base + slot, obj2gco(uv), LJ_TUPVAL);
+  lj_state_stack_pubtv(L, L, base + slot);
   return uv;
 }
 
@@ -200,7 +204,7 @@ static LJ_AINLINE void func_pubuv_payload(lua_State *L, GCupval *uv)
   /*
   ** A closed upvalue containing a primitive has no child edge to repair or
   ** remember. Keep the publication barrier on actual GC payloads, where GC2
-  ** and the legacy incremental collector must see uv->tv before the upvalue is
+  ** and the incremental collector must see uv->tv before the upvalue is
   ** linked into the pending root chain.
   */
   if (tvisgcv(&uv->tv))
@@ -215,7 +219,7 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
   ** Bump FNEW helpers initialize a fresh white closure before linking it into
   ** the pending-root chain. With no active mark/remember barrier, those edges
   ** will be discovered when the new root is first traversed. If the barrier
-  ** mirror is active, use the normal publication path so GC2/legacy marking
+  ** mirror is active, use the normal publication path so GC2/color marking
   ** observes the child immediately.
   **
   ** During active black allocation the fresh parent is not yet published and
@@ -246,12 +250,17 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
 #define func_pubfreshobjobj(L, tg, p, o) \
   func_pubfreshobjobj_((L), (tg), obj2gco(p), obj2gco(o))
 
-static LJ_AINLINE void func_fnew_preserve_operand(global_State *g, GCobj *o)
+static LJ_AINLINE void func_fnew_preserve_operand(lua_State *L, GCobj *o)
 {
-  if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
+  global_State *g;
+  if (!L || !o || LJ_UNLIKELY(o->gch.gct == 0))
     return;
+  g = G(L);
+  if (!g)
+    return;
+  lj_gc_pubobjroot(L, o);
   if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
-    lj_gc_markobj_legacy(g, o);
+    lj_gc_markobj(g, o);
   } else if ((g->gc.state == GCSsweepstring || g->gc.state == GCSsweep) &&
 	     isdead(g, o)) {
     /*
@@ -262,17 +271,16 @@ static LJ_AINLINE void func_fnew_preserve_operand(global_State *g, GCobj *o)
     ** sweep, so inherited upvalues and nested prototype constants survive until
     ** the freshly published closure is visible to the next mark cycle.
     */
-    lj_gc_markobj_legacy_deep(g, o);
+    lj_gc_markobj_deep(g, o);
   }
 }
 
 static LJ_AINLINE void func_fnew_preserve_operands(lua_State *L, GCproto *pt,
 						   GCfuncL *parent)
 {
-  global_State *g = G(L);
-  func_fnew_preserve_operand(g, obj2gco(parent));
-  func_fnew_preserve_operand(g, obj2gco(funcproto((GCfunc *)parent)));
-  func_fnew_preserve_operand(g, obj2gco(pt));
+  func_fnew_preserve_operand(L, obj2gco(parent));
+  func_fnew_preserve_operand(L, obj2gco(funcproto((GCfunc *)parent)));
+  func_fnew_preserve_operand(L, obj2gco(pt));
 }
 
 /* Create a closed upvalue initialized from a stack slot. */
@@ -284,7 +292,7 @@ static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
   uv->closed = 1;
   /*
   ** FNEW may capture a C-call result slot before the next ordinary root scan.
-  ** Publish the source stack value first, so legacy/GC2 barriers repair
+  ** Publish the source stack value first, so color/GC2 barriers repair
   ** other-white results before the assertion-checked copy below.
   */
   lj_gc_pubroot(L, slot);
@@ -350,7 +358,7 @@ void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
     } else if (lj_mem_freegco_defer(g, uv, sizeof(GCupval))) {
       /*
       ** A normal open upvalue is always linked in the global open-upvalue ring.
-      ** Lock-free legacy-root sweep can still observe an arena-retained body
+      ** Lock-free root-spine sweep can still observe an arena-retained body
       ** after a close/free race has cleared the ring links but before bitmap
       ** reuse is allowed. There is no ring ownership left to unlink; preserve
       ** the body through the deferred arena path just like closed upvalues.
@@ -434,7 +442,7 @@ static LJ_AINLINE int func_bump_arena_owned_active(global_State *g,
 						   TGState *tg)
 {
   return tg && lj_tg_mark_active_acq(tg) && lj_tg_alloc_black_acq(tg) &&
-	 !gc2_legacy_mark_bridge_acq(g);
+	 g != NULL;
 }
 
 static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)
@@ -467,11 +475,11 @@ static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
     /*
     ** Active black bump allocation sets the arena mark bit at birth. Fresh
     ** FNEW closures/upvalues are ordinary graph objects with no finalizer-side
-    ** legacy ownership requirement, so the arena bitmap can own their body
+    ** GC root ownership requirement, so the arena bitmap can own their body
     ** lifetime instead of pushing every allocation through the global root
     ** spine. The type-local arena-owned marker distinguishes that narrow state
     ** from root-spine objects whose nextgc link can legitimately be NULL.
-    ** Coupled legacy mark cycles still publish roots because the classic mark
+    ** Coupled color mark cycles still publish roots because the color mark
     ** bridge must see these freshly constructed bodies through the root spine.
     */
     func_bump_mark_arena_owned(o);
@@ -489,7 +497,7 @@ static LJ_AINLINE void func_bump_publish_pair(global_State *g, TGState *tg,
     ** Both cells were reserved from one traversable arena run and marked black
     ** before publication. Each body carries its own arena-owned marker so
     ** unmarked GC2 arena sweep can destruct dead FNEW cells without touching
-    ** the legacy root spine.
+    ** the GC root spine.
     */
     func_bump_mark_arena_owned(head);
     func_bump_mark_arena_owned(tail);
@@ -629,7 +637,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   /*
   ** Each arena cell is made visible only after the corresponding object body is
   ** safe for marker traversal. Publish before a possible accounting assist
-  ** because bitmap sweep can see allocated cells before they enter the legacy
+  ** because bitmap sweep can see allocated cells before they enter the GC
   ** root spine.
   */
   func_bump_publish_pair(g, tg, obj2gco(fn), obj2gco(uv));

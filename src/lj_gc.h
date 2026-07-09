@@ -81,9 +81,9 @@ LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
 LJ_FUNC void lj_gc_freeall(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_preserveobj_legacy(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_markobj_legacy(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_markobj_legacy_deep(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_preserveobj(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_markobj(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_markobj_deep(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_arena_markmem_registered(global_State *g, void *p);
@@ -101,14 +101,12 @@ LJ_FUNC uint32_t lj_gc_flush_root_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc_repair_root_spine(global_State *g);
 LJ_FUNC void *lj_mem_newgco_unlinked(lua_State *L, GCSize size);
 LJ_FUNCA int LJ_FASTCALL lj_gc_step(lua_State *L);
-LJ_FUNC int lj_gc_step_explicit(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_gc_step_top(lua_State *L);
 #if LJ_HASJIT
 LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
-LJ_FUNC int lj_gc_jit_defer_fixpoint(global_State *g);
+LJ_FUNC int lj_gc2_jit_needs_exit(global_State *g);
 #endif
-LJ_FUNC void lj_gc_fullgc(lua_State *L);
 #ifdef LJ_GC2_TEST_HELPERS
 LJ_FUNC uint32_t lj_gc_test_step_fixtop_calls(void);
 LJ_FUNC void lj_gc_test_reset_step_fixtop_calls(void);
@@ -120,20 +118,12 @@ LJ_FUNC int lj_gc_test_trace_pc_proto_candidate(global_State *g, GCobj *o,
 
 static LJ_AINLINE GCSize lj_gcsize_load_acq(const GCSize *p)
 {
-#if LJ_GC64
   return (GCSize)la_load64_acq(p);
-#else
-  return (GCSize)la_load32_acq(p);
-#endif
 }
 
 static LJ_AINLINE void lj_gcsize_store_rel(GCSize *p, GCSize v)
 {
-#if LJ_GC64
   la_store64_rel(p, (uint64_t)v);
-#else
-  la_store32_rel(p, (uint32_t)v);
-#endif
 }
 
 static LJ_AINLINE GCSize lj_gc_total_load(global_State *g)
@@ -148,31 +138,19 @@ static LJ_AINLINE void lj_gc_total_store(global_State *g, GCSize total)
 
 static LJ_AINLINE void lj_gc_total_add(global_State *g, GCSize bytes)
 {
-#if LJ_GC64
   (void)la_add64_rlx(&g->gc.total, bytes);
-#else
-  (void)la_add32_rlx(&g->gc.total, (uint32_t)bytes);
-#endif
   /* 04 section 4.8 accounting: atomicity matters, ordering is counter-only. */
 }
 
 static LJ_AINLINE void lj_gc_total_sub(global_State *g, GCSize bytes)
 {
 #if LUA_USE_ASSERT
-#if LJ_GC64
   GCSize old = (GCSize)la_sub64_rlx(&g->gc.total, bytes);
-#else
-  GCSize old = (GCSize)la_sub32_rlx(&g->gc.total, (uint32_t)bytes);
-#endif
   lj_assertG(old >= bytes, "gc total underflow old=%llu bytes=%llu caller=%p",
 	     (unsigned long long)old, (unsigned long long)bytes,
 	     __builtin_return_address(0));
 #else
-#if LJ_GC64
   (void)la_sub64_rlx(&g->gc.total, bytes);
-#else
-  (void)la_sub32_rlx(&g->gc.total, (uint32_t)bytes);
-#endif
 #endif
   /* 04 section 4.8 accounting: atomicity matters, ordering is counter-only. */
 }
@@ -416,7 +394,7 @@ static LJ_AINLINE void lj_gc_list_move_rel(GCRef *dst, GCRef *src)
   }
 }
 
-/* GC check: drive collector forward if classic GC or GC2 pacing asks for work. */
+/* GC check: drive collector forward if color GC or GC2 pacing asks for work. */
 #define lj_gc_check(L) \
   { if (LJ_UNLIKELY(lj_gc_should_step(G(L)))) \
       lj_gc_step_top(L); }
@@ -466,16 +444,16 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
   /*
   ** The table itself owns the intrusive gclist link used by grayagain. Multiple
   ** mutators can hit the same backward barrier, so only the thread that changes
-  ** black to gray may publish that link. Legacy mark close also observes
+  ** black to gray may publish that link. Color mark close also observes
   ** mark_active, because the color change is visible before the grayagain link is.
   */
-  gc_legacy_mark_active_inc(g);
+  gc_mark_active_inc(g);
   if (!lj_gc_claim_black_to_gray(o)) {
-    gc_legacy_mark_active_dec(g);
+    gc_mark_active_dec(g);
     return;
   }
   lj_gc_list_push_rel(&g->gc.grayagain, o);
-  gc_legacy_mark_active_dec(g);
+  gc_mark_active_dec(g);
 }
 
 static LJ_AINLINE void lj_gc_barriertv_(lua_State *L, GCtab *t, cTValue *tv)
@@ -542,7 +520,7 @@ static LJ_AINLINE void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key)
   /*
   ** Publishing a fresh hash key only exposes that key edge. A full-table GC2
   ** barrier would requeue and rescan the whole growing table for every insert;
-  ** the legacy incremental collector still needs the normal table back barrier
+  ** the incremental collector still needs the normal table back barrier
   ** when the table is black and the key is white.
   */
   if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, key)))
@@ -555,7 +533,7 @@ static LJ_AINLINE void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key)
 
 /*
 ** M5 publication wrappers. These preserve current incremental-GC behavior
-** while naming the publication boundary shared by GC2 and the legacy
+** while naming the publication boundary shared by GC2 and the color
 ** incremental barrier. Callers use these wrappers when publishing references
 ** that can be observed by another thread or by a concurrent GC traversal.
 */
@@ -582,6 +560,7 @@ LJ_FUNCA void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o);
 LJ_FUNCA void lj_gc_pubtabtv_vm(lua_State *L, GCtab *t, cTValue *tv);
 LJ_FUNCA void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv,
 				 uint32_t n);
+LJ_FUNCA void lj_gc_pubtvroot_vm(lua_State *L, cTValue *tv);
 LJ_FUNCA void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv);
 
 /* Allocator. */

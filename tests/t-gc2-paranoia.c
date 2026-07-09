@@ -62,7 +62,7 @@ static void test_minor_major_paranoia(void)
   tg = G2TG(g);
   assert(tg != NULL);
   lj_gc2_set_generational(g, 1);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
   assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 1);
   ljt_lua_dostring(L,
@@ -76,7 +76,7 @@ static void test_minor_major_paranoia(void)
   ** the oracle as a zero-diff check.
   */
   lj_gc2_set_generational(g, 0);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   lua_close(L);
 }
@@ -123,7 +123,7 @@ int main(void)
   lua_setmetatable(L, -2);
   lua_setglobal(L, "__gc2_ud");
 
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   assert(lj_gc2_test_ssb_empty(g));
   g->gc.stepmul = 1;

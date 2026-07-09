@@ -89,14 +89,14 @@ int main(void)
   {
     GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
     assert(lj_gc2_markobj(g, bad) == 0);
-    assert(lj_gc2_markobj_nolegacy(g, bad) == 0);
-    assert(lj_gc2_markobj_nolegacy_nogrey(g, bad) == 0);
+    assert(lj_gc2_markobj_direct(g, bad) == 0);
+    assert(lj_gc2_markobj_nogrey(g, bad) == 0);
     assert(lj_gc2_preserve_sweep_root(g, bad) == 0);
     assert(lj_gc2_trace_sweep_root(g, bad) == 0);
     assert(lj_gc2_ismarked(g, bad) < 0);
     lj_gc2_test_rescan_pending_clear_if_table(g, bad);
     lj_gc2_test_rescan_pending_clear_cycle(g, bad);
-    lj_gc_markobj_legacy_deep(g, bad);
+    lj_gc_markobj_deep(g, bad);
   }
   assert(lj_gc2_test_ssb_empty(g));
 

@@ -179,6 +179,11 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
   int loop;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
+    lj_gc_pubroot(L, o);
+    lj_gc_pubroot(L, k);
+    if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(G(L), o) ||
+		    !lj_gc_tv_gcref_valid(G(L), k)))
+      return niltv(L);
     if (LJ_LIKELY(tvistab(o))) {
       GCtab *t = tabV(o);
       cTValue *tv = lj_tab_get(L, t, k);
@@ -208,6 +213,8 @@ static TValue *meta_tset(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
     *owner = NULL;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
+    lj_gc_pubroot(L, o);
+    lj_gc_pubroot(L, k);
     if (LJ_LIKELY(tvistab(o))) {
       GCtab *t = tabV(o);
       cTValue *tv = lj_tab_get(L, t, k);
@@ -615,6 +622,8 @@ TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
 /* Helper for ordered comparisons. String compare, __lt/__le metamethods. */
 TValue *lj_meta_comp(lua_State *L, cTValue *o1, cTValue *o2, int op)
 {
+  lj_gc_pubroot(L, o1);
+  lj_gc_pubroot(L, o2);
   if (LJ_HASFFI && (tviscdata(o1) || tviscdata(o2))) {
     ASMFunction cont = (op & 1) ? lj_cont_condf : lj_cont_condt;
     MMS mm = (op & 2) ? MM_le : MM_lt;

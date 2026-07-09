@@ -164,7 +164,7 @@ static void test_obj_valid_accepts_variable_cdata(lua_State *L,
 #endif
 }
 
-static void test_public_minor_skips_classic_registry_roots(lua_State *L,
+static void test_public_minor_skips_registry_roots(lua_State *L,
 							  global_State *g,
 							  TGState *tg)
 {
@@ -180,7 +180,7 @@ static void test_public_minor_skips_classic_registry_roots(lua_State *L,
   copyTVrel(L, lj_tab_set(L, registry, &key), &nilv);
 
   lj_gc2_set_generational(g, 1);
-  lj_gc_fullgc(L);  /* Forced-major baseline enables minor gates. */
+  lua_gc(L, LUA_GCCOLLECT, 0);  /* Forced-major baseline enables minor gates. */
   assert(g->gc.state == GCSpause);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
   assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
@@ -199,8 +199,8 @@ static void test_public_minor_skips_classic_registry_roots(lua_State *L,
   minor_start0 = gc2_minor_cycle_starts_acq(g);
   /*
   ** Exercise the public minor-root set directly. Driving this through the
-  ** legacy GC step can open the classic mark bridge, which deliberately mirrors
-  ** classic registry roots into GC2 for safety.
+  ** public GC step can open the color mark bridge, which deliberately mirrors
+  ** registry roots into GC2 for safety.
   */
   lj_gc2_mark_begin(g);
   lj_gc2_test_scan_minor_roots(g, L);
@@ -212,7 +212,7 @@ static void test_public_minor_skips_classic_registry_roots(lua_State *L,
 
   copyTVrel(L, lj_tab_set(L, registry, &key), &nilv);
   lj_gc2_cycle_to_idle(g);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   lj_gc2_set_generational(g, 0);
   lua_settop(L, 0);
 }
@@ -641,7 +641,7 @@ int main(void)
   assert(active_child != NULL);
   assert(root_contains(g, obj2gco(active_child)));
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 0);
-  flipwhite(obj2gco(active_child));  /* Manual GC2 sweep setup mirrors classic atomic. */
+  flipwhite(obj2gco(active_child));  /* Manual GC2 sweep setup mirrors color atomic. */
   lj_gc2_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 0);
@@ -656,7 +656,7 @@ int main(void)
   assert(lj_gc2_test_sweep_owner_progress(g, tg, 64) > 0);
   assert(!root_contains(g, obj2gco(active_child)));
   lj_gc2_cycle_to_idle(g);
-  lj_gc_fullgc(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 0);
   la_store32_rel(&g->gc2.minor_roots_enabled, 0);
 
@@ -882,7 +882,7 @@ int main(void)
   lj_gc2_cycle_to_idle(g);
   lua_settop(L, 0);
 
-  test_public_minor_skips_classic_registry_roots(L, g, tg);
+  test_public_minor_skips_registry_roots(L, g, tg);
 
   test_vm_generational_table_store_remembered(L, g, tg);
 

@@ -19,7 +19,7 @@
 
 static global_State Gs;
 
-static void check_legacy_controls(void)
+static void check_gc_controls(void)
 {
   memset(&Gs, 0, sizeof(Gs));
   lj_gc_pause_store(&Gs, 200);
@@ -59,7 +59,7 @@ int main(void)
   uint64_t expected = 0;
   int i;
 
-  check_legacy_controls();
+  check_gc_controls();
   check_gc2_init_controls();
 
   memset(&Gs, 0, sizeof(Gs));

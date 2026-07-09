@@ -307,7 +307,7 @@ static void threading_spawn_gc_handoff(lua_State *L, GCudata *ud)
   global_State *g = G(L);
   /*
   ** The thread userdata is published to the live-thread list before the child
-  ** can run. If a legacy cycle is already active, use the same root publication
+  ** can run. If a color cycle is already active, use the same root publication
   ** barrier as other native root lists so the cycle sees the userdata and its
   ** startup roots without completing the whole collector synchronously. GC2 has
   ** a snapshot-style root set, so preserving a late root may still abort the
@@ -328,13 +328,13 @@ static void threading_result_gc_handoff(lua_State *L, LJThread *th)
   /*
   ** Completing a worker mutates the child stack after the thread userdata may
   ** already have been marked through the live-thread list. Requeue the userdata
-  ** for legacy traversal, mark the stack dirty for owner-scan freshness, and
+  ** for color traversal, mark the stack dirty for owner-scan freshness, and
   ** preserve the GC2 root so join-visible result graphs are scanned from the
   ** completed child stack instead of relying on a stale thread mark.
   */
   (void)lj_tg_stack_dirty_epoch_add_rlx(L2TG(L), 1);
-  lj_gc_markobj_legacy(G(L), obj2gco(ud));
-  lj_gc_markobj_legacy(G(L), obj2gco(L));
+  lj_gc_markobj(G(L), obj2gco(ud));
+  lj_gc_markobj(G(L), obj2gco(L));
   lj_gc2_preserve_root(G(L), obj2gco(ud));
   lj_gc2_preserve_root(G(L), obj2gco(L));
 }
@@ -1385,7 +1385,7 @@ static void threading_gc_stats_push(lua_State *L)
   threading_gc_stats_setnum(L, t, "total_bytes", s.total_bytes);
   threading_gc_stats_setnum(L, t, "total_kbytes", s.total_bytes >> 10);
   threading_gc_stats_setint(L, t, "phase", s.phase);
-  threading_gc_stats_setint(L, t, "legacy_gc_state", s.legacy_gc_state);
+  threading_gc_stats_setint(L, t, "gc_state", s.gc_state);
   threading_gc_stats_setint(L, t, "generational", s.generational);
   threading_gc_stats_setint(L, t, "cycle_minor_requested",
 			    s.cycle_minor_requested);

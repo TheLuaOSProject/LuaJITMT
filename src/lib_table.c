@@ -32,6 +32,18 @@ static LJ_AINLINE int table_mt_concurrent(lua_State *L)
   return mt_active_or_entering_acq(G(L));
 }
 
+static LJ_AINLINE void table_insert_publish_pending(lua_State *L, GCtab *t,
+						    cTValue *src)
+{
+  /*
+  ** table.insert can be called from a trace with the inserted value only in the
+  ** synthetic C-call argument area. Publish the parent and pending value before
+  ** lj_tab_setint() can allocate, resize, or assist GC.
+  */
+  lj_gc_pubobjroot(L, obj2gco(t));
+  lj_gc_pubroot(L, src);
+}
+
 static LJ_AINLINE void table_insert_store_wait(lua_State *L, int guarded)
 {
   /*
@@ -48,6 +60,7 @@ static LJ_AINLINE void table_insert_store_wait(lua_State *L, int guarded)
 static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i,
 				     int guarded)
 {
+  lj_gc_pubobjroot(L, obj2gco(t));
   for (;;) {
     TValue *dst = lj_tab_setint(L, t, i);
     cTValue *src = lj_tab_getint(t, i-1);
@@ -62,6 +75,7 @@ static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i,
 	LJ_TAB_STORE_CAS_OK) {
       if (have_src) {
 	lj_gc2_barrier_weak_write(L, t, &key, &val);
+	lj_gc_pubtabtv(L, t, dst);
       }
       return;
     }
@@ -75,6 +89,7 @@ static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
   TValue *dst;
   TValue key;
   setintV(&key, i);
+  table_insert_publish_pending(L, t, src);
   for (;;) {
     dst = lj_tab_setint(L, t, i);
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
@@ -311,8 +326,20 @@ static void set2(lua_State *L, int i, int j)
   lua_rawseti(L, 1, j);
 }
 
+static LJ_AINLINE void table_sort_publish(lua_State *L)
+{
+  if (tvisnil(L->base))
+    return;
+  {
+    GCtab *t = tabV(L->base);
+    lj_gc_pubobjroot(L, obj2gco(t));
+    lj_gc_pubtab(L, t);
+  }
+}
+
 static int sort_comp(lua_State *L, int a, int b)
 {
+  table_sort_publish(L);
   if (!lua_isnil(L, 2)) {  /* function? */
     int res;
     lua_pushvalue(L, 2);
@@ -395,6 +422,7 @@ LJLIB_CF(table_sort)
   GCtab *t = lj_lib_checktab(L, 1);
   int32_t n = (int32_t)lj_tab_len(t);
   lua_settop(L, 2);
+  table_sort_publish(L);
   if (!tvisnil(L->base+1))
     lj_lib_checkfunc(L, 2);
   auxsort(L, 1, n);

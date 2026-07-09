@@ -68,7 +68,6 @@ static int after_main_contains(global_State *g, GCobj *needle)
   return 0;
 }
 
-#if LJ_GC64
 static const char legacy_probe_src[] =
   "return function()\n"
   "  local x = 0\n"
@@ -117,7 +116,6 @@ static GCupval *new_legacy_capture(lua_State *L, GCproto *pt, TValue *base)
   assert(lj_funcL_nupvalues(&fn->l) == 1);
   return func_uv_acq(&fn->l, 0);
 }
-#endif
 
 static void test_explicit_flush(lua_State *L)
 {
@@ -206,7 +204,7 @@ static void test_pending_cycle_breaker(lua_State *L)
   /*
   ** A malformed publisher-owned pending chain must not hang the collector. The
   ** flusher preserves the unique objects ahead of the cycle and splices a finite
-  ** chain into the legacy root spine.
+  ** chain into the root spine.
   */
   lj_obj_setgcwrel(obj2gco(t), obj2gco(t2));
   assert(lj_gc_flush_root_pending(g) == 2u);
@@ -272,7 +270,7 @@ static void test_after_main_cycle_breaker(lua_State *L)
 
   /*
   ** Child states and userdata publish after mainthread to preserve LuaJIT's
-  ** legacy object-list layout. This queue has a different insertion anchor
+  ** object-list layout. This queue has a different insertion anchor
   ** from the regular pending stack, so keep explicit malformed-cycle coverage.
   */
   lj_obj_setgcwrel(obj2gco(L1), obj2gco(L2));
@@ -387,7 +385,6 @@ static void test_attach_flushes_pending(lua_State *L)
 
 static void test_closed_upvalue_relink_pending(lua_State *L)
 {
-#if LJ_GC64
   global_State *g = G(L);
   TGState *tg = L2TG(L);
   GCproto *child;
@@ -426,9 +423,6 @@ static void test_closed_upvalue_relink_pending(lua_State *L)
   assert(lj_gcroot_pending_hint_acq(g) == 0);
   assert(root_contains(g, obj2gco(uv)));
   lua_settop(L, 0);
-#else
-  UNUSED(L);
-#endif
 }
 
 int main(void)

@@ -149,7 +149,7 @@ static void exercise_keyed_cas_hash_stale(lua_State *L)
   lj_tab_hmask_rel(t, newhmask);
 }
 
-static void exercise_helper_stores_ignore_legacy_mirrors(lua_State *L)
+static void exercise_helper_stores_ignore_side_mirrors(lua_State *L)
 {
   GCtab *t;
   GCstr *hkey;
@@ -166,7 +166,7 @@ static void exercise_helper_stores_ignore_legacy_mirrors(lua_State *L)
   assert((MSize)k < asize);
 
   lj_tab_storeint(L, lj_tab_setint(L, t, k), 15000);
-  hkey = lj_str_newlit(L, "helper_store_legacy_mirror");
+  hkey = lj_str_newlit(L, "helper_store_side_mirror");
   lj_tab_storeint(L, lj_tab_setstr(L, t, hkey), 16000);
   node = lj_tab_node_snapshot_acq(t, &hmask);
   assert(hmask > 0);
@@ -745,7 +745,7 @@ int main(void)
   exercise_direct_cas(L);
   exercise_keyed_cas_array_stale(L);
   exercise_keyed_cas_hash_stale(L);
-  exercise_helper_stores_ignore_legacy_mirrors(L);
+  exercise_helper_stores_ignore_side_mirrors(L);
   exercise_keyed_nil_cas_hash_stale(L);
   exercise_meta_forward_retry(L);
   exercise_capi_rawseti_forward_retry(L);

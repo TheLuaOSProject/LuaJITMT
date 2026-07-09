@@ -20,22 +20,13 @@ LJ_FUNCA void lj_tab_wait_no_l(void);
 
 /* Memory and GC object sizes. */
 typedef uint32_t MSize;
-#if LJ_GC64
 typedef uint64_t GCSize;
-#else
-typedef uint32_t GCSize;
-#endif
 
 /* Memory reference */
 typedef struct MRef {
-#if LJ_GC64
   uint64_t ptr64;	/* True 64 bit pointer. */
-#else
-  uint32_t ptr32;	/* Pseudo 32 bit pointer. */
-#endif
 } MRef;
 
-#if LJ_GC64
 #define mref(r, t)	((t *)(void *)(r).ptr64)
 #define mref_acq(r, t)	((t *)(void *)(uintptr_t)la_load64_acq(&(r).ptr64))
 #define mrefu(r)	((r).ptr64)
@@ -43,45 +34,24 @@ typedef struct MRef {
 #define setmref(r, p)	((r).ptr64 = (uint64_t)(void *)(p))
 #define setmrefu(r, u)	((r).ptr64 = (uint64_t)(u))
 #define setmrefr(r, v)	((r).ptr64 = (v).ptr64)
-#else
-#define mref(r, t)	((t *)(void *)(uintptr_t)(r).ptr32)
-#define mref_acq(r, t)	((t *)(void *)(uintptr_t)la_load32_acq(&(r).ptr32))
-#define mrefu(r)	((r).ptr32)
 
-#define setmref(r, p)	((r).ptr32 = (uint32_t)(uintptr_t)(void *)(p))
-#define setmrefu(r, u)	((r).ptr32 = (uint32_t)(u))
-#define setmrefr(r, v)	((r).ptr32 = (v).ptr32)
-#endif
-
-#if LJ_GC64
 static LJ_AINLINE void setmrefrel_(MRef *r, const void *p)
 {
   la_store64_rel(&r->ptr64, (uint64_t)(uintptr_t)p);
 }
-#else
-static LJ_AINLINE void setmrefrel_(MRef *r, const void *p)
-{
-  la_store32_rel(&r->ptr32, (uint32_t)(uintptr_t)p);
-}
-#endif
 #define setmrefrel(r, p)	setmrefrel_(&(r), (const void *)(p))
 
 /* -- GC object references ------------------------------------------------ */
 
 /* GCobj reference */
 typedef struct GCRef {
-#if LJ_GC64
   uint64_t gcptr64;	/* True 64 bit pointer. */
-#else
-  uint32_t gcptr32;	/* Pseudo 32 bit pointer. */
-#endif
 } GCRef;
 
 /* Common GC header for all collectable objects. */
 #define GCHeader	GCRef nextgc; uint8_t marked; uint8_t gct
 /* This occupies 6 bytes, so use the next 2 bytes for non-32 bit fields. */
 
-#if LJ_GC64
 #define gcref(r)	((GCobj *)(r).gcptr64)
 #define gcref_acq(r)	((GCobj *)(uintptr_t)la_load64_acq(&(r).gcptr64))
 #define gcrefp(r, t)	((t *)(void *)(r).gcptr64)
@@ -95,19 +65,6 @@ typedef struct GCRef {
 #define setgcrefp(r, p)	((r).gcptr64 = (uint64_t)(p))
 #define setgcrefnull(r)	((r).gcptr64 = 0)
 #define setgcrefr(r, v)	((r).gcptr64 = (v).gcptr64)
-#else
-#define gcref(r)	((GCobj *)(uintptr_t)(r).gcptr32)
-#define gcref_acq(r)	((GCobj *)(uintptr_t)la_load32_acq(&(r).gcptr32))
-#define gcrefp(r, t)	((t *)(void *)(uintptr_t)(r).gcptr32)
-#define gcrefu(r)	((r).gcptr32)
-#define gcrefu_acq(r)	(la_load32_acq(&(r).gcptr32))
-#define gcrefeq(r1, r2)	((r1).gcptr32 == (r2).gcptr32)
-
-#define setgcref(r, gc)	((r).gcptr32 = (uint32_t)(uintptr_t)&(gc)->gch)
-#define setgcrefp(r, p)	((r).gcptr32 = (uint32_t)(uintptr_t)(p))
-#define setgcrefnull(r)	((r).gcptr32 = 0)
-#define setgcrefr(r, v)	((r).gcptr32 = (v).gcptr32)
-#endif
 
 #define gcnext(gc)	(gcref((gc)->gch.nextgc))
 
@@ -196,7 +153,6 @@ typedef union {
 typedef LJ_ALIGN(8) union TValue {
   uint64_t u64;		/* 64 bit pattern overlaps number. */
   lua_Number n;		/* Number object overlaps split tag/value object. */
-#if LJ_GC64
   GCRef gcr;		/* GCobj reference with tag. */
   int64_t it64;
   struct {
@@ -205,27 +161,7 @@ typedef LJ_ALIGN(8) union TValue {
     , uint32_t it;	/* Internal object tag. Must overlap MSW of number. */
     )
   };
-#else
-  struct {
-    LJ_ENDIAN_LOHI(
-      union {
-	GCRef gcr;	/* GCobj reference (if any). */
-	int32_t i;	/* Integer value. */
-      };
-    , uint32_t it;	/* Internal object tag. Must overlap MSW of number. */
-    )
-  };
-#endif
-#if LJ_FR2
   int64_t ftsz;		/* Frame type and size of previous frame, or PC. */
-#else
-  struct {
-    LJ_ENDIAN_LOHI(
-      GCRef func;	/* Function for next frame (or dummy L). */
-    , FrameLink tp;	/* Link to previous frame. */
-    )
-  } fr;
-#endif
   struct {
     LJ_ENDIAN_LOHI(
       uint32_t lo;	/* Lower 32 bits of number. */
@@ -249,24 +185,6 @@ typedef const TValue cTValue;
 #define LUA_TCDATA	(LAST_TT+2)
 
 /* Internal object tags.
-**
-** Format for 32 bit GC references (!LJ_GC64):
-**
-** Internal tags overlap the MSW of a number object (must be a double).
-** Interpreted as a double these are special NaNs. The FPU only generates
-** one type of NaN (0xfff8_0000_0000_0000). So MSWs > 0xfff80000 are available
-** for use as internal tags. Small negative numbers are used to shorten the
-** encoding of type comparisons (reg/mem against sign-ext. 8 bit immediate).
-**
-**                  ---MSW---.---LSW---
-** primitive types |  itype  |         |
-** lightuserdata   |  itype  |  void * |  (32 bit platforms)
-** lightuserdata   |ffff|seg|    ofs   |  (64 bit platforms)
-** GC objects      |  itype  |  GCRef  |
-** int (LJ_DUALNUM)|  itype  |   int   |
-** number           -------double------
-**
-** Format for 64 bit GC references (LJ_GC64):
 **
 ** The upper 13 bits must be 1 (0xfff8...) for a special NaN. The next
 ** 4 bits hold the internal tag. The lowest 47 bits either hold a pointer,
@@ -301,11 +219,7 @@ typedef const TValue cTValue;
 #define LJ_TNUMX		(~13u)
 
 /* Integers have itype == LJ_TISNUM doubles have itype < LJ_TISNUM */
-#if LJ_64 && !LJ_GC64
-#define LJ_TISNUM		0xfffeffffu
-#else
 #define LJ_TISNUM		LJ_TNUMX
-#endif
 #define LJ_TISTRUECOND		LJ_TFALSE
 #define LJ_TISPRI		LJ_TTRUE
 #define LJ_TISGCV		(LJ_TSTR+1)
@@ -314,9 +228,7 @@ typedef const TValue cTValue;
 /* Type marker for slot holding a traversal index. Must be lightuserdata. */
 #define LJ_KEYINDEX		0xfffe7fffu
 
-#if LJ_GC64
 #define LJ_GCVMASK		(((uint64_t)1 << 47) - 1)
-#endif
 
 #if LJ_64
 /* To stay within 47 bits, lightuserdata is segmented. */
@@ -458,9 +370,7 @@ typedef struct GCproto {
   uint8_t numparams;	/* Number of parameters. */
   uint8_t framesize;	/* Fixed frame size. */
   MSize sizebc;		/* Number of bytecode instructions. */
-#if LJ_GC64
   uint32_t flags2;	/* Extended prototype flags. */
-#endif
   GCRef gclist;
   MRef k;		/* Split constant array (points to the middle). */
   MRef uv;		/* Upvalue list. local slot|0x8000 or parent uv idx. */
@@ -498,7 +408,6 @@ typedef struct GCproto {
 #define PROTO2_CELLUV		0x00000002u  /* Local upvalues are cell slots. */
 #define PROTO2_CELLOPS		0x00000004u  /* Prototype uses CGET/CSET. */
 
-#if LJ_GC64
 #define proto_initflags2(pt)	((pt)->flags2 = 0)
 #define proto_legacyuv(pt)	(((pt)->flags2 & PROTO2_LEGACYUV) != 0)
 #define proto_setlegacyuv(pt)	((pt)->flags2 |= PROTO2_LEGACYUV)
@@ -506,15 +415,6 @@ typedef struct GCproto {
 #define proto_setcelluv(pt)	((pt)->flags2 |= PROTO2_CELLUV)
 #define proto_cellops(pt)	(((pt)->flags2 & PROTO2_CELLOPS) != 0)
 #define proto_setcellops(pt)	((pt)->flags2 |= PROTO2_CELLOPS)
-#else
-#define proto_initflags2(pt)	((void)0)
-#define proto_legacyuv(pt)	0
-#define proto_setlegacyuv(pt)	((void)0)
-#define proto_celluv(pt)	0
-#define proto_setcelluv(pt)	((void)0)
-#define proto_cellops(pt)	0
-#define proto_setcellops(pt)	((void)0)
-#endif
 
 #define PROTO_UV_LOCAL		0x8000	/* Upvalue for local slot. */
 #define PROTO_UV_IMMUTABLE	0x4000	/* Immutable upvalue. */
@@ -610,9 +510,6 @@ typedef struct Node {
   TValue val;		/* Value object. Must be first field. */
   TValue key;		/* Key object. */
   MRef next;		/* Hash chain. */
-#if !LJ_GC64
-  MRef freetop;		/* Top of free elements (stored in t->node[0]). */
-#endif
 } Node;
 
 LJ_STATIC_ASSERT(offsetof(Node, val) == 0);
@@ -621,9 +518,6 @@ typedef struct TabNodeHdr {
   MSize hmask;		/* Hash mask paired with the following Node vector. */
   MSize flags;		/* Low bits: freecount. High bits: state flags. */
   MRef next_gen;	/* Replacement generation during/after retirement. */
-#if !LJ_GC64
-  MSize reserved;	/* Keep Node[0] aligned after the header. */
-#endif
 } TabNodeHdr;
 
 #define TABNODE_FREECOUNT_BITS	31
@@ -634,7 +528,10 @@ typedef struct TabNodeHdr {
 LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16);
 LJ_STATIC_ASSERT(((MSize)1u << LJ_MAX_HBITS) <= TABNODE_FREECOUNT_MASK);
 
+struct GCtab;
+
 typedef struct TabNodeRetire {
+  struct GCtab *tab;	/* Table that unpublished this hash vector. */
   Node *node;		/* Retired hash vector, owned only when armed. */
   MSize hmask;		/* Original hash mask for vector free. */
   uint64_t retire_epoch;  /* Safepoint epoch when retired. */
@@ -646,9 +543,6 @@ typedef struct TabArrayHdr {
   MSize asize;		/* Visible array size paired with the slots vector. */
   MSize acap;		/* Capacity plus high-bit state flags. */
   MRef next_gen;	/* Replacement array during/after retirement. */
-#if !LJ_GC64
-  MSize reserved;	/* Keep slots aligned after the header. */
-#endif
 } TabArrayHdr;
 
 #define TABARRAY_ACAP_BITS	28
@@ -661,6 +555,7 @@ LJ_STATIC_ASSERT(LJ_MAX_ASIZE <= TABARRAY_ACAP_MASK);
 LJ_STATIC_ASSERT((TABARRAY_FLAG_RETIRING & TABARRAY_ACAP_MASK) == 0);
 
 typedef struct TabArrayRetire {
+  struct GCtab *tab;	/* Table that unpublished this array vector. */
   TValue *array;	/* Retired array vector, owned only when armed. */
   MSize acap;		/* Original array capacity for vector free. */
   uint64_t retire_epoch;  /* Safepoint epoch when retired. */
@@ -685,9 +580,7 @@ typedef struct GCtab {
   MRef node;		/* Hash part. */
   uint32_t asize;	/* Size of array part (keys [0, asize-1]). */
   uint32_t hmask;	/* Hash part mask (size of hash part - 1). */
-#if LJ_GC64
   MRef freetop;		/* Top of free elements. */
-#endif
   uint32_t acap;	/* Allocated array capacity. */
   uint32_t struct_owner;  /* Table resize/compound array op owner tid. */
   uint32_t weak_cycle;	/* Classic-GC weak-list publication epoch. */
@@ -744,11 +637,7 @@ static LJ_AINLINE void lj_tab_setarenaowned(GCtab *t)
 
 static LJ_AINLINE TValue *lj_tab_array_acq(const GCtab *t)
 {
-#if LJ_GC64
   return (TValue *)(void *)(uintptr_t)la_load64_acq(&t->array.ptr64);
-#else
-  return (TValue *)(void *)(uintptr_t)la_load32_acq(&t->array.ptr32);
-#endif
 }
 
 static LJ_AINLINE void lj_tab_array_set(GCtab *t, const TValue *array)
@@ -758,11 +647,7 @@ static LJ_AINLINE void lj_tab_array_set(GCtab *t, const TValue *array)
 
 static LJ_AINLINE void lj_tab_array_rel(GCtab *t, const TValue *array)
 {
-#if LJ_GC64
   la_store64_rel(&t->array.ptr64, (uint64_t)(uintptr_t)(const void *)array);
-#else
-  la_store32_rel(&t->array.ptr32, (uint32_t)(uintptr_t)(const void *)array);
-#endif
 }
 
 static LJ_AINLINE MSize lj_tab_asize_acq(const GCtab *t)
@@ -859,9 +744,6 @@ static LJ_AINLINE void lj_tab_array_hdr_init(TabArrayHdr *hdr, MSize asize,
   hdr->asize = asize;
   hdr->acap = lj_tab_array_hdr_pack_acap(acap, 0);
   setmref(hdr->next_gen, NULL);
-#if !LJ_GC64
-  hdr->reserved = 0;
-#endif
 }
 
 static LJ_AINLINE int lj_tab_array_is_colocated(const GCtab *t,
@@ -895,46 +777,27 @@ static LJ_AINLINE MSize lj_tab_array_hdr_flags_acq(const TValue *array)
 
 static LJ_AINLINE TValue *lj_tab_array_nextgen_acq(const TValue *array)
 {
-#if LJ_GC64
   return (TValue *)(void *)(uintptr_t)
     la_load64_acq(&lj_tab_array_hdr(array)->next_gen.ptr64);
-#else
-  return (TValue *)(void *)(uintptr_t)
-    la_load32_acq(&lj_tab_array_hdr(array)->next_gen.ptr32);
-#endif
 }
 
 static LJ_AINLINE int lj_tab_array_nextgen_cas(TValue *array,
 					       const TValue **oldp,
 					       const TValue *next)
 {
-#if LJ_GC64
   uint64_t old = (uint64_t)(uintptr_t)(const void *)*oldp;
   int ok = la_cas64(&lj_tab_array_hdrw(array)->next_gen.ptr64, &old,
 		    (uint64_t)(uintptr_t)(const void *)next,
 		    LA_ACQ_REL, LA_ACQ);
   *oldp = (const TValue *)(const void *)(uintptr_t)old;
   return ok;
-#else
-  uint32_t old = (uint32_t)(uintptr_t)(const void *)*oldp;
-  int ok = la_cas32(&lj_tab_array_hdrw(array)->next_gen.ptr32, &old,
-		    (uint32_t)(uintptr_t)(const void *)next,
-		    LA_ACQ_REL, LA_ACQ);
-  *oldp = (const TValue *)(const void *)(uintptr_t)old;
-  return ok;
-#endif
 }
 
 static LJ_AINLINE void lj_tab_array_nextgen_rel(TValue *array,
 						const TValue *next)
 {
-#if LJ_GC64
   la_store64_rel(&lj_tab_array_hdrw(array)->next_gen.ptr64,
 		 (uint64_t)(uintptr_t)(const void *)next);
-#else
-  la_store32_rel(&lj_tab_array_hdrw(array)->next_gen.ptr32,
-		 (uint32_t)(uintptr_t)(const void *)next);
-#endif
 }
 
 static LJ_AINLINE int lj_tab_array_is_retiring(const GCtab *t,
@@ -1023,11 +886,7 @@ static LJ_AINLINE MSize lj_tab_array_separated_acap_acq(const GCtab *t)
 
 static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)
 {
-#if LJ_GC64
   return (Node *)(void *)(uintptr_t)la_load64_acq(&t->node.ptr64);
-#else
-  return (Node *)(void *)(uintptr_t)la_load32_acq(&t->node.ptr32);
-#endif
 }
 
 static LJ_AINLINE void lj_tab_node_set(GCtab *t, const Node *node)
@@ -1037,11 +896,7 @@ static LJ_AINLINE void lj_tab_node_set(GCtab *t, const Node *node)
 
 static LJ_AINLINE void lj_tab_node_rel(GCtab *t, const Node *node)
 {
-#if LJ_GC64
   la_store64_rel(&t->node.ptr64, (uint64_t)(uintptr_t)(const void *)node);
-#else
-  la_store32_rel(&t->node.ptr32, (uint32_t)(uintptr_t)(const void *)node);
-#endif
 }
 
 static LJ_AINLINE const TabNodeHdr *lj_tab_node_hdr(const Node *node)
@@ -1064,6 +919,15 @@ static LJ_AINLINE GCSize lj_tab_node_bytes(MSize hmask)
 static LJ_AINLINE MSize lj_tab_node_hmask_acq(const Node *node)
 {
   return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->hmask);
+}
+
+static LJ_AINLINE int lj_tab_hmask_value_valid(MSize hmask)
+{
+  MSize hsize;
+  if (hmask > (((MSize)1u << LJ_MAX_HBITS) - 1u))
+    return 0;
+  hsize = hmask + 1u;
+  return (hsize & hmask) == 0;
 }
 
 static LJ_AINLINE void lj_tab_node_hmask_set(Node *node, MSize hmask)
@@ -1140,44 +1004,25 @@ static LJ_AINLINE void lj_tab_node_free_release(Node *node)
 
 static LJ_AINLINE Node *lj_tab_node_nextgen_acq(const Node *node)
 {
-#if LJ_GC64
   return (Node *)(void *)(uintptr_t)
     la_load64_acq(&lj_tab_node_hdr(node)->next_gen.ptr64);
-#else
-  return (Node *)(void *)(uintptr_t)
-    la_load32_acq(&lj_tab_node_hdr(node)->next_gen.ptr32);
-#endif
 }
 
 static LJ_AINLINE int lj_tab_node_nextgen_cas(Node *node, const Node **oldp,
 					      const Node *next)
 {
-#if LJ_GC64
   uint64_t old = (uint64_t)(uintptr_t)(const void *)*oldp;
   int ok = la_cas64(&lj_tab_node_hdrw(node)->next_gen.ptr64, &old,
 		    (uint64_t)(uintptr_t)(const void *)next,
 		    LA_ACQ_REL, LA_ACQ);
   *oldp = (const Node *)(const void *)(uintptr_t)old;
   return ok;
-#else
-  uint32_t old = (uint32_t)(uintptr_t)(const void *)*oldp;
-  int ok = la_cas32(&lj_tab_node_hdrw(node)->next_gen.ptr32, &old,
-		    (uint32_t)(uintptr_t)(const void *)next,
-		    LA_ACQ_REL, LA_ACQ);
-  *oldp = (const Node *)(const void *)(uintptr_t)old;
-  return ok;
-#endif
 }
 
 static LJ_AINLINE void lj_tab_node_nextgen_rel(Node *node, const Node *next)
 {
-#if LJ_GC64
   la_store64_rel(&lj_tab_node_hdrw(node)->next_gen.ptr64,
 		 (uint64_t)(uintptr_t)(const void *)next);
-#else
-  la_store32_rel(&lj_tab_node_hdrw(node)->next_gen.ptr32,
-		 (uint32_t)(uintptr_t)(const void *)next);
-#endif
 }
 
 static LJ_AINLINE int lj_tab_node_is_retiring(const Node *node)
@@ -1215,11 +1060,44 @@ static LJ_AINLINE Node *lj_tab_node_snapshot_acq(const GCtab *t,
 						 MSize *hmaskp)
 {
   Node *node;
-  MSize hmask;
+  MSize hmask, thmask;
+  uint32_t retries = 0;
 retry_snapshot:
   node = lj_tab_node_acq(t);
   hmask = lj_tab_node_hmask_acq(node);
+  if (LJ_UNLIKELY(!lj_tab_hmask_value_valid(hmask))) {
+    if (++retries < 4) {
+      lj_tab_wait_no_l();
+      goto retry_snapshot;
+    }
+    hmask = 0;
+  }
   if (lj_tab_node_is_retiring(node)) {
+    Node *next = lj_tab_node_nextgen_acq(node);
+    if (next && next != node) {
+      node = next;
+      hmask = lj_tab_node_hmask_acq(node);
+      if (LJ_UNLIKELY(!lj_tab_hmask_value_valid(hmask))) {
+	if (++retries < 4) {
+	  lj_tab_wait_no_l();
+	  goto retry_snapshot;
+	}
+	hmask = 0;
+      }
+      if (!lj_tab_node_is_retiring(node))
+	goto snapshot_done;
+    }
+    lj_tab_wait_no_l();
+    goto retry_snapshot;
+  }
+  thmask = (MSize)la_load32_acq(&t->hmask);
+  if (LJ_UNLIKELY(hmask != thmask && lj_tab_hmask_value_valid(thmask) &&
+		  ++retries < 4)) {
+    lj_tab_wait_no_l();
+    goto retry_snapshot;
+  }
+snapshot_done:
+  if (LJ_UNLIKELY(node != lj_tab_node_acq(t) && ++retries < 4)) {
     lj_tab_wait_no_l();
     goto retry_snapshot;
   }
@@ -1245,11 +1123,7 @@ static LJ_AINLINE void lj_tab_hmask_rel(GCtab *t, MSize hmask)
 */
 static LJ_AINLINE Node *lj_tab_nextnode_acq(const Node *n)
 {
-#if LJ_GC64
   return (Node *)(void *)(uintptr_t)la_load64_acq(&n->next.ptr64);
-#else
-  return (Node *)(void *)(uintptr_t)la_load32_acq(&n->next.ptr32);
-#endif
 }
 
 static LJ_AINLINE void lj_tab_nextnode_set(Node *n, const Node *next)
@@ -1259,13 +1133,8 @@ static LJ_AINLINE void lj_tab_nextnode_set(Node *n, const Node *next)
 
 static LJ_AINLINE void lj_tab_nextnode_rel(Node *n, const Node *next)
 {
-#if LJ_GC64
   la_store64_rel(&n->next.ptr64, (uint64_t)(uintptr_t)(const void *)next);
-#else
-  la_store32_rel(&n->next.ptr32, (uint32_t)(uintptr_t)(const void *)next);
-#endif
 }
-#if LJ_GC64
 /*
 ** GC64 keeps the hash free cursor in the table header, not in Node[0]. The
 ** cursor is only a hint, but it crosses the same resize/publication boundary
@@ -1285,10 +1154,6 @@ static LJ_AINLINE void lj_tab_freetop_rel(GCtab *t, const Node *freetop)
 
 #define getfreetop(t, n)	(lj_tab_freetop_acq((t)))
 #define setfreetop(t, n, v)	(lj_tab_freetop_rel((t), (v)))
-#else
-#define getfreetop(t, n)	(noderef((n)->freetop))
-#define setfreetop(t, n, v)	(setmref((n)->freetop, (v)))
-#endif
 
 /* -- State objects ------------------------------------------------------- */
 
@@ -1374,7 +1239,7 @@ typedef struct GCState {
   GCRef gray;		/* List of gray objects. */
   GCRef grayagain;	/* List of objects for atomic traversal. */
   GCRef weak;		/* List of weak tables (to be cleared). */
-  uint32_t mark_active;	/* Legacy mark publishers/traversers in flight. */
+  uint32_t mark_active;	/* Mark publishers/traversers in flight. */
   GCSize debt;		/* Debt (how much GC is behind schedule). */
   GCSize estimate;	/* Estimate of memory actually in use. */
   MSize stepmul;	/* Incremental GC step granularity. */
@@ -1412,7 +1277,7 @@ typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2WeakOverflow GC2WeakOverflow;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
-  uint32_t cycle;	/* Monotonically increasing classic-GC cycle id. */
+  uint32_t cycle;	/* Monotonically increasing color-GC cycle id. */
   uint32_t cycle_leader;  /* Requested cycle leader or cycle-close gate. */
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
@@ -1451,7 +1316,6 @@ typedef struct GC2State {
   uint32_t minor_survival_threshold_pct;  /* Survival pct forcing a major. */
   uint64_t minor_survival_major_requests;  /* High-survival major requests. */
   uint32_t force_major;  /* One-shot full-GC major-cycle override. */
-  uint32_t legacy_mark_bridge;  /* GC2 marks feed an active legacy mark cycle. */
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */
   uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */
@@ -1613,8 +1477,8 @@ typedef struct GC2State {
   uint64_t finalizer_queued;  /* Objects published to the GC2 finalizer queue. */
   uint64_t finalizer_dequeued;  /* Objects popped from the GC2 finalizer queue. */
   uint64_t finalizer_mpsc_drained;  /* Objects drained from producer stack. */
-  uint64_t finalizer_enters;  /* Legacy finalizer callback guard enters. */
-  uint64_t finalizer_leaves;  /* Legacy finalizer callback guard leaves. */
+  uint64_t finalizer_enters;  /* Finalizer callback guard enters. */
+  uint64_t finalizer_leaves;  /* Finalizer callback guard leaves. */
   uint64_t finalizer_sweep_blocks;  /* Sweep attempts blocked by finalizers. */
   uint64_t finalizer_spawn_deferrals;  /* Live spawned TG kept finalize open. */
   uint64_t finalizer_spawn_release_wakes;  /* Last spawned TG woke scheduler. */
@@ -1684,7 +1548,7 @@ typedef struct global_State {
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
   uint32_t mt_live;	/* Active secondary Lua threads. */
   uint32_t mt_entering;	/* Secondary entrants before mt_live claim. */
-  uint32_t mt_gc_exclusive;  /* Explicit classic GC excludes secondary entry. */
+  uint32_t mt_gc_exclusive;  /* Explicit color GC excludes secondary entry. */
   uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
 } global_State;
@@ -2216,13 +2080,7 @@ static LJ_AINLINE void lj_state_scan_handoff_epoch_rel(lua_State *L,
 }
 
 /* Macros to access the currently executing (Lua) function. */
-#if LJ_GC64
 #define curr_func(L)		(&gcval(L->base-2)->fn)
-#elif LJ_FR2
-#define curr_func(L)		(&gcref((L->base-2)->gcr)->fn)
-#else
-#define curr_func(L)		(&gcref((L->base-1)->fr.func)->fn)
-#endif
 #define curr_funcisL(L)		(isluafunc(curr_func(L)))
 #define curr_proto(L)		(funcproto(curr_func(L)))
 #define curr_topL(L)		(L->base + curr_proto(L)->framesize)
@@ -2464,23 +2322,23 @@ static LJ_AINLINE GCobj *lj_gc_root_acq(global_State *g)
   return gcref_acq(*lj_gc_root_ref(g));
 }
 
-static LJ_AINLINE uint32_t gc_legacy_mark_active_acq(global_State *g)
+static LJ_AINLINE uint32_t gc_mark_active_acq(global_State *g)
 {
   return la_load32_acq(&g->gc.mark_active);
 }
 
-static LJ_AINLINE void gc_legacy_mark_active_store_rlx(global_State *g,
+static LJ_AINLINE void gc_mark_active_store_rlx(global_State *g,
 						       uint32_t n)
 {
   la_store32_rlx(&g->gc.mark_active, n);
 }
 
-static LJ_AINLINE void gc_legacy_mark_active_inc(global_State *g)
+static LJ_AINLINE void gc_mark_active_inc(global_State *g)
 {
   (void)la_add32_acqrel(&g->gc.mark_active, 1);
 }
 
-static LJ_AINLINE void gc_legacy_mark_active_dec(global_State *g)
+static LJ_AINLINE void gc_mark_active_dec(global_State *g)
 {
   (void)la_sub32_acqrel(&g->gc.mark_active, 1);
 }
@@ -2529,23 +2387,6 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
     next = old + 1u;
   } while (!la_cas32(&g->gc2.cycle, &old, next, LA_ACQ_REL, LA_ACQ));
   return next;
-}
-
-static LJ_AINLINE uint32_t gc2_legacy_mark_bridge_acq(global_State *g)
-{
-  return la_load32_acq(&g->gc2.legacy_mark_bridge);
-}
-
-static LJ_AINLINE void gc2_legacy_mark_bridge_store_rlx(global_State *g,
-							uint32_t enabled)
-{
-  la_store32_rlx(&g->gc2.legacy_mark_bridge, enabled);
-}
-
-static LJ_AINLINE void gc2_legacy_mark_bridge_rel(global_State *g,
-						  uint32_t enabled)
-{
-  la_store32_rel(&g->gc2.legacy_mark_bridge, enabled);
 }
 
 #define LJ_GC2_COUNTER64_ACCESSORS(name, field) \
@@ -4281,7 +4122,6 @@ static LJ_AINLINE void gc2_finreg_cdata_pending_order_hits_add(global_State *g,
   la_add64_rlx(&g->gc2.finreg_cdata_pending_order_hits, n);
 }
 
-#if LJ_GC64
 static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 {
   la_store64_rel(&r->gcptr64, (uint64_t)(uintptr_t)gc);
@@ -4308,34 +4148,6 @@ static LJ_AINLINE GCobj *gcref_xchg_acqrel(GCRef *r, GCobj *obj)
   return (GCobj *)(uintptr_t)la_xchg64_acqrel(&r->gcptr64,
 					       (uint64_t)(uintptr_t)obj);
 }
-#else
-static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
-{
-  la_store32_rel(&r->gcptr32, (uint32_t)(uintptr_t)gc);
-}
-static LJ_AINLINE void setgcrefrrel_(GCRef *r, GCRef v)
-{
-  la_store32_rel(&r->gcptr32, v.gcptr32);
-}
-static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
-{
-  la_store32_rel(&r->gcptr32, 0);
-}
-static LJ_AINLINE int gcref_cas(GCRef *r, GCobj **oldp, GCobj *obj)
-{
-  uint32_t old = (uint32_t)(uintptr_t)*oldp;
-  int ok = la_cas32(&r->gcptr32, &old, (uint32_t)(uintptr_t)obj,
-		    LA_ACQ_REL, LA_ACQ);
-  if (!ok)
-    *oldp = (GCobj *)(uintptr_t)old;
-  return ok;
-}
-static LJ_AINLINE GCobj *gcref_xchg_acqrel(GCRef *r, GCobj *obj)
-{
-  return (GCobj *)(uintptr_t)la_xchg32_acqrel(&r->gcptr32,
-					       (uint32_t)(uintptr_t)obj);
-}
-#endif
 #define setgcrefrel(r, gc)	setgcrefrel_(&(r), (gc))
 #define setgcrefrrel(r, v)	setgcrefrrel_(&(r), (v))
 #define setgcrefnullrel(r)	setgcrefnullrel_(&(r))
@@ -4621,21 +4433,12 @@ static LJ_AINLINE void lj_uv_setnext_rel(GCupval *uv, GCupval *next)
 /* -- TValue getters/setters ---------------------------------------------- */
 
 /* Macros to test types. */
-#if LJ_GC64
 #define itype(o)	((uint32_t)((o)->it64 >> 47))
 #define tvisnil(o)	((o)->it64 == -1)
-#else
-#define itype(o)	((o)->it)
-#define tvisnil(o)	(itype(o) == LJ_TNIL)
-#endif
 #define tvisfalse(o)	(itype(o) == LJ_TFALSE)
 #define tvistrue(o)	(itype(o) == LJ_TTRUE)
 #define tvisbool(o)	(tvisfalse(o) || tvistrue(o))
-#if LJ_64 && !LJ_GC64
-#define tvislightud(o)	(((int32_t)itype(o) >> 15) == -2)
-#else
 #define tvislightud(o)	(itype(o) == LJ_TLIGHTUD)
-#endif
 #if LJ_64
 #define tvisforward(o)	((o)->u64 == LJ_TFORWARD_BITS)
 #define tviskeylock(o)	((o)->u64 == LJ_TKEYLOCK_BITS)
@@ -4889,12 +4692,7 @@ static LJ_AINLINE int lj_tv_cas(TValue *dst, TValue *expect,
 #define rawnumequal(o1, o2)	((o1)->u64 == (o2)->u64)
 
 /* Macros to convert type ids. */
-#if LJ_64 && !LJ_GC64
-#define itypemap(o) \
-  (tvisnumber(o) ? ~LJ_TNUMX : tvislightud(o) ? ~LJ_TLIGHTUD : ~itype(o))
-#else
 #define itypemap(o)	(tvisnumber(o) ? ~LJ_TNUMX : ~itype(o))
-#endif
 
 static LJ_AINLINE void mainthread_rel(global_State *g, lua_State *L)
 {
@@ -4956,11 +4754,7 @@ static LJ_AINLINE GCstr *lj_mmname_str_acq(global_State *g, MMS mm)
 }
 
 /* Macros to get tagged values. */
-#if LJ_GC64
 #define gcval(o)	((GCobj *)(gcrefu((o)->gcr) & LJ_GCVMASK))
-#else
-#define gcval(o)	(gcref((o)->gcr))
-#endif
 #define boolV(o)	check_exp(tvisbool(o), (LJ_TFALSE - itype(o)))
 #if LJ_64
 #define lightudseg(u) \
@@ -5008,7 +4802,8 @@ static LJ_AINLINE int lj_tv_gcref_type_match(cTValue *tv)
   */
   if (tvisgcv(tv)) {
     GCobj *o = gcval(tv);
-    if (o == NULL || !checkptrGC(o))
+    if (o == NULL || !checkptrGC(o) ||
+	((uintptr_t)o & (sizeof(void *) - 1u)) != 0)
       return 0;
     return ~itype(tv) == o->gch.gct;
   }
@@ -5016,31 +4811,18 @@ static LJ_AINLINE int lj_tv_gcref_type_match(cTValue *tv)
 }
 
 /* Macros to set tagged values. */
-#if LJ_GC64
 #define setitype(o, i)		((o)->it = ((i) << 15))
 #define setnilV(o)		tv_rawstore((o), ~(uint64_t)0)
 #define setpriV(o, x) \
   tv_rawstore((o), (uint64_t)(int64_t)~((uint64_t)~(x)<<47))
 #define setboolV(o, x) \
   tv_rawstore((o), (uint64_t)(int64_t)~((uint64_t)((x)+1)<<47))
-#else
-#define setitype(o, i)		((o)->it = (i))
-#define setnilV(o)		((o)->it = LJ_TNIL)
-#define setboolV(o, x)		((o)->it = LJ_TFALSE-(uint32_t)(x))
-#define setpriV(o, i)		(setitype((o), (i)))
-#endif
 
 static LJ_AINLINE void setrawlightudV(TValue *o, void *p)
 {
-#if LJ_GC64
   TValue tv;
   tv.u64 = (uint64_t)p | (((uint64_t)LJ_TLIGHTUD) << 47);
   tv_rawstore(o, tv.u64);
-#elif LJ_64
-  o->u64 = (uint64_t)p | (((uint64_t)0xffff) << 48);
-#else
-  setgcrefp(o->gcr, p); setitype(o, LJ_TLIGHTUD);
-#endif
 }
 
 static LJ_AINLINE void setforwardV(TValue *o)
@@ -5061,15 +4843,8 @@ static LJ_AINLINE void setkeylockV(TValue *o)
 #endif
 }
 
-#if LJ_FR2 || LJ_32
 #define contptr(f)		((void *)(f))
 #define setcont(o, f)		((o)->u64 = (uint64_t)(uintptr_t)contptr(f))
-#else
-#define contptr(f) \
-  ((void *)(uintptr_t)(uint32_t)((intptr_t)(f) - (intptr_t)lj_vm_asm_begin))
-#define setcont(o, f) \
-  ((o)->u64 = (uint64_t)(void *)(f) - (uint64_t)lj_vm_asm_begin)
-#endif
 
 static LJ_AINLINE void checklivetv(lua_State *L, TValue *o, const char *msg)
 {
@@ -5087,13 +4862,9 @@ static LJ_AINLINE void checklivetv(lua_State *L, TValue *o, const char *msg)
 
 static LJ_AINLINE void setgcVraw(TValue *o, GCobj *v, uint32_t itype)
 {
-#if LJ_GC64
   TValue tv;
   setgcreft(tv.gcr, v, itype);
   tv_rawstore(o, tv.u64);
-#else
-  setgcref(o->gcr, v); setitype(o, itype);
-#endif
 }
 
 static LJ_AINLINE void setgcV(lua_State *L, TValue *o, GCobj *v, uint32_t it)
