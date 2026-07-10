@@ -1213,7 +1213,6 @@ typedef struct GCState {
   GCRef gray;		/* List of gray objects. */
   GCRef grayagain;	/* List of objects for atomic traversal. */
   GCRef weak;		/* List of weak tables (to be cleared). */
-  uint32_t mark_active;	/* Mark publishers/traversers in flight. */
   GCSize debt;		/* Debt (how much GC is behind schedule). */
   GCSize estimate;	/* Estimate of memory actually in use. */
   MSize stepmul;	/* Incremental GC step granularity. */
@@ -2325,27 +2324,6 @@ static LJ_AINLINE GCRef *lj_gc_root_ref(global_State *g)
 static LJ_AINLINE GCobj *lj_gc_root_acq(global_State *g)
 {
   return gcref_acq(*lj_gc_root_ref(g));
-}
-
-static LJ_AINLINE uint32_t gc_mark_active_acq(global_State *g)
-{
-  return la_load32_acq(&g->gc.mark_active);
-}
-
-static LJ_AINLINE void gc_mark_active_store_rlx(global_State *g,
-						       uint32_t n)
-{
-  la_store32_rlx(&g->gc.mark_active, n);
-}
-
-static LJ_AINLINE void gc_mark_active_inc(global_State *g)
-{
-  (void)la_add32_acqrel(&g->gc.mark_active, 1);
-}
-
-static LJ_AINLINE void gc_mark_active_dec(global_State *g)
-{
-  (void)la_sub32_acqrel(&g->gc.mark_active, 1);
 }
 
 static LJ_AINLINE uint32_t gc2_phase_acq(global_State *g)

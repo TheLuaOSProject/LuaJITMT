@@ -59,16 +59,14 @@ return function(add)
 
   register({
     name = "m3_gc2_no_legacy_runtime",
-    description = "GC2-only runtime legacy marker/sweeper tripwire",
+    description = "GC2-only runtime/shutdown physical-absence regression",
     run = function(t)
-      build.with_default_build_restore(t, function()
-        build.clean_build(t, { xcflags = gc2_test_cflags })
-        compile_and_run_c(t, t:tmp("lj_t-gc2-no-legacy-runtime"),
-                          "t-gc2-no-legacy-runtime.c", {
-          cflags = gc2_test_cflags,
-          timeout = "60s"
-        })
-      end)
+      make_clean(t)
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-no-legacy-runtime"),
+                        "t-gc2-no-legacy-runtime.c", {
+        timeout = "60s"
+      })
     end
   })
 

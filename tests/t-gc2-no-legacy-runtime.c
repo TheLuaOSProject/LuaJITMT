@@ -1,12 +1,10 @@
 /*
-** GC2-only runtime tripwire.
+** GC2-only runtime and shutdown regression.
 **
-** The old color marker and sweeper must never run, including lua_close().
+** The old color marker and sweeper entry points are physically absent. This
+** ordinary-build workload keeps broad GC/JIT/threading coverage around that
+** invariant, including lua_close().
 */
-
-#ifndef LJ_GC2_TEST_HELPERS
-#error "t-gc2-no-legacy-runtime requires -DLJ_GC2_TEST_HELPERS"
-#endif
 
 #include <assert.h>
 #include <inttypes.h>
@@ -50,38 +48,20 @@ static const char gc2_only_workload[] =
   "  end\n"
   "  for _ = 1, 80 do assert(close_trace(100) == 5050) end\n"
   "  keep.close_trace = close_trace\n"
-  "end\n";
-
-static void dump_stats(const char *where, const GCLegacyEntryStats *s)
-{
-  fprintf(stderr,
-    "%s: runtime markobj=%" PRIu64 " markobj_deep=%" PRIu64
-    " mark=%" PRIu64 " propagate=%" PRIu64 " propagatemark=%" PRIu64
-    " sweep=%" PRIu64 " sweepstr=%" PRIu64
-    "; shutdown markobj=%" PRIu64 " markobj_deep=%" PRIu64
-    " mark=%" PRIu64 " propagate=%" PRIu64 " propagatemark=%" PRIu64
-    " sweep=%" PRIu64 " sweepstr=%" PRIu64 "\n",
-    where,
-    s->runtime_markobj, s->runtime_markobj_deep,
-    s->runtime_mark, s->runtime_propagate, s->runtime_propagatemark,
-    s->runtime_sweep, s->runtime_sweepstr,
-    s->shutdown_markobj, s->shutdown_markobj_deep,
-    s->shutdown_mark, s->shutdown_propagate, s->shutdown_propagatemark,
-    s->shutdown_sweep, s->shutdown_sweepstr);
-}
-
-static void require_zero_runtime(const char *where,
-                                 const GCLegacyEntryStats *s)
-{
-  if (s->runtime_markobj != 0 || s->runtime_markobj_deep != 0 ||
-      s->runtime_mark != 0 || s->runtime_propagate != 0 ||
-      s->runtime_propagatemark != 0 ||
-      s->runtime_sweep != 0 || s->runtime_sweepstr != 0) {
-    dump_stats(where, s);
-    fputs("live-state execution entered the retired color collector\n", stderr);
-    abort();
-  }
-}
+  "  local util = require('jit.util')\n"
+  "  local sticky_trace\n"
+  "  for tr = 1, 128 do\n"
+  "    if util.traceinfo(tr) then sticky_trace = tr; break end\n"
+  "  end\n"
+  "  assert(sticky_trace, 'close workload did not record a trace')\n"
+  "  collectgarbage('collect')\n"
+  "  assert(util.traceinfo(sticky_trace), 'live trace retired by GC2')\n"
+  "  assert(close_trace(100) == 5050)\n"
+  "end\n"
+  "collectgarbage('collect')\n"
+  "local joined_again, result_again = close_worker:join(0)\n"
+  "assert(joined_again == true and result_again == true)\n"
+  "assert(close_worker:running() == false)\n";
 
 static void run_chunk(lua_State *L, const char *src)
 {
@@ -96,12 +76,10 @@ static void run_chunk(lua_State *L, const char *src)
 
 int main(void)
 {
-  GCLegacyEntryStats live, closed;
   lua_State *L;
   global_State *g;
-  uint64_t cycle0;
+  uint64_t cycle0, cycle1;
 
-  lj_gc_test_legacy_entries_reset();
   L = luaL_newstate();
   assert(L != NULL);
   luaL_openlibs(L);
@@ -109,36 +87,17 @@ int main(void)
   cycle0 = gc2_cycle_acq(g);
 
   run_chunk(L, gc2_only_workload);
-  assert(gc2_cycle_acq(g) > cycle0);
-
-  lj_gc_test_legacy_entries_snapshot(&live);
-  require_zero_runtime("before lua_close", &live);
-  if (live.shutdown_markobj != 0 || live.shutdown_markobj_deep != 0 ||
-      live.shutdown_mark != 0 || live.shutdown_propagate != 0 ||
-      live.shutdown_propagatemark != 0 ||
-      live.shutdown_sweep != 0 || live.shutdown_sweepstr != 0) {
-    dump_stats("before lua_close", &live);
-    fputs("shutdown-classified legacy work ran before lua_close\n", stderr);
-    abort();
-  }
+  cycle1 = gc2_cycle_acq(g);
+  assert(cycle1 > cycle0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_n_workers_acq(g) == 2);
+  assert(gc2_worker_thread_acq(g, 0) != NULL);
+  assert(gc2_worker_thread_acq(g, 1) != NULL);
 
   lua_close(L);
 
-  lj_gc_test_legacy_entries_snapshot(&closed);
-  require_zero_runtime("after lua_close", &closed);
-  if (closed.shutdown_markobj != 0 || closed.shutdown_markobj_deep != 0 ||
-      closed.shutdown_mark != 0 || closed.shutdown_propagate != 0 ||
-      closed.shutdown_propagatemark != 0) {
-    dump_stats("after lua_close", &closed);
-    fputs("lua_close entered the retired color marker\n", stderr);
-    abort();
-  }
-  if (closed.shutdown_sweep != 0 || closed.shutdown_sweepstr != 0) {
-    dump_stats("after lua_close", &closed);
-    fputs("lua_close entered the retired color sweeper\n", stderr);
-    abort();
-  }
-
-  puts("t-gc2-no-legacy-runtime OK; runtime and shutdown legacy entries=0");
+  printf("t-gc2-no-legacy-runtime OK; GC2 cycles=%" PRIu64
+	 ", workers and sticky trace survived, lua_close completed\n",
+	 cycle1 - cycle0);
   return 0;
 }

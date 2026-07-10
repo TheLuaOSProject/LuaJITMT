@@ -1337,11 +1337,6 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   fn = funcV(L->top - 1);
   assert(isluafunc(fn));
   pt = funcproto(fn);
-  assert(lj_gc_test_trace_pc_proto_candidate(g, obj2gco(pt),
-					     proto_bc(pt)) == 1);
-  assert(lj_gc_test_trace_pc_proto_candidate(g, obj2gco(pt),
-					     proto_bc(pt) + pt->sizebc) == 0);
-  assert(lj_gc_test_trace_pc_proto_candidate(g, bad, proto_bc(pt)) == 0);
   assert(lj_gc2_test_trace_pc_proto_candidate(g, obj2gco(pt),
 					      proto_bc(pt)) == 1);
   assert(lj_gc2_test_trace_pc_proto_candidate(g, obj2gco(pt),
@@ -1539,11 +1534,11 @@ static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
   return tvisnil(lj_tab_get(L, weak, &k));
 }
 
-static void weak_bridge_link(global_State *g, GCtab *t, int weak)
+static void weak_bridge_link(GCRef *head, GCtab *t, int weak)
 {
   lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
-  setgcrefr(t->gclist, g->gc.weak);
-  setgcref(g->gc.weak, obj2gco(t));
+  setgcrefr(t->gclist, *head);
+  setgcref(*head, obj2gco(t));
 }
 
 static Node *install_hmask0_node(lua_State *L, GCtab *t, GCtab *key, GCtab *val)
@@ -1723,8 +1718,10 @@ static void test_weak_snapshot_bridge_coverage(lua_State *L, global_State *g,
 {
   GCtab *weak, *key, *val;
   GCtab *absent, *akey, *aval;
+  GCRef weak_head;
   uint64_t idx, count;
 
+  setgcrefnull(weak_head);
   lua_settop(L, 0);
   make_weak_table(L, "v", &weak, &key, &val);
   make_weak_table(L, "v", &absent, &akey, &aval);
@@ -1733,45 +1730,44 @@ static void test_weak_snapshot_bridge_coverage(lua_State *L, global_State *g,
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
-  setgcrefnull(g->gc.weak);
-  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
-  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  weak_bridge_link(&weak_head, weak, LJ_GC_WEAKVAL);
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
 
   enter_weak_clear_fixture(g, tg);
-  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
   gc2_weak_drain_active_rel(g, 1);
-  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   gc2_weak_drain_active_rel(g, 0);
-  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
 
   lj_obj_cleargcflags(obj2gco(weak), LJ_GC_WEAK);
-  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
-  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKKEY);
-  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAK);
-  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
 
   count = la_load64_acq(&g->gc2.weak_count);
   idx = la_add64_rlx(&g->gc2.weak_count, 1);
   assert(idx == count);
   assert(idx < (uint64_t)g->gc2.weak_capacity);
-  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   la_store64_rlx(&g->gc2.weak_count, count);
-  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
 
   la_store64_rlx(&g->gc2.weak_count, (uint64_t)g->gc2.weak_capacity + 1u);
-  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
   la_store64_rlx(&g->gc2.weak_count, count);
 
-  setgcrefnull(g->gc.weak);
-  weak_bridge_link(g, absent, LJ_GC_WEAKVAL);
-  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  setgcrefnull(weak_head);
+  weak_bridge_link(&weak_head, absent, LJ_GC_WEAKVAL);
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(weak_head)));
 
-  setgcrefnull(g->gc.weak);
+  setgcrefnull(weak_head);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 6);
 }
@@ -1781,10 +1777,12 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
 {
   GCtab *weak, *key, *val;
   GCtab *missing, *mkey, *mval;
+  GCRef weak_head;
   uint64_t runs0, progress0, skipped0, fallbacks0, backfills0;
   uint64_t backfill_tables0, backfill_cleared0;
   uint64_t clear_tables0, clear_cleared0;
 
+  setgcrefnull(weak_head);
   lua_settop(L, 0);
   make_weak_table(L, "v", &weak, &key, &val);
   /*
@@ -1798,8 +1796,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
-  setgcrefnull(g->gc.weak);
-  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
+  weak_bridge_link(&weak_head, weak, LJ_GC_WEAKVAL);
   lj_gc2_mark_to_weak(g);
   runs0 = gc2_weak_complete_runs_acq(g);
   progress0 = gc2_weak_complete_progress_acq(g);
@@ -1807,7 +1804,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
   clear_tables0 = gc2_weak_clear_tables_acq(g);
   clear_cleared0 = gc2_weak_clear_cleared_acq(g);
-  assert(lj_gc2_weak_complete(g, L, gcref(g->gc.weak), 1) == 1);
+  assert(lj_gc2_weak_complete(g, L, gcref(weak_head), 1) == 1);
   assert(weak_entry_is_nil(L, weak, key));
   assert(gc2_weak_complete_runs_acq(g) == runs0 + 1u);
   /*
@@ -1820,7 +1817,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   assert(gc2_weak_bridge_fallbacks_acq(g) == fallbacks0);
   assert(gc2_weak_clear_tables_acq(g) > clear_tables0);
   assert(gc2_weak_clear_cleared_acq(g) == clear_cleared0 + 1u);
-  setgcrefnull(g->gc.weak);
+  setgcrefnull(weak_head);
   lj_gc2_cycle_to_idle(g);
   lua_settop(L, 0);
 
@@ -1836,9 +1833,8 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
-  setgcrefnull(g->gc.weak);
-  weak_bridge_link(g, missing, LJ_GC_WEAKVAL);
-  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
+  weak_bridge_link(&weak_head, missing, LJ_GC_WEAKVAL);
+  weak_bridge_link(&weak_head, weak, LJ_GC_WEAKVAL);
   lj_gc2_mark_to_weak(g);
   runs0 = gc2_weak_complete_runs_acq(g);
   skipped0 = gc2_weak_bridge_skipped_acq(g);
@@ -1846,7 +1842,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   backfills0 = gc2_weak_bridge_backfills_acq(g);
   backfill_tables0 = gc2_weak_bridge_backfill_tables_acq(g);
   backfill_cleared0 = gc2_weak_bridge_backfill_cleared_acq(g);
-  assert(lj_gc2_weak_complete(g, L, gcref(g->gc.weak), 1) == 1);
+  assert(lj_gc2_weak_complete(g, L, gcref(weak_head), 1) == 1);
   assert(weak_entry_is_nil(L, weak, key));
   assert(weak_entry_is_nil(L, missing, mkey));
   assert(gc2_weak_complete_runs_acq(g) == runs0 + 1u);
@@ -1857,7 +1853,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
 	 backfill_tables0 + 1u);
   assert(gc2_weak_bridge_backfill_cleared_acq(g) ==
 	 backfill_cleared0 + 1u);
-  setgcrefnull(g->gc.weak);
+  setgcrefnull(weak_head);
   lj_gc2_cycle_to_idle(g);
   lua_settop(L, 0);
 
@@ -1869,9 +1865,11 @@ static void test_weak_bridge_fallback_hmask0(lua_State *L, global_State *g,
 					     TGState *tg)
 {
   GCtab *weak, *key, *val;
+  GCRef weak_head;
   Node *node;
   uint64_t fallbacks0;
 
+  setgcrefnull(weak_head);
   lua_settop(L, 0);
   lua_newtable(L);
   weak = tabV(L->top - 1);
@@ -1893,20 +1891,19 @@ static void test_weak_bridge_fallback_hmask0(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
-  setgcrefnull(g->gc.weak);
-  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
+  weak_bridge_link(&weak_head, weak, LJ_GC_WEAKVAL);
   lj_gc2_mark_to_weak(g);
   la_store64_rlx(&g->gc2.weak_count, 1);
   la_store8_rlx(&g->gc2.weak_ready[0], 0);
 
   fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
-  assert(lj_gc2_weak_complete(g, L, gcref(g->gc.weak), 1) == 0);
+  assert(lj_gc2_weak_complete(g, L, gcref(weak_head), 1) == 0);
   assert(gc2_weak_bridge_fallbacks_acq(g) == fallbacks0 + 1u);
   assert(!tvisnil(&node->val));
-  lj_gc_clearweak_bridge(g, gcref(g->gc.weak));
+  lj_gc_clearweak_bridge(g, gcref(weak_head));
   assert(tvisnil(&node->val));
 
-  setgcrefnull(g->gc.weak);
+  setgcrefnull(weak_head);
   restore_hmask0_node(g, weak, node);
   lj_gc2_cycle_to_idle(g);
   assert(g->gc2.phase == LJ_GC2_IDLE);

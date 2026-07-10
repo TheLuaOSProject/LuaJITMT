@@ -86,15 +86,9 @@ LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
 LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_preserveobj(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_markobj(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_markobj_deep(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_arena_markmem_registered(global_State *g, void *p);
-#if LJ_HASJIT
-LJ_FUNC void lj_gc_mark_trace_slot(global_State *g, uint32_t traceno);
-#endif
 LJ_FUNC void lj_gc_linkobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_pending(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_new(global_State *g, GCobj *o);
@@ -113,31 +107,8 @@ LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
 LJ_FUNC int lj_gc2_jit_needs_exit(global_State *g);
 #endif
 #ifdef LJ_GC2_TEST_HELPERS
-typedef struct GCLegacyEntryStats {
-  uint64_t runtime_markobj;
-  uint64_t runtime_markobj_deep;
-  uint64_t runtime_mark;
-  uint64_t runtime_propagate;
-  uint64_t runtime_propagatemark;
-  uint64_t runtime_sweep;
-  uint64_t runtime_sweepstr;
-  uint64_t shutdown_markobj;
-  uint64_t shutdown_markobj_deep;
-  uint64_t shutdown_mark;
-  uint64_t shutdown_propagate;
-  uint64_t shutdown_propagatemark;
-  uint64_t shutdown_sweep;
-  uint64_t shutdown_sweepstr;
-} GCLegacyEntryStats;
-
-LJ_FUNC void lj_gc_test_legacy_entries_reset(void);
-LJ_FUNC void lj_gc_test_legacy_entries_snapshot(GCLegacyEntryStats *stats);
 LJ_FUNC uint32_t lj_gc_test_step_fixtop_calls(void);
 LJ_FUNC void lj_gc_test_reset_step_fixtop_calls(void);
-#endif
-#if (defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA) && LJ_HASJIT
-LJ_FUNC int lj_gc_test_trace_pc_proto_candidate(global_State *g, GCobj *o,
-						const BCIns *pc);
 #endif
 
 static LJ_AINLINE GCSize lj_gcsize_load_acq(const GCSize *p)
@@ -332,90 +303,6 @@ static LJ_AINLINE int lj_gc_should_step(global_State *g)
 {
   return lj_gc_total_load(g) >= lj_gc_threshold_load(g) ||
 	 lj_gc2_hard_limit_reached(g);
-}
-
-static LJ_AINLINE GCobj *lj_gc_list_head_acq(const GCRef *head)
-{
-  return gcref_acq(*head);
-}
-
-static LJ_AINLINE void lj_gc_list_clear_rel(GCRef *head)
-{
-  setgcrefnullrel(*head);
-}
-
-static LJ_AINLINE void lj_gc_list_push_rel(GCRef *head, GCobj *o)
-{
-  GCobj *next = lj_gc_list_head_acq(head);
-  for (;;) {
-    GCobj *expect;
-    if (LJ_UNLIKELY(next == o))
-      return;  /* Already at the frontier head; do not self-link the list. */
-    if (next)
-      setgcrefrel(o->gch.gclist, next);
-    else
-      setgcrefnullrel(o->gch.gclist);
-    expect = next;
-    if (gcref_cas(head, &expect, o))
-      return;
-    next = expect;
-  }
-}
-
-static LJ_AINLINE int lj_gc_list_pop_head_rel(GCRef *head, GCobj *o)
-{
-  GCobj *expect = o;
-  GCobj *next;
-  if (LJ_UNLIKELY(o == NULL))
-    return 0;
-  if (LJ_UNLIKELY(lj_gc_list_head_acq(head) != o))
-    return 0;
-  next = gcref_acq(o->gch.gclist);
-  if (LJ_UNLIKELY(next == o))
-    next = NULL;
-  if (!gcref_cas(head, &expect, next))
-    return 0;
-  /*
-  ** Duplicate intrusive entries can survive concurrent rescans. Once this head
-  ** occurrence is detached, clear the object's link so any stale later
-  ** occurrence terminates the list instead of preserving an old back-edge.
-  */
-  setgcrefnullrel(o->gch.gclist);
-  return 1;
-}
-
-static LJ_AINLINE void lj_gc_list_move_rel(GCRef *dst, GCRef *src)
-{
-  GCobj *head = gcref_xchg_acqrel(src, NULL);
-  GCobj *tail;
-  GCobj *next;
-  if (!head)
-    return;
-  /*
-  ** Phase boundaries move stock intrusive GC lists while mutator barriers can
-  ** still publish with CAS. Detach the source atomically, then splice that
-  ** detached chain onto the destination with the same head-CAS discipline as a
-  ** push. This preserves every node published before the exchange; later source
-  ** publications remain on the source list for the next boundary.
-  */
-  tail = head;
-  for (;;) {
-    next = gcref_acq(tail->gch.gclist);
-    if (!next || next == tail)
-      break;
-    tail = next;
-  }
-  next = lj_gc_list_head_acq(dst);
-  for (;;) {
-    GCobj *expect = next;
-    if (next)
-      setgcrefrel(tail->gch.gclist, next);
-    else
-      setgcrefnullrel(tail->gch.gclist);
-    if (gcref_cas(dst, &expect, head))
-      return;
-    next = expect;
-  }
 }
 
 /* GC check: drive collector forward if color GC or GC2 pacing asks for work. */

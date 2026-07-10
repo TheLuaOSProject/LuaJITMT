@@ -44,16 +44,18 @@ race with an already-running arena sweep and with a GC2 root scan starting
 between preservation and intrusive-list publication. Removing the duplicate
 collector does not remove either publication side.
 
-## Second GC2-only runtime and shutdown slice
+## GC2-only runtime, shutdown, and physical marker deletion
 
-The live legacy entry counter now covers `lj_gc_markobj()`,
-`lj_gc_markobj_deep()`, `gc_mark()`, `gc_propagate_gray()`, per-object
-`propagatemark()`, `gc_sweep()`, and `gc_sweepstr()`, split between runtime and
-shutdown. A JIT/interpreter/table/closure/weak-graph workload, repeated full
-GC2 cycles, `jit.flush()`, and `lua_close()` all require every counter to remain
-zero.
+The legacy entry graph has now been physically deleted from the runtime:
+`lj_gc_markobj()`, `lj_gc_markobj_deep()`, `lj_gc_preserveobj()`,
+`lj_gc_mark_trace_slot()`, `gc_mark()`, `gc_propagate_gray()`, per-object
+`propagatemark()`, the old frame/JIT traversers, `gc_sweep()`, and
+`gc_sweepstr()` no longer exist in the built library. The regression is an
+ordinary-build JIT/interpreter/table/closure/weak-graph workload with repeated
+full GC2 cycles, sticky-MT tracing, two parked GC2 workers, a joined child state,
+and `lua_close()`; symbol absence is the entry proof.
 
-That assertion is now structural as well as observational:
+The supporting execution paths are GC2-native:
 
 - native-root publication, thread-result handoff, finalizer discovery/requeue,
   FNEW operand protection, upvalue close/store, table/object barriers, and trace
@@ -76,10 +78,10 @@ That assertion is now structural as well as observational:
   dedicated atomic two-bit GC2 latch; neither threshold handoff nor sweep
   deferral reads or writes `GCSfinalize`.
 
-The old marker implementation is still present but has no production caller;
-the entry guard makes any accidental revival fatal in focused coverage. Its
-physical deletion and removal of color-only fields remains cleanup work, not a
-runtime or shutdown dependency.
+The dead global color-frontier publisher count and its accessors are removed.
+Some color constants/constructor bits and compatibility state fields remain
+temporarily because string interning, x64 generated fast paths, paranoia tests,
+and non-x64 backends still name them. They cannot start or traverse a collector.
 
 ## Remaining P0 GC2 completeness work
 
@@ -130,9 +132,8 @@ destructors without retaining `gc.root` as a global ownership spine.
 1. Land the per-arena identity sidecar to replace pending-spine traffic.
 2. Add nonblocking runtime string-table sweep and the custom-allocation
    registry/allocator-generation protocol.
-3. Delete the now-unreachable old marker, grey lists, color helpers and
-   color-only `GCState` fields; retire the weak bridge after GC2 coverage is
-   exhaustive.
+3. Remove the remaining inert color flags/compatibility fields and retire the
+   weak bridge after GC2 coverage is exhaustive.
 4. Extend zero-entry and close/failure tests across custom allocators,
    sysmalloc, FFI finalizers, secondary TGs, Wine, and Darling.
 
