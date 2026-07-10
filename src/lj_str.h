@@ -143,9 +143,29 @@ static LJ_AINLINE void lj_str_retired_next_rel(StrTabHdr *hdr,
 
 #define lj_str_buckets(g)	(lj_str_tabh_acq((g))->bucket)
 
-static LJ_AINLINE uintptr_t lj_str_ref_load_acq(const GCRef *r)
+static LJ_AINLINE uintptr_t lj_str_link_load_acq(const GCRef *r)
 {
   return (uintptr_t)la_load64_acq(&r->gcptr64);
+}
+
+static LJ_AINLINE int lj_str_link_cas_acqrel(GCRef *r, uintptr_t *oldp,
+					     uintptr_t want)
+{
+  uint64_t old = (uint64_t)*oldp;
+  int ok = la_cas64(&r->gcptr64, &old, (uint64_t)want,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldp = (uintptr_t)old;
+  return ok;
+}
+
+static LJ_AINLINE GCobj *lj_str_link_target(uintptr_t link)
+{
+  return lj_str_hashhead_u(link);
+}
+
+static LJ_AINLINE uintptr_t lj_str_ref_load_acq(const GCRef *r)
+{
+  return lj_str_link_load_acq(r);
 }
 
 static LJ_AINLINE void lj_str_ref_store_rel(GCRef *r, uintptr_t u)
@@ -155,7 +175,7 @@ static LJ_AINLINE void lj_str_ref_store_rel(GCRef *r, uintptr_t u)
 
 static LJ_AINLINE GCobj *lj_str_hashhead_acq(const GCRef *r)
 {
-  return lj_str_hashhead_u(lj_str_ref_load_acq(r));
+  return lj_str_link_target(lj_str_link_load_acq(r));
 }
 
 static LJ_AINLINE uintptr_t lj_str_hashflags_acq(const GCRef *r)
@@ -174,13 +194,19 @@ static LJ_AINLINE uintptr_t lj_str_hashsecondary_acq(const GCRef *r)
 
 static LJ_AINLINE GCobj *lj_str_next_acq(const GCobj *o)
 {
-  return lj_obj_gcw_acq((GCobj *)o);
+  return lj_str_link_target(lj_str_link_load_acq(
+	lj_obj_gcwref((GCobj *)o)));
+}
+
+static LJ_AINLINE uintptr_t lj_str_next_link_acq(const GCobj *o)
+{
+  return lj_str_link_load_acq(lj_obj_gcwref((GCobj *)o));
 }
 
 static LJ_AINLINE void lj_str_next_store_rel(GCobj *o, uintptr_t next)
 {
   lj_str_ref_store_rel(lj_obj_gcwref(o),
-		       next & ~(uintptr_t)LJ_STRHASH_LINKMASK);
+		       next & ~(uintptr_t)LJ_STRHASH_SECONDARY);
 }
 
 static LJ_AINLINE void lj_str_bucket_store_rel(GCRef *r, GCobj *o,
@@ -207,7 +233,15 @@ LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 LJ_FUNC void lj_str_freetab(global_State *g);
 
+enum {
+  LJ_STR_TEST_MATCH_AFTER_COMPARE,
+  LJ_STR_TEST_MATCH_BEFORE_RESCUE_CAS
+};
 #ifdef LJ_STR_TEST_HELPERS
+typedef void (*LJStrTestMatchHook)(lua_State *L, GCRef *link,
+				   GCobj *target, uintptr_t observed,
+				   uint32_t stage);
+LJ_FUNC void lj_str_test_set_match_hook(LJStrTestMatchHook hook);
 LJ_FUNC uint32_t lj_str_test_id_refills(void);
 LJ_FUNC void lj_str_test_reset_id_refills(void);
 LJ_FUNC uint32_t lj_str_test_num_refills(void);

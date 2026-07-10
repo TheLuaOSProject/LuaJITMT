@@ -135,6 +135,26 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 #ifdef LJ_STR_TEST_HELPERS
 static uint32_t str_test_id_refills;
 static uint32_t str_test_num_refills;
+static LJStrTestMatchHook str_test_match_hook;
+
+void lj_str_test_set_match_hook(LJStrTestMatchHook hook)
+{
+  str_test_match_hook = hook;
+}
+
+static LJ_AINLINE void str_test_match(lua_State *L, GCRef *link,
+				      GCobj *target, uintptr_t observed,
+				      uint32_t stage)
+{
+  LJStrTestMatchHook hook = str_test_match_hook;
+  if (hook)
+    hook(L, link, target, observed, stage);
+}
+
+static LJ_AINLINE int str_test_match_enabled(void)
+{
+  return str_test_match_hook != NULL;
+}
 
 uint32_t lj_str_test_id_refills(void)
 {
@@ -166,6 +186,9 @@ static LJ_AINLINE void str_test_num_refill(void)
   (void)la_add32_acqrel(&str_test_num_refills, 1);
 }
 #else
+#define str_test_match(L, link, target, observed, stage) \
+  ((void)(L), (void)(link), (void)(target), (void)(observed), (void)(stage))
+#define str_test_match_enabled()	0
 #define str_test_id_refill()	((void)0)
 #define str_test_num_refill()	((void)0)
 #endif
@@ -180,14 +203,6 @@ static void strtab_wait(lua_State *L)
   ** StrTabHdr that must be cleaned up by the surrounding control flow.
   */
   (void)lj_thr_retry_yield(L);
-}
-
-static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want)
-{
-  uint64_t exp = (uint64_t)*expect;
-  int ok = la_cas64(&r->gcptr64, &exp, (uint64_t)want, LA_REL, LA_ACQ);
-  *expect = (uintptr_t)exp;
-  return ok;
 }
 
 static LJ_NOINLINE StrID strid_refill(global_State *g, TGState *tg)
@@ -618,6 +633,35 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   return s;
 }
 
+/* Validate and, if needed, rescue the exact incoming link for a match. */
+static LJ_AINLINE int strtab_match_link(lua_State *L, GCRef *link,
+					GCobj *o, uintptr_t observed)
+{
+  global_State *g = G(L);
+  uintptr_t current, want;
+
+  /* A tagger or prepender may run after the matching bytes were inspected. */
+  str_test_match(L, link, o, observed, LJ_STR_TEST_MATCH_AFTER_COMPARE);
+  if (!(observed & LJ_STRHASH_DEAD) &&
+      gc2_phase_acq(g) != LJ_GC2_SWEEP && !str_test_match_enabled())
+    return 1;  /* DEAD is only published by the sweep owner. */
+  current = lj_str_link_load_acq(link);
+  if (lj_str_link_target(current) != o)
+    return 0;  /* The incoming edge moved: restart from the bucket head. */
+  if (!(current & LJ_STRHASH_DEAD))
+    return 1;
+
+  want = current & ~(uintptr_t)LJ_STRHASH_DEAD;
+  str_test_match(L, link, o, current,
+		 LJ_STR_TEST_MATCH_BEFORE_RESCUE_CAS);
+  if (!lj_str_link_cas_acqrel(link, &current, want))
+    return 0;  /* Rescue or unlink won: never follow a stale incoming edge. */
+
+  /* Clearing DEAD defeats unlink; preserve the exact body in the current phase. */
+  (void)lj_gc2_preserve_sweep_root(g, o);
+  return 1;
+}
+
 /* Intern a string and return string object. */
 GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 {
@@ -630,9 +674,10 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
     for (;;) {
       StrTabHdr *hdr = strtab_enter(L, g);
       GCRef *strtab;
+      GCRef *head, *link;
       GCobj *o;
       MSize mask, coll = 0;
-      uintptr_t u;
+      uintptr_t headu, u;
       int grow = 0;
       if (LJ_UNLIKELY(hdr == NULL)) {
 	if (news)
@@ -645,24 +690,26 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       strtab = hdr->bucket;
       hashalg = 0;
       hash = hash_sparse(g->str.seed, str, len);
-      u = lj_str_ref_load_acq(&strtab[hash & mask]);
-      o = lj_str_hashhead_u(u);
+      head = &strtab[hash & mask];
+      u = lj_str_link_load_acq(head);
 #if LUAJIT_SECURITY_STRHASH
       if (LJ_UNLIKELY(u & LJ_STRHASH_SECONDARY)) {
 	hashalg = 1;
 	hash = hash_dense(g->str.seed, hash, str, len);
-	u = lj_str_ref_load_acq(&strtab[hash & mask]);
-	o = lj_str_hashhead_u(u);
+	head = &strtab[hash & mask];
       }
 #endif
-      while (o != NULL) {
+
+retry_lookup:
+      coll = 0;
+      link = head;
+      while ((o = lj_str_link_target(
+		u = lj_str_link_load_acq(link))) != NULL) {
 	GCstr *sx = gco2str(o);
 	if (sx->hash == hash && sx->len == len) {
 	  if (memcmp(str, strdata(sx), len) == 0) {
-	    if (isdead(g, o)) {  /* Resurrect if dead. */
-	      flipwhite(o);
-	      lj_gc_arena_markobj(g, o);
-	    }
+	    if (!strtab_match_link(L, link, o, u))
+	      goto retry_lookup;
 	    strtab_leave(L, hdr);
 	    if (news)
 	      lj_mem_free(g, news, lj_str_size(news->len));
@@ -671,7 +718,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	  coll++;
 	}
 	coll++;
-	o = lj_str_next_acq(o);
+	link = lj_obj_gcwref(o);
       }
 #if LUAJIT_SECURITY_STRHASH
       /* Rehash chain if there are too many collisions. */
@@ -691,27 +738,28 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       news->hash = hash;
       news->hashalg = (uint8_t)hashalg;
       for (;;) {
-	GCRef *head = &strtab[hash & mask];
 	uintptr_t want;
-	u = lj_str_ref_load_acq(head);  /* 06 section 6.5 bucket snapshot. */
-	o = lj_str_hashhead_u(u);
-	while (o != NULL) {
+
+retry_insert_lookup:
+	headu = lj_str_link_load_acq(head);  /* 06 section 6.5 snapshot. */
+	link = head;
+	while ((o = lj_str_link_target(
+		  u = lj_str_link_load_acq(link))) != NULL) {
 	  GCstr *sx = gco2str(o);
 	  if (sx->hash == hash && sx->len == len &&
 	      memcmp(str, strdata(sx), len) == 0) {
-	    if (isdead(g, o)) {
-	      flipwhite(o);
-	      lj_gc_arena_markobj(g, o);
-	    }
+	    if (!strtab_match_link(L, link, o, u))
+	      goto retry_insert_lookup;
 	    strtab_leave(L, hdr);
 	    lj_mem_free(g, news, lj_str_size(news->len));
 	    return sx;
 	  }
-	  o = lj_str_next_acq(o);
+	  link = lj_obj_gcwref(o);
 	}
-	lj_str_next_store_rel(obj2gco(news), u);
-	want = (uintptr_t)news | (u & LJ_STRHASH_SECONDARY);
-	if (strref_cas_rel(head, &u, want)) {  /* 06 section 6.5 intern linearization. */
+	lj_str_next_store_rel(obj2gco(news), headu);
+	want = (uintptr_t)news | (headu & LJ_STRHASH_SECONDARY);
+	u = headu;
+	if (lj_str_link_cas_acqrel(head, &u, want)) {  /* Intern linearization. */
 	  grow = strnum_publish_success(g, L2TG(L), mask);
 	  break;
 	}

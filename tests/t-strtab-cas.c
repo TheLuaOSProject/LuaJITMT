@@ -45,6 +45,180 @@ typedef struct ReclaimReaderCtx {
   uint32_t reclaimed;
 } ReclaimReaderCtx;
 
+enum {
+  TAGGED_HOOK_NONE,
+  TAGGED_HOOK_TAG_AFTER_COMPARE,
+  TAGGED_HOOK_CLEAR_BEFORE_CAS
+};
+
+typedef struct TaggedMatchCtx {
+  GCobj *target;
+  uint32_t action;
+  uint32_t after_compare;
+  uint32_t before_cas;
+  uint32_t mutations;
+} TaggedMatchCtx;
+
+static TaggedMatchCtx tagged_match_ctx;
+
+static StrHash test_hash_sparse(uint64_t seed, const char *str, MSize len)
+{
+  StrHash a, b, h = len ^ (StrHash)seed;
+  if (len >= 4) {
+    a = lj_getu32(str);
+    h ^= lj_getu32(str+len-4);
+    b = lj_getu32(str+(len>>1)-2);
+    h ^= b; h -= lj_rol(b, 14);
+    b += lj_getu32(str+(len>>2)-1);
+  } else {
+    a = *(const uint8_t *)str;
+    h ^= *(const uint8_t *)(str+len-1);
+    b = *(const uint8_t *)(str+(len>>1));
+    h ^= b; h -= lj_rol(b, 14);
+  }
+  a ^= h; a -= lj_rol(h, 11);
+  b ^= a; b -= lj_rol(a, 25);
+  h ^= b; h -= lj_rol(b, 16);
+  UNUSED(a);
+  return h;
+}
+
+static void tagged_match_hook(lua_State *L, GCRef *link, GCobj *target,
+			      uintptr_t observed, uint32_t stage)
+{
+  uintptr_t expect;
+  if (target != tagged_match_ctx.target)
+    return;
+  assert(lj_str_link_target(observed) == target);
+  if (stage == LJ_STR_TEST_MATCH_AFTER_COMPARE) {
+    tagged_match_ctx.after_compare++;
+    if (tagged_match_ctx.action == TAGGED_HOOK_TAG_AFTER_COMPARE) {
+      assert((observed & LJ_STRHASH_DEAD) == 0);
+      expect = observed;
+      assert(lj_str_link_cas_acqrel(link, &expect,
+				    observed | LJ_STRHASH_DEAD));
+      tagged_match_ctx.mutations++;
+      tagged_match_ctx.action = TAGGED_HOOK_NONE;
+    }
+  } else {
+    assert(stage == LJ_STR_TEST_MATCH_BEFORE_RESCUE_CAS);
+    tagged_match_ctx.before_cas++;
+    if (tagged_match_ctx.action == TAGGED_HOOK_CLEAR_BEFORE_CAS) {
+      assert((observed & LJ_STRHASH_DEAD) != 0);
+      expect = observed;
+      assert(lj_str_link_cas_acqrel(link, &expect,
+				    observed & ~(uintptr_t)LJ_STRHASH_DEAD));
+      (void)lj_gc2_preserve_sweep_root(G(L), target);
+      tagged_match_ctx.mutations++;
+      tagged_match_ctx.action = TAGGED_HOOK_NONE;
+    }
+  }
+}
+
+static void reset_tagged_match_hook(GCobj *target, uint32_t action)
+{
+  memset(&tagged_match_ctx, 0, sizeof(tagged_match_ctx));
+  tagged_match_ctx.target = target;
+  tagged_match_ctx.action = action;
+  lj_str_test_set_match_hook(tagged_match_hook);
+}
+
+static void exercise_tagged_link_protocol(lua_State *L)
+{
+  enum { TEST_MASK = 4095u };
+  global_State *g = G(L);
+  StrTabHdr *hdr;
+  GCRef synthetic;
+  GCRef *head;
+  GCstr *target, *prepended;
+  uintptr_t expect, raw;
+  StrHash target_hash;
+  MSize mask, bucket;
+  char target_buf[64], prepend_buf[64];
+  uint32_t n;
+
+  /* Raw link CAS preserves unrelated tags, and next links strip SECONDARY only. */
+  synthetic.gcptr64 = (uint64_t)((uintptr_t)obj2gco(&g->strempty) |
+				 LJ_STRHASH_DEAD | LJ_STRHASH_SECONDARY);
+  expect = lj_str_link_load_acq(&synthetic);
+  assert(lj_str_link_target(expect) == obj2gco(&g->strempty));
+  assert(lj_str_link_cas_acqrel(&synthetic, &expect,
+				expect & ~(uintptr_t)LJ_STRHASH_DEAD));
+  raw = lj_str_link_load_acq(&synthetic);
+  assert((raw & LJ_STRHASH_DEAD) == 0);
+  assert((raw & LJ_STRHASH_SECONDARY) != 0);
+
+  lj_str_resize(L, TEST_MASK);
+  hdr = lj_str_tabh_acq(g);
+  assert(hdr != NULL);
+  mask = hdr->mask;
+  assert(mask >= TEST_MASK);
+
+  /* Pick an empty primary bucket, then calculate a distinct colliding name. */
+  for (n = 0;; n++) {
+    MSize len;
+    snprintf(target_buf, sizeof(target_buf),
+	     "m5-strtab-tag-target-%08x", n);
+    len = (MSize)strlen(target_buf);
+    target_hash = test_hash_sparse(g->str.seed, target_buf, len);
+    bucket = target_hash & mask;
+    raw = lj_str_link_load_acq(&hdr->bucket[bucket]);
+    if (raw == 0)
+      break;
+  }
+  for (n = 0;; n++) {
+    MSize len;
+    snprintf(prepend_buf, sizeof(prepend_buf),
+	     "m5-strtab-tag-prepend-%08x", n);
+    len = (MSize)strlen(prepend_buf);
+    if ((test_hash_sparse(g->str.seed, prepend_buf, len) & mask) == bucket)
+      break;
+  }
+
+  target = lj_str_new(L, target_buf, strlen(target_buf));
+  assert(target != NULL && target->hashalg == 0);
+  head = &hdr->bucket[bucket];
+  raw = lj_str_link_load_acq(head);
+  assert(lj_str_link_target(raw) == obj2gco(target));
+  assert((raw & LJ_STRHASH_LINKMASK) == 0);
+
+  /* A prepend moves the old head tag to the new object's next link. */
+  expect = raw;
+  assert(lj_str_link_cas_acqrel(head, &expect, raw | LJ_STRHASH_DEAD));
+  prepended = lj_str_new(L, prepend_buf, strlen(prepend_buf));
+  assert(prepended != NULL && prepended != target);
+  raw = lj_str_link_load_acq(head);
+  assert(lj_str_link_target(raw) == obj2gco(prepended));
+  assert((raw & LJ_STRHASH_DEAD) == 0);
+  assert((raw & LJ_STRHASH_SECONDARY) == 0);
+  raw = lj_str_next_link_acq(obj2gco(prepended));
+  assert(lj_str_link_target(raw) == obj2gco(target));
+  assert((raw & LJ_STRHASH_DEAD) != 0);
+  assert((raw & LJ_STRHASH_SECONDARY) == 0);
+
+  /* A competing rescue wins the CAS; the loser restarts and keeps identity. */
+  reset_tagged_match_hook(obj2gco(target), TAGGED_HOOK_CLEAR_BEFORE_CAS);
+  assert(lj_str_new(L, target_buf, strlen(target_buf)) == target);
+  lj_str_test_set_match_hook(NULL);
+  assert(tagged_match_ctx.mutations == 1);
+  assert(tagged_match_ctx.before_cas == 1);
+  assert(tagged_match_ctx.after_compare == 2);  /* Retry reached the match. */
+  raw = lj_str_next_link_acq(obj2gco(prepended));
+  assert((raw & LJ_STRHASH_DEAD) == 0);
+
+  /* Tagging after bytes match is observed, cleared and rescued before return. */
+  reset_tagged_match_hook(obj2gco(prepended),
+			  TAGGED_HOOK_TAG_AFTER_COMPARE);
+  assert(lj_str_new(L, prepend_buf, strlen(prepend_buf)) == prepended);
+  lj_str_test_set_match_hook(NULL);
+  assert(tagged_match_ctx.mutations == 1);
+  assert(tagged_match_ctx.after_compare == 1);
+  assert(tagged_match_ctx.before_cas == 1);
+  raw = lj_str_link_load_acq(head);
+  assert(lj_str_link_target(raw) == obj2gco(prepended));
+  assert((raw & LJ_STRHASH_LINKMASK) == 0);
+}
+
 static MSize assert_resize_state(StrTabHdr *hdr)
 {
   MSize state = la_load32_acq(&hdr->resize);
@@ -262,6 +436,7 @@ int main(void)
   assert(s1 == s2);
   exercise_string_id_blocks(L);
   exercise_string_count_blocks(L);
+  exercise_tagged_link_protocol(L);
   retire_epoch = gc2_hs_epoch_acq(g);
   (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
   assert(lj_str_retired_head_acq(g) == NULL);
@@ -397,6 +572,6 @@ int main(void)
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
   lua_close(L);
-  printf("t-strtab-cas OK: resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
   return 0;
 }

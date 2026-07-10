@@ -117,6 +117,41 @@ allowing a normal automatic GC2 cycle still segfaults even for a small table
 workload. This is a runtime ownership-domain failure, not a reason to restore
 the old collector, and remains the next P0 implementation target.
 
+The first fault is now pinned down at commit `4c323ec3`. A detached x86-64
+debug build made with
+
+```sh
+make -j2 \
+  XCFLAGS='-DLUAJIT_USE_SYSMALLOC -DLUA_USE_APICHECK' \
+  CCDEBUG='-g3' CCOPT='-O0 -fno-omit-frame-pointer'
+```
+
+reproduces the automatic-GC failure without the JIT:
+
+```sh
+./src/luajit -joff -e \
+  'local keep={}; for i=1,500 do local t={i,i+1,i+2}; if i%100==0 then keep[#keep+1]=t end end'
+```
+
+The first invalid access is a read in `lj_arena_ishuge()` at
+`src/lj_arena.h:483`, reached from `gc2_sweep_obj_old_generation()` at
+`src/lj_gc.c:688`, `lj_gc_sweep_gc2_unmarked()`, the GC2 sweep boundary, and
+the automatic `BC_TNEW` allocation assist. The ownership-spine cursor is on
+the main `lua_State` embedded in `GG_State`; `g->allocf_arena == 0`, but the
+root-pruning classifier still applies `lj_arena_of()` and reads the resulting
+arena-aligned address. With glibc `realloc`, that aligned address is below the
+mapped heap and the arena-header read faults.
+
+Guarding only that classifier is insufficient. Custom memory is accepted as
+`GC2_OBJMEM_CUSTOM` by object validation, but `lj_gc2_markmem()` finds no
+arena-owning TG and returns zero. Consequently the main thread and every other
+custom allocation acquire neither a per-cycle mark nor traversable work. An
+assert build detects this earlier in `lj_gc2_trace_sweep_root()` with
+`sweep semantic root published without a GC2 mark`. The registry therefore
+must provide exact allocation ownership, cycle marks, semantic traversal, and
+grace-delayed sweep/destruction; an arena-probe guard alone would merely turn
+the crash into an unmarked, untraced custom heap.
+
 ### Exact arena object identity
 
 The immediate correctness fallback is complete: every active-black JIT bump

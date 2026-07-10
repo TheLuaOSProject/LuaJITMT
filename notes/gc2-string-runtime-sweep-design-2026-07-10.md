@@ -85,3 +85,32 @@ the first successful physical destructor consumes one published count.
 - retire-record OOM retains the tagged string and makes bounded progress later;
 - repeated live cycles reduce `str.num` and resident bytes without changing
   intern identity, fixed strings, weak semantics, or throughput materially.
+
+## Landed boundary: tagged-link interner slice
+
+The first bounded slice is now present in `lj_str.h`, `lj_str.c`, and the M5
+string CAS fixture. It deliberately stops before collector ownership or
+reclamation:
+
+- string links have shared raw acquire-load and acquire/release-CAS helpers;
+  target decoding always strips both link tags before dereferencing;
+- a new head stores the prior bucket head in its `nextgc` while stripping only
+  `SECONDARY`, so the old target's `DEAD` state survives the prepend;
+- both pre-allocation and pre-publication intern scans retain the exact incoming
+  `GCRef` for each target. A matching tagged target is CAS-cleared and passed to
+  the phase-aware `lj_gc2_preserve_sweep_root()` path. A changed edge or lost
+  CAS restarts at the bucket head, preserving one canonical intern identity;
+- ordinary non-SWEEP untagged matches keep a one-phase-load fast path. Exact
+  incoming-edge revalidation is enabled for SWEEP, when a tagger may publish
+  `DEAD`, and for the deterministic test hook only;
+- the fixture proves DEAD-safe prepend, tag-after-byte-match rescue, a competing
+  rescue winning the CAS followed by an actual bucket retry, raw tag-preserving
+  CAS behavior, and bucket-only `SECONDARY` semantics.
+
+There is still no production tag scan, sweep cursor, sweep/resize owner bit,
+unlink pass, side retire record, grace protocol, string-body destructor, or
+`str.num` reclaim credit in this slice. Resize and secondary rehash have not yet
+been generalized to transfer an incoming target's `DEAD` bit while rebuilding
+chains; a production tagger must not be enabled until collector/resize
+arbitration and that tagged rebuild rule land. The old globally waiting
+`lj_str_sweep_claim()` is unchanged and is not used by the new interner path.
