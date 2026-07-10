@@ -18,6 +18,7 @@
 #include "lj_ctype.h"
 #include "lj_ccallback.h"
 #include "lj_buf.h"
+#include "lj_dispatch.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -2365,7 +2366,15 @@ static void ctype_freeretired(global_State *g, CTState *cts)
 
 CTState *LJ_FASTCALL lj_ctype_ctsG_acq(global_State *g)
 {
-  return ctype_ctsG(g);
+  CTState *cts;
+  /* The callback trampoline calls this immediately before both the incoming
+  ** prepare helper and the outgoing leave helper. Keep that assembler ABI,
+  ** but make the intervening C boundary explicitly transparent to the native
+  ** errno/LastError pair (including compiler instrumentation builds). */
+  ERRNO_SAVE
+  cts = ctype_ctsG(g);
+  ERRNO_RESTORE
+  return cts;
 }
 
 /* -- C type state -------------------------------------------------------- */

@@ -655,6 +655,101 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov BASE, L:RB->top		// Need the (realloced) L->top in BASE.
   |  jmp <3
   |
+  |// External unwinders may change errno/LastError after the personality
+  |// returns _URC_INSTALL_CONTEXT. R12 points to an exception/TLS-owned carrier
+  |// holding packed OS state at +0, the real target at +8, and original R12 at
+  |// +16. Preserve every x64 JIT value register while a tiny C helper restores
+  |// the pair, then RET through the saved target with the exact original RSP.
+  |// LuaJIT x64 emits SSE scalar/vector operations only; AVX upper halves are
+  |// deliberately outside the current register-state contract.
+  |->vm_unwind_os_eh:
+  |  endbr
+  |  push aword [r12+8]		// Real target; RET restores original RSP.
+  |  pushfq
+  |  push rax; push rcx; push rdx; push rbx; push rbp
+  |  push rsi; push rdi; push r8; push r9; push r10
+  |  push r11; push aword [r12+16]; push r13; push r14; push r15
+  |.if X64WIN
+  |  sub rsp, 16*16+4*8+8		// XMM, shadow space and alignment.
+  |  movdqu [rsp+4*8+0*16], xmm0
+  |  movdqu [rsp+4*8+1*16], xmm1
+  |  movdqu [rsp+4*8+2*16], xmm2
+  |  movdqu [rsp+4*8+3*16], xmm3
+  |  movdqu [rsp+4*8+4*16], xmm4
+  |  movdqu [rsp+4*8+5*16], xmm5
+  |  movdqu [rsp+4*8+6*16], xmm6
+  |  movdqu [rsp+4*8+7*16], xmm7
+  |  movdqu [rsp+4*8+8*16], xmm8
+  |  movdqu [rsp+4*8+9*16], xmm9
+  |  movdqu [rsp+4*8+10*16], xmm10
+  |  movdqu [rsp+4*8+11*16], xmm11
+  |  movdqu [rsp+4*8+12*16], xmm12
+  |  movdqu [rsp+4*8+13*16], xmm13
+  |  movdqu [rsp+4*8+14*16], xmm14
+  |  movdqu [rsp+4*8+15*16], xmm15
+  |  mov CARG1, [r12]
+  |  call extern lj_err_restore_os
+  |  movdqu xmm0,  [rsp+4*8+0*16]
+  |  movdqu xmm1,  [rsp+4*8+1*16]
+  |  movdqu xmm2,  [rsp+4*8+2*16]
+  |  movdqu xmm3,  [rsp+4*8+3*16]
+  |  movdqu xmm4,  [rsp+4*8+4*16]
+  |  movdqu xmm5,  [rsp+4*8+5*16]
+  |  movdqu xmm6,  [rsp+4*8+6*16]
+  |  movdqu xmm7,  [rsp+4*8+7*16]
+  |  movdqu xmm8,  [rsp+4*8+8*16]
+  |  movdqu xmm9,  [rsp+4*8+9*16]
+  |  movdqu xmm10, [rsp+4*8+10*16]
+  |  movdqu xmm11, [rsp+4*8+11*16]
+  |  movdqu xmm12, [rsp+4*8+12*16]
+  |  movdqu xmm13, [rsp+4*8+13*16]
+  |  movdqu xmm14, [rsp+4*8+14*16]
+  |  movdqu xmm15, [rsp+4*8+15*16]
+  |  add rsp, 16*16+4*8+8
+  |.else
+  |  sub rsp, 16*16+8			// XMM save plus call alignment.
+  |  movdqu [rsp+0*16], xmm0
+  |  movdqu [rsp+1*16], xmm1
+  |  movdqu [rsp+2*16], xmm2
+  |  movdqu [rsp+3*16], xmm3
+  |  movdqu [rsp+4*16], xmm4
+  |  movdqu [rsp+5*16], xmm5
+  |  movdqu [rsp+6*16], xmm6
+  |  movdqu [rsp+7*16], xmm7
+  |  movdqu [rsp+8*16], xmm8
+  |  movdqu [rsp+9*16], xmm9
+  |  movdqu [rsp+10*16], xmm10
+  |  movdqu [rsp+11*16], xmm11
+  |  movdqu [rsp+12*16], xmm12
+  |  movdqu [rsp+13*16], xmm13
+  |  movdqu [rsp+14*16], xmm14
+  |  movdqu [rsp+15*16], xmm15
+  |  mov CARG1, [r12]
+  |  call extern lj_err_restore_os
+  |  movdqu xmm0,  [rsp+0*16]
+  |  movdqu xmm1,  [rsp+1*16]
+  |  movdqu xmm2,  [rsp+2*16]
+  |  movdqu xmm3,  [rsp+3*16]
+  |  movdqu xmm4,  [rsp+4*16]
+  |  movdqu xmm5,  [rsp+5*16]
+  |  movdqu xmm6,  [rsp+6*16]
+  |  movdqu xmm7,  [rsp+7*16]
+  |  movdqu xmm8,  [rsp+8*16]
+  |  movdqu xmm9,  [rsp+9*16]
+  |  movdqu xmm10, [rsp+10*16]
+  |  movdqu xmm11, [rsp+11*16]
+  |  movdqu xmm12, [rsp+12*16]
+  |  movdqu xmm13, [rsp+13*16]
+  |  movdqu xmm14, [rsp+14*16]
+  |  movdqu xmm15, [rsp+15*16]
+  |  add rsp, 16*16+8
+  |.endif
+  |  pop r15; pop r14; pop r13; pop r12; pop r11
+  |  pop r10; pop r9; pop r8; pop rdi; pop rsi
+  |  pop rbp; pop rbx; pop rdx; pop rcx; pop rax
+  |  popfq
+  |  ret
+  |
   |->vm_unwind_yield:
   |  mov al, LUA_YIELD
   |  jmp ->vm_unwind_c_eh
@@ -664,6 +759,15 @@ static void build_subroutines(BuildCtx *ctx)
   |  endbr
   |  mov eax, CARG2d			// Error return status for vm_pcall.
   |  mov rsp, CARG1
+  |.if X64WIN
+  |  jmp ->vm_unwind_c_eh		// Internal unwind has no OS-state carrier.
+  |->vm_unwind_c_eh_os:		// Win64 RtlUnwindEx target with pair in R10.
+  |  endbr
+  |  mov SAVE_ERRF, eax
+  |  mov CARG1, r10
+  |  call extern lj_err_restore_os
+  |  mov eax, SAVE_ERRF
+  |.endif
   |->vm_unwind_c_eh:			// Landing pad for external unwinder.
   |  endbr
   |  mov L:RB, SAVE_L
@@ -696,6 +800,15 @@ static void build_subroutines(BuildCtx *ctx)
   |  endbr
   |  and CARG1, CFRAME_RAWMASK
   |  mov rsp, CARG1
+  |.if X64WIN
+  |  jmp ->vm_unwind_ff_eh		// Internal unwind has no OS-state carrier.
+  |->vm_unwind_ff_eh_os:		// Win64 RtlUnwindEx target with pair in R10.
+  |  endbr
+  |  mov SAVE_ERRF, eax
+  |  mov CARG1, r10
+  |  call extern lj_err_restore_os
+  |  mov eax, SAVE_ERRF
+  |.endif
   |->vm_unwind_ff_eh:			// Landing pad for external unwinder.
   |  endbr
   |  mov L:RB, SAVE_L
@@ -2708,11 +2821,6 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RAd, dword [DISPATCH+DISPATCH_TG(vmstate)]	// Get trace number.
   |  set_vmstate EXIT
   |.if X64WIN
-  |  load_J TMPR
-  |  mov dword [TMPR+J_OFS(exitno)], RCd
-  |  mov dword [TMPR+J_OFS(parent)], RAd
-  |.endif
-  |.if X64WIN
   |  sub rsp, 16*8+4*8			// Room for SSE regs + save area.
   |.else
   |  sub rsp, 16*8			// Room for SSE regs.
@@ -2729,10 +2837,6 @@ static void build_subroutines(BuildCtx *ctx)
   |  // Caveat: RB is rbp.
   |  mov L:RB, [DISPATCH+DISPATCH_TG(cur_L)]
   |  mov BASE, [DISPATCH+DISPATCH_TG(jit_base)]
-  |.if X64WIN
-  |  load_J TMPR
-  |  mov aword [TMPR+J_OFS(L)], L:RB
-  |.endif
   |  mov L:RB->base, BASE
   |.if X64WIN
   |  lea CARG2, [rsp+4*8]
@@ -2740,10 +2844,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, rsp
   |.endif
   |.if X64WIN
+  |  // Win64 has four register arguments. Pack the two 16 bit exit IDs so the
+  |  // exiting TG never publishes L/parent/exitno through shared jit_State.
+  |  mov CARG4d, RAd
+  |  shl CARG4d, 16
+  |  or CARG4d, RCd
+  |  mov CARG3, L:RB
   |  load_J CARG1
   |  // Keep jit_base set across snapshot restore; trace-flush handshakes use
   |  // it to avoid remotely acknowledging a TG that still depends on mcode.
-  |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex)
+  |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex, lua_State *L, uint32_t exitpair)
   |.else
   |  mov CARG3, L:RB
   |  mov CARG5d, RCd

@@ -20,19 +20,93 @@
 #include "lj_ccallback.h"
 #include "lj_vm.h"
 #include "lj_strfmt.h"
+#include "lj_oserr.h"
 
-#if LJ_TARGET_WINDOWS && LJ_UNWIND_EXT
+#if LJ_TARGET_WINDOWS
+#if LJ_UNWIND_EXT
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0602
 #elif _WIN32_WINNT < 0x0602
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x0602
 #endif
+#endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 #endif
+
+typedef LJOSerrState ErrOSState;
+
+#define err_os_save(err) lj_oserr_save((err))
+#define err_os_restore(err) lj_oserr_restore((err))
+
+#ifdef LJ_OSERR_TEST_UNWIND_CLOBBER
+/* Test-only fault injection: model an unwinder changing platform TLS after a
+** personality/SEH handler has returned but before the landing target runs. */
+static LJ_AINLINE void err_os_test_unwind_clobber(void)
+{
+  errno = EILSEQ;
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)0x7eedu);
+#endif
+}
+#else
+#define err_os_test_unwind_clobber() ((void)0)
+#endif
+
+static LJ_AINLINE void *err_os_restore_ptr(const ErrOSState *err, void *p)
+{
+  err_os_restore(err);
+  return p;
+}
+
+/* Carrier for the x64 external-unwind trampoline. The personality temporarily
+** replaces callee-saved R12 with this pointer and saves the original value
+** here. The
+** trampoline restores all trace registers before entering the real target. */
+#if LJ_TARGET_X64
+typedef struct LJErrX64Carrier {
+  uint64_t os;
+  uintptr_t target;
+  uintptr_t r12;
+} LJErrX64Carrier;
+
+LJ_STATIC_ASSERT(sizeof(LJErrX64Carrier) == 24u);
+LJ_STATIC_ASSERT(offsetof(LJErrX64Carrier, os) == 0u);
+LJ_STATIC_ASSERT(offsetof(LJErrX64Carrier, target) == 8u);
+LJ_STATIC_ASSERT(offsetof(LJErrX64Carrier, r12) == 16u);
+
+static LJ_AINLINE void err_x64_carrier_set(LJErrX64Carrier *carrier,
+					   ASMFunction target,
+					   uintptr_t r12,
+					   const ErrOSState *err)
+{
+  carrier->os = lj_oserr_pack(err);
+  carrier->target = (uintptr_t)lj_ptr_strip(target);
+  carrier->r12 = r12;
+}
+#endif
+
+#if LJ_TARGET_WINDOWS
+#if defined(_MSC_VER)
+#define LJ_ERR_TLS __declspec(thread)
+#else
+#define LJ_ERR_TLS __thread
+#endif
+#else
+#define LJ_ERR_TLS LJ_TLS
+#endif
+
+/* Called only from assembler landing pads. This must finish with the Win32
+** LastError store: the C return sequence itself is error-state transparent. */
+void LJ_FASTCALL lj_err_restore_os(uint64_t packed)
+{
+  ErrOSState err;
+  lj_oserr_unpack(&err, packed);
+  err_os_restore(&err);
+}
 
 /*
 ** LuaJIT can either use internal or external frame unwinding:
@@ -180,8 +254,10 @@ LJ_NOINLINE static void unwindstack(lua_State *L, TValue *top)
 /* Unwind until stop frame. Optionally cleanup frames. */
 static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 {
+  ErrOSState err;
   TValue *frame = L->base-1;
   void *cf = L->cframe;
+  err_os_save(&err);
   while (cf) {
     int32_t nres = cframe_nres(cframe_raw(cf));
     if (nres < 0) {  /* C frame without Lua frame? */
@@ -192,13 +268,13 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 	  L->cframe = cframe_prev(cf);
 	  unwindstack(L, top);
 	}
-	return cf;
+	return err_os_restore_ptr(&err, cf);
       }
     }
     if (frame <= tvref(L->stack)+LJ_FR2)
       break;
     if (!err_frame_func_slot_valid(frame))
-      return NULL;
+      return err_os_restore_ptr(&err, NULL);
     switch (frame_typep(frame)) {
     case FRAME_LUA:  /* Lua frame. */
     case FRAME_LUAP:
@@ -216,7 +292,7 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 	frame = frame_prevd(frame);
 	break;
       }
-      return NULL;  /* Continue unwinding. */
+      return err_os_restore_ptr(&err, NULL);  /* Continue unwinding. */
 #else
       UNUSED(stopcf);
       cf = cframe_prev(cf);
@@ -230,19 +306,25 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 	  L->cframe = NULL;
 	  L->status = (uint8_t)errcode;
 	}
-	return cf;
+	return err_os_restore_ptr(&err, cf);
       }
       if (errcode) {
 	L->base = frame_prevd(frame) + 1;
 	L->cframe = cframe_prev(cf);
 	unwindstack(L, frame - LJ_FR2);
       }
-      return cf;
+      return err_os_restore_ptr(&err, cf);
     case FRAME_CONT:  /* Continuation frame. */
       if (frame_iscont_fficb(frame)) {
 #if LJ_HASFFI
-	if (errcode)
+	if (errcode) {
+	  /* callback_unwind() must see the original throw-edge pair when the
+	  ** callback body owns it, not an errno value changed by stack walking. */
+	  err_os_restore(&err);
 	  lj_ccallback_unwind(L, frame);
+	}
+	if (errcode)
+	  err_os_save(&err);  /* Callback frame selected its outgoing pair. */
 #endif
 	goto unwind_c;
       }
@@ -266,7 +348,8 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 	L->cframe = cf;
 	unwindstack(L, L->base);
       }
-      return (void *)((intptr_t)cf | CFRAME_UNWIND_FF);
+      return err_os_restore_ptr(&err,
+	(void *)((intptr_t)cf | CFRAME_UNWIND_FF));
     }
   }
   /* No C frame. */
@@ -276,11 +359,13 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
     L->cframe = NULL;
     unwindstack(L, L->base);
     panic = panicf_load(G(L));
-    if (panic)
+    if (panic) {
+      err_os_restore(&err);
       panic(L);
+    }
     exit(EXIT_FAILURE);
   }
-  return L;  /* Anything non-NULL will do. */
+  return err_os_restore_ptr(&err, L);  /* Anything non-NULL will do. */
 }
 
 /* -- External frame unwinding -------------------------------------------- */
@@ -328,10 +413,59 @@ extern void __DestructExceptionObject(EXCEPTION_RECORD *rec, int nothrow);
 #define LJ_EXCODE_CHECK(cl)	(((cl) ^ LJ_EXCODE) <= 0xff)
 #define LJ_EXCODE_ERRCODE(cl)	((int)((cl) & 0xff))
 
+static LJ_AINLINE EXCEPTION_RECORD *err_win_lua_record(
+  EXCEPTION_RECORD *rec)
+{
+  if (LJ_EXCODE_CHECK(rec->ExceptionCode))
+    return rec;
+  if (rec->ExceptionCode == STATUS_LONGJUMP && rec->ExceptionRecord &&
+      LJ_EXCODE_CHECK(rec->ExceptionRecord->ExceptionCode))
+    return rec->ExceptionRecord;
+  return NULL;
+}
+
+static LJ_AINLINE EXCEPTION_RECORD *err_win_os_enter(EXCEPTION_RECORD *rec,
+						      ErrOSState *err)
+{
+  EXCEPTION_RECORD *lua_rec = err_win_lua_record(rec);
+  if (lua_rec && lua_rec->NumberParameters >= 2) {
+    err->errnum = (int)(uint32_t)lua_rec->ExceptionInformation[0];
+    err->winerr = (uint32_t)lua_rec->ExceptionInformation[1];
+  } else {
+    err_os_save(err);
+  }
+  err_os_restore(err);
+  return lua_rec;
+}
+
+static LJ_AINLINE int err_win_os_leave(EXCEPTION_RECORD *lua_rec,
+				       CONTEXT *ctx, const ErrOSState *err,
+				       int result)
+{
+  if (lua_rec) {
+    lua_rec->NumberParameters = 2;
+    lua_rec->ExceptionInformation[0] = (ULONG_PTR)(uint32_t)err->errnum;
+    lua_rec->ExceptionInformation[1] = (ULONG_PTR)err->winerr;
+  }
+#if LJ_TARGET_X64
+  /* RtlUnwindEx restores volatile registers from this target context. The
+  ** dedicated C/FF landing labels consume R10 before running any helper. */
+  ctx->R10 = (DWORD64)lj_oserr_pack(err);
+#else
+  UNUSED(ctx);
+#endif
+  err_os_restore(err);
+  err_os_test_unwind_clobber();
+  return result;
+}
+
 /* Windows exception handler for interpreter frame. */
 LJ_FUNCA int lj_err_unwind_win(EXCEPTION_RECORD *rec,
   void *f, CONTEXT *ctx, UndocumentedDispatcherContext *dispatch)
 {
+  ErrOSState err;
+  EXCEPTION_RECORD *lua_rec = err_win_os_enter(rec, &err);
+  void *cf2;
 #if LJ_TARGET_X86
   void *cf = (char *)f - CFRAME_OFS_SEH;
 #elif LJ_TARGET_ARM64
@@ -355,9 +489,13 @@ LJ_FUNCA int lj_err_unwind_win(EXCEPTION_RECORD *rec,
       }
     }
     /* Unwind internal frames. */
+    err_os_restore(&err);
     err_unwind(L, cf, errcode);
+    err_os_save(&err);
   } else {
-    void *cf2 = err_unwind(L, cf, 0);
+    err_os_restore(&err);
+    cf2 = err_unwind(L, cf, 0);
+    err_os_save(&err);
     if (cf2) {  /* We catch it, so start unwinding the upper frames. */
 #if !LJ_TARGET_X86
       EXCEPTION_RECORD rec2;
@@ -370,7 +508,8 @@ LJ_FUNCA int lj_err_unwind_win(EXCEPTION_RECORD *rec,
 	setstrV(L, L->top++, lj_err_str(L, LJ_ERR_ERRCPP));
       } else if (!LJ_EXCODE_CHECK(rec->ExceptionCode)) {
 	/* Don't catch access violations etc. */
-	return 1;  /* ExceptionContinueSearch */
+	return err_win_os_leave(lua_rec, ctx, &err,
+				1);  /* ExceptionContinueSearch */
       }
 #if LJ_TARGET_X86
       UNUSED(ctx);
@@ -379,6 +518,7 @@ LJ_FUNCA int lj_err_unwind_win(EXCEPTION_RECORD *rec,
       ** with EH_UNWINDING set. Then call the specified function, passing cf
       ** and errcode.
       */
+      (void)err_win_os_leave(lua_rec, ctx, &err, 0);
       lj_vm_rtlunwind(cf, (void *)rec,
 	(cframe_unwind_ff(cf2) && errcode != LUA_YIELD) ?
 	(void *)lj_vm_unwind_ff : (void *)lj_vm_unwind_c, errcode);
@@ -402,16 +542,23 @@ LJ_FUNCA int lj_err_unwind_win(EXCEPTION_RECORD *rec,
       ** (including ourselves) again with EH_UNWINDING set. Then set
       ** stack pointer = f, result = errcode and jump to the specified target.
       */
+      (void)err_win_os_leave(lua_rec, ctx, &err, 0);
       RtlUnwindEx(f, (void *)((cframe_unwind_ff(cf2) && errcode != LUA_YIELD) ?
+#if LJ_TARGET_X64
+			      lj_vm_unwind_ff_eh_os :
+			      lj_vm_unwind_c_eh_os),
+#else
 			      lj_vm_unwind_ff_eh :
 			      lj_vm_unwind_c_eh),
+#endif
 		  rec, (void *)(uintptr_t)errcode, dispatch->ContextRecord,
 		  dispatch->HistoryTable);
       /* RtlUnwindEx should never return. */
 #endif
     }
   }
-  return 1;  /* ExceptionContinueSearch */
+  return err_win_os_leave(lua_rec, ctx, &err,
+			  1);  /* ExceptionContinueSearch */
 }
 
 #if LJ_UNWIND_JIT
@@ -424,8 +571,13 @@ LJ_FUNCA int lj_err_unwind_win(EXCEPTION_RECORD *rec,
 #error "NYI: Windows arch-specific unwinder for JIT-compiled code"
 #endif
 
+#if LJ_TARGET_X64
+static LJ_ERR_TLS LJErrX64Carrier err_win_jit_carrier;
+#endif
+
 /* Windows unwinder for JIT-compiled code. */
-static void err_unwind_win_jit(global_State *g, int errcode)
+static void err_unwind_win_jit(global_State *g, int errcode,
+			       const ErrOSState *err)
 {
   CONTEXT ctx;
   UNWIND_HISTORY_TABLE hist;
@@ -440,12 +592,20 @@ static void err_unwind_win_jit(global_State *g, int errcode)
       ExitNo exitno;
       uintptr_t stub = lj_trace_unwind(G2J(g), (uintptr_t)(addr - sizeof(MCode)), &exitno);
       if (stub) {  /* Jump to side exit to unwind the trace. */
-	ctx.CONTEXT_REG_PC = stub;
-#if LJ_TARGET_X64 && !LJ_ABI_WIN
+#if LJ_TARGET_X64
+	err_x64_carrier_set(&err_win_jit_carrier,
+				(ASMFunction)(uintptr_t)stub,
+				(uintptr_t)ctx.R12, err);
+	ctx.R12 = (DWORD64)(uintptr_t)&err_win_jit_carrier;
+	ctx.CONTEXT_REG_PC = (DWORD64)(uintptr_t)lj_vm_unwind_os_eh;
 	lj_tg_jit_exitcode_rel(G2TG(g), errcode);
 #else
+	ctx.CONTEXT_REG_PC = stub;
 	G2J(g)->exitcode = errcode;
 #endif
+	/* RtlRestoreContext itself may touch platform TLS. The x64 trampoline
+	** performs the authoritative restore after context installation. */
+	err_os_restore(err);
 	RtlRestoreContext(&ctx, NULL);  /* Does not return. */
       }
       break;
@@ -459,11 +619,13 @@ static void err_unwind_win_jit(global_State *g, int errcode)
 #endif
 
 /* Raise Windows exception. */
-static void err_raise_ext(global_State *g, int errcode)
+static void err_raise_ext(global_State *g, int errcode,
+			  const ErrOSState *err)
 {
+  ULONG_PTR args[2];
 #if LJ_UNWIND_JIT
   if (lj_tg_jit_base(g)) {
-    err_unwind_win_jit(g, errcode);
+    err_unwind_win_jit(g, errcode, err);
     return;  /* Unwinding failed. */
   }
 #elif LJ_HASJIT
@@ -471,7 +633,10 @@ static void err_raise_ext(global_State *g, int errcode)
   lj_tg_setjit_base(g, NULL);
 #endif
   UNUSED(g);
-  RaiseException(LJ_EXCODE_MAKE(errcode), 1 /* EH_NONCONTINUABLE */, 0, NULL);
+  args[0] = (ULONG_PTR)(uint32_t)err->errnum;
+  args[1] = (ULONG_PTR)err->winerr;
+  err_os_restore(err);
+  RaiseException(LJ_EXCODE_MAKE(errcode), 1 /* EH_NONCONTINUABLE */, 2, args);
 }
 
 #elif !LJ_NO_UNWIND && (defined(__GNUC__) || defined(__clang__))
@@ -506,7 +671,65 @@ typedef struct _Unwind_Exception
 } __attribute__((__aligned__)) _Unwind_Exception;
 #define UNWIND_EXCEPTION_TYPE	_Unwind_Exception
 
+typedef struct LJErrUEx {
+  UNWIND_EXCEPTION_TYPE ex;
+  global_State *g;
+  ErrOSState os;
+#if LJ_TARGET_X64
+  LJErrX64Carrier landing;
+#endif
+} LJErrUEx;
+
+/* JIT personality code historically addressed g as *(uex + 1). Keep that
+** private ABI exact while extending only the tail of our exception object. */
+LJ_STATIC_ASSERT(offsetof(LJErrUEx, ex) == 0u);
+LJ_STATIC_ASSERT(offsetof(LJErrUEx, g) == sizeof(UNWIND_EXCEPTION_TYPE));
+LJ_STATIC_ASSERT(offsetof(LJErrUEx, os) ==
+		 sizeof(UNWIND_EXCEPTION_TYPE) + sizeof(global_State *));
+#if LJ_TARGET_X64
+LJ_STATIC_ASSERT(offsetof(LJErrUEx, landing) ==
+		 offsetof(LJErrUEx, os) + sizeof(ErrOSState));
+#endif
+
+static void err_uex_cleanup(int reason, UNWIND_EXCEPTION_TYPE *uex)
+{
+  UNUSED(reason);
+  UNUSED(uex);  /* TLS-owned exception storage is reused by the next throw. */
+}
+
+static LJ_AINLINE int err_uex_has_os(uint64_t uexclass,
+				     const UNWIND_EXCEPTION_TYPE *uex)
+{
+  /* Another LuaJIT DSO may use the same exception class with the historical
+  ** shorter {ex,g} object. The cleanup marker prevents an out-of-bounds tail
+  ** access while preserving the established g-at-(uex+1) JIT ABI. */
+  return LJ_UEXCLASS_CHECK(uexclass) && uex->excleanup == err_uex_cleanup;
+}
+
+static LJ_AINLINE void err_uex_os_enter(uint64_t uexclass,
+					UNWIND_EXCEPTION_TYPE *uex,
+					ErrOSState *err)
+{
+  if (err_uex_has_os(uexclass, uex))
+    *err = ((LJErrUEx *)(void *)uex)->os;
+  else
+    err_os_save(err);
+  err_os_restore(err);
+}
+
+static LJ_AINLINE int err_uex_os_leave(uint64_t uexclass,
+				       UNWIND_EXCEPTION_TYPE *uex,
+				       const ErrOSState *err, int result)
+{
+  if (err_uex_has_os(uexclass, uex))
+    ((LJErrUEx *)(void *)uex)->os = *err;
+  err_os_restore(err);
+  err_os_test_unwind_clobber();
+  return result;
+}
+
 extern uintptr_t _Unwind_GetCFA(_Unwind_Context *);
+extern uintptr_t _Unwind_GetGR(_Unwind_Context *, int);
 extern void _Unwind_SetGR(_Unwind_Context *, int, uintptr_t);
 extern uintptr_t _Unwind_GetIP(_Unwind_Context *);
 extern void _Unwind_SetIP(_Unwind_Context *, uintptr_t);
@@ -518,25 +741,57 @@ extern int _Unwind_RaiseException(_Unwind_Exception *);
 #define _UA_HANDLER_FRAME	4
 #define _UA_FORCE_UNWIND	8
 
+#if LJ_TARGET_X64
+/* R12 is DWARF register 12 on SysV AMD64 and Darwin x86_64. The exception-owned
+** carrier saves its trace value before installing the trampoline pointer. */
+#define LJ_ERR_X64_CARRIER_REG	12
+static LJ_AINLINE void err_uex_install_x64(_Unwind_Context *ctx,
+					    uint64_t uexclass,
+					    UNWIND_EXCEPTION_TYPE *uex,
+					    const ErrOSState *err,
+					    ASMFunction target)
+{
+  LJErrUEx *ex;
+  if (!err_uex_has_os(uexclass, uex)) {
+    _Unwind_SetIP(ctx, (uintptr_t)lj_ptr_strip(target));
+    return;
+  }
+  ex = (LJErrUEx *)(void *)uex;
+  err_x64_carrier_set(&ex->landing, target,
+	_Unwind_GetGR(ctx, LJ_ERR_X64_CARRIER_REG), err);
+  _Unwind_SetGR(ctx, LJ_ERR_X64_CARRIER_REG,
+		(uintptr_t)&ex->landing);
+  _Unwind_SetIP(ctx, (uintptr_t)lj_ptr_strip(lj_vm_unwind_os_eh));
+}
+#endif
+
 /* DWARF2 personality handler referenced from interpreter .eh_frame. */
 LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
   uint64_t uexclass, _Unwind_Exception *uex, _Unwind_Context *ctx)
 {
+  ErrOSState err;
   void *cf;
   lua_State *L;
+  err_uex_os_enter(uexclass, uex, &err);
   if (version != 1)
-    return _URC_FATAL_PHASE1_ERROR;
+    return err_uex_os_leave(uexclass, uex, &err,
+			    _URC_FATAL_PHASE1_ERROR);
   cf = (void *)_Unwind_GetCFA(ctx);
   L = cframe_L(cf);
   if ((actions & _UA_SEARCH_PHASE)) {
 #if LJ_UNWIND_EXT
-    if (err_unwind(L, cf, 0) == NULL)
-      return _URC_CONTINUE_UNWIND;
+    err_os_restore(&err);
+    if (err_unwind(L, cf, 0) == NULL) {
+      err_os_save(&err);
+      return err_uex_os_leave(uexclass, uex, &err,
+			      _URC_CONTINUE_UNWIND);
+    }
+    err_os_save(&err);
 #endif
     if (!LJ_UEXCLASS_CHECK(uexclass)) {
       setstrV(L, L->top++, lj_err_str(L, LJ_ERR_ERRCPP));
     }
-    return _URC_HANDLER_FOUND;
+    return err_uex_os_leave(uexclass, uex, &err, _URC_HANDLER_FOUND);
   }
   if ((actions & _UA_CLEANUP_PHASE)) {
     int errcode;
@@ -548,15 +803,26 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
       errcode = LUA_ERRRUN;
     }
 #if LJ_UNWIND_EXT
+    err_os_restore(&err);
     cf = err_unwind(L, cf, errcode);
+    /* A callback continuation can deliberately select a different outgoing
+    ** pair while cleanup walks the Lua frames. Carry that pair into every
+    ** later personality invocation through the exception object itself. */
+    err_os_save(&err);
     if ((actions & _UA_FORCE_UNWIND)) {
-      return _URC_CONTINUE_UNWIND;
+      return err_uex_os_leave(uexclass, uex, &err,
+			      _URC_CONTINUE_UNWIND);
     } else if (cf) {
       ASMFunction ip;
       _Unwind_SetGR(ctx, LJ_TARGET_EHRETREG, errcode);
       ip = cframe_unwind_ff(cf) ? lj_vm_unwind_ff_eh : lj_vm_unwind_c_eh;
+#if LJ_TARGET_X64
+      err_uex_install_x64(ctx, uexclass, uex, &err, ip);
+#else
       _Unwind_SetIP(ctx, (uintptr_t)lj_ptr_strip(ip));
-      return _URC_INSTALL_CONTEXT;
+#endif
+      return err_uex_os_leave(uexclass, uex, &err,
+			      _URC_INSTALL_CONTEXT);
     }
 #if LJ_TARGET_X86ORX64
     else if ((actions & _UA_HANDLER_FRAME)) {
@@ -564,8 +830,14 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
       ** Real fix: http://gcc.gnu.org/viewcvs/trunk/gcc/unwind-dw2.c?r1=121165&r2=124837&pathrev=153877&diff_format=h
       */
       _Unwind_SetGR(ctx, LJ_TARGET_EHRETREG, errcode);
+#if LJ_TARGET_X64
+      err_uex_install_x64(ctx, uexclass, uex, &err,
+			  lj_vm_unwind_rethrow);
+#else
       _Unwind_SetIP(ctx, (uintptr_t)lj_vm_unwind_rethrow);
-      return _URC_INSTALL_CONTEXT;
+#endif
+      return err_uex_os_leave(uexclass, uex, &err,
+			      _URC_INSTALL_CONTEXT);
     }
 #endif
 #else
@@ -578,7 +850,7 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
 #endif
 #endif
   }
-  return _URC_CONTINUE_UNWIND;
+  return err_uex_os_leave(uexclass, uex, &err, _URC_CONTINUE_UNWIND);
 }
 
 #if LJ_UNWIND_EXT && defined(LUA_USE_ASSERT)
@@ -604,20 +876,23 @@ void lj_err_verify(void)
 static int err_unwind_jit(int version, int actions,
   uint64_t uexclass, _Unwind_Exception *uex, _Unwind_Context *ctx)
 {
+  ErrOSState err;
+  err_uex_os_enter(uexclass, uex, &err);
   /* NYI: FFI C++ exception interoperability. */
   if (version != 1 || !LJ_UEXCLASS_CHECK(uexclass))
-    return _URC_FATAL_PHASE1_ERROR;
+    return err_uex_os_leave(uexclass, uex, &err,
+			    _URC_FATAL_PHASE1_ERROR);
   if ((actions & _UA_SEARCH_PHASE)) {
-    return _URC_HANDLER_FOUND;
+    return err_uex_os_leave(uexclass, uex, &err, _URC_HANDLER_FOUND);
   }
   if ((actions & _UA_CLEANUP_PHASE)) {
-    global_State *g = *(global_State **)(uex+1);
+    global_State *g = ((LJErrUEx *)(void *)uex)->g;
     ExitNo exitno;
     uintptr_t addr = _Unwind_GetIP(ctx);  /* Return address _after_ call. */
     uintptr_t stub = lj_trace_unwind(G2J(g), addr - sizeof(MCode), &exitno);
     lj_assertG(lj_tg_jit_base(g), "unexpected throw across mcode frame");
     if (stub) {  /* Jump to side exit to unwind the trace. */
-#if LJ_TARGET_X64 && !LJ_ABI_WIN
+#if LJ_TARGET_X64
       lj_tg_jit_exitcode_rel(G2TG(g), LJ_UEXCLASS_ERRCODE(uexclass));
 #else
       G2J(g)->exitcode = LJ_UEXCLASS_ERRCODE(uexclass);
@@ -626,14 +901,20 @@ static int err_unwind_jit(int version, int actions,
       _Unwind_SetGR(ctx, 4, stub);
       _Unwind_SetGR(ctx, 5, exitno);
       _Unwind_SetIP(ctx, (uintptr_t)(void *)lj_vm_unwind_stub);
+#elif LJ_TARGET_X64
+      err_uex_install_x64(ctx, uexclass, uex, &err,
+			  (ASMFunction)(uintptr_t)stub);
 #else
       _Unwind_SetIP(ctx, stub);
 #endif
-      return _URC_INSTALL_CONTEXT;
+      return err_uex_os_leave(uexclass, uex, &err,
+			      _URC_INSTALL_CONTEXT);
     }
-    return _URC_FATAL_PHASE2_ERROR;
+    return err_uex_os_leave(uexclass, uex, &err,
+			    _URC_FATAL_PHASE2_ERROR);
   }
-  return _URC_FATAL_PHASE1_ERROR;
+  return err_uex_os_leave(uexclass, uex, &err,
+			  _URC_FATAL_PHASE1_ERROR);
 }
 
 /* DWARF2 template frame info for JIT-compiled code.
@@ -740,6 +1021,38 @@ struct _Unwind_Control_Block {
   uint32_t misc[20];
 };
 
+typedef struct LJErrUEx {
+  UNWIND_EXCEPTION_TYPE ex;
+  global_State *g;
+  ErrOSState os;
+} LJErrUEx;
+
+LJ_STATIC_ASSERT(offsetof(LJErrUEx, g) == sizeof(UNWIND_EXCEPTION_TYPE));
+LJ_STATIC_ASSERT(offsetof(LJErrUEx, os) ==
+		 sizeof(UNWIND_EXCEPTION_TYPE) + sizeof(global_State *));
+
+static LJ_AINLINE void err_uex_os_enter(uint64_t uexclass,
+					UNWIND_EXCEPTION_TYPE *uex,
+					ErrOSState *err)
+{
+  if (LJ_UEXCLASS_CHECK(uexclass))
+    *err = ((LJErrUEx *)(void *)uex)->os;
+  else
+    err_os_save(err);
+  err_os_restore(err);
+}
+
+static LJ_AINLINE int err_uex_os_leave(uint64_t uexclass,
+				       UNWIND_EXCEPTION_TYPE *uex,
+				       const ErrOSState *err, int result)
+{
+  if (LJ_UEXCLASS_CHECK(uexclass))
+    ((LJErrUEx *)(void *)uex)->os = *err;
+  err_os_restore(err);
+  err_os_test_unwind_clobber();
+  return result;
+}
+
 extern int _Unwind_RaiseException(_Unwind_Control_Block *);
 extern int __gnu_unwind_frame(_Unwind_Control_Block *, _Unwind_Context *);
 extern int _Unwind_VRS_Set(_Unwind_Context *, int, uint32_t, int, void *);
@@ -763,14 +1076,18 @@ extern void lj_vm_unwind_ext(void);
 LJ_FUNCA int lj_err_unwind_arm(int state, _Unwind_Control_Block *ucb,
 			       _Unwind_Context *ctx)
 {
+  ErrOSState err;
   void *cf = (void *)_Unwind_GetGR(ctx, 13);
   lua_State *L = cframe_L(cf);
   int errcode;
 
+  err_uex_os_enter(ucb->exclass, ucb, &err);
+
   switch ((state & _US_ACTION_MASK)) {
   case _US_VIRTUAL_UNWIND_FRAME:
     if ((state & _US_FORCE_UNWIND)) break;
-    return _URC_HANDLER_FOUND;
+    return err_uex_os_leave(ucb->exclass, ucb, &err,
+			    _URC_HANDLER_FOUND);
   case _US_UNWIND_FRAME_STARTING:
     if (LJ_UEXCLASS_CHECK(ucb->exclass)) {
       errcode = LJ_UEXCLASS_ERRCODE(ucb->exclass);
@@ -778,7 +1095,9 @@ LJ_FUNCA int lj_err_unwind_arm(int state, _Unwind_Control_Block *ucb,
       errcode = LUA_ERRRUN;
       setstrV(L, L->top++, lj_err_str(L, LJ_ERR_ERRCPP));
     }
+    err_os_restore(&err);
     cf = err_unwind(L, cf, errcode);
+    err_os_save(&err);
     if ((state & _US_FORCE_UNWIND) || cf == NULL) break;
     _Unwind_SetGR(ctx, 15, (uint32_t)lj_vm_unwind_ext);
     _Unwind_SetGR(ctx, 0, (uint32_t)ucb);
@@ -786,19 +1105,21 @@ LJ_FUNCA int lj_err_unwind_arm(int state, _Unwind_Control_Block *ucb,
     _Unwind_SetGR(ctx, 2, cframe_unwind_ff(cf) ?
 			    (uint32_t)lj_vm_unwind_ff_eh :
 			    (uint32_t)lj_vm_unwind_c_eh);
-    return _URC_INSTALL_CONTEXT;
+    return err_uex_os_leave(ucb->exclass, ucb, &err,
+			    _URC_INSTALL_CONTEXT);
   default:
-    return _URC_FAILURE;
+    return err_uex_os_leave(ucb->exclass, ucb, &err, _URC_FAILURE);
   }
   if (__gnu_unwind_frame(ucb, ctx) != _URC_OK)
-    return _URC_FAILURE;
+    return err_uex_os_leave(ucb->exclass, ucb, &err, _URC_FAILURE);
 #ifdef LUA_USE_ASSERT
   /* We should never get here unless this is a forced unwind aka backtrace. */
   if (_Unwind_GetGR(ctx, 0) == 0xff33aa77) {
     _Unwind_SetGR(ctx, 0, 0xff33aa88);
   }
 #endif
-  return _URC_CONTINUE_UNWIND;
+  return err_uex_os_leave(ucb->exclass, ucb, &err,
+			  _URC_CONTINUE_UNWIND);
 }
 
 #if LJ_UNWIND_EXT && defined(LUA_USE_ASSERT)
@@ -834,11 +1155,6 @@ void lj_err_verify(void)
 
 
 #if LJ_UNWIND_EXT
-typedef struct LJErrUEx {
-  UNWIND_EXCEPTION_TYPE ex;
-  global_State *g;
-} LJErrUEx;
-
 #if LJ_TARGET_WINDOWS
 static DWORD err_uex_key = FLS_OUT_OF_INDEXES;
 static INIT_ONCE err_uex_once = INIT_ONCE_STATIC_INIT;
@@ -884,7 +1200,8 @@ static LJ_TLS LJErrUEx static_uex;
 #endif
 
 /* Raise external exception. */
-static void err_raise_ext(global_State *g, int errcode)
+static void err_raise_ext(global_State *g, int errcode,
+			  const ErrOSState *err)
 {
 #if LJ_TARGET_WINDOWS
   LJErrUEx *uex = err_uex_get();
@@ -892,13 +1209,25 @@ static void err_raise_ext(global_State *g, int errcode)
     abort();
   memset(uex, 0, sizeof(*uex));
   uex->ex.exclass = LJ_UEXCLASS_MAKE(errcode);
+#if !LJ_TARGET_ARM
+  uex->ex.excleanup = err_uex_cleanup;
+#endif
   uex->g = g;
+  uex->os = *err;
+  err_os_restore(err);
   _Unwind_RaiseException(&uex->ex);
+  err_os_restore(err);
 #else
   memset(&static_uex, 0, sizeof(static_uex));
   static_uex.ex.exclass = LJ_UEXCLASS_MAKE(errcode);
+#if !LJ_TARGET_ARM
+  static_uex.ex.excleanup = err_uex_cleanup;
+#endif
   static_uex.g = g;
+  static_uex.os = *err;
+  err_os_restore(err);
   _Unwind_RaiseException(&static_uex.ex);
+  err_os_restore(err);
 #endif
 }
 
@@ -911,11 +1240,19 @@ static void err_raise_ext(global_State *g, int errcode)
 /* Throw error. Find catch frame, unwind stack and continue. */
 LJ_NOINLINE void LJ_FASTCALL lj_err_throw(lua_State *L, int errcode)
 {
-  global_State *g = G(L);
+  ErrOSState err;
+  global_State *g;
+  /* Message construction, trace abort and platform unwinding are internal
+  ** bookkeeping. In particular, a caught STOPREQ immediately following an
+  ** FFI call must still expose the foreign errno/LastError pair. No pending
+  ** state is published: the pair remains in this error-path C frame. */
+  err_os_save(&err);
+  g = G(L);
   lj_trace_abort(g);
   L->status = LUA_OK;
 #if LJ_UNWIND_EXT
-  err_raise_ext(g, errcode);
+  err_os_restore(&err);
+  err_raise_ext(g, errcode, &err);
   /*
   ** A return from this function signals a corrupt C stack that cannot be
   ** unwound. We have no choice but to call the panic function and exit.
@@ -926,15 +1263,21 @@ LJ_NOINLINE void LJ_FASTCALL lj_err_throw(lua_State *L, int errcode)
   */
   {
     lua_CFunction panic = panicf_load(g);
-    if (panic)
+    if (panic) {
+      err_os_restore(&err);
       panic(L);
+    }
   }
 #else
 #if LJ_HASJIT
   lj_tg_setjit_base(g, NULL);
 #endif
   {
-    void *cf = err_unwind(L, NULL, errcode);
+    void *cf;
+    /* Restore before the stack walk, then retain any deliberate callback
+    ** frame restoration performed by err_unwind(). */
+    err_os_restore(&err);
+    cf = err_unwind(L, NULL, errcode);
     if (cframe_unwind_ff(cf))
       lj_vm_unwind_ff(cframe_raw(cf));
     else
@@ -952,17 +1295,26 @@ LJ_NOINLINE GCstr *lj_err_str(lua_State *L, ErrMsg em)
 
 LJ_NORET LJ_NOINLINE static void lj_err_err(lua_State *L)
 {
+  ErrOSState err;
+  err_os_save(&err);
   setstrV(L, L->top++, lj_err_str(L, LJ_ERR_ERRERR));
+  err_os_restore(&err);
   lj_err_throw(L, LUA_ERRERR);
 }
 
 /* Out-of-memory error. */
 LJ_NOINLINE void lj_err_mem(lua_State *L)
 {
-  if (L->status == LUA_ERRERR)
+  ErrOSState err;
+  err_os_save(&err);
+  if (L->status == LUA_ERRERR) {
+    err_os_restore(&err);
     lj_err_err(L);
-  if (L->status == LUA_ERRERR+1)  /* Don't touch the stack during state setup. */
+  }
+  if (L->status == LUA_ERRERR+1) {  /* Don't touch stack during state setup. */
+    err_os_restore(&err);
     lj_vm_unwind_c(L->cframe, LUA_ERRMEM);
+  }
   if (LJ_HASJIT) {
     TValue *base = lj_tg_jit_base(G(L));
     if (base) L->base = base;
@@ -976,6 +1328,10 @@ LJ_NOINLINE void lj_err_mem(lua_State *L)
     }
   }
   setstrV(L, L->top++, lj_err_str(L, LJ_ERR_ERRMEM));
+  /* In particular, a cdata nothrow allocation restores the foreign pair
+  ** before entering here. Error-string lookup and stack repair must not
+  ** replace that pair at the actual nonlocal throw edge. */
+  err_os_restore(&err);
   lj_err_throw(L, LUA_ERRMEM);
 }
 
@@ -1035,7 +1391,10 @@ static ptrdiff_t finderrfunc(lua_State *L)
 /* Runtime error. */
 LJ_NOINLINE void LJ_FASTCALL lj_err_run(lua_State *L)
 {
-  ptrdiff_t ef = (LJ_HASJIT && lj_tg_jit_base(G(L))) ? 0 : finderrfunc(L);
+  ErrOSState err;
+  ptrdiff_t ef;
+  err_os_save(&err);
+  ef = (LJ_HASJIT && lj_tg_jit_base(G(L))) ? 0 : finderrfunc(L);
   if (ef) {
     TValue *errfunc, *top;
     lj_state_checkstack(L, LUA_MINSTACK * 2);  /* Might raise new error. */
@@ -1051,8 +1410,13 @@ LJ_NOINLINE void LJ_FASTCALL lj_err_run(lua_State *L)
     copyTV(L, top-1, errfunc);
     if (LJ_FR2) setnilV(top++);
     L->top = top+1;
+    /* Let an xpcall handler observe the state at the original error edge.
+    ** If it explicitly changes errno/LastError, preserve its outgoing pair. */
+    err_os_restore(&err);
     lj_vm_call(L, top, 1+1);  /* Stack: |errfunc|msg| -> |msg| */
+    err_os_save(&err);
   }
+  err_os_restore(&err);
   lj_err_throw(L, LUA_ERRRUN);
 }
 
@@ -1160,7 +1524,9 @@ LJ_NOINLINE void lj_err_optype_call(lua_State *L, TValue *o)
 /* Error in context of caller. */
 LJ_NOINLINE void lj_err_callermsg(lua_State *L, const char *msg)
 {
+  ErrOSState err;
   TValue *frame = NULL, *pframe = NULL;
+  err_os_save(&err);
   if (!(LJ_HASJIT && lj_tg_jit_base(G(L)))) {
     frame = L->base-1;
     if (frame_islua(frame)) {
@@ -1193,6 +1559,7 @@ LJ_NOINLINE void lj_err_callermsg(lua_State *L, const char *msg)
     }
   }
   lj_debug_addloc(L, msg, pframe, frame);
+  err_os_restore(&err);
   lj_err_run(L);
 }
 

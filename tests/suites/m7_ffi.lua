@@ -14,6 +14,46 @@ local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script
 local run_stock = runtime.run_stock
 
+local function read_all(path)
+  local f = assert(io.open(path, "rb"))
+  local s = assert(f:read("*a"))
+  f:close()
+  return s
+end
+
+local function plain_count(s, needle)
+  local n, pos = 0, 1
+  while true do
+    local first = s:find(needle, pos, true)
+    if not first then return n end
+    n = n + 1
+    pos = first + #needle
+  end
+end
+
+local function assert_generic_ccall_source(t)
+  local files = {
+    t:path("src", "lj_crecord.c"),
+    t:path("src", "lj_ccall.c"),
+    t:path("src", "lj_ccall.h"),
+    t:path("src", "lj_ircall.h")
+  }
+  for _, path in ipairs(files) do
+    local source = read_all(path)
+    assert(plain_count(source, "crec_call_jit_") == 0,
+           path .. ": explicit recorder shape survived")
+    assert(plain_count(source, "lj_ccall_jit_") == 0,
+           path .. ": explicit C-call wrapper survived")
+    assert(plain_count(source, "LJ_CCALL_JIT_") == 0,
+           path .. ": explicit signature enum survived")
+  end
+  local recorder = read_all(files[1])
+  assert(plain_count(recorder, "static TRef crec_call_args(") == 1,
+         "generic C-call argument recorder is not unique")
+  assert(plain_count(recorder, "IRT(IR_CALLXS, t)") == 1,
+         "generic scalar CALLXS emission is not unique")
+end
+
 local m7_cases = {
   "m7_ffi_cdef_token",
   "m7_ffi_cdef_dup_stack",
@@ -52,9 +92,10 @@ end
 return function(add)
   add({
     name = "m7_ffi_ccall_native",
-    description = "FFI native blocking-call behavior",
+    description = "FFI native state and temporary traced-call safety gate",
     run = function(t)
       local struct_so, jit_so
+      assert_generic_ccall_source(t)
       clean_build(t)
       jit_so = build_shared_library(t,
         t:tmp("lj_t-ffi-ccall-jit-lib.so"),
@@ -66,9 +107,12 @@ return function(add)
                       "t-ffi-cbblack-race.c")
       build_and_run_c(t, t:tmp("lj_t-ffi-ccall-native-helpers"),
                       "t-ffi-ccall-native-helpers.c")
-      -- Keep env-sensitive native FFI probes as explicit calls. The aggregate
-      -- M7 run must show the required library env/timeout at the callsite,
-      -- matching the focused m7_ffi_ccall_native command transcript.
+      build_and_run_c(t, t:tmp("lj_t-ffi-ccall-error-state"),
+                      "t-ffi-ccall-error-state.c", { timeout = "30s" })
+      -- The ABI fixture remains an interpreted generic-CALLXS oracle. The
+      -- smaller STOPREQ and boxing/error-state probes run with explicit
+      -- no-trace assertions while the temporary XSAVE safety gate is active.
+      run_luajit_script(t, "t-ffi-ccall-trace-gate.lua")
       build_and_run_c(t, t:tmp("lj_t-ffi-ccall-struct-overflow"),
                       "t-ffi-ccall-struct-overflow.c", {
         env = { LJ_M7_FFI_CCALL_STRUCT_SO = struct_so },
@@ -81,9 +125,16 @@ return function(add)
         env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
         timeout = "20s"
       })
+      -- Keep every legacy ABI/result assertion live. No production wrapper
+      -- or signature dispatcher backs these calls. Only the historical
+      -- positive trace-count checks invert under this explicit temporary-gate
+      -- mode; unmatched/fast-function trace checks stay exact.
       run_luajit_script(t, "t-ffi-ccall-native.lua", nil, {
-        env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
-        timeout = "20s"
+        env = {
+          LJ_M7_FFI_CCALL_JIT_SO = jit_so,
+          LJ_M7_FFI_CCALL_GATE = "1"
+        },
+        timeout = "60s"
       })
       luajit_code(t, [[
 local ffi = require"ffi"

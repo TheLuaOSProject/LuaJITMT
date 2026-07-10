@@ -781,9 +781,9 @@ static uint32_t gdbjit_lock;
 static void gdbjit_lock_wait(lua_State *L)
 {
   /*
-  ** Keep descriptor contention as native time for the owning TG. This path is
-  ** opt-in debugger metadata and must still finish trace add/delete cleanup, so
-  ** STOPREQ is acknowledged but not thrown from inside the descriptor update.
+  ** Keep descriptor contention as native time for the owning TG. Runtime
+  ** add/delete paths are try-only; VM close must finish outstanding unregister
+  ** cleanup, so STOPREQ is acknowledged but not thrown from this wait.
   */
   (void)lj_thr_retry_yield(L);
 }
@@ -799,6 +799,12 @@ static void gdbjit_lock_acquire(lua_State *L)
   } while (1);
 }
 
+static int gdbjit_lock_try(void)
+{
+  uint32_t expect = 0;
+  return la_cas32(&gdbjit_lock, &expect, 1, LA_ACQ_REL, LA_ACQ);
+}
+
 static void gdbjit_lock_release()
 {
   la_store32_rel(&gdbjit_lock, 0);  /* 08 section 8.3: descriptor unlock. */
@@ -812,9 +818,16 @@ static void gdbjit_newentry(lua_State *L, GDBJITctx *ctx)
   GDBJITentryobj *eo = lj_mem_newt(L, sz, GDBJITentryobj);
   memcpy(&eo->obj, &ctx->obj, ctx->objsize);  /* Copy ELF object. */
   eo->sz = sz;
+  /* Optional debugger metadata must not park the recorder behind another Lua
+  ** universe's process-global descriptor update. A collision simply omits this
+  ** trace's debug entry; normal execution and later retirement stay lockless.
+  */
+  if (!gdbjit_lock_try()) {
+    lj_mem_free(G(L), eo, eo->sz);
+    return;
+  }
   trace_gdbjit_entry_rel(ctx->T, (void *)eo);
   /* Link new entry to chain and register it. */
-  gdbjit_lock_acquire(L);
   {
     GDBJITentry *head = gdbjit_desc_first_acq();
     gdbjit_entry_prev_rel(&eo->entry, NULL);
@@ -865,27 +878,57 @@ void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
   gdbjit_newentry(J->L, &ctx);
 }
 
+static void gdbjit_deltrace_locked(global_State *g, GCtrace *T,
+				   GDBJITentryobj *eo)
+{
+  trace_gdbjit_entry_rel(T, NULL);
+  {
+    GDBJITentry *prev = gdbjit_entry_prev_acq(&eo->entry);
+    GDBJITentry *next = gdbjit_entry_next_acq(&eo->entry);
+    if (prev)
+      gdbjit_entry_next_rel(prev, next);
+    else
+      gdbjit_desc_first_rel(next);
+    if (next)
+      gdbjit_entry_prev_rel(next, prev);
+  }
+  gdbjit_desc_relevant_rel(&eo->entry);
+  gdbjit_desc_action_rel(GDBJIT_UNREGISTER);
+  __jit_debug_register_code();
+  gdbjit_lock_release();
+  lj_mem_free(g, eo, eo->sz);
+}
+
 /* Delete debug info for trace and notify GDB. */
-void lj_gdbjit_deltrace(jit_State *J, GCtrace *T)
+int lj_gdbjit_deltrace(jit_State *J, GCtrace *T)
 {
   GDBJITentryobj *eo = (GDBJITentryobj *)trace_gdbjit_entry_acq(T);
   if (eo) {
-    gdbjit_lock_acquire(J->L);
-    {
-      GDBJITentry *prev = gdbjit_entry_prev_acq(&eo->entry);
-      GDBJITentry *next = gdbjit_entry_next_acq(&eo->entry);
-      if (prev)
-	gdbjit_entry_next_rel(prev, next);
-      else
-	gdbjit_desc_first_rel(next);
-      if (next)
-	gdbjit_entry_prev_rel(next, prev);
-    }
-    gdbjit_desc_relevant_rel(&eo->entry);
-    gdbjit_desc_action_rel(GDBJIT_UNREGISTER);
-    __jit_debug_register_code();
-    gdbjit_lock_release();
-    lj_mem_free(J2G(J), eo, eo->sz);
+    /* GDB's descriptor is process-global, so another independent Lua universe
+    ** can be registering a trace while this universe performs an opportunistic
+    ** SMR drain. Never park that drain (and never dereference its deliberately
+    ** unset J->L) waiting for optional debugger instrumentation. The trace body
+    ** retains eo and is retried at the next grace pass.
+    */
+    if (!gdbjit_lock_try())
+      return 0;
+    /* The recorder token serializes deletion for this universe. */
+    gdbjit_deltrace_locked(J2G(J), T, eo);
+  }
+  return 1;
+}
+
+/* VM close cannot leave a process-global descriptor pointing into freed Lua
+** allocator storage. Runtime reclamation is strictly try-only above; final
+** teardown is the one exceptional path that completes an outstanding optional
+** debugger unregister before destroying the universe allocator.
+*/
+void lj_gdbjit_deltrace_close(global_State *g, GCtrace *T)
+{
+  GDBJITentryobj *eo = (GDBJITentryobj *)trace_gdbjit_entry_acq(T);
+  if (eo) {
+    gdbjit_lock_acquire(mainthread_acq(g));
+    gdbjit_deltrace_locked(g, T, eo);
   }
 }
 

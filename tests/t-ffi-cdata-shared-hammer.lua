@@ -81,6 +81,15 @@ if jit.status() then
 	 "active-MT trace-owned cdata allocation loop should trace")
   harness.release_start(release, 1)
   harness.join_all({ worker })
+
+  -- mt_active is intentionally sticky after the first worker exits. Existing
+  -- cdata recorded in this one-thread gap would survive the next activation,
+  -- because only the first activation flushes pre-MT traces.
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  assert(trace_field_rw(shared, 80) > 0)
+  assert(trace_count(200) == 0,
+	 "shared cdata must stay interpreted between worker generations")
 end
 
 local function assert_domain(obj, max_threads, max_iters)

@@ -69,6 +69,14 @@ struct TGState {
   global_State *gl;
   lua_State *cur_L;
   TValue *jit_base;
+  /* Owner-private trace-root state materialized by IR_XSAVE. The future
+  ** generic native-enter helper consumes these fields before it release-
+  ** publishes a remotely readable native frame. They are deliberately not a
+  ** remote publication by themselves.
+  */
+  TValue *ffi_xsave_root;
+  uint32_t ffi_xsave_baseslot;
+  uint32_t ffi_xsave_nslots;
   int jit_exitcode;
   int32_t vmstate;
   uint32_t profile_samples;

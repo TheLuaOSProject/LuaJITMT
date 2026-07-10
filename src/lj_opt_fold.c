@@ -2530,6 +2530,11 @@ LJFOLD(CALLS any any)
 LJFOLD(CALLXS any any)
 LJFOLD(XBAR)
 LJFOLD(XPOLL)
+/* XSAVE is ordered and must be re-emitted when LOOP substitutes its body.
+** Passing an operandless marker to CSE could merge it with an earlier marker,
+** leaving the copied snapshot without its matching publication boundary.
+*/
+LJFOLD(XSAVE)
 LJFOLD(RETF any any)  /* Modifies BASE. */
 LJFOLD(TNEW any any)
 LJFOLD(TDUP any)

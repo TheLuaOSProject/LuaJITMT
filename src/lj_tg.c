@@ -153,6 +153,9 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->gl = g;
   lj_tg_store_cur_L(tg, L);
   lj_tg_store_thread_L(tg, L);
+  tg->ffi_xsave_root = NULL;
+  tg->ffi_xsave_baseslot = 0;
+  tg->ffi_xsave_nslots = 0;
   tg->vmstate = ~LJ_VMST_INTERP;
   tg->profile_vmstate = 'N';
   tg->prng = g->prng;
@@ -193,6 +196,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
     lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);
   }
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
+  lj_arena_alloc_owner_tg_rel(&tg->alloc, tg);
   if (alloc_ready && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
     lj_tg_flags_or_rlx(tg, TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
@@ -228,6 +232,7 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
       (HugeTab *)gc2_small_arena_tab_acq(g));
   }
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
+  lj_arena_alloc_owner_tg_rel(&tg->alloc, tg);
   if (arena_internal && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
     lj_tg_flags_or_rlx(tg, TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);

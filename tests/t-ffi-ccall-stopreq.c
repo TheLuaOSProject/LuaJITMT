@@ -89,8 +89,8 @@ static void run_fresh_stopreq_interrupt(lua_State *L, global_State *g,
   ljt_tg_clear_stopreq(tg);
 }
 
-static void run_traced_fresh_stopreq_interrupt(lua_State *L, global_State *g,
-					       TGState *tg)
+static void run_gated_fresh_stopreq_interrupt(lua_State *L, global_State *g,
+					      TGState *tg)
 {
   CCallStopReqCtx ctx;
   pthread_t thread;
@@ -104,7 +104,7 @@ static void run_traced_fresh_stopreq_interrupt(lua_State *L, global_State *g,
     "local util = require('jit.util')\n"
     "local lib = assert(lj_m7_ccall_jit_lib)\n"
     "local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32\n"
-    "function lj_m7_traced_sleep(n, ms)\n"
+    "function lj_m7_gated_sleep(n, ms)\n"
     "  local r = 0\n"
     "  for _ = 1, n do r = sleep_i32(ms) end\n"
     "  return r\n"
@@ -112,8 +112,9 @@ static void run_traced_fresh_stopreq_interrupt(lua_State *L, global_State *g,
     "jit.on()\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
-    "assert(lj_m7_traced_sleep(80, 0) == 7)\n"
-    "assert(util.traceinfo(1), 'traced FFI ccall sleep probe did not compile')\n");
+    "assert(lj_m7_gated_sleep(80, 0) == 7)\n"
+    "assert(not util.traceinfo(1),\n"
+    "       'ordinary FFI C call bypassed the XSAVE safety gate')\n");
 
   ctx.g = g;
   ctx.tg = tg;
@@ -123,16 +124,16 @@ static void run_traced_fresh_stopreq_interrupt(lua_State *L, global_State *g,
   assert(pthread_create(&thread, NULL, publish_stopreq_while_native, &ctx) == 0);
   rc = luaL_dostring(L,
     "local ok, err = pcall(function()\n"
-    "  return lj_m7_traced_sleep(2, 200)\n"
+    "  return lj_m7_gated_sleep(2, 200)\n"
     "end)\n"
-    "assert(ok == false, 'fresh STOPREQ did not interrupt traced FFI ccall')\n"
+    "assert(ok == false, 'fresh STOPREQ did not interrupt gated FFI ccall')\n"
     "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
     "       tostring(err))\n");
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.published);
   if (rc != LUA_OK) {
     const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "traced fresh STOPREQ chunk failed: %s\n",
+    fprintf(stderr, "gated fresh STOPREQ chunk failed: %s\n",
 	    err ? err : "(nil)");
   }
   assert(rc == LUA_OK);
@@ -175,7 +176,7 @@ int main(void)
   run_fresh_stopreq_interrupt(L, g, tg);
   assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) == 0);
 
-  run_traced_fresh_stopreq_interrupt(L, g, tg);
+  run_gated_fresh_stopreq_interrupt(L, g, tg);
   assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) == 0);
 
   lua_close(L);

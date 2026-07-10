@@ -25,6 +25,15 @@ LJ_ASMF_NORET void LJ_FASTCALL lj_vm_rtlunwind(void *cframe, void *excptrec,
 #endif
 LJ_ASMF void lj_vm_unwind_c_eh(void);
 LJ_ASMF void lj_vm_unwind_ff_eh(void);
+#if LJ_TARGET_X64
+/* External-error landing pads which restore errno/LastError after the OS
+** unwinder has finished touching platform TLS. */
+LJ_ASMF void lj_vm_unwind_os_eh(void);
+#if LJ_ABI_WIN
+LJ_ASMF void lj_vm_unwind_c_eh_os(void);
+LJ_ASMF void lj_vm_unwind_ff_eh_os(void);
+#endif
+#endif
 #if LJ_TARGET_X86ORX64
 LJ_ASMF void lj_vm_unwind_rethrow(void);
 #endif

@@ -40,6 +40,13 @@ local function call_ok(fn)
   assert(ok, err)
 end
 
+-- A missing trace in the two-argument form must not be reinterpreted as the
+-- one-argument global exit number. Immediately after a full flush, that old
+-- fallthrough could index an already-retired exit-stub group.
+call_ok(function()
+  assert(traceexitstub(32, 0) == nil)
+end)
+
 local function probe_trace(tr)
   local info = traceinfo(tr)
   if not info then
@@ -103,6 +110,13 @@ end
 
 local ok, result = worker:join(20)
 assert(ok == true and result == true)
+if not finished then
+  -- Fast probe loops can exhaust max_probes before the worker schedules its
+  -- final channel send. A successful join orders that send before this receive.
+  local token, sent = done_recv(done, 0)
+  assert(sent == true and token == "done")
+  finished = true
+end
 assert(finished, "worker joined without sending done token")
 assert(probes > 0)
 assert(live_seen > 0)

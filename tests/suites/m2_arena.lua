@@ -22,6 +22,7 @@ local M2_ORDER = {
 local function arena_sources(t, cfile)
   return {
     t:path("tests", cfile),
+    t:path("tests", "t-arena-tls-stub.c"),
     t:path("src", "lj_arena.c"),
     t:path("src", "lj_prng.c")
   }

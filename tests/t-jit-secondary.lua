@@ -86,7 +86,12 @@ local worker = th.spawn(function()
     assert(table_alloc(80) == 6560)
   end
   local table_traces = trace_count(trace_limit)
-  assert(table_traces > 0)
+  if table_traces <= 0 then
+    local st = th.gcstats()
+    error(("table allocation did not trace (phase=%s cycles=%s workers=%s)")
+      :format(tostring(st.phase), tostring(st.cycle_starts),
+              tostring(st.worker_runs)))
+  end
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")

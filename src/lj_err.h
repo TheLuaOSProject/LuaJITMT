@@ -23,6 +23,7 @@ LJ_DATA const char *lj_err_allmsg;
 
 LJ_FUNC GCstr *lj_err_str(lua_State *L, ErrMsg em);
 LJ_FUNC const char *lj_err_strerrno(int errnum, char *buf, size_t bufsz);
+LJ_FUNCA void LJ_FASTCALL lj_err_restore_os(uint64_t packed);
 LJ_FUNCA_NORET void LJ_FASTCALL lj_err_throw(lua_State *L, int errcode);
 LJ_FUNC_NORET void lj_err_mem(lua_State *L);
 LJ_FUNC_NORET void LJ_FASTCALL lj_err_stkov(lua_State *L);

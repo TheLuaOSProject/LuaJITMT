@@ -22,6 +22,7 @@ local m6_cases = {
   "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
+  "m6_jit_xsave",
   "m6_jit_table_store_helper",
   "m6_jit_entering_table_store",
   "m6_jit_tbar_gc2_black_gate",
@@ -703,6 +704,8 @@ return function(add)
                       { build = false, timeout = "20s" })
       luajit_file(t, t:path("tests", "t-jit-secondary.lua"),
                   { lua_path = true, timeout = "20s" })
+      luajit_file(t, t:path("tests", "t-jit-explicit-exit.lua"),
+                  { lua_path = true, timeout = "20s" })
 
       luajit_code(t, [=[
 local util = require("jit.util")
@@ -730,6 +733,18 @@ local s=0
 for i=1,64 do s=s+f1(i) end
 assert(s==2720)
 assert(util.traceinfo(1), "deep inlined FUNCF loop did not trace")
+]=], { timeout = "20s" })
+
+      luajit_code(t, [=[
+local util = require("jit.util")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "callunroll=32")
+local function leaf(x) return x + 1 end
+local function tail(x) return leaf(x) end
+local sum = 0
+for i = 1, 80 do sum = sum + tail(i) end
+assert(sum == 3320)
+assert(util.traceinfo(1), "Lua tailcall loop did not trace")
 ]=], { timeout = "20s" })
       print("M6 JIT recorder token behavior passed")
     end
@@ -876,6 +891,23 @@ assert(util.traceinfo(1), "numeric upvalue loop did not trace")
 assert(threading.gcworkers(0) == 1)
 ]=], { timeout = "20s" })
       print("M6 JIT XPOLL barrier behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_xsave",
+    description = "dormant XSAVE snapshots retain materialized allocation roots",
+    run = function(t)
+      local flags = "-DLUA_USE_ASSERT -DLJ_XSAVE_TEST_HELPERS"
+      build.with_default_build_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-jit-xsave"), "t-jit-xsave.c", {
+          build = false,
+          cflags = flags,
+          timeout = "20s"
+        })
+      end)
+      print("M6 JIT XSAVE snapshot behavior passed")
     end
   })
 
@@ -2158,7 +2190,7 @@ local threading = require("threading")
 local trace_count = require("jit_harness").trace_count
 
 jit.flush()
-jit.opt.start("hotloop=1", "hotexit=1")
+jit.opt.start("hotloop=1", "hotexit=1", "maxtrace=8")
 local function hot(n)
   local s = 0
   for i = 1, n do s = s + i end
@@ -2170,8 +2202,19 @@ assert(trace_count(200) > 0, "pre-MT loop did not trace")
 local worker = threading.spawn(function() return true end)
 assert(({ worker:join(5) })[1] == true)
 assert(trace_count(200) == 0, "first thread activation did not flush traces")
+
+-- mt_active remains sticky after the worker generation. Exercise more full
+-- flush generations than the deliberately tiny trace namespace: retired slots
+-- must age through the safepoint grace period and become reusable instead of
+-- accumulating forever between worker generations.
+for round = 1, 24 do
+  for _ = 1, 4 do assert(hot(80) == 3240) end
+  assert(trace_count(32) > 0,
+         "sticky-MT trace namespace exhausted at churn round " .. round)
+  jit.flush()
+end
 ]=], { timeout = "20s" })
-      print("M6 JIT MT activation flush behavior passed")
+      print("M6 JIT MT activation flush and retired-slot reuse passed")
     end
   })
 

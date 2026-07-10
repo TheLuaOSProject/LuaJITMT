@@ -5,6 +5,14 @@
 
 #include "lj_obj.h"
 
+#include <errno.h>
+#if LJ_TARGET_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 #if LJ_HASFFI
 
 #include "lj_atomic.h"
@@ -28,6 +36,30 @@
 /* -- Target-specific handling of callback slots -------------------------- */
 
 #define CALLBACK_MCODE_SIZE	(LJ_PAGESIZE * LJ_NUM_CBPAGE)
+
+typedef struct CCallbackErrorState {
+  int errnum;
+  uint32_t winerr;
+} CCallbackErrorState;
+
+static LJ_AINLINE void ccallback_error_save(CCallbackErrorState *err)
+{
+#if LJ_TARGET_WINDOWS
+  err->winerr = (uint32_t)GetLastError();
+#else
+  err->winerr = 0;
+#endif
+  err->errnum = errno;
+}
+
+static LJ_AINLINE void ccallback_error_restore(
+  const CCallbackErrorState *err)
+{
+  errno = err->errnum;
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)err->winerr);
+#endif
+}
 
 static LJ_AINLINE CTypeID1 callback_cbid_load(CTypeID1 *cbid, MSize slot)
 {
@@ -780,15 +812,19 @@ void lj_ccallback_mcode_free(CTState *cts)
 
 static void callback_frame_push(lua_State *L, CCallbackRuntime *cb,
 				TValue *cont, uint32_t native_depth,
-				uint8_t auto_detach)
+				uint8_t auto_detach,
+				const CCallbackErrorState *err)
 {
   MSize depth = ccallback_depth_acq(cb);
   if (LJ_UNLIKELY(depth >= CCALLBACK_MAX_NEST))
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   cb->frame[depth].L = L;
-  cb->frame[depth].cont = cont;
+  cb->frame[depth].cont = savestack(L, cont);
   cb->frame[depth].native_depth = native_depth;
   cb->frame[depth].auto_detach = auto_detach;
+  cb->frame[depth].errphase = CCALLBACK_ERR_SETUP;
+  cb->frame[depth].errnum = err->errnum;
+  cb->frame[depth].winerr = err->winerr;
   ccallback_depth_rel(cb, depth + 1);
 }
 
@@ -807,9 +843,12 @@ static void callback_frame_pop(CCallbackRuntime *cb)
   depth--;
   frame = &cb->frame[depth];
   frame->L = NULL;
-  frame->cont = NULL;
+  frame->cont = 0;
   frame->native_depth = 0;
   frame->auto_detach = 0;
+  frame->errphase = CCALLBACK_ERR_SETUP;
+  frame->errnum = 0;
+  frame->winerr = 0;
   ccallback_depth_rel(cb, depth);
 }
 
@@ -830,40 +869,62 @@ static int callback_auto_attach(CTState *cts, MSize slot)
 
 CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
 {
-  TGState *tg = lj_thr_get_tg();
+  CCallbackErrorState err;
+  TGState *tg;
   lua_State *L;
   CCallbackRuntime *cb;
   uint8_t auto_detach = 0;
+  /* This is the first C callback helper after the tiny CTState accessor.
+  ** Preserve the native caller's error pair across TLS lookup/auto-attach. */
+  ccallback_error_save(&err);
+  tg = lj_thr_get_tg();
   if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g ||
 		  lj_tg_load_cur_L(tg) == NULL)) {
     if (tg == NULL && callback_auto_attach(cts, slot)) {
       tg = lj_thr_get_tg();
       auto_detach = 1;
     }
-    if (tg == NULL || tg->gl != cts->g || lj_tg_load_cur_L(tg) == NULL)
+    if (tg == NULL || tg->gl != cts->g || lj_tg_load_cur_L(tg) == NULL) {
+      ccallback_error_restore(&err);
       return NULL;  /* No legal callback carrier for this foreign pthread. */
+    }
   }
   L = lj_tg_load_cur_L(tg);
   cb = &tg->cb;
   ccallback_L_rel(cb, L);  /* Carrier TG from current TLS, not slot owner. */
   ccallback_slot_rel(cb, slot);
   ccallback_auto_detach_rel(cb, auto_detach);
+  ccallback_error_restore(&err);
   return cb;
 }
 
 void lj_ccallback_unwind(lua_State *L, TValue *cont)
 {
-  TGState *tg = lj_thr_get_tg();
+  CCallbackErrorState err;
+  TGState *tg;
   CCallbackRuntime *cb;
   CCallbackFrame *frame;
-  if (L == NULL || tg == NULL || tg->gl != G(L))
+  ccallback_error_save(&err);
+  tg = lj_thr_get_tg();
+  if (L == NULL || tg == NULL || tg->gl != G(L)) {
+    ccallback_error_restore(&err);
     return;
+  }
   cb = &tg->cb;
   lj_tg_ffi_call_func_rel(tg, NULL);
   ccallback_native_had_stopreq_rel(cb, 0);
+  ccallback_slot_rel(cb, 0);
   frame = callback_frame_top(cb);
-  if (frame != NULL && frame->cont == cont) {
+  if (frame != NULL && restorestack(L, frame->cont) == cont) {
     uint8_t auto_detach = frame->auto_detach;
+    /* Setup has not exposed the pair to Lua yet, while result conversion must
+    ** retain the pair captured immediately after the Lua body. Once the body
+    ** is running, however, ffi.errno()/SetLastError writes are user-visible:
+    ** keep the throw-edge pair supplied by the error unwinder. */
+    if (frame->errphase != CCALLBACK_ERR_BODY) {
+      err.errnum = frame->errnum;
+      err.winerr = frame->winerr;
+    }
     callback_frame_pop(cb);
     ccallback_auto_detach_rel(cb, 0);
     if (auto_detach)
@@ -875,6 +936,8 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
       lj_threading_detach(L, 0);
     }
   }
+  /* The frame is popped first, so no per-TG error state survives the unwind. */
+  ccallback_error_restore(&err);
 }
 
 static int callback_ctype_snapshot_wait(lua_State *L, CTState *cts,
@@ -917,7 +980,10 @@ static CTypeID callback_frame_rid_load(lua_State *L)
 }
 
 /* Convert and push callback arguments to Lua stack. */
-static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
+static void callback_conv_args(CTState *cts, lua_State *L,
+			       CCallbackRuntime *cb, uint32_t native_depth,
+			       uint8_t auto_detach,
+			       const CCallbackErrorState *err)
 {
   TValue *o = L->top;
   intptr_t *stack = cb->stack;
@@ -973,6 +1039,12 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
   if (LJ_FR2) o++;
   setframe_ftsz(o, ((char *)(o+1) - (char *)L->base) + FRAME_CONT);
   L->top = L->base = ++o;
+  /* Publish the owner/error frame as soon as the continuation exists. All
+  ** subsequent CType/stack/result setup may throw; unwind can now restore the
+  ** native depth, scoped attach and incoming error pair without scratch state
+  ** in the shared TG runtime. */
+  callback_frame_push(L, cb, L->base-1, native_depth, auto_detach, err);
+  ccallback_auto_detach_rel(cb, 0);
   if (!ct)
     lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
   if (isluafunc(fn))
@@ -1117,14 +1189,20 @@ static int ccallback_had_stopreq(CCallbackRuntime *cb)
 lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 					   CCallbackRuntime *cb)
 {
-  lua_State *L = ccallback_L_acq(cb);
-  global_State *g = cts->g;
-  TGState *tg = lj_thr_get_tg();
-  uint8_t auto_detach = ccallback_auto_detach_acq(cb);
+  CCallbackErrorState err;
+  lua_State *L;
+  global_State *g;
+  TGState *tg;
+  uint8_t auto_detach;
   uint32_t native_depth;
   uint32_t actions = 0;
   int had_stopreq = 0;
   void *ffi_call_func;
+  ccallback_error_save(&err);
+  L = ccallback_L_acq(cb);
+  g = cts->g;
+  tg = lj_thr_get_tg();
+  auto_detach = ccallback_auto_detach_acq(cb);
   if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
 		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
     abort();
@@ -1151,15 +1229,18 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
     lj_tg_in_native_store_rlx(tg, 0);
     actions = lj_safepoint_poll(L);
   }
-  callback_conv_args(cts, L, cb);
-  callback_frame_push(L, cb, L->base-1, native_depth, auto_detach);
-  ccallback_auto_detach_rel(cb, 0);
+  callback_conv_args(cts, L, cb, native_depth, auto_detach, &err);
   if (native_depth != 0) {
     if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
       callback_frame_top(cb)->native_depth = 0;
       lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
     }
   }
+  /* From this point until leave() starts result conversion, an error is owned
+  ** by the Lua body's throw edge, including an explicit ffi.errno() or Win32
+  ** SetLastError call. */
+  callback_frame_top(cb)->errphase = CCALLBACK_ERR_BODY;
+  ccallback_error_restore(&err);
   return L;  /* Now call the function on this stack. */
 }
 
@@ -1167,14 +1248,30 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
 				    CCallbackRuntime *cb)
 {
-  CCallbackFrame *frame = callback_frame_top(cb);
-  lua_State *L = frame ? frame->L : ccallback_L_acq(cb);
-  uint32_t native_depth = frame ? frame->native_depth : 0;
-  uint8_t auto_detach = frame ? frame->auto_detach :
-    ccallback_auto_detach_acq(cb);
-  TGState *tg = lj_thr_get_tg();
+  CCallbackErrorState err;
+  CCallbackFrame *frame;
+  lua_State *L;
+  uint32_t native_depth;
+  uint8_t auto_detach;
+  TGState *tg;
   GCfunc *fn;
   TValue *obase;
+  /* The callback body has finished. Capture before result conversion, GC,
+  ** frame teardown or an auto-detach can replace the value intended for the
+  ** surrounding native function. Also place it in the callback frame so a
+  ** conversion error unwinds with the same pair. */
+  ccallback_error_save(&err);
+  frame = callback_frame_top(cb);
+  if (frame) {
+    frame->errphase = CCALLBACK_ERR_RESULT;
+    frame->errnum = err.errnum;
+    frame->winerr = err.winerr;
+  }
+  L = frame ? frame->L : ccallback_L_acq(cb);
+  native_depth = frame ? frame->native_depth : 0;
+  auto_detach = frame ? frame->auto_detach :
+    ccallback_auto_detach_acq(cb);
+  tg = lj_thr_get_tg();
   if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g || cb != &tg->cb ||
 		  L == NULL || L2TG(L) != tg))
     abort();
@@ -1200,6 +1297,7 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
     lj_tg_in_native_rel(tg, native_depth);
   if (auto_detach)
     lj_threading_detach(L, 0);
+  ccallback_error_restore(&err);
 }
 
 /* -- C callback management ----------------------------------------------- */

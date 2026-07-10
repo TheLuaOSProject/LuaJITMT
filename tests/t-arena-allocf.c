@@ -36,8 +36,9 @@ int main(void)
     LJArenaAllocD ad;
     HugeTab ht = { NULL };
     LJHugeInfo hi;
-    void *p, *q, *typed, *huge, *huge2, *small;
+    void *p, *q, *typed, *huge, *huge_same, *huge2, *small;
     size_t hsize = LJ_HUGE_THRESHOLD + 100u + round;
+    size_t hsize_same = hsize + 512u;
     size_t hsize2 = LJ_ARENA_SIZE + 700u + round;
 
     lj_arena_alloc_init(&alloc);
@@ -78,8 +79,15 @@ int main(void)
     check_seq((uint8_t *)huge, 64, (uint8_t)(0x20u + round));
     fill_seq((uint8_t *)huge, 128, (uint8_t)(0x50u + round));
 
+    huge_same = lj_arena_allocf(&ad, huge, hsize, hsize_same);
+    assert(huge_same == huge);  /* Equal mapping extent stays O(1), but pinned. */
+    assert(lj_arena_hugetab_lookup(&ht, huge_same, &hi) == 1);
+    assert(hi.size == hsize_same);
+    check_seq((uint8_t *)huge_same, 128, (uint8_t)(0x50u + round));
+    huge = huge_same;
+
     alloc.alloc_black = 1;
-    huge2 = lj_arena_allocf(&ad, huge, hsize, hsize2);
+    huge2 = lj_arena_allocf(&ad, huge, hsize_same, hsize2);
     assert(huge2 != NULL);
     assert(lj_arena_ishuge(lj_arena_of(huge2)));
     assert(lj_arena_of(huge2)->hdr.owner_tid == alloc.owner_tid);
@@ -95,6 +103,12 @@ int main(void)
     assert(lj_arena_of(small)->hdr.owner_tid == alloc.owner_tid);
     assert(lj_arena_hugetab_lookup(&ht, huge2, NULL) == 0);
     check_seq((uint8_t *)small, 128, (uint8_t)(0x50u + round));
+    /* The original size class makes all of these safe after huge2 is
+    ** unmapped. A duplicate/stale operation observes only the terminal table
+    ** state and never probes its former mapping header or payload. */
+    assert(lj_arena_allocf(&ad, huge2, hsize2, 0) == NULL);
+    assert(lj_arena_free_deferred(&alloc, huge2, hsize2) == 0);
+    assert(lj_arena_allocf(&ad, huge2, hsize2, hsize) == NULL);
     assert(lj_arena_allocf(&ad, small, 128, 0) == NULL);
 
     lj_arena_hugetab_fini(&ht);

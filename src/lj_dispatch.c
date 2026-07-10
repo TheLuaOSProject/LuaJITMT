@@ -179,13 +179,17 @@ static uint8_t dispatch_state_mode(global_State *g
   uint8_t hookmask = hookmask_load(g);
 #if LJ_HASJIT
   jit_State *J = G2J(g);
-  lua_State *Lrec = J->L;
-  TGState *rectg = Lrec ? lj_jit_owner_tg_l(Lrec, J) : NULL;
+  TraceState state = lj_trace_state_load(J);
+  uint32_t owner = jit_token_acq(g);
+  lua_State *Lrec = state != LJ_TRACE_IDLE ? jit_owner_l_acq(J) : NULL;
+  TGState *rectg = Lrec && owner != 0 ? lj_tg_find_owner(g, owner) : NULL;
+  if (rectg == NULL || state == LJ_TRACE_IDLE ||
+      lj_tg_load_cur_L(rectg) != Lrec || jit_token_acq(g) != owner ||
+      lj_trace_state_load(J) == LJ_TRACE_IDLE)
+    rectg = NULL;
   *Jp = J;
   *tgp = rectg ? rectg : G2TG(g);
-  *rec_ownerp = rectg != NULL &&
-		lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-		lj_jit_token_held_l(Lrec, J);
+  *rec_ownerp = rectg != NULL;
   mode |= (jit_flags_acq(J) & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
@@ -599,8 +603,9 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
 #if LJ_HASJIT
   {
     jit_State *J = G2J(g);
-    if (J->L == L && lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-	lj_jit_token_held_l(L, J)) {
+    if (lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+	jit_owner_l_acq(J) == L && lj_jit_token_held_l(L, J) &&
+	lj_trace_state_load(J) != LJ_TRACE_IDLE) {
 #ifdef LUA_USE_ASSERT
       ptrdiff_t delta = L->top - L->base;
 #endif
@@ -698,15 +703,16 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 #if LJ_TARGET_X64
     lj_trace_hot(J, pc, L);
 #else
-    J->L = L;
+    jit_owner_l_rel(J, L);
     lj_trace_hot(J, pc);
 #endif
     lj_assertG(L->top - L->base == delta,
 	       "unbalanced stack after hot call");
     goto out;
-  } else if (J->L == L &&
-	     lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+  } else if (lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+		     jit_owner_l_acq(J) == L &&
 	     lj_jit_token_held_l(L, J) &&
+	     lj_trace_state_load(J) != LJ_TRACE_IDLE &&
 	     !(hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT))) {
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
@@ -754,7 +760,7 @@ void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc)
   if (!(hookmask_load(J2G(J)) & HOOK_VMEVENT)) {
     ERRNO_SAVE
 #if !LJ_TARGET_X64
-    lua_State *L = J->L;
+    lua_State *L = jit_owner_l_acq(J);
 #endif
     void *cf = cframe_raw(L->cframe);
     const BCIns *oldpc = cframe_pc(cf);

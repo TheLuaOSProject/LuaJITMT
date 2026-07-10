@@ -1068,6 +1068,26 @@ static GCtrace *find_trace(global_State *g)
   return NULL;
 }
 
+static void test_jit_hotcall_root(lua_State *L, global_State *g)
+{
+  int i;
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "return function(x) return x + 1 end\n") == LUA_OK);
+  /* Drive only the function-entry counter: the caller is this C fixture. */
+  for (i = 1; i <= 20; i++) {
+    lua_pushvalue(L, -1);
+    lua_pushinteger(L, i);
+    lua_call(L, 1, 1);
+    assert(lua_tointeger(L, -1) == i + 1);
+    lua_pop(L, 1);
+  }
+  assert(find_trace(g) != NULL);
+  lua_pop(L, 1);
+}
+
 static void test_jit_table_store_helper_barrier(lua_State *L, global_State *g,
 						TGState *tg)
 {
@@ -2858,6 +2878,164 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 2);
 }
 
+static int gc2_capi_collect_live_values(lua_State *L)
+{
+  global_State *g = G(L);
+  GCtab *parent, *child;
+
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);
+  lua_pop(L, 1);
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(lj_gc2_mem_registered_known(g, parent));
+  assert(lj_gc2_mem_registered_known(g, child));
+  assert(tabV(lj_tab_getint(parent, 1)) == child);
+  return 1;
+}
+
+static void test_capi_collect_live_values(lua_State *L)
+{
+  lua_pushcfunction(L, gc2_capi_collect_live_values);
+  lua_setglobal(L, "gc2_capi_collect_live_values");
+  assert(luaL_dostring(L,
+    "local t = gc2_capi_collect_live_values()\n"
+    "assert(type(t) == 'table' and type(t[1]) == 'table')\n") == LUA_OK);
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_capi_collect_live_values");
+}
+
+#if LJ_HASFFI
+static void push_raw_cdata(lua_State *L, GCcdata *cd)
+{
+  setcdataV(L, L->top++, cd);
+}
+
+static void test_pre_ctstate_cdata_edges(lua_State *L, global_State *g,
+					 TGState *tg)
+{
+  GCtab *parent, *weak;
+  GCcdata *array_cd, *hash_cd, *mark_cd, *sweep_cd;
+  GCcdata *weak_key_cd, *weak_val_cd;
+  int base = lua_gettop(L);
+
+  assert(ctype_ctsG(g) == NULL);
+
+  /* Strong array and hash edges must work before lazy FFI initialization. */
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  array_cd = lj_cdata_new_(L, CTID_INT32, 4);
+  push_raw_cdata(L, array_cd);
+  lua_rawseti(L, -2, 1);
+  hash_cd = lj_cdata_new_(L, CTID_INT32, 4);
+  push_raw_cdata(L, hash_cd);
+  lua_setfield(L, -2, "hash");
+  lua_pushvalue(L, -1);
+  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_pre_ctstate_edges");
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(ctype_ctsG(g) == NULL);
+  assert(lj_gc2_mem_registered_known(g, array_cd));
+  assert(lj_gc2_mem_registered_known(g, hash_cd));
+  assert(cdataV(lj_tab_getint(parent, 1)) == array_cd);
+  {
+    GCstr *key = lj_str_newlit(L, "hash");
+    assert(cdataV(lj_tab_getstr(parent, key)) == hash_cd);
+  }
+
+  /* Publish an old, unmarked child after the parent/root snapshot in MARK. */
+  mark_cd = lj_cdata_new_(L, CTID_INT32, 4);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(mark_cd)) == 0);
+  lj_gc2_test_scan_roots(g, L);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(mark_cd)) == 0);
+  push_raw_cdata(L, mark_cd);
+  lua_rawseti(L, -2, 2);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(mark_cd)) == 1);
+  lj_gc2_cycle_to_idle(g);
+
+  /* A SWEEP-time table publication must synchronously preserve the child. */
+  sweep_cd = lj_cdata_new_(L, CTID_INT32, 4);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(sweep_cd)) == 0);
+  lj_gc2_test_scan_roots(g, L);
+  flush_and_drain(g, tg);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  lj_gc2_weak_to_sweep(g, L);
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+  push_raw_cdata(L, sweep_cd);
+  lua_setfield(L, -2, "sweep");
+  assert(lj_gc2_ismarked(g, obj2gco(sweep_cd)) == 1);
+  lj_gc2_cycle_to_idle(g);
+
+  /* Concurrent writes into an all-weak table survive the active weak pass. */
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "kv");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_pre_ctstate_weak");
+  weak_key_cd = lj_cdata_new_(L, CTID_INT32, 4);
+  weak_val_cd = lj_cdata_new_(L, CTID_INT32, 4);
+  lj_gc2_mark_begin(g);
+  lj_gc2_test_scan_roots(g, L);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(weak_key_cd)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(weak_val_cd)) == 0);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  push_raw_cdata(L, weak_key_cd);
+  push_raw_cdata(L, weak_val_cd);
+  lua_settable(L, -3);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(weak_key_cd)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(weak_val_cd)) == 1);
+  lj_gc2_cycle_to_idle(g);
+
+  lua_pushnil(L);
+  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_pre_ctstate_weak");
+  lua_pushnil(L);
+  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_pre_ctstate_edges");
+  lua_settop(L, base);
+}
+
+static void test_post_ctstate_invalid_cdata_edge(lua_State *L,
+						 global_State *g)
+{
+  GCcdata *cd;
+  CTypeID oldid;
+  TValue tv;
+
+  assert(ctype_ctsG(g) != NULL);
+  lua_getfield(L, LUA_REGISTRYINDEX, "gc2_minor_preclaim_cdata");
+  assert(tviscdata(L->top - 1));
+  cd = cdataV(L->top - 1);
+  oldid = cd->ctypeid;
+  setcdataV(L, &tv, cd);
+  assert(lj_gc2_tv_gcref_valid_edge(g, &tv));
+  cd->ctypeid = 0;  /* Invalid after CTState publication, even for a live cell. */
+  assert(!lj_gc2_tv_gcref_valid_edge(g, &tv));
+  assert(!lj_gc_tv_gcref_valid(g, &tv));
+  cd->ctypeid = oldid;
+  assert(lj_gc2_tv_gcref_valid_edge(g, &tv));
+  lua_pop(L, 1);
+}
+#endif
+
 static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *registry_tab, *stack_tab;
@@ -2935,6 +3113,21 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
     assert(lj_gc2_test_finreg_cdata_preclaim_take(L, g, obj2gco(preclaim_cd),
 					     &fin));
     assert(tvisfunc(&fin));
+
+    /*
+    ** Exercise the first real GC2 sweep while CTState is still absent. The
+    ** registry edge is authoritative even though full CType validation cannot
+    ** yet resolve this fixed-size cdata. A dropped edge used to free the arena
+    ** cell and leave the registry pointing at memory later reused by FINREG.
+    */
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_gc(L, LUA_GCSTOP, 0);
+    assert(lj_gc2_mem_registered_known(g, preclaim_cd));
+    lua_getfield(L, LUA_REGISTRYINDEX, "gc2_minor_preclaim_cdata");
+    assert(tviscdata(L->top - 1));
+    assert(cdataV(L->top - 1) == preclaim_cd);
+    assert(cdataV(L->top - 1)->ctypeid == CTID_INT32);
+    lua_pop(L, 1);
   }
 #endif
 
@@ -3933,6 +4126,7 @@ static void test_finreg_cdata_order_active_retire(lua_State *L, global_State *g)
     "local ffi = require('ffi')\n"
     "return ffi.gc(ffi.new('char[?]', 8), gc2_cdata_counting_finalizer)\n") ==
     LUA_OK);
+  test_post_ctstate_invalid_cdata_edge(L, g);
   live = obj2gco(cdataV(L->top - 1));
   assert(finreg_cdata_order_active_refs(g, live) == 1u);
   lua_gc(L, LUA_GCCOLLECT, 0);
@@ -4630,6 +4824,7 @@ int main(void)
   test_buffer_constructor_dict_barrier(L, g, tg);
 #endif
 #if LJ_HASJIT
+  test_jit_hotcall_root(L, g);
   test_jit_table_store_helper_barrier(L, g, tg);
   test_jit_weak_table_store_helper_barrier(L, g, tg);
   test_jit_weak_array_store_helper_barrier(L, g, tg);
@@ -4666,6 +4861,10 @@ int main(void)
   test_vm_tsetm_range_barrier(L, g, tg);
   test_closure(L, g, tg);
   test_tg_thread_roots(L, g, tg);
+  test_capi_collect_live_values(L);
+#if LJ_HASFFI
+  test_pre_ctstate_cdata_edges(L, g, tg);
+#endif
   test_minor_root_scan(L, g, tg);
   test_thread(L, g, tg);
   test_thread_needscan_idle_clear(L, g, tg, 0);

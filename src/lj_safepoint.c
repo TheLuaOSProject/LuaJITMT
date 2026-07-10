@@ -12,6 +12,7 @@
 #include "lj_err.h"
 #include "lj_gc2.h"
 #include "lj_mcode.h"
+#include "lj_oserr.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
 #include "lj_str.h"
@@ -76,11 +77,12 @@ static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
     if (g && tid != 0 && gc2_hs_leader_acq(g) == tid)
       return 0;
     /*
-    ** A trace-exit C frame keeps jit_base published until vm_exit_interp has
-    ** restored the interpreter frame and reached its own poll check. If such a
-    ** frame waits here, the leader waits for jit_base to clear and neither side
-    ** can progress. Defer the consumed-poll wait to that VM-exit poll: the trace
-    ** slot is still protected by jit_base while this frame unwinds.
+    ** A trace-exit C frame keeps jit_base published through snapshot restore.
+    ** It is cleared either by the GC-defer path once restore is complete or by
+    ** vm_exit_interp before its poll check. If the earlier part of that frame
+    ** waits here, the leader waits for jit_base to clear and neither side can
+    ** progress. Defer the consumed-poll wait to the later GC/VM-exit boundary:
+    ** the trace slot is still protected by jit_base while this frame unwinds.
     */
     if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
 	lj_tg_load_jit_base(tg) != NULL)
@@ -166,7 +168,25 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
       lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
     lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
     lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+      lj_arena_hugetab_prepare_sweep(&tg->huge);
+      tg->alloc.huge_retire_cursor = 0;
+      tg->alloc.huge_reclaim_cursor = 0;
+      tg->alloc.huge_retire_done = 0;
+    }
     tg->alloc.prepare_epoch = gc2_cycle_acq(g);
+  }
+  if ((actions & LJ_GC2_HS_RESTORE_ALLOC) &&
+      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+    /* Abort is legal only before bounded root detachment/quarantine. Restore
+    ** owner-local bins on the owning TG while it is stopped at this ACK. */
+    lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+      lj_arena_hugetab_abort_sweep(&tg->huge);
+    tg->alloc.prepare_epoch = 0;
+    tg->alloc.huge_retire_cursor = 0;
+    tg->alloc.huge_reclaim_cursor = 0;
+    tg->alloc.huge_retire_done = 0;
   }
   if (actions & LJ_GC2_HS_REDISPATCH)
     lj_tg_sync_dispatch_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
@@ -228,8 +248,9 @@ retry:
     /* VM-owned acks must not resume with a consumed trace-flush poll. Drop
     ** pending first so the leader can retire/unlink traces and clear poll.
     */
-    /* Trace exit CP frames acknowledge before vm_exit_interp can clear
-    ** jit_base. Defer their consumed-poll wait to the VM exit poll.
+    /* Trace exit CP frames can acknowledge before snapshot restore is complete
+    ** and jit_base can be cleared. Defer their consumed-poll wait to the later
+    ** GC-defer or VM-exit boundary.
     */
     if (hold && wait_consumed &&
 	safepoint_wait_consumed_ack(tg, actions))
@@ -319,8 +340,17 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
 
 uint32_t lj_safepoint_ack_check(lua_State *L)
 {
-  uint32_t actions = lj_safepoint_ack(L);
+  LJOSerrState oserr;
+  uint32_t actions;
+  /* VM external-unwind landings reach this helper immediately after their
+  ** authoritative errno/LastError restore. ACK bookkeeping is observational
+  ** and must not replace the error-edge pair, including immediately before a
+  ** STOPREQ throws again. */
+  lj_oserr_save(&oserr);
+  actions = lj_safepoint_ack(L);
+  lj_oserr_restore(&oserr);
   lj_safepoint_checkstop(L, actions);
+  lj_oserr_restore(&oserr);
   return actions;
 }
 
@@ -417,8 +447,8 @@ static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
   */
 #if LJ_HASJIT
   /* Trace entry publishes jit_base before it loads a trace body/mcode pointer,
-  ** and trace exit keeps jit_base set until vm_exit_interp has restored from
-  ** the snapshot. Trace-flush boundaries must not remotely ack that window,
+  ** and trace exit keeps jit_base set until snapshot restore has completed.
+  ** Trace-flush boundaries must not remotely ack that window,
   ** otherwise the leader can retire the slot still needed by exit restore. A
   ** positive vmstate without jit_base is only a conservative trace root for GC;
   ** it is not a mcode/slot dependency and may be acknowledged normally.
@@ -463,9 +493,9 @@ static int safepoint_trace_tg_active(global_State *g)
     /*
     ** Trace quiescence protects peer TGs that may still need trace slots or
     ** mcode while leaving compiled code. The leader can legitimately start a
-    ** trace-flush handshake from trace-exit C code before vm_exit_interp has
-    ** cleared its own jit_base; waiting for that self-published edge would be
-    ** a self-deadlock. The leader still applies its own safepoint action
+    ** trace-flush handshake from trace-exit C code before snapshot restore has
+    ** reached the safe jit_base clear; waiting for that self-published edge
+    ** would be a self-deadlock. The leader still applies its own safepoint action
     ** synchronously before this quiescence check.
     */
     if (tg == self && leader != 0 && lj_tg_tid_acq(tg) == leader)
@@ -581,8 +611,6 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
     gc2_hs_pending_futex_wait(g, gc2_hs_pending_rlx(g), 1000000);
   }
   safepoint_wait_trace_quiescent(g, actions);
-  if (actions & LJ_GC2_HS_EXIT_TRACES)
-    (void)lj_trace_flushscope_retire_hs(g, epoch);
 #if LJ_HASJIT
   if (actions & LJ_GC2_HS_FLUSHJ) {
     /*

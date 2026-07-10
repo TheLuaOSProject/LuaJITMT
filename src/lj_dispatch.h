@@ -161,7 +161,7 @@ LJ_FUNCA void LJ_FASTCALL lj_dispatch_profile(lua_State *L, const BCIns *pc);
 #if LJ_TARGET_WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#define ERRNO_SAVE	int olderr = errno; DWORD oldwerr = GetLastError();
+#define ERRNO_SAVE	DWORD oldwerr = GetLastError(); int olderr = errno;
 #define ERRNO_RESTORE	errno = olderr; SetLastError(oldwerr);
 #else
 #define ERRNO_SAVE	int olderr = errno;

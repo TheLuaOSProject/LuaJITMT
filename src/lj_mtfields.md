@@ -26,8 +26,12 @@ whenever a shared field is introduced or migrated.
 | g->str.id | string ID range allocator | range fetch_add rlx; gaps are allowed |
 | g->str.second | secondary-hash table flag | store rel under table claim; readers acq |
 | J->tracev / TraceVec.slot[i] | RCU vector + publish-once slots | vector store rel / load acq; slot store rel after mcode sync / load acq |
-| J->retiredmcode | retired mcode records | CAS rel/acq; free after `LJ_FLUSH_EPOCHS` completed epochs |
-| J->retiredtraces / GCtrace.retired_next | retired trace bodies | CAS rel/acq; free after `LJ_FLUSH_EPOCHS` completed epochs |
+| J->L | recorder-token owner pointer | store rel / load acq; only unchanged token owner may restore or clear |
+| J->activemcode | preowned active-mcode retirement records | CAS rel/acq; batch exchange at full flush; raw nodes marked from JIT roots |
+| J->retiredmcode | retired mcode records | CAS rel/acq; retire epoch store rel; free after `LJ_FLUSH_EPOCHS` completed epochs |
+| J->retiredtraces / GCtrace.retired_next | token-owned tagged retired trace bodies | head CAS/exchange acq_rel; embedded link rel/acq; free only under token + zero-reader gate after `LJ_FLUSH_EPOCHS` |
+| GCtrace.retire_epoch | trace-entry retirement gate | token-owned CAS acq_rel of encoded epoch + 1; zero means live |
+| g->vmevent_owner | VM-event callback owner TG id | one nonwaiting CAS acq_rel; exact-owner CAS release to zero |
 | BCIns at patch sites | code word | single 32-bit store rel (`bc_publish`) |
 | GCtrace.exittab[i] | retarget word | store rel; loaded by indirect branch in mcode |
 | L->thr_owner | claim word | CAS acq_rel |

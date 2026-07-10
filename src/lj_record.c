@@ -1238,11 +1238,6 @@ static void rec_call_setup(jit_State *J, BCReg func, ptrdiff_t nargs)
 /* Record call. */
 void lj_record_call(jit_State *J, BCReg func, ptrdiff_t nargs)
 {
-  cTValue *functv = &J->L->base[func];
-  if (tvisfunc(functv) && isluafunc(funcV(functv))) {
-    setintV(&J->errinfo, BC_CALL);
-    lj_trace_err_info(J, LJ_TRERR_NYIBC);
-  }
   rec_call_setup(J, func, nargs);
   /* Bump frame. */
   J->framedepth++;
@@ -1255,11 +1250,6 @@ void lj_record_call(jit_State *J, BCReg func, ptrdiff_t nargs)
 /* Record tail call. */
 void lj_record_tailcall(jit_State *J, BCReg func, ptrdiff_t nargs)
 {
-  cTValue *functv = &J->L->base[func];
-  if (tvisfunc(functv) && isluafunc(funcV(functv))) {
-    setintV(&J->errinfo, BC_CALLT);
-    lj_trace_err_info(J, LJ_TRERR_NYIBC);
-  }
   rec_call_setup(J, func, nargs);
   if (frame_isvarg(J->L->base - 1)) {
     BCReg cbase = (BCReg)frame_delta(J->L->base - 1);

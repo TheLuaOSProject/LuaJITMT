@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 
 typedef struct GCArena GCArena;
+typedef struct LJHugeInfo LJHugeInfo;
 
 /* Garbage collector states. Order matters. */
 enum {
@@ -76,6 +77,11 @@ static LJ_AINLINE int lj_gc_claim_black_to_gray(GCobj *o)
 LJ_FUNC void lj_gc_fixstring(global_State *g, GCstr *s);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
+LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
+					 uint32_t limit, int *donep);
+LJ_FUNC uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg,
+					 void *p, const LJHugeInfo *hi,
+					 int *pendingp);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
 LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
@@ -565,6 +571,10 @@ LJ_FUNCA void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv);
 
 /* Allocator. */
 LJ_FUNC void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz);
+LJ_FUNC void *lj_mem_new_nothrow(lua_State *L, GCSize size);
+LJ_FUNC void *lj_mem_newgco_raw_nothrow(lua_State *L, GCSize size,
+					 uint32_t flags);
+LJ_FUNC void *lj_mem_newgco_unlinked_nothrow(lua_State *L, GCSize size);
 LJ_FUNC void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags);
 LJ_FUNC void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size);
 LJ_FUNC void *lj_mem_grow(lua_State *L, void *p,

@@ -34,29 +34,53 @@ typedef enum {
 #ifdef LUAJIT_DISABLE_VMEVENT
 #define lj_vmevent_send(g, ev, args)		UNUSED(g)
 #define lj_vmevent_send_(g, ev, args, post)	UNUSED(g)
+#define lj_vmevent_send_l(L, ev, args)		UNUSED(L)
+#define lj_vmevent_send_l_(L, ev, args, post)	UNUSED(L)
 #else
+#define lj_vmevent_send_l(L, ev, args) \
+  do { \
+    lua_State *V = (L); \
+    global_State *vmevg = V ? G(V) : NULL; \
+    if (vmevg && (vmevmask_load_acq(vmevg) & \
+		  VMEVENT_MASK(LJ_VMEVENT_##ev))) { \
+      ptrdiff_t vmevtop = savestack(V, V->top); \
+      ptrdiff_t argbase = lj_vmevent_prepare(V, LJ_VMEVENT_##ev); \
+      if (argbase) { \
+	args \
+	lj_vmevent_call(V, argbase, vmevtop); \
+      } \
+    } \
+  } while (0)
+#define lj_vmevent_send_l_(L, ev, args, post) \
+  do { \
+    lua_State *V = (L); \
+    global_State *vmevg = V ? G(V) : NULL; \
+    if (vmevg && (vmevmask_load_acq(vmevg) & \
+		  VMEVENT_MASK(LJ_VMEVENT_##ev))) { \
+      ptrdiff_t vmevtop = savestack(V, V->top); \
+      ptrdiff_t argbase = lj_vmevent_prepare(V, LJ_VMEVENT_##ev); \
+      if (argbase) { \
+	args \
+	lj_vmevent_call(V, argbase, vmevtop); \
+	post \
+      } \
+    } \
+  } while (0)
 #define lj_vmevent_send(g, ev, args) \
-  if (vmevmask_load_acq((g)) & VMEVENT_MASK(LJ_VMEVENT_##ev)) { \
-    lua_State *V = vmthread_acq(g); \
-    ptrdiff_t argbase = lj_vmevent_prepare(V, LJ_VMEVENT_##ev); \
-    if (argbase) { \
-      args \
-      lj_vmevent_call(V, argbase); \
-    } \
-  }
+  do { \
+    lua_State *vmevL = lj_vmevent_state((g)); \
+    if (vmevL) lj_vmevent_send_l(vmevL, ev, args); \
+  } while (0)
 #define lj_vmevent_send_(g, ev, args, post) \
-  if (vmevmask_load_acq((g)) & VMEVENT_MASK(LJ_VMEVENT_##ev)) { \
-    lua_State *V = vmthread_acq(g); \
-    ptrdiff_t argbase = lj_vmevent_prepare(V, LJ_VMEVENT_##ev); \
-    if (argbase) { \
-      args \
-      lj_vmevent_call(V, argbase); \
-      post \
-    } \
-  }
+  do { \
+    lua_State *vmevL = lj_vmevent_state((g)); \
+    if (vmevL) lj_vmevent_send_l_(vmevL, ev, args, post); \
+  } while (0)
 
 LJ_FUNC ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev);
-LJ_FUNC void lj_vmevent_call(lua_State *L, ptrdiff_t argbase);
+LJ_FUNC lua_State *lj_vmevent_state(global_State *g);
+LJ_FUNC void lj_vmevent_call(lua_State *L, ptrdiff_t argbase,
+			     ptrdiff_t oldtop);
 #endif
 
 #endif

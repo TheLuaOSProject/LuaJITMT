@@ -193,6 +193,7 @@ static void load_scoped_flush_side(lua_State *L)
     "  end\n"
     "  return s\n"
     "end\n"
+    "collectgarbage('collect')\n"
     "for _ = 1, 20 do assert(f(80, false) == 3240) end\n"
     "for _ = 1, 80 do assert(f(80, true) == 4230) end\n"
     "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"

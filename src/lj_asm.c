@@ -1925,6 +1925,8 @@ static void asm_alen(ASMState *as, IRIns *ir)
 
 /* -- Instruction dispatch ------------------------------------------------ */
 
+static void asm_xsave(ASMState *as);
+
 /* Assemble a single instruction. */
 static void asm_ir(ASMState *as, IRIns *ir)
 {
@@ -1932,6 +1934,7 @@ static void asm_ir(ASMState *as, IRIns *ir)
   /* Miscellaneous ops. */
   case IR_LOOP: asm_loop(as); break;
   case IR_XPOLL: asm_xpoll(as); break;
+  case IR_XSAVE: asm_xsave(as); break;
   case IR_NOP: case IR_XBAR:
     lj_assertA(!ra_used(ir),
 	       "IR %04d not unused", (int)(ir - as->ir) - REF_BIAS);
@@ -2284,6 +2287,45 @@ static BCReg asm_baseslot(ASMState *as, SnapShot *snap, int *gotframe)
     }
   }
   return 0;
+}
+
+/* Restore and stage the exact stack root for a future native publication.
+** Snapshot numbers are intentionally derived from the backwards assembler
+** cursor: LOOP unrolling copies/reindexes snapshots and makes a recorded
+** literal snapshot number stale.
+*/
+static void asm_xsave(ASMState *as)
+{
+#if LJ_TARGET_X64
+  SnapShot *snap;
+  BCReg baseslot;
+  int gotframe = 0;
+  lj_assertA(as->snapno < as->T->nsnap,
+	     "XSAVE IR %04d has no active snapshot",
+	     as->curins - REF_BIAS);
+  if (LJ_UNLIKELY(as->snapno >= as->T->nsnap))
+    lj_trace_err(as->J, LJ_TRERR_BADRA);
+  snap = &as->T->snap[as->snapno];
+  lj_assertA(snap->ref == as->curins,
+	     "XSAVE IR %04d mismatches snapshot %d ref %04d",
+	     as->curins - REF_BIAS, as->snapno, snap->ref - REF_BIAS);
+  lj_assertA(snap->nslots >= 1 + LJ_FR2, "XSAVE has short stack extent");
+  if (LJ_UNLIKELY(snap->ref != as->curins ||
+		  snap->nslots < 1 + LJ_FR2))
+    lj_trace_err(as->J, LJ_TRERR_BADRA);
+  asm_snap_prep(as);
+  baseslot = asm_baseslot(as, snap, &gotframe);
+  lj_assertA(gotframe || baseslot == 0, "XSAVE has inconsistent frame base");
+  lj_assertA(baseslot <= snap->nslots - 1 - LJ_FR2,
+	     "XSAVE frame base exceeds stack extent");
+  if (LJ_UNLIKELY((!gotframe && baseslot != 0) ||
+		  baseslot > snap->nslots - 1 - LJ_FR2))
+    lj_trace_err(as->J, LJ_TRERR_BADRA);
+  asm_xsave_restore_publish(as, snap, baseslot);
+#else
+  setintV(&as->J->errinfo, IR_XSAVE);
+  lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+#endif
 }
 
 static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)

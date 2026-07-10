@@ -26,6 +26,10 @@ LJ_FUNC_NORET void lj_trace_err_info(jit_State *J, TraceError e);
 /* Trace management. */
 LJ_FUNC GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T);
 LJ_FUNC void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T);
+LJ_FUNC int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T);
+LJ_FUNC int LJ_FASTCALL lj_trace_retire_gc_claim(global_State *g,
+						 GCtrace *T);
+LJ_FUNC int LJ_FASTCALL lj_trace_body_destroyed_acq(const GCtrace *T);
 LJ_FUNC void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T);
 LJ_FUNC void lj_trace_reenableproto(GCproto *pt);
 LJ_FUNC uint32_t lj_trace_flushproto(global_State *g, GCproto *pt);
@@ -52,6 +56,7 @@ LJ_FUNC void lj_jit_token_release(jit_State *J);
 LJ_FUNC void lj_jit_token_release_l(lua_State *L, jit_State *J);
 LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 LJ_FUNC void lj_trace_abort(global_State *g);
+LJ_FUNC void lj_trace_abort_owner(lua_State *L);
 LJ_FUNC void lj_trace_initstate(global_State *g);
 LJ_FUNC void lj_trace_freestate(global_State *g);
 LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
@@ -97,7 +102,10 @@ LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc,
 LJ_FUNCA void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc);
 LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc);
 #endif
-#if LJ_TARGET_X64 && !LJ_ABI_WIN
+#if LJ_TARGET_X64 && LJ_ABI_WIN
+LJ_FUNCA int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr,
+				       lua_State *L, uint32_t exitpair);
+#elif LJ_TARGET_X64
 LJ_FUNCA int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,
 				       TraceNo parent, ExitNo exitno);
 #else
@@ -173,6 +181,9 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 #define lj_trace_freeretired(g)	UNUSED(g)
 #define lj_trace_markvecs(g, gc2)	(UNUSED(g), UNUSED(gc2))
 #define lj_trace_abort(g)	UNUSED(g)
+#define lj_trace_abort_owner(L)	UNUSED(L)
+#define lj_trace_retire_gc_claim(g, T)	(UNUSED(g), UNUSED(T), 1)
+#define lj_trace_body_destroyed_acq(T)	(UNUSED(T), 1)
 #define lj_trace_end(J)		UNUSED(J)
 
 #endif

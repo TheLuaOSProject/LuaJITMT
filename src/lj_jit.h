@@ -188,11 +188,13 @@ static LJ_AINLINE void mcode_area_next_rel(MCode *area, MCode *next)
 }
 
 typedef struct MCodeRetire {
-  MCode *area;		/* Retired mcode area. */
-  size_t size;		/* Size of retired area. */
-  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
-  struct MCodeRetire *next;  /* Retired area records. */
+  MCode *area;		/* Preowned active or retired mcode area. */
+  size_t size;		/* Size of owned area. */
+  uint64_t retire_epoch;  /* Active sentinel or retirement epoch. */
+  struct MCodeRetire *next;  /* Active-owner or retired-area records. */
 } MCodeRetire;
+
+#define MCODE_RETIRE_EPOCH_ACTIVE	(~(uint64_t)0)
 
 static LJ_AINLINE MCodeRetire *
 mcode_retired_next_acq(const MCodeRetire *ret)
@@ -392,8 +394,8 @@ typedef struct GCtrace {
   uint8_t topslot;	/* Top stack slot already checked to be allocated. */
   uint8_t linktype;	/* Type of link. */
   uint8_t unused1;
-  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
-  struct GCtrace *retired_next;  /* Retired trace bodies. */
+  uint64_t retire_epoch;  /* Safepoint epoch + 1 when retirement is claimed. */
+  struct GCtrace *retired_next;  /* Token-owned tagged retire-list link. */
 #ifdef LUAJIT_USE_GDBJIT
   void *gdbjit_entry;	/* GDB JIT entry. */
 #endif
@@ -401,7 +403,11 @@ typedef struct GCtrace {
 
 #define TRACE_EXITTAB_MCODE		0x01
 #define TRACE_SCOPE_FLUSH_PENDING	0x02
-#define TRACE_RETIRED_LISTED		0x04
+
+/* Low tags in GCtrace.retired_next. GCtrace allocations are pointer-aligned. */
+#define TRACE_RETIRED_LINK_UNLINKED	((uintptr_t)1u)
+#define TRACE_RETIRED_LINK_LISTED	((uintptr_t)2u)
+#define TRACE_RETIRED_LINK_TAGMASK	((uintptr_t)3u)
 
 static LJ_AINLINE int trace_exittab_ismcode(const GCtrace *T)
 {
@@ -445,14 +451,31 @@ static LJ_AINLINE void tracevec_retired_next_rel(TraceVec *tv, TraceVec *next)
   la_storeptr_rel((void **)&tv->retired_next, next);
 }
 
-static LJ_AINLINE GCtrace *trace_retired_next_acq(const GCtrace *T)
+static LJ_AINLINE uintptr_t trace_retired_link_acq(const GCtrace *T)
 {
-  return (GCtrace *)la_loadptr_acq((void *const *)&T->retired_next);
+  return (uintptr_t)la_loadptr_acq((void *const *)&T->retired_next);
 }
 
-static LJ_AINLINE void trace_retired_next_rel(GCtrace *T, GCtrace *next)
+static LJ_AINLINE void trace_retired_link_rel(GCtrace *T, uintptr_t link)
 {
-  la_storeptr_rel((void **)&T->retired_next, next);
+  la_storeptr_rel((void **)&T->retired_next, (void *)link);
+}
+
+static LJ_AINLINE void trace_retired_link_unlinked_rel(GCtrace *T)
+{
+  la_storeptr_rel((void **)&T->retired_next,
+		  (void *)TRACE_RETIRED_LINK_UNLINKED);
+}
+
+static LJ_AINLINE int trace_retired_link_listed_acq(const GCtrace *T)
+{
+  return (trace_retired_link_acq(T) & TRACE_RETIRED_LINK_LISTED) != 0;
+}
+
+static LJ_AINLINE GCtrace *trace_retired_next_acq(const GCtrace *T)
+{
+  return (GCtrace *)(trace_retired_link_acq(T) &
+		     ~(uintptr_t)TRACE_RETIRED_LINK_TAGMASK);
 }
 
 #define traceslot_ref_acq(J, n) \
@@ -904,6 +927,7 @@ typedef struct jit_State {
   MCode *mcbot;		/* Bottom of current mcode area. */
   size_t szmcarea;	/* Size of current mcode area. */
   size_t szallmcarea;	/* Total size of all allocated mcode areas. */
+  MCodeRetire *activemcode;  /* Preowned nodes for active mcode areas. */
   MCodeRetire *retiredmcode;  /* Retired mcode areas awaiting SMR. */
   uintptr_t mcmin, mcmax;	/* Mcode allocation range. */
 
@@ -915,6 +939,19 @@ typedef struct jit_State {
   int prof_mode;	/* Profiling mode: 0, 'f', 'l'. */
 #endif
 } jit_State;
+
+/* J->L is token-private while recording, but dispatch, VM events and GC-side
+** probes observe its publication across TGs. Every shared publish/clear and
+** cross-TG probe goes through this acquire/release surface. */
+static LJ_AINLINE lua_State *jit_owner_l_acq(const jit_State *J)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&J->L);
+}
+
+static LJ_AINLINE void jit_owner_l_rel(jit_State *J, lua_State *L)
+{
+  la_storeptr_rel((void **)&J->L, L);
+}
 
 static LJ_AINLINE uint32_t jit_flags_acq(const jit_State *J)
 {
@@ -950,6 +987,25 @@ static LJ_AINLINE void jit_param_rel(jit_State *J, int param, int32_t value)
 static LJ_AINLINE MCodeRetire *mcode_retired_head_acq(const jit_State *J)
 {
   return (MCodeRetire *)la_loadptr_acq((void *const *)&J->retiredmcode);
+}
+
+static LJ_AINLINE MCodeRetire *mcode_active_head_acq(const jit_State *J)
+{
+  return (MCodeRetire *)la_loadptr_acq((void *const *)&J->activemcode);
+}
+
+static LJ_AINLINE int mcode_active_head_cas(jit_State *J,
+					    MCodeRetire **oldp,
+					    MCodeRetire *ret)
+{
+  return la_casptr((void **)&J->activemcode, (void **)oldp, ret,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE MCodeRetire *
+mcode_active_head_xchg_acqrel(jit_State *J, MCodeRetire *ret)
+{
+  return (MCodeRetire *)la_xchgptr_acqrel((void **)&J->activemcode, ret);
 }
 
 static LJ_AINLINE int mcode_retired_head_cas(jit_State *J,

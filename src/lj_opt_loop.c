@@ -226,7 +226,17 @@ static void loop_subst_snap(jit_State *J, SnapShot *osnap,
   MSize on, ln, nn, onent = osnap->nent;
   BCReg nslots = osnap->nslots;
   SnapShot *snap = &J->cur.snap[J->cur.nsnap];
-  if (irt_isguard(J->guardemit)) {  /* Guard inbetween? */
+  int keep_xsave = 0;
+  if (J->cur.nsnap != 0) {
+    SnapShot *prev = &J->cur.snap[J->cur.nsnap-1];
+    IRRef pref = prev->ref;
+    keep_xsave = pref >= REF_FIRST && pref < J->cur.nins &&
+		 IR(pref)->o == IR_XSAVE;
+  }
+  if (irt_isguard(J->guardemit) || keep_xsave) {
+    /* XSAVE snapshots are materialization boundaries even without an
+    ** intervening guard. Never let a later copied snapshot overwrite the
+    ** assembler-position identity of the copied marker. */
     nmapofs = J->cur.nsnapmap;
     J->cur.nsnap++;  /* Add new snapshot. */
   } else {  /* Otherwise overwrite previous snapshot. */
@@ -356,7 +366,12 @@ static void loop_unroll(LoopState *lps)
     IRIns *ir;
     IRRef op1, op2;
 
-    if (ins >= osnap->ref)  /* Instruction belongs to next snapshot? */
+    /* Several recorder snapshots may name the same original IR ref. XSAVE
+    ** requires its copied snapshot to name the copied marker exactly, so drain
+    ** every snapshot due before re-emitting that instruction. With no copied
+    ** guard/IR between equal-ref snapshots, loop_subst_snap() deliberately
+    ** merges them and retains the last state, just like lj_snap_add(). */
+    while (osnap < loopsnap && ins >= osnap->ref)
       loop_subst_snap(J, osnap++, loopmap, subst, invar);
 
     /* Substitute instruction operands. */

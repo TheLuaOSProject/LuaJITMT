@@ -12,11 +12,15 @@
 #if LJ_HASJIT && defined(LUAJIT_USE_GDBJIT)
 
 LJ_FUNC void lj_gdbjit_addtrace(jit_State *J, GCtrace *T);
-LJ_FUNC void lj_gdbjit_deltrace(jit_State *J, GCtrace *T);
+/* Returns zero if another Lua universe owns the process-global GDB descriptor.
+** Callers must retain T and retry; deletion never waits for that owner. */
+LJ_FUNC int lj_gdbjit_deltrace(jit_State *J, GCtrace *T);
+LJ_FUNC void lj_gdbjit_deltrace_close(global_State *g, GCtrace *T);
 
 #else
 #define lj_gdbjit_addtrace(J, T)	UNUSED(T)
-#define lj_gdbjit_deltrace(J, T)	UNUSED(T)
+#define lj_gdbjit_deltrace(J, T)	(UNUSED(J), UNUSED(T), 1)
+#define lj_gdbjit_deltrace_close(g, T)	(UNUSED(g), UNUSED(T))
 #endif
 
 #endif

@@ -2127,7 +2127,8 @@ static int asm_ahstore_trace_local_direct_ok(ASMState *as, IRIns *ir)
   for (ref = tabref + 1; ref < storeref; ref++) {
     IRIns *x = IR(ref);
     IROp op = x->o;
-    if (op == IR_XPOLL || op == IR_XBAR || (op >= IR_CALLN && op <= IR_CALLXS))
+    if (op == IR_XPOLL || op == IR_XSAVE || op == IR_XBAR ||
+	(op >= IR_CALLN && op <= IR_CALLXS))
       return 0;
     if (op == IR_NEWREF && x->op1 == tabref)
       return 0;
@@ -3477,7 +3478,7 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
 }
 
 /* Restore Lua stack from on-trace state. */
-static void asm_stack_restore(ASMState *as, SnapShot *snap)
+static void asm_stack_restore_reg(ASMState *as, SnapShot *snap, Reg base)
 {
   SnapEntry *map = &as->T->snapmap[snap->mapofs];
 #ifdef LUA_USE_ASSERT
@@ -3495,47 +3496,58 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
     if ((sn & SNAP_NORESTORE))
       continue;
     if ((sn & SNAP_KEYINDEX)) {
-      emit_movmroi(as, RID_BASE, ofs+4, LJ_KEYINDEX);
+      emit_movmroi(as, base, ofs+4, LJ_KEYINDEX);
       checkmclim(as);
       if (irref_isk(ref)) {
-	emit_movmroi(as, RID_BASE, ofs, ir->i);
+	emit_movmroi(as, base, ofs, ir->i);
       } else {
-	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, RID_BASE));
+	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, base));
 	checkmclim(as);
-	emit_movtomro(as, src, RID_BASE, ofs);
+	emit_movtomro(as, src, base, ofs);
       }
     } else if (irt_isnum(ir->t)) {
       Reg src = ra_alloc1(as, ref, RSET_FPR);
       checkmclim(as);
-      emit_rmro(as, XO_MOVSDto, src, RID_BASE, ofs);
+      emit_rmro(as, XO_MOVSDto, src, base, ofs);
+    } else if (!LJ_DUALNUM && irt_isint(ir->t)) {
+      /* Full XSAVE materialization can expose an internal narrowed integer in
+      ** a Lua slot which ordinary tail snapshots leave untouched. Non-dual
+      ** Lua stacks store all numbers as doubles, so widen it before publishing
+      ** the frame instead of writing a non-TValue IR representation. */
+      Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, base));
+      Reg tmp = ra_scratch(as, RSET_FPR);
+      emit_rmro(as, XO_MOVSDto, tmp, base, ofs);
+      checkmclim(as);
+      emit_mrm(as, XO_CVTSI2SD, tmp, src);
+      emit_rr(as, XO_XORPS, tmp, tmp);  /* Avoid partial register stall. */
     } else {
       lj_assertA(irt_ispri(ir->t) || irt_isaddr(ir->t) ||
 		 (LJ_DUALNUM && irt_isinteger(ir->t)),
 		 "restore of IR type %d", irt_type(ir->t));
       if (!irref_isk(ref)) {
-	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, RID_BASE));
+	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, base));
 	checkmclim(as);
 	if (irt_is64(ir->t)) {
 	  /* TODO: 64 bit store + 32 bit load-modify-store is suboptimal. */
 	  emit_u32(as, irt_toitype(ir->t) << 15);
-	  emit_rmro(as, XO_ARITHi, XOg_OR, RID_BASE, ofs+4);
+	  emit_rmro(as, XO_ARITHi, XOg_OR, base, ofs+4);
 	} else if (LJ_DUALNUM && irt_isinteger(ir->t)) {
-	  emit_movmroi(as, RID_BASE, ofs+4, LJ_TISNUM << 15);
+	  emit_movmroi(as, base, ofs+4, LJ_TISNUM << 15);
 	} else {
-	  emit_movmroi(as, RID_BASE, ofs+4, (irt_toitype(ir->t)<<15)|0x7fff);
+	  emit_movmroi(as, base, ofs+4, (irt_toitype(ir->t)<<15)|0x7fff);
 	}
 	checkmclim(as);
-	emit_movtomro(as, REX_64IR(ir, src), RID_BASE, ofs);
+	emit_movtomro(as, REX_64IR(ir, src), base, ofs);
       } else {
 	TValue k;
 	lj_ir_kvalue(as->J->L, &k, ir);
 	if (tvisnil(&k)) {
 	  emit_i32(as, -1);
-	  emit_rmro(as, XO_MOVmi, REX_64, RID_BASE, ofs);
+	  emit_rmro(as, XO_MOVmi, REX_64, base, ofs);
 	} else {
-	  emit_movmroi(as, RID_BASE, ofs+4, k.u32.hi);
+	  emit_movmroi(as, base, ofs+4, k.u32.hi);
 	  checkmclim(as);
-	  emit_movmroi(as, RID_BASE, ofs, k.u32.lo);
+	  emit_movmroi(as, base, ofs, k.u32.lo);
 	}
       }
       if ((sn & (SNAP_CONT|SNAP_FRAME))) {
@@ -3545,6 +3557,39 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
   }
   lj_assertA(map + nent == flinks, "inconsistent frames in snapshot");
 }
+
+/* Ordinary trace tails use the fixed interpreter BASE register. */
+static void asm_stack_restore(ASMState *as, SnapShot *snap)
+{
+  asm_stack_restore_reg(as, snap, RID_BASE);
+}
+
+#if LJ_TARGET_X64
+/* Emit a complete XSAVE stack materialization followed by owner-private TG
+** staging. Code emission runs backwards, so the apparent order below becomes
+** at runtime: full stack restore, root BASE, current-frame offset, extent.
+** A later native-enter helper will consume all three values and perform the
+** actual release publication; these stores alone expose no remote state.
+*/
+static void asm_xsave_restore_publish(ASMState *as, SnapShot *snap,
+				       BCReg baseslot)
+{
+  /* LOOP traces do not run asm_tail_link(), so backwards assembly may have
+  ** assigned REF_BASE before XSAVE and ra_alloc1() intentionally ignores its
+  ** allow set in that case. Stage the actual owning register; do not rewrite
+  ** RETF allocation or pretend a restrictive allow set can force RID_BASE. */
+  Reg base = ra_alloc1(as, REF_BASE, RSET_GPR);
+  emit_movmroi(as, RID_DISPATCH, DISPATCH_TG(ffi_xsave_nslots),
+	       (int32_t)snap->nslots);
+  checkmclim(as);
+  emit_movmroi(as, RID_DISPATCH, DISPATCH_TG(ffi_xsave_baseslot),
+	       (int32_t)baseslot);
+  checkmclim(as);
+  emit_settg(as, base, ffi_xsave_root);
+  checkmclim(as);
+  asm_stack_restore_reg(as, snap, base);
+}
+#endif
 
 /* -- GC handling --------------------------------------------------------- */
 

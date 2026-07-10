@@ -39,6 +39,7 @@ int main(void)
   HugeTab src = { NULL };
   HugeTab dst = { NULL };
   void *ptrs[sizeof(sizes)/sizeof(sizes[0])];
+  void *racep;
   LJHugeInfo hi;
   uint32_t i;
 
@@ -79,6 +80,122 @@ int main(void)
   check_info(&hi, sizes[1], LJ_HUGEF_TRAVERSABLE);
   assert(lj_arena_hugetab_live_bytes(&ht,
     LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK) == 0);
+
+  /* Deterministic prepare-vs-free ordering, free first. The one pair-CAS
+  ** claim pins both slot halves, so prepare cannot add SWEEP_OLD and neither a
+  ** duplicate free nor the generic deleter can acquire the mapping. */
+  racep = lj_arena_huge_map(&rs, LJ_HUGE_THRESHOLD + 777u,
+			    LJ_AF_TRAVERSABLE);
+  assert(racep != NULL);
+  assert(lj_arena_hugetab_insert(&ht, racep, LJ_HUGE_THRESHOLD + 777u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_claim_external_free(&ht, racep, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY));
+  assert((hi.flags & LJ_HUGEF_SWEEP_OLD) == 0);
+  lj_arena_hugetab_prepare_sweep(&ht);
+  assert(lj_arena_hugetab_lookup(&ht, racep, &hi) == 1);
+  assert((hi.flags & LJ_HUGEF_SWEEP_OLD) == 0);
+  assert(lj_arena_hugetab_claim_external_free(&ht, racep, NULL) == 0);
+  assert(lj_arena_hugetab_delete(&ht, racep, NULL) == 0);
+  assert(lj_arena_hugetab_finish_external_free(&ht, racep, &hi) ==
+	 LJ_ARENA_HUGE_FINISH_UNMAP);
+  assert(hi.size == LJ_HUGE_THRESHOLD + 777u);
+  assert(lj_arena_hugetab_lookup(&ht, racep, NULL) == 0);
+  assert(lj_arena_hugetab_finish_external_free(&ht, racep, NULL) ==
+	 LJ_ARENA_HUGE_FINISH_LOST);
+  lj_arena_huge_unmap(racep, hi.size);
+  /* These stale operations consult only the tombstoned table slot. */
+  assert(lj_arena_hugetab_claim_external_free(&ht, racep, NULL) == 0);
+  assert(lj_arena_hugetab_defer_external_free(&ht, racep, NULL) == 0);
+  lj_arena_hugetab_abort_sweep(&ht);
+  lj_arena_hugetab_clear_marks(&ht);
+
+  /* Prepare first. The same claim now retains SWEEP_OLD and BUSY through the
+  ** fresh-grace header publication, then finish can only defer to sweep. */
+  racep = lj_arena_huge_map(&rs, LJ_HUGE_THRESHOLD + 888u,
+			    LJ_AF_TRAVERSABLE);
+  assert(racep != NULL);
+  assert(lj_arena_hugetab_insert(&ht, racep, LJ_HUGE_THRESHOLD + 888u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  lj_arena_hugetab_prepare_sweep(&ht);
+  assert(lj_arena_hugetab_lookup(&ht, racep, &hi) == 1);
+  assert((hi.flags & LJ_HUGEF_SWEEP_OLD) != 0);
+  assert(lj_arena_hugetab_claim_external_free(&ht, racep, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING|
+		      LJ_HUGEF_BUSY)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING|LJ_HUGEF_BUSY));
+  assert(la_load64_acq(&lj_arena_of(racep)->hdr.retire_epoch) ==
+	 ~(uint64_t)0);
+  assert(lj_arena_hugetab_retire(&ht, racep, racep, 23u, NULL) == 0);
+  assert(la_load64_acq(&lj_arena_of(racep)->hdr.retire_epoch) ==
+	 ~(uint64_t)0);  /* A losing retire never overwrites the sentinel. */
+  assert(lj_arena_hugetab_delete(&ht, racep, NULL) == 0);
+  assert(lj_arena_hugetab_finish_external_free(&ht, racep, &hi) ==
+	 LJ_ARENA_HUGE_FINISH_DEFERRED);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING));
+  assert((hi.flags & LJ_HUGEF_BUSY) == 0);
+  /* Root detachment which arrives after the publisher may still ticket the
+  ** exact object, but it must preserve the external fresh-grace sentinel. */
+  assert(lj_arena_hugetab_retire(&ht, racep, racep, 24u, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_TICKET));
+  assert(la_load64_acq(&lj_arena_of(racep)->hdr.retire_epoch) ==
+	 ~(uint64_t)0);
+  assert(lj_arena_hugetab_claim_external_free(&ht, racep, NULL) == 0);
+  assert(lj_arena_hugetab_defer_external_free(&ht, racep, NULL) == 1);
+  assert(lj_arena_hugetab_delete(&ht, racep, &hi) == 1);
+  lj_arena_huge_unmap(racep, hi.size);
+  lj_arena_hugetab_abort_sweep(&ht);
+  lj_arena_hugetab_clear_marks(&ht);
+
+  /* A concurrent mark wins retirement by clearing RETIRED, but the explicit
+  ** detached-root TICKET must continue to block finish until reanchor. */
+  lj_arena_hugetab_prepare_sweep(&ht);
+  assert(lj_arena_hugetab_retire(&ht, ptrs[3], ptrs[3], 17u, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|
+		      LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET));
+  assert(lj_arena_hugetab_mark(&ht, ptrs[3], &hi) == 2);
+  assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_MARK|LJ_HUGEF_TICKET));
+  assert((hi.flags & LJ_HUGEF_RETIRED) == 0);
+  lj_arena_hugetab_finish_sweep(&ht, 0);
+  assert(lj_arena_hugetab_lookup(&ht, ptrs[3], &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_TICKET));
+  assert(lj_arena_hugetab_claim_live_ticket(&ht, ptrs[3], &hi) == 1);
+  assert((hi.flags & LJ_HUGEF_BUSY) != 0);
+  la_storeptr_rel(&lj_arena_of(ptrs[3])->hdr.retire_obj, NULL);
+  assert(lj_arena_hugetab_finish_live_ticket(&ht, ptrs[3], &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_TICKET|LJ_HUGEF_BUSY)) == 0);
+  lj_arena_hugetab_finish_sweep(&ht, 0);
+  assert(lj_arena_hugetab_lookup(&ht, ptrs[3], &hi) == 1);
+  assert((hi.flags & LJ_HUGEF_SWEEP_OLD) == 0);
+
+  /* Model the other CAS ordering explicitly: MARK is already visible before
+  ** retire publishes its metadata ticket. The ticket is live-only and cannot
+  ** be mistaken for stale destructor payload. */
+  lj_arena_hugetab_prepare_sweep(&ht);
+  assert(lj_arena_hugetab_mark(&ht, ptrs[3], &hi) == 1);
+  assert(lj_arena_hugetab_retire(&ht, ptrs[3], ptrs[3], 19u, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_MARK|LJ_HUGEF_TICKET));
+  assert((hi.flags & LJ_HUGEF_RETIRED) == 0);
+  assert(lj_arena_hugetab_claim_live_ticket(&ht, ptrs[3], NULL) == 1);
+  la_storeptr_rel(&lj_arena_of(ptrs[3])->hdr.retire_obj, NULL);
+  assert(lj_arena_hugetab_finish_live_ticket(&ht, ptrs[3], NULL) == 1);
+  lj_arena_hugetab_finish_sweep(&ht, 0);
+
+  /* External FREEING publication owns the mapping through BUSY while it
+  ** stores the fresh-grace sentinel, then exposes a ready terminal entry. */
+  assert(lj_arena_hugetab_defer_external_free(&ht, ptrs[1], &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING));
+  assert((hi.flags & LJ_HUGEF_BUSY) == 0);
+  assert(la_load64_acq(&lj_arena_of(ptrs[1])->hdr.retire_epoch) ==
+	 ~(uint64_t)0);
 
   for (i = 0; i < (uint32_t)(sizeof(ptrs)/sizeof(ptrs[0])); i++)
     delete_unmap(&ht, ptrs[i]);

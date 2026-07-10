@@ -24,6 +24,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define LJ_GC2_HAS_FINALIZER_DISPATCH_TYPE 1
 #endif
 #include "lj_gc.h"
+#include "lj_err.h"
 #include "lj_thr.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -201,6 +202,7 @@ static uint32_t lj_gc2_drain_ssb(global_State *g);
 static int lj_gc2_ssb_empty(global_State *g);
 static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
 							    uint32_t limit);
+static uint32_t gc2_drain_grey(global_State *g, uint32_t limit);
 static void gc2_worker_reclaim_retired_tgs(global_State *g);
 static LJ_AINLINE void gc2_preserve_direct_bodies(global_State *g, GCobj *o);
 static void gc2_traverse_func(global_State *g, GCfunc *fn);
@@ -241,6 +243,7 @@ static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o);
 static int gc2_grey_push(global_State *g, GCobj *o);
 static int gc2_registered_obj_valid(global_State *g, GCobj *o);
+static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv);
 static int gc2_thread_scan_current(global_State *g, lua_State *L);
 static int gc2_thread_has_live_owner(global_State *g, lua_State *th);
 static void gc2_mark_marked_table_payload_worker(global_State *g, GCtab *t);
@@ -266,7 +269,21 @@ static uint32_t gc2_flush_and_drain_ssb(global_State *g)
 static int gc2_worker_claim(global_State *g)
 {
   uint32_t expect = 0;
-  return gc2_worker_active_cas(g, &expect, 1);
+  /*
+  ** Worker ownership and zero-reader SMR reclamation are mutually exclusive.
+  ** The reclaimer publishes smr_reclaiming first and then rechecks that no
+  ** worker won; take the inverse half here. A worker which wins the CAS while
+  ** the reclaimer is publishing its gate immediately rolls back, so neither a
+  ** GC destructor nor a retire-list publisher can overlap detached metadata.
+  */
+  if (gc2_smr_reclaiming_acq(g) != 0 ||
+      !gc2_worker_active_cas(g, &expect, 1))
+    return 0;
+  if (LJ_UNLIKELY(gc2_smr_reclaiming_acq(g) != 0)) {
+    gc2_worker_active_rel(g, 0);
+    return 0;
+  }
+  return 1;
 }
 
 static int gc2_worker_claim_count_busy(global_State *g)
@@ -425,6 +442,9 @@ void lj_gc2_init(global_State *g)
   gc2_weak_complete_progress_store_rlx(g, 0);
   gc2_weak_to_sweep_store_rlx(g, 0);
   gc2_sweep_bridge_ready_store_rlx(g, 0);
+  gc2_sweep_root_cursor_rel(g, NULL);
+  gc2_sweep_root_done_rel(g, 0);
+  gc2_sweep_grace_needed_rel(g, 0);
   gc2_sweep_to_idle_store_rlx(g, 0);
   gc2_preserve_abort_to_idle_store_rlx(g, 0);
   gc2_alloc_total_bytes_store_rlx(g, 0);
@@ -1379,8 +1399,6 @@ int lj_gc2_collect_active(lua_State *L)
       int finstep;
       lj_gc2_sweep_prepare_bridge_boundary(
 	g, lj_gc_preserve_root_chain_for_gc2_sweep);
-      if (gc2_sweep_bridge_ready_acq(g))
-	(void)lj_gc_sweep_gc2_unmarked(g);
       if (lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) != 0) {
 	(void)lj_safepoint_ack(L);
 	continue;
@@ -2067,13 +2085,16 @@ static void gc2_mark_begin(global_State *g)
     gc2_minor_cycle_starts_add(g, 1);
   else
     gc2_major_cycle_starts_add(g, 1);
-#if LJ_HASJIT
-  {
-    lua_State *mainL = mainthread_acq(g);
-    if (mainL)
-      (void)lj_trace_flushall_gc(mainL);
-  }
-#endif
+  /*
+  ** Live published traces are reached from prototypes, trace links and active
+  ** TG vmstates; gc2_scan_jit_roots() separately preserves the token-owned
+  ** in-flight trace and retired metadata. Never flush traces or wait for the
+  ** recorder token at cycle start: trace compilation allocates, so doing so can
+  ** abort every recording attempt, and a stalled recorder would block GC
+  ** progress. The EXIT_TRACES handshake below quiesces executable trace users
+  ** before the root snapshot; VM JLOOP entry stays closed until the cycle is
+  ** IDLE again.
+  */
   /* Publish MARK before clearing the request token, so late allocators stop. */
   gc2_phase_rel(g, LJ_GC2_MARK);
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
@@ -2315,6 +2336,9 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
     return;
   }
   gc2_sweep_bridge_ready_rel(g, 0);
+  gc2_sweep_root_cursor_rel(g, lj_gc_root_ref(g));
+  gc2_sweep_root_done_rel(g, 0);
+  gc2_sweep_grace_needed_rel(g, 0);
   gc2_weak_to_sweep_add(g, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
 		   (gc2_cycle_sweep_minor_acq(g) ?
@@ -2936,22 +2960,54 @@ static int gc2_finalizer_pcall(global_State *g, lua_State *L,
   return errcode;
 }
 
+typedef struct GC2ErrFinEvent {
+  ptrdiff_t errslot;
+} GC2ErrFinEvent;
+
+static TValue *gc2_errfin_vmevent_cp(lua_State *L, lua_CFunction dummy,
+				     void *ud)
+{
+  GC2ErrFinEvent *ctx = (GC2ErrFinEvent *)ud;
+  UNUSED(dummy);
+  lj_vmevent_send_l(L, ERRFIN,
+    copyTV(V, V->top++, restorestack(L, ctx->errslot));
+  );
+  return NULL;
+}
+
+/* Deliver ERRFIN while the initiating state remains exclusively claimed. The
+** original error stays rooted in its Lua stack slot throughout handler lookup
+** and allocation. Protect the event because its final STOPREQ check may throw;
+** release the claim before propagating that error so shutdown cannot strand a
+** permanently busy state.
+*/
+static void gc2_errfin_vmevent_claimed(lua_State *L, LJStateClaim *claim,
+				       ptrdiff_t errslot,
+				       ptrdiff_t restoretop)
+{
+  GC2ErrFinEvent ctx;
+  int errcode;
+  ctx.errslot = errslot;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, gc2_errfin_vmevent_cp);
+  if (errcode == 0)
+    L->top = restorestack(L, restoretop);
+  lj_state_dropclaim(claim);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+}
+
 static int gc2_finalizer_checkstack_claimed(global_State *g, lua_State *L,
 					    MSize need, LJStateClaim *claim)
 {
   ptrdiff_t oldtop = savestack(L, L->top);
   int errcode = 0;
+  UNUSED(g);
   if ((mref(L->maxstack, char) - (char *)L->top) <=
       (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue))
     errcode = lj_state_cpgrowstack(L, need);
   if (LJ_UNLIKELY(errcode)) {
-    TValue tmp;
-    copyTV(L, &tmp, L->top-1);
-    L->top = restorestack(L, oldtop);
-    lj_state_dropclaim(claim);
-    lj_vmevent_send(g, ERRFIN,
-      copyTV(V, V->top++, &tmp);
-    );
+    ptrdiff_t errslot = savestack(L, L->top-1);
+    gc2_errfin_vmevent_claimed(L, claim, errslot, oldtop);
     return 0;
   }
   return 1;
@@ -3002,14 +3058,9 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   gc2_finalizer_restore_threshold(g, oldt);
   if (errcode) {
-    TValue tmp;
-    copyTV(cbL, &tmp, cbL->top-1);
+    ptrdiff_t errslot = savestack(cbL, cbL->top-1);
     cbL->base = restorestack(cbL, oldbase);
-    cbL->top = restorestack(cbL, oldtop);
-    lj_state_dropclaim(&claim);
-    lj_vmevent_send(g, ERRFIN,
-      copyTV(V, V->top++, &tmp);
-    );
+    gc2_errfin_vmevent_claimed(cbL, &claim, errslot, oldtop);
   } else {
     cbL->base = restorestack(cbL, oldbase);
     cbL->top = restorestack(cbL, oldtop);
@@ -3101,6 +3152,7 @@ static void gc2_sweep_bridge_request_owner_roots(global_State *g)
 void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 					  GC2SweepBridgePreserveFunc preserve)
 {
+  UNUSED(preserve);  /* Per-entry preservation is folded into bounded pruning. */
   if (!lj_gc2_sweep_bridge_can_progress(g))
     return;
   if (!gc2_worker_claim(g))
@@ -3142,8 +3194,6 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 	return;
       }
     }
-    if (preserve)
-      preserve(g);
     if (lj_tg_any_jit_active(g) || !gc2_stack_roots_fresh(g)) {
       (void)lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
       gc2_scan_tg_roots(g);
@@ -3161,6 +3211,14 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 	return;
       }
     }
+    /* One bounded ownership-spine batch. It only unlinks old mark-zero entries
+    ** and preserves destructor side bodies; no destructor runs here. */
+    (void)lj_gc_sweep_gc2_unmarked(g);
+    if (!gc2_sweep_root_done_acq(g)) {
+      gc2_worker_release(g);
+      lj_gc2_worker_wake(g);
+      return;
+    }
     lj_gc2_sweep_bridge_ready(g);
   }
   gc2_worker_release(g);
@@ -3174,16 +3232,93 @@ int lj_gc2_sweep_pending(global_State *g)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
-    if (lj_gc2_sweep_tg_ready(tg) &&
-	tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL)
-      return 1;
+    if (lj_gc2_sweep_tg_ready(tg)) {
+      if (tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL ||
+	  tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] != NULL)
+	return 1;
+      if (lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+	  lj_arena_hugetab_has_sweep_old(&tg->huge))
+	return 1;
+    }
   return 0;
+}
+
+static int gc2_sweep_reclaim_enter(global_State *g)
+{
+  uint32_t expect = 0;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_worker_active_acq(g) == 0 ||
+      !gc2_smr_reclaiming_cas(g, &expect, 1))
+    return 0;
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_worker_active_acq(g) == 0 || gc2_smr_readers_acq(g) != 0) {
+    gc2_smr_reclaiming_rel(g, 0);
+    return 0;
+  }
+  return 1;
+}
+
+static void gc2_sweep_reclaim_leave(global_State *g)
+{
+  gc2_smr_reclaiming_rel(g, 0);
+}
+
+static uint32_t gc2_sweep_reclaim_jit(global_State *g, uint64_t epoch)
+{
+  uint32_t n = 0;
+#if LJ_HASJIT
+  jit_State *J = G2J(g);
+  int token = 0;
+  /* SWEEP gates new compiled entry, but an already published entry/exit intent
+  ** still owns its trace slot and mcode. Reclaim stays opportunistic and lets a
+  ** later owner pass retry after that TG publishes quiescence. */
+  if (lj_tg_any_jit_active(g))
+    return 0;
+  if (lj_jit_token_held(J) || (token = lj_jit_token_try(J))) {
+    if (!lj_tg_any_jit_active(g)) {
+      n += lj_trace_reclaim_retired(g, epoch);
+      n += lj_mcode_reclaim_retired(g, epoch);
+    }
+    if (token)
+      lj_jit_token_release(J);
+  }
+#else
+  UNUSED(g);
+  UNUSED(epoch);
+#endif
+  return n;
+}
+
+static uint32_t gc2_sweep_huge_progress(global_State *g, TGState *tg,
+					 int preserve_marks)
+{
+  TGAlloc *alloc = &tg->alloc;
+  uint32_t cursor = alloc->huge_reclaim_cursor;
+  LJHugeInfo hi;
+  void *p = NULL;
+  int pending = 0;
+  if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+    return 0;
+  if (lj_arena_hugetab_sweep_next(&tg->huge, &cursor, &p, &hi)) {
+    uint32_t n = lj_gc_reclaim_gc2_huge(g, tg, p, &hi, &pending);
+    alloc->huge_reclaim_cursor = cursor;
+    if (pending)
+      alloc->huge_retire_done = 0;
+    return n ? n : 1u;  /* Advancing the bounded table cursor is real work. */
+  }
+  alloc->huge_reclaim_cursor = 0;
+  if (gc2_sweep_grace_needed_acq(g))
+    return 1;  /* A newly retired entry needs another completed handshake. */
+  lj_arena_hugetab_finish_sweep(&tg->huge, preserve_marks);
+  alloc->huge_retire_done =
+    (uint8_t)!lj_arena_hugetab_has_sweep_old(&tg->huge);
+  return alloc->huge_retire_done ? 1u : 0u;
 }
 
 static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 					     uint32_t limit)
 {
-  uint32_t n = 0, epoch;
+  uint32_t n = 0, arenas = 0, epoch;
   uint64_t live = 0;
   int minor, preserve_marks;
   if (!g || !tg || limit == 0 ||
@@ -3209,29 +3344,97 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   tg->alloc.sweep_epoch = epoch;
   while (n < limit) {
     GCArena *next = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+    GCArena *qa = tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE];
     if (lj_tg_any_jit_active(g) || !gc2_stack_roots_fresh(g)) {
       (void)lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
       gc2_scan_tg_roots(g);
       if (lj_tg_any_jit_active(g) || !gc2_stack_roots_fresh(g))
 	break;
     }
-    if (next)
+    if (next) {
+      (void)lj_arena_remote_free_drain_sweep(&tg->alloc, next);
       (void)lj_gc_sweep_gc2_arena_unmarked(g, next);
-    {
-      GCArena *a = lj_arena_sweep_one(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				      epoch, preserve_marks);
-      if (!a)
+      if (!lj_arena_alloc_quarantine_one(&tg->alloc,
+		LJ_ARENAK_TRAVERSABLE, gc2_hs_epoch_acq(g)))
 	break;
-      live += a->hdr.live_cells;
+      gc2_sweep_grace_needed_rel(g, 1);
+      n++;
+      continue;
     }
-    n++;
+    if (qa) {
+      int done = 0;
+      uint32_t step;
+      uint64_t retire_epoch = la_load64_acq(&qa->hdr.retire_epoch);
+      if (retire_epoch == ~(uint64_t)0) {
+	la_store64_rel(&qa->hdr.retire_epoch, gc2_hs_epoch_acq(g));
+	gc2_sweep_grace_needed_rel(g, 1);
+	break;
+      }
+      if (gc2_sweep_grace_needed_acq(g) ||
+	  gc2_hs_epoch_acq(g) <= retire_epoch)
+	break;
+      if (!gc2_sweep_reclaim_enter(g))
+	break;
+      (void)gc2_sweep_reclaim_jit(g, gc2_hs_epoch_acq(g));
+      la_store32_rel(&qa->hdr.flags,
+		     lj_arena_flags_acq(qa) | LJ_AF_PREPSWEEP);
+      if (lj_arena_remote_sweep_busy_acq(qa)) {
+	la_store32_rel(&qa->hdr.flags,
+		       lj_arena_flags_acq(qa) & ~LJ_AF_PREPSWEEP);
+	gc2_sweep_reclaim_leave(g);
+	break;
+      }
+      if (la_load64_acq(&qa->hdr.retire_epoch) == ~(uint64_t)0) {
+	la_store64_rel(&qa->hdr.retire_epoch, gc2_hs_epoch_acq(g));
+	gc2_sweep_grace_needed_rel(g, 1);
+	la_store32_rel(&qa->hdr.flags,
+		       lj_arena_flags_acq(qa) & ~LJ_AF_PREPSWEEP);
+	gc2_sweep_reclaim_leave(g);
+	break;
+      }
+      (void)lj_arena_remote_free_drain_sweep(&tg->alloc, qa);
+      step = lj_gc_reclaim_gc2_arena(g, qa, 64u, &done);
+      if (done && lj_arena_alloc_quarantine_finish(&tg->alloc,
+	    LJ_ARENAK_TRAVERSABLE, qa, epoch, preserve_marks)) {
+	live += qa->hdr.live_cells;
+	arenas++;
+	step++;
+      } else if (!done) {
+	/* Let a pending trace's physical free publish RETIRED/LIVE->FREEING
+	** between bounded passes. Each pass freezes again before gcw rewrite. */
+	la_store32_rel(&qa->hdr.flags,
+		       lj_arena_flags_acq(qa) & ~LJ_AF_PREPSWEEP);
+      }
+      gc2_sweep_reclaim_leave(g);
+      if (!step)
+	break;
+      n++;
+      continue;
+    }
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+	lj_arena_hugetab_has_sweep_old(&tg->huge)) {
+      uint32_t step;
+      if (gc2_sweep_grace_needed_acq(g))
+	break;
+      if (!gc2_sweep_reclaim_enter(g))
+	break;
+      (void)gc2_sweep_reclaim_jit(g, gc2_hs_epoch_acq(g));
+      step = gc2_sweep_huge_progress(g, tg, preserve_marks);
+      gc2_sweep_reclaim_leave(g);
+      if (!step)
+	break;
+      n++;
+      continue;
+    }
+    break;
   }
   if (n) {
     gc2_sweep_owner_runs_add(g, 1);
-    gc2_sweep_owner_arenas_add(g, n);
+    if (arenas)
+      gc2_sweep_owner_arenas_add(g, arenas);
     gc2_sweep_owner_live_cells_add(g, live);
-    if (minor)
-      gc2_minor_sweep_arenas_add(g, n);
+    if (minor && arenas)
+      gc2_minor_sweep_arenas_add(g, arenas);
   }
   return n;
 }
@@ -3239,7 +3442,29 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
 					  uint32_t limit)
 {
-  return lj_gc2_sweep_owner_progress(g, tg, limit);
+  uint32_t n;
+  int claimed = 0;
+  if (!g || !tg || limit == 0)
+    return 0;
+  if (gc2_worker_active_acq(g) == 0) {
+    if (!gc2_worker_claim(g))
+      return 0;
+    claimed = 1;
+  }
+  if (gc2_sweep_grace_needed_acq(g)) {
+    uint32_t grace;
+    for (grace = 0; grace < LJ_FLUSH_EPOCHS; grace++)
+      (void)lj_gc2_handshake(g,
+	LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+      gc2_sweep_grace_needed_rel(g, 0);
+    n = 1;
+  } else {
+    n = lj_gc2_sweep_owner_progress(g, tg, limit);
+  }
+  if (claimed)
+    gc2_worker_release(g);
+  return n;
 }
 
 static uint64_t gc2_sweep_live_cells(GCArena *a, uint32_t epoch)
@@ -3285,10 +3510,13 @@ static uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
       continue;
     cells += gc2_sweep_live_cells(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
 				  epoch);
+    cells += gc2_sweep_live_cells(
+	lj_arena_alloc_reclaimed_head(&tg->alloc, LJ_ARENAK_TRAVERSABLE),
+	epoch);
     if (flags & TGF_HUGETAB)
       huge_bytes = gc2_saturating_add64(huge_bytes,
 	lj_arena_hugetab_live_bytes(&tg->huge,
-	  LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE));
+	  LJ_HUGEF_TRAVERSABLE));
   }
   bytes = cells > (~(uint64_t)0 >> LJ_CELL_SHIFT) ?
 	  ~(uint64_t)0 : cells << LJ_CELL_SHIFT;
@@ -3363,6 +3591,15 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   uint32_t phase;
   if (!g)
     return;
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_SWEEP) {
+    if (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
+	gc2_sweep_grace_needed_acq(g)) {
+      lj_gc2_worker_wake(g);
+      return;
+    }
+    (void)lj_gc2_handshake(g, LJ_GC2_HS_RESTORE_ALLOC);
+  }
   gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   gc2_sweep_bridge_ready_rel(g, 0);
   /*
@@ -3395,9 +3632,17 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
 
 void lj_gc2_preserve_root(global_State *g, GCobj *o)
 {
+  uint32_t phase;
   if (!g || !o)
     return;
-  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_SWEEP) {
+    /* Quarantine makes SWEEP resurrection a normal state transition. Aborting
+    ** to IDLE here would strand detached gcw links and NEEDSWEEP arenas. */
+    (void)lj_gc2_trace_sweep_root(g, o);
+    return;
+  }
+  if (phase != LJ_GC2_IDLE)
     lj_gc2_preserve_abort_to_idle(g);
   lj_gc2_remember_root(g, o);
 }
@@ -3414,7 +3659,9 @@ int lj_gc2_sweep_to_idle(global_State *g)
   if (phase != LJ_GC2_SWEEP || gc2_sweep_blocked_by_finalizer(g) ||
       !gc2_sweep_bridge_ready_acq(g) ||
       gc2_sweep_bridge_owner_roots_pending(g) ||
-      lj_gc2_sweep_needs_prepare(g) || lj_gc2_sweep_pending(g)) {
+      gc2_sweep_grace_needed_acq(g) || !lj_gc2_ssb_empty(g) ||
+      !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
+      lj_gc2_sweep_pending(g)) {
     gc2_worker_release(g);
     return 0;
   }
@@ -3429,11 +3676,15 @@ int lj_gc2_sweep_to_idle(global_State *g)
     gc2_worker_release(g);
     return 0;
   }
-  if (g->gc.state == GCSfinalize) {
-    g->gc.state = GCSpause;
-    g->gc.debt = 0;
-  }
+  /* GC2 phase is the sole collector authority. Once its SWEEP closes, keep the
+  ** legacy/color compatibility state coherent regardless of which bounded
+  ** bridge substate last touched it; public GC APIs still observe GCSpause. */
+  g->gc.state = GCSpause;
+  g->gc.debt = 0;
   gc2_sweep_to_idle_add(g, 1);
+  gc2_sweep_grace_needed_rel(g, 0);
+  gc2_sweep_root_done_rel(g, 0);
+  gc2_sweep_root_cursor_rel(g, NULL);
   /*
   ** The close owner has finished the SWEEP->IDLE transition, and cycle_leader
   ** remains set until pacing is republished below. Release worker_active before
@@ -3459,9 +3710,22 @@ void lj_gc2_cycle_to_idle(global_State *g)
   uint64_t live = 0;
   if (!g)
     return;
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_SWEEP &&
+      (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
+       gc2_sweep_grace_needed_acq(g))) {
+    /* Once gcw detachment/quarantine starts, only the normal bounded close may
+    ** publish IDLE. A forced close would orphan exact variable cdata headers. */
+    if (!lj_gc2_sweep_to_idle(g))
+      lj_gc2_worker_wake(g);
+    return;
+  }
   gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   (void)gc2_flush_and_drain_ssb(g);
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    /* No root was detached yet. Restore frozen generations on their owning TG
+    ** before publishing IDLE; direct cross-owner bin mutation is forbidden. */
+    (void)lj_gc2_handshake(g, LJ_GC2_HS_RESTORE_ALLOC);
     live = lj_gc2_sweep_live_aggregate(g);
     lj_gc2_update_minor_survival_policy(g, live);
   }
@@ -3470,6 +3734,9 @@ void lj_gc2_cycle_to_idle(global_State *g)
     gc2_sweep_to_idle_add(g, 1);
   }
   gc2_sweep_bridge_ready_rel(g, 0);
+  gc2_sweep_grace_needed_rel(g, 0);
+  gc2_sweep_root_done_rel(g, 0);
+  gc2_sweep_root_cursor_rel(g, NULL);
   gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   /*
@@ -3654,18 +3921,23 @@ static LJ_AINLINE int gc2_reclaim_retired_ready(global_State *g)
 	 gc2_weak_write_active_acq(g) == 0;
 }
 
-void lj_gc2_smr_read_enter(global_State *g)
+int lj_gc2_smr_read_try(global_State *g)
 {
   if (!g)
-    return;
-  for (;;) {
-    while (gc2_smr_reclaiming_acq(g) != 0)
-      (void)lj_thr_retry_yield(NULL);
-    (void)gc2_smr_readers_add(g, 1);
-    if (gc2_smr_reclaiming_acq(g) == 0)
-      return;
-    (void)gc2_smr_readers_sub(g, 1);
-  }
+    return 1;
+  if (gc2_smr_reclaiming_acq(g) != 0)
+    return 0;
+  (void)gc2_smr_readers_add(g, 1);
+  if (gc2_smr_reclaiming_acq(g) == 0)
+    return 1;
+  (void)gc2_smr_readers_sub(g, 1);
+  return 0;
+}
+
+void lj_gc2_smr_read_enter(global_State *g)
+{
+  while (!lj_gc2_smr_read_try(g))
+    (void)lj_thr_retry_yield(NULL);
 }
 
 void lj_gc2_smr_read_leave(global_State *g)
@@ -3709,8 +3981,29 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
   n += lj_ctype_reclaim_retired(g, epoch);  /* 11.2 CTState table SMR drain. */
   n += lj_clib_cache_reclaim_retired(g, epoch);  /* 11.7 CLibrary cache SMR. */
 #endif
-  n += lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7 SMR drain. */
-  n += lj_trace_reclaim_retired(g, epoch);  /* 08 section 8.3/8.7 drain. */
+#if LJ_HASJIT
+  if (!lj_tg_any_jit_active(g)) {
+    jit_State *J = G2J(g);
+    int token = 0;
+    /*
+    ** Mcode and trace retirement share recorder-owned accounting, trace slots,
+    ** and J->freetrace. Reclaim them as one opportunistic token transaction;
+    ** never wait for a recorder which may itself be inside an SMR read section.
+    */
+    if (lj_jit_token_held(J) || (token = lj_jit_token_try(J))) {
+      /* Trace bodies own the last mcode/exit-table references. Drain them first
+      ** so an area which becomes unreferenced can be unmapped in this same
+      ** token transaction instead of waiting for another handshake.
+      */
+      if (!lj_tg_any_jit_active(g)) {
+	n += lj_trace_reclaim_retired(g, epoch);  /* 08 section 8.3/8.7. */
+	n += lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7. */
+      }
+      if (token)
+	lj_jit_token_release(J);
+    }
+  }
+#endif
   if (n) {
     gc2_smr_reclaim_runs_add(g, 1);
     gc2_smr_reclaimed_add(g, n);
@@ -3727,6 +4020,16 @@ static int gc2_tv_gcref_type_match(global_State *g, cTValue *tv)
   o = gcval(tv);
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR;
+#if LJ_HASFFI
+  /*
+  ** A real fixed cdata can be created by the lexer/bytecode loader before the
+  ** lazy CTState exists. Prove that exact arena cell in that bootstrap window;
+  ** once CTState is published, require full CType/size validation. This remains
+  ** safe for conservative stack/weak snapshots and rejects stale CType IDs.
+  */
+  if (itype(tv) == LJ_TCDATA)
+    return gc2_tv_gcref_type_match_known(g, tv);
+#endif
   /*
   ** Conservative stack and weak-table snapshots can contain stale spill words
   ** with collectable tags. Validate the candidate object against registered
@@ -3755,6 +4058,28 @@ static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
   o = gcval(tv);
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR;
+#if LJ_HASFFI
+  if (itype(tv) == LJ_TCDATA) {
+    uint32_t gct;
+    /*
+    ** Fixed-size cdata may be published before CTState exists. In that narrow
+    ** bootstrap window accept only an exact live, fixed, cell-aligned cdata
+    ** allocation. Variable/aligned/huge cdata necessarily needs CTState to
+    ** prove its real base. Once CTState exists, never bypass normal CType/size
+    ** validation: a stale or corrupted CType ID is not an authoritative edge.
+    */
+    if (ctype_ctsG(g) == NULL) {
+      if (!gc2_markobj_base_valid(g, o, NULL, &gct) ||
+	  gct != (uint32_t)~LJ_TCDATA || cdataisv(gco2cd(o)) ||
+	  ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
+	return 0;
+      return 1;
+    }
+    if (!lj_gc2_obj_valid_queued(g, o))
+      return 0;
+    return o->gch.gct == (uint32_t)~LJ_TCDATA;
+  }
+#endif
   /*
   ** Table and queue edges are not conservative stack words. Validate them with
   ** the owner+bitmap fast path so root/table traversal stays proportional to
@@ -3771,6 +4096,11 @@ static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
       return 0;
   }
   return ~itype(tv) == o->gch.gct;
+}
+
+int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv)
+{
+  return g && tv && gc2_tv_gcref_type_match_known(g, tv);
 }
 
 #define GC2_STACK_ARENA_CACHE	8
@@ -3825,10 +4155,7 @@ static int gc2_tv_gcref_type_match_stack(global_State *g, cTValue *tv,
   }
 #if LJ_HASFFI
   if (itype(tv) == LJ_TCDATA) {
-    uint32_t gct;
-    if (!gc2_markobj_base_valid(g, o, NULL, &gct))
-      return 0;
-    return gct == (uint32_t)~LJ_TCDATA;
+    return gc2_tv_gcref_type_match_known(g, tv);
   }
 #endif
   if (!gc2_obj_valid_stack_cached(g, o, cache))
@@ -4373,10 +4700,6 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
   int remote_current = gc2_thread_is_remote_current(g, L);
   int native_current = gc2_thread_is_native_current(g, L);
   int jit_current = gc2_thread_is_jit_current(g, L);
-  if (vm_current && L->cframe != NULL) {
-    gc2_mark_frame_chain_funcs(g, L);
-    return max;
-  }
   if (remote_current || native_current || jit_current) {
     gc2_mark_frame_chain_funcs(g, L);
 #if LJ_HASJIT
@@ -4413,8 +4736,6 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
     used = max;
   if (vm_current && L->base > bot + 1 + LJ_FR2) {
     top = gc2_active_thread_top(g, L, top, NULL);
-    if (used > top)
-      top = used;
     /*
     ** The active C-call PC gives the current call window. Frame functions were
     ** already marked above, and open local cells are scanned through the open-upval
@@ -4428,26 +4749,6 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
       top = used;
   }
   return top > max ? max : top;
-}
-
-static void gc2_mark_stack_func_slots(global_State *g, lua_State *L)
-{
-  TValue *o, *bot, *max;
-  TValue tv;
-  if (!L || tvref(L->stack) == NULL)
-    return;
-  bot = tvref(L->stack);
-  max = tvref(L->maxstack);
-  /*
-  ** Match the color collector's same-thread C-call root path: frame headers can
-  ** be backend-specific while C/JIT helpers are active, but function-valued stack
-  ** slots still name executable closure/prototype payload.
-  */
-  for (o = bot + 1 + LJ_FR2; o < max; o++) {
-    lj_tv_load_acq(&tv, o);
-    if (tvisfunc(&tv) && gc2_tv_gcref_type_match(g, &tv))
-      gc2_mark_thread_root_obj(g, obj2gco(funcV(&tv)));
-  }
 }
 
 static LJ_AINLINE uint8_t *gc2_thread_flagp(lua_State *L)
@@ -4623,14 +4924,6 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
   cycle = gc2_cycle_acq(g);
   lj_gc2_markobj(g, obj2gco(L));
   lj_gc2_markmem(g, tvref(L->stack));
-  /*
-  ** Frame headers can be outside the precise active value window or temporarily
-  ** owner-private while C/JIT boundaries update L->base/top. Preserve any
-  ** function-valued stack slots conservatively for every stack scan; this keeps
-  ** live frame closure/prototype graphs from being reclaimed without widening
-  ** ordinary non-function locals.
-  */
-  gc2_mark_stack_func_slots(g, L);
   cache.n = 0;
   top = gc2_stack_scan_top(g, L);
   for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++) {
@@ -5042,7 +5335,6 @@ static void gc2_scan_current_trace_root(global_State *g);
 static void gc2_scan_jit_roots(global_State *g)
 {
   jit_State *J = G2J(g);
-  TraceNo i, sizetrace;
   /*
   ** Published and retired JIT state is outside the ordinary Lua root graph, but
   ** stale patched bytecode, exit restore, and mcode retirement may still name it
@@ -5051,12 +5343,6 @@ static void gc2_scan_jit_roots(global_State *g)
   ** can recycle retired trace/mcode metadata while stale readers still hold it.
   */
   lj_trace_markvecs(g, 1);
-  sizetrace = trace_sizetrace_acq(J);
-  for (i = 1; i < sizetrace; i++) {
-    GCtrace *T = gc2_traceref_safe(g, i);
-    if (T && trace_traceno_acq(T) == i)
-      (void)gc2_mark_trace_root(g, i);
-  }
   gc2_scan_current_trace_root(g);
   lj_mcode_markretired(g, 1);
   lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
@@ -5068,9 +5354,32 @@ static void gc2_scan_current_trace_root(global_State *g)
 {
   jit_State *J = G2J(g);
   GCtrace *T = &J->cur;
+  int token = 0;
   IRIns *irbase;
   IRRef ref;
-  GCproto *pt = J->pt;
+  GCproto *pt;
+  if (lj_trace_state_load(J) == LJ_TRACE_IDLE)
+    return;
+  /*
+  ** Recorder geometry is token-private and may be replaced or torn down by its
+  ** owner. Root scanning must never wait for that owner: request an async abort,
+  ** keep this mark round open, and retry from the next root handshake. While the
+  ** round remains open no arena sweep can reclaim the unscanned recorder roots.
+  */
+  if (!lj_jit_token_held(J)) {
+    if (!lj_jit_token_try(J)) {
+      lj_trace_abort(g);
+      gc2_marks_this_round_add(g, 1);
+      lj_gc2_worker_wake(g);
+      lj_assertG(gc2_phase_acq(g) != LJ_GC2_SWEEP,
+		 "active recorder escaped mark closure into sweep");
+      return;
+    }
+    token = 1;
+  }
+  if (lj_trace_state_load(J) == LJ_TRACE_IDLE)
+    goto out;
+  pt = J->pt;
   /*
   ** J->curfinal is the assembler's unpublished compact trace body. It is not
   ** in the trace vector or GC root list until trace_save() publishes it,
@@ -5089,7 +5398,7 @@ static void gc2_scan_current_trace_root(global_State *g)
       lj_gc2_valid_proto_for_traverse(g, pt))
     gc2_mark_thread_root_obj(g, obj2gco(pt));
   if (trace_traceno_acq(T) == 0)
-    return;
+    goto out;
   irbase = trace_ir_acq(T);
   /*
   ** The current trace is a root, but it is not yet an anchored GCtrace object.
@@ -5110,6 +5419,9 @@ static void gc2_scan_current_trace_root(global_State *g)
   (void)gc2_mark_trace_root(g, trace_nextside_acq(T));
   gc2_mark_thread_root_obj(g, trace_startptgco_acq(T));
   gc2_mark_trace_snapshot_pcs_root(g, T);
+out:
+  if (token)
+    lj_jit_token_release(J);
 }
 #endif
 
@@ -8292,7 +8604,7 @@ static int gc2_sweep_barrier_tv(global_State *g, cTValue *tv)
     return 0;
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
-    if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &snap)))
+    if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
       return 1;
     (void)lj_gc2_trace_sweep_root(g, gcV(&snap));
   }
@@ -8388,7 +8700,7 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
   if (tv) {
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
-      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &snap)))
+      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
 	return;
       if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
 	(void)lj_gc2_trace_sweep_root(g, gcV(&snap));
@@ -8552,7 +8864,7 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
       if (tvisgcv(&snap)) {
-	if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &snap)))
+	if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
 	  continue;
 	if (!dirtied) {
 	  gc2_table_dirty_bump_parent(g, parent);
@@ -8565,7 +8877,7 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
     for (i = 0; i < n; i++) {
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
-      if (tvisgcv(&snap) && gc2_tv_gcref_type_match(g, &snap))
+      if (tvisgcv(&snap) && gc2_tv_gcref_type_match_known(g, &snap))
 	gc2_remember_pair(g, parent, gcV(&snap));
     }
   }
@@ -8595,7 +8907,7 @@ void lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent, cTValue *tv)
   if (tv) {
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
-      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &snap)))
+      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
 	return;
       if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
 	(void)lj_gc2_trace_sweep_root(g, gcV(&snap));
@@ -8651,7 +8963,7 @@ void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
   GCobj *child;
   if (!t || !key || !tvisgcv(key))
     return;
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, key)))
+  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, key)))
     return;
   /*
   ** Key publication always passes through this helper so weak-table and
@@ -8702,7 +9014,7 @@ void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
   if (!L || !t || !key || !tvisgcv(key))
     return;
   g = G(L);
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, key)))
+  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, key)))
     return;
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return;
@@ -8719,7 +9031,7 @@ void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val)
   if (!L || !t || !val || !tvisgcv(val))
     return;
   g = G(L);
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, val)))
+  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, val)))
     return;
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return;
@@ -8744,10 +9056,10 @@ void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
     return;
   if (gc2_tab_weak_barrier_mode(g, t) == 0)
     return;
-  if (key && tvisgcv(key) && gc2_tv_gcref_type_match(g, key) &&
+  if (key && tvisgcv(key) && gc2_tv_gcref_type_match_known(g, key) &&
       lj_gc2_markobj(g, gcV(key)))
     gc2_weak_keys_marked_add(g, 1);
-  if (val && tvisgcv(val) && gc2_tv_gcref_type_match(g, val) &&
+  if (val && tvisgcv(val) && gc2_tv_gcref_type_match_known(g, val) &&
       lj_gc2_markobj(g, gcV(val)))
     gc2_weak_values_marked_add(g, 1);
 }
@@ -8895,6 +9207,57 @@ static LJ_AINLINE void gc2_preserve_direct_bodies(global_State *g, GCobj *o)
     gc2_preserve_tab_direct_bodies(g, gco2tab(o));
 }
 
+/*
+** Mark/rescue one exact small-arena allocation start. WHITE remains the state
+** for marked raw/fixed allocations; LIVE specifically records a detached GC
+** header which the post-grace pass must reanchor. A publisher only changes
+** RETIRED->LIVE. FREEING is past the destructor LP and cannot be republished.
+*/
+static int gc2_mark_small_cell(global_State *g, GCArena *a, uint32_t cell)
+{
+  uint32_t flags = lj_arena_flags_acq(a);
+  int marked, rescued = 0;
+  if (flags & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE)) {
+    uint32_t state = lj_arena_sweep_state_acq(a, cell);
+    for (;;) {
+      if (state == LJ_ARENA_SWEEP_FREEING)
+	return 0;
+      if (state != LJ_ARENA_SWEEP_RETIRED)
+	break;
+      if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
+					LJ_ARENA_SWEEP_LIVE)) {
+	uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	lj_assertG(old != 0, "sweep rescue deferred underflow");
+	UNUSED(old);
+	rescued = 1;
+	break;
+      }
+      state = lj_arena_sweep_state_acq(a, cell);
+    }
+  }
+  marked = !la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);
+  if (marked)
+    gc2_marks_this_round_add(g, 1);
+  /* A marker can read OWNED just before RESET publishes NEEDSWEEP. Reconcile a
+  ** RETIRED state after the bitmap store; PREPSWEEP/WHITE needs no state change
+  ** because the bounded classifier observes the mark bit before retirement. */
+  flags = lj_arena_flags_acq(a);
+  if (flags & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE)) {
+    uint32_t state = lj_arena_sweep_state_acq(a, cell);
+    if (state == LJ_ARENA_SWEEP_RETIRED &&
+	lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
+					LJ_ARENA_SWEEP_LIVE)) {
+      uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+      lj_assertG(old != 0, "transition-overlap rescue underflow");
+      UNUSED(old);
+      rescued = 1;
+    } else if (state == LJ_ARENA_SWEEP_FREEING) {
+      return 0;
+    }
+  }
+  return marked || rescued;
+}
+
 int lj_gc2_markmem(global_State *g, void *p)
 {
   TGState *tg;
@@ -8911,11 +9274,7 @@ int lj_gc2_markmem(global_State *g, void *p)
       if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
 	  !lj_arena_bm_get(a->block, cell))
 	return 0;
-      marked = !la_bit_test_and_set64(&a->mark[cell >> 6],
-				      cell & 63);  /* 05 section 5.6.1. */
-      if (marked)
-	gc2_marks_this_round_add(g, 1);
-      return marked;
+      return gc2_mark_small_cell(g, a, cell);
     }
     if (registered == 0)
       return 0;
@@ -8927,19 +9286,15 @@ int lj_gc2_markmem(global_State *g, void *p)
     if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
       return 0;
     marked = lj_arena_hugetab_mark(&tg->huge, p, NULL);
-    if (marked == 1)
+    if (marked > 0)
       gc2_marks_this_round_add(g, 1);  /* 05 section 5.7.1. */
-    return marked == 1;
+    return marked > 0;
   }
   cell = lj_arena_cellof(p);
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
       !lj_arena_bm_get(a->block, cell))
     return 0;
-  marked = !la_bit_test_and_set64(&a->mark[cell >> 6],
-				  cell & 63);  /* 05 section 5.6.1. */
-  if (marked)
-    gc2_marks_this_round_add(g, 1);  /* 05 section 5.7.1. */
-  return marked;
+  return gc2_mark_small_cell(g, a, cell);
 }
 
 int lj_gc2_markmem_registered(global_State *g, void *p)
@@ -8960,25 +9315,21 @@ int lj_gc2_markmem_registered(global_State *g, void *p)
     if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
       return 0;
     marked = lj_arena_hugetab_mark(&tg->huge, p, NULL);
-    if (marked == 1)
+    if (marked > 0)
       gc2_marks_this_round_add(g, 1);
-    return marked == 1;
+    return marked > 0;
   }
   cell = lj_arena_cellof(p);
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
       !lj_arena_bm_get(a->block, cell))
     return 0;
-  marked = !la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);
-  if (marked)
-    gc2_marks_this_round_add(g, 1);
-  return marked;
+  return gc2_mark_small_cell(g, a, cell);
 }
 
 static LJ_AINLINE int gc2_markmem_worker_fast(global_State *g, void *p)
 {
   GCArena *a;
   uint32_t cell;
-  int marked;
   if (!p || la_load32_acq(&g->allocf_arena) == 0)
     return lj_gc2_markmem(g, p);
   a = lj_arena_of(p);
@@ -8988,10 +9339,7 @@ static LJ_AINLINE int gc2_markmem_worker_fast(global_State *g, void *p)
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
       !lj_arena_bm_get(a->block, cell))
     return 0;
-  marked = !la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);
-  if (marked)
-    gc2_marks_this_round_add(g, 1);
-  return marked;
+  return gc2_mark_small_cell(g, a, cell);
 }
 
 int lj_gc2_markobj(global_State *g, GCobj *o)
@@ -9889,10 +10237,6 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
   int remote_current = gc2_thread_is_remote_current(g, L);
   int native_current = gc2_thread_is_native_current(g, L);
   int jit_current = gc2_thread_is_jit_current(g, L);
-  if (vm_current && L->cframe != NULL) {
-    gc2_mark_frame_chain_funcs_worker(g, L);
-    return max;
-  }
   if (remote_current || native_current || jit_current) {
     gc2_mark_frame_chain_funcs_worker(g, L);
 #if LJ_HASJIT
@@ -9929,27 +10273,6 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
       top = used;
   }
   return top > max ? max : top;
-}
-
-static void gc2_mark_stack_func_slots_worker(global_State *g, lua_State *L,
-					     int sweep)
-{
-  TValue *o, *bot, *max;
-  TValue tv;
-  if (!L || tvref(L->stack) == NULL)
-    return;
-  bot = tvref(L->stack);
-  max = tvref(L->maxstack);
-  for (o = bot + 1 + LJ_FR2; o < max; o++) {
-    lj_tv_load_acq(&tv, o);
-    if (tvisfunc(&tv) && gc2_tv_gcref_type_match(g, &tv)) {
-      GCobj *fn = obj2gco(funcV(&tv));
-      if (sweep)
-	gc2_mark_thread_root_obj(g, fn);
-      else
-	gc2_mark_thread_root_obj_worker(g, fn);
-    }
-  }
 }
 
 static int gc2_thread_owner_scans(global_State *g, lua_State *th)
@@ -10142,7 +10465,6 @@ scan_thread:
   sweep = gc2_phase_acq(g) == LJ_GC2_SWEEP;
   gc2_thread_scan_claims_add(g, 1);
   lj_gc2_markmem(g, tvref(th->stack));
-  gc2_mark_stack_func_slots_worker(g, th, sweep);
   top = gc2_stack_scan_top_worker(g, th);
   for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
@@ -10200,7 +10522,7 @@ scan_thread:
 
 static void gc2_traverse_obj(global_State *g, GCobj *o)
 {
-  int gct;
+  uint32_t gct;
   if (LJ_UNLIKELY(!gc2_queue_obj_valid(g, o))) {
     gc2_rescan_pending_clear_if_table(g, o);
     return;
@@ -10284,28 +10606,34 @@ uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o)
 {
   void *base;
   int traversable;
-  uint32_t drained = 0;
   uint32_t gct;
   if (LJ_UNLIKELY(!gc2_markobj_base_valid(g, o, &base, &gct)))
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return (uint32_t)lj_gc2_markobj(g, o);
   (void)lj_gc2_markmem(g, base);
+  lj_assertG(lj_gc2_ismarked(g, o) > 0,
+	     "sweep semantic root published without a GC2 mark");
   gc2_preserve_direct_bodies(g, o);
   traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
     gc2_mark_base_traversable(g, base);
-  if (traversable || gct == (uint32_t)~LJ_TUDATA) {
+  if (traversable) {
     /*
-    ** MARK/WEAK have ended, so a sweep-time semantic root cannot rely on the
-    ** ordinary mark enqueue path. Trace root containers synchronously: package
-    ** tables, registry tables, thread stacks, and FFI/JIT side roots must close
-    ** their strong payload edges before any root-spine or arena sweep reuses
-    ** child cells.
+    ** Mutators never push/pop the single-owner global grey deque. Publish the
+    ** rescued container on this TG's SSB; the worker converts it to grey work
+    ** before the post-retire grace/reclaim boundary. This also makes every
+    ** sweep-time semantic publication visible to the close predicate.
     */
-    gc2_traverse_obj(g, o);
-    drained = 1 + gc2_drain_grey(g, ~(uint32_t)0);
+    int pushed = lj_gc2_ssb_push(g, o);
+    lj_assertG(pushed, "gc2 sweep rescue SSB publication failed");
+    return (uint32_t)(pushed != 0);
+  } else if (gct == (uint32_t)~LJ_TUDATA) {
+    /* Userdata is never put on the grey deque; its metatable edge is small and
+    ** traversal publishes any collectable child through the current TG SSB. */
+    gc2_traverse_udata(g, gco2ud(o));
+    return 1;
   }
-  return drained;
+  return 0;
 }
 
 static void gc2_trace_sweep_tv(global_State *g, cTValue *tv)
@@ -10422,6 +10750,35 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   uint32_t n = 0;
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
+  /* Sweep-time publishers enqueue rescued containers on SSB. Close that graph
+  ** before taking the post-retirement grace or running any destructor. */
+  while (n < limit) {
+    uint32_t moved = gc2_drain_published_ssb_to_grey(g, 1);
+    GCobj *o = gc2_grey_pop(g);
+    if (o) {
+      gc2_traverse_obj(g, o);
+      n++;
+      continue;
+    }
+    if (!moved)
+      break;
+    n += moved;
+  }
+  if (n)
+    return n;
+  if (gc2_sweep_grace_needed_acq(g)) {
+    uint32_t grace;
+    /* This synchronous API returns only after every target acknowledged. The
+    ** worker token prevents a second retire producer, so clearing the latch
+    ** afterward proves all currently quarantined gcw/raw readers crossed a
+    ** complete epoch. The next worker pass drains roots published by the ACK. */
+    for (grace = 0; grace < LJ_FLUSH_EPOCHS; grace++)
+      (void)lj_gc2_handshake(g,
+	LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+      gc2_sweep_grace_needed_rel(g, 0);
+    return 1;
+  }
   for (tg = gc2_tg_list_acq(g);
        tg != NULL && n < limit;
        tg = lj_tg_next_acq(tg)) {
@@ -10496,9 +10853,18 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP)
     return 0;
-  if (phase != LJ_GC2_SWEEP) {
-    TGState *tg = G2TG(g);
-    if (tg && !lj_tg_flags_test_acq(tg, TGF_DEAD))
+  {
+    TGState *tg = lj_thr_get_tg();
+    /*
+    ** The initiating mutator is not a remote handshake target. Sweep-time
+    ** preservation can therefore leave rescans in its owner-local active SSB
+    ** after the WEAK boundary. Publish that buffer before testing the sweep
+    ** fixpoint; otherwise the worker sees no published work while
+    ** lj_gc2_ssb_empty() correctly keeps SWEEP open forever. Never use the
+    ** main-TG fallback here: only the actual TLS owner may rotate its active
+    ** SSB node.
+    */
+    if (tg && tg->gl == g && !lj_tg_flags_test_acq(tg, TGF_DEAD))
       (void)gc2_flush_ssb(g, tg, 0);
   }
   if (!gc2_worker_claim_count_busy(g))
@@ -10683,6 +11049,16 @@ int lj_gc2_ismarkedmem(global_State *g, void *p)
       if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
 	  !lj_arena_bm_get(a->block, cell))
 	return -1;
+      if (lj_arena_flags_acq(a) & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE)) {
+	uint32_t state = lj_arena_sweep_state_acq(a, cell);
+	if (state == LJ_ARENA_SWEEP_LIVE)
+	  return 1;
+	if (state == LJ_ARENA_SWEEP_FREEING)
+	  return -1;
+	if (state == LJ_ARENA_SWEEP_RETIRED)
+	  return 0;
+	return lj_arena_bm_get(a->mark, cell);
+      }
       return lj_arena_bm_get(a->mark, cell);
     }
     if (registered == 0)
@@ -10696,12 +11072,24 @@ int lj_gc2_ismarkedmem(global_State *g, void *p)
     if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB) ||
 	lj_arena_hugetab_lookup(&tg->huge, p, &hi) != 1)
       return -1;
+    if (hi.flags & LJ_HUGEF_FREEING)
+      return -1;
     return (hi.flags & LJ_HUGEF_MARK) != 0;
   }
   cell = lj_arena_cellof(p);
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
       !lj_arena_bm_get(a->block, cell))
     return -1;
+  if (lj_arena_flags_acq(a) & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE)) {
+    uint32_t state = lj_arena_sweep_state_acq(a, cell);
+    if (state == LJ_ARENA_SWEEP_LIVE)
+      return 1;
+    if (state == LJ_ARENA_SWEEP_FREEING)
+      return -1;
+    if (state == LJ_ARENA_SWEEP_RETIRED)
+      return 0;
+    return lj_arena_bm_get(a->mark, cell);
+  }
   return lj_arena_bm_get(a->mark, cell);
 }
 

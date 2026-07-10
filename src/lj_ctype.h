@@ -380,11 +380,20 @@ typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 
 #define CCALLBACK_MAX_NEST	LJ_MAX_XLEVEL
 
+enum {
+  CCALLBACK_ERR_SETUP,		/* Argument/setup failure: preserve entry pair. */
+  CCALLBACK_ERR_BODY,		/* Lua body failure: preserve throw-edge pair. */
+  CCALLBACK_ERR_RESULT		/* Result conversion: preserve body return pair. */
+};
+
 typedef struct CCallbackFrame {
   lua_State *L;			/* Callback carrier Lua state. */
-  TValue *cont;			/* Continuation frame owning this entry. */
+  ptrdiff_t cont;		/* Stack-relative continuation frame offset. */
   uint32_t native_depth;	/* Callback entered from a native region. */
   uint8_t auto_detach;		/* Scoped foreign-thread auto-attach. */
+  uint8_t errphase;		/* Which saved/current OS error pair owns unwind. */
+  int errnum;			/* errno to expose on normal/error return. */
+  uint32_t winerr;		/* Win32 LastError paired with errnum. */
 } CCallbackFrame;
 
 typedef LJ_ALIGN(8) struct CCallbackRuntime {

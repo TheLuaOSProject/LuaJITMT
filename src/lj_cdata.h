@@ -9,6 +9,8 @@
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_ctype.h"
+#include "lj_err.h"
+#include "lj_oserr.h"
 
 #if LJ_HASFFI
 
@@ -40,6 +42,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
   GCcdata *cd;
   CTypeID checked;
   global_State *g = G(L);
+  LJOSerrState oserr;
 #ifdef LUA_USE_ASSERT
   CType *ct = ctype_raw(cts, id);
   CTInfo info = ctype_info_acq(ct);
@@ -48,12 +51,23 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
 	       "inconsistent size of fixed-size cdata alloc");
 #endif
   checked = ctype_check(cts, id);
-  cd = (GCcdata *)lj_mem_newgco_unlinked(L, sizeof(GCcdata) + sz);
+  /* Cdata materialization is transparent to the OS error pair even when the
+  ** allocator fails. Use the non-throwing primitive so the stack-local pair
+  ** is restored at the actual throw edge instead of relying on lexical
+  ** cleanup after an external unwind. */
+  lj_oserr_save(&oserr);
+  cd = (GCcdata *)lj_mem_newgco_unlinked_nothrow(L,
+						  sizeof(GCcdata) + sz);
+  if (LJ_UNLIKELY(cd == NULL)) {
+    lj_oserr_restore(&oserr);
+    lj_err_mem(L);
+  }
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = checked;
   cdata_flags_rel(cd, 0);
   newwhite(g, obj2gco(cd));
   lj_gc_linkobj_new(g, obj2gco(cd));
+  lj_oserr_restore(&oserr);
   return cd;
 }
 
@@ -61,12 +75,21 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
 static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
 {
   global_State *g = G(L);
-  GCcdata *cd = (GCcdata *)lj_mem_newgco_unlinked(L, sizeof(GCcdata) + sz);
+  GCcdata *cd;
+  LJOSerrState oserr;
+  lj_oserr_save(&oserr);
+  cd = (GCcdata *)lj_mem_newgco_unlinked_nothrow(L,
+						  sizeof(GCcdata) + sz);
+  if (LJ_UNLIKELY(cd == NULL)) {
+    lj_oserr_restore(&oserr);
+    lj_err_mem(L);
+  }
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = id;
   cdata_flags_rel(cd, 0);
   newwhite(g, obj2gco(cd));
   lj_gc_linkobj_new(g, obj2gco(cd));
+  lj_oserr_restore(&oserr);
   return cd;
 }
 

@@ -259,11 +259,11 @@ int main(void)
     GCArena *a1, *a2, *swept1, *swept2;
     lj_arena_alloc_init(&publish);
     publish.alloc_black = 0;
-    first = lj_arena_alloc(&publish, &rs, 16000, 0);
-    fill1 = lj_arena_alloc(&publish, &rs, 16000, 0);
-    fill2 = lj_arena_alloc(&publish, &rs, 16000, 0);
-    fill3 = lj_arena_alloc(&publish, &rs, 16000, 0);
-    second = lj_arena_alloc(&publish, &rs, 16000, 0);
+    first = lj_arena_alloc(&publish, &rs, 15000, 0);
+    fill1 = lj_arena_alloc(&publish, &rs, 15000, 0);
+    fill2 = lj_arena_alloc(&publish, &rs, 15000, 0);
+    fill3 = lj_arena_alloc(&publish, &rs, 15000, 0);
+    second = lj_arena_alloc(&publish, &rs, 15000, 0);
     assert(first != NULL && fill1 != NULL && fill2 != NULL &&
 	   fill3 != NULL && second != NULL);
     a1 = lj_arena_of(first);
@@ -283,7 +283,7 @@ int main(void)
     assert(publish.bump[LJ_ARENAK_PLAIN].a == swept2);
     assert(bin_count(&publish, LJ_ARENAK_PLAIN) >= 1);
     expected_reuse = swept1 == a1 ? first : second;
-    reuse = lj_arena_alloc(&publish, &rs, 16000, 0);
+    reuse = lj_arena_alloc(&publish, &rs, 15000, 0);
     assert(reuse == expected_reuse);
     lj_arena_alloc_fini(&publish);
   }
@@ -334,6 +334,110 @@ int main(void)
     lj_arena_free(&dst, livep, 64);
     lj_arena_alloc_fini(&src);
     lj_arena_alloc_fini(&dst);
+  }
+
+  {
+    TGAlloc late;
+    void *p, *already_free, *same_cycle, *ordinary, *ordinary_reuse;
+    void *next_cycle;
+    GCArena *a;
+    uint32_t cell, freecell, samecell, ordinarycell;
+    lj_arena_alloc_init(&late);
+    late.alloc_black = 1;
+    p = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
+    already_free = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
+    assert(p != NULL && already_free != NULL);
+    a = lj_arena_of(p);
+    assert(lj_arena_of(already_free) == a);
+    cell = lj_arena_cellof(p);
+    freecell = lj_arena_cellof(already_free);
+    lj_arena_alloc_prepare_sweep_kind(&late, LJ_ARENAK_TRAVERSABLE);
+    assert(lj_arena_alloc_quarantine_one(&late, LJ_ARENAK_TRAVERSABLE,
+					  11u) == a);
+    assert(lj_arena_sweep_state_cas(a, freecell, LJ_ARENA_SWEEP_WHITE,
+					    LJ_ARENA_SWEEP_FREEING));
+    assert(lj_arena_alloc_quarantine_finish(&late,
+	LJ_ARENAK_TRAVERSABLE, a, 31u, 0));
+    assert((a->hdr.flags & LJ_AF_RECLAIMED) != 0);
+    assert(lj_arena_remote_active_acq(a) != 0);  /* CLOSED admission gate. */
+
+    /* The physical free loses the CLOSED/open race, so it may only publish a
+    ** size-bearing late record. It must not alter the committed sweep sidecar
+    ** or disappear as a permanent opaque-allocation leak. */
+    assert(lj_arena_quarantine_owns_body(p, 64));
+    /* A duplicate physical free for the already-free committed cell is legal
+    ** too: adoption must consume its record and clear late[] even though
+    ** block[freecell] is zero. */
+    assert(lj_arena_quarantine_owns_body(already_free, 64));
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL);
+    assert((la_load64_acq(&a->late[cell >> 6]) &
+	    ((uint64_t)1 << (cell & 63))) != 0);
+    assert((la_load64_acq(&a->late[freecell >> 6]) &
+	    ((uint64_t)1 << (freecell & 63))) != 0);
+    assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_WHITE);
+
+    late.alloc_black = 0;
+    same_cycle = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
+    assert(same_cycle == already_free);
+    samecell = lj_arena_cellof(same_cycle);
+    assert(same_cycle != p);  /* No reuse without a fresh grace. */
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL);
+    assert((la_load64_acq(&a->late[cell >> 6]) &
+	    ((uint64_t)1 << (cell & 63))) != 0);
+    assert((la_load64_acq(&a->late[freecell >> 6]) &
+	    ((uint64_t)1 << (freecell & 63))) == 0);
+    assert(lj_arena_bm_get(a->block, cell));
+    assert(lj_arena_remote_active_acq(a) == 0);
+    assert((a->hdr.flags & LJ_AF_RECLAIMED) == 0);
+
+    /* A duplicate ordinary publication for the retained body must observe the
+    ** stable late bit before touching sweep state or the intrusive link. */
+    assert(((LJArenaRemoteFree *)p)->next == NULL);
+    assert(lj_arena_remote_free_publish(&late, p, 64));
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == p);
+    assert(((LJArenaRemoteFree *)p)->next == NULL);
+    assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_WHITE);
+
+    /* A normal remote record can share the queue with the deferred late one.
+    ** Ordinary drain must free/reuse it immediately while repartitioning the
+    ** late live-cell record intact. */
+    ordinary = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
+    assert(ordinary != NULL && lj_arena_of(ordinary) == a && ordinary != p);
+    assert(lj_arena_remote_free_publish(&late, ordinary, 64));
+    assert(lj_arena_remote_free_drain(&late) == 1u);
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL);
+    assert((la_load64_acq(&a->late[cell >> 6]) &
+	    ((uint64_t)1 << (cell & 63))) != 0);
+    assert(lj_arena_bm_get(a->block, cell));
+    ordinary_reuse = lj_arena_alloc(&late, &rs, 64,
+	LJ_AF_TRAVERSABLE);
+    assert(ordinary_reuse == ordinary);
+    ordinarycell = lj_arena_cellof(ordinary_reuse);
+
+    /* The next cycle consumes the deferred ticket only after sweep[] has
+    ** reset. Root pruning can now detach a remaining gct=0 ticket and this
+    ** cycle's quarantine grace covers conversion to reusable bitmap space. */
+    lj_arena_alloc_prepare_sweep_kind(&late, LJ_ARENAK_TRAVERSABLE);
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
+    assert((la_load64_acq(&a->late[cell >> 6]) &
+	    ((uint64_t)1 << (cell & 63))) == 0);
+    assert(lj_arena_sweep_state_acq(a, cell) ==
+	   LJ_ARENA_SWEEP_FREEING);
+    /* Stand in for classification of the other live allocation; the deferred
+    ** body itself must stay FREEING through this cycle's quarantine. */
+    lj_arena_bm_set(a->mark, samecell);
+    lj_arena_bm_set(a->mark, ordinarycell);
+    assert(lj_arena_alloc_quarantine_one(&late,
+	LJ_ARENAK_TRAVERSABLE, 41u) == a);
+    assert(lj_arena_alloc_quarantine_finish(&late,
+	LJ_ARENAK_TRAVERSABLE, a, 51u, 0));
+    assert(!lj_arena_bm_get(a->block, cell));
+    next_cycle = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
+    assert(next_cycle == p);  /* Reuse is legal after the fresh cycle grace. */
+    lj_arena_free(&late, next_cycle, 64);
+    lj_arena_free(&late, same_cycle, 64);
+    lj_arena_free(&late, ordinary_reuse, 64);
+    lj_arena_alloc_fini(&late);
   }
 
   printf("t-arena-sweep OK: owner-local sweep rebuild verified\n");

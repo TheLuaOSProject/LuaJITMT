@@ -826,6 +826,13 @@ static void threading_worker_cleanup(ThreadingWorkerCtx *ctx)
   lua_State *L = ctx->L;
   TGState *tg = ctx->tg;
   global_State *g = ctx->g;
+  /* A BC_FUNCF hot edge can start the recorder immediately before the worker
+  ** returns to this C boundary. Cancel its unpublished state while L and the
+  ** owner TG are still claimed and published; detaching first would strand the
+  ** global recorder token under a dead tid.
+  */
+  if (ctx->claimed)
+    lj_trace_abort_owner(L);
   if (ctx->claimed)
     lj_ccallback_disown_state(L);
   if (ctx->claimed)
@@ -928,6 +935,11 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
 static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
 				     int disown_callbacks)
 {
+  /* Foreign attached threads have the same recorder lifetime boundary as
+  ** spawned workers: no recorder state may retain this TG's soon-dead tid.
+  */
+  if (ctx->attached)
+    lj_trace_abort_owner(L);
   if (ctx->attached && disown_callbacks)
     lj_ccallback_disown_state(L);
   if (ctx->attached) {
@@ -1972,6 +1984,7 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   if (!tg || tg == g->main_tg || lj_tg_load_thread_L(tg) != L)
     return;
   tid = lj_tg_tid_acq(tg);
+  lj_trace_abort_owner(L);
   if (disown_callbacks)
     lj_ccallback_disown_state(L);
   lj_tg_detach(g, tg);

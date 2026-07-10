@@ -1340,6 +1340,9 @@ typedef struct GC2State {
   uint64_t weak_complete_progress;  /* Worker progress during P_WEAK finish. */
   uint64_t weak_to_sweep;  /* WEAK-to-SWEEP phase publications. */
   uint32_t sweep_bridge_ready;  /* Root sweep reached close boundary. */
+  GCRef *sweep_root_cursor;  /* Bounded old-generation root-prune link. */
+  uint32_t sweep_root_done;  /* Final pending-root flush reached EOF. */
+  uint32_t sweep_grace_needed;  /* Quarantine awaits another HS epoch. */
   uint64_t sweep_to_idle;  /* SWEEP-to-IDLE phase publications. */
   uint64_t preserve_abort_to_idle;  /* Preserve aborts leaving an active phase. */
   uint64_t alloc_total_bytes;  /* Monotonic flushed mutator allocation bytes. */
@@ -1508,6 +1511,7 @@ typedef struct global_State {
   uint8_t dispatchmode;	/* Dispatch mode. */
   uint8_t vmevmask;	/* VM event mask. */
   uint32_t hookactive;	/* Active debug hook callbacks. */
+  uint32_t vmevent_owner;  /* TG serializing VM-event protected callbacks. */
   StrInternState str;	/* String interning. */
   TabState tab;		/* Table raw storage retirement. */
   int32_t vmstate;  /* VM state or current JIT code trace number. */
@@ -1552,6 +1556,11 @@ typedef struct global_State {
   uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
 } global_State;
+
+#if defined(LUA_USE_ASSERT) || defined(LUA_USE_APICHECK)
+LJ_FUNC_NORET void lj_assert_fail(global_State *g, const char *file, int line,
+				  const char *func, const char *fmt, ...);
+#endif
 
 LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
 		 offsetof(global_State, nilnodehdr) + sizeof(TabNodeHdr));
@@ -1670,6 +1679,25 @@ static LJ_AINLINE uint8_t vmevmask_update(global_State *g, uint8_t clear,
     if (vmevmask_cas(g, &old, next))
       return next;
   }
+}
+
+static LJ_AINLINE uint32_t vmevent_owner_acq(global_State *g)
+{
+  return la_load32_acq(&g->vmevent_owner);
+}
+
+static LJ_AINLINE int vmevent_owner_cas(global_State *g, uint32_t *oldp,
+					uint32_t owner)
+{
+  return la_cas32(&g->vmevent_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void vmevent_owner_rel(global_State *g, uint32_t owner)
+{
+  uint32_t expect = owner;
+  int released = la_cas32(&g->vmevent_owner, &expect, 0, LA_REL, LA_RLX);
+  lj_assertG(released, "VM-event owner changed before release");
+  UNUSED(released);
 }
 
 static LJ_AINLINE uint32_t mt_active_acq(global_State *g)
@@ -1819,6 +1847,35 @@ static LJ_AINLINE int hookmask_set_if_clear(global_State *g, uint8_t blocked,
     next = (uint8_t)(old | set);
     if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
       return 1;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+static LJ_AINLINE int hookmask_vmevent_enter(global_State *g)
+{
+  /* VM-event callbacks own the process-wide hook suppression bits only when no
+  ** debug/profile/GC callback is already using them. Event arguments live on
+  ** their initiating L and can be discarded without waiting on a busy hook.
+  */
+  return hookmask_set_if_clear(g,
+    HOOK_ACTIVE|HOOK_VMEVENT|HOOK_GC|HOOK_PROFILE,
+    HOOK_ACTIVE|HOOK_VMEVENT);
+}
+
+static LJ_AINLINE void hookmask_vmevent_leave(global_State *g)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next = (uint8_t)(old & (uint8_t)~HOOK_VMEVENT);
+    /* Preserve a concurrently entered debug or GC hook. hookactive is sampled
+    ** inside the CAS loop so its increment-before-mask and decrement-after-mask
+    ** protocols cannot be hidden by this event's leave.
+    */
+    if (la_load32_acq(&g->hookactive) == 0 && !(next & HOOK_GC))
+      next &= (uint8_t)~HOOK_ACTIVE;
+    else
+      next |= HOOK_ACTIVE;
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
   }
 }
 
@@ -2085,11 +2142,6 @@ static LJ_AINLINE void lj_state_scan_handoff_epoch_rel(lua_State *L,
 #define curr_proto(L)		(funcproto(curr_func(L)))
 #define curr_topL(L)		(L->base + curr_proto(L)->framesize)
 #define curr_top(L)		(curr_funcisL(L) ? curr_topL(L) : L->top)
-
-#if defined(LUA_USE_ASSERT) || defined(LUA_USE_APICHECK)
-LJ_FUNC_NORET void lj_assert_fail(global_State *g, const char *file, int line,
-				  const char *func, const char *fmt, ...);
-#endif
 
 /* -- GC object definition and conversions -------------------------------- */
 
@@ -2874,6 +2926,37 @@ static LJ_AINLINE void gc2_sweep_bridge_ready_rel(global_State *g,
 						  uint32_t ready)
 {
   la_store32_rel(&g->gc2.sweep_bridge_ready, ready);
+}
+
+static LJ_AINLINE GCRef *gc2_sweep_root_cursor_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&g->gc2.sweep_root_cursor);
+}
+
+static LJ_AINLINE void gc2_sweep_root_cursor_rel(global_State *g, GCRef *p)
+{
+  la_storeptr_rel((void **)&g->gc2.sweep_root_cursor, p);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_root_done_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_root_done);
+}
+
+static LJ_AINLINE void gc2_sweep_root_done_rel(global_State *g, uint32_t done)
+{
+  la_store32_rel(&g->gc2.sweep_root_done, done);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_grace_needed_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_grace_needed);
+}
+
+static LJ_AINLINE void gc2_sweep_grace_needed_rel(global_State *g,
+						   uint32_t needed)
+{
+  la_store32_rel(&g->gc2.sweep_grace_needed, needed);
 }
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_to_idle, sweep_to_idle)

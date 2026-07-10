@@ -343,10 +343,11 @@ static GCtrace *jit_checktrace_tr(lua_State *L, TraceNo tr)
 {
   jit_State *J = L2J(L);
   TraceVec *tv = tracevec_acq(J);
-  if (tr > 0 && trace_traceno_acq(&J->cur) == tr &&
-      lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-      (J->L == L || vmthread_acq(G(L)) == L) &&
-      lj_jit_token_held_l(J->L, J) && lj_jit_token_held(J)) {
+  lua_State *owner = jit_owner_l_acq(J);
+  if (tr > 0 && lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+      trace_traceno_acq(&J->cur) == tr &&
+      owner == L && lj_jit_token_held_l(L, J) && lj_jit_token_held(J) &&
+      lj_trace_state_load(J) != LJ_TRACE_IDLE) {
     /*
     ** RECORD vmevents expose the pending trace number before trace_stop()
     ** publishes a body in the trace vector. The recorder owns J->cur under the
@@ -615,6 +616,13 @@ LJLIB_CF(jit_util_traceexitstub)
       setintptrV(L->top-1, (intptr_t)(void *)addr);
       return 1;
     }
+    /*
+    ** The two-argument form names a trace and an exit. If a concurrent flush
+    ** invalidated that trace, return no result; do not fall through and
+    ** reinterpret the trace number as the one-argument global exit number.
+    ** Full flush may already have retired the corresponding exit-stub group.
+    */
+    return 0;
   }
 #endif
 #ifdef EXITSTUBS_PER_GROUP

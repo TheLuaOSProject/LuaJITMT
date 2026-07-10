@@ -157,6 +157,7 @@ enum {
 #define LJ_GC2_HS_REDISPATCH		0x00000100u
 #define LJ_GC2_HS_FLUSHJ		0x00000200u
 #define LJ_GC2_HS_STOPREQ		0x00000400u
+#define LJ_GC2_HS_RESTORE_ALLOC		0x00000800u
 
 #define LJ_GC2_ACCT_FLUSH		32768u
 /*
@@ -212,9 +213,26 @@ LJ_FUNC int lj_gc2_sweep_needs_prepare(global_State *g);
 LJ_FUNC int lj_gc2_sweep_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc2_handshake(global_State *g, uint32_t actions);
 LJ_FUNC uint64_t lj_gc2_retire_epoch(global_State *g);
+LJ_FUNC int lj_gc2_smr_read_try(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_enter(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
 LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
+
+/* A JIT retire-list detach is valid either in the ordinary idle zero-worker
+** grace pass, or in the sweep owner's bounded quarantine drain. Both cases
+** additionally require smr_reclaiming and the recorder token at the call site.
+*/
+static LJ_AINLINE int lj_gc2_jit_reclaim_context_acq(global_State *g)
+{
+  uint32_t phase;
+  uint32_t worker;
+  if (!g || gc2_smr_reclaiming_acq(g) == 0)
+    return 0;
+  phase = gc2_phase_acq(g);
+  worker = gc2_worker_active_acq(g);
+  return (phase == LJ_GC2_IDLE && worker == 0) ||
+	 (phase == LJ_GC2_SWEEP && worker != 0);
+}
 LJ_FUNC void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s);
 LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_trace_sweep_roots(global_State *g);
@@ -341,6 +359,8 @@ LJ_FUNC int lj_gc2_markobj_nogrey(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
 LJ_FUNC int lj_gc2_obj_valid(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_obj_valid_queued(global_State *g, GCobj *o);
+/* Validate a structured, authoritative TValue edge (table/root publication). */
+LJ_FUNC int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv);
 LJ_FUNC int lj_gc2_mem_registered(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_mem_registered_known(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_markmem_registered(global_State *g, void *p);

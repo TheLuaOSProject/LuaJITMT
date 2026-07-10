@@ -15,6 +15,7 @@
 #include "lj_ctype.h"
 #include "lj_cconv.h"
 #include "lj_cdata.h"
+#include "lj_oserr.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
 
@@ -41,12 +42,28 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   global_State *g;
   MSize extra = sizeof(GCcdataVar) + sizeof(GCcdata) +
 		(align > CT_MEMALIGN ? (1u<<align) - (1u<<CT_MEMALIGN) : 0);
-  char *p = lj_mem_newt(L, extra + sz, char);
-  uintptr_t adata = (uintptr_t)p + sizeof(GCcdataVar) + sizeof(GCcdata);
-  uintptr_t almask = (1u << align) - 1u;
-  GCcdata *cd = (GCcdata *)(((adata + almask) & ~almask) - sizeof(GCcdata));
+  char *p;
+  uintptr_t adata;
+  uintptr_t almask;
+  GCcdata *cd;
+  LJOSerrState oserr;
+  /* Same contract for traced VLA/VLS and over-aligned CNEW materialization. */
+  lj_oserr_save(&oserr);
+  p = (char *)lj_mem_new_nothrow(L, extra + sz);
+  if (LJ_UNLIKELY(p == NULL)) {
+    lj_oserr_restore(&oserr);
+    lj_err_mem(L);
+  }
+  adata = (uintptr_t)p + sizeof(GCcdataVar) + sizeof(GCcdata);
+  almask = (1u << align) - 1u;
+  cd = (GCcdata *)(((adata + almask) & ~almask) - sizeof(GCcdata));
   lj_assertL((char *)cd - p < 65536, "excessive cdata alignment");
   cdatav(cd)->offset = (uint16_t)((char *)cd - p);
+  /* Keep the same offset at the allocation base. With ordinary alignment this
+  ** aliases cdatav.offset; with over-alignment it occupies otherwise-unused
+  ** prefix padding. Bitmap sweep can therefore recover the exact GC header
+  ** from an allocation start without repurposing gcw before an SMR grace. */
+  *(uint16_t *)(void *)p = cdatav(cd)->offset;
   cdatav(cd)->extra = extra;
   cdatav(cd)->len = sz;
   g = G(L);
@@ -56,6 +73,7 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   newwhite(g, obj2gco(cd));
   lj_obj_addgcflags(obj2gco(cd), 0x80);
   lj_gc_linkobj_new(g, obj2gco(cd));
+  lj_oserr_restore(&oserr);
   return cd;
 }
 

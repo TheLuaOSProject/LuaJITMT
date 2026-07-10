@@ -139,6 +139,24 @@ void lj_gc_arena_markmem_registered(global_State *g, void *p)
     (void)lj_gc2_markmem_registered(g, p);
 }
 
+static void gc2_preserve_root_spine_body(global_State *g, GCobj *o)
+{
+  if (o && o->gch.gct == (uint32_t)~LJ_TTAB) {
+    GCtab *t = gco2tab(o);
+    TValue *array = NULL;
+    MSize asize = 0, acap = 0, hmask = 0;
+    Node *node = NULL;
+    if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
+	LJ_TAB_GC_SNAPSHOT_OK && array)
+      (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+				 (void *)array);
+    UNUSED(asize);
+    if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
+	LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
+      (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+  }
+}
+
 void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g)
 {
   GCobj *o;
@@ -158,20 +176,7 @@ void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g)
     if (!gc_root_link_valid(g, o))
       break;
     next = lj_obj_gcw_acq(o);
-    if (o->gch.gct == (uint32_t)~LJ_TTAB) {
-      GCtab *t = gco2tab(o);
-      TValue *array = NULL;
-      MSize asize = 0, acap = 0, hmask = 0;
-      Node *node = NULL;
-      if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
-	  LJ_TAB_GC_SNAPSHOT_OK && array)
-	(void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
-				       (void *)array);
-      UNUSED(asize);
-      if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
-	  LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
-	(void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
-    }
+    gc2_preserve_root_spine_body(g, o);
     if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
     o = next;
@@ -198,6 +203,10 @@ static int gc_tv_gcref_type_match(global_State *g, cTValue *tv)
   o = gcval(tv);
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR;
+#if LJ_HASFFI
+  if (itype(tv) == LJ_TCDATA)
+    return lj_gc2_tv_gcref_valid_edge(g, tv);
+#endif
   if (o == NULL || !checkptrGC(o) ||
       ((uintptr_t)o & (sizeof(void *) - 1u)) != 0)
     return 0;
@@ -224,7 +233,7 @@ static int gc_tv_gcref_type_match(global_State *g, cTValue *tv)
 
 int lj_gc_tv_gcref_valid(global_State *g, cTValue *tv)
 {
-  return gc_tv_gcref_type_match(g, tv);
+  return lj_gc2_tv_gcref_valid_edge(g, tv);
 }
 
 static int gc_objroot_gct_valid(global_State *g, GCobj *o, uint32_t *gctp)
@@ -255,11 +264,17 @@ static int gc_objroot_gct_valid(global_State *g, GCobj *o, uint32_t *gctp)
   return 1;
 }
 
-static int gc_tab_tv_gcref_type_match(cTValue *tv)
+static int gc_tab_tv_gcref_type_match(global_State *g, cTValue *tv)
 {
   GCobj *o;
   if (!tvisgcv(tv))
     return 1;
+#if LJ_HASFFI
+  if (itype(tv) == LJ_TCDATA)
+    return lj_gc2_tv_gcref_valid_edge(g, tv);
+#else
+  UNUSED(g);
+#endif
   o = gcval(tv);
   if (o == NULL || !checkptrGC(o) ||
       ((uintptr_t)o & (sizeof(void *) - 1u)) != 0)
@@ -666,6 +681,7 @@ static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
 static int gc_mark_claim_white(global_State *g, GCobj *o)
 {
   uint8_t old = la_load8_acq(&o->gch.marked);
+  UNUSED(g);
   for (;;) {
     uint8_t next;
     if (!(old & LJ_GC_WHITES))
@@ -1010,14 +1026,14 @@ static void gc_mark_tab_slot_edge_obj(global_State *g, GCobj *o)
 
 static void gc_mark_tab_edge_tv(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc_tab_tv_gcref_type_match(tv)) || !tvisgcv(tv))
+  if (LJ_UNLIKELY(!gc_tab_tv_gcref_type_match(g, tv)) || !tvisgcv(tv))
     return;
   gc_mark_tab_slot_edge_obj(g, gcV(tv));
 }
 
 static void gc_mark_strong_edge_tv(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, tv)) || !tvisgcv(tv))
+  if (LJ_UNLIKELY(!lj_gc2_tv_gcref_valid_edge(g, tv)) || !tvisgcv(tv))
     return;
   gc_mark_strong_edge_obj(g, gcV(tv));
 }
@@ -1582,28 +1598,6 @@ static void gc_mark_frame_chain_funcs(global_State *g, lua_State *th)
   }
 }
 
-static void gc_mark_stack_func_slots(global_State *g, lua_State *th)
-{
-  TValue *o, *bot, *max;
-  TValue tv;
-  if (!th || tvref(th->stack) == NULL)
-    return;
-  bot = tvref(th->stack);
-  max = tvref(th->maxstack);
-  /*
-  ** Same-thread C calls can suspend Lua callers below fast-function and cpcall
-  ** frames whose frame metadata is backend-specific. Function-valued frame slots
-  ** are not ordinary live locals, but their closure/proto payload is executable
-  ** state for the suspended call chain and must survive a full collection entered
-  ** from that C call.
-  */
-  for (o = bot + 1 + LJ_FR2; o < max; o++) {
-    lj_tv_load_acq(&tv, o);
-    if (tvisfunc(&tv) && gc_tv_gcref_type_match(g, &tv))
-      gc_mark_thread_root_func(g, funcV(&tv));
-  }
-}
-
 /* Traverse the frame structure of a stack. */
 static MSize gc_traverse_frames(global_State *g, lua_State *th)
 {
@@ -1957,13 +1951,8 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
 #if LJ_HASJIT
     gc_mark_active_cframe_proto(g, th);
 #endif
-    gc_mark_stack_func_slots(g, th);
-    top = tvref(th->maxstack);
-    used = (MSize)(top - tvref(th->stack));
   }
-  if (th == cur_L && th->cframe != NULL) {
-    /* Current C-frame helper operands are live until the helper returns. */
-  } else if (!remote_current && !native_current && !jit_current && th == cur_L &&
+  if (!remote_current && !native_current && !jit_current && th == cur_L &&
       th->base > tvref(th->stack) + 1 + LJ_FR2) {
     top = gc_active_thread_top(g, th, top, NULL);
     /*
@@ -2258,6 +2247,10 @@ static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
   */
   if (gct == (uint32_t)~LJ_TSTR)
     return 0;
+#if LJ_HASJIT
+  if (gct == (uint32_t)~LJ_TTRACE)
+    return lj_trace_free_gc(g, gco2trace(o));
+#endif
   if (gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA) {
     GCFreeFunc fn = gc_freefunc[gct - (uint32_t)~LJ_TSTR];
     if (fn) {
@@ -2443,38 +2436,6 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
 	 gc_freefunc[gct - (uint32_t)~LJ_TSTR] != NULL;
 }
 
-static int gc2_arena_owned_fnew_body(GCobj *o)
-{
-  /*
-  ** FNEW active-black bump allocation can skip the GC root spine for fresh
-  ** Lua closures and closed local-cell upvalues. Type-local marker bits prove
-  ** that narrow body-lifetime ownership state without overloading nextgc, which
-  ** remains reserved for root/open-upvalue chains.
-  */
-  if (o->gch.gct == (uint32_t)~LJ_TFUNC) {
-    GCfunc *fn = gco2func(o);
-    return isluafunc(fn) && lj_funcL_arenaowned(&fn->l) &&
-	   lj_funcL_nupvalues(&fn->l) <= LJ_MAX_UPVAL;
-  }
-  if (o->gch.gct == (uint32_t)~LJ_TUPVAL) {
-    GCupval *uv = gco2uv(o);
-    return lj_uv_arenaowned(uv) && uv->closed && uvval(uv) == &uv->tv;
-  }
-  return 0;
-}
-
-static int gc2_arena_owned_tab_body(GCobj *o)
-{
-  /*
-  ** Empty active-black TNEW can skip the GC root spine. Its table body is
-  ** then owned by the arena bitmap and tagged with the otherwise impossible
-  ** colocated-size encoding 0x80. If the table later grows, the tag remains the
-  ** body ownership marker while side vectors keep their normal validation.
-  */
-  return o->gch.gct == (uint32_t)~LJ_TTAB &&
-	 lj_tab_arenaowned(gco2tab(o));
-}
-
 static int gc2_deferred_body_pending(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
@@ -2530,124 +2491,226 @@ static int gc_root_chain_contains_obj(global_State *g, GCobj *needle)
   return 0;
 }
 
+#define GC2_ROOT_PRUNE_BATCH 256u
+
+static void *gc2_sweep_obj_base(global_State *g, GCobj *o)
+{
+#if LJ_HASFFI
+  if (o && o->gch.gct == (uint32_t)~LJ_TCDATA) {
+    GCcdata *cd = gco2cd(o);
+    void *base;
+    if (cdataisv(cd) && lj_cdata_validate(g, cd, &base, NULL))
+      return base;
+  }
+#else
+  UNUSED(g);
+#endif
+  return o;
+}
+
+static int gc2_sweep_obj_old_generation(global_State *g, GCobj *o)
+{
+  void *base = gc2_sweep_obj_base(g, o);
+  GCArena *a;
+  if (!base || !checkptrGC(base))
+    return 0;
+  a = lj_arena_of(base);
+  if (!lj_arena_ishuge(a))
+    return (lj_arena_flags_acq(a) &
+	    (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE)) != 0;
+  {
+    uint32_t owner_tid = lj_arena_owner_acq(a);
+    TGState *tg = lj_tg_find_owner(g, owner_tid);
+    LJHugeInfo hi;
+    return tg && lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+	   lj_arena_hugetab_lookup(&tg->huge, base, &hi) == 1 &&
+	   (hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_TRAVERSABLE)) ==
+	     (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_TRAVERSABLE);
+  }
+}
+
+/* Classify one exact small old-generation allocation after its ownership-spine
+** link has been detached. LIVE means it must be reanchored after the grace;
+** RETIRED means its destructor is pending. WHITE remains reserved for raw or
+** fixed allocations which were never detached. */
+static void gc2_sweep_detached_small(global_State *g, GCArena *a,
+				     uint32_t cell, int marked)
+{
+  uint32_t state = lj_arena_sweep_state_acq(a, cell);
+  if (marked) {
+    for (;;) {
+      if (state == LJ_ARENA_SWEEP_LIVE ||
+	  state == LJ_ARENA_SWEEP_FREEING)
+	break;
+      if (lj_arena_sweep_state_cas(a, cell, state,
+					   LJ_ARENA_SWEEP_LIVE)) {
+	if (state == LJ_ARENA_SWEEP_RETIRED) {
+	  uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	  lj_assertG(old != 0, "detached-root rescue underflow");
+	  UNUSED(old);
+	}
+	break;
+      }
+      state = lj_arena_sweep_state_acq(a, cell);
+    }
+  } else if (state == LJ_ARENA_SWEEP_WHITE) {
+    uint32_t old;
+    /* Reserve the counter before publishing RETIRED. A sweep-time publisher
+    ** which wins RETIRED->LIVE can then decrement without racing an increment. */
+    (void)lj_arena_reclaim_deferred_add(a, 1);
+    if (!lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_WHITE,
+					  LJ_ARENA_SWEEP_RETIRED)) {
+      old = lj_arena_reclaim_deferred_sub(a, 1);
+      lj_assertG(old != 0, "detached-root retire rollback underflow");
+    } else if (lj_arena_bm_get(a->mark, cell) &&
+	       lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
+					  LJ_ARENA_SWEEP_LIVE)) {
+      old = lj_arena_reclaim_deferred_sub(a, 1);
+      lj_assertG(old != 0, "detached-root overlap rescue underflow");
+    }
+    UNUSED(old);
+  }
+  gc2_sweep_grace_needed_rel(g, 1);
+}
+
+static void gc2_sweep_detached_obj(global_State *g, GCobj *o, int marked)
+{
+  void *base = gc2_sweep_obj_base(g, o);
+  GCArena *a = lj_arena_of(base);
+  if (!lj_arena_ishuge(a)) {
+    uint32_t cell = lj_arena_cellof(base);
+    if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS)
+      gc2_sweep_detached_small(g, a, cell, marked);
+    return;
+  }
+  {
+    uint32_t owner_tid = lj_arena_owner_acq(a);
+    TGState *tg = lj_tg_find_owner(g, owner_tid);
+    int ticketed;
+    if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+      return;
+    /* One huge mapping contains one allocation. Publish an explicit metadata
+    ** ticket for both dead and already-marked detached roots: RETIRED is the
+    ** destructor claim, while MARK|TICKET is the post-grace reanchor claim.
+    ** A concurrent marker may win either side of this call without making the
+    ** exact variable-offset header undiscoverable. */
+    ticketed = lj_arena_hugetab_retire(&tg->huge, base, o,
+					      lj_gc2_retire_epoch(g), NULL);
+    lj_assertG(ticketed, "detached huge root lost ownership ticket");
+    gc2_sweep_grace_needed_rel(g, 1);
+    if (!ticketed)
+      return;  /* Retain the mapped body; never invent a destructor owner. */
+    UNUSED(marked);
+  }
+}
+
 uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 {
-  GCRef *p = lj_gc_root_ref(g);
+  GCRef *p;
   GCobj *o;
-  uint32_t n = 0;
-  (void)lj_gc_flush_root_pending(g);
-  (void)lj_gc_repair_root_spine(g);
-  while ((o = gcref_acq(*p)) != NULL) {
-    int marked, stale_marked_dead_huge;
-    if (LJ_UNLIKELY(!lj_gc2_obj_valid(g, o))) {
-      /*
-      ** A stale link can point at memory that is no longer safe to read, so this
-      ** sweep cannot splice through it. Leave the predecessor link intact and let
-      ** later root publication repair/re-attach known semantic anchors.
-      */
+  uint32_t seen = 0, unlinked = 0;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_sweep_root_done_acq(g))
+    return 0;
+  p = gc2_sweep_root_cursor_acq(g);
+  if (!p)
+    p = lj_gc_root_ref(g);
+  while (seen < GC2_ROOT_PRUNE_BATCH && (o = gcref_acq(*p)) != NULL) {
+    int marked;
+    seen++;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
+      /* Quarantined bodies remain mapped, but an unregistered pointer is not a
+      ** cursor-safe ownership entry. Restart after spine repair in a later
+      ** bounded batch instead of dereferencing an unknown successor. */
+      (void)lj_gc_repair_root_spine(g);
+      p = lj_gc_root_ref(g);
       break;
     }
+    gc2_preserve_root_spine_body(g, o);
+    if (!gc2_sweep_obj_old_generation(g, o)) {
+      p = lj_obj_gcwref(o);  /* Post-reset allocation: never this sweep. */
+      continue;
+    }
     marked = lj_gc2_ismarked(g, o);
-    stale_marked_dead_huge = marked > 0 && isdead(g, o) &&
-			     lj_arena_ishuge(lj_arena_of(o));
-    if (marked == 0 || stale_marked_dead_huge) {
-      if (o->gch.gct == 0) {
-	if (!gc_chain_splice(p, o)) {
-	  gc_root_wait_no_l();
-	  continue;
-	}
-	continue;
+    if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(o)) ||
+	(lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))) {
+      (void)lj_gc2_markmem(g, gc2_sweep_obj_base(g, o));
+      p = lj_obj_gcwref(o);
+      continue;
+    }
+    if (o->gch.gct == 0 || gc2_valid_freeable_obj(g, o)) {
+#if LJ_HASJIT
+      if (marked == 0 && o->gch.gct == (uint32_t)~LJ_TTRACE &&
+	  !lj_trace_retire_gc_claim(g, gco2trace(o))) {
+	/* The nonwaiting recorder-token attempt left trace/root/state unchanged. */
+	break;
       }
-      if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(o))) {
-	gc2_preserve_pending_finalizer_body(g, o);
-	p = lj_obj_gcwref(o);
-	continue;
-      }
-      if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)) {
-	p = lj_obj_gcwref(o);
-	continue;
-      }
-      if ((isdead(g, o) || lj_arena_ishuge(lj_arena_of(o))) &&
-	  gc2_valid_freeable_obj(g, o)) {
-	if (!gc_chain_splice(p, o)) {
-	  gc_root_wait_no_l();
-	  continue;
-	}
-	if (!gc2_free_unmarked_obj(g, o))
-	  continue;
-	n++;
-	continue;
-      }
+#endif
+      if (!gc_chain_splice(p, o))
+	continue;  /* Concurrent insertion at this link; revisit boundedly. */
+      gc2_sweep_detached_obj(g, o, marked > 0);
+      unlinked++;
+      continue;
     }
     p = lj_obj_gcwref(o);
   }
-  return n;
-}
-
-static int gc2_stack_slot_names_obj(cTValue *tv, GCobj *want)
-{
-  TValue snap;
-  lj_tv_load_acq(&snap, tv);
-  return tvisgcv(&snap) && gcV(&snap) == want;
-}
-
-static int gc2_thread_stack_names_obj(global_State *g, lua_State *L,
-				      GCobj *want)
-{
-  TValue *o, *end;
-  if (!lj_gc2_valid_thread_for_traverse(g, L))
-    return 0;
-  o = tvref(L->stack) + 1 + LJ_FR2;
-  end = tvref(L->maxstack);
-  for (; o < end; o++)
-    if (gc2_stack_slot_names_obj(o, want))
-      return 1;
-  return 0;
-}
-
-static int gc2_tg_stacks_name_obj(global_State *g, TGState *tg, GCobj *want)
-{
-  lua_State *thread_L, *cur_L;
-  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
-    return 0;
-  thread_L = lj_tg_load_thread_L(tg);
-  cur_L = lj_tg_load_cur_L(tg);
-  if (gc2_thread_stack_names_obj(g, thread_L, want))
-    return 1;
-  return cur_L != thread_L && gc2_thread_stack_names_obj(g, cur_L, want);
-}
-
-static int gc2_any_stack_names_obj(global_State *g, GCobj *want)
-{
-  TGState *tg;
-  int saw_main = 0;
-  if (!g || !want)
-    return 0;
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    if (tg == g->main_tg)
-      saw_main = 1;
-    if (gc2_tg_stacks_name_obj(g, tg, want))
-      return 1;
+  gc2_sweep_root_cursor_rel(g, p);
+  if (gcref_acq(*p) == NULL) {
+    uint32_t flushed = lj_gc_flush_root_pending(g);
+    (void)lj_gc_repair_root_spine(g);
+    if (flushed != 0 || lj_gcroot_pending_hint_acq(g) != 0) {
+      gc2_sweep_root_cursor_rel(g, lj_gc_root_ref(g));
+    } else {
+      gc2_sweep_root_done_rel(g, 1);
+      gc2_sweep_root_cursor_rel(g, NULL);
+    }
   }
-  if (g->main_tg && !saw_main && gc2_tg_stacks_name_obj(g, g->main_tg, want))
-    return 1;
-  return 0;
+  return unlinked;
 }
 
-static int gc2_preserve_stack_named_obj(global_State *g, GCArena *a,
-					uint32_t cell, GCobj *o)
+static uint32_t gc2_sweep_alloc_end(const GCArena *a, uint32_t start)
 {
-  if (!gc2_any_stack_names_obj(g, o))
-    return 0;
-  (void)lj_gc2_trace_sweep_root(g, o);
-  lj_arena_bm_set(a->mark, cell);
-  return 1;
+  uint32_t i = start + 1u;
+  while (i < LJ_ARENA_CELLS &&
+	 !lj_arena_bm_get(a->block, i) && !lj_arena_bm_get(a->mark, i))
+    i++;
+  return i;
+}
+
+static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
+				  uint32_t cell, uint32_t end)
+{
+  GCobj *o = (GCobj *)lj_arena_cellptr(a, cell);
+#if LJ_HASFFI
+  {
+    char *base = (char *)o;
+    size_t bytes = (size_t)(end - cell) << LJ_CELL_SHIFT;
+    uint16_t offset = la_load16_acq((uint16_t *)(void *)base);
+    if (offset >= sizeof(GCcdataVar) &&
+	(size_t)offset + sizeof(GCcdata) <= bytes) {
+      GCcdata *cd = (GCcdata *)(void *)(base + offset);
+      void *realbase = NULL;
+      GCSize size = 0;
+      if (cd->gct == ~LJ_TCDATA && cdataisv(cd) &&
+	  memcdatav(cd) == (void *)base &&
+	  lj_cdata_validate(g, cd, &realbase, &size) &&
+	  realbase == (void *)base && size <= bytes)
+	return obj2gco(cd);
+    }
+  }
+#else
+  UNUSED(end);
+#endif
+  if (o->gch.gct == 0 || gc2_valid_freeable_obj(g, o))
+    return o;
+  return NULL;
 }
 
 static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
 				       int unmarked_only)
 {
   uint32_t i, n = 0;
+  GCobj *o;
   if (!g || !a)
     return 0;
   if (unmarked_only) {
@@ -2655,48 +2718,27 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
     (void)lj_gc_repair_root_spine(g);
   }
   for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
-    if (lj_arena_bm_get(a->block, i) &&
-	(!unmarked_only || !lj_arena_bm_get(a->mark, i))) {
-      GCobj *o = (GCobj *)lj_arena_cellptr(a, i);
-      if (gc2_cdata_finalizer_pending(o)) {
-	gc2_preserve_pending_finalizer_body(g, o);
-	continue;
-      }
-      if (unmarked_only && gc2_valid_freeable_obj(g, o) &&
-	  gc2_preserve_stack_named_obj(g, a, i, o))
-	continue;
-      if (unmarked_only &&
-	  (gc2_arena_owned_fnew_body(o) || gc2_arena_owned_tab_body(o)) &&
-	  gc2_valid_freeable_obj(g, o)) {
-	if (!gc2_free_unmarked_obj(g, o))
-	  continue;
-	n++;
-	continue;
-      }
-      if (unmarked_only && gc2_valid_freeable_obj(g, o)) {
-	if (gc_root_chain_contains_obj(g, o)) {
-	  if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)) {
-	    lj_arena_bm_set(a->mark, i);
-	    continue;
-	  }
-	  lj_gc_unlink_root_obj(g, o);
-	  if (!gc2_free_unmarked_obj(g, o))
-	    continue;
-	  n++;
-	  continue;
-	}
-	if (!gc2_free_unmarked_obj(g, o))
-	  continue;
-	n++;
-	continue;
-      }
-      if ((!unmarked_only || isdead(g, o)) && gc2_valid_freeable_obj(g, o)) {
+    uint32_t state;
+    if (!lj_arena_bm_get(a->block, i))
+      continue;
+    if (!unmarked_only) {
+      o = (GCobj *)lj_arena_cellptr(a, i);
+      if (isdead(g, o) && gc2_valid_freeable_obj(g, o)) {
 	lj_gc_unlink_root_obj(g, o);
-	if (!gc2_free_unmarked_obj(g, o))
-	  continue;
-	n++;
+	if (gc2_free_unmarked_obj(g, o))
+	  n++;
       }
+      continue;
     }
+    state = lj_arena_sweep_state_acq(a, i);
+    if (state != LJ_ARENA_SWEEP_WHITE || lj_arena_bm_get(a->mark, i))
+      continue;
+    /* Every GC object is ownership-spine linked before publication. The
+    ** bounded bridge classified all old nonfixed headers before arena scan, so
+    ** a remaining WHITE allocation is raw/opaque storage. Retain it unless its
+    ** owning subsystem physically frees it (which transitions FREEING). Never
+    ** infer a destructor from attacker-controlled payload bytes. */
+    (void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
   }
   return n;
 }
@@ -2704,6 +2746,259 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
 uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a)
 {
   return gc2_sweep_arena_bodies(g, a, 1);
+}
+
+uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
+				  uint32_t limit, int *donep)
+{
+  uint32_t cell, scanned = 0, changed = 0;
+  int pending = 0;
+  if (donep)
+    *donep = 0;
+  if (!g || !a || limit == 0 ||
+      !(lj_arena_flags_acq(a) & LJ_AF_QUARANTINE))
+    return 0;
+  cell = a->hdr.reclaim_cell;
+  if (cell < LJ_AFIRST_CELL || cell > LJ_ARENA_CELLS)
+    cell = LJ_AFIRST_CELL;
+  while (cell < LJ_ARENA_CELLS && scanned < limit) {
+    uint32_t state;
+    if (!lj_arena_bm_get(a->block, cell)) {
+      cell++;
+      scanned++;
+      continue;
+    }
+    state = lj_arena_sweep_state_acq(a, cell);
+    if (state == LJ_ARENA_SWEEP_LIVE ||
+	state == LJ_ARENA_SWEEP_RETIRED) {
+      uint32_t end = gc2_sweep_alloc_end(a, cell);
+      GCobj *o = gc2_sweep_cell_obj(g, a, cell, end);
+      if (!o) {
+	/* LIVE/RETIRED is published only from an exact ownership-spine header.
+	** Refuse bitmap publication if that proof cannot be reconstructed. */
+	lj_assertG(0, "cannot reconstruct detached arena GC header");
+	pending = 1;
+	cell++;
+	scanned++;
+	continue;
+      }
+      if (state == LJ_ARENA_SWEEP_LIVE) {
+	if (o->gch.gct == 0) {
+	  if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_LIVE,
+					      LJ_ARENA_SWEEP_FREEING))
+	    changed++;
+	  else
+	    pending = 1;
+	  cell++;
+	  scanned++;
+	  continue;
+	}
+#if LJ_HASJIT
+	if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
+	    la_load64_acq(&gco2trace(o)->retire_epoch) != 0) {
+	  /* A retire-list root deliberately marked this trace during the grace.
+	  ** It is not a rescued Lua root: leave it detached until the token-owned
+	  ** physical destructor publishes gct=0/FREEING. */
+	  (void)lj_trace_free_gc(g, gco2trace(o));
+	  pending = 1;
+	  cell++;
+	  scanned++;
+	  continue;
+	}
+#endif
+	/* The detach left gcw untouched for pre-grace root readers. Now no such
+	** reader remains, publish one fresh ownership link and retire LIVE state. */
+	lj_gc_linkobj(g, o);
+	if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_LIVE,
+					    LJ_ARENA_SWEEP_WHITE))
+	  changed++;
+	else
+	  pending = 1;  /* A concurrent physical free won; revisit conservatively. */
+      } else {
+        if (o->gch.gct == 0) {
+	  if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
+					      LJ_ARENA_SWEEP_FREEING)) {
+	    uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	    lj_assertG(old != 0, "destroyed-body deferred underflow");
+	    UNUSED(old);
+	    changed++;
+	  } else {
+	    pending = 1;
+	  }
+	  cell++;
+	  scanned++;
+	  continue;
+	}
+#if LJ_HASJIT
+	if (o->gch.gct == (uint32_t)~LJ_TTRACE) {
+	  /* Listing/slot teardown is not physical completion. Keep RETIRED until
+	  ** trace_freebody tears down exittab and release-publishes gct=0. */
+	  if (!lj_trace_body_destroyed_acq(gco2trace(o)))
+	    (void)lj_trace_free_gc(g, gco2trace(o));
+	  pending = 1;
+	} else
+#endif
+	if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
+					    LJ_ARENA_SWEEP_FREEING)) {
+	  uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	  int freed;
+	  lj_assertG(old != 0, "arena destructor deferred underflow");
+	  UNUSED(old);
+	  freed = gc2_free_unmarked_obj(g, o);
+	  if (LJ_UNLIKELY(!freed)) {
+	    (void)lj_arena_reclaim_deferred_add(a, 1);
+	    (void)lj_arena_sweep_state_cas(a, cell,
+	      LJ_ARENA_SWEEP_FREEING, LJ_ARENA_SWEEP_RETIRED);
+	    pending = 1;
+	  } else {
+	    changed++;
+	  }
+	} else {
+	  pending = 1;  /* RETIRED->LIVE rescue or physical-free completion. */
+	}
+      }
+    }
+    cell++;
+    scanned++;
+  }
+  a->hdr.reclaim_cell = cell;
+  if (cell == LJ_ARENA_CELLS) {
+    uint32_t deferred = lj_arena_reclaim_deferred_acq(a);
+    if (deferred == 0 && !pending) {
+      if (donep)
+	*donep = 1;
+    } else {
+      a->hdr.reclaim_cell = LJ_AFIRST_CELL;
+    }
+  }
+  /* Cursor advancement is bounded real work and must keep the owner scheduled
+  ** until it reaches EOF. At EOF, a token-busy trace returns zero so the worker
+  ** can park rather than spin; JIT token release wakes it for another pass. */
+  if (changed)
+    return changed;
+  return cell < LJ_ARENA_CELLS && scanned != 0 ? 1u : 0u;
+}
+
+uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
+				 const LJHugeInfo *hi, int *pendingp)
+{
+  GCArena *a;
+  GCobj *o;
+  uint32_t flags;
+  if (pendingp)
+    *pendingp = 0;
+  if (!g || !tg || !p || !hi)
+    return 0;
+  a = lj_arena_of(p);
+  flags = hi->flags;
+  if (flags & LJ_HUGEF_BUSY) {
+    if (pendingp) *pendingp = 1;
+    return 0;  /* Publisher/reanchor owns all mapping-header access. */
+  }
+  o = (flags & LJ_HUGEF_TICKET) ?
+      (GCobj *)la_loadptr_acq((void *const *)&a->hdr.retire_obj) : NULL;
+
+  if (flags & LJ_HUGEF_FREEING) {
+    uint64_t retire_epoch = la_load64_acq(&a->hdr.retire_epoch);
+    uint64_t now = lj_gc2_retire_epoch(g);
+    if (retire_epoch == ~(uint64_t)0) {
+      la_store64_rel(&a->hdr.retire_epoch, now);
+      gc2_sweep_grace_needed_rel(g, 1);
+      if (pendingp) *pendingp = 1;
+      return 1;
+    }
+    if (retire_epoch >= now) {
+      if (pendingp) *pendingp = 1;
+      return 0;
+    }
+  }
+
+  if (flags & LJ_HUGEF_MARK) {
+    if (o && (flags & LJ_HUGEF_TICKET)) {
+#if LJ_HASJIT
+      if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
+	  la_load64_acq(&gco2trace(o)->retire_epoch) != 0) {
+	(void)lj_trace_free_gc(g, gco2trace(o));
+	if (pendingp) *pendingp = 1;
+	return 0;
+      }
+#endif
+      if (!gc2_valid_freeable_obj(g, o)) {
+	if (pendingp) *pendingp = 1;
+	return 0;
+      }
+      if (!lj_arena_hugetab_claim_live_ticket(&tg->huge, p, NULL)) {
+	if (pendingp) *pendingp = 1;
+	return 0;
+      }
+      /* Every old nonfixed root was detached before the grace. One mapping has
+      ** one allocation, so retire_obj is an exact single reanchor ticket. */
+      lj_gc_linkobj(g, o);
+      la_storeptr_rel(&a->hdr.retire_obj, NULL);
+      {
+	int finished = lj_arena_hugetab_finish_live_ticket(&tg->huge, p, NULL);
+	lj_assertG(finished, "huge live ticket lost after root reanchor");
+	if (!finished) {
+	  if (pendingp) *pendingp = 1;
+	  return 0;
+	}
+      }
+      return 1;
+    }
+    return 0;  /* Marked raw/fixed huge storage was never detached. */
+  }
+
+  if (!(flags & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING))) {
+    if (o && lj_arena_hugetab_retire(&tg->huge, p, o,
+					     lj_gc2_retire_epoch(g), NULL)) {
+      gc2_sweep_grace_needed_rel(g, 1);
+      if (pendingp) *pendingp = 1;
+      return 1;
+    }
+    /* Opaque huge storage has no GC destructor proof. Preserve it rather than
+    ** interpreting payload bytes as a header. */
+    (void)lj_arena_hugetab_mark(&tg->huge, p, NULL);
+    return 1;
+  }
+
+  if (!o) {
+    /* An external subsystem owns the logical free. FREEING is enough to let
+    ** this sole huge-table owner perform the final delete after the grace. */
+    if (!(flags & LJ_HUGEF_FREEING) &&
+	!lj_arena_hugetab_claim_freeing(&tg->huge, p, NULL)) {
+      if (pendingp) *pendingp = 1;
+      return 0;
+    }
+  } else {
+#if LJ_HASJIT
+    if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
+	!lj_trace_body_destroyed_acq(gco2trace(o))) {
+      (void)lj_trace_free_gc(g, gco2trace(o));
+      if (pendingp) *pendingp = 1;
+      return 0;
+    }
+#endif
+    if (!(flags & LJ_HUGEF_FREEING)) {
+      if (!lj_arena_hugetab_claim_freeing(&tg->huge, p, NULL)) {
+	if (pendingp) *pendingp = 1;
+	return 0;
+      }
+      if (o->gch.gct != 0 && !gc2_free_unmarked_obj(g, o)) {
+	(void)lj_arena_hugetab_revert_retired(&tg->huge, p);
+	if (pendingp) *pendingp = 1;
+	return 0;
+      }
+    }
+  }
+  {
+    LJHugeInfo snap;
+    if (lj_arena_hugetab_delete(&tg->huge, p, &snap) == 1) {
+      /* No access to a/a->hdr is legal after this unmap. */
+      lj_arena_huge_unmap(p, snap.size);
+      return 1;
+    }
+  }
+  return 0;
 }
 
 uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g)
@@ -2787,13 +3082,39 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
 	  o->gch.gct = 0;
 	continue;
       }
+#if LJ_HASJIT
+      /* The root-chain splice is a semantic unlink. Gate and dual-mark a live
+      ** trace before that CAS; lj_trace_free_gc() may lose the nonwaiting token
+      ** race afterward, but its exact claimed slot remains authoritative until
+      ** the token-owned retire scan inserts and disconnects it. Shutdown uses
+      ** the ordinary splice-before-immediate-free order below.
+      */
+      if (o->gch.gct == (uint32_t)~LJ_TTRACE && ow != LJ_GC_SFIXED &&
+	  !lj_trace_retire_gc_claim(g, gco2trace(o))) {
+	gc_root_wait_no_l();
+	continue;  /* Exact body is not discoverable yet: retain its root. */
+      }
+#endif
       if (!gc_chain_splice(p, o)) {
 	gc_root_wait_no_l();
 	continue;
       }
-      gc_freefunc[o->gch.gct - ~LJ_TSTR](g, o);
-      if (deferred)
+      {
+	uint32_t gct = o->gch.gct;
+	int retired_trace = 0;
+#if LJ_HASJIT
+	if (gct == (uint32_t)~LJ_TTRACE) {
+	  retired_trace = 1;
+	  (void)lj_trace_free_gc(g, gco2trace(o));
+	} else
+#endif
+	  gc_freefunc[gct - (uint32_t)~LJ_TSTR](g, o);
+	/* A trace destructor transfers the still-intact body to the SMR retire
+	** list. Clearing gct here would make the later reclaimer unable to validate
+	** its compact payload and would falsely advertise physical destruction. */
+	if (deferred && !retired_trace)
 	o->gch.gct = 0;  /* Body is awaiting bitmap reuse; destructor is done. */
+      }
     }
   }
   return p;
@@ -3113,7 +3434,7 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
     GCobj *o = gcV(&snap);
-    if (!gc_tv_gcref_type_match(g, &snap))
+    if (!lj_gc2_tv_gcref_valid_edge(g, &snap))
       return;
     if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
       (void)lj_gc2_trace_sweep_root(g, o);
@@ -3237,7 +3558,8 @@ void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
   for (i = 0; i < n; i++) {
     TValue snap;
     lj_tv_load_acq(&snap, &tv[i]);
-    if (LJ_LIKELY(gc_tv_gcref_type_match(g, &snap)) && tviswhite(&snap)) {
+    if (LJ_LIKELY(lj_gc2_tv_gcref_valid_edge(g, &snap)) &&
+	tviswhite(&snap)) {
       lj_gc_barrierback(g, t);
       return;
     }
@@ -3261,7 +3583,8 @@ void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
   TValue snap;
   int white;
   lj_tv_load_acq(&snap, tv);
-  if (LJ_UNLIKELY(!gc_tv_gcref_type_match(g, &snap)) || !tvisgcv(&snap))
+  if (LJ_UNLIKELY(!lj_gc2_tv_gcref_valid_edge(g, &snap)) ||
+      !tvisgcv(&snap))
     return;
   white = tviswhite(&snap);
   lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap);
@@ -3344,6 +3667,27 @@ static LJArenaAllocD *gc_arena_allocd_for_ptr(global_State *g, const void *p)
   return (LJArenaAllocD *)g->allocd;
 }
 
+/* Allocate a new fragment without raising an error on allocation failure. */
+void *lj_mem_new_nothrow(lua_State *L, GCSize size)
+{
+  global_State *g = G(L);
+  void *p;
+  lj_assertG(size != 0, "zero-sized non-throwing allocation");
+  if (g->allocf == lj_arena_allocf) {
+    LJArenaAllocD *ad = gc_arena_allocd_for_new(L);
+    p = lj_arena_allocf(ad, NULL, 0, size);
+  } else {
+    p = g->allocf(g->allocd, NULL, 0, size);
+  }
+  if (p == NULL)
+    return NULL;
+  lj_assertG(checkptrGC(p),
+	     "allocated memory address %p outside required range", p);
+  lj_gc_total_add(g, size);
+  lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
+  return p;
+}
+
 /* Call pluggable memory allocator to allocate or resize a fragment. */
 void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
 {
@@ -3367,8 +3711,8 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
   return p;
 }
 
-/* Allocate raw storage for a GC object without linking it. */
-void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
+/* Allocate raw storage for a GC object without linking or throwing. */
+void *lj_mem_newgco_raw_nothrow(lua_State *L, GCSize size, uint32_t flags)
 {
   global_State *g = G(L);
   GCobj *o;
@@ -3378,12 +3722,26 @@ void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
   else
     o = (GCobj *)g->allocf(g->allocd, NULL, 0, size);
   if (o == NULL)
-    lj_err_mem(L);
+    return NULL;
   lj_assertG(checkptrGC(o),
 	     "allocated memory address %p outside required range", o);
   lj_gc_total_add(g, size);
   lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
   return o;
+}
+
+/* Allocate raw storage for a GC object without linking it. */
+void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
+{
+  void *o = lj_mem_newgco_raw_nothrow(L, size, flags);
+  if (o == NULL)
+    lj_err_mem(L);
+  return o;
+}
+
+void *lj_mem_newgco_unlinked_nothrow(lua_State *L, GCSize size)
+{
+  return lj_mem_newgco_raw_nothrow(L, size, LJ_AF_TRAVERSABLE);
 }
 
 void *lj_mem_newgco_unlinked(lua_State *L, GCSize size)
@@ -3752,6 +4110,8 @@ int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
       !lj_arena_bm_get(a->block, cell))
     return 0;
+  if (!lj_arena_free_deferred(&tg->alloc, p, osize))
+    return 0;
   lj_gc_total_sub(g, osize);
-  return lj_arena_free_deferred(&tg->alloc, p, osize);
+  return 1;
 }

@@ -22,6 +22,7 @@
 #include "lj_ircall.h"
 #include "lj_iropt.h"
 #include "lj_trace.h"
+#include "lj_snap.h"
 #include "lj_record.h"
 #include "lj_ffrecord.h"
 #include "lj_crecord.h"
@@ -661,9 +662,35 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
 
 /* -- Math library fast functions ----------------------------------------- */
 
+/* Materialize the current caller state for a future generic native call.
+** Keep the snapshot number out of the IR: LOOP substitution copies and
+** reindexes snapshots, while backward assembly already tracks the matching
+** snapshot for the copied marker.
+*/
+void lj_ffrecord_xsave(jit_State *J)
+{
+#if LJ_TARGET_X64
+  IRRef ref;
+  lj_snap_add(J);
+  lj_ir_set(J, IRT(IR_XSAVE, IRT_NIL), 0, 0);
+  ref = tref_ref(lj_ir_emit(J));  /* Ordered raw emit; LOOP uses FOLD. */
+  lj_assertJ(J->cur.nsnap != 0 && J->cur.snap[J->cur.nsnap-1].ref == ref,
+	     "XSAVE snapshot does not name marker IR");
+  UNUSED(ref);
+#else
+  setintV(&J->errinfo, IR_XSAVE);
+  lj_trace_err_info(J, LJ_TRERR_NYIIR);
+#endif
+}
+
 static void LJ_FASTCALL recff_math_abs(jit_State *J, RecordFFData *rd)
 {
   TRef tr = lj_ir_tonum(J, J->base[0]);
+#ifdef LJ_XSAVE_TEST_HELPERS
+  /* Test-only dormant-path injection. Production recorders do not emit XSAVE
+  ** until the generic native-call protocol consumes its pending TG fields. */
+  lj_ffrecord_xsave(J);
+#endif
   J->base[0] = emitir(IRTN(IR_ABS), tr, lj_ir_ksimd(J, LJ_KSIMD_ABS));
   UNUSED(rd);
 }
@@ -1513,11 +1540,20 @@ void lj_ffrecord_func(jit_State *J)
   rd.data = m & 0xff;
   rd.nres = 1;  /* Default is one result. */
   rd.argv = J->L->base;
+  rd.postcall_exit = 0;
   J->base[J->maxslot] = 0;  /* Mark end of arguments. */
   (recff_func[m >> 8])(J, &rd);  /* Call recff_* handler. */
   if (rd.nres >= 0) {
     if (J->postproc == LJ_POST_NONE) J->postproc = LJ_POST_FFRETRY;
     lj_record_ret(J, 0, rd.nres);
+    if (rd.postcall_exit) {
+      /* This snapshot is in the caller after lj_record_ret(). Thus the
+      ** unconditional generated guard cannot replay a completed C call even
+      ** when return processing has already selected a trace tail. */
+      lj_snap_add(J);
+      emitir(IRTG(IR_EQ, IRT_INT), rd.postcall_exit, lj_ir_kint(J, 0));
+      J->needsnap = 1;
+    }
   }
 }
 

@@ -99,6 +99,7 @@ void lj_mcode_init(global_State *g)
 #endif
 }
 
+#if LJ_TARGET_POSIX
 static lua_State *mcode_native_enter(jit_State *J)
 {
   lua_State *L = J ? J->L : NULL;
@@ -112,6 +113,7 @@ static void mcode_native_leave(lua_State *L)
   if (L)
     (void)lj_native_leave(L);
 }
+#endif
 
 void lj_mcode_sync_core(jit_State *J)
 {
@@ -515,7 +517,6 @@ fail:
   } else {
     J->mcmax = 0;  /* Switch to a new range after the flush. */
   }
-  lj_trace_err(J, LJ_TRERR_MCODEAL);  /* Give up. OS probably ignores hints? */
   return NULL;
 }
 
@@ -531,7 +532,6 @@ static void *mcode_alloc(jit_State *J, size_t sz)
 #else
   void *p = mcode_alloc_at(J, 0, sz, MCPROT_GEN);
 #endif
-  if (!p) lj_trace_err(J, LJ_TRERR_MCODEAL);
   return p;
 }
 
@@ -550,32 +550,80 @@ static LJ_AINLINE MCode *mcode_register_area(jit_State *J, MCode *area,
   MCode *rwbot = lj_mcode_rx2rw(area, bot);
   MCode *newbot = (MCode *)lj_err_register_mcode(area, sz, (uint8_t *)bot,
 						 (uint8_t *)rwbot);
-  UNUSED(J);
+  UNUSED(J); UNUSED(sz);  /* Some no-unwind configurations elide registration. */
   return newbot;
 }
 
-/* Allocate a new MCode area. */
+static void mcode_active_push(jit_State *J, MCodeRetire *ret)
+{
+  MCodeRetire *head = mcode_active_head_acq(J);
+  do {
+    mcode_retired_next_rel(ret, head);
+  } while (!mcode_active_head_cas(J, &head, ret));
+}
+
+/* Mark raw retirement nodes across an owner-list publication race. */
+static void mcode_preserve_list(global_State *g, MCodeRetire *ret)
+{
+  for (; ret != NULL && lj_gc2_mem_registered(g, ret);
+       ret = mcode_retired_next_acq(ret))
+    (void)lj_gc2_markmem_registered(g, ret);
+}
+
+/* Allocate a new MCode area and its preowned, GC-visible retirement node. */
 static void mcode_allocarea(jit_State *J, size_t sz)
 {
+  global_State *g = J2G(J);
   MCode *oldarea = J->mcarea;
+  MCode *area;
   MCode *rwarea;
+  MCode *bot;
   MCLink *rwlink;
-  J->mcarea = (MCode *)mcode_alloc(J, sz);
-  J->szmcarea = sz;
-  J->mcprot = MCPROT_GEN;
-  J->mctop = (MCode *)((char *)J->mcarea + J->szmcarea);
-  J->mcbot = (MCode *)((char *)J->mcarea + sizeof(MCLink));
+  MCodeRetire *ret;
+
+  /* Keep both fallible resources local until the complete owner pair exists. */
+  area = (MCode *)mcode_alloc(J, sz);
+  if (LJ_UNLIKELY(area == NULL))
+    lj_trace_err(J, LJ_TRERR_MCODEAL);
+  ret = (MCodeRetire *)lj_mem_new_nothrow(J->L, sizeof(MCodeRetire));
+  if (LJ_UNLIKELY(ret == NULL)) {
+    mcode_free_mapping(area, sz);
+    lj_trace_err(J, LJ_TRERR_MCODEAL);
+  }
+  ret->area = NULL;
+  ret->size = sz;
+  ret->retire_epoch = MCODE_RETIRE_EPOCH_ACTIVE;
+  mcode_retired_next_rel(ret, NULL);
+  (void)lj_gc2_markmem_registered(g, ret);
 #if LJ_MCODE_DUALMAP
-  rwarea = lj_mcode_area_rw(J->mcarea);
+  rwarea = lj_mcode_area_rw(area);
 #else
-  rwarea = J->mcarea;
+  rwarea = area;
 #endif
   rwlink = (MCLink *)rwarea;
   mcode_area_next_rel(rwarea, oldarea);
   rwlink->size = sz;
   rwlink->rw = rwarea;
+  bot = mcode_register_area(J, area, sz,
+			    (MCode *)((char *)area + sizeof(MCLink)));
+  ret->area = area;
+
+  /*
+  ** Own the sidecar before publishing the area. GC root scans mark this list;
+  ** the allocation-edge marks close both sides of a concurrent sweep/CAS race.
+  ** Mark only the newly published node here: walking the prior active list on
+  ** every area allocation would make a many-area recorder grow quadratically.
+  */
+  (void)lj_gc2_markmem_registered(g, ret);
+  mcode_active_push(J, ret);
+  (void)lj_gc2_markmem_registered(g, ret);
+
+  J->mcarea = area;
+  J->szmcarea = sz;
+  J->mcprot = MCPROT_GEN;
+  J->mctop = (MCode *)((char *)area + sz);
+  J->mcbot = bot;
   J->szallmcarea += sz;
-  J->mcbot = mcode_register_area(J, J->mcarea, sz, J->mcbot);
 }
 
 static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
@@ -592,13 +640,6 @@ static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
     mcode_retired_next_rel(tail, head);
   } while (!mcode_retired_head_cas(J, &head, ret));
   /* 08 section 8.7 mcode SMR. */
-}
-
-static void mcode_preserve_retired(global_State *g, MCodeRetire *ret)
-{
-  for (; ret != NULL && lj_gc2_mem_registered(g, ret);
-       ret = mcode_retired_next_acq(ret))
-    (void)lj_gc2_markmem_registered(g, ret);
 }
 
 static void mcode_freearea_direct(global_State *g, MCode *area, size_t size)
@@ -619,7 +660,8 @@ static LJ_AINLINE int mcode_retire_ready(MCodeRetire *ret,
 					  uint64_t completed_epoch)
 {
   uint64_t retire_epoch = la_load64_acq(&ret->retire_epoch);
-  return completed_epoch >= retire_epoch &&
+  return retire_epoch != MCODE_RETIRE_EPOCH_ACTIVE &&
+	 completed_epoch >= retire_epoch &&
 	 completed_epoch - retire_epoch >= LJ_FLUSH_EPOCHS;
 }
 
@@ -628,54 +670,58 @@ void lj_mcode_free(jit_State *J)
 {
   global_State *g = J2G(J);
   MCode *mc = J->mcarea;
-  MCodeRetire *retired = NULL, *retired_tail = NULL;
+  MCodeRetire *retired, *ret;
   uint64_t epoch;
   if (!mc)
     return;
   epoch = lj_gc2_retire_epoch(g);
-  while (mc) {
-    MCode *next = mcode_area_next_acq(mc);
-    MCodeRetire *ret = lj_mem_newt(J->L, sizeof(MCodeRetire), MCodeRetire);
-    ret->area = mc;
-    ret->size = ((MCLink *)mc)->size;
-    ret->retire_epoch = epoch;
-    mcode_retired_next_rel(ret, NULL);
-    if (retired_tail)
-      mcode_retired_next_rel(retired_tail, ret);
-    else
-      retired = ret;
-    retired_tail = ret;
-    mc = next;
+  retired = mcode_active_head_xchg_acqrel(J, NULL);
+  lj_assertJ(retired != NULL, "active mcode area has no retirement owner");
+#ifdef LUA_USE_ASSERT
+  {
+    MCode *area = mc;
+    MCodeRetire *owner = retired;
+    while (area != NULL && owner != NULL) {
+      lj_assertJ(owner->area == area && owner->size == ((MCLink *)area)->size,
+		 "mcode area/retirement owner order mismatch");
+      area = mcode_area_next_acq(area);
+      owner = mcode_retired_next_acq(owner);
+    }
+    lj_assertJ(area == NULL && owner == NULL,
+	       "mcode area/retirement owner count mismatch");
   }
+#endif
+  for (ret = retired; ret != NULL; ret = mcode_retired_next_acq(ret)) {
+    lj_assertJ(ret->area != NULL &&
+	       la_load64_acq(&ret->retire_epoch) == MCODE_RETIRE_EPOCH_ACTIVE,
+	       "invalid active mcode retirement owner");
+    la_store64_rel(&ret->retire_epoch, epoch);
+  }
+  /* Publish ownership before detaching the executable-area chain. */
+  mcode_preserve_list(g, retired);
+  mcode_retired_push(J, retired);
+  mcode_preserve_list(g, retired);
   J->mcarea = NULL;
   J->mctop = J->mcbot = NULL;
   J->szmcarea = 0;
-  /*
-  ** MCodeRetire records are raw arena nodes published only through the SMR
-  ** retire stack. Mark before and after publication so concurrent sweep and a
-  ** root scan racing with the CAS push both retain the list nodes.
-  */
-  mcode_preserve_retired(g, retired);
-  mcode_retired_push(J, retired);
-  mcode_preserve_retired(g, retired);
 }
 
 void lj_mcode_freeall(global_State *g)
 {
   jit_State *J;
-  MCode *mc;
+  MCodeRetire *active;
   if (!g)
     return;
   J = G2J(g);
-  mc = J->mcarea;
-  while (mc) {
-    MCode *next = mcode_area_next_acq(mc);
-    mcode_freearea_direct(g, mc, ((MCLink *)mc)->size);
-    mc = next;
-  }
+  active = mcode_active_head_xchg_acqrel(J, NULL);
   J->mcarea = NULL;
   J->mctop = J->mcbot = NULL;
   J->szmcarea = 0;
+  while (active && lj_gc2_mem_registered(g, active)) {
+    MCodeRetire *next = mcode_retired_next_acq(active);
+    mcode_freearea(g, active);
+    active = next;
+  }
   lj_mcode_freeretired(g);
 }
 
@@ -687,6 +733,10 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
   if (!g || completed_epoch == 0)
     return 0;
   J = G2J(g);
+  if (!lj_gc2_jit_reclaim_context_acq(g) || !lj_jit_token_held(J))
+    return 0;
+  lj_assertG(lj_gc2_jit_reclaim_context_acq(g) && lj_jit_token_held(J),
+	     "mcode retire-list detach without exclusive reclaim gate");
   ret = mcode_retired_head_xchg_acqrel(J, NULL);
   while (ret && lj_gc2_mem_registered(g, ret)) {
     MCodeRetire *next = mcode_retired_next_acq(ret);
@@ -725,6 +775,14 @@ void lj_mcode_markretired(global_State *g, int gc2)
   if (!g)
     return;
   J = G2J(g);
+  for (ret = mcode_active_head_acq(J);
+       ret != NULL && lj_gc2_mem_registered(g, ret);
+       ret = mcode_retired_next_acq(ret)) {
+    if (gc2)
+      lj_gc2_markmem_registered(g, ret);
+    else
+      lj_gc_arena_markmem_registered(g, ret);
+  }
   for (ret = mcode_retired_head_acq(J);
        ret != NULL && lj_gc2_mem_registered(g, ret);
        ret = mcode_retired_next_acq(ret)) {

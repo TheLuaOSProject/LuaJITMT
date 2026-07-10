@@ -40,3 +40,16 @@ payload access.
   current node generation. GC2 now snapshots table storage before weak-mode
   lookup, matching the legacy collector order, and validates the metatable object
   before using the fast metamethod cache.
+
+2026-07-10 worker-generation recorder fix:
+- `recff_cdata_index()` used the instantaneous GC2 thread count to decide
+  whether an existing cdata field load/store could be recorded. After the first
+  worker exited, that count returned to one while the one-way `mt_active` latch
+  stayed set. A shared-cdata trace recorded in this gap was not covered by the
+  first-activation flush and could run during the next worker generation.
+- The recorder now uses `lj_record_mt_runtime_shared()`, matching table/frame
+  recording policy and preserving the trace-owned `CNEW`/`CNEWI` exception.
+  Existing cdata therefore stays interpreted after any threading activation
+  until traced CLOAD/CSTORE has a complete shared-root and aliasing protocol.
+- The hammer now records again after joining its first worker and requires the
+  sticky generation-safe gate before it starts the later multi-worker phase.

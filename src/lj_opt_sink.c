@@ -13,6 +13,7 @@
 #include "lj_ir.h"
 #include "lj_jit.h"
 #include "lj_iropt.h"
+#include "lj_dispatch.h"
 #include "lj_target.h"
 
 /* Some local macros to save typing. Undef'd at the end. */
@@ -151,6 +152,86 @@ static void sink_mark_snap(jit_State *J, SnapShot *snap)
   }
 }
 
+/* Seed or propagate one XSAVE dependency. */
+static int sink_mark_xsave_ref(jit_State *J, IRRef ref, int *changedp)
+{
+  IRIns *ir;
+  if (irref_isk(ref))
+    return 1;
+  if (ref == REF_BASE)
+    return 1;
+  if (LJ_UNLIKELY(ref < REF_FIRST || ref >= J->cur.nins))
+    return 0;
+  ir = IR(ref);
+  if (irt_ismarked(ir->t))
+    return 1;
+  irt_setmark(ir->t);
+  *changedp = 1;
+  return 1;
+}
+
+/* XSAVE is an explicit materialization boundary, not an interpreter exit.
+** Loop traces do not ordinarily mark all intermediate snapshots for sinking,
+** so find marker snapshots independently. This forces allocations and their
+** dependent stores to exist before the stack is published.
+*/
+static void sink_mark_xsave_snaps(jit_State *J)
+{
+  SnapNo i;
+  int complete = 1, changed = 0, has_xsave = 0;
+  unsigned pass;
+  for (i = 0; i < J->cur.nsnap; i++) {
+    SnapShot *snap = &J->cur.snap[i];
+    IRRef ref = snap->ref;
+    if (ref >= REF_FIRST && ref < J->cur.nins && IR(ref)->o == IR_XSAVE) {
+      SnapEntry *map;
+      MSize n;
+      has_xsave = 1;
+      lj_assertJ(snap->ref == ref, "XSAVE snapshot identity changed");
+      if (LJ_UNLIKELY(snap->mapofs >= J->cur.nsnapmap ||
+		      snap->nent > J->cur.nsnapmap - snap->mapofs)) {
+	complete = 0;
+	continue;
+      }
+      map = &J->cur.snapmap[snap->mapofs];
+      for (n = 0; n < snap->nent; n++)
+	if (!sink_mark_xsave_ref(J, snap_ref(map[n]), &changed))
+	  complete = 0;
+    }
+  }
+  /* Most IR references point backwards, so one descending pass reaches their
+  ** whole graph. Iterate a small fixed number for unusual copied-PHI forward
+  ** edges. If it does not converge, the allocation fallback below is exact for
+  ** sinking safety and only loses optimization on malformed/exotic IR.
+  */
+  for (pass = 0; complete && changed && pass < 8; pass++) {
+    IRIns *ir;
+    changed = 0;
+    for (ir = IR(J->cur.nins-1); ir >= IR(REF_FIRST); ir--)
+      if (irt_ismarked(ir->t)) {
+	uint8_t mode = lj_ir_mode[ir->o];
+	if (irm_op1(mode) == IRMref &&
+	    !sink_mark_xsave_ref(J, ir->op1, &changed))
+	  complete = 0;
+	if (irm_op2(mode) == IRMref &&
+	    !sink_mark_xsave_ref(J, ir->op2, &changed))
+	  complete = 0;
+      }
+  }
+  if (changed)
+    complete = 0;
+  if (LJ_UNLIKELY(has_xsave && !complete)) {
+    IRIns *ir;
+    /* Corrupt/cyclic input is rejected later by ASM snapshot validation. Keep
+    ** this optimization pass conservative in the meantime: no allocation may
+    ** remain sunk at a publication boundary we could not fully traverse. */
+    for (ir = IR(REF_FIRST); ir < IR(J->cur.nins); ir++)
+      if (ir->o == IR_TNEW || ir->o == IR_TDUP ||
+	  (LJ_HASFFI && (ir->o == IR_CNEW || ir->o == IR_CNEWI)))
+	irt_setmark(ir->t);
+  }
+}
+
 /* Iteratively remark PHI refs with differing marks or PHI value counts. */
 static void sink_remark_phi(jit_State *J)
 {
@@ -244,6 +325,7 @@ void lj_opt_sink(jit_State *J)
   if ((jit_flags_acq(J) & need) == need &&
       (J->chain[IR_TNEW] || J->chain[IR_TDUP] ||
        (LJ_HASFFI && (J->chain[IR_CNEW] || J->chain[IR_CNEWI])))) {
+    sink_mark_xsave_snaps(J);
     if (!J->loopref)
       sink_mark_snap(J, &J->cur.snap[J->cur.nsnap-1]);
     sink_mark_ins(J);

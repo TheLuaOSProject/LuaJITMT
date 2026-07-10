@@ -1,5 +1,11 @@
 # FFI CALLXS native-state boundary
 
+Status: historical explicit-shape implementation. The complete
+`crec_call_jit_*`/`lj_ccall_jit_*` matrix described below was removed on
+2026-07-10 and replaced in source by one stock-derived generic scalar recorder
+behind the XSAVE safety gate. See
+`notes/generic-traced-ffi-calls-2026-07-10.md` for the current architecture.
+
 Broad ordinary FFI C calls keep falling back to the interpreted
 `lj_ccall_func()` path, which enters native state around `lj_vm_ffi_call()` and
 performs fresh STOPREQ handling. Generic x64 `IR_CALLXS` lowering remains

@@ -12,10 +12,30 @@
 #include "lj_obj.h"
 #include "lj_jit.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_mcode.h"
 #include "lj_trace.h"
 
 #include "lib/lua_fixture_helpers.h"
+
+typedef struct FailAllocCtx {
+  lua_Alloc oldf;
+  void *oldud;
+  uint32_t grow_calls;
+  int fail_grow;
+} FailAllocCtx;
+
+static void *fail_growing_alloc(void *ud, void *ptr, size_t osize,
+				size_t nsize)
+{
+  FailAllocCtx *ctx = (FailAllocCtx *)ud;
+  if (nsize > osize) {
+    ctx->grow_calls++;
+    if (ctx->fail_grow)
+      return NULL;
+  }
+  return ctx->oldf(ctx->oldud, ptr, osize, nsize);
+}
 
 static MCodeRetire *retired_find(jit_State *J, MCode *needle)
 {
@@ -28,6 +48,52 @@ static MCodeRetire *retired_find(jit_State *J, MCode *needle)
   return NULL;
 }
 
+static MCodeRetire *active_find(jit_State *J, MCode *needle)
+{
+  MCodeRetire *ret;
+  for (ret = mcode_active_head_acq(J);
+       ret != NULL;
+       ret = mcode_retired_next_acq(ret))
+    if (ret->area == needle)
+      return ret;
+  return NULL;
+}
+
+static int reclaim_gate_enter(global_State *g)
+{
+  uint32_t expect = 0;
+  uint32_t worker = 0;
+  int sweep = gc2_phase_acq(g) == LJ_GC2_SWEEP;
+  if (sweep) {
+    assert(gc2_sweep_bridge_ready_acq(g) != 0);
+    assert(gc2_worker_active_cas(g, &worker, 1));
+  } else {
+    assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  }
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(gc2_smr_reclaiming_cas(g, &expect, 1));
+  return sweep;
+}
+
+static void reclaim_gate_leave(global_State *g, int sweep)
+{
+  gc2_smr_reclaiming_rel(g, 0);
+  if (sweep)
+    gc2_worker_active_rel(g, 0);
+}
+
+static uint32_t reclaim_mcode_at(global_State *g, uint64_t epoch)
+{
+  jit_State *J = G2J(g);
+  uint32_t n;
+  int sweep = reclaim_gate_enter(g);
+  assert(lj_jit_token_try(J));
+  n = lj_mcode_reclaim_retired(g, epoch);
+  lj_jit_token_release(J);
+  reclaim_gate_leave(g, sweep);
+  return n;
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -37,9 +103,11 @@ int main(void)
   MCodeRetire *ret;
   size_t szall;
   uint64_t epoch;
+  FailAllocCtx alloc;
 
   g = G(L);
   J = G2J(g);
+  assert(mcode_active_head_acq(J) == NULL);
   assert(mcode_retired_head_acq(J) == NULL);
 
   ljt_lua_dostring(L,
@@ -56,9 +124,26 @@ int main(void)
   szall = J->szallmcarea;
   assert(oldmc != NULL);
   assert(szall != 0);
+  ret = active_find(J, oldmc);
+  assert(ret != NULL);
+  assert(ret->retire_epoch == MCODE_RETIRE_EPOCH_ACTIVE);
   assert(mcode_retired_head_acq(J) == NULL);
 
-  assert(lj_trace_flushall(L) == 0);
+  /*
+  ** A safepoint leader can flush while holding the global recorder token.
+  ** Deny every allocator growth to prove the entire eventless flush, including
+  ** machine-code retirement, is a no-throw ownership transfer.
+  */
+  alloc.oldf = lua_getallocf(L, &alloc.oldud);
+  alloc.grow_calls = 0;
+  alloc.fail_grow = 1;
+  lua_setallocf(L, fail_growing_alloc, &alloc);
+  assert(lj_trace_flushall_gc(L) == 0);
+  alloc.fail_grow = 0;
+  lua_setallocf(L, alloc.oldf, alloc.oldud);
+  assert(alloc.grow_calls == 0);
+
+  assert(mcode_active_head_acq(J) == NULL);
   assert(J->mcarea == NULL);
   assert(J->mctop == NULL);
   assert(J->mcbot == NULL);
@@ -69,31 +154,31 @@ int main(void)
 
   epoch = ret->retire_epoch;
   assert(epoch == g->gc2.hs_epoch);
-  assert(lj_mcode_reclaim_retired(g, epoch) == 0);
+  assert(reclaim_mcode_at(g, epoch) == 0);
   ret = retired_find(J, oldmc);
   assert(ret != NULL);
   assert(J->szallmcarea == szall);
-  assert(lj_mcode_reclaim_retired(g, epoch + 1u) == 0);
+  assert(reclaim_mcode_at(g, epoch + 1u) == 0);
   assert(retired_find(J, oldmc) != NULL);
-  assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) == 0);
+  assert(reclaim_mcode_at(g, epoch + LJ_FLUSH_EPOCHS) == 0);
   /*
   ** Retired trace bodies hold mcode pointers until their own SMR grace and
-  ** GC root unlink have completed. This preserves stale bytecode
-  ** recovery: a patched loop or return can still need startins from the body.
+  ** the ownership root is detached (by the sweep bridge, or by IDLE reclaim).
+  ** This preserves stale bytecode recovery: a patched loop or return can still
+  ** need startins from the body. Exercise the applicable gated path itself.
   */
   {
-    GCtrace *rt;
-    for (rt = trace_retired_head_acq(J);
-	 rt != NULL;
-	 rt = trace_retired_next_acq(rt))
-      lj_gc_unlink_root_obj(g, obj2gco(rt));
+    int sweep = reclaim_gate_enter(g);
+    assert(lj_jit_token_try(J));
+    assert(lj_trace_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
+    assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
+    lj_jit_token_release(J);
+    reclaim_gate_leave(g, sweep);
   }
-  assert(lj_trace_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
-  assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
   assert(mcode_retired_head_acq(J) == NULL);
   assert(J->szallmcarea == 0);
 
   lua_close(L);
-  printf("t-jit-mcode-retire OK: mcode flush retires by epoch\n");
+  printf("t-jit-mcode-retire OK: no-throw mcode flush retires by epoch\n");
   return 0;
 }

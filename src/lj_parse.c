@@ -1678,7 +1678,7 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   fs_fixup_line(fs, pt, (void *)((char *)pt + ofsli), numline);
   fs_fixup_var(ls, pt, (uint8_t *)((char *)pt + ofsdbg), ofsvar);
 
-  lj_vmevent_send(G(L), BC,
+  lj_vmevent_send_l(L, BC,
     setprotoV(V, V->top++, pt);
   );
 
