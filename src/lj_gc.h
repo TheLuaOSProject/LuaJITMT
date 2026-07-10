@@ -85,7 +85,6 @@ LJ_FUNC uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg,
 LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
 LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
-LJ_FUNC void lj_gc_freeall(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_preserveobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_markobj(global_State *g, GCobj *o);
@@ -114,6 +113,25 @@ LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
 LJ_FUNC int lj_gc2_jit_needs_exit(global_State *g);
 #endif
 #ifdef LJ_GC2_TEST_HELPERS
+typedef struct GCLegacyEntryStats {
+  uint64_t runtime_markobj;
+  uint64_t runtime_markobj_deep;
+  uint64_t runtime_mark;
+  uint64_t runtime_propagate;
+  uint64_t runtime_propagatemark;
+  uint64_t runtime_sweep;
+  uint64_t runtime_sweepstr;
+  uint64_t shutdown_markobj;
+  uint64_t shutdown_markobj_deep;
+  uint64_t shutdown_mark;
+  uint64_t shutdown_propagate;
+  uint64_t shutdown_propagatemark;
+  uint64_t shutdown_sweep;
+  uint64_t shutdown_sweepstr;
+} GCLegacyEntryStats;
+
+LJ_FUNC void lj_gc_test_legacy_entries_reset(void);
+LJ_FUNC void lj_gc_test_legacy_entries_snapshot(GCLegacyEntryStats *stats);
 LJ_FUNC uint32_t lj_gc_test_step_fixtop_calls(void);
 LJ_FUNC void lj_gc_test_reset_step_fixtop_calls(void);
 #endif
@@ -439,45 +457,25 @@ LJ_FUNC int lj_gc_tv_gcref_valid(global_State *g, cTValue *tv);
 LJ_FUNC void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNCA void lj_gc_barrierback_tab_g(global_State *g, GCtab *t);
 
-/* Move the GC propagation frontier back for tables (make it gray again). */
+/* Compatibility entry for callers that need to rescan a mutated table. GC2 is
+** the sole runtime collector, so no legacy black-to-gray list is maintained. */
 static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
 {
-  GCobj *o = obj2gco(t);
-  lj_assertG(!iswhite(o) && !isdead(g, o),
-	     "bad object states for backward barrier");
-  lj_assertG(g->gc.state != GCSfinalize && g->gc.state != GCSpause,
-	     "bad GC state");
-  /*
-  ** The table itself owns the intrusive gclist link used by grayagain. Multiple
-  ** mutators can hit the same backward barrier, so only the thread that changes
-  ** black to gray may publish that link. Color mark close also observes
-  ** mark_active, because the color change is visible before the grayagain link is.
-  */
-  gc_mark_active_inc(g);
-  if (!lj_gc_claim_black_to_gray(o)) {
-    gc_mark_active_dec(g);
-    return;
-  }
-  lj_gc_list_push_rel(&g->gc.grayagain, o);
-  gc_mark_active_dec(g);
+  lj_gc2_barrier_tab_g(g, t);
 }
 
 static LJ_AINLINE void lj_gc_barriertv_(lua_State *L, GCtab *t, cTValue *tv)
 {
   global_State *g;
   TValue snap;
-  int white;
   if (!tv)
     return;
   g = G(L);
   lj_tv_load_acq(&snap, tv);
   if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, &snap)))
     return;
-  white = tviswhite(&snap);
   lj_gc2_barrier_tv_pair_g(g, obj2gco(t), &snap);
   lj_gc2_barrier_weak_value(L, t, &snap);
-  if (white && isblack(obj2gco(t)))
-    lj_gc_barrierback(g, t);
 }
 
 static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
@@ -485,83 +483,57 @@ static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
 {
   global_State *g;
   TValue snap;
-  int white;
   if (!tv)
     return;
   g = G(L);
   lj_tv_load_acq(&snap, tv);
   if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, &snap)))
     return;
-  white = tviswhite(&snap);
   lj_gc2_barrier_tv_pair_g(g, p, &snap);
-  if (white && isblack(p))
-    lj_gc_barrierf(g, p, gcV(&snap));
 }
 
 /* Barrier for stores to table objects. TValue and GCobj variant. */
 #define lj_gc_anybarriert(L, t)  \
-  { lj_gc2_barrier_tab((L), (t)); \
-    if (LJ_UNLIKELY(isblack(obj2gco(t)))) lj_gc_barrierback(G(L), (t)); }
+  lj_gc2_barrier_tab((L), (t))
 #define lj_gc_barriert(L, t, tv) \
   lj_gc_barriertv_((L), (t), (tv))
 #define lj_gc_objbarriert(L, t, o)  \
-  { int lj_gc_white_ = iswhite(obj2gco(o)); \
-    lj_gc2_barrier_obj_pair((L), obj2gco(t), obj2gco(o)); \
-    if (lj_gc_white_ && isblack(obj2gco(t))) \
-      lj_gc_barrierback(G(L), (t)); }
+  lj_gc2_barrier_obj_pair((L), obj2gco(t), obj2gco(o))
 
 /* Barrier for stores to any other object. TValue and GCobj variant. */
 #define lj_gc_barrier(L, p, tv) \
   lj_gc_barrierobjtv_((L), obj2gco(p), (tv))
 #define lj_gc_objbarrier(L, p, o) \
-  { int lj_gc_white_ = iswhite(obj2gco(o)); \
-    lj_gc2_barrier_obj_pair((L), obj2gco(p), obj2gco(o)); \
-    if (lj_gc_white_ && isblack(obj2gco(p))) \
-      lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
+  lj_gc2_barrier_obj_pair((L), obj2gco(p), obj2gco(o))
 
 static LJ_AINLINE void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key)
 {
-  int white;
   global_State *g = G(L);
   /*
   ** Publishing a fresh hash key only exposes that key edge. A full-table GC2
-  ** barrier would requeue and rescan the whole growing table for every insert;
-  ** the incremental collector still needs the normal table back barrier
-  ** when the table is black and the key is white.
+  ** barrier would requeue and rescan the whole growing table for every insert.
   */
   if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, key)))
     return;
-  white = tviswhite(key);
   lj_gc2_barrier_key_g(g, t, key);
-  if (white && isblack(obj2gco(t)))
-    lj_gc_barrierback(g, t);
 }
 
 /*
-** M5 publication wrappers. These preserve current incremental-GC behavior
-** while naming the publication boundary shared by GC2 and the color
-** incremental barrier. Callers use these wrappers when publishing references
-** that can be observed by another thread or by a concurrent GC traversal.
+** M5 publication wrappers. Callers use these GC2 barriers when publishing
+** references that can be observed by another thread or concurrent traversal.
 */
 #define lj_gc_pubtab(L, t) \
-  { lj_gc2_barrier_tab((L), (t)); \
-    if (LJ_UNLIKELY(isblack(obj2gco(t)))) lj_gc_barrierback(G(L), (t)); }
+  lj_gc2_barrier_tab((L), (t))
 #define lj_gc_pubtabtv(L, t, tv) \
   lj_gc_barriertv_((L), (t), (tv))
 #define lj_gc_pubtabkey(L, t, key) \
   lj_gc_pubtabkey_((L), (t), (key))
 #define lj_gc_pubtabobj(L, t, o) \
-  { int lj_gc_white_ = iswhite(obj2gco(o)); \
-    lj_gc2_barrier_obj_pair((L), obj2gco(t), obj2gco(o)); \
-    if (lj_gc_white_ && isblack(obj2gco(t))) \
-      lj_gc_barrierback(G(L), (t)); }
+  lj_gc2_barrier_obj_pair((L), obj2gco(t), obj2gco(o))
 #define lj_gc_pubobjtv(L, p, tv) \
   lj_gc_barrierobjtv_((L), obj2gco(p), (tv))
 #define lj_gc_pubobjobj(L, p, o) \
-  { int lj_gc_white_ = iswhite(obj2gco(o)); \
-    lj_gc2_barrier_obj_pair((L), obj2gco(p), obj2gco(o)); \
-    if (lj_gc_white_ && isblack(obj2gco(p))) \
-      lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
+  lj_gc2_barrier_obj_pair((L), obj2gco(p), obj2gco(o))
 LJ_FUNCA void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o);
 LJ_FUNCA void lj_gc_pubtabtv_vm(lua_State *L, GCtab *t, cTValue *tv);
 LJ_FUNCA void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv,

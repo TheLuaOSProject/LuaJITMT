@@ -31,6 +31,7 @@
 #if LJ_HASJIT
 #include "lj_dispatch.h"
 #include "lj_jit.h"
+#include "lj_trace.h"
 #endif
 
 #include "lib/thread_fixture_helpers.h"
@@ -1327,6 +1328,7 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   jit_State *J = G2J(g);
   GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
   GCtrace saved;
+  TraceState savedstate;
   GCfunc *fn;
   GCproto *pt;
   UNUSED(tg);
@@ -1350,13 +1352,19 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(pt)) == 0);
   saved = J->cur;
+  savedstate = lj_trace_state_load(J);
   memset(&J->cur, 0, sizeof(J->cur));
   J->cur.traceno = 1;
   J->cur.nk = REF_TRUE;
   J->cur.nins = REF_TRUE;
   setgcref(J->cur.startpt, obj2gco(pt));
+  /* gc2_scan_current_trace_root() intentionally ignores idle recorder
+  ** geometry. Model the active unpublished-recorder state this fixture is
+  ** proving instead of relying on stale J->cur bytes while state is IDLE. */
+  lj_trace_state_store(J, LJ_TRACE_START);
   lj_gc2_test_scan_roots(g, L);
   assert(lj_gc2_ismarked(g, obj2gco(pt)) == 1);
+  lj_trace_state_store(J, savedstate);
   J->cur = saved;
   lj_gc2_cycle_to_idle(g);
 }
@@ -1873,13 +1881,17 @@ static void test_weak_bridge_fallback_hmask0(lua_State *L, global_State *g,
   val = tabV(L->top - 1);
   node = install_hmask0_node(L, weak, key, val);
   assert(!tvisnil(&node->val));
+  /* The GC2 weak bridge decides liveness from GC2 marks, not retired color
+  ** bits. Drop the synthetic key/value stack roots before beginning the cycle
+  ** so this fixture models genuinely clearable weak edges. */
+  lua_settop(L, 0);
 
   lj_gc2_mark_begin(g);
   assert(g->gc2.weak_stack != NULL);
   assert(g->gc2.weak_ready != NULL);
   assert(g->gc2.weak_capacity > 0);
-  makewhite(g, obj2gco(key));
-  makewhite(g, obj2gco(val));
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
   setgcrefnull(g->gc.weak);
   weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
@@ -1900,7 +1912,7 @@ static void test_weak_bridge_fallback_hmask0(lua_State *L, global_State *g,
   assert(g->gc2.phase == LJ_GC2_IDLE);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
-  lua_pop(L, 3);
+  lua_settop(L, 0);
 }
 
 static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
@@ -3676,15 +3688,22 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
     "do\n"
     "  local cd = ffi.gc(ffi.new('gc2_spawn_defer_t'), function()\n"
     "    gc2_spawn_worker = th.spawn(function(started, release)\n"
-    "      started:send('started')\n"
+    "      started:send(collectgarbage('isrunning') and 'running' or 'stopped')\n"
     "      local msg, ok = release:recv(10)\n"
     "      return ok == true and msg == 'release'\n"
     "    end, gc2_spawn_started, gc2_spawn_release)\n"
     "  end)\n"
     "end\n") == LUA_OK);
 
+  /* This fixture normally runs with automatic collection stopped. Make the
+  ** logical pre-callback state explicit so the worker-side threshold check
+  ** distinguishes GC2's temporary suppression from a user-requested stop. */
+  lua_gc(L, LUA_GCRESTART, -1);
+  assert(lj_gc_threshold_load(g) != LJ_MAX_MEM);
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(g->gc.state == GCSfinalize);
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+  assert((gc2_finalizer_spawn_latch_acq(g) &
+	  LJ_GC2_FINSPAWN_DEFERRED) != 0);
   assert(mt_live_acq(g) != 0);
   assert(mt_gc_exclusive_acq(g) == 0);
   assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
@@ -3692,7 +3711,7 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
 
   assert(luaL_dostring(L,
     "local msg, ok = gc2_spawn_started:recv(1)\n"
-    "assert(ok == true and msg == 'started')\n"
+    "assert(ok == true and msg == 'running')\n"
     "assert(gc2_spawn_release:send('release', 1) == true)\n"
     "local joined, result = gc2_spawn_worker:join(10)\n"
     "assert(joined == true and result == true, tostring(result))\n"
@@ -3700,9 +3719,12 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
     "gc2_spawn_started = nil\n"
     "gc2_spawn_release = nil\n") == LUA_OK);
   assert(mt_live_acq(g) == 0);
+  assert((gc2_finalizer_spawn_latch_acq(g) &
+	  LJ_GC2_FINSPAWN_DEFERRED) != 0);
   assert(gc2_finalizer_spawn_release_wakes_acq(g) > releasewakes0);
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(g->gc.state == GCSpause);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_finalizer_spawn_latch_acq(g) == 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
 }

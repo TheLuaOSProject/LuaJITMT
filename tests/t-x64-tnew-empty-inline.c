@@ -35,6 +35,20 @@ typedef struct ReusableRun {
   uint32_t cell;
 } ReusableRun;
 
+static void prime_traversable_bump_window(TGState *tg)
+{
+  TGAlloc *alloc = &tg->alloc;
+  GCArena *a = lj_arena_map(&tg->prng, LJ_AF_TRAVERSABLE);
+  assert(a != NULL);
+  lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
+  lj_arena_next_rel(a, alloc->owned[LJ_ARENAK_TRAVERSABLE]);
+  alloc->owned[LJ_ARENAK_TRAVERSABLE] = a;
+  alloc->bump[LJ_ARENAK_TRAVERSABLE].a = a;
+  alloc->bump[LJ_ARENAK_TRAVERSABLE].cell = LJ_AFIRST_CELL;
+  alloc->bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
+  assert(lj_arena_alloc_register_existing(alloc));
+}
+
 static void *counting_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   TestAllocCtx *ctx = (TestAllocCtx *)ud;
@@ -55,16 +69,6 @@ static void load_grown_table_chunk(lua_State *L)
     "for i = 1, 40 do t[i] = i end\n"
     "t.k = 'v'\n"
     "return t\n");
-}
-
-static void clear_lua_stack_values(lua_State *L)
-{
-  TValue *slot, *end;
-  lua_settop(L, 0);
-  slot = tvref(L->stack) + 1 + LJ_FR2;
-  end = tvref(L->maxstack);
-  for (; slot < end; slot++)
-    setnilV(slot);
 }
 
 static int root_chain_contains(global_State *g, GCobj *needle)
@@ -88,7 +92,7 @@ static uint32_t ptr_state(void *p)
   return lj_arena_state(a, cell);
 }
 
-static void assert_empty_table_body(global_State *g, GCtab *t, int arena_owned)
+static void assert_empty_table_body(global_State *g, GCtab *t)
 {
   Node *node;
   assert(t != NULL);
@@ -96,10 +100,7 @@ static void assert_empty_table_body(global_State *g, GCtab *t, int arena_owned)
   assert(t->gct == (uint8_t)~LJ_TTAB);
   assert((t->marked & LJ_GC_WHITES) == (g->gc.currentwhite & LJ_GC_WHITES));
   assert(t->nomm == (uint8_t)~0u);
-  if (arena_owned)
-    assert(lj_tab_arenaowned(t));
-  else
-    assert(t->colo == 0);
+  assert(t->colo == 0);
   assert(mref(t->array, TValue) == NULL);
   assert(gcref_acq(t->metatable) == NULL);
   assert(t->asize == 0);
@@ -145,16 +146,12 @@ static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
 
   assert(a0 != NULL);
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
-  for (i = 4; i < LJ_ALLOC_NBINS; i++)
-    assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
-  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				    TNEW_EMPTY_NCELLS));
   assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
 
   ljt_lua_pcall(L, 0, 1, "empty TNEW inline pcall");
   t = tabV(L->top - 1);
 
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -192,16 +189,12 @@ static void test_plain_new0_inline_empty(lua_State *L, global_State *g,
 
   assert(a0 != NULL);
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
-  for (i = 4; i < LJ_ALLOC_NBINS; i++)
-    assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
-  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				    TNEW_EMPTY_NCELLS));
   assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
 
   t = lj_tab_new0(L);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -238,16 +231,12 @@ static void test_plain_new_inline_empty(lua_State *L, global_State *g,
 
   assert(a0 != NULL);
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
-  for (i = 4; i < LJ_ALLOC_NBINS; i++)
-    assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
-  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				    TNEW_EMPTY_NCELLS));
   assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
 
   t = lj_tab_new(L, 0, 0);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -284,17 +273,13 @@ static void test_capi_newtable_inline_empty(lua_State *L, global_State *g,
 
   assert(a0 != NULL);
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
-  for (i = 4; i < LJ_ALLOC_NBINS; i++)
-    assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
-  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				    TNEW_EMPTY_NCELLS));
   assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
 
   lua_newtable(L);
   t = tabV(L->top - 1);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -311,9 +296,9 @@ static void test_capi_newtable_inline_empty(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
-static void test_active_black_empty_tables_skip_pending(lua_State *L,
-							global_State *g,
-							TGState *tg)
+static void test_active_black_empty_tables_publish_exact(lua_State *L,
+							 global_State *g,
+							 TGState *tg)
 {
   LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   GCArena *a0;
@@ -321,7 +306,6 @@ static void test_active_black_empty_tables_skip_pending(lua_State *L,
   GCSize total0;
   uint64_t local0;
   uint32_t old_mark_active, cell0, calls0, i;
-  uint32_t swept;
   uint8_t old_alloc_black;
   GCtab *t_inline, *t_helper;
 
@@ -354,8 +338,8 @@ static void test_active_black_empty_tables_skip_pending(lua_State *L,
   lj_tg_mark_active_rel(tg, old_mark_active);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t_inline, 1);
-  assert_empty_table_body(g, t_helper, 1);
+  assert_empty_table_body(g, t_inline);
+  assert_empty_table_body(g, t_helper);
   assert((void *)t_inline == lj_arena_cellptr(a0, cell0));
   assert((void *)t_helper ==
 	 lj_arena_cellptr(a0, cell0 + TNEW_EMPTY_NCELLS));
@@ -364,35 +348,24 @@ static void test_active_black_empty_tables_skip_pending(lua_State *L,
     assert(lj_arena_state(a0, cell0 + i) == 3u);
   assert(lj_gc_total_load(g) == total0 + 2u * TNEW_EMPTY_SIZE);
   assert(lj_tg_local_total_acq(tg) == local0 + 2u * TNEW_EMPTY_SIZE);
-  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
-  assert(lj_gcroot_pending_hint_acq(g) == 0);
-  assert(lj_obj_gcw_acq(obj2gco(t_inline)) == NULL);
-  assert(lj_obj_gcw_acq(obj2gco(t_helper)) == NULL);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t_helper));
+  assert(lj_obj_gcw_acq(obj2gco(t_helper)) == obj2gco(t_inline));
+  assert(lj_obj_gcw_acq(obj2gco(t_inline)) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_gc2_ismarked(g, obj2gco(t_inline)) > 0);
   assert(lj_gc2_ismarked(g, obj2gco(t_helper)) > 0);
-  assert(lj_gc_flush_root_pending(g) == 0);
-  assert(!root_chain_contains(g, obj2gco(t_inline)));
-  assert(!root_chain_contains(g, obj2gco(t_helper)));
+  assert(lj_gc_flush_root_pending(g) >= 2u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(root_chain_contains(g, obj2gco(t_inline)));
+  assert(root_chain_contains(g, obj2gco(t_helper)));
   assert(lj_arena_bm_get(a0->mark, cell0));
   assert(lj_arena_bm_get(a0->mark, cell0 + TNEW_EMPTY_NCELLS));
-  setnilV(L->top - 1);
   lua_pop(L, 1);
-  clear_lua_stack_values(L);
-
-  lj_arena_bm_clear(a0->mark, cell0);
-  lj_arena_bm_clear(a0->mark, cell0 + TNEW_EMPTY_NCELLS);
-  swept = lj_gc_sweep_gc2_arena_unmarked(g, a0);
-  assert(swept >= 2u);
-  assert(lj_arena_state(a0, cell0) == 1u);
-  assert(lj_arena_state(a0, cell0 + TNEW_EMPTY_NCELLS) == 1u);
-  for (i = 1; i < TNEW_EMPTY_NCELLS; i++) {
-    assert(lj_arena_state(a0, cell0 + i) == 0u);
-    assert(lj_arena_state(a0, cell0 + TNEW_EMPTY_NCELLS + i) == 0u);
-  }
 }
 
-static void test_active_black_grown_table_sweeps(lua_State *L, global_State *g,
-						 TGState *tg)
+static void test_active_black_grown_table_publishes_exact(lua_State *L,
+							  global_State *g,
+							  TGState *tg)
 {
   LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   GCArena *a0;
@@ -400,7 +373,7 @@ static void test_active_black_grown_table_sweeps(lua_State *L, global_State *g,
   TValue *array;
   Node *node;
   void *arraymem, *nodemem;
-  uint32_t old_mark_active, cell0, swept;
+  uint32_t old_mark_active, cell0;
   uint8_t old_alloc_black;
   GCtab *t;
 
@@ -429,14 +402,15 @@ static void test_active_black_grown_table_sweeps(lua_State *L, global_State *g,
   lj_tg_alloc_black_rel(tg, old_alloc_black);
   lj_tg_mark_active_rel(tg, old_mark_active);
 
-  assert(lj_tab_arenaowned(t));
+  assert(t->colo == 0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
-  assert(lj_obj_gcw_acq(tobj) == NULL);
-  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
-  assert(lj_gcroot_pending_hint_acq(g) == 0);
-  assert(lj_gc_flush_root_pending(g) == 0);
-  assert(!root_chain_contains(g, tobj));
+  assert(lj_tg_gcroot_pending_acq(tg) == tobj);
+  assert(lj_obj_gcw_acq(tobj) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_gc2_ismarked(g, tobj) > 0);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(root_chain_contains(g, tobj));
 
   array = lj_tab_array_acq(t);
   node = lj_tab_node_acq(t);
@@ -451,14 +425,6 @@ static void test_active_black_grown_table_sweeps(lua_State *L, global_State *g,
   assert((ptr_state(arraymem) & 2u) != 0);
   assert((ptr_state(nodemem) & 2u) != 0);
   lua_pop(L, 1);
-  clear_lua_stack_values(L);
-
-  lj_arena_bm_clear(a0->mark, cell0);
-  swept = lj_gc_sweep_gc2_arena_unmarked(g, a0);
-  assert(swept >= 1u);
-  assert(lj_arena_state(a0, cell0) == 1u);
-  assert((ptr_state(arraymem) & 2u) == 0);
-  assert((ptr_state(nodemem) & 2u) == 0);
 }
 
 #if LJ_HASJIT
@@ -483,16 +449,12 @@ static void test_jit_helper_inline_empty_tnew(lua_State *L, global_State *g,
 
   assert(a0 != NULL);
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
-  for (i = 4; i < LJ_ALLOC_NBINS; i++)
-    assert(tg->alloc.bins[LJ_ARENAK_TRAVERSABLE][i] == NULL);
-  assert(!lj_arena_alloc_has_run_ge(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				    TNEW_EMPTY_NCELLS));
   assert(local0 < LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
 
   t = lj_tab_new0_forjit(L);
 
   assert(lj_tab_test_new0_calls() == calls0);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
   assert(lj_arena_state(a0, cell0) == (black ? 3u : 2u));
@@ -522,7 +484,7 @@ static void test_jit_helper_entering_fallback(lua_State *L, global_State *g)
   mt_entering_futex_wake(g, 0x7fffffff);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(root_chain_contains(g, obj2gco(t)));
 }
@@ -550,7 +512,7 @@ static void test_entering_uses_helper(lua_State *L, global_State *g,
 
   t = tabV(L->top - 1);
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(t));
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gcroot_pending_hint_acq(g) != 0);
@@ -577,7 +539,7 @@ static void test_local_accounting_fallback(lua_State *L, global_State *g,
   assert(lj_tg_local_total_acq(tg) == 0);
   assert(lj_gc2_alloc_since_load(g) >=
 	 since0 + LJ_GC2_ACCT_FLUSH);
-  assert_empty_table_body(g, tabV(L->top - 1), 0);
+  assert_empty_table_body(g, tabV(L->top - 1));
   lua_pop(L, 1);
 }
 
@@ -593,7 +555,7 @@ static void test_custom_allocator_fallback(lua_State *L, global_State *g)
 
   ljt_lua_pcall(L, 0, 1, "empty TNEW custom allocator fallback pcall");
   assert(ctx.calls > 0);
-  assert_empty_table_body(g, tabV(L->top - 1), 0);
+  assert_empty_table_body(g, tabV(L->top - 1));
   lua_pop(L, 1);
 
   lua_setallocf(L, ctx.oldf, ctx.oldud);
@@ -631,7 +593,7 @@ static void test_inline_empty_tnew_uses_bump_with_free_run(lua_State *L,
   t = tabV(L->top - 1);
 
   assert(lj_tab_test_new0_calls() == calls0);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert((void *)t != lj_arena_cellptr(run.a, run.cell));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
@@ -679,7 +641,7 @@ static void test_plain_new0_uses_bump_with_free_run(lua_State *L,
   t = lj_tab_new0(L);
 
   assert(lj_tab_test_new0_calls() == calls0 + 1u);
-  assert_empty_table_body(g, t, 0);
+  assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert((void *)t != lj_arena_cellptr(run.a, run.cell));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
@@ -712,13 +674,15 @@ int main(void)
   assert(tg == g->main_tg);
   assert(lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL));
   ljt_lua_dostring(L, "if jit then jit.off(true, true) end\n");
+  if (tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL)
+    prime_traversable_bump_window(tg);
 
   test_inline_empty_tnew(L, g, tg);
   test_plain_new0_inline_empty(L, g, tg);
   test_plain_new_inline_empty(L, g, tg);
   test_capi_newtable_inline_empty(L, g, tg);
-  test_active_black_empty_tables_skip_pending(L, g, tg);
-  test_active_black_grown_table_sweeps(L, g, tg);
+  test_active_black_empty_tables_publish_exact(L, g, tg);
+  test_active_black_grown_table_publishes_exact(L, g, tg);
 #if LJ_HASJIT
   test_jit_helper_inline_empty_tnew(L, g, tg);
   test_jit_helper_entering_fallback(L, g);

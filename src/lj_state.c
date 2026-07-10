@@ -334,30 +334,6 @@ static void close_state_reanchor_root(global_State *g, GCobj *target)
   lj_gcroot_repair_epoch_add(g);
 }
 
-static int close_state_unlink_root(global_State *g, GCobj *target)
-{
-  GCRef *p;
-  GCobj *o;
-  uint32_t n = 0;
-  if (!g || !target)
-    return 0;
-  (void)lj_gc_flush_root_pending(g);
-  p = lj_gc_root_ref(g);
-  while ((o = gcref_acq(*p)) != NULL) {
-    if (!close_state_root_link_valid(g, o))
-      break;
-    if (o == target) {
-      GCobj *next = lj_obj_gcw_acq(o);
-      GCobj *expect = o;
-      return gcref_cas(p, &expect, next);
-    }
-    p = lj_obj_gcwref(o);
-    if (++n >= 1000000u)
-      break;
-  }
-  return 0;
-}
-
 int lj_state_thread_registry_valid(global_State *g, lua_State *th)
 {
   return g && th && lj_gc2_obj_valid_queued(g, obj2gco(th)) &&
@@ -401,17 +377,19 @@ restart:
   }
 }
 
-static void close_state_free_registered_states(global_State *g, lua_State *L)
+static void close_state_reanchor_registered_states(global_State *g,
+					     lua_State *L)
 {
   lua_State *th = lj_state_thread_registry_head_xchg(g, NULL);
   uint32_t n = 0;
   while (th && lj_state_thread_registry_valid(g, th)) {
     lua_State *next = lj_state_thread_registry_next_acq(th);
     lj_state_thread_registry_next_rel(th, NULL);
-    if (th != L) {
-      (void)close_state_unlink_root(g, obj2gco(th));
-      lj_state_free(g, th);
-    }
+    /* A threading.thread userdata may still carry this state pointer after
+    ** lj_threading_shutdown(). Keep every exact state on the terminal GC2
+    ** ownership spine and let the single destructor drain free it once. */
+    if (th != L)
+      close_state_reanchor_root(g, obj2gco(th));
     th = next;
     if (++n >= 1000000u)
       break;
@@ -432,6 +410,15 @@ static void close_state(lua_State *L)
 		    lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
   GCobj *o;
   uint32_t n = 0;
+  /* Parked GC2 workers are collector threads, not threading.* children.
+  ** Join them before touching TG registries, ownership roots, strings or
+  ** destructors; lj_gc2_fini() repeats this idempotently for partial states. */
+  lj_gc2_worker_stop(g);
+#if LJ_HASJIT
+  /* Disconnect every live trace while its start prototype and bytecode are
+  ** still alive. Retired bodies stay list-owned until trace_freestate(). */
+  (void)lj_trace_flushall_gc(L);
+#endif
   lj_func_closeuv(L, tvref(L->stack));
   /*
   ** Thread states are strong runtime roots (mainthread_ref, TG roots or
@@ -439,7 +426,7 @@ static void close_state(lua_State *L)
   ** lockless root-list maintenance left any thread state off the GC chain.
   */
   close_state_reanchor_root(g, obj2gco(L));
-  close_state_free_registered_states(g, L);
+  close_state_reanchor_registered_states(g, L);
   lj_thr_fence();
   (void)lj_tg_reclaim_dead(g);
   (void)lj_gc_flush_root_pending(g);
@@ -460,9 +447,12 @@ static void close_state(lua_State *L)
     o = next;
   }
   n = 0;
+  /* The VM callback state is now owned only by the terminal root drain. Clear
+  ** this side root before a custom allocator can release the state body. */
+  setgcrefnullrel(*vmthread_ref(g));
   if (arena_alloc)
     close_state_arena_free_noinsert(g);
-  lj_gc_freeall(g);
+  lj_gc2_freeall(g);
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL;) {
     GCobj *next;

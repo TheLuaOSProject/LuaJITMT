@@ -307,11 +307,10 @@ static void threading_spawn_gc_handoff(lua_State *L, GCudata *ud)
   global_State *g = G(L);
   /*
   ** The thread userdata is published to the live-thread list before the child
-  ** can run. If a color cycle is already active, use the same root publication
-  ** barrier as other native root lists so the cycle sees the userdata and its
-  ** startup roots without completing the whole collector synchronously. GC2 has
-  ** a snapshot-style root set, so preserving a late root may still abort the
-  ** current GC2 cycle to idle and let the next cycle rescan from roots.
+  ** can run. Use the same GC2 root-publication barrier as other native root
+  ** lists so the cycle sees the userdata and its startup roots. GC2 has a
+  ** snapshot-style root set, so preserving a late root may still abort the
+  ** current cycle to idle and let the next cycle rescan from roots.
   */
   lj_gc_pubobjroot(L, obj2gco(ud));
   lj_gc2_preserve_root(g, obj2gco(ud));
@@ -328,13 +327,12 @@ static void threading_result_gc_handoff(lua_State *L, LJThread *th)
   /*
   ** Completing a worker mutates the child stack after the thread userdata may
   ** already have been marked through the live-thread list. Requeue the userdata
-  ** for color traversal, mark the stack dirty for owner-scan freshness, and
-  ** preserve the GC2 root so join-visible result graphs are scanned from the
-  ** completed child stack instead of relying on a stale thread mark.
+  ** for GC2 traversal, mark the stack dirty for owner-scan freshness, and
+  ** preserve both GC2 roots so join-visible result graphs are scanned from the
+  ** completed child stack instead of relying on a stale thread mark. The legacy
+  ** color collector is deliberately not part of this handoff.
   */
   (void)lj_tg_stack_dirty_epoch_add_rlx(L2TG(L), 1);
-  lj_gc_markobj(G(L), obj2gco(ud));
-  lj_gc_markobj(G(L), obj2gco(L));
   lj_gc2_preserve_root(G(L), obj2gco(ud));
   lj_gc2_preserve_root(G(L), obj2gco(L));
 }
@@ -665,7 +663,12 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
       threading_spawn_gc_handoff(L, rootud);
     if (mt_live_add_rlx(g, 1) == 0) {
       GCSize threshold = lj_gc_threshold_load(g);
-      if (threshold == LJ_MAX_MEM && g->gc.state == GCSfinalize)
+      /* A finalizer temporarily suppresses automatic collection while its
+      ** callback runs. The callback latch is nested-safe and excludes GC2's
+      ** queue-drain owner scope; legacy g->gc.state is unrelated here. */
+      if (threshold == LJ_MAX_MEM &&
+	  (gc2_finalizer_spawn_latch_acq(g) &
+	   LJ_GC2_FINSPAWN_CALLBACK_ACTIVE) != 0)
 	threshold = lj_gc_mt_threshold_load(g);
       lj_gc_mt_threshold_store(g, threshold);
       /* M4: no automatic GC while children run. */
@@ -1612,6 +1615,7 @@ LJLIB_CF(threading_now)
 
 LJLIB_CF(threading_fence)
 {
+  UNUSED(L);
   lj_thr_fence();
   return 0;
 }

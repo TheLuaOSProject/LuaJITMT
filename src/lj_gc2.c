@@ -578,6 +578,7 @@ void lj_gc2_init(global_State *g)
   gc2_finalizer_tail_store_rlx(g, NULL);
   gc2_finalizer_active_store_rlx(g, 0);
   gc2_finalizer_owner_store_rlx(g, 0);
+  gc2_finalizer_spawn_latch_store_rlx(g, 0);
   gc2_finalizer_queued_store_rlx(g, 0);
   gc2_finalizer_dequeued_store_rlx(g, 0);
   gc2_finalizer_mpsc_drained_store_rlx(g, 0);
@@ -2655,7 +2656,7 @@ static int lj_gc2_finalizer_step_ctx(lua_State *L,
   if (gc2_finalizer_spawn_deferred(g)) {
     if (cost)
       *cost = LJ_MAX_MEM;
-    return -1;  /* Keep GCSfinalize open until spawned TG exits. */
+    return -1;  /* Keep GC2 SWEEP open until the spawned TG exits. */
   }
   return 0;
 }
@@ -2943,18 +2944,38 @@ static int gc2_finalizer_mt_reclaim_exclusive(global_State *g)
 static int gc2_finalizer_pcall(global_State *g, lua_State *L,
 			       TValue *top, int *continue_gc)
 {
-  uint8_t oldstate = g->gc.state;
   uint32_t oldphase = gc2_phase_acq(g);
   uint32_t live_before = mt_live_acq(g);
+  uint32_t oldlatch = gc2_finalizer_spawn_latch_update(
+    g, LJ_GC2_FINSPAWN_CALLBACK_ACTIVE, 0);
+  int owns_callback_latch =
+    (oldlatch & LJ_GC2_FINSPAWN_CALLBACK_ACTIVE) == 0;
   int had_mt_exclusive = gc2_finalizer_mt_release_exclusive(g);
   int errcode = lj_vm_pcall(L, top, 1+0, -1);  /* Stack: |mo|o| -> | */
-  int keep_gc = had_mt_exclusive ?
-			gc2_finalizer_mt_reclaim_exclusive(g) : 1;
+  int keep_gc;
+  if (had_mt_exclusive) {
+    /* Publish before the reclaim attempt so the last exiting secondary cannot
+    ** miss the scheduler wake in the live-to-zero race. A successful reclaim
+    ** proves that no spawned TG outlived this callback and consumes the latch.
+    */
+    (void)gc2_finalizer_spawn_latch_update(
+      g, LJ_GC2_FINSPAWN_DEFERRED, 0);
+    keep_gc = gc2_finalizer_mt_reclaim_exclusive(g);
+    if (keep_gc)
+      (void)gc2_finalizer_spawn_latch_update(
+	g, 0, LJ_GC2_FINSPAWN_DEFERRED);
+  } else {
+    keep_gc = 1;
+  }
   if (!had_mt_exclusive && oldphase == LJ_GC2_SWEEP &&
-      mt_live_acq(g) > live_before)
+      mt_live_acq(g) > live_before) {
     keep_gc = 0;  /* GC2 finalizer spawned a secondary thread. */
-  if (!keep_gc && (oldstate == GCSfinalize || oldphase == LJ_GC2_SWEEP))
-    g->gc.state = GCSfinalize;
+    (void)gc2_finalizer_spawn_latch_update(
+      g, LJ_GC2_FINSPAWN_DEFERRED, 0);
+  }
+  if (owns_callback_latch)
+    (void)gc2_finalizer_spawn_latch_update(
+      g, 0, LJ_GC2_FINSPAWN_CALLBACK_ACTIVE);
   if (continue_gc)
     *continue_gc = keep_gc;
   return errcode;
@@ -3073,12 +3094,19 @@ static int gc2_finalizer_spawn_deferred(global_State *g)
 {
   if (!g)
     return 0;
-  if (g->gc.state == GCSfinalize &&
+  if ((gc2_finalizer_spawn_latch_acq(g) & LJ_GC2_FINSPAWN_DEFERRED) != 0 &&
       mt_live_acq(g) != 0 &&
       mt_gc_exclusive_acq(g) == 0) {
     gc2_finalizer_spawn_deferrals_add(g, 1);
     return 1;
   }
+  /* The GC driver which observes the released last secondary consumes the
+  ** latch. The leaving TG only wakes the driver, keeping latch ownership on
+  ** the collector side and avoiding an exit-vs-predicate lost-clear race. */
+  if ((gc2_finalizer_spawn_latch_acq(g) & LJ_GC2_FINSPAWN_DEFERRED) != 0 &&
+      mt_live_acq(g) == 0)
+    (void)gc2_finalizer_spawn_latch_update(
+      g, 0, LJ_GC2_FINSPAWN_DEFERRED);
   return 0;
 }
 
@@ -3086,7 +3114,7 @@ void lj_gc2_finalizer_spawn_release(global_State *g)
 {
   if (!g)
     return;
-  if (g->gc.state == GCSfinalize &&
+  if ((gc2_finalizer_spawn_latch_acq(g) & LJ_GC2_FINSPAWN_DEFERRED) != 0 &&
       mt_live_acq(g) == 0 &&
       mt_gc_exclusive_acq(g) == 0) {
     gc2_finalizer_spawn_release_wakes_add(g, 1);
@@ -7079,8 +7107,6 @@ static void gc2_finreg_queue_mark(global_State *g, GCobj *o)
   uint32_t phase;
   if (!g || !o)
     return;
-  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
-    lj_gc_markobj(g, o);
   phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
     (void)lj_gc2_markobj(g, o);  /* 05 section 5.8 FINREG resurrection. */
@@ -7566,8 +7592,9 @@ static void gc2_finreg_dispatch_requeue(global_State *g, GCobj *o)
   } else {
     return;
   }
-  makewhite(g, o);
-  lj_gc_arena_markobj(g, o);
+  /* The reinserted object is a GC2 root. Keep it live in an in-flight cycle
+  ** without reviving or traversing any legacy color-collector state. */
+  gc2_finreg_queue_mark(g, o);
 }
 
 #if LJ_HASFFI
@@ -7893,9 +7920,6 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
 	(void)lj_gc2_finreg_udata_set(g, o, 1);
       if (mt)
 	gc2_finreg_queue_mark(g, obj2gco(mt));
-      if (tvisgcv(&mmv) &&
-	  (g->gc.state == GCSpropagate || g->gc.state == GCSatomic))
-	lj_gc_markobj(g, gcV(&mmv));
       gc2_mark_tv(g, &mmv);
     }
     /*

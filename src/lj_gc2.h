@@ -179,6 +179,7 @@ enum {
 
 LJ_FUNC void lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_fini(global_State *g);
+LJ_FUNC void lj_gc2_freeall(global_State *g);
 LJ_FUNC void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes);
 LJ_FUNC uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_cycle_explicit(global_State *g, TGState *tg);

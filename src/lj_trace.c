@@ -345,7 +345,7 @@ static void tracevec_retire(jit_State *J, TraceVec *tv)
 
 static void trace_exittab_free(global_State *g, GCtrace *T, SnapNo nsnap);
 typedef struct TraceProtoPCState TraceProtoPCState;
-static void trace_preservebody(global_State *g, GCtrace *T, int gc2,
+static void trace_preservebody(global_State *g, GCtrace *T,
 			       TraceProtoPCState *pcstate);
 
 static LJArenaAllocD *trace_arena_allocd_for_tg(global_State *g, TGState *tg)
@@ -543,34 +543,30 @@ static int trace_retired_needs_payload_preserve(global_State *g, GCtrace *T)
   return trace_retired_payload_grace_active(g, T);
 }
 
-static void trace_preservebody_raw(global_State *g, GCtrace *T, int gc2)
+static void trace_preservebody_raw(global_State *g, GCtrace *T)
 {
-  if (gc2) lj_gc2_markmem(g, T);
-  else lj_gc_preserveobj(g, obj2gco(T));
+  (void)lj_gc2_markmem(g, T);
   if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
     return;
   {
     MCode **exittab = trace_exittab_acq(T);
-    if (exittab && !trace_exittab_ismcode(T)) {
-      if (gc2) lj_gc2_markmem(g, exittab);
-      else lj_gc_arena_markmem(g, exittab);
-    }
+    if (exittab && !trace_exittab_ismcode(T))
+      (void)lj_gc2_markmem(g, exittab);
   }
 }
 
-static void trace_preserve_retired_body(global_State *g, GCtrace *T, int gc2,
+static void trace_preserve_retired_body(global_State *g, GCtrace *T,
 					TraceProtoPCState *pcstate)
 {
   if (trace_retired_needs_payload_preserve(g, T))
-    trace_preservebody(g, T, gc2, pcstate);
+    trace_preservebody(g, T, pcstate);
   else
-    trace_preservebody_raw(g, T, gc2);
+    trace_preservebody_raw(g, T);
 }
 
 static void trace_preserve_retired_publish(global_State *g, GCtrace *T)
 {
-  trace_preserve_retired_body(g, T, 0, NULL);
-  trace_preserve_retired_body(g, T, 1, NULL);
+  trace_preserve_retired_body(g, T, NULL);
 }
 
 static void trace_retired_push_preserved(jit_State *J, GCtrace *T)
@@ -587,7 +583,7 @@ static void trace_retired_push_preserved(jit_State *J, GCtrace *T)
 	     "retired trace preservation without recorder token");
   trace_preserve_retired_publish(g, T);
   trace_retired_publish_token(J, T);
-  trace_preserve_retired_body(g, T, 1, NULL);
+  trace_preserve_retired_body(g, T, NULL);
 }
 
 /*
@@ -602,8 +598,8 @@ static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
 {
   uint64_t expect = 0;
   uint64_t stamp = trace_retire_stamp(epoch);
-  /* Dual-mark before the unique entry gate; a root-prune caller can then unlink
-  ** only after this helper returns without opening an unpreserved gap.
+  /* Preserve in GC2 before the unique entry gate; a root-prune caller can then
+  ** unlink only after this helper returns without opening an unpreserved gap.
   */
   trace_preserve_retired_publish(g, T);
   (void)la_cas64(&T->retire_epoch, &expect, stamp, LA_ACQ_REL, LA_ACQ);
@@ -671,16 +667,13 @@ static void trace_rescue_runnable_target(global_State *g, GCtrace *T)
   GCobj *o = obj2gco(T);
   /*
   ** The reverse edge is semantic reachability, not stale-reader body
-  ** retention. Reopen the full traversal frontier before declining retirement:
-  ** color GC drains the trace graph synchronously, while GC2 sweep publishes it
-  ** through the current TG's SSB. The root-prune cursor then retries the same
-  ** body and observes its new mark instead of transferring it to RETIRED.
+  ** retention. Reopen the GC2 traversal frontier before declining retirement.
+  ** During sweep this publishes through the current TG's SSB; during an earlier
+  ** phase the same helper performs an ordinary GC2 semantic mark. The root-prune
+  ** cursor then retries the same body and observes its new mark instead of
+  ** transferring it to RETIRED.
   */
-  lj_gc_markobj_deep(g, o);
-  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    (void)lj_gc2_trace_sweep_root(g, o);
-  else if (gc2_phase_acq(g) != LJ_GC2_IDLE)
-    (void)lj_gc2_markobj(g, o);
+  (void)lj_gc2_trace_sweep_root(g, o);
 }
 
 static void trace_retire_at_epoch(global_State *g, GCtrace *T,
@@ -825,7 +818,7 @@ static int trace_preserve_body_candidate(global_State *g, GCobj *o,
   return 1;
 }
 
-static void trace_preserve_body_obj(global_State *g, GCobj *o, int gc2)
+static void trace_preserve_body_obj(global_State *g, GCobj *o)
 {
   uint32_t gct;
   if (!trace_preserve_body_candidate(g, o, &gct))
@@ -835,13 +828,10 @@ static void trace_preserve_body_obj(global_State *g, GCobj *o, int gc2)
       (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN))
     return;  /* FINREG/P_WEAK owns finalizer-cdata reachability. */
 #endif
-  if (gc2)
-    (void)lj_gc2_markobj_nogrey(g, o);
-  else
-    lj_gc_preserveobj(g, o);
+  (void)lj_gc2_markobj_nogrey(g, o);
 }
 
-static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
+static void trace_preserve_proto_obj(global_State *g, GCobj *o)
 {
   uint32_t gct;
   /*
@@ -852,10 +842,7 @@ static void trace_preserve_proto_obj(global_State *g, GCobj *o, int gc2)
   if (!trace_preserve_body_candidate(g, o, &gct) ||
       gct != (uint32_t)~LJ_TPROTO)
     return;
-  if (gc2)
-    (void)lj_gc2_markobj_nogrey(g, o);
-  else
-    lj_gc_preserveobj(g, o);
+  (void)lj_gc2_markobj_nogrey(g, o);
 }
 
 #define TRACE_PROTO_PC_CACHE	256
@@ -916,7 +903,7 @@ int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
 #endif
 
 static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
-					int gc2, TraceProtoPCCache *cache,
+					TraceProtoPCCache *cache,
 					MSize *ncachep, uint32_t *budgetp)
 {
   GCobj *o;
@@ -925,7 +912,7 @@ static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
     return;
   for (i = 0; i < ncache; i++) {
     if (pc >= cache[i].start && pc < cache[i].end) {
-      trace_preserve_proto_obj(g, cache[i].o, gc2);
+      trace_preserve_proto_obj(g, cache[i].o);
       return;
     }
   }
@@ -954,7 +941,7 @@ static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
 	  *ncachep = ++ncache;
 	}
 	if (pc >= bc && pc < end) {
-	  trace_preserve_proto_obj(g, o, gc2);
+	  trace_preserve_proto_obj(g, o);
 	  return;
 	}
       }
@@ -969,7 +956,7 @@ static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc,
   }
 }
 
-static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T, int gc2,
+static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T,
 					TraceProtoPCState *pcstate)
 {
   SnapShot *snap = trace_snap_acq(T);
@@ -992,13 +979,13 @@ static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T, int gc2,
     if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
       return;
     map = &snapmap[ofs];
-    trace_preserve_proto_for_pc(g, snap_pc_acq(&map[nent]), gc2,
+    trace_preserve_proto_for_pc(g, snap_pc_acq(&map[nent]),
 				pcstate->cache, &pcstate->ncache,
 				&pcstate->walk_budget);
   }
 }
 
-static void trace_preserve_kgc(global_State *g, GCtrace *T, int gc2)
+static void trace_preserve_kgc(global_State *g, GCtrace *T)
 {
   IRIns *irbase = trace_ir_acq(T);
   IRRef ref;
@@ -1009,14 +996,14 @@ static void trace_preserve_kgc(global_State *g, GCtrace *T, int gc2)
     IRIns irs = ir_load_acq(ir);
     if (irs.o == IR_KGC) {
       GCobj *o = ir_kgc_load_acq(ir);
-      trace_preserve_body_obj(g, o, gc2);
+      trace_preserve_body_obj(g, o);
     }
     if (irt_is64(irs.t) && irs.o != IR_KNULL)
       ref++;
   }
 }
 
-static void trace_preservebody(global_State *g, GCtrace *T, int gc2,
+static void trace_preservebody(global_State *g, GCtrace *T,
 			       TraceProtoPCState *pcstate)
 {
   /* Retired traces are SMR-protected bodies, but stale bytecode readers can
@@ -1027,19 +1014,16 @@ static void trace_preservebody(global_State *g, GCtrace *T, int gc2,
   ** those object bodies without treating the retired trace as a live trace slot.
   ** Published live traces mark the same graph through traversal.
   */
-  if (gc2) lj_gc2_markmem(g, T);
-  else lj_gc_preserveobj(g, obj2gco(T));
+  (void)lj_gc2_markmem(g, T);
   if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
     return;
-  trace_preserve_kgc(g, T, gc2);
-  trace_preserve_proto_obj(g, trace_startptgco_acq(T), gc2);
-  trace_preserve_snapshot_pcs(g, T, gc2, pcstate);
+  trace_preserve_kgc(g, T);
+  trace_preserve_proto_obj(g, trace_startptgco_acq(T));
+  trace_preserve_snapshot_pcs(g, T, pcstate);
   {
     MCode **exittab = trace_exittab_acq(T);
-    if (exittab && !trace_exittab_ismcode(T)) {
-      if (gc2) lj_gc2_markmem(g, exittab);
-      else lj_gc_arena_markmem(g, exittab);
-    }
+    if (exittab && !trace_exittab_ismcode(T))
+      (void)lj_gc2_markmem(g, exittab);
   }
 }
 
@@ -1120,7 +1104,7 @@ static void trace_slot_retire(jit_State *J, GCtrace *T, TraceNo traceno)
 }
 
 /* Complete the JIT-state half of a previously published retirement claim.
-** GC/GC2 may publish the claim while another TG records, but only the token
+** GC2 may publish the claim while another TG records, but only the token
 ** owner may disconnect the public slot or update J->freetrace. */
 static int trace_finish_slot_retire(jit_State *J, GCtrace *T)
 {
@@ -1353,9 +1337,10 @@ void lj_trace_markvecs(global_State *g, int gc2)
   TraceVec *tv = tracevec_acq(J);
   GCtrace *rt;
   TraceProtoPCState pcstate;
+  UNUSED(gc2);  /* Compatibility argument: GC2 is the sole runtime collector. */
   trace_proto_pc_state_init(&pcstate);
   if (tv) {
-    if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
+    (void)lj_gc2_markmem(g, tv);
     /*
     ** The trace vector is raw VM metadata and must survive concurrent readers,
     ** but its slots are not semantic roots. Stock LuaJIT lets a dead prototype
@@ -1374,22 +1359,19 @@ void lj_trace_markvecs(global_State *g, int gc2)
       for (i = 1; i < sizetrace; i++) {
 	GCtrace *T = traceref_safe(J, i);
 	if (T && la_load64_acq(&T->retire_epoch) != 0)
-	  trace_preserve_retired_body(g, T, gc2, &pcstate);
+	  trace_preserve_retired_body(g, T, &pcstate);
       }
     }
   }
   for (tv = tracevec_retired_head_acq(J);
        tv != NULL && lj_gc2_mem_registered(g, tv);
        tv = tracevec_retired_next_acq(tv)) {
-    if (gc2)
-      lj_gc2_markmem_registered(g, tv);
-    else
-      lj_gc_arena_markmem_registered(g, tv);
+    (void)lj_gc2_markmem_registered(g, tv);
   }
   for (rt = trace_retired_head_acq(J);
        rt != NULL && lj_gc2_mem_registered(g, rt);
        rt = trace_retired_next_acq(rt))
-    trace_preserve_retired_body(g, rt, gc2, &pcstate);
+    trace_preserve_retired_body(g, rt, &pcstate);
 }
 
 /* Find a free trace number. */
@@ -2135,7 +2117,7 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
   global_State *g = J2G(J);
   lj_assertJ(lj_jit_token_held(J),
 	     "scoped trace retirement without recorder-token ownership");
-  /* Gate new entry and publish dual-GC preservation before unlinking the root
+  /* Gate new entry and publish GC2 preservation before unlinking the root
   ** graph or inbound side-trace edge below.
   */
   trace_retire_at_epoch(g, T, epoch);
@@ -2411,12 +2393,18 @@ void lj_trace_freestate(global_State *g)
 {
   jit_State *J = G2J(g);
 #ifdef LUA_USE_ASSERT
-  {  /* This assumes all traces have already been freed. */
+  {  /* Live slots are gone. Reserved retired slots may still name bodies until
+      ** the active vector is freed below and the retire list drains. */
     ptrdiff_t i;
     ptrdiff_t sizetrace = (ptrdiff_t)trace_sizetrace_acq(J);
-    for (i = 1; i < sizetrace; i++)
-      lj_assertG(i == (ptrdiff_t)J->cur.traceno || traceref_safe(J, i) == NULL,
-		 "trace still allocated");
+    for (i = 1; i < sizetrace; i++) {
+      GCtrace *T = traceref_safe(J, (TraceNo)i);
+      lj_assertG(i == (ptrdiff_t)J->cur.traceno || T == NULL ||
+		 (trace_traceno_acq(T) == 0 &&
+		  la_load64_acq(&T->retire_epoch) != 0 &&
+		  trace_retired_link_listed_acq(T)),
+		 "live trace remained at VM close");
+    }
   }
 #endif
   lj_mem_freevec(g, J->snapmapbuf, J->sizesnapmap, SnapEntry);
@@ -2487,15 +2475,9 @@ static void trace_mark_active_startpt(jit_State *J)
   ** trace-number allocation. The start prototype is already a semantic root in
   ** that setup window, and remains one until recording publishes or aborts.
   */
-  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic ||
-      g->gc.state == GCSsweepstring || g->gc.state == GCSsweep)
-    lj_gc_markobj_deep(g, o);
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
-    lj_gc2_preserve_root(g, o);
-  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
     (void)lj_gc2_trace_sweep_root(g, o);
-  else
-    lj_gc2_barrier_marked_proto(J->L, J->pt);
+  lj_gc2_barrier_marked_proto(J->L, J->pt);
 }
 
 /* -- Trace compiler state machine ---------------------------------------- */

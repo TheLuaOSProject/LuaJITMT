@@ -20,6 +20,7 @@ end
 
 local m3_scaffold_deps = {
   "m3_gc_root_pending",
+  "m3_gc2_no_legacy_runtime",
   "m3_gc2_worker_scheduler",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
@@ -53,6 +54,21 @@ return function(add)
       compile_and_run_c(t, t:tmp("lj_t-gc-root-pending"),
                         "t-gc-root-pending.c")
       print("M3 pending GC root publication test passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_no_legacy_runtime",
+    description = "GC2-only runtime legacy marker/sweeper tripwire",
+    run = function(t)
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { xcflags = gc2_test_cflags })
+        compile_and_run_c(t, t:tmp("lj_t-gc2-no-legacy-runtime"),
+                          "t-gc2-no-legacy-runtime.c", {
+          cflags = gc2_test_cflags,
+          timeout = "60s"
+        })
+      end)
     end
   })
 

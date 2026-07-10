@@ -40,6 +40,75 @@
 #define GCSWEEPCOST	10
 #define GCACTIVEAUTOSTEPS	64u
 
+#ifdef LJ_GC2_TEST_HELPERS
+/*
+** Test-only tripwires for the retired color collector. Runtime and shutdown
+** counters remain separate so either kind of accidental re-entry is directly
+** diagnosable without a debugger. Both classes must stay identically zero.
+*/
+static GCLegacyEntryStats gc_test_legacy_entries;
+
+static LJ_AINLINE int gc_test_legacy_is_shutdown(global_State *g)
+{
+  return (g->gc.currentwhite & LJ_GC_SFIXED) != 0;
+}
+
+#define gc_test_legacy_count(g, name) \
+  ((void)la_add64_rlx(gc_test_legacy_is_shutdown((g)) ? \
+			     &gc_test_legacy_entries.shutdown_##name : \
+			     &gc_test_legacy_entries.runtime_##name, 1))
+
+void lj_gc_test_legacy_entries_reset(void)
+{
+  la_store64_rel(&gc_test_legacy_entries.runtime_markobj, 0);
+  la_store64_rel(&gc_test_legacy_entries.runtime_markobj_deep, 0);
+  la_store64_rel(&gc_test_legacy_entries.runtime_mark, 0);
+  la_store64_rel(&gc_test_legacy_entries.runtime_propagate, 0);
+  la_store64_rel(&gc_test_legacy_entries.runtime_propagatemark, 0);
+  la_store64_rel(&gc_test_legacy_entries.runtime_sweep, 0);
+  la_store64_rel(&gc_test_legacy_entries.runtime_sweepstr, 0);
+  la_store64_rel(&gc_test_legacy_entries.shutdown_markobj, 0);
+  la_store64_rel(&gc_test_legacy_entries.shutdown_markobj_deep, 0);
+  la_store64_rel(&gc_test_legacy_entries.shutdown_mark, 0);
+  la_store64_rel(&gc_test_legacy_entries.shutdown_propagate, 0);
+  la_store64_rel(&gc_test_legacy_entries.shutdown_propagatemark, 0);
+  la_store64_rel(&gc_test_legacy_entries.shutdown_sweep, 0);
+  la_store64_rel(&gc_test_legacy_entries.shutdown_sweepstr, 0);
+}
+
+void lj_gc_test_legacy_entries_snapshot(GCLegacyEntryStats *stats)
+{
+  if (!stats)
+    return;
+  stats->runtime_markobj =
+    la_load64_acq(&gc_test_legacy_entries.runtime_markobj);
+  stats->runtime_markobj_deep =
+    la_load64_acq(&gc_test_legacy_entries.runtime_markobj_deep);
+  stats->runtime_mark = la_load64_acq(&gc_test_legacy_entries.runtime_mark);
+  stats->runtime_propagate =
+    la_load64_acq(&gc_test_legacy_entries.runtime_propagate);
+  stats->runtime_propagatemark =
+    la_load64_acq(&gc_test_legacy_entries.runtime_propagatemark);
+  stats->runtime_sweep = la_load64_acq(&gc_test_legacy_entries.runtime_sweep);
+  stats->runtime_sweepstr =
+    la_load64_acq(&gc_test_legacy_entries.runtime_sweepstr);
+  stats->shutdown_markobj =
+    la_load64_acq(&gc_test_legacy_entries.shutdown_markobj);
+  stats->shutdown_markobj_deep =
+    la_load64_acq(&gc_test_legacy_entries.shutdown_markobj_deep);
+  stats->shutdown_mark = la_load64_acq(&gc_test_legacy_entries.shutdown_mark);
+  stats->shutdown_propagate =
+    la_load64_acq(&gc_test_legacy_entries.shutdown_propagate);
+  stats->shutdown_propagatemark =
+    la_load64_acq(&gc_test_legacy_entries.shutdown_propagatemark);
+  stats->shutdown_sweep = la_load64_acq(&gc_test_legacy_entries.shutdown_sweep);
+  stats->shutdown_sweepstr =
+    la_load64_acq(&gc_test_legacy_entries.shutdown_sweepstr);
+}
+#else
+#define gc_test_legacy_count(g, name) ((void)0)
+#endif
+
 static GCSize gc_step_debt_quantum(global_State *g)
 {
   /*
@@ -575,6 +644,7 @@ void lj_gc_markobj(global_State *g, GCobj *o)
 {
   if (!g || !o || LJ_UNLIKELY(o->gch.gct == 0))
     return;
+  gc_test_legacy_count(g, markobj);
   /*
   ** Active GC2 birth marking can make a proto non-white before constructor
   ** edges queue its traversal. When the color mark bridge is also active,
@@ -758,6 +828,7 @@ static int gc_valid_func_obj(global_State *g, GCfunc *fn)
 static void gc_mark(global_State *g, GCobj *o)
 {
   int gct = o->gch.gct;
+  gc_test_legacy_count(g, mark);
   if (LJ_UNLIKELY(gct == 0))
     return;  /* Body destructor already ran via GC2 arena sweep. */
   if (LJ_UNLIKELY(gct == ~LJ_TFUNC &&
@@ -1995,6 +2066,7 @@ static size_t propagatemark(global_State *g)
   int gct;
   int black_rescan;
   size_t m = 0;
+  gc_test_legacy_count(g, propagatemark);
   if (o == NULL)
     return 0;
   gc_mark_active_inc(g);
@@ -2145,6 +2217,7 @@ done:
 static size_t gc_propagate_gray(global_State *g)
 {
   size_t m = 0;
+  gc_test_legacy_count(g, propagate);
   while (lj_gc_list_head_acq(&g->gc.gray) != NULL)
     m += propagatemark(g);
   return m;
@@ -2171,6 +2244,7 @@ static int gc_has_traversable_payload(uint32_t gct)
 void lj_gc_markobj_deep(global_State *g, GCobj *o)
 {
   uint32_t gct;
+  gc_test_legacy_count(g, markobj_deep);
   if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, o, &gct)))
     return;
   /*
@@ -2240,7 +2314,8 @@ static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
 {
   uint32_t gct = o->gch.gct;
   /*
-  ** Strings are owned by the intern table and swept through gc_sweepstr().
+  ** Strings are owned by the intern table and swept by GC2's string-table
+  ** owner (or the terminal GC2 shutdown drain).
   ** Traversable arena scans can encounter stale type bytes from reclaimed or
   ** reused bodies; dispatching those through lj_str_free() would double-count
   ** string-table ownership and corrupt g->str.num.
@@ -2391,18 +2466,6 @@ static int gc2_cdata_finalizer_pending(GCobj *o)
   UNUSED(o);
   return 0;
 #endif
-}
-
-static void gc2_preserve_pending_finalizer_body(global_State *g, GCobj *o)
-{
-  /*
-  ** FINREG, not ordinary sweep, owns the transition from finalizer-registered
-  ** cdata to a freeable body. Preserve the arena cell without traversing the
-  ** cdata payload and keep the color white so the ordered FINREG P_WEAK scan
-  ** can still discover and queue the finalizer.
-  */
-  (void)lj_gc2_markobj_direct(g, o);
-  makewhite(g, o);
 }
 
 static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
@@ -3023,139 +3086,6 @@ uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g)
   return total;
 }
 
-/* Full sweep of a GC list. */
-#define gc_fullsweep(g, p)	gc_sweep(g, (p), ~(uint32_t)0)
-
-/* Partial sweep of a GC list. */
-static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
-{
-  /* Mask with other white and LJ_GC_FIXED. Or LJ_GC_SFIXED on shutdown. */
-  int ow = otherwhite(g);
-  int rootchain = p == lj_gc_root_ref(g);
-  GCobj *o;
-  if (rootchain) {
-    (void)lj_gc_flush_root_pending(g);
-    (void)lj_gc_repair_root_spine(g);
-  }
-  while ((o = gcref_acq(*p)) != NULL && lim-- > 0) {
-    if (rootchain && LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
-      if (ow == LJ_GC_SFIXED)
-	setgcrefnullrel(*p);  /* Shutdown can truncate a stale root tail. */
-      break;
-    }
-    if (LJ_UNLIKELY(o->gch.gct == 0)) {
-      if (!gc_chain_splice(p, o)) {
-	gc_root_wait_no_l();
-	continue;
-      }
-      continue;  /* Body destructor already ran via GC2 arena sweep. */
-    }
-    if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
-      gc_fullsweep(g, lj_state_openupval_ref(gco2th(o)));
-    if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
-      lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
-		 "sweep of undead object");
-      makewhite(g, o);  /* Value is alive, change to the current white. */
-      p = lj_obj_gcwref(o);
-    } else {  /* Otherwise value is dead, free it. */
-      int deferred = gc2_deferred_body_pending(g, o);
-      lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
-		 "sweep of unlive object");
-      if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(o))) {
-	gc2_preserve_pending_finalizer_body(g, o);
-	p = lj_obj_gcwref(o);
-	continue;
-      }
-      if (LJ_UNLIKELY(!gc2_valid_freeable_obj(g, o))) {
-	/*
-	** Lock-free root publication can leave an SMR-preserved arena body on the
-	** GC root spine after its destructor has run or after the header has
-	** been reused for non-GC state. The color sweeper cannot dispatch from
-	** that stale gct byte; unlink the ownership-spine entry and leave the body
-	** lifetime to arena/SMR reclamation.
-	*/
-	if (!gc_chain_splice(p, o)) {
-	  gc_root_wait_no_l();
-	  continue;
-	}
-	if (deferred)
-	  o->gch.gct = 0;
-	continue;
-      }
-#if LJ_HASJIT
-      /* The root-chain splice is a semantic unlink. Gate and dual-mark a live
-      ** trace before that CAS; lj_trace_free_gc() may lose the nonwaiting token
-      ** race afterward, but its exact claimed slot remains authoritative until
-      ** the token-owned retire scan inserts and disconnects it. Shutdown uses
-      ** the ordinary splice-before-immediate-free order below.
-      */
-      if (o->gch.gct == (uint32_t)~LJ_TTRACE && ow != LJ_GC_SFIXED &&
-	  !lj_trace_retire_gc_claim(g, gco2trace(o))) {
-	gc_root_wait_no_l();
-	continue;  /* Exact body is not discoverable yet: retain its root. */
-      }
-#endif
-      if (!gc_chain_splice(p, o)) {
-	gc_root_wait_no_l();
-	continue;
-      }
-      {
-	uint32_t gct = o->gch.gct;
-	int retired_trace = 0;
-#if LJ_HASJIT
-	if (gct == (uint32_t)~LJ_TTRACE) {
-	  retired_trace = 1;
-	  (void)lj_trace_free_gc(g, gco2trace(o));
-	} else
-#endif
-	  gc_freefunc[gct - (uint32_t)~LJ_TSTR](g, o);
-	/* A trace destructor transfers the still-intact body to the SMR retire
-	** list. Clearing gct here would make the later reclaimer unable to validate
-	** its compact payload and would falsely advertise physical destruction. */
-	if (deferred && !retired_trace)
-	o->gch.gct = 0;  /* Body is awaiting bitmap reuse; destructor is done. */
-      }
-    }
-  }
-  return p;
-}
-
-/* Sweep one string interning table chain. Preserves hashalg bit. */
-static void gc_sweepstr(global_State *g, GCRef *chain)
-{
-  /* Mask with other white and LJ_GC_FIXED. Or LJ_GC_SFIXED on shutdown. */
-  int ow = otherwhite(g);
-  uintptr_t u = lj_str_ref_load_acq(chain);
-  GCRef q;
-  GCRef *p = &q;
-  GCobj *o;
-  lj_str_ref_store_rel(&q, u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
-  while ((o = gcref_acq(*p)) != NULL) {
-    if (LJ_UNLIKELY(la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TSTR)) {
-      /*
-      ** String destructors stamp gct=0 before physical free. If a stale bucket
-      ** link survives a lock-free resize/freeall race, unlink it from the
-      ** chain snapshot instead of treating the old body as another live string.
-      */
-      lj_str_ref_store_rel(p, (uintptr_t)lj_str_next_acq(o));
-      continue;
-    }
-    if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
-      lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
-		 "sweep of undead string");
-      makewhite(g, o);  /* String is alive, change to the current white. */
-      p = lj_obj_gcwref(o);
-    } else {  /* Otherwise string is dead, free it. */
-      lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
-		 "sweep of unlive string");
-      lj_str_ref_store_rel(p, (uintptr_t)lj_str_next_acq(o));
-      lj_str_free(g, gco2str(o));
-    }
-  }
-  lj_str_ref_store_rel(chain,
-		       lj_str_ref_load_acq(&q) | (u & LJ_STRHASH_SECONDARY));
-}
-
 /* Check whether we can clear a key or a value slot from a table. */
 static int gc_mayclear(global_State *g, cTValue *o, int val)
 {
@@ -3168,10 +3098,10 @@ static int gc_mayclear(global_State *g, cTValue *o, int val)
     return 1;
   if (tvisgcv(o)) {  /* Only collectable objects can be weak references. */
     if (tvisstr(o)) {  /* But strings cannot be used as weak references. */
-      gc_mark_str(g, strV(o));  /* And need to be marked. */
+      (void)lj_gc2_markobj(g, gcV(o));  /* Interned strings remain strong. */
       return 0;
     }
-    if (iswhite(gcV(o)))
+    if (lj_gc2_ismarked(g, gcV(o)) <= 0)
       return 1;  /* Object is about to be collected. */
     if (tvisudata(o) && val && isfinalized(udataV(o)))
       return 1;  /* Finalized userdata is dropped only from values. */
@@ -3252,20 +3182,200 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
   }
 }
 
-/* Free all remaining GC objects. */
-void lj_gc_freeall(global_State *g)
+typedef struct GCShutdownSeen {
+  const void **slot;
+  size_t mask;
+  size_t count;
+} GCShutdownSeen;
+
+static size_t gc_shutdown_ptrhash(const void *p)
 {
+  uintptr_t x = (uintptr_t)p >> 3;
+#if LJ_64
+  x ^= x >> 33;
+  x *= (uintptr_t)0xff51afd7ed558ccdULL;
+  x ^= x >> 33;
+#else
+  x ^= x >> 16;
+  x *= (uintptr_t)0x7feb352dUL;
+  x ^= x >> 15;
+#endif
+  return (size_t)x;
+}
+
+static int gc_shutdown_seen_grow(GCShutdownSeen *seen, size_t minslots)
+{
+  const void **old = seen->slot;
+  size_t oldcap = seen->mask + 1u;
+  size_t cap = old ? oldcap << 1 : 1024u;
+  const void **slot;
+  size_t i;
+  while (cap < minslots && cap <= (SIZE_MAX >> 1))
+    cap <<= 1;
+  if (cap < minslots || cap > SIZE_MAX / sizeof(*slot))
+    return 0;
+  slot = (const void **)calloc(cap, sizeof(*slot));
+  if (!slot)
+    return 0;
+  if (old) {
+    for (i = 0; i < oldcap; i++) {
+      const void *p = old[i];
+      if (p) {
+	size_t j = gc_shutdown_ptrhash(p) & (cap - 1u);
+	while (slot[j])
+	  j = (j + 1u) & (cap - 1u);
+	slot[j] = p;
+      }
+    }
+    free((void *)old);
+  }
+  seen->slot = slot;
+  seen->mask = cap - 1u;
+  return 1;
+}
+
+/* Return 1 for a first observation, 0 for a duplicate/cycle, -1 on OOM. */
+static int gc_shutdown_seen_add(GCShutdownSeen *seen, const void *p)
+{
+  size_t i;
+  if (!seen->slot && !gc_shutdown_seen_grow(seen, 1024u))
+    return -1;
+  if (seen->count >= (seen->mask + 1u) / 2u &&
+      !gc_shutdown_seen_grow(seen, (seen->mask + 1u) << 1))
+    return -1;
+  i = gc_shutdown_ptrhash(p) & seen->mask;
+  while (seen->slot[i]) {
+    if (seen->slot[i] == p)
+      return 0;
+    i = (i + 1u) & seen->mask;
+  }
+  seen->slot[i] = p;
+  seen->count++;
+  return 1;
+}
+
+static void gc_shutdown_seen_clear(GCShutdownSeen *seen)
+{
+  if (seen->slot)
+    memset((void *)seen->slot, 0, (seen->mask + 1u) * sizeof(*seen->slot));
+  seen->count = 0;
+}
+
+static void gc_shutdown_seen_fini(GCShutdownSeen *seen)
+{
+  free((void *)seen->slot);
+  seen->slot = NULL;
+  seen->mask = seen->count = 0;
+}
+
+static void gc2_shutdown_free_obj(global_State *g, GCobj *o)
+{
+  uint32_t gct;
+  int deferred;
+  if (!gc2_valid_freeable_obj(g, o)) {
+    /* A stale ownership-spine entry has either already had its destructor run
+    ** or belongs to terminal arena teardown. Never dispatch from an untrusted
+    ** type byte merely because the process is closing. */
+    return;
+  }
+  gct = o->gch.gct;
+  deferred = gc2_deferred_body_pending(g, o);
+#if LJ_HASJIT
+  if (gct == (uint32_t)~LJ_TTRACE) {
+    (void)lj_trace_free_gc(g, gco2trace(o));
+    return;  /* Trace retirement owns its intact header until the SMR drain. */
+  }
+#endif
+  gc_freefunc[gct - (uint32_t)~LJ_TSTR](g, o);
+  if (deferred)
+    la_store8_rel(&o->gch.gct, 0);  /* Arena body awaits terminal unmap. */
+}
+
+static uint32_t gc2_shutdown_free_roots(global_State *g,
+					 GCShutdownSeen *seen)
+{
+  GCobj *maino = obj2gco(mainthread_acq(g));
+  GCRef *p = lj_gc_root_ref(g);
+  GCobj *o;
+  uint32_t freed = 0;
+  gc_shutdown_seen_clear(seen);
+  while ((o = gcref_acq(*p)) != NULL) {
+    GCobj *next;
+    int seenrc = gc_shutdown_seen_add(seen, o);
+    if (seenrc <= 0) {
+      /* A duplicate intrusive node necessarily closes a cycle: one object has
+      ** only one gcw link. Allocation failure is also fail-safe: stop before
+      ** dereferencing an untracked body rather than risking terminal UAF. */
+      setgcrefnullrel(*p);
+      break;
+    }
+    if (!gc_root_link_valid(g, o)) {
+      setgcrefnullrel(*p);
+      break;
+    }
+    next = lj_obj_gcw_acq(o);
+    if (o == maino) {
+      p = lj_obj_gcwref(o);
+      continue;
+    }
+    if (next)
+      setgcrefrel(*p, next);
+    else
+      setgcrefnullrel(*p);
+    gc2_shutdown_free_obj(g, o);
+    freed++;
+  }
+  return freed;
+}
+
+static void gc2_shutdown_free_strings(global_State *g,
+				      GCShutdownSeen *seen)
+{
+  StrTabHdr *hdr = lj_str_tabh_acq(g);
   MSize i;
-  StrTabHdr *hdr;
+  if (!hdr)
+    return;
+  gc_shutdown_seen_clear(seen);
+  for (i = hdr->mask; i != ~(MSize)0; i--) {
+    GCRef *bucket = &hdr->bucket[i];
+    uintptr_t u = lj_str_ref_load_acq(bucket);
+    GCobj *o = (GCobj *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
+    lj_str_ref_store_rel(bucket, u & LJ_STRHASH_SECONDARY);
+    while (o) {
+      GCobj *next;
+      int seenrc = gc_shutdown_seen_add(seen, o);
+      if (seenrc <= 0)
+	break;
+      next = lj_str_next_acq(o);
+      if (la_load8_acq(&o->gch.gct) == (uint8_t)~LJ_TSTR)
+	lj_str_free(g, gco2str(o));
+      o = next;
+    }
+  }
+}
+
+/* Free all remaining GC objects with GC2 ownership metadata only. This is a
+** terminal, single-threaded drain after threading shutdown and finalizers; it
+** deliberately never starts the retired color marker or sweeper. */
+void lj_gc2_freeall(global_State *g)
+{
+  GCShutdownSeen seen;
+  GCobj *maino;
+  uint32_t rounds = 0;
+  memset(&seen, 0, sizeof(seen));
+  (void)lj_gc_repair_root_spine(g);
+  do {
+    (void)lj_gc_flush_root_pending(g);
+    if (gc2_shutdown_free_roots(g, &seen) == 0)
+      break;
+  } while (++rounds < 16u);  /* Closing a thread can publish closed upvalues. */
   (void)lj_gc_flush_root_pending(g);
-  /* Free everything, except super-fixed objects (the main thread). */
-  g->gc.currentwhite = LJ_GC_WHITES | LJ_GC_SFIXED;
-  gc_fullsweep(g, lj_gc_root_ref(g));
-  hdr = lj_str_tabh_acq(g);
-  if (hdr)
-    for (i = hdr->mask; i != ~(MSize)0; i--)  /* Free all string hash chains. */
-      gc_sweepstr(g, &hdr->bucket[i]);
-  (void)lj_gc_sweep_gc2_all_arena_bodies(g);
+  (void)gc2_shutdown_free_roots(g, &seen);
+  maino = obj2gco(mainthread_acq(g));
+  lj_obj_setgcwrel(maino, NULL);
+  lj_gc_root_rel(g, maino);
+  gc2_shutdown_free_strings(g, &seen);
+  gc_shutdown_seen_fini(&seen);
 }
 
 #if LJ_HASJIT
@@ -3433,30 +3543,11 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
     return;
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
-    GCobj *o = gcV(&snap);
     if (!lj_gc2_tv_gcref_valid_edge(g, &snap))
       return;
-    if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-      (void)lj_gc2_trace_sweep_root(g, o);
-      return;
-    }
-    if (isdead(g, o)) {
-      makewhite(g, o);
-      (void)lj_gc2_markobj_direct(g, o);
-      gc_mark(g, o);
-      (void)gc_propagate_gray(g);
-      return;
-    }
-    if (iswhite(o) &&
-	(g->gc.state == GCSpropagate || g->gc.state == GCSatomic)) {
-      if (gc2_phase_acq(g) != LJ_GC2_IDLE) {
-	(void)lj_gc2_markobj_direct(g, o);
-	gc_mark(g, o);
-      } else {
-	gc_mark(g, o);
-      }
-      return;
-    }
+    /* GC2 is the sole runtime collector. Its publication barrier covers
+    ** MARK/WEAK, SWEEP resurrection and the generational IDLE remembered set;
+    ** never revive or traverse the retired color collector here. */
     lj_gc2_barrier_tv_g(g, &snap);
   }
 }
@@ -3476,29 +3567,24 @@ void lj_gc_pubobjroot(lua_State *L, GCobj *o)
   lj_gc_pubroot(L, &tv);
 }
 
-/* Move the GC propagation frontier forward. */
+/* Compatibility entry for a published object edge. GC2 owns the runtime
+** frontier; the legacy color frontier is never entered. */
 void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v)
 {
-  lj_assertG(isblack(o) && iswhite(v) && !isdead(g, v) && !isdead(g, o),
-	     "bad object states for forward barrier");
-  lj_assertG(g->gc.state != GCSfinalize && g->gc.state != GCSpause,
-	     "bad GC state");
-  lj_assertG(o->gch.gct != ~LJ_TTAB, "barrier object is not a table");
-  /* Preserve invariant during propagation. Otherwise it doesn't matter. */
-  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+  UNUSED(o);
+  if (!g || !v)
+    return;
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    (void)lj_gc2_trace_sweep_root(g, v);
+  else if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     (void)lj_gc2_markobj_direct(g, v);
-    gc_mark(g, v);  /* Move frontier forward. */
-  } else {
-    makewhite(g, o);  /* Make it white to avoid the following barrier. */
-  }
 }
 
 /* VM-callable table black-to-gray repair. */
 void lj_gc_barrierback_tab_g(global_State *g, GCtab *t)
 {
-  if (g && t && (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) &&
-      isblack(obj2gco(t)))
-    lj_gc_barrierback(g, t);
+  if (g && t)
+    lj_gc2_barrier_tab_g(g, t);
 }
 
 void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key)
@@ -3509,7 +3595,6 @@ void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key)
     lj_gc2_barrier_key_g(g, t, key);
   else
     lj_gc2_barrier_tab_g(g, t);
-  lj_gc_barrierback_tab_g(g, t);
 }
 
 /* Publication wrapper for x64 VM table -> object stores. */
@@ -3517,7 +3602,6 @@ void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
 {
   global_State *g;
   uint32_t gct;
-  int white;
   if (!L || !t || !o)
     return;
   g = G(L);
@@ -3525,10 +3609,7 @@ void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
 		  gct != (uint32_t)~LJ_TTAB ||
 		  !gc_objroot_gct_valid(g, o, NULL)))
     return;
-  white = iswhite(o);
   lj_gc2_barrier_obj_pair(L, obj2gco(t), o);
-  if (white && isblack(obj2gco(t)))
-    lj_gc_barrierback(g, t);
 }
 
 /* Publication wrapper for x64 VM table -> TValue stores. */
@@ -3544,7 +3625,6 @@ void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
 {
   global_State *g;
   uint32_t gct;
-  uint32_t i;
   if (!L || !t || !tv || n == 0)
     return;
   g = G(L);
@@ -3553,17 +3633,6 @@ void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
     return;
   lj_gc2_barrier_tvn_pair_g(g, obj2gco(t), tv, n);
   lj_gc2_barrier_tab(L, t);  /* Preserve the previous TSETM table barrier. */
-  if (!isblack(obj2gco(t)))
-    return;
-  for (i = 0; i < n; i++) {
-    TValue snap;
-    lj_tv_load_acq(&snap, &tv[i]);
-    if (LJ_LIKELY(lj_gc2_tv_gcref_valid_edge(g, &snap)) &&
-	tviswhite(&snap)) {
-      lj_gc_barrierback(g, t);
-      return;
-    }
-  }
 }
 
 /* Publication wrapper for x64 VM table -> stack loads. */
@@ -3577,26 +3646,13 @@ void lj_gc_pubtvroot_vm(lua_State *L, cTValue *tv)
 /* Publication wrapper for closed-upvalue TValue stores. Pass &uv->tv. */
 void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
 {
-#define TV2MARKED(x) \
-  (*((uint8_t *)(x) - offsetof(GCupval, tv) + offsetof(GCupval, marked)))
   GCupval *uv = (GCupval *)((char *)tv - offsetof(GCupval, tv));
   TValue snap;
-  int white;
   lj_tv_load_acq(&snap, tv);
   if (LJ_UNLIKELY(!lj_gc2_tv_gcref_valid_edge(g, &snap)) ||
       !tvisgcv(&snap))
     return;
-  white = tviswhite(&snap);
   lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap);
-  if ((TV2MARKED(tv) & LJ_GC_BLACK) && white) {
-    if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
-      (void)lj_gc2_markobj_direct(g, gcV(&snap));
-      gc_mark(g, gcV(&snap));
-    } else {
-      TV2MARKED(tv) = (TV2MARKED(tv) & (uint8_t)~LJ_GC_COLORS) | curwhite(g);
-    }
-  }
-#undef TV2MARKED
 }
 
 /* Close upvalue. Also needs a write barrier. */
@@ -3616,19 +3672,7 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
   ** root-list CAS on the close-upvalue path without changing collector reach.
   */
   lj_gc_linkobj_pending(g, o);
-  if (isgray(o)) {  /* A closed upvalue is never gray, so fix this. */
-    if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
-      TValue tv;
-      gray2black(o);  /* Make it black and preserve invariant. */
-      lj_tv_load_acq(&tv, &uv->tv);
-      if (tviswhite(&tv))
-	lj_gc_barrierf(g, o, gcV(&tv));
-    } else {
-      makewhite(g, o);  /* Make it white, i.e. sweep the upvalue. */
-      lj_assertG(g->gc.state != GCSfinalize && g->gc.state != GCSpause,
-		 "bad GC state");
-    }
-  }
+  lj_gc2_barrier_tv_pair_g(g, o, &uv->tv);
 }
 
 #if LJ_HASJIT
@@ -3637,8 +3681,6 @@ void lj_gc_pubtrace(global_State *g, uint32_t traceno)
 {
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     lj_gc2_mark_trace_slot(g, traceno);
-  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
-    gc_marktrace(g, traceno);
 }
 #endif
 

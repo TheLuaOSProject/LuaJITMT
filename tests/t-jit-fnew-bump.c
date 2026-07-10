@@ -238,7 +238,9 @@ static void test_traced_active_black_inline(lua_State *L, global_State *g,
 
   helper1 = gc1num_bump_helper_calls();
   assert(helper1 == helper0);
-  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+  assert(lj_tg_gcroot_pending_acq(tg) != pending0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
+  assert(lj_gc_flush_root_pending(g) > 0);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
   lua_pushnil(L);
   lua_setglobal(L, "__fnew_active_run");
@@ -754,9 +756,9 @@ static void test_accounting_fast_direct(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
-static void test_active_black_direct_skips_pending_root(lua_State *L,
-							global_State *g,
-							TGState *tg)
+static void test_active_black_direct_publishes_exact(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
 {
   uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
   uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
@@ -764,6 +766,7 @@ static void test_active_black_direct_skips_pending_root(lua_State *L,
   TValue slots[256];
   GCfunc *parent, *fn;
   GCproto *child;
+  GCupval *uv;
   GCobj *pending0;
   int32_t slotno;
 
@@ -786,10 +789,14 @@ static void test_active_black_direct_skips_pending_root(lua_State *L,
   setnumV(&slots[slotno], 321);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 321);
   assert_one_upvalue_result(fn, &slots[slotno], 321);
+  uv = func_uv_acq(&fn->l, 0);
   assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
-  assert(lj_funcL_arenaowned(&fn->l));
-  assert(lj_uv_arenaowned(func_uv_acq(&fn->l, 0)));
-  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+  assert(lj_funcL_nupvalues(&fn->l) == 1u);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(fn));
+  assert(lj_obj_gcw_acq(obj2gco(fn)) == obj2gco(uv));
+  assert(lj_obj_gcw_acq(obj2gco(uv)) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
+  assert(lj_gc_flush_root_pending(g) >= 2u);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
 
   lj_tg_alloc_black_rel(tg, old_alloc_black);
@@ -797,7 +804,7 @@ static void test_active_black_direct_skips_pending_root(lua_State *L,
   lua_pop(L, 1);
 }
 
-static void test_active_black_direct_sweeps_arena_owned(
+static void test_active_black_direct_keeps_exact_cells(
   lua_State *L, global_State *g, TGState *tg)
 {
   uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
@@ -834,10 +841,13 @@ static void test_active_black_direct_sweeps_arena_owned(
   uv = func_uv_acq(&fn->l, 0);
   assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
   assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
-  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+  assert(lj_funcL_nupvalues(&fn->l) == 1u);
+  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(fn));
+  assert(lj_obj_gcw_acq(obj2gco(fn)) == obj2gco(uv));
+  assert(lj_obj_gcw_acq(obj2gco(uv)) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) != 0);
+  assert(lj_gc_flush_root_pending(g) >= 2u);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
-  assert(lj_funcL_arenaowned(&fn->l));
-  assert(lj_uv_arenaowned(uv));
 
   a = lj_arena_of(fn);
   assert(a == lj_arena_of(uv));
@@ -896,16 +906,16 @@ int main(void)
   test_bump_allocator_gate_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);
   test_accounting_fast_direct(L, g, tg);
-  test_active_black_direct_skips_pending_root(L, g, tg);
-  test_active_black_direct_sweeps_arena_owned(L, g, tg);
+  test_active_black_direct_publishes_exact(L, g, tg);
+  test_active_black_direct_keeps_exact_cells(L, g, tg);
   test_accounting_fallback(L, g, tg);
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);
+  test_traced_active_black_inline(L, g, tg);
   if (getenv("LJ_TEST_TRACED_FNEW") != NULL) {
     test_traced_behavior(L);
     test_traced_immutable_numeric_inline(L, g);
-    test_traced_active_black_inline(L, g, tg);
     test_traced_mark_active_white_fallback(L, g, tg);
     test_traced_alloc_black_inline(L, g, tg);
     test_traced_post_sweep_bump_refill(L);

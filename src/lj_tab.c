@@ -1570,17 +1570,12 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   ** Publish the initialized table, or prove GC2 arena ownership, before an
   ** accounting flush can assist GC.
   */
-  if (lj_tg_mark_active_acq(tg) && black) {
-    /*
-    ** Active-black empty tables are already owned by the arena mark bit at
-    ** birth and have no child edges. Keep them off the root spine to avoid
-    ** pending-root traffic.
-    */
-    lj_tab_setarenaowned(t);
-    lj_obj_setgcwnullrel(obj2gco(t));
-  } else {
-    lj_gc_linkobj_new(g, obj2gco(t));
-  }
+  /*
+  ** A birth mark protects the body but does not describe the object occupying
+  ** the arena run. Always publish the exact table header through the per-TG
+  ** pending ownership chain so GC2 can prune and destruct it during sweep.
+  */
+  lj_gc_linkobj_new(g, obj2gco(t));
   if (account_now)
     lj_gc2_account_alloc(g, tg, sizeof(GCtab));
   else
@@ -4461,17 +4456,6 @@ static void tab_tsetm_barrier_range(lua_State *L, GCtab *parent, uint32_t start,
     lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), dst);
   }
   lj_gc2_barrier_tab(L, parent);  /* Preserve the previous TSETM table barrier. */
-  if (!isblack(obj2gco(parent)))
-    return;
-  for (i = 0; i < n; i++) {
-    TValue snap;
-    TValue *dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
-    lj_tv_load_acq(&snap, dst);
-    if (tviswhite(&snap)) {
-      lj_gc_barrierback(g, parent);
-      return;
-    }
-  }
 }
 
 static LJ_AINLINE TValue *tab_tsetm_fast_range(GCtab *parent, uint32_t start,

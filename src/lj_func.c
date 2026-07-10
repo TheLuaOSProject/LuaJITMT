@@ -217,10 +217,9 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
   global_State *g = G(L);
   /*
   ** Bump FNEW helpers initialize a fresh white closure before linking it into
-  ** the pending-root chain. With no active mark/remember barrier, those edges
-  ** will be discovered when the new root is first traversed. If the barrier
-  ** mirror is active, use the normal publication path so GC2/color marking
-  ** observes the child immediately.
+  ** the pending-root chain. With no active GC2 barrier, those edges will be
+  ** discovered when the new root is first traversed. If marking is active, use
+  ** the normal publication path so GC2 observes the child immediately.
   **
   ** During active black allocation the fresh parent is not yet published and
   ** its children are either established roots or freshly black-allocated in
@@ -229,8 +228,8 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
   ** adds allocation-loop contention. Protos are different: parser allocation
   ** can birth-mark a proto before any traversal is queued, so an already-marked
   ** proto still needs a one-per-proto SSB traversal handoff.
-  ** Keep the normal barrier for active white allocation, unmarked/custom
-  ** children, and idle remembered-set publication.
+  ** Keep the normal barrier for active white allocation and unmarked/custom
+  ** children.
   */
   if (tg && lj_tg_mark_active_acq(tg)) {
     int marked = lj_gc2_ismarked(g, child);
@@ -240,11 +239,7 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
       lj_gc2_barrier_marked_proto(L, gco2pt(child));
     else if (marked <= 0)
       lj_gc2_barrier_obj_pair(L, parent, child);
-  } else if (isblack(parent)) {
-    lj_gc2_barrier_obj_pair(L, parent, child);
   }
-  if (iswhite(child) && isblack(parent))
-    lj_gc_barrierf(g, parent, child);
 }
 
 #define func_pubfreshobjobj(L, tg, p, o) \
@@ -259,20 +254,6 @@ static LJ_AINLINE void func_fnew_preserve_operand(lua_State *L, GCobj *o)
   if (!g)
     return;
   lj_gc_pubobjroot(L, o);
-  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
-    lj_gc_markobj(g, o);
-  } else if ((g->gc.state == GCSsweepstring || g->gc.state == GCSsweep) &&
-	     isdead(g, o)) {
-    /*
-    ** FNEW can execute while a prior incremental cycle is sweeping. Its parent
-    ** closure/prototype and child prototype are VM operands, not table/upvalue
-    ** writes, so no ordinary barrier protects an other-white prototype from that
-    ** old sweep. Preserve the operand graph before the allocation check can help
-    ** sweep, so inherited upvalues and nested prototype constants survive until
-    ** the freshly published closure is visible to the next mark cycle.
-    */
-    lj_gc_markobj_deep(g, o);
-  }
 }
 
 static LJ_AINLINE void func_fnew_preserve_operands(lua_State *L, GCproto *pt,
@@ -292,8 +273,8 @@ static GCupval *func_snapshotuv_unlinked(lua_State *L, const TValue *slot)
   uv->closed = 1;
   /*
   ** FNEW may capture a C-call result slot before the next ordinary root scan.
-  ** Publish the source stack value first, so color/GC2 barriers repair
-  ** other-white results before the assertion-checked copy below.
+  ** Publish the source stack value first, so GC2 repairs the result edge before
+  ** the assertion-checked copy below.
   */
   lj_gc_pubroot(L, slot);
   copyTVrel(L, &uv->tv, slot);
@@ -438,13 +419,6 @@ static void func_arena_set_alloc(GCArena *a, uint32_t cell, int black)
     lj_arena_bm_clear(a->mark, cell);
 }
 
-static LJ_AINLINE int func_bump_arena_owned_active(global_State *g,
-						   TGState *tg)
-{
-  return tg && lj_tg_mark_active_acq(tg) && lj_tg_alloc_black_acq(tg) &&
-	 g != NULL;
-}
-
 static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)
 {
   /*
@@ -460,51 +434,21 @@ static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)
 	 g->allocd == &tg->allocd;
 }
 
-static LJ_AINLINE void func_bump_mark_arena_owned(GCobj *o)
+static LJ_AINLINE void func_bump_publish_obj(global_State *g, GCobj *o)
 {
-  if (o->gch.gct == ~LJ_TFUNC)
-    lj_funcL_setarenaowned(&gco2func(o)->l);
-  else if (o->gch.gct == ~LJ_TUPVAL)
-    lj_uv_setarenaowned(gco2uv(o));
-}
-
-static LJ_AINLINE void func_bump_publish_obj(global_State *g, TGState *tg,
-					     GCobj *o)
-{
-  if (func_bump_arena_owned_active(g, tg)) {
-    /*
-    ** Active black bump allocation sets the arena mark bit at birth. Fresh
-    ** FNEW closures/upvalues are ordinary graph objects with no finalizer-side
-    ** GC root ownership requirement, so the arena bitmap can own their body
-    ** lifetime instead of pushing every allocation through the global root
-    ** spine. The type-local arena-owned marker distinguishes that narrow state
-    ** from root-spine objects whose nextgc link can legitimately be NULL.
-    ** Coupled color mark cycles still publish roots because the color mark
-    ** bridge must see these freshly constructed bodies through the root spine.
-    */
-    func_bump_mark_arena_owned(o);
-    lj_obj_setgcwnullrel(o);
-    return;
-  }
+  /*
+  ** Arena mark bits carry liveness, but they do not identify the object header
+  ** or destructor occupying a traversable run. Publish every bump object on
+  ** the per-TG pending ownership chain, including active-black allocations, so
+  ** GC2 can prune and dispatch the exact header before arena quarantine.
+  */
   lj_gc_linkobj_new(g, o);
 }
 
-static LJ_AINLINE void func_bump_publish_pair(global_State *g, TGState *tg,
-					      GCobj *head, GCobj *tail)
+static LJ_AINLINE void func_bump_publish_pair(global_State *g, GCobj *head,
+					      GCobj *tail)
 {
-  if (func_bump_arena_owned_active(g, tg)) {
-    /*
-    ** Both cells were reserved from one traversable arena run and marked black
-    ** before publication. Each body carries its own arena-owned marker so
-    ** unmarked GC2 arena sweep can destruct dead FNEW cells without touching
-    ** the GC root spine.
-    */
-    func_bump_mark_arena_owned(head);
-    func_bump_mark_arena_owned(tail);
-    lj_obj_setgcwnullrel(head);
-    lj_obj_setgcwnullrel(tail);
-    return;
-  }
+  /* One release publication makes both exact headers ownership-discoverable. */
   lj_obj_setgcwrel(head, tail);
   lj_gc_linkobj_new_chain(g, head, tail);
 }
@@ -519,6 +463,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   uint64_t local_total;
   uint32_t cell, black;
   int account_now;
+  UNUSED(L);
 
   if (!func_bump_alloc_ready(g, tg))
     return NULL;
@@ -553,7 +498,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   ** root before an accounting flush can assist GC; malloc-backed unlinked objects
   ** do not have this bitmap visibility.
   */
-  func_bump_publish_obj(g, tg, obj2gco(uv));
+  func_bump_publish_obj(g, obj2gco(uv));
   if (account_now)
     lj_gc2_account_alloc(g, tg, nbytes);
   else
@@ -640,7 +585,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   ** because bitmap sweep can see allocated cells before they enter the GC
   ** root spine.
   */
-  func_bump_publish_pair(g, tg, obj2gco(fn), obj2gco(uv));
+  func_bump_publish_pair(g, obj2gco(fn), obj2gco(uv));
   if (account_now)
     lj_gc2_account_alloc(g, tg, nbytes);
   else
@@ -701,7 +646,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   ** Publish the initialized arena object before a possible accounting assist.
   ** This keeps bitmap sweep from treating a still-C-owned bump cell as garbage.
   */
-  func_bump_publish_obj(g, tg, obj2gco(fn));
+  func_bump_publish_obj(g, obj2gco(fn));
   if (account_now)
     lj_gc2_account_alloc(g, tg, nbytes);
   else

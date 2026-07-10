@@ -42,6 +42,11 @@ static void test_trace_complete_payload_layout(GCtrace *T)
   T->snapmap = (SnapEntry *)p;
 }
 
+static uint8_t test_gc_colors(GCobj *o)
+{
+  return (uint8_t)(lj_obj_gcflags(o) & LJ_GC_COLORS);
+}
+
 static void test_trace_stale_startins_candidates(global_State *g, GCproto *pt,
 						 GCtrace *T)
 {
@@ -85,6 +90,7 @@ static void test_gc_claim_rescues_runnable_inbound(lua_State *L)
   static IRIns dummyir[REF_TRUE+1];
   TraceNo targetno = 0, sourceno = 0, i;
   uint64_t epoch;
+  uint8_t target_colors;
 
   /* Trace vectors are lazy. Compile one ordinary loop so the synthetic reverse
   ** edge below shares the exact published-vector path used at runtime. */
@@ -113,6 +119,8 @@ static void test_gc_claim_rescues_runnable_inbound(lua_State *L)
   source = lj_trace_alloc(L, &tmpl);
   test_trace_complete_payload_layout(target);
   test_trace_complete_payload_layout(source);
+  newwhite(g, target);
+  target_colors = test_gc_colors(obj2gco(target));
 
   trace_traceno_rel(target, targetno);
   trace_link_rel(target, targetno);
@@ -131,6 +139,8 @@ static void test_gc_claim_rescues_runnable_inbound(lua_State *L)
   assert(trace_link_acq(source) == targetno);
   assert(gcref_acq(tv->slot[targetno]) == obj2gco(target));
   assert(!trace_retired_link_listed_acq(target));
+  assert(lj_gc2_ismarked(g, obj2gco(target)) > 0);
+  assert(test_gc_colors(obj2gco(target)) == target_colors);
 
   /* Remove the synthetic graph and transfer the two scratch bodies to the
   ** ordinary unpublished-body retire path before continuing the fixture.
@@ -160,6 +170,7 @@ int main(void)
   MCode **exittab;
   GCtrace *ret;
   uint64_t epoch, scoped_epoch;
+  uint8_t trace_colors;
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -180,6 +191,8 @@ int main(void)
 
   T = lj_trace_alloc(L, &tmpl);
   test_trace_complete_payload_layout(T);
+  newwhite(g, T);
+  trace_colors = test_gc_colors(obj2gco(T));
   assert(gcref(T->startpt) == NULL);
   /* A scratch body has neither a public slot nor a retire-list node. A foreign
   ** recorder makes the nonwaiting GC claim defer without an epoch-only LP; its
@@ -193,6 +206,9 @@ int main(void)
   lj_trace_free_unpublished(g, T);
   lj_jit_token_release(J);
   assert(retired_find(J, T) == T);
+  lj_trace_markvecs(g, 0);  /* Compatibility argument cannot select color GC. */
+  assert(lj_gc2_ismarked(g, obj2gco(T)) > 0);
+  assert(test_gc_colors(obj2gco(T)) == trace_colors);
   assert(lj_trace_retire_gc_claim(g, T) == 1);
   epoch = la_load64_acq(&T->retire_epoch) - 1u;
   assert(reclaim_trace_at(g, epoch + LJ_FLUSH_EPOCHS) >= 1);

@@ -955,8 +955,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const uint32_t ncells = fncells + uvcells;
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
-  MCLabel l_done, l_fallback, l_markclear, l_markdone;
-  MCLabel l_arena_owned, l_publish_root, l_mark_ok;
+  MCLabel l_done, l_fallback, l_markclear, l_markdone, l_mark_ok;
   Reg base, parent, val, pt, g, arena, cell, next, uv, tmp;
   IRRef fallback_args[CCI_NARGS_MAX];
   RegSet allow;
@@ -1005,17 +1004,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   tmp = ra_scratch(as, allow);
   checkmclim(as);  /* Register setup may spill before the inline template. */
 
-  /* Success: publish the initialized pair, then continue with CALL result use. */
-  emit_jmp(as, l_done);
-  emit_i8(as, (int8_t)LJ_UV_ARENA_OWNED);
-  emit_rmro(as, XO_ARITHib, XOg_OR, uv, offsetof(GCupval, immutable));
-  emit_i8(as, (int8_t)LJ_FUNC_ARENA_OWNED);
-  emit_rmro(as, XO_ARITHib, XOg_OR, RID_RET, offsetof(GCfuncL, nupvalues));
-  emit_movtomro(as, tmp|REX_GC64, RID_RET, offsetof(GChead, nextgc));
-  emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
-  emit_loadi(as, tmp, 0);
-  checkmclim(as);  /* Split arena-owned publication from pending-root path. */
-  l_arena_owned = emit_label(as);
+  /* Success: publish both exact headers, then continue with CALL result use. */
   emit_jmp(as, l_done);
   emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
   emit_settg(as, RID_RET, gcroot_pending);
@@ -1023,14 +1012,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GChead, nextgc));
   emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_gettg(as, tmp, gcroot_pending);
-  checkmclim(as);  /* Split pending-root link from routing predicates. */
-  l_publish_root = emit_label(as);
-  emit_jmp(as, l_arena_owned);
-  asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(alloc.alloc_black),
-			      1, CC_Z, l_publish_root);
-  asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
-		      CC_E, l_publish_root);
-  checkmclim(as);  /* Keep accounting separate from publication checks. */
+  checkmclim(as);  /* Keep publication separate from accounting updates. */
 
   emit_settg(as, tmp, local_total);
   emit_gri(as, XG_ARITHi(XOg_ADD), tmp|REX_64, (int32_t)nbytes);
@@ -1149,11 +1131,10 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_leatg(as, tmp, hotcount);
   checkmclim(as);  /* Split TG state checks from active-marking predicates. */
   /*
-  ** The inlined path initializes a fresh pair and normally root-publishes it.
-  ** The only active-marking case kept inline is the same standalone active
-  ** black arena-owned case as the C FNEW bump helper: both fresh cells have
-  ** arena mark bits and type-local arena-owned markers. Active white allocation
-  ** still uses the C helper's publication barriers.
+  ** The inlined path initializes a fresh pair and always publishes both exact
+  ** headers through the TG pending chain. Active-black allocation remains safe
+  ** to inline because both arena mark bits are set at birth. Active-white
+  ** allocation still uses the C helper's publication barriers.
   */
   l_mark_ok = emit_label(as);
   asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(alloc.alloc_black),

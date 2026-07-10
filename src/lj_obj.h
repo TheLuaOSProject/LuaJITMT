@@ -461,7 +461,6 @@ typedef struct GCupval {
 #define uvval(uv_)	(mref((uv_)->v, TValue))
 
 #define LJ_UV_IMMUTABLE	0x01u
-#define LJ_UV_ARENA_OWNED	0x80u
 
 /* -- Function object (closures) ------------------------------------------ */
 
@@ -495,13 +494,6 @@ typedef union GCfunc {
   check_exp(isluafunc(fn), (GCproto *)(mref((fn)->l.pc, char)-sizeof(GCproto)))
 #define sizeCfunc(n)	(sizeof(GCfuncC)-sizeof(TValue)+sizeof(TValue)*(n))
 #define sizeLfunc(n)	(sizeof(GCfuncL)-sizeof(GCRef)+sizeof(GCRef)*(n))
-
-/* Lua closures reserve the high nupvalues bit for arena-owned FNEW bodies.
-** C closures keep the full byte as their upvalue count.
-*/
-#define LJ_FUNC_NUPVALUES_MASK	0x7fu
-#define LJ_FUNC_ARENA_OWNED	0x80u
-LJ_STATIC_ASSERT(LJ_MAX_UPVAL < LJ_FUNC_ARENA_OWNED);
 
 /* -- Table object -------------------------------------------------------- */
 
@@ -601,32 +593,14 @@ static LJ_AINLINE int8_t lj_tab_colo_acq(const GCtab *t)
   return (int8_t)la_load8_acq((const uint8_t *)&t->colo);
 }
 
-static LJ_AINLINE uint8_t lj_tab_colo_raw_acq(const GCtab *t)
-{
-  return la_load8_acq((const uint8_t *)&t->colo);
-}
-
 static LJ_AINLINE void lj_tab_colo_rel(GCtab *t, int8_t colo)
 {
   la_store8_rel((uint8_t *)&t->colo, (uint8_t)colo);
 }
 
-#define LJ_TAB_COLO_MASK	0x7fu
-#define LJ_TAB_ARENA_OWNED	0x80u
-
 static LJ_AINLINE MSize lj_tab_colo_size(const GCtab *t)
 {
-  return (MSize)(lj_tab_colo_raw_acq(t) & LJ_TAB_COLO_MASK);
-}
-
-static LJ_AINLINE int lj_tab_arenaowned(const GCtab *t)
-{
-  return lj_tab_colo_raw_acq(t) == LJ_TAB_ARENA_OWNED;
-}
-
-static LJ_AINLINE void lj_tab_setarenaowned(GCtab *t)
-{
-  lj_tab_colo_rel(t, (int8_t)LJ_TAB_ARENA_OWNED);
+  return (MSize)la_load8_acq((const uint8_t *)&t->colo);
 }
 
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
@@ -1477,13 +1451,14 @@ typedef struct GC2State {
   void *finalizer_tail;  /* Single-consumer finalizer ring tail. */
   uint32_t finalizer_active;  /* Finalizer callbacks currently executing. */
   uint32_t finalizer_owner_tid;  /* TG allowed to finish nested finalizer GC. */
+  uint32_t finalizer_spawn_latch;  /* Callback-active/deferred bit latch. */
   uint64_t finalizer_queued;  /* Objects published to the GC2 finalizer queue. */
   uint64_t finalizer_dequeued;  /* Objects popped from the GC2 finalizer queue. */
   uint64_t finalizer_mpsc_drained;  /* Objects drained from producer stack. */
   uint64_t finalizer_enters;  /* Finalizer callback guard enters. */
   uint64_t finalizer_leaves;  /* Finalizer callback guard leaves. */
   uint64_t finalizer_sweep_blocks;  /* Sweep attempts blocked by finalizers. */
-  uint64_t finalizer_spawn_deferrals;  /* Live spawned TG kept finalize open. */
+  uint64_t finalizer_spawn_deferrals;  /* Live spawned TG kept SWEEP open. */
   uint64_t finalizer_spawn_release_wakes;  /* Last spawned TG woke scheduler. */
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   uint32_t finalizer_drain_test_pause;  /* Test hook: pause one drain splice. */
@@ -2213,14 +2188,12 @@ static LJ_AINLINE void lj_obj_setgcwnull(GCobj *o)
 
 static LJ_AINLINE uint32_t lj_func_nupvalues(const GCfunc *fn)
 {
-  uint8_t nup = la_load8_acq(&fn->c.nupvalues);
-  return isluafunc(fn) ? (uint32_t)(nup & LJ_FUNC_NUPVALUES_MASK) :
-			 (uint32_t)nup;
+  return (uint32_t)la_load8_acq(&fn->c.nupvalues);
 }
 
 static LJ_AINLINE uint32_t lj_funcL_nupvalues(const GCfuncL *fn)
 {
-  return (uint32_t)(la_load8_acq(&fn->nupvalues) & LJ_FUNC_NUPVALUES_MASK);
+  return (uint32_t)la_load8_acq(&fn->nupvalues);
 }
 
 static LJ_AINLINE uint32_t lj_funcC_nupvalues(const GCfuncC *fn)
@@ -2228,29 +2201,9 @@ static LJ_AINLINE uint32_t lj_funcC_nupvalues(const GCfuncC *fn)
   return (uint32_t)la_load8_acq(&fn->nupvalues);
 }
 
-static LJ_AINLINE int lj_funcL_arenaowned(const GCfuncL *fn)
-{
-  return (la_load8_acq(&fn->nupvalues) & LJ_FUNC_ARENA_OWNED) != 0;
-}
-
-static LJ_AINLINE void lj_funcL_setarenaowned(GCfuncL *fn)
-{
-  fn->nupvalues = (uint8_t)(fn->nupvalues | LJ_FUNC_ARENA_OWNED);
-}
-
 static LJ_AINLINE int lj_uv_immutable(const GCupval *uv)
 {
   return (la_load8_acq(&uv->immutable) & LJ_UV_IMMUTABLE) != 0;
-}
-
-static LJ_AINLINE int lj_uv_arenaowned(const GCupval *uv)
-{
-  return (la_load8_acq(&uv->immutable) & LJ_UV_ARENA_OWNED) != 0;
-}
-
-static LJ_AINLINE void lj_uv_setarenaowned(GCupval *uv)
-{
-  uv->immutable = (uint8_t)(uv->immutable | LJ_UV_ARENA_OWNED);
 }
 
 static LJ_AINLINE GCobj *func_uvptr_acq(const GCfuncL *fn, uint32_t idx)
@@ -3909,6 +3862,32 @@ static LJ_AINLINE void gc2_finalizer_owner_rel(global_State *g,
 					       uint32_t owner)
 {
   la_store32_rel(&g->gc2.finalizer_owner_tid, owner);
+}
+
+#define LJ_GC2_FINSPAWN_CALLBACK_ACTIVE	0x00000001u
+#define LJ_GC2_FINSPAWN_DEFERRED		0x00000002u
+
+static LJ_AINLINE uint32_t gc2_finalizer_spawn_latch_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_spawn_latch);
+}
+
+static LJ_AINLINE void gc2_finalizer_spawn_latch_store_rlx(global_State *g,
+						    uint32_t latched)
+{
+  la_store32_rlx(&g->gc2.finalizer_spawn_latch, latched);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_spawn_latch_update(
+  global_State *g, uint32_t set, uint32_t clear)
+{
+  uint32_t old = gc2_finalizer_spawn_latch_acq(g);
+  for (;;) {
+    uint32_t next = (old | set) & ~clear;
+    if (next == old || la_cas32(&g->gc2.finalizer_spawn_latch, &old, next,
+				LA_ACQ_REL, LA_ACQ))
+      return old;
+  }
 }
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_queued, finalizer_queued)

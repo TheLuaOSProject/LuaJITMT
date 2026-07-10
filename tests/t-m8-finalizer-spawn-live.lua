@@ -21,7 +21,7 @@ local function run_spawn_live(label, setup_finalizer, drive)
 
   setup_finalizer(function(_)
     worker = th.spawn(function(started_ch, release_ch)
-      started_ch:send("started")
+      started_ch:send(collectgarbage("isrunning") and "running" or "stopped")
       local msg, ok = release_ch:recv(10)
       return ok == true and msg == "release"
     end, started, release)
@@ -30,8 +30,8 @@ local function run_spawn_live(label, setup_finalizer, drive)
   local complete = drive()
 
   local msg, ok = started:recv(1)
-  assert(ok == true and msg == "started",
-         label .. ": finalizer-spawned worker did not start")
+  assert(ok == true and msg == "running",
+         label .. ": finalizer-spawned worker lost logical GC state")
   assert(worker ~= nil, label .. ": finalizer did not publish worker handle")
   assert(complete ~= true,
          label .. ": GC step completed while finalizer-spawned worker was live")
