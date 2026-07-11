@@ -15,6 +15,24 @@ return function(add)
   if jit and jit.os == "Linux" then
     terminal_orphan_libs[#terminal_orphan_libs + 1] = "-Wl,--wrap=munmap"
   end
+
+  add({
+    name = "m4_tgslot_token_model",
+    description = "stable TG-slot incarnation and lease token model",
+    run = function(t)
+      compile_and_run_sources(t, t:tmp("lj_t-tgslot-token"),
+        { t:path("tests", "t-tgslot-token.c") }, {
+        default_cflags = false,
+        include_src = true,
+        link_luajit = false,
+        libs = {},
+        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16",
+        timeout = "20s"
+      })
+      print("M4 stable TG-slot token model passed")
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
     {
       name = "m4_threading_api",
