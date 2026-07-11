@@ -9458,6 +9458,26 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
   }
 }
 
+void lj_gc2_barrier_obj_pair_g(global_State *g, GCobj *parent,
+				GCobj *child)
+{
+  uint32_t phase;
+  if (!g || !child)
+    return;
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_SWEEP) {
+    gc2_sweep_barrier_obj(g, child);
+    return;
+  }
+  /* This is the g-only ABI barrier. It cannot borrow a TG from raw TLS and
+  ** must retain the historic guarantee that every active phase preserves the
+  ** child, including MARK/WEAK startup before mark_active is acknowledged. */
+  if (phase != LJ_GC2_IDLE) {
+    gc2_table_dirty_bump_parent(g, parent);
+    gc2_barrier_mark_or_rescan(g, child);
+  }
+}
+
 void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child)
 {
   global_State *g;

@@ -1744,13 +1744,9 @@ void lj_gc_pubobjroot(lua_State *L, GCobj *o)
 ** frontier; the legacy color frontier is never entered. */
 void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v)
 {
-  UNUSED(o);
   if (!g || !v)
     return;
-  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    (void)lj_gc2_trace_sweep_root(g, v);
-  else if (gc2_phase_acq(g) != LJ_GC2_IDLE)
-    (void)lj_gc2_markobj_direct(g, v);
+  lj_gc2_barrier_obj_pair_g(g, o, v);
 }
 
 /* VM-callable table black-to-gray repair. */

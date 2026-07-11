@@ -342,6 +342,8 @@ LJ_FUNC void lj_gc_pubtrace(global_State *g, uint32_t traceno);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
 					cTValue *tv, uint32_t n);
+LJ_FUNCA void lj_gc2_barrier_obj_pair_g(global_State *g, GCobj *parent,
+					GCobj *child);
 LJ_FUNCA void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent,
 				      GCobj *child);
 LJ_FUNC void lj_gc2_barrier_marked_proto(lua_State *L, GCproto *pt);

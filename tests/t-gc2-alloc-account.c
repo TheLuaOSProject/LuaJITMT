@@ -81,6 +81,35 @@ static void test_obj_valid_rejects_nonobject(global_State *g)
   assert(lj_gc2_obj_valid_queued(g, bad) == 0);
 }
 
+static void test_global_barrier_without_mark_active(lua_State *L,
+					     global_State *g, TGState *tg)
+{
+  GCtab *parent, *mark_child, *weak_child;
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  mark_child = tabV(L->top - 1);
+  lua_newtable(L);
+  weak_child = tabV(L->top - 1);
+
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_gc2_ismarked(g, obj2gco(mark_child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(weak_child)) == 0);
+  lj_tg_mark_active_rel(tg, 0);
+
+  lj_gc_barrierf(g, obj2gco(parent), obj2gco(mark_child));
+  assert(lj_gc2_ismarked(g, obj2gco(mark_child)) == 1);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_WEAK);
+  lj_gc_barrierf(g, obj2gco(parent), obj2gco(weak_child));
+  assert(lj_gc2_ismarked(g, obj2gco(weak_child)) == 1);
+
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
 static void test_finreg_entry_rejects_nonobject(lua_State *L,
 						global_State *g)
 {
@@ -498,6 +527,7 @@ int main(void)
   assert(gc2_jit_hard_checks_acq(g) == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
   test_pub_barrier_entry_rejects_nonobject(L, g);
+  test_global_barrier_without_mark_active(L, g, tg);
 
   (void)lua_gc(L, LUA_GCSETPAUSE, 150);
   assert(la_load32_acq(&g->gc2.gcpause_pct) == 150);
