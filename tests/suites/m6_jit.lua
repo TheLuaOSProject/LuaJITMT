@@ -15,6 +15,7 @@ local shell_quote = utils.shell_quote
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
+  "m6_jit_hotcall_missing_args",
   "m6_jit_recursive_call_unroll",
   "m6_jit_recursive_retention",
   "m6_jit_trace_proto_gc",
@@ -747,6 +748,24 @@ assert(sum == 3320)
 assert(util.traceinfo(1), "Lua tailcall loop did not trace")
 ]=], { timeout = "20s" })
       print("M6 JIT recorder token behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_hotcall_missing_args",
+    description = "FUNCF hot-call roots preserve missing fixed parameters",
+    run = function(t)
+      build.with_default_build_restore(t, function()
+        clean_build(t, build.gc2_paranoia_opts({ quiet = true }))
+        luajit_file(t, t:path("tests", "t-jit-hotcall-missing-args.lua"), {
+          lua_path = true,
+          timeout = "20s"
+        })
+        runtime.run_stock(t, {
+          "test.lua", "--quiet", "lib/string/format/num.lua", "5"
+        }, { timeout = "20s" })
+      end)
+      print("M6 JIT hot-call missing-argument behavior passed")
     end
   })
 

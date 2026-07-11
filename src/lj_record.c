@@ -218,6 +218,13 @@ static void rec_check_slots(jit_State *J)
   cTValue *base = J->L->base - J->baseslot;
   GCproto *slotpt = rec_check_frame_pt(base + LJ_FR2);
   BCReg slotbase = 1+LJ_FR2;
+  /* A trace entered from a C/fast frame has no Lua prototype at its initial
+  ** stack frame marker. Keep the root prototype available for validating
+  ** slots that setup has already represented as pending local cells; nested
+  ** Lua frame markers below replace slotpt in the ordinary way.
+  */
+  if (slotpt == NULL)
+    slotpt = trace_startpt_acq(&J->cur);
   lj_assertJ(J->baseslot >= 1+LJ_FR2, "bad baseslot");
   lj_assertJ(J->baseslot == 1+LJ_FR2 || (J->slot[J->baseslot-1] & TREF_FRAME),
 	     "baseslot does not point to frame");
@@ -2924,7 +2931,16 @@ static void rec_celluv_promote_pending(jit_State *J)
   }
 }
 
-static int rec_celluv_materialize_cget_sources(jit_State *J)
+/* Prepare raw local-cell sources needed from the trace-entry frame.
+**
+** A non-negative root_nargs selects the pre-IFUNCF hot-call pass.  At that
+** boundary the VM has not cleared missing fixed parameters yet, so only
+** demand-loaded missing CGET sources may be inspected, and they must be
+** reconciled with guarded NIL SLOADs.  A negative root_nargs selects the
+** ordinary materialization pass after root setup (or snapshot replay).
+*/
+static int rec_celluv_prepare_cget_sources(jit_State *J,
+					   ptrdiff_t root_nargs)
 {
   const BCIns *pc, *end;
   BCReg framesize;
@@ -2932,6 +2948,8 @@ static int rec_celluv_materialize_cget_sources(jit_State *J)
   int materialized = 0;
   if (J->pt == NULL)
     return 0;
+  if (root_nargs >= (ptrdiff_t)J->pt->numparams)
+    return 0;  /* Fully supplied FUNCF roots need no pre-prologue scan. */
   pc = J->pc;
   end = proto_bc(J->pt) + J->pt->sizebc;
   framesize = J->pt->framesize;
@@ -2942,8 +2960,17 @@ static int rec_celluv_materialize_cget_sources(jit_State *J)
     if (op == BC_CGET) {
       BCReg slot = bc_d(ins);
       if (slot < framesize && !defined[slot] && J->base[slot] == 0) {
-	(void)getslot(J, slot);
-	materialized = 1;
+	if (root_nargs >= 0) {
+	  if ((ptrdiff_t)slot >= root_nargs && slot < J->pt->numparams) {
+	    (void)sloadt(J, (int32_t)slot, IRT_GUARD|IRT_NIL,
+			 IRSLOAD_TYPECHECK);
+	    J->base[slot] = TREF_NIL;
+	    materialized = 1;
+	  }
+	} else {
+	  (void)getslot(J, slot);
+	  materialized = 1;
+	}
       }
     }
     /*
@@ -4210,6 +4237,15 @@ static const BCIns *rec_setup_root(jit_State *J)
   return pc;
 }
 
+/* Exact argument count at the pre-IFUNCF FUNCF hot-call boundary. */
+static ptrdiff_t rec_func_root_nargs(jit_State *J)
+{
+  ptrdiff_t nargs = J->L->top - J->L->base;
+  lj_assertJ(nargs >= 0, "negative hotcall argument count");
+  if (nargs < 0) nargs = 0;
+  return nargs;
+}
+
 /* Setup for recording a new trace. */
 void lj_record_setup(jit_State *J)
 {
@@ -4299,7 +4335,7 @@ void lj_record_setup(jit_State *J)
       }
     }
     lj_snap_replay(J, T);
-    if (rec_celluv_materialize_cget_sources(J))
+    if (rec_celluv_prepare_cget_sources(J, -1))
       lj_snap_add(J);
   sidecheck:
     if ((trace_nchild_acq(rec_traceref_live(J, J->cur.root)) >=
@@ -4316,6 +4352,7 @@ void lj_record_setup(jit_State *J)
       lj_record_stop(J, LJ_TRLINK_INTERP, 0);
     }
   } else {  /* Root trace. */
+    ptrdiff_t root_nargs = -1;
     J->cur.root = 0;
     J->cur.startins = *J->pc;
     J->pc = rec_setup_root(J);
@@ -4324,12 +4361,21 @@ void lj_record_setup(jit_State *J)
     ** The one exception is BC_ITERN, which sets LJ_TRACE_RECORD_1ST.
     */
     lj_snap_add(J);
+    if (bc_op(J->cur.startins) == BC_FUNCF) {
+      root_nargs = rec_func_root_nargs(J);
+      /* Snapshot #0 must precede the missing-argument guards: a later call
+      ** supplying a real value exits without restoring NIL over that value.
+      ** Run this demand pass before promotion helpers so a failing guard has
+      ** no speculative local-cell allocation to leave behind.
+      */
+      (void)rec_celluv_prepare_cget_sources(J, root_nargs);
+    }
     if (bc_op(J->cur.startins) == BC_FORL)
       rec_for_loop(J, J->pc-1, &J->scev, 1);
     else if (bc_op(J->cur.startins) == BC_ITERC)
       J->startpc = NULL;
     rec_celluv_promote_pending(J);
-    if (rec_celluv_materialize_cget_sources(J))
+    if (rec_celluv_prepare_cget_sources(J, -1))
       lj_snap_add(J);
     if (1 + J->pt->framesize >= LJ_MAX_JSLOTS)
       lj_trace_err(J, LJ_TRERR_STACKOV);
