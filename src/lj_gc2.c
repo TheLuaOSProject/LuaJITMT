@@ -271,6 +271,17 @@ static uint32_t gc2_flush_and_drain_ssb(global_State *g)
   return lj_gc2_drain_ssb(g);
 }
 
+static LJ_AINLINE int gc2_mark_close_intent_blocks_worker(global_State *g)
+{
+  /* mark_close_intent arbitrates only the MARK fixpoint/transition. A helper
+  ** may publish WEAK and then be descheduled before clearing the advisory
+  ** intent. Ordinary WEAK/SWEEP work must remain claimable in that window.
+  ** Recheck this predicate after the token CAS so a new MARK intent cannot be
+  ** crossed by a claimant which sampled an older phase. */
+  return gc2_phase_acq(g) == LJ_GC2_MARK &&
+	 gc2_mark_close_intent_acq(g) != 0;
+}
+
 static int gc2_worker_claim(global_State *g)
 {
   uint32_t expect = 0;
@@ -281,11 +292,11 @@ static int gc2_worker_claim(global_State *g)
   ** the reclaimer is publishing its gate immediately rolls back, so neither a
   ** GC destructor nor a retire-list publisher can overlap detached metadata.
   */
-  if (gc2_mark_close_intent_acq(g) != 0 ||
+  if (gc2_mark_close_intent_blocks_worker(g) ||
       gc2_smr_reclaiming_acq(g) != 0 ||
       !gc2_worker_active_cas(g, &expect, 1))
     return 0;
-  if (LJ_UNLIKELY(gc2_mark_close_intent_acq(g) != 0 ||
+  if (LJ_UNLIKELY(gc2_mark_close_intent_blocks_worker(g) ||
 		  gc2_smr_reclaiming_acq(g) != 0)) {
     gc2_worker_active_rel(g, 0);
     return 0;
@@ -4560,14 +4571,10 @@ static void gc2_root_rescan_later(global_State *g, GCobj *o)
   }
 }
 
-static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
+static void gc2_thread_root_rescan_marked_obj_forced(global_State *g,
+						      GCobj *o)
 {
-  uint32_t phase;
   if (!o)
-    return;
-  phase = gc2_phase_acq(g);
-  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
-      phase != LJ_GC2_SWEEP)
     return;
   if (o->gch.gct == ~LJ_TFUNC)
     gc2_preserve_direct_bodies(g, o);
@@ -4614,6 +4621,18 @@ static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
   default:
     break;
   }
+}
+
+static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
+{
+  uint32_t phase;
+  if (!o)
+    return;
+  phase = gc2_phase_acq(g);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
+      phase != LJ_GC2_SWEEP)
+    return;
+  gc2_thread_root_rescan_marked_obj_forced(g, o);
 }
 
 static void gc2_mark_thread_root_obj(global_State *g, GCobj *o)
@@ -11764,7 +11783,10 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
   }
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK) {
-    gc2_mark_close_intent_rel(g, 0);
+    /* Intent is a Boolean advisory until it is cycle-tagged. Do not clear it
+    ** from an unowned old-phase sample: this helper could be descheduled
+    ** through IDLE into a new MARK and erase that cycle's request. Phase-gated
+    ** ordinary claims ignore the stale bit, and serialized IDLE resets it. */
     lj_gc2_worker_wake(g);
     return phase == LJ_GC2_WEAK;
   }
@@ -11773,8 +11795,8 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_MARK) {
     phase = gc2_phase_acq(g);
-    gc2_worker_release(g);
     gc2_mark_close_intent_rel(g, 0);
+    gc2_worker_release(g);
     lj_gc2_worker_wake(g);
     return phase == LJ_GC2_WEAK;
   }
@@ -11793,11 +11815,15 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
   hit = gc2_phase_acq(g) == LJ_GC2_WEAK;
   if (hit)
     gc2_mark_complete_hits_add(g, 1);
-  gc2_worker_release(g);
   phase = gc2_phase_acq(g);
-  hit = phase == LJ_GC2_WEAK;
+  /* Intent is phase-local. Clear it while worker_active still excludes a new
+  ** IDLE->MARK owner, so preemption cannot expose WEAK with a stale intent and
+  ** no close owner. Ordinary claims also phase-gate the bit as a defensive
+  ** backstop for forced/test transitions. */
   if (phase != LJ_GC2_MARK)
     gc2_mark_close_intent_rel(g, 0);
+  gc2_worker_release(g);
+  hit = phase == LJ_GC2_WEAK;
   /* Partial rounds retain helpable intent. In either case wake a worker or
   ** mutator helper after releasing the token; no owner identity is required. */
   lj_gc2_worker_wake(g);

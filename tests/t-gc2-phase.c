@@ -638,6 +638,49 @@ static void test_mark_complete_waits_for_assist(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
+static void test_stale_mark_intent_does_not_block_weak(lua_State *L,
+						       global_State *g,
+						       TGState *tg)
+{
+  GCtab *parent, *child;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_rawseti(L, -2, 1);
+
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  gc2_worker_active_rel(g, 1);
+  gc2_mark_close_intent_rel(g, 1);
+  lj_gc2_mark_to_weak(g);
+  gc2_worker_active_rel(g, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+
+  /* Model preemption after the close helper's MARK->WEAK publication and
+  ** worker-token release, but before its advisory intent clear. WEAK work must
+  ** still acquire/release worker_active instead of parking forever behind a
+  ** phase-local bit. Keep the bit set here to prove claim routing, not cleanup,
+  ** supplies progress. */
+  assert(lj_gc2_worker_drain(g, 64) > 0);
+  assert(gc2_worker_active_acq(g) == 0);
+  assert(gc2_mark_close_intent_acq(g) == 1);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_mark_close_intent_acq(g) == 0);
+  lua_pop(L, 1);
+}
+
 static void test_weak_complete_waits_for_assist(lua_State *L, global_State *g,
 						TGState *tg)
 {
@@ -933,6 +976,7 @@ int main(void)
   test_incremental_fixpoint_round(L, g);
   test_mark_complete_waits_for_peer(L, g, tg);
   test_mark_complete_waits_for_assist(L, g, tg);
+  test_stale_mark_intent_does_not_block_weak(L, g, tg);
   test_weak_complete_waits_for_assist(L, g, tg);
 
   lua_newtable(L);
