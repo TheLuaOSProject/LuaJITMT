@@ -266,6 +266,21 @@ typedef struct GCstr {
   MSize len;		/* Size of string. */
 } GCstr;
 
+/*
+** Exact retirement owner for a string body removed from the intern table.
+** The body cannot use GCstr.nextgc for retirement: that word remains the
+** successor link observed by pre-unlink intern-table readers.  A side record
+** therefore keeps the body and the header generation that protected it until
+** both the safepoint grace interval and all header pins have drained.
+*/
+typedef struct StrBodyRetire {
+  struct StrBodyRetire *next;
+  GCstr *str;
+  StrTabHdr *hdr;
+  uint64_t retire_epoch;
+  GCSize size;
+} StrBodyRetire;
+
 #define strref(r)	(&gcref((r))->str)
 #define strref_acq(r)	(&gcref_acq((r))->str)
 #define strdata(s)	((const char *)((s)+1))
@@ -1226,8 +1241,20 @@ typedef struct GCState {
 typedef struct StrInternState {
   StrTabHdr *tabh;	/* String hash table header and anchors. */
   StrTabHdr *retired;	/* Retired table headers kept until state close. */
+  StrBodyRetire *retired_body;  /* Unlinked bodies awaiting SMR grace. */
+  StrBodyRetire *sweep_pending;  /* Pre-CAS unlink ownership record. */
+  StrTabHdr *sweep_hdr;	/* Header owned by the bounded GC2 string sweep. */
+  GCRef *sweep_link;	/* Exact incoming-edge cursor in sweep_hdr. */
+  uint64_t sweep_grace_epoch;  /* Epoch at the current string grace edge. */
+  uint64_t sweep_tagged;	/* Successfully tagged incoming edges. */
+  uint64_t sweep_rescued;	/* Tagged exact matches preserved by interners. */
+  uint64_t sweep_unlinked;	/* Successfully retired string bodies. */
+  uint64_t sweep_reclaimed;	/* Physically reclaimed string bodies. */
   MSize mask;		/* Mirror of tabh->mask for existing fast paths. */
   MSize num;		/* Number of strings in hash table. */
+  MSize sweep_bucket;	/* Bucket containing sweep_link. */
+  uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */
+  uint32_t sweep_cycle;	/* GC2 cycle which owns sweep_hdr. */
   StrID id;		/* Next string ID. */
   uint8_t idreseed;	/* String ID reseed counter. */
   uint8_t second;	/* String interning table uses secondary hashing. */
@@ -1295,8 +1322,6 @@ typedef struct GC2State {
 	  uint64_t remembered_filtered;  /* Remembered pairs rejected by age filter. */
 	  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
 	  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
-	  uint32_t fixedstr_scan_cycle;  /* Last cycle that scanned fixed strings. */
-	  void *fixedstr_scan_hdr;  /* String table header scanned for that cycle. */
 	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
 	  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   uint32_t ssb_published;  /* Published SSB node count. */
@@ -2488,39 +2513,6 @@ static LJ_AINLINE void gc2_grey_bottom_rel(global_State *g, uint64_t bottom)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_pushed, grey_pushed)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_drained, grey_drained)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_marks_this_round, marks_this_round)
-
-static LJ_AINLINE uint32_t gc2_fixedstr_scan_cycle_acq(global_State *g)
-{
-  return la_load32_acq(&g->gc2.fixedstr_scan_cycle);
-}
-
-static LJ_AINLINE void gc2_fixedstr_scan_cycle_store_rlx(global_State *g,
-							 uint32_t cycle)
-{
-  la_store32_rlx(&g->gc2.fixedstr_scan_cycle, cycle);
-}
-
-static LJ_AINLINE void gc2_fixedstr_scan_cycle_rel(global_State *g,
-						   uint32_t cycle)
-{
-  la_store32_rel(&g->gc2.fixedstr_scan_cycle, cycle);
-}
-
-static LJ_AINLINE void *gc2_fixedstr_scan_hdr_acq(global_State *g)
-{
-  return la_loadptr_acq((void *const *)&g->gc2.fixedstr_scan_hdr);
-}
-
-static LJ_AINLINE void gc2_fixedstr_scan_hdr_store_rlx(global_State *g,
-						       void *hdr)
-{
-  la_storeptr_rlx((void **)&g->gc2.fixedstr_scan_hdr, hdr);
-}
-
-static LJ_AINLINE void gc2_fixedstr_scan_hdr_rel(global_State *g, void *hdr)
-{
-  la_storeptr_rel((void **)&g->gc2.fixedstr_scan_hdr, hdr);
-}
 
 static LJ_AINLINE void *gc2_small_arena_tab_acq(global_State *g)
 {

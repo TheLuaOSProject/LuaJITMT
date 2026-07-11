@@ -14,6 +14,25 @@
 #define LJ_STRHASH_SECONDARY	((uintptr_t)2)
 #define LJ_STRHASH_LINKMASK	(LJ_STRHASH_DEAD|LJ_STRHASH_SECONDARY)
 
+/*
+** Runtime GCstr unlink/free remains safety-gated until every sweep-time string
+** publication can atomically defeat retirement and every native raw-byte borrow
+** is represented by a quiescence/hazard contract. The implementation below is
+** retained for focused development, but production builds must not enter it.
+*/
+#define LJ_GC2_STRING_BODY_RECLAIM 0
+
+/* Bounded GC2 string-table subphase. */
+enum {
+  LJ_STR_SWEEP_IDLE,
+  LJ_STR_SWEEP_ACQUIRE,
+  LJ_STR_SWEEP_TAG,
+  LJ_STR_SWEEP_TAG_GRACE,
+  LJ_STR_SWEEP_UNLINK,
+  LJ_STR_SWEEP_UNLINK_GRACE,
+  LJ_STR_SWEEP_DONE
+};
+
 #define lj_str_hashhead_u(u) \
   ((GCobj *)(void *)((u) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
 #define lj_str_tabsize(mask) \
@@ -141,6 +160,162 @@ static LJ_AINLINE void lj_str_retired_next_rel(StrTabHdr *hdr,
   la_storeptr_rel((void **)&hdr->retired_next, next);
 }
 
+static LJ_AINLINE StrBodyRetire *lj_str_body_retired_head_acq(
+  const global_State *g)
+{
+  return (StrBodyRetire *)la_loadptr_acq(
+    (void *const *)&g->str.retired_body);
+}
+
+static LJ_AINLINE int lj_str_body_retired_head_cas(global_State *g,
+						   StrBodyRetire **oldp,
+						   StrBodyRetire *ret)
+{
+  return la_casptr((void **)&g->str.retired_body, (void **)oldp, ret,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE StrBodyRetire *lj_str_body_retired_head_xchg_acqrel(
+  global_State *g, StrBodyRetire *ret)
+{
+  return (StrBodyRetire *)la_xchgptr_acqrel(
+    (void **)&g->str.retired_body, ret);
+}
+
+static LJ_AINLINE StrBodyRetire *lj_str_body_retired_next_acq(
+  const StrBodyRetire *ret)
+{
+  return (StrBodyRetire *)la_loadptr_acq((void *const *)&ret->next);
+}
+
+static LJ_AINLINE void lj_str_body_retired_next_rel(StrBodyRetire *ret,
+						    StrBodyRetire *next)
+{
+  la_storeptr_rel((void **)&ret->next, next);
+}
+
+static LJ_AINLINE GCstr *lj_str_body_retired_str_acq(
+  const StrBodyRetire *ret)
+{
+  return (GCstr *)la_loadptr_acq((void *const *)&ret->str);
+}
+
+static LJ_AINLINE void lj_str_body_retired_str_rel(StrBodyRetire *ret,
+						   GCstr *str)
+{
+  la_storeptr_rel((void **)&ret->str, str);
+}
+
+static LJ_AINLINE StrTabHdr *lj_str_body_retired_hdr_acq(
+  const StrBodyRetire *ret)
+{
+  return (StrTabHdr *)la_loadptr_acq((void *const *)&ret->hdr);
+}
+
+static LJ_AINLINE void lj_str_body_retired_hdr_rel(StrBodyRetire *ret,
+						   StrTabHdr *hdr)
+{
+  la_storeptr_rel((void **)&ret->hdr, hdr);
+}
+
+static LJ_AINLINE uint64_t lj_str_body_retired_epoch_acq(
+  const StrBodyRetire *ret)
+{
+  return la_load64_acq(&ret->retire_epoch);
+}
+
+static LJ_AINLINE void lj_str_body_retired_epoch_rel(StrBodyRetire *ret,
+						     uint64_t epoch)
+{
+  la_store64_rel(&ret->retire_epoch, epoch);
+}
+
+static LJ_AINLINE StrBodyRetire *lj_str_sweep_pending_acq(
+  const global_State *g)
+{
+  return (StrBodyRetire *)la_loadptr_acq(
+    (void *const *)&g->str.sweep_pending);
+}
+
+static LJ_AINLINE void lj_str_sweep_pending_rel(global_State *g,
+						StrBodyRetire *ret)
+{
+  la_storeptr_rel((void **)&g->str.sweep_pending, ret);
+}
+
+static LJ_AINLINE StrTabHdr *lj_str_sweep_hdr_acq(const global_State *g)
+{
+  return (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.sweep_hdr);
+}
+
+static LJ_AINLINE void lj_str_sweep_hdr_rel(global_State *g, StrTabHdr *hdr)
+{
+  la_storeptr_rel((void **)&g->str.sweep_hdr, hdr);
+}
+
+static LJ_AINLINE GCRef *lj_str_sweep_link_acq(const global_State *g)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&g->str.sweep_link);
+}
+
+static LJ_AINLINE void lj_str_sweep_link_rel(global_State *g, GCRef *link)
+{
+  la_storeptr_rel((void **)&g->str.sweep_link, link);
+}
+
+static LJ_AINLINE MSize lj_str_sweep_bucket_acq(const global_State *g)
+{
+  return (MSize)la_load32_acq(&g->str.sweep_bucket);
+}
+
+static LJ_AINLINE void lj_str_sweep_bucket_rel(global_State *g, MSize bucket)
+{
+  la_store32_rel(&g->str.sweep_bucket, bucket);
+}
+
+static LJ_AINLINE uint32_t lj_str_sweep_phase_acq(const global_State *g)
+{
+  return la_load32_acq(&g->str.sweep_phase);
+}
+
+static LJ_AINLINE void lj_str_sweep_phase_rel(global_State *g,
+					      uint32_t phase)
+{
+  la_store32_rel(&g->str.sweep_phase, phase);
+}
+
+static LJ_AINLINE uint64_t lj_str_sweep_grace_epoch_acq(
+  const global_State *g)
+{
+  return la_load64_acq(&g->str.sweep_grace_epoch);
+}
+
+static LJ_AINLINE void lj_str_sweep_grace_epoch_rel(global_State *g,
+						    uint64_t epoch)
+{
+  la_store64_rel(&g->str.sweep_grace_epoch, epoch);
+}
+
+static LJ_AINLINE void lj_str_sweep_tagged_add(global_State *g, uint64_t n)
+{
+  (void)la_add64_rlx(&g->str.sweep_tagged, n);
+}
+
+static LJ_AINLINE void lj_str_sweep_rescued_add(global_State *g, uint64_t n)
+{
+  (void)la_add64_rlx(&g->str.sweep_rescued, n);
+}
+
+static LJ_AINLINE void lj_str_sweep_unlinked_add(global_State *g, uint64_t n)
+{
+  (void)la_add64_rlx(&g->str.sweep_unlinked, n);
+}
+
+static LJ_AINLINE void lj_str_sweep_reclaimed_add(global_State *g, uint64_t n)
+{
+  (void)la_add64_rlx(&g->str.sweep_reclaimed, n);
+}
+
 #define lj_str_buckets(g)	(lj_str_tabh_acq((g))->bucket)
 
 static LJ_AINLINE uintptr_t lj_str_link_load_acq(const GCRef *r)
@@ -212,7 +387,8 @@ static LJ_AINLINE void lj_str_next_store_rel(GCobj *o, uintptr_t next)
 static LJ_AINLINE void lj_str_bucket_store_rel(GCRef *r, GCobj *o,
 					       uintptr_t flags)
 {
-  lj_str_ref_store_rel(r, (uintptr_t)o | (flags & LJ_STRHASH_SECONDARY));
+  /* Rechainers must carry the target's incoming DEAD tag to its new edge. */
+  lj_str_ref_store_rel(r, (uintptr_t)o | (flags & LJ_STRHASH_LINKMASK));
 }
 
 /* String helpers. */
@@ -231,6 +407,12 @@ LJ_FUNC void lj_str_flush_num_credit(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);
 LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
+LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
+LJ_FUNC uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit);
+LJ_FUNC int lj_str_gc2_sweep_pending(global_State *g);
+LJ_FUNC void lj_str_gc2_sweep_abort(global_State *g);
+LJ_FUNC void lj_str_gc2_sweep_finish(global_State *g);
+LJ_FUNC void lj_str_free_retired_bodies(global_State *g);
 LJ_FUNC void lj_str_freetab(global_State *g);
 
 enum {
@@ -238,6 +420,15 @@ enum {
   LJ_STR_TEST_MATCH_BEFORE_RESCUE_CAS
 };
 #ifdef LJ_STR_TEST_HELPERS
+typedef struct LJStrTestSweepSnapshot {
+  uint64_t tagged;
+  uint64_t rescued;
+  uint64_t unlinked;
+  uint64_t retired;
+  uint64_t reclaimed;
+  uint32_t phase;
+  uint32_t pending;
+} LJStrTestSweepSnapshot;
 typedef void (*LJStrTestMatchHook)(lua_State *L, GCRef *link,
 				   GCobj *target, uintptr_t observed,
 				   uint32_t stage);
@@ -246,6 +437,9 @@ LJ_FUNC uint32_t lj_str_test_id_refills(void);
 LJ_FUNC void lj_str_test_reset_id_refills(void);
 LJ_FUNC uint32_t lj_str_test_num_refills(void);
 LJ_FUNC void lj_str_test_reset_num_refills(void);
+LJ_FUNC void lj_str_test_reset_sweep_counters(global_State *g);
+LJ_FUNC void lj_str_test_sweep_snapshot(global_State *g,
+					LJStrTestSweepSnapshot *snapshot);
 #endif
 
 #define lj_str_newz(L, s)	(lj_str_new(L, s, strlen(s)))

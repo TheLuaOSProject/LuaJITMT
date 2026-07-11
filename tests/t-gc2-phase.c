@@ -960,9 +960,13 @@ int main(void)
   assert(g->gc2.phase == LJ_GC2_SWEEP);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 1);
-  assert(gc2_ssb_published_acq(g) == ssb_published0 + 1u);
+  /* Root closure may refill and publish the main SSB more than once. Every
+  ** transition publication must be drained; the exact buffer count is not a
+  ** semantic invariant. */
+  assert(gc2_ssb_published_acq(g) > ssb_published0);
   assert(tg->ssb_next == tg->ssb_base);
-  assert(gc2_ssb_drained_acq(g) == ssb_drained0 + 1u);
+  assert(gc2_ssb_drained_acq(g) - ssb_drained0 ==
+	 gc2_ssb_published_acq(g) - ssb_published0);
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
@@ -978,7 +982,15 @@ int main(void)
 				     phase_trav_a));
   assert((phase_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((phase_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
-  lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
+  /* Bridge preparation is bounded and may lose the worker token to the parked
+  ** collector. Drive it to its published boundary instead of assuming one
+  ** scheduling attempt completes all root-spine work. */
+  for (i = 0; !gc2_sweep_bridge_ready_acq(g) && i < 10000; i++) {
+    lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
+    if (!gc2_sweep_bridge_ready_acq(g))
+      (void)lj_thr_retry_yield(L);
+  }
+  assert(gc2_sweep_bridge_ready_acq(g));
   while (lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH) != 0)
     ;
   assert(!lj_gc2_sweep_needs_prepare(g));
@@ -1050,6 +1062,9 @@ int main(void)
   assert(!lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc2_test_finalizer_pending(g));
   assert(!lj_gc2_test_finalizer_sweep_pending(g));
+  phase_flush_and_drain(g, tg);
+  while (lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) != 0)
+    ;
   lj_gc2_sweep_bridge_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 1);
   assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0 + 1u);

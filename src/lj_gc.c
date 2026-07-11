@@ -1440,25 +1440,27 @@ static void gc2_shutdown_free_strings(global_State *g,
 {
   StrTabHdr *hdr = lj_str_tabh_acq(g);
   MSize i;
-  if (!hdr)
-    return;
-  gc_shutdown_seen_clear(seen);
-  for (i = hdr->mask; i != ~(MSize)0; i--) {
-    GCRef *bucket = &hdr->bucket[i];
-    uintptr_t u = lj_str_ref_load_acq(bucket);
-    GCobj *o = (GCobj *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
-    lj_str_ref_store_rel(bucket, u & LJ_STRHASH_SECONDARY);
-    while (o) {
-      GCobj *next;
-      int seenrc = gc_shutdown_seen_add(seen, o);
-      if (seenrc <= 0)
-	break;
-      next = lj_str_next_acq(o);
-      if (la_load8_acq(&o->gch.gct) == (uint8_t)~LJ_TSTR)
-	lj_str_free(g, gco2str(o));
-      o = next;
+  if (hdr) {
+    gc_shutdown_seen_clear(seen);
+    for (i = hdr->mask; i != ~(MSize)0; i--) {
+      GCRef *bucket = &hdr->bucket[i];
+      uintptr_t u = lj_str_ref_load_acq(bucket);
+      GCobj *o = (GCobj *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
+      lj_str_ref_store_rel(bucket, u & LJ_STRHASH_SECONDARY);
+      while (o) {
+	GCobj *next;
+	int seenrc = gc_shutdown_seen_add(seen, o);
+	if (seenrc <= 0)
+	  break;
+	next = lj_str_next_acq(o);
+	if (la_load8_acq(&o->gch.gct) == (uint8_t)~LJ_TSTR)
+	  lj_str_free(g, gco2str(o));
+	o = next;
+      }
     }
   }
+  /* Unlinked bodies are no longer discoverable from the active table. */
+  lj_str_free_retired_bodies(g);
 }
 
 /* Free all remaining GC objects with GC2 ownership metadata only. This is a

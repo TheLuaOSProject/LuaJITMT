@@ -84,6 +84,7 @@ struct TGState {
   uint32_t in_native;
   StrTabHdr *strtab_active_hdr;
   uint32_t strtab_active_depth;
+  uint64_t strtab_active_epoch;  /* GC2 epoch of outermost table read pin. */
   StrID strid_next;
   StrID strid_end;
   uint32_t strnum_credit;  /* Unused string-count reservations. */
@@ -166,6 +167,17 @@ static LJ_AINLINE void lj_tg_strtab_active_depth_rel(TGState *tg,
 						     uint32_t depth)
 {
   la_store32_rel(&tg->strtab_active_depth, depth);
+}
+
+static LJ_AINLINE uint64_t lj_tg_strtab_active_epoch_acq(const TGState *tg)
+{
+  return la_load64_acq(&tg->strtab_active_epoch);
+}
+
+static LJ_AINLINE void lj_tg_strtab_active_epoch_rel(TGState *tg,
+						     uint64_t epoch)
+{
+  la_store64_rel(&tg->strtab_active_epoch, epoch);
 }
 
 static LJ_AINLINE uint32_t lj_tg_in_native_inc_rel(TGState *tg)

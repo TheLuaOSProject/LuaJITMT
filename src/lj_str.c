@@ -15,6 +15,7 @@
 #include "lj_prng.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lj_arena.h"
 
 /* -- String helpers ------------------------------------------------------ */
 
@@ -128,9 +129,12 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 
 #define LJ_STR_MAXCOLL		32
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
-#define LJ_STRTAB_RESIZE_LOBITS	(LJ_STRTAB_RESIZE - 1u)
+#define LJ_STRTAB_SWEEP		((MSize)0x40000000u)
+#define LJ_STRTAB_OWNER_MASK	(LJ_STRTAB_RESIZE|LJ_STRTAB_SWEEP)
+#define LJ_STRTAB_OWNER_LOBITS	(LJ_STRTAB_SWEEP - 1u)
 #define LJ_STRID_BLOCK		64u
 #define LJ_STRNUM_BLOCK		64u
+#define LJ_STR_SWEEP_GRACE_EPOCHS LJ_GC2_GRACE_EPOCHS
 
 #ifdef LJ_STR_TEST_HELPERS
 static uint32_t str_test_id_refills;
@@ -289,14 +293,21 @@ static void strtab_retire(global_State *g, StrTabHdr *hdr)
 static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
 {
   MSize state = la_load32_acq(&hdr->resize);
-  lj_assertX((state & LJ_STRTAB_RESIZE_LOBITS) == 0,
+  lj_assertX((state & LJ_STRTAB_OWNER_LOBITS) == 0 &&
+	     (state & ~(MSize)LJ_STRTAB_OWNER_MASK) == 0,
 	     "stale string table reader-count bits");
   return state;
 }
 
 static LJ_AINLINE int strtab_resizing(StrTabHdr *hdr)
 {
-  return strtab_resize_acq(hdr) != 0;
+  /* Sweep mutates links with exact CASes, so ordinary interners keep running. */
+  return (strtab_resize_acq(hdr) & LJ_STRTAB_RESIZE) != 0;
+}
+
+static LJ_AINLINE int strtab_sweeping(StrTabHdr *hdr)
+{
+  return (strtab_resize_acq(hdr) & LJ_STRTAB_SWEEP) != 0;
 }
 
 static void strtab_active_enter(TGState *tg, StrTabHdr *hdr)
@@ -304,6 +315,7 @@ static void strtab_active_enter(TGState *tg, StrTabHdr *hdr)
   uint32_t depth = lj_tg_strtab_active_depth_acq(tg);
   if (depth == 0) {
     lj_tg_strtab_active_hdr_rel(tg, hdr);
+    lj_tg_strtab_active_epoch_rel(tg, gc2_hs_epoch_acq(tg->gl));
   } else {
     lj_assertX(lj_tg_strtab_active_hdr_acq(tg) == hdr,
 	       "nested string-table enter changed header");
@@ -359,21 +371,49 @@ static int strtab_active_on_hdr(global_State *g, StrTabHdr *hdr)
   return 0;
 }
 
+static LJ_AINLINE int strtab_active_on_tg_before(global_State *g,
+						 TGState *tg, StrTabHdr *hdr,
+						 uint64_t epoch)
+{
+  return strtab_active_on_tg(g, tg, hdr) &&
+    lj_tg_strtab_active_epoch_acq(tg) <= epoch;
+}
+
+static int strtab_active_on_hdr_before(global_State *g, StrTabHdr *hdr,
+					       uint64_t epoch)
+{
+  TGState *tg, *main_tg, *self;
+  int saw_main = 0, saw_self = 0;
+  main_tg = g->main_tg;
+  self = lj_thr_get_tg();
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (tg == main_tg)
+      saw_main = 1;
+    if (tg == self)
+      saw_self = 1;
+    if (strtab_active_on_tg_before(g, tg, hdr, epoch))
+      return 1;
+  }
+  if (!saw_main && strtab_active_on_tg_before(g, main_tg, hdr, epoch))
+    return 1;
+  if (!saw_self && self != main_tg &&
+      strtab_active_on_tg_before(g, self, hdr, epoch))
+    return 1;
+  return 0;
+}
+
 static int strtab_claim(lua_State *L, StrTabHdr *hdr)
 {
   global_State *g = G(L);
-  for (;;) {
-    MSize expect = 0;
-    if (strtab_resize_acq(hdr) != 0)
-      return 0;
-    if (la_cas32(&hdr->resize, &expect, LJ_STRTAB_RESIZE,
-		 LA_ACQ_REL, LA_ACQ))
-      break;
-    lj_assertX((expect & LJ_STRTAB_RESIZE_LOBITS) == 0,
+  MSize expect = 0;
+  /* Resize and secondary rehash never wait behind either destructive owner. */
+  if (strtab_resize_acq(hdr) != 0 ||
+      !la_cas32(&hdr->resize, &expect, LJ_STRTAB_RESIZE,
+		LA_ACQ_REL, LA_ACQ)) {
+    lj_assertX((expect & LJ_STRTAB_OWNER_LOBITS) == 0 &&
+	       (expect & ~(MSize)LJ_STRTAB_OWNER_MASK) == 0,
 	       "stale string table reader-count bits");
-    if (expect != 0)
-      return 0;
-    strtab_wait(L);
+    return 0;
   }
   while (strtab_active_on_hdr(g, hdr))
     strtab_wait(L);
@@ -387,12 +427,15 @@ static void strtab_release(StrTabHdr *hdr)
 
 int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr)
 {
+  MSize expect = 0;
   /*
-  ** String sweep rewrites bucket links and frees dead string bodies.
-  ** Reuse the string-table resize claim so lockless interners cannot enter the
-  ** header while a bucket is being destructively swept.
+  ** Sweep owns stable bucket topology against resize/secondary rehash, but it
+  ** never excludes or drains ordinary interners. All shared-link changes use
+  ** exact CAS and body reclamation is deferred to a later grace period.
   */
-  if (!hdr || !strtab_claim(L, hdr))
+  if (!hdr || strtab_resize_acq(hdr) != 0 ||
+      !la_cas32(&hdr->resize, &expect, LJ_STRTAB_SWEEP,
+		LA_ACQ_REL, LA_ACQ))
     return 0;
   if (LJ_UNLIKELY(lj_str_tabh_acq(G(L)) != hdr)) {
     strtab_release(hdr);
@@ -404,6 +447,20 @@ int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr)
 void lj_str_sweep_release(StrTabHdr *hdr)
 {
   strtab_release(hdr);
+}
+
+static int strtab_gc2_claim(global_State *g, StrTabHdr *hdr)
+{
+  MSize expect = 0;
+  if (!g || !hdr || strtab_resize_acq(hdr) != 0 ||
+      !la_cas32(&hdr->resize, &expect, LJ_STRTAB_SWEEP,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  if (LJ_UNLIKELY(lj_str_tabh_acq(g) != hdr)) {
+    strtab_release(hdr);
+    return 0;
+  }
+  return 1;
 }
 
 static LJ_AINLINE void strtab_leave(lua_State *L, StrTabHdr *hdr)
@@ -506,13 +563,15 @@ restart:
 
   /* Reinsert all strings from the old table into the new table. */
   for (i = oldmask; i != ~(MSize)0; i--) {
-    GCobj *o = lj_str_hashhead_acq(&oldtab[i]);
-    while (o) {
-      GCobj *next = lj_str_next_acq(o);
+    uintptr_t oldlink = lj_str_link_load_acq(&oldtab[i]);
+    GCobj *o;
+    while ((o = lj_str_link_target(oldlink)) != NULL) {
+      uintptr_t nextlink = lj_str_next_link_acq(o);
+      uintptr_t dead = oldlink & LJ_STRHASH_DEAD;
       GCstr *s = gco2str(o);
       MSize hash = s->hash;
-#if LUAJIT_SECURITY_STRHASH
       uintptr_t u;
+#if LUAJIT_SECURITY_STRHASH
       if (LJ_LIKELY(!s->hashalg)) {  /* String hashed with primary hash. */
 	hash &= newmask;
 	u = lj_str_ref_load_acq(&newtab[hash]);
@@ -536,15 +595,16 @@ restart:
       }
       /* NOBARRIER: The string table is a GC root. */
       lj_str_next_store_rel(o, u);
-      lj_str_bucket_store_rel(&newtab[hash], o, u);
+      lj_str_bucket_store_rel(&newtab[hash], o,
+			      (u & LJ_STRHASH_SECONDARY) | dead);
 #else
       hash &= newmask;
       u = lj_str_ref_load_acq(&newtab[hash]);
       /* NOBARRIER: The string table is a GC root. */
       lj_str_next_store_rel(o, u);
-      lj_str_bucket_store_rel(&newtab[hash], o, 0);
+      lj_str_bucket_store_rel(&newtab[hash], o, dead);
 #endif
-      o = next;
+      oldlink = nextlink;
     }
   }
 
@@ -557,29 +617,30 @@ restart:
 
 #if LUAJIT_SECURITY_STRHASH
 /* Rehash and rechain all strings in a chain. */
-static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
-					      const char *str, MSize len)
+static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
 {
   global_State *g = G(L);
   int ow = g->gc.state == GCSsweepstring ? otherwhite(g) : 0;  /* Sweeping? */
   StrTabHdr *hdr = lj_str_tabh_acq(g);
   GCRef *strtab;
   MSize strmask;
+  uintptr_t oldlink;
   GCobj *o;
   if (!hdr || !strtab_claim(L, hdr))
-    return lj_str_new(L, str, len);
+    return 0;
   if (lj_str_tabh_acq(g) != hdr) {
     strtab_release(hdr);
-    return lj_str_new(L, str, len);
+    return 0;
   }
   strtab = hdr->bucket;
   strmask = hdr->mask;
-  o = lj_str_hashhead_acq(&strtab[hashc & strmask]);
+  oldlink = lj_str_link_load_acq(&strtab[hashc & strmask]);
   lj_str_ref_store_rel(&strtab[hashc & strmask], LJ_STRHASH_SECONDARY);
   lj_str_second_rel(g, 1);
-  while (o) {
+  while ((o = lj_str_link_target(oldlink)) != NULL) {
     uintptr_t u;
-    GCobj *next = lj_str_next_acq(o);
+    uintptr_t nextlink = lj_str_next_link_acq(o);
+    uintptr_t dead = oldlink & LJ_STRHASH_DEAD;
     GCstr *s = gco2str(o);
     StrHash hash;
     if (ow) {  /* Must sweep while rechaining. */
@@ -591,7 +652,7 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
 	lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		   "sweep of unlive string");
 	lj_str_free(g, s);
-	o = next;
+	oldlink = nextlink;
 	continue;
       }
     }
@@ -605,12 +666,12 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
     hash &= strmask;
     u = lj_str_ref_load_acq(&strtab[hash]);
     lj_str_next_store_rel(o, u);
-    lj_str_bucket_store_rel(&strtab[hash], o, u);
-    o = next;
+    lj_str_bucket_store_rel(&strtab[hash], o,
+			    (u & LJ_STRHASH_SECONDARY) | dead);
+    oldlink = nextlink;
   }
   strtab_release(hdr);
-  /* Try to insert the pending string again. */
-  return lj_str_new(L, str, len);
+  return 1;
 }
 #endif
 
@@ -638,17 +699,25 @@ static LJ_AINLINE int strtab_match_link(lua_State *L, GCRef *link,
 					GCobj *o, uintptr_t observed)
 {
   global_State *g = G(L);
+  uint32_t phase;
   uintptr_t current, want;
 
   /* A tagger or prepender may run after the matching bytes were inspected. */
   str_test_match(L, link, o, observed, LJ_STR_TEST_MATCH_AFTER_COMPARE);
-  if (!(observed & LJ_STRHASH_DEAD) &&
-      gc2_phase_acq(g) != LJ_GC2_SWEEP && !str_test_match_enabled())
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
+    (void)lj_gc2_markobj(g, o);
+  else if (phase == LJ_GC2_SWEEP)
+    (void)lj_gc2_preserve_sweep_root(g, o);
+  else if (!(observed & LJ_STRHASH_DEAD) && !str_test_match_enabled())
     return 1;  /* DEAD is only published by the sweep owner. */
+
+  /* Mark/preserve while the pinned edge still protects the body, then validate. */
   current = lj_str_link_load_acq(link);
   if (lj_str_link_target(current) != o)
     return 0;  /* The incoming edge moved: restart from the bucket head. */
-  if (!(current & LJ_STRHASH_DEAD))
+  if (!(current & LJ_STRHASH_DEAD) ||
+      (phase != LJ_GC2_SWEEP && !str_test_match_enabled()))
     return 1;
 
   want = current & ~(uintptr_t)LJ_STRHASH_DEAD;
@@ -657,9 +726,45 @@ static LJ_AINLINE int strtab_match_link(lua_State *L, GCRef *link,
   if (!lj_str_link_cas_acqrel(link, &current, want))
     return 0;  /* Rescue or unlink won: never follow a stale incoming edge. */
 
-  /* Clearing DEAD defeats unlink; preserve the exact body in the current phase. */
-  (void)lj_gc2_preserve_sweep_root(g, o);
+  lj_str_sweep_rescued_add(g, 1);
   return 1;
+}
+
+/* Preserve reachability before following a non-matching object's next link.
+** Without this, UNLINK could remove the predecessor and its successor while an
+** interner continued through the predecessor's now-stale next word, allowing a
+** later byte match to validate an edge which no longer belongs to the table. */
+static LJ_AINLINE int strtab_protect_walk_link(lua_State *L, GCRef *link,
+					       GCobj *o)
+{
+  global_State *g = G(L);
+  uint32_t phase = gc2_phase_acq(g);
+  uintptr_t current, want;
+  if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
+    (void)lj_gc2_markobj(g, o);
+  else if (phase == LJ_GC2_SWEEP)
+    (void)lj_gc2_preserve_sweep_root(g, o);
+  else
+    return 1;
+  current = lj_str_link_load_acq(link);
+  if (lj_str_link_target(current) != o)
+    return 0;
+  if (phase == LJ_GC2_SWEEP && (current & LJ_STRHASH_DEAD)) {
+    want = current & ~(uintptr_t)LJ_STRHASH_DEAD;
+    if (!lj_str_link_cas_acqrel(link, &current, want))
+      return 0;
+    lj_str_sweep_rescued_add(g, 1);
+  }
+  return 1;
+}
+
+static LJ_AINLINE void strtab_mark_before_publish(global_State *g, GCobj *o)
+{
+  uint32_t phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
+    (void)lj_gc2_markobj(g, o);
+  else if (phase == LJ_GC2_SWEEP)
+    (void)lj_gc2_preserve_sweep_root(g, o);
 }
 
 /* Intern a string and return string object. */
@@ -671,6 +776,9 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
     StrHash hash;
     GCstr *news = NULL;
     int hashalg = 0;
+#if LUAJIT_SECURITY_STRHASH
+    int skip_rehash = 0;
+#endif
     for (;;) {
       StrTabHdr *hdr = strtab_enter(L, g);
       GCRef *strtab;
@@ -718,15 +826,21 @@ retry_lookup:
 	  coll++;
 	}
 	coll++;
+	if (!strtab_protect_walk_link(L, link, o))
+	  goto retry_lookup;
 	link = lj_obj_gcwref(o);
       }
 #if LUAJIT_SECURITY_STRHASH
       /* Rehash chain if there are too many collisions. */
-      if (LJ_UNLIKELY(coll > LJ_STR_MAXCOLL) && !hashalg) {
-	strtab_leave(L, hdr);
-	if (news)
-	  lj_mem_free(g, news, lj_str_size(news->len));
-	return lj_str_rehash_chain(L, hash, str, len);
+      if (LJ_UNLIKELY(coll > LJ_STR_MAXCOLL) && !hashalg && !skip_rehash) {
+	if (strtab_sweeping(hdr)) {
+	  /* Keep this insertion nonrecursive while the CAS sweeper owns topology. */
+	  skip_rehash = 1;
+	} else {
+	  strtab_leave(L, hdr);
+	  skip_rehash = !lj_str_rehash_chain(L, hash);
+	  continue;
+	}
       }
 #endif
       if (news == NULL) {
@@ -754,8 +868,12 @@ retry_insert_lookup:
 	    lj_mem_free(g, news, lj_str_size(news->len));
 	    return sx;
 	  }
+	  if (!strtab_protect_walk_link(L, link, o))
+	    goto retry_insert_lookup;
 	  link = lj_obj_gcwref(o);
 	}
+	/* Allocation-black is the fallback; make sweep publication explicit. */
+	strtab_mark_before_publish(g, obj2gco(news));
 	lj_str_next_store_rel(obj2gco(news), headu);
 	want = (uintptr_t)news | (headu & LJ_STRHASH_SECONDARY);
 	u = headu;
@@ -803,6 +921,343 @@ void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
   lj_mem_free(g, s, lj_str_size(s->len));
 }
 
+/* -- GC2 intern-table string reclamation ------------------------------- */
+
+static LJ_AINLINE int str_sweep_target_live(global_State *g, GCobj *o)
+{
+  int marked = lj_gc2_ismarked(g, o);
+  if (marked != 0)  /* Invalid/retiring memory is retained conservatively. */
+    return 1;
+  return (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)) != 0;
+}
+
+static void str_body_retired_push(global_State *g, StrBodyRetire *ret)
+{
+  StrBodyRetire *head = lj_str_body_retired_head_acq(g);
+  do {
+    lj_str_body_retired_next_rel(ret, head);
+  } while (!lj_str_body_retired_head_cas(g, &head, ret));
+}
+
+static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
+					   StrTabHdr *hdr)
+{
+  TGState *tg = lj_thr_get_tg();
+  StrBodyRetire *ret;
+  if (!g || !s || !hdr || !tg || tg->gl != g ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return NULL;
+  /*
+  ** A parked worker has no borrowable Lua stack. Allocate this tiny ownership
+  ** record from its own TG-local plain arena, so failure is non-throwing and no
+  ** shared allocator cursor is touched. Dead worker arenas are transferred to
+  ** the main TG before their TG registry node can be reclaimed.
+  */
+  ret = (StrBodyRetire *)lj_arena_allocd_alloc(&tg->allocd,
+					       sizeof(*ret), 0);
+  if (!ret)
+    return NULL;
+  lj_assertG(checkptrGC(ret),
+	     "string retirement record outside required address range");
+  ret->next = NULL;
+  ret->str = s;
+  ret->hdr = hdr;
+  ret->retire_epoch = 0;
+  ret->size = lj_str_size(s->len);
+  lj_gc_total_add(g, sizeof(*ret));
+  lj_gc2_account_alloc(g, tg, sizeof(*ret));
+  return ret;
+}
+
+static void str_sweep_cursor_start(global_State *g, StrTabHdr *hdr,
+				   uint32_t phase)
+{
+  lj_str_sweep_bucket_rel(g, 0);
+  lj_str_sweep_link_rel(g, &hdr->bucket[0]);
+  lj_str_sweep_phase_rel(g, phase);
+}
+
+static uint32_t str_sweep_finish_tag(global_State *g)
+{
+  lj_str_sweep_link_rel(g, NULL);
+  lj_str_sweep_grace_epoch_rel(g, lj_gc2_retire_epoch(g));
+  lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_TAG_GRACE);
+  gc2_sweep_grace_needed_rel(g, 1);
+  return 1;
+}
+
+static uint32_t str_sweep_finish_unlink(global_State *g, StrTabHdr *hdr)
+{
+  lj_str_sweep_link_rel(g, NULL);
+  lj_str_sweep_grace_epoch_rel(g, lj_gc2_retire_epoch(g));
+  lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_UNLINK_GRACE);
+  /* Resize may proceed during the post-unlink body grace. */
+  strtab_release(hdr);
+  lj_str_sweep_hdr_rel(g, NULL);
+  gc2_sweep_grace_needed_rel(g, 1);
+  return 1;
+}
+
+static uint32_t str_sweep_advance_bucket(global_State *g, StrTabHdr *hdr,
+					 uint32_t phase)
+{
+  MSize bucket = lj_str_sweep_bucket_acq(g);
+  if (bucket >= hdr->mask)
+    return phase == LJ_STR_SWEEP_TAG ? str_sweep_finish_tag(g) :
+	   str_sweep_finish_unlink(g, hdr);
+  bucket++;
+  lj_str_sweep_bucket_rel(g, bucket);
+  lj_str_sweep_link_rel(g, &hdr->bucket[bucket]);
+  return 1;
+}
+
+static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
+{
+  GCRef *link = lj_str_sweep_link_acq(g);
+  uintptr_t u, want, current;
+  GCobj *o;
+  if (!link)
+    return str_sweep_finish_tag(g);
+  u = lj_str_link_load_acq(link);
+  o = lj_str_link_target(u);
+  if (!o)
+    return str_sweep_advance_bucket(g, hdr, LJ_STR_SWEEP_TAG);
+
+  if (str_sweep_target_live(g, o)) {
+    if (u & LJ_STRHASH_DEAD) {
+      current = u;
+      want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
+      if (!lj_str_link_cas_acqrel(link, &current, want))
+	return 1;
+    }
+    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    return 1;
+  }
+
+  if (!(u & LJ_STRHASH_DEAD)) {
+    current = u;
+    want = u | LJ_STRHASH_DEAD;
+    if (!lj_str_link_cas_acqrel(link, &current, want))
+      return 1;  /* A prepend moved this incoming edge: retry it. */
+    lj_str_sweep_tagged_add(g, 1);
+    u = want;
+    /* A late root can race the tag CAS. Never leave it for unlink unchecked. */
+    if (str_sweep_target_live(g, o)) {
+      current = u;
+      want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
+      (void)lj_str_link_cas_acqrel(link, &current, want);
+    }
+  }
+  /* UNLINK restarts at every bucket head, so a later prepend cannot be missed. */
+  lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+  return 1;
+}
+
+static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
+{
+  GCRef *link = lj_str_sweep_link_acq(g);
+  uintptr_t u, current, want, next;
+  StrBodyRetire *ret;
+  GCobj *o;
+  if (!link)
+    return str_sweep_finish_unlink(g, hdr);
+  u = lj_str_link_load_acq(link);
+  o = lj_str_link_target(u);
+  if (!o)
+    return str_sweep_advance_bucket(g, hdr, LJ_STR_SWEEP_UNLINK);
+  if (!(u & LJ_STRHASH_DEAD)) {
+    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    return 1;
+  }
+
+  /* A rescued/fixed/invalid target wins over an earlier tag observation. */
+  if (str_sweep_target_live(g, o)) {
+    current = u;
+    want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
+    if (!lj_str_link_cas_acqrel(link, &current, want))
+      return 1;
+    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    return 1;
+  }
+
+  ret = str_body_retire_new(g, gco2str(o), hdr);
+  if (!ret) {
+    /* Metadata OOM retains canonical identity and retries in a later cycle. */
+    current = u;
+    want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
+    if (!lj_str_link_cas_acqrel(link, &current, want))
+      return 1;
+    lj_str_sweep_link_rel(g, lj_obj_gcwref(o));
+    return 1;
+  }
+
+  /* Publish the fully initialized side owner before the unlink linearization. */
+  lj_str_sweep_pending_rel(g, ret);
+  next = lj_str_next_link_acq(o);
+  want = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
+	 (u & LJ_STRHASH_SECONDARY);
+  current = u;
+  if (!lj_str_link_cas_acqrel(link, &current, want)) {
+    lj_str_sweep_pending_rel(g, NULL);
+    lj_mem_free(g, ret, sizeof(*ret));
+    return 1;
+  }
+
+  lj_str_body_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
+  str_body_retired_push(g, ret);
+  lj_str_sweep_pending_rel(g, NULL);
+  lj_str_sweep_unlinked_add(g, 1);
+  /* Stay on the exact incoming edge: it now names the successor. */
+  return 1;
+}
+
+static LJ_AINLINE int str_sweep_grace_complete(global_State *g)
+{
+  uint64_t start = lj_str_sweep_grace_epoch_acq(g);
+  uint64_t now = lj_gc2_retire_epoch(g);
+  return now >= start && now - start >= LJ_STR_SWEEP_GRACE_EPOCHS;
+}
+
+void lj_str_gc2_sweep_begin(global_State *g, int major)
+{
+  if (!g)
+    return;
+  if (lj_str_sweep_phase_acq(g) != LJ_STR_SWEEP_IDLE)
+    lj_str_gc2_sweep_abort(g);
+  lj_str_sweep_hdr_rel(g, NULL);
+  lj_str_sweep_link_rel(g, NULL);
+  lj_str_sweep_pending_rel(g, NULL);
+  lj_str_sweep_bucket_rel(g, 0);
+  lj_str_sweep_grace_epoch_rel(g, 0);
+  la_store32_rel(&g->str.sweep_cycle, gc2_cycle_acq(g));
+  major = major && LJ_GC2_STRING_BODY_RECLAIM;
+  lj_str_sweep_phase_rel(g, major ? LJ_STR_SWEEP_ACQUIRE :
+					 LJ_STR_SWEEP_DONE);
+}
+
+int lj_str_gc2_sweep_pending(global_State *g)
+{
+  uint32_t phase;
+  if (!g)
+    return 0;
+  phase = lj_str_sweep_phase_acq(g);
+  return phase != LJ_STR_SWEEP_IDLE && phase != LJ_STR_SWEEP_DONE;
+}
+
+uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
+{
+  uint32_t phase, n = 0;
+  StrTabHdr *hdr;
+  if (!g || limit == 0 || gc2_phase_acq(g) != LJ_GC2_SWEEP)
+    return 0;
+  while (n < limit) {
+    phase = lj_str_sweep_phase_acq(g);
+    if (phase == LJ_STR_SWEEP_IDLE || phase == LJ_STR_SWEEP_DONE)
+      break;
+    if (phase == LJ_STR_SWEEP_ACQUIRE) {
+      hdr = lj_str_tabh_acq(g);
+      if (!hdr) {
+	lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+	n++;
+	continue;
+      }
+      if (!strtab_gc2_claim(g, hdr)) {
+	/* Failed claims are retry work, not a reason to park forever. */
+	n++;
+	continue;
+      }
+      lj_str_sweep_hdr_rel(g, hdr);
+      str_sweep_cursor_start(g, hdr, LJ_STR_SWEEP_TAG);
+      n++;
+      continue;
+    }
+    hdr = lj_str_sweep_hdr_acq(g);
+    if (phase == LJ_STR_SWEEP_TAG) {
+      if (LJ_UNLIKELY(!hdr || lj_str_tabh_acq(g) != hdr)) {
+	lj_str_gc2_sweep_abort(g);
+	break;
+      }
+      n += str_sweep_tag_one(g, hdr);
+      continue;
+    }
+    if (phase == LJ_STR_SWEEP_TAG_GRACE) {
+      if (gc2_sweep_grace_needed_acq(g))
+	break;
+      if (!str_sweep_grace_complete(g)) {
+	gc2_sweep_grace_needed_rel(g, 1);
+	n++;
+	continue;
+      }
+      /* Handshake ACKs may be remote while native code still holds a table
+      ** pin. Only pre-tag readers must drain; newer readers see the published
+      ** tags and protect every traversed incoming edge before following it. */
+      if (strtab_active_on_hdr_before(g, hdr,
+	    lj_str_sweep_grace_epoch_acq(g))) {
+	(void)lj_thr_retry_yield(NULL);
+	n++;
+	continue;
+      }
+      str_sweep_cursor_start(g, hdr, LJ_STR_SWEEP_UNLINK);
+      n++;
+      continue;
+    }
+    if (phase == LJ_STR_SWEEP_UNLINK) {
+      if (LJ_UNLIKELY(!hdr || lj_str_tabh_acq(g) != hdr)) {
+	lj_str_gc2_sweep_abort(g);
+	break;
+      }
+      n += str_sweep_unlink_one(g, hdr);
+      continue;
+    }
+    if (phase == LJ_STR_SWEEP_UNLINK_GRACE) {
+      if (gc2_sweep_grace_needed_acq(g))
+	break;
+      if (!str_sweep_grace_complete(g)) {
+	gc2_sweep_grace_needed_rel(g, 1);
+	n++;
+	continue;
+      }
+      lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+      n++;
+      continue;
+    }
+    lj_assertG(0, "bad GC2 string sweep phase");
+    lj_str_gc2_sweep_abort(g);
+    break;
+  }
+  return n;
+}
+
+void lj_str_gc2_sweep_abort(global_State *g)
+{
+  StrBodyRetire *pending;
+  StrTabHdr *hdr;
+  if (!g)
+    return;
+  hdr = lj_str_sweep_hdr_acq(g);
+  if (hdr && (strtab_resize_acq(hdr) & LJ_STRTAB_SWEEP))
+    strtab_release(hdr);
+  lj_str_sweep_hdr_rel(g, NULL);
+  lj_str_sweep_link_rel(g, NULL);
+  pending = lj_str_sweep_pending_acq(g);
+  lj_str_sweep_pending_rel(g, NULL);
+  if (pending && lj_gc2_mem_registered(g, pending))
+    lj_mem_free(g, pending, sizeof(*pending));
+  lj_str_sweep_bucket_rel(g, 0);
+  lj_str_sweep_grace_epoch_rel(g, 0);
+  lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_IDLE);
+}
+
+void lj_str_gc2_sweep_finish(global_State *g)
+{
+  if (!g)
+    return;
+  lj_assertG(lj_str_sweep_phase_acq(g) == LJ_STR_SWEEP_DONE,
+	     "unfinished string sweep reached GC2 close");
+  lj_str_gc2_sweep_abort(g);
+}
+
 void LJ_FASTCALL lj_str_init(lua_State *L)
 {
   global_State *g = G(L);
@@ -812,10 +1267,36 @@ void LJ_FASTCALL lj_str_init(lua_State *L)
 
 uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
+  StrBodyRetire *ret;
   StrTabHdr *hdr;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
+  /* Body records are processed before header records. A deferred current-header
+  ** body still needs that generation name for the active-pin check below. */
+  ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
+  while (ret && lj_gc2_mem_registered(g, ret)) {
+    StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
+    uint64_t retire_epoch = lj_str_body_retired_epoch_acq(ret);
+    StrTabHdr *rethdr = lj_str_body_retired_hdr_acq(ret);
+    int old_enough = completed_epoch >= retire_epoch &&
+	completed_epoch - retire_epoch >= LJ_STR_SWEEP_GRACE_EPOCHS;
+    lj_str_body_retired_next_rel(ret, NULL);
+    if (old_enough &&
+	(lj_str_tabh_acq(g) != rethdr || !strtab_active_on_hdr(g, rethdr))) {
+      GCstr *s = lj_str_body_retired_str_acq(ret);
+      if (s && lj_gc2_mem_registered(g, s) &&
+	  la_load8_acq(&s->gct) == (uint8_t)~LJ_TSTR) {
+	lj_str_free(g, s);
+	lj_str_sweep_reclaimed_add(g, 1);
+      }
+      lj_mem_free(g, ret, sizeof(*ret));
+      reclaimed++;
+    } else {
+      str_body_retired_push(g, ret);
+    }
+    ret = next;
+  }
   hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
   while (hdr && lj_gc2_mem_registered(g, hdr)) {
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
@@ -830,6 +1311,61 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
   }
   return reclaimed;
 }
+
+void lj_str_free_retired_bodies(global_State *g)
+{
+  StrBodyRetire *ret, *pending;
+  if (!g)
+    return;
+  /* Workers are stopped before the terminal GC2 drain, so an unlink CAS cannot
+  ** still be between its discoverable pending slot and retired-list publish. */
+  pending = lj_str_sweep_pending_acq(g);
+  lj_str_sweep_pending_rel(g, NULL);
+  if (pending && lj_gc2_mem_registered(g, pending))
+    lj_mem_free(g, pending, sizeof(*pending));
+  ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
+  while (ret && lj_gc2_mem_registered(g, ret)) {
+    StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
+    GCstr *s = lj_str_body_retired_str_acq(ret);
+    if (s && lj_gc2_mem_registered(g, s) &&
+	la_load8_acq(&s->gct) == (uint8_t)~LJ_TSTR)
+      lj_str_free(g, s);
+    lj_mem_free(g, ret, sizeof(*ret));
+    ret = next;
+  }
+}
+
+#ifdef LJ_STR_TEST_HELPERS
+void lj_str_test_reset_sweep_counters(global_State *g)
+{
+  if (!g)
+    return;
+  la_store64_rlx(&g->str.sweep_tagged, 0);
+  la_store64_rlx(&g->str.sweep_rescued, 0);
+  la_store64_rlx(&g->str.sweep_unlinked, 0);
+  la_store64_rlx(&g->str.sweep_reclaimed, 0);
+}
+
+void lj_str_test_sweep_snapshot(global_State *g,
+				LJStrTestSweepSnapshot *snapshot)
+{
+  uint64_t unlinked, reclaimed;
+  if (!snapshot)
+    return;
+  memset(snapshot, 0, sizeof(*snapshot));
+  if (!g)
+    return;
+  unlinked = la_load64_acq(&g->str.sweep_unlinked);
+  reclaimed = la_load64_acq(&g->str.sweep_reclaimed);
+  snapshot->tagged = la_load64_acq(&g->str.sweep_tagged);
+  snapshot->rescued = la_load64_acq(&g->str.sweep_rescued);
+  snapshot->unlinked = unlinked;
+  snapshot->reclaimed = reclaimed;
+  snapshot->retired = unlinked >= reclaimed ? unlinked - reclaimed : 0;
+  snapshot->phase = lj_str_sweep_phase_acq(g);
+  snapshot->pending = (uint32_t)lj_str_gc2_sweep_pending(g);
+}
+#endif
 
 void lj_str_freetab(global_State *g)
 {

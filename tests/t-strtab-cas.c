@@ -20,7 +20,8 @@
 #include "lj_thr.h"
 
 #define TEST_STRTAB_RESIZE	((MSize)0x80000000u)
-#define TEST_STRTAB_RESIZE_LOBITS	(TEST_STRTAB_RESIZE - 1u)
+#define TEST_STRTAB_SWEEP	((MSize)0x40000000u)
+#define TEST_STRTAB_OWNER_LOBITS	(TEST_STRTAB_SWEEP - 1u)
 
 typedef struct ActiveReleaseCtx {
   TGState *tg;
@@ -225,8 +226,9 @@ static void exercise_tagged_link_protocol(lua_State *L)
 static MSize assert_resize_state(StrTabHdr *hdr)
 {
   MSize state = la_load32_acq(&hdr->resize);
-  assert((state & TEST_STRTAB_RESIZE_LOBITS) == 0);
-  assert(state == 0 || state == TEST_STRTAB_RESIZE);
+  assert((state & TEST_STRTAB_OWNER_LOBITS) == 0);
+  assert(state == 0 || state == TEST_STRTAB_RESIZE ||
+	 state == TEST_STRTAB_SWEEP);
   return state;
 }
 
@@ -238,6 +240,11 @@ static void assert_resize_idle(StrTabHdr *hdr)
 static void assert_resize_claimed(StrTabHdr *hdr)
 {
   assert(assert_resize_state(hdr) == TEST_STRTAB_RESIZE);
+}
+
+static void assert_sweep_claimed(StrTabHdr *hdr)
+{
+  assert(assert_resize_state(hdr) == TEST_STRTAB_SWEEP);
 }
 
 static int cmp_strid(const void *a, const void *b)
@@ -347,7 +354,7 @@ static void *release_active_after_claim(void *arg)
   ActiveReleaseCtx *ctx = (ActiveReleaseCtx *)arg;
   while (assert_resize_state(ctx->hdr) == 0)
     (void)lj_thr_sleep_ns(NULL, 100000);
-  assert_resize_claimed(ctx->hdr);
+  assert(assert_resize_state(ctx->hdr) != 0);
   la_store32_rel(&ctx->claimed, 1);
   if (ctx->delay_ns > 0)
     (void)lj_thr_sleep_ns(NULL, ctx->delay_ns);
@@ -534,7 +541,7 @@ int main(void)
   assert(la_load32_acq(&ctx.cleared) != 0);
   assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
   assert(lj_tg_strtab_active_depth_acq(tg) == 0);
-  assert_resize_claimed(hdr);
+  assert_sweep_claimed(hdr);
   lj_str_sweep_release(hdr);
   assert_resize_idle(hdr);
 

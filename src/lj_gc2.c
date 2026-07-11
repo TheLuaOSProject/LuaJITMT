@@ -425,8 +425,6 @@ void lj_gc2_init(global_State *g)
   gc2_remembered_filtered_store_rlx(g, 0);
   gc2_remembered_drained_store_rlx(g, 0);
   gc2_marks_this_round_store_rlx(g, 0);
-  gc2_fixedstr_scan_cycle_store_rlx(g, ~(uint32_t)0);
-  gc2_fixedstr_scan_hdr_store_rlx(g, NULL);
   gc2_ssb_head_store_rlx(g, NULL);
   gc2_ssb_published_store_rlx(g, 0);
   gc2_ssb_drained_store_rlx(g, 0);
@@ -2101,16 +2099,7 @@ static void gc2_mark_begin(global_State *g)
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
   if (tg != NULL && !gc2_tg_list_contains(g, tg))
     lj_tg_attach(g, tg);
-  {
-    uint32_t cycle = gc2_cycle_inc_acqrel(g);
-    /*
-    ** Fixed strings are discovered once per cycle and string-table header. Reset
-    ** the cache after the cycle increment so cycle-number reuse never inherits a
-    ** stale completed scan record.
-    */
-    gc2_fixedstr_scan_hdr_store_rlx(g, NULL);
-    gc2_fixedstr_scan_cycle_store_rlx(g, cycle - 1u);
-  }
+  (void)gc2_cycle_inc_acqrel(g);
   if (leader)
     gc2_cycle_starts_add(g, 1);
   gc2_marks_this_round_store_rlx(g, 0);
@@ -2340,6 +2329,10 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
   gc2_sweep_root_cursor_rel(g, lj_gc_root_ref(g));
   gc2_sweep_root_done_rel(g, 0);
   gc2_sweep_grace_needed_rel(g, 0);
+  /* String identity reclamation is major-only until it has its own birth
+  ** generation cutoff.  Publish pending work now, but the string subsystem
+  ** does not claim or tag the header until the semantic bridge is ready. */
+  lj_str_gc2_sweep_begin(g, gc2_cycle_sweep_minor_acq(g) == 0);
   gc2_weak_to_sweep_add(g, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
 		   (gc2_cycle_sweep_minor_acq(g) ?
@@ -3257,6 +3250,8 @@ int lj_gc2_sweep_pending(global_State *g)
   TGState *tg;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
+  if (lj_str_gc2_sweep_pending(g))
+    return 1;
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
@@ -3481,7 +3476,7 @@ uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
   }
   if (gc2_sweep_grace_needed_acq(g)) {
     uint32_t grace;
-    for (grace = 0; grace < LJ_FLUSH_EPOCHS; grace++)
+    for (grace = 0; grace < LJ_GC2_GRACE_EPOCHS; grace++)
       (void)lj_gc2_handshake(g,
 	LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
     if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
@@ -3628,6 +3623,7 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
     }
     (void)lj_gc2_handshake(g, LJ_GC2_HS_RESTORE_ALLOC);
   }
+  lj_str_gc2_sweep_abort(g);
   gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   gc2_sweep_bridge_ready_rel(g, 0);
   /*
@@ -3695,6 +3691,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   }
   gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   (void)gc2_flush_and_drain_ssb(g);
+  lj_str_gc2_sweep_finish(g);
   live = lj_gc2_sweep_live_aggregate(g);
   lj_gc2_update_minor_survival_policy(g, live);
   gc2_update_public_minor_gates(g);
@@ -3757,6 +3754,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
     live = lj_gc2_sweep_live_aggregate(g);
     lj_gc2_update_minor_survival_policy(g, live);
   }
+  lj_str_gc2_sweep_abort(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
     gc2_sweep_to_idle_add(g, 1);
@@ -4337,37 +4335,6 @@ static void gc2_mark_upval_payload_tv(global_State *g, cTValue *tv)
     return;
   }
   gc2_mark_thread_root_tv(g, tv);
-}
-
-static void gc2_mark_fixedstr(global_State *g)
-{
-  MSize i;
-  StrTabHdr *hdr;
-  GCRef *strtab;
-  uint32_t cycle;
-  hdr = lj_str_tabh_acq(g);
-  if (!hdr)
-    return;
-  cycle = gc2_cycle_acq(g);
-  if (gc2_fixedstr_scan_cycle_acq(g) == cycle &&
-      gc2_fixedstr_scan_hdr_acq(g) == hdr)
-    return;
-  strtab = hdr->bucket;
-  for (i = 0; i <= hdr->mask; i++) {
-    GCobj *o;
-    for (o = lj_str_hashhead_acq(&strtab[i]); o != NULL;
-	 o = lj_str_next_acq(o))
-      if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
-	lj_gc2_markobj(g, o);
-  }
-  /*
-  ** Fixed strings are immutable roots. A GC2 cycle only needs one full table
-  ** discovery pass for a stable string table header; fixstring(g, s) marks any
-  ** later fixed string at creation time, and a resize changes hdr and triggers
-  ** another pass for the new bucket array.
-  */
-  gc2_fixedstr_scan_hdr_rel(g, hdr);
-  gc2_fixedstr_scan_cycle_rel(g, cycle);
 }
 
 static BCReg gc2_live_local_topslot(GCproto *pt, const BCIns *ip)
@@ -5485,7 +5452,6 @@ static void gc2_scan_global_roots(global_State *g)
   }
   gc2_scan_pending_roots(g);
   gc2_scan_threading_states(g);
-  gc2_mark_fixedstr(g);
   gc2_mark_strtab_mem(g);
   gc2_mark_tab_retired_mem(g);
 #if LJ_64
@@ -10702,7 +10668,6 @@ void lj_gc2_trace_sweep_roots(global_State *g)
   */
   gc2_scan_pending_roots(g);
   gc2_scan_threading_states(g);
-  gc2_mark_fixedstr(g);
   gc2_mark_strtab_mem(g);
   gc2_mark_tab_retired_mem(g);
 #if LJ_64
@@ -10796,12 +10761,17 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
     ** worker token prevents a second retire producer, so clearing the latch
     ** afterward proves all currently quarantined gcw/raw readers crossed a
     ** complete epoch. The next worker pass drains roots published by the ACK. */
-    for (grace = 0; grace < LJ_FLUSH_EPOCHS; grace++)
+    for (grace = 0; grace < LJ_GC2_GRACE_EPOCHS; grace++)
       (void)lj_gc2_handshake(g,
 	LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
     if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
       gc2_sweep_grace_needed_rel(g, 0);
     return 1;
+  }
+  if (gc2_sweep_bridge_ready_acq(g)) {
+    uint32_t strings = lj_str_gc2_sweep_step(g, limit);
+    if (strings)
+      return strings;
   }
   for (tg = gc2_tg_list_acq(g);
        tg != NULL && n < limit;
