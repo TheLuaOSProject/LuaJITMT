@@ -46,6 +46,15 @@ static void assert_late_attach_color(global_State *g, TGState *tg,
   lj_tg_fini_thread(g, late_tg);
 }
 
+static void close_weak_for_sweep(lua_State *L, global_State *g)
+{
+  int complete = 0, i;
+  for (i = 0; i < 128 && !complete; i++)
+    complete = lj_gc2_weak_complete(g, L, NULL,
+				    LJ_GC2_WEAK_DRAIN_BATCH);
+  assert(complete);
+}
+
 static int root_contains(global_State *g, GCobj *target)
 {
   GCobj *o;
@@ -284,6 +293,8 @@ static void test_vm_generational_table_store_remembered(lua_State *L,
   minor_requests0 = gc2_minor_cycle_requests_acq(g);
   minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_mark_begin(g);
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_major_cycle_starts_acq(g) == major_starts0);
   assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
@@ -400,6 +411,8 @@ static void test_jit_generational_table_store_remembered(lua_State *L,
   minor_requests0 = gc2_minor_cycle_requests_acq(g);
   minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_mark_begin(g);
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_major_cycle_starts_acq(g) == major_starts0);
   assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
@@ -631,6 +644,7 @@ int main(void)
   lj_gc2_mark_to_weak(g);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_WEAK);
   assert_late_attach_color(g, tg, &late_tg, 7002u, 1, 1);
+  close_weak_for_sweep(L, g);
   lj_gc2_weak_to_sweep(g, L);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(tg->alloc.alloc_black == 0);
@@ -646,6 +660,7 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 0);
   lj_gc2_mark_to_weak(g);
+  close_weak_for_sweep(L, g);
   lj_gc2_weak_to_sweep(g, L);
   assert(lj_gc2_test_sweep_owner_progress(g, tg, 64) == 0);
   /*
@@ -731,6 +746,8 @@ int main(void)
   minor_requests0 = gc2_minor_cycle_requests_acq(g);
   minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_mark_begin(g);
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_major_cycle_starts_acq(g) == major_starts0);
   assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
@@ -750,6 +767,10 @@ int main(void)
   /* Internal remembered tests avoid allocation-triggered major cycles. */
   la_store32_rel(&g->gc2.force_major, 0);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
+  /* Meta-store resolution may allocate. Keep this white-box IDLE remembered
+  ** sequence from running a complete automatic minor cycle between its exact
+  ** filtering counter snapshots. */
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
   lua_createtable(L, 1, 0);
   parent = tabV(L->top - 1);
   lua_newtable(L);
@@ -778,17 +799,18 @@ int main(void)
   /*
   ** Direct meta stores use the same public table-store publication route as
   ** VM fallback stores: the owner is remembered once, and the helper also
-  ** observes two already-old edges while resolving/publishing the slot.
+  ** observes the already-old source through the temporary-root, weak-value,
+  ** and final pair routes while resolving/publishing the slot.
   */
   settabV(L, &vals[1], grandchild);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
   assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
-  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0 + 2u);
+  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0 + 3u);
   assert(active_ssb_last(tg) == obj2gco(parent));
   settabV(L, &vals[1], child);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
   assert(gc2_remembered_filtered_acq(g) ==
-	 remembered_filtered0 + 4u);
+	 remembered_filtered0 + 6u);
   assert(gc2_remembered_pushed_acq(g) ==
 	 remembered_pushed0 + 2u);
   assert(active_ssb_last(tg) == obj2gco(parent));
@@ -859,6 +881,8 @@ int main(void)
   minor_requests0 = gc2_minor_cycle_requests_acq(g);
   minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_mark_begin(g);
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_major_cycle_starts_acq(g) == major_starts0);
   assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);

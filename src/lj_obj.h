@@ -603,7 +603,7 @@ typedef struct GC2FinRegUDataNode {
 typedef struct GCtab {
   GCHeader;
   uint8_t nomm;		/* Negative cache for fast metamethods. */
-  int8_t colo;		/* Array colocation, or 0x80 for arena-owned empty TNEW. */
+  int8_t colo;		/* Colocated-array size; high bit means it was split. */
   MRef array;		/* Array part. */
   GCRef gclist;
   GCRef metatable;	/* Must be at same offset in GCudata. */
@@ -636,9 +636,15 @@ static LJ_AINLINE void lj_tab_colo_rel(GCtab *t, int8_t colo)
   la_store8_rel((uint8_t *)&t->colo, (uint8_t)colo);
 }
 
+#define LJ_TAB_COLO_MASK	0x7fu
+
 static LJ_AINLINE MSize lj_tab_colo_size(const GCtab *t)
 {
-  return (MSize)la_load8_acq((const uint8_t *)&t->colo);
+  /* Resizing preserves the original inline allocation size in the low bits
+  ** and sets the sign bit once table indexing moves to a separated array.
+  ** Physical-size and GC validation consumers must ignore that state bit. */
+  return (MSize)(la_load8_acq((const uint8_t *)&t->colo) &
+		 LJ_TAB_COLO_MASK);
 }
 
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
@@ -1351,6 +1357,8 @@ typedef struct GC2State {
 	  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
 	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
 	  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
+  GC2SSBNode *ssb_drain;  /* Worker-private detached remainder. */
+  uint32_t ssb_consumer_active;  /* Consumers with a locally detached chain. */
   uint32_t ssb_published;  /* Published SSB node count. */
   uint32_t ssb_drained;	/* Drained/recycled SSB node count. */
   uint64_t ssb_items_published;  /* Published SSB entries. */
@@ -1439,6 +1447,7 @@ typedef struct GC2State {
   uint32_t weak_drain_active;  /* Cursor-reserved weak clears in flight. */
   uint32_t weak_write_active;  /* Mutator weak-table stores in flight. */
   uint32_t weak_mark_closed;  /* WEAK root/SSB/grey closure before clears. */
+  uint32_t weak_root_scanned;  /* Close owns one completed root snapshot. */
   uint64_t weak_count;	/* Weak discovery slots reserved this cycle. */
   uint64_t weak_tables_seen;  /* Weak table traversals found by GC2. */
   uint64_t weak_tables_weakkey;  /* Weak-key table traversals. */
@@ -1520,6 +1529,7 @@ typedef struct GC2State {
   uint64_t weak_values_marked;  /* P_WEAK write barriers marking values. */
   TGState *tg_list;	/* Registered per-thread state blocks. */
   uint32_t n_threads;	/* Number of registered TG blocks. */
+  uint32_t tg_reclaiming;  /* Try-only dead-TG registry writer gate. */
 } GC2State;
 #if LJ_HASJIT
 typedef struct jit_State jit_State;
@@ -1771,6 +1781,12 @@ static LJ_AINLINE uint32_t mt_entering_acq(global_State *g)
 static LJ_AINLINE uint32_t mt_entering_add_rlx(global_State *g, uint32_t n)
 {
   return la_add32_rlx(&g->mt_entering, n);
+}
+
+static LJ_AINLINE uint32_t mt_entering_add_acqrel(global_State *g,
+						   uint32_t n)
+{
+  return la_add32_acqrel(&g->mt_entering, n);
 }
 
 static LJ_AINLINE uint32_t mt_entering_sub_acqrel(global_State *g, uint32_t n)
@@ -2733,6 +2749,31 @@ static LJ_AINLINE void gc2_weak_mark_closed_rel(global_State *g,
   la_store32_rel(&g->gc2.weak_mark_closed, closed);
 }
 
+static LJ_AINLINE uint32_t gc2_weak_root_scanned_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.weak_root_scanned);
+}
+
+static LJ_AINLINE void gc2_weak_root_scanned_store_rlx(global_State *g,
+						uint32_t scanned)
+{
+  la_store32_rlx(&g->gc2.weak_root_scanned, scanned);
+}
+
+static LJ_AINLINE void gc2_weak_root_scanned_rel(global_State *g,
+					  uint32_t scanned)
+{
+  la_store32_rel(&g->gc2.weak_root_scanned, scanned);
+}
+
+static LJ_AINLINE int gc2_weak_root_scanned_cas(global_State *g,
+						 uint32_t *oldp,
+						 uint32_t scanned)
+{
+  return la_cas32(&g->gc2.weak_root_scanned, oldp, scanned,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
 LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_seen, weak_tables_seen)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_weakkey, weak_tables_weakkey)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_weakval, weak_tables_weakval)
@@ -2940,6 +2981,31 @@ static LJ_AINLINE int gc2_tg_list_cas(global_State *g, TGState **oldp,
 		   LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint32_t gc2_tg_reclaiming_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_reclaiming);
+}
+
+static LJ_AINLINE void gc2_tg_reclaiming_store_rlx(global_State *g,
+						    uint32_t active)
+{
+  la_store32_rlx(&g->gc2.tg_reclaiming, active);
+}
+
+static LJ_AINLINE void gc2_tg_reclaiming_rel(global_State *g,
+					      uint32_t active)
+{
+  la_store32_rel(&g->gc2.tg_reclaiming, active);
+}
+
+static LJ_AINLINE int gc2_tg_reclaiming_cas(global_State *g,
+					     uint32_t *oldp,
+					     uint32_t active)
+{
+  return la_cas32(&g->gc2.tg_reclaiming, oldp, active,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE GC2SSBNode *gc2_ssb_head_acq(global_State *g)
 {
   return (GC2SSBNode *)la_loadptr_acq(
@@ -2964,6 +3030,46 @@ static LJ_AINLINE GC2SSBNode *gc2_ssb_head_xchg_acqrel(global_State *g,
 {
   return (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_head,
 					 head);  /* 05 section 5.6.2. */
+}
+
+static LJ_AINLINE GC2SSBNode *gc2_ssb_drain_acq(global_State *g)
+{
+  return (GC2SSBNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.ssb_drain);
+}
+
+static LJ_AINLINE void gc2_ssb_drain_rel(global_State *g,
+					 GC2SSBNode *head)
+{
+  la_storeptr_rel((void **)&g->gc2.ssb_drain, head);
+}
+
+static LJ_AINLINE GC2SSBNode *gc2_ssb_drain_xchg_acqrel(global_State *g,
+						 GC2SSBNode *head)
+{
+  return (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_drain,
+					 head);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_consumer_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.ssb_consumer_active);
+}
+
+static LJ_AINLINE void gc2_ssb_consumer_active_store_rlx(global_State *g,
+						  uint32_t n)
+{
+  la_store32_rlx(&g->gc2.ssb_consumer_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_consumer_enter(global_State *g)
+{
+  return la_add32_acqrel(&g->gc2.ssb_consumer_active, 1);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_consumer_leave(global_State *g)
+{
+  return la_sub32_acqrel(&g->gc2.ssb_consumer_active, 1);
 }
 
 static LJ_AINLINE uint32_t gc2_ssb_published_acq(global_State *g)

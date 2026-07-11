@@ -20,6 +20,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
+#include "lj_tab.h"
 #include "lj_tg.h"
 
 static uint32_t ptr_state(void *p)
@@ -40,10 +41,269 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
   return 0;
 }
 
+static int gc_root_list_contains(global_State *g, GCobj *needle)
+{
+  GCobj *o;
+  uint32_t seen = 0;
+  for (o = lj_gc_root_acq(g);
+       o != NULL && seen++ < LJ_GC2_ROOT_SCAN_LIMIT;) {
+    GCobj *next;
+    if (o == needle)
+      return 1;
+    next = lj_obj_gcw_acq(o);
+    if (next == o)
+      break;
+    o = next;
+  }
+  return 0;
+}
+
+static void arena_needsweep_move_head(TGAlloc *alloc, uint32_t kind,
+				      GCArena *target)
+{
+  GCArena *head, *prev = NULL, *a;
+  assert(alloc != NULL && kind < LJ_ARENA_NKINDS && target != NULL);
+  head = alloc->needsweep[kind];
+  if (head == target)
+    return;
+  for (a = head; a != NULL && a != target;) {
+    GCArena *next = lj_arena_next_acq(a);
+    assert(next != a);
+    prev = a;
+    a = next;
+  }
+  assert(a == target && prev != NULL);
+  lj_arena_next_rel(prev, lj_arena_next_acq(target));
+  lj_arena_next_rel(target, head);
+  alloc->needsweep[kind] = target;
+}
+
 static int noop_finalizer(lua_State *L)
 {
   (void)L;
   return 0;
+}
+
+static void test_preserve_abort_waits_for_restore_publisher(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  GCtab *t;
+  GCArena *a;
+  uint32_t cycle;
+  int admission;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  t = lj_tab_new(L, 0, 0);
+  assert(t != NULL);
+  a = lj_arena_of(t);
+  assert(!lj_arena_ishuge(a));
+  assert((lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0);
+
+  cycle = ++g->gc2.cycle;
+  la_store32_rel(&g->gc2.phase, LJ_GC2_SWEEP);
+  assert(lj_arena_alloc_prepare_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE));
+  tg->alloc.prepare_epoch = cycle;
+  assert(arena_list_contains(
+	tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE], a));
+
+  /* Hold a legal counted terminal reader across the abort handshake. Its
+  ** count defeats this owner's exact restore LP without blocking either side. */
+  admission = lj_arena_rescue_enter(a);
+  assert(admission == LJ_ARENA_RESCUE_FULL);
+  lj_gc2_preserve_abort_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+  assert(tg->alloc.prepare_epoch == cycle);
+  assert(lj_gc2_sweep_needs_restore(g));
+
+  lj_arena_rescue_leave(a);
+  lj_gc2_preserve_abort_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(tg->alloc.prepare_epoch == 0);
+  assert(!lj_gc2_sweep_needs_restore(g));
+  assert(arena_list_contains(
+	tg->alloc.owned[LJ_ARENAK_TRAVERSABLE], a));
+  lua_close(L);
+}
+
+static void test_prepare_collision_detaches_allocator(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  GCArena *first = NULL, *second = NULL, *fresh_a;
+  void *fresh;
+  uint32_t i;
+  int admission;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  for (i = 0; i < 16u && !second; i++) {
+    void *p = lj_arena_alloc(&tg->alloc, &tg->prng,
+	LJ_HUGE_THRESHOLD, LJ_AF_TRAVERSABLE);
+    GCArena *a;
+    assert(p != NULL);
+    a = lj_arena_of(p);
+    if (!first)
+      first = a;
+    else if (a != first)
+      second = a;
+  }
+  assert(first != NULL && second != NULL);
+
+  /* A live OPEN publisher makes one arena's nonwaiting seal fail. Every old
+  ** arena must nevertheless be detached from bump/bins/owned before ACK lets
+  ** the mutator allocate again. */
+  admission = lj_arena_rescue_enter(second);
+  assert(admission == LJ_ARENA_RESCUE_FULL);
+  assert(!lj_arena_alloc_prepare_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(!arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+	first));
+  assert(!arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+	second));
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+	first));
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+	second));
+  fresh = lj_arena_alloc(&tg->alloc, &tg->prng, 64u,
+			 LJ_AF_TRAVERSABLE);
+  assert(fresh != NULL);
+  fresh_a = lj_arena_of(fresh);
+  assert(fresh_a != first && fresh_a != second);
+
+  lj_arena_rescue_leave(second);
+  assert(lj_arena_alloc_prepare_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+	fresh_a));
+  assert(lj_arena_alloc_restore_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+	first));
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+	second));
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+	fresh_a));
+  lua_close(L);
+}
+
+static void test_quarantine_late_live_after_eof(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  GCtab *t;
+  GCArena *a, *other_needsweep;
+  uint64_t hs_epoch;
+  uint32_t cell, step, i;
+  int done = 0;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  t = lj_tab_new(L, 0, 0);
+  assert(t != NULL);
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  assert(gc_root_list_contains(g, obj2gco(t)));
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  assert(!lj_arena_ishuge(a));
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  assert((lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0);
+
+  lj_arena_alloc_prepare_sweep_kind(&tg->alloc,
+				    LJ_ARENAK_TRAVERSABLE);
+  assert(arena_list_contains(
+	    tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE], a));
+  arena_needsweep_move_head(&tg->alloc, LJ_ARENAK_TRAVERSABLE, a);
+  /* Make every still-WHITE allocation in this isolated target arena an
+  ** explicit retained/raw cell. The table remains linked until the deliberate
+  ** late detach below, so no invalid header is manufactured for reclamation. */
+  (void)lj_gc_sweep_gc2_arena_unmarked(g, a);
+  assert(lj_arena_bm_get(a->mark, cell));
+  assert(lj_arena_alloc_quarantine_one(&tg->alloc,
+	    LJ_ARENAK_TRAVERSABLE, 1u) == a);
+  /* Keep unrelated prepared arenas out of the focused owner-progress choice;
+  ** restore this owner-local list before teardown. */
+  other_needsweep = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+  tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+
+  /* First complete a bounded pass with no actionable sidecar state. */
+  while (!done) {
+    step = lj_gc_reclaim_gc2_arena(g, a, 64u, &done);
+    assert(step != 0 || done);
+  }
+  assert(a->hdr.reclaim_cell == LJ_ARENA_CELLS);
+  assert(lj_arena_reclaim_deferred_acq(a) == 0);
+
+  /* Model a sweep-time preservation/detach publication after the numeric
+  ** cursor already passed this exact valid header. Before the fix, finish
+  ** rejected LIVE forever while every subsequent reclaim started at EOF. */
+  lj_gc_unlink_root_obj(g, obj2gco(t));
+  assert(!gc_root_list_contains(g, obj2gco(t)));
+  assert(lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_WHITE,
+				  LJ_ARENA_SWEEP_LIVE));
+  /* PREPSWEEP hands quarantine an exact CLOSED, publisher-free gate. */
+  assert(lj_arena_remote_active_acq(a) == LJ_ARENA_REMOTE_CLOSED);
+  g->gc2.cycle++;
+  g->gc2.phase = LJ_GC2_SWEEP;
+  tg->alloc.prepare_epoch = g->gc2.cycle;
+  gc2_sweep_bridge_ready_store_rlx(g, 0);
+  gc2_sweep_root_done_rel(g, 1);
+  assert(lj_gc2_handshake(g,
+	LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB) == 1);
+  while (lj_gc2_test_ssb_drain(g) != 0)
+    ;
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+  hs_epoch = gc2_hs_epoch_acq(g);
+  assert(hs_epoch != 0);
+  la_store64_rel(&a->hdr.retire_epoch, hs_epoch - 1u);
+  gc2_sweep_grace_needed_rel(g, 0);
+  lj_gc2_sweep_bridge_ready(g);
+  assert(gc2_sweep_bridge_ready_acq(g));
+  /* limit=1 makes the failed finish and exact rearm the sole reported unit.
+  ** Without owner step accounting this call incorrectly declares no work. */
+  assert(lj_gc2_test_sweep_owner_progress(g, tg, 1u) == 1u);
+  /* CLOSED must precede the rejecting readiness scan and remain closed across
+  ** retry; otherwise an ordinary producer can mutate after validation and
+  ** still let the terminal close CAS succeed. */
+  assert((lj_arena_remote_active_acq(a) & LJ_ARENA_REMOTE_CLOSED) != 0);
+  assert(a->hdr.reclaim_cell == cell);  /* Exact actionable backedge. */
+
+  assert(lj_gc2_test_sweep_owner_progress(g, tg, 1u) == 1u);
+  assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_WHITE);
+  assert(gc_root_list_contains(g, obj2gco(t)));
+  for (i = 0; i < 128u &&
+	  tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == a; i++)
+    assert(lj_gc2_test_sweep_owner_progress(g, tg, 1u) == 1u);
+  assert(i < 128u);
+  assert(lj_arena_alloc_reclaimed_head(&tg->alloc,
+	    LJ_ARENAK_TRAVERSABLE) == a);
+  while (lj_gc2_test_ssb_drain(g) != 0)
+    ;
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  /* Restore the other arenas prepared solely by this fixture. The completed
+  ** target deliberately remains on the normal CLOSED reclaimed stack. */
+  tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = other_needsweep;
+  lj_arena_alloc_restore_sweep_kind(&tg->alloc,
+				    LJ_ARENAK_TRAVERSABLE);
+  lua_close(L);
 }
 
 static void seed_traversable_needsweep(TGState *tg, uint32_t n)
@@ -614,8 +874,9 @@ int main(void)
   deadsplit = tabV(tv);
   assert(deadsplit->asize > 0);
   assert(deadsplit->colo < 0);
-  assert(deadsplit->asize > ((uint32_t)deadsplit->colo & 0x7f));
-  deadsplit_size = sizetabcolo((uint32_t)deadsplit->colo & 0x7f);
+  assert(deadsplit->asize > lj_tab_colo_size(deadsplit));
+  assert(lj_tab_colo_size(deadsplit) != 0);
+  deadsplit_size = sizetabcolo(lj_tab_colo_size(deadsplit));
   splitarr = lj_tab_array_hdrw(lj_tab_array_acq(deadsplit));
   splitarr_size = lj_tab_array_bytes(deadsplit->acap);
   splitnode_size = deadsplit->hmask > 0 ?
@@ -821,6 +1082,9 @@ int main(void)
   assert((ptr_state(finpt) & 2u) == 0);
 
   lua_close(L);
+  test_prepare_collision_detaches_allocator();
+  test_preserve_abort_waits_for_restore_publisher();
+  test_quarantine_late_live_after_eof();
   test_sweep_to_idle_worker_active();
   test_worker_owned_sweep_direct();
   test_minor_sweep_identity_direct();

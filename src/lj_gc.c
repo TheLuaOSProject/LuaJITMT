@@ -223,7 +223,7 @@ static MSize gc_udata_io_file_size(void)
 		 ~(sizeof(void *) - 1u));
 }
 
-static int gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
+int lj_gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
 {
   MSize len;
   GCSize size;
@@ -262,10 +262,13 @@ static int gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
   case UDTYPE_CHANNEL:
     {
       LJChan *ch = (LJChan *)uddata(ud);
-      uint32_t cap = la_load32_acq(&ch->cap);
-      uint32_t mask = la_load32_acq(&ch->mask);
-      uint32_t rendezvous = la_load32_acq(&ch->rendezvous);
+      uint32_t cap, mask, rendezvous;
       uint64_t bytes;
+      if (len < sizeof(LJChan))
+	return 0;
+      cap = la_load32_acq(&ch->cap);
+      mask = la_load32_acq(&ch->mask);
+      rendezvous = la_load32_acq(&ch->rendezvous);
       if (cap == 0 || (cap & (cap - 1u)) != 0 || mask != cap - 1u ||
 	  rendezvous > 1u)
 	return 0;
@@ -445,22 +448,35 @@ static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
 
 static int gc2_size_fits_mem(global_State *g, const void *p, GCSize size)
 {
-  TGState *tg = G2TG(g);
   GCArena *a;
-  uint32_t cell, maxcells;
-  if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      g->allocf != lj_arena_allocf)
+  uint32_t cell, end, ncells;
+  if (!g || g->allocf != lj_arena_allocf)
     return 1;
   if (!p || size > LJ_MAX_MEM32)
     return 0;
+  /* Prove mapping ownership and an exact live allocation start before reading
+  ** its arena header. Destructor validation can receive stale side pointers. */
+  if (!lj_gc2_mem_registered_known(g, p))
+    return 0;
   a = lj_arena_of(p);
-  if (lj_arena_ishuge(a))
-    return size <= LJ_MAX_MEM32;
+  if (lj_arena_ishuge(a)) {
+    TGState *tg = lj_tg_find_owner(g, lj_arena_owner_acq(a));
+    LJHugeInfo hi;
+    return tg && lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+	   lj_arena_hugetab_lookup(&tg->huge, p, &hi) == 1 &&
+	   !(hi.flags & LJ_HUGEF_FREEING) && size <= hi.size;
+  }
   cell = lj_arena_cellof(p);
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
     return 0;
-  maxcells = LJ_ARENA_CELLS - cell;
-  return lj_arena_ncells(size) <= maxcells;
+  ncells = lj_arena_ncells(size);
+  /* block|mark is the allocation/free boundary map. RESET_ALLOC publishes the
+  ** old bump tail before root pruning, so the next boundary is authoritative
+  ** for every object whose destructor GC2 may dispatch. */
+  for (end = cell + 1u; end < LJ_ARENA_CELLS; end++)
+    if (lj_arena_bm_get(a->block, end) || lj_arena_bm_get(a->mark, end))
+      break;
+  return ncells <= end - cell;
 }
 
 static int gc2_size_fits_arena(global_State *g, GCobj *o, GCSize size)
@@ -598,9 +614,12 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
     return 0;  /* Stale table header: side-vector sizes are not trustworthy. */
   if (gct == (uint32_t)~LJ_TUDATA) {
     GCSize size;
-    if (!gc_udata_payload_valid(gco2ud(o), &size) ||
+    if (!lj_gc_udata_payload_valid(gco2ud(o), &size) ||
 	!gc2_size_fits_arena(g, o, size))
       return 0;  /* Stale userdata header: payload size is not trustworthy. */
+    if (lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD &&
+	lj_thread_live_node_acq((LJThread *)uddata(gco2ud(o))) != NULL)
+      return 0;  /* Published native root still owns this thread userdata. */
   }
   return gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA &&
 	 gc_freefunc[gct - (uint32_t)~LJ_TSTR] != NULL;
@@ -939,15 +958,60 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
       continue;
     }
     state = lj_arena_sweep_state_acq(a, cell);
+    if (lj_arena_late_get(a, cell)) {
+      /* A bit-only terminal publisher has already completed the physical
+      ** destructor. Never reconstruct this header. Retain the allocation for
+      ** the next generation and settle detached accounting exactly once. */
+      while (state != LJ_ARENA_SWEEP_WHITE) {
+	if (lj_arena_sweep_state_cas(a, cell, state,
+					 LJ_ARENA_SWEEP_WHITE)) {
+	  if (state == LJ_ARENA_SWEEP_RETIRED) {
+	    uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	    lj_assertG(old != 0, "late-pin deferred underflow");
+	    UNUSED(old);
+	  }
+	  changed++;
+	  break;
+	}
+	state = lj_arena_sweep_state_acq(a, cell);
+      }
+      cell++;
+      scanned++;
+      continue;
+    }
+    if (state == LJ_ARENA_SWEEP_RETIRED &&
+	((la_load64_acq(&a->mark[cell >> 6]) >> (cell & 63)) & 1u) &&
+	lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
+					 LJ_ARENA_SWEEP_LIVE)) {
+      uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+      lj_assertG(old != 0, "sealed marked rescue underflow");
+      UNUSED(old);
+      state = LJ_ARENA_SWEEP_LIVE;
+      changed++;
+    }
     if (state == LJ_ARENA_SWEEP_LIVE ||
 	state == LJ_ARENA_SWEEP_RETIRED) {
       uint32_t end = gc2_sweep_alloc_end(a, cell);
       GCobj *o = gc2_sweep_cell_obj(g, a, cell, end);
       if (!o) {
-	/* LIVE/RETIRED is published only from an exact ownership-spine header.
-	** Refuse bitmap publication if that proof cannot be reconstructed. */
-	lj_assertG(0, "cannot reconstruct detached arena GC header");
-	pending = 1;
+	/* A valid detach publishes only an exact ownership-spine header, but a
+	** hostile/racy producer may leave a header snapshot temporarily or
+	** permanently undecodable. Fail closed without parking the whole GC: pin
+	** the allocation as graphless raw storage and settle detached accounting.
+	** A later semantic edge can validate/mark the same block again; reclamation
+	** never reuses it based on attacker-controlled header bytes. */
+	(void)la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);
+	if (lj_arena_sweep_state_cas(a, cell, state,
+					 LJ_ARENA_SWEEP_WHITE)) {
+	  if (state == LJ_ARENA_SWEEP_RETIRED) {
+	    uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	    lj_assertG(old != 0, "invalid-header deferred underflow");
+	    UNUSED(old);
+	  }
+	  changed++;
+	} else {
+	  pending = 1;
+	}
 	cell++;
 	scanned++;
 	continue;
@@ -2066,6 +2130,13 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
     return 0;
   main_tg = g->main_tg;
   self = lj_thr_get_tg();
+  /* Raw TLS may legitimately belong to another independent Lua universe on
+  ** the same OS thread. It is neither a pending-root producer nor an attach
+  ** edge for this registry; exclude it before the hint fast path inspects its
+  ** owner-private chains. gc_flush_root_pending_tg() also rejects mismatched
+  ** universes, but that is deliberately after the non-empty probe. */
+  if (self && self->gl != g)
+    self = NULL;
   /*
   ** This is only a non-empty hint. Publishers set it before and after pending
   ** stack publication; false positives are harmless and false negatives are

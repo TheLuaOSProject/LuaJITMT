@@ -109,7 +109,10 @@ return function(add)
       compile_and_run_c(t, t:tmp("lj_t-gc2-worker-scheduler"),
                         "t-gc2-worker-scheduler.c", {
         cflags = gc2_test_cflags,
-        libs = { "-lm", "-ldl", pthread, "-Wl,--wrap=pthread_create" }
+        libs = {
+          "-lm", "-ldl", pthread,
+          "-Wl,--wrap=pthread_create", "-Wl,--wrap=pthread_join"
+        }
       })
       run_luajit_script_jit_modes(t, "t-gc-workers.lua")
 

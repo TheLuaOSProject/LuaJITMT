@@ -150,7 +150,9 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     lj_tg_alloc_black_rel(tg, 0);
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
     lua_State *L = lj_tg_load_cur_L(tg);
-    lj_gc2_scan_cycle_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
+    /* Each TG owns only its stack snapshot. The handshake leader scans the
+    ** process-global root set once after all owner acknowledgements. */
+    lj_gc2_scan_cycle_owner_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB) {
     /*
@@ -166,24 +168,34 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */
   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
       lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
-    lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-    lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+    int prepared = lj_arena_alloc_prepare_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    int plain_restored = lj_arena_alloc_restore_sweep_kind(
+	&tg->alloc, LJ_ARENAK_PLAIN);
     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
       lj_arena_hugetab_prepare_sweep(&tg->huge);
       tg->alloc.huge_retire_cursor = 0;
       tg->alloc.huge_reclaim_cursor = 0;
       tg->alloc.huge_retire_done = 0;
     }
-    tg->alloc.prepare_epoch = gc2_cycle_acq(g);
+    if (prepared && plain_restored)
+      tg->alloc.prepare_epoch = gc2_cycle_acq(g);
+    else
+      lj_gc2_sweep_publish_wake(g);
   }
   if ((actions & LJ_GC2_HS_RESTORE_ALLOC) &&
       lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+    int restored;
     /* Abort is legal only before bounded root detachment/quarantine. Restore
     ** owner-local bins on the owning TG while it is stopped at this ACK. */
-    lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    restored = lj_arena_alloc_restore_sweep_kind(
+	&tg->alloc, LJ_ARENAK_TRAVERSABLE);
     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
       lj_arena_hugetab_abort_sweep(&tg->huge);
-    tg->alloc.prepare_epoch = 0;
+    if (restored)
+      tg->alloc.prepare_epoch = 0;
+    else
+      lj_gc2_sweep_publish_wake(g);
     tg->alloc.huge_retire_cursor = 0;
     tg->alloc.huge_reclaim_cursor = 0;
     tg->alloc.huge_retire_done = 0;
@@ -576,6 +588,23 @@ static void safepoint_leader_leave(global_State *g, uint32_t id)
   }
 }
 
+static void safepoint_finish_prior_epoch(global_State *g)
+{
+  /* A synchronous leader can be entered while a previously published async
+  ** request still owns counted reqmask slots (notably STOPREQ arriving between
+  ** bytecodes and an allocation-triggered GC). Never overwrite that pending
+  ** count with the next epoch's sentinel. Finish the prior boundary first;
+  ** applying STOPREQ here only publishes its sticky/fresh flag, so the normal
+  ** VM/native exit boundary still performs the user-visible throw. */
+  while (gc2_hs_pending_acq(g) != 0) {
+    uint32_t pending = gc2_hs_pending_acq(g);
+    safepoint_ack_native(g, gc2_hs_actions_acq(g));
+    if (gc2_hs_pending_acq(g) == 0)
+      break;
+    gc2_hs_pending_futex_wait(g, pending, 1000000);
+  }
+}
+
 uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
   uint64_t epoch;
@@ -584,6 +613,7 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   if (!g || actions == 0)
     return 0;
   leader = safepoint_leader_enter(g);
+  safepoint_finish_prior_epoch(g);
   gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
   gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = gc2_hs_epoch_rlx(g) + 1u;
@@ -610,6 +640,14 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
       break;
     gc2_hs_pending_futex_wait(g, gc2_hs_pending_rlx(g), 1000000);
   }
+  if (actions & LJ_GC2_HS_SCAN_ROOTS) {
+    TGState *self = lj_thr_get_tg_fallback(g);
+    lj_gc2_scan_cycle_global_roots(g);
+    /* Global traversal can enqueue rescans in the leader's active SSB after
+    ** its self acknowledgement already flushed. Publish that final suffix. */
+    if (self)
+      (void)lj_gc2_flush_ssb(g, self);
+  }
   safepoint_wait_trace_quiescent(g, actions);
 #if LJ_HASJIT
   if (actions & LJ_GC2_HS_FLUSHJ) {
@@ -622,6 +660,15 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   }
 #endif
   (void)lj_gc2_reclaim_retired(g, epoch);  /* 05 section 5.9 grace drain. */
+  if (actions & LJ_GC2_HS_FLUSH_SSB) {
+    TGState *self = lj_thr_get_tg_fallback(g);
+    /* Epoch reclamation can preserve a late metadata/object edge after the
+    ** global-root flush above. Publish that suffix before the handshake's
+    ** completion LP so fixpoint callers never manufacture another handshake
+    ** solely to expose one leader-local SSB entry. */
+    if (self)
+      (void)lj_gc2_flush_ssb(g, self);
+  }
   safepoint_clear_consumed_polls(g, epoch);
   safepoint_leader_leave(g, leader);
   return signaled;

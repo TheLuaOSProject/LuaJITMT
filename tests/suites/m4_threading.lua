@@ -76,6 +76,23 @@ return function(add)
         }
       },
       message = "M4 threading.spawn native STOPREQ tests passed"
+    },
+    {
+      name = "m4_threading_lifecycle",
+      description = "foreign detach/reclaim and close/attach lifetime fixture",
+      output = "lj_t-threading-lifecycle",
+      cfile = "t-threading-lifecycle.c",
+      opts = {
+        timeout = "20s",
+        libs = {
+          "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+          "-Wl,--wrap=lj_state_release",
+          "-Wl,--wrap=lj_tg_attach",
+          "-Wl,--wrap=lj_threading_shutdown",
+          "-Wl,--wrap=lj_arena_alloc_transfer"
+        }
+      },
+      message = "M4 threading lifecycle barrier tests passed"
     }
   })
 

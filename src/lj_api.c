@@ -1391,7 +1391,7 @@ LUA_API void *lua_newuserdata(lua_State *L, size_t size)
   env = getcurrenv(L);
   lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
-  if (size > LJ_MAX_UDATA)
+  if (size > LJ_MAX_UDATA - sizeof(GCudata))
     lj_err_msg(errL, LJ_ERR_UDATAOV);
   ud = lj_udata_new(errL, (MSize)size, env);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))

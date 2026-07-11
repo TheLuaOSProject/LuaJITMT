@@ -75,6 +75,7 @@ static LJ_AINLINE int lj_gc_claim_black_to_gray(GCobj *o)
 
 /* Collector. */
 LJ_FUNC void lj_gc_fixstring(global_State *g, GCstr *s);
+LJ_FUNC int lj_gc_udata_payload_valid(GCudata *ud, GCSize *sizep);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
 LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,

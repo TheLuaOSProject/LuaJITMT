@@ -313,12 +313,13 @@ static int close_state_root_link_valid(global_State *g, GCobj *o)
 
 static void close_state_reanchor_root(global_State *g, GCobj *target)
 {
-  GCobj *o;
+  GCobj *head, *o;
   uint32_t n = 0;
-  if (!g || !target)
+  if (!g || !target || !close_state_root_link_valid(g, target))
     return;
   (void)lj_gc_flush_root_pending(g);
-  for (o = lj_gc_root_acq(g); o != NULL;) {
+  head = lj_gc_root_acq(g);
+  for (o = head; o != NULL;) {
     GCobj *next;
     if (!close_state_root_link_valid(g, o))
       break;
@@ -329,7 +330,11 @@ static void close_state_reanchor_root(global_State *g, GCobj *target)
       return;
     o = next;
   }
-  lj_obj_setgcwrel(target, lj_gc_root_acq(g));
+  /* A damaged/stale head is not a valid successor for the reanchored object.
+  ** Shutdown is single-threaded here, so fail closed to a one-node spine. */
+  if (head && !close_state_root_link_valid(g, head))
+    head = NULL;
+  lj_obj_setgcwrel(target, head);
   lj_gc_root_rel(g, target);
   lj_gcroot_repair_epoch_add(g);
 }
@@ -413,7 +418,12 @@ static void close_state(lua_State *L)
   /* Parked GC2 workers are collector threads, not threading.* children.
   ** Join them before touching TG registries, ownership roots, strings or
   ** destructors; lj_gc2_fini() repeats this idempotently for partial states. */
-  lj_gc2_worker_stop(g);
+  if (LJ_UNLIKELY(!lj_gc2_worker_stop(g)))
+    abort();  /* A failed join is not permission to reclaim worker storage. */
+  /* threading_shutdown tombstones native live-root nodes before entering this
+  ** terminal path. Only now are all collector readers joined, so their raw
+  ** arena storage may be physically released. */
+  lj_threading_live_free_all(g);
 #if LJ_HASJIT
   /* Disconnect every live trace while its start prototype and bytecode are
   ** still alive. Retired bodies stay list-owned until trace_freestate(). */
@@ -428,7 +438,10 @@ static void close_state(lua_State *L)
   close_state_reanchor_root(g, obj2gco(L));
   close_state_reanchor_registered_states(g, L);
   lj_thr_fence();
-  (void)lj_tg_reclaim_dead(g);
+  if (mt_shutdown_acq(g) != 0)
+    (void)lj_tg_reclaim_dead_terminal(g);
+  else
+    (void)lj_tg_reclaim_dead(g);  /* Partial-state initialization failure. */
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL;) {
     GCobj *next;
@@ -450,9 +463,20 @@ static void close_state(lua_State *L)
   /* The VM callback state is now owned only by the terminal root drain. Clear
   ** this side root before a custom allocator can release the state body. */
   setgcrefnullrel(*vmthread_ref(g));
+  (void)lj_gc2_shutdown_discard_ssb(g);
+  /* Terminal discard can drop the final embedded-node pin on a DEAD TG which
+  ** the first shutdown scan deliberately retained. Unlink/transfer it before
+  ** freeall invalidates userdata and allocator ownership metadata. */
+  if (mt_shutdown_acq(g) != 0)
+    (void)lj_tg_reclaim_dead_terminal(g);
   if (arena_alloc)
     close_state_arena_free_noinsert(g);
   lj_gc2_freeall(g);
+  /* Root/object destructors can close suspended-thread upvalues and run GC2
+  ** publication barriers while freeall walks the ownership spine. Workers and
+  ** secondary publishers are already joined, so discard that final main-TG
+  ** suffix before GC2/TG finalization checks published-node pins. */
+  (void)lj_gc2_shutdown_discard_ssb(g);
   (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL;) {
     GCobj *next;

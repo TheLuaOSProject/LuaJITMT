@@ -2,6 +2,21 @@ local function workers(...)
   return require"threading".gcworkers(...)
 end
 
+local diag = os.getenv("LJ_GC_WORKERS_DIAG") == "1"
+local function stamp(label, started)
+  if diag then
+    local th = require"threading"
+    local s = th.gcstats()
+    io.stderr:write(("gcworkers diag %-20s %.6fs phase=%s cycles=%s/%s " ..
+		     "roots=%s worker=%s/%s wakes=%s async=%s\n"):format(
+	label, th.now() - started, tostring(s.phase),
+	tostring(s.cycle_starts), tostring(s.cycle_requests),
+	tostring(s.major_root_scans), tostring(s.worker_runs),
+	tostring(s.worker_busy_retries), tostring(s.worker_wakes),
+	tostring(s.worker_async_progress)))
+  end
+end
+
 local function churn_worker_control(rounds)
   local th = require"threading"
   for round = 1, rounds do
@@ -21,8 +36,12 @@ local function churn_worker_control(rounds)
       end, id, round)
     end
     for id = 1, #threads do
+      local started = require"threading".now()
       local ok, done = threads[id]:join(30)
-      assert(ok == true and done == true)
+      stamp(("join-%d-%d"):format(round, id), started)
+      assert(ok == true and done == true,
+	     ("worker %d round %d failed: %s / %s"):
+	       format(id, round, tostring(ok), tostring(done)))
     end
   end
   local old = workers(0)
@@ -46,7 +65,9 @@ assert(workers() == 2)
 assert(workers(3) == 2)
 assert(workers() == 2)
 
+local collect_started = require"threading".now()
 collectgarbage("collect")
+stamp("initial-collect", collect_started)
 local stats1 = require"threading".gcstats()
 assert(stats1.worker_wakes >= stats0.worker_wakes)
 assert(stats1.worker_async_progress >= stats0.worker_async_progress)

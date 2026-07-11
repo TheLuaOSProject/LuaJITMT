@@ -68,9 +68,11 @@ static GCudata *threading_thread_udata_candidate(global_State *g, GCobj *o)
 
 GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node)
 {
+  GCudata *ud;
   if (!node)
     return NULL;
-  return threading_thread_udata_candidate(g, lj_thread_live_udata_ref_acq(node));
+  ud = threading_thread_udata_candidate(g, lj_thread_live_udata_ref_acq(node));
+  return ud && lj_gc_udata_payload_valid(ud, NULL) ? ud : NULL;
 }
 
 GCudata *lj_thread_state_udata_acq(global_State *g, const lua_State *L)
@@ -87,6 +89,10 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
   lj_thread_live_next_rel(node, NULL);
   lj_thread_live_retired_next_rel(node, NULL);
   lj_thread_live_udata_ref_rel(node, obj2gco(ud));
+  /* LJThreadLive is raw arena storage, not a GC object on the ownership spine.
+  ** Mark it before publication so a cycle whose root snapshot already passed
+  ** cannot reclaim the native-root node before the next global scan. */
+  (void)lj_gc2_markmem(G(L), node);
   setudataV(L, &tv, ud);
   lj_gc_pubroot(L, &tv);  /* 09 section 9.2: native live root. */
   return node;
@@ -97,6 +103,7 @@ static void threading_live_retire(global_State *g, LJThreadLive *node)
   LJThreadLive *head;
   if (!g || !node)
     return;
+  (void)lj_gc2_markmem(g, node);
   /*
   ** Scanners can hold an unlinked node until the surrounding SMR read section
   ** ends. Keep the active next pointer stable for those readers and use a
@@ -106,6 +113,8 @@ static void threading_live_retire(global_State *g, LJThreadLive *node)
     head = lj_thread_live_retired_head_acq(g);
     lj_thread_live_retired_next_rel(node, head);
   } while (!lj_thread_live_retired_head_cas(g, &head, node));
+  /* Close mark-before-publish versus IDLE->MARK clear/root-snapshot. */
+  (void)lj_gc2_markmem(g, node);
 }
 
 static void threading_live_trim_dead_head(global_State *g)
@@ -133,11 +142,16 @@ static void threading_live_publish(lua_State *L, LJThread *th,
     head = lj_thread_live_head_acq(g);
     lj_thread_live_next_rel(node, head);
   } while (!lj_thread_live_head_cas(g, &head, node));
+  /* Mark again after the list LP. If a cycle cleared the construction mark and
+  ** completed its global snapshot between allocation and this CAS, the
+  ** post-publication phase read preserves the raw node in that cycle. */
+  (void)lj_gc2_markmem(g, node);
   {
     GCudata *ud = lj_thread_live_udata_acq(g, node);
     if (ud) {
       TValue tv;
       setudataV(L, &tv, ud);
+      (void)lj_gc2_markobj(g, obj2gco(ud));
       lj_gc_pubroot(L, &tv);  /* Publish against cycles started after new. */
     }
   }
@@ -161,7 +175,7 @@ static void threading_live_remove(global_State *g, LJThread *th)
   }
 }
 
-static void threading_live_free_all(global_State *g)
+void lj_threading_live_free_all(global_State *g)
 {
   LJThreadLive *node = lj_thread_live_head_xchg_acqrel(g, NULL);
   while (node) {
@@ -533,12 +547,24 @@ static void threading_entering_leave(global_State *g)
 
 static int threading_entering_begin(global_State *g)
 {
-  mt_entering_add_rlx(g, 1);
-  if (mt_shutdown_acq(g) != 0) {
-    threading_entering_leave(g);
-    return 0;
+  /* Acq-rel pairs the entrant with the registry writer's post-CAS acquire
+  ** recheck; neither side may miss the other's publication. */
+  mt_entering_add_acqrel(g, 1);
+  for (;;) {
+    if (mt_shutdown_acq(g) != 0) {
+      threading_entering_leave(g);
+      return 0;
+    }
+    /* Pair admission with the dead-registry writer's post-CAS counter check.
+    ** An entrant which loses this race backs out before reading tg_list; a
+    ** reclaimer which loses observes mt_entering and abandons its try-pass. */
+    if (gc2_tg_reclaiming_acq(g) == 0)
+      return 1;
+    /* Keep this reservation continuously: dropping it here would let
+    ** lua_close free g before the retry. The writer never waits for us; its
+    ** post-CAS counter check abandons the reclaim pass. */
+    (void)lj_thr_retry_yield(NULL);
   }
-  return 1;
 }
 
 static void threading_wait_entering(lua_State *L, global_State *g)
@@ -597,7 +623,9 @@ void lj_threading_shutdown(lua_State *L)
     threading_live_remove(g, th);
     (void)lj_tg_reclaim_dead(g);
   }
-  threading_live_free_all(g);
+  /* GC2 workers may still hold a scoped raw-node snapshot. Tombstoning is
+  ** complete here, but physical node release belongs to close_state after the
+  ** collector pool has joined. */
 }
 
 static void threading_gc_leave(global_State *g);
@@ -634,7 +662,8 @@ static void threading_mt_active_finish_traces(lua_State *L, int token)
   (UNUSED(L), UNUSED(token))
 #endif
 
-static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
+static int threading_gc_enter_counted(lua_State *L, GCudata *rootud,
+				      int retain_entering)
 {
   global_State *g = G(L);
   for (;;) {
@@ -642,13 +671,15 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
     uint32_t exclusive;
     while ((exclusive = mt_gc_exclusive_acq(g)) != 0) {
       if (mt_shutdown_acq(g) != 0) {
-	threading_entering_leave(g);
+	if (!retain_entering)
+	  threading_entering_leave(g);
 	return 0;
       }
       mt_gc_exclusive_futex_wait(g, exclusive, 1000000);
     }
     if (mt_shutdown_acq(g) != 0) {
-      threading_entering_leave(g);
+      if (!retain_entering)
+	threading_entering_leave(g);
       return 0;
     }
     expect = 0;
@@ -675,7 +706,8 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
       lj_gc_threshold_store(g, LJ_MAX_MEM);
     }
     if (mt_gc_exclusive_acq(g) == 0) {
-      threading_entering_leave(g);
+      if (!retain_entering)
+	threading_entering_leave(g);
       if (mt_shutdown_acq(g) != 0) {
 	threading_gc_leave(g);
 	return 0;
@@ -691,7 +723,7 @@ static int threading_gc_enter(lua_State *L, GCudata *rootud)
   global_State *g = G(L);
   if (!threading_entering_begin(g))
     return 0;
-  return threading_gc_enter_counted(L, rootud);
+  return threading_gc_enter_counted(L, rootud, 0);
 }
 
 static void threading_gc_leave(global_State *g)
@@ -748,6 +780,8 @@ typedef struct ThreadingWorkerCtx {
   uint8_t tg_state_set;
   uint8_t attached;
 } ThreadingWorkerCtx;
+
+static int threading_tg_is_registered(global_State *g, TGState *target);
 
 static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
 				   void *ud)
@@ -829,6 +863,7 @@ static void threading_worker_cleanup(ThreadingWorkerCtx *ctx)
   lua_State *L = ctx->L;
   TGState *tg = ctx->tg;
   global_State *g = ctx->g;
+  int was_attached = ctx->attached || threading_tg_is_registered(g, tg);
   /* A BC_FUNCF hot edge can start the recorder immediately before the worker
   ** returns to this C boundary. Cancel its unpublished state while L and the
   ** owner TG are still claimed and published; detaching first would strand the
@@ -838,15 +873,23 @@ static void threading_worker_cleanup(ThreadingWorkerCtx *ctx)
     lj_trace_abort_owner(L);
   if (ctx->claimed)
     lj_ccallback_disown_state(L);
-  if (ctx->claimed)
-    lj_state_release(L, ctx->tid);
-  if (ctx->attached)
-    lj_tg_detach(g, tg);
-  if (ctx->tg_state_set) {
+  /* The startup path publishes this hint before its state claim. A failed
+  ** racy claim must not leave the child naming a TG that userdata teardown can
+  ** later release. */
+  L->tg_hint = NULL;
+  if (ctx->tg_state_set && !was_attached) {
     lj_tg_store_cur_L(tg, NULL);
     lj_tg_store_thread_L(tg, NULL);
     lj_tg_store_thread_ud(tg, NULL);
   }
+  if (ctx->claimed) {
+    /* The child state outlives its OS-thread TG until join/userdata teardown.
+    ** Clear the owner hint before releasing the state; detach may make the TG
+    ** reclaimable immediately after this boundary. */
+    lj_state_release(L, ctx->tid);
+  }
+  if (was_attached)
+    lj_tg_detach(g, tg);
   if (ctx->tls_set)
     lj_thr_set_tg(NULL);
   threading_gc_leave(g);
@@ -921,52 +964,69 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
   lj_tg_store_thread_L(ctx->tg, L);
   ctx->tg_state_set = 1;
   lj_tg_store_thread_ud(ctx->tg, lj_thread_state_udata_acq(ctx->g, L));
-  if (!threading_gc_enter_counted(L, NULL)) {
-    ctx->entering = 0;
+  /* Keep the admission token across both the attach transaction and every
+  ** protected failure cleanup. The successful path transitions to mt_live;
+  ** the failed path must remain visible to lua_close until its final access to
+  ** L, g and the private TG has completed. */
+  if (!threading_gc_enter_counted(L, NULL, 1)) {
     return NULL;
   }
-  ctx->entering = 0;
   ctx->gc_entered = 1;
   lj_tg_attach(ctx->g, ctx->tg);
   ctx->attached = 1;
   if (mt_shutdown_acq(ctx->g) != 0)
     return NULL;
   ctx->success = 1;
+  ctx->entering = 0;
+  threading_entering_leave(ctx->g);
   return NULL;
 }
 
 static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
 				     int disown_callbacks)
 {
+  /* lj_tg_attach() has post-CAS catch-up work. A protected error may therefore
+  ** arrive after registry publication but before the ordinary return-site can
+  ** set ctx->attached. The admission/live reservation makes this membership
+  ** probe stable against dead-TG reclamation. */
+  int was_attached = ctx->attached ||
+    threading_tg_is_registered(ctx->g, ctx->tg);
   /* Foreign attached threads have the same recorder lifetime boundary as
   ** spawned workers: no recorder state may retain this TG's soon-dead tid.
   */
-  if (ctx->attached)
+  if (was_attached)
     lj_trace_abort_owner(L);
-  if (ctx->attached && disown_callbacks)
+  if (was_attached && disown_callbacks)
     lj_ccallback_disown_state(L);
-  if (ctx->attached) {
-    lj_tg_store_cur_L(ctx->tg, NULL);
-    lj_tg_store_thread_L(ctx->tg, NULL);
-    lj_tg_store_thread_ud(ctx->tg, NULL);
-    ctx->tg_state_set = 0;
+  if (was_attached) {
     lj_tg_detach(ctx->g, ctx->tg);
+    ctx->tg_state_set = 0;
   }
   if (ctx->tg_state_set) {
     lj_tg_store_cur_L(ctx->tg, NULL);
     lj_tg_store_thread_L(ctx->tg, NULL);
     lj_tg_store_thread_ud(ctx->tg, NULL);
   }
-  if (ctx->gc_entered)
-    threading_gc_leave(ctx->g);
   if (ctx->tls_set)
     lj_thr_set_tg(NULL);
   L->tg_hint = NULL;
   lj_state_release(L, ctx->tid);
-  if (ctx->entering)
+  if (!was_attached) {
+    lj_tg_fini_thread(ctx->g, ctx->tg);
+    free(ctx->tg);
+  }
+  /* Do not reclaim a registered foreign TG inline. Apart from competing with
+  ** the main/collector reclaimer, doing so would make the release below cease
+  ** to be the lifetime boundary observed by lua_close. If both counters are
+  ** held, release entering first so mt_live protects the second atomic. */
+  if (ctx->entering) {
+    ctx->entering = 0;
     threading_entering_leave(ctx->g);
-  lj_tg_fini_thread(ctx->g, ctx->tg);
-  free(ctx->tg);
+  }
+  if (ctx->gc_entered) {
+    ctx->gc_entered = 0;
+    threading_gc_leave(ctx->g);  /* Final access to g on this failure path. */
+  }
 }
 
 static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
@@ -1151,6 +1211,13 @@ LJLIB_CF(threading_thread___gc)
       if (!threading_tg_is_registered(g, th->tg)) {
 	lj_tg_fini_thread(g, th->tg);
 	lj_mem_freet(g, th->tg);
+	th->tg = NULL;
+	lj_thread_state_store_rel(th, NULL);
+	} else {
+	/* The userdata is relinquishing the last external owner while an SSB
+	** publication still pins the embedded node storage. Let registry reclaim
+	** finalize it through lj_mem_* after the final pin is dropped. */
+	lj_tg_flags_or_rlx(th->tg, TGF_DEFER_FREE);
 	th->tg = NULL;
 	lj_thread_state_store_rel(th, NULL);
       }
@@ -1708,6 +1775,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   th->state = LJ_THREAD_STARTING;
   th->nargs = (uint32_t)nargs;
   lj_tg_init_thread(G(L), tg, L1, threading_arena_internal(G(L)));
+  lj_tg_flags_or_rlx(tg, TGF_LUA_ALLOC);
   th->thr.tid = lj_thr_newid();
   lj_tg_tid_rel(tg, th->thr.tid);
   lj_tg_derive_prng(G(L), tg, th->thr.tid);
@@ -1910,6 +1978,7 @@ static int threading_attach(lua_State *L, int wait)
   global_State *g;
   TGState *cur, *tg;
   uint32_t tid;
+  MSize topofs;
   ThreadingAttachCtx ctx;
   int errcode;
   if (!L)
@@ -1953,10 +2022,15 @@ static int threading_attach(lua_State *L, int wait)
   ctx.tg = tg;
   ctx.tid = tid;
   ctx.entering = 1;
+  topofs = (MSize)(L->top - tvref(L->stack));
   errcode = lj_vm_cpcall(L, NULL, &ctx, threading_attach_cp);
   if (LJ_UNLIKELY(errcode)) {
+    /* Foreign attach is an int-valued admission API. Do not rethrow after
+    ** releasing its final VM-lifetime token: a concurrent lua_close is then
+    ** entitled to reclaim L before an error unwinder could inspect it. */
+    L->top = tvref(L->stack) + topofs;
     threading_attach_cleanup(L, &ctx, 0);
-    lj_err_throw(L, errcode);
+    return 0;
   }
   if (!ctx.success) {
     threading_attach_cleanup(L, &ctx, 1);
@@ -1991,10 +2065,10 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   lj_trace_abort_owner(L);
   if (disown_callbacks)
     lj_ccallback_disown_state(L);
+  /* Detach clears remotely scanned fields before publishing DEAD. The
+  ** following state-release lookup remains covered by mt_live; no access to
+  ** this malloc-backed TG is permitted after the final mt_live release. */
   lj_tg_detach(g, tg);
-  lj_tg_store_cur_L(tg, NULL);
-  lj_tg_store_thread_L(tg, NULL);
-  lj_tg_store_thread_ud(tg, NULL);
   L->tg_hint = NULL;
   lj_state_release(L, tid);
   lj_thr_set_tg(NULL);

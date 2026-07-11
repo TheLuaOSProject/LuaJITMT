@@ -258,5 +258,6 @@ LJ_FUNC uint32_t lj_thr_yield(lua_State *L);
 LJ_FUNC uint32_t lj_thr_retry_yield(lua_State *L);
 LJ_FUNC uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns);
 LJ_FUNC void lj_threading_shutdown(lua_State *L);
+LJ_FUNC void lj_threading_live_free_all(global_State *g);
 
 #endif

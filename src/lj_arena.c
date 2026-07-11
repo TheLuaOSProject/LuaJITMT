@@ -25,7 +25,10 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_arena.h"
+#include "lj_gc2.h"
 #include "lj_prng.h"
+#include "lj_tg.h"
+#include "lj_thr.h"
 
 #if !defined(_WIN32)
 #ifndef MAP_ANONYMOUS
@@ -44,109 +47,258 @@
 #define LJ_HUGETAB_EMPTY		((uint64_t)0)
 #define LJ_HUGETAB_TOMBSTONE		((uint64_t)1)
 
-/* The high bit closes admission to arena-local remote lifetime publication.
-** An owner may only close an idle gate (zero active publishers). Once closed,
-** producers may publish only size-bearing intrusive queue records, deduped by
-** late[]; they never touch the sweep or allocation bitmaps. The gate stays
-** closed while the arena is on the reclaimed stack and is reopened only by
-** its adopter after all admitted publishers are quiescent. */
-#define LJ_ARENA_REMOTE_CLOSED		0x80000000u
+static LJ_AINLINE uint64_t arena_remote_count(uint64_t active)
+{
+  return active & LJ_ARENA_REMOTE_COUNT_MASK;
+}
+
+static LJ_NORET void arena_remote_overflow(void)
+{
+  /* Every live admission requires a distinct executing context and nonzero
+  ** address-space-backed state. Supported x64 processes cannot host 2^61 of
+  ** them. Treat a violated platform invariant as fatal instead of dropping a
+  ** lifetime intent or inventing an uncoordinated poison state. */
+  abort();
+}
+
+static void arena_progress_wake(GCArena *a)
+{
+  global_State *g = a ? (global_State *)lj_arena_progress_g_acq(a) : NULL;
+  if (g)
+    lj_gc2_sweep_publish_wake(g);
+}
+
+static void arena_late_clear_committed_free(GCArena *a)
+{
+  uint32_t w;
+  for (w = 0; w < LJ_ARENA_WORDS; w++) {
+    uint64_t block = la_load64_acq(&a->block[w]);
+    (void)la_and64_rlx(&a->late[w], block);
+  }
+}
 
 static int arena_remote_enter(GCArena *a)
 {
-  uint32_t active;
+  uint64_t active;
   if (!a)
     return 0;
-  active = la_load32_acq(&a->hdr.remote_active);
+  active = la_load64_acq(&a->hdr.remote_active);
   for (;;) {
-    uint32_t expect = active;
-    if (active & LJ_ARENA_REMOTE_CLOSED)
+    uint64_t expect = active;
+    if (active & LJ_ARENA_REMOTE_STATE_MASK)
       return 0;
-    lj_assertX(active != LJ_ARENA_REMOTE_CLOSED-1u,
-	       "arena remote publisher overflow");
-    if (active == LJ_ARENA_REMOTE_CLOSED-1u)
-      return 0;
-    if (la_cas32(&a->hdr.remote_active, &expect, active + 1u,
+    if (arena_remote_count(active) == LJ_ARENA_REMOTE_COUNT_MASK) {
+      arena_remote_overflow();
+    }
+    if (la_cas64(&a->hdr.remote_active, &expect, active + 1u,
 		 LA_ACQ_REL, LA_ACQ))
       return 1;
     active = expect;
   }
 }
 
-/* Admit a queue-only late publisher after terminal close. The low bits remain
-** an active-publisher count, so adoption cannot reopen/reuse the arena until
-** every admitted producer has release-published its record. */
+/* Admit a bit-only late publisher after terminal close or while SEALED. The
+** admission CAS publishes PENDING before the late bit, so an owner can never
+** clear/commit past an intent whose producer was preempted before the bit. */
 static int arena_remote_late_enter(GCArena *a)
 {
-  uint32_t active;
+  uint64_t active;
   if (!a)
     return 0;
-  active = la_load32_acq(&a->hdr.remote_active);
+  active = la_load64_acq(&a->hdr.remote_active);
   for (;;) {
-    uint32_t expect = active;
-    if (!(active & LJ_ARENA_REMOTE_CLOSED))
+    uint64_t expect = active;
+    uint64_t next;
+    if (!(active & (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)))
       return 0;  /* Gate reopened: caller must use the ordinary route. */
-    if ((active & ~LJ_ARENA_REMOTE_CLOSED) ==
-	(~LJ_ARENA_REMOTE_CLOSED))
-      return -1;  /* Saturation: conservatively retain without admission. */
-    if (la_cas32(&a->hdr.remote_active, &expect, active + 1u,
+    if (arena_remote_count(active) == LJ_ARENA_REMOTE_COUNT_MASK) {
+      arena_remote_overflow();
+    }
+    next = (active + 1u) | LJ_ARENA_REMOTE_PENDING;
+    if (la_cas64(&a->hdr.remote_active, &expect, next,
 		 LA_ACQ_REL, LA_ACQ))
       return 1;
     active = expect;
+  }
+}
+
+static void arena_publish_leave(GCArena *a)
+{
+  uint64_t old = la_sub64_acqrel(&a->hdr.remote_active, 1);
+  lj_assertX(arena_remote_count(old) != 0,
+	     "arena publisher leave without admission");
+  if (arena_remote_count(old) == 1u) {
+    uint32_t flags = lj_arena_flags_acq(a);
+    uint64_t now = old - 1u;
+    int wake = (now & LJ_ARENA_REMOTE_STATE_MASK) != 0 ||
+	(flags & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
+		  LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) != 0;
+    /* Adoption/restore publishes all bitmap and bin state before clearing the
+    ** lifecycle flags and dropping SEALED to CLOSED. The last bit-only
+    ** publisher can then complete the exact clean gate transition to OPEN. */
+    if (!(flags & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
+		   LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) &&
+	(now & LJ_ARENA_REMOTE_CLOSED) &&
+	!(now & LJ_ARENA_REMOTE_SEALED)) {
+      uint64_t expect = now;
+      arena_late_clear_committed_free(a);
+      (void)la_cas64(&a->hdr.remote_active, &expect, 0,
+		     LA_REL, LA_ACQ);
+    }
+    /* OPEN 1->0 is the ordinary mark fast path and has no waiter. Lifecycle
+    ** owners need the edge only after they publish a terminal gate/flag. */
+    if (wake)
+      arena_progress_wake(a);
   }
 }
 
 static void arena_remote_leave(GCArena *a)
 {
-  uint32_t active = la_load32_acq(&a->hdr.remote_active);
-  lj_assertX((active & LJ_ARENA_REMOTE_CLOSED) == 0 && active != 0,
-	     "arena remote publisher leave without admission");
-  if ((active & LJ_ARENA_REMOTE_CLOSED) == 0 && active != 0)
-    (void)la_sub32_acqrel(&a->hdr.remote_active, 1);
-}
-
-static int arena_remote_close(GCArena *a)
-{
-  uint32_t expect = 0;
-  return a && la_cas32(&a->hdr.remote_active, &expect,
-		       LJ_ARENA_REMOTE_CLOSED, LA_ACQ_REL, LA_ACQ);
+  arena_publish_leave(a);
 }
 
 int lj_arena_remote_sweep_busy_acq(const GCArena *a)
 {
-  uint32_t active;
+  uint64_t active;
   if (!a)
     return 0;
   active = lj_arena_remote_active_acq(a);
-  /* Ordinary admitted publishers may still mutate sweep state and must leave
-  ** before the owner freezes it. A CLOSED gate admits only queue-only late
-  ** records. Those never mutate sweep/allocation bitmaps, and reclaimed-stack
-  ** adoption already refuses to reopen while their low-bit count is nonzero.
-  */
-  return (active & LJ_ARENA_REMOTE_CLOSED) == 0 && active != 0;
+  return arena_remote_count(active) != 0;
 }
 
-static int arena_remote_try_open(GCArena *a)
+int lj_arena_reclaim_seal(GCArena *a)
 {
-  uint32_t expect = LJ_ARENA_REMOTE_CLOSED;
-  return a && la_cas32(&a->hdr.remote_active, &expect, 0,
-		       LA_ACQ_REL, LA_ACQ);
+  uint64_t active;
+  if (!a)
+    return 0;
+  active = lj_arena_remote_active_acq(a);
+  for (;;) {
+    uint64_t state = active & LJ_ARENA_REMOTE_STATE_MASK;
+    uint64_t expect = active;
+    uint64_t next;
+    if (arena_remote_count(active) != 0)
+      return 0;
+    if (state & LJ_ARENA_REMOTE_SEALED)
+      return 0;
+    if (state != 0 && state != LJ_ARENA_REMOTE_CLOSED &&
+	state != (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_PENDING))
+      return 0;
+    next = (state & LJ_ARENA_REMOTE_PENDING) |
+	   LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED;
+    if (la_cas64(&a->hdr.remote_active, &expect, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    active = expect;
+  }
+}
+
+/* Final clean-state arbitration. A bit-only publisher changes this exact word
+** before publishing its intent, so the owner cannot enter mutation/commit
+** ownership past a preempted producer. */
+static int arena_reclaim_commit_sealed(GCArena *a)
+{
+  uint64_t expect = LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED;
+  return a && la_cas64(&a->hdr.remote_active, &expect,
+			LJ_ARENA_REMOTE_SEALED, LA_ACQ_REL, LA_ACQ);
+}
+
+int lj_arena_reclaim_clear_pending(GCArena *a)
+{
+  uint64_t active;
+  const uint64_t clean = LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED;
+  if (!a)
+    return 0;
+  active = lj_arena_remote_active_acq(a);
+  for (;;) {
+    uint64_t expect = active;
+    if (active == clean)
+      return 1;
+    if (active != (clean|LJ_ARENA_REMOTE_PENDING))
+      return 0;
+    if (la_cas64(&a->hdr.remote_active, &expect, clean,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    active = expect;
+  }
+}
+
+void lj_arena_reclaim_unseal(GCArena *a, int keep_pending)
+{
+  uint64_t active;
+  if (!a)
+    return;
+  active = lj_arena_remote_active_acq(a);
+  for (;;) {
+    uint64_t expect = active;
+    uint64_t next;
+    lj_assertX((active & LJ_ARENA_REMOTE_SEALED) != 0,
+	       "arena unseal without exclusive ownership");
+    if (!(active & LJ_ARENA_REMOTE_SEALED))
+      return;
+    next = arena_remote_count(active) | LJ_ARENA_REMOTE_CLOSED |
+	((keep_pending || arena_remote_count(active) != 0) &&
+	 (active & LJ_ARENA_REMOTE_PENDING) ?
+	 LJ_ARENA_REMOTE_PENDING : 0u);
+    if (la_cas64(&a->hdr.remote_active, &expect, next,
+		 LA_REL, LA_ACQ))
+      return;
+    active = expect;
+  }
+}
+
+static int arena_remote_open_sealed(GCArena *a)
+{
+  uint64_t active;
+  if (!a)
+    return 0;
+  active = lj_arena_remote_active_acq(a);
+  for (;;) {
+    uint64_t expect = active;
+    if (active != LJ_ARENA_REMOTE_SEALED)
+      return 0;
+    if (la_cas64(&a->hdr.remote_active, &expect, 0,
+		 LA_REL, LA_ACQ))
+      return 1;
+    active = expect;
+  }
+}
+
+int lj_arena_rescue_enter(GCArena *a)
+{
+  uint64_t active;
+  if (!a)
+    return 0;
+  active = lj_arena_remote_active_acq(a);
+  for (;;) {
+    uint64_t expect = active;
+    uint64_t next;
+    int committed;
+    if (arena_remote_count(active) == LJ_ARENA_REMOTE_COUNT_MASK) {
+      arena_remote_overflow();
+    }
+    committed = (active & LJ_ARENA_REMOTE_SEALED) &&
+		!(active & LJ_ARENA_REMOTE_CLOSED);
+    next = active + 1u;
+    if (!committed &&
+	(active & (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)))
+      next |= LJ_ARENA_REMOTE_PENDING;
+    if (la_cas64(&a->hdr.remote_active, &expect, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return committed ? LJ_ARENA_RESCUE_COMMITTED :
+	((active & LJ_ARENA_REMOTE_SEALED) ?
+	 LJ_ARENA_RESCUE_BIT_ONLY : LJ_ARENA_RESCUE_FULL);
+    active = expect;
+  }
+}
+
+void lj_arena_rescue_leave(GCArena *a)
+{
+  arena_publish_leave(a);
 }
 
 static void arena_remote_late_leave(GCArena *a)
 {
-  uint32_t old = la_sub32_acqrel(&a->hdr.remote_active, 1);
-  lj_assertX((old & LJ_ARENA_REMOTE_CLOSED) != 0 &&
-	     (old & ~LJ_ARENA_REMOTE_CLOSED) != 0,
-	     "arena late publisher leave without admission");
-  if ((old & ~LJ_ARENA_REMOTE_CLOSED) == 1u) {
-    uint32_t flags = lj_arena_flags_acq(a);
-    /* Adoption clears RECLAIMED only after bins are fully rebuilt. If it lost
-    ** the final OPEN CAS to this publisher, the last leave completes it. */
-    if (!(flags & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|
-		   LJ_AF_PREPSWEEP|LJ_AF_RECLAIMED)))
-      (void)arena_remote_try_open(a);
-  }
+  arena_publish_leave(a);
 }
 
 typedef struct LJHugeEnt {
@@ -1289,19 +1441,30 @@ static uint32_t arena_bin(uint32_t ncells)
 
 #define LJ_ARENA_BIN_WALK_LIMIT 8192u
 
-static void arena_set_alloc(GCArena *a, uint32_t cell, int black)
+static void arena_set_extent(GCArena *a, uint32_t cell)
 {
+  lj_arena_bm_clear(a->block, cell);
+  lj_arena_bm_clear(a->mark, cell);
+}
+
+static void arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
+			    int black)
+{
+  uint32_t i;
+  lj_assertX(ncells != 0 && cell >= LJ_AFIRST_CELL &&
+	     ncells <= LJ_ARENA_CELLS - cell,
+	     "arena allocation extent out of range");
+  /* Rebuilt free runs coalesce adjacent state-1 boundaries. Consuming such a
+  ** run must erase every old interior boundary before publishing its new
+  ** allocation start; otherwise a later rebuild can relink a suffix of this
+  ** live allocation as reusable storage. */
+  for (i = 1; i < ncells; i++)
+    arena_set_extent(a, cell + i);
   lj_arena_bm_set(a->block, cell);
   if (black)
     lj_arena_bm_set(a->mark, cell);
   else
     lj_arena_bm_clear(a->mark, cell);
-}
-
-static void arena_set_extent(GCArena *a, uint32_t cell)
-{
-  lj_arena_bm_clear(a->block, cell);
-  lj_arena_bm_clear(a->mark, cell);
 }
 
 static void arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
@@ -1313,18 +1476,24 @@ static void arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
     arena_set_extent(a, start + i);
 }
 
-static void arena_insert_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
-				  uint32_t len)
+static void arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
+				uint32_t len)
 {
   uint32_t k = arena_kind(a->hdr.flags);
   uint32_t b = arena_bin(len);
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
-  arena_set_free_run(a, start, len);
   run->start = start;
   run->len = len;
   run->next = alloc->bins[k][b];
   alloc->bins[k][b] = run;
   alloc->binmask[k] |= (uint32_t)1u << b;
+}
+
+static void arena_insert_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
+				  uint32_t len)
+{
+  arena_set_free_run(a, start, len);
+  arena_link_run_head(alloc, a, start, len);
 }
 
 static LJ_AINLINE int arena_free_run_ptr_ok(const LJArenaFreeRun *run)
@@ -1424,26 +1593,27 @@ static LJ_AINLINE void arena_remote_set_meta(LJArenaRemoteFree *node,
   la_store32_rel(&node->meta, arena_remote_meta(start, len));
 }
 
-static int arena_remote_record_push(GCArena *a, void *p, size_t size)
+/* A terminal/grace-late free needs no intrusive size record. The allocation
+** bitmap already identifies its exact start and extent, while this atomic bit
+** pins that allocation until a later PREPSWEEP and grace consume it. */
+static int arena_late_pin(GCArena *a, const void *p, size_t size)
 {
-  LJArenaRemoteFree *node, *head;
   uint32_t start, ncells;
+  if (!a || !p || size == 0)
+    return -1;
   start = lj_arena_cellof(p);
   ncells = lj_arena_ncells(size);
-  if (size == 0 || start < LJ_AFIRST_CELL ||
+  if (start < LJ_AFIRST_CELL || start >= LJ_ARENA_CELLS ||
       ncells > LJ_ARENA_CELLS - start ||
       lj_arena_cellptr(a, start) != p)
-    return -1;  /* Invalid/duplicate terminal free: retain safely. */
-  if (la_bit_test_and_set64(&a->late[start >> 6], start & 63))
-    return -1;  /* One exact size-bearing record is already discoverable. */
-  node = (LJArenaRemoteFree *)p;
-  arena_remote_set_meta(node, start, ncells);
-  head = (LJArenaRemoteFree *)la_loadptr_acq(
-    (void *const *)&a->hdr.remote_free);
-  do {
-    la_storeptr_rlx((void **)&node->next, head);
-  } while (!la_casptr((void **)&a->hdr.remote_free, (void **)&head, node,
-		       LA_REL, LA_ACQ));
+    return -1;
+  /* Admission count precedes this atomic classification. An adoption cannot
+  ** open/reuse the cell until leave; a terminal apply racing block 1->0 makes
+  ** this at worst a duplicate bit which stable adoption removes. */
+  if (!((la_load64_acq(&a->block[start >> 6]) >> (start & 63)) & 1u))
+    return -1;
+  (void)la_bit_test_and_set64(&a->late[start >> 6], start & 63);
+  arena_progress_wake(a);
   return 1;
 }
 
@@ -1453,7 +1623,7 @@ static int arena_remote_late_publish(GCArena *a, void *p, size_t size)
   int published;
   if (entered <= 0)
     return entered;  /* Zero means reopened/retry; negative means retain. */
-  published = arena_remote_record_push(a, p, size);
+  published = arena_late_pin(a, p, size);
   arena_remote_late_leave(a);
   return published;
 }
@@ -1485,10 +1655,9 @@ retry_open:
   if ((flags & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE)) &&
       lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING)
     return 1;
-  /* A closed terminal/reclaimed gate owns bitmap publication. Queue only an
-  ** exact size-bearing late record. A commit-freed duplicate is discarded at
-  ** adoption; a still-allocated body remains pinned until the next complete
-  ** sweep/grace consumes the record. */
+  /* A closed terminal/reclaimed gate owns bitmap publication. Publish only a
+  ** sidecar late bit: the body remains intact and allocated until a later
+  ** complete sweep/grace consumes the pin. */
   if (!arena_remote_enter(a)) {
     int late = arena_remote_late_publish(a, (void *)p, size);
     if (late == 0)
@@ -1498,7 +1667,7 @@ retry_open:
   flags = lj_arena_flags_acq(a);
   if (!(flags & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE))) {
     if (flags & (LJ_AF_PREPSWEEP|LJ_AF_RECLAIMED)) {
-      (void)arena_remote_record_push(a, (void *)p, size);
+      (void)arena_late_pin(a, p, size);
       arena_remote_leave(a);
       return 1;
     }
@@ -1599,7 +1768,7 @@ retry_open:
 
 static uint32_t arena_remote_free_drain_one(TGAlloc *alloc, GCArena *a)
 {
-  LJArenaRemoteFree *node, *deferred = NULL, *deferred_tail = NULL;
+  LJArenaRemoteFree *node;
   uint32_t n = 0;
   uint32_t flags;
   if (!alloc || !a ||
@@ -1617,46 +1786,16 @@ static uint32_t arena_remote_free_drain_one(TGAlloc *alloc, GCArena *a)
 	start < LJ_ARENA_CELLS && len != 0 &&
 	len <= LJ_ARENA_CELLS - start &&
 	lj_arena_cellptr(a, start) == (void *)node;
-    uint64_t bit = valid ? (uint64_t)1 << (start & 63) : 0;
-    int late = valid &&
-      (la_load64_acq(&a->late[start >> 6]) & bit) != 0;
-    if (late && lj_arena_bm_get(a->block, start)) {
-      /* This physical free began after the arena's terminal grace. Keep its
-      ** exact size-bearing record and committed allocation bit until the next
-      ** sweep resets sweep[] and consumes it as FREEING. That cycle's root
-      ** prune and grace then cover any reanchored tombstone before reuse. */
-      la_storeptr_rlx((void **)&node->next, deferred);
-      if (!deferred_tail)
-	deferred_tail = node;
-      deferred = node;
-    } else {
-      if (late) {
-	/* The committed sweep already freed this cell. The late record is only
-	** a duplicate and no new grace is needed for an allocation that cannot
-	** still be reached through this body. */
-	(void)la_and64_rlx(&a->late[start >> 6], ~bit);
-      }
-      if (valid && lj_arena_bm_get(a->block, start)) {
-	if (flags & LJ_AF_RECLAIMED)
-	  arena_set_free_run(a, start, len);
-	else
-	  arena_insert_run(alloc, a, start, len);
-	(void)lj_arena_sweep_state_cas(a, start,
-	  LJ_ARENA_SWEEP_FREEING, LJ_ARENA_SWEEP_WHITE);
-	n++;
-      }
+    if (valid && lj_arena_bm_get(a->block, start)) {
+      if (flags & LJ_AF_RECLAIMED)
+	arena_set_free_run(a, start, len);
+      else
+	arena_insert_run(alloc, a, start, len);
+      (void)lj_arena_sweep_state_cas(a, start,
+	LJ_ARENA_SWEEP_FREEING, LJ_ARENA_SWEEP_WHITE);
+      n++;
     }
     node = next;
-  }
-  if (deferred) {
-    LJArenaRemoteFree *head = (LJArenaRemoteFree *)la_loadptr_acq(
-      (void *const *)&a->hdr.remote_free);
-    /* Publish the partition as one intact list. Only the tail is rewritten
-    ** across CAS retries, so no retained node's traversal link is corrupted. */
-    do {
-      la_storeptr_rlx((void **)&deferred_tail->next, head);
-    } while (!la_casptr((void **)&a->hdr.remote_free, (void **)&head,
-			 deferred, LA_REL, LA_ACQ));
   }
   return n;
 }
@@ -1676,11 +1815,6 @@ uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc, GCArena *a)
       (void *const *)&node->next);
     uint32_t start = arena_remote_start(node);
     uint32_t len = arena_remote_len(node);
-    if (lj_arena_of(node) == a && start >= LJ_AFIRST_CELL &&
-	start < LJ_ARENA_CELLS &&
-	lj_arena_cellptr(a, start) == (void *)node)
-      (void)la_and64_rlx(&a->late[start >> 6],
-			 ~(uint64_t)((uint64_t)1 << (start & 63)));
     if (lj_arena_of(node) == a && start >= LJ_AFIRST_CELL &&
 	start < LJ_ARENA_CELLS && len != 0 &&
 	len <= LJ_ARENA_CELLS - start &&
@@ -1809,15 +1943,131 @@ static int arena_reclaimed_cas(TGAlloc *alloc, uint32_t k,
 		   LA_ACQ_REL, LA_ACQ);
 }
 
+static void arena_sweep_state_reset(GCArena *a)
+{
+  uint32_t w;
+  for (w = 0; w < LJ_ARENA_SWEEP_WORDS; w++)
+    la_store64_rel(&a->sweep[w], 0);
+}
+
 static void arena_sweep_state_prepare(GCArena *a)
 {
+  uint32_t w;
   /* WHITE means "not detached/classified" during NEEDSWEEP. The mark bitmap
   ** still distinguishes live raw/fixed allocations. LIVE is reserved for an
   ** exact old GC header detached from the ownership spine (or rescued after
-  ** retirement), so the post-grace pass can reanchor it exactly once. */
-  memset(a->sweep, 0, sizeof(a->sweep));
+  ** retirement), so the post-grace pass can reanchor it exactly once. Keep an
+  ** allocated FREEING start terminal throughout PREP: an intrusive remote-free
+  ** record may already own and overwrite that body, and no committed reader may
+  ** observe a transient WHITE gap before the stable queue drain. */
+  for (w = 0; w < LJ_ARENA_SWEEP_WORDS; w++) {
+    uint64_t old = la_load64_acq(&a->sweep[w]);
+    uint64_t block = la_load64_acq(&a->block[w >> 1]);
+    uint32_t starts = (uint32_t)(w & 1u ? block >> 32 : block);
+    uint64_t next = 0;
+    uint32_t j;
+    for (j = 0; j < 32u; j++) {
+      uint32_t cell = (w << 5) + j;
+      if (cell >= LJ_AFIRST_CELL && (starts & ((uint32_t)1u << j)) &&
+	  ((old >> (j << 1)) & 3u) == LJ_ARENA_SWEEP_FREEING)
+	next |= (uint64_t)LJ_ARENA_SWEEP_FREEING << (j << 1);
+    }
+    la_store64_rel(&a->sweep[w], next);
+  }
   a->hdr.reclaim_cell = LJ_AFIRST_CELL;
   a->hdr.reclaim_deferred = 0;
+}
+
+static void arena_prepare_bump_tail(GCArena *a)
+{
+  uint32_t cell, end, i;
+  if (!a)
+    return;
+  cell = la_load32_acq(&a->hdr.prep_bump_cell);
+  end = la_load32_acq(&a->hdr.prep_bump_end);
+  if (cell >= LJ_AFIRST_CELL && cell < end && end <= LJ_ARENA_CELLS) {
+    /* Committed PREP readers may mark another live cell in the same word.
+    ** Structural publication must therefore update only its own bits with
+    ** atomic RMWs instead of losing an unrelated concurrent mark OR. */
+    (void)la_and64_rlx(&a->block[cell >> 6],
+		       ~((uint64_t)1 << (cell & 63)));
+    (void)la_or64_rlx(&a->mark[cell >> 6],
+		      (uint64_t)1 << (cell & 63));
+    for (i = cell + 1u; i < end; i++) {
+      (void)la_and64_rlx(&a->block[i >> 6],
+			 ~((uint64_t)1 << (i & 63)));
+      (void)la_and64_rlx(&a->mark[i >> 6],
+			 ~((uint64_t)1 << (i & 63)));
+    }
+  }
+  la_store32_rel(&a->hdr.prep_bump_cell, 0);
+  la_store32_rel(&a->hdr.prep_bump_end, 0);
+}
+
+/* Consume only pins which were visible before this PREPSWEEP generation.
+** SEALED admission makes a concurrent publisher set PENDING first. A bit
+** published after this exchange simply remains pinned for one extra cycle. */
+static uint32_t arena_late_prepare_consume(GCArena *a)
+{
+  uint32_t w, n = 0;
+  for (w = 0; w < LJ_ARENA_WORDS; w++) {
+    uint64_t bits = la_load64_acq(&a->late[w]);
+    while (bits) {
+      uint32_t j = lj_ffs64(bits);
+      uint32_t cell = (w << 6) + j;
+      uint32_t state;
+      bits &= bits - 1u;
+      if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+	  !lj_arena_bm_get(a->block, cell)) {
+	(void)la_and64_rlx(&a->late[w], ~((uint64_t)1 << j));
+	continue;
+      }
+      state = lj_arena_sweep_state_acq(a, cell);
+      while (state != LJ_ARENA_SWEEP_FREEING) {
+	if (lj_arena_sweep_state_cas(a, cell, state,
+					 LJ_ARENA_SWEEP_FREEING)) {
+	  n++;
+	  break;
+	}
+	state = lj_arena_sweep_state_acq(a, cell);
+      }
+      /* Publish terminal state before clearing the pin. A marker which misses
+      ** the bit must observe/recheck FREEING before reading the body. */
+      (void)la_and64_rlx(&a->late[w], ~((uint64_t)1 << j));
+    }
+  }
+  return n;
+}
+
+/* A current-generation late pin represents an already-completed physical
+** destructor. Keep the allocation body, never reconstruct its header, and
+** settle transient detached accounting before the terminal bitmap scan. */
+static uint32_t arena_quarantine_settle_late(GCArena *a)
+{
+  uint32_t w, n = 0;
+  for (w = 0; w < LJ_ARENA_WORDS; w++) {
+    uint64_t bits = la_load64_acq(&a->late[w]) & a->block[w];
+    while (bits) {
+      uint32_t j = lj_ffs64(bits);
+      uint32_t cell = (w << 6) + j;
+      uint32_t state = lj_arena_sweep_state_acq(a, cell);
+      bits &= bits - 1u;
+      while (state != LJ_ARENA_SWEEP_WHITE) {
+	if (lj_arena_sweep_state_cas(a, cell, state,
+					 LJ_ARENA_SWEEP_WHITE)) {
+	  if (state == LJ_ARENA_SWEEP_RETIRED) {
+	    uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	    lj_assertX(old != 0, "arena late-pin deferred underflow");
+	    UNUSED(old);
+	  }
+	  n++;
+	  break;
+	}
+	state = lj_arena_sweep_state_acq(a, cell);
+      }
+    }
+  }
+  return n;
 }
 
 void lj_arena_alloc_set_registry(TGAlloc *alloc, HugeTab *tab)
@@ -1959,7 +2209,7 @@ static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
   if (rr->bump.len >= LJ_BUMP_MIN &&
       start == rr->bump.start && len == rr->bump.len)
     return;
-  arena_insert_run_head(rr->alloc, rr->a, start, len);
+  arena_link_run_head(rr->alloc, rr->a, start, len);
 }
 
 static void arena_rebuild_free_run(uint32_t start, uint32_t len, void *ud)
@@ -1969,13 +2219,16 @@ static void arena_rebuild_free_run(uint32_t start, uint32_t len, void *ud)
     return;
   if (len > rf->limit - start)
     len = rf->limit - start;
-  arena_insert_run_head(rf->alloc, rf->a, start, len);
+  arena_link_run_head(rf->alloc, rf->a, start, len);
 }
 
 static int arena_adopt_reclaimed_one(TGAlloc *alloc, uint32_t k)
 {
-  GCArena *a, *next;
+  GCArena *a, *next, *old_owned;
   ArenaRebuildFree rf;
+  TGAlloc staged;
+  LJArenaFreeRun *old_bins[LJ_ALLOC_NBINS];
+  uint32_t old_binmask, b;
   if (!alloc || k >= LJ_ARENA_NKINDS)
     return 0;
   a = arena_reclaimed_acq(alloc, k);
@@ -1986,29 +2239,63 @@ static int arena_adopt_reclaimed_one(TGAlloc *alloc, uint32_t k)
     if (arena_reclaimed_cas(alloc, k, &a, next))
       break;
   }
-  /* The terminal gate is still CLOSED. Materialize ordinary records and
-  ** commit-freed late duplicates, but retain late records for committed live
-  ** cells until the next sweep/grace. A late producer either increments the
-  ** closed-gate count first (making this CAS fail) or observes OPEN and takes
-  ** the ordinary remote queue path. Deferred records do not prevent adoption:
-  ** their allocation bits remain set and ordinary owner drains retain them. */
+  la_store32_rel(&a->hdr.flags,
+		 lj_arena_flags_acq(a) | LJ_AF_PREPSWEEP);
+  if (!lj_arena_reclaim_seal(a))
+    goto retry_reclaimed;
+  /* Rebuild into private staging heads while CLOSED|SEALED. If a bit-only
+  ** publisher dirties the gate, no reusable run has escaped into owner bins. */
   (void)arena_remote_free_drain_one(alloc, a);
-  if (!arena_remote_try_open(a)) {
+  arena_late_clear_committed_free(a);
+  if (!lj_arena_reclaim_clear_pending(a) ||
+      !arena_reclaim_commit_sealed(a))
+    goto retry_unseal;
+  memset(&staged, 0, sizeof(staged));
+  memcpy(old_bins, alloc->bins[k], sizeof(old_bins));
+  old_binmask = alloc->binmask[k];
+  old_owned = alloc->owned[k];
+  rf.alloc = &staged;
+  rf.a = a;
+  rf.limit = LJ_ARENA_CELLS;
+  lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
+  for (b = 0; b < LJ_ALLOC_NBINS; b++) {
+    LJArenaFreeRun *head = staged.bins[k][b];
+    if (head) {
+      LJArenaFreeRun *tail = head;
+      while (tail->next)
+	tail = tail->next;
+      tail->next = alloc->bins[k][b];
+      alloc->bins[k][b] = head;
+    }
+  }
+  alloc->binmask[k] |= staged.binmask[k];
+  la_store32_rel(&a->hdr.flags,
+		 lj_arena_flags_acq(a) & ~LJ_AF_RECLAIMED);
+  lj_arena_next_rel(a, old_owned);
+  alloc->owned[k] = a;
+  if (arena_remote_open_sealed(a)) {
+    la_store32_rel(&a->hdr.flags,
+		   lj_arena_flags_acq(a) & ~LJ_AF_PREPSWEEP);
+    return 1;
+  }
+  /* A publisher won after the clean generation CAS. Roll back owner-visible
+  ** staging without touching its bit intent, then retry from CLOSED later. */
+  alloc->owned[k] = old_owned;
+  memcpy(alloc->bins[k], old_bins, sizeof(old_bins));
+  alloc->binmask[k] = old_binmask;
+  la_store32_rel(&a->hdr.flags,
+		 lj_arena_flags_acq(a) | LJ_AF_RECLAIMED);
+
+retry_unseal:
+  lj_arena_reclaim_unseal(a, 1);
+retry_reclaimed:
+  {
     GCArena *head = arena_reclaimed_acq(alloc, k);
     do {
       lj_arena_next_rel(a, head);
     } while (!arena_reclaimed_cas(alloc, k, &head, a));
-    return 0;
   }
-  la_store32_rel(&a->hdr.flags,
-		 lj_arena_flags_acq(a) & ~LJ_AF_RECLAIMED);
-  lj_arena_next_rel(a, alloc->owned[k]);
-  alloc->owned[k] = a;
-  rf.alloc = alloc;
-  rf.a = a;
-  rf.limit = LJ_ARENA_CELLS;
-  lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
-  return 1;
+  return 0;
 }
 
 void lj_arena_alloc_init(TGAlloc *alloc)
@@ -2072,31 +2359,44 @@ void lj_arena_alloc_rebuild_free(TGAlloc *alloc)
     lj_arena_alloc_rebuild_free_kind(alloc, k);
 }
 
-void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
+int lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
 {
-  GCArena *a, *reclaimed;
+  GCArena *a, *reclaimed, *work, *prepared = NULL;
+  int complete = 1;
   if (k >= LJ_ARENA_NKINDS)
-    return;
-  a = alloc->owned[k];
+    return 0;
   /* A completed sweep leaves arenas on the CLOSED reclaimed stack until the
   ** owner needs allocation space. A later collection must not depend on such
-  ** an allocation: detach the whole stack at this owner safepoint and feed it
-  ** directly into the new NEEDSWEEP set. The gate deliberately stays CLOSED;
-  ** late remote frees remain queued and are classified after sweep[] has been
-  ** reinitialised below. Only the sweep owner publishes reclaimed entries, and
-  ** RESET_ALLOC runs while that owner is serialized, so an entry published
-  ** after this exchange belongs to a later completed sweep generation.
+  ** an allocation. First detach every owner allocation cursor and bin at this
+  ** owner safepoint. A gate collision can then leave an arena in PREPSWEEP
+  ** without returning it to allocator-visible state; the mutator may allocate
+  ** a fresh arena while the last publisher wakes a later RESET_ALLOC retry.
   */
-  reclaimed = (GCArena *)la_xchgptr_acqrel(
-    (void **)&alloc->reclaimed[k], NULL);
-  if (alloc->bump[k].a && alloc->bump[k].cell < alloc->bump[k].end)
-    arena_set_free_run(alloc->bump[k].a, alloc->bump[k].cell,
-		       alloc->bump[k].end - alloc->bump[k].cell);
+  if (alloc->bump[k].a) {
+    if (alloc->bump[k].cell < alloc->bump[k].end) {
+      la_store32_rel(&alloc->bump[k].a->hdr.prep_bump_cell,
+		     alloc->bump[k].cell);
+      la_store32_rel(&alloc->bump[k].a->hdr.prep_bump_end,
+		     alloc->bump[k].end);
+    } else {
+      la_store32_rel(&alloc->bump[k].a->hdr.prep_bump_cell, 0);
+      la_store32_rel(&alloc->bump[k].a->hdr.prep_bump_end, 0);
+    }
+  }
+  a = alloc->owned[k];
   alloc->owned[k] = NULL;
   alloc->bump[k].a = NULL;
   alloc->bump[k].cell = 0;
   alloc->bump[k].end = 0;
   arena_clear_bins(alloc, k);
+  reclaimed = (GCArena *)la_xchgptr_acqrel(
+    (void **)&alloc->reclaimed[k], NULL);
+  work = alloc->needsweep[k];  /* PREPSWEEP entries from an earlier retry. */
+  alloc->needsweep[k] = NULL;
+
+  /* Publish every newly detached source as PREPSWEEP before it becomes part of
+  ** the retry list. Remote physical frees then use nonintrusive late pins even
+  ** if their OPEN admission raced this owner-side detachment. */
   while (a || reclaimed) {
     GCArena *next;
     if (!a) {
@@ -2111,21 +2411,58 @@ void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
 		   (lj_arena_flags_acq(a) &
 		    ~(LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) |
 		   LJ_AF_PREPSWEEP);
-    arena_sweep_state_prepare(a);
-    /* A remote destructor which started before PREPSWEEP may already have
-    ** published its intrusive record. This also consumes CLOSED records which
-    ** adoption deliberately retained for a fresh cycle. Convert them to
-    ** terminal sweep state only after state initialization; any later producer
-    ** is consumed by the bounded first-pass drain after NEEDSWEEP is visible. */
-    (void)lj_arena_remote_free_drain_sweep(alloc, a);
-    la_store32_rel(&a->hdr.flags,
-		   (lj_arena_flags_acq(a) &
-		    ~(LJ_AF_PREPSWEEP|LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) |
-		   LJ_AF_NEEDSWEEP);
-    lj_arena_next_rel(a, alloc->needsweep[k]);
-    alloc->needsweep[k] = a;
+    lj_arena_next_rel(a, work);
+    work = a;
     a = next;
   }
+
+  while (work) {
+    GCArena *next = lj_arena_next_acq(work);
+    uint32_t flags = lj_arena_flags_acq(work);
+    if (next == work)
+      next = NULL;
+    /* A prior retry may already have completed this arena. */
+    if ((flags & (LJ_AF_NEEDSWEEP|LJ_AF_PREPSWEEP)) ==
+	LJ_AF_NEEDSWEEP)
+      goto prepared_one;
+    la_store32_rel(&work->hdr.flags,
+		   (flags &
+		    ~(LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) |
+		   LJ_AF_PREPSWEEP);
+    if (!lj_arena_reclaim_seal(work)) {
+      complete = 0;
+      goto prepared_one;
+    }
+    /* SEALED still admits counted intent producers. PREPSWEEP is visible
+    ** before the exact zero-count generation LP, so a post-LP reader returns
+    ** DEAD without touching header bytes while sweep/late state is rebuilt. */
+    if (!lj_arena_reclaim_clear_pending(work) ||
+	!arena_reclaim_commit_sealed(work)) {
+      lj_arena_reclaim_unseal(work, 1);
+      complete = 0;
+      goto prepared_one;
+    }
+    arena_prepare_bump_tail(work);
+    arena_sweep_state_prepare(work);
+    /* Ordinary OPEN records are stable under SEALED. Grace-late frees are
+    ** bit-only and become FREEING only in this later generation, before its
+    ** grace. A publication racing this exchange remains pinned for one extra
+    ** generation and sets PENDING before the bit. */
+    (void)lj_arena_remote_free_drain_sweep(alloc, work);
+    (void)arena_late_prepare_consume(work);
+    lj_arena_reclaim_unseal(work, 1);
+    la_store32_rel(&work->hdr.flags,
+		   (lj_arena_flags_acq(work) &
+		    ~(LJ_AF_PREPSWEEP|LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) |
+		   LJ_AF_NEEDSWEEP);
+
+prepared_one:
+    lj_arena_next_rel(work, prepared);
+    prepared = work;
+    work = next;
+  }
+  alloc->needsweep[k] = prepared;
+  return complete;
 }
 
 GCArena *lj_arena_alloc_quarantine_one(TGAlloc *alloc, uint32_t kind,
@@ -2163,22 +2500,34 @@ GCArena *lj_arena_alloc_reclaimed_head(const TGAlloc *alloc, uint32_t kind)
     arena_reclaimed_acq(alloc, kind) : NULL;
 }
 
-static int arena_quarantine_bitmap_ready(GCArena *a)
+static int arena_quarantine_bitmap_ready(GCArena *a, uint32_t *retry_cell)
 {
   uint32_t w;
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
-    uint64_t b = a->block[w];
+    uint64_t b = la_load64_acq(&a->block[w]);
+    uint64_t late = la_load64_acq(&a->late[w]);
+    uint64_t marks = la_load64_acq(&a->mark[w]);
     uint32_t j;
     for (j = 0; j < 64u; j++) {
       uint32_t state;
       if (!(b & ((uint64_t)1 << j)))
 	continue;
+      if (late & ((uint64_t)1 << j))
+	continue;
       state = lj_arena_sweep_state_acq(a, (w << 6) + j);
       if (state == LJ_ARENA_SWEEP_LIVE ||
-	  state == LJ_ARENA_SWEEP_RETIRED ||
-	  (state == LJ_ARENA_SWEEP_WHITE &&
-	   !(a->mark[w] & ((uint64_t)1 << j))))
-	return 0;  /* Detached root, pending destructor, or unclassified white. */
+	  state == LJ_ARENA_SWEEP_RETIRED) {
+	if (retry_cell)
+	  *retry_cell = (w << 6) + j;
+	return 0;  /* First actionable detached root or pending destructor. */
+      }
+      if (state == LJ_ARENA_SWEEP_WHITE &&
+	  !(marks & ((uint64_t)1 << j))) {
+	/* The ownership-spine pass has completed, so a remaining WHITE start is
+	** raw/opaque storage. Resolve it here while SEALED instead of returning
+	** an owner-only reason with no publisher wake. */
+	(void)la_bit_test_and_set64(&a->mark[w], j);
+      }
     }
   }
   return 1;
@@ -2188,8 +2537,9 @@ static void arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
 {
   uint32_t w;
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
-    uint64_t b = a->block[w];
-    uint64_t m = a->mark[w];
+    uint64_t b = la_load64_acq(&a->block[w]);
+    uint64_t m = la_load64_acq(&a->mark[w]);
+    uint64_t late = la_load64_acq(&a->late[w]);
     uint64_t live = 0, freeing = 0;
     uint32_t j;
     for (j = 0; j < 64u; j++) {
@@ -2197,53 +2547,76 @@ static void arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
       uint32_t state;
       if (!(b & ((uint64_t)1 << j)))
 	continue;
+      if (late & ((uint64_t)1 << j)) {
+	live |= (uint64_t)1 << j;
+	continue;
+      }
       state = lj_arena_sweep_state_acq(a, cell);
       if (state == LJ_ARENA_SWEEP_WHITE)
 	live |= (uint64_t)1 << j;
       else
 	freeing |= (uint64_t)1 << j;
     }
-    a->block[w] = live;
-    a->mark[w] = ((~b) & m) | freeing |
-		 (preserve_marks ? live : (uint64_t)0);
+    la_store64_rel(&a->block[w], live);
+    la_store64_rel(&a->mark[w], ((~b) & m) | freeing |
+		   (preserve_marks ? live : (uint64_t)0));
   }
 }
 
 int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
 				      GCArena *a, uint32_t sweep_epoch,
-				      int preserve_marks)
+				      int preserve_marks, uint32_t *reasonp)
 {
   GCArena *head, *next, *reclaimed;
-  uint32_t remote_active;
+  uint32_t retry_cell = LJ_ARENA_CELLS;
+  uint32_t reason = LJ_ARENA_FINISH_NONE;
+  if (reasonp)
+    *reasonp = LJ_ARENA_FINISH_NONE;
   if (!alloc || kind >= LJ_ARENA_NKINDS || !a)
     return 0;
   head = alloc->quarantine[kind];
   if (head != a)
     return 0;
-  /* Freeze state-to-bitmap publication. Producers admitted before close are
-  ** covered by remote_active; producers admitted under CLOSED may publish only
-  ** late queue records for adoption, never sweep/allocation bitmap changes. */
   la_store32_rel(&a->hdr.flags,
 		 (lj_arena_flags_acq(a) & ~LJ_AF_RECLAIMED) |
 		 LJ_AF_QUARANTINE|LJ_AF_PREPSWEEP);
-  /* Closing zero is the terminal admission LP. A producer either completed
-  ** all sweep-state writes before this CAS, or observes CLOSED and uses the
-  ** queue-only late protocol. Keep CLOSED through reclaimed-stack publication
-  ** so owner adoption can serialize every late node before reuse. */
-  remote_active = lj_arena_remote_active_acq(a);
-  if (((remote_active & LJ_ARENA_REMOTE_CLOSED) == 0 &&
-       remote_active != 0) ||
-      la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL ||
-      la_load64_acq(&a->hdr.retire_epoch) == ~(uint64_t)0 ||
-      lj_arena_reclaim_deferred_acq(a) != 0 ||
-      !arena_quarantine_bitmap_ready(a) ||
-      ((remote_active & LJ_ARENA_REMOTE_CLOSED) == 0 &&
-       !arena_remote_close(a))) {
-    la_store32_rel(&a->hdr.flags,
-		   lj_arena_flags_acq(a) & ~LJ_AF_PREPSWEEP);
-    return 0;
+  if ((lj_arena_remote_active_acq(a) &
+       (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)) !=
+      (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)) {
+    reason = LJ_ARENA_FINISH_PUBLISHER;
+    goto blocked;
+  }
+  (void)arena_quarantine_settle_late(a);
+  if (la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL) {
+    reason = LJ_ARENA_FINISH_PUBLISHER;
+    goto blocked;
+  }
+  if (la_load64_acq(&a->hdr.retire_epoch) == ~(uint64_t)0) {
+    reason = LJ_ARENA_FINISH_EPOCH;
+    goto blocked;
+  }
+  if (lj_arena_reclaim_deferred_acq(a) != 0) {
+    reason = LJ_ARENA_FINISH_ACTIONABLE;
+    goto blocked;
+  }
+  if (!arena_quarantine_bitmap_ready(a, &retry_cell)) {
+    reason = retry_cell < LJ_ARENA_CELLS ?
+      LJ_ARENA_FINISH_ACTIONABLE : LJ_ARENA_FINISH_UNCLASSIFIED;
+    goto blocked;
+  }
+  /* Clear only an intent whose producer has left, then switch generations by
+  ** exact clean CAS. Any rescue admitted after validation dirties the word and
+  ** defeats this LP. After it, rescue loses without touching mark/state. */
+  if (!lj_arena_reclaim_clear_pending(a) ||
+      !arena_reclaim_commit_sealed(a)) {
+    reason = LJ_ARENA_FINISH_PUBLISHER;
+    goto blocked;
   }
   arena_quarantine_apply_bitmap(a, preserve_marks);
+  /* Publish every terminal block decision before WHITE is reused as the
+  ** post-commit sidecar value. Committed readers sample state then block, so
+  ** a dead cell can never combine reset-WHITE with its old block bit. */
+  arena_sweep_state_reset(a);
   next = lj_arena_next_acq(a);
   if (next == a || (next && !(lj_arena_flags_acq(next) & LJ_AF_QUARANTINE)))
     next = NULL;
@@ -2254,7 +2627,6 @@ int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
   a->hdr.retire_epoch = 0;
   a->hdr.reclaim_cell = LJ_AFIRST_CELL;
   a->hdr.reclaim_deferred = 0;
-  memset(a->sweep, 0, sizeof(a->sweep));
   la_store32_rel(&a->hdr.flags,
 		 (lj_arena_flags_acq(a) &
 		  ~(LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|LJ_AF_PREPSWEEP)) |
@@ -2263,9 +2635,19 @@ int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
   do {
     lj_arena_next_rel(a, reclaimed);
   } while (!arena_reclaimed_cas(alloc, kind, &reclaimed, a));
-  /* remote_active deliberately remains CLOSED until adoption has rebuilt all
-  ** owner-local free-run state from the committed bitmap. */
+  lj_arena_reclaim_unseal(a, 1);  /* Queue-only until stable adoption. */
+  if (reasonp)
+    *reasonp = LJ_ARENA_FINISH_COMMITTED;
   return 1;
+
+blocked:
+  if (retry_cell < a->hdr.reclaim_cell)
+    a->hdr.reclaim_cell = retry_cell;
+  la_store32_rel(&a->hdr.flags,
+		 lj_arena_flags_acq(a) & ~LJ_AF_PREPSWEEP);
+  if (reasonp)
+    *reasonp = reason;
+  return 0;
 }
 
 void lj_arena_alloc_prepare_sweep(TGAlloc *alloc)
@@ -2275,39 +2657,105 @@ void lj_arena_alloc_prepare_sweep(TGAlloc *alloc)
     lj_arena_alloc_prepare_sweep_kind(alloc, k);
 }
 
-void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
+int lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
 {
   GCArena *a;
   if (k >= LJ_ARENA_NKINDS)
-    return;
-  a = alloc->needsweep[k];
-  alloc->needsweep[k] = NULL;
-  while (a) {
+    return 0;
+  while ((a = alloc->needsweep[k]) != NULL) {
     GCArena *next = lj_arena_next_acq(a);
+    GCArena *old_owned;
+    TGAlloc staged;
+    LJArenaFreeRun *old_bins[LJ_ALLOC_NBINS];
+    uint32_t old_binmask, old_flags, b;
+    ArenaRebuildFree rf;
     uint32_t i;
     if (next == a ||
-	(next && !(lj_arena_flags_acq(next) & LJ_AF_NEEDSWEEP)))
+	(next && !(lj_arena_flags_acq(next) &
+		  (LJ_AF_NEEDSWEEP|LJ_AF_PREPSWEEP))))
       next = NULL;
+    la_store32_rel(&a->hdr.flags,
+		   lj_arena_flags_acq(a) | LJ_AF_PREPSWEEP);
+    if (!lj_arena_reclaim_seal(a))
+      return 0;
     (void)lj_arena_remote_free_drain_sweep(alloc, a);
-    /* No root detachment has occurred on the legal abort path. Preserve every
-    ** allocation except a destructor-complete remote free, then discard the
-    ** transient classifier sidecar before owner allocation resumes. */
+    /* The legal abort path precedes root detachment, so PREPSWEEP may have
+    ** produced only WHITE and destructor-complete FREEING starts. Refuse an
+    ** unexpected actionable generation before taking the irreversible LP. */
+    for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
+      uint32_t state;
+      if (!lj_arena_bm_get(a->block, i))
+	continue;
+      state = lj_arena_sweep_state_acq(a, i);
+      if (state == LJ_ARENA_SWEEP_LIVE ||
+	  state == LJ_ARENA_SWEEP_RETIRED) {
+	lj_arena_reclaim_unseal(a, 1);
+	return 0;
+      }
+    }
+    /* Exact C|S->S precedes every bitmap/sidecar mutation. A producer admitted
+    ** before this point dirties PENDING and defeats the CAS; a later producer
+    ** is counted in the committed generation and defeats exact OPEN. */
+    if (!lj_arena_reclaim_clear_pending(a) ||
+	!arena_reclaim_commit_sealed(a)) {
+      lj_arena_reclaim_unseal(a, 1);
+      return 0;
+    }
+    arena_prepare_bump_tail(a);
+    /* PREPSWEEP already consumed late[] before changing those starts to
+    ** FREEING, so absence of a late bit is not provenance. Re-pin every
+    ** FREEING allocation and retain its block bit through a fresh full grace.
+    ** This conservatively delays ordinary remote frees by one cycle too. */
     for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
       if (lj_arena_bm_get(a->block, i) &&
 	  lj_arena_sweep_state_acq(a, i) == LJ_ARENA_SWEEP_FREEING) {
-	a->block[i >> 6] &= ~((uint64_t)1 << (i & 63));
-	a->mark[i >> 6] |= (uint64_t)1 << (i & 63);
+	(void)la_bit_test_and_set64(&a->late[i >> 6], i & 63);
+	(void)lj_arena_sweep_state_cas(a, i, LJ_ARENA_SWEEP_FREEING,
+					 LJ_ARENA_SWEEP_WHITE);
       }
     }
-    memset(a->sweep, 0, sizeof(a->sweep));
+    arena_sweep_state_reset(a);
+    a->hdr.reclaim_cell = LJ_AFIRST_CELL;
+    a->hdr.reclaim_deferred = 0;
+    arena_late_clear_committed_free(a);
+    memset(&staged, 0, sizeof(staged));
+    rf.alloc = &staged;
+    rf.a = a;
+    rf.limit = LJ_ARENA_CELLS;
+    lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
+    memcpy(old_bins, alloc->bins[k], sizeof(old_bins));
+    old_binmask = alloc->binmask[k];
+    old_owned = alloc->owned[k];
+    old_flags = lj_arena_flags_acq(a);
+    for (b = 0; b < LJ_ALLOC_NBINS; b++) {
+      LJArenaFreeRun *head = staged.bins[k][b];
+      if (head) {
+	LJArenaFreeRun *tail = head;
+	while (tail->next)
+	  tail = tail->next;
+	tail->next = alloc->bins[k][b];
+	alloc->bins[k][b] = head;
+      }
+    }
+    alloc->binmask[k] |= staged.binmask[k];
     la_store32_rel(&a->hdr.flags,
-		   lj_arena_flags_acq(a) &
-		   ~(LJ_AF_NEEDSWEEP|LJ_AF_PREPSWEEP));
-    lj_arena_next_rel(a, alloc->owned[k]);
+		   lj_arena_flags_acq(a) & ~LJ_AF_NEEDSWEEP);
+    lj_arena_next_rel(a, old_owned);
     alloc->owned[k] = a;
-    a = next;
+    if (!arena_remote_open_sealed(a)) {
+      alloc->owned[k] = old_owned;
+      memcpy(alloc->bins[k], old_bins, sizeof(old_bins));
+      alloc->binmask[k] = old_binmask;
+      la_store32_rel(&a->hdr.flags, old_flags);
+      lj_arena_next_rel(a, next);
+      lj_arena_reclaim_unseal(a, 1);
+      return 0;
+    }
+    la_store32_rel(&a->hdr.flags,
+		   lj_arena_flags_acq(a) & ~LJ_AF_PREPSWEEP);
+    alloc->needsweep[k] = next;
   }
-  lj_arena_alloc_rebuild_free_kind(alloc, k);
+  return 1;
 }
 
 void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
@@ -2383,12 +2831,13 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
 }
 
 static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
-				    uint32_t owner_tid)
+				    uint32_t owner_tid, global_State *progress_g)
 {
   uint32_t n = 0;
   while (a) {
     GCArena *next = lj_arena_next_acq(a);
     lj_arena_owner_rel(a, owner_tid);
+    lj_arena_progress_g_rel(a, progress_g);
     lj_arena_next_rel(a, *dstp);
     *dstp = a;
     a = next;
@@ -2401,6 +2850,8 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
 {
   uint32_t k, n = 0;
   uint32_t owner_tid;
+  TGState *owner_tg;
+  global_State *progress_g;
   if (!dst || !src || dst == src)
     return 0;
   /* The source owner is dead/quiescent. Its arena-local Treiber queues remain
@@ -2408,6 +2859,8 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
   ** payload records through list rebuild. */
   (void)lj_arena_remote_free_drain(src);
   owner_tid = lj_arena_alloc_owner_acq(dst);
+  owner_tg = (TGState *)lj_arena_alloc_owner_tg_acq(dst);
+  progress_g = owner_tg ? owner_tg->gl : NULL;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     LJArenaBump *b = &src->bump[k];
     if (b->a && b->cell < b->end)
@@ -2416,13 +2869,14 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
     src->bump[k].cell = 0;
     src->bump[k].end = 0;
     arena_clear_bins(src, k);
-    n += arena_transfer_list(&dst->owned[k], src->owned[k], owner_tid);
+    n += arena_transfer_list(&dst->owned[k], src->owned[k], owner_tid,
+			     progress_g);
     src->owned[k] = NULL;
     n += arena_transfer_list(&dst->needsweep[k], src->needsweep[k],
-			     owner_tid);
+			     owner_tid, progress_g);
     src->needsweep[k] = NULL;
     n += arena_transfer_list(&dst->quarantine[k], src->quarantine[k],
-			     owner_tid);
+			     owner_tid, progress_g);
     src->quarantine[k] = NULL;
     {
       GCArena *a = (GCArena *)la_xchgptr_acqrel(
@@ -2431,6 +2885,7 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
 	GCArena *next = lj_arena_next_acq(a);
 	GCArena *head = arena_reclaimed_acq(dst, k);
 	lj_arena_owner_rel(a, owner_tid);
+	lj_arena_progress_g_rel(a, progress_g);
 	do {
 	  lj_arena_next_rel(a, head);
 	} while (!arena_reclaimed_cas(dst, k, &head, a));
@@ -2455,6 +2910,10 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   if (!a)
     return NULL;
   lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
+  {
+    TGState *owner_tg = (TGState *)lj_arena_alloc_owner_tg_acq(alloc);
+    lj_arena_progress_g_rel(a, owner_tg ? owner_tg->gl : NULL);
+  }
   if (!arena_registry_insert_fresh(alloc, a, flags)) {
     lj_arena_unmap(a);
     return NULL;
@@ -2493,8 +2952,15 @@ int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
       GCArena *a = lj_arena_of(run);
       uint32_t start = run->start;
       uint32_t len = run->len;
+      uint32_t i;
       *pp = run->next;
       arena_refresh_binmask(alloc, k, bin);
+      /* Rebuild may have coalesced several adjacent state-1 boundaries into
+      ** this private bump window. Erase the complete old boundary map now;
+      ** specialized C/VM/JIT bump publishers subsequently install only their
+      ** real object starts. */
+      for (i = 0; i < len; i++)
+	arena_set_extent(a, start + i);
       b->a = NULL;
       b->cell = 0;
       b->end = 0;
@@ -2557,7 +3023,8 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
       arena_refresh_binmask(alloc, k, bin);
       if (len > ncells)
 	arena_insert_run(alloc, a, start + ncells, len - ncells);
-      arena_set_alloc(a, start, lj_arena_alloc_black_acq(alloc));
+      arena_set_alloc(a, start, ncells,
+		      lj_arena_alloc_black_acq(alloc));
       return lj_arena_cellptr(a, start);
     }
   }
@@ -2568,7 +3035,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   }
   cell = b->cell;
   b->cell += ncells;
-  arena_set_alloc(b->a, cell, lj_arena_alloc_black_acq(alloc));
+  arena_set_alloc(b->a, cell, ncells, lj_arena_alloc_black_acq(alloc));
   return lj_arena_cellptr(b->a, cell);
 }
 
@@ -2632,13 +3099,12 @@ retry_open:
     return 1;  /* Exact body was already committed free. */
   }
   /* A completed GC destructor must not make its body reusable before a later
-  ** sweep/grace. Retain the allocation bit, clear its liveness mark, and use
-  ** the late-record protocol as an intrusive gct=0 tombstone. Ordinary owner
-  ** drains retain late+allocated records; the next PREPSWEEP drain converts
-  ** this exact start to FREEING and terminal bitmap commit releases it. */
+  ** sweep/grace. Retain the allocation bit, clear its liveness mark, and pin
+  ** the exact start without overwriting the still-SMR-visible header. The next
+  ** PREPSWEEP converts the bit to FREEING before arming a fresh grace. */
   (void)la_and64_rlx(&a->mark[start >> 6],
 		     ~((uint64_t)1 << (start & 63)));
-  published = arena_remote_record_push(a, p, size);
+  published = arena_late_pin(a, p, size);
   arena_remote_leave(a);
   return published != 0;
 }

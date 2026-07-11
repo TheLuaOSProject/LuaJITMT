@@ -17,8 +17,11 @@
 
 GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
 {
-  GCudata *ud = lj_mem_newt(L, sizeof(GCudata) + sz, GCudata);
+  GCudata *ud;
   global_State *g = G(L);
+  if (LJ_UNLIKELY(sz > LJ_MAX_MEM32 - sizeof(GCudata)))
+    lj_err_msg(L, LJ_ERR_UDATAOV);
+  ud = (GCudata *)lj_mem_newgco_unlinked(L, sizeof(GCudata) + sz);
   newwhite(g, ud);  /* Not finalized. */
   ud->gct = ~LJ_TUDATA;
   ud->len = sz;
@@ -34,10 +37,13 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
 
 void LJ_FASTCALL lj_udata_free(global_State *g, GCudata *ud)
 {
+  GCSize size = sizeudata(ud);
   if (lj_udata_udtype_acq(ud) == UDTYPE_THREAD) {
     LJThread *th = (LJThread *)uddata(ud);
     TValue *roots = lj_thread_start_roots_acq(th);
     uint32_t n = lj_thread_start_root_count_acq(th);
+    lj_assertG(lj_thread_live_node_acq(th) == NULL,
+	       "free of published threading.thread userdata");
     if (roots)
       lj_mem_free(g, roots, (size_t)n * sizeof(TValue));
   }
@@ -45,7 +51,8 @@ void LJ_FASTCALL lj_udata_free(global_State *g, GCudata *ud)
   if (lj_udata_udtype_acq(ud) == UDTYPE_FFI_CLIB)
     lj_clib_unload(NULL, g, (CLibrary *)uddata(ud));
 #endif
-  lj_mem_free(g, ud, sizeudata(ud));
+  if (!lj_mem_freegco_defer(g, ud, size))
+    lj_mem_free(g, ud, size);
 }
 
 #if LJ_64

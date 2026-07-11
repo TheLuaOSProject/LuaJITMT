@@ -111,6 +111,7 @@ static void tg_root_anchor_fini(global_State *g, TGState *tg)
 
 static void tg_init_ssb(TGState *tg)
 {
+  la_store32_rlx(&tg->ssb_refs, 0);
   tg->ssb_node[0].pad = 0;
   lj_gc2_ssb_owner_rel(&tg->ssb_node[0], tg);
   lj_gc2_ssb_next_rel(&tg->ssb_node[0], NULL);
@@ -131,6 +132,8 @@ void lj_tg_fini_ssb(TGState *tg)
   GC2SSBNode *node, *next;
   if (!tg)
     return;
+  lj_assertX(lj_tg_ssb_refs_acq(tg) == 0,
+	     "finalizing TG with published SSB nodes");
   node = lj_tg_ssb_active_acq(tg);
   if (node && (node->pad & TG_GC2_SSB_DYNAMIC))
     free(node);
@@ -168,6 +171,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strid_next = 0;
   tg->strid_end = 0;
   tg->strnum_credit = 0;
+  lj_tg_worker_retire_next_rel(tg, NULL);
   setnilV(&tg->tmptv);
   setnilV(&tg->tmptv2);
   tg_root_anchor_block_init(&tg->root_anchor);
@@ -248,7 +252,7 @@ void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid)
 {
   TGState *parent = lj_thr_get_tg();
   const PRNGState *parent_prng =
-    parent && parent != tg ? &parent->prng : &g->prng;
+    parent && parent != tg && parent->gl == g ? &parent->prng : &g->prng;
   if (tid != 0)
     lj_prng_derive(&tg->prng, parent_prng, tid);
 }
@@ -360,18 +364,34 @@ void lj_tg_detach(global_State *g, TGState *tg)
       (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0))
     (void)lj_safepoint_ack(thread_L);  /* Leaving TG owns its ack. */
   (void)lj_gc_flush_root_pending(g);
-  (void)lj_gc2_flush_ssb(g, tg);  /* 09 section 9.3 detach publishes SSB. */
+  (void)lj_gc2_flush_ssb_detach(g, tg);  /* Terminal, allocation-free flush. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
   lj_str_flush_num_credit(g, tg);
+  /* Clear every remotely sampled owner publication before DEAD becomes
+  ** visible. Subsequent foreign state-release cleanup remains protected by
+  ** mt_live, which prevents physical registry reclamation until that lookup
+  ** and every other VM access is complete. */
+  lj_tg_store_cur_L(tg, NULL);
+  lj_tg_store_thread_L(tg, NULL);
+  lj_tg_store_thread_ud(tg, NULL);
+  lj_tg_in_native_store_rlx(tg, 0);
+#if LJ_HASJIT
+  lj_tg_store_jit_base(tg, NULL);
+#endif
+#if LJ_HASFFI
+  lj_tg_ffi_call_func_rel(tg, NULL);
+#endif
+  /* POSIX profiling samples the current TLS TG from a signal handler. Since
+  ** delivery is same-thread, clearing TLS before the registry retirement LP
+  ** guarantees that a handler either finishes against the still-live TG or
+  ** observes NULL; it can never retain a post-decrement raw pointer. */
+  if (lj_thr_get_tg() == tg)
+    lj_thr_set_tg(NULL);
   la_fence_rel();
   oldflags = lj_tg_flags_or_rlx(tg, TGF_DEAD);  /* 05 section 5.4.1. */
   (void)lj_safepoint_retire_dead_tg(g, tg);
   if (!(oldflags & TGF_DEAD))
     (void)gc2_n_threads_sub_acqrel(g, 1);
-  lj_tg_in_native_store_rlx(tg, 0);
-#if LJ_HASFFI
-  lj_tg_ffi_call_func_rel(tg, NULL);
-#endif
 }
 
 static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
@@ -398,13 +418,35 @@ static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
   return 1;
 }
 
-uint32_t lj_tg_reclaim_dead(global_State *g)
+static int tg_reclaim_dead_admissible(global_State *g, int terminal)
+{
+  TGState *self;
+  if (!g || gc2_n_threads_acq(g) != 1 ||
+      gc2_hs_pending_acq(g) != 0 || mt_live_acq(g) != 0 ||
+      mt_entering_acq(g) != 0 || gc2_n_workers_acq(g) != 0)
+    return 0;
+  if (terminal)
+    return mt_shutdown_acq(g) != 0;
+  self = lj_thr_get_tg();
+  return self == g->main_tg;
+}
+
+static uint32_t tg_reclaim_dead(global_State *g, int terminal)
 {
   TGState *prev, *tg;
+  uint32_t expect = 0;
   uint32_t reclaimed = 0;
-  if (!g || gc2_n_threads_acq(g) != 1 ||
-      gc2_hs_pending_acq(g) != 0)
+  if (!tg_reclaim_dead_admissible(g, terminal) ||
+      !gc2_tg_reclaiming_cas(g, &expect, 1))
     return 0;
+  /* Counter admission and the writer CAS form a two-sided try protocol: new
+  ** threading entrants back out while the gate is set, while a writer that
+  ** lost to an earlier entrant abandons without waiting. Recheck only after
+  ** publishing the gate so no list reader can cross this boundary unseen. */
+  if (!tg_reclaim_dead_admissible(g, terminal)) {
+    gc2_tg_reclaiming_rel(g, 0);
+    return 0;
+  }
   (void)lj_gc_flush_root_pending(g);
 restart:
   prev = NULL;
@@ -412,7 +454,16 @@ restart:
   while (tg != NULL) {
     TGState *next = lj_tg_next_acq(tg);
     if (lj_tg_flags_test_acq(tg, TGF_DEAD)) {
-      uint8_t heap_tg = lj_tg_flags_test_acq(tg, TGF_HEAP);
+      uint8_t flags = lj_tg_flags_acq(tg);
+      uint8_t heap_tg = (uint8_t)(flags & TGF_HEAP);
+      uint8_t deferred_lua_tg = (uint8_t)
+	((flags & (TGF_LUA_ALLOC|TGF_DEFER_FREE)) ==
+	 (TGF_LUA_ALLOC|TGF_DEFER_FREE));
+      if (lj_tg_ssb_refs_acq(tg) != 0) {
+	prev = tg;  /* Published embedded nodes still name this TG storage. */
+	tg = next;
+	continue;
+      }
       if (!tg_transfer_dead_alloc(g, tg)) {
 	prev = tg;  /* Keep owner lookup live until allocator transfer succeeds. */
 	tg = next;
@@ -430,6 +481,12 @@ restart:
       if (heap_tg) {
 	lj_tg_fini_thread(g, tg);
 	free(tg);
+	} else if (deferred_lua_tg) {
+	/* The threading.thread userdata relinquished this still-registered TG
+	** while an embedded SSB publication pinned it. Its final reference has
+	** now drained, so finish through the allocator which created the TG. */
+	lj_tg_fini_thread(g, tg);
+	lj_mem_freet(g, tg);
       }
       tg = next;
       continue;
@@ -437,7 +494,23 @@ restart:
     prev = tg;
     tg = next;
   }
+  gc2_tg_reclaiming_rel(g, 0);
   return reclaimed;
+}
+
+uint32_t lj_tg_reclaim_dead(global_State *g)
+{
+  return tg_reclaim_dead(g, 0);
+}
+
+uint32_t lj_tg_reclaim_dead_terminal(global_State *g)
+{
+  /* A closing Lua universe may share its OS thread with another universe, so
+  ** raw TLS legitimately need not name this GG's embedded main TG. Shutdown
+  ** has already closed attach admission and joined every mutator/GC worker;
+  ** the counter checks and writer CAS above are the terminal ownership proof.
+  ** Keep the ordinary runtime path main-TLS-only. */
+  return tg_reclaim_dead(g, 1);
 }
 
 TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)

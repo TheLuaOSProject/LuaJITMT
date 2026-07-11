@@ -38,10 +38,13 @@ typedef uint16_t HotCount;
 #define TGF_STOPREQ		0x08u
 #define TGF_STOPREQ_FRESH	0x10u
 #define TGF_HEAP		0x20u
+#define TGF_LUA_ALLOC		0x40u
+#define TGF_DEFER_FREE		0x80u
 #define TG_HUGETAB_BITS		16u
 #define TG_GC2_SSB_BYTES	8192u
 #define TG_GC2_SSB_SLOTS	(TG_GC2_SSB_BYTES / sizeof(GCRef))
 #define TG_GC2_SSB_DYNAMIC	0x01u
+#define TG_GC2_SSB_REMEMBERED_SHIFT 1u
 #define TG_ROOT_ANCHOR_SLOTS	16u
 
 typedef struct GG_State GG_State;
@@ -102,6 +105,7 @@ struct TGState {
   GC2SSBNode ssb_node[2];
   GC2SSBNode *ssb_active, *ssb_free;
   GCRef *ssb_next, *ssb_end, *ssb_base;
+  uint32_t ssb_refs;  /* Published embedded nodes pin this TG. */
   GCobj *gcroot_pending;
   GCobj *gcroot_pending_after_main;
   SBuf tmpbuf;
@@ -117,6 +121,7 @@ struct TGState {
   GCudata *thread_ud;
   uint32_t tid;
   TGState *next_tg;
+  TGState *worker_retire_next;  /* Worker-TG retirement, outside registry. */
   uint64_t local_total;
   uint64_t stack_dirty_epoch;
   ExitTrampolines *exittr;
@@ -410,10 +415,55 @@ static LJ_AINLINE void lj_gc2_ssb_count_rel(GC2SSBNode *node, uint32_t n)
   la_store32_rel(&node->n, n);
 }
 
+/* `pad` keeps the allocation flag in bit zero and the count of the active or
+** published node's remembered suffix above it. Idle-generational pushes are a
+** contiguous suffix: a phase transition flushes the old active node before
+** any active-cycle producer can append to its replacement. Consumers pop SSB
+** slots from the end, so the count is an exact per-slot tag without enlarging
+** the hot node header or pointer representation. */
+static LJ_AINLINE uint32_t
+lj_gc2_ssb_remembered_acq(const GC2SSBNode *node)
+{
+  return la_load32_acq(&node->pad) >> TG_GC2_SSB_REMEMBERED_SHIFT;
+}
+
+static LJ_AINLINE void
+lj_gc2_ssb_remembered_rel(GC2SSBNode *node, uint32_t n)
+{
+  uint32_t flags = la_load32_acq(&node->pad) & TG_GC2_SSB_DYNAMIC;
+  lj_assertX(n <= TG_GC2_SSB_SLOTS, "SSB remembered suffix overflow");
+  la_store32_rel(&node->pad,
+	flags | (n << TG_GC2_SSB_REMEMBERED_SHIFT));
+}
+
+static LJ_AINLINE uint32_t lj_gc2_ssb_remembered_add(GC2SSBNode *node)
+{
+  uint32_t old = la_add32_rlx(&node->pad,
+			      1u << TG_GC2_SSB_REMEMBERED_SHIFT);
+  lj_assertX((old >> TG_GC2_SSB_REMEMBERED_SHIFT) < TG_GC2_SSB_SLOTS,
+	     "SSB remembered suffix overflow");
+  return old >> TG_GC2_SSB_REMEMBERED_SHIFT;
+}
+
 static LJ_AINLINE GC2SSBNode *lj_tg_ssb_free_acq(const TGState *tg)
 {
   return (GC2SSBNode *)la_loadptr_acq(
     (void *const *)&tg->ssb_free);  /* 05 section 5.6.2 SSB. */
+}
+
+static LJ_AINLINE uint32_t lj_tg_ssb_refs_acq(const TGState *tg)
+{
+  return la_load32_acq((uint32_t *)&tg->ssb_refs);
+}
+
+static LJ_AINLINE uint32_t lj_tg_ssb_refs_add(TGState *tg, uint32_t n)
+{
+  return la_add32_rlx(&tg->ssb_refs, n);
+}
+
+static LJ_AINLINE uint32_t lj_tg_ssb_refs_sub(TGState *tg, uint32_t n)
+{
+  return la_sub32_acqrel(&tg->ssb_refs, n);
 }
 
 static LJ_AINLINE void lj_tg_ssb_free_store_rlx(TGState *tg,
@@ -619,6 +669,18 @@ static LJ_AINLINE TGState *lj_tg_next_acq(const TGState *tg)
 static LJ_AINLINE void lj_tg_next_rel(TGState *tg, TGState *next)
 {
   la_storeptr_rel((void **)&tg->next_tg, next);
+}
+
+static LJ_AINLINE TGState *lj_tg_worker_retire_next_acq(const TGState *tg)
+{
+  return (TGState *)la_loadptr_acq(
+    (void *const *)&tg->worker_retire_next);
+}
+
+static LJ_AINLINE void lj_tg_worker_retire_next_rel(TGState *tg,
+						     TGState *next)
+{
+  la_storeptr_rel((void **)&tg->worker_retire_next, next);
 }
 
 static LJ_AINLINE uint32_t lj_tg_poll_acq(const TGState *tg)
@@ -859,6 +921,7 @@ LJ_FUNC void lj_tg_fini_thread(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_attach(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_detach(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_tg_reclaim_dead(global_State *g);
+LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal(global_State *g);
 LJ_FUNC TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid);
 LJ_FUNC TGState *lj_tg_thread_active(global_State *g, lua_State *L);
 LJ_FUNC void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg);

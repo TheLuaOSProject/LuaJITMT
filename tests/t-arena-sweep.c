@@ -148,10 +148,15 @@ int main(void)
     assert(bin_count(&rebuild, LJ_ARENAK_PLAIN) == 1);
     big = lj_arena_alloc(&rebuild, &rs, 96, 0);
     assert(big == r1);
+    /* Rebuild coalesces the adjacent 2- and 4-cell free records into this
+    ** six-cell allocation. No old state-1 boundary may survive inside it. */
+    assert(lj_arena_state(lj_arena_of(big),
+			  lj_arena_cellof(big) + 2u) == 0);
     lj_arena_free(&rebuild, r3, 16);
     lj_arena_alloc_rebuild_free(&rebuild);
     tail = lj_arena_alloc(&rebuild, &rs, 64, 0);
-    assert(tail != r3);
+    assert((uintptr_t)tail < (uintptr_t)big ||
+	   (uintptr_t)tail >= (uintptr_t)big + 96u);
     lj_arena_alloc_fini(&rebuild);
   }
 
@@ -177,6 +182,41 @@ int main(void)
     assert(lj_arena_state(a, cblack) == 2);
     assert(lj_arena_state(a, cfree) == 1);
     lj_arena_alloc_fini(&clear);
+  }
+
+  {
+    TGAlloc reserve;
+    GCArena *a, *ra;
+    void *r1, *r2, *guard;
+    uint32_t c1, c2, rc, i;
+    lj_arena_alloc_init(&reserve);
+    r1 = lj_arena_alloc(&reserve, &rs, 32, 0);
+    r2 = lj_arena_alloc(&reserve, &rs, 64, 0);
+    guard = lj_arena_alloc(&reserve, &rs, 16, 0);
+    assert(r1 != NULL && r2 != NULL && guard != NULL);
+    a = lj_arena_of(r1);
+    assert(lj_arena_of(r2) == a && lj_arena_of(guard) == a);
+    c1 = lj_arena_cellof(r1);
+    c2 = lj_arena_cellof(r2);
+    assert(c2 == c1 + 2u);
+    lj_arena_free(&reserve, r1, 32);
+    lj_arena_free(&reserve, r2, 64);
+    /* Retire the unrelated fresh-arena bump tail so reserve_bump must consume
+    ** the rebuilt adjacent run below. */
+    reserve.bump[LJ_ARENAK_PLAIN].cell =
+      reserve.bump[LJ_ARENAK_PLAIN].end;
+    lj_arena_alloc_rebuild_free(&reserve);
+    assert(lj_arena_reserve_bump(&reserve, &rs, 0, 2u, &ra, &rc));
+    assert(ra == a && rc == c1);
+    /* The six-cell coalesced run becomes one private reservation plus bump
+    ** tail. Neither the old r1 nor r2 boundary may remain visible. */
+    for (i = 0; i < 6u; i++)
+      assert(lj_arena_state(a, c1 + i) == 0);
+    lj_arena_bm_set(a->block, rc);
+    assert(reserve.bump[LJ_ARENAK_PLAIN].a == a);
+    assert(reserve.bump[LJ_ARENAK_PLAIN].cell == c1 + 2u);
+    assert(reserve.bump[LJ_ARENAK_PLAIN].end == c1 + 6u);
+    lj_arena_alloc_fini(&reserve);
   }
 
   {
@@ -356,24 +396,23 @@ int main(void)
 					  11u) == a);
     assert(lj_arena_sweep_state_cas(a, freecell, LJ_ARENA_SWEEP_WHITE,
 					    LJ_ARENA_SWEEP_FREEING));
+    assert(lj_arena_reclaim_seal(a));
     assert(lj_arena_alloc_quarantine_finish(&late,
-	LJ_ARENAK_TRAVERSABLE, a, 31u, 0));
+	LJ_ARENAK_TRAVERSABLE, a, 31u, 0, NULL));
     assert((a->hdr.flags & LJ_AF_RECLAIMED) != 0);
     assert(lj_arena_remote_active_acq(a) != 0);  /* CLOSED admission gate. */
 
-    /* The physical free loses the CLOSED/open race, so it may only publish a
-    ** size-bearing late record. It must not alter the committed sweep sidecar
-    ** or disappear as a permanent opaque-allocation leak. */
+    /* The physical free loses the CLOSED/open race, so it may publish only a
+    ** bit-only late pin. The still-SMR-visible body remains untouched. */
     assert(lj_arena_quarantine_owns_body(p, 64));
-    /* A duplicate physical free for the already-free committed cell is legal
-    ** too: adoption must consume its record and clear late[] even though
-    ** block[freecell] is zero. */
+    /* A duplicate physical free for an already-free committed cell is legal
+    ** too and does not need a pin. */
     assert(lj_arena_quarantine_owns_body(already_free, 64));
-    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL);
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
     assert((la_load64_acq(&a->late[cell >> 6]) &
 	    ((uint64_t)1 << (cell & 63))) != 0);
     assert((la_load64_acq(&a->late[freecell >> 6]) &
-	    ((uint64_t)1 << (freecell & 63))) != 0);
+	    ((uint64_t)1 << (freecell & 63))) == 0);
     assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_WHITE);
 
     late.alloc_black = 0;
@@ -381,7 +420,7 @@ int main(void)
     assert(same_cycle == already_free);
     samecell = lj_arena_cellof(same_cycle);
     assert(same_cycle != p);  /* No reuse without a fresh grace. */
-    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL);
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
     assert((la_load64_acq(&a->late[cell >> 6]) &
 	    ((uint64_t)1 << (cell & 63))) != 0);
     assert((la_load64_acq(&a->late[freecell >> 6]) &
@@ -394,18 +433,17 @@ int main(void)
     ** stable late bit before touching sweep state or the intrusive link. */
     assert(((LJArenaRemoteFree *)p)->next == NULL);
     assert(lj_arena_remote_free_publish(&late, p, 64));
-    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == p);
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
     assert(((LJArenaRemoteFree *)p)->next == NULL);
     assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_WHITE);
 
-    /* A normal remote record can share the queue with the deferred late one.
-    ** Ordinary drain must free/reuse it immediately while repartitioning the
-    ** late live-cell record intact. */
+    /* A normal OPEN remote record still uses the intrusive owner queue and is
+    ** immediately reusable; the unrelated bit-only late pin remains intact. */
     ordinary = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
     assert(ordinary != NULL && lj_arena_of(ordinary) == a && ordinary != p);
     assert(lj_arena_remote_free_publish(&late, ordinary, 64));
     assert(lj_arena_remote_free_drain(&late) == 1u);
-    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL);
+    assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
     assert((la_load64_acq(&a->late[cell >> 6]) &
 	    ((uint64_t)1 << (cell & 63))) != 0);
     assert(lj_arena_bm_get(a->block, cell));
@@ -429,8 +467,9 @@ int main(void)
     lj_arena_bm_set(a->mark, ordinarycell);
     assert(lj_arena_alloc_quarantine_one(&late,
 	LJ_ARENAK_TRAVERSABLE, 41u) == a);
+    assert(lj_arena_reclaim_seal(a));
     assert(lj_arena_alloc_quarantine_finish(&late,
-	LJ_ARENAK_TRAVERSABLE, a, 51u, 0));
+	LJ_ARENAK_TRAVERSABLE, a, 51u, 0, NULL));
     assert(!lj_arena_bm_get(a->block, cell));
     next_cycle = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
     assert(next_cycle == p);  /* Reuse is legal after the fresh cycle grace. */

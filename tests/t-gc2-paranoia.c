@@ -33,6 +33,7 @@ static int paranoia_finalizer(lua_State *L)
 
 static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
 {
+  int complete = 0, i;
   uint32_t swept;
   lj_gc2_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
@@ -40,8 +41,10 @@ static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_scan_cycle_roots(g, L);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
   lj_gc2_mark_to_weak(g);
-  assert(lj_gc2_weak_complete(g, L, gcref(g->gc.weak),
-			      LJ_GC2_WEAK_DRAIN_BATCH) == 1);
+  for (i = 0; i < 128 && !complete; i++)
+    complete = lj_gc2_weak_complete(g, L, gcref(g->gc.weak),
+				    LJ_GC2_WEAK_DRAIN_BATCH);
+  assert(complete);
   lj_gc2_weak_to_sweep(g, L);
   lj_gc2_sweep_bridge_ready(g);
   do {

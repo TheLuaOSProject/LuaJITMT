@@ -689,6 +689,9 @@ static void test_multistate_public_api_gc(lua_State *L1)
     "for i=1,20000 do hold[i] = {i, tostring(i)} end\n"
     "collectgarbage('collect')\n") == LUA_OK);
   lua_gc(L2, LUA_GCCOLLECT, 0);
+  assert(gc2_phase_acq(g2) == LJ_GC2_IDLE);
+  assert(lj_gc2_test_ssb_empty(g2));
+  assert(tg2->ssb_next == tg2->ssb_base);
   assert(lj_thr_get_tg() == tg1);
   lua_close(L2);
   assert(lj_thr_get_tg() == tg1);
@@ -883,6 +886,11 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 1);
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
   assert(!lj_gc2_test_ssb_empty(g));
+  /* A root-scan implementation may already have rotated the buffer while
+  ** leaving published work nonempty. Seed one exact active entry so this
+  ** section continues to exercise the active-to-published flush LP itself. */
+  assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(tg->ssb_next > tg->ssb_base);
   assert(lj_gc2_flush_ssb(g, tg) > 0);
   assert(lj_gc2_test_ssb_drain(g) > 0);
   assert(lj_gc2_test_ssb_empty(g));
@@ -952,6 +960,9 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 1);
   assert(lj_native_leave(L) == 0);
   assert(lj_tg_in_native_acq(tg) == 0);
+  /* The remote/native scan may publish its SSB before native leave. Seed an
+  ** active edge so this explicit flush assertion tests rotation, not timing. */
+  assert(lj_gc2_test_ssb_push(g, obj2gco(native_tab)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) > 0);
   assert(lj_gc2_test_ssb_drain(g) > 0);
   assert(lj_gc2_test_ssb_empty(g));

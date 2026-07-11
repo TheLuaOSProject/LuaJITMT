@@ -410,8 +410,14 @@ GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
 }
 
 #if LJ_HASJIT
-static void func_arena_set_alloc(GCArena *a, uint32_t cell, int black)
+static void func_arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
+				 int black)
 {
+  uint32_t i;
+  for (i = 1; i < ncells; i++) {
+    lj_arena_bm_clear(a->block, cell + i);
+    lj_arena_bm_clear(a->mark, cell + i);
+  }
   lj_arena_bm_set(a->block, cell);
   if (black)
     lj_arena_bm_set(a->mark, cell);
@@ -490,7 +496,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   newwhite(g, uv);
 
   black = lj_arena_alloc_black_acq(&tg->alloc);
-  func_arena_set_alloc(a, cell, black);
+  func_arena_set_alloc(a, cell, ncells, black);
   lj_gc_total_add(g, nbytes);
   /*
   ** Arena bump cells become visible to bitmap sweep as soon as their block bit
@@ -551,7 +557,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
   black = lj_arena_alloc_black_acq(&tg->alloc);
-  func_arena_set_alloc(a, cell, black);
+  func_arena_set_alloc(a, cell, fncells, black);
   func_pubfreshobjobj(L, tg, fn, pt);
   func_pubfreshobjobj(L, tg, fn, env);
   {
@@ -567,7 +573,7 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   uv->immutable = 0;
   uv->dhash = 0;
   newwhite(g, uv);
-  func_arena_set_alloc(a, uvcell, black);
+  func_arena_set_alloc(a, uvcell, uvcells, black);
   func_pubuv_payload(L, uv);
 
   slot = (base ? base : L->base) + slotno;
@@ -634,7 +640,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
   black = lj_arena_alloc_black_acq(&tg->alloc);
-  func_arena_set_alloc(a, cell, black);
+  func_arena_set_alloc(a, cell, ncells, black);
   func_pubfreshobjobj(L, tg, fn, pt);
   func_pubfreshobjobj(L, tg, fn, env);
   count = (uint32_t)pt->flags + PROTO_CLCOUNT;

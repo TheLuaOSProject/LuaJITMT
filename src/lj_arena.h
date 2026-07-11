@@ -37,6 +37,19 @@
    LJ_AF_QUARANTINE|LJ_AF_RECLAIMED|LJ_AF_PREPSWEEP)
 #define LJ_AF_HUGE_MAGIC	0x4c4a4800u
 
+/* Arena-local lifetime publication gate. The low bits count admitted
+** publishers. CLOSED routes terminal frees to the bit-only late bitmap and
+** makes rescues sticky through PENDING. SEALED excludes ordinary intrusive
+** publishers and owner transfer while still allowing counted bit/status
+** producers whose admission defeats exact commit/open arbitration. */
+#define LJ_ARENA_REMOTE_CLOSED		UINT64_C(0x8000000000000000)
+#define LJ_ARENA_REMOTE_SEALED		UINT64_C(0x4000000000000000)
+#define LJ_ARENA_REMOTE_PENDING		UINT64_C(0x2000000000000000)
+#define LJ_ARENA_REMOTE_COUNT_MASK	UINT64_C(0x1fffffffffffffff)
+#define LJ_ARENA_REMOTE_STATE_MASK \
+  (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED| \
+   LJ_ARENA_REMOTE_PENDING)
+
 static LJ_AINLINE uint32_t lj_arena_bin_from_ncells(uint32_t ncells)
 {
   if (ncells == 0)
@@ -80,10 +93,13 @@ typedef struct GCAhdr {
   uint64_t retire_epoch;
   uint32_t reclaim_cell;
   uint32_t reclaim_deferred;
-  uint32_t remote_active;
+  uint64_t remote_active;
   LJArenaRemoteFree *remote_free;
   void *retire_obj;  /* Exact GC header for variable-offset huge bodies. */
-  uint8_t pad[48];
+  void *progress_g;  /* Immutable global_State used for progress wakes. */
+  uint32_t prep_bump_cell;  /* Detached bump tail pending PREP commit. */
+  uint32_t prep_bump_end;
+  uint8_t pad[32];
 } GCAhdr;
 
 /*
@@ -101,6 +117,22 @@ enum {
   LJ_ARENA_SWEEP_LIVE = 1,
   LJ_ARENA_SWEEP_RETIRED = 2,
   LJ_ARENA_SWEEP_FREEING = 3
+};
+
+enum {
+  LJ_ARENA_FINISH_NONE = 0,
+  LJ_ARENA_FINISH_COMMITTED,
+  LJ_ARENA_FINISH_ACTIONABLE,
+  LJ_ARENA_FINISH_UNCLASSIFIED,
+  LJ_ARENA_FINISH_EPOCH,
+  LJ_ARENA_FINISH_PUBLISHER
+};
+
+enum {
+  LJ_ARENA_RESCUE_RETRY = 0,
+  LJ_ARENA_RESCUE_FULL = 1,
+  LJ_ARENA_RESCUE_BIT_ONLY = 2,
+  LJ_ARENA_RESCUE_COMMITTED = 3
 };
 
 struct GCArena {
@@ -127,6 +159,16 @@ static LJ_AINLINE uint32_t lj_arena_flags_acq(const GCArena *a)
 static LJ_AINLINE void lj_arena_owner_rel(GCArena *a, uint32_t owner_tid)
 {
   la_store32_rel(&a->hdr.owner_tid, owner_tid);  /* 04 section 4.6. */
+}
+
+static LJ_AINLINE void *lj_arena_progress_g_acq(const GCArena *a)
+{
+  return la_loadptr_acq((void *const *)&a->hdr.progress_g);
+}
+
+static LJ_AINLINE void lj_arena_progress_g_rel(GCArena *a, void *g)
+{
+  la_storeptr_rel((void **)&a->hdr.progress_g, g);
 }
 
 static LJ_AINLINE GCArena *lj_arena_next_acq(const GCArena *a)
@@ -355,9 +397,9 @@ LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_clear_marks(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_rebuild_free(TGAlloc *alloc);
-LJ_FUNC void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t kind);
+LJ_FUNC int lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_prepare_sweep(TGAlloc *alloc);
-LJ_FUNC void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t kind);
+LJ_FUNC int lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC GCArena *lj_arena_alloc_quarantine_one(TGAlloc *alloc, uint32_t kind,
 						uint64_t retire_epoch);
 LJ_FUNC GCArena *lj_arena_alloc_quarantine_head(const TGAlloc *alloc,
@@ -366,7 +408,8 @@ LJ_FUNC GCArena *lj_arena_alloc_reclaimed_head(const TGAlloc *alloc,
 					      uint32_t kind);
 LJ_FUNC int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
 					      GCArena *a, uint32_t sweep_epoch,
-					      int preserve_marks);
+					      int preserve_marks,
+					      uint32_t *reasonp);
 LJ_FUNC void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
 					    uint32_t epoch, int preserve_marks);
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,
@@ -385,6 +428,11 @@ LJ_FUNC uint32_t lj_arena_remote_free_drain(TGAlloc *alloc);
 LJ_FUNC uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc,
 						   GCArena *a);
 LJ_FUNC int lj_arena_remote_sweep_busy_acq(const GCArena *a);
+LJ_FUNC int lj_arena_reclaim_seal(GCArena *a);
+LJ_FUNC int lj_arena_reclaim_clear_pending(GCArena *a);
+LJ_FUNC void lj_arena_reclaim_unseal(GCArena *a, int keep_pending);
+LJ_FUNC int lj_arena_rescue_enter(GCArena *a);
+LJ_FUNC void lj_arena_rescue_leave(GCArena *a);
 LJ_FUNC int lj_arena_quarantine_owns_body(const void *p, size_t size);
 LJ_FUNC void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 			       size_t osize, size_t nsize, uint32_t flags);
@@ -414,6 +462,11 @@ static LJ_AINLINE void *lj_arena_cellptr(GCArena *a, uint32_t cell)
 static LJ_AINLINE uint32_t lj_arena_bm_get(const uint64_t *bm, uint32_t i)
 {
   return (uint32_t)((bm[i >> 6] >> (i & 63)) & 1u);
+}
+
+static LJ_AINLINE uint32_t lj_arena_late_get(const GCArena *a, uint32_t i)
+{
+  return (uint32_t)((la_load64_acq(&a->late[i >> 6]) >> (i & 63)) & 1u);
 }
 
 static LJ_AINLINE uint32_t lj_arena_sweep_state_acq(const GCArena *a,
@@ -458,9 +511,9 @@ static LJ_AINLINE uint32_t lj_arena_reclaim_deferred_sub(GCArena *a,
   return la_sub32_rlx(&a->hdr.reclaim_deferred, n);
 }
 
-static LJ_AINLINE uint32_t lj_arena_remote_active_acq(const GCArena *a)
+static LJ_AINLINE uint64_t lj_arena_remote_active_acq(const GCArena *a)
 {
-  return la_load32_acq(&a->hdr.remote_active);
+  return la_load64_acq(&a->hdr.remote_active);
 }
 
 static LJ_AINLINE void lj_arena_bm_set(uint64_t *bm, uint32_t i)
@@ -493,6 +546,9 @@ LJ_STATIC_ASSERT(LJ_ARENA_CELLS == 4096u);
 LJ_STATIC_ASSERT(LJ_ARENA_WORDS == 64u);
 LJ_STATIC_ASSERT(LJ_CELL_SIZE == 16u);
 LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);
+LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_active) == 56u);
+LJ_STATIC_ASSERT((offsetof(GCAhdr, remote_active) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_free) == 64u);
 LJ_STATIC_ASSERT(offsetof(GCArena, block) == 128u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->block) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->mark) == 512u);

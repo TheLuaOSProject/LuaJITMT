@@ -68,48 +68,44 @@ unmaps a BUSY entry.
 
 ## Small-arena terminal admission
 
-The previous `remote_active == 0` check was not a terminal LP: a producer could
-increment immediately afterward and publish after state-to-bitmap conversion.
-The owner now CASes `remote_active` from zero to a CLOSED high-bit state after a
-read-only readiness check. An ordinary producer either increments before that
-CAS (so close fails) or observes CLOSED.
+`GCAhdr.remote_active` is now a naturally aligned 64-bit atomic containing
+`CLOSED`, `SEALED`, `PENDING`, and a 61-bit publisher count. `remote_free`
+remains at offset 64, `GCAhdr` remains 128 bytes, and the allocator block still
+starts at offset 128. Exhausting the count is unreachable on supported x64
+address spaces and aborts rather than silently dropping a lifetime intent.
 
-A CLOSED producer:
+Every small-arena mark/rescue and physical-free publisher joins the gate,
+including the OPEN fast generation. Before terminal commit, a producer which
+observes CLOSED or SEALED atomically publishes count plus PENDING before its
+bit/status intent. The owner may clear PENDING only from an exact zero-count
+word. Terminal commit is exact `CLOSED|SEALED -> SEALED`; a producer winning
+any observation-to-CAS race defeats the commit.
 
-1. CAS-increments the low active count under CLOSED,
-2. deduplicates the allocation start in a separate 512-byte `late[]` bitmap,
-3. release-pushes an exact `{start,len}` record to the arena queue,
-4. decrements the closed-gate active count.
+OPEN remote frees retain the existing intrusive exact-size queue. A
+terminal/grace-late free instead publishes only the allocation-start bit in
+`late[]`; it never overwrites the still-SMR-visible body. That bit pins block1
+through the current generation. A later PREPSWEEP consumes it to FREEING before
+a fresh grace, after which bitmap reuse is legal. The last counted publisher
+release edge wakes the sweep worker.
 
-It does not touch `sweep[]`, `block[]`, or `mark[]` during terminal conversion.
-The arena stays mapped and cannot be reused while on the reclaimed stack.
-Adoption partitions the late records against the stable committed bitmap. A
-record for a cell commit already made free is a duplicate, so adoption clears
-its `late[]` bit and drops it. A record for a still-allocated cell is retained,
-including after the arena reopens and rejoins the owned list; ordinary queue
-drains requeue that size-bearing record without clearing its allocation bit.
-An ordinary remote publication checks the persistent `late[]` bit before
-changing sweep state or writing its intrusive node, so a duplicate free cannot
-rewrite the already-linked node into a queue cycle.
-The next sweep resets `sweep[]`, drains the retained record to `FREEING`, and
-clears its `late[]` bit before publishing NEEDSWEEP. Root pruning can then
-detach any remaining tombstone, and that new cycle's grace covers bitmap reuse.
+After the terminal LP, rescue is read-only. Terminal apply release-publishes
+block decisions before resetting sidecar states to WHITE. A committed reader
+samples state and then block, rejecting either old FREEING or new block0, and
+does not write a mark that apply could lose.
 
-Adoption can CAS CLOSED to OPEN only with zero admitted late producers, but a
-retained record itself does not prevent reopening because its committed
-allocation bit pins the body. A producer racing the OPEN CAS either makes it
-fail or reloads OPEN and takes the normal remote route. Thus raw/opaque
-physical frees are eventually materialized, never receive same-generation
-reuse after their physical free began too late for the old grace, and are not
-silently leaked.
+Reclaimed adoption and abort restore seal a quiescent generation, take their
+exact clean LP before bitmap/bin mutation, build free-run heads privately, and
+open only through exact `SEALED -> 0`. A publisher which wins after the clean
+LP defeats OPEN; owner-visible staging is rolled back and the arena remains
+CLOSED. Restore re-pins every PREPSWEEP block1 FREEING start for a fresh grace,
+because the late-bit exchange has already erased provenance. None of these
+paths waits for a publisher.
 
-The rare CLOSED-to-OPEN observation race is retried iteratively in both
-quarantine ownership and remote-free publication. This is an ordinary
-lock-free retry: every failed attempt observed an owner generation complete,
-and no retry grows the C stack or loses the physical-free record. An individual
-producer may starve under adversarial repeated full-cycle turnover, just as it
-may in the surrounding CAS loops, but the system continues to make progress
-and no body is leaked as a fallback.
+Pointer plus size is not an allocation-generation tag. The terminal protocol
+therefore assumes one exact-size deallocation ticket per allocation generation.
+Internal retirement producers must prove that ownership or add a generation
+tag; FREEING can deduplicate overlapping calls in one generation but cannot
+repair an invalid delayed duplicate after address reuse.
 
 The extra bitmap moves `LJ_AFIRST_CELL` from 136 to 168, costing 512 bytes per
 64 KiB arena (0.78% of arena capacity). It avoids heap allocation, locks, and
@@ -117,15 +113,6 @@ unbounded external record objects on the late-free path.
 
 ## Remaining work
 
-- **P0: terminal rescue admission.** `remote_active` currently closes
-  destructor/remote-free publishers, but a sweep-time mark or
-  `RETIRED -> LIVE` rescue does not enter that arena gate. Such a publisher can
-  pass the readiness scan and race bitmap commit/sidecar reset, allowing a
-  rescued live body to be classified free. Extend terminal admission to every
-  mark/rescue publisher, close before the stable readiness check, revalidate
-  while closed, and give a CLOSED late rescue a discoverable nonwaiting pin;
-  do not drop it. Until this lands, the quarantine is a WIP checkpoint and is
-  not a proof of fully thread-safe GC reuse.
 - **P0: bitmap memory model and mark generations.** Several `block[]` and
   `mark[]` accesses remain plain C loads/stores while GC workers use atomic bit
   operations. Besides formal data-race UB, a plain word RMW can lose an
@@ -134,6 +121,18 @@ unbounded external record objects on the late-free path.
   handshake and can erase a birth/rescue mark. Move reset to a generation-tagged
   or double-buffered lazy initialization protocol, while retaining the proven
   single-observer VM fast-path exception.
+- **P0: retained cdata object views.** Variable/over-aligned small cdata may
+  have an interior header on a block0 extent, and huge cdata validation can
+  race unmap before an exact containing-slot mark. Add bounded small containing-
+  start lookup, atomic huge mark-containing publication, and a sweepable
+  graphless cdata allocation class.
+- **P0: HugeTab lifetime during ownership transfer.** MARK publication and
+  source-to-destination slot transfer/delete need one quiescent or MOVING
+  protocol so a copied/deleted slot cannot lose a concurrent mark.
+- **P0: remaining mark-lifetime callers.** Weak/FINREG and table/raw snapshot
+  paths must consume retained tri-state views rather than validate or query a
+  mark and then dereference after reuse. The active audit is recorded in
+  `notes/gc2-mark-status-lifetime-audit-2026-07-11.md`.
 - RESET_ALLOC still visits every owned traversable arena at a safepoint. Replace
   this with generation detachment/lazy sidecar initialization to make reset
   O(1) in heap size.
@@ -145,6 +144,6 @@ unbounded external record objects on the late-free path.
 Focused deterministic fixtures cover both marker/retire CAS orderings for huge
 tickets, both prepare-before-free and free-before-prepare terminal orderings,
 duplicate/stale huge free and realloc rejection without header access, the
-same-mapping realloc fast path, rejection of same-generation CLOSED late-free
-reuse, reuse after the next sweep/grace, and late-dedup clearing for a cell
-already freed by committed bitmap conversion.
+same-mapping realloc fast path, rejection of same-generation terminal late-free
+reuse, reuse after the next sweep/grace, EOF LIVE rearming, exact terminal
+commit/open arbitration, and rollback after a publisher defeats owner OPEN.

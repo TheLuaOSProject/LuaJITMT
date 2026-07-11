@@ -1,10 +1,22 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+
 /*
 ** Focused test for the staged parked GC2 worker scheduler.
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(__linux__) && defined(__x86_64__)
+#include <signal.h>
+#include <ucontext.h>
+#endif
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -30,6 +42,67 @@ static uint32_t worker_start_create_pause;
 static uint32_t worker_start_create_paused;
 static uint32_t worker_start_create_release;
 static global_State *worker_start_expect_no_traces_g;
+static uint32_t worker_join_fail_once;
+
+#if defined(__linux__) && defined(__x86_64__)
+/*
+** The production loop deliberately has no test hook in its wake/park fast
+** path. Linux/x86-64 trap-flag stepping lets this fixture stop the real worker
+** at the exact observable instruction window instead: the forced zero-drain
+** busy counter has advanced, while the following park counter has not.
+*/
+#define WORKER_PARK_TRACE_SIGNAL SIGUSR2
+#define WORKER_PARK_TRACE_FLAG 0x100u
+
+static global_State *worker_park_trace_g;
+static uint64_t worker_park_busy_base;
+static uint64_t worker_park_parks_base;
+static uint32_t worker_park_trace_armed;
+static uint32_t worker_park_trace_seen;
+static uint32_t worker_park_trace_release;
+
+static void worker_park_trace_flag(void *vctx, int enable)
+{
+  ucontext_t *ctx = (ucontext_t *)vctx;
+  if (enable)
+    ctx->uc_mcontext.gregs[REG_EFL] |= WORKER_PARK_TRACE_FLAG;
+  else
+    ctx->uc_mcontext.gregs[REG_EFL] &= ~WORKER_PARK_TRACE_FLAG;
+}
+
+static void worker_park_trace_start(int sig, siginfo_t *info, void *vctx)
+{
+  UNUSED(sig); UNUSED(info);
+  if (la_load32_acq(&worker_park_trace_armed))
+    worker_park_trace_flag(vctx, 1);
+}
+
+static void worker_park_trace_step(int sig, siginfo_t *info, void *vctx)
+{
+  global_State *g;
+  uint64_t busy, parks, busy_base, parks_base;
+  UNUSED(sig); UNUSED(info);
+
+  if (!la_load32_acq(&worker_park_trace_armed)) {
+    worker_park_trace_flag(vctx, 0);
+    return;
+  }
+  g = (global_State *)la_loadptr_acq((void *const *)&worker_park_trace_g);
+  if (!g)
+    return;
+  busy_base = la_load64_acq(&worker_park_busy_base);
+  parks_base = la_load64_acq(&worker_park_parks_base);
+  busy = gc2_worker_busy_retries_acq(g);
+  parks = gc2_worker_parks_acq(g);
+  if (busy == busy_base + 1u && parks == parks_base) {
+    /* Resume without further single-step traps after the publisher commits. */
+    worker_park_trace_flag(vctx, 0);
+    la_store32_rel(&worker_park_trace_seen, 1);
+    while (!la_load32_acq(&worker_park_trace_release))
+      __asm__ __volatile__("pause" ::: "memory");
+  }
+}
+#endif
 
 static uint32_t scheduler_trace_count(global_State *g)
 {
@@ -50,6 +123,7 @@ static uint32_t scheduler_trace_count(global_State *g)
 extern int __real_pthread_create(pthread_t *thread,
 				 const pthread_attr_t *attr,
 				 void *(*start_routine)(void *), void *arg);
+extern int __real_pthread_join(pthread_t thread, void **retval);
 
 int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 			  void *(*start_routine)(void *), void *arg)
@@ -64,6 +138,14 @@ int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     la_store32_rel(&worker_start_create_paused, 0);
   }
   return __real_pthread_create(thread, attr, start_routine, arg);
+}
+
+int __wrap_pthread_join(pthread_t thread, void **retval)
+{
+  uint32_t expect = 1;
+  if (la_cas32(&worker_join_fail_once, &expect, 0, LA_ACQ_REL, LA_ACQ))
+    return EINVAL;
+  return __real_pthread_join(thread, retval);
 }
 
 static int wait_until_marked(global_State *g, GCobj *o)
@@ -304,6 +386,342 @@ static void test_two_worker_contention(global_State *g)
   assert(wait_gc2_counter_at_least(g, gc2_worker_busy_retries_acq, busy0 + 2u));
   la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
   gc2_worker_active_rel(g, 0);
+}
+
+static void test_worker_retirement_uses_embedded_links(global_State *g)
+{
+  TGState blocker, *worker0, *worker1, *head, *next;
+  TGState *saved_tg = lj_thr_get_tg();
+  GCSize total0;
+  uint32_t tid = lj_thr_newid();
+
+  assert(gc2_n_workers_acq(g) == 2);
+  worker0 = gc2_worker_tg_acq(g, 0);
+  worker1 = gc2_worker_tg_acq(g, 1);
+  assert(worker0 != NULL && worker1 != NULL && worker0 != worker1);
+
+  /* Keep n_threads above the registry's sole-owner reclamation boundary while
+  ** the parked workers detach. Their lifetime queue must use the worker TGs'
+  ** embedded links; allocating queue nodes via mainthread(g) here would drive
+  ** the main allocator from a foreign controller in the production case. */
+  lj_tg_init_thread(g, &blocker, NULL, 0);
+  lj_tg_tid_rel(&blocker, tid);
+  lj_tg_derive_prng(g, &blocker, tid);
+  lj_native_enter(&blocker);
+  lj_tg_attach(g, &blocker);
+  assert(lj_tg_worker_retire_next_acq(&blocker) == NULL);
+
+  lj_gc2_worker_stop(g);
+  assert(gc2_n_workers_acq(g) == 0);
+  assert(gc2_worker_tg_acq(g, 0) == NULL);
+  assert(gc2_worker_tg_acq(g, 1) == NULL);
+  head = (TGState *)gc2_worker_tg_retired_acq(g);
+  assert(head == worker0 || head == worker1);
+  next = lj_tg_worker_retire_next_acq(head);
+  assert(next == (head == worker0 ? worker1 : worker0));
+  assert(lj_tg_worker_retire_next_acq(next) == NULL);
+
+  lj_tg_detach(g, &blocker);
+  lj_gc2_worker_stop(g);  /* Unlink registry nodes, then free retired workers. */
+  assert(gc2_worker_tg_retired_acq(g) == NULL);
+  lj_tg_fini_thread(g, &blocker);
+  lj_thr_set_tg(saved_tg);
+
+  total0 = lj_gc_total_load(g);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(gc2_n_workers_acq(g) == 2);
+  /* Runtime-only pool records must not enter the Lua allocator/accounting.
+  ** A foreign gcworkers() controller cannot own the main TG allocator. */
+  assert(lj_gc_total_load(g) == total0);
+}
+
+static void test_worker_join_failure_retains_lifetime(global_State *g)
+{
+  LJThr *thread0;
+  TGState *tg0;
+
+  assert(gc2_n_workers_acq(g) == 2);
+  thread0 = (LJThr *)gc2_worker_thread_acq(g, 0);
+  tg0 = gc2_worker_tg_acq(g, 0);
+  assert(thread0 != NULL && tg0 != NULL);
+
+  la_store32_rel(&worker_join_fail_once, 1);
+  assert(lj_gc2_workers_set(g, 0) == 0);
+  assert(la_load32_acq(&worker_join_fail_once) == 0);
+  assert(gc2_worker_stop_acq(g) == 1);
+  assert(gc2_n_workers_acq(g) == 1);
+  assert(gc2_worker_thread_acq(g, 0) == thread0);
+  assert(gc2_worker_tg_acq(g, 0) == tg0);
+  assert(scheduler_tg_registered(g, tg0));
+
+  /* Retrying the control operation performs the real join, then and only then
+  ** releases the retained TG slot. */
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+  assert(gc2_worker_thread_acq(g, 0) == NULL);
+  assert(gc2_worker_tg_acq(g, 0) == NULL);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+}
+
+static void test_multistate_terminal_tg_reclaim(lua_State *outer_L,
+                                                global_State *outer_g)
+{
+  lua_State *L2;
+  global_State *g2;
+  TGState *outer_tg = lj_thr_get_tg();
+  TGState *worker0, *worker1, *deferred;
+  GCobj *outer_pending;
+  uint32_t tid;
+
+  assert(outer_tg != NULL && outer_tg->gl == outer_g);
+  assert(gc2_n_workers_acq(outer_g) == 2);
+  assert(lj_gc2_workers_set(outer_g, 0) == 1);
+
+  /* Seed an owner-private chain in universe 1. Closing universe 2 must not
+  ** mistake raw TLS for one of g2's pending-root producers. */
+  (void)lj_gc_flush_root_pending(outer_g);
+  lua_newtable(outer_L);
+  outer_pending = lj_tg_gcroot_pending_acq(outer_tg);
+  assert(outer_pending != NULL);
+
+  L2 = luaL_newstate();
+  assert(L2 != NULL);
+  g2 = G(L2);
+  assert(lj_thr_get_tg() == outer_tg);
+  assert(outer_tg->gl != g2);
+
+  assert(lj_gc2_workers_set(g2, 2) == 1);
+  worker0 = gc2_worker_tg_acq(g2, 0);
+  worker1 = gc2_worker_tg_acq(g2, 1);
+  assert(worker0 != NULL && worker1 != NULL && worker0 != worker1);
+  lj_gc2_worker_stop(g2);
+  assert(gc2_n_workers_acq(g2) == 0);
+  assert(scheduler_tg_registered(g2, worker0));
+  assert(scheduler_tg_registered(g2, worker1));
+  assert(gc2_worker_tg_retired_acq(g2) != NULL);
+
+  /* Model a threading.thread userdata which relinquished its last external
+  ** reference while its TG remained registry-owned. */
+  deferred = lj_mem_newt(L2, sizeof(TGState), TGState);
+  lj_tg_init_thread(g2, deferred, NULL, 1);
+  lj_tg_flags_or_rlx(deferred, TGF_LUA_ALLOC|TGF_DEFER_FREE);
+  tid = lj_thr_newid();
+  lj_tg_tid_rel(deferred, tid);
+  lj_tg_derive_prng(g2, deferred, tid);
+  lj_tg_attach(g2, deferred);
+  lj_tg_detach(g2, deferred);
+  (void)lj_tg_ssb_refs_add(deferred, 1);
+  assert(scheduler_tg_registered(g2, deferred));
+  assert(lj_tg_reclaim_dead(g2) == 0);  /* Raw TLS still belongs to g1. */
+
+  mt_shutdown_rel(g2, 1);
+  assert(lj_tg_reclaim_dead_terminal(g2) == 2u);
+  assert(!scheduler_tg_registered(g2, worker0));
+  assert(!scheduler_tg_registered(g2, worker1));
+  assert(scheduler_tg_registered(g2, deferred));
+  assert(lj_tg_ssb_refs_sub(deferred, 1) == 1u);
+  assert(lj_tg_reclaim_dead_terminal(g2) == 1u);
+  assert(!scheduler_tg_registered(g2, deferred));
+  assert(lj_tg_gcroot_pending_acq(outer_tg) == outer_pending);
+
+  /* Registry unlink leaves unflagged worker storage to the embedded retire
+  ** list. The idempotent stopped-pool pass now finalizes and frees it. */
+  lj_gc2_worker_stop(g2);
+  assert(gc2_worker_tg_retired_acq(g2) == NULL);
+  lua_close(L2);
+  assert(lj_thr_get_tg() == outer_tg);
+  assert(lj_tg_gcroot_pending_acq(outer_tg) == outer_pending);
+
+  (void)lj_gc_flush_root_pending(outer_g);
+  lua_pop(outer_L, 1);
+  assert(lj_gc2_workers_set(outer_g, 2) == 1);
+}
+
+static void test_bounded_ssb_private_remainder(global_State *g)
+{
+  enum { NNODES = 64 };
+  GC2SSBNode *head = NULL;
+  uint32_t i;
+
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_ssb_head_acq(g) == NULL);
+  assert(gc2_ssb_drain_acq(g) == NULL);
+  assert(lj_gc2_test_ssb_empty(g));
+
+  for (i = 0; i < NNODES; i++) {
+    GC2SSBNode *node = (GC2SSBNode *)malloc(sizeof(GC2SSBNode));
+    assert(node != NULL);
+    node->pad = TG_GC2_SSB_DYNAMIC;
+    lj_gc2_ssb_owner_rel(node, NULL);
+    lj_gc2_ssb_count_rel(node, 1);
+    setgcrefnull(node->slot[0]);
+    lj_gc2_ssb_next_rel(node, head);
+    head = node;
+  }
+  gc2_ssb_head_store_rlx(g, head);
+  la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
+
+  assert(lj_gc2_worker_drain(g, 1) == 1);
+  /* A bounded drain owns the untouched suffix directly. Re-publishing the
+  ** suffix to the MPSC head makes limit=1 perform a full tail walk per item
+  ** (quadratic for a large queue) and lets weak-close handshakes amplify it. */
+  assert(gc2_ssb_head_acq(g) == NULL);
+  assert(gc2_ssb_drain_acq(g) != NULL);
+  assert(!lj_gc2_test_ssb_empty(g));
+  for (i = 1; i < NNODES; i++)
+    assert(lj_gc2_worker_drain(g, 1) == 1);
+  assert(gc2_ssb_head_acq(g) == NULL);
+  assert(gc2_ssb_drain_acq(g) == NULL);
+  assert(lj_gc2_test_ssb_empty(g));
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(gc2_n_workers_acq(g) == 2);
+}
+
+static void test_worker_wake_between_snapshot_and_park(lua_State *L,
+						global_State *g)
+{
+#if defined(__linux__) && defined(__x86_64__)
+  struct sigaction start_sa, step_sa, old_start_sa, old_step_sa;
+  sigset_t trace_set, old_mask;
+  LJThr *worker;
+  GCobj *obj;
+  uint64_t parks0, busy0, drained0, published_wake = 0;
+  int i, caught = 0, drained_without_rescue = 0, queue_drained = 0;
+  int object_unlinked = 0, worker_started = 0;
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  obj = obj2gco(tabV(L->top - 1));
+  object_unlinked = unlink_root_object(g, obj);
+  assert(object_unlinked);
+
+  sigemptyset(&trace_set);
+  sigaddset(&trace_set, WORKER_PARK_TRACE_SIGNAL);
+  sigaddset(&trace_set, SIGTRAP);
+  assert(pthread_sigmask(SIG_UNBLOCK, &trace_set, &old_mask) == 0);
+
+  memset(&step_sa, 0, sizeof(step_sa));
+  step_sa.sa_sigaction = worker_park_trace_step;
+  sigemptyset(&step_sa.sa_mask);
+  step_sa.sa_flags = SA_SIGINFO;
+  assert(sigaction(SIGTRAP, &step_sa, &old_step_sa) == 0);
+
+  memset(&start_sa, 0, sizeof(start_sa));
+  start_sa.sa_sigaction = worker_park_trace_start;
+  sigemptyset(&start_sa.sa_mask);
+  start_sa.sa_flags = SA_SIGINFO;
+  assert(sigaction(WORKER_PARK_TRACE_SIGNAL, &start_sa, &old_start_sa) == 0);
+
+  la_storeptr_rel((void **)&worker_park_trace_g, g);
+  la_store32_rel(&worker_park_trace_armed, 0);
+  la_store32_rel(&worker_park_trace_seen, 0);
+  la_store32_rel(&worker_park_trace_release, 0);
+
+  parks0 = gc2_worker_parks_acq(g);
+  assert(lj_gc2_workers_set(g, 1) == 1);
+  worker_started = 1;
+  assert(gc2_n_workers_acq(g) == 1);
+  assert(wait_gc2_counter_at_least(g, gc2_worker_parks_acq, parks0 + 1u));
+
+  /*
+  ** Leave the real worker's drain with zero progress, then single-step from
+  ** its interrupted futex return. The first busy/park counter skew is exactly
+  ** after the iteration's pre-drain wake snapshot and before its park
+  ** decision. Publishing in that skew caught the former late-snapshot bug:
+  ** the worker used to snapshot the new sequence and sleep on queued work.
+  */
+  parks0 = gc2_worker_parks_acq(g);
+  busy0 = gc2_worker_busy_retries_acq(g);
+  la_store64_rel(&worker_park_busy_base, busy0);
+  la_store64_rel(&worker_park_parks_base, parks0);
+  gc2_worker_active_rel(g, 1);
+  la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
+  la_store32_rel(&worker_park_trace_armed, 1);
+
+  worker = (LJThr *)gc2_worker_thread_acq(g, 0);
+  assert(worker != NULL);
+  assert(pthread_kill(worker->handle, WORKER_PARK_TRACE_SIGNAL) == 0);
+  for (i = 0; i < 10000; i++) {
+    if (la_load32_acq(&worker_park_trace_seen)) {
+      caught = 1;
+      break;
+    }
+    sleep_ns(100000L);
+  }
+
+  if (caught) {
+    assert(gc2_worker_busy_retries_acq(g) == busy0 + 1u);
+    assert(gc2_worker_parks_acq(g) == parks0);
+    drained0 = gc2_finalizer_mpsc_drained_acq(g);
+    lj_gc2_test_finalizer_enqueue(g, obj);
+    assert(gc2_finalizer_mpsc_acq(g) != NULL);
+    published_wake = gc2_worker_wake_acq(g);
+  }
+
+  /* Release both the synthetic drain owner and the stopped instruction. */
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  gc2_worker_active_rel(g, 0);
+  la_store32_rel(&worker_park_trace_armed, 0);
+  la_store32_rel(&worker_park_trace_release, 1);
+
+  if (caught) {
+    for (i = 0; i < 5000; i++) {
+      if (gc2_finalizer_mpsc_drained_acq(g) >= drained0 + 1u) {
+        drained_without_rescue = 1;
+        break;
+      }
+      sleep_ns(100000L);
+    }
+    /* Keep cleanup bounded even when testing a deliberately broken binary. */
+    if (!drained_without_rescue) {
+      assert(gc2_worker_wake_acq(g) == published_wake);
+      lj_gc2_test_worker_wake(g);
+      queue_drained = wait_gc2_counter_at_least(
+	 g, gc2_finalizer_mpsc_drained_acq, drained0 + 1u);
+    } else {
+      /* No later wake is allowed to mask the publication under test. */
+      assert(gc2_worker_wake_acq(g) == published_wake);
+      queue_drained = 1;
+    }
+  }
+
+  if (worker_started)
+    assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(sigaction(WORKER_PARK_TRACE_SIGNAL, &old_start_sa, NULL) == 0);
+  assert(sigaction(SIGTRAP, &old_step_sa, NULL) == 0);
+  assert(pthread_sigmask(SIG_SETMASK, &old_mask, NULL) == 0);
+  la_storeptr_rel((void **)&worker_park_trace_g, NULL);
+
+  if (caught && queue_drained) {
+    assert(gc2_finalizer_mpsc_acq(g) == NULL);
+    assert(lj_gc2_test_finalizer_dequeue(g) == obj);
+    assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
+  }
+  if (object_unlinked)
+    relink_root_object(g, obj);
+  lua_settop(L, 0);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(gc2_n_workers_acq(g) == 2);
+
+  assert(caught);  /* Deterministic instruction-window interception. */
+  assert(queue_drained);
+  assert(drained_without_rescue);  /* The publication wake was not lost. */
+#else
+  /* Exact instruction-window stepping is a Linux/x86-64 test technique. */
+  UNUSED(L); UNUSED(g);
+  fprintf(stderr,
+	  "t-gc2-worker-scheduler: wake-before-park window test skipped\n");
+#endif
 }
 
 static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
@@ -788,7 +1206,12 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  for (i = 0; i < 1000 && lj_gc2_test_weak_snapshot_count(g) == 0; i++)
+  /* Snapshot readiness is published at weak-table discovery, before the same
+  ** bounded traversal reaches its strong key. Wait for both independent
+  ** effects; the snapshot counter alone is not a traversal-complete fence. */
+  for (i = 0; i < 1000 &&
+       (lj_gc2_test_weak_snapshot_count(g) == 0 ||
+	lj_gc2_ismarked(g, obj2gco(key)) != 1); i++)
     sleep_ns(1000000L);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
@@ -892,8 +1315,11 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(gc2_worker_async_progress_acq(g) > async0);
   assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			      swept_a));
-  assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE],
-			     swept_a));
+  /* Terminal commit keeps the arena CLOSED on the reclaimed stack. Owner
+  ** allocation adopts it lazily only when reusable space is requested. */
+  assert(arena_list_contains(lj_arena_alloc_reclaimed_head(
+	&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE), swept_a));
+  assert((lj_arena_flags_acq(swept_a) & LJ_AF_RECLAIMED) != 0);
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(swept_a->hdr.sweep_epoch == sweep_cycle);
@@ -952,6 +1378,11 @@ int main(void)
   assert(la_load32_acq(&g->gc2.n_threads) == 3);
 
   test_two_worker_contention(g);
+  test_worker_retirement_uses_embedded_links(g);
+  test_worker_join_failure_retains_lifetime(g);
+  test_multistate_terminal_tg_reclaim(L, g);
+  test_bounded_ssb_private_remainder(g);
+  test_worker_wake_between_snapshot_and_park(L, g);
   test_worker_finalizer_mpsc_drain(L, g);
   test_worker_finalizer_sweep_mpsc_drain(L, g);
   test_worker_finalizer_requires_real_tg(L, g);
