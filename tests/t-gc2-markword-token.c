@@ -299,6 +299,8 @@ static void test_activation_transitions_and_saturation(void)
            LJ_GC2_ACT_IDLE, &idle) == LJ_GC2_TRANSITION_OK);
   assert(before.mark_epoch == idle.mark_epoch);
   assert(before.state == idle.state);
+  assert(before.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(idle.gate == LJ_GC2_ROOT_GATE_OPEN);
   assert(!lj_gc2_activation_equal(&before, &idle));
 
   assert(lj_gc2_activation_try_transition(&token, &before, 17,
@@ -318,6 +320,7 @@ static void test_activation_transitions_and_saturation(void)
   assert(observed.mark_epoch == UINT64_MAX);
   assert(observed.generation == LJ_GC2_ACT_MAX_GENERATION);
   assert(observed.state == LJ_GC2_ACT_NO_RECLAIM);
+  assert(observed.gate == LJ_GC2_ROOT_GATE_OPEN);
   assert(lj_gc2_activation_try_transition(&token, &observed, UINT64_MAX,
            LJ_GC2_ACT_IDLE, NULL) == LJ_GC2_TRANSITION_INVALID);
   assert(lj_gc2_activation_try_transition(&token, &observed, UINT64_MAX,
@@ -363,6 +366,353 @@ static void test_activation_edge_and_epoch_policy(void)
   assert(lj_gc2_activation_equal(&open, &observed));
 }
 
+static void test_activation_root_gate(void)
+{
+  LJGC2Activation token;
+  LJGC2ActivationSnap open, closing, pending, observed, commit, reopened;
+
+  assert(lj_gc2_activation_init_unpublished(&token, 31, 20,
+                                             LJ_GC2_ACT_WEAK));
+  open = lj_gc2_activation_snapshot(&token);
+  assert(open.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(lj_gc2_activation_try_gate(&token, &open,
+           LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
+
+  /* A late publisher changes the same CX16 authority as close/commit. */
+  assert(lj_gc2_activation_try_gate(&token, &closing,
+           LJ_GC2_ROOT_GATE_PENDING, &pending) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_gate(&token, &closing,
+           LJ_GC2_ROOT_GATE_COMMIT, &observed) == LJ_GC2_TRANSITION_LOST);
+  assert(lj_gc2_activation_equal(&observed, &pending));
+  assert(lj_gc2_activation_try_gate(&token, &pending,
+           LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_gate(&token, &closing,
+           LJ_GC2_ROOT_GATE_COMMIT, &commit) == LJ_GC2_TRANSITION_OK);
+
+  /* COMMIT is not an ABA-safe terminal observation for a new publisher. */
+  assert(lj_gc2_activation_try_gate(&token, &commit,
+           LJ_GC2_ROOT_GATE_PENDING, &pending) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_gate(&token, &pending,
+           LJ_GC2_ROOT_GATE_OPEN, &reopened) == LJ_GC2_TRANSITION_OK);
+  assert(reopened.state == open.state);
+  assert(reopened.gate == open.gate);
+  assert(reopened.mark_epoch == open.mark_epoch);
+  assert(reopened.generation != open.generation);
+  assert(lj_gc2_activation_try_gate(&token, &open,
+           LJ_GC2_ROOT_GATE_CLOSING, &observed) == LJ_GC2_TRANSITION_LOST);
+  assert(lj_gc2_activation_equal(&observed, &reopened));
+
+  assert(lj_gc2_activation_try_gate(&token, &reopened,
+           LJ_GC2_ROOT_GATE_COMMIT, NULL) == LJ_GC2_TRANSITION_INVALID);
+  assert(lj_gc2_activation_try_update(&token, &reopened, 31,
+           LJ_GC2_ACT_WEAK, 4, NULL) == LJ_GC2_TRANSITION_INVALID);
+
+  assert(lj_gc2_activation_try_gate(&token, &reopened,
+           LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_transition(&token, &closing, 31,
+           LJ_GC2_ACT_NO_RECLAIM, &observed) == LJ_GC2_TRANSITION_OK);
+  assert(observed.state == LJ_GC2_ACT_NO_RECLAIM);
+  assert(observed.gate == LJ_GC2_ROOT_GATE_OPEN);
+}
+
+static void test_root_gate_edge_policy(void)
+{
+  static const uint8_t allowed[4] = { 0x03, 0x0f, 0x07, 0x0d };
+  unsigned from, to;
+  for (from = 0; from < 4; from++)
+    for (to = 0; to < 4; to++)
+      assert(lj_gc2_root_gate_edge_valid((uint8_t)from, (uint8_t)to) ==
+             ((allowed[from] >> to) & 1));
+  assert(!lj_gc2_root_gate_edge_valid(4, LJ_GC2_ROOT_GATE_OPEN));
+}
+
+typedef struct GateRaceArg {
+  LJGC2Activation *token;
+  LJGC2ActivationSnap expected;
+  LJGC2ActivationSnap observed;
+  uint32_t *ready;
+  uint32_t *go;
+  uint8_t next_gate;
+  LJGC2TransitionResult result;
+} GateRaceArg;
+
+static void *gate_race_thread(void *ud)
+{
+  GateRaceArg *arg = (GateRaceArg *)ud;
+  (void)la_add32_acqrel(arg->ready, 1);
+  while (!la_load32_acq(arg->go))
+    la_cpu_pause();
+  arg->result = lj_gc2_activation_try_gate(arg->token, &arg->expected,
+                                            arg->next_gate, &arg->observed);
+  return NULL;
+}
+
+static void test_concurrent_close_pending_commit(void)
+{
+  LJGC2Activation token;
+  LJGC2ActivationSnap open, closing, final, pending;
+  GateRaceArg arg[2];
+  pthread_t thread[2];
+  uint32_t ready = 0, go = 0;
+  unsigned winner;
+
+  assert(lj_gc2_activation_init_unpublished(&token, 73, 11,
+                                             LJ_GC2_ACT_WEAK));
+  open = lj_gc2_activation_snapshot(&token);
+  assert(lj_gc2_activation_try_gate(&token, &open,
+           LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
+  memset(arg, 0, sizeof(arg));
+  arg[0].token = arg[1].token = &token;
+  arg[0].expected = arg[1].expected = closing;
+  arg[0].ready = arg[1].ready = &ready;
+  arg[0].go = arg[1].go = &go;
+  arg[0].next_gate = LJ_GC2_ROOT_GATE_PENDING;
+  arg[1].next_gate = LJ_GC2_ROOT_GATE_COMMIT;
+  assert(pthread_create(&thread[0], NULL, gate_race_thread, &arg[0]) == 0);
+  assert(pthread_create(&thread[1], NULL, gate_race_thread, &arg[1]) == 0);
+  while (la_load32_acq(&ready) != 2)
+    la_cpu_pause();
+  la_store32_rel(&go, 1);
+  assert(pthread_join(thread[0], NULL) == 0);
+  assert(pthread_join(thread[1], NULL) == 0);
+  assert((arg[0].result == LJ_GC2_TRANSITION_OK) +
+         (arg[1].result == LJ_GC2_TRANSITION_OK) == 1);
+  assert((arg[0].result == LJ_GC2_TRANSITION_LOST) +
+         (arg[1].result == LJ_GC2_TRANSITION_LOST) == 1);
+  winner = arg[0].result == LJ_GC2_TRANSITION_OK ? 0u : 1u;
+  final = lj_gc2_activation_snapshot(&token);
+  assert(lj_gc2_activation_equal(&final, &arg[winner].observed));
+  assert(lj_gc2_activation_equal(&final, &arg[winner ^ 1u].observed));
+  if (final.gate == LJ_GC2_ROOT_GATE_COMMIT) {
+    assert(lj_gc2_activation_try_gate(&token, &final,
+             LJ_GC2_ROOT_GATE_PENDING, &pending) == LJ_GC2_TRANSITION_OK);
+    final = pending;
+  }
+  assert(final.gate == LJ_GC2_ROOT_GATE_PENDING);
+}
+
+static LJGC2RootDescSpec rootdesc_scalar_spec(uint64_t old_root,
+                                              uint64_t new_root)
+{
+  LJGC2RootDescSpec spec;
+  memset(&spec, 0, sizeof(spec));
+  spec.flags = LJ_GC2_ROOTDESC_F_OLD | LJ_GC2_ROOTDESC_F_NEW;
+  spec.old_root = old_root;
+  spec.new_root = new_root;
+  return spec;
+}
+
+static void test_rootdesc_scalar_lifecycle_and_aba(void)
+{
+  LJGC2RootDesc desc;
+  LJGC2RootDescSpec spec = rootdesc_scalar_spec(UINT64_C(0x1234),
+                                                UINT64_C(0x5678));
+  LJGC2RootDescTicket first, second;
+  LJGC2RootDescView view;
+
+  assert(sizeof(desc) == 64);
+  assert(((uintptr_t)&desc & 15u) == 0);
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 7));
+  memset(&view, 0, sizeof(view));
+  assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+  assert(view.generation == 7);
+  assert(lj_gc2_rootdesc_publish(&desc, &spec, &first) ==
+         LJ_GC2_ROOTDESC_OK);
+  assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
+  assert(view.generation == 8);
+  assert(view.flags == spec.flags);
+  assert(view.old_root == spec.old_root);
+  assert(view.new_root == spec.new_root);
+  assert(lj_gc2_rootdesc_finish(&desc, &first) == LJ_GC2_ROOTDESC_OK);
+
+  spec.old_root++;
+  spec.new_root++;
+  assert(lj_gc2_rootdesc_publish(&desc, &spec, &second) ==
+         LJ_GC2_ROOTDESC_OK);
+  assert(second.control != first.control);
+  assert(lj_gc2_rootdesc_finish(&desc, &first) == LJ_GC2_ROOTDESC_BUSY);
+  assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
+  assert(view.generation == 9);
+  assert(view.old_root == spec.old_root);
+  assert(lj_gc2_rootdesc_finish(&desc, &second) == LJ_GC2_ROOTDESC_OK);
+}
+
+static void test_rootdesc_ranges_and_sticky_failure(void)
+{
+  uint64_t slots[16];
+  LJGC2RootDesc desc;
+  LJGC2RootDescSpec spec;
+  LJGC2RootDescTicket ticket;
+  LJGC2RootDescView view;
+
+  memset(&spec, 0, sizeof(spec));
+  spec.flags = LJ_GC2_ROOTDESC_F_RANGE0 | LJ_GC2_ROOTDESC_F_RANGE1 |
+               LJ_GC2_ROOTDESC_F_MOVE_DOWN;
+  spec.range[0].lo = &slots[2];
+  spec.range[0].hi = &slots[12];
+  spec.range[1].lo = &slots[0];
+  spec.range[1].hi = &slots[10];
+  assert(lj_gc2_rootdesc_spec_valid(&spec));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0));
+  assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
+         LJ_GC2_ROOTDESC_OK);
+  assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
+  assert(view.range[0].lo == spec.range[0].lo);
+  assert(view.range[0].hi == spec.range[0].hi);
+  assert(view.range[1].lo == spec.range[1].lo);
+  assert(view.range[1].hi == spec.range[1].hi);
+
+  /* Reentrant owner publication is a sticky safety failure, never an ABA. */
+  assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
+         LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM);
+  assert(lj_gc2_rootdesc_finish(&desc, &ticket) ==
+         LJ_GC2_ROOTDESC_PINNED);
+
+  spec.flags |= LJ_GC2_ROOTDESC_F_MOVE_UP;
+  assert(!lj_gc2_rootdesc_spec_valid(&spec));
+  spec.flags = LJ_GC2_ROOTDESC_F_RANGE0;
+  assert(!lj_gc2_rootdesc_spec_valid(&spec));
+  spec.flags = LJ_GC2_ROOTDESC_F_OLD | LJ_GC2_ROOTDESC_F_MOVE_UP;
+  assert(!lj_gc2_rootdesc_spec_valid(&spec));
+
+  spec.flags = LJ_GC2_ROOTDESC_F_RANGE1 | LJ_GC2_ROOTDESC_F_MOVE_UP;
+  assert(!lj_gc2_rootdesc_spec_valid(&spec));
+  spec.flags = LJ_GC2_ROOTDESC_F_RANGE0 | LJ_GC2_ROOTDESC_F_RANGE1 |
+               LJ_GC2_ROOTDESC_F_MOVE_UP;
+  spec.range[0].lo = &slots[0];
+  spec.range[0].hi = &slots[4];
+  spec.range[1].lo = &slots[4];
+  spec.range[1].hi = &slots[9];
+  assert(!lj_gc2_rootdesc_spec_valid(&spec));
+
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 10));
+  assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
+         LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_snapshot(&desc, NULL) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM);
+
+  assert(lj_gc2_rootdesc_init_unpublished(&desc,
+                                           LJ_GC2_ROOTDESC_MAX_GENERATION));
+  spec = rootdesc_scalar_spec(1, 2);
+  assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
+         LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_snapshot(&desc, NULL) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM);
+  assert(!lj_gc2_rootdesc_init_unpublished(
+      &desc, LJ_GC2_ROOTDESC_MAX_GENERATION + 1u));
+}
+
+static void test_rootdesc_pin_wins_delayed_activation(void)
+{
+  LJGC2RootDesc desc;
+  uint64_t idle, active;
+
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 3));
+  idle = la_load64_acq(&desc.control);
+  active = lj_gc2_rootdesc_pack_control(4, LJ_GC2_ROOTDESC_ACTIVE);
+  assert(lj_gc2_rootdesc_pin(&desc, idle) == LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_try_activate(&desc, idle, active) ==
+         LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_state(la_load64_acq(&desc.control)) ==
+         LJ_GC2_ROOTDESC_NO_RECLAIM);
+}
+
+enum { ROOTDESC_STRESS_ITERATIONS = 20000 };
+
+typedef struct RootDescStress {
+  LJGC2RootDesc desc;
+  uint64_t slots[8];
+  uint32_t ready;
+  uint32_t go;
+  uint32_t done;
+  uint32_t active_seen;
+} RootDescStress;
+
+static void *rootdesc_writer(void *ud)
+{
+  RootDescStress *stress = (RootDescStress *)ud;
+  LJGC2RootDescSpec spec;
+  LJGC2RootDescTicket ticket;
+  uint64_t i;
+  memset(&spec, 0, sizeof(spec));
+  spec.flags = LJ_GC2_ROOTDESC_F_OLD | LJ_GC2_ROOTDESC_F_NEW |
+               LJ_GC2_ROOTDESC_F_RANGE0 | LJ_GC2_ROOTDESC_F_MOVE_UP;
+  spec.range[0].lo = &stress->slots[1];
+  spec.range[0].hi = &stress->slots[7];
+  (void)la_add32_acqrel(&stress->ready, 1);
+  while (!la_load32_acq(&stress->go))
+    la_cpu_pause();
+  for (i = 1; i <= ROOTDESC_STRESS_ITERATIONS; i++) {
+    unsigned pause;
+    spec.old_root = i;
+    spec.new_root = i ^ UINT64_C(0xd1e5c0de5eed1234);
+    assert(lj_gc2_rootdesc_publish(&stress->desc, &spec, &ticket) ==
+           LJ_GC2_ROOTDESC_OK);
+    for (pause = 0; pause < 8; pause++)
+      la_cpu_pause();
+    assert(lj_gc2_rootdesc_finish(&stress->desc, &ticket) ==
+           LJ_GC2_ROOTDESC_OK);
+  }
+  la_store32_rel(&stress->done, 1);
+  return NULL;
+}
+
+static void *rootdesc_reader(void *ud)
+{
+  RootDescStress *stress = (RootDescStress *)ud;
+  uint64_t last_generation = 0;
+  (void)la_add32_acqrel(&stress->ready, 1);
+  while (!la_load32_acq(&stress->go))
+    la_cpu_pause();
+  do {
+    LJGC2RootDescView view;
+    LJGC2RootDescSnapshotResult result =
+      lj_gc2_rootdesc_snapshot(&stress->desc, &view);
+    assert(result != LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM);
+    if (result == LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE) {
+      assert(view.generation >= last_generation);
+      assert(view.new_root ==
+             (view.old_root ^ UINT64_C(0xd1e5c0de5eed1234)));
+      assert(view.range[0].lo == &stress->slots[1]);
+      assert(view.range[0].hi == &stress->slots[7]);
+      last_generation = view.generation;
+      (void)la_add32_rlx(&stress->active_seen, 1);
+    }
+  } while (!la_load32_acq(&stress->done));
+  return NULL;
+}
+
+static void test_concurrent_rootdesc_snapshots(void)
+{
+  enum { NREADER = 4 };
+  RootDescStress stress;
+  pthread_t writer, readers[NREADER];
+  LJGC2RootDescView view;
+  unsigned i;
+
+  memset(&stress, 0, sizeof(stress));
+  assert(lj_gc2_rootdesc_init_unpublished(&stress.desc, 0));
+  assert(pthread_create(&writer, NULL, rootdesc_writer, &stress) == 0);
+  for (i = 0; i < NREADER; i++)
+    assert(pthread_create(&readers[i], NULL, rootdesc_reader, &stress) == 0);
+  while (la_load32_acq(&stress.ready) != NREADER + 1)
+    la_cpu_pause();
+  la_store32_rel(&stress.go, 1);
+  assert(pthread_join(writer, NULL) == 0);
+  for (i = 0; i < NREADER; i++)
+    assert(pthread_join(readers[i], NULL) == 0);
+  assert(lj_gc2_rootdesc_snapshot(&stress.desc, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+  assert(view.generation == ROOTDESC_STRESS_ITERATIONS);
+  assert(la_load32_acq(&stress.active_seen) != 0);
+}
+
 enum { TOKEN_FIRST_GENERATION = 7, TOKEN_FINAL_GENERATION = 20000 };
 
 typedef struct TokenStress {
@@ -403,6 +753,7 @@ static void *token_reader(void *ud)
     assert(snap.generation >= previous);
     assert(snap.mark_epoch == (snap.generation + 6) / 7);
     assert(snap.state == snap.generation % 7);
+    assert(snap.gate == LJ_GC2_ROOT_GATE_OPEN);
     previous = snap.generation;
   } while (!la_load32_acq(&stress->done));
   return NULL;
@@ -433,6 +784,7 @@ static void test_concurrent_activation_snapshots(void)
   assert(final.generation == TOKEN_FINAL_GENERATION);
   assert(final.mark_epoch == (TOKEN_FINAL_GENERATION + 6) / 7);
   assert(final.state == TOKEN_FINAL_GENERATION % 7);
+  assert(final.gate == LJ_GC2_ROOT_GATE_OPEN);
 }
 
 int main(void)
@@ -443,7 +795,14 @@ int main(void)
   test_exhaustive_publication_models();
   test_activation_transitions_and_saturation();
   test_activation_edge_and_epoch_policy();
+  test_activation_root_gate();
+  test_root_gate_edge_policy();
+  test_concurrent_close_pending_commit();
   test_concurrent_activation_snapshots();
+  test_rootdesc_scalar_lifecycle_and_aba();
+  test_rootdesc_ranges_and_sticky_failure();
+  test_rootdesc_pin_wins_delayed_activation();
+  test_concurrent_rootdesc_snapshots();
   printf("t-gc2-markword-token OK: %u publication and %u activation schedules\n",
          publish_schedules, activation_schedules);
   return 0;
