@@ -20,4 +20,4 @@ LuaJIT-MT
 
 Adds lockless multithreading to LuaJIT.
 
-Disclaimer: AI agents (Claude Fable, GPT-5.5) were used extensively in the implementation. 
+Disclaimer: AI agents (Claude Fable, GPT-5.5 xhigh, GPT-5.6-sol Ultra) were used extensively in the implementation. 
