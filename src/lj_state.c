@@ -508,6 +508,11 @@ static void close_state(lua_State *L)
   lj_gc2_fini(g);
   if (lj_thr_get_tg() == g->main_tg)
     lj_thr_set_tg(NULL);
+  /* Close stable body admission and prove zero borrows before destroying any
+  ** main-TG subordinate storage. The tagged body remains RECLAIMING until the
+  ** final raw-owner/orphan drain below completes. */
+  if (!lj_tg_registry_main_close_begin(g))
+    abort();
   if (arena_alloc && g->main_tg) {
     lj_tg_fini_ssb(g->main_tg);
     lj_buf_free(g, &g->main_tg->tmpbuf);
@@ -530,6 +535,12 @@ static void close_state(lua_State *L)
   ** subsequent lj_mem_free(). */
   if (mt_shutdown_acq(g) != 0)
     (void)lj_gc2_terminal_reclaim_tgs(g);
+  /* Stable TG slots outlive GC2 teardown and every secondary body. The late
+  ** terminal owner drain above is the final legacy authority which may still
+  ** need their keys, so only now close the main incarnation and free the
+  ** immutable slot spine. Partial initialization reaches this point with just
+  ** the main slot and uses the same terminal cleanup. */
+  lj_tg_registry_fini(g);
   if (arena_alloc) {
     /*
     ** Internal arena slabs are released when the arena allocator is destroyed
@@ -590,6 +601,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   GG_State *GG;
   lua_State *L;
   global_State *g;
+  uint32_t tid;
   int arena_internal = 0;
 #if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   /* The callback remains in the ABI, but is deliberately not invoked yet. */
@@ -602,6 +614,12 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
     /* Can only return NULL here, so this errors with "not enough memory". */
     return NULL;
   }
+  /* Owner ids are process-wide, monotonic identities. Exhaustion is reported
+  ** through lua_newstate's existing NULL failure result; it must never wrap
+  ** into an older live identity or the reserved GC scanner sentinel. */
+  tid = lj_thr_newid();
+  if (tid == 0)
+    return NULL;
   if (allocf == LJ_ALLOCF_INTERNAL) {
     lj_arena_alloc_init(&boot_alloc);
     lj_arena_allocd_init(&boot_ad, &boot_alloc, &prng, 0);
@@ -699,7 +717,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_gc_pause_store(g, LUAI_GCPAUSE);
   lj_gc_stepmul_store(g, LUAI_GCMUL);
   lj_dispatch_init((GG_State *)L);
-  lj_tg_init((GG_State *)L, arena_internal);
+  lj_tg_init((GG_State *)L, arena_internal, tid);
   lj_gc2_init(g);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
   if (lj_vm_cpcall(L, NULL, NULL, cpluaopen) != 0) {

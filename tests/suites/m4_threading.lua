@@ -141,7 +141,7 @@ return function(add)
       description = "TG registry SMR reader/reclaimer exclusion fixture",
       output = "lj_t-tg-registry-lease",
       cfile = "t-tg-registry-lease.c",
-      opts = { timeout = "20s" },
+      opts = build.gc2_test_helper_opts({ timeout = "20s" }),
       message = "M4 TG registry lease tests passed"
     },
     {

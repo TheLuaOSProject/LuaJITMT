@@ -8,8 +8,13 @@
 ** by those leases.  next_all is initialized before the node is linked into an
 ** external registry and is never changed afterward.
 **
-** This header deliberately does not integrate with TGState or the runtime TG
-** list.  It is the standalone lifetime primitive used by that later wiring.
+** The runtime best-effort shadow-publishes TG bodies through these slots and
+** its legacy raw TG list. Slot OOM marks the universe incomplete and keeps the
+** exact TG on the legacy-only path. Runtime slots are separately allocated,
+** linked once, never reused, and retained until universe shutdown. The legacy
+** list/SMR/raw-holder gates remain mandatory positive reclaim authority; this
+** token is currently only an additional lifecycle mirror and negative lease
+** veto.
 */
 #ifndef _LJ_TGREGISTRY_H
 #define _LJ_TGREGISTRY_H

@@ -3,8 +3,10 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -32,6 +34,18 @@ typedef struct HandshakeCtx {
   uint32_t signaled;
 } HandshakeCtx;
 
+#define ID_STRESS_THREADS 8u
+#define ID_STRESS_COUNT 4096u
+
+typedef struct IdStressCtx {
+  uint32_t counter;
+  uint32_t first;
+  uint32_t ready;
+  uint32_t go;
+  uint32_t successes;
+  uint32_t seen[ID_STRESS_COUNT];
+} IdStressCtx;
+
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
@@ -44,13 +58,28 @@ static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 
 static void attach_without_catchup(global_State *g, TGState *tg)
 {
+  LJTGRegistrySlot *slot = (LJTGRegistrySlot *)malloc(sizeof(*slot));
+  LJTGRegistrySlot *stable_head;
+  LJTGRegistryKey key;
+  LJTGSlotSnap snap;
   void *head;
+  assert(slot != NULL);
+  assert(lj_tgregistry_slot_init_unpublished(slot, 0, NULL));
+  assert(lj_tgregistry_try_claim(slot, &key, &snap) == LJ_TGSLOT_OK);
+  assert(lj_tgregistry_try_publish_body(&key, tg, &snap) == LJ_TGSLOT_OK);
+  tg->registry_key = key;
+  do {
+    stable_head = gc2_tg_registry_head_acq(g);
+    slot->next_all = stable_head;
+  } while (!gc2_tg_registry_head_cas(g, &stable_head, slot));
+  (void)gc2_tg_registry_nodes_add(g, 1);
   do {
     head = la_loadptr_acq((void *const *)&g->gc2.tg_list);
     lj_tg_next_rel(tg, (TGState *)head);
   } while (!la_casptr((void **)&g->gc2.tg_list, &head, tg,
 		      LA_ACQ_REL, LA_ACQ));
   la_add32_rlx(&g->gc2.n_threads, 1);
+  assert(lj_tgregistry_try_publish(&key, &snap) == LJ_TGSLOT_OK);
 }
 
 static int tg_list_contains(TGState *tg, TGState *needle)
@@ -111,6 +140,22 @@ static void *handshake_main(void *arg)
   return NULL;
 }
 
+static void *id_stress_main(void *arg)
+{
+  IdStressCtx *ctx = (IdStressCtx *)arg;
+  uint32_t id;
+  (void)la_add32_rlx(&ctx->ready, 1);
+  while (la_load32_acq(&ctx->go) == 0)
+    la_cpu_pause();
+  while ((id = lj_thr_id_alloc(&ctx->counter)) != 0) {
+    uint32_t index = id - ctx->first;
+    assert(index < ID_STRESS_COUNT);
+    assert(la_add32_rlx(&ctx->seen[index], 1) == 0);
+    (void)la_add32_rlx(&ctx->successes, 1);
+  }
+  return NULL;
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -127,6 +172,40 @@ int main(void)
   LJThr hs_thread;
   void *ret = NULL;
   uint64_t epoch0;
+
+  {
+    uint32_t counter = LJ_THREAD_GCSCAN - 3u;
+    LJThr invalid = {0};
+    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCSCAN - 2u);
+    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCSCAN - 1u);
+    assert(lj_thr_id_alloc(&counter) == 0);
+    assert(lj_thr_id_alloc(&counter) == 0);
+    assert(counter == LJ_THREAD_GCSCAN - 1u);
+    counter = LJ_THREAD_GCSCAN;
+    assert(lj_thr_id_alloc(&counter) == 0);
+    assert(counter == LJ_THREAD_GCSCAN);
+    invalid.tid = LJ_THREAD_GCSCAN;
+    assert(lj_thr_create(&invalid, id_stress_main, NULL) == EAGAIN);
+    assert(invalid.tid == 0);
+  }
+  {
+    IdStressCtx idctx = {0};
+    LJThr idthr[ID_STRESS_THREADS] = {{0}};
+    uint32_t i;
+    idctx.counter = LJ_THREAD_GCSCAN - 1u - ID_STRESS_COUNT;
+    idctx.first = idctx.counter + 1u;
+    for (i = 0; i < ID_STRESS_THREADS; i++)
+      assert(lj_thr_create(&idthr[i], id_stress_main, &idctx) == 0);
+    while (la_load32_acq(&idctx.ready) != ID_STRESS_THREADS)
+      la_cpu_pause();
+    la_store32_rel(&idctx.go, 1);
+    for (i = 0; i < ID_STRESS_THREADS; i++)
+      assert(lj_thr_join(&idthr[i], NULL) == 0);
+    assert(la_load32_acq(&idctx.successes) == ID_STRESS_COUNT);
+    assert(la_load32_acq(&idctx.counter) == LJ_THREAD_GCSCAN - 1u);
+    for (i = 0; i < ID_STRESS_COUNT; i++)
+      assert(la_load32_acq(&idctx.seen[i]) == 1);
+  }
 
   assert(L != NULL);
   g = G(L);

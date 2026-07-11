@@ -19,6 +19,10 @@ whenever a shared field is introduced or migrated.
 | g->gc2.phase | phase word | load rlx in fast paths; transitions rel + handshake |
 | g->gc2.activation | veto-only typed phase mirror | stable acq snapshot; exact CX16 transitions; mismatch vetoes reclaim; no positive authority yet |
 | g->gc2.cycle_leader | cycle request / phase-edge gate | exact CAS ownership; request retained through MARK init; GCSCAN excludes worker/phase edges |
+| g->gc2.tg_registry_head / LJTGRegistrySlot.next_all | stable shadow TG spine | head CAS acq_rel; next initialized before successful link and immutable thereafter; slots freed only after terminal legacy TG drain |
+| g->gc2.tg_registry_incomplete / TG.registry_shadow_missed | sticky universe veto + exact per-body legacy-only marker | failure store rel; readers acq; universe bit never clears; future stable authority must reject an incomplete spine |
+| LJTGRegistrySlot.token / body_value | shadow TG lifecycle + tagged body lease | exact CX16 lifecycle/lease CAS; tagged body exact-CAS; negative reclaim veto only while legacy raw-list/SMR gates remain positive authority |
+| TG.registry_key | owner lifecycle key | owner-private before slot head release; immutable while attached; cleared only by the legacy reclaimer after RECLAIMING admission |
 | TG.poll / TG.reqmask | signal word | store rel by GC; load rlx by owner; ack CAS acq_rel |
 | Node.key | write-once | CAS rlx claim; read rlx and re-check |
 | Node.next | chain link | CAS rel insert; load acq walk |

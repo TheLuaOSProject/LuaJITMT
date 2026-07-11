@@ -172,6 +172,9 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strid_end = 0;
   tg->strnum_credit = 0;
   (void)lj_gc2_rootdesc_init_unpublished(&tg->root_desc, 0);
+  tg->registry_key.slot = NULL;
+  tg->registry_key.incarnation = LJ_TGSLOT_INCARNATION_NONE;
+  lj_tg_registry_shadow_missed_rel(tg, 0);
   lj_tg_fini_state_store_rlx(tg, TG_FINI_LIVE);
   lj_tg_worker_retire_next_rel(tg, NULL);
   setnilV(&tg->tmptv);
@@ -188,12 +191,13 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
 }
 
-void lj_tg_init(GG_State *GG, int alloc_ready)
+void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
 {
   TGState *tg = &GG->main_tg;
   global_State *g = &GG->g;
   lua_State *L = &GG->L;
-  uint32_t tid = lj_thr_newid();
+  lj_assertG(tid != 0 && tid != LJ_THREAD_GCSCAN,
+	     "invalid main TG owner id");
   g->main_tg = tg;
   lj_tg_tid_rel(tg, tid);
   L->tg_hint = tg;
@@ -352,11 +356,89 @@ static void tg_attach_catchup(global_State *g, TGState *tg)
   }
 }
 
+static LJ_NORET void tg_registry_attach_corrupt(LJTGRegistrySlot *slot)
+{
+  free(slot);
+  /* Successful allocation followed only by private constant-state primitive
+  ** operations. Failure here is corruption, not a recoverable OOM edge. */
+  abort();
+}
+
+static int tg_registry_link_attaching(global_State *g, TGState *tg)
+{
+  LJTGRegistrySlot *head;
+  LJTGRegistrySlot *slot;
+  LJTGRegistryKey key;
+  LJTGSlotSnap snap;
+#if defined(LJ_GC2_TEST_HELPERS)
+  if (gc2_tg_registry_test_fail_alloc_xchg(g, 0) != 0)
+    slot = NULL;
+  else
+#endif
+    slot = (LJTGRegistrySlot *)malloc(sizeof(*slot));
+  if (!slot) {
+    (void)gc2_tg_registry_alloc_failures_add(g, 1);
+    gc2_tg_registry_incomplete_rel(g, 1);
+    lj_tg_registry_shadow_missed_rel(tg, 1);
+    return 0;
+  }
+  if (!lj_tgregistry_slot_init_unpublished(slot, 0, NULL) ||
+      lj_tgregistry_try_claim(slot, &key, &snap) != LJ_TGSLOT_OK ||
+      lj_tgregistry_try_publish_body(&key, tg, &snap) != LJ_TGSLOT_OK)
+    tg_registry_attach_corrupt(slot);
+  tg->registry_key = key;
+  /* A legacy-only missed attach may retry idempotently. Clear its per-body
+  ** exception before the stable head release makes this slot discoverable. */
+  lj_tg_registry_shadow_missed_rel(tg, 0);
+  do {
+    head = gc2_tg_registry_head_acq(g);
+    /* The slot is still private after a failed head CAS, so next_all may be
+    ** refreshed. The successful release CAS is its one immutable-link LP. */
+    slot->next_all = head;
+  } while (!gc2_tg_registry_head_cas(g, &head, slot));
+  (void)gc2_tg_registry_nodes_add(g, 1);
+  return 1;
+}
+
+static int tg_registry_publish_live(TGState *tg)
+{
+  for (;;) {
+    LJTGSlotSnap snap;
+    LJTGSlotResult result;
+    if (!lj_tgregistry_key_valid(&tg->registry_key))
+      return 0;
+    result = lj_tgregistry_try_publish(&tg->registry_key, &snap);
+    if (result == LJ_TGSLOT_OK)
+      return 1;
+    if (result == LJ_TGSLOT_LOST)
+      continue;
+    return 0;
+  }
+}
+
 void lj_tg_attach(global_State *g, TGState *tg)
 {
   TGState *head;
+  int new_slot;
   if (!g || !tg)
     return;
+  new_slot = !lj_tgregistry_key_valid(&tg->registry_key);
+  if (new_slot) {
+    if (lj_gc2_rootdesc_snapshot(&tg->root_desc, NULL) !=
+	LJ_GC2_ROOTDESC_SNAPSHOT_IDLE)
+      abort();  /* Attach publication requires an empty root descriptor. */
+    /* Stable enumeration is intentionally disabled in this shadow slice.
+    ** Preserve the legacy attach/root behavior until exact descriptors and a
+    ** borrow-carrying scanner can make ATTACHING an authoritative root state. */
+    if (!tg_registry_link_attaching(g, tg))
+      new_slot = 0;  /* Shadow OOM preserves the unchanged legacy attach. */
+  } else {
+    LJTGSlotSnap snap;
+    if (lj_tgregistry_key_snapshot(&tg->registry_key, &snap) !=
+	LJ_TGSLOT_OK || (snap.state != LJ_TGSLOT_ATTACHING &&
+			 snap.state != LJ_TGSLOT_LIVE))
+      abort();  /* Reattaching a retired TG body is not a valid lifecycle. */
+  }
   lj_tg_poll_store_rlx(tg, 0);
   lj_tg_reqmask_store_rlx(tg, 0);
   tg_adopt_gc2_phase(g, tg);  /* 09 section 9.3 attach catch-up scaffold. */
@@ -370,6 +452,9 @@ void lj_tg_attach(global_State *g, TGState *tg)
       if (cur == tg) {
 	if (next == tg)
 	  lj_tg_next_rel(tg, NULL);
+	if (lj_tgregistry_key_valid(&tg->registry_key) &&
+	    !tg_registry_publish_live(tg))
+	  abort();
 	return;
       }
       if (next == cur)
@@ -381,15 +466,76 @@ void lj_tg_attach(global_State *g, TGState *tg)
   gc2_n_threads_add_rlx(g, 1);  /* Live TG count; list keeps dead nodes. */
   tg_attach_wait_trace_boundary(g, tg);
   (void)lj_gc_flush_root_pending(g);
+  if (lj_tgregistry_key_valid(&tg->registry_key) &&
+      !tg_registry_publish_live(tg))
+    abort();
+}
+
+int lj_tg_registry_detach_begin(global_State *g, TGState *tg)
+{
+  UNUSED(g);
+  if (!tg)
+    return 0;
+  if (lj_tg_registry_shadow_missed_acq(tg))
+    return 1;  /* Shadow lifecycle is unavailable; legacy gates stay exact. */
+  if (!lj_tgregistry_key_valid(&tg->registry_key))
+    return 0;
+  for (;;) {
+    LJTGSlotSnap snap;
+    LJTGSlotResult result =
+      lj_tgregistry_key_snapshot(&tg->registry_key, &snap);
+    if (result != LJ_TGSLOT_OK)
+      return 0;
+    if (snap.state == LJ_TGSLOT_DETACHING ||
+	snap.state == LJ_TGSLOT_RETIRED)
+      return 1;
+    if (snap.state != LJ_TGSLOT_LIVE)
+      return 0;
+    result = lj_tgregistry_try_detach(&tg->registry_key, &snap);
+    if (result == LJ_TGSLOT_OK)
+      return 1;
+    if (result != LJ_TGSLOT_LOST)
+      return 0;
+  }
+}
+
+static int tg_registry_retire(TGState *tg)
+{
+  if (!tg || !lj_tgregistry_key_valid(&tg->registry_key))
+    return 0;
+  for (;;) {
+    LJTGSlotSnap snap;
+    LJTGSlotResult result =
+      lj_tgregistry_key_snapshot(&tg->registry_key, &snap);
+    if (result != LJ_TGSLOT_OK)
+      return 0;
+    if (snap.state == LJ_TGSLOT_RETIRED)
+      return 1;
+    if (snap.state != LJ_TGSLOT_DETACHING)
+      return 0;
+    result = lj_tgregistry_try_retire(&tg->registry_key, &snap);
+    if (result == LJ_TGSLOT_OK)
+      return 1;
+    if (result != LJ_TGSLOT_LOST)
+      return 0;
+  }
 }
 
 void lj_tg_detach(global_State *g, TGState *tg)
 {
   uint8_t oldflags;
-  lua_State *thread_L;
+  lua_State *cur_L, *thread_L;
   if (!g || !tg)
     return;
+  /* DETACHING closes lifecycle publication before the first descriptor root
+  ** or raw TLS-facing hint is cleared. It remains borrowable until RETIRED. */
+  if (!lj_tg_registry_detach_begin(g, tg))
+    return;  /* Fail closed: never publish DEAD past a malformed slot. */
+  if (lj_gc2_rootdesc_snapshot(&tg->root_desc, NULL) !=
+      LJ_GC2_ROOTDESC_SNAPSHOT_IDLE)
+    abort();  /* The owner must finish its descriptor before final detach. */
   thread_L = lj_tg_load_thread_L(tg);
+  cur_L = lj_tg_load_cur_L(tg);
   if (thread_L &&
       (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0))
     (void)lj_safepoint_ack(thread_L);  /* Leaving TG owns its ack. */
@@ -407,9 +553,16 @@ void lj_tg_detach(global_State *g, TGState *tg)
   ** visible. Subsequent foreign state-release cleanup remains protected by
   ** mt_live, which prevents physical registry reclamation until that lookup
   ** and every other VM access is complete. */
+  if (cur_L && cur_L->tg_hint == tg)
+    cur_L->tg_hint = NULL;
+  if (thread_L && thread_L != cur_L && thread_L->tg_hint == tg)
+    thread_L->tg_hint = NULL;
   lj_tg_store_cur_L(tg, NULL);
   lj_tg_store_thread_L(tg, NULL);
   lj_tg_store_thread_ud(tg, NULL);
+  la_storeptr_rel((void **)&tg->ffi_xsave_root, NULL);
+  la_store32_rel(&tg->ffi_xsave_baseslot, 0);
+  la_store32_rel(&tg->ffi_xsave_nslots, 0);
   lj_tg_in_native_store_rlx(tg, 0);
 #if LJ_HASJIT
   lj_tg_store_jit_base(tg, NULL);
@@ -428,6 +581,54 @@ void lj_tg_detach(global_State *g, TGState *tg)
   (void)lj_safepoint_retire_dead_tg(g, tg);
   if (!(oldflags & TGF_DEAD))
     (void)gc2_n_threads_sub_acqrel(g, 1);
+  /* RETIRED is only a registry admission close. Legacy list/SMR/raw-holder
+  ** predicates remain mandatory before any TG body can be reclaimed. */
+  (void)tg_registry_retire(tg);
+}
+
+/* Called only by the legacy TG-list writer after all of its existing global,
+** SMR, worker, allocator and raw-holder predicates succeeded. The stable token
+** is an additional negative veto for already-admitted registry borrows; it is
+** never sufficient positive authority to reclaim a TG body. */
+static int tg_registry_reclaim_begin(TGState *tg, LJTGRegistryKey *keyp)
+{
+  LJTGRegistryBodySnap body;
+  LJTGSlotSnap snap;
+  LJTGSlotResult result;
+  void *reclaim_body = NULL;
+  if (!tg || !keyp)
+    return 0;
+  if (lj_tg_registry_shadow_missed_acq(tg)) {
+    keyp->slot = NULL;
+    keyp->incarnation = LJ_TGSLOT_INCARNATION_NONE;
+    return 1;
+  }
+  if (!lj_tgregistry_key_valid(&tg->registry_key))
+    return 0;
+  *keyp = tg->registry_key;
+  result = lj_tgregistry_key_snapshot(keyp, &snap);
+  if (result != LJ_TGSLOT_OK)
+    return 0;
+  if (snap.state == LJ_TGSLOT_RECLAIMING && snap.lease_count == 0) {
+    body = lj_tgregistry_slot_body_snapshot(keyp->slot);
+    return body.body == tg && body.incarnation == keyp->incarnation;
+  }
+  if (snap.state != LJ_TGSLOT_RETIRED)
+    return 0;
+  result = lj_tgregistry_try_reclaim(keyp, &reclaim_body, &snap);
+  return result == LJ_TGSLOT_OK && reclaim_body == tg;
+}
+
+static void tg_registry_reclaim_finish(const LJTGRegistryKey *key)
+{
+  for (;;) {
+    LJTGSlotSnap snap;
+    LJTGSlotResult result = lj_tgregistry_try_clear(key, &snap);
+    if (result == LJ_TGSLOT_OK)
+      return;
+    if (result != LJ_TGSLOT_LOST)
+      abort();  /* RECLAIMING rejects all borrowers; mismatch is corruption. */
+  }
 }
 
 static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
@@ -570,6 +771,7 @@ restart:
   while (tg != NULL) {
     TGState *next = lj_tg_next_acq(tg);
     if (lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+      LJTGRegistryKey registry_key;
       uint8_t flags = lj_tg_flags_acq(tg);
       uint8_t heap_tg = (uint8_t)(flags & TGF_HEAP);
       uint8_t lua_tg = (uint8_t)(flags & TGF_LUA_ALLOC);
@@ -605,15 +807,23 @@ restart:
 	** the main TG. After all GC/runtime destructors have run, the terminal
 	** orphan pass instead destroys the now-dead allocator in place; this path
 	** never depends on destination hugetab capacity. */
+	/* RETIRED already closed new stable borrows. Consume the owner lease only
+	** after the legacy writer gates hold and before mutating allocator state;
+	** an admitted borrower makes this opportunistic pass retain the raw node. */
+	if (!tg_registry_reclaim_begin(tg, &registry_key)) {
+	  prev = tg;
+	  tg = next;
+	  continue;
+	}
       if (!orphan && !tg_transfer_dead_alloc(g, tg)) {
-	prev = tg;  /* Keep owner lookup live until allocator transfer succeeds. */
+	/* RECLAIMING is a safe closed-admission retry state. Keep raw-list
+	** ownership until a later legacy writer can complete the transfer. */
+	prev = tg;
 	tg = next;
 	continue;
       }
 	if (orphan && !tg_fini_thread(g, tg, 1)) {
-	  prev = tg;
-	  tg = next;
-	  continue;
+	  abort();  /* RECLAIMING cannot be rolled back to registry visibility. */
 	}
       if (prev) {
 	lj_tg_next_rel(prev, next);
@@ -623,6 +833,9 @@ restart:
 	  goto restart;
       }
       lj_tg_next_rel(tg, NULL);
+      tg->registry_key.slot = NULL;
+      tg->registry_key.incarnation = LJ_TGSLOT_INCARNATION_NONE;
+      lj_tg_registry_shadow_missed_rel(tg, 0);
       reclaimed++;
       if (heap_tg) {
 	if (!orphan && !lj_tg_fini_thread(g, tg))
@@ -640,6 +853,13 @@ restart:
 	  abort();
 	lj_mem_freet(g, tg);
       }
+      /* The tagged body remains named only in non-borrowable RECLAIMING while
+      ** this writer performs any finalization/free it owns. Unflagged workers
+      ** and ordinary Lua-owned TGs instead retain a separate raw storage owner
+      ** after unlink; zero stable borrows is established before their slot is
+      ** cleared. Slots are not reused and stay linked until shutdown. */
+      if (lj_tgregistry_key_valid(&registry_key))
+	tg_registry_reclaim_finish(&registry_key);
       tg = next;
       continue;
     }
@@ -671,6 +891,65 @@ uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g)
   ** Shutdown admission, the SMR/TG writer gates, and zero publishers prove
   ** that allocator mappings can be destroyed instead of transferred. */
   return tg_reclaim_dead(g, 1, 1);
+}
+
+int lj_tg_registry_main_close_begin(global_State *g)
+{
+  LJTGRegistryKey key;
+  LJTGSlotSnap snap;
+  TGState *tg;
+  if (!g || !(tg = g->main_tg))
+    return 1;
+  if (lj_tg_registry_shadow_missed_acq(tg))
+    return 1;  /* No slot was published; legacy authority is unchanged. */
+  if (!lj_tgregistry_key_valid(&tg->registry_key))
+    return 0;  /* Completed GC2 init requires an exact key or missed marker. */
+  if (lj_tgregistry_key_snapshot(&tg->registry_key, &snap) == LJ_TGSLOT_OK &&
+      snap.state == LJ_TGSLOT_RECLAIMING && snap.lease_count == 0)
+    return tg_registry_reclaim_begin(tg, &key);
+  if (!lj_tg_registry_detach_begin(g, tg) || !tg_registry_retire(tg) ||
+      !tg_registry_reclaim_begin(tg, &key))
+    return 0;  /* Never destroy subordinate storage under an admitted borrow. */
+  return 1;
+}
+
+void lj_tg_registry_fini(global_State *g)
+{
+  LJTGRegistrySlot *slot, *next;
+  uint32_t freed = 0, expected;
+  if (!g)
+    return;
+  /* The main TG is never removed from the legacy list. Universe shutdown has
+  ** already joined every possible borrower, so mirror its terminal lifecycle
+  ** and clear the tagged body before releasing stable slot storage. */
+  if (g->main_tg &&
+      lj_tgregistry_key_valid(&g->main_tg->registry_key)) {
+    LJTGRegistryKey key;
+    if (!tg_registry_reclaim_begin(g->main_tg, &key))
+      abort();
+    g->main_tg->registry_key.slot = NULL;
+    g->main_tg->registry_key.incarnation = LJ_TGSLOT_INCARNATION_NONE;
+    tg_registry_reclaim_finish(&key);
+  }
+  expected = gc2_tg_registry_nodes_acq(g);
+  slot = gc2_tg_registry_head_xchg_acqrel(g, NULL);
+  while (slot) {
+    LJTGRegistryBodySnap body = lj_tgregistry_slot_body_snapshot(slot);
+    LJTGSlotSnap snap = lj_tgslot_snapshot(&slot->token);
+    next = lj_tgregistry_slot_next_all(slot);
+    /* Every secondary body must have passed the legacy writer and the main
+    ** body was closed above. Never turn a leaked lease/pinned body into a
+    ** dangling pointer by freeing its stable node. */
+    if (snap.state != LJ_TGSLOT_EMPTY || snap.lease_count != 0 ||
+	body.body != NULL || body.incarnation != snap.incarnation)
+      abort();
+    free(slot);
+    slot = next;
+    freed++;
+  }
+  if (freed != expected)
+    abort();
+  gc2_tg_registry_nodes_store_rlx(g, 0);
 }
 
 TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)

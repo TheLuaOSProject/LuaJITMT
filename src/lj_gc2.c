@@ -967,6 +967,13 @@ void lj_gc2_init(global_State *g)
   gc2_weak_keys_marked_store_rlx(g, 0);
   gc2_weak_values_marked_store_rlx(g, 0);
   gc2_small_arena_tab_store_rlx(g, NULL);
+  gc2_tg_registry_head_store_rlx(g, NULL);
+  gc2_tg_registry_nodes_store_rlx(g, 0);
+  gc2_tg_registry_incomplete_store_rlx(g, 0);
+  gc2_tg_registry_alloc_failures_store_rlx(g, 0);
+#if defined(LJ_GC2_TEST_HELPERS)
+  gc2_tg_registry_test_fail_alloc_rel(g, 0);
+#endif
   gc2_tg_list_store_rlx(g, NULL);
   gc2_n_threads_store_rlx(g, 0);
   gc2_tg_reclaiming_store_rlx(g, 0);
@@ -1437,9 +1444,14 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
       (void)gc2_worker_stop_locked_l(g, waitL, actionsp);
       return 0;
     }
-    thr->tid = 0;
-    lj_tg_init_thread(g, tg, NULL, gc2_worker_arena_internal(g));
     thr->tid = lj_thr_newid();
+    if (thr->tid == 0) {
+      free(tg);
+      free(thr);
+      (void)gc2_worker_stop_locked_l(g, waitL, actionsp);
+      return 0;
+    }
+    lj_tg_init_thread(g, tg, NULL, gc2_worker_arena_internal(g));
     lj_tg_tid_rel(tg, thr->tid);
     lj_tg_derive_prng(g, tg, thr->tid);
     gc2_worker_thread_store_rlx(g, i, thr);

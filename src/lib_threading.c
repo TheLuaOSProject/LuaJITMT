@@ -873,6 +873,11 @@ static void threading_worker_cleanup(ThreadingWorkerCtx *ctx)
     lj_trace_abort_owner(L);
   if (ctx->claimed)
     lj_ccallback_disown_state(L);
+  /* The child state hint is a raw TG-facing publication. Close stable-slot
+  ** lifecycle admission before clearing it; lj_tg_detach() completes the
+  ** already-owned DETACHING transaction after state ownership is released. */
+  if (was_attached && !lj_tg_registry_detach_begin(g, tg))
+    abort();
   /* The startup path publishes this hint before its state claim. A failed
   ** racy claim must not leave the child naming a TG that userdata teardown can
   ** later release. */
@@ -998,19 +1003,22 @@ static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
     lj_trace_abort_owner(L);
   if (was_attached && disown_callbacks)
     lj_ccallback_disown_state(L);
-  if (was_attached) {
-    lj_tg_detach(ctx->g, ctx->tg);
-    ctx->tg_state_set = 0;
-  }
-  if (ctx->tg_state_set) {
+  if (was_attached &&
+      !lj_tg_registry_detach_begin(ctx->g, ctx->tg))
+    abort();
+  if (ctx->tg_state_set && !was_attached) {
     lj_tg_store_cur_L(ctx->tg, NULL);
     lj_tg_store_thread_L(ctx->tg, NULL);
     lj_tg_store_thread_ud(ctx->tg, NULL);
   }
-  if (ctx->tls_set)
-    lj_thr_set_tg(NULL);
   L->tg_hint = NULL;
   lj_state_release(L, ctx->tid);
+  if (was_attached) {
+    lj_tg_detach(ctx->g, ctx->tg);
+    ctx->tg_state_set = 0;
+  }
+  if (ctx->tls_set)
+    lj_thr_set_tg(NULL);
   if (!was_attached) {
     lj_tg_fini_thread(ctx->g, ctx->tg);
     free(ctx->tg);
@@ -1749,12 +1757,16 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   TGState *tg;
   lua_State *L1;
   uint32_t tid = lj_thr_current_id(G(L));
+  uint32_t worker_tid;
   ptrdiff_t baseofs = savestack(L, base);
   GCtab *startenv;
   int rc;
 
   if (mt_shutdown_acq(G(L)) != 0)
     lj_err_callermsg(L, "VM shutdown in progress");
+  worker_tid = lj_thr_newid();
+  if (worker_tid == 0)
+    lj_err_callermsg(L, "thread owner id space exhausted");
   lj_state_checkstack(L, 2);
   startenv = lj_state_env_acq(L);
   L1 = lua_newthread(L);
@@ -1776,7 +1788,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   th->nargs = (uint32_t)nargs;
   lj_tg_init_thread(G(L), tg, L1, threading_arena_internal(G(L)));
   lj_tg_flags_or_rlx(tg, TGF_LUA_ALLOC);
-  th->thr.tid = lj_thr_newid();
+  th->thr.tid = worker_tid;
   lj_tg_tid_rel(tg, th->thr.tid);
   lj_tg_derive_prng(G(L), tg, th->thr.tid);
   lj_tg_store_thread_ud(tg, ud);
@@ -1992,6 +2004,10 @@ static int threading_attach(lua_State *L, int wait)
   if (!threading_entering_begin(g))
     return 0;
   tid = lj_thr_newid();
+  if (tid == 0) {
+    threading_entering_leave(g);
+    return 0;
+  }
   for (;;) {
     if (lj_state_claim(L, tid))
       break;
@@ -2065,12 +2081,14 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   lj_trace_abort_owner(L);
   if (disown_callbacks)
     lj_ccallback_disown_state(L);
-  /* Detach clears remotely scanned fields before publishing DEAD. The
-  ** following state-release lookup remains covered by mt_live; no access to
-  ** this malloc-backed TG is permitted after the final mt_live release. */
-  lj_tg_detach(g, tg);
+  /* Close stable admission before the state stops naming this owner. Keep the
+  ** raw TLS body live through state release, then let monolithic detach clear
+  ** roots/TLS and publish RETIRED only after that final ownership use. */
+  if (!lj_tg_registry_detach_begin(g, tg))
+    abort();
   L->tg_hint = NULL;
   lj_state_release(L, tid);
+  lj_tg_detach(g, tg);
   lj_thr_set_tg(NULL);
   threading_gc_leave(g);
 }

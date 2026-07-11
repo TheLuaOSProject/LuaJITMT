@@ -34,10 +34,7 @@ static uint32_t lj_thr_next_tid;
 
 uint32_t lj_thr_newid(void)
 {
-  uint32_t tid = la_add32_rlx(&lj_thr_next_tid, 1) + 1u;  /* 09 section 9.2. */
-  if (tid == 0)
-    tid = la_add32_rlx(&lj_thr_next_tid, 1) + 1u;
-  return tid;
+  return lj_thr_id_alloc(&lj_thr_next_tid);  /* 09 section 9.2. */
 }
 
 #if LJ_TARGET_WINDOWS
@@ -98,6 +95,10 @@ int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg)
     return EINVAL;
   if (thr->tid == 0)
     thr->tid = lj_thr_newid();
+  if (thr->tid == 0 || thr->tid == LJ_THREAD_GCSCAN) {
+    thr->tid = 0;
+    return EAGAIN;
+  }
 #if LJ_TARGET_WINDOWS
   thr->func = func;
   thr->arg = arg;

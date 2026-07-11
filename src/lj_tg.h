@@ -133,6 +133,10 @@ struct TGState {
   ExitTrampolines *exittr;
   /* Dormant until every root writer and phase edge uses the admission gate. */
   LJGC2RootDesc root_desc;
+  /* Stable slot storage is external and survives this TG body. The key names
+  ** its one non-reused runtime incarnation until legacy reclaim clears it. */
+  LJTGRegistryKey registry_key;
+  uint8_t registry_shadow_missed;  /* Legacy-only attach after slot OOM. */
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
@@ -236,6 +240,17 @@ static LJ_AINLINE uint32_t lj_tg_in_native_inc_rel(TGState *tg)
     depth++;
   lj_tg_in_native_rel(tg, depth);
   return depth;
+}
+
+static LJ_AINLINE uint8_t lj_tg_registry_shadow_missed_acq(const TGState *tg)
+{
+  return la_load8_acq(&tg->registry_shadow_missed);
+}
+
+static LJ_AINLINE void lj_tg_registry_shadow_missed_rel(TGState *tg,
+						 uint8_t missed)
+{
+  la_store8_rel(&tg->registry_shadow_missed, missed);
 }
 
 static LJ_AINLINE uint32_t lj_tg_in_native_dec_rel(TGState *tg)
@@ -941,7 +956,7 @@ LJ_FUNC TValue *lj_tg_root_anchor_slot_acq(TGState *tg, uint32_t idx);
   ((int)(offsetof(TGState, f) - offsetof(TGState, dispatch)))
 #define DISPATCH_TG(f)	TG_OFS(f)
 
-LJ_FUNC void lj_tg_init(GG_State *GG, int alloc_ready);
+LJ_FUNC void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid);
 LJ_FUNC void lj_tg_fini(global_State *g);
 LJ_FUNC void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
 			       int arena_internal);
@@ -949,7 +964,10 @@ LJ_FUNC void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid);
 LJ_FUNC void lj_tg_fini_ssb(TGState *tg);
 LJ_FUNC int lj_tg_fini_thread(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_attach(global_State *g, TGState *tg);
+LJ_FUNC int lj_tg_registry_detach_begin(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_detach(global_State *g, TGState *tg);
+LJ_FUNC int lj_tg_registry_main_close_begin(global_State *g);
+LJ_FUNC void lj_tg_registry_fini(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g);

@@ -14,6 +14,7 @@
 #include "lj_arch.h"
 #include "lj_atomic.h"
 #include "lj_gc2token.h"
+#include "lj_tgregistry.h"
 
 LJ_FUNCA void lj_tab_wait_no_l(void);
 
@@ -1532,6 +1533,13 @@ typedef struct GC2State {
 #endif
   uint64_t weak_keys_marked;  /* P_WEAK write barriers marking keys. */
   uint64_t weak_values_marked;  /* P_WEAK write barriers marking values. */
+  LJTGRegistrySlot *tg_registry_head;  /* Stable, immutable-next TG slots. */
+  uint32_t tg_registry_nodes;  /* Slots linked for this universe. */
+  uint32_t tg_registry_incomplete;  /* At least one legacy-only TG attach. */
+  uint32_t tg_registry_alloc_failures;  /* Shadow slot OOM telemetry. */
+#if defined(LJ_GC2_TEST_HELPERS)
+  uint32_t tg_registry_test_fail_alloc;  /* One-shot slot OOM injection. */
+#endif
   TGState *tg_list;	/* Registered per-thread state blocks. */
   uint32_t n_threads;	/* Number of registered TG blocks. */
   uint32_t tg_reclaiming;  /* Try-only dead-TG registry writer gate. */
@@ -2891,6 +2899,103 @@ static LJ_AINLINE void gc2_weak_bridge_backfill_cleared_add(global_State *g,
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_keys_marked, weak_keys_marked)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_values_marked, weak_values_marked)
+
+static LJ_AINLINE LJTGRegistrySlot *gc2_tg_registry_head_acq(global_State *g)
+{
+  return (LJTGRegistrySlot *)la_loadptr_acq(
+    (void *const *)&g->gc2.tg_registry_head);
+}
+
+static LJ_AINLINE void gc2_tg_registry_head_store_rlx(global_State *g,
+					       LJTGRegistrySlot *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.tg_registry_head, head);
+}
+
+static LJ_AINLINE int gc2_tg_registry_head_cas(global_State *g,
+					LJTGRegistrySlot **oldp,
+					LJTGRegistrySlot *head)
+{
+  return la_casptr((void **)&g->gc2.tg_registry_head, (void **)oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE LJTGRegistrySlot *
+gc2_tg_registry_head_xchg_acqrel(global_State *g, LJTGRegistrySlot *head)
+{
+  return (LJTGRegistrySlot *)la_xchgptr_acqrel(
+    (void **)&g->gc2.tg_registry_head, head);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_nodes_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_nodes);
+}
+
+static LJ_AINLINE void gc2_tg_registry_nodes_store_rlx(global_State *g,
+						uint32_t nodes)
+{
+  la_store32_rlx(&g->gc2.tg_registry_nodes, nodes);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_nodes_add(global_State *g,
+					      uint32_t nodes)
+{
+  return la_add32_rlx(&g->gc2.tg_registry_nodes, nodes);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_alloc_failures_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_alloc_failures);
+}
+
+static LJ_AINLINE void gc2_tg_registry_alloc_failures_store_rlx(
+  global_State *g, uint32_t failures)
+{
+  la_store32_rlx(&g->gc2.tg_registry_alloc_failures, failures);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_alloc_failures_add(
+  global_State *g, uint32_t failures)
+{
+  return la_add32_rlx(&g->gc2.tg_registry_alloc_failures, failures);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_incomplete_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_incomplete);
+}
+
+static LJ_AINLINE void gc2_tg_registry_incomplete_store_rlx(global_State *g,
+						     uint32_t incomplete)
+{
+  la_store32_rlx(&g->gc2.tg_registry_incomplete, incomplete);
+}
+
+static LJ_AINLINE void gc2_tg_registry_incomplete_rel(global_State *g,
+					       uint32_t incomplete)
+{
+  la_store32_rel(&g->gc2.tg_registry_incomplete, incomplete);
+}
+
+#if defined(LJ_GC2_TEST_HELPERS)
+static LJ_AINLINE uint32_t gc2_tg_registry_test_fail_alloc_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_test_fail_alloc);
+}
+
+static LJ_AINLINE void gc2_tg_registry_test_fail_alloc_rel(global_State *g,
+						    uint32_t fail)
+{
+  la_store32_rel(&g->gc2.tg_registry_test_fail_alloc, fail);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_test_fail_alloc_xchg(
+  global_State *g, uint32_t fail)
+{
+  return la_xchg32_acqrel(&g->gc2.tg_registry_test_fail_alloc, fail);
+}
+#endif
 
 static LJ_AINLINE uint64_t gc2_weak_scan_cursor_acq(global_State *g)
 {

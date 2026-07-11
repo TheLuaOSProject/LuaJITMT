@@ -48,6 +48,25 @@ typedef struct LJStateClaim {
 #define LJ_THREAD_ABORTING	3u
 #define LJ_THREAD_GCSCAN	0xffffffffu
 
+/* Process-wide owner ids are never reused. The counter stores the largest id
+** already issued and saturates at the final non-sentinel value. Returning zero
+** is an explicit admission failure: wrapping would alias an older state/TG
+** owner, while issuing LJ_THREAD_GCSCAN would impersonate the GC stack-scanner
+** claim. Relaxed ordering is sufficient because the CAS publishes uniqueness,
+** not any object initialized by the eventual id owner. */
+static LJ_AINLINE uint32_t lj_thr_id_alloc(uint32_t *counter)
+{
+  uint32_t current = la_load32_rlx(counter);
+  for (;;) {
+    uint32_t next;
+    if (current >= LJ_THREAD_GCSCAN - 1u)
+      return 0;
+    next = current + 1u;
+    if (la_cas32(counter, &current, next, LA_RLX, LA_RLX))
+      return next;
+  }
+}
+
 #define LJ_MUTEX_UNLOCKED	0u
 #define LJ_MUTEX_LOCKED		1u
 

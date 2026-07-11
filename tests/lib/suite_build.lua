@@ -93,6 +93,10 @@ function M.gc2_paranoia_opts(opts)
                        gc2_paranoia_flags)
 end
 
+function M.gc2_test_helper_opts(opts)
+  return helper_opts(opts, gc2_test_helper_flag)
+end
+
 function M.tab_helper_build_opts(opts)
   return helper_build_opts(opts, tab_test_helper_flag)
 end
