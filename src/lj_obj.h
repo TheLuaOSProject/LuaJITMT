@@ -392,7 +392,7 @@ static LJ_AINLINE void cdata_flags_or_atomic(GCcdata *cd, uint16_t flags)
   }
 }
 
-#define cdataisv(cd)	((cd)->marked & 0x80)
+#define cdataisv(cd)	(la_load8_acq(&(cd)->marked) & 0x80)
 #define cdatav(cd)	((GCcdataVar *)((char *)(cd) - sizeof(GCcdataVar)))
 #define cdatavlen(cd)	check_exp(cdataisv(cd), cdatav(cd)->len)
 #define sizecdatav(cd)	(cdatavlen(cd) + cdatav(cd)->extra)
@@ -2288,7 +2288,7 @@ static LJ_AINLINE GCupval *func_uv_acq(const GCfuncL *fn, uint32_t idx)
 
 static LJ_AINLINE uint8_t lj_obj_gcflags(const GCobj *o)
 {
-  return o->gch.marked;
+  return la_load8_acq(&o->gch.marked);
 }
 
 static LJ_AINLINE uint8_t *lj_obj_gcflags_ref(GCobj *o)
@@ -2298,12 +2298,14 @@ static LJ_AINLINE uint8_t *lj_obj_gcflags_ref(GCobj *o)
 
 static LJ_AINLINE void lj_obj_setgcflags(GCobj *o, uint8_t flags)
 {
-  o->gch.marked = flags;
+  /* Full replacement is construction/sole-owner only. It must never race a
+  ** bitwise updater, because a store intentionally replaces every flag. */
+  la_store8_rel(&o->gch.marked, flags);
 }
 
 static LJ_AINLINE void lj_obj_addgcflags(GCobj *o, uint8_t flags)
 {
-  o->gch.marked |= flags;
+  (void)la_or8_rlx(&o->gch.marked, flags);
 }
 
 static LJ_AINLINE void lj_obj_addgcflags_atomic(GCobj *o, uint8_t flags)
@@ -2318,7 +2320,7 @@ static LJ_AINLINE void lj_obj_addgcflags_atomic(GCobj *o, uint8_t flags)
 
 static LJ_AINLINE void lj_obj_cleargcflags(GCobj *o, uint8_t flags)
 {
-  o->gch.marked &= (uint8_t)~flags;
+  (void)la_and8_rlx(&o->gch.marked, (uint8_t)~flags);
 }
 
 static LJ_AINLINE void lj_obj_cleargcflags_atomic(GCobj *o, uint8_t flags)
@@ -2333,13 +2335,25 @@ static LJ_AINLINE void lj_obj_cleargcflags_atomic(GCobj *o, uint8_t flags)
 
 static LJ_AINLINE void lj_obj_xorgcflags(GCobj *o, uint8_t flags)
 {
-  o->gch.marked ^= flags;
+  /* XOR is only safe when the caller owns the decision or toggles a disjoint
+  ** bit. Use lj_gc_resurrect_if_dead() for conditional white resurrection. */
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)(old ^ flags);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
 }
 
 static LJ_AINLINE void lj_obj_masksetgcflags(GCobj *o, uint8_t clear,
-					     uint8_t set)
+						     uint8_t set)
 {
-  o->gch.marked = (uint8_t)((o->gch.marked & (uint8_t)~clear) | set);
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)((old & (uint8_t)~clear) | set);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
 }
 
 LJ_STATIC_ASSERT(sizeof(GCRef) == 8u);
@@ -5100,7 +5114,8 @@ static LJ_AINLINE void checklivetv(lua_State *L, TValue *o, const char *msg)
 	       "mismatch of TValue type %d vs GC type %d",
 	       ~itype(o), gcval(o)->gch.gct);
     /* Copy of isdead check from lj_gc.h to avoid circular include. */
-    lj_assertL(!(gcval(o)->gch.marked & (G(L)->gc.currentwhite ^ 3) & 3), msg);
+    lj_assertL(!(lj_obj_gcflags(gcval(o)) &
+		 (G(L)->gc.currentwhite ^ 3) & 3), msg);
   }
 #endif
 }

@@ -12065,7 +12065,8 @@ static uint32_t gc2_paranoia_scan_arena(global_State *g, GCArena *a)
 {
   uint32_t w, bad = 0;
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
-    uint64_t m = a->block[w] & a->mark[w];
+    uint64_t b = la_load64_acq(&a->block[w]);
+    uint64_t m = b & la_load64_acq(&a->mark[w]);
     while (m) {
       uint32_t bit = (uint32_t)__builtin_ctzll(m);
       uint32_t cell = (w << 6) + bit;

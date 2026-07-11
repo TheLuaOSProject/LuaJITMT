@@ -1759,7 +1759,7 @@ LJLIB_CF(ffi_typeinfo)
     if (sib)
       ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "sib"), (int32_t)sib);
     if (name) {
-      if (isdead(G(L), obj2gco(name))) flipwhite(obj2gco(name));
+      (void)lj_gc_resurrect_if_dead(G(L), obj2gco(name));
       ffi_typeinfo_storestr(L, t, lj_str_newlit(L, "name"), name);
     }
     lj_gc_pubtab(L, t);

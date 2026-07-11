@@ -62,10 +62,11 @@ static GCupval *func_finduv(lua_State *L, TValue *slot)
 	 uvval((p = gco2uv(next))) >= slot) {
     lj_assertG(!p->closed && uvval(p) != &p->tv, "closed upvalue in chain");
     if (uvval(p) == slot) {  /* Found open upvalue pointing to same slot? */
-      if (isdead(g, obj2gco(p))) {  /* Resurrect it, if it's dead. */
-	flipwhite(obj2gco(p));
-	lj_gc_arena_markobj(g, obj2gco(p));
-      }
+      /* The bitmap mark is deliberately unconditional: if another thread won
+      ** the resurrection CAS but has not marked yet, this lookup still pins
+      ** the upvalue before returning it. */
+      (void)lj_gc_resurrect_if_dead(g, obj2gco(p));
+      lj_gc_arena_markobj(g, obj2gco(p));
       return p;
     }
     pp = lj_obj_gcwref(obj2gco(p));

@@ -21,6 +21,7 @@ end
 
 local m3_scaffold_deps = {
   "m3_gc_root_pending",
+  "m3_gcflags_atomic",
   "m3_gc2_markword_token_model",
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
@@ -61,6 +62,18 @@ return function(add)
         cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
       })
       print("M3 GC2 markword and activation model passed")
+    end
+  })
+
+  register({
+    name = "m3_gcflags_atomic",
+    description = "concurrent GC header flag read/modify/write regression",
+    run = function(t)
+      make_clean(t)
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gcflags-atomic"),
+                        "t-gcflags-atomic.c")
+      print("M3 atomic GC header flags passed")
     end
   })
 
@@ -257,6 +270,7 @@ return function(add)
       make_default(t, { jobs = false })
 
       run_c_fixtures(t, {
+        "t-gcflags-atomic",
         "t-gc2-phase",
         "t-gc2-markbits",
         "t-gc2-traverse"
