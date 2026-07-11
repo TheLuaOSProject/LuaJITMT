@@ -322,10 +322,10 @@ void lj_arena_sweep_words(GCArena *a, int preserve_marks)
 {
   uint32_t w;
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
-    uint64_t b = a->block[w];
-    uint64_t m = a->mark[w];
-    a->block[w] = b & m;
-    a->mark[w] = preserve_marks ? (b | m) : (b ^ m);
+    uint64_t b = la_load64_acq(&a->block[w]);
+    uint64_t m = la_load64_acq(&a->mark[w]);
+    la_store64_rel(&a->block[w], b & m);
+    la_store64_rel(&a->mark[w], preserve_marks ? (b | m) : (b ^ m));
   }
 }
 
@@ -334,7 +334,8 @@ void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud)
   int32_t run_start = -1;
   uint32_t i = LJ_AFIRST_CELL;
   while (i < LJ_ARENA_CELLS) {
-    uint64_t starts = (a->block[i >> 6] | a->mark[i >> 6]) >> (i & 63);
+    uint64_t starts = (la_load64_rlx(&a->block[i >> 6]) |
+		       la_load64_rlx(&a->mark[i >> 6])) >> (i & 63);
     uint32_t st;
     if (!starts) {
       i = (i | 63u) + 1u;
@@ -1536,7 +1537,7 @@ static uint32_t arena_bin(uint32_t ncells)
 
 static void arena_set_extent(GCArena *a, uint32_t cell)
 {
-  lj_arena_bm_clear(a->block, cell);
+  lj_arena_block_clear(a, cell);
   lj_arena_bm_clear(a->mark, cell);
 }
 
@@ -1553,17 +1554,18 @@ static void arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
   ** live allocation as reusable storage. */
   for (i = 1; i < ncells; i++)
     arena_set_extent(a, cell + i);
-  lj_arena_bm_set(a->block, cell);
   if (black)
     lj_arena_bm_set(a->mark, cell);
   else
     lj_arena_bm_clear(a->mark, cell);
+  /* Release-publish block[] only after the initial mark is durable. */
+  lj_arena_block_set(a, cell);
 }
 
 static void arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
 {
   uint32_t i;
-  lj_arena_bm_clear(a->block, start);
+  lj_arena_block_clear(a, start);
   lj_arena_bm_set(a->mark, start);
   for (i = 1; i < len; i++)
     arena_set_extent(a, start + i);
@@ -2139,7 +2141,8 @@ static uint32_t arena_quarantine_settle_late(GCArena *a)
 {
   uint32_t w, n = 0;
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
-    uint64_t bits = la_load64_acq(&a->late[w]) & a->block[w];
+    uint64_t bits = la_load64_acq(&a->late[w]) &
+		    la_load64_acq(&a->block[w]);
     while (bits) {
       uint32_t j = lj_ffs64(bits);
       uint32_t cell = (w << 6) + j;
@@ -2412,8 +2415,10 @@ static void arena_clear_marks_list(GCArena *a)
 {
   for (; a != NULL; a = lj_arena_next_acq(a)) {
     uint32_t w;
-    for (w = 0; w < LJ_ARENA_WORDS; w++)
-      a->mark[w] &= ~a->block[w];
+    for (w = 0; w < LJ_ARENA_WORDS; w++) {
+      uint64_t block = la_load64_acq(&a->block[w]);
+      (void)la_and64_rlx(&a->mark[w], ~block);
+    }
   }
 }
 

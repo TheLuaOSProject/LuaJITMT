@@ -29,6 +29,135 @@ static void run_script(lua_State *L, const char *code, const char *label)
   ljt_lua_dostring(L, code);
 }
 
+static int is_rex(uint8_t byte)
+{
+  return (byte & 0xf0u) == 0x40u;
+}
+
+static size_t find_bitmap_op(const uint8_t *mc, size_t len, size_t start,
+			     int locked, uint8_t opcode, uint32_t disp)
+{
+  size_t i;
+  for (i = start; i < len; i++) {
+    size_t j = i;
+    uint32_t got;
+    if (locked) {
+      if (mc[j++] != 0xf0u)
+	continue;
+    } else {
+      if (mc[j] == 0xf0u || (i != 0 && mc[i-1] == 0xf0u) ||
+	  (i > 1 && is_rex(mc[i-1]) && mc[i-2] == 0xf0u))
+	continue;
+    }
+    if (j < len && is_rex(mc[j]))
+      j++;
+    if (j + 7u > len || mc[j] != 0x0fu || mc[j+1] != opcode)
+      continue;
+    got = (uint32_t)mc[j+3] | ((uint32_t)mc[j+4] << 8) |
+	  ((uint32_t)mc[j+5] << 16) | ((uint32_t)mc[j+6] << 24);
+    if (got == disp)
+      return i;
+  }
+  return (size_t)-1;
+}
+
+static size_t find_gct_store(const uint8_t *mc, size_t len, uint8_t gct)
+{
+  size_t i;
+  for (i = 0; i + 4u < len; i++) {
+    uint8_t modrm, rm;
+    size_t disp;
+    if (mc[i] != 0xc6u)
+      continue;
+    modrm = mc[i+1];
+    if ((modrm & 0xf8u) != 0x40u)  /* MOV byte [base+disp8], imm8. */
+      continue;
+    rm = modrm & 7u;
+    disp = i + 2u + (rm == 4u);  /* Skip SIB for rsp/r12 bases. */
+    if (disp + 1u < len && mc[disp] == offsetof(GCupval, gct) &&
+	mc[disp+1] == gct)
+      return i;
+  }
+  return (size_t)-1;
+}
+
+static size_t find_i32_store(const uint8_t *mc, size_t len, size_t start,
+			     uint32_t field, uint32_t value)
+{
+  size_t i;
+  for (i = start; i + 10u <= len; i++) {
+    uint8_t modrm, rm;
+    size_t disp;
+    uint32_t got_field, got_value;
+    if (mc[i] != 0xc7u)
+      continue;
+    modrm = mc[i+1];
+    if ((modrm & 0xf8u) != 0x80u)  /* MOV dword [base+disp32], imm32. */
+      continue;
+    rm = modrm & 7u;
+    disp = i + 2u + (rm == 4u);
+    if (disp + 8u > len)
+      continue;
+    got_field = (uint32_t)mc[disp] | ((uint32_t)mc[disp+1] << 8) |
+		((uint32_t)mc[disp+2] << 16) | ((uint32_t)mc[disp+3] << 24);
+    got_value = (uint32_t)mc[disp+4] | ((uint32_t)mc[disp+5] << 8) |
+		((uint32_t)mc[disp+6] << 16) | ((uint32_t)mc[disp+7] << 24);
+    if (got_field == field && got_value == value)
+      return i;
+  }
+  return (size_t)-1;
+}
+
+static void assert_traced_fnew_publication_order(lua_State *L)
+{
+  int traceno;
+  for (traceno = 1; traceno <= 256; traceno++) {
+    size_t len, fn_header, uv_header, mark_set, mark_clear, first_mark, block;
+    size_t pending_hint;
+    const uint8_t *mc;
+    lua_getglobal(L, "require");
+    lua_pushliteral(L, "jit.util");
+    ljt_lua_pcall(L, 1, 1, "load jit.util for FNEW mcode");
+    lua_getfield(L, -1, "tracemc");
+    lua_pushinteger(L, traceno);
+    ljt_lua_pcall(L, 1, 1, "fetch FNEW trace mcode");
+    lua_remove(L, -2);  /* jit.util table. */
+    mc = (const uint8_t *)lua_tolstring(L, -1, &len);
+    if (mc == NULL) {
+      lua_pop(L, 1);
+      continue;
+    }
+    mark_set = find_bitmap_op(mc, len, 0, 1, 0xabu,
+			      (uint32_t)offsetof(GCArena, mark));
+    block = find_bitmap_op(mc, len, 0, 0, 0xabu,
+			   (uint32_t)offsetof(GCArena, block));
+    if (mark_set == (size_t)-1 || block == (size_t)-1) {
+      lua_pop(L, 1);
+      continue;
+    }
+    fn_header = find_gct_store(mc, len, (uint8_t)~LJ_TFUNC);
+    uv_header = find_gct_store(mc, len, (uint8_t)~LJ_TUPVAL);
+    mark_clear = find_bitmap_op(mc, len, 0, 1, 0xb3u,
+				(uint32_t)offsetof(GCArena, mark));
+    pending_hint = find_i32_store(mc, len, block,
+				  (uint32_t)offsetof(global_State,
+						    gcroot_pending_hint), 1u);
+    assert(fn_header != (size_t)-1 && uv_header != (size_t)-1);
+    assert(mark_clear != (size_t)-1);
+    assert(pending_hint != (size_t)-1);
+    first_mark = mark_set < mark_clear ? mark_set : mark_clear;
+    /* x64 emits backwards: this guards the order in executable mcode, not the
+    ** visually misleading order of emit_* calls in lj_asm_x86.h. */
+    assert(fn_header < first_mark);
+    assert(uv_header < first_mark);
+    assert(first_mark < block);
+    assert(block < pending_hint);
+    lua_pop(L, 1);
+    return;
+  }
+  assert(0 && "missing traced inline FNEW bitmap publication");
+}
+
 static void reset_gc1num_bump_counters(void)
 {
   lj_func_test_reset_gc1num_bump_fast_calls();
@@ -147,6 +276,7 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
 
   run_script(L, setup, "immutable numeric FNEW traced inline setup");
   run_script(L, warm, "immutable numeric FNEW traced inline warmup");
+  assert_traced_fnew_publication_order(L);
   (void)lj_gc_flush_root_pending(g);
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
@@ -913,9 +1043,9 @@ int main(void)
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);
   test_traced_active_black_inline(L, g, tg);
+  test_traced_immutable_numeric_inline(L, g);
   if (getenv("LJ_TEST_TRACED_FNEW") != NULL) {
     test_traced_behavior(L);
-    test_traced_immutable_numeric_inline(L, g);
     test_traced_mark_active_white_fallback(L, g, tg);
     test_traced_alloc_black_inline(L, g, tg);
     test_traced_post_sweep_bump_refill(L);

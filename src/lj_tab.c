@@ -1555,15 +1555,16 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   if (next < cell || next > end)
     return NULL;
   b->cell = next;
-  lj_arena_bm_set(a->block, cell);
+  t = (GCtab *)lj_arena_cellptr(a, cell);
+  tab_init_empty(g, t);
+  newwhite(g, t);
   black = lj_arena_alloc_black_acq(&tg->alloc);
   if (black)
     lj_arena_bm_set(a->mark, cell);
   else
     lj_arena_bm_clear(a->mark, cell);
-  t = (GCtab *)lj_arena_cellptr(a, cell);
-  tab_init_empty(g, t);
-  newwhite(g, t);
+  /* block[] is the discovery publication: expose only a complete header. */
+  lj_arena_block_set(a, cell);
   lj_gc_total_add(g, sizeof(GCtab));
   /*
   ** The arena block bit is visible to bitmap sweep before this helper returns.

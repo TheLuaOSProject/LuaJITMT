@@ -7,6 +7,7 @@ local compile_and_run_sources = build.compile_and_run_sources
 
 local M2_ORDER = {
   "m2_arena_bitmap",
+  "m2_arena_publication",
   "m2_arena_map",
   "m2_arena_alloc",
   "m2_arena_hugetab",
@@ -53,6 +54,20 @@ return function(add)
     run = function(t)
       run_standalone_fixture(t, t:tmp("lj_t_arena_bitmap"),
                              "t-arena-bitmap.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_publication",
+    description = "arena header/mark-before-block publication regression",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      compile_and_run_sources(t, t:tmp("lj_t_arena_publication"),
+        arena_sources(t, "t-arena-publication.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 " .. pthread,
+        link_luajit = false,
+        libs = { pthread }
+      })
     end
   })
 

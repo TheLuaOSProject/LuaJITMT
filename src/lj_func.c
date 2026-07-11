@@ -416,14 +416,14 @@ static void func_arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
 {
   uint32_t i;
   for (i = 1; i < ncells; i++) {
-    lj_arena_bm_clear(a->block, cell + i);
+    lj_arena_block_clear(a, cell + i);
     lj_arena_bm_clear(a->mark, cell + i);
   }
-  lj_arena_bm_set(a->block, cell);
   if (black)
     lj_arena_bm_set(a->mark, cell);
   else
     lj_arena_bm_clear(a->mark, cell);
+  lj_arena_block_set(a, cell);
 }
 
 static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)

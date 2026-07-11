@@ -877,10 +877,19 @@ typedef struct ASMCallFnew1Num {
   uint32_t uvspec;
 } ASMCallFnew1Num;
 
-static void asm_fnew1num_arena_bmop(ASMState *as, x86Op xo, Reg bit,
-				    Reg arena, size_t field)
+static void asm_fnew1num_arena_markop(ASMState *as, x86Op xo, Reg bit,
+				      Reg arena)
 {
-  emit_rmro(as, xo, bit|REX_64, arena, (int32_t)field);
+  /* mark[] is shared with collector workers. Match the atomic C bitmap RMW. */
+  emit_lockrmro(as, xo, bit|REX_64, arena,
+		offsetof(GCArena, mark));
+}
+
+static void asm_fnew1num_arena_blockop(ASMState *as, Reg bit, Reg arena)
+{
+  /* The TG owns block[] structurally; x86 TSO makes this the release
+  ** allocation-discovery publication after the initialized headers/marks. */
+  emit_rmro(as, XO_BTS, bit|REX_64, arena, offsetof(GCArena, block));
 }
 
 static void asm_fnew1num_movi8(ASMState *as, Reg base, int32_t ofs, int32_t k)
@@ -1014,6 +1023,26 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_gettg(as, tmp, gcroot_pending);
   checkmclim(as);  /* Keep publication separate from accounting updates. */
 
+  /* The assembler emits backwards. These bitmap operations therefore run
+  ** after the fully initialized pair, but before its pending-chain publication.
+  ** Rebuild the upvalue cell index in `next`; `uv` is a pointer by then. */
+  asm_fnew1num_arena_blockop(as, next, arena);
+  asm_fnew1num_arena_blockop(as, cell, arena);
+  l_markdone = emit_label(as);
+  asm_fnew1num_arena_markop(as, XO_BTR, next, arena);
+  asm_fnew1num_arena_markop(as, XO_BTR, cell, arena);
+  l_markclear = emit_label(as);
+  emit_jmp(as, l_markdone);
+  asm_fnew1num_arena_markop(as, XO_BTS, next, arena);
+  asm_fnew1num_arena_markop(as, XO_BTS, cell, arena);
+  emit_jcc(as, CC_E, l_markclear);
+  emit_i8(as, 0);
+  emit_rmro(as, XO_ARITHib, XOg_CMP, RID_DISPATCH,
+	    DISPATCH_TG(alloc.alloc_black));
+  emit_gri(as, XG_ARITHi(XOg_ADD), next, (int32_t)fncells);
+  emit_rr(as, XO_MOV, next, cell);
+  checkmclim(as);  /* Keep discovery publication in one mcode-size segment. */
+
   emit_settg(as, tmp, local_total);
   emit_gri(as, XG_ARITHi(XOg_ADD), tmp|REX_64, (int32_t)nbytes);
   emit_gettg(as, tmp, local_total);
@@ -1079,20 +1108,6 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_rr(as, XO_MOV, RID_RET, cell);
   checkmclim(as);  /* Split cell address derivation from bitmap updates. */
 
-  l_markdone = emit_label(as);
-  asm_fnew1num_arena_bmop(as, XO_BTR, uv, arena, offsetof(GCArena, mark));
-  asm_fnew1num_arena_bmop(as, XO_BTR, cell, arena, offsetof(GCArena, mark));
-  l_markclear = emit_label(as);
-  emit_jmp(as, l_markdone);
-  asm_fnew1num_arena_bmop(as, XO_BTS, uv, arena, offsetof(GCArena, mark));
-  asm_fnew1num_arena_bmop(as, XO_BTS, cell, arena, offsetof(GCArena, mark));
-  emit_jcc(as, CC_E, l_markclear);
-  emit_i8(as, 0);
-  emit_rmro(as, XO_ARITHib, XOg_CMP, RID_DISPATCH,
-	    DISPATCH_TG(alloc.alloc_black));
-  checkmclim(as);  /* Split mark bitmap operations from block bitmap writes. */
-  asm_fnew1num_arena_bmop(as, XO_BTS, uv, arena, offsetof(GCArena, block));
-  asm_fnew1num_arena_bmop(as, XO_BTS, cell, arena, offsetof(GCArena, block));
   emit_gri(as, XG_ARITHi(XOg_ADD), uv, (int32_t)fncells);
   emit_rr(as, XO_MOV, uv, cell);
   emit_movtomro(as, next, RID_DISPATCH,

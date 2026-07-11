@@ -4381,14 +4381,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp r9d, ITYPEd
     |  ja >7
     |  mov dword [DISPATCH+DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell)], r9d
-    |  bts qword [r8+ARENA_BLOCK_OFS], RA
-    |  cmp byte [DISPATCH+DISPATCH_TG(alloc.alloc_black)], 0
-    |  je >8
-    |  bts qword [r8+ARENA_MARK_OFS], RA
-    |  jmp >9
-    |8:
-    |  btr qword [r8+ARENA_MARK_OFS], RA
-    |9:
+    |  mov ITYPEd, RAd			// Preserve cell index until publication.
     |  shl RA, LJ_CELL_SHIFT
     |  lea TAB:RC, [r8+RA]
     |  movzx r9d, byte [TMPR+GL_OFS(gc.currentwhite)]
@@ -4406,6 +4399,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea r9, [TMPR+GL_OFS(nilnode)]
     |  mov TAB:RC->node, r9
     |  mov TAB:RC->freetop, r9
+    |  // block[] is the allocation-discovery publication. Initialize the whole
+    |  // header and birth mark first so a concurrent GC2 scanner can never see
+    |  // block=1 and either traverse partial fields or have its mark erased.
+    |  cmp byte [DISPATCH+DISPATCH_TG(alloc.alloc_black)], 0
+    |  je >8
+    |  // mark[] is shared with GC workers; match the C atomic bitmap RMW.
+    |  lock
+    |  bts qword [r8+ARENA_MARK_OFS], ITYPE
+    |  jmp >9
+|8:
+    |  lock
+    |  btr qword [r8+ARENA_MARK_OFS], ITYPE
+|9:
+    |  bts qword [r8+ARENA_BLOCK_OFS], ITYPE
     |  add qword [TMPR+GL_OFS(gc.total)], TAB_EMPTY_SIZE
     |  add qword [DISPATCH+DISPATCH_TG(local_total)], TAB_EMPTY_SIZE
     |  // The birth mark carries liveness, not exact object identity. Always

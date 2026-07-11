@@ -464,7 +464,9 @@ static LJ_AINLINE void *lj_arena_cellptr(GCArena *a, uint32_t cell)
 
 static LJ_AINLINE uint32_t lj_arena_bm_get(const uint64_t *bm, uint32_t i)
 {
-  return (uint32_t)((bm[i >> 6] >> (i & 63)) & 1u);
+  /* block[] is also the allocation-discovery publication. Acquire is free on
+  ** x86-64 and makes a positive observation order later header reads. */
+  return (uint32_t)((la_load64_acq(&bm[i >> 6]) >> (i & 63)) & 1u);
 }
 
 static LJ_AINLINE uint32_t lj_arena_late_get(const GCArena *a, uint32_t i)
@@ -521,17 +523,40 @@ static LJ_AINLINE uint64_t lj_arena_remote_active_acq(const GCArena *a)
 
 static LJ_AINLINE void lj_arena_bm_set(uint64_t *bm, uint32_t i)
 {
-  bm[i >> 6] |= (uint64_t)1 << (i & 63);
+  (void)la_or64_rlx(&bm[i >> 6], (uint64_t)1 << (i & 63));
 }
 
 static LJ_AINLINE void lj_arena_bm_clear(uint64_t *bm, uint32_t i)
 {
-  bm[i >> 6] &= ~((uint64_t)1 << (i & 63));
+  (void)la_and64_rlx(&bm[i >> 6], ~((uint64_t)1 << (i & 63)));
+}
+
+/* Allocation starts are single-writer/multi-reader. The TG allocator owner is
+** the only structural writer; GC and remote free paths only sample block[] or
+** publish into mark/late/sweep side state. Atomic load/store
+** keeps those samples data-race-free without putting a locked RMW on the hot
+** allocation path. The x64 VM/JIT block BTS fast paths require the same sole-
+** writer predicate. */
+static LJ_AINLINE void lj_arena_block_set(GCArena *a, uint32_t i)
+{
+  uint64_t *word = &a->block[i >> 6];
+  uint64_t value = la_load64_rlx(word);
+  /* Publish the allocation start only after its mark state is initialized. */
+  la_store64_rel(word, value | ((uint64_t)1 << (i & 63)));
+}
+
+static LJ_AINLINE void lj_arena_block_clear(GCArena *a, uint32_t i)
+{
+  uint64_t *word = &a->block[i >> 6];
+  uint64_t value = la_load64_rlx(word);
+  la_store64_rlx(word, value & ~((uint64_t)1 << (i & 63)));
 }
 
 static LJ_AINLINE uint32_t lj_arena_state(const GCArena *a, uint32_t i)
 {
-  return (lj_arena_bm_get(a->block, i) << 1) | lj_arena_bm_get(a->mark, i);
+  uint32_t block = lj_arena_bm_get(a->block, i);
+  uint32_t mark = lj_arena_bm_get(a->mark, i);
+  return (block << 1) | mark;
 }
 
 static LJ_AINLINE int lj_arena_ishuge(const GCArena *a)
