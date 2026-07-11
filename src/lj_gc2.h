@@ -222,6 +222,8 @@ LJ_FUNC uint64_t lj_gc2_retire_epoch(global_State *g);
 LJ_FUNC int lj_gc2_smr_read_try(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_enter(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
+/* Migration-only veto: a zero result never authorizes reclamation. */
+LJ_FUNC int lj_gc2_activation_reclaim_veto(global_State *g);
 LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
 
 /* A JIT retire-list detach is valid either in the ordinary idle zero-worker
@@ -298,6 +300,12 @@ LJ_FUNC int lj_gc2_finalizer_deferred(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_phase_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_close_pending(global_State *g);
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+LJ_FUNC void lj_gc2_test_activation_mirror_edge(global_State *g,
+						 uint32_t from_phase,
+						 uint32_t to_phase);
+LJ_FUNC int lj_gc2_test_activation_mark_recheck(global_State *g,
+						 uint32_t expected_leader);
+LJ_FUNC int lj_gc2_test_sweep_reclaim_enter(global_State *g);
 LJ_FUNC int lj_gc2_test_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_ssb_drain(global_State *g);
 LJ_FUNC int lj_gc2_test_ssb_empty(global_State *g);

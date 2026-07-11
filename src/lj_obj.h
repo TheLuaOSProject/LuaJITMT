@@ -13,6 +13,7 @@
 #include "lj_def.h"
 #include "lj_arch.h"
 #include "lj_atomic.h"
+#include "lj_gc2token.h"
 
 LJ_FUNCA void lj_tab_wait_no_l(void);
 
@@ -1311,7 +1312,8 @@ typedef struct GC2WeakOverflow GC2WeakOverflow;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
   uint32_t cycle;	/* Monotonically increasing color-GC cycle id. */
-  uint32_t cycle_leader;  /* Requested cycle leader or cycle-close gate. */
+  LJ_ALIGN(16) LJGC2Activation activation;  /* Veto-only typed phase mirror. */
+  uint32_t cycle_leader;  /* Request tid or exact GCSCAN phase-edge gate. */
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
@@ -1534,6 +1536,7 @@ typedef struct GC2State {
   uint32_t n_threads;	/* Number of registered TG blocks. */
   uint32_t tg_reclaiming;  /* Try-only dead-TG registry writer gate. */
 } GC2State;
+LJ_STATIC_ASSERT((offsetof(GC2State, activation) & 15u) == 0);
 #if LJ_HASJIT
 typedef struct jit_State jit_State;
 #endif

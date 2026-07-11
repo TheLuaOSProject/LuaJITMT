@@ -102,7 +102,8 @@ static void test_global_barrier_without_mark_active(lua_State *L,
   lj_gc_barrierf(g, obj2gco(parent), obj2gco(mark_child));
   assert(lj_gc2_ismarked(g, obj2gco(mark_child)) == 1);
 
-  la_store32_rel(&g->gc2.phase, LJ_GC2_WEAK);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
   lj_gc_barrierf(g, obj2gco(parent), obj2gco(weak_child));
   assert(lj_gc2_ismarked(g, obj2gco(weak_child)) == 1);
 

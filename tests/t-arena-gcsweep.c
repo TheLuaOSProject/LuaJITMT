@@ -58,6 +58,28 @@ static int gc_root_list_contains(global_State *g, GCobj *needle)
   return 0;
 }
 
+/* Synthetic sweep fixtures bypass root/weak work intentionally. Keep their
+** veto-only activation mirror coherent without pretending to close its gate. */
+static LJGC2ActivationSnap test_publish_sweep_phase(global_State *g)
+{
+  LJGC2ActivationSnap idle, mark, weak, sweep;
+  uint64_t epoch;
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(idle.state == LJ_GC2_ACT_IDLE);
+  assert(idle.gate == LJ_GC2_ROOT_GATE_OPEN);
+  epoch = idle.mark_epoch == UINT64_MAX ? UINT64_MAX : idle.mark_epoch + 1u;
+  assert(lj_gc2_activation_try_transition(&g->gc2.activation, &idle, epoch,
+           LJ_GC2_ACT_MARK, &mark) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_transition(&g->gc2.activation, &mark, epoch,
+           LJ_GC2_ACT_WEAK, &weak) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_transition(&g->gc2.activation, &weak, epoch,
+           LJ_GC2_ACT_SWEEP_OPEN, &sweep) == LJ_GC2_TRANSITION_OK);
+  gc2_phase_rel(g, LJ_GC2_SWEEP);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  return sweep;
+}
+
 static void arena_needsweep_move_head(TGAlloc *alloc, uint32_t kind,
 				      GCArena *target)
 {
@@ -91,6 +113,7 @@ static void test_preserve_abort_waits_for_restore_publisher(void)
   TGState *tg;
   GCtab *t;
   GCArena *a;
+  LJGC2ActivationSnap sweep, idle;
   uint32_t cycle;
   int admission;
 
@@ -105,7 +128,7 @@ static void test_preserve_abort_waits_for_restore_publisher(void)
   assert((lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0);
 
   cycle = ++g->gc2.cycle;
-  la_store32_rel(&g->gc2.phase, LJ_GC2_SWEEP);
+  sweep = test_publish_sweep_phase(g);
   assert(lj_arena_alloc_prepare_sweep_kind(
 	&tg->alloc, LJ_ARENAK_TRAVERSABLE));
   tg->alloc.prepare_epoch = cycle;
@@ -118,12 +141,20 @@ static void test_preserve_abort_waits_for_restore_publisher(void)
   assert(admission == LJ_ARENA_RESCUE_FULL);
   lj_gc2_preserve_abort_to_idle(g);
   assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+  idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_gc2_activation_equal(&sweep, &idle));
   assert(tg->alloc.prepare_epoch == cycle);
   assert(lj_gc2_sweep_needs_restore(g));
 
   lj_arena_rescue_leave(a);
   lj_gc2_preserve_abort_to_idle(g);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(idle.state == LJ_GC2_ACT_IDLE);
+  assert(idle.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(idle.generation == sweep.generation + 1u);
+  assert(idle.mark_epoch == sweep.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
   assert(tg->alloc.prepare_epoch == 0);
   assert(!lj_gc2_sweep_needs_restore(g));
   assert(arena_list_contains(
@@ -203,6 +234,7 @@ static void test_quarantine_late_live_after_eof(void)
   TGState *tg;
   GCtab *t;
   GCArena *a, *other_needsweep;
+  LJGC2ActivationSnap sweep, idle;
   uint64_t hs_epoch;
   uint32_t cell, step, i;
   int done = 0;
@@ -257,7 +289,7 @@ static void test_quarantine_late_live_after_eof(void)
   /* PREPSWEEP hands quarantine an exact CLOSED, publisher-free gate. */
   assert(lj_arena_remote_active_acq(a) == LJ_ARENA_REMOTE_CLOSED);
   g->gc2.cycle++;
-  g->gc2.phase = LJ_GC2_SWEEP;
+  sweep = test_publish_sweep_phase(g);
   tg->alloc.prepare_epoch = g->gc2.cycle;
   gc2_sweep_bridge_ready_store_rlx(g, 0);
   gc2_sweep_root_done_rel(g, 1);
@@ -301,6 +333,12 @@ static void test_quarantine_late_live_after_eof(void)
   assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
   lj_gc2_cycle_to_idle(g);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(idle.state == LJ_GC2_ACT_IDLE);
+  assert(idle.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(idle.generation == sweep.generation + 1u);
+  assert(idle.mark_epoch == sweep.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
 
   /* Restore the other arenas prepared solely by this fixture. The completed
   ** target deliberately remains on the normal CLOSED reclaimed stack. */
@@ -356,7 +394,7 @@ static void test_worker_owned_sweep_direct(void)
 
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
-  g->gc2.phase = LJ_GC2_SWEEP;
+  (void)test_publish_sweep_phase(g);
   gc2_sweep_bridge_ready_store_rlx(g, 0);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
@@ -447,7 +485,7 @@ static void test_minor_sweep_identity_direct(void)
 
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
-  g->gc2.phase = LJ_GC2_SWEEP;
+  (void)test_publish_sweep_phase(g);
   gc2_sweep_bridge_ready_store_rlx(g, 0);
   la_store32_rel(&g->gc2.cycle_minor_requested, 1);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
@@ -505,7 +543,7 @@ static void test_boundary_lazy_sweep(void)
 
   oldcycle = g->gc2.cycle;
   g->gc2.cycle = oldcycle + 1u;
-  g->gc2.phase = LJ_GC2_SWEEP;
+  (void)test_publish_sweep_phase(g);
   tg->alloc.sweep_epoch = g->gc2.cycle;  /* Simulate prepared boundary. */
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
@@ -581,7 +619,7 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   oldcycle = g->gc2.cycle;
   g->gc2.cycle = oldcycle + 1u;
   sweep_cycle = g->gc2.cycle;
-  g->gc2.phase = LJ_GC2_SWEEP;
+  (void)test_publish_sweep_phase(g);
   assert(lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC) == 2);
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
@@ -649,7 +687,7 @@ static void test_sweep_to_idle_worker_active(void)
   lua_gc(L, LUA_GCCOLLECT, 0);
 
   g->gc2.cycle++;
-  g->gc2.phase = LJ_GC2_SWEEP;
+  (void)test_publish_sweep_phase(g);
   tg->alloc.sweep_epoch = g->gc2.cycle;
   setgcrefnull(empty);
   setmref(g->gc.sweep, &empty);

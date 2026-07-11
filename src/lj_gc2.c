@@ -70,6 +70,349 @@ typedef struct GC2FinalizerDispatchCtx {
   GC2FinalizerDispatchFunc dispatch;
 } GC2FinalizerDispatchCtx;
 
+/*
+** The typed activation word is a migration-time veto, never a reclaim grant.
+** Legacy phase/worker/SMR predicates remain the sole positive authority until
+** every root writer participates in the exact root gate.
+*/
+static int gc2_activation_state_for_phase(uint32_t phase, uint8_t *statep)
+{
+  uint8_t state;
+  switch (phase) {
+  case LJ_GC2_IDLE: state = LJ_GC2_ACT_IDLE; break;
+  case LJ_GC2_MARK: state = LJ_GC2_ACT_MARK; break;
+  case LJ_GC2_WEAK: state = LJ_GC2_ACT_WEAK; break;
+  case LJ_GC2_SWEEP: state = LJ_GC2_ACT_SWEEP_OPEN; break;
+  default: return 0;
+  }
+  if (statep)
+    *statep = state;
+  return 1;
+}
+
+/* Fault-only sticky pin. A failing actor never waits for a peer, but retries
+** its exact CX16 snapshot while racing phase actors make system-wide progress. */
+static void gc2_activation_pin_no_reclaim(global_State *g)
+{
+  LJGC2Activation *token = &g->gc2.activation;
+  for (;;) {
+    LJGC2ActivationSnap snap = lj_gc2_activation_snapshot(token);
+    LJGC2ActivationSnap observed;
+    LJGC2TransitionResult result;
+    if (snap.state == LJ_GC2_ACT_NO_RECLAIM &&
+        snap.gate == LJ_GC2_ROOT_GATE_OPEN)
+      return;
+    if (lj_gc2_activation_value_valid(snap.mark_epoch, snap.generation,
+                                       snap.state, snap.gate)) {
+      result = lj_gc2_activation_try_transition(token, &snap,
+        snap.mark_epoch, LJ_GC2_ACT_NO_RECLAIM, &observed);
+      if (result == LJ_GC2_TRANSITION_OK ||
+          result == LJ_GC2_TRANSITION_PINNED)
+        return;
+      if (result == LJ_GC2_TRANSITION_LOST)
+        continue;
+    }
+    /* Normalize a malformed but stably decoded authority. The exact CAS cannot
+    ** erase a racing valid transition, and NO_RECLAIM accepts epoch zero. */
+    {
+      la_u128 expected, desired;
+      uint64_t generation = snap.generation == LJ_GC2_ACT_MAX_GENERATION ?
+                            snap.generation : snap.generation + 1u;
+      expected.lo = snap.mark_epoch;
+      expected.hi = lj_gc2_activation_pack_hi(snap.generation,
+                                               snap.state, snap.gate);
+      desired.lo = snap.mark_epoch;
+      desired.hi = lj_gc2_activation_pack_hi(generation,
+        LJ_GC2_ACT_NO_RECLAIM, LJ_GC2_ROOT_GATE_OPEN);
+      if (la_cas128(&token->value, &expected, desired))
+        return;
+    }
+  }
+}
+
+static int gc2_activation_matches_legacy(const LJGC2ActivationSnap *snap,
+                                          uint32_t phase)
+{
+  uint8_t state;
+  return gc2_activation_state_for_phase(phase, &state) &&
+         lj_gc2_activation_value_valid(snap->mark_epoch, snap->generation,
+                                        snap->state, snap->gate) &&
+         snap->state == state && snap->gate == LJ_GC2_ROOT_GATE_OPEN;
+}
+
+/* A delayed forward mirror may observe a preserve abort after the legacy
+** phase reached IDLE.  Typed IDLE proves the abort completed.  Otherwise only
+** the exact GCSCAN owner proves that an active typed source is still waiting
+** for its reset.  Active/IDLE with no owner is an orphan and must fail closed.
+*/
+static int gc2_activation_forward_abort_defer(global_State *g)
+{
+  LJGC2ActivationSnap current;
+  uint32_t before, leader, after;
+  before = gc2_phase_acq(g);
+  leader = gc2_cycle_leader_acq(g);
+  after = gc2_phase_acq(g);
+  if (before != LJ_GC2_IDLE || after != LJ_GC2_IDLE)
+    return 0;
+  if (leader == LJ_THREAD_GCSCAN)
+    return 1;
+  /* The caller's source snapshot may predate a completed abort and sentinel
+  ** release. Resample the typed word only after seeing stable legacy IDLE. */
+  current = lj_gc2_activation_snapshot(&g->gc2.activation);
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    return 0;
+  return lj_gc2_activation_value_valid(current.mark_epoch,
+                                        current.generation, current.state,
+                                        current.gate) &&
+         current.state == LJ_GC2_ACT_IDLE &&
+         current.gate == LJ_GC2_ROOT_GATE_OPEN;
+}
+
+static int gc2_activation_stage_mark(global_State *g,
+                                      LJGC2ActivationSnap *staged)
+{
+  LJGC2Activation *token = &g->gc2.activation;
+  LJGC2ActivationSnap snap = lj_gc2_activation_snapshot(token);
+  LJGC2ActivationSnap observed;
+  LJGC2TransitionResult result;
+  uint64_t epoch;
+  if (!gc2_activation_matches_legacy(&snap, LJ_GC2_IDLE)) {
+    gc2_activation_pin_no_reclaim(g);
+    return 0;
+  }
+  epoch = snap.mark_epoch == UINT64_MAX ? snap.mark_epoch :
+                                           snap.mark_epoch + 1u;
+  result = lj_gc2_activation_try_transition(token, &snap, epoch,
+                                             LJ_GC2_ACT_MARK, &observed);
+  if (result == LJ_GC2_TRANSITION_OK) {
+    if (staged)
+      *staged = observed;
+    return 1;
+  }
+  if (result != LJ_GC2_TRANSITION_PINNED)
+    gc2_activation_pin_no_reclaim(g);
+  return 0;
+}
+
+static void gc2_activation_mirror_edge(global_State *g, uint32_t from_phase,
+                                        uint32_t to_phase)
+{
+  LJGC2Activation *token = &g->gc2.activation;
+  LJGC2ActivationSnap snap = lj_gc2_activation_snapshot(token);
+  LJGC2ActivationSnap observed;
+  LJGC2TransitionResult result = LJ_GC2_TRANSITION_INVALID;
+  uint8_t to_state;
+  uint64_t epoch;
+  int forward;
+  if (!gc2_activation_state_for_phase(to_phase, &to_state)) {
+    gc2_activation_pin_no_reclaim(g);
+    return;
+  }
+  /* An xchg which returned its target did not own a semantic phase edge: a
+  ** prior closer can still be between its legacy xchg and typed reset. Such an
+  ** observer leaves the mismatch as a temporary veto instead of spuriously
+  ** making ordinary close contention permanently NO_RECLAIM. An actor which
+  ** did change the legacy phase must still prove its exact typed source; an
+  ** already-target token there could hide a genuinely missing mirror. */
+  if (from_phase == to_phase)
+    return;
+  if (from_phase == LJ_GC2_IDLE && to_phase == LJ_GC2_MARK) {
+    (void)gc2_activation_stage_mark(g, NULL);
+    return;
+  }
+  forward = from_phase != LJ_GC2_IDLE && to_phase != LJ_GC2_IDLE;
+  if (forward) {
+    uint32_t legacy = gc2_phase_acq(g);
+    uint32_t expected_legacy =
+      from_phase == LJ_GC2_MARK && to_phase == LJ_GC2_WEAK ?
+      to_phase : from_phase;
+    if (legacy == LJ_GC2_IDLE) {
+      if (gc2_activation_forward_abort_defer(g))
+        return;
+      gc2_activation_pin_no_reclaim(g);
+      return;
+    }
+    if (legacy != expected_legacy) {
+      gc2_activation_pin_no_reclaim(g);
+      return;
+    }
+  }
+  if (!gc2_activation_matches_legacy(&snap, from_phase)) {
+    if (forward && gc2_activation_forward_abort_defer(g))
+      return;
+    gc2_activation_pin_no_reclaim(g);
+    return;
+  }
+  epoch = snap.mark_epoch;
+  if (from_phase == LJ_GC2_SWEEP && to_phase == LJ_GC2_IDLE) {
+    result = lj_gc2_activation_try_abandon_sweep_open(token, &snap,
+                                                       &observed);
+  } else {
+    result = lj_gc2_activation_try_transition(token, &snap, epoch, to_state,
+                                               &observed);
+  }
+  if (result == LJ_GC2_TRANSITION_LOST && forward &&
+      gc2_activation_forward_abort_defer(g))
+    return;
+  if (result != LJ_GC2_TRANSITION_OK &&
+      result != LJ_GC2_TRANSITION_PINNED)
+    gc2_activation_pin_no_reclaim(g);
+}
+
+/* Collapse a defensive preserve/forced-close skew while the caller owns the
+** exact GCSCAN sentinel.  The runtime does not publish PREP/CLOSING/COMMIT yet;
+** seeing one (or a non-OPEN gate) is therefore a real authority mismatch.
+*/
+static void gc2_activation_abort_reset(global_State *g,
+                                        uint32_t legacy_source)
+{
+  LJGC2Activation *token = &g->gc2.activation;
+  for (;;) {
+    LJGC2ActivationSnap snap = lj_gc2_activation_snapshot(token);
+    LJGC2ActivationSnap observed;
+    LJGC2TransitionResult result;
+    if (!lj_gc2_activation_value_valid(snap.mark_epoch, snap.generation,
+                                        snap.state, snap.gate) ||
+        snap.gate != LJ_GC2_ROOT_GATE_OPEN) {
+      gc2_activation_pin_no_reclaim(g);
+      return;
+    }
+    if (snap.state == LJ_GC2_ACT_NO_RECLAIM)
+      return;
+    if (snap.state == LJ_GC2_ACT_IDLE) {
+      if (legacy_source != LJ_GC2_IDLE)
+        gc2_activation_pin_no_reclaim(g);
+      return;
+    }
+    /* Exact phase-gate ownership rules out an already-completed competing
+    ** reset. Accept only the two explicitly modeled WEAK transition skews;
+    ** every other active-source disagreement is a missing mirror. */
+    if (!((legacy_source == LJ_GC2_MARK &&
+           snap.state == LJ_GC2_ACT_MARK) ||
+          (legacy_source == LJ_GC2_WEAK &&
+           (snap.state == LJ_GC2_ACT_MARK ||
+            snap.state == LJ_GC2_ACT_WEAK ||
+            snap.state == LJ_GC2_ACT_SWEEP_OPEN)) ||
+          (legacy_source == LJ_GC2_SWEEP &&
+           snap.state == LJ_GC2_ACT_SWEEP_OPEN))) {
+      gc2_activation_pin_no_reclaim(g);
+      return;
+    }
+    if (snap.state == LJ_GC2_ACT_SWEEP_OPEN) {
+      result = lj_gc2_activation_try_abandon_sweep_open(token, &snap,
+                                                         &observed);
+    } else if (snap.state == LJ_GC2_ACT_MARK ||
+               snap.state == LJ_GC2_ACT_WEAK) {
+      result = lj_gc2_activation_try_transition(token, &snap, snap.mark_epoch,
+                                                 LJ_GC2_ACT_IDLE, &observed);
+    } else {
+      gc2_activation_pin_no_reclaim(g);
+      return;
+    }
+    if (result == LJ_GC2_TRANSITION_OK ||
+        result == LJ_GC2_TRANSITION_PINNED)
+      return;
+    if (result != LJ_GC2_TRANSITION_LOST) {
+      gc2_activation_pin_no_reclaim(g);
+      return;
+    }
+  }
+}
+
+/* Revalidate the staged IDLE->MARK edge before any irreversible cycle-start
+** side effect.  An exact rollback never touches a replacement cycle leader.
+*/
+static int gc2_activation_mark_recheck(
+  global_State *g, uint32_t expected_leader,
+  const LJGC2ActivationSnap *staged)
+{
+  LJGC2ActivationSnap current;
+  LJGC2ActivationSnap observed;
+  LJGC2TransitionResult result;
+  uint32_t phase = gc2_phase_acq(g);
+  uint32_t leader = gc2_cycle_leader_acq(g);
+  if (phase == LJ_GC2_IDLE && leader == expected_leader) {
+    if (!staged)
+      return 1;  /* Sticky NO_RECLAIM remains a veto-only migration state. */
+    current = lj_gc2_activation_snapshot(&g->gc2.activation);
+    if (lj_gc2_activation_equal(&current, staged) &&
+        gc2_phase_acq(g) == LJ_GC2_IDLE &&
+        gc2_cycle_leader_acq(g) == expected_leader)
+      return 1;
+    phase = gc2_phase_acq(g);
+  }
+  if (!staged)
+    return 0;  /* The sticky activation veto already records the mismatch. */
+  if (phase != LJ_GC2_IDLE) {
+    gc2_activation_pin_no_reclaim(g);
+    return 0;
+  }
+  result = lj_gc2_activation_try_transition(&g->gc2.activation, staged,
+                                             staged->mark_epoch,
+                                             LJ_GC2_ACT_IDLE, &observed);
+  if (result == LJ_GC2_TRANSITION_OK ||
+      result == LJ_GC2_TRANSITION_PINNED)
+    return 0;
+  if (result == LJ_GC2_TRANSITION_LOST &&
+      gc2_activation_forward_abort_defer(g))
+    return 0;
+  gc2_activation_pin_no_reclaim(g);
+  return 0;
+}
+
+/* GCSCAN is an exact phase-edge gate. Forward actors hold it through all
+** post-CAS initialization; close actors hold it through typed reset and idle
+** publication. A cycle request is never overwritten in either direction. */
+static int gc2_phase_gate_try(global_State *g)
+{
+  uint32_t expect = 0;
+  return gc2_cycle_leader_cas(g, &expect, LJ_THREAD_GCSCAN);
+}
+
+static void gc2_phase_gate_release(global_State *g)
+{
+  uint32_t expect = LJ_THREAD_GCSCAN;
+  if (LJ_UNLIKELY(!gc2_cycle_leader_cas(g, &expect, 0))) {
+    /* Never overwrite a replacement request.  A stolen sentinel is a protocol
+    ** fault, so retain storage through the typed sticky veto. */
+    gc2_activation_pin_no_reclaim(g);
+  }
+}
+
+int lj_gc2_activation_reclaim_veto(global_State *g)
+{
+  LJGC2ActivationSnap snap;
+  uint32_t before, after;
+  if (!g)
+    return 1;
+  /* A disagreement can be the short interval between two conservative mirror
+  ** stores. Veto it, but let the exact phase actor decide whether it is a real
+  ** mismatch that must become sticky NO_RECLAIM. */
+  before = gc2_phase_acq(g);
+  snap = lj_gc2_activation_snapshot(&g->gc2.activation);
+  after = gc2_phase_acq(g);
+  return before != after || !gc2_activation_matches_legacy(&snap, after);
+}
+
+#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT)
+void lj_gc2_test_activation_mirror_edge(global_State *g, uint32_t from_phase,
+                                         uint32_t to_phase)
+{
+  if (g)
+    gc2_activation_mirror_edge(g, from_phase, to_phase);
+}
+
+int lj_gc2_test_activation_mark_recheck(global_State *g,
+                                         uint32_t expected_leader)
+{
+  LJGC2ActivationSnap staged;
+  if (!g)
+    return 0;
+  staged = lj_gc2_activation_snapshot(&g->gc2.activation);
+  return gc2_activation_mark_recheck(g, expected_leader, &staged);
+}
+#endif
+
 static GC2FinalizerNode *gc2_finalizer_node_next_acq(GC2FinalizerNode *fn)
 {
   return (GC2FinalizerNode *)la_loadptr_acq((void *const *)&fn->next);
@@ -257,21 +600,6 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
 
-static uint32_t gc2_flush_and_drain_ssb(global_State *g)
-{
-  if (!g)
-    return 0;
-  if (gc2_phase_acq(g) == LJ_GC2_IDLE)
-    return 0;
-  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
-  /*
-  ** The initiating mutator is not a remote handshake target. Flush its active
-  ** SSB explicitly so forced close paths do not strand local rescan work.
-  */
-  (void)lj_gc2_flush_ssb(g, G2TG(g));
-  return lj_gc2_drain_ssb(g);
-}
-
 static LJ_AINLINE int gc2_mark_close_intent_blocks_worker(global_State *g)
 {
   /* mark_close_intent arbitrates only the MARK fixpoint/transition. A helper
@@ -294,10 +622,12 @@ static int gc2_worker_claim(global_State *g)
   ** GC destructor nor a retire-list publisher can overlap detached metadata.
   */
   if (gc2_mark_close_intent_blocks_worker(g) ||
+      gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN ||
       gc2_smr_reclaiming_acq(g) != 0 ||
       !gc2_worker_active_cas(g, &expect, 1))
     return 0;
   if (LJ_UNLIKELY(gc2_mark_close_intent_blocks_worker(g) ||
+		  gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN ||
 		  gc2_smr_reclaiming_acq(g) != 0)) {
     gc2_worker_active_rel(g, 0);
     return 0;
@@ -308,10 +638,12 @@ static int gc2_worker_claim(global_State *g)
 static int gc2_worker_claim_mark_close(global_State *g)
 {
   uint32_t expect = 0;
-  if (gc2_smr_reclaiming_acq(g) != 0 ||
+  if (gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN ||
+      gc2_smr_reclaiming_acq(g) != 0 ||
       !gc2_worker_active_cas(g, &expect, 1))
     return 0;
-  if (LJ_UNLIKELY(gc2_smr_reclaiming_acq(g) != 0)) {
+  if (LJ_UNLIKELY(gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN ||
+                  gc2_smr_reclaiming_acq(g) != 0)) {
     gc2_worker_active_rel(g, 0);
     return 0;
   }
@@ -410,6 +742,9 @@ void lj_gc2_init(global_State *g)
   gc2_gcpause_pct_store_rlx(g, (uint32_t)lj_gc_pause_load(g));
   gc2_assist_shift_store_rlx(g,
     lj_gc2_assist_shift_from_stepmul(lj_gc_stepmul_load(g)));
+  if (!lj_gc2_activation_init_unpublished(&g->gc2.activation, 0, 0,
+                                           LJ_GC2_ACT_IDLE))
+    abort();  /* Constant unpublished IDLE/OPEN authority must be representable. */
   gc2_phase_store_rlx(g, LJ_GC2_IDLE);
   gc2_cycle_store_rlx(g, 0);
   gc2_cycle_leader_store_rlx(g, 0);
@@ -1415,7 +1750,7 @@ static int gc2_request_cycle_start(global_State *g, TGState *tg,
 {
   uint32_t expect = 0;
   uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
-  if (tid == 0)
+  if (tid == 0 || tid == LJ_THREAD_GCSCAN)
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     return 0;
@@ -1423,6 +1758,14 @@ static int gc2_request_cycle_start(global_State *g, TGState *tg,
     return 0;  /* Honor collectgarbage("stop"). */
   if (!gc2_cycle_leader_cas(g, &expect, tid))
     return 0;  /* 05 section 5.11 nonblocking cycle-request token. */
+  if (LJ_UNLIKELY(gc2_phase_acq(g) != LJ_GC2_IDLE)) {
+    /* A requester may have paused after its initial IDLE sample while another
+    ** actor published MARK and consumed the preceding request. Do not strand a
+    ** tid token in an active phase: relinquish only this exact request. */
+    expect = tid;
+    (void)gc2_cycle_leader_cas(g, &expect, 0);
+    return 0;
+  }
   gc2_cycle_requests_add(g, 1);  /* 05 section 5.11 telemetry. */
   gc2_request_threshold(g);  /* Color cycle-driver bridge. */
   return 1;
@@ -2248,15 +2591,32 @@ static int gc2_tg_list_contains(global_State *g, TGState *needle)
 static int gc2_mark_begin(global_State *g)
 {
   TGState *tg;
+  LJGC2ActivationSnap staged;
   uint32_t leader;
   uint32_t forced_major, minor_requested, sweep_minor, roots_minor;
+  int staged_mark;
   if (!g)
     return 0;
   if (!gc2_worker_claim(g))
     return 0;
-  if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
-      gc2_cycle_leader_acq(g) == 0) {
+  leader = gc2_cycle_leader_acq(g);
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE || leader == 0 ||
+      leader == LJ_THREAD_GCSCAN) {
+    /* GCSCAN is the close/abort sentinel. In particular, do not consume it in
+    ** the short legacy-IDLE/typed-active reset window and misdiagnose that
+    ** conservative mismatch as a corrupt next-cycle source. */
     gc2_worker_release(g);
+    return 0;
+  }
+  /* Stage the veto-only typed mirror while the nonzero request token excludes
+  ** every CAS-owned close sentinel. Recheck it before consuming requests,
+  ** changing counters, or touching queue state so a failed admission can
+  ** exact-rollback without leaving partial cycle-start effects. */
+  staged_mark = gc2_activation_stage_mark(g, &staged);
+  if (!gc2_activation_mark_recheck(g, leader,
+                                    staged_mark ? &staged : NULL)) {
+    gc2_worker_release(g);
+    lj_gc2_worker_wake(g);
     return 0;
   }
   tg = G2TG(g);
@@ -2302,9 +2662,10 @@ static int gc2_mark_begin(global_State *g)
   ** before the root snapshot; VM JLOOP entry stays closed until the cycle is
   ** IDLE again.
   */
-  /* Publish MARK before clearing the request token, so late allocators stop. */
+  /* Publish MARK while retaining the exact request as a phase gate through all
+  ** mark resets and barrier initialization. A close actor can claim only zero,
+  ** so it cannot publish IDLE underneath this still-running initializer. */
   gc2_phase_rel(g, LJ_GC2_MARK);
-  leader = gc2_cycle_leader_xchg_acqrel(g, 0);
   if (tg != NULL && !gc2_tg_list_contains(g, tg))
     lj_tg_attach(g, tg);
   (void)gc2_cycle_inc_acqrel(g);
@@ -2329,6 +2690,11 @@ static int gc2_mark_begin(global_State *g)
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
 		   LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_REDISPATCH|
 		   LJ_GC2_HS_FLUSH_SSB);
+  {
+    uint32_t expect = leader;
+    if (LJ_UNLIKELY(!gc2_cycle_leader_cas(g, &expect, 0)))
+      gc2_activation_pin_no_reclaim(g);
+  }
   gc2_worker_release(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
   return 1;
@@ -2464,11 +2830,18 @@ int lj_gc2_minor_roots_skip_bridge_mark(global_State *g)
 void lj_gc2_mark_to_weak(global_State *g)
 {
   uint32_t expect = LJ_GC2_MARK;
-  if (!g || lj_tg_any_jit_active(g) ||
-      !gc2_phase_cas(g, &expect, LJ_GC2_WEAK))
+  if (!g || lj_tg_any_jit_active(g) || !gc2_phase_gate_try(g))
     return;
+  if (lj_tg_any_jit_active(g) ||
+      !gc2_phase_cas(g, &expect, LJ_GC2_WEAK)) {
+    gc2_phase_gate_release(g);
+    return;
+  }
+  /* WEAK cannot reclaim, so the exact legacy CAS may safely lead its mirror. */
+  gc2_activation_mirror_edge(g, LJ_GC2_MARK, LJ_GC2_WEAK);
   gc2_mark_root_scanned_rel(g, 0);
   gc2_mark_to_weak_add(g, 1);
+  gc2_phase_gate_release(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -2529,7 +2902,37 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
     gc2_worker_release(g);
     return;
   }
+  /* Exclude every preserve/forced close through the complete post-CAS SWEEP
+  ** initialization. A preserve publisher which loses this gate rescues its
+  ** exact object into the still-active phase below. */
+  if (!gc2_phase_gate_try(g)) {
+    gc2_worker_release(g);
+    return;
+  }
+  if (lj_tg_any_jit_active(g) || gc2_phase_acq(g) != LJ_GC2_WEAK ||
+      !gc2_weak_mark_closed_acq(g) ||
+      gc2_weak_root_scanned_acq(g) != 1 ||
+      gc2_weak_owned_peer_active(g) || !lj_gc2_ssb_empty(g) ||
+      gc2_thread_scan_needscan_pending_acq(g) != 0 ||
+      gc2_table_rescan_pending_acq(g) != 0 ||
+      gc2_marks_this_round_acq(g) != 0) {
+    if (gc2_phase_acq(g) == LJ_GC2_WEAK)
+      gc2_weak_mark_closed_rel(g, 0);
+    gc2_phase_gate_release(g);
+    gc2_worker_release(g);
+    return;
+  }
+  /* Typed SWEEP_OPEN must be visible before legacy SWEEP can enable any of its
+  ** existing reclaim paths. It remains a veto, not positive permission. */
+  gc2_activation_mirror_edge(g, LJ_GC2_WEAK, LJ_GC2_SWEEP);
   if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP)) {
+    /* A CAS-owned preserve abort may have reset legacy phase first and either
+    ** still own the typed reset or have completed it. Its exact reset consumes
+    ** any staged SWEEP_OPEN state; other failures are genuine mismatches. */
+    if (expect != LJ_GC2_IDLE ||
+        !gc2_activation_forward_abort_defer(g))
+      gc2_activation_pin_no_reclaim(g);
+    gc2_phase_gate_release(g);
     gc2_worker_release(g);
     return;
   }
@@ -2548,6 +2951,7 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
 		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
   gc2_weak_to_sweep_drain_boundary(g, L);
   (void)lj_tg_reclaim_dead(g);
+  gc2_phase_gate_release(g);
   gc2_worker_release(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
@@ -3543,15 +3947,25 @@ static int gc2_sweep_reclaim_enter(global_State *g)
   uint32_t expect = 0;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_worker_active_acq(g) == 0 ||
+      lj_gc2_activation_reclaim_veto(g) ||
       !gc2_smr_reclaiming_cas(g, &expect, 1))
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
-      gc2_worker_active_acq(g) == 0 || gc2_smr_readers_acq(g) != 0) {
+      gc2_worker_active_acq(g) == 0 ||
+      lj_gc2_activation_reclaim_veto(g) ||
+      gc2_smr_readers_acq(g) != 0) {
     gc2_smr_reclaiming_rel(g, 0);
     return 0;
   }
   return 1;
 }
+
+#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT)
+int lj_gc2_test_sweep_reclaim_enter(global_State *g)
+{
+  return gc2_sweep_reclaim_enter(g);
+}
+#endif
 
 static void gc2_sweep_reclaim_leave(global_State *g)
 {
@@ -3943,9 +4357,35 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   if (!g)
     return;
   phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_IDLE)
+    return;
+  /* A running GC owner may still mutate mark/sweep work after an IDLE store.
+  ** Preserve-root callers rescue their exact object into the active phase, so
+  ** abort remains opportunistic until the worker token is quiescent. */
+  if (gc2_worker_active_acq(g) != 0) {
+    lj_gc2_worker_wake(g);
+    return;
+  }
+  /* A close actor owns exactly 0->GCSCAN. It never overwrites an admitted MARK
+  ** request and competing closers cannot clear this actor's sentinel. */
+  if (!gc2_phase_gate_try(g)) {
+    lj_gc2_worker_wake(g);
+    return;
+  }
+  if (gc2_worker_active_acq(g) != 0) {
+    gc2_phase_gate_release(g);
+    lj_gc2_worker_wake(g);
+    return;
+  }
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_IDLE) {
+    gc2_phase_gate_release(g);
+    return;
+  }
   if (phase == LJ_GC2_SWEEP) {
     if (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
 	gc2_sweep_grace_needed_acq(g)) {
+      gc2_phase_gate_release(g);
       lj_gc2_worker_wake(g);
       return;
     }
@@ -3954,12 +4394,12 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
       /* Restore can lose its exact SEALED->OPEN arbitration to a counted
       ** publisher. Keep SWEEP and every frozen generation intact; the last
       ** publisher release wakes a later bounded abort/collector attempt. */
+      gc2_phase_gate_release(g);
       lj_gc2_worker_wake(g);
       return;
     }
   }
   lj_str_gc2_sweep_abort(g);
-  gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   gc2_sweep_bridge_ready_rel(g, 0);
   gc2_sweep_root_scanned_rel(g, 0);
   /*
@@ -3970,6 +4410,15 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   ** by the next cycle's normal start/transition handshakes.
   */
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
+  /* The reset accepts the two defensive forward-transition skews: legacy WEAK
+  ** with typed MARK, and legacy WEAK with typed SWEEP_OPEN. It still pins every
+  ** invalid/gated authority and keeps NO_RECLAIM absorbing. */
+  gc2_activation_abort_reset(g, phase);
+  if (phase == LJ_GC2_IDLE) {
+    gc2_phase_gate_release(g);
+    lj_gc2_worker_wake(g);
+    return;
+  }
   gc2_mark_root_scanned_rel(g, 0);
   gc2_mark_close_intent_rel(g, 0);
   lj_gc2_worker_wake(g);
@@ -3982,7 +4431,7 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   ** resumed idle-generational producer. The next MARK start preserves and
   ** drains the exact work instead. */
   (void)lj_tg_reclaim_dead(g);
-  gc2_cycle_leader_rel(g, 0);
+  gc2_phase_gate_release(g);
 }
 
 void lj_gc2_preserve_root(global_State *g, GCobj *o)
@@ -3999,7 +4448,21 @@ void lj_gc2_preserve_root(global_State *g, GCobj *o)
   }
   if (phase != LJ_GC2_IDLE)
     lj_gc2_preserve_abort_to_idle(g);
-  lj_gc2_remember_root(g, o);
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_IDLE) {
+    lj_gc2_remember_root(g, o);
+  } else if (phase == LJ_GC2_SWEEP) {
+    /* A WEAK->SWEEP actor can own the phase gate after the abort attempt. Its
+    ** rescue barrier is already authoritative for this exact late root. */
+    (void)lj_gc2_trace_sweep_root(g, o);
+  } else if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) {
+    /* Losing the phase gate is not permission to drop an ephemeral native
+    ** root. Mark/enqueue it in the active cycle; the transition predicates and
+    ** post-SWEEP drain account for the resulting SSB/mark publication. */
+    gc2_mark_thread_root_obj(g, o);
+  } else {
+    gc2_activation_pin_no_reclaim(g);
+  }
 }
 
 int lj_gc2_sweep_to_idle(global_State *g)
@@ -4011,7 +4474,16 @@ int lj_gc2_sweep_to_idle(global_State *g)
   if (!gc2_worker_claim(g))
     return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
   phase = gc2_phase_acq(g);
-  if (phase != LJ_GC2_SWEEP || gc2_sweep_blocked_by_finalizer(g) ||
+  if (phase != LJ_GC2_SWEEP) {
+    gc2_worker_release(g);
+    return 0;
+  }
+  if (!gc2_phase_gate_try(g)) {
+    gc2_worker_release(g);
+    return 0;
+  }
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_sweep_blocked_by_finalizer(g) ||
       !gc2_sweep_bridge_ready_acq(g) ||
       lj_tg_any_jit_active(g) || gc2_weak_owned_peer_active(g) ||
       gc2_sweep_bridge_owner_roots_pending(g) ||
@@ -4020,17 +4492,18 @@ int lj_gc2_sweep_to_idle(global_State *g)
       !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
       lj_gc2_sweep_pending(g) ||
       gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
+    gc2_phase_gate_release(g);
     gc2_worker_release(g);
     return 0;
   }
-  gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)gc2_flush_ssb(g, G2TG(g), 0);
   (void)gc2_drain_ssb_owned(g);
   /* The final handshake can publish sweep-rescue edges after the first close
   ** predicate. Revalidate while retaining the worker token; using the generic
   ** drain here would fail by trying to acquire our own token. */
-  if (gc2_sweep_blocked_by_finalizer(g) ||
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_sweep_blocked_by_finalizer(g) ||
       lj_tg_any_jit_active(g) || gc2_weak_owned_peer_active(g) ||
       gc2_sweep_bridge_owner_roots_pending(g) ||
       gc2_table_rescan_pending_acq(g) != 0 ||
@@ -4038,7 +4511,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
       !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
       lj_gc2_sweep_pending(g) ||
       gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
-    gc2_cycle_leader_rel(g, 0);
+    gc2_phase_gate_release(g);
     gc2_worker_release(g);
     lj_gc2_worker_wake(g);
     return 0;
@@ -4048,11 +4521,17 @@ int lj_gc2_sweep_to_idle(global_State *g)
   lj_gc2_update_minor_survival_policy(g, live);
   gc2_update_public_minor_gates(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
+  /* Legacy remains the close authority. This exact reset only abandons the
+  ** veto-only SWEEP_OPEN generation and never publishes CLOSING or COMMIT. */
+  if (phase == LJ_GC2_SWEEP)
+    gc2_activation_mirror_edge(g, phase, LJ_GC2_IDLE);
+  else
+    gc2_activation_pin_no_reclaim(g);
   gc2_mark_root_scanned_rel(g, 0);
   gc2_mark_close_intent_rel(g, 0);
   lj_gc2_worker_wake(g);
   if (phase != LJ_GC2_SWEEP) {
-    gc2_cycle_leader_rel(g, 0);
+    gc2_phase_gate_release(g);
     gc2_worker_release(g);
     return 0;
   }
@@ -4081,7 +4560,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   (void)gc2_clear_container_needscan_all(g);
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
-  gc2_cycle_leader_rel(g, 0);
+  gc2_phase_gate_release(g);
   return 1;
 }
 
@@ -4092,6 +4571,8 @@ void lj_gc2_cycle_to_idle(global_State *g)
   if (!g)
     return;
   phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_IDLE)
+    return;
   if (phase == LJ_GC2_SWEEP &&
       (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
        gc2_sweep_grace_needed_acq(g))) {
@@ -4101,8 +4582,46 @@ void lj_gc2_cycle_to_idle(global_State *g)
       lj_gc2_worker_wake(g);
     return;
   }
-  gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
-  (void)gc2_flush_and_drain_ssb(g);
+  if (!gc2_worker_claim(g)) {
+    lj_gc2_worker_wake(g);
+    return;
+  }
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_IDLE) {
+    gc2_worker_release(g);
+    return;
+  }
+  if (phase == LJ_GC2_SWEEP &&
+      (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
+       gc2_sweep_grace_needed_acq(g))) {
+    gc2_worker_release(g);
+    if (!lj_gc2_sweep_to_idle(g))
+      lj_gc2_worker_wake(g);
+    return;
+  }
+  if (!gc2_phase_gate_try(g)) {
+    gc2_worker_release(g);
+    lj_gc2_worker_wake(g);
+    return;
+  }
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_IDLE) {
+    gc2_phase_gate_release(g);
+    gc2_worker_release(g);
+    return;
+  }
+  if (phase == LJ_GC2_SWEEP &&
+      (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
+       gc2_sweep_grace_needed_acq(g))) {
+    gc2_phase_gate_release(g);
+    gc2_worker_release(g);
+    if (!lj_gc2_sweep_to_idle(g))
+      lj_gc2_worker_wake(g);
+    return;
+  }
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  (void)gc2_flush_ssb(g, G2TG(g), 0);
+  (void)gc2_drain_ssb_owned(g);
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
     /* No root was detached yet. Restore frozen generations on their owning TG
     ** before publishing IDLE; direct cross-owner bin mutation is forbidden. */
@@ -4111,7 +4630,8 @@ void lj_gc2_cycle_to_idle(global_State *g)
       /* A counted publisher defeated one owner's exact restore LP. Keep the
       ** cycle and all sweep-old registries intact; its release edge wakes the
       ** next bounded abort attempt. */
-      gc2_cycle_leader_rel(g, 0);
+      gc2_phase_gate_release(g);
+      gc2_worker_release(g);
       lj_gc2_worker_wake(g);
       return;
     }
@@ -4120,6 +4640,15 @@ void lj_gc2_cycle_to_idle(global_State *g)
   }
   lj_str_gc2_sweep_abort(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
+  /* Forced and pre-bridge closes accept only the same defensive forward skews
+  ** as preserve abort, while the exact GCSCAN sentinel remains owned. */
+  gc2_activation_abort_reset(g, phase);
+  if (phase == LJ_GC2_IDLE) {
+    gc2_phase_gate_release(g);
+    gc2_worker_release(g);
+    lj_gc2_worker_wake(g);
+    return;
+  }
   gc2_mark_root_scanned_rel(g, 0);
   gc2_mark_close_intent_rel(g, 0);
   lj_gc2_worker_wake(g);
@@ -4132,12 +4661,13 @@ void lj_gc2_cycle_to_idle(global_State *g)
   gc2_sweep_root_done_rel(g, 0);
   gc2_sweep_root_cursor_rel(g, NULL);
   gc2_update_public_minor_gates(g);
+  gc2_worker_release(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   /* Forced close preserves queue membership for the next MARK cycle. This is
   ** conservative and avoids cross-owner queue/cursor mutation after IDLE. */
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
-  gc2_cycle_leader_rel(g, 0);
+  gc2_phase_gate_release(g);
 }
 
 int lj_gc2_sweep_bridge_close(global_State *g)
@@ -4302,7 +4832,8 @@ static LJ_AINLINE int gc2_reclaim_retired_ready(global_State *g)
 	 gc2_worker_active_acq(g) == 0 &&
 	 gc2_assist_active_acq(g) == 0 &&
 	 gc2_weak_drain_active_acq(g) == 0 &&
-	 gc2_weak_write_active_acq(g) == 0;
+	 gc2_weak_write_active_acq(g) == 0 &&
+	 !lj_gc2_activation_reclaim_veto(g);
 }
 
 int lj_gc2_smr_read_try(global_State *g)

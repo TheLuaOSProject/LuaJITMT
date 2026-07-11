@@ -17,6 +17,8 @@ whenever a shared field is introduced or migrated.
 | GCobj.gch.gct | immutable after publish | plain read; written pre-publish |
 | arena bitmaps (block/mark) | atomic bitset | fetch_or rlx; sweep owns exclusive |
 | g->gc2.phase | phase word | load rlx in fast paths; transitions rel + handshake |
+| g->gc2.activation | veto-only typed phase mirror | stable acq snapshot; exact CX16 transitions; mismatch vetoes reclaim; no positive authority yet |
+| g->gc2.cycle_leader | cycle request / phase-edge gate | exact CAS ownership; request retained through MARK init; GCSCAN excludes worker/phase edges |
 | TG.poll / TG.reqmask | signal word | store rel by GC; load rlx by owner; ack CAS acq_rel |
 | Node.key | write-once | CAS rlx claim; read rlx and re-check |
 | Node.next | chain link | CAS rel insert; load acq walk |

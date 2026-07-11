@@ -947,6 +947,9 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   if (!g || !a || limit == 0 ||
       !(lj_arena_flags_acq(a) & LJ_AF_QUARANTINE))
     return 0;
+  /* The activation mirror can only veto this legacy-authorized reclaim. */
+  if (lj_gc2_activation_reclaim_veto(g))
+    return 0;
   cell = a->hdr.reclaim_cell;
   if (cell < LJ_AFIRST_CELL || cell > LJ_ARENA_CELLS)
     cell = LJ_AFIRST_CELL;
@@ -1123,6 +1126,12 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
     *pendingp = 0;
   if (!g || !tg || !p || !hi)
     return 0;
+  /* Keep the mapping and its ticket intact on any typed/legacy disagreement. */
+  if (lj_gc2_activation_reclaim_veto(g)) {
+    if (pendingp)
+      *pendingp = 1;
+    return 0;
+  }
   a = lj_arena_of(p);
   flags = hi->flags;
   if (flags & LJ_HUGEF_BUSY) {

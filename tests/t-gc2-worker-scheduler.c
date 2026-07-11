@@ -44,6 +44,38 @@ static uint32_t worker_start_create_release;
 static global_State *worker_start_expect_no_traces_g;
 static uint32_t worker_join_fail_once;
 
+static void test_publish_sweep_phase(global_State *g)
+{
+  LJGC2ActivationSnap idle, mark, weak, sweep;
+  uint64_t epoch;
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(idle.state == LJ_GC2_ACT_IDLE);
+  assert(idle.gate == LJ_GC2_ROOT_GATE_OPEN);
+  epoch = idle.mark_epoch == UINT64_MAX ? UINT64_MAX : idle.mark_epoch + 1u;
+  assert(lj_gc2_activation_try_transition(&g->gc2.activation, &idle, epoch,
+           LJ_GC2_ACT_MARK, &mark) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_transition(&g->gc2.activation, &mark, epoch,
+           LJ_GC2_ACT_WEAK, &weak) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_transition(&g->gc2.activation, &weak, epoch,
+           LJ_GC2_ACT_SWEEP_OPEN, &sweep) == LJ_GC2_TRANSITION_OK);
+  gc2_phase_rel(g, LJ_GC2_SWEEP);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+}
+
+static void test_reset_sweep_phase(global_State *g)
+{
+  LJGC2ActivationSnap sweep, idle;
+  assert(gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE) == LJ_GC2_SWEEP);
+  sweep = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(sweep.state == LJ_GC2_ACT_SWEEP_OPEN);
+  assert(sweep.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(lj_gc2_activation_try_abandon_sweep_open(&g->gc2.activation,
+           &sweep, &idle) == LJ_GC2_TRANSITION_OK);
+  assert(idle.state == LJ_GC2_ACT_IDLE);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+}
+
 #if defined(__linux__) && defined(__x86_64__)
 /*
 ** The production loop deliberately has no test hook in its wake/park fast
@@ -819,7 +851,7 @@ static void test_worker_finalizer_sweep_mpsc_drain(lua_State *L,
   runs0 = gc2_worker_runs_acq(g);
   async0 = gc2_worker_async_progress_acq(g);
 
-  la_store32_rel(&g->gc2.phase, LJ_GC2_SWEEP);
+  test_publish_sweep_phase(g);
   lj_gc2_test_finalizer_enqueue(g, a);
   lj_gc2_test_finalizer_enqueue(g, b);
   assert(wait_gc2_counter_at_least(g, gc2_finalizer_mpsc_drained_acq,
@@ -831,7 +863,7 @@ static void test_worker_finalizer_sweep_mpsc_drain(lua_State *L,
 				   async0 + 2u));
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
 
-  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  test_reset_sweep_phase(g);
   assert(lj_gc2_test_finalizer_dequeue(g) == a);
   assert(lj_gc2_test_finalizer_dequeue(g) == b);
   assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
@@ -1309,7 +1341,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(lj_gc2_test_finalizer_pending(g));
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
-  g->gc2.phase = LJ_GC2_SWEEP;
+  test_publish_sweep_phase(g);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);

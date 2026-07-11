@@ -335,7 +335,7 @@ static void test_activation_edge_and_epoch_policy(void)
     0x86, 0x85, 0x89, 0x91, 0xa0, 0xd0, 0x91, 0x80
   };
   LJGC2Activation token;
-  LJGC2ActivationSnap idle, mark, weak, open, observed;
+  LJGC2ActivationSnap idle, mark, weak, open, abandoned, observed;
   unsigned from, to;
 
   for (from = 0; from < 8; from++)
@@ -364,6 +364,37 @@ static void test_activation_edge_and_epoch_policy(void)
            LJ_GC2_ACT_SWEEP_CLOSING, NULL) == LJ_GC2_TRANSITION_INVALID);
   observed = lj_gc2_activation_snapshot(&token);
   assert(lj_gc2_activation_equal(&open, &observed));
+  assert(lj_gc2_activation_try_transition(&token, &open, 1,
+           LJ_GC2_ACT_IDLE, NULL) == LJ_GC2_TRANSITION_INVALID);
+  assert(lj_gc2_activation_try_abandon_sweep_open(&token, &weak, NULL) ==
+         LJ_GC2_TRANSITION_INVALID);
+  assert(lj_gc2_activation_try_abandon_sweep_open(&token, &open,
+           &abandoned) == LJ_GC2_TRANSITION_OK);
+  assert(abandoned.mark_epoch == open.mark_epoch);
+  assert(abandoned.generation == open.generation + 1u);
+  assert(abandoned.state == LJ_GC2_ACT_IDLE);
+  assert(abandoned.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(lj_gc2_activation_try_abandon_sweep_open(&token, &open,
+           &observed) == LJ_GC2_TRANSITION_LOST);
+  assert(lj_gc2_activation_equal(&observed, &abandoned));
+
+  assert(lj_gc2_activation_init_unpublished(&token, 9, 40,
+                                             LJ_GC2_ACT_SWEEP_OPEN));
+  open = lj_gc2_activation_snapshot(&token);
+  assert(lj_gc2_activation_try_gate(&token, &open,
+           LJ_GC2_ROOT_GATE_CLOSING, &observed) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_abandon_sweep_open(&token, &observed,
+           NULL) == LJ_GC2_TRANSITION_INVALID);
+
+  assert(lj_gc2_activation_init_unpublished(&token, 9,
+      LJ_GC2_ACT_MAX_GENERATION, LJ_GC2_ACT_SWEEP_OPEN));
+  open = lj_gc2_activation_snapshot(&token);
+  assert(lj_gc2_activation_try_abandon_sweep_open(&token, &open,
+           &observed) == LJ_GC2_TRANSITION_PINNED);
+  assert(observed.mark_epoch == 9);
+  assert(observed.generation == LJ_GC2_ACT_MAX_GENERATION);
+  assert(observed.state == LJ_GC2_ACT_NO_RECLAIM);
+  assert(observed.gate == LJ_GC2_ROOT_GATE_OPEN);
 }
 
 static void test_activation_root_gate(void)

@@ -23,6 +23,7 @@ local m3_scaffold_deps = {
   "m3_gc_root_pending",
   "m3_gcflags_atomic",
   "m3_gc2_markword_token_model",
+  "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
   "m3_gc2_worker_scheduler",
@@ -62,6 +63,21 @@ return function(add)
         cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
       })
       print("M3 GC2 markword and activation model passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_activation_runtime",
+    description = "veto-only typed GC2 activation runtime migration",
+    run = function(t)
+      make_clean(t)
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-activation-veto"),
+                        "t-gc2-activation-veto.c", {
+        cflags = gc2_test_cflags,
+        timeout = "60s"
+      })
+      print("M3 veto-only GC2 activation runtime migration passed")
     end
   })
 

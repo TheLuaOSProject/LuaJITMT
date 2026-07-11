@@ -947,6 +947,7 @@ int main(void)
   void *pre_mark_plain, *pre_mark_trav, *phase_plain, *phase_trav;
   GCArena *pre_mark_plain_a, *pre_mark_trav_a;
   GCArena *phase_plain_a, *phase_trav_a;
+  LJGC2ActivationSnap act_idle, act_mark, act_weak, act_sweep, act_close;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
 
   test_isolated_weak_skip_case("v");
@@ -992,9 +993,19 @@ int main(void)
   assert(pre_mark_trav != NULL);
   pre_mark_plain_a = lj_arena_of(pre_mark_plain);
   pre_mark_trav_a = lj_arena_of(pre_mark_trav);
+  act_idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_idle.state == LJ_GC2_ACT_IDLE);
+  assert(act_idle.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(!lj_gc2_activation_reclaim_veto(g));
   cycle0 = g->gc2.cycle;
   lj_gc2_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
+  act_mark = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_mark.state == LJ_GC2_ACT_MARK);
+  assert(act_mark.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_mark.generation == act_idle.generation + 1u);
+  assert(act_mark.mark_epoch == act_idle.mark_epoch + 1u);
+  assert(!lj_gc2_activation_reclaim_veto(g));
   assert(g->gc2.cycle == cycle0 + 1u);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(tg->mark_active == 1);
@@ -1027,6 +1038,12 @@ int main(void)
   phase_trav_a = lj_arena_of(phase_trav);
   lj_gc2_mark_to_weak(g);
   assert(g->gc2.phase == LJ_GC2_WEAK);
+  act_weak = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_weak.state == LJ_GC2_ACT_WEAK);
+  assert(act_weak.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_weak.generation == act_mark.generation + 1u);
+  assert(act_weak.mark_epoch == act_mark.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
   done = 0;
@@ -1038,6 +1055,12 @@ int main(void)
   assert(done);
   lj_gc2_weak_to_sweep(g, L);
   assert(g->gc2.phase == LJ_GC2_SWEEP);
+  act_sweep = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_sweep.state == LJ_GC2_ACT_SWEEP_OPEN);
+  assert(act_sweep.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_sweep.generation == act_weak.generation + 1u);
+  assert(act_sweep.mark_epoch == act_weak.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 1);
   /* Root closure may refill and publish the main SSB more than once. Every
@@ -1151,15 +1174,35 @@ int main(void)
   assert(la_load64_acq(&g->gc2.sweep_live_updates) ==
 	 sweep_live_updates0 + 1u);
   assert_idle(g, tg);
+  act_close = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_close.state == LJ_GC2_ACT_IDLE);
+  assert(act_close.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_close.generation == act_sweep.generation + 1u);
+  assert(act_close.mark_epoch == act_sweep.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
   lua_pop(L, 2);
   lj_arena_free(&tg->alloc, phase_plain, 64);
   lj_arena_free(&tg->alloc, phase_trav, 64);
+
+  /* Drive a second complete legacy cycle. Its four semantic writes must each
+  ** advance the veto-only generation and return to coherent IDLE/OPEN. */
+  act_idle = act_close;
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert_idle(g, tg);
+  act_close = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_close.state == LJ_GC2_ACT_IDLE);
+  assert(act_close.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_close.generation == act_idle.generation + 4u);
+  assert(act_close.mark_epoch == act_idle.mark_epoch + 1u);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+
   lj_gc2_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
   lj_gc2_mark_to_weak(g);
   assert(g->gc2.phase == LJ_GC2_WEAK);
+  act_weak = lj_gc2_activation_snapshot(&g->gc2.activation);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
   preserve_abort_to_idle0 = gc2_preserve_abort_to_idle_acq(g);
@@ -1167,6 +1210,12 @@ int main(void)
   assert(gc2_preserve_abort_to_idle_acq(g) ==
 	 preserve_abort_to_idle0 + 1u);
   assert_idle(g, tg);
+  act_close = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_close.state == LJ_GC2_ACT_IDLE);
+  assert(act_close.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_close.generation == act_weak.generation + 1u);
+  assert(act_close.mark_epoch == act_weak.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
 
   assert(luaL_dostring(L,
     "hold = {}\n"

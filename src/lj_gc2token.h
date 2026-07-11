@@ -298,6 +298,56 @@ lj_gc2_activation_try_transition(LJGC2Activation *token,
                                       next_state, gate, observed);
 }
 
+/*
+** Abandon the staged sweep authority without claiming that root admission was
+** ever closed.  This is the only legal shortcut from SWEEP_OPEN to IDLE: both
+** sides must use the OPEN root gate, the mark epoch is unchanged, and the
+** exact CX16 authority still advances its non-wrapping generation.
+**
+** The runtime migration layer uses this for a legacy pre-bridge abort and for
+** a legacy sweep close while the activation token is veto-only.  It must be
+** deleted once SWEEP_CLOSING/SWEEP_COMMIT becomes the reclaim authority.
+*/
+LA_INLINE LJGC2TransitionResult
+lj_gc2_activation_try_abandon_sweep_open(
+  LJGC2Activation *token, const LJGC2ActivationSnap *expected_snap,
+  LJGC2ActivationSnap *observed)
+{
+  la_u128 expected, desired;
+  uint64_t next_generation;
+  if (!lj_gc2_activation_value_valid(expected_snap->mark_epoch,
+                                      expected_snap->generation,
+                                      expected_snap->state,
+                                      expected_snap->gate) ||
+      expected_snap->state != LJ_GC2_ACT_SWEEP_OPEN ||
+      expected_snap->gate != LJ_GC2_ROOT_GATE_OPEN)
+    return LJ_GC2_TRANSITION_INVALID;
+  if (expected_snap->generation == LJ_GC2_ACT_MAX_GENERATION)
+    return lj_gc2_activation_try_transition(token, expected_snap,
+      expected_snap->mark_epoch, LJ_GC2_ACT_NO_RECLAIM, observed);
+  next_generation = expected_snap->generation + 1u;
+  expected.lo = expected_snap->mark_epoch;
+  expected.hi = lj_gc2_activation_pack_hi(expected_snap->generation,
+                                           LJ_GC2_ACT_SWEEP_OPEN,
+                                           LJ_GC2_ROOT_GATE_OPEN);
+  desired.lo = expected_snap->mark_epoch;
+  desired.hi = lj_gc2_activation_pack_hi(next_generation,
+                                          LJ_GC2_ACT_IDLE,
+                                          LJ_GC2_ROOT_GATE_OPEN);
+  if (la_cas128(&token->value, &expected, desired)) {
+    if (observed) {
+      observed->mark_epoch = expected_snap->mark_epoch;
+      observed->generation = next_generation;
+      observed->state = LJ_GC2_ACT_IDLE;
+      observed->gate = LJ_GC2_ROOT_GATE_OPEN;
+    }
+    return LJ_GC2_TRANSITION_OK;
+  }
+  if (observed)
+    *observed = lj_gc2_activation_snapshot(token);
+  return LJ_GC2_TRANSITION_LOST;
+}
+
 LA_INLINE LJGC2TransitionResult
 lj_gc2_activation_try_gate(LJGC2Activation *token,
                            const LJGC2ActivationSnap *expected_snap,
