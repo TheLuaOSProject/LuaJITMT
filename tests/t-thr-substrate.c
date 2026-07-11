@@ -74,7 +74,11 @@ static void wait_late_remote_ack(TGState *tg, global_State *g)
 static void *worker_main(void *arg)
 {
   ThrCtx *ctx = (ThrCtx *)arg;
+  LJGC2RootDescView root_view;
   lj_tg_init_thread(ctx->g, &ctx->tg, ctx->L, 0);
+  assert(lj_gc2_rootdesc_snapshot(&ctx->tg.root_desc, &root_view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+  assert(root_view.generation == 0);
   lj_thr_set_tg(&ctx->tg);
   assert(lj_thr_get_tg() == &ctx->tg);
   assert(G2TG(ctx->g) == &ctx->tg);
@@ -127,6 +131,12 @@ int main(void)
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
+  {
+    LJGC2RootDescView root_view;
+    assert(lj_gc2_rootdesc_snapshot(&tg->root_desc, &root_view) ==
+           LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+    assert(root_view.generation == 0);
+  }
 
   lj_thr_set_tg(tg);
   assert(tg->tid != 0);

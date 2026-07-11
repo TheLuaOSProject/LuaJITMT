@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 #include "lj_bc.h"
 #include "lj_arena.h"
+#include "lj_gc2token.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #endif
@@ -130,6 +131,8 @@ struct TGState {
   uint64_t local_total;
   uint64_t stack_dirty_epoch;
   ExitTrampolines *exittr;
+  /* Dormant until every root writer and phase edge uses the admission gate. */
+  LJGC2RootDesc root_desc;
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);

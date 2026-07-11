@@ -171,6 +171,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strid_next = 0;
   tg->strid_end = 0;
   tg->strnum_credit = 0;
+  (void)lj_gc2_rootdesc_init_unpublished(&tg->root_desc, 0);
   lj_tg_fini_state_store_rlx(tg, TG_FINI_LIVE);
   lj_tg_worker_retire_next_rel(tg, NULL);
   setnilV(&tg->tmptv);
