@@ -6,6 +6,7 @@ local runtime = require("suite_runtime")
 local make_clean = build.make_clean
 local make_default = build.build_default
 local compile_and_run_c = build.compile_and_run_c
+local compile_and_run_sources = build.compile_and_run_sources
 local run_c_fixtures = build.run_c_fixtures
 local build_shared_library = build.build_shared_library
 local capture_luajit = runtime.capture_luajit
@@ -20,6 +21,7 @@ end
 
 local m3_scaffold_deps = {
   "m3_gc_root_pending",
+  "m3_gc2_markword_token_model",
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
   "m3_gc2_worker_scheduler",
@@ -45,6 +47,22 @@ end
 
 return function(add)
   local cases, register = utils.case_registry(add)
+
+  register({
+    name = "m3_gc2_markword_token_model",
+    description = "epoch markword and typed activation standalone model",
+    run = function(t)
+      compile_and_run_sources(t, t:tmp("lj_t-gc2-markword-token"),
+        { t:path("tests", "t-gc2-markword-token.c") }, {
+        default_cflags = false,
+        include_src = true,
+        link_luajit = false,
+        libs = {},
+        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
+      })
+      print("M3 GC2 markword and activation model passed")
+    end
+  })
 
   register({
     name = "m3_gc_root_pending",
@@ -246,6 +264,7 @@ return function(add)
         cflags = gc2_test_cflags
       })
 
+      utils.run_case(cases, t, "m3_gc2_markword_token_model")
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
       utils.run_case(cases, t, "m3_gc_active_thread_roots")
       utils.run_case(cases, t, "m3_safepoint_handshake")
