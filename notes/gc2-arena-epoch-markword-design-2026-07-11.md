@@ -93,13 +93,15 @@ either half after arena publication.
 `GCAhdr` also gains a 64-bit `sweep_mark_epoch`, taken from existing padding.
 It is immutable from NEEDSWEEP publication through terminal commit or restore.
 The global GC2 state gains a monotonically increasing, nonzero 64-bit epoch
-counter and an immutable `cycle_mark_epoch`.  The phase machine gains a short
-nonblocking `MARK_PREP` publication state so the next epoch and empty work
-counters are never exposed as an IDLE generation.  A TG allocator replaces the
-boolean color as the authoritative field with `alloc_mark_epoch` (`0` means
-white allocation, otherwise it is the exact birth epoch).  A compatibility
-`alloc_black` mirror may exist briefly for generated-code migration, but cannot
-decide liveness after the conversion.
+counter, an immutable `cycle_mark_epoch`, and an atomic 64-bit
+`mark_activation` token.  The token packs the current epoch index and one ACTIVE
+bit; only an ACTIVE snapshot authorizes current-cycle liveness marking.  The
+leader initializes all counters and the next cycle epoch before one release
+store activates the token, so a new epoch is never exposed as an IDLE
+generation.  A TG allocator replaces the boolean color as the authoritative
+field with `alloc_mark_epoch` (`0` means white allocation, otherwise it is the
+exact birth epoch).  A compatibility `alloc_black` mirror may exist briefly
+for generated-code migration, but cannot decide liveness after the conversion.
 
 The structural state is now:
 
@@ -133,6 +135,8 @@ W.epoch == E && (W.bits & M) != 0
 An epoch mismatch denotes an all-zero liveness word without changing memory.
 A major start increments the global epoch.  A minor start reuses the current
 epoch so the prior major and prior minor survivors remain the old set.
+`mark_activation` is `(epoch << 1) | active`; markwords store the unpacked
+epoch.  Inactive publication changes only the low bit, not the epoch identity.
 
 The first-mark CAS loop is conceptually:
 
@@ -150,24 +154,23 @@ for (;;) {
 }
 ```
 
-The caller acquires a stable phase/epoch snapshot and retries if the word
-reports a later epoch.  A normal MARK/WEAK mark or barrier also reloads the
-phase/epoch after the CAS or duplicate result and repeats before returning if
-it changed.  This closes a barrier operation which began just before a major
-flip but publishes its heap edge just after it.  Such an operation is still
-covered by the cycle's TG handshakes while it is between the CAS and final
-epoch recheck; it cannot acknowledge a later root/fixpoint cut halfway through
-the barrier.  Birth uses the owning TG's exact handshake token, and sweep
-rescue uses the arena's immutable latched epoch instead of this global retry
-loop.
+The caller acquires `mark_activation` and retries if the word reports a later
+epoch.  A normal active mark/barrier also reloads the activation token after the
+CAS or duplicate result and repeats before returning if it changed.  This
+closes a barrier operation which began just before a major flip but publishes
+its heap edge just after it.  Such an operation is still covered by the cycle's
+TG handshakes while it is between the CAS and final token recheck; it cannot
+acknowledge a later root/fixpoint cut halfway through the barrier.  Birth uses
+the owning TG's exact handshake token, and sweep rescue uses the arena's
+immutable latched epoch instead of this global retry loop.
 
-A direct idle mark which began before `MARK_PREP` can still publish an
+A direct idle mark which began before activation can still publish an
 old-epoch pair, but it cannot overwrite a pair from the new epoch.  If it
-observes the newer pair it is forbidden to write the older epoch.  During
-`MARK_PREP`, traversable-object marks and store-barrier targets are published
-to pending/SSB work rather than setting a not-yet-active liveness bit.  This is
-the property a separate tag store plus `fetch_or` cannot provide: the tag and
-bits have one CAS linearization point.
+observes the newer pair it is forbidden to write the older epoch.  While the
+activation token is inactive, traversable-object marks and store-barrier
+targets are published to pending/SSB work rather than setting a not-yet-active
+liveness bit.  This is the property a separate tag store plus `fetch_or`
+cannot provide: the tag and bits have one CAS linearization point.
 
 `mark_clear(E, mask)` also uses a full-pair CAS.  It only clears bits when the
 word epoch equals `E`, preserves every unrelated bit, and never changes the
@@ -179,10 +182,11 @@ causes an ordinary retry/mark CAS, and a stale true in a liveness query is
 conservative.  Terminal classification performs the read only under the arena
 gate, where the result is stable.
 
-The epoch is 64 bit and must not wrap.  Increment checks `next != 0`; reaching
-the guard is a fatal implementation invariant rather than silently reusing an
-epoch.  This avoids a 32-bit wrap/rebase protocol that torture mode could
-eventually exercise.
+The markword epoch field is 64 bit; the packed activation token permits
+63-bit epoch indices.  Increment checks the high-bit limit and never wraps;
+reaching the guard is a fatal implementation invariant rather than silently
+reusing an epoch.  This avoids a 32-bit wrap/rebase protocol that torture mode
+could eventually exercise.
 
 ### Why not a separate epoch array
 
@@ -297,32 +301,58 @@ authorizes dereferencing an object header.
 
 At IDLE, after the prior sweep has closed, the leader:
 
-1. CAS-publishes `IDLE -> MARK_PREP` before changing any epoch-visible field;
-2. resets `marks_this_round`, grey/weak cursors, and the new-cycle work state;
-3. selects major and release-publishes the next nonzero epoch as
+1. leaves `mark_activation` inactive and resets `marks_this_round`, grey/weak
+   cursors, and the new-cycle work state;
+2. selects major and release-publishes the next nonzero epoch as
    `cycle_mark_epoch`;
-4. release-publishes MARK, which is the activation LP for that epoch;
-5. runs the existing barrier/ALLOC_BLACK/root-exit handshake; and
-6. drains PREP publications, starts root scan, and begins fixpoint work.
+3. release-publishes MARK and then release-stores the ACTIVE token for that
+   exact epoch; the token store is the liveness activation LP;
+4. runs the existing barrier/ALLOC_BLACK/root-exit handshake; and
+5. drains inactive-window publications, starts root scan, and begins fixpoint
+   work.
 
 There is no arena walk and no clear.  A word is logically empty until its first
 CAS into the new epoch.  Marks racing the boundary are monotonic: an old-epoch
 CAS cannot regress a word which already carries the new epoch.
 
-`MARK_PREP` never makes a mutator wait.  Allocations remain white and use the
-normal exact pending-object publication.  A traversable object or store target
-encountered during PREP goes to an existing SSB/pending-root carrier (or a
-small dedicated MPSC premark carrier) without setting the new epoch bit; raw
-side memory is retained through its published owner root.  MARK drains those
-publications after the handshake.  This state is required: publishing a new
-epoch while phase still reads IDLE would let a liveness-only fixed/direct mark
-set the new bit without grey work, after which root scan could mistake it for
-already traversed.  Likewise, resetting `marks_this_round` after MARK is
+An inactive activation token never makes a mutator wait.  Allocations remain
+white and use the normal exact pending-object publication.  A traversable
+object or store target encountered in the inactive preparation window goes to
+an existing SSB/pending-root carrier (or a small dedicated MPSC premark
+carrier) without setting the new epoch bit; raw side memory is retained through
+its published owner root.  MARK drains those publications after the handshake.
+This activation word is required: publishing a new epoch as an ordinary field
+while phase still reads IDLE would let a liveness-only fixed/direct mark set the
+new bit without grey work, after which root scan could mistake it for already
+traversed.  Likewise, resetting `marks_this_round` after the ACTIVE token is
 visible can erase a real first-mark event.
 
-The MARK-before-ALLOC_BLACK handshake window remains covered by the root and
-pending snapshot, as it is today, but it no longer overlaps a destructive
-bitmap reset or uninitialized fixpoint counters.
+All C mark/queue decisions use the activation token, not an independently
+sampled phase mirror.  The small phase-to-token publication interval therefore
+routes work to the inactive carrier; it cannot create a liveness bit without
+grey ownership.  The MARK-before-ALLOC_BLACK handshake window remains covered
+by the root and pending snapshot, as it is today, but it no longer overlaps a
+destructive bitmap reset or uninitialized fixpoint counters.
+
+Worker drain, fixpoint, and phase-advance entry must also require an ACTIVE
+token whose epoch equals `cycle_mark_epoch`.  Observing MARK alone is not
+authority to inspect freshly reset counters: a worker which lands in the short
+MARK-before-ACTIVE interval returns or consumes only the inactive carrier.  The
+leader cannot report a fixpoint or enter WEAK until activation and the initial
+inactive-carrier drain have both completed.
+
+MARK and WEAK keep the token active.  After the weak/fixpoint close handshake,
+the leader exact-CAS deactivates the token without changing its epoch index,
+then release-publishes SWEEP.  The CAS is admitted only after the existing mark
+producer/phase-peer close gate is empty.  A producer which loses that CAS must
+publish through the durable inactive carrier; SWEEP owns and drains that
+carrier through the arena's latched rescue protocol before terminal commit.  A
+mark operation spanning deactivation must recheck the token and take that same
+route instead of ordinary grey first-mark semantics.  Thus neither ordering
+interval between two atomics is treated as a fixpoint.  The token remains
+inactive throughout SWEEP and IDLE.  A minor start reactivates the same epoch;
+a major start activates the next one only after the initialization sequence
+above.
 
 ### Generational baseline and minor cycles
 
@@ -488,11 +518,12 @@ Major start then has no HugeTab scan either.  This also avoids packing an
 eventually wrapping generation into the size/flag word.
 
 If the small-arena P0 lands first, the temporary HugeTab rule is: perform its
-CAS clear during `MARK_PREP`, before publishing MARK, route PREP marks through
-durable pending ownership, and prove that the following root/pending handshake
-covers every pre-cut birth/fixed mark.  Keep this explicitly documented as
-temporary; GC2 generation-reset completion requires the epoch-record conversion
-or an equivalently proved non-destructive scheme.
+CAS clear while `mark_activation` is inactive, before activating MARK, route
+inactive-window marks through durable pending ownership, and prove that the
+following root/pending handshake covers every pre-cut birth/fixed mark.  Keep
+this explicitly documented as temporary; GC2 generation-reset completion
+requires the epoch-record conversion or an equivalently proved
+non-destructive scheme.
 
 ## Migration sequence
 
@@ -527,8 +558,9 @@ the old plain word remains authoritative beside the new plane.
 Enumerate atomic LP interleavings for:
 
 - delayed epoch-E marker, major E+1 publication, and E+1 marker;
-- a store barrier spanning the global epoch flip and its final epoch recheck;
-- a direct/fixed mark during `MARK_PREP`, plus MARK activation and drain;
+- a store barrier spanning activation of a new epoch and its final token
+  recheck;
+- a direct/fixed mark while activation is inactive, plus activation and drain;
 - two first markers in the same word and in the same cell;
 - current mark versus exact-cell clear/free;
 - unrelated-cell clear versus mark in the same word;
@@ -548,8 +580,8 @@ The invariants are:
 Broken variants must all produce counterexamples: separate tag and bits,
 plain/atomic reset, tag-before-clear, clear-after-publish, stale epoch allowed to
 regress, allocation-time whole-word clear, block-before-black-mark, and
-terminal mark without gate pending.  Omitting the marker's final global epoch
-recheck must also produce the spanning-barrier counterexample.
+terminal mark without gate pending.  Omitting the marker's final activation
+token recheck must also produce the spanning-barrier counterexample.
 
 ### Structural/random model
 
@@ -576,7 +608,8 @@ Add pause hooks at the LPs and cover at least:
 1. old marker paused before CAS; new epoch/current mark wins; old resumes;
 2. major epoch publication before a TG's ALLOC_BLACK ack, with a white birth
    recovered by pending/root scan;
-3. PREP fixed/raw/traversable publications, including a counter-reset pause;
+3. inactive-window fixed/raw/traversable publications, including a
+   counter-reset pause;
 4. black allocations in MARK, WEAK, and major SWEEP, plus white allocation in
    IDLE and minor SWEEP;
 5. same-word unrelated marker versus free/restore;
