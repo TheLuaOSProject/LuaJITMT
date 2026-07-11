@@ -1318,6 +1318,7 @@ int lj_gc2_worker_stop(global_State *g)
 
 static void *gc2_worker_main(void *arg)
 {
+  enum { GC2_ACTIVE_PARK_TIMEOUT_NS = 10000000 };
   TGState *tg = (TGState *)arg;
   global_State *g = tg ? tg->gl : NULL;
   if (!g)
@@ -1354,7 +1355,16 @@ static void *gc2_worker_main(void *arg)
     gc2_worker_parks_add(g, 1);
     if (gc2_worker_stop_acq(g) != 0)
       break;
-    gc2_worker_wake_futex_wait(g, wake, -1);
+    /* worker_active release wakes its own futex, not worker_wake. A worker
+    ** which observed that token busy can otherwise consume the last wake,
+    ** park here, and miss the release while real mark/sweep work remains.
+    ** Keep the overwhelmingly common IDLE park indefinite (zero polling), but
+    ** use a low-frequency active-cycle retry as the notification backstop.
+    ** This is scheduler repair, not ownership transfer: a preempted token
+    ** holder remains a separate helpability problem. */
+    gc2_worker_wake_futex_wait(g, wake,
+	gc2_phase_acq(g) == LJ_GC2_IDLE ? -1 :
+	GC2_ACTIVE_PARK_TIMEOUT_NS);
   }
   lj_tg_detach(g, tg);
   lj_thr_set_tg(NULL);

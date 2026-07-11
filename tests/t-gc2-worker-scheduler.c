@@ -370,12 +370,15 @@ static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
 
 static void test_two_worker_contention(global_State *g)
 {
-  uint64_t busy0, parks0, wakes0;
+  GC2SSBNode *node;
+  uint64_t async0, busy0, parks0, wakes0;
+  uint32_t wake;
 
   assert(gc2_n_workers_acq(g) == 2);
   parks0 = gc2_worker_parks_acq(g);
   if (parks0 < 2u)
     assert(wait_gc2_counter_at_least(g, gc2_worker_parks_acq, 2u));
+  parks0 = gc2_worker_parks_acq(g);
 
   busy0 = gc2_worker_busy_retries_acq(g);
   wakes0 = gc2_worker_wakes_acq(g);
@@ -384,8 +387,33 @@ static void test_two_worker_contention(global_State *g)
   lj_gc2_test_worker_wake(g);
   assert(gc2_worker_wakes_acq(g) > wakes0);
   assert(wait_gc2_counter_at_least(g, gc2_worker_busy_retries_acq, busy0 + 2u));
-  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+
+  /* Both workers consumed the published wake and lost worker_active. Install
+  ** one counted SSB item, then wait until both have committed to parking on
+  ** the unchanged worker_wake sequence. Releasing only worker_active models
+  ** gc2_worker_release(): its futex notification must not be the sole path to
+  ** retrying visible active-phase work. */
+  node = (GC2SSBNode *)malloc(sizeof(GC2SSBNode));
+  assert(node != NULL);
+  node->pad = TG_GC2_SSB_DYNAMIC;
+  lj_gc2_ssb_owner_rel(node, NULL);
+  lj_gc2_ssb_count_rel(node, 1);
+  lj_gc2_ssb_remembered_rel(node, 0);
+  setgcrefnull(node->slot[0]);
+  lj_gc2_ssb_next_rel(node, NULL);
+  assert(gc2_ssb_head_acq(g) == NULL);
+  assert(gc2_ssb_drain_acq(g) == NULL);
+  gc2_ssb_head_store_rlx(g, node);
+  async0 = gc2_worker_async_progress_acq(g);
+  wake = gc2_worker_wake_acq(g);
+  assert(wait_gc2_counter_at_least(g, gc2_worker_parks_acq, parks0 + 2u));
   gc2_worker_active_rel(g, 0);
+  la_futex_wake(&g->gc2.worker_active, 0x7fffffff);
+  assert(wait_gc2_counter_at_least(g, gc2_worker_async_progress_acq,
+				   async0 + 1u));
+  assert(gc2_worker_wake_acq(g) == wake);
+  assert(lj_gc2_test_ssb_empty(g));
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
 }
 
 static void test_worker_retirement_uses_embedded_links(global_State *g)
