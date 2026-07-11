@@ -11,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_thr.h"
@@ -169,6 +170,16 @@ int main(void)
     assert(lj_state_owner_acq(Lclaim) == 0);
     assert(lj_tg_stack_dirty_epoch_acq(tg) == dirty0 + 1u);
     lua_pop(L, 1);
+  }
+
+  {
+    TValue slot;
+    uint64_t dirty0 = lj_tg_stack_dirty_epoch_acq(tg);
+    setnilV(&slot);
+    tv_rawstore_rel(&slot, tv_rawload(&slot));
+    (void)lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
+    lj_gc_pubtvroot_vm(L, &slot);
+    assert(lj_tg_stack_dirty_epoch_acq(tg) == dirty0 + 1u);
   }
 
   tg->alloc.alloc_black = 1;

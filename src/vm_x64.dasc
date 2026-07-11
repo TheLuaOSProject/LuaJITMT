@@ -600,6 +600,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub RDd, 1
   |  jnz <1
   |2:
+  |  // Invalidate a root scan that raced the result-copy loop.
+  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, PC
   |3:
@@ -3797,6 +3799,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |  movzx RDd, PC_RD
     |  branchPC RD
+    if (op == BC_ISTC || op == BC_ISFC) {
+      |  // Only the taken test-copy path wrote RA.
+      |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+    }
     |1:					// Fallthrough to the next instruction.
     |  ins_next
     break;
@@ -5454,6 +5460,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RA, RB
     |  jb <2
     |3:
+    |  // Publish the completed fixed/copy-all vararg destination range.
+    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |  ins_next
     |
     |5:  // Copy all varargs.

@@ -1809,7 +1809,8 @@ void lj_gc_pubtvroot_vm(lua_State *L, cTValue *tv)
 {
   if (!L || !tv)
     return;
-  lj_state_stack_pubtv(L, L, tv);
+  /* DynASM stores and dirties the slot before entering this cold wrapper. */
+  lj_gc_pubroot(L, tv);
 }
 
 /* Publication wrapper for closed-upvalue TValue stores. Pass &uv->tv. */
