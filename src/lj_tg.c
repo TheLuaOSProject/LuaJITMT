@@ -171,6 +171,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strid_next = 0;
   tg->strid_end = 0;
   tg->strnum_credit = 0;
+  lj_tg_fini_state_store_rlx(tg, TG_FINI_LIVE);
   lj_tg_worker_retire_next_rel(tg, NULL);
   setnilV(&tg->tmptv);
   setnilV(&tg->tmptv2);
@@ -257,17 +258,45 @@ void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid)
     lj_prng_derive(&tg->prng, parent_prng, tid);
 }
 
-void lj_tg_fini_thread(global_State *g, TGState *tg)
+static int tg_fini_thread(global_State *g, TGState *tg, int terminal)
 {
+  uint8_t expect = TG_FINI_LIVE;
   if (!tg)
-    return;
+    return 1;
+  /* LIVE->BUSY is the physical-finalization LP. Valid runtime reclaimers and
+  ** the worker-retire owner are serialized, so observing BUSY is an ownership
+  ** violation, never a reason to wait. DONE release-publishes every pointer
+  ** clear and allocator unmap; a later worker-retire storage owner may then
+  ** call this routine idempotently before free(tg). */
+  if (!lj_tg_fini_state_cas(tg, &expect, TG_FINI_BUSY)) {
+    if (expect == TG_FINI_DONE)
+      return 1;
+    /* Storage owners commonly finalize immediately before free(tg). BUSY can
+    ** therefore never degrade to a failed try result: doing so would let an
+    ** older void-style caller release storage under the active finalizer. */
+    abort();
+  }
   lj_str_flush_num_credit(g, tg);
   tg_root_anchor_fini(g, tg);
   lj_tg_fini_ssb(tg);
   lj_buf_free(g, &tg->tmpbuf);
-  if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
-    lj_arena_hugetab_fini(&tg->huge);
+  lj_buf_init(NULL, &tg->tmpbuf);
+  if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+    if (terminal)
+      (void)lj_arena_hugetab_fini_all(&tg->huge);
+    else
+      lj_arena_hugetab_fini(&tg->huge);
+    lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_HUGETAB);
+    lj_arena_allocd_sethugetab(&tg->allocd, NULL);
+  }
   lj_arena_alloc_fini(&tg->alloc);
+  lj_tg_fini_state_rel(tg, TG_FINI_DONE);
+  return 1;
+}
+
+int lj_tg_fini_thread(global_State *g, TGState *tg)
+{
+  return tg_fini_thread(g, tg, 0);
 }
 
 static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
@@ -367,6 +396,12 @@ void lj_tg_detach(global_State *g, TGState *tg)
   (void)lj_gc2_flush_ssb_detach(g, tg);  /* Terminal, allocation-free flush. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
   lj_str_flush_num_credit(g, tg);
+  /* tmpbuf is owner-private transient storage. Detach is its final owner
+  ** boundary, so release it while this TG is still a live registry lookup;
+  ** global root scans no longer need a dead-storage exception and later
+  ** allocator transfer/finalization sees an idempotently empty buffer. */
+  lj_buf_free(g, &tg->tmpbuf);
+  lj_buf_init(NULL, &tg->tmpbuf);
   /* Clear every remotely sampled owner publication before DEAD becomes
   ** visible. Subsequent foreign state-release cleanup remains protected by
   ** mt_live, which prevents physical registry reclamation until that lookup
@@ -401,8 +436,6 @@ static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
     return 1;
   if (!main_tg || !lj_tg_flags_test_acq(main_tg, TGF_ARENA_INTERNAL))
     return 0;
-  lj_buf_free(g, &tg->tmpbuf);  /* Route through the still-findable owner. */
-  lj_buf_init(NULL, &tg->tmpbuf);
   if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
     if (!lj_tg_flags_test_acq(main_tg, TGF_HUGETAB) ||
 	!lj_arena_hugetab_transfer(&main_tg->huge, &tg->huge,
@@ -422,8 +455,10 @@ static int tg_reclaim_dead_admissible(global_State *g, int terminal)
 {
   TGState *self;
   if (!g || gc2_n_threads_acq(g) != 1 ||
-      gc2_hs_pending_acq(g) != 0 || mt_live_acq(g) != 0 ||
-      mt_entering_acq(g) != 0 || gc2_n_workers_acq(g) != 0)
+      gc2_hs_pending_acq(g) != 0 || gc2_hs_leader_acq(g) != 0 ||
+      mt_live_acq(g) != 0 ||
+      mt_entering_acq(g) != 0 || gc2_n_workers_acq(g) != 0 ||
+      gc2_worker_active_acq(g) != 0)
     return 0;
   if (terminal)
     return mt_shutdown_acq(g) != 0;
@@ -431,23 +466,103 @@ static int tg_reclaim_dead_admissible(global_State *g, int terminal)
   return self == g->main_tg;
 }
 
-static uint32_t tg_reclaim_dead(global_State *g, int terminal)
+static int tg_reclaim_writer_try(global_State *g, int terminal)
 {
-  TGState *prev, *tg;
   uint32_t expect = 0;
-  uint32_t reclaimed = 0;
   if (!tg_reclaim_dead_admissible(g, terminal) ||
-      !gc2_tg_reclaiming_cas(g, &expect, 1))
+      !gc2_smr_reclaiming_cas(g, &expect, 1))
     return 0;
-  /* Counter admission and the writer CAS form a two-sided try protocol: new
-  ** threading entrants back out while the gate is set, while a writer that
-  ** lost to an earlier entrant abandons without waiting. Recheck only after
-  ** publishing the gate so no list reader can cross this boundary unseen. */
-  if (!tg_reclaim_dead_admissible(g, terminal)) {
-    gc2_tg_reclaiming_rel(g, 0);
+  /* Publish the shared metadata-reclaim gate before testing readers. A reader
+  ** already inside keeps its counted lease and makes this pass abandon; a new
+  ** reader observes the gate and backs out. GC workers use the inverse
+  ** worker_active/reclaiming protocol, so this writer never waits for either. */
+  if (gc2_smr_readers_acq(g) != 0 ||
+      !tg_reclaim_dead_admissible(g, terminal)) {
+    gc2_smr_reclaiming_rel(g, 0);
     return 0;
   }
-  (void)lj_gc_flush_root_pending(g);
+  expect = 0;
+  if (!gc2_tg_reclaiming_cas(g, &expect, 1)) {
+    gc2_smr_reclaiming_rel(g, 0);
+    return 0;
+  }
+  /* The TG gate excludes attach/list writers; the second full recheck closes
+  ** both admission races before any next_tg link or TG body can be removed. */
+  if (gc2_smr_readers_acq(g) != 0 ||
+      !tg_reclaim_dead_admissible(g, terminal)) {
+    gc2_tg_reclaiming_rel(g, 0);
+    gc2_smr_reclaiming_rel(g, 0);
+    return 0;
+  }
+  return 1;
+}
+
+static void tg_reclaim_writer_leave(global_State *g)
+{
+  gc2_tg_reclaiming_rel(g, 0);
+  gc2_smr_reclaiming_rel(g, 0);
+}
+
+static int tg_terminal_pending_roots_empty(global_State *g)
+{
+  TGState *tg;
+  if (lj_gcroot_pending_hint_acq(g) != 0)
+    return 0;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg))
+    if (lj_tg_gcroot_pending_acq(tg) != NULL ||
+	lj_tg_gcroot_pending_after_main_acq(tg) != NULL)
+      return 0;
+  return 1;
+}
+
+static int tg_lua_storage_owner_follows(TGState *tg, uint32_t owner_tid)
+{
+  TGState *cur;
+  uint32_t n = 0;
+  if (!tg || owner_tid == 0 || owner_tid == lj_tg_tid_acq(tg))
+    return 0;
+  for (cur = lj_tg_next_acq(tg); cur != NULL; cur = lj_tg_next_acq(cur)) {
+    if (lj_tg_tid_acq(cur) == owner_tid)
+      return 1;
+    if (cur == lj_tg_next_acq(cur) || ++n >= 1000000u)
+      return 0;
+  }
+  return 0;
+}
+
+static int tg_worker_retired_contains(global_State *g, TGState *target)
+{
+  TGState *tg;
+  uint32_t n = 0;
+  for (tg = (TGState *)gc2_worker_tg_retired_acq(g);
+       tg != NULL; tg = lj_tg_worker_retire_next_acq(tg)) {
+    if (tg == target)
+      return 1;
+    if (tg == lj_tg_worker_retire_next_acq(tg) || ++n >= 1000000u)
+      return 0;
+  }
+  return 0;
+}
+
+static uint32_t tg_reclaim_dead(global_State *g, int terminal, int orphan)
+{
+  TGState *prev, *tg;
+  uint32_t reclaimed = 0;
+  /* Flush before publishing the SMR writer gate. Root validation may itself
+  ** take a registry read lease; doing it as the writer would self-deny. The
+  ** late orphan path runs after the Lua stack and all objects are gone, so it
+  ** must never try to repair/flush roots: close_state has already proved and
+  ** published empty pending stacks at its earlier post-freeall boundary. */
+  if (!tg_reclaim_dead_admissible(g, terminal))
+    return 0;
+  if (!orphan)
+    (void)lj_gc_flush_root_pending(g);
+  if (!tg_reclaim_writer_try(g, terminal))
+    return 0;
+  if (orphan && !tg_terminal_pending_roots_empty(g)) {
+    tg_reclaim_writer_leave(g);
+    return 0;
+  }
 restart:
   prev = NULL;
   tg = gc2_tg_list_acq(g);
@@ -456,19 +571,49 @@ restart:
     if (lj_tg_flags_test_acq(tg, TGF_DEAD)) {
       uint8_t flags = lj_tg_flags_acq(tg);
       uint8_t heap_tg = (uint8_t)(flags & TGF_HEAP);
+      uint8_t lua_tg = (uint8_t)(flags & TGF_LUA_ALLOC);
       uint8_t deferred_lua_tg = (uint8_t)
 	((flags & (TGF_LUA_ALLOC|TGF_DEFER_FREE)) ==
 	 (TGF_LUA_ALLOC|TGF_DEFER_FREE));
+      if ((heap_tg && lua_tg) ||
+	  ((flags & TGF_DEFER_FREE) && !lua_tg))
+	abort();
       if (lj_tg_ssb_refs_acq(tg) != 0) {
+	lj_assertG(!orphan, "published SSB pin survived terminal freeall");
 	prev = tg;  /* Published embedded nodes still name this TG storage. */
 	tg = next;
 	continue;
       }
-      if (!tg_transfer_dead_alloc(g, tg)) {
+	if (orphan && lua_tg) {
+	  uint32_t storage_owner;
+	  /* threading.spawn allocates the TG from its already-linked parent,
+	  ** then the child CAS-prepends on attach. A retained TG's userdata
+	  ** finalizer publishes DEFER_FREE; runtime parent reclamation instead
+	  ** rewrites the storage header owner to the still-last main TG. Thus the
+	  ** Lua TG body owner must occur strictly later in this newest-first list. */
+	  if (!deferred_lua_tg || g->allocf != lj_arena_allocf)
+	    abort();
+	  storage_owner = lj_arena_owner_acq(lj_arena_of(tg));
+	  if (!tg_lua_storage_owner_follows(tg, storage_owner))
+	    abort();
+	}
+	if (orphan && !heap_tg && !lua_tg &&
+	    !tg_worker_retired_contains(g, tg))
+	  abort();  /* Only the embedded retire list may own unflagged storage. */
+	/* Runtime reclamation preserves every allocation by moving ownership to
+	** the main TG. After all GC/runtime destructors have run, the terminal
+	** orphan pass instead destroys the now-dead allocator in place; this path
+	** never depends on destination hugetab capacity. */
+      if (!orphan && !tg_transfer_dead_alloc(g, tg)) {
 	prev = tg;  /* Keep owner lookup live until allocator transfer succeeds. */
 	tg = next;
 	continue;
       }
+	if (orphan && !tg_fini_thread(g, tg, 1)) {
+	  prev = tg;
+	  tg = next;
+	  continue;
+	}
       if (prev) {
 	lj_tg_next_rel(prev, next);
       } else {
@@ -479,13 +624,19 @@ restart:
       lj_tg_next_rel(tg, NULL);
       reclaimed++;
       if (heap_tg) {
-	lj_tg_fini_thread(g, tg);
+	if (!orphan && !lj_tg_fini_thread(g, tg))
+	  abort();
 	free(tg);
+	} else if (orphan && lua_tg) {
+	/* freeall has destroyed the threading.thread userdata, so terminal
+	** registry ownership supersedes its ordinary DEFER_FREE handoff. */
+	lj_mem_freet(g, tg);
 	} else if (deferred_lua_tg) {
 	/* The threading.thread userdata relinquished this still-registered TG
 	** while an embedded SSB publication pinned it. Its final reference has
 	** now drained, so finish through the allocator which created the TG. */
-	lj_tg_fini_thread(g, tg);
+	if (!lj_tg_fini_thread(g, tg))
+	  abort();
 	lj_mem_freet(g, tg);
       }
       tg = next;
@@ -494,13 +645,13 @@ restart:
     prev = tg;
     tg = next;
   }
-  gc2_tg_reclaiming_rel(g, 0);
+  tg_reclaim_writer_leave(g);
   return reclaimed;
 }
 
 uint32_t lj_tg_reclaim_dead(global_State *g)
 {
-  return tg_reclaim_dead(g, 0);
+  return tg_reclaim_dead(g, 0, 0);
 }
 
 uint32_t lj_tg_reclaim_dead_terminal(global_State *g)
@@ -510,7 +661,15 @@ uint32_t lj_tg_reclaim_dead_terminal(global_State *g)
   ** has already closed attach admission and joined every mutator/GC worker;
   ** the counter checks and writer CAS above are the terminal ownership proof.
   ** Keep the ordinary runtime path main-TLS-only. */
-  return tg_reclaim_dead(g, 1);
+  return tg_reclaim_dead(g, 1, 0);
+}
+
+uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g)
+{
+  /* This is valid only after freeall and every subsystem/raw destructor.
+  ** Shutdown admission, the SMR/TG writer gates, and zero publishers prove
+  ** that allocator mappings can be destroyed instead of transferred. */
+  return tg_reclaim_dead(g, 1, 1);
 }
 
 TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)

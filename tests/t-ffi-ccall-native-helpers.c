@@ -286,6 +286,14 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   assert(ljt_tg_has_stopreq(tg));
 
   pending_native = native;
+  /* Native leave returned the STOP action without checking it, so the generic
+  ** protocol deliberately retains a synthetic VM-dispatch poll. This fixture
+  ** wants the nested probe below to perform the checked throw inside its pcall;
+  ** cancel only that dispatch edge while retaining FRESH and pending_actions. */
+  assert((pending_actions & LJ_GC2_HS_STOPREQ) != 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 1);
+  lj_tg_poll_rel(tg, 0);
   lua_pushcfunction(L, checkstop_from_lua);
   lua_setglobal(L, "ccall_native_checkstop_probe");
   lua_pushcfunction(L, error_state_from_lua);

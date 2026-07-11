@@ -496,13 +496,12 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_fixpoint_round(g, L, 1) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   /*
-  ** A one-unit round is bounded by worker progress, not by object-graph depth.
-  ** The root handshake may queue the stack root and then spend the single
-  ** post-root budget item traversing it, so the child can already be marked.
-  ** The grandchild must remain behind the open frontier and the round must not
-  ** report a fixpoint.
+  ** A one-unit round is bounded by worker progress, not object-graph depth. The
+  ** owner acknowledgement marks the stack root, then its single post-root item
+  ** may only detach/convert that TG's SSB publication. Child traversal remains
+  ** behind the open frontier and the round must not report a fixpoint.
   */
-  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
   assert(!lj_gc2_test_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
@@ -1416,13 +1415,12 @@ static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 0);
   lj_tg_vmstate_store_rel(tg, (int32_t)trace_traceno_acq(T));
-  lj_gc2_test_scan_roots(g, NULL);
+  lj_gc2_scan_cycle_owner_tg_roots(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 1);
   assert(la_load64_acq(&g->gc2.tg_trace_roots) == trace_roots0 + 1u);
   lj_tg_vmstate_store_rel(tg, (int32_t)old_vmstate);
-  /* A global test scan queues the complete semantic root graph. Close its
-  ** owner-handoff and table-rescan work before forcing this synthetic cycle
-  ** idle; cycle_to_idle intentionally preserves unfinished work now. */
+  /* The owner scan queues the complete TG-private semantic graph. Close its
+  ** table-rescan work before forcing this synthetic cycle idle. */
   for (round = 0; round < 64; round++)
     if (lj_gc2_fixpoint_round(g, L, ~(uint32_t)0))
       break;
@@ -2898,14 +2896,25 @@ static void test_closure(lua_State *L, global_State *g, TGState *tg)
 static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
 {
   TGState extra_tg;
-  lua_State *thread_L, *cur_L;
-  uint64_t thread_roots0, cur_roots0;
-  uint32_t n_threads0;
+  lua_State *thread_L, *cur_L, *registry_L, *ownerless_L, *stale_L, *fail_L;
+  GCtab *thread_tab, *cur_tab, *registry_tab, *ownerless_tab;
+  GCtab *anchor_tab, *stale_tab, *fail_tab;
+  uint64_t thread_roots0, cur_roots0, major_roots0;
+  uint64_t registry_epoch0, ownerless_epoch0, stale_epoch0, fail_epoch0;
+  uint64_t busy0, claims0;
+  uint32_t n_threads0, anchor_idx, registry_stacksize, fail_stacksize;
+  uint32_t round;
+  TGState *old_tg = lj_thr_get_tg();
+  int base = lua_gettop(L);
 
   thread_L = lua_newthread(L);
   assert(thread_L != NULL);
+  lua_newtable(thread_L);
+  thread_tab = tabV(thread_L->top - 1);
   cur_L = lua_newthread(L);
   assert(cur_L != NULL);
+  lua_newtable(cur_L);
+  cur_tab = tabV(cur_L->top - 1);
 
   lj_tg_init_thread(g, &extra_tg, thread_L, 1);
   extra_tg.tid = tg->tid + 6000u;
@@ -2917,9 +2926,55 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   lj_state_owner_rel(thread_L, extra_tg.tid);
   lj_state_owner_rel(cur_L, extra_tg.tid);
 
+  /* A registry-only foreign state is an identity root in the global pass. Its
+  ** stack belongs to extra_tg and is reached only through NEEDSCAN. */
+  registry_L = lua_newthread(L);
+  assert(registry_L != NULL);
+  lua_newtable(registry_L);
+  registry_tab = tabV(registry_L->top - 1);
+  registry_L->tg_hint = &extra_tg;
+  lj_state_owner_rel(registry_L, extra_tg.tid);
+  lj_state_thread_registry_publish(g, registry_L);
+
+  /* Ownerless registry membership still grants identity, not a direct global
+  ** stack scan. Ordinary queued traversal may GCSCAN-claim it later. */
+  ownerless_L = lua_newthread(L);
+  assert(ownerless_L != NULL);
+  lua_newtable(ownerless_L);
+  ownerless_tab = tabV(ownerless_L->top - 1);
+  lj_state_owner_rel(ownerless_L, 0);
+  lj_state_thread_registry_publish(g, ownerless_L);
+
+  stale_L = lua_newthread(L);
+  assert(stale_L != NULL);
+  lua_newtable(stale_L);
+  stale_tab = tabV(stale_L->top - 1);
+  stale_L->tg_hint = tg;
+  lj_state_owner_rel(stale_L, lj_tg_tid_acq(tg));
+
+  /* Keep a validation-failure state off the main stack and outside the global
+  ** registry. It becomes a TG publication only for the failure/rescan check. */
+  fail_L = lua_newthread(L);
+  assert(fail_L != NULL);
+  lua_newtable(fail_L);
+  fail_tab = tabV(fail_L->top - 1);
+  fail_L->tg_hint = &extra_tg;
+  lj_state_owner_rel(fail_L, extra_tg.tid);
+
+  /* Remove all fixture states from the main stack. Their only semantic roots
+  ** are now the explicit TG/registry publications under test. */
+  lua_settop(L, base);
+
+  lua_newtable(L);
+  anchor_tab = tabV(L->top - 1);
+  assert(lj_tg_root_anchor_push(L, &extra_tg, L->top - 1,
+				&anchor_idx) != NULL);
+  lua_pop(L, 1);
+
   lj_gc2_mark_begin(g);
   thread_roots0 = la_load64_acq(&g->gc2.tg_thread_roots);
   cur_roots0 = la_load64_acq(&g->gc2.tg_cur_roots);
+  major_roots0 = gc2_major_root_scans_acq(g);
   /*
   ** mark_begin() is allowed to catch up the main TG registration after library
   ** bootstrap. The auxiliary TG assertion measures only the attach/detach delta
@@ -2928,27 +2983,141 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   n_threads0 = g->gc2.n_threads;
   assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(ownerless_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(anchor_tab)) == 0);
   lj_tg_attach(g, &extra_tg);
   assert(lj_tg_find_owner(g, extra_tg.tid) == &extra_tg);
   assert(g->gc2.n_threads >= n_threads0);
-  lj_gc2_test_scan_roots(g, NULL);
+  /* The once-per-handshake global pass must not inspect auxiliary TG
+  ** publications. Only the TG-owner entry may mark/stamp these states. */
+  registry_epoch0 = lj_state_scan_epoch_acq(registry_L);
+  ownerless_epoch0 = lj_state_scan_epoch_acq(ownerless_L);
+  registry_stacksize = registry_L->stacksize;
+  registry_L->stacksize = 0;  /* Remote identity traversal must not validate it. */
+  lj_gc2_scan_cycle_global_roots(g);
+  assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(thread_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(cur_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(anchor_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_L)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(ownerless_L)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(ownerless_tab)) == 0);
+  assert(lj_state_scan_epoch_acq(registry_L) == registry_epoch0);
+  assert(lj_state_scan_epoch_acq(ownerless_L) == ownerless_epoch0);
+  assert(gc2_major_root_scans_acq(g) == major_roots0 + 1u);
+  assert(la_load64_acq(&g->gc2.tg_thread_roots) == thread_roots0);
+  assert(la_load64_acq(&g->gc2.tg_cur_roots) == cur_roots0);
+
+  /* Drain until the foreign registry identity becomes a tid-addressed handoff.
+  ** stacksize remains poisoned: reaching this bit proves traversal checked
+  ** ownership before any mutable stack geometry. */
+  for (round = 0; round < 64 &&
+       !(lj_obj_gcflags(obj2gco(registry_L)) & LJ_GC_NEEDSCAN); round++) {
+    (void)lj_gc2_flush_ssb(g, tg);
+    (void)lj_gc2_worker_drain(g, 64);
+  }
+  assert(round < 64);
+  assert(lj_obj_gcflags(obj2gco(registry_L)) & LJ_GC_NEEDSCAN);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+  assert(lj_state_scan_epoch_acq(registry_L) == registry_epoch0);
+  registry_L->stacksize = registry_stacksize;
+
+  lj_thr_set_tg(&extra_tg);  /* Model the real owner-side safepoint ACK. */
+  lj_gc2_scan_cycle_owner_tg_roots(g, &extra_tg);
+  lj_thr_set_tg(old_tg);
   assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 1);
-  assert(la_load64_acq(&g->gc2.tg_thread_roots) > thread_roots0);
+  assert(lj_gc2_ismarked(g, obj2gco(thread_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(cur_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(anchor_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 1);
+  assert(lj_state_scan_epoch_acq(thread_L) == g->gc2.cycle);
+  assert(lj_state_scan_epoch_acq(cur_L) == g->gc2.cycle);
+  assert(lj_state_scan_epoch_acq(registry_L) == g->gc2.cycle);
+  assert(la_load64_acq(&g->gc2.tg_thread_roots) == thread_roots0 + 1u);
   assert(la_load64_acq(&g->gc2.tg_cur_roots) == cur_roots0 + 1u);
 
+  /* A stale auxiliary cur_L alias owned by the main TG is an identity root,
+  ** but extra_tg must neither read nor stamp its foreign stack. */
+  extra_tg.cur_L = stale_L;
+  stale_epoch0 = lj_state_scan_epoch_acq(stale_L);
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_scan_cycle_owner_tg_roots(g, &extra_tg);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_ismarked(g, obj2gco(stale_L)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(stale_tab)) == 0);
+  assert(lj_state_scan_epoch_acq(stale_L) == stale_epoch0);
+  extra_tg.cur_L = cur_L;
+
+  /* A same-owner publication whose stack validation transiently fails remains
+  ** an identity root and queues a rescan; it must not silently stamp freshness. */
+  extra_tg.cur_L = fail_L;
+  fail_epoch0 = lj_state_scan_epoch_acq(fail_L);
+  fail_stacksize = fail_L->stacksize;
+  fail_L->stacksize = 0;
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_scan_cycle_owner_tg_roots(g, &extra_tg);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_ismarked(g, obj2gco(fail_L)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(fail_tab)) == 0);
+  assert(lj_state_scan_epoch_acq(fail_L) == fail_epoch0);
+  assert(!lj_gc2_test_ssb_empty(g));
+  fail_L->stacksize = fail_stacksize;
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_scan_cycle_owner_tg_roots(g, &extra_tg);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_ismarked(g, obj2gco(fail_tab)) == 1);
+  assert(lj_state_scan_epoch_acq(fail_L) == g->gc2.cycle);
+  extra_tg.cur_L = cur_L;
+
+  (void)lj_gc2_flush_ssb(g, &extra_tg);
+  flush_and_drain(g, tg);
+  lj_tg_root_anchor_pop(&extra_tg, anchor_idx);
   lj_state_owner_rel(thread_L, 0);
   lj_state_owner_rel(cur_L, 0);
+  lj_state_owner_rel(registry_L, 0);
+  lj_state_owner_rel(stale_L, 0);
   thread_L->tg_hint = tg;
   cur_L->tg_hint = tg;
+  registry_L->tg_hint = tg;
+
+  /* Detach publishes DEAD before some lifecycle wrappers release their state
+  ** owner. A DEAD-but-registered tid is not stale: the collector must requeue
+  ** without validating or CAS-taking the state until release completes. */
   lj_tg_detach(g, &extra_tg);
   assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
+  lj_state_scan_epoch_rel(fail_L, 0);
+  lj_state_scan_handoff_epoch_rel(fail_L, 0);
+  fail_stacksize = fail_L->stacksize;
+  fail_L->stacksize = 0;
+  busy0 = la_load64_acq(&g->gc2.thread_scan_busy);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(fail_L)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  for (round = 0; round < 8 &&
+       la_load64_acq(&g->gc2.thread_scan_busy) == busy0; round++)
+    (void)lj_gc2_worker_drain(g, 1);
+  assert(round < 8);
+  assert(lj_state_owner_acq(fail_L) == extra_tg.tid);
+  assert(lj_state_scan_epoch_acq(fail_L) == 0);
+  fail_L->stacksize = fail_stacksize;
+  lj_state_release(fail_L, extra_tg.tid);
+  claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
+  for (round = 0; round < 64 &&
+       lj_state_scan_epoch_acq(fail_L) != g->gc2.cycle; round++)
+    (void)lj_gc2_worker_drain(g, 64);
+  assert(round < 64);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) > claims0);
+  assert(lj_state_owner_acq(fail_L) == 0);
+  fail_L->tg_hint = tg;
   assert(g->gc2.n_threads <= n_threads0 + 1u);
   assert(lj_tg_reclaim_dead(g) == 1u);
   assert(lj_tg_find_owner(g, extra_tg.tid) != &extra_tg);
   lj_tg_fini_thread(g, &extra_tg);
   lj_gc2_cycle_to_idle(g);
-  lua_pop(L, 2);
+  lua_settop(L, base);
 }
 
 static int gc2_capi_collect_live_values(lua_State *L)
@@ -3259,12 +3428,12 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(lj_gc2_worker_drain(g, 2) == 2u);
   assert(la_load64_acq(&g->gc2.thread_scan_busy) == busy0 + 1u);
-  /* A synthetic owner id has no live TG to acknowledge NEEDSCAN, so GC2 treats
-  ** the suspended state as quiescent and scans it instead of publishing a
-  ** handoff that can never complete.
+  /* A synthetic owner id has no live TG to acknowledge NEEDSCAN. Under the TG
+  ** registry lease GC2 CAS-transfers that exact stale id to GCSCAN, scans the
+  ** quiescent state, then releases it to the ordinary ownerless state.
   */
   assert(la_load64_acq(&g->gc2.thread_scan_requeues) == requeues0);
-  assert(lj_state_owner_acq(busy) == busy_owner);
+  assert(lj_state_owner_acq(busy) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 1);
   assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 1u);
   lj_state_owner_rel(busy, 0);

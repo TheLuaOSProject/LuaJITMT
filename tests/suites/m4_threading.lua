@@ -8,6 +8,13 @@ local with_temp_paths = utils.with_temp_paths
 local compile_and_run_sources = build.compile_and_run_sources
 
 return function(add)
+  local terminal_orphan_libs = {
+    "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+    "-Wl,--wrap=lj_arena_hugetab_transfer"
+  }
+  if jit and jit.os == "Linux" then
+    terminal_orphan_libs[#terminal_orphan_libs + 1] = "-Wl,--wrap=munmap"
+  end
   runtime.add_luajit_script_cases(add, {
     {
       name = "m4_threading_api",
@@ -93,6 +100,25 @@ return function(add)
         }
       },
       message = "M4 threading lifecycle barrier tests passed"
+    },
+    {
+      name = "m4_tg_registry_lease",
+      description = "TG registry SMR reader/reclaimer exclusion fixture",
+      output = "lj_t-tg-registry-lease",
+      cfile = "t-tg-registry-lease.c",
+      opts = { timeout = "20s" },
+      message = "M4 TG registry lease tests passed"
+    },
+    {
+      name = "m4_tg_terminal_orphan",
+      description = "capacity-independent terminal TG allocator drain fixture",
+      output = "lj_t-tg-terminal-orphan",
+      cfile = "t-tg-terminal-orphan.c",
+      opts = {
+        timeout = "20s",
+        libs = terminal_orphan_libs
+      },
+      message = "M4 terminal TG allocator drain tests passed"
     }
   })
 

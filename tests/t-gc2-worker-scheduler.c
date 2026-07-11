@@ -1101,8 +1101,12 @@ static void test_worker_stop_l_delivers_stopreq(lua_State *L, global_State *g,
   assert(gc2_n_workers_acq(g) == 0);
   assert(gc2_worker_thread_acq(g, 0) == NULL);
   assert(la_load32_acq(&g->gc2.hs_pending) == 0);
-  assert(lj_tg_poll_acq(tg) == 0);
+  /* A returned-but-unchecked STOP action retains its one-shot VM dispatch edge
+  ** until an L-aware check consumes it. This fixture deliberately inspects the
+  ** action instead of throwing, so cancel that edge explicitly for teardown. */
+  assert(lj_tg_poll_acq(tg) == 1);
   assert(lj_tg_reqmask_acq(tg) == 0);
+  lj_tg_poll_rel(tg, 0);
   ljt_tg_clear_stopreq(tg);
   assert(lj_gc2_workers_set(g, 2) == 1);
   assert(gc2_n_workers_acq(g) == 2);
@@ -1146,6 +1150,10 @@ static void test_worker_start_l_native_stopreq(lua_State *L, global_State *g,
   assert(gc2_n_workers_acq(g) == 0);
   assert(gc2_worker_thread_acq(g, 0) == NULL);
   assert(la_load32_acq(&worker_start_create_paused) == 0);
+  assert((actions & LJ_GC2_HS_STOPREQ) != 0);
+  assert(lj_tg_poll_acq(tg) == 1);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  lj_tg_poll_rel(tg, 0);
   ljt_tg_clear_stopreq(tg);
   assert(lj_gc2_workers_set(g, 2) == 1);
   assert(gc2_n_workers_acq(g) == 2);

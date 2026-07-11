@@ -1355,6 +1355,7 @@ typedef struct GC2State {
 	  uint64_t remembered_filtered;  /* Remembered pairs rejected by age filter. */
 	  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
 	  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
+	  uint32_t mark_root_scanned;  /* MARK close owner/global snapshot state. */
 	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
 	  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   GC2SSBNode *ssb_drain;  /* Worker-private detached remainder. */
@@ -1373,6 +1374,7 @@ typedef struct GC2State {
   uint64_t weak_complete_progress;  /* Worker progress during P_WEAK finish. */
   uint64_t weak_to_sweep;  /* WEAK-to-SWEEP phase publications. */
   uint32_t sweep_bridge_ready;  /* Root sweep reached close boundary. */
+  uint32_t sweep_root_scanned;  /* Mandatory SWEEP owner/global snapshot done. */
   GCRef *sweep_root_cursor;  /* Bounded old-generation root-prune link. */
   uint32_t sweep_root_done;  /* Final pending-root flush reached EOF. */
   uint32_t sweep_grace_needed;  /* Quarantine awaits another HS epoch. */
@@ -1413,6 +1415,7 @@ typedef struct GC2State {
   uint32_t worker_started;  /* Workers that have entered their loops. */
   uint32_t worker_exited;  /* Workers that have left their loops. */
   uint32_t worker_active;  /* Single sweep/worker/close owner token. */
+  uint32_t mark_close_intent;  /* Fair MARK fixpoint/transition contender. */
   uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
   uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
   uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */
@@ -2568,6 +2571,31 @@ LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_pushed, grey_pushed)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_drained, grey_drained)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_marks_this_round, marks_this_round)
 
+static LJ_AINLINE uint32_t gc2_mark_root_scanned_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.mark_root_scanned);
+}
+
+static LJ_AINLINE void gc2_mark_root_scanned_store_rlx(global_State *g,
+						uint32_t scanned)
+{
+  la_store32_rlx(&g->gc2.mark_root_scanned, scanned);
+}
+
+static LJ_AINLINE void gc2_mark_root_scanned_rel(global_State *g,
+						 uint32_t scanned)
+{
+  la_store32_rel(&g->gc2.mark_root_scanned, scanned);
+}
+
+static LJ_AINLINE int gc2_mark_root_scanned_cas(global_State *g,
+						uint32_t *oldp,
+						uint32_t scanned)
+{
+  return la_cas32(&g->gc2.mark_root_scanned, oldp, scanned,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE void *gc2_small_arena_tab_acq(global_State *g)
 {
   return la_loadptr_acq((void *const *)&g->gc2.small_arena_tab);
@@ -2928,6 +2956,23 @@ static LJ_AINLINE void gc2_sweep_bridge_ready_rel(global_State *g,
 						  uint32_t ready)
 {
   la_store32_rel(&g->gc2.sweep_bridge_ready, ready);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_root_scanned_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_root_scanned);
+}
+
+static LJ_AINLINE void gc2_sweep_root_scanned_store_rlx(global_State *g,
+						 uint32_t scanned)
+{
+  la_store32_rlx(&g->gc2.sweep_root_scanned, scanned);
+}
+
+static LJ_AINLINE void gc2_sweep_root_scanned_rel(global_State *g,
+						  uint32_t scanned)
+{
+  la_store32_rel(&g->gc2.sweep_root_scanned, scanned);
 }
 
 static LJ_AINLINE GCRef *gc2_sweep_root_cursor_acq(global_State *g)
@@ -4106,6 +4151,30 @@ static LJ_AINLINE int gc2_worker_active_cas(global_State *g, uint32_t *oldp,
 					    uint32_t active)
 {
   return la_cas32(&g->gc2.worker_active, oldp, active, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_mark_close_intent_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.mark_close_intent);
+}
+
+static LJ_AINLINE void gc2_mark_close_intent_store_rlx(global_State *g,
+						uint32_t owner)
+{
+  la_store32_rlx(&g->gc2.mark_close_intent, owner);
+}
+
+static LJ_AINLINE void gc2_mark_close_intent_rel(global_State *g,
+					  uint32_t owner)
+{
+  la_store32_rel(&g->gc2.mark_close_intent, owner);
+}
+
+static LJ_AINLINE int gc2_mark_close_intent_cas(global_State *g,
+					 uint32_t *oldp, uint32_t owner)
+{
+  return la_cas32(&g->gc2.mark_close_intent, oldp, owner,
+		  LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE uint32_t gc2_gcpause_pct_acq(global_State *g)

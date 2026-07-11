@@ -158,6 +158,7 @@ enum {
 #define LJ_GC2_HS_FLUSHJ		0x00000200u
 #define LJ_GC2_HS_STOPREQ		0x00000400u
 #define LJ_GC2_HS_RESTORE_ALLOC		0x00000800u
+#define LJ_GC2_HS_SCAN_OWNER_ROOTS	0x00001000u
 
 #define LJ_GC2_ACCT_FLUSH		32768u
 /*
@@ -176,6 +177,7 @@ enum {
 #define LJ_GC2_SWEEP_BATCH		64u
 #define LJ_GC2_GRACE_EPOCHS		2u
 #define LJ_GC2_ROOT_SCAN_LIMIT		1000000u
+#define LJ_GC2_ROOT_RETRY_ROUNDS	8u
 #define LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT	80u
 
 LJ_FUNC void lj_gc2_init(global_State *g);
@@ -240,11 +242,13 @@ static LJ_AINLINE int lj_gc2_jit_reclaim_context_acq(global_State *g)
 LJ_FUNC void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s);
 LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_scan_cycle_global_roots(global_State *g);
+LJ_FUNC void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_scan_cycle_owner_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_trace_sweep_roots(global_State *g);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_flush_ssb_detach(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_workers_count(global_State *g);
+LJ_FUNC uint32_t lj_gc2_terminal_reclaim_tgs(global_State *g);
 LJ_FUNC int lj_gc2_workers_set(global_State *g, uint32_t n);
 LJ_FUNC void lj_gc2_sweep_publish_wake(global_State *g);
 LJ_FUNC int lj_gc2_workers_set_l(lua_State *L, uint32_t n,

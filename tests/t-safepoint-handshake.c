@@ -103,9 +103,51 @@ static int publish_stopreq_c(lua_State *L)
   return 0;
 }
 
+static int tg_only_stopreq_edge_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  uint32_t actions;
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  lj_native_enter(tg);
+  actions = lj_native_leave_tg(tg);
+  assert(actions == LJ_GC2_HS_STOPREQ);
+  assert(g->gc2.hs_pending == 0 && tg->reqmask == 0 && tg->poll == 1);
+  /* Deliberately discard one L-aware acknowledgement. The synthetic edge must
+  ** remain armed, so the following checked acknowledgement still throws. */
+  (void)lj_safepoint_ack(L);
+  assert(tg->poll == 1);
+  (void)lj_safepoint_ack_check(L);
+  assert(0);  /* The checked edge above must throw. */
+  return 0;
+}
+
 static int publish_global_stopreq_c(lua_State *L)
 {
   assert(lj_safepoint_handshake(G(L), LJ_GC2_HS_STOPREQ) >= 1u);
+  return 0;
+}
+
+static int publish_peer_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint8_t flags;
+  assert(tg != NULL);
+  assert(lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ) >= 1u);
+  /* These cases target a blocked peer, not the publishing Lua state. Cancel
+  ** the publisher's synthetic STOP edge before returning to VM dispatch while
+  ** leaving every peer's independently acknowledged edge intact. */
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  flags = la_load8_acq(&tg->tg_flags);
+  assert((flags & (TGF_STOPREQ|TGF_STOPREQ_FRESH)) ==
+	 (TGF_STOPREQ|TGF_STOPREQ_FRESH));
+  (void)lj_tg_flags_and_rlx(tg,
+	(uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+  lj_tg_poll_rel(tg, 0);
   return 0;
 }
 
@@ -580,6 +622,35 @@ static int assert_no_stopreq_c(lua_State *L)
   return 0;
 }
 
+static void test_owner_only_root_handshake(lua_State *L, global_State *g,
+					   TGState *tg)
+{
+  uint64_t major0, minor0, owner0;
+  uint32_t cycle;
+  assert(L != NULL && g != NULL && tg != NULL);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  cycle = gc2_cycle_acq(g);
+  major0 = gc2_major_root_scans_acq(g);
+  minor0 = gc2_minor_root_scans_acq(g);
+  owner0 = gc2_tg_thread_roots_acq(g);
+  /* Force an observable owner-stack stamp. The owner-only action must service
+  ** that private root without repeating the already-latched process-global
+  ** snapshot used by MARK close. */
+  lj_state_scan_epoch_rel(L, 0);
+  assert(lj_gc2_handshake(g,
+	LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) >= 1u);
+  assert(gc2_hs_actions_acq(g) ==
+	 (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB));
+  assert(lj_state_scan_epoch_acq(L) == cycle);
+  assert(gc2_tg_thread_roots_acq(g) > owner0);
+  assert(gc2_major_root_scans_acq(g) == major0);
+  assert(gc2_minor_root_scans_acq(g) == minor0);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+}
+
 #if LJ_HASFFI
 static global_State *ffi_stopreq_g;
 static TGState *ffi_stopreq_tg;
@@ -723,8 +794,12 @@ int main(void)
   lua_setglobal(L, "publish_alloc_white");
   lua_pushcfunction(L, publish_stopreq_c);
   lua_setglobal(L, "publish_stopreq");
+  lua_pushcfunction(L, tg_only_stopreq_edge_c);
+  lua_setglobal(L, "tg_only_stopreq_edge");
   lua_pushcfunction(L, publish_global_stopreq_c);
   lua_setglobal(L, "publish_global_stopreq");
+  lua_pushcfunction(L, publish_peer_stopreq_c);
+  lua_setglobal(L, "publish_peer_stopreq");
   lua_pushcfunction(L, mark_sticky_stopreq_c);
   lua_setglobal(L, "mark_sticky_stopreq");
   lua_pushcfunction(L, assert_acked_alloc_white_c);
@@ -747,6 +822,7 @@ int main(void)
   lua_setglobal(L, "start_native_stopreq");
   lua_pushcfunction(L, join_native_stopreq_c);
   lua_setglobal(L, "join_native_stopreq");
+
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -766,6 +842,7 @@ int main(void)
   assert(tg->ssb_base == tg->ssb_node[0].slot);
   assert(tg->ssb_next == tg->ssb_base);
   assert(tg->ssb_end == tg->ssb_base + TG_GC2_SSB_SLOTS);
+  test_owner_only_root_handshake(L, g, tg);
 
   assert_attach_phase(L, g, tg, LJ_GC2_IDLE, 0, 0);
   assert_attach_phase(L, g, tg, LJ_GC2_MARK, 1, 1);
@@ -820,15 +897,17 @@ int main(void)
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.hs_actions == actions);
   assert((tg->tg_flags & TGF_STOPREQ) != 0);
+  lj_tg_poll_rel(tg, 0);
   tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
 
   publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
   assert(lj_safepoint_fresh_stopreq(L, 0, 0));
   assert(g->gc2.hs_pending == 0);
-  assert(tg->poll == 0);
+  assert(tg->poll == 1);  /* Discarded action remains dispatch-visible. */
   assert(tg->reqmask == 0);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   assert((tg->tg_flags & TGF_STOPREQ) != 0);
+  lj_tg_poll_rel(tg, 0);
   tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
 
 #if LJ_HASJIT
@@ -1009,6 +1088,28 @@ int main(void)
 
   assert(lj_gc2_handshake(g, 0) == 0);
 
+  /* A TG-only/native boundary has no lua_State from which STOPREQ can throw.
+  ** It must consume the counted handshake but preserve a synthetic poll until
+  ** the next L-aware acknowledgement observes TGF_STOPREQ_FRESH. */
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  lj_native_enter(tg);
+  actions = lj_native_leave_tg(tg);
+  assert(actions == LJ_GC2_HS_STOPREQ);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->poll == 1);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH));
+  assert(lj_safepoint_ack(L) == LJ_GC2_HS_STOPREQ);
+  assert(tg->poll == 1);  /* Discarded action remains dispatch-visible. */
+  lj_tg_poll_rel(tg, 0);
+  clear_stopreq_c(L);
+  assert_no_stopreq_c(L);
+  assert(luaL_dostring(L,
+    "local ok, err = pcall(tg_only_stopreq_edge)\n"
+    "assert(not ok and tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
+    "clear_stopreq()\n"
+    "assert_no_stopreq()\n") == LUA_OK);
+
   assert(luaL_dostring(L,
     "local p = os.tmpname()\n"
     "local q = p .. '.renamed'\n"
@@ -1162,8 +1263,7 @@ int main(void)
     "    out:send({ok, tostring(err)})\n"
     "  end, m, done)\n"
     "  th.sleep(0.01)\n"
-    "  publish_global_stopreq()\n"
-    "  clear_stopreq()\n"
+    "  publish_peer_stopreq()\n"
     "  local res, rok = done:recv(1)\n"
     "  assert(rok == true, 'mutex lock STOPREQ did not wake before unlock')\n"
     "  assert(res[1] == false)\n"
@@ -1206,8 +1306,7 @@ int main(void)
     "    out:send({ok, tostring(err)})\n"
     "  end, q, done)\n"
     "  th.sleep(0.01)\n"
-    "  publish_global_stopreq()\n"
-    "  clear_stopreq()\n"
+    "  publish_peer_stopreq()\n"
     "  local res, rok = done:recv(1)\n"
     "  assert(rok == true, 'channel recv STOPREQ did not wake')\n"
     "  assert(res[1] == false)\n"
@@ -1225,8 +1324,7 @@ int main(void)
     "    out:send({ok, tostring(err)})\n"
     "  end, q, done)\n"
     "  th.sleep(0.01)\n"
-    "  publish_global_stopreq()\n"
-    "  clear_stopreq()\n"
+    "  publish_peer_stopreq()\n"
     "  local res, rok = done:recv(1)\n"
     "  assert(rok == true, 'channel send STOPREQ did not wake')\n"
     "  assert(res[1] == false)\n"

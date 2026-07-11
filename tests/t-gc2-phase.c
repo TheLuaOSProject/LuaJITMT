@@ -98,6 +98,16 @@ static void *release_assist_active(void *arg)
   return NULL;
 }
 
+static void *release_assist_worker_active(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  peer_release_wait_native(rel);
+  gc2_assist_active_rel(rel->g, 0);
+  gc2_worker_active_rel(rel->g, 0);
+  la_futex_wake(&rel->g->gc2.worker_active, 0x7fffffff);
+  return NULL;
+}
+
 static void *finalizer_enqueue_worker(void *arg)
 {
   FinalizerProducer *fp = (FinalizerProducer *)arg;
@@ -522,7 +532,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   GCtab *parent, *child;
   PeerRelease rel;
   pthread_t thread;
-  uint64_t runs0, hits0, waits0;
+  uint64_t runs0, hits0, waits0, roots0;
 
   lua_settop(L, 0);
   lua_newtable(L);
@@ -550,13 +560,20 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   runs0 = gc2_mark_complete_runs_acq(g);
   hits0 = gc2_mark_complete_hits_acq(g);
   waits0 = gc2_mark_complete_peer_waits_acq(g);
+  roots0 = gc2_major_root_scans_acq(g);
   assert(pthread_create(&thread, NULL, release_worker_active, &rel) == 0);
   /* All userdata is now an ordinary traversable GC2 object, so the full root
   ** graph can legitimately need more than two bounded closure rounds. */
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 0);
   assert(pthread_join(thread, NULL) == 0);
   assert(gc2_worker_active_acq(g) == 0);
+  assert(gc2_major_root_scans_acq(g) == roots0);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
+  assert(gc2_mark_close_intent_acq(g) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  /* One fair close owns the worker token and root fixpoint. It may need several
+  ** bounded rounds, but cannot multiply snapshots across millions of retries. */
+  assert(gc2_major_root_scans_acq(g) - roots0 <= 64u);
   assert(gc2_mark_complete_runs_acq(g) == runs0 + 2u);
   assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
   assert(gc2_mark_complete_peer_waits_acq(g) > waits0);
@@ -595,6 +612,7 @@ static void test_mark_complete_waits_for_assist(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
 
   gc2_assist_active_rel(g, 1);
+  gc2_worker_active_rel(g, 1);
   rel.g = g;
   rel.wait_tg = tg;
   rel.delay_ns = 20000000L;
@@ -602,11 +620,15 @@ static void test_mark_complete_waits_for_assist(lua_State *L, global_State *g,
   runs0 = gc2_mark_complete_runs_acq(g);
   hits0 = gc2_mark_complete_hits_acq(g);
   waits0 = gc2_mark_complete_peer_waits_acq(g);
-  assert(pthread_create(&thread, NULL, release_assist_active, &rel) == 0);
+  assert(pthread_create(&thread, NULL,
+		       release_assist_worker_active, &rel) == 0);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 0);
   assert(pthread_join(thread, NULL) == 0);
   assert(gc2_assist_active_acq(g) == 0);
+  assert(gc2_worker_active_acq(g) == 0);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
+  assert(gc2_mark_close_intent_acq(g) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
   assert(gc2_mark_complete_runs_acq(g) == runs0 + 2u);
   assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
   assert(gc2_mark_complete_peer_waits_acq(g) > waits0);

@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -246,6 +247,61 @@ int main(void)
   assert(src.h == NULL);
   assert(dst.h == NULL);
 
-  printf("t-arena-hugetab OK: insert lookup mark live delete tombstone full\n");
+  /* A dead-owner transfer is transactional per entry even when the source
+  ** carries abandoned BUSY/FREEING state and dst fills partway through. The
+  ** moved prefix must be destination-only and the unmoved suffix source-only;
+  ** physically freeing the moved mapping before terminal source destruction
+  ** must neither dereference it nor attempt a second unmap. */
+  assert(lj_arena_hugetab_init(&src, 2) == 1);
+  assert(lj_arena_hugetab_init(&dst, 0) == 1);
+  ptrs[0] = lj_arena_huge_map(&rs, LJ_HUGE_THRESHOLD + 501u, 0);
+  ptrs[1] = lj_arena_huge_map(&rs, LJ_HUGE_THRESHOLD + 502u, 0);
+  assert(ptrs[0] != NULL && ptrs[1] != NULL);
+  lj_arena_owner_rel(lj_arena_of(ptrs[0]), 0x1111u);
+  lj_arena_owner_rel(lj_arena_of(ptrs[1]), 0x1111u);
+  assert(lj_arena_hugetab_insert(&src, ptrs[0],
+	LJ_HUGE_THRESHOLD + 501u, LJ_HUGEF_BUSY) == 1);
+  assert(lj_arena_hugetab_insert(&src, ptrs[1],
+	LJ_HUGE_THRESHOLD + 502u, LJ_HUGEF_FREEING|LJ_HUGEF_BUSY) == 1);
+  assert(lj_arena_hugetab_transfer(&dst, &src, 0x2222u) == 0);
+  {
+    int s0 = lj_arena_hugetab_lookup(&src, ptrs[0], NULL);
+    int d0 = lj_arena_hugetab_lookup(&dst, ptrs[0], NULL);
+    int s1 = lj_arena_hugetab_lookup(&src, ptrs[1], NULL);
+    int d1 = lj_arena_hugetab_lookup(&dst, ptrs[1], NULL);
+    void *moved = d0 ? ptrs[0] : ptrs[1];
+    assert((s0 != 0) != (d0 != 0));
+    assert((s1 != 0) != (d1 != 0));
+    assert((d0 != 0) + (d1 != 0) == 1);
+    assert(lj_arena_owner_acq(lj_arena_of(moved)) == 0x2222u);
+    assert(lj_arena_hugetab_forget_terminal(&dst, moved, &hi) == 1);
+    lj_arena_huge_unmap(moved, hi.size);
+  }
+  errno = EDOM;
+  assert(lj_arena_hugetab_fini_all(&src) == 1u);
+  assert(errno == EDOM);
+  assert(src.h == NULL);
+  errno = ERANGE;
+  assert(lj_arena_hugetab_fini_all(&dst) == 0u);
+  assert(errno == ERANGE);
+  assert(dst.h == NULL);
+
+  /* Functional terminal forget excludes a still-live mapping even when its
+  ** slot has a state which ordinary delete must refuse (the GG close path uses
+  ** this before retaining GG's final manual unmap). */
+  assert(lj_arena_hugetab_init(&src, 1) == 1);
+  ptrs[2] = lj_arena_huge_map(&rs, LJ_HUGE_THRESHOLD + 503u, 0);
+  assert(ptrs[2] != NULL);
+  assert(lj_arena_hugetab_insert(&src, ptrs[2],
+	LJ_HUGE_THRESHOLD + 503u, LJ_HUGEF_BUSY|LJ_HUGEF_FREEING) == 1);
+  assert(lj_arena_hugetab_forget_terminal(&src, ptrs[2], &hi) == 1);
+  check_info(&hi, LJ_HUGE_THRESHOLD + 503u,
+	     LJ_HUGEF_BUSY|LJ_HUGEF_FREEING);
+  assert(lj_arena_hugetab_lookup(&src, ptrs[2], NULL) == 0);
+  lj_arena_huge_unmap(ptrs[2], hi.size);
+  assert(lj_arena_hugetab_fini_all(&src) == 0u);
+
+  printf("t-arena-hugetab OK: insert lookup mark live delete tombstone full "
+	 "terminal\n");
   return 0;
 }

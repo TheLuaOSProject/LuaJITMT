@@ -681,6 +681,83 @@ void lj_arena_hugetab_fini(HugeTab *ht)
   errno = olderr;
 }
 
+uint32_t lj_arena_hugetab_fini_all(HugeTab *ht)
+{
+  int olderr = errno;
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint32_t i, cap, unmapped = 0;
+  if (!h)
+    return 0;
+  /* Terminal single-owner destruction. Ordinary fini deliberately releases
+  ** only the side table because live mappings may already have transferred to
+  ** another allocator. Here every slot is detached first and a mapping is
+  ** unmapped exactly once. Dead-allocator transfer transactionally tombstones
+  ** each source slot before changing the mapping header owner, so a later
+  ** destination-capacity failure leaves every moved prefix destination-only
+  ** and every unmoved suffix source-only. Thus this table is authoritative and
+  ** no possibly stale mapping header need be sampled here. BUSY/FREEING/
+  ** RETIRED are runtime arbitration states; after freeall and the terminal
+  ** registry grace there is no actor left to complete them, so the full-slot
+  ** CAS supersedes all of them. */
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    LJHugeEnt *e = &h->ent[i];
+    for (;;) {
+      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t meta;
+      la_u128 exp, des;
+      if (addr <= LJ_HUGETAB_TOMBSTONE)
+	break;
+      meta = la_load64_acq(&e->slot.hi);
+      if (la_load64_acq(&e->slot.lo) != addr)
+	continue;
+      exp.lo = addr;
+      exp.hi = meta;
+      des.lo = LJ_HUGETAB_TOMBSTONE;
+      des.hi = 0;
+      if (!la_cas128(&e->slot, &exp, des))
+	continue;
+      {
+	size_t size = (size_t)(meta >> LJ_HUGETAB_META_SHIFT);
+	lj_arena_huge_unmap((void *)(uintptr_t)addr, size);
+	unmapped++;
+      }
+      break;
+    }
+  }
+  lj_arena_hugetab_fini(ht);
+  errno = olderr;
+  return unmapped;
+}
+
+int lj_arena_hugetab_forget_terminal(HugeTab *ht, const void *p,
+				      LJHugeInfo *hi)
+{
+  int olderr = errno;
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t addr, meta;
+  LJHugeEnt *e;
+  if (!h || !p)
+    return 0;
+  addr = (uint64_t)(uintptr_t)p;
+  for (;;) {
+    la_u128 exp, des;
+    if (!hugetab_search(h, addr, &e, &meta)) {
+      errno = olderr;
+      return 0;
+    }
+    exp.lo = addr;
+    exp.hi = meta;
+    des.lo = LJ_HUGETAB_TOMBSTONE;
+    des.hi = 0;
+    if (la_cas128(&e->slot, &exp, des)) {
+      hugetab_decode(meta, hi);
+      errno = olderr;
+      return 1;
+    }
+  }
+}
+
 int lj_arena_hugetab_insert(HugeTab *ht, void *p, size_t size,
 			    uint32_t hflags)
 {
@@ -1355,9 +1432,25 @@ int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src, uint32_t owner_tid)
 	int inserted = lj_arena_hugetab_insert(dst, p, size, hflags);
 	if (inserted < 0)
 	  return 0;
+	if (inserted == 0) {
+	  LJHugeInfo existing;
+	  if (lj_arena_hugetab_lookup(dst, p, &existing) != 1 ||
+	      existing.size != size || existing.flags != hflags)
+	    return 0;
+	}
+	/* The source owner is dead and the surrounding TG writer gate has proved
+	** quiescence. Make each entry transfer transactional even if an abandoned
+	** BUSY/FREEING state would make the ordinary delete refuse: destination
+	** insert/confirm, exact source tombstone, then and only then publish the new
+	** header owner. A later capacity failure can never leave a stale source
+	** duplicate pointing at a mapping which the destination may unmap. */
+	if (!lj_arena_hugetab_forget_terminal(src, p, NULL)) {
+	  if (inserted > 0 &&
+	      !lj_arena_hugetab_forget_terminal(dst, p, NULL))
+	    abort();  /* Never return while leaving a new duplicate behind. */
+	  return 0;
+	}
 	lj_arena_owner_rel(lj_arena_of(p), owner_tid);
-	if (inserted >= 0)
-	  (void)lj_arena_hugetab_delete(src, p, NULL);
       }
     }
   }

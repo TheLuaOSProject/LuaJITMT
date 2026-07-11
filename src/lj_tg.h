@@ -47,6 +47,10 @@ typedef uint16_t HotCount;
 #define TG_GC2_SSB_REMEMBERED_SHIFT 1u
 #define TG_ROOT_ANCHOR_SLOTS	16u
 
+#define TG_FINI_LIVE		0u
+#define TG_FINI_BUSY		1u
+#define TG_FINI_DONE		2u
+
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
 typedef struct TGRootAnchorBlock TGRootAnchorBlock;
@@ -97,6 +101,7 @@ struct TGState {
   uint8_t gc_assist;
   uint8_t hookmask_th;
   uint8_t tg_flags;
+  uint8_t fini_state;  /* Physical allocator finalization ownership. */
   uint32_t reqmask;
   uint64_t hs_epoch_ack;
   TGAlloc alloc;
@@ -378,6 +383,28 @@ static LJ_AINLINE int lj_tg_flags_test_acq(const TGState *tg, uint8_t flags)
 static LJ_AINLINE int lj_tg_flags_all_acq(const TGState *tg, uint8_t flags)
 {
   return (lj_tg_flags_acq(tg) & flags) == flags;
+}
+
+static LJ_AINLINE uint8_t lj_tg_fini_state_acq(const TGState *tg)
+{
+  return la_load8_acq(&tg->fini_state);
+}
+
+static LJ_AINLINE void lj_tg_fini_state_store_rlx(TGState *tg,
+						   uint8_t state)
+{
+  la_store8_rlx(&tg->fini_state, state);
+}
+
+static LJ_AINLINE void lj_tg_fini_state_rel(TGState *tg, uint8_t state)
+{
+  la_store8_rel(&tg->fini_state, state);
+}
+
+static LJ_AINLINE int lj_tg_fini_state_cas(TGState *tg, uint8_t *oldp,
+					    uint8_t state)
+{
+  return la_cas8(&tg->fini_state, oldp, state, LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE GC2SSBNode *lj_gc2_ssb_next_acq(const GC2SSBNode *node)
@@ -917,11 +944,12 @@ LJ_FUNC void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
 			       int arena_internal);
 LJ_FUNC void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid);
 LJ_FUNC void lj_tg_fini_ssb(TGState *tg);
-LJ_FUNC void lj_tg_fini_thread(global_State *g, TGState *tg);
+LJ_FUNC int lj_tg_fini_thread(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_attach(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_detach(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_tg_reclaim_dead(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal(global_State *g);
+LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g);
 LJ_FUNC TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid);
 LJ_FUNC TGState *lj_tg_thread_active(global_State *g, lua_State *L);
 LJ_FUNC void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg);

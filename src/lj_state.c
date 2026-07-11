@@ -522,6 +522,14 @@ static void close_state(lua_State *L)
     lj_mem_freevec(g, mref(g->gc.lightudseg, uint32_t), segnum, uint32_t);
   }
 #endif
+  /* This is the final owner-lookup boundary. GC objects, subsystem/GC2 raw
+  ** metadata, per-main/global buffers, the Lua stack and lightud segments are
+  ** all gone, while GG, the main allocator, TG registry and embedded worker-
+  ** retire list remain live. Dead allocators which could not fit a runtime
+  ** hugetab transfer can now be destroyed in place without invalidating a
+  ** subsequent lj_mem_free(). */
+  if (mt_shutdown_acq(g) != 0)
+    (void)lj_gc2_terminal_reclaim_tgs(g);
   if (arena_alloc) {
     /*
     ** Internal arena slabs are released when the arena allocator is destroyed
@@ -543,8 +551,24 @@ static void close_state(lua_State *L)
       alloc = g->main_tg->alloc;
     else
       lj_arena_alloc_init(&alloc);
-    if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB))
-      lj_arena_hugetab_fini(&g->main_tg->huge);
+    if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB)) {
+      LJHugeInfo gghi;
+      /* All subsystem/TG finalizers and owner lookups are complete. Destroy
+      ** any residual main-owner huge mapping before the side table itself;
+      ** dead source tables were drained first at the final owner-lookup
+      ** boundary above, so
+      ** an old transferred slot can never name an already-unmapped header. */
+      if (lj_arena_hugetab_lookup(&g->main_tg->huge, GG, &gghi) == 1) {
+	/* Boot/adoption configurations may register GG after its direct huge
+	** allocation. Forget (but do not unmap) that exact entry so fini_all
+	** cannot release the state executing this code; the manual unmap below
+	** remains GG's sole physical owner. */
+	if (!gghuge || gghi.size != sizeof(GG_State) ||
+	    !lj_arena_hugetab_forget_terminal(&g->main_tg->huge, GG, NULL))
+	  abort();
+      }
+      (void)lj_arena_hugetab_fini_all(&g->main_tg->huge);
+    }
     lj_arena_alloc_fini(&alloc);
     if (gghuge)
       lj_arena_huge_unmap(GG, sizeof(GG_State));

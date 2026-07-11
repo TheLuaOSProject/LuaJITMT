@@ -100,15 +100,62 @@ static void safepoint_clear_poll(TGState *tg)
   lj_tg_poll_futex_wake(tg, 1);
 }
 
+static void safepoint_restore_counted_poll(TGState *tg)
+{
+  la_fence_seq();
+  /* reqmask is the per-TG counted publication and precedes poll. A bare global
+  ** leader may already have completed this TG's only clear pass, so using it
+  ** here would manufacture an orphan poll after FRESH was consumed. */
+  if (tg && lj_tg_reqmask_acq(tg) != 0) {
+    lj_tg_poll_rel(tg, 1);
+    lj_tg_poll_futex_wake(tg, 1);
+  }
+}
+
+static void safepoint_rearm_fresh_stopreq_poll(TGState *tg)
+{
+  if (!tg || !lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH) ||
+      (lj_tg_load_cur_L(tg) == NULL && lj_tg_load_thread_L(tg) == NULL))
+    return;
+  lj_tg_poll_rel(tg, 1);
+  la_fence_seq();
+  if (!lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+    /* checkstop won between the FRESH snapshot and poll publication. Remove
+    ** the orphan synthetic edge, then repair any newer counted request. */
+    safepoint_clear_poll(tg);
+    safepoint_restore_counted_poll(tg);
+    return;
+  }
+  lj_tg_poll_futex_wake(tg, 1);
+}
+
+static void safepoint_consume_fresh_stopreq_poll(TGState *tg)
+{
+  if (!tg)
+    return;
+  /* FRESH is the consume LP. A concurrent rearm which observed the old value
+  ** must detect its disappearance after publishing poll and remove that edge. */
+  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ_FRESH);
+  if (lj_tg_poll_acq(tg) == 0)
+    return;
+  safepoint_clear_poll(tg);
+  /* A new leader can publish between the poll snapshot and clear. Do not let
+  ** consuming the uncounted STOPREQ edge erase its counted signal. */
+  safepoint_restore_counted_poll(tg);
+}
+
 static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
 {
-  /* Trace flush boundaries mutate trace slots and patched bytecode after all
-  ** TGs have acknowledged. Keep acknowledged TGs from re-entering trace
-  ** dispatch while the leader is between the grace boundary and that retire
-  ** action. Epochs without a live leader cannot complete that consumed-poll
-  ** phase, so they clear at acknowledgement like ordinary safepoints.
+  /* These boundaries inspect or rotate owner-private state and may keep using
+  ** process-global state after the individual TG acknowledgement. Keep a
+  ** native-to-Lua reentry parked until the leader completes the matching root,
+  ** SSB, allocator, or trace boundary. Epochs without a live leader cannot
+  ** complete that consumed-poll phase, so they clear at acknowledgement.
   */
-  return (actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
+  return (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS|
+		     LJ_GC2_HS_FLUSH_SSB|
+		     LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC|
+		     LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
 	 gc2_hs_leader_acq(g) != 0;
 }
 
@@ -123,6 +170,22 @@ static void safepoint_clear_consumed_polls(global_State *g, uint64_t epoch)
     if (lj_tg_hs_epoch_ack_acq(tg) == epoch &&
 	lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) != 0)
       safepoint_clear_poll(tg);
+  }
+}
+
+static void safepoint_rearm_fresh_stopreq_polls(global_State *g)
+{
+  TGState *tg;
+  /* Run only after leader_leave. First clear every consumed hold above so a
+  ** combined STOPREQ|root/SSB/allocator request cannot deadlock its waiter;
+  ** this second pass creates a distinct, uncounted VM-dispatch edge. */
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+	!lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH) ||
+	lj_tg_reqmask_acq(tg) != 0 ||
+	(lj_tg_load_cur_L(tg) == NULL && lj_tg_load_thread_L(tg) == NULL))
+      continue;
+    safepoint_rearm_fresh_stopreq_poll(tg);
   }
 }
 
@@ -148,11 +211,13 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     lj_tg_alloc_black_rel(tg, 1);
   if (actions & LJ_GC2_HS_ALLOC_WHITE)
     lj_tg_alloc_black_rel(tg, 0);
-  if (actions & LJ_GC2_HS_SCAN_ROOTS) {
-    lua_State *L = lj_tg_load_cur_L(tg);
-    /* Each TG owns only its stack snapshot. The handshake leader scans the
-    ** process-global root set once after all owner acknowledgements. */
-    lj_gc2_scan_cycle_owner_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
+  if (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) {
+    /* Each stopped TG publishes its complete private root set. Passing the TG
+    ** directly is essential: cur_L may be NULL, may differ from thread_L, and
+    ** must not be used to rediscover the owner tid for NEEDSCAN handoffs. A
+    ** full SCAN_ROOTS epoch adds the once-per-snapshot global pass below;
+    ** SCAN_OWNER_ROOTS intentionally services only an existing owner handoff. */
+    lj_gc2_scan_cycle_owner_tg_roots(g, tg);  /* 05 section 5.7.1/5.7.2. */
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB) {
     /*
@@ -221,6 +286,16 @@ retry:
     if (lj_tg_poll_acq(tg) != 0) {
       if (lj_tg_reqmask_acq(tg) != 0)
 	goto retry;
+      /* Uncounted poll re-armed by a remote/TG-only STOPREQ ACK. Once the
+      ** producing leader has left, consume the wake edge and return the action
+      ** so an L-aware ack/check boundary throws from TGF_STOPREQ_FRESH. */
+      if (wait_consumed && gc2_hs_leader_acq(g) == 0 &&
+	  lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+	/* Keep the uncounted edge armed until lj_safepoint_checkstop consumes
+	** TGF_STOPREQ_FRESH. A caller which ignores the returned mask must not
+	** silently lose the VM interrupt. */
+	return LJ_GC2_HS_STOPREQ;
+      }
       /* Remote leader acks do not resume this TG's VM, so they must not
       ** block behind another leader's already-consumed poll bit. */
       if (wait_consumed &&
@@ -267,6 +342,12 @@ retry:
     if (hold && wait_consumed &&
 	safepoint_wait_consumed_ack(tg, actions))
       goto retry;
+  }
+  if (wait_consumed && (actions & LJ_GC2_HS_STOPREQ) &&
+      (lj_tg_load_cur_L(tg) != NULL || lj_tg_load_thread_L(tg) != NULL)) {
+    /* L-aware and TG-only owner ACKs retain a one-shot dispatch edge until
+    ** checkstop throws. Remote ACKs use the post-leader registry rearm pass. */
+    safepoint_rearm_fresh_stopreq_poll(tg);
   }
   return actions;
 }
@@ -330,6 +411,18 @@ uint32_t lj_safepoint_poll(lua_State *L)
   return lj_safepoint_ack(L);
 }
 
+uint32_t lj_safepoint_poll_tg(TGState *tg)
+{
+  if (!tg || !tg->gl)
+    return 0;
+  if (lj_tg_poll_acq(tg) == 0 && lj_tg_reqmask_acq(tg) == 0)
+    return 0;
+  /* Worker/no-Lua-stack TGs still own private allocator and SSB state. They
+  ** therefore participate at the same consumed-poll boundary instead of
+  ** silently resuming after a remote native acknowledgement. */
+  return safepoint_ack_tg(tg->gl, tg, 1, 1);
+}
+
 void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
 {
   TGState *tg;
@@ -344,8 +437,15 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
   */
   if ((actions & LJ_GC2_HS_STOPREQ) ||
       (tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH))) {
-    if (tg)
-      (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ_FRESH);
+    if (tg) {
+      LJOSerrState oserr;
+      lj_oserr_save(&oserr);
+      /* Consume only the synthetic uncounted edge. A new handshake can publish
+      ** between the first poll load and clear; fence and recheck its counted
+      ** reqmask/leader publication, then restore poll before throwing. */
+      safepoint_consume_fresh_stopreq_poll(tg);
+      lj_oserr_restore(&oserr);
+    }
     lj_err_callermsg(L, "thread interrupted: VM shutdown");
   }
 }
@@ -399,13 +499,37 @@ uint32_t lj_native_leave(lua_State *L)
     return 0;
   depth = lj_tg_in_native_acq(tg);
   if (depth == 1) {
-    uint32_t actions = lj_safepoint_poll(L);
-    (void)lj_tg_in_native_dec_rel(tg);
-    return actions;
+    /* Close the remotely readable native snapshot before checking for work.
+    ** If a remote ACK consumed poll first, the consumed-poll gate keeps this
+    ** owner here until that scan completes. If this store wins, the leader
+    ** cannot start a new remote-private scan and leaves the request for this
+    ** owner-side poll. No Lua/TG-private mutation is permitted between them. */
+    lj_tg_in_native_rel(tg, 0);
+    /* Paired with the post-signal fence in safepoint_signal_late(): the owner
+    ** cannot miss poll while the leader misses this native-state close. */
+    la_fence_seq();
+    return lj_safepoint_poll(L);
   }
   if (lj_tg_in_native_dec_rel(tg) != 0)
     return 0;
   return lj_safepoint_poll(L);
+}
+
+uint32_t lj_native_leave_tg(TGState *tg)
+{
+  uint32_t depth;
+  if (!tg)
+    return 0;
+  depth = lj_tg_in_native_acq(tg);
+  if (depth == 0)
+    return 0;
+  if (depth > 1) {
+    (void)lj_tg_in_native_dec_rel(tg);
+    return 0;
+  }
+  lj_tg_in_native_rel(tg, 0);
+  la_fence_seq();  /* Pair with post-signal fence before remote native load. */
+  return lj_safepoint_poll_tg(tg);
 }
 
 uint32_t lj_native_leave_l(lua_State *L, LJNativeFrame *frame)
@@ -442,6 +566,11 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
     ** the TG for this epoch; the waiter will see reqmask and retry.
     */
     lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
+    /* Paired with the native owner close->poll fence. This is the Dekker edge
+    ** which forbids both sides observing the old value: either the owner sees
+    ** the request and acknowledges itself, or the leader observes native and
+    ** completes the remote snapshot before clearing the consumed poll. */
+    la_fence_seq();
     lj_tg_poll_futex_wake(tg, 1);
     if (lj_safepoint_retire_dead_tg(g, tg) && signaled != 0)
       signaled--;
@@ -451,11 +580,12 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
 
 static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
 {
-  /* GC2 root scans may remotely acknowledge native-suspended Lua stacks. That
-  ** acknowledgement is only the handshake boundary: GC2 leaves NEEDSCAN pending
-  ** when a raw remote/native stack sample cannot authoritatively decode the
-  ** owner-private frame chain. Trace-flush actions below are different: they can
-  ** retire trace slots or mcode that an active trace/native exit still needs.
+  /* A sanctioned native-to-Lua reentry clears in_native with release ordering
+  ** and polls before changing the Lua stack, C frame, root anchors, SSB or
+  ** allocator. If a remote acknowledgement consumed the request first, its
+  ** poll remains set through leader completion and the reentry waits for it.
+  ** Thus a still-native TG is a stable owner-private snapshot for root/SSB and
+  ** allocator boundary actions. Trace retirement has the extra JIT gate below.
   */
 #if LJ_HASJIT
   /* Trace entry publishes jit_base before it loads a trace body/mcode pointer,
@@ -484,10 +614,10 @@ static void safepoint_ack_native(global_State *g, uint32_t actions)
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (tg == self)
-      safepoint_ack_tg(g, tg, 0, 0);  /* Leader owns this synthetic ack. */
+      (void)safepoint_ack_tg(g, tg, 0, 0);
     else if (lj_tg_in_native_acq(tg) &&
 	     safepoint_native_ack_allowed(tg, actions))
-      safepoint_ack_tg(g, tg, 0, 0);  /* 05 section 5.4.3 remote native ack. */
+      (void)safepoint_ack_tg(g, tg, 0, 0);
   }
 }
 
@@ -567,10 +697,15 @@ static uint32_t safepoint_leader_enter(global_State *g)
     uint32_t expect = 0;
     if (gc2_hs_leader_cas(g, &expect, id))
       return id;
-    /* Avoid leader-wait vs ack-wait deadlock while preserving current action
-    ** semantics for native acknowledgements.
-    */
-    safepoint_ack_native(g, gc2_hs_actions_acq(g));
+    /* A contender may help only its exact TLS TG. Remote acknowledgement is
+    ** owned by the active leader after request publication and its full fence;
+    ** helping arbitrary native TGs here could race that fence, or scan the
+    ** leader TG while its self-wait bypass is active. */
+    {
+      TGState *self = lj_thr_get_tg();
+      if (self && self->gl == g)
+	safepoint_ack_tg(g, self, 0, 0);
+    }
     if (expect == 0)
       continue;
     gc2_hs_leader_futex_wait(g, expect, 1000000);
@@ -669,7 +804,13 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
     if (self)
       (void)lj_gc2_flush_ssb(g, self);
   }
+  /* hs_pending==0 does not pin registry nodes. Hold the ordinary tactical
+  ** reader lease across the final list walks and leader handoff; TG reclamation
+  ** is try-only and backs out rather than waiting on this reader. */
+  lj_gc2_smr_read_enter(g);
   safepoint_clear_consumed_polls(g, epoch);
   safepoint_leader_leave(g, leader);
+  safepoint_rearm_fresh_stopreq_polls(g);
+  lj_gc2_smr_read_leave(g);
   return signaled;
 }

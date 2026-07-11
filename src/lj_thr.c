@@ -361,7 +361,7 @@ uint32_t lj_state_owner_wait(lua_State *L, lua_State *target, uint32_t owner,
   if (L) {
     actions = lj_native_leave(L);
   } else if (tg) {
-    (void)lj_tg_in_native_dec_rel(tg);
+    actions = lj_native_leave_tg(tg);
   }
   return actions;
 }
@@ -410,7 +410,7 @@ uint32_t lj_thr_yield(lua_State *L)
   if (L) {
     actions = lj_native_leave(L);
   } else if (tg) {
-    (void)lj_tg_in_native_dec_rel(tg);
+    actions = lj_native_leave_tg(tg);
   }
   return actions;
 }
@@ -446,7 +446,7 @@ uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns)
   if (L) {
     actions = lj_native_leave(L);
   } else if (tg) {
-    (void)lj_tg_in_native_dec_rel(tg);  /* No Lua stack is available to poll. */
+    actions = lj_native_leave_tg(tg);  /* TG-private owner poll, no Lua stack. */
   }
   return actions;
 }

@@ -52,7 +52,7 @@ static void *callback_stopreq_worker(void *arg)
     ctx->err = 2;
   else if (!ljt_tg_has_stopreq(ctx->tg))
     ctx->err = 3;
-  else if (lj_tg_poll_acq(ctx->tg) != 0 ||
+  else if (lj_tg_poll_acq(ctx->tg) != 1 ||
 	   lj_tg_reqmask_acq(ctx->tg) != 0)
     ctx->err = 4;
   la_store32_rel(&ctx->handshook, 1);
@@ -78,7 +78,10 @@ static int callback_fresh_stopreq_call(CallbackStopReqFn cb)
   assert(la_load32_acq(&ctx.handshook) == 1);
   assert(ctx.err == 0);
   assert(ljt_tg_has_stopreq(test_tg));
-  assert(lj_tg_poll_acq(test_tg) == 0);
+  /* Remote native acknowledgement consumed the counted request and retained
+  ** one synthetic reentry edge. The callback bridge must check it before the
+  ** Lua callback can touch its stack. */
+  assert(lj_tg_poll_acq(test_tg) == 1);
   assert(lj_tg_reqmask_acq(test_tg) == 0);
   return cb(41);
 }

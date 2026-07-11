@@ -339,6 +339,9 @@ LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
 LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
 LJ_FUNC int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits);
 LJ_FUNC void lj_arena_hugetab_fini(HugeTab *ht);
+LJ_FUNC uint32_t lj_arena_hugetab_fini_all(HugeTab *ht);
+LJ_FUNC int lj_arena_hugetab_forget_terminal(HugeTab *ht, const void *p,
+					      LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_insert(HugeTab *ht, void *p, size_t size,
 				    uint32_t hflags);
 LJ_FUNC int lj_arena_hugetab_lookup(HugeTab *ht, const void *p,

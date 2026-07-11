@@ -129,12 +129,11 @@ still allocated `LJThr` and worker `TGState` through the main allocator crashed
 at JIT-on iteration 585. This is why the fix covers the complete worker-control
 metadata lifetime rather than only the first corrupt node observed in GDB.
 
-## Remaining allocator-transfer debt
+## Allocator-transfer debt resolved
 
-Runtime dead-TG transfer is still tactical. Each per-TG huge-object table has a
-fixed capacity, and transferring the aggregate live huge mappings into the main
-TG can fail if that destination fills. The ordinary reclaimer must then retain
-the dead TG. Terminal shutdown still needs a post-`freeall` orphan-allocator
-drain which can finalize any such retained allocator without first fitting its
-now-dead mappings into the main table. The planned global/orphan allocator
-ownership design must remove this capacity-dependent lifetime edge.
+Runtime transfer remains opportunistic, but its per-entry transaction now
+prevents partial-prefix source duplicates.  Shutdown has a capacity-independent
+final owner-lookup boundary which destroys retained dead allocators in place,
+then releases unflagged worker TG storage through the embedded retire list.
+The ordering, ownership proof, and forced-capacity regressions are recorded in
+`notes/gc2-terminal-orphan-drain-2026-07-11.md`.

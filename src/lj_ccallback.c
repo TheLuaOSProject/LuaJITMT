@@ -1197,7 +1197,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   uint32_t native_depth;
   uint32_t actions = 0;
   int had_stopreq = 0;
-  void *ffi_call_func;
+  void *ffi_call_func = NULL;
   ccallback_error_save(&err);
   L = ccallback_L_acq(cb);
   g = cts->g;
@@ -1206,6 +1206,22 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
 		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
     abort();
+  native_depth = lj_tg_in_native_acq(tg);
+  if (native_depth != 0) {
+    /* Publish the native-to-Lua transition before any stack/C-frame, JIT,
+    ** callback-blacklist or argument-conversion mutation. A remote native ACK
+    ** that consumed the request first keeps poll set through leader completion,
+    ** so this owner poll cannot return while that ACK still reads private TG
+    ** roots. If this transition wins, the leader leaves the request for this
+    ** owner to acknowledge here. */
+    ffi_call_func = lj_tg_ffi_call_func_acq(tg);
+    had_stopreq = ccallback_had_stopreq(cb);
+    lj_tg_in_native_rel(tg, 0);
+    /* Pair with the leader's post-request fence: callback reentry either owns
+    ** this acknowledgement or waits for the completed remote snapshot. */
+    la_fence_seq();
+    actions = lj_safepoint_poll(L);
+  }
   if (lj_tg_jit_base(g)) {
     lua_CFunction panic;
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_FFI_BADCBACK));
@@ -1220,14 +1236,9 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   cframe_errfunc(cf) = -1;
   cframe_nres(cf) = 0;
   L->cframe = cf;
-  native_depth = lj_tg_in_native_acq(tg);
   if (native_depth != 0) {
-    ffi_call_func = lj_tg_ffi_call_func_acq(tg);
     if (ffi_call_func != NULL)
       lj_ctype_cb_blacklist(L, cts, ffi_call_func);
-    had_stopreq = ccallback_had_stopreq(cb);
-    lj_tg_in_native_store_rlx(tg, 0);
-    actions = lj_safepoint_poll(L);
   }
   callback_conv_args(cts, L, cb, native_depth, auto_detach, &err);
   if (native_depth != 0) {

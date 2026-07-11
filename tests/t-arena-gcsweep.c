@@ -267,6 +267,10 @@ static void test_quarantine_late_live_after_eof(void)
     ;
   assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+  /* This fixture manually publishes READY instead of driving the normal
+  ** bridge helper. Retire the snapshot's completed mark round just as that
+  ** helper does at its READY linearization point. */
+  (void)gc2_marks_this_round_xchg_acqrel(g, 0);
   hs_epoch = gc2_hs_epoch_acq(g);
   assert(hs_epoch != 0);
   la_store64_rel(&a->hdr.retire_epoch, hs_epoch - 1u);
