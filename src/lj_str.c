@@ -140,10 +140,24 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 static uint32_t str_test_id_refills;
 static uint32_t str_test_num_refills;
 static LJStrTestMatchHook str_test_match_hook;
+static LJStrTestCanonHook str_test_canon_hook;
 
 void lj_str_test_set_match_hook(LJStrTestMatchHook hook)
 {
   str_test_match_hook = hook;
+}
+
+void lj_str_test_set_canon_hook(LJStrTestCanonHook hook)
+{
+  str_test_canon_hook = hook;
+}
+
+static LJ_AINLINE void str_test_canon(lua_State *L, GCstr *s,
+				      StrCanonRec *rec, uint32_t stage)
+{
+  LJStrTestCanonHook hook = str_test_canon_hook;
+  if (hook)
+    hook(L, s, rec, stage);
 }
 
 static LJ_AINLINE void str_test_match(lua_State *L, GCRef *link,
@@ -290,6 +304,20 @@ static void strtab_retire(global_State *g, StrTabHdr *hdr)
   strtab_retired_push(g, hdr);
 }
 
+static void strq_retired_push(global_State *g, StrCanonHdr *hdr)
+{
+  StrCanonHdr *head = lj_str_qretired_head_acq(g);
+  do {
+    lj_str_qretired_next_rel(hdr, head);
+  } while (!lj_str_qretired_head_cas(g, &head, hdr));
+}
+
+static void strq_retire(global_State *g, StrCanonHdr *hdr)
+{
+  lj_str_qretire_epoch_rel(hdr, lj_gc2_retire_epoch(g));
+  strq_retired_push(g, hdr);
+}
+
 static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
 {
   MSize state = la_load32_acq(&hdr->resize);
@@ -400,6 +428,84 @@ static int strtab_active_on_hdr_before(global_State *g, StrTabHdr *hdr,
       strtab_active_on_tg_before(g, self, hdr, epoch))
     return 1;
   return 0;
+}
+
+static void strq_active_enter(TGState *tg, StrCanonHdr *hdr)
+{
+  uint32_t depth = lj_tg_strq_active_depth_acq(tg);
+  if (depth == 0) {
+    lj_tg_strq_active_hdr_rel(tg, hdr);
+    lj_tg_strq_active_epoch_rel(tg, gc2_hs_epoch_acq(tg->gl));
+  } else {
+    lj_assertX(lj_tg_strq_active_hdr_acq(tg) == hdr,
+	       "nested canonical quarantine enter changed header");
+  }
+  lj_tg_strq_active_depth_rel(tg, depth + 1u);
+}
+
+static void strq_active_leave(TGState *tg, StrCanonHdr *hdr)
+{
+  uint32_t depth = lj_tg_strq_active_depth_acq(tg);
+  lj_assertX(depth != 0, "bad canonical quarantine active depth");
+  lj_assertX(lj_tg_strq_active_hdr_acq(tg) == hdr,
+	     "canonical quarantine active header mismatch");
+  depth--;
+  lj_tg_strq_active_depth_rel(tg, depth);
+  if (depth == 0)
+    lj_tg_strq_active_hdr_rel(tg, NULL);
+}
+
+static LJ_AINLINE int strq_active_on_tg(global_State *g, TGState *tg,
+					 StrCanonHdr *hdr)
+{
+  return tg && tg->gl == g && lj_tg_strq_active_depth_acq(tg) != 0 &&
+    lj_tg_strq_active_hdr_acq(tg) == hdr;
+}
+
+static int strq_active_on_hdr(global_State *g, StrCanonHdr *hdr)
+{
+  TGState *tg, *main_tg = g->main_tg, *self = lj_thr_get_tg();
+  int saw_main = 0, saw_self = 0;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (tg == main_tg) saw_main = 1;
+    if (tg == self) saw_self = 1;
+    if (strq_active_on_tg(g, tg, hdr))
+      return 1;
+  }
+  if (!saw_main && strq_active_on_tg(g, main_tg, hdr))
+    return 1;
+  if (!saw_self && self != main_tg && strq_active_on_tg(g, self, hdr))
+    return 1;
+  return 0;
+}
+
+static StrCanonHdr *strq_enter(lua_State *L, global_State *g)
+{
+  TGState *tg = L2TG(L);
+  for (;;) {
+    StrCanonHdr *hdr = lj_str_qtabh_acq(g);
+    if (!hdr)
+      return NULL;
+    if (lj_tg_strq_active_depth_acq(tg) != 0 &&
+	lj_tg_strq_active_hdr_acq(tg) == hdr) {
+      strq_active_enter(tg, hdr);
+      return hdr;
+    }
+    if (la_load32_acq(&hdr->resize) != 0) {
+      strtab_wait(L);
+      continue;
+    }
+    strq_active_enter(tg, hdr);
+    if (LJ_LIKELY(lj_str_qtabh_acq(g) == hdr &&
+		  la_load32_acq(&hdr->resize) == 0))
+      return hdr;
+    strq_active_leave(tg, hdr);
+  }
+}
+
+static void strq_leave(lua_State *L, StrCanonHdr *hdr)
+{
+  strq_active_leave(L2TG(L), hdr);
 }
 
 static int strtab_claim(lua_State *L, StrTabHdr *hdr)
@@ -615,6 +721,57 @@ restart:
     strtab_retire(g, oldhdr);
 }
 
+/* Replace the quarantine header only after claiming its topology and observing
+** no published header pins. A late reader which loaded the old header before
+** the claim rechecks resize after publishing its pin and never dereferences a
+** bucket. Failed claims are opportunistic; lookup remains available. */
+int lj_str_quarantine_resize(lua_State *L, MSize newmask)
+{
+  global_State *g = G(L);
+  StrCanonHdr *oldhdr, *newhdr;
+  GCSize newsize;
+  MSize i, expect = 0;
+  if (newmask >= LJ_MAX_STRTAB-1 || (newmask & (newmask + 1u)) != 0)
+    return 0;
+  newsize = lj_str_qtabsize(newmask);
+  newhdr = (StrCanonHdr *)lj_mem_new(L, newsize);
+  memset(newhdr, 0, newsize);
+  newhdr->mask = newmask;
+  /* Allocation may safepoint and let another generation retire. Snapshot the
+  ** current header only after the allocating step; everything below is one
+  ** no-safepoint topology-claim sequence protected by header retirement. */
+  oldhdr = lj_str_qtabh_acq(g);
+  if (!oldhdr || newmask <= oldhdr->mask) {
+    lj_mem_free(g, newhdr, newsize);
+    return 0;
+  }
+  if (la_load32_acq(&oldhdr->resize) != 0 ||
+      !la_cas32(&oldhdr->resize, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+    lj_mem_free(g, newhdr, newsize);
+    return 0;
+  }
+  if (lj_str_qtabh_acq(g) != oldhdr || strq_active_on_hdr(g, oldhdr)) {
+    la_store32_rel(&oldhdr->resize, 0);
+    lj_mem_free(g, newhdr, newsize);
+    return 0;
+  }
+  for (i = 0; i <= oldhdr->mask; i++) {
+    StrCanonRec *rec = lj_str_qbucket_acq(&oldhdr->bucket[i]);
+    while (rec) {
+      StrCanonRec *next = lj_str_qnext_acq(rec);
+      StrCanonRec **bucket = &newhdr->bucket[rec->hash & newmask];
+      StrCanonRec *head = lj_str_qbucket_acq(bucket);
+      lj_str_qnext_rel(rec, head);
+      lj_str_qbucket_rel(bucket, rec);
+      rec = next;
+    }
+  }
+  lj_str_qmask_rel(g, newmask);
+  lj_str_qtabh_rel(g, newhdr);
+  strq_retire(g, oldhdr);
+  return 1;
+}
+
 #if LUAJIT_SECURITY_STRHASH
 /* Rehash and rechain all strings in a chain. */
 static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
@@ -688,6 +845,7 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   s->sid = strid_next(L, g);
   s->reserved = 0;
   s->hashalg = (uint8_t)hashalg;
+  lj_str_canon_store_rlx(s, LJ_STR_CANON_LIVE);
   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */
   *(uint32_t *)(strdatawr(s)+(len & ~(MSize)3)) = 0;
   memcpy(strdatawr(s), str, len);
@@ -767,13 +925,76 @@ static LJ_AINLINE void strtab_mark_before_publish(global_State *g, GCobj *o)
     (void)lj_gc2_preserve_sweep_root(g, o);
 }
 
+/* Consult the authoritative secondary canonical directory after a true main
+** table miss. The per-TG header pin keeps the selected quarantine generation
+** stable while immutable bytes are compared; Stage A retains bucket records
+** until terminal shutdown. QCOMMIT/FREEING are deliberately not
+** acquirable; those states are enabled only after read epochs can substitute
+** the current canonical body. */
+static GCstr *strcanon_lookup(lua_State *L, const char *str, MSize len,
+			      StrHash hash)
+{
+  global_State *g = G(L);
+  StrCanonHdr *hdr;
+  StrCanonRec *rec;
+  GCstr *found = NULL;
+  if (lj_str_qcount_acq(g) == 0)
+    return NULL;
+  hdr = strq_enter(L, g);
+  if (!hdr)
+    return NULL;
+  for (rec = lj_str_qbucket_acq(&hdr->bucket[hash & hdr->mask]);
+       rec != NULL;
+       rec = lj_str_qnext_acq(rec)) {
+    GCstr *s;
+    uintptr_t canon, want;
+    uint32_t state;
+    if (rec->hash != hash || rec->len != len)
+      continue;
+    s = (GCstr *)la_loadptr_acq((void *const *)&rec->str);
+    if (!s || !lj_gc2_mem_registered(g, s) ||
+	la_load8_acq(&s->gct) != (uint8_t)~LJ_TSTR ||
+	s->len != len || memcmp(str, strdata(s), len) != 0)
+      continue;
+    canon = lj_str_canon_acq(s);
+    for (;;) {
+      state = lj_str_canon_state(canon);
+      if (lj_str_canon_record(canon) != rec ||
+	  (state != LJ_STR_CANON_QACTIVE &&
+	   state != LJ_STR_CANON_QRESCUED &&
+	   state != LJ_STR_CANON_QCLOSING))
+	break;
+      if (state == LJ_STR_CANON_QRESCUED) {
+	found = s;
+	break;
+      }
+      want = lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED);
+      if (lj_str_canon_cas(s, &canon, want)) {
+	found = s;  /* Rescue and logical-death arbitration LP. */
+	break;
+      }
+    }
+    if (found) {
+      strtab_mark_before_publish(g, obj2gco(found));
+      canon = lj_str_canon_acq(found);
+      if (lj_str_canon_state(canon) != LJ_STR_CANON_QRESCUED ||
+	  lj_str_canon_record(canon) != rec)
+	found = NULL;
+      else
+	break;
+    }
+  }
+  strq_leave(L, hdr);
+  return found;
+}
+
 /* Intern a string and return string object. */
 GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 {
   global_State *g = G(L);
   if (lenx-1 < LJ_MAX_STR-1) {
     MSize len = (MSize)lenx;
-    StrHash hash;
+    StrHash hash, qhash = hash_sparse(g->str.seed, str, len);
     GCstr *news = NULL;
     int hashalg = 0;
 #if LUAJIT_SECURITY_STRHASH
@@ -797,7 +1018,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       mask = hdr->mask;
       strtab = hdr->bucket;
       hashalg = 0;
-      hash = hash_sparse(g->str.seed, str, len);
+      hash = qhash;
       head = &strtab[hash & mask];
       u = lj_str_link_load_acq(head);
 #if LUAJIT_SECURITY_STRHASH
@@ -844,7 +1065,11 @@ retry_lookup:
       }
 #endif
       if (news == NULL) {
+	GCstr *qs;
 	strtab_leave(L, hdr);
+	qs = strcanon_lookup(L, str, len, qhash);
+	if (qs)
+	  return qs;
 	news = lj_str_alloc(L, str, len, hash, hashalg);
 	continue;
       }
@@ -871,6 +1096,14 @@ retry_insert_lookup:
 	  if (!strtab_protect_walk_link(L, link, o))
 	    goto retry_insert_lookup;
 	  link = lj_obj_gcwref(o);
+	}
+	if (LJ_UNLIKELY(lj_str_qcount_acq(g) != 0)) {
+	  GCstr *qs = strcanon_lookup(L, str, len, qhash);
+	  if (qs) {
+	    strtab_leave(L, hdr);
+	    lj_mem_free(g, news, lj_str_size(news->len));
+	    return qs;
+	  }
 	}
 	/* Allocation-black is the fallback; make sweep publication explicit. */
 	strtab_mark_before_publish(g, obj2gco(news));
@@ -961,14 +1194,134 @@ static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
   lj_assertG(checkptrGC(ret),
 	     "string retirement record outside required address range");
   ret->next = NULL;
+  ret->qnext = NULL;
   ret->str = s;
   ret->hdr = hdr;
   ret->retire_epoch = 0;
+  ret->main_unlink_epoch = 0;
+  ret->close_epoch = 0;
+  ret->q_unlink_epoch = 0;
   ret->size = lj_str_size(s->len);
+  /* The quarantine index is independent of mutable main-table secondary
+  ** hashing. Always key it by the canonical sparse hash of immutable bytes. */
+  ret->hash = hash_sparse(g->str.seed, strdata(s), s->len);
+  ret->len = s->len;
+  ret->main_linked = 1;
+  ret->status = 0;
   lj_gc_total_add(g, sizeof(*ret));
   lj_gc2_account_alloc(g, tg, sizeof(*ret));
   return ret;
 }
+
+#ifdef LJ_STR_TEST_HELPERS
+static void strcanon_bucket_publish(lua_State *L, global_State *g,
+				    StrCanonRec *rec)
+{
+  StrCanonHdr *hdr = strq_enter(L, g);
+  StrCanonRec **bucket;
+  StrCanonRec *head;
+  lj_assertG(hdr != NULL, "canonical quarantine is not initialized");
+  str_test_canon(L, lj_str_body_retired_str_acq(rec), rec,
+		 LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH);
+  bucket = &hdr->bucket[rec->hash & hdr->mask];
+  head = lj_str_qbucket_acq(bucket);
+  do {
+    lj_str_qnext_rel(rec, head);
+  } while (!lj_str_qbucket_cas(bucket, &head, rec));
+  strq_leave(L, hdr);
+}
+
+int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
+{
+  global_State *g;
+  StrTabHdr *hdr;
+  StrCanonRec *rec;
+  GCRef *link;
+  uintptr_t u, next, want, canon;
+  uint64_t epoch;
+  GCobj *o;
+  if (!L || !s)
+    return 0;
+  g = G(L);
+  if (s == &g->strempty || lj_str_canon_acq(s) != LJ_STR_CANON_LIVE)
+    return 0;
+  hdr = lj_str_tabh_acq(g);
+  if (!hdr)
+    return 0;
+  rec = str_body_retire_new(g, s, hdr);
+  if (!rec)
+    return 0;
+  /* Establish durable metadata ownership before the Q-header pin can wait or
+  ** service a safepoint. LIST_ONLY never owns the still-main-linked body. */
+  la_store32_rel(&rec->status, LJ_STR_CANONREC_LIST_ONLY);
+  lj_str_body_retired_epoch_rel(rec, lj_gc2_retire_epoch(g));
+  str_body_retired_push(g, rec);
+  strcanon_bucket_publish(L, g, rec);  /* Reservation precedes main unlink. */
+
+  /* Snapshot and claim main topology only after every allocating/waiting Q
+  ** operation. The remainder is one no-safepoint exact-edge sequence. */
+  hdr = lj_str_tabh_acq(g);
+  if (!hdr || !lj_str_sweep_claim(L, hdr)) {
+    la_store32_rel(&rec->status,
+	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_CANCELLED);
+    la_storeptr_rel((void **)&rec->str, NULL);
+    return 0;
+  }
+  la_storeptr_rel((void **)&rec->hdr, hdr);
+  link = &hdr->bucket[s->hash & hdr->mask];
+  while ((o = lj_str_link_target(u = lj_str_link_load_acq(link))) != NULL &&
+	 o != obj2gco(s))
+    link = lj_obj_gcwref(o);
+  if (!o) {
+    la_store32_rel(&rec->status,
+	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_CANCELLED);
+    la_storeptr_rel((void **)&rec->str, NULL);
+    lj_str_sweep_release(hdr);
+    return 0;
+  }
+  canon = LJ_STR_CANON_LIVE;
+  want = lj_str_canon_pack(rec, LJ_STR_CANON_QACTIVE);
+  if (!lj_str_canon_cas(s, &canon, want)) {
+    la_store32_rel(&rec->status,
+	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_CANCELLED);
+    la_storeptr_rel((void **)&rec->str, NULL);
+    lj_str_sweep_release(hdr);
+    return 0;
+  }
+  la_store32_rel(&rec->status,
+	LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED);
+  (void)lj_str_qcount_inc_sat_acqrel(g);
+  epoch = lj_gc2_retire_epoch(g);
+  la_store64_rel(&rec->main_unlink_epoch, epoch);
+  lj_str_body_retired_epoch_rel(rec, epoch);
+  /* Durable list ownership precedes this phase-aware retention barrier. If a
+  ** new cycle starts after the barrier, its metadata scan sees the list; if it
+  ** started before list publication, this barrier observes the active phase. */
+  strtab_mark_before_publish(g, obj2gco(s));
+  next = lj_str_next_link_acq(obj2gco(s));
+  want = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
+	 (u & LJ_STRHASH_SECONDARY);
+  if (!lj_str_link_cas_acqrel(link, &u, want)) {
+    canon = lj_str_canon_pack(rec, LJ_STR_CANON_QACTIVE);
+    want = lj_str_canon_pack(rec, LJ_STR_CANON_QRESCUED);
+    (void)lj_str_canon_cas(s, &canon, want);
+    /* The main table still owns the body. Quarantine reserves identity but
+    ** must not run the terminal body destructor a second time. */
+    la_store32_rel(&rec->status, LJ_STR_CANONREC_Q_LINKED);
+    strtab_mark_before_publish(g, obj2gco(s));
+    lj_str_sweep_release(hdr);
+    return 0;
+  }
+  la_store32_rel(&rec->main_linked, 0);
+  strtab_mark_before_publish(g, obj2gco(s));
+  lj_str_sweep_release(hdr);
+  /* This hook is deliberately after releasing the main topology claim: a
+  ** concurrent interner can now observe a true main miss and must acquire the
+  ** already-published non-zero Q count before consulting the directory. */
+  str_test_canon(L, s, rec, LJ_STR_TEST_CANON_MAIN_UNLINKED);
+  return 1;
+}
+#endif
 
 static void str_sweep_cursor_start(global_State *g, StrTabHdr *hdr,
 				   uint32_t phase)
@@ -1258,10 +1611,22 @@ void lj_str_gc2_sweep_finish(global_State *g)
   lj_str_gc2_sweep_abort(g);
 }
 
+static void strcanon_init(lua_State *L)
+{
+  global_State *g = G(L);
+  GCSize size = lj_str_qtabsize(LJ_STR_CANON_MINMASK);
+  StrCanonHdr *hdr = (StrCanonHdr *)lj_mem_new(L, size);
+  memset(hdr, 0, size);
+  hdr->mask = LJ_STR_CANON_MINMASK;
+  lj_str_qmask_rel(g, hdr->mask);
+  lj_str_qtabh_rel(g, hdr);
+}
+
 void LJ_FASTCALL lj_str_init(lua_State *L)
 {
   global_State *g = G(L);
   g->str.seed = lj_prng_u64(&g->prng);
+  strcanon_init(L);
   lj_str_resize(L, LJ_MIN_STRTAB-1);
 }
 
@@ -1269,6 +1634,7 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   StrBodyRetire *ret;
   StrTabHdr *hdr;
+  StrCanonHdr *qhdr;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
@@ -1279,9 +1645,18 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
     StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
     uint64_t retire_epoch = lj_str_body_retired_epoch_acq(ret);
     StrTabHdr *rethdr = lj_str_body_retired_hdr_acq(ret);
+    uint32_t status = la_load32_acq(&ret->status);
     int old_enough = completed_epoch >= retire_epoch &&
 	completed_epoch - retire_epoch >= LJ_STR_SWEEP_GRACE_EPOCHS;
     lj_str_body_retired_next_rel(ret, NULL);
+    /* Stage A quarantine records remain authoritative until the later
+    ** QCOMMIT/E2 protocol lands. Never remove a bucket-visible record or body
+    ** through the legacy prototype retire drain. */
+    if (status & (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_LIST_ONLY)) {
+      str_body_retired_push(g, ret);
+      ret = next;
+      continue;
+    }
     if (old_enough &&
 	(lj_str_tabh_acq(g) != rethdr || !strtab_active_on_hdr(g, rethdr))) {
       GCstr *s = lj_str_body_retired_str_acq(ret);
@@ -1309,6 +1684,19 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     hdr = next;
   }
+  qhdr = lj_str_qretired_head_xchg_acqrel(g, NULL);
+  while (qhdr && lj_gc2_mem_registered(g, qhdr)) {
+    StrCanonHdr *next = lj_str_qretired_next_acq(qhdr);
+    lj_str_qretired_next_rel(qhdr, NULL);
+    if (lj_str_qretire_epoch_acq(qhdr) < completed_epoch &&
+	!strq_active_on_hdr(g, qhdr)) {
+      lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
+      reclaimed++;
+    } else {
+      strq_retired_push(g, qhdr);
+    }
+    qhdr = next;
+  }
   return reclaimed;
 }
 
@@ -1327,9 +1715,14 @@ void lj_str_free_retired_bodies(global_State *g)
   while (ret && lj_gc2_mem_registered(g, ret)) {
     StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
     GCstr *s = lj_str_body_retired_str_acq(ret);
-    if (s && lj_gc2_mem_registered(g, s) &&
+    uint32_t status = la_load32_acq(&ret->status);
+    if (!(status & (LJ_STR_CANONREC_Q_LINKED|
+		    LJ_STR_CANONREC_LIST_ONLY)) ||
+	(status & LJ_STR_CANONREC_BODY_OWNED)) {
+      if (s && lj_gc2_mem_registered(g, s) &&
 	la_load8_acq(&s->gct) == (uint8_t)~LJ_TSTR)
-      lj_str_free(g, s);
+        lj_str_free(g, s);
+    }
     lj_mem_free(g, ret, sizeof(*ret));
     ret = next;
   }
@@ -1370,6 +1763,7 @@ void lj_str_test_sweep_snapshot(global_State *g,
 void lj_str_freetab(global_State *g)
 {
   StrTabHdr *hdr = lj_str_tabh_xchg_acqrel(g, NULL);
+  StrCanonHdr *qhdr;
   if (hdr) {
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
   }
@@ -1378,5 +1772,14 @@ void lj_str_freetab(global_State *g)
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
     hdr = next;
+  }
+  qhdr = lj_str_qtabh_xchg_acqrel(g, NULL);
+  if (qhdr)
+    lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
+  qhdr = lj_str_qretired_head_xchg_acqrel(g, NULL);
+  while (qhdr && lj_gc2_mem_registered(g, qhdr)) {
+    StrCanonHdr *next = lj_str_qretired_next_acq(qhdr);
+    lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
+    qhdr = next;
   }
 }

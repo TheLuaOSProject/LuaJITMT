@@ -27,10 +27,12 @@
 LA_INLINE uint8_t  la_load8_rlx (const uint8_t  *p){return __atomic_load_n(p,__ATOMIC_RELAXED);}
 LA_INLINE uint32_t la_load32_rlx(const uint32_t *p){return __atomic_load_n(p,__ATOMIC_RELAXED);}
 LA_INLINE uint64_t la_load64_rlx(const uint64_t *p){return __atomic_load_n(p,__ATOMIC_RELAXED);}
+LA_INLINE uintptr_t la_loaduptr_rlx(const uintptr_t *p){return __atomic_load_n(p,__ATOMIC_RELAXED);}
 LA_INLINE uint8_t  la_load8_acq (const uint8_t  *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE uint16_t la_load16_acq(const uint16_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE uint32_t la_load32_acq(const uint32_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE uint64_t la_load64_acq(const uint64_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
+LA_INLINE uintptr_t la_loaduptr_acq(const uintptr_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE void    *la_loadptr_rlx(void *const *p) {return __atomic_load_n((void *const *)p,__ATOMIC_RELAXED);}
 LA_INLINE void    *la_loadptr_acq(void *const *p) {return __atomic_load_n((void *const *)p,__ATOMIC_ACQUIRE);}
 #define la_loadfunc_acq(p) __atomic_load_n((p),__ATOMIC_ACQUIRE)
@@ -41,7 +43,9 @@ LA_INLINE void la_store8_rel (uint8_t  *p,uint8_t  v){__atomic_store_n(p,v,__ATO
 LA_INLINE void la_store32_rlx(uint32_t *p,uint32_t v){__atomic_store_n(p,v,__ATOMIC_RELAXED);}
 LA_INLINE void la_store32_rel(uint32_t *p,uint32_t v){__atomic_store_n(p,v,__ATOMIC_RELEASE);}
 LA_INLINE void la_store64_rlx(uint64_t *p,uint64_t v){__atomic_store_n(p,v,__ATOMIC_RELAXED);}
+LA_INLINE void la_storeuptr_rlx(uintptr_t *p,uintptr_t v){__atomic_store_n(p,v,__ATOMIC_RELAXED);}
 LA_INLINE void la_store64_rel(uint64_t *p,uint64_t v){__atomic_store_n(p,v,__ATOMIC_RELEASE);}
+LA_INLINE void la_storeuptr_rel(uintptr_t *p,uintptr_t v){__atomic_store_n(p,v,__ATOMIC_RELEASE);}
 LA_INLINE void la_store16_rel(uint16_t *p,uint16_t v){__atomic_store_n(p,v,__ATOMIC_RELEASE);}
 LA_INLINE void la_storeptr_rlx(void **p,void *v){__atomic_store_n(p,v,__ATOMIC_RELAXED);}
 LA_INLINE void la_storeptr_rel(void **p,void *v){__atomic_store_n(p,v,__ATOMIC_RELEASE);}
@@ -55,6 +59,8 @@ LA_INLINE int la_cas8(uint8_t *p,uint8_t *exp,uint8_t des,int mo_s,int mo_f)
 LA_INLINE int la_cas16(uint16_t *p,uint16_t *exp,uint16_t des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
 LA_INLINE int la_cas64(uint64_t *p,uint64_t *exp,uint64_t des,int mo_s,int mo_f)
+{return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
+LA_INLINE int la_casuptr(uintptr_t *p,uintptr_t *exp,uintptr_t des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
 LA_INLINE int la_casptr(void **p,void **exp,void *des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}

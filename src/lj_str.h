@@ -14,6 +14,67 @@
 #define LJ_STRHASH_SECONDARY	((uintptr_t)2)
 #define LJ_STRHASH_LINKMASK	(LJ_STRHASH_DEAD|LJ_STRHASH_SECONDARY)
 
+/* Per-body canonical lifecycle. Record-carrying states use the low three
+** alignment bits of an authoritative StrCanonRec pointer. */
+#define LJ_STR_CANON_STATE_MASK	((uintptr_t)7u)
+enum {
+  LJ_STR_CANON_LIVE = 0,
+  LJ_STR_CANON_CANDIDATE = 1,
+  LJ_STR_CANON_QACTIVE = 2,
+  LJ_STR_CANON_QRESCUED = 3,
+  LJ_STR_CANON_QCLOSING = 4,
+  LJ_STR_CANON_QCOMMIT = 5,
+  LJ_STR_CANON_FREEING = 6
+};
+
+#define LJ_STR_CANONREC_Q_LINKED	0x01u
+#define LJ_STR_CANONREC_BODY_OWNED	0x02u
+#define LJ_STR_CANONREC_CANCELLED	0x04u
+#define LJ_STR_CANONREC_LIST_ONLY	0x08u
+
+#define LJ_STR_CANON_MINMASK	63u
+
+static LJ_AINLINE uintptr_t lj_str_canon_acq(const GCstr *s)
+{
+  return la_loaduptr_acq(&s->canon);
+}
+
+static LJ_AINLINE void lj_str_canon_store_rlx(GCstr *s, uintptr_t canon)
+{
+  la_storeuptr_rlx(&s->canon, canon);
+}
+
+static LJ_AINLINE void lj_str_canon_rel(GCstr *s, uintptr_t canon)
+{
+  la_storeuptr_rel(&s->canon, canon);
+}
+
+static LJ_AINLINE int lj_str_canon_cas(GCstr *s, uintptr_t *oldp,
+				       uintptr_t canon)
+{
+  return la_casuptr(&s->canon, oldp, canon, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t lj_str_canon_state(uintptr_t canon)
+{
+  return (uint32_t)(canon & LJ_STR_CANON_STATE_MASK);
+}
+
+static LJ_AINLINE StrCanonRec *lj_str_canon_record(uintptr_t canon)
+{
+  return (StrCanonRec *)(void *)(canon & ~(uintptr_t)LJ_STR_CANON_STATE_MASK);
+}
+
+static LJ_AINLINE uintptr_t lj_str_canon_pack(StrCanonRec *rec,
+				       uint32_t state)
+{
+  lj_assertX(state >= LJ_STR_CANON_QACTIVE && state <= LJ_STR_CANON_FREEING,
+	     "recordless canonical state");
+  lj_assertX(((uintptr_t)rec & LJ_STR_CANON_STATE_MASK) == 0,
+	     "unaligned canonical string record");
+  return (uintptr_t)rec | (uintptr_t)state;
+}
+
 /*
 ** Runtime GCstr unlink/free remains safety-gated until every sweep-time string
 ** publication can atomically defeat retirement and every native raw-byte borrow
@@ -41,10 +102,159 @@ enum {
    (((GCSize)(mask) + 1u) * (GCSize)sizeof(GCRef)))
 #define lj_str_tabbytes(tabh) \
   ((tabh) ? lj_str_tabsize((tabh)->mask) : (GCSize)0)
+#define lj_str_qtabsize(mask) \
+  ((mask) == ~(MSize)0 ? (GCSize)0 : \
+   (GCSize)offsetof(StrCanonHdr, bucket) + \
+   (((GCSize)(mask) + 1u) * (GCSize)sizeof(StrCanonRec *)))
+#define lj_str_qtabbytes(tabh) \
+  ((tabh) ? lj_str_qtabsize((tabh)->mask) : (GCSize)0)
 
 static LJ_AINLINE StrTabHdr *lj_str_tabh_acq(const global_State *g)
 {
   return (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+}
+
+static LJ_AINLINE StrCanonHdr *lj_str_qtabh_acq(const global_State *g)
+{
+  return (StrCanonHdr *)la_loadptr_acq((void *const *)&g->str.qtabh);
+}
+
+static LJ_AINLINE void lj_str_qtabh_store_rlx(global_State *g,
+				       StrCanonHdr *hdr)
+{
+  la_storeptr_rlx((void **)&g->str.qtabh, hdr);
+}
+
+static LJ_AINLINE void lj_str_qtabh_rel(global_State *g, StrCanonHdr *hdr)
+{
+  la_storeptr_rel((void **)&g->str.qtabh, hdr);
+}
+
+static LJ_AINLINE StrCanonHdr *lj_str_qtabh_xchg_acqrel(global_State *g,
+						 StrCanonHdr *hdr)
+{
+  return (StrCanonHdr *)la_xchgptr_acqrel((void **)&g->str.qtabh, hdr);
+}
+
+static LJ_AINLINE MSize lj_str_qmask_acq(const global_State *g)
+{
+  return (MSize)la_load32_acq(&g->str.qmask);
+}
+
+static LJ_AINLINE void lj_str_qmask_store_rlx(global_State *g, MSize mask)
+{
+  la_store32_rlx(&g->str.qmask, mask);
+}
+
+static LJ_AINLINE void lj_str_qmask_rel(global_State *g, MSize mask)
+{
+  la_store32_rel(&g->str.qmask, mask);
+}
+
+static LJ_AINLINE MSize lj_str_qcount_acq(const global_State *g)
+{
+  return (MSize)la_load32_acq(&g->str.qcount);
+}
+
+static LJ_AINLINE void lj_str_qcount_store_rlx(global_State *g, MSize n)
+{
+  la_store32_rlx(&g->str.qcount, (uint32_t)n);
+}
+
+/* Stage A never removes an authoritative quarantine record. Keep this count
+** exact until saturation and permanently non-zero afterwards: zero is a
+** correctness fast-path, so wrapping through zero would permit a duplicate
+** main-table publication. Later Q-unlink stages need a separate exact live
+** count instead of decrementing a saturated value. */
+static LJ_AINLINE MSize lj_str_qcount_inc_sat_acqrel(global_State *g)
+{
+  uint32_t old = la_load32_acq(&g->str.qcount);
+  while (old != UINT32_MAX) {
+    uint32_t next = old + 1u;
+    if (la_cas32(&g->str.qcount, &old, next, LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+  return (MSize)old;
+}
+
+static LJ_AINLINE StrCanonRec *lj_str_qbucket_acq(StrCanonRec *const *bucket)
+{
+  return (StrCanonRec *)la_loadptr_acq((void *const *)bucket);
+}
+
+static LJ_AINLINE void lj_str_qbucket_rel(StrCanonRec **bucket,
+					   StrCanonRec *rec)
+{
+  la_storeptr_rel((void **)bucket, rec);
+}
+
+static LJ_AINLINE int lj_str_qbucket_cas(StrCanonRec **bucket,
+					  StrCanonRec **oldp,
+					  StrCanonRec *rec)
+{
+  return la_casptr((void **)bucket, (void **)oldp, rec,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE StrCanonRec *lj_str_qnext_acq(const StrCanonRec *rec)
+{
+  return (StrCanonRec *)la_loadptr_acq((void *const *)&rec->qnext);
+}
+
+static LJ_AINLINE void lj_str_qnext_rel(StrCanonRec *rec,
+					 StrCanonRec *next)
+{
+  la_storeptr_rel((void **)&rec->qnext, next);
+}
+
+static LJ_AINLINE StrCanonHdr *lj_str_qretired_head_acq(
+  const global_State *g)
+{
+  return (StrCanonHdr *)la_loadptr_acq((void *const *)&g->str.qretired);
+}
+
+static LJ_AINLINE void lj_str_qretired_head_store_rlx(global_State *g,
+						       StrCanonHdr *hdr)
+{
+  la_storeptr_rlx((void **)&g->str.qretired, hdr);
+}
+
+static LJ_AINLINE int lj_str_qretired_head_cas(global_State *g,
+						StrCanonHdr **oldp,
+						StrCanonHdr *hdr)
+{
+  return la_casptr((void **)&g->str.qretired, (void **)oldp, hdr,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE StrCanonHdr *lj_str_qretired_head_xchg_acqrel(
+  global_State *g, StrCanonHdr *hdr)
+{
+  return (StrCanonHdr *)la_xchgptr_acqrel((void **)&g->str.qretired, hdr);
+}
+
+static LJ_AINLINE uint64_t lj_str_qretire_epoch_acq(
+  const StrCanonHdr *hdr)
+{
+  return la_load64_acq(&hdr->retire_epoch);
+}
+
+static LJ_AINLINE void lj_str_qretire_epoch_rel(StrCanonHdr *hdr,
+						 uint64_t epoch)
+{
+  la_store64_rel(&hdr->retire_epoch, epoch);
+}
+
+static LJ_AINLINE StrCanonHdr *lj_str_qretired_next_acq(
+  const StrCanonHdr *hdr)
+{
+  return (StrCanonHdr *)la_loadptr_acq((void *const *)&hdr->retired_next);
+}
+
+static LJ_AINLINE void lj_str_qretired_next_rel(StrCanonHdr *hdr,
+						 StrCanonHdr *next)
+{
+  la_storeptr_rel((void **)&hdr->retired_next, next);
 }
 
 static LJ_AINLINE void lj_str_tabh_store_rlx(global_State *g, StrTabHdr *hdr)
@@ -405,6 +615,7 @@ LJ_FUNCA GCstr *lj_str_new(lua_State *L, const char *str, size_t len);
 LJ_FUNC void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s);
 LJ_FUNC void lj_str_flush_num_credit(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);
+LJ_FUNC int lj_str_quarantine_resize(lua_State *L, MSize newmask);
 LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
@@ -419,6 +630,10 @@ enum {
   LJ_STR_TEST_MATCH_AFTER_COMPARE,
   LJ_STR_TEST_MATCH_BEFORE_RESCUE_CAS
 };
+enum {
+  LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH,
+  LJ_STR_TEST_CANON_MAIN_UNLINKED
+};
 #ifdef LJ_STR_TEST_HELPERS
 typedef struct LJStrTestSweepSnapshot {
   uint64_t tagged;
@@ -432,7 +647,10 @@ typedef struct LJStrTestSweepSnapshot {
 typedef void (*LJStrTestMatchHook)(lua_State *L, GCRef *link,
 				   GCobj *target, uintptr_t observed,
 				   uint32_t stage);
+typedef void (*LJStrTestCanonHook)(lua_State *L, GCstr *str,
+				   StrCanonRec *rec, uint32_t stage);
 LJ_FUNC void lj_str_test_set_match_hook(LJStrTestMatchHook hook);
+LJ_FUNC void lj_str_test_set_canon_hook(LJStrTestCanonHook hook);
 LJ_FUNC uint32_t lj_str_test_id_refills(void);
 LJ_FUNC void lj_str_test_reset_id_refills(void);
 LJ_FUNC uint32_t lj_str_test_num_refills(void);
@@ -440,6 +658,7 @@ LJ_FUNC void lj_str_test_reset_num_refills(void);
 LJ_FUNC void lj_str_test_reset_sweep_counters(global_State *g);
 LJ_FUNC void lj_str_test_sweep_snapshot(global_State *g,
 					LJStrTestSweepSnapshot *snapshot);
+LJ_FUNC int lj_str_test_quarantine_detach(lua_State *L, GCstr *s);
 #endif
 
 #define lj_str_newz(L, s)	(lj_str_new(L, s, strlen(s)))

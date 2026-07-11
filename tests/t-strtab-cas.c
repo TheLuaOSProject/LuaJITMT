@@ -65,6 +65,30 @@ typedef struct TaggedMatchCtx {
 
 static TaggedMatchCtx tagged_match_ctx;
 
+typedef struct CanonRaceCtx {
+  lua_State *L;
+  GCstr *s;
+  StrCanonRec *rec;
+  StrCanonHdr *qhdr;
+  uint32_t pause_stage;
+  uint32_t reached;
+  uint32_t release;
+  uint32_t done;
+  int result;
+} CanonRaceCtx;
+
+static CanonRaceCtx *canon_race_ctx;
+
+static void test_sleep_without_tg(int64_t ns)
+{
+  TGState *saved = lj_thr_get_tg();
+  /* These deterministic test barriers hand one TG between OS threads. Never
+  ** let the polling sleep mutate that TG's non-RMW in_native depth. */
+  lj_thr_set_tg(NULL);
+  (void)lj_thr_sleep_ns(NULL, ns);
+  lj_thr_set_tg(saved);
+}
+
 static StrHash test_hash_sparse(uint64_t seed, const char *str, MSize len)
 {
   StrHash a, b, h = len ^ (StrHash)seed;
@@ -221,6 +245,187 @@ static void exercise_tagged_link_protocol(lua_State *L)
   raw = lj_str_link_load_acq(head);
   assert(lj_str_link_target(raw) == obj2gco(prepended));
   assert((raw & LJ_STRHASH_LINKMASK) == 0);
+}
+
+static void exercise_canonical_layout(lua_State *L)
+{
+  global_State *g = G(L);
+  static const MSize lens[] = { 1u, 3u, 4u, 7u, 8u, 15u, 16u, 31u };
+  char buf[64];
+  size_t i;
+  assert(strdata(&g->strempty) == (const char *)&g->stremptyz);
+  assert(strdata(&g->strempty)[0] == '\0');
+  assert(lj_str_canon_acq(&g->strempty) == LJ_STR_CANON_LIVE);
+  for (i = 0; i < sizeof(lens)/sizeof(lens[0]); i++) {
+    MSize len = lens[i];
+    GCstr *s;
+    MSize j;
+    for (j = 0; j < len; j++)
+      buf[j] = (char)('a' + (j + (MSize)i) % 26u);
+    s = lj_str_new(L, buf, len);
+    assert(s != NULL);
+    assert(s->len == len);
+    assert(lj_str_canon_acq(s) == LJ_STR_CANON_LIVE);
+    assert(memcmp(strdata(s), buf, len) == 0);
+    assert(strdata(s)[len] == '\0');
+    assert(lj_str_new(L, buf, len) == s);
+  }
+}
+
+static void canonical_race_hook(lua_State *L, GCstr *s, StrCanonRec *rec,
+				uint32_t stage)
+{
+  CanonRaceCtx *ctx = canon_race_ctx;
+  if (!ctx || ctx->pause_stage != stage || ctx->s != s)
+    return;
+  assert(ctx->L == L);
+  assert(rec != NULL);
+  ctx->rec = rec;
+  if (stage == LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH) {
+    ctx->qhdr = lj_tg_strq_active_hdr_acq(L2TG(L));
+    assert(ctx->qhdr != NULL);
+    assert(lj_tg_strq_active_depth_acq(L2TG(L)) != 0);
+  }
+  la_store32_rel(&ctx->reached, 1);
+  while (la_load32_acq(&ctx->release) == 0)
+    test_sleep_without_tg(100000);
+}
+
+static void *canonical_detach_worker(void *arg)
+{
+  CanonRaceCtx *ctx = (CanonRaceCtx *)arg;
+  TGState *oldtg = lj_thr_get_tg();
+  /* The hook's release/acquire handoff serializes every main-TG mutation with
+  ** the driver thread. The driver polls without a TLS TG; the worker stops
+  ** touching the TG before handing ownership back at either pause. */
+  lj_thr_set_tg(L2TG(ctx->L));
+  ctx->result = lj_str_test_quarantine_detach(ctx->L, ctx->s);
+  lj_thr_set_tg(oldtg);
+  la_store32_rel(&ctx->done, 1);
+  return NULL;
+}
+
+static void canonical_race_start(CanonRaceCtx *ctx, lua_State *L, GCstr *s,
+				 uint32_t stage, LJThr *thr)
+{
+  int i;
+  memset(ctx, 0, sizeof(*ctx));
+  ctx->L = L;
+  ctx->s = s;
+  ctx->pause_stage = stage;
+  canon_race_ctx = ctx;
+  lj_str_test_set_canon_hook(canonical_race_hook);
+  assert(lj_thr_create(thr, canonical_detach_worker, ctx) == 0);
+  for (i = 0; i < 50000 && la_load32_acq(&ctx->reached) == 0 &&
+	 la_load32_acq(&ctx->done) == 0; i++)
+    test_sleep_without_tg(100000);
+  assert(la_load32_acq(&ctx->reached) != 0);
+  assert(la_load32_acq(&ctx->done) == 0);
+}
+
+static void canonical_race_finish(CanonRaceCtx *ctx, LJThr *thr)
+{
+  la_store32_rel(&ctx->release, 1);
+  assert(lj_thr_join(thr, NULL) == 0);
+  assert(la_load32_acq(&ctx->done) != 0);
+  assert(ctx->result == 1);
+  lj_str_test_set_canon_hook(NULL);
+  canon_race_ctx = NULL;
+}
+
+static int canonical_qbucket_contains(StrCanonHdr *hdr, StrCanonRec *want)
+{
+  StrCanonRec *rec;
+  for (rec = lj_str_qbucket_acq(&hdr->bucket[want->hash & hdr->mask]);
+       rec != NULL; rec = lj_str_qnext_acq(rec)) {
+    if (rec == want)
+      return 1;
+  }
+  return 0;
+}
+
+static void exercise_canonical_quarantine(lua_State *L)
+{
+  static const char publish_name[] =
+    "m5-strtab-canonical-q-publish-resize-race";
+  static const char unlink_name[] =
+    "m5-strtab-canonical-unlink-qcount-race";
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  CanonRaceCtx ctx;
+  LJThr worker;
+  MSize before = lj_str_qcount_acq(g);
+  MSize oldmask;
+  StrCanonHdr *oldhdr;
+  GCstr *spublish, *sunlink;
+  uintptr_t canon;
+
+  /* Exercise the zero -> non-zero correctness gate first in a fresh state.
+  ** The test barrier makes this a program-order regression, not a hardware
+  ** memory-order litmus: once the exact main edge is absent, a new interner
+  ** must take the now-enabled Q lookup and return the identical body. */
+  assert(before == 0);
+  sunlink = lj_str_new(L, unlink_name, sizeof(unlink_name)-1u);
+  assert(sunlink != NULL);
+  assert(lj_str_canon_acq(sunlink) == LJ_STR_CANON_LIVE);
+  canonical_race_start(&ctx, L, sunlink, LJ_STR_TEST_CANON_MAIN_UNLINKED,
+		       &worker);
+  assert(ctx.rec != NULL);
+  assert(lj_str_qcount_acq(g) == 1u);
+  assert(lj_str_new(L, unlink_name, sizeof(unlink_name)-1u) == sunlink);
+  canon = lj_str_canon_acq(sunlink);
+  assert(lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED);
+  canonical_race_finish(&ctx, &worker);
+
+  /* Pause an actual publisher while it pins the old Q header. A concurrent
+  ** resize must abort without moving the bucket topology out from under it. */
+  oldmask = lj_str_qmask_acq(g);
+  oldhdr = lj_str_qtabh_acq(g);
+  spublish = lj_str_new(L, publish_name, sizeof(publish_name)-1u);
+  assert(spublish != NULL);
+  assert(lj_str_canon_acq(spublish) == LJ_STR_CANON_LIVE);
+  canonical_race_start(&ctx, L, spublish,
+	LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH, &worker);
+  assert(ctx.rec != NULL);
+  assert(ctx.qhdr == oldhdr);
+  assert(!canonical_qbucket_contains(ctx.qhdr, ctx.rec));
+  assert(la_load32_acq(&ctx.rec->status) == LJ_STR_CANONREC_LIST_ONLY);
+  assert(lj_str_canon_acq(spublish) == LJ_STR_CANON_LIVE);
+  assert(lj_tg_strq_active_hdr_acq(tg) == oldhdr);
+  assert(lj_tg_strq_active_depth_acq(tg) == 1u);
+  assert(lj_str_quarantine_resize(L, (oldmask << 1) + 1u) == 0);
+  assert(lj_str_qtabh_acq(g) == oldhdr);
+  canonical_race_finish(&ctx, &worker);
+  assert(lj_tg_strq_active_hdr_acq(tg) == NULL);
+  assert(lj_tg_strq_active_depth_acq(tg) == 0);
+  assert(lj_str_qcount_acq(g) == 2u);
+  canon = lj_str_canon_acq(spublish);
+  assert(lj_str_canon_state(canon) == LJ_STR_CANON_QACTIVE);
+  assert(lj_str_canon_record(canon) != NULL);
+  assert(lj_str_quarantine_resize(L, (oldmask << 1) + 1u) == 1);
+  assert(lj_str_qtabh_acq(g) != oldhdr);
+  assert(lj_str_qmask_acq(g) == (oldmask << 1) + 1u);
+  assert(lj_str_qretired_head_acq(g) == oldhdr);
+  assert(lj_str_new(L, publish_name, sizeof(publish_name)-1u) == spublish);
+  canon = lj_str_canon_acq(spublish);
+  assert(lj_str_canon_state(canon) == LJ_STR_CANON_QRESCUED);
+
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(lj_str_qcount_acq(g) == before + 2u);
+  assert(lj_str_canon_state(lj_str_canon_acq(spublish)) ==
+	 LJ_STR_CANON_QRESCUED);
+  assert(lj_str_canon_state(lj_str_canon_acq(sunlink)) ==
+	 LJ_STR_CANON_QRESCUED);
+  assert(lj_str_new(L, publish_name, sizeof(publish_name)-1u) == spublish);
+  assert(lj_str_new(L, unlink_name, sizeof(unlink_name)-1u) == sunlink);
+
+  /* The zero/non-zero bypass is a correctness boundary. Prove that the Stage
+  ** A monotonic count saturates instead of wrapping back to the false zero. */
+  lj_str_qcount_store_rlx(g, UINT32_MAX - 1u);
+  assert(lj_str_qcount_inc_sat_acqrel(g) == UINT32_MAX - 1u);
+  assert(lj_str_qcount_acq(g) == UINT32_MAX);
+  assert(lj_str_qcount_inc_sat_acqrel(g) == UINT32_MAX);
+  assert(lj_str_qcount_acq(g) == UINT32_MAX);
 }
 
 static MSize assert_resize_state(StrTabHdr *hdr)
@@ -455,6 +660,7 @@ int main(void)
   exercise_string_id_blocks(L);
   exercise_string_count_blocks(L);
   exercise_tagged_link_protocol(L);
+  exercise_canonical_layout(L);
   retire_epoch = gc2_hs_epoch_acq(g);
   (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
   assert(lj_str_retired_head_acq(g) == NULL);
@@ -589,11 +795,13 @@ int main(void)
   assert(gc2_smr_reclaim_runs_acq(g) > smr_runs0);
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
+  exercise_canonical_quarantine(L);
+
   lua_close(L);
 #if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  printf("t-strtab-cas OK: tagged-link rescue/prepend races, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
 #else
-  printf("t-strtab-cas OK: tagged-link rescue/prepend races, resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
 #endif
   return 0;
 }

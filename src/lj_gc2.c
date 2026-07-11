@@ -1846,6 +1846,8 @@ static void gc2_clear_marks_all(global_State *g)
 static void gc2_mark_strtab_mem(global_State *g)
 {
   StrTabHdr *hdr;
+  StrCanonHdr *qhdr;
+  StrBodyRetire *ret;
   hdr = lj_str_tabh_acq(g);
   if (hdr)
     lj_gc2_markmem(g, hdr);
@@ -1853,6 +1855,49 @@ static void gc2_mark_strtab_mem(global_State *g)
        hdr != NULL && lj_gc2_mem_registered(g, hdr);
        hdr = lj_str_retired_next_acq(hdr))
     lj_gc2_markmem(g, hdr);
+  qhdr = lj_str_qtabh_acq(g);
+  if (qhdr)
+    lj_gc2_markmem(g, qhdr);
+  for (qhdr = lj_str_qretired_head_acq(g);
+       qhdr != NULL && lj_gc2_mem_registered(g, qhdr);
+       qhdr = lj_str_qretired_next_acq(qhdr))
+    lj_gc2_markmem(g, qhdr);
+  ret = lj_str_sweep_pending_acq(g);
+  if (ret && lj_gc2_mem_registered(g, ret)) {
+    lj_gc2_markmem(g, ret);
+    if ((la_load32_acq(&ret->status) &
+	 (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) ==
+	(LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) {
+      GCstr *s = lj_str_body_retired_str_acq(ret);
+      if (s && lj_gc2_mem_registered(g, s)) {
+	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+	  (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
+	else
+	  (void)lj_gc2_markobj(g, obj2gco(s));
+      }
+    }
+  }
+  /* Side records are ownership metadata. Stage A/B deliberately retain every
+  ** authoritative quarantine body until QCOMMIT is implemented; this is not a
+  ** liveness sample authorizing unlink/free. Later close stages replace this
+  ** conservative mark with their separate physical-quarantine proof. */
+  for (ret = lj_str_body_retired_head_acq(g);
+       ret != NULL && lj_gc2_mem_registered(g, ret);
+       ret = lj_str_body_retired_next_acq(ret)) {
+    uint32_t status = la_load32_acq(&ret->status);
+    lj_gc2_markmem(g, ret);
+    if ((status & (LJ_STR_CANONREC_Q_LINKED|
+		   LJ_STR_CANONREC_BODY_OWNED)) ==
+	(LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) {
+      GCstr *s = lj_str_body_retired_str_acq(ret);
+      if (s && lj_gc2_mem_registered(g, s)) {
+	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+	  (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
+	else
+	  (void)lj_gc2_markobj(g, obj2gco(s));
+      }
+    }
+  }
 }
 
 static void gc2_mark_tab_retired_mem(global_State *g)

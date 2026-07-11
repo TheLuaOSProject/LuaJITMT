@@ -247,6 +247,8 @@ typedef const TValue cTValue;
 typedef uint32_t StrHash;	/* String hash value. */
 typedef uint32_t StrID;		/* String ID. */
 
+typedef struct StrCanonRec StrCanonRec;
+
 typedef struct StrTabHdr {
   MSize mask;		/* String hash mask (size of hash table - 1). */
   MSize resize;		/* Reserved resize claim for M5 lock-free interning. */
@@ -256,6 +258,15 @@ typedef struct StrTabHdr {
   GCRef bucket[1];	/* String hash table anchors. */
 } StrTabHdr;
 
+/* RCU header for the secondary canonical-string quarantine index. */
+typedef struct StrCanonHdr {
+  MSize mask;		/* Quarantine hash mask (size - 1). */
+  MSize resize;	/* Exact topology-owner claim. */
+  uint64_t retire_epoch;
+  struct StrCanonHdr *retired_next;
+  StrCanonRec *bucket[1];
+} StrCanonHdr;
+
 /* String object header. String payload follows. */
 typedef struct GCstr {
   GCHeader;
@@ -264,6 +275,7 @@ typedef struct GCstr {
   StrID sid;		/* Interned string ID. */
   StrHash hash;		/* Hash of string. */
   MSize len;		/* Size of string. */
+  LJ_ALIGN(8) uintptr_t canon;  /* Atomic canonical-lifecycle word. */
 } GCstr;
 
 /*
@@ -273,13 +285,24 @@ typedef struct GCstr {
 ** therefore keeps the body and the header generation that protected it until
 ** both the safepoint grace interval and all header pins have drained.
 */
-typedef struct StrBodyRetire {
-  struct StrBodyRetire *next;
+struct StrCanonRec {
+  StrCanonRec *next;	/* Retired/ownership list link. */
+  StrCanonRec *qnext;	/* Quarantine bucket link. */
   GCstr *str;
   StrTabHdr *hdr;
   uint64_t retire_epoch;
+  uint64_t main_unlink_epoch;
+  uint64_t close_epoch;
+  uint64_t q_unlink_epoch;
   GCSize size;
-} StrBodyRetire;
+  StrHash hash;
+  MSize len;
+  uint32_t main_linked;
+  uint32_t status;
+};
+
+/* Compatibility name for the already-landed prototype retirement paths. */
+typedef StrCanonRec StrBodyRetire;
 
 #define strref(r)	(&gcref((r))->str)
 #define strref_acq(r)	(&gcref_acq((r))->str)
@@ -1241,6 +1264,8 @@ typedef struct GCState {
 typedef struct StrInternState {
   StrTabHdr *tabh;	/* String hash table header and anchors. */
   StrTabHdr *retired;	/* Retired table headers kept until state close. */
+  StrCanonHdr *qtabh;	/* Secondary canonical quarantine header. */
+  StrCanonHdr *qretired;	/* Retired quarantine headers awaiting SMR. */
   StrBodyRetire *retired_body;  /* Unlinked bodies awaiting SMR grace. */
   StrBodyRetire *sweep_pending;  /* Pre-CAS unlink ownership record. */
   StrTabHdr *sweep_hdr;	/* Header owned by the bounded GC2 string sweep. */
@@ -1252,6 +1277,8 @@ typedef struct StrInternState {
   uint64_t sweep_reclaimed;	/* Physically reclaimed string bodies. */
   MSize mask;		/* Mirror of tabh->mask for existing fast paths. */
   MSize num;		/* Number of strings in hash table. */
+  MSize qmask;		/* Mirror of qtabh->mask for diagnostics/growth. */
+  MSize qcount;	/* Saturating authoritative Q count; zero is exact. */
   MSize sweep_bucket;	/* Bucket containing sweep_link. */
   uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */
   uint32_t sweep_cycle;	/* GC2 cycle which owns sweep_hdr. */
@@ -2301,6 +2328,17 @@ LJ_STATIC_ASSERT(offsetof(GChead, nextgc) == 0u);
 LJ_STATIC_ASSERT(offsetof(GChead, marked) == sizeof(GCRef));
 LJ_STATIC_ASSERT(offsetof(GChead, gct) == sizeof(GCRef) + 1u);
 LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCstr, marked));
+LJ_STATIC_ASSERT((offsetof(GCstr, canon) & (sizeof(uintptr_t)-1u)) == 0u);
+LJ_STATIC_ASSERT(sizeof(GCstr) == offsetof(GCstr, canon) + sizeof(uintptr_t));
+#if LJ_64
+LJ_STATIC_ASSERT(offsetof(GCstr, sid) == 12u);
+LJ_STATIC_ASSERT(offsetof(GCstr, hash) == 16u);
+LJ_STATIC_ASSERT(offsetof(GCstr, len) == 20u);
+LJ_STATIC_ASSERT(offsetof(GCstr, canon) == 24u);
+LJ_STATIC_ASSERT(sizeof(GCstr) == 32u);
+LJ_STATIC_ASSERT(offsetof(global_State, stremptyz) ==
+		 offsetof(global_State, strempty) + sizeof(GCstr));
+#endif
 LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCtab, marked));
 LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCupval, marked));
 LJ_STATIC_ASSERT(((int)offsetof(GCupval, marked) -

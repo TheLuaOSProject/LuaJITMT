@@ -596,6 +596,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->gc.currentwhite = LJ_GC_WHITE0 | LJ_GC_FIXED;
   g->strempty.marked = LJ_GC_WHITE0;
   g->strempty.gct = ~LJ_TSTR;
+  lj_str_canon_store_rlx(&g->strempty, LJ_STR_CANON_LIVE);
   g->allocf = allocf;
   g->allocd = allocd;
   g->allocf_arena = (allocf == lj_arena_allocf);
@@ -613,6 +614,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_uv_setnext_rel(&g->uvhead, &g->uvhead);
   lj_str_tabh_store_rlx(g, NULL);
   lj_str_retired_head_store_rlx(g, NULL);
+  lj_str_qtabh_store_rlx(g, NULL);
+  lj_str_qretired_head_store_rlx(g, NULL);
   g->str.retired_body = NULL;
   g->str.sweep_pending = NULL;
   g->str.sweep_hdr = NULL;
@@ -626,6 +629,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->str.sweep_phase = 0;
   g->str.sweep_cycle = 0;
   lj_str_mask_store_rlx(g, ~(MSize)0);
+  lj_str_qmask_store_rlx(g, ~(MSize)0);
+  lj_str_qcount_store_rlx(g, 0);
   g->tab.retired_nodes = NULL;
   g->tab.retired_arrays = NULL;
   g->threading_live = NULL;

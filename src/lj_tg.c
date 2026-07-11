@@ -162,6 +162,9 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strtab_active_hdr = NULL;
   tg->strtab_active_depth = 0;
   tg->strtab_active_epoch = 0;
+  tg->strq_active_hdr = NULL;
+  tg->strq_active_depth = 0;
+  tg->strq_active_epoch = 0;
   tg->strid_next = 0;
   tg->strid_end = 0;
   tg->strnum_credit = 0;

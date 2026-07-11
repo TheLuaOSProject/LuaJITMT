@@ -68,10 +68,20 @@ return function(add)
 
   add({
     name = "m5_strtab_cas",
-    description = "string table CAS publication fixtures",
+    description = "string table CAS publication and canonical quarantine model fixtures",
     run = function(t)
       local out = t:tmp("lj_t-strtab-cas")
       local out_rehash = t:tmp("lj_t-strtab-rehash")
+      local out_canon = t:tmp("lj_t-strcanon-model")
+      compile_and_run_sources(t, out_canon,
+        { t:path("tests", "t-strcanon-model.c") }, {
+        default_cflags = false,
+        include_src = false,
+        link_luajit = false,
+        libs = {},
+        timeout = "20s",
+        cflags = "-std=c11 -O2 -Wall -Wextra -Werror -pthread"
+      })
       t:build({ clean = true, quiet = true,
                 xcflags = "-DLJ_STR_TEST_HELPERS" })
       compile_and_run_c(t, out, "t-strtab-cas.c", {
@@ -80,7 +90,7 @@ return function(add)
       })
       compile_and_run_c(t, out_rehash, "t-strtab-rehash.c",
                         { timeout = "20s" })
-      print("M5 string table CAS publication tests passed")
+      print("M5 string table CAS publication and canonical quarantine model tests passed")
     end
   })
 
