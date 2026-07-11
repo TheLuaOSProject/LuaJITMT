@@ -69,7 +69,7 @@ static const char *clib_extname(lua_State *L, const char *name)
      ) {
     if (!strchr(name, '.')) {
       name = lj_strfmt_pushf(L, CLIB_SOEXT, name);
-      L->top--;
+      lj_state_stack_pubtv(L, L, L->top-1);
 #if LJ_TARGET_CYGWIN
     } else {
       return name;
@@ -78,7 +78,7 @@ static const char *clib_extname(lua_State *L, const char *name)
     if (!(name[0] == CLIB_SOPREFIX[0] && name[1] == CLIB_SOPREFIX[1] &&
 	  name[2] == CLIB_SOPREFIX[2])) {
       name = lj_strfmt_pushf(L, CLIB_SOPREFIX "%s", name);
-      L->top--;
+      lj_state_stack_pubtv(L, L, L->top-1);
     }
   }
   return name;
@@ -90,9 +90,15 @@ static const char *clib_check_lds(lua_State *L, const char *buf)
   const char *p, *e;
   if ((!strncmp(buf, "GROUP", 5) || !strncmp(buf, "INPUT", 5)) &&
       (p = strchr(buf, '('))) {
+    GCstr *s;
     while (*++p == ' ') ;
     for (e = p; *e && *e != ' ' && *e != ')'; e++) ;
-    return strdata(lj_str_new(L, p, e-p));
+    lj_state_checkstack(L, 1);
+    s = lj_str_new(L, p, e-p);
+    setstrV(L, L->top, s);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;  /* Root through fclose and the retry dlopen. */
+    return strdata(s);
   }
   return NULL;
 }
@@ -207,27 +213,43 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
 {
   uint32_t actions;
   int had_stopreq = lj_safepoint_had_stopreq(L);
-  void *h = clib_native_dlopen(L, clib_extname(L, name),
+  ptrdiff_t oldtop = savestack(L, L->top);
+  const char *extname = clib_extname(L, name);
+  void *h = clib_native_dlopen(L, extname,
 			       RTLD_LAZY | (global?RTLD_GLOBAL:RTLD_LOCAL),
 			       &actions);
+  L->top = restorestack(L, oldtop);
   if (!h) {
     const char *e, *err = dlerror();
     lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
-    if (err && *err == '/' && (e = strchr(err, ':')) &&
-	(name = clib_resolve_lds(L, strdata(lj_str_new(L, err, e-err))))) {
-      had_stopreq = lj_safepoint_had_stopreq(L);
-      h = clib_native_dlopen(L, name,
-			     RTLD_LAZY | (global?RTLD_GLOBAL:RTLD_LOCAL),
-			     &actions);
-      if (h) {
-	if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
-	  uint32_t close_actions = clib_native_dlclose(L, h);
-	  lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
+    if (err && *err == '/' && (e = strchr(err, ':'))) {
+      GCstr *path;
+      oldtop = savestack(L, L->top);
+      lj_state_checkstack(L, 1);
+      path = lj_str_new(L, err, e-err);
+      setstrV(L, L->top, path);
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;  /* Root through the native fopen. */
+      name = clib_resolve_lds(L, strdata(path));
+      if (name) {
+	had_stopreq = lj_safepoint_had_stopreq(L);
+	h = clib_native_dlopen(L, name,
+			       RTLD_LAZY | (global?RTLD_GLOBAL:RTLD_LOCAL),
+			       &actions);
+	L->top = restorestack(L, oldtop);
+	if (h) {
+	  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
+	    uint32_t close_actions = clib_native_dlclose(L, h);
+	    lj_safepoint_checkstop(L, actions | close_actions |
+				   LJ_GC2_HS_STOPREQ);
+	  }
+	  return h;
 	}
-	return h;
+	err = dlerror();
+	lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+      } else {
+	L->top = restorestack(L, oldtop);
       }
-      err = dlerror();
-      lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     }
     if (!err) err = "dlopen failed";
     lj_err_callermsg(L, err);
@@ -314,7 +336,7 @@ static const char *clib_extname(lua_State *L, const char *name)
 {
   if (clib_needext(name)) {
     name = lj_strfmt_pushf(L, "%s.dll", name);
-    L->top--;
+    lj_state_stack_pubtv(L, L, L->top-1);
   }
   return name;
 }
@@ -343,6 +365,7 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
 {
   uint32_t actions;
   int had_stopreq = lj_safepoint_had_stopreq(L);
+  ptrdiff_t oldtop = savestack(L, L->top);
   DWORD oldwerr = GetLastError(), err = 0;
   void *h;
   name = clib_extname(L, name);
@@ -351,7 +374,9 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
     lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
     SetLastError(err);
     clib_error(L, "cannot load module " LUA_QS ": %s", name);
-  } else if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
+  }
+  L->top = restorestack(L, oldtop);
+  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = clib_native_freelib(L, h);
     lj_safepoint_checkstop(L, actions | close_actions | LJ_GC2_HS_STOPREQ);
   }
@@ -732,11 +757,13 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 	CTInfo cconv = ctype_cconv(info);
 	if (cconv == CTCC_FASTCALL || cconv == CTCC_STDCALL) {
 	  CTSize sz = clib_func_argsize(cts, ct);
+	  ptrdiff_t oldtop = savestack(L, L->top);
 	  const char *symd = lj_strfmt_pushf(L,
 			       cconv == CTCC_FASTCALL ? "@%s@%d" : "_%s@%d",
 			       sym, sz);
-	  L->top--;
+	  lj_state_stack_pubtv(L, L, L->top-1);
 	  p = clib_getsym(L, cl, symd);
+	  L->top = restorestack(L, oldtop);
 	}
       }
 #endif
