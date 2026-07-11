@@ -204,6 +204,7 @@ static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					GCobj *o, cTValue *fin);
 static LJ_AINLINE int gc2_finreg_udata_obj_valid(global_State *g, GCobj *o);
 static uint32_t gc2_clear_container_needscan_all(global_State *g);
+static uint32_t gc2_clear_uncounted_needscan_all(global_State *g);
 static int gc2_frame_func_valid(global_State *g, TValue *frame,
 				GCfunc **fnp, GCproto **ptp);
 static void gc2_traverse_obj(global_State *g, GCobj *o);
@@ -2278,6 +2279,19 @@ static int gc2_mark_begin(global_State *g)
     gc2_minor_cycle_starts_add(g, 1);
   else
     gc2_major_cycle_starts_add(g, 1);
+  /*
+  ** A forced/late-preserve abort deliberately carries exact SSB and grey
+  ** references into the next cycle.  The LJ_GC_NEEDSCAN bit on an uncounted
+  ** payload container is only queue deduplication, however: it has no cycle
+  ** tag and cannot prove that the carried queue still contains this exact
+  ** object.  Clear stale FUNC/PROTO/UPVAL/UDATA/TRACE dedupe while the worker
+  ** token excludes queue consumers and phase is still IDLE.  Current-cycle
+  ** root discovery can then publish a fresh traversal after mark reset.
+  **
+  ** Do not clear TABLE or THREAD here.  Their NEEDSCAN state has an associated
+  ** pending counter/owner handoff that must be reconciled by its own protocol.
+  */
+  (void)gc2_clear_uncounted_needscan_all(g);
   /*
   ** Live published traces are reached from prototypes, trace links and active
   ** TG vmstates; gc2_scan_jit_roots() separately preserves the token-owned
@@ -5169,6 +5183,57 @@ static uint32_t gc2_clear_container_needscan_chain(global_State *g, GCobj *head)
       break;
     o = next;
   }
+  return cleared;
+}
+
+static int gc2_uncounted_needscan_type(uint32_t gct)
+{
+  switch (gct) {
+  case ~LJ_TFUNC:
+  case ~LJ_TPROTO:
+  case ~LJ_TUPVAL:
+  case ~LJ_TUDATA:
+#if LJ_HASJIT
+  case ~LJ_TTRACE:
+#endif
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+static uint32_t gc2_clear_uncounted_needscan_chain(global_State *g,
+						    GCobj *head)
+{
+  GCobj *o;
+  uint32_t cleared = 0, n = 0;
+  for (o = head; o != NULL;) {
+    GCobj *next;
+    if (!gc2_root_spine_entry(g, o, &next))
+      break;
+    if (gc2_uncounted_needscan_type((uint32_t)o->gch.gct) &&
+	(gc2_rescan_pending_clear(o) & LJ_GC_NEEDSCAN))
+      cleared++;
+    if (next == o || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      break;
+    o = next;
+  }
+  return cleared;
+}
+
+static uint32_t gc2_clear_uncounted_needscan_all(global_State *g)
+{
+  lua_State *mainL;
+  uint32_t cleared = 0;
+  if (!g)
+    return 0;
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  cleared += gc2_clear_uncounted_needscan_chain(g, lj_gc_root_acq(g));
+  mainL = mainthread_acq(g);
+  if (mainL)
+    cleared += gc2_clear_uncounted_needscan_chain(
+		g, lj_obj_gcw_acq(obj2gco(mainL)));
   return cleared;
 }
 

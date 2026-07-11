@@ -619,6 +619,55 @@ static void test_table_rescan_idle_clear(lua_State *L, global_State *g,
   lua_pop(L, 2);
 }
 
+static void test_upval_needscan_preserve_abort(lua_State *L, global_State *g,
+					       TGState *tg, int preserve_abort)
+{
+  int top = lua_gettop(L);
+  GCfunc *outer, *target;
+  GCupval *uv;
+  TValue snap;
+
+  assert(luaL_dostring(L,
+    "local function target() return 42 end\n"
+    "return function() return target end\n") == LUA_OK);
+  outer = funcV(L->top - 1);
+  assert(isluafunc(outer) && lj_funcL_nupvalues(&outer->l) == 1);
+  uv = gco2uv(gcref(outer->l.uvptr[0]));
+  assert(uv->closed && uvval(uv) == &uv->tv);
+  lj_tv_load_acq(&snap, uvval(uv));
+  assert(tvisfunc(&snap));
+  target = funcV(&snap);
+  assert(target != outer && isluafunc(target));
+
+  lj_gc2_force_major(g);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(outer)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(uv)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 1);
+  assert(lj_obj_gcflags(obj2gco(uv)) & LJ_GC_NEEDSCAN);
+  assert(lj_gc2_test_ssb_empty(g));
+
+  if (preserve_abort)
+    lj_gc2_preserve_abort_to_idle(g);
+  else
+    lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lj_obj_gcflags(obj2gco(uv)) & LJ_GC_NEEDSCAN);
+  assert(lj_gc2_test_ssb_empty(g));
+
+  lj_gc2_force_major(g);
+  lj_gc2_mark_begin(g);
+  assert((lj_obj_gcflags(obj2gco(uv)) & LJ_GC_NEEDSCAN) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(outer)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(uv)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, top);
+}
+
 static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
 {
   GCfunc *fn;
@@ -5081,6 +5130,8 @@ int main(void)
   test_c_table_rescan_barrier(L, g, tg);
   test_table_rescan_idle_clear(L, g, tg, 0);
   test_table_rescan_idle_clear(L, g, tg, 1);
+  test_upval_needscan_preserve_abort(L, g, tg, 0);
+  test_upval_needscan_preserve_abort(L, g, tg, 1);
   test_vm_upvalue_barrier(L, g, tg);
   test_vm_table_barrier(L, g, tg);
   test_vm_meta_tset_barrier(L, g, tg);
