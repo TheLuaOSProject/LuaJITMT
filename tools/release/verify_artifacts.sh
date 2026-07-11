@@ -71,6 +71,14 @@ check_sha256_file() {
   fi
 }
 
+sha256_stdin() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    shasum -a 256 | awk '{print $1}'
+  fi
+}
+
 checksum_lists() {
   local name=$1
   awk '
@@ -216,6 +224,30 @@ verify_archive_layout() {
       "$name" >&2
     failed=1
   fi
+  if [ "$platform" = "windows-x86_64-ucrt" ]; then
+    local runtime_path="$root${prefix}/bin/libwinpthread-1.dll"
+    local declared_sha actual_sha
+    if ! printf '%s\n' "$buildinfo" |
+        grep -Fxq 'bundled_runtime: libwinpthread-1.dll'; then
+      printf 'archive %s BUILDINFO does not declare bundled libwinpthread runtime\n' \
+        "$name" >&2
+      failed=1
+    fi
+    if ! printf '%s\n' "$buildinfo" |
+        grep -Eq '^bundled_runtime_origin: .+/libwinpthread-1[.]dll$'; then
+      printf 'archive %s BUILDINFO does not record libwinpthread toolchain origin\n' \
+        "$name" >&2
+      failed=1
+    fi
+    declared_sha=$(printf '%s\n' "$buildinfo" |
+      sed -n 's/^bundled_runtime_sha256: \([0-9a-fA-F]\{64\}\)$/\1/p')
+    actual_sha=$(archive_file "$archive" "$runtime_path" | sha256_stdin)
+    if [ -z "$declared_sha" ] || [ "$actual_sha" != "$declared_sha" ]; then
+      printf 'archive %s bundled runtime checksum does not match BUILDINFO\n' \
+        "$name" >&2
+      failed=1
+    fi
+  fi
 }
 
 failed=0
@@ -267,6 +299,7 @@ verify_archive_layout \
   "LuaJITMT-${tag}-windows-x86_64-ucrt.zip" \
   windows-x86_64-ucrt luajit.exe \
   bin/lua51.dll \
+  bin/libwinpthread-1.dll \
   lib/libluajit-5.1.dll.a
 
 [ "$failed" -eq 0 ] || exit 1

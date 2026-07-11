@@ -25,3 +25,10 @@ works but grants substantially more authority than perf itself needs.
 
 This is an environment limitation. It does not block correctness testing, but
 it blocks the strongest local performance diagnostics.
+
+## Resolution
+
+Resolved in the rebuilt development container. The devcontainer launch profile
+requests `CAP_PERFMON` explicitly in addition to its privileged test
+configuration, and `perf stat -e cycles,instructions true` now records hardware
+events successfully.

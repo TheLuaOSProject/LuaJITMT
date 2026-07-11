@@ -135,6 +135,69 @@ checksum() {
   fi
 }
 
+windows_stage_runtime() {
+  local cross=$1
+  local cc=$2
+  local bindir=$3
+  local buildinfo=$4
+  local runtime_name=libwinpthread-1.dll
+  local runtime_path
+  local runtime_sha256
+
+  runtime_path=$("${cross}${cc}" -print-file-name="$runtime_name")
+  if [ "$runtime_path" = "$runtime_name" ] || [ ! -f "$runtime_path" ]; then
+    printf '%s could not locate required runtime %s\n' \
+      "${cross}${cc}" "$runtime_name" >&2
+    exit 1
+  fi
+  runtime_path=$(CDPATH= cd -- "$(dirname -- "$runtime_path")" && pwd)/$(basename -- "$runtime_path")
+  install -m 0755 "$runtime_path" "$bindir/$runtime_name"
+  runtime_sha256=$(checksum "$runtime_path" | awk '{print $1}')
+  {
+    printf 'bundled_runtime: %s\n' "$runtime_name"
+    printf 'bundled_runtime_origin: %s\n' "$runtime_path"
+    printf 'bundled_runtime_sha256: %s\n' "$runtime_sha256"
+  } >> "$buildinfo"
+}
+
+windows_verify_import_closure() {
+  local cross=$1
+  local bindir=$2
+  local objdump=${cross}objdump
+  local image import lower imports
+  local -a images=("$bindir/luajit.exe" "$bindir/lua51.dll")
+
+  if ! command -v "$objdump" >/dev/null 2>&1; then
+    printf '%s is required to validate Windows runtime imports\n' "$objdump" >&2
+    exit 1
+  fi
+  while IFS= read -r -d '' image; do images+=("$image"); done \
+    < <(find "$bindir" -maxdepth 1 -type f -iname '*.dll' -print0)
+  for image in "${images[@]}"; do
+    [ -f "$image" ] || { printf 'missing Windows image: %s\n' "$image" >&2; exit 1; }
+    if ! imports=$("$objdump" -p "$image" |
+        sed -n 's/^[[:space:]]*DLL Name:[[:space:]]*//p'); then
+      printf 'failed to inspect PE imports: %s\n' "$image" >&2
+      exit 1
+    fi
+    while IFS= read -r import; do
+      [ -n "$import" ] || continue
+      lower=${import,,}
+      case "$lower" in
+        api-ms-win-*.dll|ext-ms-win-*.dll|advapi32.dll|bcrypt.dll|comctl32.dll|comdlg32.dll|crypt32.dll|gdi32.dll|imm32.dll|kernel32.dll|msvcrt.dll|ntdll.dll|ole32.dll|oleaut32.dll|rpcrt4.dll|secur32.dll|setupapi.dll|shell32.dll|shlwapi.dll|ucrtbase.dll|user32.dll|userenv.dll|version.dll|winmm.dll|winspool.drv|ws2_32.dll) ;;
+        *)
+          if [ ! -f "$bindir/$import" ] && ! find "$bindir" -maxdepth 1 -type f \
+              -iname "$import" -print -quit | grep -q .; then
+            printf 'unpackaged PE dependency: %s imports %s\n' \
+              "$(basename -- "$image")" "$import" >&2
+            exit 1
+          fi
+          ;;
+      esac
+    done <<< "$imports"
+  done
+}
+
 release_host_lua() {
   if [ -n "$release_host_lua_bin" ]; then return; fi
   if [ -n "${LJ_RELEASE_HOST_LUA:-}" ]; then
@@ -276,6 +339,9 @@ case "$platform" in
       printf 'toolchain: %s%s\n' "$cross" "$cc"
       printf 'runtime: UCRT\n'
     } >> "${stage}${prefix}/share/doc/luajitmt/BUILDINFO"
+    windows_stage_runtime "$cross" "$cc" "${stage}${prefix}/bin" \
+      "${stage}${prefix}/share/doc/luajitmt/BUILDINFO"
+    windows_verify_import_closure "$cross" "${stage}${prefix}/bin"
     run_release_test
     archive=$(archive_zip_stage)
     run_release_archive_test "$archive"

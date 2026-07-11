@@ -12,6 +12,7 @@
 		"--cap-add=SYS_ADMIN",
 		"--cap-add=SYS_PTRACE",
 		"--cap-add=SYS_RESOURCE",
+		"--cap-add=PERFMON",
 		"--ulimit=nofile=1048576:1048576",
 		"--device=/dev/fuse",
 		"--mount=type=volume,source=lj-lockless-darling,target=/darling"

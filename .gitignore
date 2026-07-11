@@ -19,3 +19,5 @@ src/.lj-test-build-signature
 .devcontainer/features/darling/prefix/
 .devcontainer/features/darling/prefix.workdir/
 release-artifacts/
+.release-home/
+.release-wine/

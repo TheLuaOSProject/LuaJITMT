@@ -34,3 +34,13 @@ missing packaged dependency.
 
 This is a release-harness/packaging defect, separate from the Win64 GC2 register
 alias runtime bug fixed in commit `d2574282`.
+
+## Resolution
+
+Resolved in the release harness. The UCRT build now locates the matching
+`libwinpthread-1.dll` through the selected cross compiler, bundles it beside the
+Windows binaries, and records its absolute toolchain origin and SHA-256 in
+`BUILDINFO`. Before testing or archiving, the builder rejects any non-system PE
+import that is not present in that directory. Both the archive layout verifier
+and the isolated archive smoke require the bundled DLL, so a host/Wine search
+path can no longer hide its absence.

@@ -294,6 +294,7 @@ local function run_windows_archive(t)
   local p = release_prefix()
   local required = common_archive_paths("luajit.exe")
   required[#required + 1] = p .. "/bin/lua51.dll"
+  required[#required + 1] = p .. "/bin/libwinpthread-1.dll"
   required[#required + 1] = p .. "/lib/libluajit-5.1.dll.a"
   return run_archive_binary(t, "windows", env("LJ_RELEASE_WINDOWS_ARCHIVE"), {
     p .. "/bin/luajit.exe"

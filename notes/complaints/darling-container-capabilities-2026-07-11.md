@@ -29,3 +29,12 @@ namespace creation, mount/FUSE operations, and tracing, expose `/dev/fuse`, and
 use a seccomp policy which allows those operations.
 
 This is an environment limitation, not a LuaJIT runtime defect.
+
+## Resolution
+
+Resolved by the checked-in devcontainer launch profile, which runs privileged,
+disables the seccomp and AppArmor filters, grants `SYS_ADMIN` and `SYS_PTRACE`,
+and exposes `/dev/fuse`. After rebuilding, the current container has the needed
+capabilities and device; `darling shell /usr/bin/true` exits successfully. The
+remaining file-descriptor-limit warning is nonfatal and does not prevent the
+macOS test runner from executing binaries.
