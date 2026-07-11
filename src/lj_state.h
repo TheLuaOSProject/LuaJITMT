@@ -85,4 +85,15 @@ LJ_FUNC lua_State *lj_state_newstate(lua_Alloc f, void *ud);
 
 #define LJ_ALLOCF_INTERNAL	((lua_Alloc)(void *)(uintptr_t)(1237<<4))
 
+/*
+** Temporary GC2 safety boundary: all state storage stays in the internal
+** arena until arbitrary lua_Alloc callbacks have nonblocking body SMR,
+** allocator-generation ownership and concurrent-callback semantics.
+** Keep this as a named gate so the complete implementation can remove the
+** policy without another public API or ABI change.
+*/
+#ifndef LJ_GC2_INTERNAL_ALLOCATOR_ONLY
+#define LJ_GC2_INTERNAL_ALLOCATOR_ONLY 1
+#endif
+
 #endif

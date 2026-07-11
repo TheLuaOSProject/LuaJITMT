@@ -28,6 +28,7 @@
 #include "lj_ctype.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
+#include "lj_state.h"
 #include "lj_tg.h"
 
 typedef struct NativeHelperStopReqCtx {
@@ -44,11 +45,13 @@ typedef struct NativeHelperRedispatchCtx {
   uint32_t saw_native;
 } NativeHelperRedispatchCtx;
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 typedef struct NativeHelperAllocCtx {
   lua_Alloc oldf;
   void *oldud;
   uint32_t clobbers;
 } NativeHelperAllocCtx;
+#endif
 
 #define STOPREQ_WINERR UINT32_C(0x52a7)
 
@@ -58,6 +61,7 @@ static TGState *pending_tg;
 static uint32_t pending_actions;
 static NativeHelperRedispatchCtx *errno_redispatch_ctx;
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void *clobber_error_alloc(void *ud, void *ptr, size_t osize,
 				 size_t nsize)
 {
@@ -70,6 +74,7 @@ static void *clobber_error_alloc(void *ud, void *ptr, size_t osize,
 #endif
   return p;
 }
+#endif
 
 static int error_state_from_lua(lua_State *L)
 {
@@ -249,7 +254,9 @@ static void run_callback_blacklist(lua_State *L, CTState *cts, TGState *tg)
 static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
 				    global_State *g, TGState *tg)
 {
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   NativeHelperAllocCtx alloc;
+#endif
   NativeHelperStopReqCtx ctx;
   CCallNativeState native;
   pthread_t thread;
@@ -288,9 +295,11 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   lua_pushinteger(L,
 	(lua_Integer)(LJ_TARGET_WINDOWS ? STOPREQ_WINERR : 0));
   lua_setglobal(L, "ccall_expected_winerr");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   alloc.oldf = lua_getallocf(L, &alloc.oldud);
   alloc.clobbers = 0;
   lua_setallocf(L, clobber_error_alloc, &alloc);
+#endif
   ljt_lua_dostring(L,
     "local ok, err = pcall(ccall_native_checkstop_probe)\n"
     "local e, w = ccall_error_state_probe()\n"
@@ -299,8 +308,10 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
     "assert(w == ccall_expected_winerr, w)\n"
     "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
     "       tostring(err))\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   lua_setallocf(L, alloc.oldf, alloc.oldud);
   assert(alloc.clobbers != 0);
+#endif
   ljt_tg_clear_stopreq(tg);
 }
 

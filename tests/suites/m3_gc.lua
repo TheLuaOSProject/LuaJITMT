@@ -21,6 +21,7 @@ end
 local m3_scaffold_deps = {
   "m3_gc_root_pending",
   "m3_gc2_no_legacy_runtime",
+  "m3_gc2_internal_allocator_only",
   "m3_gc2_worker_scheduler",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
@@ -67,6 +68,33 @@ return function(add)
                         "t-gc2-no-legacy-runtime.c", {
         timeout = "60s"
       })
+    end
+  })
+
+  register({
+    name = "m3_gc2_internal_allocator_only",
+    description = "temporary internal-arena-only lua_Alloc safety boundary",
+    run = function(t)
+      local sysmalloc = "-DLUAJIT_USE_SYSMALLOC -DLUA_USE_APICHECK"
+      make_clean(t)
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-internal-allocator-only"),
+                        "t-gc2-internal-allocator-only.c", {
+        timeout = "60s"
+      })
+      build.with_default_build_restore(t, function()
+        make_clean(t)
+        make_default(t, {
+          jobs = false,
+          args = { "XCFLAGS=" .. sysmalloc }
+        })
+        compile_and_run_c(t,
+                          t:tmp("lj_t-gc2-internal-allocator-only-sysmalloc"),
+                          "t-gc2-internal-allocator-only.c", {
+          cflags = sysmalloc,
+          timeout = "60s"
+        })
+      end, { jobs = false })
     end
   })
 

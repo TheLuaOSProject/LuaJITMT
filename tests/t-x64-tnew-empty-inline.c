@@ -11,6 +11,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_state.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -24,11 +25,13 @@
 #define TNEW_EMPTY_SIZE		((GCSize)sizeof(GCtab))
 #define TNEW_EMPTY_NCELLS	((uint32_t)((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT))
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 typedef struct TestAllocCtx {
   lua_Alloc oldf;
   void *oldud;
   uint32_t calls;
 } TestAllocCtx;
+#endif
 
 typedef struct ReusableRun {
   GCArena *a;
@@ -49,6 +52,7 @@ static void prime_traversable_bump_window(TGState *tg)
   assert(lj_arena_alloc_register_existing(alloc));
 }
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void *counting_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   TestAllocCtx *ctx = (TestAllocCtx *)ud;
@@ -56,6 +60,7 @@ static void *counting_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
     ctx->calls++;
   return ctx->oldf(ctx->oldud, ptr, osize, nsize);
 }
+#endif
 
 static void load_empty_table_chunk(lua_State *L)
 {
@@ -543,6 +548,7 @@ static void test_local_accounting_fallback(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void test_custom_allocator_fallback(lua_State *L, global_State *g)
 {
   TestAllocCtx ctx;
@@ -561,6 +567,7 @@ static void test_custom_allocator_fallback(lua_State *L, global_State *g)
   lua_setallocf(L, ctx.oldf, ctx.oldud);
   assert(g->allocf_arena == 1);
 }
+#endif
 
 static void test_inline_empty_tnew_uses_bump_with_free_run(lua_State *L,
 							   global_State *g,
@@ -689,7 +696,9 @@ int main(void)
 #endif
   test_entering_uses_helper(L, g, tg);
   test_local_accounting_fallback(L, g, tg);
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   test_custom_allocator_fallback(L, g);
+#endif
   test_inline_empty_tnew_uses_bump_with_free_run(L, g, tg);
   test_plain_new0_uses_bump_with_free_run(L, g, tg);
 

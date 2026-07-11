@@ -543,6 +543,11 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lua_State *L;
   global_State *g;
   int arena_internal = 0;
+#if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
+  /* The callback remains in the ABI, but is deliberately not invoked yet. */
+  allocf = LJ_ALLOCF_INTERNAL;
+  allocd = NULL;
+#endif
   /* We need the PRNG for the memory allocator, so initialize this first. */
   if (!lj_prng_seed_secure_l(NULL, &prng)) {
     lj_assertX(0, "secure PRNG seeding failed");

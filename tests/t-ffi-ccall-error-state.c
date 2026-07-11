@@ -13,6 +13,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_state.h"
 #include "lj_tg.h"
 
 #if LJ_TARGET_WINDOWS
@@ -27,6 +28,7 @@
 #define PROBE_WINERR UINT32_C(0x6a17)
 
 typedef struct ProbeAllocCtx {
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   lua_Alloc oldf;
   void *oldud;
   TGState *tg;
@@ -34,8 +36,11 @@ typedef struct ProbeAllocCtx {
   uint64_t armed_calls;
   uint64_t armed_jit_calls;
   uint64_t failed_allocs;
+#endif
   int armed;
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   int fail_next;
+#endif
 } ProbeAllocCtx;
 
 static ProbeAllocCtx *probe_ctx;
@@ -74,12 +79,14 @@ static int *probe_ptr(void)
   return &probe_value;
 }
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static int *probe_ptr_oom(void)
 {
   probe_arm();
   probe_ctx->fail_next = 1;
   return &probe_value;
 }
+#endif
 
 static uint32_t probe_get_winerr(void)
 {
@@ -96,6 +103,7 @@ static void probe_disarm(void)
   probe_ctx->armed = 0;
 }
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void *probe_clobber_alloc(void *ud, void *ptr, size_t osize,
 				 size_t nsize)
 {
@@ -122,12 +130,6 @@ static void *probe_clobber_alloc(void *ud, void *ptr, size_t osize,
   return p;
 }
 
-static void push_pointer(lua_State *L, const char *name, void *p)
-{
-  lua_pushlightuserdata(L, p);
-  lua_setglobal(L, name);
-}
-
 static void reset_armed_allocs(ProbeAllocCtx *ctx)
 {
   assert(ctx->armed == 0);
@@ -148,6 +150,13 @@ static void require_armed_alloc(const ProbeAllocCtx *ctx, const char *phase,
     abort();
   }
 }
+#endif
+
+static void push_pointer(lua_State *L, const char *name, void *p)
+{
+  lua_pushlightuserdata(L, p);
+  lua_setglobal(L, name);
+}
 
 int main(void)
 {
@@ -155,20 +164,24 @@ int main(void)
   ProbeAllocCtx alloc;
   assert(L != NULL);
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   alloc.oldf = lua_getallocf(L, &alloc.oldud);
   alloc.tg = L2TG(L);
   alloc.calls = 0;
   alloc.armed_calls = 0;
   alloc.armed_jit_calls = 0;
   alloc.failed_allocs = 0;
-  alloc.armed = 0;
   alloc.fail_next = 0;
+#endif
+  alloc.armed = 0;
   probe_ctx = &alloc;
 
   push_pointer(L, "lj_probe_i32", (void *)(uintptr_t)&probe_i32);
   push_pointer(L, "lj_probe_u64", (void *)(uintptr_t)&probe_u64);
   push_pointer(L, "lj_probe_ptr", (void *)(uintptr_t)&probe_ptr);
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   push_pointer(L, "lj_probe_ptr_oom", (void *)(uintptr_t)&probe_ptr_oom);
+#endif
   push_pointer(L, "lj_probe_get_winerr",
 	       (void *)(uintptr_t)&probe_get_winerr);
   push_pointer(L, "lj_probe_disarm", (void *)(uintptr_t)&probe_disarm);
@@ -185,7 +198,9 @@ int main(void)
     "lj_probe_i32 = ffi.cast('int32_t (*)(void)', lj_probe_i32)\n"
     "lj_probe_u64 = ffi.cast('uint64_t (*)(void)', lj_probe_u64)\n"
     "lj_probe_ptr = ffi.cast('int *(*)(void)', lj_probe_ptr)\n"
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
     "lj_probe_ptr_oom = ffi.cast('int *(*)(void)', lj_probe_ptr_oom)\n"
+#endif
     "lj_probe_get_winerr = ffi.cast('uint32_t (*)(void)',\n"
     "                                  lj_probe_get_winerr)\n"
     "lj_probe_disarm = ffi.cast('void (*)(void)', lj_probe_disarm)\n"
@@ -193,11 +208,16 @@ int main(void)
     "lj_probe_vla_t = ffi.typeof('uint8_t[?]')\n"
     "lj_probe_keep = {}\n");
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   lua_setallocf(L, probe_clobber_alloc, &alloc);
+#endif
 
-  /* Interpreted pointer conversion allocates a fixed cdata after native_leave.
-  ** The final call-frame restore must beat the allocator's deliberate clobber. */
+  /* Always verify the native error pair across interpreted pointer boxing.
+  ** When callback allocators are enabled, additionally prove that the final
+  ** call-frame restore beats a deliberate post-return allocator clobber. */
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
+#endif
   ljt_lua_dostring(L,
     "jit.off()\n"
     "local p = lj_probe_ptr()\n"
@@ -208,9 +228,12 @@ int main(void)
     "assert(w == lj_probe_expected_winerr, w)\n"
     "assert(p[0] == 91)\n"
     "lj_probe_keep[1] = p\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   require_armed_alloc(&alloc, "interpreted pointer result", 0);
   assert(alloc.armed_jit_calls == 0);
+#endif
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   /* Fail the first post-return cdata allocation. The nothrow CNEW path must
   ** restore the foreign pair before lj_err_mem(), and the external unwinder's
   ** final landing pad must restore it again after installing the context. */
@@ -228,12 +251,10 @@ int main(void)
   assert(alloc.fail_next == 0);
   require_armed_alloc(&alloc, "failing interpreted pointer result", 0);
   assert(alloc.armed_jit_calls == 0);
-  /* GC2 does not yet have a custom-allocation registry. Keeping a wrapper
-  ** installed across fresh collection cycles can make pre-existing arena
-  ** objects look custom and is tracked as a separate lua_setallocf ABI blocker.
-  ** The default fixture still proves the normal and exceptional post-return
-  ** allocation edges; opt into the longer class matrix once testing that
-  ** allocator migration work explicitly. */
+#endif
+  /* Keep the longer boxing matrix opt-in. In internal-allocator-only builds
+  ** it still covers native error preservation, but intentionally omits all
+  ** assertions which depend on observing a lua_Alloc callback. */
   if (getenv("LJ_FFI_ERRSTATE_OOM_ONLY") != NULL ||
       getenv("LJ_FFI_ERRSTATE_ALLOC_STRESS") == NULL)
     goto done;
@@ -242,7 +263,9 @@ int main(void)
   ** CALLXS publication lands. Keep exercising the same boxed/aligned/VLA
   ** post-call allocation windows in the interpreter and require that none of
   ** those allocations happened under a generated-code jit_base. */
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
+#endif
   ljt_lua_dostring(L,
     "jit.on()\n"
     "jit.flush()\n"
@@ -263,12 +286,16 @@ int main(void)
     "local n = 0\n"
     "for tr = 1, 128 do if util.traceinfo(tr) then n = n + 1 end end\n"
     "assert(n == 0, 'ordinary FFI C call bypassed the XSAVE safety gate')\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
+#endif
   ljt_lua_dostring(L, "lj_probe_boxed_run(4000)\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   require_armed_alloc(&alloc, "gated boxed CNEWI result", 0);
   assert(alloc.armed_jit_calls == 0);
 
   reset_armed_allocs(&alloc);
+#endif
   ljt_lua_dostring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1', '-sink')\n"
@@ -291,12 +318,16 @@ int main(void)
     "local n = 0\n"
     "for tr = 1, 128 do if util.traceinfo(tr) then n = n + 1 end end\n"
     "assert(n == 0, 'ordinary FFI C call bypassed the XSAVE safety gate')\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
+#endif
   ljt_lua_dostring(L, "lj_probe_aligned_run(4000)\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   require_armed_alloc(&alloc, "gated aligned CNEW result", 0);
   assert(alloc.armed_jit_calls == 0);
 
   reset_armed_allocs(&alloc);
+#endif
   ljt_lua_dostring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1', '-sink')\n"
@@ -319,16 +350,22 @@ int main(void)
     "local n = 0\n"
     "for tr = 1, 128 do if util.traceinfo(tr) then n = n + 1 end end\n"
     "assert(n == 0, 'ordinary FFI C call bypassed the XSAVE safety gate')\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
+#endif
   ljt_lua_dostring(L, "lj_probe_vla_run(4000)\n");
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   require_armed_alloc(&alloc, "gated variable CNEW result", 0);
   assert(alloc.armed_jit_calls == 0);
 
-  assert(alloc.armed == 0);
   assert(alloc.calls != 0);
+#endif
+  assert(alloc.armed == 0);
 done:
   assert(alloc.armed == 0);
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   lua_setallocf(L, alloc.oldf, alloc.oldud);
+#endif
   probe_ctx = NULL;
   lua_close(L);
   printf("t-ffi-ccall-error-state OK: gated post-call boxing preserves native errors\n");

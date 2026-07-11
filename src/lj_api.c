@@ -2364,6 +2364,10 @@ LUA_API lua_Alloc lua_getallocf(lua_State *L, void **ud)
 
 LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
 {
+#if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
+  /* Temporary GC2 policy: preserve the arena ownership domain. */
+  UNUSED(L); UNUSED(f); UNUSED(ud);
+#else
   global_State *g = G(L);
   uint32_t arena = (f == lj_arena_allocf);
   if (!arena)
@@ -2372,4 +2376,5 @@ LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
   g->allocf = f;
   if (arena)
     la_store32_rel(&g->allocf_arena, 1);
+#endif
 }

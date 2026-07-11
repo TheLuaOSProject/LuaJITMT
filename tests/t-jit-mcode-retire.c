@@ -10,6 +10,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_state.h"
 #include "lj_jit.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -18,6 +19,7 @@
 
 #include "lib/lua_fixture_helpers.h"
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 typedef struct FailAllocCtx {
   lua_Alloc oldf;
   void *oldud;
@@ -36,6 +38,7 @@ static void *fail_growing_alloc(void *ud, void *ptr, size_t osize,
   }
   return ctx->oldf(ctx->oldud, ptr, osize, nsize);
 }
+#endif
 
 static MCodeRetire *retired_find(jit_State *J, MCode *needle)
 {
@@ -103,7 +106,9 @@ int main(void)
   MCodeRetire *ret;
   size_t szall;
   uint64_t epoch;
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   FailAllocCtx alloc;
+#endif
 
   g = G(L);
   J = G2J(g);
@@ -134,6 +139,7 @@ int main(void)
   ** Deny every allocator growth to prove the entire eventless flush, including
   ** machine-code retirement, is a no-throw ownership transfer.
   */
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   alloc.oldf = lua_getallocf(L, &alloc.oldud);
   alloc.grow_calls = 0;
   alloc.fail_grow = 1;
@@ -142,6 +148,10 @@ int main(void)
   alloc.fail_grow = 0;
   lua_setallocf(L, alloc.oldf, alloc.oldud);
   assert(alloc.grow_calls == 0);
+#else
+  /* lua_setallocf is intentionally inert at this temporary GC2 boundary. */
+  assert(lj_trace_flushall_gc(L) == 0);
+#endif
 
   assert(mcode_active_head_acq(J) == NULL);
   assert(J->mcarea == NULL);

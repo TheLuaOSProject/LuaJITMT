@@ -14,6 +14,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_obj.h"
+#include "lj_state.h"
 #include "lj_str.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -29,6 +30,7 @@ typedef struct ActiveReleaseCtx {
   uint32_t cleared;
 } ActiveReleaseCtx;
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 typedef struct FailAllocCtx {
   int fail_next;
   size_t fail_min;
@@ -37,6 +39,7 @@ typedef struct FailAllocCtx {
 typedef struct ResizeOOMCtx {
   MSize newmask;
 } ResizeOOMCtx;
+#endif
 
 typedef struct ReclaimReaderCtx {
   global_State *g;
@@ -322,6 +325,7 @@ static void exercise_string_count_blocks(lua_State *L)
   assert(lj_str_num_acq(g) == exact);
 }
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   FailAllocCtx *ctx = (FailAllocCtx *)ud;
@@ -336,6 +340,7 @@ static void *fail_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
   }
   return realloc(ptr, nsize);
 }
+#endif
 
 static void *release_active_after_claim(void *arg)
 {
@@ -354,12 +359,14 @@ static void *release_active_after_claim(void *arg)
   return NULL;
 }
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static int protected_resize(lua_State *L)
 {
   ResizeOOMCtx *ctx = (ResizeOOMCtx *)lua_touserdata(L, 1);
   lj_str_resize(L, ctx->newmask);
   return 0;
 }
+#endif
 
 static void *reclaim_retired_worker(void *arg)
 {
@@ -369,6 +376,7 @@ static void *reclaim_retired_worker(void *arg)
   return NULL;
 }
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void exercise_resize_oom_does_not_claim(void)
 {
   FailAllocCtx allocctx = { 0, 0 };
@@ -400,6 +408,7 @@ static void exercise_resize_oom_does_not_claim(void)
 
   lua_close(L);
 }
+#endif
 
 int main(void)
 {
@@ -423,7 +432,9 @@ int main(void)
   tg = L2TG(L);
   assert(tg != NULL);
 
+#if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   exercise_resize_oom_does_not_claim();
+#endif
 
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
@@ -572,6 +583,10 @@ int main(void)
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
   lua_close(L);
+#if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
+#else
   printf("t-strtab-cas OK: tagged-link rescue/prepend races, resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
+#endif
   return 0;
 }
