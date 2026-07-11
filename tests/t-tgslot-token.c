@@ -64,12 +64,10 @@ static void test_scalar_lifecycle_and_reuse(void)
   assert(snap.lease_count == 1 && snap.state == LJ_TGSLOT_DETACHING);
   assert(retry_edge(lj_tgslot_try_retire, &first, &snap) == LJ_TGSLOT_OK);
   assert(snap.lease_count == 1 && snap.state == LJ_TGSLOT_RETIRED);
-  assert(lj_tgslot_try_begin_reclaim(&first, &snap) == LJ_TGSLOT_BUSY);
-  assert(lj_tgslot_try_release(&first, &snap) == LJ_TGSLOT_OK);
-  assert(snap.lease_count == 0 && snap.state == LJ_TGSLOT_RETIRED);
+  assert(lj_tgslot_try_release(&first, &snap) == LJ_TGSLOT_BUSY);
   assert(retry_edge(lj_tgslot_try_begin_reclaim, &first, &snap) ==
          LJ_TGSLOT_OK);
-  assert(snap.state == LJ_TGSLOT_RECLAIMING);
+  assert(snap.lease_count == 0 && snap.state == LJ_TGSLOT_RECLAIMING);
   assert(retry_edge(lj_tgslot_try_finish_reclaim, &first, &snap) ==
          LJ_TGSLOT_OK);
   assert(snap.incarnation == 1 && snap.state == LJ_TGSLOT_EMPTY);
@@ -105,7 +103,8 @@ static void test_borrow_retire_linearization(void)
   assert(lj_tgslot_try_borrow(&key, &snap) == LJ_TGSLOT_DENIED);
   assert(lj_tgslot_try_begin_reclaim(&key, &snap) == LJ_TGSLOT_BUSY);
   assert(lj_tgslot_try_release(&key, &snap) == LJ_TGSLOT_OK);
-  assert(lj_tgslot_try_release(&key, &snap) == LJ_TGSLOT_OK);
+  assert(snap.state == LJ_TGSLOT_RETIRED && snap.lease_count == 1);
+  assert(lj_tgslot_try_release(&key, &snap) == LJ_TGSLOT_BUSY);
   assert(retry_edge(lj_tgslot_try_begin_reclaim, &key, NULL) ==
          LJ_TGSLOT_OK);
   assert(retry_edge(lj_tgslot_try_finish_reclaim, &key, NULL) ==
@@ -128,7 +127,8 @@ static void test_attaching_borrow_and_abort(void)
   assert(snap.state == LJ_TGSLOT_RETIRED && snap.lease_count == 2);
   assert(lj_tgslot_try_borrow(&key, &snap) == LJ_TGSLOT_DENIED);
   assert(lj_tgslot_try_release(&key, &snap) == LJ_TGSLOT_OK);
-  assert(lj_tgslot_try_release(&key, &snap) == LJ_TGSLOT_OK);
+  assert(snap.state == LJ_TGSLOT_RETIRED && snap.lease_count == 1);
+  assert(lj_tgslot_try_release(&key, &snap) == LJ_TGSLOT_BUSY);
   assert(retry_edge(lj_tgslot_try_begin_reclaim, &key, NULL) ==
          LJ_TGSLOT_OK);
   assert(retry_edge(lj_tgslot_try_finish_reclaim, &key, NULL) ==
@@ -168,6 +168,8 @@ static void test_invalid_edges_and_owner_lease(void)
   assert(!lj_tgslot_init_unpublished(&slot, 1, 0, LJ_TGSLOT_LIVE));
   assert(!lj_tgslot_init_unpublished(&slot, 1, 1,
                                       LJ_TGSLOT_RECLAIMING));
+  assert(!lj_tgslot_init_unpublished(&slot, 1, 0,
+                                      LJ_TGSLOT_RETIRED));
   assert(!lj_tgslot_init_unpublished(&slot, 1, 0,
                                       LJ_TGSLOT_EXHAUSTED + 1u));
   assert(!lj_tgslot_init_unpublished(NULL, 0, 0, LJ_TGSLOT_EMPTY));
@@ -303,12 +305,7 @@ static void *reclaimer_thread(void *ud)
   } while (result == LJ_TGSLOT_LOST);
   assert(result == LJ_TGSLOT_OK);
 
-  /* Drop the body lease only after admission is closed by RETIRED. */
-  do {
-    result = lj_tgslot_try_release(&stress->key, NULL);
-  } while (result == LJ_TGSLOT_LOST);
-  assert(result == LJ_TGSLOT_OK);
-
+  /* RETIRED retains the owner lease while remote borrows drain. */
   result = lj_tgslot_try_begin_reclaim(&stress->key, NULL);
   assert(result == LJ_TGSLOT_BUSY);
   (void)la_add32_rlx(&stress->busy_reclaims, 1);

@@ -73,25 +73,50 @@ EMPTY -> ATTACHING -> LIVE -> DETACHING -> RETIRED -> RECLAIMING -> EMPTY
 ```
 
 ATTACHING, LIVE, and DETACHING can be borrowed.  RETIRED closes admission while
-preserving all leases.  Physical finalization requires the exact
-`RETIRED, leases=0 -> RECLAIMING` transition.  Reuse increments incarnation,
-so a stale key cannot borrow the same address.  Lease saturation makes a live
-body PINNED.  Incarnation exhaustion enters a distinct terminal-empty state;
-it must not make a stale key look like a lease on an already-freed body.
+preserving all leases, including one permanent owner-body lease.  Remote
+releases can drain RETIRED only to that final lease.  Physical finalization is
+admitted by the single exact `RETIRED, leases=1 -> RECLAIMING, leases=0` CAS,
+which consumes the owner lease without ever exposing a reclaimable
+`RETIRED, leases=0` interval.  Reuse increments incarnation, so a stale key
+cannot borrow the same address.  Lease saturation makes a live body PINNED.
+Incarnation exhaustion enters a distinct terminal-empty state; it must not
+make a stale key look like a lease on an already-freed body.
 
-The future external handle contains at least:
+The standalone external registry slot now contains:
 
 ```c
 LJTGSlotToken token;
-TGState *body;          /* release-published, acquire after body lease */
-global_State *gl;       /* same lifetime rule */
-uint32_t stable_refs;   /* slot/TLS-key lifetime, not a body lease */
+la_u128 body_value;            /* exact {body pointer, body incarnation} */
+LJTGRegistrySlot *next_all;    /* immutable after registry publication */
 ```
+
+`token` and `body_value` are separate aligned CX16 words.  For EMPTY
+incarnation `i`, the body value is exactly `{NULL, i}`.  Claim atomically
+publishes token `{ATTACHING, i+1, owner lease}` while the body remains
+`{NULL, i}`; body publication then exact-CASes that value to `{body, i+1}`.
+Once published, the tagged body is immutable for the remainder of
+ATTACHING/LIVE/DETACHING/RETIRED and all borrow leases.  Reclamation
+exact-CASes `{body, i+1}` to `{NULL, i+1}` before publishing EMPTY.
+Consequently, a delayed clearer cannot erase a republished body even if
+allocator reuse gives the new incarnation the identical pointer.
+
+The body carries its `global_State` association.  The stable slot and its
+`next_all` link remain allocated until universe shutdown; only the keyed body
+incarnation is reclaimed and reused.  Any body/tag mismatch under an unchanged
+borrowable token exact-pins that incarnation as no-reclaim.  The one expected
+exception is the rootless ATTACHING publication gap described above.  A new
+slot is still private then, while a reused slot is already on the immutable
+registry spine.  Exact borrow and enumeration report bounded `BUSY` and
+acquire no lease.  The attach descriptor/activation revalidation must cover a
+collector which skipped that gap before any roots are published.
 
 Body leases cover subordinate storage too: allocator state, root-anchor
 blocks, temporary buffers, embedded published SSB nodes, and any storage a
-helper can reach through the TG.  An idle TLS key keeps the small stable handle
-alive but must not by itself pin the whole Lua universe.
+helper can reach through the TG.  An installed TLS binding holds one ordinary
+long-lived body borrow in addition to the registry's owner lease.  This keeps a
+forgotten or stale TLS cache from becoming a use-after-free: RETIRED reclaim
+stays busy until the binding is cleared.  It protects the TG body, not the
+independent lifetime of the whole Lua universe.
 
 ## Attach ordering
 
@@ -101,8 +126,9 @@ CAS; a leader can finish in that gap.  The replacement order is:
 
 1. Keep the Lua universe alive through the entry operation.
 2. Claim a stable slot in ATTACHING with its owner body lease.
-3. Release-publish body/global pointers, then link the empty ATTACHING handle;
-   root-bearing TG fields are still nil.
+3. Release-publish body/global pointers.  CAS-link a newly allocated stable
+   slot; a reused slot is already on the immutable spine.  Root-bearing TG
+   fields are still nil.
 4. Install the stable key in TLS.
 5. Publish an ATTACH root descriptor covering the intended thread, stack, and
    owner roots.
@@ -121,10 +147,12 @@ is current.
 ## Detach and reclaim ordering
 
 Detach publishes a descriptor and enters DETACHING before clearing remotely
-readable roots.  It consumes requests, flushes SSB/accounting, transitions to
-RETIRED, clears TLS to the stable key, then drops the owner body lease.  Any
-thread can attempt bounded reclamation; failure to acquire the exact zero-lease
-transition simply leaves work for another helper.
+readable roots.  It consumes requests and flushes SSB/accounting, then clears
+root publications and the TLS binding before the final owner-side use of the
+TG.  Only that completed boundary may transition to RETIRED.  Remote leases
+then drain toward the permanent owner lease; any thread can attempt the exact
+`RETIRED/1 -> RECLAIMING/0` CAS.  A busy attempt simply leaves work for another
+helper, and no separate owner-release operation exists.
 
 Existing TG-list SMR and handshake waits remain temporary compatibility
 mechanisms.  They cannot be used in the final nonblocking protocol.  Stable

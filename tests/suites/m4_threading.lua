@@ -33,6 +33,23 @@ return function(add)
     end
   })
 
+  add({
+    name = "m4_tgregistry_slot_model",
+    description = "stable external TG registry-slot body and lease model",
+    run = function(t)
+      compile_and_run_sources(t, t:tmp("lj_t-tgregistry-slot"),
+        { t:path("tests", "t-tgregistry-slot.c") }, {
+        default_cflags = false,
+        include_src = true,
+        link_luajit = false,
+        libs = {},
+        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16",
+        timeout = "30s"
+      })
+      print("M4 stable external TG registry-slot model passed")
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
     {
       name = "m4_threading_api",

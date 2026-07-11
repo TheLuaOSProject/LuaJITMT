@@ -82,9 +82,10 @@ LA_INLINE uint8_t lj_tgslot_state(uint64_t hi)
 }
 
 /*
-** The owner body lease is installed by EMPTY -> ATTACHING and must remain
-** until RETIRED.  This makes zero leases impossible while the slot body is
-** publicly usable.  PINNED is the conservative no-reclaim state.
+** The owner body lease is installed by EMPTY -> ATTACHING and remains through
+** RETIRED. Reclaim consumes it in RETIRED/1 -> RECLAIMING/0. This makes zero
+** leases impossible while the slot body is publicly usable. PINNED is the
+** conservative no-reclaim state.
 */
 LA_INLINE int lj_tgslot_components_valid(uint64_t incarnation,
                                           uint64_t lease_count,
@@ -107,6 +108,9 @@ LA_INLINE int lj_tgslot_components_valid(uint64_t incarnation,
   case LJ_TGSLOT_EXHAUSTED:
     return incarnation == UINT64_MAX && lease_count == 0;
   case LJ_TGSLOT_RETIRED:
+    /* RETIRED retains the final owner lease. Reclaim consumes it in the
+    ** exact RETIRED/1 -> RECLAIMING/0 transition. */
+    return lease_count != 0;
   case LJ_TGSLOT_PINNED:
     return 1;
   default:
@@ -236,9 +240,10 @@ LA_INLINE int lj_tgslot_replacement_valid(const LJTGSlotSnap *before,
              before->state == LJ_TGSLOT_ATTACHING;
     if (next_lease_count < before->lease_count &&
         before->lease_count - next_lease_count == 1u) {
-      if (before->state == LJ_TGSLOT_RETIRED ||
-          before->state == LJ_TGSLOT_PINNED)
+      if (before->state == LJ_TGSLOT_PINNED)
         return 1;
+      if (before->state == LJ_TGSLOT_RETIRED)
+        return before->lease_count > 1u;
       return before->lease_count > 1u &&
              (before->state == LJ_TGSLOT_ATTACHING ||
               before->state == LJ_TGSLOT_LIVE ||
@@ -261,6 +266,10 @@ LA_INLINE int lj_tgslot_replacement_valid(const LJTGSlotSnap *before,
     return before->incarnation != UINT64_MAX &&
            next_incarnation == before->incarnation + 1u &&
            before->lease_count == 0 && next_lease_count == 1;
+  if (before->state == LJ_TGSLOT_RETIRED &&
+      next_state == LJ_TGSLOT_RECLAIMING)
+    return before->incarnation == next_incarnation &&
+           before->lease_count == 1u && next_lease_count == 0;
   return before->incarnation == next_incarnation &&
          before->lease_count == next_lease_count;
 }
@@ -422,12 +431,43 @@ lj_tgslot_try_abort_attach(const LJTGSlotKey *key, LJTGSlotSnap *observed)
                                   LJ_TGSLOT_RETIRED, 0, observed);
 }
 
-/* Physical body reclamation is admitted only by this exact zero-lease CAS. */
+/* Physical reclamation consumes the final owner body lease in the same exact
+** CAS which enters RECLAIMING. Remote releases may drain RETIRED only to one,
+** so a duplicate owner release cannot consume a borrower lease and no
+** RETIRED/count-zero interval is exposed.
+*/
 LA_INLINE LJTGSlotResult
 lj_tgslot_try_begin_reclaim(const LJTGSlotKey *key, LJTGSlotSnap *observed)
 {
-  return lj_tgslot_try_keyed_edge(key, LJ_TGSLOT_RETIRED,
-                                  LJ_TGSLOT_RECLAIMING, 1, observed);
+  LJTGSlotSnap before;
+  if (!lj_tgslot_key_valid(key))
+    return LJ_TGSLOT_INVALID;
+  before = lj_tgslot_snapshot(key->slot);
+  if (!lj_tgslot_components_valid(before.incarnation, before.lease_count,
+                                  before.state))
+    return LJ_TGSLOT_INVALID;
+  if (before.incarnation != key->incarnation) {
+    if (observed) *observed = before;
+    return LJ_TGSLOT_STALE;
+  }
+  if (before.state == LJ_TGSLOT_PINNED) {
+    if (observed) *observed = before;
+    return LJ_TGSLOT_PINNED_RESULT;
+  }
+  if (before.state == LJ_TGSLOT_EXHAUSTED) {
+    if (observed) *observed = before;
+    return LJ_TGSLOT_STALE;
+  }
+  if (before.state != LJ_TGSLOT_RETIRED) {
+    if (observed) *observed = before;
+    return LJ_TGSLOT_DENIED;
+  }
+  if (before.lease_count != 1u) {
+    if (observed) *observed = before;
+    return LJ_TGSLOT_BUSY;
+  }
+  return lj_tgslot_try_replace(key->slot, &before, before.incarnation, 0,
+                               LJ_TGSLOT_RECLAIMING, observed);
 }
 
 /* The caller clears body/global pointers before publishing EMPTY. */
@@ -488,9 +528,10 @@ lj_tgslot_try_borrow(const LJTGSlotKey *key, LJTGSlotSnap *observed)
 }
 
 /*
-** Release one previously acquired lease.  The final owner body lease cannot
-** be dropped before RETIRED.  Releases from PINNED reduce accounting while
-** preserving its absorbing no-reclaim state.
+** Release one previously acquired remote lease. The final owner body lease is
+** never released here; begin_reclaim consumes it atomically after RETIRED and
+** after every remote lease drained. Releases from PINNED reduce accounting
+** while preserving its absorbing no-reclaim state.
 */
 LA_INLINE LJTGSlotResult
 lj_tgslot_try_release(const LJTGSlotKey *key, LJTGSlotSnap *observed)
@@ -528,6 +569,11 @@ lj_tgslot_try_release(const LJTGSlotKey *key, LJTGSlotSnap *observed)
        before.state == LJ_TGSLOT_LIVE ||
        before.state == LJ_TGSLOT_DETACHING) &&
       before.lease_count == 1) {
+    if (observed)
+      *observed = before;
+    return LJ_TGSLOT_BUSY;
+  }
+  if (before.state == LJ_TGSLOT_RETIRED && before.lease_count == 1) {
     if (observed)
       *observed = before;
     return LJ_TGSLOT_BUSY;
