@@ -545,9 +545,11 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->vm_gc2_pubroot:
   |  mov RB, BASE			// Save BASE.
-  |  mov L:CARG1, SAVE_L
-  |  mov L:CARG1->base, BASE
+  |  // Win64 aliases RA and CARG1 to rcx. Materialize the destination before
+  |  // loading L into CARG1, or the lua_State pointer becomes the slot index.
   |  lea CARG2, [RB+RA*8]
+  |  mov L:CARG1, SAVE_L
+  |  mov L:CARG1->base, RB
   |  call extern lj_gc_pubtvroot_vm	// (lua_State *L, cTValue *tv)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
