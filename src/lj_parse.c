@@ -1133,7 +1133,10 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
 	      lj_tab_getstr(fs->kt, name) != NULL,
 	      "unanchored variable name");
   /* NOBARRIER: name is anchored in fs->kt and ls->vstack is not a GCobj. */
-  setgcref(ls->vstack[vtop].name, obj2gco(name));
+  /* Fixed parser names are small tagged sentinels, not dereferenceable
+  ** GC objects. Store the pointer bits directly; real GCstr pointers have the
+  ** same representation and remain anchored by fs->kt. */
+  setgcrefp(ls->vstack[vtop].name, name);
   fs->varmap[fs->nactvar+n] = (uint16_t)vtop;
   ls->vtop = vtop+1;
 }
@@ -1171,7 +1174,7 @@ static BCReg var_lookup_local(FuncState *fs, GCstr *n)
 {
   int i;
   for (i = fs->nactvar-1; i >= 0; i--) {
-    if (n == strref(var_get(fs->ls, fs, i).name))
+    if (n == gcrefp(var_get(fs->ls, fs, i).name, GCstr))
       return (BCReg)i;
   }
   return (BCReg)-1;  /* Not found. */
@@ -1243,7 +1246,7 @@ static MSize gola_new(LexState *ls, GCstr *name, uint8_t info, BCPos pc)
   lj_assertFS(name == NAME_BREAK || lj_tab_getstr(fs->kt, name) != NULL,
 	      "unanchored label name");
   /* NOBARRIER: name is anchored in fs->kt and ls->vstack is not a GCobj. */
-  setgcref(ls->vstack[vtop].name, obj2gco(name));
+  setgcrefp(ls->vstack[vtop].name, name);
   ls->vstack[vtop].startpc = pc;
   ls->vstack[vtop].slot = (uint8_t)fs->nactvar;
   ls->vstack[vtop].info = info;
@@ -1273,12 +1276,12 @@ static void gola_resolve(LexState *ls, FuncScope *bl, MSize idx)
   for (; vg < vl; vg++)
     if (gcrefeq(vg->name, vl->name) && gola_isgoto(vg)) {
       if (vg->slot < vl->slot) {
-	GCstr *name = strref(var_get(ls, ls->fs, vg->slot).name);
+	GCstr *name = gcrefp(var_get(ls, ls->fs, vg->slot).name, GCstr);
 	lj_assertLS((uintptr_t)name >= VARNAME__MAX, "expected goto name");
 	ls->linenumber = ls->fs->bcbase[vg->startpc].line;
-	lj_assertLS(strref(vg->name) != NAME_BREAK, "unexpected break");
+	lj_assertLS(gcrefp(vg->name, GCstr) != NAME_BREAK, "unexpected break");
 	lj_lex_error(ls, 0, LJ_ERR_XGSCOPE,
-		     strdata(strref(vg->name)), strdata(name));
+		     strdata(gcrefp(vg->name, GCstr)), strdata(name));
       }
       gola_patch(ls, vg, vl);
     }
@@ -1290,13 +1293,13 @@ static void gola_fixup(LexState *ls, FuncScope *bl)
   VarInfo *v = ls->vstack + bl->vstart;
   VarInfo *ve = ls->vstack + ls->vtop;
   for (; v < ve; v++) {
-    GCstr *name = strref(v->name);
+    GCstr *name = gcrefp(v->name, GCstr);
     if (name != NULL) {  /* Only consider remaining valid gotos/labels. */
       if (gola_islabel(v)) {
 	VarInfo *vg;
 	setgcrefnull(v->name);  /* Invalidate label that goes out of scope. */
 	for (vg = v+1; vg < ve; vg++)  /* Resolve pending backward gotos. */
-	  if (strref(vg->name) == name && gola_isgoto(vg)) {
+	  if (gcrefp(vg->name, GCstr) == name && gola_isgoto(vg)) {
 	    gola_patch(ls, vg, v);
 	  }
       } else if (gola_isgoto(v)) {
@@ -1321,7 +1324,7 @@ static VarInfo *gola_findlabel(LexState *ls, GCstr *name)
   VarInfo *v = ls->vstack + ls->fs->bl->vstart;
   VarInfo *ve = ls->vstack + ls->vtop;
   for (; v < ve; v++)
-    if (strref(v->name) == name && gola_islabel(v))
+    if (gcrefp(v->name, GCstr) == name && gola_islabel(v))
       return v;
   return NULL;
 }
@@ -1554,7 +1557,7 @@ static size_t fs_prep_var(LexState *ls, FuncState *fs, size_t *ofsvar)
   lj_buf_reset(&ls->sb);  /* Copy to temp. string buffer. */
   /* Store upvalue names. */
   for (i = 0, n = fs->nuv; i < n; i++) {
-    GCstr *s = strref(vs[fs->uvmap[i]].name);
+    GCstr *s = gcrefp(vs[fs->uvmap[i]].name, GCstr);
     MSize len = s->len+1;
     char *p = lj_buf_more(&ls->sb, len);
     p = lj_buf_wmem(p, strdata(s), len);
@@ -1565,7 +1568,7 @@ static size_t fs_prep_var(LexState *ls, FuncState *fs, size_t *ofsvar)
   /* Store local variable names and compressed ranges. */
   for (ve = vs + ls->vtop, vs += fs->vbase; vs < ve; vs++) {
     if (!gola_isgotolabel(vs)) {
-      GCstr *s = strref(vs->name);
+      GCstr *s = gcrefp(vs->name, GCstr);
       BCPos startpc;
       char *p;
       if ((uintptr_t)s < VARNAME__MAX) {
@@ -2663,10 +2666,10 @@ static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
   switch (bc_op(ins)) {
   case BC_MOV:
     if (bc_d(ins) >= fs->nactvar) return 0;
-    name = gco2str(gcref(var_get(ls, fs, bc_d(ins)).name));
+    name = gcrefp(var_get(ls, fs, bc_d(ins)).name, GCstr);
     break;
   case BC_UGET:
-    name = gco2str(gcref(ls->vstack[fs->uvmap[bc_d(ins)]].name));
+    name = gcrefp(ls->vstack[fs->uvmap[bc_d(ins)]].name, GCstr);
     break;
   case BC_GGET:
     /* There's no inverse index (yet), so lookup the strings. */

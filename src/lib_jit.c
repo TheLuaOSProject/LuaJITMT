@@ -1076,7 +1076,13 @@ static void jit_init(lua_State *L)
   /* If you get a crash below then your toolchain indicates unaligned
   ** accesses are OK, but your kernel disagrees. I.e. fix your toolchain.
   */
-  if (*(uint32_t *)((char *)&L2TG(L)->tmptv + 2) != 0x504d4d50u) L->top = NULL;
+  {
+    uint32_t unaligned;
+    /* Preserve the hardware probe without a C-level misaligned dereference.
+    ** Optimizers lower this fixed-size copy to the same target load. */
+    memcpy(&unaligned, (char *)&L2TG(L)->tmptv + 2, sizeof(unaligned));
+    if (unaligned != 0x504d4d50u) L->top = NULL;
+  }
 #endif
 }
 #endif

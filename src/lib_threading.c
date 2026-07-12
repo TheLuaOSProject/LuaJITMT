@@ -619,6 +619,30 @@ static void threading_wait_entering(lua_State *L, global_State *g)
   }
 }
 
+static void threading_shutdown_clear_self_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  if (!tg)
+    return;
+  /*
+  ** The shutdown handshake is deliberately broadcast: every live child TG
+  ** must observe STOPREQ, including children which are parked in native code.
+  ** Its initiating main TG participates in the same handshake for the normal
+  ** epoch/pending protocol, but must not carry the synthetic one-shot STOPREQ
+  ** edge into the rest of lua_close(). There is no second STOPREQ publisher
+  ** once mt_shutdown is set and the synchronous handshake has completed.
+  */
+  (void)lj_tg_flags_and_rlx(tg,
+	(uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+  lj_tg_poll_rel(tg, 0);
+  la_fence_seq();
+  /* Preserve a non-STOPREQ handshake which raced shutdown completion. */
+  if (lj_tg_reqmask_acq(tg) != 0) {
+    lj_tg_poll_rel(tg, 1);
+    lj_tg_poll_futex_wake(tg, 1);
+  }
+}
+
 void lj_threading_shutdown(lua_State *L)
 {
   global_State *g = G(L);
@@ -636,6 +660,7 @@ void lj_threading_shutdown(lua_State *L)
   threading_wait_entering(L, g);
   if (mt_live_acq(g) != 0) {
     (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
+    threading_shutdown_clear_self_stopreq(L);
     while (mt_live_acq(g) != 0) {
       uint32_t live = mt_live_acq(g);
       if (live == 0)
