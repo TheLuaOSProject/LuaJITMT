@@ -3,13 +3,11 @@
 */
 
 #include <assert.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if !defined(_WIN32)
-#include <signal.h>
-#endif
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -28,11 +26,25 @@ typedef struct BindingThreadCtx {
 } BindingThreadCtx;
 
 #if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+#define LJ_TLS_INIT_RACE_THREADS 8
+#define LJ_TLS_RAW_ABORT_ARG "--raw-tls-admission-abort"
+#define LJ_TLS_INIT_RACE_ARG "--concurrent-tls-index-retry"
+#define LJ_TLS_RAW_ABORT_EXIT ((DWORD)0x4c4a4142u)  /* "LJAB". */
+#define LJ_TLS_RAW_RETURN_EXIT ((DWORD)0x4c4a5254u)  /* "LJRT". */
+
 typedef struct AdmissionFailureThreadCtx {
   LJTGRegistryBorrow hold;
   LJThrTGResult result;
   TGState *observed;
 } AdmissionFailureThreadCtx;
+
+typedef struct InitRaceThreadCtx {
+  uint32_t *ready;
+  uint32_t *go;
+  uint32_t *failures;
+  uint32_t *successes;
+  int result;
+} InitRaceThreadCtx;
 #endif
 
 #if !LJ_TARGET_WINDOWS
@@ -98,6 +110,96 @@ static void *admission_failure_thread(void *arg)
   ctx->observed = lj_thr_get_tg();
   return NULL;
 }
+
+static void raw_admission_abort_handler(int signo)
+{
+  ExitProcess(signo == SIGABRT ? LJ_TLS_RAW_ABORT_EXIT :
+                                LJ_TLS_RAW_RETURN_EXIT);
+}
+
+static void raw_admission_abort_child(void)
+{
+  TGState raw;
+  assert(signal(SIGABRT, raw_admission_abort_handler) != SIG_ERR);
+  lj_thr_tls_test_fail_cell_alloc(1);
+  lj_thr_set_tg(&raw);
+  ExitProcess(LJ_TLS_RAW_RETURN_EXIT);  /* Silent failure reached this point. */
+}
+
+static void *init_race_thread(void *arg)
+{
+  InitRaceThreadCtx *ctx = (InitRaceThreadCtx *)arg;
+  (void)la_add32_acqrel(ctx->ready, 1);
+  while (la_load32_acq(ctx->go) == 0)
+    (void)lj_thr_yield(NULL);
+  if (lj_thr_tg_tls_init()) {
+    ctx->result = 1;
+    (void)la_add32_acqrel(ctx->successes, 1);
+    return NULL;
+  }
+  (void)la_add32_acqrel(ctx->failures, 1);
+  /* Do not let the failed caller perform the process-index retry first. A
+  ** concurrent waiter must complete InitOnce and its own cell admission. */
+  while (la_load32_acq(ctx->successes) == 0)
+    (void)lj_thr_yield(NULL);
+  ctx->result = lj_thr_tg_tls_init();
+  if (ctx->result)
+    (void)la_add32_acqrel(ctx->successes, 1);
+  return NULL;
+}
+
+static int concurrent_index_retry_child(void)
+{
+  InitRaceThreadCtx ctx[LJ_TLS_INIT_RACE_THREADS];
+  LJThr thr[LJ_TLS_INIT_RACE_THREADS];
+  uint32_t ready = 0, go = 0, failures = 0, successes = 0;
+  unsigned int i;
+  memset(ctx, 0, sizeof(ctx));
+  memset(thr, 0, sizeof(thr));
+  lj_thr_tls_test_fail_index_alloc(1);
+  for (i = 0; i < LJ_TLS_INIT_RACE_THREADS; i++) {
+    ctx[i].ready = &ready;
+    ctx[i].go = &go;
+    ctx[i].failures = &failures;
+    ctx[i].successes = &successes;
+    assert(lj_thr_create(&thr[i], init_race_thread, &ctx[i]) == 0);
+  }
+  while (la_load32_acq(&ready) != LJ_TLS_INIT_RACE_THREADS)
+    (void)lj_thr_yield(NULL);
+  la_store32_rel(&go, 1);
+  for (i = 0; i < LJ_TLS_INIT_RACE_THREADS; i++) {
+    assert(lj_thr_join(&thr[i], NULL) == 0);
+    assert(ctx[i].result);
+  }
+  assert(la_load32_acq(&failures) == 1u);
+  assert(la_load32_acq(&successes) == LJ_TLS_INIT_RACE_THREADS);
+  return 0;
+}
+
+static DWORD run_windows_child(const char *arg)
+{
+  char image[MAX_PATH];
+  char command[MAX_PATH + 64];
+  STARTUPINFOA startup;
+  PROCESS_INFORMATION process;
+  DWORD code = STILL_ACTIVE;
+  DWORD len;
+  int command_len;
+  memset(&startup, 0, sizeof(startup));
+  memset(&process, 0, sizeof(process));
+  startup.cb = sizeof(startup);
+  len = GetModuleFileNameA(NULL, image, (DWORD)sizeof(image));
+  assert(len > 0 && len < (DWORD)sizeof(image));
+  command_len = snprintf(command, sizeof(command), "\"%s\" %s", image, arg);
+  assert(command_len > 0 && (size_t)command_len < sizeof(command));
+  assert(CreateProcessA(image, command, NULL, NULL, FALSE, 0, NULL, NULL,
+                        &startup, &process));
+  assert(WaitForSingleObject(process.hProcess, INFINITE) == WAIT_OBJECT_0);
+  assert(GetExitCodeProcess(process.hProcess, &code));
+  assert(CloseHandle(process.hThread));
+  assert(CloseHandle(process.hProcess));
+  return code;
+}
 #endif
 
 static LJTGRegistryKey publish_body(global_State *g, TGState *tg,
@@ -154,8 +256,25 @@ static void reclaim_body(const LJTGRegistryKey *key, void *expected_body)
   assert(lease_count(key, LJ_TGSLOT_EMPTY) == 0u);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+  if (argc == 2 && strcmp(argv[1], LJ_TLS_RAW_ABORT_ARG) == 0) {
+    raw_admission_abort_child();
+    return 1;
+  }
+  if (argc == 2 && strcmp(argv[1], LJ_TLS_INIT_RACE_ARG) == 0)
+    return concurrent_index_retry_child();
+  assert(argc == 1);
+  /* Each child starts with a fresh process index. The first proves that the
+  ** void raw API fails closed on per-thread cell admission; the second proves
+  ** a failed concurrent process-index initializer remains retryable. */
+  assert(run_windows_child(LJ_TLS_RAW_ABORT_ARG) == LJ_TLS_RAW_ABORT_EXIT);
+  assert(run_windows_child(LJ_TLS_INIT_RACE_ARG) == 0);
+#else
+  (void)argc;
+  (void)argv;
+#endif
   global_State *g = (global_State *)calloc(1, sizeof(*g));
   global_State *wrong_g = (global_State *)calloc(1, sizeof(*wrong_g));
   TGState *a = (TGState *)calloc(1, sizeof(*a));
@@ -194,6 +313,12 @@ int main(void)
 #endif
   assert(lj_thr_tg_tls_init());
   lj_thr_set_tg(NULL);
+#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+  /* Preserve the direct-slot backend's documented TlsGetValue side effect. */
+  SetLastError(ERROR_INVALID_DATA);
+  assert(lj_thr_get_tg() == NULL);
+  assert(GetLastError() == ERROR_SUCCESS);
+#endif
 #if !LJ_TARGET_WINDOWS
   assert(signal(SIGPROF, sample_handler) != SIG_ERR);
 #endif

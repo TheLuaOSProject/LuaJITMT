@@ -34,6 +34,12 @@ the stable cell; after that, binding reads and writes never allocate or call
 edge. A POSIX platform TLS resolver may still perform lazy setup, as documented
 for the unresolved PIC/TLV paths below.
 
+Here and below, Windows "first admission" means the first binding admission of
+each OS thread, not only the first thread in the process. `InitOnceExecuteOnce`
+and `TlsAlloc` establish the single process index once; each OS thread then
+allocates and publishes its own cell once before it can install either a raw or
+exact binding.
+
 ## Target and pointer-tag contract
 
 This phase supports x86-64 Linux, macOS, and Windows. Compile-time assertions
@@ -157,6 +163,14 @@ one `TlsSetValue` relocation, solely in `lj_thr_tg_tls_init()`. Existing-cell
 install, swap, and clear each locate the cell with `TlsGetValue` and issue a
 plain x86-64 atomic release store; none calls `TlsSetValue`.
 
+Successful `TlsGetValue` calls clear the calling thread's Win32 last-error
+value. The getter and exact control paths deliberately do not save and restore
+it: this preserves the direct-slot Windows backend's existing clobber behavior,
+and the cell indirection adds no second Win32 lookup. Runtime boundaries which
+promise to preserve a foreign call's error state continue to use their explicit
+error-state snapshots; callers must not treat an internal TG lookup as a
+last-error-preserving boundary.
+
 This is the relevant performance trade: compared with storing the tag directly
 in the Win32 TLS slot, reads gain one dependent pointer load, while every
 post-admission mutation loses a fallible Win32 setter call and rollback result.
@@ -173,6 +187,12 @@ allocation/publication failure returns `TLS_FAILURE`, leaves the incoming exact
 handle active, and leaves the getter empty. A publication failure held armed
 across an already-admitted thread's install, swap, and clear is consumed only
 by a later fresh thread, proving those mutations do not call `TlsSetValue`.
+An isolated child-process death test injects cell-allocation failure before a
+raw `lj_thr_set_tg()` call and observes the raw setter's `SIGABRT` fail-stop
+instead of allowing a silent return. A separate fresh child releases eight OS
+threads together against one injected process-index allocation failure; the
+failed initialization leaves `InitOnce` retryable, exactly one failure is
+observed, and every caller completes admission.
 
 Published cells intentionally have process lifetime in this phase. Win32 TLS
 indices have no destructor, so an admitted OS thread which exits loses the only
@@ -232,7 +252,9 @@ made Clang/MSVC a requirement.
   clear/release, with lease counts proving isolation;
 - POSIX same-thread SIGPROF observations after install/swap/clear;
 - Windows index/cell-allocation/first-publication failure ownership, including
-  fresh-thread failure and existing-cell mutation isolation; and
+  concurrent index retry, fresh-thread failure, raw-setter death, and
+  existing-cell mutation isolation, plus `TlsGetValue` last-error clobber
+  compatibility; and
 - Linux, MinGW UCRT/Wine, and macOS/Darling builds and runtime execution.
 - ASAN+UBSAN and GCC TSAN target builds, including malformed-token and
   two-thread exact-binding coverage.
