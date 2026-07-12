@@ -145,6 +145,19 @@ return function(add)
       message = "M4 TG registry lease tests passed"
     },
     {
+      name = "m4_tg_tls_binding",
+      description = "exact TG registry TLS handle-move and ABA fixture",
+      output = "lj_t-tg-tls-binding",
+      cfile = "t-tg-tls-binding.c",
+      opts = {
+        clean = true,
+        xcflags = "-DLJ_THR_TLS_TEST_HELPERS",
+        cflags = "-DLJ_THR_TLS_TEST_HELPERS",
+        timeout = "20s"
+      },
+      message = "M4 exact TG TLS binding tests passed"
+    },
+    {
       name = "m4_tg_terminal_orphan",
       description = "capacity-independent terminal TG allocator drain fixture",
       output = "lj_t-tg-terminal-orphan",

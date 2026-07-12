@@ -13,6 +13,7 @@
 #include "lj_thr.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #if LJ_TARGET_WINDOWS
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -24,11 +25,68 @@
 #include <unistd.h>
 #endif
 
+#define LJ_THR_TG_EXACT_TAG ((uintptr_t)1u)
+#define LJ_THR_TG_TAG_MASK LJ_THR_TG_EXACT_TAG
+typedef char lj_thr_tg_tag_requires_alignment[
+  __alignof__(TGState) >= 2 ? 1 : -1];
+typedef char lj_thr_tg_tag_requires_pointer_width[
+  sizeof(uintptr_t) == sizeof(void *) ? 1 : -1];
+
 #if LJ_TARGET_WINDOWS
-static DWORD lj_tls_tg_key = TLS_OUT_OF_INDEXES;
+/* One opaque tagged word is the complete hot binding. Low bit zero is a raw
+** compatibility TG pointer; low bit one means TLS owns one exact registry
+** lease for the masked body. The getter performs exactly one TlsGetValue. */
+static uint32_t lj_tls_tg_key = TLS_OUT_OF_INDEXES;
 static INIT_ONCE lj_tls_tg_once = INIT_ONCE_STATIC_INIT;
+#if defined(LJ_THR_TLS_TEST_HELPERS)
+static uint32_t lj_tls_test_fail_alloc_after;
+static uint32_t lj_tls_test_fail_set_after;
+
+void lj_thr_tls_test_fail_alloc(uint32_t nth)
+{
+  la_store32_rel(&lj_tls_test_fail_alloc_after, nth);
+}
+
+void lj_thr_tls_test_fail_set(uint32_t nth)
+{
+  la_store32_rel(&lj_tls_test_fail_set_after, nth);
+}
+
+static int lj_thr_tls_test_fail_now(uint32_t *count)
+{
+  uint32_t current = la_load32_acq(count);
+  while (current != 0) {
+    uint32_t next = current - 1u;
+    if (la_cas32(count, &current, next, LA_ACQ_REL, LA_ACQ))
+      return next == 0;
+  }
+  return 0;
+}
+#endif
+
+static DWORD lj_thr_tls_alloc_index(void)
+{
+#if defined(LJ_THR_TLS_TEST_HELPERS)
+  if (lj_thr_tls_test_fail_now(&lj_tls_test_fail_alloc_after)) {
+    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+    return TLS_OUT_OF_INDEXES;
+  }
+#endif
+  return TlsAlloc();
+}
+
+static BOOL lj_thr_tls_set_value(DWORD key, void *value)
+{
+#if defined(LJ_THR_TLS_TEST_HELPERS)
+  if (lj_thr_tls_test_fail_now(&lj_tls_test_fail_set_after)) {
+    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+    return FALSE;
+  }
+#endif
+  return TlsSetValue(key, value);
+}
 #else
-static LJ_TLS TGState *lj_tls_tg;
+static LJ_TLS uintptr_t lj_tls_tg_word;
 #endif
 static uint32_t lj_thr_next_tid;
 
@@ -45,30 +103,37 @@ static BOOL CALLBACK lj_thr_tls_init(PINIT_ONCE once, PVOID param,
   UNUSED(once);
   UNUSED(param);
   UNUSED(ctx);
-  key = TlsAlloc();
-  if (key == TLS_OUT_OF_INDEXES)
+  key = lj_thr_tls_alloc_index();
+  if (key == TLS_OUT_OF_INDEXES) {
+    la_store32_rel(&lj_tls_tg_key, TLS_OUT_OF_INDEXES);
     return FALSE;
-  lj_tls_tg_key = key;
+  }
+  la_store32_rel(&lj_tls_tg_key, (uint32_t)key);
   return TRUE;
+}
+
+int lj_thr_tg_tls_init(void)
+{
+  return InitOnceExecuteOnce(&lj_tls_tg_once, lj_thr_tls_init, NULL, NULL) &&
+    (DWORD)la_load32_acq(&lj_tls_tg_key) != TLS_OUT_OF_INDEXES;
 }
 
 static DWORD lj_thr_tls_key(void)
 {
-  return InitOnceExecuteOnce(&lj_tls_tg_once, lj_thr_tls_init, NULL, NULL) ?
-    lj_tls_tg_key : TLS_OUT_OF_INDEXES;
+  return (DWORD)la_load32_acq(&lj_tls_tg_key);
 }
 
-static void lj_thr_tls_set(TGState *tg)
+static uintptr_t lj_thr_tls_word_get(void)
 {
   DWORD key = lj_thr_tls_key();
-  if (key != TLS_OUT_OF_INDEXES)
-    (void)TlsSetValue(key, tg);
+  return key != TLS_OUT_OF_INDEXES ? (uintptr_t)TlsGetValue(key) : 0;
 }
 
-static TGState *lj_thr_tls_get(void)
+static int lj_thr_tls_word_set(uintptr_t word)
 {
   DWORD key = lj_thr_tls_key();
-  return key != TLS_OUT_OF_INDEXES ? (TGState *)TlsGetValue(key) : NULL;
+  return key != TLS_OUT_OF_INDEXES &&
+    lj_thr_tls_set_value(key, (void *)word) != 0;
 }
 
 static DWORD WINAPI lj_thr_windows_main(void *arg)
@@ -78,16 +143,35 @@ static DWORD WINAPI lj_thr_windows_main(void *arg)
   return 0;
 }
 #else
-static void lj_thr_tls_set(TGState *tg)
+int lj_thr_tg_tls_init(void)
 {
-  lj_tls_tg = tg;
+  return 1;
 }
+
+static uintptr_t lj_thr_tls_word_get(void)
+{
+  return la_loaduptr_acq(&lj_tls_tg_word);
+}
+
+static int lj_thr_tls_word_set(uintptr_t word)
+{
+  la_storeuptr_rel(&lj_tls_tg_word, word);
+  return 1;
+}
+#endif
+
+#if defined(LJ_THR_TLS_TEST_HELPERS)
+void lj_thr_tls_test_set_word(uintptr_t word)
+{
+  if (!lj_thr_tg_tls_init() || !lj_thr_tls_word_set(word))
+    abort();
+}
+#endif
 
 static TGState *lj_thr_tls_get(void)
 {
-  return lj_tls_tg;
+  return (TGState *)(lj_thr_tls_word_get() & ~LJ_THR_TG_TAG_MASK);
 }
-#endif
 
 int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg)
 {
@@ -167,9 +251,241 @@ uint64_t lj_thr_now_ns(void)
 #endif
 }
 
+typedef enum LJThrTGMode {
+  LJ_THR_TG_MODE_EMPTY,
+  LJ_THR_TG_MODE_RAW,
+  LJ_THR_TG_MODE_KEYED,
+  LJ_THR_TG_MODE_CORRUPT
+} LJThrTGMode;
+
+typedef struct LJThrTGView {
+  TGState *body;
+  LJTGRegistryKey key;
+} LJThrTGView;
+
+static int lj_thr_tg_borrow_empty(const LJTGRegistryBorrow *hold)
+{
+  return hold && !hold->active && hold->body == NULL &&
+    hold->key.slot == NULL &&
+    hold->key.incarnation == LJ_TGSLOT_INCARNATION_NONE;
+}
+
+static LJThrTGMode lj_thr_tg_view(LJThrTGView *view)
+{
+  uintptr_t word = lj_thr_tls_word_get();
+  if (!view)
+    return LJ_THR_TG_MODE_CORRUPT;
+  view->body = NULL;
+  view->key.slot = NULL;
+  view->key.incarnation = LJ_TGSLOT_INCARNATION_NONE;
+  if (word == 0)
+    return LJ_THR_TG_MODE_EMPTY;
+  view->body = (TGState *)(word & ~LJ_THR_TG_TAG_MASK);
+  if ((word & LJ_THR_TG_EXACT_TAG) == 0)
+    return LJ_THR_TG_MODE_RAW;
+  if (!view->body ||
+      (uintptr_t)view->body % (uintptr_t)__alignof__(TGState) != 0)
+    return LJ_THR_TG_MODE_CORRUPT;
+  /* The tag is ownership evidence for one ordinary lease. That lease keeps
+  ** this body and its immutable embedded key alive while we reconstruct it. */
+  view->key = view->body->registry_key;
+  return lj_tgregistry_key_valid(&view->key) ? LJ_THR_TG_MODE_KEYED :
+                                               LJ_THR_TG_MODE_CORRUPT;
+}
+
+static LJThrTGResult
+lj_thr_tg_validate_view(const LJThrTGView *view, int new_target)
+{
+  LJTGRegistryBodySnap body;
+  LJTGRegistrySlot *slot, *slow, *fast;
+  LJTGSlotSnap snap;
+  LJTGSlotResult status;
+  TGState *tg;
+  global_State *g;
+  if (!view || !view->body ||
+      (uintptr_t)view->body % (uintptr_t)__alignof__(TGState) != 0 ||
+      !lj_tgregistry_key_valid(&view->key))
+    return LJ_THR_TG_INVALID;
+  snap.incarnation = LJ_TGSLOT_INCARNATION_NONE;
+  snap.lease_count = 0;
+  snap.state = LJ_TGSLOT_EMPTY;
+  status = lj_tgregistry_key_snapshot(&view->key, &snap);
+  if (!((status == LJ_TGSLOT_OK &&
+         (snap.state == LJ_TGSLOT_ATTACHING ||
+          snap.state == LJ_TGSLOT_LIVE ||
+          snap.state == LJ_TGSLOT_DETACHING ||
+          snap.state == LJ_TGSLOT_RETIRED)) ||
+        (!new_target && status == LJ_TGSLOT_PINNED_RESULT &&
+         snap.state == LJ_TGSLOT_PINNED)) ||
+      snap.lease_count < 2u)
+    return LJ_THR_TG_CORRUPT;
+  if (new_target && snap.state != LJ_TGSLOT_ATTACHING &&
+      snap.state != LJ_TGSLOT_LIVE)
+    return LJ_THR_TG_CORRUPT;
+  body = lj_tgregistry_slot_body_snapshot(view->key.slot);
+  if (!lj_tgregistry_body_snap_is(&body, view->body,
+                                  view->key.incarnation))
+    return LJ_THR_TG_CORRUPT;
+  tg = view->body;
+  if (!lj_tgregistry_key_equal(&tg->registry_key, &view->key) || !tg->gl)
+    return LJ_THR_TG_CORRUPT;
+  /* The caller retains the universe lifetime while this dereferences tg->gl.
+  ** Floyd detection rejects a corrupt cycle without imposing a size limit. */
+  g = tg->gl;
+  slot = gc2_tg_registry_head_acq(g);
+  slow = fast = slot;
+  while (slot) {
+    if (slot == view->key.slot)
+      return LJ_THR_TG_OK;
+    slot = lj_tgregistry_slot_next_all(slot);
+    slow = lj_tgregistry_slot_next_all(slow);
+    fast = lj_tgregistry_slot_next_all(fast);
+    if (fast)
+      fast = lj_tgregistry_slot_next_all(fast);
+    if (slow && slow == fast)
+      return LJ_THR_TG_CORRUPT;
+  }
+  return LJ_THR_TG_CORRUPT;
+}
+
+static void lj_thr_tg_move_out(LJTGRegistryBorrow *hold,
+                               const LJThrTGView *view)
+{
+  hold->key = view->key;
+  hold->body = view->body;
+  hold->active = 1;
+}
+
+LJThrTGResult lj_thr_tg_install(LJTGRegistryBorrow *new_hold)
+{
+  LJThrTGView current, incoming;
+  LJThrTGMode mode;
+  LJThrTGResult result;
+  uintptr_t word;
+  if (!new_hold || !new_hold->active || !new_hold->body ||
+      !lj_tgregistry_key_valid(&new_hold->key) ||
+      ((uintptr_t)new_hold->body & LJ_THR_TG_TAG_MASK) != 0)
+    return LJ_THR_TG_INVALID;
+  if (!lj_thr_tg_tls_init())
+    return LJ_THR_TG_TLS_FAILURE;
+  mode = lj_thr_tg_view(&current);
+  if (mode == LJ_THR_TG_MODE_CORRUPT)
+    return LJ_THR_TG_CORRUPT;
+  if (mode != LJ_THR_TG_MODE_EMPTY)
+    return LJ_THR_TG_EXPECT_MISMATCH;
+  incoming.body = (TGState *)new_hold->body;
+  incoming.key = new_hold->key;
+  result = lj_thr_tg_validate_view(&incoming, 1);
+  if (result != LJ_THR_TG_OK)
+    return result;
+  word = (uintptr_t)incoming.body | LJ_THR_TG_EXACT_TAG;
+  if (!lj_thr_tls_word_set(word))
+    return LJ_THR_TG_TLS_FAILURE;
+  lj_tgregistry_borrow_init(new_hold);
+  return LJ_THR_TG_OK;
+}
+
+LJThrTGResult lj_thr_tg_swap(const LJTGRegistryKey *expected_old,
+                             LJTGRegistryBorrow *new_hold,
+                             LJTGRegistryBorrow *old_hold)
+{
+  LJThrTGView current, incoming;
+  LJThrTGMode mode;
+  LJThrTGResult result;
+  uintptr_t word;
+  if (!lj_tgregistry_key_valid(expected_old) || !new_hold ||
+      !new_hold->active || !new_hold->body || old_hold == new_hold ||
+      !lj_thr_tg_borrow_empty(old_hold) ||
+      ((uintptr_t)new_hold->body & LJ_THR_TG_TAG_MASK) != 0)
+    return LJ_THR_TG_INVALID;
+  if (!lj_thr_tg_tls_init())
+    return LJ_THR_TG_TLS_FAILURE;
+  mode = lj_thr_tg_view(&current);
+  if (mode == LJ_THR_TG_MODE_CORRUPT)
+    return LJ_THR_TG_CORRUPT;
+  if (mode != LJ_THR_TG_MODE_KEYED ||
+      !lj_tgregistry_key_equal(&current.key, expected_old))
+    return LJ_THR_TG_EXPECT_MISMATCH;
+  result = lj_thr_tg_validate_view(&current, 0);
+  if (result != LJ_THR_TG_OK)
+    return result;
+  incoming.body = (TGState *)new_hold->body;
+  incoming.key = new_hold->key;
+  result = lj_thr_tg_validate_view(&incoming, 1);
+  if (result != LJ_THR_TG_OK)
+    return result;
+  word = (uintptr_t)incoming.body | LJ_THR_TG_EXACT_TAG;
+  if (!lj_thr_tls_word_set(word))
+    return LJ_THR_TG_TLS_FAILURE;
+  /* Both fungible token counts protect their exact bodies at this LP. */
+  lj_thr_tg_move_out(old_hold, &current);
+  lj_tgregistry_borrow_init(new_hold);
+  return LJ_THR_TG_OK;
+}
+
+LJThrTGResult lj_thr_tg_clear(const LJTGRegistryKey *expected_old,
+                              LJTGRegistryBorrow *old_hold)
+{
+  LJThrTGView current;
+  LJThrTGMode mode;
+  LJThrTGResult result;
+  if (!lj_tgregistry_key_valid(expected_old) ||
+      !lj_thr_tg_borrow_empty(old_hold))
+    return LJ_THR_TG_INVALID;
+  mode = lj_thr_tg_view(&current);
+  if (mode == LJ_THR_TG_MODE_CORRUPT)
+    return LJ_THR_TG_CORRUPT;
+  if (mode != LJ_THR_TG_MODE_KEYED ||
+      !lj_tgregistry_key_equal(&current.key, expected_old))
+    return LJ_THR_TG_EXPECT_MISMATCH;
+  result = lj_thr_tg_validate_view(&current, 0);
+  if (result != LJ_THR_TG_OK)
+    return result;
+  if (!lj_thr_tls_word_set(0))
+    return LJ_THR_TG_TLS_FAILURE;
+  /* The lease count remains owned by this operation until materialized. */
+  lj_thr_tg_move_out(old_hold, &current);
+  return LJ_THR_TG_OK;
+}
+
+int lj_thr_tg_current_key(LJTGRegistryKey *key)
+{
+  LJThrTGView current;
+  LJThrTGMode mode;
+  LJThrTGResult result;
+  if (!key)
+    return LJ_THR_TG_INVALID;
+  key->slot = NULL;
+  key->incarnation = LJ_TGSLOT_INCARNATION_NONE;
+  mode = lj_thr_tg_view(&current);
+  if (mode == LJ_THR_TG_MODE_EMPTY || mode == LJ_THR_TG_MODE_RAW)
+    return LJ_THR_TG_EXPECT_MISMATCH;
+  if (mode == LJ_THR_TG_MODE_CORRUPT)
+    return LJ_THR_TG_CORRUPT;
+  result = lj_thr_tg_validate_view(&current, 0);
+  if (result != LJ_THR_TG_OK)
+    return result;
+  *key = current.key;
+  return LJ_THR_TG_OK;
+}
+
+static void lj_thr_tls_set_raw(TGState *tg)
+{
+  uintptr_t word;
+  if (tg && ((uintptr_t)tg & LJ_THR_TG_TAG_MASK) != 0)
+    abort();
+  if (!lj_thr_tg_tls_init())
+    return;  /* lua_newstate propagates first-time index allocation failure. */
+  word = lj_thr_tls_word_get();
+  if ((word & LJ_THR_TG_EXACT_TAG) != 0)
+    abort();  /* A void raw call cannot move the exact lease represented here. */
+  if (!lj_thr_tls_word_set((uintptr_t)tg))
+    abort();  /* Temporary fail-stop until all callers use result-bearing APIs. */
+}
+
 void lj_thr_set_tg(TGState *tg)
 {
-  lj_thr_tls_set(tg);  /* 03 section 3.2: one TLS TG pointer per OS thread. */
+  lj_thr_tls_set_raw(tg);  /* Raw compatibility until lifecycle migration. */
 }
 
 TGState *lj_thr_get_tg(void)

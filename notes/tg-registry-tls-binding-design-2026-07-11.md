@@ -2,7 +2,11 @@
 
 Date: 2026-07-11
 
-Status: design/audit only. This note does not make the stable registry positive
+Status: design/audit only. The three-index Windows representation in this note
+is superseded by the simpler tagged-word implementation documented in
+`notes/tg-registry-tls-tagged-binding-2026-07-12.md`. The lifecycle ordering,
+caller inventory, universe-lifetime requirement, and remaining-holder audit
+remain applicable. This note does not make the stable registry positive
 reclamation authority and does not claim that the remaining raw TG holders are
 safe.
 

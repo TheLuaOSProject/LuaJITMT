@@ -539,6 +539,23 @@ lj_tgregistry_try_release(LJTGRegistryBorrow *borrow,
   return result;
 }
 
+/* Complete an admitted ordinary-borrow release across exact-CAS contention.
+** LOST only means another actor changed the lease count while this handle's
+** own lease kept its incarnation alive. Every other failure is fail-closed:
+** the still-active handle is returned to the caller and must be retained as a
+** no-reclaim veto rather than discarded or guessed released.
+*/
+LA_INLINE LJTGSlotResult
+lj_tgregistry_release_to_completion(LJTGRegistryBorrow *borrow,
+                                    LJTGSlotSnap *observed)
+{
+  for (;;) {
+    LJTGSlotResult result = lj_tgregistry_try_release(borrow, observed);
+    if (result != LJ_TGSLOT_LOST)
+      return result;
+  }
+}
+
 LA_INLINE LJTGSlotResult
 lj_tgregistry_try_detach(const LJTGRegistryKey *key,
                          LJTGSlotSnap *observed)

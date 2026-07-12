@@ -608,6 +608,11 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   allocf = LJ_ALLOCF_INTERNAL;
   allocd = NULL;
 #endif
+  /* Windows publishes its process-wide tagged TG TLS index as a retryable unit.
+  ** Fail before allocating or publishing a Lua universe; a later newstate may
+  ** retry InitOnce after transient TlsAlloc exhaustion. POSIX is a no-op. */
+  if (!lj_thr_tg_tls_init())
+    return NULL;
   /* We need the PRNG for the memory allocator, so initialize this first. */
   if (!lj_prng_seed_secure_l(NULL, &prng)) {
     lj_assertX(0, "secure PRNG seeding failed");

@@ -42,6 +42,34 @@ typedef struct LJStateClaim {
   uint8_t release;
 } LJStateClaim;
 
+/* Stable TG TLS operations move already-admitted registry borrow handles.
+** They are dormant until lifecycle callers publish exact keys before roots.
+*/
+typedef enum LJThrTGResult {
+  LJ_THR_TG_OK = 1,
+  LJ_THR_TG_EXPECT_MISMATCH = 0,
+  LJ_THR_TG_INVALID = -1,
+  LJ_THR_TG_TLS_FAILURE = -2,
+  LJ_THR_TG_CORRUPT = -3
+} LJThrTGResult;
+
+/* Exact TLS ownership result matrix:
+**
+** - OK install/swap consumes new_hold; OK swap/clear activates old_hold.
+** - EXPECT_MISMATCH, INVALID, CORRUPT and TLS_FAILURE leave the one-word TLS
+**   binding and every input/output handle unchanged.
+**
+** Exact TLS is represented by tagged_body = body|1. Its fungible token count
+** prevents body/key reuse, so swap/clear can reconstruct the exact linear
+** handle from the protected body's immutable registry_key after the hot LP.
+**
+** Install/swap additionally require caller-held lifecycle publication
+** authority which prevents the new ATTACHING/LIVE key from reaching
+** DETACHING until after the hot-body LP. A token snapshot cannot manufacture
+** that owner-side exclusion. The caller also holds the universe lifetime
+** while reverse validation dereferences TGState.gl and the registry spine.
+*/
+
 #define LJ_THREAD_STARTING	0u
 #define LJ_THREAD_RUNNING	1u
 #define LJ_THREAD_DONE		2u
@@ -254,6 +282,21 @@ LJ_FUNC uint32_t lj_thr_newid(void);
 LJ_FUNC uint32_t lj_thr_id(const LJThr *thr);
 LJ_FUNC uint32_t lj_thr_current_id(global_State *g);
 LJ_FUNC uint64_t lj_thr_now_ns(void);
+LJ_FUNC int lj_thr_tg_tls_init(void);
+LJ_FUNC LJThrTGResult lj_thr_tg_install(LJTGRegistryBorrow *new_hold);
+LJ_FUNC LJThrTGResult lj_thr_tg_swap(const LJTGRegistryKey *expected_old,
+				     LJTGRegistryBorrow *new_hold,
+				     LJTGRegistryBorrow *old_hold);
+LJ_FUNC LJThrTGResult lj_thr_tg_clear(const LJTGRegistryKey *expected_old,
+				      LJTGRegistryBorrow *old_hold);
+LJ_FUNC int lj_thr_tg_current_key(LJTGRegistryKey *key);
+#if defined(LJ_THR_TLS_TEST_HELPERS)
+LJ_FUNC void lj_thr_tls_test_set_word(uintptr_t word);
+#if LJ_TARGET_WINDOWS
+LJ_FUNC void lj_thr_tls_test_fail_alloc(uint32_t nth);
+LJ_FUNC void lj_thr_tls_test_fail_set(uint32_t nth);
+#endif
+#endif
 LJ_FUNC void lj_thr_set_tg(TGState *tg);
 LJ_FUNC TGState *lj_thr_get_tg(void);
 LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
