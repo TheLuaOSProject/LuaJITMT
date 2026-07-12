@@ -607,8 +607,9 @@ void lj_str_resize(lua_State *L, MSize newmask)
   GCSize newsize;
   MSize i, oldmask;
 
-  /* No resizing during GC traversal or if already too big. */
-  if (g->gc.state == GCSsweepstring || newmask >= LJ_MAX_STRTAB-1)
+  /* The atomic header claim below serializes every GC2 topology owner. The
+  ** retired color collector state byte is not a resize authority. */
+  if (newmask >= LJ_MAX_STRTAB-1)
     return;
 
   newsize = lj_str_tabsize(newmask);

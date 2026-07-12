@@ -2347,7 +2347,7 @@ static LJ_AINLINE void lj_obj_cleargcflags_atomic(GCobj *o, uint8_t flags)
 static LJ_AINLINE void lj_obj_xorgcflags(GCobj *o, uint8_t flags)
 {
   /* XOR is only safe when the caller owns the decision or toggles a disjoint
-  ** bit. Use lj_gc_resurrect_if_dead() for conditional white resurrection. */
+  ** bit. GC2 never derives resurrection authority from header whites. */
   uint8_t old = la_load8_acq(&o->gch.marked);
   for (;;) {
     uint8_t next = (uint8_t)(old ^ flags);
@@ -5221,9 +5221,6 @@ static LJ_AINLINE void checklivetv(lua_State *L, TValue *o, const char *msg)
     lj_assertL(~itype(o) == gcval(o)->gch.gct,
 	       "mismatch of TValue type %d vs GC type %d",
 	       ~itype(o), gcval(o)->gch.gct);
-    /* Copy of isdead check from lj_gc.h to avoid circular include. */
-    lj_assertL(!(lj_obj_gcflags(gcval(o)) &
-		 (G(L)->gc.currentwhite ^ 3) & 3), msg);
   }
 #endif
 }

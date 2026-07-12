@@ -13,6 +13,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_ctype.h"
+#include "lj_gc.h"
 #include "lj_tg.h"
 
 #include "lib/ctype_parse_fixture_helpers.h"
@@ -124,6 +125,39 @@ static void assert_typeinfo_waits_without_lock(lua_State *L, CTState *cts,
     "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
     "assert(ti and ti.size == 4 and ti.info ~= nil)\n");
   ljt_ctype_release_when_native_join(&ctx, thread);
+}
+
+static void assert_typeinfo_ignores_legacy_name_color(lua_State *L,
+					       CTState *cts)
+{
+  CType snap;
+  GCstr *name;
+  CTypeID id, top;
+  uint8_t colors, deadwhite;
+
+  name = NULL;
+  top = ctype_top_acq(cts);
+  for (id = top; id-- > 1;) {
+    if (lj_ctype_snapshot(cts, id, &snap) == 1 &&
+	(name = ctype_name_acq(&snap)) != NULL)
+      break;
+    name = NULL;
+  }
+  assert(name != NULL && id != 0);
+  lua_pushinteger(L, (lua_Integer)id);
+  lua_setglobal(L, "lj_m7_typeinfo_color_name_id");
+  colors = (uint8_t)(lj_obj_gcflags(obj2gco(name)) & LJ_GC_COLORS);
+  deadwhite = (uint8_t)(otherwhite(G(L)) & LJ_GC_WHITES);
+  lj_obj_masksetgcflags(obj2gco(name), LJ_GC_COLORS, deadwhite);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "for i = 1, 100 do\n"
+    "  local ti = ffi.typeinfo(lj_m7_typeinfo_color_name_id)\n"
+    "  assert(ti and type(ti.name) == 'string')\n"
+    "end\n");
+  assert((lj_obj_gcflags(obj2gco(name)) & LJ_GC_COLORS) == deadwhite);
+  lj_obj_masksetgcflags(obj2gco(name), LJ_GC_COLORS, colors);
 }
 
 int main(void)
@@ -292,6 +326,8 @@ int main(void)
   tg = L2TG(L);
   assert(tg != NULL);
   seq0 = ljt_ctype_parse_seq(cts);
+
+  assert_typeinfo_ignores_legacy_name_color(L, cts);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"

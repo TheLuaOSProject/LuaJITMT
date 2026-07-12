@@ -261,7 +261,12 @@ static void exercise_rehash_ignores_legacy_colors(lua_State *L)
   uint32_t n;
   int oldstate;
 
+  /* The compatibility collector state is deliberately adversarial. The
+  ** atomic string topology claim, not GCSsweepstring, owns resize exclusion. */
+  oldstate = g->gc.state;
+  g->gc.state = GCSsweepstring;
   lj_str_resize(L, TEST_MASK);
+  g->gc.state = (uint8_t)oldstate;
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL && hdr->mask == TEST_MASK);
 

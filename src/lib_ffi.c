@@ -1758,10 +1758,8 @@ LJLIB_CF(ffi_typeinfo)
       ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "size"), (int32_t)size);
     if (sib)
       ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "sib"), (int32_t)sib);
-    if (name) {
-      (void)lj_gc_resurrect_if_dead(G(L), obj2gco(name));
+    if (name)
       ffi_typeinfo_storestr(L, t, lj_str_newlit(L, "name"), name);
-    }
     lj_gc_pubtab(L, t);
     lj_gc_check(L);
     return 1;

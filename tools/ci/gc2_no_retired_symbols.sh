@@ -10,7 +10,7 @@ root=$(CDPATH= cd -P "$script_dir/../.." && pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-gc2-symbols.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
-deny='gc_mark gc_mark_claim_white gc_propagate_gray propagatemark gc_sweep gc_sweepstr gc_traverse_tab gc_traverse_func gc_traverse_proto gc_traverse_thread gc_traverse_trace gc_traverse_udata lj_gc_markobj lj_gc_markobj_deep lj_gc_preserveobj lj_gc_mark_trace_slot lj_gc_sweep_gc2_all_arena_bodies'
+deny='gc_mark gc_mark_claim_white gc_propagate_gray propagatemark gc_sweep gc_sweepstr gc_traverse_tab gc_traverse_func gc_traverse_proto gc_traverse_thread gc_traverse_trace gc_traverse_udata lj_gc_markobj lj_gc_markobj_deep lj_gc_preserveobj lj_gc_mark_trace_slot lj_gc_sweep_gc2_all_arena_bodies lj_gc_resurrect_if_dead'
 deny_ere=$(printf '%s\n' "$deny" | sed 's/[[:space:]][[:space:]]*/|/g')
 token_ere="(^|[^[:alnum:]_])($deny_ere)([^[:alnum:]_]|$)"
 source_hits="$tmpdir/source-hits"

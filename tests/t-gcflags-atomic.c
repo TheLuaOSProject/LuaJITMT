@@ -24,14 +24,6 @@ typedef struct FlagArg {
   unsigned index;
 } FlagArg;
 
-typedef struct ResurrectArg {
-  global_State *g;
-  GCobj *object;
-  uint32_t *ready;
-  uint32_t *go;
-  uint32_t claimed;
-} ResurrectArg;
-
 static void *flag_writer(void *ud)
 {
   FlagArg *arg = (FlagArg *)ud;
@@ -60,47 +52,6 @@ static void *flag_writer(void *ud)
     (void)la_add32_acqrel(&stress->done, 1);
   }
   return NULL;
-}
-
-static void *resurrect_writer(void *ud)
-{
-  ResurrectArg *arg = (ResurrectArg *)ud;
-  (void)la_add32_acqrel(arg->ready, 1);
-  while (!la_load32_acq(arg->go))
-    la_cpu_pause();
-  arg->claimed = (uint32_t)lj_gc_resurrect_if_dead(arg->g, arg->object);
-  return NULL;
-}
-
-static void test_conditional_resurrection(void)
-{
-  global_State g;
-  GCobj object;
-  ResurrectArg arg[2];
-  pthread_t thread[2];
-  uint32_t ready = 0, go = 0;
-  unsigned i;
-
-  memset(&g, 0, sizeof(g));
-  memset(&object, 0, sizeof(object));
-  memset(arg, 0, sizeof(arg));
-  g.gc.currentwhite = LJ_GC_WHITE0;
-  lj_obj_setgcflags(&object, LJ_GC_WHITE1 | LJ_GC_FINALIZED);
-  for (i = 0; i < 2; i++) {
-    arg[i].g = &g;
-    arg[i].object = &object;
-    arg[i].ready = &ready;
-    arg[i].go = &go;
-    assert(pthread_create(&thread[i], NULL, resurrect_writer, &arg[i]) == 0);
-  }
-  while (la_load32_acq(&ready) != 2)
-    la_cpu_pause();
-  la_store32_rel(&go, 1);
-  for (i = 0; i < 2; i++)
-    assert(pthread_join(thread[i], NULL) == 0);
-  assert(arg[0].claimed + arg[1].claimed == 1);
-  assert((lj_obj_gcflags(&object) & LJ_GC_WHITES) == LJ_GC_WHITE0);
-  assert(lj_obj_gcflags(&object) & LJ_GC_FINALIZED);
 }
 
 int main(void)
@@ -139,8 +90,6 @@ int main(void)
   assert(!cdataisv(&cd));
   la_store8_rel(&cd.marked, 0x80u);
   assert(cdataisv(&cd));
-
-  test_conditional_resurrection();
 
   printf("t-gcflags-atomic OK: %u synchronized flag updates\n",
          FLAG_ROUNDS * FLAG_THREADS);

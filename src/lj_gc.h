@@ -60,23 +60,6 @@ LJ_STATIC_ASSERT(LJ_GC_NEEDSCAN == 0x80);
 #define fixstring(g, s)	lj_gc_fixstring((g), (s))
 #define markfinalized(x)	(lj_obj_addgcflags((x), LJ_GC_FINALIZED))
 
-/* Idempotent resurrection claim. Exactly one racing caller changes an object
-** from the other white to the current white; unrelated header flags survive. */
-static LJ_AINLINE int lj_gc_resurrect_if_dead(global_State *g, GCobj *o)
-{
-  uint8_t current = (uint8_t)(g->gc.currentwhite & LJ_GC_WHITES);
-  uint8_t other = (uint8_t)(current ^ LJ_GC_WHITES);
-  uint8_t old = la_load8_acq(&o->gch.marked);
-  for (;;) {
-    uint8_t next;
-    if ((old & other) == 0)
-      return 0;
-    next = (uint8_t)((old & (uint8_t)~LJ_GC_WHITES) | current);
-    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
-      return 1;
-  }
-}
-
 static LJ_AINLINE int lj_gc_claim_black_to_gray(GCobj *o)
 {
   uint8_t old = la_load8_acq(&o->gch.marked);
