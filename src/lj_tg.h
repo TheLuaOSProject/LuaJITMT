@@ -73,6 +73,10 @@ struct TGState {
   HotCount hotcount[HOTCOUNT_SIZE];
   ASMFunction dispatch[GG_LEN_DISP];
   uint32_t poll;
+  /* SIGPROF publishes this word only. The x64 VM reads {poll,profile_request}
+  ** as one aligned qword and enters normal owner context before dispatch is
+  ** changed. Keep this field immediately after poll. */
+  uint32_t profile_request;
   uint32_t mark_active;
   global_State *gl;
   lua_State *cur_L;
@@ -140,6 +144,9 @@ struct TGState {
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
+LJ_STATIC_ASSERT((offsetof(TGState, poll) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(TGState, profile_request) ==
+		 offsetof(TGState, poll) + sizeof(uint32_t));
 
 static LJ_AINLINE int32_t lj_tg_vmstate_load_acq(TGState *tg)
 {
@@ -752,6 +759,29 @@ static LJ_AINLINE void lj_tg_poll_futex_wait(TGState *tg, uint32_t poll,
 static LJ_AINLINE void lj_tg_poll_futex_wake(TGState *tg, int n)
 {
   la_futex_wake(&tg->poll, n);
+}
+
+static LJ_AINLINE uint32_t lj_tg_profile_request_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->profile_request);
+}
+
+static LJ_AINLINE void lj_tg_profile_request_store_rlx(TGState *tg,
+						       uint32_t request)
+{
+  la_store32_rlx(&tg->profile_request, request);
+}
+
+static LJ_AINLINE void lj_tg_profile_request_rel(TGState *tg,
+						 uint32_t request)
+{
+  la_store32_rel(&tg->profile_request, request);
+}
+
+static LJ_AINLINE uint32_t lj_tg_profile_request_xchg_acqrel(TGState *tg,
+						     uint32_t request)
+{
+  return la_xchg32_acqrel(&tg->profile_request, request);
 }
 
 static LJ_AINLINE uint32_t lj_tg_reqmask_acq(const TGState *tg)

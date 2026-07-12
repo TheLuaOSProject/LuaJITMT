@@ -160,6 +160,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->ffi_xsave_baseslot = 0;
   tg->ffi_xsave_nslots = 0;
   tg->vmstate = ~LJ_VMST_INTERP;
+  lj_tg_profile_request_store_rlx(tg, 0);
   tg->profile_vmstate = 'N';
   tg->prng = g->prng;
   tg->strtab_active_hdr = NULL;
@@ -440,6 +441,7 @@ void lj_tg_attach(global_State *g, TGState *tg)
       abort();  /* Reattaching a retired TG body is not a valid lifecycle. */
   }
   lj_tg_poll_store_rlx(tg, 0);
+  lj_tg_profile_request_store_rlx(tg, 0);
   lj_tg_reqmask_store_rlx(tg, 0);
   tg_adopt_gc2_phase(g, tg);  /* 09 section 9.3 attach catch-up scaffold. */
   tg_attach_catchup(g, tg);

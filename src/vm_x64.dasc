@@ -340,7 +340,10 @@
   (TABARRAY_ASIZE_OFS + (int)offsetof(TabArrayHdr, acap))
 #define TABNODE_HMASK_OFS	(-(int)sizeof(TabNodeHdr))
 #define TABNODE_FLAGS_OFS	(TABNODE_HMASK_OFS + (int)offsetof(TabNodeHdr, flags))
-|.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
+|// poll and profile_request are adjacent aligned words. A single qword test
+|// preserves the existing zero-cost not-taken poll edge while routing an
+|// atomic SIGPROF request through vm_safepoint into normal owner C context.
+|.define TGPOLL, qword [DISPATCH+DISPATCH_TG(poll)]
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
 |.macro load_DISPATCH, lreg
 |  mov DISPATCH, L:lreg->tg_hint

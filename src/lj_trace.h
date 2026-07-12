@@ -44,6 +44,7 @@ LJ_FUNC int lj_trace_hasany(global_State *g);
 LJ_FUNC int lj_trace_flushall(lua_State *L);
 LJ_FUNC int lj_trace_flushall_gc(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs(lua_State *L);
+LJ_FUNC int lj_trace_flushall_hs_noevent(lua_State *L);
 LJ_FUNC void lj_trace_flushscope_hs(global_State *g, uint32_t work);
 LJ_FUNC uint32_t lj_trace_flushscope_retire_hs(global_State *g,
 					       uint64_t epoch);
@@ -163,6 +164,7 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 
 #define lj_trace_flushall(L)	(UNUSED(L), 0)
 #define lj_trace_flushall_hs(L)	(UNUSED(L), 0)
+#define lj_trace_flushall_hs_noevent(L)	(UNUSED(L), 0)
 #define lj_trace_flushscope_retire_hs(g, e)	(UNUSED(g), UNUSED(e), 0)
 #define lj_trace_hasany(g)	(UNUSED(g), 0)
 #define lj_jit_token_try(J)	(UNUSED(J), 0)

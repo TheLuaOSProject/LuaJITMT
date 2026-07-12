@@ -71,6 +71,39 @@ return function(add)
     end
   })
 
+  add({
+    name = "m4_posix_signal_artifacts",
+    description = "x86-64 signal getter disassembly and relocation contract",
+    run = function(t)
+      if jit and jit.os == "Linux" and jit.arch == "x64" then
+        build.with_default_build_restore(t, function()
+          t:build({
+            clean = true,
+            xcflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
+                       "-DLJ_PROFILE_TIMER_TEST_HELPERS"
+          })
+          t:run({ "sh", t:path("tools", "ci",
+                               "m4_posix_signal_artifacts.sh") }, {
+            timeout = "20s"
+          })
+        end)
+      elseif jit and jit.os == "OSX" and jit.arch == "x64" then
+        build.with_default_build_restore(t, function()
+          t:build({
+            clean = true,
+            xcflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
+                       "-DLJ_PROFILE_TIMER_TEST_HELPERS"
+          })
+          t:run({ "sh", t:path("tools", "ci",
+                               "m4_posix_signal_macho_artifacts.sh") }, {
+            timeout = "20s"
+          })
+        end)
+      end
+      print("M4 POSIX signal getter artifact contract passed")
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
     {
       name = "m4_threading_api",
@@ -179,6 +212,21 @@ return function(add)
       message = "M4 exact TG TLS binding tests passed"
     },
     {
+      name = "m4_posix_signal_safety",
+      description = "exact POSIX TG signal cache and SIGPROF lifecycle fixture",
+      output = "lj_t-posix-signal-safety",
+      cfile = "t-posix-signal-safety.c",
+      opts = {
+        clean = true,
+        xcflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
+                  "-DLJ_PROFILE_TIMER_TEST_HELPERS",
+        cflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
+                 "-DLJ_PROFILE_TIMER_TEST_HELPERS",
+        timeout = "20s"
+      },
+      message = "M4 POSIX signal cache/timer lifecycle tests passed"
+    },
+    {
       name = "m4_tg_terminal_orphan",
       description = "capacity-independent terminal TG allocator drain fixture",
       output = "lj_t-tg-terminal-orphan",
@@ -189,6 +237,33 @@ return function(add)
       },
       message = "M4 terminal TG allocator drain tests passed"
     }
+  })
+
+  add({
+    name = "m4_posix_signal_dso_lifetime",
+    description = "SIGPROF containing-image permanent pin across dlclose",
+    run = function(t)
+      if jit and (jit.os == "Linux" or jit.os == "OSX") and
+         jit.arch == "x64" then
+        local helpers = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
+                        "-DLJ_PROFILE_TIMER_TEST_HELPERS"
+        local loader = t:tmp("lj_t-posix-signal-dso-loader")
+        local image = t:path("src", "libluajit.so")
+        t:build({ clean = true, xcflags = helpers })
+        t:cc(loader, { t:path("tests", "t-posix-signal-safety.c") }, {
+          cflags = "-DLJ_PROFILE_DSO_LOADER",
+          include_src = true,
+          link_luajit = false,
+          libs = { "-ldl", os.getenv("PTHREAD") or "-pthread" }
+        })
+        for _, mode in ipairs({
+          "pin-failure", "pin-mismatch", "success", "stop-failure"
+        }) do
+          t:run({ loader, image, mode }, { timeout = "20s" })
+        end
+      end
+      print("M4 POSIX signal containing-image lifetime tests passed")
+    end
   })
 
   add({

@@ -53,14 +53,24 @@ typedef enum LJThrTGResult {
   LJ_THR_TG_CORRUPT = -3
 } LJThrTGResult;
 
+/* The signal cache is deliberately narrower than generic POSIX support.  Its
+** pthread_t representation and generated-code contract are checked for the
+** two x86-64 targets in scope. */
+#define LJ_THR_TG_SIGNAL_CACHE \
+  (LJ_TARGET_X64 && (LJ_TARGET_LINUX || LJ_TARGET_OSX))
+
 /* Exact TLS ownership result matrix:
 **
 ** - OK install/swap consumes new_hold; OK swap/clear activates old_hold.
 ** - EXPECT_MISMATCH, INVALID and CORRUPT leave the tagged binding and every
 **   input/output handle unchanged.
-** - TLS_FAILURE is an install-only first-admission result on Windows; it also
-**   leaves the incoming handle active. Once the thread cell exists, exact
-**   install publication, swap and clear are infallible atomic cell stores.
+** - TLS_FAILURE leaves all handles and bindings unchanged. On Windows it is
+**   an install-only result when the thread TLS cell cannot be admitted. On
+**   supported POSIX targets install may return it when the process-stable
+**   signal cell cannot be registered; swap may also return it after fork(2),
+**   when the inherited cell belongs to the parent process incarnation. Once
+**   admitted in the current process, exact publication/swap/clear are
+**   infallible atomic stores.
 **
 ** Exact TLS is represented by tagged_body = body|1. Its fungible token count
 ** prevents body/key reuse, so swap/clear can reconstruct the exact linear
@@ -301,8 +311,43 @@ LJ_FUNC void lj_thr_tls_test_fail_cell_alloc(uint32_t nth);
 LJ_FUNC void lj_thr_tls_test_fail_cell_publish(uint32_t nth);
 #endif
 #endif
+#if LJ_THR_TG_SIGNAL_CACHE && defined(LJ_THR_SIGNAL_TEST_HELPERS)
+LJ_FUNC void lj_thr_tg_signal_test_fail_key_create(uint32_t nth);
+LJ_FUNC void lj_thr_tg_signal_test_fail_cell_alloc(uint32_t nth);
+LJ_FUNC void lj_thr_tg_signal_test_fail_cell_publish(uint32_t nth);
+#if LJ_TARGET_LINUX
+LJ_FUNC void lj_thr_tg_signal_test_fail_fork_page(uint32_t nth);
+#endif
+LJ_FUNC uint64_t lj_thr_tg_signal_test_generation(void);
+LJ_FUNC uintptr_t lj_thr_tg_signal_test_process(void);
+LJ_FUNC uint32_t lj_thr_tg_signal_test_poisoned(void);
+LJ_FUNC void lj_thr_tg_signal_test_force_generation(uint64_t generation);
+LJ_FUNC void lj_thr_tg_signal_test_force_process(uintptr_t process);
+LJ_FUNC void lj_thr_tg_signal_test_advance_same_process(void);
+LJ_FUNC void lj_thr_tg_signal_test_force_building(void);
+LJ_FUNC uint32_t lj_thr_tg_signal_test_key_state(void);
+LJ_FUNC void lj_thr_tg_signal_test_reset_destructors(void);
+LJ_FUNC uint32_t lj_thr_tg_signal_test_destructors(void);
+LJ_FUNC uintptr_t lj_thr_tg_signal_test_last_destructor_word(void);
+#endif
 LJ_FUNC void lj_thr_set_tg(TGState *tg);
 LJ_FUNC TGState *lj_thr_get_tg(void);
+/* Handler-only exact TG lookup. It never consults compiler TLS/TLV state and
+** never returns raw compatibility bindings. */
+LJ_FUNC TGState *lj_thr_get_tg_signal(void);
+/* Transitional profiler-only lookup. It additionally accepts a same-thread
+** raw mirror until production lifecycle callers all own exact leases. */
+LJ_FUNC TGState *lj_thr_get_tg_profile_signal(void);
+/* Cold signal activation. The caller must pin the containing image first,
+** because POSIX provides no way to unregister an atfork callback. */
+LJ_FUNC int lj_thr_tg_signal_activate(void);
+/* Retryable cold admission for the TG already owned by this OS thread. It
+** republishes the exact/raw TLS binding into the process-stable signal cell. */
+LJ_FUNC int lj_thr_tg_signal_prepare_current(TGState *expected_tg);
+/* Cold process-incarnation repair plus an exact nonwrapping generation
+** snapshot. Linux repair also consumes the kernel WIPEONFORK witness. */
+LJ_FUNC int lj_thr_tg_signal_process_snapshot(uint64_t *generation,
+                                               uint32_t *advanced);
 LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
 LJ_FUNC int lj_threading_attach(lua_State *L);
 LJ_FUNC int lj_threading_attach_wait(lua_State *L);

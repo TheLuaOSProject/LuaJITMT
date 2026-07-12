@@ -878,6 +878,22 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
   }
 }
 
+typedef struct JitProfileStartCtx {
+  const char *mode;
+  lua_State *callback_state;
+} JitProfileStartCtx;
+
+static TValue *jit_profile_start_cp(lua_State *L, lua_CFunction dummy,
+				    void *ud)
+{
+  JitProfileStartCtx *ctx = (JitProfileStartCtx *)ud;
+  UNUSED(dummy);
+  luaJIT_profile_start(L, ctx->mode,
+		       (luaJIT_profile_callback)jit_profile_callback,
+		       ctx->callback_state);
+  return NULL;
+}
+
 /* profile.start(mode, cb) */
 LJLIB_CF(jit_profile_start)
 {
@@ -885,7 +901,9 @@ LJLIB_CF(jit_profile_start)
   GCstr *mode = lj_lib_optstr(L, 1);
   GCfunc *func = lj_lib_checkfunc(L, 2);
   lua_State *L2 = lua_newthread(L);  /* Thread that runs profiler callback. */
+  JitProfileStartCtx ctx;
   TValue key, tv;
+  int errcode;
   luaJIT_profile_stop(L);
   jit_profile_registry_clear(L);
   /* Anchor thread and function in registry. */
@@ -898,8 +916,15 @@ LJLIB_CF(jit_profile_start)
   jit_profile_registry_store(L, registry, &key, &tv);
   lj_gc2_barrier_weak_write(L, registry, &key, &tv);
   lj_gc_pubtab(L, registry);
-  luaJIT_profile_start(L, mode ? strdata(mode) : "",
-		       (luaJIT_profile_callback)jit_profile_callback, L2);
+  ctx.mode = mode ? strdata(mode) : "";
+  ctx.callback_state = L2;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, jit_profile_start_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    /* The low-level lifecycle has already rolled STARTING back. Remove the
+    ** Lua callback roots before preserving the original profile-start error. */
+    jit_profile_registry_clear(L);
+    lj_err_throw(L, errcode);
+  }
   if (!lj_profile_active(L))
     jit_profile_registry_clear(L);
   return 0;

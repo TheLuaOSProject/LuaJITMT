@@ -2278,8 +2278,11 @@ static TValue *trace_flush_vmevent_cp(lua_State *L, lua_CFunction dummy,
   return NULL;
 }
 
-/* Request a leader-owned full trace flush through the safepoint protocol. */
-int lj_trace_flushall_hs(lua_State *L)
+/* Request a leader-owned full trace flush through the safepoint protocol.
+** Internal policy transitions use the eventless form: invoking a user TRACE
+** callback while their lifecycle state is transitional permits a same-thread
+** reentrant operation to self-wait forever. Public flushes retain the event. */
+static int trace_flushall_hs_impl(lua_State *L, int send_event)
 {
   global_State *g = G(L);
   jit_State *J = L2J(L);
@@ -2294,7 +2297,7 @@ int lj_trace_flushall_hs(lua_State *L)
     ** the safepoint epoch: otherwise every flush reserves another trace number at
     ** the same generation and the namespace can never reach its reuse grace.
     */
-    return trace_flushall_direct(L, 0, 1);
+    return trace_flushall_direct(L, 0, send_event);
   }
   token = lj_jit_token_acquire_wait(J);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
@@ -2305,13 +2308,26 @@ int lj_trace_flushall_hs(lua_State *L)
   ** event path can race a peer TEXIT callback, and releasing the token first
   ** lets a new recorder have J->L overwritten by either event.
   */
-  jit_owner_l_rel(J, L);
-  errcode = lj_vm_cpcall(L, NULL, NULL, trace_flush_vmevent_cp);
+  errcode = 0;
+  if (send_event) {
+    jit_owner_l_rel(J, L);
+    errcode = lj_vm_cpcall(L, NULL, NULL, trace_flush_vmevent_cp);
+  }
   if (token)
     lj_jit_token_release(J);
   if (errcode)
     lj_err_throw(L, errcode);  /* Propagate only after releasing the token. */
   return 0;
+}
+
+int lj_trace_flushall_hs(lua_State *L)
+{
+  return trace_flushall_hs_impl(L, 1);
+}
+
+int lj_trace_flushall_hs_noevent(lua_State *L)
+{
+  return trace_flushall_hs_impl(L, 0);
 }
 
 void lj_trace_flushscope_hs(global_State *g, uint32_t work)

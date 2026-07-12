@@ -3631,7 +3631,16 @@ static void asm_gc_check(ASMState *as)
 static void asm_xpoll(ASMState *as)
 {
   asm_guardcc(as, CC_NE);  /* Assumes asm_snap_prep() already done. */
+#if LJ_64
+  /* poll and profile_request are one aligned qword on x64. Keep trace
+  ** backedges consistent with vm_x64.dasc so SIGPROF can force an otherwise
+  ** unbounded hot trace through its normal owner-context exit. */
+  emit_i8(as, 0);
+  emit_rmro(as, XG_TOXOi8(XG_ARITHi(XOg_CMP)), XOg_CMP|REX_64,
+            RID_DISPATCH, DISPATCH_TG(poll));
+#else
   emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);
+#endif
 }
 
 /* Fixup the loop branch. */

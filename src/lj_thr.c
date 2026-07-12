@@ -23,12 +23,21 @@
 #include <sched.h>
 #include <time.h>
 #include <unistd.h>
+#if LJ_TARGET_LINUX
+#include <sys/mman.h>
+#ifndef MADV_WIPEONFORK
+#define MADV_WIPEONFORK 18
+#endif
+#endif
 #endif
 
 #define LJ_THR_TG_EXACT_TAG ((uintptr_t)1u)
 #define LJ_THR_TG_TAG_MASK LJ_THR_TG_EXACT_TAG
+#define LJ_THR_TG_SIGNAL_RAW_TAG ((uintptr_t)2u)
+#define LJ_THR_TG_SIGNAL_TAG_MASK \
+  (LJ_THR_TG_EXACT_TAG|LJ_THR_TG_SIGNAL_RAW_TAG)
 typedef char lj_thr_tg_tag_requires_alignment[
-  __alignof__(TGState) >= 2 ? 1 : -1];
+  __alignof__(TGState) >= 4 ? 1 : -1];
 typedef char lj_thr_tg_tag_requires_pointer_width[
   sizeof(uintptr_t) == sizeof(void *) ? 1 : -1];
 
@@ -112,6 +121,716 @@ static BOOL lj_thr_tls_publish_cell(DWORD key, LJThrTGCell *cell)
 static LJ_TLS uintptr_t lj_tls_tg_word;
 #endif
 static uint32_t lj_thr_next_tid;
+
+#if LJ_THR_TG_SIGNAL_CACHE
+/* Immutable hash nodes are never reclaimed. A signal handler snapshots one
+** bucket head and follows only next links initialized before publication, so
+** registration cannot create a retry/unlink race. Tag 1 mirrors an exact TLS
+** lease; tag 2 is the explicitly temporary same-thread profiler/raw bridge. */
+#define LJ_THR_TG_SIGNAL_BUCKETS 256u
+typedef struct LJThrTGSignalCell {
+  struct LJThrTGSignalCell *next;
+  uint64_t generation;
+  uintptr_t process;
+  uintptr_t owner;
+  uintptr_t tagged_word;
+} LJThrTGSignalCell;
+
+static LJThrTGSignalCell *lj_tg_signal_buckets[LJ_THR_TG_SIGNAL_BUCKETS];
+static pthread_key_t lj_tg_signal_key;
+static uint32_t lj_tg_signal_key_state;
+static uint32_t lj_tg_signal_atfork_state;
+static uint32_t lj_tg_signal_process_poisoned;
+static uint64_t lj_tg_signal_generation = 1u;
+static uintptr_t lj_tg_signal_process_cached;
+#if LJ_TARGET_LINUX
+/* Linux applies MADV_WIPEONFORK in the kernel for libc and raw fork/clone
+** paths alike. The page is dedicated so zeroing cannot corrupt unrelated
+** state. A handler accepts only READY; owner context advances the generation
+** before publishing READY again. */
+#define LJ_THR_SIGNAL_FORK_PAGE_SIZE 4096u
+#define LJ_THR_SIGNAL_FORK_DIRTY 0u
+#define LJ_THR_SIGNAL_FORK_BUILDING 1u
+#define LJ_THR_SIGNAL_FORK_READY 2u
+typedef struct LJThrSignalForkPage {
+  uint32_t state;
+} LJThrSignalForkPage;
+static LJThrSignalForkPage *lj_tg_signal_fork_page;
+#endif
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+static uint32_t lj_tg_signal_test_fail_key_create_after;
+static uint32_t lj_tg_signal_test_fail_cell_alloc_after;
+static uint32_t lj_tg_signal_test_fail_cell_publish_after;
+#if LJ_TARGET_LINUX
+static uint32_t lj_tg_signal_test_fail_fork_page_after;
+#endif
+static uint32_t lj_tg_signal_test_destructor_count;
+static uintptr_t lj_tg_signal_test_destructor_last_word;
+static int lj_thr_signal_test_fail_now(uint32_t *count);
+#endif
+
+typedef char lj_thr_signal_pthread_id_must_fit[
+  sizeof(pthread_t) == sizeof(uintptr_t) ? 1 : -1];
+
+#define LJ_THR_SIGNAL_KEY_EMPTY 0u
+#define LJ_THR_SIGNAL_KEY_BUILDING 1u
+#define LJ_THR_SIGNAL_KEY_READY 2u
+#define LJ_THR_SIGNAL_KEY_DEAD 3u
+
+/* Function-address relocations are resolved when the image is loaded, unlike
+** a lazy PLT/TLV call first reached from a signal. Artifact gates check that
+** the handler getter calls only these eagerly-bound POSIX functions. */
+static pthread_t (*volatile lj_thr_signal_pthread_self_fn)(void) =
+  pthread_self;
+static pid_t (*volatile lj_thr_signal_getpid_fn)(void) = getpid;
+
+static LJ_AINLINE uintptr_t lj_thr_signal_process(void)
+{
+  return (uintptr_t)lj_thr_signal_getpid_fn();
+}
+
+static LJ_AINLINE uintptr_t lj_thr_signal_owner(void)
+{
+  /* pthread_self() is async-signal-safe on the supported targets. Both ABIs
+  ** represent pthread_t in one pointer-sized scalar; no TLS address is
+  ** taken. */
+  return (uintptr_t)lj_thr_signal_pthread_self_fn();
+}
+
+static LJ_AINLINE uint32_t lj_thr_signal_bucket(uint64_t generation,
+                                                uintptr_t process,
+                                                uintptr_t owner)
+{
+  uint64_t x = (uint64_t)owner ^ ((uint64_t)process << 32) ^ generation;
+  x ^= x >> 33;
+  x *= UINT64_C(0xff51afd7ed558ccd);
+  x ^= x >> 33;
+  return (uint32_t)x & (LJ_THR_TG_SIGNAL_BUCKETS - 1u);
+}
+
+#if LJ_TARGET_LINUX
+static LJThrSignalForkPage *lj_thr_signal_fork_page_ensure(void)
+{
+  LJThrSignalForkPage *page = (LJThrSignalForkPage *)
+    la_loadptr_acq((void *const *)&lj_tg_signal_fork_page);
+  if (!page) {
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+    if (lj_thr_signal_test_fail_now(
+          &lj_tg_signal_test_fail_fork_page_after))
+      return NULL;
+#endif
+    LJThrSignalForkPage *candidate = (LJThrSignalForkPage *)mmap(
+      NULL, LJ_THR_SIGNAL_FORK_PAGE_SIZE, PROT_READ | PROT_WRITE,
+      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *expected = NULL;
+    if (candidate == MAP_FAILED)
+      return NULL;
+    if (madvise(candidate, LJ_THR_SIGNAL_FORK_PAGE_SIZE,
+                MADV_WIPEONFORK) != 0) {
+      (void)munmap(candidate, LJ_THR_SIGNAL_FORK_PAGE_SIZE);
+      return NULL;
+    }
+    la_store32_rlx(&candidate->state, LJ_THR_SIGNAL_FORK_READY);
+    if (la_casptr((void **)&lj_tg_signal_fork_page, &expected, candidate,
+                  LA_REL, LA_ACQ)) {
+      page = candidate;
+    } else {
+      (void)munmap(candidate, LJ_THR_SIGNAL_FORK_PAGE_SIZE);
+      page = (LJThrSignalForkPage *)expected;
+    }
+  }
+  return page;
+}
+
+static LJ_AINLINE int lj_thr_signal_fork_ready(void)
+{
+  LJThrSignalForkPage *page = (LJThrSignalForkPage *)
+    la_loadptr_acq((void *const *)&lj_tg_signal_fork_page);
+  return page && la_load32_acq(&page->state) == LJ_THR_SIGNAL_FORK_READY;
+}
+
+static LJ_AINLINE void lj_thr_signal_fork_publish_ready(void)
+{
+  LJThrSignalForkPage *page = (LJThrSignalForkPage *)
+    la_loadptr_acq((void *const *)&lj_tg_signal_fork_page);
+  if (page)
+    la_store32_rel(&page->state, LJ_THR_SIGNAL_FORK_READY);
+}
+#else
+static LJ_AINLINE int lj_thr_signal_fork_ready(void)
+{
+  return 1;
+}
+
+static LJ_AINLINE void lj_thr_signal_fork_publish_ready(void)
+{
+}
+#endif
+
+/* Advance the process incarnation without ever wrapping. The cached PID is
+** zero throughout the transition, so the asynchronous reader fails closed.
+** A saturated generation permanently poisons this process copy. */
+static void lj_thr_signal_process_advance(uintptr_t process)
+{
+  uint64_t generation = la_load64_acq(&lj_tg_signal_generation);
+  la_storeuptr_rel(&lj_tg_signal_process_cached, 0);
+  if (generation == UINT64_MAX) {
+    la_store32_rel(&lj_tg_signal_process_poisoned, 1);
+  } else {
+    la_store64_rel(&lj_tg_signal_generation, generation + 1u);
+  }
+  if (la_load32_acq(&lj_tg_signal_key_state) ==
+      LJ_THR_SIGNAL_KEY_BUILDING)
+    la_store32_rel(&lj_tg_signal_key_state, LJ_THR_SIGNAL_KEY_EMPTY);
+  if (la_load32_acq(&lj_tg_signal_atfork_state) ==
+      LJ_THR_SIGNAL_KEY_BUILDING)
+    la_store32_rel(&lj_tg_signal_atfork_state, LJ_THR_SIGNAL_KEY_EMPTY);
+  la_storeuptr_rel(&lj_tg_signal_process_cached, process);
+}
+
+/* pthread_atfork child hook. Only async-signal-safe, lock-free x86-64 atomics
+** and the eagerly relocated getpid entry are reachable from here. Resetting a
+** copied BUILDING state prevents a child from waiting for a vanished builder. */
+static void lj_thr_signal_atfork_child(void)
+{
+  lj_thr_signal_process_advance(lj_thr_signal_process());
+  lj_thr_signal_fork_publish_ready();
+}
+
+/* Repair a fork which bypassed pthread_atfork (raw syscall/foreign runtime),
+** and initialize the first process identity. Every cold cache admission calls
+** this even when the pthread key already exists. */
+static int lj_thr_signal_process_repair(uint32_t *advanced)
+{
+  int saved_errno = errno;
+  uintptr_t process = lj_thr_signal_process();
+  uintptr_t cached;
+#if LJ_TARGET_LINUX
+  LJThrSignalForkPage *page;
+#endif
+  if (advanced)
+    *advanced = 0;
+  if (process == 0) {
+    errno = saved_errno;
+    return 0;
+  }
+#if LJ_TARGET_LINUX
+  page = lj_thr_signal_fork_page_ensure();
+  if (!page) {
+    errno = saved_errno;
+    return 0;
+  }
+  for (;;) {
+    uint32_t fork_state = la_load32_acq(&page->state);
+    if (fork_state == LJ_THR_SIGNAL_FORK_READY)
+      break;
+    if (fork_state == LJ_THR_SIGNAL_FORK_DIRTY) {
+      uint32_t expected = LJ_THR_SIGNAL_FORK_DIRTY;
+      if (la_cas32(&page->state, &expected, LJ_THR_SIGNAL_FORK_BUILDING,
+                   LA_ACQ_REL, LA_ACQ)) {
+        /* The kernel witness, unlike a numeric PID, cannot be resurrected by
+        ** an uninterrupted chain of raw forks and ancestor PID reuse. */
+        lj_thr_signal_process_advance(process);
+        if (advanced)
+          *advanced = 1;
+        la_store32_rel(&page->state, LJ_THR_SIGNAL_FORK_READY);
+        errno = saved_errno;
+        return !la_load32_acq(&lj_tg_signal_process_poisoned);
+      }
+      continue;
+    }
+    if (fork_state != LJ_THR_SIGNAL_FORK_BUILDING) {
+      errno = saved_errno;
+      return 0;
+    }
+    (void)sched_yield();
+  }
+#endif
+  cached = la_loaduptr_acq(&lj_tg_signal_process_cached);
+  if (cached == 0) {
+    uintptr_t expected = 0;
+    if (!la_casuptr(&lj_tg_signal_process_cached, &expected, process,
+                    LA_REL, LA_ACQ))
+      cached = expected;
+    else
+      cached = process;
+  }
+  if (cached != process) {
+    uintptr_t expected = cached;
+    if (la_casuptr(&lj_tg_signal_process_cached, &expected, 0,
+                   LA_ACQ_REL, LA_ACQ)) {
+      lj_thr_signal_process_advance(process);
+      if (advanced)
+        *advanced = 1;
+    } else {
+      do {
+        cached = la_loaduptr_acq(&lj_tg_signal_process_cached);
+        if (cached == process)
+          break;
+        (void)sched_yield();
+      } while (cached == 0);
+      if (cached != process) {
+        errno = saved_errno;
+        return 0;
+      }
+    }
+  }
+  errno = saved_errno;
+  return !la_load32_acq(&lj_tg_signal_process_poisoned);
+}
+
+int lj_thr_tg_signal_process_snapshot(uint64_t *generation,
+                                      uint32_t *advanced)
+{
+  int usable = lj_thr_signal_process_repair(advanced);
+  if (generation)
+    *generation = la_load64_acq(&lj_tg_signal_generation);
+  return usable;
+}
+
+static int lj_thr_signal_atfork_ensure(void)
+{
+  int saved_errno = errno;
+  for (;;) {
+    uint32_t state = la_load32_acq(&lj_tg_signal_atfork_state);
+    if (state == LJ_THR_SIGNAL_KEY_READY) {
+      errno = saved_errno;
+      return 1;
+    }
+    if (state == LJ_THR_SIGNAL_KEY_EMPTY) {
+      uint32_t expected = LJ_THR_SIGNAL_KEY_EMPTY;
+      if (la_cas32(&lj_tg_signal_atfork_state, &expected,
+                   LJ_THR_SIGNAL_KEY_BUILDING, LA_ACQ_REL, LA_ACQ)) {
+        int rc = pthread_atfork(NULL, NULL, lj_thr_signal_atfork_child);
+        la_store32_rel(&lj_tg_signal_atfork_state,
+                       rc == 0 ? LJ_THR_SIGNAL_KEY_READY :
+                                 LJ_THR_SIGNAL_KEY_EMPTY);
+        errno = saved_errno;
+        return rc == 0;
+      }
+      continue;
+    }
+    (void)sched_yield();
+    if (!lj_thr_signal_process_repair(NULL)) {
+      errno = saved_errno;
+      return 0;
+    }
+  }
+}
+
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+static int lj_thr_signal_test_fail_now(uint32_t *count)
+{
+  uint32_t current = la_load32_acq(count);
+  while (current != 0) {
+    uint32_t next = current - 1u;
+    if (la_cas32(count, &current, next, LA_ACQ_REL, LA_ACQ))
+      return next == 0;
+  }
+  return 0;
+}
+
+void lj_thr_tg_signal_test_fail_key_create(uint32_t nth)
+{
+  la_store32_rel(&lj_tg_signal_test_fail_key_create_after, nth);
+}
+
+void lj_thr_tg_signal_test_fail_cell_alloc(uint32_t nth)
+{
+  la_store32_rel(&lj_tg_signal_test_fail_cell_alloc_after, nth);
+}
+
+void lj_thr_tg_signal_test_fail_cell_publish(uint32_t nth)
+{
+  la_store32_rel(&lj_tg_signal_test_fail_cell_publish_after, nth);
+}
+
+#if LJ_TARGET_LINUX
+void lj_thr_tg_signal_test_fail_fork_page(uint32_t nth)
+{
+  la_store32_rel(&lj_tg_signal_test_fail_fork_page_after, nth);
+}
+#endif
+
+uint64_t lj_thr_tg_signal_test_generation(void)
+{
+  return la_load64_acq(&lj_tg_signal_generation);
+}
+
+uintptr_t lj_thr_tg_signal_test_process(void)
+{
+  return la_loaduptr_acq(&lj_tg_signal_process_cached);
+}
+
+uint32_t lj_thr_tg_signal_test_poisoned(void)
+{
+  return la_load32_acq(&lj_tg_signal_process_poisoned);
+}
+
+void lj_thr_tg_signal_test_force_generation(uint64_t generation)
+{
+  la_store64_rel(&lj_tg_signal_generation, generation);
+  la_store32_rel(&lj_tg_signal_process_poisoned, 0);
+}
+
+void lj_thr_tg_signal_test_force_process(uintptr_t process)
+{
+  la_storeuptr_rel(&lj_tg_signal_process_cached, process);
+}
+
+void lj_thr_tg_signal_test_advance_same_process(void)
+{
+  lj_thr_signal_process_advance(lj_thr_signal_process());
+}
+
+void lj_thr_tg_signal_test_force_building(void)
+{
+  la_store32_rel(&lj_tg_signal_key_state, LJ_THR_SIGNAL_KEY_BUILDING);
+  la_store32_rel(&lj_tg_signal_atfork_state, LJ_THR_SIGNAL_KEY_BUILDING);
+}
+
+uint32_t lj_thr_tg_signal_test_key_state(void)
+{
+  return la_load32_acq(&lj_tg_signal_key_state);
+}
+#endif
+
+static void lj_thr_signal_cell_destructor(void *ptr)
+{
+  LJThrTGSignalCell *cell = (LJThrTGSignalCell *)ptr;
+  uintptr_t word;
+  if (!cell)
+    return;
+  /* Clear handler visibility first. For an exact tag, the lease remains
+  ** represented by compiler TLS and is intentionally leaked by an unclean
+  ** lifecycle exit until the production detach handoff owns its release. A
+  ** raw compatibility tag owns no lease and simply dies with the thread. */
+  word = la_loaduptr_acq(&cell->tagged_word);
+  la_storeuptr_rel(&cell->tagged_word, 0);
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+  la_storeuptr_rel(&lj_tg_signal_test_destructor_last_word, word);
+  (void)la_add32_acqrel(&lj_tg_signal_test_destructor_count, 1);
+#else
+  UNUSED(word);
+#endif
+}
+
+static int lj_thr_signal_key_ensure(void)
+{
+  /* Temporary cold admission bridge: pthread_key_create and the losing
+  ** BUILDING sched_yield path are not part of the final nonblocking proof.
+  ** Failure reopens EMPTY so a later admission can retry instead of inheriting
+  ** pthread_once's permanent failed initialization. */
+  int saved_errno = errno;
+  if (!lj_thr_signal_process_repair(NULL)) {
+    errno = saved_errno;
+    return 0;
+  }
+  for (;;) {
+    uint32_t state = la_load32_acq(&lj_tg_signal_key_state);
+    if (state == LJ_THR_SIGNAL_KEY_READY) {
+      errno = saved_errno;
+      return 1;
+    }
+    if (state == LJ_THR_SIGNAL_KEY_DEAD) {
+      errno = saved_errno;
+      return 0;
+    }
+    if (state == LJ_THR_SIGNAL_KEY_EMPTY) {
+      uint32_t expected = LJ_THR_SIGNAL_KEY_EMPTY;
+      if (la_cas32(&lj_tg_signal_key_state, &expected,
+                   LJ_THR_SIGNAL_KEY_BUILDING, LA_ACQ_REL, LA_ACQ)) {
+        int rc;
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+        if (lj_thr_signal_test_fail_now(
+              &lj_tg_signal_test_fail_key_create_after))
+          rc = EAGAIN;
+        else
+#endif
+          rc = pthread_key_create(&lj_tg_signal_key,
+                                  lj_thr_signal_cell_destructor);
+        la_store32_rel(&lj_tg_signal_key_state,
+                       rc == 0 ? LJ_THR_SIGNAL_KEY_READY :
+                                 LJ_THR_SIGNAL_KEY_EMPTY);
+        errno = saved_errno;
+        return rc == 0;
+      }
+      continue;
+    }
+    (void)sched_yield();
+  }
+}
+
+int lj_thr_tg_signal_activate(void)
+{
+  /* The caller must make this image process-stable before registration:
+  ** pthread_atfork has no unregister operation. profile_timer_start pins its
+  ** containing image first; the standalone fixture runs in the main image. */
+  return lj_thr_signal_process_repair(NULL) && lj_thr_signal_atfork_ensure();
+}
+
+static LJThrTGSignalCell *lj_thr_signal_cell_specific(void)
+{
+  if (la_load32_acq(&lj_tg_signal_key_state) !=
+      LJ_THR_SIGNAL_KEY_READY)
+    return NULL;
+  return (LJThrTGSignalCell *)pthread_getspecific(lj_tg_signal_key);
+}
+
+static LJThrTGSignalCell *lj_thr_signal_cell_prepare(void)
+{
+  LJThrTGSignalCell *cell, *head;
+  uint64_t generation;
+  uintptr_t process, owner;
+  uint32_t bucket;
+  int saved_errno = errno;
+  if (!lj_thr_signal_key_ensure())
+    return NULL;
+  cell = (LJThrTGSignalCell *)pthread_getspecific(lj_tg_signal_key);
+  process = la_loaduptr_acq(&lj_tg_signal_process_cached);
+  generation = la_load64_acq(&lj_tg_signal_generation);
+  owner = lj_thr_signal_owner();
+  if (cell && cell->generation == generation && cell->process == process &&
+      cell->owner == owner) {
+    errno = saved_errno;
+    return cell;
+  }
+  if (process == 0 || owner == 0) {
+    errno = saved_errno;
+    return NULL;
+  }
+  cell = NULL;
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+  if (!lj_thr_signal_test_fail_now(&lj_tg_signal_test_fail_cell_alloc_after))
+#endif
+    cell = (LJThrTGSignalCell *)malloc(sizeof(*cell));
+  if (!cell) {
+    errno = saved_errno;
+    return NULL;
+  }
+  cell->next = NULL;
+  cell->generation = generation;
+  cell->process = process;
+  cell->owner = owner;
+  la_storeuptr_rlx(&cell->tagged_word, 0);
+  /* A destructor may only observe a globally unpublished zero cell here. */
+  {
+    int publish_error;
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+    publish_error = lj_thr_signal_test_fail_now(
+      &lj_tg_signal_test_fail_cell_publish_after) ? ENOMEM :
+                                                    pthread_setspecific(
+                                                      lj_tg_signal_key, cell);
+#else
+    publish_error = pthread_setspecific(lj_tg_signal_key, cell);
+#endif
+    if (publish_error != 0) {
+      free(cell);
+      errno = saved_errno;
+      return NULL;
+    }
+  }
+  bucket = lj_thr_signal_bucket(generation, process, owner);
+  do {
+    head = (LJThrTGSignalCell *)
+      la_loadptr_acq((void *const *)&lj_tg_signal_buckets[bucket]);
+    cell->next = head;
+  } while (!la_casptr((void **)&lj_tg_signal_buckets[bucket],
+                      (void **)&head, cell, LA_REL, LA_ACQ));
+  errno = saved_errno;
+  return cell;
+}
+
+static void lj_thr_signal_word_set(uintptr_t word)
+{
+  LJThrTGSignalCell *cell = lj_thr_signal_cell_specific();
+  if (!cell)
+    abort();  /* Exact admission prepared the process-stable signal cell. */
+  la_storeuptr_rel(&cell->tagged_word, word);
+}
+
+static void lj_thr_signal_word_clear_if_registered(void)
+{
+  LJThrTGSignalCell *cell = lj_thr_signal_cell_specific();
+  if (cell)
+    la_storeuptr_rel(&cell->tagged_word, 0);
+}
+
+static LJ_AINLINE uintptr_t lj_thr_signal_word_get(void)
+{
+  uintptr_t process = lj_thr_signal_process();
+  uintptr_t cached = la_loaduptr_acq(&lj_tg_signal_process_cached);
+  uint64_t generation;
+  uintptr_t owner = lj_thr_signal_owner();
+  LJThrTGSignalCell *cell;
+  uintptr_t word;
+  uint32_t bucket;
+  /* getpid is a mandatory eager backstop on every lookup. It rejects a raw or
+  ** missed fork before any inherited bucket node or TG body can be consumed. */
+  if (process == 0 || process != cached || owner == 0 ||
+      !lj_thr_signal_fork_ready() ||
+      la_load32_acq(&lj_tg_signal_process_poisoned))
+    return 0;
+  generation = la_load64_acq(&lj_tg_signal_generation);
+  bucket = lj_thr_signal_bucket(generation, process, owner);
+  cell = (LJThrTGSignalCell *)
+    la_loadptr_acq((void *const *)&lj_tg_signal_buckets[bucket]);
+  while (cell) {
+    if (cell->generation == generation && cell->process == process &&
+        cell->owner == owner) {
+      word = la_loaduptr_acq(&cell->tagged_word);
+      return word;
+    }
+    cell = cell->next;
+  }
+  return 0;
+}
+
+static LJ_AINLINE TGState *lj_thr_signal_word_decode(int accept_raw)
+{
+  uintptr_t word = lj_thr_signal_word_get();
+  uintptr_t tag = word & LJ_THR_TG_SIGNAL_TAG_MASK;
+  if (tag != LJ_THR_TG_EXACT_TAG &&
+      !(accept_raw && tag == LJ_THR_TG_SIGNAL_RAW_TAG))
+    return NULL;
+  word &= ~LJ_THR_TG_SIGNAL_TAG_MASK;
+  return word != 0 && word % (uintptr_t)__alignof__(TGState) == 0 ?
+         (TGState *)word : NULL;
+}
+
+TGState *lj_thr_get_tg_signal(void)
+{
+  return lj_thr_signal_word_decode(0);
+}
+
+TGState *lj_thr_get_tg_profile_signal(void)
+{
+  return lj_thr_signal_word_decode(1);
+}
+
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+#if LJ_TARGET_OSX
+LUA_API TGState *luaJIT_thr_tg_signal_test_get(void)
+{
+  return lj_thr_signal_word_decode(0);
+}
+
+LUA_API TGState *luaJIT_thr_tg_profile_signal_test_get(void)
+{
+  return lj_thr_signal_word_decode(1);
+}
+#else
+LUA_API TGState *luaJIT_thr_tg_signal_test_get(void)
+  __attribute__((alias("lj_thr_get_tg_signal")));
+LUA_API TGState *luaJIT_thr_tg_profile_signal_test_get(void)
+  __attribute__((alias("lj_thr_get_tg_profile_signal")));
+#endif
+/* Mach-O nlist entries carry no symbol size. Keep an exported helper boundary
+** after the two full-body getters so llvm-objdump does not include later
+** stripped local functions in the final-image artifact check. */
+LUA_API void luaJIT_thr_tg_signal_test_end(void)
+{
+}
+#endif
+
+/* pthread_key_delete prevents a later live-thread exit from calling back into
+** an unloaded shared object. Concurrent dlclose/use remains outside the C ABI
+** contract, but merely unloading after users stopped is safe. */
+static void __attribute__((destructor)) lj_thr_signal_cache_fini(void)
+{
+  uint32_t state = la_load32_acq(&lj_tg_signal_key_state);
+  uint32_t bucket;
+  if (state == LJ_THR_SIGNAL_KEY_READY) {
+    la_store32_rel(&lj_tg_signal_key_state, LJ_THR_SIGNAL_KEY_DEAD);
+    for (bucket = 0; bucket < LJ_THR_TG_SIGNAL_BUCKETS; bucket++) {
+      LJThrTGSignalCell *cell = (LJThrTGSignalCell *)
+        la_loadptr_acq((void *const *)&lj_tg_signal_buckets[bucket]);
+      while (cell) {
+        la_storeuptr_rel(&cell->tagged_word, 0);
+        cell = cell->next;
+      }
+    }
+    (void)pthread_key_delete(lj_tg_signal_key);
+  }
+#if LJ_TARGET_LINUX
+  /* Once atfork is READY the caller's image is process-stable and a handler
+  ** may have selected this page, so leave it mapped for kernel reclamation.
+  ** Before activation (notably a failed profile pin), no callback/handler was
+  ** installed and an ordinary stopped-user dlclose may reclaim it. */
+  if (la_load32_acq(&lj_tg_signal_atfork_state) ==
+      LJ_THR_SIGNAL_KEY_EMPTY) {
+    LJThrSignalForkPage *page = (LJThrSignalForkPage *)
+      la_loadptr_acq((void *const *)&lj_tg_signal_fork_page);
+    la_storeptr_rel((void **)&lj_tg_signal_fork_page, NULL);
+    if (page)
+      (void)munmap(page, LJ_THR_SIGNAL_FORK_PAGE_SIZE);
+  }
+#endif
+}
+
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+void lj_thr_tg_signal_test_reset_destructors(void)
+{
+  la_store32_rel(&lj_tg_signal_test_destructor_count, 0);
+  la_storeuptr_rel(&lj_tg_signal_test_destructor_last_word, 0);
+}
+
+uint32_t lj_thr_tg_signal_test_destructors(void)
+{
+  return la_load32_acq(&lj_tg_signal_test_destructor_count);
+}
+
+uintptr_t lj_thr_tg_signal_test_last_destructor_word(void)
+{
+  return la_loaduptr_acq(&lj_tg_signal_test_destructor_last_word);
+}
+#endif
+#else
+static LJ_AINLINE void *lj_thr_signal_cell_prepare(void)
+{
+  return (void *)1;
+}
+
+static LJ_AINLINE void lj_thr_signal_word_set(uintptr_t word)
+{
+  UNUSED(word);
+}
+
+static LJ_AINLINE void lj_thr_signal_word_clear_if_registered(void)
+{
+}
+
+TGState *lj_thr_get_tg_signal(void)
+{
+  return NULL;
+}
+
+TGState *lj_thr_get_tg_profile_signal(void)
+{
+  return NULL;
+}
+
+int lj_thr_tg_signal_activate(void)
+{
+  return 1;
+}
+
+int lj_thr_tg_signal_prepare_current(TGState *expected_tg)
+{
+  UNUSED(expected_tg);
+  return 1;
+}
+
+int lj_thr_tg_signal_process_snapshot(uint64_t *generation,
+                                      uint32_t *advanced)
+{
+  if (generation)
+    *generation = 1u;
+  if (advanced)
+    *advanced = 0;
+  return 1;
+}
+#endif
 
 uint32_t lj_thr_newid(void)
 {
@@ -217,6 +936,34 @@ static TGState *lj_thr_tls_get(void)
 {
   return (TGState *)(lj_thr_tls_word_get() & ~LJ_THR_TG_TAG_MASK);
 }
+
+#if LJ_THR_TG_SIGNAL_CACHE
+int lj_thr_tg_signal_prepare_current(TGState *expected_tg)
+{
+  LJThrTGSignalCell *cell;
+  uintptr_t word = lj_thr_tls_word_get();
+  uintptr_t tag = word & LJ_THR_TG_SIGNAL_TAG_MASK;
+  int saved_errno = errno;
+  /* A profiler started from a thread with no current TG could never route a
+  ** sample safely. Likewise, tags other than the exact TLS lease are corrupt
+  ** here: raw compatibility pointers are naturally aligned and untagged. */
+  if (word == 0 || (tag != 0 && tag != LJ_THR_TG_EXACT_TAG) ||
+      (TGState *)(word & ~LJ_THR_TG_SIGNAL_TAG_MASK) != expected_tg) {
+    errno = saved_errno;
+    return 0;
+  }
+  cell = lj_thr_signal_cell_prepare();
+  if (!cell) {
+    errno = saved_errno;
+    return 0;
+  }
+  la_storeuptr_rel(&cell->tagged_word,
+                   tag == LJ_THR_TG_EXACT_TAG ? word :
+                   word | LJ_THR_TG_SIGNAL_RAW_TAG);
+  errno = saved_errno;
+  return 1;
+}
+#endif
 
 int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg)
 {
@@ -423,8 +1170,13 @@ LJThrTGResult lj_thr_tg_install(LJTGRegistryBorrow *new_hold)
   result = lj_thr_tg_validate_view(&incoming, 1);
   if (result != LJ_THR_TG_OK)
     return result;
+  if (!lj_thr_signal_cell_prepare())
+    return LJ_THR_TG_TLS_FAILURE;
   word = (uintptr_t)incoming.body | LJ_THR_TG_EXACT_TAG;
+  /* TLS acquires ownership before the signal-visible mirror. A handler in the
+  ** gap merely drops a sample; once it sees the mirror, the lease is live. */
   lj_thr_tls_word_set(word);
+  lj_thr_signal_word_set(word);
   lj_tgregistry_borrow_init(new_hold);
   return LJ_THR_TG_OK;
 }
@@ -456,8 +1208,16 @@ LJThrTGResult lj_thr_tg_swap(const LJTGRegistryKey *expected_old,
   result = lj_thr_tg_validate_view(&incoming, 1);
   if (result != LJ_THR_TG_OK)
     return result;
+  /* fork(2) changes the process identity represented by a signal cell. The
+  ** inherited exact TLS lease stays valid in the child copy, but a swap must
+  ** first admit a child-local mirror before either binding is changed. */
+  if (!lj_thr_signal_cell_prepare())
+    return LJ_THR_TG_TLS_FAILURE;
   word = (uintptr_t)incoming.body | LJ_THR_TG_EXACT_TAG;
+  /* The old lease remains operation-owned until old_hold is materialized.
+  ** Publish the new TLS owner before changing the signal mirror. */
   lj_thr_tls_word_set(word);
+  lj_thr_signal_word_set(word);
   /* Both fungible token counts protect their exact bodies at this LP. */
   lj_thr_tg_move_out(old_hold, &current);
   lj_tgregistry_borrow_init(new_hold);
@@ -482,6 +1242,9 @@ LJThrTGResult lj_thr_tg_clear(const LJTGRegistryKey *expected_old,
   result = lj_thr_tg_validate_view(&current, 0);
   if (result != LJ_THR_TG_OK)
     return result;
+  /* A handler must stop seeing the body before TLS relinquishes ownership and
+  ** before the caller can receive and release the reconstructed lease. */
+  lj_thr_signal_word_set(0);
   lj_thr_tls_word_set(0);
   /* The lease count remains owned by this operation until materialized. */
   lj_thr_tg_move_out(old_hold, &current);
@@ -512,14 +1275,30 @@ int lj_thr_tg_current_key(LJTGRegistryKey *key)
 static void lj_thr_tls_set_raw(TGState *tg)
 {
   uintptr_t word;
-  if (tg && ((uintptr_t)tg & LJ_THR_TG_TAG_MASK) != 0)
+#if LJ_THR_TG_SIGNAL_CACHE
+  LJThrTGSignalCell *signal_cell = NULL;
+#endif
+  if (tg && ((uintptr_t)tg & LJ_THR_TG_SIGNAL_TAG_MASK) != 0)
     abort();
   if (!lj_thr_tg_tls_init())
     abort();  /* Void raw callers cannot safely report per-thread admission. */
   word = lj_thr_tls_word_get();
   if ((word & LJ_THR_TG_EXACT_TAG) != 0)
     abort();  /* A void raw call cannot move the exact lease represented here. */
+  /* Clear the old mirror before changing a raw binding. The transitional raw
+  ** profile tag is same-thread-only and rejected by the exact signal getter.
+  ** Admission failure merely drops profiler samples. */
+  lj_thr_signal_word_clear_if_registered();
+#if LJ_THR_TG_SIGNAL_CACHE
+  if (tg)
+    signal_cell = lj_thr_signal_cell_prepare();
+#endif
   lj_thr_tls_word_set((uintptr_t)tg);
+#if LJ_THR_TG_SIGNAL_CACHE
+  if (signal_cell)
+    la_storeuptr_rel(&signal_cell->tagged_word,
+                     (uintptr_t)tg | LJ_THR_TG_SIGNAL_RAW_TAG);
+#endif
 }
 
 void lj_thr_set_tg(TGState *tg)

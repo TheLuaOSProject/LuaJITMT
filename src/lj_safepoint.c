@@ -13,6 +13,7 @@
 #include "lj_gc2.h"
 #include "lj_mcode.h"
 #include "lj_oserr.h"
+#include "lj_profile.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
 #include "lj_str.h"
@@ -385,6 +386,11 @@ uint32_t lj_safepoint_ack(lua_State *L)
   uint32_t actions;
   if (!L)
     return 0;
+#if LJ_HASPROFILE
+  /* SIGPROF only publishes TG atomics. Consume its request on the interrupted
+  ** TG's ordinary VM/C owner path before any dispatch table mutation. */
+  lj_profile_owner_poll(L);
+#endif
   if (L->base == NULL || tvref(L->stack) == NULL)
     return safepoint_ack_tg(G(L), L2TG(L), 1, 1);
   oldbase = savestack(L, L->base);
@@ -406,7 +412,8 @@ uint32_t lj_safepoint_poll(lua_State *L)
   /* reqmask owns the counted pending slot. poll is the wake/dispatch signal and
   ** can be consumed independently when a thread catches up with the current
   ** epoch, so a nonzero reqmask must still drive the acknowledgement path. */
-  if (lj_tg_poll_acq(tg) == 0 && lj_tg_reqmask_acq(tg) == 0)
+  if (lj_tg_poll_acq(tg) == 0 && lj_tg_reqmask_acq(tg) == 0 &&
+      lj_tg_profile_request_acq(tg) == 0)
     return 0;
   return lj_safepoint_ack(L);
 }

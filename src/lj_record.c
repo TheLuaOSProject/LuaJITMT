@@ -27,6 +27,7 @@
 #include "lj_ff.h"
 #if LJ_HASPROFILE
 #include "lj_debug.h"
+#include "lj_profile.h"
 #endif
 #include "lj_ir.h"
 #include "lj_jit.h"
@@ -423,6 +424,23 @@ static void canonicalize_slots(jit_State *J)
   }
 }
 
+#if LJ_TARGET_X64 && LJ_GC64
+static LJ_AINLINE int rec_needs_xpoll(jit_State *J)
+{
+  global_State *g = J2G(J);
+  /* Keep this policy in step with loop_needs_xpoll(). Optimized self-loops get
+  ** their poll next to IR_LOOP; every other trace needs a guarded tail poll so
+  ** optimizer-disabled self-links and multi-trace cycles remain interruptible.
+  */
+  return gc2_n_threads_acq(g) > 1 || gc2_n_workers_acq(g) != 0 ||
+	 mt_active_or_entering_acq(g)
+#if LJ_HASPROFILE
+	 || lj_profile_poll_required(g)
+#endif
+	 ;
+}
+#endif
+
 /* Stop recording. */
 void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk)
 {
@@ -441,6 +459,10 @@ void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk)
       J->cur.link = J->cur.root;
   }
   canonicalize_slots(J);
+#if LJ_TARGET_X64 && LJ_GC64
+  if (rec_needs_xpoll(J))
+    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0);
+#endif
 nocanon:
   /* Note: all loop ops must set J->pc to the following instruction! */
   lj_snap_add(J);  /* Add loop snapshot. */

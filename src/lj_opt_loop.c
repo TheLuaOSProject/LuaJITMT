@@ -15,6 +15,7 @@
 #include "lj_ir.h"
 #include "lj_jit.h"
 #include "lj_iropt.h"
+#include "lj_profile.h"
 #include "lj_trace.h"
 #include "lj_snap.h"
 #include "lj_vm.h"
@@ -302,12 +303,17 @@ static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
 {
   global_State *g = J2G(J);
   /* A loop poll is needed only after another TG can participate in a
-  ** safepoint handshake. First Lua-thread activation and GC-worker activation
-  ** flush existing traces before publishing that state, so pre-activation
-  ** loop traces cannot survive into a remotely-polled runtime.
+  ** safepoint handshake or while SIGPROF owner requests are enabled. First
+  ** Lua-thread/GC-worker activation and profile start flush existing traces
+  ** around their policy publication, so a trace with the old policy cannot
+  ** survive into a runtime that needs remote/asynchronous polls.
   */
   return gc2_n_threads_acq(g) > 1 || gc2_n_workers_acq(g) != 0 ||
-	 mt_active_or_entering_acq(g);
+	 mt_active_or_entering_acq(g)
+#if LJ_HASPROFILE
+	 || lj_profile_poll_required(g)
+#endif
+	 ;
 }
 #endif
 

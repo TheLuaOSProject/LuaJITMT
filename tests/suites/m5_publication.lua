@@ -717,6 +717,17 @@ return function(add)
   })
 
   add({
+    name = "m5_profile_single_trace_poll",
+    description = "SIGPROF exits optimized and opt-0 unbounded JIT traces",
+    run = function(t)
+      t:build({ quiet = true })
+      build_and_run_luajit_script(t, "t-profile-single-trace.lua", nil,
+                                  { build = false, timeout = "20s" })
+      print("M5 jit.profile single-trace qword poll passed")
+    end
+  })
+
+  add({
     name = "m5_gc_total_atomic",
     description = "GC total atomic accounting helper behavior",
     run = function(t)
