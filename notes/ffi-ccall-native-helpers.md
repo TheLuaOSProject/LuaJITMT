@@ -1,10 +1,14 @@
 # FFI C-Call Native-State Helpers
 
-Status: the compact `lj_ccall_native_{save,enter,leave,checkstop}` protocol
-remains current. The explicit `lj_ccall_jit_*` signature wrappers catalogued
-below are historical: all 163 wrappers and their recorder/IR/header machinery
-were removed on 2026-07-10 in favor of one generic `IR_CALLXS` seam. The
-focused C regression now exercises the compact protocol directly.
+> **Historical/superseded catalog (2026-07-12).** The compact
+> `lj_ccall_native_{save,enter,leave,checkstop}` protocol described at the start
+> of this note remains current. The explicit `lj_ccall_jit_*` signature-wrapper
+> catalog below is archive-only: commit `830297de` removed all 163 wrappers and
+> their recorder, IR, and header machinery. Do not extend or restore that
+> matrix. See [Generic traced FFI calls on x86-64](generic-traced-ffi-calls-2026-07-10.md)
+> and the [2026-07-12 call-shape audit](ffi-call-shape-generalization-audit-2026-07-12.md).
+
+The focused C regression now exercises the compact protocol directly.
 
 Interpreted FFI C calls now factor their native-state bookkeeping through
 `CCallNativeState` plus exported `lj_ccall_native_save()`,

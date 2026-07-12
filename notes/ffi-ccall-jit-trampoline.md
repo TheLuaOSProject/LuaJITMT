@@ -1,5 +1,12 @@
 # FFI C-Call JIT Trampoline
 
+> **Historical/superseded (2026-07-12).** This document records the deleted
+> explicit signature-matrix implementation. Commit `830297de` replaced that
+> production architecture with one generic ABI-driven `IR_CALLXS` seam. The
+> catalog below is archive-only; do not extend or restore it. See
+> [Generic traced FFI calls on x86-64](generic-traced-ffi-calls-2026-07-10.md)
+> and the [2026-07-12 call-shape audit](ffi-call-shape-generalization-audit-2026-07-12.md).
+
 The first traced ordinary FFI C-call slice now records exact void, signed
 32-bit integer, pointer-returning, zero-argument narrow integer, zero-argument
 unsigned 32-bit/signed 64-bit/unsigned 64-bit integer, and FP-returning
