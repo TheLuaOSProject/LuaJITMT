@@ -4085,8 +4085,19 @@ static uint32_t arena_remote_free_drain_one(TGAlloc *alloc, GCArena *a)
   uint32_t n = 0;
   uint32_t flags;
   int plain_held = 0;
-  if (!alloc || !a ||
-      arena_remote_count(lj_arena_remote_active_acq(a)) != 0 ||
+  if (!alloc || !a)
+    return 0;
+  /*
+  ** Do not close a plain arena generation merely to discover that its
+  ** intrusive remote-free queue is empty. A publisher racing this acquire
+  ** load either becomes visible to a later drain or is already covered by
+  ** remote_active and defeats the ownership claim below. Remote frees are
+  ** opportunistic allocator input; deferring a post-load publication does
+  ** not make its storage reusable or drop its lifetime intent.
+  */
+  if (la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL)
+    return 0;
+  if (arena_remote_count(lj_arena_remote_active_acq(a)) != 0 ||
       ((flags = lj_arena_flags_acq(a)) &
        (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|LJ_AF_PREPSWEEP)))
     return 0;
@@ -5768,14 +5779,31 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
     return NULL;
   {
     uint32_t bin = 0;
-    LJArenaFreeRun **pp = arena_find_run(alloc, k, ncells, &bin);
-    if ((!pp || !*pp) && arena_adopt_reclaimed_one(alloc, k))
+    LJArenaFreeRun **pp;
+    int bump_ready = b->a && b->cell + ncells <= b->end;
+    if (bump_ready) {
+      /* Preserve the allocator's established bin-before-bump reuse order, but
+      ** do not walk reclaimed arenas or remote queues while this private
+      ** window can make progress and no suitable published run exists. */
       pp = arena_find_run(alloc, k, ncells, &bin);
-    if (!pp || !*pp) {
-      (void)lj_arena_remote_free_drain(alloc);
+      if (!pp || !*pp)
+	goto bump_alloc;
+    } else {
+      arena_publish_bump_run(alloc, k);
       pp = arena_find_run(alloc, k, ncells, &bin);
+      if ((!pp || !*pp) && arena_adopt_reclaimed_one(alloc, k))
+	pp = arena_find_run(alloc, k, ncells, &bin);
+      if (!pp || !*pp) {
+	(void)lj_arena_remote_free_drain(alloc);
+	pp = arena_find_run(alloc, k, ncells, &bin);
+      }
+      if (!pp || !*pp) {
+	if (!arena_alloc_fresh(alloc, rs, flags))
+	  return NULL;
+	goto bump_alloc;
+      }
     }
-    if (pp && *pp) {
+    {
       LJArenaFreeRun *run = *pp;
       GCArena *a = lj_arena_of(run);
       uint32_t start = run->start;
@@ -5790,17 +5818,25 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 	arena_link_run_head(alloc, a, start, len);
 	return NULL;
       }
-      if (len > ncells &&
-	  !arena_insert_run(alloc, a, start + ncells, len - ncells))
-	return NULL;  /* Retain the allocated prefix; never reuse a conflict. */
+      if (len > ncells) {
+	if (bump_ready) {
+	  /* Keep the older private bump window and preserve reuse ordering. */
+	  if (!arena_insert_run(alloc, a, start + ncells, len - ncells))
+	    return NULL;
+	} else {
+	  /* Clear each rebuilt boundary once, then amortize the tail as a private
+	  ** bump window instead of repeatedly scrubbing a shrinking free run. */
+	  if (!arena_clear_extent_range(a, start + ncells, len - ncells))
+	    return NULL;  /* Retain prefix and unpublished tail on conflict. */
+	  b->a = a;
+	  b->cell = start + ncells;
+	  b->end = start + len;
+	}
+      }
       return lj_arena_cellptr(a, start);
     }
   }
-  if (!b->a || b->cell + ncells > b->end) {
-    arena_publish_bump_run(alloc, k);
-    if (!arena_alloc_fresh(alloc, rs, flags))
-      return NULL;
-  }
+bump_alloc:
   cell = b->cell;
   b->cell += ncells;
   if (!arena_set_alloc(b->a, cell, ncells,
