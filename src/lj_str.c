@@ -141,6 +141,7 @@ static uint32_t str_test_id_refills;
 static uint32_t str_test_num_refills;
 static LJStrTestMatchHook str_test_match_hook;
 static LJStrTestCanonHook str_test_canon_hook;
+static LJStrTestReclaimHook str_test_reclaim_hook;
 
 void lj_str_test_set_match_hook(LJStrTestMatchHook hook)
 {
@@ -152,12 +153,24 @@ void lj_str_test_set_canon_hook(LJStrTestCanonHook hook)
   str_test_canon_hook = hook;
 }
 
+void lj_str_test_set_reclaim_hook(LJStrTestReclaimHook hook)
+{
+  str_test_reclaim_hook = hook;
+}
+
 static LJ_AINLINE void str_test_canon(lua_State *L, GCstr *s,
 				      StrCanonRec *rec, uint32_t stage)
 {
   LJStrTestCanonHook hook = str_test_canon_hook;
   if (hook)
     hook(L, s, rec, stage);
+}
+
+static LJ_AINLINE void str_test_reclaim(global_State *g, uint32_t stage)
+{
+  LJStrTestReclaimHook hook = str_test_reclaim_hook;
+  if (hook)
+    hook(g, stage);
 }
 
 static LJ_AINLINE void str_test_match(lua_State *L, GCRef *link,
@@ -207,6 +220,8 @@ static LJ_AINLINE void str_test_num_refill(void)
 #define str_test_match(L, link, target, observed, stage) \
   ((void)(L), (void)(link), (void)(target), (void)(observed), (void)(stage))
 #define str_test_match_enabled()	0
+#define str_test_reclaim(g, stage) \
+  ((void)(g), (void)(stage))
 #define str_test_id_refill()	((void)0)
 #define str_test_num_refill()	((void)0)
 #endif
@@ -1210,6 +1225,195 @@ static void str_body_retired_push(global_State *g, StrBodyRetire *ret)
   } while (!lj_str_body_retired_head_cas(g, &head, ret));
 }
 
+/* -- b1.2 explicit sole-mutator body retirement ------------------------ */
+
+void lj_str_gc2_reclaim_request(global_State *g)
+{
+  if (g)
+    lj_str_reclaim_requested_rel(g, 1);
+}
+
+void lj_str_gc2_reclaim_cancel(global_State *g)
+{
+  if (!g)
+    return;
+  /* A synchronous full collection cannot return while its admitted string
+  ** sweep is still active.  Keep this assertion close to the API cancellation
+  ** edge so a future asynchronous caller cannot silently shorten exclusion. */
+  lj_assertG(lj_str_reclaim_exclusive_acq(g) == 0,
+	     "explicit string reclaim returned while exclusion was active");
+  lj_str_reclaim_requested_rel(g, 0);
+}
+
+static void str_reclaim_exclusive_leave(global_State *g)
+{
+  if (g && lj_str_reclaim_exclusive_acq(g) != 0)
+    lj_str_reclaim_exclusive_rel(g, 0);
+}
+
+static int str_reclaim_exclusive_try(global_State *g)
+{
+  TGState *tg;
+  uint32_t expect = 0;
+  if (!g || lj_str_reclaim_requested_acq(g) == 0 ||
+      g->allocf != lj_arena_allocf ||
+      la_load32_acq(&g->allocf_arena) == 0 ||
+      lj_str_qcount_acq(g) != 0 || lj_gc2_finalizer_phase_pending(g))
+    return 0;
+  tg = lj_thr_get_tg();
+  if (!tg || tg != g->main_tg || tg->gl != g ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+    return 0;
+#if LJ_HASJIT
+  /* MARK's EXIT_TRACES boundary normally establishes this already. Keep it an
+  ** admission predicate so a future transition reorder cannot free a string
+  ** body while the main TG still executes code that borrowed its payload. */
+  if (lj_tg_any_jit_active(g))
+    return 0;
+#endif
+  if (!lj_str_reclaim_exclusive_cas(g, &expect, 1))
+    return 0;
+  str_test_reclaim(g, LJ_STR_TEST_RECLAIM_EXCLUSIVE_CLAIMED);
+  /* Entrants publish mt_entering and pool control publishes n_workers before
+  ** the matching fence/recheck.  This fence is the other half of the
+  ** store-buffering exclusion: either this owner sees their publication, or
+  ** they see reclaim_exclusive and back out before touching shared VM state. */
+  la_fence_seq();
+  if (mt_shutdown_acq(g) != 0 || mt_live_acq(g) != 0 ||
+      mt_entering_acq(g) != 0 || gc2_n_workers_acq(g) != 0 ||
+      lj_str_sweep_batch_acq(g) != NULL ||
+      lj_str_retired_batch_head_acq(g) != NULL) {
+    str_reclaim_exclusive_leave(g);
+    return 0;
+  }
+  /* No interner can consume a new count credit until exclusion is released.
+  ** Make the count exact before physical destructors start subtracting it. */
+  lj_str_flush_num_credit(g, tg);
+  lj_str_reclaim_requested_rel(g, 0);
+  return 1;
+}
+
+static StrRetireBatch *str_retire_batch_new(global_State *g, StrTabHdr *hdr)
+{
+  TGState *tg = lj_thr_get_tg();
+  StrRetireBatch *batch;
+  if (!g || !hdr || !tg || tg != g->main_tg || tg->gl != g ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return NULL;
+  batch = (StrRetireBatch *)lj_arena_allocd_alloc(&tg->allocd,
+						   sizeof(*batch), 0);
+  if (!batch)
+    return NULL;
+  memset(batch, 0, sizeof(*batch));
+  batch->hdr = hdr;
+  return batch;
+}
+
+static void str_retire_batch_push(global_State *g, StrRetireBatch *batch)
+{
+  StrRetireBatch *head = lj_str_retired_batch_head_acq(g);
+  do {
+    la_storeptr_rel((void **)&batch->next, head);
+  } while (!lj_str_retired_batch_head_cas(g, &head, batch));
+}
+
+static void str_retire_batch_seal_current(global_State *g)
+{
+  StrRetireBatch *batch = lj_str_sweep_batch_acq(g);
+  if (!batch)
+    return;
+  lj_assertG(lj_str_sweep_batch_pending_acq(g) == 0,
+	     "string batch sealed across unlink handoff");
+  if (batch->count == 0) {
+    lj_str_sweep_batch_rel(g, NULL);
+    lj_mem_free(g, batch, sizeof(*batch));
+    return;
+  }
+  batch->retire_epoch = lj_gc2_retire_epoch(g);
+  la_store32_rel(&batch->sealed, 1);
+  /* Publish the durable list owner before clearing the current owner.  Both
+  ** pointers can name the batch only inside this no-safepoint handoff. */
+  str_retire_batch_push(g, batch);
+  lj_str_sweep_batch_rel(g, NULL);
+}
+
+static StrRetireBatch *str_retire_batch_current(global_State *g,
+						 StrTabHdr *hdr)
+{
+  StrRetireBatch *batch = lj_str_sweep_batch_acq(g);
+  if (batch && batch->count == LJ_STR_RETIRE_BATCH_CAP) {
+    str_retire_batch_seal_current(g);
+    batch = NULL;
+  }
+  if (!batch) {
+    batch = str_retire_batch_new(g, hdr);
+    if (batch) {
+      TGState *tg = lj_thr_get_tg();
+      /* Make the initialized allocation globally discoverable before the
+      ** accounting checkpoint can trigger a hard-limit assist. */
+      lj_gc_total_add(g, sizeof(*batch));
+      lj_str_sweep_batch_rel(g, batch);
+      lj_gc2_account_alloc(g, tg, sizeof(*batch));
+    }
+  }
+  return batch;
+}
+
+static uint32_t str_retire_batches_reclaim_all(global_State *g,
+						int reclaim_held)
+{
+  StrRetireBatch *batch;
+  uint32_t reclaimed = 0;
+  str_retire_batch_seal_current(g);
+  batch = lj_str_retired_batch_head_xchg_acqrel(g, NULL);
+  while (batch) {
+    StrRetireBatch *next;
+    uint32_t i, count;
+    lj_assertG(reclaim_held ?
+	       lj_gc2_mem_registered_known_reclaim_held(g, batch) :
+	       lj_gc2_mem_registered_known(g, batch),
+	       "invalid sole-mutator string retirement batch");
+    next = (StrRetireBatch *)la_loadptr_acq((void *const *)&batch->next);
+    count = la_load32_acq(&batch->count);
+    lj_assertG(la_load32_acq(&batch->sealed) != 0 &&
+	       count != 0 && count <= LJ_STR_RETIRE_BATCH_CAP,
+	       "invalid sealed string retirement batch");
+    for (i = 0; i < count; i++) {
+      GCstr *s = (GCstr *)la_loadptr_acq((void *const *)&batch->body[i]);
+      uint8_t gct;
+      int freed;
+      lj_assertG(s != NULL && (reclaim_held ?
+		 lj_gc2_mem_registered_known_reclaim_held(g, s) :
+		 lj_gc2_mem_registered_known(g, s)),
+		 "invalid sole-mutator retired string body");
+      gct = la_load8_acq(&s->gct);
+      if (gct == (uint8_t)~LJ_TSTR) {
+	freed = str_free_try_impl(g, s, reclaim_held);
+	if (LJ_UNLIKELY(freed == LJ_GC_DESTRUCT_LOST)) {
+	  /* Releasing exclusion after losing an unlinked canonical body would
+	  ** permit a duplicate identity. This narrow path therefore fails closed
+	  ** instead of pretending the concurrent quarantine protocol exists. */
+	  lj_assertG(0, "sole-mutator string destructor ownership lost");
+	  abort();
+	}
+	if (freed == LJ_GC_DESTRUCT_ACQUIRED) {
+	  lj_str_sweep_reclaimed_add(g, 1);
+	  reclaimed++;
+	}
+      } else if (LJ_UNLIKELY(gct != 0)) {
+	lj_assertG(0, "sole-mutator retired string type identity changed");
+	abort();
+      }
+      la_storeptr_rel((void **)&batch->body[i], NULL);
+    }
+    lj_mem_free(g, batch, sizeof(*batch));
+    batch = next;
+  }
+  return reclaimed;
+}
+
+#ifdef LJ_STR_TEST_HELPERS
 static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
 					   StrTabHdr *hdr)
 {
@@ -1251,7 +1455,6 @@ static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
   return ret;
 }
 
-#ifdef LJ_STR_TEST_HELPERS
 static void strcanon_bucket_publish(lua_State *L, global_State *g,
 				    StrCanonRec *rec)
 {
@@ -1380,6 +1583,7 @@ static uint32_t str_sweep_finish_tag(global_State *g)
 
 static uint32_t str_sweep_finish_unlink(global_State *g, StrTabHdr *hdr)
 {
+  str_retire_batch_seal_current(g);
   lj_str_sweep_link_rel(g, NULL);
   lj_str_sweep_grace_epoch_rel(g, lj_gc2_retire_epoch(g));
   lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_UNLINK_GRACE);
@@ -1449,7 +1653,9 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
 {
   GCRef *link = lj_str_sweep_link_acq(g);
   uintptr_t u, current, want, next;
-  StrBodyRetire *ret;
+  StrRetireBatch *batch;
+  GCstr *s;
+  uint32_t slot;
   GCobj *o;
   if (!link)
     return str_sweep_finish_unlink(g, hdr);
@@ -1472,8 +1678,8 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
     return 1;
   }
 
-  ret = str_body_retire_new(g, gco2str(o), hdr);
-  if (!ret) {
+  batch = str_retire_batch_current(g, hdr);
+  if (!batch) {
     /* Metadata OOM retains canonical identity and retries in a later cycle. */
     current = u;
     want = u & ~(uintptr_t)LJ_STRHASH_DEAD;
@@ -1483,26 +1689,29 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
     return 1;
   }
 
-  /* Publish the fully initialized side owner before the unlink linearization. */
-  lj_str_sweep_pending_rel(g, ret);
+  s = gco2str(o);
+  slot = batch->count;
+  lj_assertG(slot < LJ_STR_RETIRE_BATCH_CAP,
+	     "full string retirement batch reached unlink");
+  /* Publish the body slot and inclusive count before the unlink LP.  The
+  ** current-batch pointer is already globally discoverable; pending prevents
+  ** abort/terminal code from consuming the provisional last slot. */
+  la_storeptr_rel((void **)&batch->body[slot], s);
+  la_store32_rel(&batch->count, slot + 1u);
+  lj_str_sweep_batch_pending_rel(g, 1);
   next = lj_str_next_link_acq(o);
   want = (next & ~(uintptr_t)LJ_STRHASH_SECONDARY) |
 	 (u & LJ_STRHASH_SECONDARY);
   current = u;
   if (!lj_str_link_cas_acqrel(link, &current, want)) {
-    lj_str_sweep_pending_rel(g, NULL);
-    lj_mem_free(g, ret, sizeof(*ret));
+    la_store32_rel(&batch->count, slot);
+    la_storeptr_rel((void **)&batch->body[slot], NULL);
+    lj_str_sweep_batch_pending_rel(g, 0);
     return 1;
   }
 
-  /* The pending slot remains the sole discoverable owner across the unlink
-  ** LP. Publish its body-ownership transition before list publication; abort
-  ** never consumes a non-NULL pending slot, and terminal cleanup runs only
-  ** after the worker has completed this entire handoff. */
-  lj_str_body_retired_main_linked_rel(ret, 0);
-  lj_str_body_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
-  str_body_retired_push(g, ret);
-  lj_str_sweep_pending_rel(g, NULL);
+  /* The inclusive count now describes a durable unlinked body. */
+  lj_str_sweep_batch_pending_rel(g, 0);
   lj_str_sweep_unlinked_add(g, 1);
   /* Stay on the exact incoming edge: it now names the successor. */
   return 1;
@@ -1531,8 +1740,12 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
   lj_str_sweep_link_rel(g, NULL);
   lj_str_sweep_bucket_rel(g, 0);
   lj_str_sweep_grace_epoch_rel(g, 0);
+  lj_str_sweep_batch_pending_rel(g, 0);
   la_store32_rel(&g->str.sweep_cycle, gc2_cycle_acq(g));
-  major = major && LJ_GC2_STRING_BODY_RECLAIM;
+  /* The fully concurrent quarantine/commit protocol remains hard-disabled.
+  ** b1.2 instead admits only an explicit, internal-allocator, sole-main-TG
+  ** collection and holds that nonwaiting exclusion through physical free. */
+  major = major && str_reclaim_exclusive_try(g);
   lj_str_sweep_phase_rel(g, major ? LJ_STR_SWEEP_ACQUIRE :
 					 LJ_STR_SWEEP_DONE);
 }
@@ -1559,12 +1772,23 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
     if (phase == LJ_STR_SWEEP_ACQUIRE) {
       hdr = lj_str_tabh_acq(g);
       if (!hdr) {
+	str_reclaim_exclusive_leave(g);
 	lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
 	n++;
 	continue;
       }
       if (!strtab_gc2_claim(g, hdr)) {
 	/* Failed claims are retry work, not a reason to park forever. */
+	n++;
+	continue;
+      }
+      /* Admission has excluded every new interner. A pre-admission native
+      ** table pin would mean the sole-mutator proof was incomplete, so skip
+      ** this pass before tagging or unlinking anything. */
+      if (LJ_UNLIKELY(strtab_active_on_hdr(g, hdr))) {
+	strtab_release(hdr);
+	str_reclaim_exclusive_leave(g);
+	lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
 	n++;
 	continue;
       }
@@ -1643,6 +1867,10 @@ void lj_str_gc2_sweep_abort(global_State *g)
     lj_assertG(0, "string sweep abort crossed pending unlink handoff");
     abort();
   }
+  if (LJ_UNLIKELY(lj_str_sweep_batch_pending_acq(g) != 0)) {
+    lj_assertG(0, "string sweep abort crossed batched unlink handoff");
+    abort();
+  }
   hdr = lj_str_sweep_hdr_acq(g);
   if (hdr && (strtab_resize_acq(hdr) & LJ_STRTAB_SWEEP))
     strtab_release(hdr);
@@ -1650,6 +1878,15 @@ void lj_str_gc2_sweep_abort(global_State *g)
   lj_str_sweep_link_rel(g, NULL);
   lj_str_sweep_bucket_rel(g, 0);
   lj_str_sweep_grace_epoch_rel(g, 0);
+  if (LJ_UNLIKELY(lj_str_sweep_batch_acq(g) != NULL ||
+      lj_str_retired_batch_head_acq(g) != NULL)) {
+    /* Once a body is unlinked, only the post-SWEEP exact reclaimer can consume
+    ** its allocator generation. Every legal preserve/forced abort is gated
+    ** before that point; reaching this path would otherwise strand identity. */
+    lj_assertG(0, "string sweep abort crossed irreversible batch retirement");
+    abort();
+  }
+  str_reclaim_exclusive_leave(g);
   lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_IDLE);
 }
 
@@ -1659,7 +1896,28 @@ void lj_str_gc2_sweep_finish(global_State *g)
     return;
   lj_assertG(lj_str_sweep_phase_acq(g) == LJ_STR_SWEEP_DONE,
 	     "unfinished string sweep reached GC2 close");
-  lj_str_gc2_sweep_abort(g);
+  lj_assertG(lj_str_sweep_batch_pending_acq(g) == 0 &&
+	     lj_str_sweep_batch_acq(g) == NULL,
+	     "unfinished batched string ownership reached GC2 close");
+  lj_str_sweep_hdr_rel(g, NULL);
+  lj_str_sweep_link_rel(g, NULL);
+  lj_str_sweep_bucket_rel(g, 0);
+  lj_str_sweep_grace_epoch_rel(g, 0);
+  /* Keep reclaim_exclusive and the sealed batch list through the IDLE grace
+  ** drain. Arena PREPSWEEP/PENDING state still vetoes a semantic destructor
+  ** while SWEEP is active. */
+  lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_IDLE);
+}
+
+int lj_str_gc2_reclaim_complete(global_State *g)
+{
+  if (!g || lj_str_reclaim_exclusive_acq(g) == 0)
+    return 1;
+  if (lj_str_sweep_batch_acq(g) != NULL ||
+      lj_str_retired_batch_head_acq(g) != NULL)
+    return 0;
+  str_reclaim_exclusive_leave(g);
+  return 1;
 }
 
 static void strcanon_init(lua_State *L)
@@ -1735,6 +1993,7 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
   ** current-thread capability across every detach and nested validation. */
   /* Body records are processed before header records. A deferred current-header
   ** body still needs that generation name for the active-pin check below. */
+  reclaimed += str_retire_batches_reclaim_all(g, 1);
   ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
   if (LJ_UNLIKELY(!str_body_retired_chain_valid(g, ret, 1))) {
     lj_assertG(0, "invalid/cyclic detached string-body retire chain");
@@ -1936,6 +2195,18 @@ void lj_str_free_retired_bodies(global_State *g)
   StrBodyRetire *ret, *pending;
   if (!g)
     return;
+  /* Joined-world shutdown is also the exact abort sink for a partially
+  ** completed sole-mutator batch. No worker can remain inside the pending
+  ** unlink handoff after lj_gc2_fini() has joined the pool. */
+  if (LJ_UNLIKELY(lj_str_sweep_batch_pending_acq(g) != 0)) {
+    lj_assertG(0, "terminal string cleanup crossed batched unlink handoff");
+    abort();
+  }
+  if (lj_str_sweep_batch_acq(g) != NULL ||
+      lj_str_retired_batch_head_acq(g) != NULL)
+    (void)str_retire_batches_reclaim_all(g, 0);
+  str_reclaim_exclusive_leave(g);
+  lj_str_reclaim_requested_rel(g, 0);
   /* Workers are stopped before the terminal GC2 drain, so an unlink CAS cannot
   ** still be between its discoverable pending slot and retired-list publish. */
   pending = lj_str_sweep_pending_acq(g);

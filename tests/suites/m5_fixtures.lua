@@ -71,6 +71,7 @@ return function(add)
     description = "string table CAS publication and canonical quarantine model fixtures",
     run = function(t)
       local out = t:tmp("lj_t-strtab-cas")
+      local out_reclaim = t:tmp("lj_t-str-reclaim-sole")
       local out_rehash = t:tmp("lj_t-strtab-rehash")
       local out_canon = t:tmp("lj_t-strcanon-model")
       compile_and_run_sources(t, out_canon,
@@ -85,6 +86,10 @@ return function(add)
       t:build({ clean = true, quiet = true,
                 xcflags = "-DLJ_STR_TEST_HELPERS" })
       compile_and_run_c(t, out, "t-strtab-cas.c", {
+        cflags = "-DLJ_STR_TEST_HELPERS",
+        timeout = "20s"
+      })
+      compile_and_run_c(t, out_reclaim, "t-str-reclaim-sole.c", {
         cflags = "-DLJ_STR_TEST_HELPERS",
         timeout = "20s"
       })

@@ -1615,6 +1615,11 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
     n = LJ_GC2_WORKER_MAX;
   if (gc2_n_workers_acq(g) != 0)
     return 1;
+  /* The explicit sole-mutator string pass never waits for pool control.  A
+  ** competing enable either observes this gate here or loses the reciprocal
+  ** publication/recheck below before it starts an OS worker. */
+  if (lj_str_reclaim_exclusive_acq(g) != 0)
+    return 0;
   L = mainthread_acq(g);
   if (!L)
     return 0;
@@ -1626,6 +1631,15 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
   gc2_worker_started_rel(g, 0);
   gc2_worker_exited_rel(g, 0);
   gc2_n_workers_rel(g, n);  /* 05 section 5.6.3 parked pool. */
+  la_fence_seq();
+  if (lj_str_reclaim_exclusive_acq(g) != 0) {
+    /* No pthread exists yet. Roll the advertised pool back while the control
+    ** lock still excludes another pool transition. */
+    gc2_n_workers_rel(g, 0);
+    gc2_worker_finish_traces_l(waitL, trace_token);
+    (void)gc2_worker_release_tg_slots(g);
+    return 0;
+  }
   gc2_worker_finish_traces_l(waitL, trace_token);
   for (i = 0; i < n; i++) {
     /* Pool control may run on an attached foreign Lua thread. These records
@@ -5106,6 +5120,13 @@ int lj_gc2_sweep_to_idle(global_State *g)
   */
   gc2_worker_release(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+  /* An admitted b1.2 string batch is consumed by the exact IDLE reclaimer
+  ** inside the handshake above.  Never reopen attach/pool admission while an
+  ** unlinked canonical body remains undiscoverable from the main table. */
+  if (LJ_UNLIKELY(!lj_str_gc2_reclaim_complete(g))) {
+    lj_assertG(0, "explicit string retirement survived IDLE grace drain");
+    abort();
+  }
   lj_assertG(gc2_thread_scan_needscan_pending_acq(g) == 0,
 	     "thread NEEDSCAN leaked to normal sweep close");
   lj_assertG(gc2_table_rescan_pending_acq(g) == 0,

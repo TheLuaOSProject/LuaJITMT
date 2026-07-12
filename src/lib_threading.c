@@ -592,6 +592,12 @@ static int threading_entering_begin(global_State *g)
   /* Acq-rel pairs the entrant with the registry writer's post-CAS acquire
   ** recheck; neither side may miss the other's publication. */
   mt_entering_add_acqrel(g, 1);
+  /* The sole-mutator string collector publishes its gate, fences, then checks
+  ** this counter.  Publish our counter first and fence before checking its
+  ** gate so the store-buffering outcome (both sides believe they won) is
+  ** forbidden.  A losing entrant keeps its reservation while yielding: this
+  ** prevents lua_close from freeing g and makes the collector's race visible. */
+  la_fence_seq();
   for (;;) {
     if (mt_shutdown_acq(g) != 0) {
       threading_entering_leave(g);
@@ -600,7 +606,8 @@ static int threading_entering_begin(global_State *g)
     /* Pair admission with the dead-registry writer's post-CAS counter check.
     ** An entrant which loses this race backs out before reading tg_list; a
     ** reclaimer which loses observes mt_entering and abandons its try-pass. */
-    if (gc2_tg_reclaiming_acq(g) == 0)
+    if (gc2_tg_reclaiming_acq(g) == 0 &&
+	lj_str_reclaim_exclusive_acq(g) == 0)
       return 1;
     /* Keep this reservation continuously: dropping it here would let
     ** lua_close free g before the retry. The writer never waits for us; its
@@ -776,7 +783,12 @@ static int threading_gc_enter_counted(lua_State *L, GCudata *rootud,
       /* M4: no automatic GC while children run. */
       lj_gc_threshold_store(g, LJ_MAX_MEM);
     }
-    if (mt_gc_exclusive_acq(g) == 0) {
+    /* Pair live publication with the string collector's post-gate recheck.
+    ** mt_entering remains held until after this test, so either counter also
+    ** independently closes the transition window. */
+    la_fence_seq();
+    if (mt_gc_exclusive_acq(g) == 0 &&
+	lj_str_reclaim_exclusive_acq(g) == 0) {
       if (!retain_entering)
 	threading_entering_leave(g);
       if (mt_shutdown_acq(g) != 0) {

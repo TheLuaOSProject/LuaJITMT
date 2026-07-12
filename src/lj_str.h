@@ -465,6 +465,85 @@ static LJ_AINLINE void lj_str_sweep_pending_rel(global_State *g,
   la_storeptr_rel((void **)&g->str.sweep_pending, ret);
 }
 
+static LJ_AINLINE StrRetireBatch *lj_str_retired_batch_head_acq(
+  const global_State *g)
+{
+  return (StrRetireBatch *)la_loadptr_acq(
+    (void *const *)&g->str.retired_batch);
+}
+
+static LJ_AINLINE int lj_str_retired_batch_head_cas(global_State *g,
+						     StrRetireBatch **oldp,
+						     StrRetireBatch *batch)
+{
+  return la_casptr((void **)&g->str.retired_batch, (void **)oldp, batch,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE StrRetireBatch *lj_str_retired_batch_head_xchg_acqrel(
+  global_State *g, StrRetireBatch *batch)
+{
+  return (StrRetireBatch *)la_xchgptr_acqrel(
+    (void **)&g->str.retired_batch, batch);
+}
+
+static LJ_AINLINE StrRetireBatch *lj_str_sweep_batch_acq(
+  const global_State *g)
+{
+  return (StrRetireBatch *)la_loadptr_acq(
+    (void *const *)&g->str.sweep_batch);
+}
+
+static LJ_AINLINE void lj_str_sweep_batch_rel(global_State *g,
+					       StrRetireBatch *batch)
+{
+  la_storeptr_rel((void **)&g->str.sweep_batch, batch);
+}
+
+static LJ_AINLINE uint32_t lj_str_sweep_batch_pending_acq(
+  const global_State *g)
+{
+  return la_load32_acq(&g->str.sweep_batch_pending);
+}
+
+static LJ_AINLINE void lj_str_sweep_batch_pending_rel(global_State *g,
+						       uint32_t pending)
+{
+  la_store32_rel(&g->str.sweep_batch_pending, pending);
+}
+
+static LJ_AINLINE uint32_t lj_str_reclaim_requested_acq(
+  const global_State *g)
+{
+  return la_load32_acq(&g->str.reclaim_requested);
+}
+
+static LJ_AINLINE void lj_str_reclaim_requested_rel(global_State *g,
+						     uint32_t requested)
+{
+  la_store32_rel(&g->str.reclaim_requested, requested);
+}
+
+static LJ_AINLINE uint32_t lj_str_reclaim_exclusive_acq(
+  const global_State *g)
+{
+  return la_load32_acq(&g->str.reclaim_exclusive);
+}
+
+static LJ_AINLINE int lj_str_reclaim_exclusive_cas(global_State *g,
+						     uint32_t *oldp,
+						     uint32_t exclusive)
+{
+  return la_cas32(&g->str.reclaim_exclusive, oldp, exclusive,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void lj_str_reclaim_exclusive_rel(global_State *g,
+						     uint32_t exclusive)
+{
+  la_store32_rel(&g->str.reclaim_exclusive, exclusive);
+}
+
 static LJ_AINLINE StrTabHdr *lj_str_sweep_hdr_acq(const global_State *g)
 {
   return (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.sweep_hdr);
@@ -642,11 +721,14 @@ LJ_FUNC int lj_str_quarantine_resize(lua_State *L, MSize newmask);
 ** scope. Terminal joined-world cleanup uses the separate free helpers below. */
 LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
+LJ_FUNC void lj_str_gc2_reclaim_request(global_State *g);
+LJ_FUNC void lj_str_gc2_reclaim_cancel(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
 LJ_FUNC uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit);
 LJ_FUNC int lj_str_gc2_sweep_pending(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_abort(global_State *g);
 LJ_FUNC void lj_str_gc2_sweep_finish(global_State *g);
+LJ_FUNC int lj_str_gc2_reclaim_complete(global_State *g);
 LJ_FUNC void lj_str_free_retired_bodies(global_State *g);
 LJ_FUNC void lj_str_freetab(global_State *g);
 
@@ -657,6 +739,9 @@ enum {
 enum {
   LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH,
   LJ_STR_TEST_CANON_MAIN_UNLINKED
+};
+enum {
+  LJ_STR_TEST_RECLAIM_EXCLUSIVE_CLAIMED
 };
 #ifdef LJ_STR_TEST_HELPERS
 typedef struct LJStrTestSweepSnapshot {
@@ -673,8 +758,10 @@ typedef void (*LJStrTestMatchHook)(lua_State *L, GCRef *link,
 				   uint32_t stage);
 typedef void (*LJStrTestCanonHook)(lua_State *L, GCstr *str,
 				   StrCanonRec *rec, uint32_t stage);
+typedef void (*LJStrTestReclaimHook)(global_State *g, uint32_t stage);
 LJ_FUNC void lj_str_test_set_match_hook(LJStrTestMatchHook hook);
 LJ_FUNC void lj_str_test_set_canon_hook(LJStrTestCanonHook hook);
+LJ_FUNC void lj_str_test_set_reclaim_hook(LJStrTestReclaimHook hook);
 LJ_FUNC uint32_t lj_str_test_id_refills(void);
 LJ_FUNC void lj_str_test_reset_id_refills(void);
 LJ_FUNC uint32_t lj_str_test_num_refills(void);

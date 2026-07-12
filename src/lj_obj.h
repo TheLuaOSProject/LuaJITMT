@@ -311,6 +311,22 @@ struct StrCanonRec {
 /* Compatibility name for the already-landed prototype retirement paths. */
 typedef StrCanonRec StrBodyRetire;
 
+/*
+** Sole-mutator string reclamation batches.  These are deliberately separate
+** from StrCanonRec: the latter is the long-lived canonical-quarantine identity
+** required by the fully concurrent protocol, while a batch is valid only
+** under the b1.2 explicit-collection exclusion gate.
+*/
+#define LJ_STR_RETIRE_BATCH_CAP 256u
+typedef struct StrRetireBatch {
+  struct StrRetireBatch *next;
+  StrTabHdr *hdr;
+  uint64_t retire_epoch;
+  uint32_t count;
+  uint32_t sealed;
+  GCstr *body[LJ_STR_RETIRE_BATCH_CAP];
+} StrRetireBatch;
+
 #define strref(r)	(&gcref((r))->str)
 #define strref_acq(r)	(&gcref_acq((r))->str)
 #define strdata(s)	((const char *)((s)+1))
@@ -1332,6 +1348,8 @@ typedef struct StrInternState {
   StrCanonHdr *qretired;	/* Retired quarantine headers awaiting SMR. */
   StrBodyRetire *retired_body;  /* Unlinked bodies awaiting SMR grace. */
   StrBodyRetire *sweep_pending;  /* Pre-CAS unlink ownership record. */
+  StrRetireBatch *retired_batch;  /* Sealed sole-mutator body batches. */
+  StrRetireBatch *sweep_batch;  /* Published current sole-mutator batch. */
   StrTabHdr *sweep_hdr;	/* Header owned by the bounded GC2 string sweep. */
   GCRef *sweep_link;	/* Exact incoming-edge cursor in sweep_hdr. */
   uint64_t sweep_grace_epoch;  /* Epoch at the current string grace edge. */
@@ -1346,6 +1364,9 @@ typedef struct StrInternState {
   MSize sweep_bucket;	/* Bucket containing sweep_link. */
   uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */
   uint32_t sweep_cycle;	/* GC2 cycle which owns sweep_hdr. */
+  uint32_t sweep_batch_pending;  /* Batch slot spans the exact unlink CAS. */
+  uint32_t reclaim_requested;  /* Explicit lua_gc(LUA_GCCOLLECT) request. */
+  uint32_t reclaim_exclusive;  /* Nonwaiting sole-mutator admission gate. */
   StrID id;		/* Next string ID. */
   uint8_t idreseed;	/* String ID reseed counter. */
   uint8_t second;	/* String interning table uses secondary hashing. */

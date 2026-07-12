@@ -2699,6 +2699,14 @@ static GCSize api_gc_restart_threshold(global_State *g)
   return (total/100) * lj_gc_pause_load(g);
 }
 
+static TValue *api_gc_collect_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  int *result = (int *)ud;
+  UNUSED(dummy);
+  *result = lj_gc2_collect_active(L);
+  return NULL;
+}
+
 LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
@@ -2714,7 +2722,23 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     }
     break;
   case LUA_GCCOLLECT:
-    (void)lj_gc2_collect_active(L);
+    /* b1.2 permits physical string-body reclamation only for this explicit
+    ** full-collection boundary. Admission remains opportunistic and refuses
+    ** any live/entering secondary mutator or configured GC worker pool. */
+    {
+      int collected = 0;
+      int errcode;
+      lj_str_gc2_reclaim_request(g);
+      /* Keep the one-shot request cleanup outside the protected collector.
+      ** All post-admission operations are non-throwing; protection also clears
+      ** a request if an earlier mark/bridge allocation ever gains an error
+      ** path in a later revision. */
+      errcode = lj_vm_cpcall(L, NULL, &collected, api_gc_collect_cp);
+      lj_str_gc2_reclaim_cancel(g);
+      if (LJ_UNLIKELY(errcode != LUA_OK))
+	lj_err_throw(L, errcode);
+      UNUSED(collected);
+    }
     api_gc_setlogical(g, api_gc_restart_threshold(g));
     break;
   case LUA_GCCOUNT:
