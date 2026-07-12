@@ -6144,6 +6144,7 @@ static int gc2_thread_is_remote_current(global_State *g, lua_State *L)
     return 0;
   tg = lj_tg_find_owner(g, owner);
   return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	 tg != lj_thr_get_tg() &&
 	 lj_tg_load_cur_L(tg) == L && L != lj_tg_cur_L(g);
 }
 
@@ -12513,15 +12514,27 @@ static void gc2_preserve_lfunc_direct_bodies(global_State *g, GCfunc *fn)
 static void gc2_preserve_tab_direct_bodies(global_State *g, GCtab *t)
 {
   TValue *array;
+  MSize asize, acap, hmask;
   Node *node;
   if (!g || !t)
     return;
-  array = lj_tab_array_acq(t);
-  if (array && !lj_tab_array_is_colocated(t, array))
-    (void)lj_gc2_markmem(g, lj_tab_array_hdrw(array));
-  node = lj_tab_node_acq(t);
-  if (node && node != &g->nilnode)
+  /* This is an early representation-preservation optimization. The retained
+  ** table identity is still published for semantic traversal, and ordinary
+  ** table access owns its separate generation-read epoch. Do not turn a
+  ** normal collision with an opportunistic retired-body reclaimer into sticky
+  ** NO_RECLAIM: acquire one tactical SMR section, snapshot only validated
+  ** current generations, and skip the early marks if that try loses. */
+  if (!lj_gc2_smr_read_try(g))
+    return;
+  if (lj_tab_array_snapshot_gc_held(g, t, &array, &asize, &acap) ==
+      LJ_TAB_GC_SNAPSHOT_OK && array && !lj_tab_array_is_colocated(t, array))
+    (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+				 (void *)array);
+  UNUSED(asize);
+  if (lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) ==
+      LJ_TAB_GC_SNAPSHOT_OK && node != &g->nilnode && hmask > 0)
     (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+  lj_gc2_smr_read_leave(g);
 }
 
 static LJ_AINLINE void gc2_preserve_direct_bodies(global_State *g, GCobj *o)
@@ -15508,6 +15521,17 @@ uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o)
       gc2_recovery_fail_closed(g);
     return 1;
   }
+  if (gct == (uint32_t)~LJ_TTHREAD &&
+      gc2_thread_scan_current(g, gco2th(o))) {
+    /* The owner acknowledgement synchronously traversed this exact stack and
+    ** published its cycle/dirty stamp before the global root pass reached the
+    ** registry identity. Requeueing the already-covered thread here would make
+    ** traversal consume the handoff stamp, manufacture another NEEDSCAN, and
+    ** force the SWEEP bridge into an unbounded root-handshake loop while the
+    ** owner remains parked in native code. The preserve mark above is the body
+    ** lifetime edge; the current stamp is the complete payload proof. */
+    return 0;
+  }
   if (traversable || gct == (uint32_t)~LJ_TUDATA) {
     /*
     ** Mutators never push/pop the single-owner global grey deque. Publish the
@@ -15561,6 +15585,19 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   }
   if (n)
     return n;
+  /* A peer can publish a below-capacity active SSB suffix after the SWEEP
+  ** bridge snapshot. The current logical owner was rotated before taking the
+  ** worker token, but another native/VM TG can leave semantic rescue work in
+  ** its private suffix. The close predicate deliberately treats that suffix
+  ** as non-empty; rotate it here before deciding that the worker has no work,
+  ** otherwise a secondary explicit collector and a native-parked main TG can
+  ** wait forever for a final close handshake that the non-empty predicate
+  ** itself prevents. */
+  if (gc2_ssb_published_empty(g) && gc2_grey_empty(g) &&
+      gc2_recovery_empty(g) && !lj_gc2_ssb_empty(g)) {
+    (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+    return 1;
+  }
   /* A zero-progress drain is not proof of semantic emptiness: the exact
   ** recovery locator may still be behind its reserve-before-publish LP, and a
   ** sticky classification failure deliberately has no drainable identity.
