@@ -700,9 +700,11 @@ return function(add)
     name = "m6_jit_token",
     description = "M6 JIT recorder token and x64 XPOLL behavior",
     run = function(t)
-      build_default(t)
+      clean_build(t, build.gc2_test_helper_opts({ quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-jit-token"), "t-jit-token.c",
-                      { build = false, timeout = "20s" })
+                      build.gc2_test_helper_opts({
+                        build = false, clean = false, timeout = "20s"
+                      }))
       luajit_file(t, t:path("tests", "t-jit-secondary.lua"),
                   { lua_path = true, timeout = "20s" })
       luajit_file(t, t:path("tests", "t-jit-explicit-exit.lua"),
@@ -804,35 +806,44 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
 local util = require("jit.util")
 jit.flush()
 jit.opt.start("hotloop=56", "hotexit=10")
-local function trace_count()
-  local n = 0
+local function trace_stats()
+  local n, uprec = 0, 0
   for i = 1, 256 do
-    if util.traceinfo(i) then n = n + 1 end
+    local info = util.traceinfo(i)
+    if info then
+      n = n + 1
+      if info.linktype == "up-recursion" then uprec = uprec + 1 end
+    end
   end
-  return n
+  return n, uprec
 end
-jit.off(trace_count, true)
+jit.off(trace_stats, true)
 local function fib(n)
   if n < 2 then return n end
   return fib(n-1) + fib(n-2)
 end
 assert(fib(30) == 832040)
 assert(util.traceinfo(1), "recursive fib workload did not trace")
-local after_first = trace_count()
+local after_first, uprec_first = trace_stats()
+assert(uprec_first > 0, "recursive fib did not publish an up-recursion trace")
 assert(fib(30) == 832040)
-local after_second = trace_count()
+local after_second, uprec_second = trace_stats()
+assert(uprec_second > 0, "recursive fib lost its up-recursion graph")
 for _ = 1, 4 do
   assert(fib(24) == 46368)
 end
 for _ = 1, 8 do
   assert(fib(30) == 832040)
 end
-local after_warm = trace_count()
-assert(after_second >= after_first,
-       "recursive fib trace count regressed during warmup")
-assert(after_warm <= after_second + 4,
+local after_warm, uprec_warm = trace_stats()
+assert(uprec_warm > 0, "recursive fib lost its stable up-recursion trace")
+-- GC2 may retire dead side traces between samples, so a lower live count is
+-- expected. Bound growth from the larger warmup sample instead of requiring
+-- the live trace count to be monotonic.
+local warm_base = math.max(after_first, after_second)
+assert(after_warm <= warm_base + 4,
        "recursive fib kept recording after warmup: " ..
-       after_second .. " -> " .. after_warm)
+       warm_base .. " -> " .. after_warm)
 assert(after_warm < 64, "recursive fib trace graph grew unexpectedly")
 print("jit-recursive-call-unroll OK")
 ]=], { timeout = "20s" })

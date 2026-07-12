@@ -675,7 +675,7 @@ static uint32_t safepoint_leader_id(global_State *g)
 {
   TGState *self = lj_thr_get_tg_fallback(g);
   uint32_t id = self ? lj_tg_tid_acq(self) : 0;
-  return id && id != LJ_THREAD_GCSCAN ? id : 1u;
+  return lj_thr_id_is_owner(id) ? id : 1u;
 }
 
 #if LJ_HASJIT

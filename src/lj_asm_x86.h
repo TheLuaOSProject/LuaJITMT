@@ -899,6 +899,291 @@ static void asm_fnew1num_arena_readyop(ASMState *as, Reg bit, Reg arena)
   emit_rmro(as, XO_BTS, bit|REX_64, arena, offsetof(GCArena, ready));
 }
 
+static void asm_fnew1num_packed_bit_transition(ASMState *as, Reg desired,
+					       Reg bit, uint32_t from,
+					       uint32_t to, MCLabel impossible)
+{
+  lj_assertA(from <= 1u && to <= 1u, "invalid packed root bit transition");
+  /* The assembler emits backwards. At runtime the first bit operation both
+  ** validates `from` through CF and moves to the opposite value. Restore it
+  ** only when `to == from`, after the impossible-state branch. */
+  if (from) {
+    if (to)
+      emit_rr(as, XO_BTS, bit|REX_64, desired|REX_64);
+    emit_jcc(as, CC_AE, impossible);  /* BTR observed zero. */
+    emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
+  } else {
+    if (!to)
+      emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
+    emit_jcc(as, CC_B, impossible);  /* BTS observed one. */
+    emit_rr(as, XO_BTS, bit|REX_64, desired|REX_64);
+  }
+}
+
+/* Transform a lane in the RAX sample and CAS it at an already-derived word.
+** On unrelated-word interference CMPXCHG refreshes RAX and returns to the
+** caller's state-dispatch label; a source-lane mismatch is genuinely invalid
+** for that sampled dispatch arm. */
+static MCLabel asm_fnew1num_packed_sampled_transition(ASMState *as, Reg word,
+						    Reg bit, Reg desired,
+						    int32_t plane,
+						    uint32_t lane_bits,
+						    uint32_t from,
+						    uint32_t to,
+						    MCLabel retry,
+						    MCLabel impossible)
+{
+  int32_t j;
+  MCLabel fixup = 0;
+  if (retry)
+    emit_jcc(as, CC_NE, retry);
+  else
+    fixup = emit_sjcc_label(as, CC_NE);
+  emit_lockrmro(as, XO_CMPXCHG, desired|REX_64, word, plane);
+  emit_gri(as, XG_ARITHi(XOg_SUB), bit, (int32_t)lane_bits-1);
+  for (j = (int32_t)lane_bits-1; j >= 0; j--) {
+    asm_fnew1num_packed_bit_transition(as, desired, bit,
+	(from >> j) & 1u, (to >> j) & 1u, impossible);
+    if (j != 0)
+      emit_gri(as, XG_ARITHi(XOg_ADD), bit, 1);
+  }
+  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
+  return fixup;
+}
+
+/* Validate one exact lane in the current RAX sample without touching memory.
+** `sample` is disposable; every expected bit is inverted while CF proves its
+** original value. */
+static void asm_fnew1num_packed_sample_validate(ASMState *as, Reg sample,
+						 Reg bit, uint32_t lane_bits,
+						 uint32_t state,
+						 MCLabel impossible)
+{
+  int32_t j;
+  emit_gri(as, XG_ARITHi(XOg_SUB), bit, (int32_t)lane_bits-1);
+  for (j = (int32_t)lane_bits-1; j >= 0; j--) {
+    if ((state >> j) & 1u) {
+      emit_jcc(as, CC_AE, impossible);
+      emit_rr(as, XO_BTR, bit|REX_64, sample|REX_64);
+    } else {
+      emit_jcc(as, CC_B, impossible);
+      emit_rr(as, XO_BTS, bit|REX_64, sample|REX_64);
+    }
+    if (j != 0)
+      emit_gri(as, XG_ARITHi(XOg_ADD), bit, 1);
+  }
+  emit_rr(as, XO_MOV, sample|REX_64, RID_RET|REX_64);
+}
+
+static void asm_fnew1num_packed_load(ASMState *as, Reg arena, Reg cell,
+					     Reg word, Reg bit, int32_t plane,
+					     uint32_t cells_per_word,
+					     uint32_t word_shift,
+					     uint32_t lane_shift)
+{
+  emit_rmro(as, XO_MOV, RID_RET|REX_64, word, plane);
+  emit_rr(as, XO_ARITH(XOg_ADD), word|REX_64, arena|REX_64);
+  emit_shifti(as, XOg_SHL|REX_64, word, 3);
+  emit_shifti(as, XOg_SHR, word, word_shift);
+  emit_rr(as, XO_MOV, word, cell);
+  emit_shifti(as, XOg_SHL, bit, lane_shift);
+  emit_gri(as, XG_ARITHi(XOg_AND), bit, cells_per_word-1u);
+  emit_rr(as, XO_MOV, bit, cell);
+}
+
+static void asm_fnew1num_packed_transition(ASMState *as, Reg arena, Reg cell,
+					   Reg word, Reg bit, Reg desired,
+					   int32_t plane,
+					   uint32_t cells_per_word,
+					   uint32_t word_shift,
+					   uint32_t lane_shift,
+					   uint32_t lane_bits,
+					   uint32_t from, uint32_t to,
+					   MCLabel impossible)
+{
+  MCLabel retry;
+  int32_t j;
+  lj_assertA((cells_per_word == 16u || cells_per_word == 32u) &&
+	     (1u << word_shift) == cells_per_word &&
+	     (1u << lane_shift) == lane_bits && lane_bits <= 4u &&
+	     from < (1u << lane_bits) && to < (1u << lane_bits),
+	     "unsupported inline packed-state transition");
+
+  /* Emit backwards. Runtime enters with RAX holding the sampled packed word;
+  ** CMPXCHG refreshes it on unrelated-lane interference and retries the exact
+  ** transition without disturbing neighboring allocation starts. */
+  retry = emit_sjcc_label(as, CC_NE);
+  emit_lockrmro(as, XO_CMPXCHG, desired|REX_64, word, plane);
+  /* Emit high-to-low so runtime validates/mutates low-to-high, then restores
+  ** the lane's low-bit index before CMPXCHG. This is shared by the two-bit
+  ** root plane and frozen four-bit lifetime plane. */
+  emit_gri(as, XG_ARITHi(XOg_SUB), bit, (int32_t)lane_bits-1);
+  for (j = (int32_t)lane_bits-1; j >= 0; j--) {
+    asm_fnew1num_packed_bit_transition(as, desired, bit,
+	(from >> j) & 1u, (to >> j) & 1u, impossible);
+    if (j != 0)
+      emit_gri(as, XG_ARITHi(XOg_ADD), bit, 1);
+  }
+  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
+  emit_sfixup(as, retry);
+
+  asm_fnew1num_packed_load(as, arena, cell, word, bit, plane,
+				   cells_per_word, word_shift, lane_shift);
+}
+
+#define asm_fnew1num_root_transition(as, arena, cell, word, bit, desired, \
+				     from, to, impossible) \
+  asm_fnew1num_packed_transition((as), (arena), (cell), (word), (bit), \
+	(desired), (int32_t)offsetof(GCArena, root), \
+	LJ_ARENA_ROOT_CELLS_PER_WORD, 5u, 1u, 2u, (from), (to), (impossible))
+
+#define asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired, \
+					 from, to, impossible) \
+  asm_fnew1num_packed_transition((as), (arena), (cell), (word), (bit), \
+	(desired), (int32_t)offsetof(GCArena, lifetime), \
+	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u, 4u, \
+	(from), (to), (impossible))
+
+/* Runtime order is lifetime CONSTRUCT->LIVE followed by root LINKING->MEMBER.
+** If the sampled lifetime lane is MUTATING, recovery owns the lifetime restore:
+** validate the complete 0011 nibble, publish MEMBER, then repair a stale
+** CONSTRUCT restore. A completed LIVE crossover is accepted only with MEMBER;
+** FREE/DESTRUCT/RESCUE and every undefined nibble fail closed. */
+static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
+					  Reg word, Reg bit, Reg desired,
+					  MCLabel impossible)
+{
+  MCLabel done = emit_label(as), repair_m, repair_l, repair_c;
+  MCLabel repair_dispatch, repair_entry, repair_fixup;
+  MCLabel root_link, root_member;
+  MCLabel initial_m, initial_l, initial_c, initial_dispatch, initial_fixup;
+
+  /* Final crossover repair. Recovery can sample LINKING, restore MUTATING to
+  ** CONSTRUCT, and lose the root CAS immediately after its post-check. Accept
+  ** LIVE/MUTATING, or exact-CAS CONSTRUCT->LIVE before returning. */
+  emit_jmp(as, done);
+  asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
+	LJ_ARENA_LIFETIME_MUTATING, impossible);
+  repair_m = emit_label(as);
+
+  emit_jmp(as, done);
+  asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
+	LJ_ARENA_LIFETIME_LIVE, impossible);
+  repair_l = emit_label(as);
+
+  emit_jmp(as, done);
+  repair_fixup = asm_fnew1num_packed_sampled_transition(as, word, bit,
+	desired, (int32_t)offsetof(GCArena, lifetime), 4u,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	0, impossible);
+  repair_c = emit_label(as);
+
+  /* Dispatch the frozen 4-bit lane by bit 1 then bit 0. Exact validation in
+  ** each arm rejects FREE/DESTRUCT/RESCUE and all corrupt encodings. */
+  emit_jmp(as, repair_c);
+  emit_jcc(as, CC_B, repair_m);
+  emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
+  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
+  emit_jcc(as, CC_AE, repair_l);
+  emit_rmro(as, XO_LEA, bit, bit, -1);
+  emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
+  emit_rmro(as, XO_LEA, bit, bit, 1);
+  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
+  repair_dispatch = emit_label(as);
+  emit_sfixup(as, repair_fixup);
+  asm_fnew1num_packed_load(as, arena, cell, word, bit,
+	(int32_t)offsetof(GCArena, lifetime),
+	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u);
+  repair_entry = emit_label(as);
+
+  /* LINKING may be committed only from CONSTRUCT or recovery-owned MUTATING.
+  ** A pre-existing LIVE lane is accepted solely with an already-MEMBER root. */
+  asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
+	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_MEMBER, impossible);
+  root_link = emit_label(as);
+
+  emit_jmp(as, repair_entry);
+  asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
+	LJ_ARENA_ROOT_MEMBER, LJ_ARENA_ROOT_MEMBER, impossible);
+  root_member = emit_label(as);
+
+  /* Initial visible-state arms. CONSTRUCT wins the normal lifetime LP;
+  ** MUTATING leaves the lane to recovery; LIVE is only the completed recovery
+  ** crossover and therefore takes the exact MEMBER validation path. */
+  emit_jmp(as, root_link);
+  asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
+	LJ_ARENA_LIFETIME_MUTATING, impossible);
+  initial_m = emit_label(as);
+
+  emit_jmp(as, root_member);
+  asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
+	LJ_ARENA_LIFETIME_LIVE, impossible);
+  initial_l = emit_label(as);
+
+  emit_jmp(as, root_link);
+  initial_fixup = asm_fnew1num_packed_sampled_transition(as, word, bit,
+	desired, (int32_t)offsetof(GCArena, lifetime), 4u,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	0, impossible);
+  initial_c = emit_label(as);
+
+  emit_jmp(as, initial_c);
+  emit_jcc(as, CC_B, initial_m);
+  emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
+  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
+  emit_jcc(as, CC_AE, initial_l);
+  emit_rmro(as, XO_LEA, bit, bit, -1);
+  emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
+  emit_rmro(as, XO_LEA, bit, bit, 1);
+  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
+  initial_dispatch = emit_label(as);
+  emit_sfixup(as, initial_fixup);
+  UNUSED(initial_dispatch);
+  UNUSED(repair_dispatch);
+  asm_fnew1num_packed_load(as, arena, cell, word, bit,
+	(int32_t)offsetof(GCArena, lifetime),
+	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u);
+}
+
+/* Claim one undiscovered reservation. A root-plane mismatch rolls back only
+** this function's successful lifetime claim before transferring to failure. */
+static void asm_fnew1num_construct_claim(ASMState *as, Reg arena, Reg cell,
+					 Reg word, Reg bit, Reg desired,
+					 MCLabel failure)
+{
+  MCLabel done = emit_label(as), rollback;
+  emit_jmp(as, failure);
+  asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, failure);
+  rollback = emit_label(as);
+  emit_jmp(as, done);
+  asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
+	LJ_ARENA_ROOT_NONE, LJ_ARENA_ROOT_LINKING, rollback);
+  asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT, failure);
+}
+
+/* Claim function then upvalue. Any second-start failure first abandons that
+** start (when needed), then clears the function root and lifetime lanes. */
+static void asm_fnew1num_construct_pair_claim(ASMState *as, Reg arena,
+					      Reg fncell, Reg uvcell,
+					      Reg word, Reg bit, Reg desired,
+					      MCLabel impossible)
+{
+  MCLabel done = emit_label(as), rollback_fn;
+  emit_jmp(as, impossible);
+  asm_fnew1num_lifetime_transition(as, arena, fncell, word, bit, desired,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, impossible);
+  asm_fnew1num_root_transition(as, arena, fncell, word, bit, desired,
+	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_NONE, impossible);
+  rollback_fn = emit_label(as);
+  emit_jmp(as, done);
+  asm_fnew1num_construct_claim(as, arena, uvcell, word, bit, desired,
+	rollback_fn);
+  asm_fnew1num_construct_claim(as, arena, fncell, word, bit, desired,
+	impossible);
+}
+
 static void asm_fnew1num_movi8(ASMState *as, Reg base, int32_t ofs, int32_t k)
 {
   emit_i8(as, k);
@@ -972,8 +1257,8 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
   MCLabel l_done, l_fallback, l_markclear, l_markdone, l_mark_ok;
-  MCLabel l_pending_retry;
-  Reg base, parent, val, pt, g, arena, cell, next, uv, tmp;
+  MCLabel l_pending_retry, l_state_impossible;
+  Reg base, parent, val, pt, g, arena, cell, next, uv, tmp, root;
   IRRef fallback_args[CCI_NARGS_MAX];
   RegSet allow;
   uint32_t i;
@@ -1019,25 +1304,43 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   uv = ra_scratch(as, allow);
   rset_clear(allow, uv);
   tmp = ra_scratch(as, allow);
+  rset_clear(allow, tmp);
+  root = ra_scratch(as, allow);
   checkmclim(as);  /* Register setup may spill before the inline template. */
+
+  /* A fresh-reservation descriptor mismatch is allocator corruption. Every
+  ** partial claim has an exact pre-visibility rollback edge into this terminal
+  ** trap, which remains terminal even if a debugger resumes SIGTRAP. */
+  emit_i8(as, 0xfdu);  /* JMP -3 after INT3. */
+  emit_i8(as, 0xebu);
+  emit_i8(as, XI_INT3);
+  l_state_impossible = emit_label(as);
+  checkmclim(as);
 
   /* Success: publish both exact headers, then continue with CALL result use.
   ** The activation predicates below are eligibility samples, not an exclusion
   ** lease: a worker can xchg the pending stack immediately after them. Keep the
-  ** old head in RAX for CMPXCHG, preserve the function in `cell`, and rebuild
+  ** old head in RAX for CMPXCHG, preserve the function in `pt`, and rebuild
   ** the upvalue tail on every failed attempt. */
   emit_jmp(as, l_done);
+  emit_rr(as, XO_MOV, RID_RET|REX_64, pt|REX_64);
+  asm_fnew1num_construct_commit(as, arena, next, root, tmp, uv,
+				l_state_impossible);
+  checkmclim(as);
+  asm_fnew1num_construct_commit(as, arena, cell, root, tmp, uv,
+				l_state_impossible);
+  checkmclim(as);
+  /* Keep LINKING through both the list CAS and its post-CAS hint repair. */
   emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
-  emit_rr(as, XO_MOV, RID_RET|REX_64, cell|REX_64);
   l_pending_retry = emit_sjcc_label(as, CC_NE);
-  emit_lockrmro(as, XO_CMPXCHG, cell|REX_64, RID_DISPATCH,
+  emit_lockrmro(as, XO_CMPXCHG, pt|REX_64, RID_DISPATCH,
 		DISPATCH_TG(gcroot_pending));
   emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
   emit_movtomro(as, RID_RET|REX_GC64, uv, offsetof(GChead, nextgc));
   emit_sfixup(as, l_pending_retry);
-  emit_movtomro(as, uv|REX_GC64, cell, offsetof(GChead, nextgc));
+  emit_movtomro(as, uv|REX_GC64, pt, offsetof(GChead, nextgc));
   emit_gettg(as, RID_RET, gcroot_pending);
-  emit_rr(as, XO_MOV, cell|REX_64, RID_RET|REX_64);
+  emit_rr(as, XO_MOV, pt|REX_64, RID_RET|REX_64);
   checkmclim(as);  /* Keep publication separate from accounting updates. */
 
   /* The assembler emits backwards. These bitmap operations therefore run
@@ -1116,6 +1419,19 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_gri(as, XG_ARITHi(XOg_ADD), tmp, PROTO_CLCOUNT);
   emit_rmro(as, XO_MOVZXb, tmp, pt, offsetof(GCproto, flags));
   emit_loadu64(as, pt, (uint64_t)(uintptr_t)fi.pt);
+  checkmclim(as);
+
+  /* The bump reservation privately identifies both FREE starts before block
+  ** discovery. Claim lifetime then root for function and upvalue. Every
+  ** partial second-start failure abandons both reservations in exact reverse
+  ** order. Save the function pointer temporarily in `g`, then reload TG. */
+  emit_gettg(as, g, gl);
+  emit_rr(as, XO_MOV, RID_RET|REX_64, g|REX_64);
+  asm_fnew1num_construct_pair_claim(as, arena, cell, next, root, tmp, pt,
+				    l_state_impossible);
+  emit_gri(as, XG_ARITHi(XOg_ADD), next, (int32_t)fncells);
+  emit_rr(as, XO_MOV, next, cell);
+  emit_rr(as, XO_MOV, g|REX_64, RID_RET|REX_64);
   checkmclim(as);
 
   emit_rr(as, XO_ARITH(XOg_ADD), uv|REX_64, arena|REX_64);

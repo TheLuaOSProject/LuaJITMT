@@ -13,6 +13,7 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_arena.h"
 #include "lj_func.h"
@@ -35,12 +36,92 @@ typedef struct PendingRace {
   uint32_t flushed;
 } PendingRace;
 
+typedef struct RootStateRace {
+  global_State *g;
+  GCobj *o;
+  GCArena *a;
+  uint32_t path;
+  uint32_t stage;
+  int result;
+  int done;
+} RootStateRace;
+
 static PendingRace *active_race;
+static RootStateRace *active_state_race;
 
 static void spin_until(const uint32_t *p, uint32_t value)
 {
   while (la_load32_acq(p) != value)
     la_cpu_pause();
+}
+
+static void root_state_hook(global_State *g, GCobj *o, uint32_t path)
+{
+  RootStateRace *race = active_state_race;
+  if (!race || race->path != path || race->o != o)
+    return;
+  assert(race->g == g);
+  lj_gc_test_set_root_state_hook(NULL);
+  la_store32_rel(&race->stage, 1);
+  spin_until(&race->stage, 2);
+}
+
+static void *root_state_race_actor(void *arg)
+{
+  RootStateRace *race = (RootStateRace *)arg;
+  if (race->path == LJ_GC_ROOT_STATE_TEST_LINKING)
+    race->result = lj_gc_linkobj(race->g, race->o);
+  else if (race->path == LJ_GC_ROOT_STATE_TEST_UNLINKING)
+    race->result = lj_gc_unlink_root_obj(race->g, race->o);
+  else
+    race->result = (int)lj_gc_reclaim_gc2_arena(
+	      race->g, race->a, 1u, &race->done);
+  return NULL;
+}
+
+static pthread_t begin_root_state_race(RootStateRace *race, global_State *g,
+				       GCobj *o, uint32_t path)
+{
+  pthread_t thread;
+  race->g = g;
+  race->o = o;
+  race->a = NULL;
+  race->path = path;
+  race->stage = 0;
+  race->result = -99;
+  race->done = 0;
+  active_state_race = race;
+  lj_gc_test_set_root_state_hook(root_state_hook);
+  assert(pthread_create(&thread, NULL, root_state_race_actor, race) == 0);
+  spin_until(&race->stage, 1);
+  return thread;
+}
+
+static pthread_t begin_small_reanchor_race(RootStateRace *race,
+					    global_State *g, GCobj *o,
+					    GCArena *a)
+{
+  pthread_t thread;
+  race->g = g;
+  race->o = o;
+  race->a = a;
+  race->path = LJ_GC_ROOT_STATE_TEST_SMALL_REANCHOR_LINKED;
+  race->stage = 0;
+  race->result = -99;
+  race->done = 0;
+  active_state_race = race;
+  lj_gc_test_set_root_state_hook(root_state_hook);
+  assert(pthread_create(&thread, NULL, root_state_race_actor, race) == 0);
+  spin_until(&race->stage, 1);
+  return thread;
+}
+
+static void finish_root_state_race(RootStateRace *race, pthread_t thread)
+{
+  la_store32_rel(&race->stage, 2);
+  assert(pthread_join(thread, NULL) == 0);
+  active_state_race = NULL;
+  lj_gc_test_set_root_state_hook(NULL);
 }
 
 static int root_contains(global_State *g, GCobj *needle)
@@ -53,6 +134,37 @@ static int root_contains(global_State *g, GCobj *needle)
     assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
   }
   return 0;
+}
+
+static uint32_t root_occurrences(global_State *g, GCobj *needle)
+{
+  GCobj *o;
+  uint32_t n = 0, found = 0;
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    found += o == needle;
+    assert(++n < LJ_GC2_ROOT_SCAN_LIMIT);
+  }
+  return found;
+}
+
+static uint32_t small_root_state(GCobj *o)
+{
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell;
+  assert(!lj_arena_ishuge(a));
+  cell = lj_arena_cellof(o);
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  return lj_arena_root_state_acq(a, cell);
+}
+
+static uint32_t small_lifetime_state(const void *base)
+{
+  GCArena *a = lj_arena_of(base);
+  uint32_t cell;
+  assert(!lj_arena_ishuge(a));
+  cell = lj_arena_cellof(base);
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  return lj_arena_lifetime_state_acq(a, cell);
 }
 
 static int after_main_contains(global_State *g, GCobj *needle)
@@ -127,12 +239,8 @@ static void finish_race(PendingRace *race, pthread_t thread)
   lj_gc_test_set_root_pending_load_hook(NULL);
 }
 
-static GCupval *new_closed_upvalue_unlinked(lua_State *L)
+static void init_closed_upvalue(global_State *g, GCupval *uv)
 {
-  global_State *g = G(L);
-  GCupval *uv = (GCupval *)
-    lj_mem_newgco_unlinked_nothrow(L, sizeof(GCupval));
-  assert(uv != NULL);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
   uv->immutable = 0;
@@ -141,7 +249,325 @@ static GCupval *new_closed_upvalue_unlinked(lua_State *L)
   uv->dhash = 0;
   newwhite(g, uv);
   lj_obj_setgcwnullrel(obj2gco(uv));
+}
+
+static GCupval *new_closed_upvalue_constructing(lua_State *L)
+{
+  global_State *g = G(L);
+  GCupval *uv = (GCupval *)
+    lj_mem_newgco_unlinked_nothrow(L, sizeof(GCupval));
+  assert(uv != NULL);
+  init_closed_upvalue(g, uv);
   return uv;
+}
+
+static GCupval *new_closed_upvalue_live_unlinked(lua_State *L)
+{
+  global_State *g = G(L);
+  GCupval *uv = (GCupval *)lj_mem_newgco_raw_nothrow(
+    L, sizeof(GCupval), LJ_AF_TRAVERSABLE);
+  assert(uv != NULL);
+  init_closed_upvalue(g, uv);
+  lj_gc_publishobj_header(g, obj2gco(uv));
+  return uv;
+}
+
+static void test_construct_commit_and_abandon(lua_State *L)
+{
+  global_State *g = G(L);
+  GCupval *uv = new_closed_upvalue_constructing(L);
+  GCobj *o = obj2gco(uv);
+  GCArena *a;
+  uint32_t cell;
+
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_LINKING);
+  assert(lj_gc_linkobj_new(g, o) == LJ_GC_ROOT_LINKED);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+
+  /* Recovery may own MUTATING after READY while the unique constructor still
+  ** owns LINKING. Root commit succeeds without stealing that lifetime lane. */
+  uv = new_closed_upvalue_constructing(L);
+  o = obj2gco(uv);
+  a = lj_arena_of(o);
+  cell = lj_arena_cellof(o);
+  lj_gc_publishobj_header(g, o);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+				     LJ_ARENA_LIFETIME_CONSTRUCT,
+				     LJ_ARENA_LIFETIME_MUTATING));
+  assert(lj_gc_linkobj_new(g, o) == LJ_GC_ROOT_LINKED);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+				     LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_LIVE));
+
+  /* The symmetric cancellation clears LINKING while recovery retains its
+  ** mutation claim. Its completion restores LIVE before ordinary free. */
+  uv = new_closed_upvalue_constructing(L);
+  o = obj2gco(uv);
+  a = lj_arena_of(o);
+  cell = lj_arena_cellof(o);
+  lj_gc_publishobj_header(g, o);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+				     LJ_ARENA_LIFETIME_CONSTRUCT,
+				     LJ_ARENA_LIFETIME_MUTATING));
+  assert(lj_mem_abandon_gco_unpublished(g, o) ==
+	 LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+				     LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_LIVE));
+  lj_mem_free(g, o, sizeof(GCupval));
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+
+  uv = new_closed_upvalue_constructing(L);
+  o = obj2gco(uv);
+  a = lj_arena_of(o);
+  cell = lj_arena_cellof(o);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_LINKING);
+  lj_mem_freegco_unpublished(g, o, sizeof(GCupval));
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+}
+
+static void test_destructor_terminal_gate(lua_State *L)
+{
+  global_State *g = G(L);
+  GCupval *uv = new_closed_upvalue_live_unlinked(L);
+  GCArena *a = lj_arena_of(uv);
+  uint32_t cell = lj_arena_cellof(uv);
+  LJGCDestructCtx dctx, duplicate;
+
+  assert(lj_gc_destructor_enter(g, uv, sizeof(GCupval), &dctx) ==
+	 LJ_GC_DESTRUCT_ACQUIRED);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(lj_gc_destructor_enter(g, uv, sizeof(GCupval), &duplicate) ==
+	 LJ_GC_DESTRUCT_OWNED);
+  /* The type function may mutate/account only after the unique terminal LP. */
+  lj_func_freeuv(g, uv);
+  lj_gc_destructor_leave(g, &dctx);
+}
+
+static void test_duplicate_link_is_idempotent(lua_State *L)
+{
+  global_State *g = G(L);
+  GCtab *t = lj_tab_new(L, 0, 0);
+  GCobj *o = obj2gco(t);
+  GCobj *next;
+
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_occurrences(g, o) == 1u);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+  next = lj_obj_gcw_acq(o);
+  assert(lj_gc_linkobj(g, o) == LJ_GC_ROOT_LINK_ALREADY);
+  assert(lj_obj_gcw_acq(o) == next);
+  assert(root_occurrences(g, o) == 1u);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+}
+
+static void test_explicit_membership_claim_races(lua_State *L)
+{
+  global_State *g = G(L);
+  RootStateRace race;
+  pthread_t thread;
+  GCupval *uv = new_closed_upvalue_live_unlinked(L);
+  GCobj *o = obj2gco(uv);
+  GCobj *next;
+
+  assert(small_root_state(o) == LJ_ARENA_ROOT_NONE);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  thread = begin_root_state_race(&race, g, o,
+				 LJ_GC_ROOT_STATE_TEST_LINKING);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_LINKING);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_MUTATING);
+  next = lj_obj_gcw_acq(o);
+  assert(lj_gc_linkobj(g, o) == LJ_GC_ROOT_LINK_DEFER);
+  assert(lj_obj_gcw_acq(o) == next);
+  assert(lj_gc_unlink_root_obj(g, o) == LJ_GC_ROOT_UNLINK_UNPROVEN);
+  assert(root_occurrences(g, o) == 0u);
+  finish_root_state_race(&race, thread);
+  assert(race.result == LJ_GC_ROOT_LINKED);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  assert(root_occurrences(g, o) == 1u);
+
+  thread = begin_root_state_race(&race, g, o,
+				 LJ_GC_ROOT_STATE_TEST_UNLINKING);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_UNLINKING);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  next = lj_obj_gcw_acq(o);
+  assert(lj_gc_linkobj(g, o) == LJ_GC_ROOT_LINK_DEFER);
+  assert(lj_obj_gcw_acq(o) == next);
+  assert(root_occurrences(g, o) == 1u);
+  finish_root_state_race(&race, thread);
+  assert(race.result == LJ_GC_ROOT_UNLINKED);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_NONE);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  assert(root_occurrences(g, o) == 0u);
+
+  assert(lj_gc_linkobj(g, o) == LJ_GC_ROOT_LINKED);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  assert(root_occurrences(g, o) == 1u);
+}
+
+#if LJ_HASFFI
+static void test_variable_cdata_arbitrates_before_validation(lua_State *L)
+{
+  global_State *g = G(L);
+  GCcdata *cd;
+  GCobj *o;
+  GCArena *a;
+  void *base;
+  uint32_t cell;
+  uint8_t gct;
+
+  assert(luaL_dostring(L,
+    "local ffi=require('ffi'); return ffi.new('uint8_t[?]', 257)") ==
+    LUA_OK);
+  assert(tviscdata(L->top - 1));
+  cd = cdataV(L->top - 1);
+  assert(cdataisv(cd));
+  o = obj2gco(cd);
+  base = memcdatav(cd);
+  a = lj_arena_of(base);
+  assert(!lj_arena_ishuge(a));
+  cell = lj_arena_cellof(base);
+
+  (void)lj_gc_flush_root_pending(g);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+  assert(lj_gc_unlink_root_obj(g, o) == LJ_GC_ROOT_UNLINKED);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+
+  /* Model another descriptor owner, then make every post-arbitration check
+  ** fail. The losing base-hinted requeue must return DEFER without consulting
+  ** the interior header or READY; validation-first code returns INVALID. */
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_MUTATING));
+  gct = la_load8_acq(&cd->gct);
+  la_store8_rel(&cd->gct, 0);
+  lj_arena_bm_clear(a->ready, cell);
+  assert(lj_gc_linkobj_at(g, o, base) == LJ_GC_ROOT_LINK_DEFER);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  la_store8_rel(&cd->gct, gct);
+  lj_arena_bm_set(a->ready, cell);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+				     LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_LIVE));
+
+  /* late[] is irrevocable logical-free provenance. It is rechecked while the
+  ** linker owns MUTATING and must defeat publication before header validation. */
+  (void)la_bit_test_and_set64(&a->late[cell >> 6], cell & 63);
+  la_store8_rel(&cd->gct, 0);
+  lj_arena_bm_clear(a->ready, cell);
+  assert(lj_gc_linkobj_at(g, o, base) == LJ_GC_ROOT_LINK_DEFER);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  lj_arena_bm_clear(a->late, cell);
+  la_store8_rel(&cd->gct, gct);
+  lj_arena_bm_set(a->ready, cell);
+
+  /* Ordinary root publication never manufactures RESCUE. A tentative
+  ** destructor retains DESTRUCT on a losing root attempt; once its exact
+  ** DESTRUCT->FREE LP wins, the same poisoned-header attempt still defers. */
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_DESTRUCT));
+  la_store8_rel(&cd->gct, 0);
+  lj_arena_bm_clear(a->ready, cell);
+  assert(lj_gc_linkobj_at(g, o, base) == LJ_GC_ROOT_LINK_DEFER);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_DESTRUCT);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+				     LJ_ARENA_LIFETIME_DESTRUCT,
+				     LJ_ARENA_LIFETIME_FREE));
+  assert(lj_gc_linkobj_at(g, o, base) == LJ_GC_ROOT_LINK_DEFER);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  /* Fixture-only rollback: no destructor touched bytes in this synthetic LP. */
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_FREE,
+				     LJ_ARENA_LIFETIME_LIVE));
+  la_store8_rel(&cd->gct, gct);
+  lj_arena_bm_set(a->ready, cell);
+
+  assert(lj_gc_linkobj_at(g, o, base) == LJ_GC_ROOT_LINKED);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  lua_pop(L, 1);
+}
+#endif
+
+static void enter_synthetic_sweep(global_State *g)
+{
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lj_gc2_test_activation_mirror_edge(g, LJ_GC2_IDLE, LJ_GC2_MARK);
+  gc2_phase_rel(g, LJ_GC2_MARK);
+  gc2_phase_rel(g, LJ_GC2_WEAK);
+  lj_gc2_test_activation_mirror_edge(g, LJ_GC2_MARK, LJ_GC2_WEAK);
+  lj_gc2_test_activation_mirror_edge(g, LJ_GC2_WEAK, LJ_GC2_SWEEP);
+  gc2_phase_rel(g, LJ_GC2_SWEEP);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+}
+
+static void leave_synthetic_sweep(global_State *g)
+{
+  lj_gc2_test_activation_mirror_edge(g, LJ_GC2_SWEEP, LJ_GC2_IDLE);
+  gc2_phase_rel(g, LJ_GC2_IDLE);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+}
+
+static void test_small_reanchor_commits_once(lua_State *L)
+{
+  global_State *g = G(L);
+  RootStateRace race;
+  pthread_t thread;
+  GCupval *uv = new_closed_upvalue_live_unlinked(L);
+  GCobj *o = obj2gco(uv);
+  GCArena *a = lj_arena_of(o);
+  GCobj *next;
+  uint32_t cell = lj_arena_cellof(o);
+  uint32_t flags0 = lj_arena_flags_acq(a);
+  uint32_t cursor0 = a->hdr.reclaim_cell;
+
+  assert(lj_gc_linkobj(g, o) == LJ_GC_ROOT_LINKED);
+  assert(lj_gc_unlink_root_obj(g, o) == LJ_GC_ROOT_UNLINKED);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_WHITE,
+					  LJ_ARENA_SWEEP_LIVE));
+  la_store32_rel(&a->hdr.flags, flags0 | LJ_AF_QUARANTINE);
+  a->hdr.reclaim_cell = cell;
+  enter_synthetic_sweep(g);
+
+  thread = begin_small_reanchor_race(&race, g, o, a);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+  assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_LIVE);
+  assert(root_occurrences(g, o) == 1u);
+  next = lj_obj_gcw_acq(o);
+  assert(lj_gc_linkobj(g, o) == LJ_GC_ROOT_LINK_ALREADY);
+  assert(lj_obj_gcw_acq(o) == next);
+  assert(root_occurrences(g, o) == 1u);
+
+  finish_root_state_race(&race, thread);
+  assert(race.result == 1);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+  assert(lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_WHITE);
+  assert(root_occurrences(g, o) == 1u);
+
+  leave_synthetic_sweep(g);
+  a->hdr.reclaim_cell = cursor0;
+  la_store32_rel(&a->hdr.flags, flags0);
 }
 
 static void assert_single_thread_fastpath_window(global_State *g,
@@ -208,11 +634,15 @@ static void test_vm_tnew_retry(lua_State *L)
   assert(tvistab(L->top - 1));
   fresh = tabV(L->top - 1);
   assert(race.published == obj2gco(fresh));
+  /* The real VM CAS has completed both pending-head hints before exposing the
+  ** final MEMBER lane. Flush may transfer the edge, but never owns this state. */
+  assert(small_root_state(obj2gco(fresh)) == LJ_ARENA_ROOT_MEMBER);
   assert(root_contains(g, obj2gco(old)));
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(fresh));
   assert(lj_obj_gcw_acq(obj2gco(fresh)) == NULL);
   assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(root_contains(g, obj2gco(fresh)));
+  assert(small_root_state(obj2gco(fresh)) == LJ_ARENA_ROOT_MEMBER);
   lua_pop(L, 1);
 }
 #endif
@@ -230,8 +660,12 @@ static void test_chain_tail_retry(lua_State *L)
   assert_single_thread_fastpath_window(g, tg);
   old = lj_tab_new(L, 0, 0);
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(old));
-  head = new_closed_upvalue_unlinked(L);
-  tail = new_closed_upvalue_unlinked(L);
+  head = new_closed_upvalue_constructing(L);
+  tail = new_closed_upvalue_constructing(L);
+  assert(small_lifetime_state(head) == LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(small_lifetime_state(tail) == LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(small_root_state(obj2gco(head)) == LJ_ARENA_ROOT_LINKING);
+  assert(small_root_state(obj2gco(tail)) == LJ_ARENA_ROOT_LINKING);
   lj_obj_setgcwrel(obj2gco(head), obj2gco(tail));
 
   thread = begin_race(&race, g, tg, obj2gco(old),
@@ -244,6 +678,10 @@ static void test_chain_tail_retry(lua_State *L)
   assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(head));
   assert(lj_obj_gcw_acq(obj2gco(head)) == obj2gco(tail));
   assert(lj_obj_gcw_acq(obj2gco(tail)) == NULL);
+  assert(small_lifetime_state(head) == LJ_ARENA_LIFETIME_LIVE);
+  assert(small_lifetime_state(tail) == LJ_ARENA_LIFETIME_LIVE);
+  assert(small_root_state(obj2gco(head)) == LJ_ARENA_ROOT_MEMBER);
+  assert(small_root_state(obj2gco(tail)) == LJ_ARENA_ROOT_MEMBER);
   assert(lj_gc_flush_root_pending(g) == 2u);
   assert(root_contains(g, obj2gco(head)));
   assert(root_contains(g, obj2gco(tail)));
@@ -402,6 +840,15 @@ int main(void)
   lua_State *L = luaL_newstate();
   assert(L != NULL);
   lua_gc(L, LUA_GCSTOP, 0);
+  luaL_openlibs(L);
+  test_construct_commit_and_abandon(L);
+  test_destructor_terminal_gate(L);
+  test_duplicate_link_is_idempotent(L);
+  test_explicit_membership_claim_races(L);
+#if LJ_HASFFI
+  test_variable_cdata_arbitrates_before_validation(L);
+#endif
+  test_small_reanchor_commits_once(L);
   test_ordinary_retry(L);
 #if LJ_TARGET_X64 && LJ_GC64
   test_vm_tnew_retry(L);
@@ -412,6 +859,6 @@ int main(void)
   test_finreg_udata_has_single_reanchor_owner(L);
   test_root_unlink_rejects_string_successor(L);
   lua_close(L);
-  puts("t-gc-root-pending-race OK: CAS retries, stable main/FINREG ownership, and string-safe unlink verified");
+  puts("t-gc-root-pending-race OK: construction/lifetime CAS, retries, stable FINREG ownership, and safe unlink verified");
   return 0;
 }

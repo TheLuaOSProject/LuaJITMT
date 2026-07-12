@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_safepoint.h"
+#include "lj_state.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 
@@ -971,7 +972,7 @@ int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg)
     return EINVAL;
   if (thr->tid == 0)
     thr->tid = lj_thr_newid();
-  if (thr->tid == 0 || thr->tid == LJ_THREAD_GCSCAN) {
+  if (!lj_thr_id_is_owner(thr->tid)) {
     thr->tid = 0;
     return EAGAIN;
   }
@@ -1327,18 +1328,27 @@ static void state_gcscan_wait_no_l(void)
 int lj_state_claim(lua_State *L, uint32_t tid)
 {
   uint32_t owner;
-  if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
+  if (!L || !lj_thr_id_is_owner(tid))
     return 0;
   for (;;) {
+    if (lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE)
+      return 0;
     owner = lj_state_owner_acq(L);
     if (owner == tid)
       return 1;
     if (owner == 0) {
       uint32_t expect = 0;
-      if (lj_state_owner_cas(L, &expect, tid))
-	return 1;
+      if (lj_state_owner_cas(L, &expect, tid)) {
+	if (LJ_LIKELY(lj_state_gcprep_state_acq(L) ==
+		      LJ_STATE_GCPREP_NONE))
+	  return 1;
+	lj_state_release(L, tid);
+	return 0;
+      }
       continue;
     }
+    if (owner == LJ_THREAD_GCPREP)
+      return 0;
     if (owner == LJ_THREAD_GCSCAN) {
       state_gcscan_wait_no_l();
       continue;
@@ -1356,9 +1366,11 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
     claim->tid = 0;
     claim->release = 0;
   }
-  if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
+  if (!L || !lj_thr_id_is_owner(tid))
     return 0;
   for (;;) {
+    if (lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE)
+      return 0;
     owner = lj_state_owner_acq(L);
     if (owner == tid) {
       if (claim) {
@@ -1370,6 +1382,11 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
     if (owner == 0) {
       uint32_t expect = 0;
       if (lj_state_owner_cas(L, &expect, tid)) {
+	if (LJ_UNLIKELY(lj_state_gcprep_state_acq(L) !=
+			LJ_STATE_GCPREP_NONE)) {
+	  lj_state_release(L, tid);
+	  return 0;
+	}
 	if (claim) {
 	  claim->L = L;
 	  claim->tg_hint = NULL;
@@ -1380,6 +1397,8 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
       }
       continue;
     }
+    if (owner == LJ_THREAD_GCPREP)
+      return 0;
     if (owner == LJ_THREAD_GCSCAN) {
       state_gcscan_wait_no_l();
       continue;
@@ -1417,6 +1436,8 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
   if (!L)
     return 0;
   for (;;) {
+    if (lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE)
+      return 0;
     owner = lj_state_owner_acq(L);
     if (owner == 0) {
       uint32_t expect = 0;
@@ -1440,6 +1461,8 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
       */
       return 0;  /* 05 section 5.7.2: scan claim handoff. */
     }
+    if (owner == LJ_THREAD_GCPREP)
+      return 0;
     return 0;
   }
 }
@@ -1447,7 +1470,7 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
 static void state_stack_dirty(lua_State *L, uint32_t tid)
 {
   TGState *tg;
-  if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
+  if (!L || !lj_thr_id_is_owner(tid))
     return;
   tg = lj_tg_find_owner(G(L), tid);
   if (tg)

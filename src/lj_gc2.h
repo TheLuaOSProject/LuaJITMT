@@ -7,6 +7,7 @@
 #define _LJ_GC2_H
 
 #include "lj_obj.h"
+#include "lj_arena.h"
 
 #ifndef LJ_GC2_PARANOIA
 #define LJ_GC2_PARANOIA		0
@@ -18,7 +19,18 @@ typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
 typedef void (*GC2FinRegMarkObjFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
 typedef void (*GC2FinRegMarkTVFunc)(global_State *g, cTValue *tv);
-#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+/* Opaque counted body admission. A successful acquire protects every payload
+** byte through the final read before lj_gc2_lease_release(). Do not copy an
+** active lease. Huge allocations carry a counted HugeTab reader; only the
+** temporary custom-lua_Alloc path may return a valid no-op lease. */
+typedef struct LJGC2Lease {
+  void *arena;
+  intptr_t admission;
+  LJHugeReader huge;
+} LJGC2Lease;
+#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || \
+    defined(LJ_TRACE_TEST_HELPERS) || defined(LUA_USE_ASSERT) || \
+    LJ_GC2_PARANOIA
 typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 					GCobj *o);
 #define LJ_GC2_HAS_FINALIZER_DISPATCH_TYPE 1
@@ -188,6 +200,10 @@ enum {
 LJ_FUNC void lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_fini(global_State *g);
 LJ_FUNC uint32_t lj_gc2_shutdown_discard_ssb(global_State *g);
+/* Joined-world terminal PRE/POST fence. Reconciles every durable recovery
+** identity and count-zero arena admission gate, but never clears root/late or
+** lifecycle planes. Safe and required to repeat between freeall rounds. */
+LJ_FUNC int lj_gc2_terminal_prefree(global_State *g);
 LJ_FUNC void lj_gc2_freeall(global_State *g);
 LJ_FUNC void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes);
 LJ_FUNC uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg);
@@ -227,6 +243,9 @@ LJ_FUNC uint64_t lj_gc2_retire_epoch(global_State *g);
 LJ_FUNC int lj_gc2_smr_read_try(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_enter(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
+/* True only for the current OS thread which won the active IDLE/SWEEP
+** exclusive-reclaimer CAS. This is an identity certificate, not lifetime. */
+LJ_FUNC int lj_gc2_reclaim_context_held(global_State *g);
 /* Migration-only veto: a zero result never authorizes reclamation. */
 LJ_FUNC int lj_gc2_activation_reclaim_veto(global_State *g);
 LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
@@ -308,7 +327,9 @@ LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 LJ_FUNC int lj_gc2_finalizer_deferred(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_phase_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_close_pending(global_State *g);
-#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || \
+    defined(LJ_TRACE_TEST_HELPERS) || defined(LUA_USE_ASSERT) || \
+    LJ_GC2_PARANOIA
 LJ_FUNC void lj_gc2_test_activation_mirror_edge(global_State *g,
 						 uint32_t from_phase,
 						 uint32_t to_phase);
@@ -318,14 +339,23 @@ LJ_FUNC int lj_gc2_test_sweep_reclaim_enter(global_State *g);
 LJ_FUNC int lj_gc2_test_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_ssb_drain(global_State *g);
 LJ_FUNC int lj_gc2_test_ssb_empty(global_State *g);
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
+LJ_FUNC int lj_gc2_test_idle_reclaim_enter(global_State *g);
+LJ_FUNC void lj_gc2_test_idle_reclaim_leave(global_State *g);
+LJ_FUNC int lj_gc2_test_sweep_reclaim_scope_enter(global_State *g);
+LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
+#endif
 #if defined(LJ_GC2_TEST_HELPERS)
 #define LJ_GC2_RECOVERY_TEST_RESERVED	1u
 #define LJ_GC2_RECOVERY_TEST_PRE_COMPLETE	2u
 #define LJ_GC2_RECOVERY_TEST_SSB_COMMITTED	3u
+#define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE	4u
+#define LJ_GC2_RECOVERY_TEST_POST_CLAIM	5u
 LJ_FUNC void lj_gc2_test_recovery_fail_grey_grow(uint32_t count);
 LJ_FUNC void lj_gc2_test_recovery_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_gc2_test_recovery_paused(void);
 LJ_FUNC void lj_gc2_test_recovery_release(void);
+LJ_FUNC void lj_gc2_test_recovery_fail_closed(global_State *g);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_recovery_drain(global_State *g, uint32_t limit);
 LJ_FUNC int lj_gc2_test_recovery_state(global_State *g, GCobj *o);
@@ -407,6 +437,17 @@ LJ_FUNC int lj_gc2_markobj_status(global_State *g, GCobj *o, uint32_t *gctp);
 LJ_FUNC int lj_gc2_markobj_expected_status(global_State *g, GCobj *o,
 					    uint32_t expected_gct,
 					    uint32_t *gctp);
+/* Acquire a semantic object/body lease. expected_gct==0 accepts any GC type.
+** Returns -1 for dead/invalid, 0 for already live, or 1 for newly retained;
+** graph work is published before return exactly as for markobj_status(). */
+LJ_FUNC int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
+				      uint32_t expected_gct, uint32_t *gctp,
+				      LJGC2Lease *lease);
+/* Acquire one exact registered raw allocation with the same tri-state result. */
+LJ_FUNC int lj_gc2_mem_lease_acquire(global_State *g, void *p,
+				      LJGC2Lease *lease);
+/* Release is idempotent and zeros the public token before dropping admission. */
+LJ_FUNC void lj_gc2_lease_release(LJGC2Lease *lease);
 /* Resolve an interior bytecode pointer through allocator identity and retain
 ** its exact prototype owner. The caller must hold a GC2 SMR read scope while
 ** allocator ownership can transfer between TG registries. */
@@ -426,9 +467,26 @@ LJ_FUNC int lj_gc2_obj_valid_queued(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv);
 LJ_FUNC int lj_gc2_mem_registered(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_mem_registered_known(global_State *g, const void *p);
+/* Current-thread sweep-reclaimer certificate. This does not acquire lifetime:
+** callers must already own the exact object/side-storage sweep ticket through
+** their final dereference. It succeeds only on the thread which won both the
+** worker and SMR-reclaimer ownership transaction, so an unrelated mutator
+** cannot turn the process-global smr_reclaiming bit into body authority. */
+LJ_FUNC int lj_gc2_mem_registered_known_reclaim_held(global_State *g,
+						       const void *p);
 LJ_FUNC int lj_gc2_markmem_registered(global_State *g, void *p);
-LJ_FUNC int lj_gc2_valid_proto_for_traverse(global_State *g, GCproto *pt);
-LJ_FUNC int lj_gc2_valid_thread_for_traverse(global_State *g, lua_State *th);
+/* Raw-allocation mark for an exact detached body/list owner running inside the
+** current-thread exclusive reclaimer. It does not acquire ordinary SMR and
+** returns -1 for no durable mark, 0 for an existing/opaque durable mark, or 1
+** for a newly published mark. A nonnegative result is arena-quarantine proof,
+** not a body lease: the caller's exact detached ticket remains responsible for
+** every dereference. */
+LJ_FUNC int lj_gc2_markmem_reclaim_held_status(global_State *g, void *p);
+/* Geometry validation for a prototype whose exact public body lease remains
+** held through all subsequent prototype reads. */
+LJ_FUNC int lj_gc2_valid_proto_for_traverse_held(global_State *g,
+						  GCproto *pt,
+						  const LJGC2Lease *lease);
 LJ_FUNC uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 #if LJ_HASJIT

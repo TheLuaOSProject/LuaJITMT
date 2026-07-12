@@ -21,6 +21,7 @@
 #endif
 
 typedef void *(*LJThrFunc)(void *);
+struct LJGC2Lease;
 
 typedef struct LJThr {
 #if LJ_TARGET_WINDOWS
@@ -87,12 +88,21 @@ typedef enum LJThrTGResult {
 #define LJ_THREAD_RUNNING	1u
 #define LJ_THREAD_DONE		2u
 #define LJ_THREAD_ABORTING	3u
+#define LJ_THREAD_GCPREP	0xfffffffeu
 #define LJ_THREAD_GCSCAN	0xffffffffu
+
+/* Only process-issued ids may name a live OS-thread/TG owner. The top two
+** values are non-TG protocol claims and must never enter owner lookup, cycle
+** leadership, dirty-epoch routing or safepoint leadership. */
+static LJ_AINLINE int lj_thr_id_is_owner(uint32_t tid)
+{
+  return tid != 0 && tid < LJ_THREAD_GCPREP;
+}
 
 /* Process-wide owner ids are never reused. The counter stores the largest id
 ** already issued and saturates at the final non-sentinel value. Returning zero
 ** is an explicit admission failure: wrapping would alias an older state/TG
-** owner, while issuing LJ_THREAD_GCSCAN would impersonate the GC stack-scanner
+** owner, while issuing either reserved value would impersonate a GC protocol
 ** claim. Relaxed ordering is sufficient because the CAS publishes uniqueness,
 ** not any object initialized by the eventual id owner. */
 static LJ_AINLINE uint32_t lj_thr_id_alloc(uint32_t *counter)
@@ -100,7 +110,7 @@ static LJ_AINLINE uint32_t lj_thr_id_alloc(uint32_t *counter)
   uint32_t current = la_load32_rlx(counter);
   for (;;) {
     uint32_t next;
-    if (current >= LJ_THREAD_GCSCAN - 1u)
+    if (current >= LJ_THREAD_GCPREP - 1u)
       return 0;
     next = current + 1u;
     if (la_cas32(counter, &current, next, LA_RLX, LA_RLX))
@@ -122,9 +132,11 @@ struct LJThreadLive {
 };
 
 LJ_FUNC GCudata *lj_thread_live_udata_acq(global_State *g,
-					  LJThreadLive *node);
+					  LJThreadLive *node,
+					  struct LJGC2Lease *lease);
 LJ_FUNC GCudata *lj_thread_state_udata_acq(global_State *g,
-					   const lua_State *L);
+					   const lua_State *L,
+					   struct LJGC2Lease *lease);
 
 static LJ_AINLINE GCobj *
 lj_thread_live_udata_ref_acq(const LJThreadLive *node)

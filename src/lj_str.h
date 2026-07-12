@@ -440,6 +440,18 @@ static LJ_AINLINE void lj_str_body_retired_epoch_rel(StrBodyRetire *ret,
   la_store64_rel(&ret->retire_epoch, epoch);
 }
 
+static LJ_AINLINE uint32_t lj_str_body_retired_main_linked_acq(
+  const StrBodyRetire *ret)
+{
+  return la_load32_acq(&ret->main_linked);
+}
+
+static LJ_AINLINE void lj_str_body_retired_main_linked_rel(
+  StrBodyRetire *ret, uint32_t linked)
+{
+  la_store32_rel(&ret->main_linked, linked);
+}
+
 static LJ_AINLINE StrBodyRetire *lj_str_sweep_pending_acq(
   const global_State *g)
 {
@@ -613,9 +625,21 @@ LJ_FUNC int lj_str_sweep_claim(lua_State *L, StrTabHdr *hdr);
 LJ_FUNC void lj_str_sweep_release(StrTabHdr *hdr);
 LJ_FUNCA GCstr *lj_str_new(lua_State *L, const char *str, size_t len);
 LJ_FUNC void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s);
+LJ_FUNC int LJ_FASTCALL lj_str_free_try(global_State *g, GCstr *s);
+struct LJGCDestructCtx;
+/* Terminal joined-world bucket removal is a two-LP transaction: prepare()
+** acquires exact physical lifetime without mutating the string, the caller
+** removes its incoming bucket edge, and commit() consumes type/count/body.
+** commit() is valid only after prepare() returns DESTRUCT_ACQUIRED. */
+LJ_FUNC int lj_str_free_prepare(global_State *g, GCstr *s,
+				 struct LJGCDestructCtx *ctx);
+LJ_FUNC void lj_str_free_commit(global_State *g, GCstr *s,
+				 struct LJGCDestructCtx *ctx);
 LJ_FUNC void lj_str_flush_num_credit(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);
 LJ_FUNC int lj_str_quarantine_resize(lua_State *L, MSize newmask);
+/* Runtime drain only: caller holds GC2's exact-thread exclusive-reclaimer
+** scope. Terminal joined-world cleanup uses the separate free helpers below. */
 LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 LJ_FUNC void lj_str_gc2_sweep_begin(global_State *g, int major);
@@ -655,6 +679,8 @@ LJ_FUNC uint32_t lj_str_test_id_refills(void);
 LJ_FUNC void lj_str_test_reset_id_refills(void);
 LJ_FUNC uint32_t lj_str_test_num_refills(void);
 LJ_FUNC void lj_str_test_reset_num_refills(void);
+LJ_FUNC int lj_str_test_body_retired_chain_valid(global_State *g,
+						  StrBodyRetire *head);
 LJ_FUNC void lj_str_test_reset_sweep_counters(global_State *g);
 LJ_FUNC void lj_str_test_sweep_snapshot(global_State *g,
 					LJStrTestSweepSnapshot *snapshot);

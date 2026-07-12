@@ -30,23 +30,26 @@ static int retired_has(jit_State *J, TraceVec *needle)
 static uint32_t reclaim_trace_at(global_State *g, uint64_t epoch)
 {
   jit_State *J = G2J(g);
-  uint32_t expect = 0;
   uint32_t worker = 0;
   uint32_t n;
   int sweep = gc2_phase_acq(g) == LJ_GC2_SWEEP;
   if (sweep) {
     assert(gc2_sweep_bridge_ready_acq(g) != 0);
     assert(gc2_worker_active_cas(g, &worker, 1));
+    assert(lj_gc2_test_sweep_reclaim_scope_enter(g));
   } else {
     assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+    assert(lj_gc2_test_idle_reclaim_enter(g));
   }
-  assert(gc2_smr_reclaiming_cas(g, &expect, 1));
   assert(lj_jit_token_try(J));
   n = lj_trace_reclaim_retired(g, epoch);
   lj_jit_token_release(J);
-  gc2_smr_reclaiming_rel(g, 0);
-  if (sweep)
+  if (sweep) {
+    lj_gc2_test_sweep_reclaim_scope_leave(g);
     gc2_worker_active_rel(g, 0);
+  } else {
+    lj_gc2_test_idle_reclaim_leave(g);
+  }
   return n;
 }
 

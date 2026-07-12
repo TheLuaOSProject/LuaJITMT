@@ -56,6 +56,18 @@ static void worker_drain_all(global_State *g)
   assert(lj_gc2_test_ssb_empty(g));
 }
 
+static void settle_automatic_cycle(global_State *g)
+{
+  uint32_t attempts;
+  for (attempts = 0;
+       gc2_phase_acq(g) != LJ_GC2_IDLE && attempts < 4096u;
+       attempts++) {
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+    lj_gc2_cycle_to_idle(g);
+  }
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+}
+
 static int weak_snapshot_has(global_State *g, GCtab *t);
 #if LJ_HASFFI
 static int gc2_cdata_counting_finalizer(lua_State *L);
@@ -758,6 +770,10 @@ static void test_upval_needscan_preserve_abort(lua_State *L, global_State *g,
   target = funcV(&snap);
   assert(target != outer && isluafunc(target));
 
+  /* Chunk compilation may cross the allocation trigger and leave an automatic
+  ** cycle in SWEEP before this focused cycle starts. Finish it first so the
+  ** force-major hook below actually resets marks for the asserted NEW result. */
+  settle_automatic_cycle(g);
   lj_gc2_force_major(g);
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(outer)) == 1);
@@ -1392,6 +1408,10 @@ static void test_jit_weak_table_store_helper_barrier(lua_State *L,
   /* M8: existing weak table stores trace through a P_WEAK-aware helper. */
   assert(find_trace(g) != NULL);
 
+  /* Trace compilation/warmup may cross the automatic trigger. The focused
+  ** assertions below require a fresh mark generation, not a still-open sweep
+  ** whose survivor mark correctly reports ALREADY. */
+  settle_automatic_cycle(g);
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   flush_and_drain(g, tg);
@@ -1920,8 +1940,52 @@ static void test_weak_snapshot_rejects_nonobject(lua_State *L, global_State *g)
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_test_weak_snapshot_tab(g, 0) == NULL);
   assert(lj_gc2_test_weak_snapshot_scan(g, 1) == 0);
+  assert(gc2_weak_scan_cursor_acq(g) == 1u);
   assert(lj_gc2_test_weak_snapshot_clear(g, 1) == 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 1u);
   lj_gc2_cycle_to_idle(g);
+}
+
+static void test_weak_snapshot_transient_replays_same_index(lua_State *L,
+						     global_State *g)
+{
+  GCArena *a;
+  GCtab *t;
+  uint32_t cell;
+  uint64_t idx;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+
+  lj_gc2_mark_begin(g);
+  assert(g->gc2.weak_stack != NULL);
+  assert(g->gc2.weak_ready != NULL);
+  idx = la_add64_rlx(&g->gc2.weak_count, 1);
+  assert(idx == 0);
+  setgcref(g->gc2.weak_stack[0], obj2gco(t));
+  la_store8_rel(&g->gc2.weak_ready[0], 1);
+
+  /* Model the interval after a destructive owner has claimed the lifetime LP
+  ** but before it either commits FREE or restores LIVE. No table body may be
+  ** inspected and neither cursor may consume this identity. */
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+					     LJ_ARENA_LIFETIME_DESTRUCT));
+  assert(lj_gc2_test_weak_snapshot_scan(g, 1) == 0);
+  assert(gc2_weak_scan_cursor_acq(g) == 0);
+  assert(lj_gc2_test_weak_snapshot_clear(g, 1) == 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+					     LJ_ARENA_LIFETIME_LIVE));
+  assert(lj_gc2_test_weak_snapshot_scan(g, 1) == 1u);
+  assert(gc2_weak_scan_cursor_acq(g) == 1u);
+  assert(lj_gc2_test_weak_snapshot_clear(g, 1) == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 1u);
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
 }
 
 static void test_weak_self_metatable_publish_barrier(lua_State *L,
@@ -4198,16 +4262,7 @@ static void push_udata_finalizer_mt(lua_State *L)
 
 static int test_unlink_udata_object(global_State *g, GCobj *target)
 {
-  GCRef *p = lj_obj_gcwref(obj2gco(mainthread_acq(g)));
-  GCobj *o;
-  while ((o = gcref(*p)) != NULL) {
-    if (o == target) {
-      setgcrefr(*p, *lj_obj_gcwref(o));
-      return 1;
-    }
-    p = lj_obj_gcwref(o);
-  }
-  return 0;
+  return lj_gc_unlink_root_obj(g, target) == LJ_GC_ROOT_UNLINKED;
 }
 
 static uint32_t finreg_udata_active_nodes(global_State *g)
@@ -4246,6 +4301,76 @@ static void finreg_udata_mark_other_active(global_State *g, GCobj *target)
     if (o && o != target)
       (void)lj_gc2_markobj(g, o);
   }
+}
+
+static uint32_t finreg_test_small_root_state(GCobj *o)
+{
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell;
+  assert(!lj_arena_ishuge(a));
+  cell = lj_arena_cellof(o);
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  return lj_arena_root_state_acq(a, cell);
+}
+
+static void test_finreg_userdata_dispatch_defer_retry(lua_State *L,
+						       global_State *g)
+{
+  GCobj *o;
+  GCArena *a;
+  uint32_t cell;
+  uint64_t queued0, dequeued0;
+  GCSize cost = 0;
+  int finalized0;
+
+  lua_settop(L, 0);
+  lua_newuserdata(L, 1);
+  o = obj2gco(udataV(L->top - 1));
+  lua_newtable(L);
+  lua_pushcfunction(L, gc2_counting_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  (void)lj_gc_flush_root_pending(g);
+
+  lj_gc2_mark_begin(g);
+  finreg_udata_mark_other_active(g, o);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  assert(lj_gc2_finreg_udata_finalize(g, 0) != 0);
+  assert(finreg_test_small_root_state(o) == LJ_ARENA_ROOT_NONE);
+  assert(lj_gc2_finalizer_close_pending(g));
+
+  a = lj_arena_of(o);
+  cell = lj_arena_cellof(o);
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_NONE,
+					 LJ_ARENA_ROOT_LINKING));
+  queued0 = gc2_finalizer_queued_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
+  finalized0 = gc2_udata_finalized;
+
+  /* Root publication loses immediately. Dispatch must retain the exact FIFO
+  ** node and callback without allocation, clearing FINREG, or charging a
+  ** dequeue. */
+  assert(lj_gc2_finalizer_step(L, 1, &cost) == -1);
+  assert(cost == LJ_MAX_MEM);
+  assert(gc2_finalizer_queued_acq(g) == queued0);
+  assert(gc2_finalizer_dequeued_acq(g) == dequeued0);
+  assert(lj_gc2_finalizer_close_pending(g));
+  assert((lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG) != 0);
+  assert(gc2_udata_finalized == finalized0);
+  assert(finreg_test_small_root_state(o) == LJ_ARENA_ROOT_LINKING);
+
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_LINKING,
+					 LJ_ARENA_ROOT_NONE));
+  cost = 0;
+  assert(lj_gc2_finalizer_step(L, 1, &cost) == 1);
+  assert(gc2_finalizer_queued_acq(g) == queued0);
+  assert(gc2_finalizer_dequeued_acq(g) == dequeued0 + 1u);
+  assert(gc2_udata_finalized == finalized0 + 1);
+  assert((lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG) == 0);
+  assert(finreg_test_small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
 }
 
 static void test_finreg_userdata_unproven_unlink_retry(lua_State *L,
@@ -4590,17 +4715,7 @@ static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
 #if LJ_HASFFI
 static int test_unlink_root_object(global_State *g, GCobj *target)
 {
-  GCRef *p = &g->gc.root;
-  GCobj *o;
-  (void)lj_gc_flush_root_pending(g);
-  while ((o = gcref(*p)) != NULL) {
-    if (o == target) {
-      setgcrefr(*p, *lj_obj_gcwref(o));
-      return 1;
-    }
-    p = lj_obj_gcwref(o);
-  }
-  return 0;
+  return lj_gc_unlink_root_obj(g, target) == LJ_GC_ROOT_UNLINKED;
 }
 
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
@@ -5143,7 +5258,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
     "  ffi.gc(a, gc2_cdata_order_finalizer_3)\n"
     "end\n") ==
     LUA_OK);
-  assert(gc2_finreg_cdata_sets_acq(g) == sets2 + 3u);
+  /* Replacing a's callback preserves one active registration; only a and b
+  ** transition nil->enabled and contribute set notifications. */
+  assert(gc2_finreg_cdata_sets_acq(g) == sets2 + 2u);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
@@ -5349,10 +5466,11 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 static void test_finreg_disabled_ordered_pending(lua_State *L, global_State *g)
 {
   CTState *cts;
+  CTypeFinLease finlease = CTYPE_FIN_LEASE_INIT;
   TValue key;
-  GCtab *t;
+  GCcdata *cd;
   GCtab *fin_tab;
-  cTValue *slot;
+  int rc;
   lua_settop(L, 0);
   lua_pushcfunction(L, gc2_cdata_counting_finalizer);
   lua_setglobal(L, "gc2_cdata_counting_finalizer");
@@ -5367,24 +5485,41 @@ static void test_finreg_disabled_ordered_pending(lua_State *L, global_State *g)
   assert(cts != NULL);
   lua_getglobal(L, "gc2_disable_keep");
   assert(tviscdata(L->top - 1));
-  setcdataV(L, &key, cdataV(L->top - 1));
-  slot = lj_ctype_fin_get(L, cts, &key, &t);
-  assert(slot != niltv(L));
-  assert(t != NULL);
-  assert(lj_ctype_fin_istab(g, t));
-  fin_tab = t;
+  cd = cdataV(L->top - 1);
+  setcdataV(L, &key, cd);
+  rc = lj_ctype_fin_get(L, cts, &key, &finlease);
+  assert(rc == LJ_CTYPE_FIN_FOUND);
+  assert(finlease.slot != NULL && finlease.tab != NULL);
+  assert(lj_ctype_fin_istab(g, finlease.tab));
+  fin_tab = finlease.tab;
+  lj_ctype_fin_lease_release(&finlease);
   lj_gc2_finreg_cdata_disable(g);
   assert(!lj_gc2_finreg_cdata_pending(g));
   assert(!lj_ctype_fin_istab(g, fin_tab));
-  slot = lj_ctype_fin_get(L, cts, &key, &t);
-  assert(slot == niltv(L));
-  assert(t == NULL);
+  rc = lj_ctype_fin_get(L, cts, &key, &finlease);
+  assert(rc == LJ_CTYPE_FIN_MISS);
+  assert(finlease.slot == NULL && finlease.tab == NULL);
+  lj_ctype_fin_lease_release(&finlease);
   lua_pop(L, 1);
+
+  /* This fixture deliberately invokes the terminal-only disable operation
+  ** while one ordered registration is still live. Disabled generations are
+  ** intentionally invisible to both discovery and ffi.gc(cd, nil), so leaving
+  ** the table disabled would manufacture an ownerless FIN bit which no normal
+  ** lua_close sequence can create. Restore this exact, still-owned generation
+  ** only after the disable/MISS assertions, then let the ordinary keyed clear
+  ** transaction retire the slot and bit before terminal root validation. */
+  assert(lj_gc2_mem_registered_known(g, fin_tab));
+  assert((lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN) != 0);
+  fin_gen_tab_enable_rel(fin_tab);
+  assert(lj_ctype_fin_istab(g, fin_tab));
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.gc(gc2_disable_keep, nil)\n"
     "gc2_disable_keep = nil\n") ==
     LUA_OK);
+  assert((lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN) == 0);
+  assert(!lj_gc2_finreg_cdata_pending(g));
   lua_settop(L, 0);
 }
 #endif
@@ -5418,6 +5553,19 @@ int main(void)
   tg = G2TG(g);
   assert(tg != NULL);
 
+#if defined(LJ_GC2_TEST_WEAK_ONLY)
+  test_weak_tables(L, g, tg);
+  test_weak_snapshot_growth(L, g, tg);
+  test_worker_weak_drain(L, g, tg);
+  test_weak_snapshot_ready_publication(L, g);
+  test_weak_snapshot_rejects_nonobject(L, g);
+  test_weak_snapshot_transient_replays_same_index(L, g);
+  test_weak_self_metatable_publish_barrier(L, g, tg);
+  test_weak_snapshot_bridge_coverage(L, g, tg);
+  test_weak_complete_bridge(L, g, tg);
+  test_weak_bridge_fallback_hmask0(L, g, tg);
+  test_weak_clear_marks_string_slots(L, g, tg);
+#else
   test_strong_table(L, g, tg);
   test_retired_table_owner_nonsemantic(L, g, tg);
   test_grey_deque_growth(L, g, tg);
@@ -5463,6 +5611,7 @@ int main(void)
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
   test_weak_snapshot_rejects_nonobject(L, g);
+  test_weak_snapshot_transient_replays_same_index(L, g);
   test_weak_self_metatable_publish_barrier(L, g, tg);
   test_weak_snapshot_bridge_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
@@ -5496,6 +5645,7 @@ int main(void)
   test_finreg_userdata_queue_mark(L, g, tg);
   test_finreg_userdata_active_unlink(L, g);
   test_finreg_userdata_unproven_unlink_retry(L, g);
+  test_finreg_userdata_dispatch_defer_retry(L, g);
   test_finreg_userdata_telemetry(L, g);
   test_finreg_internal_userdata_telemetry(L, g);
   test_finreg_userdata_inplace_finalizer_behavior(L);
@@ -5517,6 +5667,7 @@ int main(void)
 #endif
   test_huge_false_type_discharge(L, g, tg);
   test_leaf_ssb(L, g, tg);
+#endif
 
   lua_close(L);
   printf("t-gc2-traverse OK: SSB grey traversal verified\n");

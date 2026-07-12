@@ -51,7 +51,8 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   LJOSerrState oserr;
   /* Same contract for traced VLA/VLS and over-aligned CNEW materialization. */
   lj_oserr_save(&oserr);
-  p = (char *)lj_mem_newgco_raw_nothrow(L, allocsz, LJ_AF_TRAVERSABLE);
+  p = (char *)lj_mem_newgco_raw_nothrow(
+    L, allocsz, LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
   if (LJ_UNLIKELY(p == NULL)) {
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
@@ -75,7 +76,7 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   newwhite(g, obj2gco(cd));
   lj_obj_addgcflags(obj2gco(cd), 0x80);
   if (LJ_UNLIKELY(!lj_mem_publish_interior_cdata(L, p, allocsz))) {
-    lj_mem_free(g, p, allocsz);
+    lj_mem_freegco_unpublished(g, p, allocsz);
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
   }
@@ -143,6 +144,23 @@ int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
   if (!g || !cd || cd->gct != ~LJ_TCDATA)
     return 0;
   cts = ctype_ctsG(g);
+  if (!cts) {
+    /* Fixed predefined cdata may be materialized by VM/JIT construction before
+    ** the FFI CTState is published. Its immutable CTTYDEF layout is sufficient
+    ** to validate the exact base, tail certificate and allocation size. Never
+    ** accept variable/interior cdata through this bootstrap-only fallback. */
+    if (cdataisv(cd) ||
+	!lj_ctype_predefined_payload_size(cd->ctypeid, &sz) ||
+	sz > LJ_MAX_MEM32 - sizeof(GCcdata))
+      return 0;
+    base = cd;
+    size = (GCSize)(sizeof(GCcdata) + sz);
+    if (!cdata_size_tail_matches(cd, (size_t)size))
+      return 0;
+    if (basep) *basep = base;
+    if (sizep) *sizep = size;
+    return 1;
+  }
   if (!cdata_raw_info_safe(cts, cd->ctypeid, &info, &sz))
     return 0;
   if (cdataisv(cd)) {
@@ -205,6 +223,49 @@ int lj_cdata_fin_isclaim(cTValue *tv)
   return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64;
 }
 
+#if defined(LJ_CDATA_TEST_HELPERS)
+static uint32_t cdata_fin_test_pause_armed[LJ_CDATA_FIN_PAUSE__MAX];
+static uint32_t cdata_fin_test_pause_waiting[LJ_CDATA_FIN_PAUSE__MAX];
+static uint32_t cdata_fin_test_pause_release[LJ_CDATA_FIN_PAUSE__MAX];
+
+void lj_cdata_test_fin_pause_arm(uint32_t point)
+{
+  if (point == 0 || point >= LJ_CDATA_FIN_PAUSE__MAX)
+    abort();
+  la_store32_rel(&cdata_fin_test_pause_waiting[point], 0);
+  la_store32_rel(&cdata_fin_test_pause_release[point], 0);
+  la_store32_rel(&cdata_fin_test_pause_armed[point], 1);
+}
+
+int lj_cdata_test_fin_pause_waiting(uint32_t point)
+{
+  return point > 0 && point < LJ_CDATA_FIN_PAUSE__MAX &&
+    la_load32_acq(&cdata_fin_test_pause_waiting[point]) != 0;
+}
+
+void lj_cdata_test_fin_pause_release(uint32_t point)
+{
+  if (point == 0 || point >= LJ_CDATA_FIN_PAUSE__MAX)
+    abort();
+  la_store32_rel(&cdata_fin_test_pause_release[point], 1);
+}
+
+static void cdata_fin_test_pause(uint32_t point)
+{
+  uint32_t expect = 1;
+  if (point == 0 || point >= LJ_CDATA_FIN_PAUSE__MAX ||
+      !la_cas32(&cdata_fin_test_pause_armed[point], &expect, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return;
+  la_store32_rel(&cdata_fin_test_pause_waiting[point], 1);
+  while (la_load32_acq(&cdata_fin_test_pause_release[point]) == 0)
+    (void)lj_thr_retry_yield(NULL);
+  la_store32_rel(&cdata_fin_test_pause_waiting[point], 0);
+}
+#else
+#define cdata_fin_test_pause(point) ((void)0)
+#endif
+
 static void cdata_fin_claim_wait(lua_State *L)
 {
   /*
@@ -215,45 +276,157 @@ static void cdata_fin_claim_wait(lua_State *L)
   (void)lj_thr_retry_yield(L);
 }
 
-static int cdata_fin_claim(lua_State *L, TValue *tv, TValue *old, int nonnil)
+static LJ_NORET void cdata_fin_store_invariant(global_State *g,
+					       const char *why)
 {
-  TValue claim;
+  lj_assertG_(g, 0, "%s", why);
+  UNUSED(g); UNUSED(why);
+  abort();
+}
+
+static void cdata_fin_store_exact_or_abort(global_State *g,
+					    CTypeFinLease *lease,
+					    cTValue *key, cTValue *src,
+					    const char *why)
+{
+  if (!lj_cdata_fin_store_claim_held(lease, key, src))
+    cdata_fin_store_invariant(g, why);
+}
+
+int lj_cdata_fin_claim_held(CTypeFinLease *lease, cTValue *key, TValue *old,
+			    int nonnil)
+{
+  TValue claim, expect;
+  int rc;
+  if (!lease || !lease->tab || !lease->slot || !key || !old)
+    return LJ_CTYPE_FIN_RETRY;
+  rc = lj_tab_read_current_keyed(lease->tab, lease->slot, key, old);
+  if (rc != LJ_TAB_STORE_CAS_OK || tvisforward(old) ||
+      lj_cdata_fin_isclaim(old))
+    return LJ_CTYPE_FIN_RETRY;
+  if (nonnil && tvisnil(old))
+    return LJ_CTYPE_FIN_MISS;
   cdata_fin_setclaim(&claim);
-  for (;;) {
-    lj_tv_load_acq(old, tv);
-    if (lj_cdata_fin_isclaim(old)) {
-      cdata_fin_claim_wait(L);
-      continue;
-    }
-    if (nonnil && tvisnil(old))
-      return 0;
-    if (lj_tv_cas(tv, old, &claim))
-      return 1;  /* 11.4 FINREG slot claim. */
-    cdata_fin_claim_wait(L);  /* CAS loser: yield before retrying. */
-  }
-}
-
-int lj_cdata_fin_claim_any_l(lua_State *L, TValue *tv, TValue *old)
-{
-  return cdata_fin_claim(L, tv, old, 0);
-}
-
-int lj_cdata_fin_claim_func_l(lua_State *L, TValue *tv, TValue *old)
-{
-  return cdata_fin_claim(L, tv, old, 1);
-}
-
-void lj_cdata_fin_storenil(lua_State *L, TValue *tv)
-{
-  TValue nilv;
-  setnilV(&nilv);
-  copyTVrel(L, tv, &nilv);
+  expect = *old;
+  if (lj_tv_cas(lease->slot, &expect, &claim))
+    return LJ_CTYPE_FIN_FOUND;
+  *old = expect;
+  /* A resize winner publishes FORWARD. Never use it as a CAS expectation on a
+  ** retry; release the exact generation certificate and resolve by key again. */
+  return LJ_CTYPE_FIN_RETRY;
 }
 
 typedef struct CDataFinBarrierCtx {
   GCtab *t;
   cTValue *key;
 } CDataFinBarrierCtx;
+
+int lj_cdata_fin_store_claim_held(CTypeFinLease *lease, cTValue *key,
+				  cTValue *src)
+{
+  uint32_t retry;
+  if (!lease || !lease->tab || !lease->slot || !key || !src)
+    return 0;
+  for (retry = 0; retry < 4; retry++) {
+    TValue old, expect;
+    if (lj_tab_read_current_keyed(lease->tab, lease->slot, key, &old) !=
+	LJ_TAB_STORE_CAS_OK || tvisforward(&old) ||
+	!lj_cdata_fin_isclaim(&old))
+      return 0;
+    expect = old;
+    if (lj_tv_cas(lease->slot, &expect, src))
+      return 1;
+    if (tvisforward(&expect) || !lj_cdata_fin_isclaim(&expect))
+      return 0;
+  }
+  return 0;
+}
+
+/* Install a key only in its empty anchor node. Collision chaining and resize
+** can wait or allocate, so a contended/full anchor falls back to a larger
+** generation instead. KEYLOCK plus FINCLAIM make this short path restartable
+** without holding a structural-owner lock. */
+static int cdata_fin_try_newkey_anchor_held(lua_State *L,
+					   CTypeFinLease *lease,
+					   cTValue *key, cTValue *claim)
+{
+  Node *node, *n;
+  MSize hmask;
+  TValue nk, nv, nilv, keylock, expect;
+  int snap, reserved, value_claimed = 0;
+  if (!lease || !lease->g || !lease->tab || !lease->smr_held ||
+      !key || !tviscdata(key) || !claim)
+    return LJ_CTYPE_FIN_RETRY;
+  snap = lj_tab_node_snapshot_gc_held(lease->g, lease->tab, &node, &hmask);
+  if (snap != LJ_TAB_GC_SNAPSHOT_OK)
+    return LJ_CTYPE_FIN_RETRY;
+  if (hmask == 0)
+    return LJ_CTYPE_FIN_MISS;
+  n = hashgcref_node(node, hmask, key->gcr);
+  lj_tv_load_acq(&nk, &n->key);
+  if (lj_obj_equal(&nk, key) || tviskeylock(&nk))
+    return LJ_CTYPE_FIN_RETRY;
+  if (!tvisnil(&nk))
+    return LJ_CTYPE_FIN_MISS;
+  lj_tv_load_acq(&nv, &n->val);
+  if (!tvisnil(&nv))
+    return LJ_CTYPE_FIN_RETRY;
+  reserved = lj_tab_node_free_reserve(node);
+  if (reserved <= 0)
+    return reserved < 0 ? LJ_CTYPE_FIN_RETRY : LJ_CTYPE_FIN_MISS;
+  if (lj_tab_node_acq(lease->tab) != node ||
+      lj_tab_node_is_retiring(node)) {
+    lj_tab_node_free_release(node);
+    return LJ_CTYPE_FIN_RETRY;
+  }
+  setnilV(&nilv);
+  setkeylockV(&keylock);
+  expect = nilv;
+  if (!lj_tv_cas(&n->key, &expect, &keylock)) {
+    lj_tab_node_free_release(node);
+    return LJ_CTYPE_FIN_RETRY;
+  }
+  if (lj_tab_node_acq(lease->tab) != node ||
+      lj_tab_node_is_retiring(node))
+    goto rollback_key;
+  expect = nilv;
+  if (!lj_tv_cas(&n->val, &expect, claim))
+    goto rollback_key;
+  value_claimed = 1;
+  if (lj_tab_node_acq(lease->tab) != node ||
+      lj_tab_node_is_retiring(node))
+    goto rollback_value;
+  /* The cdata key is already validated and rooted by lj_cdata_setfin(). */
+  copyTVrel(L, &n->key, key);
+  lj_gc_pubtabkey(L, lease->tab, key);
+  lease->slot = &n->val;
+  return LJ_CTYPE_FIN_FOUND;
+
+rollback_value:
+  value_claimed = 1;
+rollback_key:
+  {
+    int clean = 1;
+    if (value_claimed) {
+      expect = *claim;
+      if (!lj_tv_cas(&n->val, &expect, &nilv))
+	clean = 0;
+    }
+    expect = keylock;
+    if (!lj_tv_cas(&n->key, &expect, &nilv))
+      clean = 0;
+    if (clean) {
+      lj_tab_node_free_release(node);
+      return LJ_CTYPE_FIN_RETRY;
+    }
+  }
+  /* KEYLOCK and FINCLAIM are owned by this exact reservation. Resize and table
+  ** clear wait for both, so losing either rollback CAS is not recoverable
+  ** contention. Returning would expose an internal sentinel to ordinary table
+  ** traversal and silently brick the registry. */
+  cdata_fin_store_invariant(lease->g,
+			    "FINREG anchor rollback ownership lost");
+}
 
 static TValue *cdata_fin_weak_key_barrier_cp(lua_State *L, lua_CFunction dummy,
 					     void *ud)
@@ -264,54 +437,141 @@ static TValue *cdata_fin_weak_key_barrier_cp(lua_State *L, lua_CFunction dummy,
   return NULL;
 }
 
-static void cdata_fin_weak_key_barrier_claimed(lua_State *L, GCtab *t,
-					       cTValue *key, TValue *slot,
-					       cTValue *restore)
+static void cdata_fin_weak_key_barrier_claimed(lua_State *L,
+					       global_State *g, CTState *cts,
+					       CTypeFinLease *lease,
+					       cTValue *key, cTValue *restore,
+					       FinRegOrderNode **ordp)
 {
   CDataFinBarrierCtx ctx;
   int errcode;
-  ctx.t = t;
+  ctx.t = lease->tab;
   ctx.key = key;
   errcode = lj_vm_cpcall(L, NULL, &ctx, cdata_fin_weak_key_barrier_cp);
   if (LJ_UNLIKELY(errcode)) {
-    if (restore && !lj_cdata_fin_isclaim(restore))
-      copyTVrel(L, slot, restore);
-    else
-      lj_cdata_fin_storenil(L, slot);
+    TValue nilv;
+    cTValue *src = restore;
+    setnilV(&nilv);
+    if (!src || lj_cdata_fin_isclaim(src))
+      src = &nilv;
+    cdata_fin_store_exact_or_abort(g, lease, key, src,
+				   "FINREG barrier unwind lost slot claim");
+    if (ordp && *ordp) {
+      lj_ctype_fin_order_free(g, *ordp);
+      *ordp = NULL;
+    }
+    UNUSED(cts);
+    /* cpcall caught the internal unwind. Drop both lifetime certificates
+    ** before rethrowing across this C frame. */
+    lj_ctype_fin_lease_release(lease);
     lj_err_throw(L, errcode);
   }
 }
 
-static void cdata_fin_store(lua_State *L, global_State *g, CTState *cts,
-			    GCtab *t, GCcdata *cd, TValue *tv, TValue *val,
-			    cTValue *restore, int enabled,
-			    FinRegOrderNode **ordp)
+static int cdata_fin_store_enabled(lua_State *L, global_State *g,
+				   CTState *cts, CTypeFinLease *lease,
+				   GCcdata *cd, cTValue *key, TValue *val,
+				   cTValue *restore,
+				   FinRegOrderNode **ordp)
 {
-  if (enabled) {
-    TValue key;
-    setcdataV(L, &key, cd);
-    cdata_fin_weak_key_barrier_claimed(L, t, &key, tv, restore);
-    if (ordp && *ordp) {
-      /*
-      ** Publish the ordered node while the slot still contains the claim
-      ** sentinel. Ordered FINREG scans wait for claim resolution before the
-      ** cdata can become a visible finalizer candidate.
-      */
-      lj_ctype_fin_order_publish(cts, *ordp, obj2gco(cd), t, tv);
-      *ordp = NULL;
-    }
-    lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
-    copyTVrel(L, tv, val);
-    lj_gc2_barrier_weak_value(L, t, val);
-    lj_gc2_barrier_tv_pair(L, obj2gco(t), val);
-  } else {
-    (void)lj_ctype_fin_order_retire_obj(cts, obj2gco(cd));
-    lj_cdata_fin_storenil(L, tv);
-    lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+  GCtab *t = lease->tab;
+  TValue *tv = lease->slot;
+  int fresh = tvisnil(restore);
+
+  /* Re-registering the exact same callback is an identity-preserving slot
+  ** transaction. Keep its one ordered membership and active-set accounting;
+  ** only close a scanner which may have observed FINCLAIM. */
+  if (!fresh && lj_obj_equal(restore, val)) {
+    cdata_fin_store_exact_or_abort(g, lease, key, restore,
+				   "FINREG identical enable lost slot claim");
+    lj_gc2_barrier_weak_value(L, t, restore);
+    lj_gc2_barrier_tv_pair(L, obj2gco(t), restore);
+    lj_gc_pubtab(L, t);
+    lj_ctype_fin_lease_release(lease);
+    return 1;
   }
+
+  cdata_fin_weak_key_barrier_claimed(L, g, cts, lease, key, restore,
+				    ordp);
+  if (!fresh) {
+    size_t retired = 0;
+    if (!lj_ctype_fin_order_retire_obj_complete(
+	  cts, obj2gco(cd), &retired)) {
+      /* Once even one membership is retired, restoring the callback would
+      ** expose a live registration without a complete discovery certificate.
+      ** Published native nodes must remain admissible under the outer SMR
+      ** lease; a partial commit is therefore an invariant failure, not an API
+      ** retry. A zero-mutation transient remains exactly rollbackable. */
+      if (retired != 0)
+	cdata_fin_store_invariant(g,
+	  "FINREG replacement retirement partially committed");
+      cdata_fin_store_exact_or_abort(
+	g, lease, key, restore,
+	"FINREG replacement rollback lost exact slot claim");
+      lj_ctype_fin_lease_release(lease);
+      return 0;
+    }
+  }
+  if (ordp && *ordp) {
+    /* Publish the ordered node while the slot still contains FINCLAIM.
+    ** Ordered discovery treats that sentinel as an in-flight transaction. */
+    lj_ctype_fin_order_publish(cts, *ordp, obj2gco(cd), t, tv);
+    *ordp = NULL;
+  }
+  cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_ENABLE_ORDER);
+  lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+  if (fresh)
+    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
+  cdata_fin_store_exact_or_abort(g, lease, key, val,
+				 "FINREG enable lost exact slot claim");
+  lj_gc2_barrier_weak_value(L, t, val);
+  lj_gc2_barrier_tv_pair(L, obj2gco(t), val);
   lj_gc_pubtab(L, t);  /* 11.4 FINREG publish after claim resolution. */
+  lj_ctype_fin_lease_release(lease);
+  return 1;
+}
+
+/* FINCLAIM is the clear transaction LP. No later enable can observe nil until
+** every old ordered membership is logically retired and the old FIN bit is
+** gone. Conversely, a transient spine scan restores the exact old value before
+** releasing either lifetime certificate, leaving the registration unchanged. */
+static int cdata_fin_clear_claimed(lua_State *L, global_State *g,
+				    CTState *cts, CTypeFinLease *lease,
+				    GCcdata *cd, cTValue *key, cTValue *old)
+{
+  TValue nilv;
+  size_t retired = 0;
+  /* A previously committed clear leaves a stable nil slot with no FIN bit.
+  ** Repeating ffi.gc(cd, nil) is an identity no-op, not another clear event.
+  ** Nil plus FIN is distinct: GC2 may own a queued preclaim which an explicit
+  ** clear still has to suppress under this exact slot transaction. */
+  if (tvisnil(old) &&
+      !(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
+    cdata_fin_store_exact_or_abort(g, lease, key, old,
+				   "FINREG nil clear lost slot claim");
+    lj_ctype_fin_lease_release(lease);
+    return 1;
+  }
+  if (!lj_ctype_fin_order_retire_obj_complete(
+	cts, obj2gco(cd), &retired)) {
+    if (retired != 0)
+      cdata_fin_store_invariant(g,
+	"FINREG clear retirement partially committed");
+    cdata_fin_store_exact_or_abort(
+      g, lease, key, old, "FINREG clear rollback lost exact slot claim");
+    lj_ctype_fin_lease_release(lease);
+    return 0;
+  }
+  UNUSED(retired);
+  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+  cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL);
+  setnilV(&nilv);
+  cdata_fin_store_exact_or_abort(g, lease, key, &nilv,
+				 "FINREG clear lost exact slot claim");
+  lj_gc_pubtab(L, lease->tab);
+  lj_ctype_fin_lease_release(lease);
+  return 1;
 }
 
 void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
@@ -319,8 +579,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
   global_State *g = G(L);
   CTState *cts = ctype_ctsG(g);
   ptrdiff_t anchor;
-  GCtab *t;
-  TValue *tv, key, val, old;
+  TValue key, val, old, claim;
   FinRegOrderNode *ord = NULL;
   int enabled = (it != LJ_TNIL);
   if (LJ_UNLIKELY(cts == NULL))
@@ -328,8 +587,6 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
   lj_state_checkstack(L, enabled ? 2u : 1u);
   anchor = savestack(L, L->top);
   setcdataV(L, &key, cd);
-  if (!enabled)
-    (void)lj_ctype_fin_order_retire_obj(cts, obj2gco(cd));
   if (enabled) {
     TValue *top = restorestack(L, anchor);
     setgcV(L, &val, obj, it);
@@ -350,71 +607,111 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
   if (!enabled)
     lj_gc_pubroot(L, &key);
   for (;;) {
-    tv = (TValue *)lj_ctype_fin_get(L, cts, &key, &t);
-    if (tv == niltv(L)) {
+    CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
+    int rc = lj_ctype_fin_get(L, cts, &key, &held);
+    if (rc == LJ_CTYPE_FIN_RETRY) {
+      lj_ctype_fin_lease_release(&held);
+      if (enabled)
+	cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
+      else
+	cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
+      cdata_fin_claim_wait(L);
+      continue;
+    }
+    if (rc == LJ_CTYPE_FIN_MISS) {
       if (!enabled) {  /* Missing clear is a no-op; avoid structural insert. */
-	lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-	lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+	cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_MISS);
 	goto done;
       }
-      t = lj_ctype_fin_head(cts);
-      if (!t || !lj_tab_metatable_acq(t))
-	goto done;
-      cdata_fin_setclaim(&old);
-      switch (lj_tab_try_newkey_anchor(L, t, &key, &old, &tv)) {
-      case 1:
-	if (!lj_tab_metatable_acq(t)) {
-	  lj_cdata_fin_storenil(L, tv);
-	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-	  goto done;
-	}
-	cdata_fin_store(L, g, cts, t, cd, tv, &val, &old, enabled, &ord);
-	goto done;
-      case -1:
-	continue;  /* Racing insert published the key; claim existing slot. */
-      default:
-	break;
+      rc = lj_ctype_fin_head(cts, &held);
+      if (rc == LJ_CTYPE_FIN_RETRY) {
+	lj_ctype_fin_lease_release(&held);
+	cdata_fin_claim_wait(L);
+	continue;
       }
-      switch (lj_tab_try_newkey_chain(L, t, &key, &old, &tv)) {
-      case 1:
-	if (!lj_tab_metatable_acq(t)) {
-	  lj_cdata_fin_storenil(L, tv);
-	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-	  goto done;
+      if (rc == LJ_CTYPE_FIN_FOUND) {
+	if (!fin_gen_tab_enabled_acq(held.tab)) {
+	  lj_ctype_fin_lease_release(&held);
+	} else {
+	  cdata_fin_setclaim(&claim);
+	  setnilV(&old);
+	  rc = cdata_fin_try_newkey_anchor_held(L, &held, &key, &claim);
+	  if (rc == LJ_CTYPE_FIN_FOUND) {
+	    if (!fin_gen_tab_enabled_acq(held.tab)) {
+	      cdata_fin_store_exact_or_abort(
+		g, &held, &key, &old,
+		"disabled FINREG anchor lost exact slot claim");
+	      lj_ctype_fin_lease_release(&held);
+	      continue;
+	    }
+	    (void)cdata_fin_store_enabled(L, g, cts, &held, cd, &key,
+					   &val, &old, &ord);
+	    goto done;
+	  }
+	  lj_ctype_fin_lease_release(&held);
+	  if (rc == LJ_CTYPE_FIN_ERROR) {
+	    cdata_fin_claim_wait(L);
+	    continue;
+	  }
+	  if (rc == LJ_CTYPE_FIN_RETRY) {
+	    cdata_fin_claim_wait(L);
+	    continue;  /* Key publication or vector generation raced us. */
+	  }
 	}
-	cdata_fin_store(L, g, cts, t, cd, tv, &val, &old, enabled, &ord);
-	goto done;
-      case -1:
-	continue;  /* Racing collision insert published the key. */
-      default:
-	break;
       }
-      switch (lj_ctype_fin_newgen(L, cts, &key, &old, &t, &tv)) {
+      cdata_fin_setclaim(&claim);
+      setnilV(&old);
+      switch (lj_ctype_fin_newgen(L, cts, &key, &claim, &held)) {
       case 1:
-	if (!lj_tab_metatable_acq(t)) {
-	  lj_cdata_fin_storenil(L, tv);
-	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-	  goto done;
+	if (!fin_gen_tab_enabled_acq(held.tab)) {
+	  cdata_fin_store_exact_or_abort(
+	    g, &held, &key, &old,
+	    "disabled fresh FINREG generation lost exact slot claim");
+	  lj_ctype_fin_lease_release(&held);
+	  continue;
 	}
-	cdata_fin_store(L, g, cts, t, cd, tv, &val, &old, enabled, &ord);
+	(void)cdata_fin_store_enabled(L, g, cts, &held, cd, &key, &val,
+				      &old, &ord);
 	goto done;
       case -1:
 	continue;  /* Racing generation already has this cdata key. */
+      case LJ_CTYPE_FIN_ERROR:
+	cdata_fin_claim_wait(L);
+	continue;
       default:
-	goto done;
+	cdata_fin_claim_wait(L);
+	continue;
       }
     }
-    (void)lj_cdata_fin_claim_any_l(L, tv, &old);
-    if (!lj_tab_metatable_acq(t)) {
-      lj_cdata_fin_storenil(L, tv);
-      lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-      goto done;
+    rc = lj_cdata_fin_claim_held(&held, &key, &old, 0);
+    if (rc != LJ_CTYPE_FIN_FOUND) {
+      lj_ctype_fin_lease_release(&held);
+      if (enabled)
+	cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_ENABLE_RETRY);
+      else
+	cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
+      cdata_fin_claim_wait(L);
+      continue;
     }
-    cdata_fin_store(L, g, cts, t, cd, tv, &val, &old, enabled, &ord);
+    if (!fin_gen_tab_enabled_acq(held.tab)) {
+      cdata_fin_store_exact_or_abort(
+	g, &held, &key, &old,
+	"disabled FINREG slot lost exact claim rollback");
+      lj_ctype_fin_lease_release(&held);
+      continue;
+    }
+    if (enabled) {
+      if (!cdata_fin_store_enabled(L, g, cts, &held, cd, &key, &val,
+				   &old, &ord)) {
+	cdata_fin_claim_wait(L);
+	continue;
+      }
+    }
+    else if (!cdata_fin_clear_claimed(L, g, cts, &held, cd, &key, &old)) {
+      cdata_fin_test_pause(LJ_CDATA_FIN_PAUSE_CLEAR_RETRY);
+      cdata_fin_claim_wait(L);
+      continue;
+    }
     goto done;
   }
 done:

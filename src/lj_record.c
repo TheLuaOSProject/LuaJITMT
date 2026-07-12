@@ -128,27 +128,15 @@ static void rec_check_ir(jit_State *J)
   }
 }
 
+static int rec_check_child_cellslot(jit_State *J, GCproto *pt,
+				    BCReg slotno);
+
 static int rec_check_may_pending_celluv(jit_State *J, BCReg slotno)
 {
-  ptrdiff_t i, j, n;
-  GCRef *kr;
-  if (!J->pt || !(J->pt->flags & PROTO_CHILD))
-    return 0;
-  n = proto_sizekgc_acq(J->pt);
-  kr = mref(J->pt->k, GCRef) - 1;
-  for (i = 0; i < n; i++, kr--) {
-    GCobj *o = gcref_acq(*kr);
-    if (o->gch.gct == ~LJ_TPROTO) {
-      GCproto *pt = gco2pt(o);
-      for (j = 0; j < pt->sizeuv; j++) {
-	uint32_t v = proto_uv(pt)[j];
-	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
-	    (BCReg)(v & 0xff) == slotno)
-	  return 1;
-      }
-    }
-  }
-  return 0;
+  /* Assertion-only verification still runs against concurrently collectible
+  ** child constants. Reuse the exact typed-lease walk instead of treating a
+  ** diagnostic gct byte as permission to inspect sizeuv/proto_uv. */
+  return J->pt ? rec_check_child_cellslot(J, J->pt, slotno) : 0;
 }
 
 static int rec_check_child_cellslot(jit_State *J, GCproto *pt, BCReg slotno)
@@ -160,18 +148,23 @@ static int rec_check_child_cellslot(jit_State *J, GCproto *pt, BCReg slotno)
   n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
   for (i = 0; i < n; i++, kr--) {
+    LJGC2Lease lease;
     GCobj *o = gcref_acq(*kr);
-    if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+    if (lj_gc2_obj_lease_acquire(J2G(J), o,
+	  (uint32_t)~LJ_TPROTO, NULL, &lease) >= 0) {
       GCproto *child = gco2pt(o);
       MSize j, nuv = child->sizeuv;
-      if (!proto_celluv(child))
-	continue;
-      for (j = 0; j < nuv; j++) {
-	uint32_t v = proto_uv(child)[j];
-	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
-	    (BCReg)(v & 0xff) == slotno)
-	  return 1;
+      if (proto_celluv(child)) {
+	for (j = 0; j < nuv; j++) {
+	  uint32_t v = proto_uv(child)[j];
+	  if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	      (BCReg)(v & 0xff) == slotno) {
+	    lj_gc2_lease_release(&lease);
+	    return 1;
+	  }
+	}
       }
+      lj_gc2_lease_release(&lease);
     }
   }
   return 0;
@@ -2997,17 +2990,28 @@ static int rec_celluv_prepare_cget_sources(jit_State *J,
     BCOp op = bc_op(ins);
     if (op == BC_CGET) {
       BCReg slot = bc_d(ins);
-      if (slot < framesize && !defined[slot] && J->base[slot] == 0) {
-	if (root_nargs >= 0) {
-	  if ((ptrdiff_t)slot >= root_nargs && slot < J->pt->numparams) {
-	    (void)sloadt(J, (int32_t)slot, IRT_GUARD|IRT_NIL,
-			 IRSLOAD_TYPECHECK);
-	    J->base[slot] = TREF_NIL;
+      if (slot < framesize && !defined[slot]) {
+	/* A side trace inherits maxslot from the parent exit snapshot. The
+	** parent path may have shrunk below a raw local-cell source used only by
+	** this branch. Keep every source discovered by this entry pass inside
+	** the side trace's snapshot extent, including sources already replayed
+	** from the parent. Otherwise a later guard exit can resume the
+	** interpreter without the canonical CGET source slot.
+	*/
+	if (slot >= J->maxslot)
+	  J->maxslot = (BCReg)(slot + 1);
+	if (J->base[slot] == 0) {
+	  if (root_nargs >= 0) {
+	    if ((ptrdiff_t)slot >= root_nargs && slot < J->pt->numparams) {
+	      (void)sloadt(J, (int32_t)slot, IRT_GUARD|IRT_NIL,
+			   IRSLOAD_TYPECHECK);
+	      J->base[slot] = TREF_NIL;
+	      materialized = 1;
+	    }
+	  } else {
+	    (void)getslot(J, slot);
 	    materialized = 1;
 	  }
-	} else {
-	  (void)getslot(J, slot);
-	  materialized = 1;
 	}
       }
     }
@@ -4357,20 +4361,6 @@ void lj_record_setup(jit_State *J)
       }
     } else {
       J->startpc = NULL;  /* Prevent forming an extra loop. */
-    }
-    if (J->pt && proto_cellops(J->pt)) {
-      GCtrace *rootT = rec_traceref_live(J, root);
-      BCOp startop = bc_op(trace_startins_acq(rootT));
-      if (startop == BC_FUNCF || startop == BC_JFUNCF) {
-	/*
-	** Side traces under a function-entry root can start on branches that do
-	** not read every fixed argument. If such a side trace later fails its
-	** own entry guard, it can resume in the interpreter without
-	** reconstructing those arguments. Keep this local-cell entry path
-	** interpreted; loop and stitched traces still handle explicit arguments.
-	*/
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);
-      }
     }
     lj_snap_replay(J, T);
     if (rec_celluv_prepare_cget_sources(J, -1))

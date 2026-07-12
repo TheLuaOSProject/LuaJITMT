@@ -41,6 +41,12 @@ typedef struct RecoveryDrainCtx {
   uint32_t result;
 } RecoveryDrainCtx;
 
+typedef struct RecoveryFreeCtx {
+  TGAlloc *alloc;
+  void *p;
+  size_t size;
+} RecoveryFreeCtx;
+
 static RecoveryFixture recovery_fixture_open(void)
 {
   RecoveryFixture f;
@@ -98,6 +104,61 @@ static void *gc_worker_drain_thread(void *arg)
   RecoveryDrainCtx *ctx = (RecoveryDrainCtx *)arg;
   ctx->result = lj_gc2_worker_drain(ctx->g, ctx->limit);
   return NULL;
+}
+
+static void *recovery_free_thread(void *arg)
+{
+  RecoveryFreeCtx *ctx = (RecoveryFreeCtx *)arg;
+  lj_arena_free(ctx->alloc, ctx->p, ctx->size);
+  return NULL;
+}
+
+static GCtab *recovery_make_unlinked_table(RecoveryFixture *f)
+{
+  GCtab *t;
+  GCArena *a;
+  uint32_t cell;
+  lua_newtable(f->L);
+  t = tabV(f->L->top - 1);
+  assert(lj_gc_flush_root_pending(f->g) != 0);
+  assert(lj_gc_unlink_root_obj(f->g, obj2gco(t)) == LJ_GC_ROOT_UNLINKED);
+  lua_pop(f->L, 1);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_ready_get(a, cell));
+  return t;
+}
+
+static void recovery_init_closed_upvalue(global_State *g, GCupval *uv)
+{
+  uv->gct = ~LJ_TUPVAL;
+  uv->closed = 1;
+  uv->immutable = 0;
+  setnilV(&uv->tv);
+  setmref(uv->v, &uv->tv);
+  uv->dhash = 0;
+  newwhite(g, uv);
+  lj_obj_setgcwnullrel(obj2gco(uv));
+}
+
+static GCupval *recovery_new_constructing_upvalue(RecoveryFixture *f)
+{
+  GCupval *uv = (GCupval *)lj_mem_newgco_unlinked_nothrow(
+    f->L, sizeof(GCupval));
+  assert(uv != NULL);
+  recovery_init_closed_upvalue(f->g, uv);
+  lj_gc_publishobj_header(f->g, obj2gco(uv));
+  assert(lj_arena_lifetime_state_acq(
+	   lj_arena_of(uv), lj_arena_cellof(uv)) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(lj_arena_root_state_acq(lj_arena_of(uv), lj_arena_cellof(uv)) ==
+	 LJ_ARENA_ROOT_LINKING);
+  return uv;
 }
 
 static void recovery_mark_table(RecoveryFixture *f, GCtab *t)
@@ -433,6 +494,324 @@ static void test_claimed_redirty_replay(void)
   recovery_fixture_close(&f);
 }
 
+static void test_public_lease_excludes_destructor(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryFreeCtx fr = {0};
+  LJGC2Lease objlease, memlease, badlease, zero;
+  pthread_t thread;
+  GCtab *t = recovery_make_unlinked_table(&f);
+  GCArena *a = lj_arena_of(t);
+  uint32_t cell = lj_arena_cellof(t);
+  uint32_t gct = 0;
+  uint32_t allocf_arena0;
+  memset(&objlease, 0xa5, sizeof(objlease));
+  memset(&memlease, 0xa5, sizeof(memlease));
+  memset(&badlease, 0xa5, sizeof(badlease));
+  memset(&zero, 0, sizeof(zero));
+
+  /* Every DEAD path must overwrite caller junk with an idempotent no-op token. */
+  assert(lj_gc2_obj_lease_acquire(f.g, obj2gco(t),
+	 (uint32_t)~LJ_TFUNC, NULL, &badlease) < 0);
+  assert(memcmp(&badlease, &zero, sizeof(badlease)) == 0);
+  lj_gc2_lease_release(&badlease);
+  lj_gc2_lease_release(&badlease);
+  memset(&badlease, 0xa5, sizeof(badlease));
+  assert(lj_gc2_obj_lease_acquire(f.g, NULL, 0, NULL, &badlease) < 0);
+  assert(memcmp(&badlease, &zero, sizeof(badlease)) == 0);
+  lj_gc2_lease_release(&badlease);
+  memset(&badlease, 0xa5, sizeof(badlease));
+  assert(lj_gc2_mem_lease_acquire(f.g, NULL, &badlease) < 0);
+  assert(memcmp(&badlease, &zero, sizeof(badlease)) == 0);
+  lj_gc2_lease_release(&badlease);
+
+  /* The documented temporary custom-lua_Alloc boundary retains raw storage
+  ** globally, so a public raw lease succeeds with an explicit no-op token. */
+  allocf_arena0 = la_load32_acq(&f.g->allocf_arena);
+  assert(allocf_arena0 != 0);
+  la_store32_rel(&f.g->allocf_arena, 0);
+  memset(&badlease, 0xa5, sizeof(badlease));
+  assert(lj_gc2_mem_lease_acquire(f.g, t, &badlease) >= 0);
+  assert(memcmp(&badlease, &zero, sizeof(badlease)) == 0);
+  lj_gc2_lease_release(&badlease);
+  lj_gc2_lease_release(&badlease);
+  la_store32_rel(&f.g->allocf_arena, allocf_arena0);
+
+  assert(lj_gc2_obj_lease_acquire(f.g, obj2gco(t),
+	 (uint32_t)~LJ_TTAB, &gct, &objlease) >= 0);
+  assert(gct == (uint32_t)~LJ_TTAB);
+  assert(objlease.arena == (void *)a);
+  assert(objlease.admission != 0);
+  /* The raw API protects the exact same registered allocation independently. */
+  assert(lj_gc2_mem_lease_acquire(f.g, t, &memlease) >= 0);
+  assert(memlease.arena == (void *)a);
+  assert(memlease.admission != 0);
+  lj_gc2_lease_release(&memlease);
+  assert(memcmp(&memlease, &zero, sizeof(memlease)) == 0);
+  lj_gc2_lease_release(&memlease);  /* Idempotent no-op after zeroing. */
+
+  fr.alloc = &f.tg->alloc;
+  fr.p = t;
+  fr.size = sizeof(GCtab);
+  lj_arena_test_lifetime_pause(1);
+  assert(pthread_create(&thread, NULL, recovery_free_thread, &fr) == 0);
+  while (lj_arena_test_lifetime_paused() == 0)
+    la_cpu_pause();
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_DESTRUCT);
+  assert(lj_arena_late_get(a, cell));
+  /* A reader admitted before DESTRUCT may continue through its final byte read. */
+  assert((uint32_t)la_load8_acq(&t->gct) == (uint32_t)~LJ_TTAB);
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_ready_get(a, cell));
+
+  /* Let the writer perform its reader proof while the object lease is held. */
+  lj_arena_test_lifetime_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_late_get(a, cell));
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_ready_get(a, cell));
+  assert((uint32_t)la_load8_acq(&t->gct) == (uint32_t)~LJ_TTAB);
+
+  lj_gc2_lease_release(&objlease);
+  assert(memcmp(&objlease, &zero, sizeof(objlease)) == 0);
+  lj_gc2_lease_release(&objlease);  /* Idempotent no-op after zeroing. */
+  recovery_fixture_close(&f);
+}
+
+static void test_small_recovery_vs_free_both_orders(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryPublishCtx publish = {0};
+  RecoveryFreeCtx fr = {0};
+  pthread_t thread;
+  GCtab *t;
+  GCArena *a;
+  uint32_t cell;
+  uint64_t published0, drained0;
+
+  /* Recovery wins the lifetime lane. The losing free publishes only late[];
+  ** recovery consumes its exact count without touching the logically dead
+  ** body, leaving late[] authoritative for terminal sweep/free processing. */
+  t = recovery_make_unlinked_table(&f);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  published0 = gc2_recovery_published_acq(f.g);
+  drained0 = gc2_recovery_drained_acq(f.g);
+  publish.g = f.g;
+  publish.o = obj2gco(t);
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_RESERVED);
+  assert(pthread_create(&thread, NULL, recovery_publish_thread, &publish) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_RESERVED);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  lj_arena_free(&f.tg->alloc, t, sizeof(GCtab));
+  assert(lj_arena_late_get(a, cell));
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_ready_get(a, cell));
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(publish.result == 1);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(lj_arena_late_get(a, cell));
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+
+  /* Irrevocable external free publishes late before DESTRUCT. Recovery must
+  ** not RESCUE or traverse that provenance; the writer commits FREE and clears
+  ** late only after old-body discovery is gone. */
+  t = recovery_make_unlinked_table(&f);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  published0 = gc2_recovery_published_acq(f.g);
+  drained0 = gc2_recovery_drained_acq(f.g);
+  fr.alloc = &f.tg->alloc;
+  fr.p = t;
+  fr.size = sizeof(GCtab);
+  lj_arena_test_lifetime_pause(1);
+  assert(pthread_create(&thread, NULL, recovery_free_thread, &fr) == 0);
+  while (lj_arena_test_lifetime_paused() == 0)
+    la_cpu_pause();
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_DESTRUCT);
+  assert(lj_arena_late_get(a, cell));
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(t)) == 1);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_DESTRUCT);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_published_acq(f.g) == published0);
+  lj_arena_test_lifetime_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+  assert(!lj_arena_late_get(a, cell));
+  assert(!lj_arena_bm_get(a->block, cell));
+  assert(gc2_recovery_drained_acq(f.g) == drained0);
+
+  /* Tentative GC destruction has no late provenance. The semantic publisher
+  ** wins DESTRUCT->RESCUE in the same lane, publishes exact recovery, restores
+  ** LIVE, and makes the writer's terminal DESTRUCT->FREE CAS fail untouched. */
+  t = recovery_make_unlinked_table(&f);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  published0 = gc2_recovery_published_acq(f.g);
+  drained0 = gc2_recovery_drained_acq(f.g);
+  assert(!lj_arena_late_get(a, cell));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_DESTRUCT));
+  gc2_phase_rel(f.g, LJ_GC2_SWEEP);
+  assert(lj_gc2_trace_sweep_root(f.g, obj2gco(t)) == 1);
+  gc2_phase_rel(f.g, LJ_GC2_IDLE);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(!lj_arena_lifetime_state_cas(a, cell,
+	 LJ_ARENA_LIFETIME_DESTRUCT, LJ_ARENA_LIFETIME_FREE));
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+  assert(lj_gc_linkobj_terminal(f.g, obj2gco(t)) == LJ_GC_ROOT_LINKED);
+
+  recovery_fixture_close(&f);
+}
+
+static void test_constructor_recovery_overlap_one(uint32_t stage, int commit)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryPublishCtx publish = {0};
+  pthread_t thread;
+  GCupval *uv = recovery_new_constructing_upvalue(&f);
+  GCobj *o = obj2gco(uv);
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell = lj_arena_cellof(o);
+  uint64_t published0 = gc2_recovery_published_acq(f.g);
+  uint64_t drained0 = gc2_recovery_drained_acq(f.g);
+
+  publish.g = f.g;
+  publish.o = o;
+  lj_gc2_test_recovery_pause(stage);
+  assert(pthread_create(&thread, NULL, recovery_publish_thread, &publish) == 0);
+  recovery_wait_paused(stage);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  if (stage == LJ_GC2_RECOVERY_TEST_RESERVED)
+    assert(lj_arena_recovery_state_acq(a, cell) ==
+	   LJ_ARENA_RECOVERY_IDLE);
+  else
+    assert(lj_arena_recovery_state_acq(a, cell) ==
+	   LJ_ARENA_RECOVERY_PENDING);
+
+  if (commit) {
+    assert(lj_gc_linkobj_new(f.g, o) == LJ_GC_ROOT_LINKED);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+  } else {
+    assert(lj_mem_abandon_gco_unpublished(f.g, o) ==
+	   LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  }
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(publish.result == 1);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+  if (!commit) {
+    lj_mem_free(f.g, o, sizeof(GCupval));
+    assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+  }
+  recovery_fixture_close(&f);
+}
+
+static void test_constructor_recovery_overlaps(void)
+{
+  test_constructor_recovery_overlap_one(
+    LJ_GC2_RECOVERY_TEST_RESERVED, 1);
+  test_constructor_recovery_overlap_one(
+    LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE, 1);
+  test_constructor_recovery_overlap_one(
+    LJ_GC2_RECOVERY_TEST_RESERVED, 0);
+  test_constructor_recovery_overlap_one(
+    LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE, 0);
+}
+
+static void test_postclaim_late_retained_requeues(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryDrainCtx drain = {0};
+  pthread_t thread;
+  GCupval *uv = recovery_new_constructing_upvalue(&f);
+  GCobj *o = obj2gco(uv);
+  GCArena *a = lj_arena_of(o);
+  uint32_t cell = lj_arena_cellof(o);
+  uint64_t drained0 = gc2_recovery_drained_acq(f.g);
+
+  assert(lj_gc2_test_recovery_publish(f.g, o) == 1);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_POST_CLAIM);
+  drain.g = f.g;
+  drain.limit = 1;
+  assert(pthread_create(&thread, NULL, recovery_drain_thread, &drain) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_POST_CLAIM);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_MUTATING);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_CLAIMED);
+
+  /* The external free can publish its irrevocable intent after CLAIMED, but
+  ** constructor ownership still names the object. The drain must restore the
+  ** constructor lane and replay the same counted recovery identity. */
+  lj_arena_free(&f.tg->alloc, uv, sizeof(GCupval));
+  assert(lj_arena_late_get(a, cell));
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_ready_get(a, cell));
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(drain.result == 1u);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_drained_acq(f.g) == drained0);
+
+  assert(lj_mem_abandon_gco_unpublished(f.g, o) ==
+	 LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+  assert(lj_arena_late_get(a, cell));
+  recovery_fixture_close(&f);
+}
+
 static void test_weak_clear_recovery_gate(void)
 {
   RecoveryFixture f = recovery_fixture_open();
@@ -498,13 +877,110 @@ static void test_weak_clear_recovery_gate(void)
   recovery_fixture_close(&f);
 }
 
+static void test_sweep_empty_string_is_immortal(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GCtab *parent;
+  GCstr *empty;
+  uint64_t published0 = gc2_recovery_published_acq(f.g);
+  uint64_t drained0 = gc2_recovery_drained_acq(f.g);
+
+  lua_createtable(f.L, 1, 1);
+  parent = tabV(f.L->top - 1);
+  lua_pushliteral(f.L, "");
+  empty = strV(f.L->top - 1);
+  assert(empty == &f.g->strempty);
+  lua_rawseti(f.L, -2, 1);
+  lua_pushliteral(f.L, "");
+  assert(strV(f.L->top - 1) == empty);
+  lua_pushliteral(f.L, "");
+  assert(strV(f.L->top - 1) == empty);
+  lua_rawset(f.L, -3);
+
+  /* Recovery traversal during SWEEP visits both table slots through
+  ** gc2_mark_table_child_tv_worker(). The embedded immortal is a valid leaf,
+  ** not an arena-classification failure or a recovery identity. */
+  gc2_phase_rel(f.g, LJ_GC2_SWEEP);
+  assert(lj_gc2_trace_sweep_root(f.g, obj2gco(empty)) == 1u);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(parent)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+
+  gc2_phase_rel(f.g, LJ_GC2_IDLE);
+  lua_pop(f.L, 1);
+  recovery_fixture_close(&f);
+}
+
+static void test_sticky_failure_without_items_is_bounded(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  const uint32_t lane0 = 2u;
+  const uint32_t small_slot0 = 1234u;
+  const uint32_t small_cell0 = LJ_AFIRST_CELL + 17u;
+  const uint32_t huge_slot0 = 40503u;
+  uint32_t i;
+
+  assert(gc2_phase_acq(f.g) == LJ_GC2_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  gc2_recovery_scan_lane_store_rlx(f.g, lane0);
+  gc2_recovery_small_slot_store_rlx(f.g, small_slot0);
+  gc2_recovery_small_cell_store_rlx(f.g, small_cell0);
+  gc2_recovery_huge_slot_store_rlx(f.g, huge_slot0);
+
+  lj_gc2_test_recovery_fail_closed(f.g);
+  assert(gc2_recovery_failed_acq(f.g) == 1u);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(lj_gc2_activation_reclaim_veto(f.g));
+
+  /* A sticky failure has no locator to scan. Repeating a maximal drain must
+  ** remain constant-time: drain_one never rotates or advances any lane cursor,
+  ** and the sticky failure is neither cleared nor converted into fake work. */
+  for (i = 0; i < 4096u; i++)
+    assert(lj_gc2_test_recovery_drain(f.g, ~(uint32_t)0) == 0);
+  assert(gc2_recovery_scan_lane_rlx(f.g) == lane0);
+  assert(gc2_recovery_small_slot_rlx(f.g) == small_slot0);
+  assert(gc2_recovery_small_cell_rlx(f.g) == small_cell0);
+  assert(gc2_recovery_huge_slot_rlx(f.g) == huge_slot0);
+  assert(gc2_recovery_failed_acq(f.g) == 1u);
+
+  /* Full, bounded-step, worker, forced-close, and preserve-abort drivers all
+  ** return/defer without spinning or weakening the absorbing reclamation veto. */
+  gc2_phase_rel(f.g, LJ_GC2_SWEEP);
+  assert(lj_gc2_collect_active(f.L) == 0);
+  assert(lj_gc2_step_explicit(f.L, 1u << 20) == 0);
+  assert(lj_gc2_worker_drain(f.g, LJ_GC2_SWEEP_BATCH) == 0);
+  assert(!lj_gc2_sweep_bridge_can_progress(f.g));
+  assert(lj_gc2_sweep_to_idle(f.g) == 0);
+  lj_gc2_cycle_to_idle(f.g);
+  lj_gc2_preserve_abort_to_idle(f.g);
+  assert(gc2_phase_acq(f.g) == LJ_GC2_SWEEP);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_failed_acq(f.g) == 1u);
+  assert(lj_gc2_activation_reclaim_veto(f.g));
+  assert(gc2_recovery_scan_lane_rlx(f.g) == lane0);
+
+  recovery_fixture_close(&f);
+}
+
 int main(void)
 {
   test_full_active_ssb_fallback();
   test_grey_growth_transaction();
   test_reservation_gap_blocks_mark_close();
   test_claimed_redirty_replay();
+  test_public_lease_excludes_destructor();
+  test_small_recovery_vs_free_both_orders();
+  test_constructor_recovery_overlaps();
+  test_postclaim_late_retained_requeues();
   test_weak_clear_recovery_gate();
-  printf("t-gc2-recovery OK: full-SSB fallback, failed grey growth, transactional SSB consumption, reservation/weak-clear vetoes, and REDIRTY replay verified\n");
+  test_sweep_empty_string_is_immortal();
+  test_sticky_failure_without_items_is_bounded();
+  printf("t-gc2-recovery OK: no-drop SSB/recovery, free/lifetime races, constructor overlap, closure vetoes, empty-string SWEEP, bounded sticky failure, and REDIRTY replay verified\n");
   return 0;
 }

@@ -125,9 +125,12 @@ Integration runs also exposed and fixed two independent reachability bugs:
   lookup failure is safe (sticky fail-closed) but pessimistic; passing an
   already-held HugeTab/admission hint would avoid turning that rare collision
   into a permanently vetoed cycle.
-- Recovery makes traversal loss safe; it does not by itself prove all GC2,
-  JIT, FFI, VM, HugeTab-rehash, sanitizer, or cross-platform release gates.
-  Those remain required before `b1.2.0`.
+- Recovery makes traversal loss safe; it does not by itself prove the GC2/JIT
+  correctness, sanitizer, performance-sanity, or final cross-platform smoke
+  gates retained for `b1.2.0`.  Exhaustive FFI/VM nonblocking work and bounded
+  HugeTab maintenance were explicitly sequenced into `b1.2.1` on 2026-07-12;
+  ordinary-use hangs or memory-safety failures in those paths still block the
+  earlier beta.
 
 ## Integration hardening found by the first full-runtime runs
 

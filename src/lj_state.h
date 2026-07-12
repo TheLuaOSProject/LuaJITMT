@@ -8,6 +8,8 @@
 
 #include "lj_obj.h"
 
+typedef struct LJGC2Lease LJGC2Lease;
+
 #define incr_top(L) \
   (++L->top >= tvref(L->maxstack) && (lj_state_growstack1(L), 0))
 
@@ -39,6 +41,87 @@ LJ_FUNC lua_State *lj_state_new_withenv_envrooted(lua_State *L, GCtab *env,
 						 uint32_t anchoridx);
 LJ_FUNC lua_State *lj_state_new(lua_State *L, uint32_t *anchoridx);
 LJ_FUNC void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L);
+
+enum {
+  LJ_STATE_GCPREP_NONE = 0,
+  LJ_STATE_GCPREP_PENDING = 1,
+  LJ_STATE_GCPREP_DONE = 2
+};
+
+static LJ_AINLINE uint32_t lj_state_gcprep_state_acq(const lua_State *L)
+{
+  return la_load32_acq(&L->gcprep_state);
+}
+
+static LJ_AINLINE void lj_state_gcprep_state_store_rlx(lua_State *L,
+							uint32_t state)
+{
+  la_store32_rlx(&L->gcprep_state, state);
+}
+
+static LJ_AINLINE void lj_state_gcprep_state_rel(lua_State *L,
+						  uint32_t state)
+{
+  la_store32_rel(&L->gcprep_state, state);
+}
+
+static LJ_AINLINE lua_State *lj_state_gcprep_next_acq(const lua_State *L)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&L->gcprep_next);
+}
+
+static LJ_AINLINE void lj_state_gcprep_next_rel(lua_State *L,
+						 lua_State *next)
+{
+  la_storeptr_rel((void **)&L->gcprep_next, next);
+}
+
+static LJ_AINLINE uint32_t lj_state_gcprep_pending_acq(global_State *g)
+{
+  return la_load32_acq(&g->thread_gcprep_pending);
+}
+
+static LJ_AINLINE lua_State *lj_state_gcprep_head_acq(global_State *g)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&g->thread_gcprep);
+}
+
+static LJ_AINLINE int lj_state_gcprep_head_cas(global_State *g,
+						lua_State **oldp,
+						lua_State *head)
+{
+  return la_casptr((void **)&g->thread_gcprep, (void **)oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE lua_State *lj_state_gcprep_head_xchg(global_State *g,
+							lua_State *head)
+{
+  return (lua_State *)la_xchgptr_acqrel((void **)&g->thread_gcprep, head);
+}
+
+/* Exact-reclaimer terminal THREAD split. claim_and_pin() performs only root
+** preflight, owner arbitration and the destructor-incomplete reservation; the
+** caller must either cancel() on a lost destructor LP or publish() after
+** lifetime FREE. drain() runs semantic preparation outside the exclusive
+** writer and leaves physical bitmap reuse to the next exact arena pass. */
+LJ_FUNC int lj_state_gcprep_claim_and_pin(global_State *g, lua_State *L);
+LJ_FUNC void lj_state_gcprep_cancel(global_State *g, lua_State *L);
+LJ_FUNC void lj_state_gcprep_publish(global_State *g, lua_State *L);
+LJ_FUNC uint32_t lj_state_gcprep_drain(global_State *g, uint32_t limit);
+LJ_FUNC void lj_state_gcprep_drain_terminal(global_State *g);
+
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_STATE_TEST_HELPERS)
+LJ_FUNC void lj_state_test_gcprep_pause(int enabled);
+LJ_FUNC uint32_t lj_state_test_gcprep_paused(void);
+LJ_FUNC void lj_state_test_gcprep_pre_lp_pause(int enabled);
+LJ_FUNC uint32_t lj_state_test_gcprep_pre_lp_paused(void);
+LJ_FUNC void lj_state_test_gcprep_terminal_drain_reset(void);
+LJ_FUNC uint32_t lj_state_test_gcprep_terminal_drain_count(void);
+#endif
+
+LJ_FUNC int lj_state_thread_registry_lease(global_State *g, lua_State *th,
+					    LJGC2Lease *lease);
 LJ_FUNC int lj_state_thread_registry_valid(global_State *g, lua_State *th);
 LJ_FUNC void lj_state_thread_registry_publish(global_State *g, lua_State *th);
 

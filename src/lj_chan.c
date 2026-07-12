@@ -162,8 +162,6 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     return 0;
   }
   if (L)
-    lj_state_stack_pubrange(L, L);
-  if (L)
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: timed channel park. */
   else if (tg)
     lj_native_enter(tg);
@@ -260,6 +258,7 @@ static int chan_rendezvous_send_status(LJChan *ch, uint64_t pos)
 static int chan_wait_rendezvous_send(lua_State *L, LJChan *ch, uint64_t pos,
 				     int64_t deadline)
 {
+  int stack_published = 0;
   for (;;) {
     int rc = chan_rendezvous_send_status(ch, pos);
     int64_t waitns;
@@ -268,7 +267,13 @@ static int chan_wait_rendezvous_send(lua_State *L, LJChan *ch, uint64_t pos,
     waitns = chan_remaining_ns(deadline);
     if (waitns == 0)
       return chan_cancel_rendezvous_send(ch, pos) ? LJ_CHAN_TIMEOUT :
-							    LJ_CHAN_OK;
+								    LJ_CHAN_OK;
+    if (L && !stack_published) {
+      /* This native wait does not mutate the Lua stack. Publish its semantic
+      ** roots once; later GC epochs scan the parked TG at their handshake. */
+      lj_state_stack_pubrange(L, L);
+      stack_published = 1;
+    }
     (void)chan_wait_timeout(L, ch, waitns);
   }
 }
@@ -369,6 +374,7 @@ int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv, int64_t ns)
 {
   int64_t deadline;
   int stack_tv = chan_tv_on_stack(L, tv);
+  int stack_published = 0;
   ptrdiff_t tvofs = stack_tv ? savestack(L, tv) : 0;
   if (ns < 0)
     return lj_chan_send(L, ch, tv);
@@ -389,6 +395,10 @@ int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv, int64_t ns)
     waitns = chan_remaining_ns(deadline);
     if (waitns == 0)
       return LJ_CHAN_TIMEOUT;
+    if (L && !stack_published) {
+      lj_state_stack_pubrange(L, L);
+      stack_published = 1;
+    }
     (void)chan_wait_timeout(L, ch, waitns);
   }
 }
@@ -396,6 +406,7 @@ int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv, int64_t ns)
 int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
 {
   int64_t deadline;
+  int stack_published = 0;
   if (ns < 0)
     return lj_chan_recv(L, ch, out);
   deadline = chan_deadline_ns(ns);
@@ -407,6 +418,10 @@ int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
     waitns = chan_remaining_ns(deadline);
     if (waitns == 0)
       return LJ_CHAN_TIMEOUT;
+    if (L && !stack_published) {
+      lj_state_stack_pubrange(L, L);
+      stack_published = 1;
+    }
     (void)chan_wait_timeout(L, ch, waitns);
   }
 }
@@ -414,6 +429,7 @@ int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
 int lj_chan_recv_timeout_gc(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
 {
   int64_t deadline;
+  int stack_published = 0;
   if (ns < 0)
     return lj_chan_recv_gc(L, ch, out);
   deadline = chan_deadline_ns(ns);
@@ -425,6 +441,10 @@ int lj_chan_recv_timeout_gc(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
     waitns = chan_remaining_ns(deadline);
     if (waitns == 0)
       return LJ_CHAN_TIMEOUT;
+    if (L && !stack_published) {
+      lj_state_stack_pubrange(L, L);
+      stack_published = 1;
+    }
     (void)chan_wait_timeout(L, ch, waitns);
   }
 }

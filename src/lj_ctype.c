@@ -285,6 +285,28 @@ int lj_ctype_predefined_string(const char *p, MSize len, CTypeID *idp)
   return 0;
 }
 
+/* Immutable layout oracle for cdata materialized before CTState publication.
+** Only fixed-size predefined payloads are accepted; VLA/void/abandoned entries
+** cannot be validated without the live ctype graph. */
+int lj_ctype_predefined_payload_size(CTypeID id, CTSize *sizep)
+{
+  CTSize size;
+  switch (id) {
+#define CTYPE_PREDEF_SIZE(name, sz, ct, info) \
+  case CTID_##name: \
+    if ((int)(sz) < 0 || (ct) == CT_ATTRIB || (ct) == CT_VOID) return 0; \
+    size = (CTSize)(sz); \
+    break;
+    CTTYDEF(CTYPE_PREDEF_SIZE)
+#undef CTYPE_PREDEF_SIZE
+  default:
+    return 0;
+  }
+  if (sizep)
+    *sizep = size;
+  return 1;
+}
+
 #undef ctype_string_match
 
 #define CTTYPEINFO_NUM		(sizeof(lj_ctype_typeinfo)/sizeof(CTInfo)-1)
@@ -433,26 +455,185 @@ static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
   return gen;
 }
 
-GCtab *lj_ctype_fin_gen_tab_valid(CTState *cts, FinRegGen *gen)
+void lj_ctype_fin_lease_release(CTypeFinLease *lease)
 {
-  GCtab *t;
-  GCobj *o;
-  if (!cts || !gen || !lj_gc2_mem_registered(cts->g, gen))
-    return NULL;
-  t = fin_gen_tab_acq(gen);
-  if (!t)
-    return NULL;
-  o = obj2gco(t);
-  if (!lj_gc2_obj_valid_queued(cts->g, o) ||
-      (uint32_t)la_load8_acq(&o->gch.gct) != (uint32_t)~LJ_TTAB)
-    return NULL;
-  return t;
+  global_State *g;
+  uint32_t smr;
+  if (!lease)
+    return;
+  g = lease->g;
+  smr = lease->smr_held;
+  /* Clear the public state first: cleanup paths and cpcall error recovery may
+  ** call release more than once, but an admission must be dropped exactly once. */
+  lease->g = NULL;
+  lease->tab = NULL;
+  lease->slot = NULL;
+  lease->smr_held = 0;
+  lj_gc2_lease_release(&lease->table_lease);
+  if (smr)
+    lj_gc2_smr_read_leave(g);
 }
 
-static GCtab *ctype_fin_gen_tab_enabled(CTState *cts, FinRegGen *gen)
+/* Acquire the raw generation record only long enough to snapshot its list
+** edge and install an exact expected-TAB body lease. The returned token keeps
+** the table and any separated vector snapshot mapped; no raw generation-record
+** pointer escapes this helper. */
+static int ctype_fin_gen_tab_acquire_next_smr(CTState *cts, FinRegGen *gen,
+					      CTypeFinLease *lease,
+					      FinRegGen **nextp)
 {
-  GCtab *t = lj_ctype_fin_gen_tab_valid(cts, gen);
-  return t && fin_gen_tab_enabled_acq(t) ? t : NULL;
+  global_State *g;
+  LJGC2Lease genlease = { 0 };
+  GCtab *t;
+  FinRegGen *next;
+  int rc;
+  if (!lease)
+    return LJ_CTYPE_FIN_RETRY;
+  memset(lease, 0, sizeof(*lease));
+  if (nextp)
+    *nextp = NULL;
+  if (!cts || !gen || !(g = cts->g))
+    return LJ_CTYPE_FIN_MISS;
+
+  lease->g = g;
+  if (lj_gc2_mem_lease_acquire(g, gen, &genlease) < 0) {
+    lj_ctype_fin_lease_release(lease);
+    return LJ_CTYPE_FIN_RETRY;
+  }
+  t = fin_gen_tab_acq(gen);
+  next = fin_gen_next_acq(gen);
+  if (!t) {
+    lj_gc2_lease_release(&genlease);
+    if (nextp)
+      *nextp = next;
+    lj_ctype_fin_lease_release(lease);
+    return LJ_CTYPE_FIN_MISS;
+  }
+  rc = lj_gc2_obj_lease_acquire(g, obj2gco(t), (uint32_t)~LJ_TTAB,
+				NULL, &lease->table_lease);
+  if (rc < 0 || fin_gen_tab_acq(gen) != t) {
+    lj_gc2_lease_release(&genlease);
+    lj_ctype_fin_lease_release(lease);
+    return LJ_CTYPE_FIN_RETRY;
+  }
+  if (nextp)
+    *nextp = next;
+  lease->tab = t;
+  lj_gc2_lease_release(&genlease);
+  return LJ_CTYPE_FIN_FOUND;
+}
+
+static int ctype_fin_gen_next_smr(global_State *g, FinRegGen *gen,
+				   FinRegGen **nextp)
+{
+  LJGC2Lease lease = { 0 };
+  if (!gen) {
+    *nextp = NULL;
+    return 1;
+  }
+  if (lj_gc2_mem_lease_acquire(g, gen, &lease) < 0) {
+    lj_gc2_lease_release(&lease);
+    return 0;
+  }
+  *nextp = fin_gen_next_acq(gen);
+  lj_gc2_lease_release(&lease);
+  return 1;
+}
+
+static int ctype_fin_order_next_smr(global_State *g, FinRegOrderNode *ord,
+				     int retired,
+				     FinRegOrderNode **nextp)
+{
+  LJGC2Lease lease = { 0 };
+  if (!ord) {
+    *nextp = NULL;
+    return 1;
+  }
+  if (lj_gc2_mem_lease_acquire(g, ord, &lease) < 0) {
+    lj_gc2_lease_release(&lease);
+    return 0;
+  }
+  *nextp = retired ? fin_order_retired_next_acq(ord) :
+    fin_order_next_acq(ord);
+  lj_gc2_lease_release(&lease);
+  return 1;
+}
+
+static LJ_NORET void ctype_fin_spine_cycle(global_State *g)
+{
+  lj_assertG_(g, 0, "cycle in FINREG native spine");
+  UNUSED(g);
+  abort();
+}
+
+int lj_ctype_fin_gen_tab_acquire(CTState *cts, FinRegGen *gen,
+				 CTypeFinLease *lease)
+{
+  int rc;
+  if (!lease)
+    return LJ_CTYPE_FIN_RETRY;
+  memset(lease, 0, sizeof(*lease));
+  if (!cts || !cts->g || !gen)
+    return LJ_CTYPE_FIN_MISS;
+  if (!lj_gc2_smr_read_try(cts->g))
+    return LJ_CTYPE_FIN_RETRY;
+  rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, lease, NULL);
+  if (rc == LJ_CTYPE_FIN_FOUND)
+    lease->smr_held = 1;  /* Transfer the already-active reader to the token. */
+  else
+    lj_gc2_smr_read_leave(cts->g);
+  return rc;
+}
+
+/* FINREG keys are cdata identities. Resolve only against an admitted current
+** node generation and return RETRY for KEYLOCK/FORWARD/retiring observations;
+** callers must never turn those internal states into an ordinary miss. */
+static int ctype_fin_slot_lookup_held(CTypeFinLease *lease, cTValue *key,
+				      TValue **slotp)
+{
+  Node *node, *check, *n;
+  MSize hmask, checkmask, steps = 0;
+  uintptr_t base, end;
+  int snap;
+  if (slotp)
+    *slotp = NULL;
+  if (!lease || !lease->g || !lease->tab ||
+      !key || !tviscdata(key))
+    return LJ_CTYPE_FIN_MISS;
+  snap = lj_tab_node_snapshot_gc_held(lease->g, lease->tab, &node, &hmask);
+  if (snap != LJ_TAB_GC_SNAPSHOT_OK)
+    return LJ_CTYPE_FIN_RETRY;
+  if (hmask == 0)
+    return LJ_CTYPE_FIN_MISS;
+  base = (uintptr_t)(void *)node;
+  end = base + (uintptr_t)(hmask + 1u) * sizeof(Node);
+  n = hashgcref_node(node, hmask, key->gcr);
+  while (n && steps++ <= hmask) {
+    TValue nk;
+    uintptr_t np = (uintptr_t)(void *)n;
+    if (np < base || np >= end || (np - base) % sizeof(Node) != 0)
+      return LJ_CTYPE_FIN_RETRY;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tviskeylock(&nk))
+      return LJ_CTYPE_FIN_RETRY;
+    if (lj_obj_equal(&nk, key)) {
+      TValue current;
+      int rc = lj_tab_read_current_keyed(lease->tab, &n->val, key,
+					 &current);
+      if (rc != LJ_TAB_STORE_CAS_OK || tvisforward(&current))
+	return LJ_CTYPE_FIN_RETRY;
+      if (slotp)
+	*slotp = &n->val;
+      return LJ_CTYPE_FIN_FOUND;
+    }
+    n = lj_tab_nextnode_acq(n);
+  }
+  if (n)
+    return LJ_CTYPE_FIN_RETRY;  /* Corrupt/cyclic chain: bounded fail-closed. */
+  snap = lj_tab_node_snapshot_gc_held(lease->g, lease->tab, &check,
+					      &checkmask);
+  return snap == LJ_TAB_GC_SNAPSHOT_OK && check == node && checkmask == hmask ?
+    LJ_CTYPE_FIN_MISS : LJ_CTYPE_FIN_RETRY;
 }
 
 FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
@@ -498,12 +679,20 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
 			      FinRegOrderNode *ord, FinRegOrderNode *next)
 {
   FinRegOrderNode *head, *expect;
-  if (!cts || !ord || !lj_gc2_mem_registered(cts->g, ord))
+  LJGC2Lease ordlease = { 0 }, prevlease = { 0 };
+  int ok = 0;
+  UNUSED(next);
+  if (!cts || !cts->g || !ord || !lj_gc2_smr_read_try(cts->g))
     return 0;
-  /* Retain before the active-state CAS or any other record dereference. */
-  (void)lj_gc2_markmem(cts->g, ord);
-  if (!fin_order_active_retiring(ord))
-    return 1;
+  if (lj_gc2_mem_lease_acquire(cts->g, ord, &ordlease) < 0)
+    goto out;
+  next = fin_order_next_acq(ord);  /* Ignore an unprotected caller snapshot. */
+  if (prev && lj_gc2_mem_lease_acquire(cts->g, prev, &prevlease) < 0)
+    goto out;
+  if (!fin_order_active_retiring(ord)) {
+    ok = 1;
+    goto out;
+  }
   do {
     head = fin_order_retired_acq(cts);
     fin_order_retired_next_rel(ord, head);
@@ -521,166 +710,413 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
     expect = ord;
     (void)fin_order_head_cas(cts, &expect, next);
   }
-  return 1;  /* 11.4 ordered FINREG logical retire plus best-effort splice. */
+  ok = 1;  /* 11.4 ordered FINREG logical retire plus best-effort splice. */
+out:
+  lj_gc2_lease_release(&prevlease);
+  lj_gc2_lease_release(&ordlease);
+  lj_gc2_smr_read_leave(cts->g);
+  return ok;
+}
+
+int lj_ctype_fin_order_retire_obj_complete(CTState *cts, GCobj *target,
+					    size_t *retiredp)
+{
+  FinRegOrderNode *prev, *ord, *fast;
+  size_t n = 0;
+  int complete = 0;
+  if (retiredp)
+    *retiredp = 0;
+  if (!cts || !cts->g || !target || !lj_gc2_smr_read_try(cts->g))
+    return 0;
+restart:
+  prev = NULL;
+  ord = fin_order_head_acq(cts);
+  fast = ord;
+  while (ord) {
+    LJGC2Lease ordlease = { 0 };
+    FinRegOrderNode *next;
+    uint32_t active;
+    GCobj *obj;
+    if (lj_gc2_mem_lease_acquire(cts->g, ord, &ordlease) < 0) {
+      lj_gc2_lease_release(&ordlease);
+      goto transient;
+    }
+    next = fin_order_next_acq(ord);
+    active = fin_order_active_acq(ord);
+    obj = active == 1 ? fin_order_obj_acq(ord) : NULL;
+    lj_gc2_lease_release(&ordlease);
+    if (active == 1 && obj == target) {
+      int retired = lj_ctype_fin_order_retire(cts, prev, ord, next);
+      n += (size_t)retired;
+      if (!retired)
+	goto transient;
+    } else if (active == 1) {
+      prev = ord;
+    }
+    ord = next;
+    if (fast && !ctype_fin_order_next_smr(cts->g, fast, 0, &fast))
+      goto transient;
+    if (fast && !ctype_fin_order_next_smr(cts->g, fast, 0, &fast))
+      goto transient;
+    if (ord && fast == ord) {
+      lj_gc2_smr_read_leave(cts->g);
+      ctype_fin_spine_cycle(cts->g);
+    }
+  }
+  complete = 1;
+  goto out;
+transient:
+  /* A logical retire cannot be rolled back. If this pass already committed
+  ** any target node, restart from the current head while FINCLAIM and the
+  ** caller's outer lifetime certificates still exclude a same-object writer.
+  ** Recomputing prev also avoids depending on an adjacent node concurrently
+  ** retired by another cdata transaction. A pre-commit transient remains
+  ** rollbackable by the caller. */
+  if (n != 0) {
+    (void)lj_thr_retry_yield(NULL);
+    goto restart;
+  }
+out:
+  lj_gc2_smr_read_leave(cts->g);
+  if (retiredp)
+    *retiredp = n;
+  return complete;
 }
 
 size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target)
 {
-  FinRegOrderNode *prev, *ord;
   size_t n = 0;
-  if (!cts || !target)
-    return 0;
-  prev = NULL;
-  ord = fin_order_head_acq(cts);
-  while (ord && lj_gc2_mem_registered(cts->g, ord)) {
-    FinRegOrderNode *next = fin_order_next_acq(ord);
-    uint32_t active = fin_order_active_acq(ord);
-    if (active == 1 && fin_order_obj_acq(ord) == target) {
-      n += (size_t)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    if (active == 1)
-      prev = ord;
-    ord = next;
-  }
+  (void)lj_ctype_fin_order_retire_obj_complete(cts, target, &n);
   return n;
 }
 
-GCtab *lj_ctype_fin_head(CTState *cts)
-{
-  FinRegGen *gen = fin_gen_head_acq(cts);
-  return lj_ctype_fin_gen_tab_valid(cts, gen);
-}
-
-cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
-			  GCtab **tabp)
+int lj_ctype_fin_head(CTState *cts, CTypeFinLease *lease)
 {
   FinRegGen *gen;
-  for (gen = fin_gen_head_acq(cts);
-       gen != NULL && lj_gc2_mem_registered(cts->g, gen);
-       gen = fin_gen_next_acq(gen)) {
-    GCtab *t = ctype_fin_gen_tab_enabled(cts, gen);
-    if (!t)
-      continue;
-    cTValue *tv = lj_tab_get(L, t, key);
-    if (tv != niltv(L)) {
-      *tabp = t;
-      return tv;
+  int rc;
+  if (!lease)
+    return LJ_CTYPE_FIN_RETRY;
+  memset(lease, 0, sizeof(*lease));
+  if (!cts || !cts->g)
+    return LJ_CTYPE_FIN_MISS;
+  if (!lj_gc2_smr_read_try(cts->g))
+    return LJ_CTYPE_FIN_RETRY;
+  gen = fin_gen_head_acq(cts);
+  rc = gen ? ctype_fin_gen_tab_acquire_next_smr(cts, gen, lease, NULL) :
+    LJ_CTYPE_FIN_MISS;
+  if (rc == LJ_CTYPE_FIN_FOUND)
+    lease->smr_held = 1;
+  else
+    lj_gc2_smr_read_leave(cts->g);
+  return rc;
+}
+
+/* Scan an entire generation spine inside one already-active SMR interval. A
+** raw successor is consumed before that interval can end, eliminating the
+** registered->raw->revalidate ABA window for untagged FinRegGen records. */
+static int ctype_fin_get_smr(CTState *cts, FinRegGen *gen, cTValue *key,
+			     CTypeFinLease *lease)
+{
+  while (gen != NULL) {
+    CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
+    FinRegGen *next = NULL;
+    TValue *slot;
+    int rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &held, &next);
+    if (rc == LJ_CTYPE_FIN_RETRY)
+      return LJ_CTYPE_FIN_RETRY;
+    if (rc == LJ_CTYPE_FIN_FOUND && fin_gen_tab_enabled_acq(held.tab)) {
+      rc = ctype_fin_slot_lookup_held(&held, key, &slot);
+      if (rc == LJ_CTYPE_FIN_FOUND) {
+	*lease = held;  /* Move the one active certificate to the caller. */
+	lease->slot = slot;
+	return LJ_CTYPE_FIN_FOUND;
+      }
+      lj_ctype_fin_lease_release(&held);
+      if (rc == LJ_CTYPE_FIN_RETRY)
+	return LJ_CTYPE_FIN_RETRY;
+    } else {
+      lj_ctype_fin_lease_release(&held);
     }
+    gen = next;
   }
-  *tabp = NULL;
-  return niltv(L);
+  return LJ_CTYPE_FIN_MISS;
 }
 
-static int ctype_fin_any_key(CTState *cts, lua_State *L, cTValue *key)
-{
-  GCtab *t;
-  return lj_ctype_fin_get(L, cts, key, &t) != niltv(L);
-}
-
-static int ctype_fin_has_claim(CTState *cts, cTValue *claim)
+int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
+		     CTypeFinLease *lease)
 {
   FinRegGen *gen;
-  for (gen = fin_gen_head_acq(cts);
-       gen != NULL && lj_gc2_mem_registered(cts->g, gen);
-       gen = fin_gen_next_acq(gen)) {
-    GCtab *t = lj_ctype_fin_gen_tab_valid(cts, gen);
-    MSize i, hmask;
-    if (!t)
+  int rc;
+  UNUSED(L);
+  if (!lease)
+    return LJ_CTYPE_FIN_RETRY;
+  memset(lease, 0, sizeof(*lease));
+  if (!cts || !cts->g || !key || !tviscdata(key))
+    return LJ_CTYPE_FIN_MISS;
+  if (!lj_gc2_smr_read_try(cts->g))
+    return LJ_CTYPE_FIN_RETRY;
+  gen = fin_gen_head_acq(cts);
+  rc = ctype_fin_get_smr(cts, gen, key, lease);
+  if (rc == LJ_CTYPE_FIN_FOUND)
+    lease->smr_held = 1;
+  else
+    lj_gc2_smr_read_leave(cts->g);
+  return rc;
+}
+
+static int ctype_fin_has_claim_smr(CTState *cts, FinRegGen *gen,
+				   cTValue *claim)
+{
+  while (gen != NULL) {
+    CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
+    FinRegGen *next = NULL;
+    Node *node, *check;
+    MSize i, hmask, checkmask;
+    int snap;
+    int rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &held, &next);
+    if (rc != LJ_CTYPE_FIN_FOUND)
+      return 1;  /* Transient record/table identity is conservatively busy. */
+    if (!fin_gen_tab_enabled_acq(held.tab)) {
+      lj_ctype_fin_lease_release(&held);
+      gen = next;
       continue;
-    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
-    for (i = 0; i <= hmask; i++) {
-      TValue val;
-      lj_tv_load_acq(&val, &node[i].val);
-      if (tv_rawload(&val) == tv_rawload(claim))
-	return 1;
     }
+    snap = lj_tab_node_snapshot_gc_held(held.g, held.tab, &node, &hmask);
+    if (snap != LJ_TAB_GC_SNAPSHOT_OK) {
+      lj_ctype_fin_lease_release(&held);
+      return 1;
+    }
+    if (hmask > 0) {
+      for (i = 0; i <= hmask; i++) {
+	TValue val;
+	lj_tv_load_acq(&val, &node[i].val);
+	if (tv_rawload(&val) == tv_rawload(claim)) {
+	  lj_ctype_fin_lease_release(&held);
+	  return 1;
+	}
+      }
+    }
+    snap = lj_tab_node_snapshot_gc_held(held.g, held.tab, &check,
+						&checkmask);
+    lj_ctype_fin_lease_release(&held);
+    if (snap != LJ_TAB_GC_SNAPSHOT_OK || check != node ||
+	checkmask != hmask)
+      return 1;
+    gen = next;
   }
   return 0;
 }
 
+#define CTYPE_FIN_RETRY_MAX 256u
+
 int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
-			cTValue *claim, GCtab **tabp, TValue **slot)
+			cTValue *claim, CTypeFinLease *lease)
 {
-  for (;;) {
-    FinRegGen *head = fin_gen_head_acq(cts);
-    GCtab *headtab = head ? lj_ctype_fin_gen_tab_valid(cts, head) : NULL;
-    MSize hmask = 1;
-    uint32_t hbits;
-    GCtab *t;
-    FinRegGen *gen;
-    TValue *tv;
-    TValue *anchor;
-    if (headtab)
-      (void)lj_tab_node_snapshot_acq(headtab, &hmask);
-    hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
-    if (head && (!headtab || !fin_gen_tab_enabled_acq(headtab)))
-      return 0;
-    while (ctype_fin_has_claim(cts, claim))
+  uint32_t retry;
+  MSize hmask = 0;
+  uint32_t hbits = 1;
+  GCtab *t;
+  FinRegGen *gen;
+  TValue *tv;
+  TValue *anchor;
+  if (!L || !cts || !key || !claim || !lease)
+    return 0;
+
+  memset(lease, 0, sizeof(*lease));
+  /* Size is only a hint. Sample it through the ordinary exact head token and
+  ** release before any allocation, yield or potential error unwind. */
+  for (retry = 0; retry < CTYPE_FIN_RETRY_MAX; retry++) {
+    CTypeFinLease headheld = CTYPE_FIN_LEASE_INIT;
+    int rc = lj_ctype_fin_head(cts, &headheld);
+    if (rc == LJ_CTYPE_FIN_FOUND) {
+      Node *node;
+      if (!fin_gen_tab_enabled_acq(headheld.tab)) {
+	/* A quarantined generation remains on the native spine so older live
+	** generations stay reachable. It is not a reason to brick all future
+	** registrations: use the minimum size hint and publish a healthy head
+	** above it. */
+	lj_ctype_fin_lease_release(&headheld);
+	break;
+      }
+      rc = lj_tab_node_snapshot_gc_held(headheld.g, headheld.tab, &node,
+					       &hmask);
+      lj_ctype_fin_lease_release(&headheld);
+      if (rc != LJ_TAB_GC_SNAPSHOT_OK) {
+	ctype_fin_claim_wait(L);
+	continue;
+      }
+      hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
+      if (hbits > LJ_MAX_HBITS)
+	hbits = LJ_MAX_HBITS;
+      break;
+    }
+    if (rc == LJ_CTYPE_FIN_MISS)
+      break;
+    lj_ctype_fin_lease_release(&headheld);
+    ctype_fin_claim_wait(L);
+  }
+  if (retry == CTYPE_FIN_RETRY_MAX)
+    return LJ_CTYPE_FIN_ERROR;
+
+  /* Allocation and private insertion may throw, so no body/raw-record lease or
+  ** tactical SMR reader is active until the table and generation are complete. */
+  anchor = L->top;
+  t = ctype_fin_tab_new_anchor_l(L, hbits);
+  gen = ctype_fin_gen_new_l(L, t);
+  tv = lj_tab_set(L, t, key);  /* Private generation, unpublished. */
+  copyTVrel(L, tv, claim);
+
+  for (retry = 0; retry < CTYPE_FIN_RETRY_MAX; retry++) {
+    CTypeFinLease headheld = CTYPE_FIN_LEASE_INIT;
+    CTypeFinLease found = CTYPE_FIN_LEASE_INIT;
+    FinRegGen *head;
+    int rc, busy;
+    if (!lj_gc2_smr_read_try(cts->g)) {
       ctype_fin_claim_wait(L);
-    if (ctype_fin_any_key(cts, L, key))
+      continue;
+    }
+    head = fin_gen_head_acq(cts);
+    if (head) {
+      rc = ctype_fin_gen_tab_acquire_next_smr(cts, head, &headheld, NULL);
+      if (rc != LJ_CTYPE_FIN_FOUND) {
+	lj_ctype_fin_lease_release(&headheld);
+	lj_gc2_smr_read_leave(cts->g);
+	ctype_fin_claim_wait(L);
+	continue;
+      }
+      lj_ctype_fin_lease_release(&headheld);
+    }
+    busy = ctype_fin_has_claim_smr(cts, head, claim);
+    if (busy) {
+      lj_gc2_smr_read_leave(cts->g);
+      ctype_fin_claim_wait(L);
+      continue;
+    }
+    rc = ctype_fin_get_smr(cts, head, key, &found);
+    if (rc == LJ_CTYPE_FIN_FOUND) {
+      lj_ctype_fin_lease_release(&found);
+      lj_gc2_smr_read_leave(cts->g);
+      lj_mem_freet(G(L), gen);
+      L->top = anchor;
       return -1;
-    /*
-    ** The generation record allocation and the private-table insertion can
-    ** both run GC. Keep the table in the owning lua_State's published stack
-    ** roots until the generation-list CAS and its post-publication repair are
-    ** complete; the native list is not an authoritative root before the CAS.
-    */
-    anchor = L->top;
-    t = ctype_fin_tab_new_anchor_l(L, hbits);
-    gen = ctype_fin_gen_new_l(L, t);
-    tv = lj_tab_set(L, t, key);  /* Private generation, unpublished. */
-    copyTVrel(L, tv, claim);
+    }
+    lj_ctype_fin_lease_release(&found);
+    if (rc == LJ_CTYPE_FIN_RETRY || fin_gen_head_acq(cts) != head) {
+      lj_gc2_smr_read_leave(cts->g);
+      ctype_fin_claim_wait(L);
+      continue;
+    }
     fin_gen_next_rel(gen, head);
-    /* Close allocation/initialization versus a root snapshot that has already
-    ** passed this lua_State. The second repair below closes the inverse race:
-    ** IDLE->MARK can clear this construction mark immediately before the CAS.
-    */
     (void)lj_gc2_markmem(G(L), gen);
     lj_gc_pubobjroot(L, obj2gco(t));
     if (fin_gen_head_cas(cts, &head, gen)) {
+      TValue *resolved = NULL;
       (void)lj_gc2_markmem(G(L), gen);
       lj_gc_pubobjroot(L, obj2gco(t));
-      *tabp = t;
-      *slot = tv;
+      rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, lease, NULL);
+      if (rc == LJ_CTYPE_FIN_FOUND)
+	rc = ctype_fin_slot_lookup_held(lease, key, &resolved);
+      if (rc == LJ_CTYPE_FIN_FOUND && resolved == tv) {
+	lease->slot = resolved;
+	lease->smr_held = 1;  /* Transfer the still-active reader to caller. */
+	L->top = anchor;
+	return 1;  /* Generation publish plus exact slot/body handoff. */
+      }
+      lj_ctype_fin_lease_release(lease);
+      /* The rooted fresh table should always admit. If allocator identity is
+      ** unavailable, disable this generation and remove its unresolved claim
+      ** before dropping the construction root. */
+      {
+	CTypeFinLease cleanup = CTYPE_FIN_LEASE_INIT;
+	int admitted;
+	cleanup.g = cts->g;
+	admitted = lj_gc2_obj_lease_acquire(
+	  cts->g, obj2gco(t), (uint32_t)~LJ_TTAB, NULL,
+	  &cleanup.table_lease);
+	if (admitted < 0) {
+	  lj_gc2_lease_release(&cleanup.table_lease);
+	  lj_gc2_smr_read_leave(cts->g);
+	  L->top = anchor;
+	  lj_assertG_(cts->g, 0, "fresh FINREG table admission lost");
+	  abort();
+	}
+	cleanup.tab = t;
+	fin_gen_tab_disable_rel(cleanup.tab);
+	{
+	  TValue nilv, expect;
+	  setnilV(&nilv);
+	  expect = *claim;
+	  if (!lj_tv_cas(tv, &expect, &nilv)) {
+	    lj_ctype_fin_lease_release(&cleanup);
+	    lj_gc2_smr_read_leave(cts->g);
+	    L->top = anchor;
+	    lj_assertG_(cts->g, 0,
+			"fresh FINREG claim cleanup ownership lost");
+	    abort();
+	  }
+	}
+	lj_ctype_fin_lease_release(&cleanup);
+      }
+      lj_gc2_smr_read_leave(cts->g);
       L->top = anchor;
-      return 1;  /* 11.4 FINREG generation CAS publish. */
+      return LJ_CTYPE_FIN_RETRY;
     }
-    lj_mem_freet(G(L), gen);
-    L->top = anchor;
+    lj_gc2_smr_read_leave(cts->g);
     ctype_fin_claim_wait(L);
   }
+  lj_mem_freet(G(L), gen);
+  L->top = anchor;
+  return LJ_CTYPE_FIN_ERROR;
 }
 
 int lj_ctype_fin_istab(global_State *g, GCtab *t)
 {
   CTState *cts = ctype_ctsG(g);
   FinRegGen *gen;
-  if (!cts)
+  if (!cts || !t)
     return 0;
-  for (gen = fin_gen_head_acq(cts);
-       gen != NULL && lj_gc2_mem_registered(cts->g, gen);
-       gen = fin_gen_next_acq(gen)) {
-    GCtab *ft = ctype_fin_gen_tab_enabled(cts, gen);
-    if (ft == t)
+  if (!lj_gc2_smr_read_try(g))
+    return 0;
+  gen = fin_gen_head_acq(cts);
+  while (gen != NULL) {
+    CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
+    FinRegGen *next = NULL;
+    int rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &held, &next);
+    if (rc != LJ_CTYPE_FIN_FOUND) {
+      lj_gc2_smr_read_leave(g);
+      return 0;
+    }
+    if (held.tab == t && fin_gen_tab_enabled_acq(held.tab)) {
+      lj_ctype_fin_lease_release(&held);
+      lj_gc2_smr_read_leave(g);
       return 1;
+    }
+    lj_ctype_fin_lease_release(&held);
+    gen = next;
   }
+  lj_gc2_smr_read_leave(g);
   return 0;
 }
 
-void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
-		       void (*markmem)(global_State *, void *))
+int lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
+		      void (*markmem)(global_State *, void *))
 {
   CTState *cts = ctype_ctsG(g);
-  FinRegGen *gen;
+  FinRegGen *gen, *genfast;
   if (!cts)
-    return;
-  for (gen = fin_gen_head_acq(cts);
-       gen != NULL && lj_gc2_mem_registered(g, gen); ) {
+    return 1;
+  if (!mark || !markmem || !lj_gc2_smr_read_try(g))
+    return 0;
+  gen = fin_gen_head_acq(cts);
+  genfast = gen;
+  while (gen != NULL) {
+    LJGC2Lease genlease = { 0 };
     FinRegGen *next;
     GCtab *t;
-    /* Retain the raw side-root record before dereferencing either field. */
+    if (lj_gc2_mem_lease_acquire(g, gen, &genlease) < 0) {
+      lj_gc2_lease_release(&genlease);
+      goto retry;
+    }
     markmem(g, gen);
     t = fin_gen_tab_acq(gen);
     next = fin_gen_next_acq(gen);
@@ -690,25 +1126,69 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
     */
     if (t)
       mark(g, obj2gco(t));
+    lj_gc2_lease_release(&genlease);
     gen = next;
+    if (genfast && !ctype_fin_gen_next_smr(g, genfast, &genfast))
+      goto retry;
+    if (genfast && !ctype_fin_gen_next_smr(g, genfast, &genfast))
+      goto retry;
+    if (gen && genfast == gen) {
+      lj_gc2_smr_read_leave(g);
+      ctype_fin_spine_cycle(g);
+    }
   }
   {
-    FinRegOrderNode *ord;
-    for (ord = fin_order_head_acq(cts);
-	 ord != NULL && lj_gc2_mem_registered(g, ord); ) {
+    FinRegOrderNode *ord, *fast;
+    ord = fin_order_head_acq(cts);
+    fast = ord;
+    while (ord != NULL) {
+      LJGC2Lease ordlease = { 0 };
       FinRegOrderNode *next;
+      if (lj_gc2_mem_lease_acquire(g, ord, &ordlease) < 0) {
+	lj_gc2_lease_release(&ordlease);
+	goto retry;
+      }
       markmem(g, ord);
       next = fin_order_next_acq(ord);
+      lj_gc2_lease_release(&ordlease);
       ord = next;
+      if (fast && !ctype_fin_order_next_smr(g, fast, 0, &fast))
+	goto retry;
+      if (fast && !ctype_fin_order_next_smr(g, fast, 0, &fast))
+	goto retry;
+      if (ord && fast == ord) {
+	lj_gc2_smr_read_leave(g);
+	ctype_fin_spine_cycle(g);
+      }
     }
-    for (ord = fin_order_retired_acq(cts);
-	 ord != NULL && lj_gc2_mem_registered(g, ord); ) {
+    ord = fin_order_retired_acq(cts);
+    fast = ord;
+    while (ord != NULL) {
+      LJGC2Lease ordlease = { 0 };
       FinRegOrderNode *next;
+      if (lj_gc2_mem_lease_acquire(g, ord, &ordlease) < 0) {
+	lj_gc2_lease_release(&ordlease);
+	goto retry;
+      }
       markmem(g, ord);
       next = fin_order_retired_next_acq(ord);
+      lj_gc2_lease_release(&ordlease);
       ord = next;
+      if (fast && !ctype_fin_order_next_smr(g, fast, 1, &fast))
+	goto retry;
+      if (fast && !ctype_fin_order_next_smr(g, fast, 1, &fast))
+	goto retry;
+      if (ord && fast == ord) {
+	lj_gc2_smr_read_leave(g);
+	ctype_fin_spine_cycle(g);
+      }
     }
   }
+  lj_gc2_smr_read_leave(g);
+  return 1;
+retry:
+  lj_gc2_smr_read_leave(g);
+  return 0;
 }
 
 void lj_ctype_fin_freetabs(global_State *g, CTState *cts)
@@ -2368,6 +2848,38 @@ GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size)
   return lj_buf_str(L, sb);
 }
 
+/* CTypeTab retirement is one intrusive chain. Preflight it before mutation so
+** a duplicate push/cycle cannot revisit a table after ctype_tab_free(). */
+static int ctype_retired_chain_valid(global_State *g, CTypeTab *head,
+				      int reclaim_held)
+{
+  CTypeTab *slow = head, *fast = head;
+  while (fast) {
+    if (slow) {
+      if (!(reclaim_held ?
+	    lj_gc2_mem_registered_known_reclaim_held(g, slow) :
+	    lj_gc2_mem_registered_known(g, slow)))
+	return 0;
+      slow = ctype_tab_retired_next_acq(slow);
+    }
+    if (!(reclaim_held ?
+	  lj_gc2_mem_registered_known_reclaim_held(g, fast) :
+	  lj_gc2_mem_registered_known(g, fast)))
+      return 0;
+    fast = ctype_tab_retired_next_acq(fast);
+    if (fast) {
+      if (!(reclaim_held ?
+	    lj_gc2_mem_registered_known_reclaim_held(g, fast) :
+	    lj_gc2_mem_registered_known(g, fast)))
+	return 0;
+      fast = ctype_tab_retired_next_acq(fast);
+    }
+    if (fast && slow == fast)
+      return 0;
+  }
+  return 1;
+}
+
 uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   CTState *cts = ctype_ctsG(g);
@@ -2375,8 +2887,21 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
   uint32_t reclaimed = 0;
   if (!cts || completed_epoch == 0)
     return 0;
+  /* The generic GC2 owner retains its exact current-thread SMR capability
+  ** across this detach and every record validation below. */
   ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
+  if (LJ_UNLIKELY(!ctype_retired_chain_valid(g, ret, 1))) {
+    lj_assertG(0, "invalid/cyclic detached ctype-table retire chain");
+    abort();
+  }
+  while (ret) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, ret))) {
+      /* xchg transferred the whole chain to this exact reclaimer. Silently
+      ** stopping here would orphan the unvisited suffix permanently. */
+      lj_assertG(0, "invalid detached ctype-table retire record");
+      abort();
+    }
     CTypeTab *next = ctype_tab_retired_next_acq(ret);
     ctype_tab_retired_next_rel(ret, NULL);
     if (ctype_tab_retire_epoch_acq(ret) < completed_epoch) {
@@ -2393,7 +2918,15 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 static void ctype_freeretired(global_State *g, CTState *cts)
 {
   CTypeTab *ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
+  if (LJ_UNLIKELY(!ctype_retired_chain_valid(g, ret, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal ctype-table retire chain");
+    abort();
+  }
+  while (ret) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, ret))) {
+      lj_assertG(0, "invalid terminal ctype-table retire record");
+      abort();
+    }
     CTypeTab *next = ctype_tab_retired_next_acq(ret);
     ctype_tab_free(g, ret);
     ret = next;

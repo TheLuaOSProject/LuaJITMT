@@ -224,8 +224,20 @@ void LJ_FASTCALL lj_udata_free(global_State *g, GCudata *ud)
       lj_mem_free(g, roots, (size_t)n * sizeof(TValue));
   }
 #if LJ_HASFFI
-  if (lj_udata_udtype_acq(ud) == UDTYPE_FFI_CLIB)
-    lj_clib_unload(NULL, g, (CLibrary *)uddata(ud));
+  if (lj_udata_udtype_acq(ud) == UDTYPE_FFI_CLIB) {
+    CLibrary *cl = (CLibrary *)uddata(ud);
+    if (LJ_UNLIKELY(lj_gc2_reclaim_context_held(g) &&
+		    (cl->handle != NULL || lj_clib_cache_head_acq(cl) != NULL))) {
+      /* Runtime physical reclaim owns the exclusive GC2 writer and must never
+      ** enter dlclose/FreeLibrary or walk an unbounded live symbol cache. The
+      ** registered ffi_clib finalizer performs both semantic operations before
+      ** FINREG releases the userdata to sweep. Joined-world close is the sole
+      ** path allowed to perform that work from the type destructor. */
+      lj_assertG(0, "GC2 reclaimed an unfinalized FFI CLibrary");
+      abort();
+    }
+    lj_clib_unload(NULL, g, cl);
+  }
 #endif
   if (!lj_mem_freegco_defer(g, ud, size))
     lj_mem_free(g, ud, size);

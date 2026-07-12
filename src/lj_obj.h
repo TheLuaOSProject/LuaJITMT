@@ -1660,7 +1660,9 @@ typedef struct global_State {
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
   LJThreadLive *threading_live_retired;  /* Unlinked live-root tombstones. */
   uint32_t threading_live_count;  /* Non-tombstone threading.thread roots. */
+  uint32_t thread_gcprep_pending;  /* Reserved/queued terminal destructors. */
   lua_State *threading_states;  /* All non-main lua_State objects. */
+  lua_State *thread_gcprep;  /* Terminal THREAD preparation queue. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
   uint32_t mt_live;	/* Active secondary Lua threads. */
@@ -2155,6 +2157,7 @@ struct lua_State {
   GCRef env;		/* Thread environment (table of globals). */
   GCRef mt_thread;	/* threading.thread userdata for this state. */
   lua_State *thread_next;  /* Lockless shutdown registry link. */
+  lua_State *gcprep_next;  /* Terminal-preparation queue link. */
   void *cframe;		/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
@@ -2163,6 +2166,7 @@ struct lua_State {
   uint64_t scan_epoch;	/* Last stack scan epoch for GC workers. */
   uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
   uint64_t scan_handoff_epoch;  /* GC2 cycle that requested owner scan. */
+  uint32_t gcprep_state;  /* Terminal THREAD destructor handoff state. */
 };
 
 #define G(L)			(mref(L->glref, global_State))

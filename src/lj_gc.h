@@ -11,6 +11,19 @@
 typedef struct GCArena GCArena;
 typedef struct LJHugeInfo LJHugeInfo;
 
+typedef struct LJGCDestructCtx {
+  void *base;
+  void *hugetab;
+  GCSize size;
+  uint8_t huge_claim;
+} LJGCDestructCtx;
+
+enum {
+  LJ_GC_DESTRUCT_LOST = 0,
+  LJ_GC_DESTRUCT_ACQUIRED = 1,
+  LJ_GC_DESTRUCT_OWNED = 2
+};
+
 /* Garbage collector states. Order matters. */
 enum {
   GCSpause, GCSstart, GCSpropagate, GCSatomic, GCSsweepstring, GCSsweep,
@@ -93,6 +106,15 @@ enum {
   LJ_GC_ROOT_UNLINK_ABSENT = 0,
   LJ_GC_ROOT_UNLINKED = 1
 };
+/* Result of an intrusive ownership publication. LINKED is the unique
+** NONE->LINKING publisher, ALREADY proves an existing MEMBER without touching
+** gcw, and DEFER leaves LINKING/UNLINKING ownership to its current actor. */
+enum {
+  LJ_GC_ROOT_LINK_INVALID = -1,
+  LJ_GC_ROOT_LINK_DEFER = 0,
+  LJ_GC_ROOT_LINKED = 1,
+  LJ_GC_ROOT_LINK_ALREADY = 2
+};
 LJ_FUNC int lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
@@ -100,13 +122,18 @@ LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_arena_markmem_registered(global_State *g, void *p);
 LJ_FUNC void lj_gc_publishobj_header(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_linkobj(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_linkobj_pending(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_linkobj_new(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_linkobj_new_chain(global_State *g, GCobj *head,
-				     GCobj *tail);
-LJ_FUNC void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o);
+LJ_FUNC int lj_gc_linkobj(global_State *g, GCobj *o);
+/* Ordinary requeue with an allocation base resolved by the caller's stronger
+** incarnation token (required for interior variable cdata). */
+LJ_FUNC int lj_gc_linkobj_at(global_State *g, GCobj *o, void *base);
+LJ_FUNC int lj_gc_linkobj_pending(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc_linkobj_new(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc_linkobj_new_chain(global_State *g, GCobj *head,
+				    GCobj *tail);
+LJ_FUNC int lj_gc_linkobj_new_after_main(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o);
+/* Terminal-only repair after every worker/publisher has joined. */
+LJ_FUNC int lj_gc_linkobj_terminal(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc_flush_root_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc_repair_root_spine(global_State *g);
 LJ_FUNC void *lj_mem_newgco_unlinked(lua_State *L, GCSize size);
@@ -117,6 +144,11 @@ LJ_FUNCA void LJ_FASTCALL lj_gc_step_top(lua_State *L);
 LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
 LJ_FUNC int lj_gc2_jit_needs_exit(global_State *g);
 #endif
+enum {
+  LJ_GC_ROOT_STATE_TEST_LINKING = 1,
+  LJ_GC_ROOT_STATE_TEST_UNLINKING = 2,
+  LJ_GC_ROOT_STATE_TEST_SMALL_REANCHOR_LINKED = 3
+};
 #ifdef LJ_GC2_TEST_HELPERS
 enum {
   LJ_GC_ROOT_PENDING_TEST_ORDINARY = 1,
@@ -131,6 +163,13 @@ LJ_FUNC uint32_t lj_gc_test_step_fixtop_calls(void);
 LJ_FUNC void lj_gc_test_reset_step_fixtop_calls(void);
 LJ_FUNC void lj_gc_test_set_root_pending_load_hook(
   LJGcRootPendingLoadHook hook);
+typedef void (*LJGcRootStateHook)(global_State *g, GCobj *o,
+				   uint32_t path);
+LJ_FUNC void lj_gc_test_set_root_state_hook(LJGcRootStateHook hook);
+/* Targeted exact-reclaimer entry for destructor race fixtures. The caller must
+** hold the GC2 reclaim scope and must already have unlinked all semantic and
+** ownership-spine roots for the THREAD. */
+LJ_FUNC int lj_gc_test_reclaim_thread(global_State *g, lua_State *L);
 /* Test-build bridge used by the x64 interpreter's inlined pending-root CAS.
 ** Returning published keeps the VM result register live across the hook call. */
 LJ_FUNC GCobj *lj_gc_test_root_pending_loaded_vm(global_State *g, TGState *tg,
@@ -475,6 +514,25 @@ LJ_FUNC int lj_mem_publish_cdata(lua_State *L, void *base, GCSize size,
 LJ_FUNC int lj_mem_publish_interior_cdata(lua_State *L, void *base,
 					  GCSize size);
 LJ_FUNC void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size);
+/* Exact pre-destructor arbitration. Only ACQUIRED permits payload/header or
+** accounting mutation. leave() completes a HugeTab BUSY claim; it is a no-op
+** for custom/plain/small allocations. */
+LJ_FUNC int lj_gc_destructor_enter(global_State *g, void *base, GCSize size,
+				    LJGCDestructCtx *ctx);
+/* Exact sweep-reclaimer counterpart. The caller must already own the detached
+** body/list ticket; GC2 additionally verifies the current-thread reclaimer
+** capability before touching arena metadata. */
+LJ_FUNC int lj_gc_destructor_enter_reclaim_held(global_State *g, void *base,
+						 GCSize size,
+						 LJGCDestructCtx *ctx);
+LJ_FUNC void lj_gc_destructor_leave(global_State *g,
+				     LJGCDestructCtx *ctx);
+/* Cancel allocator-owned CONSTRUCT+LINKING before ordinary free/retirement.
+** The result uses LJ_ARENA_HUGE_ROOT_COMPLETE_* for both small and huge
+** allocations (small/custom cancellation completes as LIVE). */
+LJ_FUNC int lj_mem_abandon_gco_unpublished(global_State *g, void *base);
+LJ_FUNC void lj_mem_freegco_unpublished(global_State *g, void *base,
+					GCSize osize);
 LJ_FUNC void *lj_mem_grow(lua_State *L, void *p,
 			  MSize *szp, MSize lim, MSize esz);
 LJ_FUNC int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize);

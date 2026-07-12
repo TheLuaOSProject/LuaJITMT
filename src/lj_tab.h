@@ -207,11 +207,15 @@ LJ_FUNC void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbit
 #define LJ_TAB_GC_SNAPSHOT_INVALID	0
 #define LJ_TAB_GC_SNAPSHOT_OK		1
 #define LJ_TAB_GC_SNAPSHOT_TRANSIENT	2
-LJ_FUNC int lj_tab_array_snapshot_gc(global_State *g, const GCtab *t,
-				     TValue **arrayp, MSize *asizep,
-				     MSize *acapp);
-LJ_FUNC int lj_tab_node_snapshot_gc(global_State *g, const GCtab *t,
-				    Node **nodep, MSize *hmaskp);
+/* GC snapshots never manufacture semantic retention. The caller must keep an
+** exact TAB object/body lease, stable root-membership lane, GC2 traversal scope,
+** or terminal destructor ticket through its final returned-pointer dereference,
+** plus an SMR reader or exclusive reclaimer token for separated side storage. */
+LJ_FUNC int lj_tab_array_snapshot_gc_held(global_State *g, const GCtab *t,
+					  TValue **arrayp, MSize *asizep,
+					  MSize *acapp);
+LJ_FUNC int lj_tab_node_snapshot_gc_held(global_State *g, const GCtab *t,
+					 Node **nodep, MSize *hmaskp);
 /* Long C-side generation scans publish an owner-written epoch pin before
 ** acquiring any raw array/node pointer and drop it after the final dereference.
 ** Nested scopes retain the epoch of the outermost reader. */
@@ -224,6 +228,8 @@ LJ_FUNC void lj_tab_read_enter(TGState *tg);
 LJ_FUNC void lj_tab_read_leave(TGState *tg);
 LJ_FUNC void lj_tab_read_checkpoint(TGState *tg, LJTabReadCheckpoint *cp);
 LJ_FUNC void lj_tab_read_unwind(const LJTabReadCheckpoint *cp);
+/* Runtime drain only: the detached vectors require GC2's exact-thread
+** exclusive-reclaimer scope; terminal cleanup calls lj_tab_freeretired(). */
 LJ_FUNC uint32_t lj_tab_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 LJ_FUNC void lj_tab_freeretired(global_State *g);

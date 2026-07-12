@@ -96,17 +96,72 @@ static GCtrace *retired_find(jit_State *J, GCtrace *needle)
   return NULL;
 }
 
+static GCtrace *published_trace_find(jit_State *J)
+{
+  MSize i;
+  for (i = 1; i < J->sizetrace; i++) {
+    GCtrace *T = traceref(J, i);
+    if (T != NULL && trace_traceno_acq(T) > 0)
+      return T;
+  }
+  return NULL;
+}
+
+static void settle_automatic_cycle(global_State *g)
+{
+  uint32_t attempts;
+  for (attempts = 0;
+       gc2_phase_acq(g) != LJ_GC2_IDLE && attempts < 4096u;
+       attempts++) {
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+    lj_gc2_cycle_to_idle(g);
+  }
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+}
+
+static void test_listed_slot_teardown_no_republish(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  GCtrace *T;
+  int i;
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "return function(x) return x + 1 end\n") == LUA_OK);
+  for (i = 1; i <= 20; i++) {
+    lua_pushvalue(L, -1);
+    lua_pushinteger(L, i);
+    lua_call(L, 1, 1);
+    lua_pop(L, 1);
+  }
+  settle_automatic_cycle(g);
+  T = published_trace_find(J);
+  assert(T != NULL && trace_traceno_acq(T) != 0);
+  lj_trace_test_reset_retire_publish_calls();
+  assert(lj_trace_retire_gc_claim(g, T));
+  assert(la_load64_acq(&T->retire_epoch) != 0);
+  assert(lj_trace_test_retire_publish_calls() == 1u);
+  /* The body is already on the retire list, but its public slot still needs
+  ** the second half of token-owned teardown. This must not repeat first
+  ** retirement (which would enter an SMR reader under sweep reclaim). */
+  assert(lj_trace_free_gc(g, T));
+  assert(lj_trace_test_retire_publish_calls() == 1u);
+  assert(trace_traceno_acq(T) == 0);
+  lua_settop(L, 0);
+}
+
 static uint32_t reclaim_trace_at(global_State *g, uint64_t epoch)
 {
   jit_State *J = G2J(g);
-  uint32_t expect = 0;
   uint32_t n;
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(gc2_smr_reclaiming_cas(g, &expect, 1));
+  assert(lj_gc2_test_idle_reclaim_enter(g));
   assert(lj_jit_token_try(J));
   n = lj_trace_reclaim_retired(g, epoch);
   lj_jit_token_release(J);
-  gc2_smr_reclaiming_rel(g, 0);
+  lj_gc2_test_idle_reclaim_leave(g);
   return n;
 }
 
@@ -172,8 +227,9 @@ static void test_gc_claim_rescues_runnable_inbound(lua_State *L)
   assert(lj_gc2_ismarked(g, obj2gco(target)) > 0);
   assert(test_gc_colors(obj2gco(target)) == target_colors);
 
-  /* Remove the synthetic graph and transfer the two scratch bodies to the
-  ** ordinary unpublished-body retire path before continuing the fixture.
+  /* Remove the synthetic graph and transfer the two already root-published
+  ** bodies through the ordinary semantic retire claim. The unpublished abort
+  ** API owns only a still-LINKING recorder construction.
   */
   setgcrefrel(tv->slot[targetno], NULL);
   setgcrefrel(tv->slot[sourceno], NULL);
@@ -182,10 +238,8 @@ static void test_gc_claim_rescues_runnable_inbound(lua_State *L)
   trace_link_rel(target, 0);
   trace_link_rel(source, 0);
   epoch = lj_gc2_retire_epoch(g);
-  assert(lj_jit_token_try(J));
-  lj_trace_free_unpublished(g, target);
-  lj_trace_free_unpublished(g, source);
-  lj_jit_token_release(J);
+  assert(lj_trace_retire_gc_claim(g, target));
+  assert(lj_trace_retire_gc_claim(g, source));
   assert(reclaim_trace_at(g, epoch + LJ_FLUSH_EPOCHS) >= 2);
 }
 
@@ -228,10 +282,8 @@ static void test_reclaim_requeue_is_raw_and_retryable(lua_State *L,
   /* Publish a valid retired body with synthetic public-number metadata, then
   ** leave a runnable source trace naming that number. The ready reclaim path
   ** must requeue target without repeating semantic proto/KGC preservation. */
-  assert(lj_jit_token_try(J));
-  lj_trace_free_unpublished(g, target);
+  assert(lj_trace_retire_gc_claim(g, target));
   trace_nextroot_rel(target, targetno);
-  lj_jit_token_release(J);
   trace_traceno_rel(source, sourceno);
   trace_link_rel(source, targetno);
   setgcrefrel(tv->slot[sourceno], obj2gco(source));
@@ -256,9 +308,7 @@ static void test_reclaim_requeue_is_raw_and_retryable(lua_State *L,
 
   setgcrefrel(tv->slot[sourceno], NULL);
   trace_traceno_rel(source, 0);
-  assert(lj_jit_token_try(J));
-  lj_trace_free_unpublished(g, source);
-  lj_jit_token_release(J);
+  assert(lj_trace_retire_gc_claim(g, source));
   /* Synthetic future-epoch calls above do not advance g->gc2.hs_epoch. Reset
   ** only the test throttle so this newly retired current-epoch body can drain. */
   J->trace_reclaim_epoch = 0;
@@ -284,7 +334,7 @@ static void test_pending_trace_arena_requests_full_grace(lua_State *L,
   T = lj_trace_alloc(L, &tmpl);
   test_trace_complete_payload_layout(T);
   setgcref(T->startpt, obj2gco(pt));
-  test_trace_publish_root(g, T);
+  test_trace_publish_header(g, T);
   assert(lj_jit_token_try(J));
   lj_trace_free_unpublished(g, T);
   lj_jit_token_release(J);
@@ -435,7 +485,7 @@ int main(void)
 
   T = lj_trace_alloc(L, &tmpl);
   test_trace_complete_payload_layout(T);
-  test_trace_publish_header(g, T);
+  test_trace_publish_root(g, T);
   test_trace_stale_startins_candidates(g, pt, T);
   setgcref(T->startpt, obj2gco(pt));
   exittab = lj_mem_newvec(L, 1, MCode *);
@@ -468,7 +518,7 @@ int main(void)
 
   T = lj_trace_alloc(L, &tmpl);
   test_trace_complete_payload_layout(T);
-  test_trace_publish_header(g, T);
+  test_trace_publish_root(g, T);
   setgcref(T->startpt, obj2gco(pt));
   exittab = lj_mem_newvec(L, 1, MCode *);
   exittab[0] = NULL;
@@ -488,6 +538,7 @@ int main(void)
   assert(reclaim_trace_at(g, scoped_epoch + LJ_FLUSH_EPOCHS) >= 1);
   assert(retired_find(J, T) == NULL);
 
+  test_listed_slot_teardown_no_republish(L);
   lua_close(L);
   printf("t-jit-trace-retire OK: bodies, exittabs, and inbound-link rescue retire correctly\n");
   return 0;

@@ -251,20 +251,16 @@ static void test_mt_epoch_pin(lua_State *L)
   assert(ret != NULL);
   retire_epoch = lj_tab_node_retired_epoch_acq(ret);
 
-  /* Multi-TG direct drains without the outer metadata writer gate fail closed. */
-  assert(lj_tab_reclaim_retired(g,
-				retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 0);
-  assert(find_retired(g, oldnode) != NULL);
-
-  gc2_smr_reclaiming_rel(g, 1);
-  (void)lj_tab_reclaim_retired(g,
-			      retire_epoch + LJ_TAB_RETIRE_EPOCHS);
+  /* The real generic reclaim transaction owns the process-visible writer bit
+  ** and its non-transferable TLS capability. The live read epoch makes the
+  ** subsystem requeue this generation without waiting. */
+  (void)lj_gc2_reclaim_retired(g,
+			       retire_epoch + LJ_TAB_RETIRE_EPOCHS);
   assert(find_retired(g, oldnode) != NULL);
   lj_tab_read_leave(&extra);
-  assert(lj_tab_reclaim_retired(g,
+  assert(lj_gc2_reclaim_retired(g,
 				retire_epoch + LJ_TAB_RETIRE_EPOCHS) >= 1u);
   assert(find_retired(g, oldnode) == NULL);
-  gc2_smr_reclaiming_rel(g, 0);
 
   lua_pop(L, 1);
   lj_tg_detach(g, &extra);
@@ -312,15 +308,17 @@ int main(void)
   assert(lj_tab_node_retired_hmask_acq(ret) == oldhmask);
   assert(lj_tab_node_retired_armed_acq(ret) == 1);
   retire_epoch = lj_tab_node_retired_epoch_acq(ret);
-  assert(lj_tab_reclaim_retired(g, retire_epoch) == 0);
+  (void)lj_gc2_reclaim_retired(g, retire_epoch);
   assert(find_retired(g, oldnode) != NULL);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 0);
+  (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
   assert(find_retired(g, oldnode) != NULL);
   lj_tab_node_rel(t, oldnode);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 0);
+  (void)lj_gc2_reclaim_retired(g,
+			       retire_epoch + LJ_TAB_RETIRE_EPOCHS);
   assert(find_retired(g, oldnode) != NULL);
   lj_tab_node_rel(t, newnode);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 1);
+  assert(lj_gc2_reclaim_retired(g,
+				retire_epoch + LJ_TAB_RETIRE_EPOCHS) >= 1);
   assert(find_retired(g, oldnode) == NULL);
   for (i = 0; i < 4; i++)
     check_pair(L, i);

@@ -566,6 +566,40 @@ static void clib_cache_retire(lua_State *L, global_State *g,
   clib_cache_retired_push(g, entry);
 }
 
+/* Preflight before mutating a detached cache chain. In a singly linked list a
+** duplicate entry necessarily closes a cycle; Floyd detection prevents both
+** suffix truncation and a second free of the same cache entry. */
+static int clib_cache_retired_chain_valid(global_State *g,
+					   CLibCacheEntry *head,
+					   int reclaim_held)
+{
+  CLibCacheEntry *slow = head, *fast = head;
+  while (fast) {
+    if (slow) {
+      if (!(reclaim_held ?
+	    lj_gc2_mem_registered_known_reclaim_held(g, slow) :
+	    lj_gc2_mem_registered_known(g, slow)))
+	return 0;
+      slow = lj_clib_cache_retired_next_acq(slow);
+    }
+    if (!(reclaim_held ?
+	  lj_gc2_mem_registered_known_reclaim_held(g, fast) :
+	  lj_gc2_mem_registered_known(g, fast)))
+      return 0;
+    fast = lj_clib_cache_retired_next_acq(fast);
+    if (fast) {
+      if (!(reclaim_held ?
+	    lj_gc2_mem_registered_known_reclaim_held(g, fast) :
+	    lj_gc2_mem_registered_known(g, fast)))
+	return 0;
+      fast = lj_clib_cache_retired_next_acq(fast);
+    }
+    if (fast && slow == fast)
+      return 0;
+  }
+  return 1;
+}
+
 uint32_t lj_clib_cache_reclaim_retired(global_State *g,
 				       uint64_t completed_epoch)
 {
@@ -573,8 +607,19 @@ uint32_t lj_clib_cache_reclaim_retired(global_State *g,
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
+  /* The generic GC2 owner retains its exact current-thread SMR capability
+  ** across this detach and every entry validation below. */
   entry = clib_cache_retired_xchg_acqrel(g, NULL);
-  while (entry && lj_gc2_mem_registered(g, entry)) {
+  if (LJ_UNLIKELY(!clib_cache_retired_chain_valid(g, entry, 1))) {
+    lj_assertG(0, "invalid/cyclic detached CLibrary cache retire chain");
+    abort();
+  }
+  while (entry) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, entry))) {
+      lj_assertG(0, "invalid detached CLibrary cache retire entry");
+      abort();
+    }
     CLibCacheEntry *next = lj_clib_cache_retired_next_acq(entry);
     lj_clib_cache_retired_next_rel(entry, NULL);
     if (lj_clib_cache_retire_epoch_acq(entry) < completed_epoch) {
@@ -594,7 +639,15 @@ void lj_clib_cache_freeretired(global_State *g)
   if (!g)
     return;
   entry = clib_cache_retired_xchg_acqrel(g, NULL);
-  while (entry && lj_gc2_mem_registered(g, entry)) {
+  if (LJ_UNLIKELY(!clib_cache_retired_chain_valid(g, entry, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal CLibrary cache retire chain");
+    abort();
+  }
+  while (entry) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, entry))) {
+      lj_assertG(0, "invalid terminal CLibrary cache retire entry");
+      abort();
+    }
     CLibCacheEntry *next = lj_clib_cache_retired_next_acq(entry);
     lj_mem_freet(g, entry);
     entry = next;

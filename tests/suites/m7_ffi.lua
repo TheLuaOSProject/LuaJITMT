@@ -229,6 +229,12 @@ print("bulk fill ok")
     description = "concurrent FFI cdata allocation behavior",
     run = function(t)
       clean_build(t)
+      build_and_run_c(t, t:tmp("lj_t-ffi-cdata-pre-ctstate"),
+                      "t-ffi-cdata-pre-ctstate.c",
+                      { build = false, timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-gc2-overaligned-cdata-progress"),
+                      "t-gc2-overaligned-cdata-progress.c",
+                      { build = false, timeout = "20s" })
       run_luajit_script(t, "t-ffi-cdata-alloc.lua", {
         getenv("LJ_M7_FFI_CDATA_THREADS", "6"),
         getenv("LJ_M7_FFI_CDATA_ITERS", "400")
@@ -320,6 +326,11 @@ print("bulk fill ok")
                       "t-ffi-clib-extern-snapshot.c", {
         build = false,
         env = { LJ_M7_FFI_CLIB_EXTERN_SO = extern_so },
+        timeout = "20s"
+      })
+      build_and_run_c(t, t:tmp("lj_t-ffi-clib-cache-retire"),
+                      "t-ffi-clib-cache-retire.c", {
+        build = false,
         timeout = "20s"
       })
       run_luajit_script(t, "t-ffi-clib-cache.lua", {
@@ -528,7 +539,13 @@ assert(cl.lj_clib_ldscript_value() == 42)
     name = "m7_ffi_finreg",
     description = "FFI cdata finalizer registry behavior",
     run = function(t)
-      clean_build(t)
+      clean_build(t, { xcflags = "-DLJ_CDATA_TEST_HELPERS" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-finreg-clear-races"),
+                      "t-ffi-finreg-clear-races.c", {
+        build = false,
+        cflags = "-DLJ_CDATA_TEST_HELPERS",
+        timeout = "30s"
+      })
       run_luajit_script(t, "t-ffi-gc-finreg.lua", {
         getenv("LJ_M7_FFI_FIN_THREADS", "6"),
         getenv("LJ_M7_FFI_FIN_ITERS", "240")
@@ -543,6 +560,9 @@ assert(cl.lj_clib_ldscript_value() == 42)
       })
       build_and_run_c(t, t:tmp("lj_t-ffi-finreg-free-path"),
                       "t-ffi-finreg-free-path.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-finreg-slot-lease"),
+                      "t-ffi-finreg-slot-lease.c",
+                      { build = false, timeout = "20s" })
       print("M7 FFI finalizer registry behavior passed")
     end
   })

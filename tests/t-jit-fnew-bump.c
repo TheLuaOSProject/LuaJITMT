@@ -19,6 +19,7 @@
 #include "lj_func.h"
 #include "lj_target.h"
 #include "lj_tg.h"
+#include "lj_vm.h"
 
 #include "lib/lua_fixture_helpers.h"
 
@@ -181,7 +182,8 @@ static int decode_x64_mov_store(const uint8_t *mc, size_t len, size_t pos,
 }
 
 static size_t find_locked_cmpxchg(const uint8_t *mc, size_t len, size_t start,
-				   int32_t field, X64MemInsn *found)
+				   int32_t field, int required_base,
+				   X64MemInsn *found)
 {
   size_t i;
   for (i = start; i + 5u < len; i++) {
@@ -201,7 +203,8 @@ static size_t find_locked_cmpxchg(const uint8_t *mc, size_t len, size_t start,
     if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, &ins))
       continue;
     ins.end = j;
-    if (!ins.indexed && ins.base == RID_DISPATCH && ins.disp == field) {
+    if (!ins.indexed && (required_base < 0 || ins.base == required_base) &&
+	ins.disp == field) {
       if (found)
 	*found = ins;
       return i;
@@ -235,6 +238,342 @@ static int decode_backward_jne(const uint8_t *mc, size_t len, size_t pos,
   return 1;
 }
 
+static int decode_x64_mov_rr(const uint8_t *mc, size_t len, size_t pos,
+			     uint8_t *dstp, uint8_t *srcp, size_t *endp)
+{
+  size_t j = pos;
+  uint8_t rex = 0, opcode, modrm, reg, rm;
+  if (j < len && is_rex(mc[j]))
+    rex = mc[j++];
+  if (!(rex & 8u) || j + 2u > len)
+    return 0;
+  opcode = mc[j++];
+  if (opcode != 0x8bu && opcode != 0x89u)
+    return 0;
+  modrm = mc[j++];
+  if ((modrm >> 6) != 3u)
+    return 0;
+  reg = (uint8_t)(((modrm >> 3) & 7u) | ((rex & 4u) << 1));
+  rm = (uint8_t)((modrm & 7u) | ((rex & 1u) << 3));
+  *dstp = opcode == 0x8bu ? reg : rm;
+  *srcp = opcode == 0x8bu ? rm : reg;
+  *endp = j;
+  return 1;
+}
+
+static int decode_x64_bit_rr(const uint8_t *mc, size_t len, size_t pos,
+			     uint8_t opcode, uint8_t *valuep,
+			     uint8_t *bitp, size_t *endp)
+{
+  size_t j = pos;
+  uint8_t rex = 0, modrm;
+  if (j < len && is_rex(mc[j]))
+    rex = mc[j++];
+  if (!(rex & 8u) || j + 3u > len || mc[j] != 0x0fu ||
+      mc[j+1] != opcode)
+    return 0;
+  j += 2u;
+  modrm = mc[j++];
+  if ((modrm >> 6) != 3u)
+    return 0;
+  *bitp = (uint8_t)(((modrm >> 3) & 7u) | ((rex & 4u) << 1));
+  *valuep = (uint8_t)((modrm & 7u) | ((rex & 1u) << 3));
+  *endp = j;
+  return 1;
+}
+
+static int decode_x64_arith1(const uint8_t *mc, size_t len, size_t pos,
+			     uint8_t group, uint8_t reg, size_t *endp)
+{
+  size_t j = pos;
+  uint8_t rex = 0, modrm, dst;
+  if (j < len && is_rex(mc[j]))
+    rex = mc[j++];
+  if (j + 3u > len || mc[j++] != 0x83u)
+    return 0;
+  modrm = mc[j++];
+  dst = (uint8_t)((modrm & 7u) | ((rex & 1u) << 3));
+  if ((modrm >> 6) != 3u || ((modrm >> 3) & 7u) != group ||
+      dst != reg || mc[j++] != 1u)
+    return 0;
+  *endp = j;
+  return 1;
+}
+
+static int decode_x64_arith_imm(const uint8_t *mc, size_t len, size_t pos,
+				 uint8_t group, uint8_t reg, uint8_t imm,
+				 size_t *endp)
+{
+  size_t j = pos;
+  uint8_t rex = 0, modrm, dst;
+  if (j < len && is_rex(mc[j]))
+    rex = mc[j++];
+  if (j + 3u > len || mc[j++] != 0x83u)
+    return 0;
+  modrm = mc[j++];
+  dst = (uint8_t)((modrm & 7u) | ((rex & 1u) << 3));
+  if ((modrm >> 6) != 3u || ((modrm >> 3) & 7u) != group ||
+	 dst != reg || mc[j++] != imm)
+    return 0;
+  *endp = j;
+  return 1;
+}
+
+static int decode_x64_adjust1(const uint8_t *mc, size_t len, size_t pos,
+			      uint8_t group, uint8_t reg, size_t *endp)
+{
+  size_t j = pos;
+  uint8_t rex = 0, modrm, dst, base;
+  int8_t wanted = group == XOg_ADD ? 1 : -1;
+  if (decode_x64_arith1(mc, len, pos, group, reg, endp))
+    return 1;
+  if (j < len && is_rex(mc[j]))
+    rex = mc[j++];
+  if (j + 3u > len || mc[j++] != 0x8du)
+    return 0;
+  modrm = mc[j++];
+  dst = (uint8_t)(((modrm >> 3) & 7u) | ((rex & 4u) << 1));
+  base = (uint8_t)((modrm & 7u) | ((rex & 1u) << 3));
+  if ((modrm >> 6) != 1u || dst != reg || base != reg ||
+	(int8_t)mc[j++] != wanted)
+    return 0;
+  *endp = j;
+  return 1;
+}
+
+static int decode_x64_jcc(const uint8_t *mc, size_t len, size_t pos,
+			  uint8_t cc, size_t *endp, size_t *targetp)
+{
+  size_t end;
+  int32_t rel;
+  int64_t target;
+  if (pos + 2u <= len && mc[pos] == (uint8_t)(0x70u + cc)) {
+	end = pos + 2u;
+	rel = (int8_t)mc[pos+1];
+  } else if (pos + 6u <= len && mc[pos] == 0x0fu &&
+      mc[pos+1] == (uint8_t)(0x80u + cc)) {
+    end = pos + 6u;
+    rel = (int32_t)((uint32_t)mc[pos+2] |
+	((uint32_t)mc[pos+3] << 8) | ((uint32_t)mc[pos+4] << 16) |
+	((uint32_t)mc[pos+5] << 24));
+  } else {
+    return 0;
+  }
+  target = (int64_t)end + rel;
+  if (target < 0 || target >= (int64_t)len)
+    return 0;
+  *endp = end;
+  *targetp = (size_t)target;
+  return 1;
+}
+
+static int decode_root_bit_transition(const uint8_t *mc, size_t len,
+				      size_t *posp, uint8_t value,
+				      uint8_t bit, uint32_t *fromp,
+				      uint32_t *top, size_t *impossiblep)
+{
+  size_t p = *posp, next, impossible;
+  uint8_t gotvalue, gotbit;
+  uint32_t from, to;
+  if (decode_x64_bit_rr(mc, len, p, 0xabu, &gotvalue, &gotbit, &p)) {
+    from = 0;
+    if (gotvalue != value || gotbit != bit ||
+	!decode_x64_jcc(mc, len, p, CC_B, &p, &impossible))
+      return 0;
+    if (decode_x64_bit_rr(mc, len, p, 0xb3u,
+			  &gotvalue, &gotbit, &next)) {
+      if (gotvalue != value || gotbit != bit)
+	return 0;
+      p = next;
+      to = 0;
+    } else {
+      to = 1;
+    }
+  } else if (decode_x64_bit_rr(mc, len, p, 0xb3u,
+				&gotvalue, &gotbit, &p)) {
+    from = 1;
+    if (gotvalue != value || gotbit != bit ||
+	!decode_x64_jcc(mc, len, p, CC_AE, &p, &impossible))
+      return 0;
+    if (decode_x64_bit_rr(mc, len, p, 0xabu,
+			  &gotvalue, &gotbit, &next)) {
+      if (gotvalue != value || gotbit != bit)
+	return 0;
+      p = next;
+      to = 1;
+    } else {
+      to = 0;
+    }
+  } else {
+    return 0;
+  }
+  if (*impossiblep != (size_t)-1 && *impossiblep != impossible)
+    return 0;
+  *impossiblep = impossible;
+  *posp = p;
+  *fromp = from;
+  *top = to;
+  return 1;
+}
+
+static int decode_root_transition(const uint8_t *mc, size_t len,
+				  const X64MemInsn *cas, uint32_t *fromp,
+				  uint32_t *top, size_t *jne_endp,
+				  size_t *impossiblep)
+{
+  size_t p, first_end, jne_end, impossible = (size_t)-1;
+  uint8_t dst, src, value, bit;
+  uint32_t lofrom, loto, hifrom, hito;
+  if (!decode_backward_jne(mc, len, cas->end, 0, &p, &jne_end) ||
+      !decode_x64_mov_rr(mc, len, p, &dst, &src, &p) ||
+      dst != cas->reg || src != RID_RET)
+    return 0;
+  if (!decode_x64_bit_rr(mc, len, p, 0xabu, &value, &bit, &first_end) &&
+      !decode_x64_bit_rr(mc, len, p, 0xb3u, &value, &bit, &first_end))
+    return 0;
+  if (first_end <= p || value != cas->reg ||
+      !decode_root_bit_transition(mc, len, &p, value, bit,
+				   &lofrom, &loto, &impossible) ||
+      !decode_x64_adjust1(mc, len, p, XOg_ADD, bit, &p) ||
+      !decode_root_bit_transition(mc, len, &p, value, bit,
+				   &hifrom, &hito, &impossible) ||
+      !decode_x64_adjust1(mc, len, p, XOg_SUB, bit, &p))
+    return 0;
+  /* DynASM's hand-written commit restores an unchanged low bit after the high
+  ** transition, while the JIT template restores it before advancing to high.
+  ** Accept either exact ordering and derive the same packed from/to state. */
+  if (p != cas->start) {
+    size_t next;
+    uint8_t gotvalue, gotbit;
+    uint8_t opcode = lofrom ? 0xabu : 0xb3u;
+    if (loto == lofrom ||
+	!decode_x64_bit_rr(mc, len, p, opcode,
+			  &gotvalue, &gotbit, &next) ||
+	gotvalue != value || gotbit != bit || next != cas->start)
+      return 0;
+    loto = lofrom;
+    p = next;
+  }
+  if (p != cas->start)
+    return 0;
+  *fromp = lofrom | (hifrom << 1);
+  *top = loto | (hito << 1);
+  *jne_endp = jne_end;
+  *impossiblep = impossible;
+  return 1;
+}
+
+static size_t find_root_transition(const uint8_t *mc, size_t len,
+				    size_t start, uint32_t wanted_from,
+				    uint32_t wanted_to, X64MemInsn *found,
+				    size_t *impossiblep)
+{
+  while (start < len) {
+    X64MemInsn cas;
+    size_t pos = find_locked_cmpxchg(mc, len, start,
+	(int32_t)offsetof(GCArena, root), -1, &cas);
+    size_t jne_end, impossible;
+    uint32_t from, to;
+    if (pos == (size_t)-1)
+      return pos;
+    if (decode_root_transition(mc, len, &cas, &from, &to, &jne_end,
+			       &impossible) &&
+	from == wanted_from && to == wanted_to) {
+      if (found)
+	*found = cas;
+      if (impossiblep)
+	*impossiblep = impossible;
+      return pos;
+    }
+    start = pos + 1u;
+  }
+  return (size_t)-1;
+}
+
+static int decode_packed_transition_body(const uint8_t *mc, size_t len,
+					 const X64MemInsn *cas, size_t p,
+					 uint32_t lane_bits, uint32_t *fromp,
+					 uint32_t *top, size_t *impossiblep)
+{
+  size_t next, impossible = (size_t)-1;
+  uint8_t dst, src, value, bit;
+  uint32_t from = 0, to = 0, j;
+  if (lane_bits < 2u || lane_bits > 4u ||
+      !decode_x64_mov_rr(mc, len, p, &dst, &src, &p) ||
+      dst != cas->reg || src != RID_RET)
+    return 0;
+  for (j = 0; j < lane_bits; j++) {
+    uint32_t bitfrom, bitto;
+    if (!decode_x64_bit_rr(mc, len, p, 0xabu, &value, &bit, &next) &&
+	!decode_x64_bit_rr(mc, len, p, 0xb3u, &value, &bit, &next))
+      return 0;
+    if (value != cas->reg ||
+	!decode_root_bit_transition(mc, len, &p, value, bit,
+				   &bitfrom, &bitto, &impossible))
+      return 0;
+    from |= bitfrom << j;
+    to |= bitto << j;
+    if (j + 1u < lane_bits &&
+	!decode_x64_adjust1(mc, len, p, XOg_ADD, bit, &p))
+      return 0;
+  }
+  if (!decode_x64_arith_imm(mc, len, p, XOg_SUB, bit,
+			    (uint8_t)(lane_bits-1u), &p) || p != cas->start)
+    return 0;
+  *fromp = from;
+  *top = to;
+  *impossiblep = impossible;
+  return 1;
+}
+
+static int decode_packed_transition(const uint8_t *mc, size_t len,
+				    const X64MemInsn *cas,
+				    uint32_t lane_bits, uint32_t *fromp,
+				    uint32_t *top, size_t *impossiblep)
+{
+  size_t p, jne_end;
+  if (!decode_backward_jne(mc, len, cas->end, 0, &p, &jne_end))
+    return 0;
+  if (decode_packed_transition_body(mc, len, cas, p, lane_bits,
+				    fromp, top, impossiblep))
+    return 1;
+  /* Commit CAS failure redispatches C/M/L from the refreshed RAX sample, so
+  ** its JNE target precedes the exact C->L arm. Locate that arm locally. */
+  p = cas->start > 192u ? cas->start - 192u : 0u;
+  for (; p < cas->start; p++)
+    if (decode_packed_transition_body(mc, len, cas, p, lane_bits,
+				      fromp, top, impossiblep))
+      return 1;
+  return 0;
+}
+
+static size_t find_lifetime_transition(const uint8_t *mc, size_t len,
+				       size_t start, uint32_t wanted_from,
+				       uint32_t wanted_to, X64MemInsn *found,
+				       size_t *impossiblep)
+{
+  while (start < len) {
+    X64MemInsn cas;
+    size_t pos = find_locked_cmpxchg(mc, len, start,
+	(int32_t)offsetof(GCArena, lifetime), -1, &cas);
+    size_t impossible;
+    uint32_t from, to;
+    if (pos == (size_t)-1)
+      return pos;
+    if (decode_packed_transition(mc, len, &cas, 4u, &from, &to,
+				 &impossible) &&
+	from == wanted_from && to == wanted_to) {
+      if (found)
+	*found = cas;
+      if (impossiblep)
+	*impossiblep = impossible;
+      return pos;
+    }
+    start = pos + 1u;
+  }
+  return (size_t)-1;
+}
+
 static int decode_pending_retry(const uint8_t *mc, size_t len, size_t floor,
 				 const X64MemInsn *cas, X64MemInsn *tail,
 				 size_t *jne_endp)
@@ -265,6 +604,124 @@ static int decode_pending_retry(const uint8_t *mc, size_t len, size_t floor,
   return 0;
 }
 
+static size_t find_rel_call_target(const uint8_t *mc, size_t len,
+				   const void *target)
+{
+  size_t i;
+  uintptr_t want = (uintptr_t)target;
+  for (i = 0; i + 5u <= len; i++) {
+    int32_t rel;
+    uintptr_t got;
+    if (mc[i] != 0xe8u)
+      continue;
+    rel = (int32_t)((uint32_t)mc[i+1] | ((uint32_t)mc[i+2] << 8) |
+	((uint32_t)mc[i+3] << 16) | ((uint32_t)mc[i+4] << 24));
+    got = (uintptr_t)(mc + i + 5u) + rel;
+    if (got == want)
+      return i;
+  }
+  return (size_t)-1;
+}
+
+static int decode_rel_jmp_target(const uint8_t *mc, size_t len, size_t pos,
+				 size_t *targetp, size_t *endp)
+{
+  size_t end;
+  int32_t rel;
+  int64_t target;
+  if (pos + 2u <= len && mc[pos] == 0xebu) {
+    rel = (int8_t)mc[pos+1];
+    end = pos + 2u;
+  } else if (pos + 5u <= len && mc[pos] == 0xe9u) {
+    rel = (int32_t)((uint32_t)mc[pos+1] |
+	((uint32_t)mc[pos+2] << 8) | ((uint32_t)mc[pos+3] << 16) |
+	((uint32_t)mc[pos+4] << 24));
+    end = pos + 5u;
+  } else {
+    return 0;
+  }
+  target = (int64_t)end + rel;
+  if (target < 0 || target >= (int64_t)len)
+    return 0;
+  *targetp = (size_t)target;
+  *endp = end;
+  return 1;
+}
+
+static void assert_vm_tnew_membership_order(void)
+{
+  const uint8_t *mc = (const uint8_t *)lj_vm_asm_begin + lj_bc_ofs[BC_TNEW];
+  size_t len = (size_t)(lj_bc_ofs[BC_TDUP] - lj_bc_ofs[BC_TNEW]);
+  size_t life_claim, claim, life_rollback, gct, ready, block;
+  size_t hint1, pending, hint2, commit;
+  size_t life_bad = (size_t)-1, rollback_bad = (size_t)-1;
+  size_t claim_bad = (size_t)-1, commit_bad = (size_t)-1;
+  size_t retry_target, retry_end;
+  size_t cold_call, cold_jmp = (size_t)-1, cold_restart = (size_t)-1;
+  X64MemInsn insn;
+  size_t i;
+
+  assert(lj_bc_ofs[BC_TDUP] > lj_bc_ofs[BC_TNEW]);
+  life_claim = find_lifetime_transition(mc, len, 0,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
+	&insn, &life_bad);
+  claim = find_root_transition(mc, len, 0, LJ_ARENA_ROOT_NONE,
+			       LJ_ARENA_ROOT_LINKING, &insn, &claim_bad);
+  life_rollback = find_lifetime_transition(mc, len, claim,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE,
+	&insn, &rollback_bad);
+  gct = find_gct_store(mc, len, (uint8_t)~LJ_TTAB);
+  ready = find_bitmap_op(mc, len, 0, 0, 0xabu,
+			  (uint32_t)offsetof(GCArena, ready));
+  block = find_bitmap_op(mc, len, 0, 0, 0xabu,
+			  (uint32_t)offsetof(GCArena, block));
+  hint1 = find_i32_store(mc, len, block,
+	(uint32_t)offsetof(global_State, gcroot_pending_hint), 1u);
+  pending = find_locked_cmpxchg(mc, len, block,
+	(int32_t)DISPATCH_TG(gcroot_pending), RID_DISPATCH, &insn);
+  assert(pending != (size_t)-1);
+  assert(decode_backward_jne(mc, len, insn.end, block,
+			     &retry_target, &retry_end));
+  hint2 = find_i32_store(mc, len, retry_end,
+	(uint32_t)offsetof(global_State, gcroot_pending_hint), 1u);
+  commit = find_root_transition(mc, len, retry_end,
+				LJ_ARENA_ROOT_LINKING,
+				LJ_ARENA_ROOT_MEMBER, &insn, &commit_bad);
+  cold_call = find_rel_call_target(mc, len, (const void *)lj_gc_step_fixtop);
+  if (cold_call != (size_t)-1) {
+    size_t stop = cold_call + 48u < len ? cold_call + 48u : len;
+    for (i = cold_call + 5u; i < stop; i++) {
+      size_t end;
+      if (decode_rel_jmp_target(mc, len, i, &cold_restart, &end)) {
+	cold_jmp = i;
+	break;
+      }
+    }
+  }
+
+  assert(life_claim != (size_t)-1 && claim != (size_t)-1 &&
+	 life_rollback != (size_t)-1 && gct != (size_t)-1);
+  assert(ready != (size_t)-1 && block != (size_t)-1);
+  assert(hint1 != (size_t)-1 && hint2 != (size_t)-1);
+  assert(commit != (size_t)-1);
+  assert(claim < claim_bad && claim_bad <= life_rollback);
+  assert(life_bad == rollback_bad && rollback_bad == commit_bad &&
+	 commit_bad + 3u <= len);
+  assert(mc[commit_bad] == 0xccu && mc[commit_bad+1u] == 0xebu &&
+	 mc[commit_bad+2u] == 0xfdu);
+  assert(cold_call != (size_t)-1 && cold_jmp != (size_t)-1);
+  /* The cold fixtop helper must restart at the original eligibility label
+  ** (`test RDd,RDd`), never at either later membership CAS retry loop. */
+  assert(cold_restart + 2u <= len);
+  assert(mc[cold_restart] == 0x85u && mc[cold_restart+1] == 0xc0u);
+  assert(cold_restart < life_claim && life_claim < claim);
+  assert(claim < gct);
+  assert(gct < ready && ready < block);
+  assert(block < hint1 && hint1 < pending);
+  assert(retry_target < pending && pending < retry_end);
+  assert(retry_end <= hint2 && hint2 < commit);
+}
+
 static void assert_traced_fnew_publication_order(lua_State *L)
 {
   int traceno;
@@ -272,7 +729,16 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     size_t len, fn_header, uv_header, mark_set, mark_clear, first_mark;
     size_t ready, block;
     size_t pending_hint, pending_cas, pending_hint2, retry_jne_end = 0;
+    size_t life_claim1, life_claim2, life_commit1, life_commit2;
+    size_t root_claim1, root_claim2, root_commit1, root_commit2;
+    size_t root_rollback;
+    size_t life_claim1_bad = (size_t)-1, life_claim2_bad = (size_t)-1;
+    size_t life_commit1_bad = (size_t)-1, life_commit2_bad = (size_t)-1;
+    size_t claim1_bad = (size_t)-1, claim2_bad = (size_t)-1;
+    size_t commit1_bad = (size_t)-1, commit2_bad = (size_t)-1;
+    size_t rollback_bad = (size_t)-1;
     X64MemInsn pending_cmp, pending_tail;
+    X64MemInsn root_insn;
     int pending_retry;
     const uint8_t *mc;
     lua_getglobal(L, "require");
@@ -303,7 +769,7 @@ static void assert_traced_fnew_publication_order(lua_State *L)
 				(uint32_t)offsetof(GCArena, mark));
     pending_cas = find_locked_cmpxchg(mc, len, block,
 				     (int32_t)DISPATCH_TG(gcroot_pending),
-				     &pending_cmp);
+				     RID_DISPATCH, &pending_cmp);
     pending_retry = pending_cas != (size_t)-1 &&
       decode_pending_retry(mc, len, block, &pending_cmp, &pending_tail,
 			   &retry_jne_end);
@@ -313,6 +779,41 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     pending_hint2 = !pending_retry ? (size_t)-1 :
       find_i32_store(mc, len, retry_jne_end,
 	(uint32_t)offsetof(global_State, gcroot_pending_hint), 1u);
+    life_claim1 = find_lifetime_transition(mc, len, 0,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
+	&root_insn, &life_claim1_bad);
+    life_claim2 = life_claim1 == (size_t)-1 ? (size_t)-1 :
+      find_lifetime_transition(mc, len, life_claim1 + 1u,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
+	&root_insn, &life_claim2_bad);
+    root_claim1 = find_root_transition(mc, len, 0,
+				       LJ_ARENA_ROOT_NONE,
+				       LJ_ARENA_ROOT_LINKING, &root_insn,
+				       &claim1_bad);
+    root_claim2 = root_claim1 == (size_t)-1 ? (size_t)-1 :
+      find_root_transition(mc, len, root_claim1 + 1u,
+			   LJ_ARENA_ROOT_NONE,
+			   LJ_ARENA_ROOT_LINKING, &root_insn, &claim2_bad);
+    root_commit1 = !pending_retry ? (size_t)-1 :
+      find_root_transition(mc, len, retry_jne_end,
+			   LJ_ARENA_ROOT_LINKING,
+			   LJ_ARENA_ROOT_MEMBER, &root_insn, &commit1_bad);
+    root_commit2 = root_commit1 == (size_t)-1 ? (size_t)-1 :
+      find_root_transition(mc, len, root_commit1 + 1u,
+			   LJ_ARENA_ROOT_LINKING,
+			   LJ_ARENA_ROOT_MEMBER, &root_insn, &commit2_bad);
+    life_commit1 = !pending_retry ? (size_t)-1 :
+      find_lifetime_transition(mc, len, retry_jne_end,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	&root_insn, &life_commit1_bad);
+    life_commit2 = life_commit1 == (size_t)-1 ? (size_t)-1 :
+      find_lifetime_transition(mc, len, life_commit1 + 1u,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	&root_insn, &life_commit2_bad);
+    root_rollback = find_root_transition(mc, len, 0,
+					 LJ_ARENA_ROOT_LINKING,
+					 LJ_ARENA_ROOT_NONE,
+					 &root_insn, &rollback_bad);
     assert(fn_header != (size_t)-1 && uv_header != (size_t)-1);
     assert(mark_clear != (size_t)-1);
     assert(ready != (size_t)-1);
@@ -320,11 +821,22 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     assert(pending_cas != (size_t)-1);
     assert(pending_retry);
     assert(pending_hint2 != (size_t)-1);
+    assert(life_claim1 != (size_t)-1 && life_claim2 != (size_t)-1);
+    assert(root_claim1 != (size_t)-1 && root_claim2 != (size_t)-1);
+    assert(life_commit1 != (size_t)-1 && life_commit2 != (size_t)-1);
+    assert(root_commit1 != (size_t)-1 && root_commit2 != (size_t)-1);
+    assert(root_rollback != (size_t)-1);
     first_mark = mark_set < mark_clear ? mark_set : mark_clear;
     /* x64 emits backwards: this guards the order in executable mcode, not the
     ** visually misleading order of emit_* calls in lj_asm_x86.h. */
     assert(fn_header < first_mark);
     assert(uv_header < first_mark);
+    /* Both exact starts are LINKING before any header/bitmap discovery. The
+    ** decoded BTS/BTR/Jcc sequences above prove the emitted state transforms,
+    ** rather than merely counting locked instructions at the root offset. */
+    assert(life_claim1 < root_claim1 && root_claim1 < life_claim2);
+    assert(life_claim2 < root_claim2);
+    assert(root_claim2 < fn_header && root_claim2 < uv_header);
     assert(first_mark < ready);
     assert(ready < block);
     assert(block < pending_tail.start);
@@ -334,6 +846,22 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     assert(pending_cmp.end < retry_jne_end);
     assert(retry_jne_end <= pending_hint2);
     assert(pending_hint2 - retry_jne_end <= 32u);
+    assert(pending_hint2 < life_commit1 && life_commit1 < root_commit1);
+    assert(root_commit1 < life_commit2 && life_commit2 < root_commit2);
+    /* The pre-visibility pair rollback is present but out of the normal
+    ** success path; its physical placement is allocator-dependent. */
+    /* Every validation edge except the second claim is terminal. The second
+    ** claim enters the first claim's exact rollback block before that same
+    ** terminal INT3 loop. */
+    assert(life_claim1_bad != (size_t)-1 &&
+	   life_claim2_bad != (size_t)-1 && claim1_bad != (size_t)-1 &&
+	   claim2_bad != (size_t)-1);
+    assert(life_commit1_bad == commit1_bad &&
+	   life_commit2_bad == commit1_bad &&
+	   commit1_bad == commit2_bad && commit1_bad == rollback_bad);
+    assert(commit1_bad + 3u <= len && mc[commit1_bad] == 0xccu &&
+	   mc[commit1_bad+1u] == 0xebu && mc[commit1_bad+2u] == 0xfdu);
+    assert(claim2_bad < len && root_rollback < len);
     lua_pop(L, 1);
     return;
   }
@@ -352,6 +880,92 @@ static uint32_t gc1num_bump_helper_calls(void)
 	 lj_func_test_gc1num_bump_fallback_calls();
 }
 
+static void assert_arena_root_member(const void *p)
+{
+  GCArena *a = lj_arena_of(p);
+  uint32_t cell = lj_arena_cellof(p);
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+}
+
+static int packed_lane_transition(uint32_t state, uint32_t lane_bits,
+				  uint32_t from, uint32_t to,
+				  uint32_t *resultp)
+{
+  uint32_t mask = (1u << lane_bits) - 1u;
+  if (state > mask || from > mask || to > mask || state != from)
+    return 0;
+  *resultp = (state & ~mask) | to;
+  return 1;
+}
+
+static void assert_lifetime_state_matrix(void)
+{
+  uint32_t state;
+  for (state = 0; state < 16u; state++) {
+    uint32_t result = 0xffu;
+    int claim = packed_lane_transition(state, 4u,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT, &result);
+    int normal_commit = packed_lane_transition(state, 4u,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE, &result);
+    int recovery_commit = packed_lane_transition(state, 4u,
+	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_MUTATING, &result);
+    int completed_commit = packed_lane_transition(state, 4u,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_LIVE, &result);
+    /* These are the three emitted dispatch contracts. In particular, upper
+    ** nibble states DESTRUCT/RESCUE and 6..15 can never masquerade as the old
+    ** two-bit C/M encodings. */
+    assert(claim == (state == 0u));
+    assert(normal_commit == (state == 2u));
+    assert(recovery_commit == (state == 3u));
+    assert(completed_commit == (state == 1u));
+    assert((claim + normal_commit + recovery_commit + completed_commit) <= 1);
+    if (claim)
+      assert(result == LJ_ARENA_LIFETIME_CONSTRUCT);
+    else if (normal_commit || completed_commit)
+      assert(result == LJ_ARENA_LIFETIME_LIVE);
+    else if (recovery_commit)
+      assert(result == LJ_ARENA_LIFETIME_MUTATING);
+    else
+      assert(result == 0xffu);
+    if (state >= LJ_ARENA_LIFETIME_DESTRUCT)
+      assert(!claim && !normal_commit && !recovery_commit &&
+	     !completed_commit);
+  }
+}
+
+static void assert_arena_root_range_state(const GCArena *a, uint32_t cell,
+					  uint32_t ncells, uint32_t state)
+{
+  uint32_t i;
+  assert(a != NULL && ncells != 0);
+  assert(cell >= LJ_AFIRST_CELL && ncells <= LJ_ARENA_CELLS - cell);
+  for (i = 0; i < ncells; i++)
+    assert(lj_arena_root_state_acq(a, cell + i) == state);
+}
+
+static int assert_fnew_root_layout(GCfunc *fn)
+{
+  GCupval *uv = func_uv_acq(&fn->l, 0);
+  GCArena *a = lj_arena_of(fn);
+  uint32_t fncell = lj_arena_cellof(fn);
+  uint32_t uvcell = lj_arena_cellof(uv);
+  uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
+  uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
+  assert_arena_root_member(fn);
+  assert_arena_root_member(uv);
+  assert(lj_arena_of(uv) == a && uvcell == fncell + fncells);
+  if (fncells > 1u)
+    assert_arena_root_range_state(a, fncell + 1u, fncells - 1u,
+					  LJ_ARENA_ROOT_NONE);
+  if (uvcells > 1u)
+    assert_arena_root_range_state(a, uvcell + 1u, uvcells - 1u,
+					  LJ_ARENA_ROOT_NONE);
+  return fncell / LJ_ARENA_ROOT_CELLS_PER_WORD !=
+	 uvcell / LJ_ARENA_ROOT_CELLS_PER_WORD;
+}
+
 static void prime_traversable_bump_window(TGState *tg)
 {
   TGAlloc *alloc = &tg->alloc;
@@ -364,6 +978,61 @@ static void prime_traversable_bump_window(TGState *tg)
   alloc->bump[LJ_ARENAK_TRAVERSABLE].cell = LJ_AFIRST_CELL;
   alloc->bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
   assert(lj_arena_alloc_register_existing(alloc));
+}
+
+static void test_vm_tnew_root_member(lua_State *L, global_State *g,
+				     TGState *tg)
+{
+  GCArena *a;
+  uint32_t cell, ncells = lj_arena_ncells(sizeof(GCtab));
+  GCtab *t;
+  ljt_lua_loadstring(L, "return {}\n");
+  (void)lj_gc_flush_root_pending(g);
+  prime_traversable_bump_window(tg);
+  a = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a;
+  cell = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].cell;
+  /* The direct VM is a consumer of the allocator-owned reservation token: the
+  ** exact start and its undiscovered interiors must arrive NONE(00). */
+  assert_arena_root_range_state(a, cell, ncells, LJ_ARENA_ROOT_NONE);
+  /* total >= 0 deterministically takes BC_TNEW's fixtop cold edge. After the
+  ** helper, the handler must reload RD/G, restart eligibility, and finish the
+  ** same inline allocation with committed membership. */
+  lj_gc_threshold_store(g, 0);
+  ljt_lua_pcall(L, 0, 1, "x64 cold-fixtop TNEW membership commit");
+  lj_gc_threshold_store(g, UINT64_MAX / 2u);
+  assert(tvistab(L->top - 1));
+  t = tabV(L->top - 1);
+  assert(lj_arena_of(t) == a && lj_arena_cellof(t) == cell);
+  assert_arena_root_member(t);
+  if (ncells > 1u)
+    assert_arena_root_range_state(a, cell + 1u, ncells - 1u,
+					  LJ_ARENA_ROOT_NONE);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  lua_pop(L, 1);
+}
+
+static void test_vm_tnew_branch_targets(lua_State *L, global_State *g)
+{
+  uint32_t old_allocf_arena = la_load32_acq(&g->allocf_arena);
+
+  /* RD!=0 must retain BC_TNEW's original >6 generic-table target. */
+  ljt_lua_loadstring(L, "return { 11, 22, 33 }\n");
+  ljt_lua_pcall(L, 0, 1, "x64 nonempty TNEW branch target");
+  assert(lua_istable(L, -1));
+  assert(lua_objlen(L, -1) == 3u);
+  lua_rawgeti(L, -1, 3);
+  assert(lua_tointeger(L, -1) == 33);
+  lua_pop(L, 2);
+
+  /* A failed fast-path eligibility sample must retain >7, not enter any
+  ** membership label inserted between the predicate and the slow helper. */
+  assert(old_allocf_arena != 0);
+  la_store32_rel(&g->allocf_arena, 0);
+  ljt_lua_loadstring(L, "return {}\n");
+  ljt_lua_pcall(L, 0, 1, "x64 TNEW eligibility fallback target");
+  la_store32_rel(&g->allocf_arena, old_allocf_arena);
+  assert(lua_istable(L, -1));
+  lua_pop(L, 1);
 }
 
 static void suppress_new_trace_recording(lua_State *L, global_State *g)
@@ -478,6 +1147,26 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
 
   helper1 = gc1num_bump_helper_calls();
   assert(helper1 == helper0);
+  lua_getglobal(L, "__fnew_hint_t");
+  assert(lua_istable(L, -1));
+  lua_rawgeti(L, -1, 1);
+  assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
+  (void)assert_fnew_root_layout(funcV(L->top - 1));
+  lua_pop(L, 1);
+  {
+    int i, found_cross_word = 0;
+    for (i = 1; i <= 100 && !found_cross_word; i++) {
+      lua_rawgeti(L, -1, i);
+      assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
+      found_cross_word = assert_fnew_root_layout(funcV(L->top - 1));
+      lua_pop(L, 1);
+    }
+    /* Exercise the FNEW pair path whose exact starts live in different packed
+    ** root words; each CAS must derive its own word without touching either
+    ** allocation's NONE interiors. */
+    assert(found_cross_word);
+  }
+  lua_pop(L, 1);
   assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(lj_gc_flush_root_pending(g) > 0);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
@@ -1247,10 +1936,23 @@ int main(void)
   TGState *tg;
 
   assert(L != NULL);
+  assert_lifetime_state_matrix();
+  assert_vm_tnew_membership_order();
   luaL_openlibs(L);
   g = G(L);
   tg = L2TG(L);
 
+  test_vm_tnew_root_member(L, g, tg);
+  test_vm_tnew_branch_targets(L, g);
+  if (getenv("LJ_TEST_X64_PUBLICATION_ONLY") != NULL) {
+    /* Keep an allocation/GC-independent runner for emitted-mcode audits. This
+    ** is also useful while a separate collector tranche is under repair. */
+    test_traced_active_black_inline(L, g, tg);
+    test_traced_immutable_numeric_inline(L, g);
+    puts("t-jit-fnew-bump x64 publication OK");
+    fflush(stdout);
+    _Exit(0);
+  }
   test_uvcell_bump_direct(L, g, tg);
   test_bump_allocator_gate_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);

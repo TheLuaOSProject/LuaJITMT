@@ -60,6 +60,7 @@ int main(void)
   const size_t plain_size = 96;
   const size_t huge_size = LJ_HUGE_THRESHOLD + 113u;
   LJHugeInfo hi;
+  uint64_t marks0;
 
   assert(L != NULL);
   g = G(L);
@@ -84,7 +85,10 @@ int main(void)
   tab = tabV(L->top - 1);
 
   lj_gc2_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
+  /* Cycle-start root handshakes may legitimately mark permanent roots after
+  ** resetting the counter. This fixture checks exact helper deltas from that
+  ** semantic baseline, not an obsolete empty-root startup assumption. */
+  marks0 = la_load64_acq(&g->gc2.marks_this_round);
   assert(lj_gc2_markobj(g, NULL) == 0);
   {
     GCobj *bad = (GCobj *)(uintptr_t)U64x(00004000,00000000);
@@ -103,20 +107,20 @@ int main(void)
   assert(ptr_state(trav) == 3);
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markmem(g, trav) == 0);
-  assert(la_load64_acq(&g->gc2.marks_this_round) == 1);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == marks0 + 1u);
 
   assert(lj_gc2_markmem(g, plain) == 1);
   assert(ptr_state(plain) == 3);
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markmem(g, plain) == 0);
-  assert(la_load64_acq(&g->gc2.marks_this_round) == 2);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == marks0 + 2u);
 
   assert(lj_gc2_markmem(g, huge) == 1);
   assert(lj_arena_hugetab_lookup(&tg->huge, huge, &hi) == 1);
   assert(hi.flags == (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK));
   assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markmem(g, huge) == 0);
-  assert(la_load64_acq(&g->gc2.marks_this_round) == 3);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == marks0 + 3u);
 
   assert(lj_gc2_ismarked(g, obj2gco(tab)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(tab)) == 1);
@@ -124,7 +128,7 @@ int main(void)
   assert(!lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markobj(g, obj2gco(tab)) == 0);
   drain_marked_table(g, tg, tab);
-  assert(la_load64_acq(&g->gc2.marks_this_round) == 4);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == marks0 + 4u);
   assert(lj_gc2_test_weak_snapshot_count(g) == 0);
 
   not_mt = lj_str_newz(L, "gc2-not-a-table-metatable");

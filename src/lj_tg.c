@@ -269,7 +269,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
   TGState *tg = &GG->main_tg;
   global_State *g = &GG->g;
   lua_State *L = &GG->L;
-  lj_assertG(tid != 0 && tid != LJ_THREAD_GCSCAN,
+  lj_assertG(lj_thr_id_is_owner(tid),
 	     "invalid main TG owner id");
   g->main_tg = tg;
   lj_tg_tid_rel(tg, tid);
@@ -1035,7 +1035,7 @@ void lj_tg_registry_fini(global_State *g)
 TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
 {
   TGState *tg;
-  if (!g || owner_tid == 0)
+  if (!g || !lj_thr_id_is_owner(owner_tid))
     return NULL;
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
@@ -1059,7 +1059,7 @@ TGState *lj_tg_thread_active(global_State *g, lua_State *L)
   if (!g || !L)
     return NULL;
   owner = lj_state_owner_acq(L);
-  if (owner != 0 && owner != LJ_THREAD_GCSCAN)
+  if (lj_thr_id_is_owner(owner))
     tg = lj_tg_find_owner(g, owner);
   else if (L == lj_tg_cur_L(g))
     tg = G2TG(g);

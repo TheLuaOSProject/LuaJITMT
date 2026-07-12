@@ -145,6 +145,20 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
 #define trace_test_note_findfree_grow(traceno)		((void)(traceno))
 #endif
 
+#if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
+static uint32_t trace_test_retire_publish_calls;
+
+void lj_trace_test_reset_retire_publish_calls(void)
+{
+  la_store32_rel(&trace_test_retire_publish_calls, 0);
+}
+
+uint32_t lj_trace_test_retire_publish_calls(void)
+{
+  return la_load32_acq(&trace_test_retire_publish_calls);
+}
+#endif
+
 static int trace_scope_mark_pending(GCtrace *T)
 {
   uint8_t flags = la_load8_acq(&T->unused1);
@@ -175,12 +189,13 @@ TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J)
   ** fall back through ambient TLS here: a different thread can observe J->L and
   ** otherwise mistake its own TG for the active recorder owner.
   */
-  tg = L->tg_hint;
-  if (tg && tg->gl == g)
-    return tg;
   owner = lj_state_owner_acq(L);
-  return owner != 0 && owner != LJ_THREAD_GCSCAN ?
-	 lj_tg_find_owner(g, owner) : NULL;
+  if (!lj_thr_id_is_owner(owner))
+    return NULL;
+  tg = L->tg_hint;
+  if (tg && tg->gl == g && lj_tg_tid_acq(tg) == owner)
+    return tg;
+  return lj_tg_find_owner(g, owner);
 }
 
 static LJ_AINLINE uint32_t jit_token_tid_l(lua_State *L, jit_State *J)
@@ -541,16 +556,34 @@ static int trace_retired_needs_payload_preserve(global_State *g, GCtrace *T)
   return trace_retired_payload_grace_active(g, T);
 }
 
-static void trace_preservebody_raw(global_State *g, GCtrace *T)
+static int trace_preservebody_raw_(global_State *g, GCtrace *T,
+				   int reclaim_held)
 {
-  (void)lj_gc2_markmem(g, T);
+  if (reclaim_held) {
+    if (lj_gc2_markmem_reclaim_held_status(g, T) < 0)
+      return 0;
+  } else {
+    (void)lj_gc2_markmem(g, T);
+  }
   if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
-    return;
+    return 1;  /* The exact body is preserved; malformed children stay opaque. */
   {
     MCode **exittab = trace_exittab_acq(T);
-    if (exittab && !trace_exittab_ismcode(T))
-      (void)lj_gc2_markmem(g, exittab);
+    if (exittab && !trace_exittab_ismcode(T)) {
+	if (reclaim_held) {
+	  if (lj_gc2_markmem_reclaim_held_status(g, exittab) < 0)
+	    return 0;
+	} else {
+	(void)lj_gc2_markmem(g, exittab);
+	}
+    }
   }
+  return 1;
+}
+
+static void trace_preservebody_raw(global_State *g, GCtrace *T)
+{
+  (void)trace_preservebody_raw_(g, T, 0);
 }
 
 static void trace_preserve_retired_body(global_State *g, GCtrace *T)
@@ -599,9 +632,19 @@ static void trace_retired_push_preserved_reclaim(jit_State *J, GCtrace *T)
   ** arena owner cannot consume the detached allocation, but do not repeat an
   ** unchanged snapshot-PC ownership-spine traversal for every 64-cell sweep
   ** slice. The next cycle's root scan will close the graph again before sweep. */
-  trace_preservebody_raw(g, T);
+  if (LJ_UNLIKELY(!trace_preservebody_raw_(g, T, 1))) {
+    /* A detached-list ticket authorizes the current body access, but arena
+    ** quarantine only observes its durable mark (and the exittab needs its own
+    ** mark). Never publish a list node whose physical allocations were not
+    ** preserved: that would defer a deterministic UAF into a later epoch. */
+    lj_assertJ(0, "retired trace requeue without durable allocation marks");
+    abort();
+  }
   trace_retired_publish_token(J, T);
-  trace_preservebody_raw(g, T);
+  if (LJ_UNLIKELY(!trace_preservebody_raw_(g, T, 1))) {
+    lj_assertJ(0, "retired trace publication lost allocation marks");
+    abort();
+  }
 }
 
 /*
@@ -616,6 +659,9 @@ static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
 {
   uint64_t expect = 0;
   uint64_t stamp = trace_retire_stamp(epoch);
+#if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
+  (void)la_add32_acqrel(&trace_test_retire_publish_calls, 1);
+#endif
   /* Preserve in GC2 before the unique entry gate; a root-prune caller can then
   ** unlink only after this helper returns without opening an unpreserved gap.
   */
@@ -754,11 +800,27 @@ static void trace_retire(global_State *g, GCtrace *T)
   trace_retire_at_epoch(g, T, lj_gc2_retire_epoch(g));
 }
 
-static int trace_freebody(global_State *g, GCtrace *T)
+static int trace_freebody_(global_State *g, GCtrace *T, int reclaim_held,
+			   int terminal)
 {
   GCSize size;
   SnapNo nsnap;
+  LJGCDestructCtx dctx;
+  int acquired;
   if (LJ_UNLIKELY(!trace_size_checked(g, T, &size, &nsnap)))
+    return 0;
+  if (terminal && g->allocf == lj_arena_allocf &&
+      la_load32_acq(&g->allocf_arena) != 0) {
+    GCArena *a = lj_arena_of(T);
+    if (!lj_arena_ishuge(a) && !lj_arena_terminal_reconcile(a))
+      abort();
+  }
+  acquired = reclaim_held ?
+    lj_gc_destructor_enter_reclaim_held(g, T, size, &dctx) :
+    lj_gc_destructor_enter(g, T, size, &dctx);
+  if (acquired == LJ_GC_DESTRUCT_OWNED)
+    return 1;
+  if (acquired != LJ_GC_DESTRUCT_ACQUIRED)
     return 0;
   /* Runtime reclaim only reaches here after the nonwaiting debugger unregister
   ** succeeded. At VM close, lj_trace_freeretired() performs the exceptional
@@ -776,6 +838,7 @@ static int trace_freebody(global_State *g, GCtrace *T)
   */
   la_store8_rel(&T->gct, 0);
   lj_mem_free(g, T, size);
+  lj_gc_destructor_leave(g, &dctx);
   return 1;
 }
 
@@ -788,16 +851,23 @@ static void trace_free_immediate(global_State *g, GCtrace *T)
 {
   GCSize size;
   SnapNo nsnap;
+  LJGCDestructCtx dctx;
+  int acquired;
   if (LJ_UNLIKELY(!trace_size_checked(g, T, &size, &nsnap)))
+    return;
+  acquired = lj_gc_destructor_enter(g, T, size, &dctx);
+  if (acquired != LJ_GC_DESTRUCT_ACQUIRED)
     return;
   trace_exittab_free(g, T, nsnap);
   T->gct = 0;  /* Unpublished aborts may race with preserved retired scans. */
   lj_mem_free(g, T, size);
+  lj_gc_destructor_leave(g, &dctx);
 }
 
 void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
+  int abandoned;
   /* GC2 may have acquired J->curfinal immediately before the owner replaces or
   ** aborts it. Use the ordinary epoch/SMR retire path even though no trace slot
   ** was published; this keeps the compact body immutable until that reader exits.
@@ -806,6 +876,13 @@ void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T)
   */
   lj_assertJ(lj_jit_token_held(J),
 	     "unpublished trace retirement without recorder token");
+  abandoned = lj_mem_abandon_gco_unpublished(g, T);
+  if (LJ_UNLIKELY(abandoned != LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE)) {
+    /* A second logical owner for an unpublished recorder body is corruption;
+    ** do not enqueue a pointer whose mapping may already be sweep-owned. */
+    lj_assertJ(0, "unpublished trace construction ownership lost");
+    abort();
+  }
   trace_retire(g, T);
 }
 
@@ -822,15 +899,24 @@ static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 }
 
 static int trace_preserve_body_candidate(global_State *g, GCobj *o,
-					 uint32_t *gctp)
+					 uint32_t *gctp,
+					 LJGC2Lease *lease)
 {
   uint32_t gct;
-  if (!lj_gc2_obj_valid_queued(g, o))
+  if (!lease)
     return 0;
-  gct = (uint32_t)la_load8_acq(&o->gch.gct);
+  memset(lease, 0, sizeof(*lease));
+  /* Every successful caller is about to preserve or inspect an object reached
+  ** through a trace-owned edge. Keep the counted admission in the caller's
+  ** lease until its final gct/proto/trace/gcw read; a status-only validator
+  ** would drop the body lease before the type-specific dereference. */
+  if (lj_gc2_obj_lease_acquire(g, o, 0, &gct, lease) < 0)
+    return 0;
   if (LJ_UNLIKELY(gct == 0 || gct < (uint32_t)~LJ_TSTR ||
-		  gct > (uint32_t)~LJ_TUDATA))
+		  gct > (uint32_t)~LJ_TUDATA)) {
+    lj_gc2_lease_release(lease);
     return 0;
+  }
   if (gctp)
     *gctp = gct;
   return 1;
@@ -864,14 +950,15 @@ static void trace_preserve_proto_obj(global_State *g, GCobj *o)
 static GCproto *trace_proto_pc_candidate_valid(global_State *g, GCobj *o,
 					       uint32_t gct,
 					       const BCIns **bcp,
-					       const BCIns **endp)
+					       const BCIns **endp,
+					       const LJGC2Lease *lease)
 {
   GCproto *pt;
   const BCIns *bc;
   if (gct != (uint32_t)~LJ_TPROTO)
     return NULL;
   pt = gco2pt(o);
-  if (!lj_gc2_valid_proto_for_traverse(g, pt))
+  if (!lj_gc2_valid_proto_for_traverse_held(g, pt, lease))
     return NULL;
   bc = proto_bc(pt);
   if (bcp)
@@ -883,12 +970,17 @@ static GCproto *trace_proto_pc_candidate_valid(global_State *g, GCobj *o,
 
 static GCproto *trace_proto_pc_candidate(global_State *g, GCobj *o,
 					 const BCIns **bcp,
-					 const BCIns **endp)
+					 const BCIns **endp,
+					 LJGC2Lease *lease)
 {
+  GCproto *pt;
   uint32_t gct;
-  if (!trace_preserve_body_candidate(g, o, &gct))
+  if (!trace_preserve_body_candidate(g, o, &gct, lease))
     return NULL;
-  return trace_proto_pc_candidate_valid(g, o, gct, bcp, endp);
+  pt = trace_proto_pc_candidate_valid(g, o, gct, bcp, endp, lease);
+  if (!pt)
+    lj_gc2_lease_release(lease);
+  return pt;
 }
 
 static int trace_pc_in_proto_range(const BCIns *pc, const BCIns *bc,
@@ -909,15 +1001,23 @@ static int trace_pc_in_proto_range(const BCIns *pc, const BCIns *bc,
 #ifdef LJ_TRACE_TEST_HELPERS
 int lj_trace_test_preserve_body_candidate(global_State *g, GCobj *o)
 {
-  return trace_preserve_body_candidate(g, o, NULL);
+  LJGC2Lease lease;
+  int valid = trace_preserve_body_candidate(g, o, NULL, &lease);
+  lj_gc2_lease_release(&lease);
+  return valid;
 }
 
 int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
 				     const BCIns *pc)
 {
+  LJGC2Lease lease;
   const BCIns *bc, *end;
-  return pc && trace_proto_pc_candidate(g, o, &bc, &end) &&
-	 trace_pc_in_proto_range(pc, bc, (MSize)(end - bc));
+  GCproto *pt = pc ? trace_proto_pc_candidate(g, o, &bc, &end, &lease) :
+		    NULL;
+  int valid = pt && trace_pc_in_proto_range(pc, bc, (MSize)(end - bc));
+  if (pc)
+    lj_gc2_lease_release(&lease);
+  return valid;
 }
 #endif
 
@@ -934,6 +1034,7 @@ static void trace_preserve_proto_for_pc(global_State *g, const BCIns *pc)
 
 static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T)
 {
+  LJGC2Lease startlease;
   SnapShot *snap = trace_snap_acq(T);
   SnapEntry *snapmap = trace_snapmap_acq(T);
   GCobj *startpt = trace_startptgco_acq(T);
@@ -946,15 +1047,18 @@ static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T)
   ** trace_preservebody_inner() has already preserved. Most snapshot PCs name
   ** that same bytecode body. Resolve its interval once and avoid restarting a
   ** potentially long ownership-spine walk for every such snapshot/requeue. */
-  (void)trace_proto_pc_candidate(g, startpt, &startbc, &startend);
+  (void)trace_proto_pc_candidate(g, startpt, &startbc, &startend,
+				 &startlease);
   (void)lj_gc_flush_root_pending(g);
   for (i = 0; i < nsnap; i++) {
     SnapShot *s = &snap[i];
     MSize ofs = snap_mapofs_acq(s);
     MSize nent = snap_nent_acq(s);
     SnapEntry *map;
-    if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
+    if (ofs >= nsnapmap || nent >= nsnapmap - ofs) {
+      lj_gc2_lease_release(&startlease);
       return;
+    }
     map = &snapmap[ofs];
     {
       const BCIns *pc = snap_pc_acq(&map[nent]);
@@ -964,6 +1068,7 @@ static void trace_preserve_snapshot_pcs(global_State *g, GCtrace *T)
       trace_preserve_proto_for_pc(g, pc);
     }
   }
+  lj_gc2_lease_release(&startlease);
 }
 
 static void trace_preserve_kgc(global_State *g, GCtrace *T)
@@ -1174,7 +1279,15 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
   lj_assertG(lj_gc2_jit_reclaim_context_acq(g) && lj_jit_token_held(J),
 	     "trace retire-list detach without exclusive reclaim gate");
   tv = tracevec_retired_head_xchg_acqrel(J, NULL);
-  while (tv && lj_gc2_mem_registered(g, tv)) {
+  while (tv) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, tv))) {
+      /* xchg transferred the complete list to this exclusive owner. Losing an
+      ** unvalidated head would also lose every successor, while reading next
+      ** without a certificate would be a UAF. Fail before either action. */
+      lj_assertG(0, "invalid detached retired TraceVec identity");
+      abort();
+    }
     TraceVec *next = tracevec_retired_next_acq(tv);
     tracevec_retired_next_rel(tv, NULL);
     if (la_load64_acq(&tv->retire_epoch) < completed_epoch) {
@@ -1186,7 +1299,12 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
     tv = next;
   }
   rt = trace_retired_head_xchg_acqrel(J, NULL);
-  while (rt && lj_gc2_mem_registered(g, rt)) {
+  while (rt) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, rt))) {
+      lj_assertG(0, "invalid detached retired trace identity");
+      abort();
+    }
     GCtrace *next = trace_retired_next_acq(rt);
     trace_retired_link_unlinked_rel(rt);
     if (trace_body_retire_ready(rt, completed_epoch)) {
@@ -1228,7 +1346,7 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
 	rt = next;
 	continue;
       }
-      if (!trace_freebody(g, rt)) {
+      if (!trace_freebody_(g, rt, 1, 0)) {
 	/* A malformed/stale compact header is not an allocator contract. Keep the
 	** exact body and its mcode references discoverable instead of turning a
 	** validation failure into an unbounded-size free or executable UAF.
@@ -1320,11 +1438,20 @@ int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
 				rxlo, rxhi, rwlo, rwhi))
 	return 1;
   }
-  for (T = trace_retired_head_acq(J);
-       T != NULL && lj_gc2_mem_registered(g, T);
-       T = trace_retired_next_acq(T)) {
+  for (T = trace_retired_head_acq(J); T != NULL;) {
+    GCtrace *next;
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, T))) {
+      /* The recorder token and exact-thread SMR writer pin this live retire
+      ** list. Treat an invalid head as structural corruption; stopping early
+      ** would falsely prove the candidate mcode area unreferenced. */
+      lj_assertG(0, "invalid retired trace during mcode reference scan");
+      abort();
+    }
+    next = trace_retired_next_acq(T);
     if (trace_mcode_area_refs(g, T, rxlo, rxhi, rwlo, rwhi))
       return 1;
+    T = next;
   }
   return 0;
 }
@@ -1334,13 +1461,21 @@ void lj_trace_freeretired(global_State *g)
   jit_State *J = G2J(g);
   TraceVec *tv = tracevec_retired_head_xchg_acqrel(J, NULL);
   GCtrace *rt;
-  while (tv && lj_gc2_mem_registered(g, tv)) {
+  while (tv) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered(g, tv))) {
+      lj_assertG(0, "invalid terminal detached retired TraceVec");
+      abort();
+    }
     TraceVec *next = tracevec_retired_next_acq(tv);
     tracevec_free(g, tv);
     tv = next;
   }
   rt = trace_retired_head_xchg_acqrel(J, NULL);
-  while (rt && lj_gc2_mem_registered(g, rt)) {
+  while (rt) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered(g, rt))) {
+      lj_assertG(0, "invalid terminal detached retired trace");
+      abort();
+    }
     GCtrace *next = trace_retired_next_acq(rt);
     int freed;
     /* lj_trace_freestate() has already verified and freed the active trace
@@ -1348,7 +1483,7 @@ void lj_trace_freeretired(global_State *g)
     ** release helper: there is no slot left to clear and no token-free write to
     ** J->freetrace is permitted. */
     lj_gdbjit_deltrace_close(g, rt);
-    freed = trace_freebody(g, rt);
+    freed = trace_freebody_(g, rt, 0, 1);
     lj_assertG(freed, "invalid retired trace body at VM close");
     UNUSED(freed);
     rt = next;
@@ -1508,8 +1643,8 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   size_t sz = sztr + szins +
 	      T->nsnap*sizeof(SnapShot) +
 	      T->nsnapmap*sizeof(SnapEntry);
-  GCtrace *T2 = (GCtrace *)lj_mem_newgco_raw(L, (MSize)sz,
-					     LJ_AF_TRAVERSABLE);
+  GCtrace *T2 = (GCtrace *)lj_mem_newgco_raw(
+    L, (MSize)sz, LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
   char *p = (char *)T2 + sztr;
   T2->gct = ~LJ_TTRACE;
   lj_obj_setgcflags(obj2gco(T2), 0);
@@ -1629,6 +1764,22 @@ int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T)
   UNUSED(traceno);
   needs_publish = !sfixed && !trace_retired_link_listed_acq(T);
   needs_slot = trace_traceno_acq(T) != 0;
+  /* First retirement must run outside the exclusive SMR writer so its full
+  ** proto/KGC/snapshot-PC preservation can acquire ordinary body leases. A
+  ** quarantine pass may finish an already-listed trace, but cannot manufacture
+  ** that initial semantic publication while its own reader gate is closed. */
+  if (needs_publish &&
+      lj_gc2_mem_registered_known_reclaim_held(g, T)) {
+    /* A small/huge body reaches the sweep reclaimer only after root pruning
+    ** transferred its exact membership ticket. Trace pruning calls
+    ** lj_trace_retire_gc_claim() before that transfer, and that function lists
+    ** the body before returning success. A LIVE trace found from the retired
+    ** root is already listed by definition. Thus first retirement here is an
+    ** ownership invariant violation, not retryable work: returning would leave
+    ** an off-spine body with no outside-writer publication point forever. */
+    lj_assertG(0, "unlisted trace reached exclusive sweep reclaim");
+    abort();
+  }
   /* GC workers never wait for an active recorder. Claim/list publication and
   ** slot teardown are one token-serialized transaction; a loser requests an
   ** asynchronous recorder abort and leaves the root/quarantine body unchanged
@@ -1649,7 +1800,11 @@ int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T)
       /* Publish before semantic entry/root teardown. Keep both operations in
       ** this token transaction so no assembler can install a new direct edge
       ** after the retirement epoch starts. */
-      trace_retire_at_epoch(g, T, lj_gc2_retire_epoch(g));
+      if (needs_publish)
+	trace_retire_at_epoch(g, T, lj_gc2_retire_epoch(g));
+      else
+	lj_assertG(la_load64_acq(&T->retire_epoch) != 0,
+		   "listed trace without retirement epoch");
       trace_retire_disconnect(J, T);
     }
     if (needs_slot)
@@ -2050,42 +2205,76 @@ static GCtrace *trace_stale_startins_root_candidate_valid(global_State *g,
 }
 
 #ifdef LJ_TRACE_TEST_HELPERS
-static GCtrace *trace_stale_startins_root_candidate(global_State *g, GCobj *o)
+static GCtrace *trace_stale_startins_root_candidate(global_State *g, GCobj *o,
+					     LJGC2Lease *lease)
 {
+  GCtrace *T;
   uint32_t gct;
-  if (!trace_preserve_body_candidate(g, o, &gct))
+  if (!trace_preserve_body_candidate(g, o, &gct, lease))
     return NULL;
-  return trace_stale_startins_root_candidate_valid(g, o, gct);
+  T = trace_stale_startins_root_candidate_valid(g, o, gct);
+  if (!T)
+    lj_gc2_lease_release(lease);
+  return T;
 }
 
 int lj_trace_test_stale_startins_candidate(global_State *g, GCobj *o)
 {
-  return trace_stale_startins_root_candidate(g, o) != NULL;
+  LJGC2Lease lease;
+  int valid = trace_stale_startins_root_candidate(g, o, &lease) != NULL;
+  lj_gc2_lease_release(&lease);
+  return valid;
 }
 #endif
 
 static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc,
 				       GCproto *owner)
 {
+  LJGC2Lease leases[2];
+  uint32_t gct[2];
+  uint32_t leaseidx = 0;
   GCobj *o;
   uint32_t n = 0;
+  memset(leases, 0, sizeof(leases));
   (void)lj_gc_flush_root_pending(g);
-  for (o = lj_gc_root_acq(g); o != NULL;) {
+  o = lj_gc_root_acq(g);
+  if (o && !trace_preserve_body_candidate(
+	     g, o, &gct[leaseidx], &leases[leaseidx]))
+    return 0;
+  while (o != NULL) {
     GCobj *next;
-    uint32_t gct;
-    if (!trace_preserve_body_candidate(g, o, &gct) ||
-	LJ_UNLIKELY(gct == (uint32_t)~LJ_TSTR))
+    int next_valid = 1;
+    if (LJ_UNLIKELY(gct[leaseidx] == (uint32_t)~LJ_TSTR)) {
+      lj_gc2_lease_release(&leases[leaseidx]);
       break;
+    }
     next = lj_obj_gcw_acq(o);
-    GCtrace *T = trace_stale_startins_root_candidate_valid(g, o, gct);
+    /* Admit the successor before releasing current. Root-spine membership is
+    ** an ownership relation, but a concurrent prune can remove/destroy next in
+    ** the load-to-next-iteration gap and reuse the same address. */
+    if (next && !trace_preserve_body_candidate(
+		  g, next, &gct[leaseidx ^ 1u],
+		  &leases[leaseidx ^ 1u]))
+      next_valid = 0;
+    GCtrace *T = trace_stale_startins_root_candidate_valid(
+	  g, o, gct[leaseidx]);
     if (T) {
       BCIns startins = trace_stale_startins_match(T, pc, owner);
-      if (startins != 0)
+	if (startins != 0) {
+	  lj_gc2_lease_release(&leases[leaseidx]);
+	  lj_gc2_lease_release(&leases[leaseidx ^ 1u]);
 	return startins;
+	}
     }
-    if (++n >= 1000000u)
+    lj_gc2_lease_release(&leases[leaseidx]);
+    if (!next_valid)
       break;
+    if (++n >= 1000000u) {
+      lj_gc2_lease_release(&leases[leaseidx ^ 1u]);
+      break;
+    }
     o = next;
+    leaseidx ^= 1u;
   }
   return 0;
 }

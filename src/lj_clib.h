@@ -120,6 +120,8 @@ static LJ_AINLINE CLibCacheEntry *lj_clib_cache_head_xchg_acqrel(
 
 LJ_FUNC cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name);
 LJ_FUNC CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g);
+/* Runtime drain only: caller holds GC2's exact-thread exclusive-reclaimer
+** scope. Joined-world close uses lj_clib_cache_freeretired(). */
 LJ_FUNC uint32_t lj_clib_cache_reclaim_retired(global_State *g,
 					       uint64_t completed_epoch);
 LJ_FUNC void lj_clib_cache_freeretired(global_State *g);

@@ -67,6 +67,11 @@ LJ_FUNC int lj_trace_retired_mcode_refs(global_State *g, MCode *area,
 LJ_FUNC void lj_trace_freeretired(global_State *g);
 LJ_FUNC void lj_trace_markvecs(global_State *g, int gc2);
 
+#if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC void lj_trace_test_reset_retire_publish_calls(void);
+LJ_FUNC uint32_t lj_trace_test_retire_publish_calls(void);
+#endif
+
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_trace_test_reset_retention_stats(void);
 LJ_FUNC void lj_trace_test_note_call_unroll_abort(TraceNo lnk);

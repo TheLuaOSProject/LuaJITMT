@@ -732,6 +732,7 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   GCtab *parent, *child, *grandchild;
   uint64_t worker_runs0, worker_grey0, worker_ssb0;
   uint32_t old_stepmul = g->gc.stepmul;
+  int i;
 
   lua_settop(L, 0);
   lua_newtable(L);
@@ -762,13 +763,20 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   lj_gc_threshold_store(g, g->gc.total);
   assert(lj_gc2_step_explicit(L, 1) == 0);
   assert(g->gc.state == GCSpropagate);
-  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
-  assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
+  /* Cycle start deliberately preserves exact grey/SSB identities carried by
+  ** an earlier bounded abort. One explicit step consumes at most one worker
+  ** batch, so the three-table fixture is guaranteed to make progress but is
+  ** not guaranteed to be the only graph work in that batch. Table traversal
+  ** can also publish fresh owner-local SSB rescans for a later worker pass. */
+  assert(gc2_worker_grey_drained_acq(g) >= worker_grey0 + 3u);
   assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
+  for (i = 0; i < 128 && !lj_gc2_test_ssb_empty(g); i++)
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+  assert(lj_gc2_test_ssb_empty(g));
 
   g->gc.stepmul = old_stepmul;
   g->gc.state = GCSpause;

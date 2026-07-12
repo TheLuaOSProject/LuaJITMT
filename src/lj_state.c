@@ -372,6 +372,10 @@ static int close_state_root_link_valid(global_State *g, GCobj *o)
   th = gcref_acq(*vmthread_ref(g));
   if (th && th->gch.gct == ~LJ_TTHREAD && o == th)
     return 1;
+  /* close_state calls this only after mutators, GC workers, finalizers and the
+  ** threading registry have joined. That terminal world-stop is the body and
+  ** reuse certificate for the subsequent gct/gcw reads; acquiring semantic
+  ** retention here would revive objects while the sole destructor drains. */
   if (!lj_gc2_obj_valid(g, o))
     return 0;
   /* Strings are owned solely by the intern table and use nextgc as their hash
@@ -401,73 +405,553 @@ static void close_state_reanchor_root(global_State *g, GCobj *target)
   }
   /* A damaged/stale head is not a valid successor for the reanchored object.
   ** Shutdown is single-threaded here, so fail closed to a one-node spine. */
-  if (head && !close_state_root_link_valid(g, head))
-    head = NULL;
-  lj_obj_setgcwrel(target, head);
-  lj_gc_root_rel(g, target);
-  lj_gcroot_repair_epoch_add(g);
+  if (head && !close_state_root_link_valid(g, head)) {
+    lj_gc_root_rel(g, NULL);
+    lj_gcroot_repair_epoch_add(g);
+  }
+  /* The terminal helper is the only exceptional stale-state reset. Every
+  ** publisher/remover has joined, and the scan above proved that target has no
+  ** incoming ownership edge, so repairing membership cannot create a duplicate
+  ** intrusive link. */
+  (void)lj_gc_linkobj_terminal(g, target);
+}
+
+int lj_state_thread_registry_lease(global_State *g, lua_State *th,
+				    LJGC2Lease *lease)
+{
+  if (!lease)
+    return 0;
+  memset(lease, 0, sizeof(*lease));
+  return g && th && lj_gc2_obj_lease_acquire(
+    g, obj2gco(th), (uint32_t)~LJ_TTHREAD, NULL, lease) >= 0;
 }
 
 int lj_state_thread_registry_valid(global_State *g, lua_State *th)
 {
-  return g && th && lj_gc2_obj_valid_queued(g, obj2gco(th)) &&
-	 th->gct == ~LJ_TTHREAD;
+  LJGC2Lease lease;
+  int valid = lj_state_thread_registry_lease(g, th, &lease);
+  /* Identity-only convenience probe. Registry walkers which dereference th
+  ** must retain their own lease through the final body access. */
+  lj_gc2_lease_release(&lease);
+  return valid;
 }
 
 void lj_state_thread_registry_publish(global_State *g, lua_State *th)
 {
-  lua_State *head;
+  LJGC2Lease headlease;
+  lua_State *head, *expect;
   if (!g || !th)
     return;
-  do {
+
+  for (;;) {
+    /* Container publication itself needs a registry generation read even when
+    ** the old head is NULL. Otherwise an exact reclaimer could prove `th`
+    ** absent, cross its terminal FREE LP, and then lose to this head CAS. */
+    if (!lj_gc2_smr_read_try(g)) {
+      (void)lj_thr_retry_yield(NULL);
+      continue;
+    }
+    if (lj_state_gcprep_state_acq(th) != LJ_STATE_GCPREP_NONE ||
+	lj_state_owner_acq(th) == LJ_THREAD_GCPREP) {
+      lj_gc2_smr_read_leave(g);
+      return;
+    }
     head = lj_state_thread_registry_head_acq(g);
+    memset(&headlease, 0, sizeof(headlease));
+    /* Keep the exact old-head incarnation alive until the head CAS either
+    ** publishes that pointer as th->next or proves it is no longer current. */
+    if (head && !lj_state_thread_registry_lease(g, head, &headlease)) {
+      lj_gc2_smr_read_leave(g);
+      continue;
+    }
     lj_state_thread_registry_next_rel(th, head);
-  } while (!lj_state_thread_registry_head_cas(g, &head, th));
+    expect = head;
+    if (lj_state_thread_registry_head_cas(g, &expect, th)) {
+      lj_gc2_lease_release(&headlease);
+      lj_gc2_smr_read_leave(g);
+      return;
+    }
+    lj_gc2_lease_release(&headlease);
+    lj_gc2_smr_read_leave(g);
+  }
 }
 
 static void state_registry_remove(global_State *g, lua_State *th)
 {
   lua_State *prev, *cur;
+  uint32_t retries = 0;
   if (!g || !th)
     return;
 restart:
-  prev = NULL;
-  cur = lj_state_thread_registry_head_acq(g);
-  while (cur && lj_state_thread_registry_valid(g, cur)) {
-    lua_State *next = lj_state_thread_registry_next_acq(cur);
-    if (cur == th) {
-      if (prev) {
-	if (!lj_state_thread_registry_next_cas(prev, &cur, next))
-	  goto restart;
-      } else {
-	if (!lj_state_thread_registry_head_cas(g, &cur, next))
-	  goto restart;
+  {
+    LJGC2Lease prevlease, curlease, nextlease;
+    uint32_t scanned = 0;
+    memset(&prevlease, 0, sizeof(prevlease));
+    memset(&curlease, 0, sizeof(curlease));
+    memset(&nextlease, 0, sizeof(nextlease));
+    prev = NULL;
+    cur = lj_state_thread_registry_head_acq(g);
+    /* The type destructor already owns `th` past its terminal allocation LP,
+    ** so ordinary semantic admission of that one node is expected to fail.
+    ** Every other node needs a counted lease before registry_next is read. */
+    if (cur && cur != th &&
+	!lj_state_thread_registry_lease(g, cur, &curlease)) {
+      if (++retries >= LJ_GC2_ROOT_SCAN_LIMIT) {
+	lj_assertG(0, "thread registry head did not become admissible");
+	abort();
       }
-      lj_state_thread_registry_next_rel(th, NULL);
-      return;
+      goto restart;
     }
-    prev = cur;
-    cur = next;
+    while (cur) {
+      lua_State *next;
+      if (++scanned >= LJ_GC2_ROOT_SCAN_LIMIT) {
+	lj_assertG(0, "thread registry scan exceeded structural bound");
+	abort();
+      }
+      next = lj_state_thread_registry_next_acq(cur);
+      if (next == cur) {
+	if (cur == th)
+	  next = NULL;  /* Unlink the destructor-owned self-cycle itself. */
+	else {
+	  lj_assertG(0, "thread registry contains a foreign self-cycle");
+	  abort();
+	}
+      }
+
+      /* Retain predecessor, current and successor incarnations together.
+      ** Reacquiring `prev` by address immediately before the CAS is not
+      ** sufficient: a removed THREAD can be freed and another THREAD can reuse
+      ** the same address with an unrelated registry_next field. */
+      if (next && next != th &&
+	  !lj_state_thread_registry_lease(g, next, &nextlease)) {
+	lj_gc2_lease_release(&prevlease);
+	lj_gc2_lease_release(&curlease);
+	if (++retries >= LJ_GC2_ROOT_SCAN_LIMIT) {
+	  lj_assertG(0, "thread registry successor did not become admissible");
+	  abort();
+	}
+	goto restart;
+      }
+      if (cur == th) {
+	int removed;
+	if (prev)
+	  removed = lj_state_thread_registry_next_cas(prev, &cur, next);
+	else
+	  removed = lj_state_thread_registry_head_cas(g, &cur, next);
+	if (!removed) {
+	  lj_gc2_lease_release(&prevlease);
+	  lj_gc2_lease_release(&curlease);
+	  lj_gc2_lease_release(&nextlease);
+	  goto restart;
+	}
+	lj_state_thread_registry_next_rel(th, NULL);
+	lj_gc2_lease_release(&prevlease);
+	lj_gc2_lease_release(&curlease);
+	lj_gc2_lease_release(&nextlease);
+	return;
+      }
+
+      lj_gc2_lease_release(&prevlease);
+      prev = cur;
+      prevlease = curlease;
+      memset(&curlease, 0, sizeof(curlease));
+      cur = next;
+      curlease = nextlease;
+      memset(&nextlease, 0, sizeof(nextlease));
+    }
+    lj_gc2_lease_release(&prevlease);
+    lj_gc2_lease_release(&curlease);
   }
+}
+
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_STATE_TEST_HELPERS)
+static uint32_t state_gcprep_test_pause_armed;
+static uint32_t state_gcprep_test_pause_waiting;
+static uint32_t state_gcprep_test_pre_lp_armed;
+static uint32_t state_gcprep_test_pre_lp_waiting;
+static uint32_t state_gcprep_test_terminal_drains;
+
+void lj_state_test_gcprep_pause(int enabled)
+{
+  la_store32_rel(&state_gcprep_test_pause_armed, enabled != 0);
+  if (!enabled)
+    la_store32_rel(&state_gcprep_test_pause_waiting, 0);
+}
+
+uint32_t lj_state_test_gcprep_paused(void)
+{
+  return la_load32_acq(&state_gcprep_test_pause_waiting);
+}
+
+void lj_state_test_gcprep_pre_lp_pause(int enabled)
+{
+  la_store32_rel(&state_gcprep_test_pre_lp_armed, enabled != 0);
+  if (!enabled)
+    la_store32_rel(&state_gcprep_test_pre_lp_waiting, 0);
+}
+
+uint32_t lj_state_test_gcprep_pre_lp_paused(void)
+{
+  return la_load32_acq(&state_gcprep_test_pre_lp_waiting);
+}
+
+void lj_state_test_gcprep_terminal_drain_reset(void)
+{
+  la_store32_rel(&state_gcprep_test_terminal_drains, 0);
+}
+
+uint32_t lj_state_test_gcprep_terminal_drain_count(void)
+{
+  return la_load32_acq(&state_gcprep_test_terminal_drains);
+}
+
+static void state_gcprep_test_terminal_drain_add(uint32_t n)
+{
+  if (n != 0)
+    (void)la_add32_acqrel(&state_gcprep_test_terminal_drains, n);
+}
+
+static void state_gcprep_test_pause_before_lp(void)
+{
+  if (la_load32_acq(&state_gcprep_test_pre_lp_armed) != 0) {
+    la_store32_rel(&state_gcprep_test_pre_lp_waiting, 1);
+    while (la_load32_acq(&state_gcprep_test_pre_lp_armed) != 0)
+      (void)lj_thr_retry_yield(NULL);
+    la_store32_rel(&state_gcprep_test_pre_lp_waiting, 0);
+  }
+}
+
+static void state_gcprep_test_pause_after_publish(void)
+{
+  if (la_load32_acq(&state_gcprep_test_pause_armed) != 0) {
+    la_store32_rel(&state_gcprep_test_pause_waiting, 1);
+    while (la_load32_acq(&state_gcprep_test_pause_armed) != 0)
+      (void)lj_thr_retry_yield(NULL);
+    la_store32_rel(&state_gcprep_test_pause_waiting, 0);
+  }
+}
+#else
+#define state_gcprep_test_pause_after_publish() ((void)0)
+#define state_gcprep_test_pause_before_lp() ((void)0)
+#define state_gcprep_test_terminal_drain_add(n) ((void)(n))
+#endif
+
+static int state_gcprep_tg_names(global_State *g, TGState *tg,
+				  lua_State *L)
+{
+  UNUSED(g);
+  if (!tg)
+    return 0;
+  if (lj_tg_load_cur_L(tg) == L || lj_tg_load_thread_L(tg) == L)
+    return 1;
+#if LJ_HASFFI
+  {
+    CCallbackRuntime *cb = &tg->cb;
+    MSize i, depth = ccallback_depth_acq(cb);
+    if (ccallback_L_acq(cb) == L)
+      return 1;
+    if (depth > CCALLBACK_MAX_NEST)
+      return 1;  /* Invalid active callback metadata vetoes destruction. */
+    for (i = 0; i < depth; i++)
+      if ((lua_State *)la_loadptr_acq(
+	    (void *const *)&cb->frame[i].L) == L)
+	return 1;
+  }
+#endif
+  return 0;
+}
+
+/* Exact-writer preflight for process-global raw state roots. Registry
+** publication now retains an ordinary SMR generation even for an empty old
+** head, so absence is stable until this writer leaves. */
+static int state_gcprep_registry_absent(global_State *g, lua_State *L)
+{
+  lua_State *th = lj_state_thread_registry_head_acq(g);
+  uint32_t n = 0;
+  while (th) {
+    lua_State *next;
+    if (th == L)
+      return 0;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known_reclaim_held(g, th))) {
+      lj_assertG(0, "invalid THREAD registry during terminal preflight");
+      abort();
+    }
+    next = lj_state_thread_registry_next_acq(th);
+    if (LJ_UNLIKELY(next == th || ++n >= LJ_GC2_ROOT_SCAN_LIMIT)) {
+      lj_assertG(0, "cyclic THREAD registry during terminal preflight");
+      abort();
+    }
+    th = next;
+  }
+  return 1;
+}
+
+static int state_gcprep_callback_absent(global_State *g, lua_State *L)
+{
+#if LJ_HASFFI
+  CTState *cts = ctype_ctsG(g);
+  lua_State **owner;
+  MSize i, n;
+  if (!cts)
+    return 1;
+  owner = ctype_cb_owner_acq(cts);
+  n = ctype_cb_sizeid_acq(cts);
+  if (!owner)
+    return 1;
+  if (LJ_UNLIKELY(n > lj_ccallback_maxslot())) {
+    lj_assertG(0, "invalid callback owner extent during THREAD preflight");
+    abort();
+  }
+  for (i = 0; i < n; i++)
+    if (ctype_cb_owner_slot_acq(owner, i) == L)
+      return 0;
+#else
+  UNUSED(g); UNUSED(L);
+#endif
+  return 1;
+}
+
+static int state_gcprep_roots_absent(global_State *g, lua_State *L)
+{
+  TGState *tg;
+  uint32_t n = 0;
+  /* On TG-local VMs g->cur_L is only a bootstrap mirror and can retain the last
+  ** resumed coroutine. Use the current TG accessor here; the registry walk below
+  ** checks every other TG's authoritative cur_L/thread_L publication. */
+  if (!g || !L || L == mainthread_acq(g) || L == vmthread_acq(g) ||
+      lj_tg_cur_L(g) == L || L->cframe != NULL)
+    return 0;
+  for (tg = gc2_tg_list_acq(g); tg; tg = lj_tg_next_acq(tg)) {
+    if (state_gcprep_tg_names(g, tg, L))
+      return 0;
+    if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT)) {
+      lj_assertG(0, "cyclic TG registry during THREAD preflight");
+      abort();
+    }
+  }
+  if (g->main_tg && state_gcprep_tg_names(g, g->main_tg, L))
+    return 0;
+  return state_gcprep_registry_absent(g, L) &&
+	 state_gcprep_callback_absent(g, L);
+}
+
+static void state_gcprep_queue_push(global_State *g, lua_State *L)
+{
+  lua_State *head = lj_state_gcprep_head_acq(g);
+  do {
+    lj_state_gcprep_next_rel(L, head);
+  } while (!lj_state_gcprep_head_cas(g, &head, L));
+}
+
+int lj_state_gcprep_claim_and_pin(global_State *g, lua_State *L)
+{
+  GCArena *a;
+  uint32_t cell, expect = 0, old;
+  if (!g || !L || !lj_gc2_reclaim_context_held(g) ||
+      L->gct != ~LJ_TTHREAD || mref(L->glref, global_State) != g ||
+      lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE ||
+      !lj_state_owner_cas(L, &expect, LJ_THREAD_GCPREP))
+    return 0;
+  if (!state_gcprep_roots_absent(g, L)) {
+    lj_state_release(L, LJ_THREAD_GCPREP);
+    return 0;
+  }
+  a = lj_arena_of(L);
+  cell = lj_arena_cellof(L);
+  if (LJ_UNLIKELY(lj_arena_ishuge(a) ||
+	  cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+	  !lj_gc2_mem_registered_known_reclaim_held(g, L))) {
+    lj_state_release(L, LJ_THREAD_GCPREP);
+    return 0;
+  }
+  /* Reserve both scopes before the destructor LP. FREE+FREEING otherwise
+  ** looks indistinguishable from a synchronously completed type destructor. */
+  old = lj_arena_gcprep_pending_add(a, 1);
+  if (LJ_UNLIKELY(old == ~(uint32_t)0)) {
+    lj_assertG(0, "THREAD arena preparation pin overflow");
+    abort();
+  }
+  old = la_add32_acqrel(&g->thread_gcprep_pending, 1);
+  if (LJ_UNLIKELY(old == ~(uint32_t)0)) {
+    lj_assertG(0, "THREAD preparation count overflow");
+    abort();
+  }
+  state_gcprep_test_pause_before_lp();
+  return 1;
+}
+
+void lj_state_gcprep_cancel(global_State *g, lua_State *L)
+{
+  GCArena *a;
+  uint32_t old;
+  if (!g || !L)
+    return;
+  a = lj_arena_of(L);
+  old = la_sub32_acqrel(&g->thread_gcprep_pending, 1);
+  lj_assertG(old != 0, "THREAD preparation cancel underflow");
+  old = lj_arena_gcprep_pending_sub(a, 1);  /* Physical permission last. */
+  lj_assertG(old != 0, "THREAD arena preparation cancel underflow");
+  lj_assertG(lj_state_gcprep_state_acq(L) == LJ_STATE_GCPREP_NONE,
+	     "cancel of published THREAD preparation");
+  lj_state_release(L, LJ_THREAD_GCPREP);
+  UNUSED(old);
+}
+
+void lj_state_gcprep_publish(global_State *g, lua_State *L)
+{
+  GCArena *a;
+  uint32_t cell;
+  if (!g || !L)
+    abort();
+  a = lj_arena_of(L);
+  cell = lj_arena_cellof(L);
+  if (LJ_UNLIKELY(!lj_gc2_reclaim_context_held(g) ||
+	  lj_state_owner_acq(L) != LJ_THREAD_GCPREP ||
+	  lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE ||
+	  lj_arena_lifetime_state_acq(a, cell) != LJ_ARENA_LIFETIME_FREE ||
+	  lj_arena_sweep_state_acq(a, cell) != LJ_ARENA_SWEEP_FREEING ||
+	  lj_arena_gcprep_pending_acq(a) == 0)) {
+    lj_assertG(0, "invalid terminal THREAD preparation publication");
+    abort();
+  }
+  lj_state_gcprep_state_rel(L, LJ_STATE_GCPREP_PENDING);
+  state_gcprep_queue_push(g, L);
+  state_gcprep_test_pause_after_publish();
+  lj_gc2_sweep_publish_wake(g);
+}
+
+static lua_State *state_gcprep_queue_pop(global_State *g)
+{
+  lua_State *head = lj_state_gcprep_head_acq(g);
+  while (head) {
+    lua_State *next = lj_state_gcprep_next_acq(head);
+    if (lj_state_gcprep_head_cas(g, &head, next)) {
+      lj_state_gcprep_next_rel(head, NULL);
+      return head;
+    }
+  }
+  return NULL;
+}
+
+uint32_t lj_state_gcprep_drain(global_State *g, uint32_t limit)
+{
+  uint32_t n = 0;
+  while (g && n < limit) {
+    lua_State *L = state_gcprep_queue_pop(g);
+    GCArena *a;
+    TValue *stack;
+    MSize stacksize;
+    uint32_t old;
+    if (!L)
+      break;
+    a = lj_arena_of(L);
+    if (LJ_UNLIKELY(lj_state_gcprep_state_acq(L) !=
+		    LJ_STATE_GCPREP_PENDING ||
+		    lj_state_owner_acq(L) != LJ_THREAD_GCPREP ||
+		    lj_arena_gcprep_pending_acq(a) == 0)) {
+      lj_assertG(0, "invalid queued terminal THREAD body");
+      abort();
+    }
+#if LJ_HASFFI
+    /* Pre-FREE callback ownership vetoes the LP. This is therefore an
+    ** idempotent no-op in the valid path and closes any defensive stale slot
+    ** before allocator permission is released. */
+    lj_ccallback_disown_state(L);
+    if (LJ_UNLIKELY(!state_gcprep_callback_absent(g, L))) {
+      lj_assertG(0, "terminal THREAD retained callback ownership");
+      abort();
+    }
+#endif
+    if (lj_state_openupval_acq(L) != NULL) {
+      lj_func_closeuv(L, tvref(L->stack));
+      lj_trace_abort(g);
+      if (LJ_UNLIKELY(lj_state_openupval_acq(L) != NULL)) {
+	lj_assertG(0, "terminal THREAD retained open upvalues");
+	abort();
+      }
+    }
+    stack = tvref(L->stack);
+    stacksize = L->stacksize;
+    if (stacksize != 0) {
+      lj_mem_freevec(g, stack, stacksize, TValue);
+      setmref(L->stack, NULL);
+      setmref(L->maxstack, NULL);
+      L->base = L->top = NULL;
+      L->stacksize = 0;
+    }
+    if (LJ_UNLIKELY(!lj_mem_freegco_defer(g, L, sizeof(lua_State)))) {
+      lj_assertG(0, "terminal THREAD body escaped quarantine ownership");
+      abort();
+    }
+    lj_state_gcprep_state_rel(L, LJ_STATE_GCPREP_DONE);
+    old = la_sub32_acqrel(&g->thread_gcprep_pending, 1);
+    lj_assertG(old != 0, "THREAD preparation drain underflow");
+    /* This is the final access to L/a. Releasing the arena pin permits the
+    ** next exact pass to clear block[] and reuse the body immediately. */
+    old = lj_arena_gcprep_pending_sub(a, 1);
+    lj_assertG(old != 0, "THREAD arena preparation drain underflow");
+    UNUSED(old);
+    n++;
+  }
+  return n;
+}
+
+void lj_state_gcprep_drain_terminal(global_State *g)
+{
+  uint32_t drained = 0;
+  while (g && lj_state_gcprep_pending_acq(g) != 0) {
+    uint32_t n = lj_state_gcprep_drain(g, LJ_GC2_ROOT_SCAN_LIMIT);
+    if (LJ_UNLIKELY(n == 0)) {
+      lj_assertG(0, "terminal THREAD preparation queue lost");
+      abort();
+    }
+    drained += n;
+  }
+  if (g && LJ_UNLIKELY(lj_state_gcprep_head_acq(g) != NULL)) {
+    lj_assertG(0, "terminal THREAD preparation queue/count mismatch");
+    abort();
+  }
+  state_gcprep_test_terminal_drain_add(drained);
 }
 
 static void close_state_reanchor_registered_states(global_State *g,
 					     lua_State *L)
 {
   lua_State *th = lj_state_thread_registry_head_xchg(g, NULL);
+  LJGC2Lease leases[2];
+  uint32_t leaseidx = 0;
   uint32_t n = 0;
-  while (th && lj_state_thread_registry_valid(g, th)) {
-    lua_State *next = lj_state_thread_registry_next_acq(th);
+  memset(leases, 0, sizeof(leases));
+  if (th && !lj_state_thread_registry_lease(g, th, &leases[leaseidx])) {
+    lj_assertG(0, "terminal thread registry head is not admissible");
+    abort();
+  }
+  while (th) {
+    lua_State *next;
+    next = lj_state_thread_registry_next_acq(th);
+    if (next == th)
+      next = NULL;  /* Terminally sever one exact self-cycle. */
+    if (next && !lj_state_thread_registry_lease(
+		  g, next, &leases[leaseidx ^ 1u])) {
+      lj_gc2_lease_release(&leases[leaseidx]);
+      lj_assertG(0, "terminal thread registry successor is not admissible");
+      abort();
+    }
     lj_state_thread_registry_next_rel(th, NULL);
     /* A threading.thread userdata may still carry this state pointer after
     ** lj_threading_shutdown(). Keep every exact state on the terminal GC2
     ** ownership spine and let the single destructor drain free it once. */
     if (th != L)
       close_state_reanchor_root(g, obj2gco(th));
+    lj_gc2_lease_release(&leases[leaseidx]);
     th = next;
-    if (++n >= 1000000u)
-      break;
+    leaseidx ^= 1u;
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT) {
+      lj_assertG(0, "terminal thread registry contains a cycle");
+      abort();
+    }
   }
+  lj_gc2_lease_release(&leases[leaseidx]);
 }
 
 static void close_state_arena_free_noinsert(global_State *g)
@@ -489,6 +973,10 @@ static void close_state(lua_State *L)
   ** destructors; lj_gc2_fini() repeats this idempotently for partial states. */
   if (LJ_UNLIKELY(!lj_gc2_worker_stop(g)))
     abort();  /* A failed join is not permission to reclaim worker storage. */
+  /* A worker may have crossed a child THREAD's irreversible FREE LP just
+  ** before shutdown. Finish its semantic/side-allocation handoff while CTState,
+  ** callback slots, TG registries and arena routing are all still intact. */
+  lj_state_gcprep_drain_terminal(g);
   /* threading_shutdown tombstones native live-root nodes before entering this
   ** terminal path. Only now are all collector readers joined, so their raw
   ** arena storage may be physically released. */
@@ -729,6 +1217,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   L->dummy_ffid = FF_C;
   setmref(L->glref, g);
   lj_state_owner_rel(L, 0);
+  lj_state_gcprep_next_rel(L, NULL);
+  lj_state_gcprep_state_store_rlx(L, LJ_STATE_GCPREP_NONE);
   lj_state_grayagain_cycle_store_rlx(L, 0);
   lj_state_scan_epoch_rel(L, 0);
   lj_state_scan_dirty_epoch_rel(L, 0);
@@ -776,6 +1266,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->threading_live = NULL;
   g->threading_live_retired = NULL;
   g->threading_live_count = 0;
+  g->thread_gcprep_pending = 0;
+  g->thread_gcprep = NULL;
   lj_state_thread_registry_head_clear(g);
   lj_registry_setnil_rel(L);
   g->nilnodehdr.hmask = 0;
@@ -873,7 +1365,9 @@ static lua_State *state_new_withenv_at_anchor(lua_State *L, GCtab *env,
   L1->cframe = NULL;
   L1->tg_hint = NULL;
   lj_state_thread_registry_next_rel(L1, NULL);
+  lj_state_gcprep_next_rel(L1, NULL);
   lj_state_owner_rel(L1, 0);
+  lj_state_gcprep_state_store_rlx(L1, LJ_STATE_GCPREP_NONE);
   lj_state_grayagain_cycle_store_rlx(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);
   lj_state_scan_dirty_epoch_rel(L1, 0);
@@ -887,7 +1381,7 @@ static lua_State *state_new_withenv_at_anchor(lua_State *L, GCtab *env,
   ** stack allocation lets failure explicitly cancel this READY=0 body instead
   ** of abandoning an immortal pending constructor. */
   if (LJ_UNLIKELY(!stack_init_nothrow(L1, L))) {
-    lj_mem_free(g, L1, sizeof(lua_State));
+    lj_mem_freegco_unpublished(g, L1, sizeof(lua_State));
     lj_tg_root_anchor_pop(tg, idx);
     lj_err_mem(L);
   }

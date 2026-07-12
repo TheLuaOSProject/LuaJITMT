@@ -726,7 +726,7 @@ GCproto *lj_bcread_proto(LexState *ls, uint32_t *anchoridx)
     ** which sweep deliberately pins. The body was never discoverable, so this
     ** protected owner can cancel it directly before dropping child anchors. */
     if (ctx.pt != NULL && !ctx.published)
-      lj_mem_free(G(L), ctx.pt, ctx.sizept);
+      lj_mem_freegco_unpublished(G(L), ctx.pt, ctx.sizept);
     while (lj_tg_root_anchor_top_acq(tg) > anchor_base)
       lj_tg_root_anchor_pop(tg,
 			    lj_tg_root_anchor_top_acq(tg) - 1u);

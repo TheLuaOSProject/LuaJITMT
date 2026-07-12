@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_atomic.h"
 
 #if LJ_HASFFI
@@ -237,6 +238,27 @@ typedef struct FinRegGen {
   GCtab *tab;			/* One hash-only FINREG table generation. */
   struct FinRegGen *next;	/* Older generation, searched after this one. */
 } FinRegGen;
+
+/*
+** Exact lifetime certificate for one FINREG table slot. The table body lease
+** and tactical SMR scope are deliberately one move-only token: the former
+** keeps GCtab fields admitted while the latter keeps a separated array/node
+** generation mapped through the final slot access. Never copy an active token.
+*/
+typedef struct CTypeFinLease {
+  global_State *g;
+  GCtab *tab;
+  TValue *slot;
+  LJGC2Lease table_lease;
+  uint32_t smr_held;
+} CTypeFinLease;
+
+#define CTYPE_FIN_LEASE_INIT { 0 }
+
+#define LJ_CTYPE_FIN_RETRY	(-1)
+#define LJ_CTYPE_FIN_MISS	0
+#define LJ_CTYPE_FIN_FOUND	1
+#define LJ_CTYPE_FIN_ERROR	(-2)
 
 typedef struct FinRegOrderNode {
   GCRef obj;			/* Cdata object for this registration. */
@@ -1190,6 +1212,7 @@ LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
 				      CTInfo info, CTSize size, int *newp);
 LJ_FUNC int lj_ctype_predefined_string(const char *p, MSize len,
 				       CTypeID *idp);
+LJ_FUNC int lj_ctype_predefined_payload_size(CTypeID id, CTSize *sizep);
 LJ_FUNC int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out);
 LJ_FUNC int lj_ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp);
 LJ_FUNC int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id,
@@ -1211,8 +1234,10 @@ LJ_FUNC int lj_ctype_enumconst_wait(lua_State *L, CTState *cts,
 LJ_FUNC void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
-LJ_FUNC GCtab *lj_ctype_fin_head(CTState *cts);
-LJ_FUNC GCtab *lj_ctype_fin_gen_tab_valid(CTState *cts, FinRegGen *gen);
+LJ_FUNC void lj_ctype_fin_lease_release(CTypeFinLease *lease);
+LJ_FUNC int lj_ctype_fin_gen_tab_acquire(CTState *cts, FinRegGen *gen,
+					 CTypeFinLease *lease);
+LJ_FUNC int lj_ctype_fin_head(CTState *cts, CTypeFinLease *lease);
 LJ_FUNC FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L);
 LJ_FUNC void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord);
 LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
@@ -1220,15 +1245,22 @@ LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
 LJ_FUNC int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
 				      FinRegOrderNode *ord,
 				      FinRegOrderNode *next);
+/* Complete means the whole ordered spine was inspected and every active node
+** for target was logically retired. A false result may still report partial
+** progress, but callers must retain/restore their semantic ownership token and
+** retry before publishing a registry clear. */
+LJ_FUNC int lj_ctype_fin_order_retire_obj_complete(CTState *cts,
+						    GCobj *target,
+						    size_t *retiredp);
 LJ_FUNC size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target);
-LJ_FUNC cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
-				  GCtab **tabp);
+LJ_FUNC int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
+			     CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
-				cTValue *claim, GCtab **tabp, TValue **slot);
+				cTValue *claim, CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_istab(global_State *g, GCtab *t);
-LJ_FUNC void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *,
-							    GCobj *),
-			       void (*markmem)(global_State *, void *));
+LJ_FUNC int lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *,
+							   GCobj *),
+			      void (*markmem)(global_State *, void *));
 LJ_FUNC void lj_ctype_fin_freetabs(global_State *g, CTState *cts);
 LJ_FUNC CType *lj_ctype_publish(CTState *cts, CTypeID id, CType *src);
 LJ_FUNC int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt);
@@ -1283,6 +1315,8 @@ LJ_FUNC GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned);
 LJ_FUNC GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size);
+/* Runtime drain only: caller must own GC2's exact-thread exclusive-reclaimer
+** scope before detaching the retired CTypeTab chain. */
 LJ_FUNC uint32_t lj_ctype_reclaim_retired(global_State *g,
 					  uint64_t completed_epoch);
 LJ_FUNCA CTState *LJ_FASTCALL lj_ctype_ctsG_acq(global_State *g);

@@ -199,6 +199,14 @@ return function(add)
       message = "M4 TG registry lease tests passed"
     },
     {
+      name = "m4_thread_gcprep",
+      description = "terminal coroutine preparation and open-upvalue fixture",
+      output = "lj_t-thread-gcprep",
+      cfile = "t-thread-gcprep.c",
+      opts = build.gc2_test_helper_opts({ timeout = "20s" }),
+      message = "M4 terminal coroutine preparation tests passed"
+    },
+    {
       name = "m4_tg_tls_binding",
       description = "exact TG registry TLS handle-move and ABA fixture",
       output = "lj_t-tg-tls-binding",

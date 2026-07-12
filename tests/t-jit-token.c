@@ -313,7 +313,6 @@ static void expect_gc_trace_free_defers_for_token(lua_State *L)
   TraceNo traceno;
   TraceNo freetrace;
   uint32_t foreign = foreign_token_owner(L);
-  uint32_t gate = 0;
   uint64_t retire_epoch;
 
   make_token_flush_trace(L);
@@ -350,14 +349,14 @@ static void expect_gc_trace_free_defers_for_token(lua_State *L)
   assert(trace_retired_link_listed_acq(T));
   assert(lj_trace_free_gc(g, T) == 1);
   assert(trace_traceno_acq(T) == 0);
-  assert(gc2_smr_reclaiming_cas(g, &gate, 1));
+  assert(lj_gc2_test_idle_reclaim_enter(g));
   assert(lj_jit_token_try(J));
   /* The process-wide pass may reclaim unrelated entries retired by the
   ** fixture's preceding jit.flush(). Only this body's pre-margin retention is
   ** part of the assertion. */
   (void)lj_trace_reclaim_retired(g, retire_epoch + 1u);
   lj_jit_token_release(J);
-  gc2_smr_reclaiming_rel(g, 0);
+  lj_gc2_test_idle_reclaim_leave(g);
   assert(jit_token_acq(g) == 0);
   assert(trace_retired_link_listed_acq(T));
   assert(trace_traceno_acq(T) == 0);

@@ -30,6 +30,126 @@ static void assert_no_bins(TGAlloc *alloc, uint32_t kind)
     assert(alloc->bins[kind][b] == NULL);
 }
 
+static void test_root_membership(PRNGState *rs)
+{
+  TGAlloc src, dst;
+  GCArena *a;
+  void *p, *adjacent, *other, *reuse;
+  uint32_t cell, adjacent_cell, before;
+
+  lj_arena_alloc_init(&src);
+  lj_arena_alloc_init(&dst);
+  src.alloc_black = 0;
+  p = lj_arena_alloc(&src, rs, 32, 0);
+  src.alloc_black = 1;
+  adjacent = lj_arena_alloc(&src, rs, 32, 0);
+  other = lj_arena_alloc(&src, rs, 32, 0);
+  assert(p != NULL && adjacent != NULL && other != NULL);
+  a = lj_arena_of(p);
+  assert(lj_arena_of(adjacent) == a && lj_arena_of(other) == a);
+  cell = lj_arena_cellof(p);
+  adjacent_cell = lj_arena_cellof(adjacent);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_root_state_acq(a, adjacent_cell) == LJ_ARENA_ROOT_NONE);
+
+  /* Exercise every encoded state while proving that masked CAS updates do not
+  ** disturb another allocation start packed into the same metadata word. */
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_NONE,
+					 LJ_ARENA_ROOT_LINKING));
+  assert(lj_arena_root_state_cas(a, adjacent_cell, LJ_ARENA_ROOT_NONE,
+					 LJ_ARENA_ROOT_UNLINKING));
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
+  assert(lj_arena_root_state_acq(a, adjacent_cell) ==
+	 LJ_ARENA_ROOT_UNLINKING);
+  assert(!lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_NONE,
+					  LJ_ARENA_ROOT_MEMBER));
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_LINKING,
+					 LJ_ARENA_ROOT_MEMBER));
+  assert(lj_arena_root_state_acq(a, adjacent_cell) ==
+	 LJ_ARENA_ROOT_UNLINKING);
+  assert(lj_arena_root_state_cas(a, adjacent_cell,
+					 LJ_ARENA_ROOT_UNLINKING,
+					 LJ_ARENA_ROOT_NONE));
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_MEMBER,
+					 LJ_ARENA_ROOT_UNLINKING));
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_UNLINKING,
+					 LJ_ARENA_ROOT_MEMBER));
+  assert(!lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_MEMBER, 4u));
+
+  /* A logical free while MEMBER must retain the exact body and cannot publish
+  ** a reusable bin node. The late bit records the free for a later cycle. */
+  before = bin_count(&src, LJ_ARENAK_PLAIN);
+  lj_arena_free(&src, p, 32);
+  assert(bin_count(&src, LJ_ARENAK_PLAIN) == before);
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_late_get(a, cell));
+  assert(lj_arena_alloc(&src, rs, 32, 0) != p);
+
+  /* Sweep and owner transfer preserve both committed and transient root state.
+  ** The allocation remains unavailable even though its ordinary mark was dead. */
+  assert(lj_arena_alloc_prepare_sweep_kind(&src, LJ_ARENAK_PLAIN));
+  assert(lj_arena_sweep_one(&src, LJ_ARENAK_PLAIN, 71u, 0) == a);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_alloc_transfer(&dst, &src) == 1u);
+  assert(src.owned[LJ_ARENAK_PLAIN] == NULL);
+  assert(dst.owned[LJ_ARENAK_PLAIN] == a);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+
+  /* Once the explicit owner relinquishes membership, the remembered free is
+  ** consumed by the next sweep and only then can allocation reuse the cell. */
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_MEMBER,
+					 LJ_ARENA_ROOT_UNLINKING));
+  assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_UNLINKING,
+					 LJ_ARENA_ROOT_NONE));
+  lj_arena_alloc_clear_marks(&dst);
+  assert(lj_arena_alloc_prepare_sweep_kind(&dst, LJ_ARENAK_PLAIN));
+  assert(lj_arena_sweep_one(&dst, LJ_ARENAK_PLAIN, 72u, 0) == a);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(!lj_arena_late_get(a, cell));
+  dst.alloc_black = 0;
+  reuse = lj_arena_alloc(&dst, rs, 32, 0);
+  assert(reuse == p);
+
+  lj_arena_alloc_fini(&src);
+  lj_arena_alloc_fini(&dst);
+
+  {
+    TGAlloc hold;
+    GCArena *held_arena;
+    void *held;
+    uint32_t held_cell, reason = LJ_ARENA_FINISH_NONE;
+    lj_arena_alloc_init(&hold);
+    hold.alloc_black = 0;
+    held = lj_arena_alloc(&hold, rs, 64, LJ_AF_TRAVERSABLE);
+    assert(held != NULL);
+    held_arena = lj_arena_of(held);
+    held_cell = lj_arena_cellof(held);
+    assert(lj_arena_lifetime_state_acq(held_arena, held_cell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
+    assert(lj_arena_root_state_cas(held_arena, held_cell,
+	LJ_ARENA_ROOT_NONE, LJ_ARENA_ROOT_MEMBER));
+    assert(lj_arena_alloc_prepare_sweep_kind(&hold,
+	LJ_ARENAK_TRAVERSABLE));
+    assert(lj_arena_alloc_quarantine_one(&hold, LJ_ARENAK_TRAVERSABLE,
+					  0) == held_arena);
+    assert(lj_arena_reclaim_seal(held_arena));
+    /* Membership is a conservative live pin, not actionable recovery work:
+    ** quarantine may commit the other cells while preserving this one. */
+    assert(lj_arena_alloc_quarantine_finish(&hold,
+	LJ_ARENAK_TRAVERSABLE, held_arena, 73u, 0, &reason));
+    assert(reason == LJ_ARENA_FINISH_COMMITTED);
+    assert(lj_arena_root_state_acq(held_arena, held_cell) ==
+	   LJ_ARENA_ROOT_MEMBER);
+    assert(lj_arena_bm_get(held_arena->block, held_cell));
+    assert(lj_arena_lifetime_state_acq(held_arena, held_cell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
+    assert(lj_arena_root_state_cas(held_arena, held_cell,
+	LJ_ARENA_ROOT_MEMBER, LJ_ARENA_ROOT_NONE));
+    lj_arena_alloc_fini(&hold);
+  }
+}
+
 int main(void)
 {
   PRNGState rs;
@@ -42,6 +162,7 @@ int main(void)
   uint32_t ctdead, ctlive;
 
   lj_prng_seed_fixed(&rs);
+  test_root_membership(&rs);
   lj_arena_alloc_init(&alloc);
   lj_arena_allocd_init(&travad, &alloc, &rs, LJ_AF_TRAVERSABLE);
 
@@ -314,11 +435,13 @@ int main(void)
     GCArena *a1, *a2, *swept1, *swept2;
     lj_arena_alloc_init(&publish);
     publish.alloc_black = 0;
-    first = lj_arena_alloc(&publish, &rs, 15000, 0);
-    fill1 = lj_arena_alloc(&publish, &rs, 15000, 0);
-    fill2 = lj_arena_alloc(&publish, &rs, 15000, 0);
-    fill3 = lj_arena_alloc(&publish, &rs, 15000, 0);
-    second = lj_arena_alloc(&publish, &rs, 15000, 0);
+    /* Keep four allocations in the first arena after the four-bit lifetime
+    ** plane increased LJ_AFIRST_CELL, while the fifth forces a second arena. */
+    first = lj_arena_alloc(&publish, &rs, 14400, 0);
+    fill1 = lj_arena_alloc(&publish, &rs, 14400, 0);
+    fill2 = lj_arena_alloc(&publish, &rs, 14400, 0);
+    fill3 = lj_arena_alloc(&publish, &rs, 14400, 0);
+    second = lj_arena_alloc(&publish, &rs, 14400, 0);
     assert(first != NULL && fill1 != NULL && fill2 != NULL &&
 	   fill3 != NULL && second != NULL);
     a1 = lj_arena_of(first);
@@ -338,7 +461,7 @@ int main(void)
     assert(publish.bump[LJ_ARENAK_PLAIN].a == swept2);
     assert(bin_count(&publish, LJ_ARENAK_PLAIN) >= 1);
     expected_reuse = swept1 == a1 ? first : second;
-    reuse = lj_arena_alloc(&publish, &rs, 15000, 0);
+    reuse = lj_arena_alloc(&publish, &rs, 14400, 0);
     assert(reuse == expected_reuse);
     lj_arena_alloc_fini(&publish);
   }
@@ -406,6 +529,10 @@ int main(void)
     assert(lj_arena_of(already_free) == a);
     cell = lj_arena_cellof(p);
     freecell = lj_arena_cellof(already_free);
+    assert(lj_arena_lifetime_state_acq(a, cell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
+    assert(lj_arena_lifetime_state_acq(a, freecell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
     lj_arena_alloc_prepare_sweep_kind(&late, LJ_ARENAK_TRAVERSABLE);
     assert(lj_arena_alloc_quarantine_one(&late, LJ_ARENAK_TRAVERSABLE,
 					  11u) == a);
@@ -415,6 +542,10 @@ int main(void)
     assert(lj_arena_alloc_quarantine_finish(&late,
 	LJ_ARENAK_TRAVERSABLE, a, 31u, 0, NULL));
     assert((a->hdr.flags & LJ_AF_RECLAIMED) != 0);
+    assert(lj_arena_lifetime_state_acq(a, cell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
+    assert(lj_arena_lifetime_state_acq(a, freecell) ==
+	   LJ_ARENA_LIFETIME_FREE);
     assert(lj_arena_remote_active_acq(a) != 0);  /* CLOSED admission gate. */
 
     /* The physical free loses the CLOSED/open race, so it may publish only a
@@ -434,6 +565,8 @@ int main(void)
     same_cycle = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
     assert(same_cycle == already_free);
     samecell = lj_arena_cellof(same_cycle);
+    assert(lj_arena_lifetime_state_acq(a, samecell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
     assert(same_cycle != p);  /* No reuse without a fresh grace. */
     assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
     assert((la_load64_acq(&a->late[cell >> 6]) &
@@ -457,7 +590,11 @@ int main(void)
     ordinary = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
     assert(ordinary != NULL && lj_arena_of(ordinary) == a && ordinary != p);
     assert(lj_arena_remote_free_publish(&late, ordinary, 64));
+    assert(lj_arena_lifetime_state_acq(a, lj_arena_cellof(ordinary)) ==
+	   LJ_ARENA_LIFETIME_FREE);
     assert(lj_arena_remote_free_drain(&late) == 1u);
+    assert(lj_arena_lifetime_state_acq(a, lj_arena_cellof(ordinary)) ==
+	   LJ_ARENA_LIFETIME_FREE);
     assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
     assert((la_load64_acq(&a->late[cell >> 6]) &
 	    ((uint64_t)1 << (cell & 63))) != 0);
@@ -466,6 +603,8 @@ int main(void)
 	LJ_AF_TRAVERSABLE);
     assert(ordinary_reuse == ordinary);
     ordinarycell = lj_arena_cellof(ordinary_reuse);
+    assert(lj_arena_lifetime_state_acq(a, ordinarycell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
 
     /* The next cycle consumes the deferred ticket only after sweep[] has
     ** reset. Root pruning can now detach a remaining gct=0 ticket and this
@@ -473,9 +612,11 @@ int main(void)
     lj_arena_alloc_prepare_sweep_kind(&late, LJ_ARENAK_TRAVERSABLE);
     assert(la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL);
     assert((la_load64_acq(&a->late[cell >> 6]) &
-	    ((uint64_t)1 << (cell & 63))) == 0);
+	    ((uint64_t)1 << (cell & 63))) != 0);
     assert(lj_arena_sweep_state_acq(a, cell) ==
 	   LJ_ARENA_SWEEP_FREEING);
+    assert(lj_arena_lifetime_state_acq(a, cell) ==
+	   LJ_ARENA_LIFETIME_FREE);
     /* Stand in for classification of the other live allocation; the deferred
     ** body itself must stay FREEING through this cycle's quarantine. */
     lj_arena_bm_set(a->mark, samecell);
@@ -486,8 +627,13 @@ int main(void)
     assert(lj_arena_alloc_quarantine_finish(&late,
 	LJ_ARENAK_TRAVERSABLE, a, 51u, 0, NULL));
     assert(!lj_arena_bm_get(a->block, cell));
+    assert(!lj_arena_late_get(a, cell));
+    assert(lj_arena_lifetime_state_acq(a, cell) ==
+	   LJ_ARENA_LIFETIME_FREE);
     next_cycle = lj_arena_alloc(&late, &rs, 64, LJ_AF_TRAVERSABLE);
     assert(next_cycle == p);  /* Reuse is legal after the fresh cycle grace. */
+    assert(lj_arena_lifetime_state_acq(a, cell) ==
+	   LJ_ARENA_LIFETIME_LIVE);
     lj_arena_free(&late, next_cycle, 64);
     lj_arena_free(&late, same_cycle, 64);
     lj_arena_free(&late, ordinary_reuse, 64);

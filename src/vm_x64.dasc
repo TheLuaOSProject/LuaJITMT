@@ -335,6 +335,8 @@
 #define TAB_EMPTY_BINMASK	((int32_t)(~((1u << (TAB_EMPTY_NCELLS-1))-1u)))
 #define ARENA_BLOCK_OFS		((int)offsetof(GCArena, block))
 #define ARENA_MARK_OFS		((int)offsetof(GCArena, mark))
+#define ARENA_ROOT_OFS		((int)offsetof(GCArena, root))
+#define ARENA_LIFETIME_OFS	((int)offsetof(GCArena, lifetime))
 #define ARENA_READY_OFS		((int)offsetof(GCArena, ready))
 #define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
 #define TABARRAY_ACAP_OFS	\
@@ -4394,6 +4396,104 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov ITYPEd, RAd			// Preserve cell index until publication.
     |  shl RA, LJ_CELL_SHIFT
     |  lea TAB:RC, [r8+RA]
+    |  // Claim the exact FREE lifetime and NONE root lanes before any body,
+    |  // READY or block visibility. The bump reservation is consumed already,
+    |  // so every partial failure must abandon its exact descriptor first.
+    |  mov TMP1, RC
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_LIFETIME_CELLS_PER_WORD-1
+    |  shl r9d, 2
+    |  shr ITYPEd, 4
+    |  lea r8, [r8+ITYPE*8]
+    |  mov RC, [r8+ARENA_LIFETIME_OFS]
+|9:
+    |  mov ITYPE, RC
+    |  // FREE(0000)->CONSTRUCT(0010), validating the complete nibble.
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  sub r9d, 3
+    |  lock
+    |  cmpxchg aword [r8+ARENA_LIFETIME_OFS], ITYPE
+    |  jne <9
+    |  // Root words retain their independent two-bit/32-cell geometry.
+    |  mov r8, TMP1
+    |  and r8, -LJ_ARENA_SIZE
+    |  mov ITYPE, TMP1
+    |  sub ITYPE, r8
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_ROOT_CELLS_PER_WORD-1
+    |  shl r9d, 1
+    |  shr ITYPEd, 5
+    |  lea r8, [r8+ITYPE*8]
+    |  mov RC, [r8+ARENA_ROOT_OFS]
+|9:
+    |  mov ITYPE, RC
+    |  bts ITYPE, r9
+    |  jc >8
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >8
+    |  btr ITYPE, r9
+    |  sub r9d, 1
+    |  lock
+    |  cmpxchg aword [r8+ARENA_ROOT_OFS], ITYPE
+    |  jne <9
+    |  jmp >3
+|8:
+    |  // Root NONE->LINKING failed: return owned CONSTRUCT to FREE exactly.
+    |  mov r8, TMP1
+    |  and r8, -LJ_ARENA_SIZE
+    |  mov ITYPE, TMP1
+    |  sub ITYPE, r8
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_LIFETIME_CELLS_PER_WORD-1
+    |  shl r9d, 2
+    |  shr ITYPEd, 4
+    |  lea r8, [r8+ITYPE*8]
+    |  mov RC, [r8+ARENA_LIFETIME_OFS]
+|9:
+    |  mov ITYPE, RC
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  add r9d, 1
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  sub r9d, 3
+    |  lock
+    |  cmpxchg aword [r8+ARENA_LIFETIME_OFS], ITYPE
+    |  jne <9
+    |  jmp >2
+|3:
+    |  mov RC, TMP1
+    |  // Recover the arena and allocation cell for bitmap publication.
+    |  mov r8, RC
+    |  and r8, -LJ_ARENA_SIZE
+    |  mov ITYPE, RC
+    |  sub ITYPE, r8
+    |  shr ITYPE, LJ_CELL_SHIFT
     |  movzx r9d, byte [TMPR+GL_OFS(gc.currentwhite)]
     |  and r9d, LJ_GC_WHITES
     |  mov byte TAB:RC->marked, r9b
@@ -4452,9 +4552,199 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lock
     |  cmpxchg aword [DISPATCH+DISPATCH_TG(gcroot_pending)], r8
     |  jne <8
-    |  mov RC, r8
     |  mov dword [TMPR+GL_OFS(gcroot_pending_hint)], 1
+    |  // The pending-stack CAS is the visibility LP. Commit the frozen four-
+    |  // bit lifetime lane before the independent two-bit root lane. Keep the
+    |  // table pointer in r8 across both descriptor address calculations.
+    |  mov RA, r8
+    |  and RA, -LJ_ARENA_SIZE
+    |  mov ITYPE, r8
+    |  sub ITYPE, RA
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_LIFETIME_CELLS_PER_WORD-1
+    |  shl r9d, 2
+    |  shr ITYPEd, 4
+    |  lea RA, [RA+ITYPE*8]
+    |  mov RC, [RA+ARENA_LIFETIME_OFS]
+|3:
+    |  // Normal CONSTRUCT(0010)->LIVE(0001), including upper-bit proof.
+    |  mov ITYPE, RC
+    |  bts ITYPE, r9
+    |  jc >8
+    |  lea r9d, [r9+1]
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  lea r9d, [r9-1]
+    |  lea r9d, [r9+2]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  jc >2
+    |  lea r9d, [r9+2]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  lea r9d, [r9+3]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  jc >2
+    |  lea r9d, [r9+3]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  lock
+    |  cmpxchg aword [RA+ARENA_LIFETIME_OFS], ITYPE
+    |  jne <3
+    |  jmp >3
+|8:
+    |  // A low-one sample is either recovery-owned MUTATING(0011) or the
+    |  // completed LIVE(0001) crossover. Reject RESCUE and every invalid lane.
+    |  mov ITYPE, RC
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  lea r9d, [r9+1]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-1]
+    |  jnc >9
+    |  lea r9d, [r9+2]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  jc >2
+    |  lea r9d, [r9+2]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  lea r9d, [r9+3]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  jc >2
+    |  jmp >3
+|9:
+    |  lea r9d, [r9+2]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  jc >2
+    |  lea r9d, [r9+3]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  jc >2
+    |  // LIVE is acceptable only with an already-MEMBER root.
+    |  mov RA, r8
+    |  and RA, -LJ_ARENA_SIZE
+    |  mov ITYPE, r8
+    |  sub ITYPE, RA
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_ROOT_CELLS_PER_WORD-1
+    |  shl r9d, 1
+    |  shr ITYPEd, 5
+    |  lea RA, [RA+ITYPE*8]
+    |  mov RC, [RA+ARENA_ROOT_OFS]
+    |  mov ITYPE, RC
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  lea r9d, [r9+1]
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  lea r9d, [r9-1]
+    |  jmp >8
+|3:
+    |  // CONSTRUCT and MUTATING may perform LINKING(01)->MEMBER(11).
+    |  mov RA, r8
+    |  and RA, -LJ_ARENA_SIZE
+    |  mov ITYPE, r8
+    |  sub ITYPE, RA
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_ROOT_CELLS_PER_WORD-1
+    |  shl r9d, 1
+    |  shr ITYPEd, 5
+    |  lea RA, [RA+ITYPE*8]
+    |  mov RC, [RA+ARENA_ROOT_OFS]
+|3:
+    |  mov ITYPE, RC
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  bts ITYPE, r9
+    |  lea r9d, [r9+1]
+    |  bts ITYPE, r9
+    |  jc >2
+    |  lea r9d, [r9-1]
+    |  lock
+    |  cmpxchg aword [RA+ARENA_ROOT_OFS], ITYPE
+    |  jne <3
+|8:
+    |  // Symmetric recovery crossover repair: after MEMBER publication, an
+    |  // owner that sampled LINKING may still restore MUTATING to CONSTRUCT.
+    |  // Exact-CAS that state to LIVE; LIVE/MUTATING are already safe.
+    |  mov RA, r8
+    |  and RA, -LJ_ARENA_SIZE
+    |  mov ITYPE, r8
+    |  sub ITYPE, RA
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_LIFETIME_CELLS_PER_WORD-1
+    |  shl r9d, 2
+    |  shr ITYPEd, 4
+    |  lea RA, [RA+ITYPE*8]
+    |  mov RC, [RA+ARENA_LIFETIME_OFS]
+|3:
+    |  mov ITYPE, RC
+    |  bts ITYPE, r9
+    |  jc >8
+    |  lea r9d, [r9+1]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-1]
+    |  jnc >2
+    |  lea r9d, [r9+2]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  jc >2
+    |  lea r9d, [r9+2]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  lea r9d, [r9+3]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  jc >2
+    |  lea r9d, [r9+3]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  lock
+    |  cmpxchg aword [RA+ARENA_LIFETIME_OFS], ITYPE
+    |  jne <3
+    |  jmp >9
+|8:
+    |  mov ITYPE, RC
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  lea r9d, [r9+1]
+    |  btr ITYPE, r9
+    |  lea r9d, [r9-1]
+    |  jnc >8
+    |  lea r9d, [r9+2]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  jc >2
+    |  lea r9d, [r9+3]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  jc >2
+    |  jmp >9
+|8:
+    |  lea r9d, [r9+2]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-2]
+    |  jc >2
+    |  lea r9d, [r9+3]
+    |  bts ITYPE, r9
+    |  lea r9d, [r9-3]
+    |  jc >2
+|9:
+    |  mov RC, r8
     |  jmp >4
+|2:
+    |  // The private reservation is already consumed, so generic fallback
+    |  // would abandon or duplicate it. Stay terminal if SIGTRAP is resumed.
+    |  int3
+    |  jmp <2
     |7:
     |  mov L:CARG1, L:RB
     |  call extern lj_tab_new0  // (lua_State *L)

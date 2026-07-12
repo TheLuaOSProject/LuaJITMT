@@ -68,7 +68,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
   newwhite(g, obj2gco(cd));
   if (LJ_UNLIKELY(!lj_mem_publish_cdata(
 	L, cd, (GCSize)(sizeof(GCcdata) + sz), 0))) {
-    lj_mem_free(g, cd, sizeof(GCcdata) + sz);
+    lj_mem_freegco_unpublished(g, cd, sizeof(GCcdata) + sz);
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
   }
@@ -96,7 +96,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
   newwhite(g, obj2gco(cd));
   if (LJ_UNLIKELY(!lj_mem_publish_cdata(
 	L, cd, (GCSize)(sizeof(GCcdata) + sz), 0))) {
-    lj_mem_free(g, cd, sizeof(GCcdata) + sz);
+    lj_mem_freegco_unpublished(g, cd, sizeof(GCcdata) + sz);
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
   }
@@ -118,10 +118,27 @@ LJ_FUNC int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
 LJ_FUNC void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd);
 LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
 			     uint32_t it);
-LJ_FUNC int lj_cdata_fin_claim_any_l(lua_State *L, TValue *tv, TValue *old);
-LJ_FUNC int lj_cdata_fin_claim_func_l(lua_State *L, TValue *tv, TValue *old);
+/* One-shot keyed claims for an exact CTypeFinLease. RETRY means the caller must
+** release/re-resolve before touching the slot again; FORWARD is never claimed. */
+LJ_FUNC int lj_cdata_fin_claim_held(CTypeFinLease *lease, cTValue *key,
+				    TValue *old, int nonnil);
+LJ_FUNC int lj_cdata_fin_store_claim_held(CTypeFinLease *lease,
+					  cTValue *key, cTValue *src);
 LJ_FUNC int lj_cdata_fin_isclaim(cTValue *tv);
-LJ_FUNC void lj_cdata_fin_storenil(lua_State *L, TValue *tv);
+
+#if defined(LJ_CDATA_TEST_HELPERS)
+enum {
+  LJ_CDATA_FIN_PAUSE_ENABLE_ORDER = 1,
+  LJ_CDATA_FIN_PAUSE_CLEAR_MISS,
+  LJ_CDATA_FIN_PAUSE_CLEAR_BEFORE_NIL,
+  LJ_CDATA_FIN_PAUSE_ENABLE_RETRY,
+  LJ_CDATA_FIN_PAUSE_CLEAR_RETRY,
+  LJ_CDATA_FIN_PAUSE__MAX
+};
+LJ_FUNC void lj_cdata_test_fin_pause_arm(uint32_t point);
+LJ_FUNC int lj_cdata_test_fin_pause_waiting(uint32_t point);
+LJ_FUNC void lj_cdata_test_fin_pause_release(uint32_t point);
+#endif
 
 LJ_FUNC CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
 				cTValue *key, uint8_t **pp, CTInfo *qual,

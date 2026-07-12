@@ -32,6 +32,9 @@
 #define LJ_AF_QUARANTINE	0x00000010u
 #define LJ_AF_RECLAIMED		0x00000020u
 #define LJ_AF_PREPSWEEP		0x00000040u
+/* Allocation-request modifier. This bit is consumed by the allocator and is
+** never persisted in GCAhdr.flags or ordinary HugeTab metadata. */
+#define LJ_AF_ROOT_CONSTRUCT	0x80000000u
 #define LJ_AF_FLAG_MASK \
   (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP|LJ_AF_FULL|LJ_AF_REGISTERED| \
    LJ_AF_QUARANTINE|LJ_AF_RECLAIMED|LJ_AF_PREPSWEEP)
@@ -41,7 +44,10 @@
 ** publishers. CLOSED routes terminal frees to the bit-only late bitmap and
 ** makes rescues sticky through PENDING. SEALED excludes ordinary intrusive
 ** publishers and owner transfer while still allowing counted bit/status
-** producers whose admission defeats exact commit/open arbitration. */
+** producers whose admission defeats exact commit/open arbitration. For plain
+** arenas, SEALED|PENDING is also the exact short-lived body-writer token;
+** readers reject it, while bit-only late publishers increment the same count
+** and keep the eventual bin generation CLOSED until the last leave. */
 #define LJ_ARENA_REMOTE_CLOSED		UINT64_C(0x8000000000000000)
 #define LJ_ARENA_REMOTE_SEALED		UINT64_C(0x4000000000000000)
 #define LJ_ARENA_REMOTE_PENDING		UINT64_C(0x2000000000000000)
@@ -75,11 +81,26 @@ typedef struct LJArenaAllocD LJArenaAllocD;
 typedef struct LJHugeTabHdr LJHugeTabHdr;
 typedef struct HugeTab HugeTab;
 typedef struct LJHugeInfo LJHugeInfo;
+typedef struct LJHugeReader LJHugeReader;
 typedef struct LJArenaRemoteFree LJArenaRemoteFree;
 typedef struct TGAlloc TGAlloc;
 
 struct HugeTab {
   LJHugeTabHdr *h;
+};
+
+/* Counted HugeTab body admission. The stable table header and exact allocation
+** base are sufficient for release; the possibly TG-embedded HugeTab wrapper
+** may retire immediately after acquire and is never dereferenced by release.
+** Tokens must be zero-initialized before acquire and may be released more than
+** once. They are single-caller objects (concurrent release of one token is not
+** supported). The stable table header outlives every admitted token, while the
+** wrapper need not; fini/fini_all and every slot-removal operation mechanically
+** refuse a nonzero reader count. */
+struct LJHugeReader {
+  LJHugeTabHdr *h;
+  void *base;
+  uint32_t size;
 };
 
 typedef struct GCAhdr {
@@ -99,7 +120,15 @@ typedef struct GCAhdr {
   void *progress_g;  /* Immutable global_State used for progress wakes. */
   uint32_t prep_bump_cell;  /* Detached bump tail pending PREP commit. */
   uint32_t prep_bump_end;
-  uint8_t pad[32];
+  /* Terminal THREAD destructors transfer semantic preparation outside the
+  ** exclusive GC2 writer after lifetime FREE. This count is the explicit
+  ** destructor-incomplete pin which prevents quarantine bitmap commit while
+  ** such a body is still queue-owned. */
+  uint32_t gcprep_pending;
+  /* Terminal unmap closure. Published before the remote_active terminal CAS;
+  ** rescue admission rechecks it after any losing CAS retry. */
+  uint32_t terminal_closed;
+  uint8_t pad[24];
 } GCAhdr;
 
 /*
@@ -119,6 +148,39 @@ typedef struct GCAhdr {
 #define LJ_ARENA_RECOVERY_CELLS_PER_WORD	32u
 #define LJ_ARENA_RECOVERY_WORDS \
   (LJ_ARENA_CELLS / LJ_ARENA_RECOVERY_CELLS_PER_WORD)
+
+/* Persistent intrusive-root membership. This is independent of sweep and
+** recovery ownership and survives every collector phase. The bit encoding is
+** intentional: x64 fresh-object publishers can claim/commit by setting the
+** low/high bit respectively, while generic paths use the masked CAS helper. */
+#define LJ_ARENA_ROOT_CELLS_PER_WORD	32u
+#define LJ_ARENA_ROOT_WORDS \
+  (LJ_ARENA_CELLS / LJ_ARENA_ROOT_CELLS_PER_WORD)
+
+/* Per-start allocation lifetime arbitration for traversable small objects.
+** Interior cells and every plain-arena cell remain FREE. Four bits provide an
+** exact same-word cancel point between semantic rescue and physical free:
+** MUTATING is non-destructive constructor/root/recovery ownership, DESTRUCT
+** is a tentative free, and RESCUE is readable semantic cancellation. */
+#define LJ_ARENA_LIFETIME_CELLS_PER_WORD	16u
+#define LJ_ARENA_LIFETIME_WORDS \
+  (LJ_ARENA_CELLS / LJ_ARENA_LIFETIME_CELLS_PER_WORD)
+
+enum {
+  LJ_ARENA_LIFETIME_FREE = 0,
+  LJ_ARENA_LIFETIME_LIVE = 1,
+  LJ_ARENA_LIFETIME_CONSTRUCT = 2,
+  LJ_ARENA_LIFETIME_MUTATING = 3,
+  LJ_ARENA_LIFETIME_DESTRUCT = 4,
+  LJ_ARENA_LIFETIME_RESCUE = 5
+};
+
+enum {
+  LJ_ARENA_ROOT_NONE = 0,
+  LJ_ARENA_ROOT_LINKING = 1,
+  LJ_ARENA_ROOT_UNLINKING = 2,
+  LJ_ARENA_ROOT_MEMBER = 3
+};
 
 enum {
   LJ_ARENA_RECOVERY_IDLE = 0,
@@ -158,6 +220,13 @@ struct GCArena {
   /* Durable GC2 work identity. This plane is never allocator scratch and may
   ** only be cleared by the recovery owner through the state CAS protocol. */
   uint64_t recovery[LJ_ARENA_RECOVERY_WORDS];
+  /* Allocation-lifetime ownership-spine state. Only allocation starts may be
+  ** non-NONE; allocator free/reuse must never erase a live/transient claim. */
+  uint64_t root[LJ_ARENA_ROOT_WORDS];
+  /* Physical allocation-lifetime ownership. Only traversable allocation
+  ** starts may be non-FREE; unlike root[], nonzero never implies root
+  ** membership or semantic liveness. */
+  uint64_t lifetime[LJ_ARENA_LIFETIME_WORDS];
   /* Closed-window remote-free deduplication. Unlike sweep[], this bitmap may
   ** be published after terminal bitmap commit. A bit naming committed live
   ** storage persists across adoption and is consumed by the next sweep. */
@@ -324,6 +393,7 @@ static LJ_AINLINE int lj_arena_alloc_has_run_ge(const TGAlloc *alloc,
 struct LJHugeInfo {
   size_t size;
   uint32_t flags;
+  uint32_t readers;
 };
 
 struct LJArenaAllocD {
@@ -347,15 +417,23 @@ struct LJArenaAllocD {
 #define LJ_HUGEF_RECOVERY_SHIFT	11u
 #define LJ_HUGEF_RECOVERY_MASK	(0x03u << LJ_HUGEF_RECOVERY_SHIFT)
 #define LJ_HUGEF_DEFER_FREE	0x2000u
+#define LJ_HUGEF_ROOT_SHIFT	14u
+#define LJ_HUGEF_ROOT_MASK	(0x03u << LJ_HUGEF_ROOT_SHIFT)
 #define LJ_HUGEF_MASK \
   (LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FINALIZER| \
    LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING| \
    LJ_HUGEF_TICKET|LJ_HUGEF_BUSY|LJ_HUGEF_INTERIOR_CDATA|LJ_HUGEF_READY| \
-   LJ_HUGEF_CDATA|LJ_HUGEF_RECOVERY_MASK|LJ_HUGEF_DEFER_FREE)
+   LJ_HUGEF_CDATA|LJ_HUGEF_RECOVERY_MASK|LJ_HUGEF_DEFER_FREE| \
+   LJ_HUGEF_ROOT_MASK)
 
 static LJ_AINLINE uint32_t lj_arena_huge_recovery_state(uint32_t flags)
 {
   return (flags & LJ_HUGEF_RECOVERY_MASK) >> LJ_HUGEF_RECOVERY_SHIFT;
+}
+
+static LJ_AINLINE uint32_t lj_arena_huge_root_state(uint32_t flags)
+{
+  return (flags & LJ_HUGEF_ROOT_MASK) >> LJ_HUGEF_ROOT_SHIFT;
 }
 /* A containing-object marker published MARK while the retire owner held BUSY,
 ** but deliberately did not inspect or return the still-unpublished header.
@@ -403,12 +481,41 @@ LJ_FUNC int lj_arena_hugetab_recovery_state_cas(HugeTab *ht,
 						 uint32_t from,
 						 uint32_t to,
 						 LJHugeInfo *hi);
+/* Root-membership transitions preserve every other HugeTab metadata bit. */
+LJ_FUNC int lj_arena_hugetab_root_state_acq(HugeTab *ht, const void *p,
+					     LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_root_state_cas(HugeTab *ht, const void *p,
+					     uint32_t from, uint32_t to,
+					     LJHugeInfo *hi);
+/* Complete a root-state transition without dropping a racing logical free.
+** An ordinary transition returns LIVE. Any non-NONE->NONE completion folds a
+** racing DEFER_FREE into a fresh-grace sweep handoff and returns SWEEP (this
+** includes LINKING rollback). LOST retains the mapping and is safe to retry.
+** A zero retire_epoch requests the all-ones fresh sentinel. */
+#define LJ_ARENA_HUGE_ROOT_COMPLETE_LOST	0
+#define LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE	1
+#define LJ_ARENA_HUGE_ROOT_COMPLETE_SWEEP	2
+LJ_FUNC int lj_arena_hugetab_root_complete(HugeTab *ht, const void *p,
+					    uint32_t from, uint32_t to,
+					    uint64_t retire_epoch,
+					    LJHugeInfo *hi);
+/* Root-construction insertion publishes LINKING in the initial full-slot CAS.
+** Commit advances LINKING->MEMBER. Abandon folds a racing deferred free just
+** like root_complete and therefore returns one of the ROOT_COMPLETE results. */
+LJ_FUNC int lj_arena_hugetab_root_construct_commit(HugeTab *ht,
+						     const void *p,
+						     LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_root_construct_abandon(HugeTab *ht,
+						      const void *p,
+						      uint64_t retire_epoch,
+						      LJHugeInfo *hi);
 /* Complete a CLAIMED huge recovery identity. A racing logical free is folded
-** into the same full-slot transition and can never leave IDLE|DEFER_FREE.
-** SWEEP publishes FREEING|SWEEP_OLD with a fresh-grace sentinel, including
-** when no sweep owned the entry at publication time. UNMAP is reserved for a
-** future proven-exclusive handoff and is not currently emitted. REQUEUED
-** leaves the identity count unchanged and requires another drain. */
+** into the same full-slot transition when this is the final owner. If counted
+** readers remain, IDLE|DEFER_FREE intentionally transfers that responsibility
+** to the last reader. SWEEP publishes FREEING|SWEEP_OLD with a fresh-grace
+** sentinel. UNMAP is reserved for a future proven-exclusive handoff and is
+** not currently emitted. REQUEUED leaves the identity count unchanged and
+** requires another drain. */
 #define LJ_ARENA_HUGE_RECOVERY_COMPLETE_LOST	0
 #define LJ_ARENA_HUGE_RECOVERY_COMPLETE_LIVE	1
 #define LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP	2
@@ -444,6 +551,70 @@ LJ_FUNC int lj_arena_hugetab_cdata_range_lookup(HugeTab *ht, const void *p,
 						 void **basep, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_mark_cdata_range(HugeTab *ht, const void *p,
 					       void **basep, LJHugeInfo *hi);
+/* Counted body admissions use one full-slot CAS to validate address, 32-bit
+** authoritative size, flags and reader count. Therefore a successful return
+** closes the old lookup-to-header deletion window: base remains mapped and no
+** destructive BUSY/FREEING/tombstone/transfer can succeed until release.
+**
+** The exact/range reader APIs do not change MARK. The cdata variants require
+** a published traversable cdata identity; the generic range variant accepts
+** any allocation containing p. Mark-reader variants additionally perform the
+** corresponding semantic MARK transition and return the same 0/1/2 results
+** as the metadata-only mark APIs. MARK_INTENT records liveness behind a
+** pre-ticket retire owner but deliberately returns no reader token or base.
+** MARK_SATURATED likewise publishes MARK but returns no token when the bounded
+** reader field is full; the caller must arrange a later traversal/retry and
+** must not inspect body bytes from that result.
+**
+** Reader acquire returns ACQUIRED, MISSING, or OVERFLOW. Mark-reader acquire
+** returns -1 for rejection/missing, MARK_SATURATED for a full bounded counter,
+** MARK_INTENT, or the ordinary mark result. A failed acquire leaves a
+** zero-initialized token untouched. DEFER_FREE rejects every new admission.
+** Release clears the token before its CAS and is idempotent. The last reader
+** either drops the count or atomically hands an irrevocable DEFER_FREE to
+** FREEING|SWEEP_OLD; root/recovery/BUSY owners may instead retain the durable
+** bit for their own completion CAS. No API waits or yields. */
+#define LJ_ARENA_HUGE_READER_OVERFLOW	(-2)
+#define LJ_ARENA_HUGE_READER_MISSING	0
+#define LJ_ARENA_HUGE_READER_ACQUIRED	1
+#define LJ_ARENA_HUGE_READER_RELEASE_LOST	0
+#define LJ_ARENA_HUGE_READER_RELEASED	1
+#define LJ_ARENA_HUGE_READER_HANDOFF	2
+#define LJ_ARENA_HUGE_MARK_SATURATED	4
+LJ_FUNC int lj_arena_hugetab_reader_acquire(HugeTab *ht, const void *p,
+					      LJHugeReader *reader,
+					      LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_reader_range_acquire(HugeTab *ht,
+						    const void *p,
+						    void **basep,
+						    LJHugeReader *reader,
+						    LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_reader_cdata_range_acquire(HugeTab *ht,
+						          const void *p,
+						          void **basep,
+						          LJHugeReader *reader,
+						          LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_mark_reader_acquire(HugeTab *ht,
+						   const void *p,
+						   LJHugeReader *reader,
+						   LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_mark_range_reader_acquire(HugeTab *ht,
+						         const void *p,
+						         void **basep,
+						         LJHugeReader *reader,
+						         LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_mark_cdata_range_reader_acquire(
+  HugeTab *ht, const void *p, void **basep, LJHugeReader *reader,
+  LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_reader_release(LJHugeReader *reader,
+					      LJHugeInfo *hi);
+/* Pure token geometry: no HugeTab wrapper, slot, mapping header or payload is
+** dereferenced. covers_range accepts a zero-length range at base+size. */
+LJ_FUNC int lj_arena_hugetab_reader_covers(const LJHugeReader *reader,
+					     const void *p);
+LJ_FUNC int lj_arena_hugetab_reader_covers_range(const LJHugeReader *reader,
+						   const void *p,
+						   size_t size);
 LJ_FUNC int lj_arena_hugetab_publish_gco(HugeTab *ht, const void *p);
 LJ_FUNC int lj_arena_hugetab_publish_cdata(HugeTab *ht, const void *p,
 					    int interior);
@@ -496,14 +667,44 @@ LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 #if defined(LJ_ARENA_TEST_HELPERS)
 LJ_FUNC void lj_arena_hugetab_test_retire_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_hugetab_test_retire_paused(void);
+LJ_FUNC void lj_arena_test_plain_late_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_test_plain_late_paused(void);
+LJ_FUNC void lj_arena_test_registry_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_test_registry_paused(void);
+LJ_FUNC void lj_arena_test_plain_claim_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_test_plain_claim_paused(void);
+LJ_FUNC void lj_arena_test_plain_admit_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_test_plain_admit_paused(void);
+#endif
+#if defined(LJ_ARENA_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC void lj_arena_test_lifetime_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_test_lifetime_paused(void);
 #endif
 LJ_FUNC void lj_arena_alloc_set_registry(TGAlloc *alloc, HugeTab *tab);
 LJ_FUNC HugeTab *lj_arena_alloc_registry_acq(const TGAlloc *alloc);
 LJ_FUNC int lj_arena_alloc_registry_lookup(const TGAlloc *alloc,
 					   const GCArena *a,
 					   LJHugeInfo *hi);
+/* Bridge a counted registry-slot reader into the arena's remote admission.
+** No arena/header byte is read before the HugeTab reader CAS succeeds. The
+** registry count remains held until rescue_enter has modified remote_active,
+** so terminal registry deletion and arena unmap cannot both miss the reader. */
+LJ_FUNC int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
+					    LJHugeInfo *hi);
 LJ_FUNC int lj_arena_alloc_register_existing(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
+/* Exact-arena form for the immediate pre-destructor check after an earlier
+** terminal destructor recreated a conservative gate intent. The caller owns
+** joined-world terminal authority. It accepts OPEN/CLOSED, CASes only exact
+** count-zero CLOSED|PENDING to CLOSED, and otherwise fails without inspecting
+** or changing any allocation side plane. */
+LJ_FUNC int lj_arena_terminal_reconcile(GCArena *a);
+/* Quiescent terminal PRE pass. Visits every allocator list without detaching
+** it and CASes only exact count-zero CLOSED|PENDING to CLOSED. OPEN/CLOSED are
+** already quiet; any admission, SEALED writer, terminal-unmap claim or other
+** bit pattern fails the pass. No allocation side plane is inspected or
+** changed, so late/root/recovery/lifetime ownership remains authoritative. */
+LJ_FUNC int lj_arena_alloc_terminal_reconcile(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_clear_marks(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t kind);
@@ -539,6 +740,30 @@ LJ_FUNC uint32_t lj_arena_remote_free_drain(TGAlloc *alloc);
 LJ_FUNC uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc,
 						   GCArena *a);
 LJ_FUNC int lj_arena_remote_sweep_busy_acq(const GCArena *a);
+#define LJ_ARENA_DESTRUCT_LOST		0
+#define LJ_ARENA_DESTRUCT_ACQUIRED	1
+#define LJ_ARENA_DESTRUCT_OWNED		2
+/* Pre-destructor physical ownership. Only ACQUIRED authorizes one semantic
+** destructor invocation; OWNED requires the exact FREE+FREEING terminal pair.
+** LOST includes mere late intent or a semantic RESCUE/non-destructive owner,
+** and no body byte may be touched. A plain-arena ACQUIRED result retains its
+** SEALED writer token across the destructor; the same owner must finish with
+** lj_arena_free(), which commits storage and reopens admissions. */
+LJ_FUNC int lj_arena_destruct_acquire(const void *p, size_t size);
+/* Fresh root construction owns both descriptor planes until commit/abandon.
+** Normally commit publishes LIVE before MEMBER and abandon clears LINKING
+** before LIVE. If recovery temporarily owns CONSTRUCT->MUTATING, either helper
+** may finish only the root lane; recovery must restore LIVE when it observes
+** MEMBER/NONE, or restore CONSTRUCT only while root remains LINKING. */
+LJ_FUNC int lj_arena_root_construct_claim(GCArena *a, uint32_t cell);
+LJ_FUNC int lj_arena_root_construct_commit(GCArena *a, uint32_t cell);
+LJ_FUNC int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell);
+LJ_FUNC int lj_arena_lifetime_empty(const GCArena *a);
+/* Quiescent terminal cleanup only. Returns the state it replaced with FREE.
+** The caller owns all semantic destruction; this only discards the locator
+** lane after no runtime actor can observe or resume the allocation. */
+LJ_FUNC uint32_t lj_arena_lifetime_clear_terminal(GCArena *a,
+						    uint32_t cell);
 LJ_FUNC int lj_arena_reclaim_seal(GCArena *a);
 LJ_FUNC int lj_arena_reclaim_clear_pending(GCArena *a);
 LJ_FUNC void lj_arena_reclaim_unseal(GCArena *a, int keep_pending);
@@ -618,6 +843,42 @@ static LJ_AINLINE uint32_t lj_arena_recovery_state_acq(const GCArena *a,
   return (uint32_t)((word >> shift) & 0x03u);
 }
 
+static LJ_AINLINE uint32_t lj_arena_lifetime_state_acq(const GCArena *a,
+							uint32_t i)
+{
+  uint32_t shift;
+  uint64_t word;
+  if (!a || i >= LJ_ARENA_CELLS)
+    return LJ_ARENA_LIFETIME_FREE;
+  shift = (i & (LJ_ARENA_LIFETIME_CELLS_PER_WORD-1u)) << 2;
+  word = la_load64_acq(
+    &a->lifetime[i / LJ_ARENA_LIFETIME_CELLS_PER_WORD]);
+  return (uint32_t)((word >> shift) & 0x0fu);
+}
+
+static LJ_AINLINE int lj_arena_lifetime_state_cas(GCArena *a, uint32_t i,
+						    uint32_t from,
+						    uint32_t to)
+{
+  uint32_t wi, shift;
+  uint64_t mask, old;
+  if (!a || i >= LJ_ARENA_CELLS || from > LJ_ARENA_LIFETIME_RESCUE ||
+      to > LJ_ARENA_LIFETIME_RESCUE)
+    return 0;
+  wi = i / LJ_ARENA_LIFETIME_CELLS_PER_WORD;
+  shift = (i & (LJ_ARENA_LIFETIME_CELLS_PER_WORD-1u)) << 2;
+  mask = (uint64_t)0x0fu << shift;
+  old = la_load64_acq(&a->lifetime[wi]);
+  for (;;) {
+    uint64_t next;
+    if (((old & mask) >> shift) != from)
+      return 0;
+    next = (old & ~mask) | ((uint64_t)to << shift);
+    if (la_cas64(&a->lifetime[wi], &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
 static LJ_AINLINE int lj_arena_recovery_state_cas(GCArena *a, uint32_t i,
 						   uint32_t from,
 						   uint32_t to)
@@ -637,6 +898,40 @@ static LJ_AINLINE int lj_arena_recovery_state_cas(GCArena *a, uint32_t i,
       return 0;
     next = (old & ~mask) | ((uint64_t)to << shift);
     if (la_cas64(&a->recovery[wi], &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE uint32_t lj_arena_root_state_acq(const GCArena *a,
+						    uint32_t i)
+{
+  uint32_t shift;
+  uint64_t word;
+  if (!a || i >= LJ_ARENA_CELLS)
+    return LJ_ARENA_ROOT_NONE;
+  shift = (i & (LJ_ARENA_ROOT_CELLS_PER_WORD-1u)) << 1;
+  word = la_load64_acq(&a->root[i / LJ_ARENA_ROOT_CELLS_PER_WORD]);
+  return (uint32_t)((word >> shift) & 0x03u);
+}
+
+static LJ_AINLINE int lj_arena_root_state_cas(GCArena *a, uint32_t i,
+					       uint32_t from, uint32_t to)
+{
+  uint32_t wi, shift;
+  uint64_t mask, old;
+  if (!a || i >= LJ_ARENA_CELLS || from > LJ_ARENA_ROOT_MEMBER ||
+      to > LJ_ARENA_ROOT_MEMBER)
+    return 0;
+  wi = i / LJ_ARENA_ROOT_CELLS_PER_WORD;
+  shift = (i & (LJ_ARENA_ROOT_CELLS_PER_WORD-1u)) << 1;
+  mask = (uint64_t)0x03u << shift;
+  old = la_load64_acq(&a->root[wi]);
+  for (;;) {
+    uint64_t next;
+    if (((old & mask) >> shift) != from)
+      return 0;
+    next = (old & ~mask) | ((uint64_t)to << shift);
+    if (la_cas64(&a->root[wi], &old, next, LA_ACQ_REL, LA_ACQ))
       return 1;
   }
 }
@@ -678,6 +973,23 @@ static LJ_AINLINE uint32_t lj_arena_reclaim_deferred_sub(GCArena *a,
 						  uint32_t n)
 {
   return la_sub32_rlx(&a->hdr.reclaim_deferred, n);
+}
+
+static LJ_AINLINE uint32_t lj_arena_gcprep_pending_acq(const GCArena *a)
+{
+  return la_load32_acq(&a->hdr.gcprep_pending);
+}
+
+static LJ_AINLINE uint32_t lj_arena_gcprep_pending_add(GCArena *a,
+						uint32_t n)
+{
+  return la_add32_acqrel(&a->hdr.gcprep_pending, n);
+}
+
+static LJ_AINLINE uint32_t lj_arena_gcprep_pending_sub(GCArena *a,
+						uint32_t n)
+{
+  return la_sub32_acqrel(&a->hdr.gcprep_pending, n);
 }
 
 static LJ_AINLINE uint64_t lj_arena_remote_active_acq(const GCArena *a)
@@ -766,8 +1078,10 @@ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->block) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->mark) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->sweep) == 1024u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->recovery) == 1024u);
+LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->root) == 1024u);
+LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->lifetime) == 2048u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->late) == 512u);
-LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 296u);
+LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 488u);
 LJ_STATIC_ASSERT(sizeof(LJArenaFreeRun) == LJ_CELL_SIZE);
 LJ_STATIC_ASSERT(sizeof(LJArenaRemoteFree) == LJ_CELL_SIZE);
 

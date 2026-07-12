@@ -1118,12 +1118,33 @@ retry_insert_lookup:
   }
 }
 
-void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
+static int str_free_prepare_impl(global_State *g, GCstr *s,
+				 LJGCDestructCtx *dctx, int reclaim_held)
 {
   uint8_t gct = la_load8_acq(&s->gct);
+  GCSize size;
+  if (LJ_UNLIKELY(gct != (uint8_t)~LJ_TSTR))
+    return LJ_GC_DESTRUCT_OWNED;
+  size = lj_str_size(s->len);
+  return reclaim_held ?
+    lj_gc_destructor_enter_reclaim_held(g, s, size, dctx) :
+    lj_gc_destructor_enter(g, s, size, dctx);
+}
+
+void lj_str_free_commit(global_State *g, GCstr *s, LJGCDestructCtx *dctx)
+{
+  uint8_t gct = la_load8_acq(&s->gct);
+  GCSize size;
+  if (LJ_UNLIKELY(!dctx || dctx->base != (void *)s || dctx->size == 0)) {
+    lj_assertG(0, "invalid prepared string destructor context");
+    abort();
+  }
+  size = dctx->size;
   for (;;) {
-    if (LJ_UNLIKELY(gct != (uint8_t)~LJ_TSTR))
-      return;
+    if (LJ_UNLIKELY(gct != (uint8_t)~LJ_TSTR)) {
+      lj_assertG(0, "string type claim lost after destructor ownership");
+      abort();
+    }
     if (la_cas8(&s->gct, &gct, 0, LA_ACQ_REL, LA_ACQ))
       break;
   }
@@ -1142,7 +1163,33 @@ void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
   #else
   (void)lj_str_num_sub_acqrel(g, 1);
   #endif
-  lj_mem_free(g, s, lj_str_size(s->len));
+  lj_mem_free(g, s, size);
+  lj_gc_destructor_leave(g, dctx);
+}
+
+int lj_str_free_prepare(global_State *g, GCstr *s, LJGCDestructCtx *dctx)
+{
+  return str_free_prepare_impl(g, s, dctx, 0);
+}
+
+static int str_free_try_impl(global_State *g, GCstr *s, int reclaim_held)
+{
+  LJGCDestructCtx dctx;
+  int acquired = str_free_prepare_impl(g, s, &dctx, reclaim_held);
+  if (acquired != LJ_GC_DESTRUCT_ACQUIRED)
+    return acquired;  /* RESCUE/loss or another terminal owner won. */
+  lj_str_free_commit(g, s, &dctx);
+  return LJ_GC_DESTRUCT_ACQUIRED;
+}
+
+int LJ_FASTCALL lj_str_free_try(global_State *g, GCstr *s)
+{
+  return str_free_try_impl(g, s, 0);
+}
+
+void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
+{
+  (void)lj_str_free_try(g, s);
 }
 
 /* -- GC2 intern-table string reclamation ------------------------------- */
@@ -1448,6 +1495,11 @@ static uint32_t str_sweep_unlink_one(global_State *g, StrTabHdr *hdr)
     return 1;
   }
 
+  /* The pending slot remains the sole discoverable owner across the unlink
+  ** LP. Publish its body-ownership transition before list publication; abort
+  ** never consumes a non-NULL pending slot, and terminal cleanup runs only
+  ** after the worker has completed this entire handoff. */
+  lj_str_body_retired_main_linked_rel(ret, 0);
   lj_str_body_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
   str_body_retired_push(g, ret);
   lj_str_sweep_pending_rel(g, NULL);
@@ -1467,11 +1519,16 @@ void lj_str_gc2_sweep_begin(global_State *g, int major)
 {
   if (!g)
     return;
+  if (LJ_UNLIKELY(lj_str_sweep_pending_acq(g) != NULL)) {
+    /* A pending record exists only inside unlink's no-safepoint handoff. A new
+    ** sweep owner cannot clear or adopt it without racing the exact bucket CAS. */
+    lj_assertG(0, "string sweep began during pending unlink handoff");
+    abort();
+  }
   if (lj_str_sweep_phase_acq(g) != LJ_STR_SWEEP_IDLE)
     lj_str_gc2_sweep_abort(g);
   lj_str_sweep_hdr_rel(g, NULL);
   lj_str_sweep_link_rel(g, NULL);
-  lj_str_sweep_pending_rel(g, NULL);
   lj_str_sweep_bucket_rel(g, 0);
   lj_str_sweep_grace_epoch_rel(g, 0);
   la_store32_rel(&g->str.sweep_cycle, gc2_cycle_acq(g));
@@ -1575,19 +1632,22 @@ uint32_t lj_str_gc2_sweep_step(global_State *g, uint32_t limit)
 
 void lj_str_gc2_sweep_abort(global_State *g)
 {
-  StrBodyRetire *pending;
   StrTabHdr *hdr;
   if (!g)
     return;
+  /* worker_active/phase-gate ownership makes this slot NULL at every legal
+  ** abort boundary. Never xchg-and-free it: before the bucket CAS the worker
+  ** still owns the record, and after that CAS the record owns an unlinked body.
+  ** Either interpretation makes concurrent consumption a UAF or lost body. */
+  if (LJ_UNLIKELY(lj_str_sweep_pending_acq(g) != NULL)) {
+    lj_assertG(0, "string sweep abort crossed pending unlink handoff");
+    abort();
+  }
   hdr = lj_str_sweep_hdr_acq(g);
   if (hdr && (strtab_resize_acq(hdr) & LJ_STRTAB_SWEEP))
     strtab_release(hdr);
   lj_str_sweep_hdr_rel(g, NULL);
   lj_str_sweep_link_rel(g, NULL);
-  pending = lj_str_sweep_pending_acq(g);
-  lj_str_sweep_pending_rel(g, NULL);
-  if (pending && lj_gc2_mem_registered(g, pending))
-    lj_mem_free(g, pending, sizeof(*pending));
   lj_str_sweep_bucket_rel(g, 0);
   lj_str_sweep_grace_epoch_rel(g, 0);
   lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_IDLE);
@@ -1621,6 +1681,48 @@ void LJ_FASTCALL lj_str_init(lua_State *L)
   lj_str_resize(L, LJ_MIN_STRTAB-1);
 }
 
+static LJ_AINLINE int str_retire_node_known(global_State *g, const void *p,
+					     int reclaim_held)
+{
+  return reclaim_held ?
+    lj_gc2_mem_registered_known_reclaim_held(g, p) :
+    lj_gc2_mem_registered_known(g, p);
+}
+
+/* Validate a detached intrusive chain before mutating or freeing any node.
+** A duplicate node in a singly linked list necessarily forms a cycle, so
+** Floyd detection is also duplicate detection. Every successor dereference is
+** preceded by the appropriate exact-reclaimer or joined-world membership
+** proof. Returning false never truncates or partially consumes the chain. */
+#define STR_RETIRE_CHAIN_VALIDATOR(name, type, nextfn) \
+static int name(global_State *g, type *head, int reclaim_held) \
+{ \
+  type *slow = head, *fast = head; \
+  while (fast) { \
+    if (slow) { \
+      if (!str_retire_node_known(g, slow, reclaim_held)) return 0; \
+      slow = nextfn(slow); \
+    } \
+    if (!str_retire_node_known(g, fast, reclaim_held)) return 0; \
+    fast = nextfn(fast); \
+    if (fast) { \
+      if (!str_retire_node_known(g, fast, reclaim_held)) return 0; \
+      fast = nextfn(fast); \
+    } \
+    if (fast && slow == fast) return 0; \
+  } \
+  return 1; \
+}
+
+STR_RETIRE_CHAIN_VALIDATOR(str_body_retired_chain_valid, StrBodyRetire,
+			   lj_str_body_retired_next_acq)
+STR_RETIRE_CHAIN_VALIDATOR(str_tab_retired_chain_valid, StrTabHdr,
+			   lj_str_retired_next_acq)
+STR_RETIRE_CHAIN_VALIDATOR(str_qretired_chain_valid, StrCanonHdr,
+			   lj_str_qretired_next_acq)
+
+#undef STR_RETIRE_CHAIN_VALIDATOR
+
 uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   StrBodyRetire *ret;
@@ -1629,14 +1731,28 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
+  /* The generic GC2 owner has closed SMR admission and installed its exact
+  ** current-thread capability across every detach and nested validation. */
   /* Body records are processed before header records. A deferred current-header
   ** body still needs that generation name for the active-pin check below. */
   ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
+  if (LJ_UNLIKELY(!str_body_retired_chain_valid(g, ret, 1))) {
+    lj_assertG(0, "invalid/cyclic detached string-body retire chain");
+    abort();
+  }
+  while (ret) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, ret))) {
+      /* The exclusive owner already detached this list. Losing the remaining
+      ** chain here is an allocator/accounting corruption, not a retry result. */
+      lj_assertG(0, "invalid detached string-body retire record");
+      abort();
+    }
     StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
     uint64_t retire_epoch = lj_str_body_retired_epoch_acq(ret);
     StrTabHdr *rethdr = lj_str_body_retired_hdr_acq(ret);
     uint32_t status = la_load32_acq(&ret->status);
+    uint32_t main_linked = lj_str_body_retired_main_linked_acq(ret);
     int old_enough = completed_epoch >= retire_epoch &&
 	completed_epoch - retire_epoch >= LJ_STR_SWEEP_GRACE_EPOCHS;
     lj_str_body_retired_next_rel(ret, NULL);
@@ -1648,13 +1764,44 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
       ret = next;
       continue;
     }
+    if (LJ_UNLIKELY(main_linked != 0)) {
+      /* Normal sweep records enter this list only after their exact bucket
+      ** unlink. A still-linked record never owns the canonical body. */
+      lj_assertG(0, "linked string body reached retired ownership list");
+      abort();
+    }
     if (old_enough &&
 	(lj_str_tabh_acq(g) != rethdr || !strtab_active_on_hdr(g, rethdr))) {
       GCstr *s = lj_str_body_retired_str_acq(ret);
-      if (s && lj_gc2_mem_registered(g, s) &&
-	  la_load8_acq(&s->gct) == (uint8_t)~LJ_TSTR) {
-	lj_str_free(g, s);
-	lj_str_sweep_reclaimed_add(g, 1);
+      uint8_t gct;
+      int freed;
+      /* This record is the exact detached body owner. Validate the nested
+      ** allocation with that same non-transferable reclaimer capability before
+      ** reading its type/size, then arbitrate destruction through the matching
+      ** reclaim-held entry point. A transient failed validation retains both
+      ** the record and its body for the next grace pass. */
+      if (LJ_UNLIKELY(!s ||
+	  !lj_gc2_mem_registered_known_reclaim_held(g, s))) {
+	str_body_retired_push(g, ret);
+	ret = next;
+	continue;
+      }
+      gct = la_load8_acq(&s->gct);
+      if (gct == (uint8_t)~LJ_TSTR) {
+	freed = str_free_try_impl(g, s, 1);
+	if (freed == LJ_GC_DESTRUCT_LOST) {
+	  str_body_retired_push(g, ret);
+	  ret = next;
+	  continue;
+	}
+	if (freed == LJ_GC_DESTRUCT_ACQUIRED)
+	  lj_str_sweep_reclaimed_add(g, 1);
+      } else if (LJ_UNLIKELY(gct != 0)) {
+	/* A completed destructor publishes type zero. Any other type means the
+	** allocation was reused or the exact retire record names the wrong body;
+	** neither condition permits silently dropping its ownership record. */
+	lj_assertG(0, "retired string body type identity changed");
+	abort();
       }
       lj_mem_free(g, ret, sizeof(*ret));
       reclaimed++;
@@ -1664,7 +1811,16 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
     ret = next;
   }
   hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
-  while (hdr && lj_gc2_mem_registered(g, hdr)) {
+  if (LJ_UNLIKELY(!str_tab_retired_chain_valid(g, hdr, 1))) {
+    lj_assertG(0, "invalid/cyclic detached string-table retire chain");
+    abort();
+  }
+  while (hdr) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, hdr))) {
+      lj_assertG(0, "invalid detached string-table retire header");
+      abort();
+    }
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_str_retired_next_rel(hdr, NULL);
     if (lj_str_retire_epoch_acq(hdr) < completed_epoch) {
@@ -1676,7 +1832,16 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
     hdr = next;
   }
   qhdr = lj_str_qretired_head_xchg_acqrel(g, NULL);
-  while (qhdr && lj_gc2_mem_registered(g, qhdr)) {
+  if (LJ_UNLIKELY(!str_qretired_chain_valid(g, qhdr, 1))) {
+    lj_assertG(0, "invalid/cyclic detached string-canonical retire chain");
+    abort();
+  }
+  while (qhdr) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, qhdr))) {
+      lj_assertG(0, "invalid detached string-canonical retire header");
+      abort();
+    }
     StrCanonHdr *next = lj_str_qretired_next_acq(qhdr);
     lj_str_qretired_next_rel(qhdr, NULL);
     if (lj_str_qretire_epoch_acq(qhdr) < completed_epoch &&
@@ -1691,6 +1856,81 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
   return reclaimed;
 }
 
+static int str_terminal_body_reconcile(global_State *g, GCstr *s)
+{
+  GCArena *a;
+  if (g->allocf != lj_arena_allocf ||
+      la_load32_acq(&g->allocf_arena) == 0)
+    return 1;
+  if (!s || !checkptrGC(s))
+    return 0;
+  a = lj_arena_of(s);
+  return lj_arena_ishuge(a) || lj_arena_terminal_reconcile(a);
+}
+
+/* Joined-world only. Validate every list node before its successor read so a
+** stale duplicate pending pointer can never turn into a second free. */
+static int str_terminal_retired_contains(global_State *g,
+					 StrBodyRetire *needle)
+{
+  StrBodyRetire *ret = lj_str_body_retired_head_acq(g);
+  if (LJ_UNLIKELY(!str_body_retired_chain_valid(g, ret, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal string-body ownership list");
+    abort();
+  }
+  while (ret) {
+    StrBodyRetire *next;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, ret))) {
+      lj_assertG(0, "invalid terminal string-body ownership list");
+      abort();
+    }
+    if (ret == needle)
+      return 1;
+    next = lj_str_body_retired_next_acq(ret);
+    ret = next;
+  }
+  return 0;
+}
+
+/* Run only while `ret` remains discoverable from either sweep_pending or the
+** detached retired list. The caller clears/frees the record after this exact
+** body transaction succeeds. */
+static void str_terminal_free_retired_body(global_State *g,
+					   StrBodyRetire *ret)
+{
+  GCstr *s = lj_str_body_retired_str_acq(ret);
+  uint32_t status = la_load32_acq(&ret->status);
+  uint32_t main_linked = lj_str_body_retired_main_linked_acq(ret);
+  int owns_body = !(status & (LJ_STR_CANONREC_Q_LINKED|
+				     LJ_STR_CANONREC_LIST_ONLY)) ||
+	(status & LJ_STR_CANONREC_BODY_OWNED);
+  if (!owns_body)
+    return;
+  if (LJ_UNLIKELY(main_linked != 0)) {
+    lj_assertG(0, "linked string record claimed terminal body ownership");
+    abort();
+  }
+  if (LJ_UNLIKELY(!s || !lj_gc2_mem_registered_known(g, s) ||
+      !str_terminal_body_reconcile(g, s))) {
+    lj_assertG(0, "invalid terminal retired string body");
+    abort();
+  }
+  {
+    uint8_t gct = la_load8_acq(&s->gct);
+    if (gct == (uint8_t)~LJ_TSTR) {
+      if (lj_str_free_try(g, s) == LJ_GC_DESTRUCT_LOST) {
+	/* Keep the record discoverable on failure. Reconcile is exact for
+	** count-zero CLOSED|PENDING, so this is terminal ownership corruption. */
+	lj_assertG(0, "terminal string destructor ownership failed");
+	abort();
+      }
+    } else if (LJ_UNLIKELY(gct != 0)) {
+      lj_assertG(0, "terminal retired string body type identity changed");
+      abort();
+    }
+  }
+}
+
 void lj_str_free_retired_bodies(global_State *g)
 {
   StrBodyRetire *ret, *pending;
@@ -1699,27 +1939,49 @@ void lj_str_free_retired_bodies(global_State *g)
   /* Workers are stopped before the terminal GC2 drain, so an unlink CAS cannot
   ** still be between its discoverable pending slot and retired-list publish. */
   pending = lj_str_sweep_pending_acq(g);
-  lj_str_sweep_pending_rel(g, NULL);
-  if (pending && lj_gc2_mem_registered(g, pending))
-    lj_mem_free(g, pending, sizeof(*pending));
-  ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
-    StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
-    GCstr *s = lj_str_body_retired_str_acq(ret);
-    uint32_t status = la_load32_acq(&ret->status);
-    if (!(status & (LJ_STR_CANONREC_Q_LINKED|
-		    LJ_STR_CANONREC_LIST_ONLY)) ||
-	(status & LJ_STR_CANONREC_BODY_OWNED)) {
-      if (s && lj_gc2_mem_registered(g, s) &&
-	la_load8_acq(&s->gct) == (uint8_t)~LJ_TSTR)
-        lj_str_free(g, s);
+  if (pending) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, pending))) {
+      lj_assertG(0, "invalid terminal pending string retire record");
+      abort();
     }
+    if (str_terminal_retired_contains(g, pending)) {
+      /* The list is now the durable owner. Remove only the redundant slot;
+      ** the list loop below performs the one record/body destruction. */
+      lj_str_sweep_pending_rel(g, NULL);
+    } else {
+      if (lj_str_body_retired_main_linked_acq(pending) == 0)
+	str_terminal_free_retired_body(g, pending);
+      /* A main-linked pending record lost its bucket CAS and owns metadata
+      ** only. In either case keep the slot published until all body work has
+      ** succeeded, then retire the record exactly once. */
+      lj_str_sweep_pending_rel(g, NULL);
+      lj_mem_free(g, pending, sizeof(*pending));
+    }
+  }
+  ret = lj_str_body_retired_head_xchg_acqrel(g, NULL);
+  if (LJ_UNLIKELY(!str_body_retired_chain_valid(g, ret, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal string-body retire chain");
+    abort();
+  }
+  while (ret) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, ret))) {
+      lj_assertG(0, "invalid terminal string-body retire record");
+      abort();
+    }
+    StrBodyRetire *next = lj_str_body_retired_next_acq(ret);
+    str_terminal_free_retired_body(g, ret);
     lj_mem_free(g, ret, sizeof(*ret));
     ret = next;
   }
 }
 
 #ifdef LJ_STR_TEST_HELPERS
+int lj_str_test_body_retired_chain_valid(global_State *g,
+					  StrBodyRetire *head)
+{
+  return str_body_retired_chain_valid(g, head, 0);
+}
+
 void lj_str_test_reset_sweep_counters(global_State *g)
 {
   if (!g)
@@ -1759,7 +2021,15 @@ void lj_str_freetab(global_State *g)
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
   }
   hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
-  while (hdr && lj_gc2_mem_registered(g, hdr)) {
+  if (LJ_UNLIKELY(!str_tab_retired_chain_valid(g, hdr, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal string-table retire chain");
+    abort();
+  }
+  while (hdr) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, hdr))) {
+      lj_assertG(0, "invalid terminal string-table retire header");
+      abort();
+    }
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
     hdr = next;
@@ -1768,7 +2038,15 @@ void lj_str_freetab(global_State *g)
   if (qhdr)
     lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
   qhdr = lj_str_qretired_head_xchg_acqrel(g, NULL);
-  while (qhdr && lj_gc2_mem_registered(g, qhdr)) {
+  if (LJ_UNLIKELY(!str_qretired_chain_valid(g, qhdr, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal string-canonical retire chain");
+    abort();
+  }
+  while (qhdr) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, qhdr))) {
+      lj_assertG(0, "invalid terminal string-canonical retire header");
+      abort();
+    }
     StrCanonHdr *next = lj_str_qretired_next_acq(qhdr);
     lj_mem_free(g, qhdr, lj_str_qtabbytes(qhdr));
     qhdr = next;

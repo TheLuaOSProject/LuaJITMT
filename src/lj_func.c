@@ -87,6 +87,13 @@ static GCupval *func_finduv_nothrow(lua_State *L, TValue *slot)
   return uv;
 }
 
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_FUNC_TEST_HELPERS)
+GCupval *lj_func_test_openuv(lua_State *L, TValue *slot)
+{
+  return func_finduv_nothrow(L, slot);
+}
+#endif
+
 #if LJ_HASJIT
 static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
 				      TGState *tg);
@@ -628,9 +635,14 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   ** is recorded as an allocation helper and gets the trace CALLA check. After
   ** sweep, a reusable free run can become the next private bump window.
   */
-  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
+  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng,
+			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
 			     ncells, &a, &cell))
     return NULL;
+  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, cell))) {
+    lj_assertG(0, "upvalue bump construction claim lost");
+    abort();
+  }  /* Idempotent when reserve_bump performed the request claim. */
   uv = (GCupval *)lj_arena_cellptr(a, cell);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
@@ -680,10 +692,26 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   ** publication, and accounting are independent of arena address reuse order.
   */
 
-  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
+  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng,
+			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
 			     ncells, &a, &cell))
     return NULL;
+  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, cell))) {
+    lj_assertG(0, "closure-pair primary construction claim lost");
+    abort();
+  }
   uvcell = cell + fncells;
+  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, uvcell))) {
+    int abandoned = lj_arena_root_construct_abandon(a, cell);
+    int cleared = abandoned &&
+      lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				  LJ_ARENA_LIFETIME_FREE);
+    lj_assertG(cleared, "closure-pair bump construction claim lost");
+    UNUSED(cleared);
+    if (!cleared)
+      abort();
+    return NULL;
+  }
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   uv = (GCupval *)lj_arena_cellptr(a, uvcell);
 
@@ -755,9 +783,14 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   ** ordinary Lua identity, but address reuse order is not observable.
   */
 
-  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng, LJ_AF_TRAVERSABLE,
+  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng,
+			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
 			     ncells, &a, &cell))
     return NULL;
+  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, cell))) {
+    lj_assertG(0, "closure bump construction claim lost");
+    abort();
+  }
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   fn->l.gct = ~LJ_TFUNC;
   fn->l.ffid = FF_LUA;
@@ -824,11 +857,11 @@ static void func_pending_chain_free(lua_State *L, GCfunc *fn)
   GCobj *o = lj_obj_gcw_acq(obj2gco(fn));
   while (o != NULL) {
     GCobj *next = lj_obj_gcw_acq(o);
-    lj_mem_free(g, o, sizeof(GCupval));
+    lj_mem_freegco_unpublished(g, o, sizeof(GCupval));
     o = next;
   }
-  lj_mem_free(g, fn,
-	      sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)));
+  lj_mem_freegco_unpublished(
+    g, fn, sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)));
 }
 
 static int func_pending_chain_contains(GCfunc *fn, GCupval *needle)

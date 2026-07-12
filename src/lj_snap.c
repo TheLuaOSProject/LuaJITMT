@@ -71,18 +71,23 @@ static int snapshot_child_cellslot(jit_State *J, GCproto *pt, BCReg slot)
   n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
   for (i = 0; i < n; i++, kr--) {
+    LJGC2Lease lease;
     GCobj *o = gcref_acq(*kr);
-    if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+    if (lj_gc2_obj_lease_acquire(J2G(J), o,
+	  (uint32_t)~LJ_TPROTO, NULL, &lease) >= 0) {
       GCproto *child = gco2pt(o);
       MSize j, nuv = child->sizeuv;
-      if (!proto_celluv(child))
-	continue;
-      for (j = 0; j < nuv; j++) {
-	uint32_t v = proto_uv(child)[j];
-	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
-	    (BCReg)(v & 0xff) == slot)
-	  return 1;
+      if (proto_celluv(child)) {
+	for (j = 0; j < nuv; j++) {
+	  uint32_t v = proto_uv(child)[j];
+	  if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	      (BCReg)(v & 0xff) == slot) {
+	    lj_gc2_lease_release(&lease);
+	    return 1;
+	  }
+	}
       }
+      lj_gc2_lease_release(&lease);
     }
   }
   return 0;
@@ -418,6 +423,7 @@ static void snap_useuv(jit_State *J, GCproto *pt, uint8_t *udf)
     ptrdiff_t i, j, n = (ptrdiff_t)proto_sizekgc_acq(pt);
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
+      LJGC2Lease lease;
       GCobj *o = gcref_acq(*kr);
       /*
       ** Snapshot pruning is an optimization pass, not the owner of the proto
@@ -426,7 +432,8 @@ static void snap_useuv(jit_State *J, GCproto *pt, uint8_t *udf)
       ** cell before reading a child-proto payload. Skipping an unproven child
       ** only keeps fewer slots live for this optimization decision.
       */
-      if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+      if (lj_gc2_obj_lease_acquire(J2G(J), o,
+	    (uint32_t)~LJ_TPROTO, NULL, &lease) >= 0) {
 	GCproto *child = gco2pt(o);
 	for (j = 0; j < child->sizeuv; j++) {
 	  uint32_t v = proto_uv(child)[j];
@@ -434,6 +441,7 @@ static void snap_useuv(jit_State *J, GCproto *pt, uint8_t *udf)
 	    udf[(v & 0xff)] = 0;
 	  }
 	}
+	lj_gc2_lease_release(&lease);
       }
     }
   }
@@ -449,19 +457,22 @@ static void snap_usechildcellsrc(jit_State *J, GCproto *pt, uint8_t *udf,
   n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
   for (i = 0; i < n; i++, kr--) {
+    LJGC2Lease lease;
     GCobj *o = gcref_acq(*kr);
-    if (lj_gc2_obj_valid(J2G(J), o) && o->gch.gct == ~LJ_TPROTO) {
+    if (lj_gc2_obj_lease_acquire(J2G(J), o,
+	  (uint32_t)~LJ_TPROTO, NULL, &lease) >= 0) {
       GCproto *child = gco2pt(o);
       MSize j, nuv = child->sizeuv;
-      if (!proto_celluv(child))
-	continue;
-      for (j = 0; j < nuv; j++) {
-	uint32_t v = proto_uv(child)[j];
-	BCReg slot = (BCReg)(v & 0xff);
-	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
-	    slot < maxslot)
-	  udf[slot] = 0;
+      if (proto_celluv(child)) {
+	for (j = 0; j < nuv; j++) {
+	  uint32_t v = proto_uv(child)[j];
+	  BCReg slot = (BCReg)(v & 0xff);
+	  if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	      slot < maxslot)
+	    udf[slot] = 0;
+	}
       }
+      lj_gc2_lease_release(&lease);
     }
   }
 }

@@ -717,7 +717,11 @@ void lj_mcode_freeall(global_State *g)
   J->mcarea = NULL;
   J->mctop = J->mcbot = NULL;
   J->szmcarea = 0;
-  while (active && lj_gc2_mem_registered(g, active)) {
+  while (active) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered(g, active))) {
+      lj_assertG(0, "invalid terminal detached active mcode owner");
+      abort();
+    }
     MCodeRetire *next = mcode_retired_next_acq(active);
     mcode_freearea(g, active);
     active = next;
@@ -741,7 +745,14 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
   lj_assertG(lj_gc2_jit_reclaim_context_acq(g) && lj_jit_token_held(J),
 	     "mcode retire-list detach without exclusive reclaim gate");
   ret = mcode_retired_head_xchg_acqrel(J, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
+  while (ret) {
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, ret))) {
+      /* xchg made this thread the only list owner. Never drop an invalid head
+      ** or read its successor without the exact reclaimer certificate. */
+      lj_assertG(0, "invalid detached mcode retirement owner");
+      abort();
+    }
     MCodeRetire *next = mcode_retired_next_acq(ret);
     mcode_retired_next_rel(ret, NULL);
     if (mcode_retire_ready(ret, completed_epoch)) {
@@ -772,7 +783,11 @@ void lj_mcode_freeretired(global_State *g)
     return;
   J = G2J(g);
   ret = mcode_retired_head_xchg_acqrel(J, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
+  while (ret) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered(g, ret))) {
+      lj_assertG(0, "invalid terminal detached retired mcode owner");
+      abort();
+    }
     MCodeRetire *next = mcode_retired_next_acq(ret);
     mcode_freearea(g, ret);
     ret = next;

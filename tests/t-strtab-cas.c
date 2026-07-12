@@ -668,6 +668,62 @@ static void *reclaim_retired_worker(void *arg)
   return NULL;
 }
 
+static StrBodyRetire *synthetic_pending_record(lua_State *L, GCstr *s,
+					       uint32_t status)
+{
+  StrBodyRetire *ret = lj_mem_newt(L, sizeof(*ret), StrBodyRetire);
+  memset(ret, 0, sizeof(*ret));
+  lj_str_body_retired_next_rel(ret, NULL);
+  lj_str_body_retired_str_rel(ret, s);
+  lj_str_body_retired_hdr_rel(ret, lj_str_tabh_acq(G(L)));
+  lj_str_body_retired_epoch_rel(ret, lj_gc2_retire_epoch(G(L)));
+  lj_str_body_retired_main_linked_rel(ret, 1);
+  la_store32_rel(&ret->status, status);
+  return ret;
+}
+
+static void exercise_terminal_pending_ownership(lua_State *L, GCstr *s)
+{
+  global_State *g = G(L);
+  StrBodyRetire *ret, *expect;
+  assert(lj_str_sweep_pending_acq(g) == NULL);
+  assert(lj_str_body_retired_head_acq(g) == NULL);
+
+  /* A pre-CAS pending record owns metadata only. Terminal cleanup must leave
+  ** the still-interned body to its bucket and retire exactly this record. */
+  ret = synthetic_pending_record(L, s, 0);
+  lj_str_sweep_pending_rel(g, ret);
+  lj_str_free_retired_bodies(g);
+  assert(lj_str_sweep_pending_acq(g) == NULL);
+  assert(lj_str_body_retired_head_acq(g) == NULL);
+  assert(lj_str_new(L, strdata(s), s->len) == s);
+
+  /* Model the push-before-pending-clear overlap at the worker handoff. The
+  ** retired list is the durable owner, so the redundant slot must not cause a
+  ** second record free. LIST_ONLY deliberately leaves the bucket-owned body. */
+  ret = synthetic_pending_record(L, s, LJ_STR_CANONREC_LIST_ONLY);
+  expect = NULL;
+  assert(lj_str_body_retired_head_cas(g, &expect, ret));
+  lj_str_sweep_pending_rel(g, ret);
+  lj_str_free_retired_bodies(g);
+  assert(lj_str_sweep_pending_acq(g) == NULL);
+  assert(lj_str_body_retired_head_acq(g) == NULL);
+  assert(lj_str_new(L, strdata(s), s->len) == s);
+
+  /* A duplicate intrusive push forms a self/cycle. Detection must happen
+  ** before the first mutation/free, so repairing this synthetic edge leaves a
+  ** complete one-record list which terminal cleanup can consume normally. */
+  ret = synthetic_pending_record(L, s, LJ_STR_CANONREC_LIST_ONLY);
+  lj_str_body_retired_next_rel(ret, ret);
+  assert(!lj_str_test_body_retired_chain_valid(g, ret));
+  lj_str_body_retired_next_rel(ret, NULL);
+  expect = NULL;
+  assert(lj_str_body_retired_head_cas(g, &expect, ret));
+  lj_str_free_retired_bodies(g);
+  assert(lj_str_body_retired_head_acq(g) == NULL);
+  assert(lj_str_new(L, strdata(s), s->len) == s);
+}
+
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void exercise_resize_oom_does_not_claim(void)
 {
@@ -737,6 +793,7 @@ int main(void)
   s1 = lj_str_new(L, "m5-strtab-cas-same", strlen("m5-strtab-cas-same"));
   s2 = lj_str_new(L, "m5-strtab-cas-same", strlen("m5-strtab-cas-same"));
   assert(s1 == s2);
+  exercise_terminal_pending_ownership(L, s1);
   exercise_string_id_blocks(L);
   exercise_string_count_blocks(L);
   exercise_tagged_link_protocol(L);

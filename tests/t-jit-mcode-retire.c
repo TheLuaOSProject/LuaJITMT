@@ -64,25 +64,28 @@ static MCodeRetire *active_find(jit_State *J, MCode *needle)
 
 static int reclaim_gate_enter(global_State *g)
 {
-  uint32_t expect = 0;
   uint32_t worker = 0;
   int sweep = gc2_phase_acq(g) == LJ_GC2_SWEEP;
   if (sweep) {
     assert(gc2_sweep_bridge_ready_acq(g) != 0);
     assert(gc2_worker_active_cas(g, &worker, 1));
+    assert(lj_gc2_test_sweep_reclaim_scope_enter(g));
   } else {
     assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+    assert(lj_gc2_test_idle_reclaim_enter(g));
   }
   assert(gc2_smr_readers_acq(g) == 0);
-  assert(gc2_smr_reclaiming_cas(g, &expect, 1));
   return sweep;
 }
 
 static void reclaim_gate_leave(global_State *g, int sweep)
 {
-  gc2_smr_reclaiming_rel(g, 0);
-  if (sweep)
+  if (sweep) {
+    lj_gc2_test_sweep_reclaim_scope_leave(g);
     gc2_worker_active_rel(g, 0);
+  } else {
+    lj_gc2_test_idle_reclaim_leave(g);
+  }
 }
 
 static uint32_t reclaim_mcode_at(global_State *g, uint64_t epoch)

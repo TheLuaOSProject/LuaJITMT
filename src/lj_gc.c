@@ -116,6 +116,15 @@ static void gc_root_wait_no_l(void)
 }
 
 static int gc_root_link_valid(global_State *g, GCobj *o);
+#ifdef LJ_GC2_TEST_HELPERS
+static void gc_test_root_state(global_State *g, GCobj *o, uint32_t path);
+#else
+static LJ_AINLINE void gc_test_root_state(global_State *g, GCobj *o,
+					   uint32_t path)
+{
+  UNUSED(g); UNUSED(o); UNUSED(path);
+}
+#endif
 
 /* -- GC2 mark bridge ----------------------------------------------------- */
 
@@ -144,14 +153,20 @@ static void gc2_preserve_root_spine_body(global_State *g, GCobj *o)
     TValue *array = NULL;
     MSize asize = 0, acap = 0, hmask = 0;
     Node *node = NULL;
-    if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
+    /* The caller has just proved stable MEMBER ownership and remains the sole
+    ** sweep-prune actor, which pins the table body without turning this
+    ** ownership spine into a semantic root set. SMR separately pins any side
+    ** generation returned by the snapshots through its mark publication. */
+    lj_gc2_smr_read_enter(g);
+    if (lj_tab_array_snapshot_gc_held(g, t, &array, &asize, &acap) ==
 	LJ_TAB_GC_SNAPSHOT_OK && array)
       (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
 				 (void *)array);
     UNUSED(asize);
-    if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
+    if (lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) ==
 	LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
       (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+    lj_gc2_smr_read_leave(g);
   }
 }
 
@@ -311,6 +326,384 @@ static int gc_root_link_valid(global_State *g, GCobj *o)
   return la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TSTR;
 }
 
+typedef struct GCRootStateRef {
+  GCArena *a;
+  HugeTab *ht;
+  void *base;
+  uint32_t cell;
+  uint8_t kind;
+  uint8_t lifetime_state;
+} GCRootStateRef;
+
+enum {
+  GC_ROOT_STATE_INVALID = 0,
+  GC_ROOT_STATE_EXEMPT,
+  GC_ROOT_STATE_SMALL,
+  GC_ROOT_STATE_HUGE
+};
+
+static int gc_root_publish_claimed(global_State *g, GCobj *o,
+				    GCRootStateRef *rootstate);
+
+static void *gc_root_obj_base(global_State *g, GCobj *o)
+{
+#if LJ_HASFFI
+  if (o && la_load8_acq(&o->gch.gct) == (uint8_t)~LJ_TCDATA) {
+    void *base = NULL;
+    if (!lj_cdata_validate(g, gco2cd(o), &base, NULL))
+      return NULL;
+    return base;
+  }
+#else
+  UNUSED(g);
+#endif
+  return o;
+}
+
+/* These call sites already retain an exact construction/root/sweep lifetime
+** lane. The ordinary membership query takes its own tactical SMR reader; the
+** current sweep reclaimer cannot do that because it owns the exclusive SMR
+** gate, so use its non-transferable current-thread certificate instead. */
+static LJ_AINLINE int gc2_mem_registered_ticketed(global_State *g,
+						   const void *p)
+{
+  return lj_gc2_mem_registered_known(g, p) ||
+	 lj_gc2_mem_registered_known_reclaim_held(g, p);
+}
+
+/* Resolve the persistent membership lane without changing semantic liveness.
+** Variable cdata is keyed by its exact allocation base, while its intrusive
+** root identity remains the interior GCcdata header. */
+static int gc_root_state_resolve(global_State *g, GCobj *o, void *base,
+				 GCRootStateRef *ref)
+{
+  lua_State *mainL, *vmL;
+  GCArena *a;
+  if (!ref)
+    return GC_ROOT_STATE_INVALID;
+  memset(ref, 0, sizeof(*ref));
+  if (!g || !o)
+    return GC_ROOT_STATE_INVALID;
+  mainL = mainthread_acq(g);
+  vmL = vmthread_acq(g);
+  if ((mainL && o == obj2gco(mainL)) || (vmL && o == obj2gco(vmL)) ||
+      g->allocf != lj_arena_allocf || la_load32_acq(&g->allocf_arena) == 0) {
+    ref->kind = GC_ROOT_STATE_EXEMPT;
+    ref->base = o;
+    return ref->kind;
+  }
+  if (!base || !checkptrGC(base) || !gc2_mem_registered_ticketed(g, base))
+    return GC_ROOT_STATE_INVALID;
+  a = lj_arena_of(base);
+  ref->a = a;
+  ref->base = base;
+  if (!lj_arena_ishuge(a)) {
+    uint32_t cell = lj_arena_cellof(base);
+    if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+	lj_arena_cellptr(a, cell) != base)
+      return GC_ROOT_STATE_INVALID;
+    ref->cell = cell;
+    ref->kind = GC_ROOT_STATE_SMALL;
+    return ref->kind;
+  } else {
+    uint32_t owner = lj_arena_owner_acq(a);
+    TGState *tg = lj_tg_find_owner(g, owner);
+    if (!tg && g->main_tg && lj_tg_tid_acq(g->main_tg) == owner)
+      tg = g->main_tg;
+    if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+      return GC_ROOT_STATE_INVALID;
+    ref->ht = &tg->huge;
+    ref->kind = GC_ROOT_STATE_HUGE;
+    return ref->kind;
+  }
+}
+
+/* Validate only after the caller owns the allocation lifetime lane (or a
+** stronger subsystem token for huge mappings). In particular, block[] and
+** READY are address-reuse-sensitive and must not authorize a small-object
+** root CAS before LIVE->MUTATING has linearized. */
+static int gc_root_state_validate(global_State *g, GCobj *o,
+				  const GCRootStateRef *ref)
+{
+  void *base;
+  if (ref->kind == GC_ROOT_STATE_EXEMPT)
+    return 1;
+  base = gc_root_obj_base(g, o);
+  if (!base || base != ref->base || !checkptrGC(base) ||
+      !gc2_mem_registered_ticketed(g, base))
+    return 0;
+  if (ref->kind == GC_ROOT_STATE_SMALL)
+    return lj_arena_of(base) == ref->a &&
+	   lj_arena_cellof(base) == ref->cell &&
+	   (lj_arena_flags_acq(ref->a) & LJ_AF_TRAVERSABLE) != 0 &&
+	   lj_arena_bm_get(ref->a->block, ref->cell) &&
+	   lj_arena_ready_get(ref->a, ref->cell);
+  if (ref->kind == GC_ROOT_STATE_HUGE) {
+    LJHugeInfo hi;
+    return lj_arena_hugetab_lookup(ref->ht, base, &hi) == 1 &&
+	   (hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
+	     (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) &&
+	   !(hi.flags & LJ_HUGEF_FREEING);
+  }
+  return 0;
+}
+
+static int gc_root_state_ref(global_State *g, GCobj *o, GCRootStateRef *ref)
+{
+  /* Callers hold an existing ownership-spine, construction, or terminal
+  ** incarnation lease. That stronger lease makes this one pre-resolution
+  ** cdata header read stable; ordinary publishers use an explicit base. */
+  void *base = gc_root_obj_base(g, o);
+  int kind = gc_root_state_resolve(g, o, base, ref);
+  if (kind == GC_ROOT_STATE_INVALID ||
+      (kind != GC_ROOT_STATE_EXEMPT &&
+       !gc_root_state_validate(g, o, ref)))
+    return GC_ROOT_STATE_INVALID;
+  return kind;
+}
+
+static uint32_t gc_root_state_acq(const GCRootStateRef *ref)
+{
+  if (ref->kind == GC_ROOT_STATE_SMALL)
+    return lj_arena_root_state_acq(ref->a, ref->cell);
+  if (ref->kind == GC_ROOT_STATE_HUGE) {
+    int state = lj_arena_hugetab_root_state_acq(ref->ht, ref->base, NULL);
+    return state < 0 ? LJ_ARENA_ROOT_UNLINKING : (uint32_t)state;
+  }
+  return LJ_ARENA_ROOT_NONE;
+}
+
+static int gc_root_state_cas(const GCRootStateRef *ref, uint32_t from,
+			     uint32_t to)
+{
+  if (ref->kind == GC_ROOT_STATE_SMALL)
+    return lj_arena_root_state_cas(ref->a, ref->cell, from, to);
+  if (ref->kind == GC_ROOT_STATE_HUGE)
+    return lj_arena_hugetab_root_state_cas(
+	ref->ht, ref->base, from, to, NULL);
+  return ref->kind == GC_ROOT_STATE_EXEMPT;
+}
+
+static int gc_root_link_claim_at(global_State *g, GCobj *o, void *base,
+				 GCRootStateRef *ref)
+{
+  uint32_t state;
+  int kind = gc_root_state_resolve(g, o, base, ref);
+  if (kind == GC_ROOT_STATE_INVALID)
+    return LJ_GC_ROOT_LINK_INVALID;
+  if (kind == GC_ROOT_STATE_EXEMPT)
+    return LJ_GC_ROOT_LINKED;
+  if (kind == GC_ROOT_STATE_SMALL) {
+    /* Only the winner may inspect discovery/header state or mutate the root
+    ** lane. FREE excludes stale publishers; MUTATING serializes requeue with
+    ** allocator reuse without imposing a lock or wait on either side. */
+    if (!lj_arena_lifetime_state_cas(ref->a, ref->cell,
+				     LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_MUTATING)) {
+      /* GC2 recovery is the sole runtime DESTRUCT->RESCUE producer because it
+      ** reserves globally visible traversal work before making the body
+      ** readable. Ordinary root owners retain their semantic token and retry. */
+      return LJ_GC_ROOT_LINK_DEFER;
+    }
+    ref->lifetime_state = LJ_ARENA_LIFETIME_MUTATING;
+    /* External/remote free release-publishes late[] before attempting its
+    ** lifetime claim. Once observed, semantic ownership was irrevocably
+    ** relinquished: restore LIVE for the terminal consumer and do not inspect
+    ** the header or manufacture a resurrection root. Tentative GC destruction
+    ** uses DESTRUCT (without late) and is rescued only by GC2 recovery work. */
+    if (lj_arena_late_get(ref->a, ref->cell)) {
+      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
+					LJ_ARENA_LIFETIME_MUTATING,
+					LJ_ARENA_LIFETIME_LIVE);
+      ref->lifetime_state = 0;
+      return LJ_GC_ROOT_LINK_DEFER;
+    }
+    if (!gc_root_state_validate(g, o, ref)) {
+      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
+					ref->lifetime_state,
+					LJ_ARENA_LIFETIME_LIVE);
+      ref->lifetime_state = 0;
+      return LJ_GC_ROOT_LINK_INVALID;
+    }
+  } else if (!gc_root_state_validate(g, o, ref)) {
+    return LJ_GC_ROOT_LINK_INVALID;
+  }
+  state = gc_root_state_acq(ref);
+  if (state == LJ_ARENA_ROOT_MEMBER) {
+    if (ref->lifetime_state) {
+      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
+					ref->lifetime_state,
+					LJ_ARENA_LIFETIME_LIVE);
+      ref->lifetime_state = 0;
+    }
+    return LJ_GC_ROOT_LINK_ALREADY;
+  }
+  if (state != LJ_ARENA_ROOT_NONE ||
+      !gc_root_state_cas(ref, LJ_ARENA_ROOT_NONE,
+			 LJ_ARENA_ROOT_LINKING)) {
+    if (ref->lifetime_state) {
+      (void)lj_arena_lifetime_state_cas(ref->a, ref->cell,
+					ref->lifetime_state,
+					LJ_ARENA_LIFETIME_LIVE);
+      ref->lifetime_state = 0;
+    }
+    return LJ_GC_ROOT_LINK_DEFER;
+  }
+  gc_test_root_state(g, o, LJ_GC_ROOT_STATE_TEST_LINKING);
+  return LJ_GC_ROOT_LINKED;
+}
+
+static int gc_root_link_commit(const GCRootStateRef *ref)
+{
+  if (ref->kind == GC_ROOT_STATE_EXEMPT)
+    return 1;
+  if (ref->kind == GC_ROOT_STATE_SMALL &&
+      (!ref->lifetime_state ||
+       !lj_arena_lifetime_state_cas(ref->a, ref->cell,
+				    ref->lifetime_state,
+				    LJ_ARENA_LIFETIME_LIVE)))
+    return 0;
+  /* Restore LIVE first. A racing free must then observe LINKING and leave the
+  ** span alone, while the final CAS establishes the MEMBER=>LIVE invariant. */
+  return gc_root_state_cas(ref, LJ_ARENA_ROOT_LINKING,
+			   LJ_ARENA_ROOT_MEMBER);
+}
+
+static int gc_root_construct_claimed(global_State *g, GCobj *o,
+				     GCRootStateRef *ref)
+{
+  int kind = gc_root_state_ref(g, o, ref);
+  if (kind == GC_ROOT_STATE_INVALID)
+    return LJ_GC_ROOT_LINK_INVALID;
+  if (kind == GC_ROOT_STATE_EXEMPT)
+    return LJ_GC_ROOT_LINKED;
+  if (gc_root_state_acq(ref) != LJ_ARENA_ROOT_LINKING)
+    return LJ_GC_ROOT_LINK_DEFER;
+  if (kind == GC_ROOT_STATE_SMALL) {
+    uint32_t life = lj_arena_lifetime_state_acq(ref->a, ref->cell);
+    /* Recovery may acquire a now-READY constructor before its owner reaches
+    ** the list CAS. The owner still uniquely owns LINKING publication; the
+    ** construct helper commits MEMBER while recovery retains MUTATING and is
+    ** responsible for the eventual LIVE restore. */
+    if (life != LJ_ARENA_LIFETIME_CONSTRUCT &&
+	life != LJ_ARENA_LIFETIME_MUTATING)
+      return LJ_GC_ROOT_LINK_DEFER;
+  }
+  return LJ_GC_ROOT_LINKED;
+}
+
+static int gc_root_construct_commit(const GCRootStateRef *ref)
+{
+  if (ref->kind == GC_ROOT_STATE_EXEMPT)
+    return 1;
+  if (ref->kind == GC_ROOT_STATE_SMALL)
+    return lj_arena_root_construct_commit(ref->a, ref->cell);
+  if (ref->kind == GC_ROOT_STATE_HUGE)
+    return lj_arena_hugetab_root_construct_commit(
+	ref->ht, ref->base, NULL) == LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE;
+  return 0;
+}
+
+static int gc_root_clear_complete(global_State *g,
+				  const GCRootStateRef *ref, uint32_t from)
+{
+  if (ref->kind == GC_ROOT_STATE_EXEMPT)
+    return 1;
+  if (ref->kind == GC_ROOT_STATE_SMALL) {
+    int completed = gc_root_state_cas(ref, from, LJ_ARENA_ROOT_NONE);
+    if (completed)
+      /* A concurrent free records late[] while the root state pins the span.
+      ** Clearing the last claim makes that remembered free actionable. */
+      lj_arena_recovery_complete_wake(ref->a);
+    return completed;
+  }
+  if (ref->kind == GC_ROOT_STATE_HUGE) {
+    int completed = lj_arena_hugetab_root_complete(
+	ref->ht, ref->base, from, LJ_ARENA_ROOT_NONE,
+	g ? lj_gc2_retire_epoch(g) : 0, NULL);
+    if (completed == LJ_ARENA_HUGE_ROOT_COMPLETE_SWEEP) {
+      /* The metadata CAS folded a racing logical free into FREEING|SWEEP_OLD
+      ** with a fresh epoch. Ensure the parked sweep owner observes it. */
+      gc2_sweep_grace_needed_rel(g, 1);
+      lj_gc2_sweep_publish_wake(g);
+    }
+    return completed != LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
+  }
+  return 0;
+}
+
+static void gc_root_link_rollback(global_State *g,
+				  const GCRootStateRef *ref)
+{
+  if (ref->kind == GC_ROOT_STATE_SMALL && ref->lifetime_state) {
+    int cleared = gc_root_state_cas(ref, LJ_ARENA_ROOT_LINKING,
+				    LJ_ARENA_ROOT_NONE);
+    int restored = cleared &&
+      lj_arena_lifetime_state_cas(ref->a, ref->cell,
+				  ref->lifetime_state,
+				  LJ_ARENA_LIFETIME_LIVE);
+    lj_assertG(restored, "ordinary root-link rollback lost lifetime");
+    UNUSED(restored);
+    return;
+  }
+  (void)gc_root_clear_complete(g, ref, LJ_ARENA_ROOT_LINKING);
+}
+
+/* Terminal/shutdown reconciliation has no surviving publisher, so it can
+** identify which owner protocol was interrupted from the lifetime plane. */
+static int gc_root_link_terminal_rollback(global_State *g,
+					  const GCRootStateRef *ref)
+{
+  if (ref->kind == GC_ROOT_STATE_SMALL) {
+    uint32_t life = lj_arena_lifetime_state_acq(ref->a, ref->cell);
+    if (life == LJ_ARENA_LIFETIME_CONSTRUCT)
+      return lj_arena_root_construct_abandon(ref->a, ref->cell);
+    if (life == LJ_ARENA_LIFETIME_MUTATING ||
+	life == LJ_ARENA_LIFETIME_RESCUE) {
+      if (!gc_root_state_cas(ref, LJ_ARENA_ROOT_LINKING,
+			     LJ_ARENA_ROOT_NONE))
+	return 0;
+      return lj_arena_lifetime_state_cas(ref->a, ref->cell,
+					 life,
+					 LJ_ARENA_LIFETIME_LIVE);
+    }
+  }
+  return gc_root_clear_complete(g, ref, LJ_ARENA_ROOT_LINKING);
+}
+
+static int gc_root_unlink_claim(global_State *g, GCobj *o,
+				GCRootStateRef *ref)
+{
+  uint32_t state;
+  int kind = gc_root_state_ref(g, o, ref);
+  if (kind == GC_ROOT_STATE_INVALID)
+    return LJ_GC_ROOT_UNLINK_UNPROVEN;
+  if (kind == GC_ROOT_STATE_EXEMPT)
+    return LJ_GC_ROOT_UNLINKED;
+  state = gc_root_state_acq(ref);
+  if (state == LJ_ARENA_ROOT_NONE)
+    return LJ_GC_ROOT_UNLINK_ABSENT;
+  if (state != LJ_ARENA_ROOT_MEMBER ||
+      !gc_root_state_cas(ref, LJ_ARENA_ROOT_MEMBER,
+			 LJ_ARENA_ROOT_UNLINKING))
+    return LJ_GC_ROOT_UNLINK_UNPROVEN;
+  gc_test_root_state(g, o, LJ_GC_ROOT_STATE_TEST_UNLINKING);
+  return LJ_GC_ROOT_UNLINKED;
+}
+
+static void gc_root_unlink_restore(const GCRootStateRef *ref)
+{
+  if (ref->kind != GC_ROOT_STATE_EXEMPT)
+    (void)gc_root_state_cas(ref, LJ_ARENA_ROOT_UNLINKING,
+			   LJ_ARENA_ROOT_MEMBER);
+}
+
+static int gc_root_unlink_commit(global_State *g,
+				 const GCRootStateRef *ref)
+{
+  return gc_root_clear_complete(g, ref, LJ_ARENA_ROOT_UNLINKING);
+}
+
 static int gc_root_chain_break_cycle(global_State *g, GCobj *head)
 {
   GCobj *slow = head, *fast = head, *entry, *tail, *next;
@@ -407,7 +800,14 @@ static const GCFreeFunc gc_freefunc[] = {
   (GCFreeFunc)lj_udata_free
 };
 
-static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
+static int gc2_free_body_info(global_State *g, GCobj *o, void **basep,
+			      GCSize *sizep);
+static int gc_destructor_enter_impl(global_State *g, void *base, GCSize size,
+				    LJGCDestructCtx *ctx,
+				    int reclaim_held);
+
+static int gc2_free_unmarked_obj(global_State *g, GCobj *o,
+				 int huge_preowned, int reclaim_held)
 {
   uint32_t gct = o->gch.gct;
   /*
@@ -420,18 +820,86 @@ static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
   if (gct == (uint32_t)~LJ_TSTR)
     return 0;
 #if LJ_HASJIT
-  if (gct == (uint32_t)~LJ_TTRACE)
-    return lj_trace_free_gc(g, gco2trace(o));
+  if (gct == (uint32_t)~LJ_TTRACE) {
+    /* This is semantic retirement, not the physical type destructor. The JIT
+    ** token excludes assembler/link publication while retire_epoch/list/slot
+    ** ownership is transferred, and the intact body remains SMR-readable.
+    ** trace_freebody()/trace_free_immediate() independently acquire the exact
+    ** DESTRUCT->FREE (or HugeTab BUSY) LP before exittab, gct, accounting or
+    ** allocation bytes are mutated. Root UNLINKING deliberately prevents that
+    ** physical LP during the earlier token transaction. */
+    return lj_trace_free_gc(g, gco2trace(o)) ?
+	   LJ_GC_DESTRUCT_ACQUIRED : LJ_GC_DESTRUCT_LOST;
+  }
 #endif
   if (gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA) {
     GCFreeFunc fn = gc_freefunc[gct - (uint32_t)~LJ_TSTR];
     if (fn) {
+      LJGCDestructCtx dctx;
+      void *base;
+      GCSize size;
+      int acquired, thread_gcprep = 0;
+      if (!gc2_free_body_info(g, o, &base, &size))
+	return LJ_GC_DESTRUCT_LOST;
+      /* Huge reclaim calls only after its full-slot RETIRED->FREEING CAS.
+      ** Every other path acquires small DESTRUCT->FREE or a huge BUSY claim
+      ** here, before the type-specific function can mutate side allocations,
+      ** object bytes, or global accounting. */
+      if (reclaim_held && gct == (uint32_t)~LJ_TTHREAD) {
+	/* lua_State is fixed-size small-arena storage. Its semantic destructor
+	** closes upvalues and touches global callback/registry state, so transfer
+	** that work out of the exclusive writer only after reserving an explicit
+	** arena completion pin and winning the irreversible destructor LP. */
+	if (LJ_UNLIKELY(huge_preowned || lj_arena_ishuge(lj_arena_of(base)))) {
+	  lj_assertG(0, "huge lua_State reached terminal preparation");
+	  abort();
+	}
+	if (!lj_state_gcprep_claim_and_pin(g, gco2th(o)))
+	  return LJ_GC_DESTRUCT_LOST;
+	thread_gcprep = 1;
+      }
+      if (huge_preowned) {
+        GCArena *a = lj_arena_of(base);
+        TGState *tg = lj_tg_find_owner(g, lj_arena_owner_acq(a));
+        LJHugeInfo hi;
+        if (!lj_arena_ishuge(a) || !tg ||
+	    !lj_tg_flags_test_acq(tg, TGF_HUGETAB) ||
+	    lj_arena_hugetab_lookup(&tg->huge, base, &hi) != 1 ||
+	    !(hi.flags & LJ_HUGEF_FREEING))
+	  return LJ_GC_DESTRUCT_LOST;
+	acquired = LJ_GC_DESTRUCT_ACQUIRED;
+      } else {
+        acquired = gc_destructor_enter_impl(g, base, size, &dctx,
+					     reclaim_held);
+      }
+      if (acquired != LJ_GC_DESTRUCT_ACQUIRED) {
+	if (thread_gcprep)
+	  lj_state_gcprep_cancel(g, gco2th(o));
+	return acquired;
+      }
+      if (thread_gcprep) {
+	lj_state_gcprep_publish(g, gco2th(o));
+	return LJ_GC_DESTRUCT_ACQUIRED;
+      }
       fn(g, o);
-      return 1;
+      if (!huge_preowned)
+	lj_gc_destructor_leave(g, &dctx);
+      return LJ_GC_DESTRUCT_ACQUIRED;
     }
   }
-  return 0;
+  return LJ_GC_DESTRUCT_LOST;
 }
+
+#ifdef LJ_GC2_TEST_HELPERS
+int lj_gc_test_reclaim_thread(global_State *g, lua_State *L)
+{
+  if (!g || !L || !lj_gc2_reclaim_context_held(g) ||
+      L == mainthread_acq(g) || L->gct != (uint32_t)~LJ_TTHREAD ||
+      mref(L->glref, global_State) != g)
+    return LJ_GC_DESTRUCT_LOST;
+  return gc2_free_unmarked_obj(g, obj2gco(L), 0, 1);
+}
+#endif
 
 static int gc2_size_fits_mem(global_State *g, const void *p, GCSize size)
 {
@@ -443,7 +911,7 @@ static int gc2_size_fits_mem(global_State *g, const void *p, GCSize size)
     return 0;
   /* Prove mapping ownership and an exact live allocation start before reading
   ** its arena header. Destructor validation can receive stale side pointers. */
-  if (!lj_gc2_mem_registered_known(g, p))
+  if (!gc2_mem_registered_ticketed(g, p))
     return 0;
   a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
@@ -476,8 +944,13 @@ static int gc2_valid_func_free_obj(global_State *g, GCfunc *fn)
   GCSize size;
   if (!fn || !checkptrGC(fn) ||
       (((uintptr_t)fn & (uintptr_t)(sizeof(void *) - 1u)) != 0) ||
-      !lj_gc2_obj_valid(g, obj2gco(fn)) || fn->c.gct != ~LJ_TFUNC)
+      !lj_gc2_obj_valid_queued(g, obj2gco(fn)) || fn->c.gct != ~LJ_TFUNC)
     return 0;
+  /* Every caller retains one of: root MEMBER/UNLINKING, a post-grace arena
+  ** RETIRED ticket, a HugeTab TICKET/FREEING claim, or joined-world terminal
+  ** ownership. The queued validator deliberately consumes that stronger lease
+  ** without opening and immediately dropping a transient rescue scope before
+  ** the nupvalue/size dereferences below. */
   if (isluafunc(fn)) {
     uint32_t nup = lj_funcL_nupvalues(&fn->l);
     if (nup > LJ_MAX_UPVAL)
@@ -516,8 +989,15 @@ static int gc2_valid_pow2_mask(MSize hmask)
   return (hsize & hmask) == 0;
 }
 
-static int gc2_valid_tab_obj(global_State *g, GCtab *t)
+static int gc2_valid_tab_obj(global_State *g, GCtab *t,
+			     int vector_reclaim_owned)
 {
+  /* Every caller owns the retained root/small RETIRED/huge ticket/terminal
+  ** certificate documented by gc2_valid_freeable_obj(). A physical-reclaim or
+  ** joined-world caller also owns side-vector reclaim; earlier root pruning
+  ** takes an opportunistic SMR reader instead and retries if reclaim is active. */
+  int smr_reader = 0;
+  int valid = 0;
   int8_t colo = lj_tab_colo_acq(t);
   MSize colosz = lj_tab_colo_size(t);
   MSize asize, acap;
@@ -527,44 +1007,54 @@ static int gc2_valid_tab_obj(global_State *g, GCtab *t)
   MSize hmask;
   GCSize bodysize;
 
-  if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) !=
+  if (!vector_reclaim_owned) {
+    if (!lj_gc2_smr_read_try(g))
+      return 0;
+    smr_reader = 1;
+  }
+
+  if (lj_tab_array_snapshot_gc_held(g, t, &array, &asize, &acap) !=
       LJ_TAB_GC_SNAPSHOT_OK ||
-      lj_tab_node_snapshot_gc(g, t, &node, &hmask) !=
+      lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) !=
       LJ_TAB_GC_SNAPSHOT_OK)
-    return 0;
+    goto out;
   if (LJ_MAX_COLOSIZE != 0 && colosz > LJ_MAX_COLOSIZE)
-    return 0;
+    goto out;
   if (asize > LJ_MAX_ASIZE || acap > LJ_MAX_ASIZE)
-    return 0;
+    goto out;
   if (colo > 0) {
     if (array != coloarray || asize > colosz || lj_tab_acap_acq(t) > colosz)
-      return 0;
+      goto out;
   } else if (array == coloarray) {
     /*
     ** A negative colocated marker means a resize has split the old inline array
     ** from table indexing. A dead table still pointing at the inline storage is
     ** in a transient resize state; ordinary sweep must not free it as separated.
     */
-    return 0;
+    goto out;
   } else if (array != NULL) {
     if (!gc2_size_fits_mem(g, lj_tab_array_hdrw(array),
 			   lj_tab_array_bytes(acap)))
-      return 0;
+      goto out;
   }
 
   if (node == NULL)
-    return 0;
+    goto out;
   if (!gc2_valid_pow2_mask(hmask))
-    return 0;
+    goto out;
   if (hmask > 0) {
     if (!gc2_size_fits_mem(g, lj_tab_node_hdrw(node),
 			   lj_tab_node_bytes(hmask)))
-      return 0;
+      goto out;
   }
 
   bodysize = (LJ_MAX_COLOSIZE != 0 && colosz) ?
 	     (GCSize)sizetabcolo(colosz) : (GCSize)sizeof(GCtab);
-  return gc2_size_fits_arena(g, obj2gco(t), bodysize);
+  valid = gc2_size_fits_arena(g, obj2gco(t), bodysize);
+out:
+  if (smr_reader)
+    lj_gc2_smr_read_leave(g);
+  return valid;
 }
 
 static int gc2_cdata_finalizer_pending(GCobj *o)
@@ -584,7 +1074,8 @@ static int gc2_udata_finalizer_pending(GCobj *o)
 	 (lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG) != 0;
 }
 
-static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
+static int gc2_valid_freeable_obj(global_State *g, GCobj *o,
+				  int vector_reclaim_owned)
 {
   uint32_t gct = o->gch.gct;
   if (gct == (uint32_t)~LJ_TSTR)
@@ -595,6 +1086,10 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
   if (gct == (uint32_t)~LJ_TCDATA &&
       !lj_gc2_obj_valid_queued(g, o))
     return 0;  /* Stale cdata header: ctype/size is not safe to dispatch. */
+  /* gc2_valid_freeable_obj() is reached only with the same retained root,
+  ** sweep-ticket, HugeTab-ticket, or terminal lease documented for the
+  ** function validator above. cdata base/size validation remains inside that
+  ** lease until the central destructor acquisition. */
 #endif
   if (gct == (uint32_t)~LJ_TPROTO && !gc2_valid_proto_obj(g, gco2pt(o)))
     return 0;  /* Stale proto header: sizept is not safe for destructor. */
@@ -603,7 +1098,8 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
   if (gct == (uint32_t)~LJ_TTHREAD &&
       mref(gco2th(o)->glref, global_State) != g)
     return 0;  /* Stale thread header: glref is not safe for destructor. */
-  if (gct == (uint32_t)~LJ_TTAB && !gc2_valid_tab_obj(g, gco2tab(o)))
+  if (gct == (uint32_t)~LJ_TTAB &&
+      !gc2_valid_tab_obj(g, gco2tab(o), vector_reclaim_owned))
     return 0;  /* Stale table header: side-vector sizes are not trustworthy. */
   if (gct == (uint32_t)~LJ_TUDATA) {
     GCSize size;
@@ -616,6 +1112,69 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
   }
   return gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA &&
 	 gc_freefunc[gct - (uint32_t)~LJ_TSTR] != NULL;
+}
+
+/* Resolve the exact allocation start and body extent using only validated,
+** immutable destructor metadata. This may read a still-live body, but performs
+** no mutation; lj_gc_destructor_enter() is the mandatory next operation. */
+static int gc2_free_body_info(global_State *g, GCobj *o, void **basep,
+			      GCSize *sizep)
+{
+  uint32_t gct;
+  void *base = o;
+  GCSize size;
+  if (!g || !o || !basep || !sizep)
+    return 0;
+  gct = o->gch.gct;
+  if (gct == (uint32_t)~LJ_TUPVAL) {
+    size = (GCSize)sizeof(GCupval);
+  } else if (gct == (uint32_t)~LJ_TTHREAD) {
+    size = (GCSize)sizeof(lua_State);
+  } else if (gct == (uint32_t)~LJ_TPROTO) {
+    size = gco2pt(o)->sizept;
+  } else if (gct == (uint32_t)~LJ_TFUNC) {
+    GCfunc *fn = gco2func(o);
+    size = isluafunc(fn) ?
+	   (GCSize)sizeLfunc((MSize)lj_funcL_nupvalues(&fn->l)) :
+	   (GCSize)sizeCfunc((MSize)lj_funcC_nupvalues(&fn->c));
+#if LJ_HASFFI
+  } else if (gct == (uint32_t)~LJ_TCDATA) {
+    if (!lj_cdata_validate(g, gco2cd(o), &base, &size))
+      return 0;
+#endif
+  } else if (gct == (uint32_t)~LJ_TTAB) {
+    MSize colosz = lj_tab_colo_size(gco2tab(o));
+    size = (LJ_MAX_COLOSIZE != 0 && colosz) ?
+	   (GCSize)sizetabcolo(colosz) : (GCSize)sizeof(GCtab);
+  } else if (gct == (uint32_t)~LJ_TUDATA) {
+    if (!lj_gc_udata_payload_valid(gco2ud(o), &size))
+      return 0;
+  } else {
+    return 0;
+  }
+  if (g->allocf == lj_arena_allocf &&
+      la_load32_acq(&g->allocf_arena) != 0 &&
+      gc2_mem_registered_ticketed(g, base) &&
+      lj_arena_ishuge(lj_arena_of(base))) {
+    GCArena *a = lj_arena_of(base);
+    TGState *tg = lj_tg_find_owner(g, lj_arena_owner_acq(a));
+    LJHugeInfo hi;
+    /* The semantic retire owner or the immediately preceding full-slot claim
+    ** pins this mapping. The exclusive sweep owner cannot enter an ordinary
+    ** SMR reader, so gc2_mem_registered_ticketed() must accept its
+    ** non-transferable reclaim-TLS certificate. FREEING is therefore valid
+    ** here, unlike an ordinary pre-dispatch validator which has not established
+    ** destructor ownership. */
+    if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB) ||
+	lj_arena_hugetab_lookup(&tg->huge, base, &hi) != 1 ||
+	size > hi.size)
+      return 0;
+  } else if (!gc2_size_fits_mem(g, base, size)) {
+    return 0;
+  }
+  *basep = base;
+  *sizep = size;
+  return 1;
 }
 
 static int gc2_deferred_body_pending(global_State *g, GCobj *o)
@@ -638,12 +1197,20 @@ int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
 {
   GCRef *p;
   GCobj *o;
+  GCRootStateRef rootstate;
   uint32_t n = 0;
+  int claim;
   if (!g || !dead)
     return LJ_GC_ROOT_UNLINK_UNPROVEN;
-  p = lj_gc_root_ref(g);
+  /* Claim before draining publisher stacks. A pending publisher only changes
+  ** LINKING to MEMBER after its post-CAS hint, so either this observes LINKING
+  ** and defers or UNLINKING excludes a concurrent publication of dead. */
+  claim = gc_root_unlink_claim(g, dead, &rootstate);
+  if (claim != LJ_GC_ROOT_UNLINKED)
+    return claim;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
+  p = lj_gc_root_ref(g);
   while ((o = gcref_acq(*p)) != NULL && n++ < LJ_GC2_ROOT_SCAN_LIMIT) {
     GCobj *next;
     if (LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
@@ -651,10 +1218,9 @@ int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
       ** ownership entry can have been reused as an interned string, where this
       ** word is the tagged string-hash successor. Sever only the acquired
       ** incoming edge and report that target absence could not be proved. */
-      if (!gc_ref_cas_obj(p, o, NULL)) {
-	gc_root_wait_no_l();
-	continue;
-      }
+      gc_root_unlink_restore(&rootstate);
+      if (!gc_ref_cas_obj(p, o, NULL))
+	return LJ_GC_ROOT_UNLINK_UNPROVEN;
       (void)lj_gc_repair_root_spine(g);
       return LJ_GC_ROOT_UNLINK_UNPROVEN;
     }
@@ -663,22 +1229,30 @@ int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
       /* A valid self-link can only be damaged ownership metadata. Removing the
       ** exact incoming edge is sufficient; never publish the same pointer back
       ** through p and call that a successful splice. */
-      if (gc_ref_cas_obj(p, o, next == o ? NULL : next))
-	return LJ_GC_ROOT_UNLINKED;
-      gc_root_wait_no_l();
-      continue;
+	if (gc_ref_cas_obj(p, o, next == o ? NULL : next)) {
+	  int committed = gc_root_unlink_commit(g, &rootstate);
+	  lj_assertG(committed, "root membership unlink commit lost");
+	  UNUSED(committed);
+	  return LJ_GC_ROOT_UNLINKED;
+	}
+      gc_root_unlink_restore(&rootstate);
+      return LJ_GC_ROOT_UNLINK_UNPROVEN;
     }
     if (LJ_UNLIKELY(next == o)) {
-      if (!gc_ref_cas_obj(p, o, NULL)) {
-	gc_root_wait_no_l();
-	continue;
-      }
+      gc_root_unlink_restore(&rootstate);
+      (void)gc_ref_cas_obj(p, o, NULL);
       return LJ_GC_ROOT_UNLINK_UNPROVEN;
     }
     p = lj_obj_gcwref(o);
   }
-  return o == NULL ? LJ_GC_ROOT_UNLINK_ABSENT :
-		     LJ_GC_ROOT_UNLINK_UNPROVEN;
+  if (o == NULL) {
+    int committed = gc_root_unlink_commit(g, &rootstate);
+    lj_assertG(committed, "absent root membership commit lost");
+    UNUSED(committed);
+    return LJ_GC_ROOT_UNLINK_ABSENT;
+  }
+  gc_root_unlink_restore(&rootstate);
+  return LJ_GC_ROOT_UNLINK_UNPROVEN;
 }
 
 #define GC2_ROOT_PRUNE_BATCH 256u
@@ -723,8 +1297,8 @@ static int gc2_sweep_obj_old_generation(global_State *g, GCobj *o)
 ** link has been detached. LIVE means it must be reanchored after the grace;
 ** RETIRED means its destructor is pending. WHITE remains reserved for raw or
 ** fixed allocations which were never detached. */
-static void gc2_sweep_detached_small(global_State *g, GCArena *a,
-				     uint32_t cell, int marked)
+static int gc2_sweep_detached_small(global_State *g, GCArena *a,
+				    uint32_t cell, int marked)
 {
   uint32_t state = lj_arena_sweep_state_acq(a, cell);
   if (marked) {
@@ -761,24 +1335,25 @@ static void gc2_sweep_detached_small(global_State *g, GCArena *a,
     UNUSED(old);
   }
   gc2_sweep_grace_needed_rel(g, 1);
+  return 1;
 }
 
-static void gc2_sweep_detached_obj(global_State *g, GCobj *o, int marked)
+static int gc2_sweep_detached_obj(global_State *g, GCobj *o, int marked)
 {
   void *base = gc2_sweep_obj_base(g, o);
   GCArena *a = lj_arena_of(base);
   if (!lj_arena_ishuge(a)) {
     uint32_t cell = lj_arena_cellof(base);
     if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS)
-      gc2_sweep_detached_small(g, a, cell, marked);
-    return;
+      return gc2_sweep_detached_small(g, a, cell, marked);
+    return 0;
   }
   {
     uint32_t owner_tid = lj_arena_owner_acq(a);
     TGState *tg = lj_tg_find_owner(g, owner_tid);
     int ticketed;
     if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB))
-      return;
+      return 0;
     /* One huge mapping contains one allocation. Publish an explicit metadata
     ** ticket for both dead and already-marked detached roots: RETIRED is the
     ** destructor claim, while MARK|TICKET is the post-grace reanchor claim.
@@ -796,10 +1371,11 @@ static void gc2_sweep_detached_obj(global_State *g, GCobj *o, int marked)
 	(void)lj_gc2_trace_sweep_root(g, o);
     }
     lj_assertG(ticketed, "detached huge root lost ownership ticket");
-    gc2_sweep_grace_needed_rel(g, 1);
     if (!ticketed)
-      return;  /* Retain the mapped body; never invent a destructor owner. */
+      return 0;  /* Retain the mapped body; never invent a destructor owner. */
+    gc2_sweep_grace_needed_rel(g, 1);
     UNUSED(marked);
+    return 1;
   }
 }
 
@@ -863,17 +1439,43 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
       p = lj_obj_gcwref(o);
       continue;
     }
-    if (o->gch.gct == 0 || gc2_valid_freeable_obj(g, o)) {
+    if (o->gch.gct == 0 || gc2_valid_freeable_obj(g, o, 0)) {
+      GCRootStateRef rootstate;
+      int rootclaim = gc_root_unlink_claim(g, o, &rootstate);
+      if (rootclaim != LJ_GC_ROOT_UNLINKED) {
+	/* NONE is an unconverted direct-VM publication; LINKING/UNLINKING is an
+	** in-flight C publisher/remover. Neither is proof that this incoming edge
+	** belongs to us. Retain the allocation and its graph for this generation
+	** without changing gcw. */
+	(void)lj_gc2_markmem(g, gc2_sweep_obj_base(g, o));
+	p = lj_obj_gcwref(o);
+	continue;
+      }
 #if LJ_HASJIT
       if (marked == 0 && o->gch.gct == (uint32_t)~LJ_TTRACE &&
 	  !lj_trace_retire_gc_claim(g, gco2trace(o))) {
 	/* The nonwaiting recorder-token attempt left trace/root/state unchanged. */
+	gc_root_unlink_restore(&rootstate);
 	break;
       }
 #endif
-      if (!gc_chain_splice(p, o))
-	continue;  /* Concurrent insertion at this link; revisit boundedly. */
-      gc2_sweep_detached_obj(g, o, marked > 0);
+      if (!gc_chain_splice(p, o)) {
+	/* Do not monopolize UNLINKING against predecessor churn. A later bounded
+	** root pass can acquire a fresh claim and retry the exact edge. */
+	gc_root_unlink_restore(&rootstate);
+	break;
+      }
+      if (LJ_UNLIKELY(!gc2_sweep_detached_obj(g, o, marked > 0))) {
+	/* The object is no longer reachable from the spine, so restoring MEMBER
+	** would lie. Keep UNLINKING as a fail-closed arena-reuse veto. */
+	lj_assertG(0, "detached root lost sweep classification");
+	break;
+      }
+      {
+	int committed = gc_root_unlink_commit(g, &rootstate);
+	lj_assertG(committed, "sweep root membership commit lost");
+	UNUSED(committed);
+      }
       unlinked++;
       continue;
     }
@@ -940,7 +1542,7 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
 #else
   UNUSED(end);
 #endif
-  if (o->gch.gct == 0 || gc2_valid_freeable_obj(g, o))
+  if (o->gch.gct == 0 || gc2_valid_freeable_obj(g, o, 1))
     return o;
   return NULL;
 }
@@ -991,14 +1593,52 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   if (cell < LJ_AFIRST_CELL || cell > LJ_ARENA_CELLS)
     cell = LJ_AFIRST_CELL;
   while (cell < LJ_ARENA_CELLS && scanned < limit) {
-    uint32_t state;
+    uint32_t state, rootmem;
     if (!lj_arena_bm_get(a->block, cell)) {
       cell++;
       scanned++;
       continue;
     }
     state = lj_arena_sweep_state_acq(a, cell);
+    rootmem = lj_arena_root_state_acq(a, cell);
+    if (rootmem == LJ_ARENA_ROOT_LINKING ||
+	rootmem == LJ_ARENA_ROOT_UNLINKING) {
+      /* A publisher/remover owns both the intrusive link and the allocation
+      ** reuse veto. Reclaim never waits for it or inspects a mutable header. */
+      pending = 1;
+      cell++;
+      scanned++;
+      continue;
+    }
+    if (rootmem == LJ_ARENA_ROOT_MEMBER &&
+	state == LJ_ARENA_SWEEP_RETIRED) {
+      /* A finalizer/resurrection publisher can win after detachment. Convert
+      ** the destructor ticket back to the ordinary LIVE reanchor completion
+      ** state; MEMBER proves that reinsertion has already happened exactly
+      ** once. */
+      if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
+					   LJ_ARENA_SWEEP_LIVE)) {
+	uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
+	lj_assertG(old != 0, "member rescue deferred underflow");
+	UNUSED(old);
+	state = LJ_ARENA_SWEEP_LIVE;
+	changed++;
+      } else {
+	pending = 1;
+	cell++;
+	scanned++;
+	continue;
+      }
+    }
     if (lj_arena_late_get(a, cell)) {
+      if (rootmem != LJ_ARENA_ROOT_NONE) {
+	/* A terminal body publication conflicting with membership is corrupt but
+	** not permission to free or rewrite ownership. Keep the arena quarantined. */
+	pending = 1;
+	cell++;
+	scanned++;
+	continue;
+      }
       /* A bit-only terminal publisher has already completed the physical
       ** destructor. Never reconstruct this header. Retain the allocation for
       ** the next generation and settle detached accounting exactly once. */
@@ -1034,6 +1674,13 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
       uint32_t end = gc2_sweep_alloc_end(a, cell);
       GCobj *o = gc2_sweep_cell_obj(g, a, cell, end);
       if (!o) {
+	if (rootmem != LJ_ARENA_ROOT_NONE) {
+	  (void)la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);
+	  pending = 1;
+	  cell++;
+	  scanned++;
+	  continue;
+	}
 	/* A valid detach publishes only an exact ownership-spine header, but a
 	** hostile/racy producer may leave a header snapshot temporarily or
 	** permanently undecodable. Fail closed without parking the whole GC: pin
@@ -1057,9 +1704,24 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	continue;
       }
       if (state == LJ_ARENA_SWEEP_LIVE) {
-	if (o->gch.gct == 0) {
+	if (rootmem == LJ_ARENA_ROOT_MEMBER) {
+	  /* A previous pass committed the root edge before losing the LIVE->WHITE
+	  ** race. Finish only the accounting state; touching gcw would duplicate
+	  ** the intrusive membership. */
 	  if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_LIVE,
-					      LJ_ARENA_SWEEP_FREEING))
+					      LJ_ARENA_SWEEP_WHITE))
+	    changed++;
+	  else
+	    pending = 1;
+	  cell++;
+	  scanned++;
+	  continue;
+	}
+	if (o->gch.gct == 0) {
+	  int owned = lj_arena_destruct_acquire(
+	    lj_arena_cellptr(a, cell),
+	    (size_t)(end - cell) << LJ_CELL_SHIFT);
+	  if (owned != LJ_ARENA_DESTRUCT_LOST)
 	    changed++;
 	  else
 	    pending = 1;
@@ -1081,21 +1743,39 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	  continue;
 	}
 #endif
-	/* The detach left gcw untouched for pre-grace root readers. Now no such
-	** reader remains, publish one fresh ownership link and retire LIVE state. */
-	lj_gc_linkobj(g, o);
-	if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_LIVE,
-					    LJ_ARENA_SWEEP_WHITE))
-	  changed++;
-	else
-	  pending = 1;  /* A concurrent physical free won; revisit conservatively. */
+	/* The detach left gcw untouched for pre-grace readers. Claim persistent
+	** membership before rewriting it, publish once, then retire LIVE. */
+	{
+	  GCRootStateRef rootstate;
+	  int link = gc_root_link_claim_at(
+	    g, o, lj_arena_cellptr(a, cell), &rootstate);
+	  if (link == LJ_GC_ROOT_LINK_ALREADY) {
+	    if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_LIVE,
+						LJ_ARENA_SWEEP_WHITE))
+	      changed++;
+	    else
+	      pending = 1;
+	  } else if (link != LJ_GC_ROOT_LINKED) {
+	    pending = 1;
+	  } else if (gc_root_publish_claimed(g, o, &rootstate) !=
+		     LJ_GC_ROOT_LINKED) {
+	    pending = 1;
+	  } else {
+	    gc_test_root_state(g, o,
+			       LJ_GC_ROOT_STATE_TEST_SMALL_REANCHOR_LINKED);
+	    if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_LIVE,
+						LJ_ARENA_SWEEP_WHITE))
+	      changed++;
+	    else
+	      pending = 1;
+	  }
+	}
       } else {
         if (o->gch.gct == 0) {
-	  if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
-					      LJ_ARENA_SWEEP_FREEING)) {
-	    uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
-	    lj_assertG(old != 0, "destroyed-body deferred underflow");
-	    UNUSED(old);
+	  int owned = lj_arena_destruct_acquire(
+	    lj_arena_cellptr(a, cell),
+	    (size_t)(end - cell) << LJ_CELL_SHIFT);
+	  if (owned != LJ_ARENA_DESTRUCT_LOST) {
 	    changed++;
 	  } else {
 	    pending = 1;
@@ -1114,23 +1794,12 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	  pending = 1;
 	} else
 #endif
-	if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_RETIRED,
-					    LJ_ARENA_SWEEP_FREEING)) {
-	  uint32_t old = lj_arena_reclaim_deferred_sub(a, 1);
-	  int freed;
-	  lj_assertG(old != 0, "arena destructor deferred underflow");
-	  UNUSED(old);
-	  freed = gc2_free_unmarked_obj(g, o);
-	  if (LJ_UNLIKELY(!freed)) {
-	    (void)lj_arena_reclaim_deferred_add(a, 1);
-	    (void)lj_arena_sweep_state_cas(a, cell,
-	      LJ_ARENA_SWEEP_FREEING, LJ_ARENA_SWEEP_RETIRED);
-	    pending = 1;
-	  } else {
-	    changed++;
-	  }
-	} else {
-	  pending = 1;  /* RETIRED->LIVE rescue or physical-free completion. */
+	{
+	  int freed = gc2_free_unmarked_obj(g, o, 0, 1);
+	  if (freed == LJ_GC_DESTRUCT_LOST)
+	    pending = 1;  /* DESTRUCT->RESCUE or another nonterminal owner won. */
+	  else
+	    changed++;  /* ACQUIRED ran it; OWNED proves a prior terminal owner. */
 	}
       }
     }
@@ -1140,7 +1809,8 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   a->hdr.reclaim_cell = cell;
   if (cell == LJ_ARENA_CELLS) {
     uint32_t deferred = lj_arena_reclaim_deferred_acq(a);
-    if (deferred == 0 && !pending) {
+    if (deferred == 0 && !pending &&
+	lj_arena_gcprep_pending_acq(a) == 0) {
       if (donep)
 	*donep = 1;
     } else {
@@ -1160,7 +1830,8 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 {
   GCArena *a;
   GCobj *o;
-  uint32_t flags;
+  uint32_t flags, rootmem;
+  int rootq;
   if (pendingp)
     *pendingp = 0;
   if (!g || !tg || !p || !hi)
@@ -1179,6 +1850,35 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
   }
   o = (flags & LJ_HUGEF_TICKET) ?
       (GCobj *)la_loadptr_acq((void *const *)&a->hdr.retire_obj) : NULL;
+  rootq = lj_arena_hugetab_root_state_acq(&tg->huge, p, NULL);
+  if (rootq < 0) {
+    if (pendingp) *pendingp = 1;
+    return 0;
+  }
+  rootmem = (uint32_t)rootq;
+  if (rootmem == LJ_ARENA_ROOT_LINKING ||
+      rootmem == LJ_ARENA_ROOT_UNLINKING) {
+    /* A preempted root owner pins reuse by itself. Preserve this mapping for
+    ** the current sweep and let table progress continue; the owner will later
+    ** create a valid detach ticket or leave reclamation to a future cycle. */
+    if (!(flags & LJ_HUGEF_MARK)) {
+      (void)lj_arena_hugetab_mark(&tg->huge, p, NULL);
+      return 1;
+    }
+    return 0;
+  }
+  if (rootmem == LJ_ARENA_ROOT_MEMBER &&
+      (flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET)) !=
+	(LJ_HUGEF_MARK|LJ_HUGEF_TICKET)) {
+    /* A stable retained fixed/FINREG/direct-publisher mapping legitimately has
+    ** no detach ticket. Preserve it for this sweep without manufacturing LIVE
+    ** reanchor work or keeping the huge sweep pending forever. */
+    if (!(flags & LJ_HUGEF_MARK)) {
+      (void)lj_arena_hugetab_mark(&tg->huge, p, NULL);
+      return 1;
+    }
+    return 0;
+  }
 
   if (flags & LJ_HUGEF_FREEING) {
     uint64_t retire_epoch = la_load64_acq(&a->hdr.retire_epoch);
@@ -1197,6 +1897,8 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 
   if (flags & LJ_HUGEF_MARK) {
     if (o && (flags & LJ_HUGEF_TICKET)) {
+      GCRootStateRef rootstate;
+      int link;
 #if LJ_HASJIT
       if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
 	  la_load64_acq(&gco2trace(o)->retire_epoch) != 0) {
@@ -1206,17 +1908,58 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 	return 0;
       }
 #endif
-      if (!gc2_valid_freeable_obj(g, o)) {
+      if (!gc2_valid_freeable_obj(g, o, 1)) {
 	if (pendingp) *pendingp = 1;
 	return 0;
       }
+      if (rootmem == LJ_ARENA_ROOT_MEMBER) {
+	/* A prior pass committed the exact intrusive edge and only lost the
+	** ticket-finishing tail. Never insert it again. */
+	if (!lj_arena_hugetab_claim_live_ticket(&tg->huge, p, NULL)) {
+	  if (pendingp) *pendingp = 1;
+	  return 0;
+	}
+	la_storeptr_rel(&a->hdr.retire_obj, NULL);
+	if (!lj_arena_hugetab_finish_live_ticket(&tg->huge, p, NULL)) {
+	  lj_assertG(0, "huge live ticket lost after member reconciliation");
+	  if (pendingp) *pendingp = 1;
+	  return 0;
+	}
+	return 1;
+      }
+      link = gc_root_link_claim_at(g, o, p, &rootstate);
+      if (link == LJ_GC_ROOT_LINK_ALREADY) {
+	/* Another publisher completed between the fresh state sample and claim. */
+	if (!lj_arena_hugetab_claim_live_ticket(&tg->huge, p, NULL)) {
+	  if (pendingp) *pendingp = 1;
+	  return 0;
+	}
+	la_storeptr_rel(&a->hdr.retire_obj, NULL);
+	if (!lj_arena_hugetab_finish_live_ticket(&tg->huge, p, NULL)) {
+	  lj_assertG(0, "huge live ticket lost after concurrent member");
+	  if (pendingp) *pendingp = 1;
+	  return 0;
+	}
+	return 1;
+      }
+      if (link != LJ_GC_ROOT_LINKED) {
+	if (pendingp) *pendingp = 1;
+	return 0;
+      }
+      /* Membership must precede BUSY: after BUSY, a losing claim cannot safely
+      ** roll ownership back through a mapping operation it does not own. */
       if (!lj_arena_hugetab_claim_live_ticket(&tg->huge, p, NULL)) {
+	gc_root_link_rollback(g, &rootstate);
 	if (pendingp) *pendingp = 1;
 	return 0;
       }
       /* Every old nonfixed root was detached before the grace. One mapping has
       ** one allocation, so retire_obj is an exact single reanchor ticket. */
-      lj_gc_linkobj(g, o);
+      if (gc_root_publish_claimed(g, o, &rootstate) !=
+	  LJ_GC_ROOT_LINKED) {
+	if (pendingp) *pendingp = 1;
+	return 0;
+      }
       la_storeptr_rel(&a->hdr.retire_obj, NULL);
       {
 	int finished = lj_arena_hugetab_finish_live_ticket(&tg->huge, p, NULL);
@@ -1273,7 +2016,8 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 	if (pendingp) *pendingp = 1;
 	return 0;
       }
-      if (o->gch.gct != 0 && !gc2_free_unmarked_obj(g, o)) {
+      if (o->gch.gct != 0 &&
+	  gc2_free_unmarked_obj(g, o, 1, 1) == LJ_GC_DESTRUCT_LOST) {
 	(void)lj_arena_hugetab_revert_retired(&tg->huge, p);
 	if (pendingp) *pendingp = 1;
 	return 0;
@@ -1317,14 +2061,29 @@ static int gc_mayclear(global_State *g, cTValue *o, int val)
 /* Clear collected entries from weak tables. */
 void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 {
+  LJGC2Lease leases[2];
+  uint32_t leaseidx = 0;
+  memset(leases, 0, sizeof(leases));
+  if (!o)
+    return;
+  lj_gc2_smr_read_enter(g);
+  if (lj_gc2_obj_lease_acquire(g, o, (uint32_t)~LJ_TTAB,
+			       NULL, &leases[leaseidx]) < 0) {
+    lj_gc2_smr_read_leave(g);
+    return;
+  }
   while (o) {
     GCtab *t = gco2tab(o);
+    GCobj *next;
+    /* Weak-list membership is semantic ownership, but it is not a counted
+    ** body admission and does not pin a concurrently retired vector. Current
+    ** TAB admission plus SMR cover every slot and gclist dereference. */
     lj_assertG((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK),
 	       "clear of non-weak table");
     if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAKVAL)) {
       TValue *array;
       MSize i, asize, acap;
-      if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
+      if (lj_tab_array_snapshot_gc_held(g, t, &array, &asize, &acap) ==
 	  LJ_TAB_GC_SNAPSHOT_OK) {
 	UNUSED(acap);
 	for (i = 0; i < asize; i++) {
@@ -1348,7 +2107,7 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
     {
       MSize i, hmask;
       Node *node;
-      if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
+      if (lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) ==
 	  LJ_TAB_GC_SNAPSHOT_OK) {
 	for (i = 0; i <= hmask; i++) {
 	  Node *n = &node[i];
@@ -1383,7 +2142,23 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 	}
       }
     }
-    o = lj_tab_gclist_acq(t);
+    next = lj_tab_gclist_acq(t);
+    /* Acquire the successor before dropping either certificate for current.
+    ** A load/release/next-iteration acquire gap permits a completed grace to
+    ** destroy and reuse next even though its raw address remains in hand. */
+    if (next && lj_gc2_obj_lease_acquire(
+		  g, next, (uint32_t)~LJ_TTAB, NULL,
+		  &leases[leaseidx ^ 1u]) < 0) {
+      lj_gc2_lease_release(&leases[leaseidx]);
+      lj_gc2_smr_read_leave(g);
+      return;
+    }
+    lj_gc2_lease_release(&leases[leaseidx]);
+    lj_gc2_smr_read_leave(g);
+    o = next;
+    leaseidx ^= 1u;
+    if (o)
+      lj_gc2_smr_read_enter(g);
   }
 }
 
@@ -1473,92 +2248,278 @@ static void gc_shutdown_seen_fini(GCShutdownSeen *seen)
   seen->mask = seen->count = 0;
 }
 
-static void gc2_shutdown_free_obj(global_State *g, GCobj *o)
-{
+typedef struct GC2ShutdownDestroy {
+  LJGCDestructCtx dctx;
+  GCFreeFunc fn;
+  void *base;
+  GCSize size;
   uint32_t gct;
-  int deferred;
-  if (!gc2_valid_freeable_obj(g, o)) {
-    /* A stale ownership-spine entry has either already had its destructor run
-    ** or belongs to terminal arena teardown. Never dispatch from an untrusted
-    ** type byte merely because the process is closing. */
-    return;
-  }
-  gct = o->gch.gct;
-  deferred = gc2_deferred_body_pending(g, o);
+  uint8_t deferred;
+  uint8_t acquired;
+} GC2ShutdownDestroy;
+
+static int gc2_shutdown_reconcile_base(global_State *g, void *base)
+{
+  GCArena *a;
+  if (g->allocf != lj_arena_allocf ||
+      la_load32_acq(&g->allocf_arena) == 0)
+    return 1;
+  if (!base || !checkptrGC(base) ||
+      !lj_gc2_mem_registered_known(g, base))
+    return 0;
+  a = lj_arena_of(base);
+  /* Huge lifetime/destructor arbitration lives entirely in its HugeTab slot;
+  ** its mapped header is not a small-arena C|P admission generation. */
+  return lj_arena_ishuge(a) ? 1 : lj_arena_terminal_reconcile(a);
+}
+
+/* Validate immutable destructor geometry while the incoming root edge still
+** makes the body discoverable. Lifetime acquisition is deliberately separate:
+** it can run only after the terminal root side-plane has reached NONE. */
+static int gc2_shutdown_destroy_init(global_State *g, GCobj *o,
+				      GC2ShutdownDestroy *sd)
+{
+  memset(sd, 0, sizeof(*sd));
+  if (!gc2_valid_freeable_obj(g, o, 1))
+    return 0;
+  sd->gct = o->gch.gct;
+  sd->base = o;
+  sd->deferred = (uint8_t)gc2_deferred_body_pending(g, o);
 #if LJ_HASJIT
-  if (gct == (uint32_t)~LJ_TTRACE) {
-    (void)lj_trace_free_gc(g, gco2trace(o));
-    return;  /* Trace retirement owns its intact header until the SMR drain. */
-  }
+  if (sd->gct == (uint32_t)~LJ_TTRACE)
+    return 1;  /* Retire-list publication is the trace prepare transaction. */
 #endif
-  gc_freefunc[gct - (uint32_t)~LJ_TSTR](g, o);
-  if (deferred)
+  if (sd->gct < (uint32_t)~LJ_TSTR ||
+      sd->gct > (uint32_t)~LJ_TUDATA ||
+      !(sd->fn = gc_freefunc[sd->gct - (uint32_t)~LJ_TSTR]) ||
+      !gc2_free_body_info(g, o, &sd->base, &sd->size))
+    return 0;
+  return 1;
+}
+
+static int gc2_shutdown_destroy_acquire(global_State *g,
+					 GC2ShutdownDestroy *sd)
+{
+  int acquired;
+  /* A prior destructor can recreate count-zero C|P after the round-wide PRE.
+  ** Reconcile this exact allocation's arena at the last point before its
+  ** irreversible lifetime acquisition. */
+  if (!gc2_shutdown_reconcile_base(g, sd->base))
+    abort();
+  acquired = lj_gc_destructor_enter(g, sd->base, sd->size, &sd->dctx);
+  if (acquired == LJ_GC_DESTRUCT_LOST)
+    return 0;
+  sd->acquired = (uint8_t)acquired;
+  return 1;
+}
+
+static void gc2_shutdown_destroy_commit(global_State *g, GCobj *o,
+					 GC2ShutdownDestroy *sd)
+{
+  if (sd->acquired != LJ_GC_DESTRUCT_ACQUIRED)
+    return;  /* A previous terminal owner already completed this body. */
+  sd->fn(g, o);
+  lj_gc_destructor_leave(g, &sd->dctx);
+  if (sd->deferred)
     la_store8_rel(&o->gch.gct, 0);  /* Arena body awaits terminal unmap. */
 }
 
+/* All runtime publishers/readers have joined before freeall. Reconcile the
+** exact side-plane claim after its incoming edge is removed and before a
+** destructor can reach the arena allocator. This is the only terminal path
+** allowed to complete a preempted LINKING/UNLINKING state. */
+static int gc2_shutdown_release_root_state(global_State *g, GCobj *o)
+{
+  GCRootStateRef rootstate;
+  uint32_t state;
+  int kind = gc_root_state_ref(g, o, &rootstate);
+  if (kind == GC_ROOT_STATE_INVALID)
+    return 0;
+  if (kind == GC_ROOT_STATE_EXEMPT)
+    return 1;
+  state = gc_root_state_acq(&rootstate);
+  if (state == LJ_ARENA_ROOT_NONE)
+    return 1;  /* Unconverted direct-VM publication. */
+  if (state == LJ_ARENA_ROOT_MEMBER) {
+    if (!gc_root_state_cas(&rootstate, LJ_ARENA_ROOT_MEMBER,
+				   LJ_ARENA_ROOT_UNLINKING))
+      return 0;
+    state = LJ_ARENA_ROOT_UNLINKING;
+  }
+  if (state == LJ_ARENA_ROOT_LINKING)
+    return gc_root_link_terminal_rollback(g, &rootstate);
+  if (state == LJ_ARENA_ROOT_UNLINKING)
+    return gc_root_unlink_commit(g, &rootstate);
+  return 0;
+}
+
+/* Destructor acquisition is allowed to lose nonblocking ownership, but the
+** incoming root edge has deliberately not been spliced yet. Recreate the exact
+** MEMBER side-plane through the ordinary small/huge lifetime claim so the next
+** terminal round can safely validate and retry this same body. */
+static void gc2_shutdown_restore_root_state(global_State *g, GCobj *o,
+					     void *base)
+{
+  GCRootStateRef rootstate;
+  int link = gc_root_link_claim_at(g, o, base, &rootstate);
+  if (link == LJ_GC_ROOT_LINK_ALREADY)
+    return;
+  if (link != LJ_GC_ROOT_LINKED || !gc_root_link_commit(&rootstate)) {
+    lj_assertG(0, "terminal root membership rollback failed");
+    abort();
+  }
+}
+
 static uint32_t gc2_shutdown_free_roots(global_State *g,
-					 GCShutdownSeen *seen)
+					 GCShutdownSeen *seen,
+					 int *blockedp)
 {
   GCobj *maino = obj2gco(mainthread_acq(g));
   GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
   uint32_t freed = 0;
+  if (blockedp)
+    *blockedp = 0;
   gc_shutdown_seen_clear(seen);
   while ((o = gcref_acq(*p)) != NULL) {
     GCobj *next;
+    GC2ShutdownDestroy sd;
     int seenrc = gc_shutdown_seen_add(seen, o);
     if (seenrc <= 0) {
       /* A duplicate intrusive node necessarily closes a cycle: one object has
       ** only one gcw link. Allocation failure is also fail-safe: stop before
       ** dereferencing an untracked body rather than risking terminal UAF. */
-      setgcrefnullrel(*p);
-      break;
+      lj_assertG(0, "terminal root spine duplicate or seen-set OOM");
+      abort();
     }
     if (!gc_root_link_valid(g, o)) {
-      setgcrefnullrel(*p);
-      break;
+      lj_assertG(0, "invalid terminal root spine identity");
+      abort();
     }
     next = lj_obj_gcw_acq(o);
     if (o == maino) {
       p = lj_obj_gcwref(o);
       continue;
     }
+    if (LJ_UNLIKELY(!gc2_shutdown_destroy_init(g, o, &sd))) {
+      lj_assertG(0, "invalid terminal GC destructor identity");
+      abort();
+    }
+#if LJ_HASJIT
+    if (sd.gct == (uint32_t)~LJ_TTRACE) {
+      GCtrace *T = gco2trace(o);
+      /* close_state's joined-world flush must have transferred every public
+      ** trace to the token-owned retire list before the GC root drain begins.
+      ** Make that prerequisite explicit: sfixed lj_trace_free_gc() otherwise
+      ** permits an epoch-zero trace to take trace_free_immediate(), which would
+      ** physically free `o` while p->o and its root side-plane are still live. */
+      if (LJ_UNLIKELY(la_load64_acq(&T->retire_epoch) == 0 ||
+	  !trace_retired_link_listed_acq(T))) {
+	lj_assertG(0, "terminal root trace lacks retire-list ownership");
+	abort();
+      }
+      if (!gc2_shutdown_reconcile_base(g, sd.base))
+	abort();
+      if (!lj_trace_free_gc(g, T)) {
+	if (blockedp) *blockedp = 1;
+	break;
+      }
+      /* Slot/debug teardown cannot consume the intrusive list owner. Recheck
+      ** before releasing MEMBER and splicing the last root-spine edge. */
+      if (LJ_UNLIKELY(la_load64_acq(&T->retire_epoch) == 0 ||
+	  !trace_retired_link_listed_acq(T))) {
+	lj_assertG(0, "terminal trace lost retire-list ownership");
+	abort();
+      }
+      if (LJ_UNLIKELY(!gc2_shutdown_release_root_state(g, o))) {
+	lj_assertG(0, "terminal trace root reconciliation failed");
+	abort();
+      }
+    } else
+#endif
+    {
+      /* Keep p->o intact while clearing the side-plane and acquiring physical
+      ** lifetime. A losing nonblocking acquire is rolled back to MEMBER before
+      ** returning, so no object disappears between terminal rounds. */
+      if (LJ_UNLIKELY(!gc2_shutdown_release_root_state(g, o))) {
+	lj_assertG(0, "terminal root membership reconciliation failed");
+	abort();
+      }
+      if (!gc2_shutdown_destroy_acquire(g, &sd)) {
+	gc2_shutdown_restore_root_state(g, o, sd.base);
+	if (blockedp) *blockedp = 1;
+	break;
+      }
+    }
+    /* Only acquired lifetime or an exact trace retire-list owner permits the
+    ** incoming edge to be spliced. Type-specific destruction runs afterward. */
     if (next)
       setgcrefrel(*p, next);
     else
       setgcrefnullrel(*p);
-    gc2_shutdown_free_obj(g, o);
+#if LJ_HASJIT
+    if (sd.gct != (uint32_t)~LJ_TTRACE)
+#endif
+      gc2_shutdown_destroy_commit(g, o, &sd);
     freed++;
   }
   return freed;
 }
 
-static void gc2_shutdown_free_strings(global_State *g,
-				      GCShutdownSeen *seen)
+static uint32_t gc2_shutdown_free_strings(global_State *g,
+					  GCShutdownSeen *seen,
+					  int *blockedp)
 {
   StrTabHdr *hdr = lj_str_tabh_acq(g);
   MSize i;
+  uint32_t freed = 0;
+  if (blockedp)
+    *blockedp = 0;
   if (hdr) {
     gc_shutdown_seen_clear(seen);
     for (i = hdr->mask; i != ~(MSize)0; i--) {
       GCRef *bucket = &hdr->bucket[i];
       uintptr_t u = lj_str_ref_load_acq(bucket);
       GCobj *o = (GCobj *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
-      lj_str_ref_store_rel(bucket, u & LJ_STRHASH_SECONDARY);
+      uintptr_t secondary = u & LJ_STRHASH_SECONDARY;
       while (o) {
 	GCobj *next;
+	LJGCDestructCtx dctx;
+	int acquired;
 	int seenrc = gc_shutdown_seen_add(seen, o);
-	if (seenrc <= 0)
-	  break;
+	if (seenrc <= 0) {
+	  lj_assertG(0, "terminal string chain duplicate or seen-set OOM");
+	  abort();
+	}
+	if (la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TSTR) {
+	  lj_assertG(0, "invalid terminal interned-string identity");
+	  abort();
+	}
 	next = lj_str_next_acq(o);
-	if (la_load8_acq(&o->gch.gct) == (uint8_t)~LJ_TSTR)
-	  lj_str_free(g, gco2str(o));
+	/* Keep the bucket edge until the exact gate and destructor lifetime LP
+	** succeed. A loss leaves this string and its complete suffix discoverable
+	** for the next PRE/retry round. */
+	if (!gc2_shutdown_reconcile_base(g, o))
+	  abort();
+	acquired = lj_str_free_prepare(g, gco2str(o), &dctx);
+	if (acquired == LJ_GC_DESTRUCT_LOST) {
+	  if (blockedp) *blockedp = 1;
+	  return freed;
+	}
+	/* The exact lifetime owner now prevents reuse. Publish the successor before
+	** commit mutates the string type/count or releases its allocation bytes. */
+	lj_str_ref_store_rel(bucket,
+	  (uintptr_t)next | secondary);
+	if (acquired == LJ_GC_DESTRUCT_ACQUIRED)
+	  lj_str_free_commit(g, gco2str(o), &dctx);
+	freed++;
 	o = next;
       }
     }
   }
   /* Unlinked bodies are no longer discoverable from the active table. */
   lj_str_free_retired_bodies(g);
+  return freed;
 }
 
 /* Free all remaining GC objects with GC2 ownership metadata only. This is a
@@ -1568,20 +2529,66 @@ void lj_gc2_freeall(global_State *g)
 {
   GCShutdownSeen seen;
   GCobj *maino;
-  uint32_t rounds = 0;
+  uint32_t stalled = 0;
   memset(&seen, 0, sizeof(seen));
   (void)lj_gc_repair_root_spine(g);
-  do {
-    (void)lj_gc_flush_root_pending(g);
-    if (gc2_shutdown_free_roots(g, &seen) == 0)
+  for (;;) {
+    uint32_t pre_ssb = lj_gc2_shutdown_discard_ssb(g);
+    uint32_t pre_roots = lj_gc_flush_root_pending(g);
+    uint32_t post_ssb, post_roots, freed;
+    int blocked = 0;
+    (void)lj_gc_repair_root_spine(g);
+    if (!lj_gc2_terminal_prefree(g))
+      abort();
+    freed = gc2_shutdown_free_roots(g, &seen, &blocked);
+    /* Thread/upvalue/userdata destruction can publish exact root or SSB work.
+    ** Consume it before deciding whether this was a stable terminal round. */
+    post_ssb = lj_gc2_shutdown_discard_ssb(g);
+    post_roots = lj_gc_flush_root_pending(g);
+    (void)lj_gc_repair_root_spine(g);
+    if (!blocked && freed == 0 && pre_ssb == 0 && pre_roots == 0 &&
+	post_ssb == 0 && post_roots == 0)
       break;
-  } while (++rounds < 16u);  /* Closing a thread can publish closed upvalues. */
-  (void)lj_gc_flush_root_pending(g);
-  (void)gc2_shutdown_free_roots(g, &seen);
+    if (blocked && freed == 0 && pre_ssb == 0 && pre_roots == 0 &&
+	post_ssb == 0 && post_roots == 0) {
+      /* One retry is required because the losing destructor itself may have
+      ** published count-zero C|P. The next PRE consumes it. A second identical
+      ** round has no remaining publisher and is an unresolved ownership bug. */
+      if (++stalled >= 2u) {
+	lj_assertG(0, "terminal root destructor made no progress");
+	abort();
+      }
+    } else {
+      stalled = 0;
+    }
+  }
+  if (!lj_gc2_terminal_prefree(g))
+    abort();
   maino = obj2gco(mainthread_acq(g));
   lj_obj_setgcwrel(maino, NULL);
   lj_gc_root_rel(g, maino);
-  gc2_shutdown_free_strings(g, &seen);
+  stalled = 0;
+  for (;;) {
+    uint32_t freed;
+    int blocked = 0;
+    if (!lj_gc2_terminal_prefree(g))
+      abort();
+    freed = gc2_shutdown_free_strings(g, &seen, &blocked);
+    if (!blocked)
+      break;
+    if (freed == 0 && ++stalled >= 2u) {
+      lj_assertG(0, "terminal string destructor made no progress");
+      abort();
+    }
+    if (freed != 0)
+      stalled = 0;
+  }
+  /* FINAL catches a C|P publication from the last type-specific destructor. */
+  (void)lj_gc2_shutdown_discard_ssb(g);
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  if (!lj_gc2_terminal_prefree(g))
+    abort();
   gc_shutdown_seen_fini(&seen);
 }
 
@@ -1645,10 +2652,24 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
 #ifdef LJ_GC2_TEST_HELPERS
 static uint32_t gc_test_step_fixtop_calls;
 static LJGcRootPendingLoadHook gc_test_root_pending_load_hook;
+static LJGcRootStateHook gc_test_root_state_hook;
 
 void lj_gc_test_set_root_pending_load_hook(LJGcRootPendingLoadHook hook)
 {
   la_storeptr_rel((void **)&gc_test_root_pending_load_hook, (void *)hook);
+}
+
+void lj_gc_test_set_root_state_hook(LJGcRootStateHook hook)
+{
+  la_storeptr_rel((void **)&gc_test_root_state_hook, (void *)hook);
+}
+
+static void gc_test_root_state(global_State *g, GCobj *o, uint32_t path)
+{
+  LJGcRootStateHook hook = (LJGcRootStateHook)
+    la_loadptr_acq((void *const *)&gc_test_root_state_hook);
+  if (hook)
+    hook(g, o, path);
 }
 
 static LJ_AINLINE void gc_test_root_pending_loaded(global_State *g,
@@ -1874,6 +2895,7 @@ void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
 void lj_gc_closeuv(global_State *g, GCupval *uv)
 {
   GCobj *o = obj2gco(uv);
+  int link;
   /* Copy stack slot to upvalue itself and point to the copy. */
   copyTVrel(mainthread_acq(g), &uv->tv, uvval(uv));
   setmref(uv->v, &uv->tv);
@@ -1886,7 +2908,12 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
   ** that spine flushes pending roots first. Queueing here avoids a global
   ** root-list CAS on the close-upvalue path without changing collector reach.
   */
-  lj_gc_linkobj_pending(g, o);
+  link = lj_gc_linkobj_pending(g, o);
+  if (link <= LJ_GC_ROOT_LINK_DEFER)
+    /* A concurrent unlink/link owner keeps gcw private. Preserve the closed
+    ** upvalue in the semantic frontier and let the later bounded owner retry;
+    ** closure edges remain the authoritative reachability relation. */
+    (void)lj_gc2_markmem(g, o);
   lj_gc2_barrier_tv_pair_g(g, o, &uv->tv);
 }
 
@@ -1934,6 +2961,81 @@ static LJArenaAllocD *gc_arena_allocd_for_ptr(global_State *g, const void *p)
       return gc_arena_allocd_for_tg(g, tg);
   }
   return (LJArenaAllocD *)g->allocd;
+}
+
+static int gc_destructor_enter_impl(global_State *g, void *base, GCSize size,
+				    LJGCDestructCtx *ctx,
+				    int reclaim_held)
+{
+  GCArena *a;
+  if (ctx)
+    memset(ctx, 0, sizeof(*ctx));
+  if (!g || !base || size == 0 || !ctx)
+    return LJ_GC_DESTRUCT_LOST;
+  ctx->base = base;
+  ctx->size = size;
+  if (g->allocf != lj_arena_allocf ||
+      la_load32_acq(&g->allocf_arena) == 0)
+    return LJ_GC_DESTRUCT_ACQUIRED;
+  if (!checkptrGC(base) ||
+      !(reclaim_held ?
+	lj_gc2_mem_registered_known_reclaim_held(g, base) :
+	lj_gc2_mem_registered_known(g, base)))
+    return LJ_GC_DESTRUCT_LOST;
+  a = lj_arena_of(base);
+  if (!lj_arena_ishuge(a)) {
+    int result = lj_arena_destruct_acquire(base, size);
+    return result == LJ_ARENA_DESTRUCT_ACQUIRED ?
+	   LJ_GC_DESTRUCT_ACQUIRED :
+	   result == LJ_ARENA_DESTRUCT_OWNED ?
+	   LJ_GC_DESTRUCT_OWNED : LJ_GC_DESTRUCT_LOST;
+  } else {
+    LJArenaAllocD *ad = gc_arena_allocd_for_ptr(g, base);
+    LJHugeInfo hi;
+    if (!ad || !ad->huge)
+      return LJ_GC_DESTRUCT_LOST;
+    if (lj_arena_hugetab_claim_external_free(ad->huge, base, &hi)) {
+      ctx->hugetab = ad->huge;
+      ctx->huge_claim = 1;
+      return LJ_GC_DESTRUCT_ACQUIRED;
+    }
+    if (lj_arena_hugetab_lookup(ad->huge, base, &hi) == 1 &&
+	(hi.flags & LJ_HUGEF_FREEING))
+      return LJ_GC_DESTRUCT_OWNED;
+    return LJ_GC_DESTRUCT_LOST;
+  }
+}
+
+int lj_gc_destructor_enter(global_State *g, void *base, GCSize size,
+			    LJGCDestructCtx *ctx)
+{
+  return gc_destructor_enter_impl(g, base, size, ctx, 0);
+}
+
+int lj_gc_destructor_enter_reclaim_held(global_State *g, void *base,
+					 GCSize size, LJGCDestructCtx *ctx)
+{
+  return gc_destructor_enter_impl(g, base, size, ctx, 1);
+}
+
+void lj_gc_destructor_leave(global_State *g, LJGCDestructCtx *ctx)
+{
+  if (ctx && ctx->huge_claim) {
+    HugeTab *ht = (HugeTab *)ctx->hugetab;
+    LJHugeInfo hi;
+    int finish = lj_arena_hugetab_finish_external_free(
+	      ht, ctx->base, &hi);
+    if (finish == LJ_ARENA_HUGE_FINISH_UNMAP) {
+      lj_arena_huge_unmap(ctx->base, hi.size);
+    } else if (finish == LJ_ARENA_HUGE_FINISH_DEFERRED) {
+      gc2_sweep_grace_needed_rel(g, 1);
+      lj_gc2_sweep_publish_wake(g);
+    } else {
+      lj_assertG(0, "huge GC destructor ownership lost");
+      abort();
+    }
+    ctx->huge_claim = 0;
+  }
 }
 
 static int gc_arena_ptr_nonreallocable(LJArenaAllocD *ad, const void *p)
@@ -2134,24 +3236,27 @@ void lj_gc_publishobj_header(global_State *g, GCobj *o)
 
 void *lj_mem_newgco_unlinked_nothrow(lua_State *L, GCSize size)
 {
-  return lj_mem_newgco_raw_nothrow(L, size, LJ_AF_TRAVERSABLE);
+  return lj_mem_newgco_raw_nothrow(L, size,
+				    LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
 }
 
 void *lj_mem_newgco_unlinked_deferred_nothrow(lua_State *L, GCSize size)
 {
-  return gc_mem_newgco_raw_nothrow(L, size, LJ_AF_TRAVERSABLE, 0);
+  return gc_mem_newgco_raw_nothrow(
+	L, size, LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT, 0);
 }
 
 void *lj_mem_newgco_unlinked(lua_State *L, GCSize size)
 {
-  return lj_mem_newgco_raw(L, size, LJ_AF_TRAVERSABLE);
+  return lj_mem_newgco_raw(L, size,
+			    LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
 }
 
-void lj_gc_linkobj(global_State *g, GCobj *o)
+static int gc_root_publish_claimed(global_State *g, GCobj *o,
+				    GCRootStateRef *rootstate)
 {
   GCRef *root = lj_gc_root_ref(g);
   GCobj *head;
-  lj_gc_publishobj_header(g, o);
   do {
     head = gcref_acq(*root);
     if (head)
@@ -2159,7 +3264,58 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
     else
       lj_obj_setgcwnull(o);
   } while (!gcref_cas(root, &head, o));  /* M7 publish. */
+  if (LJ_UNLIKELY(!gc_root_link_commit(rootstate))) {
+    /* The exact object is already visible and must never be published again.
+    ** Leaving LINKING is fail-closed for arena reuse/reclaim. */
+    lj_assertG(0, "root membership link commit lost");
+    return LJ_GC_ROOT_LINK_DEFER;
+  }
   lj_gcroot_repair_epoch_add(g);
+  return LJ_GC_ROOT_LINKED;
+}
+
+static int gc_root_publish_constructed(global_State *g, GCobj *o,
+				       GCRootStateRef *rootstate)
+{
+  GCRef *root = lj_gc_root_ref(g);
+  GCobj *head;
+  do {
+    head = gcref_acq(*root);
+    if (head)
+      lj_obj_setgcwrel(o, head);
+    else
+      lj_obj_setgcwnullrel(o);
+  } while (!gcref_cas(root, &head, o));
+  if (LJ_UNLIKELY(!gc_root_construct_commit(rootstate))) {
+    /* Visibility is irreversible. Retaining LINKING/CONSTRUCT is the safe
+    ** response to an impossible lost owner transition: reuse stays vetoed. */
+    lj_assertG(0, "constructed root membership commit lost");
+    abort();
+  }
+  lj_gcroot_repair_epoch_add(g);
+  return LJ_GC_ROOT_LINKED;
+}
+
+int lj_gc_linkobj_at(global_State *g, GCobj *o, void *base)
+{
+  GCRootStateRef rootstate;
+  int claim;
+  if (!g || !o || !base)
+    return LJ_GC_ROOT_LINK_INVALID;
+  /* The caller's FINREG/ticket/terminal token resolved base without granting
+  ** this publisher descriptor ownership. Small validation deliberately starts
+  ** only after the following LIVE->MUTATING CAS succeeds. */
+  claim = gc_root_link_claim_at(g, o, base, &rootstate);
+  if (claim != LJ_GC_ROOT_LINKED)
+    return claim;
+  return gc_root_publish_claimed(g, o, &rootstate);
+}
+
+int lj_gc_linkobj(global_State *g, GCobj *o)
+{
+  /* Fixed-layout ordinary objects have allocation-base identity. Interior
+  ** cdata dispatch must use lj_gc_linkobj_at() with its retained exact base. */
+  return lj_gc_linkobj_at(g, o, o);
 }
 
 static LJ_AINLINE void gc_root_set_next(GCobj *o, GCobj *next)
@@ -2189,15 +3345,23 @@ static uint32_t gc_root_chain_tail(global_State *g, GCobj *head, GCobj **tailp)
   (void)gc_root_chain_break_cycle(g, head);
   tail = head;
   do {
-    if (!gc_root_link_valid(g, tail))
-      break;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, tail))) {
+      /* head has already been xchg-detached from its per-TG pending slot. A
+      ** silent short count would splice a valid prefix and lose this node plus
+      ** its complete suffix. Registry lifetime is held across this walk, so a
+      ** rejection is structural corruption, not retryable admission. */
+      lj_assertG(0, "invalid detached pending-root node");
+      abort();
+    }
     if (n != ~(uint32_t)0)
       n++;
     next = lj_obj_gcw_acq(tail);
     if (!next)
       break;
-    if (!gc_root_link_valid(g, next))
-      break;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, next))) {
+      lj_assertG(0, "invalid detached pending-root successor");
+      abort();
+    }
     tail = next;
   } while (1);
   *tailp = tail;
@@ -2211,8 +3375,12 @@ static int gc_root_chain_contains_to_tail(global_State *g, GCobj *head, GCobj *t
   if (!needle)
     return 0;
   for (o = head; o != NULL; o = lj_obj_gcw_acq(o)) {
-    if (!gc_root_link_valid(g, o))
-      return 0;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
+      /* Never overwrite tail->next using an unvalidated existing-spine head.
+      ** The detached pending chain remains intact up to this fail-stop. */
+      lj_assertG(0, "invalid root spine during pending-root splice");
+      abort();
+    }
     if (o == needle)
       return 1;
     if (o == tail)
@@ -2262,8 +3430,12 @@ static uint32_t gc_root_prepend_chain_after(global_State *g, GCobj *anchor,
 {
   GCobj *tail;
   uint32_t n = gc_root_chain_tail(g, head, &tail);
-  if (!anchor || !n)
+  if (!n)
     return 0;
+  if (LJ_UNLIKELY(!anchor)) {
+    lj_assertG(0, "missing main-thread pending-root anchor");
+    abort();
+  }
   gc_root_prepend_chain_at(g, lj_obj_gcwref(anchor), head, tail);
   /* mainthread is a permanent root-spine anchor. Root pruning never detaches
   ** it, so publishing after it needs exactly the one slot CAS above. Do not
@@ -2316,6 +3488,7 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
 {
   TGState *tg, *main_tg, *self;
   uint32_t n = 0, saw_main = 0, saw_self = 0;
+  int reclaim_held;
   if (!g)
     return 0;
   main_tg = g->main_tg;
@@ -2337,6 +3510,14 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
       !gc_root_pending_tg_nonempty(main_tg) &&
       (self == NULL || self == main_tg ||
        !gc_root_pending_tg_nonempty(self)))
+    return 0;
+  /* Pin the TG/HugeTab registry before the first pending-head xchg and retain
+  ** it through validation and splice. The exclusive reclaimer already owns a
+  ** stronger exact-thread registry certificate; every other caller uses one
+  ** nonblocking ordinary reader. On admission loss leave the hint and every
+  ** per-TG chain untouched for a later flush. */
+  reclaim_held = lj_gc2_reclaim_context_held(g);
+  if (!reclaim_held && !lj_gc2_smr_read_try(g))
     return 0;
   /*
   ** Once the hint is non-zero, clear it before scanning so a concurrent
@@ -2360,17 +3541,26 @@ uint32_t lj_gc_flush_root_pending(global_State *g)
   if (n != 0)
     (void)lj_gc_repair_root_spine(g);
   gc_pending_root_stats(g, n);
+  if (!reclaim_held)
+    lj_gc2_smr_read_leave(g);
   return n;
 }
 
-static void gc_linkobj_pending(global_State *g, GCobj *o)
+static int gc_linkobj_pending(global_State *g, GCobj *o)
 {
   TGState *tg = lj_thr_get_tg();
+  GCRootStateRef rootstate;
   GCobj *head;
-  lj_gc_publishobj_header(g, o);
+  int claim;
+  if (!g || !o)
+    return LJ_GC_ROOT_LINK_INVALID;
+  /* Closed open-upvalues have exact-base identity and remain incarnation-
+  ** pinned by their closure/open-list handoff throughout this requeue. */
+  claim = gc_root_link_claim_at(g, o, o, &rootstate);
+  if (claim != LJ_GC_ROOT_LINKED)
+    return claim;
   if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
-    lj_gc_linkobj(g, o);
-    return;
+    return gc_root_publish_claimed(g, o, &rootstate);
   }
   /* A worker/attacher can publish its activation immediately after any
   ** single-threaded eligibility sample and exchange this stack before the
@@ -2383,62 +3573,150 @@ static void gc_linkobj_pending(global_State *g, GCobj *o)
   do {
     gc_root_set_next_rel(o, head);
   } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
+  if (LJ_UNLIKELY(!gc_root_link_commit(&rootstate))) {
+    lj_assertG(0, "pending root membership commit lost");
+    return LJ_GC_ROOT_LINK_DEFER;
+  }
+  return LJ_GC_ROOT_LINKED;
 }
 
-void lj_gc_linkobj_pending(global_State *g, GCobj *o)
+int lj_gc_linkobj_pending(global_State *g, GCobj *o)
 {
-  gc_linkobj_pending(g, o);
+  return gc_linkobj_pending(g, o);
 }
 
-void lj_gc_linkobj_new(global_State *g, GCobj *o)
+static int gc_linkobj_new_pending(global_State *g, GCobj *o)
 {
-  gc_linkobj_pending(g, o);
+  TGState *tg = lj_thr_get_tg();
+  GCRootStateRef rootstate;
+  GCobj *head;
+  int claim;
+  if (!g || !o)
+    return LJ_GC_ROOT_LINK_INVALID;
+  lj_gc_publishobj_header(g, o);
+  claim = gc_root_construct_claimed(g, o, &rootstate);
+  if (LJ_UNLIKELY(claim != LJ_GC_ROOT_LINKED)) {
+    lj_assertG(0, "fresh GC object lost construction ownership");
+    abort();
+  }
+  if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return gc_root_publish_constructed(g, o, &rootstate);
+  head = lj_tg_gcroot_pending_acq(tg);
+  gc_test_root_pending_loaded(g, tg, o, head,
+			      LJ_GC_ROOT_PENDING_TEST_ORDINARY);
+  do {
+    gc_root_set_next_rel(o, head);
+  } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
+  if (LJ_UNLIKELY(!gc_root_construct_commit(&rootstate))) {
+    lj_assertG(0, "pending constructed root membership commit lost");
+    abort();
+  }
+  return LJ_GC_ROOT_LINKED;
 }
 
-void lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)
+int lj_gc_linkobj_new(global_State *g, GCobj *o)
+{
+  return gc_linkobj_new_pending(g, o);
+}
+
+static int gc_root_chain_commit_constructed(global_State *g, GCobj *head,
+					    GCobj *tail)
+{
+  GCobj *o = head;
+  for (;;) {
+    GCRootStateRef rootstate;
+    GCobj *next;
+    if (gc_root_state_ref(g, o, &rootstate) == GC_ROOT_STATE_INVALID ||
+	!gc_root_construct_commit(&rootstate))
+      return 0;
+    if (o == tail)
+      return 1;
+    next = lj_obj_gcw_acq(o);
+    if (!next || next == o)
+      return 0;
+    o = next;
+  }
+}
+
+int lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)
 {
   TGState *tg;
   GCobj *oldhead;
   if (!head || !tail)
-    return;
+    return LJ_GC_ROOT_LINK_INVALID;
   {
     GCobj *o = head;
     for (;;) {
+      GCRootStateRef rootstate;
       GCobj *next;
+      int claim;
       lj_gc_publishobj_header(g, o);
+      claim = gc_root_construct_claimed(g, o, &rootstate);
+      if (claim != LJ_GC_ROOT_LINKED) {
+	lj_assertG(0, "fresh GC chain lost construction ownership");
+	abort();
+      }
       if (o == tail)
 	break;
       next = lj_obj_gcw_acq(o);
       lj_assertG(next != NULL && next != o,
 		 "invalid unpublished GC object chain");
-      if (!next || next == o)
-	return;
+      if (!next || next == o) {
+	abort();
+      }
       o = next;
     }
   }
   tg = lj_thr_get_tg();
   if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
     gc_root_prepend_known_chain(g, head, tail);
-    return;
+  } else {
+    /* See gc_linkobj_pending(): the tail link and pending-stack head must
+    ** linearize together even before MT becomes sticky. */
+    oldhead = lj_tg_gcroot_pending_acq(tg);
+    gc_test_root_pending_loaded(g, tg, tail, oldhead,
+				LJ_GC_ROOT_PENDING_TEST_CHAIN);
+    do {
+      gc_root_set_next_rel(tail, oldhead);
+    } while (!lj_tg_gcroot_pending_cas(tg, &oldhead, head));
   }
-  /* See gc_linkobj_pending(): the tail link and pending-stack head must
-  ** linearize together even before MT becomes sticky. */
-  oldhead = lj_tg_gcroot_pending_acq(tg);
-  gc_test_root_pending_loaded(g, tg, tail, oldhead,
-			      LJ_GC_ROOT_PENDING_TEST_CHAIN);
-  do {
-    gc_root_set_next_rel(tail, oldhead);
-  } while (!lj_tg_gcroot_pending_cas(tg, &oldhead, head));
+  if (LJ_UNLIKELY(!gc_root_chain_commit_constructed(g, head, tail))) {
+    lj_assertG(0, "constructed root chain membership commit lost");
+    abort();
+  }
+  return LJ_GC_ROOT_LINKED;
 }
 
-void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
+int lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
 {
   TGState *tg = lj_thr_get_tg();
+  GCRootStateRef rootstate;
   GCobj *head;
+  int claim;
+  if (!g || !o)
+    return LJ_GC_ROOT_LINK_INVALID;
   lj_gc_publishobj_header(g, o);
+  claim = gc_root_construct_claimed(g, o, &rootstate);
+  if (LJ_UNLIKELY(claim != LJ_GC_ROOT_LINKED)) {
+    lj_assertG(0, "fresh after-main object lost construction ownership");
+    abort();
+  }
   if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
-    lj_gc_linkobj_after(g, obj2gco(mainthread_acq(g)), o);
-    return;
+    GCobj *anchor = obj2gco(mainthread_acq(g));
+    GCRef *p;
+    if (!anchor)
+      abort();
+    p = lj_obj_gcwref(anchor);
+    do {
+      head = gcref_acq(*p);
+      gc_root_set_next(o, head);
+    } while (!gcref_cas(p, &head, o));
+    if (LJ_UNLIKELY(!gc_root_construct_commit(&rootstate))) {
+      lj_assertG(0, "after-main constructed membership commit lost");
+      abort();
+    }
+    lj_gcroot_repair_epoch_add(g);
+    return LJ_GC_ROOT_LINKED;
   }
   /* The after-main stack shares the same activation race as the ordinary
   ** pending stack. A failed CAS rewrites o->gcw before any reader can discover
@@ -2449,22 +3727,68 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
   do {
     gc_root_set_next_rel(o, head);
   } while (!lj_tg_gcroot_pending_after_main_cas(tg, &head, o));
+  if (LJ_UNLIKELY(!gc_root_construct_commit(&rootstate))) {
+    lj_assertG(0, "pending after-main constructed membership commit lost");
+    abort();
+  }
+  return LJ_GC_ROOT_LINKED;
 }
 
-void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o)
+int lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o)
 {
+  GCRootStateRef rootstate;
   GCRef *p;
   GCobj *head;
+  int claim;
   if (!anchor || !o)
-    return;
-  lj_gc_publishobj_header(g, o);
+    return LJ_GC_ROOT_LINK_INVALID;
+  /* Userdata FINREG keeps the fixed-layout node and registration flag stable
+  ** until this anchored requeue has committed. */
+  claim = gc_root_link_claim_at(g, o, o, &rootstate);
+  if (claim != LJ_GC_ROOT_LINKED)
+    return claim;
   p = lj_obj_gcwref(anchor);
   do {
     head = gcref_acq(*p);
     gc_root_set_next(o, head);
   } while (!gcref_cas(p, &head, o));
-  if (g)
-    lj_gcroot_repair_epoch_add(g);
+  if (LJ_UNLIKELY(!gc_root_link_commit(&rootstate))) {
+    lj_assertG(0, "anchored root membership commit lost");
+    return LJ_GC_ROOT_LINK_DEFER;
+  }
+  lj_gcroot_repair_epoch_add(g);
+  return LJ_GC_ROOT_LINKED;
+}
+
+int lj_gc_linkobj_terminal(global_State *g, GCobj *o)
+{
+  GCRootStateRef rootstate;
+  uint32_t state;
+  int kind;
+  if (!g || !o)
+    return LJ_GC_ROOT_LINK_INVALID;
+  lj_gc_publishobj_header(g, o);
+  kind = gc_root_state_ref(g, o, &rootstate);
+  if (kind == GC_ROOT_STATE_INVALID)
+    return LJ_GC_ROOT_LINK_INVALID;
+  if (kind != GC_ROOT_STATE_EXEMPT) {
+    state = gc_root_state_acq(&rootstate);
+    if (state == LJ_ARENA_ROOT_MEMBER) {
+	if (!gc_root_state_cas(&rootstate, state, LJ_ARENA_ROOT_UNLINKING) ||
+	    !gc_root_unlink_commit(g, &rootstate))
+	return LJ_GC_ROOT_LINK_DEFER;
+    } else if (state == LJ_ARENA_ROOT_LINKING) {
+      (void)gc_root_link_terminal_rollback(g, &rootstate);
+      if (gc_root_state_acq(&rootstate) != LJ_ARENA_ROOT_NONE)
+	return LJ_GC_ROOT_LINK_DEFER;
+    } else if (state == LJ_ARENA_ROOT_UNLINKING) {
+      if (!gc_root_unlink_commit(g, &rootstate))
+	return LJ_GC_ROOT_LINK_DEFER;
+    } else if (state != LJ_ARENA_ROOT_NONE) {
+      return LJ_GC_ROOT_LINK_DEFER;
+    }
+  }
+  return lj_gc_linkobj_at(g, o, rootstate.base);
 }
 
 /* Allocate a pending GC object. Header/body initialization must finish before
@@ -2474,9 +3798,58 @@ void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o)
 void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
 {
   global_State *g = G(L);
-  GCobj *o = (GCobj *)lj_mem_newgco_raw(L, size, LJ_AF_TRAVERSABLE);
+  GCobj *o = (GCobj *)lj_mem_newgco_raw(
+    L, size, LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
   newwhite(g, o);
   return o;
+}
+
+int lj_mem_abandon_gco_unpublished(global_State *g, void *base)
+{
+  GCArena *a;
+  if (!g || !base)
+    return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
+  if (g->allocf != lj_arena_allocf ||
+      la_load32_acq(&g->allocf_arena) == 0)
+    return LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE;
+  if (!checkptrGC(base) || !lj_gc2_mem_registered_known(g, base))
+    return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
+  a = lj_arena_of(base);
+  if (!lj_arena_ishuge(a)) {
+    uint32_t cell = lj_arena_cellof(base);
+    if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+	!(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) ||
+	!lj_arena_bm_get(a->block, cell) ||
+	!lj_arena_root_construct_abandon(a, cell))
+      return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
+    return LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE;
+  } else {
+    LJArenaAllocD *ad = gc_arena_allocd_for_ptr(g, base);
+    int result;
+    if (!ad || !ad->huge)
+      return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
+    result = lj_arena_hugetab_root_construct_abandon(
+	ad->huge, base, lj_gc2_retire_epoch(g), NULL);
+    if (result == LJ_ARENA_HUGE_ROOT_COMPLETE_SWEEP) {
+      gc2_sweep_grace_needed_rel(g, 1);
+      lj_gc2_sweep_publish_wake(g);
+    }
+    return result;
+  }
+}
+
+void lj_mem_freegco_unpublished(global_State *g, void *base, GCSize osize)
+{
+  int result = lj_mem_abandon_gco_unpublished(g, base);
+  if (LJ_UNLIKELY(result != LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE)) {
+    /* SWEEP means a racing logical free already owns both accounting and
+    ** physical reclaim. LOST cannot be made safe by guessing at the bytes. */
+    if (result == LJ_ARENA_HUGE_ROOT_COMPLETE_SWEEP)
+      return;
+    lj_assertG(0, "unpublished GC construction ownership lost");
+    abort();
+  }
+  lj_mem_free(g, base, osize);
 }
 
 void lj_mem_free(global_State *g, void *p, size_t osize)

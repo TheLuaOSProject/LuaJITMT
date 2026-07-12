@@ -9,6 +9,7 @@
 #include "lauxlib.h"
 
 #include "lj_obj.h"
+#include "lj_gc2.h"
 #include "lj_tab.h"
 
 static TabArrayRetire *find_retired_array(global_State *g, TValue *array)
@@ -99,15 +100,17 @@ int main(void)
   assert(lj_tab_array_is_retiring(t, lj_tab_array_retired_array_acq(ret)));
   assert(lj_tab_array_retired_armed_acq(ret) == 1);
   retire_epoch = lj_tab_array_retired_epoch_acq(ret);
-  assert(lj_tab_reclaim_retired(g, retire_epoch) == 0);
+  (void)lj_gc2_reclaim_retired(g, retire_epoch);
   assert(find_retired_array(g, oldarray) != NULL);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 0);
+  (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
   assert(find_retired_array(g, oldarray) != NULL);
   lj_tab_array_rel(t, oldarray);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 0);
+  (void)lj_gc2_reclaim_retired(g,
+			       retire_epoch + LJ_TAB_RETIRE_EPOCHS);
   assert(find_retired_array(g, oldarray) != NULL);
   lj_tab_array_rel(t, array);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 1);
+  assert(lj_gc2_reclaim_retired(g,
+				retire_epoch + LJ_TAB_RETIRE_EPOCHS) >= 1);
   assert(find_retired_array(g, oldarray) == NULL);
   for (i = 0; i < (int)oldasize; i += 3)
     assert(get_int(t, i) == i + 1000);
@@ -140,8 +143,9 @@ int main(void)
 	 array);
   assert(lj_tab_array_is_retiring(t, lj_tab_array_retired_array_acq(ret)));
   retire_epoch = lj_tab_array_retired_epoch_acq(ret);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 0);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) >= 1);
+  (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
+  assert(lj_gc2_reclaim_retired(g,
+				retire_epoch + LJ_TAB_RETIRE_EPOCHS) >= 1);
   assert(find_retired_array(g, oldarray) == NULL);
   assert(get_int(t, 9) == 9009);
   assert(get_int(t, (int32_t)oldasize + 4) == 4444);
@@ -171,8 +175,9 @@ int main(void)
 	 array);
   assert(lj_tab_array_is_retiring(t, lj_tab_array_retired_array_acq(ret)));
   retire_epoch = lj_tab_array_retired_epoch_acq(ret);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 0);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) >= 1);
+  (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
+  assert(lj_gc2_reclaim_retired(g,
+				retire_epoch + LJ_TAB_RETIRE_EPOCHS) >= 1);
   assert(find_retired_array(g, oldarray) == NULL);
   assert(get_int(t, 9) == 9009);
   lua_pop(L, 1);

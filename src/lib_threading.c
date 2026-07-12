@@ -53,33 +53,50 @@ static LJThread *threading_tothread(lua_State *L)
   return (LJThread *)uddata(udataV(L->base));
 }
 
-static GCudata *threading_thread_udata_candidate(global_State *g, GCobj *o)
+static GCudata *threading_thread_udata_candidate(global_State *g, GCobj *o,
+					  LJGC2Lease *lease)
 {
-  uint32_t gct;
   GCudata *ud;
-  if (!lj_gc2_obj_valid_queued(g, o))
-    return NULL;
-  gct = (uint32_t)la_load8_acq(&o->gch.gct);
-  if (gct != (uint32_t)~LJ_TUDATA)
+  /* The live-node/state reference can be tombstoned immediately after its
+  ** acquire load. Retain the exact typed allocation before any payload read;
+  ** a shape-only queued validator would drop its body lease on return. */
+  if (!lease || lj_gc2_obj_lease_acquire(g, o, (uint32_t)~LJ_TUDATA,
+						NULL, lease) < 0)
     return NULL;
   ud = gco2ud(o);
-  return lj_udata_udtype_acq(ud) == UDTYPE_THREAD ? ud : NULL;
+  if (lj_udata_udtype_acq(ud) == UDTYPE_THREAD)
+    return ud;
+  lj_gc2_lease_release(lease);
+  return NULL;
 }
 
-GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node)
+GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node,
+				   LJGC2Lease *lease)
 {
   GCudata *ud;
+  if (!lease)
+    return NULL;
+  memset(lease, 0, sizeof(*lease));
   if (!node)
     return NULL;
-  ud = threading_thread_udata_candidate(g, lj_thread_live_udata_ref_acq(node));
-  return ud && lj_gc_udata_payload_valid(ud, NULL) ? ud : NULL;
+  ud = threading_thread_udata_candidate(
+    g, lj_thread_live_udata_ref_acq(node), lease);
+  if (ud && lj_gc_udata_payload_valid(ud, NULL))
+    return ud;
+  lj_gc2_lease_release(lease);
+  return NULL;
 }
 
-GCudata *lj_thread_state_udata_acq(global_State *g, const lua_State *L)
+GCudata *lj_thread_state_udata_acq(global_State *g, const lua_State *L,
+				    LJGC2Lease *lease)
 {
+  if (!lease)
+    return NULL;
+  memset(lease, 0, sizeof(*lease));
   if (!L)
     return NULL;
-  return threading_thread_udata_candidate(g, lj_state_mt_thread_acq(L));
+  return threading_thread_udata_candidate(
+    g, lj_state_mt_thread_acq(L), lease);
 }
 
 static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
@@ -147,13 +164,15 @@ static void threading_live_publish(lua_State *L, LJThread *th,
   ** post-publication phase read preserves the raw node in that cycle. */
   (void)lj_gc2_markmem(g, node);
   {
-    GCudata *ud = lj_thread_live_udata_acq(g, node);
+    LJGC2Lease lease;
+    GCudata *ud = lj_thread_live_udata_acq(g, node, &lease);
     if (ud) {
       TValue tv;
       setudataV(L, &tv, ud);
       (void)lj_gc2_markobj(g, obj2gco(ud));
       lj_gc_pubroot(L, &tv);  /* Publish against cycles started after new. */
     }
+    lj_gc2_lease_release(&lease);
   }
   la_add32_acqrel(&g->threading_live_count, 1);
   lj_thread_live_node_rel(th, node);
@@ -222,19 +241,31 @@ static void threading_root_table(lua_State *L, GCRootID id, GCtab *t)
   if (t) {
     global_State *g = G(L);
     GCobj *o = obj2gco(t);
+    LJGC2Lease lease;
     TValue *array;
     MSize asize, acap, hmask;
     Node *node;
     lj_gcroot_rel(g, id, o);
     lj_gc_pubobjroot(L, o);
-    if (lj_tab_array_snapshot_gc(g, t, &array, &asize, &acap) ==
-	LJ_TAB_GC_SNAPSHOT_OK && array)
-      (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
-				      (void *)array);
-    UNUSED(asize);
-    if (lj_tab_node_snapshot_gc(g, t, &node, &hmask) ==
-	LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
-      (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+    /* Reclaim is opportunistic. Root publication must not yield waiting for
+    ** its SMR writer: the retained table is sufficient for the later GC2
+    ** traversal, and a successful tactical reader only preserves the current
+    ** vector generations early. */
+    if (lj_gc2_smr_read_try(g)) {
+      if (lj_gc2_obj_lease_acquire(g, o, (uint32_t)~LJ_TTAB,
+					   NULL, &lease) >= 0) {
+	if (lj_tab_array_snapshot_gc_held(g, t, &array, &asize, &acap) ==
+	    LJ_TAB_GC_SNAPSHOT_OK && array)
+	  (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+					  (void *)array);
+	UNUSED(asize);
+	if (lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) ==
+	    LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
+	  (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+	lj_gc2_lease_release(&lease);
+      }
+      lj_gc2_smr_read_leave(g);
+    }
     lj_gc2_preserve_root(g, o);
   }
 }
@@ -614,12 +645,15 @@ void lj_threading_shutdown(lua_State *L)
   }
   for (node = lj_thread_live_head_acq(g); node != NULL;
        node = lj_thread_live_next_acq(node)) {
-    GCudata *ud = lj_thread_live_udata_acq(g, node);
+    LJGC2Lease lease;
+    GCudata *ud = lj_thread_live_udata_acq(g, node, &lease);
     if (!ud)
       continue;
     th = (LJThread *)uddata(ud);
-    if (th->main_thread || lj_thread_state_load_acq(th) == NULL)
+    if (th->main_thread || lj_thread_state_load_acq(th) == NULL) {
+      lj_gc2_lease_release(&lease);
       continue;
+    }
     while (la_load32_acq(&th->state) != LJ_THREAD_DONE) {
       uint32_t futex = la_load32_acq(&th->futex);
       if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
@@ -633,6 +667,7 @@ void lj_threading_shutdown(lua_State *L)
     }
     threading_live_remove(g, th);
     (void)lj_tg_reclaim_dead(g);
+    lj_gc2_lease_release(&lease);
   }
   /* GC2 workers may still hold a scoped raw-node snapshot. Tombstoning is
   ** complete here, but physical node release belongs to close_state after the
@@ -972,6 +1007,8 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
 				   void *ud)
 {
   ThreadingAttachCtx *ctx = (ThreadingAttachCtx *)ud;
+  LJGC2Lease lease;
+  GCudata *thread_ud;
   UNUSED(dummy);
   L->tg_hint = ctx->tg;
   lj_thr_set_tg(ctx->tg);
@@ -979,7 +1016,9 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
   lj_tg_store_cur_L(ctx->tg, L);
   lj_tg_store_thread_L(ctx->tg, L);
   ctx->tg_state_set = 1;
-  lj_tg_store_thread_ud(ctx->tg, lj_thread_state_udata_acq(ctx->g, L));
+  thread_ud = lj_thread_state_udata_acq(ctx->g, L, &lease);
+  lj_tg_store_thread_ud(ctx->tg, thread_ud);
+  lj_gc2_lease_release(&lease);
   /* Keep the admission token across both the attach transaction and every
   ** protected failure cleanup. The successful path transitions to mt_live;
   ** the failed path must remain visible to lua_close until its final access to

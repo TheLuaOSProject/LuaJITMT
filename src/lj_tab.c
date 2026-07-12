@@ -723,25 +723,19 @@ static LJ_AINLINE void tab_array_free(global_State *g, TValue *array, MSize acap
   lj_mem_free(g, lj_tab_array_hdrw(array), lj_tab_array_bytes(acap));
 }
 
-static LJ_AINLINE GCtab *tab_gc_table_candidate(global_State *g, GCobj *o)
-{
-  uint32_t gct;
-  if (!lj_gc2_obj_valid_queued(g, o))
-    return NULL;
-  gct = (uint32_t)la_load8_acq(&o->gch.gct);
-  return gct == (uint32_t)~LJ_TTAB ? gco2tab(o) : NULL;
-}
-
 #ifdef LJ_TAB_TEST_HELPERS
 int lj_tab_test_table_candidate(global_State *g, GCobj *o)
 {
-  return tab_gc_table_candidate(g, o) != NULL;
+  /* Identity-only test probe: no object/vector pointer escapes this status
+  ** call, so the temporary typed retention can be released on return. */
+  return lj_gc2_markobj_expected_status(
+    g, o, (uint32_t)~LJ_TTAB, NULL) >= 0;
 }
 #endif
 
-static LJ_AINLINE int tab_gc_table_valid(global_State *g, const GCtab *t)
+static LJ_AINLINE int tab_gc_table_valid_held(const GCtab *t)
 {
-  return t && tab_gc_table_candidate(g, obj2gco((GCtab *)t)) != NULL;
+  return t && (uint32_t)la_load8_acq(&t->gct) == (uint32_t)~LJ_TTAB;
 }
 
 static LJ_AINLINE int tab_gc_array_hdr_valid(global_State *g,
@@ -754,7 +748,8 @@ static LJ_AINLINE int tab_gc_array_hdr_valid(global_State *g,
   if (!array)
     return 0;
   hdr = (const void *)lj_tab_array_hdr(array);
-  if (!lj_gc2_mem_registered_known(g, hdr))
+  if (!lj_gc2_mem_registered_known(g, hdr) &&
+      !lj_gc2_mem_registered_known_reclaim_held(g, hdr))
     return 0;
   asize = lj_tab_array_hdr_asize_acq(array);
   acap = lj_tab_array_hdr_acap_acq(array);
@@ -767,13 +762,14 @@ static LJ_AINLINE int tab_gc_array_hdr_valid(global_State *g,
   return 1;
 }
 
-int lj_tab_array_snapshot_gc(global_State *g, const GCtab *t, TValue **arrayp,
-			     MSize *asizep, MSize *acapp)
+static int tab_array_snapshot_gc_impl(global_State *g, const GCtab *t,
+				      TValue **arrayp, MSize *asizep,
+				      MSize *acapp)
 {
   TValue *array;
   MSize asize, acap, flags;
 retry_snapshot:
-  if (!tab_gc_table_valid(g, t))
+  if (!tab_gc_table_valid_held(t))
     return LJ_TAB_GC_SNAPSHOT_INVALID;
   array = lj_tab_array_acq(t);
   asize = lj_tab_asize_acq(t);
@@ -812,19 +808,28 @@ retry_snapshot:
   return LJ_TAB_GC_SNAPSHOT_OK;
 }
 
-int lj_tab_node_snapshot_gc(global_State *g, const GCtab *t, Node **nodep,
-			    MSize *hmaskp)
+int lj_tab_array_snapshot_gc_held(global_State *g, const GCtab *t,
+					  TValue **arrayp, MSize *asizep,
+					  MSize *acapp)
+{
+  return tab_array_snapshot_gc_impl(g, t, arrayp, asizep, acapp);
+}
+
+static int tab_node_snapshot_gc_impl(global_State *g, const GCtab *t,
+				     Node **nodep, MSize *hmaskp)
 {
   Node *node;
   MSize hmask, flags;
 retry_snapshot:
-  if (!tab_gc_table_valid(g, t))
+  if (!tab_gc_table_valid_held(t))
     return LJ_TAB_GC_SNAPSHOT_INVALID;
   node = lj_tab_node_acq(t);
   if (!node)
     return LJ_TAB_GC_SNAPSHOT_INVALID;
   if (node != &g->nilnode &&
-      !lj_gc2_mem_registered_known(g, (const void *)lj_tab_node_hdr(node))) {
+      !lj_gc2_mem_registered_known(g, (const void *)lj_tab_node_hdr(node)) &&
+      !lj_gc2_mem_registered_known_reclaim_held(
+	g, (const void *)lj_tab_node_hdr(node))) {
     if (lj_tab_node_acq(t) != node)
       goto retry_snapshot;
     return LJ_TAB_GC_SNAPSHOT_INVALID;
@@ -843,6 +848,12 @@ retry_snapshot:
   *nodep = node;
   *hmaskp = hmask;
   return LJ_TAB_GC_SNAPSHOT_OK;
+}
+
+int lj_tab_node_snapshot_gc_held(global_State *g, const GCtab *t,
+					 Node **nodep, MSize *hmaskp)
+{
+  return tab_node_snapshot_gc_impl(g, t, nodep, hmaskp);
 }
 
 static LJ_AINLINE Node *newhpart_alloc(lua_State *L, uint32_t hbits,
@@ -997,6 +1008,16 @@ static int tab_freeze_forward(lua_State *L, GCtab *t, int weak,
     lj_tv_load_acq(oldp, slot);
     if (tvisforward(oldp))
       return 0;
+    /* A FINREG claim is the keyed writer's logical slot pin. Moving it would
+    ** strand an indistinguishable claim in the retired generation and let the
+    ** claimant publish its result outside the table. The claim owner performs
+    ** no resize-dependent work, so leave the slot and retry only after it has
+    ** resolved. A later tranche replaces this cooperative retry with the
+    ** table-wide nonblocking claim descriptor. */
+    if (tab_val_is_publish_claim(oldp)) {
+      lj_tab_wait_no_l();
+      continue;
+    }
     if (tvisnil(oldp))
       return 0;
     /*
@@ -1352,11 +1373,14 @@ static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask
 	return 0;
       }
       lj_tv_load_acq(&val, &n->val);
+      /* Claims pin both nil-key construction slots and established FINREG
+      ** entries. Detect either before the resize publishes RETIRING; a claim
+      ** racing after this scan is caught again by tab_freeze_forward(). */
+      if (tab_val_is_publish_claim(&val)) {
+	*retryp = 1;
+	return 0;
+      }
       if (tvisnil(&key)) {
-	if (tab_val_is_publish_claim(&val)) {
-	  *retryp = 1;
-	  return 0;
-	}
 	continue;
       }
       if (!tab_tv_snapshot_valid(&key) || !tab_tv_snapshot_valid(&val) ||
@@ -1538,6 +1562,43 @@ static int tab_array_still_published(global_State *g, const TabArrayRetire *ret)
     return 0;
   return lj_gc2_tab_generation_current(
     g, t, lj_tab_array_retired_array_acq(ret), 1);
+}
+
+/* Retire records and their vector allocations are separate arena objects. The
+** exclusive list ticket proves the record, but it does not by itself make a
+** stale vector-header dereference legal. Validate the nested allocation with
+** the exact-thread reclaim certificate and retain the record on any mismatch.
+*/
+static int tab_node_reclaim_body_valid(global_State *g,
+				       const TabNodeRetire *ret,
+				       Node **nodep, MSize *hmaskp)
+{
+  Node *node = lj_tab_node_retired_node_acq(ret);
+  MSize hmask = lj_tab_node_retired_hmask_acq(ret);
+  if (!node || node == &g->nilnode ||
+      !lj_gc2_mem_registered_known_reclaim_held(
+	g, (const void *)lj_tab_node_hdr(node)) ||
+      !tab_node_free_ready(node, hmask))
+    return 0;
+  *nodep = node;
+  *hmaskp = hmask;
+  return 1;
+}
+
+static int tab_array_reclaim_body_valid(global_State *g,
+					 const TabArrayRetire *ret,
+					 TValue **arrayp, MSize *acapp)
+{
+  TValue *array = lj_tab_array_retired_array_acq(ret);
+  MSize acap = lj_tab_array_retired_acap_acq(ret);
+  if (!array ||
+      !lj_gc2_mem_registered_known_reclaim_held(
+	g, (const void *)lj_tab_array_hdr(array)) ||
+      !tab_array_free_ready(array, acap))
+    return 0;
+  *arrayp = array;
+  *acapp = acap;
+  return 1;
 }
 
 static LJ_AINLINE void tab_read_oldest_on_tg(global_State *g, TGState *tg,
@@ -1742,7 +1803,7 @@ static GCtab *newtab_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
 
 oom:
   if (t)
-    lj_mem_free(g, t, tbytes);
+    lj_mem_freegco_unpublished(g, t, tbytes);
   if (node)
     lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(hmask));
   if (array)
@@ -1815,6 +1876,10 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   end = b->end;
   next = cell + ncells;
   if (next < cell || next > end)
+    return NULL;
+  /* Claim construction ownership before either consuming the private window
+  ** or exposing header bytes. A failed claim leaves the bump cursor intact. */
+  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, cell)))
     return NULL;
   b->cell = next;
   t = (GCtab *)lj_arena_cellptr(a, cell);
@@ -2310,6 +2375,45 @@ retry_resize:
   goto restart_resize;
 }
 
+static LJ_AINLINE int tab_retire_record_known(global_State *g,
+					       const void *p,
+					       int reclaim_held)
+{
+  return reclaim_held ?
+    lj_gc2_mem_registered_known_reclaim_held(g, p) :
+    lj_gc2_mem_registered_known(g, p);
+}
+
+/* Preflight detached lists before clearing a link or freeing a record. This
+** catches both cycles and duplicate pushes without truncating a suffix or
+** revisiting a record after its first free. */
+#define TAB_RETIRE_CHAIN_VALIDATOR(name, type, nextfn) \
+static int name(global_State *g, type *head, int reclaim_held) \
+{ \
+  type *slow = head, *fast = head; \
+  while (fast) { \
+    if (slow) { \
+      if (!tab_retire_record_known(g, slow, reclaim_held)) return 0; \
+      slow = nextfn(slow); \
+    } \
+    if (!tab_retire_record_known(g, fast, reclaim_held)) return 0; \
+    fast = nextfn(fast); \
+    if (fast) { \
+      if (!tab_retire_record_known(g, fast, reclaim_held)) return 0; \
+      fast = nextfn(fast); \
+    } \
+    if (fast && slow == fast) return 0; \
+  } \
+  return 1; \
+}
+
+TAB_RETIRE_CHAIN_VALIDATOR(tab_node_retired_chain_valid, TabNodeRetire,
+			   lj_tab_node_retired_next_acq)
+TAB_RETIRE_CHAIN_VALIDATOR(tab_array_retired_chain_valid, TabArrayRetire,
+			   lj_tab_array_retired_next_acq)
+
+#undef TAB_RETIRE_CHAIN_VALIDATOR
+
 uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   TabNodeRetire *ret;
@@ -2319,16 +2423,15 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   if (!g || completed_epoch == 0)
     return 0;
   /*
-  ** Multi-TG reclamation is valid only inside the ordinary GC2 metadata writer
-  ** gate. It excludes competing retired-list consumers/TG body reclamation but
-  ** never waits for a reader. Long C scans publish a per-TG outer epoch; a pin
-  ** old enough to name this generation simply makes the record get requeued.
+  ** Multi-TG reclamation is valid only inside GC2's exact-thread exclusive-
+  ** reclaimer scope. It excludes competing retired-list consumers/TG body
+  ** reclamation but never waits for a reader. Long C scans publish a per-TG
+  ** outer epoch; a pin old enough to name this generation simply makes the
+  ** record get requeued.
   ** Readers which start after retirement acquire the replacement root and have
   ** a newer epoch, so they do not delay old storage. The table-published root
   ** check remains a separate cold-path validation before physical free.
   */
-  if (gc2_n_threads_acq(g) > 1 && gc2_smr_reclaiming_acq(g) == 0)
-    return 0;
   oldest_reader = tab_read_oldest_epoch(g);
   /*
   ** Flush pending table roots once before the conservative published-root
@@ -2338,17 +2441,30 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   */
   (void)lj_gc_flush_root_pending(g);
   ret = lj_tab_node_retired_head_xchg_acqrel(g, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
+  if (LJ_UNLIKELY(!tab_node_retired_chain_valid(g, ret, 1))) {
+    lj_assertG(0, "invalid/cyclic detached table-node retire chain");
+    abort();
+  }
+  while (ret) {
+    Node *node = NULL;
+    MSize hmask = 0;
+    int current;
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, ret))) {
+      lj_assertG(0, "invalid detached table-node retire record");
+      abort();
+    }
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
     lj_tab_node_retired_next_rel(ret, NULL);
+    current = tab_node_still_published(g, ret);
     if (!lj_tab_node_retired_armed_acq(ret)) {
       tab_retired_push(g, ret);
     } else if (tab_retire_epoch_elapsed(completed_epoch,
 					lj_tab_node_retired_epoch_acq(ret)) &&
 		       oldest_reader > lj_tab_node_retired_epoch_acq(ret) &&
-		       !tab_node_still_published(g, ret)) {
-      tab_node_free(g, lj_tab_node_retired_node_acq(ret),
-		    lj_tab_node_retired_hmask_acq(ret));
+		       current == 0 &&
+		       tab_node_reclaim_body_valid(g, ret, &node, &hmask)) {
+      tab_node_free(g, node, hmask);
       lj_mem_freet(g, ret);
       reclaimed++;
     } else {
@@ -2357,17 +2473,30 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     ret = next;
   }
   aret = lj_tab_array_retired_head_xchg_acqrel(g, NULL);
-  while (aret && lj_gc2_mem_registered(g, aret)) {
+  if (LJ_UNLIKELY(!tab_array_retired_chain_valid(g, aret, 1))) {
+    lj_assertG(0, "invalid/cyclic detached table-array retire chain");
+    abort();
+  }
+  while (aret) {
+    TValue *array = NULL;
+    MSize acap = 0;
+    int current;
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, aret))) {
+      lj_assertG(0, "invalid detached table-array retire record");
+      abort();
+    }
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
     lj_tab_array_retired_next_rel(aret, NULL);
+    current = tab_array_still_published(g, aret);
     if (!lj_tab_array_retired_armed_acq(aret)) {
       tab_array_retired_push(g, aret);
     } else if (tab_retire_epoch_elapsed(completed_epoch,
 					lj_tab_array_retired_epoch_acq(aret)) &&
 		       oldest_reader > lj_tab_array_retired_epoch_acq(aret) &&
-		       !tab_array_still_published(g, aret)) {
-      tab_array_free(g, lj_tab_array_retired_array_acq(aret),
-		     lj_tab_array_retired_acap_acq(aret));
+		       current == 0 &&
+		       tab_array_reclaim_body_valid(g, aret, &array, &acap)) {
+      tab_array_free(g, array, acap);
       lj_mem_freet(g, aret);
       reclaimed++;
     } else {
@@ -2385,20 +2514,56 @@ void lj_tab_freeretired(global_State *g)
   if (!g)
     return;
   ret = lj_tab_node_retired_head_xchg_acqrel(g, NULL);
-  while (ret && lj_gc2_mem_registered(g, ret)) {
+  if (LJ_UNLIKELY(!tab_node_retired_chain_valid(g, ret, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal table-node retire chain");
+    abort();
+  }
+  while (ret) {
+    Node *node;
+    MSize hmask;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, ret))) {
+      lj_assertG(0, "invalid terminal table-node retire record");
+      abort();
+    }
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
-    if (lj_tab_node_retired_armed_acq(ret))
-      tab_node_free(g, lj_tab_node_retired_node_acq(ret),
-		    lj_tab_node_retired_hmask_acq(ret));
+    node = lj_tab_node_retired_node_acq(ret);
+    hmask = lj_tab_node_retired_hmask_acq(ret);
+    if (lj_tab_node_retired_armed_acq(ret)) {
+      if (LJ_UNLIKELY(!node || node == &g->nilnode ||
+	  !lj_gc2_mem_registered_known(g, lj_tab_node_hdr(node)) ||
+	  !tab_node_free_ready(node, hmask))) {
+	lj_assertG(0, "invalid terminal retired table-node body");
+	abort();
+      }
+      tab_node_free(g, node, hmask);
+    }
     lj_mem_freet(g, ret);
     ret = next;
   }
   aret = lj_tab_array_retired_head_xchg_acqrel(g, NULL);
-  while (aret && lj_gc2_mem_registered(g, aret)) {
+  if (LJ_UNLIKELY(!tab_array_retired_chain_valid(g, aret, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal table-array retire chain");
+    abort();
+  }
+  while (aret) {
+    TValue *array;
+    MSize acap;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, aret))) {
+      lj_assertG(0, "invalid terminal table-array retire record");
+      abort();
+    }
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
-    if (lj_tab_array_retired_armed_acq(aret))
-      tab_array_free(g, lj_tab_array_retired_array_acq(aret),
-		     lj_tab_array_retired_acap_acq(aret));
+    array = lj_tab_array_retired_array_acq(aret);
+    acap = lj_tab_array_retired_acap_acq(aret);
+    if (lj_tab_array_retired_armed_acq(aret)) {
+      if (LJ_UNLIKELY(!array ||
+	  !lj_gc2_mem_registered_known(g, lj_tab_array_hdr(array)) ||
+	  !tab_array_free_ready(array, acap))) {
+	lj_assertG(0, "invalid terminal retired table-array body");
+	abort();
+      }
+      tab_array_free(g, array, acap);
+    }
     lj_mem_freet(g, aret);
     aret = next;
   }
@@ -3816,19 +3981,39 @@ static LJ_AINLINE void tab_store_barrier_write(lua_State *L, GCtab *parent,
 
 static LJ_AINLINE void tab_publish_storage(lua_State *L, GCtab *t)
 {
+  global_State *g;
+  LJGC2Lease lease;
   TValue *array;
   MSize asize, acap, hmask;
   Node *node;
   if (!L || !t)
     return;
-  if (lj_tab_array_snapshot_gc(G(L), t, &array, &asize, &acap) ==
+  g = G(L);
+  /* Retired-vector reclaim is opportunistic. A store publication must never
+  ** wait for it: the table/value barriers below retain semantic work, while a
+  ** successful tactical reader only marks the current side generations early. */
+  if (!lj_gc2_smr_read_try(g))
+    return;
+  if (lj_gc2_obj_lease_acquire(g, obj2gco(t), (uint32_t)~LJ_TTAB,
+				NULL, &lease) < 0) {
+    lj_gc2_smr_read_leave(g);
+    return;
+  }
+  /* A resize may retire either side vector immediately after its generation
+  ** snapshot. Keep both snapshots and their physical mark publications in one
+  ** SMR read interval, while lease keeps the table body admitted. Reclamation
+  ** therefore cannot free either the table or a returned vector between
+  ** snapshot validation and lj_gc2_markmem(). */
+  if (lj_tab_array_snapshot_gc_held(g, t, &array, &asize, &acap) ==
       LJ_TAB_GC_SNAPSHOT_OK && array)
-    (void)lj_gc2_markmem(G(L), acap ? (void *)lj_tab_array_hdrw(array) :
-					(void *)array);
+    (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+				   (void *)array);
   UNUSED(asize);
-  if (lj_tab_node_snapshot_gc(G(L), t, &node, &hmask) ==
+  if (lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) ==
       LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
-    (void)lj_gc2_markmem(G(L), lj_tab_node_hdrw(node));
+    (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+  lj_gc2_lease_release(&lease);
+  lj_gc2_smr_read_leave(g);
 }
 
 static LJ_AINLINE int tab_trystoretv_cas_once(lua_State *L, TValue *dst,
@@ -4047,7 +4232,11 @@ static LJ_AINLINE int tab_trystoretv_cas_keyed_once(lua_State *L,
   ** perform L-aware safepoint waits before reaching this non-throwing window.
   */
   g = L ? G(L) : NULL;
-  lj_gc2_smr_read_enter(g);
+  /* Failure to enter is a generation-stale result, not a reason to wait for
+  ** the opportunistic reclaimer. The keyed caller re-resolves from the table
+  ** root and retries without retaining this raw slot. */
+  if (!lj_gc2_smr_read_try(g))
+    return LJ_TAB_STORE_CAS_STALE;
   if (!tab_current_slot_for_key(parent, dst, key))
     rc = LJ_TAB_STORE_CAS_STALE;
   else {

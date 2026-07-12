@@ -338,30 +338,38 @@ publication. It is acceptable for the b1.2.0 functional gate only if it does not
 degrade into pathological slowdown, but it remains a post-gate performance
 target.
 
-## Remaining release gates
+## Remaining project gates
 
-1. Make every sweep-time semantic publication no-drop under SSB/grey capacity
-   or allocation failure. `lj_gc2_trace_sweep_root()` currently preserves the
-   mapping but still treats an SSB enqueue failure as assertion-only; the
-   HugeTab MARK-intent owner therefore needs a nonblocking, retryable publication
-   fallback before this protocol is a release claim.
-2. Bound HugeTab tombstone accumulation with a nonblocking rebuild/rehash
+Sweep-time semantic publication is no longer an open item.  The current
+`lj_gc2_trace_sweep_root()` path falls back from SSB/grey publication to the
+allocation-free recovery identity, and a classification failure makes reclaim
+fail closed.  `m3_gc2_recovery` exercises the exact SWEEP/free/recovery schedule
+in normal and assertion/paranoia builds; see
+`gc2-no-drop-recovery-2026-07-12.md`.
+
+1. Bound HugeTab tombstone accumulation with a nonblocking rebuild/rehash
    protocol. Long churn must not turn exact/range lookup into a table-sized
    probe.
-3. Add the deterministic trace-CNEW/register-only race described above and
+2. Add the deterministic trace-CNEW/register-only race described above and
    keep the `lj_ir_kvalue()` destination audit mechanically current as new
    materialization call sites are added.
-4. Re-audit persistent FFI side vectors/lists beyond the repaired interpreted
+3. Re-audit persistent FFI side vectors/lists beyond the repaired interpreted
    call temporaries and CLibrary cache handoff for retain-before-dereference
    ordering, especially callback and CType growth/retirement structures.
-5. Finish the exhaustive pending-constructor/OOM schedule audit. Tables,
+4. Finish the exhaustive pending-constructor/OOM schedule audit. Tables,
    functions, prototypes, userdata, threads, strings and cdata now have local
-   protocols, but the release claim requires every traversable allocation site
-   to be classified and fault-injected rather than inferred from type coverage.
-6. Add/finish forged-header, weak fixed/VLA/over-aligned/huge cdata,
+   protocols, but the final project claim requires every traversable allocation
+   site to be classified and fault-injected rather than inferred from type
+   coverage.
+5. Add/finish forged-header, weak fixed/VLA/over-aligned/huge cdata,
    pre-CTState, late-root, and pending-constructor/sweep adversarial schedules.
-7. Complete Linux sanitizer/stress gates and the scoped Wine and Darling cross
-   artifact/runtime gates on the final coherent tree.
-8. Restore arbitrary custom `lua_Alloc` only through the separately documented
+6. Complete Linux sanitizer/stress gates and the scoped Wine and Darling cross
+   artifact/runtime gates on each final coherent release tree.
+7. Restore arbitrary custom `lua_Alloc` only through the separately documented
    body-SMR/registry gates. Its current omission is explicitly temporary and
    does not permit the old collector to run.
+
+The focused JIT/cdata race remains a `b1.2.0` blocker.  On 2026-07-12 exhaustive
+FFI-side-structure coverage, every-allocation-site fault injection, bounded
+HugeTab maintenance, and custom-allocator restoration were sequenced into
+`b1.2.1`; see `b1.2.0-release-gate-2026-07-12.md`.
