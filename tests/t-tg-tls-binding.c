@@ -27,6 +27,14 @@ typedef struct BindingThreadCtx {
   uint32_t done;
 } BindingThreadCtx;
 
+#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+typedef struct AdmissionFailureThreadCtx {
+  LJTGRegistryBorrow hold;
+  LJThrTGResult result;
+  TGState *observed;
+} AdmissionFailureThreadCtx;
+#endif
+
 #if !LJ_TARGET_WINDOWS
 static uintptr_t sampled_tls_body;
 
@@ -81,6 +89,16 @@ static void *binding_thread(void *arg)
   la_store32_rel(&ctx->done, 1);
   return ctx->body;
 }
+
+#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+static void *admission_failure_thread(void *arg)
+{
+  AdmissionFailureThreadCtx *ctx = (AdmissionFailureThreadCtx *)arg;
+  ctx->result = lj_thr_tg_install(&ctx->hold);
+  ctx->observed = lj_thr_get_tg();
+  return NULL;
+}
+#endif
 
 static LJTGRegistryKey publish_body(global_State *g, TGState *tg,
                                     LJTGRegistrySlot *slot, int link)
@@ -153,13 +171,26 @@ int main(void)
   void *aret = NULL, *bret = NULL;
   void *body = NULL;
   void *mis_storage = NULL, *mis_body;
+#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+  AdmissionFailureThreadCtx alloc_fail, publish_fail;
+  LJThr alloc_fail_thr = {0}, publish_fail_thr = {0};
+  void *failure_ret = (void *)(uintptr_t)1u;
+#endif
 
   assert(g && wrong_g && a && b && aslot && bslot);
 #if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
-  /* Index-allocation failure leaves InitOnce retryable and lua_newstate
-  ** reports NULL before publishing a universe. */
-  lj_thr_tls_test_fail_alloc(1);
+  /* All three first-admission failures report NULL before universe
+  ** publication. Index failure leaves InitOnce retryable; unpublished cells
+  ** are freed, and the hot getter neither initializes nor allocates. */
+  lj_thr_tls_test_fail_index_alloc(1);
   assert(luaL_newstate() == NULL);
+  assert(lj_thr_get_tg() == NULL);
+  lj_thr_tls_test_fail_cell_alloc(1);
+  assert(luaL_newstate() == NULL);
+  assert(lj_thr_get_tg() == NULL);
+  lj_thr_tls_test_fail_cell_publish(1);
+  assert(luaL_newstate() == NULL);
+  assert(lj_thr_get_tg() == NULL);
 #endif
   assert(lj_thr_tg_tls_init());
   lj_thr_set_tg(NULL);
@@ -168,6 +199,23 @@ int main(void)
 #endif
   akey = publish_body(g, a, aslot, 1);
   bkey = publish_body(g, b, bslot, 1);
+
+#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+  /* A new OS thread has no cell even though this thread and the process index
+  ** are initialized. Cell allocation failure changes neither its hot binding
+  ** nor the incoming exact handle. */
+  memset(&alloc_fail, 0, sizeof(alloc_fail));
+  lj_tgregistry_borrow_init(&alloc_fail.hold);
+  assert(lj_tgregistry_try_borrow(&akey, &alloc_fail.hold, &snap) ==
+         LJ_TGSLOT_OK);
+  lj_thr_tls_test_fail_cell_alloc(1);
+  assert(lj_thr_create(&alloc_fail_thr, admission_failure_thread,
+                       &alloc_fail) == 0);
+  assert(lj_thr_join(&alloc_fail_thr, &failure_ret) == 0);
+  assert(failure_ret == NULL && alloc_fail.result == LJ_THR_TG_TLS_FAILURE);
+  assert(alloc_fail.hold.active && alloc_fail.observed == NULL);
+  release_borrow(&alloc_fail.hold);
+#endif
 
   /* Distinct OS threads own distinct tagged bindings and token counts. */
   memset(&actx, 0, sizeof(actx));
@@ -232,10 +280,9 @@ int main(void)
   a->gl = g;
 
 #if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
-  /* The single tagged-word publication failure consumes no handle. */
-  lj_thr_tls_test_fail_set(1);
-  assert(lj_thr_tg_install(&ahold) == LJ_THR_TG_TLS_FAILURE);
-  assert(ahold.active && lj_thr_get_tg() == NULL);
+  /* Keep a first-cell publication failure armed across this initialized
+  ** thread's install, swap, and clear. A later fresh thread must consume it. */
+  lj_thr_tls_test_fail_cell_publish(1);
 #endif
   assert(lj_thr_tg_install(&ahold) == LJ_THR_TG_OK);
   assert(!ahold.active && lj_thr_get_tg() == a);
@@ -254,11 +301,6 @@ int main(void)
   assert(!old.active && lj_thr_get_tg() == a);
 
   assert(lj_tgregistry_try_borrow(&bkey, &bhold, &snap) == LJ_TGSLOT_OK);
-#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
-  lj_thr_tls_test_fail_set(1);
-  assert(lj_thr_tg_swap(&akey, &bhold, &old) == LJ_THR_TG_TLS_FAILURE);
-  assert(bhold.active && !old.active && lj_thr_get_tg() == a);
-#endif
   assert(lj_thr_tg_swap(&akey, &bhold, &old) == LJ_THR_TG_OK);
   assert(!bhold.active && old.active && old.body == a);
   assert(lj_thr_get_tg() == b);
@@ -271,20 +313,29 @@ int main(void)
   /* Clear publishes hot NULL before returning the still-held local lease. */
   retire_body(&bkey);
   assert(lj_tgregistry_try_reclaim(&bkey, &body, &snap) == LJ_TGSLOT_BUSY);
-#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
-  lj_thr_tls_test_fail_set(1);  /* Tagged-word clear failure changes nothing. */
-  assert(lj_thr_tg_clear(&bkey, &old) == LJ_THR_TG_TLS_FAILURE);
-  assert(!old.active && lj_thr_get_tg() == b);
   assert(lj_thr_tg_clear(&bkey, &old) == LJ_THR_TG_OK);
-#else
-  assert(lj_thr_tg_clear(&bkey, &old) == LJ_THR_TG_OK);
-#endif
   assert(lj_thr_get_tg() == NULL && old.active && old.body == b);
   sample_tls(NULL);
   assert(lease_count(&bkey, LJ_TGSLOT_RETIRED) == 2u);
   assert(lj_tgregistry_try_reclaim(&bkey, &body, &snap) == LJ_TGSLOT_BUSY);
   release_borrow(&old);
   reclaim_body(&bkey, b);
+
+#if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+  /* Existing-cell mutations above did not call TlsSetValue: the armed hook is
+  ** still pending and fails this fresh thread's first cell publication. */
+  memset(&publish_fail, 0, sizeof(publish_fail));
+  lj_tgregistry_borrow_init(&publish_fail.hold);
+  assert(lj_tgregistry_try_borrow(&akey, &publish_fail.hold, &snap) ==
+         LJ_TGSLOT_OK);
+  failure_ret = (void *)(uintptr_t)1u;
+  assert(lj_thr_create(&publish_fail_thr, admission_failure_thread,
+                       &publish_fail) == 0);
+  assert(lj_thr_join(&publish_fail_thr, &failure_ret) == 0);
+  assert(failure_ret == NULL && publish_fail.result == LJ_THR_TG_TLS_FAILURE);
+  assert(publish_fail.hold.active && publish_fail.observed == NULL);
+  release_borrow(&publish_fail.hold);
+#endif
 
   retire_body(&akey);
   reclaim_body(&akey, a);
