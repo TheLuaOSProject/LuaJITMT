@@ -50,6 +50,27 @@ return function(add)
     end
   })
 
+  add({
+    name = "m4_universe_token_model",
+    description = "exact universe admission, publication epoch, and close-owner model",
+    run = function(t)
+      compile_and_run_sources(t, t:tmp("lj_t-universe-token"),
+        {
+          t:path("tests", "t-universe-token.c"),
+          t:path("src", "lj_universe.c")
+        }, {
+        default_cflags = false,
+        include_src = true,
+        link_luajit = false,
+        libs = {},
+        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16 " ..
+                 "-DLJ_UNIVERSE_TEST_HELPERS",
+        timeout = "30s"
+      })
+      print("M4 exact universe admission token model passed")
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
     {
       name = "m4_threading_api",
