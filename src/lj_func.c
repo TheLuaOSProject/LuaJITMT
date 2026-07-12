@@ -320,15 +320,15 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
   while ((head = lj_state_openupval_acq(L)) != NULL &&
 	 uvval((uv = gco2uv(head))) >= level) {
     GCobj *o = obj2gco(uv);
-    lj_assertG(!isblack(o), "bad black upvalue");
     lj_assertG(!uv->closed && uvval(uv) != &uv->tv, "closed upvalue in chain");
     lj_state_openupval_rel(L, lj_obj_gcw_acq(o));  /* No longer open. */
-    if (isdead(g, o)) {
-      lj_func_freeuv(g, uv);
-    } else {
-      unlinkuv(g, uv);
-      lj_gc_closeuv(g, uv);
-    }
+    /*
+    ** Header colors are no longer a liveness authority. Transfer every closed
+    ** cell from the open-upvalue ring to GC2's ownership/publication path;
+    ** GC2's mark domain decides whether the closed cell remains live.
+    */
+    unlinkuv(g, uv);
+    lj_gc_closeuv(g, uv);
   }
 }
 

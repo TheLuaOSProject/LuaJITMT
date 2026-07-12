@@ -895,30 +895,17 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
   return NULL;
 }
 
-static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
-				       int unmarked_only)
+static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a)
 {
-  uint32_t i, n = 0;
-  GCobj *o;
+  uint32_t i;
   if (!g || !a)
     return 0;
-  if (unmarked_only) {
-    (void)lj_gc_flush_root_pending(g);
-    (void)lj_gc_repair_root_spine(g);
-  }
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
   for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
     uint32_t state;
     if (!lj_arena_bm_get(a->block, i))
       continue;
-    if (!unmarked_only) {
-      o = (GCobj *)lj_arena_cellptr(a, i);
-      if (isdead(g, o) && gc2_valid_freeable_obj(g, o)) {
-	lj_gc_unlink_root_obj(g, o);
-	if (gc2_free_unmarked_obj(g, o))
-	  n++;
-      }
-      continue;
-    }
     state = lj_arena_sweep_state_acq(a, i);
     if (state != LJ_ARENA_SWEEP_WHITE || lj_arena_bm_get(a->mark, i))
       continue;
@@ -929,12 +916,12 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
     ** infer a destructor from attacker-controlled payload bytes. */
     (void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
   }
-  return n;
+  return 0;
 }
 
 uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a)
 {
-  return gc2_sweep_arena_bodies(g, a, 1);
+  return gc2_sweep_arena_unmarked_bodies(g, a);
 }
 
 uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
@@ -1242,28 +1229,6 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
     }
   }
   return 0;
-}
-
-uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g)
-{
-  TGState *tg;
-  uint32_t total = 0;
-  if (!g)
-    return 0;
-  for (tg = gc2_tg_list_acq(g);
-       tg != NULL;
-       tg = lj_tg_next_acq(tg)) {
-    GCArena *a;
-    if (!lj_gc2_sweep_tg_ready(tg))
-      continue;
-    for (a = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]; a;
-	 a = lj_arena_next_acq(a))
-      total += gc2_sweep_arena_bodies(g, a, 0);
-    for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE]; a;
-	 a = lj_arena_next_acq(a))
-      total += gc2_sweep_arena_bodies(g, a, 0);
-  }
-  return total;
 }
 
 /* Check whether we can clear a key or a value slot from a table. */

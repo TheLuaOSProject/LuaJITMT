@@ -392,6 +392,7 @@ static void test_closed_upvalue_relink_pending(lua_State *L)
   TValue *slot;
   GCupval *uv;
   uint32_t uvdesc;
+  uint8_t deadwhite;
   assert(tg != NULL);
   (void)lj_gc_flush_root_pending(g);
 
@@ -411,9 +412,17 @@ static void test_closed_upvalue_relink_pending(lua_State *L)
   assert(!root_contains(g, obj2gco(uv)));
   (void)lj_gc_flush_root_pending(g);
 
+  /* Legacy close used header color as a liveness verdict and freed this open
+  ** cell instead of closing it. GC2 owns liveness, so an adversarial stale
+  ** other-white value must be observationally irrelevant here. */
+  deadwhite = (uint8_t)(otherwhite(g) & LJ_GC_WHITES);
+  lj_obj_masksetgcflags(obj2gco(uv), LJ_GC_COLORS, deadwhite);
+  assert(isdead(g, obj2gco(uv)));
+
   lj_func_closeuv(L, slot);
   assert(uv->closed);
   assert(uvval(uv) == &uv->tv);
+  assert((lj_obj_gcflags(obj2gco(uv)) & LJ_GC_COLORS) == deadwhite);
   assert(lj_gcroot_pending_hint_acq(g) != 0);
   assert(pending_contains(tg, obj2gco(uv)));
   assert(!root_contains(g, obj2gco(uv)));

@@ -19,6 +19,14 @@ local function build_loadlib_stopreq_so(t)
                               "t-loadlib-stopreq-lib.c")
 end
 
+local function gc2_retired_symbol_gate(t, artifacts)
+  local argv = {
+    "sh", t:path("tools", "ci", "gc2_no_retired_symbols.sh")
+  }
+  for i = 1, #artifacts do argv[#argv + 1] = artifacts[i] end
+  t:run(argv, { timeout = "30s" })
+end
+
 local m3_scaffold_deps = {
   "m3_gc_root_pending",
   "m3_gcflags_atomic",
@@ -107,14 +115,31 @@ return function(add)
 
   register({
     name = "m3_gc2_no_legacy_runtime",
-    description = "GC2-only runtime/shutdown physical-absence regression",
+    description = "GC2-only runtime/shutdown and retired-symbol absence",
     run = function(t)
-      make_clean(t)
-      make_default(t, { jobs = false })
-      compile_and_run_c(t, t:tmp("lj_t-gc2-no-legacy-runtime"),
-                        "t-gc2-no-legacy-runtime.c", {
-        timeout = "60s"
-      })
+      build.with_default_build_restore(t, function()
+        make_clean(t)
+        make_default(t, { jobs = false })
+        gc2_retired_symbol_gate(t, {
+          t:path("src", "lj_gc.o"),
+          t:path("src", "libluajit.a")
+        })
+        compile_and_run_c(t, t:tmp("lj_t-gc2-no-legacy-runtime"),
+                          "t-gc2-no-legacy-runtime.c", {
+          timeout = "60s"
+        })
+
+        make_clean(t)
+        t:make({ "amalg" }, { quiet = true, jobs = false })
+        gc2_retired_symbol_gate(t, {
+          t:path("src", "ljamalg.o"),
+          t:path("src", "libluajit.a")
+        })
+        compile_and_run_c(t, t:tmp("lj_t-gc2-no-legacy-runtime-amalg"),
+                          "t-gc2-no-legacy-runtime.c", {
+          timeout = "60s"
+        })
+      end, { jobs = false })
     end
   })
 

@@ -247,6 +247,81 @@ static void exercise_tagged_link_protocol(lua_State *L)
   assert((raw & LJ_STRHASH_LINKMASK) == 0);
 }
 
+static void exercise_rehash_ignores_legacy_colors(lua_State *L)
+{
+  enum { TEST_MASK = 4095u, TEST_CHAIN = 34u, TEST_TOTAL = TEST_CHAIN + 1u };
+  global_State *g = G(L);
+  StrTabHdr *hdr;
+  GCstr *members[TEST_CHAIN];
+  GCstr *trigger;
+  char names[TEST_TOTAL][64];
+  size_t lens[TEST_TOTAL];
+  MSize bucket = 0, found = 0;
+  uint8_t deadwhite;
+  uint32_t n;
+  int oldstate;
+
+  lj_str_resize(L, TEST_MASK);
+  hdr = lj_str_tabh_acq(g);
+  assert(hdr != NULL && hdr->mask == TEST_MASK);
+
+  /* Prepare an overlong primary chain while the sweep topology claim asks
+  ** ordinary interners to defer secondary rehash. The final name is retained
+  ** as the post-claim insertion that must run lj_str_rehash_chain(). */
+  for (n = 0; found < TEST_TOTAL; n++) {
+    char candidate[64];
+    MSize len, b;
+    int written = snprintf(candidate, sizeof(candidate),
+			   "m5-strtab-rehash-color-%08x", n);
+    assert(written > 0 && (size_t)written < sizeof(candidate));
+    len = (MSize)written;
+    b = test_hash_sparse(g->str.seed, candidate, len) & hdr->mask;
+    if (found == 0) {
+      if (lj_str_link_load_acq(&hdr->bucket[b]) != 0)
+	continue;
+      bucket = b;
+    } else if (b != bucket) {
+      continue;
+    }
+    memcpy(names[found], candidate, len + 1u);
+    lens[found] = len;
+    found++;
+  }
+
+  assert(lj_str_sweep_claim(L, hdr) == 1);
+  assert(la_load32_acq(&hdr->resize) == TEST_STRTAB_SWEEP);
+  for (n = 0; n < TEST_CHAIN; n++) {
+    members[n] = lj_str_new(L, names[n], lens[n]);
+    assert(members[n] != NULL && members[n]->hashalg == 0);
+  }
+  lj_str_sweep_release(hdr);
+  assert(la_load32_acq(&hdr->resize) == 0);
+
+  /* The retired implementation swept this chain as a side effect whenever
+  ** the compatibility state and header whites happened to look old. Those
+  ** fields are not GC2 liveness input and rehash must only change topology. */
+  deadwhite = (uint8_t)(otherwhite(g) & LJ_GC_WHITES);
+  for (n = 0; n < TEST_CHAIN; n++) {
+    lj_obj_masksetgcflags(obj2gco(members[n]), LJ_GC_COLORS, deadwhite);
+    assert(isdead(g, obj2gco(members[n])));
+  }
+  oldstate = g->gc.state;
+  g->gc.state = GCSsweepstring;
+  trigger = lj_str_new(L, names[TEST_CHAIN], lens[TEST_CHAIN]);
+  g->gc.state = (uint8_t)oldstate;
+  assert(trigger != NULL && trigger->hashalg == 1);
+
+  for (n = 0; n < TEST_CHAIN; n++) {
+    assert(members[n]->gct == (uint8_t)~LJ_TSTR);
+    assert(members[n]->len == lens[n]);
+    assert(memcmp(strdata(members[n]), names[n], lens[n] + 1u) == 0);
+    assert(members[n]->hashalg == 1);
+    assert(lj_str_new(L, names[n], lens[n]) == members[n]);
+    lj_obj_masksetgcflags(obj2gco(members[n]), LJ_GC_COLORS,
+			 (uint8_t)curwhite(g));
+  }
+}
+
 static void exercise_canonical_layout(lua_State *L)
 {
   global_State *g = G(L);
@@ -660,6 +735,7 @@ int main(void)
   exercise_string_id_blocks(L);
   exercise_string_count_blocks(L);
   exercise_tagged_link_protocol(L);
+  exercise_rehash_ignores_legacy_colors(L);
   exercise_canonical_layout(L);
   retire_epoch = gc2_hs_epoch_acq(g);
   (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
@@ -799,9 +875,9 @@ int main(void)
 
   lua_close(L);
 #if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  printf("t-strtab-cas OK: tagged-link rescue/prepend races, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified (custom-allocator resize OOM injection skipped by the temporary internal-allocator-only policy)\n");
 #else
-  printf("t-strtab-cas OK: tagged-link rescue/prepend races, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
+  printf("t-strtab-cas OK: tagged-link rescue/prepend races, color-independent secondary rehash, canonical layout, Q-publish/resize and unlink/qcount identity races, saturating Q presence, resize OOM, active-drain claim, TLS-only active drain, GC2 epoch retire, duplicate intern guard, and string ID/count block reservation verified\n");
 #endif
   return 0;
 }

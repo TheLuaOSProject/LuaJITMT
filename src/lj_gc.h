@@ -100,7 +100,6 @@ LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 LJ_FUNC uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg,
 					 void *p, const LJHugeInfo *hi,
 					 int *pendingp);
-LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
 LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);

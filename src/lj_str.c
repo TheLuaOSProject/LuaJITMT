@@ -777,7 +777,6 @@ int lj_str_quarantine_resize(lua_State *L, MSize newmask)
 static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
 {
   global_State *g = G(L);
-  int ow = g->gc.state == GCSsweepstring ? otherwhite(g) : 0;  /* Sweeping? */
   StrTabHdr *hdr = lj_str_tabh_acq(g);
   GCRef *strtab;
   MSize strmask;
@@ -800,19 +799,6 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
     uintptr_t dead = oldlink & LJ_STRHASH_DEAD;
     GCstr *s = gco2str(o);
     StrHash hash;
-    if (ow) {  /* Must sweep while rechaining. */
-      if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* String alive? */
-	lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
-		   "sweep of undead string");
-	makewhite(g, o);
-      } else {  /* Free dead string. */
-	lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
-		   "sweep of unlive string");
-	lj_str_free(g, s);
-	oldlink = nextlink;
-	continue;
-      }
-    }
     hash = s->hash;
     if (!s->hashalg) {  /* Rehash with secondary hash. */
       hash = hash_dense(g->str.seed, hash, strdata(s), s->len);
