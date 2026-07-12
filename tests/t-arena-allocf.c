@@ -52,7 +52,20 @@ int main(void)
     assert(typed != NULL);
     assert(lj_arena_of(typed)->hdr.owner_tid == alloc.owner_tid);
     assert((lj_arena_of(typed)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+    assert(lj_arena_cdata_get(lj_arena_of(typed),
+			      lj_arena_cellof(typed)) == 0);
+    assert(lj_arena_ready_get(lj_arena_of(typed),
+			      lj_arena_cellof(typed)) == 0);
+    assert(lj_arena_allocd_publish_interior_cdata(&ad, typed, 48) == 1);
+    assert(lj_arena_cdata_get(lj_arena_of(typed),
+			      lj_arena_cellof(typed)) == 1);
+    assert(lj_arena_ready_get(lj_arena_of(typed),
+			      lj_arena_cellof(typed)) == 1);
     lj_arena_free(&alloc, typed, 48);
+    assert(lj_arena_cdata_get(lj_arena_of(typed),
+			      lj_arena_cellof(typed)) == 0);
+    assert(lj_arena_ready_get(lj_arena_of(typed),
+			      lj_arena_cellof(typed)) == 0);
 
     p = lj_arena_allocf(&ad, NULL, 0, 64);
     assert(p != NULL);

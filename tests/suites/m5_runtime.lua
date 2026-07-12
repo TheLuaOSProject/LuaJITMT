@@ -297,4 +297,65 @@ return function(add)
         { xcflags = build.assert_flag })
     end
   })
+
+  add({
+    name = "m5_parser_gc2_roots",
+    description = "parser raw-root, proto handoff, and protected unwind behavior",
+    run = function(t)
+      build_and_run_c(t, t:tmp("lj_t-parser-gc2-roots"),
+                      "t-parser-gc2-roots.c", { xcflags = build.assert_flag })
+      build_and_run_luajit_script(t, "t-parser-gc2-roots.lua", nil,
+        { xcflags = build.assert_flag, joff = true })
+    end
+  })
+
+  add({
+    name = "m5_function_construction_anchors",
+    description = "function construction anchors and exact OOM cancellation",
+    run = function(t)
+      local flags = build.assert_flag .. " -DLJ_FUNC_TEST_HELPERS"
+      build_and_run_c(t, t:tmp("lj_t-func-construction-anchor"),
+                      "t-func-construction-anchor.c", {
+        clean = true,
+        xcflags = flags,
+        cflags = flags,
+        timeout = "20s"
+      })
+    end
+  })
+
+  add({
+    name = "m5_userdata_construction_roots",
+    description = "READY-safe userdata construction and error-root cleanup",
+    run = function(t)
+      local flags = build.assert_flag .. " -DLJ_UDATA_TEST_HELPERS"
+      build.with_default_build_restore(t, function()
+        t:build({ clean = true, quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-udata-construction-roots"),
+                        "t-udata-construction-roots.c", {
+          build = false,
+          cflags = flags,
+          timeout = "60s"
+        })
+      end)
+    end
+  })
+
+  add({
+    name = "m5_api_gc_handoffs",
+    description = "public API string/key/environment root handoffs",
+    run = function(t)
+      local flags = build.assert_flag .. " -DLJ_TG_ROOT_TEST_HELPERS " ..
+                    "-DLJ_API_ROOT_TEST_HELPERS"
+      build.with_default_build_restore(t, function()
+        t:build({ clean = true, quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-api-gc-handoffs"),
+                        "t-api-gc-handoffs.c", {
+          build = false,
+          cflags = flags,
+          timeout = "30s"
+        })
+      end)
+    end
+  })
 end

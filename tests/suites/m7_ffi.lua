@@ -94,7 +94,7 @@ return function(add)
     name = "m7_ffi_ccall_native",
     description = "FFI native state and temporary traced-call safety gate",
     run = function(t)
-      local struct_so, jit_so
+      local root_so, struct_so, jit_so
       assert_generic_ccall_source(t)
       clean_build(t)
       jit_so = build_shared_library(t,
@@ -103,6 +103,9 @@ return function(add)
       struct_so = build_shared_library(t,
         t:tmp("lj_t-ffi-ccall-struct-overflow.so"),
         "t-ffi-ccall-struct-overflow-lib.c")
+      root_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-ccall-temp-roots.so"),
+        "t-ffi-ccall-temp-roots-lib.c")
       build_and_run_c(t, t:tmp("lj_t-ffi-cbblack-race"),
                       "t-ffi-cbblack-race.c")
       build_and_run_c(t, t:tmp("lj_t-ffi-ccall-native-helpers"),
@@ -113,6 +116,10 @@ return function(add)
       -- smaller STOPREQ and boxing/error-state probes run with explicit
       -- no-trace assertions while the temporary XSAVE safety gate is active.
       run_luajit_script(t, "t-ffi-ccall-trace-gate.lua")
+      run_luajit_script(t, "t-ffi-ccall-temp-roots.lua", nil, {
+        env = { LJ_M7_FFI_CCALL_ROOT_SO = root_so },
+        timeout = "60s"
+      })
       build_and_run_c(t, t:tmp("lj_t-ffi-ccall-struct-overflow"),
                       "t-ffi-ccall-struct-overflow.c", {
         env = { LJ_M7_FFI_CCALL_STRUCT_SO = struct_so },

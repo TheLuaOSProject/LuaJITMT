@@ -815,8 +815,12 @@ static void base_storestr_str(lua_State *L, GCtab *tab, GCstr *key, GCstr *val)
 
 static void newproxy_weaktable(lua_State *L)
 {
-  GCtab *t = lj_tab_new(L, 0, 1);
-  settabV(L, L->top++, t);
+  GCtab *t;
+  lj_state_checkstack(L, 1);
+  t = lj_tab_new(L, 0, 1);
+  settabV(L, L->top, t);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
   lj_tab_metatable_rel(t, t);
   base_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "kv"));
   lj_tab_nomm_rel(t, (uint8_t)(~(1u<<MM_mode)));

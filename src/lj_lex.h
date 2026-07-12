@@ -56,6 +56,7 @@ typedef struct LexState {
   TValue lookaheadval;	/* Lookahead token value. */
   const char *p;	/* Current position in input buffer. */
   const char *pe;	/* End of input buffer. */
+  const char *bcend;	/* Declared end of current bytecode prototype body. */
   LexChar c;		/* Current character. */
   LexToken tok;		/* Current token. */
   LexToken lookahead;	/* Lookahead token. */
@@ -72,13 +73,55 @@ typedef struct LexState {
   MSize vtop;		/* Top of variable stack. */
   BCInsLine *bcstack;	/* Stack for bytecode instructions/line numbers. */
   MSize sizebcstack;	/* Size of bytecode stack. */
+  /*
+  ** Owner-published raw roots. A source/bytecode load may span arbitrarily
+  ** many GC2 cycles, while these three backing allocations are named only by
+  ** this native LexState. The owning TG release-publishes a LIFO chain before
+  ** the reader can allocate and restores the preceding head before cleanup
+  ** frees anything. Owner-root scans run at that TG's safepoint, so the native
+  ** descriptor itself cannot disappear while it is being inspected.
+  **
+  ** The duplicate vector bases give the scanner acquire-visible publication
+  ** without making every owner-private parser access atomic. SBuf already
+  ** release-publishes its relocated bounds, so its base is loaded directly.
+  */
+  struct LexState *root_prev;
+  TGState *root_tg;
+  BCInsLine *root_bcstack;
+  VarInfo *root_vstack;
   uint32_t level;	/* Syntactical nesting level. */
   int endmark;		/* Trust bytecode end marker, even if not at EOF. */
   int fr2;		/* Generate bytecode for LJ_FR2 mode. */
 } LexState;
 
+static LJ_AINLINE void lj_lex_root_bcstack_rel(LexState *ls, BCInsLine *p)
+{
+  la_storeptr_rel((void **)&ls->root_bcstack, p);
+}
+
+static LJ_AINLINE BCInsLine *lj_lex_root_bcstack_acq(const LexState *ls)
+{
+  return (BCInsLine *)la_loadptr_acq((void *const *)&ls->root_bcstack);
+}
+
+static LJ_AINLINE void lj_lex_root_vstack_rel(LexState *ls, VarInfo *p)
+{
+  la_storeptr_rel((void **)&ls->root_vstack, p);
+}
+
+static LJ_AINLINE VarInfo *lj_lex_root_vstack_acq(const LexState *ls)
+{
+  return (VarInfo *)la_loadptr_acq((void *const *)&ls->root_vstack);
+}
+
+static LJ_AINLINE LexState *lj_lex_root_prev_acq(const LexState *ls)
+{
+  return (LexState *)la_loadptr_acq((void *const *)&ls->root_prev);
+}
+
 LJ_FUNC int lj_lex_setup(lua_State *L, LexState *ls);
 LJ_FUNC void lj_lex_cleanup(lua_State *L, LexState *ls);
+LJ_FUNC void lj_lex_gc2_markroots(global_State *g, TGState *tg);
 LJ_FUNC void lj_lex_next(LexState *ls);
 LJ_FUNC LexToken lj_lex_lookahead(LexState *ls);
 LJ_FUNC const char *lj_lex_token2str(LexState *ls, LexToken tok);

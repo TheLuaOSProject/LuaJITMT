@@ -41,11 +41,13 @@
 #define LJ_ARENA_MMAP_LOWER		((uintptr_t)0x4000)
 #define LJ_ARENA_ADDR_LIMIT		((uintptr_t)1 << 47)
 #define LJ_HUGETAB_MAX_BITS		26
-#define LJ_HUGETAB_META_SHIFT		8
+#define LJ_HUGETAB_META_SHIFT		11
 #define LJ_HUGETAB_META_MASK \
   (((uint64_t)1 << LJ_HUGETAB_META_SHIFT) - 1u)
 #define LJ_HUGETAB_EMPTY		((uint64_t)0)
 #define LJ_HUGETAB_TOMBSTONE		((uint64_t)1)
+
+LJ_STATIC_ASSERT(LJ_HUGEF_MASK == LJ_HUGETAB_META_MASK);
 
 static LJ_AINLINE uint64_t arena_remote_count(uint64_t active)
 {
@@ -315,6 +317,35 @@ struct LJHugeTabHdr {
 LJ_STATIC_ASSERT(sizeof(LJHugeEnt) == 16u);
 LJ_STATIC_ASSERT(offsetof(LJHugeTabHdr, ent) == 16u);
 LJ_STATIC_ASSERT((offsetof(LJHugeTabHdr, ent) & 15u) == 0);
+
+#if defined(LJ_ARENA_TEST_HELPERS)
+static uint32_t hugetab_test_retire_pause;
+static uint32_t hugetab_test_retire_paused;
+
+void lj_arena_hugetab_test_retire_pause(int enabled)
+{
+  if (enabled)
+    la_store32_rel(&hugetab_test_retire_paused, 0);
+  la_store32_rel(&hugetab_test_retire_pause, enabled != 0);
+}
+
+uint32_t lj_arena_hugetab_test_retire_paused(void)
+{
+  return la_load32_acq(&hugetab_test_retire_paused);
+}
+
+static void hugetab_test_retire_pause_after_busy(void)
+{
+  if (la_load32_acq(&hugetab_test_retire_pause) != 0) {
+    la_store32_rel(&hugetab_test_retire_paused, 1);
+    while (la_load32_acq(&hugetab_test_retire_pause) != 0)
+      la_cpu_pause();
+    la_store32_rel(&hugetab_test_retire_paused, 0);
+  }
+}
+#else
+#define hugetab_test_retire_pause_after_busy() ((void)0)
+#endif
 LJ_STATIC_ASSERT((LJ_AF_HUGE_MAGIC & LJ_AF_FLAG_MASK) == 0);
 
 /* Apply the 04_allocator.md sweep identities over the arena bitmaps. */
@@ -324,6 +355,11 @@ void lj_arena_sweep_words(GCArena *a, int preserve_marks)
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
     uint64_t b = la_load64_acq(&a->block[w]);
     uint64_t m = la_load64_acq(&a->mark[w]);
+    /* Keep cdata allocation coverage until its dead span is selected as a free
+    ** run or reused. Dead starts are no longer in block, so stale coverage
+    ** alone cannot admit a header; preserving it here keeps live interior
+    ** coverage across the bitmap transform. */
+    (void)la_and64_rlx(&a->ready[w], b & m);
     la_store64_rel(&a->block[w], b & m);
     la_store64_rel(&a->mark[w], preserve_marks ? (b | m) : (b ^ m));
   }
@@ -816,11 +852,35 @@ int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p, void **basep,
 				  LJHugeInfo *hi)
 {
   LJHugeTabHdr *h = ht ? ht->h : NULL;
-  uint64_t target;
-  uint32_t i, cap;
+  uint64_t target, candidate[3];
+  uint32_t i, n = 1, cap;
   if (!h || !p)
     return 0;
   target = (uint64_t)(uintptr_t)p;
+  candidate[0] = target;
+  {
+    uintptr_t span = (uintptr_t)p & ~(uintptr_t)LJ_ARENA_MASK;
+    uint64_t base = (uint64_t)(span + sizeof(GCAhdr));
+    if (base != target)
+      candidate[n++] = base;
+    if (span >= (uintptr_t)LJ_ARENA_SIZE) {
+      base = (uint64_t)(span - (uintptr_t)LJ_ARENA_SIZE + sizeof(GCAhdr));
+      if (base != target && (n == 1 || base != candidate[1]))
+	candidate[n++] = base;
+    }
+  }
+  for (i = 0; i < n; i++) {
+    uint64_t meta;
+    if (hugetab_search(h, candidate[i], NULL, &meta)) {
+      size_t size = (size_t)(meta >> LJ_HUGETAB_META_SHIFT);
+      if (target >= candidate[i] && target - candidate[i] < (uint64_t)size) {
+	if (basep)
+	  *basep = (void *)(uintptr_t)candidate[i];
+	hugetab_decode(meta, hi);
+	return 1;
+      }
+    }
+  }
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
@@ -841,6 +901,53 @@ int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p, void **basep,
   return 0;
 }
 
+/* GC object candidates are either exact allocation bases or interior-cdata
+** headers within the first 64 KiB mapping span. Hash only those complete
+** candidates; a stale word must never turn into a 2^16-slot table scan. */
+int lj_arena_hugetab_cdata_range_lookup(HugeTab *ht, const void *p,
+					 void **basep, LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t target, candidate[3];
+  uint32_t i, n = 1;
+  if (basep)
+    *basep = NULL;
+  if (!h || !p)
+    return 0;
+  target = (uint64_t)(uintptr_t)p;
+  candidate[0] = target;
+  {
+    uintptr_t span = (uintptr_t)p & ~(uintptr_t)LJ_ARENA_MASK;
+    uint64_t base = (uint64_t)(span + sizeof(GCAhdr));
+    if (base != target)
+      candidate[n++] = base;
+    if (span >= (uintptr_t)LJ_ARENA_SIZE) {
+      base = (uint64_t)(span - (uintptr_t)LJ_ARENA_SIZE + sizeof(GCAhdr));
+      if (base != target && (n == 1 || base != candidate[1]))
+	candidate[n++] = base;
+    }
+  }
+  for (i = 0; i < n; i++) {
+    uint64_t meta;
+    if (hugetab_search(h, candidate[i], NULL, &meta)) {
+      size_t size = (size_t)(meta >> LJ_HUGETAB_META_SHIFT);
+      if ((target == candidate[i] &&
+	   (meta & LJ_HUGEF_INTERIOR_CDATA)) ||
+	  (target != candidate[i] &&
+	   (meta & (LJ_HUGEF_CDATA|LJ_HUGEF_INTERIOR_CDATA)) !=
+	     (LJ_HUGEF_CDATA|LJ_HUGEF_INTERIOR_CDATA)))
+	continue;
+      if (target >= candidate[i] && target - candidate[i] < (uint64_t)size) {
+	if (basep)
+	  *basep = (void *)(uintptr_t)candidate[i];
+	hugetab_decode(meta, hi);
+	return 1;
+      }
+    }
+  }
+  return 0;
+}
+
 int lj_arena_hugetab_mark(HugeTab *ht, const void *p, LJHugeInfo *hi)
 {
   LJHugeTabHdr *h = ht ? ht->h : NULL;
@@ -855,6 +962,12 @@ int lj_arena_hugetab_mark(HugeTab *ht, const void *p, LJHugeInfo *hi)
       return -1;
     if (oldmeta & LJ_HUGEF_FREEING)
       return -1;  /* Destructor ownership has crossed its grace LP. */
+    /* A raw-memory root needs no payload read. Record its mark while the retire
+    ** owner publishes the exact header ticket, then return without waiting for
+    ** that owner. The retire CAS preserves MARK and suppresses RETIRED. Other
+    ** BUSY states (notably realloc) have no such discharge contract. */
+    if ((oldmeta & LJ_HUGEF_BUSY) && !(oldmeta & LJ_HUGEF_SWEEP_OLD))
+      return -1;
     newmeta = (oldmeta | LJ_HUGEF_MARK) & ~(uint64_t)LJ_HUGEF_RETIRED;
     if (hugetab_cas_meta(e, addr, oldmeta, newmeta)) {
       hugetab_decode(newmeta, hi);
@@ -863,6 +976,227 @@ int lj_arena_hugetab_mark(HugeTab *ht, const void *p, LJHugeInfo *hi)
       return (oldmeta & LJ_HUGEF_MARK) ? 0 : 1;
     }
   }
+}
+
+/* Atomically mark the entry which contains an interior address. The full-slot
+** CAS is both the range-lookup validation and the lifetime LP. A normal result
+** returns an admitted base whose bytes may be read. MARK_INTENT instead records
+** liveness behind a retire owner's BUSY claim and returns no readable base; the
+** unique retire owner must later discharge one traversal from retire_obj. */
+static int hugetab_mark_range_entry(LJHugeEnt *e, uint64_t target,
+				    void **basep, LJHugeInfo *hi)
+{
+  for (;;) {
+    la_u128 exp, des;
+    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t meta, next, size;
+    int result;
+    if (addr <= LJ_HUGETAB_TOMBSTONE)
+      return -2;
+    meta = la_load64_acq(&e->slot.hi);
+    if (la_load64_acq(&e->slot.lo) != addr)
+      continue;
+    size = meta >> LJ_HUGETAB_META_SHIFT;
+    if (target < addr || target - addr >= size)
+      return -2;
+    exp.lo = addr;
+    exp.hi = meta;
+    if (!(meta & LJ_HUGEF_TRAVERSABLE) || !(meta & LJ_HUGEF_READY) ||
+	(meta & LJ_HUGEF_FREEING) ||
+	(target != addr &&
+	 (meta & (LJ_HUGEF_CDATA|LJ_HUGEF_INTERIOR_CDATA)) !=
+	   (LJ_HUGEF_CDATA|LJ_HUGEF_INTERIOR_CDATA))) {
+      des = exp;  /* Prove exact rejection without changing the slot. */
+      if (!la_cas128(&e->slot, &exp, des))
+	continue;
+      return -1;
+    }
+    if (meta & LJ_HUGEF_BUSY) {
+      /* TICKET|MARK|BUSY is the body-stable live-reanchor claim and may use
+      ** the ordinary admitted return below. Before TICKET, only metadata is
+      ** stable: publish an opaque mark intent without reading the header or
+      ** waiting for a paused retire owner. A TICKET without MARK is not a
+      ** reachable protocol state.
+      **
+      ** SWEEP_OLD|BUSY without TICKET can also be a realloc claim acquired
+      ** after prepare_sweep(). That owner has no traversal-discharge step, but
+      ** none is needed: production GC allocations in traversable arenas are
+      ** immutable/non-reallocable (lj_mem_realloc rejects them). Thus such a
+      ** claim can name only raw storage hit by a conservative false candidate;
+      ** the metadata MARK preserves its mapping and there is no object graph
+      ** to walk. If this is the retire claim instead, retire() publishes the
+      ** exact header ticket and its return-2 owner performs the one required
+      ** traversal. These cases therefore safely share the opaque intent state
+      ** without another metadata bit. */
+      if (!(meta & LJ_HUGEF_SWEEP_OLD) ||
+	  ((meta & LJ_HUGEF_TICKET) && !(meta & LJ_HUGEF_MARK))) {
+	des = exp;
+	if (!la_cas128(&e->slot, &exp, des))
+	  continue;
+	return -1;
+      }
+      if (!(meta & LJ_HUGEF_TICKET)) {
+	next = (meta | LJ_HUGEF_MARK) & ~(uint64_t)LJ_HUGEF_RETIRED;
+	des.lo = addr;
+	des.hi = next;
+	if (!la_cas128(&e->slot, &exp, des))
+	  continue;
+	hugetab_decode(next, hi);
+	return LJ_ARENA_HUGE_MARK_INTENT;
+      }
+    }
+    next = (meta | LJ_HUGEF_MARK) & ~(uint64_t)LJ_HUGEF_RETIRED;
+    des.lo = addr;
+    des.hi = next;
+    if (!la_cas128(&e->slot, &exp, des))
+      continue;
+    if (basep)
+      *basep = (void *)(uintptr_t)addr;
+    hugetab_decode(next, hi);
+    result = (meta & LJ_HUGEF_RETIRED) ? 2 :
+	((meta & LJ_HUGEF_MARK) ? 0 : 1);
+    return result;
+  }
+}
+
+int lj_arena_hugetab_mark_range(HugeTab *ht, const void *p, void **basep,
+				 LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t target, candidate[3];
+  uint32_t i, n = 1, cap;
+  if (basep)
+    *basep = NULL;
+  if (!h || !p)
+    return -1;
+  target = (uint64_t)(uintptr_t)p;
+  candidate[0] = target;  /* Exact huge object/allocation base. */
+  {
+    uintptr_t span = (uintptr_t)p & ~(uintptr_t)LJ_ARENA_MASK;
+    uint64_t base = (uint64_t)(span + sizeof(GCAhdr));
+    if (base != target)
+      candidate[n++] = base;
+    if (span >= (uintptr_t)LJ_ARENA_SIZE) {
+      base = (uint64_t)(span - (uintptr_t)LJ_ARENA_SIZE + sizeof(GCAhdr));
+      if (base != target && (n == 1 || base != candidate[1]))
+	candidate[n++] = base;
+    }
+  }
+  /* Huge cdata headers are near their allocation base. Hash these exact
+  ** candidates before the bounded full-table fallback used by generic range
+  ** probes and adversarial tests. */
+  for (i = 0; i < n; i++) {
+    LJHugeEnt *e;
+    uint64_t meta;
+    int result;
+    if (!hugetab_search(h, candidate[i], &e, &meta))
+      continue;
+    if ((target == candidate[i]) ==
+	((meta & LJ_HUGEF_INTERIOR_CDATA) != 0))
+      return -1;
+    result = hugetab_mark_range_entry(e, target, basep, hi);
+    if (result != -2)
+      return result;
+  }
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    int result = hugetab_mark_range_entry(&h->ent[i], target, basep, hi);
+    if (result != -2)
+      return result;
+  }
+  return -1;
+}
+
+int lj_arena_hugetab_mark_cdata_range(HugeTab *ht, const void *p,
+				       void **basep, LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t target, candidate[3];
+  uint32_t i, n = 1;
+  if (basep)
+    *basep = NULL;
+  if (!h || !p)
+    return -1;
+  target = (uint64_t)(uintptr_t)p;
+  candidate[0] = target;
+  {
+    uintptr_t span = (uintptr_t)p & ~(uintptr_t)LJ_ARENA_MASK;
+    uint64_t base = (uint64_t)(span + sizeof(GCAhdr));
+    if (base != target)
+      candidate[n++] = base;
+    if (span >= (uintptr_t)LJ_ARENA_SIZE) {
+      base = (uint64_t)(span - (uintptr_t)LJ_ARENA_SIZE + sizeof(GCAhdr));
+      if (base != target && (n == 1 || base != candidate[1]))
+	candidate[n++] = base;
+    }
+  }
+  for (i = 0; i < n; i++) {
+    LJHugeEnt *e;
+    uint64_t meta;
+    int result;
+    if (!hugetab_search(h, candidate[i], &e, &meta))
+      continue;
+    if ((target == candidate[i]) ==
+	((meta & LJ_HUGEF_INTERIOR_CDATA) != 0))
+      return -1;
+    result = hugetab_mark_range_entry(e, target, basep, hi);
+    if (result != -2)
+      return result;
+  }
+  return -1;
+}
+
+int lj_arena_hugetab_publish_gco(HugeTab *ht, const void *p)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  LJHugeEnt *e;
+  uint64_t addr, meta;
+  if (!h || !p)
+    return 0;
+  addr = (uint64_t)(uintptr_t)p;
+  for (;;) {
+    uint64_t next;
+    if (!hugetab_search(h, addr, &e, &meta) ||
+	(meta & LJ_HUGEF_FREEING) || !(meta & LJ_HUGEF_TRAVERSABLE))
+      return 0;
+    if (meta & LJ_HUGEF_READY)
+      return 1;
+    next = meta | LJ_HUGEF_READY;
+    if (hugetab_cas_meta(e, addr, meta, next))
+      return 1;
+  }
+}
+
+int lj_arena_hugetab_publish_cdata(HugeTab *ht, const void *p, int interior)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  LJHugeEnt *e;
+  uint64_t addr, meta;
+  if (!h || !p)
+    return 0;
+  addr = (uint64_t)(uintptr_t)p;
+  for (;;) {
+    uint64_t next, required;
+    if (!hugetab_search(h, addr, &e, &meta) ||
+	(meta & LJ_HUGEF_FREEING) || !(meta & LJ_HUGEF_TRAVERSABLE))
+      return 0;
+    required = LJ_HUGEF_CDATA | LJ_HUGEF_READY |
+	(interior ? LJ_HUGEF_INTERIOR_CDATA : 0u);
+    if ((meta & required) == required &&
+	(interior || !(meta & LJ_HUGEF_INTERIOR_CDATA)))
+      return 1;
+    if ((meta & LJ_HUGEF_INTERIOR_CDATA) && !interior)
+      return 0;  /* Allocation identity cannot change after publication. */
+    next = meta | LJ_HUGEF_CDATA | LJ_HUGEF_READY |
+	(interior ? LJ_HUGEF_INTERIOR_CDATA : 0u);
+    if (hugetab_cas_meta(e, addr, meta, next))
+      return 1;  /* Release-publishes the initialized base/header layout. */
+  }
+}
+
+int lj_arena_hugetab_publish_interior_cdata(HugeTab *ht, const void *p)
+{
+  return lj_arena_hugetab_publish_cdata(ht, p, 1);
 }
 
 void lj_arena_hugetab_clear_marks(HugeTab *ht)
@@ -1027,7 +1361,10 @@ int lj_arena_hugetab_retire(HugeTab *ht, const void *p, const void *obj,
   /* BUSY pins the mapping before either header field is touched. This matters
   ** even for a losing retirement attempt: an external free may otherwise win
   ** deletion between search and these stores, or its fresh-grace sentinel may
-  ** be overwritten by a retire attempt which cannot publish TICKET. */
+  ** be overwritten by a retire attempt which cannot publish TICKET. A return
+  ** of 2 identifies the one owner whose final TICKET contains MARK; that owner
+  ** must discharge a semantic traversal. MARK provenance is intentionally not
+  ** encoded, so a pre-BUSY mark may cause a harmless duplicate traversal. */
   for (;;) {
     uint64_t busy, next;
     if (!hugetab_search(h, addr, &e, &meta))
@@ -1043,6 +1380,7 @@ int lj_arena_hugetab_retire(HugeTab *ht, const void *p, const void *obj,
     busy = meta | LJ_HUGEF_BUSY;
     if (!hugetab_cas_meta(e, addr, meta, busy))
       continue;
+    hugetab_test_retire_pause_after_busy();
     {
       GCArena *a = lj_arena_of(p);
       la_storeptr_rel(&a->hdr.retire_obj, (void *)obj);
@@ -1062,7 +1400,7 @@ int lj_arena_hugetab_retire(HugeTab *ht, const void *p, const void *obj,
 	next &= ~(uint64_t)LJ_HUGEF_RETIRED;
       if (hugetab_cas_meta(e, addr, busy, next)) {
 	hugetab_decode(next, hi);
-	return 1;
+	return (next & LJ_HUGEF_MARK) ? 2 : 1;
       }
       if (la_load64_acq(&e->slot.lo) != addr)
 	return 0;
@@ -1554,6 +1892,10 @@ static void arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
   ** live allocation as reusable storage. */
   for (i = 1; i < ncells; i++)
     arena_set_extent(a, cell + i);
+  /* Free-run publication clears typed coverage for the complete reusable
+  ** span. Ordinary allocation must not pay side-plane RMWs. */
+  lj_assertX(!lj_arena_cdata_get(a, cell) && !lj_arena_ready_get(a, cell),
+	     "arena allocation reused published typed metadata");
   if (black)
     lj_arena_bm_set(a->mark, cell);
   else
@@ -1564,7 +1906,18 @@ static void arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
 
 static void arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
 {
-  uint32_t i;
+  uint32_t i, pos = start, end = start + len;
+  while (pos < end) {
+    uint32_t wi = pos >> 6;
+    uint32_t lo = pos & 63u;
+    uint32_t n = end - pos;
+    uint32_t take = n < 64u - lo ? n : 64u - lo;
+    uint64_t mask = take == 64u ? ~(uint64_t)0 :
+      (((uint64_t)1 << take) - 1u) << lo;
+    (void)la_and64_rlx(&a->cdata[wi], ~mask);
+    (void)la_and64_rlx(&a->ready[wi], ~mask);
+    pos += take;
+  }
   lj_arena_block_clear(a, start);
   lj_arena_bm_set(a->mark, start);
   for (i = 1; i < len; i++)
@@ -2075,24 +2428,36 @@ static void arena_sweep_state_prepare(GCArena *a)
 
 static void arena_prepare_bump_tail(GCArena *a)
 {
-  uint32_t cell, end, i;
+  uint32_t cell, end, firstw, lastw, w;
   if (!a)
     return;
   cell = la_load32_acq(&a->hdr.prep_bump_cell);
   end = la_load32_acq(&a->hdr.prep_bump_end);
   if (cell >= LJ_AFIRST_CELL && cell < end && end <= LJ_ARENA_CELLS) {
     /* Committed PREP readers may mark another live cell in the same word.
-    ** Structural publication must therefore update only its own bits with
-    ** atomic RMWs instead of losing an unrelated concurrent mark OR. */
-    (void)la_and64_rlx(&a->block[cell >> 6],
-		       ~((uint64_t)1 << (cell & 63)));
-    (void)la_or64_rlx(&a->mark[cell >> 6],
-		      (uint64_t)1 << (cell & 63));
-    for (i = cell + 1u; i < end; i++) {
-      (void)la_and64_rlx(&a->block[i >> 6],
-			 ~((uint64_t)1 << (i & 63)));
-      (void)la_and64_rlx(&a->mark[i >> 6],
-			 ~((uint64_t)1 << (i & 63)));
+    ** Structural publication must therefore update only the tail mask with
+    ** atomic RMWs. Do this once per bitmap word rather than four locked RMWs
+    ** per cell. The mark CAS keeps the leading free-run boundary continuously
+    ** set and preserves unrelated concurrent marks outside the tail. */
+    firstw = cell >> 6;
+    lastw = (end - 1u) >> 6;
+    for (w = firstw; w <= lastw; w++) {
+      uint32_t lo = w == firstw ? (cell & 63u) : 0u;
+      uint32_t hi = w == lastw ? ((end - 1u) & 63u) + 1u : 64u;
+      uint64_t lomask = ~(uint64_t)0 << lo;
+      uint64_t himask = hi == 64u ? ~(uint64_t)0 :
+	(((uint64_t)1 << hi) - 1u);
+      uint64_t mask = lomask & himask;
+      uint64_t old, next;
+      (void)la_and64_rlx(&a->block[w], ~mask);
+      (void)la_and64_rlx(&a->cdata[w], ~mask);
+      (void)la_and64_rlx(&a->ready[w], ~mask);
+      old = la_load64_rlx(&a->mark[w]);
+      do {
+	next = old & ~mask;
+	if (w == firstw)
+	  next |= (uint64_t)1 << (cell & 63u);
+      } while (!la_cas64(&a->mark[w], &old, next, LA_RLX, LA_RLX));
     }
   }
   la_store32_rel(&a->hdr.prep_bump_cell, 0);
@@ -2305,6 +2670,10 @@ static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
   if (rr->bump.len >= LJ_BUMP_MIN &&
       start == rr->bump.start && len == rr->bump.len)
     return;
+  /* Rebuild publication is the point at which this span becomes selectable
+  ** from an allocator bin. Scrub READY and complete cdata coverage for every
+  ** rebuilt run, not only the largest run selected as the bump window. */
+  arena_set_free_run(rr->a, start, len);
   arena_link_run_head(rr->alloc, rr->a, start, len);
 }
 
@@ -2315,6 +2684,7 @@ static void arena_rebuild_free_run(uint32_t start, uint32_t len, void *ud)
     return;
   if (len > rf->limit - start)
     len = rf->limit - start;
+  arena_set_free_run(rf->a, start, len);
   arena_link_run_head(rf->alloc, rf->a, start, len);
 }
 
@@ -2655,6 +3025,9 @@ static void arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
       else
 	freeing |= (uint64_t)1 << j;
     }
+    /* As in lj_arena_sweep_words(), keep coverage until free-run selection.
+    ** block/mark boundaries prevent a dead start from being admitted. */
+    (void)la_and64_rlx(&a->ready[w], live);
     la_store64_rel(&a->block[w], live);
     la_store64_rel(&a->mark[w], ((~b) & m) | freeing |
 		   (preserve_marks ? live : (uint64_t)0));
@@ -3386,6 +3759,79 @@ void *lj_arena_allocd_alloc(LJArenaAllocD *ad, size_t size, uint32_t flags)
   if (!ad || !ad->alloc || !ad->prng)
     return NULL;
   return arena_allocf_new(ad, size, flags);
+}
+
+static int arena_publish_start_bit(uint64_t *word, uint64_t bit)
+{
+  uint64_t old = la_load64_acq(word);
+  for (;;) {
+    uint64_t expect = old;
+    if (old & bit)
+      return 1;
+    if (la_cas64(word, &expect, old | bit, LA_REL, LA_RLX))
+      return 1;
+    old = expect;
+  }
+}
+
+int lj_arena_allocd_publish_gco(LJArenaAllocD *ad, void *p)
+{
+  GCArena *a;
+  uint32_t cell;
+  uint64_t bit;
+  if (!ad || !p)
+    return 0;
+  a = lj_arena_of(p);
+  if (lj_arena_ishuge(a))
+    return ad->huge && lj_arena_hugetab_publish_gco(ad->huge, p);
+  cell = lj_arena_cellof(p);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+      !lj_arena_bm_get(a->block, cell) ||
+      !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
+    return 0;
+  bit = (uint64_t)1 << (cell & 63);
+  return arena_publish_start_bit(&a->ready[cell >> 6], bit);
+}
+
+int lj_arena_allocd_publish_cdata(LJArenaAllocD *ad, void *p, size_t size,
+					   int interior)
+{
+  if (!ad || !p || size == 0)
+    return 0;
+  if (size > LJ_HUGE_THRESHOLD)
+    return ad->huge &&
+      lj_arena_hugetab_publish_cdata(ad->huge, p, interior);
+  {
+    GCArena *a = lj_arena_of(p);
+    uint32_t cell = lj_arena_cellof(p), ncells = lj_arena_ncells(size);
+    uint32_t pos = cell, end = cell + ncells;
+    uint64_t bit;
+    if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS || ncells == 0 ||
+	end < cell || end > LJ_ARENA_CELLS ||
+	!lj_arena_bm_get(a->block, cell) ||
+	!(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
+      return 0;
+    while (pos < end) {
+      uint32_t wi = pos >> 6;
+      uint32_t lo = pos & 63u;
+      uint32_t n = end - pos;
+      uint32_t take = n < 64u - lo ? n : 64u - lo;
+      uint64_t mask = take == 64u ? ~(uint64_t)0 :
+	(((uint64_t)1 << take) - 1u) << lo;
+      (void)la_or64_rlx(&a->cdata[wi], mask);
+      pos += take;
+    }
+    bit = (uint64_t)1 << (cell & 63);
+    /* READY is the final release publication. Its acquire observation orders
+    ** the complete allocation-coverage plane and initialized descriptor. */
+    return arena_publish_start_bit(&a->ready[cell >> 6], bit);
+  }
+}
+
+int lj_arena_allocd_publish_interior_cdata(LJArenaAllocD *ad, void *p,
+					    size_t size)
+{
+  return lj_arena_allocd_publish_cdata(ad, p, size, 1);
 }
 
 void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)

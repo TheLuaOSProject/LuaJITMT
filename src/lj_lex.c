@@ -11,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -21,6 +22,7 @@
 #include "lualib.h"
 #endif
 #include "lj_state.h"
+#include "lj_tg.h"
 #include "lj_lex.h"
 #include "lj_parse.h"
 #include "lj_char.h"
@@ -397,6 +399,7 @@ static LexToken lex_scan(LexState *ls, TValue *tv)
 /* Setup lexer state. */
 int lj_lex_setup(lua_State *L, LexState *ls)
 {
+  TGState *tg = L2TG(L);
   int header = 0;
   ls->L = L;
   ls->fs = NULL;
@@ -406,12 +409,24 @@ int lj_lex_setup(lua_State *L, LexState *ls)
   ls->vtop = 0;
   ls->bcstack = NULL;
   ls->sizebcstack = 0;
+  ls->root_prev = lj_tg_lexstate_acq(tg);
+  ls->root_tg = tg;
+  lj_lex_root_bcstack_rel(ls, NULL);
+  lj_lex_root_vstack_rel(ls, NULL);
   ls->tok = 0;
   ls->lookahead = TK_eof;  /* No look-ahead token. */
+  /* The native descriptor becomes remotely enumerable below. Initialize its
+  ** semantic token slots before that publication, even though their token
+  ** tags do not become meaningful until the first scan. */
+  setnilV(&ls->tokval);
+  setnilV(&ls->lookaheadval);
   ls->linenumber = 1;
   ls->lastline = 1;
   ls->endmark = 0;
   ls->fr2 = LJ_FR2;  /* Generate native bytecode by default. */
+  /* Publish before lex_more() invokes the reader: a reentrant reader may run
+  ** arbitrary Lua/GC work before this setup call regains control. */
+  lj_tg_lexstate_rel(tg, ls);
   lex_next(ls);  /* Read-ahead first char. */
   if (ls->c == 0xef && ls->p + 2 <= ls->pe && (uint8_t)ls->p[0] == 0xbb &&
       (uint8_t)ls->p[1] == 0xbf) {  /* Skip UTF-8 BOM (if buffered). */
@@ -435,7 +450,9 @@ int lj_lex_setup(lua_State *L, LexState *ls)
       ** Lua code by looking at the first char. Since this is a potential
       ** security violation no attempt is made to echo the chunkname either.
       */
-      setstrV(L, L->top++, lj_err_str(L, LJ_ERR_BCBAD));
+      setstrV(L, L->top, lj_err_str(L, LJ_ERR_BCBAD));
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
       lj_err_throw(L, LUA_ERRSYNTAX);
     }
     return 1;
@@ -447,9 +464,61 @@ int lj_lex_setup(lua_State *L, LexState *ls)
 void lj_lex_cleanup(lua_State *L, LexState *ls)
 {
   global_State *g = G(L);
+  TGState *tg = ls->root_tg;
+  if (tg) {
+    /* The load claim makes this an owner-only LIFO. Restoring the durable TG
+    ** head is the unpublication LP and must precede every raw free. */
+    if (LJ_UNLIKELY(lj_tg_lexstate_acq(tg) != ls))
+      abort();
+    lj_tg_lexstate_rel(tg, ls->root_prev);
+    ls->root_tg = NULL;
+  }
+  lj_lex_root_bcstack_rel(ls, NULL);
+  lj_lex_root_vstack_rel(ls, NULL);
   lj_mem_freevec(g, ls->bcstack, ls->sizebcstack, BCInsLine);
   lj_mem_freevec(g, ls->vstack, ls->sizevstack, VarInfo);
   lj_buf_free(g, &ls->sb);
+  ls->bcstack = NULL;
+  ls->sizebcstack = 0;
+  ls->vstack = NULL;
+  ls->sizevstack = 0;
+  lj_buf_init(L, &ls->sb);
+}
+
+/* Mark the exact raw allocations named by active lexer/parser descriptors.
+** This is called only from the owning TG's stopped root-scan boundary. */
+void lj_lex_gc2_markroots(global_State *g, TGState *tg)
+{
+  LexState *ls;
+  uint32_t n = 0;
+  if (!g || !tg)
+    return;
+  for (ls = lj_tg_lexstate_acq(tg); ls != NULL;
+       ls = lj_lex_root_prev_acq(ls)) {
+    TValue tv;
+    if (LJ_UNLIKELY(ls->root_tg != tg || ++n > LJ_GC2_ROOT_SCAN_LIMIT))
+      abort();
+    /* Numeric cdata and interned strings can live in these native slots while
+    ** table insertion or a reader callback allocates. The owner is stopped at
+    ** this scan boundary, so acquire snapshots are authoritative. */
+    lj_tv_load_acq(&tv, &ls->tokval);
+    if (tvisgcv(&tv)) {
+      if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+	(void)lj_gc2_trace_sweep_root(g, gcV(&tv));
+      else
+	(void)lj_gc2_markobj(g, gcV(&tv));
+    }
+    lj_tv_load_acq(&tv, &ls->lookaheadval);
+    if (tvisgcv(&tv)) {
+      if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+	(void)lj_gc2_trace_sweep_root(g, gcV(&tv));
+      else
+	(void)lj_gc2_markobj(g, gcV(&tv));
+    }
+    (void)lj_gc2_markmem(g, lj_lex_root_bcstack_acq(ls));
+    (void)lj_gc2_markmem(g, lj_lex_root_vstack_acq(ls));
+    (void)lj_gc2_markmem(g, lj_buf_bptr_acq(&ls->sb));
+  }
 }
 
 /* Return next lexical token. */

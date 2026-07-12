@@ -114,6 +114,12 @@ static void assert_empty_table_body(global_State *g, GCtab *t)
   assert(t->struct_owner == 0);
   assert(node == &g->nilnode);
   assert(getfreetop(t, node) == &g->nilnode);
+  if (g->allocf == lj_arena_allocf) {
+    GCArena *a = lj_arena_of(t);
+    uint32_t cell = lj_arena_cellof(t);
+    assert(lj_arena_bm_get(a->block, cell));
+    assert(lj_arena_ready_get(a, cell));
+  }
 }
 
 static ReusableRun create_reusable_empty_table_run(TGState *tg)

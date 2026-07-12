@@ -15,7 +15,9 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_func.h"
+#include "lj_state.h"
 #include "lj_bc.h"
+#include "lj_frame.h"
 #include "lj_dispatch.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
@@ -112,13 +114,30 @@ static TValue *lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
   }
 }
 
-static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
+static const uint8_t *lib_read_lfunc_body(lua_State *L, const uint8_t *p,
+					  GCtab *tab)
 {
   int len = *p++;
-  GCstr *name = lj_str_new(L, (const char *)p, len);
+  TGState *tg = L2TG(L);
   LexState ls;
+  TValue nilv, namev;
+  TValue *nameanchor;
+  uint32_t nameanchoridx;
+  GCstr *name;
   GCproto *pt;
   GCfunc *fn;
+  uint32_t anchoridx;
+  /* Reserve the generated name root before string allocation. The protected
+  ** wrapper below restores this base on every throw, including OOM while the
+  ** direct prototype reader owns an additional construction anchor. */
+  setnilV(&nilv);
+  nameanchor = lj_tg_root_anchor_push(L, tg, &nilv, &nameanchoridx);
+  if (LJ_UNLIKELY(nameanchor == NULL))
+    lj_err_mem(L);
+  name = lj_str_new(L, (const char *)p, len);
+  setstrV(L, &namev, name);
+  copyTVrel(L, nameanchor, &namev);
+  lj_gc_pubroot(L, nameanchor);
   memset(&ls, 0, sizeof(ls));
   ls.L = L;
   ls.p = (const char *)(p+len);
@@ -127,23 +146,61 @@ static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
   ls.level = (BCDUMP_F_STRIP|(LJ_BE*BCDUMP_F_BE));
   ls.fr2 = LJ_FR2;
   ls.chunkname = name;
-  pt = lj_bcread_proto(&ls);
+  pt = lj_bcread_proto(&ls, &anchoridx);
   pt->firstline = ~(BCLine)0;
-  fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L));
+  fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L), anchoridx);
   {
     TValue *slot;
     /* NOBARRIER: See below for common barrier. */
     slot = lib_storefunc_str(L, tab, name, fn);
     lib_weak_write_str(L, tab, name, slot);
   }
+  lj_tg_root_anchor_pop(tg, anchoridx);
+  lj_tg_root_anchor_pop(tg, nameanchoridx);
   return (const uint8_t *)ls.p;
 }
 
-void lj_lib_register(lua_State *L, const char *libname,
-		     const uint8_t *p, const lua_CFunction *cf)
+typedef struct LibReadLFuncCtx {
+  const uint8_t *p;
+  const uint8_t *result;
+  GCtab *tab;
+} LibReadLFuncCtx;
+
+static TValue *lib_read_lfunc_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  LibReadLFuncCtx *ctx = (LibReadLFuncCtx *)ud;
+  UNUSED(dummy);
+  cframe_errfunc(L->cframe) = -1;  /* Inherit the library opener's handler. */
+  ctx->result = lib_read_lfunc_body(L, ctx->p, ctx->tab);
+  return NULL;
+}
+
+static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p,
+				     GCtab *tab)
+{
+  TGState *tg = L2TG(L);
+  LibReadLFuncCtx ctx;
+  uint32_t anchor_base = lj_tg_root_anchor_top_acq(tg);
+  int errcode;
+  ctx.p = p;
+  ctx.result = NULL;
+  ctx.tab = tab;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, lib_read_lfunc_cp);
+  while (lj_tg_root_anchor_top_acq(tg) > anchor_base)
+    lj_tg_root_anchor_pop(tg, lj_tg_root_anchor_top_acq(tg) - 1u);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+  return ctx.result;
+}
+
+static void lib_register_body(lua_State *L, const char *libname,
+			      const uint8_t *p, const lua_CFunction *cf)
 {
   GCtab *env = lj_state_env_acq(L);
   GCfunc *ofn = NULL;
+  TValue nilv, fnv;
+  TValue *ofnanchor;
+  uint32_t ofnanchoridx;
   int ffid = *p++;
   BCIns *bcff = &L2GG(L)->bcff[*p++];
   GCtab *tab = lib_create_table(L, libname, *p++);
@@ -152,6 +209,10 @@ void lj_lib_register(lua_State *L, const char *libname,
   /* Avoid barriers further down. */
   lj_gc_pubtab(L, tab);
   lj_tab_nomm_rel(tab, 0);
+  setnilV(&nilv);
+  ofnanchor = lj_tg_root_anchor_push(L, L2TG(L), &nilv, &ofnanchoridx);
+  if (LJ_UNLIKELY(ofnanchor == NULL))
+    lj_err_mem(L);
 
   for (;;) {
     uint32_t tag = *p++;
@@ -160,17 +221,19 @@ void lj_lib_register(lua_State *L, const char *libname,
       if (tag != LIBINIT_STRING) {
 	const char *name;
 	MSize nuv = (MSize)(L->top - L->base - tpos);
-	GCfunc *fn = lj_func_newC(L, nuv, env);
+	uint32_t this_ffid = (uint32_t)(ffid++);
+	uint32_t fnanchoridx;
+	GCfunc *fn = lj_func_newC(L, nuv, env, &fnanchoridx);
 	if (nuv) {
 	  MSize i;
-	  L->top = L->base + tpos;
+	  TValue *src = L->base + tpos;
 	  for (i = 0; i < nuv; i++) {
-	    copyTVrel(L, &fn->c.upvalue[i], L->top+i);
+	    copyTVrel(L, &fn->c.upvalue[i], src+i);
 	    lj_gc_pubobjtv(L, fn, &fn->c.upvalue[i]);
 	  }
+	  L->top = src;
 	}
-      fn->c.ffid = (uint8_t)(ffid++);
-      name = (const char *)p;
+	name = (const char *)p;
       p += len;
       if (tag == LIBINIT_CF)
 	setmref(fn->c.pc, &G(L)->bc_cfunc_int);
@@ -180,6 +243,7 @@ void lj_lib_register(lua_State *L, const char *libname,
 	fn->c.f = ofn->c.f;  /* Copy handler from previous function. */
       else
 	fn->c.f = *cf++;  /* Get cf or handler from C function table. */
+      lj_func_ffid_rel(fn, this_ffid);
       if (len) {
 	GCstr *key = lj_str_new(L, name, len);
 	TValue *slot;
@@ -187,6 +251,10 @@ void lj_lib_register(lua_State *L, const char *libname,
 	slot = lib_storefunc_str(L, tab, key, fn);
 	lib_weak_write_str(L, tab, key, slot);
       }
+      setfuncV(L, &fnv, fn);
+      copyTVrel(L, ofnanchor, &fnv);
+      lj_gc_pubroot(L, ofnanchor);
+      lj_tg_root_anchor_pop(L2TG(L), fnanchoridx);
       ofn = fn;
     } else {
       switch (tag | len) {
@@ -207,24 +275,70 @@ void lj_lib_register(lua_State *L, const char *libname,
 	p += sizeof(double);
 	break;
       case LIBINIT_COPY:
-	copyTV(L, L->top, L->top - *p++);
+	copyTVrel(L, L->top, L->top - *p++);
+	lj_state_stack_pubtv(L, L, L->top);
 	L->top++;
 	break;
       case LIBINIT_LASTCL:
-	setfuncV(L, L->top++, ofn);
+	{
+	  TValue fnv;
+	  setfuncV(L, &fnv, ofn);
+	  copyTVrel(L, L->top, &fnv);
+	  lj_state_stack_pubtv(L, L, L->top);
+	  L->top++;
+	}
 	break;
       case LIBINIT_FFID:
 	ffid++;
 	break;
       case LIBINIT_END:
+	lj_tg_root_anchor_pop(L2TG(L), ofnanchoridx);
 	return;
       default:
-	setstrV(L, L->top++, lj_str_new(L, (const char *)p, len));
+	{
+	  TValue strv;
+	  setstrV(L, &strv, lj_str_new(L, (const char *)p, len));
+	  copyTVrel(L, L->top, &strv);
+	  lj_state_stack_pubtv(L, L, L->top);
+	  L->top++;
+	}
 	p += len;
 	break;
       }
     }
   }
+}
+
+typedef struct LibRegisterCtx {
+  const char *libname;
+  const uint8_t *p;
+  const lua_CFunction *cf;
+} LibRegisterCtx;
+
+static TValue *lib_register_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  LibRegisterCtx *ctx = (LibRegisterCtx *)ud;
+  UNUSED(dummy);
+  cframe_errfunc(L->cframe) = -1;
+  lib_register_body(L, ctx->libname, ctx->p, ctx->cf);
+  return NULL;
+}
+
+void lj_lib_register(lua_State *L, const char *libname,
+		     const uint8_t *p, const lua_CFunction *cf)
+{
+  TGState *tg = L2TG(L);
+  LibRegisterCtx ctx;
+  uint32_t anchor_base = lj_tg_root_anchor_top_acq(tg);
+  int errcode;
+  ctx.libname = libname;
+  ctx.p = p;
+  ctx.cf = cf;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, lib_register_cp);
+  while (lj_tg_root_anchor_top_acq(tg) > anchor_base)
+    lj_tg_root_anchor_pop(tg, lj_tg_root_anchor_top_acq(tg) - 1u);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
 }
 
 /* Push internal function on the stack. */
@@ -233,8 +347,8 @@ GCfunc *lj_lib_pushcc(lua_State *L, lua_CFunction f, int id, int n)
   GCfunc *fn;
   lua_pushcclosure(L, f, n);
   fn = funcV(L->top-1);
-  fn->c.ffid = (uint8_t)id;
-  setmref(fn->c.pc, &G(L)->bc_cfunc_int);
+  setmrefrel(fn->c.pc, &G(L)->bc_cfunc_int);
+  lj_func_ffid_rel(fn, (uint32_t)id);
   return fn;
 }
 
@@ -253,10 +367,14 @@ int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id, const char *name)
   GCfunc *fn = lj_lib_pushcf(L, cf, id);
   GCtab *t = lj_func_env_acq(curr_func(L));  /* Reference to parent table. */
   GCstr *key = lj_str_newz(L, name);
+  TValue fnv;
   TValue *slot = lib_storefunc_str(L, t, key, fn);
   lib_weak_write_str(L, t, key, slot);
   lj_gc_pubtab(L, t);
-  setfuncV(L, L->top++, fn);
+  setfuncV(L, &fnv, fn);
+  copyTVrel(L, L->top, &fnv);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
   return 1;
 }
 

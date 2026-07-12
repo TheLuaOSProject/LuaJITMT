@@ -20,6 +20,7 @@
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_tab.h"
+#include "lj_state.h"
 #include "lj_ff.h"
 #include "lj_lib.h"
 
@@ -103,6 +104,7 @@ static MSize table_insert_len(lua_State *L, GCtab *t)
 {
   if (!table_mt_concurrent(L))
     return lj_tab_len(t);
+  lj_tab_read_enter(L2TG(L));
   for (;;) {
     TValue *array0, *array1;
     Node *node0, *node1;
@@ -120,8 +122,10 @@ static MSize table_insert_len(lua_State *L, GCtab *t)
     if (array0 == array1 && asize0 == asize1 &&
 	node0 == node1 && hmask0 == hmask1 &&
 	(!array1 || !lj_tab_array_is_retiring(t, array1)) &&
-	(hmask1 == 0 || !lj_tab_node_is_retiring(node1)))
-      return n;
+	(hmask1 == 0 || !lj_tab_node_is_retiring(node1))) {
+	lj_tab_read_leave(L2TG(L));
+	return n;
+    }
     lj_tab_wait_no_l();
   }
 }
@@ -194,11 +198,16 @@ LJLIB_CF(table_maxn)
 {
   GCtab *t = lj_lib_checktab(L, 1);
   TValue *array;
-  MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  MSize asize;
   Node *node;
   MSize hmask;
   lua_Number m = 0;
   ptrdiff_t i;
+  /* The forwarded-value fallback can yield and service a handshake before the
+  ** outer scan resumes at its raw array/node snapshot. Publish one owner-local
+  ** epoch pin for the complete no-throw scan. */
+  lj_tab_read_enter(L2TG(L));
+  asize = lj_tab_array_snapshot_acq(t, &array);
   for (i = (ptrdiff_t)asize - 1; i >= 0; i--) {
     if (table_maxn_array_visible(t, (int32_t)i, &array[i])) {
       m = (lua_Number)(int32_t)i;
@@ -214,6 +223,7 @@ LJLIB_CF(table_maxn)
       if (n > m) m = n;
     }
   }
+  lj_tab_read_leave(L2TG(L));
   setnumV(L->top-1, m);
   return 1;
 }
@@ -450,9 +460,18 @@ static void table_pack_storeint_str(lua_State *L, GCtab *t, GCstr *key,
 LJLIB_CF(table_pack)
 {
   TValue uv;
-  TValue *array, *base = L->base;
+  TValue *array, *base = L->base, *root;
   MSize i, n = (uint32_t)(L->top - base);
-  GCtab *t = lj_tab_new(L, n ? n+1 : 0, 1);
+  GCtab *t;
+  /* Keep all input slots intact, but publish the new table before the "n"
+  ** insertion can resize/wait and before any later GC check. */
+  lj_state_checkstack(L, 1);
+  base = L->base;
+  t = lj_tab_new(L, n ? n+1 : 0, 1);
+  root = L->top;
+  settabV(L, root, t);
+  lj_state_stack_pubtv(L, L, root);
+  L->top++;
   lj_lib_upvalue_load_acq(L, 1, &uv);
   table_pack_storeint_str(L, t, strV(&uv), (int32_t)n);
   (void)lj_tab_array_snapshot_acq(t, &array);
@@ -460,6 +479,7 @@ LJLIB_CF(table_pack)
   for (i = 0; i < n; i++)
     lj_tab_storetv(L, &array[i], &base[i]);
   settabV(L, base, t);
+  lj_state_stack_pubtv(L, L, base);
   L->top = base+1;
   lj_gc_pubtab(L, t);
   lj_gc_check(L);

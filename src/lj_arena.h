@@ -144,6 +144,15 @@ struct GCArena {
   ** be published after terminal bitmap commit. A bit naming committed live
   ** storage persists across adoption and is consumed by the next sweep. */
   uint64_t late[LJ_ARENA_WORDS];
+  /* Per-cell allocation coverage for every fixed/interior cdata body. READY
+  ** remains start-only and is published after the complete coverage range and
+  ** descriptor. Boundaries plus coverage and GCcdata's byte-tail field give an
+  ** exact extent without taxing ordinary Lua allocation hot paths. */
+  uint64_t cdata[LJ_ARENA_WORDS];
+  /* Header-discovery publication for traversable allocation starts. block=1
+  ** and ready=0 is a constructor-owned pending allocation: sweep pins it as
+  ** opaque storage and typed readers must not inspect payload bytes. */
+  uint64_t ready[LJ_ARENA_WORDS];
 };
 
 static LJ_AINLINE uint32_t lj_arena_owner_acq(const GCArena *a)
@@ -314,15 +323,24 @@ struct LJArenaAllocD {
 #define LJ_HUGEF_FREEING	0x20u
 #define LJ_HUGEF_TICKET		0x40u
 #define LJ_HUGEF_BUSY		0x80u
+#define LJ_HUGEF_INTERIOR_CDATA	0x100u
+#define LJ_HUGEF_READY		0x200u
+#define LJ_HUGEF_CDATA		0x400u
 #define LJ_HUGEF_MASK \
   (LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FINALIZER| \
    LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING| \
-   LJ_HUGEF_TICKET|LJ_HUGEF_BUSY)
+   LJ_HUGEF_TICKET|LJ_HUGEF_BUSY|LJ_HUGEF_INTERIOR_CDATA|LJ_HUGEF_READY| \
+   LJ_HUGEF_CDATA)
+/* A containing-object marker published MARK while the retire owner held BUSY,
+** but deliberately did not inspect or return the still-unpublished header.
+** The unique retire owner preserves MARK in its TICKET publication and must
+** arrange one later traversal of retire_obj. basep remains NULL for this result. */
+#define LJ_ARENA_HUGE_MARK_INTENT	3
 #define LJ_ARENA_REGISTRY_BITS	16u
 
-/* The header, block/mark bitmaps, two-bit sweep sidecar, and closed-window
-** remote-free bitmap occupy 168 cells. Both sidecars are off the ordinary
-** allocation fast path. */
+/* The header, block/mark bitmaps, two-bit sweep sidecar, closed-window
+** remote-free bitmap, interior-cdata identity and ready-publication planes
+** precede allocation cells. */
 #define LJ_ARENA_META_BYTES	((uint32_t)sizeof(GCArena))
 #define LJ_AFIRST_CELL \
   ((uint32_t)((sizeof(GCArena) + LJ_CELL_SIZE-1) >> LJ_CELL_SHIFT))
@@ -350,6 +368,17 @@ LJ_FUNC int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p,
 					  void **basep, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_mark(HugeTab *ht, const void *p,
 					  LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_mark_range(HugeTab *ht, const void *p,
+					void **basep, LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_cdata_range_lookup(HugeTab *ht, const void *p,
+						 void **basep, LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_mark_cdata_range(HugeTab *ht, const void *p,
+					       void **basep, LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_publish_gco(HugeTab *ht, const void *p);
+LJ_FUNC int lj_arena_hugetab_publish_cdata(HugeTab *ht, const void *p,
+					    int interior);
+LJ_FUNC int lj_arena_hugetab_publish_interior_cdata(HugeTab *ht,
+						     const void *p);
 LJ_FUNC void lj_arena_hugetab_clear_marks(HugeTab *ht);
 LJ_FUNC void lj_arena_hugetab_prepare_sweep(HugeTab *ht);
 LJ_FUNC void lj_arena_hugetab_abort_sweep(HugeTab *ht);
@@ -358,6 +387,11 @@ LJ_FUNC void lj_arena_hugetab_finish_sweep(HugeTab *ht,
 LJ_FUNC int lj_arena_hugetab_sweep_next(HugeTab *ht, uint32_t *cursor,
 					void **pp, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_has_sweep_old(HugeTab *ht);
+/* Retire returns 0 on failure, 1 after publishing/reusing an ordinary TICKET,
+** or 2 whenever this unique retire owner's final TICKET contains MARK. MARK
+** provenance is not encoded: it may predate BUSY or arrive as BUSY-window
+** intent. Return 2 always requires a semantic traversal from exact retire_obj;
+** a pre-BUSY mark may therefore cause a conservative duplicate walk. */
 LJ_FUNC int lj_arena_hugetab_retire(HugeTab *ht, const void *p,
 				    const void *obj, uint64_t retire_epoch,
 				    LJHugeInfo *hi);
@@ -389,6 +423,10 @@ LJ_FUNC int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src,
 				      uint32_t owner_tid);
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
+#if defined(LJ_ARENA_TEST_HELPERS)
+LJ_FUNC void lj_arena_hugetab_test_retire_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_hugetab_test_retire_paused(void);
+#endif
 LJ_FUNC void lj_arena_alloc_set_registry(TGAlloc *alloc, HugeTab *tab);
 LJ_FUNC HugeTab *lj_arena_alloc_registry_acq(const TGAlloc *alloc);
 LJ_FUNC int lj_arena_alloc_registry_lookup(const TGAlloc *alloc,
@@ -444,6 +482,11 @@ LJ_FUNC void lj_arena_allocd_init(LJArenaAllocD *ad, TGAlloc *alloc,
 LJ_FUNC void lj_arena_allocd_sethugetab(LJArenaAllocD *ad, HugeTab *ht);
 LJ_FUNC void *lj_arena_allocd_alloc(LJArenaAllocD *ad, size_t size,
 				    uint32_t flags);
+LJ_FUNC int lj_arena_allocd_publish_gco(LJArenaAllocD *ad, void *p);
+LJ_FUNC int lj_arena_allocd_publish_cdata(LJArenaAllocD *ad, void *p,
+					   size_t size, int interior);
+LJ_FUNC int lj_arena_allocd_publish_interior_cdata(LJArenaAllocD *ad,
+						    void *p, size_t size);
 LJ_FUNC void *lj_arena_allocf(void *ud, void *ptr, size_t osize,
 			      size_t nsize);
 
@@ -467,6 +510,16 @@ static LJ_AINLINE uint32_t lj_arena_bm_get(const uint64_t *bm, uint32_t i)
   /* block[] is also the allocation-discovery publication. Acquire is free on
   ** x86-64 and makes a positive observation order later header reads. */
   return (uint32_t)((la_load64_acq(&bm[i >> 6]) >> (i & 63)) & 1u);
+}
+
+static LJ_AINLINE uint32_t lj_arena_cdata_get(const GCArena *a, uint32_t i)
+{
+  return (uint32_t)((la_load64_acq(&a->cdata[i >> 6]) >> (i & 63)) & 1u);
+}
+
+static LJ_AINLINE uint32_t lj_arena_ready_get(const GCArena *a, uint32_t i)
+{
+  return (uint32_t)((la_load64_acq(&a->ready[i >> 6]) >> (i & 63)) & 1u);
 }
 
 static LJ_AINLINE uint32_t lj_arena_late_get(const GCArena *a, uint32_t i)
@@ -552,6 +605,26 @@ static LJ_AINLINE void lj_arena_block_clear(GCArena *a, uint32_t i)
   la_store64_rlx(word, value & ~((uint64_t)1 << (i & 63)));
 }
 
+/* Specialized bump paths initialize the complete header while block=0. They
+** can publish READY with their sole-writer store immediately before the block
+** release, avoiding the generic post-allocation CAS. */
+static LJ_AINLINE void lj_arena_ready_set_unpublished(GCArena *a, uint32_t i)
+{
+  uint64_t *word = &a->ready[i >> 6];
+  uint64_t value = la_load64_rlx(word);
+  la_store64_rlx(word, value | ((uint64_t)1 << (i & 63)));
+}
+
+/* Generic constructors normally need a CAS because block=1 already exposes
+** the pending allocation to GC. Before MT/worker activation there is no remote
+** bitmap writer, so the main TG may finish READY with one release store. */
+static LJ_AINLINE void lj_arena_ready_set_exclusive(GCArena *a, uint32_t i)
+{
+  uint64_t *word = &a->ready[i >> 6];
+  uint64_t value = la_load64_rlx(word);
+  la_store64_rel(word, value | ((uint64_t)1 << (i & 63)));
+}
+
 static LJ_AINLINE uint32_t lj_arena_state(const GCArena *a, uint32_t i)
 {
   uint32_t block = lj_arena_bm_get(a->block, i);
@@ -582,7 +655,7 @@ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->block) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->mark) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->sweep) == 1024u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->late) == 512u);
-LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 168u);
+LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 232u);
 LJ_STATIC_ASSERT(sizeof(LJArenaFreeRun) == LJ_CELL_SIZE);
 LJ_STATIC_ASSERT(sizeof(LJArenaRemoteFree) == LJ_CELL_SIZE);
 

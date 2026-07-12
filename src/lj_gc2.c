@@ -36,6 +36,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #include "lj_tg.h"
 #include "lj_frame.h"
 #include "lj_state.h"
+#include "lj_lex.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cdata.h"
@@ -581,6 +582,25 @@ static int gc2_markobj_preserve_status(global_State *g, GCobj *o,
 				       int *traversablep);
 static int gc2_markobj_preserve_expected_status(global_State *g, GCobj *o,
 						 uint32_t expected_gct);
+static int gc2_markobj_expected_status(global_State *g, GCobj *o,
+					uint32_t expected_gct,
+					uint32_t *gctp);
+static int gc2_retain_candidate_status(global_State *g, GCobj *o,
+					void **basep, uint32_t *gctp,
+					int *traversablep,
+					uint32_t expected_gct,
+					GC2MarkScope *holdp);
+static int gc2_small_arena_known(global_State *g, GCArena *a);
+static int gc2_small_containing_start(GCArena *a, uint32_t cell,
+				      uint32_t *startp);
+static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
+				     uint32_t expected_gct,
+				     void **basep, uint32_t *startp,
+				     uint32_t *gctp, GC2MarkScope *scope);
+static int gc2_retained_candidate_valid(global_State *g, GCobj *o,
+					 void *base, GCArena *a,
+					 uint32_t start, size_t alloc_size,
+					 int interior_tag, uint32_t *gctp);
 static int gc2_markobj_worker_status(global_State *g, GCobj *o,
 				     uint32_t *gctp);
 static int gc2_markobj_direct_status(global_State *g, GCobj *o);
@@ -588,7 +608,8 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud);
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o);
 static int gc2_grey_push(global_State *g, GCobj *o);
-static int gc2_registered_obj_valid(global_State *g, GCobj *o);
+static int gc2_observed_obj_valid(global_State *g, GCobj *o);
+static int gc2_queue_obj_valid(global_State *g, GCobj *o);
 static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv);
 static int gc2_thread_needscan(lua_State *L);
 static int gc2_thread_scan_current(global_State *g, lua_State *L);
@@ -656,6 +677,34 @@ static int gc2_worker_claim_count_busy(global_State *g)
     return 1;
   gc2_worker_busy_retries_add(g, 1);
   return 0;
+}
+
+static int gc2_small_cdata_span_exact(GCArena *a, uint32_t start,
+				       GCcdata *cd, GCSize size)
+{
+  uint32_t cells, i, end;
+  if (!a || !cd || size > LJ_HUGE_THRESHOLD ||
+      !cdata_size_tail_matches(cd, (size_t)size))
+    return 0;
+  cells = lj_arena_ncells((size_t)size);
+  if (cells == 0 || start + cells > LJ_ARENA_CELLS)
+    return 0;
+  for (i = 0; i < cells; i++) {
+    uint32_t cell = start + i;
+    if (!lj_arena_cdata_get(a, cell) ||
+	(i != 0 && (lj_arena_bm_get(a->block, cell) ||
+		    lj_arena_bm_get(a->mark, cell))))
+      return 0;
+  }
+  end = start + cells;
+  /* At the exact end either the next allocation/free-run boundary starts, or
+  ** cdata coverage stops. Adjacent cdata allocations are distinguished by
+  ** their block boundary even though both coverage ranges contain one bits. */
+  if (end < LJ_ARENA_CELLS &&
+      !lj_arena_bm_get(a->block, end) && !lj_arena_bm_get(a->mark, end) &&
+      lj_arena_cdata_get(a, end))
+    return 0;
+  return 1;
 }
 
 static void gc2_worker_release(global_State *g)
@@ -3582,7 +3631,7 @@ static int gc2_finalizer_pcall(global_State *g, lua_State *L,
   int owns_callback_latch =
     (oldlatch & LJ_GC2_FINSPAWN_CALLBACK_ACTIVE) == 0;
   int had_mt_exclusive = gc2_finalizer_mt_release_exclusive(g);
-  int errcode = lj_vm_pcall(L, top, 1+0, -1);  /* Stack: |mo|o| -> | */
+  int errcode = lj_vm_pcall_unwind(L, top, 1+0, -1);  /* |mo|o| -> | */
   int keep_gc;
   if (had_mt_exclusive) {
     /* Publish before the reclaim attempt so the last exiting secondary cannot
@@ -4964,16 +5013,8 @@ static int gc2_tv_gcref_type_match(global_State *g, cTValue *tv)
   ** header before publishing the TValue, so the tag/header match remains the
   ** final semantic edge check.
   */
-  if (!lj_gc2_obj_valid(g, o)) {
-    /*
-    ** Strings are plain allocations, not necessarily aligned traversable
-    ** object cells. Validate the containing allocation before the header read.
-    ** The embedded empty string is a valid, immortal string object.
-    */
-    if (itype(tv) != LJ_TSTR ||
-	(o != obj2gco(&g->strempty) && !lj_gc2_mem_registered_known(g, o)))
-      return 0;
-  }
+  if (!lj_gc2_obj_valid(g, o))
+    return 0;
   return ~itype(tv) == o->gch.gct;
 }
 
@@ -4987,7 +5028,6 @@ static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
     return o->gch.gct == ~LJ_TSTR;
 #if LJ_HASFFI
   if (itype(tv) == LJ_TCDATA) {
-    uint32_t gct;
     /*
     ** Fixed-size cdata may be published before CTState exists. In that narrow
     ** bootstrap window accept only an exact live, fixed, cell-aligned cdata
@@ -4995,16 +5035,14 @@ static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
     ** prove its real base. Once CTState exists, never bypass normal CType/size
     ** validation: a stale or corrupted CType ID is not an authoritative edge.
     */
-    if (ctype_ctsG(g) == NULL) {
-      if (!gc2_markobj_base_valid(g, o, NULL, &gct) ||
-	  gct != (uint32_t)~LJ_TCDATA || cdataisv(gco2cd(o)) ||
-	  ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
-	return 0;
-      return 1;
-    }
-    if (!lj_gc2_obj_valid_queued(g, o))
+    if (!gc2_queue_obj_valid(g, o) ||
+	la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TCDATA)
       return 0;
-    return o->gch.gct == (uint32_t)~LJ_TCDATA;
+    if (ctype_ctsG(g) == NULL &&
+	(cdataisv(gco2cd(o)) ||
+	 ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0))
+      return 0;
+    return 1;
   }
 #endif
   /*
@@ -5012,16 +5050,8 @@ static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
   ** the owner+bitmap fast path so root/table traversal stays proportional to
   ** the object graph, not to the number of arenas owned by the VM.
   */
-  if (!lj_gc2_obj_valid_queued(g, o)) {
-    /*
-    ** Known edges can still name strings, whose storage is proven by the
-    ** containing allocation rather than object-cell alignment. The embedded
-    ** empty string is a valid string edge.
-    */
-    if (itype(tv) != LJ_TSTR ||
-	(o != obj2gco(&g->strempty) && !lj_gc2_mem_registered_known(g, o)))
-      return 0;
-  }
+  if (!lj_gc2_obj_valid_queued(g, o))
+    return 0;
   return ~itype(tv) == o->gch.gct;
 }
 
@@ -5030,76 +5060,14 @@ int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv)
   return g && tv && gc2_tv_gcref_type_match_known(g, tv);
 }
 
-#define GC2_STACK_ARENA_CACHE	8
-
-typedef struct GC2StackArenaCache {
-  GCArena *arena[GC2_STACK_ARENA_CACHE];
-  MSize n;
-} GC2StackArenaCache;
-
-static int gc2_obj_valid_stack_cached(global_State *g, GCobj *o,
-				      GC2StackArenaCache *cache)
-{
-  GCArena *want;
-  uint32_t cell;
-  MSize i;
-  if (!g || !o || !checkptrGC(o) ||
-      (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0))
-    return 0;
-  if (g->allocf != lj_arena_allocf)
-    return 1;
-  want = lj_arena_of(o);
-  cell = lj_arena_cellof(o);
-  for (i = 0; i < cache->n; i++) {
-    if (cache->arena[i] == want)
-      return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
-	     lj_arena_bm_get(want->block, cell);
-  }
-  if (!gc2_registered_obj_valid(g, o))
-    return 0;
-  if (cache->n < GC2_STACK_ARENA_CACHE && !lj_arena_ishuge(want))
-    cache->arena[cache->n++] = want;
-  return 1;
-}
-
-static int gc2_tv_gcref_type_match_stack(global_State *g, cTValue *tv,
-					 GC2StackArenaCache *cache)
-{
-  GCobj *o;
-  if (!tvisgcv(tv))
-    return 1;
-  o = gcval(tv);
-  if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
-    return o->gch.gct == ~LJ_TSTR;
-  if (itype(tv) == LJ_TSTR) {
-    /*
-    ** Stack string roots are plain allocations; prove memory before header.
-    ** The embedded empty string is a valid, immortal string root.
-    */
-    if (o != obj2gco(&g->strempty) && !lj_gc2_mem_registered_known(g, o))
-      return 0;
-    return o->gch.gct == ~LJ_TSTR;
-  }
-#if LJ_HASFFI
-  if (itype(tv) == LJ_TCDATA) {
-    return gc2_tv_gcref_type_match_known(g, tv);
-  }
-#endif
-  if (!gc2_obj_valid_stack_cached(g, o, cache))
-    return 0;
-  return ~itype(tv) == o->gch.gct;
-}
-
 static void gc2_mark_tv(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, tv)))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
     return;
-  if (tvisgcv(tv)) {
-    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-      (void)lj_gc2_trace_sweep_root(g, gcV(tv));
-    else
-      lj_gc2_markobj(g, gcV(tv));
   }
+  if (tvisgcv(tv))
+    lj_gc2_markobj(g, gcV(tv));
 }
 
 static void gc2_root_rescan_later(global_State *g, GCobj *o)
@@ -5230,25 +5198,30 @@ static void gc2_mark_thread_root_obj(global_State *g, GCobj *o)
 
 static void gc2_mark_thread_root_tv(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, tv)))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
     return;
+  }
   if (tvisgcv(tv))
     gc2_mark_thread_root_obj(g, gcV(tv));
 }
 
-static void gc2_mark_thread_root_tv_stack(global_State *g, cTValue *tv,
-					  GC2StackArenaCache *cache)
+static void gc2_mark_thread_root_tv_stack(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_stack(g, tv, cache)))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
     return;
+  }
   if (tvisgcv(tv))
     gc2_mark_thread_root_obj(g, gcV(tv));
 }
 
 static void gc2_mark_upval_payload_tv(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, tv)))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
     return;
+  }
   if (!tvisgcv(tv))
     return;
   if (tvistab(tv)) {
@@ -5341,7 +5314,7 @@ static BCReg gc2_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres,
 
 static GCproto *gc2_func_proto_if_lua(GCfunc *fn)
 {
-  return fn->c.ffid == FF_LUA ?
+  return lj_func_ffid_acq(fn) == FF_LUA ?
 			 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
@@ -5837,7 +5810,6 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L)
   GCobj *mt, *uv;
   TValue *o, *top;
   TValue tv;
-  GC2StackArenaCache cache;
   uint64_t dirty_epoch;
   uint32_t cycle;
   if (!lj_gc2_valid_thread_for_traverse(g, L))
@@ -5847,11 +5819,10 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L)
   ** Mark the identity without queueing a duplicate gc2_traverse_thread pass. */
   (void)lj_gc2_markobj_nogrey(g, obj2gco(L));
   lj_gc2_markmem(g, tvref(L->stack));
-  cache.n = 0;
   top = gc2_stack_scan_top(g, L);
   for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
-    gc2_mark_thread_root_tv_stack(g, &tv, &cache);
+    gc2_mark_thread_root_tv_stack(g, &tv);
   }
   if (L == lj_tg_cur_L(g) && L->cframe != NULL) {
 #if LJ_HASJIT
@@ -6287,6 +6258,9 @@ static void gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
   /* Detach tears down tmpbuf before publishing DEAD. Every remaining live TG
   ** scans this owner-private backing only at its acknowledgement boundary. */
   lj_gc2_markmem(g, lj_buf_bptr_acq(&tg->tmpbuf));
+  /* Active source/bytecode loads keep parser vectors in native LexState frames.
+  ** Their owner-published TG chain is stable at this acknowledgement boundary. */
+  lj_lex_gc2_markroots(g, tg);
   if (lj_tg_jit_active_acq(tg)) {
     lj_tv_load_acq(&tv, &tg->tmptv);
     gc2_mark_thread_root_tv(g, &tv);
@@ -6454,12 +6428,16 @@ static void gc2_scan_global_roots(global_State *g)
     CTState *cts = ctype_ctsG(g);
     if (cts) {
       CTypeTab *ret;
+      GCtab *miscmap;
       GCRef *meta;
       uint64_t *cbblack;
       TValue *func;
       lua_State **owner;
       /* Retain the CTState before reading any concurrently published field. */
       lj_gc2_markmem(g, cts);
+      miscmap = ctype_miscmap_acq(cts);
+      if (miscmap)
+	(void)lj_gc2_markobj(g, obj2gco(miscmap));
       meta = ctype_metamap_acq(cts);
       cbblack = ctype_cbblack_acq(cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
@@ -6597,7 +6575,6 @@ void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L)
 }
 
 static LJ_AINLINE void *gc2_mark_base(global_State *g, GCobj *o);
-static int gc2_mark_base_traversable(global_State *g, void *p);
 static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o);
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o);
@@ -6626,228 +6603,87 @@ static LJ_AINLINE void gc2_queue_slot_clear_rel(GCRef *slot)
   setgcrefnullrel(*slot);
 }
 
-enum {
-  GC2_OBJMEM_INVALID,
-  GC2_OBJMEM_CUSTOM,
-  GC2_OBJMEM_SMALL,
-  GC2_OBJMEM_HUGE
-};
-
-/* A GC header in a huge mapping is either the exact allocation base or a
-** variable/over-aligned cdata header less than one arena span from that base
-** (lj_cdata_newv stores a uint16_t offset and asserts the same bound). Huge
-** mappings are arena-aligned and expose base == mapping+sizeof(GCAhdr), so at
-** most the current and preceding span can own such a header. Keep conservative
-** stack-root validation O(number of TGs), rather than linearly scanning every
-** 2^16-slot HugeTab for each rejected TValue word. This is classification only;
-** the retained cdata view still needs an atomic containing-slot mark before it
-** may validate header bytes. */
-static int gc2_hugetab_header_lookup(HugeTab *ht, const void *p,
-				     LJHugeInfo *hip)
+static int gc2_huge_observed(global_State *g, GCobj *o, void **basep,
+			     LJHugeInfo *hip)
 {
-  uintptr_t target, span, candidate[2];
-  uint32_t i, n = 1;
-  LJHugeInfo hi;
-  if (!ht || !p)
-    return 0;
-  if (lj_arena_hugetab_lookup(ht, p, &hi) == 1) {
-    if (hip)
-      *hip = hi;
-    return 1;
-  }
-  target = (uintptr_t)p;
-  span = target & ~(uintptr_t)LJ_ARENA_MASK;
-  candidate[0] = span + sizeof(GCAhdr);
-  if (span >= (uintptr_t)LJ_ARENA_SIZE) {
-    candidate[1] = span - (uintptr_t)LJ_ARENA_SIZE + sizeof(GCAhdr);
-    n = 2;
-  }
-  for (i = 0; i < n; i++) {
-    uintptr_t base = candidate[i];
-    if (base == target || base > target)
-      continue;
-    if (lj_arena_hugetab_lookup(ht, (const void *)base, &hi) == 1 &&
-	target - base < (uintptr_t)hi.size) {
-      if (hip)
-	*hip = hi;
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg))
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+	lj_arena_hugetab_cdata_range_lookup(&tg->huge, o, basep, hip) == 1)
       return 1;
-    }
-  }
-  return 0;
+  tg = g->main_tg;
+  return tg && lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+    lj_arena_hugetab_cdata_range_lookup(&tg->huge, o, basep, hip) == 1;
 }
 
-static int gc2_obj_mem_live_kind(global_State *g, const void *p,
-				 LJHugeInfo *hip)
+/* Validate a candidate whose containing queue, root-spine, table snapshot or
+** SMR scope already supplies the lifetime lease. Unlike the conservative
+** validator above, this must never turn structural observation into semantic
+** reachability. In particular, weak clearing and FINREG liveness tests depend
+** on a white interior cdata remaining white after validation. */
+static int gc2_observed_obj_valid(global_State *g, GCobj *o)
 {
-  TGState *tg;
-  GCArena *want;
-  uint32_t cell;
-  if (g->allocf != lj_arena_allocf)
-    return GC2_OBJMEM_CUSTOM;
-  want = lj_arena_of(p);
-  cell = lj_arena_cellof(p);
-  {
-    int registered = gc2_small_arena_registered(g, want, NULL);
-    if (registered > 0) {
-      if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
-	return GC2_OBJMEM_INVALID;
-      return lj_arena_bm_get(want->block, cell) != 0 ?
-	     GC2_OBJMEM_SMALL : GC2_OBJMEM_INVALID;
-    }
-    if (registered == 0 && cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS)
-      return GC2_OBJMEM_INVALID;
-  }
-  if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS) {
-    for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-      if (gc2_tg_owns_small_arena(tg, want))
-	return lj_arena_bm_get(want->block, cell) != 0 ?
-	       GC2_OBJMEM_SMALL : GC2_OBJMEM_INVALID;
-    }
-    if (g->main_tg && gc2_tg_owns_small_arena(g->main_tg, want))
-      return lj_arena_bm_get(want->block, cell) != 0 ?
-	     GC2_OBJMEM_SMALL : GC2_OBJMEM_INVALID;
-  }
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
-      LJHugeInfo hi;
-      if (gc2_hugetab_header_lookup(&tg->huge, p, &hi)) {
-	if (hip)
-	  *hip = hi;
-	return GC2_OBJMEM_HUGE;
-      }
-    }
-  }
-  if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB)) {
-    LJHugeInfo hi;
-    if (gc2_hugetab_header_lookup(&g->main_tg->huge, p, &hi)) {
-      if (hip)
-	*hip = hi;
-      return GC2_OBJMEM_HUGE;
-    }
-  }
-  return GC2_OBJMEM_INVALID;
-}
-
-static int gc2_huge_exact_traversable(global_State *g, const void *p)
-{
-  TGState *tg;
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
-      LJHugeInfo hi;
-      if (lj_arena_hugetab_lookup(&tg->huge, p, &hi) == 1)
-	return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
-    }
-  }
-  if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB)) {
-    LJHugeInfo hi;
-    if (lj_arena_hugetab_lookup(&g->main_tg->huge, p, &hi) == 1)
-      return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
-  }
-  return 0;
-}
-
-static int gc2_queue_small_cell_live(global_State *g, GCobj *o)
-{
-  GCArena *want;
-  uint32_t cell, owner_tid;
-  if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
-    return 0;
-  if (g->allocf != lj_arena_allocf)
-    return 1;
-  want = lj_arena_of(o);
-  cell = lj_arena_cellof(o);
-  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
-    return 0;
-  {
-    int registered = gc2_small_arena_registered(g, want, NULL);
-    if (registered > 0)
-      return lj_arena_bm_get(want->block, cell) != 0;
-    if (registered == 0)
-      return 0;
-  }
-  /*
-  ** Queue and gray entries are not arbitrary stack words: they were
-  ** published as GC objects. Trust the arena header enough to use owner+bitmap
-  ** as an O(1) liveness check, and reserve the full list walk for conservative
-  ** public validation of raw TValue snapshots.
-  */
-  {
-    TGState *tg;
-    for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-      if (gc2_tg_owns_small_arena(tg, want))
-	return lj_arena_bm_get(want->block, cell) != 0;
-    }
-    if (g->main_tg && gc2_tg_owns_small_arena(g->main_tg, want))
-      return lj_arena_bm_get(want->block, cell) != 0;
-  }
-  owner_tid = lj_arena_owner_acq(want);
-  if (owner_tid != 0)
-    return lj_arena_bm_get(want->block, cell) != 0;
-  return 0;
-}
-
-static int gc2_registered_obj_valid(global_State *g, GCobj *o)
-{
-  int memkind;
+  GCArena *a;
+  uint32_t start, gct;
+  void *base;
   if (!g || !o || !checkptrGC(o) ||
-      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
+      ((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0)
     return 0;
-  memkind = gc2_obj_mem_live_kind(g, o, NULL);
-  if (memkind == GC2_OBJMEM_INVALID)
-    return 0;
-  if (memkind == GC2_OBJMEM_CUSTOM)
-    return 1;
-#if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
-    void *base;
-    /*
-    ** Variable-size/aligned cdata stores the GCcdata header inside a larger raw
-    ** allocation. Prove the header address is registered before reading it,
-    ** then validate and mark from the computed allocation base just like
-    ** gc2_mark_base().
-    */
-    if (!lj_cdata_validate(g, gco2cd(o), &base, NULL))
+  if (la_load32_acq(&g->allocf_arena) == 0)
+    return 1;  /* Temporary custom-lua_Alloc compatibility boundary. */
+  a = lj_arena_of(o);
+  if (gc2_small_arena_known(g, a)) {
+    uint32_t cell = lj_arena_cellof(o);
+    int interior_tag;
+    if (!(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
       return 0;
-    return lj_gc2_mem_registered_known(g, base);
+    if (!gc2_small_containing_start(a, cell, &start) ||
+	!lj_arena_ready_get(a, start))
+      return 0;
+    base = lj_arena_cellptr(a, start);
+    interior_tag = o != (GCobj *)base;
+    if (interior_tag && !lj_arena_cdata_get(a, start))
+      return 0;
+    if (!gc2_retained_candidate_valid(g, o, base, a, start, 0,
+				       interior_tag, &gct))
+      return 0;
+  } else {
+    LJHugeInfo hi;
+    int interior_tag;
+    base = NULL;
+    if (!gc2_huge_observed(g, o, &base, &hi))
+      return 0;
+    if ((hi.flags & LJ_HUGEF_FREEING) ||
+	((hi.flags & LJ_HUGEF_BUSY) &&
+	 (hi.flags & (LJ_HUGEF_TICKET|LJ_HUGEF_MARK)) !=
+	   (LJ_HUGEF_TICKET|LJ_HUGEF_MARK)) ||
+	(hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) !=
+	  (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY))
+      return 0;
+    interior_tag = o != (GCobj *)base;
+    if ((interior_tag &&
+	 (hi.flags & (LJ_HUGEF_CDATA|LJ_HUGEF_INTERIOR_CDATA)) !=
+	   (LJ_HUGEF_CDATA|LJ_HUGEF_INTERIOR_CDATA)) ||
+	(!interior_tag && (hi.flags & LJ_HUGEF_INTERIOR_CDATA)))
+      return 0;
+    if (!gc2_retained_candidate_valid(g, o, base, NULL, 0, hi.size,
+				       interior_tag, &gct))
+      return 0;
+    if ((gct == (uint32_t)~LJ_TCDATA) !=
+	((hi.flags & LJ_HUGEF_CDATA) != 0))
+      return 0;
   }
-#endif
-  if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
-    return 0;
-  if (memkind == GC2_OBJMEM_HUGE)
-    return gc2_huge_exact_traversable(g, o);
   return 1;
 }
 
 int lj_gc2_obj_valid(global_State *g, GCobj *o)
 {
-  return gc2_registered_obj_valid(g, o);
+  return gc2_observed_obj_valid(g, o);
 }
 
 static int gc2_queue_obj_valid(global_State *g, GCobj *o)
 {
-  LJHugeInfo hi;
-  int memkind;
-  if (!g || !o || !checkptrGC(o) ||
-      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
-    return 0;
-  memkind = gc2_obj_mem_live_kind(g, o, &hi);
-  if (memkind == GC2_OBJMEM_CUSTOM)
-    return 1;
-  if (memkind == GC2_OBJMEM_INVALID)
-    return gc2_queue_small_cell_live(g, o);
-#if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
-    void *base;
-    if (!lj_cdata_validate(g, gco2cd(o), &base, NULL))
-      return 0;
-    return lj_gc2_mem_registered_known(g, base);
-  }
-#endif
-  if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
-    return 0;
-  if (memkind == GC2_OBJMEM_HUGE)
-    return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
-  return 1;
+  return gc2_observed_obj_valid(g, o);
 }
 
 int lj_gc2_obj_valid_queued(global_State *g, GCobj *o)
@@ -8054,32 +7890,8 @@ out:
 #if LJ_HASFFI
 static LJ_AINLINE int gc2_finreg_cdata_obj_valid(global_State *g, GCobj *o)
 {
-  int memkind;
-  GCcdata *cd;
-  if (!g || !o || !checkptrGC(o) ||
-      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
-    return 0;
-  memkind = gc2_obj_mem_live_kind(g, o, NULL);
-  if (memkind == GC2_OBJMEM_INVALID && !gc2_queue_small_cell_live(g, o))
-    return 0;
-  if (o->gch.gct != ~LJ_TCDATA)
-    return 0;
-  cd = gco2cd(o);
-  /*
-  ** Fixed-size raw cdata can exist before CTState is initialized, so FINREG
-  ** entry guards cannot require full ctype validation for every cdata header.
-  ** Variable/aligned cdata still needs lj_cdata_validate() to prove the real
-  ** allocation base before the header is accepted.
-  */
-  if (cdataisv(cd) ||
-      ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0 ||
-      memkind == GC2_OBJMEM_HUGE) {
-    void *base;
-    if (!lj_cdata_validate(g, cd, &base, NULL))
-      return 0;
-    return lj_gc2_mem_registered_known(g, base);
-  }
-  return 1;
+  return gc2_queue_obj_valid(g, o) &&
+    la_load8_acq(&o->gch.gct) == (uint8_t)~LJ_TCDATA;
 }
 #endif
 
@@ -8089,34 +7901,12 @@ static LJ_AINLINE int gc2_finreg_udata_obj_valid(global_State *g, GCobj *o)
 	 o->gch.gct == ~LJ_TUDATA;
 }
 
-#if LJ_HASFFI
-static void gc2_finreg_cdata_clear_idle_mark(global_State *g, GCobj *o)
-{
-  void *base;
-  GCArena *a;
-  uint32_t cell;
-  if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
-      !gc2_markobj_base_valid(g, o, &base, NULL))
-    return;
-  a = lj_arena_of(base);
-  if (lj_arena_ishuge(a))
-    return;  /* Huge cdata keeps the conservative next-cycle fallback. */
-  if (gc2_small_arena_registered(g, a, NULL) <= 0)
-    return;
-  cell = lj_arena_cellof(base);
-  if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
-      lj_arena_bm_get(a->block, cell))
-    lj_arena_bm_clear(a->mark, cell);
-}
-#endif
-
 void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)
 {
 #if LJ_HASFFI
   if (!gc2_finreg_cdata_obj_valid(g, o))
     return;
   if (enabled) {
-    gc2_finreg_cdata_clear_idle_mark(g, o);
     gc2_finreg_cdata_sets_add(g, 1);
   } else {
     gc2_finreg_cdata_clears_add(g, 1);
@@ -8218,7 +8008,7 @@ static GCobj *gc2_finreg_cdata_order_resolve(lua_State *L, CTState *cts,
   if (!L || !cts || !ord || !slotp)
     return NULL;
   o = fin_order_obj_acq(ord);
-  if (!lj_gc2_obj_valid(cts->g, o) || o->gch.gct != ~LJ_TCDATA)
+  if (!lj_gc2_obj_valid_queued(cts->g, o) || o->gch.gct != ~LJ_TCDATA)
     return NULL;
   setcdataV(L, &key, gco2cd(o));
   slot = lj_ctype_fin_get(L, cts, &key, &t);
@@ -8754,19 +8544,23 @@ int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
   }
 }
 
-void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
+static int gc2_finreg_udata_register_nothrow(lua_State *L, global_State *g,
+					      GCobj *o)
 {
   GC2FinRegUDataNode *node, *head;
   if (!L || !gc2_finreg_udata_obj_valid(g, o))
-    return;
+    return 1;
   for (node = gc2_finreg_udata_head_acq(g);
        node != NULL && lj_gc2_mem_registered(g, node);
        node = gc2_finreg_udata_next_acq(node)) {
     if (gc2_finreg_udata_active_acq(node) &&
 	gc2_finreg_udata_obj_acq(node) == o)
-      return;
+      return 1;
   }
-  node = lj_mem_newt(L, sizeof(GC2FinRegUDataNode), GC2FinRegUDataNode);
+  node = (GC2FinRegUDataNode *)
+    lj_mem_new_nothrow(L, sizeof(GC2FinRegUDataNode));
+  if (LJ_UNLIKELY(node == NULL))
+    return 0;  /* No registry/FINREG mutation precedes the OOM result. */
   gc2_finreg_udata_obj_rel(node, o);
   gc2_finreg_udata_retired_next_rel(node, NULL);
   gc2_finreg_udata_active_rel(node, 1);
@@ -8778,17 +8572,33 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
   /* Close construction-mark versus IDLE->MARK clear/root-snapshot. */
   (void)lj_gc2_markmem(g, node);
   gc2_finreg_udata_registered_add(g, 1);
+  return 1;
+}
+
+void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
+{
+  if (LJ_UNLIKELY(!gc2_finreg_udata_register_nothrow(L, g, o)))
+    lj_err_mem(L);
+}
+
+int lj_gc2_finreg_udata_register_mt_nothrow(lua_State *L, global_State *g,
+					     GCudata *ud, GCtab *mt)
+{
+  TValue mmv;
+  if (!L || !g || !ud || !mt)
+    return 1;
+  if (LJ_UNLIKELY(!gc2_finreg_udata_register_nothrow(L, g, obj2gco(ud))))
+    return 0;
+  if (lj_meta_fasttv(g, mt, MM_gc, &mmv))
+    (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
+  return 1;
 }
 
 void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
 				     GCudata *ud, GCtab *mt)
 {
-  TValue mmv;
-  if (!L || !g || !ud || !mt)
-    return;
-  lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
-  if (lj_meta_fasttv(g, mt, MM_gc, &mmv))
-    (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
+  if (LJ_UNLIKELY(!lj_gc2_finreg_udata_register_mt_nothrow(L, g, ud, mt)))
+    lj_err_mem(L);
 }
 
 static int gc2_finreg_udata_retire(global_State *g,
@@ -9792,11 +9602,8 @@ static int gc2_sweep_barrier_tv(global_State *g, cTValue *tv)
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP || !tv)
     return 0;
   lj_tv_load_acq(&snap, tv);
-  if (tvisgcv(&snap)) {
-    if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
-      return 1;
+  if (tvisgcv(&snap))
     (void)lj_gc2_trace_sweep_root(g, gcV(&snap));
-  }
   return 1;
 }
 
@@ -9889,15 +9696,13 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
   if (tv) {
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
-      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
-	return;
-      if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-	(void)lj_gc2_trace_sweep_root(g, gcV(&snap));
-	return;
-      }
-      if (gc2_barrier_active_g(g)) {
+      uint32_t phase = gc2_phase_acq(g);
+      if (phase != LJ_GC2_IDLE) {
 	GCobj *o = gcV(&snap);
-	if (gc2_markobj_direct_status(g, o) == GC2_MARK_LIVE_ALREADY)
+	int status = gc2_markobj_expected_status(g, o,
+						(uint32_t)~itype(&snap), NULL);
+	if (status != GC2_MARK_DEAD &&
+	    status == GC2_MARK_LIVE_ALREADY && phase != LJ_GC2_SWEEP)
 	  gc2_thread_root_rescan_marked_obj(g, o);
       } else {
 	gc2_remember_pair(g, NULL, gcV(&snap));
@@ -10036,7 +9841,11 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
       (void)gc2_sweep_barrier_tv(g, &tv[i]);
     return;
   }
-  active = gc2_barrier_active_g(g);
+  /* g-only publication cannot rely on the local TG's delayed mark_active ACK.
+  ** The global phase store precedes root scanning, so non-IDLE is the exact
+  ** startup-safe barrier gate; an IDLE observation is covered by the later
+  ** activation scan of the already-published values. */
+  active = gc2_phase_acq(g) != LJ_GC2_IDLE;
   if (!active && !gc2_remember_active_g(g) &&
       parent && gc2_phase_acq(g) == LJ_GC2_IDLE &&
       lj_gc2_ismarked(g, parent) > 0) {
@@ -10053,21 +9862,34 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
       if (tvisgcv(&snap)) {
-	if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
+	if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+	  (void)lj_gc2_trace_sweep_root(g, gcV(&snap));
 	  continue;
-	if (!dirtied) {
-	  gc2_table_dirty_bump_parent(g, parent);
-	  dirtied = 1;
 	}
-	gc2_barrier_mark_or_rescan(g, gcV(&snap));
+	{
+	  int status = gc2_markobj_expected_status(g, gcV(&snap),
+						  (uint32_t)~itype(&snap), NULL);
+	  if (status == GC2_MARK_DEAD)
+	    continue;
+	  if (!dirtied) {
+	    gc2_table_dirty_bump_parent(g, parent);
+	    dirtied = 1;
+	  }
+	  if (status == GC2_MARK_LIVE_ALREADY)
+	    gc2_thread_root_rescan_marked_obj(g, gcV(&snap));
+	}
       }
     }
   } else if (gc2_remember_active_g(g)) {
     for (i = 0; i < n; i++) {
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
-      if (tvisgcv(&snap) && gc2_tv_gcref_type_match_known(g, &snap))
-	gc2_remember_pair(g, parent, gcV(&snap));
+      if (tvisgcv(&snap)) {
+	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+	  (void)lj_gc2_trace_sweep_root(g, gcV(&snap));
+	else
+	  gc2_remember_pair(g, parent, gcV(&snap));
+      }
     }
   }
 }
@@ -10116,15 +9938,15 @@ void lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent, cTValue *tv)
   if (tv) {
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
-      if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
-	return;
-      if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-	(void)lj_gc2_trace_sweep_root(g, gcV(&snap));
-	return;
-      }
-      if (gc2_barrier_active_g(g)) {
-	gc2_table_dirty_bump_parent(g, parent);
-	gc2_barrier_mark_or_rescan(g, gcV(&snap));
+      uint32_t phase = gc2_phase_acq(g);
+      if (phase != LJ_GC2_IDLE) {
+	int status = gc2_markobj_expected_status(g, gcV(&snap),
+						(uint32_t)~itype(&snap), NULL);
+	if (status != GC2_MARK_DEAD) {
+	  gc2_table_dirty_bump_parent(g, parent);
+	  if (status == GC2_MARK_LIVE_ALREADY && phase != LJ_GC2_SWEEP)
+	    gc2_thread_root_rescan_marked_obj(g, gcV(&snap));
+	}
       } else {
 	gc2_remember_pair(g, parent, gcV(&snap));
       }
@@ -10172,6 +9994,10 @@ void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
   GCobj *child;
   if (!t || !key || !tvisgcv(key))
     return;
+  if (g && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(key));
+    return;
+  }
   if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, key)))
     return;
   /*
@@ -10223,6 +10049,8 @@ void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
   if (!L || !t || !key || !tvisgcv(key))
     return;
   g = G(L);
+  if (gc2_phase_acq(g) != LJ_GC2_WEAK)
+    return;
   if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, key)))
     return;
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
@@ -10240,6 +10068,8 @@ void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val)
   if (!L || !t || !val || !tvisgcv(val))
     return;
   g = G(L);
+  if (gc2_phase_acq(g) != LJ_GC2_WEAK)
+    return;
   if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, val)))
     return;
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
@@ -10271,23 +10101,6 @@ void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
   if (val && tvisgcv(val) && gc2_tv_gcref_type_match_known(g, val) &&
       lj_gc2_markobj(g, gcV(val)))
     gc2_weak_values_marked_add(g, 1);
-}
-
-static int gc2_mark_base_traversable(global_State *g, void *p)
-{
-  TGState *tg = gc2_tg_for_mem(g, p);
-  GCArena *a;
-  if (!p || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
-    return 0;
-  a = lj_arena_of(p);
-  if (lj_arena_ishuge(a)) {
-    LJHugeInfo hi;
-    if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB) ||
-	lj_arena_hugetab_lookup(&tg->huge, p, &hi) != 1)
-      return 0;
-    return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
-  }
-  return (a->hdr.flags & LJ_AF_TRAVERSABLE) != 0;
 }
 
 static LJ_AINLINE void *gc2_mark_base(global_State *g, GCobj *o)
@@ -10323,39 +10136,26 @@ static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o)
 static int gc2_markobj_base_valid(global_State *g, GCobj *o, void **basep,
 				  uint32_t *gctp)
 {
-  int memkind;
-  uint32_t gct;
+  GC2MarkScope scope;
   void *base;
-  if (!g || !o || !checkptrGC(o) ||
-      (((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0))
+  uint32_t gct;
+  int status, traversable;
+  status = gc2_retain_candidate_status(g, o, &base, &gct, &traversable,
+					0, &scope);
+  if (status == GC2_MARK_DEAD)
     return 0;
-  memkind = gc2_obj_mem_live_kind(g, o, NULL);
-  if (memkind == GC2_OBJMEM_INVALID && !gc2_queue_small_cell_live(g, o))
-    return 0;
-  gct = o->gch.gct;
-  if (gct == 0 || gct < (uint32_t)~LJ_TSTR ||
-      gct > (uint32_t)~LJ_TUDATA)
-    return 0;
-  base = o;
-#if LJ_HASFFI
-  if (gct == (uint32_t)~LJ_TCDATA) {
-    GCcdata *cd = gco2cd(o);
-    if (cdataisv(cd) ||
-	((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0 ||
-	memkind == GC2_OBJMEM_HUGE) {
-      if (!lj_cdata_validate(g, cd, &base, NULL))
-	return 0;
-      if (!lj_gc2_mem_registered_known(g, base))
-	return 0;
+  gc2_preserve_direct_bodies(g, o);
+  if (status == GC2_MARK_NEW && gc2_gct_may_traverse(gct)) {
+    uint32_t phase = gc2_phase_acq(g);
+    if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+	 phase == LJ_GC2_SWEEP) &&
+	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
+      int pushed = lj_gc2_ssb_push(g, o);
+      lj_assertG(pushed, "gc2 validating mark failed to publish traversal");
+      UNUSED(pushed);
     }
-  } else
-#endif
-  if (gct != (uint32_t)~LJ_TSTR) {
-    if (((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)
-      return 0;
-    if (memkind == GC2_OBJMEM_HUGE && !gc2_huge_exact_traversable(g, o))
-      return 0;
   }
+  gc2_mark_scope_leave(&scope);
   if (basep)
     *basep = base;
   if (gctp)
@@ -10567,6 +10367,402 @@ static int gc2_mark_small_cell_begin(global_State *g, GCArena *a,
   return status;
 }
 
+#define GC2_CDATA_BACK_CELLS \
+  ((uint32_t)(LJ_HUGE_THRESHOLD / LJ_CELL_SIZE))
+
+static int gc2_small_arena_known(global_State *g, GCArena *a)
+{
+  TGState *tg;
+  int registered = gc2_small_arena_registered(g, a, NULL);
+  if (registered >= 0)
+    return registered;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg))
+    if (gc2_tg_owns_small_arena(tg, a))
+      return 1;
+  return g->main_tg && gc2_tg_owns_small_arena(g->main_tg, a);
+}
+
+/* Find the nearest allocation start at or before an interior cdata header.
+** The small-allocation size cap bounds this to at most 17 acquired bitmap
+** words even at the worst word alignment. No candidate bytes are read here. */
+static int gc2_small_containing_start(GCArena *a, uint32_t cell,
+				      uint32_t *startp)
+{
+  uint32_t mincell, wi, minwi;
+  if (!a || cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+    return 0;
+  mincell = cell >= GC2_CDATA_BACK_CELLS - 1u ?
+    cell - (GC2_CDATA_BACK_CELLS - 1u) : LJ_AFIRST_CELL;
+  if (mincell < LJ_AFIRST_CELL)
+    mincell = LJ_AFIRST_CELL;
+  wi = cell >> 6;
+  minwi = mincell >> 6;
+  for (;;) {
+    uint64_t bits = la_load64_acq(&a->block[wi]) |
+		    la_load64_acq(&a->mark[wi]);
+    uint32_t hi = wi == (cell >> 6) ? (cell & 63u) : 63u;
+    uint32_t lo = wi == minwi ? (mincell & 63u) : 0u;
+    uint64_t himask = hi == 63u ? ~(uint64_t)0 :
+	(((uint64_t)1 << (hi + 1u)) - 1u);
+    uint64_t lomask = lo == 0 ? ~(uint64_t)0 :
+	(~(uint64_t)0 << lo);
+    bits &= himask & lomask;
+    if (bits) {
+      uint32_t start = (wi << 6) + lj_fls64(bits);
+      if (!lj_arena_bm_get(a->block, start))
+	return 0;  /* The nearest boundary is a reusable free run. */
+      *startp = start;
+      return 1;
+    }
+    if (wi == minwi)
+      break;
+    wi--;
+  }
+  return 0;
+}
+
+static int gc2_retained_cdata_layout(global_State *g, GCobj *o, void *base,
+				      GCArena *a, uint32_t start,
+				      size_t authoritative_size,
+				      int interior_tag)
+{
+#if LJ_HASFFI
+  void *realbase;
+  GCSize size;
+  uintptr_t b = (uintptr_t)base, p = (uintptr_t)o;
+  GCcdata *cd = gco2cd(o);
+  if (!interior_tag || p <= b || p - b > UINT16_MAX ||
+      la_load16_acq((const uint16_t *)base) != (uint16_t)(p - b) ||
+      !cdataisv(cd) || !lj_cdata_validate(g, cd, &realbase, &size) ||
+      realbase != base)
+    return 0;
+  if (a) {
+    if (!gc2_small_cdata_span_exact(a, start, cd, size))
+      return 0;
+  } else if ((size_t)size != authoritative_size) {
+    return 0;
+  }
+  return 1;
+#else
+  UNUSED(g); UNUSED(o); UNUSED(base); UNUSED(a); UNUSED(start);
+  UNUSED(authoritative_size); UNUSED(interior_tag);
+  return 0;
+#endif
+}
+
+#if LJ_HASFFI
+static int gc2_predefined_ctype_payload_size(CTypeID id, CTSize *sizep)
+{
+  switch (id) {
+#define GC2_PREDEF_SIZE(name, sz, ct, info) \
+  case CTID_##name: \
+    if ((int)(sz) < 0 || (ct) == CT_ATTRIB || (ct) == CT_VOID) return 0; \
+    *sizep = (CTSize)(sz); \
+    return 1;
+    CTTYDEF(GC2_PREDEF_SIZE)
+#undef GC2_PREDEF_SIZE
+  default:
+    return 0;
+  }
+}
+#endif
+
+/* Validate only after the containing allocation has been marked/admitted.
+** A non-base candidate is accepted solely through allocation-owned cdata
+** identity metadata published after the complete interior header. */
+static int gc2_retained_candidate_valid(global_State *g, GCobj *o,
+					 void *base, GCArena *a,
+					 uint32_t start, size_t alloc_size,
+					 int interior_tag, uint32_t *gctp)
+{
+  uint32_t gct = (uint32_t)la_load8_acq(&o->gch.gct);
+  if (gct == 0 || gct < (uint32_t)~LJ_TSTR ||
+      gct > (uint32_t)~LJ_TUDATA)
+    return 0;
+  if (a && ((gct == (uint32_t)~LJ_TCDATA) !=
+	    (lj_arena_cdata_get(a, start) != 0)))
+    return 0;
+  if (o != (GCobj *)base) {
+    if (gct != (uint32_t)~LJ_TCDATA ||
+	!gc2_retained_cdata_layout(g, o, base, a, start, alloc_size,
+				   interior_tag))
+      return 0;
+  } else {
+    if (interior_tag)
+      return 0;  /* An interior-cdata allocation never places cd at base. */
+#if LJ_HASFFI
+    if (gct == (uint32_t)~LJ_TCDATA) {
+      void *realbase;
+      GCSize size;
+      if (ctype_ctsG(g) == NULL) {
+	CTSize payload;
+	/* Lexer/bytecode bootstrap uses only immutable predefined fixed types.
+	** Coverage identifies the cdata family, but exact bytes still come from
+	** this authoritative table plus the header tail encoding. */
+	if (cdataisv(gco2cd(o)) ||
+	    ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0 ||
+	    !gc2_predefined_ctype_payload_size(gco2cd(o)->ctypeid, &payload) ||
+	    payload > LJ_MAX_MEM32 - sizeof(GCcdata))
+	  return 0;
+	size = (GCSize)(sizeof(GCcdata) + payload);
+	if (!cdata_size_tail_matches(gco2cd(o), (size_t)size) ||
+	    (a ? !gc2_small_cdata_span_exact(a, start, gco2cd(o), size) :
+		  (size_t)size != alloc_size))
+	  return 0;
+      } else if (cdataisv(gco2cd(o)) ||
+		 !lj_cdata_validate(g, gco2cd(o), &realbase, &size) ||
+		 realbase != base || (a ? size > LJ_HUGE_THRESHOLD :
+					(size_t)size != alloc_size)) {
+	return 0;
+      }
+      if (a && ctype_ctsG(g) != NULL &&
+	  !gc2_small_cdata_span_exact(a, start, gco2cd(o), size))
+	return 0;
+    }
+#endif
+  }
+  if (gctp)
+    *gctp = gct;
+  return 1;
+}
+
+/* Establish a counted small-arena body lease without changing semantic mark
+** state. The structural planes are allocation-owned and are sampled on both
+** sides of header/layout validation. FREEING/late is the destructor LP; READY
+** is the constructor LP. A successful caller may inspect the admitted object
+** only until gc2_mark_scope_leave(). */
+static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
+				     uint32_t expected_gct,
+				     void **basep, uint32_t *startp,
+				     uint32_t *gctp, GC2MarkScope *scope)
+{
+  uint32_t cell, start, state, gct;
+  void *base;
+  int admission, interior_tag;
+  if (scope) {
+    scope->a = NULL;
+    scope->admission = LJ_ARENA_RESCUE_RETRY;
+  }
+  if (!g || !o || !a || !scope ||
+      !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
+    return 0;
+  admission = lj_arena_rescue_enter(a);
+  if (admission == LJ_ARENA_RESCUE_RETRY)
+    return -1;
+  scope->a = a;
+  scope->admission = admission;
+  cell = lj_arena_cellof(o);
+  if (!gc2_small_containing_start(a, cell, &start) ||
+      !lj_arena_bm_get(a->block, start) ||
+      !lj_arena_ready_get(a, start) || lj_arena_late_get(a, start) ||
+      lj_arena_sweep_state_acq(a, start) == LJ_ARENA_SWEEP_FREEING)
+    goto invalid;
+  base = lj_arena_cellptr(a, start);
+  interior_tag = o != (GCobj *)base;
+  if ((interior_tag && !lj_arena_cdata_get(a, start)) ||
+      !gc2_retained_candidate_valid(g, o, base, a, start, 0,
+				    interior_tag, &gct) ||
+      (expected_gct != 0 && gct != expected_gct))
+    goto invalid;
+  /* A remote destructor publishes FREEING before touching body bytes. Keep a
+  ** final structural check inside the counted lease so a validator which met
+  ** that LP never returns a dereferenceable identity. */
+  state = lj_arena_sweep_state_acq(a, start);
+  if (!lj_arena_bm_get(a->block, start) ||
+      !lj_arena_ready_get(a, start) || lj_arena_late_get(a, start) ||
+      state == LJ_ARENA_SWEEP_FREEING)
+    goto invalid;
+  if (basep)
+    *basep = base;
+  if (startp)
+    *startp = start;
+  if (gctp)
+    *gctp = gct;
+  return 1;
+invalid:
+  gc2_mark_scope_leave(scope);
+  return 0;
+}
+
+static int gc2_mark_huge_candidate(global_State *g, GCobj *o, void **basep,
+				    LJHugeInfo *hip)
+{
+  TGState *tg;
+  int marked;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+      continue;
+    marked = lj_arena_hugetab_mark_cdata_range(&tg->huge, o, basep, hip);
+    if (marked >= 0)
+      goto found;
+  }
+  tg = g->main_tg;
+  if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+    return GC2_MARK_DEAD;
+  marked = lj_arena_hugetab_mark_cdata_range(&tg->huge, o, basep, hip);
+  if (marked < 0)
+    return GC2_MARK_DEAD;
+found:
+  if (marked == LJ_ARENA_HUGE_MARK_INTENT)
+    return GC2_MARK_DEAD;  /* Unique retire owner discharges after TICKET. */
+  if (marked > 0)
+    gc2_marks_this_round_add(g, 1);
+  return marked > 0 ? GC2_MARK_NEW : GC2_MARK_LIVE_ALREADY;
+}
+
+static int gc2_retain_candidate_status(global_State *g, GCobj *o,
+					void **basep, uint32_t *gctp,
+					int *traversablep,
+					uint32_t expected_gct,
+					GC2MarkScope *holdp)
+{
+  GC2MarkScope scope;
+  GCArena *a;
+  void *base = NULL;
+  uint32_t gct = 0;
+  int status, traversable = 0;
+  scope.a = NULL;
+  scope.admission = LJ_ARENA_RESCUE_RETRY;
+  if (holdp) {
+    holdp->a = NULL;
+    holdp->admission = LJ_ARENA_RESCUE_RETRY;
+  }
+  if (!g || !o || !checkptrGC(o) ||
+      ((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0)
+    return GC2_MARK_DEAD;
+  if (la_load32_acq(&g->allocf_arena) == 0) {
+    /* Custom lua_Alloc is intentionally outside the current GC2 retention
+    ** tranche. Preserve the temporary compatibility behavior documented in
+    ** notes/lua-alloc-temporarily-disabled-2026-07-10.md. */
+    base = o;
+    gct = (uint32_t)la_load8_acq(&o->gch.gct);
+#if LJ_HASFFI
+    if (gct == (uint32_t)~LJ_TCDATA && cdataisv(gco2cd(o)) &&
+	!lj_cdata_validate(g, gco2cd(o), &base, NULL))
+      return GC2_MARK_DEAD;
+#endif
+    if (gct == 0 || gct < (uint32_t)~LJ_TSTR ||
+	gct > (uint32_t)~LJ_TUDATA ||
+	(expected_gct != 0 && gct != expected_gct))
+      return GC2_MARK_DEAD;
+    status = GC2_MARK_LIVE_ALREADY;
+    traversable = gct != (uint32_t)~LJ_TUDATA;
+    goto done;
+  }
+  a = lj_arena_of(o);
+  if (gc2_small_arena_known(g, a)) {
+    uint32_t start;
+    int admitted = gc2_small_candidate_admit(g, o, a, expected_gct,
+					      &base, &start, &gct, &scope);
+    if (admitted <= 0)
+      return GC2_MARK_DEAD;
+    /* Header identity, type and layout are now exact under a counted body
+    ** lease. Only this point may change the semantic mark/rescue state. */
+    status = gc2_mark_small_cell_admitted(g, a, start, scope.admission);
+    if (status == GC2_MARK_DEAD) {
+      gc2_mark_scope_leave(&scope);
+      return status;
+    }
+    traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
+	((lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0);
+    if (holdp) {
+      *holdp = scope;
+      scope.a = NULL;
+      scope.admission = LJ_ARENA_RESCUE_RETRY;
+    } else {
+      gc2_mark_scope_leave(&scope);
+    }
+  } else {
+    LJHugeInfo hi;
+    GCobj *actual;
+    uint32_t actual_gct = 0;
+    uint32_t phase;
+    uint16_t offset = 0;
+    int interior_tag;
+    /* The mark CAS is the huge-mapping lifetime LP. No candidate/header byte
+    ** may be read before it succeeds. MARK_INTENT deliberately returns DEAD
+    ** with no base; the unique retire owner performs the traversal discharge. */
+    status = gc2_mark_huge_candidate(g, o, &base, &hi);
+    if (status == GC2_MARK_DEAD || !base)
+      return GC2_MARK_DEAD;
+    interior_tag = (hi.flags & LJ_HUGEF_INTERIOR_CDATA) != 0;
+    if (interior_tag) {
+      if ((hi.flags & LJ_HUGEF_CDATA) == 0 ||
+	  hi.size < sizeof(GCcdataVar) + sizeof(GCcdata))
+	return GC2_MARK_DEAD;
+      offset = la_load16_acq((const uint16_t *)base);
+      if (offset < sizeof(GCcdataVar) ||
+	  (size_t)offset + sizeof(GCcdata) > hi.size)
+	return GC2_MARK_DEAD;
+      actual = (GCobj *)(void *)((char *)base + offset);
+    } else {
+      actual = (GCobj *)base;
+    }
+    if (!gc2_retained_candidate_valid(g, actual, base, NULL, 0, hi.size,
+				      interior_tag, &actual_gct) ||
+	((actual_gct == (uint32_t)~LJ_TCDATA) !=
+	 ((hi.flags & LJ_HUGEF_CDATA) != 0)))
+      return GC2_MARK_DEAD;
+    phase = gc2_phase_acq(g);
+    if (o != actual || (expected_gct != 0 && actual_gct != expected_gct)) {
+      /* A false candidate/type may conservatively retain this allocation for
+      ** one cycle, but it must discharge any graph mark it just consumed so a
+      ** later real edge cannot observe ALREADY and skip the children. */
+      if (gc2_gct_may_traverse(actual_gct) &&
+	  (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+	   phase == LJ_GC2_SWEEP)) {
+	int pushed = lj_gc2_ssb_push(g, actual);
+	lj_assertG(pushed, "huge false candidate failed traversal discharge");
+	UNUSED(pushed);
+      }
+      return GC2_MARK_DEAD;
+    }
+    gct = actual_gct;
+    traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
+	((hi.flags & LJ_HUGEF_TRAVERSABLE) != 0);
+  }
+done:
+  if (basep)
+    *basep = base;
+  if (gctp)
+    *gctp = gct;
+  if (traversablep)
+    *traversablep = traversable;
+  return status;
+}
+
+int lj_gc2_tab_generation_current(global_State *g, GCtab *t,
+					   const void *generation,
+					   int array_generation)
+{
+  GC2MarkScope scope;
+  GCArena *a;
+  void *base;
+  uint32_t start, gct;
+  int admitted, same;
+  if (!g || !t || !generation || !checkptrGC(t) ||
+      ((uintptr_t)t & (uintptr_t)(sizeof(void *) - 1u)) != 0)
+    return 0;
+  if (la_load32_acq(&g->allocf_arena) == 0)
+    return -1;  /* Temporary custom-lua_Alloc boundary: retain, never free. */
+  a = lj_arena_of(t);
+  if (!gc2_small_arena_known(g, a))
+    return -1;  /* GCtab is small today; fail closed if that ever changes. */
+  admitted = gc2_small_candidate_admit(g, obj2gco(t), a,
+					(uint32_t)~LJ_TTAB,
+					&base, &start, &gct, &scope);
+  UNUSED(base); UNUSED(start); UNUSED(gct);
+  if (admitted < 0)
+    return -1;
+  if (admitted == 0)
+    return 0;
+  same = array_generation ?
+    (const void *)lj_tab_array_acq(t) == generation :
+    (const void *)lj_tab_node_acq(t) == generation;
+  gc2_mark_scope_leave(&scope);
+  return same;
+}
+
 static int gc2_markmem_registered_scoped_status(global_State *g, void *p,
 						 GC2MarkScope *holdp);
 
@@ -10673,71 +10869,37 @@ static int gc2_markobj_preserve_status_impl(global_State *g, GCobj *o,
 					    GC2MarkScope *holdp)
 {
   GC2MarkScope scope;
-  GCArena *a;
   void *base;
   uint32_t gct;
   int status, traversable;
   scope.a = NULL;
   scope.admission = LJ_ARENA_RESCUE_RETRY;
-  if (holdp) {
-    holdp->a = NULL;
-    holdp->admission = LJ_ARENA_RESCUE_RETRY;
-  }
-  if (!g || !o || !checkptrGC(o) ||
-      ((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0)
-    return GC2_MARK_DEAD;
-  a = lj_arena_of(o);
-  if (la_load32_acq(&g->allocf_arena) != 0 &&
-      (gc2_small_arena_registered(g, a, NULL) > 0 ||
-       gc2_queue_small_cell_live(g, o))) {
-    /* Small GC headers are allocation starts. Publish mark/rescue intent
-    ** immediately after admission, before validation dereferences the header. */
-    status = gc2_mark_small_cell_begin(g, a, lj_arena_cellof(o), &scope);
-    if (status == GC2_MARK_DEAD)
-      return status;
-    if (!gc2_markobj_base_valid(g, o, &base, &gct)) {
-      gc2_mark_scope_leave(&scope);
-      return GC2_MARK_DEAD;
-    }
-    if (expected_gct != 0 && gct != expected_gct) {
-      gc2_mark_scope_leave(&scope);
-      return GC2_MARK_DEAD;
-    }
-    if (lj_arena_of(base) != a) {
-      gc2_mark_scope_leave(&scope);
-      return GC2_MARK_DEAD;
-    }
-    if (lj_arena_cellof(base) != lj_arena_cellof(o)) {
-      int basestatus = gc2_mark_small_cell_admitted(g, a,
-			lj_arena_cellof(base), scope.admission);
-      if (basestatus == GC2_MARK_DEAD) {
-	gc2_mark_scope_leave(&scope);
-	return GC2_MARK_DEAD;
+  status = gc2_retain_candidate_status(g, o, &base, &gct, &traversable,
+					expected_gct, &scope);
+  if (status == GC2_MARK_DEAD)
+    return status;
+  gc2_preserve_direct_bodies(g, o);
+  if (expected_gct != 0 && gct != expected_gct) {
+    if (status == GC2_MARK_NEW && gc2_gct_may_traverse(gct) &&
+	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
+      uint32_t phase = gc2_phase_acq(g);
+      if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+	  phase == LJ_GC2_SWEEP) {
+	int pushed = lj_gc2_ssb_push(g, o);
+	lj_assertG(pushed,
+	  "expected-type mismatch failed to publish actual traversal");
+	UNUSED(pushed);
       }
-      if (basestatus == GC2_MARK_NEW)
-	status = GC2_MARK_NEW;
     }
-    gc2_preserve_direct_bodies(g, o);
-    traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
-	gc2_mark_base_traversable(g, base);
-    if (holdp) {
-      *holdp = scope;
-      scope.a = NULL;
-      scope.admission = LJ_ARENA_RESCUE_RETRY;
-    } else {
-      gc2_mark_scope_leave(&scope);
-    }
+    gc2_mark_scope_leave(&scope);
+    return GC2_MARK_DEAD;
+  }
+  if (holdp) {
+    *holdp = scope;
+    scope.a = NULL;
+    scope.admission = LJ_ARENA_RESCUE_RETRY;
   } else {
-    if (!gc2_markobj_base_valid(g, o, &base, &gct))
-      return GC2_MARK_DEAD;
-    if (expected_gct != 0 && gct != expected_gct)
-      return GC2_MARK_DEAD;
-    status = gc2_markmem_status(g, base);
-    if (status == GC2_MARK_DEAD)
-      return status;
-    gc2_preserve_direct_bodies(g, o);
-    traversable = gct == (uint32_t)~LJ_TUDATA ? 0 :
-	gc2_mark_base_traversable(g, base);
+    gc2_mark_scope_leave(&scope);
   }
   if (basep)
     *basep = base;
@@ -10770,46 +10932,55 @@ static int gc2_markobj_preserve_expected_status(global_State *g, GCobj *o,
 					  expected_gct, NULL);
 }
 
-int lj_gc2_markobj(global_State *g, GCobj *o)
+static int gc2_markobj_expected_status(global_State *g, GCobj *o,
+					uint32_t expected_gct,
+					uint32_t *gctp)
 {
-  void *base;
   int status;
   int traversable;
   uint32_t gct;
-  status = gc2_markobj_preserve_status(g, o, &base, &gct, &traversable);
+  status = gc2_markobj_preserve_status_impl(g, o, NULL, &gct, &traversable,
+					     expected_gct, NULL);
   if (status == GC2_MARK_DEAD)
-    return 0;
-  if (status == GC2_MARK_NEW && gc2_gct_may_traverse(gct)) {
+    return GC2_MARK_DEAD;
+  if (gctp)
+    *gctp = gct;
+  if (gc2_gct_may_traverse(gct)) {
     uint32_t phase = gc2_phase_acq(g);
-    if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
+    if (((status == GC2_MARK_NEW &&
+	  (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)) ||
+	 phase == LJ_GC2_SWEEP) &&
 	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
       int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
       lj_assertG(pushed, "gc2 SSB push failed for marked container object");
       UNUSED(pushed);
     }
   }
-  return status == GC2_MARK_NEW;
+  return status;
+}
+
+int lj_gc2_markobj_status(global_State *g, GCobj *o, uint32_t *gctp)
+{
+  return gc2_markobj_expected_status(g, o, 0, gctp);
+}
+
+int lj_gc2_markobj_expected_status(global_State *g, GCobj *o,
+					    uint32_t expected_gct,
+					    uint32_t *gctp)
+{
+  if (expected_gct == 0)
+    return GC2_MARK_DEAD;
+  return gc2_markobj_expected_status(g, o, expected_gct, gctp);
+}
+
+int lj_gc2_markobj(global_State *g, GCobj *o)
+{
+  return lj_gc2_markobj_status(g, o, NULL) == GC2_MARK_NEW;
 }
 
 static int gc2_markobj_direct_status(global_State *g, GCobj *o)
 {
-  void *base;
-  int status;
-  int traversable;
-  uint32_t gct;
-  status = gc2_markobj_preserve_status(g, o, &base, &gct, &traversable);
-  if (status == GC2_MARK_DEAD)
-    return GC2_MARK_DEAD;
-  if (status == GC2_MARK_NEW && gc2_gct_may_traverse(gct)) {
-    uint32_t phase = gc2_phase_acq(g);
-    if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
-	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
-      int pushed = lj_gc2_ssb_push(g, o);
-      lj_assertG(pushed, "gc2 SSB push failed for marked container object");
-      UNUSED(pushed);
-    }
-  }
-  return status;
+  return lj_gc2_markobj_status(g, o, NULL);
 }
 
 int lj_gc2_markobj_direct(global_State *g, GCobj *o)
@@ -10820,9 +10991,19 @@ int lj_gc2_markobj_direct(global_State *g, GCobj *o)
 int lj_gc2_markobj_nogrey(global_State *g, GCobj *o)
 {
   int status;
-  status = gc2_markobj_preserve_status(g, o, NULL, NULL, NULL);
+  uint32_t gct;
+  status = gc2_markobj_preserve_status(g, o, NULL, &gct, NULL);
   if (status == GC2_MARK_DEAD)
     return 0;
+  /* Only leaf strings and a lua_State whose owner immediately performs the
+  ** complete synchronous stack traversal may share the semantic mark domain
+  ** without publishing grey work. Graph-bearing body-retention users must use
+  ** lj_gc2_markobj(), otherwise a later semantic edge can see ALREADY and skip
+  ** the graph. */
+  if (gct != (uint32_t)~LJ_TSTR && gct != (uint32_t)~LJ_TTHREAD) {
+    lj_assertG(0, "graph-bearing no-grey mark without synchronous traversal");
+    abort();
+  }
   return status == GC2_MARK_NEW;
 }
 
@@ -10858,8 +11039,10 @@ static int gc2_markobj_worker(global_State *g, GCobj *o)
 
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, tv)))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
     return;
+  }
   if (tvisgcv(tv))
     gc2_markobj_worker(g, gcV(tv));
 }
@@ -10882,16 +11065,20 @@ static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o)
 
 static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, tv)))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
     return;
+  }
   if (tvisgcv(tv))
     gc2_mark_thread_root_obj_worker(g, gcV(tv));
 }
 
 static void gc2_mark_upval_payload_tv_worker(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, tv)))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
     return;
+  }
   if (!tvisgcv(tv))
     return;
   if (tvistab(tv)) {
@@ -11122,7 +11309,11 @@ static void gc2_mark_table_child_obj_worker(global_State *g, GCtab *t)
 
 static void gc2_mark_table_child_tv_worker(global_State *g, cTValue *tv)
 {
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, tv)) || !tvisgcv(tv))
+  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
+    return;
+  }
+  if (!tvisgcv(tv))
     return;
   if (tvistab(tv))
     gc2_mark_table_child_obj_worker(g, tabV(tv));
@@ -11622,9 +11813,9 @@ static void gc2_traverse_trace(global_State *g, GCtrace *T)
 
 static void gc2_traverse_proto(global_State *g, GCproto *pt)
 {
-  ptrdiff_t i;
+  ptrdiff_t i, sizekgc = (ptrdiff_t)proto_sizekgc_acq(pt);
   gc2_markobj_worker(g, obj2gco(proto_chunkname_acq(pt)));
-  for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)
+  for (i = -sizekgc; i < 0; i++)
     gc2_mark_payload_obj_worker(g, proto_kgc_acq(pt, i));
 #if LJ_HASJIT
   gc2_marktrace_worker(g, proto_trace_acq(pt));
@@ -12647,12 +12838,77 @@ int lj_gc2_ismarkedmem(global_State *g, void *p)
 
 int lj_gc2_ismarked(global_State *g, GCobj *o)
 {
-  void *base;
-  if (!g || !o)
+  GCArena *a;
+  void *base = NULL;
+  uint32_t gct;
+  if (!g || !o || !checkptrGC(o) ||
+      ((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0)
     return -1;
-  if (!gc2_markobj_base_valid(g, o, &base, NULL))
-    return -1;
-  return lj_gc2_ismarkedmem(g, base);
+  if (la_load32_acq(&g->allocf_arena) == 0) {
+    base = o;
+#if LJ_HASFFI
+    gct = (uint32_t)la_load8_acq(&o->gch.gct);
+    if (gct == (uint32_t)~LJ_TCDATA && cdataisv(gco2cd(o)) &&
+	!lj_cdata_validate(g, gco2cd(o), &base, NULL))
+      return -1;
+#endif
+    return lj_gc2_ismarkedmem(g, base);
+  }
+  a = lj_arena_of(o);
+  if (gc2_small_arena_known(g, a)) {
+    int admission;
+    uint32_t start;
+    int result;
+    if (!(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
+      return -1;
+    admission = lj_arena_rescue_enter(a);
+    if (admission == LJ_ARENA_RESCUE_RETRY)
+      return -1;
+    if (!gc2_small_containing_start(a, lj_arena_cellof(o), &start) ||
+	!lj_arena_ready_get(a, start)) {
+      if (gc2_mark_admission_counted(admission))
+	lj_arena_rescue_leave(a);
+      return -1;
+    }
+    base = lj_arena_cellptr(a, start);
+    result = gc2_ismarked_small_cell(a, start);
+    if (result >= 0 &&
+	!gc2_retained_candidate_valid(g, o, base, a, start, 0,
+				      o != (GCobj *)base,
+				      &gct))
+      result = -1;
+    if (gc2_mark_admission_counted(admission))
+      lj_arena_rescue_leave(a);
+    return result;
+  } else {
+    TGState *tg;
+    LJHugeInfo hi;
+    for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+      if (lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+	  lj_arena_hugetab_cdata_range_lookup(&tg->huge, o, &base, &hi) == 1)
+	goto huge_found;
+    }
+    tg = g->main_tg;
+    if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB) ||
+	lj_arena_hugetab_cdata_range_lookup(&tg->huge, o, &base, &hi) != 1)
+      return -1;
+huge_found:
+    /* Mark queries are observational. Their caller supplies the root/SMR
+    ** identity lease; unlike the retaining path above, do not set MARK merely
+    ** to answer the query. */
+    if ((hi.flags & LJ_HUGEF_FREEING) ||
+	((hi.flags & LJ_HUGEF_BUSY) &&
+	 (hi.flags & (LJ_HUGEF_TICKET|LJ_HUGEF_MARK)) !=
+	   (LJ_HUGEF_TICKET|LJ_HUGEF_MARK)) ||
+	(hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) !=
+	  (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) ||
+	!gc2_retained_candidate_valid(g, o, base, NULL, 0, hi.size,
+	  o != (GCobj *)base, &gct) ||
+	((gct == (uint32_t)~LJ_TCDATA) !=
+	 ((hi.flags & LJ_HUGEF_CDATA) != 0)))
+      return -1;
+    return (hi.flags & LJ_HUGEF_MARK) != 0;
+  }
 }
 
 #if LJ_GC2_PARANOIA

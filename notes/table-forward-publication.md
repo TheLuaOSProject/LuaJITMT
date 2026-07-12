@@ -24,12 +24,12 @@ their snapshot is still the published root. If it is not, they refresh from the
 root without touching the old header. If it is still the root, they may use that
 root-owned successor breadcrumb.
 
-Retired node and array vectors are not physically freed while more than one TG
-is live. C table scans can hold node/array snapshots across safepoints; an epoch
-advance alone proves forward progress, not that every peer has dropped those
-local snapshots. Reclaim therefore waits for both `LJ_TAB_RETIRE_EPOCHS` and a
-single live TG before freeing retired vectors. Close-time cleanup still releases
-all remaining retired vectors.
+Retired node and array vectors use bounded multi-TG epoch reclamation. Long C
+scans which must cross safepoints publish a TG-local outer read epoch; after
+`LJ_TAB_RETIRE_EPOCHS`, the nonwaiting reclaimer frees a generation only when no
+pin old enough to name it remains. A live old pin requeues the record. See
+`notes/table-mt-retire-epoch-pins-2026-07-12.md` for the retain-first owner
+validation, unwind, and focused-test contracts.
 
 JIT table traversal (`pairs`/`next` through recorded `ITERN`/`next`) is also a
 multi-TG boundary. The recorder predicts traversal result types from the table

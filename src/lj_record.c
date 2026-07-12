@@ -134,7 +134,7 @@ static int rec_check_may_pending_celluv(jit_State *J, BCReg slotno)
   GCRef *kr;
   if (!J->pt || !(J->pt->flags & PROTO_CHILD))
     return 0;
-  n = J->pt->sizekgc;
+  n = proto_sizekgc_acq(J->pt);
   kr = mref(J->pt->k, GCRef) - 1;
   for (i = 0; i < n; i++, kr--) {
     GCobj *o = gcref_acq(*kr);
@@ -157,7 +157,7 @@ static int rec_check_child_cellslot(jit_State *J, GCproto *pt, BCReg slotno)
   ptrdiff_t i, n;
   if (!(pt->flags & PROTO_CHILD))
     return 0;
-  n = pt->sizekgc;
+  n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
   for (i = 0; i < n; i++, kr--) {
     GCobj *o = gcref_acq(*kr);
@@ -1858,12 +1858,25 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	MSize hmask = tpl_hmask;
 	uint32_t i, asize;
 	TValue *array;
-	for (i = 0; i <= hmask; i++) {
-	  TValue key, val;
-	  lj_tv_load_acq(&key, &node[i].key);
-	  lj_tv_load_acq(&val, &node[i].val);
-	  if (!tvisnil(&key) && tvisnil(&val))
-	    rec_template_mark_nil(J, tpl, &key);
+	/* rec_template_mark_nil() can yield while resolving a raced table slot.
+	** Copy one key, discard the raw generation, then restart from the current
+	** root after the call. Already marked values make this loop finite. */
+	for (;;) {
+	  TValue key;
+	  int found = 0;
+	  node = lj_tab_node_snapshot_acq(tpl, &hmask);
+	  for (i = 0; i <= hmask; i++) {
+	    TValue val;
+	    lj_tv_load_acq(&key, &node[i].key);
+	    lj_tv_load_acq(&val, &node[i].val);
+	    if (!tvisnil(&key) && tvisnil(&val)) {
+	      found = 1;
+	      break;
+	    }
+	  }
+	  if (!found)
+	    break;
+	  rec_template_mark_nil(J, tpl, &key);
 	}
 	if (!tvisnil(&ix->keyv) && tref_isk(ix->key)) {
 	  rec_template_mark_nil(J, tpl, &ix->keyv);
@@ -2048,8 +2061,11 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
   TRef key;
   GCtab *t = tabV(&ix->tabv);
   MSize hrefk_hmask;
-  Node *hrefk_node = lj_tab_node_snapshot_acq(t, &hrefk_hmask);
+  Node *hrefk_node;
   ix->oldv = lj_tab_get(J->L, t, &ix->keyv);  /* Lookup previous value. */
+  /* lj_tab_get() may yield and service a handshake while retrying a raced
+  ** generation. Acquire the recorder's raw hash snapshot only afterwards. */
+  hrefk_node = lj_tab_node_snapshot_acq(t, &hrefk_hmask);
   *rbref = 0;
   rbguard->irt = 0;
 

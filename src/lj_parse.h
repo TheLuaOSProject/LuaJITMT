@@ -9,7 +9,10 @@
 #include "lj_obj.h"
 #include "lj_lex.h"
 
-LJ_FUNC GCproto *lj_parse(LexState *ls);
+/* Returns with the top-level prototype retained in the TG anchor at
+** *anchoridx. The loader must keep or replace that exact anchor through its
+** function/stack handoff, then pop it. */
+LJ_FUNC GCproto *lj_parse(LexState *ls, uint32_t *anchoridx);
 LJ_FUNC GCstr *lj_parse_keepstr(LexState *ls, const char *str, size_t l);
 #if LJ_HASFFI
 LJ_FUNC void lj_parse_keepcdata(LexState *ls, TValue *tv, GCcdata *cd);

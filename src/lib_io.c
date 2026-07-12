@@ -30,6 +30,7 @@
 #include "lj_safepoint.h"
 #include "lj_strscan.h"
 #include "lj_tg.h"
+#include "lj_udata.h"
 
 /* Userdata payload for I/O file. */
 typedef struct IOFileUD {
@@ -274,7 +275,7 @@ static IOFileUD *io_file_new(lua_State *L)
   }
   iof->fp = NULL;
   iof->type = IOFILE_TYPE_FILE;
-  lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);
+  lj_udata_specialize(L, ud, UDTYPE_IO_FILE);
   return iof;
 }
 
@@ -823,7 +824,7 @@ static GCobj *io_std_new(lua_State *L, FILE *fp, const char *name)
   }
   iof->fp = fp;
   iof->type = IOFILE_TYPE_STDF;
-  lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);
+  lj_udata_specialize(L, ud, UDTYPE_IO_FILE);
   lua_setfield(L, -2, name);
   return obj2gco(ud);
 }

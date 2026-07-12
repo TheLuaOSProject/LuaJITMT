@@ -232,6 +232,11 @@ typedef const TValue cTValue;
 
 #define LJ_GCVMASK		(((uint64_t)1 << 47) - 1)
 
+/* Shared hard bound for remotely scanned runtime root containers. Producers
+** must reject the slot at this index; scanners may therefore visit exactly
+** every published entry without silently clamping a larger container. */
+#define LJ_ROOT_SCAN_LIMIT	1000000u
+
 #if LJ_64
 /* To stay within 47 bits, lightuserdata is segmented. */
 #define LJ_LIGHTUD_BITS_SEG	8
@@ -374,6 +379,22 @@ typedef struct GCcdataVar {
 
 #define cdataptr(cd)	((void *)((cd)+1))
 #define LJ_CDATA_CALLBACK_FREE	0x0001u
+/* Exact allocation byte tail (size modulo one arena cell). Coverage bits give
+** the cell span; these four immutable bits distinguish every byte extent inside
+** the final cell. Bit 0 remains the mutable callback-release flag. */
+#define LJ_CDATA_SIZE_TAIL_SHIFT	1u
+#define LJ_CDATA_SIZE_TAIL_MASK	0x001eu
+static LJ_AINLINE uint16_t cdata_size_tail_flags(size_t size)
+{
+  return (uint16_t)(((uint16_t)(size & 15u)) <<
+		    LJ_CDATA_SIZE_TAIL_SHIFT);
+}
+
+static LJ_AINLINE int cdata_size_tail_matches(const GCcdata *cd, size_t size)
+{
+  return (la_load16_acq(&cd->flags) & LJ_CDATA_SIZE_TAIL_MASK) ==
+    cdata_size_tail_flags(size);
+}
 static LJ_AINLINE uint16_t cdata_flags_acq(const GCcdata *cd)
 {
   return la_load16_acq(&cd->flags);
@@ -429,6 +450,19 @@ typedef struct GCproto {
   MRef varinfo;		/* Names and compressed extents of local variables. */
 } GCproto;
 
+/* Bytecode loading may publish a traversal-safe proto prefix before nested KGC
+** constructors finish. sizekgc is the release-published immutable boundary for
+** the initialized GCRef prefix; concurrent traversal snapshots it with acquire. */
+static LJ_AINLINE MSize proto_sizekgc_acq(const GCproto *pt)
+{
+  return (MSize)la_load32_acq(&pt->sizekgc);
+}
+
+static LJ_AINLINE void proto_sizekgc_rel(GCproto *pt, MSize sizekgc)
+{
+  la_store32_rel(&pt->sizekgc, (uint32_t)sizekgc);
+}
+
 /* Flags for prototype. */
 #define PROTO_CHILD		0x01	/* Has child prototypes. */
 #define PROTO_VARARG		0x02	/* Vararg function. */
@@ -460,10 +494,12 @@ typedef struct GCproto {
 #define PROTO_UV_IMMUTABLE	0x4000	/* Immutable upvalue. */
 
 #define proto_kgc(pt, idx) \
-  check_exp((uintptr_t)(intptr_t)(idx) >= ~(uintptr_t)(pt)->sizekgc+1u, \
+  check_exp((uintptr_t)(intptr_t)(idx) >= \
+	    ~(uintptr_t)proto_sizekgc_acq(pt)+1u, \
 	    gcref(mref((pt)->k, GCRef)[(idx)]))
 #define proto_kgc_acq(pt, idx) \
-  check_exp((uintptr_t)(intptr_t)(idx) >= ~(uintptr_t)(pt)->sizekgc+1u, \
+  check_exp((uintptr_t)(intptr_t)(idx) >= \
+	    ~(uintptr_t)proto_sizekgc_acq(pt)+1u, \
 	    gcref_acq(mref((pt)->k, GCRef)[(idx)]))
 #define proto_knumtv(pt, idx) \
   check_exp((uintptr_t)(idx) < (pt)->sizekn, &mref((pt)->k, TValue)[(idx)])
@@ -527,9 +563,17 @@ typedef union GCfunc {
 
 #define FF_LUA		0
 #define FF_C		1
-#define isluafunc(fn)	((fn)->c.ffid == FF_LUA)
-#define iscfunc(fn)	((fn)->c.ffid == FF_C)
-#define isffunc(fn)	((fn)->c.ffid > FF_C)
+static LJ_AINLINE uint32_t lj_func_ffid_acq(const GCfunc *fn)
+{
+  return (uint32_t)la_load8_acq(&fn->c.ffid);
+}
+static LJ_AINLINE void lj_func_ffid_rel(GCfunc *fn, uint32_t ffid)
+{
+  la_store8_rel(&fn->c.ffid, (uint8_t)ffid);
+}
+#define isluafunc(fn)	(lj_func_ffid_acq((fn)) == FF_LUA)
+#define iscfunc(fn)	(lj_func_ffid_acq((fn)) == FF_C)
+#define isffunc(fn)	(lj_func_ffid_acq((fn)) > FF_C)
 #define funcproto(fn) \
   check_exp(isluafunc(fn), (GCproto *)(mref((fn)->l.pc, char)-sizeof(GCproto)))
 #define sizeCfunc(n)	(sizeof(GCfuncC)-sizeof(TValue)+sizeof(TValue)*(n))
@@ -1572,7 +1616,7 @@ typedef struct global_State {
   Node nilnode;		/* Fallback 1-element hash part (nil key and value). */
   TValue registrytv;	/* Anchor for registry. */
   GCRef vmthref;	/* Link to VM thread. */
-  GCupval uvhead;	/* Head of double-linked list of all open upvalues. */
+  GCupval uvhead;	/* Dormant self-linked compatibility sentinel. */
   int32_t hookcount;	/* Instruction hook countdown. */
   int32_t hookcstart;	/* Start count for instruction hook counter. */
   lua_Hook hookf;	/* Hook function. */

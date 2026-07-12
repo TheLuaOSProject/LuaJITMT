@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -26,6 +27,168 @@ static void delete_unmap(HugeTab *ht, void *p)
   lj_arena_huge_unmap(p, hi.size);
 }
 
+#if defined(LJ_ARENA_TEST_HELPERS)
+typedef struct RetireRace {
+  HugeTab *ht;
+  void *p;
+  void *obj;
+  uint64_t epoch;
+  LJHugeInfo hi;
+  int result;
+} RetireRace;
+
+static void *retire_race_thread(void *ud)
+{
+  RetireRace *race = (RetireRace *)ud;
+  race->result = lj_arena_hugetab_retire(race->ht, race->p, race->obj,
+					 race->epoch, &race->hi);
+  return NULL;
+}
+
+static void retire_race_wait_busy(void)
+{
+  while (!lj_arena_hugetab_test_retire_paused())
+    la_cpu_pause();
+}
+
+static void retire_race_cleanup(HugeTab *ht, void *p, void *obj)
+{
+  LJHugeInfo hi;
+  assert(lj_arena_hugetab_claim_live_ticket(ht, p, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET|LJ_HUGEF_BUSY)) ==
+	 (LJ_HUGEF_MARK|LJ_HUGEF_TICKET|LJ_HUGEF_BUSY));
+  assert(la_loadptr_acq((void *const *)&lj_arena_of(p)->hdr.retire_obj) == obj);
+  la_storeptr_rel(&lj_arena_of(p)->hdr.retire_obj, NULL);
+  assert(lj_arena_hugetab_finish_live_ticket(ht, p, &hi) == 1);
+  lj_arena_hugetab_finish_sweep(ht, 0);
+  delete_unmap(ht, p);
+  lj_arena_hugetab_fini(ht);
+}
+
+static void test_retire_busy_mark_intent(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 1537u;
+  HugeTab raceht = { NULL };
+  RetireRace race;
+  pthread_t thread;
+  LJHugeInfo hi;
+  void *base = (void *)(uintptr_t)1u;
+
+  assert(lj_arena_hugetab_init(&raceht, 2) == 1);
+  race.p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(race.p != NULL);
+  race.obj = (char *)race.p + 16u;
+  race.ht = &raceht;
+  race.epoch = 101u;
+  race.result = 0;
+  assert(lj_arena_hugetab_insert(&raceht, race.p, size,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_interior_cdata(&raceht, race.p) == 1);
+  lj_arena_hugetab_prepare_sweep(&raceht);
+
+  lj_arena_hugetab_test_retire_pause(1);
+  assert(pthread_create(&thread, NULL, retire_race_thread, &race) == 0);
+  retire_race_wait_busy();
+  assert(lj_arena_hugetab_lookup(&raceht, race.p, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY));
+  assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET|LJ_HUGEF_FREEING)) == 0);
+  assert(la_loadptr_acq((void *const *)&lj_arena_of(race.p)->hdr.retire_obj) ==
+	 NULL);
+
+  /* The marker must neither wait for the paused owner nor expose a base whose
+  ** retire_obj header has not been published. Duplicate markers retain the
+  ** same opaque intent; the unique retire owner discharges one traversal. */
+  assert(lj_arena_hugetab_mark_cdata_range(&raceht, race.obj, &base, &hi) ==
+	 LJ_ARENA_HUGE_MARK_INTENT);
+  assert(base == NULL);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY|LJ_HUGEF_MARK)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY|LJ_HUGEF_MARK));
+  assert((hi.flags & (LJ_HUGEF_TICKET|LJ_HUGEF_FREEING)) == 0);
+  assert(lj_arena_hugetab_mark_cdata_range(&raceht, race.obj, &base, &hi) ==
+	 LJ_ARENA_HUGE_MARK_INTENT);
+  assert(base == NULL);
+  assert(lj_arena_hugetab_mark(&raceht, race.p, &hi) == 0);
+
+  lj_arena_hugetab_test_retire_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(race.result == 2);  /* Unique retire owner discharges the intent. */
+  assert((race.hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK|
+			   LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK|LJ_HUGEF_TICKET));
+  assert((race.hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_RETIRED|
+			   LJ_HUGEF_FREEING)) == 0);
+  retire_race_cleanup(&raceht, race.p, race.obj);
+}
+
+static void test_realloc_shaped_busy_mark_only(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 1777u;
+  HugeTab ht = { NULL };
+  LJHugeInfo hi;
+  void *p, *base = (void *)(uintptr_t)1u;
+
+  assert(lj_arena_hugetab_init(&ht, 2) == 1);
+  p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  /* Model a raw allocation whose realloc claim won after SWEEP_OLD. It is
+  ** conservatively candidate-shaped but has no GC header graph and no retire
+  ** owner that could discharge traversal. Mapping liveness alone is exact. */
+  assert(lj_arena_hugetab_insert(&ht, p, size,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_SWEEP_OLD|
+	LJ_HUGEF_BUSY) == 1);
+  assert(lj_arena_hugetab_mark_range(&ht, p, &base, &hi) ==
+	 LJ_ARENA_HUGE_MARK_INTENT);
+  assert(base == NULL);
+  assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY)) ==
+	 (LJ_HUGEF_MARK|LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY));
+  assert((hi.flags & LJ_HUGEF_TICKET) == 0);
+  assert(la_loadptr_acq((void *const *)&lj_arena_of(p)->hdr.retire_obj) ==
+	 NULL);
+  assert(lj_arena_hugetab_fini_all(&ht) == 1u);
+  lj_arena_hugetab_fini(&ht);
+}
+
+static void test_retire_busy_exact_mark(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 1663u;
+  HugeTab raceht = { NULL };
+  RetireRace race;
+  pthread_t thread;
+  LJHugeInfo hi;
+
+  assert(lj_arena_hugetab_init(&raceht, 2) == 1);
+  race.p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(race.p != NULL);
+  race.obj = race.p;
+  race.ht = &raceht;
+  race.epoch = 102u;
+  race.result = 0;
+  assert(lj_arena_hugetab_insert(&raceht, race.p, size,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_gco(&raceht, race.p) == 1);
+  lj_arena_hugetab_prepare_sweep(&raceht);
+
+  lj_arena_hugetab_test_retire_pause(1);
+  assert(pthread_create(&thread, NULL, retire_race_thread, &race) == 0);
+  retire_race_wait_busy();
+  /* Exact/raw roots need no payload admission. They publish MARK and return
+  ** immediately while the retire owner is deliberately paused. */
+  assert(lj_arena_hugetab_mark(&raceht, race.p, &hi) == 1);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY|LJ_HUGEF_MARK)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_BUSY|LJ_HUGEF_MARK));
+  lj_arena_hugetab_test_retire_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(race.result == 2);  /* BUSY-window exact MARK has the same owner. */
+  assert((race.hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK|
+			   LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK|LJ_HUGEF_TICKET));
+  assert((race.hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_RETIRED|
+			   LJ_HUGEF_FREEING)) == 0);
+  retire_race_cleanup(&raceht, race.p, race.obj);
+}
+#endif
+
 int main(void)
 {
   static const size_t sizes[] = {
@@ -41,10 +204,16 @@ int main(void)
   HugeTab dst = { NULL };
   void *ptrs[sizeof(sizes)/sizeof(sizes[0])];
   void *racep;
+  void *rangep, *rangebase;
   LJHugeInfo hi;
   uint32_t i;
 
   lj_prng_seed_fixed(&rs);
+#if defined(LJ_ARENA_TEST_HELPERS)
+  test_retire_busy_mark_intent(&rs);
+  test_retire_busy_exact_mark(&rs);
+#endif
+  test_realloc_shaped_busy_mark_only(&rs);
   assert(lj_arena_hugetab_init(&ht, 4) == 1);
   assert(lj_arena_hugetab_lookup(&ht, (void *)0x12340, &hi) == 0);
   assert(lj_arena_hugetab_mark(&ht, (void *)0x12340, &hi) == -1);
@@ -59,6 +228,44 @@ int main(void)
     assert(lj_arena_hugetab_lookup(&ht, ptrs[i], &hi) == 1);
     check_info(&hi, sizes[i], flags);
   }
+
+  /* Containing marks use one full-slot CAS as lookup+lifetime LP and retain
+  ** the post-initialization interior-cdata identity bit. */
+  rangep = lj_arena_huge_map(&rs, LJ_HUGE_THRESHOLD + 1234u,
+			     LJ_AF_TRAVERSABLE);
+  assert(rangep != NULL);
+  assert(lj_arena_hugetab_insert(&ht, rangep, LJ_HUGE_THRESHOLD + 1234u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  rangebase = NULL;
+  assert(lj_arena_hugetab_mark_range(&ht, (char *)rangep + 1,
+				     &rangebase, &hi) == -1);
+  assert(rangebase == NULL);
+  assert(lj_arena_hugetab_lookup(&ht, rangep, &hi) == 1);
+  check_info(&hi, LJ_HUGE_THRESHOLD + 1234u, LJ_HUGEF_TRAVERSABLE);
+  assert(lj_arena_hugetab_publish_interior_cdata(&ht, rangep) == 1);
+  assert(lj_arena_hugetab_lookup(&ht, rangep, &hi) == 1);
+  check_info(&hi, LJ_HUGE_THRESHOLD + 1234u,
+	     LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_CDATA|
+	     LJ_HUGEF_INTERIOR_CDATA|LJ_HUGEF_READY);
+  /* A stale allocation-base edge cannot mark a tagged interior-header
+  ** allocation. The strict cdata candidate shape rejects without mutation. */
+  assert(lj_arena_hugetab_mark_cdata_range(&ht, rangep,
+					   &rangebase, &hi) == -1);
+  assert(lj_arena_hugetab_lookup(&ht, rangep, &hi) == 1);
+  assert((hi.flags & LJ_HUGEF_MARK) == 0);
+  assert(lj_arena_hugetab_mark_cdata_range(&ht, (char *)rangep + 1,
+					   &rangebase, &hi) == 1);
+  assert(rangebase == rangep);
+  check_info(&hi, LJ_HUGE_THRESHOLD + 1234u,
+	     LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_CDATA|
+	     LJ_HUGEF_INTERIOR_CDATA|LJ_HUGEF_READY|LJ_HUGEF_MARK);
+  assert(lj_arena_hugetab_mark_range(
+    &ht, (char *)rangep + LJ_HUGE_THRESHOLD + 1233u,
+    &rangebase, &hi) == 0);
+  assert(lj_arena_hugetab_mark_range(
+    &ht, (char *)rangep + LJ_HUGE_THRESHOLD + 1234u,
+    &rangebase, &hi) == -1);
+  delete_unmap(&ht, rangep);
 
   assert(lj_arena_hugetab_insert(&ht, ptrs[0], sizes[0] + 16u,
 				 LJ_HUGEF_MARK) == 0);
@@ -94,6 +301,8 @@ int main(void)
   assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) ==
 	 (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY));
   assert((hi.flags & LJ_HUGEF_SWEEP_OLD) == 0);
+  assert(lj_arena_hugetab_mark_range(&ht, (char *)racep + 1,
+				     &rangebase, &hi) == -1);
   lj_arena_hugetab_prepare_sweep(&ht);
   assert(lj_arena_hugetab_lookup(&ht, racep, &hi) == 1);
   assert((hi.flags & LJ_HUGEF_SWEEP_OLD) == 0);
@@ -176,11 +385,11 @@ int main(void)
   assert((hi.flags & LJ_HUGEF_SWEEP_OLD) == 0);
 
   /* Model the other CAS ordering explicitly: MARK is already visible before
-  ** retire publishes its metadata ticket. The ticket is live-only and cannot
-  ** be mistaken for stale destructor payload. */
+  ** retire publishes its metadata ticket. Provenance is not encoded, so the
+  ** unique retire owner must request a conservative duplicate traversal. */
   lj_arena_hugetab_prepare_sweep(&ht);
   assert(lj_arena_hugetab_mark(&ht, ptrs[3], &hi) == 1);
-  assert(lj_arena_hugetab_retire(&ht, ptrs[3], ptrs[3], 19u, &hi) == 1);
+  assert(lj_arena_hugetab_retire(&ht, ptrs[3], ptrs[3], 19u, &hi) == 2);
   assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET)) ==
 	 (LJ_HUGEF_MARK|LJ_HUGEF_TICKET));
   assert((hi.flags & LJ_HUGEF_RETIRED) == 0);
@@ -236,11 +445,14 @@ int main(void)
   assert(lj_arena_hugetab_insert(&src, ptrs[0],
 				 LJ_HUGE_THRESHOLD + 4096u,
 				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_interior_cdata(&src, ptrs[0]) == 1);
   assert(lj_arena_hugetab_transfer(&dst, &src, 0x5678u) == 1);
   assert(lj_arena_of(ptrs[0])->hdr.owner_tid == 0x5678u);
   assert(lj_arena_hugetab_lookup(&src, ptrs[0], NULL) == 0);
   assert(lj_arena_hugetab_lookup(&dst, ptrs[0], &hi) == 1);
-  check_info(&hi, LJ_HUGE_THRESHOLD + 4096u, LJ_HUGEF_TRAVERSABLE);
+  check_info(&hi, LJ_HUGE_THRESHOLD + 4096u,
+	     LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_CDATA|
+	     LJ_HUGEF_INTERIOR_CDATA|LJ_HUGEF_READY);
   delete_unmap(&dst, ptrs[0]);
   lj_arena_hugetab_fini(&src);
   lj_arena_hugetab_fini(&dst);

@@ -823,7 +823,8 @@ static LJ_NOINLINE int lj_str_rehash_chain(lua_State *L, StrHash hashc)
 static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
 			   StrHash hash, int hashalg)
 {
-  GCstr *s = lj_mem_newt(L, lj_str_size(len), GCstr);
+  GCstr *s = (GCstr *)lj_mem_newgco_raw(L, lj_str_size(len),
+					 LJ_AF_TRAVERSABLE);
   global_State *g = G(L);
   newwhite(g, s);
   s->gct = ~LJ_TSTR;
@@ -836,6 +837,9 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */
   *(uint32_t *)(strdatawr(s)+(len & ~(MSize)3)) = 0;
   memcpy(strdatawr(s), str, len);
+  /* The string table is the ownership root, but typed readers still need the
+  ** same exact header-ready lifetime certificate as root-spine GC objects. */
+  lj_gc_publishobj_header(g, obj2gco(s));
   return s;
 }
 

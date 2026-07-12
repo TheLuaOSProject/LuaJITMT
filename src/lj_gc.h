@@ -75,6 +75,8 @@ static LJ_AINLINE int lj_gc_claim_black_to_gray(GCobj *o)
 
 /* Collector. */
 LJ_FUNC void lj_gc_fixstring(global_State *g, GCstr *s);
+LJ_FUNC int lj_gc_udata_payload_valid_as(GCudata *ud, uint8_t udtype,
+					  GCSize *sizep);
 LJ_FUNC int lj_gc_udata_payload_valid(GCudata *ud, GCSize *sizep);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
@@ -89,6 +91,7 @@ LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_arena_markmem_registered(global_State *g, void *p);
+LJ_FUNC void lj_gc_publishobj_header(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_pending(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_new(global_State *g, GCobj *o);
@@ -433,10 +436,20 @@ LJ_FUNCA void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv);
 /* Allocator. */
 LJ_FUNC void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz);
 LJ_FUNC void *lj_mem_new_nothrow(lua_State *L, GCSize size);
+/* Constructor-only allocation which updates global bytes but defers GC2 local
+** accounting/assistance until every mutually dependent body is published. */
+LJ_FUNC void *lj_mem_new_deferred_nothrow(lua_State *L, GCSize size);
 LJ_FUNC void *lj_mem_newgco_raw_nothrow(lua_State *L, GCSize size,
 					 uint32_t flags);
 LJ_FUNC void *lj_mem_newgco_unlinked_nothrow(lua_State *L, GCSize size);
+LJ_FUNC void *lj_mem_newgco_unlinked_deferred_nothrow(lua_State *L,
+						       GCSize size);
+LJ_FUNC void lj_mem_account_deferred(lua_State *L, GCSize size);
 LJ_FUNC void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags);
+LJ_FUNC int lj_mem_publish_cdata(lua_State *L, void *base, GCSize size,
+				  int interior);
+LJ_FUNC int lj_mem_publish_interior_cdata(lua_State *L, void *base,
+					  GCSize size);
 LJ_FUNC void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size);
 LJ_FUNC void *lj_mem_grow(lua_State *L, void *p,
 			  MSize *szp, MSize lim, MSize esz);

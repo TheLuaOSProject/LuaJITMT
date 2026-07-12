@@ -41,6 +41,8 @@ static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
   LexState *ls = (LexState *)ud;
   GCproto *pt;
   GCfunc *fn;
+  TValue resultv;
+  uint32_t anchoridx;
   int bc;
   UNUSED(dummy);
   cframe_errfunc(L->cframe) = -1;  /* Inherit error function. */
@@ -60,18 +62,22 @@ static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
       lj_err_throw(L, LUA_ERRSYNTAX);
     }
   }
-  pt = bc ? lj_bcread(ls) : lj_parse(ls);
+  pt = bc ? lj_bcread(ls, &anchoridx) : lj_parse(ls, &anchoridx);
   if (ls->fr2 == LJ_FR2) {
-    fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L));
+    fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L), anchoridx);
     /* Don't combine above/below into one statement. */
-    setfuncV(L, L->top, fn);
+    setfuncV(L, &resultv, fn);
+    copyTVrel(L, L->top, &resultv);
     lj_state_stack_pubtv(L, L, L->top);
     L->top++;
+    lj_tg_root_anchor_pop(L2TG(L), anchoridx);
   } else {
     /* Non-native generation returns a dumpable, but non-runnable prototype. */
-    setprotoV(L, L->top, pt);
+    setprotoV(L, &resultv, pt);
+    copyTVrel(L, L->top, &resultv);
     lj_state_stack_pubtv(L, L, L->top);
     L->top++;
+    lj_tg_root_anchor_pop(L2TG(L), anchoridx);
   }
   return NULL;
 }
@@ -81,15 +87,23 @@ LUA_API int lua_loadx(lua_State *L, lua_Reader reader, void *data,
 {
   LJStateClaim claim;
   LexState ls;
+  TGState *load_tg;
+  uint32_t anchor_base;
   int status;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(load_errstate(L), "thread busy");
+  load_tg = L2TG(L);
+  anchor_base = lj_tg_root_anchor_top_acq(load_tg);
+  memset(&ls, 0, sizeof(ls));
   ls.rfunc = reader;
   ls.rdata = data;
   ls.chunkarg = chunkname ? chunkname : "?";
   ls.mode = mode;
   lj_buf_init(L, &ls.sb);
   status = lj_vm_cpcall(L, NULL, &ls, cpparser);
+  while (lj_tg_root_anchor_top_acq(load_tg) > anchor_base)
+    lj_tg_root_anchor_pop(load_tg,
+			  lj_tg_root_anchor_top_acq(load_tg) - 1u);
   lj_lex_cleanup(L, &ls);
   lj_gc_check(L);
   lj_state_dropresumeclaim(&claim);

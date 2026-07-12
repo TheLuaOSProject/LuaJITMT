@@ -93,10 +93,25 @@ static void resizestack(lua_State *L, MSize n)
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
 }
 
+static void state_root_anchor_unwind(TGState *tg, uint32_t saved_top)
+{
+  uint32_t top;
+  if (!tg)
+    abort();
+  top = lj_tg_root_anchor_top_acq(tg);
+  if (top < saved_top)
+    abort();
+  while (top > saved_top) {
+    lj_tg_root_anchor_pop(tg, top - 1u);
+    top = lj_tg_root_anchor_top_acq(tg);
+  }
+}
+
 int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
 {
+  LJTabReadCheckpoint tabread;
   TGState *oldtg;
-  uint32_t owner;
+  uint32_t owner, root_anchor_top;
   int status;
   if (LJ_UNLIKELY(L == NULL))
     return LUA_ERRRUN;
@@ -107,9 +122,42 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
   owner = lj_state_owner_acq(L);
   if (LJ_UNLIKELY(oldtg == NULL))
     L->tg_hint = lj_thr_get_tg_fallback(G(L));
+  lj_tab_read_checkpoint(L2TG(L), &tabread);
+  root_anchor_top = lj_tg_root_anchor_top_acq(tabread.tg);
   status = lj_vm_cpcall_asm(L, func, ud, cp);
+  lj_tab_read_unwind(&tabread);
+  if (status != LUA_OK)
+    state_root_anchor_unwind(tabread.tg, root_anchor_top);
   if (LJ_UNLIKELY(oldtg == NULL && owner == 0 && lj_state_owner_acq(L) == 0))
     L->tg_hint = NULL;  /* Ownerless coroutine states stay TG-neutral. */
+  return status;
+}
+
+int lj_vm_pcall_unwind(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)
+{
+  LJTabReadCheckpoint tabread;
+  uint32_t root_anchor_top;
+  int status;
+  lj_tab_read_checkpoint(L2TG(L), &tabread);
+  root_anchor_top = lj_tg_root_anchor_top_acq(tabread.tg);
+  status = lj_vm_pcall(L, base, nres1, ef);
+  lj_tab_read_unwind(&tabread);
+  if (status != LUA_OK)
+    state_root_anchor_unwind(tabread.tg, root_anchor_top);
+  return status;
+}
+
+int lj_vm_resume_unwind(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)
+{
+  LJTabReadCheckpoint tabread;
+  uint32_t root_anchor_top;
+  int status;
+  lj_tab_read_checkpoint(L2TG(L), &tabread);
+  root_anchor_top = lj_tg_root_anchor_top_acq(tabread.tg);
+  status = lj_vm_resume(L, base, nres1, ef);
+  lj_tab_read_unwind(&tabread);
+  if (status != LUA_OK)
+    state_root_anchor_unwind(tabread.tg, root_anchor_top);
   return status;
 }
 
@@ -238,10 +286,13 @@ int LJ_FASTCALL lj_state_cpgrowstack(lua_State *L, MSize need)
   return lj_vm_cpcall(L, NULL, &need, cpgrowstack);
 }
 
-/* Allocate basic stack for new state. */
-static void stack_init(lua_State *L1, lua_State *L)
+/* Allocate basic stack for new state without unwinding past a pending header. */
+static int stack_init_nothrow(lua_State *L1, lua_State *L)
 {
-  TValue *stend, *st = lj_mem_newvec(L, LJ_STACK_START+LJ_STACK_EXTRA, TValue);
+  GCSize size = (GCSize)(LJ_STACK_START + LJ_STACK_EXTRA) * sizeof(TValue);
+  TValue *stend, *st = (TValue *)lj_mem_new_nothrow(L, size);
+  if (!st)
+    return 0;
   setmref(L1->stack, st);
   L1->stacksize = LJ_STACK_START + LJ_STACK_EXTRA;
   stend = st + L1->stacksize;
@@ -251,6 +302,13 @@ static void stack_init(lua_State *L1, lua_State *L)
   L1->base = L1->top = st;
   while (st < stend)  /* Clear new slots. */
     setnilV(st++);
+  return 1;
+}
+
+static void stack_init(lua_State *L1, lua_State *L)
+{
+  if (LJ_UNLIKELY(!stack_init_nothrow(L1, L)))
+    lj_err_mem(L);
 }
 
 void lj_state_stack_pubtv(lua_State *L, lua_State *target, cTValue *tv)
@@ -291,7 +349,13 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   lj_mcode_init(g);
   lj_trace_initstate(g);
   lj_err_verify();
-  vmthread_rel(g, lj_state_new(L));
+  {
+    uint32_t anchoridx;
+    lua_State *vmL = lj_state_new(L, &anchoridx);
+    vmthread_rel(g, vmL);
+    lj_gc_pubobjroot(L, obj2gco(vmL));
+    lj_tg_root_anchor_pop(L2TG(L), anchoridx);
+  }
   lj_gc2_update_pacing(g);
   lj_gc2_publish_idle_threshold(g);
   return NULL;
@@ -782,15 +846,25 @@ LUA_API void lua_close(lua_State *L)
   close_state(L);
 }
 
-lua_State *lj_state_new_withenv(lua_State *L, GCtab *env)
+static lua_State *state_new_withenv_at_anchor(lua_State *L, GCtab *env,
+					      TValue *anchor, uint32_t idx)
 {
   global_State *g = G(L);
-  lua_State *L1 = (lua_State *)lj_mem_newgco_unlinked(L, sizeof(lua_State));
+  TGState *tg = L2TG(L);
+  TValue thv;
+  lua_State *L1;
+  L1 = (lua_State *)lj_mem_newgco_unlinked_nothrow(L, sizeof(lua_State));
+  if (LJ_UNLIKELY(!L1)) {
+    lj_tg_root_anchor_pop(tg, idx);
+    lj_err_mem(L);
+  }
   L1->gct = ~LJ_TTHREAD;
   L1->dummy_ffid = FF_C;
   L1->status = LUA_OK;
   L1->stacksize = 0;
   setmref(L1->stack, NULL);
+  setmref(L1->maxstack, NULL);
+  L1->base = L1->top = NULL;
   L1->cframe = NULL;
   L1->tg_hint = NULL;
   lj_state_thread_registry_next_rel(L1, NULL);
@@ -804,7 +878,21 @@ lua_State *lj_state_new_withenv(lua_State *L, GCtab *env)
   setmrefr(L1->glref, L->glref);
   lj_state_env_rel(L1, env);
   newwhite(g, obj2gco(L1));
-  stack_init(L1, L);  /* init stack */
+  /* Keep the object opaque while its geometry is mutable. The non-throwing
+  ** stack allocation lets failure explicitly cancel this READY=0 body instead
+  ** of abandoning an immortal pending constructor. */
+  if (LJ_UNLIKELY(!stack_init_nothrow(L1, L))) {
+    lj_mem_free(g, L1, sizeof(lua_State));
+    lj_tg_root_anchor_pop(tg, idx);
+    lj_err_mem(L);
+  }
+  /* Publish the pending identity through a non-intrusive TG anchor. Scanners
+  ** may observe the TValue while READY=0, but reject it without hiding older
+  ** roots; the post-READY barrier repairs that exact observation. */
+  setthreadV(L, &thv, L1);
+  copyTVrel(L, anchor, &thv);
+  lj_gc_publishobj_header(g, obj2gco(L1));
+  lj_gc_pubroot(L, anchor);
   lj_gc_linkobj_new_after_main(g, obj2gco(L1));
   if (env)
     lj_gc_pubobjobj(L, L1, env);
@@ -812,9 +900,44 @@ lua_State *lj_state_new_withenv(lua_State *L, GCtab *env)
   return L1;
 }
 
-lua_State *lj_state_new(lua_State *L)
+lua_State *lj_state_new_withenv(lua_State *L, GCtab *env,
+				uint32_t *anchoridx)
 {
-  return lj_state_new_withenv(L, lj_state_env_acq(L));
+  TGState *tg = L2TG(L);
+  TValue envv;
+  TValue *anchor;
+  uint32_t idx;
+  lj_assertL(anchoridx != NULL, "missing new-thread construction anchor");
+  if (env)
+    settabV(L, &envv, env);
+  else
+    setnilV(&envv);
+  anchor = lj_tg_root_anchor_push(L, tg, &envv, &idx);
+  if (LJ_UNLIKELY(!anchor))
+    lj_err_mem(L);
+  lj_gc_pubroot(L, anchor);
+  *anchoridx = idx;
+  return state_new_withenv_at_anchor(L, env, anchor, idx);
+}
+
+lua_State *lj_state_new_withenv_envrooted(lua_State *L, GCtab *env,
+					  uint32_t anchoridx)
+{
+  TGState *tg = L2TG(L);
+  TValue snap;
+  TValue *anchor = lj_tg_root_anchor_slot_acq(tg, anchoridx);
+  lj_assertL(anchor != NULL &&
+	     lj_tg_root_anchor_top_acq(tg) == anchoridx + 1u,
+	     "new-thread environment root is not the top anchor");
+  lj_tv_load_acq(&snap, anchor);
+  lj_assertL((env && tvistab(&snap) && tabV(&snap) == env) ||
+	     (!env && tvisnil(&snap)), "wrong new-thread environment root");
+  return state_new_withenv_at_anchor(L, env, anchor, anchoridx);
+}
+
+lua_State *lj_state_new(lua_State *L, uint32_t *anchoridx)
+{
+  return lj_state_new_withenv(L, lj_state_env_acq(L), anchoridx);
 }
 
 void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
@@ -831,7 +954,8 @@ void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
     lj_trace_abort(g);  /* For aa_uref soundness. */
     lj_assertG(lj_state_openupval_acq(L) == NULL, "stale open upvalues");
   }
-  lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
+  if (L->stacksize != 0)
+    lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
   if (!lj_mem_freegco_defer(g, L, sizeof(lua_State)))
     lj_mem_freet(g, L);
 }

@@ -26,6 +26,7 @@
 #include "lj_cdata.h"
 #include "lj_ccall.h"
 #include "lj_safepoint.h"
+#include "lj_state.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
 
@@ -119,6 +120,33 @@ static CType *ccall_rawchild_wait(lua_State *L, CTState *cts, CType *ct,
   CTypeID id = ctype_childid(cts, ct);
   return ccall_rawid_wait(L, cts, id, ridp, out);
 }
+
+/* ccall_set_args() pre-grows enough Lua stack space for every ABI temporary.
+** Publish pass-by-reference cdata there immediately after construction. These
+** roots then survive CType waits, callback-capable native execution and the
+** post-return result snapshot; normal/error frame unwinding owns cleanup. */
+static LJ_AINLINE void ccall_push_cdata_root(lua_State *L, GCcdata *cd)
+{
+  setcdataV(L, L->top, cd);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+}
+
+#if (LJ_TARGET_X64 && LJ_ABI_WIN) || LJ_TARGET_ARM64 || LJ_TARGET_PPC
+#define CCALL_ARG_ROOT_BOUND \
+  (CCALL_NUM_STACK + CCALL_NUM_GPR + 1u)
+static LJ_AINLINE void *ccall_new_temp_root(lua_State *L, CTState *cts,
+					     CTypeID id, CTSize sz)
+{
+  GCcdata *cd = lj_cdata_new_l(L, cts, id, sz);
+  void *p = cdataptr(cd);
+  ccall_push_cdata_root(L, cd);  /* No poll/throw after READY and before root. */
+  return p;
+}
+#else
+/* These targets pass aggregate arguments directly in CCallState storage. */
+#define CCALL_ARG_ROOT_BOUND 0u
+#endif
 
 /* Target-specific handling of register arguments. */
 #if LJ_TARGET_X86
@@ -217,14 +245,14 @@ static CType *ccall_rawchild_wait(lua_State *L, CTState *cts, CType *ct,
 #define CCALL_HANDLE_STRUCTARG \
   /* Pass structs of size 1, 2, 4 or 8 in a GPR by value. */ \
   if (!(sz == 1 || sz == 2 || sz == 4 || sz == 8)) { \
-    rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
+    rp = ccall_new_temp_root(L, cts, did, sz); \
     sz = CTSIZE_PTR;  /* Pass all other structs by reference. */ \
   }
 
 #define CCALL_HANDLE_COMPLEXARG \
   /* Pass complex float in a GPR and complex double by reference. */ \
   if (sz != 2*sizeof(float)) { \
-    rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
+    rp = ccall_new_temp_root(L, cts, did, sz); \
     sz = CTSIZE_PTR; \
   }
 
@@ -432,7 +460,7 @@ static CType *ccall_rawchild_wait(lua_State *L, CTState *cts, CType *ct,
 #define CCALL_HANDLE_STRUCTARG \
   unsigned int cl = ccall_classify_struct(cts, d); \
   if (cl == 0) {  /* Pass struct by reference. */ \
-    rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
+    rp = ccall_new_temp_root(L, cts, did, sz); \
     sz = CTSIZE_PTR; \
   } else if (cl > 1) {  /* Pass struct in FPRs or on stack. */ \
     isfp = (cl & 4) ? 2 : 1; \
@@ -489,7 +517,7 @@ static CType *ccall_rawchild_wait(lua_State *L, CTState *cts, CType *ct,
   memcpy(dp, sp, ctr->size);  /* Copy complex from GPRs. */
 
 #define CCALL_HANDLE_STRUCTARG \
-  rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
+  rp = ccall_new_temp_root(L, cts, did, sz); \
   sz = CTSIZE_PTR;  /* Pass all structs by reference. */
 
 #define CCALL_HANDLE_COMPLEXARG \
@@ -1097,7 +1125,7 @@ CTypeID lj_ccall_ctid_vararg(lua_State *L, CTState *cts, cTValue *o)
 ** Note: may reallocate the C type table and invalidate CType pointers.
 */
 static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
-			  CCallState *cc)
+			  CCallState *cc, int *has_result_root)
 {
   int gcsteps = 0;
   TValue *o, *top = L->top;
@@ -1143,7 +1171,8 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
       CTSize sz = rsize;
       GCcdata *cd = lj_cdata_new_l(L, cts, ctype_cid(info), sz);
       void *dp = cdataptr(cd);
-      setcdataV(L, L->top++, cd);
+      ccall_push_cdata_root(L, cd);
+      *has_result_root = 1;
       if (ctype_isstruct(rinfo)) {
 	CCALL_HANDLE_STRUCTRET
       } else {
@@ -1503,16 +1532,41 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
   if (ctype_isfunc(info)) {
     CCallState cc;
     uint32_t actions;
-    int gcsteps, ret;
+    ptrdiff_t calltop;
+    MSize nroot;
+    int gcsteps, ret, has_result_root = 0;
     void *func;
+    /* Every pass-by-reference temporary consumes one GPR or one stack slot;
+    ** FPR-only arguments never create one. Thus CCALL_NUM_GPR plus
+    ** CCALL_NUM_STACK bounds all argument roots on every supported ABI. The
+    ** first extra slot is the optional aggregate-result root. Another argument
+    ** slot can hold the single over-limit temporary created before ABI
+    ** placement detects CCALL_SIZE_STACK exhaustion and throws. Targets which
+    ** pass aggregates directly in CCallState have a compile-time zero argument
+    ** bound. Cap the nonzero ABI bound by the actual argument count so an
+    ** ordinary small call does not reserve the maximum call-state footprint. */
+    nroot = (MSize)(L->top - (L->base+1));
+    if (nroot > CCALL_ARG_ROOT_BOUND)
+      nroot = CCALL_ARG_ROOT_BOUND;
+    lj_state_checkstack(L, nroot + 1u);
+    calltop = savestack(L, L->top);
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
     func = (void *)cc.func;
-    gcsteps = ccall_set_args(L, cts, ct, &cc);
+    gcsteps = ccall_set_args(L, cts, ct, &cc, &has_result_root);
     lj_ccall_native_enter(L, &native, func);
     lj_vm_ffi_call(&cc);
     actions = lj_ccall_native_leave(L, cts, &native, func);
     ct = ccall_ctype_snapshot_wait(L, cts, id, &ctsnap);
+    /* Drop argument temporaries only after the foreign call and the final
+    ** throwing type snapshot. Keep an aggregate result as the sole appended
+    ** slot so ccall_get_results() retains its established top-1 contract. */
+    L->top = restorestack(L, calltop) + has_result_root;
     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);
+    /* Scalar cdata results are constructed directly into top-1. Publish the
+    ** final result uniformly before STOPREQ handling or GC accounting can
+    ** poll, throw or start another cycle. */
+    if (ret)
+      lj_state_stack_pubtv(L, L, L->top-1);
 #if LJ_TARGET_X86 && LJ_ABI_WIN
     /* Automatically detect __stdcall and fix up C function declaration. */
     {

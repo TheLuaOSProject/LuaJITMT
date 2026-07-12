@@ -116,6 +116,12 @@ static LJ_AINLINE void name##_armed_rel(type *ret, uint32_t armed) \
 LJ_TAB_RETIRE_HEAD_ACCESSORS(lj_tab_node_retired, TabNodeRetire, retired_nodes)
 LJ_TAB_RETIRE_RECORD_ACCESSORS(lj_tab_node_retired, TabNodeRetire)
 
+static LJ_AINLINE GCtab *
+lj_tab_node_retired_tab_acq(const TabNodeRetire *ret)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&ret->tab);
+}
+
 static LJ_AINLINE Node *lj_tab_node_retired_node_acq(const TabNodeRetire *ret)
 {
   return (Node *)la_loadptr_acq((void *const *)&ret->node);
@@ -141,6 +147,12 @@ static LJ_AINLINE void lj_tab_node_retired_hmask_rel(TabNodeRetire *ret,
 LJ_TAB_RETIRE_HEAD_ACCESSORS(lj_tab_array_retired, TabArrayRetire,
 			     retired_arrays)
 LJ_TAB_RETIRE_RECORD_ACCESSORS(lj_tab_array_retired, TabArrayRetire)
+
+static LJ_AINLINE GCtab *
+lj_tab_array_retired_tab_acq(const TabArrayRetire *ret)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&ret->tab);
+}
 
 static LJ_AINLINE TValue *
 lj_tab_array_retired_array_acq(const TabArrayRetire *ret)
@@ -168,9 +180,22 @@ static LJ_AINLINE void lj_tab_array_retired_acap_rel(TabArrayRetire *ret,
 #undef LJ_TAB_RETIRE_RECORD_ACCESSORS
 #undef LJ_TAB_RETIRE_HEAD_ACCESSORS
 
+/* A construction root closes the gap between a table becoming READY and its
+** first ordinary Lua/native semantic root. The rooted API leaves this TG slot
+** live so callers may safely wait, reacquire a state claim, or grow a stack. */
+typedef struct LJTabRoot {
+  TGState *tg;
+  uint32_t idx;
+} LJTabRoot;
+
 LJ_FUNCA GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits);
 LJ_FUNCA GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L);
 LJ_FUNC GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h);
+LJ_FUNC GCtab *lj_tab_new_rooted(lua_State *L, uint32_t asize,
+				  uint32_t hbits, LJTabRoot *root);
+LJ_FUNC GCtab *lj_tab_new_ah_rooted(lua_State *L, uint32_t a, uint32_t h,
+				    LJTabRoot *root);
+LJ_FUNC void lj_tab_root_release(LJTabRoot *root);
 #if LJ_HASJIT
 LJ_FUNC GCtab * LJ_FASTCALL lj_tab_new0_forjit(lua_State *L);
 LJ_FUNC GCtab * LJ_FASTCALL lj_tab_new1(lua_State *L, uint32_t ahsize);
@@ -187,6 +212,18 @@ LJ_FUNC int lj_tab_array_snapshot_gc(global_State *g, const GCtab *t,
 				     MSize *acapp);
 LJ_FUNC int lj_tab_node_snapshot_gc(global_State *g, const GCtab *t,
 				    Node **nodep, MSize *hmaskp);
+/* Long C-side generation scans publish an owner-written epoch pin before
+** acquiring any raw array/node pointer and drop it after the final dereference.
+** Nested scopes retain the epoch of the outermost reader. */
+typedef struct LJTabReadCheckpoint {
+  TGState *tg;
+  uint64_t epoch;
+  uint32_t depth;
+} LJTabReadCheckpoint;
+LJ_FUNC void lj_tab_read_enter(TGState *tg);
+LJ_FUNC void lj_tab_read_leave(TGState *tg);
+LJ_FUNC void lj_tab_read_checkpoint(TGState *tg, LJTabReadCheckpoint *cp);
+LJ_FUNC void lj_tab_read_unwind(const LJTabReadCheckpoint *cp);
 LJ_FUNC uint32_t lj_tab_reclaim_retired(global_State *g,
 					uint64_t completed_epoch);
 LJ_FUNC void lj_tab_freeretired(global_State *g);
@@ -225,6 +262,7 @@ typedef void (*LJTabNewkeyReserveHook)(lua_State *L, GCtab *t,
 typedef void (*LJTabResizeArrayHook)(lua_State *L, GCtab *t,
 				     TValue *oldarray, MSize oldasize);
 typedef void (*LJTabNextAfterKeyindexHook)(GCtab *t, uint32_t idx);
+typedef void (*LJTabConstructorPrepublishHook)(lua_State *L, GCtab *t);
 LJ_FUNC void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_chain_after_reserve_hook(
@@ -233,6 +271,8 @@ LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
   LJTabNextAfterKeyindexHook hook);
+LJ_FUNC void lj_tab_test_set_constructor_prepublish_hook(
+  LJTabConstructorPrepublishHook hook);
 LJ_FUNC int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src,
 					      MSize idx, GCtab *dst,
 					      int freeze_old);

@@ -20,6 +20,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_udata.h"
+#include "lj_state.h"
 #include "lj_meta.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
@@ -49,6 +50,23 @@ static LJ_AINLINE SBufExt *buffer_tobufw(lua_State *L)
 }
 
 #define buffer_toudata(sbx)	((GCudata *)(sbx)-1)
+
+/* Allocate the first owned buffer without a longjmp while a constructor root
+** is live.  This is the empty-SBuf specialization of buf_grow(): there is no
+** old storage, payload, COW reference or borrowed owner to transfer. */
+static char *buffer_storage_new_nothrow(lua_State *L, SBufExt *sbx, MSize sz)
+{
+  MSize nsz = LJ_MIN_SBUF;
+  char *raw;
+  while (nsz < sz)
+    nsz += nsz;
+  raw = (char *)lj_mem_new_nothrow(L, nsz);
+  if (!raw)
+    return NULL;
+  lj_buf_rptr_rel(sbx, raw);
+  lj_buf_bounds_rel((SBuf *)sbx, raw, raw, raw + nsz);
+  return raw;
+}
 
 /* -- Buffer methods ------------------------------------------------------ */
 
@@ -310,7 +328,9 @@ LJLIB_CF(buffer_new)
   int targ = 1;
   GCtab *env, *dict_str = NULL, *dict_mt = NULL;
   GCudata *ud;
+  LJUdataRoot root;
   SBufExt *sbx;
+  char *raw = NULL;
   if (L->base < L->top && !tvistab(L->base)) {
     targ = 2;
     if (!tvisnil(L->base))
@@ -338,11 +358,13 @@ LJLIB_CF(buffer_new)
     }
   }
   env = lj_func_env_acq(curr_func(L));
-  ud = lj_udata_new(L, sizeof(SBufExt), env);
+  lj_state_checkstack(L, 1);  /* No stack growth with root live. */
+  ud = lj_udata_newrooted(L, sizeof(SBufExt), env, &root);
   lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);
-  lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
-  setudataV(L, L->top++, ud);
+  /* Registration may allocate.  The generic constructor root remains the
+  ** semantic owner until the complete SBufExt payload is release-published. */
+  lj_udata_finreg_mt_rooted(L, ud, env, &root);
   sbx = (SBufExt *)uddata(ud);
   lj_bufx_init(L, sbx);
   lj_bufx_dict_str_rel(sbx, dict_str);
@@ -351,8 +373,21 @@ LJLIB_CF(buffer_new)
   lj_bufx_dict_mt_rel(sbx, dict_mt);
   if (dict_mt)
     lj_gc_pubobjobj(L, ud, dict_mt);
-  lj_udata_udtype_rel(ud, UDTYPE_BUFFER);
-  if (sz > 0) lj_buf_need2((SBuf *)sbx, sz);
+  if (sz > 0) {
+    raw = buffer_storage_new_nothrow(L, sbx, sz);
+    if (LJ_UNLIKELY(raw == NULL)) {
+      lj_udata_root_release(&root);
+      lj_err_mem(L);
+    }
+    /* The backing store is raw arena memory, not an independently reachable
+    ** GC object.  Retain it before the subtype makes traversal authoritative. */
+    if (raw)
+      (void)lj_gc2_markmem(G(L), raw);
+  }
+  lj_udata_specialize(L, ud, UDTYPE_BUFFER);
+  if (raw)
+    (void)lj_gc2_markmem(G(L), raw);  /* Close bitmap-clear vs subtype LP. */
+  lj_udata_pushrooted(L, ud, &root);
   lj_gc_check(L);
   return 1;
 }

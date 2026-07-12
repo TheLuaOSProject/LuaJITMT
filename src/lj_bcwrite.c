@@ -10,6 +10,8 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_buf.h"
+#include "lj_tab.h"
+#include "lj_tg.h"
 #include "lj_bc.h"
 #include "lj_err.h"
 #if LJ_HASFFI
@@ -175,11 +177,17 @@ static void bcwrite_ktab_sorted_hash(BCWriteCtx *ctx, Node *node, MSize nhash)
 /* Write a template table. */
 static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
 {
+  lua_State *L = sbufL(&ctx->sb);
   MSize narray = 0, nhash = 0;
   Node *hashnode = NULL;
   TValue *array = NULL;
   MSize hmask = 0;
-  MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  MSize asize;
+  /* Buffer/heap growth can allocate between scan iterations. The TG-local pin
+  ** protects the raw template generation; the central Lua throw boundary
+  ** clears it if an allocation error unwinds this protected bytecode write. */
+  lj_tab_read_enter(L2TG(L));
+  asize = lj_tab_array_snapshot_acq(t, &array);
   if (asize > 0) {  /* Determine max. length of array part. */
     ptrdiff_t i;
     for (i = (ptrdiff_t)asize-1; i >= 0; i--) {
@@ -228,12 +236,13 @@ static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
       }
     }
   }
+  lj_tab_read_leave(L2TG(L));
 }
 
 /* Write GC constants of a prototype. */
 static void bcwrite_kgc(BCWriteCtx *ctx, GCproto *pt)
 {
-  MSize i, sizekgc = pt->sizekgc;
+  MSize i, sizekgc = proto_sizekgc_acq(pt);
   GCRef *kr = mref(pt->k, GCRef) - (ptrdiff_t)sizekgc;
   for (i = 0; i < sizekgc; i++, kr++) {
     GCobj *o = gcref_acq(*kr);
@@ -402,7 +411,7 @@ static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
 
   /* Recursively write children of prototype. */
   if ((pt->flags & PROTO_CHILD)) {
-    ptrdiff_t i, n = pt->sizekgc;
+    ptrdiff_t i, n = (ptrdiff_t)proto_sizekgc_acq(pt);
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
       GCobj *o = gcref_acq(*kr);
@@ -424,7 +433,7 @@ static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
   *p++ = pt->numparams;
   *p++ = pt->framesize;
   *p++ = pt->sizeuv;
-  p = lj_strfmt_wuleb128(p, pt->sizekgc);
+  p = lj_strfmt_wuleb128(p, proto_sizekgc_acq(pt));
   p = lj_strfmt_wuleb128(p, pt->sizekn);
   p = lj_strfmt_wuleb128(p, pt->sizebc-1);
   if (!(ctx->flags & BCDUMP_F_STRIP)) {

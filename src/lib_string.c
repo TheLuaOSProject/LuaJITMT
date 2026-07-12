@@ -704,7 +704,9 @@ LUALIB_API int luaopen_string(lua_State *L)
   strtab = tabV(L->top-1);
   lj_state_checkstack(L, 1);
   mt = lj_tab_new(L, 0, 1);
-  settabV(L, L->top++, mt);
+  settabV(L, L->top, mt);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
   g = G(L);
   string_storetab_str(L, mt, mmname_str(g, MM_index), strtab);
   lj_tab_nomm_rel(mt, (uint8_t)(~(1u<<MM_index)));

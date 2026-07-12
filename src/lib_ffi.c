@@ -2927,9 +2927,16 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   CTState *cts = lj_ctype_init(L);
   GCtab *miscmap;
   lj_ccallback_init_l(L, cts);
+  lj_state_checkstack(L, 1);
   miscmap = lj_tab_new(L, 0, 1);
+  settabV(L, L->top, miscmap);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
   ctype_miscmap_rel(cts, miscmap);
-  settabV(L, L->top++, miscmap);
+  /* CTState is the permanent native root after this initializer pops the
+  ** stack anchor. Repair an already-running cycle after publishing that edge;
+  ** future cycles acquire-scan miscmap from CTState. */
+  lj_gc_pubobjroot(L, obj2gco(miscmap));
   LJ_LIB_REG(L, NULL, ffi_meta);
   /* NOBARRIER: basemt is a GC root. */
   lj_basemt_it_rel(G(L), LJ_TCDATA, tabV(L->top-1));

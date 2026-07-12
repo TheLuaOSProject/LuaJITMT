@@ -176,7 +176,7 @@ enum {
 #define LJ_GC2_WEAK_DRAIN_BATCH		64u
 #define LJ_GC2_SWEEP_BATCH		64u
 #define LJ_GC2_GRACE_EPOCHS		2u
-#define LJ_GC2_ROOT_SCAN_LIMIT		1000000u
+#define LJ_GC2_ROOT_SCAN_LIMIT		LJ_ROOT_SCAN_LIMIT
 #define LJ_GC2_ROOT_RETRY_ROUNDS	8u
 #define LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT	80u
 
@@ -286,9 +286,13 @@ LJ_FUNC void lj_gc2_test_finalizer_drain_pause(global_State *g);
 #endif
 LJ_FUNC int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_udata_register(lua_State *L, global_State *g,
-					  GCobj *o);
+					   GCobj *o);
+LJ_FUNC int lj_gc2_finreg_udata_register_mt_nothrow(lua_State *L,
+						     global_State *g,
+						     GCudata *ud,
+						     GCtab *mt);
 LJ_FUNC void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
-					     GCudata *ud, GCtab *mt);
+					      GCudata *ud, GCtab *mt);
 LJ_FUNC void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o);
 LJ_FUNC size_t lj_gc2_finreg_udata_finalize(global_State *g, int all);
 LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L);
@@ -376,6 +380,22 @@ LJ_FUNCA void lj_gc2_barrier_tab_g(global_State *g, GCtab *t);
 LJ_FUNCA void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
+/* Returns -1 for dead/invalid, 0 for already live, 1 for newly retained and
+** optionally snapshots the admitted header type. Active semantic graph work is
+** published before return. */
+LJ_FUNC int lj_gc2_markobj_status(global_State *g, GCobj *o, uint32_t *gctp);
+/* As above, but reject an acquired header of a different type before changing
+** its semantic mark state. This is required for tagged/stale edge admission:
+** a type mismatch must not premark a graph which a later real edge must walk. */
+LJ_FUNC int lj_gc2_markobj_expected_status(global_State *g, GCobj *o,
+					    uint32_t expected_gct,
+					    uint32_t *gctp);
+/* Retain the table allocation non-semantically while comparing one current
+** vector root. Returns 1 for the same generation, 0 for a valid different or
+** terminal owner, and -1 when admission is transient and reclaim must retry. */
+LJ_FUNC int lj_gc2_tab_generation_current(global_State *g, GCtab *t,
+					   const void *generation,
+					   int array_generation);
 LJ_FUNC int lj_gc2_markobj_direct(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markobj_nogrey(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);

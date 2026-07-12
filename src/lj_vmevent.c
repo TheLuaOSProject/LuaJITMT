@@ -151,7 +151,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop)
   ** already turns nested events into bounded drops, while a temporary zero mask
   ** can erase a concurrent jit.attach() VMEVENT_NOCACHE invalidation.
   */
-  status = lj_vm_pcall(L, restorestack(L, argbase), 0+1, 0);
+  status = lj_vm_pcall_unwind(L, restorestack(L, argbase), 0+1, 0);
   if (LJ_UNLIKELY(status)) {
     /* Really shouldn't use stderr here, but where else to complain? */
     L->top--;

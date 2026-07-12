@@ -112,7 +112,8 @@ static void assert_traced_fnew_publication_order(lua_State *L)
 {
   int traceno;
   for (traceno = 1; traceno <= 256; traceno++) {
-    size_t len, fn_header, uv_header, mark_set, mark_clear, first_mark, block;
+    size_t len, fn_header, uv_header, mark_set, mark_clear, first_mark;
+    size_t ready, block;
     size_t pending_hint;
     const uint8_t *mc;
     lua_getglobal(L, "require");
@@ -131,6 +132,8 @@ static void assert_traced_fnew_publication_order(lua_State *L)
 			      (uint32_t)offsetof(GCArena, mark));
     block = find_bitmap_op(mc, len, 0, 0, 0xabu,
 			   (uint32_t)offsetof(GCArena, block));
+    ready = find_bitmap_op(mc, len, 0, 0, 0xabu,
+			   (uint32_t)offsetof(GCArena, ready));
     if (mark_set == (size_t)-1 || block == (size_t)-1) {
       lua_pop(L, 1);
       continue;
@@ -144,13 +147,15 @@ static void assert_traced_fnew_publication_order(lua_State *L)
 						    gcroot_pending_hint), 1u);
     assert(fn_header != (size_t)-1 && uv_header != (size_t)-1);
     assert(mark_clear != (size_t)-1);
+    assert(ready != (size_t)-1);
     assert(pending_hint != (size_t)-1);
     first_mark = mark_set < mark_clear ? mark_set : mark_clear;
     /* x64 emits backwards: this guards the order in executable mcode, not the
     ** visually misleading order of emit_* calls in lj_asm_x86.h. */
     assert(fn_header < first_mark);
     assert(uv_header < first_mark);
-    assert(first_mark < block);
+    assert(first_mark < ready);
+    assert(ready < block);
     assert(block < pending_hint);
     lua_pop(L, 1);
     return;
@@ -482,7 +487,6 @@ static void test_traced_alloc_black_inline(lua_State *L, global_State *g,
 static void test_traced_post_sweep_bump_refill(lua_State *L)
 {
   uint32_t fallback0, fallback1;
-  uint32_t fast0, fast1;
   const char *setup =
     "local util = require'jit.util'\n"
     "jit.flush()\n"
@@ -511,17 +515,40 @@ static void test_traced_post_sweep_bump_refill(lua_State *L)
 
   lj_func_test_reset_gc1num_bump_fast_calls();
   lj_func_test_reset_gc1num_bump_fallback_calls();
-  fast0 = lj_func_test_gc1num_bump_fast_calls();
   fallback0 = lj_func_test_gc1num_bump_fallback_calls();
 
   run_script(L, rerun, "numeric FNEW post-sweep refill rerun");
 
-  fast1 = lj_func_test_gc1num_bump_fast_calls();
   fallback1 = lj_func_test_gc1num_bump_fallback_calls();
+  /* A semantic construction lease may preserve a reusable inline bump window
+  ** through this collection. Either the trace keeps allocating inline or its
+  ** first miss refills through the fast helper; neither may reach fallback. */
   assert(fallback1 == fallback0);
-  assert(fast1 > fast0);
   lua_pushnil(L);
   lua_setglobal(L, "__fnew_refill_run");
+}
+
+static void test_traced_gcvalue_promotion(lua_State *L)
+{
+  const char *code =
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1', '-sink')\n"
+    "local keep\n"
+    "local function run(n)\n"
+    "  local x = { value = 0 }\n"
+    "  for i = 1, n do\n"
+    "    x = { value = i }\n"
+    "    local function f() return x end\n"
+    "    keep = f\n"
+    "  end\n"
+    "  return keep().value\n"
+    "end\n"
+    "assert(run(2000) == 2000)\n"
+    "assert(util.traceinfo(1), 'GC-valued cell promotion did not trace')\n"
+    "collectgarbage('collect')\n"
+    "assert(run(2000) == 2000)\n";
+  run_script(L, code, "traced GC-valued local-cell promotion");
 }
 
 static void load_one_upvalue_fixture(lua_State *L, GCfunc **parentp,
@@ -837,7 +864,6 @@ static void test_interpreter_no_upvalue_fast_path(lua_State *L)
 
 static void test_traced_no_upvalue_fast_path(lua_State *L)
 {
-  uint32_t fast0, fast1;
   const char *code =
     "local util = require'jit.util'\n"
     "jit.flush()\n"
@@ -852,11 +878,25 @@ static void test_traced_no_upvalue_fast_path(lua_State *L)
     "assert(t[1] ~= t[2])\n"
     "assert(debug.getupvalue(t[1], 1) == nil)\n";
 
+  run_script(L, code, "traced no-upvalue FNEW fast path");
+}
+
+static void test_no_upvalue_forjit_fast_direct(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCfunc *parent, *fn;
+  GCproto *child;
+  uint32_t fast0;
+
+  load_no_upvalue_fixture(L, &parent, &child);
+  quiet_gc_for_bump(g, tg);
+  prime_traversable_bump_window(tg);
   lj_func_test_reset_gc0_bump_trace_calls();
   fast0 = lj_func_test_gc0_bump_trace_calls();
-  run_script(L, code, "traced no-upvalue FNEW fast path");
-  fast1 = lj_func_test_gc0_bump_trace_calls();
-  assert(fast1 > fast0);
+  fn = lj_func_newL_gc_forjit(L, NULL, child, &parent->l);
+  assert(isluafunc(fn) && lj_funcL_nupvalues(&fn->l) == 0);
+  assert(lj_func_test_gc0_bump_trace_calls() > fast0);
+  lua_pop(L, 1);
 }
 
 static void test_accounting_fast_direct(lua_State *L, global_State *g,
@@ -1015,8 +1055,10 @@ static void test_accounting_fallback(lua_State *L, global_State *g,
   la_store64_rel(&tg->local_total, LJ_GC2_ACCT_FLUSH - 1u);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 123);
   assert_one_upvalue_result(fn, &slots[slotno], 123);
-  assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
-  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
+  /* A would-flush bump must decline before READY so the generic allocator can
+  ** account while the allocation remains opaque and cancellation-safe. */
+  assert(lj_func_test_gc1num_bump_fallback_calls() > fallback0);
+  assert(lj_func_test_gc1num_bump_fast_calls() == fast0);
   assert(lj_tg_local_total_acq(tg) < LJ_GC2_ACCT_FLUSH);
   lua_pop(L, 1);
 }
@@ -1042,6 +1084,7 @@ int main(void)
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);
+  test_no_upvalue_forjit_fast_direct(L, g, tg);
   test_traced_active_black_inline(L, g, tg);
   test_traced_immutable_numeric_inline(L, g);
   if (getenv("LJ_TEST_TRACED_FNEW") != NULL) {
@@ -1050,6 +1093,7 @@ int main(void)
     test_traced_alloc_black_inline(L, g, tg);
     test_traced_post_sweep_bump_refill(L);
     test_traced_no_upvalue_fast_path(L);
+    test_traced_gcvalue_promotion(L);
   }
 
   lua_close(L);

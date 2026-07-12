@@ -658,6 +658,7 @@ void lj_debug_pushactivelines(lua_State *L, GCfunc *fn)
     GCproto *pt = funcproto(fn);
     const void *lineinfo = proto_lineinfo(pt);
     settabV(L, L->top, t);
+    lj_state_stack_pubtv(L, L, L->top);
     incr_top(L);
     if (lineinfo) {
       BCLine first = pt->firstline;
@@ -828,6 +829,7 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
       GCproto *pt = funcproto(fn);
       const void *lineinfo = proto_lineinfo(pt);
       settabV(L, L->top, t);
+      lj_state_stack_pubtv(L, L, L->top);
       incr_top(L);
       if (lineinfo) {
 	BCLine first = pt->firstline;

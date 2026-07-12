@@ -335,6 +335,7 @@
 #define TAB_EMPTY_BINMASK	((int32_t)(~((1u << (TAB_EMPTY_NCELLS-1))-1u)))
 #define ARENA_BLOCK_OFS		((int)offsetof(GCArena, block))
 #define ARENA_MARK_OFS		((int)offsetof(GCArena, mark))
+#define ARENA_READY_OFS		((int)offsetof(GCArena, ready))
 #define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
 #define TABARRAY_ACAP_OFS	\
   (TABARRAY_ASIZE_OFS + (int)offsetof(TabArrayHdr, acap))
@@ -4149,7 +4150,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  settp UPVAL:RC, LJ_TUPVAL
     |  mov [BASE+RA*8], UPVAL:RC
     |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-    |  ins_next
+    |  jmp ->vm_gc2_pubroot
     break;
   case BC_CGET:
     |  ins_AD	// RA = dst, RD = local cell/raw slot
@@ -4345,7 +4346,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  settp LFUNC:RC, LJ_TFUNC
     |  mov [BASE+RA*8], LFUNC:RC
     |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-    |  ins_next
+    |  jmp ->vm_gc2_pubroot
     break;
 
   /* -- Table ops --------------------------------------------------------- */
@@ -4421,6 +4422,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lock
     |  btr qword [r8+ARENA_MARK_OFS], ITYPE
 |9:
+    |  // READY precedes block discovery and is sole-writer in this VM path.
+    |  bts qword [r8+ARENA_READY_OFS], ITYPE
     |  bts qword [r8+ARENA_BLOCK_OFS], ITYPE
     |  add qword [TMPR+GL_OFS(gc.total)], TAB_EMPTY_SIZE
     |  add qword [DISPATCH+DISPATCH_TG(local_total)], TAB_EMPTY_SIZE

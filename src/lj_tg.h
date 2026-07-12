@@ -55,6 +55,7 @@ typedef uint16_t HotCount;
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
 typedef struct TGRootAnchorBlock TGRootAnchorBlock;
+struct LexState;
 
 struct TGRootAnchorBlock {
   TGRootAnchorBlock *next;
@@ -80,6 +81,7 @@ struct TGState {
   uint32_t mark_active;
   global_State *gl;
   lua_State *cur_L;
+  struct LexState *lexstate;  /* Owner-published parser raw-root descriptor. */
   TValue *jit_base;
   /* Owner-private trace-root state materialized by IR_XSAVE. The future
   ** generic native-enter helper consumes these fields before it release-
@@ -100,6 +102,8 @@ struct TGState {
   StrCanonHdr *strq_active_hdr;
   uint32_t strq_active_depth;
   uint64_t strq_active_epoch;  /* GC2 epoch of outermost quarantine pin. */
+  uint32_t tab_read_depth;
+  uint64_t tab_read_epoch;  /* GC2 epoch of outermost long table-vector read. */
   StrID strid_next;
   StrID strid_end;
   uint32_t strnum_credit;  /* Unused string-count reservations. */
@@ -235,9 +239,29 @@ static LJ_AINLINE uint64_t lj_tg_strq_active_epoch_acq(const TGState *tg)
 }
 
 static LJ_AINLINE void lj_tg_strq_active_epoch_rel(TGState *tg,
-						    uint64_t epoch)
+							    uint64_t epoch)
 {
   la_store64_rel(&tg->strq_active_epoch, epoch);
+}
+
+static LJ_AINLINE uint32_t lj_tg_tab_read_depth_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->tab_read_depth);
+}
+
+static LJ_AINLINE void lj_tg_tab_read_depth_rel(TGState *tg, uint32_t depth)
+{
+  la_store32_rel(&tg->tab_read_depth, depth);
+}
+
+static LJ_AINLINE uint64_t lj_tg_tab_read_epoch_acq(const TGState *tg)
+{
+  return la_load64_acq(&tg->tab_read_epoch);
+}
+
+static LJ_AINLINE void lj_tg_tab_read_epoch_rel(TGState *tg, uint64_t epoch)
+{
+  la_store64_rel(&tg->tab_read_epoch, epoch);
 }
 
 static LJ_AINLINE uint32_t lj_tg_in_native_inc_rel(TGState *tg)
@@ -887,6 +911,16 @@ static LJ_AINLINE void lj_tg_store_cur_L(TGState *tg, lua_State *L)
   la_storeptr_rel((void **)&tg->cur_L, L);  /* 05 section 5.7.4 TG root. */
 }
 
+static LJ_AINLINE struct LexState *lj_tg_lexstate_acq(const TGState *tg)
+{
+  return (struct LexState *)la_loadptr_acq((void *const *)&tg->lexstate);
+}
+
+static LJ_AINLINE void lj_tg_lexstate_rel(TGState *tg, struct LexState *ls)
+{
+  la_storeptr_rel((void **)&tg->lexstate, ls);
+}
+
 static LJ_AINLINE lua_State *lj_tg_load_thread_L(TGState *tg)
 {
   return (lua_State *)la_loadptr_acq((void *const *)&tg->thread_L);
@@ -978,8 +1012,19 @@ static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
 LJ_FUNC int lj_tg_any_jit_active(global_State *g);
 LJ_FUNC TValue *lj_tg_root_anchor_push(lua_State *L, TGState *tg,
 				       cTValue *tv, uint32_t *idxp);
+/* Ensure storage for the next root-anchor slot without publishing a root or
+** raising an error. This is used immediately before a value-producing
+** operation whose result exists only in a C local: the later push is then a
+** non-allocating publication. */
+LJ_FUNC int lj_tg_root_anchor_reserve_nothrow(lua_State *L, TGState *tg);
 LJ_FUNC void lj_tg_root_anchor_pop(TGState *tg, uint32_t idx);
 LJ_FUNC TValue *lj_tg_root_anchor_slot_acq(TGState *tg, uint32_t idx);
+#if defined(LJ_TG_ROOT_TEST_HELPERS)
+typedef void (*LJTGRootPushHook)(lua_State *L, TGState *tg, uint32_t idx,
+				 TValue *slot);
+LJ_FUNC void lj_tg_root_test_fail_reserve_after(uint32_t nth);
+LJ_FUNC void lj_tg_root_test_set_push_hook(LJTGRootPushHook hook);
+#endif
 
 #define TG_DISP2HOT	(-(int)(HOTCOUNT_SIZE*sizeof(HotCount)))
 #define TG_OFS(f) \

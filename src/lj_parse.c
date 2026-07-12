@@ -19,6 +19,7 @@
 #include "lj_tab.h"
 #include "lj_func.h"
 #include "lj_state.h"
+#include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_bc.h"
 #if LJ_HASFFI
@@ -290,6 +291,9 @@ void lj_parse_keepcdata(LexState *ls, TValue *tv, GCcdata *cd)
 {
   lua_State *L = ls->L;
   setcdataV(L, tv, cd);
+  /* The LexState descriptor is a semantic native root. Close a concurrent
+  ** MARK observation before table insertion can wait, allocate or throw. */
+  lj_gc_pubroot(L, tv);
   parse_keep_storebool(L, ls->fs->kt, tv);
 }
 #endif
@@ -458,6 +462,7 @@ static BCPos bcemit_INS(FuncState *fs, BCIns ins)
     ptrdiff_t base = fs->bcbase - ls->bcstack;
     checklimit(fs, ls->sizebcstack, LJ_MAX_BCINS, "bytecode instructions");
     lj_mem_growvec(fs->L, ls->bcstack, ls->sizebcstack, LJ_MAX_BCINS,BCInsLine);
+    lj_lex_root_bcstack_rel(ls, ls->bcstack);
     fs->bclim = (BCPos)(ls->sizebcstack - base);
     fs->bcbase = ls->bcstack + base;
   }
@@ -1122,6 +1127,7 @@ static void var_new(LexState *ls, BCReg n, GCstr *name)
     if (ls->sizevstack >= LJ_MAX_VSTACK)
       lj_lex_error(ls, 0, LJ_ERR_XLIMC, LJ_MAX_VSTACK);
     lj_mem_growvec(ls->L, ls->vstack, ls->sizevstack, LJ_MAX_VSTACK, VarInfo);
+    lj_lex_root_vstack_rel(ls, ls->vstack);
   }
   lj_assertFS((uintptr_t)name < VARNAME__MAX ||
 	      lj_tab_getstr(fs->kt, name) != NULL,
@@ -1232,6 +1238,7 @@ static MSize gola_new(LexState *ls, GCstr *name, uint8_t info, BCPos pc)
     if (ls->sizevstack >= LJ_MAX_VSTACK)
       lj_lex_error(ls, 0, LJ_ERR_XLIMC, LJ_MAX_VSTACK);
     lj_mem_growvec(ls->L, ls->vstack, ls->sizevstack, LJ_MAX_VSTACK, VarInfo);
+    lj_lex_root_vstack_rel(ls, ls->vstack);
   }
   lj_assertFS(name == NAME_BREAK || lj_tab_getstr(fs->kt, name) != NULL,
 	      "unanchored label name");
@@ -1417,8 +1424,11 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
   checklimitgt(fs, fs->nkgc, BCMAX_D+1, "constants");
   setmref(pt->k, kptr);
   pt->sizekn = fs->nkn;
-  pt->sizekgc = fs->nkgc;
+  proto_sizekgc_rel(pt, fs->nkgc);
   kt = fs->kt;
+  /* Publishing copied GC constants can allocate SSB overflow storage and poll
+  ** while this fixup resumes its raw template scan. */
+  lj_tab_read_enter(L2TG(fs->L));
   asize = lj_tab_array_snapshot_acq(kt, &array);
   for (i = 0; i < asize; i++) {
     TValue val;
@@ -1462,6 +1472,7 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
       }
     }
   }
+  lj_tab_read_leave(L2TG(fs->L));
 }
 
 /* Fixup upvalues for prototype, step #1. */
@@ -1634,13 +1645,18 @@ static void fs_fixup_ret(FuncState *fs)
 }
 
 /* Finish a FuncState and return the new prototype. */
-static GCproto *fs_finish(LexState *ls, BCLine line)
+static GCproto *fs_finish(LexState *ls, BCLine line, uint32_t *anchoridx)
 {
   lua_State *L = ls->L;
+  TGState *tg = L2TG(L);
   FuncState *fs = ls->fs;
   BCLine numline = line - fs->linedefined;
   size_t sizept, ofsk, ofsuv, ofsli, ofsdbg, ofsvar;
   GCproto *pt;
+  TValue nilv, ptv, *anchor;
+  uint32_t anchor_index;
+
+  lj_assertFS(anchoridx != NULL, "missing proto construction anchor output");
 
   /* Apply final fixups. */
   fs_fixup_ret(fs);
@@ -1653,8 +1669,15 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   ofsli = sizept; sizept += fs_prep_line(fs, numline);
   ofsdbg = sizept; sizept += fs_prep_var(ls, fs, &ofsvar);
 
+  /* Reserve the semantic handoff root before allocating a pending proto. An
+  ** anchor-block allocation may throw, but cannot then abandon a GC header. */
+  setnilV(&nilv);
+  anchor = lj_tg_root_anchor_push(L, tg, &nilv, &anchor_index);
+  if (LJ_UNLIKELY(!anchor))
+    lj_err_mem(L);
+
   /* Allocate prototype and initialize its fields. */
-  pt = (GCproto *)lj_mem_newgco(L, (MSize)sizept);
+  pt = (GCproto *)lj_mem_newgco_unlinked(L, (MSize)sizept);
   pt->gct = ~LJ_TPROTO;
   pt->sizept = (MSize)sizept;
   pt->trace = 0;
@@ -1668,7 +1691,6 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   pt->numparams = fs->numparams;
   pt->framesize = fs->framesize;
   setgcrefrel(pt->chunkname, obj2gco(ls->chunkname));
-  lj_gc_pubobjobj(L, pt, ls->chunkname);
 
   /* Close potentially uninitialized gap between bc and kgc. */
   *(uint32_t *)((char *)pt + ofsk - sizeof(GCRef)*(fs->nkgc+1)) = 0;
@@ -1678,6 +1700,19 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   fs_fixup_line(fs, pt, (void *)((char *)pt + ofsli), numline);
   fs_fixup_var(ls, pt, (uint8_t *)((char *)pt + ofsdbg), ofsvar);
 
+  /* Put the complete pending identity in its semantic anchor before READY.
+  ** A scanner which sees READY=0 treats it as opaque/pinned; the post-READY
+  ** root barrier closes that observation before ownership publication. */
+  setprotoV(L, &ptv, pt);
+  copyTVrel(L, anchor, &ptv);
+  lj_gc_publishobj_header(G(L), obj2gco(pt));
+  lj_gc_pubroot(L, anchor);
+  lj_gc_linkobj_new(G(L), obj2gco(pt));
+  lj_gc_pubobjobj(L, pt, ls->chunkname);
+
+  /* The anchor remains live across arbitrary BC-event Lua and after this
+  ** function returns. Its caller must first publish the durable parent/output
+  ** edge, and only then pop anchor_index. */
   lj_vmevent_send_l(L, BC,
     setprotoV(V, V->top++, pt);
   );
@@ -1686,6 +1721,7 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   ls->vtop = fs->vbase;  /* Reset variable stack. */
   ls->fs = fs->prev;
   lj_assertL(ls->fs != NULL || ls->tok == TK_eof, "bad parser state");
+  *anchoridx = anchor_index;
   return pt;
 }
 
@@ -1711,6 +1747,7 @@ static void fs_init(LexState *ls, FuncState *fs)
   fs->kt = lj_tab_new(L, 0, 0);
   /* Anchor table of constants in stack to avoid being collected. */
   settabV(L, L->top, fs->kt);
+  lj_state_stack_pubtv(L, L, L->top);
   incr_top(L);
 }
 
@@ -1829,13 +1866,19 @@ static void expr_table(LexState *ls, ExpDesc *e)
     expr(ls, &val);
     if (expr_isk(&key) && key.k != VKNIL &&
 	(key.k == VKSTR || expr_isk_nojump(&val))) {
-      TValue k, *v;
-      if (!t) {  /* Create template table on demand. */
-	BCReg kidx;
-	t = lj_tab_new(fs->L, needarr ? narr : 0, hsize2hbits(nhash));
-	kidx = const_gc(fs, obj2gco(t), LJ_TTAB);
-	fs->bcbase[pc].ins = BCINS_AD(BC_TDUP, freg-1, kidx);
-      }
+	TValue k, *v;
+	if (!t) {  /* Create template table on demand. */
+	  BCReg kidx;
+	  LJTabRoot troot;
+	  t = lj_tab_new_rooted(fs->L, needarr ? narr : 0,
+				hsize2hbits(nhash), &troot);
+	  /* const_gc() may allocate or wait before publishing the constants-table
+	  ** edge. Keep a durable TG anchor through that handoff; lua_loadx's anchor
+	  ** baseline drains it if parser error unwinds before the explicit pop. */
+	  kidx = const_gc(fs, obj2gco(t), LJ_TTAB);
+	  lj_tab_root_release(&troot);
+	  fs->bcbase[pc].ins = BCINS_AD(BC_TDUP, freg-1, kidx);
+	}
       vcall = 0;
       expr_kvalue(fs, &k, &key);
       v = lj_tab_set(fs->L, t, &k);
@@ -1941,6 +1984,7 @@ static void parse_body(LexState *ls, ExpDesc *e, int needself, BCLine line)
   FuncState fs, *pfs = ls->fs;
   FuncScope bl;
   GCproto *pt;
+  uint32_t anchoridx;
   ptrdiff_t oldbase = pfs->bcbase - ls->bcstack;
   fs_init(ls, &fs);
   fscope_begin(&fs, &bl, 0);
@@ -1951,12 +1995,13 @@ static void parse_body(LexState *ls, ExpDesc *e, int needself, BCLine line)
   bcemit_AD(&fs, BC_FUNCF, 0, 0);  /* Placeholder. */
   parse_chunk(ls);
   if (ls->tok != TK_end) lex_match(ls, TK_end, TK_function, line);
-  pt = fs_finish(ls, (ls->lastline = ls->linenumber));
+  pt = fs_finish(ls, (ls->lastline = ls->linenumber), &anchoridx);
   pfs->bcbase = ls->bcstack + oldbase;  /* May have been reallocated. */
   pfs->bclim = (BCPos)(ls->sizebcstack - oldbase);
   /* Store new prototype in the constant array of the parent. */
   expr_init(e, VRELOCABLE,
 	    bcemit_AD(pfs, BC_FNEW, 0, const_gc(pfs, obj2gco(pt), LJ_TPROTO)));
+  lj_tg_root_anchor_pop(L2TG(ls->L), anchoridx);
 #if LJ_HASFFI
   pfs->flags |= (fs.flags & PROTO_FFI);
 #endif
@@ -2808,18 +2853,20 @@ static void parse_chunk(LexState *ls)
 }
 
 /* Entry point of bytecode parser. */
-GCproto *lj_parse(LexState *ls)
+GCproto *lj_parse(LexState *ls, uint32_t *anchoridx)
 {
   FuncState fs;
   FuncScope bl;
   GCproto *pt;
   lua_State *L = ls->L;
+  lj_assertLS(anchoridx != NULL, "missing parser handoff anchor output");
 #ifdef LUAJIT_DISABLE_DEBUGINFO
   ls->chunkname = lj_str_newlit(L, "=");
 #else
   ls->chunkname = lj_str_newz(L, ls->chunkarg);
 #endif
   setstrV(L, L->top, ls->chunkname);  /* Anchor chunkname string. */
+  lj_state_stack_pubtv(L, L, L->top);
   incr_top(L);
   ls->level = 0;
   fs_init(ls, &fs);
@@ -2834,7 +2881,7 @@ GCproto *lj_parse(LexState *ls)
   parse_chunk(ls);
   if (ls->tok != TK_eof)
     err_token(ls, TK_eof);
-  pt = fs_finish(ls, ls->linenumber);
+  pt = fs_finish(ls, ls->linenumber, anchoridx);
   L->top--;  /* Drop chunkname. */
   lj_assertL(fs.prev == NULL && ls->fs == NULL, "mismatched frame nesting");
   lj_assertL(pt->sizeuv == 0, "toplevel proto has upvalues");

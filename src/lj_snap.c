@@ -68,7 +68,7 @@ static int snapshot_child_cellslot(jit_State *J, GCproto *pt, BCReg slot)
   ptrdiff_t i, n;
   if (!(pt->flags & PROTO_CHILD))
     return 0;
-  n = pt->sizekgc;
+  n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
   for (i = 0; i < n; i++, kr--) {
     GCobj *o = gcref_acq(*kr);
@@ -415,7 +415,7 @@ static void snap_useuv(jit_State *J, GCproto *pt, uint8_t *udf)
   ** a missed optimization.
   */
   if ((pt->flags & PROTO_CHILD)) {
-    ptrdiff_t i, j, n = pt->sizekgc;
+    ptrdiff_t i, j, n = (ptrdiff_t)proto_sizekgc_acq(pt);
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
       GCobj *o = gcref_acq(*kr);
@@ -446,7 +446,7 @@ static void snap_usechildcellsrc(jit_State *J, GCproto *pt, uint8_t *udf,
   ptrdiff_t i, n;
   if (!(pt->flags & PROTO_CHILD))
     return;
-  n = pt->sizekgc;
+  n = proto_sizekgc_acq(pt);
   kr = mref(pt->k, GCRef) - 1;
   for (i = 0; i < n; i++, kr--) {
     GCobj *o = gcref_acq(*kr);
@@ -1081,6 +1081,10 @@ static void snap_unsink(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
       TValue tv;
       settabV(L, &tv, t);
       copyTVrel(L, o, &tv);
+      /* Snapshot restoration can allocate while filling sunk fields. Keep the
+      ** just-materialized table live until the complete restored stack range is
+      ** published at the trace-exit boundary. */
+      lj_gc_pubroot(L, o);
     }
     irlast = &irbase[snap_ref_acq(snap)];
     for (irs = ir+1; irs < irlast; irs++)

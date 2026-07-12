@@ -63,6 +63,20 @@ static LJ_AINLINE int tab_key_islocked(cTValue *key)
 }
 
 #ifdef LJ_TAB_TEST_HELPERS
+static LJTabConstructorPrepublishHook tab_test_constructor_prepublish_hook;
+
+void lj_tab_test_set_constructor_prepublish_hook(
+  LJTabConstructorPrepublishHook hook)
+{
+  tab_test_constructor_prepublish_hook = hook;
+}
+
+static LJ_AINLINE void tab_test_constructor_prepublish(lua_State *L, GCtab *t)
+{
+  if (tab_test_constructor_prepublish_hook)
+    tab_test_constructor_prepublish_hook(L, t);
+}
+
 #define TAB_TEST_COUNTER(name, hitfn) \
 static uint32_t tab_test_##name; \
 static LJ_AINLINE void tab_test_##hitfn(void) \
@@ -81,6 +95,7 @@ void lj_tab_test_reset_##name(void) \
 TAB_TEST_COUNTER(wait_no_l_calls, wait_no_l_call)
 #else
 #define tab_test_wait_no_l_call()	((void)0)
+#define tab_test_constructor_prepublish(L, t)	((void)0)
 #endif
 
 LJ_FUNCA void lj_tab_wait_no_l(void)
@@ -100,6 +115,81 @@ LJ_FUNCA void lj_tab_wait_l(lua_State *L)
   */
   actions = lj_thr_retry_yield(L);
   lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+}
+
+void lj_tab_read_enter(TGState *tg)
+{
+  uint32_t depth;
+  if (!tg || !tg->gl)
+    abort();
+  depth = lj_tg_tab_read_depth_acq(tg);
+  if (depth == ~(uint32_t)0)
+    abort();
+  if (depth == 0) {
+    /* Publish the epoch before depth. A reclaimer which acquire-observes the
+    ** nonzero depth can therefore classify this reader without sampling an
+    ** uninitialized/stale outer epoch. The raw generation is acquired only by
+    ** the caller after this release publication. */
+    lj_tg_tab_read_epoch_rel(tg, gc2_hs_epoch_acq(tg->gl));
+  }
+  lj_tg_tab_read_depth_rel(tg, depth + 1u);
+}
+
+void lj_tab_read_leave(TGState *tg)
+{
+  uint32_t depth;
+  if (!tg)
+    abort();
+  depth = lj_tg_tab_read_depth_acq(tg);
+  if (depth == 0)
+    abort();
+  lj_tg_tab_read_depth_rel(tg, depth - 1u);
+  if (depth == 1u) {
+    /* Depth is the reader-active publication. Clear it before the now-stale
+    ** outer epoch, matching protected-unwind ordering: a reclaimer which sees
+    ** zero depth ignores either side of the following diagnostic reset. The
+    ** TG owner cannot begin another outer scope concurrently with itself. */
+    lj_tg_tab_read_epoch_rel(tg, 0);
+  }
+}
+
+void lj_tab_read_checkpoint(TGState *tg, LJTabReadCheckpoint *cp)
+{
+  uint32_t depth;
+  if (!tg || !tg->gl || !cp)
+    abort();
+  depth = lj_tg_tab_read_depth_acq(tg);
+  cp->tg = tg;
+  cp->depth = depth;
+  cp->epoch = depth != 0 ? lj_tg_tab_read_epoch_acq(tg) : 0;
+}
+
+void lj_tab_read_unwind(const LJTabReadCheckpoint *cp)
+{
+  TGState *tg;
+  uint32_t depth;
+  uint64_t epoch;
+  if (!cp || !(tg = cp->tg) || !tg->gl)
+    abort();
+  depth = lj_tg_tab_read_depth_acq(tg);
+  if (depth < cp->depth)
+    abort();
+  if (cp->depth != 0) {
+    epoch = lj_tg_tab_read_epoch_acq(tg);
+    /* Nested readers inherit the outer epoch. A different epoch while the
+    ** saved scope is still active proves that a non-owner reset or an
+    ** unmatched leave corrupted the publication. */
+    if (epoch != cp->epoch)
+      abort();
+    lj_tg_tab_read_epoch_rel(tg, cp->epoch);
+    lj_tg_tab_read_depth_rel(tg, cp->depth);
+  } else {
+    /* Release the active flag first. Reclaimers ignore epoch whenever depth
+    ** is zero, so clearing the diagnostic/stale epoch afterwards cannot make
+    ** a retired generation eligible while a reader is still advertised. */
+    lj_tg_tab_read_depth_rel(tg, 0);
+    lj_tg_tab_read_epoch_rel(tg, 0);
+  }
 }
 
 static uint32_t tab_struct_tid(lua_State *L)
@@ -411,6 +501,7 @@ TValue *lj_tab_forwarded_array_slot(GCtab *t, TValue *array, MSize asize,
       if (lj_tab_array_is_colocated(t, array)) {
 	if (lj_tab_array_acq(t) == array) {
 	  lj_tab_wait_no_l();
+	  asize = lj_tab_array_snapshot_acq(t, &array);
 	  continue;
 	}
 	nextasize = lj_tab_array_snapshot_acq(t, &nextarray);
@@ -435,6 +526,7 @@ TValue *lj_tab_forwarded_array_slot(GCtab *t, TValue *array, MSize asize,
     }
     if (lj_tab_array_acq(t) == array && lj_tab_array_is_retiring(t, array)) {
       lj_tab_wait_no_l();
+      asize = lj_tab_array_snapshot_acq(t, &array);
       continue;
     }
     return NULL;
@@ -460,6 +552,7 @@ TValue *lj_tab_forwarded_hash_slot(GCtab *t, Node *node, MSize hmask,
     }
     if (lj_tab_node_acq(t) == node && lj_tab_node_is_retiring(node)) {
       lj_tab_wait_no_l();
+      node = lj_tab_node_snapshot_acq(t, &hmask);
       continue;
     }
     return NULL;
@@ -483,8 +576,9 @@ static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
 	  lj_tv_load_acq(&nextval, &nextarray[idx]);
 	  if (tvisnil(&nextval) && lj_tab_array_acq(t) == oldarray &&
 	      (lj_tab_array_is_retiring(t, oldarray) ||
-	       lj_tab_array_is_colocated(t, oldarray))) {
+		       lj_tab_array_is_colocated(t, oldarray))) {
 	    lj_tab_wait_no_l();
+	    *asizep = lj_tab_array_snapshot_acq(t, arrayp);
 	    continue;
 	  }
 	  *arrayp = nextarray;
@@ -499,6 +593,7 @@ static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
       if (lj_tab_array_is_retiring(t, array) ||
 	  lj_tab_array_is_colocated(t, array)) {
 	lj_tab_wait_no_l();
+	*asizep = lj_tab_array_snapshot_acq(t, arrayp);
 	continue;
       }
     }
@@ -542,6 +637,21 @@ static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
   return node;
 }
 
+static LJ_AINLINE Node *tab_node_new_deferred_nothrow(lua_State *L,
+						       MSize hmask)
+{
+  TabNodeHdr *hdr = (TabNodeHdr *)lj_mem_new_deferred_nothrow(
+    L, lj_tab_node_bytes(hmask));
+  Node *node;
+  if (!hdr)
+    return NULL;
+  node = (Node *)(void *)((char *)(void *)hdr + sizeof(TabNodeHdr));
+  hdr->hmask = hmask;
+  hdr->flags = (hmask + 1u) & TABNODE_FREECOUNT_MASK;
+  setmref(hdr->next_gen, NULL);
+  return node;
+}
+
 static LJ_AINLINE int tab_valid_hmask(MSize hmask)
 {
   MSize hsize;
@@ -573,6 +683,18 @@ static LJ_AINLINE void tab_node_free(global_State *g, Node *node, MSize hmask)
 static LJ_AINLINE TValue *tab_array_new(lua_State *L, MSize asize, MSize acap)
 {
   TabArrayHdr *hdr = (TabArrayHdr *)lj_mem_new(L, lj_tab_array_bytes(acap));
+  lj_tab_array_hdr_init(hdr, asize, acap);
+  return lj_tab_array_slots(hdr);
+}
+
+static LJ_AINLINE TValue *tab_array_new_deferred_nothrow(lua_State *L,
+							 MSize asize,
+							 MSize acap)
+{
+  TabArrayHdr *hdr = (TabArrayHdr *)lj_mem_new_deferred_nothrow(
+    L, lj_tab_array_bytes(acap));
+  if (!hdr)
+    return NULL;
   lj_tab_array_hdr_init(hdr, asize, acap);
   return lj_tab_array_slots(hdr);
 }
@@ -734,6 +856,29 @@ static LJ_AINLINE Node *newhpart_alloc(lua_State *L, uint32_t hbits,
   hsize = 1u << hbits;
   hmask = hsize - 1u;
   node = tab_node_new(L, hmask);
+  for (i = 0; i < hsize; i++) {
+    Node *n = &node[i];
+    lj_tab_nextnode_set(n, NULL);
+    lj_tab_storenilraw(&n->key);
+    lj_tab_storenilraw(&n->val);
+  }
+  *hmaskp = hmask;
+  return node;
+}
+
+static LJ_AINLINE Node *newhpart_alloc_deferred_nothrow(lua_State *L,
+							 uint32_t hbits,
+							 MSize *hmaskp)
+{
+  uint32_t i, hsize, hmask;
+  Node *node;
+  if (hbits == 0 || hbits > LJ_MAX_HBITS)
+    return NULL;
+  hsize = 1u << hbits;
+  hmask = hsize - 1u;
+  node = tab_node_new_deferred_nothrow(L, hmask);
+  if (!node)
+    return NULL;
   for (i = 0; i < hsize; i++) {
     Node *n = &node[i];
     lj_tab_nextnode_set(n, NULL);
@@ -1191,7 +1336,7 @@ TValue *lj_tab_test_resize_assist_array_slot(lua_State *L, GCtab *src,
 
 static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask,
 				     uint32_t oldasize, uint32_t asize,
-				     int *deadkeyp)
+				     int *deadkeyp, int *retryp)
 {
   uint32_t count = 0;
   int deadkey = 0;
@@ -1201,17 +1346,16 @@ static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask
       Node *n = &oldnode[i];
       TValue key, val;
       uint32_t idx;
-    retry_node:
       lj_tv_load_acq(&key, &n->key);
       if (tab_key_islocked(&key)) {
-	lj_tab_wait_l(L);
-	goto retry_node;
+	*retryp = 1;
+	return 0;
       }
       lj_tv_load_acq(&val, &n->val);
       if (tvisnil(&key)) {
 	if (tab_val_is_publish_claim(&val)) {
-	  lj_tab_wait_l(L);
-	  goto retry_node;
+	  *retryp = 1;
+	  return 0;
 	}
 	continue;
       }
@@ -1228,6 +1372,7 @@ static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask
     count += oldasize - asize;
   if (deadkeyp)
     *deadkeyp = deadkey;
+  UNUSED(L);
   return count;
 }
 
@@ -1246,20 +1391,20 @@ TAB_RETIRE_PUSH(tab_retired_push, TabNodeRetire,
 		lj_tab_node_retired_next_rel,
 		lj_tab_node_retired_head_cas)
 
-static LJ_AINLINE GCtab *tab_node_retired_tab_acq(const TabNodeRetire *ret)
-{
-  return (GCtab *)la_loadptr_acq((void *const *)&ret->tab);
-}
-
 static LJ_AINLINE void tab_node_retired_tab_rel(TabNodeRetire *ret, GCtab *t)
 {
   la_storeptr_rel((void **)&ret->tab, t);
 }
 
-static TabNodeRetire *tab_retire_reserve(lua_State *L, GCtab *t, Node *node,
-					 MSize hmask)
+static TabNodeRetire *tab_retire_reserve(lua_State *L)
 {
   TabNodeRetire *ret = lj_mem_newt(L, sizeof(TabNodeRetire), TabNodeRetire);
+  return ret;
+}
+
+static void tab_retire_init(lua_State *L, TabNodeRetire *ret, GCtab *t,
+			    Node *node, MSize hmask)
+{
   lj_assertL(tab_node_free_ready(node, hmask),
 	     "mismatched retired table node size");
   tab_node_retired_tab_rel(ret, t);
@@ -1268,7 +1413,6 @@ static TabNodeRetire *tab_retire_reserve(lua_State *L, GCtab *t, Node *node,
   lj_tab_node_retired_epoch_rel(ret, 0);
   lj_tab_node_retired_armed_rel(ret, 0);
   lj_tab_node_retired_next_rel(ret, NULL);
-  return ret;
 }
 
 static void tab_retire_discard(global_State *g, TabNodeRetire *ret)
@@ -1279,15 +1423,14 @@ static void tab_retire_discard(global_State *g, TabNodeRetire *ret)
 
 static void tab_retire_preserve(global_State *g, TabNodeRetire *ret)
 {
-  GCtab *t = tab_node_retired_tab_acq(ret);
   lj_gc_arena_markmem(g, ret);
-  if (t)
-    lj_gc_arena_markmem(g, t);
   lj_gc_arena_markmem(g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
 }
 
 static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
 {
+  GCtab *t = lj_tab_node_retired_tab_acq(ret);
+  Node *node = lj_tab_node_retired_node_acq(ret);
   /*
   ** The retire record is pushed before the new hash generation is fully
   ** published, then armed after publication. A marker can run between those
@@ -1296,9 +1439,15 @@ static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
   ** release-published armed bit.
   */
   tab_retire_preserve(g, ret);
+  if (!t || lj_tab_node_acq(t) == node) {
+    lj_assertG(0, "arming table node before replacement publication");
+    abort();
+  }
   lj_tab_node_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
   lj_tab_node_retired_armed_rel(ret, 1);
   tab_retire_preserve(g, ret);
+  /* ret->tab is identity metadata, not a semantic GC edge. The cold reclaim
+  ** check takes a counted non-marking lease before dereferencing it. */
 }
 
 /* 06 section 6.3.1 raw array retire. */
@@ -1309,20 +1458,20 @@ TAB_RETIRE_PUSH(tab_array_retired_push, TabArrayRetire,
 
 #undef TAB_RETIRE_PUSH
 
-static LJ_AINLINE GCtab *tab_array_retired_tab_acq(const TabArrayRetire *ret)
-{
-  return (GCtab *)la_loadptr_acq((void *const *)&ret->tab);
-}
-
 static LJ_AINLINE void tab_array_retired_tab_rel(TabArrayRetire *ret, GCtab *t)
 {
   la_storeptr_rel((void **)&ret->tab, t);
 }
 
-static TabArrayRetire *tab_array_retire_reserve(lua_State *L, GCtab *t,
-						TValue *array, MSize acap)
+static TabArrayRetire *tab_array_retire_reserve(lua_State *L)
 {
   TabArrayRetire *ret = lj_mem_newt(L, sizeof(TabArrayRetire), TabArrayRetire);
+  return ret;
+}
+
+static void tab_array_retire_init(lua_State *L, TabArrayRetire *ret, GCtab *t,
+				  TValue *array, MSize acap)
+{
   lj_assertL(tab_array_free_ready(array, acap),
 	     "mismatched retired table array capacity");
   tab_array_retired_tab_rel(ret, t);
@@ -1331,7 +1480,6 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, GCtab *t,
   lj_tab_array_retired_epoch_rel(ret, 0);
   lj_tab_array_retired_armed_rel(ret, 0);
   lj_tab_array_retired_next_rel(ret, NULL);
-  return ret;
 }
 
 static void tab_array_retire_discard(global_State *g, TabArrayRetire *ret)
@@ -1342,25 +1490,29 @@ static void tab_array_retire_discard(global_State *g, TabArrayRetire *ret)
 
 static void tab_array_retire_preserve(global_State *g, TabArrayRetire *ret)
 {
-  GCtab *t = tab_array_retired_tab_acq(ret);
   lj_gc_arena_markmem(g, ret);
-  if (t)
-    lj_gc_arena_markmem(g, t);
   lj_gc_arena_markmem(g,
 		      lj_tab_array_hdrw(lj_tab_array_retired_array_acq(ret)));
 }
 
 static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
 {
+  GCtab *t = lj_tab_array_retired_tab_acq(ret);
+  TValue *array = lj_tab_array_retired_array_acq(ret);
   /*
   ** Arrays use the same push-then-arm publication protocol as hash nodes.
   ** Preserve at the arming edge so a concurrent marker cannot miss storage that
   ** becomes reclaimable metadata after its retired-list pass.
   */
   tab_array_retire_preserve(g, ret);
+  if (!t || lj_tab_array_acq(t) == array) {
+    lj_assertG(0, "arming table array before replacement publication");
+    abort();
+  }
   lj_tab_array_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
   lj_tab_array_retired_armed_rel(ret, 1);
   tab_array_retire_preserve(g, ret);
+  /* Owner identity remains nonsemantic, matching node retirement. */
 }
 
 static LJ_AINLINE int tab_retire_epoch_elapsed(uint64_t completed_epoch,
@@ -1370,25 +1522,58 @@ static LJ_AINLINE int tab_retire_epoch_elapsed(uint64_t completed_epoch,
 	 completed_epoch - retire_epoch >= LJ_TAB_RETIRE_EPOCHS;
 }
 
-static LJ_AINLINE int tab_retire_owner_valid(global_State *g, GCtab *t)
-{
-  return t && lj_gc2_obj_valid(g, obj2gco(t)) && t->gct == ~LJ_TTAB;
-}
-
 static int tab_node_still_published(global_State *g, const TabNodeRetire *ret)
 {
-  GCtab *t = tab_node_retired_tab_acq(ret);
-  if (!tab_retire_owner_valid(g, t))
-    return 1;
-  return lj_tab_node_acq(t) == lj_tab_node_retired_node_acq(ret);
+  GCtab *t = lj_tab_node_retired_tab_acq(ret);
+  if (!t)
+    return 0;
+  return lj_gc2_tab_generation_current(
+    g, t, lj_tab_node_retired_node_acq(ret), 0);
 }
 
 static int tab_array_still_published(global_State *g, const TabArrayRetire *ret)
 {
-  GCtab *t = tab_array_retired_tab_acq(ret);
-  if (!tab_retire_owner_valid(g, t))
-    return 1;
-  return lj_tab_array_acq(t) == lj_tab_array_retired_array_acq(ret);
+  GCtab *t = lj_tab_array_retired_tab_acq(ret);
+  if (!t)
+    return 0;
+  return lj_gc2_tab_generation_current(
+    g, t, lj_tab_array_retired_array_acq(ret), 1);
+}
+
+static LJ_AINLINE void tab_read_oldest_on_tg(global_State *g, TGState *tg,
+					      uint64_t *oldestp)
+{
+  if (tg && tg->gl == g && lj_tg_tab_read_depth_acq(tg) != 0) {
+    uint64_t epoch = lj_tg_tab_read_epoch_acq(tg);
+    if (epoch < *oldestp)
+      *oldestp = epoch;
+  }
+}
+
+/* Return the oldest outer table-vector read which can still name a generation
+** retired in that epoch. The legacy TG list is append-only until the separate
+** SMR writer gate removes dead nodes; ordinary reclaim already owns that gate.
+** Main/self fallbacks cover attach/detach-adjacent owner publications which are
+** temporarily absent from the list, matching the string-table pin contract. */
+static uint64_t tab_read_oldest_epoch(global_State *g)
+{
+  TGState *tg, *main_tg, *self;
+  uint64_t oldest = ~(uint64_t)0;
+  int saw_main = 0, saw_self = 0;
+  main_tg = g->main_tg;
+  self = lj_thr_get_tg();
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (tg == main_tg)
+      saw_main = 1;
+    if (tg == self)
+      saw_self = 1;
+    tab_read_oldest_on_tg(g, tg, &oldest);
+  }
+  if (!saw_main)
+    tab_read_oldest_on_tg(g, main_tg, &oldest);
+  if (!saw_self && self != main_tg)
+    tab_read_oldest_on_tg(g, self, &oldest);
+  return oldest;
 }
 
 /*
@@ -1449,9 +1634,21 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   lj_tab_freetop_rel(t, nilnode);
 }
 
-static LJ_AINLINE void tab_publish_new(global_State *g, GCtab *t)
+static LJ_AINLINE void tab_publish_new(lua_State *L, GCtab *t,
+				       TValue *anchor)
 {
+  global_State *g = G(L);
+  TValue tv;
   newwhite(g, t);
+  settabV(L, &tv, t);
+  copyTVrel(L, anchor, &tv);  /* Semantic root precedes READY. */
+  lj_gc_publishobj_header(g, obj2gco(t));
+  lj_gc_pubroot(L, anchor);
+  /* Test-only collections are valid from this point onward: the complete
+  ** table is READY and its semantic construction root has been barriered.
+  ** Production constructors never poll/ACK/yield in the preceding READY=0
+  ** interval, where the nil anchor deliberately does not retain side bodies. */
+  tab_test_constructor_prepublish(L, t);
   lj_gc_linkobj_new(g, obj2gco(t));  /* Publish table after body init. */
 }
 
@@ -1466,38 +1663,98 @@ static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,
 LJ_STATIC_ASSERT(((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT) == 5u);
 
 /* Create a new table with slots initialized to nil. */
-static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
+static GCtab *newtab_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
+			    LJTabRoot *root)
 {
   global_State *g = G(L);
-  GCtab *t;
-  /* First try to colocate the array part. */
-  if (LJ_MAX_COLOSIZE != 0 && asize > 0 && asize <= LJ_MAX_COLOSIZE) {
-    TValue *array;
-    lj_assertL((sizeof(GCtab) & 7) == 0, "bad GCtab size");
-    t = (GCtab *)lj_mem_newgco_unlinked(L, sizetabcolo(asize));
-    tab_init_empty(g, t);
-    lj_tab_colo_rel(t, (int8_t)asize);
+  GCtab *t = NULL;
+  TValue *array = NULL;
+  Node *node = NULL;
+  TGState *tg = L2TG(L);
+  TValue nilv;
+  TValue *anchor;
+  uint32_t anchoridx;
+  MSize hmask = 0;
+  GCSize tbytes, abytes = 0, nbytes = 0;
+  int colocated = LJ_MAX_COLOSIZE != 0 && asize > 0 &&
+		  asize <= LJ_MAX_COLOSIZE;
+  if (root) {
+    root->tg = NULL;
+    root->idx = 0;
+  }
+  if (asize > LJ_MAX_ASIZE || hbits > LJ_MAX_HBITS)
+    lj_err_msg(L, LJ_ERR_TABOV);
+  lj_assertL((sizeof(GCtab) & 7) == 0, "bad GCtab size");
+  tbytes = (GCSize)(colocated ? sizetabcolo(asize) : sizeof(GCtab));
+  setnilV(&nilv);
+  anchor = lj_tg_root_anchor_push(L, tg, &nilv, &anchoridx);
+  if (!anchor)
+    lj_err_mem(L);
+
+  /* Allocate all fallible side bodies before the header. Their accounting is
+  ** deferred, so no GC assistance can run between allocation and the final
+  ** table publication. This avoids both a READY table with half-built roots
+  ** and a leaked READY=0 header after a later OOM. */
+  if (!colocated && asize > 0) {
+    abytes = (GCSize)lj_tab_array_bytes(asize);
+    array = tab_array_new_deferred_nothrow(L, asize, asize);
+    if (!array)
+      goto oom;
+    cleararray(array, asize);
+  }
+  if (hbits) {
+    node = newhpart_alloc_deferred_nothrow(L, hbits, &hmask);
+    if (!node)
+      goto oom;
+    nbytes = (GCSize)lj_tab_node_bytes(hmask);
+  }
+  t = (GCtab *)lj_mem_newgco_unlinked_deferred_nothrow(L, tbytes);
+  if (!t)
+    goto oom;
+  tab_init_empty(g, t);
+  if (colocated) {
     array = (TValue *)((char *)t + sizeof(GCtab));
+    lj_tab_colo_rel(t, (int8_t)asize);
     cleararray(array, asize);
     tab_publish_array(t, array, asize, asize);
-    tab_publish_new(g, t);
-  } else {  /* Otherwise separately allocate the array part. */
-    t = (GCtab *)lj_mem_newgco_unlinked(L, sizeof(GCtab));
-    tab_init_empty(g, t);
-    tab_publish_new(g, t);
-    if (asize > 0) {
-      TValue *array;
-      if (asize > LJ_MAX_ASIZE)
-	lj_err_msg(L, LJ_ERR_TABOV);
-      array = tab_array_new(L, asize, asize);
-      tab_pub_array_mem(L, t, array, asize);
-      cleararray(array, asize);
-      tab_publish_array(t, array, asize, asize);
-    }
+  } else if (array) {
+    tab_pub_array_mem(L, t, array, asize);
+    tab_publish_array(t, array, asize, asize);
   }
-  if (hbits)
-    newhpart(L, t, hbits);
+  if (node)
+    newhpart_publish(L, t, node, hmask, &node[hmask+1], hmask + 1u);
+
+  /* READY and ownership are the single final constructor publication. Every
+  ** array/hash root and raw side-body mark is already visible at this point. */
+  tab_publish_new(L, t, anchor);
+  if (abytes)
+    lj_mem_account_deferred(L, abytes);
+  if (nbytes)
+    lj_mem_account_deferred(L, nbytes);
+  lj_mem_account_deferred(L, tbytes);
+  if (root) {
+    root->tg = tg;
+    root->idx = anchoridx;
+  } else {
+    lj_tg_root_anchor_pop(tg, anchoridx);
+  }
   return t;
+
+oom:
+  if (t)
+    lj_mem_free(g, t, tbytes);
+  if (node)
+    lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(hmask));
+  if (array)
+    lj_mem_free(g, lj_tab_array_hdrw(array), lj_tab_array_bytes(asize));
+  lj_tg_root_anchor_pop(tg, anchoridx);
+  lj_err_mem(L);
+  return NULL;  /* Unreachable. */
+}
+
+static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
+{
+  return newtab_rooted(L, asize, hbits, NULL);
 }
 
 /* Create a new table.
@@ -1545,6 +1802,11 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
     return NULL;
   local_total = lj_tg_local_total_acq(tg);
   account_now = local_total >= LJ_GC2_ACCT_FLUSH - sizeof(GCtab);
+  /* A bump result has no caller-visible root until this helper returns. The
+  ** rare accounting-flush case can assist a new cycle, so route it through
+  ** anchored newtab() instead of polling after READY with only a C local. */
+  if (account_now)
+    return NULL;
   b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   a = b->a;
   if (a == NULL)
@@ -1563,6 +1825,7 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
     lj_arena_bm_set(a->mark, cell);
   else
     lj_arena_bm_clear(a->mark, cell);
+  lj_arena_ready_set_unpublished(a, cell);
   /* block[] is the discovery publication: expose only a complete header. */
   lj_arena_block_set(a, cell);
   lj_gc_total_add(g, sizeof(GCtab));
@@ -1577,10 +1840,7 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
   ** pending ownership chain so GC2 can prune and destruct it during sweep.
   */
   lj_gc_linkobj_new(g, obj2gco(t));
-  if (account_now)
-    lj_gc2_account_alloc(g, tg, sizeof(GCtab));
-  else
-    (void)lj_tg_local_total_add_rlx(tg, sizeof(GCtab));
+  (void)lj_tg_local_total_add_rlx(tg, sizeof(GCtab));
   return t;
 }
 
@@ -1598,6 +1858,33 @@ GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h)
   if (a == 0 && h == 0)
     return lj_tab_new0(L);
   return lj_tab_new(L, a ? a+1 : 0, hsize2hbits(h));
+}
+
+GCtab *lj_tab_new_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
+			  LJTabRoot *root)
+{
+  lj_assertL(root != NULL, "missing table construction root");
+  /* Rooted callers deliberately bypass the empty bump specialization: the TG
+  ** anchor, not a transient birth mark, spans their semantic handoff. */
+  return newtab_rooted(L, asize, hbits, root);
+}
+
+GCtab *lj_tab_new_ah_rooted(lua_State *L, uint32_t a, uint32_t h,
+			     LJTabRoot *root)
+{
+  /* Deliberately bypass the empty-table bump specialization. The rooted API
+  ** is for callers which may poll or wait before installing the ordinary Lua
+  ** root, so the pre-reserved TG anchor must span the entire handoff. */
+  return lj_tab_new_rooted(L, a ? a+1 : 0, hsize2hbits(h), root);
+}
+
+void lj_tab_root_release(LJTabRoot *root)
+{
+  if (!root || !root->tg)
+    return;
+  lj_tg_root_anchor_pop(root->tg, root->idx);
+  root->tg = NULL;
+  root->idx = 0;
 }
 
 #if LJ_HASJIT
@@ -1753,6 +2040,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   int struct_acq;
   Node *node_succ;
   int deadkey;
+  int count_retry;
   int weak;
   int shared_resize;
 
@@ -1789,6 +2077,7 @@ restart_resize:
   struct_acq = 0;
   node_succ = NULL;
   deadkey = 0;
+  count_retry = 0;
   weak = lj_gc2_weak_write_candidate(L, t);
   shared_resize = !tab_private_mutation_allowed(L);
   hash_flags0 = oldhmask > 0 ? lj_tab_node_hdr_flags_word_acq(oldnode) : 0;
@@ -1797,7 +2086,12 @@ restart_resize:
     goto restart_resize;
   }
   hashcount = tab_rehash_hashcount(L, oldnode, oldhmask, oldasize, asize,
-				   &deadkey);
+				   &deadkey, &count_retry);
+  if (count_retry) {
+    /* No raw generation pointer survives the safepoint-capable wait. */
+    lj_tab_wait_l(L);
+    goto restart_resize;
+  }
   if (hashcount) {
     uint32_t needhbits = hsize2hbits(hashcount);
     if (hbits < needhbits)
@@ -1861,11 +2155,6 @@ restart_resize:
     for (i = 0; i < newacap; i++)
       lj_tab_storenilraw(&array[i]);
   }
-  if (asize > oldasize) {  /* Array part grows? */
-    uint32_t i;
-    for (i = oldasize; i < asize; i++)  /* Clear newly allocated slots. */
-      lj_tab_storenilraw(&array[i]);
-  }
   if (hbits) {
     newnode = newhpart_alloc(L, hbits, &newhmask);
     tab_pub_node_mem(L, t, newnode);
@@ -1873,10 +2162,14 @@ restart_resize:
     newfreecount = newhmask + 1u;
   }
   if (oldhmask > 0)
-    oldret = tab_retire_reserve(L, t, oldnode, oldhmask);
+    oldret = tab_retire_reserve(L);
   if (newarray && oldarray_separated && oldacap > 0)
-    oldaret = tab_array_retire_reserve(L, t, oldarray, oldacap);
-  struct_acq = shared_resize ? lj_tab_struct_enter(L, t) : 0;
+    oldaret = tab_array_retire_reserve(L);
+  /* Replacement storage is already owned by this attempt. A STOPREQ throw
+  ** while waiting for the structural slot would leak it, so this retry window
+  ** uses the TLS owner and yield-only wait variant. No old vector is
+  ** dereferenced until the root recheck below succeeds. */
+  struct_acq = shared_resize ? lj_tab_struct_enter(NULL, t) : 0;
   /*
   ** From here until lj_tab_struct_leave(), retry waits must not raise a fresh
   ** STOPREQ: a longjmp would leak the per-table structural owner and the
@@ -1884,15 +2177,24 @@ restart_resize:
   ** inside the critical publication window; the retry path below releases all
   ** claims and then performs the L-aware STOPREQ-visible wait.
   */
-	  {
-	    TValue *curarray;
-	    MSize curasize = lj_tab_array_snapshot_acq(t, &curarray);
-	    if (curarray != oldarray || (uint32_t)curasize != oldasize ||
-		lj_tab_node_acq(t) != oldnode)
-	      goto retry_resize;
-	    if (!shared_resize && !tab_private_mutation_allowed(L))
-	      goto retry_resize;
-	  }
+  {
+    TValue *curarray;
+    MSize curasize = lj_tab_array_snapshot_acq(t, &curarray);
+    if (curarray != oldarray || (uint32_t)curasize != oldasize ||
+	lj_tab_node_acq(t) != oldnode)
+      goto retry_resize;
+    if (!shared_resize && !tab_private_mutation_allowed(L))
+      goto retry_resize;
+  }
+  if (oldret)
+    tab_retire_init(L, oldret, t, oldnode, oldhmask);
+  if (oldaret)
+    tab_array_retire_init(L, oldaret, t, oldarray, oldacap);
+  if (asize > oldasize) {  /* Array part grows? */
+    uint32_t i;
+    for (i = oldasize; i < asize; i++)  /* Clear newly allocated/current slots. */
+      lj_tab_storenilraw(&array[i]);
+  }
   if (oldaret) {
     const TValue *expect = NULL;
     if (!lj_tab_array_nextgen_cas(oldarray, &expect, array))
@@ -2012,21 +2314,22 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   TabNodeRetire *ret;
   TabArrayRetire *aret;
+  uint64_t oldest_reader;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
   /*
-  ** Table readers can carry node/array snapshots through C-side scans. While
-  ** more than one TG is live, epoch completion only proves that safepoints
-  ** moved forward; it does not prove that no peer still holds such a snapshot.
-  ** Defer physical free until the VM is back to a single live TG.
-  ** Even then, the retired generation must not still be the table-published
-  ** root. The root-list scan below is cold-path validation before free, not a
-  ** warm-path lock; it preserves stock table semantics if retirement raced with
-  ** publication or reclamation observes an in-flight generation change.
+  ** Multi-TG reclamation is valid only inside the ordinary GC2 metadata writer
+  ** gate. It excludes competing retired-list consumers/TG body reclamation but
+  ** never waits for a reader. Long C scans publish a per-TG outer epoch; a pin
+  ** old enough to name this generation simply makes the record get requeued.
+  ** Readers which start after retirement acquire the replacement root and have
+  ** a newer epoch, so they do not delay old storage. The table-published root
+  ** check remains a separate cold-path validation before physical free.
   */
-  if (gc2_n_threads_acq(g) > 1)
+  if (gc2_n_threads_acq(g) > 1 && gc2_smr_reclaiming_acq(g) == 0)
     return 0;
+  oldest_reader = tab_read_oldest_epoch(g);
   /*
   ** Flush pending table roots once before the conservative published-root
   ** checks below. Each retired generation still gets its own root-list scan,
@@ -2042,7 +2345,8 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
       tab_retired_push(g, ret);
     } else if (tab_retire_epoch_elapsed(completed_epoch,
 					lj_tab_node_retired_epoch_acq(ret)) &&
-	       !tab_node_still_published(g, ret)) {
+		       oldest_reader > lj_tab_node_retired_epoch_acq(ret) &&
+		       !tab_node_still_published(g, ret)) {
       tab_node_free(g, lj_tab_node_retired_node_acq(ret),
 		    lj_tab_node_retired_hmask_acq(ret));
       lj_mem_freet(g, ret);
@@ -2060,7 +2364,8 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
       tab_array_retired_push(g, aret);
     } else if (tab_retire_epoch_elapsed(completed_epoch,
 					lj_tab_array_retired_epoch_acq(aret)) &&
-	       !tab_array_still_published(g, aret)) {
+		       oldest_reader > lj_tab_array_retired_epoch_acq(aret) &&
+		       !tab_array_still_published(g, aret)) {
       tab_array_free(g, lj_tab_array_retired_array_acq(aret),
 		     lj_tab_array_retired_acap_acq(aret));
       lj_mem_freet(g, aret);

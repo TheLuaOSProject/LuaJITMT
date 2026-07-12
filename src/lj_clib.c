@@ -722,6 +722,10 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
     }
     info = ctype_info_acq(ct);
+    /* Reserve the eventual cache-publication anchor before constructing a
+    ** symbol cdata. No stack growth or other poll then separates READY return
+    ** from copyTV() into the semantic Lua root below. */
+    lj_state_checkstack(L, 1);
     if (ctype_isconstval(info)) {
       CTypeID childid = ctype_cid(info);
       CTInfo cttinfo;
@@ -776,9 +780,9 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       *(void **)cdataptr(cd) = p;
       setcdataV(L, &tmp, cd);
     }
-    lj_state_checkstack(L, 1);
     anchor = L->top++;
     copyTV(L, anchor, &tmp);  /* Root tmp while allocating/publishing entry. */
+    lj_state_stack_pubtv(L, L, anchor);
     tv = clib_cache_publish(L, cl, name, anchor);
     tv = clib_env_publish(L, cache_env, name, tv);
     L->top--;
@@ -791,25 +795,45 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 /* Create a new CLibrary object and push it on the stack. */
 static CLibrary *clib_new(lua_State *L, GCtab *mt)
 {
-  GCtab *t = lj_tab_new(L, 0, 0);
-  GCudata *ud = lj_udata_new(L, sizeof(CLibrary), t);
-  CLibrary *cl = (CLibrary *)uddata(ud);
+  LJUdataRoot root;
+  GCtab *t;
+  GCudata *ud;
+  CLibrary *cl;
+  lj_state_checkstack(L, 1);
+  t = lj_tab_new(L, 0, 0);
+  /* The cache table is private and is not a registry root.  Publish it in the
+  ** eventual result slot before any userdata/FINREG allocation can yield. */
+  settabV(L, L->top, t);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  ud = lj_udata_newrooted(L, sizeof(CLibrary), t, &root);
+  cl = (CLibrary *)uddata(ud);
+  cl->handle = NULL;
   lj_clib_cache_env_rel(cl, t);
   cl->cache_head = NULL;
+  lj_gc_pubobjobj(L, ud, t);
   lj_udata_metatable_rel(ud, mt);
   lj_gc_pubobjobj(L, ud, mt);
-  lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
-  lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);
-  setudataV(L, L->top++, ud);
+  /* Keep the object generic and constructor-rooted across the throwing raw
+  ** FINREG-node allocation.  handle/cache fields are now destructor-safe. */
+  lj_udata_finreg_mt_rooted(L, ud, mt, &root);
+  lj_udata_specialize(L, ud, UDTYPE_FFI_CLIB);
+  /* Replace the temporary cache-table root with the public CLibrary result.
+  ** The constructor anchor overlaps this root transition. */
+  setudataV(L, L->top-1, ud);
+  lj_state_stack_pubtv(L, L, L->top-1);
+  lj_udata_root_release(&root);
   return cl;
 }
 
 /* Load a C library. */
 void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global)
 {
-  void *handle = clib_loadlib(L, strdata(name), global);
   CLibrary *cl = clib_new(L, mt);
-  cl->handle = handle;
+  /* Construct/root/register first.  Any loader error now unwinds an object
+  ** whose NULL handle is safe to finalize, and successful native handles are
+  ** never stranded by a later userdata allocation failure. */
+  cl->handle = clib_loadlib(L, strdata(name), global);
 }
 
 /* Unload a C library. */

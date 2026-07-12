@@ -31,6 +31,44 @@ static void tg_root_anchor_block_init(TGRootAnchorBlock *block)
     setnilV(&block->slot[i]);
 }
 
+#if defined(LJ_TG_ROOT_TEST_HELPERS)
+static uint32_t tg_root_test_fail_reserve;
+static LJTGRootPushHook tg_root_test_push_hook;
+
+void lj_tg_root_test_fail_reserve_after(uint32_t nth)
+{
+  la_store32_rel(&tg_root_test_fail_reserve, nth);
+}
+
+void lj_tg_root_test_set_push_hook(LJTGRootPushHook hook)
+{
+  la_storeptr_rel((void **)&tg_root_test_push_hook, (void *)hook);
+}
+
+static int tg_root_test_fail_reserve_take(void)
+{
+  uint32_t old = la_load32_acq(&tg_root_test_fail_reserve);
+  while (old != 0) {
+    if (la_cas32(&tg_root_test_fail_reserve, &old, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return old == 1u;
+  }
+  return 0;
+}
+
+static void tg_root_test_push(lua_State *L, TGState *tg, uint32_t idx,
+			      TValue *slot)
+{
+  LJTGRootPushHook hook = (LJTGRootPushHook)
+    la_xchgptr_acqrel((void **)&tg_root_test_push_hook, NULL);
+  if (hook)
+    hook(L, tg, idx, slot);
+}
+#else
+#define tg_root_test_fail_reserve_take() 0
+#define tg_root_test_push(L, tg, idx, slot) ((void)0)
+#endif
+
 static TValue *tg_root_anchor_slot_create(lua_State *L, TGState *tg,
 					  uint32_t idx)
 {
@@ -46,6 +84,34 @@ static TValue *tg_root_anchor_slot_create(lua_State *L, TGState *tg,
     block = next;
   }
   return &block->slot[idx % TG_ROOT_ANCHOR_SLOTS];
+}
+
+int lj_tg_root_anchor_reserve_nothrow(lua_State *L, TGState *tg)
+{
+  TGRootAnchorBlock *block;
+  uint32_t blockidx, idx;
+  if (!L || !tg)
+    return 0;
+  idx = lj_tg_root_anchor_top_acq(tg);
+  if (idx >= LJ_ROOT_SCAN_LIMIT)
+    return 0;
+  block = &tg->root_anchor;
+  blockidx = idx / TG_ROOT_ANCHOR_SLOTS;
+  while (blockidx-- != 0) {
+    TGRootAnchorBlock *next = lj_tg_root_anchor_next_acq(block);
+    if (!next) {
+      if (tg_root_test_fail_reserve_take())
+	return 0;
+      next = (TGRootAnchorBlock *)
+	lj_mem_new_nothrow(L, sizeof(TGRootAnchorBlock));
+      if (!next)
+	return 0;
+      tg_root_anchor_block_init(next);
+      lj_tg_root_anchor_next_rel(block, next);
+    }
+    block = next;
+  }
+  return 1;
 }
 
 TValue *lj_tg_root_anchor_slot_acq(TGState *tg, uint32_t idx)
@@ -72,13 +138,14 @@ TValue *lj_tg_root_anchor_push(lua_State *L, TGState *tg, cTValue *tv,
   if (!tg)
     return NULL;
   idx = lj_tg_root_anchor_top_acq(tg);
-  if (LJ_UNLIKELY(idx == ~(uint32_t)0))
+  if (LJ_UNLIKELY(idx >= LJ_ROOT_SCAN_LIMIT))
     lj_err_mem(L);
   slot = tg_root_anchor_slot_create(L, tg, idx);
   copyTVrel(L, slot, tv);
   lj_tg_root_anchor_top_rel(tg, idx + 1);
   if (idxp)
     *idxp = idx;
+  tg_root_test_push(L, tg, idx, slot);
   return slot;
 }
 
@@ -88,7 +155,9 @@ void lj_tg_root_anchor_pop(TGState *tg, uint32_t idx)
   uint32_t top;
   if (!slot)
     return;
-  setnilV(slot);
+  /* GC2 scans anchor slots with an acquire TValue load. Release-publish the
+  ** complete nil word so pop cannot race that scan through a plain store. */
+  tv_rawstore_rel(slot, ~(uint64_t)0);
   top = lj_tg_root_anchor_top_acq(tg);
   if (top == idx + 1)
     lj_tg_root_anchor_top_rel(tg, idx);
@@ -155,6 +224,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
 {
   tg->gl = g;
   lj_tg_store_cur_L(tg, L);
+  lj_tg_lexstate_rel(tg, NULL);
   lj_tg_store_thread_L(tg, L);
   tg->ffi_xsave_root = NULL;
   tg->ffi_xsave_baseslot = 0;
@@ -169,6 +239,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strq_active_hdr = NULL;
   tg->strq_active_depth = 0;
   tg->strq_active_epoch = 0;
+  tg->tab_read_depth = 0;
+  tg->tab_read_epoch = 0;
   tg->strid_next = 0;
   tg->strid_end = 0;
   tg->strnum_credit = 0;
@@ -529,6 +601,12 @@ void lj_tg_detach(global_State *g, TGState *tg)
   lua_State *cur_L, *thread_L;
   if (!g || !tg)
     return;
+  /* A table-vector pin names raw generation storage. Detaching its TG would
+  ** make the owner-written publication disappear from reclamation scans while
+  ** a C frame could still dereference that storage. This is an internal scope
+  ** leak and cannot be recovered by publishing DEAD. */
+  if (lj_tg_tab_read_depth_acq(tg) != 0 || lj_tg_lexstate_acq(tg) != NULL)
+    abort();
   /* DETACHING closes lifecycle publication before the first descriptor root
   ** or raw TLS-facing hint is cleared. It remains borrowable until RETIRED. */
   if (!lj_tg_registry_detach_begin(g, tg))

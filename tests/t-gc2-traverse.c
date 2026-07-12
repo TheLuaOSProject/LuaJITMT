@@ -17,6 +17,7 @@
 #include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_arena.h"
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -89,6 +90,124 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarkedmem(g, lj_tab_node_hdrw(lj_tab_node_acq(parent))) == 1);
   assert(gc2_grey_pushed_acq(g) == grey_pushed0 + 2u);
   assert(gc2_grey_drained_acq(g) == grey_drained0 + 2u);
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 2);
+}
+
+static void test_retired_table_owner_nonsemantic(lua_State *L,
+						 global_State *g, TGState *tg)
+{
+  GCtab *parent, *child;
+  TValue *array;
+  MSize asize, hmask;
+
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -3, "retired-child");
+  (void)lj_tab_node_snapshot_acq(parent, &hmask);
+  asize = lj_tab_array_snapshot_acq(parent, &array);
+  assert(hmask > 0);
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  /* Retire metadata preserves only its record/vector. ret->tab is an identity
+  ** used under a cold counted lease, never a semantic root for the dead owner. */
+  lj_tab_resize(L, parent, (uint32_t)asize,
+		(hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 2u));
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  /* Nor may raw owner marking poison the semantic plane: the first real edge
+  ** must still report NEW and enqueue the child graph. */
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 2);
+}
+
+static void test_false_candidate_mark_admission(lua_State *L,
+					 global_State *g, TGState *tg)
+{
+  GCtab *parent, *child;
+
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_pushvalue(L, -2);
+  lua_setfield(L, -2, "admission-child");
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj_expected_status(g, obj2gco(parent),
+					 (uint32_t)~LJ_TFUNC, NULL) < 0);
+  assert(lj_gc2_ismarkedmem(g, parent) == 0);
+  /* An aligned interior word in a non-cdata graph allocation must be rejected
+  ** before the containing table receives a semantic mark. */
+  assert(lj_gc2_markobj_expected_status(
+	 g, (GCobj *)(void *)((char *)parent + 16),
+	 (uint32_t)~LJ_TTAB, NULL) < 0);
+  assert(lj_gc2_ismarkedmem(g, parent) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 2);
+}
+
+#if LJ_HASFFI
+static void test_cdata_exact_coverage_admission(lua_State *L,
+						global_State *g)
+{
+  GCcdata *cd = lj_cdata_new_(L, CTID_INT8, 1);
+  CTypeID saved = cd->ctypeid;
+  setcdataV(L, L->top, cd);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+
+  lj_gc2_mark_begin(g);
+  /* INT8 and INT64 bodies occupy the same two 16-byte cells here. Coverage
+  ** alone would overaccept the forged larger CType; byte-tail metadata must
+  ** reject it without setting the allocation mark. */
+  cd->ctypeid = CTID_INT64;
+  assert(lj_gc2_markobj_status(g, obj2gco(cd), NULL) < 0);
+  assert(lj_gc2_ismarkedmem(g, cd) == 0);
+  cd->ctypeid = saved;
+  assert(lj_gc2_markobj(g, obj2gco(cd)) == 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
+}
+#endif
+
+static void test_huge_false_type_discharge(lua_State *L, global_State *g,
+					    TGState *tg)
+{
+  GCudata *ud;
+  GCtab *child;
+  ud = lj_udata_new(L, (MSize)LJ_HUGE_THRESHOLD + 1024u, NULL);
+  setudataV(L, L->top, ud);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  assert(lua_setmetatable(L, -3) == 1);
+  assert(lj_arena_ishuge(lj_arena_of(ud)));
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(ud)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  /* Huge MARK is the mapping lease and necessarily precedes header type
+  ** rejection. The false expected tag must therefore queue the authoritative
+  ** userdata graph before returning DEAD. */
+  assert(lj_gc2_markobj_expected_status(g, obj2gco(ud),
+					 (uint32_t)~LJ_TFUNC, NULL) < 0);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(ud)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 2);
 }
@@ -860,23 +979,30 @@ static void test_userdata_constructor_publish_barrier(lua_State *L,
 static void test_thread_constructor_env_barrier(lua_State *L, global_State *g,
 						TGState *tg)
 {
-  GCtab *env = tabref_acq(L->env);
+  GCtab *env;
   lua_State *L1;
+  uint32_t anchoridx;
 
   lua_settop(L, 0);
-  assert(env != NULL);
+  /* The main thread environment is itself a global thread root and is now
+  ** correctly marked by cycle startup, so it cannot isolate the constructor
+  ** edge. Use a fresh stack table whose root scan has not run yet. */
+  lua_newtable(L);
+  env = tabV(L->top - 1);
   lj_gc2_mark_begin(g);
   assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(env)) == 0);
 
-  L1 = lj_state_new(L);
+  L1 = lj_state_new_withenv(L, env, &anchoridx);
   assert(lj_gc2_ismarked(g, obj2gco(L1)) == 1);
   assert(tabref_acq(L1->env) == env);
   assert(lj_gc2_ismarked(g, obj2gco(env)) == 1);
   setthreadV(L, L->top++, L1);
+  lj_state_stack_pubtv(L, L, L->top - 1);
+  lj_tg_root_anchor_pop(L2TG(L), anchoridx);
   flush_and_drain(g, tg);
   lj_gc2_cycle_to_idle(g);
-  lua_pop(L, 1);
+  lua_pop(L, 2);
 }
 
 static void test_thread_spawn_constructor_child_barrier(lua_State *L,
@@ -1055,7 +1181,12 @@ static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
   assert(isluafunc(fn));
   pt = funcproto(fn);
   assert(proto_chunkname_acq(pt) == chunkname);
-  assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
+  /* Parser allocation checks may drive this deliberately-started cycle all
+  ** the way back to IDLE. A mark bit has no liveness meaning after that point;
+  ** while the cycle remains active, the proto publication barrier must mark
+  ** the chunk name immediately. */
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE ||
+	 lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
 
   flush_and_drain(g, tg);
   lj_gc2_cycle_to_idle(g);
@@ -5120,6 +5251,7 @@ int main(void)
   assert(tg != NULL);
 
   test_strong_table(L, g, tg);
+  test_retired_table_owner_nonsemantic(L, g, tg);
   test_grey_deque_growth(L, g, tg);
   test_grey_deque_steal_race(L, g, tg);
   test_worker_drain(L, g, tg);
@@ -5209,6 +5341,11 @@ int main(void)
   test_finalizer_spawn_deferred_state(L, g);
   test_finreg_disabled_ordered_pending(L, g);
 #endif
+  test_false_candidate_mark_admission(L, g, tg);
+#if LJ_HASFFI
+  test_cdata_exact_coverage_admission(L, g);
+#endif
+  test_huge_false_type_discharge(L, g, tg);
   test_leaf_ssb(L, g, tg);
 
   lua_close(L);

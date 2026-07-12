@@ -141,12 +141,88 @@ enum {
   API_TOSTR_OK = 1
 };
 
-static void index2adr_storestr(lua_State *L, int idx, TValue *o, GCstr *s)
+typedef struct ApiGCRoot {
+  TGState *tg;
+  uint32_t idx;
+} ApiGCRoot;
+
+static void api_gcroot_release(ApiGCRoot *root)
+{
+  if (!root || !root->tg)
+    return;
+  lj_tg_root_anchor_pop(root->tg, root->idx);
+  root->tg = NULL;
+  root->idx = 0;
+}
+
+static TValue *api_gcroot_push_reserved(lua_State *L, cTValue *tv,
+					ApiGCRoot *root)
+{
+  TValue *slot;
+  TGState *tg = L2TG(L);
+  uint32_t idx;
+  lj_assertL(root != NULL && tg != NULL,
+	     "API GC root without an owner TG");
+  slot = lj_tg_root_anchor_push(L, tg, tv, &idx);
+  lj_assertL(slot != NULL, "reserved API GC root allocation failed");
+  root->tg = tg;
+  root->idx = idx;
+  lj_gc_pubroot(L, slot);
+  return slot;
+}
+
+static uint32_t api_envroot_claimed(lua_State *errL, GCtab *env,
+				    LJStateClaim *claim, ApiGCRoot *root)
+{
+  TValue envv;
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL)))) {
+    lj_state_dropclaim(claim);
+    lj_err_mem(errL);
+  }
+  if (env)
+    settabV(errL, &envv, env);
+  else
+    setnilV(&envv);
+  (void)api_gcroot_push_reserved(errL, &envv, root);
+  return root->idx;
+}
+
+static GCstr *api_str_new_rooted(lua_State *L, const char *str, size_t len,
+				 ApiGCRoot *root)
+{
+  TValue tv;
+  GCstr *s;
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(L, L2TG(L))))
+    lj_err_mem(L);
+  s = lj_str_new(L, str, len);
+  setstrV(L, &tv, s);
+  (void)api_gcroot_push_reserved(L, &tv, root);
+  return s;
+}
+
+static GCstr *api_str_newz_rooted(lua_State *L, const char *str,
+				  ApiGCRoot *root)
+{
+  return api_str_new_rooted(L, str, strlen(str), root);
+}
+
+static void api_gcroot_replace(lua_State *L, ApiGCRoot *root, cTValue *tv)
+{
+  TValue *slot = lj_tg_root_anchor_slot_acq(root->tg, root->idx);
+  lj_assertL(slot != NULL, "missing API GC root slot");
+  copyTVrel(L, slot, tv);
+  lj_gc_pubroot(L, slot);
+}
+
+static void index2adr_storestr_noflush(lua_State *L, int idx, TValue *o,
+				      GCstr *s)
 {
   if (index_iscupvalue(idx)) {
     TValue tv;
     setstrV(L, &tv, s);
-    index2adr_cupvalue_store_rel(L, idx, &tv);
+    o = index2adr(L, idx);
+    copyTVrel(L, o, &tv);
+    lj_gc_pubobjtv(L, curr_func(L), &tv);
   } else {
     setstrV(L, o, s);
     lj_state_stack_pubtv(L, L, o);
@@ -157,6 +233,7 @@ static GCstr *api_tolstring_claimed(lua_State *L, int idx, int *status)
 {
   for (;;) {
     LJStateClaim claim;
+    ApiGCRoot root = { NULL, 0 };
     TValue snap, numtv;
     cTValue *o;
     GCstr *s;
@@ -178,8 +255,14 @@ static GCstr *api_tolstring_claimed(lua_State *L, int idx, int *status)
 
     {
       lua_State *errL = api_errstate(L);
+      TValue strtv;
       lj_gc_check(errL);
+      if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL,
+							 L2TG(errL))))
+	lj_err_mem(errL);
       s = lj_strfmt_number(errL, &numtv);
+      setstrV(errL, &strtv, s);
+      (void)api_gcroot_push_reserved(errL, &strtv, &root);
     }
 
     api_checkclaim(L, &claim);
@@ -187,22 +270,32 @@ static GCstr *api_tolstring_claimed(lua_State *L, int idx, int *status)
     if (tvisstr(o)) {
       s = strV(o);
       lj_state_dropclaim(&claim);
+      api_gcroot_release(&root);
       *status = API_TOSTR_OK;
       return s;
     }
     if (tvisnumber(o)) {
       if (tv_rawload_acq(o) == tv_rawload(&numtv)) {
-	index2adr_storestr(L, idx, index_iscupvalue(idx) ? NULL : (TValue *)o,
-			   s);
+	if (index_iscupvalue(idx) && lj_trace_hasany(G(L))) {
+	  lj_state_dropclaim(&claim);
+	  api_gcroot_release(&root);
+	  api_trace_flush_mutation(api_errstate(L));
+	  continue;
+	}
+	index2adr_storestr_noflush(L, idx,
+				 index_iscupvalue(idx) ? NULL : (TValue *)o, s);
 	lj_state_dropclaim(&claim);
+	api_gcroot_release(&root);
 	*status = API_TOSTR_OK;
 	return s;
       }
       lj_state_dropclaim(&claim);
+      api_gcroot_release(&root);
       continue;
     }
     *status = tvisnil(o) ? API_TOSTR_NIL : API_TOSTR_BAD;
     lj_state_dropclaim(&claim);
+    api_gcroot_release(&root);
     return NULL;
   }
 }
@@ -259,6 +352,42 @@ static void api_checkstack1_claimed(lua_State *L, lua_State *errL,
   }
 }
 
+/* api_checkclaim() uses tryclaim rather than resumeclaim and therefore does
+** not save/replace an ownerless coroutine's tg_hint. Its failure cleanup must
+** only release ownership; dropresumeclaim() would incorrectly clear an
+** existing hint. */
+static void api_checkstack1_preclaimed(lua_State *L, lua_State *errL,
+				       LJStateClaim *claim)
+{
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue)) {
+    int status = lj_state_cpgrowstack(L, 1);
+    if (status != LUA_OK) {
+      if (L->top > L->base) L->top--;
+      lj_state_dropclaim(claim);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+		       "not enough memory" : "stack overflow");
+    }
+  }
+}
+
+static void api_checkstack1_gcroot_claimed(lua_State *L, lua_State *errL,
+					   LJStateClaim *claim,
+					   ApiGCRoot *root)
+{
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue)) {
+    int status = lj_state_cpgrowstack(L, 1);
+    if (status != LUA_OK) {
+      if (L->top > L->base) L->top--;
+      lj_state_dropresumeclaim(claim);
+      api_gcroot_release(root);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+		       "not enough memory" : "stack overflow");
+    }
+  }
+}
+
 static int api_getmetafield_key_claimed(lua_State *L, int idx, GCstr *field,
 					LJStateClaim *claim);
 
@@ -268,7 +397,7 @@ static void api_vm_call_claimed(lua_State *L, TValue *base, int nres1,
   if (claim && claim->release) {
     global_State *g = G(L);
     uint8_t oldh = hook_save(g);
-    int status = lj_vm_pcall(L, base, nres1, 0);
+    int status = lj_vm_pcall_unwind(L, base, nres1, 0);
     if (status)
       hook_restore(g, oldh);
     if (status) {
@@ -1132,24 +1261,29 @@ LUA_API void lua_pushinteger(lua_State *L, lua_Integer n)
 LUA_API void lua_pushlstring(lua_State *L, const char *str, size_t len)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot root = { NULL, 0 };
   lua_State *errL;
   GCstr *s;
   api_checkclaim(L, &preclaim);
   lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
-  s = lj_str_new(errL, str, len);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+  s = api_str_new_rooted(errL, str, len, &root);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    api_gcroot_release(&root);
     lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
+  }
+  api_checkstack1_gcroot_claimed(L, errL, &claim, &root);
   setstrV(L, L->top, s);
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
+  api_gcroot_release(&root);
   lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_pushstring(lua_State *L, const char *str)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot root = { NULL, 0 };
   lua_State *errL;
   GCstr *s = NULL;
   if (str == NULL) {
@@ -1158,17 +1292,23 @@ LUA_API void lua_pushstring(lua_State *L, const char *str)
     api_checkclaim(L, &preclaim);
     lj_state_dropclaim(&preclaim);
     errL = api_errstate(L);
-    s = lj_str_newz(errL, str);
+    s = api_str_newz_rooted(errL, str, &root);
   }
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    api_gcroot_release(&root);
     lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
+  }
+  if (str == NULL)
+    api_checkstack1_claimed(L, errL, &claim);
+  else
+    api_checkstack1_gcroot_claimed(L, errL, &claim, &root);
   if (str == NULL)
     setnilV(L->top);
   else
     setstrV(L, L->top, s);
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
+  api_gcroot_release(&root);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -1176,18 +1316,27 @@ LUA_API const char *lua_pushvfstring(lua_State *L, const char *fmt,
 				     va_list argp)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot root = { NULL, 0 };
   lua_State *errL;
   GCstr *s;
+  TValue strtv;
   api_checkclaim(L, &preclaim);
   lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL))))
+    lj_err_mem(errL);
   s = lj_strfmt_vstr(errL, fmt, argp);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+  setstrV(errL, &strtv, s);
+  (void)api_gcroot_push_reserved(errL, &strtv, &root);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    api_gcroot_release(&root);
     lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
+  }
+  api_checkstack1_gcroot_claimed(L, errL, &claim, &root);
   setstrV(L, L->top, s);
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
+  api_gcroot_release(&root);
   lj_state_dropresumeclaim(&claim);
   return strdata(s);
 }
@@ -1205,31 +1354,43 @@ LUA_API const char *lua_pushfstring(lua_State *L, const char *fmt, ...)
 LUA_API void lua_pushcclosure(lua_State *L, lua_CFunction f, int n)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot root = { NULL, 0 };
   lua_State *errL;
   GCtab *env;
   GCfunc *fn;
+  TValue fnv;
+  TValue *src;
+  TGState *construct_tg;
+  uint32_t anchoridx;
   int nup = n;
   api_checkclaim(L, &preclaim);
   lj_checkapi_slot(n);
   env = getcurrenv(L);
-  lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
-  fn = lj_func_newC(errL, (MSize)n, env);
-  fn->c.f = f;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  lj_checkapi_slot(nup);
   if (nup == 0)
-    api_checkstack1_claimed(L, errL, &claim);
-  L->top -= nup;
+    api_checkstack1_preclaimed(L, errL, &preclaim);
+  anchoridx = api_envroot_claimed(errL, env, &preclaim, &root);
+  lj_state_dropclaim(&preclaim);
+  construct_tg = root.tg;
+  fn = lj_func_newC_envrooted(errL, (MSize)n, env, anchoridx);
+  fn->c.f = f;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    lj_tg_root_anchor_pop(construct_tg, anchoridx);
+    lj_err_callermsg(errL, "thread busy");
+  }
+  lj_checkapi_slot(nup);
+  src = L->top - nup;
   while (nup--) {
-    copyTVrel(L, &fn->c.upvalue[nup], L->top+nup);
+    copyTVrel(L, &fn->c.upvalue[nup], src+nup);
     lj_gc_pubobjtv(L, fn, &fn->c.upvalue[nup]);
   }
+  L->top = src;
   lj_assertL(iswhite(obj2gco(fn)), "new GC object is not white");
-  setfuncV(L, L->top, fn);
+  setfuncV(L, &fnv, fn);
+  copyTVrel(L, L->top, &fnv);
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
+  lj_tg_root_anchor_pop(construct_tg, anchoridx);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -1270,78 +1431,188 @@ LUA_API void lua_createtable(lua_State *L, int narray, int nrec)
   LJStateClaim preclaim, claim;
   lua_State *errL;
   GCtab *t;
+  LJTabRoot root;
   api_checkclaim(L, &preclaim);
-  lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
-  t = lj_tab_new_ah(errL, (uint32_t)narray, (uint32_t)nrec);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+  /* Reserve the common-case destination before releasing the target claim.
+  ** A racy peer may still consume it, so the reacquired path rechecks and has
+  ** explicit root cleanup around its protected grow. */
+  api_checkstack1_preclaimed(L, errL, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  t = lj_tab_new_ah_rooted(errL, (uint32_t)narray, (uint32_t)nrec, &root);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    lj_tab_root_release(&root);
     lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
+  }
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue)) {
+    int status = lj_state_cpgrowstack(L, 1);
+    if (status != LUA_OK) {
+      if (L->top > L->base) L->top--;
+      lj_state_dropresumeclaim(&claim);
+      lj_tab_root_release(&root);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+		       "not enough memory" : "stack overflow");
+    }
+  }
   settabV(L, L->top, t);
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
+  lj_tab_root_release(&root);
   lj_state_dropresumeclaim(&claim);
+}
+
+typedef struct ApiNewMetatableCtx {
+  lua_State *target;
+  const char *tname;
+  int result;
+} ApiNewMetatableCtx;
+
+#if defined(LJ_API_ROOT_TEST_HELPERS)
+typedef void (*LJApiNewMetatableHook)(lua_State *L, int stage, GCtab *regt,
+				      GCstr *key, TValue *valueslot,
+				      TValue *rootslot);
+static LJApiNewMetatableHook api_test_newmetatable_hook;
+
+void lj_api_test_set_newmetatable_hook(LJApiNewMetatableHook hook)
+{
+  api_test_newmetatable_hook = hook;
+}
+
+static void api_test_newmetatable(lua_State *L, int stage, GCtab *regt,
+				  GCstr *key, TValue *valueslot,
+				  TValue *rootslot)
+{
+  LJApiNewMetatableHook hook = api_test_newmetatable_hook;
+  if (hook) {
+    if (stage == 2)
+      api_test_newmetatable_hook = NULL;
+    hook(L, stage, regt, key, valueslot, rootslot);
+  }
+}
+#else
+#define api_test_newmetatable(L, stage, regt, key, valueslot, rootslot) \
+  ((void)0)
+#endif
+
+static void api_newmetatable_push(lua_State *errL, ApiNewMetatableCtx *ctx,
+				  ApiGCRoot *root)
+{
+  LJStateClaim claim;
+  TValue out;
+  TValue *slot;
+  lua_State *L = ctx->target;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    api_gcroot_release(root);
+    lj_err_callermsg(errL, "thread busy");
+  }
+  api_checkstack1_gcroot_claimed(L, errL, &claim, root);
+  slot = lj_tg_root_anchor_slot_acq(root->tg, root->idx);
+  lj_assertL(slot != NULL, "lost new-metatable result root");
+  lj_tv_load_acq(&out, slot);
+  copyTV(L, L->top, &out);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  api_gcroot_release(root);
+  lj_state_dropresumeclaim(&claim);
+}
+
+static TValue *api_newmetatable_cp(lua_State *errL, lua_CFunction dummy,
+				    void *ud)
+{
+  ApiNewMetatableCtx *ctx = (ApiNewMetatableCtx *)ud;
+  ApiGCRoot regroot = { NULL, 0 };
+  ApiGCRoot keyroot = { NULL, 0 };
+  GCtab *regt;
+  GCstr *key;
+  TValue regtv;
+  TValue *keyslot;
+  UNUSED(dummy);
+  cframe_errfunc(errL->cframe) = -1;
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL))))
+    lj_err_mem(errL);
+  regt = lj_registry_tab_acq(G(errL));
+  settabV(errL, &regtv, regt);
+  (void)api_gcroot_push_reserved(errL, &regtv, &regroot);
+  key = api_str_newz_rooted(errL, ctx->tname, &keyroot);
+  keyslot = lj_tg_root_anchor_slot_acq(keyroot.tg, keyroot.idx);
+  lj_assertX(keyslot != NULL, "missing new-metatable key root");
+  for (;;) {
+    TValue *tv = lj_tab_setstr(errL, regt, key);
+    TValue old;
+    int rc = lj_tab_read_current_keyed(regt, tv, keyslot, &old);
+    if (rc != LJ_TAB_STORE_CAS_OK) {
+      lj_tab_store_wait_l(errL);
+      continue;
+    }
+    if (tvisnil(&old)) {
+      LJTabRoot mtroot;
+      GCtab *mt = lj_tab_new_ah_rooted(errL, 0, 1, &mtroot);
+      TValue mtv;
+      settabV(errL, &mtv, mt);
+      api_test_newmetatable(errL, 1, regt, key, tv, keyslot);
+      rc = lj_tab_trysetnil_cas_keyed(errL, regt, tv, keyslot, &mtv,
+				      &old);
+      if (rc == LJ_TAB_STORE_CAS_OK) {
+	lj_gc_pubtab(errL, regt);
+	/* Transfer the result to the older key slot before dropping the top
+	** constructor root. A racing registry delete therefore cannot reclaim
+	** the new table during target-state claim/growth. */
+	api_gcroot_replace(errL, &keyroot, &mtv);
+	lj_tab_root_release(&mtroot);
+	ctx->result = 1;
+	api_newmetatable_push(errL, ctx, &keyroot);
+	api_gcroot_release(&regroot);
+	return NULL;
+      }
+      if (rc == LJ_TAB_STORE_CAS_EXISTS) {
+	/* old is consumed before any wait. Root it in the still-live lower slot,
+	** then retire the losing constructor root in LIFO order. */
+	api_gcroot_replace(errL, &keyroot, &old);
+	api_test_newmetatable(errL, 2, regt, key, tv,
+	  lj_tg_root_anchor_slot_acq(keyroot.tg, keyroot.idx));
+	lj_tab_root_release(&mtroot);
+	ctx->result = 0;
+	api_newmetatable_push(errL, ctx, &keyroot);
+	api_gcroot_release(&regroot);
+	return NULL;
+      }
+      lj_tab_root_release(&mtroot);
+      lj_tab_store_wait_l(errL);
+      keyslot = lj_tg_root_anchor_slot_acq(keyroot.tg, keyroot.idx);
+      continue;
+    }
+    /* The old registry snapshot must become a root before claim reacquisition
+    ** or stack growth: a racing peer may remove the registry edge immediately
+    ** after this read. The key is no longer needed on this return path. */
+    api_gcroot_replace(errL, &keyroot, &old);
+    ctx->result = 0;
+    api_newmetatable_push(errL, ctx, &keyroot);
+    api_gcroot_release(&regroot);
+    return NULL;
+  }
 }
 
 LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 {
-  LJStateClaim preclaim, claim;
+  LJStateClaim preclaim;
+  ApiNewMetatableCtx ctx;
   lua_State *errL;
-  GCtab *regt = lj_registry_tab_acq(G(L));
-  GCstr *key;
-  TValue keytv;
+  int status;
   api_checkclaim(L, &preclaim);
   lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
-  key = lj_str_newz(errL, tname);
-  setstrV(L, &keytv, key);
-  for (;;) {
-    TValue *tv = lj_tab_setstr(errL, regt, key);
-    TValue old;
-    int rc = lj_tab_read_current_keyed(regt, tv, &keytv, &old);
-    if (rc != LJ_TAB_STORE_CAS_OK) {
-      lj_tab_store_wait_l(errL);  /* luaL_newmetatable saw stale/FORWARD slot. */
-      continue;
-    }
-    if (tvisnil(&old)) {
-      GCtab *mt = lj_tab_new(errL, 0, 1);
-      TValue tmp;
-      settabV(L, &tmp, mt);
-      rc = lj_tab_trysetnil_cas_keyed(errL, regt, tv, &keytv, &tmp, &old);
-      if (rc == LJ_TAB_STORE_CAS_OK) {
-	lj_gc_pubtab(errL, regt);
-	if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-	  lj_err_callermsg(errL, "thread busy");
-	api_checkstack1_claimed(L, errL, &claim);
-	settabV(L, L->top, mt);
-	lj_state_stack_pubtv(L, L, L->top);
-	L->top++;
-	lj_state_dropresumeclaim(&claim);
-	return 1;
-      }
-      if (rc != LJ_TAB_STORE_CAS_EXISTS) {
-	lj_tab_store_wait_l(errL);
-	continue;
-      }
-      if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-	lj_err_callermsg(errL, "thread busy");
-      api_checkstack1_claimed(L, errL, &claim);
-      copyTV(L, L->top, &old);
-      lj_state_stack_pubtv(L, L, L->top);
-      L->top++;
-      lj_state_dropresumeclaim(&claim);
-      return 0;
-    } else {
-      if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-	lj_err_callermsg(errL, "thread busy");
-      api_checkstack1_claimed(L, errL, &claim);
-      copyTV(L, L->top, &old);
-      lj_state_stack_pubtv(L, L, L->top);
-      L->top++;
-      lj_state_dropresumeclaim(&claim);
-      return 0;
-    }
-  }
+  ctx.target = L;
+  ctx.tname = tname;
+  ctx.result = 0;
+  /* Nested protection is intentional: Lua fast pcall/xpcall does not pass
+  ** through the C wrapper checkpoint, so every key/table anchor is unwound
+  ** here before the original error is rethrown. This path is initialization-
+  ** oriented and not part of ordinary field-access performance. */
+  status = lj_vm_cpcall(errL, NULL, &ctx, api_newmetatable_cp);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(errL, status);
+  return ctx.result;
 }
 
 LUA_API int lua_pushthread(lua_State *L)
@@ -1363,20 +1634,38 @@ LUA_API int lua_pushthread(lua_State *L)
 LUA_API lua_State *lua_newthread(lua_State *L)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot root = { NULL, 0 };
   lua_State *errL;
   GCtab *env;
   lua_State *L1;
+  TGState *anchor_tg;
+  uint32_t anchoridx;
   api_checkclaim(L, &preclaim);
   env = getcurrenv(L);
-  lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
-  L1 = lj_state_new_withenv(errL, env);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+  anchoridx = api_envroot_claimed(errL, env, &preclaim, &root);
+  lj_state_dropclaim(&preclaim);
+  anchor_tg = root.tg;
+  L1 = lj_state_new_withenv_envrooted(errL, env, anchoridx);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    lj_tg_root_anchor_pop(anchor_tg, anchoridx);
     lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
+  }
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue)) {
+    int status = lj_state_cpgrowstack(L, 1);
+    if (status != LUA_OK) {
+      if (L->top > L->base) L->top--;
+      lj_state_dropresumeclaim(&claim);
+      lj_tg_root_anchor_pop(anchor_tg, anchoridx);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+		       "not enough memory" : "stack overflow");
+    }
+  }
   setthreadV(L, L->top, L1);
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
+  lj_tg_root_anchor_pop(anchor_tg, anchoridx);
   lj_state_dropresumeclaim(&claim);
   return L1;
 }
@@ -1384,22 +1673,42 @@ LUA_API lua_State *lua_newthread(lua_State *L)
 LUA_API void *lua_newuserdata(lua_State *L, size_t size)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot envroot = { NULL, 0 };
   lua_State *errL;
   GCtab *env;
   GCudata *ud;
+  LJUdataRoot root;
   api_checkclaim(L, &preclaim);
   env = getcurrenv(L);
-  lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
-  if (size > LJ_MAX_UDATA - sizeof(GCudata))
+  if (size > LJ_MAX_UDATA - sizeof(GCudata)) {
+    lj_state_dropclaim(&preclaim);
     lj_err_msg(errL, LJ_ERR_UDATAOV);
-  ud = lj_udata_new(errL, (MSize)size, env);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+  }
+  (void)api_envroot_claimed(errL, env, &preclaim, &envroot);
+  root.tg = envroot.tg;
+  root.idx = envroot.idx;
+  lj_state_dropclaim(&preclaim);
+  ud = lj_udata_newrooted_envrooted(errL, (MSize)size, env, &root);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    lj_udata_root_release(&root);
     lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
+  }
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue)) {
+    int status = lj_state_cpgrowstack(L, 1);
+    if (status != LUA_OK) {
+      if (L->top > L->base) L->top--;
+      lj_state_dropresumeclaim(&claim);
+      lj_udata_root_release(&root);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+		       "not enough memory" : "stack overflow");
+    }
+  }
   setudataV(L, L->top, ud);
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
+  lj_udata_root_release(&root);
   lj_state_dropresumeclaim(&claim);
   return uddata(ud);
 }
@@ -1459,23 +1768,28 @@ LUA_API void lua_gettable(lua_State *L, int idx)
 LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 {
   LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
   cTValue *v, *t;
-  TValue key;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(api_errstate(L), "thread busy");
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   t = index2adr_check_read(L, idx, &snap);
-  setstrV(L, &key, lj_str_newz(L, k));
-  v = lj_meta_tget(L, t, &key);
+  /* Use the eventual result slot as the key root. The __index retry/call path
+  ** can safepoint, but it now has exactly the same natural stack shape as
+  ** lua_gettable() instead of retaining a generated GCstr only in C. */
+  setstrV(L, L->top, lj_str_newz(L, k));
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  v = lj_meta_tget(L, t, L->top-1);
   if (v == NULL) {
     L->top += 2;
     api_vm_call_claimed(L, L->top-2, 1+1, &claim);
     L->top -= 2+LJ_FR2;
     v = L->top+1+LJ_FR2;
   }
-  copyTV(L, L->top, v);
-  lj_state_stack_pubtv(L, L, L->top);
-  incr_top(L);
+  copyTV(L, L->top-1, v);
+  lj_state_stack_pubtv(L, L, L->top-1);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -1527,6 +1841,7 @@ LUA_API int lua_getmetatable(lua_State *L, int idx)
   GCtab *mt = NULL;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
+retry_after_grow:
   o = index2adr_read(L, idx, &snap);
   if (tvistab(o))
     mt = lj_tab_metatable_acq(tabV(o));
@@ -1538,7 +1853,14 @@ LUA_API int lua_getmetatable(lua_State *L, int idx)
     lj_state_dropresumeclaim(&claim);
     return 0;
   }
-  api_checkstack1_claimed(L, errL, &claim);
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue)) {
+    /* The old mt snapshot must not cross protected growth. Grow, then reload
+    ** the indexed object and its current metatable from the relocated stack. */
+    api_checkstack1_claimed(L, errL, &claim);
+    mt = NULL;
+    goto retry_after_grow;
+  }
   settabV(L, L->top, mt);
   lj_state_stack_pubtv(L, L, L->top);
   incr_top(L);
@@ -1549,14 +1871,21 @@ LUA_API int lua_getmetatable(lua_State *L, int idx)
 LUALIB_API int luaL_getmetafield(lua_State *L, int idx, const char *field)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot root = { NULL, 0 };
+  lua_State *errL;
   GCstr *key;
   int ok;
   api_checkclaim(L, &preclaim);
   lj_state_dropclaim(&preclaim);
-  key = lj_str_newz(api_errstate(L), field);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(api_errstate(L), "thread busy");
+  errL = api_errstate(L);
+  key = api_str_newz_rooted(errL, field, &root);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    api_gcroot_release(&root);
+    lj_err_callermsg(errL, "thread busy");
+  }
+  api_checkstack1_gcroot_claimed(L, errL, &claim, &root);
   ok = api_getmetafield_key_claimed(L, idx, key, &claim);
+  api_gcroot_release(&root);
   lj_state_dropresumeclaim(&claim);
   return ok;
 }
@@ -1567,6 +1896,7 @@ static int api_getmetafield_key_claimed(lua_State *L, int idx, GCstr *field,
   TValue snap;
   cTValue *o, *tv;
   GCtab *mt = NULL;
+  UNUSED(claim);
   o = index2adr_read(L, idx, &snap);
   if (tvistab(o))
     mt = lj_tab_metatable_acq(tabV(o));
@@ -1574,16 +1904,25 @@ static int api_getmetafield_key_claimed(lua_State *L, int idx, GCstr *field,
     mt = lj_udata_metatable_acq(udataV(o));
   else
     mt = lj_basemt_obj_acq(G(L), o);
-  if (mt != NULL && (tv = lj_tab_getstr(mt, field)) != NULL) {
+  if (mt != NULL) {
     TValue mtv;
-    lj_tv_load_acq(&mtv, tv);
-    if (!tvisnil(&mtv)) {
-      api_checkstack1_claimed(L, api_errstate(L), claim);
-      copyTV(L, L->top, &mtv);
-      lj_state_stack_pubtv(L, L, L->top);
-      incr_top(L);
-      return 1;
+    /* The caller pre-reserved this slot. Root the metatable itself before the
+    ** generation-following lookup can yield, then replace that natural root
+    ** with the result snapshot. */
+    settabV(L, L->top, mt);
+    lj_state_stack_pubtv(L, L, L->top);
+    incr_top(L);
+    tv = lj_tab_getstr(mt, field);
+    if (tv != NULL) {
+      lj_tv_load_acq(&mtv, tv);
+      if (!tvisnil(&mtv)) {
+	copyTV(L, L->top-1, &mtv);
+	lj_state_stack_pubtv(L, L, L->top-1);
+	return 1;
+      }
     }
+    setnilV(L->top-1);
+    L->top--;
   }
   return 0;
 }
@@ -1611,8 +1950,9 @@ LUA_API void lua_getfenv(lua_State *L, int idx)
       lj_err_callermsg(errL, "thread busy");
     }
     env = lj_state_env_acq(L1);
-    lj_state_dropclaim(&thclaim);
     settabV(L, L->top, env);
+    lj_state_stack_pubtv(L, L, L->top);
+    lj_state_dropclaim(&thclaim);
   } else {
     setnilV(L->top);
   }
@@ -1724,8 +2064,13 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
 LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
 {
   LJStateClaim claim;
+  ApiGCRoot root = { NULL, 0 };
+  ApiGCRoot regroot = { NULL, 0 };
+  lua_State *errL;
   TValue snap;
+  TValue regtv;
   cTValue *o;
+  GCtab *regt;
   GCstr *key;
   void *p = NULL;
   api_checkclaim(L, &claim);
@@ -1735,20 +2080,40 @@ LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
     return NULL;
   }
   lj_state_dropclaim(&claim);
-  key = lj_str_newz(api_errstate(L), tname);
-  api_checkclaim(L, &claim);
+  errL = api_errstate(L);
+  key = api_str_newz_rooted(errL, tname, &root);
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL)))) {
+    api_gcroot_release(&root);
+    lj_err_mem(errL);
+  }
+  regt = lj_registry_tab_acq(G(L));
+  settabV(errL, &regtv, regt);
+  (void)api_gcroot_push_reserved(errL, &regtv, &regroot);
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    api_gcroot_release(&regroot);
+    api_gcroot_release(&root);
+    lj_err_callermsg(errL, "thread busy");
+  }
   o = index2adr_read(L, idx, &snap);
   if (tvisudata(o)) {
     GCudata *ud = udataV(o);
-    cTValue *tv = lj_tab_getstr(lj_registry_tab_acq(G(L)), key);
+    cTValue *tv = lj_tab_getstr(regt, key);
     if (tv) {
       TValue mtv;
       lj_tv_load_acq(&mtv, tv);
+      /* The registry value can be deleted as soon as its generation lookup
+      ** returns. The registry-table root is no longer needed, so reuse its
+      ** top anchor for the metatable snapshot before comparing the userdata
+      ** edge. */
+      if (tvistab(&mtv))
+	api_gcroot_replace(errL, &regroot, &mtv);
       if (tvistab(&mtv) && tabV(&mtv) == lj_udata_metatable_acq(ud))
 	p = uddata(ud);
     }
   }
   lj_state_dropclaim(&claim);
+  api_gcroot_release(&regroot);
+  api_gcroot_release(&root);
   return p;  /* NULL if value is not a userdata with a matching metatable. */
 }
 
@@ -1811,36 +2176,49 @@ LUA_API void lua_settable(lua_State *L, int idx)
 LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 {
   LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue *o;
-  TValue key;
+  TValue valtmp;
   TValue snap;
   cTValue *t;
   GCtab *owner;
   lj_checkapi_slot(1);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(api_errstate(L), "thread busy");
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   t = index2adr_check_read(L, idx, &snap);
-  setstrV(L, &key, lj_str_newz(L, k));
+  /* Materialize |key|value| on the real stack. This roots both operands across
+  ** stale-generation waits and gives __newindex the same frame contract as
+  ** lua_settable(). */
+  setstrV(L, L->top, lj_str_newz(L, k));
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  copyTV(L, &valtmp, L->top-2);
+  copyTVrel(L, L->top-2, L->top-1);
+  copyTVrel(L, L->top-1, &valtmp);
+  lj_state_stack_pubtv(L, L, L->top-2);
+  lj_state_stack_pubtv(L, L, L->top-1);
   for (;;) {
-    o = lj_meta_tset_owner(L, t, &key, &owner);
+    o = lj_meta_tset_owner(L, t, L->top-2, &owner);
     if (o) {
       TValue *val = L->top-1;
+      TValue *key = L->top-2;
       int weakwr = lj_gc2_weak_write_begin(L, owner);
       int rc;
       if (weakwr)
-	lj_gc2_barrier_weak_write(L, owner, &key, val);
-      rc = lj_tab_trystoretv_cas_keyed(L, owner, o, &key, val);
+	lj_gc2_barrier_weak_write(L, owner, key, val);
+      rc = lj_tab_trystoretv_cas_keyed(L, owner, o, key, val);
       if (weakwr) {
-	lj_gc2_barrier_weak_write(L, owner, &key, val);
+	lj_gc2_barrier_weak_write(L, owner, key, val);
 	lj_gc2_barrier_tv_pair(L, obj2gco(owner), val);
 	lj_gc2_weak_write_end(L, weakwr);
       }
       if (rc == LJ_TAB_STORE_CAS_OK) {
 	if (!weakwr)
-	  lj_gc2_barrier_weak_write(L, owner, &key, val);
-	lj_gc_pubtabkey(L, owner, &key);
+	  lj_gc2_barrier_weak_write(L, owner, key, val);
+	lj_gc_pubtabkey(L, owner, key);
 	lj_gc_pubtabtv(L, owner, val);
-	L->top = val;
+	L->top = key;
 	lj_state_dropresumeclaim(&claim);
 	return;
       }
@@ -1850,7 +2228,7 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
       copyTV(L, base+2, base-3-2*LJ_FR2);
       L->top = base+3;
       api_vm_call_claimed(L, base, 0+1, &claim);
-      L->top -= 2+LJ_FR2;
+      L->top -= 3+LJ_FR2;
       lj_state_dropresumeclaim(&claim);
       return;
     }
@@ -2101,7 +2479,7 @@ LUA_API void lua_call(lua_State *L, int nargs, int nresults)
   if (claim.release) {
     global_State *g = G(L);
     uint8_t oldh = hook_save(g);
-    int status = lj_vm_pcall(L, api_call_base(L, nargs), nresults+1, 0);
+    int status = lj_vm_pcall_unwind(L, api_call_base(L, nargs), nresults+1, 0);
     if (status)
       hook_restore(g, oldh);
     lj_state_dropresumeclaim(&claim);
@@ -2131,7 +2509,7 @@ LUA_API int lua_pcall(lua_State *L, int nargs, int nresults, int errfunc)
     cTValue *o = index2adr_stack(L, errfunc);
     ef = savestack(L, o);
   }
-  status = lj_vm_pcall(L, api_call_base(L, nargs), nresults+1, ef);
+  status = lj_vm_pcall_unwind(L, api_call_base(L, nargs), nresults+1, ef);
   if (status) hook_restore(g, oldh);
   lj_state_dropresumeclaim(&claim);
   return status;
@@ -2139,18 +2517,23 @@ LUA_API int lua_pcall(lua_State *L, int nargs, int nresults, int errfunc)
 
 static TValue *cpcall(lua_State *L, lua_CFunction func, void *ud)
 {
-  GCfunc *fn = lj_func_newC(L, 0, getcurrenv(L));
-  TValue *top = L->top;
-  fn->c.f = func;
-  setfuncV(L, top++, fn);
-  if (LJ_FR2) setnilV(top++);
+  uint32_t anchoridx;
+  GCfunc *fn;
+  TValue fnv, *top;
 #if LJ_64
   ud = lj_lightud_intern(L, ud);
 #endif
+  fn = lj_func_newC(L, 0, getcurrenv(L), &anchoridx);
+  top = L->top;
+  fn->c.f = func;
+  setfuncV(L, &fnv, fn);
+  copyTVrel(L, top++, &fnv);
+  if (LJ_FR2) setnilV(top++);
   setrawlightudV(top++, ud);
   cframe_nres(L->cframe) = 1+0;  /* Zero results. */
   L->top = top;
   lj_state_stack_pubrange(L, L);
+  lj_tg_root_anchor_pop(L2TG(L), anchoridx);
   return top-1;  /* Now call the newly allocated C function. */
 }
 
@@ -2173,15 +2556,22 @@ LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
 LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
 {
   LJStateClaim preclaim, claim;
+  ApiGCRoot root = { NULL, 0 };
+  lua_State *errL;
   GCstr *key;
   api_checkclaim(L, &preclaim);
   lj_state_dropclaim(&preclaim);
-  key = lj_str_newz(api_errstate(L), field);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(api_errstate(L), "thread busy");
+  errL = api_errstate(L);
+  key = api_str_newz_rooted(errL, field, &root);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
+    api_gcroot_release(&root);
+    lj_err_callermsg(errL, "thread busy");
+  }
+  api_checkstack1_gcroot_claimed(L, errL, &claim, &root);
   if (api_getmetafield_key_claimed(L, idx, key, &claim)) {
     TValue snap;
     TValue *top = L->top--;
+    api_gcroot_release(&root);
     if (LJ_FR2) setnilV(top++);
     copyTV(L, top++, index2adr_read(L, idx, &snap));
     L->top = top;
@@ -2190,6 +2580,7 @@ LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
     lj_state_dropresumeclaim(&claim);
     return 1;
   }
+  api_gcroot_release(&root);
   lj_state_dropresumeclaim(&claim);
   return 0;
 }
@@ -2265,7 +2656,7 @@ LUA_API int lua_resume(lua_State *L, int nargs)
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(api_errstate(L), "thread busy");
   if (L->cframe == NULL && L->status <= LUA_YIELD) {
-    status = lj_vm_resume(L,
+    status = lj_vm_resume_unwind(L,
       L->status == LUA_OK ? api_call_base(L, nargs) : L->top - nargs,
       0, 0);
   } else {

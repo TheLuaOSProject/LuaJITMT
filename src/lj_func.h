@@ -17,8 +17,14 @@ LJ_FUNCA void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level);
 LJ_FUNC void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv);
 
 /* Functions (closures). */
-LJ_FUNC GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env);
-LJ_FUNC GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env);
+LJ_FUNC GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env,
+			      uint32_t *anchoridx);
+/* Adopt a caller-published top anchor containing env, then replace that exact
+** slot with the complete closure. OOM pops the adopted slot before raising. */
+LJ_FUNC GCfunc *lj_func_newC_envrooted(lua_State *L, MSize nelems,
+				       GCtab *env, uint32_t anchoridx);
+LJ_FUNC GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env,
+				   uint32_t anchoridx);
 LJ_FUNCA GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent);
 LJ_FUNCA void lj_func_syncslot_forjit(lua_State *L, TValue *base,
 				      int32_t slot, const TValue *tv);
@@ -57,6 +63,11 @@ LJ_FUNC uint32_t lj_func_test_gc0_bump_trace_calls(void);
 LJ_FUNC void lj_func_test_reset_gc0_bump_trace_calls(void);
 LJ_FUNC uint32_t lj_func_test_uvcell_bump_calls(void);
 LJ_FUNC void lj_func_test_reset_uvcell_bump_calls(void);
+LJ_FUNC void lj_func_test_fail_empty_uv_after(uint32_t nth);
+LJ_FUNC uint32_t lj_func_test_empty_uv_fail_remaining(void);
+LJ_FUNC void lj_func_test_fail_finduv_after(uint32_t nth);
+LJ_FUNC uint32_t lj_func_test_finduv_fail_remaining(void);
+LJ_FUNC void lj_func_test_collect_after_finduv(uint32_t nth);
 #endif
 LJ_FUNC void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *c);
 

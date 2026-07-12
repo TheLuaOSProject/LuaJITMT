@@ -9,6 +9,7 @@
 
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_arena.h"
 #include "lj_err.h"
 #include "lj_state.h"
 #include "lj_tab.h"
@@ -42,6 +43,7 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   global_State *g;
   MSize extra = sizeof(GCcdataVar) + sizeof(GCcdata) +
 		(align > CT_MEMALIGN ? (1u<<align) - (1u<<CT_MEMALIGN) : 0);
+  GCSize allocsz = (GCSize)extra + (GCSize)sz;
   char *p;
   uintptr_t adata;
   uintptr_t almask;
@@ -49,7 +51,7 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   LJOSerrState oserr;
   /* Same contract for traced VLA/VLS and over-aligned CNEW materialization. */
   lj_oserr_save(&oserr);
-  p = (char *)lj_mem_new_nothrow(L, extra + sz);
+  p = (char *)lj_mem_newgco_raw_nothrow(L, allocsz, LJ_AF_TRAVERSABLE);
   if (LJ_UNLIKELY(p == NULL)) {
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
@@ -69,9 +71,14 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   g = G(L);
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = id;
-  cdata_flags_rel(cd, 0);
+  cdata_flags_rel(cd, cdata_size_tail_flags(allocsz));
   newwhite(g, obj2gco(cd));
   lj_obj_addgcflags(obj2gco(cd), 0x80);
+  if (LJ_UNLIKELY(!lj_mem_publish_interior_cdata(L, p, allocsz))) {
+    lj_mem_free(g, p, allocsz);
+    lj_oserr_restore(&oserr);
+    lj_err_mem(L);
+  }
   lj_gc_linkobj_new(g, obj2gco(cd));
   lj_oserr_restore(&oserr);
   return cd;
@@ -162,6 +169,8 @@ int lj_cdata_validate(global_State *g, GCcdata *cd, void **basep,
     }
     base = cd;
   }
+  if (!cdata_size_tail_matches(cd, (size_t)size))
+    return 0;
   if (basep) *basep = base;
   if (sizep) *sizep = size;
   return 1;

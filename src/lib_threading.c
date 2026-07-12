@@ -262,24 +262,28 @@ static TValue *threading_storeudata_str(lua_State *L, GCtab *env, GCstr *key,
 
 static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
 {
-  global_State *g = G(L);
-  GCudata *ud = lj_udata_new(L, sizeof(LJThread), env);
-  LJThread *th = (LJThread *)uddata(ud);
+  LJUdataRoot root;
+  GCudata *ud;
+  LJThread *th;
+  lj_state_checkstack(L, 1);  /* No stack growth with root live. */
+  ud = lj_udata_newrooted(L, sizeof(LJThread), env, &root);
+  th = (LJThread *)uddata(ud);
   memset(th, 0, sizeof(*th));
   lj_udata_metatable_rel(ud, env);
   threading_root_table(L, GCROOT_THREADING_THREAD_MT, env);
   lj_gc_pubobjobj(L, ud, env);
   lj_thread_udata_rel(th, ud);
-  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
-  lj_gc2_finreg_udata_register_mt(L, g, ud, env);
-  setudataV(L, L->top++, ud);
+  /* Keep the userdata generic and held by its constructor root until every
+  ** specialized payload byte is initialized. */
+  lj_udata_finreg_mt_rooted(L, ud, env, &root);
+  lj_udata_specialize(L, ud, UDTYPE_THREAD);
+  lj_udata_pushrooted(L, ud, &root);
   return ud;
 }
 
 static void threading_publish_thread_state(lua_State *L, GCudata *ud,
 					   LJThread *th, lua_State *L1)
 {
-  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
   lj_thread_state_store_rel(th, L1);
   lj_gc_pubobjobj(L, ud, L1);
 }
@@ -287,6 +291,7 @@ static void threading_publish_thread_state(lua_State *L, GCudata *ud,
 static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
 				       ptrdiff_t baseofs, uint32_t n)
 {
+  global_State *g = G(L);
   TValue *base;
   TValue *roots;
   uint32_t i;
@@ -299,9 +304,15 @@ static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
     lj_gc_pubroot(L, &roots[i]);
     lj_gc_pubobjtv(L, ud, &roots[i]);
   }
-  lj_thread_start_roots_rel(th, roots);
+  /* The vector is a raw GC2 allocation.  Mark on both sides of its release
+  ** publication so an IDLE->MARK bitmap clear cannot erase the only native
+  ** lifetime proof.  Count precedes the pointer LP; a pointer acquire then
+  ** observes the complete element range. */
+  (void)lj_gc2_markmem(g, roots);
   lj_thread_start_root_count_rel(th, n);
-  lj_gc2_remember_root(G(L), obj2gco(ud));
+  lj_thread_start_roots_rel(th, roots);
+  (void)lj_gc2_markmem(g, roots);
+  lj_udata_rescan(L, ud);
 }
 
 static void threading_start_roots_clear(lua_State *L, LJThread *th)
@@ -1933,7 +1944,9 @@ LJLIB_CF(threading_current)
       lj_tg_store_thread_ud(tg, ud);
     threading_state_set_ud(L, L, ud);
   }
-  setudataV(L, L->top++, ud);
+  setudataV(L, L->top, ud);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
   return 1;
 }
 
@@ -1942,15 +1955,19 @@ LJLIB_PUSH(top-3) LJLIB_SET(!)  /* Set environment to mutex methods. */
 LJLIB_CF(threading_mutex)
 {
   GCtab *env = lj_func_env_acq(curr_func(L));
-  GCudata *ud = lj_udata_new(L, sizeof(LJMutex), env);
-  LJMutex *m = (LJMutex *)uddata(ud);
+  LJUdataRoot root;
+  GCudata *ud;
+  LJMutex *m;
+  lj_state_checkstack(L, 1);  /* No stack growth with root live. */
+  ud = lj_udata_newrooted(L, sizeof(LJMutex), env, &root);
+  m = (LJMutex *)uddata(ud);
   lj_udata_metatable_rel(ud, env);
   threading_root_table(L, GCROOT_THREADING_MUTEX_MT, env);
   lj_gc_pubobjobj(L, ud, env);
-  lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
+  lj_udata_finreg_mt_rooted(L, ud, env, &root);
   m->state = LJ_MUTEX_UNLOCKED;
-  lj_udata_udtype_rel(ud, UDTYPE_MUTEX);
-  setudataV(L, L->top++, ud);
+  lj_udata_specialize(L, ud, UDTYPE_MUTEX);
+  lj_udata_pushrooted(L, ud, &root);
   lj_gc_check(L);
   return 1;
 }
@@ -1965,6 +1982,7 @@ LJLIB_CF(threading_channel)
   uint64_t bytes;
   GCtab *env;
   GCudata *ud;
+  LJUdataRoot root;
   if (n < 0)
     lj_err_arg(L, 1, LJ_ERR_NUMRNG);
   cap = (uint32_t)n;
@@ -1973,14 +1991,15 @@ LJLIB_CF(threading_channel)
   if (bytes > LJ_MAX_UDATA)
     lj_err_arg(L, 1, LJ_ERR_NUMRNG);
   env = lj_func_env_acq(curr_func(L));
-  ud = lj_udata_new(L, lj_chan_memsize(cap), env);
+  lj_state_checkstack(L, 1);  /* No stack growth with root live. */
+  ud = lj_udata_newrooted(L, lj_chan_memsize(cap), env, &root);
   lj_udata_metatable_rel(ud, env);
   threading_root_table(L, GCROOT_THREADING_CHANNEL_MT, env);
   lj_gc_pubobjobj(L, ud, env);
-  lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
+  lj_udata_finreg_mt_rooted(L, ud, env, &root);
   lj_chan_init((LJChan *)uddata(ud), cap);
-  lj_udata_udtype_rel(ud, UDTYPE_CHANNEL);
-  setudataV(L, L->top++, ud);
+  lj_udata_specialize(L, ud, UDTYPE_CHANNEL);
+  lj_udata_pushrooted(L, ud, &root);
   lj_gc_check(L);
   return 1;
 }

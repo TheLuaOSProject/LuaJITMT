@@ -892,6 +892,13 @@ static void asm_fnew1num_arena_blockop(ASMState *as, Reg bit, Reg arena)
   emit_rmro(as, XO_BTS, bit|REX_64, arena, offsetof(GCArena, block));
 }
 
+static void asm_fnew1num_arena_readyop(ASMState *as, Reg bit, Reg arena)
+{
+  /* Header bytes are complete and block[] is still zero, so the sole arena
+  ** owner can publish READY without a locked RMW before discovery. */
+  emit_rmro(as, XO_BTS, bit|REX_64, arena, offsetof(GCArena, ready));
+}
+
 static void asm_fnew1num_movi8(ASMState *as, Reg base, int32_t ofs, int32_t k)
 {
   emit_i8(as, k);
@@ -1028,6 +1035,8 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   ** Rebuild the upvalue cell index in `next`; `uv` is a pointer by then. */
   asm_fnew1num_arena_blockop(as, next, arena);
   asm_fnew1num_arena_blockop(as, cell, arena);
+  asm_fnew1num_arena_readyop(as, next, arena);
+  asm_fnew1num_arena_readyop(as, cell, arena);
   l_markdone = emit_label(as);
   asm_fnew1num_arena_markop(as, XO_BTR, next, arena);
   asm_fnew1num_arena_markop(as, XO_BTR, cell, arena);

@@ -184,18 +184,118 @@ static void test_obj_valid_accepts_variable_cdata(lua_State *L,
 {
 #if LJ_HASFFI
   {
-    GCcdata *cd;
+    static const char *chunks[] = {
+      "local ffi = ffi\n"
+      "local ct = ffi.typeof('double __attribute__((vector_size(16)))')\n"
+      "local v = ct(1.5)\n"
+      "return v",
+      "local ffi = ffi; return ffi.new('uint8_t[?]', 32)",
+      "local ffi = ffi; return ffi.new('uint8_t[?]', 70000)"
+    };
+    size_t i;
     int status;
     lua_pushcfunction(L, luaopen_ffi);
     lua_call(L, 0, 1);
     lua_setglobal(L, "ffi");
-    status = luaL_dostring(L, "return ffi.new('uint8_t[?]', 70000)");
+    for (i = 0; i < sizeof(chunks)/sizeof(chunks[0]); i++) {
+      GCcdata *cd;
+      GCArena *a;
+      void *base;
+      GCSize size;
+      status = luaL_dostring(L, chunks[i]);
+      if (status != LUA_OK)
+	fprintf(stderr, "variable cdata chunk %u failed: %s\n", (unsigned)i,
+		lua_tostring(L, -1));
+      assert(status == LUA_OK);
+      assert(tviscdata(L->top - 1));
+      cd = cdataV(L->top - 1);
+      assert(cdataisv(cd));
+      assert(lj_cdata_validate(g, cd, &base, &size) == 1);
+      assert(base != cd);
+      a = lj_arena_of(base);
+      if (size <= LJ_HUGE_THRESHOLD) {
+	uint32_t start = lj_arena_cellof(base);
+	assert(lj_arena_bm_get(a->block, start));
+	assert(lj_arena_cdata_get(a, start));
+      } else {
+	LJHugeInfo hi;
+	TGState *tg = L2TG(L);
+	assert(lj_arena_hugetab_lookup(&tg->huge, base, &hi) == 1);
+	assert(hi.size == size);
+	assert((hi.flags & (LJ_HUGEF_TRAVERSABLE |
+			    LJ_HUGEF_INTERIOR_CDATA)) ==
+	       (LJ_HUGEF_TRAVERSABLE | LJ_HUGEF_INTERIOR_CDATA));
+      }
+      {
+	int marked_before = lj_gc2_ismarked(g, obj2gco(cd));
+        assert(lj_gc2_obj_valid(g, obj2gco(cd)) == 1);
+        assert(lj_gc2_ismarked(g, obj2gco(cd)) == marked_before);
+        assert(lj_gc2_obj_valid_queued(g, obj2gco(cd)) == 1);
+        assert(lj_gc2_ismarked(g, obj2gco(cd)) == marked_before);
+        assert(lj_gc2_markobj(g, obj2gco(cd)) == (marked_before == 0));
+      }
+      assert(lj_gc2_ismarked(g, obj2gco(cd)) == 1);
+      setnilV(L->top - 1);
+      lua_settop(L, 0);
+    }
+  }
+#else
+  UNUSED(L);
+  UNUSED(g);
+#endif
+}
+
+static void test_variable_cdata_reclamation(lua_State *L, global_State *g)
+{
+#if LJ_HASFFI
+  static const char *chunks[] = {
+    "local ffi = ffi; return ffi.new('uint8_t[?]', 32)",
+    "local ffi = ffi; return ffi.new('uint8_t[?]', 70000)"
+  };
+  TGState *tg = L2TG(L);
+  size_t i;
+  for (i = 0; i < sizeof(chunks)/sizeof(chunks[0]); i++) {
+    GCcdata *cd;
+    void *base;
+    GCSize size;
+    int status = luaL_dostring(L, chunks[i]);
+    int round;
+    if (status != LUA_OK)
+      fprintf(stderr, "variable cdata reclaim chunk %u failed: %s\n",
+	      (unsigned)i, lua_tostring(L, -1));
     assert(status == LUA_OK);
     assert(tviscdata(L->top - 1));
     cd = cdataV(L->top - 1);
+    assert(cdataisv(cd));
+    assert(lj_cdata_validate(g, cd, &base, &size) == 1);
+
+    /* A full collection while the stack still owns the cdata must preserve
+    ** both its allocation metadata and its interior header. */
+    (void)lua_gc(L, LUA_GCCOLLECT, 0);
     assert(lj_gc2_obj_valid(g, obj2gco(cd)) == 1);
-    assert(lj_gc2_obj_valid_queued(g, obj2gco(cd)) == 1);
-    lua_settop(L, 0);
+    if (size <= LJ_HUGE_THRESHOLD) {
+      GCArena *a = lj_arena_of(base);
+      uint32_t start = lj_arena_cellof(base);
+      assert(lj_arena_bm_get(a->block, start));
+      assert(lj_arena_cdata_get(a, start));
+      setnilV(L->top - 1);  /* Defeat deliberate full-stack conservative scan. */
+      lua_settop(L, 0);
+      for (round = 0; round < 16 &&
+	   lj_arena_bm_get(a->block, start); round++)
+	(void)lua_gc(L, LUA_GCCOLLECT, 0);
+      assert(!lj_arena_bm_get(a->block, start));
+      assert(!lj_arena_cdata_get(a, start));
+    } else {
+      LJHugeInfo hi;
+      assert(lj_arena_hugetab_lookup(&tg->huge, base, &hi) == 1);
+      assert((hi.flags & LJ_HUGEF_INTERIOR_CDATA) != 0);
+      setnilV(L->top - 1);  /* Defeat deliberate full-stack conservative scan. */
+      lua_settop(L, 0);
+      for (round = 0; round < 16 &&
+	   lj_arena_hugetab_lookup(&tg->huge, base, &hi) == 1; round++)
+	(void)lua_gc(L, LUA_GCCOLLECT, 0);
+      assert(lj_arena_hugetab_lookup(&tg->huge, base, &hi) == 0);
+    }
   }
 #else
   UNUSED(L);
@@ -1106,6 +1206,7 @@ int main(void)
   lj_gc2_cycle_to_idle(g);
 
   test_obj_valid_accepts_variable_cdata(L, g);
+  test_variable_cdata_reclamation(L, g);
 
   lua_close(L);
   puts("t-gc2-alloc-account OK: allocation accounting flushes by threshold and safepoint");

@@ -9,6 +9,8 @@
 #define lj_gc_c
 #define LUA_CORE
 
+#include <stdlib.h>
+
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
@@ -184,34 +186,6 @@ int lj_gc_tv_gcref_valid(global_State *g, cTValue *tv)
   return lj_gc2_tv_gcref_valid_edge(g, tv);
 }
 
-static int gc_objroot_gct_valid(global_State *g, GCobj *o, uint32_t *gctp)
-{
-  uint32_t gct;
-  if (!g || !o || !checkptrGC(o))
-    return 0;
-  if (!lj_gc2_obj_valid_queued(g, o)) {
-    /*
-    ** Strings may be plain allocations rather than traversable object cells.
-    ** For other object roots, queued-object validation must prove the cell
-    ** before the header drives the synthetic TValue tag. The empty string is
-    ** embedded in global_State and is a valid string root.
-    */
-    if (o != obj2gco(&g->strempty) && !lj_gc2_mem_registered_known(g, o))
-      return 0;
-    gct = o->gch.gct;
-    if (gct != (uint32_t)~LJ_TSTR)
-      return 0;
-  } else {
-    gct = o->gch.gct;
-  }
-  if (gct == 0 || gct < (uint32_t)~LJ_TSTR ||
-      gct > (uint32_t)~LJ_TUDATA)
-    return 0;
-  if (gctp)
-    *gctp = gct;
-  return 1;
-}
-
 static MSize gc_udata_io_file_size(void)
 {
   /*
@@ -223,17 +197,15 @@ static MSize gc_udata_io_file_size(void)
 		 ~(sizeof(void *) - 1u));
 }
 
-int lj_gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
+int lj_gc_udata_payload_valid_as(GCudata *ud, uint8_t udtype, GCSize *sizep)
 {
   MSize len;
   GCSize size;
-  uint8_t udtype;
   if (!ud || ud->gct != ~LJ_TUDATA)
     return 0;
   len = ud->len;
   if (len > LJ_MAX_UDATA || len > LJ_MAX_MEM32 - sizeof(GCudata))
     return 0;
-  udtype = lj_udata_udtype_acq(ud);
   if (udtype >= UDTYPE__MAX)
     return 0;
   switch (udtype) {
@@ -298,6 +270,13 @@ int lj_gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
   return 1;
 }
 
+int lj_gc_udata_payload_valid(GCudata *ud, GCSize *sizep)
+{
+  if (!ud)
+    return 0;
+  return lj_gc_udata_payload_valid_as(ud, lj_udata_udtype_acq(ud), sizep);
+}
+
 static int gc_chain_splice(GCRef *p, GCobj *o)
 {
   GCobj *next = lj_obj_gcw_acq(o);
@@ -321,7 +300,9 @@ static int gc_root_link_valid(global_State *g, GCobj *o)
   th = gcref_acq(*vmthread_ref(g));
   if (th && th->gch.gct == ~LJ_TTHREAD && o == th)
     return 1;
-  return lj_gc2_obj_valid(g, o);
+  /* The ownership-spine link is the lifetime lease. Structural validation
+  ** must not mark the object immediately before sweep samples liveness. */
+  return lj_gc2_obj_valid_queued(g, o);
 }
 
 static int gc_root_chain_break_cycle(global_State *g, GCobj *head)
@@ -600,7 +581,7 @@ static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
     return 0;  /* FINREG dispatch must clear LJ_GC_CDATA_FIN before free. */
 #if LJ_HASFFI
   if (gct == (uint32_t)~LJ_TCDATA &&
-      !lj_cdata_validate(g, gco2cd(o), NULL, NULL))
+      !lj_gc2_obj_valid_queued(g, o))
     return 0;  /* Stale cdata header: ctype/size is not safe to dispatch. */
 #endif
   if (gct == (uint32_t)~LJ_TPROTO && !gc2_valid_proto_obj(g, gco2pt(o)))
@@ -783,8 +764,17 @@ static void gc2_sweep_detached_obj(global_State *g, GCobj *o, int marked)
     ** destructor claim, while MARK|TICKET is the post-grace reanchor claim.
     ** A concurrent marker may win either side of this call without making the
     ** exact variable-offset header undiscoverable. */
-    ticketed = lj_arena_hugetab_retire(&tg->huge, base, o,
-					      lj_gc2_retire_epoch(g), NULL);
+    {
+      LJHugeInfo hi;
+      ticketed = lj_arena_hugetab_retire(&tg->huge, base, o,
+						lj_gc2_retire_epoch(g), &hi);
+      /* A marker that meets SWEEP_OLD|BUSY cannot read the header or wait for
+      ** the retire owner. It publishes MARK_INTENT instead; return 2 makes this
+      ** unique owner discharge exactly one semantic traversal after TICKET has
+      ** made retire_obj and the mapping readable again. */
+      if (ticketed == 2)
+	(void)lj_gc2_trace_sweep_root(g, o);
+    }
     lj_assertG(ticketed, "detached huge root lost ownership ticket");
     gc2_sweep_grace_needed_rel(g, 1);
     if (!ticketed)
@@ -871,9 +861,21 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
 {
   GCobj *o = (GCobj *)lj_arena_cellptr(a, cell);
 #if LJ_HASFFI
-  {
+  if (lj_arena_ready_get(a, cell) && lj_arena_cdata_get(a, cell)) {
     char *base = (char *)o;
     size_t bytes = (size_t)(end - cell) << LJ_CELL_SHIFT;
+    if (o->gch.gct == (uint32_t)~LJ_TCDATA &&
+	!cdataisv(gco2cd(o))) {
+      void *realbase = NULL;
+      GCSize size = 0;
+      if (lj_cdata_validate(g, gco2cd(o), &realbase, &size) &&
+	  realbase == (void *)base && size <= bytes &&
+	  lj_arena_ncells(size) == end - cell &&
+	  cdata_size_tail_matches(gco2cd(o), (size_t)size))
+	return o;
+    }
+    /* If the base is not an exact fixed cdata header, allocation-owned prefix
+    ** offset identifies the variable/over-aligned interior header. */
     uint16_t offset = la_load16_acq((uint16_t *)(void *)base);
     if (offset >= sizeof(GCcdataVar) &&
 	(size_t)offset + sizeof(GCcdata) <= bytes) {
@@ -883,7 +885,9 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
       if (cd->gct == ~LJ_TCDATA && cdataisv(cd) &&
 	  memcdatav(cd) == (void *)base &&
 	  lj_cdata_validate(g, cd, &realbase, &size) &&
-	  realbase == (void *)base && size <= bytes)
+	  realbase == (void *)base && size <= bytes &&
+	  lj_arena_ncells(size) == end - cell &&
+	  cdata_size_tail_matches(cd, (size_t)size))
 	return obj2gco(cd);
     }
   }
@@ -1179,8 +1183,14 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
   }
 
   if (!(flags & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING))) {
-    if (o && lj_arena_hugetab_retire(&tg->huge, p, o,
-					     lj_gc2_retire_epoch(g), NULL)) {
+    int ticketed = o ? lj_arena_hugetab_retire(
+	&tg->huge, p, o, lj_gc2_retire_epoch(g), NULL) : 0;
+    if (ticketed) {
+      /* Return 2 means the final TICKET contains MARK. HugeTab deliberately
+      ** does not encode whether that mark preceded BUSY or arrived as an
+      ** opaque intent, so discharge even if this duplicates an earlier walk. */
+      if (ticketed == 2)
+	(void)lj_gc2_trace_sweep_root(g, o);
       gc2_sweep_grace_needed_rel(g, 1);
       if (pendingp) *pendingp = 1;
       return 1;
@@ -1690,8 +1700,6 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
     return;
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
-    if (!lj_gc2_tv_gcref_valid_edge(g, &snap))
-      return;
     /* GC2 is the sole runtime collector. Its publication barrier covers
     ** MARK/WEAK, SWEEP resurrection and the generational IDLE remembered set;
     ** never revive or traverse the retired color collector here. */
@@ -1703,15 +1711,16 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
 void lj_gc_pubobjroot(lua_State *L, GCobj *o)
 {
   global_State *g;
-  uint32_t gct;
-  TValue tv;
-  if (!L)
+  if (!L || !o)
     return;
+  /* The object barrier retains before inspecting the header and routes SWEEP
+  ** roots directly through rescue. Synthesizing a TValue tag here would first
+  ** require the unsafe header read this publication is meant to protect. */
   g = G(L);
-  if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, o, &gct)))
-    return;
-  setgcV(L, &tv, o, ~gct);
-  lj_gc_pubroot(L, &tv);
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lj_gc2_barrier_obj_pair_g(g, NULL, o);
+  else
+    lj_gc2_barrier_obj_pair(L, NULL, o);
 }
 
 /* Compatibility entry for a published object edge. GC2 owns the runtime
@@ -1743,14 +1752,7 @@ void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key)
 /* Publication wrapper for x64 VM table -> object stores. */
 void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
 {
-  global_State *g;
-  uint32_t gct;
   if (!L || !t || !o)
-    return;
-  g = G(L);
-  if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, obj2gco(t), &gct) ||
-		  gct != (uint32_t)~LJ_TTAB ||
-		  !gc_objroot_gct_valid(g, o, NULL)))
     return;
   lj_gc2_barrier_obj_pair(L, obj2gco(t), o);
 }
@@ -1766,15 +1768,9 @@ void lj_gc_pubtabtv_vm(lua_State *L, GCtab *t, cTValue *tv)
 /* Publication wrapper for x64 VM table range stores. */
 void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
 {
-  global_State *g;
-  uint32_t gct;
   if (!L || !t || !tv || n == 0)
     return;
-  g = G(L);
-  if (LJ_UNLIKELY(!gc_objroot_gct_valid(g, obj2gco(t), &gct) ||
-		  gct != (uint32_t)~LJ_TTAB))
-    return;
-  lj_gc2_barrier_tvn_pair_g(g, obj2gco(t), tv, n);
+  lj_gc2_barrier_tvn_pair_g(G(L), obj2gco(t), tv, n);
   lj_gc2_barrier_tab(L, t);  /* Preserve the previous TSETM table barrier. */
 }
 
@@ -1793,8 +1789,7 @@ void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
   GCupval *uv = (GCupval *)((char *)tv - offsetof(GCupval, tv));
   TValue snap;
   lj_tv_load_acq(&snap, tv);
-  if (LJ_UNLIKELY(!lj_gc2_tv_gcref_valid_edge(g, &snap)) ||
-      !tvisgcv(&snap))
+  if (!tvisgcv(&snap))
     return;
   lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap);
 }
@@ -1808,8 +1803,8 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
   setmref(uv->v, &uv->tv);
   uv->closed = 1;
   /*
-  ** lj_func_closeuv() has already removed the upvalue from the thread-open
-  ** chain and g->uvhead, so its nextgc link is available for object-list
+  ** lj_func_closeuv() has already removed the upvalue from the per-state open
+  ** chain, so its nextgc link is available for object-list
   ** publication. Liveness is still discovered through closures that reference
   ** the GCupval; the object list is the sweep/free spine and every consumer of
   ** that spine flushes pending roots first. Queueing here avoids a global
@@ -1846,15 +1841,42 @@ static LJArenaAllocD *gc_arena_allocd_for_ptr(global_State *g, const void *p)
 {
   if (p) {
     uint32_t owner_tid = lj_arena_owner_acq(lj_arena_of(p));
-    TGState *tg = lj_tg_find_owner(g, owner_tid);
+    TGState *tg = lj_thr_get_tg();
+    /* Constructors normally publish into their own arena. Keep that hot path
+    ** O(1): the exact TLS binding pins tg, while the acquired arena owner id
+    ** rejects a concurrently transferred arena. The main TG is state-lifetime
+    ** stable and covers owner-side publication after worker adoption. */
+    if (tg && tg->gl == g && lj_tg_tid_acq(tg) == owner_tid &&
+	lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+      return &tg->allocd;
+    tg = g->main_tg;
+    if (tg && lj_tg_tid_acq(tg) == owner_tid &&
+	lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+      return &tg->allocd;
+    tg = lj_tg_find_owner(g, owner_tid);
     if (tg)
       return gc_arena_allocd_for_tg(g, tg);
   }
   return (LJArenaAllocD *)g->allocd;
 }
 
-/* Allocate a new fragment without raising an error on allocation failure. */
-void *lj_mem_new_nothrow(lua_State *L, GCSize size)
+static int gc_arena_ptr_nonreallocable(LJArenaAllocD *ad, const void *p)
+{
+  GCArena *a;
+  if (!ad || !p)
+    return 0;
+  a = lj_arena_of(p);
+  if (!lj_arena_ishuge(a))
+    return (lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0;
+  if (ad->huge) {
+    LJHugeInfo hi;
+    if (lj_arena_hugetab_lookup(ad->huge, p, &hi) == 1)
+      return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
+  }
+  return 0;
+}
+
+static void *gc_mem_new_nothrow(lua_State *L, GCSize size, int account)
 {
   global_State *g = G(L);
   void *p;
@@ -1870,8 +1892,26 @@ void *lj_mem_new_nothrow(lua_State *L, GCSize size)
   lj_assertG(checkptrGC(p),
 	     "allocated memory address %p outside required range", p);
   lj_gc_total_add(g, size);
-  lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
+  if (account)
+    lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
   return p;
+}
+
+/* Allocate a new fragment without raising an error on allocation failure. */
+void *lj_mem_new_nothrow(lua_State *L, GCSize size)
+{
+  return gc_mem_new_nothrow(L, size, 1);
+}
+
+void *lj_mem_new_deferred_nothrow(lua_State *L, GCSize size)
+{
+  return gc_mem_new_nothrow(L, size, 0);
+}
+
+void lj_mem_account_deferred(lua_State *L, GCSize size)
+{
+  if (L && size != 0)
+    lj_gc2_account_alloc(G(L), L2TG(L), size);
 }
 
 /* Call pluggable memory allocator to allocate or resize a fragment. */
@@ -1882,6 +1922,15 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
   if (g->allocf == lj_arena_allocf) {
     LJArenaAllocD *ad = p ? gc_arena_allocd_for_ptr(g, p) :
 			    gc_arena_allocd_for_new(L);
+    /* GC headers and unpublished constructor bodies have identity metadata
+    ** tied to their exact allocation base and extent. They are deliberately
+    ** non-reallocable; type-specific teardown must use lj_mem_free() after the
+    ** object is disconnected. Silently moving one would transfer READY/cdata
+    ** state onto bytes with no valid publication history. */
+    if (p && gc_arena_ptr_nonreallocable(ad, p)) {
+      lj_assertG(0, "attempt to resize traversable GC allocation");
+      abort();
+    }
     p = lj_arena_allocf(ad, p, osz, nsz);
   } else {
     p = g->allocf(g->allocd, p, osz, nsz);
@@ -1897,8 +1946,8 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
   return p;
 }
 
-/* Allocate raw storage for a GC object without linking or throwing. */
-void *lj_mem_newgco_raw_nothrow(lua_State *L, GCSize size, uint32_t flags)
+static void *gc_mem_newgco_raw_nothrow(lua_State *L, GCSize size,
+					uint32_t flags, int account)
 {
   global_State *g = G(L);
   GCobj *o;
@@ -1912,8 +1961,15 @@ void *lj_mem_newgco_raw_nothrow(lua_State *L, GCSize size, uint32_t flags)
   lj_assertG(checkptrGC(o),
 	     "allocated memory address %p outside required range", o);
   lj_gc_total_add(g, size);
-  lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
+  if (account)
+    lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
   return o;
+}
+
+/* Allocate raw storage for a GC object without linking or throwing. */
+void *lj_mem_newgco_raw_nothrow(lua_State *L, GCSize size, uint32_t flags)
+{
+  return gc_mem_newgco_raw_nothrow(L, size, flags, 1);
 }
 
 /* Allocate raw storage for a GC object without linking it. */
@@ -1925,9 +1981,89 @@ void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
   return o;
 }
 
+int lj_mem_publish_cdata(lua_State *L, void *base, GCSize size, int interior)
+{
+  global_State *g = G(L);
+  if (g->allocf != lj_arena_allocf)
+    return 1;  /* Temporary custom-lua_Alloc compatibility path. */
+  return lj_arena_allocd_publish_cdata(
+	gc_arena_allocd_for_new(L), base, (size_t)size, interior);
+}
+
+int lj_mem_publish_interior_cdata(lua_State *L, void *base, GCSize size)
+{
+  return lj_mem_publish_cdata(L, base, size, 1);
+}
+
+void lj_gc_publishobj_header(global_State *g, GCobj *o)
+{
+  LJArenaAllocD *ad;
+  void *route = o;
+  int is_cdata = 0;
+  if (!g || !o || g->allocf != lj_arena_allocf)
+    return;
+#if LJ_HASFFI
+  if (la_load8_acq(&o->gch.gct) == (uint8_t)~LJ_TCDATA) {
+    is_cdata = 1;
+    if (cdataisv(gco2cd(o)))
+      route = memcdatav(gco2cd(o));
+  }
+#endif
+  ad = gc_arena_allocd_for_ptr(g, route);
+  if (!is_cdata && route == (void *)o && ad && g->main_tg &&
+      ad == &g->main_tg->allocd && lj_thr_get_tg() == g->main_tg &&
+      mt_active_acq(g) == 0 && mt_entering_acq(g) == 0 &&
+      gc2_n_workers_acq(g) == 0) {
+    GCArena *a = lj_arena_of(o);
+    if (!lj_arena_ishuge(a)) {
+      uint32_t cell = lj_arena_cellof(o);
+      if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+	  (lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) &&
+	  lj_arena_bm_get(a->block, cell)) {
+	/* The sole VM/allocator thread is also the sole READY writer here. */
+	lj_arena_ready_set_exclusive(a, cell);
+	return;
+      }
+    }
+  }
+  if (!is_cdata && route == (void *)o && lj_arena_allocd_publish_gco(ad, o))
+    return;
+  if (is_cdata) {
+    GCArena *a = lj_arena_of(route);
+    if (!lj_arena_ishuge(a)) {
+      uint32_t cell = lj_arena_cellof(route);
+      if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+	  (lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) &&
+	  lj_arena_bm_get(a->block, cell) &&
+	  lj_arena_cdata_get(a, cell) && lj_arena_ready_get(a, cell))
+	return;
+    } else if (ad && ad->huge) {
+      LJHugeInfo hi;
+      if (lj_arena_hugetab_lookup(ad->huge, route, &hi) == 1 &&
+	  (hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_CDATA|
+		       LJ_HUGEF_READY)) ==
+	    (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_CDATA|LJ_HUGEF_READY) &&
+	  ((route != (void *)o) ==
+	   ((hi.flags & LJ_HUGEF_INTERIOR_CDATA) != 0)) &&
+	  !(hi.flags & LJ_HUGEF_FREEING))
+	return;
+    }
+  }
+  /* Linking an undiscoverable header would let root traversal inspect partial
+  ** bytes and would make constructor failure indistinguishable from a live
+  ** object. This is a terminal internal invariant in every build. */
+  lj_assertG(0, "GC object linked before header-ready publication");
+  abort();
+}
+
 void *lj_mem_newgco_unlinked_nothrow(lua_State *L, GCSize size)
 {
   return lj_mem_newgco_raw_nothrow(L, size, LJ_AF_TRAVERSABLE);
+}
+
+void *lj_mem_newgco_unlinked_deferred_nothrow(lua_State *L, GCSize size)
+{
+  return gc_mem_newgco_raw_nothrow(L, size, LJ_AF_TRAVERSABLE, 0);
 }
 
 void *lj_mem_newgco_unlinked(lua_State *L, GCSize size)
@@ -1939,6 +2075,7 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
 {
   GCRef *root = lj_gc_root_ref(g);
   GCobj *head;
+  lj_gc_publishobj_header(g, o);
   do {
     head = gcref_acq(*root);
     if (head)
@@ -2148,6 +2285,7 @@ static void gc_linkobj_pending(global_State *g, GCobj *o)
 {
   TGState *tg = lj_thr_get_tg();
   GCobj *head;
+  lj_gc_publishobj_header(g, o);
   if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
     lj_gc_linkobj(g, o);
     return;
@@ -2187,6 +2325,21 @@ void lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)
   GCobj *oldhead;
   if (!head || !tail)
     return;
+  {
+    GCobj *o = head;
+    for (;;) {
+      GCobj *next;
+      lj_gc_publishobj_header(g, o);
+      if (o == tail)
+	break;
+      next = lj_obj_gcw_acq(o);
+      lj_assertG(next != NULL && next != o,
+		 "invalid unpublished GC object chain");
+      if (!next || next == o)
+	return;
+      o = next;
+    }
+  }
   tg = lj_thr_get_tg();
   if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
     gc_root_prepend_known_chain(g, head, tail);
@@ -2214,6 +2367,7 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
 {
   TGState *tg = lj_thr_get_tg();
   GCobj *head;
+  lj_gc_publishobj_header(g, o);
   if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
     lj_gc_linkobj_after(g, obj2gco(mainthread_acq(g)), o);
     return;
@@ -2237,6 +2391,7 @@ void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o)
   GCobj *head;
   if (!anchor || !o)
     return;
+  lj_gc_publishobj_header(g, o);
   p = lj_obj_gcwref(anchor);
   do {
     head = gcref_acq(*p);
@@ -2246,13 +2401,15 @@ void lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o)
     lj_gcroot_repair_epoch_add(g);
 }
 
-/* Allocate new GC object and link it to the root set. */
+/* Allocate a pending GC object. Header/body initialization must finish before
+** lj_gc_linkobj_new() publishes READY and the ownership root. Legacy non-x64
+** JIT backends must use the same explicit final publication contract before
+** they are brought into the current target set. */
 void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
 {
   global_State *g = G(L);
   GCobj *o = (GCobj *)lj_mem_newgco_raw(L, size, LJ_AF_TRAVERSABLE);
   newwhite(g, o);
-  lj_gc_linkobj_new(g, o);
   return o;
 }
 

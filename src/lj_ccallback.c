@@ -91,11 +91,11 @@ static LJ_AINLINE int callback_owner_clear(lua_State **owner, MSize slot,
 				   L);  /* 11.5 callback owner disown. */
 }
 
-static lua_State *callback_carrier_new_l(lua_State *L)
+static lua_State *callback_carrier_new_l(lua_State *L, uint32_t *anchoridx)
 {
   lua_State *carrier;
   lj_gc_check(L);
-  carrier = lj_state_new(L);
+  carrier = lj_state_new(L, anchoridx);
   carrier->tg_hint = NULL;  /* Hidden carrier is attached only on demand. */
   return carrier;
 }
@@ -121,12 +121,14 @@ static TValue *callback_owner_barrier_cp(lua_State *L, lua_CFunction dummy,
 }
 
 static void callback_owner_barrier_claimed_l(lua_State *L, lua_State **owner,
-					     MSize slot, lua_State *carrier)
+					     MSize slot, lua_State *carrier,
+					     uint32_t anchoridx)
 {
   CallbackOwnerBarrierCtx ctx;
   int errcode;
   ctx.carrier = carrier;
   errcode = lj_vm_cpcall(L, NULL, &ctx, callback_owner_barrier_cp);
+  lj_tg_root_anchor_pop(L2TG(L), anchoridx);
   if (LJ_UNLIKELY(errcode)) {
     (void)callback_owner_clear(owner, slot, carrier);
     lj_err_throw(L, errcode);
@@ -1381,6 +1383,7 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
   lua_State **owner = ctype_cb_owner_acq(cts);
   TValue *func = callback_func_slots(cts);
   lua_State *carrier = NULL;
+  uint32_t carrier_anchor = 0;
   MSize top, sizeid;
   sizeid = ctype_cb_sizeid_acq(cts);
   if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)
@@ -1389,13 +1392,16 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
     if (LJ_LIKELY(callback_cbid_load(cbid, top) == 0 &&
 		  callback_owner_load(owner, top) == NULL)) {
       if (carrier == NULL)
-	carrier = callback_carrier_new_l(L);
+	carrier = callback_carrier_new_l(L, &carrier_anchor);
       if (LJ_LIKELY(callback_owner_claim(owner, top, carrier))) {
-	callback_owner_barrier_claimed_l(L, owner, top, carrier);
+	callback_owner_barrier_claimed_l(L, owner, top, carrier,
+					 carrier_anchor);
 	return top;
       }
     }
   }
+  if (carrier != NULL)
+    lj_tg_root_anchor_pop(L2TG(L), carrier_anchor);
 #if CALLBACK_MAX_SLOT
   if (top >= CALLBACK_MAX_SLOT)
 #endif

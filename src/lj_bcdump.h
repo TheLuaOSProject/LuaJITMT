@@ -68,7 +68,7 @@ enum {
 
 LJ_FUNC int lj_bcwrite(lua_State *L, GCproto *pt, lua_Writer writer,
 		       void *data, uint32_t flags);
-LJ_FUNC GCproto *lj_bcread_proto(LexState *ls);
-LJ_FUNC GCproto *lj_bcread(LexState *ls);
+LJ_FUNC GCproto *lj_bcread_proto(LexState *ls, uint32_t *anchoridx);
+LJ_FUNC GCproto *lj_bcread(LexState *ls, uint32_t *anchoridx);
 
 #endif

@@ -31,8 +31,13 @@ static LJ_AINLINE void lj_state_checkstack(lua_State *L, MSize need)
     lj_state_growstack(L, need);
 }
 
-LJ_FUNC lua_State *lj_state_new_withenv(lua_State *L, GCtab *env);
-LJ_FUNC lua_State *lj_state_new(lua_State *L);
+/* Returns with the new thread held in one TG root-anchor slot. The caller must
+** publish its permanent root and pop anchoridx without an intervening throw. */
+LJ_FUNC lua_State *lj_state_new_withenv(lua_State *L, GCtab *env,
+					 uint32_t *anchoridx);
+LJ_FUNC lua_State *lj_state_new_withenv_envrooted(lua_State *L, GCtab *env,
+						 uint32_t anchoridx);
+LJ_FUNC lua_State *lj_state_new(lua_State *L, uint32_t *anchoridx);
 LJ_FUNC void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L);
 LJ_FUNC int lj_state_thread_registry_valid(global_State *g, lua_State *th);
 LJ_FUNC void lj_state_thread_registry_publish(global_State *g, lua_State *th);

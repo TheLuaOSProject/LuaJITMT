@@ -17,6 +17,7 @@
 #include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_udata.h"
+#include "lj_vm.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cdata.h"
@@ -154,7 +155,7 @@ static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
 }
 
 /* Prepare string dictionary for use (once). */
-void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
+static void serialize_dict_prep_str(lua_State *L, GCtab *dict)
 {
   MSize hmask;
   (void)lj_tab_node_snapshot_acq(dict, &hmask);
@@ -165,6 +166,7 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
     if (!len) return;
     asize = lj_tab_array_snapshot_acq(dict, &array);
     lj_tab_resize(L, dict, asize, hsize2hbits(len));
+    lj_tab_read_enter(L2TG(L));
     asize = lj_tab_array_snapshot_acq(dict, &array);
     for (i = 1; i <= len && i < asize; i++) {
       TValue tv;
@@ -177,12 +179,13 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
       }
     }
+    lj_tab_read_leave(L2TG(L));
     lj_gc_pubtab(L, dict);
   }
 }
 
 /* Prepare metatable dictionary for use (once). */
-void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
+static void serialize_dict_prep_mt(lua_State *L, GCtab *dict)
 {
   MSize hmask;
   (void)lj_tab_node_snapshot_acq(dict, &hmask);
@@ -193,6 +196,7 @@ void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
     if (!len) return;
     asize = lj_tab_array_snapshot_acq(dict, &array);
     lj_tab_resize(L, dict, asize, hsize2hbits(len));
+    lj_tab_read_enter(L2TG(L));
     asize = lj_tab_array_snapshot_acq(dict, &array);
     for (i = 1; i <= len && i < asize; i++) {
       TValue tv;
@@ -205,8 +209,50 @@ void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
       }
     }
+    lj_tab_read_leave(L2TG(L));
     lj_gc_pubtab(L, dict);
   }
+}
+
+typedef struct SerializeDictPrepCtx {
+  GCtab *dict;
+  int mt;
+} SerializeDictPrepCtx;
+
+static TValue *serialize_dict_prep_cp(lua_State *L, lua_CFunction dummy,
+				      void *ud)
+{
+  SerializeDictPrepCtx *ctx = (SerializeDictPrepCtx *)ud;
+  UNUSED(dummy);
+  if (ctx->mt)
+    serialize_dict_prep_mt(L, ctx->dict);
+  else
+    serialize_dict_prep_str(L, ctx->dict);
+  return NULL;
+}
+
+static void serialize_dict_prep_protected(lua_State *L, GCtab *dict, int mt)
+{
+  SerializeDictPrepCtx ctx;
+  int status;
+  ctx.dict = dict;
+  ctx.mt = mt;
+  /* The dictionary scan may resize, wait, allocate or reject an option after
+  ** acquiring a raw table-generation pin. Catch locally so a Lua-level fast
+  ** pcall never becomes responsible for unwinding that native resource. */
+  status = lj_vm_cpcall(L, NULL, &ctx, serialize_dict_prep_cp);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+}
+
+void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
+{
+  serialize_dict_prep_protected(L, dict, 0);
+}
+
+void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
+{
+  serialize_dict_prep_protected(L, dict, 1);
 }
 
 /* -- Internal serializer ------------------------------------------------- */
@@ -236,9 +282,14 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     const Node *hashnode = NULL;
     uint32_t narray = 0, nhash = 0, one = 2, hmask = 0;
     TValue *array = NULL;
-    MSize asize = lj_tab_array_snapshot_acq(t, &array);
+    MSize asize;
     if (sbx->depth <= 0) lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DEPTH);
     sbx->depth--;
+    /* Recursive buffer growth and dictionary lookups can acknowledge multiple
+    ** handshakes while this frame resumes its raw table scan. The external
+    ** serializer wrapper owns a nested protected checkpoint for every throw. */
+    lj_tab_read_enter(L2TG(sbufL(sbx)));
+    asize = lj_tab_array_snapshot_acq(t, &array);
     if (asize > 0) {  /* Determine max. length of array part. */
       ptrdiff_t i;
       for (i = (ptrdiff_t)asize-1; i >= 0; i--) {
@@ -345,6 +396,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 	}
       }
     }
+    lj_tab_read_leave(L2TG(sbufL(sbx)));
     sbx->depth++;
 #if LJ_HASFFI
   } else if (tviscdata(o)) {
@@ -475,6 +527,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     GCtab *t, *mt = NULL;
     if (sbx->depth <= 0) lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DEPTH);
     sbx->depth--;
+    lj_tab_read_enter(L2TG(sbufL(sbx)));
     if (tp == SER_TAG_DICT_MT) {
       GCtab *dict_mt;
       TValue *array = NULL;
@@ -513,6 +566,10 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       TValue tv;
       settabV(sbufL(sbx), &tv, t);
       copyTVrel(sbufL(sbx), o, &tv);
+      /* The destination may be a parent table slot or a C API result slot.
+      ** Retain the child before recursive decoding can allocate or wait; the
+      ** final parent/result publication remains the durable semantic edge. */
+      lj_gc_pubroot(sbufL(sbx), o);
     }
     if (narray) {
       TValue *array;
@@ -533,6 +590,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
 	r = serialize_get(r, sbx, v);
       } while (--nhash);
     }
+    lj_tab_read_leave(L2TG(sbufL(sbx)));
     sbx->depth++;
 #if LJ_HASFFI
   } else if (tp >= SER_TAG_INT64 &&  tp <= SER_TAG_COMPLEX) {
@@ -594,12 +652,74 @@ eob:
 
 /* -- External serialization API ------------------------------------------ */
 
+typedef struct SerializePutCtx {
+  SBufExt *sbx;
+  cTValue *o;
+  char *result;
+} SerializePutCtx;
+
+typedef struct SerializeGetCtx {
+  SBufExt *sbx;
+  TValue *o;
+  char *result;
+} SerializeGetCtx;
+
+static TValue *serialize_put_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  SerializePutCtx *ctx = (SerializePutCtx *)ud;
+  char *w = lj_buf_wptr_acq((SBuf *)ctx->sbx);
+  UNUSED(L);
+  UNUSED(dummy);
+  ctx->result = serialize_put(w, ctx->sbx, ctx->o);
+  return NULL;
+}
+
+static TValue *serialize_get_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  SerializeGetCtx *ctx = (SerializeGetCtx *)ud;
+  UNUSED(L);
+  UNUSED(dummy);
+  ctx->result = serialize_get(lj_buf_rptr_acq(ctx->sbx), ctx->sbx, ctx->o);
+  return NULL;
+}
+
+static char *serialize_put_protected(SBufExt *sbx, cTValue *o)
+{
+  lua_State *L = sbufL(sbx);
+  SerializePutCtx ctx;
+  int status;
+  ctx.sbx = sbx;
+  ctx.o = o;
+  ctx.result = NULL;
+  /* Recursive serialization intentionally holds generation pins across
+  ** buffer growth. Its own protected C boundary restores the exact outer pin
+  ** checkpoint before an error is rethrown to Lua, including JIT helper calls
+  ** and Lua fast-pcall catch paths. */
+  status = lj_vm_cpcall(L, NULL, &ctx, serialize_put_cp);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+  return ctx.result;
+}
+
+static char *serialize_get_protected(SBufExt *sbx, TValue *o)
+{
+  lua_State *L = sbufL(sbx);
+  SerializeGetCtx ctx;
+  int status;
+  ctx.sbx = sbx;
+  ctx.o = o;
+  ctx.result = NULL;
+  status = lj_vm_cpcall(L, NULL, &ctx, serialize_get_cp);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+  return ctx.result;
+}
+
 /* Encode to buffer. */
 SBufExt * LJ_FASTCALL lj_serialize_put(SBufExt *sbx, cTValue *o)
 {
-  char *w = lj_buf_wptr_acq((SBuf *)sbx);
   sbx->depth = LJ_SERIALIZE_DEPTH;
-  lj_buf_wptr_rel((SBuf *)sbx, serialize_put(w, sbx, o));
+  lj_buf_wptr_rel((SBuf *)sbx, serialize_put_protected(sbx, o));
   return sbx;
 }
 
@@ -607,7 +727,7 @@ SBufExt * LJ_FASTCALL lj_serialize_put(SBufExt *sbx, cTValue *o)
 char * LJ_FASTCALL lj_serialize_get(SBufExt *sbx, TValue *o)
 {
   sbx->depth = LJ_SERIALIZE_DEPTH;
-  return serialize_get(lj_buf_rptr_acq(sbx), sbx, o);
+  return serialize_get_protected(sbx, o);
 }
 
 /* Stand-alone encoding, borrowing from global temporary buffer. */
@@ -618,7 +738,7 @@ GCstr * LJ_FASTCALL lj_serialize_encode(lua_State *L, cTValue *o)
   memset(&sbx, 0, sizeof(SBufExt));
   lj_bufx_set_borrow(L, &sbx, &L2TG(L)->tmpbuf);
   sbx.depth = LJ_SERIALIZE_DEPTH;
-  w = serialize_put(lj_buf_wptr_acq((SBuf *)&sbx), &sbx, o);
+  w = serialize_put_protected(&sbx, o);
   return lj_str_new(L, lj_buf_bptr_acq((SBuf *)&sbx),
 		    (size_t)(w - lj_buf_bptr_acq((SBuf *)&sbx)));
 }
@@ -632,7 +752,7 @@ void lj_serialize_decode(lua_State *L, TValue *o, GCstr *str)
   lj_bufx_set_cow(L, &sbx, strdata(str), str->len);
   /* No need to set sbx.cowref here. */
   sbx.depth = LJ_SERIALIZE_DEPTH;
-  r = serialize_get(lj_buf_rptr_acq(&sbx), &sbx, o);
+  r = serialize_get_protected(&sbx, o);
   if (r != lj_buf_wptr_acq((SBuf *)&sbx))
     lj_err_caller(L, LJ_ERR_BUFFER_LEFTOV);
 }

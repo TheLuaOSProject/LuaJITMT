@@ -34,6 +34,7 @@ int main(void)
 {
   PRNGState rs;
   TGAlloc alloc;
+  LJArenaAllocD travad;
   void *dead1, *live1, *oldfree, *live2, *taildead;
   void *tdead, *tlive;
   GCArena *plain, *trav, *swept;
@@ -42,6 +43,7 @@ int main(void)
 
   lj_prng_seed_fixed(&rs);
   lj_arena_alloc_init(&alloc);
+  lj_arena_allocd_init(&travad, &alloc, &rs, LJ_AF_TRAVERSABLE);
 
   alloc.alloc_black = 0;
   dead1 = lj_arena_alloc(&alloc, &rs, 64, 0);
@@ -76,6 +78,13 @@ int main(void)
   assert(lj_arena_of(tlive) == trav);
   ctdead = lj_arena_cellof(tdead);
   ctlive = lj_arena_cellof(tlive);
+  /* Model a dead fixed cdata allocation in a non-largest free run. Sweep
+  ** rebuild must scrub its complete coverage before linking that run into a
+  ** reusable bin; otherwise the next allocation reaches arena_set_alloc with
+  ** stale typed metadata. */
+  assert(lj_arena_allocd_publish_cdata(&travad, tdead, 128, 0) == 1);
+  assert(lj_arena_cdata_get(trav, ctdead) == 1);
+  assert(lj_arena_ready_get(trav, ctdead) == 1);
 
   assert(alloc.owned[LJ_ARENAK_PLAIN] == plain);
   assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == trav);
@@ -121,6 +130,12 @@ int main(void)
   assert(trav->hdr.live_cells == 2);
   assert(lj_arena_state(trav, ctdead) == 1);
   assert(lj_arena_state(trav, ctlive) == 3);
+  {
+    uint32_t i;
+    for (i = 0; i < lj_arena_ncells(128); i++)
+      assert(lj_arena_cdata_get(trav, ctdead + i) == 0);
+  }
+  assert(lj_arena_ready_get(trav, ctdead) == 0);
   assert(bin_count(&alloc, LJ_ARENAK_TRAVERSABLE) == 1);
   assert(lj_arena_alloc(&alloc, &rs, 128, LJ_AF_TRAVERSABLE) == tdead);
 

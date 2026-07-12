@@ -1,5 +1,5 @@
 /*
-** Latch-controlled regression for mark/header-before-block publication.
+** Latch-controlled regression for pending block and final READY publication.
 */
 
 #include <assert.h>
@@ -43,6 +43,19 @@ static void spin_until(const uint32_t *p, uint32_t value)
     la_cpu_pause();
 }
 
+static void publish_ready(GCArena *a, uint32_t cell)
+{
+  uint64_t bit = (uint64_t)1 << (cell & 63);
+  uint64_t old = la_load64_acq(&a->ready[cell >> 6]);
+  while (!(old & bit)) {
+    uint64_t expect = old;
+    if (la_cas64(&a->ready[cell >> 6], &expect, old | bit,
+		 LA_REL, LA_RLX))
+      return;
+    old = expect;
+  }
+}
+
 static void *publisher(void *unused)
 {
   uint32_t i;
@@ -56,8 +69,13 @@ static void *publisher(void *unused)
     ** round. No payload access overlaps until the observer grants permit. */
     lj_arena_block_clear(test_arena(), PUB_CELL);
     lj_arena_bm_clear(test_arena()->mark, PUB_CELL);
+    lj_arena_bm_clear(test_arena()->ready, PUB_CELL);
     p = payload();
     memset(p, 0, sizeof(*p));
+    /* Generic allocation discovery precedes constructor completion. READY=0
+    ** makes this block opaque and conservatively pinned. */
+    lj_arena_bm_set(test_arena()->mark, PUB_CELL);
+    lj_arena_block_set(test_arena(), PUB_CELL);
     la_store32_rel(&stage, i);
 
     spin_until(&permit, i);
@@ -66,8 +84,7 @@ static void *publisher(void *unused)
     p->inverse = ~magic;
     p->sequence = i;
     p->complete = UINT32_C(0xc001c0de);
-    lj_arena_bm_set(test_arena()->mark, PUB_CELL);
-    lj_arena_block_set(test_arena(), PUB_CELL);
+    publish_ready(test_arena(), PUB_CELL);
   }
   return NULL;
 }
@@ -81,14 +98,13 @@ static void *observer(void *unused)
     uint64_t magic;
     uint32_t state;
     spin_until(&stage, i);
-    assert(lj_arena_bm_get(test_arena()->block, PUB_CELL) == 0);
+    assert(lj_arena_bm_get(test_arena()->block, PUB_CELL) == 1);
+    assert(lj_arena_ready_get(test_arena(), PUB_CELL) == 0);
     la_store32_rel(&permit, i);
 
-    do {
-      state = lj_arena_state(test_arena(), PUB_CELL);
-      if (!(state & 2u))
-	la_cpu_pause();
-    } while (!(state & 2u));
+    while (!lj_arena_ready_get(test_arena(), PUB_CELL))
+      la_cpu_pause();
+    state = lj_arena_state(test_arena(), PUB_CELL);
     assert(state == 3u);
     p = payload();
     magic = UINT64_C(0x9e3779b97f4a7c15) ^ (uint64_t)i;

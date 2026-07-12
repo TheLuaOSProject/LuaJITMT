@@ -256,7 +256,7 @@ LJLIB_CF(jit_util_funcinfo)
     setintfield(L, t, "stackslots", pt->framesize);
     setintfield(L, t, "params", pt->numparams);
     setintfield(L, t, "bytecodes", (int32_t)pt->sizebc);
-    setintfield(L, t, "gcconsts", (int32_t)pt->sizekgc);
+    setintfield(L, t, "gcconsts", (int32_t)proto_sizekgc_acq(pt));
     setintfield(L, t, "nconsts", (int32_t)pt->sizekn);
     setintfield(L, t, "upvalues", (int32_t)pt->sizeuv);
     if (pc < pt->sizebc)
@@ -313,7 +313,7 @@ LJLIB_CF(jit_util_funck)
       return 1;
     }
   } else {
-    if (~idx < (ptrdiff_t)pt->sizekgc) {
+    if (~idx < (ptrdiff_t)proto_sizekgc_acq(pt)) {
       GCobj *gc = proto_kgc_acq(pt, idx);
       setgcV(L, L->top-1, gc, ~gc->gch.gct);
       return 1;
