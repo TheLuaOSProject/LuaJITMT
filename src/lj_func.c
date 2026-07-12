@@ -231,6 +231,29 @@ static LJ_AINLINE void func_pubuv_payload(lua_State *L, GCupval *uv)
     lj_gc_pubobjtv(L, uv, &uv->tv);
 }
 
+static LJ_AINLINE int func_bump_child_marked(global_State *g, GCobj *child)
+{
+  GCArena *a;
+  uint32_t cell;
+  /* These operands come from the active bump constructor itself: proto/env
+  ** are stable strong inputs and the fresh upvalue was just READY-published in
+  ** the same owner arena. No GC-capable operation occurs before the pending
+  ** pair publication, so a direct allocation-start mark sample is exact. */
+  if (!g || !child || g->allocf != lj_arena_allocf ||
+      la_load32_acq(&g->allocf_arena) == 0 || !checkptrGC(child))
+    return lj_gc2_ismarked(g, child);
+  a = lj_arena_of(child);
+  if (lj_arena_ishuge(a) ||
+      !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
+    return lj_gc2_ismarked(g, child);
+  cell = lj_arena_cellof(child);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+      lj_arena_cellptr(a, cell) != (void *)child ||
+      !lj_arena_bm_get(a->block, cell) || !lj_arena_ready_get(a, cell))
+    return lj_gc2_ismarked(g, child);
+  return (int)lj_arena_bm_get(a->mark, cell);
+}
+
 static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
 					    GCobj *parent, GCobj *child)
 {
@@ -252,12 +275,11 @@ static LJ_AINLINE void func_pubfreshobjobj_(lua_State *L, TGState *tg,
   ** children.
   */
   if (tg && lj_tg_mark_active_acq(tg)) {
-    int marked = lj_gc2_ismarked(g, child);
     if (!lj_tg_alloc_black_acq(tg))
       lj_gc2_barrier_obj_pair(L, parent, child);
     else if (child->gch.gct == ~LJ_TPROTO)
       lj_gc2_barrier_marked_proto(L, gco2pt(child));
-    else if (marked <= 0)
+    else if (func_bump_child_marked(g, child) <= 0)
       lj_gc2_barrier_obj_pair(L, parent, child);
   }
 }
@@ -561,11 +583,11 @@ GCfunc *lj_func_newC_envrooted(lua_State *L, MSize nelems, GCtab *env,
 static void func_arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
 				 int black)
 {
-  uint32_t i;
-  for (i = 1; i < ncells; i++) {
-    lj_arena_block_clear(a, cell + i);
-    lj_arena_bm_clear(a->mark, cell + i);
-  }
+  /* reserve_bump() clears the complete recycled boundary/mark range before
+  ** exposing its private bump window. Fresh arenas are zero-filled. Thus the
+  ** interior cells are already unpublished and need no per-object bitmap
+  ** RMWs; only the actual allocation start is installed here. */
+  UNUSED(ncells);
   if (black)
     lj_arena_bm_set(a->mark, cell);
   else
@@ -600,12 +622,13 @@ static LJ_AINLINE void func_bump_publish_obj(global_State *g, GCobj *o)
   lj_gc_linkobj_new(g, o);
 }
 
-static LJ_AINLINE void func_bump_publish_pair(global_State *g, GCobj *head,
-					      GCobj *tail)
+static LJ_AINLINE void func_bump_publish_pair(global_State *g, GCArena *a,
+					      GCobj *head, uint32_t headcell,
+					      GCobj *tail, uint32_t tailcell)
 {
   /* One release publication makes both exact headers ownership-discoverable. */
   lj_obj_setgcwrel(head, tail);
-  lj_gc_linkobj_new_chain(g, head, tail);
+  lj_gc_linkobj_new_chain_arena(g, a, head, headcell, tail, tailcell);
 }
 
 static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
@@ -623,10 +646,14 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
     return NULL;
   local_total = lj_tg_local_total_acq(tg);
   /* A flushing account can assist GC after READY while the result is still
-  ** only in a native local. Decline the bump path before consuming its window;
-  ** the generic READY=0 allocator owns accounting and cancellation safely. */
-  if (local_total >= LJ_GC2_ACCT_FLUSH - nbytes)
-    return NULL;
+  ** only in a native local. Run that checkpoint before reserving constructor
+  ** state, then keep the successful post-READY handoff safepoint-free. */
+  if (local_total >= LJ_GC2_ACCT_FLUSH - nbytes) {
+    (void)lj_gc2_flush_alloc_checkpoint(g, tg);
+    if (!func_bump_alloc_ready(g, tg) ||
+	lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+      return NULL;
+  }
 
   /*
   ** Closed nil local cells are leaf objects, so the bump path only replaces
@@ -639,10 +666,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
 			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
 			     ncells, &a, &cell))
     return NULL;
-  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, cell))) {
-    lj_assertG(0, "upvalue bump construction claim lost");
-    abort();
-  }  /* Idempotent when reserve_bump performed the request claim. */
+  /* ROOT_CONSTRUCT reservation already owns CONSTRUCT|LINKING at cell. */
   uv = (GCupval *)lj_arena_cellptr(a, cell);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
@@ -684,34 +708,24 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
     return NULL;
   local_total = lj_tg_local_total_acq(tg);
   /* Keep the post-READY result handoff strictly safepoint-free. */
-  if (local_total >= LJ_GC2_ACCT_FLUSH - nbytes)
-    return NULL;
+  if (local_total >= LJ_GC2_ACCT_FLUSH - nbytes) {
+    (void)lj_gc2_flush_alloc_checkpoint(g, tg);
+    if (!func_bump_alloc_ready(g, tg) ||
+	lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+      return NULL;
+  }
 
   /*
   ** Use or refill the private bump window for the fresh pair. Closure identity,
   ** publication, and accounting are independent of arena address reuse order.
   */
 
-  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng,
-			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
-			     ncells, &a, &cell))
+  if (!lj_arena_reserve_bump_pair(&tg->alloc, &tg->prng,
+				  LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
+				  ncells, fncells, &a, &cell))
     return NULL;
-  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, cell))) {
-    lj_assertG(0, "closure-pair primary construction claim lost");
-    abort();
-  }
+  /* The pair reservation owns both CONSTRUCT|LINKING lanes. */
   uvcell = cell + fncells;
-  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, uvcell))) {
-    int abandoned = lj_arena_root_construct_abandon(a, cell);
-    int cleared = abandoned &&
-      lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
-				  LJ_ARENA_LIFETIME_FREE);
-    lj_assertG(cleared, "closure-pair bump construction claim lost");
-    UNUSED(cleared);
-    if (!cleared)
-      abort();
-    return NULL;
-  }
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   uv = (GCupval *)lj_arena_cellptr(a, uvcell);
 
@@ -746,7 +760,8 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
 
   lj_gc_total_add(g, nbytes);
   /* Publish the complete pair; the precheck above rules out accounting assist. */
-  func_bump_publish_pair(g, obj2gco(fn), obj2gco(uv));
+  func_bump_publish_pair(g, a, obj2gco(fn), cell,
+			 obj2gco(uv), uvcell);
   if (!(uvspec & PROTO_UV_IMMUTABLE))
     func_storecell_pub(L, slot, uv);
   (void)lj_tg_local_total_add_rlx(tg, nbytes);
@@ -773,8 +788,12 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
     return NULL;
   local_total = lj_tg_local_total_acq(tg);
   /* Keep the post-READY result handoff strictly safepoint-free. */
-  if (local_total >= LJ_GC2_ACCT_FLUSH - nbytes)
-    return NULL;
+  if (local_total >= LJ_GC2_ACCT_FLUSH - nbytes) {
+    (void)lj_gc2_flush_alloc_checkpoint(g, tg);
+    if (!func_bump_alloc_ready(g, tg) ||
+	lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH - nbytes)
+      return NULL;
+  }
 
   /*
   ** The caller already owns the allocation pacing check: interpreter BC_FNEW
@@ -787,10 +806,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
 			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
 			     ncells, &a, &cell))
     return NULL;
-  if (LJ_UNLIKELY(!lj_arena_root_construct_claim(a, cell))) {
-    lj_assertG(0, "closure bump construction claim lost");
-    abort();
-  }
+  /* ROOT_CONSTRUCT reservation already owns CONSTRUCT|LINKING at cell. */
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   fn->l.gct = ~LJ_TFUNC;
   fn->l.ffid = FF_LUA;

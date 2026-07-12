@@ -336,6 +336,28 @@ static void test_construct_commit_and_abandon(lua_State *L)
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
 }
 
+static void test_construct_publish_behind_foreign_reclaimer_gate(lua_State *L)
+{
+  global_State *g = G(L);
+  GCupval *uv = new_closed_upvalue_constructing(L);
+  GCobj *o = obj2gco(uv);
+  uint32_t expect = 0;
+
+  /* This thread did not acquire a reclaimer certificate. A fresh fixed-layout
+  ** constructor nevertheless owns exact CONSTRUCT|LINKING identity and must
+  ** publish without entering the process-wide registry SMR reader. */
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(!lj_gc2_reclaim_context_held(g));
+  assert(gc2_smr_reclaiming_cas(g, &expect, 1));
+  assert(lj_gc_linkobj_new(g, o) == LJ_GC_ROOT_LINKED);
+  assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
+  assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
+  gc2_smr_reclaiming_rel(g, 0);
+
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_contains(g, o));
+}
+
 static void test_destructor_terminal_gate(lua_State *L)
 {
   global_State *g = G(L);
@@ -842,6 +864,7 @@ int main(void)
   lua_gc(L, LUA_GCSTOP, 0);
   luaL_openlibs(L);
   test_construct_commit_and_abandon(L);
+  test_construct_publish_behind_foreign_reclaimer_gate(L);
   test_destructor_terminal_gate(L);
   test_duplicate_link_is_idempotent(L);
   test_explicit_membership_claim_races(L);

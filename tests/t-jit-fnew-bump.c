@@ -1898,8 +1898,8 @@ static void test_active_black_direct_keeps_exact_cells(
   lua_pop(L, 1);
 }
 
-static void test_accounting_fallback(lua_State *L, global_State *g,
-				     TGState *tg)
+static void test_accounting_checkpoint(lua_State *L, global_State *g,
+				       TGState *tg)
 {
   uint32_t fast0, fallback0;
   TValue slots[256];
@@ -1921,10 +1921,11 @@ static void test_accounting_fallback(lua_State *L, global_State *g,
   la_store64_rel(&tg->local_total, LJ_GC2_ACCT_FLUSH - 1u);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 123);
   assert_one_upvalue_result(fn, &slots[slotno], 123);
-  /* A would-flush bump must decline before READY so the generic allocator can
-  ** account while the allocation remains opaque and cancellation-safe. */
-  assert(lj_func_test_gc1num_bump_fallback_calls() > fallback0);
-  assert(lj_func_test_gc1num_bump_fast_calls() == fast0);
+  /* A would-flush bump runs the accounting/assist checkpoint before reserving
+  ** CONSTRUCT lanes. Once the checkpoint returns, exact pair publication stays
+  ** safepoint-free and need not pay the generic allocator fallback. */
+  assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
+  assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
   assert(lj_tg_local_total_acq(tg) < LJ_GC2_ACCT_FLUSH);
   lua_pop(L, 1);
 }
@@ -1959,7 +1960,7 @@ int main(void)
   test_accounting_fast_direct(L, g, tg);
   test_active_black_direct_publishes_exact(L, g, tg);
   test_active_black_direct_keeps_exact_cells(L, g, tg);
-  test_accounting_fallback(L, g, tg);
+  test_accounting_checkpoint(L, g, tg);
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);

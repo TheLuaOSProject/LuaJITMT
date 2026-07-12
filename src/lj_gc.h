@@ -128,8 +128,15 @@ LJ_FUNC int lj_gc_linkobj(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc_linkobj_at(global_State *g, GCobj *o, void *base);
 LJ_FUNC int lj_gc_linkobj_pending(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc_linkobj_new(global_State *g, GCobj *o);
+/* Fresh publication with allocation-base identity retained by the constructor.
+** This is required for interior cdata and avoids re-deriving fixed cdata shape
+** from concurrently published CType metadata. */
+LJ_FUNC int lj_gc_linkobj_new_at(global_State *g, GCobj *o, void *base);
 LJ_FUNC int lj_gc_linkobj_new_chain(global_State *g, GCobj *head,
 				    GCobj *tail);
+LJ_FUNC int lj_gc_linkobj_new_chain_arena(global_State *g, GCArena *a,
+					   GCobj *head, uint32_t headcell,
+					   GCobj *tail, uint32_t tailcell);
 LJ_FUNC int lj_gc_linkobj_new_after_main(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc_linkobj_after(global_State *g, GCobj *anchor, GCobj *o);
 /* Terminal-only repair after every worker/publisher has joined. */

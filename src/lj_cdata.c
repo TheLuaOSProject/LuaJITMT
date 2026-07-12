@@ -80,7 +80,7 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
   }
-  lj_gc_linkobj_new(g, obj2gco(cd));
+  lj_gc_linkobj_new_at(g, obj2gco(cd), p);
   lj_oserr_restore(&oserr);
   return cd;
 }

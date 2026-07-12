@@ -730,6 +730,10 @@ LJ_FUNC uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
 LJ_FUNC int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs,
 				  uint32_t flags, uint32_t ncells,
 				  GCArena **ap, uint32_t *cellp);
+LJ_FUNC int lj_arena_reserve_bump_pair(TGAlloc *alloc, PRNGState *rs,
+				       uint32_t flags, uint32_t ncells,
+				       uint32_t second_offset,
+				       GCArena **ap, uint32_t *cellp);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 			     uint32_t flags);
 LJ_FUNC int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size);
@@ -757,6 +761,8 @@ LJ_FUNC int lj_arena_destruct_acquire(const void *p, size_t size);
 ** MEMBER/NONE, or restore CONSTRUCT only while root remains LINKING. */
 LJ_FUNC int lj_arena_root_construct_claim(GCArena *a, uint32_t cell);
 LJ_FUNC int lj_arena_root_construct_commit(GCArena *a, uint32_t cell);
+LJ_FUNC int lj_arena_root_construct_commit_pair(GCArena *a, uint32_t first,
+					  uint32_t second);
 LJ_FUNC int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell);
 LJ_FUNC int lj_arena_lifetime_empty(const GCArena *a);
 /* Quiescent terminal cleanup only. Returns the state it replaced with FREE.
@@ -777,6 +783,10 @@ LJ_FUNC void lj_arena_allocd_init(LJArenaAllocD *ad, TGAlloc *alloc,
 LJ_FUNC void lj_arena_allocd_sethugetab(LJArenaAllocD *ad, HugeTab *ht);
 LJ_FUNC void *lj_arena_allocd_alloc(LJArenaAllocD *ad, size_t size,
 				    uint32_t flags);
+/* Publish READY for an exact fixed-layout small-arena allocation start. The
+** constructor's CONSTRUCT/LIVE/RESCUE lane pins the mapping and incarnation,
+** so this local operation deliberately needs no allocator registry reader. */
+LJ_FUNC int lj_arena_publish_gco_at(void *p);
 LJ_FUNC int lj_arena_allocd_publish_gco(LJArenaAllocD *ad, void *p);
 LJ_FUNC int lj_arena_allocd_publish_cdata(LJArenaAllocD *ad, void *p,
 					   size_t size, int interior);
@@ -879,6 +889,44 @@ static LJ_AINLINE int lj_arena_lifetime_state_cas(GCArena *a, uint32_t i,
   }
 }
 
+static LJ_AINLINE int lj_arena_packed_state_cas_pair(uint64_t *plane,
+	uint32_t cells_per_word, uint32_t lane_bits, uint64_t lane_mask,
+	uint32_t first, uint32_t second, uint32_t from, uint32_t to)
+{
+  uint32_t wi, shift1, shift2;
+  uint64_t mask1, mask2, old;
+  if (first == second ||
+      first / cells_per_word != second / cells_per_word)
+    return 0;
+  wi = first / cells_per_word;
+  shift1 = (first & (cells_per_word-1u)) * lane_bits;
+  shift2 = (second & (cells_per_word-1u)) * lane_bits;
+  mask1 = lane_mask << shift1;
+  mask2 = lane_mask << shift2;
+  old = la_load64_acq(&plane[wi]);
+  for (;;) {
+    uint64_t next;
+    if (((old & mask1) >> shift1) != from ||
+	((old & mask2) >> shift2) != from)
+      return 0;
+    next = (old & ~(mask1 | mask2)) |
+	((uint64_t)to << shift1) | ((uint64_t)to << shift2);
+    if (la_cas64(&plane[wi], &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE int lj_arena_lifetime_state_cas_pair(GCArena *a,
+	uint32_t first, uint32_t second, uint32_t from, uint32_t to)
+{
+  if (!a || first >= LJ_ARENA_CELLS || second >= LJ_ARENA_CELLS ||
+      from > LJ_ARENA_LIFETIME_RESCUE || to > LJ_ARENA_LIFETIME_RESCUE)
+    return 0;
+  return lj_arena_packed_state_cas_pair(a->lifetime,
+	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 0x0fu,
+	first, second, from, to);
+}
+
 static LJ_AINLINE int lj_arena_recovery_state_cas(GCArena *a, uint32_t i,
 						   uint32_t from,
 						   uint32_t to)
@@ -936,6 +984,17 @@ static LJ_AINLINE int lj_arena_root_state_cas(GCArena *a, uint32_t i,
   }
 }
 
+static LJ_AINLINE int lj_arena_root_state_cas_pair(GCArena *a,
+	uint32_t first, uint32_t second, uint32_t from, uint32_t to)
+{
+  if (!a || first >= LJ_ARENA_CELLS || second >= LJ_ARENA_CELLS ||
+      from > LJ_ARENA_ROOT_MEMBER || to > LJ_ARENA_ROOT_MEMBER)
+    return 0;
+  return lj_arena_packed_state_cas_pair(a->root,
+	LJ_ARENA_ROOT_CELLS_PER_WORD, 2u, 0x03u,
+	first, second, from, to);
+}
+
 LJ_FUNC int lj_arena_recovery_empty(const GCArena *a);
 /* Recovery completion may expose a previously recorded late free or unblock a
 ** sweep retry. This allocation-free wake never mutates recovery ownership. */
@@ -956,6 +1015,17 @@ static LJ_AINLINE int lj_arena_sweep_state_cas(GCArena *a, uint32_t i,
     if (la_cas64(&a->sweep[wi], &old, next, LA_ACQ_REL, LA_ACQ))
       return 1;
   }
+}
+
+static LJ_AINLINE int lj_arena_sweep_state_cas_pair(GCArena *a,
+	uint32_t first, uint32_t second, uint32_t from, uint32_t to)
+{
+  if (!a || first >= LJ_ARENA_CELLS || second >= LJ_ARENA_CELLS ||
+      from > LJ_ARENA_SWEEP_FREEING || to > LJ_ARENA_SWEEP_FREEING)
+    return 0;
+  return lj_arena_packed_state_cas_pair(a->sweep,
+	LJ_ARENA_SWEEP_CELLS_PER_WORD, 2u, 0x03u,
+	first, second, from, to);
 }
 
 static LJ_AINLINE uint32_t lj_arena_reclaim_deferred_acq(const GCArena *a)

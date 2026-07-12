@@ -581,9 +581,9 @@ static void gc2_mark_thread_root_obj(global_State *g, GCobj *o);
 static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
 static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv);
-static void gc2_mark_payload_obj_worker(global_State *g, GCobj *o);
+static int gc2_mark_payload_obj_worker(global_State *g, GCobj *o);
 static int gc2_valid_proto_for_traverse_held(GCproto *pt);
-static void gc2_traverse_proto(global_State *g, GCproto *pt);
+static void gc2_traverse_proto(global_State *g, GCproto *pt, int force);
 static int lj_gc2_ssb_push(global_State *g, GCobj *o);
 static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain);
 static uint32_t gc2_drain_ssb_owned(global_State *g);
@@ -731,7 +731,9 @@ static int gc2_observed_obj_valid_scoped(global_State *g, GCobj *o,
 						 uint32_t *gctp,
 						 GC2MarkScope *scope);
 static int gc2_observed_obj_valid(global_State *g, GCobj *o);
-static int gc2_queue_obj_valid(global_State *g, GCobj *o);
+static int gc2_queue_obj_info(global_State *g, GCobj *o,
+			      GCArena *known_small,
+			      LJGC2QueuedInfo *info, int full);
 static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv);
 static int gc2_thread_needscan(lua_State *L);
 static int gc2_thread_scan_current(global_State *g, lua_State *L);
@@ -2252,17 +2254,23 @@ void lj_gc2_check_trigger(global_State *g, TGState *tg)
 void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
 {
   uint64_t old, total;
-  int flushed = 0;
   if (!g || !tg || bytes == 0)
     return;
   old = lj_tg_local_total_add_rlx(tg, (uint64_t)bytes);
   total = old + (uint64_t)bytes;
-  if (total < old || total >= LJ_GC2_ACCT_FLUSH) {
-    (void)lj_gc2_flush_alloc(g, tg);
-    flushed = 1;
-  }
-  if (!flushed)
+  if (total >= old && total < LJ_GC2_ACCT_FLUSH)
     return;
+  (void)lj_gc2_flush_alloc_checkpoint(g, tg);
+}
+
+uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg)
+{
+  uint64_t flushed;
+  if (!g || !tg)
+    return 0;
+  flushed = lj_gc2_flush_alloc(g, tg);
+  if (flushed == 0)
+    return 0;
   lj_gc2_check_trigger(g, tg);
   if (lj_gc2_hard_limit_reached(g)) {  /* 05 section 5.11 hard limit. */
     uint64_t since = lj_gc2_alloc_since_load(g);
@@ -2275,6 +2283,7 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
       lj_gc2_hard_check_advance(g, since);
     }
   }
+  return flushed;
 }
 
 uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)
@@ -2999,6 +3008,13 @@ static int gc2_mark_begin(global_State *g)
   }
   tg = G2TG(g);
   forced_major = gc2_force_major_xchg_acqrel(g, 0);
+  /*
+  ** Cycle zero is reserved as the prototype-scan reset value. Make the
+  ** uint32_t wrap cycle major so all survivor marks are rebuilt while
+  ** per-prototype deduplication is disabled for that one cycle.
+  */
+  if (gc2_cycle_acq(g) == ~(uint32_t)0)
+    forced_major = 1;
   minor_requested = !forced_major && gc2_generational_acq(g) != 0;
   sweep_minor = minor_requested &&
     gc2_minor_sweep_enabled_acq(g) != 0;
@@ -6333,29 +6349,46 @@ static uint32_t gc2_clear_uncounted_needscan_chain(global_State *g,
 						    GCobj *head)
 {
   GCobj *o = head;
-  GC2MarkScope scope;
+  GCobj *maino, *vmo;
+  lua_State *mainL, *vmL;
+  GCArena *known_small = NULL;
   uint32_t cleared = 0, n = 0;
-  if (o && !gc2_root_spine_admit(g, o, &scope))
+  if (!o || !lj_gc2_smr_read_try(g))
     return 0;
+  mainL = mainthread_acq(g);
+  vmL = vmthread_acq(g);
+  maino = mainL ? obj2gco(mainL) : NULL;
+  vmo = vmL ? obj2gco(vmL) : NULL;
   while (o != NULL) {
-    GC2MarkScope nextscope;
+    LJGC2QueuedInfo info;
     GCobj *next;
-    if (gc2_uncounted_needscan_type((uint32_t)o->gch.gct) &&
+    uint32_t gct;
+    /* The intrusive root membership is already the lifetime lease. Keep one
+    ** bounded registry reader across the whole walk and validate each exact
+    ** allocation non-semantically, instead of opening and closing a rescue
+    ** admission for every root. The permanent threads are GG_State-owned and
+    ** retain their state-lifetime exemption. */
+    if (o == maino || o == vmo) {
+      gct = (uint32_t)~LJ_TTHREAD;
+      known_small = NULL;
+    } else {
+      if (LJ_UNLIKELY(!gc2_queue_obj_info(g, o, known_small, &info, 0) ||
+		      info.gct == (uint32_t)~LJ_TSTR))
+	break;
+      gct = info.gct;
+      known_small = info.start != 0 ? (GCArena *)info.arena : NULL;
+    }
+    next = lj_obj_gcw_acq(o);
+    if (gc2_uncounted_needscan_type(gct) &&
 	(gc2_rescan_pending_clear(o) & LJ_GC_NEEDSCAN))
       cleared++;
-    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT) {
-      gc2_mark_scope_leave(&scope);
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
       break;
-    }
-    if (!gc2_root_spine_handoff(g, o, &scope, &next, &nextscope))
+    if (next == o)
       break;
-    if (next == o) {
-      gc2_mark_scope_leave(&nextscope);
-      break;
-    }
     o = next;
-    scope = nextscope;
   }
+  lj_gc2_smr_read_leave(g);
   return cleared;
 }
 
@@ -7987,26 +8020,31 @@ int lj_gc2_obj_valid(global_State *g, GCobj *o)
   return gc2_observed_obj_valid(g, o);
 }
 
-static int gc2_queue_obj_valid(global_State *g, GCobj *o)
+static int gc2_queue_obj_info(global_State *g, GCobj *o,
+			      GCArena *known_small,
+			      LJGC2QueuedInfo *info, int full)
 {
   GCArena *a;
   uint32_t gct;
   void *base;
+  if (info)
+    memset(info, 0, sizeof(*info));
   if (!g || !o || !checkptrGC(o) ||
       ((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0)
     return 0;
   if (la_load32_acq(&g->allocf_arena) == 0)
-    return 1;
+    goto custom_valid;
   a = lj_arena_of(o);
-  if (gc2_small_arena_known(g, a)) {
-    uint32_t cell = lj_arena_cellof(o), start;
+  if ((known_small && a == known_small) || gc2_small_arena_known(g, a)) {
+    uint32_t cell = lj_arena_cellof(o), start = cell;
     int interior_tag;
     /* Queue-valid callers already retain root MEMBER/UNLINKING, a post-grace
     ** RETIRED sweep ticket, or terminal ownership. Opening a rescue admission
     ** here would set PENDING on the sealed generation and defeat the very
     ** destructor whose ticket protects these reads. */
     if (!(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) ||
-	!gc2_small_containing_start(a, cell, &start) ||
+	(!lj_arena_bm_get(a->block, cell) &&
+	 !gc2_small_containing_start(a, cell, &start)) ||
 	!lj_arena_ready_get(a, start))
       return 0;
     base = lj_arena_cellptr(a, start);
@@ -8015,6 +8053,22 @@ static int gc2_queue_obj_valid(global_State *g, GCobj *o)
 	!gc2_retained_candidate_valid(g, o, base, a, start, 0,
 				       interior_tag, &gct))
       return 0;
+    if (info) {
+      info->arena = a;
+      info->base = base;
+      info->start = start;
+      info->gct = gct;
+      info->marked = lj_arena_bm_get(a->mark, start);
+      if (full) {
+	uint32_t end;
+	for (end = start + 1u; end < LJ_ARENA_CELLS; end++)
+	  if (lj_arena_bm_get(a->block, end) ||
+	      lj_arena_bm_get(a->mark, end))
+	    break;
+	info->alloc_size = (size_t)(end - start) << LJ_CELL_SHIFT;
+	info->end = end;
+      }
+    }
   } else {
     LJHugeInfo hi;
     int interior_tag;
@@ -8040,6 +8094,20 @@ static int gc2_queue_obj_valid(global_State *g, GCobj *o)
 	((gct == (uint32_t)~LJ_TCDATA) !=
 	 ((hi.flags & LJ_HUGEF_CDATA) != 0)))
       return 0;
+    if (info) {
+      info->arena = a;
+      info->base = base;
+      info->alloc_size = hi.size;
+      info->gct = gct;
+      info->marked = (hi.flags & LJ_HUGEF_MARK) != 0;
+    }
+  }
+  return 1;
+custom_valid:
+  if (info) {
+    info->base = o;
+    info->gct = (uint32_t)la_load8_acq(&o->gch.gct);
+    info->marked = 1;
   }
   return 1;
 }
@@ -8053,12 +8121,38 @@ int lj_gc2_obj_valid_queued(global_State *g, GCobj *o)
   ** A caller such as pending-root flush which already holds this universe's
   ** reader pays only the TLS nesting increment. */
   if (gc2_reclaim_tls_active(g))
-    return gc2_queue_obj_valid(g, o);
+    return gc2_queue_obj_info(g, o, NULL, NULL, 0);
   if (!lj_gc2_smr_read_try(g))
     return 0;
-  valid = gc2_queue_obj_valid(g, o);
+  valid = gc2_queue_obj_info(g, o, NULL, NULL, 0);
   lj_gc2_smr_read_leave(g);
   return valid;
+}
+
+int lj_gc2_obj_queued_info_held(global_State *g, GCobj *o,
+					 void *known_arena,
+					 LJGC2QueuedInfo *info)
+{
+  if (!g || !o || !info ||
+      (!gc2_smr_reader_tls_active(g) && !gc2_reclaim_tls_active(g))) {
+    if (info)
+      memset(info, 0, sizeof(*info));
+    return 0;
+  }
+  return gc2_queue_obj_info(g, o, (GCArena *)known_arena, info, 1);
+}
+
+int lj_gc2_obj_queued_brief_held(global_State *g, GCobj *o,
+					  void *known_arena,
+					  LJGC2QueuedInfo *info)
+{
+  if (!g || !o || !info ||
+      (!gc2_smr_reader_tls_active(g) && !gc2_reclaim_tls_active(g))) {
+    if (info)
+      memset(info, 0, sizeof(*info));
+    return 0;
+  }
+  return gc2_queue_obj_info(g, o, (GCArena *)known_arena, info, 0);
 }
 
 static uint64_t gc2_grey_repair_span(global_State *g, MSize cap,
@@ -13725,14 +13819,14 @@ static void gc2_mark_marked_table_payload_worker(global_State *g, GCtab *t)
     gc2_activation_pin_no_reclaim(g);
 }
 
-static void gc2_mark_payload_obj_worker(global_State *g, GCobj *o)
+static int gc2_mark_payload_obj_worker(global_State *g, GCobj *o)
 {
   uint32_t gct;
   int status = gc2_markobj_worker_status(g, o, &gct);
   if (status == GC2_MARK_DEAD)
-    return;
+    return status;
   if (status == GC2_MARK_NEW)
-    return;
+    return status;
   switch (gct) {
   case ~LJ_TTAB:
     gc2_mark_marked_table_payload_worker(g, gco2tab(o));
@@ -13761,6 +13855,7 @@ static void gc2_mark_payload_obj_worker(global_State *g, GCobj *o)
   default:
     break;
   }
+  return status;
 }
 
 static void gc2_mark_table_child_obj_worker(global_State *g, GCtab *t)
@@ -13820,7 +13915,20 @@ void lj_gc2_barrier_marked_proto(lua_State *L, GCproto *pt)
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
     return;
-  if (lj_gc2_ismarked(g, o) <= 0) {
+  if (!mt_active_or_entering_acq(g) && gc2_n_workers_acq(g) == 0 &&
+      g->allocf == lj_arena_allocf && la_load32_acq(&g->allocf_arena) != 0 &&
+      !lj_arena_ishuge(lj_arena_of(pt)) &&
+      (lj_arena_flags_acq(lj_arena_of(pt)) & LJ_AF_TRAVERSABLE) &&
+      lj_arena_cellof(pt) >= LJ_AFIRST_CELL &&
+      lj_arena_cellof(pt) < LJ_ARENA_CELLS &&
+      lj_arena_cellptr(lj_arena_of(pt), lj_arena_cellof(pt)) == (void *)pt &&
+      pt->gct == ~LJ_TPROTO &&
+      lj_arena_bm_get(lj_arena_of(pt)->block, lj_arena_cellof(pt)) &&
+      lj_arena_ready_get(lj_arena_of(pt), lj_arena_cellof(pt)) &&
+      lj_arena_bm_get(lj_arena_of(pt)->mark, lj_arena_cellof(pt))) {
+    /* Authoritative constructor/recorder prototype under the sole-runtime
+    ** gate: the exact arena cannot transfer or disappear during this call. */
+  } else if (lj_gc2_ismarked(g, o) <= 0) {
     (void)lj_gc2_markobj_direct(g, o);
     return;
   }
@@ -14303,8 +14411,11 @@ static void gc2_traverse_func(global_State *g, GCfunc *fn)
     uint32_t i, nup = lj_funcL_nupvalues(&fn->l);
     if (LJ_UNLIKELY(!pt))
       return;
-    gc2_mark_payload_obj_worker(g, obj2gco(pt));
-    gc2_traverse_proto(g, pt);
+    {
+      int ptstatus = gc2_mark_payload_obj_worker(g, obj2gco(pt));
+      if (ptstatus != GC2_MARK_DEAD)
+	gc2_traverse_proto(g, pt, ptstatus == GC2_MARK_NEW);
+    }
     for (i = 0; i < nup; i++) {
       GCobj *uv = obj2gco(func_uv_acq(&fn->l, i));
       if (uv && uv->gch.gct == ~LJ_TUPVAL)
@@ -14353,15 +14464,30 @@ static void gc2_traverse_trace(global_State *g, GCtrace *T)
 }
 #endif
 
-static void gc2_traverse_proto(global_State *g, GCproto *pt)
+static void gc2_traverse_proto(global_State *g, GCproto *pt, int force)
 {
+  uint32_t cycle = gc2_cycle_acq(g);
   ptrdiff_t i, sizekgc = (ptrdiff_t)proto_sizekgc_acq(pt);
+  /*
+  ** KGC and chunkname edges are immutable after READY. The trace anchor is the
+  ** sole mutable GC edge and its publisher marks the new trace independently
+  ** through lj_gc_pubtrace(). Therefore a completed same-cycle scan covers the
+  ** prototype payload for every closure sharing it.
+  **
+  ** Store the stamp only after every child mark/publication returns. The
+  ** worker token excludes phase close during this traversal. A first mark is
+  ** forced even if a 32-bit stamp happens to match after wrap; cycle zero
+  ** disables deduplication and the wrap cycle is forced major at mark start.
+  */
+  if (!force && cycle != 0 && proto_gc2_scan_cycle_acq(pt) == cycle)
+    return;
   gc2_markobj_worker(g, obj2gco(proto_chunkname_acq(pt)));
   for (i = -sizekgc; i < 0; i++)
     gc2_mark_payload_obj_worker(g, proto_kgc_acq(pt, i));
 #if LJ_HASJIT
   gc2_marktrace_worker(g, proto_trace_acq(pt));
 #endif
+  proto_gc2_scan_cycle_rel(pt, cycle);
 }
 
 static void gc2_mark_frame_chain_funcs_worker(global_State *g, lua_State *L)
@@ -14765,7 +14891,7 @@ static int gc2_traverse_obj(global_State *g, GCobj *o)
   } else if (LJ_LIKELY(gct == ~LJ_TPROTO)) {
     GCproto *pt = gco2pt(o);
     if (gc2_valid_proto_for_traverse_held(pt))
-      gc2_traverse_proto(g, pt);
+      gc2_traverse_proto(g, pt, 0);
   } else if (LJ_LIKELY(gct == ~LJ_TTHREAD)) {
     gc2_traverse_thread(g, gco2th(o), &scope);
   } else if (gct == ~LJ_TUPVAL) {

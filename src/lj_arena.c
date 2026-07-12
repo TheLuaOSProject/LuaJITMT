@@ -185,12 +185,15 @@ static uint64_t arena_lifetime_block_bits(const GCArena *a, uint32_t w)
     return 0;
   for (k = 0; k < 4u; k++) {
     uint64_t states = la_load64_acq(&a->lifetime[(w << 2) + k]);
-    uint32_t occupied = 0;
-    uint32_t j;
-    for (j = 0; j < 16u; j++)
-      if ((states >> (j << 2)) & 0x0fu)
-	occupied |= (uint32_t)1u << j;
-    bits |= (uint64_t)occupied << (k << 4);
+    uint64_t occupied = (states | (states >> 1) | (states >> 2) |
+			 (states >> 3)) & UINT64_C(0x1111111111111111);
+    /* Reclaimed arenas are normally sparse or completely FREE. Convert only
+    ** actual non-zero nibbles instead of testing all 16 lifetime lanes. */
+    while (occupied) {
+      uint32_t lane = (uint32_t)(lj_ffs64(occupied) >> 2);
+      bits |= (uint64_t)1 << ((k << 4) + lane);
+      occupied &= occupied - 1u;
+    }
   }
   return bits;
 }
@@ -313,6 +316,66 @@ int lj_arena_root_construct_commit(GCArena *a, uint32_t cell)
   return root == LJ_ARENA_ROOT_LINKING &&
     lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_LINKING,
 				    LJ_ARENA_ROOT_MEMBER);
+}
+
+int lj_arena_root_construct_commit_pair(GCArena *a, uint32_t first,
+					 uint32_t second)
+{
+  uint32_t lwi, rwi, lshift1, lshift2, rshift1, rshift2;
+  uint64_t lmask1, lmask2, rmask1, rmask2, old;
+  if (!arena_lifetime_managed(a) || first == second ||
+      first < LJ_AFIRST_CELL || second < LJ_AFIRST_CELL ||
+      first >= LJ_ARENA_CELLS || second >= LJ_ARENA_CELLS)
+    goto fallback;
+  lwi = first / LJ_ARENA_LIFETIME_CELLS_PER_WORD;
+  rwi = first / LJ_ARENA_ROOT_CELLS_PER_WORD;
+  if (lwi != second / LJ_ARENA_LIFETIME_CELLS_PER_WORD ||
+      rwi != second / LJ_ARENA_ROOT_CELLS_PER_WORD)
+    goto fallback;
+  lshift1 = (first & (LJ_ARENA_LIFETIME_CELLS_PER_WORD-1u)) << 2;
+  lshift2 = (second & (LJ_ARENA_LIFETIME_CELLS_PER_WORD-1u)) << 2;
+  rshift1 = (first & (LJ_ARENA_ROOT_CELLS_PER_WORD-1u)) << 1;
+  rshift2 = (second & (LJ_ARENA_ROOT_CELLS_PER_WORD-1u)) << 1;
+  lmask1 = (uint64_t)0x0fu << lshift1;
+  lmask2 = (uint64_t)0x0fu << lshift2;
+  rmask1 = (uint64_t)0x03u << rshift1;
+  rmask2 = (uint64_t)0x03u << rshift2;
+
+  old = la_load64_acq(&a->lifetime[lwi]);
+  for (;;) {
+    uint64_t next;
+    if (((old & lmask1) >> lshift1) != LJ_ARENA_LIFETIME_CONSTRUCT ||
+	((old & lmask2) >> lshift2) != LJ_ARENA_LIFETIME_CONSTRUCT)
+      goto fallback;
+    next = (old & ~(lmask1 | lmask2)) |
+	((uint64_t)LJ_ARENA_LIFETIME_LIVE << lshift1) |
+	((uint64_t)LJ_ARENA_LIFETIME_LIVE << lshift2);
+    if (la_cas64(&a->lifetime[lwi], &old, next, LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+
+  old = la_load64_acq(&a->root[rwi]);
+  for (;;) {
+    uint32_t root1 = (uint32_t)((old & rmask1) >> rshift1);
+    uint32_t root2 = (uint32_t)((old & rmask2) >> rshift2);
+    uint64_t next;
+    if ((root1 != LJ_ARENA_ROOT_LINKING &&
+	 root1 != LJ_ARENA_ROOT_MEMBER) ||
+	(root2 != LJ_ARENA_ROOT_LINKING &&
+	 root2 != LJ_ARENA_ROOT_MEMBER))
+      goto fallback;
+    if (root1 == LJ_ARENA_ROOT_MEMBER && root2 == LJ_ARENA_ROOT_MEMBER)
+      return 1;
+    next = (old & ~(rmask1 | rmask2)) |
+	((uint64_t)LJ_ARENA_ROOT_MEMBER << rshift1) |
+	((uint64_t)LJ_ARENA_ROOT_MEMBER << rshift2);
+    if (la_cas64(&a->root[rwi], &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+
+fallback:
+  return lj_arena_root_construct_commit(a, first) &&
+    lj_arena_root_construct_commit(a, second);
 }
 
 int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell)
@@ -3359,20 +3422,49 @@ static void arena_alloc_claim_rollback(GCArena *a, uint32_t cell,
   lj_assertX(ok, "arena allocation lifetime rollback lost");
 }
 
-static int arena_set_extent(GCArena *a, uint32_t cell)
+static uint64_t arena_range_mask(uint32_t lo, uint32_t nbits)
 {
-  lj_assertX(lj_arena_recovery_state_acq(a, cell) ==
-	     LJ_ARENA_RECOVERY_IDLE,
-	     "arena extent reuse crossed recovery ownership");
-  if (lj_arena_recovery_state_acq(a, cell) != LJ_ARENA_RECOVERY_IDLE)
-    abort();
-  if (lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE)
+  return nbits == 64u ? ~(uint64_t)0 :
+    (((uint64_t)1 << nbits) - 1u) << lo;
+}
+
+static int arena_clear_extent_range(GCArena *a, uint32_t start, uint32_t len)
+{
+  uint32_t pos, end;
+  if (start >= LJ_ARENA_CELLS || len > LJ_ARENA_CELLS - start)
     return 0;
-  if (arena_lifetime_managed(a) &&
-      lj_arena_lifetime_state_acq(a, cell) != LJ_ARENA_LIFETIME_FREE)
-    return 0;
-  lj_arena_block_clear(a, cell);
-  lj_arena_bm_clear(a->mark, cell);
+  end = start + len;
+  /* Keep the exact per-cell ownership precondition of arena_set_extent().
+  ** Validate the complete range before changing either bitmap, so a failed
+  ** side-plane check leaves every old boundary intact. */
+  for (pos = start; pos < end; pos++) {
+    uint32_t recovery = lj_arena_recovery_state_acq(a, pos);
+    lj_assertX(recovery == LJ_ARENA_RECOVERY_IDLE,
+	       "arena extent reuse crossed recovery ownership");
+    if (recovery != LJ_ARENA_RECOVERY_IDLE)
+      abort();
+    if (lj_arena_root_state_acq(a, pos) != LJ_ARENA_ROOT_NONE ||
+	(arena_lifetime_managed(a) &&
+	 lj_arena_lifetime_state_acq(a, pos) != LJ_ARENA_LIFETIME_FREE))
+      return 0;
+  }
+  /* block[] has one structural writer, so one store per affected word is
+  ** sufficient. mark[] admits concurrent marker ORs and retains an atomic
+  ** AND, now clearing all reusable cells covered by that word at once. */
+  for (pos = start; pos < end; ) {
+    uint32_t wi = pos >> 6;
+    uint32_t lo = pos & 63u;
+    uint32_t take = end - pos;
+    uint32_t room = 64u - lo;
+    uint64_t mask, word;
+    if (take > room)
+      take = room;
+    mask = arena_range_mask(lo, take);
+    word = la_load64_rlx(&a->block[wi]);
+    la_store64_rlx(&a->block[wi], word & ~mask);
+    (void)la_and64_rlx(&a->mark[wi], ~mask);
+    pos += take;
+  }
   return 1;
 }
 
@@ -3423,11 +3515,11 @@ static int arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
   ** run must erase every old interior boundary before publishing its new
   ** allocation start; otherwise a later rebuild can relink a suffix of this
   ** live allocation as reusable storage. */
-  for (i = 1; i < ncells; i++)
-    if (!arena_set_extent(a, cell + i)) {
-      arena_alloc_claim_rollback(a, cell, root_construct);
-      return 0;
-    }
+  if (ncells > 1 &&
+      !arena_clear_extent_range(a, cell + 1u, ncells - 1u)) {
+    arena_alloc_claim_rollback(a, cell, root_construct);
+    return 0;
+  }
   /* Free-run publication clears typed coverage for the complete reusable
   ** span. Ordinary allocation must not pay side-plane RMWs. */
   lj_assertX(!lj_arena_cdata_get(a, cell) && !lj_arena_ready_get(a, cell),
@@ -3475,9 +3567,8 @@ static int arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
   }
   lj_arena_block_clear(a, start);
   lj_arena_bm_set(a->mark, start);
-  for (i = 1; i < len; i++)
-    if (!arena_set_extent(a, start + i))
-      return 0;
+  if (len > 1 && !arena_clear_extent_range(a, start + 1u, len - 1u))
+    return 0;
   return 1;
 }
 
@@ -5509,14 +5600,55 @@ static int arena_reserve_lifetime(GCArena *a, uint32_t cell, uint32_t flags)
   return ok;
 }
 
-int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
-			  uint32_t ncells, GCArena **ap, uint32_t *cellp)
+static int arena_reserve_lifetime_pair(GCArena *a, uint32_t first,
+					uint32_t second, uint32_t flags)
+{
+  int rootok, lifeok;
+  if (!(flags & LJ_AF_TRAVERSABLE) || !(flags & LJ_AF_ROOT_CONSTRUCT) ||
+      first == second || second >= LJ_ARENA_CELLS)
+    return 0;
+  if (first / LJ_ARENA_LIFETIME_CELLS_PER_WORD ==
+	second / LJ_ARENA_LIFETIME_CELLS_PER_WORD &&
+      first / LJ_ARENA_ROOT_CELLS_PER_WORD ==
+	second / LJ_ARENA_ROOT_CELLS_PER_WORD) {
+    lifeok = lj_arena_lifetime_state_cas_pair(a, first, second,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT);
+    if (!lifeok)
+      return 0;
+    rootok = lj_arena_root_state_cas_pair(a, first, second,
+	LJ_ARENA_ROOT_NONE, LJ_ARENA_ROOT_LINKING);
+    if (rootok)
+      return 1;
+    lifeok = lj_arena_lifetime_state_cas_pair(a, first, second,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
+    lj_assertX(lifeok, "arena pair construction claim rollback lost");
+    UNUSED(lifeok);
+    return 0;
+  }
+  if (!lj_arena_root_construct_claim(a, first))
+    return 0;
+  if (lj_arena_root_construct_claim(a, second))
+    return 1;
+  rootok = lj_arena_root_construct_abandon(a, first);
+  lifeok = rootok && lj_arena_lifetime_state_cas(a, first,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_FREE);
+  lj_assertX(rootok && lifeok,
+	     "arena split pair construction claim rollback lost");
+  UNUSED(rootok); UNUSED(lifeok);
+  return 0;
+}
+
+static int arena_reserve_bump_impl(TGAlloc *alloc, PRNGState *rs,
+	uint32_t flags, uint32_t ncells, uint32_t second_offset,
+	GCArena **ap, uint32_t *cellp)
 {
   uint32_t k = arena_kind(flags);
   LJArenaBump *b;
   uint32_t cell;
   if (!alloc || !ap || !cellp || ncells == 0 ||
       ncells > LJ_ARENA_CELLS - LJ_AFIRST_CELL ||
+      (second_offset != 0 &&
+       (second_offset >= ncells || !(flags & LJ_AF_ROOT_CONSTRUCT))) ||
       ((flags & LJ_AF_ROOT_CONSTRUCT) &&
        !(flags & LJ_AF_TRAVERSABLE)))
     return 0;
@@ -5537,15 +5669,20 @@ int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
       GCArena *a = lj_arena_of(run);
       uint32_t start = run->start;
       uint32_t len = run->len;
-      uint32_t i;
       *pp = run->next;
       arena_refresh_binmask(alloc, k, bin);
       /* Rebuild may have coalesced several adjacent state-1 boundaries into
       ** this private bump window. Erase the complete old boundary map now;
       ** specialized C/VM/JIT bump publishers subsequently install only their
       ** real object starts. */
-      for (i = 0; i < len; i++)
-	arena_set_extent(a, start + i);
+      if (!arena_clear_extent_range(a, start, len)) {
+	/* Keep a vetoed detached run private. Re-inserting metadata which failed
+	** its ownership precondition would make the same unsafe span reusable. */
+	b->a = a;
+	b->cell = start;
+	b->end = start + len;
+	return 0;
+      }
       b->a = NULL;
       b->cell = 0;
       b->end = 0;
@@ -5559,7 +5696,9 @@ int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
 	b->cell = start + ncells;
 	b->end = start + len;
       }
-      if (!arena_reserve_lifetime(a, start, flags)) {
+      if (!(second_offset ? arena_reserve_lifetime_pair(
+	      a, start, start + second_offset, flags) :
+	    arena_reserve_lifetime(a, start, flags))) {
 	/* No bytes or block bit have been published. Retain the detached span as
 	** a private bump window so a transient descriptor conflict cannot make it
 	** allocator-visible. */
@@ -5577,13 +5716,29 @@ int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
   }
   cell = b->cell;
   b->cell = cell + ncells;
-  if (!arena_reserve_lifetime(b->a, cell, flags)) {
+  if (!(second_offset ? arena_reserve_lifetime_pair(
+	  b->a, cell, cell + second_offset, flags) :
+	arena_reserve_lifetime(b->a, cell, flags))) {
     b->cell = cell;
     return 0;
   }
   *ap = b->a;
   *cellp = cell;
   return 1;
+}
+
+int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
+			  uint32_t ncells, GCArena **ap, uint32_t *cellp)
+{
+  return arena_reserve_bump_impl(alloc, rs, flags, ncells, 0, ap, cellp);
+}
+
+int lj_arena_reserve_bump_pair(TGAlloc *alloc, PRNGState *rs, uint32_t flags,
+	uint32_t ncells, uint32_t second_offset,
+	GCArena **ap, uint32_t *cellp)
+{
+  return arena_reserve_bump_impl(alloc, rs, flags, ncells, second_offset,
+				 ap, cellp);
 }
 
 void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
@@ -6074,20 +6229,27 @@ static int arena_publish_start_bit(uint64_t *word, uint64_t bit)
   }
 }
 
-int lj_arena_allocd_publish_gco(LJArenaAllocD *ad, void *p)
+int lj_arena_publish_gco_at(void *p)
 {
   GCArena *a;
   uint32_t cell, life;
   uint64_t bit;
-  if (!ad || !p)
+  if (!p)
     return 0;
   a = lj_arena_of(p);
   if (lj_arena_ishuge(a))
-    return ad->huge && lj_arena_hugetab_publish_gco(ad->huge, p);
+    return 0;
   cell = lj_arena_cellof(p);
-  life = lj_arena_lifetime_state_acq(a, cell);
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
-      !lj_arena_bm_get(a->block, cell) ||
+      lj_arena_cellptr(a, cell) != p)
+    return 0;
+  /* READY is irrevocable for this allocation incarnation. Recovery can move
+  ** CONSTRUCT to MUTATING only after observing READY, so a repeated owner-side
+  ** publication must accept that already-complete release edge. */
+  if (lj_arena_ready_get(a, cell))
+    return 1;
+  life = lj_arena_lifetime_state_acq(a, cell);
+  if (!lj_arena_bm_get(a->block, cell) ||
       !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) ||
       (life != LJ_ARENA_LIFETIME_LIVE &&
 	   life != LJ_ARENA_LIFETIME_CONSTRUCT &&
@@ -6095,6 +6257,17 @@ int lj_arena_allocd_publish_gco(LJArenaAllocD *ad, void *p)
     return 0;
   bit = (uint64_t)1 << (cell & 63);
   return arena_publish_start_bit(&a->ready[cell >> 6], bit);
+}
+
+int lj_arena_allocd_publish_gco(LJArenaAllocD *ad, void *p)
+{
+  GCArena *a;
+  if (!ad || !p)
+    return 0;
+  a = lj_arena_of(p);
+  if (lj_arena_ishuge(a))
+    return ad->huge && lj_arena_hugetab_publish_gco(ad->huge, p);
+  return lj_arena_publish_gco_at(p);
 }
 
 int lj_arena_allocd_publish_cdata(LJArenaAllocD *ad, void *p, size_t size,

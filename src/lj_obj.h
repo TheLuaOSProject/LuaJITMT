@@ -432,6 +432,7 @@ typedef struct GCproto {
   uint8_t framesize;	/* Fixed frame size. */
   MSize sizebc;		/* Number of bytecode instructions. */
   uint32_t flags2;	/* Extended prototype flags. */
+  uint32_t gc2_scan_cycle;  /* Last completed immutable GC2 payload scan. */
   GCRef gclist;
   MRef k;		/* Split constant array (points to the middle). */
   MRef uv;		/* Upvalue list. local slot|0x8000 or parent uv idx. */
@@ -482,13 +483,24 @@ static LJ_AINLINE void proto_sizekgc_rel(GCproto *pt, MSize sizekgc)
 #define PROTO2_CELLUV		0x00000002u  /* Local upvalues are cell slots. */
 #define PROTO2_CELLOPS		0x00000004u  /* Prototype uses CGET/CSET. */
 
-#define proto_initflags2(pt)	((pt)->flags2 = 0)
+#define proto_initflags2(pt) \
+  ((void)((pt)->flags2 = 0, (pt)->gc2_scan_cycle = 0))
 #define proto_legacyuv(pt)	(((pt)->flags2 & PROTO2_LEGACYUV) != 0)
 #define proto_setlegacyuv(pt)	((pt)->flags2 |= PROTO2_LEGACYUV)
 #define proto_celluv(pt)	(((pt)->flags2 & PROTO2_CELLUV) != 0)
 #define proto_setcelluv(pt)	((pt)->flags2 |= PROTO2_CELLUV)
 #define proto_cellops(pt)	(((pt)->flags2 & PROTO2_CELLOPS) != 0)
 #define proto_setcellops(pt)	((pt)->flags2 |= PROTO2_CELLOPS)
+
+static LJ_AINLINE uint32_t proto_gc2_scan_cycle_acq(const GCproto *pt)
+{
+  return la_load32_acq(&pt->gc2_scan_cycle);
+}
+
+static LJ_AINLINE void proto_gc2_scan_cycle_rel(GCproto *pt, uint32_t cycle)
+{
+  la_store32_rel(&pt->gc2_scan_cycle, cycle);
+}
 
 #define PROTO_UV_LOCAL		0x8000	/* Upvalue for local slot. */
 #define PROTO_UV_IMMUTABLE	0x4000	/* Immutable upvalue. */

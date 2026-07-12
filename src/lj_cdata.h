@@ -72,7 +72,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
   }
-  lj_gc_linkobj_new(g, obj2gco(cd));
+  lj_gc_linkobj_new_at(g, obj2gco(cd), cd);
   lj_oserr_restore(&oserr);
   return cd;
 }
@@ -100,7 +100,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
     lj_oserr_restore(&oserr);
     lj_err_mem(L);
   }
-  lj_gc_linkobj_new(g, obj2gco(cd));
+  lj_gc_linkobj_new_at(g, obj2gco(cd), cd);
   lj_oserr_restore(&oserr);
   return cd;
 }

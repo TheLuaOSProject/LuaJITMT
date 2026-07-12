@@ -28,6 +28,18 @@ typedef struct LJGC2Lease {
   intptr_t admission;
   LJHugeReader huge;
 } LJGC2Lease;
+/* Non-semantic snapshot for an object whose queue/root/detached ticket already
+** pins its incarnation. The caller must hold this universe's SMR reader (or
+** the exact sweep-reclaimer certificate) through the final use. */
+typedef struct LJGC2QueuedInfo {
+  void *arena;
+  void *base;
+  size_t alloc_size;
+  uint32_t start;
+  uint32_t end;
+  uint32_t gct;
+  uint32_t marked;
+} LJGC2QueuedInfo;
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || \
     defined(LJ_TRACE_TEST_HELPERS) || defined(LUA_USE_ASSERT) || \
     LJ_GC2_PARANOIA
@@ -188,7 +200,7 @@ enum {
 #define LJ_GC2_HELPER_IDLE_STEP		(LJ_GC2_ACCT_FLUSH * 4u)
 #define LJ_GC2_ACTIVE_AUTO_STEP		4096u
 #define LJ_GC2_TRACE_HARD_CHECK_BATCH	(LJ_GC2_ACCT_FLUSH * 16u)
-#define LJ_GC2_PENDING_ROOT_TRIGGER_MAX	LJ_GC2_TRIGGER_MIN
+#define LJ_GC2_PENDING_ROOT_TRIGGER_MAX	(LJ_GC2_ACCT_FLUSH * 12u)
 #define LJ_GC2_WORKER_DRAIN_BATCH	64u
 #define LJ_GC2_WEAK_DRAIN_BATCH		64u
 #define LJ_GC2_SWEEP_BATCH		64u
@@ -207,6 +219,10 @@ LJ_FUNC int lj_gc2_terminal_prefree(global_State *g);
 LJ_FUNC void lj_gc2_freeall(global_State *g);
 LJ_FUNC void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes);
 LJ_FUNC uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg);
+/* Flush already-accounted owner-local bytes and perform the same trigger/hard
+** checkpoint as an accounting-boundary allocation, without charging a future
+** object before its constructor succeeds. */
+LJ_FUNC uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_cycle_explicit(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_major(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_collect_active(lua_State *L);
@@ -463,6 +479,14 @@ LJ_FUNC int lj_gc2_markobj_nogrey(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
 LJ_FUNC int lj_gc2_obj_valid(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_obj_valid_queued(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_obj_queued_info_held(global_State *g, GCobj *o,
+					 void *known_arena,
+					 LJGC2QueuedInfo *info);
+/* Lightweight structural snapshot for ownership-chain validation. This fills
+** arena/base/start/gct/marked but deliberately skips allocation-end discovery. */
+LJ_FUNC int lj_gc2_obj_queued_brief_held(global_State *g, GCobj *o,
+					  void *known_arena,
+					  LJGC2QueuedInfo *info);
 /* Validate a structured, authoritative TValue edge (table/root publication). */
 LJ_FUNC int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv);
 LJ_FUNC int lj_gc2_mem_registered(global_State *g, const void *p);
