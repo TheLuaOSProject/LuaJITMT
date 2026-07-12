@@ -2893,6 +2893,9 @@ genlookup:
       }
       if (tab_val_forward_retry(t, &val, node))
 	goto retry_lookup;
+      if (forwarded_retry && tvisnil(&val) &&
+	  tab_forwarded_lookup_retry(t, node))
+	goto retry_lookup;
       if (tvisforward(&val))
 	return NULL;
       return &n->val;
@@ -2949,6 +2952,9 @@ genlookup:
 	goto genlookup;
       }
       if (tab_val_forward_retry(t, &val, node))
+	goto retry_lookup;
+      if (forwarded_retry && tvisnil(&val) &&
+	  tab_forwarded_lookup_retry(t, node))
 	goto retry_lookup;
       if (tvisforward(&val))
 	return NULL;
@@ -3022,6 +3028,9 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 	  goto genlookup;
 	}
 	if (tab_val_forward_retry(t, &val, node))
+	  goto retry_lookup;
+	if (forwarded_retry && tvisnil(&val) &&
+	    tab_forwarded_lookup_retry(t, node))
 	  goto retry_lookup;
 	if (tvisforward(&val))
 	  return niltv(L);
@@ -3102,13 +3111,16 @@ retry:
 	  return -1;
 	goto retry;
       }
+      if (tab_val_absent(out) &&
+	  (lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node)))
+	return -1;
       return tab_val_absent(out) ? 0 : 1;
     }
     if (tab_key_islocked(&nk))
       return -1;
   } while ((n = lj_tab_nextnode_acq(n)));
 
-  if (lj_tab_node_is_retiring(node))
+  if (lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node))
     return -1;
   setnilV(out);
   return 0;

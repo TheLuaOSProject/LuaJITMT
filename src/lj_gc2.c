@@ -6224,14 +6224,18 @@ static TValue *gc2_active_thread_top(global_State *g, lua_State *L, TValue *top,
   return top > max ? max : top;
 }
 
-static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
+static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
+				  int *conservativep)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used, *max = tvref(L->maxstack);
+  uint32_t n = 0;
   int vm_current = gc2_thread_is_current(g, L);
   int remote_current = gc2_thread_is_remote_current(g, L);
   int native_current = gc2_thread_is_native_current(g, L);
   int jit_current = gc2_thread_is_jit_current(g, L);
+  if (conservativep)
+    *conservativep = 0;
   if (remote_current || native_current || jit_current) {
     gc2_mark_frame_chain_funcs(g, L);
 #if LJ_HASJIT
@@ -6247,10 +6251,19 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
     return max;
   }
   used = L->top - 1;
-  for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
-    GCfunc *fn = frame_func(frame);
-    GCproto *pt = gc2_func_proto_if_lua(fn);
+  for (frame = L->base - 1; frame > bot + LJ_FR2; ) {
+    GCfunc *fn;
+    GCproto *pt;
+    TValue *prev;
+    GC2FrameScope scope;
     TValue *ftop = frame;
+    if (!gc2_frame_prev_safe(g, bot, max, frame, &prev, &fn, &scope)) {
+      /* A same-thread C transition may expose a temporary frame header. */
+      if (conservativep)
+	*conservativep = 1;
+      return max;
+    }
+    pt = fn ? gc2_func_proto_if_lua(fn) : NULL;
     if (pt)
       ftop += pt->framesize;
     if (ftop > used)
@@ -6261,7 +6274,17 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
     ** GC2 cycle has traversed its payload, so use the thread-root path rather
     ** than a body-only mark.
     */
-    gc2_mark_thread_root_obj(g, obj2gco(fn));
+    if (fn)
+      gc2_mark_thread_root_obj(g, obj2gco(fn));
+    gc2_frame_scope_leave(&scope);
+    if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
+      break;
+    frame = prev;
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT) {
+      if (conservativep)
+	*conservativep = 1;
+      return max;
+    }
   }
   used++;
   if (used > max)
@@ -6489,6 +6512,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   TValue tv;
   uint64_t dirty_epoch;
   uint32_t cycle;
+  int conservative = 0;
   if (!gc2_valid_thread_for_traverse_held(g, L, held))
     return 0;
   cycle = gc2_cycle_acq(g);
@@ -6496,9 +6520,12 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   ** Mark the identity without queueing a duplicate gc2_traverse_thread pass. */
   (void)lj_gc2_markobj_nogrey(g, obj2gco(L));
   lj_gc2_markmem(g, tvref(L->stack));
-  top = gc2_stack_scan_top(g, L);
+  top = gc2_stack_scan_top(g, L, &conservative);
   for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
+    if (conservative &&
+	LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &tv)))
+      continue;
     gc2_mark_thread_root_tv_stack(g, &tv);
   }
   if (L == lj_tg_cur_L(g) && L->cframe != NULL) {
@@ -14541,14 +14568,18 @@ static void gc2_mark_frame_chain_funcs_worker(global_State *g, lua_State *L)
   }
 }
 
-static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
+static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L,
+					 int *conservativep)
 {
   TValue *frame, *bot = tvref(L->stack);
   TValue *top = L->top, *used = L->top - 1, *max = tvref(L->maxstack);
+  uint32_t n = 0;
   int vm_current = gc2_thread_is_current(g, L);
   int remote_current = gc2_thread_is_remote_current(g, L);
   int native_current = gc2_thread_is_native_current(g, L);
   int jit_current = gc2_thread_is_jit_current(g, L);
+  if (conservativep)
+    *conservativep = 0;
   if (remote_current || native_current || jit_current) {
     gc2_mark_frame_chain_funcs_worker(g, L);
 #if LJ_HASJIT
@@ -14557,10 +14588,18 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 #endif
     return max;
   }
-  for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
-    GCfunc *fn = frame_func(frame);
-    GCproto *pt = gc2_func_proto_if_lua(fn);
+  for (frame = L->base - 1; frame > bot + LJ_FR2; ) {
+    GCfunc *fn;
+    GCproto *pt;
+    TValue *prev;
+    GC2FrameScope scope;
     TValue *ftop = frame;
+    if (!gc2_frame_prev_safe(g, bot, max, frame, &prev, &fn, &scope)) {
+      if (conservativep)
+	*conservativep = 1;
+      return max;
+    }
+    pt = fn ? gc2_func_proto_if_lua(fn) : NULL;
     if (pt)
       ftop += pt->framesize;
     if (ftop > used)
@@ -14570,7 +14609,17 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
     ** just live closure bodies. Already-marked closures still need their proto
     ** and upvalue edges sampled for this worker cycle.
     */
-    gc2_mark_thread_root_obj_worker(g, obj2gco(fn));
+    if (fn)
+      gc2_mark_thread_root_obj_worker(g, obj2gco(fn));
+    gc2_frame_scope_leave(&scope);
+    if (prev >= frame || prev <= bot + LJ_FR2 || prev >= max)
+      break;
+    frame = prev;
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT) {
+      if (conservativep)
+	*conservativep = 1;
+      return max;
+    }
   }
   used++;
   if (used > max)
@@ -14741,6 +14790,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th,
   uint32_t cycle;
   uint32_t owner, current_tid;
   int sweep, registry_lease = 0;
+  int conservative = 0;
   claim.L = NULL;
   claim.tg_hint = NULL;
   claim.tid = 0;
@@ -14809,9 +14859,12 @@ scan_thread:
   sweep = gc2_phase_acq(g) == LJ_GC2_SWEEP;
   gc2_thread_scan_claims_add(g, 1);
   lj_gc2_markmem(g, tvref(th->stack));
-  top = gc2_stack_scan_top_worker(g, th);
+  top = gc2_stack_scan_top_worker(g, th, &conservative);
   for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
+    if (conservative &&
+	LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &tv)))
+      continue;
     if (sweep) {
       if (tvisthread(&tv) && threadV(&tv) == th)
 	continue;

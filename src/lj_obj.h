@@ -1189,9 +1189,17 @@ retry_snapshot:
     goto retry_snapshot;
   }
 snapshot_done:
-  if (LJ_UNLIKELY(node != lj_tab_node_acq(t) && ++retries < 4)) {
-    lj_tab_wait_no_l();
-    goto retry_snapshot;
+  {
+    Node *root = lj_tab_node_acq(t);
+    if (LJ_UNLIKELY(node != root)) {
+      if (++retries < 4) {
+	lj_tab_wait_no_l();
+	goto retry_snapshot;
+      }
+      /* Bounded fallback stays on a published generation. */
+      node = root;
+      hmask = lj_tab_node_hmask_acq(node);
+    }
   }
   *hmaskp = hmask;
   return node;

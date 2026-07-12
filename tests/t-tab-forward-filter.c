@@ -134,6 +134,147 @@ static void exercise_forward_waits_for_published_successor(lua_State *L)
   assert(pthread_join(thread, NULL) == 0);
 }
 
+static void exercise_vm_global_waits_for_published_successor(void)
+{
+  lua_State *L = luaL_newstate();
+  ForwardPublishCtx ctx;
+  pthread_t thread;
+  GCtab *t;
+  GCstr *key;
+  Node *oldnode, *newnode;
+  MSize oldhmask, newhmask;
+  TValue *newslot;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  assert(luaL_loadstring(L, "return type(1)") == 0);
+  lua_getglobal(L, "_G");
+  t = tabV(L->top-1);
+  key = tabfwd_newstr(L, "type");
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  lj_tab_resize(L, t, lj_tab_asize_acq(t), lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  tabfwd_assert_forward(tabfwd_find_str_slot(oldnode, oldhmask, key));
+  newslot = tabfwd_find_str_slot(newnode, newhmask, key);
+  assert(newslot != NULL);
+
+  ctx.t = t;
+  ctx.array = NULL;
+  ctx.asize = 0;
+  ctx.node = newnode;
+  ctx.hmask = newhmask;
+  ctx.slot = newslot;
+  lj_tv_load_acq(&ctx.val, newslot);
+  assert(tvisfunc(&ctx.val));
+  ctx.publish_array = 0;
+
+  lj_tab_storenilraw(newslot);
+  lj_tab_node_rel(t, oldnode);
+  lj_tab_hmask_rel(t, oldhmask);
+  assert(pthread_create(&thread, NULL, tabfwd_publish_successor, &ctx) == 0);
+  lua_pushvalue(L, 1);
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(strcmp(lua_tostring(L, -1), "number") == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  lua_close(L);
+}
+
+static void exercise_vm_metadispatch_waits_for_published_successor(void)
+{
+  lua_State *L = luaL_newstate();
+  ForwardPublishCtx ctx;
+  pthread_t thread;
+  GCtab *obj, *mt;
+  GCstr *key;
+  Node *oldnode, *newnode;
+  MSize oldhmask, newhmask;
+  TValue *newslot;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  assert(luaL_dostring(L,
+    "probe = setmetatable({}, { __index = function() return 'meta-ready' end })\n"
+    "function readprobe() return probe.missing end\n") == 0);
+  lua_getglobal(L, "probe");
+  obj = tabV(L->top-1);
+  mt = lj_tab_metatable_acq(obj);
+  assert(mt != NULL);
+  key = tabfwd_newstr(L, "__index");
+  oldnode = lj_tab_node_acq(mt);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  lj_tab_resize(L, mt, lj_tab_asize_acq(mt), lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(mt);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  tabfwd_assert_forward(tabfwd_find_str_slot(oldnode, oldhmask, key));
+  newslot = tabfwd_find_str_slot(newnode, newhmask, key);
+  assert(newslot != NULL);
+
+  ctx.t = mt;
+  ctx.array = NULL;
+  ctx.asize = 0;
+  ctx.node = newnode;
+  ctx.hmask = newhmask;
+  ctx.slot = newslot;
+  lj_tv_load_acq(&ctx.val, newslot);
+  assert(tvisfunc(&ctx.val));
+  ctx.publish_array = 0;
+
+  lj_tab_storenilraw(newslot);
+  lj_tab_node_rel(mt, oldnode);
+  lj_tab_hmask_rel(mt, oldhmask);
+  assert(pthread_create(&thread, NULL, tabfwd_publish_successor, &ctx) == 0);
+  lua_getglobal(L, "readprobe");
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(strcmp(lua_tostring(L, -1), "meta-ready") == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  lua_close(L);
+}
+
+static void exercise_meta_tget_return_storage(void)
+{
+  lua_State *L = luaL_newstate();
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+
+  lua_newtable(L);
+  lua_pushliteral(L, "api-field-ready");
+  lua_setfield(L, -2, "field");
+  lua_getfield(L, -1, "field");
+  assert(strcmp(lua_tostring(L, -1), "api-field-ready") == 0);
+  lua_pop(L, 1);
+  lua_pushliteral(L, "field");
+  lua_gettable(L, -2);
+  assert(strcmp(lua_tostring(L, -1), "api-field-ready") == 0);
+  lua_settop(L, 0);
+
+  assert(luaL_dostring(L,
+    "local leaf = { value = 'nested-ready' }\n"
+    "local middle = setmetatable({}, { __index = leaf })\n"
+    "local root = setmetatable({}, { __index = middle })\n"
+    "local key = 'value'\n"
+    "assert(root.value == 'nested-ready')\n"
+    "assert(root[key] == 'nested-ready')\n") == 0);
+
+#if LJ_HASFFI
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef[[typedef struct { int payload; } tabfwd_meta_scratch_t;]]\n"
+    "local index = { answer = 'ffi-index-ready' }\n"
+    "local ct = ffi.metatype('tabfwd_meta_scratch_t', { __index = index })\n"
+    "local value = ct()\n"
+    "assert(value.answer == 'ffi-index-ready')\n") == 0);
+#endif
+
+  lua_close(L);
+}
+
 static void exercise_forward_hops_after_later_publish(lua_State *L)
 {
   GCtab *t;
@@ -438,6 +579,9 @@ int main(void)
   luaL_openlibs(L);
 
   exercise_forward_waits_for_published_successor(L);
+  exercise_vm_global_waits_for_published_successor();
+  exercise_vm_metadispatch_waits_for_published_successor();
+  exercise_meta_tget_return_storage();
   exercise_forward_hops_after_later_publish(L);
 
   lua_createtable(L, LJ_MAX_COLOSIZE + 16, 4);

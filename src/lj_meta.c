@@ -76,6 +76,16 @@ cTValue *lj_meta_cachetv(GCtab *mt, MMS mm, GCstr *name, TValue *out)
   return (!lj_tv_gcref_type_match(out) || tvisnil(out)) ? NULL : out;
 }
 
+cTValue *lj_meta_cachetv_l(lua_State *L, GCtab *mt, MMS mm, GCstr *name,
+			   TValue *out)
+{
+  TValue key;
+  lj_assertX(mm <= MM_FAST, "bad metamethod %d", mm);
+  setstrV(L, &key, name);
+  (void)lj_tab_gettv_forjit(L, mt, &key, out);
+  return (!lj_tv_gcref_type_match(out) || tvisnil(out)) ? NULL : out;
+}
+
 /* Lookup metamethod for object. */
 cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
 {
@@ -176,6 +186,7 @@ static TValue *mmcall(lua_State *L, ASMFunction cont, cTValue *mo,
 cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
 {
   TValue motv;
+  TValue *tvv = &L2TG(L)->tmptv2;
   int loop;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
@@ -186,10 +197,10 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
       return niltv(L);
     if (LJ_LIKELY(tvistab(o))) {
       GCtab *t = tabV(o);
-      cTValue *tv = lj_tab_get(L, t, k);
+      cTValue *tv = lj_tab_gettv_forjit(L, t, k, tvv);
       if (!tvisnil(tv) ||
-	  !(mo = lj_meta_fasttv(G(L), lj_tab_metatable_acq(t),
-				MM_index, &motv)))
+	  !(mo = lj_meta_fasttv_l(L, lj_tab_metatable_acq(t),
+			  MM_index, &motv)))
 	return tv;
     } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_index))) {
       lj_err_optype(L, o, LJ_ERR_OPINDEX);
