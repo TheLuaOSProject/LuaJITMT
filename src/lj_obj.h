@@ -1349,6 +1349,7 @@ typedef struct TabState {
 
 #define LJ_GC2_HS_LATENCY_BUCKETS 48
 #define LJ_GC2_WORKER_MAX 2
+#define LJ_GC2_GREY_EMBEDDED 256u
 
 typedef struct TGState TGState;
 typedef struct LJThreadLive LJThreadLive;
@@ -1411,6 +1412,16 @@ typedef struct GC2State {
   uint32_t ssb_drained;	/* Drained/recycled SSB node count. */
   uint64_t ssb_items_published;  /* Published SSB entries. */
   uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
+  uint64_t recovery_items;  /* Exact durable queue-overflow identities. */
+  uint64_t recovery_published;  /* New allocation-free recovery identities. */
+  uint64_t recovery_redirtied;  /* Publications racing claimed recovery work. */
+  uint64_t recovery_drained;  /* Recovery identities fully traversed. */
+  uint32_t recovery_main_state;  /* Exact embedded main-thread recovery. */
+  uint32_t recovery_failed;  /* Sticky semantic no-drop fail-closed veto. */
+  uint32_t recovery_scan_lane;  /* Packed worker-owned lane/quantum cursor. */
+  uint32_t recovery_small_slot;  /* Worker-owned small-registry resume slot. */
+  uint32_t recovery_small_cell;  /* Worker-owned in-arena resume cell. */
+  uint32_t recovery_huge_slot;  /* Worker-owned HugeTab resume slot. */
   uint64_t fixpoint_rounds;  /* Bounded mark fixpoint round attempts. */
   uint64_t fixpoint_hits;  /* Rounds ending at zero-mark empty work. */
   uint64_t mark_complete_runs;  /* Final mark completion attempts. */
@@ -1452,6 +1463,7 @@ typedef struct GC2State {
   uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
   uint64_t grey_drained;  /* Grey entries popped for traversal. */
+  GCRef grey_embedded[LJ_GC2_GREY_EMBEDDED];  /* Allocation-free base ring. */
   void *worker_thread[LJ_GC2_WORKER_MAX];  /* Opaque LJThr* parked workers. */
   void *worker_tg[LJ_GC2_WORKER_MAX];  /* Opaque TGState* parked workers. */
   void *worker_tg_retired;  /* Dead worker TGs awaiting registry unlink. */
@@ -1591,6 +1603,10 @@ typedef struct GC2State {
 LJ_STATIC_ASSERT((offsetof(GC2State, activation) & 15u) == 0);
 #if LJ_HASJIT
 typedef struct jit_State jit_State;
+/* IR_FLOAD encodes GG-relative immutable SIMD constants in a 10-bit fold key.
+** Keep their aligned backing slots near the front of global_State even as GC2
+** metadata grows; the extra slot preserves the historical align-up geometry. */
+#define LJ_GG_KSIMD_SLOTS 5u
 #endif
 
 /* Global state, shared by all threads of a Lua universe. */
@@ -1598,6 +1614,9 @@ typedef struct global_State {
   lua_Alloc allocf;	/* Memory allocator. */
   void *allocd;		/* Memory allocator data. */
   uint32_t allocf_arena;  /* Active allocator is the internal arena shim. */
+#if LJ_HASJIT
+  LJ_ALIGN(16) TValue ksimd[LJ_GG_KSIMD_SLOTS];
+#endif
   GCState gc;		/* Garbage collector. */
   GCstr strempty;	/* Empty string. */
   uint8_t stremptyz;	/* Zero terminator of empty string. */
@@ -3316,6 +3335,122 @@ static LJ_AINLINE void gc2_ssb_drained_add(global_State *g, uint32_t n)
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_ssb_items_published, ssb_items_published)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_ssb_items_drained, ssb_items_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_recovery_published, recovery_published)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_recovery_redirtied, recovery_redirtied)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_recovery_drained, recovery_drained)
+
+static LJ_AINLINE uint64_t gc2_recovery_items_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.recovery_items);
+}
+
+static LJ_AINLINE void gc2_recovery_items_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.recovery_items, n);
+}
+
+static LJ_AINLINE uint64_t gc2_recovery_items_add(global_State *g,
+						   uint64_t n)
+{
+  uint64_t old = la_load64_acq(&g->gc2.recovery_items);
+  for (;;) {
+    uint64_t next;
+    if (LJ_UNLIKELY(old > ~(uint64_t)0 - n))
+      return ~(uint64_t)0;
+    next = old + n;
+    if (la_cas64(&g->gc2.recovery_items, &old, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return old;
+  }
+}
+
+static LJ_AINLINE uint64_t gc2_recovery_items_sub(global_State *g,
+						   uint64_t n)
+{
+  return la_sub64_acqrel(&g->gc2.recovery_items, n);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_main_state_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.recovery_main_state);
+}
+
+static LJ_AINLINE void gc2_recovery_main_state_store_rlx(global_State *g,
+							  uint32_t state)
+{
+  la_store32_rlx(&g->gc2.recovery_main_state, state);
+}
+
+static LJ_AINLINE int gc2_recovery_main_state_cas(global_State *g,
+						   uint32_t *oldp,
+						   uint32_t state)
+{
+  return la_cas32(&g->gc2.recovery_main_state, oldp, state,
+			  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_failed_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.recovery_failed);
+}
+
+static LJ_AINLINE void gc2_recovery_failed_store_rlx(global_State *g,
+						       uint32_t failed)
+{
+  la_store32_rlx(&g->gc2.recovery_failed, failed);
+}
+
+static LJ_AINLINE void gc2_recovery_failed_rel(global_State *g,
+						 uint32_t failed)
+{
+  la_store32_rel(&g->gc2.recovery_failed, failed);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_scan_lane_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_scan_lane);
+}
+
+static LJ_AINLINE void gc2_recovery_scan_lane_store_rlx(global_State *g,
+							 uint32_t lane)
+{
+  la_store32_rlx(&g->gc2.recovery_scan_lane, lane);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_small_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_small_slot);
+}
+
+static LJ_AINLINE void gc2_recovery_small_slot_store_rlx(global_State *g,
+							  uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.recovery_small_slot, slot);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_small_cell_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_small_cell);
+}
+
+static LJ_AINLINE void gc2_recovery_small_cell_store_rlx(global_State *g,
+							  uint32_t cell)
+{
+  la_store32_rlx(&g->gc2.recovery_small_cell, cell);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_huge_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_huge_slot);
+}
+
+static LJ_AINLINE void gc2_recovery_huge_slot_store_rlx(global_State *g,
+							 uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.recovery_huge_slot, slot);
+}
+
 LJ_GC2_COUNTER64_ACCESSORS(gc2_fixpoint_rounds, fixpoint_rounds)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_fixpoint_hits, fixpoint_hits)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_complete_runs, mark_complete_runs)

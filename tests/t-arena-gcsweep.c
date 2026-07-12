@@ -20,6 +20,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
+#include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
 
@@ -76,6 +77,10 @@ static LJGC2ActivationSnap test_publish_sweep_phase(global_State *g)
   assert(lj_gc2_activation_try_transition(&g->gc2.activation, &weak, epoch,
            LJ_GC2_ACT_SWEEP_OPEN, &sweep) == LJ_GC2_TRANSITION_OK);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
+  /* Synthetic fixtures intentionally skip string reclamation. Mirror the real
+  ** WEAK->SWEEP initialization with a completed non-major string cycle so the
+  ** paranoia close oracle sees a valid DONE state. */
+  lj_str_gc2_sweep_begin(g, 0);
   assert(!lj_gc2_activation_reclaim_veto(g));
   return sweep;
 }
@@ -801,6 +806,8 @@ int main(void)
   deadchunk_size = sizeLfunc((MSize)lj_funcL_nupvalues(&deadchunk->l));
   deadpt = funcproto(fn);
   deadpt_size = deadpt->sizept;
+  assert((lj_obj_gcflags(obj2gco(deadpt)) &
+	  (LJ_GC_FIXED|LJ_GC_SFIXED)) == 0);
   assert(ptr_state(deadchunk) == 2);
   assert(ptr_state(deadpt) == 2);
   L->top--;
@@ -1025,6 +1032,8 @@ int main(void)
   bcfn_size = sizeLfunc((MSize)lj_funcL_nupvalues(&bcfn->l));
   bcpt = funcproto(bcfn);
   bcpt_size = bcpt->sizept;
+  assert((lj_obj_gcflags(obj2gco(bcpt)) &
+	  (LJ_GC_FIXED|LJ_GC_SFIXED)) == 0);
   assert((lj_arena_of(bcpt)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert(ptr_state(bcfn) == 2);
   assert(ptr_state(bcpt) == 2);

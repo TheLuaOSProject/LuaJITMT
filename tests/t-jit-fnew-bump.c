@@ -17,6 +17,7 @@
 #include "lj_arena.h"
 #include "lj_dispatch.h"
 #include "lj_func.h"
+#include "lj_target.h"
 #include "lj_tg.h"
 
 #include "lib/lua_fixture_helpers.h"
@@ -108,13 +109,171 @@ static size_t find_i32_store(const uint8_t *mc, size_t len, size_t start,
   return (size_t)-1;
 }
 
+typedef struct X64MemInsn {
+  size_t start, end;
+  uint8_t reg, base;
+  int indexed;
+  int32_t disp;
+} X64MemInsn;
+
+static int decode_x64_mem_modrm(const uint8_t *mc, size_t len, size_t *jp,
+				uint8_t rex, uint8_t modrm,
+				X64MemInsn *ins)
+{
+  size_t j = *jp;
+  uint8_t mod = modrm >> 6;
+  uint8_t rm = modrm & 7u;
+  uint8_t base_lo = rm;
+  int disp32 = 0;
+
+  if (mod == 3u)
+    return 0;
+  ins->reg = (uint8_t)(((modrm >> 3) & 7u) | ((rex & 4u) << 1));
+  ins->indexed = 0;
+  if (rm == 4u) {
+    uint8_t sib, index;
+    if (j >= len)
+      return 0;
+    sib = mc[j++];
+    index = (sib >> 3) & 7u;
+    base_lo = sib & 7u;
+    ins->indexed = !(index == 4u && (rex & 2u) == 0);
+    if (mod == 0u && base_lo == 5u)
+      disp32 = 1;
+  } else if (mod == 0u && rm == 5u) {
+    disp32 = 1;  /* RIP-relative: no base register. */
+  }
+  ins->base = (mod == 0u && base_lo == 5u) ? 0xffu :
+    (uint8_t)(base_lo | ((rex & 1u) << 3));
+  if (mod == 1u) {
+    if (j >= len)
+      return 0;
+    ins->disp = (int8_t)mc[j++];
+  } else if (mod == 2u || disp32) {
+    if (j + 4u > len)
+      return 0;
+    ins->disp = (int32_t)((uint32_t)mc[j] |
+	((uint32_t)mc[j+1] << 8) | ((uint32_t)mc[j+2] << 16) |
+	((uint32_t)mc[j+3] << 24));
+    j += 4u;
+  } else {
+    ins->disp = 0;
+  }
+  *jp = j;
+  return 1;
+}
+
+static int decode_x64_mov_store(const uint8_t *mc, size_t len, size_t pos,
+				 X64MemInsn *ins)
+{
+  size_t j = pos;
+  uint8_t rex = 0, modrm;
+  if (j < len && is_rex(mc[j]))
+    rex = mc[j++];
+  if (!(rex & 8u) || j >= len || mc[j++] != 0x89u || j >= len)
+    return 0;
+  modrm = mc[j++];
+  ins->start = pos;
+  if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, ins))
+    return 0;
+  ins->end = j;
+  return 1;
+}
+
+static size_t find_locked_cmpxchg(const uint8_t *mc, size_t len, size_t start,
+				   int32_t field, X64MemInsn *found)
+{
+  size_t i;
+  for (i = start; i + 5u < len; i++) {
+    size_t j = i;
+    uint8_t rex = 0, modrm;
+    X64MemInsn ins;
+    if (mc[j++] != 0xf0u)
+      continue;
+    if (j < len && is_rex(mc[j]))
+      rex = mc[j++];
+    if (!(rex & 0x08u) || j + 3u > len ||
+	mc[j] != 0x0fu || mc[j+1] != 0xb1u)
+      continue;
+    j += 2u;
+    modrm = mc[j++];
+    ins.start = i;
+    if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, &ins))
+      continue;
+    ins.end = j;
+    if (!ins.indexed && ins.base == RID_DISPATCH && ins.disp == field) {
+      if (found)
+	*found = ins;
+      return i;
+    }
+  }
+  return (size_t)-1;
+}
+
+static int decode_backward_jne(const uint8_t *mc, size_t len, size_t pos,
+			       size_t floor, size_t *targetp, size_t *endp)
+{
+  size_t end;
+  int32_t rel;
+  int64_t target;
+  if (pos + 2u <= len && mc[pos] == 0x75u) {
+    rel = (int8_t)mc[pos+1];
+    end = pos + 2u;
+  } else if (pos + 6u <= len && mc[pos] == 0x0fu && mc[pos+1] == 0x85u) {
+    rel = (int32_t)((uint32_t)mc[pos+2] |
+	((uint32_t)mc[pos+3] << 8) | ((uint32_t)mc[pos+4] << 16) |
+	((uint32_t)mc[pos+5] << 24));
+    end = pos + 6u;
+  } else {
+    return 0;
+  }
+  target = (int64_t)end + rel;
+  if (target < (int64_t)floor || target >= (int64_t)pos)
+    return 0;
+  *targetp = (size_t)target;
+  *endp = end;
+  return 1;
+}
+
+static int decode_pending_retry(const uint8_t *mc, size_t len, size_t floor,
+				 const X64MemInsn *cas, X64MemInsn *tail,
+				 size_t *jne_endp)
+{
+  X64MemInsn link;
+  size_t target, jne_end, i, scan;
+  if (!decode_backward_jne(mc, len, cas->end, floor, &target, &jne_end) ||
+      !decode_x64_mov_store(mc, len, target, tail) ||
+      tail->reg != RID_RET || tail->indexed ||
+      tail->disp != (int32_t)offsetof(GChead, nextgc) ||
+      tail->base == cas->reg)
+    return 0;
+
+  /* The retry target is the tail rewrite `uv->nextgc = RAX`. Tie that base
+  ** back to the stable `fn->nextgc = uv` instruction immediately before it,
+  ** without depending on the allocator's choice of fn/uv registers. */
+  scan = target > 15u ? target - 15u : floor;
+  if (scan < floor)
+    scan = floor;
+  for (i = scan; i < target; i++) {
+    if (decode_x64_mov_store(mc, len, i, &link) && link.end == target &&
+	!link.indexed && link.base == cas->reg && link.reg == tail->base &&
+	link.disp == (int32_t)offsetof(GChead, nextgc)) {
+      *jne_endp = jne_end;
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static void assert_traced_fnew_publication_order(lua_State *L)
 {
   int traceno;
   for (traceno = 1; traceno <= 256; traceno++) {
     size_t len, fn_header, uv_header, mark_set, mark_clear, first_mark;
     size_t ready, block;
-    size_t pending_hint;
+    size_t pending_hint, pending_cas, pending_hint2, retry_jne_end = 0;
+    X64MemInsn pending_cmp, pending_tail;
+    int pending_retry;
     const uint8_t *mc;
     lua_getglobal(L, "require");
     lua_pushliteral(L, "jit.util");
@@ -142,13 +301,25 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     uv_header = find_gct_store(mc, len, (uint8_t)~LJ_TUPVAL);
     mark_clear = find_bitmap_op(mc, len, 0, 1, 0xb3u,
 				(uint32_t)offsetof(GCArena, mark));
-    pending_hint = find_i32_store(mc, len, block,
-				  (uint32_t)offsetof(global_State,
-						    gcroot_pending_hint), 1u);
+    pending_cas = find_locked_cmpxchg(mc, len, block,
+				     (int32_t)DISPATCH_TG(gcroot_pending),
+				     &pending_cmp);
+    pending_retry = pending_cas != (size_t)-1 &&
+      decode_pending_retry(mc, len, block, &pending_cmp, &pending_tail,
+			   &retry_jne_end);
+    pending_hint = !pending_retry ? (size_t)-1 :
+      find_i32_store(mc, len, pending_tail.end,
+	(uint32_t)offsetof(global_State, gcroot_pending_hint), 1u);
+    pending_hint2 = !pending_retry ? (size_t)-1 :
+      find_i32_store(mc, len, retry_jne_end,
+	(uint32_t)offsetof(global_State, gcroot_pending_hint), 1u);
     assert(fn_header != (size_t)-1 && uv_header != (size_t)-1);
     assert(mark_clear != (size_t)-1);
     assert(ready != (size_t)-1);
     assert(pending_hint != (size_t)-1);
+    assert(pending_cas != (size_t)-1);
+    assert(pending_retry);
+    assert(pending_hint2 != (size_t)-1);
     first_mark = mark_set < mark_clear ? mark_set : mark_clear;
     /* x64 emits backwards: this guards the order in executable mcode, not the
     ** visually misleading order of emit_* calls in lj_asm_x86.h. */
@@ -156,7 +327,13 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     assert(uv_header < first_mark);
     assert(first_mark < ready);
     assert(ready < block);
-    assert(block < pending_hint);
+    assert(block < pending_tail.start);
+    assert(pending_tail.end <= pending_hint);
+    assert(pending_hint - pending_tail.end <= 16u);
+    assert(pending_hint < pending_cas);
+    assert(pending_cmp.end < retry_jne_end);
+    assert(retry_jne_end <= pending_hint2);
+    assert(pending_hint2 - retry_jne_end <= 32u);
     lua_pop(L, 1);
     return;
   }

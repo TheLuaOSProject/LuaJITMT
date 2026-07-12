@@ -111,6 +111,10 @@ typedef struct GG_State {
 #define GG_DISP2HOT	(GG_OFS(hotcount) - GG_OFS(dispatch))
 #define GG_DISP2STATIC	(GG_LEN_DDISP*(int)sizeof(ASMFunction))
 #if LJ_HASJIT
+LJ_STATIC_ASSERT((GG_OFS(g.ksimd) & 15) == 0);
+LJ_STATIC_ASSERT((GG_OFS(g.ksimd) >> 2) >= IRFL__MAX);
+LJ_STATIC_ASSERT(((GG_OFS(g.ksimd) +
+	2*(LJ_KSIMD__MAX-1)*(int)sizeof(TValue)) >> 2) <= 0x3ff);
 LJ_STATIC_ASSERT(GG_DISP2HOT == TG_DISP2HOT);
 #endif
 

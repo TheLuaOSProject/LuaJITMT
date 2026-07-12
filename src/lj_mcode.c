@@ -730,10 +730,13 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
   jit_State *J;
   MCodeRetire *ret;
   uint32_t reclaimed = 0;
+  int retry_same_epoch = 0;
   if (!g || completed_epoch == 0)
     return 0;
   J = G2J(g);
   if (!lj_gc2_jit_reclaim_context_acq(g) || !lj_jit_token_held(J))
+    return 0;
+  if (J->mcode_reclaim_epoch == completed_epoch)
     return 0;
   lj_assertG(lj_gc2_jit_reclaim_context_acq(g) && lj_jit_token_held(J),
 	     "mcode retire-list detach without exclusive reclaim gate");
@@ -741,15 +744,23 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (ret && lj_gc2_mem_registered(g, ret)) {
     MCodeRetire *next = mcode_retired_next_acq(ret);
     mcode_retired_next_rel(ret, NULL);
-    if (mcode_retire_ready(ret, completed_epoch) &&
-	!lj_trace_retired_mcode_refs(g, ret->area, ret->size)) {
-      mcode_freearea(g, ret);
-      reclaimed++;
+    if (mcode_retire_ready(ret, completed_epoch)) {
+      if (!lj_trace_retired_mcode_refs(g, ret->area, ret->size)) {
+	mcode_freearea(g, ret);
+	reclaimed++;
+      } else {
+	/* A ready trace can shed its last area reference later in this same epoch.
+	** Keep that retry eligible; only an entirely epoch-young list is stable. */
+	retry_same_epoch = 1;
+	mcode_retired_push(J, ret);
+      }
     } else {
       mcode_retired_push(J, ret);
     }
     ret = next;
   }
+  if (!retry_same_epoch)
+    J->mcode_reclaim_epoch = completed_epoch;
   return reclaimed;
 }
 

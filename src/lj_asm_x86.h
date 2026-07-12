@@ -972,6 +972,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
   MCLabel l_done, l_fallback, l_markclear, l_markdone, l_mark_ok;
+  MCLabel l_pending_retry;
   Reg base, parent, val, pt, g, arena, cell, next, uv, tmp;
   IRRef fallback_args[CCI_NARGS_MAX];
   RegSet allow;
@@ -1020,14 +1021,23 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   tmp = ra_scratch(as, allow);
   checkmclim(as);  /* Register setup may spill before the inline template. */
 
-  /* Success: publish both exact headers, then continue with CALL result use. */
+  /* Success: publish both exact headers, then continue with CALL result use.
+  ** The activation predicates below are eligibility samples, not an exclusion
+  ** lease: a worker can xchg the pending stack immediately after them. Keep the
+  ** old head in RAX for CMPXCHG, preserve the function in `cell`, and rebuild
+  ** the upvalue tail on every failed attempt. */
   emit_jmp(as, l_done);
   emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
-  emit_settg(as, RID_RET, gcroot_pending);
+  emit_rr(as, XO_MOV, RID_RET|REX_64, cell|REX_64);
+  l_pending_retry = emit_sjcc_label(as, CC_NE);
+  emit_lockrmro(as, XO_CMPXCHG, cell|REX_64, RID_DISPATCH,
+		DISPATCH_TG(gcroot_pending));
   emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
-  emit_movtomro(as, uv|REX_GC64, RID_RET, offsetof(GChead, nextgc));
-  emit_movtomro(as, tmp|REX_GC64, uv, offsetof(GChead, nextgc));
-  emit_gettg(as, tmp, gcroot_pending);
+  emit_movtomro(as, RID_RET|REX_GC64, uv, offsetof(GChead, nextgc));
+  emit_sfixup(as, l_pending_retry);
+  emit_movtomro(as, uv|REX_GC64, cell, offsetof(GChead, nextgc));
+  emit_gettg(as, RID_RET, gcroot_pending);
+  emit_rr(as, XO_MOV, cell|REX_64, RID_RET|REX_64);
   checkmclim(as);  /* Keep publication separate from accounting updates. */
 
   /* The assembler emits backwards. These bitmap operations therefore run

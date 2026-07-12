@@ -60,9 +60,11 @@ static void assert_arena_white(global_State *g, void *p)
   assert(lj_arena_state(a, cell) == 2);
 }
 
-static int arena_marked(global_State *g, GCobj *o)
+static void assert_gc_arena_white(global_State *g, GCobj *o)
 {
+  TGState *tg = G2TG(g);
   void *p = (void *)o;
+  GCArena *a;
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
     GCcdata *cd = gco2cd(o);
@@ -70,7 +72,18 @@ static int arena_marked(global_State *g, GCobj *o)
       p = memcdatav(cd);
   }
 #endif
-  return arena_mem_marked(g, p);
+  a = lj_arena_of(p);
+  if (lj_arena_ishuge(a)) {
+    LJHugeInfo hi;
+    assert(tg != NULL && (tg->tg_flags & TGF_HUGETAB) != 0);
+    assert(lj_arena_hugetab_lookup(&tg->huge, p, &hi) == 1);
+    assert((hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
+	   (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
+    assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_RETIRED|
+			LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) == 0);
+  } else {
+    assert_arena_white(g, p);
+  }
 }
 
 #if LJ_HASJIT
@@ -121,6 +134,7 @@ int main(void)
     "keep.vcd = ffi.new('char[?]', 64)\n"
     "do\n"
     "  local cd = ffi.gc(ffi.new('char[?]', 96), function(x) keep.fin = x end)\n"
+    "  cd = nil\n"
     "end\n"
 #endif
     "keep.co = coroutine.create(function()\n"
@@ -173,8 +187,9 @@ int main(void)
   assert(lj_arena_ishuge(lj_arena_of(str)));
   assert((tg->tg_flags & TGF_HUGETAB) != 0);
   assert(lj_arena_hugetab_lookup(&tg->huge, str, &hi) == 1);
-  assert((hi.flags & LJ_HUGEF_TRAVERSABLE) == 0);
-  assert(arena_marked(g, obj2gco(str)));
+  assert((hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
+	 (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
+  assert_gc_arena_white(g, obj2gco(str));
   L->top--;
 
 #if LJ_HASFFI
@@ -183,7 +198,7 @@ int main(void)
   assert(tviscdata(tv));
   cd = cdataV(tv);
   assert(cdataisv(cd));
-  assert(arena_marked(g, obj2gco(cd)));
+  assert_gc_arena_white(g, obj2gco(cd));
   L->top--;
 
   lua_getfield(L, -1, "fin");
@@ -191,7 +206,7 @@ int main(void)
   assert(tviscdata(tv));
   cd = cdataV(tv);
   assert(cdataisv(cd));
-  assert(arena_marked(g, obj2gco(cd)));
+  assert_gc_arena_white(g, obj2gco(cd));
   L->top--;
 
   cts = ctype_ctsG(g);

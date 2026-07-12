@@ -29,11 +29,13 @@ end
 
 local m3_scaffold_deps = {
   "m3_gc_root_pending",
+  "m3_gc_root_pending_race",
   "m3_gcflags_atomic",
   "m3_gc2_markword_token_model",
   "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
+  "m3_gc2_recovery",
   "m3_gc2_worker_scheduler",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
@@ -110,6 +112,22 @@ return function(add)
       compile_and_run_c(t, t:tmp("lj_t-gc-root-pending"),
                         "t-gc-root-pending.c")
       print("M3 pending GC root publication test passed")
+    end
+  })
+
+  register({
+    name = "m3_gc_root_pending_race",
+    description = "pending-root load/xchg/CAS activation-race regression",
+    run = function(t)
+      build.with_default_build_restore(t, function()
+        build.build_and_run_c(t, t:tmp("lj_t-gc-root-pending-race"),
+                              "t-gc-root-pending-race.c",
+                              build.gc2_test_helper_opts({
+          jobs = false,
+          timeout = "30s"
+        }))
+      end, { jobs = false })
+      print("M3 pending-root activation-race CAS test passed")
     end
   })
 
@@ -272,6 +290,35 @@ return function(add)
   })
 
   register({
+    name = "m3_gc2_recovery",
+    description = "GC2 allocation-free no-drop recovery and replay protocol",
+    run = function(t)
+      local paranoia_flags = gc2_test_cflags .. " " ..
+        build.gc2_paranoia_flags
+      build.with_default_build_restore(t, function()
+        build.build_and_run_c(t, t:tmp("lj_t-gc2-recovery"),
+                              "t-gc2-recovery.c",
+                              build.gc2_test_helper_opts({
+          jobs = false,
+          timeout = "60s"
+        }))
+
+        build.clean_build(t, {
+          jobs = false,
+          quiet = true,
+          xcflags = paranoia_flags
+        })
+        compile_and_run_c(t, t:tmp("lj_t-gc2-recovery-paranoia"),
+                          "t-gc2-recovery.c", {
+          cflags = paranoia_flags,
+          timeout = "60s"
+        })
+      end, { jobs = false })
+      print("M3 GC2 no-drop recovery protocol passed")
+    end
+  })
+
+  register({
     name = "m3_gc2_paranoia",
     description = "GC2 paranoia build, oracle fixtures, and stock tests",
     run = function(t)
@@ -320,6 +367,7 @@ return function(add)
       })
 
       utils.run_case(cases, t, "m3_gc2_markword_token_model")
+      utils.run_case(cases, t, "m3_gc2_recovery")
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
       utils.run_case(cases, t, "m3_gc_active_thread_roots")
       utils.run_case(cases, t, "m3_safepoint_handshake")

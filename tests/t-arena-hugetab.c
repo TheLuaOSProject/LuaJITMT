@@ -27,6 +27,172 @@ static void delete_unmap(HugeTab *ht, void *p)
   lj_arena_huge_unmap(p, hi.size);
 }
 
+static void test_recovery_state(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 1901u;
+  HugeTab src = { NULL }, dst = { NULL };
+  LJHugeInfo hi;
+  void *p, *found = NULL;
+  uint32_t cursor, seen;
+
+  assert(lj_arena_hugetab_init(&src, 2) == 1);
+  assert(lj_arena_hugetab_init(&dst, 2) == 1);
+  p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&src, p, size,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_recovery_state_acq(&src, p, &hi) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  /* A recovery identity cannot expose a READY0 header. */
+  assert(!lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, NULL));
+  assert(lj_arena_hugetab_publish_gco(&src, p) == 1);
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, &hi));
+  assert(lj_arena_huge_recovery_state(hi.flags) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert((hi.flags & LJ_HUGEF_MARK) != 0);
+
+  cursor = 0;
+  assert(lj_arena_hugetab_recovery_next(&src, &cursor, &found, &hi));
+  assert(found == p && hi.size == size);
+  assert(!lj_arena_hugetab_recovery_next(&src, &cursor, &found, NULL));
+  cursor = seen = 0;
+  while (lj_arena_hugetab_next(&src, &cursor, &found, &hi)) {
+    assert(found == p);
+    seen++;
+  }
+  assert(seen == 1u);
+
+  /* Every physical ownership route must fail closed while recovery is live. */
+  assert(!lj_arena_hugetab_delete(&src, p, NULL));
+  assert(!lj_arena_hugetab_claim_external_free(&src, p, NULL));
+  assert(lj_arena_hugetab_lookup(&src, p, &hi));
+  assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0);
+  assert(!lj_arena_hugetab_forget_terminal(&src, p, NULL));
+  assert(lj_arena_hugetab_fini_all(&src) == 0u);
+  assert(src.h != NULL && lj_arena_hugetab_lookup(&src, p, NULL));
+  lj_arena_hugetab_clear_marks(&src);
+  assert(lj_arena_hugetab_lookup(&src, p, &hi));
+  assert((hi.flags & LJ_HUGEF_MARK) != 0);
+  assert(!lj_arena_hugetab_transfer(&dst, &src, 77u));
+  assert(lj_arena_hugetab_lookup(&src, p, NULL));
+  assert(!lj_arena_hugetab_lookup(&dst, p, NULL));
+
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED, NULL));
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_CLAIMED, LJ_ARENA_RECOVERY_REDIRTY, NULL));
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_REDIRTY, LJ_ARENA_RECOVERY_PENDING, NULL));
+
+  /* Retirement preserves state, forces liveness and cannot publish RETIRED. */
+  lj_arena_hugetab_prepare_sweep(&src);
+  assert(lj_arena_hugetab_retire(&src, p, p, 91u, &hi) == 2);
+  assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_MARK|LJ_HUGEF_TICKET));
+  assert((hi.flags & LJ_HUGEF_RETIRED) == 0);
+  assert(lj_arena_huge_recovery_state(hi.flags) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_arena_hugetab_claim_live_ticket(&src, p, NULL));
+  la_storeptr_rel(&lj_arena_of(p)->hdr.retire_obj, NULL);
+  assert(lj_arena_hugetab_finish_live_ticket(&src, p, NULL));
+  lj_arena_hugetab_finish_sweep(&src, 0);
+  assert(lj_arena_hugetab_lookup(&src, p, &hi));
+  assert((hi.flags & LJ_HUGEF_SWEEP_OLD) != 0);
+
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED, NULL));
+  /* Generic clearing cannot forget the logical free. Completion atomically
+  ** converts it into a fresh-grace, sweep-owned terminal mapping. */
+  assert(!lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_CLAIMED, LJ_ARENA_RECOVERY_IDLE, NULL));
+  assert(lj_arena_hugetab_recovery_complete(&src, p, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP);
+  assert(lj_arena_hugetab_lookup(&src, p, &hi));
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING));
+  assert((hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_RECOVERY_MASK|
+		      LJ_HUGEF_MARK)) == 0);
+  assert(la_load64_acq(&lj_arena_of(p)->hdr.retire_epoch) ==
+	 ~(uint64_t)0);
+  delete_unmap(&src, p);
+
+  /* Without a logical free, completion retains the live mapping. */
+  p = lj_arena_huge_map(rs, size + 1u, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&src, p, size + 1u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_gco(&src, p));
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, NULL));
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED, NULL));
+  assert(lj_arena_hugetab_recovery_complete(&src, p, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_COMPLETE_LIVE);
+  assert(lj_arena_hugetab_lookup(&src, p, &hi));
+  assert(lj_arena_huge_recovery_state(hi.flags) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  delete_unmap(&src, p);
+
+  /* Even before sweep ownership exists, completion publishes a fresh-grace
+  ** sweep handoff rather than unmapping inside an SMR read-side drain. */
+  p = lj_arena_huge_map(rs, size + 2u, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&src, p, size + 2u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_gco(&src, p));
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, NULL));
+  assert(!lj_arena_hugetab_claim_external_free(&src, p, &hi));
+  assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0);
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED, NULL));
+  assert(lj_arena_hugetab_recovery_complete(&src, p, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP);
+  assert(hi.size == size + 2u);
+  assert(lj_arena_hugetab_lookup(&src, p, &hi));
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING));
+  assert(la_load64_acq(&lj_arena_of(p)->hdr.retire_epoch) ==
+	 ~(uint64_t)0);
+  delete_unmap(&src, p);
+
+  /* Terminal reconciliation runs only after all publishers have joined. It
+  ** clears ordinary recovery for later table teardown, but a logical free is
+  ** consumed by an exact tombstone and explicit unmap handoff. */
+  p = lj_arena_huge_map(rs, size + 3u, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&src, p, size + 3u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_gco(&src, p));
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, NULL));
+  assert(lj_arena_hugetab_recovery_discard_terminal(&src, p, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_TERMINAL_CLEARED);
+  assert(lj_arena_huge_recovery_state(hi.flags) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(lj_arena_hugetab_recovery_discard_terminal(&src, p, NULL) ==
+	 LJ_ARENA_HUGE_RECOVERY_TERMINAL_LOST);
+  delete_unmap(&src, p);
+
+  p = lj_arena_huge_map(rs, size + 4u, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&src, p, size + 4u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_gco(&src, p));
+  assert(lj_arena_hugetab_recovery_state_cas(&src, p,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, NULL));
+  assert(!lj_arena_hugetab_claim_external_free(&src, p, NULL));
+  assert(lj_arena_hugetab_recovery_discard_terminal(&src, p, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_TERMINAL_UNMAP);
+  assert(hi.size == size + 4u);
+  assert(!lj_arena_hugetab_lookup(&src, p, NULL));
+  lj_arena_huge_unmap(p, hi.size);
+  lj_arena_hugetab_fini(&src);
+  lj_arena_hugetab_fini(&dst);
+}
+
 #if defined(LJ_ARENA_TEST_HELPERS)
 typedef struct RetireRace {
   HugeTab *ht;
@@ -187,6 +353,59 @@ static void test_retire_busy_exact_mark(PRNGState *rs)
 			   LJ_HUGEF_FREEING)) == 0);
   retire_race_cleanup(&raceht, race.p, race.obj);
 }
+
+static void test_recovery_deferred_busy_requeue(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 1811u;
+  HugeTab raceht = { NULL };
+  RetireRace race;
+  pthread_t thread;
+  LJHugeInfo hi;
+
+  assert(lj_arena_hugetab_init(&raceht, 2) == 1);
+  race.p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(race.p != NULL);
+  race.obj = race.p;
+  race.ht = &raceht;
+  race.epoch = 103u;
+  race.result = 0;
+  assert(lj_arena_hugetab_insert(&raceht, race.p, size,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_publish_gco(&raceht, race.p));
+  lj_arena_hugetab_prepare_sweep(&raceht);
+  assert(lj_arena_hugetab_recovery_state_cas(&raceht, race.p,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, NULL));
+
+  lj_arena_hugetab_test_retire_pause(1);
+  assert(pthread_create(&thread, NULL, retire_race_thread, &race) == 0);
+  retire_race_wait_busy();
+  assert(!lj_arena_hugetab_claim_external_free(&raceht, race.p, &hi));
+  assert((hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_BUSY)) ==
+	 (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_BUSY));
+  assert(lj_arena_hugetab_recovery_state_cas(&raceht, race.p,
+	 LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED, NULL));
+  assert(lj_arena_hugetab_recovery_complete(&raceht, race.p, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_COMPLETE_REQUEUED);
+  assert(lj_arena_huge_recovery_state(hi.flags) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+
+  lj_arena_hugetab_test_retire_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(race.result == 2);
+  assert(lj_arena_hugetab_recovery_state_cas(&raceht, race.p,
+	 LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED, NULL));
+  assert(lj_arena_hugetab_recovery_complete(&raceht, race.p, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP);
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD|
+		      LJ_HUGEF_TICKET)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_TICKET));
+  assert((hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE|
+		      LJ_HUGEF_RECOVERY_MASK|LJ_HUGEF_MARK)) == 0);
+  assert(la_load64_acq(&lj_arena_of(race.p)->hdr.retire_epoch) ==
+	 ~(uint64_t)0);
+  delete_unmap(&raceht, race.p);
+  lj_arena_hugetab_fini(&raceht);
+}
 #endif
 
 int main(void)
@@ -209,9 +428,11 @@ int main(void)
   uint32_t i;
 
   lj_prng_seed_fixed(&rs);
+  test_recovery_state(&rs);
 #if defined(LJ_ARENA_TEST_HELPERS)
   test_retire_busy_mark_intent(&rs);
   test_retire_busy_exact_mark(&rs);
+  test_recovery_deferred_busy_requeue(&rs);
 #endif
   test_realloc_shaped_busy_mark_only(&rs);
   assert(lj_arena_hugetab_init(&ht, 4) == 1);

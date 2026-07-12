@@ -1679,6 +1679,10 @@ static GCproto *fs_finish(LexState *ls, BCLine line, uint32_t *anchoridx)
   /* Allocate prototype and initialize its fields. */
   pt = (GCproto *)lj_mem_newgco_unlinked(L, (MSize)sizept);
   pt->gct = ~LJ_TPROTO;
+  /* Unlinked arena storage has malloc semantics and may retain flag bytes from
+  ** an older allocation. Publish an exact new-object color before READY; stale
+  ** FIXED/SFIXED bits would otherwise make an ordinary chunk immortal. */
+  newwhite(G(L), pt);
   pt->sizept = (MSize)sizept;
   pt->trace = 0;
   pt->flags = (uint8_t)(fs->flags & ~(PROTO_HAS_RETURN|PROTO_FIXUP_RETURN));

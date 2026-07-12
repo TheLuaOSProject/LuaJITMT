@@ -765,6 +765,7 @@ enum {
   LJ_KSIMD_NEG,
   LJ_KSIMD__MAX
 };
+LJ_STATIC_ASSERT(LJ_GG_KSIMD_SLOTS == LJ_KSIMD__MAX*2u+1u);
 
 enum {
 #if LJ_TARGET_X64 || LJ_TARGET_MIPS64
@@ -812,7 +813,7 @@ enum {
 
 /* Get 16 byte aligned pointer to SIMD constant. */
 #define LJ_KSIMD(J, n) \
-  ((TValue *)(((intptr_t)&J->ksimd[2*(n)] + 15) & ~(intptr_t)15))
+  ((TValue *)(((intptr_t)&J2G(J)->ksimd[2*(n)] + 15) & ~(intptr_t)15))
 
 /* Set/reset flag to activate the SPLIT pass for the current trace. */
 #if LJ_SOFTFP32 || (LJ_32 && LJ_HASFFI)
@@ -866,7 +867,6 @@ typedef struct jit_State {
 #if LJ_K32__USED
   uint32_t k32[LJ_K32__MAX];  /* Common 4 byte constants used by backends. */
 #endif
-  TValue ksimd[LJ_KSIMD__MAX*2+1];  /* 16 byte aligned SIMD constants. */
 #if LJ_K64__USED
   TValue k64[LJ_K64__MAX];  /* Common 8 byte constants. */
 #endif
@@ -938,6 +938,8 @@ typedef struct jit_State {
   BCLine prev_line;	/* Previous line. */
   int prof_mode;	/* Profiling mode: 0, 'f', 'l'. */
 #endif
+  uint64_t trace_reclaim_epoch;  /* Last completed epoch retire list scanned. */
+  uint64_t mcode_reclaim_epoch;  /* Last completed epoch young list scanned. */
 } jit_State;
 
 /* J->L is token-private while recording, but dispatch, VM events and GC-side

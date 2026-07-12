@@ -372,7 +372,12 @@ static int close_state_root_link_valid(global_State *g, GCobj *o)
   th = gcref_acq(*vmthread_ref(g));
   if (th && th->gch.gct == ~LJ_TTHREAD && o == th)
     return 1;
-  return lj_gc2_obj_valid(g, o);
+  if (!lj_gc2_obj_valid(g, o))
+    return 0;
+  /* Strings are owned solely by the intern table and use nextgc as their hash
+  ** successor. Never reanchor a shutdown ownership chain through a stale root
+  ** address which has been recycled as a string. */
+  return la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TSTR;
 }
 
 static void close_state_reanchor_root(global_State *g, GCobj *target)

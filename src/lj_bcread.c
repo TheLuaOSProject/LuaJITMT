@@ -615,6 +615,10 @@ static GCproto *bcread_proto_body(LexState *ls, uint32_t *anchoridx,
   ctx->pt = pt;
   ctx->sizept = sizept;
   pt->gct = ~LJ_TPROTO;
+  /* Arena reuse does not zero raw constructor storage. Reset all GC flags now
+  ** so a prior object's FIXED/FINREG/NEEDSCAN bits cannot survive the READY
+  ** publication of a bytecode-loaded prototype. */
+  newwhite(G(L), pt);
   pt->numparams = (uint8_t)numparams;
   pt->framesize = (uint8_t)framesize;
   pt->sizebc = sizebc;

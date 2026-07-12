@@ -164,13 +164,26 @@ int main(void)
 
   epoch = ret->retire_epoch;
   assert(epoch == g->gc2.hs_epoch);
+  J->mcode_reclaim_epoch = 0;
   assert(reclaim_mcode_at(g, epoch) == 0);
+  /* An entirely epoch-young list is stable for this completed generation.
+  ** Record that scan and prove a duplicate call is eligible for the fast skip. */
+  assert(J->mcode_reclaim_epoch == epoch);
+  assert(reclaim_mcode_at(g, epoch) == 0);
+  assert(J->mcode_reclaim_epoch == epoch);
   ret = retired_find(J, oldmc);
   assert(ret != NULL);
   assert(J->szallmcarea == szall);
   assert(reclaim_mcode_at(g, epoch + 1u) == 0);
+  assert(J->mcode_reclaim_epoch == epoch + 1u);
+  assert(reclaim_mcode_at(g, epoch + 1u) == 0);
+  assert(J->mcode_reclaim_epoch == epoch + 1u);
   assert(retired_find(J, oldmc) != NULL);
   assert(reclaim_mcode_at(g, epoch + LJ_FLUSH_EPOCHS) == 0);
+  /* The area is old enough now, but retired trace bodies still reference it.
+  ** This transient ready-list block must not arm the same-epoch throttle: the
+  ** trace drain below can remove the final reference without advancing grace. */
+  assert(J->mcode_reclaim_epoch != epoch + LJ_FLUSH_EPOCHS);
   /*
   ** Retired trace bodies hold mcode pointers until their own SMR grace and
   ** the ownership root is detached (by the sweep bridge, or by IDLE reclaim).

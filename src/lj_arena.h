@@ -112,6 +112,21 @@ typedef struct GCAhdr {
 #define LJ_ARENA_SWEEP_WORDS \
   (LJ_ARENA_CELLS / LJ_ARENA_SWEEP_CELLS_PER_WORD)
 
+/* Allocation-free fallback work uses an independent two-bit state per arena
+** cell. Keeping this separate from sweep[] makes recovery durable across
+** MARK/WEAK/SWEEP transitions and lets a producer redirty an object while a
+** worker owns its current traversal. Only allocation starts may leave IDLE. */
+#define LJ_ARENA_RECOVERY_CELLS_PER_WORD	32u
+#define LJ_ARENA_RECOVERY_WORDS \
+  (LJ_ARENA_CELLS / LJ_ARENA_RECOVERY_CELLS_PER_WORD)
+
+enum {
+  LJ_ARENA_RECOVERY_IDLE = 0,
+  LJ_ARENA_RECOVERY_PENDING = 1,
+  LJ_ARENA_RECOVERY_CLAIMED = 2,
+  LJ_ARENA_RECOVERY_REDIRTY = 3
+};
+
 enum {
   LJ_ARENA_SWEEP_WHITE = 0,
   LJ_ARENA_SWEEP_LIVE = 1,
@@ -140,6 +155,9 @@ struct GCArena {
   uint64_t block[LJ_ARENA_WORDS];
   uint64_t mark[LJ_ARENA_WORDS];
   uint64_t sweep[LJ_ARENA_SWEEP_WORDS];
+  /* Durable GC2 work identity. This plane is never allocator scratch and may
+  ** only be cleared by the recovery owner through the state CAS protocol. */
+  uint64_t recovery[LJ_ARENA_RECOVERY_WORDS];
   /* Closed-window remote-free deduplication. Unlike sweep[], this bitmap may
   ** be published after terminal bitmap commit. A bit naming committed live
   ** storage persists across adoption and is consumed by the next sweep. */
@@ -326,11 +344,19 @@ struct LJArenaAllocD {
 #define LJ_HUGEF_INTERIOR_CDATA	0x100u
 #define LJ_HUGEF_READY		0x200u
 #define LJ_HUGEF_CDATA		0x400u
+#define LJ_HUGEF_RECOVERY_SHIFT	11u
+#define LJ_HUGEF_RECOVERY_MASK	(0x03u << LJ_HUGEF_RECOVERY_SHIFT)
+#define LJ_HUGEF_DEFER_FREE	0x2000u
 #define LJ_HUGEF_MASK \
   (LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FINALIZER| \
    LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING| \
    LJ_HUGEF_TICKET|LJ_HUGEF_BUSY|LJ_HUGEF_INTERIOR_CDATA|LJ_HUGEF_READY| \
-   LJ_HUGEF_CDATA)
+   LJ_HUGEF_CDATA|LJ_HUGEF_RECOVERY_MASK|LJ_HUGEF_DEFER_FREE)
+
+static LJ_AINLINE uint32_t lj_arena_huge_recovery_state(uint32_t flags)
+{
+  return (flags & LJ_HUGEF_RECOVERY_MASK) >> LJ_HUGEF_RECOVERY_SHIFT;
+}
 /* A containing-object marker published MARK while the retire owner held BUSY,
 ** but deliberately did not inspect or return the still-unpublished header.
 ** The unique retire owner preserves MARK in its TICKET publication and must
@@ -364,6 +390,50 @@ LJ_FUNC int lj_arena_hugetab_insert(HugeTab *ht, void *p, size_t size,
 				    uint32_t hflags);
 LJ_FUNC int lj_arena_hugetab_lookup(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
+/* Recovery lookup returns -1 for a missing mapping or one of the four
+** LJ_ARENA_RECOVERY_* states. CAS preserves every non-recovery metadata bit.
+** IDLE->PENDING callers must already own the ordinary mapping-lifetime
+** admission. The iterator returns only stable non-IDLE entries; that state
+** prevents delete/free/realloc ownership until a recovery owner clears it. */
+LJ_FUNC int lj_arena_hugetab_recovery_state_acq(HugeTab *ht,
+						 const void *p,
+						 LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_recovery_state_cas(HugeTab *ht,
+						 const void *p,
+						 uint32_t from,
+						 uint32_t to,
+						 LJHugeInfo *hi);
+/* Complete a CLAIMED huge recovery identity. A racing logical free is folded
+** into the same full-slot transition and can never leave IDLE|DEFER_FREE.
+** SWEEP publishes FREEING|SWEEP_OLD with a fresh-grace sentinel, including
+** when no sweep owned the entry at publication time. UNMAP is reserved for a
+** future proven-exclusive handoff and is not currently emitted. REQUEUED
+** leaves the identity count unchanged and requires another drain. */
+#define LJ_ARENA_HUGE_RECOVERY_COMPLETE_LOST	0
+#define LJ_ARENA_HUGE_RECOVERY_COMPLETE_LIVE	1
+#define LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP	2
+#define LJ_ARENA_HUGE_RECOVERY_COMPLETE_UNMAP	3
+#define LJ_ARENA_HUGE_RECOVERY_COMPLETE_REQUEUED	4
+LJ_FUNC int lj_arena_hugetab_recovery_complete(HugeTab *ht,
+						 const void *p,
+						 LJHugeInfo *hi);
+/* Terminal-only recovery reconciliation, after every mutator/worker has
+** joined. A normal identity is atomically cleared for later table teardown;
+** DEFER_FREE is atomically tombstoned and transfers unmap ownership to the
+** caller. Each success consumes exactly one external recovery count. */
+#define LJ_ARENA_HUGE_RECOVERY_TERMINAL_LOST	0
+#define LJ_ARENA_HUGE_RECOVERY_TERMINAL_CLEARED	1
+#define LJ_ARENA_HUGE_RECOVERY_TERMINAL_UNMAP	2
+LJ_FUNC int lj_arena_hugetab_recovery_discard_terminal(HugeTab *ht,
+							 const void *p,
+							 LJHugeInfo *hi);
+/* Iterate every live table entry. Each return is a no-op full-slot-CAS
+** snapshot; the caller must still validate semantic flags/lifetime before
+** reading the named mapping. */
+LJ_FUNC int lj_arena_hugetab_next(HugeTab *ht, uint32_t *cursor,
+				   void **pp, LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_recovery_next(HugeTab *ht, uint32_t *cursor,
+					    void **pp, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p,
 					  void **basep, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_mark(HugeTab *ht, const void *p,
@@ -535,6 +605,47 @@ static LJ_AINLINE uint32_t lj_arena_sweep_state_acq(const GCArena *a,
   return (uint32_t)((word >> shift) & 0x03u);
 }
 
+static LJ_AINLINE uint32_t lj_arena_recovery_state_acq(const GCArena *a,
+							uint32_t i)
+{
+  uint32_t shift;
+  uint64_t word;
+  if (!a || i >= LJ_ARENA_CELLS)
+    return LJ_ARENA_RECOVERY_IDLE;
+  shift = (i & (LJ_ARENA_RECOVERY_CELLS_PER_WORD-1u)) << 1;
+  word = la_load64_acq(
+    &a->recovery[i / LJ_ARENA_RECOVERY_CELLS_PER_WORD]);
+  return (uint32_t)((word >> shift) & 0x03u);
+}
+
+static LJ_AINLINE int lj_arena_recovery_state_cas(GCArena *a, uint32_t i,
+						   uint32_t from,
+						   uint32_t to)
+{
+  uint32_t wi, shift;
+  uint64_t mask, old;
+  if (!a || i >= LJ_ARENA_CELLS || from > LJ_ARENA_RECOVERY_REDIRTY ||
+      to > LJ_ARENA_RECOVERY_REDIRTY)
+    return 0;
+  wi = i / LJ_ARENA_RECOVERY_CELLS_PER_WORD;
+  shift = (i & (LJ_ARENA_RECOVERY_CELLS_PER_WORD-1u)) << 1;
+  mask = (uint64_t)0x03u << shift;
+  old = la_load64_acq(&a->recovery[wi]);
+  for (;;) {
+    uint64_t next;
+    if (((old & mask) >> shift) != from)
+      return 0;
+    next = (old & ~mask) | ((uint64_t)to << shift);
+    if (la_cas64(&a->recovery[wi], &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+LJ_FUNC int lj_arena_recovery_empty(const GCArena *a);
+/* Recovery completion may expose a previously recorded late free or unblock a
+** sweep retry. This allocation-free wake never mutates recovery ownership. */
+LJ_FUNC void lj_arena_recovery_complete_wake(GCArena *a);
+
 static LJ_AINLINE int lj_arena_sweep_state_cas(GCArena *a, uint32_t i,
 						uint32_t from, uint32_t to)
 {
@@ -654,8 +765,9 @@ LJ_STATIC_ASSERT(offsetof(GCArena, block) == 128u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->block) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->mark) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->sweep) == 1024u);
+LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->recovery) == 1024u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->late) == 512u);
-LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 232u);
+LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 296u);
 LJ_STATIC_ASSERT(sizeof(LJArenaFreeRun) == LJ_CELL_SIZE);
 LJ_STATIC_ASSERT(sizeof(LJArenaRemoteFree) == LJ_CELL_SIZE);
 

@@ -4429,10 +4429,30 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add qword [DISPATCH+DISPATCH_TG(local_total)], TAB_EMPTY_SIZE
     |  // The birth mark carries liveness, not exact object identity. Always
     |  // publish the table header so GC2 ownership sweep can dispatch it.
-    |  mov r9, [DISPATCH+DISPATCH_TG(gcroot_pending)]
-    |  mov TAB:RC->nextgc, r9
+    |  // A thread/worker activation can race the eligibility samples above and
+    |  // xchg this pending stack before publication. Couple the sampled head to
+    |  // the new table with the same retrying CAS as lj_gc_linkobj_new().
+    |  mov r8, RC
+    |  mov RC, [DISPATCH+DISPATCH_TG(gcroot_pending)]
+#ifdef LJ_GC2_TEST_HELPERS
+    |  // Deterministically pause after the stale-head load in helper builds.
+    |  mov TMP1, RC
+    |  mov CARG4, RC
+    |  mov CARG3, r8
+    |  lea CARG2, [DISPATCH-TG_OFS_DISPATCH]
+    |  mov CARG1, TMPR
+    |  call extern lj_gc_test_root_pending_loaded_vm
+    |  mov r8, RC
+    |  mov RC, TMP1
+    |  load_G TMPR
+#endif
+|8:
+    |  mov TAB:r8->nextgc, RC
     |  mov dword [TMPR+GL_OFS(gcroot_pending_hint)], 1
-    |  mov [DISPATCH+DISPATCH_TG(gcroot_pending)], RC
+    |  lock
+    |  cmpxchg aword [DISPATCH+DISPATCH_TG(gcroot_pending)], r8
+    |  jne <8
+    |  mov RC, r8
     |  mov dword [TMPR+GL_OFS(gcroot_pending_hint)], 1
     |  jmp >4
     |7:

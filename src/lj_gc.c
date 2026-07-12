@@ -302,7 +302,13 @@ static int gc_root_link_valid(global_State *g, GCobj *o)
     return 1;
   /* The ownership-spine link is the lifetime lease. Structural validation
   ** must not mark the object immediately before sweep samples liveness. */
-  return lj_gc2_obj_valid_queued(g, o);
+  if (!lj_gc2_obj_valid_queued(g, o))
+    return 0;
+  /* Interned strings exclusively use nextgc for their hash chain and are
+  ** never ownership-spine nodes. Rejecting this impossible type also closes
+  ** the address-reuse ABA where a stale pending-root tail is recycled as a
+  ** string before a defensive root-chain walk reaches it. */
+  return la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TSTR;
 }
 
 static int gc_root_chain_break_cycle(global_State *g, GCobj *head)
@@ -572,6 +578,12 @@ static int gc2_cdata_finalizer_pending(GCobj *o)
 #endif
 }
 
+static int gc2_udata_finalizer_pending(GCobj *o)
+{
+  return o->gch.gct == (uint32_t)~LJ_TUDATA &&
+	 (lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG) != 0;
+}
+
 static int gc2_valid_freeable_obj(global_State *g, GCobj *o)
 {
   uint32_t gct = o->gch.gct;
@@ -622,43 +634,51 @@ static int gc2_deferred_body_pending(global_State *g, GCobj *o)
 	 lj_arena_bm_get(a->block, cell);
 }
 
-void lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
+int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
 {
-  GCRef *p = lj_gc_root_ref(g);
+  GCRef *p;
   GCobj *o;
+  uint32_t n = 0;
   if (!g || !dead)
-    return;
+    return LJ_GC_ROOT_UNLINK_UNPROVEN;
+  p = lj_gc_root_ref(g);
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  while ((o = gcref_acq(*p)) != NULL) {
+  while ((o = gcref_acq(*p)) != NULL && n++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+    GCobj *next;
+    if (LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
+      /* Never interpret an inadmissible object's gcw. In particular, a stale
+      ** ownership entry can have been reused as an interned string, where this
+      ** word is the tagged string-hash successor. Sever only the acquired
+      ** incoming edge and report that target absence could not be proved. */
+      if (!gc_ref_cas_obj(p, o, NULL)) {
+	gc_root_wait_no_l();
+	continue;
+      }
+      (void)lj_gc_repair_root_spine(g);
+      return LJ_GC_ROOT_UNLINK_UNPROVEN;
+    }
+    next = lj_obj_gcw_acq(o);
     if (o == dead) {
-      if (gc_chain_splice(p, o))
-	return;
+      /* A valid self-link can only be damaged ownership metadata. Removing the
+      ** exact incoming edge is sufficient; never publish the same pointer back
+      ** through p and call that a successful splice. */
+      if (gc_ref_cas_obj(p, o, next == o ? NULL : next))
+	return LJ_GC_ROOT_UNLINKED;
       gc_root_wait_no_l();
       continue;
     }
+    if (LJ_UNLIKELY(next == o)) {
+      if (!gc_ref_cas_obj(p, o, NULL)) {
+	gc_root_wait_no_l();
+	continue;
+      }
+      return LJ_GC_ROOT_UNLINK_UNPROVEN;
+    }
     p = lj_obj_gcwref(o);
   }
-}
-
-static int gc_root_chain_contains_obj(global_State *g, GCobj *needle)
-{
-  GCobj *o;
-  uint32_t n = 0;
-  if (!g || !needle)
-    return 0;
-  for (o = lj_gc_root_acq(g); o != NULL && n++ < LJ_GC2_ROOT_SCAN_LIMIT;) {
-    GCobj *next;
-    if (LJ_UNLIKELY(!gc_root_link_valid(g, o)))
-      break;
-    if (o == needle)
-      return 1;
-    next = lj_obj_gcw_acq(o);
-    if (next == o)
-      break;
-    o = next;
-  }
-  return 0;
+  return o == NULL ? LJ_GC_ROOT_UNLINK_ABSENT :
+		     LJ_GC_ROOT_UNLINK_UNPROVEN;
 }
 
 #define GC2_ROOT_PRUNE_BATCH 256u
@@ -786,7 +806,8 @@ static void gc2_sweep_detached_obj(global_State *g, GCobj *o, int marked)
 uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 {
   GCRef *p;
-  GCobj *o;
+  GCobj *o, *maino, *vmo;
+  lua_State *mainL, *vmL;
   uint32_t seen = 0, unlinked = 0;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_sweep_root_done_acq(g))
@@ -794,25 +815,50 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
   p = gc2_sweep_root_cursor_acq(g);
   if (!p)
     p = lj_gc_root_ref(g);
+  mainL = mainthread_acq(g);
+  vmL = vmthread_acq(g);
+  maino = mainL ? obj2gco(mainL) : NULL;
+  vmo = vmL ? obj2gco(vmL) : NULL;
   while (seen < GC2_ROOT_PRUNE_BATCH && (o = gcref_acq(*p)) != NULL) {
     int marked;
     seen++;
     if (LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
-      /* Quarantined bodies remain mapped, but an unregistered pointer is not a
-      ** cursor-safe ownership entry. Restart after spine repair in a later
-      ** bounded batch instead of dereferencing an unknown successor. */
+      /* No successor can be read from an inadmissible ownership entry: a reused
+      ** string address, for example, uses the same word as a hash-chain link.
+      ** Sever the exact incoming edge instead of restarting forever at the
+      ** same stale node or following a foreign intrusive list. Lost ownership
+      ** metadata is fail-closed (the arena stays retained); semantic/pending
+      ** roots republish valid objects independently. */
+      if (!gc_ref_cas_obj(p, o, NULL))
+	continue;
       (void)lj_gc_repair_root_spine(g);
-      p = lj_gc_root_ref(g);
+      unlinked++;
       break;
     }
     gc2_preserve_root_spine_body(g, o);
+    /* mainthread->gcw is also the lock-free insertion point for userdata and
+    ** secondary lua_State ownership. Detaching/reanchoring the permanent
+    ** thread while an after-main publisher CASes that word is a two-location
+    ** race: generic lj_gc_linkobj() can overwrite the newly appended chain.
+    ** Neither permanent thread is runtime-collectable, so retain both as
+    ** stable spine anchors and prune only their successors. */
+    if (o == maino || o == vmo) {
+      p = lj_obj_gcwref(o);
+      continue;
+    }
     if (!gc2_sweep_obj_old_generation(g, o)) {
       p = lj_obj_gcwref(o);  /* Post-reset allocation: never this sweep. */
       continue;
     }
     marked = lj_gc2_ismarked(g, o);
     if (LJ_UNLIKELY(gc2_cdata_finalizer_pending(o)) ||
+	LJ_UNLIKELY(gc2_udata_finalizer_pending(o)) ||
 	(lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))) {
+      /* FINREG dispatch owns both finalizer classes until it requeues them and
+      ** only then clears the registration bit. Detaching a registered userdata
+      ** here would create a second LIVE reanchor ticket: dispatch could insert
+      ** it after main while the post-grace ticket inserts the same intrusive
+      ** object globally, forming a cycle with two incoming ownership edges. */
       (void)lj_gc2_markmem(g, gc2_sweep_obj_base(g, o));
       p = lj_obj_gcwref(o);
       continue;
@@ -1028,6 +1074,7 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	  ** It is not a rescued Lua root: leave it detached until the token-owned
 	  ** physical destructor publishes gct=0/FREEING. */
 	  (void)lj_trace_free_gc(g, gco2trace(o));
+	  gc2_sweep_grace_needed_rel(g, 1);
 	  pending = 1;
 	  cell++;
 	  scanned++;
@@ -1063,6 +1110,7 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	  ** trace_freebody tears down exittab and release-publishes gct=0. */
 	  if (!lj_trace_body_destroyed_acq(gco2trace(o)))
 	    (void)lj_trace_free_gc(g, gco2trace(o));
+	  gc2_sweep_grace_needed_rel(g, 1);
 	  pending = 1;
 	} else
 #endif
@@ -1153,6 +1201,7 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
       if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
 	  la_load64_acq(&gco2trace(o)->retire_epoch) != 0) {
 	(void)lj_trace_free_gc(g, gco2trace(o));
+	gc2_sweep_grace_needed_rel(g, 1);
 	if (pendingp) *pendingp = 1;
 	return 0;
       }
@@ -1214,6 +1263,7 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
     if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
 	!lj_trace_body_destroyed_acq(gco2trace(o))) {
       (void)lj_trace_free_gc(g, gco2trace(o));
+      gc2_sweep_grace_needed_rel(g, 1);
       if (pendingp) *pendingp = 1;
       return 0;
     }
@@ -1594,6 +1644,30 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
 
 #ifdef LJ_GC2_TEST_HELPERS
 static uint32_t gc_test_step_fixtop_calls;
+static LJGcRootPendingLoadHook gc_test_root_pending_load_hook;
+
+void lj_gc_test_set_root_pending_load_hook(LJGcRootPendingLoadHook hook)
+{
+  la_storeptr_rel((void **)&gc_test_root_pending_load_hook, (void *)hook);
+}
+
+static LJ_AINLINE void gc_test_root_pending_loaded(global_State *g,
+					    TGState *tg, GCobj *published,
+					    GCobj *observed, uint32_t path)
+{
+  LJGcRootPendingLoadHook hook = (LJGcRootPendingLoadHook)
+    la_loadptr_acq((void *const *)&gc_test_root_pending_load_hook);
+  if (hook)
+    hook(g, tg, published, observed, path);
+}
+
+GCobj *lj_gc_test_root_pending_loaded_vm(global_State *g, TGState *tg,
+					 GCobj *published, GCobj *observed)
+{
+  gc_test_root_pending_loaded(g, tg, published, observed,
+			      LJ_GC_ROOT_PENDING_TEST_VM_TNEW);
+  return published;
+}
 
 static LJ_AINLINE void gc_test_step_fixtop_call(void)
 {
@@ -1611,6 +1685,8 @@ void lj_gc_test_reset_step_fixtop_calls(void)
 }
 #else
 #define gc_test_step_fixtop_call()	((void)0)
+#define gc_test_root_pending_loaded(g, tg, published, observed, path) \
+  ((void)0)
 #endif
 
 static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step)
@@ -2189,8 +2265,14 @@ static uint32_t gc_root_prepend_chain_after(global_State *g, GCobj *anchor,
   if (!anchor || !n)
     return 0;
   gc_root_prepend_chain_at(g, lj_obj_gcwref(anchor), head, tail);
-  if (LJ_UNLIKELY(!gc_root_chain_contains_obj(g, anchor)))
-    n += gc_root_prepend_chain(g, anchor);
+  /* mainthread is a permanent root-spine anchor. Root pruning never detaches
+  ** it, so publishing after it needs exactly the one slot CAS above. Do not
+  ** defensively reanchor by walking mainthread's live successor chain: the
+  ** returned tail has no lifetime/membership lease and a concurrent prune can
+  ** retire or reuse it before gc_root_prepend_chain_at() writes through it.
+  ** If an already-corrupt spine has lost the permanent anchor, leaving this
+  ** separately side-rooted chain detached is fail-closed; arena discovery
+  ** retains it rather than performing a stale-tail write. */
   return n;
 }
 
@@ -2290,20 +2372,14 @@ static void gc_linkobj_pending(global_State *g, GCobj *o)
     lj_gc_linkobj(g, o);
     return;
   }
-  if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
-		mt_entering_acq(g) == 0 && gc2_n_workers_acq(g) == 0)) {
-    /*
-    ** Before secondary Lua threads, entering secondary attachers, or GC
-    ** workers exist, the main TG is the only pending-root producer and
-    ** flusher. Avoid the CAS/RMW allocation tax, but keep release publication
-    ** so a later activation sees a complete pending chain.
-    */
-    head = lj_tg_gcroot_pending_acq(tg);
-    gc_root_set_next_rel(o, head);
-    lj_tg_gcroot_pending_store_transition_rel(tg, head, o);
-    return;
-  }
+  /* A worker/attacher can publish its activation immediately after any
+  ** single-threaded eligibility sample and exchange this stack before the
+  ** following store. Always couple the acquired head to publication with the
+  ** CAS: on a racing flush, failure rebuilds o->gcw from the fresh head instead
+  ** of publishing a detached tail whose address may later be reused. */
   head = lj_tg_gcroot_pending_acq(tg);
+  gc_test_root_pending_loaded(g, tg, o, head,
+			      LJ_GC_ROOT_PENDING_TEST_ORDINARY);
   do {
     gc_root_set_next_rel(o, head);
   } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
@@ -2345,19 +2421,11 @@ void lj_gc_linkobj_new_chain(global_State *g, GCobj *head, GCobj *tail)
     gc_root_prepend_known_chain(g, head, tail);
     return;
   }
-  if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
-		mt_entering_acq(g) == 0 && gc2_n_workers_acq(g) == 0)) {
-    /*
-    ** Publish a freshly initialized object run with one release store. The
-    ** caller owns head..tail until this point; after the store, a later MT
-    ** activation or root flush observes every object and edge in the run.
-    */
-    oldhead = lj_tg_gcroot_pending_acq(tg);
-    gc_root_set_next_rel(tail, oldhead);
-    lj_tg_gcroot_pending_store_transition_rel(tg, oldhead, head);
-    return;
-  }
+  /* See gc_linkobj_pending(): the tail link and pending-stack head must
+  ** linearize together even before MT becomes sticky. */
   oldhead = lj_tg_gcroot_pending_acq(tg);
+  gc_test_root_pending_loaded(g, tg, tail, oldhead,
+			      LJ_GC_ROOT_PENDING_TEST_CHAIN);
   do {
     gc_root_set_next_rel(tail, oldhead);
   } while (!lj_tg_gcroot_pending_cas(tg, &oldhead, head));
@@ -2372,14 +2440,12 @@ void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
     lj_gc_linkobj_after(g, obj2gco(mainthread_acq(g)), o);
     return;
   }
-  if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
-		mt_entering_acq(g) == 0 && gc2_n_workers_acq(g) == 0)) {
-    head = lj_tg_gcroot_pending_after_main_acq(tg);
-    gc_root_set_next_rel(o, head);
-    lj_tg_gcroot_pending_after_main_store_transition_rel(tg, head, o);
-    return;
-  }
+  /* The after-main stack shares the same activation race as the ordinary
+  ** pending stack. A failed CAS rewrites o->gcw before any reader can discover
+  ** o through this publication. */
   head = lj_tg_gcroot_pending_after_main_acq(tg);
+  gc_test_root_pending_loaded(g, tg, o, head,
+			      LJ_GC_ROOT_PENDING_TEST_AFTER_MAIN);
   do {
     gc_root_set_next_rel(o, head);
   } while (!lj_tg_gcroot_pending_after_main_cas(tg, &head, o));

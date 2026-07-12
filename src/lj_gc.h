@@ -85,7 +85,15 @@ LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 LJ_FUNC uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg,
 					 void *p, const LJHugeInfo *hi,
 					 int *pendingp);
-LJ_FUNC void lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
+/* Result of an ownership-spine unlink attempt. ABSENT is a complete, valid
+** spine scan which proved that no unlink was needed; UNPROVEN means an
+** inadmissible entry or bounded-cycle guard prevented that proof. */
+enum {
+  LJ_GC_ROOT_UNLINK_UNPROVEN = -1,
+  LJ_GC_ROOT_UNLINK_ABSENT = 0,
+  LJ_GC_ROOT_UNLINKED = 1
+};
+LJ_FUNC int lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
@@ -110,8 +118,24 @@ LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
 LJ_FUNC int lj_gc2_jit_needs_exit(global_State *g);
 #endif
 #ifdef LJ_GC2_TEST_HELPERS
+enum {
+  LJ_GC_ROOT_PENDING_TEST_ORDINARY = 1,
+  LJ_GC_ROOT_PENDING_TEST_CHAIN = 2,
+  LJ_GC_ROOT_PENDING_TEST_AFTER_MAIN = 3,
+  LJ_GC_ROOT_PENDING_TEST_VM_TNEW = 4
+};
+typedef void (*LJGcRootPendingLoadHook)(global_State *g, TGState *tg,
+					GCobj *published, GCobj *observed,
+					uint32_t path);
 LJ_FUNC uint32_t lj_gc_test_step_fixtop_calls(void);
 LJ_FUNC void lj_gc_test_reset_step_fixtop_calls(void);
+LJ_FUNC void lj_gc_test_set_root_pending_load_hook(
+  LJGcRootPendingLoadHook hook);
+/* Test-build bridge used by the x64 interpreter's inlined pending-root CAS.
+** Returning published keeps the VM result register live across the hook call. */
+LJ_FUNC GCobj *lj_gc_test_root_pending_loaded_vm(global_State *g, TGState *tg,
+						  GCobj *published,
+						  GCobj *observed);
 #endif
 
 static LJ_AINLINE GCSize lj_gcsize_load_acq(const GCSize *p)

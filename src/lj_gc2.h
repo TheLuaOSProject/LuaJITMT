@@ -57,6 +57,11 @@ typedef struct GC2StatsSnapshot {
   uint64_t remembered_overflows;
   uint64_t remembered_filtered;
   uint64_t remembered_drained;
+  uint64_t recovery_items;
+  uint64_t recovery_published;
+  uint64_t recovery_redirtied;
+  uint64_t recovery_drained;
+  uint32_t recovery_failed;
   uint64_t poll_ack_samples;
   uint64_t poll_ack_latency_sum_ns;
   uint64_t poll_ack_latency_max_ns;
@@ -313,6 +318,18 @@ LJ_FUNC int lj_gc2_test_sweep_reclaim_enter(global_State *g);
 LJ_FUNC int lj_gc2_test_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_ssb_drain(global_State *g);
 LJ_FUNC int lj_gc2_test_ssb_empty(global_State *g);
+#if defined(LJ_GC2_TEST_HELPERS)
+#define LJ_GC2_RECOVERY_TEST_RESERVED	1u
+#define LJ_GC2_RECOVERY_TEST_PRE_COMPLETE	2u
+#define LJ_GC2_RECOVERY_TEST_SSB_COMMITTED	3u
+LJ_FUNC void lj_gc2_test_recovery_fail_grey_grow(uint32_t count);
+LJ_FUNC void lj_gc2_test_recovery_pause(uint32_t stage);
+LJ_FUNC uint32_t lj_gc2_test_recovery_paused(void);
+LJ_FUNC void lj_gc2_test_recovery_release(void);
+LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
+LJ_FUNC uint32_t lj_gc2_test_recovery_drain(global_State *g, uint32_t limit);
+LJ_FUNC int lj_gc2_test_recovery_state(global_State *g, GCobj *o);
+#endif
 LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_count(global_State *g);
 LJ_FUNC GCtab *lj_gc2_test_weak_snapshot_tab(global_State *g, uint32_t idx);
 LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_scan(global_State *g,
@@ -390,6 +407,10 @@ LJ_FUNC int lj_gc2_markobj_status(global_State *g, GCobj *o, uint32_t *gctp);
 LJ_FUNC int lj_gc2_markobj_expected_status(global_State *g, GCobj *o,
 					    uint32_t expected_gct,
 					    uint32_t *gctp);
+/* Resolve an interior bytecode pointer through allocator identity and retain
+** its exact prototype owner. The caller must hold a GC2 SMR read scope while
+** allocator ownership can transfer between TG registries. */
+LJ_FUNC int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc);
 /* Retain the table allocation non-semantically while comparing one current
 ** vector root. Returns 1 for the same generation, 0 for a valid different or
 ** terminal owner, and -1 when admission is transient and reclaim must retry. */

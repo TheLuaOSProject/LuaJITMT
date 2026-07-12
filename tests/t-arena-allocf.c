@@ -37,9 +37,11 @@ int main(void)
     HugeTab ht = { NULL };
     LJHugeInfo hi;
     void *p, *q, *typed, *huge, *huge_same, *huge2, *small;
+    void *recovery_huge;
     size_t hsize = LJ_HUGE_THRESHOLD + 100u + round;
     size_t hsize_same = hsize + 512u;
     size_t hsize2 = LJ_ARENA_SIZE + 700u + round;
+    size_t recovery_hsize = LJ_HUGE_THRESHOLD + 1700u + round;
 
     lj_arena_alloc_init(&alloc);
     alloc.owner_tid = 0xabc00000u + round;
@@ -66,6 +68,31 @@ int main(void)
 			      lj_arena_cellof(typed)) == 0);
     assert(lj_arena_ready_get(lj_arena_of(typed),
 			      lj_arena_cellof(typed)) == 0);
+
+    /* lua_Alloc relinquishing a recovery-owned huge mapping must publish a
+    ** durable logical-free intent. Recovery completion consumes that intent
+    ** into exact tombstone/unmap ownership instead of leaking the mapping. */
+    recovery_huge = lj_arena_allocd_alloc(&ad, recovery_hsize,
+					  LJ_AF_TRAVERSABLE);
+    assert(recovery_huge != NULL);
+    assert(lj_arena_allocd_publish_gco(&ad, recovery_huge));
+    assert(lj_arena_hugetab_recovery_state_cas(&ht, recovery_huge,
+	 LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING, NULL));
+    assert(lj_arena_allocf(&ad, recovery_huge, recovery_hsize, 0) == NULL);
+    assert(lj_arena_hugetab_lookup(&ht, recovery_huge, &hi));
+    assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0);
+    assert(lj_arena_hugetab_recovery_state_cas(&ht, recovery_huge,
+	 LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED, NULL));
+    assert(!lj_arena_hugetab_recovery_state_cas(&ht, recovery_huge,
+	 LJ_ARENA_RECOVERY_CLAIMED, LJ_ARENA_RECOVERY_IDLE, NULL));
+    assert(lj_arena_hugetab_recovery_complete(&ht, recovery_huge, &hi) ==
+	 LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP);
+    assert(hi.size == recovery_hsize);
+    assert(lj_arena_hugetab_lookup(&ht, recovery_huge, &hi));
+    assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING)) ==
+	   (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING));
+    assert(lj_arena_hugetab_delete(&ht, recovery_huge, &hi));
+    lj_arena_huge_unmap(recovery_huge, hi.size);
 
     p = lj_arena_allocf(&ad, NULL, 0, 64);
     assert(p != NULL);

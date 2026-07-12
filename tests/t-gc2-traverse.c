@@ -1547,6 +1547,7 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   TraceState savedstate;
   GCfunc *fn;
   GCproto *pt;
+  GCtab *nonproto;
   UNUSED(tg);
 
   assert(luaL_dostring(L, "return function() return 42 end\n") == LUA_OK);
@@ -1560,8 +1561,28 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   assert(lj_gc2_test_trace_pc_proto_candidate(g, bad, proto_bc(pt)) == 0);
   lua_pop(L, 1);
 
+  lua_newtable(L);
+  nonproto = tabV(L->top - 1);
+
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(pt)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(nonproto)) == 0);
+  lj_gc2_smr_read_enter(g);
+  assert(lj_gc2_mark_proto_for_pc(g, proto_bc(pt)) == 1);
+  assert(lj_gc2_mark_proto_for_pc(g, proto_bc(pt) + pt->sizebc - 1u) == 1);
+  assert(lj_gc2_mark_proto_for_pc(g, proto_bc(pt) + pt->sizebc) == 0);
+  lj_gc2_smr_read_leave(g);
+  assert(lj_gc2_ismarked(g, obj2gco(pt)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(nonproto)) == 0);
+  flush_and_drain(g, tg);
+  lj_gc2_cycle_to_idle(g);
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(pt)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(nonproto)) == 0);
+  assert(lj_gc2_test_trace_pc_proto_candidate(g, obj2gco(nonproto),
+					      proto_bc(pt)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(nonproto)) == 0);
   saved = J->cur;
   savedstate = lj_trace_state_load(J);
   memset(&J->cur, 0, sizeof(J->cur));
@@ -1578,6 +1599,7 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   lj_trace_state_store(J, savedstate);
   J->cur = saved;
   lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
 }
 
 static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
@@ -4211,6 +4233,80 @@ static uint32_t finreg_udata_active_refs(global_State *g, GCobj *target)
   return n;
 }
 
+static void finreg_udata_mark_other_active(global_State *g, GCobj *target)
+{
+  GC2FinRegUDataNode *node;
+  for (node = gc2_finreg_udata_head_acq(g);
+       node != NULL && lj_gc2_mem_registered(g, node);
+       node = gc2_finreg_udata_next_acq(node)) {
+    GCobj *o;
+    if (!gc2_finreg_udata_active_acq(node))
+      continue;
+    o = gc2_finreg_udata_obj_acq(node);
+    if (o && o != target)
+      (void)lj_gc2_markobj(g, o);
+  }
+}
+
+static void test_finreg_userdata_unproven_unlink_retry(lua_State *L,
+							global_State *g)
+{
+  GCobj *o, *saved_root;
+  GCstr *invalid;
+  uint64_t discovered0, queued0, finalizerq0;
+  int finalized0;
+
+  lua_settop(L, 0);
+  lua_newuserdata(L, 1);
+  o = obj2gco(udataV(L->top - 1));
+  lua_newtable(L);
+  lua_pushcfunction(L, gc2_counting_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  (void)lj_gc_flush_root_pending(g);
+  saved_root = lj_gc_root_acq(g);
+  assert(saved_root != NULL);
+  invalid = lj_str_newlit(L, "udata-finreg-unproven-root-sentinel");
+  assert(finreg_udata_active_refs(g, o) == 1u);
+
+  discovered0 = gc2_finreg_udata_discovered_acq(g);
+  queued0 = gc2_finreg_udata_queued_acq(g);
+  finalizerq0 = gc2_finalizer_queued_acq(g);
+  finalized0 = gc2_udata_finalized;
+  lj_gc2_mark_begin(g);
+  finreg_udata_mark_other_active(g, o);
+  assert(lj_gc2_ismarked(g, o) == 0);
+
+  lj_gc_root_rel(g, obj2gco(invalid));
+  lj_gcroot_repair_epoch_add(g);
+  assert(lj_gc2_finreg_udata_finalize(g, 0) == 0);
+  assert(lj_gc_root_acq(g) == NULL);
+  assert(finreg_udata_active_refs(g, o) == 1u);
+  assert(gc2_finreg_udata_discovered_acq(g) == discovered0);
+  assert(gc2_finreg_udata_queued_acq(g) == queued0);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0);
+  assert((lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG) != 0);
+  assert((lj_obj_gcflags(o) & LJ_GC_FINALIZED) == 0);
+  assert(lj_gc2_ismarked(g, o) == 1);
+  assert(lj_gc2_finalizer_close_pending(g));
+
+  lj_gc_root_rel(g, saved_root);
+  lj_gcroot_repair_epoch_add(g);
+  lj_gc2_cycle_to_idle(g);
+  lj_gc2_mark_begin(g);
+  finreg_udata_mark_other_active(g, o);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  assert(lj_gc2_finreg_udata_finalize(g, 0) != 0);
+  assert(finreg_udata_active_refs(g, o) == 0);
+  assert(gc2_finreg_udata_discovered_acq(g) == discovered0 + 1u);
+  assert(gc2_finreg_udata_queued_acq(g) == queued0 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0 + 1u);
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(gc2_udata_finalized == finalized0 + 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
 static void test_finreg_userdata_active_unlink(lua_State *L, global_State *g)
 {
   uint32_t active0;
@@ -4564,6 +4660,78 @@ static uint32_t finreg_cdata_order_active_refs(global_State *g, GCobj *target)
        ord = fin_order_next_acq(ord))
     n += fin_order_active_acq(ord) == 1 && fin_order_obj_acq(ord) == target;
   return n;
+}
+
+static void finreg_cdata_test_mark(global_State *g, cTValue *tv)
+{
+  UNUSED(g);
+  UNUSED(tv);  /* The fixture keeps the C finalizer in a global Lua root. */
+}
+
+static void test_finreg_cdata_unproven_unlink_retry(lua_State *L,
+						     global_State *g)
+{
+  GCcdata *cd;
+  GCobj *o, *saved_root;
+  GCstr *invalid;
+  uint64_t claimed0, orderq0, finalizerq0;
+  int finalized0;
+
+  lua_settop(L, 0);
+  lua_pushcfunction(L, gc2_cdata_counting_finalizer);
+  lua_setglobal(L, "gc2_cdata_counting_finalizer");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "return ffi.gc(ffi.new('char[?]', 8), gc2_cdata_counting_finalizer)\n") ==
+    LUA_OK);
+  cd = cdataV(L->top - 1);
+  o = obj2gco(cd);
+  (void)lj_gc_flush_root_pending(g);
+  saved_root = lj_gc_root_acq(g);
+  assert(saved_root != NULL);
+  invalid = lj_str_newlit(L, "finreg-unproven-root-sentinel");
+  assert(finreg_cdata_order_active_refs(g, o) == 1u);
+
+  claimed0 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderq0 = gc2_finreg_cdata_order_queued_acq(g);
+  finalizerq0 = gc2_finalizer_queued_acq(g);
+  finalized0 = gc2_cdata_finalized;
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, o) == 0);
+
+  /* An inadmissible root entry makes target absence UNPROVEN. Discovery must
+  ** restore the claimed finalizer slot and retain the active order node, not
+  ** enqueue an object which may still have an intrusive root membership. */
+  lj_gc_root_rel(g, obj2gco(invalid));
+  lj_gcroot_repair_epoch_add(g);
+  assert(lj_gc2_finreg_cdata_finalize_pweak(
+	L, g, finreg_cdata_test_mark) == 0);
+  assert(lj_gc_root_acq(g) == NULL);  /* Shared unlinker severed invalid head. */
+  assert(finreg_cdata_order_active_refs(g, o) == 1u);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0);
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0);
+  assert((lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) != 0);
+  assert((lj_obj_gcflags(o) & LJ_GC_FINALIZED) == 0);
+  assert(lj_gc2_ismarked(g, o) == 1);
+
+  /* Once a complete scan can prove membership, the same node is claimed and
+  ** dispatched exactly once. */
+  lj_gc_root_rel(g, saved_root);
+  lj_gcroot_repair_epoch_add(g);
+  lj_gc2_cycle_to_idle(g);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  assert(lj_gc2_finreg_cdata_finalize_pweak(
+	L, g, finreg_cdata_test_mark) == 1u);
+  assert(finreg_cdata_order_active_refs(g, o) == 0);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0 + 1u);
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0 + 1u);
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(gc2_cdata_finalized == finalized0 + 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
 }
 
 static void test_finreg_cdata_order_active_retire(lua_State *L, global_State *g)
@@ -5327,6 +5495,7 @@ int main(void)
   test_userdata(L, g);
   test_finreg_userdata_queue_mark(L, g, tg);
   test_finreg_userdata_active_unlink(L, g);
+  test_finreg_userdata_unproven_unlink_retry(L, g);
   test_finreg_userdata_telemetry(L, g);
   test_finreg_internal_userdata_telemetry(L, g);
   test_finreg_userdata_inplace_finalizer_behavior(L);
@@ -5336,6 +5505,7 @@ int main(void)
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_finreg_cdata_preclaim_publish_order(L, g);
 #endif
+  test_finreg_cdata_unproven_unlink_retry(L, g);
   test_finreg_cdata_order_active_retire(L, g);
   test_finreg_cdata_telemetry(L, g);
   test_finalizer_spawn_deferred_state(L, g);

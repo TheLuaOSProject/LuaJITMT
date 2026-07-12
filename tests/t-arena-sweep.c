@@ -494,6 +494,98 @@ int main(void)
     lj_arena_alloc_fini(&late);
   }
 
+  {
+    TGAlloc recovery;
+    LJArenaAllocD recovery_ad;
+    GCArena *a, *raw;
+    void *p, *allocfp, *deferredp;
+    uint32_t cell;
+    lj_arena_alloc_init(&recovery);
+    lj_arena_allocd_init(&recovery_ad, &recovery, &rs,
+			 LJ_AF_TRAVERSABLE);
+    recovery.alloc_black = 0;
+    p = lj_arena_alloc(&recovery, &rs, 64, LJ_AF_TRAVERSABLE);
+    assert(p != NULL);
+    a = lj_arena_of(p);
+    cell = lj_arena_cellof(p);
+    assert(lj_arena_recovery_empty(a));
+    assert(lj_arena_recovery_state_acq(a, cell) ==
+	   LJ_ARENA_RECOVERY_IDLE);
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING));
+    assert(!lj_arena_recovery_empty(a));
+
+    /* A logical free is retained and durably remembered without overwriting
+    ** the object body. Recovery also keeps a carried mark-zero allocation out
+    ** of sweep free-run reconstruction. */
+    lj_arena_free(&recovery, p, 64);
+    assert(lj_arena_bm_get(a->block, cell));
+    assert(lj_arena_late_get(a, cell));
+    lj_arena_sweep_words(a, 0);
+    assert(lj_arena_bm_get(a->block, cell));
+    lj_arena_alloc_rebuild_free(&recovery);
+    assert(lj_arena_bm_get(a->block, cell));
+
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED));
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_CLAIMED, LJ_ARENA_RECOVERY_REDIRTY));
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_REDIRTY, LJ_ARENA_RECOVERY_PENDING));
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_CLAIMED));
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_CLAIMED, LJ_ARENA_RECOVERY_IDLE));
+    assert(lj_arena_recovery_empty(a));
+    /* This fixture owns both sides of the deferred-free protocol. Clear the
+    ** observed late ticket, then perform its modeled owner consumption. */
+    lj_arena_bm_clear(a->late, cell);
+    lj_arena_free(&recovery, p, 64);
+
+    /* Both public free funnels consult quarantine ownership before their
+    ** direct recovery checks. That early owned return must still remember the
+    ** logical free in late[] so completion cannot strand the allocation. */
+    allocfp = lj_arena_allocf(&recovery_ad, NULL, 0, 64);
+    assert(allocfp != NULL);
+    a = lj_arena_of(allocfp);
+    cell = lj_arena_cellof(allocfp);
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING));
+    assert(lj_arena_allocf(&recovery_ad, allocfp, 64, 0) == NULL);
+    assert(lj_arena_late_get(a, cell));
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+    lj_arena_bm_clear(a->late, cell);
+    lj_arena_free(&recovery, allocfp, 64);
+
+    deferredp = lj_arena_alloc(&recovery, &rs, 64,
+			       LJ_AF_TRAVERSABLE);
+    assert(deferredp != NULL);
+    a = lj_arena_of(deferredp);
+    cell = lj_arena_cellof(deferredp);
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING));
+    assert(lj_arena_free_deferred(&recovery, deferredp, 64));
+    assert(lj_arena_late_get(a, cell));
+    assert(lj_arena_recovery_state_cas(a, cell,
+	   LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+    lj_arena_bm_clear(a->late, cell);
+    lj_arena_free(&recovery, deferredp, 64);
+    lj_arena_alloc_fini(&recovery);
+
+    /* Even the direct mapping teardown helper must retain a non-IDLE plane. */
+    raw = lj_arena_map(&rs, LJ_AF_TRAVERSABLE);
+    assert(raw != NULL);
+    assert(lj_arena_recovery_state_cas(raw, LJ_AFIRST_CELL,
+	   LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING));
+    lj_arena_unmap(raw);
+    assert(lj_arena_recovery_state_acq(raw, LJ_AFIRST_CELL) ==
+	   LJ_ARENA_RECOVERY_PENDING);
+    assert(lj_arena_recovery_state_cas(raw, LJ_AFIRST_CELL,
+	   LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+    lj_arena_unmap(raw);
+  }
+
   printf("t-arena-sweep OK: owner-local sweep rebuild verified\n");
   return 0;
 }
