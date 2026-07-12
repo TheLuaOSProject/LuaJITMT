@@ -5994,20 +5994,40 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g,
 					    GC2FinRegMarkObjFunc markobj,
 					    GC2FinRegMarkTVFunc marktv)
 {
-  MSize i, head, count;
-  if (!markobj || !marktv || !gc2_finreg_cdata_preclaim_ready(g))
+  GCRef *objv;
+  TValue *finv;
+  GC2MarkScope objscope, finscope;
+  MSize i, head, count, cap;
+  int objstatus, finstatus;
+  if (!g || !markobj || !marktv)
     return;
+  objv = gc2_finreg_cdata_preclaim_objvec_acq(g);
+  finv = gc2_finreg_cdata_preclaim_finvec_acq(g);
+  objstatus = gc2_markmem_registered_scoped_status(g, objv, &objscope);
+  finstatus = gc2_markmem_registered_scoped_status(g, finv, &finscope);
+  if (objstatus == GC2_MARK_DEAD || finstatus == GC2_MARK_DEAD)
+    goto out;
+  /* Both fixed vectors are now retained. Snapshot bounds only afterwards and
+  ** use the admitted local pointers throughout the entry walk. */
+  cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
   head = gc2_finreg_cdata_preclaim_head_acq(g);
   count = gc2_finreg_cdata_preclaim_count_acq(g);
+  if (head > cap) head = cap;
+  if (count > cap) count = cap;
   for (i = head; i < count; i++) {
-    GCobj *o = gc2_finreg_cdata_preclaim_obj_acq(g, i);
+    GCobj *o = gcref_acq(objv[i]);
     if (o) {
       TValue fin;
       markobj(g, o);
-      gc2_finreg_cdata_preclaim_fin_acq(g, i, &fin);
+      lj_tv_load_acq(&fin, &finv[i]);
       marktv(g, &fin);
     }
   }
+out:
+  if (finstatus != GC2_MARK_DEAD)
+    gc2_mark_scope_leave(&finscope);
+  if (objstatus != GC2_MARK_DEAD)
+    gc2_mark_scope_leave(&objscope);
 }
 
 static void gc2_mark_finreg_cdata_generations(global_State *g,
@@ -6112,12 +6132,46 @@ static void gc2_scan_threading_live_roots(global_State *g)
   }
 }
 
+static void gc2_scan_finreg_udata_nodes(global_State *g)
+{
+  GC2FinRegUDataNode *node, *next;
+  uint32_t scanned = 0;
+  /* These records are native ownership metadata, not semantic userdata roots:
+  ** retaining node->obj here would prevent ordinary finalizer discovery. Hold
+  ** the raw allocation admission only long enough to load its stable link. */
+  node = gc2_finreg_udata_head_acq(g);
+  while (node != NULL && scanned++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+    GC2MarkScope scope;
+    int status = gc2_markmem_registered_scoped_status(g, node, &scope);
+    if (status == GC2_MARK_DEAD)
+      break;
+    next = gc2_finreg_udata_next_acq(node);
+    gc2_mark_scope_leave(&scope);
+    node = next;
+  }
+
+  /* Logical retirement leaves the active link stable for in-flight readers;
+  ** the separate retired list owns the same raw record until final shutdown. */
+  node = gc2_finreg_udata_retired_acq(g);
+  scanned = 0;
+  while (node != NULL && scanned++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+    GC2MarkScope scope;
+    int status = gc2_markmem_registered_scoped_status(g, node, &scope);
+    if (status == GC2_MARK_DEAD)
+      break;
+    next = gc2_finreg_udata_retired_next_acq(node);
+    gc2_mark_scope_leave(&scope);
+    node = next;
+  }
+}
+
 static void gc2_scan_pending_roots(global_State *g)
 {
   if (!g)
     return;
   lj_gc2_finalizer_mark_all(g, gc2_mark_finalizer_obj);
   gc2_scan_threading_live_roots(g);
+  gc2_scan_finreg_udata_nodes(g);
 #if LJ_HASFFI
   gc2_mark_finreg_cdata_preclaims(g, gc2_finreg_markobj,
 				   gc2_finreg_marktv);
@@ -6400,11 +6454,14 @@ static void gc2_scan_global_roots(global_State *g)
     CTState *cts = ctype_ctsG(g);
     if (cts) {
       CTypeTab *ret;
-      GCRef *meta = ctype_metamap_acq(cts);
-      uint64_t *cbblack = ctype_cbblack_acq(cts);
+      GCRef *meta;
+      uint64_t *cbblack;
       TValue *func;
       lua_State **owner;
+      /* Retain the CTState before reading any concurrently published field. */
       lj_gc2_markmem(g, cts);
+      meta = ctype_metamap_acq(cts);
+      cbblack = ctype_cbblack_acq(cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
       for (ret = ctype_retiredtab_acq(cts);
 	   ret != NULL && lj_gc2_mem_registered(g, ret);
@@ -7101,12 +7158,20 @@ static int gc2_finclaim_ensure(global_State *g)
   if (!L)
     return 0;
   obj = lj_mem_newvec(L, GC2_FINCLAIM_FIXED, GCRef);
+  /* Keep the first raw allocation live across construction of its peer. */
+  (void)lj_gc2_markmem(g, obj);
   fin = lj_mem_newvec(L, GC2_FINCLAIM_FIXED, TValue);
+  (void)lj_gc2_markmem(g, obj);
+  (void)lj_gc2_markmem(g, fin);
   gc2_finreg_cdata_preclaim_objvec_rel(g, obj);
   gc2_finreg_cdata_preclaim_finvec_rel(g, fin);
   gc2_finreg_cdata_preclaim_capacity_rel(g, GC2_FINCLAIM_FIXED);
   gc2_finreg_cdata_preclaim_head_rel(g, 0);
   gc2_finreg_cdata_preclaim_count_rel(g, 0);
+  /* Close construction marks versus a cycle that clears them immediately
+  ** before the global pointer/capacity publication above. */
+  (void)lj_gc2_markmem(g, obj);
+  (void)lj_gc2_markmem(g, fin);
   return 1;  /* Fixed preclaim vector: no active-GC migration/free. */
 }
 
@@ -8705,10 +8770,13 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
   gc2_finreg_udata_obj_rel(node, o);
   gc2_finreg_udata_retired_next_rel(node, NULL);
   gc2_finreg_udata_active_rel(node, 1);
+  (void)lj_gc2_markmem(g, node);
   do {
     head = gc2_finreg_udata_head_acq(g);
     gc2_finreg_udata_next_rel(node, head);
   } while (!gc2_finreg_udata_head_cas(g, &head, node));
+  /* Close construction-mark versus IDLE->MARK clear/root-snapshot. */
+  (void)lj_gc2_markmem(g, node);
   gc2_finreg_udata_registered_add(g, 1);
 }
 
@@ -8729,6 +8797,8 @@ static int gc2_finreg_udata_retire(global_State *g,
   GC2FinRegUDataNode *head;
   if (!g || !node || !lj_gc2_mem_registered(g, node))
     return 0;
+  /* Retain the raw record before inspecting object or active state. */
+  (void)lj_gc2_markmem(g, node);
   lj_assertG(gc2_finreg_udata_obj_acq(node) == NULL,
 	     "retiring live userdata FINREG node");
   if (!gc2_finreg_udata_active_retire(node))
@@ -8737,6 +8807,7 @@ static int gc2_finreg_udata_retire(global_State *g,
     head = gc2_finreg_udata_retired_acq(g);
     gc2_finreg_udata_retired_next_rel(node, head);
   } while (!gc2_finreg_udata_retired_cas(g, &head, node));
+  (void)lj_gc2_markmem(g, node);
   gc2_finreg_udata_retired_nodes_add(g, 1);
   return 1;
 }

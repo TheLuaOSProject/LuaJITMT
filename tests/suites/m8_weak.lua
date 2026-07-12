@@ -10,6 +10,8 @@ local gc2_test_cflags = build.gc2_test_helper_flag
 
 local M8_C_FIXTURES = {
   "t-gc2-phase",
+  "t-gc2-finreg-cdata-preclaim-roots",
+  "t-gc2-finreg-udata-roots",
   "t-gc2-traverse",
   "t-m8-ffi-weak-newindex",
   "t-m8-close-finalizers",
@@ -78,6 +80,34 @@ local function run_paranoia_matrix(t)
 end
 
 return function(add)
+  add({
+    name = "m8_gc2_finreg_cdata_preclaim_roots",
+    description = "GC2 cdata FINREG fixed preclaim-vector lifetime",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      build.run_c_fixtures(t, { "t-gc2-finreg-cdata-preclaim-roots" }, {
+        output_suffix = "_m8",
+        cflags = gc2_test_cflags,
+        timeout = "20s"
+      })
+      print("M8 cdata FINREG preclaim-vector lifetime passed")
+    end
+  })
+
+  add({
+    name = "m8_gc2_finreg_udata_roots",
+    description = "GC2 userdata FINREG active/retired raw-root lifetime",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      build.run_c_fixtures(t, { "t-gc2-finreg-udata-roots" }, {
+        output_suffix = "_m8",
+        cflags = gc2_test_cflags,
+        timeout = "20s"
+      })
+      print("M8 userdata FINREG raw-root lifetime passed")
+    end
+  })
+
   add({
     name = "m8_finalizer_error_native_stdio",
     description = "default finalizer error reporter uses native stdio boundary",

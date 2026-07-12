@@ -412,16 +412,16 @@ static void ctype_storestr_str(lua_State *L, GCtab *tab, GCstr *key,
   }
 }
 
-static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
+/* Returns with the new table held in one lua_State stack-root slot. */
+static GCtab *ctype_fin_tab_new_anchor_l(lua_State *L, uint32_t hbits)
 {
-  TValue *anchor = L->top;
   GCtab *t = lj_tab_new(L, 0, hbits);
   settabV(L, L->top++, t);
+  lj_state_stack_pubtv(L, L, L->top-1);
   fin_gen_tab_enable_rel(t);
   ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"));
   lj_tab_nomm_rel(t, (uint8_t)(~(1u<<MM_mode)));
   lj_gc_pubtab(L, t);
-  L->top = anchor;
   return t;
 }
 
@@ -484,10 +484,13 @@ void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
   fin_order_tab_rel(ord, t);
   fin_order_slot_rel(ord, slot);
   fin_order_active_rel(ord, 1);
+  (void)lj_gc2_markmem(cts->g, ord);
   do {
     head = fin_order_head_acq(cts);
     fin_order_next_rel(ord, head);
   } while (!fin_order_head_cas(cts, &head, ord));
+  /* Close mark-before-publish versus IDLE->MARK clear/root-snapshot. */
+  (void)lj_gc2_markmem(cts->g, ord);
   /* 11.4 FINREG ordered registration publish. */
 }
 
@@ -497,12 +500,15 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
   FinRegOrderNode *head, *expect;
   if (!cts || !ord || !lj_gc2_mem_registered(cts->g, ord))
     return 0;
+  /* Retain before the active-state CAS or any other record dereference. */
+  (void)lj_gc2_markmem(cts->g, ord);
   if (!fin_order_active_retiring(ord))
     return 1;
   do {
     head = fin_order_retired_acq(cts);
     fin_order_retired_next_rel(ord, head);
   } while (!fin_order_retired_cas(cts, &head, ord));
+  (void)lj_gc2_markmem(cts->g, ord);
   lj_gc2_finreg_cdata_note_order_retired(cts->g);
   fin_order_active_rel(ord, 0);
   if (prev) {
@@ -605,6 +611,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     GCtab *t;
     FinRegGen *gen;
     TValue *tv;
+    TValue *anchor;
     if (headtab)
       (void)lj_tab_node_snapshot_acq(headtab, &hmask);
     hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
@@ -614,17 +621,34 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       ctype_fin_claim_wait(L);
     if (ctype_fin_any_key(cts, L, key))
       return -1;
-    t = ctype_fin_tab_new_l(L, hbits);
+    /*
+    ** The generation record allocation and the private-table insertion can
+    ** both run GC. Keep the table in the owning lua_State's published stack
+    ** roots until the generation-list CAS and its post-publication repair are
+    ** complete; the native list is not an authoritative root before the CAS.
+    */
+    anchor = L->top;
+    t = ctype_fin_tab_new_anchor_l(L, hbits);
     gen = ctype_fin_gen_new_l(L, t);
     tv = lj_tab_set(L, t, key);  /* Private generation, unpublished. */
     copyTVrel(L, tv, claim);
     fin_gen_next_rel(gen, head);
+    /* Close allocation/initialization versus a root snapshot that has already
+    ** passed this lua_State. The second repair below closes the inverse race:
+    ** IDLE->MARK can clear this construction mark immediately before the CAS.
+    */
+    (void)lj_gc2_markmem(G(L), gen);
+    lj_gc_pubobjroot(L, obj2gco(t));
     if (fin_gen_head_cas(cts, &head, gen)) {
+      (void)lj_gc2_markmem(G(L), gen);
+      lj_gc_pubobjroot(L, obj2gco(t));
       *tabp = t;
       *slot = tv;
+      L->top = anchor;
       return 1;  /* 11.4 FINREG generation CAS publish. */
     }
     lj_mem_freet(G(L), gen);
+    L->top = anchor;
     ctype_fin_claim_wait(L);
   }
 }
@@ -653,25 +677,37 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
   if (!cts)
     return;
   for (gen = fin_gen_head_acq(cts);
-       gen != NULL && lj_gc2_mem_registered(g, gen);
-       gen = fin_gen_next_acq(gen)) {
-    GCtab *t = lj_ctype_fin_gen_tab_valid(cts, gen);
+       gen != NULL && lj_gc2_mem_registered(g, gen); ) {
+    FinRegGen *next;
+    GCtab *t;
+    /* Retain the raw side-root record before dereferencing either field. */
     markmem(g, gen);
+    t = fin_gen_tab_acq(gen);
+    next = fin_gen_next_acq(gen);
+    /* The semantic marker is itself the retain-first validity check. A queued
+    ** prefilter here would drop a newly published table in the exact window
+    ** where root closure needs to discover and queue it.
+    */
     if (t)
       mark(g, obj2gco(t));
+    gen = next;
   }
   {
     FinRegOrderNode *ord;
     for (ord = fin_order_head_acq(cts);
-	 ord != NULL && lj_gc2_mem_registered(g, ord);
-	 ord = fin_order_next_acq(ord)) {
-      if (fin_order_active_acq(ord) != 0)
-	markmem(g, ord);
+	 ord != NULL && lj_gc2_mem_registered(g, ord); ) {
+      FinRegOrderNode *next;
+      markmem(g, ord);
+      next = fin_order_next_acq(ord);
+      ord = next;
     }
     for (ord = fin_order_retired_acq(cts);
-	 ord != NULL && lj_gc2_mem_registered(g, ord);
-	 ord = fin_order_retired_next_acq(ord))
+	 ord != NULL && lj_gc2_mem_registered(g, ord); ) {
+      FinRegOrderNode *next;
       markmem(g, ord);
+      next = fin_order_retired_next_acq(ord);
+      ord = next;
+    }
   }
 }
 
@@ -2413,11 +2449,14 @@ CTState *lj_ctype_init(lua_State *L)
   setmrefrel(G(L)->ctype_state, cts);  /* 11.2 CTState global publish. */
   {
     TValue *anchor = L->top;
-    GCtab *t = ctype_fin_tab_new_l(L, 1);
+    GCtab *t = ctype_fin_tab_new_anchor_l(L, 1);
     FinRegGen *gen;
-    settabV(L, L->top++, t);
     gen = ctype_fin_gen_new_l(L, t);
+    (void)lj_gc2_markmem(G(L), gen);
+    lj_gc_pubobjroot(L, obj2gco(t));
     fin_gen_head_rel(cts, gen);
+    (void)lj_gc2_markmem(G(L), gen);
+    lj_gc_pubobjroot(L, obj2gco(t));
     L->top = anchor;
   }
   return cts;
