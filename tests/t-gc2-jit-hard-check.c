@@ -20,33 +20,51 @@
 static void run_hard_alloc_trace(lua_State *L, global_State *g,
 				 const char *name, const char *src)
 {
-  uint64_t jit_checks0, assist_runs0;
-  GCtab *parent;
+  uint64_t jit_checks0, assist_runs0, hard_check0;
+  uint64_t cycle_requests0, cycle_starts0;
 
   lua_settop(L, 0);
   lj_gc2_cycle_to_idle(g);
-  lua_newtable(L);
-  parent = tabV(L->top - 1);
-  lj_gc2_mark_begin(g);
-  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  g->gc.state = GCSpause;
   lj_gc_threshold_store(g, LJ_MAX_MEM);
-  la_store64_rel(&g->gc2.hard_bytes, 1);
+  la_store64_rel(&g->gc2.hard_bytes, LJ_MAX_MEM);
+  lj_gc2_hard_check_store(g, LJ_MAX_MEM);
+  la_store64_rel(&g->gc2.alloc_since_trigger, 0);
+
+  /* Compile the allocation loop while JLOOP entry is open. GC2 mark start
+  ** deliberately closes trace entry until the cycle returns to IDLE, so
+  ** starting MARK before recording does not exercise a trace allocation
+  ** check. */
+  ljt_lua_dostring(L, src);
+  assert(lua_isfunction(L, -1));
+
+  la_store64_rel(&g->gc2.hard_bytes, LJ_GC2_ACCT_FLUSH);
   lj_gc2_hard_check_store(g, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
-  la_store64_rel(&g->gc2.alloc_since_trigger, 2);
+  la_store64_rel(&g->gc2.alloc_since_trigger, LJ_GC2_ACCT_FLUSH + 1u);
   jit_checks0 = gc2_jit_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
+  hard_check0 = lj_gc2_hard_check_load(g);
+  cycle_requests0 = gc2_cycle_requests_acq(g);
+  cycle_starts0 = gc2_cycle_starts_acq(g);
 
-  ljt_lua_dostring(L, src);
+  lua_pushinteger(L, 200);
+  ljt_lua_pcall(L, 1, 1, name);
+  lua_pop(L, 1);
 
   if (gc2_jit_hard_checks_acq(g) <= jit_checks0) {
     fprintf(stderr, "%s did not enter the x64 GC2 hard check\n", name);
     assert(0);
   }
-  if (gc2_assist_runs_acq(g) <= assist_runs0) {
-    fprintf(stderr, "%s did not run the GC2 hard assist\n", name);
+  if (lj_gc2_hard_check_load(g) <= hard_check0) {
+    fprintf(stderr, "%s did not advance the x64 GC2 hard-check cadence\n",
+	    name);
     assert(0);
   }
+  assert(gc2_assist_runs_acq(g) == assist_runs0);
+  assert(gc2_cycle_requests_acq(g) == cycle_requests0);
+  assert(gc2_cycle_starts_acq(g) == cycle_starts0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
 }
 
 static void run_idle_stopped_hard_check_trace(lua_State *L, global_State *g)
@@ -124,46 +142,72 @@ int main(void)
   run_hard_alloc_trace(L, g, "TNEW",
     "jit.flush()\n"
     "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
-    "local x\n"
-    "local i = 1\n"
-    "while i <= 200 do x = {}; i = i + 1 end\n"
-    "assert(type(x) == 'table')\n");
+    "local util = require('jit.util')\n"
+    "local function hard_tnew(n)\n"
+    "  local x\n"
+    "  local i = 1\n"
+    "  while i <= n do x = {}; i = i + 1 end\n"
+    "  return type(x)\n"
+    "end\n"
+    "assert(hard_tnew(200) == 'table')\n"
+    "assert(util.traceinfo(1), 'TNEW hard-check loop did not trace')\n"
+    "return hard_tnew\n");
 
   run_hard_alloc_trace(L, g, "CNEW",
     "jit.flush()\n"
     "local ffi = require('ffi')\n"
+    "local util = require('jit.util')\n"
     "ffi.cdef('typedef struct { int x; } lj_gc2_hard_cnew_t;')\n"
     "local ct = ffi.typeof('lj_gc2_hard_cnew_t')\n"
     "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
-    "local x\n"
-    "local i = 1\n"
-    "while i <= 200 do x = ct(i); i = i + 1 end\n"
-    "assert(x.x == 200)\n");
+    "local function hard_cnew(n)\n"
+    "  local x\n"
+    "  local i = 1\n"
+    "  while i <= n do x = ct(i); i = i + 1 end\n"
+    "  return x.x\n"
+    "end\n"
+    "assert(hard_cnew(200) == 200)\n"
+    "assert(util.traceinfo(1), 'CNEW hard-check loop did not trace')\n"
+    "return hard_cnew\n");
 
   run_hard_alloc_trace(L, g, "CELL_CNEW",
     "jit.flush()\n"
     "local util = require('jit.util')\n"
     "jit.opt.start('hotloop=1','hotexit=1')\n"
-    "local t = {}\n"
-    "for i = 1, 1000 do\n"
-    "  local x = i\n"
-    "  t[i] = function()\n"
-    "    x = x + 1\n"
-    "    return x\n"
+    "local function hard_cell_cnew(n)\n"
+    "  local t = {}\n"
+    "  for i = 1, n do\n"
+    "    local x = i\n"
+    "    t[i] = function()\n"
+    "      x = x + 1\n"
+    "      return x\n"
+    "    end\n"
     "  end\n"
+    "  return t\n"
     "end\n"
+    "assert(type(hard_cell_cnew(200)) == 'table')\n"
     "assert(util.traceinfo(1), 'CELL_CNEW loop did not trace')\n"
-    "assert(t[1]() == 2)\n"
-    "assert(t[1000]() == 1001)\n");
+    "return hard_cell_cnew\n"
+    );
 
   run_hard_alloc_trace(L, g, "SNEW",
     "jit.flush()\n"
     "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
+    "local util = require('jit.util')\n"
     "local s = 'abcdef'\n"
-    "local x\n"
-    "local i = 1\n"
-    "while i <= 200 do x = string.sub(s, 1, 3); i = i + 1 end\n"
-    "assert(x == 'abc')\n");
+    "local function hard_snew(n)\n"
+    "  local x\n"
+    "  local i = 1\n"
+    "  while i <= n do\n"
+    "    local first = i % 3 + 1\n"
+    "    x = string.sub(s, first, first + 2)\n"
+    "    i = i + 1\n"
+    "  end\n"
+    "  return x\n"
+    "end\n"
+    "assert(#hard_snew(200) == 3)\n"
+    "assert(util.traceinfo(1), 'SNEW hard-check loop did not trace')\n"
+    "return hard_snew\n");
 
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   lj_gc2_cycle_to_idle(g);
@@ -171,6 +215,6 @@ int main(void)
   lj_gc2_cycle_to_idle(g);
   lua_close(L);
   puts("t-gc2-jit-hard-check OK: idle-stopped hard check is passive and "
-       "TNEW/CNEW/CELL_CNEW/SNEW x64 GC checks enter GC2 hard assist");
+       "TNEW/CNEW/CELL_CNEW/SNEW x64 GC checks advance hard cadence");
   return 0;
 }

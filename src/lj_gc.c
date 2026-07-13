@@ -3077,14 +3077,19 @@ void lj_gc2_freeall(global_State *g)
 }
 
 #if LJ_HASJIT
-int lj_gc2_jit_needs_exit(global_State *g)
+static int gc_jit_phase_threshold_exit_due(global_State *g)
 {
   uint32_t phase = gc2_phase_acq(g);
   return lj_tg_any_jit_active(g) &&
 	 (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
 	  phase == LJ_GC2_SWEEP ||
-	  lj_gc_total_load(g) >= lj_gc_threshold_load(g) ||
-	  gc_hard_assist_due_jit(g));
+	  lj_gc_total_load(g) >= lj_gc_threshold_load(g));
+}
+
+int lj_gc2_jit_needs_exit(global_State *g)
+{
+  return gc_jit_phase_threshold_exit_due(g) ||
+	 (lj_tg_any_jit_active(g) && gc_hard_assist_due_jit(g));
 }
 #else
 #define lj_gc2_jit_needs_exit(g)	0
@@ -3245,16 +3250,30 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   L->base = jbase;
   L->top = curr_topL(L);
   tg = L2TG(L);
-  if (lj_gc2_jit_needs_exit(g))
-    return 1;
-  lj_gc2_check_trigger(g, tg);
+  /* Split an active/threshold exit from a hard-only trace cadence check. The
+  ** former must not run trace-owned phase progress. The latter must advance
+  ** hard_check_bytes without accidentally starting a stopped-IDLE cycle. */
+  needs_exit = gc_jit_phase_threshold_exit_due(g);
+  hard_step = gc_hard_assist_due_jit(g);
+  if (!needs_exit && !hard_step)
+    lj_gc2_check_trigger(g, tg);
   threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
   hard_step = gc_hard_assist_due_jit(g);
   if (hard_step) {
+    /* A phase/threshold exit owns progress from the interpreter. Service the
+    ** trace cadence and telemetry, but do not run assist work before leaving. */
+    needs_exit = needs_exit || gc_jit_phase_threshold_exit_due(g);
     gc2_jit_hard_checks_add(g, 1);
-    lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */
+    if (!needs_exit)
+      lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */
     lj_gc2_hard_check_advance(g, lj_gc2_alloc_since_load(g));
   }
+  /* hard_check_bytes may now be beyond current debt. Keep executing a stopped
+  ** IDLE trace in that case; preserve a pre-sampled or newly-due phase/threshold
+  ** exit otherwise. */
+  needs_exit = needs_exit || lj_gc2_jit_needs_exit(g);
+  if (needs_exit)
+    return 1;
   if (threshold_step) {
     while (steps-- > 0 && gc2_step_auto(L, threshold_step, 1) == 0)
       threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
