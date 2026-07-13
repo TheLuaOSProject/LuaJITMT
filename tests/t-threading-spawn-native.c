@@ -21,6 +21,8 @@
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
+#include "lj_vm.h"
 
 typedef struct SpawnStopReqCtx {
   global_State *g;
@@ -35,11 +37,35 @@ static uint32_t pause_spawn_create;
 static uint32_t pause_seen;
 static uint32_t pause_release;
 static uint32_t child_ran;
+static uint32_t worker_cpcall_seen;
+static pthread_t fixture_main_thread;
 
 
 extern int __real_pthread_create(pthread_t *thread,
 				 const pthread_attr_t *attr,
 				 void *(*start_routine)(void *), void *arg);
+extern int __real_lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
+			       lua_CPFunction cp);
+
+int __wrap_lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
+			lua_CPFunction cp)
+{
+  global_State *g = G(L);
+  if (L != mainthread_acq(g) &&
+      !pthread_equal(pthread_self(), fixture_main_thread)) {
+    TGState *tg = lj_thr_get_tg();
+    uint32_t owner = lj_state_owner_acq(L);
+    assert(tg != NULL);
+    assert(tg->gl == g);
+    assert(lj_thr_id_is_owner(owner));
+    assert(owner == lj_tg_tid_acq(tg));
+    assert(lj_tg_find_owner(g, owner) == tg);
+    assert(lj_tg_load_cur_L(tg) == L);
+    assert(lj_tg_load_thread_L(tg) == L);
+    la_add32_rlx(&worker_cpcall_seen, 1);
+  }
+  return __real_lj_vm_cpcall(L, func, ud, cp);
+}
 
 int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 			  void *(*start_routine)(void *), void *arg)
@@ -119,6 +145,7 @@ static void test_sticky_stopreq_spawn_ok(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   TGState *tg = L2TG(L);
+  uint32_t seen0 = la_load32_acq(&worker_cpcall_seen);
   static const char script[] =
     "local threading = require('threading')\n"
     "local th = threading.spawn(function() return 41 end)\n"
@@ -130,6 +157,7 @@ static void test_sticky_stopreq_spawn_ok(void)
   assert(luaL_loadbuffer(L, script, sizeof(script) - 1, "sticky-spawn") ==
 	 LUA_OK);
   assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  assert(la_load32_acq(&worker_cpcall_seen) > seen0);
   assert(ljt_tg_has_stopreq(tg));
   ljt_tg_clear_stopreq(tg);
   lua_close(L);
@@ -214,6 +242,7 @@ static void test_spawn_preserves_active_gc_cycle(void)
 
 int main(void)
 {
+  fixture_main_thread = pthread_self();
   test_sticky_stopreq_spawn_ok();
   test_fresh_stopreq_aborts_before_child_runs();
   test_spawn_preserves_active_gc_cycle();

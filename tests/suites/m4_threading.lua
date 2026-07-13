@@ -168,7 +168,7 @@ return function(add)
         timeout = "20s",
         libs = {
           "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
-          "-Wl,--wrap=pthread_create"
+          "-Wl,--wrap=pthread_create", "-Wl,--wrap=lj_vm_cpcall"
         }
       },
       message = "M4 threading.spawn native STOPREQ tests passed"

@@ -4282,6 +4282,9 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   assert(busy != NULL);
   lua_newtable(busy);
   busy_tab = tabV(busy->top - 1);
+  lua_newtable(busy);
+  late_tab = tabV(busy->top - 1);
+  busy->top--;
   lj_tg_init_thread(g, &extra_tg, owner_L, 1);
   extra_tg.tid = tg->tid + 7000u;
   if (extra_tg.tid == 0 || extra_tg.tid == LJ_THREAD_GCSCAN)
@@ -4328,21 +4331,53 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
   assert(la_load32_acq(&g->gc2.thread_scan_needscan_pending) ==
 	 needscan_pending0);
+  assert(lj_gc2_ismarked(g, obj2gco(late_tab)) == 0);
+  /* Expose one fresh stack edge after the owner scan. This white-box fixture
+  ** deliberately leaves it for the queued GC traversal below to discover. */
+  settabV(busy, busy->top++, late_tab);
+
+  /* Preserve the claimed state across its owner's registry retirement. A
+  ** DEAD-but-still-registered TG remains authoritative, so the first replay
+  ** retains the exact owner id. Once the registry body is physically absent,
+  ** the already-queued state is provably stale and may transfer to GCSCAN. */
   lj_state_owner_rel(owner_L, 0);
-  lj_state_owner_rel(busy, 0);
   owner_L->tg_hint = tg;
-  busy->tg_hint = tg;
   lj_tg_detach(g, &extra_tg);
   assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
   assert(g->gc2.n_threads <= n_threads0 + 1u);
+  assert(lj_tg_find_owner(g, extra_tg.tid) == &extra_tg);
+
+  busy0 = la_load64_acq(&g->gc2.thread_scan_busy);
+  requeues0 = la_load64_acq(&g->gc2.thread_scan_requeues);
+  claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
+  lj_state_scan_epoch_rel(busy, 0);
+  lj_gc2_test_scan_tg_thread_root(g, tg, busy);
+  {
+    uint32_t i;
+    for (i = 0; i < 64u &&
+	 la_load64_acq(&g->gc2.thread_scan_busy) == busy0; i++)
+      (void)lj_gc2_worker_drain(g, 1);
+  }
+  assert(la_load64_acq(&g->gc2.thread_scan_busy) == busy0 + 1u);
+  assert(la_load64_acq(&g->gc2.thread_scan_requeues) == requeues0);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0);
+  assert(lj_state_owner_acq(busy) == extra_tg.tid);
+  assert(lj_gc2_ismarked(g, obj2gco(late_tab)) == 0);
+  assert(!lj_gc2_test_ssb_empty(g));
+
   assert(lj_tg_reclaim_dead(g) == 1u);
   assert(lj_tg_find_owner(g, extra_tg.tid) != &extra_tg);
+  busy->tg_hint = tg;
   lj_tg_fini_thread(g, &extra_tg);
-  (void)lj_gc2_flush_ssb(g, tg);
+  lj_gc2_cycle_to_idle(g);
+  assert(la_load64_acq(&g->gc2.thread_scan_busy) >= busy0 + 2u);
+  assert(la_load64_acq(&g->gc2.thread_scan_requeues) == requeues0);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) >= claims0 + 1u);
+  assert(lj_state_owner_acq(busy) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(late_tab)) == 1);
   worker_drain_all(g);
   assert(la_load64_acq(&g->gc2.thread_scan_owner_scans) == owner_scans0);
   assert(lj_gc2_test_ssb_empty(g));
-  lj_gc2_cycle_to_idle(g);
   lua_pop(L, 2);
 
   busy = lua_newthread(L);
