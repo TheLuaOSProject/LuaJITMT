@@ -242,6 +242,94 @@ static uint32_t trace_ir_xpoll_remote_count(GCtrace *T)
   return n;
 }
 
+static uint32_t expect_nonloop_xpoll_snapshots(GCtrace *T,
+					       uint32_t *nonterminal)
+{
+  IRIns *ir = trace_ir_acq(T);
+  IRRef ref, nins = trace_nins_acq(T);
+  SnapShot *snap = trace_snap_acq(T);
+  SnapNo nsnap = trace_nsnap_acq(T);
+  uint32_t found = 0;
+  for (ref = REF_FIRST; ref < nins; ref++) {
+    SnapNo sn;
+    int exact = 0;
+    if (ir[ref].o != IR_XPOLL ||
+	(ref > REF_FIRST && ir[ref-1].o == IR_LOOP))
+      continue;  /* Optimized loop XPOLL intentionally uses the loop snap. */
+    for (sn = 0; sn < nsnap; sn++) {
+      if (snap_ref_acq(&snap[sn]) == ref) {
+	exact = 1;
+	break;
+      }
+    }
+    assert(exact && "non-loop XPOLL inherited an earlier guard snapshot");
+    if (nonterminal && ref + 1 < nins)
+      (*nonterminal)++;
+    found++;
+  }
+  return found;
+}
+
+static void expect_tail_xpoll_snapshot(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  TraceNo tr;
+  uint32_t found = 0;
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1', 'minstitch=1')\n"
+    "function lj_m6_tail_xpoll(n, flag, seed)\n"
+    "  local s = seed\n"
+    "  for i = 1, n do\n"
+    "    if flag and i % 17 == 0 then s = s + i * 7\n"
+    "    else s = s + i end\n"
+    "  end\n"
+    "  return s\n"
+    "end\n"
+    "for r = 1, 64 do\n"
+    "  assert(lj_m6_tail_xpoll(80, false, r) == r + 3240)\n"
+    "  assert(lj_m6_tail_xpoll(80, true, r) == r + 4260)\n"
+    "end\n");
+  for (tr = 1; tr < trace_sizetrace_acq(J); tr++) {
+    GCtrace *T = traceref_safe(J, tr);
+    if (trace_runnable_acq(T, tr) && trace_root_acq(T) != 0 &&
+	T->linktype == LJ_TRLINK_ROOT)
+      found += expect_nonloop_xpoll_snapshots(T, NULL);
+  }
+  assert(found > 0 && "hot side trace did not publish a terminal XPOLL");
+}
+
+static void expect_func_xpoll_snapshot(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  TraceNo tr;
+  uint32_t found = 0, nonterminal = 0;
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1', 'callunroll=32', 'recunroll=32')\n"
+    "local function f10(x) return x+1 end\n"
+    "local function f9(x) return f10(x)+1 end\n"
+    "local function f8(x) return f9(x)+1 end\n"
+    "local function f7(x) return f8(x)+1 end\n"
+    "local function f6(x) return f7(x)+1 end\n"
+    "local function f5(x) return f6(x)+1 end\n"
+    "local function f4(x) return f5(x)+1 end\n"
+    "local function f3(x) return f4(x)+1 end\n"
+    "local function f2(x) return f3(x)+1 end\n"
+    "local function f1(x) return f2(x)+1 end\n"
+    "local s = 0\n"
+    "for i = 1, 64 do s = s + f1(i) end\n"
+    "assert(s == 2720)\n");
+  for (tr = 1; tr < trace_sizetrace_acq(J); tr++) {
+    GCtrace *T = traceref_safe(J, tr);
+    if (trace_runnable_acq(T, tr))
+      found += expect_nonloop_xpoll_snapshots(T, &nonterminal);
+  }
+  assert(found > 0 && "deep inlined FUNCF trace did not publish an XPOLL");
+  assert(nonterminal > 0 &&
+	 "deep inlined FUNCF trace only published a terminal XPOLL");
+}
+
 static void expect_loop_xpoll_shape(lua_State *L, int want_xpoll)
 {
   jit_State *J = G2J(G(L));
@@ -606,6 +694,8 @@ int main(void)
     "local w = th.spawn(function() return true end)\n"
     "assert(w:join(5) == true)\n");
   assert(mt_active_acq(g) != 0);
+  expect_tail_xpoll_snapshot(L);
+  expect_func_xpoll_snapshot(L);
 
   /* Every iteration uses a fresh, deliberately exhausted coroutine stack.
   ** Race its prepare-time growth against removal and collection of the event

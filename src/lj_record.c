@@ -453,11 +453,20 @@ void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk)
   }
   canonicalize_slots(J);
 #if LJ_TARGET_X64 && LJ_GC64
+  /* A guard consumes the newest snapshot whose ref is at or before the guard
+  ** IR. Publish the terminal continuation snapshot first so the tail XPOLL
+  ** cannot inherit the preceding loop-condition exit (which may leave a
+  ** numeric loop at an arbitrary iteration when a safepoint closes the gate). */
+  lj_snap_add(J);
   emitir_raw(IRTG(IR_XPOLL, IRT_NIL), rec_needs_xpoll(J), 0);
+#else
+  lj_snap_add(J);
 #endif
+  goto snapdone;
 nocanon:
   /* Note: all loop ops must set J->pc to the following instruction! */
   lj_snap_add(J);  /* Add loop snapshot. */
+snapdone:
   J->needsnap = 0;
   J->mergesnap = 1;  /* In case recording continues. */
 }
@@ -3265,8 +3274,10 @@ static void rec_func_setup(jit_State *J)
 static void rec_func_xpoll(jit_State *J)
 {
   if (J->framedepth >= LJ_TRACE_FUNCF_XPOLL_DEPTH) {
-    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), rec_needs_xpoll(J), 0);
+    /* Bind the guard to the exact inlined-frame continuation, not the prior
+    ** caller snapshot. See the terminal XPOLL ordering in lj_record_stop(). */
     lj_snap_add(J);
+    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), rec_needs_xpoll(J), 0);
   }
 }
 
