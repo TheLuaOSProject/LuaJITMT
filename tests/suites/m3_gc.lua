@@ -355,7 +355,10 @@ return function(add)
     deps = m3_scaffold_deps,
     run = function(t)
       make_clean(t)
-      make_default(t, { jobs = false })
+      make_default(t, {
+        jobs = false,
+        args = { "XCFLAGS=" .. gc2_test_cflags }
+      })
 
       run_c_fixtures(t, {
         "t-gcflags-atomic",

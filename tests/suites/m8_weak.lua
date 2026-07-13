@@ -49,7 +49,7 @@ local function run_finalizer_error_native_stdio(t, opts)
 end
 
 local function run_default_matrix(t)
-  t:build({ clean = true, quiet = true })
+  t:build({ clean = true, quiet = true, xcflags = gc2_test_cflags })
   run_finalizer_error_native_stdio(t, { build = false })
   run_luajit_script_jit_modes(t, "t-weak-modes.lua")
   run_luajit_script_jit_modes(t, "t-m8-finalizer-spawn-live.lua", nil,
@@ -63,7 +63,7 @@ local function run_default_matrix(t)
 end
 
 local function run_paranoia_matrix(t)
-  local xcflags = build.gc2_paranoia_flags
+  local xcflags = gc2_test_cflags .. " " .. build.gc2_paranoia_flags
   t:build({ clean = true, quiet = true, xcflags = xcflags })
   luajit_script(t, "t-weak-modes.lua", nil, {
     joff = true,

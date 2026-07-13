@@ -388,6 +388,12 @@ LJ_FUNC void lj_gc2_test_recovery_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_gc2_test_recovery_paused(void);
 LJ_FUNC void lj_gc2_test_recovery_release(void);
 LJ_FUNC void lj_gc2_test_recovery_fail_closed(global_State *g);
+LJ_FUNC void lj_gc2_test_stack_admission_retry_once(GCobj *target);
+LJ_FUNC uint32_t lj_gc2_test_stack_admission_retry_hits(void);
+LJ_FUNC void lj_gc2_test_root_semantic_retry_once(GCobj *target);
+LJ_FUNC uint32_t lj_gc2_test_root_semantic_retry_hits(void);
+LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
+					      lua_State *L);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_recovery_drain(global_State *g, uint32_t limit);
 LJ_FUNC int lj_gc2_test_recovery_state(global_State *g, GCobj *o);

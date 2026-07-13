@@ -23,6 +23,7 @@
 #include "lj_tab.h"
 #include "lj_udata.h"
 #include "lj_state.h"
+#include "lj_safepoint.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
@@ -4090,6 +4091,323 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 1);
 }
 
+#if defined(LJ_GC2_TEST_HELPERS)
+static void test_stack_admission_tristate(lua_State *L, global_State *g,
+					   TGState *tg)
+{
+  TGState extra_tg;
+  TGState *old_tg = lj_thr_get_tg();
+  lua_State *owner_L, *busy;
+  TValue *fake, *saved_base;
+  GCtab *target, *mismatch, *env_target, *saved_env;
+  uint64_t scan0, dirty0, handoff0, claims0, requeues0;
+  uint64_t grey_pushed0;
+  uint32_t pending0, n_threads0, round, smr0, cycle0;
+  int base = lua_gettop(L);
+
+  /* A live foreign owner first turns the grey thread into counted NEEDSCAN
+  ** work. Native cur_L makes the eventual owner snapshot conservative and
+  ** authoritative, so the exact target is admitted from the widened tail. */
+  owner_L = lua_newthread(L);
+  assert(owner_L != NULL);
+  busy = lua_newthread(L);
+  assert(busy != NULL);
+  lua_newtable(busy);
+  target = tabV(busy->top - 1);
+  lua_newtable(L);
+  mismatch = tabV(L->top - 1);
+  fake = busy->top;
+  assert(fake < tvref(busy->maxstack));
+  setgcVraw(fake, obj2gco(mismatch), LJ_TFUNC);
+
+  lj_tg_init_thread(g, &extra_tg, owner_L, 1);
+  extra_tg.tid = tg->tid + 11000u;
+  if (extra_tg.tid == 0 || extra_tg.tid == LJ_THREAD_GCSCAN)
+    extra_tg.tid = 11000u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  owner_L->tg_hint = &extra_tg;
+  busy->tg_hint = &extra_tg;
+  lj_state_owner_rel(owner_L, extra_tg.tid);
+  lj_state_owner_rel(busy, extra_tg.tid);
+  lj_tg_store_cur_L(&extra_tg, busy);
+  /* Remove the thread from the root spine so the owner-NEEDSCAN helper reaches
+  ** it through the thread registry only. Main-stack and TG references still
+  ** provide semantic reachability, but that helper does not traverse them. */
+  lj_state_thread_registry_publish(g, busy);
+  assert(lj_gc_unlink_root_obj(g, obj2gco(busy)) == LJ_GC_ROOT_UNLINKED);
+
+  flush_and_drain(g, tg);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  cycle0 = gc2_cycle_acq(g);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_cycle_acq(g) != cycle0);
+  pin_mark_closed_for_worker_fixture(g);
+  n_threads0 = g->gc2.n_threads;
+  lj_tg_attach(g, &extra_tg);
+  lj_native_enter(&extra_tg);
+  assert(lj_tg_find_owner(g, extra_tg.tid) == &extra_tg);
+  assert(lj_tg_in_native_acq(&extra_tg) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(mismatch)) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(lj_gc2_worker_drain(g, 2) != 0);
+  assert(lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN);
+
+  scan0 = lj_state_scan_epoch_acq(busy);
+  dirty0 = lj_state_scan_dirty_epoch_acq(busy);
+  pending0 = gc2_thread_scan_needscan_pending_acq(g);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(pending0 != 0);
+
+  /* Remove the synthetic worker handoff so a direct owner-root retry must
+  ** publish a fresh counted handoff rather than merely preserve one. */
+  assert(la_and8_rlx(lj_obj_gcflags_ref(obj2gco(busy)),
+		     (uint8_t)~LJ_GC_NEEDSCAN) & LJ_GC_NEEDSCAN);
+  gc2_thread_scan_needscan_pending_dec(g);
+  lj_state_scan_handoff_epoch_rel(busy, 0);
+  assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0 - 1u);
+
+  lj_gc2_test_stack_admission_retry_once(obj2gco(target));
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_test_scan_tg_thread_root(g, &extra_tg, busy);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(mismatch)) == 0);
+  assert(lj_state_scan_epoch_acq(busy) == scan0);
+  assert(lj_state_scan_dirty_epoch_acq(busy) == dirty0);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0);
+
+  /* A second retry through the counted owner queue must preserve that exact
+  ** handoff rather than double-counting it or publishing completion stamps. */
+  handoff0 = lj_state_scan_handoff_epoch_acq(busy);
+  lj_gc2_test_stack_admission_retry_once(obj2gco(target));
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_test_scan_owned_needscan(g, owner_L);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(mismatch)) == 0);
+  assert(lj_state_scan_epoch_acq(busy) == scan0);
+  assert(lj_state_scan_dirty_epoch_acq(busy) == dirty0);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == handoff0);
+  assert(lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0);
+
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_test_scan_owned_needscan(g, owner_L);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 1);
+  /* The function-shaped stale word names a valid table allocation. A terminal
+  ** tag/header mismatch is ignored rather than retried or marked as a func. */
+  assert(lj_gc2_ismarked(g, obj2gco(mismatch)) == 0);
+  assert(lj_state_scan_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(lj_state_scan_dirty_epoch_acq(busy) ==
+	 lj_tg_stack_dirty_epoch_acq(&extra_tg));
+  assert(lj_state_scan_handoff_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0 - 1u);
+
+  /* A thread environment is an authoritative root outside the stack range.
+  ** Its transient semantic admission must publish the same counted retry and
+  ** must not let the owner snapshot stamp over the missing edge. */
+  (void)lj_gc2_flush_ssb(g, &extra_tg);
+  (void)lj_gc2_flush_ssb(g, tg);
+  worker_drain_all(g);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  saved_env = lj_state_env_acq(busy);
+  lua_newtable(L);
+  env_target = tabV(L->top - 1);
+  lj_state_env_rel(busy, env_target);
+  lua_pop(L, 1);
+  cycle0 = gc2_cycle_acq(g);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_cycle_acq(g) != cycle0);
+  pin_mark_closed_for_worker_fixture(g);
+  scan0 = lj_state_scan_epoch_acq(busy);
+  dirty0 = lj_state_scan_dirty_epoch_acq(busy);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(env_target)) == 0);
+  lj_gc2_test_root_semantic_retry_once(obj2gco(env_target));
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_test_scan_tg_thread_root(g, &extra_tg, busy);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(env_target)) == 0);
+  assert(lj_state_scan_epoch_acq(busy) == scan0);
+  assert(lj_state_scan_dirty_epoch_acq(busy) == dirty0);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 1u);
+  lj_thr_set_tg(&extra_tg);
+  lj_gc2_test_scan_owned_needscan(g, owner_L);
+  lj_thr_set_tg(old_tg);
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(env_target)) == 1);
+  assert(lj_state_scan_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+
+  setnilV(fake);
+  assert(lj_native_leave_tg(&extra_tg) == 0);
+  assert(lj_tg_in_native_acq(&extra_tg) == 0);
+  (void)lj_gc2_flush_ssb(g, &extra_tg);
+  (void)lj_gc2_flush_ssb(g, tg);
+  worker_drain_all(g);
+  assert(lj_gc_linkobj(g, obj2gco(busy)) == LJ_GC_ROOT_LINKED);
+  lj_state_owner_rel(owner_L, 0);
+  lj_state_owner_rel(busy, 0);
+  owner_L->tg_hint = tg;
+  busy->tg_hint = tg;
+  lj_tg_detach(g, &extra_tg);
+  assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
+  assert(g->gc2.n_threads <= n_threads0 + 1u);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra_tg);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lj_state_env_rel(busy, saved_env);
+  lua_settop(L, base);
+
+  /* An ownerless state is GCSCAN-claimable. Temporarily exposing an invalid
+  ** frame header drives the existing conservative frame-fallback path. The
+  ** first exact-target retry must republish the thread to grey without a
+  ** completion stamp; a later bounded worker quantum must claim and complete. */
+  busy = lua_newthread(L);
+  assert(busy != NULL);
+  lua_newtable(busy);
+  target = tabV(busy->top - 1);
+  lua_newtable(L);
+  mismatch = tabV(L->top - 1);
+  fake = busy->top;
+  assert(fake < tvref(busy->maxstack));
+  setgcVraw(fake, obj2gco(mismatch), LJ_TFUNC);
+  saved_base = busy->base;
+  busy->base = busy->top;
+
+  flush_and_drain(g, tg);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  cycle0 = gc2_cycle_acq(g);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_cycle_acq(g) != cycle0);
+  pin_mark_closed_for_worker_fixture(g);
+  scan0 = lj_state_scan_epoch_acq(busy);
+  dirty0 = lj_state_scan_dirty_epoch_acq(busy);
+  handoff0 = lj_state_scan_handoff_epoch_acq(busy);
+  claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
+  requeues0 = gc2_thread_scan_requeues_acq(g);
+  grey_pushed0 = gc2_grey_pushed_acq(g);
+  smr0 = gc2_smr_readers_acq(g);
+  pending0 = gc2_thread_scan_needscan_pending_acq(g);
+  assert(pending0 == 0);
+  /* This hook fires after the widened stale-word classifier admitted the
+  ** exact object, covering nested semantic DEAD with its outer scope held. */
+  lj_gc2_test_root_semantic_retry_once(obj2gco(target));
+  assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(lj_gc2_worker_drain(g, 2) == 2u);
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(mismatch)) == 0);
+  assert(lj_state_scan_epoch_acq(busy) == scan0);
+  assert(lj_state_scan_dirty_epoch_acq(busy) == dirty0);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == handoff0);
+  assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 1u);
+  assert(gc2_thread_scan_requeues_acq(g) == requeues0);
+  assert(gc2_smr_readers_acq(g) == smr0);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0);
+  assert(gc2_grey_pushed_acq(g) >= grey_pushed0 + 2u);
+  assert(!lj_gc2_test_ssb_empty(g));
+
+  /* Each public quantum may first convert an unrelated active SSB item above
+  ** the direct grey retry. Use a bounded 4096-item budget rather than assuming
+  ** the Chase-Lev owner can pop the retry in the very next one-item quantum. */
+  for (round = 0;
+       round < 64 && lj_state_scan_epoch_acq(busy) != gc2_cycle_acq(g);
+       round++)
+    assert(lj_gc2_worker_drain(g, 64) != 0);
+  assert(lj_state_scan_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(target)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(mismatch)) == 0);
+  assert(lj_state_scan_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(lj_state_scan_dirty_epoch_acq(busy) == 0);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == 0);
+  assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 2u);
+  assert(gc2_thread_scan_requeues_acq(g) == requeues0);
+  assert(gc2_smr_readers_acq(g) == smr0);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0);
+  assert(lj_state_owner_acq(busy) == 0);
+
+  busy->base = saved_base;
+  setnilV(fake);
+  worker_drain_all(g);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  /* Repeat the worker retry with a non-stack authoritative environment edge.
+  ** Drop GCSCAN authority first, publish the concrete retry while registry SMR
+  ** still pins its identity, then return the SMR reader count to its baseline. */
+  saved_env = lj_state_env_acq(busy);
+  lua_newtable(L);
+  env_target = tabV(L->top - 1);
+  lj_state_env_rel(busy, env_target);
+  lua_pop(L, 1);
+  cycle0 = gc2_cycle_acq(g);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_cycle_acq(g) != cycle0);
+  pin_mark_closed_for_worker_fixture(g);
+  scan0 = lj_state_scan_epoch_acq(busy);
+  dirty0 = lj_state_scan_dirty_epoch_acq(busy);
+  handoff0 = lj_state_scan_handoff_epoch_acq(busy);
+  claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
+  smr0 = gc2_smr_readers_acq(g);
+  pending0 = gc2_thread_scan_needscan_pending_acq(g);
+  assert(pending0 == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(env_target)) == 0);
+  lj_gc2_test_root_semantic_retry_once(obj2gco(env_target));
+  assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(lj_gc2_worker_drain(g, 2) == 2u);
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(env_target)) == 0);
+  assert(lj_state_scan_epoch_acq(busy) == scan0);
+  assert(lj_state_scan_dirty_epoch_acq(busy) == dirty0);
+  assert(lj_state_scan_handoff_epoch_acq(busy) == handoff0);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 1u);
+  assert(gc2_smr_readers_acq(g) == smr0);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0);
+  for (round = 0;
+       round < 64 && lj_state_scan_epoch_acq(busy) != gc2_cycle_acq(g);
+       round++)
+    assert(lj_gc2_worker_drain(g, 64) != 0);
+  assert(lj_state_scan_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(env_target)) == 1);
+  assert(lj_state_scan_epoch_acq(busy) == gc2_cycle_acq(g));
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 2u);
+  assert(gc2_smr_readers_acq(g) == smr0);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == pending0);
+  worker_drain_all(g);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lj_state_env_rel(busy, saved_env);
+  lua_settop(L, base);
+}
+#endif
+
 static void test_thread_needscan_idle_clear(lua_State *L, global_State *g,
 					    TGState *tg, int preserve_abort)
 {
@@ -6020,6 +6338,9 @@ int main(void)
 #endif
   test_minor_root_scan(L, g, tg);
   test_thread(L, g, tg);
+#if defined(LJ_GC2_TEST_HELPERS)
+  test_stack_admission_tristate(L, g, tg);
+#endif
   test_thread_needscan_idle_clear(L, g, tg, 0);
   test_thread_needscan_idle_clear(L, g, tg, 1);
   test_userdata(L, g);

@@ -229,6 +229,12 @@ static uint32_t gc2_recovery_test_paused_stage;
 static uint32_t gc2_recovery_test_pause_release;
 static uint64_t gc2_test_jit_mark_checkpoint_closes;
 static uint64_t gc2_test_jit_sweep_checkpoint_closes;
+static uintptr_t gc2_test_stack_admission_retry_target;
+static uint32_t gc2_test_stack_admission_retry_armed;
+static uint32_t gc2_test_stack_admission_retry_hits;
+static uintptr_t gc2_test_root_semantic_retry_target;
+static uint32_t gc2_test_root_semantic_retry_armed;
+static uint32_t gc2_test_root_semantic_retry_hits;
 
 void lj_gc2_test_jit_mark_checkpoint_reset(void)
 {
@@ -272,6 +278,58 @@ static int gc2_recovery_test_take_fail(uint32_t *counter)
     old = expect;
   }
   return 0;
+}
+
+void lj_gc2_test_stack_admission_retry_once(GCobj *target)
+{
+  la_store32_rel(&gc2_test_stack_admission_retry_hits, 0);
+  la_storeuptr_rel(&gc2_test_stack_admission_retry_target,
+		   (uintptr_t)(void *)target);
+  la_store32_rel(&gc2_test_stack_admission_retry_armed, target != NULL);
+}
+
+uint32_t lj_gc2_test_stack_admission_retry_hits(void)
+{
+  return la_load32_acq(&gc2_test_stack_admission_retry_hits);
+}
+
+static int gc2_stack_test_take_admission_retry(GCobj *o)
+{
+  uint32_t expect = 1;
+  if ((GCobj *)(void *)la_loaduptr_acq(
+	&gc2_test_stack_admission_retry_target) != o)
+    return 0;
+  if (!la_cas32(&gc2_test_stack_admission_retry_armed, &expect, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  (void)la_add32_rlx(&gc2_test_stack_admission_retry_hits, 1);
+  return 1;
+}
+
+void lj_gc2_test_root_semantic_retry_once(GCobj *target)
+{
+  la_store32_rel(&gc2_test_root_semantic_retry_hits, 0);
+  la_storeuptr_rel(&gc2_test_root_semantic_retry_target,
+		   (uintptr_t)(void *)target);
+  la_store32_rel(&gc2_test_root_semantic_retry_armed, target != NULL);
+}
+
+uint32_t lj_gc2_test_root_semantic_retry_hits(void)
+{
+  return la_load32_acq(&gc2_test_root_semantic_retry_hits);
+}
+
+static int gc2_root_test_take_semantic_retry(GCobj *o)
+{
+  uint32_t expect = 1;
+  if ((GCobj *)(void *)la_loaduptr_acq(
+	&gc2_test_root_semantic_retry_target) != o)
+    return 0;
+  if (!la_cas32(&gc2_test_root_semantic_retry_armed, &expect, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  (void)la_add32_rlx(&gc2_test_root_semantic_retry_hits, 1);
+  return 1;
 }
 
 static void gc2_recovery_test_pause_at(uint32_t stage)
@@ -336,6 +394,8 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define gc2_recovery_test_pause_at(stage) ((void)(stage))
 #define gc2_test_jit_mark_checkpoint_closed() ((void)0)
 #define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
+#define gc2_stack_test_take_admission_retry(o) (0)
+#define gc2_root_test_take_semantic_retry(o) (0)
 #endif
 
 #if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
@@ -997,6 +1057,9 @@ static uint32_t gc2_recovery_discard_terminal(global_State *g);
 static int gc2_observed_obj_valid_scoped(global_State *g, GCobj *o,
 						 uint32_t *gctp,
 						 GC2MarkScope *scope);
+static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
+						  uint32_t *gctp,
+						  GC2MarkScope *scope);
 static int gc2_observed_obj_valid(global_State *g, GCobj *o);
 static int gc2_queue_obj_info(global_State *g, GCobj *o,
 			      GCArena *known_small,
@@ -6335,6 +6398,58 @@ static int gc2_tv_gcref_type_match(global_State *g, cTValue *tv)
   return match;
 }
 
+enum {
+  GC2_STACK_TV_RETRY = -1,
+  GC2_STACK_TV_IGNORE = 0,
+  GC2_STACK_TV_ADMITTED = 1
+};
+
+/* A widened stack snapshot contains ordinary popped/spill cells. Distinguish a
+** terminal stale word from a transient inability to establish lifetime, and
+** return ADMITTED with the exact observation scope still held. The caller must
+** retain that scope through semantic marking: otherwise address reuse between
+** validation and marking can turn an old tagged word into a different root. */
+static int gc2_stack_tv_admit(global_State *g, cTValue *tv,
+			      GC2MarkScope *scope)
+{
+  GCobj *o;
+  uint32_t gct;
+  int status;
+  gc2_mark_scope_init(scope);
+  if (!tvisgcv(tv))
+    return GC2_STACK_TV_ADMITTED;
+  o = gcval(tv);
+#if defined(LJ_GC2_TEST_HELPERS)
+  if (gc2_stack_test_take_admission_retry(o))
+    return GC2_STACK_TV_RETRY;
+#endif
+  if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
+    return o->gch.gct == ~LJ_TSTR ?
+	   GC2_STACK_TV_ADMITTED : GC2_STACK_TV_IGNORE;
+  status = gc2_observed_obj_status_scoped(g, o, &gct, scope);
+  if (status < 0)
+    return GC2_STACK_TV_RETRY;
+  if (status == 0)
+    return GC2_STACK_TV_IGNORE;
+#if LJ_HASFFI
+  if (itype(tv) == LJ_TCDATA) {
+    if (gct != (uint32_t)~LJ_TCDATA ||
+	(ctype_ctsG(g) == NULL &&
+	 (cdataisv(gco2cd(o)) ||
+	  ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)))
+      goto ignore;
+    return GC2_STACK_TV_ADMITTED;
+  }
+#endif
+  if ((uint32_t)~itype(tv) == gct)
+    return GC2_STACK_TV_ADMITTED;
+#if LJ_HASFFI
+ignore:
+#endif
+  gc2_mark_scope_leave(scope);
+  return GC2_STACK_TV_IGNORE;
+}
+
 static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
 {
   GC2MarkScope scope;
@@ -6497,32 +6612,42 @@ static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
   gc2_thread_root_rescan_marked_obj_forced(g, o);
 }
 
-static void gc2_mark_thread_root_obj(global_State *g, GCobj *o)
+static int gc2_mark_thread_root_obj_status(global_State *g, GCobj *o)
 {
   uint32_t gct;
   int status, traversable;
   if (!o)
-    return;
+    return 1;
   if (mainthread_acq(g) && o == obj2gco(mainthread_acq(g))) {
     (void)gc2_publish_mutator(g, o);
-    return;
+    return 1;
   }
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
     (void)lj_gc2_trace_sweep_root(g, o);
-    return;
+    /* SWEEP turns a failed nested admission into durable recovery work (or a
+    ** sticky no-reclaim veto), so the stack identity is not dropped. */
+    return 1;
   }
+  if (gc2_root_test_take_semantic_retry(o))
+    return 0;
   status = gc2_markobj_preserve_status(g, o, NULL, &gct, &traversable);
   if (status == GC2_MARK_DEAD)
-    return;
+    return 0;
   if (status == GC2_MARK_NEW) {
     if (gc2_gct_may_traverse(gct) &&
 	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
       (void)gc2_publish_mutator(g, o);
     }
-    return;
+    return 1;
   }
   if (status == GC2_MARK_LIVE_ALREADY)
     gc2_thread_root_rescan_marked_obj(g, o);
+  return 1;
+}
+
+static void gc2_mark_thread_root_obj(global_State *g, GCobj *o)
+{
+  (void)gc2_mark_thread_root_obj_status(g, o);
 }
 
 static void gc2_mark_thread_root_tv(global_State *g, cTValue *tv)
@@ -6535,33 +6660,24 @@ static void gc2_mark_thread_root_tv(global_State *g, cTValue *tv)
     gc2_mark_thread_root_obj(g, gcV(tv));
 }
 
-static void gc2_mark_thread_root_tv_stack(global_State *g, cTValue *tv)
+static int gc2_mark_thread_root_tv_status(global_State *g, cTValue *tv)
 {
-  if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
-    (void)lj_gc2_trace_sweep_root(g, gcV(tv));
-    return;
-  }
   if (tvisgcv(tv))
-    gc2_mark_thread_root_obj(g, gcV(tv));
+    return gc2_mark_thread_root_obj_status(g, gcV(tv));
+  return 1;
 }
 
-static void gc2_mark_upval_payload_tv(global_State *g, cTValue *tv)
+static int gc2_mark_upval_payload_tv_status(global_State *g, cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
     (void)lj_gc2_trace_sweep_root(g, gcV(tv));
-    return;
+    return 1;
   }
   if (!tvisgcv(tv))
-    return;
-  if (tvistab(tv)) {
-    gc2_mark_thread_root_tv(g, tv);
-    return;
-  }
-  if (tvisfunc(tv)) {
-    gc2_mark_tv(g, tv);
-    return;
-  }
-  gc2_mark_thread_root_tv(g, tv);
+    return 1;
+  if (tvisfunc(tv))
+    return lj_gc2_markobj_status(g, gcV(tv), NULL) != GC2_MARK_DEAD;
+  return gc2_mark_thread_root_tv_status(g, tv);
 }
 
 static BCReg gc2_live_local_topslot(GCproto *pt, const BCIns *ip)
@@ -7260,6 +7376,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   uint64_t dirty_epoch;
   uint32_t cycle;
   int conservative = 0;
+  int stack_retry = 0;
   if (!gc2_valid_thread_for_traverse_held(g, L, held))
     return 0;
   cycle = gc2_cycle_acq(g);
@@ -7270,10 +7387,29 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   top = gc2_stack_scan_top(g, L, &conservative);
   for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
-    if (conservative &&
-	LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &tv)))
-      continue;
-    gc2_mark_thread_root_tv_stack(g, &tv);
+    if (conservative) {
+      GC2MarkScope scope;
+      int admitted = gc2_stack_tv_admit(g, &tv, &scope);
+      if (LJ_UNLIKELY(admitted == GC2_STACK_TV_RETRY)) {
+	stack_retry = 1;
+	gc2_mark_scope_leave(&scope);
+	continue;
+      }
+      if (admitted == GC2_STACK_TV_IGNORE) {
+	gc2_mark_scope_leave(&scope);
+	continue;
+      }
+      /* The observation lease remains live across the nested semantic
+      ** admission. A nested DEAD result is therefore transient, not stale. */
+      if (LJ_UNLIKELY(!gc2_mark_thread_root_tv_status(g, &tv)))
+	stack_retry = 1;
+      gc2_mark_scope_leave(&scope);
+    } else {
+      /* Authoritative slots need no stale-word classifier, but a transient
+      ** semantic admission still prevents this snapshot from completing. */
+      if (LJ_UNLIKELY(!gc2_mark_thread_root_tv_status(g, &tv)))
+	stack_retry = 1;
+    }
   }
   if (L == lj_tg_cur_L(g) && L->cframe != NULL) {
 #if LJ_HASJIT
@@ -7282,20 +7418,31 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   }
   {
     GCtab *env = lj_state_env_acq(L);
-    if (env)
-      gc2_mark_thread_root_obj(g, obj2gco(env));
+    if (env && LJ_UNLIKELY(
+		 !gc2_mark_thread_root_obj_status(g, obj2gco(env))))
+      stack_retry = 1;
   }
   mt = lj_state_mt_thread_acq(L);
-  if (mt != NULL)
-    gc2_mark_thread_root_obj(g, mt);
+  if (mt != NULL && LJ_UNLIKELY(!gc2_mark_thread_root_obj_status(g, mt)))
+    stack_retry = 1;
   for (uv = lj_state_openupval_acq(L); uv != NULL;
        uv = lj_obj_gcw_acq(uv)) {
-    gc2_mark_thread_root_obj(g, uv);
-    if (uv->gch.gct == ~LJ_TUPVAL) {
+    int uv_admitted = gc2_mark_thread_root_obj_status(g, uv);
+    if (LJ_UNLIKELY(!uv_admitted)) {
+      stack_retry = 1;
+    } else if (uv->gch.gct == ~LJ_TUPVAL) {
       TValue tv;
       lj_tv_load_acq(&tv, uvval(gco2uv(uv)));
-      gc2_mark_upval_payload_tv(g, &tv);
+      if (LJ_UNLIKELY(!gc2_mark_upval_payload_tv_status(g, &tv)))
+	stack_retry = 1;
     }
+  }
+  if (LJ_UNLIKELY(stack_retry)) {
+    /* Partial marking is conservative, but it is not a completed snapshot.
+    ** Publish concrete owner work without changing the scan/dirty completion
+    ** stamps. A previously absent handoff stamp is part of that publication. */
+    gc2_thread_set_needscan(g, L);
+    return 0;
   }
   /*
   ** A native-parked TG is not mutating the Lua stack; after the bounded safe
@@ -8151,6 +8298,17 @@ void lj_gc2_test_scan_roots(global_State *g, lua_State *L)
 {
   lj_gc2_scan_roots(g, L);
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
+				      lua_State *L)
+{
+  if (g && tg && L && lj_gc2_smr_read_try(g)) {
+    gc2_scan_tg_thread_root(g, tg, L);
+    lj_gc2_smr_read_leave(g);
+  }
+}
+#endif
 
 void lj_gc2_test_scan_owned_needscan(global_State *g, lua_State *owner_L)
 {
@@ -14817,20 +14975,30 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
     gc2_markobj_worker(g, gcV(tv));
 }
 
-static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o)
+static int gc2_mark_thread_root_obj_worker_status(global_State *g, GCobj *o)
 {
   int status;
   if (!o)
-    return;
+    return 1;
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
     (void)gc2_trace_sweep_worker_edge(g, o);
-    return;
+    return 1;  /* DEAD is represented by SWEEP recovery work. */
   }
+  if (gc2_root_test_take_semantic_retry(o))
+    return 0;
   status = gc2_markobj_worker_status(g, o, NULL);
-  if (status == GC2_MARK_DEAD || status == GC2_MARK_NEW)
-    return;
+  if (status == GC2_MARK_DEAD)
+    return 0;
+  if (status == GC2_MARK_NEW)
+    return 1;
   if (status == GC2_MARK_LIVE_ALREADY)
     gc2_thread_root_rescan_marked_obj(g, o);
+  return 1;
+}
+
+static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o)
+{
+  (void)gc2_mark_thread_root_obj_worker_status(g, o);
 }
 
 static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv)
@@ -14843,19 +15011,30 @@ static void gc2_mark_thread_root_tv_worker(global_State *g, cTValue *tv)
     gc2_mark_thread_root_obj_worker(g, gcV(tv));
 }
 
-static void gc2_mark_upval_payload_tv_worker(global_State *g, cTValue *tv)
+static int gc2_mark_thread_root_tv_worker_status(global_State *g, cTValue *tv)
+{
+  if (tvisgcv(tv))
+    return gc2_mark_thread_root_obj_worker_status(g, gcV(tv));
+  return 1;
+}
+
+static int gc2_mark_upval_payload_tv_worker_status(global_State *g,
+					    cTValue *tv)
 {
   if (tvisgcv(tv) && gc2_phase_acq(g) == LJ_GC2_SWEEP) {
     (void)gc2_trace_sweep_worker_edge(g, gcV(tv));
-    return;
+    return 1;
   }
   if (!tvisgcv(tv))
-    return;
-  if (tvistab(tv)) {
-    gc2_mark_thread_root_tv_worker(g, tv);
-    return;
-  }
-  gc2_mark_payload_obj_worker(g, gcV(tv));
+    return 1;
+  if (tvistab(tv))
+    return gc2_mark_thread_root_tv_worker_status(g, tv);
+  return gc2_mark_payload_obj_worker(g, gcV(tv)) != GC2_MARK_DEAD;
+}
+
+static void gc2_mark_upval_payload_tv_worker(global_State *g, cTValue *tv)
+{
+  (void)gc2_mark_upval_payload_tv_worker_status(g, tv);
 }
 
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o)
@@ -15961,6 +16140,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th,
   uint32_t owner, current_tid;
   int sweep, registry_lease = 0;
   int conservative = 0;
+  int stack_retry = 0;
   claim.L = NULL;
   claim.tg_hint = NULL;
   claim.tid = 0;
@@ -16032,15 +16212,40 @@ scan_thread:
   top = gc2_stack_scan_top_worker(g, th, &conservative);
   for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
-    if (conservative &&
-	LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, &tv)))
-      continue;
-    if (sweep) {
+    if (conservative) {
+      GC2MarkScope scope;
+      int admitted = gc2_stack_tv_admit(g, &tv, &scope);
+      if (LJ_UNLIKELY(admitted == GC2_STACK_TV_RETRY)) {
+	stack_retry = 1;
+	gc2_mark_scope_leave(&scope);
+	continue;
+      }
+      if (admitted == GC2_STACK_TV_IGNORE) {
+	gc2_mark_scope_leave(&scope);
+	continue;
+      }
+      if (sweep && tvisthread(&tv) && threadV(&tv) == th) {
+	gc2_mark_scope_leave(&scope);
+	continue;
+      }
+      if (sweep) {
+	/* A stack TValue is a public semantic root. Do not apply the worker-edge
+	** current-table/NEEDSCAN filters used for private graph descendants. */
+	if (LJ_UNLIKELY(!gc2_mark_thread_root_tv_status(g, &tv)))
+	  stack_retry = 1;
+      } else if (LJ_UNLIKELY(
+		   !gc2_mark_thread_root_tv_worker_status(g, &tv))) {
+	stack_retry = 1;
+      }
+      gc2_mark_scope_leave(&scope);
+    } else if (sweep) {
       if (tvisthread(&tv) && threadV(&tv) == th)
 	continue;
-      gc2_mark_thread_root_tv(g, &tv);
+      if (LJ_UNLIKELY(!gc2_mark_thread_root_tv_status(g, &tv)))
+	stack_retry = 1;
     } else {
-      gc2_mark_thread_root_tv_worker(g, &tv);
+      if (LJ_UNLIKELY(!gc2_mark_thread_root_tv_worker_status(g, &tv)))
+	stack_retry = 1;
     }
   }
   if (th == lj_tg_cur_L(g) && th->cframe != NULL) {
@@ -16051,34 +16256,37 @@ scan_thread:
   {
     GCtab *env = lj_state_env_acq(th);
     if (env) {
-      if (sweep)
-	gc2_mark_thread_root_obj(g, obj2gco(env));
-      else
-	gc2_mark_thread_root_obj_worker(g, obj2gco(env));
+      int admitted = sweep ?
+	gc2_mark_thread_root_obj_status(g, obj2gco(env)) :
+	gc2_mark_thread_root_obj_worker_status(g, obj2gco(env));
+      if (LJ_UNLIKELY(!admitted))
+	stack_retry = 1;
     }
   }
   mt = lj_state_mt_thread_acq(th);
   if (mt != NULL) {
-    if (sweep)
-      gc2_mark_thread_root_obj(g, mt);
-    else
-      gc2_markobj_worker(g, mt);
+    int admitted = sweep ? gc2_mark_thread_root_obj_status(g, mt) :
+	gc2_markobj_worker_status(g, mt, NULL) != GC2_MARK_DEAD;
+    if (LJ_UNLIKELY(!admitted))
+      stack_retry = 1;
   }
   for (uv = lj_state_openupval_acq(th); uv != NULL;
        uv = lj_obj_gcw_acq(uv)) {
-    if (sweep)
-      gc2_mark_thread_root_obj(g, uv);
-    else
-      gc2_markobj_worker(g, uv);
-    if (uv->gch.gct == ~LJ_TUPVAL) {
+    int uv_admitted = sweep ? gc2_mark_thread_root_obj_status(g, uv) :
+	gc2_markobj_worker_status(g, uv, NULL) != GC2_MARK_DEAD;
+    if (LJ_UNLIKELY(!uv_admitted)) {
+      stack_retry = 1;
+    } else if (uv->gch.gct == ~LJ_TUPVAL) {
       TValue tv;
       lj_tv_load_acq(&tv, uvval(gco2uv(uv)));
-      if (sweep)
-	gc2_mark_upval_payload_tv(g, &tv);
-      else
-	gc2_mark_upval_payload_tv_worker(g, &tv);
+      int admitted = sweep ? gc2_mark_upval_payload_tv_status(g, &tv) :
+	gc2_mark_upval_payload_tv_worker_status(g, &tv);
+      if (LJ_UNLIKELY(!admitted))
+	stack_retry = 1;
     }
   }
+  if (LJ_UNLIKELY(stack_retry))
+    goto requeue_thread;
   dirty_epoch = gc2_thread_owner_dirty(g, th, NULL);
   lj_state_scan_dirty_epoch_rel(th, dirty_epoch);
   lj_state_scan_epoch_rel(th, cycle);
@@ -16091,6 +16299,10 @@ out_thread:
   return;
 
 requeue_thread:
+  /* This label is also reached after an acquired GCSCAN claim. Release stack
+  ** authority before publishing the concrete thread retry, then end the SMR
+  ** registry lease only after that publication is durable. */
+  lj_state_dropclaim(&claim);
   {
     int pushed = gc2_publish_worker(g, obj2gco(th));
     if (!pushed)
