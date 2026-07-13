@@ -1454,6 +1454,7 @@ typedef struct GC2State {
   uint64_t ssb_items_published;  /* Published SSB entries. */
   uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
   uint64_t recovery_items;  /* Exact durable queue-overflow identities. */
+  uint64_t recovery_huge_items;  /* Exact identities in HugeTab lanes. */
   uint64_t recovery_published;  /* New allocation-free recovery identities. */
   uint64_t recovery_redirtied;  /* Publications racing claimed recovery work. */
   uint64_t recovery_drained;  /* Recovery identities fully traversed. */
@@ -3410,10 +3411,56 @@ static LJ_AINLINE uint64_t gc2_recovery_items_add(global_State *g,
   }
 }
 
-static LJ_AINLINE uint64_t gc2_recovery_items_sub(global_State *g,
-						   uint64_t n)
+static LJ_AINLINE int gc2_recovery_items_dec(global_State *g)
 {
-  return la_sub64_acqrel(&g->gc2.recovery_items, n);
+  uint64_t old = gc2_recovery_items_acq(g);
+  while (old != 0) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.recovery_items, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
+}
+
+static LJ_AINLINE uint64_t gc2_recovery_huge_items_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.recovery_huge_items);
+}
+
+static LJ_AINLINE void gc2_recovery_huge_items_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.recovery_huge_items, n);
+}
+
+static LJ_AINLINE uint64_t gc2_recovery_huge_items_add(global_State *g,
+							uint64_t n)
+{
+  uint64_t old = la_load64_acq(&g->gc2.recovery_huge_items);
+  for (;;) {
+    uint64_t next;
+    if (LJ_UNLIKELY(old > ~(uint64_t)0 - n))
+      return ~(uint64_t)0;
+    next = old + n;
+    if (la_cas64(&g->gc2.recovery_huge_items, &old, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return old;
+  }
+}
+
+static LJ_AINLINE int gc2_recovery_huge_items_dec(global_State *g)
+{
+  uint64_t old = gc2_recovery_huge_items_acq(g);
+  while (old != 0) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.recovery_huge_items, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
 }
 
 static LJ_AINLINE uint32_t gc2_recovery_main_state_acq(global_State *g)

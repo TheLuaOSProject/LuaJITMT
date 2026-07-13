@@ -31,13 +31,15 @@ static int paranoia_finalizer(lua_State *L)
   return 0;
 }
 
-static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
+static void run_generational_major_fallback(lua_State *L, global_State *g,
+					     TGState *tg)
 {
   int complete = 0, i;
   uint32_t swept;
   lj_gc2_mark_begin(g);
-  assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
-  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
+  assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 0);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
   lj_gc2_scan_cycle_roots(g, L);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
   lj_gc2_mark_to_weak(g);
@@ -66,17 +68,23 @@ static void test_minor_major_paranoia(void)
   assert(tg != NULL);
   lj_gc2_set_generational(g, 1);
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
-  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 1);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 0);
   ljt_lua_dostring(L,
     "_G.__gc2_minor_live = {}\n"
     "for i = 1, 120 do __gc2_minor_live[i] = {i, 'live'..i} end\n"
     "for i = 1, 400 do local t = {i, 'dead'..i}; t[3] = {i} end\n");
-  run_true_minor_cycle(L, g, tg);
+  /* Finish any pacing cycle opened by setup allocation. Then white-box the
+  ** accepted generational request -> major fallback independently of the
+  ** survival policy's optional extra force-major request. */
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
+  la_store32_rel(&g->gc2.force_major, 0);
+  run_generational_major_fallback(L, g, tg);
   /*
-  ** The reverse mark oracle expects a non-preserving sweep.  Generational mode
-  ** intentionally keeps old-generation arena marks, so disable it before using
-  ** the oracle as a zero-diff check.
+  ** The reverse mark oracle still checks the fallback's non-preserving major
+  ** sweep. Disable generational remembered publication before the zero-diff
+  ** check so the following forced collection has the ordinary major contract.
   */
   lj_gc2_set_generational(g, 0);
   lua_gc(L, LUA_GCCOLLECT, 0);

@@ -8,11 +8,17 @@
 
 #include <assert.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/resource.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -47,6 +53,12 @@ typedef struct RecoveryFreeCtx {
   size_t size;
 } RecoveryFreeCtx;
 
+static int recovery_self_cfunc(lua_State *L)
+{
+  (void)L;
+  return 0;
+}
+
 static RecoveryFixture recovery_fixture_open(void)
 {
   RecoveryFixture f;
@@ -57,6 +69,7 @@ static RecoveryFixture recovery_fixture_open(void)
   f.tg = G2TG(f.g);
   assert(f.tg != NULL);
   assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
   return f;
 }
 
@@ -64,6 +77,7 @@ static void recovery_fixture_close(RecoveryFixture *f)
 {
   assert(f != NULL && f->L != NULL);
   assert(gc2_recovery_items_acq(f->g) == 0);
+  assert(gc2_recovery_huge_items_acq(f->g) == 0);
   if (gc2_phase_acq(f->g) != LJ_GC2_IDLE)
     lj_gc2_cycle_to_idle(f->g);
   lua_close(f->L);
@@ -132,6 +146,21 @@ static GCtab *recovery_make_unlinked_table(RecoveryFixture *f)
   assert(lj_arena_bm_get(a->block, cell));
   assert(lj_arena_ready_get(a, cell));
   return t;
+}
+
+static GCudata *recovery_make_unlinked_huge_udata(RecoveryFixture *f)
+{
+  GCudata *ud;
+  (void)lua_newuserdata(f->L, LJ_HUGE_THRESHOLD + 1024u);
+  ud = udataV(f->L->top - 1);
+  assert(sizeudata(ud) > LJ_HUGE_THRESHOLD);
+  assert(lj_arena_ishuge(lj_arena_of(ud)));
+  assert(lj_gc_flush_root_pending(f->g) != 0);
+  assert(lj_gc_unlink_root_obj(f->g, obj2gco(ud)) == LJ_GC_ROOT_UNLINKED);
+  lua_pop(f->L, 1);
+  assert(lj_gc2_test_recovery_state(f->g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  return ud;
 }
 
 static void recovery_init_closed_upvalue(global_State *g, GCupval *uv)
@@ -916,6 +945,475 @@ static void test_sweep_empty_string_is_immortal(void)
   recovery_fixture_close(&f);
 }
 
+static void test_huge_recovery_exact_lane_accounting(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryPublishCtx pub[2] = {{0}, {0}};
+  RecoveryDrainCtx drain = {0};
+  pthread_t publisher[2], drainer;
+  GCudata *ud = recovery_make_unlinked_huge_udata(&f);
+  uint64_t redirtied0;
+
+  /* Both publishers reserve before either can publish PENDING. One wins the
+  ** exact state CAS; the loser must roll both reservations back. */
+  pub[0].g = pub[1].g = f.g;
+  pub[0].o = pub[1].o = obj2gco(ud);
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_RESERVED);
+  assert(pthread_create(&publisher[0], NULL,
+	 recovery_publish_thread, &pub[0]) == 0);
+  assert(pthread_create(&publisher[1], NULL,
+	 recovery_publish_thread, &pub[1]) == 0);
+  while (gc2_recovery_items_acq(f.g) != 2u ||
+	 gc2_recovery_huge_items_acq(f.g) != 2u)
+    la_cpu_pause();
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(publisher[0], NULL) == 0);
+  assert(pthread_join(publisher[1], NULL) == 0);
+  assert(pub[0].result == 1 && pub[1].result == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+
+  /* A publication racing CLAIMED changes only the state to REDIRTY. The
+  ** completion requeues the same counted identity, and its replay consumes
+  ** the huge subcount and aggregate count together. */
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(ud)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+  redirtied0 = gc2_recovery_redirtied_acq(f.g);
+  drain.g = f.g;
+  drain.limit = 1;
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_PRE_COMPLETE);
+  assert(pthread_create(&drainer, NULL,
+	 recovery_drain_thread, &drain) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_PRE_COMPLETE);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_CLAIMED);
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(ud)) == 1);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_REDIRTY);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+  assert(gc2_recovery_redirtied_acq(f.g) == redirtied0 + 1u);
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(drainer, NULL) == 0);
+  assert(drain.result == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+
+  /* Terminal discard first reconciles both exact counters against a
+  ** non-destructive authoritative scan, then consumes the proven locators. */
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(ud)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+  assert(lj_gc2_test_recovery_discard_terminal(f.g) == 1u);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+
+  recovery_fixture_close(&f);
+}
+
+static void test_empty_huge_lane_is_skipped(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GCtab *small;
+
+  /* Starting on lane 2 used to scan every 65,536-slot HugeTab before finding
+  ** aggregate work in main or small. A zero exact huge subcount makes both
+  ** drains bypass that directory walk deterministically. */
+  assert(lj_gc2_test_recovery_publish(
+	 f.g, obj2gco(mainthread_acq(f.g))) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+  gc2_recovery_scan_lane_store_rlx(f.g, 2u);
+  lj_gc2_test_recovery_huge_scans_reset();
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(lj_gc2_test_recovery_huge_scans() == 0);
+
+  small = recovery_make_unlinked_table(&f);
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(small)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+  gc2_recovery_scan_lane_store_rlx(f.g, 2u);
+  lj_gc2_test_recovery_huge_scans_reset();
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(lj_gc2_test_recovery_huge_scans() == 0);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+
+  recovery_fixture_close(&f);
+}
+
+static void test_current_cyclic_table_private_edge_is_consumed(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryDrainCtx drain = {0};
+  pthread_t drainer;
+  GC2SSBNode *active, *held;
+  GCRef *base, *end;
+  GCtab *t;
+  GCstr *filler;
+  uint64_t redirtied0;
+  uint32_t i;
+
+  lua_newtable(f.L);
+  t = tabV(f.L->top - 1);
+  lua_pushvalue(f.L, -1);
+  lua_rawseti(f.L, -2, 1);  /* Exact self-edge which used to replay forever. */
+  assert(lj_gc_flush_root_pending(f.g) != 0);
+  assert(lj_gc_unlink_root_obj(f.g, obj2gco(t)) == LJ_GC_ROOT_UNLINKED);
+  lua_pop(f.L, 1);
+
+  lj_gc2_mark_begin(f.g);
+  recovery_mark_table(&f, t);
+  assert(lj_gc2_test_table_scan_current(f.g, t));
+  assert(!(lj_obj_gcflags(obj2gco(t)) & LJ_GC_NEEDSCAN));
+  gc2_phase_rel(f.g, LJ_GC2_SWEEP);
+
+  /* Remove the replacement node and fill the active SSB so any publication can
+  ** only use recovery. The admitted outer table still traverses normally, but
+  ** its already-current private self-edge must be consumed without changing
+  ** the CLAIMED recovery identity to REDIRTY. */
+  held = lj_tg_ssb_free_pop(f.tg);
+  assert(held != NULL);
+  assert(lj_tg_ssb_free_acq(f.tg) == NULL);
+  active = lj_tg_ssb_active_acq(f.tg);
+  base = lj_tg_ssb_base_acq(f.tg);
+  end = lj_tg_ssb_end_acq(f.tg);
+  assert(active != NULL && base == active->slot);
+  lua_pushliteral(f.L, "gc2 cyclic recovery filler");
+  filler = strV(f.L->top - 1);
+  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+
+  redirtied0 = gc2_recovery_redirtied_acq(f.g);
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(t)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  gc2_recovery_scan_lane_store_rlx(f.g, 1u);
+  lj_gc2_test_worker_table_skips_reset();
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(lj_gc2_test_worker_table_skips() != 0);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_redirtied_acq(f.g) == redirtied0);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+
+  /* The same current stamp is not a semantic-mutation proof. While a second
+  ** recovery pass is CLAIMED and the SSB remains full, the public root/barrier
+  ** path must remain unfiltered and change that identity to REDIRTY. */
+  redirtied0 = gc2_recovery_redirtied_acq(f.g);
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(t)) == 1);
+  drain.g = f.g;
+  drain.limit = 1;
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_PRE_COMPLETE);
+  assert(pthread_create(&drainer, NULL, recovery_drain_thread, &drain) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_PRE_COMPLETE);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_CLAIMED);
+  assert(lj_gc2_trace_sweep_root(f.g, obj2gco(t)) == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_REDIRTY);
+  assert(gc2_recovery_redirtied_acq(f.g) == redirtied0 + 1u);
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(drainer, NULL) == 0);
+  assert(drain.result == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+
+  lj_tg_ssb_free_push(f.tg, held);
+  assert(lj_gc2_flush_ssb(f.g, f.tg) == TG_GC2_SSB_SLOTS);
+  recovery_drain_all(f.g, f.tg);
+  lua_pop(f.L, 1);
+  gc2_phase_rel(f.g, LJ_GC2_IDLE);
+  recovery_fixture_close(&f);
+}
+
+static void test_current_self_metatable_metadata_is_private(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GC2SSBNode *active, *held;
+  GCRef *base, *end;
+  GCtab *t;
+  GCstr *filler;
+  uint64_t redirtied0;
+  uint32_t i;
+
+  lua_newtable(f.L);
+  t = tabV(f.L->top - 1);
+  lua_pushvalue(f.L, -1);
+  assert(lua_setmetatable(f.L, -2) == 1);
+  assert(lj_tab_metatable_acq(t) == t);
+  assert(lj_gc_flush_root_pending(f.g) != 0);
+  assert(lj_gc_unlink_root_obj(f.g, obj2gco(t)) == LJ_GC_ROOT_UNLINKED);
+  lua_pop(f.L, 1);
+
+  lj_gc2_mark_begin(f.g);
+  recovery_mark_table(&f, t);
+  assert(lj_gc2_test_table_scan_current(f.g, t));
+  assert(!(lj_obj_gcflags(obj2gco(t)) & LJ_GC_NEEDSCAN));
+  gc2_phase_rel(f.g, LJ_GC2_SWEEP);
+
+  /* Weak-mode classification must retain the metatable body while reading
+  ** __mode, but this worker-private metadata read is not a semantic SWEEP root.
+  ** With no SSB replacement, the former public admission deterministically
+  ** changed this table's CLAIMED recovery state to REDIRTY forever. */
+  held = lj_tg_ssb_free_pop(f.tg);
+  assert(held != NULL);
+  assert(lj_tg_ssb_free_acq(f.tg) == NULL);
+  active = lj_tg_ssb_active_acq(f.tg);
+  base = lj_tg_ssb_base_acq(f.tg);
+  end = lj_tg_ssb_end_acq(f.tg);
+  assert(active != NULL && base == active->slot);
+  lua_pushliteral(f.L, "gc2 self metatable recovery filler");
+  filler = strV(f.L->top - 1);
+  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+
+  redirtied0 = gc2_recovery_redirtied_acq(f.g);
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(t)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  gc2_recovery_scan_lane_store_rlx(f.g, 1u);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_redirtied_acq(f.g) == redirtied0);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(t)) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+
+  lj_tg_ssb_free_push(f.tg, held);
+  assert(lj_gc2_flush_ssb(f.g, f.tg) == TG_GC2_SSB_SLOTS);
+  recovery_drain_all(f.g, f.tg);
+  lua_pop(f.L, 1);
+  gc2_phase_rel(f.g, LJ_GC2_IDLE);
+  recovery_fixture_close(&f);
+}
+
+static void recovery_assert_cyclic_container_bounded(RecoveryFixture *f,
+					       GCobj *o,
+					       const char *filler_text)
+{
+  GC2SSBNode *active, *held;
+  GCRef *base, *end;
+  GCstr *filler;
+  uint64_t redirtied0;
+  uint32_t i;
+
+  assert(lj_gc2_markobj(f->g, o) == 1);
+  recovery_drain_all(f->g, f->tg);
+  assert(lj_gc2_ismarked(f->g, o) == 1);
+  lj_obj_cleargcflags(o, LJ_GC_NEEDSCAN);
+  gc2_phase_rel(f->g, LJ_GC2_SWEEP);
+
+  held = lj_tg_ssb_free_pop(f->tg);
+  assert(held != NULL);
+  assert(lj_tg_ssb_free_acq(f->tg) == NULL);
+  active = lj_tg_ssb_active_acq(f->tg);
+  base = lj_tg_ssb_base_acq(f->tg);
+  end = lj_tg_ssb_end_acq(f->tg);
+  assert(active != NULL && base == active->slot);
+  lua_pushstring(f->L, filler_text);
+  filler = strV(f->L->top - 1);
+  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+    assert(lj_gc2_test_ssb_push(f->g, obj2gco(filler)) == 1);
+  assert(lj_tg_ssb_next_acq(f->tg) == end);
+
+  redirtied0 = gc2_recovery_redirtied_acq(f->g);
+  assert(lj_gc2_test_recovery_publish(f->g, o) == 1);
+  assert(gc2_recovery_items_acq(f->g) == 1u);
+  gc2_recovery_scan_lane_store_rlx(f->g, 1u);
+  assert(lj_gc2_test_recovery_drain(f->g, 1) == 1u);
+  assert(gc2_recovery_items_acq(f->g) == 1u);
+  assert(gc2_recovery_redirtied_acq(f->g) == redirtied0 + 1u);
+  assert(lj_obj_gcflags(o) & LJ_GC_NEEDSCAN);
+  assert(lj_gc2_test_recovery_state(f->g, o) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+
+  /* Replay sees the persistent private traversal token and consumes the exact
+  ** recovery identity without walking the cycle again. */
+  assert(lj_gc2_test_recovery_drain(f->g, 1) == 1u);
+  assert(gc2_recovery_items_acq(f->g) == 0);
+  assert(gc2_recovery_redirtied_acq(f->g) == redirtied0 + 1u);
+  assert(lj_gc2_test_recovery_state(f->g, o) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+
+  lj_tg_ssb_free_push(f->tg, held);
+  assert(lj_gc2_flush_ssb(f->g, f->tg) == TG_GC2_SSB_SLOTS);
+  recovery_drain_all(f->g, f->tg);
+  lua_pop(f->L, 1);
+  lj_gc2_test_rescan_pending_clear_cycle(f->g, o);
+  gc2_phase_rel(f->g, LJ_GC2_IDLE);
+}
+
+static void test_cyclic_non_table_recovery_is_bounded(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GCfunc *fn;
+
+  lua_pushnil(f.L);
+  lua_pushcclosure(f.L, recovery_self_cfunc, 1);
+  fn = funcV(f.L->top - 1);
+  lua_pushvalue(f.L, -1);
+  assert(lua_setupvalue(f.L, -2, 1) != NULL);
+  assert(lj_gc_flush_root_pending(f.g) != 0);
+  assert(lj_gc_unlink_root_obj(f.g, obj2gco(fn)) == LJ_GC_ROOT_UNLINKED);
+  lua_pop(f.L, 1);
+  lj_gc2_mark_begin(f.g);
+  recovery_assert_cyclic_container_bounded(
+    &f, obj2gco(fn), "gc2 self closure recovery filler");
+  recovery_fixture_close(&f);
+
+  f = recovery_fixture_open();
+  luaL_openlibs(f.L);
+  assert(luaL_dostring(f.L,
+    "local th = require('threading')\n"
+    "local ch = th.channel(1)\n"
+    "assert(ch:send(ch))\n"
+    "return ch\n") == 0);
+  assert(tvisudata(f.L->top - 1));
+  {
+    GCudata *ud = udataV(f.L->top - 1);
+    assert(lj_gc_flush_root_pending(f.g) != 0);
+    assert(lj_gc_unlink_root_obj(f.g, obj2gco(ud)) == LJ_GC_ROOT_UNLINKED);
+    lua_pop(f.L, 1);
+    lj_gc2_mark_begin(f.g);
+    recovery_assert_cyclic_container_bounded(
+      &f, obj2gco(ud), "gc2 self channel recovery filler");
+  }
+  recovery_fixture_close(&f);
+}
+
+static void test_new_mark_clears_unlinked_prior_cycle_token(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GCfunc *fn;
+
+  lua_pushnil(f.L);
+  lua_pushcclosure(f.L, recovery_self_cfunc, 1);
+  fn = funcV(f.L->top - 1);
+  assert(lj_gc_flush_root_pending(f.g) != 0);
+  assert(lj_gc_unlink_root_obj(f.g, obj2gco(fn)) == LJ_GC_ROOT_UNLINKED);
+  lua_pop(f.L, 1);
+
+  lj_gc2_mark_begin(f.g);
+  assert(lj_gc2_markobj(f.g, obj2gco(fn)) == 1);
+  recovery_drain_all(f.g, f.tg);
+  lj_obj_addgcflags_atomic(obj2gco(fn), LJ_GC_NEEDSCAN);
+  assert(lj_obj_gcflags(obj2gco(fn)) & LJ_GC_NEEDSCAN);
+  lj_gc2_cycle_to_idle(f.g);
+  assert(gc2_phase_acq(f.g) == LJ_GC2_IDLE);
+
+  /* The object is intentionally absent from both bounded root-spine cleanup
+  ** walks, so the old token survives until the exact next major NEW winner. */
+  assert(lj_obj_gcflags(obj2gco(fn)) & LJ_GC_NEEDSCAN);
+  lj_gc2_force_major(f.g);
+  lj_gc2_mark_begin(f.g);
+  assert(lj_obj_gcflags(obj2gco(fn)) & LJ_GC_NEEDSCAN);
+  assert(lj_gc2_markobj(f.g, obj2gco(fn)) == 1);
+  assert(!(lj_obj_gcflags(obj2gco(fn)) & LJ_GC_NEEDSCAN));
+  recovery_drain_all(f.g, f.tg);
+  lj_gc2_cycle_to_idle(f.g);
+  recovery_fixture_close(&f);
+}
+
+static void test_lost_huge_completion_count_fail_stops(void)
+{
+  uint32_t huge_count;
+  for (huge_count = 0; huge_count <= 1u; huge_count++) {
+    pid_t child = fork();
+    int status = 0;
+    assert(child >= 0);
+    if (child == 0) {
+      struct rlimit core_limit = {0, 0};
+      RecoveryFixture f = recovery_fixture_open();
+      assert(setrlimit(RLIMIT_CORE, &core_limit) == 0);
+      /* Model both impossible post-state-clear conditions: missing huge lane
+      ** identity, then a present huge identity with no aggregate identity.
+      ** Neither may return to caller UNMAP/SWEEP effects. */
+      gc2_recovery_huge_items_store_rlx(f.g, huge_count);
+      assert(gc2_recovery_items_acq(f.g) == 0);
+      assert(gc2_recovery_huge_items_acq(f.g) == huge_count);
+      lj_gc2_test_recovery_huge_count_complete(f.g);
+      _exit(127);
+    }
+    assert(waitpid(child, &status, 0) == child);
+    assert(WIFSIGNALED(status));
+    assert(WTERMSIG(status) == SIGABRT);
+  }
+}
+
+static void test_lost_rollback_counts_fail_stop(void)
+{
+  uint32_t huge;
+  for (huge = 0; huge <= 1u; huge++) {
+    pid_t child = fork();
+    int status = 0;
+    assert(child >= 0);
+    if (child == 0) {
+      struct rlimit core_limit = {0, 0};
+      RecoveryFixture f = recovery_fixture_open();
+      assert(setrlimit(RLIMIT_CORE, &core_limit) == 0);
+      /* Model a CAS loser whose reservation was already lost/corrupted. Both
+      ** aggregate and huge-lane rollback must refuse zero without wrapping. */
+      if (huge)
+	lj_gc2_test_recovery_huge_count_rollback(f.g);
+      else
+	lj_gc2_test_recovery_count_rollback(f.g);
+      _exit(127);
+    }
+    assert(waitpid(child, &status, 0) == child);
+    assert(WIFSIGNALED(status));
+    assert(WTERMSIG(status) == SIGABRT);
+  }
+}
+
+static void test_terminal_preflight_preserves_mismatch_locator(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  GCudata *ud = recovery_make_unlinked_huge_udata(&f);
+
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(ud)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+  gc2_recovery_huge_items_store_rlx(f.g, 0);
+  assert(lj_gc2_test_recovery_terminal_preflight(f.g) == 0);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+  assert(gc2_recovery_failed_acq(f.g) == 1u);
+
+  gc2_recovery_huge_items_store_rlx(f.g, 1);
+  assert(lj_gc2_test_recovery_discard_terminal(f.g) == 1u);
+  assert(lj_gc2_test_recovery_state(f.g, obj2gco(ud)) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+  recovery_fixture_close(&f);
+}
+
 static void test_sticky_failure_without_items_is_bounded(void)
 {
   RecoveryFixture f = recovery_fixture_open();
@@ -980,7 +1478,16 @@ int main(void)
   test_postclaim_late_retained_requeues();
   test_weak_clear_recovery_gate();
   test_sweep_empty_string_is_immortal();
+  test_huge_recovery_exact_lane_accounting();
+  test_empty_huge_lane_is_skipped();
+  test_current_cyclic_table_private_edge_is_consumed();
+  test_current_self_metatable_metadata_is_private();
+  test_cyclic_non_table_recovery_is_bounded();
+  test_new_mark_clears_unlinked_prior_cycle_token();
+  test_lost_huge_completion_count_fail_stops();
+  test_lost_rollback_counts_fail_stop();
+  test_terminal_preflight_preserves_mismatch_locator();
   test_sticky_failure_without_items_is_bounded();
-  printf("t-gc2-recovery OK: no-drop SSB/recovery, free/lifetime races, constructor overlap, closure vetoes, empty-string SWEEP, bounded sticky failure, and REDIRTY replay verified\n");
+  printf("t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane accounting/skip, bounded cyclic private/metadata edges, free/lifetime races, constructor overlap, closure vetoes, empty-string SWEEP, sticky failure, and REDIRTY replay verified\n");
   return 0;
 }

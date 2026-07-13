@@ -82,6 +82,7 @@ typedef struct GC2StatsSnapshot {
   uint64_t remembered_filtered;
   uint64_t remembered_drained;
   uint64_t recovery_items;
+  uint64_t recovery_huge_items;
   uint64_t recovery_published;
   uint64_t recovery_redirtied;
   uint64_t recovery_drained;
@@ -375,6 +376,16 @@ LJ_FUNC void lj_gc2_test_recovery_fail_closed(global_State *g);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_recovery_drain(global_State *g, uint32_t limit);
 LJ_FUNC int lj_gc2_test_recovery_state(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc2_test_recovery_huge_scans_reset(void);
+LJ_FUNC uint32_t lj_gc2_test_recovery_huge_scans(void);
+LJ_FUNC uint32_t lj_gc2_test_recovery_discard_terminal(global_State *g);
+LJ_FUNC int lj_gc2_test_recovery_terminal_preflight(global_State *g);
+LJ_FUNC void lj_gc2_test_recovery_huge_count_complete(global_State *g);
+LJ_FUNC void lj_gc2_test_recovery_count_rollback(global_State *g);
+LJ_FUNC void lj_gc2_test_recovery_huge_count_rollback(global_State *g);
+LJ_FUNC int lj_gc2_test_table_scan_current(global_State *g, GCtab *t);
+LJ_FUNC void lj_gc2_test_worker_table_skips_reset(void);
+LJ_FUNC uint32_t lj_gc2_test_worker_table_skips(void);
 #endif
 LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_count(global_State *g);
 LJ_FUNC GCtab *lj_gc2_test_weak_snapshot_tab(global_State *g, uint32_t idx);

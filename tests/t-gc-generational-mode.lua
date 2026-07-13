@@ -49,8 +49,11 @@ local _, after_collect = stats_mode()
 assert(after_collect.cycle_minor_requested == 0)
 assert(after_collect.cycle_sweep_minor == 0)
 assert(after_collect.cycle_roots_minor == 0)
-assert(after_collect.minor_sweep_enabled == 1)
-assert(after_collect.minor_roots_enabled == 1)
+-- b1.2 keeps remembered publication active but deliberately falls every
+-- generational request back to a full major until the non-table IDLE mutation
+-- audit is complete. Physical minor sweep/root elision is b1.2.1 work.
+assert(after_collect.minor_sweep_enabled == 0)
+assert(after_collect.minor_roots_enabled == 0)
 assert(after_collect.minor_survival_threshold_pct == 80)
 assert(after_collect.minor_survival_pct >= 0)
 assert(after_collect.minor_survival_pct <= 100)
@@ -60,16 +63,28 @@ assert(after_collect.minor_cycle_starts == before_collect.minor_cycle_starts)
 
 local _, before_remember = stats_mode()
 local holder = {}
-for i = 1, 64 do
+local fallback_seen = false
+for i = 1, 65536 do
   holder[i] = {i}
+  if i % 256 == 0 then
+    collectgarbage("step", 1)
+    local _, sample = stats_mode()
+    if sample.major_cycle_starts > before_remember.major_cycle_starts then
+      fallback_seen = true
+      break
+    end
+  end
 end
 local _, after_remember = stats_mode()
+assert(fallback_seen)
 assert(after_remember.remembered_barriers > before_remember.remembered_barriers)
 assert(after_remember.remembered_pushed > before_remember.remembered_pushed)
 assert(after_remember.remembered_overflows >= before_remember.remembered_overflows)
 assert(after_remember.remembered_filtered >= before_remember.remembered_filtered)
 assert(after_remember.remembered_drained >= before_remember.remembered_drained)
-assert(after_remember.minor_cycle_starts >= before_remember.minor_cycle_starts)
+assert(after_remember.minor_cycle_requests >= before_remember.minor_cycle_requests)
+assert(after_remember.minor_cycle_starts == before_remember.minor_cycle_starts)
+assert(after_remember.major_cycle_starts > before_remember.major_cycle_starts)
 assert(after_remember.minor_sweep_deferred >= before_remember.minor_sweep_deferred)
 assert(after_remember.minor_sweep_arenas >= before_remember.minor_sweep_arenas)
 assert(after_remember.minor_roots_deferred >= before_remember.minor_roots_deferred)
