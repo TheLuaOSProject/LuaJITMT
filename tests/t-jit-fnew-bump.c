@@ -2039,6 +2039,42 @@ static void test_accounting_fast_direct(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
+static void test_white_bump_clears_seeded_marks(lua_State *L,
+					 global_State *g, TGState *tg)
+{
+  TValue slots[256];
+  GCfunc *parent, *fn;
+  GCproto *child;
+  GCupval *uv;
+  GCArena *a;
+  uint32_t fncell, uvcell;
+  int32_t slotno;
+
+  load_one_upvalue_fixture(L, &parent, &child, &slotno);
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  quiet_gc_for_bump(g, tg);
+  assert(!lj_tg_mark_active_acq(tg));
+  assert(!lj_tg_alloc_black_acq(tg));
+  prime_traversable_bump_window(tg);
+  a = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a;
+  fncell = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].cell;
+  uvcell = fncell + lj_arena_ncells(sizeLfunc(1));
+  lj_arena_bm_set(a->mark, fncell);
+  lj_arena_bm_set(a->mark, uvcell);
+
+  setnumV(&slots[slotno], 777);
+  fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 777);
+  uv = func_uv_acq(&fn->l, 0);
+  assert(lj_arena_of(fn) == a && lj_arena_cellof(fn) == fncell);
+  assert(lj_arena_of(uv) == a && lj_arena_cellof(uv) == uvcell);
+  assert(!lj_arena_bm_get(a->mark, fncell));
+  assert(!lj_arena_bm_get(a->mark, uvcell));
+  assert_fnew_typed_layout(fn);
+  lua_pop(L, 1);
+}
+
 static void test_active_black_direct_publishes_typed(lua_State *L,
 						     global_State *g,
 						     TGState *tg)
@@ -2225,6 +2261,7 @@ int main(void)
   test_bump_allocator_gate_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);
   test_accounting_fast_direct(L, g, tg);
+  test_white_bump_clears_seeded_marks(L, g, tg);
   test_active_black_direct_publishes_typed(L, g, tg);
   test_active_black_direct_keeps_exact_cells(L, g, tg);
   test_accounting_checkpoint(L, g, tg);

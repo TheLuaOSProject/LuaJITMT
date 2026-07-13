@@ -591,14 +591,16 @@ GCfunc *lj_func_newC_envrooted(lua_State *L, MSize nelems, GCtab *env,
 static void func_arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
 				 int black)
 {
-  /* reserve_bump() clears the complete recycled boundary/mark range before
-  ** exposing its private bump window. Fresh arenas are zero-filled. Thus the
-  ** interior cells are already unpublished and need no per-object bitmap
-  ** RMWs; only the actual allocation start is installed here. */
+  /* Fresh arenas and scrubbed bump interiors are already mark-clear. A bump
+  ** installed directly from sweep may retain the one marked run-head used by
+  ** free-run metadata, so preserve the exact white-allocation clear only for
+  ** that rare nonzero bit. func_bump_alloc_ready() excludes another marker
+  ** while black is false; the acquire probe therefore only avoids a redundant
+  ** locked RMW and never replaces a racing current-cycle mark decision. */
   UNUSED(ncells);
   if (black)
     lj_arena_bm_set(a->mark, cell);
-  else
+  else if (LJ_UNLIKELY(lj_arena_bm_get(a->mark, cell)))
     lj_arena_bm_clear(a->mark, cell);
   lj_arena_ready_set_unpublished(a, cell);
   lj_arena_block_set(a, cell);
