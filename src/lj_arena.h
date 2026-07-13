@@ -326,11 +326,34 @@ struct TGAlloc {
   uint32_t huge_retire_cursor;
   uint32_t huge_reclaim_cursor;
   uint8_t huge_retire_done;
+  /* Advisory allocator-wide wake for intrusive remote-free queues. A remote
+  ** producer release-publishes this only after its arena-local queue CAS.
+  ** Opportunistic drains consume it before walking owned[], while transfer,
+  ** sweep and terminal owners deliberately bypass it. */
+  uint32_t remote_pending;
   uint32_t owner_tid;
   void *owner_tg;
   uint8_t alloc_black;
   uint8_t free_noinsert;
 };
+
+static LJ_AINLINE uint32_t lj_arena_remote_pending_acq(
+  const TGAlloc *alloc)
+{
+  return la_load32_acq(&alloc->remote_pending);
+}
+
+static LJ_AINLINE void lj_arena_remote_pending_rel(TGAlloc *alloc,
+						    uint32_t pending)
+{
+  la_store32_rel(&alloc->remote_pending, pending);
+}
+
+static LJ_AINLINE uint32_t lj_arena_remote_pending_xchg_acqrel(
+  TGAlloc *alloc, uint32_t pending)
+{
+  return la_xchg32_acqrel(&alloc->remote_pending, pending);
+}
 
 static LJ_AINLINE uint32_t lj_arena_alloc_owner_acq(const TGAlloc *alloc)
 {
@@ -675,6 +698,13 @@ LJ_FUNC void lj_arena_test_plain_claim_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_claim_paused(void);
 LJ_FUNC void lj_arena_test_plain_admit_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_test_plain_admit_paused(void);
+LJ_FUNC void lj_arena_test_remote_publish_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_test_remote_publish_paused(void);
+LJ_FUNC void lj_arena_test_remote_drain_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_test_remote_drain_paused(void);
+LJ_FUNC void lj_arena_test_remote_stats_reset(void);
+LJ_FUNC uint64_t lj_arena_test_remote_fast_skips(void);
+LJ_FUNC uint64_t lj_arena_test_remote_arena_probes(void);
 #endif
 #if defined(LJ_ARENA_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_arena_test_lifetime_pause(int enabled);
@@ -740,6 +770,9 @@ LJ_FUNC int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC int lj_arena_remote_free_publish(TGAlloc *alloc, void *p,
 					 size_t size);
+/* Joined-world/ownership-transfer drain. Unlike the opportunistic allocator
+** form, this always scans owned[] even when the advisory wake is clear. */
+LJ_FUNC uint32_t lj_arena_remote_free_drain_force(TGAlloc *alloc);
 LJ_FUNC uint32_t lj_arena_remote_free_drain(TGAlloc *alloc);
 LJ_FUNC uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc,
 						   GCArena *a);

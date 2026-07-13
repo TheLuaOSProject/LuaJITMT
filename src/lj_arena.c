@@ -61,9 +61,19 @@ LJ_STATIC_ASSERT(LJ_HUGEF_MASK == LJ_HUGETAB_META_MASK);
 #if defined(LJ_ARENA_TEST_HELPERS)
 static void arena_test_plain_claim_pause_after_close(void);
 static void arena_test_plain_admit_pause_after_enter(void);
+static void arena_test_remote_publish_pause_after_queue(void);
+static void arena_test_remote_drain_pause_after_clear(void);
+#define arena_test_remote_fast_skip() \
+  ((void)la_add64_rlx(&arena_test_remote_fast_skip_count, 1))
+#define arena_test_remote_arena_probe() \
+  ((void)la_add64_rlx(&arena_test_remote_arena_probe_count, 1))
 #else
 #define arena_test_plain_claim_pause_after_close() ((void)0)
 #define arena_test_plain_admit_pause_after_enter() ((void)0)
+#define arena_test_remote_publish_pause_after_queue() ((void)0)
+#define arena_test_remote_drain_pause_after_clear() ((void)0)
+#define arena_test_remote_fast_skip() ((void)0)
+#define arena_test_remote_arena_probe() ((void)0)
 #endif
 
 static LJ_AINLINE uint64_t arena_remote_count(uint64_t active)
@@ -776,6 +786,12 @@ static uint32_t arena_test_plain_claim_pause_flag;
 static uint32_t arena_test_plain_claim_pause_seen;
 static uint32_t arena_test_plain_admit_pause_flag;
 static uint32_t arena_test_plain_admit_pause_seen;
+static uint32_t arena_test_remote_publish_pause_flag;
+static uint32_t arena_test_remote_publish_pause_seen;
+static uint32_t arena_test_remote_drain_pause_flag;
+static uint32_t arena_test_remote_drain_pause_seen;
+static uint64_t arena_test_remote_fast_skip_count;
+static uint64_t arena_test_remote_arena_probe_count;
 
 void lj_arena_hugetab_test_retire_pause(int enabled)
 {
@@ -885,6 +901,66 @@ static void arena_test_plain_admit_pause_after_enter(void)
       la_cpu_pause();
     la_store32_rel(&arena_test_plain_admit_pause_seen, 0);
   }
+}
+
+void lj_arena_test_remote_publish_pause(int enabled)
+{
+  if (enabled)
+    la_store32_rel(&arena_test_remote_publish_pause_seen, 0);
+  la_store32_rel(&arena_test_remote_publish_pause_flag, enabled != 0);
+}
+
+uint32_t lj_arena_test_remote_publish_paused(void)
+{
+  return la_load32_acq(&arena_test_remote_publish_pause_seen);
+}
+
+static void arena_test_remote_publish_pause_after_queue(void)
+{
+  if (la_load32_acq(&arena_test_remote_publish_pause_flag) != 0) {
+    la_store32_rel(&arena_test_remote_publish_pause_seen, 1);
+    while (la_load32_acq(&arena_test_remote_publish_pause_flag) != 0)
+      la_cpu_pause();
+    la_store32_rel(&arena_test_remote_publish_pause_seen, 0);
+  }
+}
+
+void lj_arena_test_remote_drain_pause(int enabled)
+{
+  if (enabled)
+    la_store32_rel(&arena_test_remote_drain_pause_seen, 0);
+  la_store32_rel(&arena_test_remote_drain_pause_flag, enabled != 0);
+}
+
+uint32_t lj_arena_test_remote_drain_paused(void)
+{
+  return la_load32_acq(&arena_test_remote_drain_pause_seen);
+}
+
+static void arena_test_remote_drain_pause_after_clear(void)
+{
+  if (la_load32_acq(&arena_test_remote_drain_pause_flag) != 0) {
+    la_store32_rel(&arena_test_remote_drain_pause_seen, 1);
+    while (la_load32_acq(&arena_test_remote_drain_pause_flag) != 0)
+      la_cpu_pause();
+    la_store32_rel(&arena_test_remote_drain_pause_seen, 0);
+  }
+}
+
+void lj_arena_test_remote_stats_reset(void)
+{
+  la_store64_rel(&arena_test_remote_fast_skip_count, 0);
+  la_store64_rel(&arena_test_remote_arena_probe_count, 0);
+}
+
+uint64_t lj_arena_test_remote_fast_skips(void)
+{
+  return la_load64_acq(&arena_test_remote_fast_skip_count);
+}
+
+uint64_t lj_arena_test_remote_arena_probes(void)
+{
+  return la_load64_acq(&arena_test_remote_arena_probe_count);
 }
 #else
 #define hugetab_test_retire_pause_after_busy() ((void)0)
@@ -4072,10 +4148,18 @@ retry_open:
 		       LA_REL, LA_ACQ));
   /* FREE already excludes readers; queue publication transfers structural
   ** ownership to the drain, which clears late only after block/bin commit. */
+  arena_test_remote_publish_pause_after_queue();
   if (plain_held)
     arena_plain_mutation_release(a);
   else
     arena_remote_leave(a);
+  /* Publish the allocator-wide wake only after both the queue CAS and this
+  ** producer's arena admission have been released. A drain which consumes the
+  ** wake can therefore either take this record, or leave a later producer's
+  ** independently published wake set. Publishing before remote_leave() would
+  ** permit a consumer to clear the wake, reject the still-active arena and
+  ** permanently strand the record. */
+  lj_arena_remote_pending_rel(alloc, 1);
   return 1;
 }
 
@@ -4099,19 +4183,27 @@ static uint32_t arena_remote_free_drain_one(TGAlloc *alloc, GCArena *a)
     return 0;
   if (arena_remote_count(lj_arena_remote_active_acq(a)) != 0 ||
       ((flags = lj_arena_flags_acq(a)) &
-       (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|LJ_AF_PREPSWEEP)))
+       (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|LJ_AF_PREPSWEEP))) {
+    /* The global wake was already consumed, but an unrelated rescue/late
+    ** publisher or sweep transition prevented this queue from being taken.
+    ** Keep it scheduled: such an actor need not publish another queue wake
+    ** when it leaves. */
+    lj_arena_remote_pending_rel(alloc, 1);
     return 0;
+  }
   if (!arena_lifetime_managed(a)) {
     int gate = arena_plain_mutation_claim(a, 0);
     if (gate != 1) {
       if (gate < 0)
 	arena_remote_late_leave(a);
+      lj_arena_remote_pending_rel(alloc, 1);
       return 0;
     }
     plain_held = 1;
     flags = lj_arena_flags_acq(a);
     if (flags & (LJ_AF_NEEDSWEEP|LJ_AF_QUARANTINE|LJ_AF_PREPSWEEP)) {
       arena_plain_mutation_release(a);
+      lj_arena_remote_pending_rel(alloc, 1);
       return 0;
     }
   }
@@ -4204,17 +4296,40 @@ uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc, GCArena *a)
   return n;
 }
 
-uint32_t lj_arena_remote_free_drain(TGAlloc *alloc)
+static uint32_t arena_remote_free_drain_all(TGAlloc *alloc, int force)
 {
   uint32_t k, n = 0;
   if (!alloc)
     return 0;
+  /* Queue producers release their arena admission before release-publishing
+  ** this advisory bit. The acquire half of this exchange therefore covers
+  ** both publications. Clearing first is intentional: a producer after the
+  ** clear leaves 1 for the next opportunistic drain, whether or not this scan
+  ** happens to consume its queue record. A producer paused between its queue
+  ** CAS and flag store likewise guarantees a subsequent drain. */
+  if (lj_arena_remote_pending_xchg_acqrel(alloc, 0) == 0 && !force) {
+    arena_test_remote_fast_skip();
+    return 0;
+  }
+  arena_test_remote_drain_pause_after_clear();
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     GCArena *a;
-    for (a = alloc->owned[k]; a != NULL; a = lj_arena_next_acq(a))
+    for (a = alloc->owned[k]; a != NULL; a = lj_arena_next_acq(a)) {
+      arena_test_remote_arena_probe();
       n += arena_remote_free_drain_one(alloc, a);
+    }
   }
   return n;
+}
+
+uint32_t lj_arena_remote_free_drain_force(TGAlloc *alloc)
+{
+  return arena_remote_free_drain_all(alloc, 1);
+}
+
+uint32_t lj_arena_remote_free_drain(TGAlloc *alloc)
+{
+  return arena_remote_free_drain_all(alloc, 0);
 }
 
 static void arena_publish_bump_run(TGAlloc *alloc, uint32_t k)
@@ -5519,6 +5634,7 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
 {
   uint32_t k, n = 0;
   uint32_t owner_tid;
+  uint32_t remote_carry;
   TGState *owner_tg;
   global_State *progress_g;
   if (!dst || !src || dst == src)
@@ -5526,7 +5642,13 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
   /* The source owner is dead/quiescent. Its arena-local Treiber queues remain
   ** routable across owner_tid changes, but draining now avoids carrying dead
   ** payload records through list rebuild. */
-  (void)lj_arena_remote_free_drain(src);
+  (void)lj_arena_remote_free_drain_force(src);
+  /* A conservative rearm can remain when an arena is already in an exact
+  ** sweep generation. Carry it to the destination instead of stranding an
+  ** advisory wake in the dead source allocator; sweep itself remains
+  ** hint-independent. The caller's dead/quiescent-source precondition excludes
+  ** a producer appearing after this exchange. */
+  remote_carry = lj_arena_remote_pending_xchg_acqrel(src, 0);
   owner_tid = lj_arena_alloc_owner_acq(dst);
   owner_tg = (TGState *)lj_arena_alloc_owner_tg_acq(dst);
   progress_g = owner_tg ? owner_tg->gl : NULL;
@@ -5568,6 +5690,8 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
   lj_arena_alloc_owner_rel(src, 0);
   lj_arena_alloc_owner_tg_rel(src, NULL);
   lj_arena_alloc_black_rel(src, 0);
+  if (remote_carry)
+    lj_arena_remote_pending_rel(dst, 1);
   return n;
 }
 

@@ -16185,16 +16185,24 @@ int lj_gc2_terminal_prefree(global_State *g)
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
     if (tg == g->main_tg)
       saw_main = 1;
-    if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) &&
-	!lj_arena_alloc_terminal_reconcile(&tg->alloc))
-      abort();
+    if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+      /* Joined-world terminal ownership must not trust the opportunistic
+      ** remote-free hint. Consume every durable owned-arena queue before gate
+      ** reconciliation, including a record whose advisory wake was cleared
+      ** by an earlier failed/diagnostic drain. */
+      (void)lj_arena_remote_free_drain_force(&tg->alloc);
+      if (!lj_arena_alloc_terminal_reconcile(&tg->alloc))
+	abort();
+    }
   }
   /* Partial initialization can leave the embedded main TG outside the list;
   ** it still owns allocator lists which terminal free must reconcile. */
   if (!saw_main && g->main_tg &&
-      lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL) &&
-      !lj_arena_alloc_terminal_reconcile(&g->main_tg->alloc))
-    abort();
+      lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL)) {
+    (void)lj_arena_remote_free_drain_force(&g->main_tg->alloc);
+    if (!lj_arena_alloc_terminal_reconcile(&g->main_tg->alloc))
+      abort();
+  }
   return 1;
 }
 

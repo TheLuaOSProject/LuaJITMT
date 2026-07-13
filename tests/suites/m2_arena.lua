@@ -62,9 +62,17 @@ return function(add)
     description = "arena header/mark-before-block publication regression",
     run = function(t)
       local pthread = os.getenv("PTHREAD") or "-pthread"
-      compile_and_run_sources(t, t:tmp("lj_t_arena_publication"),
+      local out = t:tmp("lj_t_arena_publication")
+      compile_and_run_sources(t, out .. ".publication",
         arena_sources(t, "t-arena-publication.c"), {
         cflags = "-DLUAJIT_SECURITY_PRNG=0 " .. pthread,
+        link_luajit = false,
+        libs = { pthread }
+      })
+      compile_and_run_sources(t, out .. ".remote_pending",
+        arena_sources(t, "t-arena-remote-pending.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " ..
+                 pthread,
         link_luajit = false,
         libs = { pthread }
       })
