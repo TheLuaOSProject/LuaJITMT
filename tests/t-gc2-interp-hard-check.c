@@ -19,8 +19,10 @@
 
 static void arm_gc2_hard_mark(global_State *g)
 {
-  lj_gc_threshold_store(g, LJ_MAX_MEM);
   lj_gc2_mark_begin(g);
+  /* The explicit cycle-start request makes the ordinary threshold due. Reset
+  ** it afterwards: these fixtures isolate the hard cadence from threshold GC. */
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   la_store64_rel(&g->gc2.alloc_since_trigger, 2);
@@ -28,8 +30,8 @@ static void arm_gc2_hard_mark(global_State *g)
 
 static void arm_gc2_normal_hard_mark(global_State *g)
 {
-  lj_gc_threshold_store(g, LJ_MAX_MEM);
   lj_gc2_mark_begin(g);
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
   la_store64_rel(&g->gc2.hard_bytes, 2u * LJ_GC2_ACCT_FLUSH);
   la_store32_rel(&g->gc2.assist_shift, 0);
   la_store64_rel(&g->gc2.alloc_since_trigger,

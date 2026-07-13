@@ -137,9 +137,13 @@ int main(void)
     "local gate = ffi.cast('volatile uint32_t *', __gc2_sweep_gate_ptr)\n"
     "local vmstate = ffi.cast('volatile int32_t *', __gc2_sweep_vmstate_ptr)\n"
     "local hits = ffi.cast('volatile uint32_t *', __gc2_sweep_hits_ptr)\n"
-    "function __gc2_sweep_coop(n, seed)\n"
-    "  local t = {}\n"
+    "function __gc2_sweep_alloc(n)\n"
+    "  local t\n"
     "  for i = 1, n do\n"
+    /* Keep TNEW and its initialization at the front of the root trace. The
+    ** later volatile FFI telemetry must not split the allocation off onto a
+    ** side path which SWEEP deliberately refuses to record. */
+    "    t = { i }\n"
     /* vmstate is non-negative only in compiled code. is_sweep is a branchless
     ** uint32 equality test, so recording in IDLE does not install a phase guard
     ** which would force the active-phase call back to the interpreter. */
@@ -147,12 +151,11 @@ int main(void)
     "    local x = bit.bxor(phase[0], 3)\n"
     "    local is_sweep = bit.rshift(bit.bnot(bit.bor(x, -x)), 31)\n"
     "    hits[0] = hits[0] + bit.band(native, is_sweep, gate[0])\n"
-    "    t['coop' .. (seed + i)] = i\n"
     "  end\n"
     "  return t\n"
     "end\n"
-    "assert(type(__gc2_sweep_coop(400, 0)) == 'table')\n"
-    "assert(util.traceinfo(1), 'cooperative SWEEP loop did not trace')\n"
+    "assert(__gc2_sweep_alloc(400)[1] == 400)\n"
+    "assert(util.traceinfo(1), 'cooperative SWEEP TNEW loop did not trace')\n"
     "function __gc2_sweep_pure(n)\n"
     "  local x = 0\n"
     "  for i = 1, n do x = x + i end\n"
@@ -175,27 +178,28 @@ int main(void)
 
 #if defined(LJ_GC2_TEST_HELPERS)
   /* Attribute the close to the common allocation-accounting checkpoint, not
-  ** to a worker or the later asm_gc_check path. Seed a due hard cadence and a
-  ** one-byte-short TG batch while entry is observably open. The real traced
-  ** table/string allocations below must flush that batch with jit_base live,
+  ** to a worker or the later asm_gc_check path. Seed the global hard cadence
+  ** one byte below due while entry is observably open. Keep enough
+  ** room in the TG batch for the function's single interpreted prologue TNEW:
+  ** the loop backedge must enter the already-published trace before later
+  ** native TNEW allocations cross both thresholds with jit_base live,
   ** close the gate, and advance hard_check_bytes before returning. */
   la_store64_rel(&g->gc2.alloc_since_trigger,
-		 LJ_GC2_ACCT_FLUSH * 2u);
+		 LJ_GC2_ACCT_FLUSH * 2u - 1u);
   la_store64_rel(&g->gc2.hard_bytes, LJ_GC2_ACCT_FLUSH);
   lj_gc2_hard_check_store(g, LJ_GC2_ACCT_FLUSH * 2u);
-  la_store64_rel(&tg->local_total, LJ_GC2_ACCT_FLUSH - 1u);
+  la_store64_rel(&tg->local_total, LJ_GC2_ACCT_FLUSH - 4096u);
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   hard_check0 = lj_gc2_hard_check_load(g);
   lj_gc2_test_jit_sweep_checkpoint_reset();
   assert(gc2_jit_phase_gate_acq(g) != 0);
 #endif
 
-  lua_getglobal(L, "__gc2_sweep_coop");
+  lua_getglobal(L, "__gc2_sweep_alloc");
   assert(lua_isfunction(L, -1));
   lua_pushinteger(L, 80000);
-  lua_pushinteger(L, 1000000);
-  ljt_lua_pcall(L, 2, 1, "cooperative SWEEP trace");
-  assert(lua_istable(L, -1));  /* Keep every new key rooted through close. */
+  ljt_lua_pcall(L, 1, 1, "cooperative SWEEP TNEW trace");
+  assert(lua_istable(L, -1));  /* Keep the final native allocation rooted. */
 #if defined(LJ_GC2_TEST_HELPERS)
   assert(lj_gc2_test_jit_sweep_checkpoint_closes() != 0);
   assert(lj_gc2_hard_check_load(g) > hard_check0);
@@ -268,7 +272,7 @@ int main(void)
   assert(gc2_sweep_owner_runs_acq(g) > sweep_runs0);
 
   lua_pushnil(L);
-  lua_setglobal(L, "__gc2_sweep_coop");
+  lua_setglobal(L, "__gc2_sweep_alloc");
   lua_pushnil(L);
   lua_setglobal(L, "__gc2_sweep_pure");
   lua_pushnil(L); lua_setglobal(L, "__gc2_sweep_phase_ptr");

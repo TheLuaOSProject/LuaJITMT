@@ -768,7 +768,6 @@ static int tab_array_snapshot_gc_impl(global_State *g, const GCtab *t,
 {
   TValue *array;
   MSize asize, acap, flags;
-retry_snapshot:
   if (!tab_gc_table_valid_held(t))
     return LJ_TAB_GC_SNAPSHOT_INVALID;
   array = lj_tab_array_acq(t);
@@ -794,11 +793,11 @@ retry_snapshot:
     */
     if (!tab_gc_array_hdr_valid(g, array, &asize, &acap, &flags)) {
       if (lj_tab_array_acq(t) != array)
-	goto retry_snapshot;
+	return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
       return LJ_TAB_GC_SNAPSHOT_INVALID;
     }
     if (lj_tab_array_acq(t) != array)
-      goto retry_snapshot;
+      return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
     if (flags & TABARRAY_FLAG_RETIRING)
       return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
   }
@@ -820,7 +819,6 @@ static int tab_node_snapshot_gc_impl(global_State *g, const GCtab *t,
 {
   Node *node;
   MSize hmask, flags;
-retry_snapshot:
   if (!tab_gc_table_valid_held(t))
     return LJ_TAB_GC_SNAPSHOT_INVALID;
   node = lj_tab_node_acq(t);
@@ -831,18 +829,18 @@ retry_snapshot:
       !lj_gc2_mem_registered_known_reclaim_held(
 	g, (const void *)lj_tab_node_hdr(node))) {
     if (lj_tab_node_acq(t) != node)
-      goto retry_snapshot;
+      return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
     return LJ_TAB_GC_SNAPSHOT_INVALID;
   }
   hmask = lj_tab_node_hmask_acq(node);
   if (!tab_valid_hmask(hmask) && (node != &g->nilnode || hmask != 0)) {
     if (lj_tab_node_acq(t) != node)
-      goto retry_snapshot;
+      return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
     return LJ_TAB_GC_SNAPSHOT_INVALID;
   }
   flags = lj_tab_node_hdr_flags_acq(node);
   if (lj_tab_node_acq(t) != node)
-    goto retry_snapshot;
+    return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
   if (flags & TABNODE_FLAG_RETIRING)
     return LJ_TAB_GC_SNAPSHOT_TRANSIENT;
   *nodep = node;
@@ -2920,6 +2918,54 @@ genlookup:
 cTValue * LJ_FASTCALL lj_tab_getint_hop(GCtab *t, int32_t key)
 {
   return lj_tab_getint(t, key);
+}
+
+int lj_tab_getstr_gc_held(global_State *g, GCtab *t, const GCstr *key,
+			  TValue *out)
+{
+  Node *node, *n;
+  MSize hmask, visited = 0;
+  int status;
+  if (!g || !t || !key || !out)
+    return LJ_TAB_GC_LOOKUP_RETRY;
+  status = lj_tab_node_snapshot_gc_held(g, t, &node, &hmask);
+  if (status != LJ_TAB_GC_SNAPSHOT_OK)
+    return LJ_TAB_GC_LOOKUP_RETRY;
+  if (hmask == 0)
+    return LJ_TAB_GC_LOOKUP_ABSENT;
+  n = hashstr_node(node, hmask, key);
+  do {
+    TValue nk;
+    Node *next;
+    if (LJ_UNLIKELY(!tab_node_in_snapshot(node, hmask, n) ||
+		    visited++ > hmask))
+      return LJ_TAB_GC_LOOKUP_RETRY;
+    lj_tv_load_acq(&nk, &n->key);
+    if (LJ_UNLIKELY(tab_key_islocked(&nk)))
+      return LJ_TAB_GC_LOOKUP_RETRY;
+    if (tvisstr(&nk) && strV(&nk) == key) {
+      TValue val;
+      lj_tv_load_acq(&val, &n->val);
+      if (LJ_UNLIKELY(tvisforward(&val) ||
+		      tab_val_is_publish_claim(&val)))
+	return LJ_TAB_GC_LOOKUP_RETRY;
+      if (LJ_UNLIKELY(lj_tab_node_acq(t) != node ||
+		      lj_tab_node_is_retiring(node)))
+	return LJ_TAB_GC_LOOKUP_RETRY;
+      if (tvisnil(&val))
+	return LJ_TAB_GC_LOOKUP_ABSENT;
+      *out = val;
+      return LJ_TAB_GC_LOOKUP_FOUND;
+    }
+    next = lj_tab_nextnode_acq(n);
+    if (LJ_UNLIKELY(next && !tab_node_in_snapshot(node, hmask, next)))
+      return LJ_TAB_GC_LOOKUP_RETRY;
+    n = next;
+  } while (n);
+  if (LJ_UNLIKELY(lj_tab_node_acq(t) != node ||
+		  lj_tab_node_is_retiring(node)))
+    return LJ_TAB_GC_LOOKUP_RETRY;
+  return LJ_TAB_GC_LOOKUP_ABSENT;
 }
 
 cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)

@@ -1511,11 +1511,42 @@ void lj_trace_freeretired(global_State *g)
   }
 }
 
-void lj_trace_markvecs(global_State *g, int gc2)
+typedef struct TraceRootCycleGuard {
+  const void *anchor;
+  uint64_t power;
+  uint64_t length;
+} TraceRootCycleGuard;
+
+static LJ_AINLINE void trace_root_cycle_init(TraceRootCycleGuard *guard,
+					     const void *head)
+{
+  guard->anchor = head;
+  guard->power = 1;
+  guard->length = 0;
+}
+
+static LJ_AINLINE int trace_root_cycle_step(TraceRootCycleGuard *guard,
+					    const void *next)
+{
+  if (next && next == guard->anchor)
+    return 0;
+  guard->length++;
+  if (guard->length == guard->power) {
+    guard->anchor = next;
+    guard->length = 0;
+    if (guard->power <= ~(uint64_t)0 / 2u)
+      guard->power *= 2u;
+  }
+  return 1;
+}
+
+int lj_trace_markvecs(global_State *g, int gc2)
 {
   jit_State *J = G2J(g);
   TraceVec *tv = tracevec_acq(J);
-  GCtrace *rt;
+  GCtrace *rt, *nextrt;
+  TraceVec *nexttv;
+  TraceRootCycleGuard guard;
   UNUSED(gc2);  /* Compatibility argument: GC2 is the sole runtime collector. */
   if (tv) {
     (void)lj_gc2_markmem(g, tv);
@@ -1541,15 +1572,27 @@ void lj_trace_markvecs(global_State *g, int gc2)
       }
     }
   }
-  for (tv = tracevec_retired_head_acq(J);
-       tv != NULL && lj_gc2_mem_registered(g, tv);
-       tv = tracevec_retired_next_acq(tv)) {
+  tv = tracevec_retired_head_acq(J);
+  trace_root_cycle_init(&guard, tv);
+  while (tv != NULL && lj_gc2_mem_registered(g, tv)) {
+    nexttv = tracevec_retired_next_acq(tv);
     (void)lj_gc2_markmem_registered(g, tv);
+    tv = nexttv;
+    if (LJ_UNLIKELY(!trace_root_cycle_step(&guard, tv)))
+      return 0;
   }
-  for (rt = trace_retired_head_acq(J);
-       rt != NULL && lj_gc2_mem_registered(g, rt);
-       rt = trace_retired_next_acq(rt))
+  if (LJ_UNLIKELY(tv != NULL))
+    return 0;
+  rt = trace_retired_head_acq(J);
+  trace_root_cycle_init(&guard, rt);
+  while (rt != NULL && lj_gc2_mem_registered(g, rt)) {
+    nextrt = trace_retired_next_acq(rt);
     trace_preserve_retired_body(g, rt);
+    rt = nextrt;
+    if (LJ_UNLIKELY(!trace_root_cycle_step(&guard, rt)))
+      return 0;
+  }
+  return rt == NULL;
 }
 
 /* Find a free trace number. */
@@ -2808,15 +2851,18 @@ static void trace_start(jit_State *J)
   TraceNo traceno;
   uint32_t gc2phase = gc2_phase_acq(J2G(J));
 
-  /* MARK/WEAK still need a complete recorder-root barrier proof. SWEEP has
-  ** already frozen and boundedly detached the old ownership generation; new
-  ** trace/root/sidecar allocations are post-reset objects, while
-  ** trace_mark_active_startpt() explicitly preserves the prototype through the
-  ** sweep bridge. Refusing SWEEP here can starve recording forever in an
-  ** allocation-free hot loop, because no later allocation would drive the
-  ** bounded quarantine owner back to IDLE.
+  /* Cooperative MARK admits recording only after activation installed black
+  ** allocation and mutation barriers on every TG. A root-snapshot close
+  ** asynchronously aborts any still-active recorder and reopens the mark round;
+  ** token-private J->cur construction edges are never a persistent certificate.
+  ** SWEEP still rejects recording: J->cur KGC/snapshot construction edges are
+  ** intentionally NOBARRIER, so a post-bridge recorder would need its own
+  ** sweep-rescue publication before physical reclaim could remain concurrent.
+  ** Published native traces still execute during READY SWEEP; the short
+  ** hotcount retry below lets compilation resume naturally in IDLE.
   */
-  if (gc2phase != LJ_GC2_IDLE && gc2phase != LJ_GC2_SWEEP) {
+  if (gc2phase != LJ_GC2_IDLE &&
+      !(gc2phase == LJ_GC2_MARK && lj_gc2_jit_entry_open(J2G(J)))) {
     /* This is a transient collector gate, not a recorder penalty. Leaving the
     ** ordinary full hotloop reset in place can consume every hot event while a
     ** peer-owned MARK/WEAK cycle is active, so a finite loop never records even

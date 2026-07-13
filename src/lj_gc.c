@@ -3167,6 +3167,7 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
   int running = gc_logical_running(g);
   int drove = 0;
   int done = 0;
+  int mark_dispatch_yield = 0;
   if (step_limit == 0)
     step_limit = 1;
   setvmstate(g, GC);
@@ -3182,6 +3183,16 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
     done = lj_gc2_step_explicit(L, 1);
     if (gc2_phase_acq(g) == LJ_GC2_IDLE)
       break;
+    /* Activation grants a bounded number of pre-dispatch opportunities. Each
+    ** miss still completes one collector unit, a real x64 native entry clears
+    ** the remaining allowance, and exhaustion falls back to the full automatic
+    ** batch. This reaches JLOOP without allowing interpreter allocation to
+    ** postpone MARK indefinitely. */
+    if (gc2_phase_acq(g) == LJ_GC2_MARK && lj_gc2_jit_entry_open(g) &&
+	gc2_jit_mark_auto_yield_take(g)) {
+      mark_dispatch_yield = 1;
+      break;
+    }
     /* Keep driving grace/classification units, but stop after one complete
     ** LJ_GC2_SWEEP_BATCH of arenas. Without this aggregate bound, each of the
     ** GCACTIVEAUTOSTEPS units could itself complete a full arena batch. */
@@ -3196,7 +3207,13 @@ static int gc2_step_auto(lua_State *L, int threshold_step, uint32_t step_limit)
     vmstate_store_rel(g, ostate);
     return done ? 1 : (drove ? 0 : -1);
   }
-  lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
+  /* A pre-dispatch MARK lease is not permission to move the allocation
+  ** threshold. Leave it due so the first subsequent allocation—traced or
+  ** interpreted—must pay the next bounded collector quantum. This makes the
+  ** native opportunity a one-dispatch handoff instead of unbounded debt
+  ** deferral until the next accounting quantum. */
+  lj_gc_threshold_store(g, lj_gc_total_load(g) +
+	(mark_dispatch_yield ? 0 : quantum));
   vmstate_store_rel(g, ostate);
   return -1;
 }
@@ -3335,6 +3352,14 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
     gc2_jit_hard_checks_add(g, 1);
     if (!needs_exit)
       lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */
+    /* MARK assist is logical and bounded. Close native admission only after it
+    ** releases collector ownership, then advance the hard cadence so this
+    ** exact trace must restore its snapshot before fixpoint work can begin. */
+    if (!needs_exit && gc2_phase_acq(g) == LJ_GC2_MARK &&
+	lj_gc2_jit_entry_open(g)) {
+      lj_gc2_jit_mark_request_exit(g);
+      needs_exit = 1;
+    }
     lj_gc2_hard_check_advance(g, lj_gc2_alloc_since_load(g));
     /* SWEEP assist is intentionally a no-op. Its hard cadence is instead the
     ** single-TG/no-worker progress backstop: close entry asynchronously and
@@ -3350,6 +3375,9 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   ** IDLE trace in that case; preserve a pre-sampled or newly-due phase/threshold
   ** exit otherwise. */
   needs_exit = needs_exit || lj_gc2_jit_needs_exit(g);
+  if (needs_exit && gc2_phase_acq(g) == LJ_GC2_MARK &&
+      lj_gc2_jit_entry_open(g))
+    lj_gc2_jit_mark_request_exit(g);
   if (needs_exit)
     return 1;
   if (threshold_step && gc2_phase_acq(g) == LJ_GC2_SWEEP &&

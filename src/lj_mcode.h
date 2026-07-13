@@ -23,7 +23,7 @@ LJ_FUNC void lj_mcode_freeall(global_State *g);
 LJ_FUNC uint32_t lj_mcode_reclaim_retired(global_State *g,
 					  uint64_t completed_epoch);
 LJ_FUNC void lj_mcode_freeretired(global_State *g);
-LJ_FUNC void lj_mcode_markretired(global_State *g, int gc2);
+LJ_FUNC int lj_mcode_markretired(global_State *g, int gc2);
 LJ_FUNC MCode *lj_mcode_reserve(jit_State *J, MCode **lim);
 LJ_FUNC void lj_mcode_commit(jit_State *J, MCode *m);
 LJ_FUNC void lj_mcode_abort(jit_State *J);
@@ -68,7 +68,7 @@ static LJ_AINLINE MCode *lj_mcode_rw(jit_State *J, MCode *rx)
 #define lj_mcode_freeall(g)		UNUSED(g)
 #define lj_mcode_reclaim_retired(g, e)	(UNUSED(g), UNUSED(e), 0)
 #define lj_mcode_freeretired(g)		UNUSED(g)
-#define lj_mcode_markretired(g, gc2)	(UNUSED(g), UNUSED(gc2))
+#define lj_mcode_markretired(g, gc2)	(UNUSED(g), UNUSED(gc2), 1)
 
 #endif
 

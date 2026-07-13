@@ -66,7 +66,7 @@ LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
 LJ_FUNC int lj_trace_retired_mcode_refs(global_State *g, MCode *area,
 					size_t size);
 LJ_FUNC void lj_trace_freeretired(global_State *g);
-LJ_FUNC void lj_trace_markvecs(global_State *g, int gc2);
+LJ_FUNC int lj_trace_markvecs(global_State *g, int gc2);
 
 #if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_trace_test_reset_retire_publish_calls(void);
@@ -188,7 +188,7 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 #define lj_trace_retired_mcode_refs(g, area, size) \
   (UNUSED(g), UNUSED(area), UNUSED(size), 0)
 #define lj_trace_freeretired(g)	UNUSED(g)
-#define lj_trace_markvecs(g, gc2)	(UNUSED(g), UNUSED(gc2))
+#define lj_trace_markvecs(g, gc2)	(UNUSED(g), UNUSED(gc2), 1)
 #define lj_trace_abort(g)	UNUSED(g)
 #define lj_trace_abort_owner(L)	UNUSED(L)
 #define lj_trace_retire_gc_claim(g, T)	(UNUSED(g), UNUSED(T), 1)

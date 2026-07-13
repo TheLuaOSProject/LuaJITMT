@@ -60,6 +60,9 @@ static void test_publish_sweep_phase(global_State *g)
   assert(lj_gc2_activation_try_transition(&g->gc2.activation, &weak, epoch,
            LJ_GC2_ACT_SWEEP_OPEN, &sweep) == LJ_GC2_TRANSITION_OK);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
+  /* Synthetic SWEEP skips the real root driver, so model its completed
+  ** prerequisite explicitly before publishing READY below. */
+  gc2_sweep_root_scanned_rel(g, 1);
   assert(!lj_gc2_activation_reclaim_veto(g));
 }
 
@@ -67,6 +70,7 @@ static void test_reset_sweep_phase(global_State *g)
 {
   LJGC2ActivationSnap sweep, idle;
   assert(gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE) == LJ_GC2_SWEEP);
+  gc2_sweep_root_scanned_rel(g, 0);
   sweep = lj_gc2_activation_snapshot(&g->gc2.activation);
   assert(sweep.state == LJ_GC2_ACT_SWEEP_OPEN);
   assert(sweep.gate == LJ_GC2_ROOT_GATE_OPEN);

@@ -68,6 +68,15 @@ static void settle_automatic_cycle(global_State *g)
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
 }
 
+static void pin_mark_closed_for_worker_fixture(global_State *g)
+{
+  /* Tight synthetic drain loops test GC ownership/progress, not the bounded
+  ** native scheduling turn granted by the production MARK driver. */
+  lj_gc2_jit_mark_request_exit(g);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
+  gc2_jit_mark_resume_rel(g, 0);
+}
+
 static int weak_snapshot_has(global_State *g, GCtab *t);
 #if LJ_HASFFI
 static int gc2_cdata_counting_finalizer(lua_State *L);
@@ -139,6 +148,44 @@ static void test_retired_table_owner_nonsemantic(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 2);
+}
+
+static void test_retired_table_root_cycle_retries(lua_State *L,
+						   global_State *g)
+{
+  TabNodeRetire *ret, *savednext, *oldhead;
+  GCtab *t;
+  MSize hmask;
+  uint64_t marks0;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top - 1);
+  lua_pushinteger(L, 1);
+  lua_setfield(L, -2, "retired-root-cycle");
+  oldhead = lj_tab_node_retired_head_acq(g);
+  (void)lj_tab_node_snapshot_acq(t, &hmask);
+  assert(hmask > 0 && lj_fls((uint32_t)hmask) + 2u <= LJ_MAX_HBITS);
+  lj_tab_resize(L, t, lj_tab_asize_acq(t),
+		lj_fls((uint32_t)hmask) + 2u);
+  ret = lj_tab_node_retired_head_acq(g);
+  assert(ret != NULL && ret != oldhead);
+  savednext = lj_tab_node_retired_next_acq(ret);
+
+  lj_gc2_mark_begin(g);
+  gc2_mark_root_scanned_rel(g, 1);
+  marks0 = gc2_marks_this_round_acq(g);
+  /* A corrupt intrusive cycle must reject the exact root certificate promptly;
+  ** the former count cap either hung below the cap or silently certified above
+  ** it. Repair the synthetic edge before ordinary reclamation resumes. */
+  lj_tab_node_retired_next_rel(ret, ret);
+  lj_gc2_test_scan_roots(g, L);
+  assert(gc2_mark_root_scanned_acq(g) == 0);
+  assert(gc2_marks_this_round_acq(g) > marks0);
+  lj_tab_node_retired_next_rel(ret, savednext);
+
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
 }
 
 static void test_false_candidate_mark_admission(lua_State *L,
@@ -459,6 +506,11 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   lua_rawseti(L, -4, 1);  /* parent[1] = child. */
 
   lj_gc2_mark_begin(g);
+  /* Cooperative MARK begins with a bounded native lease. This fixture tests
+  ** SSB/grey drain ownership, so close admission explicitly instead of racing
+  ** the unrelated 50us scheduling deadline. */
+  lj_gc2_jit_mark_request_exit(g);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
@@ -512,6 +564,10 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
   lua_rawseti(L, -4, 1);
 
   lj_gc2_mark_begin(g);
+  /* As above, this race covers the exclusive drain token, not native-lease
+  ** scheduling. Close the fresh cooperative turn before launching contenders. */
+  lj_gc2_jit_mark_request_exit(g);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_test_ssb_empty(g));
@@ -542,8 +598,11 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
   assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
   assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
+  /* The loser either observes the drain token/empty queue, or arrives after
+  ** the winner republishes the next bounded native lease and defers there. */
   assert(gc2_worker_idle_declares_acq(g) > idle0 ||
-	 gc2_worker_busy_retries_acq(g) > busy0);
+	 gc2_worker_busy_retries_acq(g) > busy0 ||
+	 gc2_jit_phase_gate_acq(g) != 0);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
@@ -564,6 +623,8 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   s2 = strV(L->top - 1);
 
   lj_gc2_mark_begin(g);
+  lj_gc2_jit_mark_request_exit(g);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(lj_gc2_test_ssb_push(g, obj2gco(s)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_test_ssb_empty(g));
@@ -585,6 +646,8 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   worker_runs0 = gc2_worker_runs_acq(g);
   worker_ssb0 = gc2_worker_ssb_converted_acq(g);
   worker_grey0 = gc2_worker_grey_drained_acq(g);
+  lj_gc2_jit_mark_request_exit(g);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(lj_gc2_worker_drain(g, 1) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(s2)) == 1);
   assert(lj_gc2_test_ssb_empty(g));
@@ -616,6 +679,11 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 2);  /* Keep only parent as a stack root. */
 
   lj_gc2_mark_begin(g);
+  /* This is a direct fixpoint primitive fixture, not the production
+  ** mark-complete driver. Pin native resumption closed for the cycle so its
+  ** worker drains can reach the root certificate without yielding between
+  ** owner-local SSB rotations. */
+  pin_mark_closed_for_worker_fixture(g);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
@@ -1570,6 +1638,11 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   GCtab *nonproto;
   UNUSED(tg);
 
+  /* This fixture keeps a prototype only in a raw C local while probing exact
+  ** PC ownership. Start from IDLE and stop automatic pacing so setup
+  ** allocations cannot begin a black-allocation cycle behind that assertion. */
+  settle_automatic_cycle(g);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   assert(luaL_dostring(L, "return function() return 42 end\n") == LUA_OK);
   fn = funcV(L->top - 1);
   assert(isluafunc(fn));
@@ -1607,28 +1680,50 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   savedstate = lj_trace_state_load(J);
   memset(&J->cur, 0, sizeof(J->cur));
   J->cur.traceno = 1;
-  J->cur.nk = REF_TRUE;
-  J->cur.nins = REF_TRUE;
+  J->cur.nk = REF_BASE;
+  J->cur.nins = REF_BASE;
+  J->cur.ir = J->irbuf;
   setgcref(J->cur.startpt, obj2gco(pt));
-  /* gc2_scan_current_trace_root() intentionally ignores idle recorder
-  ** geometry. Model the active unpublished-recorder state this fixture is
-  ** proving instead of relying on stale J->cur bytes while state is IDLE. */
+  /* Active J->cur construction is deliberately NOBARRIER. It can never back a
+  ** persistent root certificate, even when the scanner is the recorder owner;
+  ** closure aborts it and retries after the state machine reaches IDLE. */
   lj_trace_state_store(J, LJ_TRACE_START);
   lj_gc2_test_scan_roots(g, L);
-  assert(lj_gc2_ismarked(g, obj2gco(pt)) == 1);
+  assert(lj_trace_state_aborted(lj_trace_state_load(J)));
+  assert(gc2_mark_root_scanned_acq(g) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(pt)) == 0);
   lj_trace_state_store(J, savedstate);
   J->cur = saved;
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 1);
+  assert(lua_gc(L, LUA_GCRESTART, 0) == 0);
 }
 
 static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
 					     TGState *tg)
 {
-  GCtrace *T = find_trace(g);
+  GCtrace *T;
+  int i;
   uint32_t round;
   uint32_t old_vmstate;
   uint64_t trace_roots0;
+
+  /* Earlier barrier fixtures intentionally let their private traces die.
+  ** Record and retain this fixture's own trace so the TG vmstate edge is not
+  ** coupled to incidental trace lifetime or a preceding jit.flush(). */
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "return function(x) return x + 1 end\n") == LUA_OK);
+  for (i = 1; i <= 20; i++) {
+    lua_pushvalue(L, -1);
+    lua_pushinteger(L, i);
+    lua_call(L, 1, 1);
+    assert(lua_tointeger(L, -1) == i + 1);
+    lua_pop(L, 1);
+  }
+  T = find_trace(g);
   assert(T != NULL);
   assert(trace_traceno_acq(T) > 0);
 
@@ -1642,12 +1737,16 @@ static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
   assert(la_load64_acq(&g->gc2.tg_trace_roots) == trace_roots0 + 1u);
   lj_tg_vmstate_store_rel(tg, (int32_t)old_vmstate);
   /* The owner scan queues the complete TG-private semantic graph. Close its
-  ** table-rescan work before forcing this synthetic cycle idle. */
+  ** table-rescan work before forcing this synthetic cycle idle. As in the
+  ** direct fixpoint fixture above, suppress the production native-yield lease
+  ** while exercising the primitive in a tight test loop. */
+  pin_mark_closed_for_worker_fixture(g);
   for (round = 0; round < 64; round++)
     if (lj_gc2_fixpoint_round(g, L, ~(uint32_t)0))
       break;
   assert(round < 64);
   lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
 }
 #endif
 
@@ -1986,6 +2085,86 @@ static void test_weak_snapshot_transient_replays_same_index(lua_State *L,
   assert(gc2_weak_clear_cursor_acq(g) == 1u);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 1);
+}
+
+static void test_weak_snapshot_keylock_replays_same_index(lua_State *L,
+						   global_State *g,
+						   TGState *tg)
+{
+  GCtab *weak, *key, *val;
+  GCtab *mt;
+  GCstr *modekey;
+  Node *node, *slot = NULL, *mnode, *modeslot = NULL;
+  TValue savedkey, savedmodekey, keylock, modeout;
+  MSize i, hmask, mhmask;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "v", &weak, &key, &val);
+  UNUSED(key); UNUSED(val);
+  mt = tabref_acq(weak->metatable);
+  modekey = mmname_str(g, MM_mode);
+  assert(mt != NULL && modekey != NULL);
+  mnode = lj_tab_node_snapshot_acq(mt, &mhmask);
+  for (i = 0; i <= mhmask; i++) {
+    TValue k;
+    lj_tv_load_acq(&k, &mnode[i].key);
+    if (tvisstr(&k) && strV(&k) == modekey) {
+      modeslot = &mnode[i];
+      break;
+    }
+  }
+  assert(modeslot != NULL);
+  lj_tv_load_acq(&savedmodekey, &modeslot->key);
+  setkeylockV(&keylock);
+  tv_rawstore_rel(&modeslot->key, tv_rawload(&keylock));
+  assert(lj_gc2_smr_read_try(g));
+  assert(lj_tab_getstr_gc_held(g, mt, modekey, &modeout) ==
+	 LJ_TAB_GC_LOOKUP_RETRY);
+  lj_gc2_smr_read_leave(g);
+  tv_rawstore_rel(&modeslot->key, tv_rawload(&savedmodekey));
+  assert(lj_gc2_smr_read_try(g));
+  assert(lj_tab_getstr_gc_held(g, mt, modekey, &modeout) ==
+	 LJ_TAB_GC_LOOKUP_FOUND);
+  lj_gc2_smr_read_leave(g);
+  assert(tvisstr(&modeout));
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  node = lj_tab_node_snapshot_acq(weak, &hmask);
+  assert(node != NULL && node != &g->nilnode);
+  for (i = 0; i <= hmask; i++) {
+    TValue v;
+    lj_tv_load_acq(&v, &node[i].val);
+    if (!tvisnil(&v)) {
+      slot = &node[i];
+      break;
+    }
+  }
+  assert(slot != NULL);
+  lj_tv_load_acq(&savedkey, &slot->key);
+  assert(!tviskeylock(&savedkey));
+
+  /* A descheduled structural writer may leave KEYLOCK published indefinitely.
+  ** Both weak passes must return without consuming their cursor, then replay
+  ** the same table after the writer publishes its key. */
+  tv_rawstore_rel(&slot->key, tv_rawload(&keylock));
+  assert(lj_gc2_test_weak_snapshot_scan(g, 1) == 0);
+  assert(gc2_weak_scan_cursor_acq(g) == 0);
+  tv_rawstore_rel(&slot->key, tv_rawload(&savedkey));
+  assert(lj_gc2_test_weak_snapshot_scan(g, 1) == 1u);
+  assert(gc2_weak_scan_cursor_acq(g) == 1u);
+
+  tv_rawstore_rel(&slot->key, tv_rawload(&keylock));
+  assert(lj_gc2_test_weak_snapshot_clear(g, 1) == 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  tv_rawstore_rel(&slot->key, tv_rawload(&savedkey));
+  assert(lj_gc2_test_weak_snapshot_clear(g, 1) == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 1u);
+
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 3);
 }
 
 static void test_weak_self_metatable_publish_barrier(lua_State *L,
@@ -3238,6 +3417,10 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 1);
 
   lj_gc2_mark_begin(g);
+  /* The synthetic foreign-owner loops below exercise NEEDSCAN ownership, not
+  ** cooperative native scheduling. Keep MARK admission closed so their tight
+  ** bounded drain retries cannot all land inside one native lease. */
+  pin_mark_closed_for_worker_fixture(g);
   thread_roots0 = la_load64_acq(&g->gc2.tg_thread_roots);
   cur_roots0 = la_load64_acq(&g->gc2.tg_cur_roots);
   major_roots0 = gc2_major_root_scans_acq(g);
@@ -3689,6 +3872,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   requeues0 = la_load64_acq(&g->gc2.thread_scan_requeues);
   claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
@@ -3724,6 +3908,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   lj_state_owner_rel(owner_L, extra_tg.tid);
   lj_state_owner_rel(busy, extra_tg.tid);
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   /*
   ** The auxiliary TG is a lookup fixture for the owner handoff path, not a real
   ** runnable thread. Attach it after mark-begin's global barrier handshake so it
@@ -3790,6 +3975,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   requeues0 = la_load64_acq(&g->gc2.thread_scan_requeues);
   owner_scans0 = la_load64_acq(&g->gc2.thread_scan_owner_scans);
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   assert(lj_state_scan_epoch_acq(busy) != g->gc2.cycle);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
@@ -3829,6 +4015,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   needscan0 = la_load64_acq(&g->gc2.thread_scan_needscan);
   needscan_pending0 = la_load32_acq(&g->gc2.thread_scan_needscan_pending);
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   lj_gc2_test_scan_roots(g, busy);
   assert(lj_state_scan_epoch_acq(busy) == g->gc2.cycle);
   assert(lj_state_scan_dirty_epoch_acq(busy) ==
@@ -3875,6 +4062,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   needscan0 = la_load64_acq(&g->gc2.thread_scan_needscan);
   needscan_pending0 = la_load32_acq(&g->gc2.thread_scan_needscan_pending);
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) != 0);
   assert(lj_gc2_worker_drain(g, 2) != 0);
@@ -3929,6 +4117,7 @@ static void test_thread_needscan_idle_clear(lua_State *L, global_State *g,
   lj_state_owner_rel(busy, extra_tg.tid);
 
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   n_threads0 = g->gc2.n_threads;
   lj_tg_attach(g, &extra_tg);
   assert(lj_tg_find_owner(g, extra_tg.tid) == &extra_tg);
@@ -3978,6 +4167,7 @@ static void test_thread_needscan_idle_clear(lua_State *L, global_State *g,
   assert(lj_state_scan_handoff_epoch_acq(busy) != 0);
 
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   for (round = 0; round < 64; round++)
     if (lj_gc2_fixpoint_round(g, L, ~(uint32_t)0))
       break;
@@ -4006,6 +4196,7 @@ static void test_userdata(lua_State *L, global_State *g)
   lua_setmetatable(L, -2);
 
   lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
   assert(lj_gc2_ismarked(g, obj2gco(env)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(mt)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(ud)) == 1);
@@ -4288,6 +4479,19 @@ static uint32_t finreg_udata_active_refs(global_State *g, GCobj *target)
   return n;
 }
 
+static GC2FinRegUDataNode *finreg_udata_active_node(global_State *g,
+						     GCobj *target)
+{
+  GC2FinRegUDataNode *node;
+  for (node = gc2_finreg_udata_head_acq(g);
+       node != NULL && lj_gc2_mem_registered(g, node);
+       node = gc2_finreg_udata_next_acq(node))
+    if (gc2_finreg_udata_active_acq(node) &&
+	gc2_finreg_udata_obj_acq(node) == target)
+      return node;
+  return NULL;
+}
+
 static void finreg_udata_mark_other_active(global_State *g, GCobj *target)
 {
   GC2FinRegUDataNode *node;
@@ -4428,6 +4632,89 @@ static void test_finreg_userdata_unproven_unlink_retry(lua_State *L,
   assert(gc2_finalizer_queued_acq(g) == finalizerq0 + 1u);
   lj_gc2_finalizer_dispatch_all(L);
   assert(gc2_udata_finalized == finalized0 + 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
+static void test_finreg_userdata_lookup_retry(lua_State *L,
+					       global_State *g)
+{
+  GC2FinRegUDataNode *finode;
+  GCobj *o;
+  GCtab *mt;
+  Node *mtnode;
+  uint32_t mtflags;
+  uint64_t clears0, discovered0, queued0, finalizerq0;
+  int finalized0;
+  size_t separated;
+
+  lua_settop(L, 0);
+  lua_newuserdata(L, 1);
+  o = obj2gco(udataV(L->top - 1));
+  lua_newtable(L);
+  mt = tabV(L->top - 1);
+  lua_pushcfunction(L, gc2_counting_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  (void)lj_gc_flush_root_pending(g);
+  finode = finreg_udata_active_node(g, o);
+  assert(finode != NULL);
+
+  clears0 = gc2_finreg_udata_clears_acq(g);
+  discovered0 = gc2_finreg_udata_discovered_acq(g);
+  queued0 = gc2_finreg_udata_queued_acq(g);
+  finalizerq0 = gc2_finalizer_queued_acq(g);
+  finalized0 = gc2_udata_finalized;
+
+  lj_gc2_mark_begin(g);
+  finreg_udata_mark_other_active(g, o);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  assert(lj_gc2_ismarkedmem(g, finode) == 0);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  /* Model a completed WEAK root certificate immediately before finalizer
+  ** discovery. A structural table transient must revoke both halves. */
+  gc2_weak_root_scanned_rel(g, 1);
+  gc2_weak_mark_closed_rel(g, 1);
+
+  mtnode = lj_tab_node_acq(mt);
+  assert(mtnode != NULL && mtnode != &g->nilnode);
+  mtflags = lj_tab_node_hdr_flags_word_acq(mtnode);
+  assert((mtflags & (uint32_t)TABNODE_FLAG_RETIRING) == 0);
+  lj_tab_node_hdr_flags_or_rel(mtnode, TABNODE_FLAG_RETIRING);
+  separated = lj_gc2_finreg_udata_finalize(g, 0);
+  la_store32_rel(&lj_tab_node_hdrw(mtnode)->flags, mtflags);
+
+  assert(separated == 0);
+  assert(gc2_weak_root_scanned_acq(g) == 0);
+  assert(gc2_weak_mark_closed_acq(g) == 0);
+  assert(lj_gc2_ismarked(g, o) == 1);
+  assert(lj_gc2_ismarkedmem(g, finode) == 1);
+  assert(finreg_udata_active_refs(g, o) == 1u);
+  assert(gc2_finreg_udata_clears_acq(g) == clears0);
+  assert(gc2_finreg_udata_discovered_acq(g) == discovered0);
+  assert(gc2_finreg_udata_queued_acq(g) == queued0);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0);
+  assert((lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG) != 0);
+  assert((lj_obj_gcflags(o) & LJ_GC_FINALIZED) == 0);
+  assert(gc2_udata_finalized == finalized0);
+
+  /* RETRY deliberately retained this incarnation for the cycle. Once the
+  ** transient clears, the next cycle must discover and dispatch the original
+  ** __gc instead of converting the retry into a negative lookup. */
+  lj_gc2_cycle_to_idle(g);
+  lj_gc2_mark_begin(g);
+  finreg_udata_mark_other_active(g, o);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  assert(lj_gc2_finreg_udata_finalize(g, 0) != 0);
+  assert(finreg_udata_active_refs(g, o) == 0);
+  assert(gc2_finreg_udata_clears_acq(g) == clears0);
+  assert(gc2_finreg_udata_discovered_acq(g) == discovered0 + 1u);
+  assert(gc2_finreg_udata_queued_acq(g) == queued0 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0 + 1u);
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(gc2_udata_finalized == finalized0 + 1);
+  assert(gc2_finreg_udata_clears_acq(g) == clears0 + 1u);
   lj_gc2_cycle_to_idle(g);
   lua_settop(L, 0);
 }
@@ -4777,10 +5064,101 @@ static uint32_t finreg_cdata_order_active_refs(global_State *g, GCobj *target)
   return n;
 }
 
+static FinRegOrderNode *finreg_cdata_order_active_node(global_State *g,
+						       GCobj *target)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegOrderNode *ord;
+  if (!cts)
+    return NULL;
+  for (ord = fin_order_head_acq(cts);
+       ord != NULL && lj_gc2_mem_registered(g, ord);
+       ord = fin_order_next_acq(ord))
+    if (fin_order_active_acq(ord) == 1 && fin_order_obj_acq(ord) == target)
+      return ord;
+  return NULL;
+}
+
 static void finreg_cdata_test_mark(global_State *g, cTValue *tv)
 {
   UNUSED(g);
   UNUSED(tv);  /* The fixture keeps the C finalizer in a global Lua root. */
+}
+
+static void test_finreg_cdata_slot_retry_reopens_weak(lua_State *L,
+						       global_State *g)
+{
+  FinRegOrderNode *ord;
+  GCcdata *cd;
+  GCobj *o;
+  GCtab *fintab;
+  Node *finnode;
+  uint32_t finflags;
+  uint64_t claimed0, orderq0, finalizerq0;
+  int finalized0;
+
+  lua_settop(L, 0);
+  lua_pushcfunction(L, gc2_cdata_counting_finalizer);
+  lua_setglobal(L, "gc2_cdata_counting_finalizer");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "return ffi.gc(ffi.new('char[?]', 8), gc2_cdata_counting_finalizer)\n") ==
+    LUA_OK);
+  cd = cdataV(L->top - 1);
+  o = obj2gco(cd);
+  (void)lj_gc_flush_root_pending(g);
+  ord = finreg_cdata_order_active_node(g, o);
+  assert(ord != NULL);
+  fintab = fin_order_tab_acq(ord);
+  assert(fintab != NULL);
+  finnode = lj_tab_node_acq(fintab);
+  assert(finnode != NULL && finnode != &g->nilnode);
+  finflags = lj_tab_node_hdr_flags_word_acq(finnode);
+  assert((finflags & (uint32_t)TABNODE_FLAG_RETIRING) == 0);
+
+  claimed0 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderq0 = gc2_finreg_cdata_order_queued_acq(g);
+  finalizerq0 = gc2_finalizer_queued_acq(g);
+  finalized0 = gc2_cdata_finalized;
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  gc2_weak_root_scanned_rel(g, 1);
+  gc2_weak_mark_closed_rel(g, 1);
+
+  /* A transient FIN-table generation is neither MISS nor a live candidate
+  ** skip. P_WEAK must reopen its exact certificate without consuming the
+  ** order node, slot, flags, or callback. */
+  lj_tab_node_hdr_flags_or_rel(finnode, TABNODE_FLAG_RETIRING);
+  assert(lj_gc2_finreg_cdata_finalize_pweak(
+	L, g, finreg_cdata_test_mark) == 0);
+  la_store32_rel(&lj_tab_node_hdrw(finnode)->flags, finflags);
+  assert(gc2_weak_root_scanned_acq(g) == 0);
+  assert(gc2_weak_mark_closed_acq(g) == 0);
+  assert(finreg_cdata_order_active_refs(g, o) == 1u);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0);
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0);
+  assert((lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) != 0);
+  assert((lj_obj_gcflags(o) & LJ_GC_FINALIZED) == 0);
+  assert(gc2_cdata_finalized == finalized0);
+
+  lj_gc2_cycle_to_idle(g);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  assert(lj_gc2_finreg_cdata_finalize_pweak(
+	L, g, finreg_cdata_test_mark) == 1u);
+  assert(finreg_cdata_order_active_refs(g, o) == 0);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) == claimed0 + 1u);
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq0 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq0 + 1u);
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(gc2_cdata_finalized == finalized0 + 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_cdata_counting_finalizer");
+  lua_settop(L, 0);
 }
 
 static void test_finreg_cdata_unproven_unlink_retry(lua_State *L,
@@ -5560,6 +5938,7 @@ int main(void)
   test_weak_snapshot_ready_publication(L, g);
   test_weak_snapshot_rejects_nonobject(L, g);
   test_weak_snapshot_transient_replays_same_index(L, g);
+  test_weak_snapshot_keylock_replays_same_index(L, g, tg);
   test_weak_self_metatable_publish_barrier(L, g, tg);
   test_weak_snapshot_bridge_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
@@ -5568,6 +5947,7 @@ int main(void)
 #else
   test_strong_table(L, g, tg);
   test_retired_table_owner_nonsemantic(L, g, tg);
+  test_retired_table_root_cycle_retries(L, g);
   test_grey_deque_growth(L, g, tg);
   test_grey_deque_steal_race(L, g, tg);
   test_worker_drain(L, g, tg);
@@ -5612,6 +5992,7 @@ int main(void)
   test_weak_snapshot_ready_publication(L, g);
   test_weak_snapshot_rejects_nonobject(L, g);
   test_weak_snapshot_transient_replays_same_index(L, g);
+  test_weak_snapshot_keylock_replays_same_index(L, g, tg);
   test_weak_self_metatable_publish_barrier(L, g, tg);
   test_weak_snapshot_bridge_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
@@ -5645,6 +6026,7 @@ int main(void)
   test_finreg_userdata_queue_mark(L, g, tg);
   test_finreg_userdata_active_unlink(L, g);
   test_finreg_userdata_unproven_unlink_retry(L, g);
+  test_finreg_userdata_lookup_retry(L, g);
   test_finreg_userdata_dispatch_defer_retry(L, g);
   test_finreg_userdata_telemetry(L, g);
   test_finreg_internal_userdata_telemetry(L, g);
@@ -5655,6 +6037,7 @@ int main(void)
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_finreg_cdata_preclaim_publish_order(L, g);
 #endif
+  test_finreg_cdata_slot_retry_reopens_weak(L, g);
   test_finreg_cdata_unproven_unlink_retry(L, g);
   test_finreg_cdata_order_active_retire(L, g);
   test_finreg_cdata_telemetry(L, g);

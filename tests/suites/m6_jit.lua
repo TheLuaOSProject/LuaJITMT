@@ -1945,6 +1945,13 @@ assert(util.traceinfo(1), "empty-hash miss loop did not trace")
                         timeout = "30s",
                         cflags = gc2_test_cflags
                       })
+      build_and_run_c(t, t:tmp("lj_t-gc2-jit-mark-coop-helper"),
+                      "t-gc2-jit-mark-coop.c",
+                      {
+                        build = false,
+                        timeout = "40s",
+                        cflags = gc2_test_cflags
+                      })
       print("M6 JIT allocator accounting behavior passed")
     end
   })
@@ -1958,6 +1965,8 @@ assert(util.traceinfo(1), "empty-hash miss loop did not trace")
                       "t-gc2-jit-hard-check.c", { build = false, timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-gc2-jit-sweep-coop"),
                       "t-gc2-jit-sweep-coop.c", { build = false, timeout = "30s" })
+      build_and_run_c(t, t:tmp("lj_t-gc2-jit-mark-coop"),
+                      "t-gc2-jit-mark-coop.c", { build = false, timeout = "40s" })
 
       luajit_code(t, [=[
 local util = require("jit.util")

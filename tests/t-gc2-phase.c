@@ -61,6 +61,13 @@ typedef struct FinalizerDrainer {
   global_State *g;
   uint32_t finished;
 } FinalizerDrainer;
+
+typedef struct FinalizerScanRelease {
+  global_State *g;
+  uint32_t scan_returned;
+  uint32_t release_allowed;
+  uint32_t timed_out;
+} FinalizerScanRelease;
 #endif
 
 
@@ -128,10 +135,19 @@ static void *finalizer_drain_worker(void *arg)
   return NULL;
 }
 
-static void *finalizer_drain_release_worker(void *arg)
+static void *finalizer_scan_release_worker(void *arg)
 {
-  PeerRelease *rel = (PeerRelease *)arg;
-  sleep_ns(rel->delay_ns);
+  FinalizerScanRelease *rel = (FinalizerScanRelease *)arg;
+  uint64_t deadline = lj_thr_now_ns() + 500000000u;
+  while (la_load32_acq(&rel->scan_returned) == 0 &&
+	 lj_thr_now_ns() < deadline)
+    sleep_ns(100000L);
+  if (la_load32_acq(&rel->scan_returned) == 0) {
+    la_store32_rel(&rel->timed_out, 1);
+  } else {
+    while (la_load32_acq(&rel->release_allowed) == 0)
+      sleep_ns(100000L);
+  }
   gc2_finalizer_drain_test_release_rel(rel->g, 1);
   return NULL;
 }
@@ -372,13 +388,14 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   lua_settop(L, 0);
 }
 
-static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
+static void test_finalizer_scan_retries_busy_owner(lua_State *L,
+						   global_State *g)
 {
   FinalizerDrainer fd = {0};
-  PeerRelease rel;
+  FinalizerScanRelease rel = {0};
   pthread_t drain_thread, release_thread;
   GCobj *a, *o;
-  uint64_t drained0;
+  uint64_t drained0, marks0;
 
   lua_settop(L, 0);
   assert(gc2_finalizer_mpsc_acq(g) == NULL);
@@ -404,15 +421,34 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   assert(gc2_finalizer_mpsc_drained_acq(g) == drained0);
   assert(lj_gc2_ismarked(g, a) == 0);
 
+  /* Model a completed MARK root certificate. The foreign drainer owns the
+  ** only reference to `a` while paused, so a nonblocking snapshot must revoke
+  ** the certificate and return without pretending that queue was covered. A
+  ** watchdog releases the owner only after the scan returns, or after 500 ms
+  ** to make the former blocking implementation fail instead of hanging. */
+  gc2_mark_root_scanned_rel(g, 1);
+  marks0 = gc2_marks_this_round_acq(g);
   rel.g = g;
-  rel.delay_ns = 1000000L;
-  assert(pthread_create(&release_thread, NULL, finalizer_drain_release_worker,
+  assert(pthread_create(&release_thread, NULL, finalizer_scan_release_worker,
 			&rel) == 0);
   lj_gc2_test_scan_roots(g, L);
+  la_store32_rel(&rel.scan_returned, 1);
+  assert(la_load32_acq(&rel.timed_out) == 0);
+  assert(gc2_mark_root_scanned_acq(g) == 0);
+  assert(gc2_marks_this_round_acq(g) > marks0);
+  assert(lj_gc2_ismarked(g, a) == 0);
+  assert(gc2_finalizer_active_acq(g) == 1);
+  assert(la_load32_acq(&fd.finished) == 0);
+  la_store32_rel(&rel.release_allowed, 1);
   assert(pthread_join(release_thread, NULL) == 0);
   assert(pthread_join(drain_thread, NULL) == 0);
+  assert(la_load32_acq(&rel.timed_out) == 0);
   assert(la_load32_acq(&fd.finished) == 1);
   assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 1u);
+
+  /* Once the foreign owner leaves, the next root scan owns and marks the
+  ** completed FIFO normally. */
+  lj_gc2_test_scan_roots(g, L);
   assert(lj_gc2_ismarked(g, a) == 1);
 
   o = lj_gc2_test_finalizer_dequeue(g);
@@ -747,6 +783,13 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   lua_rawseti(L, -4, 1);  /* parent[1] = child. */
 
   lj_gc2_mark_begin(g);
+  /* This fixture asserts the accounting of the first direct worker batch,
+  ** not the production pre-dispatch native turn. Close the fresh cooperative
+  ** MARK lease so lj_gc2_step_explicit() reaches that worker batch instead of
+  ** taking its equally valid mark-complete fallback path. */
+  lj_gc2_jit_mark_request_exit(g);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
+  gc2_jit_mark_resume_rel(g, 0);  /* Keep later synthetic drains closed, too. */
   setgcrefnull(g->gc.gray);
   setgcrefnull(g->gc.grayagain);
   setgcrefnull(g->gc.weak);
@@ -976,7 +1019,7 @@ int main(void)
   test_finalizer_queue_preserves_object_link(L, g);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_finalizer_drain_concurrent_consumers(L, g);
-  test_finalizer_scan_waits_for_drain(L, g);
+  test_finalizer_scan_retries_busy_owner(L, g);
 #endif
   test_finalizer_mpsc_concurrent_producers(L, g);
   test_finalizer_step_defers_busy_callback_state(L, g);
@@ -1093,6 +1136,14 @@ int main(void)
 				     phase_trav_a));
   assert((phase_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((phase_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  /* The raw READY latch is fail-closed until the mandatory SWEEP root
+  ** certificate exists. In particular, it must not open native admission and
+  ** strand READY=1/root_scanned=0 if an internal caller arrives early. */
+  assert(gc2_sweep_root_scanned_acq(g) == 0);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
+  lj_gc2_sweep_bridge_ready(g);
+  assert(gc2_sweep_bridge_ready_acq(g) == 0);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
   /* Bridge preparation is bounded and may lose the worker token to the parked
   ** collector. Drive it to its published boundary instead of assuming one
   ** scheduling attempt completes all root-spine work. */

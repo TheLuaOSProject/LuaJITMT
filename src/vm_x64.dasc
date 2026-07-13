@@ -2971,6 +2971,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
   |  jmp >7
   |9:
+  |  cmp dword GL:RA->gc2.jit_mark_auto_yield, 0
+  |  je >9
+  |  mov dword GL:RA->gc2.jit_mark_auto_yield, 0
+  |9:
   |  mov RA, BASE
   |  xchg [DISPATCH+DISPATCH_TG(jit_base)], RA
   |  load_G RA
@@ -6164,7 +6168,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne >8
     |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
     |  jmp >3
-    |8:
+|8:
+    |  // A real native entry consumes MARK's bounded pre-dispatch allowance.
+    |  // The automatic driver left its threshold due, so the next allocation
+    |  // still owes collector work; this is scheduling, not debt deferral.
+    |  cmp dword GL:RA->gc2.jit_mark_auto_yield, 0
+    |  je >8
+    |  mov dword GL:RA->gc2.jit_mark_auto_yield, 0
+|8:
     |  // Publish trace-entry intent before loading a body/mcode pointer. Trace
     |  // flush handshakes wait on jit_base. The SC fence paired with GC2's
     |  // gate-close fence makes either this recheck reject or the collector
@@ -6322,7 +6333,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne >9
     |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
     |  jmp >7
-    |9:
+|9:
+    |  cmp dword GL:RA->gc2.jit_mark_auto_yield, 0
+    |  je >9
+    |  mov dword GL:RA->gc2.jit_mark_auto_yield, 0
+|9:
     |  mov RA, BASE
     |  xchg [DISPATCH+DISPATCH_TG(jit_base)], RA
     |  load_G RA

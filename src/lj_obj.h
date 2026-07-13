@@ -1490,6 +1490,9 @@ typedef struct GC2State {
 	  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
 	  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
 	  uint32_t mark_root_scanned;  /* MARK close owner/global snapshot state. */
+	  uint32_t jit_mark_resume;  /* Cycle authorized for cooperative MARK entry. */
+	  uint32_t jit_mark_auto_yield;  /* Bounded pre-dispatch attempts per cycle. */
+	  uint64_t jit_mark_yield_until_ns;  /* Bounded MARK mutator lease. */
 	  uint32_t jit_sweep_displaced;  /* Closed gate displaced native execution. */
 	  uint64_t jit_sweep_yield_until_ns;  /* Bounded mutator turn after quiesce. */
 	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
@@ -3255,6 +3258,70 @@ static LJ_AINLINE int gc2_jit_phase_gate_cas(global_State *g,
 		  LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint32_t gc2_jit_mark_resume_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_mark_resume);
+}
+
+static LJ_AINLINE void gc2_jit_mark_resume_store_rlx(global_State *g,
+					       uint32_t cycle)
+{
+  la_store32_rlx(&g->gc2.jit_mark_resume, cycle);
+}
+
+static LJ_AINLINE void gc2_jit_mark_resume_rel(global_State *g,
+					 uint32_t cycle)
+{
+  la_store32_rel(&g->gc2.jit_mark_resume, cycle);
+}
+
+static LJ_AINLINE void gc2_jit_mark_auto_yield_store_rlx(global_State *g,
+						   uint32_t pending)
+{
+  la_store32_rlx(&g->gc2.jit_mark_auto_yield, pending);
+}
+
+static LJ_AINLINE void gc2_jit_mark_auto_yield_rel(global_State *g,
+					     uint32_t pending)
+{
+  la_store32_rel(&g->gc2.jit_mark_auto_yield, pending);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_mark_auto_yield_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_mark_auto_yield);
+}
+
+static LJ_AINLINE int gc2_jit_mark_auto_yield_take(global_State *g)
+{
+  uint32_t old = la_load32_acq(&g->gc2.jit_mark_auto_yield);
+  while (old != 0) {
+    uint32_t expect = old;
+    if (la_cas32(&g->gc2.jit_mark_auto_yield, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
+}
+
+static LJ_AINLINE uint64_t gc2_jit_mark_yield_until_ns_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.jit_mark_yield_until_ns);
+}
+
+static LJ_AINLINE void gc2_jit_mark_yield_until_ns_store_rlx(
+  global_State *g, uint64_t deadline)
+{
+  la_store64_rlx(&g->gc2.jit_mark_yield_until_ns, deadline);
+}
+
+static LJ_AINLINE void gc2_jit_mark_yield_until_ns_rel(global_State *g,
+						 uint64_t deadline)
+{
+  la_store64_rel(&g->gc2.jit_mark_yield_until_ns, deadline);
+}
+
 static LJ_AINLINE uint32_t gc2_jit_sweep_displaced_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.jit_sweep_displaced);
@@ -3322,6 +3389,14 @@ static LJ_AINLINE void gc2_sweep_root_scanned_rel(global_State *g,
 						  uint32_t scanned)
 {
   la_store32_rel(&g->gc2.sweep_root_scanned, scanned);
+}
+
+static LJ_AINLINE int gc2_sweep_root_scanned_cas(global_State *g,
+						 uint32_t *oldp,
+						 uint32_t scanned)
+{
+  return la_cas32(&g->gc2.sweep_root_scanned, oldp, scanned,
+		  LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE GCRef *gc2_sweep_root_cursor_acq(global_State *g)

@@ -58,7 +58,21 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define GC2_RECOVERY_LANE_BITS	2u
 #define GC2_RECOVERY_LANE_MASK	((1u << GC2_RECOVERY_LANE_BITS) - 1u)
 #define GC2_RECOVERY_LANE_QUANTUM	64u
+#define GC2_JIT_MARK_AUTO_YIELDS	64u
+#define GC2_JIT_MARK_YIELD_NS	50000u
 #define GC2_JIT_SWEEP_YIELD_NS	50000u
+
+static void lj_gc2_worker_wake(global_State *g);
+
+static LJ_AINLINE int gc2_jit_recorder_active(global_State *g)
+{
+#if LJ_HASJIT
+  return g && lj_trace_state_load(G2J(g)) != LJ_TRACE_IDLE;
+#else
+  UNUSED(g);
+  return 0;
+#endif
+}
 
 /*
 ** GC2 trace entry is a two-sided publication protocol. The VM first observes
@@ -71,6 +85,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 */
 static void gc2_jit_phase_gate_close(global_State *g)
 {
+  gc2_jit_mark_yield_until_ns_rel(g, 0);
   gc2_jit_sweep_yield_until_ns_rel(g, 0);
   gc2_jit_phase_gate_rel(g, 0);
   la_fence_seq();
@@ -80,9 +95,55 @@ static void gc2_jit_phase_gate_open_idle(global_State *g)
 {
   lj_assertG(gc2_phase_acq(g) == LJ_GC2_IDLE,
 	     "IDLE JIT gate opened outside IDLE");
+  gc2_jit_mark_resume_rel(g, 0);
+  gc2_jit_mark_auto_yield_rel(g, 0);
+  gc2_jit_mark_yield_until_ns_rel(g, 0);
   gc2_jit_sweep_displaced_rel(g, 0);
   gc2_jit_sweep_yield_until_ns_rel(g, 0);
   gc2_jit_phase_gate_rel(g, 1);
+}
+
+static int gc2_jit_mark_resume_authorized(global_State *g)
+{
+  uint32_t cycle;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_MARK)
+    return 0;
+  cycle = gc2_cycle_acq(g);
+  return gc2_jit_mark_resume_acq(g) == cycle;
+}
+
+static void gc2_jit_phase_gate_open_mark(global_State *g, int mutator_turn)
+{
+  uint64_t deadline = 0;
+  if (!gc2_jit_mark_resume_authorized(g))
+    return;
+  lj_assertG(gc2_phase_acq(g) == LJ_GC2_MARK &&
+	     gc2_jit_mark_resume_acq(g) == gc2_cycle_acq(g),
+	     "MARK JIT gate opened before activation acknowledgement");
+  if (mutator_turn) {
+    uint64_t now = lj_thr_now_ns();
+    deadline = now > ~(uint64_t)0 - GC2_JIT_MARK_YIELD_NS ?
+	       ~(uint64_t)0 : now + GC2_JIT_MARK_YIELD_NS;
+  }
+  gc2_jit_sweep_yield_until_ns_rel(g, 0);
+  gc2_jit_mark_yield_until_ns_rel(g, deadline);
+  gc2_jit_phase_gate_rel(g, 1);
+}
+
+static int gc2_jit_mark_turn_deferred(global_State *g)
+{
+  uint64_t deadline;
+  if (!gc2_jit_mark_resume_authorized(g) ||
+      gc2_jit_phase_gate_acq(g) == 0)
+    return 0;
+  /* Once a real entry consumed the pre-dispatch allowance and every TG has
+  ** returned from native code, there is no lease holder to protect. A racing
+  ** entrant is still covered by the gate-close publication/recheck protocol. */
+  if (gc2_jit_mark_auto_yield_acq(g) == 0 &&
+      !lj_tg_any_jit_active(g))
+    return 0;
+  deadline = gc2_jit_mark_yield_until_ns_acq(g);
+  return deadline != 0 && lj_thr_now_ns() < deadline;
 }
 
 static void gc2_jit_phase_gate_open_sweep(global_State *g, int mutator_turn)
@@ -102,6 +163,9 @@ static void gc2_jit_phase_gate_open_sweep(global_State *g, int mutator_turn)
 	       ~(uint64_t)0 : now + GC2_JIT_SWEEP_YIELD_NS;
   }
   /* Publish the scheduling lease before native entry is admitted. */
+  gc2_jit_mark_resume_rel(g, 0);
+  gc2_jit_mark_auto_yield_rel(g, 0);
+  gc2_jit_mark_yield_until_ns_rel(g, 0);
   gc2_jit_sweep_yield_until_ns_rel(g, deadline);
   gc2_jit_phase_gate_rel(g, 1);
 }
@@ -129,7 +193,20 @@ int lj_gc2_jit_entry_open(global_State *g)
     return 0;
   phase = gc2_phase_acq(g);
   return phase == LJ_GC2_IDLE ||
+    (phase == LJ_GC2_MARK && gc2_jit_mark_resume_authorized(g)) ||
     (phase == LJ_GC2_SWEEP && gc2_sweep_bridge_ready_acq(g) != 0);
+}
+
+void lj_gc2_jit_mark_request_exit(global_State *g)
+{
+  if (!gc2_jit_mark_resume_authorized(g) ||
+      gc2_jit_phase_gate_acq(g) == 0)
+    return;
+  /* The caller can still own trace mcode. Publish only the asynchronous entry
+  ** close; a later collector observes jit_base==NULL before MARK fixpoint or
+  ** root-snapshot work and may then grant the next bounded native turn. */
+  gc2_jit_phase_gate_close(g);
+  lj_gc2_worker_wake(g);
 }
 
 void lj_gc2_jit_sweep_request_exit(global_State *g)
@@ -150,7 +227,23 @@ static uint32_t gc2_recovery_test_fail_grey_grow;
 static uint32_t gc2_recovery_test_pause_stage;
 static uint32_t gc2_recovery_test_paused_stage;
 static uint32_t gc2_recovery_test_pause_release;
+static uint64_t gc2_test_jit_mark_checkpoint_closes;
 static uint64_t gc2_test_jit_sweep_checkpoint_closes;
+
+void lj_gc2_test_jit_mark_checkpoint_reset(void)
+{
+  la_store64_rel(&gc2_test_jit_mark_checkpoint_closes, 0);
+}
+
+uint64_t lj_gc2_test_jit_mark_checkpoint_closes(void)
+{
+  return la_load64_acq(&gc2_test_jit_mark_checkpoint_closes);
+}
+
+static void gc2_test_jit_mark_checkpoint_closed(void)
+{
+  (void)la_add64_rlx(&gc2_test_jit_mark_checkpoint_closes, 1);
+}
 
 void lj_gc2_test_jit_sweep_checkpoint_reset(void)
 {
@@ -241,6 +334,7 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE 4u
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM 5u
 #define gc2_recovery_test_pause_at(stage) ((void)(stage))
+#define gc2_test_jit_mark_checkpoint_closed() ((void)0)
 #define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
 #endif
 
@@ -728,6 +822,7 @@ static int gc2_finalizer_sweep_pending(global_State *g);
 static void gc2_peer_wait_no_l(void);
 static void gc2_peer_wait_l(lua_State *L);
 static void gc2_peer_wait_owned_l(lua_State *L);
+static void gc2_root_scan_retry(global_State *g);
 static int gc2_mark_begin(global_State *g);
 static void lj_gc2_finalizer_enter_l(lua_State *L, global_State *g);
 static void lj_gc2_finalizer_enter(global_State *g);
@@ -777,8 +872,6 @@ static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					GCobj *o, cTValue *fin);
 static int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 					     GCobj *o, TValue *fin);
-static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o,
-						  cTValue *fin);
 static int gc2_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o);
 static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
@@ -795,11 +888,12 @@ static int gc2_frame_func_valid(global_State *g, TValue *frame,
 static int gc2_traverse_obj(global_State *g, GCobj *o);
 static int lj_gc2_ssb_empty(global_State *g);
 static int gc2_traverse_tab(global_State *g, GCtab *t);
+static int gc2_traverse_tab_admitted(global_State *g, GCtab *t,
+				      int record_weak);
 static LJ_AINLINE int gc2_table_scan_current(global_State *g, GCtab *t);
 static int gc2_table_rescan_later(global_State *g, GCtab *t);
 static int gc2_table_rescan_later_force(global_State *g, GCtab *t);
 static void gc2_table_rescan_requeue(global_State *g, GCtab *t);
-static int gc2_traverse_tab_norecord(global_State *g, GCtab *t);
 static LJ_AINLINE int gc2_gct_may_traverse(uint32_t gct);
 static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o);
 enum {
@@ -1143,6 +1237,9 @@ void lj_gc2_init(global_State *g)
   gc2_marks_this_round_store_rlx(g, 0);
   gc2_mark_root_scanned_store_rlx(g, 0);
   gc2_jit_phase_gate_store_rlx(g, 1);
+  gc2_jit_mark_resume_store_rlx(g, 0);
+  gc2_jit_mark_auto_yield_store_rlx(g, 0);
+  gc2_jit_mark_yield_until_ns_store_rlx(g, 0);
   gc2_jit_sweep_displaced_store_rlx(g, 0);
   gc2_jit_sweep_yield_until_ns_store_rlx(g, 0);
   gc2_ssb_head_store_rlx(g, NULL);
@@ -2063,6 +2160,15 @@ static int gc2_worker_park_timeout_ns(global_State *g)
       !(gc2_cycle_leader_acq(g) != 0 &&
 	gc2_jit_phase_gate_acq(g) == 0))
     return -1;
+  if (phase == LJ_GC2_MARK && gc2_jit_phase_gate_acq(g) != 0) {
+    uint64_t deadline = gc2_jit_mark_yield_until_ns_acq(g);
+    if (deadline != 0) {
+      uint64_t now = lj_thr_now_ns();
+      uint64_t left = deadline > now ? deadline - now : 1u;
+      if (left < GC2_ACTIVE_PARK_TIMEOUT_NS)
+	return (int)left;
+    }
+  }
   if (phase == LJ_GC2_SWEEP && gc2_jit_phase_gate_acq(g) != 0) {
     uint64_t deadline = gc2_jit_sweep_yield_until_ns_acq(g);
     if (deadline != 0) {
@@ -2241,6 +2347,17 @@ int lj_gc2_collect_active(lua_State *L)
   tg = L2TG(L);
   if (!g || !tg)
     return 0;
+#if LJ_HASJIT
+  /* A full collection invoked from a recorder-owned callback/allocation cannot
+  ** wait for that same recorder to reach IDLE: the recorder cannot unwind
+  ** until this nested API call returns. Publish the ordinary asynchronous
+  ** abort and defer the collection. A peer-owned recorder follows the normal
+  ** nonwaiting root-retry path instead. */
+  if (gc2_jit_recorder_active(g) && lj_jit_token_held_l(L, G2J(g))) {
+    lj_trace_abort(g);
+    return 0;
+  }
+#endif
   /* gc2_call_finalizer deliberately retains the finalized object's body scope
   ** across the Lua callback. A recursive full collection by that same owner
   ** can help bounded phase work, but it can never finish sweeping the retained
@@ -2502,6 +2619,13 @@ uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg)
       ** worker ownership and before advancing the cadence. The current helper
       ** returns normally; XPOLL or finite trace return publishes quiescence. */
       if (lj_tg_jit_base(g) != NULL &&
+	  gc2_phase_acq(g) == LJ_GC2_MARK &&
+	  lj_gc2_jit_entry_open(g)) {
+	lj_gc2_jit_mark_request_exit(g);
+	lj_assertG(gc2_jit_phase_gate_acq(g) == 0,
+		   "allocation checkpoint failed to close JIT MARK gate");
+	gc2_test_jit_mark_checkpoint_closed();
+      } else if (lj_tg_jit_base(g) != NULL &&
 	  gc2_phase_acq(g) == LJ_GC2_SWEEP &&
 	  lj_gc2_jit_entry_open(g)) {
 	lj_gc2_jit_sweep_request_exit(g);
@@ -2928,35 +3052,94 @@ static void gc2_clear_marks_all(global_State *g)
     gc2_clear_marks(tg);
 }
 
+typedef struct GC2RootCycleGuard {
+  const void *anchor;
+  uint64_t power;
+  uint64_t length;
+} GC2RootCycleGuard;
+
+static LJ_AINLINE void gc2_root_cycle_guard_init(GC2RootCycleGuard *guard,
+						  const void *head)
+{
+  guard->anchor = head;
+  guard->power = 1;
+  guard->length = 0;
+}
+
+/* Brent cycle detection piggybacks on an admitted forward walk. This removes
+** arbitrary count caps without allowing a corrupt publication cycle to trap a
+** root-handshake participant forever. */
+static LJ_AINLINE int gc2_root_cycle_guard_step(GC2RootCycleGuard *guard,
+						 const void *next)
+{
+  if (next && next == guard->anchor)
+    return 0;
+  guard->length++;
+  if (guard->length == guard->power) {
+    guard->anchor = next;
+    guard->length = 0;
+    if (guard->power <= ~(uint64_t)0 / 2u)
+      guard->power *= 2u;
+  }
+  return 1;
+}
+
 static LJ_NOINLINE void gc2_mark_strtab_mem(global_State *g)
 {
-  StrTabHdr *hdr;
-  StrCanonHdr *qhdr;
-  StrBodyRetire *ret;
+  StrTabHdr *hdr, *nexthdr;
+  StrCanonHdr *qhdr, *nextqhdr;
+  StrBodyRetire *ret, *nextret;
+  GC2RootCycleGuard guard;
   if (!g)
     return;
   hdr = lj_str_tabh_acq(g);
-  if (hdr)
+  if (hdr && !lj_gc2_mem_registered(g, hdr))
+    gc2_root_scan_retry(g);
+  else if (hdr)
     lj_gc2_markmem(g, hdr);
-  for (hdr = lj_str_retired_head_acq(g);
-       hdr != NULL && lj_gc2_mem_registered(g, hdr);
-       hdr = lj_str_retired_next_acq(hdr))
+  hdr = lj_str_retired_head_acq(g);
+  gc2_root_cycle_guard_init(&guard, hdr);
+  while (hdr != NULL && lj_gc2_mem_registered(g, hdr)) {
+    nexthdr = lj_str_retired_next_acq(hdr);
     lj_gc2_markmem(g, hdr);
+    hdr = nexthdr;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, hdr))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
+  }
+  if (LJ_UNLIKELY(hdr != NULL && !lj_gc2_mem_registered(g, hdr)))
+    gc2_root_scan_retry(g);
   qhdr = lj_str_qtabh_acq(g);
-  if (qhdr)
+  if (qhdr && !lj_gc2_mem_registered(g, qhdr))
+    gc2_root_scan_retry(g);
+  else if (qhdr)
     lj_gc2_markmem(g, qhdr);
-  for (qhdr = lj_str_qretired_head_acq(g);
-       qhdr != NULL && lj_gc2_mem_registered(g, qhdr);
-       qhdr = lj_str_qretired_next_acq(qhdr))
+  qhdr = lj_str_qretired_head_acq(g);
+  gc2_root_cycle_guard_init(&guard, qhdr);
+  while (qhdr != NULL && lj_gc2_mem_registered(g, qhdr)) {
+    nextqhdr = lj_str_qretired_next_acq(qhdr);
     lj_gc2_markmem(g, qhdr);
+    qhdr = nextqhdr;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, qhdr))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
+  }
+  if (LJ_UNLIKELY(qhdr != NULL && !lj_gc2_mem_registered(g, qhdr)))
+    gc2_root_scan_retry(g);
   ret = lj_str_sweep_pending_acq(g);
-  if (ret && lj_gc2_mem_registered(g, ret)) {
+  if (ret && !lj_gc2_mem_registered(g, ret)) {
+    gc2_root_scan_retry(g);
+  } else if (ret) {
     lj_gc2_markmem(g, ret);
     if ((la_load32_acq(&ret->status) &
 	 (LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) ==
 	(LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) {
       GCstr *s = lj_str_body_retired_str_acq(ret);
-      if (s && lj_gc2_mem_registered(g, s)) {
+      if (s && !lj_gc2_mem_registered(g, s)) {
+	gc2_root_scan_retry(g);
+      } else if (s) {
 	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
 	  (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
 	else
@@ -2968,39 +3151,51 @@ static LJ_NOINLINE void gc2_mark_strtab_mem(global_State *g)
   ** authoritative quarantine body until QCOMMIT is implemented; this is not a
   ** liveness sample authorizing unlink/free. Later close stages replace this
   ** conservative mark with their separate physical-quarantine proof. */
-  for (ret = lj_str_body_retired_head_acq(g);
-       ret != NULL && lj_gc2_mem_registered(g, ret);
-       ret = lj_str_body_retired_next_acq(ret)) {
+  ret = lj_str_body_retired_head_acq(g);
+  gc2_root_cycle_guard_init(&guard, ret);
+  while (ret != NULL && lj_gc2_mem_registered(g, ret)) {
     uint32_t status = la_load32_acq(&ret->status);
+    nextret = lj_str_body_retired_next_acq(ret);
     lj_gc2_markmem(g, ret);
     if ((status & (LJ_STR_CANONREC_Q_LINKED|
 		   LJ_STR_CANONREC_BODY_OWNED)) ==
 	(LJ_STR_CANONREC_Q_LINKED|LJ_STR_CANONREC_BODY_OWNED)) {
       GCstr *s = lj_str_body_retired_str_acq(ret);
-      if (s && lj_gc2_mem_registered(g, s)) {
+      if (s && !lj_gc2_mem_registered(g, s)) {
+	gc2_root_scan_retry(g);
+      } else if (s) {
 	if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
 	  (void)lj_gc2_preserve_sweep_root(g, obj2gco(s));
 	else
 	  (void)lj_gc2_markobj(g, obj2gco(s));
       }
     }
+    ret = nextret;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, ret))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
   }
+  if (LJ_UNLIKELY(ret != NULL && !lj_gc2_mem_registered(g, ret)))
+    gc2_root_scan_retry(g);
 }
 
 static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
 {
-  TabNodeRetire *ret;
-  TabArrayRetire *aret;
-  uint32_t n = 0;
+  TabNodeRetire *ret, *nextret;
+  TabArrayRetire *aret, *nextaret;
+  GC2RootCycleGuard guard;
   /*
   ** The SMR reader held by callers keeps registered retire records stable while
-  ** their payload pointer and next link are read. Stale list words can remain
-  ** after a reclaim handoff, so validate the record itself before dereferencing.
+  ** their payload pointer and next link are read. Every published node must
+  ** therefore remain registered; an invalid node rejects this root snapshot
+  ** instead of becoming a silent end-of-list sentinel.
   */
-  for (ret = (TabNodeRetire *)la_loadptr_acq(
-	 (void *const *)&g->tab.retired_nodes);
-       ret != NULL && lj_gc2_mem_registered(g, ret);
-       ret = lj_tab_node_retired_next_acq(ret)) {
+  ret = (TabNodeRetire *)la_loadptr_acq(
+    (void *const *)&g->tab.retired_nodes);
+  gc2_root_cycle_guard_init(&guard, ret);
+  while (ret != NULL && lj_gc2_mem_registered(g, ret)) {
+    nextret = lj_tab_node_retired_next_acq(ret);
     (void)lj_gc2_markmem(g, ret);
     /*
     ** The armed bit controls when retired storage can be freed. It must not
@@ -3008,22 +3203,32 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     ** published, and transient snapshots can still point at that old storage.
     */
     lj_gc2_markmem(g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
-    if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT))
+    ret = nextret;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, ret))) {
+      gc2_root_scan_retry(g);
       break;
+    }
   }
-  n = 0;
-  for (aret = lj_tab_array_retired_head_acq(g);
-       aret != NULL && lj_gc2_mem_registered(g, aret);
-       aret = lj_tab_array_retired_next_acq(aret)) {
+  if (LJ_UNLIKELY(ret != NULL && !lj_gc2_mem_registered(g, ret)))
+    gc2_root_scan_retry(g);
+  aret = lj_tab_array_retired_head_acq(g);
+  gc2_root_cycle_guard_init(&guard, aret);
+  while (aret != NULL && lj_gc2_mem_registered(g, aret)) {
+    nextaret = lj_tab_array_retired_next_acq(aret);
     (void)lj_gc2_markmem(g, aret);
     /*
     ** Keep the array payload marked even before the retire record is armed;
     ** arming only makes the record eligible for epoch-based reclamation.
     */
     lj_gc2_markmem(g, lj_tab_array_hdrw(lj_tab_array_retired_array_acq(aret)));
-    if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT))
+    aret = nextaret;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, aret))) {
+      gc2_root_scan_retry(g);
       break;
+    }
   }
+  if (LJ_UNLIKELY(aret != NULL && !lj_gc2_mem_registered(g, aret)))
+    gc2_root_scan_retry(g);
 }
 
 static int gc2_root_spine_admit(global_State *g, GCobj *o,
@@ -3151,13 +3356,6 @@ int lj_gc2_test_trace_pc_proto_candidate(global_State *g, GCobj *o,
   return gc2_trace_pc_proto_candidate(g, o, pc) != NULL;
 }
 
-static void gc2_mark_proto_for_trace_pc_root(global_State *g, const BCIns *pc)
-{
-  if (!pc)
-    return;
-  (void)lj_gc2_mark_proto_for_pc(g, pc);
-}
-
 static void gc2_mark_active_cframe_proto_root(global_State *g, lua_State *L)
 {
   if (!L || L->cframe == NULL)
@@ -3179,23 +3377,6 @@ static void gc2_mark_active_cframe_proto_root(global_State *g, lua_State *L)
   }
 }
 
-static void gc2_mark_trace_snapshot_pcs_root(global_State *g, GCtrace *T)
-{
-  SnapShot *snap = trace_snap_acq(T);
-  SnapEntry *snapmap = trace_snapmap_acq(T);
-  MSize nsnapmap = trace_nsnapmap_acq(T);
-  SnapNo i, nsnap = trace_nsnap_acq(T);
-  for (i = 0; i < nsnap; i++) {
-    SnapShot *s = &snap[i];
-    MSize ofs = snap_mapofs_acq(s);
-    MSize nent = snap_nent_acq(s);
-    SnapEntry *map;
-    if (ofs >= nsnapmap || nent >= nsnapmap - ofs)
-      return;
-    map = &snapmap[ofs];
-    gc2_mark_proto_for_trace_pc_root(g, snap_pc_acq(&map[nent]));
-  }
-}
 #endif
 
 static int gc2_tg_list_contains(global_State *g, TGState *needle)
@@ -3213,7 +3394,7 @@ static int gc2_mark_begin(global_State *g)
 {
   TGState *tg;
   LJGC2ActivationSnap staged;
-  uint32_t leader;
+  uint32_t leader, mark_cycle;
   uint32_t forced_major, minor_requested, sweep_minor, roots_minor;
   int staged_mark;
   if (!g)
@@ -3325,7 +3506,7 @@ static int gc2_mark_begin(global_State *g)
   gc2_phase_rel(g, LJ_GC2_MARK);
   if (tg != NULL && !gc2_tg_list_contains(g, tg))
     lj_tg_attach(g, tg);
-  (void)gc2_cycle_inc_acqrel(g);
+  mark_cycle = gc2_cycle_inc_acqrel(g);
   if (leader)
     gc2_cycle_starts_add(g, 1);
   gc2_marks_this_round_store_rlx(g, 0);
@@ -3349,8 +3530,16 @@ static int gc2_mark_begin(global_State *g)
 		   LJ_GC2_HS_FLUSH_SSB);
   {
     uint32_t expect = leader;
-    if (LJ_UNLIKELY(!gc2_cycle_leader_cas(g, &expect, 0)))
+    if (LJ_UNLIKELY(!gc2_cycle_leader_cas(g, &expect, 0))) {
       gc2_activation_pin_no_reclaim(g);
+    } else {
+      /* The cycle generation is the C-owned proof that every activation action
+      ** was acknowledged before native MARK entry became possible. The entry
+      ** gate stayed closed while the request token was nonzero. */
+      gc2_jit_mark_resume_rel(g, mark_cycle);
+      gc2_jit_mark_auto_yield_rel(g, GC2_JIT_MARK_AUTO_YIELDS);
+      gc2_jit_phase_gate_open_mark(g, 1);
+    }
   }
   gc2_worker_release(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
@@ -3508,16 +3697,30 @@ int lj_gc2_minor_roots_skip_bridge_mark(global_State *g)
 void lj_gc2_mark_to_weak(global_State *g)
 {
   uint32_t expect = LJ_GC2_MARK;
-  if (!g || lj_tg_any_jit_active(g) || !gc2_recovery_empty(g) ||
+  if (!g || gc2_phase_acq(g) != LJ_GC2_MARK)
+    return;
+  if (gc2_jit_phase_gate_acq(g) != 0)
+    gc2_jit_phase_gate_close(g);
+  if (gc2_jit_recorder_active(g)) {
+    lj_trace_abort(g);
+    gc2_root_scan_retry(g);
+    return;
+  }
+  if (lj_tg_any_jit_active(g) || !gc2_recovery_empty(g) ||
       !gc2_phase_gate_try(g))
     return;
-  if (lj_tg_any_jit_active(g) || !gc2_recovery_empty(g) ||
+  if (gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
+      gc2_jit_recorder_active(g) ||
+      !gc2_recovery_empty(g) ||
       !gc2_phase_cas(g, &expect, LJ_GC2_WEAK)) {
     gc2_phase_gate_release(g);
     return;
   }
   /* WEAK cannot reclaim, so the exact legacy CAS may safely lead its mirror. */
   gc2_activation_mirror_edge(g, LJ_GC2_MARK, LJ_GC2_WEAK);
+  gc2_jit_mark_resume_rel(g, 0);
+  gc2_jit_mark_auto_yield_rel(g, 0);
+  gc2_jit_mark_yield_until_ns_rel(g, 0);
   gc2_mark_root_scanned_rel(g, 0);
   gc2_mark_to_weak_add(g, 1);
   gc2_phase_gate_release(g);
@@ -4237,22 +4440,23 @@ int lj_gc2_finalizer_phase_pending(global_State *g)
 static int gc2_finreg_udata_close_pending(global_State *g)
 {
   GC2FinRegUDataNode *node;
-  uint32_t n = 0;
+  GC2RootCycleGuard guard;
   if (!g)
     return 0;
   node = gc2_finreg_udata_head_acq(g);
-  while (node && n++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+  gc2_root_cycle_guard_init(&guard, node);
+  while (node) {
     GC2FinRegUDataNode *next;
     if (!lj_gc2_mem_registered(g, node))
-      return 0;  /* Do not dereference an inadmissible side-list record. */
+      return 1;  /* Invalid metadata cannot prove terminal quiescence. */
     if (gc2_finreg_udata_active_acq(node))
       return 1;
     next = gc2_finreg_udata_next_acq(node);
-    if (next == node)
-      return 0;
     node = next;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node)))
+      return 1;
   }
-  return 0;  /* Bounded close-pending probe; finalize owns list cleanup. */
+  return 0;
 }
 
 int lj_gc2_finalizer_close_pending(global_State *g)
@@ -4583,10 +4787,54 @@ static int gc2_sweep_bridge_owner_roots_pending(global_State *g)
   return gc2_thread_scan_needscan_pending_acq(g) != 0;
 }
 
+static void gc2_sweep_root_snapshot_abort(global_State *g)
+{
+  uint32_t expect = 2;
+  (void)gc2_sweep_root_scanned_cas(g, &expect, 0);
+}
+
+/* The mandatory pre-READY SWEEP root scan uses the same provisional
+** certificate discipline as MARK and WEAK. Root participants may reset 2->0
+** through gc2_root_scan_retry(); only an unchanged closed generation may
+** publish 2->1 after the complete handshake. */
+static int gc2_sweep_root_snapshot(global_State *g)
+{
+  uint32_t state, expect, cycle;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
+    return 0;
+  state = gc2_sweep_root_scanned_acq(g);
+  if (state == 1)
+    return 1;
+  if (state != 0)
+    return 0;
+  expect = 0;
+  if (!gc2_sweep_root_scanned_cas(g, &expect, 2))
+    return 0;
+  cycle = gc2_cycle_acq(g);
+  if (gc2_jit_phase_gate_acq(g) != 0)
+    gc2_jit_phase_gate_close(g);
+  if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g)) {
+    if (gc2_jit_recorder_active(g))
+      lj_trace_abort(g);
+    gc2_sweep_root_snapshot_abort(g);
+    return 0;
+  }
+  lj_gc2_trace_sweep_roots(g);
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_cycle_acq(g) != cycle || gc2_jit_phase_gate_acq(g) != 0 ||
+      lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g)) {
+    if (gc2_jit_recorder_active(g))
+      lj_trace_abort(g);
+    gc2_sweep_root_snapshot_abort(g);
+    return 0;
+  }
+  expect = 2;
+  return gc2_sweep_root_scanned_cas(g, &expect, 1);
+}
+
 void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 					  GC2SweepBridgePreserveFunc preserve)
 {
-  uint32_t cycle;
   UNUSED(preserve);  /* Per-entry preservation is folded into bounded pruning. */
   if (!lj_gc2_sweep_bridge_can_progress(g))
     return;
@@ -4609,16 +4857,12 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
     ** of the ownership spine. Record it once so a long root list cannot force
     ** another all-TG scan on every batch. A real thread NEEDSCAN handoff is the
     ** only condition which requests an additional owner snapshot. */
-    if (!gc2_sweep_root_scanned_acq(g)) {
-      cycle = gc2_cycle_acq(g);
-      lj_gc2_trace_sweep_roots(g);
-      if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
-	  gc2_cycle_acq(g) != cycle) {
-	gc2_sweep_root_scanned_rel(g, 0);
+    if (gc2_sweep_root_scanned_acq(g) != 1) {
+      if (!gc2_sweep_root_snapshot(g)) {
 	gc2_worker_release(g);
+	lj_gc2_worker_wake(g);
 	return;
       }
-      gc2_sweep_root_scanned_rel(g, 1);
     }
     if (gc2_sweep_bridge_owner_roots_pending(g)) {
       lj_gc2_trace_sweep_roots(g);
@@ -4647,7 +4891,8 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
       lj_gc2_worker_wake(g);
       return;
     }
-    if (lj_tg_any_jit_active(g) || gc2_weak_owned_peer_active(g)) {
+    if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
+	gc2_weak_owned_peer_active(g)) {
       gc2_worker_release(g);
       lj_gc2_worker_wake(g);
       return;
@@ -4658,7 +4903,8 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
     (void)gc2_marks_this_round_xchg_acqrel(g, 0);
     la_fence_seq();
     if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
-	lj_tg_any_jit_active(g) || gc2_weak_owned_peer_active(g) ||
+	lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
+	gc2_weak_owned_peer_active(g) ||
 	!lj_gc2_ssb_empty(g) || !gc2_recovery_empty(g) ||
 	gc2_sweep_bridge_owner_roots_pending(g) ||
 	gc2_table_rescan_pending_acq(g) != 0 ||
@@ -4681,7 +4927,8 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
     (void)gc2_marks_this_round_xchg_acqrel(g, 0);
     la_fence_seq();
     if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
-	!gc2_sweep_root_scanned_acq(g) || lj_tg_any_jit_active(g) ||
+	gc2_sweep_root_scanned_acq(g) != 1 ||
+	lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
 	gc2_weak_owned_peer_active(g) || !lj_gc2_ssb_empty(g) ||
 	!gc2_recovery_empty(g) ||
 	gc2_sweep_bridge_owner_roots_pending(g) ||
@@ -4727,12 +4974,14 @@ static int gc2_sweep_reclaim_enter(global_State *g)
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_worker_active_acq(g) == 0 ||
       gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
+      gc2_jit_recorder_active(g) || gc2_sweep_root_scanned_acq(g) != 1 ||
       !gc2_recovery_empty(g) || lj_gc2_activation_reclaim_veto(g) ||
       !gc2_smr_reclaiming_cas(g, &expect, 1))
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_worker_active_acq(g) == 0 ||
       gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
+      gc2_jit_recorder_active(g) || gc2_sweep_root_scanned_acq(g) != 1 ||
       !gc2_recovery_empty(g) || lj_gc2_activation_reclaim_veto(g) ||
       gc2_smr_readers_acq(g) != 0) {
     gc2_smr_reclaiming_rel(g, 0);
@@ -4839,7 +5088,8 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   if (!g || !tg || limit == 0 ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return 0;
-  if (gc2_phase_acq(g) != LJ_GC2_SWEEP || !gc2_recovery_empty(g))
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP || !gc2_recovery_empty(g) ||
+      gc2_jit_recorder_active(g) || gc2_sweep_root_scanned_acq(g) != 1)
     return 0;
   if (!gc2_sweep_bridge_ready_acq(g))
     return 0;
@@ -5184,7 +5434,14 @@ void lj_gc2_sweep_bridge_ready(global_State *g)
   uint32_t expect = 0;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return;
-  if (gc2_sweep_bridge_owner_roots_pending(g) || !gc2_recovery_empty(g))
+  /* READY is the irreversible admission edge for physical reclaim. Keep the
+  ** mandatory root-snapshot certificate inside the latch precondition, rather
+  ** than trusting every internal/test caller to have used the bridge driver.
+  ** Otherwise READY=1/root_scanned=0 is permanent: post-READY retries quite
+  ** deliberately cannot revoke the latch, while every destructor and normal
+  ** SWEEP close correctly refuses the missing certificate. */
+  if (gc2_sweep_root_scanned_acq(g) != 1 ||
+      gc2_sweep_bridge_owner_roots_pending(g) || !gc2_recovery_empty(g))
     return;
   /* READY publication and the initial entry opening are one-shot. A redundant
   ** compatibility/test call must never reopen the gate while a reclaim owner
@@ -5217,6 +5474,18 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_IDLE)
     return;
+  if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+       (phase == LJ_GC2_SWEEP && !gc2_sweep_bridge_ready_acq(g))) &&
+      gc2_jit_phase_gate_acq(g) != 0)
+    gc2_jit_phase_gate_close(g);
+  if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+       (phase == LJ_GC2_SWEEP && !gc2_sweep_bridge_ready_acq(g))) &&
+      lj_tg_any_jit_active(g)) {
+    /* Preserve-abort is opportunistic. Closing entry requests an ordinary
+    ** trace/FFI exit; this caller never waits for the active publication. */
+    lj_gc2_worker_wake(g);
+    return;
+  }
   /* A running GC owner may still mutate mark/sweep work after an IDLE store.
   ** Preserve-root callers rescue their exact object into the active phase, so
   ** abort remains opportunistic until the worker token is quiescent. */
@@ -5238,6 +5507,13 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_IDLE) {
     gc2_phase_gate_release(g);
+    return;
+  }
+  if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+       (phase == LJ_GC2_SWEEP && !gc2_sweep_bridge_ready_acq(g))) &&
+      (gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g))) {
+    gc2_phase_gate_release(g);
+    lj_gc2_worker_wake(g);
     return;
   }
   if (phase == LJ_GC2_SWEEP) {
@@ -5347,10 +5623,12 @@ int lj_gc2_sweep_to_idle(global_State *g)
     return 0;
   }
   gc2_jit_phase_gate_close(g);
-  if (lj_tg_any_jit_active(g)) {
+  if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g)) {
     /* Never wait for a peer in blocking FFI, and never self-wait from a trace
     ** helper. Allocation checks observe the closed gate; x64 loop XPOLL does
     ** the same. A later owner retries after every TG has published quiescence. */
+    if (gc2_jit_recorder_active(g))
+      lj_trace_abort(g);
     gc2_jit_sweep_displaced_rel(g, 1);
     gc2_worker_release(g);
     return 0;
@@ -5371,7 +5649,9 @@ int lj_gc2_sweep_to_idle(global_State *g)
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_sweep_blocked_by_finalizer(g) ||
       !gc2_sweep_bridge_ready_acq(g) ||
-      lj_tg_any_jit_active(g) || gc2_weak_owned_peer_active(g) ||
+      gc2_sweep_root_scanned_acq(g) != 1 ||
+      lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
+      gc2_weak_owned_peer_active(g) ||
       gc2_sweep_bridge_owner_roots_pending(g) ||
       gc2_table_rescan_pending_acq(g) != 0 ||
       gc2_sweep_grace_needed_acq(g) || !lj_gc2_ssb_empty(g) ||
@@ -5392,7 +5672,9 @@ int lj_gc2_sweep_to_idle(global_State *g)
   ** drain here would fail by trying to acquire our own token. */
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_sweep_blocked_by_finalizer(g) ||
-      lj_tg_any_jit_active(g) || gc2_weak_owned_peer_active(g) ||
+      gc2_sweep_root_scanned_acq(g) != 1 ||
+      lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
+      gc2_weak_owned_peer_active(g) ||
       gc2_sweep_bridge_owner_roots_pending(g) ||
       gc2_table_rescan_pending_acq(g) != 0 ||
       gc2_sweep_grace_needed_acq(g) || !lj_gc2_ssb_empty(g) ||
@@ -5493,6 +5775,17 @@ void lj_gc2_cycle_to_idle(global_State *g)
     gc2_worker_release(g);
     return;
   }
+  if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+       (phase == LJ_GC2_SWEEP && !gc2_sweep_bridge_ready_acq(g))) &&
+      gc2_jit_phase_gate_acq(g) != 0)
+    gc2_jit_phase_gate_close(g);
+  if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+       (phase == LJ_GC2_SWEEP && !gc2_sweep_bridge_ready_acq(g))) &&
+      lj_tg_any_jit_active(g)) {
+    gc2_worker_release(g);
+    lj_gc2_worker_wake(g);
+    return;
+  }
   if (phase == LJ_GC2_SWEEP &&
       (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
        gc2_sweep_grace_needed_acq(g))) {
@@ -5511,6 +5804,14 @@ void lj_gc2_cycle_to_idle(global_State *g)
   if (phase == LJ_GC2_IDLE) {
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
+    return;
+  }
+  if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+       (phase == LJ_GC2_SWEEP && !gc2_sweep_bridge_ready_acq(g))) &&
+      (gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g))) {
+    gc2_phase_gate_release(g);
+    gc2_worker_release(g);
+    lj_gc2_worker_wake(g);
     return;
   }
   if (phase == LJ_GC2_SWEEP &&
@@ -6078,8 +6379,14 @@ static void gc2_root_rescan_later(global_State *g, GCobj *o)
     return;
   if (o->gch.gct == ~LJ_TTAB) {
     GCtab *t = gco2tab(o);
-    if (!gc2_table_rescan_later(g, t))
+    if (!gc2_table_rescan_later(g, t)) {
       (void)gc2_traverse_tab(g, t);
+      /* Fresh lifetime admission can be transient. A failed immediate fallback
+      ** must leave concrete queue work (or the fail-closed pending veto), not
+      ** only an undrainable NEEDSCAN bit. */
+      if (!gc2_table_scan_current(g, t))
+	(void)gc2_table_rescan_later_force(g, t);
+    }
     return;
   }
   if (!gc2_rescan_pending_set(o)) {
@@ -7118,17 +7425,31 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g,
     return;
   objv = gc2_finreg_cdata_preclaim_objvec_acq(g);
   finv = gc2_finreg_cdata_preclaim_finvec_acq(g);
+  cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
+  head = gc2_finreg_cdata_preclaim_head_acq(g);
+  count = gc2_finreg_cdata_preclaim_count_acq(g);
+  if (!objv || !finv) {
+    /* A completely absent zero-capacity side vector has no roots. Any partial
+    ** publication is not a certificate that the claimed prefix was empty. */
+    if (objv || finv || cap != 0 || head != 0 || count != 0)
+      gc2_root_scan_retry(g);
+    return;
+  }
   objstatus = gc2_markmem_registered_scoped_status(g, objv, &objscope);
   finstatus = gc2_markmem_registered_scoped_status(g, finv, &finscope);
-  if (objstatus == GC2_MARK_DEAD || finstatus == GC2_MARK_DEAD)
+  if (objstatus == GC2_MARK_DEAD || finstatus == GC2_MARK_DEAD) {
+    gc2_root_scan_retry(g);
     goto out;
+  }
   /* Both fixed vectors are now retained. Snapshot bounds only afterwards and
   ** use the admitted local pointers throughout the entry walk. */
   cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
   head = gc2_finreg_cdata_preclaim_head_acq(g);
   count = gc2_finreg_cdata_preclaim_count_acq(g);
-  if (head > cap) head = cap;
-  if (count > cap) count = cap;
+  if (head > count || count > cap) {
+    gc2_root_scan_retry(g);
+    goto out;
+  }
   for (i = head; i < count; i++) {
     GCobj *o = gcref_acq(objv[i]);
     if (o) {
@@ -7157,9 +7478,7 @@ static int gc2_mark_finreg_cdata_generations(global_State *g,
   ** durable retry request: the owner's final 2->1 CAS fails, while an already
   ** completed state 1 is explicitly reopened. marks_this_round prevents a
   ** same-pass fixpoint even for direct/non-snapshot root scans. */
-  gc2_mark_root_scanned_rel(g, 0);
-  gc2_marks_this_round_add(g, 1);
-  lj_gc2_worker_wake(g);
+  gc2_root_scan_retry(g);
   return 0;
 }
 
@@ -7209,7 +7528,14 @@ void lj_gc2_finalizer_mark_all(global_State *g, GC2FinalizerMarkFunc mark)
 {
   if (!g || !mark)
     return;
-  lj_gc2_finalizer_enter(g);
+  /* A root snapshot must not wait behind an arbitrary user __gc/FFI
+  ** callback owned by another TG. Keep the completed/provisional phase
+  ** certificate open and let the worker retry after that owner leaves.
+  ** Same-owner recursive scans still enter through try_enter's nesting path. */
+  if (!lj_gc2_finalizer_try_enter(g)) {
+    gc2_root_scan_retry(g);
+    return;
+  }
   lj_gc2_finalizer_drain_owned(g);
   gc2_finalizer_mark_queued_owned(g, mark);
   lj_gc2_finalizer_leave(g);
@@ -7218,14 +7544,18 @@ void lj_gc2_finalizer_mark_all(global_State *g, GC2FinalizerMarkFunc mark)
 static void gc2_scan_threading_live_roots(global_State *g)
 {
   LJThreadLive *node, *next;
-  uint32_t scanned = 0;
+  GC2RootCycleGuard guard;
   node = lj_thread_live_head_acq(g);
-  while (node != NULL && scanned++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+  gc2_root_cycle_guard_init(&guard, node);
+  while (node != NULL) {
     GC2MarkScope scope;
     GCobj *o;
     int status = gc2_markmem_registered_scoped_status(g, node, &scope);
-    if (status == GC2_MARK_DEAD)
+    if (status == GC2_MARK_DEAD) {
+      gc2_mark_scope_leave(&scope);
+      gc2_root_scan_retry(g);
       break;
+    }
     o = lj_thread_live_udata_ref_acq(node);
     next = lj_thread_live_next_acq(node);
     /* The node is the root publication. Removal may concurrently clear it and
@@ -7237,6 +7567,10 @@ static void gc2_scan_threading_live_roots(global_State *g)
       gc2_mark_thread_root_obj(g, o);
     gc2_mark_scope_leave(&scope);
     node = next;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
   }
 
   /* Tombstones are retained until terminal shutdown so an in-flight scanner
@@ -7244,48 +7578,70 @@ static void gc2_scan_threading_live_roots(global_State *g)
   ** allocations too, and therefore remain explicit native roots even after
   ** their userdata reference is cleared. */
   node = lj_thread_live_retired_head_acq(g);
-  scanned = 0;
-  while (node != NULL && scanned++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+  gc2_root_cycle_guard_init(&guard, node);
+  while (node != NULL) {
     GC2MarkScope scope;
     int status = gc2_markmem_registered_scoped_status(g, node, &scope);
-    if (status == GC2_MARK_DEAD)
+    if (status == GC2_MARK_DEAD) {
+      gc2_mark_scope_leave(&scope);
+      gc2_root_scan_retry(g);
       break;
+    }
     next = lj_thread_live_retired_next_acq(node);
     gc2_mark_scope_leave(&scope);
     node = next;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
   }
 }
 
 static void gc2_scan_finreg_udata_nodes(global_State *g)
 {
   GC2FinRegUDataNode *node, *next;
-  uint32_t scanned = 0;
+  GC2RootCycleGuard guard;
   /* These records are native ownership metadata, not semantic userdata roots:
   ** retaining node->obj here would prevent ordinary finalizer discovery. Hold
   ** the raw allocation admission only long enough to load its stable link. */
   node = gc2_finreg_udata_head_acq(g);
-  while (node != NULL && scanned++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+  gc2_root_cycle_guard_init(&guard, node);
+  while (node != NULL) {
     GC2MarkScope scope;
     int status = gc2_markmem_registered_scoped_status(g, node, &scope);
-    if (status == GC2_MARK_DEAD)
+    if (status == GC2_MARK_DEAD) {
+      gc2_mark_scope_leave(&scope);
+      gc2_root_scan_retry(g);
       break;
+    }
     next = gc2_finreg_udata_next_acq(node);
     gc2_mark_scope_leave(&scope);
     node = next;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
   }
 
   /* Logical retirement leaves the active link stable for in-flight readers;
   ** the separate retired list owns the same raw record until final shutdown. */
   node = gc2_finreg_udata_retired_acq(g);
-  scanned = 0;
-  while (node != NULL && scanned++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+  gc2_root_cycle_guard_init(&guard, node);
+  while (node != NULL) {
     GC2MarkScope scope;
     int status = gc2_markmem_registered_scoped_status(g, node, &scope);
-    if (status == GC2_MARK_DEAD)
+    if (status == GC2_MARK_DEAD) {
+      gc2_mark_scope_leave(&scope);
+      gc2_root_scan_retry(g);
       break;
+    }
     next = gc2_finreg_udata_retired_next_acq(node);
     gc2_mark_scope_leave(&scope);
     node = next;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
   }
 }
 
@@ -7336,23 +7692,29 @@ static void gc2_scan_threading_states(global_State *g)
 {
   lua_State *th;
   GC2MarkScope scope;
-  uint32_t n = 0;
+  GC2RootCycleGuard guard;
   int status;
   if (!g)
     return;
   th = lj_state_thread_registry_head_acq(g);
   if (!th)
     return;
+  gc2_root_cycle_guard_init(&guard, th);
   status = gc2_admit_thread_identity(g, th, &scope);
   if (status == GC2_MARK_DEAD) {
     gc2_mark_scope_leave(&scope);
+    gc2_root_scan_retry(g);
     return;
   }
-  while (th != NULL && n < LJ_GC2_ROOT_SCAN_LIMIT) {
+  /* Publication prepends a finite head snapshot and removal only shortens its
+  ** stable successor path. Walk that admitted suffix to completion: retrying
+  ** forever at an arbitrary count cap would make a large valid registry pin
+  ** MARK permanently. */
+  while (th != NULL) {
     GC2MarkScope nextscope;
     lua_State *next;
     if (!lj_state_thread_registry_valid(g, th)) {
-      gc2_mark_scope_leave(&scope);
+      gc2_root_scan_retry(g);
       break;
     }
     next = lj_state_thread_registry_next_acq(th);
@@ -7365,7 +7727,8 @@ static void gc2_scan_threading_states(global_State *g)
     if (next) {
       status = gc2_admit_thread_identity(g, next, &nextscope);
       if (status == GC2_MARK_DEAD) {
-	gc2_mark_scope_leave(&scope);
+	gc2_mark_scope_leave(&nextscope);
+	gc2_root_scan_retry(g);
 	break;
       }
     } else {
@@ -7374,7 +7737,10 @@ static void gc2_scan_threading_states(global_State *g)
     gc2_mark_scope_leave(&scope);
     th = next;
     scope = nextscope;
-    n++;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, th))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
   }
   gc2_mark_scope_leave(&scope);
 }
@@ -7383,19 +7749,35 @@ static void gc2_scan_tg_anchor_roots(global_State *g, TGState *tg)
 {
   TGRootAnchorBlock *block = &tg->root_anchor;
   uint32_t i = 0, n = lj_tg_root_anchor_top_acq(tg);
-  if (n > LJ_GC2_ROOT_SCAN_LIMIT)
-    n = LJ_GC2_ROOT_SCAN_LIMIT;
+  if (LJ_UNLIKELY(n > LJ_GC2_ROOT_SCAN_LIMIT)) {
+    gc2_root_scan_retry(g);
+    return;
+  }
   while (block && i < n) {
+    GC2MarkScope scope;
+    TGRootAnchorBlock *next;
     uint32_t j;
-    if (block != &tg->root_anchor)
-      lj_gc2_markmem(g, block);
+    int status = GC2_MARK_LIVE_ALREADY;
+    gc2_mark_scope_init(&scope);
+    if (block != &tg->root_anchor) {
+      status = gc2_markmem_registered_scoped_status(g, block, &scope);
+      if (status == GC2_MARK_DEAD) {
+	gc2_mark_scope_leave(&scope);
+	gc2_root_scan_retry(g);
+	return;
+      }
+    }
     for (j = 0; j < TG_ROOT_ANCHOR_SLOTS && i < n; j++, i++) {
       TValue tv;
       lj_tv_load_acq(&tv, &block->slot[j]);
       gc2_mark_thread_root_tv(g, &tv);
     }
-    block = lj_tg_root_anchor_next_acq(block);
+    next = lj_tg_root_anchor_next_acq(block);
+    gc2_mark_scope_leave(&scope);
+    block = next;
   }
+  if (LJ_UNLIKELY(i != n))
+    gc2_root_scan_retry(g);
 }
 
 static void gc2_scan_tg_thread_root(global_State *g, TGState *tg,
@@ -7407,8 +7789,10 @@ static void gc2_scan_tg_thread_root(global_State *g, TGState *tg,
   if (!L)
     return;
   status = gc2_admit_thread_identity(g, L, &scope);
-  if (status == GC2_MARK_DEAD)
+  if (status == GC2_MARK_DEAD) {
+    gc2_root_scan_retry(g);
     return;
+  }
   /* Scoped admission marks the TG publication identity even if ownership has
   ** just moved. Stack contents/frame geometry remain strictly tid-owned. */
   tid = lj_tg_tid_acq(tg);
@@ -7476,6 +7860,12 @@ static void gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
 #if LJ_HASJIT
 static void gc2_scan_current_trace_root(global_State *g);
 
+static void gc2_current_trace_root_retry(global_State *g)
+{
+  lj_trace_abort(g);
+  gc2_root_scan_retry(g);
+}
+
 static void gc2_scan_jit_roots(global_State *g)
 {
   jit_State *J = G2J(g);
@@ -7486,9 +7876,11 @@ static void gc2_scan_jit_roots(global_State *g)
   ** retain the same JIT-side roots; otherwise a minor cycle after jit.flush()
   ** can recycle retired trace/mcode metadata while stale readers still hold it.
   */
-  lj_trace_markvecs(g, 1);
+  if (!lj_trace_markvecs(g, 1))
+    gc2_root_scan_retry(g);
   gc2_scan_current_trace_root(g);
-  lj_mcode_markretired(g, 1);
+  if (!lj_mcode_markretired(g, 1))
+    gc2_root_scan_retry(g);
   lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
   lj_gc2_markmem(g, J->snapbuf);
   lj_gc2_markmem(g, J->snapmapbuf);
@@ -7497,82 +7889,49 @@ static void gc2_scan_jit_roots(global_State *g)
 static void gc2_scan_current_trace_root(global_State *g)
 {
   jit_State *J = G2J(g);
-  GCtrace *T = &J->cur;
-  int token = 0;
-  IRIns *irbase;
-  IRRef ref;
-  GCproto *pt;
   if (lj_trace_state_load(J) == LJ_TRACE_IDLE)
     return;
   /*
-  ** Recorder geometry is token-private and may be replaced or torn down by its
-  ** owner. Root scanning must never wait for that owner: request an async abort,
-  ** keep this mark round open, and retry from the next root handshake. While the
-  ** round remains open no arena sweep can reclaim the unscanned recorder roots.
+  ** J->cur/J->curfinal are NOBARRIER token-private construction state. Even a
+  ** same-TG nested allocation can enter this root scan while it owns the JIT
+  ** token, and recording may append a KGC or snapshot edge after that nested
+  ** call returns. Consequently no observation of active recorder geometry can
+  ** become the persistent root certificate. Request an asynchronous abort and
+  ** keep MARK open until the recorder state machine has unwound to IDLE; the
+  ** published/retired trace roots then cover everything which survived.
+  **
+  ** This path never waits. A descheduled or foreign recorder merely defers
+  ** root closure, and no arena sweep can begin while its retry is outstanding.
   */
-  if (!lj_jit_token_held(J)) {
-    if (!lj_jit_token_try(J)) {
-      lj_trace_abort(g);
-      gc2_marks_this_round_add(g, 1);
-      lj_gc2_worker_wake(g);
-      lj_assertG(gc2_phase_acq(g) != LJ_GC2_SWEEP,
-		 "active recorder escaped mark closure into sweep");
-      return;
-    }
-    token = 1;
-  }
-  if (lj_trace_state_load(J) == LJ_TRACE_IDLE)
-    goto out;
-  pt = J->pt;
-  /*
-  ** J->curfinal is the assembler's unpublished compact trace body. It is not
-  ** in the trace vector or GC root list until trace_save() publishes it,
-  ** but the assembler uses it across allocation and GC safepoints. Preserve the
-  ** raw body here; J->cur below remains the semantic root for KGC constants,
-  ** start prototype and snapshot PC owners until publication.
-  */
-  if (J->curfinal)
-    lj_gc2_markmem(g, J->curfinal);
-  /*
-  ** LJ_TRACE_START has a live recorder prototype before J->cur.startpt exists.
-  ** Root the direct J->pt edge so root closure does not depend on trace body
-  ** setup reaching trace_startpt_rel() before a concurrent GC2 sweep closes.
-  */
-  if (lj_trace_state_load(J) != LJ_TRACE_IDLE && pt && checkptrGC(pt))
-    gc2_mark_thread_root_obj(g, obj2gco(pt));
-  if (trace_traceno_acq(T) == 0)
-    goto out;
-  irbase = trace_ir_acq(T);
-  /*
-  ** The current trace is a root, but it is not yet an anchored GCtrace object.
-  ** Root scans can run from multiple handshake participants, so publish any
-  ** discovered GC objects through the thread-local SSB path instead of the
-  ** single-owner worker grey deque.
-  */
-  for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
-    IRIns *ir = &irbase[ref];
-    IRIns irs = ir_load_acq(ir);
-    if (irs.o == IR_KGC)
-      gc2_mark_thread_root_obj(g, ir_kgc_load_acq(ir));
-    if (irt_is64(irs.t) && irs.o != IR_KNULL)
-      ref++;
-  }
-  (void)gc2_mark_trace_root(g, trace_link_acq(T));
-  (void)gc2_mark_trace_root(g, trace_nextroot_acq(T));
-  (void)gc2_mark_trace_root(g, trace_nextside_acq(T));
-  gc2_mark_thread_root_obj(g, trace_startptgco_acq(T));
-  gc2_mark_trace_snapshot_pcs_root(g, T);
-out:
-  if (token)
-    lj_jit_token_release(J);
+  gc2_current_trace_root_retry(g);
 }
 #endif
 
 static void gc2_root_scan_retry(global_State *g)
 {
+  uint32_t phase;
   if (!g)
     return;
-  gc2_mark_root_scanned_rel(g, 0);
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_MARK) {
+    /* MARK's state 1 is a reusable certificate, so any failed later scan must
+    ** invalidate completed as well as provisional state. */
+    gc2_mark_root_scanned_rel(g, 0);
+  } else if (phase == LJ_GC2_WEAK) {
+    /* WEAK owns its own 0->2->1 snapshot. Clearing state 2 makes the owner's
+    ** final CAS fail; clearing state 1/mark_closed also reopens a completed
+    ** frontier if a later required scan reports an incomplete publication. */
+    gc2_weak_root_scanned_rel(g, 0);
+    gc2_weak_mark_closed_rel(g, 0);
+  } else if (phase == LJ_GC2_SWEEP) {
+    uint32_t expect = 2;
+    /* Only the initial mandatory SWEEP snapshot is provisional. A later
+    ** barrier/NEEDSCAN handshake must not revoke an already-published READY
+    ** bridge; its concrete pending work and marks still block reclaim. */
+    (void)gc2_sweep_root_scanned_cas(g, &expect, 0);
+  } else {
+    return;
+  }
   gc2_marks_this_round_add(g, 1);
   lj_gc2_worker_wake(g);
 }
@@ -7621,7 +7980,8 @@ static void gc2_scan_global_roots(global_State *g)
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
-      CTypeTab *ret;
+      CTypeTab *ret, *nextret;
+      GC2RootCycleGuard guard;
       GCtab *miscmap;
       GCRef *meta;
       uint64_t *cbblack;
@@ -7635,11 +7995,19 @@ static void gc2_scan_global_roots(global_State *g)
       meta = ctype_metamap_acq(cts);
       cbblack = ctype_cbblack_acq(cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
-      for (ret = ctype_retiredtab_acq(cts);
-	   ret != NULL && lj_gc2_mem_registered(g, ret);
-	   ret = ctype_tab_retired_next_acq(ret)) {
+      ret = ctype_retiredtab_acq(cts);
+      gc2_root_cycle_guard_init(&guard, ret);
+      while (ret != NULL && lj_gc2_mem_registered(g, ret)) {
+	nextret = ctype_tab_retired_next_acq(ret);
 	lj_gc2_markmem(g, ret);
+	ret = nextret;
+	if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, ret))) {
+	  gc2_root_scan_retry(g);
+	  break;
+	}
       }
+      if (LJ_UNLIKELY(ret != NULL && !lj_gc2_mem_registered(g, ret)))
+	gc2_root_scan_retry(g);
       lj_gc2_markmem(g, meta);
       lj_gc2_markmem(g, cbblack);
       if (meta) {
@@ -7783,7 +8151,6 @@ static LJ_AINLINE void gc2_rescan_pending_clear_cycle(global_State *g,
 static int gc2_grey_push(global_State *g, GCobj *o);
 static uint32_t gc2_drain_grey(global_State *g, uint32_t limit);
 static int gc2_traverse_tab(global_State *g, GCtab *t);
-static int gc2_traverse_tab_norecord(global_State *g, GCtab *t);
 static void gc2_traverse_udata(global_State *g, GCudata *ud);
 
 static LJ_AINLINE void gc2_queue_slot_store_rel(GCRef *slot, GCobj *o)
@@ -8052,11 +8419,9 @@ int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc)
     if (marked == LJ_ARENA_HUGE_READER_OVERFLOW ||
 	marked == LJ_ARENA_HUGE_MARK_SATURATED) {
       /* No body token exists, so the interior PC cannot yet be resolved to an
-      ** object descriptor. Reopen the durable root snapshot; the trace/record
-      ** root retains this PC and retries without any speculative header read. */
-      gc2_mark_root_scanned_rel(g, 0);
-      gc2_marks_this_round_add(g, 1);
-      lj_gc2_worker_wake(g);
+      ** object descriptor. Reopen the current phase's exact root certificate;
+      ** the retaining root retries without any speculative header read. */
+      gc2_root_scan_retry(g);
       return 0;
     }
     if (marked == LJ_ARENA_HUGE_MARK_INTENT || marked < 0 || !base ||
@@ -9433,11 +9798,10 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
       TValue val;
       TValue *slot = &array[i];
       lj_tv_load_acq(&val, &array[i]);
-      if (tvisforward(&val)) {
-	slot = lj_tab_forwarded_array_slot(t, array, asize, i, &val);
-	if (!slot)
-	  continue;
-      }
+      /* FORWARD is an in-progress generation handoff, not an absent weak
+      ** entry. Retry from a fresh table snapshot on a later bounded turn. */
+      if (LJ_UNLIKELY(tvisforward(&val)))
+	goto out;
       if (!tvisnil(&val)) {
 	(*slots)++;
 	if (gc2_weak_mayclear(g, &val, 1, clear)) {
@@ -9466,23 +9830,21 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
       if (tvisforward(&val)) {
 	lj_tv_load_acq(&key, &n->key);
 	key_loaded = 1;
-	while (tviskeylock(&key)) {
-	  gc2_peer_wait_no_l();
-	  lj_tv_load_acq(&key, &n->key);
-	}
+	/* A descheduled structural writer may retain KEYLOCK indefinitely. Leave
+	** this item/cursor unclaimed so a later bounded worker turn retries it. */
+	if (LJ_UNLIKELY(tviskeylock(&key)))
+	  goto out;
 	if (tvisnil(&key))
 	  continue;
-	slot = lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val);
-	if (!slot)
-	  continue;
+	/* The successor may not be published yet. Never enter the generic mutator
+	** resolver, which is allowed to wait for its structural writer. */
+	goto out;
       }
       if (!tvisnil(&val)) {
 	if (!key_loaded)
 	  lj_tv_load_acq(&key, &n->key);
-	while (tviskeylock(&key)) {
-	  gc2_peer_wait_no_l();
-	  lj_tv_load_acq(&key, &n->key);
-	}
+	if (LJ_UNLIKELY(tviskeylock(&key)))
+	  goto out;
 	(*slots)++;
 	if (gc2_weak_mayclear(g, &key, 0, clear) ||
 	    gc2_weak_mayclear(g, &val, 1, clear)) {
@@ -9817,7 +10179,10 @@ static int gc2_weak_bridge_trace_tab(global_State *g, GCtab *t)
   ** weak-table metatables and __index chains live without forcing the color
   ** fallback for ordinary bridge gaps.
   */
-  (void)gc2_traverse_tab_norecord(g, t);
+  /* The bridge walker retains the exact table scope across this call. Avoid a
+  ** redundant fresh admission which can transient-fail despite that proof. */
+  if (gc2_traverse_tab_admitted(g, t, 0) == 0)
+    return 0;
   (void)gc2_mark_drain_owned_bounded(g, ~(uint32_t)0);
   return gc2_thread_scan_needscan_pending_acq(g) == 0 &&
 	 gc2_table_rescan_pending_acq(g) == 0 && lj_gc2_ssb_empty(g);
@@ -9995,11 +10360,10 @@ int lj_gc2_test_weak_snapshot_covers_bridge(global_State *g,
 static int gc2_weak_trace_table_strong(global_State *g, GCtab *t)
 {
   /* The caller's exact table scope bridges into traverse_tab_rec(), which
-  ** takes its own exact scope and SMR interval for all payload reads. */
+  ** takes an SMR interval for all payload reads without redundant admission. */
   if (!g || gc2_phase_acq(g) != LJ_GC2_WEAK || !t)
     return 0;
-  (void)gc2_traverse_tab_norecord(g, t);
-  return 1;
+  return gc2_traverse_tab_admitted(g, t, 0) != 0;
 }
 
 static int gc2_weak_trace_close_frontier(global_State *g, GCobj *bridge_head)
@@ -10323,15 +10687,22 @@ static void gc2_finreg_queue_mark(global_State *g, GCobj *o)
     (void)lj_gc2_preserve_sweep_root(g, o);
 }
 
-static void gc2_finreg_cdata_queue_mark(global_State *g, GCobj *o)
+static void gc2_finreg_cdata_finalizer_enqueue_admitted(global_State *g,
+							 GCobj *o,
+							 cTValue *fin)
 {
 #if LJ_HASFFI
-  if (!gc2_finreg_cdata_obj_valid(g, o))
-    return;
+  /* The FINREG walker retains this exact cdata incarnation through slot
+  ** consumption and queue publication. Do not re-enter observational
+  ** admission after unlinking the root: a transient rescue/huge-reader miss
+  ** there would otherwise consume the finalizer and silently drop its
+  ** callback. */
+  markfinalized(o);
   gc2_finreg_queue_mark(g, o);
   gc2_finreg_cdata_queued_add(g, 1);
+  lj_gc2_finalizer_enqueue_fin(g, o, fin);
 #else
-  UNUSED(g); UNUSED(o);
+  UNUSED(g); UNUSED(o); UNUSED(fin);
 #endif
 }
 
@@ -10341,21 +10712,31 @@ static void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o,
 #if LJ_HASFFI
   if (!gc2_finreg_cdata_obj_valid(g, o))
     return;
-  markfinalized(o);
-  gc2_finreg_cdata_queue_mark(g, o);
-  lj_gc2_finalizer_enqueue_fin(g, o, fin);
+  gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, fin);
 #else
   UNUSED(g); UNUSED(o); UNUSED(fin);
 #endif
 }
 
 #if LJ_HASFFI
+enum {
+  GC2_FINREG_CANDIDATE_RETRY = -1,
+  GC2_FINREG_CANDIDATE_NO = 0,
+  GC2_FINREG_CANDIDATE_YES = 1
+};
+
 static int gc2_finreg_cdata_candidate_pweak(global_State *g, GCobj *o)
 {
-  return o->gch.gct == ~LJ_TCDATA &&
-	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
-	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED) &&
-	 lj_gc2_ismarked(g, o) == 0;
+  int marked;
+  if (o->gch.gct != ~LJ_TCDATA ||
+      !(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
+      (lj_obj_gcflags(o) & LJ_GC_FINALIZED))
+    return GC2_FINREG_CANDIDATE_NO;
+  marked = lj_gc2_ismarked(g, o);
+  if (marked < 0)
+    return GC2_FINREG_CANDIDATE_RETRY;
+  return marked == 0 ? GC2_FINREG_CANDIDATE_YES :
+		       GC2_FINREG_CANDIDATE_NO;
 }
 
 static int gc2_finreg_cdata_candidate_close(GCobj *o)
@@ -10382,10 +10763,10 @@ static int gc2_finreg_cdata_order_resolve(lua_State *L, CTState *cts,
   if (!L || !cts || !ord || !op || !objscope || !finlease)
     return LJ_CTYPE_FIN_MISS;
   o = fin_order_obj_acq(ord);
-  if (!gc2_observed_obj_valid_scoped(cts->g, o, &gct, objscope) ||
-      gct != (uint32_t)~LJ_TCDATA) {
+  rc = gc2_observed_obj_status_scoped(cts->g, o, &gct, objscope);
+  if (rc <= 0 || gct != (uint32_t)~LJ_TCDATA) {
     gc2_mark_scope_leave(objscope);
-    return LJ_CTYPE_FIN_MISS;
+    return rc < 0 ? LJ_CTYPE_FIN_RETRY : LJ_CTYPE_FIN_MISS;
   }
   setcdataV(L, &key, gco2cd(o));
   rc = lj_ctype_fin_get(L, cts, &key, finlease);
@@ -10543,7 +10924,8 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     TValue *slot;
     TValue fin, key;
     GCobj *o;
-    int claim_status, preclaim_ready, resolve_status, slot_status;
+    int candidate_status, claim_status, preclaim_ready, resolve_status;
+    int slot_status;
     int unlink_status;
     if (!gc2_fin_order_walk_prepare_next(g, &walk)) {
       gc2_fin_order_walk_retry(g);
@@ -10557,8 +10939,8 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     resolve_status = gc2_finreg_cdata_order_resolve(
       L, cts, walk.cur, &o, &objscope, &finlease);
     if (resolve_status == LJ_CTYPE_FIN_RETRY) {
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
+      gc2_fin_order_walk_retry(g);
+      break;
     }
     if (resolve_status != LJ_CTYPE_FIN_FOUND) {
       gc2_finreg_cdata_order_tombstones_add(g, 1);
@@ -10576,8 +10958,8 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
+      gc2_fin_order_walk_retry(g);
+      break;
     }
     if (tvisnil(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -10590,7 +10972,13 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       gc2_fin_order_walk_advance(&walk, 0);
       continue;
     }
-    if (!gc2_finreg_cdata_candidate_pweak(g, o)) {
+    candidate_status = gc2_finreg_cdata_candidate_pweak(g, o);
+    if (candidate_status == GC2_FINREG_CANDIDATE_RETRY) {
+      gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
+      gc2_fin_order_walk_retry(g);
+      break;
+    }
+    if (candidate_status != GC2_FINREG_CANDIDATE_YES) {
       if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
 	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
 	gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -10612,8 +11000,8 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     if (claim_status != LJ_CTYPE_FIN_FOUND) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
       if (claim_status == LJ_CTYPE_FIN_RETRY) {
-	gc2_fin_order_walk_advance(&walk, 1);
-	continue;
+	gc2_fin_order_walk_retry(g);
+	break;
       }
       gc2_finreg_cdata_order_tombstones_add(g, 1);
       if (!lj_ctype_fin_order_retire(
@@ -10661,7 +11049,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       }
       lj_ctype_fin_lease_release(&finlease);
       mark(g, &fin);
-      lj_gc2_finreg_cdata_finalizer_enqueue(g, o, &fin);
+      gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
       gc2_mark_scope_leave(&objscope);
       gc2_finreg_cdata_order_fallbacks_add(g, 1);
       gc2_finreg_cdata_order_queued_add(g, 1);
@@ -10688,7 +11076,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     }
     lj_ctype_fin_lease_release(&finlease);
     mark(g, &fin);
-    lj_gc2_finreg_cdata_finalizer_enqueue(g, o, &fin);
+    gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
     gc2_mark_scope_leave(&objscope);
     gc2_finreg_cdata_order_queued_add(g, 1);
     if (!lj_ctype_fin_order_retire(
@@ -10750,8 +11138,8 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     resolve_status = gc2_finreg_cdata_order_resolve(
       L, cts, walk.cur, &o, &objscope, &finlease);
     if (resolve_status == LJ_CTYPE_FIN_RETRY) {
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
+      gc2_fin_order_walk_retry(g);
+      break;
     }
     if (resolve_status != LJ_CTYPE_FIN_FOUND) {
       if (!lj_ctype_fin_order_retire(
@@ -10768,8 +11156,8 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
-      gc2_fin_order_walk_advance(&walk, 1);
-      continue;
+      gc2_fin_order_walk_retry(g);
+      break;
     }
     if (tvisnil(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -10801,8 +11189,8 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     if (claim_status != LJ_CTYPE_FIN_FOUND) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
       if (claim_status == LJ_CTYPE_FIN_RETRY) {
-	gc2_fin_order_walk_advance(&walk, 1);
-	continue;
+	gc2_fin_order_walk_retry(g);
+	break;
       }
       if (!lj_ctype_fin_order_retire(
 	    cts, walk.prev, walk.cur, walk.next)) {
@@ -10839,7 +11227,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
       }
     }
     lj_ctype_fin_lease_release(&finlease);
-    lj_gc2_finreg_cdata_finalizer_enqueue(g, o, &fin);
+    gc2_finreg_cdata_finalizer_enqueue_admitted(g, o, &fin);
     gc2_mark_scope_leave(&objscope);
     gc2_finreg_cdata_order_queued_add(g, 1);
     queued++;
@@ -11272,11 +11660,10 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
 #endif
 }
 
-int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
+static int gc2_finreg_udata_set_admitted(global_State *g, GCobj *o,
+					  int enabled)
 {
   uint8_t old;
-  if (!gc2_finreg_udata_obj_valid(g, o))
-    return 0;
   old = la_load8_acq(lj_obj_gcflags_ref(o));
   for (;;) {
     uint8_t next = enabled ? (uint8_t)(old | LJ_GC_UDATA_FINREG) :
@@ -11293,6 +11680,13 @@ int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
     gc2_finreg_udata_clears_add(g, 1);
     return -1;
   }
+}
+
+int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
+{
+  if (!gc2_finreg_udata_obj_valid(g, o))
+    return 0;
+  return gc2_finreg_udata_set_admitted(g, o, enabled);
 }
 
 static int gc2_finreg_udata_register_nothrow(lua_State *L, global_State *g,
@@ -11437,6 +11831,70 @@ static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target,
 		    lj_gc_unlink_root_obj(g, target);
 }
 
+/* Resolve __gc without entering the ordinary table getter's retry/yield loop.
+** FINREG and the intrusive root still retain the userdata while this runs;
+** retain the sampled metatable incarnation explicitly and cover its separated
+** hash generation with SMR until the copied TValue has been classified and
+** marked. Any uncertain lifetime or structural snapshot is a retry, never
+** semantic absence. */
+static int gc2_finreg_udata_finalizer_lookup(global_State *g, GCtab *mt,
+					      TValue *mmv)
+{
+  GC2MarkScope mtscope;
+  uint32_t gct = 0;
+  int lookup_status;
+  if (!g || !mmv)
+    return LJ_TAB_GC_LOOKUP_RETRY;
+  setnilV(mmv);
+  if (!mt)
+    return LJ_TAB_GC_LOOKUP_ABSENT;
+  gc2_mark_scope_init(&mtscope);
+  if (!gc2_observed_obj_valid_scoped(g, obj2gco(mt), &gct, &mtscope) ||
+      gct != (uint32_t)~LJ_TTAB) {
+    gc2_mark_scope_leave(&mtscope);
+    return LJ_TAB_GC_LOOKUP_RETRY;
+  }
+  if (!lj_gc2_smr_read_try(g)) {
+    gc2_mark_scope_leave(&mtscope);
+    return LJ_TAB_GC_LOOKUP_RETRY;
+  }
+  lookup_status = lj_tab_getstr_gc_held(
+    g, mt, mmname_str(g, MM_gc), mmv);
+  if (lookup_status == LJ_TAB_GC_LOOKUP_FOUND &&
+      LJ_UNLIKELY(tvistabinternal(mmv) || !lj_tv_gcref_type_match(mmv)))
+    lookup_status = LJ_TAB_GC_LOOKUP_RETRY;
+  if (lookup_status == LJ_TAB_GC_LOOKUP_FOUND) {
+    gc2_finreg_queue_mark(g, obj2gco(mt));
+    gc2_mark_tv(g, mmv);
+  }
+  lj_gc2_smr_read_leave(g);
+  gc2_mark_scope_leave(&mtscope);
+  return lookup_status;
+}
+
+static void gc2_finreg_udata_finalizer_lookup_retry(
+  global_State *g, GC2FinRegUDataNode *node, GCobj *o)
+{
+  /* The node is the authoritative retry locator. Retain both it and its
+  ** userdata while reopening the current phase's root certificate; WEAK close
+  ** must observe this as incomplete even when no finalizer was queued. */
+  (void)lj_gc2_markmem(g, node);
+  gc2_finreg_queue_mark(g, o);
+  gc2_root_scan_retry(g);
+}
+
+static void gc2_finreg_udata_finalizer_enqueue_admitted(
+  global_State *g, GCobj *o, cTValue *fin)
+{
+  /* The caller retains the exact userdata incarnation through publication;
+  ** avoid a second observational admission turning a successful discovery
+  ** into a silently dropped callback. */
+  markfinalized(o);
+  gc2_finreg_queue_mark(g, o);
+  gc2_finreg_udata_queued_add(g, 1);
+  lj_gc2_finalizer_enqueue_fin(g, o, fin);
+}
+
 size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
 {
   GC2FinRegUDataNode *prev, *node;
@@ -11456,8 +11914,11 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
   while (node && lj_gc2_mem_registered(g, node)) {
     GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
     GCobj *o = gc2_finreg_udata_obj_acq(node);
+    GC2MarkScope oscope;
+    uint32_t gct = 0;
     uint8_t flags;
-    int finreg, unlink_status;
+    size_t osize = 0;
+    int finreg, marked, objstatus, unlink_status;
     if (!gc2_finreg_udata_active_acq(node)) {
       node = next;
       continue;
@@ -11471,7 +11932,22 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
       node = gc2_finreg_udata_head_acq(g);
       continue;
     }
-    if (!gc2_finreg_udata_obj_valid(g, o)) {
+    /* The side-list reference is semantic ownership, but not permission to
+    ** dereference a body between its lifetime LPs. Keep an exact admission
+    ** through every userdata header/metatable read. Overflow/transient
+    ** admission is retryable; only a terminally invalid or wrong-type
+    ** incarnation may retire the node. */
+    gc2_mark_scope_init(&oscope);
+    objstatus = gc2_observed_obj_status_scoped(g, o, &gct, &oscope);
+    if (LJ_UNLIKELY(objstatus < 0)) {
+      gc2_finreg_udata_finalizer_lookup_retry(g, node, o);
+      gc2_mark_scope_leave(&oscope);
+      prev = node;
+      node = next;
+      continue;
+    }
+    if (objstatus == 0 || gct != (uint32_t)~LJ_TUDATA) {
+      gc2_mark_scope_leave(&oscope);
       gc2_finreg_udata_obj_clear(node);
       if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
 	node = next;
@@ -11484,40 +11960,63 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
     if (lj_obj_gcflags(o) & LJ_GC_FINALIZED) {
       gc2_finreg_udata_obj_clear(node);
       if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	gc2_mark_scope_leave(&oscope);
 	node = next;
 	continue;
       }
+      gc2_mark_scope_leave(&oscope);
       prev = NULL;
       node = gc2_finreg_udata_head_acq(g);
       continue;
     }
-    if (!all && lj_gc2_ismarked(g, o) != 0) {
-      prev = node;
-      node = next;
-      continue;
+    if (!all) {
+      marked = lj_gc2_ismarked(g, o);
+      if (LJ_UNLIKELY(marked < 0)) {
+	gc2_finreg_udata_finalizer_lookup_retry(g, node, o);
+	gc2_mark_scope_leave(&oscope);
+	prev = node;
+	node = next;
+	continue;
+      }
+      if (marked > 0) {
+	gc2_mark_scope_leave(&oscope);
+	prev = node;
+	node = next;
+	continue;
+      }
     }
     {
       GCtab *mt = lj_udata_metatable_acq(gco2ud(o));
+      int lookup_status = gc2_finreg_udata_finalizer_lookup(g, mt, &mmv);
       flags = lj_obj_gcflags(o);
       finreg = (flags & LJ_GC_UDATA_FINREG) != 0;
-      if (!lj_meta_fasttv(g, mt, MM_gc, &mmv)) {
+      if (LJ_UNLIKELY(lookup_status == LJ_TAB_GC_LOOKUP_RETRY)) {
+	gc2_finreg_udata_finalizer_lookup_retry(g, node, o);
+	gc2_mark_scope_leave(&oscope);
+	prev = node;
+	node = next;
+	continue;
+      }
+      if (lookup_status == LJ_TAB_GC_LOOKUP_ABSENT) {
 	if (finreg)
-	  lj_gc2_finreg_udata_set(g, o, 0);
+	  gc2_finreg_udata_set_admitted(g, o, 0);
 	markfinalized(o);  /* Side-list no-finalizer userdata is done. */
 	gc2_finreg_udata_obj_clear(node);
 	if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	  gc2_mark_scope_leave(&oscope);
 	  node = next;
 	  continue;
 	}
+	gc2_mark_scope_leave(&oscope);
 	prev = NULL;
 	node = gc2_finreg_udata_head_acq(g);
 	continue;
       }
       if (!finreg)
-	(void)lj_gc2_finreg_udata_set(g, o, 1);
-      if (mt)
-	gc2_finreg_queue_mark(g, obj2gco(mt));
-      gc2_mark_tv(g, &mmv);
+	(void)gc2_finreg_udata_set_admitted(g, o, 1);
+      lj_assertG(lookup_status == LJ_TAB_GC_LOOKUP_FOUND,
+		 "bad userdata finalizer lookup status");
+      osize = sizeudata(gco2ud(o));
     }
     /*
     ** 05 section 5.8: GC2 userdata FINREG identity is enough for
@@ -11529,14 +12028,16 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
       ** retry. The shared unlinker may have severed an invalid prefix, so make
       ** the side-list identity a sweep root before leaving o unqueued. */
       gc2_finreg_queue_mark(g, o);
+      gc2_mark_scope_leave(&oscope);
       prev = node;
       node = next;
       continue;
     }
     gc2_finreg_udata_obj_clear(node);
     gc2_finreg_udata_discovered_add(g, 1);
-    lj_gc2_finreg_udata_finalizer_enqueue(g, o, &mmv);
-    m += sizeudata(gco2ud(o));
+    gc2_finreg_udata_finalizer_enqueue_admitted(g, o, &mmv);
+    m += osize;
+    gc2_mark_scope_leave(&oscope);
     if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
       node = next;
       continue;
@@ -11575,16 +12076,6 @@ static void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
     return;
   gc2_finreg_queue_mark(g, o);
   gc2_finreg_udata_queued_add(g, 1);
-}
-
-static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o,
-						  cTValue *fin)
-{
-  if (!gc2_finreg_udata_obj_valid(g, o))
-    return;
-  markfinalized(o);
-  lj_gc2_finreg_udata_queue(g, o);
-  lj_gc2_finalizer_enqueue_fin(g, o, fin);
 }
 
 void lj_gc2_test_finreg_udata_queue(global_State *g, GCobj *o)
@@ -12455,7 +12946,7 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
   GCstr *modes = NULL;
   int weak = 0;
   TValue modev;
-  int own_smr = 0, status, strstatus;
+  int own_smr = 0, status, strstatus, lookup_status;
   UNUSED(mark_mode);  /* __mode is a strong metadata edge whenever observed. */
   if (retryp)
     *retryp = 0;
@@ -12481,10 +12972,17 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
   }
   own_smr = !smr_held;
   setnilV(&modev);
-  if ((lj_tab_nomm_acq(mt) & (1u << MM_mode)) == 0) {
-    cTValue *mode = lj_tab_getstr(mt, mmname_str(g, MM_mode));
-    if (mode)
-      lj_tv_load_acq(&modev, mode);
+  lookup_status = LJ_TAB_GC_LOOKUP_ABSENT;
+  if ((lj_tab_nomm_acq(mt) & (1u << MM_mode)) == 0)
+    lookup_status = lj_tab_getstr_gc_held(
+      g, mt, mmname_str(g, MM_mode), &modev);
+  if (LJ_UNLIKELY(lookup_status == LJ_TAB_GC_LOOKUP_RETRY)) {
+    if (own_smr)
+      lj_gc2_smr_read_leave(g);
+    gc2_mark_scope_leave(&mtscope);
+    if (retryp)
+      *retryp = 1;
+    return 0;
   }
   strstatus = tvisstr(&modev) ?
     (semantic_admission ? gc2_expected_string_scoped_status(
@@ -14716,12 +15214,12 @@ static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak,
   int stamped, result = 0, tabstatus, weak_retry = 0;
   gc2_mark_scope_init(&scope);
   if (!already_admitted) {
-    do {
-      tabstatus = gc2_expected_tab_scoped_status(
-	g, obj2gco(t), &t, &scope);
-      if (tabstatus == GC2_TAB_SCOPE_RETRY)
-	gc2_peer_wait_no_l();
-    } while (tabstatus == GC2_TAB_SCOPE_RETRY);
+    tabstatus = gc2_expected_tab_scoped_status(
+      g, obj2gco(t), &t, &scope);
+    /* Transient rescue ownership is a retry result, not permission to wait
+    ** behind a descheduled allocator/sweeper while monopolizing GC work. */
+    if (LJ_UNLIKELY(tabstatus == GC2_TAB_SCOPE_RETRY))
+      return 0;
     if (LJ_UNLIKELY(tabstatus != GC2_TAB_SCOPE_VALID)) {
       gc2_mark_scope_leave(&scope);
       return 0;
@@ -14776,9 +15274,8 @@ static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak,
     for (i = 0; i < asize; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
-      if (tvisforward(&val) &&
-	  !lj_tab_forwarded_array_slot(t, array, asize, i, &val))
-	continue;
+      if (LJ_UNLIKELY(tvisforward(&val)))
+	goto retry_scan;
       gc2_mark_table_child_tv_worker(g, &val);
     }
   }
@@ -14794,11 +15291,9 @@ static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak,
 	if (ffi_fin) {
 	  lj_tv_load_acq(&key, &n->key);
 	  key_loaded = 1;
-	  while (lj_cdata_fin_isclaim(&val) || tviskeylock(&key)) {
-	    gc2_peer_wait_no_l();
-	    lj_tv_load_acq(&val, &n->val);
-	    lj_tv_load_acq(&key, &n->key);
-	  }
+	  if (LJ_UNLIKELY(lj_cdata_fin_isclaim(&val) ||
+			  tviskeylock(&key)))
+	    goto retry_scan;
 	}
 #endif
 	if (tvisforward(&val)) {
@@ -14806,17 +15301,17 @@ static int gc2_traverse_tab_rec(global_State *g, GCtab *t, int record_weak,
 	    lj_tv_load_acq(&key, &n->key);
 	    key_loaded = 1;
 	  }
-	  while (tviskeylock(&key)) {
-	    gc2_peer_wait_no_l();
-	    lj_tv_load_acq(&key, &n->key);
-	  }
-	  if (tvisnil(&key) ||
-	      !lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val))
+	  if (LJ_UNLIKELY(tviskeylock(&key)))
+	    goto retry_scan;
+	  if (tvisnil(&key))
 	    continue;
+	  goto retry_scan;
 	}
 	if (!tvisnil(&val)) {
 	  if (!key_loaded)
 	    lj_tv_load_acq(&key, &n->key);
+	  if (LJ_UNLIKELY(tviskeylock(&key)))
+	    goto retry_scan;
 	  lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
 	  lj_assertG(!tviskeylock(&key),
 			     "mark of key lock in non-empty slot");
@@ -14843,7 +15338,12 @@ finish_scan:
   } else {
     gc2_table_rescan_requeue(g, t);
   }
-  result = weak;
+  result = 1;
+  goto out;
+retry_scan:
+  /* Retain NEEDSCAN and republish bounded work. Partial marking/weak clearing
+  ** is monotonic and idempotent; the next turn restarts from a fresh snapshot. */
+  gc2_table_rescan_requeue(g, t);
 out:
   if (smr)
     lj_gc2_smr_read_leave(g);
@@ -14854,11 +15354,6 @@ out:
 static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
   return gc2_traverse_tab_rec(g, t, 1, 0);
-}
-
-static int gc2_traverse_tab_norecord(global_State *g, GCtab *t)
-{
-  return gc2_traverse_tab_rec(g, t, 0, 0);
 }
 
 static int gc2_traverse_tab_admitted(global_State *g, GCtab *t,
@@ -14873,26 +15368,32 @@ static int gc2_traverse_tab_admitted(global_State *g, GCtab *t,
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g)
 {
-  CLibCacheEntry *e;
-  uint32_t n = 0;
+  CLibCacheEntry *e, *next;
+  GC2RootCycleGuard guard;
   /*
   ** Retired CLibrary cache entries follow the raw SMR-list convention used by
   ** retired table and mcode metadata: validate the node before reading its
   ** payload or next link, then let the surrounding SMR reader keep it stable.
   */
-  for (e = lj_clib_cache_retired_head_acq(g);
-       e != NULL && lj_gc2_mem_registered(g, e);
-       e = lj_clib_cache_retired_next_acq(e)) {
+  e = lj_clib_cache_retired_head_acq(g);
+  gc2_root_cycle_guard_init(&guard, e);
+  while (e != NULL && lj_gc2_mem_registered(g, e)) {
     GCstr *name = lj_clib_cache_name_acq(e);
     TValue tv;
+    next = lj_clib_cache_retired_next_acq(e);
     lj_gc2_markmem(g, e);
     if (name)
       lj_gc2_markobj(g, obj2gco(name));
     lj_clib_cache_val_acq(&tv, e);
     gc2_mark_tv(g, &tv);
-    if (LJ_UNLIKELY(++n >= LJ_GC2_ROOT_SCAN_LIMIT))
+    e = next;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, e))) {
+      gc2_root_scan_retry(g);
       break;
+    }
   }
+  if (LJ_UNLIKELY(e != NULL && !lj_gc2_mem_registered(g, e)))
+    gc2_root_scan_retry(g);
 }
 
 static void gc2_traverse_clib_cache(global_State *g, CLibrary *cl)
@@ -16346,6 +16847,12 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
 {
   TGState *tg;
   uint32_t n = 0;
+  if (gc2_jit_recorder_active(g)) {
+    /* Recorder construction is denied in SWEEP. Fail closed if a forced or
+    ** stale active state is nevertheless observed before physical work. */
+    lj_trace_abort(g);
+    return 0;
+  }
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
   /* Sweep-time publishers enqueue rescued containers on SSB. Close that graph
@@ -16387,6 +16894,9 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   ** sticky classification failure deliberately has no drainable identity.
   ** Gate every irreversible sweep subsystem on the complete work predicate. */
   if (!lj_gc2_ssb_empty(g) || !gc2_recovery_empty(g))
+    return 0;
+  if (gc2_sweep_bridge_ready_acq(g) &&
+      gc2_sweep_root_scanned_acq(g) != 1)
     return 0;
   if (gc2_sweep_grace_needed_acq(g)) {
     uint32_t grace;
@@ -16464,6 +16974,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
   uint32_t phase, n = 0, converted = 0, recovered = 0, weak = 0, sweep = 0;
   uint32_t finalizer = 0;
   uint32_t total;
+  int mark_gate_closed = 0;
   int sweep_gate_closed = 0;
   if (progress)
     *progress = 0;
@@ -16497,8 +17008,9 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
       return 1;
     }
     if (gc2_mark_close_intent_acq(g) != 0) {
-      /* A partial helper retained intent. Report a scheduling unit so this
-      ** worker loops and can help again instead of parking on its own wake. */
+      /* A helper which lost ownership before reaching its bounded miss may
+      ** leave intent for the current owner. Report a scheduling unit so this
+      ** worker loops instead of parking on that owner's wake. */
       if (progress)
 	*progress = 1;
       return 1;
@@ -16512,6 +17024,26 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
       phase != LJ_GC2_SWEEP) {
     gc2_worker_release(g);
     return 0;
+  }
+  if (phase == LJ_GC2_MARK) {
+    if (gc2_jit_phase_gate_acq(g) != 0 &&
+	gc2_jit_mark_turn_deferred(g)) {
+      gc2_worker_release(g);
+      return 0;
+    }
+    if (gc2_jit_phase_gate_acq(g) != 0)
+      gc2_jit_phase_gate_close(g);
+    if (lj_tg_any_jit_active(g)) {
+      /* Closing entry/XPOLL is sufficient. A traced FFI call may block, so
+      ** return immediately and let its ordinary native return publish zero. */
+      gc2_worker_release(g);
+      return 0;
+    }
+    mark_gate_closed = gc2_jit_mark_resume_authorized(g);
+    if (gc2_phase_acq(g) != LJ_GC2_MARK) {
+      gc2_worker_release(g);
+      return 0;
+    }
   }
   if (phase == LJ_GC2_SWEEP) {
     if (gc2_sweep_bridge_ready_acq(g)) {
@@ -16586,6 +17118,9 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
     gc2_worker_idle_declares_add(g, 1);
   if (progress)
     *progress = total > limit ? limit : total;
+  if (mark_gate_closed && gc2_phase_acq(g) == LJ_GC2_MARK &&
+      gc2_mark_close_intent_acq(g) == 0)
+    gc2_jit_phase_gate_open_mark(g, 1);
   if (sweep_gate_closed && gc2_phase_acq(g) == LJ_GC2_SWEEP)
     gc2_jit_phase_gate_open_sweep(g, 0);
   gc2_worker_release(g);
@@ -16649,6 +17184,17 @@ static int gc2_mark_root_snapshot(global_State *g)
   uint32_t state, expect, cycle, actions;
   if (!g || gc2_phase_acq(g) != LJ_GC2_MARK)
     return 0;
+  if (gc2_jit_phase_gate_acq(g) != 0)
+    gc2_jit_phase_gate_close(g);
+  if (lj_tg_any_jit_active(g))
+    return 0;
+  if (gc2_jit_recorder_active(g)) {
+    lj_trace_abort(g);
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  lj_assertG(gc2_jit_phase_gate_acq(g) == 0,
+	     "MARK root snapshot entered with native gate open");
   state = gc2_mark_root_scanned_acq(g);
   if (state == 2)
     return 0;
@@ -16662,7 +17208,12 @@ static int gc2_mark_root_snapshot(global_State *g)
     (state == 1 ? LJ_GC2_HS_SCAN_OWNER_ROOTS : LJ_GC2_HS_SCAN_ROOTS);
   (void)lj_gc2_handshake(g, actions);
   if (gc2_phase_acq(g) != LJ_GC2_MARK ||
-      gc2_cycle_acq(g) != cycle || lj_tg_any_jit_active(g)) {
+      gc2_cycle_acq(g) != cycle || gc2_jit_phase_gate_acq(g) != 0 ||
+      lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g)) {
+    if (gc2_jit_recorder_active(g)) {
+      lj_trace_abort(g);
+      gc2_root_scan_retry(g);
+    }
     gc2_mark_root_snapshot_abort(g);
     return 0;
   }
@@ -16680,6 +17231,15 @@ static uint32_t gc2_fixpoint_round(global_State *g, lua_State *L,
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK)
     return 0;
+  if (gc2_jit_phase_gate_acq(g) != 0)
+    gc2_jit_phase_gate_close(g);
+  if (gc2_jit_recorder_active(g)) {
+    lj_trace_abort(g);
+    gc2_mark_root_snapshot_reopen(g);
+    gc2_root_scan_retry(g);
+    gc2_fixpoint_rounds_add(g, 1);
+    return 0;
+  }
   if (lj_tg_any_jit_active(g)) {
     gc2_mark_root_snapshot_reopen(g);
     gc2_fixpoint_rounds_add(g, 1);
@@ -16720,7 +17280,13 @@ static uint32_t gc2_fixpoint_round(global_State *g, lua_State *L,
     (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
     (void)gc2_fixpoint_drain(g, logical_tg, limit, worker_owned);
   }
-  if (gc2_phase_acq(g) != LJ_GC2_MARK || lj_tg_any_jit_active(g)) {
+  if (gc2_phase_acq(g) != LJ_GC2_MARK ||
+      gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
+      gc2_jit_recorder_active(g)) {
+    if (gc2_jit_recorder_active(g)) {
+      lj_trace_abort(g);
+      gc2_root_scan_retry(g);
+    }
     gc2_mark_root_snapshot_reopen(g);
     gc2_fixpoint_rounds_add(g, 1);
     return 0;
@@ -16739,7 +17305,8 @@ static uint32_t gc2_fixpoint_round(global_State *g, lua_State *L,
     return 0;
   }
   fixpoint = gc2_phase_acq(g) == LJ_GC2_MARK &&
-	     !lj_tg_any_jit_active(g) &&
+	     gc2_jit_phase_gate_acq(g) == 0 &&
+	     !lj_tg_any_jit_active(g) && !gc2_jit_recorder_active(g) &&
 	     gc2_mark_root_scanned_acq(g) == 1 &&
 	     gc2_marks_this_round_acq(g) == 0 &&
 	     lj_gc2_ssb_empty(g) &&
@@ -16790,6 +17357,17 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
     lj_gc2_worker_wake(g);
     return phase == LJ_GC2_WEAK;
   }
+  if (gc2_jit_phase_gate_acq(g) != 0)
+    gc2_jit_phase_gate_close(g);
+  if (lj_tg_any_jit_active(g)) {
+    /* A blocking traced FFI call owns its published jit_base until it returns.
+    ** Gate closure is the asynchronous request; MARK never waits for it. Drop
+    ** the advisory close intent as well, otherwise a background worker would
+    ** report fake progress and busy-loop for the duration of the foreign call. */
+    gc2_mark_close_intent_rel(g, 0);
+    lj_gc2_worker_wake(g);
+    return 0;
+  }
   claimed = gc2_worker_claim_mark_close(g);
   if (!claimed)
     return 0;
@@ -16804,7 +17382,7 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
 	     "MARK close token overlaps assist owner");
   hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit, 1);
   if (hit && gc2_phase_acq(g) == LJ_GC2_MARK &&
-      !lj_tg_any_jit_active(g)) {
+      gc2_jit_phase_gate_acq(g) == 0 && !lj_tg_any_jit_active(g)) {
     /* Hold worker_active through the MARK->WEAK CAS. Splitting successful
     ** completion from lj_gc2_mark_to_weak let a background worker repeatedly
     ** steal the zero window and starve the transition. */
@@ -16820,12 +17398,19 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
   ** IDLE->MARK owner, so preemption cannot expose WEAK with a stale intent and
   ** no close owner. Ordinary claims also phase-gate the bit as a defensive
   ** backstop for forced/test transitions. */
-  if (phase != LJ_GC2_MARK)
+  if (phase != LJ_GC2_MARK) {
     gc2_mark_close_intent_rel(g, 0);
+  } else if (!hit) {
+    /* A bounded close miss is not permission to monopolize MARK. Barriers and
+    ** black allocation make the completed portion stable, so grant another
+    ** bounded native turn and let a later owner retry the fixpoint. */
+    gc2_mark_close_intent_rel(g, 0);
+    gc2_jit_phase_gate_open_mark(g, 1);
+  }
   gc2_worker_release(g);
   hit = phase == LJ_GC2_WEAK;
-  /* Partial rounds retain helpable intent. In either case wake a worker or
-  ** mutator helper after releasing the token; no owner identity is required. */
+  /* A bounded miss reopened MARK and cleared intent; a successful transition
+  ** consumed it. Wake a worker or mutator helper after releasing the token. */
   lj_gc2_worker_wake(g);
   return hit;  /* Successful completion already published MARK->WEAK. */
 }
@@ -16837,12 +17422,11 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
   if (!g || max_rounds == 0 || limit == 0 ||
       gc2_phase_acq(g) != LJ_GC2_MARK)
     return 0;
-  if (lj_tg_any_jit_active(g))
-    return 0;
   gc2_mark_complete_runs_add(g, 1);
   if (gc2_mark_close_intent_cas(g, &expect, 1)) {
     lj_gc2_worker_wake(g);  /* Any worker may help if this caller is descheduled. */
   }
+  lj_gc2_jit_mark_request_exit(g);
   if (gc2_mark_close_help(g, L, max_rounds, limit))
     return 1;
   gc2_mark_complete_peer_waits_add(g, 1);

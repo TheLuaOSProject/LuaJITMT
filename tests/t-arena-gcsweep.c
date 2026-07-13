@@ -77,6 +77,9 @@ static LJGC2ActivationSnap test_publish_sweep_phase(global_State *g)
   assert(lj_gc2_activation_try_transition(&g->gc2.activation, &weak, epoch,
            LJ_GC2_ACT_SWEEP_OPEN, &sweep) == LJ_GC2_TRANSITION_OK);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
+  /* These fixtures intentionally bypass the semantic root driver. Publish
+  ** its prerequisite explicitly before any synthetic READY edge. */
+  gc2_sweep_root_scanned_rel(g, 1);
   /* Synthetic fixtures intentionally skip string reclamation. Mirror the real
   ** WEAK->SWEEP initialization with a completed non-major string cycle so the
   ** paranoia close oracle sees a valid DONE state. */

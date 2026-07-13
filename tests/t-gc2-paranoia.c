@@ -48,7 +48,13 @@ static void run_generational_major_fallback(lua_State *L, global_State *g,
 				    LJ_GC2_WEAK_DRAIN_BATCH);
   assert(complete);
   lj_gc2_weak_to_sweep(g, L);
-  lj_gc2_sweep_bridge_ready(g);
+  /* Drive the real mandatory root certificate and bounded ownership-spine
+  ** preparation. Publishing the raw READY latch here would bypass the
+  ** certificate and manufacture an impossible post-READY state. */
+  for (i = 0; i < 10000 && !gc2_sweep_bridge_ready_acq(g); i++)
+    lj_gc2_sweep_prepare_bridge_boundary(
+      g, lj_gc_preserve_root_chain_for_gc2_sweep);
+  assert(i < 10000 && gc2_sweep_root_scanned_acq(g) == 1);
   do {
     swept = lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
   } while (swept != 0);

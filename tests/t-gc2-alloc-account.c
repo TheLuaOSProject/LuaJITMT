@@ -1102,8 +1102,13 @@ int main(void)
 	 (gc2_assist_ssb_converted_acq(g) - assist_ssb0) >= 1u);
   /* The bounded assist may spend this quantum converting the SSB request.
   ** Consume one ordinary worker item before asserting its child frontier. */
-  if (lj_gc2_ismarked(g, obj2gco(child)) == 0)
+  if (lj_gc2_ismarked(g, obj2gco(child)) == 0) {
+    /* This direct ownership assertion is not a native scheduling fixture.
+    ** Close the fresh cooperative MARK lease before demanding immediate work. */
+    lj_gc2_jit_mark_request_exit(g);
+    assert(gc2_jit_phase_gate_acq(g) == 0);
     assert(lj_gc2_worker_drain(g, 1) != 0);
+  }
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
@@ -1142,8 +1147,11 @@ int main(void)
   assert(gc2_assist_ssb_converted_acq(g) >= assist_ssb0);
   assert((gc2_assist_grey_drained_acq(g) - assist_grey0) +
 	 (gc2_assist_ssb_converted_acq(g) - assist_ssb0) >= 1u);
-  if (lj_gc2_ismarked(g, obj2gco(child)) == 0)
+  if (lj_gc2_ismarked(g, obj2gco(child)) == 0) {
+    lj_gc2_jit_mark_request_exit(g);
+    assert(gc2_jit_phase_gate_acq(g) == 0);
     assert(lj_gc2_worker_drain(g, 1) != 0);
+  }
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);

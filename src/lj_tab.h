@@ -207,6 +207,9 @@ LJ_FUNC void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbit
 #define LJ_TAB_GC_SNAPSHOT_INVALID	0
 #define LJ_TAB_GC_SNAPSHOT_OK		1
 #define LJ_TAB_GC_SNAPSHOT_TRANSIENT	2
+#define LJ_TAB_GC_LOOKUP_ABSENT		0
+#define LJ_TAB_GC_LOOKUP_FOUND		1
+#define LJ_TAB_GC_LOOKUP_RETRY		2
 /* GC snapshots never manufacture semantic retention. The caller must keep an
 ** exact TAB object/body lease, stable root-membership lane, GC2 traversal scope,
 ** or terminal destructor ticket through its final returned-pointer dereference,
@@ -216,6 +219,12 @@ LJ_FUNC int lj_tab_array_snapshot_gc_held(global_State *g, const GCtab *t,
 					  MSize *acapp);
 LJ_FUNC int lj_tab_node_snapshot_gc_held(global_State *g, const GCtab *t,
 					 Node **nodep, MSize *hmaskp);
+/* Nonwaiting string-key lookup for collector/finalizer code already retaining
+** an exact table scope and SMR reader. RETRY covers structural publication,
+** KEYLOCK/FORWARD/claim sentinels and malformed generation chains; it must
+** never be interpreted as semantic absence. */
+LJ_FUNC int lj_tab_getstr_gc_held(global_State *g, GCtab *t,
+				  const GCstr *key, TValue *out);
 /* Long C-side generation scans publish an owner-written epoch pin before
 ** acquiring any raw array/node pointer and drop it after the final dereference.
 ** Nested scopes retain the epoch of the outermost reader. */

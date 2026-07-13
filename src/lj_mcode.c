@@ -794,29 +794,70 @@ void lj_mcode_freeretired(global_State *g)
   }
 }
 
-void lj_mcode_markretired(global_State *g, int gc2)
+typedef struct MCodeRootCycleGuard {
+  const void *anchor;
+  uint64_t power;
+  uint64_t length;
+} MCodeRootCycleGuard;
+
+static LJ_AINLINE void mcode_root_cycle_init(MCodeRootCycleGuard *guard,
+					     const void *head)
+{
+  guard->anchor = head;
+  guard->power = 1;
+  guard->length = 0;
+}
+
+static LJ_AINLINE int mcode_root_cycle_step(MCodeRootCycleGuard *guard,
+					    const void *next)
+{
+  if (next && next == guard->anchor)
+    return 0;
+  guard->length++;
+  if (guard->length == guard->power) {
+    guard->anchor = next;
+    guard->length = 0;
+    if (guard->power <= ~(uint64_t)0 / 2u)
+      guard->power *= 2u;
+  }
+  return 1;
+}
+
+int lj_mcode_markretired(global_State *g, int gc2)
 {
   jit_State *J;
-  MCodeRetire *ret;
+  MCodeRetire *ret, *next;
+  MCodeRootCycleGuard guard;
   if (!g)
-    return;
+    return 1;
   J = G2J(g);
-  for (ret = mcode_active_head_acq(J);
-       ret != NULL && lj_gc2_mem_registered(g, ret);
-       ret = mcode_retired_next_acq(ret)) {
+  ret = mcode_active_head_acq(J);
+  mcode_root_cycle_init(&guard, ret);
+  while (ret != NULL && lj_gc2_mem_registered(g, ret)) {
+    next = mcode_retired_next_acq(ret);
     if (gc2)
       lj_gc2_markmem_registered(g, ret);
     else
       lj_gc_arena_markmem_registered(g, ret);
+    ret = next;
+    if (LJ_UNLIKELY(!mcode_root_cycle_step(&guard, ret)))
+      return 0;
   }
-  for (ret = mcode_retired_head_acq(J);
-       ret != NULL && lj_gc2_mem_registered(g, ret);
-       ret = mcode_retired_next_acq(ret)) {
+  if (LJ_UNLIKELY(ret != NULL))
+    return 0;
+  ret = mcode_retired_head_acq(J);
+  mcode_root_cycle_init(&guard, ret);
+  while (ret != NULL && lj_gc2_mem_registered(g, ret)) {
+    next = mcode_retired_next_acq(ret);
     if (gc2)
       lj_gc2_markmem_registered(g, ret);
     else
       lj_gc_arena_markmem_registered(g, ret);
+    ret = next;
+    if (LJ_UNLIKELY(!mcode_root_cycle_step(&guard, ret)))
+      return 0;
   }
+  return ret == NULL;
 }
 
 /* -- MCode transactions -------------------------------------------------- */
