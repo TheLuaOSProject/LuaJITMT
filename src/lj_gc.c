@@ -5464,26 +5464,35 @@ void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
 int lj_mem_abandon_gco_unpublished(global_State *g, void *base)
 {
   GCArena *a;
+  LJArenaAllocD *ad;
   if (!g || !base)
     return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
   if (g->allocf != lj_arena_allocf ||
       la_load32_acq(&g->allocf_arena) == 0)
     return LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE;
-  if (!checkptrGC(base) || !lj_gc2_mem_registered_known(g, base))
+  if (!checkptrGC(base))
     return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
+  /* The caller owns this exact allocation's constructor lane. Resolving that
+  ** lane through the global arena registry would add no identity proof and can
+  ** fail spuriously while an unrelated opportunistic SMR reclaimer owns its
+  ** writer gate. Validate the immutable arena owner locally instead; this is
+  ** the same constructor-only route used by fresh root publication. */
   a = lj_arena_of(base);
+  ad = gc_constructor_allocd_at(g, base);
+  if (!ad)
+    return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
   if (!lj_arena_ishuge(a)) {
     uint32_t cell = lj_arena_cellof(base);
     if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+	lj_arena_cellptr(a, cell) != base ||
 	!(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) ||
 	!lj_arena_bm_get(a->block, cell) ||
 	!lj_arena_root_construct_abandon(a, cell))
       return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
     return LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE;
   } else {
-    LJArenaAllocD *ad = gc_arena_allocd_for_ptr(g, base);
     int result;
-    if (!ad || !ad->huge)
+    if (!ad->huge)
       return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
     result = lj_arena_hugetab_root_construct_abandon(
 	ad->huge, base, lj_gc2_retire_epoch(g), NULL);

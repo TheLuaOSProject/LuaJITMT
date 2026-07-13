@@ -559,6 +559,8 @@ LJ_FUNC int lj_gc_destructor_enter_reclaim_held(global_State *g, void *base,
 LJ_FUNC void lj_gc_destructor_leave(global_State *g,
 				     LJGCDestructCtx *ctx);
 /* Cancel allocator-owned CONSTRUCT+LINKING before ordinary free/retirement.
+** The caller must retain the exact allocator-issued base and its unique
+** constructor ownership; published or rediscovered pointers are not admitted.
 ** The result uses LJ_ARENA_HUGE_ROOT_COMPLETE_* for both small and huge
 ** allocations (small/custom cancellation completes as LIVE). */
 LJ_FUNC int lj_mem_abandon_gco_unpublished(global_State *g, void *base);

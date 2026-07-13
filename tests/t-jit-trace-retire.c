@@ -44,6 +44,14 @@ static void test_trace_complete_payload_layout(GCtrace *T)
   T->snapmap = (SnapEntry *)p;
 }
 
+static GCSize test_trace_allocation_size(const GCtrace *T)
+{
+  size_t sztr = (sizeof(GCtrace) + 7u) & ~(size_t)7u;
+  return (GCSize)(sztr + (MSize)(T->nins - T->nk) * sizeof(IRIns) +
+	(MSize)T->nsnap * sizeof(SnapShot) +
+	(MSize)T->nsnapmap * sizeof(SnapEntry));
+}
+
 static void test_trace_publish_header(global_State *g, GCtrace *T)
 {
   GCArena *a = lj_arena_of(T);
@@ -174,13 +182,42 @@ static uint32_t reclaim_trace_at(global_State *g, uint64_t epoch)
   return n;
 }
 
+static void test_unpublished_huge_abandon_smr_collision(lua_State *L)
+{
+  global_State *g = G(L);
+  GCSize size = (GCSize)LJ_HUGE_THRESHOLD + LJ_CELL_SIZE;
+  void *p = lj_mem_newgco_raw(L, size,
+	LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
+  LJGC2ActivationSnap before, after;
+
+  assert(p != NULL && lj_arena_ishuge(lj_arena_of(p)));
+  settle_automatic_cycle(g);
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  before = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_mem_abandon_gco_unpublished(g, p) ==
+	 LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+  after = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_gc2_activation_equal(&before, &after));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  lj_gc2_test_idle_reclaim_leave(g);
+  /* Huge cancellation is one-shot. Free the now rootless exact allocation
+  ** directly instead of repeating the constructor-abandon transition. */
+  lj_mem_free(g, p, size);
+}
+
 static void test_unpublished_preclaim_smr_collision(lua_State *L, GCproto *pt)
 {
   global_State *g = G(L);
   jit_State *J = G2J(g);
-  GCtrace tmpl, *T;
+  GCtrace tmpl, *T, *cancelT;
   static IRIns dummyir[REF_TRUE+1];
   MCode **exittab;
+  GCArena *a;
+  uint32_t cell;
+  GCSize cancel_size;
   LJGC2ActivationSnap before, after;
 
   memset(&tmpl, 0, sizeof(tmpl));
@@ -199,6 +236,14 @@ static void test_unpublished_preclaim_smr_collision(lua_State *L, GCproto *pt)
   assert(trace_nextroot_acq(T) == 0);
   assert(la_load64_acq(&T->retire_epoch) == 0);
   assert(!trace_retired_link_listed_acq(T));
+
+  /* Keep the semantic-retirement body in its original constructor state.
+  ** This second compact trace exercises cancellation and is freed directly
+  ** after the writer releases, so abandon remains strictly one-shot. */
+  cancelT = lj_trace_alloc(L, &tmpl);
+  test_trace_complete_payload_layout(cancelT);
+  test_trace_publish_header(g, cancelT);
+  cancel_size = test_trace_allocation_size(cancelT);
 
   settle_automatic_cycle(g);
   assert(lj_jit_token_try(J));
@@ -219,7 +264,20 @@ static void test_unpublished_preclaim_smr_collision(lua_State *L, GCproto *pt)
 			  lj_arena_cellof(exittab)));
   assert(!lj_arena_bm_get(lj_arena_of(pt)->mark, lj_arena_cellof(pt)));
   assert(!lj_gc2_activation_reclaim_veto(g));
+  a = lj_arena_of(cancelT);
+  cell = lj_arena_cellof(cancelT);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT);
+  before = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_mem_abandon_gco_unpublished(g, cancelT) ==
+	 LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
+  after = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_gc2_activation_equal(&before, &after));
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
   lj_gc2_test_idle_reclaim_leave(g);
+  lj_mem_free(g, cancelT, cancel_size);
 
   /* The exact runtime path retries its tactical pre-claim mark, claims the
   ** epoch, and then performs mandatory full preservation before token release. */
@@ -622,6 +680,7 @@ int main(void)
   assert(retired_find(J, T) == NULL);
 
   test_listed_slot_teardown_no_republish(L);
+  test_unpublished_huge_abandon_smr_collision(L);
   test_unpublished_preclaim_smr_collision(L, pt);
   lua_close(L);
   printf("t-jit-trace-retire OK: bodies, exittabs, and inbound-link rescue retire correctly\n");
