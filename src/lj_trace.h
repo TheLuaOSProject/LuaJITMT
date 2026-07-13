@@ -59,6 +59,7 @@ LJ_FUNC void lj_jit_token_release_l(lua_State *L, jit_State *J);
 LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 LJ_FUNC void lj_trace_abort(global_State *g);
 LJ_FUNC void lj_trace_abort_owner(lua_State *L);
+LJ_FUNC void lj_trace_abort_owner_before_park(lua_State *L);
 LJ_FUNC void lj_trace_initstate(global_State *g);
 LJ_FUNC void lj_trace_freestate(global_State *g);
 LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
@@ -191,6 +192,7 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 #define lj_trace_markvecs(g, gc2)	(UNUSED(g), UNUSED(gc2), 1)
 #define lj_trace_abort(g)	UNUSED(g)
 #define lj_trace_abort_owner(L)	UNUSED(L)
+#define lj_trace_abort_owner_before_park(L)	UNUSED(L)
 #define lj_trace_retire_gc_claim(g, T)	(UNUSED(g), UNUSED(T), 1)
 #define lj_trace_body_destroyed_acq(T)	(UNUSED(T), 1)
 #define lj_trace_end(J)		UNUSED(J)

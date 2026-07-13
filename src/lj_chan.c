@@ -114,11 +114,7 @@ static void chan_wait(lua_State *L, LJChan *ch)
     return;
   }
   if (L) {
-    global_State *g = G(L);
-    uint32_t tid = lj_thr_current_id(g);
-    /* Preserve an active VM-event recorder frame; see the timed twin below. */
-    if (tid == 0 || vmevent_owner_acq(g) != tid)
-      lj_trace_abort_owner(L);
+    lj_trace_abort_owner_before_park(L);
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: channel park is native. */
   } else if (tg)
     lj_native_enter(tg);
@@ -168,13 +164,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     return 0;
   }
   if (L) {
-    global_State *g = G(L);
-    uint32_t tid = lj_thr_current_id(g);
-    /* trace_state() owns J->cur across VM-event callbacks. Never destroy that
-    ** state reentrantly; the callback's bounded park instead leaves cleanup to
-    ** the outer recorder unwind. Ordinary channel parks release ownership. */
-    if (tid == 0 || vmevent_owner_acq(g) != tid)
-      lj_trace_abort_owner(L);
+    lj_trace_abort_owner_before_park(L);
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: timed channel park. */
   } else if (tg)
     lj_native_enter(tg);

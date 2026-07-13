@@ -3409,6 +3409,23 @@ void lj_trace_abort_owner(lua_State *L)
   lj_jit_token_release_l(L, J);
 }
 
+/* Retire an interrupted recorder before its owner parks outside the recorder
+** callback stack. A TRACE/RECORD VM-event handler still has trace_state() live
+** beneath it; destructively clearing J->cur there would make that state machine
+** resume into freed or zeroed recorder state. Leave the exact callback owner
+** intact so trace_state() consumes the asynchronous abort after the handler
+** returns. */
+void lj_trace_abort_owner_before_park(lua_State *L)
+{
+  global_State *g;
+  if (!L)
+    return;
+  g = G(L);
+  if (vmevent_owner_acq(g) == lj_thr_current_id(g))
+    return;
+  lj_trace_abort_owner(L);
+}
+
 /* -- Event handling ------------------------------------------------------ */
 
 /* A bytecode instruction is about to be executed. Record it. */

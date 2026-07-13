@@ -46,12 +46,12 @@ still on the C stack. Tearing down `J->cur` reentrantly from that callback
 caused an immediate production-build segmentation fault. This applies equally
 to channel and threading-library parks.
 
-Each concrete park therefore compares the current TG id with
-`vmevent_owner_acq(g)`. The exact VM-event callback owner keeps the token and
-lets the outer recorder frame perform cleanup after it unwinds; all ordinary
-parks abort and release before sleeping. The guard is deliberately not folded
-into `lj_trace_abort_owner()`, whose detach/teardown callers have different
-lifetime obligations.
+Each concrete park calls `lj_trace_abort_owner_before_park()`, which compares
+the current TG id with `vmevent_owner_acq(g)`. The exact VM-event callback owner
+keeps the token and lets the outer recorder frame perform cleanup after it
+unwinds; all ordinary parks abort and release before sleeping. The guard is
+deliberately not folded into `lj_trace_abort_owner()`, whose detach/teardown
+callers have different lifetime obligations.
 
 The safe follow-up boundary is one of:
 
