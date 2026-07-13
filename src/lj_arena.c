@@ -508,32 +508,96 @@ int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell)
   return 1;
 }
 
-/* Publish an immutable allocation/destructor class before READY or block make
-** the body decodable. The arena/bump owner is the sole structural writer, so
-** plain stores are sufficient; block's later release publication orders all
-** four planes for readers. */
-static int arena_dtor_kind_publish_unpublished(GCArena *a, uint32_t cell,
-						uint32_t kind)
+/* Validate every descriptor-discovery bit before claiming lifetime. The bump
+** owner is the sole structural writer and the span remains absent from block,
+** so a successful FREE->CONSTRUCT claim makes this snapshot stable until the
+** same owner publishes the immutable kind below. Pair starts normally share a
+** 64-cell word; test their combined mask with one load per plane. */
+static int arena_dtor_kind_preflight_unpublished(GCArena *a, uint32_t first,
+						  uint32_t second, int pair)
 {
-  uint32_t plane;
-  uint64_t bit;
-  if (!arena_lifetime_managed(a) || cell < LJ_AFIRST_CELL ||
-      cell >= LJ_ARENA_CELLS || kind == LJ_ARENA_DTOR_NONE ||
-      kind > LJ_ARENA_DTOR_MAX || lj_arena_bm_get(a->block, cell) ||
-      lj_arena_ready_get(a, cell) ||
-      lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE ||
-      lj_arena_lifetime_state_acq(a, cell) !=
-	LJ_ARENA_LIFETIME_CONSTRUCT ||
-      lj_arena_dtor_kind_acq(a, cell) != LJ_ARENA_DTOR_NONE)
+  uint32_t fw, sw, plane;
+  uint64_t fbit, sbit, mask;
+  if (!arena_lifetime_managed(a) || first < LJ_AFIRST_CELL ||
+      first >= LJ_ARENA_CELLS || (pair &&
+       (second < LJ_AFIRST_CELL || second >= LJ_ARENA_CELLS ||
+	second == first)))
     return 0;
-  bit = (uint64_t)1 << (cell & 63u);
-  for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++)
-    if (kind & ((uint32_t)1u << plane)) {
-      uint64_t old = la_load64_rlx(&a->dtor[plane][cell >> 6]);
-      old |= bit;
-      la_store64_rlx(&a->dtor[plane][cell >> 6], old);
+  fw = first >> 6;
+  sw = second >> 6;
+  fbit = (uint64_t)1 << (first & 63u);
+  sbit = (uint64_t)1 << (second & 63u);
+  if (!pair || fw == sw) {
+    mask = fbit | (pair ? sbit : 0);
+    if (((la_load64_acq(&a->block[fw]) |
+	  la_load64_acq(&a->ready[fw])) & mask) != 0)
+      return 0;
+    for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++)
+      if ((la_load64_acq(&a->dtor[plane][fw]) & mask) != 0)
+	return 0;
+  } else {
+    if (((la_load64_acq(&a->block[fw]) |
+	  la_load64_acq(&a->ready[fw])) & fbit) != 0 ||
+	((la_load64_acq(&a->block[sw]) |
+	  la_load64_acq(&a->ready[sw])) & sbit) != 0)
+      return 0;
+    for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++)
+      if ((la_load64_acq(&a->dtor[plane][fw]) & fbit) != 0 ||
+	  (la_load64_acq(&a->dtor[plane][sw]) & sbit) != 0)
+	return 0;
+  }
+  return 1;
+}
+
+/* Publish immutable destructor classes after the exact lifetime claim and
+** before READY/block make either body decodable. The arena/bump owner is the
+** sole structural writer, so plain word stores are sufficient; block's later
+** release publication orders these writes for readers. */
+static void arena_dtor_kind_publish_claimed(GCArena *a, uint32_t first,
+	uint32_t second, int pair, uint32_t first_kind, uint32_t second_kind)
+{
+  uint32_t fw = first >> 6, sw = second >> 6, plane;
+  uint64_t fbit = (uint64_t)1 << (first & 63u);
+  uint64_t sbit = (uint64_t)1 << (second & 63u);
+  lj_assertX(lj_arena_root_state_acq(a, first) == LJ_ARENA_ROOT_NONE &&
+      lj_arena_lifetime_state_acq(a, first) ==
+	LJ_ARENA_LIFETIME_CONSTRUCT,
+      "arena typed first-start publication lost claim");
+  lj_assertX(!pair ||
+      (lj_arena_root_state_acq(a, second) == LJ_ARENA_ROOT_NONE &&
+       lj_arena_lifetime_state_acq(a, second) ==
+	 LJ_ARENA_LIFETIME_CONSTRUCT),
+      "arena typed second-start publication lost claim");
+  for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++) {
+    uint32_t pbit = (uint32_t)1u << plane;
+    uint64_t fadd = (first_kind & pbit) ? fbit : 0;
+    uint64_t sadd = (pair && (second_kind & pbit)) ? sbit : 0;
+    if (fw == sw) {
+      uint64_t add = fadd | sadd;
+      if (add != 0) {
+	uint64_t old = la_load64_rlx(&a->dtor[plane][fw]);
+	lj_assertX((old & (fbit | (pair ? sbit : 0))) == 0,
+	    "arena typed same-word descriptor publication crossed authority");
+	la_store64_rlx(&a->dtor[plane][fw], old | add);
+      }
+    } else {
+      if (fadd != 0) {
+	uint64_t old = la_load64_rlx(&a->dtor[plane][fw]);
+	lj_assertX((old & fbit) == 0,
+	    "arena typed first descriptor publication crossed authority");
+	la_store64_rlx(&a->dtor[plane][fw], old | fadd);
+      }
+      if (sadd != 0) {
+	uint64_t old = la_load64_rlx(&a->dtor[plane][sw]);
+	lj_assertX((old & sbit) == 0,
+	    "arena typed second descriptor publication crossed authority");
+	la_store64_rlx(&a->dtor[plane][sw], old | sadd);
+      }
     }
-  return lj_arena_dtor_kind_acq(a, cell) == kind;
+  }
+  lj_assertX(lj_arena_dtor_kind_acq(a, first) == first_kind &&
+      (!pair || lj_arena_dtor_kind_acq(a, second) == second_kind),
+      "arena typed descriptor publication lost bits");
 }
 
 int lj_arena_dtor_construct_commit(GCArena *a, uint32_t cell)
@@ -6101,9 +6165,7 @@ static int arena_reserve_lifetime_kind(GCArena *a, uint32_t first,
 {
   int pair = second != first;
   if ((flags & LJ_AF_DTOR_CONSTRUCT) &&
-      (lj_arena_dtor_kind_acq(a, first) != LJ_ARENA_DTOR_NONE ||
-       (pair &&
-	lj_arena_dtor_kind_acq(a, second) != LJ_ARENA_DTOR_NONE)))
+      !arena_dtor_kind_preflight_unpublished(a, first, second, pair))
     return 0;  /* Stale type authority pins the unpublished span. */
   if (!(pair ? arena_reserve_lifetime_pair(a, first, second, flags) :
 	arena_reserve_lifetime(a, first, flags)))
@@ -6111,16 +6173,8 @@ static int arena_reserve_lifetime_kind(GCArena *a, uint32_t first,
   if (!(flags & LJ_AF_DTOR_CONSTRUCT))
     return first_kind == LJ_ARENA_DTOR_NONE &&
       second_kind == LJ_ARENA_DTOR_NONE;
-  if (!arena_dtor_kind_publish_unpublished(a, first, first_kind) ||
-      (pair &&
-       !arena_dtor_kind_publish_unpublished(a, second, second_kind))) {
-    /* All prerequisites were checked before the lifetime claim and there is
-    ** one structural writer. An unexpected mismatch is corruption: retain
-    ** CONSTRUCT and every installed class bit rather than erase authority or
-    ** let the bump cursor reuse this address. */
-    lj_assertX(0, "arena typed descriptor publication lost ownership");
-    return 0;
-  }
+  arena_dtor_kind_publish_claimed(a, first, second, pair,
+	first_kind, second_kind);
   return 1;
 }
 

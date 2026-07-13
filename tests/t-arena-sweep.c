@@ -318,6 +318,108 @@ static void test_dtor_identity_pins_legacy_sweep(PRNGState *rs)
   lj_arena_alloc_fini(&alloc);
 }
 
+static void clear_constructed_dtor(GCArena *a, uint32_t cell, uint32_t kind)
+{
+  uint32_t plane;
+  for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++)
+    if (kind & ((uint32_t)1u << plane))
+      lj_arena_bm_clear(a->dtor[plane], cell);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE));
+}
+
+static void test_dtor_pair_reservation_preflight(PRNGState *rs)
+{
+  TGAlloc alloc;
+  GCArena *a, *got;
+  uint32_t word, first, second, outside, cell, plane;
+
+  lj_arena_alloc_init(&alloc);
+  a = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
+  assert(a != NULL);
+  lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(&alloc));
+  lj_arena_next_rel(a, NULL);
+  alloc.owned[LJ_ARENAK_TRAVERSABLE] = a;
+  word = (LJ_AFIRST_CELL + 63u) & ~63u;
+  first = word + 4u;
+  second = first + 2u;
+  outside = first - 1u;
+  assert(second < LJ_ARENA_CELLS && (first >> 6) == (second >> 6));
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].a = a;
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].cell = first;
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
+
+  /* Discovery and every destructor plane veto before either lifetime lane is
+  ** claimed. Clearing the injected authority must make the exact same private
+  ** bump address reusable. */
+  lj_arena_bm_set(a->block, first);
+  assert(!lj_arena_reserve_bump_dtor_pair(&alloc, rs, LJ_AF_TRAVERSABLE,
+	4u, 2u, LJ_ARENA_DTOR_LFUNC1, LJ_ARENA_DTOR_CLOSED_UV,
+	&got, &cell));
+  assert(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell == first);
+  assert(lj_arena_lifetime_state_acq(a, first) == LJ_ARENA_LIFETIME_FREE);
+  assert(lj_arena_lifetime_state_acq(a, second) == LJ_ARENA_LIFETIME_FREE);
+  lj_arena_bm_clear(a->block, first);
+
+  lj_arena_bm_set(a->ready, second);
+  assert(!lj_arena_reserve_bump_dtor_pair(&alloc, rs, LJ_AF_TRAVERSABLE,
+	4u, 2u, LJ_ARENA_DTOR_LFUNC1, LJ_ARENA_DTOR_CLOSED_UV,
+	&got, &cell));
+  assert(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell == first);
+  lj_arena_bm_clear(a->ready, second);
+
+  for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++) {
+    uint32_t blocked = (plane & 1u) ? second : first;
+    lj_arena_bm_set(a->dtor[plane], blocked);
+    assert(!lj_arena_reserve_bump_dtor_pair(&alloc, rs,
+	LJ_AF_TRAVERSABLE, 4u, 2u, LJ_ARENA_DTOR_LFUNC1,
+	LJ_ARENA_DTOR_CLOSED_UV, &got, &cell));
+    assert(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell == first);
+    assert(lj_arena_lifetime_state_acq(a, first) ==
+	   LJ_ARENA_LIFETIME_FREE);
+    assert(lj_arena_lifetime_state_acq(a, second) ==
+	   LJ_ARENA_LIFETIME_FREE);
+    lj_arena_bm_clear(a->dtor[plane], blocked);
+  }
+
+  /* Unrelated bits in the same packed words must remain outside the exact
+  ** selected-start mask and survive publication unchanged. */
+  lj_arena_bm_set(a->block, outside);
+  lj_arena_bm_set(a->ready, outside);
+  lj_arena_bm_set(a->dtor[3], outside);
+  assert(lj_arena_reserve_bump_dtor_pair(&alloc, rs, LJ_AF_TRAVERSABLE,
+	4u, 2u, LJ_ARENA_DTOR_LFUNC1, LJ_ARENA_DTOR_CLOSED_UV,
+	&got, &cell));
+  assert(got == a && cell == first);
+  assert(lj_arena_bm_get(a->block, outside));
+  assert(lj_arena_ready_get(a, outside));
+  assert(lj_arena_dtor_kind_acq(a, outside) == ((uint32_t)1u << 3));
+  assert(lj_arena_dtor_kind_acq(a, first) == LJ_ARENA_DTOR_LFUNC1);
+  assert(lj_arena_dtor_kind_acq(a, second) == LJ_ARENA_DTOR_CLOSED_UV);
+  lj_arena_bm_clear(a->block, outside);
+  lj_arena_bm_clear(a->ready, outside);
+  lj_arena_bm_clear(a->dtor[3], outside);
+  clear_constructed_dtor(a, first, LJ_ARENA_DTOR_LFUNC1);
+  clear_constructed_dtor(a, second, LJ_ARENA_DTOR_CLOSED_UV);
+
+  /* Exercise the split 64-cell descriptor-word arm independently of the
+  ** common combined-mask arm. */
+  first = word + 63u;
+  second = first + 1u;
+  assert(second < LJ_ARENA_CELLS && (first >> 6) != (second >> 6));
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].cell = first;
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
+  assert(lj_arena_reserve_bump_dtor_pair(&alloc, rs, LJ_AF_TRAVERSABLE,
+	2u, 1u, LJ_ARENA_DTOR_LFUNC0, LJ_ARENA_DTOR_CLOSED_UV,
+	&got, &cell));
+  assert(got == a && cell == first);
+  assert(lj_arena_dtor_kind_acq(a, first) == LJ_ARENA_DTOR_LFUNC0);
+  assert(lj_arena_dtor_kind_acq(a, second) == LJ_ARENA_DTOR_CLOSED_UV);
+  clear_constructed_dtor(a, first, LJ_ARENA_DTOR_LFUNC0);
+  clear_constructed_dtor(a, second, LJ_ARENA_DTOR_CLOSED_UV);
+  lj_arena_alloc_fini(&alloc);
+}
+
 static void test_blockzero_dtor_survives_quarantine(PRNGState *rs)
 {
   TGAlloc alloc;
@@ -493,6 +595,7 @@ int main(void)
   test_terminal_freeing_word_fast_path(&rs);
 #endif
   test_dtor_identity_pins_legacy_sweep(&rs);
+  test_dtor_pair_reservation_preflight(&rs);
   test_blockzero_dtor_survives_quarantine(&rs);
   test_root_membership(&rs);
   lj_arena_alloc_init(&alloc);

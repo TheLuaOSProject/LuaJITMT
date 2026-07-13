@@ -629,7 +629,14 @@ static LJ_AINLINE void func_bump_publish_obj(global_State *g, GCArena *a,
   /* The arena destructor class is the ownership identity. nextgc remains inert
   ** and no global/pending ownership edge is created on this rootless path. */
   lj_obj_setgcwnullrel(o);
-  committed = lj_arena_dtor_construct_commit(a, cell);
+  lj_assertG(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE &&
+	     lj_arena_dtor_kind_acq(a, cell) != LJ_ARENA_DTOR_NONE &&
+	     lj_arena_ready_get(a, cell) && lj_arena_bm_get(a->block, cell),
+	     "typed bump object reached commit without discovery authority");
+  committed = lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE);
+  if (LJ_UNLIKELY(!committed))
+    committed = lj_arena_dtor_construct_commit(a, cell);
   lj_assertG(committed, "typed bump construction commit lost");
   if (LJ_UNLIKELY(!committed))
     abort();
@@ -642,8 +649,22 @@ static LJ_AINLINE void func_bump_publish_pair(global_State *g, GCArena *a,
   int committed;
   lj_obj_setgcwnullrel(head);
   lj_obj_setgcwnullrel(tail);
-  committed = lj_arena_dtor_construct_commit_pair(
-    a, headcell, tailcell);
+  lj_assertG(lj_arena_root_state_acq(a, headcell) == LJ_ARENA_ROOT_NONE &&
+	     lj_arena_root_state_acq(a, tailcell) == LJ_ARENA_ROOT_NONE &&
+	     lj_arena_dtor_kind_acq(a, headcell) != LJ_ARENA_DTOR_NONE &&
+	     lj_arena_dtor_kind_acq(a, tailcell) != LJ_ARENA_DTOR_NONE &&
+	     lj_arena_ready_get(a, headcell) &&
+	     lj_arena_ready_get(a, tailcell) &&
+	     lj_arena_bm_get(a->block, headcell) &&
+	     lj_arena_bm_get(a->block, tailcell),
+	     "typed bump pair reached commit without discovery authority");
+  committed = headcell / LJ_ARENA_LIFETIME_CELLS_PER_WORD ==
+	      tailcell / LJ_ARENA_LIFETIME_CELLS_PER_WORD &&
+	lj_arena_lifetime_state_cas_pair(a, headcell, tailcell,
+	  LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE);
+  if (LJ_UNLIKELY(!committed))
+    committed = lj_arena_dtor_construct_commit_pair(
+	      a, headcell, tailcell);
   lj_assertG(committed, "typed bump pair construction commit lost");
   if (LJ_UNLIKELY(!committed))
     abort();
