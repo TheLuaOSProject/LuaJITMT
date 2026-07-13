@@ -468,17 +468,7 @@ static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
 #define lj_gc_objbarrier(L, p, o) \
   lj_gc2_barrier_obj_pair((L), obj2gco(p), obj2gco(o))
 
-static LJ_AINLINE void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key)
-{
-  global_State *g = G(L);
-  /*
-  ** Publishing a fresh hash key only exposes that key edge. A full-table GC2
-  ** barrier would requeue and rescan the whole growing table for every insert.
-  */
-  if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, key)))
-    return;
-  lj_gc2_barrier_key_g(g, t, key);
-}
+LJ_FUNC void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key);
 
 /*
 ** M5 publication wrappers. Callers use these GC2 barriers when publishing

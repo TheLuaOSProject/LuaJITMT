@@ -3365,6 +3365,25 @@ void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key)
     lj_gc2_barrier_tab_g(g, t);
 }
 
+void lj_gc_pubtabkey_(lua_State *L, GCtab *t, cTValue *key)
+{
+  global_State *g;
+  TGState *tg;
+  if (!L || !t || !key)
+    return;
+  g = G(L);
+  tg = L2TG(L);
+  /* A non-generational IDLE key barrier has no GC2 work. If MARK starts after
+  ** this sample, the already-published table slot precedes this TG's activation
+  ** acknowledgement and is covered by its root snapshot. */
+  if (tg && !lj_tg_mark_active_acq(tg) &&
+      gc2_phase_acq(g) == LJ_GC2_IDLE && gc2_generational_acq(g) == 0)
+    return;
+  if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(g, key)))
+    return;
+  lj_gc2_barrier_key_g(g, t, key);
+}
+
 /* Publication wrapper for x64 VM table -> object stores. */
 void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
 {
