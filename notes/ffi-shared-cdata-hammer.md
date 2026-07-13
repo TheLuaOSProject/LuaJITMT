@@ -53,3 +53,18 @@ payload access.
   until traced CLOAD/CSTORE has a complete shared-root and aliasing protocol.
 - The hammer now records again after joining its first worker and requires the
   sticky generation-safe gate before it starts the later multi-worker phase.
+
+2026-07-13 b1.2.0 XBAR/XPOLL fixture correction:
+
+- `m6_jit_xbar_xpoll` still expected positive traces for cdata created before
+  `threading.gcworkers(1)`, despite the sticky runtime-shared recorder policy
+  above. The loops correctly returned interpreter results while the recorder
+  rejected CGET/CSET with `LJ_TRERR_NYICONV`; requiring a trace contradicted
+  the safety contract rather than exposing a runtime failure.
+- The fixture now requires those indexed/scalar load/store loops to remain
+  untraced after threading activation and keeps checking their Lua-visible
+  results. Its FFI-copy and table-length cases remain positive active-MT JIT
+  coverage.
+- Making traced CLOAD/CSTORE over pre-existing runtime-shared cdata safe is
+  explicit b1.2.1 work. The b1.2.0 functionality beta keeps the nonblocking
+  interpreter fallback and the trace-owned CNEW/CNEWI exception.

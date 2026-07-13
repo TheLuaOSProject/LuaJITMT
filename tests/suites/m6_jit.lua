@@ -974,7 +974,8 @@ local s = 0
 assert(threading.gcworkers(1) == 0)
 for i = 1, 120 do s = s + a[i % 128] end
 assert(s == 0)
-assert(util.traceinfo(1), "FFI indexed load loop did not trace")
+assert(not util.traceinfo(1),
+       "runtime-shared cdata bypassed MT trace safety gate")
 assert(threading.gcworkers(0) == 1)
 ]=])
 
@@ -992,7 +993,8 @@ for i = 1, 120 do
   s = s + p.y
 end
 assert(s == 240 and p.x == 121)
-assert(util.traceinfo(1), "FFI scalar load/store loop did not trace")
+assert(not util.traceinfo(1),
+       "runtime-shared cdata bypassed MT trace safety gate")
 assert(threading.gcworkers(0) == 1)
 ]=])
 
@@ -1005,7 +1007,8 @@ jit.opt.start("hotloop=1", "hotexit=1")
 assert(threading.gcworkers(1) == 0)
 for i = 1, 120 do a[i % 128] = i end
 assert(a[119 % 128] == 119)
-assert(util.traceinfo(1), "FFI indexed store loop did not trace")
+assert(not util.traceinfo(1),
+       "runtime-shared cdata bypassed MT trace safety gate")
 assert(threading.gcworkers(0) == 1)
 ]=])
 
