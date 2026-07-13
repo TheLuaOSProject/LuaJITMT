@@ -111,6 +111,7 @@ typedef struct GC2StatsSnapshot {
   uint64_t worker_wakes;
   uint64_t worker_parks;
   uint64_t worker_async_progress;
+  uint64_t thread_scan_frame_fallbacks;
   uint64_t sweep_owner_runs;
   uint64_t sweep_owner_arenas;
   uint64_t sweep_owner_live_cells;

@@ -685,6 +685,7 @@ static int gc2_markobj_base_valid_scoped(global_State *g, GCobj *o,
 struct GC2FrameScope {
   GC2MarkScope fn;
   GC2MarkScope pt;
+  GC2MarkScope pc;
 };
 static void gc2_mark_scope_leave(GC2MarkScope *scope);
 static void gc2_frame_scope_leave(GC2FrameScope *scope);
@@ -734,6 +735,8 @@ static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
 				     uint32_t *gctp, GC2MarkScope *scope);
 static int gc2_mark_small_cell_admitted(global_State *g, GCArena *a,
 					uint32_t cell, int admission);
+static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
+				      GC2MarkScope *scope);
 static LJ_AINLINE void gc2_preserve_direct_bodies(global_State *g, GCobj *o);
 static int gc2_retained_candidate_valid(global_State *g, GCobj *o,
 					 void *base, GCArena *a,
@@ -1092,6 +1095,7 @@ void lj_gc2_init(global_State *g)
   gc2_thread_scan_needscan_pending_store_rlx(g, 0);
   gc2_table_rescan_pending_store_rlx(g, 0);
   gc2_thread_scan_dirty_misses_store_rlx(g, 0);
+  gc2_thread_scan_frame_fallbacks_store_rlx(g, 0);
   gc2_sweep_owner_runs_store_rlx(g, 0);
   gc2_sweep_owner_arenas_store_rlx(g, 0);
   gc2_sweep_owner_live_cells_store_rlx(g, 0);
@@ -5384,6 +5388,8 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->worker_wakes = gc2_worker_wakes_acq(g);
   s->worker_parks = gc2_worker_parks_acq(g);
   s->worker_async_progress = gc2_worker_async_progress_acq(g);
+  s->thread_scan_frame_fallbacks =
+    gc2_thread_scan_frame_fallbacks_acq(g);
   s->sweep_owner_runs = gc2_sweep_owner_runs_acq(g);
   s->sweep_owner_arenas = gc2_sweep_owner_arenas_acq(g);
   s->sweep_owner_live_cells = gc2_sweep_owner_live_cells_acq(g);
@@ -5954,12 +5960,14 @@ static LJ_AINLINE void gc2_frame_scope_init(GC2FrameScope *scope)
   if (scope) {
     gc2_mark_scope_init(&scope->fn);
     gc2_mark_scope_init(&scope->pt);
+    gc2_mark_scope_init(&scope->pc);
   }
 }
 
 static void gc2_frame_scope_leave(GC2FrameScope *scope)
 {
   if (scope) {
+    gc2_mark_scope_leave(&scope->pc);
     gc2_mark_scope_leave(&scope->pt);
     gc2_mark_scope_leave(&scope->fn);
   }
@@ -6021,15 +6029,20 @@ static int gc2_frame_prev_safe(global_State *g, TValue *bot, TValue *max,
   gc2_frame_scope_init(scope);
   if (frame <= bot + LJ_FR2 || frame >= max)
     return 0;
-  (void)gc2_frame_func_valid(g, frame, &fn, &pt, scope);
+  if (!gc2_frame_func_valid(g, frame, &fn, &pt, scope))
+    goto fail;
   if (frame_islua(frame)) {
-    const BCIns *pc, *bc;
-    if (!pt)
-	goto fail;
+    const BCIns *pc;
     pc = frame_pc(frame);
-    bc = proto_bc(pt);
-    if (!pc || pc <= bc || pc > bc + pt->sizebc)
+    if (!pc || !gc2_frame_pc_valid_scoped(g, pc, &scope->pc))
 	goto fail;
+    /* frame_pc belongs to the caller, not necessarily to the callee function
+    ** in frame-1. This is particularly visible for Lua-to-C/fast calls, whose
+    ** Lua-style frame has no callee prototype. Resolve and retain the caller
+    ** prototype through the return PC before decoding pc[-1]. The observation
+    ** lease deliberately does not change MARK: caller-function traversal owns
+    ** the semantic proto edge, while owner authority keeps the frame word
+    ** stable through this body read. */
     prev = frame - (1 + LJ_FR2 + bc_a(pc[-1]));
   } else {
     ptrdiff_t sz = frame_sized(frame);
@@ -6297,6 +6310,7 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
     TValue *ftop = frame;
     if (!gc2_frame_prev_safe(g, bot, max, frame, &prev, &fn, &scope)) {
       /* A same-thread C transition may expose a temporary frame header. */
+      gc2_thread_scan_frame_fallbacks_add(g, 1);
       if (conservativep)
 	*conservativep = 1;
       return max;
@@ -6319,6 +6333,7 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
       break;
     frame = prev;
     if (++n >= LJ_GC2_ROOT_SCAN_LIMIT) {
+      gc2_thread_scan_frame_fallbacks_add(g, 1);
       if (conservativep)
 	*conservativep = 1;
       return max;
@@ -7557,6 +7572,90 @@ found:
       marked != LJ_ARENA_HUGE_MARK_SATURATED)
     scope->admission = GC2_SCOPE_HUGE_READER;
   return marked;
+}
+
+/* Resolve a return PC to its containing prototype without changing MARK.
+** Frame-chain validation only needs a body-read lease for pc[-1]; the caller
+** function discovered by the next frame owns the semantic prototype edge. */
+static int gc2_frame_pc_valid_scoped(global_State *g, const BCIns *pc,
+				      GC2MarkScope *scope)
+{
+  GCArena *a;
+  GCproto *pt;
+  GCobj *o;
+  void *base = NULL;
+  uint32_t gct = 0, start = 0;
+  uintptr_t p, bc, end;
+  size_t alloc_size = 0;
+  gc2_mark_scope_init(scope);
+  if (!g || !pc || !scope || !checkptrGC(pc))
+    return 0;
+  /* Custom lua_Alloc bodies are outside GC2 reclamation for the documented
+  ** temporary b1.2 boundary. The owner-stable VM frame is sufficient there. */
+  if (la_load32_acq(&g->allocf_arena) == 0)
+    return 1;
+  a = lj_arena_of(pc);
+  if (gc2_small_arena_known(g, a)) {
+    if (!gc2_small_containing_admit(g, a, lj_arena_cellof(pc),
+				    &base, &start, scope))
+      return 0;
+    o = (GCobj *)base;
+    if (!gc2_retained_candidate_valid(g, o, base, a, start, 0, 0,
+				       &gct) ||
+	gct != (uint32_t)~LJ_TPROTO)
+      goto fail;
+  } else {
+    TGState *tg;
+    LJHugeInfo hi;
+    int rc = LJ_ARENA_HUGE_READER_MISSING;
+    if (!lj_gc2_smr_read_try(g))
+      return 0;
+    for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+      if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+	continue;
+      rc = lj_arena_hugetab_reader_range_acquire(
+	&tg->huge, pc, &base, &scope->huge, &hi);
+      if (rc != LJ_ARENA_HUGE_READER_MISSING)
+	break;
+    }
+    if (rc == LJ_ARENA_HUGE_READER_MISSING) {
+      tg = g->main_tg;
+      if (tg && lj_tg_flags_test_acq(tg, TGF_HUGETAB))
+	rc = lj_arena_hugetab_reader_range_acquire(
+	  &tg->huge, pc, &base, &scope->huge, &hi);
+    }
+    lj_gc2_smr_read_leave(g);
+    if (rc != LJ_ARENA_HUGE_READER_ACQUIRED)
+      return 0;
+    scope->admission = GC2_SCOPE_HUGE_READER;
+    alloc_size = hi.size;
+    o = (GCobj *)base;
+    if (!base ||
+	(hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) !=
+	  (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) ||
+	(hi.flags & LJ_HUGEF_FREEING) ||
+	!gc2_retained_candidate_valid(g, o, base, NULL, 0, alloc_size, 0,
+				       &gct) ||
+	gct != (uint32_t)~LJ_TPROTO)
+      goto fail;
+  }
+  pt = gco2pt(o);
+  if (!gc2_valid_proto_for_traverse_held(pt))
+    goto fail;
+  p = (uintptr_t)pc;
+  bc = (uintptr_t)proto_bc(pt);
+  end = bc + (uintptr_t)pt->sizebc * sizeof(BCIns);
+  if (end < bc || p <= bc || p > end ||
+      ((p - bc) % sizeof(BCIns)) != 0)
+    goto fail;
+  if (scope->admission == GC2_SCOPE_HUGE_READER &&
+      !lj_arena_hugetab_reader_covers_range(&scope->huge, pc-1,
+					     sizeof(BCIns)))
+    goto fail;
+  return 1;
+fail:
+  gc2_mark_scope_leave(scope);
+  return 0;
 }
 
 int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc)
@@ -14763,6 +14862,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L,
     GC2FrameScope scope;
     TValue *ftop = frame;
     if (!gc2_frame_prev_safe(g, bot, max, frame, &prev, &fn, &scope)) {
+      gc2_thread_scan_frame_fallbacks_add(g, 1);
       if (conservativep)
 	*conservativep = 1;
       return max;
@@ -14788,6 +14888,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L,
       break;
     frame = prev;
     if (++n >= LJ_GC2_ROOT_SCAN_LIMIT) {
+      gc2_thread_scan_frame_fallbacks_add(g, 1);
       if (conservativep)
 	*conservativep = 1;
       return max;

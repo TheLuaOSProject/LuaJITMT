@@ -1653,6 +1653,8 @@ static void threading_gc_stats_push(lua_State *L)
   threading_gc_stats_setnum(L, t, "worker_parks", s.worker_parks);
   threading_gc_stats_setnum(L, t, "worker_async_progress",
 			    s.worker_async_progress);
+  threading_gc_stats_setnum(L, t, "thread_scan_frame_fallbacks",
+			    s.thread_scan_frame_fallbacks);
   threading_gc_stats_setnum(L, t, "sweep_owner_runs", s.sweep_owner_runs);
   threading_gc_stats_setnum(L, t, "sweep_owner_arenas",
 			    s.sweep_owner_arenas);

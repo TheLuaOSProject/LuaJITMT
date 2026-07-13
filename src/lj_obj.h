@@ -1538,6 +1538,7 @@ typedef struct GC2State {
   uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
   uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
+  uint64_t thread_scan_frame_fallbacks;  /* Invalid frame walks using maxstack. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
@@ -4333,6 +4334,8 @@ static LJ_AINLINE void gc2_table_rescan_pending_dec(global_State *g)
 }
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_dirty_misses, thread_scan_dirty_misses)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_frame_fallbacks,
+			   thread_scan_frame_fallbacks)
 
 static LJ_AINLINE void *gc2_finalizer_mpsc_acq(global_State *g)
 {

@@ -96,6 +96,10 @@ end
 do
   local keep = {}
   local count = 0
+  local frame_fallbacks = ok_th and th.gcstats().thread_scan_frame_fallbacks
+  local function collect_nested()
+    collectgarbage("collect")
+  end
   local dumped = string.dump(assert(loadstring(
     "return function(x) return x * 3 end"))())
   for i = 1, 320 do
@@ -116,8 +120,12 @@ do
     local k, v = {}, {}
     wkv[k] = v
   end
-  collectgarbage("collect")
+  collect_nested()
   assert(npairs(wkv) == 0, "weak-kv table kept a one-cycle hash entry")
+  if frame_fallbacks then
+    assert(th.gcstats().thread_scan_frame_fallbacks == frame_fallbacks,
+	   "valid same-thread collection used conservative maxstack fallback")
+  end
 end
 
 if ok_ffi then
