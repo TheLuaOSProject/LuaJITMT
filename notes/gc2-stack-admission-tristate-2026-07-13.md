@@ -160,7 +160,9 @@ at the older active-collect fixture's worker-attribution assertion. That graph
 was completely drained and the cycle reached IDLE; the same assertion fails on
 the unmodified `31828d7f` parent because cooperative MARK completion can perform
 the drain under the close owner rather than the worker counter. It is unrelated
-to this stack change and is being corrected as a separate fixture checkpoint.
+to this stack change. The following fixture checkpoint corrects both obsolete
+ownership assumptions: collect asserts total grey traversal, while step closes
+the fresh MARK native turn before requiring explicit worker progress.
 
 `m6_jit_gc2_readiness` and `m6_jit_vmevent_flush` passed. `m6_jit_token` passed
 after an immediate retry of one transient secondary-state fixture failure. The

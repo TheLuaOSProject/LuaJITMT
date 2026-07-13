@@ -164,15 +164,16 @@ static void test_active_collect_completes_active_cycle(lua_State *L,
 
   seed_table_graph(L, g, tg);
   runs0 = gc2_worker_runs_acq(g);
-  grey0 = gc2_worker_grey_drained_acq(g);
+  grey0 = gc2_grey_drained_acq(g);
 
   enter_synthetic_active_peer(g);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   leave_synthetic_active_peer(g);
 
   assert(gc2_worker_runs_acq(g) > runs0);
-  assert(gc2_worker_grey_drained_acq(g) >
-	 grey0 + LJ_GC2_WORKER_DRAIN_BATCH);
+  /* Cooperative MARK can defer the ordinary worker turn and let the close
+  ** owner drain this graph. Assert completed traversal, not its attribution. */
+  assert(gc2_grey_drained_acq(g) > grey0 + LJ_GC2_WORKER_DRAIN_BATCH);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   assert(lj_gc2_test_ssb_empty(g));
 
@@ -219,17 +220,25 @@ static void test_active_collect_restarts_stopped_cycle(lua_State *L,
 static void test_active_step_returns_false(lua_State *L, global_State *g,
 					   TGState *tg)
 {
-  uint64_t runs0;
+  uint64_t runs0, grey0;
 
   seed_table_graph(L, g, tg);
   runs0 = gc2_worker_runs_acq(g);
+  grey0 = gc2_grey_drained_acq(g);
 
   enter_synthetic_active_peer(g);
   assert(lua_gc(L, LUA_GCSTEP, 0) == 0);
   leave_synthetic_active_peer(g);
 
-  assert(gc2_worker_runs_acq(g) == runs0 + 1u);
+  /* The fresh MARK native turn may defer this caller's ordinary worker
+  ** quantum. STEP must remain bounded/false and leave drainable work. */
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  lj_gc2_jit_mark_request_exit(g);
+  gc2_jit_mark_resume_rel(g, 0);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0);
+  assert(gc2_worker_runs_acq(g) > runs0);
+  assert(gc2_grey_drained_acq(g) > grey0);
 
   reset_gc2(L, g);
 }
