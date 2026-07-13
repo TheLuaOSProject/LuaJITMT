@@ -12088,10 +12088,28 @@ int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
   return gc2_finreg_udata_set_admitted(g, o, enabled);
 }
 
+static void gc2_finreg_udata_node_publish(global_State *g,
+					  GC2FinRegUDataNode *node)
+{
+  GC2FinRegUDataNode *head;
+  /* The allocating mutator owns node until the active-list CAS. Active-list
+  ** membership, then the unlink/retired-list protocol, owns it afterwards and
+  ** defers physical free until terminal teardown. These marks only close the
+  ** IDLE->MARK clear/root-snapshot race; an ordinary metadata writer must not
+  ** turn that tactical miss into an absorbing reclaim veto. */
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
+  do {
+    head = gc2_finreg_udata_head_acq(g);
+    gc2_finreg_udata_next_rel(node, head);
+  } while (!gc2_finreg_udata_head_cas(g, &head, node));
+  /* Close construction-mark versus IDLE->MARK clear/root-snapshot. */
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
+}
+
 static int gc2_finreg_udata_register_nothrow(lua_State *L, global_State *g,
 					      GCobj *o)
 {
-  GC2FinRegUDataNode *node, *head;
+  GC2FinRegUDataNode *node;
   if (!L || !gc2_finreg_udata_obj_valid(g, o))
     return 1;
   for (node = gc2_finreg_udata_head_acq(g);
@@ -12108,16 +12126,20 @@ static int gc2_finreg_udata_register_nothrow(lua_State *L, global_State *g,
   gc2_finreg_udata_obj_rel(node, o);
   gc2_finreg_udata_retired_next_rel(node, NULL);
   gc2_finreg_udata_active_rel(node, 1);
-  (void)lj_gc2_markmem(g, node);
-  do {
-    head = gc2_finreg_udata_head_acq(g);
-    gc2_finreg_udata_next_rel(node, head);
-  } while (!gc2_finreg_udata_head_cas(g, &head, node));
-  /* Close construction-mark versus IDLE->MARK clear/root-snapshot. */
-  (void)lj_gc2_markmem(g, node);
+  gc2_finreg_udata_node_publish(g, node);
   gc2_finreg_udata_registered_add(g, 1);
   return 1;
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+void lj_gc2_test_finreg_udata_node_publish(global_State *g,
+					   GC2FinRegUDataNode *node)
+{
+  if (!g || !node)
+    return;
+  gc2_finreg_udata_node_publish(g, node);
+}
+#endif
 
 void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
 {

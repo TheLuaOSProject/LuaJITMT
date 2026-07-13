@@ -99,9 +99,9 @@ GCudata *lj_thread_state_udata_acq(global_State *g, const lua_State *L,
     g, lj_state_mt_thread_acq(L), lease);
 }
 
-static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
+static void threading_live_init_local(lua_State *L, GCudata *ud,
+				      LJThreadLive *node)
 {
-  LJThreadLive *node = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
   TValue tv;
   lj_thread_live_next_rel(node, NULL);
   lj_thread_live_retired_next_rel(node, NULL);
@@ -109,9 +109,15 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
   /* LJThreadLive is raw arena storage, not a GC object on the ownership spine.
   ** Mark it before publication so a cycle whose root snapshot already passed
   ** cannot reclaim the native-root node before the next global scan. */
-  (void)lj_gc2_markmem(G(L), node);
+  (void)lj_gc2_markmem_registered_publish_try(G(L), node);
   setudataV(L, &tv, ud);
   lj_gc_pubroot(L, &tv);  /* 09 section 9.2: native live root. */
+}
+
+static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
+{
+  LJThreadLive *node = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
+  threading_live_init_local(L, ud, node);
   return node;
 }
 
@@ -120,7 +126,10 @@ static void threading_live_retire(global_State *g, LJThreadLive *node)
   LJThreadLive *head;
   if (!g || !node)
     return;
-  (void)lj_gc2_markmem(g, node);
+  /* A detached-list owner retains node before the CAS; the append-only
+  ** retired list retains it afterwards. These are tactical root-snapshot
+  ** marks, not body leases, so an ordinary SMR writer is a benign miss. */
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
   /*
   ** Scanners can hold an unlinked node until the surrounding SMR read section
   ** ends. Keep the active next pointer stable for those readers and use a
@@ -131,7 +140,7 @@ static void threading_live_retire(global_State *g, LJThreadLive *node)
     lj_thread_live_retired_next_rel(node, head);
   } while (!lj_thread_live_retired_head_cas(g, &head, node));
   /* Close mark-before-publish versus IDLE->MARK clear/root-snapshot. */
-  (void)lj_gc2_markmem(g, node);
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
 }
 
 static void threading_live_trim_dead_head(global_State *g)
@@ -150,10 +159,8 @@ static void threading_live_trim_dead_head(global_State *g)
   }
 }
 
-static void threading_live_publish(lua_State *L, LJThread *th,
-				   LJThreadLive *node)
+static void threading_live_list_publish(global_State *g, LJThreadLive *node)
 {
-  global_State *g = G(L);
   LJThreadLive *head;
   do {
     head = lj_thread_live_head_acq(g);
@@ -162,7 +169,14 @@ static void threading_live_publish(lua_State *L, LJThread *th,
   /* Mark again after the list LP. If a cycle cleared the construction mark and
   ** completed its global snapshot between allocation and this CAS, the
   ** post-publication phase read preserves the raw node in that cycle. */
-  (void)lj_gc2_markmem(g, node);
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
+}
+
+static void threading_live_publish(lua_State *L, LJThread *th,
+				   LJThreadLive *node)
+{
+  global_State *g = G(L);
+  threading_live_list_publish(g, node);
   {
     LJGC2Lease lease;
     GCudata *ud = lj_thread_live_udata_acq(g, node, &lease);
@@ -177,6 +191,22 @@ static void threading_live_publish(lua_State *L, LJThread *th,
   la_add32_acqrel(&g->threading_live_count, 1);
   lj_thread_live_node_rel(th, node);
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+void lj_threading_test_live_node_publish(lua_State *L, GCudata *ud,
+					 LJThreadLive *node)
+{
+  if (!L || !ud || !node)
+    return;
+  threading_live_init_local(L, ud, node);
+  threading_live_list_publish(G(L), node);
+}
+
+void lj_threading_test_live_node_retire(global_State *g, LJThreadLive *node)
+{
+  threading_live_retire(g, node);
+}
+#endif
 
 static void threading_live_remove(global_State *g, LJThread *th)
 {
@@ -319,10 +349,25 @@ static void threading_publish_thread_state(lua_State *L, GCudata *ud,
   lj_gc_pubobjobj(L, ud, L1);
 }
 
+static void threading_start_roots_publish(lua_State *L, GCudata *ud,
+					  LJThread *th, TValue *roots,
+					  uint32_t n)
+{
+  global_State *g = G(L);
+  /* The spawn constructor owns roots before the pointer release; afterwards
+  ** the published thread userdata owns the exact vector. The two raw marks
+  ** only close the cycle-start snapshot race and may lose benignly to an
+  ** ordinary metadata writer. */
+  (void)lj_gc2_markmem_registered_publish_try(g, roots);
+  lj_thread_start_root_count_rel(th, n);
+  lj_thread_start_roots_rel(th, roots);
+  (void)lj_gc2_markmem_registered_publish_try(g, roots);
+  lj_udata_rescan(L, ud);
+}
+
 static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
 				       ptrdiff_t baseofs, uint32_t n)
 {
-  global_State *g = G(L);
   TValue *base;
   TValue *roots;
   uint32_t i;
@@ -335,16 +380,20 @@ static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
     lj_gc_pubroot(L, &roots[i]);
     lj_gc_pubobjtv(L, ud, &roots[i]);
   }
-  /* The vector is a raw GC2 allocation.  Mark on both sides of its release
-  ** publication so an IDLE->MARK bitmap clear cannot erase the only native
-  ** lifetime proof.  Count precedes the pointer LP; a pointer acquire then
-  ** observes the complete element range. */
-  (void)lj_gc2_markmem(g, roots);
-  lj_thread_start_root_count_rel(th, n);
-  lj_thread_start_roots_rel(th, roots);
-  (void)lj_gc2_markmem(g, roots);
-  lj_udata_rescan(L, ud);
+  /* Count precedes the pointer LP; a pointer acquire then observes the
+  ** complete element range. */
+  threading_start_roots_publish(L, ud, th, roots, n);
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+void lj_threading_test_start_roots_publish(lua_State *L, GCudata *ud,
+					   TValue *roots, uint32_t n)
+{
+  if (!L || !ud || !roots || n == 0)
+    return;
+  threading_start_roots_publish(L, ud, (LJThread *)uddata(ud), roots, n);
+}
+#endif
 
 static void threading_start_roots_clear(lua_State *L, LJThread *th)
 {

@@ -137,6 +137,16 @@ LJ_FUNC GCudata *lj_thread_live_udata_acq(global_State *g,
 LJ_FUNC GCudata *lj_thread_state_udata_acq(global_State *g,
 					   const lua_State *L,
 					   struct LJGC2Lease *lease);
+#if defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC void lj_threading_test_live_node_publish(lua_State *L, GCudata *ud,
+						 LJThreadLive *node);
+LJ_FUNC void lj_threading_test_live_node_retire(global_State *g,
+						LJThreadLive *node);
+LJ_FUNC void lj_threading_test_start_roots_publish(lua_State *L,
+						   GCudata *ud,
+						   TValue *roots,
+						   uint32_t n);
+#endif
 
 static LJ_AINLINE GCobj *
 lj_thread_live_udata_ref_acq(const LJThreadLive *node)

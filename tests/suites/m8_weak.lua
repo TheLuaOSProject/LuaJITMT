@@ -10,6 +10,7 @@ local gc2_test_cflags = build.gc2_test_helper_flag
 
 local M8_C_FIXTURES = {
   "t-gc2-phase",
+  "t-gc2-sidecar-publication",
   "t-gc2-finreg-cdata-preclaim-roots",
   "t-gc2-finreg-udata-roots",
   "t-gc2-traverse",
@@ -80,6 +81,27 @@ local function run_paranoia_matrix(t)
 end
 
 return function(add)
+  add({
+    name = "m8_gc2_sidecar_publication",
+    description = "nonwaiting FINREG/threading raw-sidecar publication",
+    run = function(t)
+      local paranoia = gc2_test_cflags .. " " .. build.gc2_paranoia_flags
+      t:build({ clean = true, quiet = true, xcflags = gc2_test_cflags })
+      build.run_c_fixtures(t, { "t-gc2-sidecar-publication" }, {
+        output_suffix = "_m8",
+        cflags = gc2_test_cflags,
+        timeout = "20s"
+      })
+      t:build({ clean = true, quiet = true, xcflags = paranoia })
+      build.run_c_fixtures(t, { "t-gc2-sidecar-publication" }, {
+        output_suffix = "_m8_paranoia",
+        cflags = paranoia,
+        timeout = "20s"
+      })
+      print("M8 FINREG/threading sidecar publication passed")
+    end
+  })
+
   add({
     name = "m8_gc2_finreg_cdata_preclaim_roots",
     description = "GC2 cdata FINREG fixed preclaim-vector lifetime",
