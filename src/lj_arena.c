@@ -1031,6 +1031,7 @@ static uint32_t arena_test_remote_drain_pause_flag;
 static uint32_t arena_test_remote_drain_pause_seen;
 static uint64_t arena_test_remote_fast_skip_count;
 static uint64_t arena_test_remote_arena_probe_count;
+static uint64_t arena_test_adopt_whole_count;
 
 void lj_arena_hugetab_test_retire_pause(int enabled)
 {
@@ -1200,6 +1201,11 @@ uint64_t lj_arena_test_remote_fast_skips(void)
 uint64_t lj_arena_test_remote_arena_probes(void)
 {
   return la_load64_acq(&arena_test_remote_arena_probe_count);
+}
+
+uint64_t lj_arena_test_adopt_whole_count(void)
+{
+  return la_load64_acq(&arena_test_adopt_whole_count);
 }
 #else
 #define hugetab_test_retire_pause_after_busy() ((void)0)
@@ -5150,7 +5156,23 @@ static int arena_adopt_reclaimed_one(TGAlloc *alloc, uint32_t k)
   rf.alloc = &staged;
   rf.a = a;
   rf.limit = LJ_ARENA_CELLS;
-  lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
+  /* A terminal-word quarantine may already have proved that no live cell
+  ** remains. Treat that count only as a hint: the whole-payload free-run
+  ** transform repeats the complete root/recovery/destructor/lifetime
+  ** preflight while this exact SEALED generation is clean. A stale typed
+  ** identity or any other owner rejects the transform and retains the
+  ** unchanged per-run scanner as the fail-closed fallback. */
+  if (arena_lifetime_managed(a) && a->hdr.live_cells == 0 &&
+      arena_set_free_run(a, LJ_AFIRST_CELL,
+			 LJ_ARENA_CELLS - LJ_AFIRST_CELL) &&
+      arena_link_run_head(&staged, a, LJ_AFIRST_CELL,
+			  LJ_ARENA_CELLS - LJ_AFIRST_CELL)) {
+#if defined(LJ_ARENA_TEST_HELPERS)
+    (void)la_add64_rlx(&arena_test_adopt_whole_count, 1);
+#endif
+  } else {
+    lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
+  }
   for (b = 0; b < LJ_ALLOC_NBINS; b++) {
     LJArenaFreeRun *head = staged.bins[k][b];
     if (head) {

@@ -140,8 +140,8 @@ static void test_packed_range_preflight(PRNGState *rs)
 static void test_terminal_freeing_word_fast_path(PRNGState *rs)
 {
   GCArena *a = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
-  GCArena *fallback, *plain, *finished;
-  TGAlloc finish_alloc;
+  GCArena *fallback, *plain, *finished, *fallback_finished, *plain_live;
+  TGAlloc finish_alloc, fallback_alloc, plain_alloc;
   uint32_t word = (LJ_AFIRST_CELL + 63u) >> 6;
   uint32_t base = word << 6;
   uint32_t terminal[4];
@@ -149,7 +149,8 @@ static void test_terminal_freeing_word_fast_path(PRNGState *rs)
   uint32_t recoverycell = base + 8u;
   uint32_t lifecell = base + 9u;
   uint32_t outside = base + 1u;
-  uint64_t block, mark;
+  uint64_t block, mark, whole_before;
+  void *reuse;
   uint32_t i, reason = LJ_ARENA_FINISH_NONE;
 
   assert(a != NULL && word < LJ_ARENA_WORDS);
@@ -285,7 +286,84 @@ static void test_terminal_freeing_word_fast_path(PRNGState *rs)
     assert(lj_arena_dtor_kind_acq(finished, terminal[i]) ==
 	   LJ_ARENA_DTOR_NONE);
   }
+
+  /* A zero-live reclaimed arena may be coalesced directly, but live_cells is
+  ** only the hint. Allocation triggers adoption; the whole-payload path must
+  ** repeat its exact side-plane preflight before publishing one reusable run. */
+  whole_before = lj_arena_test_adopt_whole_count();
+  reuse = lj_arena_alloc(&finish_alloc, rs, LJ_CELL_SIZE,
+			 LJ_AF_TRAVERSABLE);
+  assert(reuse != NULL && lj_arena_of(reuse) == finished);
+  assert(lj_arena_test_adopt_whole_count() == whole_before + 1u);
+  lj_arena_free(&finish_alloc, reuse, LJ_CELL_SIZE);
   lj_arena_alloc_fini(&finish_alloc);
+
+  /* Preserve a block-zero destructor identity through terminal apply. The
+  ** deliberately stale live_cells=0 hint must not authorize coalescing across
+  ** it: whole-range preflight rejects, the unchanged scanner adopts only safe
+  ** runs, and the typed identity remains a reuse veto. */
+  lj_arena_alloc_init(&fallback_alloc);
+  fallback_finished = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
+  assert(fallback_finished != NULL);
+  fallback_finished->hdr.owner_tid = fallback_alloc.owner_tid;
+  la_store32_rel(&fallback_finished->hdr.flags,
+	lj_arena_flags_acq(fallback_finished) | LJ_AF_QUARANTINE);
+  for (i = 0; i < 4u; i++) {
+    lj_arena_bm_set(fallback_finished->block, terminal[i]);
+    assert(lj_arena_sweep_state_cas(fallback_finished, terminal[i],
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
+  }
+  lj_arena_bm_set(fallback_finished->dtor[0], outside);
+  fallback_alloc.quarantine[LJ_ARENAK_TRAVERSABLE] = fallback_finished;
+  assert(lj_arena_reclaim_seal(fallback_finished));
+  reason = LJ_ARENA_FINISH_NONE;
+  assert(lj_arena_alloc_quarantine_finish(&fallback_alloc,
+	LJ_ARENAK_TRAVERSABLE, fallback_finished, 78u, 1, &reason));
+  assert(reason == LJ_ARENA_FINISH_COMMITTED);
+  assert(fallback_finished->hdr.live_cells == 0);
+  assert(lj_arena_dtor_kind_acq(fallback_finished, outside) ==
+	 LJ_ARENA_DTOR_LFUNC1);
+  whole_before = lj_arena_test_adopt_whole_count();
+  reuse = lj_arena_alloc(&fallback_alloc, rs, LJ_CELL_SIZE,
+			 LJ_AF_TRAVERSABLE);
+  assert(reuse != NULL && lj_arena_of(reuse) == fallback_finished);
+  assert(lj_arena_cellof(reuse) != outside);
+  assert(lj_arena_test_adopt_whole_count() == whole_before);
+  assert(lj_arena_dtor_kind_acq(fallback_finished, outside) ==
+	 LJ_ARENA_DTOR_LFUNC1);
+  lj_arena_free(&fallback_alloc, reuse, LJ_CELL_SIZE);
+  lj_arena_bm_clear(fallback_finished->dtor[0], outside);
+  lj_arena_alloc_fini(&fallback_alloc);
+
+  /* Plain arenas have no lifetime FREE lane, so even an explicitly stale
+  ** zero-live hint cannot select the whole-payload transform. Keep one real
+  ** block allocation through quarantine, overwrite only the advisory count,
+  ** and require ordinary allocation to map elsewhere without touching it. */
+  lj_arena_alloc_init(&plain_alloc);
+  plain_live = lj_arena_map(rs, 0);
+  assert(plain_live != NULL);
+  plain_live->hdr.owner_tid = plain_alloc.owner_tid;
+  la_store32_rel(&plain_live->hdr.flags,
+	lj_arena_flags_acq(plain_live) | LJ_AF_QUARANTINE);
+  lj_arena_bm_set(plain_live->block, base);
+  lj_arena_bm_set(plain_live->mark, base);
+  plain_alloc.quarantine[LJ_ARENAK_PLAIN] = plain_live;
+  assert(lj_arena_reclaim_seal(plain_live));
+  reason = LJ_ARENA_FINISH_NONE;
+  assert(lj_arena_alloc_quarantine_finish(&plain_alloc,
+	LJ_ARENAK_PLAIN, plain_live, 79u, 1, &reason));
+  assert(reason == LJ_ARENA_FINISH_COMMITTED);
+  assert(lj_arena_bm_get(plain_live->block, base));
+  plain_live->hdr.live_cells = 0;  /* Deliberately stale hint. */
+  whole_before = lj_arena_test_adopt_whole_count();
+  reuse = lj_arena_alloc(&plain_alloc, rs, LJ_CELL_SIZE, 0);
+  assert(reuse != NULL && lj_arena_of(reuse) != plain_live);
+  assert(lj_arena_test_adopt_whole_count() == whole_before);
+  assert(lj_arena_bm_get(plain_live->block, base));
+  lj_arena_free(&plain_alloc, reuse, LJ_CELL_SIZE);
+  lj_arena_bm_clear(plain_live->block, base);
+  lj_arena_bm_clear(plain_live->mark, base);
+  lj_arena_alloc_fini(&plain_alloc);
 }
 #endif
 

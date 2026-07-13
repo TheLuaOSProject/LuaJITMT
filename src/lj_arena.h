@@ -729,6 +729,7 @@ LJ_FUNC uint32_t lj_arena_test_remote_drain_paused(void);
 LJ_FUNC void lj_arena_test_remote_stats_reset(void);
 LJ_FUNC uint64_t lj_arena_test_remote_fast_skips(void);
 LJ_FUNC uint64_t lj_arena_test_remote_arena_probes(void);
+LJ_FUNC uint64_t lj_arena_test_adopt_whole_count(void);
 LJ_FUNC int lj_arena_test_set_free_run(GCArena *a, uint32_t start,
 					uint32_t len);
 LJ_FUNC int lj_arena_test_terminal_freeing_word(const GCArena *a,
