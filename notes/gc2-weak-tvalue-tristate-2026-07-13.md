@@ -47,6 +47,25 @@ legacy weak bridge. Duplicate partial clearing remains safe through the existing
 keyed weak-slot CAS, but it can no longer certify completion or advance bridge
 work.
 
+Per-key and per-value observation scopes end after classification, before the
+keyed clear CAS. That boundary is safe only because the exact table scope and
+the table SMR read interval remain held across the CAS, the slot generation is
+therefore retained, and the phase remains WEAK (so SWEEP cannot reclaim and
+reuse a captured object identity). Moving the CAS outside either protection or
+allowing it to overlap SWEEP would require extending the individual scopes.
+
+Weak scan/clear and bridge telemetry is intentionally approximate. Retried or
+duplicated read-only work, failed cursor CAS publication, and keyed slot-CAS
+loss can make observations differ from committed semantic changes. These
+counters are diagnostics, never completion or reclamation authority; this
+checkpoint does not redesign them as exact accounting.
+
+Strong-frontier closure now consumes the same admission distinctions. A vector
+`RETRY` aborts closure while a terminal `STALE` vector identity is explicitly
+discharged. Raw overflow records and their exact TAB payloads are fail-closed,
+and each successor record is admitted before releasing its predecessor scope,
+so a reuse gap cannot silently truncate the list.
+
 ## Deterministic coverage
 
 `LJ_GC2_TEST_HELPERS` fixtures inject one failure into the shared TValue
@@ -60,6 +79,13 @@ cursor unchanged. The retry is covered for:
   retry;
 - the overflow path, where a retrying overflow value prevents both overflow
   success and clearing of a supplied bridge table until the next call.
+
+Additional frontier fixtures inject vector TAB retry, raw overflow-record
+failure, overflow TAB retry, and a second-node handoff failure. Every first
+completion attempt leaves `weak_mark_closed` and the clear cursor untouched;
+the replay traces deliberately late strong metatable edges. A weak-key/string-
+value fixture also verifies that a dead key clears its pair without marking the
+string value merely for the doomed entry.
 
 Validation completed in the isolated implementation worktree:
 

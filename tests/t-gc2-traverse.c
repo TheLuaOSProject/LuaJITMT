@@ -2580,8 +2580,9 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
 }
 
 #if defined(LJ_GC2_TEST_HELPERS)
-static void make_weak_string_value_table(lua_State *L, GCtab **weak,
-					 GCtab **key, GCstr **val)
+static void make_weak_string_value_table(lua_State *L, const char *mode,
+					 GCtab **weak, GCtab **key,
+					 GCstr **val)
 {
   lua_newtable(L);
   *weak = tabV(L->top - 1);
@@ -2594,7 +2595,7 @@ static void make_weak_string_value_table(lua_State *L, GCtab **weak,
   lua_settable(L, -5);
   lua_newtable(L);
   lua_pushliteral(L, "__mode");
-  lua_pushliteral(L, "v");
+  lua_pushstring(L, mode);
   lua_settable(L, -3);
   lua_setmetatable(L, -4);
 }
@@ -2649,7 +2650,7 @@ static void test_weak_string_value_admission_retry(lua_State *L,
   GCstr *val;
 
   lua_settop(L, 0);
-  make_weak_string_value_table(L, &weak, &key, &val);
+  make_weak_string_value_table(L, "v", &weak, &key, &val);
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   flush_and_drain(g, tg);
@@ -2669,6 +2670,31 @@ static void test_weak_string_value_admission_retry(lua_State *L,
   assert(gc2_weak_clear_cursor_acq(g) == 1u);
   assert(weak_entry_is_string(L, weak, key, val));
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
+static void test_weak_dead_key_does_not_mark_string_value(lua_State *L,
+						   global_State *g,
+						   TGState *tg)
+{
+  GCtab *weak, *key;
+  GCstr *val;
+
+  lua_settop(L, 0);
+  make_weak_string_value_table(L, "kv", &weak, &key, &val);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  enter_weak_clear_fixture(g, tg);
+
+  assert(lj_gc2_test_weak_drain(g, 1) == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 1u);
+  assert(weak_entry_is_nil(L, weak, key));
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
   lj_gc2_cycle_to_idle(g);
   lua_settop(L, 0);
 }
@@ -2764,9 +2790,175 @@ static void test_weak_value_admission_tristate(lua_State *L,
 {
   test_weak_table_value_admission_retry(L, g, tg, 1);
   test_weak_string_value_admission_retry(L, g, tg);
+  test_weak_dead_key_does_not_mark_string_value(L, g, tg);
   test_weak_table_value_admission_retry(L, g, tg, 0);
   test_weak_hash_retry_beats_clearable_key(L, g, tg);
   test_weak_overflow_retry_stops_bridge(L, g, tg);
+}
+
+static GCtab *make_weak_mode_metatable(lua_State *L)
+{
+  GCtab *mt;
+  lua_newtable(L);
+  mt = tabV(L->top - 1);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  return mt;
+}
+
+static void install_weak_metatable_raw(GCtab *weak, GCtab *mt)
+{
+  assert(weak != NULL && mt != NULL);
+  assert((lj_obj_gcflags(obj2gco(weak)) & LJ_GC_WEAKVAL) != 0);
+  /* Deliberately bypass the mutator barrier: frontier closure must recover
+  ** this synthetic late strong header edge itself. */
+  setgcrefrel(weak->metatable, obj2gco(mt));
+}
+
+static void prepare_weak_frontier_close(global_State *g, TGState *tg)
+{
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  flush_and_drain(g, tg);
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+  assert(gc2_table_rescan_pending_acq(g) == 0);
+  gc2_weak_root_scanned_rel(g, 1);
+  gc2_weak_mark_closed_rel(g, 0);
+  (void)gc2_marks_this_round_xchg_acqrel(g, 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+}
+
+static void test_weak_frontier_vector_retry(lua_State *L, global_State *g,
+					     TGState *tg)
+{
+  GCtab *weak, *key, *value, *late;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "v", &weak, &key, &value);
+  late = make_weak_mode_metatable(L);
+  lua_settop(L, 0);
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(late)) == 0);
+  prepare_weak_frontier_close(g, tg);
+  install_weak_metatable_raw(weak, late);
+
+  lj_gc2_test_weak_frontier_fault_once(
+    LJ_GC2_WEAK_FRONTIER_FAULT_VECTOR_TAB, 0);
+  assert(!lj_gc2_weak_complete(g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH));
+  assert(lj_gc2_test_weak_frontier_fault_hits() == 1u);
+  assert(gc2_weak_mark_closed_acq(g) == 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(late)) == 0);
+
+  assert(lj_gc2_test_weak_trace_close_frontier(g, NULL));
+  assert(lj_gc2_ismarked(g, obj2gco(late)) == 1);
+  flush_and_drain(g, tg);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+  UNUSED(key); UNUSED(value);
+}
+
+static uint32_t weak_frontier_pair_marked(global_State *g, GCtab *a,
+					   GCtab *b)
+{
+  return (uint32_t)(lj_gc2_ismarked(g, obj2gco(a)) == 1) +
+    (uint32_t)(lj_gc2_ismarked(g, obj2gco(b)) == 1);
+}
+
+static void weak_frontier_overflow_fault_attempt(lua_State *L,
+						  global_State *g,
+						  TGState *tg,
+						  GCtab *weak0,
+						  GCtab *weak1,
+						  GCtab *late0,
+						  GCtab *late1,
+						  uint32_t kind,
+						  uint32_t skip,
+						  uint32_t marked)
+{
+  install_weak_metatable_raw(weak0, late0);
+  install_weak_metatable_raw(weak1, late1);
+  assert(weak_frontier_pair_marked(g, late0, late1) == 0);
+  (void)gc2_marks_this_round_xchg_acqrel(g, 0);
+
+  lj_gc2_test_weak_frontier_fault_once(kind, skip);
+  assert(!lj_gc2_weak_complete(g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH));
+  assert(lj_gc2_test_weak_frontier_fault_hits() == 1u);
+  assert(gc2_weak_mark_closed_acq(g) == 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(weak_frontier_pair_marked(g, late0, late1) == marked);
+
+  assert(lj_gc2_test_weak_trace_close_frontier(g, NULL));
+  assert(weak_frontier_pair_marked(g, late0, late1) == 2u);
+  flush_and_drain(g, tg);
+  (void)gc2_marks_this_round_xchg_acqrel(g, 0);
+}
+
+static void test_weak_frontier_overflow_retries(lua_State *L,
+						 global_State *g,
+						 TGState *tg)
+{
+  GCtab *weak0, *key0, *value0, *weak1, *key1, *value1;
+  GCtab *late[6];
+  MSize cap;
+  uint64_t overflow0;
+  uint32_t i;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "v", &weak0, &key0, &value0);
+  make_weak_table(L, "v", &weak1, &key1, &value1);
+  for (i = 0; i < 6u; i++)
+    late[i] = make_weak_mode_metatable(L);
+  lua_settop(L, 0);
+
+  lj_gc2_mark_begin(g);
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0);
+  overflow0 = gc2_weak_tables_overflow_acq(g);
+  /* Keep the allocated vector intact while forcing these two discoveries down
+  ** the raw overflow list; restore capacity before any frontier snapshot. */
+  gc2_weak_capacity_rel(g, 0);
+  assert(lj_gc2_markobj(g, obj2gco(weak0)) == 1);
+  assert(lj_gc2_markobj(g, obj2gco(weak1)) == 1);
+  flush_and_drain(g, tg);
+  gc2_weak_capacity_rel(g, cap);
+  assert(gc2_weak_tables_overflow_acq(g) == overflow0 + 2u);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 0);
+  assert(gc2_weak_overflow_acq(g) != NULL);
+  for (i = 0; i < 6u; i++)
+    assert(lj_gc2_ismarked(g, obj2gco(late[i])) == 0);
+  prepare_weak_frontier_close(g, tg);
+
+  /* Unknown head identity must fail closed before either table is traced. */
+  weak_frontier_overflow_fault_attempt(
+    L, g, tg, weak0, weak1, late[0], late[1],
+    LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_NODE, 0, 0);
+  /* A transient exact TAB admission must not disappear as a stale entry. */
+  weak_frontier_overflow_fault_attempt(
+    L, g, tg, weak0, weak1, late[2], late[3],
+    LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_TAB, 0, 0);
+  /* The second node is admitted while the first node scope is still live.
+  ** Failing that handoff traces exactly the head and replays the successor. */
+  weak_frontier_overflow_fault_attempt(
+    L, g, tg, weak0, weak1, late[4], late[5],
+    LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_NODE, 1, 1);
+
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+  UNUSED(key0); UNUSED(value0); UNUSED(key1); UNUSED(value1);
+}
+
+static void test_weak_frontier_admission_retries(lua_State *L,
+						  global_State *g,
+						  TGState *tg)
+{
+  test_weak_frontier_vector_retry(L, g, tg);
+  test_weak_frontier_overflow_retries(L, g, tg);
 }
 #endif
 
@@ -6445,6 +6637,7 @@ int main(void)
   test_weak_snapshot_growth(L, g, tg);
 #if defined(LJ_GC2_TEST_HELPERS)
   test_weak_value_admission_tristate(L, g, tg);
+  test_weak_frontier_admission_retries(L, g, tg);
 #endif
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
@@ -6502,6 +6695,7 @@ int main(void)
   test_weak_snapshot_growth(L, g, tg);
 #if defined(LJ_GC2_TEST_HELPERS)
   test_weak_value_admission_tristate(L, g, tg);
+  test_weak_frontier_admission_retries(L, g, tg);
 #endif
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);

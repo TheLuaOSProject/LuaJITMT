@@ -235,6 +235,10 @@ static uint32_t gc2_test_stack_admission_retry_hits;
 static uintptr_t gc2_test_root_semantic_retry_target;
 static uint32_t gc2_test_root_semantic_retry_armed;
 static uint32_t gc2_test_root_semantic_retry_hits;
+static uint32_t gc2_test_weak_frontier_fault_kind;
+static uint32_t gc2_test_weak_frontier_fault_skip;
+static uint32_t gc2_test_weak_frontier_fault_armed;
+static uint32_t gc2_test_weak_frontier_fault_hits;
 
 void lj_gc2_test_jit_mark_checkpoint_reset(void)
 {
@@ -329,6 +333,43 @@ static int gc2_root_test_take_semantic_retry(GCobj *o)
 		LA_ACQ_REL, LA_ACQ))
     return 0;
   (void)la_add32_rlx(&gc2_test_root_semantic_retry_hits, 1);
+  return 1;
+}
+
+void lj_gc2_test_weak_frontier_fault_once(uint32_t kind, uint32_t skip)
+{
+  la_store32_rel(&gc2_test_weak_frontier_fault_hits, 0);
+  la_store32_rel(&gc2_test_weak_frontier_fault_skip, skip);
+  la_store32_rel(&gc2_test_weak_frontier_fault_kind, kind);
+  la_store32_rel(&gc2_test_weak_frontier_fault_armed, kind != 0);
+}
+
+uint32_t lj_gc2_test_weak_frontier_fault_hits(void)
+{
+  return la_load32_acq(&gc2_test_weak_frontier_fault_hits);
+}
+
+static int gc2_test_weak_frontier_take_fault(uint32_t kind)
+{
+  uint32_t skip;
+  if (la_load32_acq(&gc2_test_weak_frontier_fault_kind) != kind ||
+      la_load32_acq(&gc2_test_weak_frontier_fault_armed) == 0)
+    return 0;
+  skip = la_load32_acq(&gc2_test_weak_frontier_fault_skip);
+  while (skip != 0) {
+    uint32_t expect = skip;
+    if (la_cas32(&gc2_test_weak_frontier_fault_skip, &expect, skip - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 0;
+    skip = expect;
+  }
+  {
+    uint32_t expect = 1;
+    if (!la_cas32(&gc2_test_weak_frontier_fault_armed, &expect, 0,
+		  LA_ACQ_REL, LA_ACQ))
+      return 0;
+  }
+  (void)la_add32_rlx(&gc2_test_weak_frontier_fault_hits, 1);
   return 1;
 }
 
@@ -9963,6 +10004,10 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
   UNUSED(tabscope);  /* The retained scope is a lifetime contract. */
   if (!g || !t || !tabscope || !lj_gc2_smr_read_try(g))
     return 0;
+  /* Individual key/value scopes may end after classification because the
+  ** keyed CAS consumes only captured TValue bits. This is safe only while the
+  ** exact table scope and table SMR retain the slot generation and WEAK stays
+  ** stable, before SWEEP can reclaim or reuse any captured object identity. */
   weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
   if (!weak)
     goto success;
@@ -10033,9 +10078,13 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
 	/* Observe both halves explicitly. In particular, a clearable key must not
 	** short-circuit a transient value admission into an irreversible clear. */
 	keyclass = gc2_weak_classify(g, &key, 0, clear);
-	valclass = gc2_weak_classify(g, &val, 1, clear);
-	if (LJ_UNLIKELY(keyclass == GC2_WEAK_RETRY ||
-			valclass == GC2_WEAK_RETRY))
+	if (LJ_UNLIKELY(keyclass == GC2_WEAK_RETRY))
+	  goto out;
+	/* A clearable key makes value classification a RETRY veto only. Do not
+	** mark a string value for an entry which this pass will remove. */
+	valclass = gc2_weak_classify(
+	  g, &val, 1, clear && keyclass == GC2_WEAK_KEEP);
+	if (LJ_UNLIKELY(valclass == GC2_WEAK_RETRY))
 	  goto out;
 	if (keyclass == GC2_WEAK_CLEAR || valclass == GC2_WEAK_CLEAR) {
 	  (*clearable)++;
@@ -10585,35 +10634,115 @@ static int gc2_weak_trace_table_strong(global_State *g, GCtab *t)
   return gc2_traverse_tab_admitted(g, t, 0) != 0;
 }
 
+/* Overflow records are raw allocations, so each link must acquire its own
+** exact body scope while the predecessor is still admitted. A failed raw
+** identity is never an end-of-list sentinel: closure must replay instead. */
+static int gc2_weak_frontier_overflow_admit(global_State *g,
+					     GC2WeakOverflow *node,
+					     GC2MarkScope *scope)
+{
+  int status;
+  gc2_mark_scope_init(scope);
+  if (!node)
+    return 1;
+#if defined(LJ_GC2_TEST_HELPERS)
+  if (gc2_test_weak_frontier_take_fault(
+	LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_NODE))
+    return 0;
+#endif
+  status = gc2_markmem_registered_scoped_status(g, node, scope);
+  if (status == GC2_MARK_DEAD) {
+    gc2_mark_scope_leave(scope);
+    return 0;
+  }
+  return 1;
+}
+
 static int gc2_weak_trace_close_frontier(global_State *g, GCobj *bridge_head)
 {
   GC2WeakOverflow *node;
-  GC2MarkScope scope;
+  GC2MarkScope scope, nodescope;
   GCtab *t;
   uint32_t i, n;
   if (!g || gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
   n = lj_gc2_weak_snapshot_count(g);
   for (i = 0; i < n; i++) {
-    t = lj_gc2_weak_snapshot_tab_scoped(g, i, &scope);
-    if (t) {
+    int status;
+#if defined(LJ_GC2_TEST_HELPERS)
+    if (gc2_test_weak_frontier_take_fault(
+	  LJ_GC2_WEAK_FRONTIER_FAULT_VECTOR_TAB)) {
+      gc2_mark_scope_init(&scope);
+      t = NULL;
+      status = GC2_TAB_SCOPE_RETRY;
+    } else
+#endif
+    status = lj_gc2_weak_snapshot_tab_scoped_status(
+      g, i, &t, &scope);
+    if (status == GC2_TAB_SCOPE_RETRY) {
+      gc2_mark_scope_leave(&scope);
+      return 0;
+    }
+    if (status == GC2_TAB_SCOPE_STALE) {
+      /* A terminal stale vector slot has no live table incarnation left to
+      ** contribute a strong edge; explicitly discharge it and continue. */
+      gc2_mark_scope_leave(&scope);
+      continue;
+    }
+    if (status != GC2_TAB_SCOPE_VALID || !t) {
+      gc2_mark_scope_leave(&scope);
+      return 0;
+    }
+    {
       int traced = gc2_weak_trace_table_strong(g, t);
       gc2_mark_scope_leave(&scope);
       if (!traced)
 	return 0;
     }
   }
-  for (node = gc2_weak_overflow_acq(g);
-       node != NULL && lj_gc2_mem_registered(g, node);
-       node = gc2_weak_overflow_next_acq(node)) {
+  node = gc2_weak_overflow_acq(g);
+  if (!gc2_weak_frontier_overflow_admit(g, node, &nodescope))
+    return 0;
+  while (node != NULL) {
+    GC2MarkScope nextscope;
+    GC2WeakOverflow *next;
+    GCtab *admitted = NULL;
+    int status;
     t = gc2_weak_overflow_tab_acq(node);
-    if (t &&
-	gc2_weak_candidate_tab_scoped(g, obj2gco(t), &scope) == t) {
+    if (!t) {
+      gc2_mark_scope_leave(&nodescope);
+      return 0;
+    }
+#if defined(LJ_GC2_TEST_HELPERS)
+    if (gc2_test_weak_frontier_take_fault(
+	  LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_TAB)) {
+      gc2_mark_scope_init(&scope);
+      status = GC2_TAB_SCOPE_RETRY;
+    } else
+#endif
+    status = gc2_weak_candidate_tab_scoped_status(
+      g, obj2gco(t), &admitted, &scope);
+    if (status != GC2_TAB_SCOPE_VALID || admitted != t) {
+      gc2_mark_scope_leave(&scope);
+      gc2_mark_scope_leave(&nodescope);
+      return 0;
+    }
+    {
       int traced = gc2_weak_trace_table_strong(g, t);
       gc2_mark_scope_leave(&scope);
-      if (!traced)
+      if (!traced) {
+	gc2_mark_scope_leave(&nodescope);
 	return 0;
+      }
     }
+    next = gc2_weak_overflow_next_acq(node);
+    if (!gc2_weak_frontier_overflow_admit(g, next, &nextscope)) {
+      gc2_mark_scope_leave(&nodescope);
+      return 0;
+    }
+    gc2_mark_scope_leave(&nodescope);
+    node = next;
+    nodescope = nextscope;
   }
   t = bridge_head ?
     gc2_weak_candidate_tab_scoped(g, bridge_head, &scope) : NULL;
@@ -10638,6 +10767,14 @@ static int gc2_weak_trace_close_frontier(global_State *g, GCobj *bridge_head)
   }
   return 1;
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+int lj_gc2_test_weak_trace_close_frontier(global_State *g,
+					   GCobj *bridge_head)
+{
+  return gc2_weak_trace_close_frontier(g, bridge_head);
+}
+#endif
 
 static int gc2_weak_mark_close_round(global_State *g, lua_State *L,
 				     GCobj *bridge_head,
