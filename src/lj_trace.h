@@ -35,6 +35,7 @@ LJ_FUNC void lj_trace_reenableproto(GCproto *pt);
 LJ_FUNC uint32_t lj_trace_flushproto(global_State *g, GCproto *pt);
 LJ_FUNC uint32_t lj_trace_flush(jit_State *J, TraceNo traceno);
 LJ_FUNC uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno);
+#define LJ_TRACE_STARTINS_RETRY	((BCIns)~(BCIns)0)
 LJ_FUNCA BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J,
 						   const BCIns *pc,
 						   TraceNo traceno,
@@ -70,6 +71,7 @@ LJ_FUNC void lj_trace_markvecs(global_State *g, int gc2);
 #if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_trace_test_reset_retire_publish_calls(void);
 LJ_FUNC uint32_t lj_trace_test_retire_publish_calls(void);
+LJ_FUNC void lj_trace_test_force_startins_retry(uint32_t count);
 #endif
 
 #ifdef LJ_TRACE_TEST_HELPERS

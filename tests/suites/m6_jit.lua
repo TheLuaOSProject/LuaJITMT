@@ -705,6 +705,11 @@ return function(add)
                       build.gc2_test_helper_opts({
                         build = false, clean = false, timeout = "20s"
                       }))
+      build_and_run_c(t, t:tmp("lj_t-jit-startins-sidecar"),
+                      "t-jit-startins-sidecar.c",
+                      build.gc2_test_helper_opts({
+                        build = false, clean = false, timeout = "20s"
+                      }))
       luajit_file(t, t:path("tests", "t-jit-secondary.lua"),
                   { lua_path = true, timeout = "20s" })
       luajit_file(t, t:path("tests", "t-jit-explicit-exit.lua"),

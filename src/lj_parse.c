@@ -1665,7 +1665,8 @@ static GCproto *fs_finish(LexState *ls, BCLine line, uint32_t *anchoridx)
   fs_fixup_ret(fs);
 
   /* Calculate total size of prototype including all colocated arrays. */
-  sizept = sizeof(GCproto) + fs->pc*sizeof(BCIns) + fs->nkgc*sizeof(GCRef);
+  sizept = sizeof(GCproto) + 2u*fs->pc*sizeof(BCIns) +
+	   fs->nkgc*sizeof(GCRef);
   sizept = (sizept + sizeof(TValue)-1) & ~(sizeof(TValue)-1);
   ofsk = sizept; sizept += fs->nkn*sizeof(TValue);
   ofsuv = sizept; sizept += ((fs->nuv+1)&~1)*2;
@@ -1690,6 +1691,8 @@ static GCproto *fs_finish(LexState *ls, BCLine line, uint32_t *anchoridx)
   pt->trace = 0;
   pt->flags = (uint8_t)(fs->flags & ~(PROTO_HAS_RETURN|PROTO_FIXUP_RETURN));
   proto_initflags2(pt);
+  setmref(pt->jit_startins,
+	  (BCIns *)((char *)pt + sizeof(GCproto)) + fs->pc);
   if (fs_has_cellops(fs))
     proto_setcellops(pt);
   if (fs_has_celluv(fs)) {
@@ -1702,6 +1705,7 @@ static GCproto *fs_finish(LexState *ls, BCLine line, uint32_t *anchoridx)
   /* Close potentially uninitialized gap between bc and kgc. */
   *(uint32_t *)((char *)pt + ofsk - sizeof(GCRef)*(fs->nkgc+1)) = 0;
   fs_fixup_bc(fs, pt, (BCIns *)((char *)pt + sizeof(GCproto)), fs->pc);
+  memset(proto_jit_startins(pt), 0, fs->pc * sizeof(BCIns));
   fs_fixup_k(fs, pt, (void *)((char *)pt + ofsk));
   fs_fixup_uv1(fs, pt, (uint16_t *)((char *)pt + ofsuv));
   fs_fixup_line(fs, pt, (void *)((char *)pt + ofsli), numline);

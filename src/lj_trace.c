@@ -147,6 +147,25 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
 
 #if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 static uint32_t trace_test_retire_publish_calls;
+static uint32_t trace_test_force_startins_retries;
+
+void lj_trace_test_force_startins_retry(uint32_t count)
+{
+  la_store32_rel(&trace_test_force_startins_retries, count);
+}
+
+static int trace_test_take_startins_retry(void)
+{
+  uint32_t old = la_load32_acq(&trace_test_force_startins_retries);
+  while (old != 0) {
+    uint32_t expect = old;
+    if (la_cas32(&trace_test_force_startins_retries, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
+}
 
 void lj_trace_test_reset_retire_publish_calls(void)
 {
@@ -157,6 +176,8 @@ uint32_t lj_trace_test_retire_publish_calls(void)
 {
   return la_load32_acq(&trace_test_retire_publish_calls);
 }
+#else
+#define trace_test_take_startins_retry() 0
 #endif
 
 static int trace_scope_mark_pending(GCtrace *T)
@@ -2279,13 +2300,70 @@ static BCIns trace_stale_startins_root(global_State *g, const BCIns *pc,
   return 0;
 }
 
+static BCIns trace_stale_startins_shadow(lua_State *L, const BCIns *pc,
+					 GCproto **ownerp)
+{
+  cTValue *frame, *bot;
+  if (ownerp)
+    *ownerp = NULL;
+  if (!L)
+    return 0;
+  if (curr_funcisL(L)) {
+    GCproto *pt = curr_proto(L);
+    BCIns ins = proto_jit_startins_acq(pt, pc);
+    if (ins != 0) {
+      if (ownerp) *ownerp = pt;
+      return ins;
+    }
+  }
+  /* Trace-exit RET/ITERN and a gate-denied callee header can observe a C or
+  ** already-shifted current base. Their prototype is nevertheless rooted by
+  ** the live Lua frame. Walk only this state-owned frame chain and select the
+  ** unique prototype whose fixed sidecar contains pc; no global SMR metadata
+  ** or peer-owned structure is touched. */
+  bot = tvref(L->stack) + LJ_FR2;
+  for (frame = L->base - 1; frame > bot; ) {
+    cTValue *prev;
+    GCfunc *fn;
+    GCproto *pt;
+    BCIns ins;
+    fn = frame_func(frame);
+    if (isluafunc(fn)) {
+      pt = funcproto(fn);
+      ins = proto_jit_startins_acq(pt, pc);
+      if (ins != 0) {
+	if (ownerp) *ownerp = pt;
+	return ins;
+      }
+    }
+    prev = frame_islua(frame) ? frame_prevl(frame) : frame_prevd(frame);
+    if (LJ_UNLIKELY(prev >= frame))
+      break;
+    frame = prev;
+  }
+  return 0;
+}
+
 BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
 					  TraceNo traceno, lua_State *L)
 {
   global_State *g = J2G(J);
   BCIns startins = 0;
-  GCproto *owner = L && curr_funcisL(L) ? curr_proto(L) : NULL;
-  lj_gc2_smr_read_enter(g);
+  GCproto *owner = NULL;
+  if (trace_test_take_startins_retry())
+    return LJ_TRACE_STARTINS_RETRY;
+  startins = trace_stale_startins_shadow(L, pc, &owner);
+  if (startins != 0)
+    return startins;
+  /* A zero result means there is no recoverable original opcode. Temporary
+  ** exclusive-writer contention is different: yield once and ask the VM to
+  ** redispatch this exact PC. The next bounded attempt observes either restored
+  ** bytecode or an admissible trace/retired-body generation, without blocking
+  ** a mutator inside the metadata lookup. */
+  if (!lj_gc2_smr_read_try(g)) {
+    (void)lj_thr_retry_yield(NULL);
+    return LJ_TRACE_STARTINS_RETRY;
+  }
   if (traceno > 0 && traceno < trace_sizetrace_acq(J))
     startins = trace_stale_startins_match_valid(g, traceref_safe(J, traceno),
 						pc, owner);
@@ -2915,8 +2993,14 @@ static void trace_stop(jit_State *J)
   case BC_RET1:
     if (addroot)
       proto_trace_rel(pt, traceno);
-    if (patchpc)
+    if (patchpc) {
+      /* Publish a prototype-owned immutable recovery copy before replacing the
+      ** opcode. It survives trace-slot/mcode retirement, so a gate-denied VM
+      ** can interpret RET/ITERN/FORL/ITERL without touching exclusive SMR state
+      ** or waiting for the IDLE retire owner. */
+      proto_jit_startins_rel(pt, patchpc, J->cur.startins);
       bc_publish(patchpc, patchins);
+    }
     break;
   case BC_JMP:
     lj_gc2_smr_read_enter(g);

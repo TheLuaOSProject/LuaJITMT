@@ -589,7 +589,7 @@ static GCproto *bcread_proto_body(LexState *ls, uint32_t *anchoridx,
   /* Calculate total size of prototype including all colocated arrays in a
   ** wide type. GCproto offsets are MSize even on GC64 builds. */
   sizept64 = (uint64_t)sizeof(GCproto) +
-	     (uint64_t)sizebc * sizeof(BCIns) +
+	     (uint64_t)sizebc * 2u * sizeof(BCIns) +
 	     (uint64_t)sizekgc * sizeof(GCRef);
   sizept64 = (sizept64 + sizeof(TValue)-1u) &
 	      ~((uint64_t)sizeof(TValue)-1u);
@@ -630,6 +630,7 @@ static GCproto *bcread_proto_body(LexState *ls, uint32_t *anchoridx,
   pt->sizeuv = (uint8_t)sizeuv;
   pt->flags = (uint8_t)flags;
   proto_initflags2(pt);
+  setmref(pt->jit_startins, proto_bc(pt) + sizebc);
   if (bcread_version(ls) == BCDUMP_VERSION_LEGACY ||
       (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS &&
        (dump_proto_flags & BCDUMP_PF_LEGACYUV)))
@@ -648,6 +649,7 @@ static GCproto *bcread_proto_body(LexState *ls, uint32_t *anchoridx,
 
   /* Read bytecode instructions and upvalue refs. */
   bcread_bytecode(ls, pt, sizebc);
+  memset(proto_jit_startins(pt), 0, sizebc * sizeof(BCIns));
   cellops = bcread_verify_bytecode(ls, pt);
   if (cellops) {
     if (proto_legacyuv(pt))

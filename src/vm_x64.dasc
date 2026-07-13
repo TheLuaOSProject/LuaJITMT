@@ -2991,7 +2991,31 @@ static void build_subroutines(BuildCtx *ctx)
   |  movzx OP, RCL
   |  shr RCd, 16
   |  cmp OP, BC_JLOOP
-  |  je ->cont_nop
+  |  jne >8
+|1:
+  |  mov RB, BASE
+  |  mov L:CARG4, SAVE_L
+  |  mov L:CARG4->base, BASE
+  |  mov CARG2, PC
+  |  sub CARG2, 4
+  |  load_J CARG1
+  |  mov CARG3d, RCd
+  |  call extern lj_trace_stale_startins
+  |  mov BASE, RB
+  |  cmp eax, -1
+  |  je >4
+  |  test eax, eax
+  |  jz ->cont_nop
+  |  mov RCd, eax
+  |  movzx RAd, RCH
+  |  movzx OP, RCL
+  |  shr RCd, 16
+  |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
+|4:
+  |  mov RCd, [PC-4]
+  |  shr RCd, 16
+  |  jmp <1
+|8:
   |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
   |6:
   |  mov RCd, TRACE:RA->startins
@@ -5721,25 +5745,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov BASE, RB			// Restore BASE.
     |  jmp <1
     |.if JIT
-    |6:  // Unpatch JLOOP.
-    |  load_J RA
-    |  mov RA, [RA+J_OFS(tracev)]
-    |  test RA, RA
-    |  jz <1
-    |  movzx RCd, word [PC+2]
-    |  mov TMPRd, RCd
-    |  mov TRACE:RA, [RA+TMPR*8+TRACEV_SLOT_OFS]
-    |  cmp TRACE:RA, 1
-    |  jbe <1
-    |  movzx RCd, word TRACE:RA->traceno
-    |  cmp RCd, TMPRd
-    |  jne <1
-    |  cmp aword TRACE:RA->retire_epoch, 0
-    |  jne <1
-    |  test byte TRACE:RA->unused1, TRACE_SCOPE_FLUSH_PENDING
-    |  jnz <1
-|7:
-    |  mov eax, TRACE:RA->startins
+    |6:  // Recover the original ITERN without touching TraceVec/trace bodies.
+    |  mov RB, BASE
+    |  mov L:CARG4, SAVE_L
+    |  mov L:CARG4->base, BASE
+    |  load_J CARG1
+    |  mov CARG2, PC
+    |  movzx CARG3d, word [PC+2]
+    |  call extern lj_trace_stale_startins
+    |  mov BASE, RB
+    |  cmp eax, -1
+    |  je <6
+    |  test eax, eax
+    |  jz <6
     |  mov al, BC_ITERC
     |  mov RB, BASE			// Save BASE.
     |  mov CARG1, PC
@@ -6184,7 +6202,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  je >5
     |  cmp TMPRd, BC_JITERL
     |  je >5
-    |  cmp OP, BC_JLOOP
+    |  cmp TMPRd, BC_JLOOP
     |  jne >4
     |  mov RCd, [PC-4]
     |  movzx RAd, RCH
@@ -6203,6 +6221,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov CARG3d, RCd
     |  call extern lj_trace_stale_startins
     |  mov BASE, RB
+    |  cmp eax, -1
+    |  jne >8
+    |  mov RCd, [PC-4]
+    |  shr RCd, 16
+    |  jmp <6
+|8:
     |  test eax, eax
     |  jz >4
     |  mov RCd, eax
@@ -6225,6 +6249,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov CARG3d, RCd
     |  call extern lj_trace_stale_startins
     |  mov BASE, RB
+    |  cmp eax, -1
+    |  jne >8
+    |  mov RCd, [PC-4]
+    |  shr RCd, 16
+    |  jmp <5
+|8:
     |  test eax, eax
     |  jz <4
     |  mov RCd, eax
@@ -6292,7 +6322,31 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx OP, RCL
     |  shr RCd, 16
     |  cmp OP, BC_JLOOP
-    |  je ->cont_nop
+    |  jne >8
+|1:
+    |  mov RB, BASE
+    |  mov L:CARG4, SAVE_L
+    |  mov L:CARG4->base, BASE
+    |  mov CARG2, PC
+    |  sub CARG2, 4
+    |  load_J CARG1
+    |  mov CARG3d, RCd
+    |  call extern lj_trace_stale_startins
+    |  mov BASE, RB
+    |  cmp eax, -1
+    |  je >4
+    |  test eax, eax
+    |  jz ->cont_nop
+    |  mov RCd, eax
+    |  movzx RAd, RCH
+    |  movzx OP, RCL
+    |  shr RCd, 16
+    |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
+|4:
+    |  mov RCd, [PC-4]
+    |  shr RCd, 16
+    |  jmp <1
+|8:
     |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
 |6:
     |  mov RCd, TRACE:RD->startins

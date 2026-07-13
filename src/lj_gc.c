@@ -1185,7 +1185,10 @@ static int gc2_valid_proto_obj(global_State *g, GCproto *pt)
     return 0;
   if (pt->framesize > LJ_MAX_SLOTS || pt->sizeuv > LJ_MAX_UPVAL)
     return 0;
-  minpt = (MSize)sizeof(GCproto) + pt->sizebc*(MSize)sizeof(BCIns);
+  if ((uintptr_t)mref(pt->jit_startins, void) !=
+      (uintptr_t)(void *)(proto_bc(pt) + pt->sizebc))
+    return 0;
+  minpt = (MSize)sizeof(GCproto) + pt->sizebc*2u*(MSize)sizeof(BCIns);
   minpt = (minpt + (MSize)sizeof(TValue)-1) & ~((MSize)sizeof(TValue)-1);
   return minpt <= pt->sizept;
 }

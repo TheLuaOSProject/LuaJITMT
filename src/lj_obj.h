@@ -465,6 +465,7 @@ typedef struct GCproto {
   MRef lineinfo;	/* Compressed map from bytecode ins. to source line. */
   MRef uvinfo;		/* Upvalue names. */
   MRef varinfo;		/* Names and compressed extents of local variables. */
+  MRef jit_startins;	/* Stable original ins for JIT-patched bytecode. */
 } GCproto;
 
 /* Bytecode loading may publish a traversal-safe proto prefix before nested KGC
@@ -542,6 +543,52 @@ static LJ_AINLINE void proto_gc2_scan_cycle_rel(GCproto *pt, uint32_t cycle)
 #define proto_lineinfo(pt)	(mref((pt)->lineinfo, const void))
 #define proto_uvinfo(pt)	(mref((pt)->uvinfo, const uint8_t))
 #define proto_varinfo(pt)	(mref((pt)->varinfo, const uint8_t))
+#define proto_jit_startins(pt)	(mref((pt)->jit_startins, BCIns))
+
+/* Zero is the unpublished sentinel. Root patching only accepts FORL/LOOP,
+** ITERL/FUNCF, ITERN and RET* originals; none has the all-zero BC_ISLT
+** encoding, so every published recovery instruction is distinguishable. */
+static LJ_AINLINE BCIns proto_jit_startins_acq(const GCproto *pt,
+						const BCIns *pc)
+{
+  const BCIns *bc = proto_bc(pt);
+  const BCIns *shadow = mref(pt->jit_startins, const BCIns);
+  uintptr_t b = (uintptr_t)(const void *)bc;
+  uintptr_t p = (uintptr_t)(const void *)pc;
+  uintptr_t bytes = (uintptr_t)pt->sizebc * sizeof(BCIns);
+  uintptr_t s = (uintptr_t)(const void *)shadow;
+  if (!shadow || b > ~(uintptr_t)0 - bytes || s != b + bytes ||
+      p < b || p - b >= bytes ||
+      ((p - b) & (sizeof(BCIns)-1u)) != 0)
+    return 0;
+  return (BCIns)la_load32_acq(
+    (const uint32_t *)&shadow[(p - b) / sizeof(BCIns)]);
+}
+
+static LJ_AINLINE void proto_jit_startins_rel(GCproto *pt, const BCIns *pc,
+					       BCIns ins)
+{
+  BCIns *bc = proto_bc(pt);
+  BCIns *shadow = proto_jit_startins(pt);
+  uintptr_t b = (uintptr_t)(void *)bc;
+  uintptr_t p = (uintptr_t)(const void *)pc;
+  uintptr_t bytes = (uintptr_t)pt->sizebc * sizeof(BCIns);
+  uintptr_t s = (uintptr_t)(void *)shadow;
+  BCIns *slot;
+  BCIns old;
+  lj_assertX(shadow != NULL && b <= ~(uintptr_t)0 - bytes &&
+	     s == b + bytes && p >= b && p - b < bytes &&
+	     ((p - b) & (sizeof(BCIns)-1u)) == 0,
+	     "JIT startins shadow PC outside prototype");
+  slot = &shadow[(p - b) / sizeof(BCIns)];
+  old = (BCIns)la_load32_acq((const uint32_t *)slot);
+  lj_assertX(old == 0 || old == ins,
+	     "JIT startins shadow changed across retrace");
+  UNUSED(bytes);
+  UNUSED(s);
+  UNUSED(old);
+  la_store32_rel((uint32_t *)slot, (uint32_t)ins);
+}
 
 /* -- Upvalue object ------------------------------------------------------ */
 
