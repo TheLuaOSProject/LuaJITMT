@@ -6991,6 +6991,8 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
     ** storage in that window; ordinary same-thread VM collections use precise
     ** frame tops so dead call results do not affect weak/FINREG decisions.
     */
+    if (conservativep)
+      *conservativep = 1;
     return max;
   }
   used = L->top - 1;
@@ -15744,6 +15746,10 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L,
     if (jit_current)
       gc2_mark_jit_frame_funcs(g, L);
 #endif
+    /* The widened tail includes ordinary popped/spill cells above L->top.
+    ** Validate their tagged pointers before treating them as semantic roots. */
+    if (conservativep)
+      *conservativep = 1;
     return max;
   }
   for (frame = L->base - 1; frame > bot + LJ_FR2; ) {

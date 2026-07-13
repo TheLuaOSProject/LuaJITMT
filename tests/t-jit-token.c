@@ -79,7 +79,8 @@ static int force_vmevent_prepare_stack_growth(lua_State *L)
 
   L->top = restorestack(L, entrytop);
   lua_pushboolean(L, L->stacksize > oldsize);
-  return 1;
+  lua_pushboolean(L, argbase != 0);
+  return 2;
 }
 
 static void expect_vmevent_owner_and_jit_pointer(lua_State *L)
@@ -304,7 +305,7 @@ static void make_token_flush_trace(lua_State *L)
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "function lj_m6_token_tracecount()\n"
     "  local n = 0\n"
-    "  for i = 1, 32 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  for i = 1, 1024 do if util.traceinfo(i) then n = n + 1 end end\n"
     "  return n\n"
     "end\n"
     "jit.off(lj_m6_token_tracecount, true)\n"
@@ -315,6 +316,29 @@ static void make_token_flush_trace(lua_State *L)
     "end\n"
     "for _ = 1, 20 do assert(lj_m6_token_flush_f(80) == 3240) end\n"
     "assert(lj_m6_token_tracecount() > 0, 'expected live trace')\n");
+}
+
+static void settle_automatic_cycle(global_State *g)
+{
+  uint32_t attempts;
+  for (attempts = 0; attempts < 4096u; attempts++) {
+    uint32_t phase = gc2_phase_acq(g);
+    uint32_t leader = gc2_cycle_leader_acq(g);
+    if (phase == LJ_GC2_IDLE && leader == 0 &&
+        gc2_jit_phase_gate_acq(g) != 0)
+      return;
+    if (phase == LJ_GC2_IDLE && leader != 0 &&
+        leader != LJ_THREAD_GCSCAN)
+      lj_gc2_mark_begin(g);
+    else if (phase != LJ_GC2_IDLE) {
+      (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+      lj_gc2_cycle_to_idle(g);
+    }
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE &&
+         gc2_cycle_leader_acq(g) == 0 &&
+         gc2_jit_phase_gate_acq(g) != 0);
 }
 
 static void expect_gc_trace_free_defers_for_token(lua_State *L)
@@ -328,6 +352,10 @@ static void expect_gc_trace_free_defers_for_token(lua_State *L)
   uint64_t retire_epoch;
 
   make_token_flush_trace(L);
+  /* Trace creation may have started an automatic GC2 cycle. This fixture
+  ** exercises the separate IDLE reclaimer transaction, so drain that cycle
+  ** before claiming and disconnecting the selected live body. */
+  settle_automatic_cycle(g);
   /* This case isolates token admission. A runnable terminal inbound edge is a
   ** separate semantic root and correctly makes GC rescue its target. */
   T = first_trace_without_runnable_inbound(J);
@@ -361,7 +389,20 @@ static void expect_gc_trace_free_defers_for_token(lua_State *L)
   assert(trace_retired_link_listed_acq(T));
   assert(lj_trace_free_gc(g, T) == 1);
   assert(trace_traceno_acq(T) == 0);
-  assert(lj_gc2_test_idle_reclaim_enter(g));
+  if (!lj_gc2_test_idle_reclaim_enter(g)) {
+    fprintf(stderr,
+      "idle reclaim preflight failed: state=%u phase=%u leader=%u gate=%u "
+      "worker=%u assist=%u weakdrain=%u weakwrite=%u readers=%u "
+      "reclaiming=%u active=%d veto=%d token=%u recovery=%u\n",
+      (unsigned)g->gc.state, gc2_phase_acq(g), gc2_cycle_leader_acq(g),
+      gc2_jit_phase_gate_acq(g), gc2_worker_active_acq(g),
+      gc2_assist_active_acq(g), gc2_weak_drain_active_acq(g),
+      gc2_weak_write_active_acq(g), gc2_smr_readers_acq(g),
+      gc2_smr_reclaiming_acq(g), lj_tg_any_jit_active(g),
+      lj_gc2_activation_reclaim_veto(g), jit_token_acq(g),
+      gc2_recovery_failed_acq(g));
+    assert(0);
+  }
   assert(lj_jit_token_try(J));
   /* The process-wide pass may reclaim unrelated entries retired by the
   ** fixture's preceding jit.flush(). Only this body's pre-margin retention is
@@ -570,15 +611,19 @@ int main(void)
   ** Race its prepare-time growth against removal and collection of the event
   ** handler's registry root. The SMR load->stack-publication handoff must keep
   ** the ephemeral closure alive even when detach wins immediately afterward.
+  ** Successful calls also leave an ordinary popped handler above co->top; a
+  ** widened remote stack snapshot must validate that raw tail conservatively.
   */
   lua_pushcfunction(L, force_vmevent_prepare_stack_growth);
   lua_setglobal(L, "lj_m6_force_vmevent_prepare_stack_growth");
+  assert(gc2_recovery_failed_acq(g) == 0);
   ljt_lua_dostring(L,
     "local th = require('threading')\n"
     "local ready = th.channel(1)\n"
     "local go = th.channel(1)\n"
     "local done = th.channel(1)\n"
-    "local rounds = 24\n"
+    "local rounds = 48\n"
+    "local successes = 0\n"
     "local worker = th.spawn(function(ready, go, done, rounds)\n"
     "  for i = 1, rounds do\n"
     "    local hook = function() end\n"
@@ -600,15 +645,24 @@ int main(void)
     "  local token, ok = ready:recv(5)\n"
     "  assert(ok == true and token == i,\n"
     "         'ready round ' .. i .. ': ' .. tostring(token))\n"
-    "  assert(go:send(i, 5) == true)\n"
-    "  local resumed, grew = coroutine.resume(co)\n"
+    "  local resumed, grew, prepared\n"
+    "  if i % 2 == 1 then\n"
+    "    resumed, grew, prepared = coroutine.resume(co)\n"
+    "    assert(go:send(i, 5) == true)\n"
+    "  else\n"
+    "    assert(go:send(i, 5) == true)\n"
+    "    resumed, grew, prepared = coroutine.resume(co)\n"
+    "  end\n"
     "  assert(resumed == true, tostring(grew))\n"
     "  assert(grew == true, 'VM-event prepare did not grow the stack')\n"
+    "  if prepared then successes = successes + 1 end\n"
     "  token, ok = done:recv(5)\n"
     "  assert(ok == true and token == i,\n"
     "         'done round ' .. i .. ': ' .. tostring(token))\n"
     "end\n"
+    "assert(successes > 0, 'VM-event handler was never stack-published')\n"
     "assert(worker:join(10) == true)\n");
+  assert(gc2_recovery_failed_acq(g) == 0);
   lua_pushnil(L);
   lua_setglobal(L, "lj_m6_force_vmevent_prepare_stack_growth");
 
@@ -630,7 +684,7 @@ int main(void)
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "function lj_m6_busy_tracecount()\n"
     "  local n = 0\n"
-    "  for i = 1, 32 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  for i = 1, 1024 do if util.traceinfo(i) then n = n + 1 end end\n"
     "  return n\n"
     "end\n"
     "jit.off(lj_m6_busy_tracecount, true)\n"
@@ -651,7 +705,7 @@ int main(void)
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function tracecount()\n"
     "  local n = 0\n"
-    "  for i = 1, 32 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  for i = 1, 1024 do if util.traceinfo(i) then n = n + 1 end end\n"
     "  return n\n"
     "end\n"
     "jit.off(tracecount, true)\n"
@@ -667,7 +721,7 @@ int main(void)
   expect_flush_waits_for_token(L, "jit.flush()\n", 1);
   expect_flush_waits_for_token(L,
     "local util = require('jit.util')\n"
-    "for tr = 1, 32 do\n"
+    "for tr = 1, 1024 do\n"
     "  if util.traceinfo(tr) then jit.flush(tr); break end\n"
     "end\n", 0);
   expect_opt_start_waits_for_token(L);
