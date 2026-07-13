@@ -30,6 +30,73 @@ static void assert_no_bins(TGAlloc *alloc, uint32_t kind)
     assert(alloc->bins[kind][b] == NULL);
 }
 
+static void test_dtor_identity_pins_legacy_sweep(PRNGState *rs)
+{
+  TGAlloc alloc;
+  GCArena *a;
+  uint32_t cell;
+  const uint32_t ncells = 1u;
+
+  lj_arena_alloc_init(&alloc);
+  alloc.alloc_black = 0;
+  assert(lj_arena_reserve_bump_dtor(&alloc, rs, LJ_AF_TRAVERSABLE,
+    ncells, LJ_ARENA_DTOR_LFUNC0, &a, &cell));
+  assert(lj_arena_dtor_kind_acq(a, cell) == LJ_ARENA_DTOR_LFUNC0);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  /* No body is needed: the legacy bitmap owner must pin arena-typed identity
+  ** without inspecting or dispatching bytes it cannot semantically destroy. */
+  lj_arena_ready_set_unpublished(a, cell);
+  lj_arena_block_set(a, cell);
+  assert(lj_arena_dtor_construct_commit(a, cell));
+  assert(lj_arena_alloc_prepare_sweep_kind(
+    &alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(lj_arena_sweep_one(
+    &alloc, LJ_ARENAK_TRAVERSABLE, 1u, 0) == a);
+  assert(lj_arena_bm_get(a->block, cell));
+  assert(lj_arena_dtor_kind_acq(a, cell) == LJ_ARENA_DTOR_LFUNC0);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+    LJ_ARENA_LIFETIME_LIVE);
+  lj_arena_alloc_fini(&alloc);
+}
+
+static void test_blockzero_dtor_survives_quarantine(PRNGState *rs)
+{
+  TGAlloc alloc;
+  GCArena *a;
+  void *p;
+  uint32_t cell, interior, reason = LJ_ARENA_FINISH_NONE;
+
+  lj_arena_alloc_init(&alloc);
+  alloc.alloc_black = 0;
+  p = lj_arena_alloc(&alloc, rs, 32, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  a = lj_arena_of(p);
+  cell = lj_arena_cellof(p);
+  interior = cell + 1u;
+  assert(lj_arena_ncells(32) > 1u);
+  assert(!lj_arena_bm_get(a->block, interior));
+  assert(lj_arena_lifetime_state_acq(a, interior) ==
+	 LJ_ARENA_LIFETIME_FREE);
+
+  /* A block-zero kind is malformed, but it remains authoritative fail-closed
+  ** metadata. Quarantine may only clear kinds at starts whose old block bit it
+  ** actually removes; it must not erase unrelated constructor/corruption
+  ** evidence merely because the cell is absent from the live-start bitmap. */
+  lj_arena_bm_set(a->dtor[3], interior);
+  assert(lj_arena_dtor_kind_acq(a, interior) == 8u);
+  assert(lj_arena_alloc_prepare_sweep_kind(
+    &alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(lj_arena_alloc_quarantine_one(&alloc, LJ_ARENAK_TRAVERSABLE,
+					  0) == a);
+  assert(lj_arena_reclaim_seal(a));
+  assert(lj_arena_alloc_quarantine_finish(&alloc,
+    LJ_ARENAK_TRAVERSABLE, a, 1u, 0, &reason));
+  assert(reason == LJ_ARENA_FINISH_COMMITTED);
+  assert(lj_arena_dtor_kind_acq(a, interior) == 8u);
+  lj_arena_bm_clear(a->dtor[3], interior);
+  lj_arena_alloc_fini(&alloc);
+}
+
 static void test_root_membership(PRNGState *rs)
 {
   TGAlloc src, dst;
@@ -162,6 +229,8 @@ int main(void)
   uint32_t ctdead, ctlive;
 
   lj_prng_seed_fixed(&rs);
+  test_dtor_identity_pins_legacy_sweep(&rs);
+  test_blockzero_dtor_survives_quarantine(&rs);
   test_root_membership(&rs);
   lj_arena_alloc_init(&alloc);
   lj_arena_allocd_init(&travad, &alloc, &rs, LJ_AF_TRAVERSABLE);
@@ -446,16 +515,19 @@ int main(void)
   {
     TGAlloc publish;
     void *first, *fill1, *fill2, *fill3, *second, *reuse, *expected_reuse;
+    size_t quarter_arena =
+      (size_t)((LJ_ARENA_CELLS - LJ_AFIRST_CELL) / 4u) << LJ_CELL_SHIFT;
     GCArena *a1, *a2, *swept1, *swept2;
     lj_arena_alloc_init(&publish);
     publish.alloc_black = 0;
-    /* Keep four allocations in the first arena after the four-bit lifetime
-    ** plane increased LJ_AFIRST_CELL, while the fifth forces a second arena. */
-    first = lj_arena_alloc(&publish, &rs, 14400, 0);
-    fill1 = lj_arena_alloc(&publish, &rs, 14400, 0);
-    fill2 = lj_arena_alloc(&publish, &rs, 14400, 0);
-    fill3 = lj_arena_alloc(&publish, &rs, 14400, 0);
-    second = lj_arena_alloc(&publish, &rs, 14400, 0);
+    /* Keep four allocations in the first arena after the lifetime and
+    ** destructor-kind sidecars increased LJ_AFIRST_CELL, while the fifth
+    ** forces a second arena. */
+    first = lj_arena_alloc(&publish, &rs, quarter_arena, 0);
+    fill1 = lj_arena_alloc(&publish, &rs, quarter_arena, 0);
+    fill2 = lj_arena_alloc(&publish, &rs, quarter_arena, 0);
+    fill3 = lj_arena_alloc(&publish, &rs, quarter_arena, 0);
+    second = lj_arena_alloc(&publish, &rs, quarter_arena, 0);
     assert(first != NULL && fill1 != NULL && fill2 != NULL &&
 	   fill3 != NULL && second != NULL);
     a1 = lj_arena_of(first);
@@ -745,6 +817,14 @@ int main(void)
 	   LJ_ARENA_RECOVERY_PENDING);
     assert(lj_arena_recovery_state_cas(raw, LJ_AFIRST_CELL,
 	   LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+    /* A destructor kind is allocation authority even when every lifetime lane
+    ** is FREE. Direct unmap must retain malformed/stale authority instead of
+    ** erasing the only information which prevents unsafe address reuse. */
+    lj_arena_bm_set(raw->dtor[0], LJ_AFIRST_CELL);
+    lj_arena_unmap(raw);
+    assert(lj_arena_dtor_kind_acq(raw, LJ_AFIRST_CELL) ==
+	   LJ_ARENA_DTOR_LFUNC1);
+    lj_arena_bm_clear(raw->dtor[0], LJ_AFIRST_CELL);
     lj_arena_unmap(raw);
   }
 

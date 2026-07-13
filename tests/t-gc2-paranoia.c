@@ -31,6 +31,30 @@ static int paranoia_finalizer(lua_State *L)
   return 0;
 }
 
+static void assert_typed_rootless_closure(lua_State *L)
+{
+  GCfunc *fn;
+  GCupval *uv;
+  GCArena *a;
+  uint32_t cell;
+  lua_getglobal(L, "__gc2_keep");
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "typed_closure");
+  assert(tvisfunc(L->top - 1));
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn) && lj_funcL_nupvalues(&fn->l) == 1u);
+  a = lj_arena_of(fn);
+  cell = lj_arena_cellof(fn);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(a, cell) == LJ_ARENA_DTOR_LFUNC1);
+  uv = func_uv_acq(&fn->l, 0);
+  a = lj_arena_of(uv);
+  cell = lj_arena_cellof(uv);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(a, cell) == LJ_ARENA_DTOR_CLOSED_UV);
+  lua_pop(L, 2);
+}
+
 static void run_generational_major_fallback(lua_State *L, global_State *g,
 					     TGState *tg)
 {
@@ -123,6 +147,8 @@ int main(void)
     "keep.dumped = string.dump(assert(loadstring("
     "  'return function(x) return x * 11 end'))())\n"
     "keep.closure = assert(loadstring(keep.dumped))\n"
+    "do local x = 41; keep.typed_closure = function() return x + 1 end end\n"
+    "assert(keep.typed_closure() == 42)\n"
     "keep.co = coroutine.create(function()\n"
     "  local s = 0\n"
     "  for i = 1, 100 do s = s + i end\n"
@@ -133,6 +159,7 @@ int main(void)
     "keep.wk = setmetatable({}, {__mode='kv'})\n"
     "do local k, v = {}, {}; keep.wk[k] = v end\n"
     "_G.__gc2_keep = keep\n");
+  assert_typed_rootless_closure(L);
   lua_newuserdata(L, 1);
   lua_newtable(L);
   lua_pushcfunction(L, paranoia_finalizer);
@@ -141,12 +168,14 @@ int main(void)
   lua_setglobal(L, "__gc2_ud");
 
   lua_gc(L, LUA_GCCOLLECT, 0);
+  assert_typed_rootless_closure(L);
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   assert(lj_gc2_test_ssb_empty(g));
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
   while (lj_gc_step(L) <= 0)
     ;
+  assert_typed_rootless_closure(L);
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   assert(lj_gc2_test_ssb_empty(g));
 

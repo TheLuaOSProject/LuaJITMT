@@ -356,6 +356,12 @@ static void test_grey_growth_transaction(void)
   ssb_drained0 = gc2_ssb_items_drained_acq(f.g);
   lj_gc2_test_recovery_fail_grey_grow(1);
   lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_SSB_COMMITTED);
+  /* MARK begins with a bounded native scheduling lease. This test launches a
+  ** single one-shot drain thread, so close entry explicitly instead of
+  ** allowing that thread to consume its quantum by honoring the lease and
+  ** return before it reaches the deterministic pause point. */
+  lj_gc2_jit_mark_request_exit(f.g);
+  assert(gc2_jit_phase_gate_acq(f.g) == 0);
   drain.g = f.g;
   drain.limit = 1;
   assert(pthread_create(&thread, NULL, gc_worker_drain_thread, &drain) == 0);
@@ -412,7 +418,16 @@ static void test_reservation_gap_blocks_mark_close(void)
   lua_newtable(f.L);
   parent = tabV(f.L->top - 1);
   lj_gc2_mark_begin(f.g);
+  assert(gc2_jit_phase_gate_acq(f.g) != 0);
+  /* An ordinary worker quantum may grant the next bounded MARK mutator turn. */
+  lj_gc2_jit_mark_request_exit(f.g);
+  assert(gc2_jit_phase_gate_acq(f.g) == 0);
+  (void)lj_gc2_worker_drain(f.g, 1);
+  assert(gc2_jit_phase_gate_acq(f.g) != 0);
+  /* The leader-side non-owner round uses the same worker drain machinery, but
+  ** its nested drain must retain the closed gate needed by the fixpoint proof. */
   recovery_clean_fixpoint(&f);
+  assert(gc2_jit_phase_gate_acq(f.g) == 0);
   assert(lj_gc2_test_ssb_empty(f.g));
   assert(lj_gc2_test_recovery_state(f.g, obj2gco(parent)) ==
 	 LJ_ARENA_RECOVERY_IDLE);

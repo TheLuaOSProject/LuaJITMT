@@ -34,6 +34,7 @@
 #define LJ_AF_PREPSWEEP		0x00000040u
 /* Allocation-request modifier. This bit is consumed by the allocator and is
 ** never persisted in GCAhdr.flags or ordinary HugeTab metadata. */
+#define LJ_AF_DTOR_CONSTRUCT	0x40000000u
 #define LJ_AF_ROOT_CONSTRUCT	0x80000000u
 #define LJ_AF_FLAG_MASK \
   (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP|LJ_AF_FULL|LJ_AF_REGISTERED| \
@@ -166,6 +167,24 @@ typedef struct GCAhdr {
 #define LJ_ARENA_LIFETIME_WORDS \
   (LJ_ARENA_CELLS / LJ_ARENA_LIFETIME_CELLS_PER_WORD)
 
+/* Authoritative allocation/destructor class for traversable starts. The
+** binary encoding is bit-sliced into four ordinary bitmap planes: this keeps
+** dynamic x64 publication to one BTS for the hot one-hot classes while still
+** leaving fifteen nonzero classes for the complete GC object family. A kind
+** is immutable from constructor publication until physical destruction has
+** completed and the allocation boundary is removed; object body bytes are
+** validation only and never select a destructor.
+**
+** The first tranche deliberately assigns one-hot codes to the three hot
+** closure shapes. The remaining encodings are reserved for generic GC
+** destructor classes, not available for type-local marker reuse. */
+#define LJ_ARENA_DTOR_PLANES	4u
+#define LJ_ARENA_DTOR_NONE	0u
+#define LJ_ARENA_DTOR_LFUNC1	1u
+#define LJ_ARENA_DTOR_CLOSED_UV	2u
+#define LJ_ARENA_DTOR_LFUNC0	4u
+#define LJ_ARENA_DTOR_MAX	15u
+
 enum {
   LJ_ARENA_LIFETIME_FREE = 0,
   LJ_ARENA_LIFETIME_LIVE = 1,
@@ -227,6 +246,11 @@ struct GCArena {
   ** starts may be non-FREE; unlike root[], nonzero never implies root
   ** membership or semantic liveness. */
   uint64_t lifetime[LJ_ARENA_LIFETIME_WORDS];
+  /* Bit-sliced authoritative destructor kind. Only allocation starts may be
+  ** nonzero. The later block release-publishes a completely installed kind;
+  ** lifetime owns the live incarnation, then sealed structural ownership and
+  ** block removal prevent reuse while the terminal planes are cleared. */
+  uint64_t dtor[LJ_ARENA_DTOR_PLANES][LJ_ARENA_WORDS];
   /* Closed-window remote-free deduplication. Unlike sweep[], this bitmap may
   ** be published after terminal bitmap commit. A bit naming committed live
   ** storage persists across adoption and is consumed by the next sweep. */
@@ -764,6 +788,18 @@ LJ_FUNC int lj_arena_reserve_bump_pair(TGAlloc *alloc, PRNGState *rs,
 				       uint32_t flags, uint32_t ncells,
 				       uint32_t second_offset,
 				       GCArena **ap, uint32_t *cellp);
+LJ_FUNC int lj_arena_reserve_bump_dtor(TGAlloc *alloc, PRNGState *rs,
+				       uint32_t flags, uint32_t ncells,
+				       uint32_t dtor_kind,
+				       GCArena **ap, uint32_t *cellp);
+LJ_FUNC int lj_arena_reserve_bump_dtor_pair(TGAlloc *alloc, PRNGState *rs,
+					    uint32_t flags,
+					    uint32_t ncells,
+					    uint32_t second_offset,
+					    uint32_t first_kind,
+					    uint32_t second_kind,
+					    GCArena **ap,
+					    uint32_t *cellp);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 			     uint32_t flags);
 LJ_FUNC int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size);
@@ -797,6 +833,13 @@ LJ_FUNC int lj_arena_root_construct_commit(GCArena *a, uint32_t cell);
 LJ_FUNC int lj_arena_root_construct_commit_pair(GCArena *a, uint32_t first,
 					  uint32_t second);
 LJ_FUNC int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell);
+/* Rootless typed constructors reserve lifetime CONSTRUCT while root[] remains
+** NONE. READY/block publication makes their immutable dtor class discoverable;
+** commit then moves CONSTRUCT to LIVE. Recovery may transiently own MUTATING
+** and is required to restore a rootless constructor directly to LIVE. */
+LJ_FUNC int lj_arena_dtor_construct_commit(GCArena *a, uint32_t cell);
+LJ_FUNC int lj_arena_dtor_construct_commit_pair(GCArena *a, uint32_t first,
+						 uint32_t second);
 LJ_FUNC int lj_arena_lifetime_empty(const GCArena *a);
 /* Quiescent terminal cleanup only. Returns the state it replaced with FREE.
 ** The caller owns all semantic destruction; this only discards the locator
@@ -858,6 +901,19 @@ static LJ_AINLINE uint32_t lj_arena_cdata_get(const GCArena *a, uint32_t i)
 static LJ_AINLINE uint32_t lj_arena_ready_get(const GCArena *a, uint32_t i)
 {
   return (uint32_t)((la_load64_acq(&a->ready[i >> 6]) >> (i & 63)) & 1u);
+}
+
+static LJ_AINLINE uint32_t lj_arena_dtor_kind_acq(const GCArena *a,
+						   uint32_t i)
+{
+  uint32_t plane, kind = LJ_ARENA_DTOR_NONE;
+  if (!a || i >= LJ_ARENA_CELLS)
+    return LJ_ARENA_DTOR_NONE;
+  for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++)
+    kind |= (uint32_t)
+      ((la_load64_acq(&a->dtor[plane][i >> 6]) >> (i & 63u)) & 1u)
+      << plane;
+  return kind;
 }
 
 static LJ_AINLINE uint32_t lj_arena_late_get(const GCArena *a, uint32_t i)
@@ -1172,6 +1228,8 @@ LJ_STATIC_ASSERT(LJ_ARENA_SIZE == 65536u);
 LJ_STATIC_ASSERT(LJ_ARENA_CELLS == 4096u);
 LJ_STATIC_ASSERT(LJ_ARENA_WORDS == 64u);
 LJ_STATIC_ASSERT(LJ_CELL_SIZE == 16u);
+LJ_STATIC_ASSERT((LJ_AF_ROOT_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
+LJ_STATIC_ASSERT((LJ_AF_DTOR_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_active) == 56u);
 LJ_STATIC_ASSERT((offsetof(GCAhdr, remote_active) & 7u) == 0);
@@ -1183,8 +1241,9 @@ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->sweep) == 1024u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->recovery) == 1024u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->root) == 1024u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->lifetime) == 2048u);
+LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->dtor) == 2048u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->late) == 512u);
-LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 488u);
+LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 616u);
 LJ_STATIC_ASSERT(sizeof(LJArenaFreeRun) == LJ_CELL_SIZE);
 LJ_STATIC_ASSERT(sizeof(LJArenaRemoteFree) == LJ_CELL_SIZE);
 

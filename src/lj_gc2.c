@@ -833,7 +833,7 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
 			     int semantic_admission, int *retryp);
 static void *gc2_worker_main(void *arg);
 static uint32_t gc2_worker_drain_logical(global_State *g, TGState *tg,
-					 uint32_t limit);
+					 uint32_t limit, int hold_mark_gate);
 typedef struct GC2MarkScope GC2MarkScope;
 static void gc2_mark_thread_root_obj(global_State *g, GCobj *o);
 static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o);
@@ -2414,7 +2414,7 @@ int lj_gc2_collect_active(lua_State *L)
     }
     if (phase == LJ_GC2_MARK) {
       if (gc2_worker_drain_logical(g, tg,
-					   LJ_GC2_WORKER_DRAIN_BATCH) != 0) {
+					   LJ_GC2_WORKER_DRAIN_BATCH, 0) != 0) {
 	(void)lj_safepoint_ack(L);
 	continue;
       }
@@ -2438,7 +2438,8 @@ int lj_gc2_collect_active(lua_State *L)
       int finstep;
       lj_gc2_sweep_prepare_bridge_boundary(
 	g, lj_gc_preserve_root_chain_for_gc2_sweep);
-      if (gc2_worker_drain_logical(g, tg, LJ_GC2_SWEEP_BATCH) != 0) {
+      if (gc2_worker_drain_logical(g, tg,
+					   LJ_GC2_SWEEP_BATCH, 0) != 0) {
 	(void)lj_safepoint_ack(L);
 	continue;
       }
@@ -2517,7 +2518,7 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
     }
     if (phase == LJ_GC2_MARK) {
       if (gc2_worker_drain_logical(g, tg,
-					   LJ_GC2_WORKER_DRAIN_BATCH) != 0) {
+					   LJ_GC2_WORKER_DRAIN_BATCH, 0) != 0) {
 	(void)lj_safepoint_ack(L);
 	continue;
       }
@@ -2547,7 +2548,8 @@ int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
       int finstep;
       lj_gc2_sweep_prepare_bridge_boundary(
 	g, lj_gc_preserve_root_chain_for_gc2_sweep);
-      if (gc2_worker_drain_logical(g, tg, LJ_GC2_SWEEP_BATCH) != 0) {
+      if (gc2_worker_drain_logical(g, tg,
+					   LJ_GC2_SWEEP_BATCH, 0) != 0) {
 	(void)lj_safepoint_ack(L);
 	continue;
       }
@@ -16969,7 +16971,8 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
 }
 
 static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
-				       uint32_t limit, uint32_t *progress)
+				       uint32_t limit, uint32_t *progress,
+				       int hold_mark_gate)
 {
   uint32_t phase, n = 0, converted = 0, recovered = 0, weak = 0, sweep = 0;
   uint32_t finalizer = 0;
@@ -17118,7 +17121,12 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
     gc2_worker_idle_declares_add(g, 1);
   if (progress)
     *progress = total > limit ? limit : total;
-  if (mark_gate_closed && gc2_phase_acq(g) == LJ_GC2_MARK &&
+  /* A leader-side fixpoint round already owns a closed-gate observation across
+  ** both drains and its root snapshot. Its nested non-owner drain must not
+  ** convert that proof into an ordinary cooperative mutator turn. Background
+  ** and public worker quanta retain the bounded reopen behavior. */
+  if (!hold_mark_gate && mark_gate_closed &&
+      gc2_phase_acq(g) == LJ_GC2_MARK &&
       gc2_mark_close_intent_acq(g) == 0)
     gc2_jit_phase_gate_open_mark(g, 1);
   if (sweep_gate_closed && gc2_phase_acq(g) == LJ_GC2_SWEEP)
@@ -17131,13 +17139,13 @@ uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
 {
   TGState *tg = lj_thr_get_tg();
   return gc2_worker_drain_inner(g, tg && tg->gl == g ? tg : NULL,
-				limit, NULL);
+					limit, NULL, 0);
 }
 
 static uint32_t gc2_worker_drain_logical(global_State *g, TGState *tg,
-					 uint32_t limit)
+					 uint32_t limit, int hold_mark_gate)
 {
-  return gc2_worker_drain_inner(g, tg, limit, NULL);
+  return gc2_worker_drain_inner(g, tg, limit, NULL, hold_mark_gate);
 }
 
 static uint32_t gc2_worker_drain_budget(global_State *g, TGState *tg,
@@ -17145,7 +17153,7 @@ static uint32_t gc2_worker_drain_budget(global_State *g, TGState *tg,
 {
   uint32_t n = 0;
   while (n < limit && (!gc2_grey_empty(g) || !lj_gc2_ssb_empty(g))) {
-    uint32_t step = gc2_worker_drain_logical(g, tg, limit - n);
+    uint32_t step = gc2_worker_drain_logical(g, tg, limit - n, 1);
     if (step == 0)
       break;
     if (step > limit - n)
@@ -17698,9 +17706,23 @@ static uint32_t gc2_paranoia_scan_arena(global_State *g, GCArena *a)
     while (m) {
       uint32_t bit = (uint32_t)__builtin_ctzll(m);
       uint32_t cell = (w << 6) + bit;
+      uint32_t dtor_kind;
       m &= m - 1u;
-      if (cell >= LJ_AFIRST_CELL &&
-	  !gc2_root_oracle_has_base(g, lj_arena_cellptr(a, cell)))
+      if (cell < LJ_AFIRST_CELL)
+	continue;
+      dtor_kind = lj_arena_dtor_kind_acq(a, cell);
+      if ((dtor_kind == LJ_ARENA_DTOR_LFUNC1 ||
+	   dtor_kind == LJ_ARENA_DTOR_CLOSED_UV ||
+	   dtor_kind == LJ_ARENA_DTOR_LFUNC0) &&
+	  lj_arena_ready_get(a, cell) &&
+	  lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE) {
+	uint32_t life = lj_arena_lifetime_state_acq(a, cell);
+	if (life == LJ_ARENA_LIFETIME_LIVE ||
+	    life == LJ_ARENA_LIFETIME_CONSTRUCT ||
+	    life == LJ_ARENA_LIFETIME_RESCUE)
+	  continue;  /* Exact arena-owned destructor identity replaces root. */
+      }
+      if (!gc2_root_oracle_has_base(g, lj_arena_cellptr(a, cell)))
 	bad++;
     }
   }

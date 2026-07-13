@@ -17,6 +17,7 @@
 #include "lj_arena.h"
 #include "lj_dispatch.h"
 #include "lj_func.h"
+#include "lj_state.h"
 #include "lj_target.h"
 #include "lj_tg.h"
 #include "lj_vm.h"
@@ -161,23 +162,6 @@ static int decode_x64_mem_modrm(const uint8_t *mc, size_t len, size_t *jp,
     ins->disp = 0;
   }
   *jp = j;
-  return 1;
-}
-
-static int decode_x64_mov_store(const uint8_t *mc, size_t len, size_t pos,
-				 X64MemInsn *ins)
-{
-  size_t j = pos;
-  uint8_t rex = 0, modrm;
-  if (j < len && is_rex(mc[j]))
-    rex = mc[j++];
-  if (!(rex & 8u) || j >= len || mc[j++] != 0x89u || j >= len)
-    return 0;
-  modrm = mc[j++];
-  ins->start = pos;
-  if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, ins))
-    return 0;
-  ins->end = j;
   return 1;
 }
 
@@ -367,6 +351,103 @@ static int decode_x64_jcc(const uint8_t *mc, size_t len, size_t pos,
   return 1;
 }
 
+static size_t find_mem_cmp_zero_jcc(const uint8_t *mc, size_t len,
+	 size_t start, int32_t field, int required_base, uint8_t cc,
+	 size_t *targetp)
+{
+  size_t i;
+  for (i = start; i + 5u < len; i++) {
+    size_t j = i, jcc_end, target;
+    uint8_t rex = 0, opcode, modrm;
+    X64MemInsn ins;
+    uint32_t imm;
+    if (is_rex(mc[j]))
+      rex = mc[j++];
+    opcode = mc[j++];
+    if (opcode != 0x83u && opcode != 0x81u)
+      continue;
+    modrm = mc[j++];
+    if (((modrm >> 3) & 7u) != XOg_CMP)
+      continue;
+    ins.start = i;
+    if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, &ins) ||
+	ins.indexed || (required_base >= 0 && ins.base != required_base) ||
+	ins.disp != field)
+      continue;
+    if (opcode == 0x83u) {
+      if (j >= len)
+	continue;
+      imm = (uint32_t)(int32_t)(int8_t)mc[j++];
+    } else {
+      if (j + 4u > len)
+	continue;
+      imm = (uint32_t)mc[j] | ((uint32_t)mc[j+1] << 8) |
+	((uint32_t)mc[j+2] << 16) | ((uint32_t)mc[j+3] << 24);
+      j += 4u;
+    }
+    if (imm != 0u ||
+	!decode_x64_jcc(mc, len, j, cc, &jcc_end, &target))
+      continue;
+    if (targetp)
+      *targetp = target;
+    return i;
+  }
+  return (size_t)-1;
+}
+
+static size_t find_bitmap_regop(const uint8_t *mc, size_t len, size_t start,
+	uint8_t opcode, int32_t disp, X64MemInsn *found)
+{
+  size_t i;
+  for (i = start; i + 5u < len; i++) {
+    size_t j = i;
+    uint8_t rex = 0, modrm;
+    X64MemInsn ins;
+    /* These descriptor operations are deliberately ordinary, never LOCKed.
+    ** Requiring REX.W also avoids rediscovering an instruction at its 0x0f. */
+    if (i != 0u && mc[i-1u] == 0xf0u)
+      continue;
+    if (is_rex(mc[j]))
+      rex = mc[j++];
+    if (!(rex & 8u) || j + 3u > len || mc[j] != 0x0fu ||
+	mc[j+1u] != opcode)
+      continue;
+    j += 2u;
+    modrm = mc[j++];
+    ins.start = i;
+    if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, &ins))
+      continue;
+    ins.end = j;
+    if (!ins.indexed && ins.disp == disp) {
+      if (found)
+	*found = ins;
+      return i;
+    }
+  }
+  return (size_t)-1;
+}
+
+static size_t find_bitmap_zero_preflight(const uint8_t *mc, size_t len,
+	 size_t start, int32_t disp, X64MemInsn *found, size_t *impossiblep)
+{
+  while (start < len) {
+    X64MemInsn ins;
+    size_t pos = find_bitmap_regop(mc, len, start, 0xa3u, disp, &ins);
+    size_t end, impossible;
+    if (pos == (size_t)-1)
+      return pos;
+    if (decode_x64_jcc(mc, len, ins.end, CC_B, &end, &impossible)) {
+      if (found)
+	*found = ins;
+      if (impossiblep)
+	*impossiblep = impossible;
+      return pos;
+    }
+    start = pos + 1u;
+  }
+  return (size_t)-1;
+}
+
 static int decode_root_bit_transition(const uint8_t *mc, size_t len,
 				      size_t *posp, uint8_t value,
 				      uint8_t bit, uint32_t *fromp,
@@ -526,6 +607,55 @@ static int decode_packed_transition_body(const uint8_t *mc, size_t len,
   return 1;
 }
 
+static int decode_packed_sample_validate_body(const uint8_t *mc, size_t len,
+	 size_t p, uint32_t lane_bits, uint32_t state, size_t *endp,
+	 size_t *impossiblep)
+{
+  size_t next, impossible = (size_t)-1;
+  uint8_t dst, src, value, bit, lane_bit = 0xffu;
+  uint32_t j;
+  if (lane_bits < 2u || lane_bits > 4u || state >= (1u << lane_bits) ||
+      !decode_x64_mov_rr(mc, len, p, &dst, &src, &p) || src != RID_RET)
+    return 0;
+  for (j = 0; j < lane_bits; j++) {
+    uint32_t from, to, expected = (state >> j) & 1u;
+    if (!decode_x64_bit_rr(mc, len, p, 0xabu, &value, &bit, &next) &&
+	!decode_x64_bit_rr(mc, len, p, 0xb3u, &value, &bit, &next))
+      return 0;
+    if (value != dst || (lane_bit != 0xffu && bit != lane_bit) ||
+	!decode_root_bit_transition(mc, len, &p, value, bit,
+				     &from, &to, &impossible) ||
+	from != expected || to != (expected ^ 1u))
+      return 0;
+    lane_bit = bit;
+    if (j + 1u < lane_bits &&
+	!decode_x64_adjust1(mc, len, p, XOg_ADD, bit, &p))
+      return 0;
+  }
+  if (!decode_x64_arith_imm(mc, len, p, XOg_SUB, lane_bit,
+	(uint8_t)(lane_bits-1u), &p))
+    return 0;
+  *endp = p;
+  *impossiblep = impossible;
+  return 1;
+}
+
+static size_t find_packed_sample_validate(const uint8_t *mc, size_t len,
+	 size_t start, uint32_t lane_bits, uint32_t state, size_t *impossiblep)
+{
+  size_t p;
+  for (p = start; p < len; p++) {
+    size_t end, impossible;
+    if (decode_packed_sample_validate_body(mc, len, p, lane_bits, state,
+					   &end, &impossible)) {
+      if (impossiblep)
+	*impossiblep = impossible;
+      return p;
+    }
+  }
+  return (size_t)-1;
+}
+
 static int decode_packed_transition(const uint8_t *mc, size_t len,
 				    const X64MemInsn *cas,
 				    uint32_t lane_bits, uint32_t *fromp,
@@ -545,6 +675,69 @@ static int decode_packed_transition(const uint8_t *mc, size_t len,
 				      fromp, top, impossiblep))
       return 1;
   return 0;
+}
+
+static int decode_packed_pair_transition_body(const uint8_t *mc, size_t len,
+	const X64MemInsn *cas, size_t p, uint32_t lane_bits,
+	uint32_t lane_delta, uint32_t *fromp, uint32_t *top,
+	size_t *mismatchp)
+{
+  const uint32_t delta_bits = lane_delta * lane_bits;
+  size_t next, mismatch = (size_t)-1;
+  uint8_t dst, src, value, bit;
+  uint32_t from = 0, to = 0, lane, j;
+  if (lane_bits < 2u || lane_bits > 4u || lane_delta == 0u ||
+	  delta_bits <= lane_bits-1u ||
+      !decode_x64_mov_rr(mc, len, p, &dst, &src, &p) ||
+      dst != cas->reg || src != RID_RET)
+    return 0;
+  for (lane = 0; lane < 2u; lane++) {
+    uint32_t lanefrom = 0, laneto = 0;
+    for (j = 0; j < lane_bits; j++) {
+      uint32_t bitfrom, bitto;
+      if (!decode_x64_bit_rr(mc, len, p, 0xabu, &value, &bit, &next) &&
+	  !decode_x64_bit_rr(mc, len, p, 0xb3u, &value, &bit, &next))
+	return 0;
+      if (value != cas->reg ||
+	  !decode_root_bit_transition(mc, len, &p, value, bit,
+				       &bitfrom, &bitto, &mismatch))
+	return 0;
+      lanefrom |= bitfrom << j;
+      laneto |= bitto << j;
+      if (j + 1u < lane_bits &&
+	  !decode_x64_adjust1(mc, len, p, XOg_ADD, bit, &p))
+	return 0;
+    }
+    if (lane == 0u &&
+	!decode_x64_arith_imm(mc, len, p, XOg_ADD, bit,
+	    (uint8_t)(delta_bits - (lane_bits-1u)), &p))
+      return 0;
+    if (lane == 0u) {
+      from = lanefrom;
+      to = laneto;
+    } else if (from != lanefrom || to != laneto) {
+      return 0;
+    }
+  }
+  if (!decode_x64_arith_imm(mc, len, p, XOg_SUB, bit,
+	(uint8_t)(delta_bits + lane_bits-1u), &p) || p != cas->start)
+    return 0;
+  *fromp = from;
+  *top = to;
+  *mismatchp = mismatch;
+  return 1;
+}
+
+static int decode_packed_pair_transition(const uint8_t *mc, size_t len,
+	const X64MemInsn *cas, uint32_t lane_bits, uint32_t lane_delta,
+	uint32_t *fromp, uint32_t *top, size_t *mismatchp)
+{
+  size_t p, jne_end;
+  if (!decode_backward_jne(mc, len, cas->end, 0, &p, &jne_end))
+    return 0;
+  return decode_packed_pair_transition_body(mc, len, cas, p, lane_bits,
+					    lane_delta, fromp, top,
+					    mismatchp);
 }
 
 static size_t find_lifetime_transition(const uint8_t *mc, size_t len,
@@ -574,38 +767,34 @@ static size_t find_lifetime_transition(const uint8_t *mc, size_t len,
   return (size_t)-1;
 }
 
-static int decode_pending_retry(const uint8_t *mc, size_t len, size_t floor,
-				 const X64MemInsn *cas, X64MemInsn *tail,
-				 size_t *jne_endp)
+static size_t find_lifetime_pair_transition(const uint8_t *mc, size_t len,
+	 size_t start, uint32_t lane_delta, uint32_t wanted_from,
+	 uint32_t wanted_to, X64MemInsn *found, size_t *mismatchp)
 {
-  X64MemInsn link;
-  size_t target, jne_end, i, scan;
-  if (!decode_backward_jne(mc, len, cas->end, floor, &target, &jne_end) ||
-      !decode_x64_mov_store(mc, len, target, tail) ||
-      tail->reg != RID_RET || tail->indexed ||
-      tail->disp != (int32_t)offsetof(GChead, nextgc) ||
-      tail->base == cas->reg)
-    return 0;
-
-  /* The retry target is the tail rewrite `uv->nextgc = RAX`. Tie that base
-  ** back to the stable `fn->nextgc = uv` instruction immediately before it,
-  ** without depending on the allocator's choice of fn/uv registers. */
-  scan = target > 15u ? target - 15u : floor;
-  if (scan < floor)
-    scan = floor;
-  for (i = scan; i < target; i++) {
-    if (decode_x64_mov_store(mc, len, i, &link) && link.end == target &&
-	!link.indexed && link.base == cas->reg && link.reg == tail->base &&
-	link.disp == (int32_t)offsetof(GChead, nextgc)) {
-      *jne_endp = jne_end;
-      return 1;
+  while (start < len) {
+    X64MemInsn cas;
+    size_t pos = find_locked_cmpxchg(mc, len, start,
+	(int32_t)offsetof(GCArena, lifetime), -1, &cas);
+    size_t mismatch;
+    uint32_t from, to;
+    if (pos == (size_t)-1)
+      return pos;
+    if (decode_packed_pair_transition(mc, len, &cas, 4u, lane_delta,
+				      &from, &to, &mismatch) &&
+	from == wanted_from && to == wanted_to) {
+      if (found)
+	*found = cas;
+      if (mismatchp)
+	*mismatchp = mismatch;
+      return pos;
     }
+    start = pos + 1u;
   }
-  return 0;
+  return (size_t)-1;
 }
 
-static size_t find_rel_call_target(const uint8_t *mc, size_t len,
-				   const void *target)
+static size_t find_rel_call_target_at(const uint8_t *mc, size_t len,
+				      uintptr_t mcaddr, const void *target)
 {
   size_t i;
   uintptr_t want = (uintptr_t)target;
@@ -616,11 +805,17 @@ static size_t find_rel_call_target(const uint8_t *mc, size_t len,
       continue;
     rel = (int32_t)((uint32_t)mc[i+1] | ((uint32_t)mc[i+2] << 8) |
 	((uint32_t)mc[i+3] << 16) | ((uint32_t)mc[i+4] << 24));
-    got = (uintptr_t)(mc + i + 5u) + rel;
+    got = mcaddr + i + 5u + (intptr_t)rel;
     if (got == want)
       return i;
   }
   return (size_t)-1;
+}
+
+static size_t find_rel_call_target(const uint8_t *mc, size_t len,
+				   const void *target)
+{
+  return find_rel_call_target_at(mc, len, (uintptr_t)mc, target);
 }
 
 static int decode_rel_jmp_target(const uint8_t *mc, size_t len, size_t pos,
@@ -722,31 +917,39 @@ static void assert_vm_tnew_membership_order(void)
   assert(retry_end <= hint2 && hint2 < commit);
 }
 
-static void assert_traced_fnew_publication_order(lua_State *L)
+static void assert_traced_fnew_descriptor_order(lua_State *L)
 {
+  const uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
   int traceno;
   for (traceno = 1; traceno <= 256; traceno++) {
     size_t len, fn_header, uv_header, mark_set, mark_clear, first_mark;
-    size_t ready, block;
-    size_t pending_hint, pending_cas, pending_hint2, retry_jne_end = 0;
-    size_t life_claim1, life_claim2, life_commit1, life_commit2;
-    size_t root_claim1, root_claim2, root_commit1, root_commit2;
-    size_t root_rollback;
-    size_t life_claim1_bad = (size_t)-1, life_claim2_bad = (size_t)-1;
-    size_t life_commit1_bad = (size_t)-1, life_commit2_bad = (size_t)-1;
-    size_t claim1_bad = (size_t)-1, claim2_bad = (size_t)-1;
-    size_t commit1_bad = (size_t)-1, commit2_bad = (size_t)-1;
-    size_t rollback_bad = (size_t)-1;
-    X64MemInsn pending_cmp, pending_tail;
-    X64MemInsn root_insn;
-    int pending_retry;
+    size_t fn_dtor, uv_dtor, ready1, ready2, block1, block2;
+    size_t pending_hint, pending_cas;
+    size_t root_claim, root_commit, root_rollback;
+    size_t pair_claim, pair_commit;
+    size_t pair_claim_bad = (size_t)-1;
+    size_t pair_commit_repair = (size_t)-1;
+    size_t split_claim1, split_claim2, split_rollback;
+    size_t repair_commit1, repair_commit2;
+    size_t repair_live1, repair_live2, repair_mut1, repair_mut2;
+    size_t live_bad1 = (size_t)-1, live_bad2 = (size_t)-1;
+    size_t mut_bad1 = (size_t)-1, mut_bad2 = (size_t)-1;
+    size_t mark_guard, mark_fallback, helper_call;
+    size_t dtor_check[LJ_ARENA_DTOR_PLANES][2];
+    size_t dtor_check_bad[LJ_ARENA_DTOR_PLANES][2];
+    X64MemInsn dtor_check_insn[LJ_ARENA_DTOR_PLANES][2];
+    X64MemInsn state_insn, fn_dtor_insn, uv_dtor_insn;
     const uint8_t *mc;
+    uintptr_t mcaddr;
+    uint32_t plane;
     lua_getglobal(L, "require");
     lua_pushliteral(L, "jit.util");
     ljt_lua_pcall(L, 1, 1, "load jit.util for FNEW mcode");
     lua_getfield(L, -1, "tracemc");
     lua_pushinteger(L, traceno);
-    ljt_lua_pcall(L, 1, 1, "fetch FNEW trace mcode");
+    ljt_lua_pcall(L, 1, 2, "fetch FNEW trace mcode and address");
+    mcaddr = (uintptr_t)(intptr_t)lua_tointeger(L, -1);
+    lua_pop(L, 1);  /* Executable mcode address. */
     lua_remove(L, -2);  /* jit.util table. */
     mc = (const uint8_t *)lua_tolstring(L, -1, &len);
     if (mc == NULL) {
@@ -755,11 +958,9 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     }
     mark_set = find_bitmap_op(mc, len, 0, 1, 0xabu,
 			      (uint32_t)offsetof(GCArena, mark));
-    block = find_bitmap_op(mc, len, 0, 0, 0xabu,
-			   (uint32_t)offsetof(GCArena, block));
-    ready = find_bitmap_op(mc, len, 0, 0, 0xabu,
-			   (uint32_t)offsetof(GCArena, ready));
-    if (mark_set == (size_t)-1 || block == (size_t)-1) {
+    block1 = find_bitmap_op(mc, len, 0, 0, 0xabu,
+			    (uint32_t)offsetof(GCArena, block));
+    if (mark_set == (size_t)-1 || block1 == (size_t)-1) {
       lua_pop(L, 1);
       continue;
     }
@@ -767,105 +968,136 @@ static void assert_traced_fnew_publication_order(lua_State *L)
     uv_header = find_gct_store(mc, len, (uint8_t)~LJ_TUPVAL);
     mark_clear = find_bitmap_op(mc, len, 0, 1, 0xb3u,
 				(uint32_t)offsetof(GCArena, mark));
-    pending_cas = find_locked_cmpxchg(mc, len, block,
-				     (int32_t)DISPATCH_TG(gcroot_pending),
-				     RID_DISPATCH, &pending_cmp);
-    pending_retry = pending_cas != (size_t)-1 &&
-      decode_pending_retry(mc, len, block, &pending_cmp, &pending_tail,
-			   &retry_jne_end);
-    pending_hint = !pending_retry ? (size_t)-1 :
-      find_i32_store(mc, len, pending_tail.end,
+    fn_dtor = find_bitmap_regop(mc, len, 0, 0xabu,
+	(int32_t)offsetof(GCArena, dtor[0]), &fn_dtor_insn);
+    uv_dtor = find_bitmap_regop(mc, len, 0, 0xabu,
+	(int32_t)offsetof(GCArena, dtor[1]), &uv_dtor_insn);
+    for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++) {
+      int32_t disp = (int32_t)offsetof(GCArena, dtor) +
+	(int32_t)(plane * LJ_ARENA_WORDS * sizeof(uint64_t));
+      dtor_check_bad[plane][0] = dtor_check_bad[plane][1] = (size_t)-1;
+      dtor_check[plane][0] = find_bitmap_zero_preflight(mc, len, 0, disp,
+	&dtor_check_insn[plane][0], &dtor_check_bad[plane][0]);
+      dtor_check[plane][1] = dtor_check[plane][0] == (size_t)-1 ?
+	(size_t)-1 : find_bitmap_zero_preflight(mc, len,
+	  dtor_check[plane][0] + 1u, disp, &dtor_check_insn[plane][1],
+	  &dtor_check_bad[plane][1]);
+    }
+    ready1 = find_bitmap_op(mc, len, 0, 0, 0xabu,
+			    (uint32_t)offsetof(GCArena, ready));
+    ready2 = ready1 == (size_t)-1 ? (size_t)-1 :
+      find_bitmap_op(mc, len, ready1 + 1u, 0, 0xabu,
+			     (uint32_t)offsetof(GCArena, ready));
+    block2 = block1 == (size_t)-1 ? (size_t)-1 :
+      find_bitmap_op(mc, len, block1 + 1u, 0, 0xabu,
+			     (uint32_t)offsetof(GCArena, block));
+    pending_cas = find_locked_cmpxchg(mc, len, 0,
+	(int32_t)DISPATCH_TG(gcroot_pending), RID_DISPATCH, &state_insn);
+    pending_hint = find_i32_store(mc, len, 0,
 	(uint32_t)offsetof(global_State, gcroot_pending_hint), 1u);
-    pending_hint2 = !pending_retry ? (size_t)-1 :
-      find_i32_store(mc, len, retry_jne_end,
-	(uint32_t)offsetof(global_State, gcroot_pending_hint), 1u);
-    life_claim1 = find_lifetime_transition(mc, len, 0,
-	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
-	&root_insn, &life_claim1_bad);
-    life_claim2 = life_claim1 == (size_t)-1 ? (size_t)-1 :
-      find_lifetime_transition(mc, len, life_claim1 + 1u,
-	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
-	&root_insn, &life_claim2_bad);
-    root_claim1 = find_root_transition(mc, len, 0,
-				       LJ_ARENA_ROOT_NONE,
-				       LJ_ARENA_ROOT_LINKING, &root_insn,
-				       &claim1_bad);
-    root_claim2 = root_claim1 == (size_t)-1 ? (size_t)-1 :
-      find_root_transition(mc, len, root_claim1 + 1u,
-			   LJ_ARENA_ROOT_NONE,
-			   LJ_ARENA_ROOT_LINKING, &root_insn, &claim2_bad);
-    root_commit1 = !pending_retry ? (size_t)-1 :
-      find_root_transition(mc, len, retry_jne_end,
-			   LJ_ARENA_ROOT_LINKING,
-			   LJ_ARENA_ROOT_MEMBER, &root_insn, &commit1_bad);
-    root_commit2 = root_commit1 == (size_t)-1 ? (size_t)-1 :
-      find_root_transition(mc, len, root_commit1 + 1u,
-			   LJ_ARENA_ROOT_LINKING,
-			   LJ_ARENA_ROOT_MEMBER, &root_insn, &commit2_bad);
-    life_commit1 = !pending_retry ? (size_t)-1 :
-      find_lifetime_transition(mc, len, retry_jne_end,
-	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
-	&root_insn, &life_commit1_bad);
-    life_commit2 = life_commit1 == (size_t)-1 ? (size_t)-1 :
-      find_lifetime_transition(mc, len, life_commit1 + 1u,
-	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
-	&root_insn, &life_commit2_bad);
+    root_claim = find_root_transition(mc, len, 0,
+	LJ_ARENA_ROOT_NONE, LJ_ARENA_ROOT_LINKING, NULL, NULL);
+    root_commit = find_root_transition(mc, len, 0,
+	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_MEMBER, NULL, NULL);
     root_rollback = find_root_transition(mc, len, 0,
-					 LJ_ARENA_ROOT_LINKING,
-					 LJ_ARENA_ROOT_NONE,
-					 &root_insn, &rollback_bad);
+	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_NONE, NULL, NULL);
+    pair_claim = find_lifetime_pair_transition(mc, len, 0, fncells,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
+	&state_insn, &pair_claim_bad);
+    pair_commit = find_lifetime_pair_transition(mc, len, 0, fncells,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	&state_insn, &pair_commit_repair);
+    split_claim1 = find_lifetime_transition(mc, len, 0,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
+	NULL, NULL);
+    split_claim2 = split_claim1 == (size_t)-1 ? (size_t)-1 :
+      find_lifetime_transition(mc, len, split_claim1 + 1u,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
+	NULL, NULL);
+    split_rollback = find_lifetime_transition(mc, len, 0,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE,
+	NULL, NULL);
+    repair_commit1 = find_lifetime_transition(mc, len, 0,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	NULL, NULL);
+    repair_commit2 = repair_commit1 == (size_t)-1 ? (size_t)-1 :
+      find_lifetime_transition(mc, len, repair_commit1 + 1u,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	NULL, NULL);
+    mark_guard = find_mem_cmp_zero_jcc(mc, len, 0,
+	DISPATCH_TG(mark_active), RID_DISPATCH, CC_NE, &mark_fallback);
+    helper_call = find_rel_call_target_at(mc, len, mcaddr,
+	(const void *)lj_func_newL_gc1num_forjit);
+    repair_live1 = find_packed_sample_validate(mc, len,
+	pair_commit_repair, 4u, LJ_ARENA_LIFETIME_LIVE, &live_bad1);
+    repair_live2 = repair_live1 == (size_t)-1 ? (size_t)-1 :
+      find_packed_sample_validate(mc, len, repair_live1 + 1u, 4u,
+	LJ_ARENA_LIFETIME_LIVE, &live_bad2);
+    repair_mut1 = find_packed_sample_validate(mc, len,
+	pair_commit_repair, 4u, LJ_ARENA_LIFETIME_MUTATING, &mut_bad1);
+    repair_mut2 = repair_mut1 == (size_t)-1 ? (size_t)-1 :
+      find_packed_sample_validate(mc, len, repair_mut1 + 1u, 4u,
+	LJ_ARENA_LIFETIME_MUTATING, &mut_bad2);
     assert(fn_header != (size_t)-1 && uv_header != (size_t)-1);
     assert(mark_clear != (size_t)-1);
-    assert(ready != (size_t)-1);
-    assert(pending_hint != (size_t)-1);
-    assert(pending_cas != (size_t)-1);
-    assert(pending_retry);
-    assert(pending_hint2 != (size_t)-1);
-    assert(life_claim1 != (size_t)-1 && life_claim2 != (size_t)-1);
-    assert(root_claim1 != (size_t)-1 && root_claim2 != (size_t)-1);
-    assert(life_commit1 != (size_t)-1 && life_commit2 != (size_t)-1);
-    assert(root_commit1 != (size_t)-1 && root_commit2 != (size_t)-1);
-    assert(root_rollback != (size_t)-1);
+    assert(fn_dtor != (size_t)-1 && uv_dtor != (size_t)-1);
+    assert(ready1 != (size_t)-1 && ready2 != (size_t)-1);
+    assert(block1 != (size_t)-1 && block2 != (size_t)-1);
+    assert(pending_hint == (size_t)-1);
+    assert(pending_cas == (size_t)-1);
+    assert(root_claim == (size_t)-1);
+    assert(root_commit == (size_t)-1);
+    assert(root_rollback == (size_t)-1);
+    assert(pair_claim != (size_t)-1 && pair_commit != (size_t)-1);
+    assert(split_claim1 != (size_t)-1 && split_claim2 != (size_t)-1);
+    assert(split_rollback != (size_t)-1);
+    assert(repair_commit1 != (size_t)-1 && repair_commit2 != (size_t)-1);
+    assert(repair_live1 != (size_t)-1 && repair_live2 != (size_t)-1);
+    assert(repair_mut1 != (size_t)-1 && repair_mut2 != (size_t)-1);
+    assert(live_bad1 == pair_claim_bad && live_bad2 == pair_claim_bad &&
+	   mut_bad1 == pair_claim_bad && mut_bad2 == pair_claim_bad);
+    assert(mark_guard != (size_t)-1 && helper_call != (size_t)-1);
+    assert(mark_guard < pair_claim && mark_fallback <= helper_call);
+    assert(pair_claim_bad + 3u <= len && mc[pair_claim_bad] == 0xccu &&
+	   mc[pair_claim_bad+1u] == 0xebu &&
+	   mc[pair_claim_bad+2u] == 0xfdu);
+    assert(fn_dtor_insn.reg != uv_dtor_insn.reg);
+    for (plane = 0; plane < LJ_ARENA_DTOR_PLANES; plane++) {
+      uint8_t reg0, reg1;
+      assert(dtor_check[plane][0] != (size_t)-1 &&
+	     dtor_check[plane][1] != (size_t)-1);
+      assert(dtor_check_bad[plane][0] == pair_claim_bad &&
+	     dtor_check_bad[plane][1] == pair_claim_bad);
+      assert(dtor_check[plane][0] < pair_claim &&
+	     dtor_check[plane][1] < pair_claim);
+      reg0 = dtor_check_insn[plane][0].reg;
+      reg1 = dtor_check_insn[plane][1].reg;
+      assert((reg0 == fn_dtor_insn.reg && reg1 == uv_dtor_insn.reg) ||
+	     (reg0 == uv_dtor_insn.reg && reg1 == fn_dtor_insn.reg));
+    }
+    assert(pair_commit < pair_commit_repair &&
+	   pair_commit_repair <= repair_commit1);
     first_mark = mark_set < mark_clear ? mark_set : mark_clear;
     /* x64 emits backwards: this guards the order in executable mcode, not the
     ** visually misleading order of emit_* calls in lj_asm_x86.h. */
     assert(fn_header < first_mark);
     assert(uv_header < first_mark);
-    /* Both exact starts are LINKING before any header/bitmap discovery. The
-    ** decoded BTS/BTR/Jcc sequences above prove the emitted state transforms,
-    ** rather than merely counting locked instructions at the root offset. */
-    assert(life_claim1 < root_claim1 && root_claim1 < life_claim2);
-    assert(life_claim2 < root_claim2);
-    assert(root_claim2 < fn_header && root_claim2 < uv_header);
-    assert(first_mark < ready);
-    assert(ready < block);
-    assert(block < pending_tail.start);
-    assert(pending_tail.end <= pending_hint);
-    assert(pending_hint - pending_tail.end <= 16u);
-    assert(pending_hint < pending_cas);
-    assert(pending_cmp.end < retry_jne_end);
-    assert(retry_jne_end <= pending_hint2);
-    assert(pending_hint2 - retry_jne_end <= 32u);
-    assert(pending_hint2 < life_commit1 && life_commit1 < root_commit1);
-    assert(root_commit1 < life_commit2 && life_commit2 < root_commit2);
-    /* The pre-visibility pair rollback is present but out of the normal
-    ** success path; its physical placement is allocator-dependent. */
-    /* Every validation edge except the second claim is terminal. The second
-    ** claim enters the first claim's exact rollback block before that same
-    ** terminal INT3 loop. */
-    assert(life_claim1_bad != (size_t)-1 &&
-	   life_claim2_bad != (size_t)-1 && claim1_bad != (size_t)-1 &&
-	   claim2_bad != (size_t)-1);
-    assert(life_commit1_bad == commit1_bad &&
-	   life_commit2_bad == commit1_bad &&
-	   commit1_bad == commit2_bad && commit1_bad == rollback_bad);
-    assert(commit1_bad + 3u <= len && mc[commit1_bad] == 0xccu &&
-	   mc[commit1_bad+1u] == 0xebu && mc[commit1_bad+2u] == 0xfdu);
-    assert(claim2_bad < len && root_rollback < len);
+    /* Every destructor plane for both starts is tested read-only before the
+    ** common adjacent pair claims either lifetime nibble. Cold per-lane
+    ** claim/rollback code remains for the real 16-cell word boundary. */
+    assert(pair_claim < fn_header && pair_claim < uv_header);
+    /* The two one-hot destructor bits make the rootless allocation identities
+    ** authoritative before either start becomes discoverable. Root lanes and
+    ** the pending ownership chain are deliberately absent from this path. */
+    assert(fn_header < fn_dtor && fn_header < uv_dtor);
+    assert(uv_header < fn_dtor && uv_header < uv_dtor);
+    assert(fn_dtor < ready1 && uv_dtor < ready1);
+    assert(ready1 < ready2 && ready2 < block1 && block1 < block2);
+    assert(block2 < pair_commit);
     lua_pop(L, 1);
     return;
   }
-  assert(0 && "missing traced inline FNEW bitmap publication");
+  assert(0 && "missing traced inline FNEW destructor publication");
 }
 
 static void reset_gc1num_bump_counters(void)
@@ -887,6 +1119,16 @@ static void assert_arena_root_member(const void *p)
   assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
   assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
+}
+
+static void assert_arena_typed_rootless(const void *p, uint32_t dtor_kind)
+{
+  GCArena *a = lj_arena_of(p);
+  uint32_t cell = lj_arena_cellof(p);
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(a, cell) == dtor_kind);
 }
 
 static int packed_lane_transition(uint32_t state, uint32_t lane_bits,
@@ -945,7 +1187,7 @@ static void assert_arena_root_range_state(const GCArena *a, uint32_t cell,
     assert(lj_arena_root_state_acq(a, cell + i) == state);
 }
 
-static int assert_fnew_root_layout(GCfunc *fn)
+static int assert_fnew_typed_layout(GCfunc *fn)
 {
   GCupval *uv = func_uv_acq(&fn->l, 0);
   GCArena *a = lj_arena_of(fn);
@@ -953,17 +1195,24 @@ static int assert_fnew_root_layout(GCfunc *fn)
   uint32_t uvcell = lj_arena_cellof(uv);
   uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
   uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
-  assert_arena_root_member(fn);
-  assert_arena_root_member(uv);
+  uint32_t i;
+  assert_arena_typed_rootless(fn, LJ_ARENA_DTOR_LFUNC1);
+  assert_arena_typed_rootless(uv, LJ_ARENA_DTOR_CLOSED_UV);
   assert(lj_arena_of(uv) == a && uvcell == fncell + fncells);
-  if (fncells > 1u)
+  if (fncells > 1u) {
     assert_arena_root_range_state(a, fncell + 1u, fncells - 1u,
 					  LJ_ARENA_ROOT_NONE);
-  if (uvcells > 1u)
+    for (i = 1u; i < fncells; i++)
+      assert(lj_arena_dtor_kind_acq(a, fncell + i) == LJ_ARENA_DTOR_NONE);
+  }
+  if (uvcells > 1u) {
     assert_arena_root_range_state(a, uvcell + 1u, uvcells - 1u,
 					  LJ_ARENA_ROOT_NONE);
-  return fncell / LJ_ARENA_ROOT_CELLS_PER_WORD !=
-	 uvcell / LJ_ARENA_ROOT_CELLS_PER_WORD;
+    for (i = 1u; i < uvcells; i++)
+      assert(lj_arena_dtor_kind_acq(a, uvcell + i) == LJ_ARENA_DTOR_NONE);
+  }
+  return fncell / LJ_ARENA_LIFETIME_CELLS_PER_WORD !=
+	 uvcell / LJ_ARENA_LIFETIME_CELLS_PER_WORD;
 }
 
 static void prime_traversable_bump_window(TGState *tg)
@@ -1101,11 +1350,17 @@ static void test_traced_behavior(lua_State *L)
 static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
 {
   TGState *tg = L2TG(L);
+  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
+  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
   uint32_t helper0, helper1;
+  GCobj *pending0;
+  GCfunc *survivor;
   const char *setup =
     "require'jit.util'\n"
     "jit.flush()\n"
-    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    /* Keep the traced loop's terminal exit below the side-trace threshold so
+    ** this fixture can attribute pending-root changes specifically to FNEW. */
+    "jit.opt.start('hotloop=1', 'hotexit=100000')\n"
     "__fnew_hint_t = {}\n";
   const char *warm =
     "local util = package.loaded['jit.util']\n"
@@ -1127,13 +1382,15 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
 
   run_script(L, setup, "immutable numeric FNEW traced inline setup");
   run_script(L, warm, "immutable numeric FNEW traced inline warmup");
-  assert_traced_fnew_publication_order(L);
+  assert_traced_fnew_descriptor_order(L);
   (void)lj_gc_flush_root_pending(g);
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
   la_store64_rel(&tg->local_total, 0);
   lj_gcroot_pending_hint_rel(g, 0);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  assert(pending0 == NULL);
   reset_gc1num_bump_counters();
   helper0 = gc1num_bump_helper_calls();
 
@@ -1151,100 +1408,87 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
   assert(lua_istable(L, -1));
   lua_rawgeti(L, -1, 1);
   assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
-  (void)assert_fnew_root_layout(funcV(L->top - 1));
+  (void)assert_fnew_typed_layout(funcV(L->top - 1));
   lua_pop(L, 1);
   {
     int i, found_cross_word = 0;
     for (i = 1; i <= 100 && !found_cross_word; i++) {
       lua_rawgeti(L, -1, i);
       assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
-      found_cross_word = assert_fnew_root_layout(funcV(L->top - 1));
+      found_cross_word = assert_fnew_typed_layout(funcV(L->top - 1));
       lua_pop(L, 1);
     }
-    /* Exercise the FNEW pair path whose exact starts live in different packed
-    ** root words; each CAS must derive its own word without touching either
-    ** allocation's NONE interiors. */
+    /* Exercise the emitted cold fallback for a pair whose exact starts live in
+    ** different 16-cell lifetime words, without publishing either as a root. */
     assert(found_cross_word);
   }
   lua_pop(L, 1);
-  assert(lj_gcroot_pending_hint_acq(g) != 0);
-  assert(lj_gc_flush_root_pending(g) > 0);
+
+  /* Reuse this exact decoded FNEW trace to prove mark_active diverts compiled
+  ** mcode to the C helper. Real MARK closes stale native entry, so manual
+  ** mirrors preserve the trace while the direct-helper fixture below covers
+  ** the actual MARK->SWEEP barrier semantics. */
+  helper0 = gc1num_bump_helper_calls();
+  lua_getglobal(L, "__fnew_hint_run");
+  assert(lua_isfunction(L, -1));
+  lua_pushnumber(L, 2000.5);
+  lj_tg_mark_active_rel(tg, 1);
+  lj_tg_alloc_black_rel(tg, 1);
+  ljt_lua_pcall(L, 1, 2, "immutable numeric FNEW active-MARK fallback");
+  lj_tg_alloc_black_rel(tg, old_alloc_black);
+  lj_tg_mark_active_rel(tg, old_mark_active);
+  assert(lua_tonumber(L, -2) == 2001.5);
+  assert(lua_tonumber(L, -1) == 2100.5);
+  lua_pop(L, 2);
+  helper1 = gc1num_bump_helper_calls();
+  assert(helper1 > helper0);
+  lua_getglobal(L, "__fnew_hint_t");
+  assert(lua_istable(L, -1));
+  lua_rawgeti(L, -1, 1);
+  assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
+  survivor = funcV(L->top - 1);
+  assert_fnew_typed_layout(survivor);
+  lua_pop(L, 2);
+
+  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(lj_gc_flush_root_pending(g) == 0);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  {
+    int round;
+    /* The table edge, not ownership-spine membership, is the only semantic
+    ** reachability of this pair. Repeated full GC must retain both typed starts
+    ** and the already-recorded trace. */
+    for (round = 0; round < 3; round++) {
+      lua_gc(L, LUA_GCCOLLECT, 0);
+      lua_getglobal(L, "__fnew_hint_t");
+      assert(lua_istable(L, -1));
+      lua_rawgeti(L, -1, 1);
+      assert(tvisfunc(L->top - 1) && funcV(L->top - 1) == survivor);
+      assert_fnew_typed_layout(survivor);
+      ljt_lua_pcall(L, 0, 1, "reachable rootless FNEW survivor");
+      assert(lua_tonumber(L, -1) == 2001.5);
+      lua_pop(L, 2);  /* Result and table. */
+
+      lua_getglobal(L, "require");
+      lua_pushliteral(L, "jit.util");
+      ljt_lua_pcall(L, 1, 1, "reload jit.util after FNEW GC");
+      lua_getfield(L, -1, "traceinfo");
+      lua_pushinteger(L, 1);
+      ljt_lua_pcall(L, 1, 1, "check FNEW trace after GC");
+      assert(!lua_isnil(L, -1));
+      lua_pop(L, 2);  /* traceinfo result and jit.util. */
+      /* traceinfo returns a fresh ordinary table, so drain its expected TNEW
+      ** membership publication before checking the FNEW queue invariant. */
+      assert(lj_gc_flush_root_pending(g) >= 1u);
+      assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+      assert(lj_gcroot_pending_hint_acq(g) == 0);
+    }
+  }
   lua_pushnil(L);
   lua_setglobal(L, "__fnew_hint_t");
   lua_pushnil(L);
   lua_setglobal(L, "__fnew_hint_run");
-}
-
-static void test_traced_active_black_inline(lua_State *L, global_State *g,
-					    TGState *tg)
-{
-  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
-  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
-  uint32_t helper0, helper1;
-  GCobj *pending0;
-  const char *setup =
-    "require'jit.util'\n"
-    "jit.flush()\n"
-    "jit.opt.start('hotloop=1', 'hotexit=1')\n";
-  const char *warm =
-    "local util = package.loaded['jit.util']\n"
-    "function __fnew_active_run(n, offset)\n"
-    "  local s = 0\n"
-    "  for i = 1, n do\n"
-    "    local x = i + offset\n"
-    "    local f = function()\n"
-    "      x = x + 1\n"
-    "      return x\n"
-    "    end\n"
-    "    s = s + f()\n"
-    "  end\n"
-    "  return s\n"
-    "end\n"
-    "assert(__fnew_active_run(100, 0) == 5150)\n"
-    "assert(util.traceinfo(1), 'numeric FNEW loop did not trace')\n";
-
-  run_script(L, setup, "numeric FNEW traced active-black inline setup");
-  run_script(L, warm, "numeric FNEW traced active-black inline warmup");
-  suppress_new_trace_recording(L, g);
-  (void)lj_gc_flush_root_pending(g);
-  lj_gcroot_pending_hint_rel(g, 0);
-  pending0 = lj_tg_gcroot_pending_acq(tg);
-  assert(pending0 == NULL);
-  reset_gc1num_bump_counters();
-  helper0 = gc1num_bump_helper_calls();
-
-  lj_gc_threshold_store(g, UINT64_MAX / 2u);
-  lj_gc2_hard_store(g, UINT64_MAX / 2u);
-  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
-  la_store64_rel(&tg->local_total, 0);
-  prime_traversable_bump_window(tg);
-
-  lua_getglobal(L, "__fnew_active_run");
-  assert(lua_isfunction(L, -1));
-  lua_pushinteger(L, 100);
-  lua_pushnumber(L, 1000);
-  (void)lj_gc_flush_root_pending(g);
-  lj_gcroot_pending_hint_rel(g, 0);
-  pending0 = lj_tg_gcroot_pending_acq(tg);
-  assert(pending0 == NULL);
-  lj_tg_mark_active_rel(tg, 1);
-  lj_tg_alloc_black_rel(tg, 1);
-  ljt_lua_pcall(L, 2, 1, "numeric FNEW traced active-black inline rerun");
-  assert(lua_tonumber(L, -1) == 105150);
-  lua_pop(L, 1);
-
-  lj_tg_alloc_black_rel(tg, old_alloc_black);
-  lj_tg_mark_active_rel(tg, old_mark_active);
-
-  helper1 = gc1num_bump_helper_calls();
-  assert(helper1 == helper0);
-  assert(lj_tg_gcroot_pending_acq(tg) != pending0);
-  assert(lj_gcroot_pending_hint_acq(g) != 0);
-  assert(lj_gc_flush_root_pending(g) > 0);
-  assert(lj_gcroot_pending_hint_acq(g) == 0);
-  lua_pushnil(L);
-  lua_setglobal(L, "__fnew_active_run");
 }
 
 static void test_traced_mark_active_white_fallback(lua_State *L,
@@ -1485,6 +1729,7 @@ static void test_uvcell_bump_direct(lua_State *L, global_State *g, TGState *tg)
   bump0 = lj_func_test_uvcell_bump_calls();
   uv = lj_func_newuvcell(L);
   assert_nil_closed_cell(uv);
+  assert_arena_typed_rootless(uv, LJ_ARENA_DTOR_CLOSED_UV);
   bump1 = lj_func_test_uvcell_bump_calls();
   assert(bump1 > bump0);
   assert(lj_tg_local_total_acq(tg) > 0);
@@ -1492,6 +1737,7 @@ static void test_uvcell_bump_direct(lua_State *L, global_State *g, TGState *tg)
   setnilV(&slots[3]);
   uv = lj_func_newuvcell_forjit(L, slots, 3);
   assert_nil_closed_cell(uv);
+  assert_arena_typed_rootless(uv, LJ_ARENA_DTOR_CLOSED_UV);
   assert(tvisgcv(&slots[3]) && gcV(&slots[3]) == obj2gco(uv));
   bump2 = lj_func_test_uvcell_bump_calls();
   assert(bump2 > bump1);
@@ -1761,6 +2007,7 @@ static void test_no_upvalue_forjit_fast_direct(lua_State *L, global_State *g,
   fast0 = lj_func_test_gc0_bump_trace_calls();
   fn = lj_func_newL_gc_forjit(L, NULL, child, &parent->l);
   assert(isluafunc(fn) && lj_funcL_nupvalues(&fn->l) == 0);
+  assert_arena_typed_rootless(fn, LJ_ARENA_DTOR_LFUNC0);
   assert(lj_func_test_gc0_bump_trace_calls() > fast0);
   lua_pop(L, 1);
 }
@@ -1792,17 +2039,16 @@ static void test_accounting_fast_direct(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
-static void test_active_black_direct_publishes_exact(lua_State *L,
+static void test_active_black_direct_publishes_typed(lua_State *L,
 						     global_State *g,
 						     TGState *tg)
 {
-  uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
-  uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
   uint32_t fast0;
+  uint32_t i;
+  int saw_sweep = 0;
   TValue slots[256];
   GCfunc *parent, *fn;
   GCproto *child;
-  GCupval *uv;
   GCobj *pending0;
   int32_t slotno;
 
@@ -1819,25 +2065,49 @@ static void test_active_black_direct_publishes_exact(lua_State *L,
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
   la_store64_rel(&tg->local_total, 0);
-  lj_tg_mark_active_rel(tg, 1);
-  lj_tg_alloc_black_rel(tg, 1);
+  /* Earlier allocator fixtures may leave a bounded cycle in progress. Close
+  ** it before this test opens the dedicated active-black cycle. */
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  (void)lj_gc_flush_root_pending(g);
+  lj_gcroot_pending_hint_rel(g, 0);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  assert(pending0 == NULL);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_tg_mark_active_acq(tg) != 0);
+  assert(lj_tg_alloc_black_acq(tg) != 0);
 
   setnumV(&slots[slotno], 321);
   fn = lj_func_newL_gc1num_forjit(L, slots, child, &parent->l, slotno, 321);
   assert_one_upvalue_result(fn, &slots[slotno], 321);
-  uv = func_uv_acq(&fn->l, 0);
   assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
   assert(lj_funcL_nupvalues(&fn->l) == 1u);
-  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(fn));
-  assert(lj_obj_gcw_acq(obj2gco(fn)) == obj2gco(uv));
-  assert(lj_obj_gcw_acq(obj2gco(uv)) == pending0);
-  assert(lj_gcroot_pending_hint_acq(g) != 0);
-  assert(lj_gc_flush_root_pending(g) >= 2u);
+  assert_fnew_typed_layout(fn);
+  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(lj_gc_flush_root_pending(g) == 0);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
 
-  lj_tg_alloc_black_rel(tg, old_alloc_black);
-  lj_tg_mark_active_rel(tg, old_mark_active);
-  lua_pop(L, 1);
+  /* Keep the new closure live from an ordinary stack root while the real cycle
+  ** crosses MARK->SWEEP. This exercises the active-black C constructor's
+  ** marked-proto and child barriers, not the traced inline implementation. */
+  setfuncV(L, L->top, fn);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  for (i = 0; i < 2000000u && gc2_phase_acq(g) != LJ_GC2_IDLE; i++) {
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+      saw_sweep = 1;
+    (void)lua_gc(L, LUA_GCSTEP, 1);
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+      saw_sweep = 1;
+  }
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE && saw_sweep);
+  assert_fnew_typed_layout(fn);
+  ljt_lua_pcall(L, 0, 1, "active-MARK direct FNEW after sweep");
+  assert(lua_tointeger(L, -1) == 322);
+  lua_pop(L, 2);  /* Result and parent fixture. */
 }
 
 static void test_active_black_direct_keeps_exact_cells(
@@ -1878,11 +2148,10 @@ static void test_active_black_direct_keeps_exact_cells(
   assert(lj_func_test_gc1num_bump_fast_calls() > fast0);
   assert(lj_func_test_gc1num_bump_fallback_calls() == fallback0);
   assert(lj_funcL_nupvalues(&fn->l) == 1u);
-  assert(lj_tg_gcroot_pending_acq(tg) == obj2gco(fn));
-  assert(lj_obj_gcw_acq(obj2gco(fn)) == obj2gco(uv));
-  assert(lj_obj_gcw_acq(obj2gco(uv)) == pending0);
-  assert(lj_gcroot_pending_hint_acq(g) != 0);
-  assert(lj_gc_flush_root_pending(g) >= 2u);
+  assert_fnew_typed_layout(fn);
+  assert(lj_tg_gcroot_pending_acq(tg) == pending0);
+  assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(lj_gc_flush_root_pending(g) == 0);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
 
   a = lj_arena_of(fn);
@@ -1946,9 +2215,7 @@ int main(void)
   test_vm_tnew_root_member(L, g, tg);
   test_vm_tnew_branch_targets(L, g);
   if (getenv("LJ_TEST_X64_PUBLICATION_ONLY") != NULL) {
-    /* Keep an allocation/GC-independent runner for emitted-mcode audits. This
-    ** is also useful while a separate collector tranche is under repair. */
-    test_traced_active_black_inline(L, g, tg);
+    /* Keep a narrow runner for emitted-mcode and active-MARK fallback audits. */
     test_traced_immutable_numeric_inline(L, g);
     puts("t-jit-fnew-bump x64 publication OK");
     fflush(stdout);
@@ -1958,14 +2225,13 @@ int main(void)
   test_bump_allocator_gate_direct(L, g, tg);
   test_interpreter_numeric_fast_path(L);
   test_accounting_fast_direct(L, g, tg);
-  test_active_black_direct_publishes_exact(L, g, tg);
+  test_active_black_direct_publishes_typed(L, g, tg);
   test_active_black_direct_keeps_exact_cells(L, g, tg);
   test_accounting_checkpoint(L, g, tg);
   test_interpreter_generic_oneuv_chain(L);
   test_interpreter_multiuv_afterfn(L);
   test_interpreter_no_upvalue_fast_path(L);
   test_no_upvalue_forjit_fast_direct(L, g, tg);
-  test_traced_active_black_inline(L, g, tg);
   test_traced_immutable_numeric_inline(L, g);
   if (getenv("LJ_TEST_TRACED_FNEW") != NULL) {
     test_traced_behavior(L);

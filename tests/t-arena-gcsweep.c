@@ -823,6 +823,10 @@ int main(void)
   deadfn_size = sizeLfunc((MSize)lj_funcL_nupvalues(&deadfn->l));
   deadfnpt = funcproto(deadfn);
   assert(ptr_state(deadfn) == 2);
+  assert(lj_arena_root_state_acq(lj_arena_of(deadfn),
+    lj_arena_cellof(deadfn)) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(deadfn),
+    lj_arena_cellof(deadfn)) == LJ_ARENA_DTOR_LFUNC0);
   assert(ptr_state(deadfnpt) == 2);
   L->top--;
 
@@ -849,6 +853,14 @@ int main(void)
   assert((lj_arena_of(deaduv)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert(ptr_state(uvfn) == 2);
   assert(ptr_state(deaduv) == 2);
+  assert(lj_arena_root_state_acq(lj_arena_of(uvfn),
+    lj_arena_cellof(uvfn)) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(uvfn),
+    lj_arena_cellof(uvfn)) == LJ_ARENA_DTOR_LFUNC1);
+  assert(lj_arena_root_state_acq(lj_arena_of(deaduv),
+    lj_arena_cellof(deaduv)) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(deaduv),
+    lj_arena_cellof(deaduv)) == LJ_ARENA_DTOR_CLOSED_UV);
   L->top--;
 
   lua_getfield(L, -1, "arr");
@@ -956,22 +968,56 @@ int main(void)
   if (splitnode)
     assert((ptr_state(splitnode) & 2u) == 0);
 
-  before_fn = g->gc.total;
+  /* Fixed/SFIXED retention overrides arena destructor identity. Rootless
+  ** typed bodies have no ownership-spine entry which could otherwise preserve
+  ** this flag, so exercise the post-grace validator directly through a real
+  ** collection before allowing the ordinary destructor on the next cycle. */
+  lj_obj_addgcflags_atomic(obj2gco(deadfn), LJ_GC_FIXED|LJ_GC_SFIXED);
   lua_pushnil(L);
   lua_setfield(L, -2, "deadfn");
   lua_gc(L, LUA_GCCOLLECT, 0);
+  assert((ptr_state(deadfn) & 2u) != 0);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(deadfn),
+    lj_arena_cellof(deadfn)) == LJ_ARENA_DTOR_LFUNC0);
+  assert((lj_obj_gcflags(obj2gco(deadfn)) &
+	  (LJ_GC_FIXED|LJ_GC_SFIXED)) == (LJ_GC_FIXED|LJ_GC_SFIXED));
+  lj_obj_cleargcflags_atomic(obj2gco(deadfn), LJ_GC_FIXED|LJ_GC_SFIXED);
+
+  before_fn = g->gc.total;
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(g->gc.total <= before_fn - deadfn_size);
   assert((ptr_state(deadfn) & 2u) == 0);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(deadfn),
+    lj_arena_cellof(deadfn)) == LJ_ARENA_DTOR_NONE);
   assert(ptr_state(deadfnpt) == 2);
   assert(ptr_state(livefn) == 2);
 
+  /* A cdata sidecar disagreement must likewise pin a rootless typed object
+  ** without selecting either destructor family. The independently described
+  ** closure can still be reclaimed in the first cycle; clearing the injected
+  ** disagreement admits the closed-upvalue destructor in the next one. */
+  lj_arena_bm_set(lj_arena_of(deaduv)->cdata, lj_arena_cellof(deaduv));
   before_uv = g->gc.total;
   lua_pushnil(L);
   lua_setfield(L, -2, "uvdead");
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(g->gc.total <= before_uv - uvfn_size - uv_size);
+  assert(g->gc.total <= before_uv - uvfn_size);
   assert((ptr_state(uvfn) & 2u) == 0);
+  assert((ptr_state(deaduv) & 2u) != 0);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(uvfn),
+    lj_arena_cellof(uvfn)) == LJ_ARENA_DTOR_NONE);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(deaduv),
+    lj_arena_cellof(deaduv)) == LJ_ARENA_DTOR_CLOSED_UV);
+  assert(lj_arena_cdata_get(lj_arena_of(deaduv),
+    lj_arena_cellof(deaduv)) == 1u);
+  lj_arena_bm_clear(lj_arena_of(deaduv)->cdata, lj_arena_cellof(deaduv));
+
+  before_uv = g->gc.total;
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_uv - uv_size);
   assert((ptr_state(deaduv) & 2u) == 0);
+  assert(lj_arena_dtor_kind_acq(lj_arena_of(deaduv),
+    lj_arena_cellof(deaduv)) == LJ_ARENA_DTOR_NONE);
 
   before_raw = g->gc.total;
   raw = lj_mem_newgco_raw(L, 64, LJ_AF_TRAVERSABLE);

@@ -899,6 +899,33 @@ static void asm_fnew1num_arena_readyop(ASMState *as, Reg bit, Reg arena)
   emit_rmro(as, XO_BTS, bit|REX_64, arena, offsetof(GCArena, ready));
 }
 
+static void asm_fnew1num_arena_dtorop(ASMState *as, Reg bit, Reg arena,
+					      uint32_t plane)
+{
+  lj_assertA(plane < LJ_ARENA_DTOR_PLANES,
+	     "invalid inline arena destructor plane");
+  /* block is still zero and the sole arena owner has proven this class bit
+  ** clear. This ordinary BTS is intentionally not locked; block publication
+  ** later orders the authoritative class for every reader. */
+  emit_rmro(as, XO_BTS, bit|REX_64, arena,
+	    (int32_t)offsetof(GCArena, dtor) +
+	    (int32_t)(plane * LJ_ARENA_WORDS * sizeof(uint64_t)));
+}
+
+static void asm_fnew1num_arena_dtor_preflight(ASMState *as, Reg bit,
+	Reg arena, uint32_t plane, MCLabel impossible)
+{
+  lj_assertA(plane < LJ_ARENA_DTOR_PLANES,
+	     "invalid inline arena destructor preflight plane");
+  /* A reserved FREE start must not retain destructor authority from an older
+  ** occupant. BT is a read-only test: fail closed on a stale bit without
+  ** clearing evidence that recovery/paranoia needs to diagnose. */
+  emit_jcc(as, CC_B, impossible);
+  emit_rmro(as, (x86Op)XO_0f(a3), bit|REX_64, arena,
+	    (int32_t)offsetof(GCArena, dtor) +
+	    (int32_t)(plane * LJ_ARENA_WORDS * sizeof(uint64_t)));
+}
+
 static void asm_fnew1num_packed_bit_transition(ASMState *as, Reg desired,
 					       Reg bit, uint32_t from,
 					       uint32_t to, MCLabel impossible)
@@ -1031,11 +1058,78 @@ static void asm_fnew1num_packed_transition(ASMState *as, Reg arena, Reg cell,
 				   cells_per_word, word_shift, lane_shift);
 }
 
-#define asm_fnew1num_root_transition(as, arena, cell, word, bit, desired, \
-				     from, to, impossible) \
-  asm_fnew1num_packed_transition((as), (arena), (cell), (word), (bit), \
-	(desired), (int32_t)offsetof(GCArena, root), \
-	LJ_ARENA_ROOT_CELLS_PER_WORD, 5u, 1u, 2u, (from), (to), (impossible))
+/* Transform two adjacent lanes in one sampled word and publish them with one
+** CAS. Runtime restores `bit` to the first lane before CMPXCHG so unrelated
+** word interference can retry from the refreshed RAX sample. `split` handles
+** the structural word-boundary case; `mismatch` handles either exact lane not
+** being in `from` (including a recovery crossover during commit).
+**
+** The no-MT/no-worker eligibility samples are not an exclusion lease. A
+** foreign lj_gc2_workers_set(g, n) controller can publish a worker after the
+** trace sampled zero without using the L-based trace-flush path. Keep this
+** locked CAS even though the main TG is the only allocator in the sampled
+** state: a new recovery writer may update a neighboring lane in this word. */
+static MCLabel asm_fnew1num_njcc_label(ASMState *as, int cc)
+{
+  MCode *p = as->mcp;
+  asm_mcode_put_i32(as, p-4, 0);
+  asm_mcode_put_u8(as, p-5, (MCode)(XI_JCCn+(cc&15)));
+  asm_mcode_put_u8(as, p-6, 0x0f);
+  as->mcp = p-6;
+  return p;
+}
+
+static void asm_fnew1num_nfixup(ASMState *as, MCLabel source)
+{
+  ptrdiff_t delta = as->mcp - source;
+  lj_assertA(delta == (int32_t)delta,
+	     "inline packed pair retry target out of range");
+  asm_mcode_put_i32(as, source-4, (int32_t)delta);
+}
+
+static void asm_fnew1num_packed_pair_transition(ASMState *as, Reg arena,
+	Reg firstcell, Reg word, Reg bit, Reg desired, int32_t plane,
+	uint32_t cells_per_word, uint32_t word_shift, uint32_t lane_shift,
+	uint32_t lane_bits, uint32_t lane_delta, uint32_t from, uint32_t to,
+	MCLabel split, MCLabel mismatch)
+{
+  const uint32_t delta_bits = lane_delta << lane_shift;
+  const uint32_t between = delta_bits - (lane_bits - 1u);
+  const uint32_t restore = delta_bits + lane_bits - 1u;
+  MCLabel retry;
+  int32_t lane, j;
+  lj_assertA(cells_per_word == 16u && word_shift == 4u && lane_shift == 2u &&
+	     lane_bits == 4u && lane_delta != 0 && lane_delta < cells_per_word &&
+	     delta_bits > lane_bits-1u && restore < 64u &&
+	     from < (1u << lane_bits) && to < (1u << lane_bits),
+	     "unsupported inline packed pair transition");
+
+  /* Eight exact bit transforms do not fit the pending short-jump helper.
+  ** Reserve a near JNE and fix its backward retry after the body is emitted. */
+  retry = asm_fnew1num_njcc_label(as, CC_NE);
+  emit_lockrmro(as, XO_CMPXCHG, desired|REX_64, word, plane);
+  emit_gri(as, XG_ARITHi(XOg_SUB), bit, (int32_t)restore);
+  for (lane = 1; lane >= 0; lane--) {
+    for (j = (int32_t)lane_bits-1; j >= 0; j--) {
+      asm_fnew1num_packed_bit_transition(as, desired, bit,
+	(from >> j) & 1u, (to >> j) & 1u, mismatch);
+      if (j != 0)
+	emit_gri(as, XG_ARITHi(XOg_ADD), bit, 1);
+    }
+    if (lane != 0)
+      emit_gri(as, XG_ARITHi(XOg_ADD), bit, (int32_t)between);
+  }
+  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
+  asm_fnew1num_nfixup(as, retry);
+
+  /* `bit` is the first lane's bit offset after packed_load(). The second lane
+  ** shares this word exactly when that offset is below this threshold. */
+  emit_jcc(as, CC_AE, split);
+  emit_gri(as, XG_ARITHi(XOg_CMP), bit,
+	   (int32_t)((cells_per_word - lane_delta) << lane_shift));
+  asm_fnew1num_packed_load(as, arena, firstcell, word, bit, plane,
+				   cells_per_word, word_shift, lane_shift);
+}
 
 #define asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired, \
 					 from, to, impossible) \
@@ -1044,171 +1138,110 @@ static void asm_fnew1num_packed_transition(ASMState *as, Reg arena, Reg cell,
 	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u, 4u, \
 	(from), (to), (impossible))
 
-/* Runtime order is lifetime CONSTRUCT->LIVE followed by root LINKING->MEMBER.
-** If the sampled lifetime lane is MUTATING, recovery owns the lifetime restore:
-** validate the complete 0011 nibble, publish MEMBER, then repair a stale
-** CONSTRUCT restore. A completed LIVE crossover is accepted only with MEMBER;
-** FREE/DESTRUCT/RESCUE and every undefined nibble fail closed. */
-static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
-					  Reg word, Reg bit, Reg desired,
-					  MCLabel impossible)
+/* Rootless typed commit accepts recovery's CONSTRUCT->MUTATING->LIVE
+** crossover. Exact validation in the LIVE/MUTATING arms rejects all other
+** encodings; the ordinary arm owns CONSTRUCT->LIVE itself. */
+static void asm_fnew1num_dtor_construct_commit(ASMState *as, Reg arena,
+	Reg cell, Reg word, Reg bit, Reg desired, MCLabel impossible)
 {
-  MCLabel done = emit_label(as), repair_m, repair_l, repair_c;
-  MCLabel repair_dispatch, repair_entry, repair_fixup;
-  MCLabel root_link, root_member;
-  MCLabel initial_m, initial_l, initial_c, initial_dispatch, initial_fixup;
+  MCLabel done = emit_label(as), state_m, state_l, state_c;
+  MCLabel retry_fixup;
 
-  /* This helper emits several complete retry/repair arms. Keep every arm in
-  ** its own sparse-limit segment: the two callers already start at a checked
-  ** boundary, but one unsplit commit is substantially larger than the mcode
-  ** red zone and could cross the real lower limit before returning. */
   checkmclim(as);
-
-  /* Final crossover repair. Recovery can sample LINKING, restore MUTATING to
-  ** CONSTRUCT, and lose the root CAS immediately after its post-check. Accept
-  ** LIVE/MUTATING, or exact-CAS CONSTRUCT->LIVE before returning. */
   emit_jmp(as, done);
   asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
 	LJ_ARENA_LIFETIME_MUTATING, impossible);
-  repair_m = emit_label(as);
+  state_m = emit_label(as);
   checkmclim(as);
 
   emit_jmp(as, done);
   asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
 	LJ_ARENA_LIFETIME_LIVE, impossible);
-  repair_l = emit_label(as);
+  state_l = emit_label(as);
   checkmclim(as);
 
   emit_jmp(as, done);
-  repair_fixup = asm_fnew1num_packed_sampled_transition(as, word, bit,
+  retry_fixup = asm_fnew1num_packed_sampled_transition(as, word, bit,
 	desired, (int32_t)offsetof(GCArena, lifetime), 4u,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
 	0, impossible);
-  repair_c = emit_label(as);
+  state_c = emit_label(as);
   checkmclim(as);
 
-  /* Dispatch the frozen 4-bit lane by bit 1 then bit 0. Exact validation in
-  ** each arm rejects FREE/DESTRUCT/RESCUE and all corrupt encodings. */
-  emit_jmp(as, repair_c);
-  emit_jcc(as, CC_B, repair_m);
+  /* Runtime dispatch: bit 1 separates LIVE from CONSTRUCT/MUTATING; bit 0
+  ** then separates the latter pair. Reload RAX before each destructive test. */
+  emit_jmp(as, state_c);
+  emit_jcc(as, CC_B, state_m);
   emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
   emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
-  emit_jcc(as, CC_AE, repair_l);
+  emit_jcc(as, CC_AE, state_l);
   emit_rmro(as, XO_LEA, bit, bit, -1);
   emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
   emit_rmro(as, XO_LEA, bit, bit, 1);
   emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
-  repair_dispatch = emit_label(as);
-  emit_sfixup(as, repair_fixup);
-  asm_fnew1num_packed_load(as, arena, cell, word, bit,
-	(int32_t)offsetof(GCArena, lifetime),
-	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u);
-  repair_entry = emit_label(as);
-  checkmclim(as);
-
-  /* LINKING may be committed only from CONSTRUCT or recovery-owned MUTATING.
-  ** A pre-existing LIVE lane is accepted solely with an already-MEMBER root. */
-  asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
-	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_MEMBER, impossible);
-  root_link = emit_label(as);
-  checkmclim(as);
-
-  emit_jmp(as, repair_entry);
-  asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
-	LJ_ARENA_ROOT_MEMBER, LJ_ARENA_ROOT_MEMBER, impossible);
-  root_member = emit_label(as);
-  checkmclim(as);
-
-  /* Initial visible-state arms. CONSTRUCT wins the normal lifetime LP;
-  ** MUTATING leaves the lane to recovery; LIVE is only the completed recovery
-  ** crossover and therefore takes the exact MEMBER validation path. */
-  emit_jmp(as, root_link);
-  asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
-	LJ_ARENA_LIFETIME_MUTATING, impossible);
-  initial_m = emit_label(as);
-  checkmclim(as);
-
-  emit_jmp(as, root_member);
-  asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
-	LJ_ARENA_LIFETIME_LIVE, impossible);
-  initial_l = emit_label(as);
-  checkmclim(as);
-
-  emit_jmp(as, root_link);
-  initial_fixup = asm_fnew1num_packed_sampled_transition(as, word, bit,
-	desired, (int32_t)offsetof(GCArena, lifetime), 4u,
-	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
-	0, impossible);
-  initial_c = emit_label(as);
-  checkmclim(as);
-
-  emit_jmp(as, initial_c);
-  emit_jcc(as, CC_B, initial_m);
-  emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
-  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
-  emit_jcc(as, CC_AE, initial_l);
-  emit_rmro(as, XO_LEA, bit, bit, -1);
-  emit_rr(as, XO_BTR, bit|REX_64, desired|REX_64);
-  emit_rmro(as, XO_LEA, bit, bit, 1);
-  emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
-  initial_dispatch = emit_label(as);
-  emit_sfixup(as, initial_fixup);
-  UNUSED(initial_dispatch);
-  UNUSED(repair_dispatch);
+  emit_sfixup(as, retry_fixup);
   asm_fnew1num_packed_load(as, arena, cell, word, bit,
 	(int32_t)offsetof(GCArena, lifetime),
 	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u);
   checkmclim(as);
 }
 
-/* Claim one undiscovered reservation. A root-plane mismatch rolls back only
-** this function's successful lifetime claim before transferring to failure. */
-static void asm_fnew1num_construct_claim(ASMState *as, Reg arena, Reg cell,
-					 Reg word, Reg bit, Reg desired,
-					 MCLabel failure)
+/* Commit the common adjacent same-word pair with one CAS. A split-word pair or
+** any recovery crossover takes the exact per-lane C/M/L dispatcher above. */
+static void asm_fnew1num_dtor_construct_pair_commit(ASMState *as, Reg arena,
+	Reg fncell, Reg uvcell, Reg word, Reg bit, Reg desired,
+	uint32_t lane_delta, MCLabel impossible)
 {
-  MCLabel done = emit_label(as), rollback;
+  MCLabel done = emit_label(as), repair;
   checkmclim(as);
-  emit_jmp(as, failure);
-  asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired,
-	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, failure);
-  rollback = emit_label(as);
-  checkmclim(as);
+
   emit_jmp(as, done);
-  asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
-	LJ_ARENA_ROOT_NONE, LJ_ARENA_ROOT_LINKING, rollback);
+  asm_fnew1num_dtor_construct_commit(as, arena, uvcell, word, bit, desired,
+				     impossible);
+  asm_fnew1num_dtor_construct_commit(as, arena, fncell, word, bit, desired,
+				     impossible);
+  repair = emit_label(as);
   checkmclim(as);
-  asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired,
-	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT, failure);
+
+  emit_jmp(as, done);
+  asm_fnew1num_packed_pair_transition(as, arena, fncell, word, bit, desired,
+	(int32_t)offsetof(GCArena, lifetime),
+	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u, 4u, lane_delta,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
+	repair, repair);
   checkmclim(as);
 }
 
-/* Claim function then upvalue. Any second-start failure first abandons that
-** start (when needed), then clears the function root and lifetime lanes. */
-static void asm_fnew1num_construct_pair_claim(ASMState *as, Reg arena,
-					      Reg fncell, Reg uvcell,
-					      Reg word, Reg bit, Reg desired,
-					      MCLabel impossible)
+/* Claim the common adjacent same-word pair with one CAS. A structural
+** split-word pair uses two exact claims; a second-start mismatch rolls the
+** first CONSTRUCT lane back to FREE before entering the terminal trap. */
+static void asm_fnew1num_dtor_construct_pair_claim(ASMState *as, Reg arena,
+	Reg fncell, Reg uvcell, Reg word, Reg bit, Reg desired,
+	uint32_t lane_delta, MCLabel impossible)
 {
-  MCLabel done = emit_label(as), rollback_fn;
-  /* Pair claim nests two full packed-state transactions. Split at each
-  ** transaction boundary so a rollback arm cannot hide multiple lane CAS
-  ** sequences behind the caller's single sparse-limit check. */
+  MCLabel done = emit_label(as), rollback_fn, split;
   checkmclim(as);
+
   emit_jmp(as, impossible);
   asm_fnew1num_lifetime_transition(as, arena, fncell, word, bit, desired,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, impossible);
-  checkmclim(as);
-  asm_fnew1num_root_transition(as, arena, fncell, word, bit, desired,
-	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_NONE, impossible);
   rollback_fn = emit_label(as);
   checkmclim(as);
   emit_jmp(as, done);
-  asm_fnew1num_construct_claim(as, arena, uvcell, word, bit, desired,
-	rollback_fn);
+  asm_fnew1num_lifetime_transition(as, arena, uvcell, word, bit, desired,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT, rollback_fn);
   checkmclim(as);
-  asm_fnew1num_construct_claim(as, arena, fncell, word, bit, desired,
-	impossible);
+  asm_fnew1num_lifetime_transition(as, arena, fncell, word, bit, desired,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT, impossible);
+  split = emit_label(as);
+  checkmclim(as);
+
+  emit_jmp(as, done);
+  asm_fnew1num_packed_pair_transition(as, arena, fncell, word, bit, desired,
+	(int32_t)offsetof(GCArena, lifetime),
+	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u, 4u, lane_delta,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
+	split, impossible);
   checkmclim(as);
 }
 
@@ -1284,8 +1317,8 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const uint32_t ncells = fncells + uvcells;
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
-  MCLabel l_done, l_fallback, l_markclear, l_markdone, l_mark_ok;
-  MCLabel l_pending_retry, l_state_impossible;
+  MCLabel l_done, l_fallback, l_markclear, l_markdone;
+  MCLabel l_state_impossible;
   Reg base, parent, val, pt, g, arena, cell, next, uv, tmp, root;
   IRRef fallback_args[CCI_NARGS_MAX];
   RegSet allow;
@@ -1345,39 +1378,29 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   l_state_impossible = emit_label(as);
   checkmclim(as);
 
-  /* Success: publish both exact headers, then continue with CALL result use.
-  ** The activation predicates below are eligibility samples, not an exclusion
-  ** lease: a worker can xchg the pending stack immediately after them. Keep the
-  ** old head in RAX for CMPXCHG, preserve the function in `pt`, and rebuild
-  ** the upvalue tail on every failed attempt. */
+  /* Success: both exact headers are arena-owned and remain off the intrusive
+  ** ownership spine. Commit rootless lifetime, then continue with CALL result
+  ** use; no pending-stack/hint/nextgc publication exists on this path. */
   emit_jmp(as, l_done);
   emit_rr(as, XO_MOV, RID_RET|REX_64, pt|REX_64);
-  asm_fnew1num_construct_commit(as, arena, next, root, tmp, uv,
-				l_state_impossible);
-  checkmclim(as);
-  asm_fnew1num_construct_commit(as, arena, cell, root, tmp, uv,
-				l_state_impossible);
-  checkmclim(as);
-  /* Keep LINKING through both the list CAS and its post-CAS hint repair. */
-  emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
-  l_pending_retry = emit_sjcc_label(as, CC_NE);
-  emit_lockrmro(as, XO_CMPXCHG, pt|REX_64, RID_DISPATCH,
-		DISPATCH_TG(gcroot_pending));
-  emit_movmroi(as, g, offsetof(global_State, gcroot_pending_hint), 1);
-  emit_movtomro(as, RID_RET|REX_GC64, uv, offsetof(GChead, nextgc));
-  emit_sfixup(as, l_pending_retry);
-  emit_movtomro(as, uv|REX_GC64, pt, offsetof(GChead, nextgc));
-  emit_gettg(as, RID_RET, gcroot_pending);
-  emit_rr(as, XO_MOV, pt|REX_64, RID_RET|REX_64);
+  asm_fnew1num_dtor_construct_pair_commit(
+    as, arena, cell, next, root, tmp, uv, fncells, l_state_impossible);
   checkmclim(as);  /* Keep publication separate from accounting updates. */
+  /* Runtime executes this before the CMPXCHG commits (backwards emitter).
+  ** Preserve the function while RAX samples packed lifetime words. */
+  emit_rr(as, XO_MOV, pt|REX_64, RID_RET|REX_64);
 
   /* The assembler emits backwards. These bitmap operations therefore run
-  ** after the fully initialized pair, but before its pending-chain publication.
-  ** Rebuild the upvalue cell index in `next`; `uv` is a pointer by then. */
+  ** after the fully initialized pair, but before READY/block discovery and the
+  ** typed lifetime commit. Rebuild the upvalue cell index in `next`; `uv` is a
+  ** pointer by then. */
   asm_fnew1num_arena_blockop(as, next, arena);
   asm_fnew1num_arena_blockop(as, cell, arena);
   asm_fnew1num_arena_readyop(as, next, arena);
   asm_fnew1num_arena_readyop(as, cell, arena);
+  /* Binary one-hot classes: exactly one ordinary BTS per allocation start. */
+  asm_fnew1num_arena_dtorop(as, next, arena, 1u);  /* CLOSED_UV == 2. */
+  asm_fnew1num_arena_dtorop(as, cell, arena, 0u);  /* LFUNC1 == 1. */
   l_markdone = emit_label(as);
   asm_fnew1num_arena_markop(as, XO_BTR, next, arena);
   asm_fnew1num_arena_markop(as, XO_BTR, cell, arena);
@@ -1428,6 +1451,9 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_rmro(as, XO_MOVtob, tmp|FORCE_REX, uv, offsetof(GCupval, marked));
   emit_rmro(as, XO_MOVtob, tmp|FORCE_REX, RID_RET,
 	    offsetof(GCfuncL, marked));
+  emit_movtomro(as, root|REX_GC64, uv, offsetof(GChead, nextgc));
+  emit_movtomro(as, root|REX_GC64, RID_RET, offsetof(GChead, nextgc));
+  emit_rr(as, XO_ARITH(XOg_XOR), root, root);
   emit_gri(as, XG_ARITHi(XOg_AND), tmp, LJ_GC_WHITES);
   emit_rmro(as, XO_MOVZXb, tmp, g, offsetof(global_State, gc.currentwhite));
 
@@ -1450,13 +1476,23 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   checkmclim(as);
 
   /* The bump reservation privately identifies both FREE starts before block
-  ** discovery. Claim lifetime then root for function and upvalue. Every
-  ** partial second-start failure abandons both reservations in exact reverse
-  ** order. Save the function pointer temporarily in `g`, then reload TG. */
+  ** discovery. Claim rootless lifetime for function and upvalue. Any partial
+  ** second-start failure restores the first lane before trapping. Save the
+  ** function pointer temporarily in `g`, then reload global_State. */
   emit_gettg(as, g, gl);
   emit_rr(as, XO_MOV, RID_RET|REX_64, g|REX_64);
-  asm_fnew1num_construct_pair_claim(as, arena, cell, next, root, tmp, pt,
-				    l_state_impossible);
+  asm_fnew1num_dtor_construct_pair_claim(
+    as, arena, cell, next, root, tmp, pt, fncells, l_state_impossible);
+  /* Runtime reaches these read-only checks after deriving both allocation
+  ** starts, but before either FREE->CONSTRUCT claim. Validate every plane for
+  ** each start independently; no stale destructor authority is cleared. */
+  for (i = 0; i < LJ_ARENA_DTOR_PLANES; i++) {
+    asm_fnew1num_arena_dtor_preflight(as, cell, arena, i,
+				      l_state_impossible);
+    asm_fnew1num_arena_dtor_preflight(as, next, arena, i,
+				      l_state_impossible);
+    checkmclim(as);
+  }
   emit_gri(as, XG_ARITHi(XOg_ADD), next, (int32_t)fncells);
   emit_rr(as, XO_MOV, next, cell);
   emit_rr(as, XO_MOV, g|REX_64, RID_RET|REX_64);
@@ -1509,16 +1545,14 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_leatg(as, tmp, hotcount);
   checkmclim(as);  /* Split TG state checks from active-marking predicates. */
   /*
-  ** The inlined path initializes a fresh pair and always publishes both exact
-  ** headers through the TG pending chain. Active-black allocation remains safe
-  ** to inline because both arena mark bits are set at birth. Active-white
-  ** allocation still uses the C helper's publication barriers.
+  ** The inlined path initializes a fresh arena-owned pair only outside active
+  ** marking. Birth-marking the pair is not sufficient in MARK: the C helper
+  ** also publishes proto/env/upvalue traversal work (including an explicitly
+  ** marked proto rescan). Until those barriers are emitted here, every active
+  ** MARK allocation uses the generic C fallback, black or white.
   */
-  l_mark_ok = emit_label(as);
-  asm_fnew1num_testi8(as, RID_DISPATCH, DISPATCH_TG(alloc.alloc_black),
-				      1, CC_Z, l_fallback);
   asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
-			      CC_E, l_mark_ok);
+			      CC_NE, l_fallback);
   checkmclim(as);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, allocf_arena), 0,
 			      CC_E, l_fallback);

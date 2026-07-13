@@ -616,27 +616,35 @@ static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)
 	 g->allocf_arena != 0 && tg == g->main_tg &&
 	 !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
 	 lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) &&
-	 g->allocd == &tg->allocd;
+	 g->allocd == &tg->allocd &&
+	 (!lj_tg_mark_active_acq(tg) || lj_tg_alloc_black_acq(tg));
 }
 
-static LJ_AINLINE void func_bump_publish_obj(global_State *g, GCobj *o)
+static LJ_AINLINE void func_bump_publish_obj(global_State *g, GCArena *a,
+					      GCobj *o, uint32_t cell)
 {
-  /*
-  ** Arena mark bits carry liveness, but they do not identify the object header
-  ** or destructor occupying a traversable run. Publish every bump object on
-  ** the per-TG pending ownership chain, including active-black allocations, so
-  ** GC2 can prune and dispatch the exact header before arena quarantine.
-  */
-  lj_gc_linkobj_new(g, o);
+  int committed;
+  /* The arena destructor class is the ownership identity. nextgc remains inert
+  ** and no global/pending ownership edge is created on this rootless path. */
+  lj_obj_setgcwnullrel(o);
+  committed = lj_arena_dtor_construct_commit(a, cell);
+  lj_assertG(committed, "typed bump construction commit lost");
+  if (LJ_UNLIKELY(!committed))
+    abort();
 }
 
 static LJ_AINLINE void func_bump_publish_pair(global_State *g, GCArena *a,
 					      GCobj *head, uint32_t headcell,
 					      GCobj *tail, uint32_t tailcell)
 {
-  /* One release publication makes both exact headers ownership-discoverable. */
-  lj_obj_setgcwrel(head, tail);
-  lj_gc_linkobj_new_chain_arena(g, a, head, headcell, tail, tailcell);
+  int committed;
+  lj_obj_setgcwnullrel(head);
+  lj_obj_setgcwnullrel(tail);
+  committed = lj_arena_dtor_construct_commit_pair(
+    a, headcell, tailcell);
+  lj_assertG(committed, "typed bump pair construction commit lost");
+  if (LJ_UNLIKELY(!committed))
+    abort();
 }
 
 static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
@@ -665,16 +673,16 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
 
   /*
   ** Closed nil local cells are leaf objects, so the bump path only replaces
-  ** arena allocation and pending-root publication. The caller still owns GC
+  ** arena allocation and typed ownership publication. The caller still owns GC
   ** pacing: interpreter BC_CNEW runs lj_gc_check_fixtop(), while traced BC_CNEW
   ** is recorded as an allocation helper and gets the trace CALLA check. After
   ** sweep, a reusable free run can become the next private bump window.
   */
-  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng,
-			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
-			     ncells, &a, &cell))
+  if (!lj_arena_reserve_bump_dtor(&tg->alloc, &tg->prng,
+				  LJ_AF_TRAVERSABLE, ncells,
+				  LJ_ARENA_DTOR_CLOSED_UV, &a, &cell))
     return NULL;
-  /* ROOT_CONSTRUCT reservation already owns CONSTRUCT|LINKING at cell. */
+  /* The typed reservation owns CONSTRUCT while root[] remains NONE. */
   uv = (GCupval *)lj_arena_cellptr(a, cell);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
@@ -688,7 +696,7 @@ static GCupval *func_newuvclosed_bump(lua_State *L, global_State *g,
   func_arena_set_alloc(a, cell, ncells, black);
   lj_gc_total_add(g, nbytes);
   /* Successful bump construction has no GC-capable step after READY. */
-  func_bump_publish_obj(g, obj2gco(uv));
+  func_bump_publish_obj(g, a, obj2gco(uv), cell);
   (void)lj_tg_local_total_add_rlx(tg, nbytes);
   func_test_uvcell_bump_call();
   return uv;
@@ -728,11 +736,13 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   ** publication, and accounting are independent of arena address reuse order.
   */
 
-  if (!lj_arena_reserve_bump_pair(&tg->alloc, &tg->prng,
-				  LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
-				  ncells, fncells, &a, &cell))
+  if (!lj_arena_reserve_bump_dtor_pair(&tg->alloc, &tg->prng,
+				       LJ_AF_TRAVERSABLE, ncells, fncells,
+				       LJ_ARENA_DTOR_LFUNC1,
+				       LJ_ARENA_DTOR_CLOSED_UV,
+				       &a, &cell))
     return NULL;
-  /* The pair reservation owns both CONSTRUCT|LINKING lanes. */
+  /* The pair reservation owns two CONSTRUCT lanes with root[] still NONE. */
   uvcell = cell + fncells;
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   uv = (GCupval *)lj_arena_cellptr(a, uvcell);
@@ -744,11 +754,6 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   env = lj_funcL_env_acq(parent);
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
-  black = lj_arena_alloc_black_acq(&tg->alloc);
-  func_arena_set_alloc(a, cell, fncells, black);
-  func_pubfreshobjobj(L, tg, fn, pt);
-  func_pubfreshobjobj(L, tg, fn, env);
-  func_proto_clcount_inc_exclusive(g, pt);
 
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
@@ -757,14 +762,22 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   uv->immutable = 0;
   uv->dhash = 0;
   newwhite(g, uv);
-  func_arena_set_alloc(a, uvcell, uvcells, black);
-  func_pubuv_payload(L, uv);
 
   slot = (base ? base : L->base) + slotno;
   func_uvmeta(uv, parent, uvspec);
   setgcrefrel(fn->l.uvptr[0], obj2gco(uv));
-  func_pubfreshobjobj(L, tg, fn, uv);
   func_nupvalues_rel(&fn->l, 1);
+
+  /* Both complete bodies and their immutable dtor kinds precede discovery.
+  ** block[] is the release LP; READY only distinguishes typed from opaque. */
+  black = lj_arena_alloc_black_acq(&tg->alloc);
+  func_arena_set_alloc(a, cell, fncells, black);
+  func_arena_set_alloc(a, uvcell, uvcells, black);
+  func_pubfreshobjobj(L, tg, fn, pt);
+  func_pubfreshobjobj(L, tg, fn, env);
+  func_pubfreshobjobj(L, tg, fn, uv);
+  func_pubuv_payload(L, uv);
+  func_proto_clcount_inc_exclusive(g, pt);
 
   lj_gc_total_add(g, nbytes);
   /* Publish the complete pair; the precheck above rules out accounting assist. */
@@ -810,11 +823,11 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
   ** ordinary Lua identity, but address reuse order is not observable.
   */
 
-  if (!lj_arena_reserve_bump(&tg->alloc, &tg->prng,
-			     LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT,
-			     ncells, &a, &cell))
+  if (!lj_arena_reserve_bump_dtor(&tg->alloc, &tg->prng,
+				  LJ_AF_TRAVERSABLE, ncells,
+				  LJ_ARENA_DTOR_LFUNC0, &a, &cell))
     return NULL;
-  /* ROOT_CONSTRUCT reservation already owns CONSTRUCT|LINKING at cell. */
+  /* The typed reservation owns CONSTRUCT while root[] remains NONE. */
   fn = (GCfunc *)lj_arena_cellptr(a, cell);
   fn->l.gct = ~LJ_TFUNC;
   fn->l.ffid = FF_LUA;
@@ -831,7 +844,7 @@ static GCfunc *func_newL_gc0_bump(lua_State *L, global_State *g, TGState *tg,
 
   lj_gc_total_add(g, nbytes);
   /* Publish the completed closure; the precheck rules out accounting assist. */
-  func_bump_publish_obj(g, obj2gco(fn));
+  func_bump_publish_obj(g, a, obj2gco(fn), cell);
   (void)lj_tg_local_total_add_rlx(tg, nbytes);
   if (count_kind == 1)
     func_test_gc0_bump_interp_call();

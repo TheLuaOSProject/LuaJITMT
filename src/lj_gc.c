@@ -1994,10 +1994,65 @@ static uint32_t gc2_sweep_alloc_end(const GCArena *a, uint32_t start)
   return i;
 }
 
+static LJ_AINLINE int gc2_sweep_dtor_kind_supported(uint32_t kind)
+{
+  return kind == LJ_ARENA_DTOR_LFUNC1 ||
+	 kind == LJ_ARENA_DTOR_CLOSED_UV ||
+	 kind == LJ_ARENA_DTOR_LFUNC0;
+}
+
+/* Validate a sidecar-selected destructor without deriving its identity from
+** mutable body bytes. The immutable arena kind is the authority; the header
+** and exact block extent only have to agree before the ordinary type-specific
+** destructor may run. */
+static GCobj *gc2_sweep_dtor_obj(global_State *g, GCArena *a,
+				  uint32_t cell, uint32_t end,
+				  uint32_t kind)
+{
+  GCobj *o;
+  GCSize size;
+  if (!g || !a || cell < LJ_AFIRST_CELL || end <= cell ||
+      end > LJ_ARENA_CELLS || !lj_arena_ready_get(a, cell) ||
+      lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE)
+    return NULL;
+  o = (GCobj *)lj_arena_cellptr(a, cell);
+  /* Sidecar identity must not override another allocation family or permanent
+  ** semantic retention. These common-header/side-plane checks run only after
+  ** the arena grace under the reclaim lease; disagreement is retained rather
+  ** than dispatched through either body's mutable bytes. */
+  if (lj_arena_cdata_get(a, cell) ||
+      (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)))
+    return NULL;
+  if (kind == LJ_ARENA_DTOR_CLOSED_UV) {
+    GCupval *uv = gco2uv(o);
+    size = (GCSize)sizeof(GCupval);
+    if (la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TUPVAL ||
+	!uv->closed || uvval(uv) != &uv->tv)
+      return NULL;
+  } else if (kind == LJ_ARENA_DTOR_LFUNC0 ||
+	     kind == LJ_ARENA_DTOR_LFUNC1) {
+    GCfunc *fn = gco2func(o);
+    MSize expected = kind == LJ_ARENA_DTOR_LFUNC1 ? 1u : 0u;
+    size = (GCSize)sizeLfunc(expected);
+    if (la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TFUNC ||
+	!isluafunc(fn) || lj_funcL_nupvalues(&fn->l) != expected)
+      return NULL;
+  } else {
+    return NULL;
+  }
+  if (lj_arena_ncells(size) != end - cell ||
+      !gc2_valid_freeable_obj(g, o, 1))
+    return NULL;
+  return o;
+}
+
 static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
 				  uint32_t cell, uint32_t end)
 {
   GCobj *o = (GCobj *)lj_arena_cellptr(a, cell);
+  uint32_t dtor_kind = lj_arena_dtor_kind_acq(a, cell);
+  if (dtor_kind != LJ_ARENA_DTOR_NONE)
+    return gc2_sweep_dtor_obj(g, a, cell, end, dtor_kind);
 #if LJ_HASFFI
   if (lj_arena_ready_get(a, cell) && lj_arena_cdata_get(a, cell)) {
     char *base = (char *)o;
@@ -2051,11 +2106,33 @@ static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a)
     state = lj_arena_sweep_state_acq(a, i);
     if (state != LJ_ARENA_SWEEP_WHITE || lj_arena_bm_get(a->mark, i))
       continue;
-    /* Every GC object is ownership-spine linked before publication. The
-    ** bounded bridge classified all old nonfixed headers before arena scan, so
-    ** a remaining WHITE allocation is raw/opaque storage. Retain it unless its
-    ** owning subsystem physically frees it (which transitions FREEING). Never
-    ** infer a destructor from attacker-controlled payload bytes. */
+    {
+      uint32_t dtor_kind = lj_arena_dtor_kind_acq(a, i);
+      if (dtor_kind != LJ_ARENA_DTOR_NONE) {
+	/* A kind-bearing start is arena-owned exact destructor identity, not
+	** opaque raw storage. Retire it before the arena grace without reading
+	** the body. A mark which overlaps this classification converts RETIRED
+	** back to LIVE through the existing rescue transition. */
+	if (gc2_sweep_dtor_kind_supported(dtor_kind) &&
+	    lj_arena_ready_get(a, i) &&
+	    lj_arena_root_state_acq(a, i) == LJ_ARENA_ROOT_NONE &&
+	    lj_arena_lifetime_state_acq(a, i) ==
+	      LJ_ARENA_LIFETIME_LIVE) {
+	  (void)gc2_sweep_detached_small(g, a, i, 0);
+	  continue;
+	}
+	/* A malformed or transient descriptor is never permission to inspect or
+	** destroy payload bytes. Pin it for this generation. */
+	(void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
+	continue;
+      }
+    }
+    /* Every untyped GC object is ownership-spine linked before publication.
+    ** The bounded bridge classified all old nonfixed headers before arena
+    ** scan, so a remaining descriptor-free WHITE allocation is raw/opaque
+    ** storage. Retain it unless its owning subsystem physically frees it
+    ** (which transitions FREEING). Never infer a destructor from
+    ** attacker-controlled payload bytes. */
     (void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
   }
   return 0;
@@ -2083,7 +2160,7 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   if (cell < LJ_AFIRST_CELL || cell > LJ_ARENA_CELLS)
     cell = LJ_AFIRST_CELL;
   while (cell < LJ_ARENA_CELLS && scanned < limit) {
-    uint32_t state, rootmem;
+    uint32_t state, rootmem, dtor_kind;
     if (!lj_arena_bm_get(a->block, cell)) {
       cell++;
       scanned++;
@@ -2091,6 +2168,7 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
     }
     state = lj_arena_sweep_state_acq(a, cell);
     rootmem = lj_arena_root_state_acq(a, cell);
+    dtor_kind = lj_arena_dtor_kind_acq(a, cell);
     if (rootmem == LJ_ARENA_ROOT_LINKING ||
 	rootmem == LJ_ARENA_ROOT_UNLINKING) {
       /* A publisher/remover owns both the intrusive link and the allocation
@@ -2208,6 +2286,28 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
       UNUSED(old);
       state = LJ_ARENA_SWEEP_LIVE;
       changed++;
+    }
+    if (state == LJ_ARENA_SWEEP_LIVE &&
+	rootmem == LJ_ARENA_ROOT_NONE &&
+	dtor_kind != LJ_ARENA_DTOR_NONE) {
+      /* A late semantic mark rescued this arena-owned body after retirement.
+      ** Its immutable sidecar remains the next-cycle discovery identity, so it
+      ** must return directly to WHITE instead of being inserted into the
+      ** ownership spine. The rescue path sets mark before publishing LIVE.
+      ** Any inconsistent descriptor is retained fail-closed in the same way. */
+      if (!gc2_sweep_dtor_kind_supported(dtor_kind) ||
+	  !lj_arena_ready_get(a, cell) ||
+	  lj_arena_lifetime_state_acq(a, cell) !=
+	    LJ_ARENA_LIFETIME_LIVE)
+	(void)la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);
+      if (lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_LIVE,
+					  LJ_ARENA_SWEEP_WHITE))
+	changed++;
+      else
+	pending = 1;
+      cell++;
+      scanned++;
+      continue;
     }
     if (state == LJ_ARENA_SWEEP_LIVE ||
 	state == LJ_ARENA_SWEEP_RETIRED) {
