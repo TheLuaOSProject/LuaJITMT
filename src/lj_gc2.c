@@ -293,7 +293,7 @@ uint32_t lj_gc2_test_stack_admission_retry_hits(void)
   return la_load32_acq(&gc2_test_stack_admission_retry_hits);
 }
 
-static int gc2_stack_test_take_admission_retry(GCobj *o)
+static int gc2_tv_test_take_admission_retry(GCobj *o)
 {
   uint32_t expect = 1;
   if ((GCobj *)(void *)la_loaduptr_acq(
@@ -394,7 +394,6 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define gc2_recovery_test_pause_at(stage) ((void)(stage))
 #define gc2_test_jit_mark_checkpoint_closed() ((void)0)
 #define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
-#define gc2_stack_test_take_admission_retry(o) (0)
 #define gc2_root_test_take_semantic_retry(o) (0)
 #endif
 
@@ -6363,74 +6362,39 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
   return n;
 }
 
-static int gc2_tv_gcref_type_match(global_State *g, cTValue *tv)
-{
-  GC2MarkScope scope;
-  GCobj *o;
-  uint32_t gct;
-  int match;
-  if (!tvisgcv(tv))
-    return 1;
-  o = gcval(tv);
-  if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
-    return o->gch.gct == ~LJ_TSTR;
-#if LJ_HASFFI
-  /*
-  ** A real fixed cdata can be created by the lexer/bytecode loader before the
-  ** lazy CTState exists. Prove that exact arena cell in that bootstrap window;
-  ** once CTState is published, require full CType/size validation. This remains
-  ** safe for conservative stack/weak snapshots and rejects stale CType IDs.
-  */
-  if (itype(tv) == LJ_TCDATA)
-    return gc2_tv_gcref_type_match_known(g, tv);
-#endif
-  /*
-  ** Conservative stack and weak-table snapshots can contain stale spill words
-  ** with collectable tags. Validate the candidate object against registered
-  ** arena cells before reading its header; live publications initialize the
-  ** header before publishing the TValue, so the tag/header match remains the
-  ** final semantic edge check.
-  */
-  if (!gc2_observed_obj_valid_scoped(g, o, &gct, &scope))
-    return 0;
-  match = (uint32_t)~itype(tv) == gct;
-  gc2_mark_scope_leave(&scope);
-  return match;
-}
-
 enum {
-  GC2_STACK_TV_RETRY = -1,
-  GC2_STACK_TV_IGNORE = 0,
-  GC2_STACK_TV_ADMITTED = 1
+  GC2_TV_SCOPE_RETRY = -1,
+  GC2_TV_SCOPE_STALE = 0,
+  GC2_TV_SCOPE_ADMITTED = 1
 };
 
-/* A widened stack snapshot contains ordinary popped/spill cells. Distinguish a
-** terminal stale word from a transient inability to establish lifetime, and
-** return ADMITTED with the exact observation scope still held. The caller must
-** retain that scope through semantic marking: otherwise address reuse between
-** validation and marking can turn an old tagged word into a different root. */
-static int gc2_stack_tv_admit(global_State *g, cTValue *tv,
-			      GC2MarkScope *scope)
+/* Conservative TValue snapshots can contain ordinary popped, spill, or stale
+** table cells. Distinguish a terminal stale word from a transient inability to
+** establish lifetime, and return ADMITTED with the exact observation scope
+** still held. The caller must retain that scope through every semantic check:
+** otherwise address reuse between validation and use can change incarnation. */
+static int gc2_tv_admit_scoped(global_State *g, cTValue *tv,
+			       GC2MarkScope *scope)
 {
   GCobj *o;
   uint32_t gct;
   int status;
   gc2_mark_scope_init(scope);
   if (!tvisgcv(tv))
-    return GC2_STACK_TV_ADMITTED;
+    return GC2_TV_SCOPE_ADMITTED;
   o = gcval(tv);
 #if defined(LJ_GC2_TEST_HELPERS)
-  if (gc2_stack_test_take_admission_retry(o))
-    return GC2_STACK_TV_RETRY;
+  if (gc2_tv_test_take_admission_retry(o))
+    return GC2_TV_SCOPE_RETRY;
 #endif
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR ?
-	   GC2_STACK_TV_ADMITTED : GC2_STACK_TV_IGNORE;
+	   GC2_TV_SCOPE_ADMITTED : GC2_TV_SCOPE_STALE;
   status = gc2_observed_obj_status_scoped(g, o, &gct, scope);
   if (status < 0)
-    return GC2_STACK_TV_RETRY;
+    return GC2_TV_SCOPE_RETRY;
   if (status == 0)
-    return GC2_STACK_TV_IGNORE;
+    return GC2_TV_SCOPE_STALE;
 #if LJ_HASFFI
   if (itype(tv) == LJ_TCDATA) {
     if (gct != (uint32_t)~LJ_TCDATA ||
@@ -6438,16 +6402,16 @@ static int gc2_stack_tv_admit(global_State *g, cTValue *tv,
 	 (cdataisv(gco2cd(o)) ||
 	  ((uintptr_t)o & (uintptr_t)(LJ_CELL_SIZE - 1u)) != 0)))
       goto ignore;
-    return GC2_STACK_TV_ADMITTED;
+    return GC2_TV_SCOPE_ADMITTED;
   }
 #endif
   if ((uint32_t)~itype(tv) == gct)
-    return GC2_STACK_TV_ADMITTED;
+    return GC2_TV_SCOPE_ADMITTED;
 #if LJ_HASFFI
 ignore:
 #endif
   gc2_mark_scope_leave(scope);
-  return GC2_STACK_TV_IGNORE;
+  return GC2_TV_SCOPE_STALE;
 }
 
 static int gc2_tv_gcref_type_match_known(global_State *g, cTValue *tv)
@@ -7389,13 +7353,13 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
     lj_tv_load_acq(&tv, o);
     if (conservative) {
       GC2MarkScope scope;
-      int admitted = gc2_stack_tv_admit(g, &tv, &scope);
-      if (LJ_UNLIKELY(admitted == GC2_STACK_TV_RETRY)) {
+      int admitted = gc2_tv_admit_scoped(g, &tv, &scope);
+      if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_RETRY)) {
 	stack_retry = 1;
 	gc2_mark_scope_leave(&scope);
 	continue;
       }
-      if (admitted == GC2_STACK_TV_IGNORE) {
+      if (admitted == GC2_TV_SCOPE_STALE) {
 	gc2_mark_scope_leave(&scope);
 	continue;
       }
@@ -9913,24 +9877,46 @@ static int gc2_weak_bridge_handoff(global_State *g, GCtab *t,
   return 1;
 }
 
-static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
-				     int markstr)
+enum {
+  GC2_WEAK_RETRY = -1,
+  GC2_WEAK_KEEP = 0,
+  GC2_WEAK_CLEAR = 1
+};
+
+static int gc2_weak_classify(global_State *g, cTValue *o, int val,
+			     int markstr)
 {
+  GC2MarkScope scope;
+  int admitted, marked;
+  int result = GC2_WEAK_KEEP;
+
   /*
-  ** Weak processing scans racy table snapshots. A tag/header mismatch means the
-  ** slot snapshot is stale, not a GC object whose mark/finalizer state can be
-  ** safely inspected. It is therefore clearable as a weak edge.
+  ** Weak processing scans racy table snapshots. A terminal tag/header mismatch
+  ** is a stale slot and therefore clearable. An admission failure which may be
+  ** transient must replay the table instead of becoming an irreversible clear.
   */
-  if (LJ_UNLIKELY(!gc2_tv_gcref_type_match(g, o)))
-    return 1;
+  admitted = gc2_tv_admit_scoped(g, o, &scope);
+  if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_RETRY)) {
+    gc2_mark_scope_leave(&scope);
+    return GC2_WEAK_RETRY;
+  }
+  if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_STALE)) {
+    gc2_mark_scope_leave(&scope);
+    return GC2_WEAK_CLEAR;
+  }
   if (tvisgcv(o)) {
     if (tvisstr(o)) {
-      if (markstr) {
-	(void)lj_gc2_markobj(g, gcV(o));
-      }
-      return 0;  /* 05 section 5.8: strings are not weak-cleared. */
-	}
-	if (lj_gc2_ismarked(g, gcV(o)) <= 0) {
+      if (gcV(o) != obj2gco(&g->strempty) && markstr &&
+	  lj_gc2_markobj_status(g, gcV(o), NULL) == GC2_MARK_DEAD)
+	result = GC2_WEAK_RETRY;
+      goto out;  /* 05 section 5.8: strings are not weak-cleared. */
+    }
+    marked = lj_gc2_ismarked(g, gcV(o));
+    if (LJ_UNLIKELY(marked < 0)) {
+	result = GC2_WEAK_RETRY;
+	goto out;
+    }
+    if (marked == 0) {
 	  /*
 	  ** GC2-owned weak completion closes roots, SSBs, grey work and weak-write
 	  ** windows before clearing. At that point the GC2 mark bitmap is the completed
@@ -9938,14 +9924,19 @@ static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
 	  ** because GC2/SMR may preserve bodies without making them semantic roots;
 	  ** the color fallback path is the only code that should use colors.
 	  */
-	  return 1;
-	}
+	  result = GC2_WEAK_CLEAR;
+	  goto out;
+    }
     /* GC2 late weak write mark wins over color white during GCSatomic. */
     if (tvisudata(o) && val &&
 	(lj_obj_gcflags(obj2gco(udataV(o))) & LJ_GC_FINALIZED))
-      return 1;
+      result = GC2_WEAK_CLEAR;
   }
-  return 0;
+out:
+  /* Keep the exact incarnation pinned through type, string mark, liveness and
+  ** finalized-state observations. */
+  gc2_mark_scope_leave(&scope);
+  return result;
 }
 
 static int gc2_tab_is_ffi_fin(global_State *g, GCtab *t)
@@ -9988,8 +9979,12 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
       if (LJ_UNLIKELY(tvisforward(&val)))
 	goto out;
       if (!tvisnil(&val)) {
+	int valclass;
 	(*slots)++;
-	if (gc2_weak_mayclear(g, &val, 1, clear)) {
+	valclass = gc2_weak_classify(g, &val, 1, clear);
+	if (LJ_UNLIKELY(valclass == GC2_WEAK_RETRY))
+	  goto out;
+	if (valclass == GC2_WEAK_CLEAR) {
 	  (*clearable)++;
 	  if (clear) {
 	    TValue key;
@@ -10011,6 +10006,7 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
       TValue key, val;
       TValue *slot = &n->val;
       int key_loaded = 0;
+      int keyclass, valclass;
       lj_tv_load_acq(&val, &n->val);
       if (tvisforward(&val)) {
 	lj_tv_load_acq(&key, &n->key);
@@ -10031,8 +10027,14 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
 	if (LJ_UNLIKELY(tviskeylock(&key)))
 	  goto out;
 	(*slots)++;
-	if (gc2_weak_mayclear(g, &key, 0, clear) ||
-	    gc2_weak_mayclear(g, &val, 1, clear)) {
+	/* Observe both halves explicitly. In particular, a clearable key must not
+	** short-circuit a transient value admission into an irreversible clear. */
+	keyclass = gc2_weak_classify(g, &key, 0, clear);
+	valclass = gc2_weak_classify(g, &val, 1, clear);
+	if (LJ_UNLIKELY(keyclass == GC2_WEAK_RETRY ||
+			valclass == GC2_WEAK_RETRY))
+	  goto out;
+	if (keyclass == GC2_WEAK_CLEAR || valclass == GC2_WEAK_CLEAR) {
 	  (*clearable)++;
 	  if (clear)
 	    (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
@@ -10417,28 +10419,48 @@ static int gc2_weak_backfill_bridge(global_State *g, GCobj *bridge_head)
   return 1;  /* 05 section 5.8: owner-cleared bridge weak snapshot gaps. */
 }
 
-static uint64_t gc2_weak_clear_overflow(global_State *g, uint64_t *slotsp,
-					uint64_t *clearedp)
+static int gc2_weak_clear_overflow(global_State *g, uint64_t *tablesp,
+				   uint64_t *slotsp, uint64_t *clearedp)
 {
   GC2WeakOverflow *node;
   uint64_t tables = 0, slots = 0, cleared = 0;
-  for (node = gc2_weak_overflow_acq(g);
-       node != NULL && lj_gc2_mem_registered(g, node);
-       node = gc2_weak_overflow_next_acq(node)) {
-    GC2MarkScope scope;
-    GCtab *t = gc2_weak_overflow_tab_acq(node);
-    if (!t ||
-	gc2_weak_candidate_tab_scoped(g, obj2gco(t), &scope) != t)
-      continue;
-    if (gc2_weak_process_tab(g, t, &scope, 1, &slots, &cleared))
-      tables++;
-    gc2_mark_scope_leave(&scope);
+  for (node = gc2_weak_overflow_acq(g); node != NULL; ) {
+    GC2MarkScope nodescope, tabscope;
+    GC2WeakOverflow *next;
+    GCtab *t, *admitted = NULL;
+    int tabstatus;
+    if (gc2_markmem_registered_scoped_status(g, node, &nodescope) ==
+	GC2_MARK_DEAD) {
+      gc2_mark_scope_leave(&nodescope);
+      return 0;
+    }
+    next = gc2_weak_overflow_next_acq(node);
+    t = gc2_weak_overflow_tab_acq(node);
+    gc2_mark_scope_init(&tabscope);
+    tabstatus = t ? gc2_weak_candidate_tab_scoped_status(
+	g, obj2gco(t), &admitted, &tabscope) : GC2_TAB_SCOPE_STALE;
+    if (tabstatus != GC2_TAB_SCOPE_VALID || admitted != t) {
+      gc2_mark_scope_leave(&tabscope);
+      gc2_mark_scope_leave(&nodescope);
+      return 0;
+    }
+    if (!gc2_weak_process_tab(g, t, &tabscope, 1, &slots, &cleared)) {
+      gc2_mark_scope_leave(&tabscope);
+      gc2_mark_scope_leave(&nodescope);
+      return 0;
+    }
+    gc2_mark_scope_leave(&tabscope);
+    gc2_mark_scope_leave(&nodescope);
+    tables++;
+    node = next;
   }
+  if (tablesp)
+    *tablesp += tables;
   if (slotsp)
     *slotsp += slots;
   if (clearedp)
     *clearedp += cleared;
-  return tables;
+  return 1;
 }
 
 static int gc2_weak_overflow_clear_bridge(global_State *g, GCobj *bridge_head)
@@ -10466,7 +10488,8 @@ static int gc2_weak_overflow_clear_bridge(global_State *g, GCobj *bridge_head)
   ** only an additional bridge source because stale colors can keep
   ** reachable weak tables out of that list.
   */
-  tables += gc2_weak_clear_overflow(g, &slots, &cleared);
+  if (!gc2_weak_clear_overflow(g, &tables, &slots, &cleared))
+    return 0;
   t = bridge_head ?
     gc2_weak_candidate_tab_scoped(g, bridge_head, &scope) : NULL;
   while (bridge_head) {
@@ -10541,6 +10564,14 @@ int lj_gc2_test_weak_snapshot_covers_bridge(global_State *g,
 {
   return lj_gc2_weak_snapshot_covers_bridge(g, bridge_head);
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+int lj_gc2_test_weak_overflow_clear_bridge(global_State *g,
+					    GCobj *bridge_head)
+{
+  return gc2_weak_overflow_clear_bridge(g, bridge_head);
+}
+#endif
 
 static int gc2_weak_trace_table_strong(global_State *g, GCtab *t)
 {
@@ -16214,13 +16245,13 @@ scan_thread:
     lj_tv_load_acq(&tv, o);
     if (conservative) {
       GC2MarkScope scope;
-      int admitted = gc2_stack_tv_admit(g, &tv, &scope);
-      if (LJ_UNLIKELY(admitted == GC2_STACK_TV_RETRY)) {
+      int admitted = gc2_tv_admit_scoped(g, &tv, &scope);
+      if (LJ_UNLIKELY(admitted == GC2_TV_SCOPE_RETRY)) {
 	stack_retry = 1;
 	gc2_mark_scope_leave(&scope);
 	continue;
       }
-      if (admitted == GC2_STACK_TV_IGNORE) {
+      if (admitted == GC2_TV_SCOPE_STALE) {
 	gc2_mark_scope_leave(&scope);
 	continue;
       }

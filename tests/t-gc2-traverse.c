@@ -2579,6 +2579,197 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
   lua_pop(L, 2);
 }
 
+#if defined(LJ_GC2_TEST_HELPERS)
+static void make_weak_string_value_table(lua_State *L, GCtab **weak,
+					 GCtab **key, GCstr **val)
+{
+  lua_newtable(L);
+  *weak = tabV(L->top - 1);
+  lua_newtable(L);
+  *key = tabV(L->top - 1);
+  lua_pushfstring(L, "gc2 weak retry string value %p", (void *)*weak);
+  *val = strV(L->top - 1);
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, -2);
+  lua_settable(L, -5);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -4);
+}
+
+static int weak_entry_is_string(lua_State *L, GCtab *weak, GCtab *key,
+				 GCstr *val)
+{
+  TValue k;
+  cTValue *slot;
+  settabV(L, &k, key);
+  slot = lj_tab_get(L, weak, &k);
+  return tvisstr(slot) && strV(slot) == val;
+}
+
+static void test_weak_table_value_admission_retry(lua_State *L,
+					  global_State *g, TGState *tg,
+					  int marked)
+{
+  GCtab *weak, *key, *val;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "v", &weak, &key, &val);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  if (marked)
+    assert(lj_gc2_markobj(g, obj2gco(val)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == marked);
+  enter_weak_clear_fixture(g, tg);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+
+  lj_gc2_test_stack_admission_retry_once(obj2gco(val));
+  assert(lj_gc2_test_weak_drain(g, 1) == 0);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(!weak_entry_is_nil(L, weak, key));
+
+  assert(lj_gc2_test_weak_drain(g, 1) == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 1u);
+  assert(weak_entry_is_nil(L, weak, key) == !marked);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == marked);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
+static void test_weak_string_value_admission_retry(lua_State *L,
+					   global_State *g, TGState *tg)
+{
+  GCtab *weak, *key;
+  GCstr *val;
+
+  lua_settop(L, 0);
+  make_weak_string_value_table(L, &weak, &key, &val);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  enter_weak_clear_fixture(g, tg);
+
+  lj_gc2_test_stack_admission_retry_once(obj2gco(val));
+  assert(lj_gc2_test_weak_drain(g, 1) == 0);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(weak_entry_is_string(L, weak, key, val));
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+
+  assert(lj_gc2_test_weak_drain(g, 1) == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 1u);
+  assert(weak_entry_is_string(L, weak, key, val));
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
+static void test_weak_hash_retry_beats_clearable_key(lua_State *L,
+					      global_State *g, TGState *tg)
+{
+  GCtab *weak, *key, *val;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "kv", &weak, &key, &val);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_markobj(g, obj2gco(val)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  enter_weak_clear_fixture(g, tg);
+
+  lj_gc2_test_stack_admission_retry_once(obj2gco(val));
+  assert(lj_gc2_test_weak_drain(g, 1) == 0);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(!weak_entry_is_nil(L, weak, key));
+
+  assert(lj_gc2_test_weak_drain(g, 1) == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 1u);
+  assert(weak_entry_is_nil(L, weak, key));
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
+static void test_weak_overflow_retry_stops_bridge(lua_State *L,
+					  global_State *g, TGState *tg)
+{
+  GCtab *overflow = NULL, *overflow_key = NULL, *overflow_val = NULL;
+  GCtab *bridge = NULL, *bridge_key = NULL, *bridge_val = NULL;
+  GCRef weak_head;
+  MSize cap, i, n;
+
+  lua_settop(L, 0);
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0);
+  n = cap + 1u;
+  make_weak_table_batch(L, n);
+  lj_gc2_mark_begin(g);
+  assert(gc2_weak_capacity_acq(g) == cap);
+  mark_weak_table_batch(L, g, n);
+  flush_and_drain(g, tg);
+  assert(gc2_weak_count_acq(g) == (uint64_t)n);
+  assert(lj_gc2_test_weak_snapshot_count(g) == cap);
+
+  for (i = 0; i < n; i++) {
+    TValue *tv = L->base + i * 3u;
+    GCtab *weak = tabV(tv);
+    if (weak_snapshot_has(g, weak)) {
+      if (!bridge) {
+	bridge = weak;
+	bridge_key = tabV(tv + 1);
+	bridge_val = tabV(tv + 2);
+      }
+    } else {
+      assert(overflow == NULL);
+      overflow = weak;
+      overflow_key = tabV(tv + 1);
+      overflow_val = tabV(tv + 2);
+    }
+  }
+  assert(overflow != NULL && bridge != NULL && overflow != bridge);
+  assert(lj_gc2_ismarked(g, obj2gco(overflow_val)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(bridge_val)) == 0);
+  setgcrefnull(weak_head);
+  weak_bridge_link(&weak_head, bridge, LJ_GC_WEAKVAL);
+  enter_weak_clear_fixture(g, tg);
+
+  lj_gc2_test_stack_admission_retry_once(obj2gco(overflow_val));
+  assert(!lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(!weak_entry_is_nil(L, overflow, overflow_key));
+  assert(!weak_entry_is_nil(L, bridge, bridge_key));
+
+  assert(lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
+  assert(weak_entry_is_nil(L, overflow, overflow_key));
+  assert(weak_entry_is_nil(L, bridge, bridge_key));
+  setgcrefnull(weak_head);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, 0);
+}
+
+static void test_weak_value_admission_tristate(lua_State *L,
+					global_State *g, TGState *tg)
+{
+  test_weak_table_value_admission_retry(L, g, tg, 1);
+  test_weak_string_value_admission_retry(L, g, tg);
+  test_weak_table_value_admission_retry(L, g, tg, 0);
+  test_weak_hash_retry_beats_clearable_key(L, g, tg);
+  test_weak_overflow_retry_stops_bridge(L, g, tg);
+}
+#endif
+
 static void test_weak_drain_uses_captured_mode(lua_State *L, global_State *g,
 					       TGState *tg)
 {
@@ -6252,6 +6443,9 @@ int main(void)
 #if defined(LJ_GC2_TEST_WEAK_ONLY)
   test_weak_tables(L, g, tg);
   test_weak_snapshot_growth(L, g, tg);
+#if defined(LJ_GC2_TEST_HELPERS)
+  test_weak_value_admission_tristate(L, g, tg);
+#endif
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
   test_weak_snapshot_rejects_nonobject(L, g);
@@ -6306,6 +6500,9 @@ int main(void)
 #endif
   test_weak_tables(L, g, tg);
   test_weak_snapshot_growth(L, g, tg);
+#if defined(LJ_GC2_TEST_HELPERS)
+  test_weak_value_admission_tristate(L, g, tg);
+#endif
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
   test_weak_snapshot_rejects_nonobject(L, g);

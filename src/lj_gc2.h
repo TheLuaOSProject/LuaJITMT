@@ -392,6 +392,8 @@ LJ_FUNC void lj_gc2_test_stack_admission_retry_once(GCobj *target);
 LJ_FUNC uint32_t lj_gc2_test_stack_admission_retry_hits(void);
 LJ_FUNC void lj_gc2_test_root_semantic_retry_once(GCobj *target);
 LJ_FUNC uint32_t lj_gc2_test_root_semantic_retry_hits(void);
+LJ_FUNC int lj_gc2_test_weak_overflow_clear_bridge(global_State *g,
+						     GCobj *bridge_head);
 LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 					      lua_State *L);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
