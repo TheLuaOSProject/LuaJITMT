@@ -5082,11 +5082,14 @@ static uint32_t gc2_sweep_huge_progress(global_State *g, TGState *tg,
 }
 
 static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
-					     uint32_t limit)
+					     uint32_t limit,
+					     int *finishedp)
 {
   uint32_t n = 0, arenas = 0, epoch;
   uint64_t live = 0;
   int minor, preserve_marks;
+  if (finishedp)
+    *finishedp = 0;
   if (!g || !tg || limit == 0 ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return 0;
@@ -5159,6 +5162,7 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     }
     if (qa) {
       int done = 0;
+      int finished_arena = 0;
       uint32_t step;
       uint64_t retire_epoch = la_load64_acq(&qa->hdr.retire_epoch);
       if (retire_epoch == ~(uint64_t)0) {
@@ -5203,6 +5207,7 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 	      LJ_ARENAK_TRAVERSABLE, qa, epoch, preserve_marks, &reason)) {
 	  live += qa->hdr.live_cells;
 	  arenas++;
+	  finished_arena = 1;
 	  step++;
 	} else {
 	  uint64_t gate = lj_arena_remote_active_acq(qa);
@@ -5241,6 +5246,16 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 	break;
       if (!step)
 	break;
+      if (finished_arena) {
+	/* Bitmap-word summaries can now finish an otherwise inert arena in one
+	** reclaim visit. End the physical-commit quantum explicitly instead of
+	** inflating the returned work count: the caller reopens the JIT gate and
+	** automatic pacing retains its LJ_GC2_SWEEP_BATCH completion bound. */
+	n++;
+	if (finishedp)
+	  *finishedp = 1;
+	break;
+      }
       n++;
       continue;
     }
@@ -5310,7 +5325,7 @@ uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
       }
       gate_owned = 1;
     }
-    n = lj_gc2_sweep_owner_progress(g, tg, limit);
+    n = lj_gc2_sweep_owner_progress(g, tg, limit, NULL);
   }
   if (gate_owned && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
       gc2_sweep_bridge_ready_acq(g) != 0)
@@ -16924,9 +16939,12 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
        tg != NULL && n < limit;
        tg = lj_tg_next_acq(tg)) {
     uint8_t flags = lj_tg_flags_acq(tg);
+    int finished = 0;
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;
-    n += lj_gc2_sweep_owner_progress(g, tg, limit - n);
+    n += lj_gc2_sweep_owner_progress(g, tg, limit - n, &finished);
+    if (finished)
+      break;
   }
   return n;  /* 05 section 5.6.3 worker-owned sweep bridge. */
 }

@@ -2131,8 +2131,13 @@ static LJ_AINLINE int gc2_sweep_pregrace_work_clear(global_State *g)
 	 lj_tg_ssb_next_acq(tg) == lj_tg_ssb_base_acq(tg);
 }
 
-static int gc2_sweep_pregrace_arena_ready(global_State *g, GCArena *a,
-					   int mt_exclusive)
+/* Establish the scan-wide capability. The caller samples this immediately
+** before taking the exact arena seal and repeats it after clearing the sealed
+** generation. The locally owned MT gate, worker token, SMR reader lease and
+** seal then keep these identities and exclusions stable until release. Do not
+** repeat this full certificate per allocation; dynamic work has its own test. */
+static int gc2_sweep_pregrace_cap_ready(global_State *g, GCArena *a,
+					 int mt_exclusive)
 {
   TGState *main_tg = g ? g->main_tg : NULL;
   uint32_t flags;
@@ -2152,9 +2157,7 @@ static int gc2_sweep_pregrace_arena_ready(global_State *g, GCArena *a,
 	mt_entering_acq(g) != 0 || gc2_n_workers_acq(g) != 0 ||
 	gc2_worker_active_acq(g) != 1 || gc2_smr_reclaiming_acq(g) != 0 ||
 	gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
-	gc2_sweep_pregrace_recorder_active(g) ||
-	lj_gc2_activation_reclaim_veto(g) ||
-	!gc2_sweep_pregrace_work_clear(g))
+	gc2_sweep_pregrace_recorder_active(g))
     return 0;
   flags = lj_arena_flags_acq(a);
   if ((flags & (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP)) !=
@@ -2165,38 +2168,44 @@ static int gc2_sweep_pregrace_arena_ready(global_State *g, GCArena *a,
   return 1;
 }
 
-static int gc2_sweep_pregrace_commit_ready(global_State *g, GCArena *a,
-					    uint32_t cell, uint32_t end,
-					    uint32_t kind,
-					    int pregrace_owned,
-					    uint32_t expected_lifetime)
+/* Publications may still transiently contend with the held capability. Sample
+** their semantic work before the exact remote generation: a publisher dirties
+** that generation before making its work durable, so the final acquire cannot
+** miss both halves. This must run after the admission fence and immediately
+** before every terminal FREE claim. */
+static LJ_AINLINE int gc2_sweep_pregrace_quiet(global_State *g, GCArena *a,
+						int pregrace_owned)
 {
-  if (!pregrace_owned ||
-      !gc2_sweep_pregrace_arena_ready(g, a, pregrace_owned) ||
-      lj_arena_remote_active_acq(a) !=
-	(LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED) ||
-      !lj_arena_bm_get(a->block, cell) || lj_arena_bm_get(a->mark, cell) ||
+  return pregrace_owned && g && a &&
+	 gc2_smr_reclaiming_acq(g) == 0 &&
+	 !lj_gc2_activation_reclaim_veto(g) &&
+	 gc2_sweep_pregrace_work_clear(g) &&
+	 lj_arena_remote_active_acq(a) ==
+	   (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED);
+}
+
+/* Exact per-allocation authority. `end` is the one allocation-boundary
+** snapshot taken by the sealed scanner and already checked against the fixed
+** kind's size. The seal and exact remote-generation checks protect that
+** snapshot, so this hot predicate only reloads independently published lanes. */
+static LJ_AINLINE int gc2_sweep_pregrace_obj_ready(GCArena *a,
+						    uint32_t cell,
+						    uint32_t end,
+						    uint32_t kind,
+						    uint32_t expected_lifetime)
+{
+  if (!a || cell < LJ_AFIRST_CELL || end <= cell ||
+      end > LJ_ARENA_CELLS || !lj_arena_bm_get(a->block, cell) ||
+      lj_arena_bm_get(a->mark, cell) ||
       lj_arena_sweep_state_acq(a, cell) != LJ_ARENA_SWEEP_WHITE ||
       lj_arena_dtor_kind_acq(a, cell) != kind ||
       !lj_arena_ready_get(a, cell) ||
       lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE ||
       lj_arena_recovery_state_acq(a, cell) != LJ_ARENA_RECOVERY_IDLE ||
       lj_arena_lifetime_state_acq(a, cell) != expected_lifetime ||
-      lj_arena_late_get(a, cell) || gc2_sweep_alloc_end(a, cell) != end)
+      lj_arena_late_get(a, cell))
     return 0;
   return 1;
-}
-
-static GCobj *gc2_sweep_pregrace_dtor_obj(global_State *g, GCArena *a,
-					   uint32_t cell, uint32_t end,
-					   uint32_t kind,
-					   int pregrace_owned)
-{
-  if (!gc2_sweep_pregrace_commit_ready(
-	g, a, cell, end, kind, pregrace_owned,
-	LJ_ARENA_LIFETIME_DESTRUCT))
-    return NULL;
-  return gc2_sweep_dtor_obj(g, a, cell, end, kind, 0);
 }
 
 static LJ_AINLINE GCSize gc2_sweep_pregrace_dtor_size(uint32_t kind)
@@ -2248,10 +2257,11 @@ static int gc2_sweep_pregrace_destruct(global_State *g, GCArena *a,
   GCobj *o;
   uint32_t life;
   int sweepok;
-  if (size == 0 || lj_arena_ncells(size) != end - cell)
+  if (!pregrace_owned || size == 0 ||
+      lj_arena_ncells(size) != end - cell)
     return LJ_GC_DESTRUCT_LOST;
-  if (!gc2_sweep_pregrace_commit_ready(
-	g, a, cell, end, kind, pregrace_owned, LJ_ARENA_LIFETIME_LIVE))
+  if (!gc2_sweep_pregrace_obj_ready(
+	a, cell, end, kind, LJ_ARENA_LIFETIME_LIVE))
     return gc2_sweep_pregrace_terminal_owned(a, cell) ?
 	   LJ_GC_DESTRUCT_OWNED : LJ_GC_DESTRUCT_LOST;
   if (!lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
@@ -2262,14 +2272,13 @@ static int gc2_sweep_pregrace_destruct(global_State *g, GCArena *a,
   /* No-both-miss pairing with rescue admission: writer claim; SC fence; gate
   ** acquire versus reader admission RMW; SC fence; lifetime acquire. */
   la_fence_seq();
-  if (!gc2_sweep_pregrace_commit_ready(
-	g, a, cell, end, kind, pregrace_owned,
-	LJ_ARENA_LIFETIME_DESTRUCT)) {
+  if (!gc2_sweep_pregrace_quiet(g, a, pregrace_owned) ||
+      !gc2_sweep_pregrace_obj_ready(
+	a, cell, end, kind, LJ_ARENA_LIFETIME_DESTRUCT)) {
     gc2_sweep_pregrace_claim_restore(g, a, cell);
     return LJ_GC_DESTRUCT_LOST;
   }
-  o = gc2_sweep_pregrace_dtor_obj(
-	g, a, cell, end, kind, pregrace_owned);
+  o = gc2_sweep_dtor_obj(g, a, cell, end, kind, 0);
   if (!o) {
     gc2_sweep_pregrace_claim_restore(g, a, cell);
     return LJ_GC_DESTRUCT_LOST;
@@ -2278,9 +2287,9 @@ static int gc2_sweep_pregrace_destruct(global_State *g, GCArena *a,
   /* Body agreement is only advisory until this final full predicate. A late
   ** publisher dirties the gate; semantic recovery steals DESTRUCT->RESCUE. */
   la_fence_seq();
-  if (!gc2_sweep_pregrace_commit_ready(
-	g, a, cell, end, kind, pregrace_owned,
-	LJ_ARENA_LIFETIME_DESTRUCT)) {
+  if (!gc2_sweep_pregrace_quiet(g, a, pregrace_owned) ||
+      !gc2_sweep_pregrace_obj_ready(
+	a, cell, end, kind, LJ_ARENA_LIFETIME_DESTRUCT)) {
     gc2_sweep_pregrace_claim_restore(g, a, cell);
     return LJ_GC_DESTRUCT_LOST;
   }
@@ -2395,13 +2404,12 @@ static uint32_t gc2_sweep_arena_unmarked_impl(global_State *g, GCArena *a,
   ** the bounded scan; a new bit-only publisher dirties PENDING/count first and
   ** makes every later exact commit check fail without waiting. */
   if (mt_exclusive && smr_held &&
-      gc2_sweep_pregrace_arena_ready(g, a, mt_exclusive) &&
+      gc2_sweep_pregrace_cap_ready(g, a, mt_exclusive) &&
       lj_arena_reclaim_seal(a)) {
     arena_sealed = 1;
     if (lj_arena_reclaim_clear_pending(a) &&
-        gc2_sweep_pregrace_arena_ready(g, a, mt_exclusive) &&
-        lj_arena_remote_active_acq(a) ==
-	  (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)) {
+        gc2_sweep_pregrace_cap_ready(g, a, mt_exclusive) &&
+	gc2_sweep_pregrace_quiet(g, a, mt_exclusive)) {
       pregrace_owned = 1;
     } else {
       lj_arena_reclaim_unseal(a, 1);
@@ -2429,9 +2437,55 @@ uint32_t lj_gc_sweep_gc2_arena_unmarked_exclusive(global_State *g,
   return gc2_sweep_arena_unmarked_impl(g, a, 1);
 }
 
+/* Return the next 64-cell boundary when the remaining cells in this bitmap
+** word cannot require semantic post-grace work. sweep[] encodes WHITE/FREEING
+** with equal low/high bits and LIVE/RETIRED with unequal bits, so the XOR is
+** an exact action summary without expanding the packed lanes. Root/recovery
+** ownership and late physical-free provenance retain the per-cell path.
+**
+** This snapshot is only an opportunistic cursor advance. A publisher which
+** creates work behind it dirties the sealed generation, while quarantine
+** finish independently finds LIVE/RETIRED/recovery backedges and lowers the
+** cursor. It therefore cannot authorize bitmap commit or body reuse. */
+static LJ_AINLINE uint32_t gc2_reclaim_noop_word_end(const GCArena *a,
+						      uint32_t cell)
+{
+  const uint64_t pairlo = UINT64_C(0x5555555555555555);
+  uint32_t w = cell >> 6;
+  uint32_t lane = cell & 63u;
+  uint32_t end = (w + 1u) << 6;
+  uint64_t cellmask = ~(uint64_t)0 << lane;
+  uint64_t block = la_load64_acq(&a->block[w]) & cellmask;
+  uint64_t sweep, pairmask;
+
+  if (block == 0)
+    return end;
+  if (la_load64_acq(&a->late[w]) & block)
+    return cell;
+
+  if (lane < 32u) {
+    sweep = la_load64_acq(&a->sweep[w << 1]);
+    pairmask = ~(uint64_t)0 << (lane << 1);
+    if ((((sweep ^ (sweep >> 1)) & pairlo) |
+	 la_load64_acq(&a->root[w << 1]) |
+	 la_load64_acq(&a->recovery[w << 1])) & pairmask)
+      return cell;
+    pairmask = ~(uint64_t)0;
+  } else {
+    pairmask = ~(uint64_t)0 << ((lane - 32u) << 1);
+  }
+  sweep = la_load64_acq(&a->sweep[(w << 1) + 1u]);
+  if ((((sweep ^ (sweep >> 1)) & pairlo) |
+       la_load64_acq(&a->root[(w << 1) + 1u]) |
+       la_load64_acq(&a->recovery[(w << 1) + 1u])) & pairmask)
+    return cell;
+  return end;
+}
+
 uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 				  uint32_t limit, int *donep)
 {
+  /* scanned counts either one ordinary cell or one proven no-op bitmap word. */
   uint32_t cell, scanned = 0, changed = 0;
   int pending = 0;
   if (donep)
@@ -2446,7 +2500,17 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   if (cell < LJ_AFIRST_CELL || cell > LJ_ARENA_CELLS)
     cell = LJ_AFIRST_CELL;
   while (cell < LJ_ARENA_CELLS && scanned < limit) {
+    uint32_t word_end = cell;
     uint32_t state, rootmem, dtor_kind;
+    /* Classify a word once per bounded pass. An actionable classification
+    ** retains the original per-cell loop until the next word boundary. */
+    if (scanned == 0 || (cell & 63u) == 0)
+      word_end = gc2_reclaim_noop_word_end(a, cell);
+    if (word_end != cell) {
+      cell = word_end;
+      scanned++;
+      continue;
+    }
     if (!lj_arena_bm_get(a->block, cell)) {
       cell++;
       scanned++;

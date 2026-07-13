@@ -611,6 +611,124 @@ static void test_prepare_collision_detaches_allocator(void)
   lua_close(L);
 }
 
+static void test_reclaim_noop_word_summary(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  TGAlloc alloc;
+  GCArena *a;
+  uint32_t first_end;
+  uint32_t word_start = (LJ_AFIRST_CELL + 63u) & ~63u;
+  uint32_t word_budget = LJ_ARENA_WORDS - (LJ_AFIRST_CELL >> 6);
+  uint32_t action = LJ_AFIRST_CELL;
+  uint32_t later = word_start + 17u;
+  uint32_t reason = LJ_ARENA_FINISH_NONE;
+  int done = 0;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  a = lj_arena_map(&tg->prng, LJ_AF_TRAVERSABLE);
+  assert(a != NULL);
+  a->hdr.owner_tid = tg->alloc.owner_tid;
+  a->hdr.reclaim_cell = LJ_AFIRST_CELL;
+  la_store32_rel(&a->hdr.flags,
+	lj_arena_flags_acq(a) | LJ_AF_QUARANTINE);
+
+  /* One budget unit covers exactly the remaining portion of the first empty
+  ** bitmap word, rather than reverting to a 64-cell sequence of no-op loads. */
+  first_end = (LJ_AFIRST_CELL | 63u) + 1u;
+  assert(lj_gc_reclaim_gc2_arena(g, a, 1u, &done) == 1u);
+  assert(!done);
+  assert(a->hdr.reclaim_cell == first_end);
+
+  /* Any semantic lane keeps its word on the original per-cell budget. A
+  ** transient root claim is body-free and therefore safe for this fixture. */
+  lj_arena_bm_set(a->block, action);
+  assert(lj_arena_root_state_cas(a, action, LJ_ARENA_ROOT_NONE,
+					 LJ_ARENA_ROOT_LINKING));
+  a->hdr.reclaim_cell = action;
+  done = 0;
+  assert(lj_gc_reclaim_gc2_arena(g, a, 1u, &done) == 1u);
+  assert(!done);
+  assert(a->hdr.reclaim_cell == action + 1u);
+  assert(lj_arena_root_state_cas(a, action, LJ_ARENA_ROOT_LINKING,
+					 LJ_ARENA_ROOT_NONE));
+  lj_arena_bm_clear(a->block, action);
+
+  /* The packed summary must inspect the complete remaining word, not merely
+  ** its cursor lane. Exercise each non-root blocker at a later allocation
+  ** start; one budget unit must retain the original one-cell path. */
+  assert(later < LJ_ARENA_CELLS && (later >> 6) == (word_start >> 6));
+  lj_arena_bm_set(a->block, later);
+  assert(lj_arena_sweep_state_cas(a, later, LJ_ARENA_SWEEP_WHITE,
+					  LJ_ARENA_SWEEP_RETIRED));
+  a->hdr.reclaim_cell = word_start;
+  done = 0;
+  assert(lj_gc_reclaim_gc2_arena(g, a, 1u, &done) == 1u);
+  assert(!done);
+  assert(a->hdr.reclaim_cell == word_start + 1u);
+  assert(lj_arena_sweep_state_acq(a, later) == LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_sweep_state_cas(a, later, LJ_ARENA_SWEEP_RETIRED,
+					  LJ_ARENA_SWEEP_WHITE));
+
+  assert(lj_arena_recovery_state_cas(a, later, LJ_ARENA_RECOVERY_IDLE,
+					     LJ_ARENA_RECOVERY_PENDING));
+  a->hdr.reclaim_cell = word_start;
+  done = 0;
+  assert(lj_gc_reclaim_gc2_arena(g, a, 1u, &done) == 1u);
+  assert(!done);
+  assert(a->hdr.reclaim_cell == word_start + 1u);
+  assert(lj_arena_recovery_state_acq(a, later) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_arena_recovery_state_cas(a, later, LJ_ARENA_RECOVERY_PENDING,
+					     LJ_ARENA_RECOVERY_IDLE));
+
+  (void)la_bit_test_and_set64(&a->late[later >> 6], later & 63u);
+  a->hdr.reclaim_cell = word_start;
+  done = 0;
+  assert(lj_gc_reclaim_gc2_arena(g, a, 1u, &done) == 1u);
+  assert(!done);
+  assert(a->hdr.reclaim_cell == word_start + 1u);
+  assert(lj_arena_late_get(a, later));
+  (void)la_and64_rlx(&a->late[later >> 6],
+			 ~((uint64_t)1 << (later & 63u)));
+  lj_arena_bm_clear(a->block, later);
+
+  /* The exact remaining-word budget covers the complete arena, including the
+  ** partial first word. EOF with no semantic change reports completion. */
+  a->hdr.reclaim_cell = LJ_AFIRST_CELL;
+  done = 0;
+  assert(lj_gc_reclaim_gc2_arena(
+	g, a, word_budget, &done) == 0u);
+  assert(done);
+  assert(a->hdr.reclaim_cell == LJ_ARENA_CELLS);
+
+  /* Publish actionable state behind that summarized EOF. Finish must retain
+  ** the arena and lower the cursor to the exact cell before any bitmap apply.
+  ** No body is needed: readiness rejects LIVE before header admission. */
+  lj_arena_bm_set(a->block, action);
+  assert(lj_arena_sweep_state_cas(a, action, LJ_ARENA_SWEEP_WHITE,
+					  LJ_ARENA_SWEEP_LIVE));
+  lj_arena_alloc_init(&alloc);
+  alloc.quarantine[LJ_ARENAK_TRAVERSABLE] = a;
+  assert(lj_arena_reclaim_seal(a));
+  assert(!lj_arena_alloc_quarantine_finish(&alloc,
+	LJ_ARENAK_TRAVERSABLE, a, 1u, 0, &reason));
+  assert(reason == LJ_ARENA_FINISH_ACTIONABLE);
+  assert(a->hdr.reclaim_cell == action);
+  lj_arena_reclaim_unseal(a, 1);
+
+  assert(lj_arena_sweep_state_cas(a, action, LJ_ARENA_SWEEP_LIVE,
+					  LJ_ARENA_SWEEP_WHITE));
+  lj_arena_bm_clear(a->block, action);
+  alloc.quarantine[LJ_ARENAK_TRAVERSABLE] = NULL;
+  lj_arena_unmap(a);
+  lua_close(L);
+}
+
 static void test_quarantine_late_live_after_eof(void)
 {
   lua_State *L = luaL_newstate();
@@ -655,7 +773,8 @@ static void test_quarantine_late_live_after_eof(void)
   other_needsweep = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
   tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
 
-  /* First complete a bounded pass with no actionable sidecar state. */
+  /* First complete the summarized bounded pass with no actionable sidecar
+  ** state. The later LIVE publication is therefore behind its numeric EOF. */
   while (!done) {
     step = lj_gc_reclaim_gc2_arena(g, a, 64u, &done);
     assert(step != 0 || done);
@@ -751,7 +870,7 @@ static void test_worker_owned_sweep_direct(void)
   global_State *g;
   TGState *tg, extra_tg;
   uint64_t worker_runs0, arenas0, idle0;
-  uint32_t sweep_cycle, i;
+  uint32_t sweep_cycle;
   void *extra_plain, *extra_trav;
   GCArena *extra_plain_a, *extra_trav_a, *swept_a;
 
@@ -800,12 +919,19 @@ static void test_worker_owned_sweep_direct(void)
   assert(gc2_worker_runs_acq(g) == worker_runs0);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0);
   lj_gc2_sweep_bridge_ready(g);
-  /* Quarantine classification, epoch grace and bitmap commit are separate
-  ** bounded owner batches. Drive one unit at a time until this exact arena is
-  ** complete instead of assuming the former in-place sweep fit in one call. */
-  for (i = 0; i < 256u && lj_gc2_sweep_pending(g); i++)
-    (void)lj_gc2_worker_drain(g, 1);
-  assert(i != 0 && i < 256u);
+
+  /* Classification and epoch grace are distinct production worker quanta. */
+  assert(lj_gc2_worker_drain(g, 1u) == 1u);
+  assert(extra_tg.alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == swept_a);
+  assert(gc2_sweep_grace_needed_acq(g));
+  assert(lj_gc2_worker_drain(g, 1u) == 1u);
+  assert(!gc2_sweep_grace_needed_acq(g));
+
+  /* An inert arena now finishes in one summarized reclaim visit. The internal
+  ** finishedp edge stops the global TG walk, but the public worker must report
+  ** its actual single unit rather than saturating this larger quantum. */
+  assert(LJ_GC2_SWEEP_BATCH > 1u);
+  assert(lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) == 1u);
   assert(gc2_worker_runs_acq(g) > worker_runs0);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0 + 1u);
   assert(gc2_worker_active_acq(g) == 0);
@@ -1558,6 +1684,7 @@ int main(void)
   assert((ptr_state(finpt) & 2u) == 0);
 
   lua_close(L);
+  test_reclaim_noop_word_summary();
   test_prepare_collision_detaches_allocator();
   test_preserve_abort_waits_for_restore_publisher();
   test_quarantine_late_live_after_eof();
