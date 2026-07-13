@@ -244,6 +244,64 @@ static uint64_t arena_lifetime_block_bits(const GCArena *a, uint32_t w)
   return bits;
 }
 
+static LJ_AINLINE int arena_lifetime_managed(const GCArena *a)
+{
+  return a && !lj_arena_ishuge(a) &&
+    (lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0;
+}
+
+LJ_STATIC_ASSERT(LJ_ARENA_SWEEP_CELLS_PER_WORD == 32u);
+LJ_STATIC_ASSERT(LJ_ARENA_ROOT_CELLS_PER_WORD == 32u);
+LJ_STATIC_ASSERT(LJ_ARENA_RECOVERY_CELLS_PER_WORD == 32u);
+LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_CELLS_PER_WORD == 16u);
+
+/* Dilate a portable 32-bit bitmap into the even bits of a 64-bit word. This
+** is the scalar Morton-code expansion, not a BMI/PDEP dependency: bit n in x
+** becomes bit 2*n in the result on every supported compiler and target. */
+static LJ_AINLINE uint64_t arena_dilate32_even(uint32_t x)
+{
+  uint64_t v = (uint64_t)x;
+  v = (v | (v << 16)) & UINT64_C(0x0000ffff0000ffff);
+  v = (v | (v << 8)) & UINT64_C(0x00ff00ff00ff00ff);
+  v = (v | (v << 4)) & UINT64_C(0x0f0f0f0f0f0f0f0f);
+  v = (v | (v << 2)) & UINT64_C(0x3333333333333333);
+  v = (v | (v << 1)) & UINT64_C(0x5555555555555555);
+  return v;
+}
+
+/* Prove the exact scalar outcome live=0/freeing=block for one bitmap word.
+** Every root/recovery lane and every non-FREE lifetime nibble in the complete
+** word must be absent. sweep[] must then contain FREEING (11) at precisely
+** the block starts and WHITE (00) everywhere else. This deliberately accepts
+** block-zero words only when both packed sweep words are exactly zero.
+**
+** A false negative merely selects the scalar path. Before the clean sealed
+** commit this proof authorizes only a readiness-scan skip; any racing publisher
+** dirties that generation. arena_quarantine_apply_bitmap() calls it again
+** after the clean commit instead of transferring the earlier observation. */
+static LJ_AINLINE int arena_quarantine_terminal_freeing_word(
+  const GCArena *a, uint32_t w, uint64_t block, int terminal_managed)
+{
+  uint64_t even, expect_lo, expect_hi;
+  uint32_t k;
+  if (!a || w >= LJ_ARENA_WORDS || !terminal_managed)
+    return 0;
+  if (la_load64_acq(&a->root[w << 1]) != 0 ||
+      la_load64_acq(&a->root[(w << 1) + 1u]) != 0 ||
+      la_load64_acq(&a->recovery[w << 1]) != 0 ||
+      la_load64_acq(&a->recovery[(w << 1) + 1u]) != 0)
+    return 0;
+  for (k = 0; k < 4u; k++)
+    if (la_load64_acq(&a->lifetime[(w << 2) + k]) != 0)
+      return 0;
+  even = arena_dilate32_even((uint32_t)block);
+  expect_lo = even | (even << 1);
+  even = arena_dilate32_even((uint32_t)(block >> 32));
+  expect_hi = even | (even << 1);
+  return la_load64_acq(&a->sweep[w << 1]) == expect_lo &&
+    la_load64_acq(&a->sweep[(w << 1) + 1u]) == expect_hi;
+}
+
 static int arena_root_empty(const GCArena *a)
 {
   uint32_t w;
@@ -259,12 +317,6 @@ static LJ_AINLINE int arena_side_owners_none(const GCArena *a, uint32_t cell)
 {
   return lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE &&
     lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE;
-}
-
-static LJ_AINLINE int arena_lifetime_managed(const GCArena *a)
-{
-  return a && !lj_arena_ishuge(a) &&
-    (lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0;
 }
 
 int lj_arena_lifetime_empty(const GCArena *a)
@@ -5360,11 +5412,19 @@ GCArena *lj_arena_alloc_reclaimed_head(const TGAlloc *alloc, uint32_t kind)
 static int arena_quarantine_bitmap_ready(GCArena *a, uint32_t *retry_cell)
 {
   uint32_t w;
+  int terminal_managed = arena_lifetime_managed(a);
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
     uint64_t b = la_load64_acq(&a->block[w]);
-    uint64_t late = la_load64_acq(&a->late[w]);
-    uint64_t marks = la_load64_acq(&a->mark[w]);
+    uint64_t late, marks;
     uint32_t j;
+    /* This preliminary proof only skips scalar observations. It grants no
+    ** commit authority: a publisher racing it dirties the sealed generation,
+    ** and the post-commit apply independently proves the word again. */
+    if (b == 0 || arena_quarantine_terminal_freeing_word(
+		   a, w, b, terminal_managed))
+      continue;
+    late = la_load64_acq(&a->late[w]);
+    marks = la_load64_acq(&a->mark[w]);
     for (j = 0; j < 64u; j++) {
       uint32_t state;
       if (!(b & ((uint64_t)1 << j)))
@@ -5396,17 +5456,39 @@ static int arena_quarantine_bitmap_ready(GCArena *a, uint32_t *retry_cell)
   return 1;
 }
 
-static void arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
+static int arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
 {
   uint32_t w;
+  int terminal_managed = arena_lifetime_managed(a);
+  int all_terminal = terminal_managed;
   for (w = 0; w < LJ_ARENA_WORDS; w++) {
     uint64_t b = la_load64_acq(&a->block[w]);
-    uint64_t m = la_load64_acq(&a->mark[w]);
-    uint64_t late = la_load64_acq(&a->late[w]);
-    uint64_t recovery = arena_recovery_block_bits(a, w);
-    uint64_t root = arena_root_block_bits(a, w);
+    uint64_t m, late, recovery, root;
     uint64_t live = 0, freeing = 0;
     uint32_t j;
+    /* The clean sealed commit immediately precedes this call. Re-prove every
+    ** packed plane rather than inheriting bitmap_ready's pre-commit sample.
+    ** On success the scalar loop's exact result is live=0/freeing=b. Preserve
+    ** its write order so READY/type discovery cannot outlive block removal. */
+    if (arena_quarantine_terminal_freeing_word(
+	  a, w, b, terminal_managed)) {
+      m = la_load64_acq(&a->mark[w]);
+      /* Preserve the scalar path's acquire edge from release-published late
+      ** provenance before any structural metadata is removed. The value is
+      ** irrelevant for terminal FREE/FREEING, but its ordering is not. */
+      (void)la_load64_acq(&a->late[w]);
+      (void)la_and64_rlx(&a->ready[w], 0);
+      la_store64_rel(&a->block[w], 0);
+      arena_dtor_clear_mask_rlx(a, w, b);
+      la_store64_rel(&a->mark[w], ((~b) & m) | b);
+      (void)la_and64_rlx(&a->late[w], 0);
+      continue;
+    }
+    all_terminal = 0;
+    m = la_load64_acq(&a->mark[w]);
+    late = la_load64_acq(&a->late[w]);
+    recovery = arena_recovery_block_bits(a, w);
+    root = arena_root_block_bits(a, w);
     for (j = 0; j < 64u; j++) {
       uint32_t cell = (w << 6) + j;
       uint32_t state;
@@ -5501,7 +5583,22 @@ static void arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
     ** leaves every retained incarnation pinned. */
     (void)la_and64_rlx(&a->late[w], live);
   }
+  return all_terminal;
 }
+
+#if defined(LJ_ARENA_TEST_HELPERS)
+int lj_arena_test_terminal_freeing_word(const GCArena *a, uint32_t word)
+{
+  return a && word < LJ_ARENA_WORDS &&
+    arena_quarantine_terminal_freeing_word(
+      a, word, la_load64_acq(&a->block[word]), arena_lifetime_managed(a));
+}
+
+int lj_arena_test_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
+{
+  return a ? arena_quarantine_apply_bitmap(a, preserve_marks) : 0;
+}
+#endif
 
 int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
 				      GCArena *a, uint32_t sweep_epoch,
@@ -5510,6 +5607,7 @@ int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
   GCArena *head, *next, *reclaimed;
   uint32_t retry_cell = LJ_ARENA_CELLS;
   uint32_t reason = LJ_ARENA_FINISH_NONE;
+  int all_terminal;
   if (reasonp)
     *reasonp = LJ_ARENA_FINISH_NONE;
   if (!alloc || kind >= LJ_ARENA_NKINDS || !a)
@@ -5559,7 +5657,7 @@ int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
     reason = LJ_ARENA_FINISH_PUBLISHER;
     goto blocked;
   }
-  arena_quarantine_apply_bitmap(a, preserve_marks);
+  all_terminal = arena_quarantine_apply_bitmap(a, preserve_marks);
   /* Publish every terminal block decision before WHITE is reused as the
   ** post-commit sidecar value. Committed readers sample state then block, so
   ** a dead cell can never combine reset-WHITE with its old block bit. */
@@ -5569,7 +5667,10 @@ int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
     next = NULL;
   alloc->quarantine[kind] = next;
   lj_arena_next_rel(a, NULL);
-  a->hdr.live_cells = arena_count_live_cells(a);
+  /* Every independently proven terminal word published block=0 above. Only a
+  ** scalar fallback can retain a live start, so avoid a redundant arena scan
+  ** exactly when the complete word certificate proves the count is zero. */
+  a->hdr.live_cells = all_terminal ? 0 : arena_count_live_cells(a);
   a->hdr.sweep_epoch = sweep_epoch;
   a->hdr.retire_epoch = 0;
   a->hdr.reclaim_cell = LJ_AFIRST_CELL;

@@ -731,6 +731,10 @@ LJ_FUNC uint64_t lj_arena_test_remote_fast_skips(void);
 LJ_FUNC uint64_t lj_arena_test_remote_arena_probes(void);
 LJ_FUNC int lj_arena_test_set_free_run(GCArena *a, uint32_t start,
 					uint32_t len);
+LJ_FUNC int lj_arena_test_terminal_freeing_word(const GCArena *a,
+						 uint32_t word);
+LJ_FUNC int lj_arena_test_quarantine_apply_bitmap(GCArena *a,
+						   int preserve_marks);
 #endif
 #if defined(LJ_ARENA_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_arena_test_lifetime_pause(int enabled);

@@ -136,6 +136,157 @@ static void test_packed_range_preflight(PRNGState *rs)
   free(snapshot);
   lj_arena_unmap(a);
 }
+
+static void test_terminal_freeing_word_fast_path(PRNGState *rs)
+{
+  GCArena *a = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
+  GCArena *fallback, *plain, *finished;
+  TGAlloc finish_alloc;
+  uint32_t word = (LJ_AFIRST_CELL + 63u) >> 6;
+  uint32_t base = word << 6;
+  uint32_t terminal[4];
+  uint32_t rootcell = base + 7u;
+  uint32_t recoverycell = base + 8u;
+  uint32_t lifecell = base + 9u;
+  uint32_t outside = base + 1u;
+  uint64_t block, mark;
+  uint32_t i, reason = LJ_ARENA_FINISH_NONE;
+
+  assert(a != NULL && word < LJ_ARENA_WORDS);
+  terminal[0] = base;
+  terminal[1] = base + 31u;
+  terminal[2] = base + 32u;
+  terminal[3] = base + 63u;
+
+  /* block=0 is terminal only with exact WHITE sweep words and no packed
+  ** owner. A stray state outside block[] must defeat the certificate. */
+  assert(lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_arena_sweep_state_cas(a, outside, LJ_ARENA_SWEEP_WHITE,
+					  LJ_ARENA_SWEEP_FREEING));
+  assert(!lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_arena_sweep_state_cas(a, outside, LJ_ARENA_SWEEP_FREEING,
+					  LJ_ARENA_SWEEP_WHITE));
+
+  /* Bits 31 and 32 exercise both independently dilated sweep words. */
+  for (i = 0; i < 4u; i++) {
+    lj_arena_bm_set(a->block, terminal[i]);
+    assert(lj_arena_sweep_state_cas(a, terminal[i],
+	  LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
+  }
+  assert(lj_arena_test_terminal_freeing_word(a, word));
+
+  assert(lj_arena_root_state_cas(a, rootcell, LJ_ARENA_ROOT_NONE,
+					 LJ_ARENA_ROOT_LINKING));
+  assert(!lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_arena_root_state_cas(a, rootcell, LJ_ARENA_ROOT_LINKING,
+					 LJ_ARENA_ROOT_NONE));
+  assert(lj_arena_recovery_state_cas(a, recoverycell,
+	LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING));
+  assert(!lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_arena_recovery_state_cas(a, recoverycell,
+	LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+  assert(lj_arena_lifetime_state_cas(a, lifecell,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_LIVE));
+  assert(!lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_arena_lifetime_state_cas(a, lifecell,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_FREE));
+
+  assert(lj_arena_sweep_state_cas(a, terminal[1],
+	LJ_ARENA_SWEEP_FREEING, LJ_ARENA_SWEEP_LIVE));
+  assert(!lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_arena_sweep_state_cas(a, terminal[1],
+	LJ_ARENA_SWEEP_LIVE, LJ_ARENA_SWEEP_FREEING));
+  assert(lj_arena_test_terminal_freeing_word(a, word));
+
+  /* READY/late do not alter the proof because generic live=0 clears them.
+  ** Typed identity is cleared only at old block starts; cdata is untouched. */
+  lj_arena_bm_set(a->mark, outside);
+  lj_arena_bm_set(a->ready, outside);
+  lj_arena_bm_set(a->ready, terminal[0]);
+  lj_arena_bm_set(a->late, outside);
+  lj_arena_bm_set(a->late, terminal[2]);
+  lj_arena_bm_set(a->dtor[0], outside);
+  lj_arena_bm_set(a->dtor[0], terminal[1]);
+  lj_arena_bm_set(a->cdata, outside);
+  lj_arena_bm_set(a->cdata, terminal[3]);
+  block = la_load64_acq(&a->block[word]);
+  mark = la_load64_acq(&a->mark[word]);
+  assert(lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_arena_test_quarantine_apply_bitmap(a, 0));
+  assert(la_load64_acq(&a->block[word]) == 0);
+  assert(la_load64_acq(&a->ready[word]) == 0);
+  assert(la_load64_acq(&a->late[word]) == 0);
+  assert(la_load64_acq(&a->mark[word]) == (((~block) & mark) | block));
+  assert(!lj_arena_bm_get(a->dtor[0], terminal[1]));
+  assert(lj_arena_bm_get(a->dtor[0], outside));
+  assert(lj_arena_bm_get(a->cdata, outside));
+  assert(lj_arena_bm_get(a->cdata, terminal[3]));
+
+  for (i = 0; i < 4u; i++)
+    assert(lj_arena_sweep_state_cas(a, terminal[i],
+	  LJ_ARENA_SWEEP_FREEING, LJ_ARENA_SWEEP_WHITE));
+  lj_arena_bm_clear(a->dtor[0], outside);
+  lj_arena_bm_clear(a->cdata, outside);
+  lj_arena_bm_clear(a->cdata, terminal[3]);
+  lj_arena_unmap(a);
+
+  /* Any unproven word falls back to the scalar implementation. A WHITE start
+  ** remains live and makes the complete apply report nonterminal. */
+  fallback = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
+  assert(fallback != NULL);
+  lj_arena_bm_set(fallback->block, base);
+  lj_arena_bm_set(fallback->ready, base);
+  lj_arena_bm_set(fallback->late, base);
+  assert(!lj_arena_test_terminal_freeing_word(fallback, word));
+  assert(!lj_arena_test_quarantine_apply_bitmap(fallback, 0));
+  assert(lj_arena_bm_get(fallback->block, base));
+  assert(lj_arena_bm_get(fallback->ready, base));
+  assert(lj_arena_bm_get(fallback->late, base));
+  lj_arena_bm_clear(fallback->block, base);
+  lj_arena_bm_clear(fallback->ready, base);
+  lj_arena_bm_clear(fallback->late, base);
+  lj_arena_unmap(fallback);
+
+  /* Plain arenas have no irreversible lifetime spine. Even an all-empty
+  ** bitmap must retain the scalar live-cell recount rather than exporting the
+  ** traversable terminal certificate. */
+  plain = lj_arena_map(rs, 0);
+  assert(plain != NULL);
+  assert(!lj_arena_test_terminal_freeing_word(plain, word));
+  assert(!lj_arena_test_quarantine_apply_bitmap(plain, 0));
+  lj_arena_unmap(plain);
+
+  /* Drive the public finish path once so both the precommit readiness skip and
+  ** the independent postcommit proof cover the exact live_cells=0 shortcut. */
+  lj_arena_alloc_init(&finish_alloc);
+  finished = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
+  assert(finished != NULL);
+  finished->hdr.owner_tid = finish_alloc.owner_tid;
+  la_store32_rel(&finished->hdr.flags,
+	lj_arena_flags_acq(finished) | LJ_AF_QUARANTINE);
+  for (i = 0; i < 4u; i++) {
+    lj_arena_bm_set(finished->block, terminal[i]);
+    lj_arena_bm_set(finished->ready, terminal[i]);
+    lj_arena_bm_set(finished->dtor[0], terminal[i]);
+    assert(lj_arena_sweep_state_cas(finished, terminal[i],
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
+  }
+  finish_alloc.quarantine[LJ_ARENAK_TRAVERSABLE] = finished;
+  assert(lj_arena_reclaim_seal(finished));
+  assert(lj_arena_alloc_quarantine_finish(&finish_alloc,
+	LJ_ARENAK_TRAVERSABLE, finished, 77u, 1, &reason));
+  assert(reason == LJ_ARENA_FINISH_COMMITTED);
+  assert(finished->hdr.live_cells == 0);
+  assert(lj_arena_alloc_reclaimed_head(
+	&finish_alloc, LJ_ARENAK_TRAVERSABLE) == finished);
+  for (i = 0; i < 4u; i++) {
+    assert(!lj_arena_bm_get(finished->block, terminal[i]));
+    assert(!lj_arena_ready_get(finished, terminal[i]));
+    assert(lj_arena_dtor_kind_acq(finished, terminal[i]) ==
+	   LJ_ARENA_DTOR_NONE);
+  }
+  lj_arena_alloc_fini(&finish_alloc);
+}
 #endif
 
 static void test_dtor_identity_pins_legacy_sweep(PRNGState *rs)
@@ -339,6 +490,7 @@ int main(void)
   lj_prng_seed_fixed(&rs);
 #if defined(LJ_ARENA_TEST_HELPERS)
   test_packed_range_preflight(&rs);
+  test_terminal_freeing_word_fast_path(&rs);
 #endif
   test_dtor_identity_pins_legacy_sweep(&rs);
   test_blockzero_dtor_survives_quarantine(&rs);
