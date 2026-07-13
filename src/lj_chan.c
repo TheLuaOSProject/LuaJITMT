@@ -14,6 +14,7 @@
 #include "lj_safepoint.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lj_trace.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -112,9 +113,14 @@ static void chan_wait(lua_State *L, LJChan *ch)
     lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
     return;
   }
-  if (L)
+  if (L) {
+    global_State *g = G(L);
+    uint32_t tid = lj_thr_current_id(g);
+    /* Preserve an active VM-event recorder frame; see the timed twin below. */
+    if (tid == 0 || vmevent_owner_acq(g) != tid)
+      lj_trace_abort_owner(L);
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: channel park is native. */
-  else if (tg)
+  } else if (tg)
     lj_native_enter(tg);
   (void)la_futex_wait(&ch->futex, f, 1000000);
   if (L)
@@ -161,9 +167,16 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
     return 0;
   }
-  if (L)
+  if (L) {
+    global_State *g = G(L);
+    uint32_t tid = lj_thr_current_id(g);
+    /* trace_state() owns J->cur across VM-event callbacks. Never destroy that
+    ** state reentrantly; the callback's bounded park instead leaves cleanup to
+    ** the outer recorder unwind. Ordinary channel parks release ownership. */
+    if (tid == 0 || vmevent_owner_acq(g) != tid)
+      lj_trace_abort_owner(L);
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: timed channel park. */
-  else if (tg)
+  } else if (tg)
     lj_native_enter(tg);
   rc = la_futex_wait(&ch->futex, f, ns);
   if (L)

@@ -39,6 +39,8 @@ local m6_cases = {
   "m6_jit_flush_gc_current_stack",
   "m6_jit_util_flush_race",
   "m6_jit_flush_thread_stress",
+  "m6_jit_flush_join_token_liveness",
+  "m6_jit_park_vmevent_reentrant",
   "m6_jit_flush_thread_heavy_stress",
   "m6_jit_mt_activation_flush",
   "m6_jit_gcworkers_activation_flush",
@@ -2226,6 +2228,39 @@ assert(live >= 4, live)
       luajit_file(t, t:path("tests", "t-jit-flush-thread-stress.lua"),
                   { lua_path = true, timeout = "60s" })
       print("M6 JIT threaded flush stress passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_flush_join_token_liveness",
+    description = "blocking join releases asynchronously aborted recorder ownership",
+    run = function(t)
+      build_default(t)
+      -- This is the deterministic reducer for the heavy stress failure: the
+      -- top-level churn FORL owns the recorder token at round 40 while its
+      -- short-lived peer enters jit.flush() and must finish before join.
+      luajit_file(t, t:path("tests", "t-jit-flush-thread-stress.lua"), {
+        lua_path = true,
+        timeout = "20s",
+        env = {
+          LJ_M6_JIT_FLUSH_THREAD_THREADS = "1",
+          LJ_M6_JIT_FLUSH_THREAD_ROUNDS = "1",
+          LJ_M6_JIT_FLUSH_THREAD_CHURN = "96",
+          LJ_M6_JIT_FLUSH_THREAD_JOIN_TIMEOUT = "5"
+        }
+      })
+      print("M6 JIT blocking-join recorder-token liveness passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_park_vmevent_reentrant",
+    description = "blocking parks preserve active VM-event recorder frames",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-park-vmevent-reentrant.lua"),
+                  { lua_path = true, timeout = "20s" })
+      print("M6 JIT VM-event park reentrancy passed")
     end
   })
 

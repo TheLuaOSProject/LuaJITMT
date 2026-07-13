@@ -439,11 +439,22 @@ static int64_t threading_native_wait_slice(int has_timeout, int64_t ns)
 static uint32_t threading_futex_wait_l(lua_State *L, uint32_t *addr,
 				       uint32_t expect, int64_t ns)
 {
+  global_State *g = G(L);
+  uint32_t tid = lj_thr_current_id(g);
   uint32_t actions;
   /*
   ** Public blocking waits are native parks, but the waiting TG must still be
-  ** visible to soft handshakes while parked.
+  ** visible to soft handshakes while parked. A C library call can be entered
+  ** while its owner still holds an asynchronously abortable recorder token.
+  ** Never park with that token: a peer which needs it may be the very thread
+  ** this wait is joining, creating an owner-token/join cycle with no runnable
+  ** side left to finish recorder cleanup.
   */
+  /* A VM-event callback is still executing inside trace_state() and therefore
+  ** cannot tear down J->cur reentrantly. Its bounded wait remains native, but
+  ** cleanup is deferred until that recorder frame unwinds. */
+  if (tid == 0 || vmevent_owner_acq(g) != tid)
+    lj_trace_abort_owner(L);
   lj_native_enter(L2TG(L));
   (void)la_futex_wait(addr, expect, ns);
   actions = lj_native_leave(L);
