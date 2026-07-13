@@ -2911,7 +2911,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov r12, [RA]
   |  mov rsp, RA			// Reposition stack to C frame.
   |.endif
-  |  cmp RDd, -LUA_ERRERR; jae >9	// Check for error from exit.
+  |  cmp RDd, -LUA_ERRERR; jae ->vm_exit_rethrow  // Error from exit.
   |  mov L:RB, SAVE_L
   |  mov MULTRES, RDd
   |  mov LFUNC:KBASE, [BASE-16]
@@ -3042,7 +3042,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  shr RCd, 16
   |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
   |
-  |9:  // Rethrow error from the right C frame.
+  |->vm_exit_rethrow:  // Rethrow error from the right C frame.
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, BASE
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
