@@ -169,7 +169,8 @@ return function(add)
     description = "runtime traversable arena sweep bridge C fixture",
     run = function(t)
       run_luajit_fixture(t, t:tmp("lj_t_arena_gcsweep"),
-                         "t-arena-gcsweep.c")
+                         "t-arena-gcsweep.c",
+                         build.gc2_test_helper_opts())
     end
   })
 

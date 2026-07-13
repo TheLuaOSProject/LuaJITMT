@@ -181,6 +181,14 @@ typedef void (*LJGcRootStateHook)(global_State *g, GCobj *o,
 LJ_FUNC void lj_gc_test_set_root_state_hook(LJGcRootStateHook hook);
 LJ_FUNC int lj_gc_test_unlink_root_obj_bounded(global_State *g, GCobj *dead,
 						uint32_t limit);
+LJ_FUNC uint32_t lj_gc_test_sweep_nonwhite32(uint64_t sweep);
+LJ_FUNC uint64_t lj_gc_test_sweep_supported_dtor64(uint64_t p0,
+	uint64_t p1, uint64_t p2, uint64_t p3);
+LJ_FUNC void lj_gc_test_sweep_partition64(uint64_t block, uint64_t mark,
+	uint64_t sweep0, uint64_t sweep1, uint64_t p0, uint64_t p1,
+	uint64_t p2, uint64_t p3, uint64_t valid, uint64_t *pinp,
+	uint64_t *candidatep);
+LJ_FUNC uint64_t lj_gc_test_sweep_bulk_pin64(uint64_t *mark, uint64_t pin);
 /* Targeted exact-reclaimer entry for destructor race fixtures. The caller must
 ** hold the GC2 reclaim scope and must already have unlinked all semantic and
 ** ownership-spine roots for the THREAD. */

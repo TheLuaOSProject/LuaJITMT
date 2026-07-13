@@ -2001,6 +2001,73 @@ static LJ_AINLINE int gc2_sweep_dtor_kind_supported(uint32_t kind)
 	 kind == LJ_ARENA_DTOR_LFUNC0;
 }
 
+/* Collapse one packed 32-cell sweep word to one bit per non-WHITE lane. */
+static LJ_AINLINE uint32_t gc2_sweep_nonwhite32(uint64_t sweep)
+{
+  uint64_t bits = (sweep | (sweep >> 1)) &
+    UINT64_C(0x5555555555555555);
+  bits = (bits | (bits >> 1)) & UINT64_C(0x3333333333333333);
+  bits = (bits | (bits >> 2)) & UINT64_C(0x0f0f0f0f0f0f0f0f);
+  bits = (bits | (bits >> 4)) & UINT64_C(0x00ff00ff00ff00ff);
+  bits = (bits | (bits >> 8)) & UINT64_C(0x0000ffff0000ffff);
+  bits = (bits | (bits >> 16)) & UINT64_C(0x00000000ffffffff);
+  return (uint32_t)bits;
+}
+
+/* Exactly one of the three supported one-hot planes, with plane 3 clear. */
+static LJ_AINLINE uint64_t gc2_sweep_supported_dtor64(uint64_t p0,
+	uint64_t p1, uint64_t p2, uint64_t p3)
+{
+  uint64_t multi = (p0 & p1) | (p0 & p2) | (p1 & p2);
+  return (p0 | p1 | p2) & ~multi & ~p3;
+}
+
+static LJ_AINLINE void gc2_sweep_partition64(uint64_t block, uint64_t mark,
+	uint64_t sweep0, uint64_t sweep1, uint64_t p0, uint64_t p1,
+	uint64_t p2, uint64_t p3, uint64_t valid, uint64_t *pinp,
+	uint64_t *candidatep)
+{
+  uint64_t nonwhite = (uint64_t)gc2_sweep_nonwhite32(sweep0) |
+	((uint64_t)gc2_sweep_nonwhite32(sweep1) << 32);
+  uint64_t todo = block & ~mark & ~nonwhite & valid;
+  uint64_t supported = gc2_sweep_supported_dtor64(p0, p1, p2, p3);
+  *pinp = todo & ~supported;
+  *candidatep = todo & supported;
+}
+
+static LJ_AINLINE uint64_t gc2_sweep_bulk_pin64(uint64_t *mark,
+	uint64_t pin)
+{
+  return la_or64_rlx(mark, pin);
+}
+
+#ifdef LJ_GC2_TEST_HELPERS
+uint32_t lj_gc_test_sweep_nonwhite32(uint64_t sweep)
+{
+  return gc2_sweep_nonwhite32(sweep);
+}
+
+uint64_t lj_gc_test_sweep_supported_dtor64(uint64_t p0, uint64_t p1,
+	uint64_t p2, uint64_t p3)
+{
+  return gc2_sweep_supported_dtor64(p0, p1, p2, p3);
+}
+
+void lj_gc_test_sweep_partition64(uint64_t block, uint64_t mark,
+	uint64_t sweep0, uint64_t sweep1, uint64_t p0, uint64_t p1,
+	uint64_t p2, uint64_t p3, uint64_t valid, uint64_t *pinp,
+	uint64_t *candidatep)
+{
+  gc2_sweep_partition64(block, mark, sweep0, sweep1, p0, p1, p2, p3,
+	valid, pinp, candidatep);
+}
+
+uint64_t lj_gc_test_sweep_bulk_pin64(uint64_t *mark, uint64_t pin)
+{
+  return gc2_sweep_bulk_pin64(mark, pin);
+}
+#endif
+
 /* Validate a sidecar-selected destructor without deriving its identity from
 ** mutable body bytes. The immutable arena kind is the authority; the header
 ** and exact block extent only have to agree before the ordinary type-specific
@@ -2317,61 +2384,85 @@ static int gc2_sweep_pregrace_destruct(global_State *g, GCArena *a,
   return LJ_GC_DESTRUCT_ACQUIRED;
 }
 
+/* Recheck one packed candidate with the original scalar authority. A stale
+** word snapshot may skip or retain work, but it never authorizes a body read,
+** retirement or terminal transition. */
+static void gc2_sweep_arena_unmarked_candidate(global_State *g, GCArena *a,
+	uint32_t i, uint32_t tentative_kind, int pregrace_owned)
+{
+  uint32_t dtor_kind;
+  uint32_t end = 0;
+  int freed = LJ_GC_DESTRUCT_LOST;
+  if (!lj_arena_bm_get(a->block, i) ||
+      lj_arena_sweep_state_acq(a, i) != LJ_ARENA_SWEEP_WHITE ||
+      lj_arena_bm_get(a->mark, i))
+    return;
+  dtor_kind = lj_arena_dtor_kind_acq(a, i);
+  if (dtor_kind != tentative_kind ||
+      !gc2_sweep_dtor_kind_supported(dtor_kind)) {
+    /* Mixed snapshots or malformed identity retain the exact allocation. */
+    (void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
+    return;
+  }
+  if (pregrace_owned) {
+    end = gc2_sweep_alloc_end(a, i);
+    freed = gc2_sweep_pregrace_destruct(
+	    g, a, i, end, dtor_kind, pregrace_owned);
+  }
+  if (freed != LJ_GC_DESTRUCT_LOST) {
+    /* ACQUIRED ran the semantic destructor; OWNED proves another terminal
+    ** owner already did. Neither path creates a RETIRED counter ticket.
+    ** Physical discovery, kind, READY and bytes remain for quarantine. */
+    gc2_sweep_grace_needed_rel(g, 1);
+    return;
+  }
+  /* A kind-bearing start is arena-owned exact destructor identity, not opaque
+  ** raw storage. Retire it before the arena grace without reading the body. A
+  ** mark overlapping classification converts RETIRED back to LIVE. */
+  if (lj_arena_ready_get(a, i) &&
+      lj_arena_root_state_acq(a, i) == LJ_ARENA_ROOT_NONE &&
+      lj_arena_lifetime_state_acq(a, i) == LJ_ARENA_LIFETIME_LIVE) {
+    (void)gc2_sweep_detached_small(g, a, i, 0);
+    return;
+  }
+  /* A transient exact descriptor is never permission to inspect its body. */
+  (void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
+}
+
 static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a,
 						 int pregrace_owned)
 {
-  uint32_t i;
+  uint32_t w;
   if (!g || !a)
     return 0;
-  for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
-    uint32_t state;
-    if (!lj_arena_bm_get(a->block, i))
-      continue;
-    state = lj_arena_sweep_state_acq(a, i);
-    if (state != LJ_ARENA_SWEEP_WHITE || lj_arena_bm_get(a->mark, i))
-      continue;
-    {
-      uint32_t dtor_kind = lj_arena_dtor_kind_acq(a, i);
-      if (dtor_kind != LJ_ARENA_DTOR_NONE) {
-	uint32_t end = 0;
-	int freed = LJ_GC_DESTRUCT_LOST;
-	if (pregrace_owned && gc2_sweep_dtor_kind_supported(dtor_kind)) {
-	  end = gc2_sweep_alloc_end(a, i);
-	  freed = gc2_sweep_pregrace_destruct(
-	    g, a, i, end, dtor_kind, pregrace_owned);
-	}
-	if (freed != LJ_GC_DESTRUCT_LOST) {
-	  /* ACQUIRED ran the semantic destructor; OWNED proves another terminal
-	  ** owner already did. Neither path creates a RETIRED counter ticket.
-	  ** Physical discovery, kind, READY and bytes remain for quarantine. */
-	  gc2_sweep_grace_needed_rel(g, 1);
-	  continue;
-	}
-	/* A kind-bearing start is arena-owned exact destructor identity, not
-	** opaque raw storage. Retire it before the arena grace without reading
-	** the body. A mark which overlaps this classification converts RETIRED
-	** back to LIVE through the existing rescue transition. */
-	if (gc2_sweep_dtor_kind_supported(dtor_kind) &&
-	    lj_arena_ready_get(a, i) &&
-	    lj_arena_root_state_acq(a, i) == LJ_ARENA_ROOT_NONE &&
-	    lj_arena_lifetime_state_acq(a, i) ==
-	      LJ_ARENA_LIFETIME_LIVE) {
-	  (void)gc2_sweep_detached_small(g, a, i, 0);
-	  continue;
-	}
-	/* A malformed or transient descriptor is never permission to inspect or
-	** destroy payload bytes. Pin it for this generation. */
-	(void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
-	continue;
-      }
+  for (w = LJ_AFIRST_CELL >> 6; w < LJ_ARENA_WORDS; w++) {
+    uint64_t valid = w == (LJ_AFIRST_CELL >> 6) ?
+	~(uint64_t)0 << (LJ_AFIRST_CELL & 63u) : ~(uint64_t)0;
+    uint64_t block = la_load64_acq(&a->block[w]);
+    uint64_t mark = la_load64_acq(&a->mark[w]);
+    uint64_t sweep0 = la_load64_acq(&a->sweep[w << 1]);
+    uint64_t sweep1 = la_load64_acq(&a->sweep[(w << 1) + 1u]);
+    uint64_t p0 = la_load64_acq(&a->dtor[0][w]);
+    uint64_t p1 = la_load64_acq(&a->dtor[1][w]);
+    uint64_t p2 = la_load64_acq(&a->dtor[2][w]);
+    uint64_t p3 = la_load64_acq(&a->dtor[3][w]);
+    uint64_t pin, candidates;
+    gc2_sweep_partition64(block, mark, sweep0, sweep1, p0, p1, p2, p3,
+	valid, &pin, &candidates);
+    /* Every descriptor-free or malformed WHITE start is retained. The old
+    ** per-cell pin ignored its previous-bit result, so one relaxed OR preserves
+    ** both semantics and marks_this_round accounting. */
+    if (pin)
+      (void)gc2_sweep_bulk_pin64(&a->mark[w], pin);
+    while (candidates) {
+      uint32_t lane = lj_ffs64(candidates);
+      uint64_t bit = (uint64_t)1 << lane;
+      uint32_t tentative_kind = (p0 & bit ? 1u : 0u) |
+	(p1 & bit ? 2u : 0u) | (p2 & bit ? 4u : 0u);
+      candidates &= candidates - 1u;
+      gc2_sweep_arena_unmarked_candidate(
+	g, a, (w << 6) + lane, tentative_kind, pregrace_owned);
     }
-    /* Every untyped GC object is ownership-spine linked before publication.
-    ** The bounded bridge classified all old nonfixed headers before arena
-    ** scan, so a remaining descriptor-free WHITE allocation is raw/opaque
-    ** storage. Retain it unless its owning subsystem physically frees it
-    ** (which transitions FREEING). Never infer a destructor from
-    ** attacker-controlled payload bytes. */
-    (void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
   }
   return 0;  /* Preserve the sidecar classifier's original return contract. */
 }

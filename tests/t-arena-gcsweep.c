@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -31,6 +32,227 @@ static uint32_t ptr_state(void *p)
   uint32_t cell = lj_arena_cellof(p);
   assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
   return lj_arena_state(a, cell);
+}
+
+static uint32_t sweep_nonwhite32_scalar(uint64_t sweep)
+{
+  uint32_t bits = 0;
+  uint32_t i;
+  for (i = 0; i < 32u; i++)
+    if (((sweep >> (i << 1)) & 3u) != LJ_ARENA_SWEEP_WHITE)
+      bits |= (uint32_t)1u << i;
+  return bits;
+}
+
+static int sweep_dtor_supported_scalar(uint32_t kind)
+{
+  return kind == LJ_ARENA_DTOR_LFUNC1 ||
+	 kind == LJ_ARENA_DTOR_CLOSED_UV ||
+	 kind == LJ_ARENA_DTOR_LFUNC0;
+}
+
+static void sweep_partition64_scalar(uint64_t block, uint64_t mark,
+	uint64_t sweep0, uint64_t sweep1, uint64_t p0, uint64_t p1,
+	uint64_t p2, uint64_t p3, uint64_t valid, uint64_t *pinp,
+	uint64_t *candidatep)
+{
+  uint64_t pin = 0, candidates = 0;
+  uint32_t i;
+  for (i = 0; i < 64u; i++) {
+    uint64_t bit = (uint64_t)1 << i;
+    uint64_t sweep = i < 32u ? sweep0 : sweep1;
+    uint32_t lane = i & 31u;
+    uint32_t state = (uint32_t)((sweep >> (lane << 1)) & 3u);
+    uint32_t kind = (p0 & bit ? 1u : 0u) |
+	(p1 & bit ? 2u : 0u) | (p2 & bit ? 4u : 0u) |
+	(p3 & bit ? 8u : 0u);
+    if (!(valid & bit) || !(block & bit) || (mark & bit) ||
+	state != LJ_ARENA_SWEEP_WHITE)
+      continue;
+    if (sweep_dtor_supported_scalar(kind))
+      candidates |= bit;
+    else
+      pin |= bit;
+  }
+  *pinp = pin;
+  *candidatep = candidates;
+}
+
+static uint64_t sweep_classifier_rand(uint64_t *state)
+{
+  uint64_t x = *state;
+  x ^= x << 13;
+  x ^= x >> 7;
+  x ^= x << 17;
+  *state = x;
+  return x;
+}
+
+static void test_packed_unmarked_classifier(void)
+{
+  static const uint32_t boundaries[] = { 0u, 31u, 32u, 63u };
+  const uint64_t all = ~(uint64_t)0;
+  const uint32_t first_lane = LJ_AFIRST_CELL & 63u;
+  const uint64_t first_valid = all << first_lane;
+  uint64_t rng = UINT64_C(0x9e3779b97f4a7c15);
+  uint32_t group, pattern, lane, state, kind, i;
+
+  /* Every state in every packed lane, plus every possible eight-lane word
+  ** fragment at all four offsets, must match the scalar expansion. */
+  for (lane = 0; lane < 32u; lane++) {
+    for (state = 0; state < 4u; state++) {
+      uint64_t sweep = (uint64_t)state << (lane << 1);
+      uint32_t expected = state == LJ_ARENA_SWEEP_WHITE ?
+	0 : (uint32_t)1u << lane;
+      assert(lj_gc_test_sweep_nonwhite32(sweep) == expected);
+    }
+  }
+  for (group = 0; group < 4u; group++) {
+    for (pattern = 0; pattern <= UINT16_MAX; pattern++) {
+      uint64_t sweep = (uint64_t)pattern << (group << 4);
+      assert(lj_gc_test_sweep_nonwhite32(sweep) ==
+	     sweep_nonwhite32_scalar(sweep));
+    }
+  }
+
+  /* All sixteen destructor-plane combinations are exact: only codes 1, 2
+  ** and 4 are supported, including at the 31/32 bitmap split and bit 63. */
+  for (kind = 0; kind <= LJ_ARENA_DTOR_MAX; kind++) {
+    uint64_t p0 = kind & 1u ? all : 0;
+    uint64_t p1 = kind & 2u ? all : 0;
+    uint64_t p2 = kind & 4u ? all : 0;
+    uint64_t p3 = kind & 8u ? all : 0;
+    uint64_t expected = sweep_dtor_supported_scalar(kind) ? all : 0;
+    assert(lj_gc_test_sweep_supported_dtor64(p0, p1, p2, p3) ==
+	   expected);
+    for (i = 0; i < sizeof(boundaries) / sizeof(boundaries[0]); i++) {
+      uint64_t bit = (uint64_t)1 << boundaries[i];
+      p0 = kind & 1u ? bit : 0;
+      p1 = kind & 2u ? bit : 0;
+      p2 = kind & 4u ? bit : 0;
+      p3 = kind & 8u ? bit : 0;
+      expected = sweep_dtor_supported_scalar(kind) ? bit : 0;
+      assert(lj_gc_test_sweep_supported_dtor64(p0, p1, p2, p3) ==
+	     expected);
+    }
+  }
+
+  {
+    uint64_t block = (UINT64_C(1) << 31) | (UINT64_C(1) << 32) |
+	(UINT64_C(1) << 63);
+    uint64_t sweep0 = (uint64_t)LJ_ARENA_SWEEP_LIVE << 62;
+    uint64_t pin, candidates;
+    lj_gc_test_sweep_partition64(block, 0, sweep0, 0, block, 0, 0, 0,
+	all, &pin, &candidates);
+    assert(pin == 0);
+    assert(candidates == ((UINT64_C(1) << 32) | (UINT64_C(1) << 63)));
+  }
+
+  /* The first scanned bitmap word begins at arena cell 576, while usable
+  ** storage begins at cell 616 (lane 40). No lower structural bit may leak. */
+  assert(first_lane != 0);
+  {
+    uint64_t below = (uint64_t)1 << (first_lane - 1u);
+    uint64_t first = (uint64_t)1 << first_lane;
+    uint64_t last = UINT64_C(1) << 63;
+    uint64_t block = below | first | last;
+    uint64_t pin, candidates;
+    lj_gc_test_sweep_partition64(block, 0, 0, 0, block, 0, 0, 0,
+	first_valid, &pin, &candidates);
+    assert(pin == 0);
+    assert(candidates == (first | last));
+  }
+
+  /* Random packed snapshots must partition identically to a scalar lane
+  ** oracle. Applying the pin mask may set bits but never clear old marks. */
+  for (i = 0; i < 20000u; i++) {
+    uint64_t block = sweep_classifier_rand(&rng);
+    uint64_t mark = sweep_classifier_rand(&rng);
+    uint64_t sweep0 = sweep_classifier_rand(&rng);
+    uint64_t sweep1 = sweep_classifier_rand(&rng);
+    uint64_t p0 = sweep_classifier_rand(&rng);
+    uint64_t p1 = sweep_classifier_rand(&rng);
+    uint64_t p2 = sweep_classifier_rand(&rng);
+    uint64_t p3 = sweep_classifier_rand(&rng);
+    uint64_t valid = i % 3u == 0 ? all :
+	(i % 3u == 1 ? first_valid : sweep_classifier_rand(&rng));
+    uint64_t pin, candidates, scalar_pin, scalar_candidates;
+    uint64_t pinned = mark;
+    uint64_t old;
+    lj_gc_test_sweep_partition64(block, mark, sweep0, sweep1,
+	p0, p1, p2, p3, valid, &pin, &candidates);
+    sweep_partition64_scalar(block, mark, sweep0, sweep1,
+	p0, p1, p2, p3, valid, &scalar_pin, &scalar_candidates);
+    assert(pin == scalar_pin);
+    assert(candidates == scalar_candidates);
+    assert((pin & candidates) == 0);
+    old = lj_gc_test_sweep_bulk_pin64(&pinned, pin);
+    assert(old == mark);
+    assert(pinned == (mark | pin));
+  }
+}
+
+static void test_packed_unmarked_outer_scan(global_State *g, TGState *tg)
+{
+  GCArena *a = lj_arena_map(&tg->prng, LJ_AF_TRAVERSABLE);
+  uint64_t marks0 = la_load64_acq(&g->gc2.marks_this_round);
+  const uint32_t first = LJ_AFIRST_CELL;
+  const uint32_t below = first - 1u;
+  const uint32_t word = (first + 63u) & ~63u;
+  const uint32_t first_last = word - 1u;
+  const uint32_t cell31 = word + 31u;
+  const uint32_t cell32 = word + 32u;
+  const uint32_t cell63 = word + 63u;
+  const uint32_t raw = word + 4u;
+  const uint32_t malformed = word + 5u;
+  const uint32_t premarked = word + 6u;
+  const uint32_t cells[] = {
+    below, first, first_last, cell31, cell32, cell63,
+    raw, malformed, premarked
+  };
+  uint32_t i;
+
+  assert(a != NULL);
+  assert((first >> 6) + 1u == (word >> 6));
+  assert(cell63 < LJ_ARENA_CELLS);
+  for (i = 0; i < sizeof(cells) / sizeof(cells[0]); i++)
+    lj_arena_bm_set(a->block, cells[i]);
+  lj_arena_bm_set(a->dtor[0], below);
+  lj_arena_bm_set(a->dtor[0], first);
+  lj_arena_bm_set(a->dtor[0], first_last);
+  lj_arena_bm_set(a->dtor[0], cell31);
+  lj_arena_bm_set(a->dtor[0], cell32);
+  lj_arena_bm_set(a->dtor[0], cell63);
+  lj_arena_bm_set(a->dtor[0], malformed);
+  lj_arena_bm_set(a->dtor[1], malformed);
+  lj_arena_bm_set(a->mark, premarked);
+  assert(lj_arena_sweep_state_cas(a, cell31,
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_LIVE));
+
+  /* Supported starts with an intentionally incomplete exact descriptor enter
+  ** the scalar conservative fallback. Untyped/malformed starts take the bulk
+  ** OR, while a non-WHITE lane and the pre-arena prefix remain untouched. */
+  assert(lj_gc_sweep_gc2_arena_unmarked(g, a) == 0);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == marks0);
+  assert(!lj_arena_bm_get(a->mark, below));
+  assert(lj_arena_bm_get(a->mark, first));
+  assert(lj_arena_bm_get(a->mark, first_last));
+  assert(!lj_arena_bm_get(a->mark, cell31));
+  assert(lj_arena_bm_get(a->mark, cell32));
+  assert(lj_arena_bm_get(a->mark, cell63));
+  assert(lj_arena_bm_get(a->mark, raw));
+  assert(lj_arena_bm_get(a->mark, malformed));
+  assert(lj_arena_bm_get(a->mark, premarked));
+
+  assert(lj_arena_sweep_state_cas(a, cell31,
+	LJ_ARENA_SWEEP_LIVE, LJ_ARENA_SWEEP_WHITE));
+  for (i = 0; i < sizeof(cells) / sizeof(cells[0]); i++) {
+    lj_arena_bm_clear(a->block, cells[i]);
+    lj_arena_bm_clear(a->mark, cells[i]);
+    lj_arena_bm_clear(a->dtor[0], cells[i]);
+    lj_arena_bm_clear(a->dtor[1], cells[i]);
+  }
+  lj_arena_unmap(a);
 }
 
 static int arena_list_contains(GCArena *a, GCArena *needle)
@@ -1253,6 +1475,7 @@ int main(void)
   LJHugeInfo hugehi;
   GCArena *fna, *arra;
 
+  test_packed_unmarked_classifier();
   assert(L != NULL);
   luaL_openlibs(L);
   assert(luaL_dostring(L,
@@ -1283,6 +1506,7 @@ int main(void)
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
   assert(tg->alloc.sweep_epoch != 0);
+  test_packed_unmarked_outer_scan(g, tg);
 
   lua_getglobal(L, "keep");
   tv = L->top - 1;
