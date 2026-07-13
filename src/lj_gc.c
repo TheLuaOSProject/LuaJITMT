@@ -1431,36 +1431,52 @@ static int gc2_deferred_body_pending(global_State *g, GCobj *o)
 	 lj_arena_bm_get(a->block, cell);
 }
 
-int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
+static int gc_unlink_root_obj_mode(global_State *g, GCobj *dead,
+				   uint32_t limit, int terminal)
 {
   GCRef *p;
   GCobj *o;
+  GCobj *tortoise = NULL;
   GCRootStateRef rootstate;
+  void *known_arena = NULL;
   uint32_t n = 0;
-  int claim;
+  uint64_t power = 1, lam = 0;
+  int claim, result = LJ_GC_ROOT_UNLINK_UNPROVEN;
   if (!g || !dead)
+    return LJ_GC_ROOT_UNLINK_UNPROVEN;
+  /* A terminal walk is finite after threading shutdown, but GC workers may
+  ** still be draining existing work while finalizers are separated. Take one
+  ** try-only reader for the whole walk: an exclusive reclaimer makes this
+  ** attempt defer instead of blocking, while admission pins every acquired
+  ** root link until the predecessor CAS has resolved. */
+  if (terminal && !lj_gc2_smr_read_try(g))
     return LJ_GC_ROOT_UNLINK_UNPROVEN;
   /* Claim before draining publisher stacks. A pending publisher only changes
   ** LINKING to MEMBER after its post-CAS hint, so either this observes LINKING
   ** and defers or UNLINKING excludes a concurrent publication of dead. */
   claim = gc_root_unlink_claim(g, dead, &rootstate);
-  if (claim != LJ_GC_ROOT_UNLINKED)
-    return claim;
+  if (claim != LJ_GC_ROOT_UNLINKED) {
+    result = claim;
+    goto done;
+  }
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
   p = lj_gc_root_ref(g);
-  while ((o = gcref_acq(*p)) != NULL && n++ < LJ_GC2_ROOT_SCAN_LIMIT) {
+  while ((o = gcref_acq(*p)) != NULL && (terminal || n < limit)) {
     GCobj *next;
-    if (LJ_UNLIKELY(!gc_root_link_valid(g, o))) {
+    n++;
+    if (LJ_UNLIKELY(terminal ?
+	!gc_root_link_valid_held(g, o, &known_arena) :
+	!gc_root_link_valid(g, o))) {
       /* Never interpret an inadmissible object's gcw. In particular, a stale
       ** ownership entry can have been reused as an interned string, where this
       ** word is the tagged string-hash successor. Sever only the acquired
       ** incoming edge and report that target absence could not be proved. */
       gc_root_unlink_restore(&rootstate);
       if (!gc_ref_cas_obj(p, o, NULL))
-	return LJ_GC_ROOT_UNLINK_UNPROVEN;
+	goto done;
       (void)lj_gc_repair_root_spine(g);
-      return LJ_GC_ROOT_UNLINK_UNPROVEN;
+      goto done;
     }
     next = lj_obj_gcw_acq(o);
     if (o == dead) {
@@ -1471,15 +1487,38 @@ int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
 	  int committed = gc_root_unlink_commit(g, &rootstate);
 	  lj_assertG(committed, "root membership unlink commit lost");
 	  UNUSED(committed);
-	  return LJ_GC_ROOT_UNLINKED;
+	  result = LJ_GC_ROOT_UNLINKED;
+	  goto done;
 	}
       gc_root_unlink_restore(&rootstate);
-      return LJ_GC_ROOT_UNLINK_UNPROVEN;
+      goto done;
     }
     if (LJ_UNLIKELY(next == o)) {
       gc_root_unlink_restore(&rootstate);
       (void)gc_ref_cas_obj(p, o, NULL);
-      return LJ_GC_ROOT_UNLINK_UNPROVEN;
+      goto done;
+    }
+    if (terminal) {
+      /* The repair epoch is only a publication hint: a prior exceptional
+      ** repair can have cached the epoch after a validation or CAS loss. Do
+      ** not let a surviving multi-node cycle turn this intentionally
+      ** unbounded terminal walk into a shutdown livelock. Brent detection is
+      ** allocation-free and reads only links admitted under our SMR scope. */
+      if (!tortoise)
+	tortoise = o;
+      if (next) {
+	lam++;
+	if (LJ_UNLIKELY(next == tortoise)) {
+	  gc_root_unlink_restore(&rootstate);
+	  (void)gc_root_chain_break_cycle_held(g, lj_gc_root_acq(g));
+	  goto done;
+	}
+	if (lam == power) {
+	  tortoise = next;
+	  power = power > ~(uint64_t)0 / 2u ? ~(uint64_t)0 : power << 1;
+	  lam = 0;
+	}
+      }
     }
     p = lj_obj_gcwref(o);
   }
@@ -1487,10 +1526,24 @@ int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
     int committed = gc_root_unlink_commit(g, &rootstate);
     lj_assertG(committed, "absent root membership commit lost");
     UNUSED(committed);
-    return LJ_GC_ROOT_UNLINK_ABSENT;
+    result = LJ_GC_ROOT_UNLINK_ABSENT;
+    goto done;
   }
   gc_root_unlink_restore(&rootstate);
-  return LJ_GC_ROOT_UNLINK_UNPROVEN;
+done:
+  if (terminal)
+    lj_gc2_smr_read_leave(g);
+  return result;
+}
+
+int lj_gc_unlink_root_obj(global_State *g, GCobj *dead)
+{
+  return gc_unlink_root_obj_mode(g, dead, LJ_GC2_ROOT_SCAN_LIMIT, 0);
+}
+
+int lj_gc_unlink_root_obj_terminal(global_State *g, GCobj *dead)
+{
+  return gc_unlink_root_obj_mode(g, dead, 0, 1);
 }
 
 #define GC2_ROOT_PRUNE_BATCH 256u
@@ -3169,6 +3222,12 @@ void lj_gc_test_set_root_pending_load_hook(LJGcRootPendingLoadHook hook)
 void lj_gc_test_set_root_state_hook(LJGcRootStateHook hook)
 {
   la_storeptr_rel((void **)&gc_test_root_state_hook, (void *)hook);
+}
+
+int lj_gc_test_unlink_root_obj_bounded(global_State *g, GCobj *dead,
+					uint32_t limit)
+{
+  return gc_unlink_root_obj_mode(g, dead, limit, 0);
 }
 
 static void gc_test_root_state(global_State *g, GCobj *o, uint32_t path)

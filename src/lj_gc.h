@@ -116,6 +116,10 @@ enum {
   LJ_GC_ROOT_LINK_ALREADY = 2
 };
 LJ_FUNC int lj_gc_unlink_root_obj(global_State *g, GCobj *dead);
+/* Terminal FINREG discovery has a finite, quiescing ownership spine and must
+** not turn the ordinary bounded-scan guard into a deterministic close
+** livelock. This variant keeps one SMR scope and scans to the target or EOF. */
+LJ_FUNC int lj_gc_unlink_root_obj_terminal(global_State *g, GCobj *dead);
 LJ_FUNC void lj_gc_preserve_root_chain_for_gc2_sweep(global_State *g);
 LJ_FUNC void lj_gc_clearweak_bridge(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
@@ -173,6 +177,8 @@ LJ_FUNC void lj_gc_test_set_root_pending_load_hook(
 typedef void (*LJGcRootStateHook)(global_State *g, GCobj *o,
 				   uint32_t path);
 LJ_FUNC void lj_gc_test_set_root_state_hook(LJGcRootStateHook hook);
+LJ_FUNC int lj_gc_test_unlink_root_obj_bounded(global_State *g, GCobj *dead,
+						uint32_t limit);
 /* Targeted exact-reclaimer entry for destructor race fixtures. The caller must
 ** hold the GC2 reclaim scope and must already have unlinked all semantic and
 ** ownership-spine roots for the THREAD. */

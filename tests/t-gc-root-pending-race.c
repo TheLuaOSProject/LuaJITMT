@@ -857,6 +857,57 @@ static void test_root_unlink_rejects_string_successor(lua_State *L)
   assert(root_contains(g, obj2gco(target)));
 }
 
+static void test_terminal_root_unlink_bypasses_runtime_cap(lua_State *L)
+{
+  enum { TEST_LIMIT = 64, PREFIX = TEST_LIMIT + 2 };
+  global_State *g = G(L);
+  GCtab *target = lj_tab_new(L, 0, 0);
+  GCtab *needle, *cycle_tail, *cycle_head;
+  GCobj *saved;
+  GCtab *prefix[PREFIX];
+  int i;
+
+  for (i = 0; i < PREFIX; i++)
+    prefix[i] = lj_tab_new(L, 0, 0);
+  (void)prefix;
+  (void)lj_gc_flush_root_pending(g);
+  assert(root_contains(g, obj2gco(target)));
+
+  /* Runtime unlink remains bounded and restores MEMBER on a cap miss. The
+  ** terminal variant must then cross the same prefix under one SMR reader and
+  ** complete the exact MEMBER -> UNLINKING -> NONE transition. */
+  assert(lj_gc_test_unlink_root_obj_bounded(g, obj2gco(target), TEST_LIMIT) ==
+	 LJ_GC_ROOT_UNLINK_UNPROVEN);
+  assert(root_contains(g, obj2gco(target)));
+  assert(lj_gc_unlink_root_obj_terminal(g, obj2gco(target)) ==
+	 LJ_GC_ROOT_UNLINKED);
+  assert(!root_contains(g, obj2gco(target)));
+  assert(lj_gc_linkobj(g, obj2gco(target)) == LJ_GC_ROOT_LINKED);
+  assert(root_contains(g, obj2gco(target)));
+
+  /* A stale repair epoch must not let a multi-node cycle hang terminal mode.
+  ** Flush and repair first so the synthetic post-cache cycle is deliberately
+  ** invisible to the epoch hint. The in-pass detector restores NEEDLE's root
+  ** claim, repairs the exceptional cycle under the retained reader, and
+  ** returns for a later retry. */
+  needle = lj_tab_new(L, 0, 0);
+  cycle_tail = lj_tab_new(L, 0, 0);
+  cycle_head = lj_tab_new(L, 0, 0);
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  assert(lj_obj_gcw_acq(obj2gco(cycle_head)) == obj2gco(cycle_tail));
+  assert(lj_obj_gcw_acq(obj2gco(cycle_tail)) == obj2gco(needle));
+  saved = lj_obj_gcw_acq(obj2gco(cycle_tail));
+  lj_obj_setgcwrel(obj2gco(cycle_tail), obj2gco(cycle_head));
+  assert(lj_gc_unlink_root_obj_terminal(g, obj2gco(needle)) ==
+	 LJ_GC_ROOT_UNLINK_UNPROVEN);
+  lj_obj_setgcwrel(obj2gco(cycle_tail), saved);
+  lj_gcroot_repair_epoch_add(g);
+  assert(lj_gc_unlink_root_obj_terminal(g, obj2gco(needle)) ==
+	 LJ_GC_ROOT_UNLINKED);
+  assert(lj_gc_linkobj(g, obj2gco(needle)) == LJ_GC_ROOT_LINKED);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -881,6 +932,7 @@ int main(void)
   test_permanent_main_needs_no_live_tail_reanchor(L);
   test_finreg_udata_has_single_reanchor_owner(L);
   test_root_unlink_rejects_string_successor(L);
+  test_terminal_root_unlink_bypasses_runtime_cap(L);
   lua_close(L);
   puts("t-gc-root-pending-race OK: construction/lifetime CAS, retries, stable FINREG ownership, and safe unlink verified");
   return 0;

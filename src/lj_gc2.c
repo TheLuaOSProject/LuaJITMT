@@ -11428,11 +11428,13 @@ void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
     gc2_finreg_udata_forgets_add(g, 1);
 }
 
-static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target)
+static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target,
+					int terminal)
 {
   /* As for cdata, finalizer dispatch may reinsert the intrusive object only
   ** after a complete scan proves absence or removes its exact membership. */
-  return lj_gc_unlink_root_obj(g, target);
+  return terminal ? lj_gc_unlink_root_obj_terminal(g, target) :
+		    lj_gc_unlink_root_obj(g, target);
 }
 
 size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
@@ -11521,7 +11523,7 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
     ** 05 section 5.8: GC2 userdata FINREG identity is enough for
     ** discovery without userdata-chain membership.
     */
-    unlink_status = gc2_finreg_udata_unlink_root(g, o);
+    unlink_status = gc2_finreg_udata_unlink_root(g, o, all);
     if (unlink_status == LJ_GC_ROOT_UNLINK_UNPROVEN) {
       /* Keep FINREG identity and the side-list node active for a later bounded
       ** retry. The shared unlinker may have severed an invalid prefix, so make
