@@ -196,7 +196,8 @@ print("bulk fill ok")
         { output = "lj_t-ffi-callback-attached-carrier",
           cfile = "t-ffi-callback-attached-carrier.c" },
         { output = "lj_t-ffi-callback-auto-attach",
-          cfile = "t-ffi-callback-auto-attach.c" }
+          cfile = "t-ffi-callback-auto-attach.c",
+          opts = { timeout = "20s" } }
       })
       run_luajit_script(t, "t-ffi-callback-runtime.lua", {
         getenv("LJ_M7_FFI_CBACK_RT_THREADS", "6"),

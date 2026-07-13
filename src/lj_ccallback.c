@@ -852,6 +852,11 @@ static void callback_frame_pop(CCallbackRuntime *cb)
   frame->errnum = 0;
   frame->winerr = 0;
   ccallback_depth_rel(cb, depth);
+  /* cb->L is a root only from prepare through the last active callback frame.
+  ** Leaving it published after depth reaches zero permanently retains a carrier,
+  ** and a detached DEAD TG can then veto terminal THREAD preparation forever. */
+  if (depth == 0)
+    ccallback_L_rel(cb, NULL);
 }
 
 static int callback_auto_attach(CTState *cts, MSize slot)
@@ -933,6 +938,8 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
       lj_threading_detach(L, 0);
   } else {
     uint8_t auto_detach = ccallback_auto_detach_acq(cb);
+    if (ccallback_depth_acq(cb) == 0)
+      ccallback_L_rel(cb, NULL);  /* Setup failed before a frame was pushed. */
     if (auto_detach) {
       ccallback_auto_detach_rel(cb, 0);
       lj_threading_detach(L, 0);

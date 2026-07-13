@@ -46,6 +46,20 @@ static uint32_t concurrent_release;
 static uint32_t concurrent_entered;
 static uint32_t concurrent_attempts;
 
+static void assert_dead_tgs_drop_callback_roots(void)
+{
+  global_State *g = G(mainL);
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+      assert(ccallback_depth_acq(&tg->cb) == 0);
+      assert(ccallback_L_acq(&tg->cb) == NULL);
+      assert(ccallback_slot_acq(&tg->cb) == 0);
+      assert(ccallback_auto_detach_acq(&tg->cb) == 0);
+    }
+  }
+}
+
 static void init_ctx(AutoCtx *ctx)
 {
   ctx->status = 99;
@@ -218,6 +232,7 @@ int main(void)
   assert(ctx.status == 0);
   assert(ctx.result == 55);
   assert(ctx.after_tg == NULL);
+  assert_dead_tgs_drop_callback_roots();
   assert(callbackL == saved_owner);
   assert(saved_owner->tg_hint == NULL);
   assert(context_checks == 1);
@@ -246,6 +261,7 @@ int main(void)
   assert(cctx[1].result == 55);
   assert(cctx[0].after_tg == NULL);
   assert(cctx[1].after_tg == NULL);
+  assert_dead_tgs_drop_callback_roots();
   assert(callbackL == saved_owner);
   assert(saved_owner->tg_hint == NULL);
   assert(context_checks == 3);

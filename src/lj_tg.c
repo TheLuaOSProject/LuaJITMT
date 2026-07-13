@@ -652,6 +652,15 @@ void lj_tg_detach(global_State *g, TGState *tg)
 #endif
 #if LJ_HASFFI
   lj_tg_ffi_call_func_rel(tg, NULL);
+  /* Callback leave/unwind normally clears this transient carrier root. Detach
+  ** is the final publication boundary, so enforce the invariant before DEAD in
+  ** case an error path reached teardown between prepare and frame setup. */
+  if (ccallback_depth_acq(&tg->cb) != 0)
+    abort();
+  ccallback_L_rel(&tg->cb, NULL);
+  ccallback_slot_rel(&tg->cb, 0);
+  ccallback_auto_detach_rel(&tg->cb, 0);
+  ccallback_native_had_stopreq_rel(&tg->cb, 0);
 #endif
   /* POSIX profiling samples the current TLS TG from a signal handler. Since
   ** delivery is same-thread, clearing TLS before the registry retirement LP
