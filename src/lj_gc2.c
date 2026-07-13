@@ -6479,7 +6479,10 @@ static void gc2_mark_tv(global_State *g, cTValue *tv)
 static void gc2_root_rescan_later(global_State *g, GCobj *o)
 {
   int pushed;
-  if (!g || !o)
+  /* The sole caller has already sampled gc2.phase through g. Keep that
+  ** non-null precondition explicit: a redundant g == NULL arm makes GCC 14
+  ** partially inline this path and misdiagnose &g->gc2.cycle as address zero. */
+  if (!o)
     return;
   if (o->gch.gct == ~LJ_TTAB) {
     GCtab *t = gco2tab(o);
