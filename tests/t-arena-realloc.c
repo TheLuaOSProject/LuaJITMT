@@ -54,11 +54,15 @@ int main(void)
   assert(!lj_arena_alloc_has_run_ge(&alloc2, LJ_ARENAK_PLAIN,
 				    lj_arena_ncells(48)));
   q3 = lj_arena_alloc(&alloc2, &rs, 32, 0);
-  assert(q3 == q1);
-  assert(alloc2.binmask[LJ_ARENAK_PLAIN] == 0);
+  /* A private bump window takes precedence over reusable bins. The freed q1
+  ** run remains published until the bounded bump window is exhausted. */
+  assert(q3 != q1);
+  assert(lj_arena_of(q3) == lj_arena_of(q2));
+  assert(lj_arena_cellof(q3) == lj_arena_cellof(q2) + qcells);
+  assert(alloc2.binmask[LJ_ARENAK_PLAIN] == qmask);
   {
     LJArenaFreeRun *stale = (LJArenaFreeRun *)q3;
-    stale->next = NULL;
+    stale->next = alloc2.bins[LJ_ARENAK_PLAIN][qbin];
     stale->start = lj_arena_cellof(q3);
     stale->len = qcells;
     alloc2.bins[LJ_ARENAK_PLAIN][qbin] = stale;
@@ -66,7 +70,8 @@ int main(void)
   }
   lj_arena_free(&alloc2, q2, 32);
   assert(alloc2.bins[LJ_ARENAK_PLAIN][qbin] == (LJArenaFreeRun *)q2);
-  assert(alloc2.bins[LJ_ARENAK_PLAIN][qbin]->next == NULL);
+  assert(alloc2.bins[LJ_ARENAK_PLAIN][qbin]->next ==
+	 (LJArenaFreeRun *)q1);
   assert(alloc2.binmask[LJ_ARENAK_PLAIN] == qmask);
   lj_arena_free(&alloc2, q3, 32);
   lj_arena_alloc_fini(&alloc2);
@@ -83,23 +88,27 @@ int main(void)
   assert(lj_arena_state(a, c1) == 1);
   assert(lj_arena_count_free_runs(a) == 1);
 
+  /* Exercise free-run splitting after the independent bump-priority check
+  ** above. Forcing this fixture's cursor empty makes the next allocation
+  ** select the published p1 run. */
+  alloc.bump[LJ_ARENAK_PLAIN].cell = alloc.bump[LJ_ARENAK_PLAIN].end;
   p3 = lj_arena_alloc(&alloc, &rs, 32, 0);
   assert(p3 == p1);
   c3 = lj_arena_cellof(p3);
   assert(lj_arena_state(a, c3) == 2);
-  assert(lj_arena_state(a, c3 + lj_arena_ncells(32)) == 1);
+  assert(lj_arena_state(a, c3 + lj_arena_ncells(32)) == 0);
 
   p4 = lj_arena_alloc(&alloc, &rs, 16, 0);
   c4 = lj_arena_cellof(p4);
   assert(c4 == c3 + lj_arena_ncells(32));
   assert(lj_arena_state(a, c4) == 2);
-  assert(lj_arena_state(a, c4 + lj_arena_ncells(16)) == 1);
+  assert(lj_arena_state(a, c4 + lj_arena_ncells(16)) == 0);
 
   fill_seq((uint8_t *)p3, 32, 0x80);
   p5 = lj_arena_realloc(&alloc, &rs, p3, 32, 96, 0);
   assert(p5 != NULL && p5 != p3);
   c5 = lj_arena_cellof(p5);
-  assert(c5 > lj_arena_cellof(p2));
+  assert(lj_arena_of(p5) != a || c5 > lj_arena_cellof(p2));
   check_seq((uint8_t *)p5, 32, 0x80);
   assert(lj_arena_state(a, c3) == 1);
 

@@ -190,10 +190,12 @@ asserts that the traced loop does not call either C helper counter.
 
 2026-07-04 sweep-reuse follow-up: the FNEW bump helpers and the x64 inline path
 now consume the active traversable bump window even when reusable free-run bins
-exist. The generic allocator still searches bins before bump allocation, but the
-FNEW fast paths are a closure-specific single-producer specialization: they do
-not publish a partially initialized object, they preserve one fresh closure and
-one fresh upvalue per `FNEW`, and Lua does not define address reuse order.
+exist. This paragraph described the generic allocator at the time; generic
+allocation became bump-first in `b1.2.0-arena-bump-priority-2026-07-13.md`.
+The FNEW fast paths are a closure-specific single-producer specialization:
+they do not publish a partially initialized object, they preserve one fresh
+closure and one fresh upvalue per `FNEW`, and Lua does not define address reuse
+order.
 
 This matters after lazy sweep starts republishing previous bump tails into
 free-run bins. Keeping the old binmask predicate made traced closure allocation

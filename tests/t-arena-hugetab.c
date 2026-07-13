@@ -821,6 +821,10 @@ static void test_small_lifetime_descriptor(PRNGState *rs)
   assert(pthread_join(thread, NULL) == 0);
   assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
   assert(!lj_arena_bm_get(a->block, cell));
+  /* The lifetime race proved p reusable; select its bin after the independent
+  ** private bump is exhausted. */
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].cell =
+    alloc.bump[LJ_ARENAK_TRAVERSABLE].end;
   reuse = lj_arena_alloc(&alloc, rs, size, LJ_AF_TRAVERSABLE);
   assert(reuse == p);
   assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
@@ -1517,6 +1521,9 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
     assert(pthread_join(thread, NULL) == 0);
     assert(race.result == 1);
     assert(lj_arena_remote_active_acq(a) == 0);
+    /* The race proves p is reusable; explicitly exhaust this fixture's
+    ** independent bump window before asserting exact bin-address reuse. */
+    alloc.bump[LJ_ARENAK_PLAIN].cell = alloc.bump[LJ_ARENAK_PLAIN].end;
     reuse = lj_arena_alloc(&alloc, rs, size, 0);
     assert(reuse == p);
     assert(!lj_arena_late_get(a, cell));

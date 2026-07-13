@@ -5780,28 +5780,27 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   {
     uint32_t bin = 0;
     LJArenaFreeRun **pp;
-    int bump_ready = b->a && b->cell + ncells <= b->end;
-    if (bump_ready) {
-      /* Preserve the allocator's established bin-before-bump reuse order, but
-      ** do not walk reclaimed arenas or remote queues while this private
-      ** window can make progress and no suitable published run exists. */
+    if (b->a && b->cell + ncells <= b->end) {
+      /* The active bump window is owner-private and absent from every bin.
+      ** Consume it before consulting published free runs. Besides improving
+      ** locality, this prevents allocation from repeatedly removing a large
+      ** run and fully scrubbing its shrinking suffix while an older bump
+      ** window remains usable. Bins are revisited as soon as this bounded
+      ** window is exhausted. */
+      goto bump_alloc;
+    }
+    arena_publish_bump_run(alloc, k);
+    pp = arena_find_run(alloc, k, ncells, &bin);
+    if ((!pp || !*pp) && arena_adopt_reclaimed_one(alloc, k))
       pp = arena_find_run(alloc, k, ncells, &bin);
-      if (!pp || !*pp)
-	goto bump_alloc;
-    } else {
-      arena_publish_bump_run(alloc, k);
+    if (!pp || !*pp) {
+      (void)lj_arena_remote_free_drain(alloc);
       pp = arena_find_run(alloc, k, ncells, &bin);
-      if ((!pp || !*pp) && arena_adopt_reclaimed_one(alloc, k))
-	pp = arena_find_run(alloc, k, ncells, &bin);
-      if (!pp || !*pp) {
-	(void)lj_arena_remote_free_drain(alloc);
-	pp = arena_find_run(alloc, k, ncells, &bin);
-      }
-      if (!pp || !*pp) {
-	if (!arena_alloc_fresh(alloc, rs, flags))
-	  return NULL;
-	goto bump_alloc;
-      }
+    }
+    if (!pp || !*pp) {
+      if (!arena_alloc_fresh(alloc, rs, flags))
+	return NULL;
+      goto bump_alloc;
     }
     {
       LJArenaFreeRun *run = *pp;
@@ -5819,19 +5818,13 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 	return NULL;
       }
       if (len > ncells) {
-	if (bump_ready) {
-	  /* Keep the older private bump window and preserve reuse ordering. */
-	  if (!arena_insert_run(alloc, a, start + ncells, len - ncells))
-	    return NULL;
-	} else {
-	  /* Clear each rebuilt boundary once, then amortize the tail as a private
-	  ** bump window instead of repeatedly scrubbing a shrinking free run. */
-	  if (!arena_clear_extent_range(a, start + ncells, len - ncells))
-	    return NULL;  /* Retain prefix and unpublished tail on conflict. */
-	  b->a = a;
-	  b->cell = start + ncells;
-	  b->end = start + len;
-	}
+	/* Clear each rebuilt boundary once, then amortize the tail as a private
+	** bump window instead of repeatedly scrubbing a shrinking free run. */
+	if (!arena_clear_extent_range(a, start + ncells, len - ncells))
+	  return NULL;  /* Retain prefix and unpublished tail on conflict. */
+	b->a = a;
+	b->cell = start + ncells;
+	b->end = start + len;
       }
       return lj_arena_cellptr(a, start);
     }

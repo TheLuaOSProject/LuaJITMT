@@ -155,7 +155,7 @@ int main(void)
   PRNGState rs;
   TGAlloc alloc;
   LJArenaAllocD travad;
-  void *dead1, *live1, *oldfree, *live2, *taildead;
+  void *dead1, *live1, *oldfree, *live2, *taildead, *bump64, *bump32;
   void *tdead, *tlive;
   GCArena *plain, *trav, *swept;
   uint32_t cdead1, clive1, coldfree, clive2, ctaildead;
@@ -239,8 +239,16 @@ int main(void)
   assert(bin_count(&alloc, LJ_ARENAK_PLAIN) == 2);
 
   assert(lj_arena_alloc(&alloc, &rs, 128, 0) == taildead);
-  assert(lj_arena_alloc(&alloc, &rs, 64, 0) == dead1);
-  assert(lj_arena_alloc(&alloc, &rs, 32, 0) == oldfree);
+  bump64 = lj_arena_alloc(&alloc, &rs, 64, 0);
+  bump32 = lj_arena_alloc(&alloc, &rs, 32, 0);
+  assert(lj_arena_of(bump64) == plain && lj_arena_of(bump32) == plain);
+  assert(lj_arena_cellof(bump64) ==
+	 ctaildead + lj_arena_ncells(128));
+  assert(lj_arena_cellof(bump32) ==
+	 lj_arena_cellof(bump64) + lj_arena_ncells(64));
+  assert(lj_arena_state(plain, cdead1) == 1);
+  assert(lj_arena_state(plain, coldfree) == 1);
+  assert(bin_count(&alloc, LJ_ARENAK_PLAIN) == 2);
 
   swept = lj_arena_sweep_one(&alloc, LJ_ARENAK_TRAVERSABLE, 9, 1);
   assert(swept == trav);
@@ -258,6 +266,10 @@ int main(void)
   }
   assert(lj_arena_ready_get(trav, ctdead) == 0);
   assert(bin_count(&alloc, LJ_ARENAK_TRAVERSABLE) == 1);
+  /* Force the fixture's private tail empty to exercise the separately
+  ** published, fully scrubbed tdead run. */
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].cell =
+    alloc.bump[LJ_ARENAK_TRAVERSABLE].end;
   assert(lj_arena_alloc(&alloc, &rs, 128, LJ_AF_TRAVERSABLE) == tdead);
 
   assert(lj_arena_sweep_one(&alloc, LJ_ARENAK_TRAVERSABLE, 10, 0) == NULL);
@@ -282,6 +294,8 @@ int main(void)
     assert(bin_count(&rebuild, LJ_ARENAK_PLAIN) == 2);
     lj_arena_alloc_rebuild_free(&rebuild);
     assert(bin_count(&rebuild, LJ_ARENAK_PLAIN) == 1);
+    rebuild.bump[LJ_ARENAK_PLAIN].cell =
+      rebuild.bump[LJ_ARENAK_PLAIN].end;
     big = lj_arena_alloc(&rebuild, &rs, 96, 0);
     assert(big == r1);
     /* Rebuild coalesces the adjacent 2- and 4-cell free records into this
@@ -460,7 +474,7 @@ int main(void)
     assert(swept2 == (swept1 == a1 ? a2 : a1));
     assert(publish.bump[LJ_ARENAK_PLAIN].a == swept2);
     assert(bin_count(&publish, LJ_ARENAK_PLAIN) >= 1);
-    expected_reuse = swept1 == a1 ? first : second;
+    expected_reuse = swept2 == a1 ? first : second;
     reuse = lj_arena_alloc(&publish, &rs, 14400, 0);
     assert(reuse == expected_reuse);
     lj_arena_alloc_fini(&publish);
@@ -599,6 +613,8 @@ int main(void)
     assert((la_load64_acq(&a->late[cell >> 6]) &
 	    ((uint64_t)1 << (cell & 63))) != 0);
     assert(lj_arena_bm_get(a->block, cell));
+    late.bump[LJ_ARENAK_TRAVERSABLE].cell =
+      late.bump[LJ_ARENAK_TRAVERSABLE].end;
     ordinary_reuse = lj_arena_alloc(&late, &rs, 64,
 	LJ_AF_TRAVERSABLE);
     assert(ordinary_reuse == ordinary);
