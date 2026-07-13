@@ -183,7 +183,9 @@ return function(add)
         libs = {
           "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
           "-Wl,--wrap=lj_state_release",
+          "-Wl,--wrap=lj_state_claim",
           "-Wl,--wrap=lj_tg_attach",
+          "-Wl,--wrap=lj_vm_cpcall",
           "-Wl,--wrap=lj_threading_shutdown",
           "-Wl,--wrap=lj_arena_alloc_transfer"
         }

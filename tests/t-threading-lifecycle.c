@@ -3,8 +3,9 @@
 **
 ** Linker wrappers stop at the two otherwise very narrow lifecycle boundaries:
 ** immediately before a detacher releases its state, and immediately after a
-** failed attach has registered its TG. This makes both races deterministic
-** without allowing lua_close() to free storage still used by the fixture.
+** provisional TG has registered but then claimed its state. This makes both
+** races deterministic without allowing lua_close() to free storage still used
+** by the fixture.
 */
 
 #include <assert.h>
@@ -22,6 +23,7 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lj_vm.h"
 
 #include "lib/test_sleep.h"
 
@@ -52,6 +54,8 @@ static uint32_t release_mode;
 static uint32_t release_entered;
 static uint32_t release_gate;
 static uint32_t attach_paused;
+static uint32_t provisional_seen;
+static uint32_t first_cpcall_owned;
 static uint32_t shutdown_returned;
 static uint32_t close_escaped_cleanup;
 static uint32_t close_worker_done;
@@ -65,7 +69,10 @@ static uint32_t transfer_real_done;
 static uint32_t transfer_result;
 
 extern void __real_lj_state_release(lua_State *L, uint32_t tid);
+extern int __real_lj_state_claim(lua_State *L, uint32_t tid);
 extern void __real_lj_tg_attach(global_State *g, TGState *tg);
+extern int __real_lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
+                               lua_CPFunction cp);
 extern void __real_lj_threading_shutdown(lua_State *L);
 extern uint32_t __real_lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
 
@@ -117,14 +124,42 @@ void __wrap_lj_tg_attach(global_State *g, TGState *tg)
 {
   __real_lj_tg_attach(g, tg);
   if (la_load32_acq(&release_mode) == RELEASE_CLOSE &&
-      lj_tg_load_thread_L(tg) == target_L) {
+      lj_thr_get_tg() == tg && lj_tg_load_thread_L(tg) == NULL) {
+    assert(lj_tg_find_owner(g, lj_tg_tid_acq(tg)) == tg);
+    la_store32_rel(&provisional_seen, 1);
+  }
+}
+
+int __wrap_lj_state_claim(lua_State *L, uint32_t tid)
+{
+  int claimed = __real_lj_state_claim(L, tid);
+  if (claimed && L == target_L &&
+      la_load32_acq(&release_mode) == RELEASE_CLOSE) {
+    TGState *tg = lj_thr_get_tg();
+    assert(la_load32_acq(&provisional_seen) != 0);
+    assert(tg != NULL && lj_tg_tid_acq(tg) == tid);
+    assert(lj_tg_find_owner(G(L), tid) == tg);
+  }
+  return claimed;
+}
+
+int __wrap_lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
+                        lua_CPFunction cp)
+{
+  if (L == target_L &&
+      la_load32_acq(&release_mode) == RELEASE_CLOSE) {
+    TGState *tg = lj_thr_get_tg();
+    assert(tg != NULL && lj_state_owner_acq(L) == lj_tg_tid_acq(tg));
+    assert(lj_tg_find_owner(G(L), lj_tg_tid_acq(tg)) == tg);
+    la_store32_rel(&first_cpcall_owned, 1);
     la_store32_rel(&attach_paused, 1);
-    while (mt_shutdown_acq(g) == 0) {
+    while (mt_shutdown_acq(G(L)) == 0) {
       if (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0)
-        (void)lj_safepoint_ack(target_L);
+        (void)lj_safepoint_poll_tg(tg);
       sleep_ns(100000L);
     }
   }
+  return __real_lj_vm_cpcall(L, func, ud, cp);
 }
 
 void __wrap_lj_threading_shutdown(lua_State *L)
@@ -248,6 +283,8 @@ static void reset_wrapper_state(uint32_t mode, lua_State *L)
   la_store32_rel(&release_entered, 0);
   la_store32_rel(&release_gate, 0);
   la_store32_rel(&attach_paused, 0);
+  la_store32_rel(&provisional_seen, 0);
+  la_store32_rel(&first_cpcall_owned, 0);
   la_store32_rel(&shutdown_returned, 0);
   la_store32_rel(&close_escaped_cleanup, 0);
   la_store32_rel(&close_worker_done, 0);
@@ -297,7 +334,7 @@ int main(void)
   assert(pthread_create(&thread, NULL, closing_attach_worker, &closing) == 0);
   wait_flag(&attach_paused);
 
-  /* The attach wrapper returns only after shutdown is published, forcing the
+  /* The cpcall wrapper returns only after shutdown is published, forcing the
   ** unsuccessful-attach cleanup path while lua_close() waits. */
   lua_close(L);
   assert(pthread_join(thread, NULL) == 0);
@@ -305,13 +342,18 @@ int main(void)
   if (early_reclaimed != 0 || final_reclaimed != 1 || concurrent_overlap ||
       concurrent_reclaimed != 1 ||
       closing.attached > 0 || la_load32_acq(&release_entered) == 0 ||
+      la_load32_acq(&provisional_seen) == 0 ||
+      la_load32_acq(&first_cpcall_owned) == 0 ||
       la_load32_acq(&close_escaped_cleanup) != 0) {
     fprintf(stderr, "lifecycle observations: early_reclaimed=%u, "
             "final_reclaimed=%u, concurrent_overlap=%d, "
             "concurrent_reclaimed=%u, close_attach=%d, "
-            "release_entered=%u, close_escaped=%u\n", early_reclaimed,
+            "release_entered=%u, provisional=%u, first_cpcall_owned=%u, "
+            "close_escaped=%u\n", early_reclaimed,
             final_reclaimed, concurrent_overlap, concurrent_reclaimed,
             closing.attached, la_load32_acq(&release_entered),
+            la_load32_acq(&provisional_seen),
+            la_load32_acq(&first_cpcall_owned),
             la_load32_acq(&close_escaped_cleanup));
     assert(0);
   }

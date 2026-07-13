@@ -94,7 +94,7 @@ static void require_threading(lua_State *L)
   assert(lua_istable(L, -1));
 }
 
-static void start_active_gc_cycle(lua_State *L)
+static uint32_t start_active_gc_cycle(lua_State *L)
 {
   global_State *g = G(L);
   int i;
@@ -107,10 +107,12 @@ static void start_active_gc_cycle(lua_State *L)
   lua_gc(L, LUA_GCRESTART, 0);
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
-  for (i = 0; i < 1000 && g->gc.state == GCSpause; i++)
+  for (i = 0; i < 1000 && gc2_phase_acq(g) == LJ_GC2_IDLE; i++)
     lj_gc_step(L);
-  assert(g->gc.state != GCSpause);
+  assert(g->gc.state == GCSpause);  /* Legacy state is compatibility-only. */
+  assert(gc2_phase_acq(g) != LJ_GC2_IDLE);
   g->gc.threshold = LJ_MAX_MEM;
+  return gc2_cycle_acq(g);
 }
 
 static void test_sticky_stopreq_spawn_ok(void)
@@ -184,7 +186,7 @@ static void test_spawn_preserves_active_gc_cycle(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g = G(L);
-  uint8_t state;
+  uint32_t cycle;
   static const char script[] =
     "local threading = require('threading')\n"
     "local th = threading.spawn(function() return true end)\n"
@@ -193,17 +195,19 @@ static void test_spawn_preserves_active_gc_cycle(void)
 
   require_threading(L);
   lua_pop(L, 1);
-  start_active_gc_cycle(L);
-  state = g->gc.state;
+  cycle = start_active_gc_cycle(L);
   assert(luaL_loadbuffer(L, script, sizeof(script) - 1, "spawn-active-gc") ==
 	 LUA_OK);
   assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
-  assert(g->gc.state == state);
+  /* Background GC2 may advance or complete this cycle while the child runs,
+  ** but spawn must not replace it with a new collection cycle. */
+  assert(gc2_cycle_acq(g) == cycle);
 
   g->gc.stepmul = 200;
   g->gc.threshold = 0;
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert(g->gc.state == GCSpause);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_close(L);
 }

@@ -405,11 +405,13 @@ static int tg_attach_trace_boundary_live(global_State *g)
 static void tg_attach_wait_trace_boundary(global_State *g, TGState *tg)
 {
   uint32_t leader;
-  lua_State *L = lj_tg_load_thread_L(tg);
   while (tg_attach_trace_boundary_live(g) &&
 	 (leader = gc2_hs_leader_acq(g)) != 0) {
-    if (L && (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0)) {
-      (void)lj_safepoint_ack(L);
+    if (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0) {
+      /* Attach is a lifecycle boundary, not proof that this thread owns the
+      ** published lua_State yet. TG-only acknowledgement covers the same
+      ** private roots without reading or restoring an unclaimed stack. */
+      (void)lj_safepoint_poll_tg(tg);
       continue;
     }
     gc2_hs_leader_futex_wait(g, leader, 1000000);
@@ -619,9 +621,10 @@ void lj_tg_detach(global_State *g, TGState *tg)
     abort();  /* The owner must finish its descriptor before final detach. */
   thread_L = lj_tg_load_thread_L(tg);
   cur_L = lj_tg_load_cur_L(tg);
-  if (thread_L &&
-      (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0))
-    (void)lj_safepoint_ack(thread_L);  /* Leaving TG owns its ack. */
+  if (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0)
+    /* Callers may release state ownership and clear tg_hint before detach.
+    ** Service the exact leaving TG without rediscovering it through L2TG. */
+    (void)lj_safepoint_poll_tg(tg);
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc2_flush_ssb_detach(g, tg);  /* Terminal, allocation-free flush. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */

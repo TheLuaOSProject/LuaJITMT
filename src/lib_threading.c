@@ -871,33 +871,86 @@ typedef struct ThreadingWorkerCtx {
 
 static int threading_tg_is_registered(global_State *g, TGState *target);
 
+static int threading_worker_start_cancelled(ThreadingWorkerCtx *ctx)
+{
+  uint32_t state = la_load32_acq(&ctx->th->state);
+  return mt_shutdown_acq(ctx->g) != 0 ||
+    state == LJ_THREAD_ABORTING || state == LJ_THREAD_DONE ||
+    lj_tg_flags_test_acq(ctx->tg, TGF_STOPREQ_FRESH);
+}
+
+static int threading_worker_claim(ThreadingWorkerCtx *ctx)
+{
+  lua_State *L = ctx->L;
+  uint32_t tid = ctx->tid;
+  for (;;) {
+    uint32_t owner, gcprep;
+    owner = lj_state_owner_acq(L);
+    gcprep = lj_state_gcprep_state_acq(L);
+    /* The parent-published TG root makes terminal preparation impossible.
+    ** PENDING/DONE here would mean a live-rooted state was reclaimed. */
+    if (LJ_UNLIKELY(gcprep != LJ_STATE_GCPREP_NONE))
+      abort();
+    if (owner == tid) {
+      ctx->claimed = 1;
+      return !threading_worker_start_cancelled(ctx);
+    }
+    if (owner == 0) {
+      uint32_t expect = 0;
+      if (!lj_state_owner_cas(L, &expect, tid))
+	continue;
+      if (LJ_UNLIKELY(lj_state_gcprep_state_acq(L) !=
+		      LJ_STATE_GCPREP_NONE))
+	abort();
+      ctx->claimed = 1;
+      return !threading_worker_start_cancelled(ctx);
+    }
+    /* Cancellation cannot return an unclaimed state to cleanup: GC could win
+    ** a new GCSCAN CAS after any owner==0 observation. Keep the TG responsive
+    ** and wait until this worker owns L, then cleanup clears the hint under
+    ** that retained claim. */
+    if (owner == LJ_THREAD_GCSCAN || owner == LJ_THREAD_GCPREP) {
+      (void)lj_safepoint_poll_tg(ctx->tg);
+    }
+    (void)lj_state_owner_wait(NULL, L, owner, 1000000);
+  }
+}
+
+static int threading_worker_prepare(ThreadingWorkerCtx *ctx)
+{
+  LJThread *th = ctx->th;
+  TGState *tg = ctx->tg;
+  global_State *g = ctx->g;
+  int run;
+
+  /* The parent initialized tg with L and published all raw root fields before
+  ** pthread_create. Make that prepared identity registry-visible before the
+  ** owner CAS; do not rewrite any L/TG root while a GCSCAN may hold L. */
+  lj_thr_set_tg(tg);
+  ctx->tls_set = 1;
+  ctx->tg_state_set = 1;
+  lj_native_enter(tg);
+  lj_tg_attach(g, tg);
+  ctx->attached = 1;
+  run = threading_worker_claim(ctx);
+  (void)lj_native_leave_tg(tg);
+  if (!run || threading_worker_start_cancelled(ctx)) {
+    th->status = LUA_ERRRUN;
+    th->nresults = 0;
+    return 0;
+  }
+  return 1;
+}
+
 static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
 				   void *ud)
 {
   ThreadingWorkerCtx *ctx = (ThreadingWorkerCtx *)ud;
   LJThread *th = ctx->th;
-  TGState *tg = ctx->tg;
   global_State *g = ctx->g;
   int status;
   UNUSED(dummy);
 
-  lj_thr_set_tg(tg);
-  ctx->tls_set = 1;
-  lj_tg_tid_rel(tg, ctx->tid);
-  setmref(L->glref, g);
-  L->tg_hint = tg;
-  if (!lj_state_claim(L, ctx->tid)) {
-    th->status = LUA_ERRRUN;
-    th->nresults = 0;
-    return NULL;
-  }
-  ctx->claimed = 1;
-  lj_tg_store_cur_L(tg, L);
-  lj_tg_store_thread_L(tg, L);
-  lj_tg_store_thread_ud(tg, lj_thread_udata_acq(th));
-  ctx->tg_state_set = 1;
-  lj_tg_attach(g, tg);
-  ctx->attached = 1;
   lj_state_stack_pubrange(L, L);
   la_store32_rel(&th->start_ready, 1);
   threading_wake_thread(th);
@@ -1006,9 +1059,17 @@ static void *threading_worker(void *arg)
   ctx.tg = tg;
   ctx.g = g;
   ctx.tid = tid;
-  errcode = lj_vm_cpcall(L, NULL, &ctx, threading_worker_cp);
-  if (LJ_UNLIKELY(errcode))
-    threading_worker_error_result(&ctx, errcode);
+  /* Preparation is intentionally outside lj_vm_cpcall: TLS/root publication
+  ** and lj_tg_attach are nonthrowing (registry allocation has a fallback),
+  ** while installing a protected VM frame itself mutates L and needs owner
+  ** authority first. */
+  if (threading_worker_prepare(&ctx)) {
+    /* The protected VM frame is installed only after this OS thread owns L.
+    ** lj_vm_cpcall itself checkpoints and may unwind mutable state. */
+    errcode = lj_vm_cpcall(L, NULL, &ctx, threading_worker_cp);
+    if (LJ_UNLIKELY(errcode))
+      threading_worker_error_result(&ctx, errcode);
+  }
   threading_worker_cleanup(&ctx);
   return NULL;
 }
@@ -1039,6 +1100,7 @@ typedef struct ThreadingAttachCtx {
   uint32_t tid;
   uint8_t entering;
   uint8_t tls_set;
+  uint8_t claimed;
   uint8_t tg_state_set;
   uint8_t gc_entered;
   uint8_t attached;
@@ -1052,12 +1114,6 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
   LJGC2Lease lease;
   GCudata *thread_ud;
   UNUSED(dummy);
-  L->tg_hint = ctx->tg;
-  lj_thr_set_tg(ctx->tg);
-  ctx->tls_set = 1;
-  lj_tg_store_cur_L(ctx->tg, L);
-  lj_tg_store_thread_L(ctx->tg, L);
-  ctx->tg_state_set = 1;
   thread_ud = lj_thread_state_udata_acq(ctx->g, L, &lease);
   lj_tg_store_thread_ud(ctx->tg, thread_ud);
   lj_gc2_lease_release(&lease);
@@ -1069,8 +1125,6 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
     return NULL;
   }
   ctx->gc_entered = 1;
-  lj_tg_attach(ctx->g, ctx->tg);
-  ctx->attached = 1;
   if (mt_shutdown_acq(ctx->g) != 0)
     return NULL;
   ctx->success = 1;
@@ -1082,18 +1136,16 @@ static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
 static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
 				     int disown_callbacks)
 {
-  /* lj_tg_attach() has post-CAS catch-up work. A protected error may therefore
-  ** arrive after registry publication but before the ordinary return-site can
-  ** set ctx->attached. The admission/live reservation makes this membership
-  ** probe stable against dead-TG reclamation. */
+  /* The admission/live reservation makes this membership probe stable against
+  ** dead-TG reclamation, including provisional attach cleanup before claim. */
   int was_attached = ctx->attached ||
     threading_tg_is_registered(ctx->g, ctx->tg);
   /* Foreign attached threads have the same recorder lifetime boundary as
   ** spawned workers: no recorder state may retain this TG's soon-dead tid.
   */
-  if (was_attached)
+  if (was_attached && ctx->claimed && ctx->tg_state_set)
     lj_trace_abort_owner(L);
-  if (was_attached && disown_callbacks)
+  if (was_attached && ctx->claimed && ctx->tg_state_set && disown_callbacks)
     lj_ccallback_disown_state(L);
   if (was_attached &&
       !lj_tg_registry_detach_begin(ctx->g, ctx->tg))
@@ -1103,8 +1155,10 @@ static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
     lj_tg_store_thread_L(ctx->tg, NULL);
     lj_tg_store_thread_ud(ctx->tg, NULL);
   }
-  L->tg_hint = NULL;
-  lj_state_release(L, ctx->tid);
+  if (ctx->tg_state_set)
+    L->tg_hint = NULL;
+  if (ctx->claimed)
+    lj_state_release(L, ctx->tid);
   if (was_attached) {
     lj_tg_detach(ctx->g, ctx->tg);
     ctx->tg_state_set = 0;
@@ -2110,28 +2164,15 @@ static int threading_attach(lua_State *L, int wait)
     threading_entering_leave(g);
     return 0;
   }
-  for (;;) {
-    if (lj_state_claim(L, tid))
-      break;
-    if (!wait || mt_shutdown_acq(g) != 0) {
-      threading_entering_leave(g);
-      return 0;
-    }
-    {
-      uint32_t owner = lj_state_owner_acq(L);
-      if (owner != 0)
-	(void)lj_state_owner_wait(NULL, L, owner, 1000000);
-      else
-	(void)lj_thr_retry_yield(NULL);
-    }
-  }
   tg = (TGState *)malloc(sizeof(TGState));
   if (!tg) {
-    lj_state_release(L, tid);
     threading_entering_leave(g);
     return 0;
   }
-  lj_tg_init_thread(g, tg, L, threading_arena_internal(g));
+  /* Publish an empty provisional TG before the state-owner CAS. Thus every
+  ** real owner id is registry-resolvable, while mt_entering keeps g and this
+  ** private lifecycle transaction alive until it transitions to mt_live. */
+  lj_tg_init_thread(g, tg, NULL, threading_arena_internal(g));
   lj_tg_flags_or_rlx(tg, TGF_HEAP);
   lj_tg_tid_rel(tg, tid);
   lj_tg_derive_prng(g, tg, tid);
@@ -2140,6 +2181,51 @@ static int threading_attach(lua_State *L, int wait)
   ctx.tg = tg;
   ctx.tid = tid;
   ctx.entering = 1;
+  lj_thr_set_tg(tg);
+  ctx.tls_set = 1;
+  /* Keep the rootless provisional TG remotely acknowledgeable through state
+  ** claim and stable root publication. The final leave polls before cpcall. */
+  lj_native_enter(tg);
+  lj_tg_attach(g, tg);
+  ctx.attached = 1;
+  for (;;) {
+    if (mt_shutdown_acq(g) != 0)
+      break;
+    if (lj_state_claim(L, tid)) {
+      ctx.claimed = 1;
+      break;
+    }
+    if (!wait)
+      break;
+    {
+      uint32_t owner = lj_state_owner_acq(L);
+      if (owner != 0)
+	(void)lj_state_owner_wait(NULL, L, owner, 1000000);
+      else
+	(void)lj_thr_retry_yield(NULL);
+    }
+  }
+  if (!ctx.claimed || mt_shutdown_acq(g) != 0 ||
+      lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+    /* Provisional detach clears the still-native TG after servicing requests. */
+    threading_attach_cleanup(L, &ctx, 0);
+    return 0;
+  }
+  setmref(L->glref, g);
+  L->tg_hint = tg;
+  lj_tg_store_cur_L(tg, L);
+  lj_tg_store_thread_L(tg, L);
+  ctx.tg_state_set = 1;
+  /* The provisional TG joined the current GC phase without a Lua root.
+  ** Publish every existing stack edge immediately after installing that root,
+  ** before a protected frame or user callback can further mutate L. */
+  lj_state_stack_pubrange(L, L);
+  (void)lj_native_leave_tg(tg);
+  if (mt_shutdown_acq(g) != 0 ||
+      lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+    threading_attach_cleanup(L, &ctx, 0);
+    return 0;
+  }
   topofs = (MSize)(L->top - tvref(L->stack));
   errcode = lj_vm_cpcall(L, NULL, &ctx, threading_attach_cp);
   if (LJ_UNLIKELY(errcode)) {
