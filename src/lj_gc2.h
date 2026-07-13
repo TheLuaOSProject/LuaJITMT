@@ -557,6 +557,14 @@ LJ_FUNC int lj_gc2_mem_registered_known(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_mem_registered_known_reclaim_held(global_State *g,
 						       const void *p);
 LJ_FUNC int lj_gc2_markmem_registered(global_State *g, void *p);
+/* Best-effort raw-allocation mark for an identity whose caller already owns
+** through an independent local or published-list root. This never waits for
+** an opportunistic SMR reclaimer and never treats ordinary SMR contention as
+** activation corruption. A defensive active-cycle miss requests the phase's
+** root-retry/wake protocol. Returns 1 only for a newly set mark; zero also
+** covers an existing mark or transient admission loss. This is not a body
+** lease. */
+LJ_FUNC int lj_gc2_markmem_registered_publish_try(global_State *g, void *p);
 /* Raw-allocation mark for an exact detached body/list owner running inside the
 ** current-thread exclusive reclaimer. It does not acquire ordinary SMR and
 ** returns -1 for no durable mark, 0 for an existing/opaque durable mark, or 1

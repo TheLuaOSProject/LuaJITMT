@@ -14989,6 +14989,24 @@ int lj_gc2_markmem_registered(global_State *g, void *p)
   return gc2_markmem_registered_status(g, p) == GC2_MARK_NEW;
 }
 
+int lj_gc2_markmem_registered_publish_try(global_State *g, void *p)
+{
+  int status;
+  if (!g || !p)
+    return 0;
+  /* Hold one outer registry admission so the existing scoped marker's nested
+  ** read is reentrant and cannot mistake an ordinary reclaimer collision for
+  ** a missing mandatory edge. The caller's independent list/local ownership
+  ** supplies identity lifetime when this tactical admission loses. */
+  if (!lj_gc2_smr_read_try(g)) {
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  status = gc2_markmem_registered_status(g, p);
+  lj_gc2_smr_read_leave(g);
+  return status == GC2_MARK_NEW;
+}
+
 int lj_gc2_mem_lease_acquire(global_State *g, void *p, LJGC2Lease *lease)
 {
   GC2MarkScope scope;

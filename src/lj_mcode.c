@@ -565,9 +565,12 @@ static void mcode_active_push(jit_State *J, MCodeRetire *ret)
 /* Mark raw retirement nodes across an owner-list publication race. */
 static void mcode_preserve_list(global_State *g, MCodeRetire *ret)
 {
-  for (; ret != NULL && lj_gc2_mem_registered(g, ret);
-       ret = mcode_retired_next_acq(ret))
-    (void)lj_gc2_markmem_registered(g, ret);
+  /* The recorder token owns the detached active suffix before publication and
+  ** excludes the retired-list reclaimer afterwards. That independent owner is
+  ** the body-lifetime proof for this walk; marking is a best-effort sweep/root
+  ** publication which must not poison GC2 when an opportunistic writer wins. */
+  for (; ret != NULL; ret = mcode_retired_next_acq(ret))
+    (void)lj_gc2_markmem_registered_publish_try(g, ret);
 }
 
 /* Allocate a new MCode area and its preowned, GC-visible retirement node. */
@@ -594,7 +597,7 @@ static void mcode_allocarea(jit_State *J, size_t sz)
   ret->size = sz;
   ret->retire_epoch = MCODE_RETIRE_EPOCH_ACTIVE;
   mcode_retired_next_rel(ret, NULL);
-  (void)lj_gc2_markmem_registered(g, ret);
+  (void)lj_gc2_markmem_registered_publish_try(g, ret);
 #if LJ_MCODE_DUALMAP
   rwarea = lj_mcode_area_rw(area);
 #else
@@ -614,9 +617,9 @@ static void mcode_allocarea(jit_State *J, size_t sz)
   ** Mark only the newly published node here: walking the prior active list on
   ** every area allocation would make a many-area recorder grow quadratically.
   */
-  (void)lj_gc2_markmem_registered(g, ret);
+  (void)lj_gc2_markmem_registered_publish_try(g, ret);
   mcode_active_push(J, ret);
-  (void)lj_gc2_markmem_registered(g, ret);
+  (void)lj_gc2_markmem_registered_publish_try(g, ret);
 
   J->mcarea = area;
   J->szmcarea = sz;

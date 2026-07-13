@@ -76,6 +76,15 @@ static void test_gc2_unmark_small(GCobj *o)
   lj_arena_bm_clear(a->mark, cell);
 }
 
+static void test_gc2_unmark_mem(void *p)
+{
+  GCArena *a = lj_arena_of(p);
+  uint32_t cell = lj_arena_cellof(p);
+  assert(!lj_arena_ishuge(a));
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  lj_arena_bm_clear(a->mark, cell);
+}
+
 static void test_trace_stale_startins_candidates(global_State *g, GCproto *pt,
 						 GCtrace *T)
 {
@@ -163,6 +172,80 @@ static uint32_t reclaim_trace_at(global_State *g, uint64_t epoch)
   lj_jit_token_release(J);
   lj_gc2_test_idle_reclaim_leave(g);
   return n;
+}
+
+static void test_unpublished_preclaim_smr_collision(lua_State *L, GCproto *pt)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  GCtrace tmpl, *T;
+  static IRIns dummyir[REF_TRUE+1];
+  MCode **exittab;
+  LJGC2ActivationSnap before, after;
+
+  memset(&tmpl, 0, sizeof(tmpl));
+  tmpl.nk = REF_BASE;
+  tmpl.nins = REF_BASE;
+  tmpl.nsnap = 1;
+  tmpl.ir = dummyir;
+  T = lj_trace_alloc(L, &tmpl);
+  test_trace_complete_payload_layout(T);
+  test_trace_publish_header(g, T);
+  setgcref(T->startpt, obj2gco(pt));
+  exittab = lj_mem_newvec(L, 1, MCode *);
+  exittab[0] = NULL;
+  T->exittab = exittab;
+  assert(trace_traceno_acq(T) == 0);
+  assert(trace_nextroot_acq(T) == 0);
+  assert(la_load64_acq(&T->retire_epoch) == 0);
+  assert(!trace_retired_link_listed_acq(T));
+
+  settle_automatic_cycle(g);
+  assert(lj_jit_token_try(J));
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  test_gc2_unmark_mem(T);
+  test_gc2_unmark_mem(exittab);
+  test_gc2_unmark_small(obj2gco(pt));
+  before = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(!lj_trace_test_preserve_unpublished_publish(g, T));
+  after = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_gc2_activation_equal(&before, &after));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(!lj_arena_bm_get(lj_arena_of(T)->mark, lj_arena_cellof(T)));
+  assert(!lj_arena_bm_get(lj_arena_of(exittab)->mark,
+			  lj_arena_cellof(exittab)));
+  assert(!lj_arena_bm_get(lj_arena_of(pt)->mark, lj_arena_cellof(pt)));
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  lj_gc2_test_idle_reclaim_leave(g);
+
+  /* The exact runtime path retries its tactical pre-claim mark, claims the
+  ** epoch, and then performs mandatory full preservation before token release. */
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  /* pt is still a Lua-stack root, so remove any mark a start/root handshake
+  ** may have published. The only operation between this check and the later
+  ** assertion is the unpublished trace's mandatory post-claim traversal. */
+  test_gc2_unmark_mem(T);
+  test_gc2_unmark_mem(exittab);
+  test_gc2_unmark_small(obj2gco(pt));
+  assert(!lj_arena_bm_get(lj_arena_of(T)->mark, lj_arena_cellof(T)));
+  assert(!lj_arena_bm_get(lj_arena_of(exittab)->mark,
+			  lj_arena_cellof(exittab)));
+  assert(!lj_arena_bm_get(lj_arena_of(pt)->mark, lj_arena_cellof(pt)));
+  lj_trace_free_unpublished(g, T);
+  lj_jit_token_release(J);
+  assert(retired_find(J, T) == T);
+  assert(lj_gc2_ismarked(g, obj2gco(T)) > 0);
+  assert(lj_gc2_ismarkedmem(g, exittab) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(pt)) > 0);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  /* The transition may already drain the now-proven retired body, otherwise
+  ** normal later grace/terminal teardown retains ownership. Do not dereference
+  ** T after this point. */
 }
 
 static void test_gc_claim_rescues_runnable_inbound(lua_State *L)
@@ -539,6 +622,7 @@ int main(void)
   assert(retired_find(J, T) == NULL);
 
   test_listed_slot_teardown_no_republish(L);
+  test_unpublished_preclaim_smr_collision(L, pt);
   lua_close(L);
   printf("t-jit-trace-retire OK: bodies, exittabs, and inbound-link rescue retire correctly\n");
   return 0;

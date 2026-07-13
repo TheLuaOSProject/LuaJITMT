@@ -364,8 +364,11 @@ static void tracevec_retired_push(jit_State *J, TraceVec *tv)
 
 static void tracevec_preserve_retired(global_State *g, TraceVec *tv)
 {
-  if (tv && lj_gc2_mem_registered(g, tv))
-    (void)lj_gc2_markmem_registered(g, tv);
+  /* The recorder token owns tv before the push and excludes its list reclaimer
+  ** afterwards. The two publication-side marks are tactical root-certificate
+  ** barriers, not the body-lifetime authority for this exact vector. */
+  if (tv)
+    (void)lj_gc2_markmem_registered_publish_try(g, tv);
 }
 
 static void tracevec_retire(jit_State *J, TraceVec *tv)
@@ -614,6 +617,50 @@ static void trace_preservebody_raw(global_State *g, GCtrace *T)
   (void)trace_preservebody_raw_(g, T, 0);
 }
 
+/* Pre-claim preservation for a recorder-owned, unpublished compact body. The
+** local construction owner retains T and its exittab until the epoch/list
+** publication below, so losing an opportunistic registry admission requests a
+** root retry but is not an unclassified edge. This deliberately preserves no
+** semantic child graph; the mandatory post-claim path does that before token
+** release. */
+static int trace_preservebody_raw_publish(global_State *g, GCtrace *T)
+{
+  if (!g || !T)
+    return 0;
+  /* Identity ownership alone does not authorize any body/header read while a
+  ** huge-table/arena registry writer is active. Keep one outer admission over
+  ** validation and exittab discovery; the nested publication markers are then
+  ** reentrant. On loss, use the public helper solely to publish phase retry
+  ** work for T and return without dereferencing either allocation. */
+  if (!lj_gc2_smr_read_try(g)) {
+    (void)lj_gc2_markmem_registered_publish_try(g, T);
+    return 0;
+  }
+  (void)lj_gc2_markmem_registered_publish_try(g, T);
+  if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL))) {
+    lj_gc2_smr_read_leave(g);
+    return 1;  /* Exact local body ownership remains authoritative. */
+  }
+  {
+    MCode **exittab = trace_exittab_acq(T);
+    if (exittab && !trace_exittab_ismcode(T))
+      (void)lj_gc2_markmem_registered_publish_try(g, exittab);
+  }
+  lj_gc2_smr_read_leave(g);
+  return 1;
+}
+
+#ifdef LJ_TRACE_TEST_HELPERS
+int lj_trace_test_preserve_unpublished_publish(global_State *g, GCtrace *T)
+{
+  if (!g || !T || trace_traceno_acq(T) != 0 ||
+      trace_nextroot_acq(T) != 0 || la_load64_acq(&T->retire_epoch) != 0 ||
+      trace_retired_link_listed_acq(T))
+    return 0;
+  return trace_preservebody_raw_publish(g, T);
+}
+#endif
+
 static void trace_preserve_retired_body(global_State *g, GCtrace *T)
 {
   if (trace_retired_needs_payload_preserve(g, T))
@@ -683,7 +730,7 @@ static void trace_retired_push_preserved_reclaim(jit_State *J, GCtrace *T)
 ** root/quarantine item after requesting an asynchronous recorder abort.
 */
 static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
-					uint64_t epoch)
+					uint64_t epoch, int unpublished)
 {
   uint64_t expect = 0;
   uint64_t stamp = trace_retire_stamp(epoch);
@@ -692,8 +739,18 @@ static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
 #endif
   /* Preserve in GC2 before the unique entry gate; a root-prune caller can then
   ** unlink only after this helper returns without opening an unpreserved gap.
-  */
-  trace_preserve_retired_publish(g, T);
+  ** Only the recorder's exact unpublished construction may use the tactical
+  ** raw marker. Once the epoch is claimed, the ordinary preserved-list path
+  ** below performs the mandatory semantic graph preservation before release. */
+  if (unpublished) {
+    lj_assertG(trace_traceno_acq(T) == 0 && trace_nextroot_acq(T) == 0 &&
+	       la_load64_acq(&T->retire_epoch) == 0 &&
+	       !trace_retired_link_listed_acq(T),
+	       "invalid unpublished trace pre-claim publication");
+    (void)trace_preservebody_raw_publish(g, T);
+  } else {
+    trace_preserve_retired_publish(g, T);
+  }
   (void)la_cas64(&T->retire_epoch, &expect, stamp, LA_ACQ_REL, LA_ACQ);
 }
 
@@ -819,7 +876,16 @@ static void trace_retire_at_epoch(global_State *g, GCtrace *T, uint64_t epoch)
   jit_State *J = G2J(g);
   lj_assertJ(lj_jit_token_held(J),
 	     "trace retire-list publication without recorder token");
-  trace_retire_claim_at_epoch(g, T, epoch);
+  trace_retire_claim_at_epoch(g, T, epoch, 0);
+  trace_retired_push_preserved(J, T);
+}
+
+static void trace_retire_unpublished(global_State *g, GCtrace *T)
+{
+  jit_State *J = G2J(g);
+  lj_assertJ(lj_jit_token_held(J),
+	     "unpublished trace retire-list publication without recorder token");
+  trace_retire_claim_at_epoch(g, T, lj_gc2_retire_epoch(g), 1);
   trace_retired_push_preserved(J, T);
 }
 
@@ -911,7 +977,7 @@ void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T)
     lj_assertJ(0, "unpublished trace construction ownership lost");
     abort();
   }
-  trace_retire(g, T);
+  trace_retire_unpublished(g, T);
 }
 
 static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,

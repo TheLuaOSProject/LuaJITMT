@@ -10,6 +10,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_arena.h"
 #include "lj_state.h"
 #include "lj_jit.h"
 #include "lj_gc.h"
@@ -136,6 +137,35 @@ int main(void)
   assert(ret != NULL);
   assert(ret->retire_epoch == MCODE_RETIRE_EPOCH_ACTIVE);
   assert(mcode_retired_head_acq(J) == NULL);
+
+  /* Ordinary IDLE retire ownership is not evidence of a broken activation.
+  ** Force the exact collision which used to pin NO_RECLAIM from the mcode
+  ** allocation-side marker, then prove the independently rooted active list
+  ** is retained by the next successful JIT root mark. */
+  {
+    GCArena *a = lj_arena_of(ret);
+    uint32_t cell = lj_arena_cellof(ret);
+    LJGC2ActivationSnap before, after;
+    int sweep = reclaim_gate_enter(g);
+    assert(!sweep);
+    assert(gc2_smr_reclaiming_acq(g) != 0);
+    assert(gc2_smr_readers_acq(g) == 0);
+    assert(!lj_arena_ishuge(a));
+    lj_arena_bm_clear(a->mark, cell);
+    assert(!lj_arena_bm_get(a->mark, cell));
+    before = lj_gc2_activation_snapshot(&g->gc2.activation);
+    assert(lj_gc2_markmem_registered_publish_try(g, ret) == 0);
+    after = lj_gc2_activation_snapshot(&g->gc2.activation);
+    assert(lj_gc2_activation_equal(&before, &after));
+    assert(gc2_smr_reclaiming_acq(g) != 0);
+    assert(gc2_smr_readers_acq(g) == 0);
+    assert(!lj_arena_bm_get(a->mark, cell));
+    assert(!lj_gc2_activation_reclaim_veto(g));
+    reclaim_gate_leave(g, sweep);
+    assert(!lj_arena_bm_get(a->mark, cell));
+    assert(lj_mcode_markretired(g, 1));
+    assert(lj_gc2_ismarkedmem(g, ret) == 1);
+  }
 
   /*
   ** A safepoint leader can flush while holding the global recorder token.
