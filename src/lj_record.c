@@ -453,8 +453,7 @@ void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk)
   }
   canonicalize_slots(J);
 #if LJ_TARGET_X64 && LJ_GC64
-  if (rec_needs_xpoll(J))
-    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0);
+  emitir_raw(IRTG(IR_XPOLL, IRT_NIL), rec_needs_xpoll(J), 0);
 #endif
 nocanon:
   /* Note: all loop ops must set J->pc to the following instruction! */
@@ -3266,7 +3265,7 @@ static void rec_func_setup(jit_State *J)
 static void rec_func_xpoll(jit_State *J)
 {
   if (J->framedepth >= LJ_TRACE_FUNCF_XPOLL_DEPTH) {
-    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0);
+    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), rec_needs_xpoll(J), 0);
     lj_snap_add(J);
   }
 }

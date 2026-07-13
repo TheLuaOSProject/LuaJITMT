@@ -246,6 +246,8 @@ LJ_FUNC void lj_gc2_preserve_root(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_cycle_to_idle(global_State *g);
 LJ_FUNC int lj_gc2_sweep_bridge_close(global_State *g);
 LJ_FUNC void lj_gc2_sweep_bridge_ready(global_State *g);
+LJ_FUNC int lj_gc2_jit_entry_open(global_State *g);
+LJ_FUNC void lj_gc2_jit_sweep_request_exit(global_State *g);
 LJ_FUNC void lj_gc2_sweep_bridge_boundary_reached(global_State *g);
 LJ_FUNC void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 						  GC2SweepBridgePreserveFunc preserve);
@@ -360,6 +362,9 @@ LJ_FUNC int lj_gc2_test_ssb_empty(global_State *g);
 #if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
 LJ_FUNC int lj_gc2_test_idle_reclaim_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_idle_reclaim_leave(global_State *g);
+LJ_FUNC void lj_gc2_test_idle_reclaim_pause_after_jit_quiescence(void);
+LJ_FUNC uint32_t lj_gc2_test_idle_reclaim_paused(void);
+LJ_FUNC void lj_gc2_test_idle_reclaim_release(void);
 LJ_FUNC int lj_gc2_test_sweep_reclaim_scope_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #endif
@@ -369,6 +374,8 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_RECOVERY_TEST_SSB_COMMITTED	3u
 #define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE	4u
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM	5u
+LJ_FUNC void lj_gc2_test_jit_sweep_checkpoint_reset(void);
+LJ_FUNC uint64_t lj_gc2_test_jit_sweep_checkpoint_closes(void);
 LJ_FUNC void lj_gc2_test_recovery_fail_grey_grow(uint32_t count);
 LJ_FUNC void lj_gc2_test_recovery_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_gc2_test_recovery_paused(void);

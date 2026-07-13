@@ -3082,11 +3082,18 @@ void lj_gc2_freeall(global_State *g)
 #if LJ_HASJIT
 static int gc_jit_phase_threshold_exit_due(global_State *g)
 {
-  uint32_t phase = gc2_phase_acq(g);
-  return lj_tg_any_jit_active(g) &&
-	 (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
-	  phase == LJ_GC2_SWEEP ||
-	  lj_gc_total_load(g) >= lj_gc_threshold_load(g));
+  uint32_t phase;
+  if (!lj_tg_any_jit_active(g))
+    return 0;
+  if (!lj_gc2_jit_entry_open(g))
+    return 1;
+  phase = gc2_phase_acq(g);
+  /* An open SWEEP lease is already inside an active cycle. The ordinary debt
+  ** threshold schedules work but is not a root/reclaim boundary; the hard
+  ** cadence below closes the gate and forces authoritative interpreter
+  ** progress. IDLE still uses its threshold to request/start a new cycle. */
+  return phase != LJ_GC2_SWEEP &&
+    lj_gc_total_load(g) >= lj_gc_threshold_load(g);
 }
 
 int lj_gc2_jit_needs_exit(global_State *g)
@@ -3270,6 +3277,15 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
     if (!needs_exit)
       lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */
     lj_gc2_hard_check_advance(g, lj_gc2_alloc_since_load(g));
+    /* SWEEP assist is intentionally a no-op. Its hard cadence is instead the
+    ** single-TG/no-worker progress backstop: close entry asynchronously and
+    ** let this exact trace restore its snapshot before the interpreter owns a
+    ** bounded reclaim quantum. */
+    if (!needs_exit && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	lj_gc2_jit_entry_open(g)) {
+      lj_gc2_jit_sweep_request_exit(g);
+      needs_exit = 1;
+    }
   }
   /* hard_check_bytes may now be beyond current debt. Keep executing a stopped
   ** IDLE trace in that case; preserve a pre-sampled or newly-due phase/threshold
@@ -3277,6 +3293,19 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   needs_exit = needs_exit || lj_gc2_jit_needs_exit(g);
   if (needs_exit)
     return 1;
+  if (threshold_step && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+      lj_gc2_jit_entry_open(g)) {
+    /* Allocation is already governed by the post-RESET SWEEP policy: major
+    ** births are black, while minor births use fresh non-sweep generations.
+    ** Phase-aware root/store barriers publish old-generation rescues. Merely
+    ** move the active-cycle scheduling threshold; SWEEP->IDLE recomputes final
+    ** pacing from live bytes and total allocation. */
+    lj_gc_threshold_store(g,
+	lj_gc_total_load(g) + gc_step_debt_quantum(g));
+    if (gc2_n_workers_acq(g) != 0)
+      lj_gc2_sweep_publish_wake(g);
+    threshold_step = 0;
+  }
   if (threshold_step) {
     while (steps-- > 0 && gc2_step_auto(L, threshold_step, 1) == 0)
       threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);

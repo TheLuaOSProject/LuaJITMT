@@ -576,17 +576,14 @@ static LJ_AINLINE void proto_jit_startins_rel(GCproto *pt, const BCIns *pc,
   uintptr_t s = (uintptr_t)(void *)shadow;
   BCIns *slot;
   BCIns old;
-  lj_assertX(shadow != NULL && b <= ~(uintptr_t)0 - bytes &&
-	     s == b + bytes && p >= b && p - b < bytes &&
-	     ((p - b) & (sizeof(BCIns)-1u)) == 0,
-	     "JIT startins shadow PC outside prototype");
+  if (LJ_UNLIKELY(shadow == NULL || b > ~(uintptr_t)0 - bytes ||
+		  s != b + bytes || p < b || p - b >= bytes ||
+		  ((p - b) & (sizeof(BCIns)-1u)) != 0))
+    abort();  /* Patched bytecode without its recovery slot is unrecoverable. */
   slot = &shadow[(p - b) / sizeof(BCIns)];
   old = (BCIns)la_load32_acq((const uint32_t *)slot);
-  lj_assertX(old == 0 || old == ins,
-	     "JIT startins shadow changed across retrace");
-  UNUSED(bytes);
-  UNUSED(s);
-  UNUSED(old);
+  if (LJ_UNLIKELY(old != 0 && old != ins))
+    abort();  /* The immutable original instruction may never change. */
   la_store32_rel((uint32_t *)slot, (uint32_t)ins);
 }
 
@@ -1445,6 +1442,7 @@ typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2WeakOverflow GC2WeakOverflow;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
+  uint32_t jit_phase_gate;  /* Native trace entry admitted by GC2. */
   uint32_t cycle;	/* Monotonically increasing color-GC cycle id. */
   LJ_ALIGN(16) LJGC2Activation activation;  /* Veto-only typed phase mirror. */
   uint32_t cycle_leader;  /* Request tid or exact GCSCAN phase-edge gate. */
@@ -1492,6 +1490,8 @@ typedef struct GC2State {
 	  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
 	  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
 	  uint32_t mark_root_scanned;  /* MARK close owner/global snapshot state. */
+	  uint32_t jit_sweep_displaced;  /* Closed gate displaced native execution. */
+	  uint64_t jit_sweep_yield_until_ns;  /* Bounded mutator turn after quiesce. */
 	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
 	  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   GC2SSBNode *ssb_drain;  /* Worker-private detached remainder. */
@@ -3223,6 +3223,76 @@ static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
 static LJ_AINLINE uint32_t gc2_sweep_bridge_ready_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.sweep_bridge_ready);
+}
+
+static LJ_AINLINE int gc2_sweep_bridge_ready_cas(global_State *g,
+					  uint32_t *oldp, uint32_t ready)
+{
+  return la_cas32(&g->gc2.sweep_bridge_ready, oldp, ready,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_phase_gate_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_phase_gate);
+}
+
+static LJ_AINLINE void gc2_jit_phase_gate_store_rlx(global_State *g,
+					      uint32_t open)
+{
+  la_store32_rlx(&g->gc2.jit_phase_gate, open);
+}
+
+static LJ_AINLINE void gc2_jit_phase_gate_rel(global_State *g, uint32_t open)
+{
+  la_store32_rel(&g->gc2.jit_phase_gate, open);
+}
+
+static LJ_AINLINE int gc2_jit_phase_gate_cas(global_State *g,
+					      uint32_t *oldp, uint32_t open)
+{
+  return la_cas32(&g->gc2.jit_phase_gate, oldp, open,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_sweep_displaced_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_sweep_displaced);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_displaced_store_rlx(global_State *g,
+						  uint32_t displaced)
+{
+  la_store32_rlx(&g->gc2.jit_sweep_displaced, displaced);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_displaced_rel(global_State *g,
+					    uint32_t displaced)
+{
+  la_store32_rel(&g->gc2.jit_sweep_displaced, displaced);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_sweep_displaced_xchg_acqrel(
+  global_State *g, uint32_t displaced)
+{
+  return la_xchg32_acqrel(&g->gc2.jit_sweep_displaced, displaced);
+}
+
+static LJ_AINLINE uint64_t gc2_jit_sweep_yield_until_ns_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.jit_sweep_yield_until_ns);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_yield_until_ns_store_rlx(global_State *g,
+						       uint64_t deadline)
+{
+  la_store64_rlx(&g->gc2.jit_sweep_yield_until_ns, deadline);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_yield_until_ns_rel(global_State *g,
+						 uint64_t deadline)
+{
+  la_store64_rel(&g->gc2.jit_sweep_yield_until_ns, deadline);
 }
 
 static LJ_AINLINE void gc2_sweep_bridge_ready_store_rlx(global_State *g,

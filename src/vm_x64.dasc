@@ -2965,7 +2965,20 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp <2
   |
   |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
-  |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
+  |  load_G RA
+  |  cmp dword GL:RA->gc2.jit_phase_gate, 0
+  |  jne >9
+  |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
+  |  jmp >7
+  |9:
+  |  mov RA, BASE
+  |  xchg [DISPATCH+DISPATCH_TG(jit_base)], RA
+  |  load_G RA
+  |  cmp dword GL:RA->gc2.jit_phase_gate, 0
+  |  jne >2
+  |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
+  |  jmp >7
+  |2:
   |  load_J RA
   |  mov RA, [RA+J_OFS(tracev)]
   |  test RA, RA
@@ -6147,12 +6160,23 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = base (ignored), RD = traceno
     |  mov L:RB, SAVE_L
     |  load_G RA
-    |  cmp dword GL:RA->gc2.phase, LJ_GC2_IDLE
-    |  jne >3
+    |  cmp dword GL:RA->gc2.jit_phase_gate, 0
+    |  jne >8
+    |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
+    |  jmp >3
+    |8:
     |  // Publish trace-entry intent before loading a body/mcode pointer. Trace
-    |  // flush handshakes wait on jit_base, so the checks below close the
-    |  // validate-to-jump window without a warm-path lock.
-    |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
+    |  // flush handshakes wait on jit_base. The SC fence paired with GC2's
+    |  // gate-close fence makes either this recheck reject or the collector
+    |  // observe the intent before touching trace metadata/mcode.
+    |  mov RA, BASE
+    |  xchg [DISPATCH+DISPATCH_TG(jit_base)], RA
+    |  load_G RA
+    |  cmp dword GL:RA->gc2.jit_phase_gate, 0
+    |  jne >1
+    |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
+    |  jmp >3
+    |1:
     |  load_J RA
     |  mov RA, [RA+J_OFS(tracev)]
     |  test RA, RA
@@ -6294,9 +6318,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
     |  load_G RA
-    |  cmp dword GL:RA->gc2.phase, LJ_GC2_IDLE
-    |  jne >7
-    |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
+    |  cmp dword GL:RA->gc2.jit_phase_gate, 0
+    |  jne >9
+    |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
+    |  jmp >7
+    |9:
+    |  mov RA, BASE
+    |  xchg [DISPATCH+DISPATCH_TG(jit_base)], RA
+    |  load_G RA
+    |  cmp dword GL:RA->gc2.jit_phase_gate, 0
+    |  jne >9
+    |  mov dword GL:RA->gc2.jit_sweep_displaced, 1
+    |  jmp >7
+    |9:
     |  load_J RA
     |  mov RA, [RA+J_OFS(tracev)]
     |  test RA, RA
@@ -6410,16 +6444,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #if LJ_HASJIT
     if (op == BC_JFUNCF) {
       |  movzx RDd, PC_RD
-      |  load_J RA
-      |  mov RA, [RA+J_OFS(tracev)]
-      |  test RA, RA
-      |  jz >5
-      |  mov RA, [RA+RD*8+TRACEV_SLOT_OFS]
-      |  cmp RA, 1
-      |  ja >4
-      |5:
-      |  ins_next
-      |4:
+      |  // Route every header trace through the common gate+xchg publication
+      |  // before reading TraceVec/slot metadata. Gate-denied callee semantics
+      |  // have already completed above and use the ordinary ins_next fallback.
       |  jmp =>BC_JLOOP
     } else
 #endif

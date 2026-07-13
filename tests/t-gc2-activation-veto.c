@@ -202,6 +202,7 @@ static void test_close_defers_active_worker(void)
   weak = activation_mark_to_weak(g, &mark);
   sweep = activation_weak_to_sweep(g, &weak);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
+  gc2_jit_phase_gate_rel(g, 0);
   gc2_worker_active_rel(g, 1);
   lj_gc2_preserve_abort_to_idle(g);
   lj_gc2_cycle_to_idle(g);
@@ -411,12 +412,14 @@ static void test_central_sweep_reclaim_activation_gate(void)
   weak = activation_mark_to_weak(g, &mark);
   sweep = activation_weak_to_sweep(g, &weak);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
+  gc2_jit_phase_gate_rel(g, 0);
   gc2_worker_active_rel(g, 1);
   assert(lj_gc2_test_sweep_reclaim_enter(g));
   assert(gc2_smr_reclaiming_acq(g) == 1);
   gc2_smr_reclaiming_rel(g, 0);
   gc2_worker_active_rel(g, 0);
   gc2_phase_rel(g, LJ_GC2_IDLE);
+  gc2_jit_phase_gate_rel(g, 1);
   assert(lj_gc2_activation_try_abandon_sweep_open(&g->gc2.activation,
            &sweep, &reset) == LJ_GC2_TRANSITION_OK);
   lua_close(L);
@@ -427,11 +430,13 @@ static void test_central_sweep_reclaim_activation_gate(void)
   g = G(L);
   mark = activation_to_mark(g);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
+  gc2_jit_phase_gate_rel(g, 0);
   gc2_worker_active_rel(g, 1);
   assert(!lj_gc2_test_sweep_reclaim_enter(g));
   assert(gc2_smr_reclaiming_acq(g) == 0);
   gc2_worker_active_rel(g, 0);
   gc2_phase_rel(g, LJ_GC2_IDLE);
+  gc2_jit_phase_gate_rel(g, 1);
   assert(lj_gc2_activation_try_transition(&g->gc2.activation, &mark,
            mark.mark_epoch, LJ_GC2_ACT_IDLE, &reset) ==
          LJ_GC2_TRANSITION_OK);
@@ -443,11 +448,13 @@ static void test_central_sweep_reclaim_activation_gate(void)
   g = G(L);
   inject_explicit_no_reclaim(g);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
+  gc2_jit_phase_gate_rel(g, 0);
   gc2_worker_active_rel(g, 1);
   assert(!lj_gc2_test_sweep_reclaim_enter(g));
   assert(gc2_smr_reclaiming_acq(g) == 0);
   gc2_worker_active_rel(g, 0);
   gc2_phase_rel(g, LJ_GC2_IDLE);
+  gc2_jit_phase_gate_rel(g, 1);
   lua_close(L);
 }
 

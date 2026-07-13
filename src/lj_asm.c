@@ -1821,9 +1821,9 @@ static void asm_phi(ASMState *as, IRIns *ir)
 
 static void asm_loop_fixup(ASMState *as);
 #if LJ_TARGET_X86ORX64
-static void asm_xpoll(ASMState *as);
+static void asm_xpoll(ASMState *as, IRIns *ir);
 #else
-#define asm_xpoll(as)		((void)0)
+#define asm_xpoll(as, ir)	((void)0)
 #endif
 
 /* Middle part of a loop. */
@@ -1933,7 +1933,7 @@ static void asm_ir(ASMState *as, IRIns *ir)
   switch ((IROp)ir->o) {
   /* Miscellaneous ops. */
   case IR_LOOP: asm_loop(as); break;
-  case IR_XPOLL: asm_xpoll(as); break;
+  case IR_XPOLL: asm_xpoll(as, ir); break;
   case IR_XSAVE: asm_xsave(as); break;
   case IR_NOP: case IR_XBAR:
     lj_assertA(!ra_used(ir),

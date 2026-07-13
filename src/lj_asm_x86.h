@@ -3963,19 +3963,28 @@ static void asm_gc_check(ASMState *as)
 /* -- Loop handling ------------------------------------------------------- */
 
 /* Poll the current TG at the loop backedge and exit through the LOOP snap. */
-static void asm_xpoll(ASMState *as)
+static void asm_xpoll(ASMState *as, IRIns *ir)
 {
-  asm_guardcc(as, CC_NE);  /* Assumes asm_snap_prep() already done. */
+  Reg gate = ra_scratch(as, RSET_GPR);
+  if (ir->op1) {
+    asm_guardcc(as, CC_NE);  /* Assumes asm_snap_prep() already done. */
 #if LJ_64
-  /* poll and profile_request are one aligned qword on x64. Keep trace
-  ** backedges consistent with vm_x64.dasc so SIGPROF can force an otherwise
-  ** unbounded hot trace through its normal owner-context exit. */
-  emit_i8(as, 0);
-  emit_rmro(as, XG_TOXOi8(XG_ARITHi(XOg_CMP)), XOg_CMP|REX_64,
-            RID_DISPATCH, DISPATCH_TG(poll));
+    /* poll and profile_request are one aligned qword on x64. Keep trace
+    ** backedges consistent with vm_x64.dasc so SIGPROF can force an otherwise
+    ** unbounded hot trace through its normal owner-context exit. */
+    emit_i8(as, 0);
+    emit_rmro(as, XG_TOXOi8(XG_ARITHi(XOg_CMP)), XOg_CMP|REX_64,
+	      RID_DISPATCH, DISPATCH_TG(poll));
 #else
-  emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);
+    emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);
 #endif
+  }
+  /* A SWEEP owner closes this gate before sampling active jit_base/vmstate.
+  ** Loop traces exit asynchronously at their ordinary snapshot; a peer parked
+  ** in blocking FFI merely defers reclaim and never blocks the collector. */
+  asm_guardcc(as, CC_E);
+  emit_gri(as, XG_ARITHi(XOg_CMP), gate, 0);
+  emit_opgl(as, XO_MOV, gate, gc2.jit_phase_gate);  /* Exact 32-bit gate. */
 }
 
 /* Fixup the loop branch. */

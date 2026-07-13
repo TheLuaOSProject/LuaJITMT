@@ -58,12 +58,114 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define GC2_RECOVERY_LANE_BITS	2u
 #define GC2_RECOVERY_LANE_MASK	((1u << GC2_RECOVERY_LANE_BITS) - 1u)
 #define GC2_RECOVERY_LANE_QUANTUM	64u
+#define GC2_JIT_SWEEP_YIELD_NS	50000u
+
+/*
+** GC2 trace entry is a two-sided publication protocol. The VM first observes
+** jit_phase_gate, publishes TG-local jit_base, executes an SC fence, and then
+** revalidates the gate immediately before using trace metadata/mcode. A GC
+** owner closes the gate and executes the matching SC fence before sampling
+** jit_base/vmstate. Thus either the entry rejects the close or the owner sees
+** an active intent and defers without waiting. XPOLL/allocation exits publish
+** quiescence before a later owner performs physical reclaim.
+*/
+static void gc2_jit_phase_gate_close(global_State *g)
+{
+  gc2_jit_sweep_yield_until_ns_rel(g, 0);
+  gc2_jit_phase_gate_rel(g, 0);
+  la_fence_seq();
+}
+
+static void gc2_jit_phase_gate_open_idle(global_State *g)
+{
+  lj_assertG(gc2_phase_acq(g) == LJ_GC2_IDLE,
+	     "IDLE JIT gate opened outside IDLE");
+  gc2_jit_sweep_displaced_rel(g, 0);
+  gc2_jit_sweep_yield_until_ns_rel(g, 0);
+  gc2_jit_phase_gate_rel(g, 1);
+}
+
+static void gc2_jit_phase_gate_open_sweep(global_State *g, int mutator_turn)
+{
+  uint64_t deadline = 0;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      !gc2_sweep_bridge_ready_acq(g))
+    return;
+  lj_assertG(gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	     gc2_sweep_bridge_ready_acq(g) != 0,
+	     "SWEEP JIT gate opened before READY");
+  if (gc2_jit_sweep_displaced_xchg_acqrel(g, 0) != 0)
+    mutator_turn = 1;
+  if (mutator_turn) {
+    uint64_t now = lj_thr_now_ns();
+    deadline = now > ~(uint64_t)0 - GC2_JIT_SWEEP_YIELD_NS ?
+	       ~(uint64_t)0 : now + GC2_JIT_SWEEP_YIELD_NS;
+  }
+  /* Publish the scheduling lease before native entry is admitted. */
+  gc2_jit_sweep_yield_until_ns_rel(g, deadline);
+  gc2_jit_phase_gate_rel(g, 1);
+}
+
+static int gc2_jit_sweep_turn_deferred(global_State *g)
+{
+  uint64_t deadline;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      gc2_jit_phase_gate_acq(g) == 0)
+    return 0;
+  deadline = gc2_jit_sweep_yield_until_ns_acq(g);
+  if (deadline == 0)
+    return 0;
+  if (lj_thr_now_ns() < deadline)
+    return 1;
+  /* Expiry is observational until an owned close. A pre-claim observer must
+  ** not erase a fresh lease concurrently published by the current worker. */
+  return 0;
+}
+
+int lj_gc2_jit_entry_open(global_State *g)
+{
+  uint32_t phase;
+  if (!g || gc2_jit_phase_gate_acq(g) == 0)
+    return 0;
+  phase = gc2_phase_acq(g);
+  return phase == LJ_GC2_IDLE ||
+    (phase == LJ_GC2_SWEEP && gc2_sweep_bridge_ready_acq(g) != 0);
+}
+
+void lj_gc2_jit_sweep_request_exit(global_State *g)
+{
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+      !gc2_sweep_bridge_ready_acq(g) || gc2_jit_phase_gate_acq(g) == 0)
+    return;
+  /* This can run inside lj_gc_step_jit while the caller still owns its mcode.
+  ** Close only the entry/XPOLL gate; the helper returns to the normal trace
+  ** exit before any collector is allowed to observe zero active users. */
+  gc2_jit_phase_gate_close(g);
+  gc2_jit_sweep_displaced_rel(g, 1);
+  lj_gc2_sweep_publish_wake(g);
+}
 
 #if defined(LJ_GC2_TEST_HELPERS)
 static uint32_t gc2_recovery_test_fail_grey_grow;
 static uint32_t gc2_recovery_test_pause_stage;
 static uint32_t gc2_recovery_test_paused_stage;
 static uint32_t gc2_recovery_test_pause_release;
+static uint64_t gc2_test_jit_sweep_checkpoint_closes;
+
+void lj_gc2_test_jit_sweep_checkpoint_reset(void)
+{
+  la_store64_rel(&gc2_test_jit_sweep_checkpoint_closes, 0);
+}
+
+uint64_t lj_gc2_test_jit_sweep_checkpoint_closes(void)
+{
+  return la_load64_acq(&gc2_test_jit_sweep_checkpoint_closes);
+}
+
+static void gc2_test_jit_sweep_checkpoint_closed(void)
+{
+  (void)la_add64_rlx(&gc2_test_jit_sweep_checkpoint_closes, 1);
+}
 static uint32_t gc2_recovery_test_huge_scans;
 static uint32_t gc2_recovery_test_worker_table_skips;
 
@@ -139,6 +241,43 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE 4u
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM 5u
 #define gc2_recovery_test_pause_at(stage) ((void)(stage))
+#define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
+#endif
+
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
+static uint32_t gc2_idle_reclaim_test_pause;
+static uint32_t gc2_idle_reclaim_test_paused;
+static uint32_t gc2_idle_reclaim_test_release;
+
+static void gc2_idle_reclaim_test_pause_after_jit_quiescence(void)
+{
+  if (la_load32_acq(&gc2_idle_reclaim_test_pause) == 0)
+    return;
+  la_store32_rel(&gc2_idle_reclaim_test_paused, 1);
+  while (la_load32_acq(&gc2_idle_reclaim_test_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&gc2_idle_reclaim_test_paused, 0);
+  la_store32_rel(&gc2_idle_reclaim_test_pause, 0);
+}
+
+void lj_gc2_test_idle_reclaim_pause_after_jit_quiescence(void)
+{
+  la_store32_rel(&gc2_idle_reclaim_test_release, 0);
+  la_store32_rel(&gc2_idle_reclaim_test_paused, 0);
+  la_store32_rel(&gc2_idle_reclaim_test_pause, 1);
+}
+
+uint32_t lj_gc2_test_idle_reclaim_paused(void)
+{
+  return la_load32_acq(&gc2_idle_reclaim_test_paused);
+}
+
+void lj_gc2_test_idle_reclaim_release(void)
+{
+  la_store32_rel(&gc2_idle_reclaim_test_release, 1);
+}
+#else
+#define gc2_idle_reclaim_test_pause_after_jit_quiescence() ((void)0)
 #endif
 
 typedef struct GC2FinalizerNode {
@@ -1003,6 +1142,9 @@ void lj_gc2_init(global_State *g)
   gc2_remembered_drained_store_rlx(g, 0);
   gc2_marks_this_round_store_rlx(g, 0);
   gc2_mark_root_scanned_store_rlx(g, 0);
+  gc2_jit_phase_gate_store_rlx(g, 1);
+  gc2_jit_sweep_displaced_store_rlx(g, 0);
+  gc2_jit_sweep_yield_until_ns_store_rlx(g, 0);
   gc2_ssb_head_store_rlx(g, NULL);
   gc2_ssb_drain_rel(g, NULL);
   gc2_ssb_consumer_active_store_rlx(g, 0);
@@ -1911,9 +2053,30 @@ int lj_gc2_worker_stop(global_State *g)
   return stopped;
 }
 
-static void *gc2_worker_main(void *arg)
+static int gc2_worker_park_timeout_ns(global_State *g)
 {
   enum { GC2_ACTIVE_PARK_TIMEOUT_NS = 10000000 };
+  uint32_t phase = gc2_phase_acq(g);
+  if (gc2_recovery_stalled_failed(g))
+    return -1;
+  if (phase == LJ_GC2_IDLE &&
+      !(gc2_cycle_leader_acq(g) != 0 &&
+	gc2_jit_phase_gate_acq(g) == 0))
+    return -1;
+  if (phase == LJ_GC2_SWEEP && gc2_jit_phase_gate_acq(g) != 0) {
+    uint64_t deadline = gc2_jit_sweep_yield_until_ns_acq(g);
+    if (deadline != 0) {
+      uint64_t now = lj_thr_now_ns();
+      uint64_t left = deadline > now ? deadline - now : 1u;
+      if (left < GC2_ACTIVE_PARK_TIMEOUT_NS)
+	return (int)left;
+    }
+  }
+  return GC2_ACTIVE_PARK_TIMEOUT_NS;
+}
+
+static void *gc2_worker_main(void *arg)
+{
   TGState *tg = (TGState *)arg;
   global_State *g = tg ? tg->gl : NULL;
   if (!g)
@@ -1957,10 +2120,7 @@ static void *gc2_worker_main(void *arg)
     ** use a low-frequency active-cycle retry as the notification backstop.
     ** This is scheduler repair, not ownership transfer: a preempted token
     ** holder remains a separate helpability problem. */
-    gc2_worker_wake_futex_wait(g, wake,
-	(gc2_phase_acq(g) == LJ_GC2_IDLE ||
-	 gc2_recovery_stalled_failed(g)) ? -1 :
-	GC2_ACTIVE_PARK_TIMEOUT_NS);
+    gc2_worker_wake_futex_wait(g, wake, gc2_worker_park_timeout_ns(g));
   }
   lj_tg_detach(g, tg);
   lj_thr_set_tg(NULL);
@@ -2103,6 +2263,12 @@ int lj_gc2_collect_active(lua_State *L)
   for (;;) {
     uint32_t phase = gc2_phase_acq(g);
     if (gc2_recovery_stalled_failed(g))
+      return 0;
+    /* Gate closure is an asynchronous request, not permission for explicit
+    ** collection to wait on a peer's jit_base. This is expected in pre-MARK
+    ** IDLE and in SWEEP when ordinary FFI remains blocked; MARK/WEAK normally
+    ** cannot observe it because their transition proofs require quiescence. */
+    if (gc2_jit_phase_gate_acq(g) == 0 && lj_tg_any_jit_active(g))
       return 0;
     if (phase == LJ_GC2_IDLE) {
       if (need_major) {
@@ -2330,6 +2496,19 @@ uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg)
       if (lj_tg_jit_base(g) != NULL)
 	gc2_jit_hard_checks_add(g, 1);
       (void)lj_gc2_assist(g, tg);
+      /* A traced allocation helper can consume this hard checkpoint before
+      ** asm_gc_check reaches lj_gc_step_jit(). In cooperative SWEEP, publish
+      ** the same asynchronous gate close after bounded assist has released any
+      ** worker ownership and before advancing the cadence. The current helper
+      ** returns normally; XPOLL or finite trace return publishes quiescence. */
+      if (lj_tg_jit_base(g) != NULL &&
+	  gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	  lj_gc2_jit_entry_open(g)) {
+	lj_gc2_jit_sweep_request_exit(g);
+	lj_assertG(gc2_jit_phase_gate_acq(g) == 0,
+		   "allocation checkpoint failed to close JIT SWEEP gate");
+	gc2_test_jit_sweep_checkpoint_closed();
+      }
       lj_gc2_hard_check_advance(g, since);
     }
   }
@@ -2581,6 +2760,11 @@ static int gc2_small_registered_rescue_enter_reclaim_held(global_State *g,
 ** capability for already-ticketed validation, never a substitute for an object
 ** lifetime/list lease. */
 static GC2_RECLAIM_TLS global_State *gc2_reclaim_tls_g;
+/* A phase-close owner may lend its already-SC-closed JIT gate only to the
+** same-thread IDLE grace callback. The reclaimer records whether it acquired
+** the gate itself, so borrowed closure is never reopened by the nested drain. */
+static GC2_RECLAIM_TLS global_State *gc2_idle_transition_gate_tls_g;
+static GC2_RECLAIM_TLS uint32_t gc2_idle_reclaim_gate_owned_tls;
 /* One process-visible reader count covers arbitrarily nested reads by the same
 ** OS thread and universe. Besides avoiding needless global RMWs, this lets a
 ** container operation retain registry identity across detach and all nested
@@ -3045,6 +3229,33 @@ static int gc2_mark_begin(global_State *g)
     gc2_worker_release(g);
     return 0;
   }
+  /* Close native entry before staging typed MARK or consuming any request,
+  ** force-major bit, counter, mark or queue state. The SC fence pairs with the
+  ** x64 entry publication/recheck. If a trace is still active (including a
+  ** peer blocked in FFI), leave the exact request intact and return: XPOLL or
+  ** the trace allocation check exits asynchronously, and a later owner retries
+  ** from unchanged IDLE state. */
+  gc2_jit_phase_gate_close(g);
+  if (lj_tg_any_jit_active(g)) {
+    gc2_worker_release(g);
+    return 0;
+  }
+  /* An IDLE retire owner can publish smr_reclaiming after this worker's first
+  ** claim check but before the worker closes native entry. It owns that close
+  ** only after winning its 1->0 CAS. Do not stage typed MARK or reopen its
+  ** gate: leave the exact request intact, release the worker token, and let
+  ** the reclaimer either finish or roll its own closure back. */
+  if (gc2_smr_reclaiming_acq(g) != 0) {
+    gc2_worker_release(g);
+    return 0;
+  }
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
+      gc2_cycle_leader_acq(g) != leader) {
+    if (gc2_phase_acq(g) == LJ_GC2_IDLE && gc2_cycle_leader_acq(g) == 0)
+      gc2_jit_phase_gate_open_idle(g);
+    gc2_worker_release(g);
+    return 0;
+  }
   /* Stage the veto-only typed mirror while the nonzero request token excludes
   ** every CAS-owned close sentinel. Recheck it before consuming requests,
   ** changing counters, or touching queue state so a failed admission can
@@ -3052,6 +3263,8 @@ static int gc2_mark_begin(global_State *g)
   staged_mark = gc2_activation_stage_mark(g, &staged);
   if (!gc2_activation_mark_recheck(g, leader,
                                     staged_mark ? &staged : NULL)) {
+    if (gc2_phase_acq(g) == LJ_GC2_IDLE && gc2_cycle_leader_acq(g) == 0)
+      gc2_jit_phase_gate_open_idle(g);
     gc2_worker_release(g);
     lj_gc2_worker_wake(g);
     return 0;
@@ -3171,6 +3384,23 @@ static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
   else
     actions |= LJ_GC2_HS_DISABLE_BARRIER;
   return actions;
+}
+
+static uint32_t gc2_idle_transition_handshake(global_State *g,
+					       uint32_t actions)
+{
+  uint32_t result;
+  lj_assertG(g && gc2_phase_acq(g) == LJ_GC2_IDLE &&
+	     gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN &&
+	     gc2_jit_phase_gate_acq(g) == 0 &&
+	     gc2_idle_transition_gate_tls_g == NULL,
+	     "invalid borrowed IDLE transition gate");
+  if (!g || gc2_idle_transition_gate_tls_g != NULL)
+    return 0;
+  gc2_idle_transition_gate_tls_g = g;
+  result = lj_gc2_handshake(g, actions);
+  gc2_idle_transition_gate_tls_g = NULL;
+  return result;
 }
 
 static void gc2_update_public_minor_gates(global_State *g)
@@ -4496,11 +4726,13 @@ static int gc2_sweep_reclaim_enter(global_State *g)
   uint32_t expect = 0;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_worker_active_acq(g) == 0 ||
+      gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
       !gc2_recovery_empty(g) || lj_gc2_activation_reclaim_veto(g) ||
       !gc2_smr_reclaiming_cas(g, &expect, 1))
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_worker_active_acq(g) == 0 ||
+      gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
       !gc2_recovery_empty(g) || lj_gc2_activation_reclaim_veto(g) ||
       gc2_smr_readers_acq(g) != 0) {
     gc2_smr_reclaiming_rel(g, 0);
@@ -4540,6 +4772,8 @@ void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g)
 
 static void gc2_sweep_reclaim_leave(global_State *g)
 {
+  lj_assertG(gc2_jit_phase_gate_acq(g) == 0,
+	     "SWEEP reclaim scope outlived closed JIT gate");
   gc2_reclaim_tls_leave(g);
   gc2_smr_reclaiming_rel(g, 0);
 }
@@ -4790,6 +5024,7 @@ uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
 {
   uint32_t n;
   int claimed = 0;
+  int gate_owned = 0;
   if (!g || !tg || limit == 0)
     return 0;
   if (gc2_worker_active_acq(g) == 0) {
@@ -4808,8 +5043,23 @@ uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
       gc2_sweep_grace_needed_rel(g, 0);
     n = 1;
   } else {
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	gc2_sweep_bridge_ready_acq(g) != 0 &&
+	gc2_jit_phase_gate_acq(g) != 0) {
+      gc2_jit_phase_gate_close(g);
+      if (lj_tg_any_jit_active(g)) {
+	gc2_jit_sweep_displaced_rel(g, 1);
+	if (claimed)
+	  gc2_worker_release(g);
+	return 0;
+      }
+      gate_owned = 1;
+    }
     n = lj_gc2_sweep_owner_progress(g, tg, limit);
   }
+  if (gate_owned && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+      gc2_sweep_bridge_ready_acq(g) != 0)
+    gc2_jit_phase_gate_open_sweep(g, 0);
   if (claimed)
     gc2_worker_release(g);
   return n;
@@ -4931,11 +5181,19 @@ static uint64_t gc2_arena_list_count(GCArena *a)
 
 void lj_gc2_sweep_bridge_ready(global_State *g)
 {
+  uint32_t expect = 0;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return;
   if (gc2_sweep_bridge_owner_roots_pending(g) || !gc2_recovery_empty(g))
     return;
-  gc2_sweep_bridge_ready_rel(g, 1);
+  /* READY publication and the initial entry opening are one-shot. A redundant
+  ** compatibility/test call must never reopen the gate while a reclaim owner
+  ** has READY=1 and the gate closed around physical destruction. */
+  if (!gc2_sweep_bridge_ready_cas(g, &expect, 1))
+    return;
+  /* Every semantic root and rescue publication is closed before READY. Native
+  ** execution may now run between bounded physical-reclaim quanta. */
+  gc2_jit_phase_gate_open_sweep(g, gc2_n_workers_acq(g) != 0);
   lj_gc2_worker_wake(g);  /* 05 section 5.8: roots reached close. */
 }
 
@@ -5020,6 +5278,7 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   ** invalid/gated authority and keeps NO_RECLAIM absorbing. */
   gc2_activation_abort_reset(g, phase);
   if (phase == LJ_GC2_IDLE) {
+    gc2_jit_phase_gate_open_idle(g);
     gc2_phase_gate_release(g);
     lj_gc2_worker_wake(g);
     return;
@@ -5030,12 +5289,14 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   if (phase != LJ_GC2_IDLE)
     gc2_preserve_abort_to_idle_add(g, 1);
   lj_gc2_worker_wake(g);
-  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+  (void)gc2_idle_transition_handshake(
+    g, gc2_idle_barrier_actions(g, 0));
   /* Queue references and NEEDSCAN membership remain a conservative next-cycle
   ** root set. Walking them here would race a worker-owned detached suffix or a
   ** resumed idle-generational producer. The next MARK start preserves and
   ** drains the exact work instead. */
   (void)lj_tg_reclaim_dead(g);
+  gc2_jit_phase_gate_open_idle(g);
   gc2_phase_gate_release(g);
 }
 
@@ -5076,6 +5337,8 @@ int lj_gc2_sweep_to_idle(global_State *g)
   uint64_t live;
   if (!g)
     return 0;
+  if (gc2_jit_sweep_turn_deferred(g))
+    return 0;
   if (!gc2_worker_claim(g))
     return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
   phase = gc2_phase_acq(g);
@@ -5083,7 +5346,25 @@ int lj_gc2_sweep_to_idle(global_State *g)
     gc2_worker_release(g);
     return 0;
   }
+  gc2_jit_phase_gate_close(g);
+  if (lj_tg_any_jit_active(g)) {
+    /* Never wait for a peer in blocking FFI, and never self-wait from a trace
+    ** helper. Allocation checks observe the closed gate; x64 loop XPOLL does
+    ** the same. A later owner retries after every TG has published quiescence. */
+    gc2_jit_sweep_displaced_rel(g, 1);
+    gc2_worker_release(g);
+    return 0;
+  }
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP) {
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+      gc2_jit_phase_gate_open_sweep(g, 0);
+    else if (gc2_phase_acq(g) == LJ_GC2_IDLE)
+      gc2_jit_phase_gate_open_idle(g);
+    gc2_worker_release(g);
+    return 0;
+  }
   if (!gc2_phase_gate_try(g)) {
+    gc2_jit_phase_gate_open_sweep(g, 0);
     gc2_worker_release(g);
     return 0;
   }
@@ -5098,6 +5379,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
       !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
       lj_gc2_sweep_pending(g) ||
       gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
+    gc2_jit_phase_gate_open_sweep(g, 0);
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
     return 0;
@@ -5118,6 +5400,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
       !gc2_grey_empty(g) || lj_gc2_sweep_needs_prepare(g) ||
       lj_gc2_sweep_pending(g) ||
       gc2_marks_this_round_xchg_acqrel(g, 0) != 0) {
+    gc2_jit_phase_gate_open_sweep(g, 0);
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
     lj_gc2_worker_wake(g);
@@ -5138,6 +5421,8 @@ int lj_gc2_sweep_to_idle(global_State *g)
   gc2_mark_close_intent_rel(g, 0);
   lj_gc2_worker_wake(g);
   if (phase != LJ_GC2_SWEEP) {
+    if (gc2_phase_acq(g) == LJ_GC2_IDLE)
+      gc2_jit_phase_gate_open_idle(g);
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
     return 0;
@@ -5159,7 +5444,8 @@ int lj_gc2_sweep_to_idle(global_State *g)
   ** table, trace, mcode, and ctype/clib state at the completed epoch.
   */
   gc2_worker_release(g);
-  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+  (void)gc2_idle_transition_handshake(
+    g, gc2_idle_barrier_actions(g, 0));
   /* An admitted b1.2 string batch is consumed by the exact IDLE reclaimer
   ** inside the handshake above.  Never reopen attach/pool admission while an
   ** unlinked canonical body remains undiscoverable from the main table. */
@@ -5174,6 +5460,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   (void)gc2_clear_container_needscan_all(g);
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
+  gc2_jit_phase_gate_open_idle(g);
   gc2_phase_gate_release(g);
   return 1;
 }
@@ -5192,6 +5479,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
        gc2_sweep_grace_needed_acq(g))) {
     /* Once gcw detachment/quarantine starts, only the normal bounded close may
     ** publish IDLE. A forced close would orphan exact variable cdata headers. */
+    gc2_jit_sweep_yield_until_ns_rel(g, 0);
     if (!lj_gc2_sweep_to_idle(g))
       lj_gc2_worker_wake(g);
     return;
@@ -5209,6 +5497,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
       (gc2_sweep_bridge_ready_acq(g) || gc2_sweep_root_done_acq(g) ||
        gc2_sweep_grace_needed_acq(g))) {
     gc2_worker_release(g);
+    gc2_jit_sweep_yield_until_ns_rel(g, 0);
     if (!lj_gc2_sweep_to_idle(g))
       lj_gc2_worker_wake(g);
     return;
@@ -5229,6 +5518,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
        gc2_sweep_grace_needed_acq(g))) {
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
+    gc2_jit_sweep_yield_until_ns_rel(g, 0);
     if (!lj_gc2_sweep_to_idle(g))
       lj_gc2_worker_wake(g);
     return;
@@ -5272,6 +5562,7 @@ void lj_gc2_cycle_to_idle(global_State *g)
   ** as preserve abort, while the exact GCSCAN sentinel remains owned. */
   gc2_activation_abort_reset(g, phase);
   if (phase == LJ_GC2_IDLE) {
+    gc2_jit_phase_gate_open_idle(g);
     gc2_phase_gate_release(g);
     gc2_worker_release(g);
     lj_gc2_worker_wake(g);
@@ -5290,11 +5581,13 @@ void lj_gc2_cycle_to_idle(global_State *g)
   gc2_sweep_root_cursor_rel(g, NULL);
   gc2_update_public_minor_gates(g);
   gc2_worker_release(g);
-  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+  (void)gc2_idle_transition_handshake(
+    g, gc2_idle_barrier_actions(g, 0));
   /* Forced close preserves queue membership for the next MARK cycle. This is
   ** conservative and avoids cross-owner queue/cursor mutation after IDLE. */
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
+  gc2_jit_phase_gate_open_idle(g);
   gc2_phase_gate_release(g);
 }
 
@@ -5533,22 +5826,89 @@ int lj_gc2_reclaim_context_held(global_State *g)
 static int gc2_idle_reclaim_enter(global_State *g)
 {
   uint32_t expect = 0;
-  if (!g || !gc2_reclaim_retired_ready(g) ||
-      !gc2_smr_reclaiming_cas(g, &expect, 1))
+  int gate_owned = 0;
+  if (!g)
+    return 0;
+  lj_assertG(gc2_idle_reclaim_gate_owned_tls == 0,
+	     "nested IDLE reclaim gate ownership");
+  if (gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN &&
+      gc2_idle_transition_gate_tls_g != g)
     return 0;
   if (!gc2_reclaim_retired_ready(g) ||
-      gc2_smr_readers_acq(g) != 0 ||
-      !gc2_reclaim_tls_enter(g)) {
-    gc2_smr_reclaiming_rel(g, 0);
+      !gc2_smr_reclaiming_cas(g, &expect, 1))
     return 0;
+  /* smr_reclaiming excludes a new worker claim. Own the IDLE native-entry
+  ** closure with an exact 1->0 CAS: a zero gate may instead belong to a MARK
+  ** admission which raced our initial readiness sample, and this reclaimer
+  ** must neither destroy behind nor reopen that actor's closure. */
+  if (gc2_jit_phase_gate_acq(g) == 0 &&
+      gc2_idle_transition_gate_tls_g == g &&
+      gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN) {
+    /* The transition owner retains gate0 and GCSCAN around this same-thread
+    ** callback. Repeat the SC fence before the nested zero-active proof, but
+    ** do not claim permission to reopen its gate. */
+  } else {
+    expect = 1;
+    if (!gc2_jit_phase_gate_cas(g, &expect, 0))
+      goto fail_unowned;
+    gate_owned = 1;
+    gc2_jit_sweep_yield_until_ns_rel(g, 0);
   }
+  la_fence_seq();
+  /* The SC fence pairs with every x64 intent publication/recheck. Therefore a
+  ** late entry either rejected the owned close or is visible here before any
+  ** retired string/table/ctype/trace/mcode body can be released. */
+  if (!gc2_reclaim_retired_ready(g) ||
+      gc2_smr_readers_acq(g) != 0 || lj_tg_any_jit_active(g) ||
+      !gc2_reclaim_tls_enter(g))
+    goto fail_gate;
+  gc2_idle_reclaim_gate_owned_tls = (uint32_t)gate_owned;
+  gc2_idle_reclaim_test_pause_after_jit_quiescence();
   return 1;
+
+fail_gate:
+  /* Reopen only our own still-IDLE closure while smr_reclaiming continues to
+  ** exclude MARK worker admission. A newly published request deliberately
+  ** inherits the closed gate and will be retried after this word is released. */
+  if (gate_owned && gc2_reclaim_retired_ready(g) &&
+      gc2_cycle_leader_acq(g) == 0) {
+    uint32_t closed = 0;
+    gc2_jit_sweep_displaced_rel(g, 0);
+    gc2_jit_sweep_yield_until_ns_rel(g, 0);
+    (void)gc2_jit_phase_gate_cas(g, &closed, 1);
+  }
+fail_unowned:
+  gc2_smr_reclaiming_rel(g, 0);
+  if (gc2_cycle_leader_acq(g) != 0)
+    lj_gc2_worker_wake(g);
+  return 0;
 }
 
 static void gc2_idle_reclaim_leave(global_State *g)
 {
+  uint32_t request;
+  uint32_t gate_owned = gc2_idle_reclaim_gate_owned_tls;
+  lj_assertG(gc2_jit_phase_gate_acq(g) == 0,
+	     "IDLE reclaim scope outlived owned closed JIT gate");
+  /* Reopen before dropping smr_reclaiming, so no MARK worker can close the
+  ** same binary gate between our eligibility check and owned 0->1 CAS. A
+  ** pending request retains closure; its later worker performs MARK admission. */
+  request = gc2_cycle_leader_acq(g);
+  if (gate_owned && gc2_reclaim_retired_ready(g) && request == 0) {
+    uint32_t closed = 0;
+    gc2_jit_sweep_displaced_rel(g, 0);
+    gc2_jit_sweep_yield_until_ns_rel(g, 0);
+    (void)gc2_jit_phase_gate_cas(g, &closed, 1);
+  }
+  if (!gate_owned)
+    lj_assertG(gc2_idle_transition_gate_tls_g == g &&
+	       request == LJ_THREAD_GCSCAN,
+	       "borrowed IDLE reclaim escaped transition owner");
+  gc2_idle_reclaim_gate_owned_tls = 0;
   gc2_reclaim_tls_leave(g);
   gc2_smr_reclaiming_rel(g, 0);
+  if (request != 0 || gc2_cycle_leader_acq(g) != 0)
+    lj_gc2_worker_wake(g);
 }
 
 #if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
@@ -16094,6 +16454,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
   uint32_t phase, n = 0, converted = 0, recovered = 0, weak = 0, sweep = 0;
   uint32_t finalizer = 0;
   uint32_t total;
+  int sweep_gate_closed = 0;
   if (progress)
     *progress = 0;
   if (!g || limit == 0)
@@ -16143,6 +16504,30 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
     return 0;
   }
   if (phase == LJ_GC2_SWEEP) {
+    if (gc2_sweep_bridge_ready_acq(g)) {
+      /* A previous reclaim quantum which displaced native execution grants a
+      ** bounded native scheduling turn. Returning zero is deliberate: the
+      ** parked worker backs off, while an interpreter driver exhausts its
+      ** bounded step loop and reaches JLOOP dispatch. The deadline also bounds
+      ** a continuously running trace before the next reclaim quantum. */
+      if (gc2_jit_sweep_turn_deferred(g)) {
+	gc2_worker_release(g);
+	return 0;
+      }
+      gc2_jit_phase_gate_close(g);
+      if (lj_tg_any_jit_active(g)) {
+	/* Gate closure is itself the asynchronous exit request. Never wait on
+	** jit_base: a blocking FFI call simply defers this reclaim quantum. */
+	gc2_jit_sweep_displaced_rel(g, 1);
+	gc2_worker_release(g);
+	return 0;
+      }
+      sweep_gate_closed = 1;
+      if (gc2_phase_acq(g) != LJ_GC2_SWEEP) {
+	gc2_worker_release(g);
+	return 0;
+      }
+    }
     sweep = gc2_worker_sweep_progress(g, limit);
   } else {
     while (n + converted + recovered < limit) {
@@ -16191,6 +16576,8 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
     gc2_worker_idle_declares_add(g, 1);
   if (progress)
     *progress = total > limit ? limit : total;
+  if (sweep_gate_closed && gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    gc2_jit_phase_gate_open_sweep(g, 0);
   gc2_worker_release(g);
   return total > limit ? limit : total;  /* 05 section 5.6.3 bounded progress. */
 }
