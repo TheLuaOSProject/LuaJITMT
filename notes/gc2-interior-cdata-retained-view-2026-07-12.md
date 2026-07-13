@@ -369,7 +369,13 @@ in normal and assertion/paranoia builds; see
    body-SMR/registry gates. Its current omission is explicitly temporary and
    does not permit the old collector to run.
 
-The focused JIT/cdata race remains a `b1.2.0` blocker.  On 2026-07-12 exhaustive
-FFI-side-structure coverage, every-allocation-site fault injection, bounded
-HugeTab maintenance, and custom-allocator restoration were sequenced into
-`b1.2.1`; see `b1.2.0-release-gate-2026-07-12.md`.
+The focused JIT/cdata race was originally retained as a `b1.2.0` blocker. On
+2026-07-13 the narrower functionality-beta scope reclassified the missing
+deterministic allocation-to-snapshot pause as b1.2.1 adversarial coverage debt:
+it is not a known failing path, and real traced CNEW/CNEWI plus the generic
+active-native root protocol remain in the b1.2.0 gate. The final release tree
+must still pass traced CNEW under the combined sanitizer/stress run and must
+not claim exhaustive JIT/FFI race coverage. Exhaustive FFI-side-structure
+coverage, every-allocation-site fault injection, bounded HugeTab maintenance,
+and custom-allocator restoration also remain sequenced into `b1.2.1`; see
+`b1.2.0-release-gate-2026-07-12.md`.
