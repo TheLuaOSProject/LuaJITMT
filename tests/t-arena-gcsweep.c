@@ -88,6 +88,117 @@ static uint64_t sweep_classifier_rand(uint64_t *state)
   return x;
 }
 
+static uint64_t selected_cas_hook_mask;
+static uint64_t selected_cas_hook_bits;
+
+static void selected_cas_mutate_hook(uint64_t *word)
+{
+  uint64_t old = la_load64_acq(word);
+  la_store64_rel(word,
+	(old & ~selected_cas_hook_mask) | selected_cas_hook_bits);
+}
+
+static void test_selected_lane_cas(void)
+{
+  const uint64_t lifetime_lsb = UINT64_C(0x1111111111111111);
+  const uint64_t sweep_lsb = UINT64_C(0x5555555555555555);
+  uint32_t lane;
+
+  for (lane = 0; lane < 16u; lane++) {
+    uint32_t shift = lane << 2;
+    uint64_t lsb = (uint64_t)1 << shift;
+    uint64_t mask = UINT64_C(0xf) << shift;
+    uint64_t word = (UINT64_C(0x2222222222222222) & ~mask) | lsb;
+    uint64_t expected = (word & ~mask) |
+	((uint64_t)LJ_ARENA_LIFETIME_DESTRUCT << shift);
+    assert(lj_gc_test_lifetime_selected_cas(&word, lsb,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT));
+    assert(word == expected);
+  }
+  for (lane = 0; lane < 32u; lane++) {
+    uint32_t shift = lane << 1;
+    uint64_t lsb = (uint64_t)1 << shift;
+    uint64_t mask = UINT64_C(3) << shift;
+    uint64_t word = UINT64_C(0x5555555555555555) & ~mask;
+    uint64_t expected = word | mask;
+    assert(lj_gc_test_sweep_selected_cas(&word, lsb,
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
+    assert(word == expected);
+  }
+
+  {
+    uint64_t word = lifetime_lsb;
+    assert(lj_gc_test_lifetime_selected_cas(&word, lifetime_lsb,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT));
+    assert(word == UINT64_C(0x4444444444444444));
+  }
+  {
+    uint64_t word = 0;
+    assert(lj_gc_test_sweep_selected_cas(&word, sweep_lsb,
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
+    assert(word == ~(uint64_t)0);
+  }
+
+  /* One selected disagreement changes no selected lane. */
+  {
+    uint64_t lanes = UINT64_C(1) | (UINT64_C(1) << 60);
+    uint64_t word = UINT64_C(1) |
+	((uint64_t)LJ_ARENA_LIFETIME_RESCUE << 60);
+    uint64_t before = word;
+    assert(!lj_gc_test_lifetime_selected_cas(&word, lanes,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT));
+    assert(word == before);
+  }
+
+  /* A selected mask may contain only the low bit of each packed lane. */
+  {
+    uint64_t lifetime = LJ_ARENA_LIFETIME_LIVE;
+    uint64_t sweep = 0;
+    assert(!lj_gc_test_lifetime_selected_cas(&lifetime, UINT64_C(2),
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT));
+    assert(!lj_gc_test_sweep_selected_cas(&sweep, UINT64_C(2),
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
+    assert(lifetime == LJ_ARENA_LIFETIME_LIVE && sweep == 0);
+  }
+
+  /* Deterministically alter an unrelated lane after the helper's load. Its
+  ** losing CAS must rebuild around that lane and preserve it exactly. */
+  {
+    uint64_t word = LJ_ARENA_LIFETIME_LIVE;
+    selected_cas_hook_mask = UINT64_C(0xf) << 60;
+    selected_cas_hook_bits = (uint64_t)LJ_ARENA_LIFETIME_MUTATING << 60;
+    lj_gc_test_set_selected_cas_hook(selected_cas_mutate_hook);
+    assert(lj_gc_test_lifetime_selected_cas(&word, UINT64_C(1),
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT));
+    lj_gc_test_set_selected_cas_hook(NULL);
+    assert(word == ((uint64_t)LJ_ARENA_LIFETIME_DESTRUCT |
+	((uint64_t)LJ_ARENA_LIFETIME_MUTATING << 60)));
+  }
+  {
+    uint64_t word = 0;
+    selected_cas_hook_mask = UINT64_C(3);
+    selected_cas_hook_bits = LJ_ARENA_SWEEP_LIVE;
+    lj_gc_test_set_selected_cas_hook(selected_cas_mutate_hook);
+    assert(lj_gc_test_sweep_selected_cas(&word, UINT64_C(1) << 62,
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
+    lj_gc_test_set_selected_cas_hook(NULL);
+    assert(word == ((UINT64_C(3) << 62) | LJ_ARENA_SWEEP_LIVE));
+  }
+
+  /* Altering a selected lane after the load makes the retry reject the whole
+  ** selected set without stealing the new RESCUE state. */
+  {
+    uint64_t word = LJ_ARENA_LIFETIME_LIVE;
+    selected_cas_hook_mask = UINT64_C(0xf);
+    selected_cas_hook_bits = LJ_ARENA_LIFETIME_RESCUE;
+    lj_gc_test_set_selected_cas_hook(selected_cas_mutate_hook);
+    assert(!lj_gc_test_lifetime_selected_cas(&word, UINT64_C(1),
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT));
+    lj_gc_test_set_selected_cas_hook(NULL);
+    assert(word == LJ_ARENA_LIFETIME_RESCUE);
+  }
+}
+
 static void test_packed_unmarked_classifier(void)
 {
   static const uint32_t boundaries[] = { 0u, 31u, 32u, 63u };
@@ -539,6 +650,179 @@ static GCSize typed_dtor_finish_target(TypedDtorFixture *fx, GCArena *other)
   return total_after_target;
 }
 
+#define DENSE_TYPED_MAX_ENTRIES 192u
+
+typedef struct DenseTypedEntry {
+  GCobj *o;
+  GCArena *a;
+  GCSize size;
+  uint32_t cell;
+  uint32_t kind;
+} DenseTypedEntry;
+
+typedef struct DenseTypedFixture {
+  lua_State *L;
+  global_State *g;
+  TGState *tg;
+  GCArena *a;
+  DenseTypedEntry selected[6];
+  uint32_t nselected;
+} DenseTypedFixture;
+
+static void dense_typed_fixture_init(DenseTypedFixture *fx,
+	uint32_t wanted)
+{
+  DenseTypedEntry entries[DENSE_TYPED_MAX_ENTRIES];
+  lua_State *L = luaL_newstate();
+  uint32_t nentry = 0;
+  uint32_t i, j;
+  int base;
+
+  memset(fx, 0, sizeof(*fx));
+  assert(L != NULL);
+  luaL_openlibs(L);
+  assert(luaL_dostring(L,
+    "function dense_typed_make1(v)\n"
+    "  local x = v\n"
+    "  return function() x = x + 1; return x end\n"
+    "end\n"
+    "collectgarbage('collect')\n"
+    "collectgarbage('stop')\n") == LUA_OK);
+  assert(wanted == 5u || wanted == 6u);
+  assert(lua_checkstack(L, 128));
+  base = lua_gettop(L);
+  for (i = 0; i < DENSE_TYPED_MAX_ENTRIES / 2u; i++) {
+    GCfunc *fn;
+    GCupval *uv;
+    lua_getglobal(L, "dense_typed_make1");
+    assert(tvisfunc(L->top - 1));
+    lua_pushnumber(L, (lua_Number)(i + 1u));
+    lua_call(L, 1, 1);
+    assert(tvisfunc(L->top - 1));
+    fn = funcV(L->top - 1);
+    assert(isluafunc(fn) && lj_funcL_nupvalues(&fn->l) == 1u);
+    uv = func_uv_acq(&fn->l, 0);
+    assert(uv != NULL && uv->closed && uvval(uv) == &uv->tv);
+
+    entries[nentry].o = obj2gco(fn);
+    entries[nentry].a = lj_arena_of(fn);
+    entries[nentry].cell = lj_arena_cellof(fn);
+    entries[nentry].kind = LJ_ARENA_DTOR_LFUNC1;
+    entries[nentry].size = (GCSize)sizeLfunc(1);
+    nentry++;
+    entries[nentry].o = obj2gco(uv);
+    entries[nentry].a = lj_arena_of(uv);
+    entries[nentry].cell = lj_arena_cellof(uv);
+    entries[nentry].kind = LJ_ARENA_DTOR_CLOSED_UV;
+    entries[nentry].size = (GCSize)sizeof(GCupval);
+    nentry++;
+  }
+  assert(nentry == DENSE_TYPED_MAX_ENTRIES);
+
+  for (i = 0; i < nentry && fx->nselected == 0; i++) {
+    uint32_t count = 0;
+    uint32_t kinds = 0;
+    for (j = 0; j < nentry; j++) {
+      if (entries[j].a == entries[i].a &&
+	  (entries[j].cell >> 4) == (entries[i].cell >> 4)) {
+	count++;
+	kinds |= entries[j].kind;
+      }
+    }
+    if (count >= wanted &&
+	(kinds & (LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV)) ==
+	  (LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV)) {
+      for (j = 0; j < nentry && fx->nselected < wanted; j++) {
+	if (entries[j].a == entries[i].a &&
+	    (entries[j].cell >> 4) == (entries[i].cell >> 4))
+	  fx->selected[fx->nselected++] = entries[j];
+      }
+      fx->a = entries[i].a;
+    }
+  }
+  assert(fx->nselected == wanted && fx->a != NULL);
+  for (i = 0; i < fx->nselected; i++) {
+    assert(fx->selected[i].a == fx->a);
+    assert((fx->selected[i].cell >> 4) ==
+	   (fx->selected[0].cell >> 4));
+    assert(lj_arena_dtor_kind_acq(fx->a, fx->selected[i].cell) ==
+	   fx->selected[i].kind);
+    assert(lj_arena_root_state_acq(fx->a, fx->selected[i].cell) ==
+	   LJ_ARENA_ROOT_NONE);
+  }
+
+  /* Drop every generated closure root only after the exact selected group has
+  ** been captured. GC is stopped, so the sidecars/bodies remain stable until
+  ** the explicit sweep fixture takes ownership. */
+  lua_settop(L, base);
+  fx->L = L;
+  fx->g = G(L);
+  fx->tg = G2TG(fx->g);
+  assert(fx->tg != NULL && fx->tg == fx->g->main_tg);
+}
+
+static void test_typed_dtor_dense_batch(uint32_t wanted)
+{
+  DenseTypedFixture fx;
+  TypedDtorFixture bridge;
+  TGAlloc *alloc;
+  GCArena *other;
+  GCSize total0, total1, selected_size = 0;
+  uint32_t w, i;
+
+  dense_typed_fixture_init(&fx, wanted);
+  alloc = &fx.tg->alloc;
+  assert(lj_arena_alloc_prepare_sweep_kind(
+	alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(arena_list_contains(
+	alloc->needsweep[LJ_ARENAK_TRAVERSABLE], fx.a));
+  arena_needsweep_move_head(alloc, LJ_ARENAK_TRAVERSABLE, fx.a);
+  for (w = 0; w < LJ_ARENA_WORDS; w++)
+    (void)la_or64_rlx(&fx.a->mark[w], la_load64_acq(&fx.a->block[w]));
+  for (i = 0; i < fx.nselected; i++) {
+    lj_arena_bm_clear(fx.a->mark, fx.selected[i].cell);
+    selected_size += fx.selected[i].size;
+  }
+  memset(&bridge, 0, sizeof(bridge));
+  bridge.g = fx.g;
+  bridge.tg = fx.tg;
+  typed_dtor_publish_ready_sweep(&bridge);
+  total0 = lj_gc_total_load(fx.g);
+  lj_gc_test_sweep_batch_stats_reset();
+  assert(lj_gc2_test_sweep_owner_progress(fx.g, fx.tg, 1u) == 1u);
+  assert(fx.tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == fx.a);
+  assert(lj_gc_test_sweep_batch_commits() == 1u);
+  assert(lj_gc_test_sweep_batch_objects() == wanted);
+  total1 = lj_gc_total_load(fx.g);
+  assert(total1 == total0 - selected_size);
+  assert(lj_arena_reclaim_deferred_acq(fx.a) == 0);
+  for (i = 0; i < fx.nselected; i++) {
+    uint32_t cell = fx.selected[i].cell;
+    assert(lj_arena_sweep_state_acq(fx.a, cell) ==
+	   LJ_ARENA_SWEEP_FREEING);
+    assert(lj_arena_lifetime_state_acq(fx.a, cell) ==
+	   LJ_ARENA_LIFETIME_FREE);
+    assert(lj_arena_bm_get(fx.a->block, cell));
+    assert(lj_arena_ready_get(fx.a, cell));
+    assert(lj_arena_dtor_kind_acq(fx.a, cell) == fx.selected[i].kind);
+  }
+
+  other = alloc->needsweep[LJ_ARENAK_TRAVERSABLE];
+  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  memset(&bridge, 0, sizeof(bridge));
+  bridge.g = fx.g;
+  bridge.tg = fx.tg;
+  bridge.a = fx.a;
+  assert(typed_dtor_finish_target(&bridge, other) == total1);
+  for (i = 0; i < fx.nselected; i++) {
+    assert(!lj_arena_bm_get(fx.a->block, fx.selected[i].cell));
+    assert(!lj_arena_ready_get(fx.a, fx.selected[i].cell));
+    assert(lj_arena_dtor_kind_acq(fx.a, fx.selected[i].cell) ==
+	   LJ_ARENA_DTOR_NONE);
+  }
+  lua_close(fx.L);
+}
+
 static void test_typed_dtor_pregrace_exclusive(void)
 {
   TypedDtorFixture fx;
@@ -556,9 +840,12 @@ static void test_typed_dtor_pregrace_exclusive(void)
   memcpy(uvbody, fx.uv, fx.uvsize);
   typed_dtor_drop_fixture_roots(&fx);
   total0 = lj_gc_total_load(fx.g);
+  lj_gc_test_sweep_batch_stats_reset();
   other = typed_dtor_prepare_target(&fx,
 	LJ_ARENA_DTOR_LFUNC0|LJ_ARENA_DTOR_LFUNC1|
 	LJ_ARENA_DTOR_CLOSED_UV);
+  assert(lj_gc_test_sweep_batch_commits() == 2u);
+  assert(lj_gc_test_sweep_batch_objects() == 3u);
 
   total1 = lj_gc_total_load(fx.g);
   assert(total1 == total0 - fx.f0size - fx.f1size - fx.uvsize);
@@ -618,8 +905,11 @@ static void test_typed_dtor_no_adjacency_match(void)
   typed_dtor_drop_fixture_roots(&fx);
   lj_arena_bm_set(fx.a->cdata, fx.uvcell);
   total0 = lj_gc_total_load(fx.g);
+  lj_gc_test_sweep_batch_stats_reset();
   other = typed_dtor_prepare_target(&fx,
 	LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV);
+  assert(lj_gc_test_sweep_batch_commits() == 0);
+  assert(lj_gc_test_sweep_batch_objects() == 0);
 
   /* The closure's immutable identity is sufficient by itself. Its adjacent
   ** upvalue disagreement must not force a pair match or veto this destructor. */
@@ -648,6 +938,168 @@ static void test_typed_dtor_no_adjacency_match(void)
   assert(!lj_arena_bm_get(fx.a->block, fx.uvcell));
   assert(lj_arena_dtor_kind_acq(fx.a, fx.f1cell) == LJ_ARENA_DTOR_NONE);
   assert(lj_arena_dtor_kind_acq(fx.a, fx.uvcell) == LJ_ARENA_DTOR_NONE);
+  lua_close(fx.L);
+}
+
+enum {
+  TYPED_BATCH_REJECT_FIXED = 1,
+  TYPED_BATCH_REJECT_HEADER = 2
+};
+
+static void test_typed_dtor_batch_body_reject(uint32_t mode)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  GCSize total0, after_scalar;
+  uint8_t saved_gct = 0;
+
+  typed_dtor_fixture_init(&fx);
+  typed_dtor_drop_fixture_roots(&fx);
+  if (mode == TYPED_BATCH_REJECT_FIXED) {
+    lj_obj_addgcflags_atomic(obj2gco(fx.f1), LJ_GC_FIXED|LJ_GC_SFIXED);
+  } else {
+    assert(mode == TYPED_BATCH_REJECT_HEADER);
+    saved_gct = la_load8_acq(&fx.uv->gct);
+    la_store8_rel(&fx.uv->gct, 0);
+  }
+  total0 = lj_gc_total_load(fx.g);
+  lj_gc_test_sweep_batch_stats_reset();
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV);
+
+  /* Both starts were selected and claimed together. One invalid body makes
+  ** the batch dispatch none; scalar fallback can still destroy the independent
+  ** valid peer and retires the rejected start for post-grace validation. */
+  assert(lj_gc_test_sweep_batch_commits() == 0);
+  assert(lj_gc_test_sweep_batch_objects() == 0);
+  if (mode == TYPED_BATCH_REJECT_FIXED) {
+    assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	   LJ_ARENA_SWEEP_RETIRED);
+    assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	   LJ_ARENA_SWEEP_FREEING);
+    after_scalar = total0 - fx.uvsize;
+    lj_obj_cleargcflags_atomic(obj2gco(fx.f1), LJ_GC_FIXED|LJ_GC_SFIXED);
+  } else {
+    assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	   LJ_ARENA_SWEEP_FREEING);
+    assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	   LJ_ARENA_SWEEP_RETIRED);
+    after_scalar = total0 - fx.f1size;
+    la_store8_rel(&fx.uv->gct, saved_gct);
+  }
+  assert(lj_gc_total_load(fx.g) == after_scalar);
+  assert(lj_arena_reclaim_deferred_acq(fx.a) == 1u);
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f1size - fx.uvsize);
+  lua_close(fx.L);
+}
+
+static void test_typed_dtor_batch_extent_reject(void)
+{
+  TypedDtorFixture fx;
+  TGAlloc *alloc;
+  GCArena *other;
+  GCSize total0;
+
+  typed_dtor_fixture_init(&fx);
+  typed_dtor_drop_fixture_roots(&fx);
+  alloc = &fx.tg->alloc;
+  assert(lj_arena_alloc_prepare_sweep_kind(
+	alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(arena_list_contains(
+	alloc->needsweep[LJ_ARENAK_TRAVERSABLE], fx.a));
+  arena_needsweep_move_head(alloc, LJ_ARENAK_TRAVERSABLE, fx.a);
+  typed_dtor_select_dead(&fx,
+	LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV);
+  assert(fx.f1cell + 1u < fx.uvcell);
+  lj_arena_bm_set(fx.a->mark, fx.f1cell + 1u);
+  typed_dtor_publish_ready_sweep(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  lj_gc_test_sweep_batch_stats_reset();
+  assert(lj_gc2_test_sweep_owner_progress(fx.g, fx.tg, 1u) == 1u);
+  assert(fx.tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == fx.a);
+
+  /* The interior mark shortens the exact closure extent, so only the valid UV
+  ** is batch-admitted. The closure takes unchanged scalar retirement. */
+  assert(lj_gc_test_sweep_batch_commits() == 1u);
+  assert(lj_gc_test_sweep_batch_objects() == 1u);
+  assert(lj_gc_total_load(fx.g) == total0 - fx.uvsize);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_SWEEP_FREEING);
+  assert(lj_arena_reclaim_deferred_acq(fx.a) == 1u);
+
+  lj_arena_bm_clear(fx.a->mark, fx.f1cell + 1u);
+  other = alloc->needsweep[LJ_ARENAK_TRAVERSABLE];
+  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f1size - fx.uvsize);
+  lua_close(fx.L);
+}
+
+static GCobj *typed_batch_recovery_target;
+static uint32_t typed_batch_recovery_fired;
+static int typed_batch_recovery_result;
+
+static void typed_batch_recovery_hook(global_State *g, GCArena *a,
+	uint32_t path)
+{
+  (void)a;
+  if (path == LJ_GC_SWEEP_BATCH_TEST_AFTER_CLAIM &&
+      !typed_batch_recovery_fired) {
+    typed_batch_recovery_fired = 1;
+    lj_gc_test_set_sweep_batch_hook(NULL);
+    typed_batch_recovery_result =
+      lj_gc2_test_recovery_publish(g, typed_batch_recovery_target);
+  }
+}
+
+static void test_typed_dtor_batch_recovery_cancel(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  GCSize total0;
+
+  typed_dtor_fixture_init(&fx);
+  typed_dtor_drop_fixture_roots(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  typed_batch_recovery_target = obj2gco(fx.f1);
+  typed_batch_recovery_fired = 0;
+  typed_batch_recovery_result = 0;
+  lj_gc_test_sweep_batch_stats_reset();
+  lj_gc_test_set_sweep_batch_hook(typed_batch_recovery_hook);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV);
+  lj_gc_test_set_sweep_batch_hook(NULL);
+
+  /* Recovery reserves durable work, steals one DESTRUCT lane, and restores it
+  ** to LIVE. The batch must commit no lane; rollback restores only the peer's
+  ** still-owned DESTRUCT and scalar fallback retires both without body access. */
+  assert(typed_batch_recovery_fired);
+  assert(typed_batch_recovery_result == 1);
+  assert(lj_gc_test_sweep_batch_commits() == 0);
+  assert(lj_gc_test_sweep_batch_objects() == 0);
+  assert(lj_gc_total_load(fx.g) == total0);
+  assert(lj_arena_recovery_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_reclaim_deferred_acq(fx.a) == 2u);
+
+  assert(gc2_recovery_items_acq(fx.g) == 1u);
+  assert(lj_gc2_test_recovery_drain(fx.g, 1u) == 1u);
+  assert(gc2_recovery_items_acq(fx.g) == 0);
+  /* Recovery deliberately preserves the selected object for this cycle, so
+  ** this target need not reach reclaimed publication. Reattach the unrelated
+  ** NEEDSWEEP suffix and let joined-world lua_close drain the live quarantine. */
+  fx.tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = other;
   lua_close(fx.L);
 }
 
@@ -1475,6 +1927,7 @@ int main(void)
   LJHugeInfo hugehi;
   GCArena *fna, *arra;
 
+  test_selected_lane_cas();
   test_packed_unmarked_classifier();
   assert(L != NULL);
   luaL_openlibs(L);
@@ -1918,7 +2371,13 @@ int main(void)
   test_boundary_lazy_sweep();
   test_boundary_lazy_sweep_extra_tg();
   test_typed_dtor_pregrace_exclusive();
+  test_typed_dtor_dense_batch(5u);
+  test_typed_dtor_dense_batch(6u);
   test_typed_dtor_no_adjacency_match();
+  test_typed_dtor_batch_body_reject(TYPED_BATCH_REJECT_FIXED);
+  test_typed_dtor_batch_body_reject(TYPED_BATCH_REJECT_HEADER);
+  test_typed_dtor_batch_extent_reject();
+  test_typed_dtor_batch_recovery_cancel();
   test_typed_dtor_denied_capability_retires(0);
   test_typed_dtor_denied_capability_retires(1);
   printf("t-arena-gcsweep OK: traversable runtime sweep bridge verified\n");

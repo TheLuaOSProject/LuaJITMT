@@ -162,6 +162,12 @@ enum {
   LJ_GC_ROOT_STATE_TEST_UNLINKING = 2,
   LJ_GC_ROOT_STATE_TEST_SMALL_REANCHOR_LINKED = 3
 };
+enum {
+  LJ_GC_SWEEP_BATCH_TEST_AFTER_CLAIM = 1,
+  LJ_GC_SWEEP_BATCH_TEST_AFTER_FIRST_VALIDATE = 2,
+  LJ_GC_SWEEP_BATCH_TEST_AFTER_BODY = 3,
+  LJ_GC_SWEEP_BATCH_TEST_BEFORE_FINAL_VALIDATE = 4
+};
 #ifdef LJ_GC2_TEST_HELPERS
 enum {
   LJ_GC_ROOT_PENDING_TEST_ORDINARY = 1,
@@ -189,6 +195,18 @@ LJ_FUNC void lj_gc_test_sweep_partition64(uint64_t block, uint64_t mark,
 	uint64_t p2, uint64_t p3, uint64_t valid, uint64_t *pinp,
 	uint64_t *candidatep);
 LJ_FUNC uint64_t lj_gc_test_sweep_bulk_pin64(uint64_t *mark, uint64_t pin);
+typedef void (*LJGcSelectedCasHook)(uint64_t *word);
+LJ_FUNC void lj_gc_test_set_selected_cas_hook(LJGcSelectedCasHook hook);
+LJ_FUNC int lj_gc_test_lifetime_selected_cas(uint64_t *word,
+	uint64_t lane_lsb, uint32_t from, uint32_t to);
+LJ_FUNC int lj_gc_test_sweep_selected_cas(uint64_t *word,
+	uint64_t lane_lsb, uint32_t from, uint32_t to);
+typedef void (*LJGcSweepBatchHook)(global_State *g, GCArena *a,
+	uint32_t path);
+LJ_FUNC void lj_gc_test_set_sweep_batch_hook(LJGcSweepBatchHook hook);
+LJ_FUNC void lj_gc_test_sweep_batch_stats_reset(void);
+LJ_FUNC uint32_t lj_gc_test_sweep_batch_commits(void);
+LJ_FUNC uint32_t lj_gc_test_sweep_batch_objects(void);
 /* Targeted exact-reclaimer entry for destructor race fixtures. The caller must
 ** hold the GC2 reclaim scope and must already have unlinked all semantic and
 ** ownership-spine roots for the THREAD. */

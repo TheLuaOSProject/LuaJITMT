@@ -2042,6 +2042,103 @@ static LJ_AINLINE uint64_t gc2_sweep_bulk_pin64(uint64_t *mark,
 }
 
 #ifdef LJ_GC2_TEST_HELPERS
+static LJGcSelectedCasHook gc2_test_selected_cas_hook;
+#endif
+
+/* Atomically replace all selected packed lanes or none. A CAS loss caused by
+** an unrelated lane rebuilds from the returned word and preserves that lane;
+** a selected-lane disagreement returns without modifying any selected lane. */
+static LJ_AINLINE int gc2_sweep_selected_cas(uint64_t *word,
+	uint64_t lane_lsb, uint32_t lane_bits, uint32_t from, uint32_t to)
+{
+  uint32_t lane_value_mask;
+  uint64_t lane_lsb_mask, selected, expected, replacement, old;
+  if (!word || lane_lsb == 0)
+    return 0;
+  if (lane_bits == 4u)
+    lane_lsb_mask = UINT64_C(0x1111111111111111);
+  else if (lane_bits == 2u)
+    lane_lsb_mask = UINT64_C(0x5555555555555555);
+  else
+    return 0;
+  if ((lane_lsb & ~lane_lsb_mask) != 0)
+    return 0;
+  lane_value_mask = ((uint32_t)1u << lane_bits) - 1u;
+  if (from > lane_value_mask || to > lane_value_mask)
+    return 0;
+  selected = lane_lsb * lane_value_mask;
+  expected = lane_lsb * from;
+  replacement = lane_lsb * to;
+  old = la_load64_acq(word);
+#ifdef LJ_GC2_TEST_HELPERS
+  if (gc2_test_selected_cas_hook)
+    gc2_test_selected_cas_hook(word);
+#endif
+  for (;;) {
+    uint64_t next;
+    if ((old & selected) != expected)
+      return 0;
+    next = (old & ~selected) | replacement;
+    if (la_cas64(word, &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE int gc2_sweep_lifetime_selected_cas(uint64_t *word,
+	uint64_t lane_lsb, uint32_t from, uint32_t to)
+{
+  return gc2_sweep_selected_cas(word, lane_lsb, 4u, from, to);
+}
+
+static LJ_AINLINE int gc2_sweep_sweep_selected_cas(uint64_t *word,
+	uint64_t lane_lsb, uint32_t from, uint32_t to)
+{
+  return gc2_sweep_selected_cas(word, lane_lsb, 2u, from, to);
+}
+
+#ifdef LJ_GC2_TEST_HELPERS
+static LJGcSweepBatchHook gc2_test_sweep_batch_hook;
+static uint32_t gc2_test_sweep_batch_commit_count;
+static uint32_t gc2_test_sweep_batch_object_count;
+
+void lj_gc_test_set_selected_cas_hook(LJGcSelectedCasHook hook)
+{
+  gc2_test_selected_cas_hook = hook;
+}
+
+int lj_gc_test_lifetime_selected_cas(uint64_t *word, uint64_t lane_lsb,
+	uint32_t from, uint32_t to)
+{
+  return gc2_sweep_lifetime_selected_cas(word, lane_lsb, from, to);
+}
+
+int lj_gc_test_sweep_selected_cas(uint64_t *word, uint64_t lane_lsb,
+	uint32_t from, uint32_t to)
+{
+  return gc2_sweep_sweep_selected_cas(word, lane_lsb, from, to);
+}
+
+void lj_gc_test_set_sweep_batch_hook(LJGcSweepBatchHook hook)
+{
+  gc2_test_sweep_batch_hook = hook;
+}
+
+void lj_gc_test_sweep_batch_stats_reset(void)
+{
+  la_store32_rel(&gc2_test_sweep_batch_commit_count, 0);
+  la_store32_rel(&gc2_test_sweep_batch_object_count, 0);
+}
+
+uint32_t lj_gc_test_sweep_batch_commits(void)
+{
+  return la_load32_acq(&gc2_test_sweep_batch_commit_count);
+}
+
+uint32_t lj_gc_test_sweep_batch_objects(void)
+{
+  return la_load32_acq(&gc2_test_sweep_batch_object_count);
+}
+
 uint32_t lj_gc_test_sweep_nonwhite32(uint64_t sweep)
 {
   return gc2_sweep_nonwhite32(sweep);
@@ -2091,18 +2188,22 @@ static GCobj *gc2_sweep_dtor_obj(global_State *g, GCArena *a,
       (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)))
     return NULL;
   if (kind == LJ_ARENA_DTOR_CLOSED_UV) {
-    GCupval *uv = gco2uv(o);
+    GCupval *uv;
     size = (GCSize)sizeof(GCupval);
-    if (la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TUPVAL ||
-	!uv->closed || uvval(uv) != &uv->tv)
+    if (la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TUPVAL)
+      return NULL;
+    uv = gco2uv(o);
+    if (!uv->closed || uvval(uv) != &uv->tv)
       return NULL;
   } else if (kind == LJ_ARENA_DTOR_LFUNC0 ||
 	     kind == LJ_ARENA_DTOR_LFUNC1) {
-    GCfunc *fn = gco2func(o);
+    GCfunc *fn;
     MSize expected = kind == LJ_ARENA_DTOR_LFUNC1 ? 1u : 0u;
     size = (GCSize)sizeLfunc(expected);
-    if (la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TFUNC ||
-	!isluafunc(fn) || lj_funcL_nupvalues(&fn->l) != expected)
+    if (la_load8_acq(&o->gch.gct) != (uint8_t)~LJ_TFUNC)
+      return NULL;
+    fn = gco2func(o);
+    if (!isluafunc(fn) || lj_funcL_nupvalues(&fn->l) != expected)
       return NULL;
   } else {
     return NULL;
@@ -2384,6 +2485,215 @@ static int gc2_sweep_pregrace_destruct(global_State *g, GCArena *a,
   return LJ_GC_DESTRUCT_ACQUIRED;
 }
 
+#define GC2_SWEEP_PREGRACE_BATCH_MAX 16u
+
+typedef struct GC2SweepPregraceEntry {
+  GCobj *o;
+  uint32_t cell;
+  uint32_t end;
+  uint32_t kind;
+} GC2SweepPregraceEntry;
+
+typedef struct GC2SweepPregraceBatch {
+  GC2SweepPregraceEntry entry[GC2_SWEEP_PREGRACE_BATCH_MAX];
+  uint64_t cells;
+  uint64_t state_lsb;
+  uint64_t lifetime_lsb;
+  uint64_t dtor[LJ_ARENA_DTOR_PLANES];
+  uint64_t selected;
+  uint32_t bitmap_word;
+  uint32_t state_word;
+  uint32_t lifetime_word;
+  uint32_t n;
+} GC2SweepPregraceBatch;
+
+static LJ_AINLINE void gc2_sweep_pregrace_batch_test(global_State *g,
+	GCArena *a, uint32_t path)
+{
+#ifdef LJ_GC2_TEST_HELPERS
+  if (gc2_test_sweep_batch_hook)
+    gc2_test_sweep_batch_hook(g, a, path);
+#else
+  UNUSED(g); UNUSED(a); UNUSED(path);
+#endif
+}
+
+/* Reload and admit only exact fixed-layout starts. This does not read a body;
+** its extent snapshot remains protected by the already-held arena seal. */
+static void gc2_sweep_pregrace_batch_preflight(GCArena *a,
+	uint32_t bitmap_word, uint64_t candidates, uint64_t p0, uint64_t p1,
+	uint64_t p2, GC2SweepPregraceBatch *batch)
+{
+  uint32_t first_lane = lj_ffs64(candidates);
+  uint32_t first_cell = (bitmap_word << 6) + first_lane;
+  memset(batch, 0, sizeof(*batch));
+  batch->bitmap_word = bitmap_word;
+  batch->state_word = first_cell >> 5;
+  batch->lifetime_word = first_cell >> 4;
+  while (candidates) {
+    uint32_t lane = lj_ffs64(candidates);
+    uint64_t bit = (uint64_t)1 << lane;
+    uint32_t cell = (bitmap_word << 6) + lane;
+    uint32_t tentative_kind = (p0 & bit ? 1u : 0u) |
+	(p1 & bit ? 2u : 0u) | (p2 & bit ? 4u : 0u);
+    uint32_t kind = lj_arena_dtor_kind_acq(a, cell);
+    GCSize size = gc2_sweep_pregrace_dtor_size(kind);
+    uint32_t end;
+    uint32_t i;
+    int overlap = 0;
+    candidates &= candidates - 1u;
+    if ((cell >> 4) != batch->lifetime_word ||
+	kind != tentative_kind || !gc2_sweep_dtor_kind_supported(kind) ||
+	size == 0)
+      continue;
+    end = gc2_sweep_alloc_end(a, cell);
+    if (lj_arena_ncells(size) != end - cell ||
+	!gc2_sweep_pregrace_obj_ready(a, cell, end, kind,
+	  LJ_ARENA_LIFETIME_LIVE))
+      continue;
+    for (i = 0; i < batch->n; i++) {
+      GC2SweepPregraceEntry *entry = &batch->entry[i];
+      if (cell < entry->end && end > entry->cell) {
+	overlap = 1;
+	break;
+      }
+    }
+    if (overlap || batch->n == GC2_SWEEP_PREGRACE_BATCH_MAX)
+      continue;
+    {
+      GC2SweepPregraceEntry *entry = &batch->entry[batch->n++];
+      uint64_t state_lsb = (uint64_t)1 << ((cell & 31u) << 1);
+      uint64_t lifetime_lsb = (uint64_t)1 << ((cell & 15u) << 2);
+      entry->o = NULL;
+      entry->cell = cell;
+      entry->end = end;
+      entry->kind = kind;
+      batch->cells |= (uint64_t)1 << (cell & 63u);
+      batch->state_lsb |= state_lsb;
+      batch->lifetime_lsb |= lifetime_lsb;
+      batch->selected |= bit;
+      for (i = 0; i < LJ_ARENA_DTOR_PLANES; i++)
+	if (kind & ((uint32_t)1u << i))
+	  batch->dtor[i] |= (uint64_t)1 << (cell & 63u);
+    }
+  }
+}
+
+/* One exact packed predicate for every selected start. Extra unrelated lanes
+** are ignored, while any selected disagreement rejects the whole batch. */
+static LJ_AINLINE int gc2_sweep_pregrace_batch_ready(
+	const GCArena *a, const GC2SweepPregraceBatch *batch,
+	uint32_t expected_lifetime)
+{
+  uint64_t pair_mask = batch->state_lsb * 3u;
+  uint64_t lifetime_mask = batch->lifetime_lsb * 15u;
+  uint32_t i;
+  if (!a || batch->n == 0 ||
+      (la_load64_acq(&a->block[batch->bitmap_word]) & batch->cells) !=
+	batch->cells ||
+      (la_load64_acq(&a->mark[batch->bitmap_word]) & batch->cells) != 0 ||
+      (la_load64_acq(&a->sweep[batch->state_word]) & pair_mask) != 0 ||
+      (la_load64_acq(&a->ready[batch->bitmap_word]) & batch->cells) !=
+	batch->cells ||
+      (la_load64_acq(&a->root[batch->state_word]) & pair_mask) != 0 ||
+      (la_load64_acq(&a->recovery[batch->state_word]) & pair_mask) != 0 ||
+      (la_load64_acq(&a->lifetime[batch->lifetime_word]) &
+	lifetime_mask) != batch->lifetime_lsb * expected_lifetime ||
+      (la_load64_acq(&a->late[batch->bitmap_word]) & batch->cells) != 0)
+    return 0;
+  for (i = 0; i < LJ_ARENA_DTOR_PLANES; i++)
+    if ((la_load64_acq(&a->dtor[i][batch->bitmap_word]) & batch->cells) !=
+	batch->dtor[i])
+      return 0;
+  return 1;
+}
+
+static void gc2_sweep_pregrace_batch_restore(global_State *g, GCArena *a,
+	const GC2SweepPregraceBatch *batch)
+{
+  uint32_t i;
+  for (i = 0; i < batch->n; i++)
+    gc2_sweep_pregrace_claim_restore(g, a, batch->entry[i].cell);
+}
+
+/* Claim and commit one bounded lifetime-word transaction. A zero return means
+** no selected object was dispatched and every candidate remains eligible for
+** the unchanged scalar retirement/pin fallback. */
+static uint64_t gc2_sweep_pregrace_batch(global_State *g, GCArena *a,
+	uint32_t bitmap_word, uint64_t candidates, uint64_t p0, uint64_t p1,
+	uint64_t p2, int pregrace_owned)
+{
+  GC2SweepPregraceBatch batch;
+  uint32_t i;
+  if (!pregrace_owned || !g || !a || candidates == 0)
+    return 0;
+  gc2_sweep_pregrace_batch_preflight(
+    a, bitmap_word, candidates, p0, p1, p2, &batch);
+  if (batch.n == 0 ||
+      !gc2_sweep_pregrace_batch_ready(
+	a, &batch, LJ_ARENA_LIFETIME_LIVE) ||
+      !gc2_sweep_lifetime_selected_cas(
+	&a->lifetime[batch.lifetime_word], batch.lifetime_lsb,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT))
+    return 0;
+
+  gc2_sweep_pregrace_batch_test(
+    g, a, LJ_GC_SWEEP_BATCH_TEST_AFTER_CLAIM);
+  la_fence_seq();
+  if (!gc2_sweep_pregrace_quiet(g, a, pregrace_owned) ||
+      !gc2_sweep_pregrace_batch_ready(
+	a, &batch, LJ_ARENA_LIFETIME_DESTRUCT))
+    goto rollback;
+  gc2_sweep_pregrace_batch_test(
+    g, a, LJ_GC_SWEEP_BATCH_TEST_AFTER_FIRST_VALIDATE);
+
+  for (i = 0; i < batch.n; i++) {
+    GC2SweepPregraceEntry *entry = &batch.entry[i];
+    entry->o = gc2_sweep_dtor_obj(
+      g, a, entry->cell, entry->end, entry->kind, 0);
+    if (!entry->o)
+      goto rollback;
+  }
+  gc2_sweep_pregrace_batch_test(g, a, LJ_GC_SWEEP_BATCH_TEST_AFTER_BODY);
+
+  la_fence_seq();
+  gc2_sweep_pregrace_batch_test(
+    g, a, LJ_GC_SWEEP_BATCH_TEST_BEFORE_FINAL_VALIDATE);
+  if (!gc2_sweep_pregrace_quiet(g, a, pregrace_owned) ||
+      !gc2_sweep_pregrace_batch_ready(
+	a, &batch, LJ_ARENA_LIFETIME_DESTRUCT))
+    goto rollback;
+  if (!gc2_sweep_lifetime_selected_cas(
+	&a->lifetime[batch.lifetime_word], batch.lifetime_lsb,
+	LJ_ARENA_LIFETIME_DESTRUCT, LJ_ARENA_LIFETIME_FREE)) {
+    gc2_sweep_pregrace_batch_restore(g, a, &batch);
+    return 0;
+  }
+  if (LJ_UNLIKELY(!gc2_sweep_sweep_selected_cas(
+	&a->sweep[batch.state_word], batch.state_lsb,
+	LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING))) {
+    lj_assertG(0, "pre-grace batch lost selected WHITE commit");
+    abort();
+  }
+  for (i = 0; i < batch.n; i++) {
+    GC2SweepPregraceEntry *entry = &batch.entry[i];
+    if (entry->kind == LJ_ARENA_DTOR_CLOSED_UV)
+      lj_func_freeuv(g, gco2uv(entry->o));
+    else
+      lj_func_free(g, gco2func(entry->o));
+  }
+  gc2_sweep_grace_needed_rel(g, 1);
+#ifdef LJ_GC2_TEST_HELPERS
+  la_add32_rlx(&gc2_test_sweep_batch_commit_count, 1);
+  la_add32_rlx(&gc2_test_sweep_batch_object_count, batch.n);
+#endif
+  return batch.selected;
+
+rollback:
+  gc2_sweep_pregrace_batch_restore(g, a, &batch);
+  return 0;
+}
+
 /* Recheck one packed candidate with the original scalar authority. A stale
 ** word snapshot may skip or retain work, but it never authorizes a body read,
 ** retirement or terminal transition. */
@@ -2454,14 +2764,24 @@ static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a,
     ** both semantics and marks_this_round accounting. */
     if (pin)
       (void)gc2_sweep_bulk_pin64(&a->mark[w], pin);
-    while (candidates) {
-      uint32_t lane = lj_ffs64(candidates);
-      uint64_t bit = (uint64_t)1 << lane;
-      uint32_t tentative_kind = (p0 & bit ? 1u : 0u) |
-	(p1 & bit ? 2u : 0u) | (p2 & bit ? 4u : 0u);
-      candidates &= candidates - 1u;
-      gc2_sweep_arena_unmarked_candidate(
-	g, a, (w << 6) + lane, tentative_kind, pregrace_owned);
+    {
+      uint32_t group;
+      for (group = 0; group < 4u; group++) {
+	uint64_t group_candidates = candidates &
+	  (UINT64_C(0xffff) << (group << 4));
+	uint64_t committed = gc2_sweep_pregrace_batch(
+	  g, a, w, group_candidates, p0, p1, p2, pregrace_owned);
+	group_candidates &= ~committed;
+	while (group_candidates) {
+	  uint32_t lane = lj_ffs64(group_candidates);
+	  uint64_t bit = (uint64_t)1 << lane;
+	  uint32_t tentative_kind = (p0 & bit ? 1u : 0u) |
+	    (p1 & bit ? 2u : 0u) | (p2 & bit ? 4u : 0u);
+	  group_candidates &= group_candidates - 1u;
+	  gc2_sweep_arena_unmarked_candidate(
+	    g, a, (w << 6) + lane, tentative_kind, pregrace_owned);
+	}
+      }
     }
   }
   return 0;  /* Preserve the sidecar classifier's original return contract. */
