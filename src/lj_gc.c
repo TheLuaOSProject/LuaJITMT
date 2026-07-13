@@ -1158,11 +1158,11 @@ static int gc2_valid_func_free_obj(global_State *g, GCfunc *fn)
       (((uintptr_t)fn & (uintptr_t)(sizeof(void *) - 1u)) != 0) ||
       !lj_gc2_obj_valid_queued(g, obj2gco(fn)) || fn->c.gct != ~LJ_TFUNC)
     return 0;
-  /* Every caller retains one of: root MEMBER/UNLINKING, a post-grace arena
-  ** RETIRED ticket, a HugeTab TICKET/FREEING claim, or joined-world terminal
-  ** ownership. The queued validator deliberately consumes that stronger lease
-  ** without opening and immediately dropping a transient rescue scope before
-  ** the nupvalue/size dereferences below. */
+  /* Every caller retains one of: root MEMBER/UNLINKING, a held small-arena
+  ** DESTRUCT lane, a post-grace RETIRED ticket, a HugeTab TICKET/FREEING claim,
+  ** or joined-world terminal ownership. The queued validator deliberately
+  ** consumes that stronger lease without opening and immediately dropping a
+  ** transient rescue scope before the nupvalue/size dereferences below. */
   if (isluafunc(fn)) {
     uint32_t nup = lj_funcL_nupvalues(&fn->l);
     if (nup > LJ_MAX_UPVAL)
@@ -2007,7 +2007,7 @@ static LJ_AINLINE int gc2_sweep_dtor_kind_supported(uint32_t kind)
 ** destructor may run. */
 static GCobj *gc2_sweep_dtor_obj(global_State *g, GCArena *a,
 				  uint32_t cell, uint32_t end,
-				  uint32_t kind)
+				  uint32_t kind, int vector_reclaim_owned)
 {
   GCobj *o;
   GCSize size;
@@ -2017,9 +2017,9 @@ static GCobj *gc2_sweep_dtor_obj(global_State *g, GCArena *a,
     return NULL;
   o = (GCobj *)lj_arena_cellptr(a, cell);
   /* Sidecar identity must not override another allocation family or permanent
-  ** semantic retention. These common-header/side-plane checks run only after
-  ** the arena grace under the reclaim lease; disagreement is retained rather
-  ** than dispatched through either body's mutable bytes. */
+  ** semantic retention. The caller owns either the post-grace reclaim lease or
+  ** the local pre-grace MT/SMR/arena-seal capability; disagreement is retained
+  ** rather than dispatched through either body's mutable bytes. */
   if (lj_arena_cdata_get(a, cell) ||
       (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED)))
     return NULL;
@@ -2041,7 +2041,7 @@ static GCobj *gc2_sweep_dtor_obj(global_State *g, GCArena *a,
     return NULL;
   }
   if (lj_arena_ncells(size) != end - cell ||
-      !gc2_valid_freeable_obj(g, o, 1))
+      !gc2_valid_freeable_obj(g, o, vector_reclaim_owned))
     return NULL;
   return o;
 }
@@ -2052,7 +2052,7 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
   GCobj *o = (GCobj *)lj_arena_cellptr(a, cell);
   uint32_t dtor_kind = lj_arena_dtor_kind_acq(a, cell);
   if (dtor_kind != LJ_ARENA_DTOR_NONE)
-    return gc2_sweep_dtor_obj(g, a, cell, end, dtor_kind);
+    return gc2_sweep_dtor_obj(g, a, cell, end, dtor_kind, 1);
 #if LJ_HASFFI
   if (lj_arena_ready_get(a, cell) && lj_arena_cdata_get(a, cell)) {
     char *base = (char *)o;
@@ -2092,13 +2092,228 @@ static GCobj *gc2_sweep_cell_obj(global_State *g, GCArena *a,
   return NULL;
 }
 
-static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a)
+static LJ_AINLINE int gc2_sweep_pregrace_recorder_active(global_State *g)
+{
+#if LJ_HASJIT
+  return g && lj_trace_state_load(G2J(g)) != LJ_TRACE_IDLE;
+#else
+  UNUSED(g);
+  return 0;
+#endif
+}
+
+/* The owner-progress caller has already established the complete SSB fixpoint.
+** Once this call locally owns the MT gate, no VM or worker producer can reopen
+** it. Recheck every cheaply observable publication immediately before each
+** destructor transaction; the exact allocation lanes below remain the final
+** authority if a non-VM terminal actor raced this bounded scan. */
+static LJ_AINLINE int gc2_sweep_pregrace_work_clear(global_State *g)
+{
+  TGState *tg = g ? g->main_tg : NULL;
+  return g && tg &&
+	 gc2_recovery_items_acq(g) == 0 &&
+	 gc2_recovery_huge_items_acq(g) == 0 &&
+	 gc2_recovery_failed_acq(g) == 0 &&
+	 gc2_assist_active_acq(g) == 0 &&
+	 gc2_weak_drain_active_acq(g) == 0 &&
+	 gc2_weak_write_active_acq(g) == 0 &&
+	 gc2_ssb_consumer_active_acq(g) == 0 &&
+	 gc2_ssb_head_acq(g) == NULL && gc2_ssb_drain_acq(g) == NULL &&
+	 gc2_grey_top_acq(g) >= gc2_grey_bottom_acq(g) &&
+	 gc2_thread_scan_needscan_pending_acq(g) == 0 &&
+	 gc2_table_rescan_pending_acq(g) == 0 &&
+	 gc2_marks_this_round_acq(g) == 0 &&
+	 gc2_finalizer_tail_acq(g) == NULL &&
+	 gc2_finalizer_mpsc_acq(g) == NULL &&
+	 gc2_finalizer_active_acq(g) == 0 &&
+	 lj_state_gcprep_pending_acq(g) == 0 &&
+	 lj_gcroot_pending_hint_acq(g) == 0 &&
+	 lj_tg_ssb_next_acq(tg) == lj_tg_ssb_base_acq(tg);
+}
+
+static int gc2_sweep_pregrace_arena_ready(global_State *g, GCArena *a,
+					   int mt_exclusive)
+{
+  TGState *main_tg = g ? g->main_tg : NULL;
+  uint32_t flags;
+  if (!mt_exclusive || !g || !a || !main_tg ||
+	gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+	!gc2_sweep_bridge_ready_acq(g) ||
+	gc2_sweep_root_scanned_acq(g) != 1 ||
+	!gc2_sweep_root_done_acq(g) ||
+	!lj_gc2_sweep_bridge_can_progress(g) ||
+	lj_thr_get_tg() != main_tg || G2TG(g) != main_tg ||
+	(lj_tg_flags_acq(main_tg) & (TGF_DEAD|TGF_ARENA_INTERNAL)) !=
+	  TGF_ARENA_INTERNAL ||
+	g->allocf != lj_arena_allocf || la_load32_acq(&g->allocf_arena) == 0 ||
+	g->allocd != &main_tg->allocd ||
+	mt_gc_exclusive_acq(g) == 0 || mt_active_acq(g) != 0 ||
+	mt_live_acq(g) != 0 ||
+	mt_entering_acq(g) != 0 || gc2_n_workers_acq(g) != 0 ||
+	gc2_worker_active_acq(g) != 1 || gc2_smr_reclaiming_acq(g) != 0 ||
+	gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
+	gc2_sweep_pregrace_recorder_active(g) ||
+	lj_gc2_activation_reclaim_veto(g) ||
+	!gc2_sweep_pregrace_work_clear(g))
+    return 0;
+  flags = lj_arena_flags_acq(a);
+  if ((flags & (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP)) !=
+	(LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP) ||
+      (flags & (LJ_AF_PREPSWEEP|LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) != 0 ||
+      lj_arena_owner_acq(a) != lj_tg_tid_acq(main_tg))
+    return 0;
+  return 1;
+}
+
+static int gc2_sweep_pregrace_commit_ready(global_State *g, GCArena *a,
+					    uint32_t cell, uint32_t end,
+					    uint32_t kind,
+					    int pregrace_owned,
+					    uint32_t expected_lifetime)
+{
+  if (!pregrace_owned ||
+      !gc2_sweep_pregrace_arena_ready(g, a, pregrace_owned) ||
+      lj_arena_remote_active_acq(a) !=
+	(LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED) ||
+      !lj_arena_bm_get(a->block, cell) || lj_arena_bm_get(a->mark, cell) ||
+      lj_arena_sweep_state_acq(a, cell) != LJ_ARENA_SWEEP_WHITE ||
+      lj_arena_dtor_kind_acq(a, cell) != kind ||
+      !lj_arena_ready_get(a, cell) ||
+      lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE ||
+      lj_arena_recovery_state_acq(a, cell) != LJ_ARENA_RECOVERY_IDLE ||
+      lj_arena_lifetime_state_acq(a, cell) != expected_lifetime ||
+      lj_arena_late_get(a, cell) || gc2_sweep_alloc_end(a, cell) != end)
+    return 0;
+  return 1;
+}
+
+static GCobj *gc2_sweep_pregrace_dtor_obj(global_State *g, GCArena *a,
+					   uint32_t cell, uint32_t end,
+					   uint32_t kind,
+					   int pregrace_owned)
+{
+  if (!gc2_sweep_pregrace_commit_ready(
+	g, a, cell, end, kind, pregrace_owned,
+	LJ_ARENA_LIFETIME_DESTRUCT))
+    return NULL;
+  return gc2_sweep_dtor_obj(g, a, cell, end, kind, 0);
+}
+
+static LJ_AINLINE GCSize gc2_sweep_pregrace_dtor_size(uint32_t kind)
+{
+  if (kind == LJ_ARENA_DTOR_LFUNC0)
+    return (GCSize)sizeLfunc(0);
+  if (kind == LJ_ARENA_DTOR_LFUNC1)
+    return (GCSize)sizeLfunc(1);
+  if (kind == LJ_ARENA_DTOR_CLOSED_UV)
+    return (GCSize)sizeof(GCupval);
+  return 0;
+}
+
+static int gc2_sweep_pregrace_terminal_owned(GCArena *a, uint32_t cell)
+{
+  return lj_arena_lifetime_state_acq(a, cell) ==
+	   LJ_ARENA_LIFETIME_FREE &&
+	 lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING;
+}
+
+/* Release a tentative body claim without stealing recovery's cancellation.
+** RESCUE owns the eventual restore and durable recovery publication. */
+static void gc2_sweep_pregrace_claim_restore(global_State *g, GCArena *a,
+					      uint32_t cell)
+{
+  uint32_t life;
+  if (lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+					  LJ_ARENA_LIFETIME_LIVE))
+    return;
+  life = lj_arena_lifetime_state_acq(a, cell);
+  if (life == LJ_ARENA_LIFETIME_RESCUE ||
+      life == LJ_ARENA_LIFETIME_LIVE ||
+      (life == LJ_ARENA_LIFETIME_FREE &&
+       lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING))
+    return;
+  lj_assertG(0, "pre-grace destructor rollback lost exact lifetime lane");
+  abort();
+}
+
+/* Claim, validate and commit one rootless typed body. No header byte is read
+** until LIVE->DESTRUCT plus the paired SC admission proof has completed.
+** Recovery may cancel DESTRUCT->RESCUE at any point before the FREE LP. */
+static int gc2_sweep_pregrace_destruct(global_State *g, GCArena *a,
+					uint32_t cell, uint32_t end,
+					uint32_t kind,
+					int pregrace_owned)
+{
+  GCSize size = gc2_sweep_pregrace_dtor_size(kind);
+  GCobj *o;
+  uint32_t life;
+  int sweepok;
+  if (size == 0 || lj_arena_ncells(size) != end - cell)
+    return LJ_GC_DESTRUCT_LOST;
+  if (!gc2_sweep_pregrace_commit_ready(
+	g, a, cell, end, kind, pregrace_owned, LJ_ARENA_LIFETIME_LIVE))
+    return gc2_sweep_pregrace_terminal_owned(a, cell) ?
+	   LJ_GC_DESTRUCT_OWNED : LJ_GC_DESTRUCT_LOST;
+  if (!lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+					   LJ_ARENA_LIFETIME_DESTRUCT))
+    return gc2_sweep_pregrace_terminal_owned(a, cell) ?
+	   LJ_GC_DESTRUCT_OWNED : LJ_GC_DESTRUCT_LOST;
+
+  /* No-both-miss pairing with rescue admission: writer claim; SC fence; gate
+  ** acquire versus reader admission RMW; SC fence; lifetime acquire. */
+  la_fence_seq();
+  if (!gc2_sweep_pregrace_commit_ready(
+	g, a, cell, end, kind, pregrace_owned,
+	LJ_ARENA_LIFETIME_DESTRUCT)) {
+    gc2_sweep_pregrace_claim_restore(g, a, cell);
+    return LJ_GC_DESTRUCT_LOST;
+  }
+  o = gc2_sweep_pregrace_dtor_obj(
+	g, a, cell, end, kind, pregrace_owned);
+  if (!o) {
+    gc2_sweep_pregrace_claim_restore(g, a, cell);
+    return LJ_GC_DESTRUCT_LOST;
+  }
+
+  /* Body agreement is only advisory until this final full predicate. A late
+  ** publisher dirties the gate; semantic recovery steals DESTRUCT->RESCUE. */
+  la_fence_seq();
+  if (!gc2_sweep_pregrace_commit_ready(
+	g, a, cell, end, kind, pregrace_owned,
+	LJ_ARENA_LIFETIME_DESTRUCT)) {
+    gc2_sweep_pregrace_claim_restore(g, a, cell);
+    return LJ_GC_DESTRUCT_LOST;
+  }
+  if (!lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+					   LJ_ARENA_LIFETIME_FREE)) {
+    life = lj_arena_lifetime_state_acq(a, cell);
+    if (life == LJ_ARENA_LIFETIME_RESCUE ||
+	life == LJ_ARENA_LIFETIME_LIVE)
+      return LJ_GC_DESTRUCT_LOST;
+    if (life == LJ_ARENA_LIFETIME_FREE &&
+	lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING)
+      return LJ_GC_DESTRUCT_OWNED;
+    lj_assertG(0, "pre-grace destructor commit lost exact lifetime lane");
+    abort();
+  }
+  sweepok = lj_arena_sweep_state_cas(a, cell, LJ_ARENA_SWEEP_WHITE,
+					     LJ_ARENA_SWEEP_FREEING);
+  lj_assertG(sweepok, "pre-grace destructor lost WHITE commit");
+  if (LJ_UNLIKELY(!sweepok))
+    abort();
+  if (kind == LJ_ARENA_DTOR_CLOSED_UV)
+    lj_func_freeuv(g, gco2uv(o));
+  else
+    lj_func_free(g, gco2func(o));
+  return LJ_GC_DESTRUCT_ACQUIRED;
+}
+
+static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a,
+						 int pregrace_owned)
 {
   uint32_t i;
   if (!g || !a)
     return 0;
-  (void)lj_gc_flush_root_pending(g);
-  (void)lj_gc_repair_root_spine(g);
   for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
     uint32_t state;
     if (!lj_arena_bm_get(a->block, i))
@@ -2109,6 +2324,20 @@ static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a)
     {
       uint32_t dtor_kind = lj_arena_dtor_kind_acq(a, i);
       if (dtor_kind != LJ_ARENA_DTOR_NONE) {
+	uint32_t end = 0;
+	int freed = LJ_GC_DESTRUCT_LOST;
+	if (pregrace_owned && gc2_sweep_dtor_kind_supported(dtor_kind)) {
+	  end = gc2_sweep_alloc_end(a, i);
+	  freed = gc2_sweep_pregrace_destruct(
+	    g, a, i, end, dtor_kind, pregrace_owned);
+	}
+	if (freed != LJ_GC_DESTRUCT_LOST) {
+	  /* ACQUIRED ran the semantic destructor; OWNED proves another terminal
+	  ** owner already did. Neither path creates a RETIRED counter ticket.
+	  ** Physical discovery, kind, READY and bytes remain for quarantine. */
+	  gc2_sweep_grace_needed_rel(g, 1);
+	  continue;
+	}
 	/* A kind-bearing start is arena-owned exact destructor identity, not
 	** opaque raw storage. Retire it before the arena grace without reading
 	** the body. A mark which overlaps this classification converts RETIRED
@@ -2135,12 +2364,69 @@ static uint32_t gc2_sweep_arena_unmarked_bodies(global_State *g, GCArena *a)
     ** attacker-controlled payload bytes. */
     (void)la_bit_test_and_set64(&a->mark[i >> 6], i & 63);
   }
-  return 0;
+  return 0;  /* Preserve the sidecar classifier's original return contract. */
+}
+
+static uint32_t gc2_sweep_arena_unmarked_impl(global_State *g, GCArena *a,
+					       int allow_exclusive)
+{
+  uint32_t n;
+  int mt_exclusive = 0;
+  int smr_held = 0;
+  int arena_sealed = 0;
+  int pregrace_owned = 0;
+  if (allow_exclusive) {
+    mt_exclusive = gc2_sweep_mt_exclusive_try(g);
+    if (mt_exclusive && lj_gc2_smr_read_try(g)) {
+      smr_held = 1;
+    } else if (mt_exclusive) {
+      /* Losing the body lease only disables the optimization. The original
+      ** sidecar-only classifier must still run before this arena moves from
+      ** NEEDSWEEP to quarantine. */
+      gc2_sweep_mt_exclusive_leave(g);
+      mt_exclusive = 0;
+    }
+  }
+  (void)lj_gc_flush_root_pending(g);
+  (void)lj_gc_repair_root_spine(g);
+  /* The completed SWEEP root snapshot can leave a conservative C|P admission
+  ** generation behind. Only the thread which locally won both the MT gate and
+  ** this exact arena seal may clear that completed intent. Keep C|S held over
+  ** the bounded scan; a new bit-only publisher dirties PENDING/count first and
+  ** makes every later exact commit check fail without waiting. */
+  if (mt_exclusive && smr_held &&
+      gc2_sweep_pregrace_arena_ready(g, a, mt_exclusive) &&
+      lj_arena_reclaim_seal(a)) {
+    arena_sealed = 1;
+    if (lj_arena_reclaim_clear_pending(a) &&
+        gc2_sweep_pregrace_arena_ready(g, a, mt_exclusive) &&
+        lj_arena_remote_active_acq(a) ==
+	  (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)) {
+      pregrace_owned = 1;
+    } else {
+      lj_arena_reclaim_unseal(a, 1);
+      arena_sealed = 0;
+    }
+  }
+  n = gc2_sweep_arena_unmarked_bodies(g, a, pregrace_owned);
+  if (arena_sealed)
+    lj_arena_reclaim_unseal(a, 1);
+  if (smr_held)
+    lj_gc2_smr_read_leave(g);
+  if (mt_exclusive)
+    gc2_sweep_mt_exclusive_leave(g);
+  return n;
 }
 
 uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a)
 {
-  return gc2_sweep_arena_unmarked_bodies(g, a);
+  return gc2_sweep_arena_unmarked_impl(g, a, 0);
+}
+
+uint32_t lj_gc_sweep_gc2_arena_unmarked_exclusive(global_State *g,
+						    GCArena *a)
+{
+  return gc2_sweep_arena_unmarked_impl(g, a, 1);
 }
 
 uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,

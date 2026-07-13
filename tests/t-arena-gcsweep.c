@@ -7,6 +7,7 @@
 #endif
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -112,6 +113,381 @@ static int noop_finalizer(lua_State *L)
 {
   (void)L;
   return 0;
+}
+
+typedef struct TypedDtorFixture {
+  lua_State *L;
+  global_State *g;
+  TGState *tg;
+  GCfunc *f0;
+  GCfunc *f1;
+  GCupval *uv;
+  GCArena *a;
+  uint32_t f0cell;
+  uint32_t f1cell;
+  uint32_t uvcell;
+  GCSize f0size;
+  GCSize f1size;
+  GCSize uvsize;
+} TypedDtorFixture;
+
+static void typed_dtor_fixture_init(TypedDtorFixture *fx)
+{
+  lua_State *L;
+  uint32_t i;
+
+  memset(fx, 0, sizeof(*fx));
+  L = luaL_newstate();
+  assert(L != NULL);
+  luaL_openlibs(L);
+  assert(luaL_dostring(L,
+    "typed_dtor_fixture = {}\n"
+    "typed_dtor_fixture.make0 = function()\n"
+    "  return function() return 17 end\n"
+    "end\n"
+    "typed_dtor_fixture.make1 = function(v)\n"
+    "  local x = v\n"
+    "  return function() x = x + 1; return x end\n"
+    "end\n"
+    "collectgarbage('collect')\n"
+    "collectgarbage('stop')\n") == LUA_OK);
+  lua_getglobal(L, "typed_dtor_fixture");
+  assert(tvistab(L->top - 1));
+
+  /* Crossing an arena boundary between the two calls is legal. Retry in that
+  ** unlikely case: the next zero-upvalue closure and the atomic one-upvalue
+  ** pair then start in the freshly selected traversable arena. */
+  for (i = 0; i < 8u; i++) {
+    lua_getfield(L, -1, "make0");
+    assert(tvisfunc(L->top - 1));
+    lua_call(L, 0, 1);
+    assert(tvisfunc(L->top - 1));
+    fx->f0 = funcV(L->top - 1);
+    lua_setfield(L, -2, "f0");
+
+    lua_getfield(L, -1, "make1");
+    assert(tvisfunc(L->top - 1));
+    lua_pushnumber(L, (lua_Number)(i + 1u));
+    lua_call(L, 1, 1);
+    assert(tvisfunc(L->top - 1));
+    fx->f1 = funcV(L->top - 1);
+    lua_setfield(L, -2, "f1");
+
+    assert(isluafunc(fx->f0));
+    assert(isluafunc(fx->f1));
+    assert(lj_funcL_nupvalues(&fx->f0->l) == 0);
+    assert(lj_funcL_nupvalues(&fx->f1->l) == 1);
+    fx->uv = func_uv_acq(&fx->f1->l, 0);
+    assert(fx->uv != NULL && fx->uv->closed);
+    assert(uvval(fx->uv) == &fx->uv->tv);
+    fx->a = lj_arena_of(fx->f1);
+    if (lj_arena_of(fx->f0) == fx->a &&
+	lj_arena_of(fx->uv) == fx->a)
+      break;
+  }
+  assert(i < 8u);
+
+  fx->L = L;
+  fx->g = G(L);
+  fx->tg = G2TG(fx->g);
+  assert(fx->tg != NULL && fx->tg == fx->g->main_tg);
+  fx->f0cell = lj_arena_cellof(fx->f0);
+  fx->f1cell = lj_arena_cellof(fx->f1);
+  fx->uvcell = lj_arena_cellof(fx->uv);
+  fx->f0size = (GCSize)sizeLfunc(0);
+  fx->f1size = (GCSize)sizeLfunc(1);
+  fx->uvsize = (GCSize)sizeof(GCupval);
+  assert(fx->uvcell == fx->f1cell + lj_arena_ncells(fx->f1size));
+  assert(lj_arena_root_state_acq(fx->a, fx->f0cell) ==
+	 LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_root_state_acq(fx->a, fx->f1cell) ==
+	 LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_root_state_acq(fx->a, fx->uvcell) ==
+	 LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(fx->a, fx->f0cell) ==
+	 LJ_ARENA_DTOR_LFUNC0);
+  assert(lj_arena_dtor_kind_acq(fx->a, fx->f1cell) ==
+	 LJ_ARENA_DTOR_LFUNC1);
+  assert(lj_arena_dtor_kind_acq(fx->a, fx->uvcell) ==
+	 LJ_ARENA_DTOR_CLOSED_UV);
+}
+
+static void typed_dtor_drop_fixture_roots(TypedDtorFixture *fx)
+{
+  lua_State *L = fx->L;
+  assert(tvistab(L->top - 1));
+  lua_pushnil(L);
+  lua_setfield(L, -2, "f0");
+  lua_pushnil(L);
+  lua_setfield(L, -2, "f1");
+}
+
+static void typed_dtor_select_dead(TypedDtorFixture *fx, uint32_t deadmask)
+{
+  uint32_t w;
+  GCArena *a = fx->a;
+  for (w = 0; w < LJ_ARENA_WORDS; w++) {
+    uint64_t starts = la_load64_acq(&a->block[w]);
+    (void)la_or64_rlx(&a->mark[w], starts);
+  }
+  if (deadmask & LJ_ARENA_DTOR_LFUNC0)
+    lj_arena_bm_clear(a->mark, fx->f0cell);
+  if (deadmask & LJ_ARENA_DTOR_LFUNC1)
+    lj_arena_bm_clear(a->mark, fx->f1cell);
+  if (deadmask & LJ_ARENA_DTOR_CLOSED_UV)
+    lj_arena_bm_clear(a->mark, fx->uvcell);
+}
+
+static void typed_dtor_publish_ready_sweep(TypedDtorFixture *fx)
+{
+  global_State *g = fx->g;
+  uint64_t hs_epoch;
+
+  g->gc2.cycle++;
+  (void)test_publish_sweep_phase(g);
+  fx->tg->alloc.prepare_epoch = g->gc2.cycle;
+  gc2_sweep_bridge_ready_store_rlx(g, 0);
+  gc2_sweep_root_done_rel(g, 1);
+  assert(lj_gc2_handshake(g,
+	LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB) == 1);
+  while (lj_gc2_test_ssb_drain(g) != 0)
+    ;
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(gc2_thread_scan_needscan_pending_acq(g) == 0);
+  (void)gc2_marks_this_round_xchg_acqrel(g, 0);
+  hs_epoch = gc2_hs_epoch_acq(g);
+  assert(hs_epoch != 0);
+  lj_gc2_sweep_bridge_ready(g);
+  assert(gc2_sweep_bridge_ready_acq(g));
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+}
+
+static GCArena *typed_dtor_prepare_target(TypedDtorFixture *fx,
+					  uint32_t deadmask)
+{
+  TGAlloc *alloc = &fx->tg->alloc;
+  GCArena *other;
+  assert(lj_arena_alloc_prepare_sweep_kind(
+	alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(arena_list_contains(
+	alloc->needsweep[LJ_ARENAK_TRAVERSABLE], fx->a));
+  arena_needsweep_move_head(alloc, LJ_ARENAK_TRAVERSABLE, fx->a);
+  typed_dtor_select_dead(fx, deadmask);
+  typed_dtor_publish_ready_sweep(fx);
+  if (deadmask & LJ_ARENA_DTOR_LFUNC0)
+    assert(!lj_arena_bm_get(fx->a->mark, fx->f0cell));
+  if (deadmask & LJ_ARENA_DTOR_LFUNC1)
+    assert(!lj_arena_bm_get(fx->a->mark, fx->f1cell));
+  if (deadmask & LJ_ARENA_DTOR_CLOSED_UV)
+    assert(!lj_arena_bm_get(fx->a->mark, fx->uvcell));
+
+  assert(lj_gc2_test_sweep_owner_progress(fx->g, fx->tg, 1u) == 1u);
+  assert(fx->tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == fx->a);
+  other = alloc->needsweep[LJ_ARENAK_TRAVERSABLE];
+  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  return other;
+}
+
+static GCSize typed_dtor_finish_target(TypedDtorFixture *fx, GCArena *other)
+{
+  TGAlloc *alloc = &fx->tg->alloc;
+  GCSize total_after_target;
+  uint32_t i;
+
+  for (i = 0; i < 256u &&
+	 !arena_list_contains(lj_arena_alloc_reclaimed_head(
+	   alloc, LJ_ARENAK_TRAVERSABLE), fx->a); i++)
+    assert(lj_gc2_test_sweep_owner_progress(
+	fx->g, fx->tg, 1u) != 0);
+  assert(i < 256u);
+  /* Target semantic/post-grace work is complete at reclaimed publication.
+  ** Snapshot accounting before cycle_to_idle also reclaims unrelated retired
+  ** table vectors accumulated by fixture setup. */
+  total_after_target = lj_gc_total_load(fx->g);
+  while (lj_gc2_test_ssb_drain(fx->g) != 0)
+    ;
+  assert(lj_gc2_test_ssb_empty(fx->g));
+  assert(gc2_thread_scan_needscan_pending_acq(fx->g) == 0);
+  lj_gc2_cycle_to_idle(fx->g);
+  assert(gc2_phase_acq(fx->g) == LJ_GC2_IDLE);
+
+  alloc->needsweep[LJ_ARENAK_TRAVERSABLE] = other;
+  assert(lj_arena_alloc_restore_sweep_kind(
+	alloc, LJ_ARENAK_TRAVERSABLE));
+  return total_after_target;
+}
+
+static void test_typed_dtor_pregrace_exclusive(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  GCSize total0, total1;
+  unsigned char f0body[sizeof(GCfunc)];
+  unsigned char f1body[sizeof(GCfunc)];
+  unsigned char uvbody[sizeof(GCupval)];
+
+  typed_dtor_fixture_init(&fx);
+  assert(fx.f0size <= sizeof(f0body));
+  assert(fx.f1size <= sizeof(f1body));
+  memcpy(f0body, fx.f0, fx.f0size);
+  memcpy(f1body, fx.f1, fx.f1size);
+  memcpy(uvbody, fx.uv, fx.uvsize);
+  typed_dtor_drop_fixture_roots(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC0|LJ_ARENA_DTOR_LFUNC1|
+	LJ_ARENA_DTOR_CLOSED_UV);
+
+  total1 = lj_gc_total_load(fx.g);
+  assert(total1 == total0 - fx.f0size - fx.f1size - fx.uvsize);
+  assert(lj_arena_reclaim_deferred_acq(fx.a) == 0);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_SWEEP_FREEING);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_FREEING);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_SWEEP_FREEING);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(memcmp(f0body, fx.f0, fx.f0size) == 0);
+  assert(memcmp(f1body, fx.f1, fx.f1size) == 0);
+  assert(memcmp(uvbody, fx.uv, fx.uvsize) == 0);
+  assert(lj_arena_bm_get(fx.a->block, fx.f0cell));
+  assert(lj_arena_bm_get(fx.a->block, fx.f1cell));
+  assert(lj_arena_bm_get(fx.a->block, fx.uvcell));
+  assert(lj_arena_ready_get(fx.a, fx.f0cell));
+  assert(lj_arena_ready_get(fx.a, fx.f1cell));
+  assert(lj_arena_ready_get(fx.a, fx.uvcell));
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_DTOR_LFUNC0);
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_DTOR_LFUNC1);
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_DTOR_CLOSED_UV);
+  assert(lj_arena_root_state_acq(fx.a, fx.f0cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_root_state_acq(fx.a, fx.f1cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_root_state_acq(fx.a, fx.uvcell) == LJ_ARENA_ROOT_NONE);
+
+  /* No selected body is charged again by post-grace physical completion. */
+  assert(typed_dtor_finish_target(&fx, other) == total1);
+  assert(!lj_arena_bm_get(fx.a->block, fx.f0cell));
+  assert(!lj_arena_bm_get(fx.a->block, fx.f1cell));
+  assert(!lj_arena_bm_get(fx.a->block, fx.uvcell));
+  assert(!lj_arena_ready_get(fx.a, fx.f0cell));
+  assert(!lj_arena_ready_get(fx.a, fx.f1cell));
+  assert(!lj_arena_ready_get(fx.a, fx.uvcell));
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f0cell) == LJ_ARENA_DTOR_NONE);
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f1cell) == LJ_ARENA_DTOR_NONE);
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.uvcell) == LJ_ARENA_DTOR_NONE);
+  lua_close(fx.L);
+}
+
+static void test_typed_dtor_no_adjacency_match(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  GCSize total0;
+
+  typed_dtor_fixture_init(&fx);
+  typed_dtor_drop_fixture_roots(&fx);
+  lj_arena_bm_set(fx.a->cdata, fx.uvcell);
+  total0 = lj_gc_total_load(fx.g);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV);
+
+  /* The closure's immutable identity is sufficient by itself. Its adjacent
+  ** upvalue disagreement must not force a pair match or veto this destructor. */
+  assert(lj_gc_total_load(fx.g) == total0 - fx.f1size);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_FREEING);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_reclaim_deferred_acq(fx.a) == 1u);
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_DTOR_LFUNC1);
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_DTOR_CLOSED_UV);
+  assert(lj_arena_cdata_get(fx.a, fx.uvcell));
+
+  /* Removing the independent disagreement admits exactly the UV destructor
+  ** after the already-required arena grace; the closure is not charged twice. */
+  lj_arena_bm_clear(fx.a->cdata, fx.uvcell);
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f1size - fx.uvsize);
+  assert(!lj_arena_bm_get(fx.a->block, fx.f1cell));
+  assert(!lj_arena_bm_get(fx.a->block, fx.uvcell));
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f1cell) == LJ_ARENA_DTOR_NONE);
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.uvcell) == LJ_ARENA_DTOR_NONE);
+  lua_close(fx.L);
+}
+
+static void test_typed_dtor_denied_capability_retires(int smr_busy)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  GCSize total0;
+  uint32_t expect = 0;
+
+  typed_dtor_fixture_init(&fx);
+  typed_dtor_drop_fixture_roots(&fx);
+  assert(lj_arena_alloc_prepare_sweep_kind(
+	&fx.tg->alloc, LJ_ARENAK_TRAVERSABLE));
+  assert(arena_list_contains(
+	fx.tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE], fx.a));
+  arena_needsweep_move_head(&fx.tg->alloc, LJ_ARENAK_TRAVERSABLE, fx.a);
+  typed_dtor_select_dead(&fx, LJ_ARENA_DTOR_LFUNC0);
+  typed_dtor_publish_ready_sweep(&fx);
+  total0 = lj_gc_total_load(fx.g);
+
+  assert(mt_gc_exclusive_acq(fx.g) == 0);
+  assert(gc2_smr_reclaiming_acq(fx.g) == 0);
+  if (smr_busy) {
+    /* Losing the body lease after winning MT exclusivity must still execute
+    ** the original sidecar-only classification before quarantine. */
+    assert(gc2_smr_reclaiming_cas(fx.g, &expect, 1));
+    assert(lj_gc_sweep_gc2_arena_unmarked_exclusive(fx.g, fx.a) == 0);
+    assert(mt_gc_exclusive_acq(fx.g) == 0);
+    gc2_smr_reclaiming_rel(fx.g, 0);
+    assert(lj_arena_alloc_quarantine_one(&fx.tg->alloc,
+	LJ_ARENAK_TRAVERSABLE, gc2_hs_epoch_acq(fx.g)) == fx.a);
+    gc2_sweep_grace_needed_rel(fx.g, 1);
+  } else {
+    /* This token has no local acquisition capability in the arena helper. A
+    ** mere observed value of one must not authorize body reads. */
+    mt_gc_exclusive_rel(fx.g, 1);
+    assert(lj_gc2_test_sweep_owner_progress(fx.g, fx.tg, 1u) == 1u);
+  }
+  assert(lj_gc_total_load(fx.g) == total0);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_reclaim_deferred_acq(fx.a) == 1u);
+  assert(lj_arena_bm_get(fx.a->block, fx.f0cell));
+  assert(lj_arena_ready_get(fx.a, fx.f0cell));
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_DTOR_LFUNC0);
+  assert(lj_arena_root_state_acq(fx.a, fx.f0cell) == LJ_ARENA_ROOT_NONE);
+  if (!smr_busy) {
+    mt_gc_exclusive_rel(fx.g, 0);
+    mt_gc_exclusive_futex_wake(fx.g, INT_MAX);
+  }
+
+  assert(fx.tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == fx.a);
+  other = fx.tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+  fx.tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = NULL;
+  assert(typed_dtor_finish_target(&fx, other) == total0 - fx.f0size);
+  assert(!lj_arena_bm_get(fx.a->block, fx.f0cell));
+  assert(lj_arena_dtor_kind_acq(fx.a, fx.f0cell) == LJ_ARENA_DTOR_NONE);
+  lua_close(fx.L);
 }
 
 static void test_preserve_abort_waits_for_restore_publisher(void)
@@ -1190,6 +1566,10 @@ int main(void)
   test_minor_sweep_identity_direct();
   test_boundary_lazy_sweep();
   test_boundary_lazy_sweep_extra_tg();
+  test_typed_dtor_pregrace_exclusive();
+  test_typed_dtor_no_adjacency_match();
+  test_typed_dtor_denied_capability_retires(0);
+  test_typed_dtor_denied_capability_retires(1);
   printf("t-arena-gcsweep OK: traversable runtime sweep bridge verified\n");
   return 0;
 }

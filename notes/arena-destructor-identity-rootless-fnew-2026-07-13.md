@@ -217,6 +217,13 @@ within 60 seconds per run.
 
 ## Benchmark result
 
+Correction (2026-07-13): the historical `GC stopped` row below is not a valid
+stopped-GC comparison and must not be used for release decisions. The benchmark
+ignores `BENCH_GC_MODE=stop`, and its explicit `collectgarbage("collect")`
+restarts automatic collection even after a simple command-line `stop`. The
+active row remains valid. A probed wrapper and corrected active/stopped matrix
+are recorded in `pregrace-typed-semantic-destruction-2026-07-13.md`.
+
 Five-run `BENCH_SCALE=.1 closures_upval` measurements on this container were:
 
 | Mode | Current ns/op (five runs; median) | Stock `/usr/bin/luajit` ns/op (five runs; median) | Ratio |

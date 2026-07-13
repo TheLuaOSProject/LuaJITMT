@@ -5146,7 +5146,10 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     GCArena *qa = tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE];
     if (next) {
       (void)lj_arena_remote_free_drain_sweep(&tg->alloc, next);
-      (void)lj_gc_sweep_gc2_arena_unmarked(g, next);
+      if (tg == g->main_tg)
+	(void)lj_gc_sweep_gc2_arena_unmarked_exclusive(g, next);
+      else
+	(void)lj_gc_sweep_gc2_arena_unmarked(g, next);
       if (!lj_arena_alloc_quarantine_one(&tg->alloc,
 		LJ_ARENAK_TRAVERSABLE, gc2_hs_epoch_acq(g)))
 	break;

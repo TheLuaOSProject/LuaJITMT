@@ -93,6 +93,8 @@ LJ_FUNC int lj_gc_udata_payload_valid_as(GCudata *ud, uint8_t udtype,
 LJ_FUNC int lj_gc_udata_payload_valid(GCudata *ud, GCSize *sizep);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
 LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
+LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked_exclusive(global_State *g,
+						    GCArena *a);
 LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 					 uint32_t limit, int *donep);
 LJ_FUNC uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg,
