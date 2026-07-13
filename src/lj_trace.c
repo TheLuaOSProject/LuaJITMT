@@ -3431,12 +3431,27 @@ void lj_trace_abort_owner_before_park(lua_State *L)
 /* A bytecode instruction is about to be executed. Record it. */
 void lj_trace_ins(jit_State *J, const BCIns *pc)
 {
+  lua_State *L = J->L;
+  int errcode;
   /* Note: J->L must already be set. pc is the true bytecode PC here. */
   J->pc = pc;
-  J->fn = curr_func(J->L);
+  J->fn = curr_func(L);
   J->pt = isluafunc(J->fn) ? funcproto(J->fn) : NULL;
-  while (lj_vm_cpcall(J->L, NULL, (void *)J, trace_state) != 0)
+  while ((errcode = lj_vm_cpcall(L, NULL, (void *)J,
+				 trace_state)) != 0) {
+    /* Recorder failures use an integer LJ_TRERR_* object and are consumed by
+    ** trace_state() on the next protected entry. An external VM error (notably
+    ** STOPREQ from a native publication boundary) carries its ordinary Lua
+    ** error object. Re-entering cpcall with that pending unwind can only throw
+    ** again, stranding the recorder token in an infinite ERR loop. We are now
+    ** between trace_state() invocations, so discard unpublished owner state
+    ** before propagating the original error to the surrounding Lua pcall. */
+    if (errcode != LUA_ERRRUN || !tvisnumber(L->top - 1)) {
+      lj_trace_abort_owner(L);
+      lj_err_throw(L, errcode);
+    }
     lj_trace_state_store_active(J, LJ_TRACE_ERR);
+  }
 }
 
 static int trace_hot_root_start_valid(const BCIns *pc)
