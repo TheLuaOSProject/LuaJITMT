@@ -39,3 +39,16 @@ Assert-build follow-up:
   mode still claimed `op2` was unused.
 - Validated with `m6_jit_tbar_gc2_black_gate`, `m3_gc2_paranoia`,
   `m6_jit_barrier_xpoll`, `m6_jit_table_store_helper`, and stock tests.
+
+2026-07-13 release-candidate fixture correction:
+
+- The SSB bound originally generated `"k" .. i` inside the measured loop. GC2
+  correctly publishes those fresh strings, so the counter was dominated by
+  allocation publication (about 154,000 conversions) rather than TBAR table
+  revisits. That made the `<10000` assertion a workload-shape failure after
+  unrelated publication changes.
+- The fixture now creates all 8192 keys with the JIT off before the full-GC
+  baseline, then traces the same 200,000 numeric-value stores using those stable
+  keys. This preserves the original key-barrier regression: the isolated store
+  loop converted 3,913 SSB entries on the candidate, while a per-store table
+  requeue would still exceed the bound by an order of magnitude.

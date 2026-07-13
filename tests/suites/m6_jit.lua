@@ -1149,8 +1149,13 @@ assert(util.traceinfo(1), "trace-local new numeric store did not trace")
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
+local keys = {}
+jit.off()
+for k in pairs(package) do keys[#keys+1] = k end
+jit.on()
 local t = {}
-for k in pairs(package) do
+for i = 1, 80 do
+  local k = keys[((i - 1) % #keys) + 1]
   local s = tostring(k)
   t[#t+1] = s
   assert(t[#t] == s and type(t[#t]) == "string",
@@ -1713,13 +1718,17 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
       build_default(t)
       luajit_code(t, [=[
 local th = require("threading")
+jit.off()
+local keys = {}
+for i = 0, 8191 do keys[i + 1] = "k" .. i end
+jit.on()
 collectgarbage("collect")
 local base = th.gcstats()
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local t = {}
 for i = 1, 200000 do
-  t["k" .. (i % 8192)] = i
+  t[keys[(i % 8192) + 1]] = i
 end
 assert(t.k1 == 196609)
 local before = th.gcstats()
