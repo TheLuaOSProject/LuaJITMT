@@ -3277,6 +3277,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 void lj_gc_pubroot(lua_State *L, cTValue *tv)
 {
   global_State *g;
+  uint32_t phase;
   TValue snap;
   if (!L || !tv)
     return;
@@ -3286,6 +3287,13 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
     setmref(L->glref, g);
   }
   if (LJ_UNLIKELY(g == NULL))
+    return;
+  phase = gc2_phase_acq(g);
+  /* Incremental IDLE has neither a current mark frontier nor an old-to-young
+  ** remembered set. A cycle starting after this acquire observes the value's
+  ** already-published source, or its caller publication before the mutator
+  ** acknowledges activation, so avoid copying/tagging this exact no-op case. */
+  if (phase == LJ_GC2_IDLE && !gc2_generational_acq(g))
     return;
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {

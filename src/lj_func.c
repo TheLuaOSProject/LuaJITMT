@@ -301,6 +301,14 @@ static LJ_AINLINE void func_fnew_preserve_operand(lua_State *L, GCobj *o)
 static LJ_AINLINE void func_fnew_preserve_operands(lua_State *L, GCproto *pt,
 						   GCfuncL *parent)
 {
+  global_State *g = G(L);
+  /* In incremental IDLE these three root barriers are exact no-ops: a cycle
+  ** which starts after this observation snapshots operands which were already
+  ** published, while an active phase is observed through the acquire load.
+  ** Coalesce the identical phase/generational tests rather than entering the
+  ** out-of-line barrier three times for every FNEW. */
+  if (gc2_phase_acq(g) == LJ_GC2_IDLE && !gc2_generational_acq(g))
+    return;
   func_fnew_preserve_operand(L, obj2gco(parent));
   func_fnew_preserve_operand(L, obj2gco(funcproto((GCfunc *)parent)));
   func_fnew_preserve_operand(L, obj2gco(pt));
