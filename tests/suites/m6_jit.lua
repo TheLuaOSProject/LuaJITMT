@@ -39,6 +39,7 @@ local m6_cases = {
   "m6_jit_flush_gc_current_stack",
   "m6_jit_util_flush_race",
   "m6_jit_flush_thread_stress",
+  "m6_jit_flush_atomic_redispatch",
   "m6_jit_flush_join_token_liveness",
   "m6_jit_park_vmevent_reentrant",
   "m6_jit_flush_thread_heavy_stress",
@@ -2228,6 +2229,20 @@ assert(live >= 4, live)
       luajit_file(t, t:path("tests", "t-jit-flush-thread-stress.lua"),
                   { lua_path = true, timeout = "60s" })
       print("M6 JIT threaded flush stress passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_flush_atomic_redispatch",
+    description = "JIT patch generations are decoded atomically after hotloop",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-flush-atomic-redispatch.lua"),
+                  { lua_path = true,
+                    timeout =
+                      os.getenv("LJ_M6_JIT_ATOMIC_REDISPATCH_TIMEOUT") or
+                      "75s" })
+      print("M6 JIT atomic bytecode redispatch passed")
     end
   })
 

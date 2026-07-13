@@ -2670,10 +2670,14 @@ static void build_subroutines(BuildCtx *ctx)
   |3:
   |  mov BASE, L:RB->base
   |4:
-  |  movzx RAd, PC_RA
   |5:
-  |  movzx OP, PC_OP
-  |  movzx RDd, PC_RD
+  |  // FORL/JFORL and other trace entry patches replace the complete BCIns.
+  |  // Decode one atomic word after returning from C; separate byte/word
+  |  // reloads can otherwise combine an old branch offset with a new opcode.
+  |  mov RCd, [PC-4]
+  |  movzx RAd, RCH
+  |  movzx OP, RCL
+  |  shr RCd, 16
   |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]	// Re-dispatch to static ins.
   |
   |->cont_hook:				// Continue from hook yield.
