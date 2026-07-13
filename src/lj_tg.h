@@ -120,6 +120,12 @@ struct TGState {
   GC2SSBNode *ssb_active, *ssb_free;
   GCRef *ssb_next, *ssb_end, *ssb_base;
   uint32_t ssb_refs;  /* Published embedded nodes pin this TG. */
+  /* Comparison-only active-MARK FNEW certificate. These raw pointers are not
+  ** roots: the exact proto/environment pair is retained by the two SSB slots
+  ** which precede publication of fnew_cert_cycle. A zero cycle is invalid. */
+  GCproto *fnew_cert_pt;
+  GCtab *fnew_cert_env;
+  uint32_t fnew_cert_cycle;
   GCobj *gcroot_pending;
   GCobj *gcroot_pending_after_main;
   SBuf tmpbuf;
@@ -621,6 +627,41 @@ static LJ_AINLINE GCRef *lj_tg_ssb_end_acq(const TGState *tg)
 static LJ_AINLINE void lj_tg_ssb_end_rel(TGState *tg, GCRef *end)
 {
   la_storeptr_rel((void **)&tg->ssb_end, end);  /* 05 section 5.6.2. */
+}
+
+/* The owner publishes an exact pair by first invalidating cycle, then writing
+** both comparison pointers, and finally release-publishing the nonzero cycle.
+** Phase activation may remotely invalidate only the cycle while the JIT gate
+** is closed. The pointer fields deliberately never carry tracing authority. */
+static LJ_AINLINE uint32_t lj_tg_fnew_cert_cycle_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->fnew_cert_cycle);
+}
+
+static LJ_AINLINE void lj_tg_fnew_cert_reset_rel(TGState *tg)
+{
+  la_store32_rel(&tg->fnew_cert_cycle, 0);
+}
+
+static LJ_AINLINE GCproto *lj_tg_fnew_cert_pt_acq(const TGState *tg)
+{
+  return (GCproto *)la_loadptr_acq((void *const *)&tg->fnew_cert_pt);
+}
+
+static LJ_AINLINE GCtab *lj_tg_fnew_cert_env_acq(const TGState *tg)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&tg->fnew_cert_env);
+}
+
+static LJ_AINLINE void lj_tg_fnew_cert_publish_rel(TGState *tg,
+						    GCproto *pt, GCtab *env,
+						    uint32_t cycle)
+{
+  lj_assertX(cycle != 0, "publishing invalid FNEW certificate cycle");
+  lj_tg_fnew_cert_reset_rel(tg);
+  la_storeptr_rlx((void **)&tg->fnew_cert_pt, pt);
+  la_storeptr_rlx((void **)&tg->fnew_cert_env, env);
+  la_store32_rel(&tg->fnew_cert_cycle, cycle);
 }
 
 static LJ_AINLINE GCobj *lj_tg_gcroot_pending_acq(const TGState *tg)

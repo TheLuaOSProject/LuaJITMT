@@ -800,6 +800,12 @@ static GCfunc *func_newL_gc1tv_bump(lua_State *L, global_State *g,
   func_pubfreshobjobj(L, tg, fn, env);
   func_pubfreshobjobj(L, tg, fn, uv);
   func_pubuv_payload(L, uv);
+  /* A traced active-black miss has now performed all normal barriers for this
+  ** closure. Seed exact durable proto/environment traversal work for later
+  ** inline hits. Failure is conservative: this closure remains protected by
+  ** the barriers above and the next traced FNEW calls C again. */
+  if (count_kind == 1)
+    (void)lj_gc2_fnew_certify_pair_nodrain(g, tg, pt, env);
   func_proto_clcount_inc_exclusive(g, pt);
 
   lj_gc_total_add(g, nbytes);

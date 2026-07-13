@@ -257,6 +257,9 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   lj_tg_gcroot_pending_store_rlx(tg, NULL);
   lj_tg_gcroot_pending_after_main_store_rlx(tg, NULL);
   tg_init_ssb(tg);
+  la_storeptr_rlx((void **)&tg->fnew_cert_pt, NULL);
+  la_storeptr_rlx((void **)&tg->fnew_cert_env, NULL);
+  lj_tg_fnew_cert_reset_rel(tg);
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT
   memcpy(tg->hotcount, G2GG(g)->hotcount, sizeof(tg->hotcount));

@@ -239,6 +239,22 @@ LJ_FUNC void lj_gc2_publish_idle_threshold(global_State *g);
 LJ_FUNC void lj_gc2_hard_check_advance(global_State *g, uint64_t since);
 LJ_FUNC uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul);
 LJ_FUNC uint32_t lj_gc2_assist(global_State *g, TGState *tg);
+/* Allocation-free active-MARK certificate seed for the x64 one-numeric-
+** upvalue FNEW fast path. Success appends the exact proto/environment pair as
+** one indivisible owner-SSB cursor publication before publishing TG cache
+** authority. Failure publishes neither a partial pair nor cache authority. */
+LJ_FUNC int lj_gc2_fnew_certify_pair_nodrain(global_State *g, TGState *tg,
+					      GCproto *pt, GCtab *env);
+#ifdef LJ_FUNC_TEST_HELPERS
+/* Addresses are embedded only in test-built x64 mcode.  Production builds do
+** not emit the capture-to-store pause probe. */
+LJ_FUNC uintptr_t lj_gc2_test_fnew_env_pause_armed_addr(void);
+LJ_FUNC uintptr_t lj_gc2_test_fnew_env_pause_waiting_addr(void);
+LJ_FUNC uintptr_t lj_gc2_test_fnew_env_pause_release_addr(void);
+LJ_FUNC void lj_gc2_test_fnew_env_pause_arm(void);
+LJ_FUNC uint32_t lj_gc2_test_fnew_env_pause_waiting(void);
+LJ_FUNC void lj_gc2_test_fnew_env_pause_continue(void);
+#endif
 LJ_FUNC void lj_gc2_set_generational(global_State *g, int enabled);
 LJ_FUNC void lj_gc2_mark_begin(global_State *g);
 LJ_FUNC int lj_gc2_mark_phase_active(global_State *g);

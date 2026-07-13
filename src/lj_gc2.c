@@ -222,6 +222,49 @@ void lj_gc2_jit_sweep_request_exit(global_State *g)
   lj_gc2_sweep_publish_wake(g);
 }
 
+#ifdef LJ_FUNC_TEST_HELPERS
+/* Test-only words read by an x64 no-call spin probe after exact certificate
+** validation and before any typed claim.  Keep these naturally aligned and
+** use the ordinary atomic helpers for the C-side arm/observe/release edges. */
+static uint32_t gc2_test_fnew_env_pause_armed;
+static uint32_t gc2_test_fnew_env_pause_waiting;
+static uint32_t gc2_test_fnew_env_pause_release;
+
+uintptr_t lj_gc2_test_fnew_env_pause_armed_addr(void)
+{
+  return (uintptr_t)(void *)&gc2_test_fnew_env_pause_armed;
+}
+
+uintptr_t lj_gc2_test_fnew_env_pause_waiting_addr(void)
+{
+  return (uintptr_t)(void *)&gc2_test_fnew_env_pause_waiting;
+}
+
+uintptr_t lj_gc2_test_fnew_env_pause_release_addr(void)
+{
+  return (uintptr_t)(void *)&gc2_test_fnew_env_pause_release;
+}
+
+void lj_gc2_test_fnew_env_pause_arm(void)
+{
+  la_store32_rel(&gc2_test_fnew_env_pause_release, 0);
+  la_store32_rel(&gc2_test_fnew_env_pause_waiting, 0);
+  la_store32_rel(&gc2_test_fnew_env_pause_armed, 1);
+}
+
+uint32_t lj_gc2_test_fnew_env_pause_waiting(void)
+{
+  return la_load32_acq(&gc2_test_fnew_env_pause_waiting);
+}
+
+void lj_gc2_test_fnew_env_pause_continue(void)
+{
+  /* Disarm later loop iterations before releasing the one already waiting. */
+  la_store32_rel(&gc2_test_fnew_env_pause_armed, 0);
+  la_store32_rel(&gc2_test_fnew_env_pause_release, 1);
+}
+#endif
+
 #if defined(LJ_GC2_TEST_HELPERS)
 static uint32_t gc2_recovery_test_fail_grey_grow;
 static uint32_t gc2_recovery_test_pause_stage;
@@ -12677,6 +12720,56 @@ static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
 static int lj_gc2_ssb_push(global_State *g, GCobj *o)
 {
   return gc2_ssb_push(g, o, 1);
+}
+
+int lj_gc2_fnew_certify_pair_nodrain(global_State *g, TGState *tg,
+				      GCproto *pt, GCtab *env)
+{
+  GC2SSBNode *node;
+  GCRef *base;
+  GCRef *next, *end;
+  uint32_t cycle;
+
+  /* Only the current OS-thread owner may append its active SSB cursor. Caller
+  ** provenance is part of certificate authority, not merely an optimization
+  ** precondition. */
+  if (!g || !tg || !pt || !env || tg->gl != g || tg != G2TG(g))
+    return 0;
+  /* This is certificate authority, not a best-effort barrier. Require the
+  ** exact cooperative-MARK native-entry predicate also checked by emitted
+  ** code. The C constructor's ordinary barriers remain authoritative on every
+  ** miss or failed seed. */
+  if (gc2_phase_acq(g) != LJ_GC2_MARK ||
+      !lj_tg_mark_active_acq(tg) || !lj_tg_alloc_black_acq(tg) ||
+      gc2_jit_phase_gate_acq(g) == 0)
+    return 0;
+  cycle = gc2_cycle_acq(g);
+  if (cycle == 0 || gc2_jit_mark_resume_acq(g) != cycle)
+    return 0;
+
+  node = lj_tg_ssb_active_acq(tg);
+  base = lj_tg_ssb_base_acq(tg);
+  next = lj_tg_ssb_next_acq(tg);
+  end = lj_tg_ssb_end_acq(tg);
+  if (!node || lj_gc2_ssb_owner_acq(node) != tg ||
+      lj_gc2_ssb_remembered_acq(node) != 0 ||
+      base != node->slot || end != node->slot + TG_GC2_SSB_SLOTS || !next ||
+      next < base || next > end ||
+      (size_t)(end - next) < 2u)
+    return 0;
+
+  /* Raw SSB entries are explicit traversal requests even for already-marked
+  ** graph-bearing objects. Store both slots before one release cursor advance;
+  ** there is no allocation, rotation, drain, recovery fallback, or partial
+  ** publication on the full-buffer path. */
+  gc2_queue_slot_store_rel(next, obj2gco(pt));
+  gc2_queue_slot_store_rel(next + 1, obj2gco(env));
+  lj_tg_ssb_next_rel(tg, next + 2);
+
+  /* Cursor publication retains the pair. Cache pointers only compare exact
+  ** identity and become usable through the final release cycle store. */
+  lj_tg_fnew_cert_publish_rel(tg, pt, env, cycle);
+  return 1;
 }
 
 static int gc2_publish_mutator_(global_State *g, GCobj *o, int allow_drain)

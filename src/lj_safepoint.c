@@ -204,8 +204,13 @@ static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
 
 void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
 {
-  if (actions & LJ_GC2_HS_ENABLE_BARRIER)
+  if (actions & LJ_GC2_HS_ENABLE_BARRIER) {
+    /* Mark activation runs with native entry closed. Invalidate comparison
+    ** authority before enabling the TG barrier mirror, so a wrapped or stale
+    ** certificate can never authorize a new cycle. */
+    lj_tg_fnew_cert_reset_rel(tg);
     lj_tg_mark_active_rel(tg, 1);
+  }
   if (actions & LJ_GC2_HS_DISABLE_BARRIER)
     lj_tg_mark_active_rel(tg, 0);
   if (actions & LJ_GC2_HS_ALLOC_BLACK)

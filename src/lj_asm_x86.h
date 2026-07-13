@@ -1116,8 +1116,10 @@ static void asm_fnew1num_packed_pair_transition(ASMState *as, Reg arena,
       if (j != 0)
 	emit_gri(as, XG_ARITHi(XOg_ADD), bit, 1);
     }
-    if (lane != 0)
+    if (lane != 0) {
       emit_gri(as, XG_ARITHi(XOg_ADD), bit, (int32_t)between);
+      checkmclim(as);  /* Bound each exact packed-lane transform separately. */
+    }
   }
   emit_rr(as, XO_MOV, desired|REX_64, RID_RET|REX_64);
   asm_fnew1num_nfixup(as, retry);
@@ -1259,15 +1261,48 @@ static void asm_fnew1num_cmpi32(ASMState *as, Reg base, int32_t ofs,
 }
 
 static void asm_fnew1num_testi8(ASMState *as, Reg base, int32_t ofs,
-				int32_t k, int cc, MCLabel target)
+					int32_t k, int cc, MCLabel target)
 {
   emit_jcc(as, cc, target);
   emit_i8(as, k);
   emit_rmro(as, XO_GROUP3b, XOg_TEST, base, ofs);
 }
 
+#ifdef LJ_FUNC_TEST_HELPERS
+/* Test-only no-call pause after the exact environment comparison. Runtime
+** order is armed check -> publish waiting -> PAUSE/release loop -> clear
+** waiting. `tmp` is dead after certificate identity checks; `env` is never
+** touched, which lets the fixture mutate parent->env inside capture-to-store. */
+static void asm_fnew1num_test_env_pause(ASMState *as, Reg tmp, MCLabel done)
+{
+  MCLabel retry;
+
+  emit_i32(as, 0);
+  emit_rmro(as, XO_MOVmi, 0, tmp, 0);
+  emit_loadu64(as, tmp, lj_gc2_test_fnew_env_pause_waiting_addr());
+  checkmclim(as);
+
+  retry = emit_sjcc_label(as, CC_E);
+  emit_rr(as, XO_TEST, tmp, tmp);
+  emit_rmro(as, XO_MOV, tmp, tmp, 0);
+  emit_loadu64(as, tmp, lj_gc2_test_fnew_env_pause_release_addr());
+  emit_i8(as, XI_NOP);  /* PAUSE is F3 90. */
+  emit_i8(as, 0xf3u);
+  emit_sfixup(as, retry);
+  checkmclim(as);
+
+  emit_i32(as, 1);
+  emit_rmro(as, XO_MOVmi, 0, tmp, 0);
+  emit_loadu64(as, tmp, lj_gc2_test_fnew_env_pause_waiting_addr());
+
+  emit_jcc(as, CC_E, done);
+  emit_gmroi(as, XG_ARITHi(XOg_CMP), tmp, 0, 0);
+  emit_loadu64(as, tmp, lj_gc2_test_fnew_env_pause_armed_addr());
+}
+#endif
+
 static int asm_fnew1num_args_x64(ASMState *as, IRIns *ir,
-				 ASMCallFnew1Num *ci)
+					 ASMCallFnew1Num *ci)
 {
   IRIns *ptir, *slotir, *valir;
   uint32_t v;
@@ -1319,7 +1354,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
   MCLabel l_done, l_fallback, l_markclear, l_markdone;
   MCLabel l_state_impossible;
-  Reg base, parent, val, pt, g, arena, cell, next, uv, tmp, root;
+  Reg base, parent, val, pt, g, arena, cell, next, uv, tmp, root, env;
   IRRef fallback_args[CCI_NARGS_MAX];
   RegSet allow;
   uint32_t i;
@@ -1367,6 +1402,8 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   tmp = ra_scratch(as, allow);
   rset_clear(allow, tmp);
   root = ra_scratch(as, allow);
+  rset_clear(allow, root);
+  env = ra_scratch(as, allow);
   checkmclim(as);  /* Register setup may spill before the inline template. */
 
   /* A fresh-reservation descriptor mismatch is allocator corruption. Every
@@ -1459,8 +1496,9 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
 
   emit_movtomro(as, tmp|REX_64, RID_RET, offsetof(GCfuncL, pc));
   emit_loadu64(as, tmp, (uint64_t)(uintptr_t)proto_bc(fi.pt));
-  emit_movtomro(as, tmp|REX_GC64, RID_RET, offsetof(GCfuncL, env));
-  emit_rmro(as, XO_MOV, tmp|REX_GC64, parent, offsetof(GCfuncL, env));
+  /* Install the environment captured before certificate validation. Do not
+  ** reload parent->env after a racy setfenv may have changed it. */
+  emit_movtomro(as, env|REX_GC64, RID_RET, offsetof(GCfuncL, env));
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, ffid), FF_LUA);
   asm_fnew1num_movi8(as, RID_RET, offsetof(GCfuncL, gct), ~LJ_TFUNC);
   checkmclim(as);  /* Split function fields from proto closure counter. */
@@ -1545,14 +1583,57 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_leatg(as, tmp, hotcount);
   checkmclim(as);  /* Split TG state checks from active-marking predicates. */
   /*
-  ** The inlined path initializes a fresh arena-owned pair only outside active
-  ** marking. Birth-marking the pair is not sufficient in MARK: the C helper
-  ** also publishes proto/env/upvalue traversal work (including an explicitly
-  ** marked proto rescan). Until those barriers are emitted here, every active
-  ** MARK allocation uses the generic C fallback, black or white.
-  */
-  asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active), 0,
-			      CC_NE, l_fallback);
+  ** In active MARK, a C miss first appends this exact proto/environment pair
+  ** as two explicit traversal requests and then release-publishes the cycle
+  ** certificate. The fresh function/upvalue bodies are birth-marked here; the
+  ** numeric payload has no GC edge. Cache fields are comparison-only and
+  ** never replace traversal work. Every mismatch returns to the C barriers.
+  **
+  ** The assembler emits backwards. Runtime order below is: capture env once;
+  ** branch around all certificate checks when the barrier mirror is inactive;
+  ** require exact phase/color/gate/current-cycle/resume/cached-cycle/pt/env;
+  ** then continue at l_mark_ok. */
+  {
+    MCLabel l_mark_ok = emit_label(as);
+
+#ifdef LJ_FUNC_TEST_HELPERS
+    asm_fnew1num_test_env_pause(as, tmp, l_mark_ok);
+#endif
+
+    emit_jcc(as, CC_NE, l_fallback);
+    emit_rmro(as, XO_CMP, env|REX_64, RID_DISPATCH,
+		      DISPATCH_TG(fnew_cert_env));
+
+    emit_jcc(as, CC_NE, l_fallback);
+    emit_rmro(as, XO_CMP, tmp|REX_64, RID_DISPATCH,
+		      DISPATCH_TG(fnew_cert_pt));
+    emit_loadu64(as, tmp, (uint64_t)(uintptr_t)fi.pt);
+
+    emit_jcc(as, CC_NE, l_fallback);
+    emit_rmro(as, XO_CMP, tmp, RID_DISPATCH,
+		      DISPATCH_TG(fnew_cert_cycle));
+    checkmclim(as);  /* Split exact pair identity from phase authority. */
+
+    emit_jcc(as, CC_NE, l_fallback);
+    emit_rmro(as, XO_CMP, tmp, g,
+		      offsetof(global_State, gc2.jit_mark_resume));
+
+    emit_jcc(as, CC_E, l_fallback);
+    emit_rr(as, XO_TEST, tmp, tmp);
+    emit_rmro(as, XO_MOV, tmp, g, offsetof(global_State, gc2.cycle));
+
+    asm_fnew1num_cmpi32(as, g,
+				offsetof(global_State, gc2.jit_phase_gate), 0,
+				CC_E, l_fallback);
+    asm_fnew1num_testi8(as, RID_DISPATCH,
+			       DISPATCH_TG(alloc.alloc_black), 1,
+			       CC_Z, l_fallback);
+    asm_fnew1num_cmpi32(as, g, offsetof(global_State, gc2.phase),
+				LJ_GC2_MARK, CC_NE, l_fallback);
+    asm_fnew1num_cmpi32(as, RID_DISPATCH, DISPATCH_TG(mark_active),
+				0, CC_E, l_mark_ok);
+    emit_rmro(as, XO_MOV, env|REX_GC64, parent, offsetof(GCfuncL, env));
+  }
   checkmclim(as);
   asm_fnew1num_cmpi32(as, g, offsetof(global_State, allocf_arena), 0,
 			      CC_E, l_fallback);

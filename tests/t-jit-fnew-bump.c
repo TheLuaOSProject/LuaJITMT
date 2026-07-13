@@ -3,9 +3,11 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -19,6 +21,7 @@
 #include "lj_func.h"
 #include "lj_state.h"
 #include "lj_target.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_vm.h"
 
@@ -351,9 +354,9 @@ static int decode_x64_jcc(const uint8_t *mc, size_t len, size_t pos,
   return 1;
 }
 
-static size_t find_mem_cmp_zero_jcc(const uint8_t *mc, size_t len,
-	 size_t start, int32_t field, int required_base, uint8_t cc,
-	 size_t *targetp)
+static size_t find_mem_cmp_imm_jcc(const uint8_t *mc, size_t len,
+	 size_t start, int32_t field, int required_base, uint32_t wanted_imm,
+	 uint8_t cc, size_t *targetp, X64MemInsn *found)
 {
   size_t i;
   for (i = start; i + 5u < len; i++) {
@@ -385,8 +388,123 @@ static size_t find_mem_cmp_zero_jcc(const uint8_t *mc, size_t len,
 	((uint32_t)mc[j+2] << 16) | ((uint32_t)mc[j+3] << 24);
       j += 4u;
     }
-    if (imm != 0u ||
+    if (imm != wanted_imm ||
 	!decode_x64_jcc(mc, len, j, cc, &jcc_end, &target))
+      continue;
+    if (targetp)
+      *targetp = target;
+    ins.end = j;
+    if (found)
+      *found = ins;
+    return i;
+  }
+  return (size_t)-1;
+}
+
+static size_t find_mem_cmp_zero_jcc(const uint8_t *mc, size_t len,
+	 size_t start, int32_t field, int required_base, uint8_t cc,
+	 size_t *targetp)
+{
+  return find_mem_cmp_imm_jcc(mc, len, start, field, required_base, 0u,
+			       cc, targetp, NULL);
+}
+
+static size_t find_mem_regop(const uint8_t *mc, size_t len, size_t start,
+	 uint8_t opcode, int32_t field, int required_base, X64MemInsn *found)
+{
+  size_t i;
+  for (i = start; i + 3u < len; i++) {
+    size_t j = i;
+    uint8_t rex = 0, modrm;
+    X64MemInsn ins;
+    if (is_rex(mc[j]))
+      rex = mc[j++];
+    if (j + 2u > len || mc[j++] != opcode)
+      continue;
+    modrm = mc[j++];
+    ins.start = i;
+    if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, &ins) ||
+	ins.indexed || (required_base >= 0 && ins.base != required_base) ||
+	ins.disp != field)
+      continue;
+    ins.end = j;
+    if (found)
+      *found = ins;
+    return i;
+  }
+  return (size_t)-1;
+}
+
+static size_t find_mem_regop_jcc(const uint8_t *mc, size_t len, size_t start,
+	 uint8_t opcode, int32_t field, int required_base, uint8_t cc,
+	 size_t *targetp, X64MemInsn *found)
+{
+  while (start < len) {
+    X64MemInsn ins;
+    size_t end, target;
+    size_t pos = find_mem_regop(mc, len, start, opcode, field,
+				required_base, &ins);
+    if (pos == (size_t)-1)
+      return pos;
+    if (decode_x64_jcc(mc, len, ins.end, cc, &end, &target)) {
+      if (targetp)
+	*targetp = target;
+      if (found)
+	*found = ins;
+      return pos;
+    }
+    start = pos + 1u;
+  }
+  return (size_t)-1;
+}
+
+static size_t find_reg_test_zero_jcc(const uint8_t *mc, size_t len,
+	 size_t start, uint8_t wanted_reg, uint8_t cc, size_t *targetp)
+{
+  size_t i;
+  for (i = start; i + 4u < len; i++) {
+    size_t j = i, end, target;
+    uint8_t rex = 0, modrm, reg, rm;
+    if (is_rex(mc[j]))
+      rex = mc[j++];
+    if (j + 2u > len || mc[j++] != 0x85u)
+      continue;
+    modrm = mc[j++];
+    if ((modrm >> 6) != 3u)
+      continue;
+    reg = (uint8_t)(((modrm >> 3) & 7u) | ((rex & 4u) << 1));
+    rm = (uint8_t)((modrm & 7u) | ((rex & 1u) << 3));
+    if (reg != wanted_reg || rm != wanted_reg ||
+	!decode_x64_jcc(mc, len, j, cc, &end, &target))
+      continue;
+    if (targetp)
+      *targetp = target;
+    return i;
+  }
+  return (size_t)-1;
+}
+
+static size_t find_mem_test_imm8_jcc(const uint8_t *mc, size_t len,
+	 size_t start, int32_t field, int required_base, uint8_t wanted_imm,
+	 uint8_t cc, size_t *targetp)
+{
+  size_t i;
+  for (i = start; i + 5u < len; i++) {
+    size_t j = i, end, target;
+    uint8_t rex = 0, modrm;
+    X64MemInsn ins;
+    if (is_rex(mc[j]))
+      rex = mc[j++];
+    if (j + 2u > len || mc[j++] != 0xf6u)
+      continue;
+    modrm = mc[j++];
+    if (((modrm >> 3) & 7u) != 0u)
+      continue;
+    ins.start = i;
+    if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, &ins) ||
+	ins.indexed || (required_base >= 0 && ins.base != required_base) ||
+	ins.disp != field || j >= len || mc[j++] != wanted_imm ||
+	!decode_x64_jcc(mc, len, j, cc, &end, &target))
       continue;
     if (targetp)
       *targetp = target;
@@ -934,11 +1052,16 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     size_t repair_live1, repair_live2, repair_mut1, repair_mut2;
     size_t live_bad1 = (size_t)-1, live_bad2 = (size_t)-1;
     size_t mut_bad1 = (size_t)-1, mut_bad2 = (size_t)-1;
-    size_t mark_guard, mark_fallback, helper_call;
+    size_t mark_guard, mark_skip, phase_guard, allocblack_guard, gate_guard;
+    size_t cycle_load, cycle_nonzero, resume_guard, cert_cycle_guard;
+    size_t cert_pt_guard, cert_env_guard, env_load, env_store, helper_call;
+    size_t cert_fallback = (size_t)-1, target = (size_t)-1;
     size_t dtor_check[LJ_ARENA_DTOR_PLANES][2];
     size_t dtor_check_bad[LJ_ARENA_DTOR_PLANES][2];
     X64MemInsn dtor_check_insn[LJ_ARENA_DTOR_PLANES][2];
     X64MemInsn state_insn, fn_dtor_insn, uv_dtor_insn;
+    X64MemInsn phase_insn, cycle_insn, resume_insn, cert_cycle_insn;
+    X64MemInsn cert_pt_insn, cert_env_insn, env_insn;
     const uint8_t *mc;
     uintptr_t mcaddr;
     uint32_t plane;
@@ -1025,7 +1148,77 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
 	NULL, NULL);
     mark_guard = find_mem_cmp_zero_jcc(mc, len, 0,
-	DISPATCH_TG(mark_active), RID_DISPATCH, CC_NE, &mark_fallback);
+	DISPATCH_TG(mark_active), RID_DISPATCH, CC_E, &mark_skip);
+    assert(mark_guard != (size_t)-1 && mark_skip <= len);
+    phase_guard = find_mem_cmp_imm_jcc(mc, len, mark_guard + 1u,
+	(int32_t)offsetof(global_State, gc2.phase), -1, LJ_GC2_MARK,
+	CC_NE, &cert_fallback, &phase_insn);
+    assert(phase_guard != (size_t)-1 && cert_fallback <= len);
+    allocblack_guard = find_mem_test_imm8_jcc(mc, len, phase_guard + 1u,
+	DISPATCH_TG(alloc.alloc_black), RID_DISPATCH, 1u, CC_E,
+	&target);
+    assert(allocblack_guard != (size_t)-1 && target == cert_fallback);
+    gate_guard = find_mem_cmp_imm_jcc(mc, len, allocblack_guard + 1u,
+	(int32_t)offsetof(global_State, gc2.jit_phase_gate), phase_insn.base,
+	0u, CC_E, &target, NULL);
+    assert(gate_guard != (size_t)-1 && target == cert_fallback);
+    cycle_load = find_mem_regop(mc, len, gate_guard + 1u, 0x8bu,
+	(int32_t)offsetof(global_State, gc2.cycle), phase_insn.base,
+	&cycle_insn);
+    assert(cycle_load != (size_t)-1);
+    cycle_nonzero = find_reg_test_zero_jcc(mc, len, cycle_load + 1u,
+	cycle_insn.reg, CC_E, &target);
+    assert(cycle_nonzero != (size_t)-1 && target == cert_fallback);
+    resume_guard = find_mem_regop_jcc(mc, len, cycle_nonzero + 1u, 0x3bu,
+	(int32_t)offsetof(global_State, gc2.jit_mark_resume), phase_insn.base,
+	CC_NE, &target, &resume_insn);
+    assert(resume_guard != (size_t)-1 && target == cert_fallback &&
+	   resume_insn.reg == cycle_insn.reg);
+    cert_cycle_guard = find_mem_regop_jcc(mc, len, resume_guard + 1u, 0x3bu,
+	DISPATCH_TG(fnew_cert_cycle), RID_DISPATCH, CC_NE, &target,
+	&cert_cycle_insn);
+    assert(cert_cycle_guard != (size_t)-1 && target == cert_fallback &&
+	   cert_cycle_insn.reg == cycle_insn.reg);
+    cert_pt_guard = find_mem_regop_jcc(mc, len, cert_cycle_guard + 1u,
+	0x3bu, DISPATCH_TG(fnew_cert_pt), RID_DISPATCH, CC_NE, &target,
+	&cert_pt_insn);
+    assert(cert_pt_guard != (size_t)-1 && target == cert_fallback);
+    cert_env_guard = find_mem_regop_jcc(mc, len, cert_pt_guard + 1u,
+	0x3bu, DISPATCH_TG(fnew_cert_env), RID_DISPATCH, CC_NE, &target,
+	&cert_env_insn);
+    assert(cert_env_guard != (size_t)-1 && target == cert_fallback);
+
+    env_load = (size_t)-1;
+    {
+      size_t p = 0;
+      while (p < mark_guard) {
+	size_t q = find_mem_regop(mc, len, p, 0x8bu,
+	  (int32_t)offsetof(GCfuncL, env), -1, &env_insn);
+	if (q == (size_t)-1 || q >= mark_guard)
+	  break;
+	if (env_insn.reg == cert_env_insn.reg) {
+	  env_load = q;
+	  break;
+	}
+	p = q + 1u;
+      }
+    }
+    env_store = (size_t)-1;
+    {
+      assert(pair_claim != (size_t)-1);
+      size_t p = pair_claim;
+      while (p < len) {
+	size_t q = find_mem_regop(mc, len, p, 0x89u,
+	  (int32_t)offsetof(GCfuncL, env), -1, &env_insn);
+	if (q == (size_t)-1)
+	  break;
+	if (env_insn.reg == cert_env_insn.reg) {
+	  env_store = q;
+	  break;
+	}
+	p = q + 1u;
+      }
+    }
     helper_call = find_rel_call_target_at(mc, len, mcaddr,
 	(const void *)lj_func_newL_gc1num_forjit);
     repair_live1 = find_packed_sample_validate(mc, len,
@@ -1056,8 +1249,20 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     assert(repair_mut1 != (size_t)-1 && repair_mut2 != (size_t)-1);
     assert(live_bad1 == pair_claim_bad && live_bad2 == pair_claim_bad &&
 	   mut_bad1 == pair_claim_bad && mut_bad2 == pair_claim_bad);
-    assert(mark_guard != (size_t)-1 && helper_call != (size_t)-1);
-    assert(mark_guard < pair_claim && mark_fallback <= helper_call);
+    assert(mark_guard != (size_t)-1 && phase_guard != (size_t)-1);
+    assert(allocblack_guard != (size_t)-1 && gate_guard != (size_t)-1);
+    assert(cycle_load != (size_t)-1 && cycle_nonzero != (size_t)-1);
+    assert(resume_guard != (size_t)-1 && cert_cycle_guard != (size_t)-1);
+    assert(cert_pt_guard != (size_t)-1 && cert_env_guard != (size_t)-1);
+    assert(env_load != (size_t)-1 && env_store != (size_t)-1);
+    assert(helper_call != (size_t)-1 && cert_fallback <= helper_call);
+    assert(env_load < mark_guard && mark_guard < phase_guard &&
+	   phase_guard < allocblack_guard && allocblack_guard < gate_guard &&
+	   gate_guard < cycle_load && cycle_load < cycle_nonzero &&
+	   cycle_nonzero < resume_guard && resume_guard < cert_cycle_guard &&
+	   cert_cycle_guard < cert_pt_guard && cert_pt_guard < cert_env_guard &&
+	   cert_env_guard < mark_skip && mark_skip <= pair_claim);
+    assert(pair_claim < env_store);
     assert(pair_claim_bad + 3u <= len && mc[pair_claim_bad] == 0xccu &&
 	   mc[pair_claim_bad+1u] == 0xebu &&
 	   mc[pair_claim_bad+2u] == 0xfdu);
@@ -1713,8 +1918,453 @@ static void quiet_gc_for_bump(global_State *g, TGState *tg)
 {
   lj_gc_threshold_store(g, UINT64_MAX / 2u);
   lj_gc2_hard_store(g, UINT64_MAX / 2u);
+  lj_gc2_hard_check_store(g, UINT64_MAX / 2u);
   lj_gc2_trigger_store(g, UINT64_MAX / 2u);
   la_store64_rel(&tg->local_total, 0);
+}
+
+static void begin_open_fnew_mark(global_State *g, TGState *tg)
+{
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_cycle_acq(g) != 0);
+  assert(gc2_jit_mark_resume_acq(g) == gc2_cycle_acq(g));
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(lj_tg_mark_active_acq(tg) != 0);
+  assert(lj_tg_alloc_black_acq(tg) != 0);
+}
+
+static void drive_fnew_mark_to_idle(lua_State *L, global_State *g)
+{
+  uint32_t i;
+  for (i = 0; i < 2000000u && gc2_phase_acq(g) != LJ_GC2_IDLE; i++)
+    (void)lua_gc(L, LUA_GCSTEP, 1);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(gc2_jit_mark_resume_acq(g) == 0);
+}
+
+static void fill_fnew_test_ssb_to(TGState *tg, GCRef *target, GCobj *o)
+{
+  GC2SSBNode *node = lj_tg_ssb_active_acq(tg);
+  GCRef *base = lj_tg_ssb_base_acq(tg);
+  GCRef *next = lj_tg_ssb_next_acq(tg);
+  GCRef *end = lj_tg_ssb_end_acq(tg);
+
+  assert(node != NULL && lj_gc2_ssb_owner_acq(node) == tg);
+  assert(base == node->slot && end == node->slot + TG_GC2_SSB_SLOTS);
+  assert(next >= base && next <= target && target <= end);
+  while (next < target) {
+    /* Publish only real traversal entries, one slot at a time.  The boundary
+    ** fixture must never advance over stale or uninitialized queue storage. */
+    setgcrefrel(next[0], o);
+    lj_tg_ssb_next_rel(tg, next + 1);
+    next++;
+  }
+}
+
+static void test_fnew_certificate_ssb_boundary(lua_State *L,
+					       global_State *g, TGState *tg)
+{
+  TGState *fake;
+  GC2SSBNode *node;
+  GCRef *base, *next0, *end, *fake_end;
+  GCfunc *parent;
+  GCproto *child;
+  GCtab *env;
+  int32_t slotno;
+  uint32_t cycle;
+
+  load_one_upvalue_fixture(L, &parent, &child, &slotno);
+  UNUSED(slotno);
+  env = lj_funcL_env_acq(&parent->l);
+  fake = (TGState *)calloc(1, sizeof(*fake));
+  assert(fake != NULL);
+  fake->gl = g;
+  node = &fake->ssb_node[0];
+  lj_gc2_ssb_owner_rel(node, fake);
+  lj_gc2_ssb_next_rel(node, NULL);
+  lj_gc2_ssb_count_rel(node, 0);
+  lj_tg_ssb_active_rel(fake, node);
+  lj_tg_ssb_base_rel(fake, node->slot);
+  fake_end = node->slot + TG_GC2_SSB_SLOTS;
+  lj_tg_ssb_end_rel(fake, fake_end);
+  lj_tg_ssb_next_rel(fake, fake_end - 2);
+  lj_tg_mark_active_rel(fake, 1);
+  lj_tg_alloc_black_rel(fake, 1);
+  la_storeptr_rlx((void **)&fake->fnew_cert_pt, NULL);
+  la_storeptr_rlx((void **)&fake->fnew_cert_env, NULL);
+  lj_tg_fnew_cert_reset_rel(fake);
+
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    drive_fnew_mark_to_idle(L, g);
+  begin_open_fnew_mark(g, tg);
+  cycle = gc2_cycle_acq(g);
+
+  /* A correctly shaped foreign TG still cannot mutate another owner's active
+  ** cursor. Current-TG identity is certificate authority, not a caller hint. */
+  assert(!lj_gc2_fnew_certify_pair_nodrain(g, fake, child, env));
+  assert(lj_tg_ssb_next_acq(fake) == fake_end - 2);
+  assert(lj_tg_fnew_cert_cycle_acq(fake) == 0);
+
+  node = lj_tg_ssb_active_acq(tg);
+  base = lj_tg_ssb_base_acq(tg);
+  next0 = lj_tg_ssb_next_acq(tg);
+  end = lj_tg_ssb_end_acq(tg);
+  assert(node != NULL && lj_gc2_ssb_owner_acq(node) == tg);
+  assert(base == node->slot && end == node->slot + TG_GC2_SSB_SLOTS);
+  assert(next0 >= base && end >= next0 + 2);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == 0);
+
+  /* One remaining slot cannot publish half a traversal pair or any cache
+  ** authority. Fill every preceding slot with a legitimate traversal request;
+  ** the active-node tuple and its production end invariant remain exact. */
+  fill_fnew_test_ssb_to(tg, end - 1, obj2gco(child));
+  next0 = end - 1;
+  setgcrefnullrel(next0[0]);
+  assert(!lj_gc2_fnew_certify_pair_nodrain(g, tg, child, env));
+  assert(lj_tg_ssb_next_acq(tg) == next0);
+  assert(gcref_acq(next0[0]) == NULL);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == 0);
+
+  /* A completely full production-valid SSB has the same all-or-nothing
+  ** failure behavior. Publish the final slot as real traversal work first. */
+  fill_fnew_test_ssb_to(tg, end, obj2gco(env));
+  assert(!lj_gc2_fnew_certify_pair_nodrain(g, tg, child, env));
+  assert(lj_tg_ssb_next_acq(tg) == end);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == 0);
+
+  lj_gc2_preserve_abort_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  begin_open_fnew_mark(g, tg);
+  cycle = gc2_cycle_acq(g);
+  node = lj_tg_ssb_active_acq(tg);
+  base = lj_tg_ssb_base_acq(tg);
+  end = lj_tg_ssb_end_acq(tg);
+  assert(node != NULL && lj_gc2_ssb_owner_acq(node) == tg);
+  assert(base == node->slot && end == node->slot + TG_GC2_SSB_SLOTS);
+  assert(lj_tg_ssb_next_acq(tg) >= base &&
+	 end >= lj_tg_ssb_next_acq(tg) + 2);
+
+  /* Two slots publish in pt,env order through one cursor release before the
+  ** comparison-only cache cycle becomes nonzero. */
+  fill_fnew_test_ssb_to(tg, end - 2, obj2gco(child));
+  next0 = end - 2;
+  setgcrefnullrel(next0[0]);
+  setgcrefnullrel(next0[1]);
+  assert(lj_gc2_fnew_certify_pair_nodrain(g, tg, child, env));
+  assert(lj_tg_ssb_next_acq(tg) == next0 + 2);
+  assert(gcref_acq(next0[0]) == obj2gco(child));
+  assert(gcref_acq(next0[1]) == obj2gco(env));
+  assert(lj_tg_fnew_cert_pt_acq(tg) == child);
+  assert(lj_tg_fnew_cert_env_acq(tg) == env);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == cycle);
+
+  /* Retain the two legitimate traversal entries.  The abort/flush path may
+  ** consume them exactly like production work. */
+  lj_tg_fnew_cert_reset_rel(tg);
+
+  lj_gc2_preserve_abort_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lj_tg_fnew_cert_reset_rel(fake);
+  free(fake);
+  lua_pop(L, 1);
+}
+
+static void call_fnew_cert_run(lua_State *L, int n, lua_Number offset,
+			       lua_Number first, lua_Number last,
+			       const char *label)
+{
+  lua_getglobal(L, "__fnew_cert_run");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, n);
+  lua_pushnumber(L, offset);
+  ljt_lua_pcall(L, 2, 2, label);
+  assert(lua_tonumber(L, -2) == first);
+  assert(lua_tonumber(L, -1) == last);
+  lua_pop(L, 2);
+}
+
+static int fnew_mark_work_empty(global_State *g, TGState *tg)
+{
+  return gc2_grey_top_acq(g) >= gc2_grey_bottom_acq(g) &&
+    gc2_ssb_head_acq(g) == NULL && gc2_ssb_drain_acq(g) == NULL &&
+    gc2_recovery_items_acq(g) == 0 &&
+    lj_tg_ssb_next_acq(tg) == lj_tg_ssb_base_acq(tg);
+}
+
+static void establish_persistent_fnew_root_snapshot(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
+{
+  uint32_t i;
+
+  /* A one-item close budget completes the global root snapshot, but the large
+  ** rooted graph leaves post-snapshot work and forces a bounded MARK reopen. */
+  for (i = 0; i < 64u && gc2_mark_root_scanned_acq(g) != 1; i++) {
+    assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+    assert(!lj_gc2_mark_complete(g, L, 1, 1));
+  }
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_mark_root_scanned_acq(g) == 1);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(gc2_jit_mark_resume_acq(g) == gc2_cycle_acq(g));
+
+  /* Drain old snapshot work without running another fixpoint round.  This
+  ** leaves an otherwise quiescent MARK with persistent state 1 and an open
+  ** native lease, so only post-snapshot barriers can hold the later close. */
+  for (i = 0; i < 64u && !fnew_mark_work_empty(g, tg); i++) {
+    lj_gc2_jit_mark_request_exit(g);
+    (void)lj_gc2_worker_drain(g, 1u << 20);
+  }
+  assert(fnew_mark_work_empty(g, tg));
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_mark_root_scanned_acq(g) == 1);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(gc2_jit_mark_resume_acq(g) == gc2_cycle_acq(g));
+}
+
+typedef struct FNewEnvRaceCtx {
+  GCfunc *parent;
+  GCtab *env;
+  uint32_t swapped;
+  uint32_t timed_out;
+} FNewEnvRaceCtx;
+
+static void *fnew_env_race_main(void *arg)
+{
+  FNewEnvRaceCtx *ctx = (FNewEnvRaceCtx *)arg;
+  uint64_t start = lj_thr_now_ns();
+
+  while (lj_gc2_test_fnew_env_pause_waiting() == 0) {
+    if (lj_thr_now_ns() - start > 2000000000u) {
+      la_store32_rel(&ctx->timed_out, 1);
+      lj_gc2_test_fnew_env_pause_continue();
+      return NULL;
+    }
+    la_cpu_pause();
+  }
+  /* Deliberately model the public setfenv publication racing an already-entered
+  ** trace.  The owner performs the real GC barrier immediately after join and
+  ** before any collector progress. */
+  lj_func_env_rel(ctx->parent, ctx->env);
+  la_store32_rel(&ctx->swapped, 1);
+  lj_gc2_test_fnew_env_pause_continue();
+  return NULL;
+}
+
+static void test_traced_active_mark_certificate(lua_State *L,
+					global_State *g, TGState *tg)
+{
+  const int n = 64;
+  GCfunc *runfn;
+  GCproto *certpt, *wrongpt;
+  GCtab *envb, *envc, *globalenv;
+  uint32_t cycle1, cycle2, helper0, helper1;
+
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    drive_fnew_mark_to_idle(L, g);
+  run_script(L,
+    "local util = require'jit.util'\n"
+    "collectgarbage('stop')\n"
+    "__fnew_cert_mark_keep = {}\n"
+    "for i = 1, 20000 do __fnew_cert_mark_keep[i] = { i, i + 1 } end\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=100000', '-sink')\n"
+    "__fnew_cert_keep = {}\n"
+    "function __fnew_cert_run(n, offset)\n"
+    "  local out = __fnew_cert_keep\n"
+    "  for i = 1, n do\n"
+    "    local x = i + offset\n"
+    "    out[i] = function() return x end\n"
+    "  end\n"
+    "  return out[1](), out[n]()\n"
+    "end\n"
+    "assert(__fnew_cert_run(64, 0.25) == 1.25)\n"
+    "assert(util.traceinfo(1), 'certificate FNEW loop did not trace')\n"
+    "__fnew_cert_env_b = setmetatable({\n"
+    "  token = { magic = 0x5eed }\n"
+    "}, { __index = _G })\n"
+    "__fnew_cert_env_c = setmetatable({\n"
+    "  token = { magic = 0xcafe }\n"
+    "}, { __index = _G })\n",
+    "active-MARK FNEW certificate setup");
+  lua_getglobal(L, "__fnew_cert_run");
+  runfn = top_lfunc(L);
+  globalenv = lj_funcL_env_acq(&runfn->l);
+  wrongpt = funcproto(runfn);
+  lua_pop(L, 1);
+  lua_getglobal(L, "__fnew_cert_env_b");
+  assert(tvistab(L->top - 1));
+  envb = tabV(L->top - 1);
+  lua_pop(L, 1);
+  lua_getglobal(L, "__fnew_cert_env_c");
+  assert(tvistab(L->top - 1));
+  envc = tabV(L->top - 1);
+  lua_pop(L, 1);
+
+  quiet_gc_for_bump(g, tg);
+  prime_traversable_bump_window(tg);
+  begin_open_fnew_mark(g, tg);
+  cycle1 = gc2_cycle_acq(g);
+  establish_persistent_fnew_root_snapshot(L, g, tg);
+  quiet_gc_for_bump(g, tg);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_tg_mark_active_acq(tg) != 0);
+  assert(lj_tg_alloc_black_acq(tg) != 0);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(gc2_jit_mark_resume_acq(g) == cycle1);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == 0);
+  reset_gc1num_bump_counters();
+  helper0 = gc1num_bump_helper_calls();
+  call_fnew_cert_run(L, n, 1000.25, 1001.25, 1064.25,
+	"first active-MARK certified FNEW run");
+  helper1 = gc1num_bump_helper_calls();
+  assert(helper1 == helper0 + 1u);
+  certpt = lj_tg_fnew_cert_pt_acq(tg);
+  assert(certpt != NULL && certpt != wrongpt);
+  assert(lj_tg_fnew_cert_env_acq(tg) == globalenv);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == cycle1);
+  assert(gc2_mark_root_scanned_acq(g) == 1);
+  assert(lj_tg_gcroot_pending_acq(tg) == NULL);
+  assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
+  assert(!fnew_mark_work_empty(g, tg));
+  /* With the old root snapshot still authoritative, a one-item close can
+  ** consume some work but cannot close over the post-snapshot barrier batch. */
+  assert(!lj_gc2_mark_complete(g, L, 1, 1));
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(gc2_mark_root_scanned_acq(g) == 1);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(gc2_jit_mark_resume_acq(g) == cycle1);
+
+  /* The exact same pt/env/cycle now constructs entirely in emitted code. */
+  helper0 = helper1;
+  call_fnew_cert_run(L, n, 2000.25, 2001.25, 2064.25,
+	"active-MARK FNEW certificate hit");
+  assert(gc1num_bump_helper_calls() == helper0);
+
+  /* Changing only the parent environment must miss once, seed that exact
+  ** environment, and install the same value in all later inline closures. */
+  /* Public setfenv flushes traces before publication. Model the permitted racy
+  ** case in which an already-entered trace observes the release-published
+  ** function env after that flush/entry race, while retaining the real GC2
+  ** parent->env barrier. */
+  lj_func_env_rel(runfn, envb);
+  lj_gc_pubobjobj(L, runfn, envb);
+  helper0 = gc1num_bump_helper_calls();
+  call_fnew_cert_run(L, n, 3000.25, 3001.25, 3064.25,
+	"active-MARK FNEW changed-environment miss");
+  assert(gc1num_bump_helper_calls() == helper0 + 1u);
+  assert(lj_tg_fnew_cert_pt_acq(tg) == certpt);
+  assert(lj_tg_fnew_cert_env_acq(tg) == envb);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == cycle1);
+
+  lua_getglobal(L, "__fnew_cert_keep");
+  lua_rawgeti(L, -1, 1);
+  assert(lua_isfunction(L, -1));
+  lua_getfenv(L, -1);
+  assert(lua_istable(L, -1) && tabV(L->top - 1) == envb);
+  lua_pop(L, 3);
+
+  /* Pause a certified active hit after its one environment capture and exact
+  ** comparison, but before typed claim/body stores. A foreign controller
+  ** release-publishes env_c while the trace is already entered. The paused
+  ** closure must retain env_b; later iterations miss once and adopt env_c. */
+  {
+    FNewEnvRaceCtx ctx;
+    pthread_t mutator;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.parent = runfn;
+    ctx.env = envc;
+    lj_gc2_test_fnew_env_pause_arm();
+    assert(pthread_create(&mutator, NULL, fnew_env_race_main, &ctx) == 0);
+    helper0 = gc1num_bump_helper_calls();
+    call_fnew_cert_run(L, n, 3500.25, 3501.25, 3564.25,
+	"active-MARK FNEW capture-to-store environment race");
+    assert(pthread_join(mutator, NULL) == 0);
+    assert(la_load32_acq(&ctx.timed_out) == 0);
+    assert(la_load32_acq(&ctx.swapped) != 0);
+    /* Complete the real parent->env barrier before any collector progress. */
+    lj_gc_pubobjobj(L, runfn, envc);
+    assert(gc1num_bump_helper_calls() == helper0 + 1u);
+    assert(lj_tg_fnew_cert_pt_acq(tg) == certpt);
+    assert(lj_tg_fnew_cert_env_acq(tg) == envc);
+    assert(lj_tg_fnew_cert_cycle_acq(tg) == cycle1);
+
+    lua_getglobal(L, "__fnew_cert_keep");
+    lua_rawgeti(L, -1, 1);
+    lua_getfenv(L, -1);
+    assert(lua_istable(L, -1) && tabV(L->top - 1) == envb);
+    lua_pop(L, 2);
+    lua_rawgeti(L, -1, n);
+    lua_getfenv(L, -1);
+    assert(lua_istable(L, -1) && tabV(L->top - 1) == envc);
+    lua_pop(L, 3);
+  }
+
+  /* A valid certificate for another proto still cannot authorize this trace.
+  ** Its first FNEW returns to C, then subsequent iterations hit the reseed. */
+  assert(lj_gc2_fnew_certify_pair_nodrain(g, tg, wrongpt, envc));
+  assert(lj_tg_fnew_cert_pt_acq(tg) == wrongpt);
+  helper0 = gc1num_bump_helper_calls();
+  call_fnew_cert_run(L, n, 4000.25, 4001.25, 4064.25,
+	"active-MARK FNEW changed-proto miss");
+  assert(gc1num_bump_helper_calls() == helper0 + 1u);
+  assert(lj_tg_fnew_cert_pt_acq(tg) == certpt);
+  assert(lj_tg_fnew_cert_env_acq(tg) == envc);
+
+  /* Remove every ordinary env_c root before finishing MARK. The closures in
+  ** the keep table are then its only semantic owners. */
+  lj_func_env_rel(runfn, globalenv);
+  lj_gc_pubobjobj(L, runfn, globalenv);
+  lua_pushnil(L);
+  lua_setglobal(L, "__fnew_cert_env_b");
+  lua_pushnil(L);
+  lua_setglobal(L, "__fnew_cert_env_c");
+  drive_fnew_mark_to_idle(L, g);
+
+  lua_getglobal(L, "__fnew_cert_keep");
+  lua_rawgeti(L, -1, 1);
+  assert(lua_isfunction(L, -1));
+  assert(funcproto(top_lfunc(L)) == certpt);
+  lua_pushvalue(L, -1);
+  ljt_lua_pcall(L, 0, 1, "surviving certified FNEW closure");
+  assert(lua_tonumber(L, -1) == 4001.25);
+  lua_pop(L, 1);
+  lua_getfenv(L, -1);
+  assert(lua_istable(L, -1) && tabV(L->top - 1) == envc);
+  lua_getfield(L, -1, "token");
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "magic");
+  assert(lua_tointeger(L, -1) == 0xcafe);
+  lua_pop(L, 5);
+
+  /* Activation reset and the explicit current-cycle comparison both reject
+  ** stale authority. Publish the old cycle deliberately; exactly one C miss
+  ** repairs it for the new cooperative MARK generation. */
+  quiet_gc_for_bump(g, tg);
+  prime_traversable_bump_window(tg);
+  begin_open_fnew_mark(g, tg);
+  cycle2 = gc2_cycle_acq(g);
+  assert(cycle2 != cycle1);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == 0);
+  lj_tg_fnew_cert_publish_rel(tg, certpt, globalenv, cycle1);
+  helper0 = gc1num_bump_helper_calls();
+  call_fnew_cert_run(L, n, 5000.25, 5001.25, 5064.25,
+	"active-MARK FNEW stale-cycle miss");
+  assert(gc1num_bump_helper_calls() == helper0 + 1u);
+  assert(lj_tg_fnew_cert_pt_acq(tg) == certpt);
+  assert(lj_tg_fnew_cert_env_acq(tg) == globalenv);
+  assert(lj_tg_fnew_cert_cycle_acq(tg) == cycle2);
+  lj_gc2_preserve_abort_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  lua_pushnil(L); lua_setglobal(L, "__fnew_cert_keep");
+  lua_pushnil(L); lua_setglobal(L, "__fnew_cert_run");
+  lua_pushnil(L); lua_setglobal(L, "__fnew_cert_mark_keep");
+  lua_gc(L, LUA_GCRESTART, 0);
 }
 
 static void test_uvcell_bump_direct(lua_State *L, global_State *g, TGState *tg)
@@ -2262,6 +2912,7 @@ int main(void)
   test_interpreter_numeric_fast_path(L);
   test_accounting_fast_direct(L, g, tg);
   test_white_bump_clears_seeded_marks(L, g, tg);
+  test_fnew_certificate_ssb_boundary(L, g, tg);
   test_active_black_direct_publishes_typed(L, g, tg);
   test_active_black_direct_keeps_exact_cells(L, g, tg);
   test_accounting_checkpoint(L, g, tg);
@@ -2278,6 +2929,7 @@ int main(void)
     test_traced_no_upvalue_fast_path(L);
     test_traced_gcvalue_promotion(L);
   }
+  test_traced_active_mark_certificate(L, g, tg);
 
   lua_close(L);
   puts("t-jit-fnew-bump OK");
