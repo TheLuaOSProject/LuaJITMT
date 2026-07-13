@@ -2308,6 +2308,11 @@ static int lj_gc2_request_cycle(global_State *g, TGState *tg)
   return requested;
 }
 
+int lj_gc2_request_cycle_pressure(global_State *g, TGState *tg)
+{
+  return lj_gc2_request_cycle(g, tg);
+}
+
 int lj_gc2_request_cycle_explicit(global_State *g, TGState *tg)
 {
   int requested;

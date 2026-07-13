@@ -892,6 +892,7 @@ typedef struct jit_State {
   GCtrace *retiredtraces;  /* Retired trace bodies awaiting SMR. */
   TraceNo freetrace;	/* Start of scan for next free trace. */
   MSize sizetrace;	/* Token-held trace vector size mirror. */
+  MSize gc_pressure_traces;  /* Published traces since last GC pressure try. */
   IRRef1 ktrace;	/* Reference to KGC with GCtrace. */
 
   IRRef1 chain[IR__MAX];  /* IR instruction skip-list chain anchors. */

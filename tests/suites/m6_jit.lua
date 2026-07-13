@@ -2455,6 +2455,9 @@ end
     description = "stock trace/prototype GC lifetime and record callback reachability",
     run = function(t)
       build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-trace-gc-pressure.lua"), {
+        timeout = "20s"
+      })
       runtime.run_stock(t, { "misc/gc_trace.lua" }, { timeout = "20s" })
       print("M6 JIT trace/prototype GC stock oracle passed")
     end

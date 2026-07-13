@@ -41,6 +41,13 @@
 #include "lj_target.h"
 #include "lj_prng.h"
 
+/* Trace bodies/prototypes are semantically ordinary GC2 objects, but the
+** compatibility total includes the much larger fixed GC2 runtime state. A
+** short burst can therefore fill public trace slots without reaching the
+** allocation trigger that stock reaches. Periodically publish ordinary GC
+** pressure; the recorder still never performs collection or liveness work. */
+#define TRACE_GC_PRESSURE_BATCH	64u
+
 #ifdef LJ_TRACE_TEST_HELPERS
 static uint32_t trace_test_call_unroll_aborts;
 static uint32_t trace_test_call_unroll_linked;
@@ -2577,6 +2584,7 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   lj_gc2_smr_read_leave(J2G(J));
   J->cur.traceno = 0;
   J->freetrace = 0;
+  J->gc_pressure_traces = 0;
   /* Clear penalty cache. */
   memset(J->penalty, 0, sizeof(J->penalty));
   /* Free the whole machine code and invalidate all exit stub groups. */
@@ -2952,7 +2960,7 @@ static void trace_start(jit_State *J)
 }
 
 /* Stop tracing. */
-static void trace_stop(jit_State *J)
+static int trace_stop(jit_State *J)
 {
   global_State *g = J2G(J);
   BCIns *pc = mref(J->cur.startpc, BCIns);
@@ -3085,6 +3093,16 @@ static void trace_stop(jit_State *J)
     setintV(V->top++, traceno);
     setfuncV(V, V->top++, J->fn);
   );
+  /* Count only completely published traces. The caller releases the recorder
+  ** token before converting this hint into an ordinary GC2 cycle request. */
+  if (++J->gc_pressure_traces >= TRACE_GC_PRESSURE_BATCH) {
+    J->gc_pressure_traces = 0;
+    /* Publication churn which continually reuses a small namespace is not
+    ** heap pressure. Request only when the token-owned free cursor proves the
+    ** live/reserved high-water has crossed this batch. */
+    return J->freetrace > TRACE_GC_PRESSURE_BATCH;
+  }
+  return 0;
 }
 
 /* Start a new root trace for down-recursion. */
@@ -3296,18 +3314,23 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       break;
 
     case LJ_TRACE_ASM:
-      setvmstate(J2G(J), ASM);
-      lj_asm_trace(J, &J->cur);
-      if (lj_trace_state_aborted(lj_trace_state_load(J)))
-	goto retry;
-      trace_stop(J);
-      setvmstate(J2G(J), INTERP);
-      lj_trace_state_store(J, LJ_TRACE_IDLE);
-      lj_dispatch_update(J2G(J), 0);
-      lj_jit_token_release_l(J->L, J);
-      if (gc2_phase_acq(G(L)) != LJ_GC2_IDLE || lj_gc_should_step(G(L)))
-	lj_gc_step(L);
-      return NULL;
+      {
+        int gc_pressure;
+        setvmstate(J2G(J), ASM);
+        lj_asm_trace(J, &J->cur);
+        if (lj_trace_state_aborted(lj_trace_state_load(J)))
+	  goto retry;
+        gc_pressure = trace_stop(J);
+        setvmstate(J2G(J), INTERP);
+        lj_trace_state_store(J, LJ_TRACE_IDLE);
+        lj_dispatch_update(J2G(J), 0);
+        lj_jit_token_release_l(J->L, J);
+        if (gc_pressure)
+	  (void)lj_gc2_request_cycle_pressure(G(L), L2TG(L));
+        if (gc2_phase_acq(G(L)) != LJ_GC2_IDLE || lj_gc_should_step(G(L)))
+	  lj_gc_step(L);
+        return NULL;
+      }
 
     default:  /* Trace aborted asynchronously. */
       setintV(L->top++, (int32_t)LJ_TRERR_RECERR);

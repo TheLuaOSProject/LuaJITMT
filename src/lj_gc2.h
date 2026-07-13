@@ -225,6 +225,10 @@ LJ_FUNC uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg);
 ** checkpoint as an accounting-boundary allocation, without charging a future
 ** object before its constructor succeeds. */
 LJ_FUNC uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg);
+/* Publish ordinary automatic-GC pressure without collecting in the caller.
+** This honors collectgarbage("stop") and uses the same bounded IDLE leader
+** token as allocation pacing. */
+LJ_FUNC int lj_gc2_request_cycle_pressure(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_cycle_explicit(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_major(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_collect_active(lua_State *L);
