@@ -1058,6 +1058,12 @@ static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
   MCLabel root_link, root_member;
   MCLabel initial_m, initial_l, initial_c, initial_dispatch, initial_fixup;
 
+  /* This helper emits several complete retry/repair arms. Keep every arm in
+  ** its own sparse-limit segment: the two callers already start at a checked
+  ** boundary, but one unsplit commit is substantially larger than the mcode
+  ** red zone and could cross the real lower limit before returning. */
+  checkmclim(as);
+
   /* Final crossover repair. Recovery can sample LINKING, restore MUTATING to
   ** CONSTRUCT, and lose the root CAS immediately after its post-check. Accept
   ** LIVE/MUTATING, or exact-CAS CONSTRUCT->LIVE before returning. */
@@ -1065,11 +1071,13 @@ static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
   asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
 	LJ_ARENA_LIFETIME_MUTATING, impossible);
   repair_m = emit_label(as);
+  checkmclim(as);
 
   emit_jmp(as, done);
   asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
 	LJ_ARENA_LIFETIME_LIVE, impossible);
   repair_l = emit_label(as);
+  checkmclim(as);
 
   emit_jmp(as, done);
   repair_fixup = asm_fnew1num_packed_sampled_transition(as, word, bit,
@@ -1077,6 +1085,7 @@ static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
 	0, impossible);
   repair_c = emit_label(as);
+  checkmclim(as);
 
   /* Dispatch the frozen 4-bit lane by bit 1 then bit 0. Exact validation in
   ** each arm rejects FREE/DESTRUCT/RESCUE and all corrupt encodings. */
@@ -1095,17 +1104,20 @@ static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
 	(int32_t)offsetof(GCArena, lifetime),
 	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u);
   repair_entry = emit_label(as);
+  checkmclim(as);
 
   /* LINKING may be committed only from CONSTRUCT or recovery-owned MUTATING.
   ** A pre-existing LIVE lane is accepted solely with an already-MEMBER root. */
   asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
 	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_MEMBER, impossible);
   root_link = emit_label(as);
+  checkmclim(as);
 
   emit_jmp(as, repair_entry);
   asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
 	LJ_ARENA_ROOT_MEMBER, LJ_ARENA_ROOT_MEMBER, impossible);
   root_member = emit_label(as);
+  checkmclim(as);
 
   /* Initial visible-state arms. CONSTRUCT wins the normal lifetime LP;
   ** MUTATING leaves the lane to recovery; LIVE is only the completed recovery
@@ -1114,11 +1126,13 @@ static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
   asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
 	LJ_ARENA_LIFETIME_MUTATING, impossible);
   initial_m = emit_label(as);
+  checkmclim(as);
 
   emit_jmp(as, root_member);
   asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
 	LJ_ARENA_LIFETIME_LIVE, impossible);
   initial_l = emit_label(as);
+  checkmclim(as);
 
   emit_jmp(as, root_link);
   initial_fixup = asm_fnew1num_packed_sampled_transition(as, word, bit,
@@ -1126,6 +1140,7 @@ static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
 	0, impossible);
   initial_c = emit_label(as);
+  checkmclim(as);
 
   emit_jmp(as, initial_c);
   emit_jcc(as, CC_B, initial_m);
@@ -1143,6 +1158,7 @@ static void asm_fnew1num_construct_commit(ASMState *as, Reg arena, Reg cell,
   asm_fnew1num_packed_load(as, arena, cell, word, bit,
 	(int32_t)offsetof(GCArena, lifetime),
 	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u);
+  checkmclim(as);
 }
 
 /* Claim one undiscovered reservation. A root-plane mismatch rolls back only
@@ -1152,15 +1168,19 @@ static void asm_fnew1num_construct_claim(ASMState *as, Reg arena, Reg cell,
 					 MCLabel failure)
 {
   MCLabel done = emit_label(as), rollback;
+  checkmclim(as);
   emit_jmp(as, failure);
   asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, failure);
   rollback = emit_label(as);
+  checkmclim(as);
   emit_jmp(as, done);
   asm_fnew1num_root_transition(as, arena, cell, word, bit, desired,
 	LJ_ARENA_ROOT_NONE, LJ_ARENA_ROOT_LINKING, rollback);
+  checkmclim(as);
   asm_fnew1num_lifetime_transition(as, arena, cell, word, bit, desired,
 	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT, failure);
+  checkmclim(as);
 }
 
 /* Claim function then upvalue. Any second-start failure first abandons that
@@ -1171,17 +1191,25 @@ static void asm_fnew1num_construct_pair_claim(ASMState *as, Reg arena,
 					      MCLabel impossible)
 {
   MCLabel done = emit_label(as), rollback_fn;
+  /* Pair claim nests two full packed-state transactions. Split at each
+  ** transaction boundary so a rollback arm cannot hide multiple lane CAS
+  ** sequences behind the caller's single sparse-limit check. */
+  checkmclim(as);
   emit_jmp(as, impossible);
   asm_fnew1num_lifetime_transition(as, arena, fncell, word, bit, desired,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, impossible);
+  checkmclim(as);
   asm_fnew1num_root_transition(as, arena, fncell, word, bit, desired,
 	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_NONE, impossible);
   rollback_fn = emit_label(as);
+  checkmclim(as);
   emit_jmp(as, done);
   asm_fnew1num_construct_claim(as, arena, uvcell, word, bit, desired,
 	rollback_fn);
+  checkmclim(as);
   asm_fnew1num_construct_claim(as, arena, fncell, word, bit, desired,
 	impossible);
+  checkmclim(as);
 }
 
 static void asm_fnew1num_movi8(ASMState *as, Reg base, int32_t ofs, int32_t k)
