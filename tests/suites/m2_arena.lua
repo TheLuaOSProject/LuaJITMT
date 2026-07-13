@@ -119,8 +119,12 @@ return function(add)
     name = "m2_arena_sweep",
     description = "owner-local arena sweep scaffold C fixture",
     run = function(t)
-      run_standalone_fixture(t, t:tmp("lj_t_arena_sweep"),
-                             "t-arena-sweep.c")
+      compile_and_run_sources(t, t:tmp("lj_t_arena_sweep"),
+        arena_sources(t, "t-arena-sweep.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS",
+        link_luajit = false,
+        libs = {}
+      })
     end
   })
 

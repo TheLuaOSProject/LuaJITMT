@@ -5,6 +5,8 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "lj_arch.h"
 #include "lj_arena.h"
@@ -29,6 +31,112 @@ static void assert_no_bins(TGAlloc *alloc, uint32_t kind)
   for (b = 0; b < LJ_ALLOC_NBINS; b++)
     assert(alloc->bins[kind][b] == NULL);
 }
+
+#if defined(LJ_ARENA_TEST_HELPERS)
+static void test_packed_range_preflight(PRNGState *rs)
+{
+  GCArena *a = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
+  GCArena *snapshot;
+  uint32_t word = (LJ_AFIRST_CELL + 63u) & ~63u;
+  uint32_t start = word + 14u;
+  uint32_t len = 20u;
+  uint32_t rootcell = word + 15u;
+  uint32_t lifecell = word + 16u;
+  uint32_t dtorcell = word + 31u;
+  uint32_t recoverycell = word + 32u;
+  uint32_t before = start - 1u;
+  uint32_t after = start + len;
+  uint32_t i;
+
+  assert(a != NULL);
+  assert(start >= LJ_AFIRST_CELL && after < LJ_ARENA_CELLS);
+  assert((start >> 6) == (recoverycell >> 6));
+  snapshot = (GCArena *)malloc(sizeof(*snapshot));
+  assert(snapshot != NULL);
+
+  /* A zero-length request must not bypass the start lifetime check or mutate
+  ** its structural bits. Out-of-range requests are equally side-effect free. */
+  assert(lj_arena_lifetime_state_cas(a, start, LJ_ARENA_LIFETIME_FREE,
+					     LJ_ARENA_LIFETIME_MUTATING));
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, start, 0));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+  assert(lj_arena_lifetime_state_cas(a, start,
+	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_FREE));
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, LJ_ARENA_CELLS, 1u));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+
+  /* The range crosses packed positions 15/16 and bitmap positions 31/32.
+  ** Every owner class must veto without changing any arena byte. Recovery is
+  ** deliberately nonfatal on the set-free path. */
+  assert(lj_arena_root_state_cas(a, rootcell, LJ_ARENA_ROOT_NONE,
+					 LJ_ARENA_ROOT_LINKING));
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, start, len));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+  assert(lj_arena_root_state_cas(a, rootcell, LJ_ARENA_ROOT_LINKING,
+					 LJ_ARENA_ROOT_NONE));
+
+  assert(lj_arena_recovery_state_cas(a, recoverycell,
+	LJ_ARENA_RECOVERY_IDLE, LJ_ARENA_RECOVERY_PENDING));
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, start, len));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+  assert(lj_arena_recovery_state_cas(a, recoverycell,
+	LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+
+  lj_arena_bm_set(a->dtor[0], dtorcell);
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, start, len));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+  lj_arena_bm_clear(a->dtor[0], dtorcell);
+
+  assert(lj_arena_lifetime_state_cas(a, lifecell,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_MUTATING));
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, start, len));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+  assert(lj_arena_lifetime_state_cas(a, lifecell,
+	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_FREE));
+
+  /* Blockers just outside the partial range must not leak through its masks.
+  ** READY/cdata are reusable coverage: the valid path scrubs them, removes
+  ** every interior boundary, and publishes one free-run start. */
+  assert(lj_arena_root_state_cas(a, before, LJ_ARENA_ROOT_NONE,
+					 LJ_ARENA_ROOT_LINKING));
+  assert(lj_arena_recovery_state_cas(a, after, LJ_ARENA_RECOVERY_IDLE,
+					     LJ_ARENA_RECOVERY_PENDING));
+  for (i = before; i <= after; i++) {
+    lj_arena_bm_set(a->block, i);
+    lj_arena_bm_set(a->mark, i);
+    lj_arena_bm_set(a->ready, i);
+    lj_arena_bm_set(a->cdata, i);
+  }
+  assert(lj_arena_test_set_free_run(a, start, len));
+  for (i = start; i < after; i++) {
+    assert(!lj_arena_bm_get(a->block, i));
+    assert(lj_arena_bm_get(a->mark, i) == (i == start));
+    assert(!lj_arena_bm_get(a->ready, i));
+    assert(!lj_arena_bm_get(a->cdata, i));
+  }
+  assert(lj_arena_bm_get(a->block, before));
+  assert(lj_arena_bm_get(a->mark, before));
+  assert(lj_arena_bm_get(a->ready, before));
+  assert(lj_arena_bm_get(a->cdata, before));
+  assert(lj_arena_bm_get(a->block, after));
+  assert(lj_arena_bm_get(a->mark, after));
+  assert(lj_arena_bm_get(a->ready, after));
+  assert(lj_arena_bm_get(a->cdata, after));
+  assert(lj_arena_root_state_cas(a, before, LJ_ARENA_ROOT_LINKING,
+					 LJ_ARENA_ROOT_NONE));
+  assert(lj_arena_recovery_state_cas(a, after,
+	LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+
+  free(snapshot);
+  lj_arena_unmap(a);
+}
+#endif
 
 static void test_dtor_identity_pins_legacy_sweep(PRNGState *rs)
 {
@@ -229,6 +337,9 @@ int main(void)
   uint32_t ctdead, ctlive;
 
   lj_prng_seed_fixed(&rs);
+#if defined(LJ_ARENA_TEST_HELPERS)
+  test_packed_range_preflight(&rs);
+#endif
   test_dtor_identity_pins_legacy_sweep(&rs);
   test_blockzero_dtor_survives_quarantine(&rs);
   test_root_membership(&rs);

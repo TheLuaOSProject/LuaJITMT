@@ -3629,28 +3629,70 @@ static uint64_t arena_range_mask(uint32_t lo, uint32_t nbits)
     (((uint64_t)1 << nbits) - 1u) << lo;
 }
 
-static int arena_clear_extent_range(GCArena *a, uint32_t start, uint32_t len)
+/* Prove that every cell in a structural-reuse range is free of persistent
+** ownership metadata. The packed-to-block converters are exact: any nonzero
+** root/recovery/dtor state and every non-FREE lifetime nibble maps to its
+** allocation cell. The surrounding owner-open/closed generation protocol is
+** unchanged; this summary merely groups the former acquire observations and
+** neither authorizes mutation nor replaces any later validation.
+**
+** READY is authoritative for arena_clear_extent_range(), where an old typed
+** publication must veto boundary removal. arena_set_free_run() deliberately
+** omits it: that path has already reached lifetime FREE with no destructor
+** identity and defensively scrubs READY before its second, stricter interior
+** validation through arena_clear_extent_range(). */
+static LJ_AINLINE int arena_range_ownership_preflight(GCArena *a,
+	uint32_t start, uint32_t len, int require_ready_clear,
+	int abort_on_recovery)
 {
   uint32_t pos, end;
+  int lifetime_managed;
   if (start >= LJ_ARENA_CELLS || len > LJ_ARENA_CELLS - start)
     return 0;
   end = start + len;
-  /* Keep the exact per-cell ownership precondition of arena_set_extent().
-  ** Validate the complete range before changing either bitmap, so a failed
-  ** side-plane check leaves every old boundary intact. */
-  for (pos = start; pos < end; pos++) {
-    uint32_t recovery = lj_arena_recovery_state_acq(a, pos);
-    lj_assertX(recovery == LJ_ARENA_RECOVERY_IDLE,
-	       "arena extent reuse crossed recovery ownership");
-    if (recovery != LJ_ARENA_RECOVERY_IDLE)
-      abort();
-    if (lj_arena_root_state_acq(a, pos) != LJ_ARENA_ROOT_NONE ||
-	lj_arena_dtor_kind_acq(a, pos) != LJ_ARENA_DTOR_NONE ||
-	lj_arena_ready_get(a, pos) ||
-	(arena_lifetime_managed(a) &&
-	 lj_arena_lifetime_state_acq(a, pos) != LJ_ARENA_LIFETIME_FREE))
+  lifetime_managed = arena_lifetime_managed(a);
+  for (pos = start; pos < end; ) {
+    uint32_t wi = pos >> 6;
+    uint32_t lo = pos & 63u;
+    uint32_t take = end - pos;
+    uint32_t room = 64u - lo;
+    uint64_t mask, recovery, blockers;
+    if (take > room)
+      take = room;
+    mask = arena_range_mask(lo, take);
+    recovery = arena_recovery_block_bits(a, wi) & mask;
+    blockers = arena_root_block_bits(a, wi) |
+	       arena_dtor_block_bits(a, wi);
+    if (lifetime_managed)
+      blockers |= arena_lifetime_block_bits(a, wi);
+    if (require_ready_clear)
+      blockers |= la_load64_acq(&a->ready[wi]);
+    blockers &= mask;
+    if (recovery != 0 && abort_on_recovery) {
+      uint64_t first_recovery = recovery & (0u - recovery);
+      /* Preserve the old cell-order diagnostic policy on the cold corrupt
+      ** path: an ordinary blocker in an earlier cell returns fail-closed;
+      ** recovery at the same or an earlier cell remains a fatal invariant. */
+      if ((blockers & (first_recovery - 1u)) == 0) {
+	lj_assertX(0, "arena extent reuse crossed recovery ownership");
+	abort();
+      }
+    }
+    if (recovery != 0 || blockers != 0)
       return 0;
+    pos += take;
   }
+  return 1;
+}
+
+static int arena_clear_extent_range(GCArena *a, uint32_t start, uint32_t len)
+{
+  uint32_t pos, end;
+  /* Validate the complete range before changing either bitmap, so a failed
+  ** side-plane check leaves every old boundary intact. */
+  if (!arena_range_ownership_preflight(a, start, len, 1, 1))
+    return 0;
+  end = start + len;
   /* The complete preflight proves this is already opaque reusable storage:
   ** READY and dtor are zero, every lifetime lane is FREE, and no root/recovery
   ** owner exists. Remove old structural boundaries with release stores;
@@ -3751,19 +3793,15 @@ static int arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
 
 static int arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
 {
-  uint32_t i, pos = start, end = start + len;
-  if (arena_lifetime_managed(a) &&
-      lj_arena_lifetime_state_acq(a, start) != LJ_ARENA_LIFETIME_FREE)
+  uint32_t pos, end;
+  /* This is the complete pre-mutation ownership proof. READY is intentionally
+  ** scrubbed below; arena_clear_extent_range() then repeats the stricter
+  ** ownership validation over every interior cell before boundary removal. */
+  if (len == 0 ||
+      !arena_range_ownership_preflight(a, start, len, 0, 0))
     return 0;
-  for (i = 0; i < len; i++)
-    if (lj_arena_root_state_acq(a, start + i) != LJ_ARENA_ROOT_NONE ||
-	lj_arena_recovery_state_acq(a, start + i) !=
-	  LJ_ARENA_RECOVERY_IDLE ||
-	lj_arena_dtor_kind_acq(a, start + i) != LJ_ARENA_DTOR_NONE ||
-	(i != 0 && arena_lifetime_managed(a) &&
-	 lj_arena_lifetime_state_acq(a, start + i) !=
-	   LJ_ARENA_LIFETIME_FREE))
-      return 0;
+  pos = start;
+  end = start + len;
   while (pos < end) {
     uint32_t wi = pos >> 6;
     uint32_t lo = pos & 63u;
@@ -3782,6 +3820,13 @@ static int arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
     return 0;
   return 1;
 }
+
+#if defined(LJ_ARENA_TEST_HELPERS)
+int lj_arena_test_set_free_run(GCArena *a, uint32_t start, uint32_t len)
+{
+  return arena_set_free_run(a, start, len);
+}
+#endif
 
 static int arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
 			       uint32_t len)

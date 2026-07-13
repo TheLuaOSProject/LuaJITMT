@@ -729,6 +729,8 @@ LJ_FUNC uint32_t lj_arena_test_remote_drain_paused(void);
 LJ_FUNC void lj_arena_test_remote_stats_reset(void);
 LJ_FUNC uint64_t lj_arena_test_remote_fast_skips(void);
 LJ_FUNC uint64_t lj_arena_test_remote_arena_probes(void);
+LJ_FUNC int lj_arena_test_set_free_run(GCArena *a, uint32_t start,
+					uint32_t len);
 #endif
 #if defined(LJ_ARENA_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 LJ_FUNC void lj_arena_test_lifetime_pause(int enabled);
