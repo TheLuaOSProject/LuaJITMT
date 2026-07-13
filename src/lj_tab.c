@@ -902,8 +902,13 @@ static LJ_AINLINE void tab_pub_node_mem(lua_State *L, GCtab *t, Node *node)
 {
   global_State *g = G(L);
   UNUSED(t);
+  /* A replacement vector is private to this construction/resize attempt until
+  ** the table root is release-published. Afterwards the table owns it. An
+  ** ordinary collision with the opportunistic registry reclaimer therefore
+  ** needs a root-scan retry, not a permanent NO_RECLAIM pin. */
   if (node)
-    (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+    (void)lj_gc2_markmem_registered_publish_try(g,
+						 lj_tab_node_hdrw(node));
 }
 
 static LJ_AINLINE void tab_pub_array_mem(lua_State *L, GCtab *t,
@@ -911,9 +916,10 @@ static LJ_AINLINE void tab_pub_array_mem(lua_State *L, GCtab *t,
 {
   global_State *g = G(L);
   UNUSED(t);
+  /* Same private-before/release-published-after lifetime as the hash vector. */
   if (array)
-    (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
-				 (void *)array);
+    (void)lj_gc2_markmem_registered_publish_try(g,
+	      acap ? (void *)lj_tab_array_hdrw(array) : (void *)array);
 }
 
 static LJ_AINLINE void tab_node_freecount_set_private(Node *node,
@@ -1445,8 +1451,11 @@ static void tab_retire_discard(global_State *g, TabNodeRetire *ret)
 
 static void tab_retire_preserve(global_State *g, TabNodeRetire *ret)
 {
-  lj_gc_arena_markmem(g, ret);
-  lj_gc_arena_markmem(g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
+  if (!lj_gc2_minor_roots_skip_bridge_mark(g)) {
+    (void)lj_gc2_markmem_registered_publish_try(g, ret);
+    (void)lj_gc2_markmem_registered_publish_try(
+      g, lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
+  }
 }
 
 static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
@@ -1458,7 +1467,10 @@ static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
   ** published, then armed after publication. A marker can run between those
   ** steps or before a just-pushed record reaches the retired-list scan, so the
   ** arming edge preserves both the record and the old storage around the
-  ** release-published armed bit.
+  ** release-published armed bit. A transient publication-marker miss is safe:
+  ** before arming, the detached-list consumer must requeue the record; after
+  ** arming, the newly published retire epoch cannot pass the grace test. The
+  ** resize attempt also retains its direct pointers throughout this function.
   */
   tab_retire_preserve(g, ret);
   if (!t || lj_tab_node_acq(t) == node) {
@@ -1512,9 +1524,11 @@ static void tab_array_retire_discard(global_State *g, TabArrayRetire *ret)
 
 static void tab_array_retire_preserve(global_State *g, TabArrayRetire *ret)
 {
-  lj_gc_arena_markmem(g, ret);
-  lj_gc_arena_markmem(g,
-		      lj_tab_array_hdrw(lj_tab_array_retired_array_acq(ret)));
+  if (!lj_gc2_minor_roots_skip_bridge_mark(g)) {
+    (void)lj_gc2_markmem_registered_publish_try(g, ret);
+    (void)lj_gc2_markmem_registered_publish_try(
+      g, lj_tab_array_hdrw(lj_tab_array_retired_array_acq(ret)));
+  }
 }
 
 static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)

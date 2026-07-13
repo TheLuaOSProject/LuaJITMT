@@ -10,7 +10,148 @@
 #include "lauxlib.h"
 
 #include "lj_obj.h"
+#include "lj_arena.h"
+#include "lj_gc2.h"
+#include "lj_state.h"
 #include "lj_tab.h"
+
+static void clear_body_mark(void *p)
+{
+  GCArena *a = lj_arena_of(p);
+  uint32_t cell = lj_arena_cellof(p);
+  assert(!lj_arena_ishuge(a));
+  lj_arena_bm_clear(a->mark, cell);
+  assert(!lj_arena_bm_get(a->mark, cell));
+}
+
+static void assert_body_marked(void *p)
+{
+  GCArena *a = lj_arena_of(p);
+  assert(!lj_arena_ishuge(a));
+  assert(lj_arena_bm_get(a->mark, lj_arena_cellof(p)));
+}
+
+static TabNodeRetire *find_retired_node(global_State *g, Node *node)
+{
+  TabNodeRetire *ret;
+  for (ret = lj_tab_node_retired_head_acq(g); ret != NULL;
+       ret = lj_tab_node_retired_next_acq(ret))
+    if (lj_tab_node_retired_node_acq(ret) == node)
+      return ret;
+  return NULL;
+}
+
+static TabArrayRetire *find_retired_array(global_State *g, TValue *array)
+{
+  TabArrayRetire *ret;
+  for (ret = lj_tab_array_retired_head_acq(g); ret != NULL;
+       ret = lj_tab_array_retired_next_acq(ret))
+    if (lj_tab_array_retired_array_acq(ret) == array)
+      return ret;
+  return NULL;
+}
+
+static void check_idle_writer_publication(lua_State *L)
+{
+  global_State *g = G(L);
+  LJGC2ActivationSnap before, after;
+  GCtab *t;
+  Node *node;
+  TValue *array;
+  void *nodebody, *arraybody;
+
+  lua_settop(L, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  before = lj_gc2_activation_snapshot(&g->gc2.activation);
+
+  /* Both side vectors are private throughout allocation and initialization;
+  ** lua_createtable release-publishes their roots only after these tactical
+  ** raw-body markers have returned. */
+  lua_createtable(L, LJ_MAX_COLOSIZE + 8, 8);
+  t = tabV(L->top-1);
+  node = lj_tab_node_acq(t);
+  array = lj_tab_array_acq(t);
+  assert(node && node != &g->nilnode);
+  assert(array && !lj_tab_array_is_colocated(t, array));
+  nodebody = lj_tab_node_hdrw(node);
+  arraybody = lj_tab_array_hdrw(array);
+
+  after = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_gc2_activation_equal(&before, &after));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+
+  /* Force both already-published generations white, then prove the mandatory
+  ** root scan, rather than the tactical publication hint, owns retention. */
+  clear_body_mark(nodebody);
+  clear_body_mark(arraybody);
+  lj_gc2_test_idle_reclaim_leave(g);
+  assert(gc2_smr_reclaiming_acq(g) == 0);
+  lj_gc2_test_scan_roots(g, L);
+  assert_body_marked(nodebody);
+  assert_body_marked(arraybody);
+  lua_settop(L, 0);
+}
+
+static void check_idle_writer_retire_arm(lua_State *L)
+{
+  global_State *g = G(L);
+  LJGC2ActivationSnap before, after;
+  GCtab *t;
+  Node *oldnode;
+  TValue *oldarray;
+  TabNodeRetire *nret;
+  TabArrayRetire *aret;
+  MSize oldasize;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 8, 8);
+  t = tabV(L->top-1);
+  oldnode = lj_tab_node_acq(t);
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert(oldnode && oldnode != &g->nilnode);
+  assert(oldarray && !lj_tab_array_is_colocated(t, oldarray));
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  before = lj_gc2_activation_snapshot(&g->gc2.activation);
+  lj_tab_resize(L, t, oldasize + 32u, 4);
+  after = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_gc2_activation_equal(&before, &after));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(lj_tab_node_acq(t) != oldnode);
+  assert(lj_tab_array_acq(t) != oldarray);
+
+  nret = find_retired_node(g, oldnode);
+  aret = find_retired_array(g, oldarray);
+  assert(nret && lj_tab_node_retired_armed_acq(nret));
+  assert(aret && lj_tab_array_retired_armed_acq(aret));
+
+  /* The published retire list owns both records and old generations. An
+  ** unarmed detached consumer can only requeue; after arm, the just-published
+  ** epoch cannot satisfy the grace delay in that writer pass. */
+  clear_body_mark(nret);
+  clear_body_mark(lj_tab_node_hdrw(oldnode));
+  clear_body_mark(aret);
+  clear_body_mark(lj_tab_array_hdrw(oldarray));
+  lj_gc2_test_idle_reclaim_leave(g);
+  assert(gc2_smr_reclaiming_acq(g) == 0);
+
+  /* The mandatory retired-list scan remains fail-closed and must recover all
+  ** four marks after the transient publication hints were skipped. */
+  lj_gc2_test_scan_roots(g, L);
+  assert_body_marked(nret);
+  assert_body_marked(lj_tab_node_hdrw(oldnode));
+  assert_body_marked(aret);
+  assert_body_marked(lj_tab_array_hdrw(oldarray));
+  lua_settop(L, 0);
+}
 
 static void assert_clear_hash(Node *node, MSize hmask)
 {
@@ -65,6 +206,9 @@ int main(void)
   int i;
 
   assert(L != NULL);
+
+  check_idle_writer_publication(L);
+  check_idle_writer_retire_arm(L);
 
   lua_createtable(L, 0, 8);
   t = tabV(L->top-1);

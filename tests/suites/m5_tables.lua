@@ -38,7 +38,7 @@ return function(add)
       description = "table hash-vector publication C fixture",
       output = "lj_t-tab-node-publish",
       cfile = "t-tab-node-publish.c",
-      opts = { timeout = "20s" },
+      opts = build.gc2_test_helper_opts({ timeout = "20s" }),
       message = "M5 table hash-vector publication tests passed"
     },
     {
