@@ -776,7 +776,7 @@ int main(void)
   TGState extra_tg;
   TGState arena_tg;
   GCtab *root_tab, *native_tab;
-  void *plain_reset, *trav_reset;
+  void *plain_reset, *plain_after_reset, *trav_reset;
   void *transfer_small, *transfer_huge;
   size_t transfer_huge_size = LJ_HUGE_THRESHOLD + 8192u;
   GCArena *plain_reset_a, *trav_reset_a;
@@ -1537,7 +1537,6 @@ int main(void)
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.hs_actions == actions);
-  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a != NULL);
   assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
   assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
 			     plain_reset_a));
@@ -1547,10 +1546,15 @@ int main(void)
 			     trav_reset_a));
   assert((plain_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((trav_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  plain_after_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  assert(plain_after_reset != NULL);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
+			     lj_arena_of(plain_after_reset)));
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  lj_arena_free(&tg->alloc, plain_after_reset, 64);
   lj_arena_free(&tg->alloc, plain_reset, 64);
   lj_arena_free(&tg->alloc, trav_reset, 64);
 
