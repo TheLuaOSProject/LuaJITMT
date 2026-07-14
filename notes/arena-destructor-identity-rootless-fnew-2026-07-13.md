@@ -99,11 +99,11 @@ lifetime. Active-white construction continues through the generic rooted
 allocator/publication path. Outside active marking the trace may still honor
 `alloc_black` for the ordinary mark-bit choice.
 
-Recovery may transiently own a visible constructor as `MUTATING`. A typed
+Recovery may transiently own a visible constructor as `RECOVERY`. A typed
 commit accepts that state without waiting; recovery's existing
-`CONSTRUCT/MUTATING -> LIVE` repair uses root `NONE` as the completed rootless
+`CONSTRUCT/RECOVERY -> LIVE` repair uses root `NONE` as the completed rootless
 target. The generated pair commit takes exact per-lane recovery arms after any
-same-word CAS mismatch. Exact `LIVE` and `MUTATING` validators share the
+same-word CAS mismatch. Exact `LIVE` and `RECOVERY` validators share the
 terminal corruption trap with pair claim; undefined lifetime states fail
 closed.
 
@@ -181,7 +181,8 @@ The focused tests cover:
 - absence of FNEW root transitions, pending-stack CAS, and pending hints;
 - exact LFUNC1/CLOSED_UV pair layout, including cross-word pairs;
 - one-CAS same-word pair claim/commit and split-word claim rollback;
-- exact `LIVE`/`MUTATING` recovery crossover validators;
+- exact `LIVE`/`RECOVERY` crossover validators, with generic `MUTATING`
+  deliberately rejected;
 - LFUNC0 and standalone closed-upvalue C helpers;
 - unconditional traced active-MARK fallback and direct active-black C
   construction through an actual MARK-to-SWEEP transition;

@@ -161,8 +161,10 @@ typedef struct GCAhdr {
 /* Per-start allocation lifetime arbitration for traversable small objects.
 ** Interior cells and every plain-arena cell remain FREE. Four bits provide an
 ** exact same-word cancel point between semantic rescue and physical free:
-** MUTATING is non-destructive constructor/root/recovery ownership, DESTRUCT
-** is a tentative free, and RESCUE is readable semantic cancellation. */
+** RECOVERY names the counted reserve-before-locator owner, DESTRUCT is a
+** tentative free, RESCUE is readable semantic cancellation, and MUTATING is
+** non-coalescible non-destructive body/layout/root ownership (including a
+** drain whose durable identity is already in the recovery plane). */
 #define LJ_ARENA_LIFETIME_CELLS_PER_WORD	16u
 #define LJ_ARENA_LIFETIME_WORDS \
   (LJ_ARENA_CELLS / LJ_ARENA_LIFETIME_CELLS_PER_WORD)
@@ -189,9 +191,12 @@ enum {
   LJ_ARENA_LIFETIME_FREE = 0,
   LJ_ARENA_LIFETIME_LIVE = 1,
   LJ_ARENA_LIFETIME_CONSTRUCT = 2,
-  LJ_ARENA_LIFETIME_MUTATING = 3,
+  /* Keep encoding 3 for the x64 constructor/recovery crossover classifier. */
+  LJ_ARENA_LIFETIME_RECOVERY = 3,
   LJ_ARENA_LIFETIME_DESTRUCT = 4,
-  LJ_ARENA_LIFETIME_RESCUE = 5
+  LJ_ARENA_LIFETIME_RESCUE = 5,
+  /* Non-destructive ownership without an implied initial reservation. */
+  LJ_ARENA_LIFETIME_MUTATING = 6
 };
 
 enum {
@@ -832,7 +837,7 @@ LJ_FUNC int lj_arena_remote_sweep_busy_acq(const GCArena *a);
 LJ_FUNC int lj_arena_destruct_acquire(const void *p, size_t size);
 /* Fresh root construction owns both descriptor planes until commit/abandon.
 ** Normally commit publishes LIVE before MEMBER and abandon clears LINKING
-** before LIVE. If recovery temporarily owns CONSTRUCT->MUTATING, either helper
+** before LIVE. If recovery temporarily owns CONSTRUCT->RECOVERY, either helper
 ** may finish only the root lane; recovery must restore LIVE when it observes
 ** MEMBER/NONE, or restore CONSTRUCT only while root remains LINKING. */
 LJ_FUNC int lj_arena_root_construct_claim(GCArena *a, uint32_t cell);
@@ -842,7 +847,7 @@ LJ_FUNC int lj_arena_root_construct_commit_pair(GCArena *a, uint32_t first,
 LJ_FUNC int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell);
 /* Rootless typed constructors reserve lifetime CONSTRUCT while root[] remains
 ** NONE. READY/block publication makes their immutable dtor class discoverable;
-** commit then moves CONSTRUCT to LIVE. Recovery may transiently own MUTATING
+** commit then moves CONSTRUCT to LIVE. Recovery may transiently own RECOVERY
 ** and is required to restore a rootless constructor directly to LIVE. */
 LJ_FUNC int lj_arena_dtor_construct_commit(GCArena *a, uint32_t cell);
 LJ_FUNC int lj_arena_dtor_construct_commit_pair(GCArena *a, uint32_t first,
@@ -968,8 +973,8 @@ static LJ_AINLINE int lj_arena_lifetime_state_cas(GCArena *a, uint32_t i,
 {
   uint32_t wi, shift;
   uint64_t mask, old;
-  if (!a || i >= LJ_ARENA_CELLS || from > LJ_ARENA_LIFETIME_RESCUE ||
-      to > LJ_ARENA_LIFETIME_RESCUE)
+  if (!a || i >= LJ_ARENA_CELLS || from > LJ_ARENA_LIFETIME_MUTATING ||
+      to > LJ_ARENA_LIFETIME_MUTATING)
     return 0;
   wi = i / LJ_ARENA_LIFETIME_CELLS_PER_WORD;
   shift = (i & (LJ_ARENA_LIFETIME_CELLS_PER_WORD-1u)) << 2;
@@ -1016,7 +1021,8 @@ static LJ_AINLINE int lj_arena_lifetime_state_cas_pair(GCArena *a,
 	uint32_t first, uint32_t second, uint32_t from, uint32_t to)
 {
   if (!a || first >= LJ_ARENA_CELLS || second >= LJ_ARENA_CELLS ||
-      from > LJ_ARENA_LIFETIME_RESCUE || to > LJ_ARENA_LIFETIME_RESCUE)
+      from > LJ_ARENA_LIFETIME_MUTATING ||
+      to > LJ_ARENA_LIFETIME_MUTATING)
     return 0;
   return lj_arena_packed_state_cas_pair(a->lifetime,
 	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 0x0fu,
@@ -1235,6 +1241,12 @@ LJ_STATIC_ASSERT(LJ_ARENA_SIZE == 65536u);
 LJ_STATIC_ASSERT(LJ_ARENA_CELLS == 4096u);
 LJ_STATIC_ASSERT(LJ_ARENA_WORDS == 64u);
 LJ_STATIC_ASSERT(LJ_CELL_SIZE == 16u);
+/* vm_x64 and traced FNEW classify these exact packed nibble encodings. */
+LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_FREE == 0);
+LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_LIVE == 1);
+LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_CONSTRUCT == 2);
+LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_RECOVERY == 3);
+LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_MUTATING <= 15);
 LJ_STATIC_ASSERT((LJ_AF_ROOT_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT((LJ_AF_DTOR_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);

@@ -785,7 +785,7 @@ static int decode_packed_transition(const uint8_t *mc, size_t len,
   if (decode_packed_transition_body(mc, len, cas, p, lane_bits,
 				    fromp, top, impossiblep))
     return 1;
-  /* Commit CAS failure redispatches C/M/L from the refreshed RAX sample, so
+  /* Commit CAS failure redispatches C/R/L from the refreshed RAX sample, so
   ** its JNE target precedes the exact C->L arm. Locate that arm locally. */
   p = cas->start > 192u ? cas->start - 192u : 0u;
   for (; p < cas->start; p++)
@@ -1227,10 +1227,10 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
       find_packed_sample_validate(mc, len, repair_live1 + 1u, 4u,
 	LJ_ARENA_LIFETIME_LIVE, &live_bad2);
     repair_mut1 = find_packed_sample_validate(mc, len,
-	pair_commit_repair, 4u, LJ_ARENA_LIFETIME_MUTATING, &mut_bad1);
+	pair_commit_repair, 4u, LJ_ARENA_LIFETIME_RECOVERY, &mut_bad1);
     repair_mut2 = repair_mut1 == (size_t)-1 ? (size_t)-1 :
       find_packed_sample_validate(mc, len, repair_mut1 + 1u, 4u,
-	LJ_ARENA_LIFETIME_MUTATING, &mut_bad2);
+	LJ_ARENA_LIFETIME_RECOVERY, &mut_bad2);
     assert(fn_header != (size_t)-1 && uv_header != (size_t)-1);
     assert(mark_clear != (size_t)-1);
     assert(fn_dtor != (size_t)-1 && uv_dtor != (size_t)-1);
@@ -1357,12 +1357,12 @@ static void assert_lifetime_state_matrix(void)
     int normal_commit = packed_lane_transition(state, 4u,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE, &result);
     int recovery_commit = packed_lane_transition(state, 4u,
-	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_MUTATING, &result);
+	LJ_ARENA_LIFETIME_RECOVERY, LJ_ARENA_LIFETIME_RECOVERY, &result);
     int completed_commit = packed_lane_transition(state, 4u,
 	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_LIVE, &result);
     /* These are the three emitted dispatch contracts. In particular, upper
     ** nibble states DESTRUCT/RESCUE and 6..15 can never masquerade as the old
-    ** two-bit C/M encodings. */
+    ** two-bit C/R encodings. Generic MUTATING is intentionally rejected. */
     assert(claim == (state == 0u));
     assert(normal_commit == (state == 2u));
     assert(recovery_commit == (state == 3u));
@@ -1373,7 +1373,7 @@ static void assert_lifetime_state_matrix(void)
     else if (normal_commit || completed_commit)
       assert(result == LJ_ARENA_LIFETIME_LIVE);
     else if (recovery_commit)
-      assert(result == LJ_ARENA_LIFETIME_MUTATING);
+      assert(result == LJ_ARENA_LIFETIME_RECOVERY);
     else
       assert(result == 0xffu);
     if (state >= LJ_ARENA_LIFETIME_DESTRUCT)

@@ -1140,8 +1140,8 @@ static void asm_fnew1num_packed_pair_transition(ASMState *as, Reg arena,
 	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u, 4u, \
 	(from), (to), (impossible))
 
-/* Rootless typed commit accepts recovery's CONSTRUCT->MUTATING->LIVE
-** crossover. Exact validation in the LIVE/MUTATING arms rejects all other
+/* Rootless typed commit accepts recovery's CONSTRUCT->RECOVERY->LIVE
+** crossover. Exact validation in the LIVE/RECOVERY arms rejects all other
 ** encodings; the ordinary arm owns CONSTRUCT->LIVE itself. */
 static void asm_fnew1num_dtor_construct_commit(ASMState *as, Reg arena,
 	Reg cell, Reg word, Reg bit, Reg desired, MCLabel impossible)
@@ -1152,7 +1152,7 @@ static void asm_fnew1num_dtor_construct_commit(ASMState *as, Reg arena,
   checkmclim(as);
   emit_jmp(as, done);
   asm_fnew1num_packed_sample_validate(as, desired, bit, 4u,
-	LJ_ARENA_LIFETIME_MUTATING, impossible);
+	LJ_ARENA_LIFETIME_RECOVERY, impossible);
   state_m = emit_label(as);
   checkmclim(as);
 
@@ -1170,7 +1170,7 @@ static void asm_fnew1num_dtor_construct_commit(ASMState *as, Reg arena,
   state_c = emit_label(as);
   checkmclim(as);
 
-  /* Runtime dispatch: bit 1 separates LIVE from CONSTRUCT/MUTATING; bit 0
+  /* Runtime dispatch: bit 1 separates LIVE from CONSTRUCT/RECOVERY; bit 0
   ** then separates the latter pair. Reload RAX before each destructive test. */
   emit_jmp(as, state_c);
   emit_jcc(as, CC_B, state_m);
@@ -1189,7 +1189,7 @@ static void asm_fnew1num_dtor_construct_commit(ASMState *as, Reg arena,
 }
 
 /* Commit the common adjacent same-word pair with one CAS. A split-word pair or
-** any recovery crossover takes the exact per-lane C/M/L dispatcher above. */
+** any recovery crossover takes the exact per-lane C/R/L dispatcher above. */
 static void asm_fnew1num_dtor_construct_pair_commit(ASMState *as, Reg arena,
 	Reg fncell, Reg uvcell, Reg word, Reg bit, Reg desired,
 	uint32_t lane_delta, MCLabel impossible)

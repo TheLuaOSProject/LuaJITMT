@@ -286,7 +286,7 @@ static void test_construct_commit_and_abandon(lua_State *L)
   assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
   assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
 
-  /* Recovery may own MUTATING after READY while the unique constructor still
+  /* Recovery may own RECOVERY after READY while the unique constructor still
   ** owns LINKING. Root commit succeeds without stealing that lifetime lane. */
   uv = new_closed_upvalue_constructing(L);
   o = obj2gco(uv);
@@ -295,17 +295,17 @@ static void test_construct_commit_and_abandon(lua_State *L)
   lj_gc_publishobj_header(g, o);
   assert(lj_arena_lifetime_state_cas(a, cell,
 				     LJ_ARENA_LIFETIME_CONSTRUCT,
-				     LJ_ARENA_LIFETIME_MUTATING));
+				     LJ_ARENA_LIFETIME_RECOVERY));
   assert(lj_gc_linkobj_new(g, o) == LJ_GC_ROOT_LINKED);
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
   assert(lj_arena_lifetime_state_acq(a, cell) ==
-	 LJ_ARENA_LIFETIME_MUTATING);
+	 LJ_ARENA_LIFETIME_RECOVERY);
   assert(lj_arena_lifetime_state_cas(a, cell,
-				     LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_RECOVERY,
 				     LJ_ARENA_LIFETIME_LIVE));
 
   /* The symmetric cancellation clears LINKING while recovery retains its
-  ** mutation claim. Its completion restores LIVE before ordinary free. */
+  ** dedicated claim. Its completion restores LIVE before ordinary free. */
   uv = new_closed_upvalue_constructing(L);
   o = obj2gco(uv);
   a = lj_arena_of(o);
@@ -313,14 +313,14 @@ static void test_construct_commit_and_abandon(lua_State *L)
   lj_gc_publishobj_header(g, o);
   assert(lj_arena_lifetime_state_cas(a, cell,
 				     LJ_ARENA_LIFETIME_CONSTRUCT,
-				     LJ_ARENA_LIFETIME_MUTATING));
+				     LJ_ARENA_LIFETIME_RECOVERY));
   assert(lj_mem_abandon_gco_unpublished(g, o) ==
 	 LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE);
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
   assert(lj_arena_lifetime_state_acq(a, cell) ==
-	 LJ_ARENA_LIFETIME_MUTATING);
+	 LJ_ARENA_LIFETIME_RECOVERY);
   assert(lj_arena_lifetime_state_cas(a, cell,
-				     LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_RECOVERY,
 				     LJ_ARENA_LIFETIME_LIVE));
   lj_mem_free(g, o, sizeof(GCupval));
   assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);

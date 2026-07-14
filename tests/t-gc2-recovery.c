@@ -316,6 +316,208 @@ static void test_full_active_ssb_fallback(void)
   recovery_fixture_close(&f);
 }
 
+static void test_full_ssb_barrier_coalesces_reserved_recovery(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryPublishCtx publish = {0};
+  pthread_t thread;
+  GC2SSBNode *active, *held;
+  GCRef *base, *end;
+  GCtab *parent, *child;
+  GCstr *filler;
+  GCArena *a;
+  uint64_t recovery_published0, recovery_drained0;
+  uint64_t ssb_published0, ssb_drained0;
+  uint32_t cell, i;
+
+  lua_createtable(f.L, 1, 0);
+  parent = tabV(f.L->top - 1);
+  lua_newtable(f.L);
+  child = tabV(f.L->top - 1);
+  a = lj_arena_of(parent);
+  cell = lj_arena_cellof(parent);
+
+  lj_gc2_mark_begin(f.g);
+  recovery_mark_table(&f, parent);
+  assert(lj_gc2_ismarked(f.g, obj2gco(child)) == 0);
+
+  /* A generic non-destructive owner has no exact recovery reservation. It
+  ** must remain distinguishable from the counted RECOVERY state, otherwise a
+  ** semantic publisher could return success with no durable retry identity. */
+  assert(lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_MUTATING));
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(parent)) == 0);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_LIVE));
+
+  /* Force the production table barrier through recovery: the active SSB is
+  ** full and its only replacement is held outside the owner free list. */
+  held = lj_tg_ssb_free_pop(f.tg);
+  assert(held != NULL);
+  assert(lj_tg_ssb_free_acq(f.tg) == NULL);
+  active = lj_tg_ssb_active_acq(f.tg);
+  base = lj_tg_ssb_base_acq(f.tg);
+  end = lj_tg_ssb_end_acq(f.tg);
+  assert(active != NULL && base == active->slot);
+  assert(end == base + TG_GC2_SSB_SLOTS);
+  lua_pushliteral(f.L, "gc2 reserved recovery filler");
+  filler = strV(f.L->top - 1);
+  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+
+  recovery_published0 = gc2_recovery_published_acq(f.g);
+  recovery_drained0 = gc2_recovery_drained_acq(f.g);
+  ssb_published0 = gc2_ssb_items_published_acq(f.g);
+  ssb_drained0 = gc2_ssb_items_drained_acq(f.g);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+
+  publish.g = f.g;
+  publish.o = obj2gco(parent);
+  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_RESERVED);
+  assert(pthread_create(&thread, NULL, recovery_publish_thread, &publish) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_RESERVED);
+
+  /* Publisher A has already reserved the global close veto and owns the exact
+  ** RECOVERY lifetime, but has not exposed PENDING in the side plane. A
+  ** second semantic publication must coalesce with that durable reservation;
+  ** it must not classify this bounded gap as an unrecoverable queue drop. */
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_RECOVERY);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == recovery_published0);
+
+  settabV(f.L, &lj_tab_array_acq(parent)[0], child);
+  lj_gc2_barrier_tab_g(f.g, parent);
+
+  assert(lj_tg_ssb_active_acq(f.tg) == active);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+  assert(lj_gc2_ssb_count_acq(active) == 0);
+  assert(gc2_ssb_head_acq(f.g) == NULL);
+  assert(gc2_ssb_drain_acq(f.g) == NULL);
+  assert(gc2_ssb_items_published_acq(f.g) == ssb_published0);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == recovery_published0);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_RECOVERY);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(publish.result == 1);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == recovery_published0 + 1u);
+
+  /* A's exact identity covers the mutation performed in the reservation gap.
+  ** Its one traversal must discover the child and discharge the sole count. */
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1);
+  assert(lj_gc2_ismarked(f.g, obj2gco(child)) == 1);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_drained_acq(f.g) == recovery_drained0 + 1u);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+
+  lj_tg_ssb_free_push(f.tg, held);
+  assert(lj_gc2_flush_ssb(f.g, f.tg) == TG_GC2_SSB_SLOTS);
+  recovery_drain_all(f.g, f.tg);
+  assert(gc2_ssb_items_published_acq(f.g) ==
+	 ssb_published0 + TG_GC2_SSB_SLOTS);
+  assert(gc2_ssb_items_drained_acq(f.g) ==
+	 ssb_drained0 + TG_GC2_SSB_SLOTS);
+
+  recovery_fixture_close(&f);
+}
+
+static void test_stale_idle_sample_rechecks_mutating_recovery(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryPublishCtx stale = {0};
+  pthread_t thread;
+  GCtab *t;
+  GCArena *a;
+  uint32_t cell;
+  uint64_t published0, drained0;
+
+  lua_newtable(f.L);
+  t = tabV(f.L->top - 1);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  lj_gc2_mark_begin(f.g);
+  recovery_mark_table(&f, t);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  published0 = gc2_recovery_published_acq(f.g);
+  drained0 = gc2_recovery_drained_acq(f.g);
+
+  /* Publisher B samples IDLE first. Disarm only future hook entries while B
+  ** remains paused, then let publisher A create the real counted identity. */
+  stale.g = f.g;
+  stale.o = obj2gco(t);
+  lj_gc2_test_recovery_pause(
+	LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED);
+  assert(pthread_create(&thread, NULL, recovery_publish_thread, &stale) == 0);
+  recovery_wait_paused(LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED);
+  lj_gc2_test_recovery_pause_disarm();
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(t)) == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+
+  /* This is the exact recovery-drain gap: PENDING already owns the count and
+  ** the worker has changed lifetime to MUTATING but has not claimed the side
+  ** lane yet. B's stale IDLE sample must re-read the side lane and coalesce. */
+  assert(lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_MUTATING));
+  assert(lj_gc2_test_recovery_mutating_recheck(a, cell) == 1);
+  lj_gc2_test_recovery_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(stale.result == 1);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+
+  assert(lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_LIVE));
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_drained_acq(f.g) == drained0 + 1u);
+
+  /* If the drain completed between the two rechecks, its IDLE publication
+  ** follows lifetime restoration. The final lifetime load therefore retries;
+  ** stable generic MUTATING+IDLE remains the only rejecting snapshot. */
+  assert(lj_gc2_test_recovery_mutating_recheck(a, cell) == 1);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_MUTATING));
+  assert(lj_gc2_test_recovery_mutating_recheck(a, cell) == 0);
+  assert(lj_gc2_test_recovery_publish(f.g, obj2gco(t)) == 0);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_LIVE));
+
+  recovery_fixture_close(&f);
+}
+
 static void test_grey_growth_transaction(void)
 {
   RecoveryFixture f = recovery_fixture_open();
@@ -649,7 +851,7 @@ static void test_small_recovery_vs_free_both_orders(void)
   assert(pthread_create(&thread, NULL, recovery_publish_thread, &publish) == 0);
   recovery_wait_paused(LJ_GC2_RECOVERY_TEST_RESERVED);
   assert(lj_arena_lifetime_state_acq(a, cell) ==
-	 LJ_ARENA_LIFETIME_MUTATING);
+	 LJ_ARENA_LIFETIME_RECOVERY);
   assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
   assert(gc2_recovery_items_acq(f.g) == 1u);
   lj_arena_free(&f.tg->alloc, t, sizeof(GCtab));
@@ -748,7 +950,7 @@ static void test_constructor_recovery_overlap_one(uint32_t stage, int commit)
   assert(pthread_create(&thread, NULL, recovery_publish_thread, &publish) == 0);
   recovery_wait_paused(stage);
   assert(lj_arena_lifetime_state_acq(a, cell) ==
-	 LJ_ARENA_LIFETIME_MUTATING);
+	 LJ_ARENA_LIFETIME_RECOVERY);
   if (stage == LJ_GC2_RECOVERY_TEST_RESERVED)
     assert(lj_arena_recovery_state_acq(a, cell) ==
 	   LJ_ARENA_RECOVERY_IDLE);
@@ -765,7 +967,7 @@ static void test_constructor_recovery_overlap_one(uint32_t stage, int commit)
     assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
   }
   assert(lj_arena_lifetime_state_acq(a, cell) ==
-	 LJ_ARENA_LIFETIME_MUTATING);
+	 LJ_ARENA_LIFETIME_RECOVERY);
   lj_gc2_test_recovery_release();
   assert(pthread_join(thread, NULL) == 0);
   assert(publish.result == 1);
@@ -1484,6 +1686,8 @@ static void test_sticky_failure_without_items_is_bounded(void)
 int main(void)
 {
   test_full_active_ssb_fallback();
+  test_full_ssb_barrier_coalesces_reserved_recovery();
+  test_stale_idle_sample_rechecks_mutating_recovery();
   test_grey_growth_transaction();
   test_reservation_gap_blocks_mark_close();
   test_claimed_redirty_replay();

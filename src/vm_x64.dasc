@@ -4640,7 +4640,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne <3
     |  jmp >3
 |8:
-    |  // A low-one sample is either recovery-owned MUTATING(0011) or the
+    |  // A low-one sample is either recovery-owned RECOVERY(0011) or the
     |  // completed LIVE(0001) crossover. Reject RESCUE and every invalid lane.
     |  mov ITYPE, RC
     |  btr ITYPE, r9
@@ -4691,7 +4691,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea r9d, [r9-1]
     |  jmp >8
 |3:
-    |  // CONSTRUCT and MUTATING may perform LINKING(01)->MEMBER(11).
+    |  // CONSTRUCT and RECOVERY may perform LINKING(01)->MEMBER(11).
     |  mov RA, r8
     |  and RA, -LJ_ARENA_SIZE
     |  mov ITYPE, r8
@@ -4717,8 +4717,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne <3
 |8:
     |  // Symmetric recovery crossover repair: after MEMBER publication, an
-    |  // owner that sampled LINKING may still restore MUTATING to CONSTRUCT.
-    |  // Exact-CAS that state to LIVE; LIVE/MUTATING are already safe.
+    |  // owner that sampled LINKING may still restore RECOVERY to CONSTRUCT.
+    |  // Exact-CAS that state to LIVE; LIVE/RECOVERY are already safe.
     |  mov RA, r8
     |  and RA, -LJ_ARENA_SIZE
     |  mov ITYPE, r8

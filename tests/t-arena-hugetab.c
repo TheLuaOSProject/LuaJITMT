@@ -761,15 +761,15 @@ static void test_small_lifetime_descriptor(PRNGState *rs)
   a = lj_arena_of(p);
   cell = lj_arena_cellof(p);
   assert(lj_arena_lifetime_state_cas(a, cell,
-	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_MUTATING));
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_RECOVERY));
   assert(lj_arena_root_construct_commit(a, cell));
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_MEMBER);
   assert(lj_arena_lifetime_state_acq(a, cell) ==
-	 LJ_ARENA_LIFETIME_MUTATING);
+	 LJ_ARENA_LIFETIME_RECOVERY);
   /* Model recovery's stale LINKING sample restoring CONSTRUCT after commit;
   ** an idempotent constructor retry repairs the crossover to LIVE. */
   assert(lj_arena_lifetime_state_cas(a, cell,
-	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_CONSTRUCT));
+	LJ_ARENA_LIFETIME_RECOVERY, LJ_ARENA_LIFETIME_CONSTRUCT));
   assert(lj_arena_root_construct_commit(a, cell));
   assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
   assert(lj_arena_root_state_cas(a, cell, LJ_ARENA_ROOT_MEMBER,
@@ -785,13 +785,13 @@ static void test_small_lifetime_descriptor(PRNGState *rs)
   a = lj_arena_of(p);
   cell = lj_arena_cellof(p);
   assert(lj_arena_lifetime_state_cas(a, cell,
-	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_MUTATING));
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_RECOVERY));
   assert(lj_arena_root_construct_abandon(a, cell));
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
   assert(lj_arena_lifetime_state_acq(a, cell) ==
-	 LJ_ARENA_LIFETIME_MUTATING);
+	 LJ_ARENA_LIFETIME_RECOVERY);
   assert(lj_arena_lifetime_state_cas(a, cell,
-	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_CONSTRUCT));
+	LJ_ARENA_LIFETIME_RECOVERY, LJ_ARENA_LIFETIME_CONSTRUCT));
   assert(lj_arena_root_construct_abandon(a, cell));
   assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
   assert(lj_arena_lifetime_clear_terminal(a, cell) ==

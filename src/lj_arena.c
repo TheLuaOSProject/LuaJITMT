@@ -380,7 +380,7 @@ int lj_arena_root_construct_commit(GCArena *a, uint32_t cell)
     return 0;
   life = lj_arena_lifetime_state_acq(a, cell);
   root = lj_arena_root_state_acq(a, cell);
-  if (life == LJ_ARENA_LIFETIME_MUTATING) {
+  if (life == LJ_ARENA_LIFETIME_RECOVERY) {
     /* Only recovery may claim CONSTRUCT. Publish the already-visible edge
     ** without stealing its lane; recovery restores LIVE after observing that
     ** LINKING no longer owns constructor state. */
@@ -392,7 +392,7 @@ int lj_arena_root_construct_commit(GCArena *a, uint32_t cell)
       return 0;
     /* Recovery may have sampled LINKING before the root CAS and restored its
     ** saved origin as CONSTRUCT afterward. Repair that crossover; if recovery
-    ** reclaimed MUTATING again, its post-restore root recheck performs the
+    ** reclaimed RECOVERY again, its post-restore root recheck performs the
     ** symmetric repair. */
     (void)lj_arena_lifetime_state_cas(a, cell,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE);
@@ -407,7 +407,7 @@ int lj_arena_root_construct_commit(GCArena *a, uint32_t cell)
     life = LJ_ARENA_LIFETIME_LIVE;
   }
   if (life != LJ_ARENA_LIFETIME_LIVE)
-    return 0;  /* Recovery/free owns MUTATING; retry without waiting. */
+    return 0;  /* Recovery, mutation or free owns the lane; never wait. */
   root = lj_arena_root_state_acq(a, cell);
   if (root == LJ_ARENA_ROOT_MEMBER)
     return 1;
@@ -485,7 +485,7 @@ int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell)
   life = lj_arena_lifetime_state_acq(a, cell);
   if (life != LJ_ARENA_LIFETIME_CONSTRUCT &&
       life != LJ_ARENA_LIFETIME_LIVE &&
-      life != LJ_ARENA_LIFETIME_MUTATING)
+      life != LJ_ARENA_LIFETIME_RECOVERY)
     return 0;
   root = lj_arena_root_state_acq(a, cell);
   if (root == LJ_ARENA_ROOT_LINKING &&
@@ -494,10 +494,10 @@ int lj_arena_root_construct_abandon(GCArena *a, uint32_t cell)
     return 0;
   if (lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE)
     return 0;
-  if (life == LJ_ARENA_LIFETIME_MUTATING)
+  if (life == LJ_ARENA_LIFETIME_RECOVERY)
   {
     /* Repair recovery's stale-LINKING CONSTRUCT restore if it crossed the root
-    ** clear. A still-MUTATING recovery performs the symmetric root recheck. */
+    ** clear. A still-RECOVERY publisher performs the symmetric root recheck. */
     (void)lj_arena_lifetime_state_cas(a, cell,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE);
     return 1;
@@ -613,7 +613,7 @@ int lj_arena_dtor_construct_commit(GCArena *a, uint32_t cell)
   for (;;) {
     if (life == LJ_ARENA_LIFETIME_LIVE)
       return 1;
-    if (life == LJ_ARENA_LIFETIME_MUTATING) {
+    if (life == LJ_ARENA_LIFETIME_RECOVERY) {
       /* Only recovery can claim a published CONSTRUCT body. Its saved origin
       ** is CONSTRUCT and root NONE makes its mandatory restore target LIVE.
       ** The global recovery reservation already vetoes phase close before the
@@ -654,7 +654,7 @@ int lj_arena_dtor_construct_commit_pair(GCArena *a, uint32_t first,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE))
     return 1;
   /* Recovery may own either lane independently. The single-start helper
-  ** accepts MUTATING without waiting and commits every still-CONSTRUCT lane. */
+  ** accepts RECOVERY without waiting and commits each still-CONSTRUCT lane. */
   return lj_arena_dtor_construct_commit(a, first) &&
     lj_arena_dtor_construct_commit(a, second);
 }
@@ -4328,7 +4328,7 @@ int lj_arena_quarantine_owns_body(const void *p, size_t size)
   life = lj_arena_lifetime_state_acq(a, cell);
   if (life != LJ_ARENA_LIFETIME_LIVE) {
     (void)arena_late_claim_release(a, p, size);
-    return 1;  /* Never steal MUTATING/DESTRUCT/RESCUE/CONSTRUCT bytes. */
+    return 1;  /* Never steal CONSTRUCT/RECOVERY/DESTRUCT/RESCUE/MUTATING. */
   }
   if (!(flags & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
 		 LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)))
@@ -6856,7 +6856,7 @@ int lj_arena_publish_gco_at(void *p)
       lj_arena_cellptr(a, cell) != p)
     return 0;
   /* READY is irrevocable for this allocation incarnation. Recovery can move
-  ** CONSTRUCT to MUTATING only after observing READY, so a repeated owner-side
+  ** CONSTRUCT to RECOVERY only after observing READY, so a repeated owner-side
   ** publication must accept that already-complete release edge. */
   if (lj_arena_ready_get(a, cell))
     return 1;

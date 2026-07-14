@@ -25,12 +25,15 @@ state:
 - `FREE`: reusable/unallocated storage; interior cells remain in this state;
 - `LIVE`: an ordinary published or non-root-owned allocation;
 - `CONSTRUCT`: an owner-private root-spine constructor which cannot be freed;
-- `MUTATING`: one bounded non-destructive allocation, recovery-publication, or
-  ordinary-link arbitration owns the allocation metadata;
+- `RECOVERY`: this exact allocation has a counted recovery-publication
+  reservation which has not necessarily reached the recovery side plane yet;
 - `DESTRUCT`: a free/sweep owner has claimed the incarnation but has not
-  changed any body, `READY`, cdata, or block byte; and
+  changed any body, `READY`, cdata, or block byte;
 - `RESCUE`: a semantic publisher won the exact cancellation race against
-  `DESTRUCT`, so the untouched body is pinned and reader-visible.
+  `DESTRUCT`, so the untouched body is pinned and reader-visible; and
+- `MUTATING`: a bounded non-destructive body, layout, or root arbitration owns
+  the allocation metadata. It has no implied initial recovery reservation;
+  recovery drain may use it only after the side plane is already durable.
 
 No loser waits for a state transition.  It preserves or defers the object and
 lets the current owner finish.  The descriptor is not a mutex: it has no wait
@@ -142,7 +145,7 @@ later sweep owner.  These are separate APIs/provenance rules: `late[]` must not
 turn a successful GC resurrection back into a free.
 
 Recovery can also overlap a completed constructor's final commit.  If it owns
-`CONSTRUCT -> MUTATING`, the constructor may commit root
+`CONSTRUCT -> RECOVERY`, the constructor may commit root
 `LINKING -> MEMBER` (or abandon to `NONE`) without waiting.  Recovery restores
 `CONSTRUCT` only while root remains `LINKING`; otherwise it restores `LIVE`.
 The symmetric post-restore check closes both interleavings.

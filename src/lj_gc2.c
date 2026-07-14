@@ -444,6 +444,13 @@ uint32_t lj_gc2_test_recovery_paused(void)
   return la_load32_acq(&gc2_recovery_test_paused_stage);
 }
 
+void lj_gc2_test_recovery_pause_disarm(void)
+{
+  /* Prevent another caller from entering the selected hook without releasing
+  ** the caller which has already published paused_stage. */
+  la_store32_rel(&gc2_recovery_test_pause_stage, 0);
+}
+
 void lj_gc2_test_recovery_release(void)
 {
   la_store32_rel(&gc2_recovery_test_pause_release, 1);
@@ -475,6 +482,7 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define LJ_GC2_RECOVERY_TEST_SSB_COMMITTED 3u
 #define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE 4u
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM 5u
+#define LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED 6u
 #define gc2_recovery_test_pause_at(stage) ((void)(stage))
 #define gc2_test_jit_mark_checkpoint_closed() ((void)0)
 #define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
@@ -8859,6 +8867,20 @@ static int gc2_recovery_small_exact_ready(GCArena *a, GCobj *o,
     lj_arena_ready_get(a, start);
 }
 
+/* The first recovery-side load may have sampled IDLE before a worker acquired
+** an already-PENDING identity and published lifetime MUTATING. That lifetime
+** acquire is ordered after the worker's PENDING observation, so a second side
+** acquire sees durable work or its later completion. Completion restores the
+** lifetime before publishing IDLE; the final lifetime acquire distinguishes
+** that crossover from a stable, unrelated MUTATING owner with no identity. */
+static int gc2_recovery_small_mutating_recheck(GCArena *a, uint32_t start)
+{
+  if (lj_arena_recovery_state_acq(a, start) != LJ_ARENA_RECOVERY_IDLE)
+    return 1;
+  return lj_arena_lifetime_state_acq(a, start) !=
+	 LJ_ARENA_LIFETIME_MUTATING;
+}
+
 static int gc2_recovery_publish_small(global_State *g, GCArena *a,
 					       GCobj *o, uint32_t start)
 {
@@ -8880,19 +8902,23 @@ static int gc2_recovery_publish_small(global_State *g, GCArena *a,
     }
     if (state != LJ_ARENA_RECOVERY_IDLE)
       return 0;
+    gc2_recovery_test_pause_at(
+	LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED);
     {
       uint32_t origin = lj_arena_lifetime_state_acq(a, start);
       uint32_t held;
-      if (origin == LJ_ARENA_LIFETIME_RESCUE) {
-	/* Another semantic publisher has already cancelled DESTRUCT. Its count
-	** reservation precedes RESCUE, so the visible lane is durable work even
-	** before its recovery side state appears. */
+      if (origin == LJ_ARENA_LIFETIME_RESCUE ||
+	  origin == LJ_ARENA_LIFETIME_RECOVERY) {
+	/* Another counted publisher already owns this exact allocation. RESCUE
+	** cancelled DESTRUCT, while RECOVERY claimed LIVE/CONSTRUCT; in both cases
+	** the reservation precedes the lifetime lane, so work is durable before
+	** its recovery side state appears. MUTATING alone is not coalescible. */
 	lj_gc2_worker_wake(g);
 	return 1;
       }
       if (origin == LJ_ARENA_LIFETIME_LIVE ||
 	  origin == LJ_ARENA_LIFETIME_CONSTRUCT)
-	held = LJ_ARENA_LIFETIME_MUTATING;
+	held = LJ_ARENA_LIFETIME_RECOVERY;
       else if (origin == LJ_ARENA_LIFETIME_DESTRUCT) {
 	/* Irrevocable external/remote free publishes late before DESTRUCT.
 	** Its intent supersedes traversal and must never be resurrected. A
@@ -8900,6 +8926,10 @@ static int gc2_recovery_publish_small(global_State *g, GCArena *a,
 	if (lj_arena_late_get(a, start))
 	  return 1;
 	held = LJ_ARENA_LIFETIME_RESCUE;
+      } else if (origin == LJ_ARENA_LIFETIME_MUTATING) {
+	if (gc2_recovery_small_mutating_recheck(a, start))
+	  continue;
+	return 0;
       } else
 	return 0;
       /* Reserve before claiming either lane. This closes MARK/WEAK/SWEEP
@@ -8914,6 +8944,7 @@ static int gc2_recovery_publish_small(global_State *g, GCArena *a,
 	  continue;
 	now = lj_arena_lifetime_state_acq(a, start);
 	if (now == LJ_ARENA_LIFETIME_RESCUE ||
+	    now == LJ_ARENA_LIFETIME_RECOVERY ||
 	    (now == LJ_ARENA_LIFETIME_DESTRUCT &&
 	     lj_arena_late_get(a, start)))
 	  return 1;
@@ -9800,6 +9831,7 @@ static int gc2_expected_type_scoped_status(global_State *g, GCobj *o,
 	** same weak identity. FREE with quiet sidecars is terminal/stale. */
 	if (life == LJ_ARENA_LIFETIME_CONSTRUCT ||
 	    life == LJ_ARENA_LIFETIME_MUTATING ||
+	    life == LJ_ARENA_LIFETIME_RECOVERY ||
 	    life == LJ_ARENA_LIFETIME_DESTRUCT ||
 	    life == LJ_ARENA_LIFETIME_RESCUE ||
 	    recovery != LJ_ARENA_RECOVERY_IDLE ||
@@ -13276,6 +13308,11 @@ int lj_gc2_test_recovery_publish(global_State *g, GCobj *o)
   return gc2_recovery_publish(g, o);
 }
 
+int lj_gc2_test_recovery_mutating_recheck(GCArena *a, uint32_t start)
+{
+  return gc2_recovery_small_mutating_recheck(a, start);
+}
+
 uint32_t lj_gc2_test_recovery_drain(global_State *g, uint32_t limit)
 {
   uint32_t n;
@@ -14178,8 +14215,8 @@ static LJ_AINLINE int gc2_small_lifetime_readable(GCArena *a,
 }
 
 /* Find the nearest non-FREE lifetime start without consulting block[] or body
-** bytes. Callers decide whether its acquired state is readable, non-destructive
-** MUTATING, or a cancellable DESTRUCT writer. */
+** bytes. Callers decide whether its acquired state is readable, counted but
+** opaque RECOVERY, generic/body-owned MUTATING, or cancellable DESTRUCT. */
 static int gc2_small_lifetime_nearest(GCArena *a, uint32_t cell,
 					      uint32_t *startp,
 					      uint32_t *lifep)
@@ -17311,10 +17348,10 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
   if (status == GC2_MARK_DEAD) {
     /* A valid post-write barrier can meet a destructive owner only at the
     ** SC lifetime handshake: either that owner observed our counted reader and
-    ** aborts, or we observed MUTATING and must publish a durable alternative.
-    ** Recovery is allocation-free when the owner has already restored LIVE;
-    ** otherwise sticky NO_RECLAIM prevents every irreversible SWEEP boundary
-    ** from silently closing over the edge. */
+    ** aborts, or recovery must retain a durable alternative. RECOVERY coalesces
+    ** with the publisher which already owns the count; generic MUTATING alone
+    ** fails closed. Once the owner restores LIVE, publication is allocation-
+    ** free; otherwise sticky NO_RECLAIM vetoes every irreversible boundary. */
     if (!gc2_recovery_publish(g, o))
       gc2_recovery_fail_closed(g);
     return 1;

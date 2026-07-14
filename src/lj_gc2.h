@@ -395,6 +395,7 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_RECOVERY_TEST_SSB_COMMITTED	3u
 #define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE	4u
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM	5u
+#define LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED	6u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_VECTOR_TAB	1u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_NODE	2u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_TAB	3u
@@ -405,6 +406,7 @@ LJ_FUNC uint64_t lj_gc2_test_jit_sweep_checkpoint_closes(void);
 LJ_FUNC void lj_gc2_test_recovery_fail_grey_grow(uint32_t count);
 LJ_FUNC void lj_gc2_test_recovery_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_gc2_test_recovery_paused(void);
+LJ_FUNC void lj_gc2_test_recovery_pause_disarm(void);
 LJ_FUNC void lj_gc2_test_recovery_release(void);
 LJ_FUNC void lj_gc2_test_recovery_fail_closed(global_State *g);
 LJ_FUNC void lj_gc2_test_stack_admission_retry_once(GCobj *target);
@@ -421,6 +423,8 @@ LJ_FUNC uint32_t lj_gc2_test_weak_frontier_fault_hits(void);
 LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 					      lua_State *L);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_test_recovery_mutating_recheck(GCArena *a,
+							 uint32_t start);
 LJ_FUNC uint32_t lj_gc2_test_recovery_drain(global_State *g, uint32_t limit);
 LJ_FUNC int lj_gc2_test_recovery_state(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_test_recovery_huge_scans_reset(void);
