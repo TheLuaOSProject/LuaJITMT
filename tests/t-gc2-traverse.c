@@ -218,6 +218,33 @@ static void test_false_candidate_mark_admission(lua_State *L,
   lua_pop(L, 2);
 }
 
+static void test_embedded_empty_string_mark(global_State *g)
+{
+  GCobj *empty = obj2gco(&g->strempty);
+  uint64_t marks0, pushed0;
+  uint32_t gct = 0;
+
+  settle_automatic_cycle(g);
+  lj_gc2_force_major(g);
+  lj_gc2_mark_begin(g);
+  marks0 = gc2_marks_this_round_acq(g);
+  pushed0 = gc2_grey_pushed_acq(g);
+
+  /* strempty is a permanent global_State leaf, not an arena candidate. A
+  ** generic root marker must report live without making a thread scan retry;
+  ** an expected-type mismatch must still be rejected. */
+  assert(lj_gc2_markobj_status(g, empty, &gct) == 0);
+  assert(gct == (uint32_t)~LJ_TSTR);
+  assert(lj_gc2_markobj_expected_status(
+	 g, empty, (uint32_t)~LJ_TSTR, NULL) == 0);
+  assert(lj_gc2_markobj_expected_status(
+	 g, empty, (uint32_t)~LJ_TFUNC, NULL) < 0);
+  assert(gc2_marks_this_round_acq(g) == marks0);
+  assert(gc2_grey_pushed_acq(g) == pushed0);
+
+  lj_gc2_cycle_to_idle(g);
+}
+
 #if LJ_HASFFI
 static void test_cdata_exact_coverage_admission(lua_State *L,
 						global_State *g)
@@ -7030,6 +7057,7 @@ int main(void)
   test_strong_table(L, g, tg);
   test_retired_table_owner_nonsemantic(L, g, tg);
   test_retired_table_root_cycle_retries(L, g);
+  test_embedded_empty_string_mark(g);
   test_grey_deque_growth(L, g, tg);
   test_grey_deque_steal_race(L, g, tg);
   test_worker_drain(L, g, tg);

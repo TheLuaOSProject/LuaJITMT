@@ -15016,6 +15016,20 @@ static int gc2_retain_candidate_status(global_State *g, GCobj *o,
   if (!g || !o || !checkptrGC(o) ||
       ((uintptr_t)o & (uintptr_t)(sizeof(void *) - 1u)) != 0)
     return GC2_MARK_DEAD;
+  if (o == obj2gco(&g->strempty)) {
+    /* The canonical empty string is an immortal leaf embedded in
+    ** global_State, not an arena allocation. It can be a normal stack/table/
+    ** JIT root (notably from getenv("")-shaped results), so central retention
+    ** must recognize it before allocator membership. Keep expected-type
+    ** validation exact and manufacture neither a mark nor grey work. */
+    gct = (uint32_t)la_load8_acq(&o->gch.gct);
+    if (gct != (uint32_t)~LJ_TSTR ||
+	(expected_gct != 0 && expected_gct != gct))
+      return GC2_MARK_DEAD;
+    base = o;
+    status = GC2_MARK_LIVE_ALREADY;
+    goto done;
+  }
   if (la_load32_acq(&g->allocf_arena) == 0) {
     /* Custom lua_Alloc is intentionally outside the current GC2 retention
     ** tranche. Preserve the temporary compatibility behavior documented in
