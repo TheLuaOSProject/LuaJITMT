@@ -63,6 +63,7 @@ static void arena_test_plain_claim_pause_after_close(void);
 static void arena_test_plain_admit_pause_after_enter(void);
 static void arena_test_remote_publish_pause_after_queue(void);
 static void arena_test_remote_drain_pause_after_clear(void);
+static void hugetab_test_realloc_pause_after_busy(void);
 #define arena_test_remote_fast_skip() \
   ((void)la_add64_rlx(&arena_test_remote_fast_skip_count, 1))
 #define arena_test_remote_arena_probe() \
@@ -1017,6 +1018,8 @@ LJ_STATIC_ASSERT((offsetof(LJHugeTabHdr, ent) & 15u) == 0);
 #if defined(LJ_ARENA_TEST_HELPERS)
 static uint32_t hugetab_test_retire_pause;
 static uint32_t hugetab_test_retire_paused;
+static uint32_t hugetab_test_realloc_pause;
+static uint32_t hugetab_test_realloc_paused;
 static uint32_t arena_test_plain_late_pause_flag;
 static uint32_t arena_test_plain_late_pause_seen;
 static uint32_t arena_test_registry_pause_flag;
@@ -1032,6 +1035,28 @@ static uint32_t arena_test_remote_drain_pause_seen;
 static uint64_t arena_test_remote_fast_skip_count;
 static uint64_t arena_test_remote_arena_probe_count;
 static uint64_t arena_test_adopt_whole_count;
+
+void lj_arena_hugetab_test_realloc_pause(int enabled)
+{
+  if (enabled)
+    la_store32_rel(&hugetab_test_realloc_paused, 0);
+  la_store32_rel(&hugetab_test_realloc_pause, enabled != 0);
+}
+
+uint32_t lj_arena_hugetab_test_realloc_paused(void)
+{
+  return la_load32_acq(&hugetab_test_realloc_paused);
+}
+
+static void hugetab_test_realloc_pause_after_busy(void)
+{
+  if (la_load32_acq(&hugetab_test_realloc_pause) != 0) {
+    la_store32_rel(&hugetab_test_realloc_paused, 1);
+    while (la_load32_acq(&hugetab_test_realloc_pause) != 0)
+      la_cpu_pause();
+    la_store32_rel(&hugetab_test_realloc_paused, 0);
+  }
+}
 
 void lj_arena_hugetab_test_retire_pause(int enabled)
 {
@@ -1209,6 +1234,7 @@ uint64_t lj_arena_test_adopt_whole_count(void)
 }
 #else
 #define hugetab_test_retire_pause_after_busy() ((void)0)
+#define hugetab_test_realloc_pause_after_busy() ((void)0)
 #define arena_test_plain_late_pause_after_enter() ((void)0)
 #define arena_test_registry_pause_after_reader() ((void)0)
 #endif
@@ -3061,8 +3087,8 @@ int lj_arena_hugetab_sweep_next(HugeTab *ht, uint32_t *cursor,
     if (addr > LJ_HUGETAB_TOMBSTONE) {
       uint64_t meta = la_load64_acq(&e->slot.hi);
       if (la_load64_acq(&e->slot.lo) == addr &&
-	  (meta & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_TRAVERSABLE)) ==
-	    (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_TRAVERSABLE)) {
+	  (meta & LJ_HUGEF_SWEEP_OLD) &&
+	  (meta & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FREEING))) {
 	if (pp)
 	  *pp = (void *)(uintptr_t)addr;
 	hugetab_decode(meta, hi);
@@ -3330,10 +3356,30 @@ int lj_arena_hugetab_claim_external_free(HugeTab *ht, const void *p,
 	 LJ_HUGE_EXT_CLAIMED;
 }
 
+enum {
+  LJ_HUGE_REALLOC_CLAIM_LOST = 0,
+  LJ_HUGE_REALLOC_CLAIM_OWNER = 1
+};
+
+enum {
+  LJ_HUGE_REALLOC_KEEP_LOST = 0,
+  LJ_HUGE_REALLOC_KEEP_DONE = 1,
+  LJ_HUGE_REALLOC_KEEP_MOVE = 2,
+  LJ_HUGE_REALLOC_KEEP_PREEMPTED = 3
+};
+
+enum {
+  LJ_HUGE_REALLOC_MOVE_LOST = 0,
+  LJ_HUGE_REALLOC_MOVE_DIRECT = 1,
+  LJ_HUGE_REALLOC_MOVE_DEFERRED = 2,
+  LJ_HUGE_REALLOC_MOVE_PREEMPTED = 3
+};
+
 /* A realloc pin is nonterminal: it excludes prepare/free/header teardown while
-** preserving the old allocation if replacement allocation fails. The claim
-** itself is the realloc-vs-free LP; a competing external free which observes
-** BUSY loses that racy operation without ever touching the mapping. */
+** preserving the old allocation if replacement allocation fails. Counted raw
+** readers may already exist; BUSY pins the mapping while the owner moves it
+** and the eventual old-slot handoff retains those exact readers. Traversable
+** allocations have address-bound GC identity and are never reallocable. */
 static int hugetab_claim_realloc(HugeTab *ht, const void *p, LJHugeInfo *hi)
 {
   LJHugeTabHdr *h = ht ? ht->h : NULL;
@@ -3345,15 +3391,22 @@ static int hugetab_claim_realloc(HugeTab *ht, const void *p, LJHugeInfo *hi)
   for (;;) {
     uint64_t next;
     if (!hugetab_search(h, addr, &e, &meta) ||
-	hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
-	hugetab_root_pending(meta) || (meta & LJ_HUGEF_DEFER_FREE) ||
-	(meta & (LJ_HUGEF_BUSY|LJ_HUGEF_FREEING|
-		 LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET)))
-      return 0;
+	(meta & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FREEING|
+		 LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET|LJ_HUGEF_DEFER_FREE|
+		 LJ_HUGEF_RECOVERY_MASK|LJ_HUGEF_ROOT_MASK|
+		 LJ_HUGEF_SWEEP_OLD)))
+      return LJ_HUGE_REALLOC_CLAIM_LOST;
+    /* Another resize owns this exact incarnation. A successful nonwaiting
+    ** follower needs a generation/forwarding descriptor: allocating first has
+    ** address ABA, while preempting first cannot preserve failed-realloc
+    ** semantics. Reject without reading the mapping or reporting success. */
+    if (meta & LJ_HUGEF_BUSY)
+      return LJ_HUGE_REALLOC_CLAIM_LOST;
     next = meta | LJ_HUGEF_BUSY;
     if (hugetab_cas_meta(e, addr, meta, next)) {
       hugetab_decode(next, hi);
-      return 1;
+      hugetab_test_realloc_pause_after_busy();
+      return LJ_HUGE_REALLOC_CLAIM_OWNER;
     }
   }
 }
@@ -3370,26 +3423,34 @@ static int hugetab_finish_realloc_keep(HugeTab *ht, const void *p,
   for (;;) {
     uint64_t packed_addr, next;
     uint32_t flags;
-    int folded;
     if (!hugetab_search(h, addr, &e, &meta) ||
-	hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
-	hugetab_root_pending(meta) ||
 	!(meta & LJ_HUGEF_BUSY) || (meta & LJ_HUGEF_FREEING))
-      return 0;
+      return LJ_HUGE_REALLOC_KEEP_LOST;
+    if (meta & LJ_HUGEF_DEFER_FREE) {
+      int folded;
+      next = meta & ~(uint64_t)LJ_HUGEF_BUSY;
+      next = hugetab_fold_deferred_free(p, next, &folded);
+      if (hugetab_cas_meta(e, addr, meta, next)) {
+	hugetab_decode(next, hi);
+	if (folded)
+	  arena_progress_wake(lj_arena_of(p));
+	return LJ_HUGE_REALLOC_KEEP_PREEMPTED;
+      }
+      continue;
+    }
+    if (hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
+	hugetab_root_pending(meta))
+      return LJ_HUGE_REALLOC_KEEP_MOVE;
     flags = (uint32_t)meta & LJ_HUGEF_MASK;
     flags &= ~LJ_HUGEF_BUSY;
     if (!hugetab_pack((void *)(uintptr_t)addr, nsize, flags,
 		      &packed_addr, &next) || packed_addr != addr)
-      return 0;
-    /* hugetab_pack resets the bounded reader field; the BUSY claim proved it
-    ** was already zero. Preserve a racing external-free intent and consume it
-    ** in this BUSY-release CAS when no other owner remains. */
-    if (meta & LJ_HUGEF_DEFER_FREE)
-      next |= LJ_HUGEF_DEFER_FREE;
-    next = hugetab_fold_deferred_free(p, next, &folded);
+      return LJ_HUGE_REALLOC_KEEP_LOST;
+    /* hugetab_pack resets the bounded reader field; the exact checks above
+    ** proved it zero and DEFER_FREE absent in the same slot snapshot. */
     if (hugetab_cas_meta(e, addr, meta, next)) {
       hugetab_decode(next, hi);
-      return 1;
+      return LJ_HUGE_REALLOC_KEEP_DONE;
     }
   }
 }
@@ -3407,13 +3468,14 @@ static int hugetab_release_realloc(HugeTab *ht, const void *p,
     uint64_t next;
     int folded;
     if (!hugetab_search(h, addr, &e, &meta) ||
-	hugetab_readers(meta) != 0 || !(meta & LJ_HUGEF_BUSY) ||
-	(meta & LJ_HUGEF_FREEING))
+	!(meta & LJ_HUGEF_BUSY) || (meta & LJ_HUGEF_FREEING))
       return 0;
     next = meta & ~(uint64_t)LJ_HUGEF_BUSY;
     next = hugetab_fold_deferred_free(p, next, &folded);
     if (hugetab_cas_meta(e, addr, meta, next)) {
       hugetab_decode(next, hi);
+      if (folded)
+	arena_progress_wake(lj_arena_of(p));
       return 1;
     }
   }
@@ -3430,19 +3492,42 @@ static int hugetab_realloc_to_external_free(HugeTab *ht, const void *p,
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
     uint64_t next;
+    int folded;
     if (!hugetab_search(h, addr, &e, &meta) ||
-	hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
-	hugetab_root_pending(meta) ||
 	!(meta & LJ_HUGEF_BUSY) || (meta & LJ_HUGEF_FREEING))
-      return 0;
+      return LJ_HUGE_REALLOC_MOVE_LOST;
+    if (meta & LJ_HUGEF_DEFER_FREE) {
+      next = meta & ~(uint64_t)LJ_HUGEF_BUSY;
+      next = hugetab_fold_deferred_free(p, next, &folded);
+      if (hugetab_cas_meta(e, addr, meta, next)) {
+	hugetab_decode(next, hi);
+	if (folded)
+	  arena_progress_wake(lj_arena_of(p));
+	return LJ_HUGE_REALLOC_MOVE_PREEMPTED;
+      }
+      continue;
+    }
+    if (hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
+	hugetab_root_pending(meta)) {
+      /* This owner won before the ordinary readers. Publish its logical move
+      ** while retaining their old geometry and exact lifetime tokens. */
+      next = (meta & ~(uint64_t)LJ_HUGEF_BUSY) | LJ_HUGEF_DEFER_FREE;
+      next = hugetab_fold_deferred_free(p, next, &folded);
+      if (hugetab_cas_meta(e, addr, meta, next)) {
+	hugetab_decode(next, hi);
+	if (folded)
+	  arena_progress_wake(lj_arena_of(p));
+	return LJ_HUGE_REALLOC_MOVE_DEFERRED;
+      }
+      continue;
+    }
     next = (meta & ~(uint64_t)(LJ_HUGEF_MARK|LJ_HUGEF_RETIRED)) |
 	   LJ_HUGEF_FREEING;  /* Retain BUSY continuously through the copy. */
-    next &= ~(uint64_t)LJ_HUGEF_DEFER_FREE;  /* This owner consumes intent. */
     if (hugetab_cas_meta(e, addr, meta, next)) {
       if (next & LJ_HUGEF_SWEEP_OLD)
 	la_store64_rel(&lj_arena_of(p)->hdr.retire_epoch, ~(uint64_t)0);
       hugetab_decode(next, hi);
-      return 1;
+      return LJ_HUGE_REALLOC_MOVE_DIRECT;
     }
   }
 }
@@ -6853,9 +6938,16 @@ static void *arena_allocf_new(LJArenaAllocD *ad, size_t size, uint32_t flags)
   if (!ad->huge || size <= LJ_HUGE_THRESHOLD)
     return lj_arena_alloc(ad->alloc, ad->prng, size, flags);
   p = lj_arena_huge_map(ad->prng, size, flags);
-  if (p)
-    lj_arena_owner_rel(lj_arena_of(p),
-		       lj_arena_alloc_owner_acq(ad->alloc));
+  if (p) {
+    GCArena *a = lj_arena_of(p);
+    TGState *owner_tg =
+      (TGState *)lj_arena_alloc_owner_tg_acq(ad->alloc);
+    lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(ad->alloc));
+    /* A final counted reader may turn a deferred plain free into actionable
+    ** FREEING|SWEEP_OLD work. Publish the process owner before the HugeTab
+    ** entry so that handoff can wake an already-active sweep. */
+    lj_arena_progress_g_rel(a, owner_tg ? owner_tg->gl : NULL);
+  }
   if (p && lj_arena_hugetab_insert(ad->huge, p, size,
 				   arena_allocf_hflags(ad, flags)) != 1) {
     lj_arena_huge_unmap(p, size);
@@ -6911,20 +7003,29 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
   LJHugeInfo hi;
   size_t csize;
   void *np;
-  int finish;
+  int claim, finish;
   /* Claim before allocation: this both rejects a stale table address before
   ** the OS can reuse it for np and pins the old payload throughout allocation
   ** and copy. A failed replacement releases the nonterminal pin unchanged. */
-  if (!hugetab_claim_realloc(ad->huge, ptr, &hi))
+  claim = hugetab_claim_realloc(ad->huge, ptr, &hi);
+  if (claim == LJ_HUGE_REALLOC_CLAIM_LOST)
     return NULL;
-  if (nsize > LJ_HUGE_THRESHOLD &&
+  if (hi.readers == 0 && nsize > LJ_HUGE_THRESHOLD &&
       lj_arena_huge_mapsize(hi.size) == lj_arena_huge_mapsize(nsize)) {
+    int kept;
     /* Same mapping extent: update authoritative logical size and retain the
     ** stock O(1) realloc fast path without a free/sweep observation window. */
-    if (hugetab_finish_realloc_keep(ad->huge, ptr, nsize, &hi))
-      return (hi.flags & LJ_HUGEF_FREEING) ? NULL : ptr;
-    (void)hugetab_release_realloc(ad->huge, ptr, NULL);
-    return NULL;
+    kept = hugetab_finish_realloc_keep(ad->huge, ptr, nsize, &hi);
+    if (kept == LJ_HUGE_REALLOC_KEEP_DONE)
+      return ptr;
+    if (kept == LJ_HUGE_REALLOC_KEEP_PREEMPTED)
+      return NULL;
+    if (kept == LJ_HUGE_REALLOC_KEEP_LOST) {
+      (void)hugetab_release_realloc(ad->huge, ptr, NULL);
+      return NULL;
+    }
+    /* A reader admitted before BUSY owns the old logical size. Fall through
+    ** to an allocate/copy/deferred-old release rather than rewriting it. */
   }
   np = arena_allocf_new(ad, nsize, ad->flags);
   if (!np) {
@@ -6935,7 +7036,14 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
   }
   csize = hi.size < nsize ? hi.size : nsize;
   memcpy(np, ptr, csize);
-  if (!hugetab_realloc_to_external_free(ad->huge, ptr, &hi)) {
+  finish = hugetab_realloc_to_external_free(ad->huge, ptr, &hi);
+  if (finish == LJ_HUGE_REALLOC_MOVE_PREEMPTED) {
+    arena_allocf_free(ad, np, nsize);
+    return NULL;
+  }
+  if (finish == LJ_HUGE_REALLOC_MOVE_DEFERRED)
+    return np;
+  if (finish != LJ_HUGE_REALLOC_MOVE_DIRECT) {
     (void)hugetab_release_realloc(ad->huge, ptr, NULL);
     arena_allocf_free(ad, np, nsize);
     return NULL;

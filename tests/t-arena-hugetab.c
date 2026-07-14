@@ -13,6 +13,7 @@
 #include "lj_arch.h"
 #include "lj_arena.h"
 #include "lj_prng.h"
+#include "lj_tg.h"
 
 typedef struct FreeRunProbe {
   uint32_t cell;
@@ -457,6 +458,136 @@ typedef struct RetireRace {
   LJHugeInfo hi;
   int result;
 } RetireRace;
+
+typedef struct HugeReallocRace {
+  LJArenaAllocD *ad;
+  void *p;
+  size_t osize;
+  size_t nsize;
+  void *result;
+} HugeReallocRace;
+
+static void *huge_realloc_race_thread(void *ud)
+{
+  HugeReallocRace *race = (HugeReallocRace *)ud;
+  race->result = lj_arena_allocf(race->ad, race->p,
+				 race->osize, race->nsize);
+  return NULL;
+}
+
+static void huge_realloc_race_wait_busy(void)
+{
+  while (!lj_arena_hugetab_test_realloc_paused())
+    la_cpu_pause();
+}
+
+static void test_huge_realloc_busy_preemption(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 2601u;
+  HugeTab ht = { NULL };
+  TGAlloc primary_alloc, follower_alloc;
+  LJArenaAllocD primary_ad, follower_ad;
+  PRNGState follower_rs;
+  HugeReallocRace race;
+  LJHugeReader reader = { NULL, NULL, 0 };
+  LJHugeInfo hi;
+  pthread_t thread;
+  void *p;
+
+  lj_prng_seed_fixed(&follower_rs);
+  assert(lj_arena_hugetab_init(&ht, 3));
+  lj_arena_alloc_init(&primary_alloc);
+  lj_arena_alloc_init(&follower_alloc);
+  lj_arena_allocd_init(&primary_ad, &primary_alloc, rs, 0);
+  lj_arena_allocd_init(&follower_ad, &follower_alloc, &follower_rs, 0);
+  lj_arena_allocd_sethugetab(&primary_ad, &ht);
+  lj_arena_allocd_sethugetab(&follower_ad, &ht);
+
+  p = lj_arena_allocd_alloc(&primary_ad, size, 0);
+  assert(p != NULL);
+  memset(p, 0x5a, 256u);
+  race.ad = &primary_ad;
+  race.p = p;
+  race.osize = size;
+  race.nsize = SIZE_MAX;  /* Deterministic primary allocation failure. */
+  race.result = (void *)(uintptr_t)1u;
+  lj_arena_hugetab_test_realloc_pause(1);
+  assert(pthread_create(&thread, NULL, huge_realloc_race_thread, &race) == 0);
+  huge_realloc_race_wait_busy();
+
+  /* Two exact-buffer resizes need an incarnation/forwarding descriptor to
+  ** share success without address ABA or double accounting. The follower is
+  ** a bounded rejection: it allocates nothing and changes no metadata. */
+  assert(lj_arena_allocf(&follower_ad, p, size, size + 64u) == NULL);
+  assert(lj_arena_hugetab_lookup(&ht, p, &hi));
+  assert(hi.size == size && hi.readers == 0u &&
+	 (hi.flags & LJ_HUGEF_BUSY) != 0 &&
+	 (hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING)) == 0);
+  assert(memcmp(p, "\x5a\x5a\x5a\x5a", 4u) == 0);
+  lj_arena_hugetab_test_realloc_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(race.result == NULL);
+  assert(lj_arena_hugetab_lookup(&ht, p, &hi));
+  assert(hi.size == size && hi.readers == 0u &&
+	 (hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE|
+		     LJ_HUGEF_FREEING)) == 0);
+  assert(memcmp(p, "\x5a\x5a\x5a\x5a", 4u) == 0);
+  assert(lj_arena_allocf(&primary_ad, p, size, 0) == NULL);
+  assert(!lj_arena_hugetab_lookup(&ht, p, NULL));
+
+  /* The opposite reader/owner completion order is equally nonblocking. BUSY
+  ** keeps the source mapped after the last old reader leaves; the claim
+  ** snapshot still forces a move and the owner then deletes it directly. */
+  p = lj_arena_allocd_alloc(&primary_ad, size + 4u, 0);
+  assert(p != NULL);
+  memset(p, 0x3c, 256u);
+  assert(lj_arena_hugetab_reader_acquire(&ht, p, &reader, NULL) ==
+	 LJ_ARENA_HUGE_READER_ACQUIRED);
+  race.p = p;
+  race.osize = size + 4u;
+  race.nsize = size + 64u;
+  race.result = NULL;
+  lj_arena_hugetab_test_realloc_pause(1);
+  assert(pthread_create(&thread, NULL, huge_realloc_race_thread, &race) == 0);
+  huge_realloc_race_wait_busy();
+  assert(lj_arena_hugetab_reader_release(&reader, &hi) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+  assert(hi.readers == 0u && (hi.flags & LJ_HUGEF_BUSY) != 0 &&
+	 (hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING)) == 0);
+  lj_arena_hugetab_test_realloc_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(race.result != NULL && race.result != p);
+  assert(memcmp(race.result, "\x3c\x3c\x3c\x3c", 4u) == 0);
+  assert(!lj_arena_hugetab_lookup(&ht, p, NULL));
+  assert(lj_arena_allocf(&primary_ad, race.result, size + 64u, 0) == NULL);
+
+  /* An external free publishes the same irrevocable preemption while BUSY.
+  ** The primary must not consume that intent or manufacture a replacement. */
+  p = lj_arena_allocd_alloc(&primary_ad, size + 8u, 0);
+  assert(p != NULL);
+  race.p = p;
+  race.osize = size + 8u;
+  race.nsize = size + 32u;
+  race.result = (void *)(uintptr_t)1u;
+  lj_arena_hugetab_test_realloc_pause(1);
+  assert(pthread_create(&thread, NULL, huge_realloc_race_thread, &race) == 0);
+  huge_realloc_race_wait_busy();
+  assert(lj_arena_allocf(&follower_ad, p, size + 8u, 0) == NULL);
+  assert(lj_arena_hugetab_lookup(&ht, p, &hi));
+  assert((hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE)) ==
+	 (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE));
+  lj_arena_hugetab_test_realloc_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(race.result == NULL);
+  assert(lj_arena_hugetab_lookup(&ht, p, &hi));
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+  delete_unmap(&ht, p);
+
+  lj_arena_alloc_fini(&primary_alloc);
+  lj_arena_alloc_fini(&follower_alloc);
+  lj_arena_hugetab_fini(&ht);
+}
 
 static void *retire_race_thread(void *ud)
 {
@@ -1155,7 +1286,10 @@ static void test_huge_reader_shapes_and_realloc(PRNGState *rs)
   LJHugeInfo hi;
   TGAlloc alloc;
   LJArenaAllocD ad;
-  void *p, *base = NULL;
+  TGState *owner;
+  global_State *progress = (global_State *)(uintptr_t)0x12340000u;
+  void *p, *q, *sweepp, *base = NULL;
+  uint32_t cursor;
 
   assert(lj_arena_hugetab_init(&ht, 2));
   p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
@@ -1205,22 +1339,59 @@ static void test_huge_reader_shapes_and_realloc(PRNGState *rs)
 	 LJ_ARENA_HUGE_READER_RELEASED);
   delete_unmap(&ht, p);
 
-  /* The public allocf realloc pin is a destructive BUSY claim and must lose
-  ** without changing size or mapping while a raw reader is admitted. */
+  /* A raw mark/reader is transient GC observation, not allocation failure.
+  ** Preserve its old geometry, move even within one mapping-size class, and
+  ** let the last reader expose the old raw mapping to fresh-grace sweep. */
   lj_arena_alloc_init(&alloc);
+  owner = (TGState *)calloc(1, sizeof(*owner));
+  assert(owner != NULL);
+  owner->gl = progress;
+  lj_arena_alloc_owner_tg_rel(&alloc, owner);
   lj_arena_allocd_init(&ad, &alloc, rs, 0);
   lj_arena_allocd_sethugetab(&ad, &ht);
+  q = lj_arena_allocd_alloc(&ad, size + 12u, LJ_AF_TRAVERSABLE);
+  assert(q != NULL && lj_arena_allocd_publish_gco(&ad, q));
+  assert(lj_arena_allocf(&ad, q, size + 12u, size + 24u) == NULL);
+  assert(lj_arena_hugetab_lookup(&ht, q, &hi));
+  assert(hi.size == size + 12u &&
+	 (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0 &&
+	 (hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE|
+		     LJ_HUGEF_FREEING)) == 0);
+  assert(lj_arena_allocf(&ad, q, size + 12u, 0) == NULL);
   p = lj_arena_allocd_alloc(&ad, size + 16u, 0);
   assert(p != NULL);
+  assert(lj_arena_progress_g_acq(lj_arena_of(p)) == progress);
+  memset(p, 0xa5, 256u);
   assert(lj_arena_hugetab_reader_acquire(&ht, p, &reader, &hi) == 1);
-  assert(lj_arena_allocf(&ad, p, size + 16u, size + 32u) == NULL);
+  assert(lj_arena_allocf(&ad, p, size + 16u, SIZE_MAX) == NULL);
   assert(lj_arena_hugetab_lookup(&ht, p, &hi));
   assert(hi.size == size + 16u && hi.readers == 1u &&
+	 (hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE|
+		     LJ_HUGEF_FREEING)) == 0);
+  assert(memcmp(p, "\xa5\xa5\xa5\xa5", 4u) == 0);
+  q = lj_arena_allocf(&ad, p, size + 16u, size + 32u);
+  assert(q != NULL && q != p);
+  assert(memcmp(q, p, 256u) == 0);
+  assert(lj_arena_hugetab_lookup(&ht, p, &hi));
+  assert(hi.size == size + 16u && hi.readers == 1u &&
+	 (hi.flags & LJ_HUGEF_DEFER_FREE) != 0 &&
 	 (hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_FREEING)) == 0);
-  assert(lj_arena_hugetab_reader_release(&reader, NULL) ==
-	 LJ_ARENA_HUGE_READER_RELEASED);
-  assert(lj_arena_allocf(&ad, p, size + 16u, 0) == NULL);
-  assert(!lj_arena_hugetab_lookup(&ht, p, NULL));
+  assert(lj_arena_hugetab_lookup(&ht, q, &hi));
+  assert(hi.size == size + 32u && hi.readers == 0u);
+  assert(lj_arena_hugetab_reader_release(&reader, &hi) ==
+	 LJ_ARENA_HUGE_READER_HANDOFF);
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+  assert((hi.flags & LJ_HUGEF_TRAVERSABLE) == 0);
+  cursor = 0;
+  sweepp = NULL;
+  assert(lj_arena_hugetab_sweep_next(&ht, &cursor, &sweepp, &hi));
+  assert(sweepp == p && lj_arena_hugetab_has_sweep_old(&ht));
+  delete_unmap(&ht, p);
+  assert(lj_arena_allocf(&ad, q, size + 32u, 0) == NULL);
+  assert(!lj_arena_hugetab_lookup(&ht, q, NULL));
+  lj_arena_alloc_owner_tg_rel(&alloc, NULL);
+  free(owner);
   lj_arena_alloc_fini(&alloc);
   lj_arena_hugetab_fini(&ht);
 }
@@ -1954,6 +2125,7 @@ int main(void)
   test_root_state(&rs);
   test_root_free_race(&rs);
 #if defined(LJ_ARENA_TEST_HELPERS)
+  test_huge_realloc_busy_preemption(&rs);
   test_small_lifetime_descriptor(&rs);
   test_retire_busy_mark_intent(&rs);
   test_retire_busy_exact_mark(&rs);

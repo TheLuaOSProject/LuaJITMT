@@ -723,6 +723,8 @@ LJ_FUNC int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src,
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
 #if defined(LJ_ARENA_TEST_HELPERS)
+LJ_FUNC void lj_arena_hugetab_test_realloc_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_hugetab_test_realloc_paused(void);
 LJ_FUNC void lj_arena_hugetab_test_retire_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_hugetab_test_retire_paused(void);
 LJ_FUNC void lj_arena_test_plain_late_pause(int enabled);
