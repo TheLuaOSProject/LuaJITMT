@@ -3,7 +3,7 @@
 **
 ** The old color marker and sweeper entry points are physically absent. This
 ** ordinary-build workload keeps broad GC/JIT/threading coverage around that
-** invariant, including lua_close().
+** invariant, including lua_close() from both IDLE and an open active SWEEP.
 */
 
 #include <assert.h>
@@ -18,6 +18,9 @@
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_jit.h"
+#include "lj_tg.h"
+#include "lj_trace.h"
 
 static const char gc2_only_workload[] =
   "local keep = {}\n"
@@ -74,6 +77,99 @@ static void run_chunk(lua_State *L, const char *src)
   }
 }
 
+static int trace_is_runnable(global_State *g, TraceNo traceno)
+{
+  GCtrace *T = traceref_safe(G2J(g), traceno);
+  return trace_runnable_acq(T, traceno) && trace_mcode_acq(T) != NULL;
+}
+
+static int main_tg_has_traversable_sweep_work(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  return tg != NULL &&
+    (tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL ||
+     tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] != NULL);
+}
+
+static void drive_to_pending_open_sweep(lua_State *L, global_State *g)
+{
+  uint32_t i;
+
+  (void)lua_gc(L, LUA_GCRESTART, 0);
+  for (i = 0; i < 1000000u; i++) {
+    (void)lua_gc(L, LUA_GCSTEP, 1);
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	gc2_sweep_bridge_ready_acq(g) != 0 &&
+	gc2_jit_phase_gate_acq(g) != 0 &&
+	main_tg_has_traversable_sweep_work(g))
+      return;
+  }
+  fputs("GC2 did not reach an open SWEEP with physical work pending\n",
+	stderr);
+  assert(0);
+}
+
+static void run_active_sweep_close(void)
+{
+  static const char active_sweep_close_workload[] =
+    "collectgarbage('stop')\n"
+    "assert(require('threading').gcworkers(0) == 0)\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "function __gc2_active_close_trace(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 40 do\n"
+    "  assert(__gc2_active_close_trace(100) == 5050)\n"
+    "end\n"
+    "local util = require('jit.util')\n"
+    "for tr = 1, 128 do\n"
+    "  if util.traceinfo(tr) then\n"
+    "    __gc2_active_close_traceno = tr\n"
+    "    break\n"
+    "  end\n"
+    "end\n"
+    "assert(__gc2_active_close_traceno, 'active-close loop did not trace')\n"
+    /* Leave substantially more than one bounded SWEEP batch of unreachable
+    ** arena work, so the first coherent open bridge cannot also finish
+    ** physical reclamation. */
+    "for round = 1, 40 do\n"
+    "  local dead = {}\n"
+    "  for i = 1, 2500 do\n"
+    "    dead[i] = { round, i, 'active-close-dead-' .. i }\n"
+    "  end\n"
+    "end\n";
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TraceNo traceno;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+  assert(g != NULL);
+
+  run_chunk(L, active_sweep_close_workload);
+  assert(gc2_n_workers_acq(g) == 0);
+  lua_getglobal(L, "__gc2_active_close_traceno");
+  assert(lua_isnumber(L, -1));
+  traceno = (TraceNo)lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  assert(traceno > 0);
+  assert(trace_is_runnable(g, traceno));
+
+  drive_to_pending_open_sweep(L, g);
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+  assert(gc2_sweep_bridge_ready_acq(g) != 0);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(main_tg_has_traversable_sweep_work(g));
+  assert(trace_is_runnable(g, traceno));
+
+  lua_close(L);
+}
+
 int main(void)
 {
   lua_State *L;
@@ -96,8 +192,10 @@ int main(void)
 
   lua_close(L);
 
+  run_active_sweep_close();
+
   printf("t-gc2-no-legacy-runtime OK; GC2 cycles=%" PRIu64
-	 ", workers and sticky trace survived, lua_close completed\n",
+	 ", IDLE and active-SWEEP lua_close completed\n",
 	 cycle1 - cycle0);
   return 0;
 }

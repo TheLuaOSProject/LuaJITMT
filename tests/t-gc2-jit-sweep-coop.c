@@ -16,6 +16,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_jit.h"
+#include "lj_target.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
@@ -24,6 +25,12 @@
 
 #if LJ_TARGET_X64
 static uint32_t probe_hits;
+static uint32_t cnew_probe_hits;
+
+typedef struct CNewProbeValue {
+  int32_t x;
+  double y;
+} CNewProbeValue;
 
 static int has_xpoll_trace(global_State *g)
 {
@@ -40,6 +47,43 @@ static int has_xpoll_trace(global_State *g)
     }
   }
   return 0;
+}
+
+static int has_cnew_trace(global_State *g)
+{
+  jit_State *J = G2J(g);
+  TraceNo traceno;
+  for (traceno = 1; traceno < trace_sizetrace_acq(J); traceno++) {
+    GCtrace *T = traceref(J, traceno);
+    if (T && trace_traceno_acq(T) == traceno && trace_mcode_acq(T) != NULL) {
+      IRIns *ir = trace_ir_acq(T);
+      IRRef i, nins = trace_nins_acq(T), cnew = 0, xload = 0;
+      int has_loop = 0, has_post_store = 0;
+      for (i = REF_FIRST; i < nins; i++) {
+	if (ir[i].o == IR_LOOP)
+	  has_loop = 1;
+	if (ir[i].o == IR_CNEW && ir[i].r != RID_SINK &&
+	    ir[i].r != RID_SUNK)
+	  cnew = i;
+	if (cnew != 0 && i > cnew && ir[i].o == IR_XLOAD)
+	  xload = i;
+	if (xload != 0 && i > xload && ir[i].o == IR_XSTORE)
+	  has_post_store = 1;
+      }
+      if (has_loop && cnew != 0 && has_post_store)
+	return 1;
+    }
+  }
+  return 0;
+}
+
+static void assert_cnew_value_at_top(lua_State *L, int32_t x)
+{
+  CNewProbeValue *v;
+  assert(tviscdata(L->top - 1));
+  v = (CNewProbeValue *)cdataptr(cdataV(L->top - 1));
+  assert(v->x == x);
+  assert(v->y == (double)x + 0.25);
 }
 
 typedef struct AsyncCloseCtx {
@@ -120,6 +164,7 @@ int main(void)
   publish_probe_ptr(L, "__gc2_sweep_gate_ptr", &g->gc2.jit_phase_gate);
   publish_probe_ptr(L, "__gc2_sweep_vmstate_ptr", &G2TG(g)->vmstate);
   publish_probe_ptr(L, "__gc2_sweep_hits_ptr", &probe_hits);
+  publish_probe_ptr(L, "__gc2_sweep_cnew_hits_ptr", &cnew_probe_hits);
 
   /* Compile a real allocating loop in IDLE. The FFI probe executes as part of
   ** the trace and uses branch-free volatile loads of phase/gate/vmstate to
@@ -137,6 +182,8 @@ int main(void)
     "local gate = ffi.cast('volatile uint32_t *', __gc2_sweep_gate_ptr)\n"
     "local vmstate = ffi.cast('volatile int32_t *', __gc2_sweep_vmstate_ptr)\n"
     "local hits = ffi.cast('volatile uint32_t *', __gc2_sweep_hits_ptr)\n"
+    "local cnew_hits = ffi.cast('volatile uint32_t *',\n"
+    "                            __gc2_sweep_cnew_hits_ptr)\n"
     "function __gc2_sweep_alloc(n)\n"
     "  local t\n"
     "  for i = 1, n do\n"
@@ -163,6 +210,26 @@ int main(void)
     "end\n"
     "assert(__gc2_sweep_pure(400) == 80200)\n"
     "assert(util.traceinfo(2), 'pure cooperative loop did not trace')\n"
+    "ffi.cdef[[\n"
+    "typedef struct { int x; double y; } lj_gc2_sweep_cnew_t;\n"
+    "]]\n"
+    "local cnew_t = ffi.typeof('lj_gc2_sweep_cnew_t')\n"
+    "function __gc2_sweep_cnew(n)\n"
+    "  local cd\n"
+    "  for i = 1, n do\n"
+    /* Keep the real CNEW before telemetry. Thus every native hit counted below
+    ** has already executed the allocation in the same traced loop iteration. */
+    "    cd = cnew_t(i, i + 0.25)\n"
+    "    local native = bit.rshift(bit.bnot(vmstate[0]), 31)\n"
+    "    local x = bit.bxor(phase[0], 3)\n"
+    "    local is_sweep = bit.rshift(bit.bnot(bit.bor(x, -x)), 31)\n"
+    "    cnew_hits[0] = cnew_hits[0] +\n"
+    "      bit.band(native, is_sweep, gate[0])\n"
+    "  end\n"
+    "  return cd\n"
+    "end\n"
+    "local warm_cnew = __gc2_sweep_cnew(400)\n"
+    "assert(warm_cnew.x == 400 and warm_cnew.y == 400.25)\n"
     /* Build unreachable old-generation work while automatic collection is
     ** stopped, so the following explicit cycle has physical reclaim to do. */
     "for round = 1, 20 do\n"
@@ -170,11 +237,31 @@ int main(void)
     "  for i = 1, 2500 do dead[i] = { round, i, 'dead' .. i } end\n"
     "end\n");
 
+  assert(has_cnew_trace(g));
+
   la_store32_rel(&probe_hits, 0);
+  la_store32_rel(&cnew_probe_hits, 0);
   drive_to_open_sweep(L, g);
   assert(lj_gc2_jit_entry_open(g));
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+  assert(gc2_sweep_bridge_ready_acq(g) != 0);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
+  assert(has_cnew_trace(g));
   sweep_runs0 = gc2_sweep_owner_runs_acq(g);
   sweep_arenas0 = gc2_sweep_owner_arenas_acq(g);
+
+  /* The fixed-size call stays well below the hard-assist cadence. Its returned
+  ** cdata is rooted across completion of this active SWEEP and a later full GC. */
+  lua_getglobal(L, "__gc2_sweep_cnew");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, 64);
+  ljt_lua_pcall(L, 1, 1, "cooperative SWEEP CNEW trace");
+  assert_cnew_value_at_top(L, 64);
+  lua_setglobal(L, "__gc2_sweep_cnew_keep");
+  assert(la_load32_acq(&cnew_probe_hits) != 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+  assert(gc2_sweep_bridge_ready_acq(g) != 0);
+  assert(gc2_jit_phase_gate_acq(g) != 0);
 
 #if defined(LJ_GC2_TEST_HELPERS)
   /* Attribute the close to the common allocation-accounting checkpoint, not
@@ -213,6 +300,13 @@ int main(void)
   assert(gc2_jit_phase_gate_acq(g) != 0);
   assert(gc2_sweep_owner_runs_acq(g) > sweep_runs0);
   assert(gc2_sweep_owner_arenas_acq(g) > sweep_arenas0);
+  lua_getglobal(L, "__gc2_sweep_cnew_keep");
+  assert_cnew_value_at_top(L, 64);
+  lua_pop(L, 1);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_getglobal(L, "__gc2_sweep_cnew_keep");
+  assert_cnew_value_at_top(L, 64);
+  lua_pop(L, 1);
   lua_pop(L, 1);
 
   /* A foreign collector closes the gate while a pure non-allocating loop is
@@ -274,14 +368,19 @@ int main(void)
   lua_pushnil(L);
   lua_setglobal(L, "__gc2_sweep_alloc");
   lua_pushnil(L);
+  lua_setglobal(L, "__gc2_sweep_cnew");
+  lua_pushnil(L);
+  lua_setglobal(L, "__gc2_sweep_cnew_keep");
+  lua_pushnil(L);
   lua_setglobal(L, "__gc2_sweep_pure");
   lua_pushnil(L); lua_setglobal(L, "__gc2_sweep_phase_ptr");
   lua_pushnil(L); lua_setglobal(L, "__gc2_sweep_gate_ptr");
   lua_pushnil(L); lua_setglobal(L, "__gc2_sweep_vmstate_ptr");
   lua_pushnil(L); lua_setglobal(L, "__gc2_sweep_hits_ptr");
+  lua_pushnil(L); lua_setglobal(L, "__gc2_sweep_cnew_hits_ptr");
   lua_close(L);
-  puts("t-gc2-jit-sweep-coop OK: x64 trace ran during SWEEP and bounded "
-       "reclaim reached IDLE");
+  puts("t-gc2-jit-sweep-coop OK: x64 TNEW/CNEW traces ran during SWEEP "
+       "and bounded reclaim reached IDLE");
   return 0;
 }
 #else
