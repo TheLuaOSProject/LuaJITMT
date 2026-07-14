@@ -174,16 +174,22 @@ int main(void)
   uint64_t epoch0;
 
   {
-    uint32_t counter = LJ_THREAD_GCSCAN - 3u;
+    uint32_t counter = LJ_THREAD_GCPREP - 3u;
     LJThr invalid = {0};
-    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCSCAN - 2u);
-    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCSCAN - 1u);
+    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCPREP - 2u);
+    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCPREP - 1u);
     assert(lj_thr_id_alloc(&counter) == 0);
     assert(lj_thr_id_alloc(&counter) == 0);
-    assert(counter == LJ_THREAD_GCSCAN - 1u);
+    assert(counter == LJ_THREAD_GCPREP - 1u);
+    counter = LJ_THREAD_GCPREP;
+    assert(lj_thr_id_alloc(&counter) == 0);
+    assert(counter == LJ_THREAD_GCPREP);
     counter = LJ_THREAD_GCSCAN;
     assert(lj_thr_id_alloc(&counter) == 0);
     assert(counter == LJ_THREAD_GCSCAN);
+    invalid.tid = LJ_THREAD_GCPREP;
+    assert(lj_thr_create(&invalid, id_stress_main, NULL) == EAGAIN);
+    assert(invalid.tid == 0);
     invalid.tid = LJ_THREAD_GCSCAN;
     assert(lj_thr_create(&invalid, id_stress_main, NULL) == EAGAIN);
     assert(invalid.tid == 0);
@@ -192,7 +198,7 @@ int main(void)
     IdStressCtx idctx = {0};
     LJThr idthr[ID_STRESS_THREADS] = {{0}};
     uint32_t i;
-    idctx.counter = LJ_THREAD_GCSCAN - 1u - ID_STRESS_COUNT;
+    idctx.counter = LJ_THREAD_GCPREP - 1u - ID_STRESS_COUNT;
     idctx.first = idctx.counter + 1u;
     for (i = 0; i < ID_STRESS_THREADS; i++)
       assert(lj_thr_create(&idthr[i], id_stress_main, &idctx) == 0);
@@ -202,7 +208,7 @@ int main(void)
     for (i = 0; i < ID_STRESS_THREADS; i++)
       assert(lj_thr_join(&idthr[i], NULL) == 0);
     assert(la_load32_acq(&idctx.successes) == ID_STRESS_COUNT);
-    assert(la_load32_acq(&idctx.counter) == LJ_THREAD_GCSCAN - 1u);
+    assert(la_load32_acq(&idctx.counter) == LJ_THREAD_GCPREP - 1u);
     for (i = 0; i < ID_STRESS_COUNT; i++)
       assert(la_load32_acq(&idctx.seen[i]) == 1);
   }

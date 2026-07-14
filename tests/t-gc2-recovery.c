@@ -11,6 +11,8 @@
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -1474,6 +1476,124 @@ static void test_huge_sweep_stable_preadmission_arbitrates_stale_writer(void)
   assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }
 
+static void test_huge_sweep_saturated_reader_failclosed(void)
+{
+  pid_t child = fork();
+  int status = 0;
+  assert(child >= 0);
+  if (child == 0) {
+    struct rlimit core_limit = {0, 0};
+    RecoveryFixture f = recovery_fixture_open();
+    RecoverySweepReclaimCtx reclaim = {0};
+    LJHugeReader *readers;
+    GC2SSBNode *held;
+    GCRef *end;
+    GCstr *filler;
+    GCudata *ud = recovery_make_unlinked_huge_udata(&f);
+    LJHugeInfo hi;
+    LJGC2ActivationSnap activation;
+    pthread_t thread;
+    long pagesize;
+    void *body_page;
+    uint32_t i;
+    assert(setrlimit(RLIMIT_CORE, &core_limit) == 0);
+    alarm(10);
+
+    /* Take the stale unmarked retirement snapshot first. Slot readers may be
+    ** admitted behind its stable TICKET, but retirement itself quite properly
+    ** refuses to start while any of those body tokens already exists. */
+    lj_arena_hugetab_prepare_sweep(&f.tg->huge);
+    assert(lj_arena_hugetab_retire(
+	 &f.tg->huge, ud, ud, 2u, &reclaim.stale) == 1);
+    assert((reclaim.stale.flags &
+	    (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET)) ==
+	   (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET));
+    assert((reclaim.stale.flags & LJ_HUGEF_MARK) == 0);
+
+    readers = (LJHugeReader *)calloc(0xffffu, sizeof(*readers));
+    assert(readers != NULL);
+    for (i = 0; i < 0xffffu; i++)
+      assert(lj_arena_hugetab_reader_acquire(
+	       &f.tg->huge, ud, &readers[i], NULL) ==
+	     LJ_ARENA_HUGE_READER_ACQUIRED);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 0xffffu && (hi.flags & LJ_HUGEF_MARK) == 0);
+
+    /* Remove the only spare node and fill the production SSB. A saturated
+    ** semantic mark can therefore neither take a body token nor enqueue its
+    ** retry through the ordinary fast path. */
+    held = lj_tg_ssb_free_pop(f.tg);
+    assert(held != NULL && lj_tg_ssb_free_acq(f.tg) == NULL);
+    end = lj_tg_ssb_end_acq(f.tg);
+    lua_pushliteral(f.L, "gc2 saturated sweep admission filler");
+    filler = strV(f.L->top - 1);
+    for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+      assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+    assert(lj_tg_ssb_next_acq(f.tg) == end);
+
+    recovery_publish_sweep_phase(f.g);
+    gc2_worker_active_rel(f.g, 1);
+    reclaim.g = f.g;
+    reclaim.tg = f.tg;
+    reclaim.p = ud;
+    assert(pthread_create(&thread, NULL,
+	   recovery_sweep_reclaim_thread, &reclaim) == 0);
+    while (la_load32_acq(&reclaim.ready) == 0)
+      la_cpu_pause();
+    assert(reclaim.entered == 1);
+    assert(gc2_smr_reclaiming_acq(f.g) == LJ_GC2_SMR_SWEEP_STABLE);
+
+    /* Make any GC-header or payload inspection immediately observable. The
+    ** full-slot MARK_SATURATED CAS is allowed to publish liveness, but without
+    ** a reader token the semantic marker must return before touching bytes. */
+    pagesize = sysconf(_SC_PAGESIZE);
+    assert(pagesize > 0 &&
+	   ((uintptr_t)pagesize & ((uintptr_t)pagesize - 1u)) == 0);
+    body_page = (void *)((uintptr_t)ud & ~((uintptr_t)pagesize - 1u));
+    assert(mprotect(body_page, (size_t)pagesize, PROT_NONE) == 0);
+    assert(lj_gc2_markobj(f.g, obj2gco(ud)) == 0);
+    assert(gc2_recovery_failed_acq(f.g) == 1u);
+    assert(gc2_recovery_items_acq(f.g) == 0);
+    assert(gc2_recovery_huge_items_acq(f.g) == 0);
+    assert(lj_tg_ssb_next_acq(f.tg) == end);
+    activation = lj_gc2_activation_snapshot(&f.g->gc2.activation);
+    assert(activation.state == LJ_GC2_ACT_NO_RECLAIM);
+    assert(lj_gc2_activation_reclaim_veto(f.g));
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 0xffffu);
+    assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_RETIRED|
+			 LJ_HUGEF_FREEING)) == LJ_HUGEF_MARK);
+    assert(lj_arena_huge_recovery_state(hi.flags) ==
+	   LJ_ARENA_RECOVERY_IDLE);
+
+    /* Remove reader saturation before waking the stale writer so the tokens
+    ** themselves cannot explain its loss. Durable MARK plus sticky
+    ** NO_RECLAIM must remain sufficient after the final release. */
+    for (i = 0; i < 0xffffu; i++)
+      assert(lj_arena_hugetab_reader_release(&readers[i], NULL) ==
+	     LJ_ARENA_HUGE_READER_RELEASED);
+    free(readers);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 0u);
+    assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_FREEING)) ==
+	   LJ_HUGEF_MARK);
+
+    la_store32_rel(&reclaim.run, 1);
+    assert(pthread_join(thread, NULL) == 0);
+    assert(la_load32_acq(&reclaim.done) == 1);
+    assert(reclaim.result == 0 && reclaim.pending == 1);
+    assert(gc2_smr_reclaiming_acq(f.g) == LJ_GC2_SMR_OPEN);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 0u);
+    assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_FREEING)) ==
+	   LJ_HUGEF_MARK);
+    alarm(0);
+    _exit(0);  /* PROT_NONE body and fail-closed activation stay isolated. */
+  }
+  assert(waitpid(child, &status, 0) == child);
+  assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
 static void test_huge_sweep_reader_keeps_pre_destructor_retryable(void)
 {
   pid_t child = fork();
@@ -2028,6 +2148,7 @@ int main(void)
   test_huge_recovery_exact_lane_accounting();
   test_huge_reader_recovery_bypasses_smr_writer();
   test_huge_sweep_stable_preadmission_arbitrates_stale_writer();
+  test_huge_sweep_saturated_reader_failclosed();
   test_huge_sweep_reader_keeps_pre_destructor_retryable();
   test_huge_deferred_free_recovery_is_bounded();
   test_empty_huge_lane_is_skipped();
@@ -2040,7 +2161,7 @@ int main(void)
   test_terminal_preflight_preserves_mismatch_locator();
   test_sticky_failure_without_items_is_bounded();
   printf("t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane "
-	 "accounting/skip, SWEEP-stable late admission, retryable Huge "
+	 "accounting/skip, SWEEP-stable late/saturated admission, retryable Huge "
 	 "destructors, held-reader SMR bypass, bounded terminal free, "
 	 "cyclic private/metadata edges, free/lifetime races, constructor "
 	 "overlap, closure vetoes, empty-string SWEEP, sticky failure, and "
