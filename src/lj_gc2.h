@@ -314,6 +314,8 @@ LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_scan_cycle_global_roots(global_State *g);
 LJ_FUNC void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_scan_cycle_owner_roots(global_State *g, lua_State *L);
+LJ_FUNC void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
+					     uint32_t tid);
 LJ_FUNC void lj_gc2_trace_sweep_roots(global_State *g);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_flush_ssb_detach(global_State *g, TGState *tg);
@@ -402,6 +404,9 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_WEAK_FRONTIER_FAULT_VECTOR_TAB	1u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_NODE	2u
 #define LJ_GC2_WEAK_FRONTIER_FAULT_OVERFLOW_TAB	3u
+#define LJ_GC2_THREAD_NEEDSCAN_TEST_BEFORE_SET	1u
+#define LJ_GC2_THREAD_NEEDSCAN_TEST_AFTER_SET	2u
+#define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING	3u
 LJ_FUNC void lj_gc2_test_jit_mark_checkpoint_reset(void);
 LJ_FUNC uint64_t lj_gc2_test_jit_mark_checkpoint_closes(void);
 LJ_FUNC void lj_gc2_test_jit_sweep_checkpoint_reset(void);
@@ -416,6 +421,10 @@ LJ_FUNC void lj_gc2_test_stack_admission_retry_once(GCobj *target);
 LJ_FUNC uint32_t lj_gc2_test_stack_admission_retry_hits(void);
 LJ_FUNC void lj_gc2_test_root_semantic_retry_once(GCobj *target);
 LJ_FUNC uint32_t lj_gc2_test_root_semantic_retry_hits(void);
+LJ_FUNC void lj_gc2_test_thread_needscan_pause(uint32_t stage);
+LJ_FUNC uint32_t lj_gc2_test_thread_needscan_paused(void);
+LJ_FUNC void lj_gc2_test_thread_needscan_release(void);
+LJ_FUNC int lj_gc2_test_thread_needscan_clear(global_State *g, lua_State *L);
 LJ_FUNC int lj_gc2_test_weak_overflow_clear_bridge(global_State *g,
 						     GCobj *bridge_head);
 LJ_FUNC int lj_gc2_test_weak_trace_close_frontier(global_State *g,
@@ -425,6 +434,8 @@ LJ_FUNC void lj_gc2_test_weak_frontier_fault_once(uint32_t kind,
 LJ_FUNC uint32_t lj_gc2_test_weak_frontier_fault_hits(void);
 LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 					      lua_State *L);
+LJ_FUNC void lj_gc2_test_thread_root_rescan_marked_obj(global_State *g,
+						       GCobj *o);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_test_publish_mutator_reader(global_State *g, GCobj *o,
 					       const LJHugeReader *reader);

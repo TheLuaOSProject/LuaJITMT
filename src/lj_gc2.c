@@ -270,6 +270,9 @@ static uint32_t gc2_recovery_test_fail_grey_grow;
 static uint32_t gc2_recovery_test_pause_stage;
 static uint32_t gc2_recovery_test_paused_stage;
 static uint32_t gc2_recovery_test_pause_release;
+static uint32_t gc2_thread_needscan_test_pause_stage;
+static uint32_t gc2_thread_needscan_test_paused_stage;
+static uint32_t gc2_thread_needscan_test_pause_release;
 static uint64_t gc2_test_jit_mark_checkpoint_closes;
 static uint64_t gc2_test_jit_sweep_checkpoint_closes;
 static uintptr_t gc2_test_stack_admission_retry_target;
@@ -427,6 +430,34 @@ static void gc2_recovery_test_pause_at(uint32_t stage)
   la_store32_rel(&gc2_recovery_test_pause_stage, 0);
 }
 
+static void gc2_thread_needscan_test_pause_at(uint32_t stage)
+{
+  if (la_load32_acq(&gc2_thread_needscan_test_pause_stage) != stage)
+    return;
+  la_store32_rel(&gc2_thread_needscan_test_paused_stage, stage);
+  while (la_load32_acq(&gc2_thread_needscan_test_pause_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&gc2_thread_needscan_test_paused_stage, 0);
+  la_store32_rel(&gc2_thread_needscan_test_pause_stage, 0);
+}
+
+void lj_gc2_test_thread_needscan_pause(uint32_t stage)
+{
+  la_store32_rel(&gc2_thread_needscan_test_pause_release, 0);
+  la_store32_rel(&gc2_thread_needscan_test_paused_stage, 0);
+  la_store32_rel(&gc2_thread_needscan_test_pause_stage, stage);
+}
+
+uint32_t lj_gc2_test_thread_needscan_paused(void)
+{
+  return la_load32_acq(&gc2_thread_needscan_test_paused_stage);
+}
+
+void lj_gc2_test_thread_needscan_release(void)
+{
+  la_store32_rel(&gc2_thread_needscan_test_pause_release, 1);
+}
+
 void lj_gc2_test_recovery_fail_grey_grow(uint32_t count)
 {
   la_store32_rel(&gc2_recovery_test_fail_grey_grow, count);
@@ -483,7 +514,11 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define LJ_GC2_RECOVERY_TEST_PRE_LIFETIME_RESTORE 4u
 #define LJ_GC2_RECOVERY_TEST_POST_CLAIM 5u
 #define LJ_GC2_RECOVERY_TEST_SMALL_IDLE_SAMPLED 6u
+#define LJ_GC2_THREAD_NEEDSCAN_TEST_BEFORE_SET 1u
+#define LJ_GC2_THREAD_NEEDSCAN_TEST_AFTER_SET 2u
+#define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING 3u
 #define gc2_recovery_test_pause_at(stage) ((void)(stage))
+#define gc2_thread_needscan_test_pause_at(stage) ((void)(stage))
 #define gc2_test_jit_mark_checkpoint_closed() ((void)0)
 #define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
 #define gc2_root_test_take_semantic_retry(o) (0)
@@ -1347,6 +1382,7 @@ void lj_gc2_init(global_State *g)
     abort();  /* Constant unpublished IDLE/OPEN authority must be representable. */
   gc2_phase_store_rlx(g, LJ_GC2_IDLE);
   gc2_cycle_store_rlx(g, 0);
+  gc2_thread_scan_cycle_store_rlx(g, 0);
   gc2_cycle_leader_store_rlx(g, 0);
   gc2_hs_epoch_store_rlx(g, 0);
   gc2_hs_pending_store_rlx(g, 0);
@@ -3672,6 +3708,7 @@ static int gc2_mark_begin(global_State *g)
   if (tg != NULL && !gc2_tg_list_contains(g, tg))
     lj_tg_attach(g, tg);
   mark_cycle = gc2_cycle_inc_acqrel(g);
+  (void)gc2_thread_scan_cycle_inc_acqrel(g);
   if (leader)
     gc2_cycle_starts_add(g, 1);
   gc2_marks_this_round_store_rlx(g, 0);
@@ -6664,14 +6701,16 @@ static void gc2_root_rescan_later(global_State *g, GCobj *o)
     return;
   }
   if (!gc2_rescan_pending_set(o)) {
-    int force = o->gch.gct == ~LJ_TFUNC || o->gch.gct == ~LJ_TPROTO;
     /*
-    ** NEEDSCAN is a dedupe hint, not proof that an SSB entry is still visible:
-    ** stale entries can be consumed or abandoned across abort/sweep transitions.
-    ** Active function/proto roots are executable payload roots, so republish
-    ** them even when unrelated queue work is present.
+    ** Same-cycle NEEDSCAN is a traversal/deduplication token: it proves this
+    ** container has already been scheduled or scanned and bounds cyclic graphs.
+    ** A preserved abort can retain an uncounted bit after its old queue suffix
+    ** has drained, so keep the compatibility repair only at an otherwise empty
+    ** frontier. Clearing and republishing FUNC/PROTO roots while unrelated work
+    ** is visible manufactures fresh work on every repeated root handshake and
+    ** prevents mark closure.
     */
-    if (!force && (!gc2_grey_empty(g) || !lj_gc2_ssb_empty(g)))
+    if (!gc2_grey_empty(g) || !lj_gc2_ssb_empty(g))
       return;
     (void)gc2_rescan_pending_clear(o);
     if (!gc2_rescan_pending_set(o))
@@ -6703,9 +6742,30 @@ static void gc2_thread_root_rescan_marked_obj_forced(global_State *g,
     gc2_root_rescan_later(g, o);
     break;
   case ~LJ_TTHREAD:
-    if (!gc2_thread_scan_current(g, gco2th(o)) &&
-	!gc2_thread_needscan(gco2th(o))) {
-      (void)gc2_publish_mutator(g, o);
+    /*
+    ** A grey traversal of an owned stack consumes its concrete queue item by
+    ** replacing it with NEEDSCAN. The owner can release the lua_State before
+    ** its next root acknowledgement (thread exit and coroutine yield both do
+    ** this). In that state no live TG can consume the counted handoff, and an
+    ** already-marked registry/root hit used to leave MARK/WEAK permanently
+    ** open. Transfer an ownerless/release-sentinel token back to concrete queue
+    ** work; an ownerless traversal can then take GCSCAN and clear the exact
+    ** token/count once installation has completed.
+    **
+    ** Keep an existing NEEDSCAN deduplicated for every ordinary owner. A live
+    ** mutator is the only authority for its changing stack, while stale owner
+    ** ids need takeover under the traversal SMR lease and GCPREP owns terminal
+    ** destruction. The per-state counted token is exact
+    ** pending-count state and survives a deliberately preserved abort without
+    ** relying on a cycle value or the ambiguous global aggregate. INSTALLING is
+    ** also concrete work: root discovery may queue it before its pending-count
+    ** publication completes, and a premature worker clear will requeue it.
+    */
+    if (!gc2_thread_scan_current(g, gco2th(o))) {
+      uint32_t owner = lj_state_owner_acq(gco2th(o));
+      if (!gc2_thread_needscan(gco2th(o)) || owner == 0 ||
+	  owner == LJ_THREAD_GCSCAN)
+	(void)gc2_publish_mutator(g, o);
     }
     break;
   case ~LJ_TFUNC:
@@ -6745,6 +6805,13 @@ static void gc2_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
     return;
   gc2_thread_root_rescan_marked_obj_forced(g, o);
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+void lj_gc2_test_thread_root_rescan_marked_obj(global_State *g, GCobj *o)
+{
+  gc2_thread_root_rescan_marked_obj(g, o);
+}
+#endif
 
 static int gc2_mark_thread_root_obj_status(global_State *g, GCobj *o)
 {
@@ -7308,32 +7375,77 @@ static LJ_AINLINE uint8_t *gc2_thread_flagp(lua_State *L)
   return lj_obj_gcflags_ref(obj2gco(L));
 }
 
+#define GC2_THREAD_NEEDSCAN_NONE	0u
+#define GC2_THREAD_NEEDSCAN_COUNTED	1u
+#define GC2_THREAD_NEEDSCAN_INSTALLING	2u
+
 static void gc2_thread_set_needscan(global_State *g, lua_State *L)
 {
-  uint8_t old = la_or8_rlx(gc2_thread_flagp(L), LJ_GC_NEEDSCAN);
-  if (!(old & LJ_GC_NEEDSCAN) ||
-      gc2_thread_scan_needscan_pending_acq(g) == 0) {
-    /*
-    ** Thread NEEDSCAN is both a header bit and a counted owner handoff. A forced
-    ** or aborted cycle can leave the bit set after the old pending count has
-    ** been drained. Republish the handoff in that state; otherwise fixpoint sees
-    ** a non-authoritative remote/native stack forever, but has no pending owner
-    ** scan that could make it authoritative.
-    */
-    lj_state_scan_handoff_epoch_rel(L, gc2_cycle_acq(g));
+  uint32_t expect = GC2_THREAD_NEEDSCAN_NONE;
+  int installed = lj_state_scan_needscan_counted_cas(
+    L, &expect, GC2_THREAD_NEEDSCAN_INSTALLING);
+  /* The per-state token is authoritative. Publish it before the header hint so
+  ** owner release cannot observe a hint-only pre-token window. */
+  (void)la_or8_rlx(gc2_thread_flagp(L), LJ_GC_NEEDSCAN);
+  if (installed) {
+    /* INSTALLING is concrete work even though it has not joined the aggregate
+    ** yet. Release and root paths may conservatively queue the state while this
+    ** publisher finishes; a premature clear returns false and requeues it. */
+    gc2_thread_needscan_test_pause_at(
+      LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING);
+    lj_state_scan_handoff_epoch_rel(L, gc2_thread_scan_cycle_acq(g));
     gc2_thread_scan_needscan_add(g, 1);
     gc2_thread_scan_requeues_add(g, 1);
     gc2_thread_scan_needscan_pending_inc(g);
+    lj_state_scan_needscan_counted_rel(
+      L, GC2_THREAD_NEEDSCAN_COUNTED);
+  }
+  /* Race closure with tid->GCSCAN->0 release. The same-value owner CAS is an
+  ** RMW ordering edge after COUNTED publication. If it wins, a later release
+  ** CAS acquires that edge before inspecting this token. If it loses, release
+  ** has already reached its sentinel (or the state is ownerless), so retain the
+  ** exact identity on the MPMC recovery plane without touching a foreign SSB or
+  ** the single-owner grey deque. Duplicate publication is harmless. */
+  {
+    uint32_t owner = lj_state_owner_acq(L);
+    uint32_t owner_expect = owner;
+    if (!lj_thr_id_is_owner(owner) ||
+	!lj_state_owner_cas(L, &owner_expect, owner)) {
+      if (!gc2_recovery_publish(g, obj2gco(L)))
+	gc2_recovery_fail_closed(g);
+      lj_gc2_worker_wake(g);
+    }
   }
 }
 
-static void gc2_thread_clear_needscan(global_State *g, lua_State *L)
+static int gc2_thread_clear_needscan(global_State *g, lua_State *L)
 {
-  uint8_t old = la_and8_rlx(gc2_thread_flagp(L), (uint8_t)~LJ_GC_NEEDSCAN);
-  if (g && (old & LJ_GC_NEEDSCAN) &&
-      gc2_thread_scan_needscan_pending_acq(g) != 0)
+  uint32_t state = lj_state_scan_needscan_counted_acq(L);
+  if (state == GC2_THREAD_NEEDSCAN_INSTALLING)
+    return 0;
+  if (state == GC2_THREAD_NEEDSCAN_COUNTED) {
+    uint32_t expect = GC2_THREAD_NEEDSCAN_COUNTED;
+    if (!lj_state_scan_needscan_counted_cas(
+	  L, &expect, GC2_THREAD_NEEDSCAN_NONE))
+      return 0;
+    lj_assertG(g != NULL, "counted thread NEEDSCAN clear without global state");
     gc2_thread_scan_needscan_pending_dec(g);
+  }
+  (void)la_and8_rlx(gc2_thread_flagp(L), (uint8_t)~LJ_GC_NEEDSCAN);
+  /* A racing new installer owns the authoritative token. Restore the hint if
+  ** this clear overlapped its header-bit publication. */
+  if (lj_state_scan_needscan_counted_acq(L) !=
+      GC2_THREAD_NEEDSCAN_NONE)
+    (void)la_or8_rlx(gc2_thread_flagp(L), LJ_GC_NEEDSCAN);
+  return 1;
 }
+
+#if defined(LJ_GC2_TEST_HELPERS)
+int lj_gc2_test_thread_needscan_clear(global_State *g, lua_State *L)
+{
+  return gc2_thread_clear_needscan(g, L);
+}
+#endif
 
 static uint32_t gc2_clear_container_needscan_chain(global_State *g, GCobj *head)
 {
@@ -7467,7 +7579,8 @@ static uint32_t gc2_clear_container_needscan_all(global_State *g)
 
 static int gc2_thread_needscan(lua_State *L)
 {
-  return (la_load8_acq(gc2_thread_flagp(L)) & LJ_GC_NEEDSCAN) != 0;
+  return lj_state_scan_needscan_counted_acq(L) !=
+    GC2_THREAD_NEEDSCAN_NONE;
 }
 
 static uint64_t gc2_thread_owner_dirty(global_State *g, lua_State *L,
@@ -7495,7 +7608,7 @@ static int gc2_thread_scan_current(global_State *g, lua_State *L)
   uint64_t owner_dirty;
   if (!g || !L || gc2_thread_needscan(L))
     return 0;
-  if (lj_state_scan_epoch_acq(L) != gc2_cycle_acq(g))
+  if (lj_state_scan_epoch_acq(L) != gc2_thread_scan_cycle_acq(g))
     return 0;
   owner_dirty = gc2_thread_owner_dirty(g, L, NULL);
   return lj_state_scan_dirty_epoch_acq(L) == owner_dirty;
@@ -7507,13 +7620,12 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   GCobj *mt, *uv;
   TValue *o, *top;
   TValue tv;
-  uint64_t dirty_epoch;
-  uint32_t cycle;
+  uint64_t dirty_epoch, cycle;
   int conservative = 0;
   int stack_retry = 0;
   if (!gc2_valid_thread_for_traverse_held(g, L, held))
     return 0;
-  cycle = gc2_cycle_acq(g);
+  cycle = gc2_thread_scan_cycle_acq(g);
   /* This owner snapshot traverses the complete thread payload synchronously.
   ** Mark the identity without queueing a duplicate gc2_traverse_thread pass. */
   (void)lj_gc2_markobj_nogrey(g, obj2gco(L));
@@ -7596,8 +7708,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   ** as an explicit NEEDSCAN handoff. Publishing the cycle here lets later
   ** identity traversal consume the owner snapshot without scanning it twice. */
   lj_state_scan_handoff_epoch_rel(L, cycle);
-  gc2_thread_clear_needscan(g, L);
-  return 1;
+  return gc2_thread_clear_needscan(g, L);
 }
 
 static void gc2_scan_owned_needscan_chain(global_State *g, uint32_t tid,
@@ -12833,15 +12944,12 @@ uint32_t lj_gc2_flush_ssb_detach(global_State *g, TGState *tg)
   return n;
 }
 
-static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
+static int gc2_ssb_push_tg(global_State *g, TGState *tg, GCobj *o,
+			    int allow_drain)
 {
-  TGState *tg;
   GCRef *next, *end;
   int remembered;
-  if (!g || !o)
-    return 0;
-  tg = G2TG(g);
-  if (!tg)
+  if (!g || !tg || !o)
     return 0;
   next = lj_tg_ssb_next_acq(tg);
   end = lj_tg_ssb_end_acq(tg);
@@ -12866,6 +12974,11 @@ static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
   /* 05 section 5.6.2: slot release-published before cursor advance. */
   lj_tg_ssb_next_rel(tg, next + 1);
   return 1;
+}
+
+static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
+{
+  return gc2_ssb_push_tg(g, G2TG(g), o, allow_drain);
 }
 
 static int lj_gc2_ssb_push(global_State *g, GCobj *o)
@@ -12950,6 +13063,36 @@ static int gc2_publish_mutator(global_State *g, GCobj *o)
 static int gc2_publish_mutator_nodrain(global_State *g, GCobj *o)
 {
   return gc2_publish_mutator_(g, o, NULL, 0);
+}
+
+void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
+				     uint32_t tid)
+{
+  TGState *tg;
+  int pushed = 0;
+  if (!g || !L || !lj_thr_id_is_owner(tid) ||
+      lj_state_owner_acq(L) != LJ_THREAD_GCSCAN ||
+      lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE ||
+      !gc2_thread_needscan(L))
+    return;
+
+  /*
+  ** The releasing thread still owns the state through the temporary GCSCAN
+  ** sentinel. Prefer its exact TLS TG without using G2TG's foreign-thread
+  ** main-TG fallback: only the OS owner may advance an active SSB cursor.
+  ** A synthetic/API release without that exact TLS identity transfers the
+  ** object directly to the MPMC recovery plane instead. Both representations
+  ** pin the state before the caller publishes owner zero.
+  */
+  tg = lj_thr_get_tg();
+  if (tg && tg->gl == g && lj_tg_tid_acq(tg) == tid &&
+      !lj_tg_flags_test_acq(tg, TGF_DEAD))
+    pushed = gc2_ssb_push_tg(g, tg, obj2gco(L), 0);
+  if (!pushed)
+    pushed = gc2_recovery_publish(g, obj2gco(L));
+  if (!pushed)
+    gc2_recovery_fail_closed(g);
+  lj_gc2_worker_wake(g);
 }
 
 static int gc2_publish_worker(global_State *g, GCobj *o)
@@ -16517,14 +16660,13 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L,
 static int gc2_thread_owner_scans(global_State *g, lua_State *th)
 {
   TGState *tg;
-  uint64_t scan_epoch, scanned_dirty, handoff_epoch, owner_dirty;
-  uint32_t cycle;
+  uint64_t scan_epoch, scanned_dirty, handoff_epoch, owner_dirty, cycle;
   if (!g || !th)
     return 0;
   owner_dirty = gc2_thread_owner_dirty(g, th, &tg);
   if (!tg)
     return 0;
-  cycle = gc2_cycle_acq(g);
+  cycle = gc2_thread_scan_cycle_acq(g);
   /* A same-cycle scan only covers this grey item after its NEEDSCAN handoff. */
   handoff_epoch = lj_state_scan_handoff_epoch_acq(th);
   if (handoff_epoch != cycle || gc2_thread_needscan(th))
@@ -16664,8 +16806,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th,
   GCobj *mt, *uv;
   TValue *o, *top;
   TValue tv;
-  uint64_t dirty_epoch;
-  uint32_t cycle;
+  uint64_t dirty_epoch, cycle;
   uint32_t owner, current_tid;
   int sweep, registry_lease = 0;
   int conservative = 0;
@@ -16720,7 +16861,16 @@ static void gc2_traverse_thread(global_State *g, lua_State *th,
 	** duplicate copy on the grey deque lets the collector repeatedly pop the
 	** same busy state while the owner is the only thread that can scan it.
 	*/
+	gc2_thread_needscan_test_pause_at(
+	  LJ_GC2_THREAD_NEEDSCAN_TEST_BEFORE_SET);
 	gc2_thread_set_needscan(g, th);
+	gc2_thread_needscan_test_pause_at(
+	  LJ_GC2_THREAD_NEEDSCAN_TEST_AFTER_SET);
+	/* The owner release path passes through GCSCAN before publishing zero.
+	** Recheck after the NEEDSCAN LP so either that release hook observes the
+	** bit or this traversal retains its own concrete retry. */
+	if (!gc2_thread_has_live_owner(g, th))
+	  goto requeue_thread;
       }
     }
     goto out_thread;  /* 05 section 5.7.2: owner scan/handoff preserves work. */
@@ -16734,7 +16884,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th,
 scan_thread:
   if (!gc2_valid_thread_for_traverse_held(g, th, held))
     goto out_thread;
-  cycle = gc2_cycle_acq(g);
+  cycle = gc2_thread_scan_cycle_acq(g);
   sweep = gc2_phase_acq(g) == LJ_GC2_SWEEP;
   gc2_thread_scan_claims_add(g, 1);
   lj_gc2_markmem(g, tvref(th->stack));
@@ -16820,7 +16970,8 @@ scan_thread:
   lj_state_scan_dirty_epoch_rel(th, dirty_epoch);
   lj_state_scan_epoch_rel(th, cycle);
   lj_state_scan_handoff_epoch_rel(th, 0);
-  gc2_thread_clear_needscan(g, th);
+  if (!gc2_thread_clear_needscan(g, th))
+    goto requeue_thread;
 out_thread:
   lj_state_dropclaim(&claim);
   if (registry_lease)
@@ -17962,7 +18113,7 @@ static void gc2_mark_root_snapshot_abort(global_State *g)
 
 static int gc2_mark_root_snapshot(global_State *g)
 {
-  uint32_t state, expect, cycle, actions;
+  uint32_t state, expect, cycle, actions, thread_pending;
   if (!g || gc2_phase_acq(g) != LJ_GC2_MARK)
     return 0;
   if (gc2_jit_phase_gate_acq(g) != 0)
@@ -17985,8 +18136,10 @@ static int gc2_mark_root_snapshot(global_State *g)
   if (!gc2_mark_root_scanned_cas(g, &expect, 2))
     return 0;
   cycle = gc2_cycle_acq(g);
+  thread_pending = gc2_thread_scan_needscan_pending_acq(g);
   actions = LJ_GC2_HS_FLUSH_SSB |
-    (state == 1 ? LJ_GC2_HS_SCAN_OWNER_ROOTS : LJ_GC2_HS_SCAN_ROOTS);
+    (state == 1 && thread_pending == 0 ? LJ_GC2_HS_SCAN_OWNER_ROOTS :
+				       LJ_GC2_HS_SCAN_ROOTS);
   (void)lj_gc2_handshake(g, actions);
   if (gc2_phase_acq(g) != LJ_GC2_MARK ||
       gc2_cycle_acq(g) != cycle || gc2_jit_phase_gate_acq(g) != 0 ||

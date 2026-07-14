@@ -1994,9 +1994,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  jz >7
   |  mov L:TMPR, TMP1
   |  and TMPR, -2
-  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-  |  mov qword L:TMPR->tg_hint, 0
-  |  mov dword L:TMPR->thr_owner, 0
+  |  mov CARG3d, RDd
+  |  mov CARG2d, [DISPATCH+DISPATCH_TG(tid)]
+  |  mov CARG1, TMPR
+  |  call extern lj_state_resume_release_result
+  |  mov L:TMPR, SAVE_L
+  |  mov BASE, L:TMPR->base
   |7:
   |  mov PC, SAVE_PC
   |  mov MULTRES, RDd
@@ -2045,9 +2048,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  jz ->coro_claim_fallback_done_ .. resume
   |  mov L:TMPR, TMP1
   |  and TMPR, -2
-  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-  |  mov qword L:TMPR->tg_hint, 0
-  |  mov dword L:TMPR->thr_owner, 0
+  |  mov PC, BASE
+  |  mov CARG3d, RDd
+  |  mov CARG2d, [DISPATCH+DISPATCH_TG(tid)]
+  |  mov CARG1, TMPR
+  |  call extern lj_state_resume_release_result
+  |  mov BASE, PC
   |->coro_claim_fallback_done_ .. resume:
   |  jmp ->fff_fallback
   |->coro_claim_busy_ .. resume:

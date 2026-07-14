@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
 #include "lj_tg.h"
@@ -1493,6 +1494,13 @@ void lj_state_resume_release(lua_State *L, uint32_t tid)
   }
 }
 
+uint32_t lj_state_resume_release_result(lua_State *L, uint32_t tid,
+					 uint32_t result)
+{
+  lj_state_resume_release(L, tid);
+  return result;
+}
+
 void lj_state_dropresumeclaim(LJStateClaim *claim)
 {
   if (claim && claim->release) {
@@ -1529,9 +1537,27 @@ void lj_state_release(lua_State *L, uint32_t tid)
   if (L && tid != 0) {
     uint32_t owner = lj_state_owner_acq(L);
     lj_assertX(owner == tid, "lua_State owner mismatch");
-    UNUSED(owner);
     state_stack_dirty(L, tid);
-    lj_state_owner_rel(L, 0);
+    if (lj_thr_id_is_owner(tid)) {
+      uint32_t expect = tid;
+      /*
+      ** Publish a short terminal ownership interval before making the state
+      ** claimable. A collector which sampled the old owner either publishes
+      ** NEEDSCAN before this CAS (and is observed below), or observes GCSCAN
+      ** and retains concrete work. This closes the set-NEEDSCAN/release race
+      ** without a lock, wait, or post-release body access.
+      */
+      if (LJ_UNLIKELY(!lj_state_owner_cas(
+			 L, &expect, LJ_THREAD_GCSCAN))) {
+	lj_assertX(0, "lua_State release sentinel CAS failed");
+	return;
+      }
+      lj_gc2_thread_owner_releasing(G(L), L, tid);
+      lj_state_owner_rel(L, 0);
+    } else {
+      UNUSED(owner);
+      lj_state_owner_rel(L, 0);
+    }
     lj_state_owner_futex_wake(L, 0x7fffffff);
   }
 }

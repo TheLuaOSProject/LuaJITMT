@@ -1223,6 +1223,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_state_scan_epoch_rel(L, 0);
   lj_state_scan_dirty_epoch_rel(L, 0);
   lj_state_scan_handoff_epoch_rel(L, 0);
+  lj_state_scan_needscan_counted_store_rlx(L, 0);
   g->gc.currentwhite = LJ_GC_WHITE0 | LJ_GC_FIXED;
   g->strempty.marked = LJ_GC_WHITE0;
   g->strempty.gct = ~LJ_TSTR;
@@ -1372,6 +1373,7 @@ static lua_State *state_new_withenv_at_anchor(lua_State *L, GCtab *env,
   lj_state_scan_epoch_rel(L1, 0);
   lj_state_scan_dirty_epoch_rel(L1, 0);
   lj_state_scan_handoff_epoch_rel(L1, 0);
+  lj_state_scan_needscan_counted_store_rlx(L1, 0);
   lj_state_openupval_clear_rel(L1);
   lj_state_mt_thread_clear_rel(L1);
   setmrefr(L1->glref, L->glref);

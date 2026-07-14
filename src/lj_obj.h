@@ -1451,6 +1451,7 @@ typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
   uint32_t jit_phase_gate;  /* Native trace entry admitted by GC2. */
   uint32_t cycle;	/* Monotonically increasing color-GC cycle id. */
+  uint64_t thread_scan_cycle;  /* Nonzero 64-bit thread-snapshot generation. */
   LJ_ALIGN(16) LJGC2Activation activation;  /* Veto-only typed phase mirror. */
   uint32_t cycle_leader;  /* Request tid or exact GCSCAN phase-edge gate. */
   uint64_t hs_epoch;	/* Soft-handshake generation. */
@@ -2263,9 +2264,10 @@ struct lua_State {
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
   uint32_t thr_owner;	/* OS-thread owner tid or claim sentinel. */
   uint32_t grayagain_cycle;  /* Classic-GC grayagain membership cycle. */
-  uint64_t scan_epoch;	/* Last stack scan epoch for GC workers. */
+  uint64_t scan_epoch;	/* Last thread-snapshot generation scanned. */
   uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
-  uint64_t scan_handoff_epoch;  /* GC2 cycle that requested owner scan. */
+  uint64_t scan_handoff_epoch;  /* Thread generation requesting owner scan. */
+  uint32_t scan_needscan_counted;  /* Exact counted NEEDSCAN membership. */
   uint32_t gcprep_state;  /* Terminal THREAD destructor handoff state. */
 };
 
@@ -2357,6 +2359,37 @@ static LJ_AINLINE void lj_state_scan_handoff_epoch_rel(lua_State *L,
 						       uint64_t epoch)
 {
   la_store64_rel(&L->scan_handoff_epoch, epoch);
+}
+
+static LJ_AINLINE uint32_t lj_state_scan_needscan_counted_acq(
+  const lua_State *L)
+{
+  return la_load32_acq((uint32_t *)&L->scan_needscan_counted);
+}
+
+static LJ_AINLINE void lj_state_scan_needscan_counted_store_rlx(
+  lua_State *L, uint32_t counted)
+{
+  la_store32_rlx(&L->scan_needscan_counted, counted);
+}
+
+static LJ_AINLINE void lj_state_scan_needscan_counted_rel(
+  lua_State *L, uint32_t counted)
+{
+  la_store32_rel(&L->scan_needscan_counted, counted);
+}
+
+static LJ_AINLINE int lj_state_scan_needscan_counted_cas(
+  lua_State *L, uint32_t *oldp, uint32_t counted)
+{
+  return la_cas32(&L->scan_needscan_counted, oldp, counted,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t lj_state_scan_needscan_counted_xchg(
+  lua_State *L, uint32_t counted)
+{
+  return la_xchg32_acqrel(&L->scan_needscan_counted, counted);
 }
 
 /* Macros to access the currently executing (Lua) function. */
@@ -2643,6 +2676,29 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
   do {
     next = old + 1u;
   } while (!la_cas32(&g->gc2.cycle, &old, next, LA_ACQ_REL, LA_ACQ));
+  return next;
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_cycle_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_cycle);
+}
+
+static LJ_AINLINE void gc2_thread_scan_cycle_store_rlx(global_State *g,
+						       uint64_t cycle)
+{
+  la_store64_rlx(&g->gc2.thread_scan_cycle, cycle);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_cycle_inc_acqrel(global_State *g)
+{
+  uint64_t old = gc2_thread_scan_cycle_acq(g), next;
+  do {
+    next = old + 1u;
+    if (next == 0)
+      next = 1;  /* Zero remains the permanent no-snapshot sentinel. */
+  } while (!la_cas64(&g->gc2.thread_scan_cycle, &old, next,
+		     LA_ACQ_REL, LA_ACQ));
   return next;
 }
 
