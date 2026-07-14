@@ -253,10 +253,14 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   lj_gc2_test_finalizer_enqueue(g, b);
   lj_gc2_test_finalizer_enqueue(g, c);
   assert(gc2_finalizer_queued_acq(g) == queued0 + 3u);
-  assert(gc2_worker_wakes_acq(g) == wakes0 + 1u);
+  /* The first empty-to-nonempty publication must wake a worker. A live worker
+  ** may splice that stack into the consumer ring between producer pushes,
+  ** making a later push another legitimate transition and wake. */
+  assert(gc2_worker_wakes_acq(g) - wakes0 >= 1u);
   lj_gc2_worker_stop(g);
-  assert(gc2_finalizer_mpsc_acq(g) != NULL);
-  assert(gc2_finalizer_tail_acq(g) == NULL);
+  /* The joined worker may or may not have completed the MPSC-to-ring splice. */
+  assert(gc2_finalizer_mpsc_acq(g) != NULL ||
+         gc2_finalizer_tail_acq(g) != NULL);
 
   lj_gc2_test_finalizer_drain(g);
   assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 3u);
