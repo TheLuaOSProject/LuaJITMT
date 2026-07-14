@@ -53,6 +53,12 @@ typedef struct RecoveryFreeCtx {
   size_t size;
 } RecoveryFreeCtx;
 
+typedef struct RecoveryIdleReclaimCtx {
+  global_State *g;
+  int entered;
+  uint32_t done;
+} RecoveryIdleReclaimCtx;
+
 static int recovery_self_cfunc(lua_State *L)
 {
   (void)L;
@@ -124,6 +130,16 @@ static void *recovery_free_thread(void *arg)
 {
   RecoveryFreeCtx *ctx = (RecoveryFreeCtx *)arg;
   lj_arena_free(ctx->alloc, ctx->p, ctx->size);
+  return NULL;
+}
+
+static void *recovery_idle_reclaim_thread(void *arg)
+{
+  RecoveryIdleReclaimCtx *ctx = (RecoveryIdleReclaimCtx *)arg;
+  ctx->entered = lj_gc2_test_idle_reclaim_enter(ctx->g);
+  if (ctx->entered)
+    lj_gc2_test_idle_reclaim_leave(ctx->g);
+  la_store32_rel(&ctx->done, 1);
   return NULL;
 }
 
@@ -1243,6 +1259,125 @@ static void test_huge_recovery_exact_lane_accounting(void)
   recovery_fixture_close(&f);
 }
 
+static void test_huge_reader_recovery_bypasses_smr_writer(void)
+{
+  RecoveryFixture f = recovery_fixture_open();
+  RecoveryIdleReclaimCtx reclaim = {0};
+  LJHugeReader reader = {0};
+  LJHugeInfo hi;
+  GC2SSBNode *active, *held;
+  GCRef *base, *end;
+  GCudata *ud = recovery_make_unlinked_huge_udata(&f);
+  GCstr *filler;
+  pthread_t thread;
+  uint32_t i;
+  uint64_t published0;
+
+  /* Acquire the slot-local lifetime token before the registry writer closes
+  ** global SMR. The token remains legal after leaving that global read side
+  ** and mechanically blocks transfer, deletion and HugeTab-header teardown. */
+  assert(lj_arena_hugetab_reader_acquire(
+	 &f.tg->huge, ud, &reader, &hi) == LJ_ARENA_HUGE_READER_ACQUIRED);
+  assert(reader.h != NULL && reader.base == (void *)ud);
+  assert(hi.readers == 1u);
+
+  reclaim.g = f.g;
+  lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
+  assert(pthread_create(&thread, NULL,
+	 recovery_idle_reclaim_thread, &reclaim) == 0);
+  while (!lj_gc2_test_idle_reclaim_paused()) {
+    assert(la_load32_acq(&reclaim.done) == 0);
+    la_cpu_pause();
+  }
+  assert(gc2_smr_reclaiming_acq(f.g) != 0);
+  assert(gc2_smr_readers_acq(f.g) == 0);
+
+  /* Saturate the real mutator fallback after the writer owns SMR. With no
+  ** replacement node, publication must use reader.h directly rather than
+  ** retrying the closed TG registry and pinning the universe NO_RECLAIM. */
+  held = lj_tg_ssb_free_pop(f.tg);
+  assert(held != NULL && lj_tg_ssb_free_acq(f.tg) == NULL);
+  active = lj_tg_ssb_active_acq(f.tg);
+  base = lj_tg_ssb_base_acq(f.tg);
+  end = lj_tg_ssb_end_acq(f.tg);
+  assert(active != NULL && base == active->slot);
+  assert(end == base + TG_GC2_SSB_SLOTS);
+  lua_pushliteral(f.L, "gc2 held huge reader filler");
+  filler = strV(f.L->top - 1);
+  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+
+  published0 = gc2_recovery_published_acq(f.g);
+  assert(lj_gc2_test_publish_mutator_reader(
+	 f.g, obj2gco(ud), &reader) == 1);
+  assert(gc2_recovery_failed_acq(f.g) == 0);
+  assert(gc2_recovery_items_acq(f.g) == 1u);
+  assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+  assert(gc2_recovery_published_acq(f.g) == published0 + 1u);
+  assert(lj_tg_ssb_next_acq(f.tg) == end);
+  assert(lj_arena_hugetab_recovery_state_acq(
+	 &f.tg->huge, ud, NULL) == LJ_ARENA_RECOVERY_PENDING);
+  assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+  assert(hi.readers == 1u);
+  assert(lj_arena_hugetab_reader_release(&reader, &hi) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+
+  lj_gc2_test_idle_reclaim_release();
+  assert(pthread_join(thread, NULL) == 0);
+  assert(reclaim.entered == 1 && la_load32_acq(&reclaim.done) == 1);
+  assert(gc2_smr_reclaiming_acq(f.g) == 0);
+
+  /* The full node contains only fixture-owned duplicate filler identities.
+  ** Discard it under the helper's joined single-thread preconditions instead
+  ** of making this one race test traverse the same string 1024 times. */
+  assert(lj_gc2_shutdown_discard_ssb(f.g) == TG_GC2_SSB_SLOTS);
+  lj_tg_ssb_free_push(f.tg, held);
+  assert(lj_gc2_test_recovery_drain(f.g, 1) == 1u);
+  assert(gc2_recovery_items_acq(f.g) == 0);
+  assert(gc2_recovery_huge_items_acq(f.g) == 0);
+  lua_pop(f.L, 1);
+  recovery_fixture_close(&f);
+}
+
+static void test_huge_deferred_free_recovery_is_bounded(void)
+{
+  pid_t child = fork();
+  int status = 0;
+  assert(child >= 0);
+  if (child == 0) {
+    struct rlimit core_limit = {0, 0};
+    RecoveryFixture f = recovery_fixture_open();
+    LJHugeReader reader = {0};
+    LJHugeInfo hi;
+    GCudata *ud = recovery_make_unlinked_huge_udata(&f);
+    assert(setrlimit(RLIMIT_CORE, &core_limit) == 0);
+    lj_arena_hugetab_prepare_sweep(&f.tg->huge);
+    assert(lj_arena_hugetab_reader_acquire(
+	   &f.tg->huge, ud, &reader, &hi) == LJ_ARENA_HUGE_READER_ACQUIRED);
+    /* The external owner relinquishes the allocation. Its deferred intent is
+    ** irrevocable, and the held reader prevents the final FREEING handoff. */
+    assert(lj_arena_hugetab_defer_external_free(
+	   &f.tg->huge, ud, &hi) == 0);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0);
+
+    /* Before the persistent preflight this call reserved and rolled both
+    ** counters back forever: the recovery CAS rejects DEFER_FREE while the
+    ** reader prevents any state change. Bound the regression independently of
+    ** the outer harness so a recurrence reports SIGALRM, not a suite timeout. */
+    alarm(2);
+    assert(lj_gc2_test_recovery_publish(f.g, obj2gco(ud)) == 1);
+    alarm(0);
+    assert(gc2_recovery_items_acq(f.g) == 0);
+    assert(gc2_recovery_huge_items_acq(f.g) == 0);
+    assert(gc2_recovery_failed_acq(f.g) == 0);
+    _exit(0);  /* The isolated child deliberately leaves terminal intent live. */
+  }
+  assert(waitpid(child, &status, 0) == child);
+  assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
 static void test_empty_huge_lane_is_skipped(void)
 {
   RecoveryFixture f = recovery_fixture_open();
@@ -1698,6 +1833,8 @@ int main(void)
   test_weak_clear_recovery_gate();
   test_sweep_empty_string_is_immortal();
   test_huge_recovery_exact_lane_accounting();
+  test_huge_reader_recovery_bypasses_smr_writer();
+  test_huge_deferred_free_recovery_is_bounded();
   test_empty_huge_lane_is_skipped();
   test_current_cyclic_table_private_edge_is_consumed();
   test_current_self_metatable_metadata_is_private();
@@ -1707,6 +1844,10 @@ int main(void)
   test_lost_rollback_counts_fail_stop();
   test_terminal_preflight_preserves_mismatch_locator();
   test_sticky_failure_without_items_is_bounded();
-  printf("t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane accounting/skip, bounded cyclic private/metadata edges, free/lifetime races, constructor overlap, closure vetoes, empty-string SWEEP, sticky failure, and REDIRTY replay verified\n");
+  printf("t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane "
+	 "accounting/skip, held-reader SMR bypass, bounded terminal free, "
+	 "cyclic private/metadata edges, free/lifetime races, constructor "
+	 "overlap, closure vetoes, empty-string SWEEP, sticky failure, and "
+	 "REDIRTY replay verified\n");
   return 0;
 }

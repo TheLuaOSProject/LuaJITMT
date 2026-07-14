@@ -1134,12 +1134,16 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud);
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o);
 static int gc2_grey_push(global_State *g, GCobj *o);
+static int gc2_recovery_publish_scoped(global_State *g, GCobj *o,
+				       const GC2MarkScope *scope);
 static int gc2_recovery_publish(global_State *g, GCobj *o);
 static LJ_AINLINE int gc2_recovery_work_pending(global_State *g);
 static LJ_AINLINE int gc2_recovery_failed_veto(global_State *g);
 static LJ_AINLINE int gc2_recovery_stalled_failed(global_State *g);
 static LJ_AINLINE int gc2_recovery_empty(global_State *g);
 static void gc2_recovery_fail_closed(global_State *g);
+static int gc2_publish_mutator_scoped(global_State *g, GCobj *o,
+				      const GC2MarkScope *scope);
 static int gc2_publish_mutator(global_State *g, GCobj *o);
 static int gc2_publish_mutator_nodrain(global_State *g, GCobj *o);
 static int gc2_publish_worker(global_State *g, GCobj *o);
@@ -8718,7 +8722,7 @@ validate_pc:
     if (((status == GC2_MARK_NEW &&
 	  (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)) ||
 	 phase == LJ_GC2_SWEEP) && traversable)
-      (void)gc2_publish_mutator(g, o);
+      (void)gc2_publish_mutator_scoped(g, o, &scope);
   }
   gc2_mark_scope_leave(&scope);
   gc2_mark_scope_leave(&locscope);
@@ -9023,9 +9027,10 @@ static int gc2_recovery_publish_huge(global_State *g, HugeTab *ht,
     }
     if (state != LJ_ARENA_RECOVERY_IDLE)
       return -1;
+    if (hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_DEFER_FREE))
+      return 1;  /* Terminal free already consumed this object's graph role. */
     if ((hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) !=
 	(LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) ||
-	(hi.flags & LJ_HUGEF_FREEING) ||
 	((hi.flags & LJ_HUGEF_BUSY) && !(hi.flags & LJ_HUGEF_SWEEP_OLD)))
       return -1;  /* Persistent ownership rejection: never spin on its owner. */
     if (!gc2_recovery_count_reserve(g))
@@ -9045,7 +9050,8 @@ static int gc2_recovery_publish_huge(global_State *g, HugeTab *ht,
   }
 }
 
-static int gc2_recovery_publish(global_State *g, GCobj *o)
+static int gc2_recovery_publish_scoped(global_State *g, GCobj *o,
+				       const GC2MarkScope *scope)
 {
   GCArena *a;
   uint32_t cell, start, attempt;
@@ -9064,6 +9070,16 @@ static int gc2_recovery_publish(global_State *g, GCobj *o)
     if (!gc2_small_lifetime_nearest(a, cell, &start, NULL))
       return 0;
     return gc2_recovery_publish_small(g, a, o, start);
+  }
+  if (scope && scope->admission == GC2_SCOPE_HUGE_READER &&
+      scope->huge.h && scope->huge.base == (void *)o &&
+      lj_arena_hugetab_reader_covers(&scope->huge, o)) {
+    HugeTab held = { scope->huge.h };
+    /* The counted entry reader is stronger than TG-list SMR for this exact
+    ** mapping: transfer, delete and table-header teardown all refuse it. Use
+    ** that already-paid lifetime admission directly so an unrelated registry
+    ** writer cannot turn a full-SSB fallback into sticky NO_RECLAIM. */
+    return gc2_recovery_publish_huge(g, &held, scope->huge.base) > 0;
   }
   /* A marked huge mapping is its own lifetime admission. TG SMR keeps each
   ** candidate table alive while a concurrent dead-owner transfer advances. */
@@ -9099,6 +9115,11 @@ static int gc2_recovery_publish(global_State *g, GCobj *o)
     la_cpu_pause();
   }
   return 0;
+}
+
+static int gc2_recovery_publish(global_State *g, GCobj *o)
+{
+  return gc2_recovery_publish_scoped(g, o, NULL);
 }
 
 static LJ_AINLINE int gc2_recovery_work_pending(global_State *g)
@@ -9852,7 +9873,7 @@ static int gc2_expected_type_scoped_status(global_State *g, GCobj *o,
 	    ((status == GC2_MARK_NEW &&
 	     (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)) ||
 	    phase == LJ_GC2_SWEEP))
-	  (void)gc2_publish_mutator(g, o);
+	  (void)gc2_publish_mutator_scoped(g, o, scope);
       }
       if (admittedp)
 	*admittedp = o;
@@ -12826,9 +12847,11 @@ int lj_gc2_fnew_certify_pair_nodrain(global_State *g, TGState *tg,
   return 1;
 }
 
-static int gc2_publish_mutator_(global_State *g, GCobj *o, int allow_drain)
+static int gc2_publish_mutator_(global_State *g, GCobj *o,
+				const GC2MarkScope *scope, int allow_drain)
 {
-  if (gc2_ssb_push(g, o, allow_drain) || gc2_recovery_publish(g, o))
+  if (gc2_ssb_push(g, o, allow_drain) ||
+      gc2_recovery_publish_scoped(g, o, scope))
     return 1;
   /* A supported arena/main-thread object always has one allocation-free
   ** recovery identity. An unexpected classification failure must veto all
@@ -12837,14 +12860,20 @@ static int gc2_publish_mutator_(global_State *g, GCobj *o, int allow_drain)
   return 0;
 }
 
+static int gc2_publish_mutator_scoped(global_State *g, GCobj *o,
+				      const GC2MarkScope *scope)
+{
+  return gc2_publish_mutator_(g, o, scope, 1);
+}
+
 static int gc2_publish_mutator(global_State *g, GCobj *o)
 {
-  return gc2_publish_mutator_(g, o, 1);
+  return gc2_publish_mutator_(g, o, NULL, 1);
 }
 
 static int gc2_publish_mutator_nodrain(global_State *g, GCobj *o)
 {
-  return gc2_publish_mutator_(g, o, 0);
+  return gc2_publish_mutator_(g, o, NULL, 0);
 }
 
 static int gc2_publish_worker(global_State *g, GCobj *o)
@@ -13306,6 +13335,20 @@ void lj_gc2_test_recovery_fail_closed(global_State *g)
 int lj_gc2_test_recovery_publish(global_State *g, GCobj *o)
 {
   return gc2_recovery_publish(g, o);
+}
+
+int lj_gc2_test_publish_mutator_reader(global_State *g, GCobj *o,
+				       const LJHugeReader *reader)
+{
+  GC2MarkScope scope;
+  gc2_mark_scope_init(&scope);
+  if (!reader)
+    return 0;
+  scope.admission = GC2_SCOPE_HUGE_READER;
+  scope.huge = *reader;
+  /* The fixture retains ownership of reader; this borrowed scope must never
+  ** release or otherwise mutate the counted token. */
+  return gc2_publish_mutator_scoped(g, o, &scope);
 }
 
 int lj_gc2_test_recovery_mutating_recheck(GCArena *a, uint32_t start)
@@ -14061,7 +14104,7 @@ static int gc2_markobj_base_valid_scoped(global_State *g, GCobj *o,
     if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
 	 phase == LJ_GC2_SWEEP) &&
 	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
-      (void)gc2_publish_mutator(g, o);
+      (void)gc2_publish_mutator_scoped(g, o, scope);
     }
   }
   if (basep)
@@ -14833,7 +14876,7 @@ static int gc2_retain_candidate_status(global_State *g, GCobj *o,
       if (gc2_gct_may_traverse(actual_gct) &&
 	  (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
 	   phase == LJ_GC2_SWEEP)) {
-	(void)gc2_publish_mutator(g, actual);
+	(void)gc2_publish_mutator_scoped(g, actual, &scope);
       }
       goto huge_invalid;
     }
@@ -15119,7 +15162,7 @@ static int gc2_markobj_preserve_status_impl(global_State *g, GCobj *o,
       uint32_t phase = gc2_phase_acq(g);
       if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
 	  phase == LJ_GC2_SWEEP) {
-	(void)gc2_publish_mutator(g, o);
+	(void)gc2_publish_mutator_scoped(g, o, &scope);
       }
     }
     gc2_mark_scope_leave(&scope);
@@ -15185,7 +15228,7 @@ static int gc2_markobj_expected_scoped_status_mode(global_State *g,
 	  (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)) ||
 	 phase == LJ_GC2_SWEEP) &&
 	(traversable || gct == (uint32_t)~LJ_TUDATA)) {
-      (void)gc2_publish_mutator(g, o);  /* 05 section 5.6.1. */
+      (void)gc2_publish_mutator_scoped(g, o, scope);  /* 05 section 5.6.1. */
     }
   }
   return status;

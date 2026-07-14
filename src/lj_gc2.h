@@ -423,6 +423,8 @@ LJ_FUNC uint32_t lj_gc2_test_weak_frontier_fault_hits(void);
 LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 					      lua_State *L);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_test_publish_mutator_reader(global_State *g, GCobj *o,
+					       const LJHugeReader *reader);
 LJ_FUNC int lj_gc2_test_recovery_mutating_recheck(GCArena *a,
 							 uint32_t start);
 LJ_FUNC uint32_t lj_gc2_test_recovery_drain(global_State *g, uint32_t limit);
