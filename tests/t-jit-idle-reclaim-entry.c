@@ -209,8 +209,6 @@ int main(void)
     ret_patch = patch_first_op(L, "__idle_shadow_ret", BC_RET0);
   assert(proto_has_op(global_proto(L, "__idle_shadow_itern"), BC_ISNEXT));
   itern_patch = patch_first_op(L, "__idle_shadow_itern", BC_ITERN);
-  lua_getglobal(L, "idle_next_wrapper");
-  lua_setglobal(L, "next");
   if (!lj_gc2_test_idle_reclaim_enter(g)) {
     fprintf(stderr,
       "idle reclaim preflight failed: state=%u phase=%u worker=%u assist=%u "
@@ -274,8 +272,9 @@ int main(void)
   assert(lua_tointeger(L, -2) == 5);
   assert(lua_tointeger(L, -1) == 165);
   lua_pop(L, 2);
+  assert(gc2_jit_sweep_displaced_acq(g) != 0);
   assert(bc_op((BCIns)la_load32_acq((const uint32_t *)itern_patch.pc)) ==
-	 BC_ITERC);
+	 BC_JLOOP);
 
   gc2_jit_sweep_displaced_rel(g, 0);
   lj_trace_test_force_startins_retry(1);
@@ -294,6 +293,23 @@ int main(void)
   assert(la_load32_acq(&ctx.done) != 0);
   assert(gc2_smr_reclaiming_acq(g) == 0);
   assert(gc2_jit_phase_gate_acq(g) != 0);
+
+  /* A failed ISNEXT must take a trace-body lease before deciding whether the
+  ** observed JLOOP still names the exact live ITERN generation and before
+  ** publishing JLOOP -> ITERC. Do that lease-dependent despecialization only
+  ** after the deliberately paused exclusive SMR writer has left. During the
+  ** pause the real builtin above still exercises closed-gate JLOOP recovery
+  ** through the immutable sidecar without waiting for body admission. */
+  lua_getglobal(L, "idle_next_wrapper");
+  lua_setglobal(L, "next");
+  lua_getglobal(L, "__idle_shadow_itern");
+  lua_getglobal(L, "idle_shadow_input");
+  ljt_lua_pcall(L, 1, 2, "reopened IDLE ITERN invalidation");
+  assert(lua_tointeger(L, -2) == 5);
+  assert(lua_tointeger(L, -1) == 165);
+  lua_pop(L, 2);
+  assert(bc_op((BCIns)la_load32_acq((const uint32_t *)itern_patch.pc)) ==
+	 BC_ITERC);
   lua_getglobal(L, "idle_real_next");
   lua_setglobal(L, "next");
   restore_patch(&loop_patch);
