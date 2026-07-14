@@ -1718,6 +1718,50 @@ static void test_terminal_reconcile(PRNGState *rs)
   lj_arena_alloc_fini(&alloc);
 }
 
+static void test_huge_reader_destructor_retry(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 2711u;
+  HugeTab ht = { NULL };
+  LJHugeReader reader = { NULL, NULL, 0 };
+  LJHugeInfo hi;
+  void *p;
+
+  assert(lj_arena_hugetab_init(&ht, 2));
+  p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&ht, p, size,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_MARK));
+  lj_arena_hugetab_prepare_sweep(&ht);
+  assert(lj_arena_hugetab_reader_acquire(&ht, p, &reader, &hi) ==
+	 LJ_ARENA_HUGE_READER_ACQUIRED);
+
+  /* A semantic destructor has not run, so reader contention must remain a
+  ** plain retry. Publishing DEFER_FREE here lets the last reader terminalize
+  ** the body without its exittab/type/accounting teardown. */
+  assert(lj_arena_hugetab_destruct_acquire(&ht, p, &hi) ==
+	 LJ_ARENA_DESTRUCT_LOST);
+  assert(hi.readers == 1u);
+  assert((hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING|
+		      LJ_HUGEF_BUSY)) == 0);
+  assert((hi.flags & LJ_HUGEF_MARK) != 0);
+  assert(lj_arena_hugetab_reader_release(&reader, &hi) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+  assert((hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING)) == 0);
+
+  assert(lj_arena_hugetab_destruct_acquire(&ht, p, &hi) ==
+	 LJ_ARENA_DESTRUCT_ACQUIRED);
+  assert((hi.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING|
+		      LJ_HUGEF_BUSY)) ==
+	 (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_FREEING|LJ_HUGEF_BUSY));
+  assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_DEFER_FREE)) == 0);
+  assert(lj_arena_hugetab_destruct_acquire(&ht, p, &hi) ==
+	 LJ_ARENA_DESTRUCT_OWNED);
+  assert(lj_arena_hugetab_finish_external_free(&ht, p, &hi) ==
+	 LJ_ARENA_HUGE_FINISH_DEFERRED);
+  delete_unmap(&ht, p);
+  lj_arena_hugetab_fini(&ht);
+}
+
 int main(void)
 {
   static const size_t sizes[] = {
@@ -1742,6 +1786,7 @@ int main(void)
   test_huge_reader_root_recovery_orders(&rs);
   test_huge_reader_shapes_and_realloc(&rs);
   test_huge_reader_overflow_and_size(&rs);
+  test_huge_reader_destructor_retry(&rs);
   test_plain_reader_mutation_gate(&rs);
   test_terminal_reconcile(&rs);
   test_registry_rescue_unmap_handoff(&rs);

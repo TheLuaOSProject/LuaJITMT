@@ -3221,7 +3221,8 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   }
   /* Cursor advancement is bounded real work and must keep the owner scheduled
   ** until it reaches EOF. At EOF, a token-busy trace returns zero so the worker
-  ** can park rather than spin; JIT token release wakes it for another pass. */
+  ** can park rather than spin; the active-phase timeout retries the pass after
+  ** token release. */
   if (changed)
     return changed;
   return cell < LJ_ARENA_CELLS && scanned != 0 ? 1u : 0u;
@@ -4511,15 +4512,16 @@ static int gc_destructor_enter_impl(global_State *g, void *base, GCSize size,
   } else {
     LJArenaAllocD *ad = gc_arena_allocd_for_ptr(g, base);
     LJHugeInfo hi;
+    int result;
     if (!ad || !ad->huge)
       return LJ_GC_DESTRUCT_LOST;
-    if (lj_arena_hugetab_claim_external_free(ad->huge, base, &hi)) {
+    result = lj_arena_hugetab_destruct_acquire(ad->huge, base, &hi);
+    if (result == LJ_ARENA_DESTRUCT_ACQUIRED) {
       ctx->hugetab = ad->huge;
       ctx->huge_claim = 1;
       return LJ_GC_DESTRUCT_ACQUIRED;
     }
-    if (lj_arena_hugetab_lookup(ad->huge, base, &hi) == 1 &&
-	(hi.flags & LJ_HUGEF_FREEING))
+    if (result == LJ_ARENA_DESTRUCT_OWNED)
       return LJ_GC_DESTRUCT_OWNED;
     return LJ_GC_DESTRUCT_LOST;
   }

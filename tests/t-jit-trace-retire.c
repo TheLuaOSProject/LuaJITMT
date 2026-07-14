@@ -18,6 +18,7 @@
 #include "lj_gc2.h"
 #include "lj_jit.h"
 #include "lj_str.h"
+#include "lj_tg.h"
 #include "lj_trace.h"
 
 #ifndef LJ_TRACE_TEST_HELPERS
@@ -58,8 +59,16 @@ static void test_trace_publish_header(global_State *g, GCtrace *T)
   uint32_t cell = lj_arena_cellof(T);
   newwhite(g, T);
   lj_gc_publishobj_header(g, obj2gco(T));
-  assert(!lj_arena_ishuge(a));
-  assert(lj_arena_ready_get(a, cell));
+  if (lj_arena_ishuge(a)) {
+    TGState *tg = G2TG(g);
+    LJHugeInfo hi;
+    assert(tg != NULL && lj_tg_flags_test_acq(tg, TGF_HUGETAB));
+    assert(lj_arena_hugetab_lookup(&tg->huge, T, &hi) == 1);
+    assert((hi.flags & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) ==
+	   (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY));
+  } else {
+    assert(lj_arena_ready_get(a, cell));
+  }
 }
 
 static void test_trace_publish_root(global_State *g, GCtrace *T)
@@ -180,6 +189,73 @@ static uint32_t reclaim_trace_at(global_State *g, uint64_t epoch)
   lj_jit_token_release(J);
   lj_gc2_test_idle_reclaim_leave(g);
   return n;
+}
+
+static void test_huge_reader_reclaim_retry(lua_State *L, GCproto *pt)
+{
+  enum {
+    TEST_HUGE_TRACE_NREF = LJ_HUGE_THRESHOLD / sizeof(IRIns) + 64u
+  };
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  TGState *tg = G2TG(g);
+  GCtrace tmpl, *T;
+  static IRIns hugeir[REF_BASE + TEST_HUGE_TRACE_NREF];
+  LJHugeReader reader = { NULL, NULL, 0 };
+  LJHugeInfo hi;
+  GCSize size;
+  uint64_t epoch, completed;
+
+  assert(trace_retired_head_acq(J) == NULL);
+  assert(tg != NULL && lj_tg_flags_test_acq(tg, TGF_HUGETAB));
+  assert(REF_BASE + TEST_HUGE_TRACE_NREF <= 0xffffu);
+  memset(&tmpl, 0, sizeof(tmpl));
+  tmpl.nk = REF_BASE;
+  tmpl.nins = REF_BASE + TEST_HUGE_TRACE_NREF;
+  tmpl.ir = hugeir;
+  T = lj_trace_alloc(L, &tmpl);
+  test_trace_complete_payload_layout(T);
+  setgcref(T->startpt, obj2gco(pt));
+  test_trace_publish_root(g, T);
+  size = test_trace_allocation_size(T);
+  assert(size > LJ_HUGE_THRESHOLD);
+  assert(lj_arena_ishuge(lj_arena_of(T)));
+  assert(lj_arena_hugetab_lookup(&tg->huge, T, &hi) == 1);
+  assert(hi.size == size);
+
+  /* Finish any allocator-triggered cycle while T is still a normal root. The
+  ** white-box reclaim below needs the real IDLE reclaimer capability. */
+  settle_automatic_cycle(g);
+  lj_trace_free(g, T);
+  assert(retired_find(J, T) == T);
+  epoch = la_load64_acq(&T->retire_epoch) - 1u;
+  completed = epoch + LJ_FLUSH_EPOCHS;
+
+  /* A counted body reader must make pre-destructor ownership a plain retry.
+  ** Publishing DEFER_FREE here would make raw re-preservation reject T and the
+  ** last reader terminalize it without trace type/side-body destruction. */
+  assert(lj_arena_hugetab_reader_acquire(
+	   &tg->huge, T, &reader, &hi) == LJ_ARENA_HUGE_READER_ACQUIRED);
+  assert(hi.readers == 1u);
+  J->trace_reclaim_epoch = 0;
+  assert(reclaim_trace_at(g, completed) == 0);
+  assert(retired_find(J, T) == T);
+  assert(!lj_trace_body_destroyed_acq(T));
+  assert(J->trace_reclaim_epoch != completed);
+  assert(lj_arena_hugetab_lookup(&tg->huge, T, &hi) == 1);
+  assert(hi.readers == 1u);
+  assert((hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING|
+		      LJ_HUGEF_BUSY)) == 0);
+
+  assert(lj_arena_hugetab_reader_release(&reader, &hi) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+  assert((hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING)) == 0);
+  assert(reclaim_trace_at(g, completed) >= 1);
+  assert(retired_find(J, T) == NULL);
+  /* The white-box completed epoch does not advance hs_epoch. Do not suppress
+  ** a later body retired at the still-current real epoch. */
+  J->trace_reclaim_epoch = 0;
+  /* T may be unmapped by the successful IDLE reclaim. */
 }
 
 static void test_unpublished_huge_abandon_smr_collision(lua_State *L)
@@ -583,6 +659,7 @@ int main(void)
   assert(luaL_loadstring(L, "return 1") == 0);
   pt = funcproto(funcV(L->top - 1));
   test_trace_preserve_candidates(g, pt);
+  test_huge_reader_reclaim_retry(L, pt);
   test_gc_claim_rescues_runnable_inbound(L);
   test_reclaim_requeue_is_raw_and_retryable(L, pt);
   test_pending_trace_arena_requests_full_grace(L, pt);

@@ -44,7 +44,7 @@ static void assert_activation(global_State *g,
   LJGC2ActivationSnap after =
     lj_gc2_activation_snapshot(&g->gc2.activation);
   assert(lj_gc2_activation_equal(before, &after));
-  assert(gc2_smr_reclaiming_acq(g) == 1);
+  assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE);
   assert(gc2_smr_readers_acq(g) == 0);
   assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(lj_gc2_reclaim_context_held(g));

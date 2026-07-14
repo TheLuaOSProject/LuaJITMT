@@ -89,7 +89,7 @@ static void expect_vmevent_owner_and_jit_pointer(lua_State *L)
   jit_State *J = G2J(g);
   lua_State *sentinel = vmthread_acq(g);
   uint32_t foreign = foreign_token_owner(L);
-  uint32_t expect = 0;
+  uint32_t expect = LJ_GC2_SMR_OPEN;
   uint32_t calls;
   ptrdiff_t top;
 
@@ -162,7 +162,8 @@ static void expect_vmevent_smr_try_drop(lua_State *L)
   mask = vmevmask_load_acq(g);
   assert((mask & VMEVENT_MASK(LJ_VMEVENT_TRACE)) != 0);
   assert(gc2_smr_readers_acq(g) == 0);
-  assert(gc2_smr_reclaiming_cas(g, &expect, 1));
+  assert(gc2_smr_reclaiming_cas(
+	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
 
   /* VM events are observational: a reclaimer collision is a one-shot drop,
   ** not a wait. It must not consume the cache bit or leak a reader count. */
@@ -172,7 +173,7 @@ static void expect_vmevent_smr_try_drop(lua_State *L)
   assert(savestack(L, L->top) == top);
   assert(vmevmask_load_acq(g) == mask);
   assert(gc2_smr_readers_acq(g) == 0);
-  gc2_smr_reclaiming_rel(g, 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
 
   assert(lj_gc2_smr_read_try(g) != 0);
   assert(gc2_smr_readers_acq(g) == 1);

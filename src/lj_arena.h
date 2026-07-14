@@ -694,6 +694,12 @@ LJ_FUNC int lj_arena_hugetab_claim_live_ticket(HugeTab *ht, const void *p,
 					       LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_finish_live_ticket(HugeTab *ht, const void *p,
 						LJHugeInfo *hi);
+/* Pre-destructor ownership uses the same FREEING|BUSY terminal token as an
+** external free, but contention is retryable: it never publishes DEFER_FREE
+** because the semantic destructor has not run yet. Results are the shared
+** LJ_ARENA_DESTRUCT_* values. */
+LJ_FUNC int lj_arena_hugetab_destruct_acquire(HugeTab *ht, const void *p,
+					       LJHugeInfo *hi);
 /* External free/realloc owns the mapping between claim and finish. Finish
 ** returns UNMAP only when the caller atomically removed a pre-sweep entry;
 ** DEFERRED leaves a sweep-old entry for the sole sweep deleter. */
@@ -829,11 +835,13 @@ LJ_FUNC int lj_arena_remote_sweep_busy_acq(const GCArena *a);
 #define LJ_ARENA_DESTRUCT_ACQUIRED	1
 #define LJ_ARENA_DESTRUCT_OWNED		2
 /* Pre-destructor physical ownership. Only ACQUIRED authorizes one semantic
-** destructor invocation; OWNED requires the exact FREE+FREEING terminal pair.
-** LOST includes mere late intent or a semantic RESCUE/non-destructive owner,
-** and no body byte may be touched. A plain-arena ACQUIRED result retains its
-** SEALED writer token across the destructor; the same owner must finish with
-** lj_arena_free(), which commits storage and reopens admissions. */
+** destructor invocation. OWNED proves an irreversible terminal semantic owner:
+** the exact FREE+FREEING pair for a small body, or a HugeTab FREEING slot; that
+** owner may still be completing its destructor under a BUSY token. LOST
+** includes mere late/deferred intent or a semantic RESCUE/non-destructive
+** owner, and no body byte may be touched. A plain-arena ACQUIRED result retains
+** its SEALED writer token across the destructor; the same owner must finish
+** with lj_arena_free(), which commits storage and reopens admissions. */
 LJ_FUNC int lj_arena_destruct_acquire(const void *p, size_t size);
 /* Fresh root construction owns both descriptor planes until commit/abandon.
 ** Normally commit publishes LIVE before MEMBER and abandon clears LINKING

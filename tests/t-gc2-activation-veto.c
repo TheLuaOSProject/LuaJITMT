@@ -417,11 +417,11 @@ static void test_central_sweep_reclaim_activation_gate(void)
   /* Typed/legacy SWEEP alone is not a physical-reclaim capability. The
   ** mandatory semantic-root certificate must be published as well. */
   assert(!lj_gc2_test_sweep_reclaim_enter(g));
-  assert(gc2_smr_reclaiming_acq(g) == 0);
+  assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_OPEN);
   gc2_sweep_root_scanned_rel(g, 1);
   assert(lj_gc2_test_sweep_reclaim_enter(g));
-  assert(gc2_smr_reclaiming_acq(g) == 1);
-  gc2_smr_reclaiming_rel(g, 0);
+  assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_SWEEP_STABLE);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
   gc2_worker_active_rel(g, 0);
   gc2_phase_rel(g, LJ_GC2_IDLE);
   gc2_jit_phase_gate_rel(g, 1);

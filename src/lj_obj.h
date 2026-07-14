@@ -1436,6 +1436,13 @@ typedef struct TabState {
 #define LJ_GC2_WORKER_MAX 2
 #define LJ_GC2_GREY_EMBEDDED 256u
 
+/* Global registry/reclaimer mode. Ordinary SMR readers require OPEN. A
+** SWEEP_STABLE owner does not change TG/HugeTab topology and permits the
+** narrower counted Huge registry admission. */
+#define LJ_GC2_SMR_OPEN			0u
+#define LJ_GC2_SMR_META_EXCLUSIVE	1u
+#define LJ_GC2_SMR_SWEEP_STABLE		2u
+
 typedef struct TGState TGState;
 typedef struct LJThreadLive LJThreadLive;
 typedef struct GC2SSBNode GC2SSBNode;
@@ -1458,7 +1465,7 @@ typedef struct GC2State {
   uint64_t smr_reclaim_runs;  /* Retired-object epoch drains with work. */
   uint64_t smr_reclaimed;  /* Retired objects freed after a grace period. */
   uint32_t smr_readers;  /* Retired-list root scans currently active. */
-  uint32_t smr_reclaiming;  /* Retired-list reclaim drain in progress. */
+  uint32_t smr_reclaiming;  /* One LJ_GC2_SMR_* registry/reclaimer mode. */
   uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */
   uint64_t cycle_starts;  /* Requested cycles consumed at mark begin. */
   uint64_t major_cycle_starts;  /* Actual major GC2 mark begins. */
@@ -3987,22 +3994,22 @@ static LJ_AINLINE uint32_t gc2_smr_reclaiming_acq(global_State *g)
 }
 
 static LJ_AINLINE void gc2_smr_reclaiming_store_rlx(global_State *g,
-						    uint32_t active)
+						    uint32_t mode)
 {
-  la_store32_rlx(&g->gc2.smr_reclaiming, active);
+  la_store32_rlx(&g->gc2.smr_reclaiming, mode);
 }
 
 static LJ_AINLINE void gc2_smr_reclaiming_rel(global_State *g,
-					      uint32_t active)
+					      uint32_t mode)
 {
-  la_store32_rel(&g->gc2.smr_reclaiming, active);
+  la_store32_rel(&g->gc2.smr_reclaiming, mode);
 }
 
 static LJ_AINLINE int gc2_smr_reclaiming_cas(global_State *g,
 					     uint32_t *oldp,
-					     uint32_t active)
+					     uint32_t mode)
 {
-  return la_cas32(&g->gc2.smr_reclaiming, oldp, active,
+  return la_cas32(&g->gc2.smr_reclaiming, oldp, mode,
 		  LA_ACQ_REL, LA_ACQ);
 }
 

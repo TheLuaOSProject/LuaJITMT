@@ -297,14 +297,17 @@ LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
 */
 static LJ_AINLINE int lj_gc2_jit_reclaim_context_acq(global_State *g)
 {
+  uint32_t mode;
   uint32_t phase;
   uint32_t worker;
-  if (!g || gc2_smr_reclaiming_acq(g) == 0)
+  if (!g || (mode = gc2_smr_reclaiming_acq(g)) == LJ_GC2_SMR_OPEN)
     return 0;
   phase = gc2_phase_acq(g);
   worker = gc2_worker_active_acq(g);
-  return (phase == LJ_GC2_IDLE && worker == 0) ||
-	 (phase == LJ_GC2_SWEEP && worker != 0);
+  return (phase == LJ_GC2_IDLE && worker == 0 &&
+	  mode == LJ_GC2_SMR_META_EXCLUSIVE) ||
+	 (phase == LJ_GC2_SWEEP && worker != 0 &&
+	  mode == LJ_GC2_SMR_SWEEP_STABLE);
 }
 LJ_FUNC void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s);
 LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);

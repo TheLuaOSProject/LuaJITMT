@@ -28,6 +28,7 @@
 #include "lj_state.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
+#include "lj_udata.h"
 
 typedef struct RecoveryFixture {
   lua_State *L;
@@ -58,6 +59,19 @@ typedef struct RecoveryIdleReclaimCtx {
   int entered;
   uint32_t done;
 } RecoveryIdleReclaimCtx;
+
+typedef struct RecoverySweepReclaimCtx {
+  global_State *g;
+  TGState *tg;
+  void *p;
+  LJHugeInfo stale;
+  int entered;
+  int pending;
+  uint32_t run;
+  uint32_t ready;
+  uint32_t result;
+  uint32_t done;
+} RecoverySweepReclaimCtx;
 
 static int recovery_self_cfunc(lua_State *L)
 {
@@ -141,6 +155,45 @@ static void *recovery_idle_reclaim_thread(void *arg)
     lj_gc2_test_idle_reclaim_leave(ctx->g);
   la_store32_rel(&ctx->done, 1);
   return NULL;
+}
+
+static void *recovery_sweep_reclaim_thread(void *arg)
+{
+  RecoverySweepReclaimCtx *ctx = (RecoverySweepReclaimCtx *)arg;
+  ctx->entered = lj_gc2_test_sweep_reclaim_scope_enter(ctx->g);
+  la_store32_rel(&ctx->ready, 1);
+  while (la_load32_acq(&ctx->run) == 0)
+    la_cpu_pause();
+  if (ctx->entered) {
+    ctx->result = lj_gc_reclaim_gc2_huge(
+	ctx->g, ctx->tg, ctx->p, &ctx->stale, &ctx->pending);
+    lj_gc2_test_sweep_reclaim_scope_leave(ctx->g);
+  }
+  la_store32_rel(&ctx->done, 1);
+  return NULL;
+}
+
+static void recovery_publish_sweep_phase(global_State *g)
+{
+  LJGC2ActivationSnap idle, mark, weak, sweep;
+  uint64_t epoch;
+  assert(g != NULL && gc2_phase_acq(g) == LJ_GC2_IDLE);
+  idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(idle.state == LJ_GC2_ACT_IDLE);
+  epoch = idle.mark_epoch == UINT64_MAX ? UINT64_MAX : idle.mark_epoch + 1u;
+  assert(lj_gc2_activation_try_transition(
+	 &g->gc2.activation, &idle, epoch, LJ_GC2_ACT_MARK, &mark) ==
+	 LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_transition(
+	 &g->gc2.activation, &mark, epoch, LJ_GC2_ACT_WEAK, &weak) ==
+	 LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_activation_try_transition(
+	 &g->gc2.activation, &weak, epoch, LJ_GC2_ACT_SWEEP_OPEN, &sweep) ==
+	 LJ_GC2_TRANSITION_OK);
+  gc2_phase_rel(g, LJ_GC2_SWEEP);
+  gc2_jit_phase_gate_rel(g, 0);
+  gc2_sweep_root_scanned_rel(g, 1);
+  assert(!lj_gc2_activation_reclaim_veto(g));
 }
 
 static GCtab *recovery_make_unlinked_table(RecoveryFixture *f)
@@ -1340,6 +1393,146 @@ static void test_huge_reader_recovery_bypasses_smr_writer(void)
   recovery_fixture_close(&f);
 }
 
+static void test_huge_sweep_stable_preadmission_arbitrates_stale_writer(void)
+{
+  pid_t child = fork();
+  int status = 0;
+  assert(child >= 0);
+  if (child == 0) {
+    struct rlimit core_limit = {0, 0};
+    RecoveryFixture f = recovery_fixture_open();
+    RecoverySweepReclaimCtx reclaim = {0};
+    GC2SSBNode *held;
+    GCRef *end;
+    GCstr *filler;
+    GCudata *ud = recovery_make_unlinked_huge_udata(&f);
+    LJHugeInfo hi;
+    pthread_t thread;
+    uint32_t i;
+    assert(setrlimit(RLIMIT_CORE, &core_limit) == 0);
+    alarm(4);
+
+    /* Snapshot one unmarked retired ticket before the writer closes registry
+    ** SMR. This is the exact stale-hi ordering used by huge sweep progress. */
+    lj_arena_hugetab_prepare_sweep(&f.tg->huge);
+    assert(lj_arena_hugetab_retire(
+	 &f.tg->huge, ud, ud, 1u, &reclaim.stale) == 1);
+    assert((reclaim.stale.flags &
+	    (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET)) ==
+	   (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET));
+    assert((reclaim.stale.flags & LJ_HUGEF_MARK) == 0);
+
+    held = lj_tg_ssb_free_pop(f.tg);
+    assert(held != NULL && lj_tg_ssb_free_acq(f.tg) == NULL);
+    end = lj_tg_ssb_end_acq(f.tg);
+    recovery_publish_sweep_phase(f.g);
+    gc2_worker_active_rel(f.g, 1);
+    reclaim.g = f.g;
+    reclaim.tg = f.tg;
+    reclaim.p = ud;
+    assert(pthread_create(&thread, NULL,
+	   recovery_sweep_reclaim_thread, &reclaim) == 0);
+    while (la_load32_acq(&reclaim.ready) == 0)
+      la_cpu_pause();
+    assert(reclaim.entered == 1);
+    assert(gc2_smr_reclaiming_acq(f.g) == LJ_GC2_SMR_SWEEP_STABLE);
+
+    /* Arrive after the SWEEP writer's admission. The ordinary SSB is made
+    ** unavailable deliberately: the semantic marker must join the stable
+    ** registry, win MARK+reader in the exact slot, and publish PENDING through
+    ** that reader before the stale writer is allowed to continue. */
+    lua_pushliteral(f.L, "gc2 sweep stable preadmission filler");
+    filler = strV(f.L->top - 1);
+    for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+      assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+    assert(lj_tg_ssb_next_acq(f.tg) == end);
+    assert(lj_gc2_markobj(f.g, obj2gco(ud)) == 1);
+    assert(gc2_recovery_failed_acq(f.g) == 0);
+    assert(gc2_recovery_items_acq(f.g) == 1u);
+    assert(gc2_recovery_huge_items_acq(f.g) == 1u);
+    assert(gc2_smr_readers_acq(f.g) == 0);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 0);
+    assert((hi.flags & LJ_HUGEF_MARK) != 0);
+    assert(lj_arena_huge_recovery_state(hi.flags) ==
+	   LJ_ARENA_RECOVERY_PENDING);
+
+    la_store32_rel(&reclaim.run, 1);
+    assert(pthread_join(thread, NULL) == 0);
+    assert(la_load32_acq(&reclaim.done) == 1);
+    assert(reclaim.result == 0 && reclaim.pending == 1);
+    assert(gc2_smr_reclaiming_acq(f.g) == LJ_GC2_SMR_OPEN);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_FREEING)) ==
+	   LJ_HUGEF_MARK);
+    assert(lj_arena_huge_recovery_state(hi.flags) ==
+	   LJ_ARENA_RECOVERY_PENDING);
+    alarm(0);
+    _exit(0);  /* Isolated stale-writer fixture intentionally keeps work live. */
+  }
+  assert(waitpid(child, &status, 0) == child);
+  assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
+static void test_huge_sweep_reader_keeps_pre_destructor_retryable(void)
+{
+  pid_t child = fork();
+  int status = 0;
+  assert(child >= 0);
+  if (child == 0) {
+    struct rlimit core_limit = {0, 0};
+    RecoveryFixture f = recovery_fixture_open();
+    GCudata *ud = recovery_make_unlinked_huge_udata(&f);
+    LJGC2Lease lease;
+    LJGCDestructCtx dctx;
+    LJHugeInfo hi;
+    GCSize size = (GCSize)sizeudata(ud);
+    assert(setrlimit(RLIMIT_CORE, &core_limit) == 0);
+    alarm(4);
+
+    lj_arena_hugetab_prepare_sweep(&f.tg->huge);
+    recovery_publish_sweep_phase(f.g);
+    gc2_worker_active_rel(f.g, 1);
+    assert(lj_gc2_test_sweep_reclaim_scope_enter(f.g));
+
+    /* Enter through the production SWEEP_STABLE registry path. The returned
+    ** public lease owns the exact HugeReader beyond its short registry count. */
+    assert(lj_gc2_mem_lease_acquire(f.g, ud, &lease) >= 0);
+    assert(lease.huge.h != NULL && lease.huge.base == (void *)ud);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 1u);
+
+    /* Pre-destructor loss must not use raw external-free semantics. Otherwise
+    ** DEFER_FREE lets lease release terminalize a body whose type destructor
+    ** and accounting work never ran. */
+    assert(lj_gc_destructor_enter_reclaim_held(
+	 f.g, ud, size, &dctx) == LJ_GC_DESTRUCT_LOST);
+    assert(dctx.huge_claim == 0);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 1u);
+    assert((hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING)) == 0);
+    lj_gc2_lease_release(&lease);
+    assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
+    assert(hi.readers == 0u &&
+	   (hi.flags & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING)) == 0);
+
+    assert(lj_gc_destructor_enter_reclaim_held(
+	 f.g, ud, size, &dctx) == LJ_GC_DESTRUCT_ACQUIRED);
+    assert(dctx.huge_claim == 1);
+    /* Generic userdata has no side destructor; use its real type destructor to
+    ** exercise the normal accounting/allocator handoff between claim and
+    ** leave. Huge bodies bypass the small-arena deferred-body path. */
+    lj_udata_free(f.g, ud);
+    lj_gc_destructor_leave(f.g, &dctx);
+    lj_gc2_test_sweep_reclaim_scope_leave(f.g);
+    gc2_worker_active_rel(f.g, 0);
+    alarm(0);
+    _exit(0);  /* Isolated protocol fixture intentionally skips runtime close. */
+  }
+  assert(waitpid(child, &status, 0) == child);
+  assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
 static void test_huge_deferred_free_recovery_is_bounded(void)
 {
   pid_t child = fork();
@@ -1834,6 +2027,8 @@ int main(void)
   test_sweep_empty_string_is_immortal();
   test_huge_recovery_exact_lane_accounting();
   test_huge_reader_recovery_bypasses_smr_writer();
+  test_huge_sweep_stable_preadmission_arbitrates_stale_writer();
+  test_huge_sweep_reader_keeps_pre_destructor_retryable();
   test_huge_deferred_free_recovery_is_bounded();
   test_empty_huge_lane_is_skipped();
   test_current_cyclic_table_private_edge_is_consumed();
@@ -1845,7 +2040,8 @@ int main(void)
   test_terminal_preflight_preserves_mismatch_locator();
   test_sticky_failure_without_items_is_bounded();
   printf("t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane "
-	 "accounting/skip, held-reader SMR bypass, bounded terminal free, "
+	 "accounting/skip, SWEEP-stable late admission, retryable Huge "
+	 "destructors, held-reader SMR bypass, bounded terminal free, "
 	 "cyclic private/metadata edges, free/lifetime races, constructor "
 	 "overlap, closure vetoes, empty-string SWEEP, sticky failure, and "
 	 "REDIRTY replay verified\n");

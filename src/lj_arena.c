@@ -3235,6 +3235,43 @@ enum {
   LJ_HUGE_EXT_CONTENDED = 3
 };
 
+int lj_arena_hugetab_destruct_acquire(HugeTab *ht, const void *p,
+					       LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t addr, meta;
+  LJHugeEnt *e;
+  if (!h || !p)
+    return LJ_ARENA_DESTRUCT_LOST;
+  addr = (uint64_t)(uintptr_t)p;
+  for (;;) {
+    uint64_t next;
+    if (!hugetab_search(h, addr, &e, &meta))
+      return LJ_ARENA_DESTRUCT_LOST;
+    if (meta & LJ_HUGEF_FREEING) {
+      hugetab_decode(meta, hi);
+      return LJ_ARENA_DESTRUCT_OWNED;
+    }
+    /* Unlike a raw external free, a pre-destructor attempt still owns live
+    ** semantic work. Lose without publishing terminal intent so the caller
+    ** can preserve/requeue the body and retry after this exact owner leaves. */
+    if ((meta & LJ_HUGEF_DEFER_FREE) || hugetab_readers(meta) != 0 ||
+	hugetab_recovery_pending(meta) || hugetab_root_pending(meta) ||
+	(meta & LJ_HUGEF_BUSY)) {
+      hugetab_decode(meta, hi);
+      return LJ_ARENA_DESTRUCT_LOST;
+    }
+    next = (meta & ~(uint64_t)(LJ_HUGEF_MARK|LJ_HUGEF_RETIRED)) |
+	   LJ_HUGEF_FREEING|LJ_HUGEF_BUSY;
+    if (hugetab_cas_meta(e, addr, meta, next)) {
+      if (next & LJ_HUGEF_SWEEP_OLD)
+	la_store64_rel(&lj_arena_of(p)->hdr.retire_epoch, ~(uint64_t)0);
+      hugetab_decode(next, hi);
+      return LJ_ARENA_DESTRUCT_ACQUIRED;
+    }
+  }
+}
+
 /* Atomically choose the external-free side of prepare-vs-free. If PREPARE has
 ** not published SWEEP_OLD, BUSY makes this caller the terminal table deleter.
 ** If PREPARE won, the same CAS pins the mapping until finish hands it to the

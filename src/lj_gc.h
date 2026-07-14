@@ -546,8 +546,9 @@ LJ_FUNC int lj_mem_publish_interior_cdata(lua_State *L, void *base,
 					  GCSize size);
 LJ_FUNC void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size);
 /* Exact pre-destructor arbitration. Only ACQUIRED permits payload/header or
-** accounting mutation. leave() completes a HugeTab BUSY claim; it is a no-op
-** for custom/plain/small allocations. */
+** accounting mutation. A Huge collision remains retryable and never publishes
+** raw DEFER_FREE before the semantic destructor runs. leave() completes a
+** HugeTab BUSY claim; it is a no-op for custom/plain/small allocations. */
 LJ_FUNC int lj_gc_destructor_enter(global_State *g, void *base, GCSize size,
 				    LJGCDestructCtx *ctx);
 /* Exact sweep-reclaimer counterpart. The caller must already own the detached

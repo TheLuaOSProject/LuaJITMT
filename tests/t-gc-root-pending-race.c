@@ -341,18 +341,19 @@ static void test_construct_publish_behind_foreign_reclaimer_gate(lua_State *L)
   global_State *g = G(L);
   GCupval *uv = new_closed_upvalue_constructing(L);
   GCobj *o = obj2gco(uv);
-  uint32_t expect = 0;
+  uint32_t expect = LJ_GC2_SMR_OPEN;
 
   /* This thread did not acquire a reclaimer certificate. A fresh fixed-layout
   ** constructor nevertheless owns exact CONSTRUCT|LINKING identity and must
   ** publish without entering the process-wide registry SMR reader. */
   assert(gc2_smr_readers_acq(g) == 0);
   assert(!lj_gc2_reclaim_context_held(g));
-  assert(gc2_smr_reclaiming_cas(g, &expect, 1));
+  assert(gc2_smr_reclaiming_cas(
+	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
   assert(lj_gc_linkobj_new(g, o) == LJ_GC_ROOT_LINKED);
   assert(small_lifetime_state(o) == LJ_ARENA_LIFETIME_LIVE);
   assert(small_root_state(o) == LJ_ARENA_ROOT_MEMBER);
-  gc2_smr_reclaiming_rel(g, 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
 
   assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(root_contains(g, o));

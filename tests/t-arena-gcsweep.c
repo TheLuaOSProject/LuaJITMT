@@ -1108,7 +1108,7 @@ static void test_typed_dtor_denied_capability_retires(int smr_busy)
   TypedDtorFixture fx;
   GCArena *other;
   GCSize total0;
-  uint32_t expect = 0;
+  uint32_t expect = LJ_GC2_SMR_OPEN;
 
   typed_dtor_fixture_init(&fx);
   typed_dtor_drop_fixture_roots(&fx);
@@ -1126,10 +1126,11 @@ static void test_typed_dtor_denied_capability_retires(int smr_busy)
   if (smr_busy) {
     /* Losing the body lease after winning MT exclusivity must still execute
     ** the original sidecar-only classification before quarantine. */
-    assert(gc2_smr_reclaiming_cas(fx.g, &expect, 1));
+    assert(gc2_smr_reclaiming_cas(
+	 fx.g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
     assert(lj_gc_sweep_gc2_arena_unmarked_exclusive(fx.g, fx.a) == 0);
     assert(mt_gc_exclusive_acq(fx.g) == 0);
-    gc2_smr_reclaiming_rel(fx.g, 0);
+    gc2_smr_reclaiming_rel(fx.g, LJ_GC2_SMR_OPEN);
     assert(lj_arena_alloc_quarantine_one(&fx.tg->alloc,
 	LJ_ARENAK_TRAVERSABLE, gc2_hs_epoch_acq(fx.g)) == fx.a);
     gc2_sweep_grace_needed_rel(fx.g, 1);

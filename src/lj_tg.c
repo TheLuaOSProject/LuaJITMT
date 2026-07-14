@@ -765,9 +765,9 @@ static int tg_reclaim_dead_admissible(global_State *g, int terminal)
 
 static int tg_reclaim_writer_try(global_State *g, int terminal)
 {
-  uint32_t expect = 0;
+  uint32_t expect = LJ_GC2_SMR_OPEN;
   if (!tg_reclaim_dead_admissible(g, terminal) ||
-      !gc2_smr_reclaiming_cas(g, &expect, 1))
+      !gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_META_EXCLUSIVE))
     return 0;
   /* Publish the shared metadata-reclaim gate before testing readers. A reader
   ** already inside keeps its counted lease and makes this pass abandon; a new
@@ -775,12 +775,12 @@ static int tg_reclaim_writer_try(global_State *g, int terminal)
   ** worker_active/reclaiming protocol, so this writer never waits for either. */
   if (gc2_smr_readers_acq(g) != 0 ||
       !tg_reclaim_dead_admissible(g, terminal)) {
-    gc2_smr_reclaiming_rel(g, 0);
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
     return 0;
   }
   expect = 0;
   if (!gc2_tg_reclaiming_cas(g, &expect, 1)) {
-    gc2_smr_reclaiming_rel(g, 0);
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
     return 0;
   }
   /* The TG gate excludes attach/list writers; the second full recheck closes
@@ -788,7 +788,7 @@ static int tg_reclaim_writer_try(global_State *g, int terminal)
   if (gc2_smr_readers_acq(g) != 0 ||
       !tg_reclaim_dead_admissible(g, terminal)) {
     gc2_tg_reclaiming_rel(g, 0);
-    gc2_smr_reclaiming_rel(g, 0);
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
     return 0;
   }
   return 1;
@@ -796,8 +796,10 @@ static int tg_reclaim_writer_try(global_State *g, int terminal)
 
 static void tg_reclaim_writer_leave(global_State *g)
 {
+  lj_assertG(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE,
+	     "TG reclaimer lost exclusive registry mode");
   gc2_tg_reclaiming_rel(g, 0);
-  gc2_smr_reclaiming_rel(g, 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
 }
 
 static int tg_terminal_pending_roots_empty(global_State *g)
