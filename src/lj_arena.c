@@ -3873,6 +3873,9 @@ static int arena_clear_extent_range(GCArena *a, uint32_t start, uint32_t len)
   return 1;
 }
 
+/* Return 1 after committing the allocation, 0 for a candidate-local side
+** descriptor veto, and -1 for a transient plain writer-generation veto.
+** Neither failure result changes the requested allocation boundary. */
 static int arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
                            int black, int root_construct)
 {
@@ -3886,7 +3889,7 @@ static int arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
   if (!arena_lifetime_managed(a) &&
       (lj_arena_remote_active_acq(a) &
 	(LJ_ARENA_REMOTE_SEALED|LJ_ARENA_REMOTE_PENDING)))
-    return 0;
+    return -1;  /* Transient plain-writer veto; try another arena. */
   if (root_construct && !arena_lifetime_managed(a))
     return 0;
   if (arena_lifetime_managed(a)) {
@@ -4671,9 +4674,54 @@ uint32_t lj_arena_remote_free_drain(TGAlloc *alloc)
   return arena_remote_free_drain_all(alloc, 0);
 }
 
+/* Retain bitmap-only discovery points when a free span cannot be written or
+** linked into an owner-local bin. block=0,mark=1 is the canonical free-run
+** boundary. Besides the span start, retain every descriptor boundary which
+** can split a rebuild while it is still active. If a rebuild consumes the
+** free prefix first, that descriptor's mark emerges as the next free boundary
+** when its ownership clears. Atomic mark ORs are safe under a closed plain
+** generation and never touch the protected body bytes. New descriptors cannot
+** legitimately claim this detached block=0 span after candidate validation. */
+static void arena_retain_free_boundaries(GCArena *a, uint32_t start,
+					 uint32_t len)
+{
+  uint32_t pos, end;
+  if (!a || len == 0 || start < LJ_AFIRST_CELL ||
+      start >= LJ_ARENA_CELLS || len > LJ_ARENA_CELLS - start)
+    return;
+  lj_assertX(!lj_arena_bm_get(a->block, start),
+	     "arena retained free boundary overlaps allocation start");
+  if (lj_arena_bm_get(a->block, start))
+    return;
+  end = start + len;
+  for (pos = start; pos < end; ) {
+    uint32_t wi = pos >> 6;
+    uint32_t lo = pos & 63u;
+    uint32_t take = end - pos;
+    uint32_t room = 64u - lo;
+    uint64_t mask, boundaries;
+    if (take > room)
+      take = room;
+    mask = arena_range_mask(lo, take);
+    boundaries = la_load64_acq(&a->block[wi]) |
+	la_load64_acq(&a->ready[wi]) |
+	arena_recovery_block_bits(a, wi) |
+	arena_root_block_bits(a, wi) |
+	arena_dtor_block_bits(a, wi) |
+	arena_lifetime_block_bits(a, wi);
+    boundaries &= mask;
+    if (pos == start)
+      boundaries |= (uint64_t)1 << lo;
+    if (boundaries)
+      (void)la_or64_rlx(&a->mark[wi], boundaries);
+    pos += take;
+  }
+}
+
 static void arena_publish_bump_run(TGAlloc *alloc, uint32_t k)
 {
   LJArenaBump *b;
+  int published = 0;
   if (!alloc || k >= LJ_ARENA_NKINDS)
     return;
   b = &alloc->bump[k];
@@ -4683,8 +4731,18 @@ static void arena_publish_bump_run(TGAlloc *alloc, uint32_t k)
   ** The active bump window is absent from the reusable free-run bins. Publish
   ** its unused tail before the window is replaced, otherwise lazy sweeping can
   ** strand one large free run per swept arena and force fresh arena mapping.
+  ** A plain writer generation temporarily makes the tail body unwritable.
+  ** Do not write a bin node through that gate. Instead retain only the atomic
+  ** free-boundary sentinel, so a later rebuild can recover the all-zero tail
+  ** without waiting for the writer or exposing its veto as allocation failure.
   */
-  arena_insert_run_head(alloc, b->a, b->cell, b->end - b->cell);
+  if (arena_lifetime_managed(b->a) ||
+      !(lj_arena_remote_active_acq(b->a) &
+	(LJ_ARENA_REMOTE_SEALED|LJ_ARENA_REMOTE_PENDING)))
+    published = arena_insert_run_head(alloc, b->a, b->cell,
+				      b->end - b->cell);
+  if (!published)
+    arena_retain_free_boundaries(b->a, b->cell, b->end - b->cell);
   b->a = NULL;
   b->cell = 0;
   b->end = 0;
@@ -6378,6 +6436,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   uint32_t k = arena_kind(flags);
   LJArenaBump *b = &alloc->bump[k];
   uint32_t ncells, cell;
+  int adopted = 0, drained = 0;
   if (size == 0)
     return NULL;
   if ((flags & LJ_AF_ROOT_CONSTRUCT) &&
@@ -6407,54 +6466,82 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
       ** run and fully scrubbing its shrinking suffix while an older bump
       ** window remains usable. Bins are revisited as soon as this bounded
       ** window is exhausted. */
-      goto bump_alloc;
+      int result;
+      cell = b->cell;
+      b->cell += ncells;
+      result = arena_set_alloc(b->a, cell, ncells,
+	lj_arena_alloc_black_acq(alloc),
+	(flags & LJ_AF_ROOT_CONSTRUCT) != 0);
+      if (result > 0)
+	return lj_arena_cellptr(b->a, cell);
+      b->cell = cell;
+      /* A candidate-local descriptor conflict and a closed plain generation
+      ** are both transient allocation vetoes, not resource exhaustion. Drop
+      ** this private cursor (publishing it only when still safe) and continue
+      ** with independent bins or a fresh arena in this same call. */
     }
+    /* Preserve the ordinary exhausted/undersized bump publication path. The
+    ** helper safely discards instead when this same arena is transiently
+    ** closed, so no caller ever writes a free-run node through that gate. */
     arena_publish_bump_run(alloc, k);
-    pp = arena_find_run(alloc, k, ncells, &bin);
-    if ((!pp || !*pp) && arena_adopt_reclaimed_one(alloc, k))
+    for (;;) {
       pp = arena_find_run(alloc, k, ncells, &bin);
-    if (!pp || !*pp) {
-      (void)lj_arena_remote_free_drain(alloc);
-      pp = arena_find_run(alloc, k, ncells, &bin);
-    }
-    if (!pp || !*pp) {
-      if (!arena_alloc_fresh(alloc, rs, flags))
-	return NULL;
-      goto bump_alloc;
-    }
-    {
-      LJArenaFreeRun *run = *pp;
-      GCArena *a = lj_arena_of(run);
-      uint32_t start = run->start;
-      uint32_t len = run->len;
-      *pp = run->next;
-      arena_refresh_binmask(alloc, k, bin);
-      if (!arena_set_alloc(a, start, ncells,
-			   lj_arena_alloc_black_acq(alloc),
-			   (flags & LJ_AF_ROOT_CONSTRUCT) != 0)) {
-	/* The root protocol vetoed reuse before any boundary mutation. Restore
-	** the private bin node and let the caller retry after unlink completes. */
-	arena_link_run_head(alloc, a, start, len);
-	return NULL;
+      if (!pp || !*pp) {
+	if (!adopted) {
+	  adopted = 1;
+	  if (arena_adopt_reclaimed_one(alloc, k))
+	    continue;
+	}
+	if (!drained) {
+	  drained = 1;
+	  (void)lj_arena_remote_free_drain(alloc);
+	  continue;
+	}
+	if (!arena_alloc_fresh(alloc, rs, flags))
+	  return NULL;
+	goto bump_alloc;
       }
-      if (len > ncells) {
-	/* Clear each rebuilt boundary once, then amortize the tail as a private
-	** bump window instead of repeatedly scrubbing a shrinking free run. */
-	if (!arena_clear_extent_range(a, start + ncells, len - ncells))
-	  return NULL;  /* Retain prefix and unpublished tail on conflict. */
-	b->a = a;
-	b->cell = start + ncells;
-	b->end = start + len;
+      {
+	LJArenaFreeRun *run = *pp;
+	GCArena *a = lj_arena_of(run);
+	uint32_t start = run->start;
+	uint32_t len = run->len;
+	int result;
+	*pp = run->next;
+	arena_refresh_binmask(alloc, k, bin);
+	result = arena_set_alloc(a, start, ncells,
+		lj_arena_alloc_black_acq(alloc),
+		(flags & LJ_AF_ROOT_CONSTRUCT) != 0);
+	if (result <= 0) {
+	  /* The candidate changed after validation. Do not touch a possibly
+	  ** closed or descriptor-owned run body to relink it; later sweep rebuilds
+	  ** this detached boundary. Keep looking rather than report false OOM. */
+	  continue;
+	}
+	if (len > ncells) {
+	  /* Clear each rebuilt boundary once, then amortize the tail as a private
+	  ** bump window instead of repeatedly scrubbing a shrinking free run. */
+	  if (arena_clear_extent_range(a, start + ncells, len - ncells)) {
+	    b->a = a;
+	    b->cell = start + ncells;
+	    b->end = start + len;
+	  } else {
+	    arena_retain_free_boundaries(a, start + ncells, len - ncells);
+	  }
+	  /* arena_set_alloc() already committed the requested prefix. If tail
+	  ** preparation loses a side-owner race, retain bitmap rediscovery points
+	  ** for that unpublished suffix and return the valid allocation. */
+	}
+	return lj_arena_cellptr(a, start);
       }
-      return lj_arena_cellptr(a, start);
     }
   }
 bump_alloc:
   cell = b->cell;
   b->cell += ncells;
-  if (!arena_set_alloc(b->a, cell, ncells,
-		       lj_arena_alloc_black_acq(alloc),
-		       (flags & LJ_AF_ROOT_CONSTRUCT) != 0)) {
+  if (arena_set_alloc(b->a, cell, ncells,
+		      lj_arena_alloc_black_acq(alloc),
+		      (flags & LJ_AF_ROOT_CONSTRUCT) != 0) <= 0) {
     b->cell = cell;
     return NULL;
   }
@@ -6690,7 +6777,7 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 	if (gate != 1) {
 	  if (gate < 0)
 	    arena_remote_late_leave(a);
-	  return NULL;
+	  goto move_realloc;
 	}
 	plain_held = 1;
 	aflags = lj_arena_flags_acq(a);
@@ -6699,15 +6786,21 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 	    !lj_arena_bm_get(a->block, cell) || lj_arena_late_get(a, cell) ||
 	    !arena_side_owners_none(a, cell)) {
 	  arena_plain_mutation_release(a);
-	  return NULL;
+	  goto move_realloc;
 	}
       }
       if (!arena_insert_run(alloc, a, cell + ncells, ocells - ncells)) {
-	if (claim == 1)
+	if (claim == 1) {
 	  arena_mutation_restore_live(a, cell);
+	  /* A traversable suffix can remain pinned by an interior root/recovery
+	  ** owner. Keep the original extent retryable: moving and then freeing the
+	  ** old full extent would encounter the same durable veto after terminal
+	  ** ownership and turn this accepted fail-closed state into an abort. */
+	  return NULL;
+	}
 	if (plain_held)
 	  arena_plain_mutation_release(a);
-	return NULL;
+	goto move_realloc;
       }
       if (claim == 1)
 	arena_mutation_restore_live(a, cell);
@@ -6716,10 +6809,11 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
     }
     return p;
   }
+move_realloc:
   np = lj_arena_alloc(alloc, rs, nsize, flags);
   if (!np)
     return NULL;
-  memcpy(np, p, osize);
+  memcpy(np, p, osize < nsize ? osize : nsize);
   lj_arena_free(alloc, p, osize);
   return np;
 }

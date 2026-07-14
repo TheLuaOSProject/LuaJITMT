@@ -14,6 +14,23 @@
 #include "lj_arena.h"
 #include "lj_prng.h"
 
+typedef struct FreeRunProbe {
+  uint32_t cell;
+  uint32_t start;
+  uint32_t len;
+  int found;
+} FreeRunProbe;
+
+static void find_free_run_covering(uint32_t start, uint32_t len, void *ud)
+{
+  FreeRunProbe *probe = (FreeRunProbe *)ud;
+  if (!probe->found && probe->cell >= start && probe->cell - start < len) {
+    probe->start = start;
+    probe->len = len;
+    probe->found = 1;
+  }
+}
+
 static void check_info(const LJHugeInfo *hi, size_t size, uint32_t flags)
 {
   assert(hi->size == size);
@@ -1365,6 +1382,101 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
 #endif
 }
 
+static void test_alloc_committed_prefix_tail_veto(PRNGState *rs)
+{
+  const size_t span_size = 128u, take_size = 32u, prefix_size = 16u;
+  TGAlloc alloc;
+  GCArena *a;
+  void *span, *guard, *p, *prefix, *tail;
+  uint32_t start, conflict;
+
+  lj_arena_alloc_init(&alloc);
+  span = lj_arena_alloc(&alloc, rs, span_size, LJ_AF_TRAVERSABLE);
+  guard = lj_arena_alloc(&alloc, rs, 16u, LJ_AF_TRAVERSABLE);
+  assert(span != NULL && guard != NULL);
+  a = lj_arena_of(span);
+  start = lj_arena_cellof(span);
+  lj_arena_free(&alloc, span, span_size);
+
+  /* The selected run remains valid for the requested prefix, but a root
+  ** claim appearing in its unused suffix vetoes private-tail preparation.
+  ** Allocation must return the already committed prefix, not false OOM. */
+  conflict = start + lj_arena_ncells(take_size) + 1u;
+  assert(lj_arena_root_state_cas(a, conflict, LJ_ARENA_ROOT_NONE,
+				 LJ_ARENA_ROOT_LINKING));
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].cell =
+    alloc.bump[LJ_ARENAK_TRAVERSABLE].end;
+  p = lj_arena_alloc(&alloc, rs, take_size, LJ_AF_TRAVERSABLE);
+  assert(p == span);
+  assert(lj_arena_bm_get(a->block, start));
+  assert(lj_arena_lifetime_state_acq(a, start) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(a, conflict) == LJ_ARENA_ROOT_LINKING);
+
+  /* Rebuild and consume the free prefix while the interior descriptor still
+  ** splits the suffix. Its own retained mark must survive as the next
+  ** discovery point; relying only on the suffix-start sentinel would strand
+  ** everything after conflict once this prefix allocation consumes it. */
+  lj_arena_alloc_rebuild_free_kind(&alloc, LJ_ARENAK_TRAVERSABLE);
+  prefix = lj_arena_alloc(&alloc, rs, prefix_size, LJ_AF_TRAVERSABLE);
+  assert(prefix == (unsigned char *)span + take_size);
+  assert(lj_arena_root_state_acq(a, conflict) == LJ_ARENA_ROOT_LINKING);
+
+  assert(lj_arena_root_state_cas(a, conflict, LJ_ARENA_ROOT_LINKING,
+				 LJ_ARENA_ROOT_NONE));
+  /* Once the descriptor clears, its bitmap-only boundary recovers the complete
+  ** remaining tail even though the earlier prefix is still allocated. */
+  lj_arena_alloc_rebuild_free_kind(&alloc, LJ_ARENAK_TRAVERSABLE);
+  tail = lj_arena_alloc(&alloc, rs,
+			span_size - take_size - prefix_size,
+			LJ_AF_TRAVERSABLE);
+  assert(tail == (unsigned char *)span + take_size + prefix_size);
+  lj_arena_free(&alloc, tail, span_size - take_size - prefix_size);
+  lj_arena_free(&alloc, prefix, prefix_size);
+  lj_arena_free(&alloc, p, take_size);
+  lj_arena_free(&alloc, guard, 16u);
+  lj_arena_alloc_fini(&alloc);
+}
+
+static void test_managed_shrink_suffix_veto(PRNGState *rs)
+{
+  const size_t osize = 64u, nsize = 32u;
+  TGAlloc alloc;
+  GCArena *a;
+  void *p;
+  uint32_t start, conflict;
+  unsigned char before[64];
+
+  lj_arena_alloc_init(&alloc);
+  p = lj_arena_alloc(&alloc, rs, osize, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  a = lj_arena_of(p);
+  start = lj_arena_cellof(p);
+  memset(p, 0x6d, osize);
+  memcpy(before, p, osize);
+  conflict = start + lj_arena_ncells(nsize);
+  assert(lj_arena_root_state_cas(a, conflict, LJ_ARENA_ROOT_NONE,
+				 LJ_ARENA_ROOT_LINKING));
+
+  /* The direct arena API permits a retryable managed shrink attempt even
+  ** though Lua's GC wrapper rejects resizing traversable object bodies. An
+  ** interior owner must preserve the complete old extent; moving and freeing
+  ** it would encounter the same durable veto after terminal ownership. */
+  assert(lj_arena_realloc(&alloc, rs, p, osize, nsize,
+			  LJ_AF_TRAVERSABLE) == NULL);
+  assert(lj_arena_bm_get(a->block, start));
+  assert(lj_arena_lifetime_state_acq(a, start) == LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(a, conflict) == LJ_ARENA_ROOT_LINKING);
+  assert(memcmp(before, p, osize) == 0);
+
+  assert(lj_arena_root_state_cas(a, conflict, LJ_ARENA_ROOT_LINKING,
+				 LJ_ARENA_ROOT_NONE));
+  assert(lj_arena_realloc(&alloc, rs, p, osize, nsize,
+			  LJ_AF_TRAVERSABLE) == p);
+  assert(memcmp(before, p, nsize) == 0);
+  lj_arena_free(&alloc, p, nsize);
+  lj_arena_alloc_fini(&alloc);
+}
+
 static void test_plain_reader_mutation_gate(PRNGState *rs)
 {
   const size_t size = 64u;
@@ -1400,13 +1512,20 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
   memcpy(before, p, size);
   admission = lj_arena_rescue_enter(a);
   assert(admission == LJ_ARENA_RESCUE_FULL);
-  assert(lj_arena_realloc(&alloc, rs, p, size, size / 2u, 0) == NULL);
-  assert(lj_arena_bm_get(a->block, cell) && !lj_arena_late_get(a, cell));
-  assert(memcmp(before, p, size) == 0);
-  lj_arena_rescue_leave(a);
-  assert(lj_arena_realloc(&alloc, rs, p, size, size / 2u, 0) == p);
-  assert(memcmp(before, p, size / 2u) == 0);
-  lj_arena_free(&alloc, p, size / 2u);
+  {
+    void *moved = lj_arena_realloc(&alloc, rs, p, size, size / 2u, 0);
+    assert(moved != NULL && moved != p);
+    assert(memcmp(before, moved, size / 2u) == 0);
+    assert(lj_arena_bm_get(a->block, cell) && lj_arena_late_get(a, cell));
+    /* The admitted reader still owns the old bytes; realloc has transferred
+    ** the caller to an independent allocation without waiting for it. */
+    assert(memcmp(before, p, size) == 0);
+    lj_arena_rescue_leave(a);
+    p = moved;
+  }
+  assert(lj_arena_realloc(&alloc, rs, p, size / 2u, size / 4u, 0) == p);
+  assert(memcmp(before, p, size / 4u) == 0);
+  lj_arena_free(&alloc, p, size / 4u);
 
   p = lj_arena_alloc(&alloc, rs, size, 0);
   assert(p != NULL);
@@ -1433,6 +1552,33 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
   lj_arena_free(&alloc, p, size);
   assert(!lj_arena_bm_get(a->block, cell));
   assert(lj_arena_remote_active_acq(a) == 0);
+
+  {
+    TGAlloc move_alloc;
+    void *gatep, *oldp, *np;
+    size_t nsize = size / 2u;
+    lj_arena_alloc_init(&move_alloc);
+    oldp = lj_arena_alloc(&move_alloc, rs, size, 0);
+    gatep = lj_arena_alloc(&move_alloc, rs, size, 0);
+    assert(oldp != NULL && gatep != NULL);
+    a = lj_arena_of(oldp);
+    assert(lj_arena_of(gatep) == a);
+    memset(oldp, 0xa5, size);
+    assert(lj_arena_destruct_acquire(gatep, size) ==
+	   LJ_ARENA_DESTRUCT_ACQUIRED);
+
+    /* Losing the unrelated arena-wide plain writer gate is not an OOM. A
+    ** shrink which cannot take its in-place token moves immediately, keeps
+    ** the requested prefix and leaves the old body durably late-freed. */
+    np = lj_arena_realloc(&move_alloc, rs, oldp, size, nsize, 0);
+    assert(np != NULL && np != oldp);
+    memset(before, 0xa5, nsize);
+    assert(memcmp(np, before, nsize) == 0);
+    assert(lj_arena_late_get(a, lj_arena_cellof(oldp)));
+    lj_arena_free(&move_alloc, gatep, size);
+    lj_arena_free(&move_alloc, np, nsize);
+    lj_arena_alloc_fini(&move_alloc);
+  }
 
 #if defined(LJ_ARENA_TEST_HELPERS)
   {
@@ -1494,6 +1640,8 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
     PlainLateRace race;
     pthread_t thread;
     void *other, *reuse;
+    uint32_t tail_cell;
+    FreeRunProbe probe;
     p = lj_arena_alloc(&alloc, rs, size, 0);
     assert(p != NULL);
     a = lj_arena_of(p);
@@ -1514,13 +1662,23 @@ static void test_plain_reader_mutation_gate(PRNGState *rs)
     lj_arena_free(&alloc, p, size);
     assert(!lj_arena_bm_get(a->block, cell));
     assert(lj_arena_remote_active_acq(a) != 0);
+    assert(alloc.bump[LJ_ARENAK_PLAIN].a == a);
+    tail_cell = alloc.bump[LJ_ARENAK_PLAIN].cell;
     other = lj_arena_alloc(&alloc, rs, size, 0);
-    assert(other == NULL || other != p);  /* Nonblocking failure is permitted. */
+    assert(other != NULL && other != p);
+    assert(lj_arena_of(other) != a);  /* Fresh fallback while a is vetoed. */
+    assert(!lj_arena_bm_get(a->block, tail_cell));
+    assert(lj_arena_bm_get(a->mark, tail_cell));
 
     lj_arena_test_plain_late_pause(0);
     assert(pthread_join(thread, NULL) == 0);
     assert(race.result == 1);
     assert(lj_arena_remote_active_acq(a) == 0);
+    memset(&probe, 0, sizeof(probe));
+    probe.cell = tail_cell;
+    lj_arena_scan_free_runs(a, find_free_run_covering, &probe);
+    assert(probe.found && probe.start <= tail_cell &&
+	   probe.start + probe.len > tail_cell);
     /* The race proves p is reusable; explicitly exhaust this fixture's
     ** independent bump window before asserting exact bin-address reuse. */
     alloc.bump[LJ_ARENAK_PLAIN].cell = alloc.bump[LJ_ARENAK_PLAIN].end;
@@ -1787,6 +1945,8 @@ int main(void)
   test_huge_reader_shapes_and_realloc(&rs);
   test_huge_reader_overflow_and_size(&rs);
   test_huge_reader_destructor_retry(&rs);
+  test_alloc_committed_prefix_tail_veto(&rs);
+  test_managed_shrink_suffix_veto(&rs);
   test_plain_reader_mutation_gate(&rs);
   test_terminal_reconcile(&rs);
   test_registry_rescue_unmap_handoff(&rs);
