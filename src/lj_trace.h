@@ -40,6 +40,10 @@ LJ_FUNCA BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J,
 						   const BCIns *pc,
 						   TraceNo traceno,
 						   lua_State *L);
+LJ_FUNCA BCIns LJ_FASTCALL lj_trace_invalidate_itern(jit_State *J,
+						      const BCIns *pc,
+						      TraceNo traceno,
+						      lua_State *L);
 LJ_FUNC uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno);
 LJ_FUNC int lj_trace_hasany(global_State *g);
 LJ_FUNC int lj_trace_flushall(lua_State *L);
@@ -73,6 +77,10 @@ LJ_FUNC int lj_trace_markvecs(global_State *g, int gc2);
 LJ_FUNC void lj_trace_test_reset_retire_publish_calls(void);
 LJ_FUNC uint32_t lj_trace_test_retire_publish_calls(void);
 LJ_FUNC void lj_trace_test_force_startins_retry(uint32_t count);
+LJ_FUNC void lj_trace_test_reset_exit_stats(void);
+LJ_FUNC uint32_t lj_trace_test_exit_calls(void);
+LJ_FUNC TraceNo lj_trace_test_last_exit_parent(void);
+LJ_FUNC ExitNo lj_trace_test_last_exitno(void);
 #endif
 
 #ifdef LJ_TRACE_TEST_HELPERS

@@ -403,6 +403,9 @@ typedef struct GCtrace {
 
 #define TRACE_EXITTAB_MCODE		0x01
 #define TRACE_SCOPE_FLUSH_PENDING	0x02
+#define TRACE_ENTRY_INVALIDATED		0x04
+#define TRACE_ENTRY_GATED \
+  (TRACE_SCOPE_FLUSH_PENDING|TRACE_ENTRY_INVALIDATED)
 
 /* Low tags in GCtrace.retired_next. GCtrace allocations are pointer-aligned. */
 #define TRACE_RETIRED_LINK_UNLINKED	((uintptr_t)1u)
@@ -515,14 +518,14 @@ static LJ_AINLINE int trace_scope_pending_acq(const GCtrace *T)
 
 static LJ_AINLINE int trace_runnable_acq(const GCtrace *T, TraceNo traceno)
 {
-  /* Scoped flushes retire trace slots only after an HS_EXIT_TRACES boundary.
-  ** The pending bit is therefore the publication gate: once set, no new VM,
-  ** recorder, or assembler path may treat the trace as runnable even though
-  ** retire_epoch remains zero until the boundary leader unlinks it.
+  /* The combined entry gate prevents new VM/C validation and new recorder or
+  ** assembler links from treating this trace as runnable. Scoped flushes set
+  ** the pending member before an HS_EXIT_TRACES boundary; retire_epoch remains
+  ** zero until the boundary leader has closed dependencies and unlinked it.
   */
   return T && trace_traceno_acq(T) == traceno &&
 	 la_load64_acq(&T->retire_epoch) == 0 &&
-	 !trace_scope_pending_acq(T);
+	 (la_load8_acq(&T->unused1) & TRACE_ENTRY_GATED) == 0;
 }
 
 static LJ_AINLINE IRRef trace_nins_acq(const GCtrace *T)
@@ -850,6 +853,7 @@ typedef struct jit_State {
   uint8_t needsnap;	/* Need snapshot before recording next bytecode. */
   IRType1 guardemit;	/* Accumulated IRT_GUARD for emitted instructions. */
   uint8_t bcskip;	/* Number of bytecode instructions to skip. */
+  uint8_t root_startins_pending;  /* Record captured root ITERN once. */
 
   FoldState fold;	/* Fold state. */
 

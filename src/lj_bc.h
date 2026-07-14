@@ -242,6 +242,21 @@ static LJ_AINLINE void bc_publish(const uint32_t *pc, uint32_t ins)
   la_store32_rel((uint32_t *)pc, ins);
 }
 
+/* Publish only across the exact bytecode generation observed by the caller. */
+static LJ_AINLINE int bc_publish_cas(const uint32_t *pc, uint32_t *expected,
+				    uint32_t ins)
+{
+  return la_cas32((uint32_t *)pc, expected, ins, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE int bc_publish_op_cas(const uint32_t *pc,
+				       uint32_t *expected, BCOp op)
+{
+  uint32_t ins = *expected;
+  setbc_op(&ins, op);
+  return bc_publish_cas(pc, expected, ins);
+}
+
 static LJ_AINLINE void bc_publish_op(const uint32_t *pc, BCOp op)
 {
   uint32_t ins = la_load32_acq((uint32_t *)pc);
@@ -258,6 +273,14 @@ static LJ_AINLINE void bc_publish_d(const uint32_t *pc, uint32_t d)
 
 LJ_FUNCA void LJ_FASTCALL lj_bc_publish_vm(uint32_t *pc, uint32_t ins);
 LJ_FUNCA void LJ_FASTCALL lj_bc_publish_op_vm(uint32_t *pc, BCOp op);
+LJ_FUNCA uint32_t LJ_FASTCALL lj_bc_publish_cas_vm(uint32_t *pc,
+						   uint32_t expected,
+						   uint32_t ins);
+
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
+LJ_FUNC void lj_bc_test_force_publish_cas_collision(uint32_t replacement);
+LJ_FUNC uint32_t lj_bc_test_publish_cas_collision_pending(void);
+#endif
 
 /* This solves a circular dependency problem, change as needed. */
 #define FF_next_N	4

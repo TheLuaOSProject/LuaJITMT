@@ -50,6 +50,42 @@ void LJ_FASTCALL lj_bc_publish_op_vm(uint32_t *pc, BCOp op)
   bc_publish_op(pc, op);
 }
 
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
+static uint32_t bc_test_publish_cas_collision_word;
+static uint32_t bc_test_publish_cas_collision_armed;
+
+void lj_bc_test_force_publish_cas_collision(uint32_t replacement)
+{
+  la_store32_rel(&bc_test_publish_cas_collision_word, replacement);
+  la_store32_rel(&bc_test_publish_cas_collision_armed, 1);
+}
+
+uint32_t lj_bc_test_publish_cas_collision_pending(void)
+{
+  return la_load32_acq(&bc_test_publish_cas_collision_armed);
+}
+
+static void bc_test_publish_cas_collision(uint32_t *pc)
+{
+  uint32_t armed = 1;
+  if (la_cas32(&bc_test_publish_cas_collision_armed, &armed, 0,
+	       LA_ACQ_REL, LA_ACQ)) {
+    uint32_t replacement =
+      la_load32_acq(&bc_test_publish_cas_collision_word);
+    bc_publish(pc, replacement);
+  }
+}
+#else
+#define bc_test_publish_cas_collision(pc) ((void)(pc))
+#endif
+
+uint32_t LJ_FASTCALL lj_bc_publish_cas_vm(uint32_t *pc, uint32_t expected,
+					  uint32_t ins)
+{
+  bc_test_publish_cas_collision(pc);
+  return bc_publish_cas(pc, &expected, ins) ? ins : expected;
+}
+
 /* -- Dispatch table management ------------------------------------------- */
 
 #if LJ_TARGET_MIPS

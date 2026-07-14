@@ -59,7 +59,7 @@ LJ_FUNC int lj_record_mt_shared_tab(jit_State *J, TRef tab);
 LJ_FUNC int lj_record_next(jit_State *J, RecordIndex *ix);
 
 LJ_FUNC void lj_record_ins(jit_State *J);
-LJ_FUNC void lj_record_setup(jit_State *J);
+LJ_FUNC void lj_record_setup(jit_State *J, BCIns root_iterl);
 #endif
 
 #endif

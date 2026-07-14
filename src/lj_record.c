@@ -3735,7 +3735,18 @@ void lj_record_ins(jit_State *J)
 #define rcv	(&ix.keyv)
 
   lbase = J->L->base;
-  ins = *pc;
+  if (LJ_UNLIKELY(J->root_startins_pending)) {
+    /* ITERN is the only root instruction recorded at the start. The TRACE
+    ** start callback may have despecialized its shared word after trace_start
+    ** captured it, so consume that exact generation once. Later loop trips
+    ** observe the then-current bytecode normally. */
+    lj_assertJ(pc == J->startpc && bc_op(J->cur.startins) == BC_ITERN,
+	       "bad pending root startins");
+    ins = J->cur.startins;
+    J->root_startins_pending = 0;
+  } else {
+    ins = (BCIns)la_load32_acq((const uint32_t *)pc);
+  }
   op = bc_op(ins);
   ra = bc_a(ins);
   ix.val = 0;
@@ -4213,11 +4224,10 @@ void lj_record_ins(jit_State *J)
 /* -- Recording setup ----------------------------------------------------- */
 
 /* Setup recording for a root trace started by a hot loop. */
-static const BCIns *rec_setup_root(jit_State *J)
+static const BCIns *rec_setup_root(jit_State *J, BCIns ins, BCIns root_iterl)
 {
   /* Determine the next PC and the bytecode range for the loop. */
   const BCIns *pcj, *pc = J->pc;
-  BCIns ins = *pc;
   BCReg ra = bc_a(ins);
   switch (bc_op(ins)) {
   case BC_FORL:
@@ -4232,27 +4242,41 @@ static const BCIns *rec_setup_root(jit_State *J)
     J->bc_min = pc;
     break;
   case BC_ITERL:
-    if (bc_op(pc[-1]) == BC_JLOOP)
-      lj_trace_err(J, LJ_TRERR_LINNER);
-    lj_assertJ(bc_op(pc[-1]) == BC_ITERC, "no ITERC before ITERL");
-    J->maxslot = ra + bc_b(pc[-1]) - 1;
+    {
+      BCIns prev =
+	(BCIns)la_load32_acq((const uint32_t *)&pc[-1]);
+      if (bc_op(prev) == BC_JLOOP)
+	lj_trace_err(J, LJ_TRERR_LINNER);
+      if (bc_op(prev) != BC_ITERC)
+	lj_trace_err(J, LJ_TRERR_RETRY);
+      J->maxslot = ra + bc_b(prev) - 1;
+    }
     J->bc_extent = (MSize)(-bc_j(ins))*sizeof(BCIns);
     pc += 1+bc_j(ins);
-    lj_assertJ(bc_op(pc[-1]) == BC_JMP, "ITERL does not point to JMP+1");
+    {
+      BCIns guard =
+	(BCIns)la_load32_acq((const uint32_t *)&pc[-1]);
+      if ((bc_op(guard) != BC_JMP && bc_op(guard) != BC_ISNEXT) ||
+	  bc_a(guard) != ra)
+	lj_trace_err(J, LJ_TRERR_RETRY);
+    }
     J->bc_min = pc;
     break;
   case BC_ITERN:
-    lj_assertJ(bc_op(pc[1]) == BC_ITERL, "no ITERL after ITERN");
+    if (bc_op(root_iterl) != BC_ITERL ||
+	bc_a(root_iterl) != bc_a(ins))
+      lj_trace_err(J, LJ_TRERR_RETRY);
+    J->bc_extent = (MSize)(-bc_j(root_iterl))*sizeof(BCIns);
+    J->bc_min = pc+2 + bc_j(root_iterl);
     J->maxslot = ra;
-    J->bc_extent = (MSize)(-bc_j(pc[1]))*sizeof(BCIns);
-    J->bc_min = pc+2 + bc_j(pc[1]);
+    J->root_startins_pending = 1;
     lj_trace_state_store_active(J, LJ_TRACE_RECORD_1ST);
     /* Record the first ITERN, too. */
     break;
   case BC_LOOP:
     /* Only check BC range for real loops, but not for "repeat until true". */
     pcj = pc + bc_j(ins);
-    ins = *pcj;
+    ins = (BCIns)la_load32_acq((const uint32_t *)pcj);
     if (bc_op(ins) == BC_JMP && bc_j(ins) < 0) {
       J->bc_min = pcj+1 + bc_j(ins);
       J->bc_extent = (MSize)(-bc_j(ins))*sizeof(BCIns);
@@ -4299,7 +4323,7 @@ static ptrdiff_t rec_func_root_nargs(jit_State *J)
 }
 
 /* Setup for recording a new trace. */
-void lj_record_setup(jit_State *J)
+void lj_record_setup(jit_State *J, BCIns root_iterl)
 {
   uint32_t i;
 
@@ -4323,6 +4347,7 @@ void lj_record_setup(jit_State *J)
   J->loopunroll = jit_param_acq(J, JIT_P_loopunroll);
   J->tailcalled = 0;
   J->loopref = 0;
+  J->root_startins_pending = 0;
 
   J->bc_min = NULL;  /* Means no limit. */
   J->bc_extent = ~(MSize)0;
@@ -4392,8 +4417,8 @@ void lj_record_setup(jit_State *J)
   } else {  /* Root trace. */
     ptrdiff_t root_nargs = -1;
     J->cur.root = 0;
-    J->cur.startins = *J->pc;
-    J->pc = rec_setup_root(J);
+    lj_assertJ(J->cur.startins != 0, "missing captured root startins");
+    J->pc = rec_setup_root(J, J->cur.startins, root_iterl);
     /* Note: the loop instruction itself is recorded at the end and not
     ** at the start! So snapshot #0 needs to point to the *next* instruction.
     ** The one exception is BC_ITERN, which sets LJ_TRACE_RECORD_1ST.

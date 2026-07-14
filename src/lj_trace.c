@@ -155,6 +155,9 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
 #if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
 static uint32_t trace_test_retire_publish_calls;
 static uint32_t trace_test_force_startins_retries;
+static uint32_t trace_test_exit_calls;
+static uint32_t trace_test_last_exit_parent;
+static uint32_t trace_test_last_exitno;
 
 void lj_trace_test_force_startins_retry(uint32_t count)
 {
@@ -183,8 +186,39 @@ uint32_t lj_trace_test_retire_publish_calls(void)
 {
   return la_load32_acq(&trace_test_retire_publish_calls);
 }
+
+void lj_trace_test_reset_exit_stats(void)
+{
+  la_store32_rel(&trace_test_exit_calls, 0);
+  la_store32_rel(&trace_test_last_exit_parent, 0);
+  la_store32_rel(&trace_test_last_exitno, 0);
+}
+
+uint32_t lj_trace_test_exit_calls(void)
+{
+  return la_load32_acq(&trace_test_exit_calls);
+}
+
+TraceNo lj_trace_test_last_exit_parent(void)
+{
+  return (TraceNo)la_load32_acq(&trace_test_last_exit_parent);
+}
+
+ExitNo lj_trace_test_last_exitno(void)
+{
+  return (ExitNo)la_load32_acq(&trace_test_last_exitno);
+}
+
+static void trace_test_note_exit(TraceNo parent, ExitNo exitno)
+{
+  la_store32_rel(&trace_test_last_exit_parent, (uint32_t)parent);
+  la_store32_rel(&trace_test_last_exitno, (uint32_t)exitno);
+  (void)la_add32_acqrel(&trace_test_exit_calls, 1);
+}
 #else
 #define trace_test_take_startins_retry() 0
+#define trace_test_note_exit(parent, exitno) \
+  ((void)(parent), (void)(exitno))
 #endif
 
 static int trace_scope_mark_pending(GCtrace *T)
@@ -192,6 +226,21 @@ static int trace_scope_mark_pending(GCtrace *T)
   uint8_t flags = la_load8_acq(&T->unused1);
   while ((flags & TRACE_SCOPE_FLUSH_PENDING) == 0) {
     uint8_t next = (uint8_t)(flags | TRACE_SCOPE_FLUSH_PENDING);
+    if (la_cas8(&T->unused1, &flags, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+  return 0;
+}
+
+/* Gate an optimized-next root without claiming a scoped-flush transaction.
+** The VM may set this bit without the recorder token. A later token owner must
+** still set TRACE_SCOPE_FLUSH_PENDING, close dependencies, and cross the
+** EXIT_TRACES boundary before graph teardown. */
+static int trace_entry_mark_invalidated(GCtrace *T)
+{
+  uint8_t flags = la_load8_acq(&T->unused1);
+  while ((flags & TRACE_ENTRY_INVALIDATED) == 0) {
+    uint8_t next = (uint8_t)(flags | TRACE_ENTRY_INVALIDATED);
     if (la_cas8(&T->unused1, &flags, next, LA_ACQ_REL, LA_ACQ))
       return 1;
   }
@@ -2027,7 +2076,7 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
 		 "FORL does not point to JFORI");
       /* Restore the branch target before exposing the original FORL. */
       bc_publish_op(foripc, BC_FORI);
-      bc_publish(pc, startins);
+      (void)bc_publish_cas(pc, (uint32_t *)&cur, startins);
     }
     break;
   case BC_JITERL:
@@ -2036,13 +2085,13 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
       break;
     lj_assertJ(op == BC_ITERL || op == BC_ITERN || op == BC_LOOP ||
 	       bc_isret(op), "bad original bytecode %d", op);
-    bc_publish(pc, startins);
+    (void)bc_publish_cas(pc, (uint32_t *)&cur, startins);
     break;
   case BC_JFUNCF:
     if (bc_d(cur) != traceno)
       break;
     lj_assertJ(op == BC_FUNCF, "bad original bytecode %d", op);
-    bc_publish(pc, startins);
+    (void)bc_publish_cas(pc, (uint32_t *)&cur, startins);
     break;
   default:  /* Already unpatched. */
     break;
@@ -2508,6 +2557,58 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
   return startins;
 }
 
+/* Recover an ITERN trace's original word and close its VM/C validation gate.
+** Failed ISNEXT executes without the recorder token, so it cannot unlink or
+** retire a root trace. TRACE_ENTRY_INVALIDATED is a one-word nonwaiting gate:
+** VM entry checks it before loading mcode, and a later scoped/full flush or GC
+** retirement performs the token-owned graph teardown after the usual grace.
+**
+** The bytecode publisher calls this before its exact JLOOP -> ITERC CAS. If
+** that CAS loses, gating the superseded trace is conservative and safe; if it
+** wins, no new VM-dispatched entry or recorder/assembler link can validate the
+** optimized-next trace after ITERC becomes visible. Pre-existing direct native
+** links remain safe because the body stays allocated until a later scoped flush
+** closes dependencies and crosses the EXIT_TRACES boundary.
+*/
+BCIns LJ_FASTCALL lj_trace_invalidate_itern(jit_State *J, const BCIns *pc,
+					     TraceNo traceno, lua_State *L)
+{
+  global_State *g = J2G(J);
+  GCproto *owner = NULL;
+  BCIns shadow, startins = 0;
+
+  if (trace_test_take_startins_retry())
+    return LJ_TRACE_STARTINS_RETRY;
+  shadow = trace_stale_startins_shadow(L, pc, &owner);
+
+  /* Body validation and the invalidation-bit CAS need one allocation lease. A
+  ** temporary exclusive registry writer is progress by a peer, so redispatch
+  ** and retry instead of waiting inside the VM. */
+  if (!lj_gc2_smr_read_try(g)) {
+    (void)lj_thr_retry_yield(NULL);
+    return LJ_TRACE_STARTINS_RETRY;
+  }
+  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
+    GCtrace *T = traceref_safe(J, traceno);
+    startins = trace_stale_startins_match_valid(g, T, pc, owner);
+    if (startins != 0 && bc_op(startins) == BC_ITERN &&
+	T && trace_traceno_acq(T) == traceno &&
+	la_load64_acq(&T->retire_epoch) == 0)
+      (void)trace_entry_mark_invalidated(T);
+  }
+  lj_gc2_smr_read_leave(g);
+
+  if (startins != 0)
+    return startins;
+  /* A missing exact live body means the JLOOP generation is already stale.
+  ** Its prototype sidecar is sufficient for static redispatch and no runnable
+  ** trace remains to gate. Keep the general retired/root search as the rare
+  ** fallback for shifted frame layouts where the sidecar owner was not found.
+  */
+  return shadow != 0 ? shadow :
+    lj_trace_stale_startins(J, pc, traceno, L);
+}
+
 /* Flush all traces associated with a prototype. */
 uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
 {
@@ -2864,12 +2965,47 @@ void lj_trace_freestate(global_State *g)
 /* Blacklist a bytecode instruction. */
 static void blacklist_pc(GCproto *pt, BCIns *pc)
 {
-  if (bc_op(*pc) == BC_ITERN) {
-    bc_publish_op(pc, BC_ITERC);
-    bc_publish_op(pc+1+bc_j(pc[1]), BC_JMP);
-  } else {
-    bc_publish_op(pc, (int)bc_op(*pc)+(int)BC_ILOOP-(int)BC_LOOP);
-    pt->flags |= PROTO_ILOOP;
+  BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
+  BCOp op = bc_op(ins);
+  if (op == BC_ITERN || op == BC_ITERC) {
+    BCIns *bc = proto_bc(pt);
+    int target_generic = op == BC_ITERC;
+    if (pc < bc || pc >= bc + pt->sizebc - 1)
+      return;
+    if (!target_generic) {
+      BCIns desired = ins;
+      setbc_op(&desired, BC_ITERC);
+      target_generic = bc_publish_cas(pc, (uint32_t *)&ins, desired) ||
+		       bc_op(ins) == BC_ITERC;
+    }
+    if (target_generic) {
+      BCIns iterl = (BCIns)la_load32_acq((const uint32_t *)(pc + 1));
+      BCOp iop = bc_op(iterl);
+      BCPos pcpos = proto_bcpos(pt, pc);
+      int32_t guardpos;
+      if (iop == BC_JITERL)
+	iterl = proto_jit_startins_acq(pt, pc + 1);
+      iop = bc_op(iterl);
+      /* ITERL branches to the first loop-body instruction. ISNEXT is the
+      ** immediately preceding guard, so step back one word from that target. */
+      guardpos = (int32_t)pcpos + 1 + (int32_t)bc_j(iterl);
+      if ((iop == BC_ITERL || iop == BC_IITERL) &&
+	  bc_a(iterl) == bc_a(ins) && guardpos >= 0 &&
+	  (uint32_t)guardpos < pt->sizebc) {
+	BCIns *guardpc = &bc[guardpos];
+	BCIns guard =
+	  (BCIns)la_load32_acq((const uint32_t *)guardpc);
+	if (bc_op(guard) == BC_ISNEXT && bc_a(guard) == bc_a(ins) &&
+	    (int64_t)guardpos + 1 + (int64_t)bc_j(guard) ==
+	      (int64_t)pcpos)
+	  (void)bc_publish_op_cas(guardpc, (uint32_t *)&guard, BC_JMP);
+      }
+    }
+  } else if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
+	     op == BC_FUNCF) {
+    BCOp disabled = (BCOp)((int)op + (int)BC_ILOOP - (int)BC_LOOP);
+    if (bc_publish_op_cas(pc, (uint32_t *)&ins, disabled))
+      pt->flags |= PROTO_ILOOP;
   }
 }
 
@@ -2919,11 +3055,97 @@ static void trace_mark_active_startpt(jit_State *J)
 
 /* -- Trace compiler state machine ---------------------------------------- */
 
+/* Validate one complete root-start generation captured under the JIT token.
+** Stitched CALL/ITERC roots carry their parent trace in exitno; an ordinary
+** hot root or down-recursion root must use one of the unpatched start opcodes.
+*/
+static int trace_root_startins_valid(BCIns ins, ExitNo exitno)
+{
+  if (exitno != 0) {
+    BCOp op = bc_op(ins);
+    return op == BC_CALLM || op == BC_CALL || op == BC_ITERC;
+  }
+  switch (bc_op(ins)) {
+  case BC_FORL:
+  case BC_ITERL:
+  case BC_ITERN:
+  case BC_LOOP:
+  case BC_FUNCF:
+  case BC_RET:
+  case BC_RET0:
+  case BC_RET1:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+/* Capture the fixed ISNEXT ... ITERN ITERL tuple before callbacks. A peer may
+** independently despecialize ITERN, so recheck the two words which define the
+** root after validating the immutable branch geometry. */
+static int trace_root_itern_tuple(GCproto *pt, const BCIns *pc,
+				  BCIns startins, BCIns *iterlp)
+{
+  const BCIns *bc;
+  BCIns iterl, guard;
+  BCPos pcpos;
+  int64_t bodypos, guardpos, targetpos;
+  if (!pt || !pc || !iterlp || pt->sizebc < 2)
+    return 0;
+  bc = proto_bc(pt);
+  if (pc < bc || pc >= bc + pt->sizebc - 1)
+    return 0;
+  pcpos = proto_bcpos(pt, pc);
+  iterl = (BCIns)la_load32_acq((const uint32_t *)&pc[1]);
+  if (bc_op(iterl) != BC_ITERL || bc_a(iterl) != bc_a(startins))
+    return 0;
+  bodypos = (int64_t)pcpos + 2 + (int64_t)bc_j(iterl);
+  guardpos = bodypos - 1;
+  if (guardpos < 0 || bodypos < 0 || bodypos > (int64_t)pcpos ||
+      bodypos >= (int64_t)pt->sizebc)
+    return 0;
+  guard = (BCIns)la_load32_acq(
+    (const uint32_t *)&bc[(BCPos)guardpos]);
+  targetpos = guardpos + 1 + (int64_t)bc_j(guard);
+  if (bc_op(guard) != BC_ISNEXT || bc_a(guard) != bc_a(startins) ||
+      targetpos != (int64_t)pcpos)
+    return 0;
+  if ((BCIns)la_load32_acq((const uint32_t *)pc) != startins ||
+      (BCIns)la_load32_acq((const uint32_t *)&pc[1]) != iterl)
+    return 0;
+  *iterlp = iterl;
+  return 1;
+}
+
 /* Start tracing. */
 static void trace_start(jit_State *J)
 {
   TraceNo traceno;
   uint32_t gc2phase = gc2_phase_acq(J2G(J));
+  BCIns root_startins = 0;
+  BCIns root_iterl = 0;
+
+  lj_assertJ(lj_jit_token_held(J),
+	     "trace start without recorder-token ownership");
+  J->root_startins_pending = 0;
+
+  /* The TRACE-start callback may execute this prototype and mutate shared
+  ** bytecode before recorder setup. Capture one whole generation now and use
+  ** it through setup; a later final patch CAS either publishes this trace or
+  ** retires it. A transition which already won simply cancels this attempt. */
+  if (J->parent == 0) {
+    root_startins =
+      (BCIns)la_load32_acq((const uint32_t *)J->pc);
+    if (!trace_root_startins_valid(root_startins, J->exitno)) {
+      lj_trace_state_store(J, LJ_TRACE_IDLE);
+      return;
+    }
+    if (bc_op(root_startins) == BC_ITERN &&
+	!trace_root_itern_tuple(J->pt, J->pc, root_startins, &root_iterl)) {
+      lj_trace_state_store(J, LJ_TRACE_IDLE);
+      return;
+    }
+  }
 
   /* Cooperative MARK admits recording only after activation installed black
   ** allocation and mutation barriers on every TG. A root-snapshot close
@@ -2950,20 +3172,18 @@ static void trace_start(jit_State *J)
   }
   trace_mark_active_startpt(J);
   if ((J->pt->flags & PROTO_NOJIT)) {  /* JIT disabled for this proto? */
-    if (J->parent == 0 && J->exitno == 0 && bc_op(*J->pc) != BC_ITERN) {
+    if (J->parent == 0 && J->exitno == 0) {
       /* Lazy bytecode patching to disable hotcount events. */
-      lj_assertJ(bc_op(*J->pc) == BC_FORL || bc_op(*J->pc) == BC_ITERL ||
-		 bc_op(*J->pc) == BC_LOOP || bc_op(*J->pc) == BC_FUNCF,
-		 "bad hot bytecode %d", bc_op(*J->pc));
-      bc_publish_op(J->pc, (int)bc_op(*J->pc)+(int)BC_ILOOP-(int)BC_LOOP);
-      J->pt->flags |= PROTO_ILOOP;
+      BCOp op = bc_op(root_startins);
+      if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
+	  op == BC_FUNCF) {
+	BCIns expected = root_startins;
+	BCOp disabled =
+	  (BCOp)((int)op + (int)BC_ILOOP - (int)BC_LOOP);
+	if (bc_publish_op_cas(J->pc, (uint32_t *)&expected, disabled))
+	  J->pt->flags |= PROTO_ILOOP;
+      }
     }
-    lj_trace_state_store(J, LJ_TRACE_IDLE);  /* Silently ignored. */
-    return;
-  }
-
-  /* Ensuring forward progress for BC_ITERN can trigger hotcount again. */
-  if (!J->parent && bc_op(*J->pc) == BC_JLOOP) {  /* Already compiled. */
     lj_trace_state_store(J, LJ_TRACE_IDLE);  /* Silently ignored. */
     return;
   }
@@ -2986,6 +3206,8 @@ static void trace_start(jit_State *J)
   J->cur.ir = J->irbuf;
   J->cur.snap = J->snapbuf;
   J->cur.snapmap = J->snapmapbuf;
+  if (J->parent == 0)
+    J->cur.startins = root_startins;
   J->mergesnap = 0;
   J->needsnap = 0;
   J->bcskip = 0;
@@ -3010,7 +3232,7 @@ static void trace_start(jit_State *J)
       setintV(V->top++, J->parent);
       setintV(V->top++, J->exitno);
     } else {
-      BCOp op = bc_op(*J->pc);
+      BCOp op = bc_op(J->cur.startins);
       if (op == BC_CALLM || op == BC_CALL || op == BC_ITERC) {
 	setintV(V->top++, J->exitno);  /* Parent of stitched trace. */
 	setintV(V->top++, -1);
@@ -3022,7 +3244,7 @@ static void trace_start(jit_State *J)
     J->parent = parent;
     J->exitno = exitno;
   );
-  lj_record_setup(J);
+  lj_record_setup(J, root_iterl);
 }
 
 /* Stop tracing. */
@@ -3043,6 +3265,7 @@ static int trace_stop(jit_State *J)
   SnapShot *snap = NULL;
   MSize topslot;
   int addroot = 0;
+  int root_patch_lost = 0;
 
   switch (op) {
   case BC_FORL:
@@ -3119,7 +3342,16 @@ static int trace_stop(jit_State *J)
       ** can interpret RET/ITERN/FORL/ITERL without touching exclusive SMR state
       ** or waiting for the IDLE retire owner. */
       proto_jit_startins_rel(pt, patchpc, J->cur.startins);
-      bc_publish(patchpc, patchins);
+      /* Root publication and VM/blacklist despecialization are competing
+      ** terminal transitions from this exact original generation. Never
+      ** overwrite ILOOP/IITERL/IFUNCF, or ISNEXT's terminal ITERC, with a
+      ** trace compiled for the superseded instruction. The VM wrapper is also
+      ** the deterministic collision point used by the regression fixture. */
+      {
+	BCIns observed = lj_bc_publish_cas_vm(patchpc, J->cur.startins,
+					    patchins);
+	root_patch_lost = observed != patchins;
+      }
     }
     break;
   case BC_JMP:
@@ -3154,6 +3386,31 @@ static int trace_stop(jit_State *J)
     break;
   }
 
+  if (LJ_UNLIKELY(root_patch_lost)) {
+    /* trace_save() already published the body and prototype root. Preserve it
+    ** for abort-event inspection, but gate native entry before invoking user
+    ** code. Ordinary abort consumers (notably jit.dump's aborted-IR mode) expect
+    ** jit.util.trace* to resolve the trace during the callback. The callback may
+    ** reentrantly flush it, so resolve the exact slot again before cleanup. */
+    (void)trace_entry_mark_invalidated(T);
+    lj_vmevent_send_l(J->L, TRACE,
+      setstrV(V, V->top++, lj_str_newlit(V, "abort"));
+      setintV(V->top++, traceno);
+      setfuncV(V, V->top++, J->fn);
+      setintV(V->top++, proto_bcpos(pt, pc));
+      setintV(V->top++, LJ_TRERR_RETRY);
+      setnilV(V->top++);
+    );
+    lj_gc2_smr_read_enter(g);
+    {
+      GCtrace *live = traceref_safe(J, traceno);
+      if (live == T && trace_traceno_acq(live) == traceno)
+	trace_scope_clear_slot(J, traceno, live, lj_gc2_retire_epoch(g));
+    }
+    lj_gc2_smr_read_leave(g);
+    return 0;
+  }
+
   lj_vmevent_send_l(J->L, TRACE,
     setstrV(V, V->top++, lj_str_newlit(V, "stop"));
     setintV(V->top++, traceno);
@@ -3174,10 +3431,12 @@ static int trace_stop(jit_State *J)
 /* Start a new root trace for down-recursion. */
 static int trace_downrec(jit_State *J)
 {
+  BCIns ins;
   /* Restart recording at the return instruction. */
   lj_assertJ(J->pt != NULL, "no active prototype");
-  lj_assertJ(bc_isret(bc_op(*J->pc)), "not at a return bytecode");
-  if (bc_op(*J->pc) == BC_RETM)
+  ins = (BCIns)la_load32_acq((const uint32_t *)J->pc);
+  lj_assertJ(bc_isret(bc_op(ins)), "not at a return bytecode");
+  if (bc_op(ins) == BC_RETM)
     return 0;  /* NYI: down-recursion with RETM. */
   J->parent = 0;
   J->exitno = 0;
@@ -3195,6 +3454,7 @@ static int trace_abort(jit_State *J)
   TraceNo traceno;
 
   J->postproc = LJ_POST_NONE;
+  J->root_startins_pending = 0;
   lj_mcode_abort(J);
   if (J->curfinal) {
     lj_trace_free_unpublished(J2G(J), J->curfinal);
@@ -3293,8 +3553,13 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 	GCtrace *T;
 	lj_gc2_smr_read_enter(J2G(J));
 	T = traceref_safe(J, traceno);
-	if (trace_runnable_acq(T, traceno))
-	  bc_publish(J->patchpc, patchins);
+	if (trace_runnable_acq(T, traceno)) {
+	  BCIns expected = trace_startins_acq(T);
+	  /* A failed ISNEXT may have terminally despecialized ITERN while the
+	  ** recorder used a temporary original instruction. Never resurrect the
+	  ** saved JLOOP over that newer ITERC generation. */
+	  (void)bc_publish_cas(J->patchpc, (uint32_t *)&expected, patchins);
+	}
 	lj_gc2_smr_read_leave(J2G(J));
       } else {
 	bc_publish(J->patchpc, patchins);
@@ -3457,6 +3722,7 @@ void lj_trace_abort_owner(lua_State *L)
   J->patchpc = NULL;
   J->patchins = 0;
   J->bcskip = 0;
+  J->root_startins_pending = 0;
   J->mergesnap = 0;
   J->needsnap = 0;
   J->guardemit.irt = 0;
@@ -3765,6 +4031,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   TraceNo parent = J->parent;
   ExitNo exitno = J->exitno;
 #endif
+  trace_test_note_exit(parent, exitno);
 #if LJ_TARGET_X64
   /* Error unwind publishes exitcode in the currently executing TG, not in the
   ** lua_State's migratable owner hint. A coroutine can move between TGs after
@@ -3887,40 +4154,58 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   }
   /* Return MULTRES or 0 or -17. */
   ERRNO_RESTORE
-  switch (bc_op(*pc)) {
-  case BC_CALLM: case BC_CALLMT:
-    return (int)((BCReg)(L->top - L->base) - bc_a(*pc) - bc_c(*pc) - LJ_FR2);
-  case BC_RETM:
-    return (int)((BCReg)(L->top - L->base) + 1 - bc_a(*pc) - bc_d(*pc));
-  case BC_TSETM:
-    return (int)((BCReg)(L->top - L->base) + 1 - bc_a(*pc));
-  case BC_JLOOP: {
-    TraceNo targetno = bc_d(*pc);
-    GCtrace *target;
-    BCIns startins;
-    lj_gc2_smr_read_enter(g);
-    target = traceref_safe(J, targetno);
-    if (!trace_runnable_acq(target, targetno) || trace_startpc_acq(target) != pc) {
+  {
+    BCIns exitins = (BCIns)la_load32_acq((const uint32_t *)pc);
+    switch (bc_op(exitins)) {
+    case BC_CALLM: case BC_CALLMT:
+      return (int)((BCReg)(L->top - L->base) -
+		   bc_a(exitins) - bc_c(exitins) - LJ_FR2);
+    case BC_RETM:
+      return (int)((BCReg)(L->top - L->base) + 1 -
+		   bc_a(exitins) - bc_d(exitins));
+    case BC_TSETM:
+      return (int)((BCReg)(L->top - L->base) + 1 - bc_a(exitins));
+    case BC_JLOOP: {
+      TraceNo targetno = bc_d(exitins);
+      GCtrace *target;
+      BCIns startins;
+      lj_gc2_smr_read_enter(g);
+      target = traceref_safe(J, targetno);
+      if (!trace_runnable_acq(target, targetno) ||
+	  trace_startpc_acq(target) != pc) {
+	lj_gc2_smr_read_leave(g);
+	return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
+      }
+      startins = trace_startins_acq(target);
       lj_gc2_smr_read_leave(g);
-      return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
+      if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {
+	/* Dispatch to original ins to ensure forward progress. */
+	/* Only the exact recorder owner may use token-private temporary patch
+	** state. A peer TG, another coroutine on the owner's TG, or nested GC/VM
+	** event execution redispatches the immutable original statically instead;
+	** none may overwrite the active recorder's patchpc/patchins/bcskip. */
+	if (lj_trace_state_load(J) != LJ_TRACE_RECORD ||
+	    !lj_jit_token_held_l(L, J) || jit_owner_l_acq(J) != L ||
+	    (hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT)) != 0)
+	  return -17;
+	/* Unpatch only the trace generation validated above. ISNEXT may have
+	** terminally installed ITERC while this exit recovered metadata. */
+	{
+	  BCIns expected = exitins;
+	  if (bc_publish_cas(pc, (uint32_t *)&expected, startins)) {
+	    J->patchins = exitins;
+	    J->patchpc = (BCIns *)pc;
+	    J->bcskip = 1;
+	  }
+	}
+      }
+      return 0;
     }
-    startins = trace_startins_acq(target);
-    lj_gc2_smr_read_leave(g);
-    if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {
-      /* Dispatch to original ins to ensure forward progress. */
-      if (lj_trace_state_load(J) != LJ_TRACE_RECORD) return -17;
-      /* Unpatch bytecode when recording. */
-      J->patchins = *pc;
-      J->patchpc = (BCIns *)pc;
-      bc_publish(J->patchpc, startins);
-      J->bcskip = 1;
+    default:
+      if (bc_isfunc_or_ff(bc_op(exitins)))
+	return (int)((BCReg)(L->top - L->base) + 1);
+      return 0;
     }
-    return 0;
-  }
-  default:
-    if (bc_isfunc_or_ff(bc_op(*pc)))
-      return (int)((BCReg)(L->top - L->base) + 1);
-    return 0;
   }
 }
 

@@ -37,8 +37,10 @@ whenever a shared field is introduced or migrated.
 | J->retiredmcode | retired mcode records | CAS rel/acq; retire epoch store rel; free after `LJ_FLUSH_EPOCHS` completed epochs |
 | J->retiredtraces / GCtrace.retired_next | token-owned tagged retired trace bodies | head CAS/exchange acq_rel; embedded link rel/acq; free only under token + zero-reader gate after `LJ_FLUSH_EPOCHS` |
 | GCtrace.retire_epoch | trace-entry retirement gate | token-owned CAS acq_rel of encoded epoch + 1; zero means live |
+| GCtrace.unused1 entry-gate bits | trace metadata flags | `TRACE_SCOPE_FLUSH_PENDING` and `TRACE_ENTRY_INVALIDATED` publish by byte CAS acq_rel and VM/C entry loads acq; invalidation gates entry only, while scoped pending authorizes dependency closure + `EXIT_TRACES` retirement; exittab ownership remains an independent relaxed bit |
 | g->vmevent_owner | VM-event callback owner TG id | one nonwaiting CAS acq_rel; exact-owner CAS release to zero |
-| BCIns at patch sites | code word | single 32-bit store rel (`bc_publish`) |
+| BCIns at patch sites | generation word | one 32-bit load acq snapshot; idempotent single-writer transitions store rel; competing semantic transitions use exact full-word CAS acq_rel (`bc_publish_cas`), with immutable prototype sidecars for stale JIT recovery |
+| GCproto.jit_startins[i] | immutable original-bytecode recovery sidecar | zero at prototype construction; publish the complete original word rel before the first J* publication; load acq after observing J*; a nonzero slot may only be republished identically and lives with the prototype |
 | GCtrace.exittab[i] | retarget word | store rel; loaded by indirect branch in mcode |
 | L->thr_owner | claim word | CAS acq_rel |
 | g->str.tabh | RCU pointer | acq / rel |

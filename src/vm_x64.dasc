@@ -3000,7 +3000,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jne >7
   |  cmp aword TRACE:RA->retire_epoch, 0
   |  jne >7
-  |  test byte TRACE:RA->unused1, TRACE_SCOPE_FLUSH_PENDING
+  |  test byte TRACE:RA->unused1, TRACE_ENTRY_GATED
   |  jnz >7
   |  lea RC, [PC-4]
   |  cmp aword TRACE:RA->startpc, RC
@@ -5652,7 +5652,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [BASE+RA*8-8], ITYPE		// Update control var.
     |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
     |2:
-    |  movzx RDd, PC_RD			// Get target from ITERL.
+    |  // ITERL/JITERL publication replaces the complete following word. A
+    |  // stale ITERN may reach here after a peer despecialized the loop.
+    |  mov RCd, [PC-4]
+    |  movzx RAd, RCH
+    |  movzx OP, RCL
+    |  shr RCd, 16
+    |  cmp OP, BC_JITERL
+    |  je =>BC_JITERL
     |  branchPC RD
     |  cmp TGPOLL, 0
     |  jnz ->vm_safepoint
@@ -5748,45 +5755,66 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |1:
     |  ins_next
     |5:  // Despecialize bytecode if any of the checks fail.
-    |  mov RB, BASE			// Save BASE.
-    |  lea CARG1, [PC-4]
-    |  mov CARG2d, BC_JMP
-    |  call extern lj_bc_publish_op_vm	// (uint32_t *pc, BCOp op)
-    |  mov BASE, RB			// Restore BASE.
+    |  mov RB, PC
+    |  sub RB, 4			// Preserve the ISNEXT PC across target recovery.
+    |  mov L:RA, SAVE_L
+    |  mov L:RA->base, BASE
     |  movzx RDd, PC_RD
     |  branchPC RD
     |.if JIT
-    |  cmp byte [PC], BC_ITERN
+    |2:  // Despecialize only the exact target generation we inspected.
+    |  mov RCd, [PC]
+    |  cmp RCL, BC_ITERC
+    |  je >8
+    |  cmp RCL, BC_ITERN
     |  jne >6
-    |.endif
-    |  mov RB, BASE			// Save BASE.
+    |  mov CARG2d, RCd
+    |  mov al, BC_ITERC
+    |  mov CARG3d, RCd
+    |  mov CARG1, PC
+    |  call extern lj_bc_publish_cas_vm	// (pc, expected, desired)
+    |  cmp al, BC_ITERC
+    |  jne <2
+    |  jmp >8
+    |6:  // Recover ITERN and gate the exact published trace before replacement.
+    |  cmp RCL, BC_JLOOP
+    |  jne >9
+    |  mov TMP1d, RCd			// Exact JLOOP generation for the CAS.
+    |  mov L:CARG4, SAVE_L
+    |  load_J CARG1
+    |  mov CARG2, PC
+    |  mov CARG3d, RCd
+    |  shr CARG3d, 16
+    |  call extern lj_trace_invalidate_itern
+    |  cmp eax, -1
+    |  je >7
+    |  test eax, eax
+    |  jz >7
+    |  cmp al, BC_ITERN
+    |  jne >7
+    |  mov al, BC_ITERC
+    |  mov CARG3d, eax
+    |  mov CARG2d, TMP1d
+    |  mov CARG1, PC
+    |  call extern lj_bc_publish_cas_vm	// (pc, expected, desired)
+    |  cmp al, BC_ITERC
+    |  jne <2
+    |  jmp >8
+    |7:
+    |  jmp <2
+    |.else
     |  mov CARG1, PC
     |  mov CARG2d, BC_ITERC
     |  call extern lj_bc_publish_op_vm	// (uint32_t *pc, BCOp op)
-    |  mov BASE, RB			// Restore BASE.
-    |  jmp <1
-    |.if JIT
-    |6:  // Recover the original ITERN without touching TraceVec/trace bodies.
-    |  mov RB, BASE
-    |  mov L:CARG4, SAVE_L
-    |  mov L:CARG4->base, BASE
-    |  load_J CARG1
-    |  mov CARG2, PC
-    |  movzx CARG3d, word [PC+2]
-    |  call extern lj_trace_stale_startins
-    |  mov BASE, RB
-    |  cmp eax, -1
-    |  je <6
-    |  test eax, eax
-    |  jz <6
-    |  mov al, BC_ITERC
-    |  mov RB, BASE			// Save BASE.
-    |  mov CARG1, PC
-    |  mov CARG2d, eax
-    |  call extern lj_bc_publish_vm	// (uint32_t *pc, uint32_t ins)
-    |  mov BASE, RB			// Restore BASE.
-    |  jmp <1
     |.endif
+    |8:  // Publish JMP only after the target is observably generic.
+    |  mov CARG1, RB
+    |  mov CARG2d, BC_JMP
+    |  call extern lj_bc_publish_op_vm	// (uint32_t *pc, BCOp op)
+    |9:
+    |  mov L:RA, SAVE_L
+    |  mov BASE, L:RA->base
+    |  jmp <1
     break;
 
   case BC_VARG:
@@ -6205,7 +6233,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne >3
     |  cmp aword TRACE:RD->retire_epoch, 0
     |  jne >8
-  |  test byte TRACE:RD->unused1, TRACE_SCOPE_FLUSH_PENDING
+  |  test byte TRACE:RD->unused1, TRACE_ENTRY_GATED
   |  jnz >8
   |  lea RA, [PC-4]
   |  cmp aword TRACE:RD->startpc, RA
@@ -6363,7 +6391,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne >7
     |  cmp aword TRACE:RD->retire_epoch, 0
     |  jne >7
-    |  test byte TRACE:RD->unused1, TRACE_SCOPE_FLUSH_PENDING
+    |  test byte TRACE:RD->unused1, TRACE_ENTRY_GATED
     |  jnz >7
     |  lea RA, [PC-4]
     |  cmp aword TRACE:RD->startpc, RA
