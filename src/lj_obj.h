@@ -1623,6 +1623,7 @@ typedef struct GC2State {
   uint64_t thread_scan_owner_scans;  /* Busy stacks covered by owner scans. */
   uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
   uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
+  LJ_ALIGN(16) LJGC2TableDesc table_rescan_desc;  /* Dormant helpable handoff. */
   uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
   uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */

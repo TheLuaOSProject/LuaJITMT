@@ -1507,6 +1507,7 @@ void lj_gc2_init(global_State *g)
   if (!lj_gc2_activation_init_unpublished(&g->gc2.activation, 0, 0,
                                            LJ_GC2_ACT_IDLE))
     abort();  /* Constant unpublished IDLE/OPEN authority must be representable. */
+  lj_gc2_tabledesc_init_unpublished(&g->gc2.table_rescan_desc, 0);
   gc2_phase_store_rlx(g, LJ_GC2_IDLE);
   gc2_cycle_store_rlx(g, 0);
   gc2_thread_scan_cycle_store_rlx(g, 0);
@@ -14012,14 +14013,6 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
   }
 }
 
-typedef struct GC2TabStamp {
-  uint64_t state;  /* Low 32 bits: dirty epoch, high 32 bits: scan cycle. */
-} GC2TabStamp;
-
-typedef struct GC2TabStampArena {
-  GC2TabStamp cell[LJ_ARENA_CELLS];
-} GC2TabStampArena;
-
 static LJ_AINLINE uint64_t gc2_tabstamp_pack(uint32_t cycle, uint32_t dirty)
 {
   return ((uint64_t)cycle << 32) | (uint64_t)dirty;
@@ -14035,40 +14028,17 @@ static LJ_AINLINE uint32_t gc2_tabstamp_cycle(uint64_t state)
   return (uint32_t)(state >> 32);
 }
 
-static GC2TabStamp *gc2_table_stamp(global_State *g, GCtab *t, int create)
+static LJGC2TabStamp *gc2_table_stamp(global_State *g, GCtab *t)
 {
-  GC2TabStampArena *tab;
-  GCArena *a;
-  uint32_t cell;
   if (!g || !t || g->allocf != lj_arena_allocf)
     return NULL;
-  a = lj_arena_of(t);
-  if (lj_arena_ishuge(a))
-    return NULL;
-  cell = lj_arena_cellof(t);
-  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
-    return NULL;
-  tab = (GC2TabStampArena *)lj_arena_gc2_tabstamp_acq(a);
-  if (!tab && create) {
-    GC2TabStampArena *fresh;
-    void *old = NULL;
-    fresh = (GC2TabStampArena *)calloc(1, sizeof(GC2TabStampArena));
-    if (!fresh)
-      return NULL;
-    if (lj_arena_gc2_tabstamp_cas(a, &old, fresh)) {
-      tab = fresh;
-    } else {
-      free(fresh);
-      tab = (GC2TabStampArena *)old;
-    }
-  }
-  return tab ? &tab->cell[cell] : NULL;
+  return lj_arena_gc2_stamp_acq(t);
 }
 
 static LJ_AINLINE uint32_t gc2_table_dirty_epoch(global_State *g, GCtab *t,
 						 int *stamped)
 {
-  GC2TabStamp *s = gc2_table_stamp(g, t, 1);
+  LJGC2TabStamp *s = gc2_table_stamp(g, t);
   if (stamped)
     *stamped = s != NULL;
   return s ? gc2_tabstamp_dirty(la_load64_acq(&s->state)) : 0;
@@ -14077,7 +14047,7 @@ static LJ_AINLINE uint32_t gc2_table_dirty_epoch(global_State *g, GCtab *t,
 static LJ_AINLINE int gc2_table_scan_publish(global_State *g, GCtab *t,
 					     uint32_t cycle, uint32_t dirty)
 {
-  GC2TabStamp *s = gc2_table_stamp(g, t, 0);
+  LJGC2TabStamp *s = gc2_table_stamp(g, t);
   uint64_t old;
   if (!s)
     return 0;
@@ -14094,7 +14064,7 @@ static LJ_AINLINE int gc2_table_scan_publish(global_State *g, GCtab *t,
 
 static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t)
 {
-  GC2TabStamp *s = gc2_table_stamp(g, t, 1);
+  LJGC2TabStamp *s = gc2_table_stamp(g, t);
   uint64_t old;
   if (!s)
     return;
@@ -16261,14 +16231,14 @@ void lj_gc2_test_table_rescan_stale_hint_clear(global_State *g, GCtab *t)
 
 static LJ_AINLINE int gc2_table_scan_current(global_State *g, GCtab *t)
 {
-  GC2TabStamp *s;
+  LJGC2TabStamp *s;
   uint32_t cycle;
   if (!g || !t)
     return 0;
   cycle = gc2_cycle_acq(g);
   if (cycle == 0)
     return 0;
-  s = gc2_table_stamp(g, t, 0);
+  s = gc2_table_stamp(g, t);
   return s && gc2_tabstamp_cycle(la_load64_acq(&s->state)) == cycle;
 }
 

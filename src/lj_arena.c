@@ -63,6 +63,7 @@ static void arena_test_plain_claim_pause_after_close(void);
 static void arena_test_plain_admit_pause_after_enter(void);
 static void arena_test_remote_publish_pause_after_queue(void);
 static void arena_test_remote_drain_pause_after_clear(void);
+static int arena_test_gc2_sidecar_alloc_fails(void);
 static void hugetab_test_realloc_pause_after_busy(void);
 #define arena_test_remote_fast_skip() \
   ((void)la_add64_rlx(&arena_test_remote_fast_skip_count, 1))
@@ -75,6 +76,7 @@ static void hugetab_test_realloc_pause_after_busy(void);
 #define arena_test_remote_drain_pause_after_clear() ((void)0)
 #define arena_test_remote_fast_skip() ((void)0)
 #define arena_test_remote_arena_probe() ((void)0)
+#define arena_test_gc2_sidecar_alloc_fails() 0
 #endif
 
 static LJ_AINLINE uint64_t arena_remote_count(uint64_t active)
@@ -1035,6 +1037,7 @@ static uint32_t arena_test_remote_drain_pause_seen;
 static uint64_t arena_test_remote_fast_skip_count;
 static uint64_t arena_test_remote_arena_probe_count;
 static uint64_t arena_test_adopt_whole_count;
+static uint32_t arena_test_gc2_sidecar_fail_alloc_flag;
 
 void lj_arena_hugetab_test_realloc_pause(int enabled)
 {
@@ -1231,6 +1234,16 @@ uint64_t lj_arena_test_remote_arena_probes(void)
 uint64_t lj_arena_test_adopt_whole_count(void)
 {
   return la_load64_acq(&arena_test_adopt_whole_count);
+}
+
+void lj_arena_test_gc2_sidecar_fail_alloc(int enabled)
+{
+  la_store32_rel(&arena_test_gc2_sidecar_fail_alloc_flag, enabled != 0);
+}
+
+static int arena_test_gc2_sidecar_alloc_fails(void)
+{
+  return la_load32_acq(&arena_test_gc2_sidecar_fail_alloc_flag) != 0;
 }
 #else
 #define hugetab_test_retire_pause_after_busy() ((void)0)
@@ -1521,11 +1534,26 @@ static void arena_os_unmap(void *p, size_t size)
 
 GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
 {
+  int olderr = errno;
   GCArena *a = (GCArena *)arena_map_aligned(rs, LJ_ARENA_SIZE);
   if (a) {
+    LJGC2TabStampArena *side = NULL;
     memset(a, 0, sizeof(*a));
     a->hdr.flags = flags & LJ_AF_FLAG_MASK;
+    if (flags & LJ_AF_TRAVERSABLE) {
+      if (!arena_test_gc2_sidecar_alloc_fails())
+	side = (LJGC2TabStampArena *)calloc(1, sizeof(*side));
+      if (!side) {
+	arena_unmap_aligned((void *)a, LJ_ARENA_SIZE);
+	errno = olderr;
+	return NULL;
+      }
+      /* The arena is still private; release publication pairs with stamp
+      ** lookup and also makes the initialization rule explicit. */
+      la_storeptr_rel((void **)&a->hdr.gc2_tabstamp, side);
+    }
   }
+  errno = olderr;
   return a;
 }
 
@@ -1570,10 +1598,37 @@ static void arena_unmap_abandon(GCArena *a, uint64_t restore)
   UNUSED(restored);
 }
 
+int lj_arena_gc2_tokens_empty_acq(const GCArena *a)
+{
+  LJGC2TabStampArena *side;
+  uint32_t flags, cell;
+  if (!a)
+    return 0;
+  flags = lj_arena_flags_acq(a);
+  if ((flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC) {
+    uint64_t control = la_load64_acq(&a->hdr.huge_tabstamp.token.control);
+    return lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE;
+  }
+  side = lj_arena_gc2_tabstamp_acq(a);
+  if (!(flags & LJ_AF_TRAVERSABLE))
+    return side == NULL;
+  /* A traversable mapping without its eagerly published sidecar violates the
+  ** mapping invariant. Fail closed rather than erase a possible token. */
+  if (!side)
+    return 0;
+  for (cell = 0; cell < LJ_ARENA_CELLS; cell++) {
+    uint64_t control = la_load64_acq(&side->cell[cell].token.control);
+    if (lj_gc2_table_token_state(control) != LJ_GC2_TABLE_TOKEN_NONE)
+      return 0;
+  }
+  return 1;
+}
+
 static LJ_AINLINE int arena_unmap_side_empty(const GCArena *a)
 {
   return a && lj_arena_recovery_empty(a) && arena_root_empty(a) &&
-    lj_arena_lifetime_empty(a) && arena_dtor_empty(a);
+    lj_arena_lifetime_empty(a) && arena_dtor_empty(a) &&
+    lj_arena_gc2_tokens_empty_acq(a);
 }
 
 static void arena_unmap_claimed(GCArena *a)
@@ -5188,9 +5243,10 @@ static GCArena *arena_unmap_list(TGAlloc *alloc, GCArena *a)
     if (claimed) {
       /* Allocator fini is the quiescent terminal owner. Live/constructor
       ** lifetime lanes no longer have a semantic consumer and may be discarded
-      ** with the mapping; recovery/root work remains an external owner and
-      ** must still drain explicitly. */
+      ** with the mapping; recovery/root work and exact table-rescan tokens
+      ** remain external owners and must still drain explicitly. */
       if (lj_arena_recovery_empty(a) && arena_root_empty(a) &&
+	  lj_arena_gc2_tokens_empty_acq(a) &&
 	  arena_registry_delete(alloc, a)) {
 	arena_unmap_claimed(a);
 	unmapped = 1;

@@ -37,12 +37,21 @@ int main(void)
     assert((mapsize & LJ_ARENA_MASK) == 0);
     assert((uintptr_t)a % LJ_ARENA_SIZE == 0);
     assert((char *)p == (char *)a + sizeof(GCAhdr));
+    assert(sizeof(GCAhdr) == 128u);
+    assert(sizeof(LJGC2TabStamp) == 16u);
+    assert(offsetof(GCAhdr, huge_tabstamp) == 104u);
     assert(checkptrGC(p));
     assert(checkptrGC((char *)a + mapsize - 1u));
     assert(lj_arena_ishuge(a));
     assert((a->hdr.flags & flags) == flags);
     assert((a->hdr.flags & LJ_AF_TRAVERSABLE) == flags);
     assert(a->hdr.live_cells == (uint32_t)(mapsize >> LJ_CELL_SHIFT));
+    assert(lj_arena_gc2_stamp_acq(p) == &a->hdr.huge_tabstamp);
+    assert(la_load64_acq(&a->hdr.huge_tabstamp.state) == 0);
+    assert(lj_gc2_table_token_state(
+	     la_load64_acq(&a->hdr.huge_tabstamp.token.control)) ==
+	   LJ_GC2_TABLE_TOKEN_NONE);
+    assert(lj_arena_gc2_tokens_empty_acq(a));
     memset(p, 0x31 + (int)i, size);
     assert(((uint8_t *)p)[0] == (uint8_t)(0x31 + i));
     assert(((uint8_t *)p)[size - 1u] == (uint8_t)(0x31 + i));

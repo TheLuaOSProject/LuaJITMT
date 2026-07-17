@@ -522,6 +522,399 @@ static void test_concurrent_close_pending_commit(void)
   assert(final.gate == LJ_GC2_ROOT_GATE_PENDING);
 }
 
+typedef struct TableTokenCompleteArg {
+  LJGC2TableToken *token;
+  LJGC2TableTokenTicket ticket;
+  uint32_t *ready;
+  uint32_t *go;
+  LJGC2TableTokenResult result;
+} TableTokenCompleteArg;
+
+static void *table_token_complete_thread(void *ud)
+{
+  TableTokenCompleteArg *arg = (TableTokenCompleteArg *)ud;
+  (void)la_add32_acqrel(arg->ready, 1);
+  while (!la_load32_acq(arg->go))
+    la_cpu_pause();
+  arg->result = lj_gc2_table_token_complete(arg->token, &arg->ticket);
+  return NULL;
+}
+
+static void test_table_descriptor_and_token_primitives(void)
+{
+  LJGC2TableDesc desc, fake_table[2];
+  LJGC2TableDescSnap snap, observed;
+  LJGC2TableDescTicket first, second;
+  LJGC2TableToken token;
+  LJGC2TableTokenTicket token_first, token_second, token_third;
+  TableTokenCompleteArg arg[2];
+  pthread_t thread[2];
+  uint32_t ready = 0, go = 0;
+  uint64_t control;
+
+  lj_gc2_tabledesc_init_unpublished(&desc, 7);
+  snap = lj_gc2_tabledesc_snapshot(&desc);
+  assert(snap.state == LJ_GC2_TABLEDESC_IDLE && snap.generation == 7);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table[0], &first,
+           &observed) == LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+         observed.table == (uintptr_t)&fake_table[0] &&
+         observed.generation == 8);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table[1], &second,
+           &observed) == LJ_GC2_TABLEDESC_RESULT_BUSY);
+  assert(observed.table == first.table &&
+         observed.generation == first.generation);
+  assert(lj_gc2_tabledesc_finish_help(&desc, &first, &observed) ==
+         LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(observed.state == LJ_GC2_TABLEDESC_IDLE &&
+         observed.generation == 8);
+
+  /* Reusing the same table address changes generation. A delayed exact helper
+  ** cannot clear the new descriptor with its prior ticket. */
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table[0], &second,
+           NULL) == LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(second.generation == first.generation + 1u);
+  assert(lj_gc2_tabledesc_finish_help(&desc, &first, &observed) ==
+         LJ_GC2_TABLEDESC_RESULT_BUSY);
+  assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+         observed.generation == second.generation);
+  assert(lj_gc2_tabledesc_finish_help(&desc, &second, NULL) ==
+         LJ_GC2_TABLEDESC_RESULT_OK);
+
+  /* Malformed stored authority and generation saturation fail closed. */
+  desc.value.lo = 3;
+  desc.value.hi = 19;
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table[0], &second,
+           &observed) == LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(observed.state == LJ_GC2_TABLEDESC_PINNED &&
+         observed.generation == 19);
+  lj_gc2_tabledesc_init_unpublished(&desc, UINT64_MAX);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table[0], &second,
+           &observed) == LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(observed.state == LJ_GC2_TABLEDESC_PINNED &&
+         observed.generation == UINT64_MAX);
+  lj_gc2_tabledesc_init_unpublished(&desc, 0);
+  assert(lj_gc2_tabledesc_try_publish(&desc, (void *)(uintptr_t)3, &second,
+           NULL) == LJ_GC2_TABLEDESC_RESULT_INVALID);
+  assert(lj_gc2_tabledesc_snapshot(&desc).state == LJ_GC2_TABLEDESC_IDLE);
+  second.table = (uint64_t)(uintptr_t)&fake_table[0];
+  second.generation = 20;
+  desc.value.lo = 3;
+  desc.value.hi = 20;
+  assert(lj_gc2_tabledesc_finish_help(&desc, &second, &observed) ==
+         LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(observed.state == LJ_GC2_TABLEDESC_PINNED);
+
+  assert(lj_gc2_table_token_init_unpublished(&token, 7));
+  assert(lj_gc2_table_token_refresh(&token, &token_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_capture_pending(&token, &token_third) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(token_third.control == token_first.control);
+  assert(lj_gc2_table_token_generation(token_first.control) == 8 &&
+         lj_gc2_table_token_state(token_first.control) ==
+           LJ_GC2_TABLE_TOKEN_PENDING);
+  assert(lj_gc2_table_token_refresh(&token, &token_second) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_generation(token_second.control) == 9);
+  assert(lj_gc2_table_token_complete(&token, &token_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_BUSY);
+  assert(lj_gc2_table_token_complete(&token, &token_second) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&token.control);
+  assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE &&
+         lj_gc2_table_token_generation(control) == 10);
+  assert(lj_gc2_table_token_refresh(&token, &token_third) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_generation(token_third.control) == 11);
+  assert(lj_gc2_table_token_complete(&token, &token_second) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_BUSY);
+
+  /* Two scanners may share one captured generation, but only one exact clear
+  ** wins and advances it to NONE. */
+  memset(arg, 0, sizeof(arg));
+  arg[0].token = arg[1].token = &token;
+  arg[0].ticket = arg[1].ticket = token_third;
+  arg[0].ready = arg[1].ready = &ready;
+  arg[0].go = arg[1].go = &go;
+  assert(pthread_create(&thread[0], NULL, table_token_complete_thread,
+                        &arg[0]) == 0);
+  assert(pthread_create(&thread[1], NULL, table_token_complete_thread,
+                        &arg[1]) == 0);
+  while (la_load32_acq(&ready) != 2)
+    la_cpu_pause();
+  la_store32_rel(&go, 1);
+  assert(pthread_join(thread[0], NULL) == 0);
+  assert(pthread_join(thread[1], NULL) == 0);
+  assert((arg[0].result == LJ_GC2_TABLE_TOKEN_RESULT_OK) +
+         (arg[1].result == LJ_GC2_TABLE_TOKEN_RESULT_OK) == 1);
+  assert((arg[0].result == LJ_GC2_TABLE_TOKEN_RESULT_BUSY) +
+         (arg[1].result == LJ_GC2_TABLE_TOKEN_RESULT_BUSY) == 1);
+
+  assert(lj_gc2_table_token_init_unpublished(
+           &token, LJ_GC2_TABLE_TOKEN_MAX_GENERATION - 1u));
+  assert(lj_gc2_table_token_refresh(&token, &token_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_generation(token_first.control) ==
+         LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+  assert(lj_gc2_table_token_complete(&token, &token_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED);
+  assert(lj_gc2_table_token_refresh(&token, &token_second) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED);
+  token_first.control = lj_gc2_table_token_pack(
+    5, LJ_GC2_TABLE_TOKEN_PENDING);
+  token.control = lj_gc2_table_token_pack(5, LJ_GC2_TABLE_TOKEN_INVALID);
+  assert(lj_gc2_table_token_complete(&token, &token_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED);
+  token.control = lj_gc2_table_token_pack(5, LJ_GC2_TABLE_TOKEN_INVALID);
+  assert(lj_gc2_table_token_refresh(&token, &token_second) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED);
+  assert(lj_gc2_table_token_state(la_load64_acq(&token.control)) ==
+         LJ_GC2_TABLE_TOKEN_PINNED);
+}
+
+enum { TABLEDESC_STRESS_ITERATIONS = 10000, TABLEDESC_STRESS_READERS = 4 };
+
+typedef struct TableDescStress {
+  LJGC2TableDesc desc;
+  LJGC2TableDesc identity[2];
+  uint64_t active_ack;
+  uint32_t ready;
+  uint32_t go;
+  uint32_t published;
+  uint32_t completed;
+  uint32_t done;
+  uint32_t active_seen;
+} TableDescStress;
+
+static void tabledesc_stress_ack(TableDescStress *stress,
+                                 uint64_t generation)
+{
+  uint64_t old = la_load64_acq(&stress->active_ack);
+  while (old < generation &&
+         !la_cas64(&stress->active_ack, &old, generation,
+                   LA_ACQ_REL, LA_ACQ))
+    ;
+}
+
+static void *tabledesc_stress_publisher(void *ud)
+{
+  TableDescStress *stress = (TableDescStress *)ud;
+  uint32_t i;
+  (void)la_add32_acqrel(&stress->ready, 1);
+  while (!la_load32_acq(&stress->go))
+    la_cpu_pause();
+  for (i = 0; i < TABLEDESC_STRESS_ITERATIONS; i++) {
+    LJGC2TableDescSnap observed;
+    LJGC2TableDescTicket ticket;
+    while (la_load32_acq(&stress->completed) != i)
+      la_cpu_pause();
+    assert(lj_gc2_tabledesc_try_publish(&stress->desc,
+             &stress->identity[i & 1u], &ticket, &observed) ==
+           LJ_GC2_TABLEDESC_RESULT_OK);
+    assert(ticket.table == (uint64_t)(uintptr_t)&stress->identity[i & 1u]);
+    assert(ticket.generation == (uint64_t)i + 1u);
+    assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+           observed.table == (uintptr_t)&stress->identity[i & 1u] &&
+           observed.generation == (uint64_t)i + 1u);
+    la_store32_rel(&stress->published, i + 1u);
+  }
+  while (la_load32_acq(&stress->completed) !=
+         TABLEDESC_STRESS_ITERATIONS)
+    la_cpu_pause();
+  la_store32_rel(&stress->done, 1);
+  return NULL;
+}
+
+static void *tabledesc_stress_helper(void *ud)
+{
+  TableDescStress *stress = (TableDescStress *)ud;
+  LJGC2TableDescTicket stale[2];
+  uint32_t i;
+  memset(stale, 0, sizeof(stale));
+  (void)la_add32_acqrel(&stress->ready, 1);
+  while (!la_load32_acq(&stress->go))
+    la_cpu_pause();
+  for (i = 0; i < TABLEDESC_STRESS_ITERATIONS; i++) {
+    LJGC2TableDescSnap snap, observed;
+    LJGC2TableDescTicket current;
+    unsigned identity = i & 1u;
+    while (la_load32_acq(&stress->published) != i + 1u)
+      la_cpu_pause();
+    snap = lj_gc2_tabledesc_snapshot(&stress->desc);
+    assert(snap.state == LJ_GC2_TABLEDESC_ACTIVE &&
+           snap.table == (uintptr_t)&stress->identity[identity] &&
+           snap.generation == (uint64_t)i + 1u);
+    current.table = (uint64_t)snap.table;
+    current.generation = snap.generation;
+
+    /* Guarantee that a racing reader sampled this exact ACTIVE pair before
+    ** allowing the helper to clear it. */
+    while (la_load64_acq(&stress->active_ack) < current.generation)
+      la_cpu_pause();
+
+    /* Each identity is reused every other round. Its helper ticket from the
+    ** prior incarnation names the same address, but must lose on generation. */
+    if (i >= 2) {
+      assert(stale[identity].table == current.table);
+      assert(stale[identity].generation + 2u == current.generation);
+      assert(lj_gc2_tabledesc_finish_help(&stress->desc,
+               &stale[identity], &observed) ==
+             LJ_GC2_TABLEDESC_RESULT_BUSY);
+      assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+             observed.table == (uintptr_t)current.table &&
+             observed.generation == current.generation);
+    }
+    stale[identity] = current;
+    assert(lj_gc2_tabledesc_finish_help(&stress->desc, &current,
+             &observed) == LJ_GC2_TABLEDESC_RESULT_OK);
+    assert(observed.state == LJ_GC2_TABLEDESC_IDLE &&
+           observed.table == 0 &&
+           observed.generation == current.generation);
+    la_store32_rel(&stress->completed, i + 1u);
+  }
+  return NULL;
+}
+
+static void *tabledesc_stress_reader(void *ud)
+{
+  TableDescStress *stress = (TableDescStress *)ud;
+  uint64_t previous_generation = 0;
+  (void)la_add32_acqrel(&stress->ready, 1);
+  while (!la_load32_acq(&stress->go))
+    la_cpu_pause();
+  do {
+    LJGC2TableDescSnap snap = lj_gc2_tabledesc_snapshot(&stress->desc);
+    assert(snap.generation >= previous_generation &&
+           snap.generation <= TABLEDESC_STRESS_ITERATIONS);
+    if (snap.state == LJ_GC2_TABLEDESC_ACTIVE) {
+      uint64_t round;
+      assert(snap.generation != 0);
+      round = snap.generation - 1u;
+      assert(snap.table ==
+             (uintptr_t)&stress->identity[(unsigned)(round & 1u)]);
+      tabledesc_stress_ack(stress, snap.generation);
+      (void)la_add32_rlx(&stress->active_seen, 1);
+    } else {
+      assert(snap.state == LJ_GC2_TABLEDESC_IDLE && snap.table == 0);
+    }
+    previous_generation = snap.generation;
+  } while (!la_load32_acq(&stress->done));
+  return NULL;
+}
+
+static void test_concurrent_tabledesc_publish_help_reuse(void)
+{
+  TableDescStress stress;
+  pthread_t publisher, helper, readers[TABLEDESC_STRESS_READERS];
+  LJGC2TableDescSnap final;
+  unsigned i;
+
+  memset(&stress, 0, sizeof(stress));
+  lj_gc2_tabledesc_init_unpublished(&stress.desc, 0);
+  assert(((uintptr_t)&stress.desc & 15u) == 0);
+  assert(((uintptr_t)&stress.identity[0] & 15u) == 0);
+  assert(((uintptr_t)&stress.identity[1] & 15u) == 0);
+  assert(pthread_create(&publisher, NULL, tabledesc_stress_publisher,
+                        &stress) == 0);
+  assert(pthread_create(&helper, NULL, tabledesc_stress_helper,
+                        &stress) == 0);
+  for (i = 0; i < TABLEDESC_STRESS_READERS; i++)
+    assert(pthread_create(&readers[i], NULL, tabledesc_stress_reader,
+                          &stress) == 0);
+  while (la_load32_acq(&stress.ready) != TABLEDESC_STRESS_READERS + 2u)
+    la_cpu_pause();
+  la_store32_rel(&stress.go, 1);
+  assert(pthread_join(publisher, NULL) == 0);
+  assert(pthread_join(helper, NULL) == 0);
+  for (i = 0; i < TABLEDESC_STRESS_READERS; i++)
+    assert(pthread_join(readers[i], NULL) == 0);
+  final = lj_gc2_tabledesc_snapshot(&stress.desc);
+  assert(final.state == LJ_GC2_TABLEDESC_IDLE && final.table == 0 &&
+         final.generation == TABLEDESC_STRESS_ITERATIONS);
+  assert(la_load64_acq(&stress.active_ack) ==
+         TABLEDESC_STRESS_ITERATIONS);
+  assert(la_load32_acq(&stress.active_seen) >=
+         TABLEDESC_STRESS_ITERATIONS);
+}
+
+typedef struct TableDescMalformedRace {
+  LJGC2TableDesc *desc;
+  LJGC2TableDescTicket ticket;
+  LJGC2TableDescSnap observed;
+  uint32_t ready;
+  uint32_t go;
+  uint32_t captured;
+  uint32_t injected;
+  LJGC2TableDescResult result;
+} TableDescMalformedRace;
+
+static void *tabledesc_malformed_injector(void *ud)
+{
+  TableDescMalformedRace *race = (TableDescMalformedRace *)ud;
+  la_u128 expected, malformed;
+  (void)la_add32_acqrel(&race->ready, 1);
+  while (!la_load32_acq(&race->go))
+    la_cpu_pause();
+  while (!la_load32_acq(&race->captured))
+    la_cpu_pause();
+  expected.lo = race->ticket.table;
+  expected.hi = race->ticket.generation;
+  malformed.lo = 3;
+  malformed.hi = race->ticket.generation;
+  assert(la_cas128(&race->desc->value, &expected, malformed));
+  la_store32_rel(&race->injected, 1);
+  return NULL;
+}
+
+static void *tabledesc_malformed_helper(void *ud)
+{
+  TableDescMalformedRace *race = (TableDescMalformedRace *)ud;
+  LJGC2TableDescSnap captured;
+  (void)la_add32_acqrel(&race->ready, 1);
+  while (!la_load32_acq(&race->go))
+    la_cpu_pause();
+  captured = lj_gc2_tabledesc_snapshot(race->desc);
+  assert(captured.state == LJ_GC2_TABLEDESC_ACTIVE &&
+         captured.table == (uintptr_t)race->ticket.table &&
+         captured.generation == race->ticket.generation);
+  la_store32_rel(&race->captured, 1);
+  while (!la_load32_acq(&race->injected))
+    la_cpu_pause();
+  race->result = lj_gc2_tabledesc_finish_help(race->desc, &race->ticket,
+                                               &race->observed);
+  return NULL;
+}
+
+static void test_tabledesc_delayed_helper_malformed_race(void)
+{
+  LJGC2TableDesc desc, identity;
+  TableDescMalformedRace race;
+  pthread_t injector, helper;
+  LJGC2TableDescSnap snap;
+
+  memset(&race, 0, sizeof(race));
+  lj_gc2_tabledesc_init_unpublished(&desc, 31);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &identity, &race.ticket,
+           NULL) == LJ_GC2_TABLEDESC_RESULT_OK);
+  race.desc = &desc;
+  assert(pthread_create(&injector, NULL, tabledesc_malformed_injector,
+                        &race) == 0);
+  assert(pthread_create(&helper, NULL, tabledesc_malformed_helper,
+                        &race) == 0);
+  while (la_load32_acq(&race.ready) != 2)
+    la_cpu_pause();
+  la_store32_rel(&race.go, 1);
+  assert(pthread_join(injector, NULL) == 0);
+  assert(pthread_join(helper, NULL) == 0);
+  assert(race.result == LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(race.observed.state == LJ_GC2_TABLEDESC_PINNED &&
+         race.observed.generation == race.ticket.generation);
+  snap = lj_gc2_tabledesc_snapshot(&desc);
+  assert(snap.state == LJ_GC2_TABLEDESC_PINNED &&
+         snap.generation == race.ticket.generation);
+}
+
 static LJGC2RootDescSpec rootdesc_scalar_spec(uint64_t old_root,
                                               uint64_t new_root)
 {
@@ -829,6 +1222,9 @@ int main(void)
   test_activation_root_gate();
   test_root_gate_edge_policy();
   test_concurrent_close_pending_commit();
+  test_table_descriptor_and_token_primitives();
+  test_concurrent_tabledesc_publish_help_reuse();
+  test_tabledesc_delayed_helper_malformed_race();
   test_concurrent_activation_snapshots();
   test_rootdesc_scalar_lifecycle_and_aba();
   test_rootdesc_ranges_and_sticky_failure();

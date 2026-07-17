@@ -8,6 +8,7 @@
 
 #include "lj_def.h"
 #include "lj_atomic.h"
+#include "lj_gc2token.h"
 
 #define LJ_ARENA_SHIFT		16
 #define LJ_ARENA_SIZE		((uint32_t)1u << LJ_ARENA_SHIFT)
@@ -86,6 +87,20 @@ typedef struct LJHugeReader LJHugeReader;
 typedef struct LJArenaRemoteFree LJArenaRemoteFree;
 typedef struct TGAlloc TGAlloc;
 
+/* Persistent per-allocation table traversal state. The scan proof and exact
+** rescan token occupy two independently atomic 64-bit words. Small arenas
+** allocate one entry for every possible cell before publication; huge
+** allocations use the identical layout embedded in their mapping header.
+** Token generations deliberately survive small-cell free/reuse. */
+typedef struct LJGC2TabStamp {
+  uint64_t state;  /* Low 32 bits: dirty epoch, high 32 bits: scan cycle. */
+  LJGC2TableToken token;
+} LJGC2TabStamp;
+
+typedef struct LJGC2TabStampArena {
+  LJGC2TabStamp cell[LJ_ARENA_CELLS];
+} LJGC2TabStampArena;
+
 struct HugeTab {
   LJHugeTabHdr *h;
 };
@@ -111,7 +126,7 @@ typedef struct GCAhdr {
   GreyStack *grey;
   uint32_t sweep_epoch;
   uint32_t live_cells;
-  void *gc2_tabstamp;
+  LJGC2TabStampArena *gc2_tabstamp;
   uint64_t retire_epoch;
   uint32_t reclaim_cell;
   uint32_t reclaim_deferred;
@@ -129,7 +144,10 @@ typedef struct GCAhdr {
   /* Terminal unmap closure. Published before the remote_active terminal CAS;
   ** rescue admission rechecks it after any losing CAS retry. */
   uint32_t terminal_closed;
-  uint8_t pad[24];
+  /* Huge allocations have no external cell sidecar. This tail is initialized
+  ** before mapping publication and remains allocation-local until unmap. */
+  LJGC2TabStamp huge_tabstamp;
+  uint8_t pad[8];
 } GCAhdr;
 
 /*
@@ -306,16 +324,11 @@ static LJ_AINLINE void lj_arena_next_rel(GCArena *a, GCArena *next)
   la_storeptr_rel((void **)&a->hdr.next, next);
 }
 
-static LJ_AINLINE void *lj_arena_gc2_tabstamp_acq(const GCArena *a)
+static LJ_AINLINE LJGC2TabStampArena *
+lj_arena_gc2_tabstamp_acq(const GCArena *a)
 {
-  return la_loadptr_acq((void *const *)&a->hdr.gc2_tabstamp);
-}
-
-static LJ_AINLINE int lj_arena_gc2_tabstamp_cas(GCArena *a, void **oldp,
-						void *tabstamp)
-{
-  return la_casptr((void **)&a->hdr.gc2_tabstamp, oldp, tabstamp,
-		   LA_ACQ_REL, LA_ACQ);
+  return (LJGC2TabStampArena *)
+    la_loadptr_acq((void *const *)&a->hdr.gc2_tabstamp);
 }
 
 struct LJArenaFreeRun {
@@ -506,6 +519,9 @@ typedef void (*LJArenaRunCB)(uint32_t start, uint32_t len, void *ud);
 LJ_FUNC void lj_arena_sweep_words(GCArena *a, int preserve_marks);
 LJ_FUNC void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud);
 LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
+/* Exact token emptiness is a terminal-unmap precondition. Scan epochs do not
+** retain mappings; NONE tokens may carry nonzero generations after reuse. */
+LJ_FUNC int lj_arena_gc2_tokens_empty_acq(const GCArena *a);
 LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
 LJ_FUNC void lj_arena_unmap(GCArena *a);
 LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
@@ -743,6 +759,7 @@ LJ_FUNC void lj_arena_test_remote_stats_reset(void);
 LJ_FUNC uint64_t lj_arena_test_remote_fast_skips(void);
 LJ_FUNC uint64_t lj_arena_test_remote_arena_probes(void);
 LJ_FUNC uint64_t lj_arena_test_adopt_whole_count(void);
+LJ_FUNC void lj_arena_test_gc2_sidecar_fail_alloc(int enabled);
 LJ_FUNC int lj_arena_test_set_free_run(GCArena *a, uint32_t start,
 					uint32_t len);
 LJ_FUNC int lj_arena_test_terminal_freeing_word(const GCArena *a,
@@ -906,6 +923,29 @@ static LJ_AINLINE uint32_t lj_arena_cellof(const void *p)
 static LJ_AINLINE void *lj_arena_cellptr(GCArena *a, uint32_t cell)
 {
   return (void *)((char *)a + ((uintptr_t)cell << LJ_CELL_SHIFT));
+}
+
+/* The caller must already retain mapping lifetime. The sidecar pointer is
+** acquire-loaded so a returned small stamp is fully initialized; huge stamps
+** are part of the already-published mapping header. */
+static LJ_AINLINE LJGC2TabStamp *lj_arena_gc2_stamp_acq(const void *p)
+{
+  GCArena *a;
+  LJGC2TabStampArena *side;
+  uint32_t flags, cell;
+  if (!p)
+    return NULL;
+  a = lj_arena_of(p);
+  flags = lj_arena_flags_acq(a);
+  if ((flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC)
+    return &a->hdr.huge_tabstamp;
+  if (!(flags & LJ_AF_TRAVERSABLE))
+    return NULL;
+  cell = lj_arena_cellof(p);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+    return NULL;
+  side = lj_arena_gc2_tabstamp_acq(a);
+  return side ? &side->cell[cell] : NULL;
 }
 
 static LJ_AINLINE uint32_t lj_arena_bm_get(const uint64_t *bm, uint32_t i)
@@ -1260,6 +1300,10 @@ LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_MUTATING <= 15);
 LJ_STATIC_ASSERT((LJ_AF_ROOT_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT((LJ_AF_DTOR_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);
+LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
+LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
+LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == LJ_ARENA_SIZE);
+LJ_STATIC_ASSERT(offsetof(GCAhdr, huge_tabstamp) == 104u);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_active) == 56u);
 LJ_STATIC_ASSERT((offsetof(GCAhdr, remote_active) & 7u) == 0);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_free) == 64u);

@@ -359,6 +359,364 @@ lj_gc2_activation_try_gate(LJGC2Activation *token,
                                       observed);
 }
 
+/* ---- Helpable table-rescan descriptor and exact per-table token ----- */
+
+/* The descriptor's low word is zero while idle, one when sticky-pinned, and
+** otherwise an aligned GCtab identity. The high word is a non-wrapping
+** publication generation. A token must be installed before ACTIVE is cleared,
+** so no publisher-owned intermediate state is required. */
+typedef enum LJGC2TableDescState {
+  LJ_GC2_TABLEDESC_IDLE = 0,
+  LJ_GC2_TABLEDESC_ACTIVE = 1,
+  LJ_GC2_TABLEDESC_PINNED = 2,
+  LJ_GC2_TABLEDESC_INVALID = 3
+} LJGC2TableDescState;
+
+typedef struct LJGC2TableDesc {
+  la_u128 value;
+} LJGC2TableDesc;
+
+typedef struct LJGC2TableDescSnap {
+  uintptr_t table;
+  uint64_t generation;
+  uint8_t state;
+} LJGC2TableDescSnap;
+
+typedef struct LJGC2TableDescTicket {
+  uint64_t table;
+  uint64_t generation;
+} LJGC2TableDescTicket;
+
+typedef enum LJGC2TableDescResult {
+  LJ_GC2_TABLEDESC_RESULT_INVALID = -2,
+  LJ_GC2_TABLEDESC_RESULT_PINNED = -1,
+  LJ_GC2_TABLEDESC_RESULT_BUSY = 0,
+  LJ_GC2_TABLEDESC_RESULT_OK = 1
+} LJGC2TableDescResult;
+
+typedef char lj_gc2_tabledesc_size_must_be_16[
+  sizeof(LJGC2TableDesc) == 16 ? 1 : -1];
+typedef char lj_gc2_tabledesc_align_must_be_16[
+  __alignof__(LJGC2TableDesc) >= 16 ? 1 : -1];
+
+LA_INLINE uint8_t lj_gc2_tabledesc_state(uint64_t table)
+{
+  if (table == 0)
+    return LJ_GC2_TABLEDESC_IDLE;
+  if (table == 1)
+    return LJ_GC2_TABLEDESC_PINNED;
+  return (table & 15u) == 0 ? LJ_GC2_TABLEDESC_ACTIVE :
+                              LJ_GC2_TABLEDESC_INVALID;
+}
+
+LA_INLINE LJGC2TableDescSnap
+lj_gc2_tabledesc_snap_from_words(uint64_t table, uint64_t generation)
+{
+  LJGC2TableDescSnap snap;
+  snap.table = (uintptr_t)table;
+  snap.generation = generation;
+  snap.state = lj_gc2_tabledesc_state(table);
+  return snap;
+}
+
+/* Exact CX16 read. The all-zero comparison is a no-op for the initial value
+** and necessarily fails with an acquire observation for every other value. */
+LA_INLINE LJGC2TableDescSnap
+lj_gc2_tabledesc_snapshot(const LJGC2TableDesc *desc)
+{
+  la_u128 exact, zero;
+  if (!desc)
+    return lj_gc2_tabledesc_snap_from_words(1, 0);
+  exact.lo = exact.hi = 0;
+  zero = exact;
+  (void)la_cas128((la_u128 *)(void *)&desc->value, &exact, zero);
+  return lj_gc2_tabledesc_snap_from_words(exact.lo, exact.hi);
+}
+
+/* Only valid before the containing global state is published. */
+LA_INLINE void lj_gc2_tabledesc_init_unpublished(LJGC2TableDesc *desc,
+                                                  uint64_t generation)
+{
+  desc->value.lo = 0;
+  desc->value.hi = generation;
+}
+
+/* Fault/saturation containment only. Do not use this to resolve ordinary
+** BUSY or stale tickets: a losing CAS deliberately follows the latest exact
+** authority and may therefore pin a later valid generation. */
+LA_INLINE LJGC2TableDescResult
+lj_gc2_tabledesc_pin(LJGC2TableDesc *desc, LJGC2TableDescSnap snap,
+                     LJGC2TableDescSnap *observed)
+{
+  la_u128 expected, desired;
+  if (!desc)
+    return LJ_GC2_TABLEDESC_RESULT_INVALID;
+  for (;;) {
+    if (snap.state == LJ_GC2_TABLEDESC_PINNED) {
+      if (observed)
+        *observed = snap;
+      return LJ_GC2_TABLEDESC_RESULT_PINNED;
+    }
+    expected.lo = (uint64_t)snap.table;
+    expected.hi = snap.generation;
+    desired.lo = 1;
+    desired.hi = snap.generation;
+    if (la_cas128(&desc->value, &expected, desired)) {
+      if (observed)
+        *observed = lj_gc2_tabledesc_snap_from_words(desired.lo,
+                                                      desired.hi);
+      return LJ_GC2_TABLEDESC_RESULT_PINNED;
+    }
+    snap = lj_gc2_tabledesc_snap_from_words(expected.lo, expected.hi);
+  }
+}
+
+/* Publish one exact identity. A racing ACTIVE descriptor is ordinary BUSY:
+** callers help that exact ticket and retry. Malformed/saturated authority is
+** converted to the absorbing PINNED representation without wrapping. */
+LA_INLINE LJGC2TableDescResult
+lj_gc2_tabledesc_try_publish(LJGC2TableDesc *desc, const void *table,
+                             LJGC2TableDescTicket *ticket,
+                             LJGC2TableDescSnap *observed)
+{
+  LJGC2TableDescSnap snap;
+  la_u128 expected, desired;
+  uintptr_t pointer = (uintptr_t)table;
+  if (!desc || !ticket || pointer <= 1u || (pointer & 15u) != 0)
+    return LJ_GC2_TABLEDESC_RESULT_INVALID;
+  snap = lj_gc2_tabledesc_snapshot(desc);
+  if (snap.state == LJ_GC2_TABLEDESC_PINNED) {
+    if (observed)
+      *observed = snap;
+    return LJ_GC2_TABLEDESC_RESULT_PINNED;
+  }
+  if (snap.state == LJ_GC2_TABLEDESC_INVALID)
+    return lj_gc2_tabledesc_pin(desc, snap, observed);
+  if (snap.state == LJ_GC2_TABLEDESC_ACTIVE) {
+    if (observed)
+      *observed = snap;
+    return LJ_GC2_TABLEDESC_RESULT_BUSY;
+  }
+  if (snap.generation == UINT64_MAX)
+    return lj_gc2_tabledesc_pin(desc, snap, observed);
+  expected.lo = 0;
+  expected.hi = snap.generation;
+  desired.lo = (uint64_t)pointer;
+  desired.hi = snap.generation + 1u;
+  if (la_cas128(&desc->value, &expected, desired)) {
+    ticket->table = desired.lo;
+    ticket->generation = desired.hi;
+    if (observed)
+      *observed = lj_gc2_tabledesc_snap_from_words(desired.lo, desired.hi);
+    return LJ_GC2_TABLEDESC_RESULT_OK;
+  }
+  snap = lj_gc2_tabledesc_snap_from_words(expected.lo, expected.hi);
+  if (observed)
+    *observed = snap;
+  if (snap.state == LJ_GC2_TABLEDESC_INVALID)
+    return lj_gc2_tabledesc_pin(desc, snap, observed);
+  return snap.state == LJ_GC2_TABLEDESC_PINNED ?
+         LJ_GC2_TABLEDESC_RESULT_PINNED : LJ_GC2_TABLEDESC_RESULT_BUSY;
+}
+
+/* Clear only the exact ACTIVE identity which has already been transferred to
+** a durable token. A stale helper can never clear a later generation, even if
+** allocator reuse supplies the same table address. */
+LA_INLINE LJGC2TableDescResult
+lj_gc2_tabledesc_finish_help(LJGC2TableDesc *desc,
+                             const LJGC2TableDescTicket *ticket,
+                             LJGC2TableDescSnap *observed)
+{
+  la_u128 expected, desired;
+  LJGC2TableDescSnap snap;
+  if (!desc || !ticket || ticket->table <= 1u ||
+      (ticket->table & 15u) != 0)
+    return LJ_GC2_TABLEDESC_RESULT_INVALID;
+  expected.lo = ticket->table;
+  expected.hi = ticket->generation;
+  desired.lo = 0;
+  desired.hi = ticket->generation;
+  if (la_cas128(&desc->value, &expected, desired)) {
+    if (observed)
+      *observed = lj_gc2_tabledesc_snap_from_words(desired.lo, desired.hi);
+    return LJ_GC2_TABLEDESC_RESULT_OK;
+  }
+  snap = lj_gc2_tabledesc_snap_from_words(expected.lo, expected.hi);
+  if (observed)
+    *observed = snap;
+  if (snap.state == LJ_GC2_TABLEDESC_INVALID)
+    return lj_gc2_tabledesc_pin(desc, snap, observed);
+  return snap.state == LJ_GC2_TABLEDESC_PINNED ?
+         LJ_GC2_TABLEDESC_RESULT_PINNED : LJ_GC2_TABLEDESC_RESULT_BUSY;
+}
+
+#define LJ_GC2_TABLE_TOKEN_STATE_BITS 2u
+#define LJ_GC2_TABLE_TOKEN_STATE_MASK \
+  ((UINT64_C(1) << LJ_GC2_TABLE_TOKEN_STATE_BITS) - 1u)
+#define LJ_GC2_TABLE_TOKEN_MAX_GENERATION \
+  (UINT64_MAX >> LJ_GC2_TABLE_TOKEN_STATE_BITS)
+
+typedef enum LJGC2TableTokenState {
+  LJ_GC2_TABLE_TOKEN_NONE = 0,
+  LJ_GC2_TABLE_TOKEN_PENDING = 1,
+  LJ_GC2_TABLE_TOKEN_PINNED = 2,
+  LJ_GC2_TABLE_TOKEN_INVALID = 3
+} LJGC2TableTokenState;
+
+typedef struct LJGC2TableToken {
+  uint64_t control;
+} LJGC2TableToken;
+
+typedef char lj_gc2_table_token_size_must_be_8[
+  sizeof(LJGC2TableToken) == 8 ? 1 : -1];
+typedef char lj_gc2_table_token_align_must_be_8[
+  __alignof__(LJGC2TableToken) >= 8 ? 1 : -1];
+
+typedef struct LJGC2TableTokenTicket {
+  uint64_t control;
+} LJGC2TableTokenTicket;
+
+typedef enum LJGC2TableTokenResult {
+  LJ_GC2_TABLE_TOKEN_RESULT_INVALID = -2,
+  LJ_GC2_TABLE_TOKEN_RESULT_PINNED = -1,
+  LJ_GC2_TABLE_TOKEN_RESULT_BUSY = 0,
+  LJ_GC2_TABLE_TOKEN_RESULT_OK = 1
+} LJGC2TableTokenResult;
+
+LA_INLINE uint64_t lj_gc2_table_token_pack(uint64_t generation,
+                                            uint8_t state)
+{
+  return (generation << LJ_GC2_TABLE_TOKEN_STATE_BITS) | (uint64_t)state;
+}
+
+LA_INLINE uint64_t lj_gc2_table_token_generation(uint64_t control)
+{
+  return control >> LJ_GC2_TABLE_TOKEN_STATE_BITS;
+}
+
+LA_INLINE uint8_t lj_gc2_table_token_state(uint64_t control)
+{
+  return (uint8_t)(control & LJ_GC2_TABLE_TOKEN_STATE_MASK);
+}
+
+/* Only valid before a side cell or huge header becomes reachable. Persistent
+** small sidecars initialize once; cell reuse must retain this generation. */
+LA_INLINE int lj_gc2_table_token_init_unpublished(LJGC2TableToken *token,
+                                                   uint64_t generation)
+{
+  if (!token || generation > LJ_GC2_TABLE_TOKEN_MAX_GENERATION)
+    return 0;
+  token->control = lj_gc2_table_token_pack(generation,
+                                           LJ_GC2_TABLE_TOKEN_NONE);
+  return 1;
+}
+
+/* Fault/saturation containment only. Runtime contention returns BUSY through
+** refresh/complete and must not call this helper to pin a newer generation. */
+LA_INLINE LJGC2TableTokenResult
+lj_gc2_table_token_pin(LJGC2TableToken *token, uint64_t control)
+{
+  uint64_t desired;
+  if (!token)
+    return LJ_GC2_TABLE_TOKEN_RESULT_INVALID;
+  for (;;) {
+    uint8_t state = lj_gc2_table_token_state(control);
+    if (state == LJ_GC2_TABLE_TOKEN_PINNED)
+      return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+    desired = lj_gc2_table_token_pack(
+      lj_gc2_table_token_generation(control), LJ_GC2_TABLE_TOKEN_PINNED);
+    if (la_cas64(&token->control, &control, desired, LA_ACQ_REL, LA_ACQ))
+      return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+  }
+}
+
+/* Every logical request advances the generation, including PENDING refreshes.
+** This invalidates a scanner which may already have published its scan proof. */
+LA_INLINE LJGC2TableTokenResult
+lj_gc2_table_token_refresh(LJGC2TableToken *token,
+                           LJGC2TableTokenTicket *ticket)
+{
+  uint64_t control, generation, desired;
+  uint8_t state;
+  if (!token || !ticket)
+    return LJ_GC2_TABLE_TOKEN_RESULT_INVALID;
+  control = la_load64_acq(&token->control);
+  for (;;) {
+    state = lj_gc2_table_token_state(control);
+    generation = lj_gc2_table_token_generation(control);
+    if (state == LJ_GC2_TABLE_TOKEN_PINNED)
+      return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+    if (state == LJ_GC2_TABLE_TOKEN_INVALID ||
+        generation == LJ_GC2_TABLE_TOKEN_MAX_GENERATION)
+      return lj_gc2_table_token_pin(token, control);
+    desired = lj_gc2_table_token_pack(generation + 1u,
+                                       LJ_GC2_TABLE_TOKEN_PENDING);
+    if (la_cas64(&token->control, &control, desired, LA_ACQ_REL, LA_ACQ)) {
+      ticket->control = desired;
+      return LJ_GC2_TABLE_TOKEN_RESULT_OK;
+    }
+  }
+}
+
+/* Capture the exact generation a scanner intends to complete. The caller must
+** acquire allocation lifetime and recheck ticket->control before reading the
+** table body; this helper only classifies the persistent side token. */
+LA_INLINE LJGC2TableTokenResult
+lj_gc2_table_token_capture_pending(LJGC2TableToken *token,
+                                   LJGC2TableTokenTicket *ticket)
+{
+  uint64_t control;
+  uint8_t state;
+  if (!token || !ticket)
+    return LJ_GC2_TABLE_TOKEN_RESULT_INVALID;
+  control = la_load64_acq(&token->control);
+  state = lj_gc2_table_token_state(control);
+  if (state == LJ_GC2_TABLE_TOKEN_PENDING) {
+    ticket->control = control;
+    return LJ_GC2_TABLE_TOKEN_RESULT_OK;
+  }
+  if (state == LJ_GC2_TABLE_TOKEN_NONE)
+    return LJ_GC2_TABLE_TOKEN_RESULT_BUSY;
+  if (state == LJ_GC2_TABLE_TOKEN_PINNED)
+    return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+  return lj_gc2_table_token_pin(token, control);
+}
+
+/* Completion is an exact generation CAS performed only after the matching
+** dirty-epoch scan proof. The NONE generation also advances, preventing an
+** old completion ticket from becoming valid after a full token lifecycle. */
+LA_INLINE LJGC2TableTokenResult
+lj_gc2_table_token_complete(LJGC2TableToken *token,
+                            const LJGC2TableTokenTicket *ticket)
+{
+  uint64_t expected, generation, desired;
+  if (!token || !ticket ||
+      lj_gc2_table_token_state(ticket->control) !=
+        LJ_GC2_TABLE_TOKEN_PENDING)
+    return LJ_GC2_TABLE_TOKEN_RESULT_INVALID;
+  generation = lj_gc2_table_token_generation(ticket->control);
+  expected = ticket->control;
+  if (generation == LJ_GC2_TABLE_TOKEN_MAX_GENERATION) {
+    desired = lj_gc2_table_token_pack(generation,
+                                       LJ_GC2_TABLE_TOKEN_PINNED);
+    if (la_cas64(&token->control, &expected, desired, LA_ACQ_REL, LA_ACQ))
+      return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+    if (lj_gc2_table_token_state(expected) == LJ_GC2_TABLE_TOKEN_INVALID)
+      return lj_gc2_table_token_pin(token, expected);
+    return lj_gc2_table_token_state(expected) == LJ_GC2_TABLE_TOKEN_PINNED ?
+           LJ_GC2_TABLE_TOKEN_RESULT_PINNED :
+           LJ_GC2_TABLE_TOKEN_RESULT_BUSY;
+  }
+  desired = lj_gc2_table_token_pack(generation + 1u,
+                                     LJ_GC2_TABLE_TOKEN_NONE);
+  if (la_cas64(&token->control, &expected, desired, LA_ACQ_REL, LA_ACQ))
+    return LJ_GC2_TABLE_TOKEN_RESULT_OK;
+  if (lj_gc2_table_token_state(expected) == LJ_GC2_TABLE_TOKEN_INVALID)
+    return lj_gc2_table_token_pin(token, expected);
+  return lj_gc2_table_token_state(expected) == LJ_GC2_TABLE_TOKEN_PINNED ?
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED : LJ_GC2_TABLE_TOKEN_RESULT_BUSY;
+}
+
 /* ---- Per-TG helpable root-operation descriptor -------------------- */
 
 #define LJ_GC2_ROOTDESC_STATE_BITS 2u

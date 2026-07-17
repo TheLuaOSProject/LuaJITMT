@@ -31,6 +31,45 @@ static uint32_t count_owned(TGAlloc *alloc, uint32_t kind)
   return n;
 }
 
+static void test_table_token_generation_survives_reuse(PRNGState *rs)
+{
+  TGAlloc alloc;
+  GCArena *a;
+  LJGC2TabStamp *stamp;
+  LJGC2TableTokenTicket ticket;
+  uint64_t completed;
+  void *p, *reuse;
+
+  lj_arena_alloc_init(&alloc);
+  p = lj_arena_alloc(&alloc, rs, LJ_CELL_SIZE, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  a = lj_arena_of(p);
+  assert(lj_arena_gc2_tabstamp_acq(a) != NULL);
+  stamp = lj_arena_gc2_stamp_acq(p);
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  completed = la_load64_acq(&stamp->token.control);
+  assert(lj_gc2_table_token_state(completed) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(lj_gc2_table_token_generation(completed) == 2u);
+
+  /* Make the exact freed run the next allocation candidate. No allocator
+  ** path may zero the persistent side entry when this cell is reused. */
+  alloc.bump[LJ_ARENAK_TRAVERSABLE].cell =
+    alloc.bump[LJ_ARENAK_TRAVERSABLE].end;
+  lj_arena_free(&alloc, p, LJ_CELL_SIZE);
+  reuse = lj_arena_alloc(&alloc, rs, LJ_CELL_SIZE, LJ_AF_TRAVERSABLE);
+  assert(reuse == p);
+  assert(lj_arena_gc2_stamp_acq(reuse) == stamp);
+  assert(la_load64_acq(&stamp->token.control) == completed);
+
+  lj_arena_free(&alloc, reuse, LJ_CELL_SIZE);
+  lj_arena_alloc_fini(&alloc);
+  assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
+}
+
 int main(void)
 {
   PRNGState rs;
@@ -40,6 +79,7 @@ int main(void)
   uint32_t i, nseen = 0;
 
   lj_prng_seed_fixed(&rs);
+  test_table_token_generation_survives_reuse(&rs);
   lj_arena_alloc_init(&alloc);
 
   for (i = 0; i < NALLOC; i++) {

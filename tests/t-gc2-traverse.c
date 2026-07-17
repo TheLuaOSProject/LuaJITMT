@@ -8047,6 +8047,11 @@ int main(void)
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
+  {
+    LJGC2TableDescSnap desc =
+      lj_gc2_tabledesc_snapshot(&g->gc2.table_rescan_desc);
+    assert(desc.state == LJ_GC2_TABLEDESC_IDLE && desc.generation == 0);
+  }
 
 #if defined(LJ_GC2_TEST_WEAK_ONLY)
   test_weak_tables(L, g, tg);

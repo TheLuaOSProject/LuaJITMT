@@ -2091,6 +2091,57 @@ static void test_huge_reader_destructor_retry(PRNGState *rs)
   lj_arena_hugetab_fini(&ht);
 }
 
+#if defined(LJ_ARENA_TEST_HELPERS)
+static void test_gc2_sidecar_prealloc_and_fini_veto(PRNGState *rs)
+{
+  TGAlloc alloc;
+  GCArena *a, *plain;
+  LJGC2TabStamp *stamp;
+  LJGC2TableTokenTicket ticket;
+  void *p;
+
+  /* A traversable small arena is not publishable without its complete
+  ** 64-KiB sidecar. Plain mappings do not depend on that allocation. */
+  errno = EDOM;
+  lj_arena_test_gc2_sidecar_fail_alloc(1);
+  assert(lj_arena_map(rs, LJ_AF_TRAVERSABLE) == NULL);
+  assert(errno == EDOM);
+  plain = lj_arena_map(rs, 0);
+  assert(plain != NULL);
+  assert(errno == EDOM);
+  assert(lj_arena_gc2_tabstamp_acq(plain) == NULL);
+  lj_arena_unmap(plain);
+  assert(errno == EDOM);
+  lj_arena_test_gc2_sidecar_fail_alloc(0);
+  a = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
+  assert(a != NULL && lj_arena_gc2_tabstamp_acq(a) != NULL);
+  lj_arena_unmap(a);
+
+  /* Allocator-list teardown has the same exact-token veto as direct unmap.
+  ** Completing to NONE preserves the advanced generation and lets a retry
+  ** release both the arena and its sidecar. */
+  lj_arena_alloc_init(&alloc);
+  p = lj_arena_alloc(&alloc, rs, 64u, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  a = lj_arena_of(p);
+  stamp = lj_arena_gc2_stamp_acq(p);
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  lj_arena_alloc_fini(&alloc);
+  assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == a);
+  assert(lj_arena_remote_active_acq(a) == 0);
+  assert(!lj_arena_gc2_tokens_empty_acq(a));
+  assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_generation(
+	   la_load64_acq(&stamp->token.control)) == 2u);
+  assert(lj_arena_gc2_tokens_empty_acq(a));
+  lj_arena_alloc_fini(&alloc);
+  assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
+}
+#endif
+
 int main(void)
 {
   static const size_t sizes[] = {
@@ -2125,6 +2176,7 @@ int main(void)
   test_root_state(&rs);
   test_root_free_race(&rs);
 #if defined(LJ_ARENA_TEST_HELPERS)
+  test_gc2_sidecar_prealloc_and_fini_veto(&rs);
   test_huge_realloc_busy_preemption(&rs);
   test_small_lifetime_descriptor(&rs);
   test_retire_busy_mark_intent(&rs);
