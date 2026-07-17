@@ -1247,10 +1247,47 @@ static void asm_fnew1num_dtor_construct_pair_claim(ASMState *as, Reg arena,
   checkmclim(as);
 }
 
+/* Roll back a fully claimed pair without touching either allocation body.
+** The common same-word shape uses one exact CAS; a structural split uses two
+** exact per-lane transitions. Any mismatch is terminal because it would mean
+** the unpublished CONSTRUCT authority was lost. */
+static void asm_fnew1num_dtor_construct_pair_rollback(ASMState *as,
+	Reg arena, Reg fncell, Reg uvcell, Reg word, Reg bit, Reg desired,
+	uint32_t lane_delta, MCLabel impossible)
+{
+  MCLabel done = emit_label(as), split;
+  checkmclim(as);
+
+  emit_jmp(as, done);
+  asm_fnew1num_lifetime_transition(as, arena, uvcell, word, bit, desired,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, impossible);
+  checkmclim(as);  /* Bound each split-word rollback independently. */
+  asm_fnew1num_lifetime_transition(as, arena, fncell, word, bit, desired,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE, impossible);
+  split = emit_label(as);
+  checkmclim(as);
+
+  emit_jmp(as, done);
+  asm_fnew1num_packed_pair_transition(as, arena, fncell, word, bit, desired,
+	(int32_t)offsetof(GCArena, lifetime),
+	LJ_ARENA_LIFETIME_CELLS_PER_WORD, 4u, 2u, 4u, lane_delta,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE,
+	split, impossible);
+  checkmclim(as);
+}
+
 static void asm_fnew1num_movi8(ASMState *as, Reg base, int32_t ofs, int32_t k)
 {
   emit_i8(as, k);
   emit_rmro(as, XO_MOVmib, 0, base, ofs);
+}
+
+static void asm_fnew1num_movi64zero(ASMState *as, Reg base, int32_t ofs)
+{
+  /* MOV r/m64, imm32 sign-extends its immediate. Zero is therefore the exact
+  ** eight-byte scan-proof reset required by LJGC2TabStamp.state. */
+  emit_i32(as, 0);
+  emit_rmro(as, XO_MOVmi, REX_64, base, ofs);
 }
 
 static void asm_fnew1num_cmpi32(ASMState *as, Reg base, int32_t ofs,
@@ -1353,6 +1390,7 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   const GCSize nbytes = (GCSize)(sizeLfunc(1) + sizeof(GCupval));
   const uint64_t uvtag = ((uint64_t)LJ_TUPVAL) << 47;
   MCLabel l_done, l_fallback, l_markclear, l_markdone;
+  MCLabel l_stamp_ok, l_stamp_rollback;
   MCLabel l_state_impossible;
   Reg base, parent, val, pt, g, arena, cell, next, uv, tmp, root, env;
   IRRef fallback_args[CCI_NARGS_MAX];
@@ -1513,6 +1551,42 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_loadu64(as, pt, (uint64_t)(uintptr_t)fi.pt);
   checkmclim(as);
 
+  /* Runtime reaches this after both exact CONSTRUCT claims and before the
+  ** first body byte. Recheck both persistent tokens, reset only the old scan
+  ** proofs on NONE, or roll the complete unpublished pair back before the C
+  ** fallback. `root` and `tmp` are disposable packed-state temporaries here. */
+  l_stamp_ok = emit_label(as);
+  checkmclim(as);
+
+  emit_jmp(as, l_fallback);
+  asm_fnew1num_dtor_construct_pair_rollback(
+    as, arena, cell, next, root, tmp, pt, fncells, l_state_impossible);
+  l_stamp_rollback = emit_label(as);
+  checkmclim(as);
+
+  emit_jmp(as, l_stamp_ok);
+  asm_fnew1num_movi64zero(as, tmp, offsetof(LJGC2TabStamp, state));
+  asm_fnew1num_movi64zero(as, root, offsetof(LJGC2TabStamp, state));
+  asm_fnew1num_testi8(as, tmp,
+	(int32_t)(offsetof(LJGC2TabStamp, token) +
+		  offsetof(LJGC2TableToken, control)),
+	(int32_t)LJ_GC2_TABLE_TOKEN_STATE_MASK, CC_NZ, l_stamp_rollback);
+  emit_gri(as, XG_ARITHi(XOg_ADD), tmp|REX_64,
+	   (int32_t)(fncells * sizeof(LJGC2TabStamp)));
+  emit_rr(as, XO_MOV, tmp|REX_64, root|REX_64);
+  asm_fnew1num_testi8(as, root,
+	(int32_t)(offsetof(LJGC2TabStamp, token) +
+		  offsetof(LJGC2TableToken, control)),
+	(int32_t)LJ_GC2_TABLE_TOKEN_STATE_MASK, CC_NZ, l_stamp_rollback);
+  emit_rr(as, XO_ARITH(XOg_ADD), root|REX_64, tmp|REX_64);
+  emit_shifti(as, XOg_SHL|REX_64, tmp, 4);
+  emit_rr(as, XO_MOV, tmp, cell);
+  emit_jcc(as, CC_Z, l_stamp_rollback);
+  emit_rr(as, XO_TEST, root|REX_64, root|REX_64);
+  emit_rmro(as, XO_MOV, root|REX_64, arena,
+	    offsetof(GCAhdr, gc2_tabstamp));
+  checkmclim(as);
+
   /* The bump reservation privately identifies both FREE starts before block
   ** discovery. Claim rootless lifetime for function and upvalue. Any partial
   ** second-start failure restores the first lane before trapping. Save the
@@ -1549,6 +1623,29 @@ static int asm_fnew1num_inline_x64(ASMState *as, IRIns *ir)
   emit_rr(as, XO_MOV, uv, cell);
   emit_movtomro(as, next, RID_DISPATCH,
 		DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell));
+  checkmclim(as);
+
+  /* Runtime executes these read-only sidecar checks after the range proof and
+  ** before consuming the private cursor. Both starts need token NONE; a
+  ** missing traversable sidecar is the same conservative fallback. `uv` and
+  ** `root` are not live allocation pointers until the code above executes. */
+  asm_fnew1num_testi8(as, root,
+	(int32_t)(offsetof(LJGC2TabStamp, token) +
+		  offsetof(LJGC2TableToken, control)),
+	(int32_t)LJ_GC2_TABLE_TOKEN_STATE_MASK, CC_NZ, l_fallback);
+  emit_gri(as, XG_ARITHi(XOg_ADD), root|REX_64,
+	   (int32_t)(fncells * sizeof(LJGC2TabStamp)));
+  asm_fnew1num_testi8(as, root,
+	(int32_t)(offsetof(LJGC2TabStamp, token) +
+		  offsetof(LJGC2TableToken, control)),
+	(int32_t)LJ_GC2_TABLE_TOKEN_STATE_MASK, CC_NZ, l_fallback);
+  emit_rr(as, XO_ARITH(XOg_ADD), root|REX_64, uv|REX_64);
+  emit_shifti(as, XOg_SHL|REX_64, root, 4);
+  emit_rr(as, XO_MOV, root, cell);
+  emit_jcc(as, CC_Z, l_fallback);
+  emit_rr(as, XO_TEST, uv|REX_64, uv|REX_64);
+  emit_rmro(as, XO_MOV, uv|REX_64, arena,
+	    offsetof(GCAhdr, gc2_tabstamp));
   checkmclim(as);
 
   emit_jcc(as, CC_A, l_fallback);

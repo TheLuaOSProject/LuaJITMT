@@ -253,6 +253,76 @@ static LJ_AINLINE int arena_lifetime_managed(const GCArena *a)
     (lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE) != 0;
 }
 
+/* Callers already retain the small mapping. A missing sidecar on a
+** traversable arena violates its pre-publication storage invariant and is
+** therefore a conservative owner, not an absent token. */
+static LJ_AINLINE LJGC2TabStamp *arena_gc2_cell_stamp_acq(
+  const GCArena *a, uint32_t cell)
+{
+  LJGC2TabStampArena *side;
+  if (!arena_lifetime_managed(a) || cell < LJ_AFIRST_CELL ||
+      cell >= LJ_ARENA_CELLS)
+    return NULL;
+  side = lj_arena_gc2_tabstamp_acq(a);
+  return side ? &side->cell[cell] : NULL;
+}
+
+static LJ_AINLINE int arena_gc2_token_none_acq(const GCArena *a,
+                                                uint32_t cell)
+{
+  return lj_arena_gc2_token_none_acq(a, cell);
+}
+
+/* Convert the persistent token sidecar into the same one-bit-per-cell shape
+** as the structural bitmaps. This is deliberately a cold-path summary: it is
+** used by sweep/rebuild/terminal certificates, while ordinary allocation
+** checks only its exact candidate. A missing traversable sidecar fails closed
+** for every allocation-capable cell in the word. */
+static LJ_AINLINE uint64_t arena_gc2_token_block_bits(const GCArena *a,
+					       uint32_t wi)
+{
+  LJGC2TabStampArena *side;
+  uint64_t bits = 0;
+  uint32_t lo, hi, cell;
+  if (!arena_lifetime_managed(a) || wi >= LJ_ARENA_WORDS)
+    return 0;
+  lo = wi << 6;
+  hi = lo + 64u;
+  if (hi <= LJ_AFIRST_CELL)
+    return 0;
+  if (lo < LJ_AFIRST_CELL)
+    lo = LJ_AFIRST_CELL;
+  side = lj_arena_gc2_tabstamp_acq(a);
+  if (!side) {
+    uint32_t bit = lo & 63u;
+    return bit == 0 ? ~(uint64_t)0 : (~(uint64_t)0 << bit);
+  }
+  for (cell = lo; cell < hi; cell++)
+    if (lj_gc2_table_token_state(
+	  la_load64_acq(&side->cell[cell].token.control)) !=
+	LJ_GC2_TABLE_TOKEN_NONE)
+      bits |= (uint64_t)1 << (cell & 63u);
+  return bits;
+}
+
+/* The caller has changed FREE to a non-readable construction/mutation lane,
+** after proving the old token NONE. Lawful token publishers must acquire the
+** reciprocal allocation lifetime before refresh, so the token cannot change
+** until this new incarnation is published. Reset only the scan proof: token
+** generation is persistent side identity across cell reuse. */
+static LJ_AINLINE int arena_gc2_prepare_incarnation(GCArena *a, uint32_t cell)
+{
+  LJGC2TabStamp *stamp;
+  if (!arena_lifetime_managed(a))
+    return 1;
+  stamp = arena_gc2_cell_stamp_acq(a, cell);
+  if (!stamp || lj_gc2_table_token_state(
+	la_load64_acq(&stamp->token.control)) != LJ_GC2_TABLE_TOKEN_NONE)
+    return 0;
+  la_store64_rel(&stamp->state, 0);
+  return 1;
+}
+
 LJ_STATIC_ASSERT(LJ_ARENA_SWEEP_CELLS_PER_WORD == 32u);
 LJ_STATIC_ASSERT(LJ_ARENA_ROOT_CELLS_PER_WORD == 32u);
 LJ_STATIC_ASSERT(LJ_ARENA_RECOVERY_CELLS_PER_WORD == 32u);
@@ -297,6 +367,8 @@ static LJ_AINLINE int arena_quarantine_terminal_freeing_word(
   for (k = 0; k < 4u; k++)
     if (la_load64_acq(&a->lifetime[(w << 2) + k]) != 0)
       return 0;
+  if (arena_gc2_token_block_bits(a, w) != 0)
+    return 0;
   even = arena_dilate32_even((uint32_t)block);
   expect_lo = even | (even << 1);
   even = arena_dilate32_even((uint32_t)(block >> 32));
@@ -319,7 +391,8 @@ static int arena_root_empty(const GCArena *a)
 static LJ_AINLINE int arena_side_owners_none(const GCArena *a, uint32_t cell)
 {
   return lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE &&
-    lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE;
+    lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE &&
+    arena_gc2_token_none_acq(a, cell);
 }
 
 int lj_arena_lifetime_empty(const GCArena *a)
@@ -340,6 +413,11 @@ uint32_t lj_arena_lifetime_clear_terminal(GCArena *a, uint32_t cell)
     return LJ_ARENA_LIFETIME_FREE;
   state = lj_arena_lifetime_state_acq(a, cell);
   while (state != LJ_ARENA_LIFETIME_FREE) {
+    /* A token may legitimately coexist with FREE, but this quiescent cleanup
+    ** helper promises that no runtime actor can resume the allocation. Refuse
+    ** to discard its locator while that promise is visibly false. */
+    if (!arena_gc2_token_none_acq(a, cell))
+      return LJ_ARENA_LIFETIME_CLEAR_BLOCKED;
     if (lj_arena_lifetime_state_cas(a, cell, state,
 					    LJ_ARENA_LIFETIME_FREE))
       return state;
@@ -360,6 +438,7 @@ int lj_arena_root_construct_claim(GCArena *a, uint32_t cell)
       root == LJ_ARENA_ROOT_LINKING)
     return 1;  /* Idempotent retry by the unique allocation owner. */
   if (life != LJ_ARENA_LIFETIME_FREE || root != LJ_ARENA_ROOT_NONE ||
+      !arena_gc2_token_none_acq(a, cell) ||
       !lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_FREE,
 					   LJ_ARENA_LIFETIME_CONSTRUCT))
     return 0;
@@ -369,6 +448,18 @@ int lj_arena_root_construct_claim(GCArena *a, uint32_t cell)
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
     lj_assertX(rolled, "arena root-construction claim rollback lost");
     UNUSED(rolled);
+    return 0;
+  }
+  if (!arena_gc2_prepare_incarnation(a, cell)) {
+    int root_rolled = lj_arena_root_state_cas(a, cell,
+	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_NONE);
+    int life_rolled = root_rolled && lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
+    /* FREE+token is the exact old incarnation: the token remains its physical
+    ** reuse veto, while no allocation byte or structural bit was changed. */
+    lj_assertX(root_rolled && life_rolled,
+		 "arena root-construction GC2 rollback lost");
+    UNUSED(root_rolled); UNUSED(life_rolled);
     return 0;
   }
   return 1;
@@ -1343,14 +1434,23 @@ void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud)
 {
   int32_t run_start = -1;
   uint32_t i = LJ_AFIRST_CELL;
+  uint32_t token_wi = UINT32_MAX;
+  uint64_t token_bits = 0;
   while (i < LJ_ARENA_CELLS) {
-    uint64_t starts = (la_load64_rlx(&a->block[i >> 6]) |
+    uint32_t wi = i >> 6;
+    uint64_t starts;
+    uint32_t st;
+    if (wi != token_wi) {
+      token_wi = wi;
+      token_bits = arena_gc2_token_block_bits(a, wi);
+    }
+    starts = (la_load64_rlx(&a->block[i >> 6]) |
 		       la_load64_rlx(&a->mark[i >> 6]) |
 		       arena_recovery_block_bits(a, i >> 6) |
 		       arena_root_block_bits(a, i >> 6) |
 		       arena_dtor_block_bits(a, i >> 6) |
-		       arena_lifetime_block_bits(a, i >> 6)) >> (i & 63);
-    uint32_t st;
+		       arena_lifetime_block_bits(a, i >> 6) |
+		       token_bits) >> (i & 63);
     if (!starts) {
       i = (i | 63u) + 1u;
       continue;
@@ -3849,8 +3949,7 @@ static int arena_destruct_claim_live(GCArena *a, uint32_t cell,
   arena_test_lifetime_pause_after_claim();
   if (!arena_mutation_open_quiet(a, own_open_count) ||
       !lj_arena_bm_get(a->block, cell) ||
-      lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE ||
-      lj_arena_recovery_state_acq(a, cell) != LJ_ARENA_RECOVERY_IDLE) {
+      !arena_side_owners_none(a, cell)) {
     (void)arena_destruct_restore_live(a, cell);
     return 0;
   }
@@ -3859,9 +3958,18 @@ static int arena_destruct_claim_live(GCArena *a, uint32_t cell,
 
 static int arena_destruct_commit_free(GCArena *a, uint32_t cell)
 {
-  return !arena_lifetime_managed(a) ||
-    lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
-					LJ_ARENA_LIFETIME_FREE);
+  if (!arena_lifetime_managed(a))
+    return 1;
+  if (!arena_gc2_token_none_acq(a, cell)) {
+    /* Token ownership is a conservative live result. Restore the tentative
+    ** lane here because several sweep callers historically relied on a failed
+    ** FREE CAS meaning that a rescue actor had already performed restoration. */
+    (void)lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+					  LJ_ARENA_LIFETIME_LIVE);
+    return 0;
+  }
+  return lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+					      LJ_ARENA_LIFETIME_FREE);
 }
 
 static int arena_destruct_restore_live(GCArena *a, uint32_t cell)
@@ -3882,8 +3990,7 @@ static int arena_mutation_claim_live(GCArena *a, uint32_t cell,
     return 0;
   if (!arena_mutation_open_quiet(a, own_open_count) ||
       !lj_arena_bm_get(a->block, cell) ||
-      lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE ||
-      lj_arena_recovery_state_acq(a, cell) != LJ_ARENA_RECOVERY_IDLE) {
+      !arena_side_owners_none(a, cell)) {
     (void)lj_arena_lifetime_state_cas(a, cell,
 	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_LIVE);
     return 0;
@@ -3979,6 +4086,12 @@ static LJ_AINLINE int arena_range_ownership_preflight(GCArena *a,
     }
     if (recovery != 0 || blockers != 0)
       return 0;
+    if (lifetime_managed) {
+      uint32_t cell;
+      for (cell = pos; cell < pos + take; cell++)
+	if (!arena_gc2_token_none_acq(a, cell))
+	  return 0;
+    }
     pos += take;
   }
   return 1;
@@ -4033,6 +4146,8 @@ static int arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
   if (root_construct && !arena_lifetime_managed(a))
     return 0;
   if (arena_lifetime_managed(a)) {
+    if (!arena_gc2_token_none_acq(a, cell))
+      return 0;
     int claimed = root_construct ?
       lj_arena_root_construct_claim(a, cell) :
       lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_FREE,
@@ -4041,9 +4156,14 @@ static int arena_set_alloc(GCArena *a, uint32_t cell, uint32_t ncells,
       return 0;
   }
   if (lj_arena_recovery_state_acq(a, cell) != LJ_ARENA_RECOVERY_IDLE ||
+      !arena_gc2_token_none_acq(a, cell) ||
       (!root_construct &&
        lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE)) {
     arena_alloc_claim_rollback(a, cell, root_construct);
+    return 0;
+  }
+  if (!root_construct && !arena_gc2_prepare_incarnation(a, cell)) {
+    arena_alloc_claim_rollback(a, cell, 0);
     return 0;
   }
   /* Fail closed before mutating any old boundary. Only allocation starts may
@@ -4136,8 +4256,9 @@ static int arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
   uint32_t k = arena_kind(a->hdr.flags);
   uint32_t b = arena_bin(len);
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
-  if (arena_lifetime_managed(a) &&
-      lj_arena_lifetime_state_acq(a, start) != LJ_ARENA_LIFETIME_FREE)
+  if (!arena_side_owners_none(a, start) ||
+      (arena_lifetime_managed(a) &&
+       lj_arena_lifetime_state_acq(a, start) != LJ_ARENA_LIFETIME_FREE))
     return 0;
   run->start = start;
   run->len = len;
@@ -4172,7 +4293,8 @@ static LJ_AINLINE int arena_free_run_body_readable(const LJArenaFreeRun *run)
   uint32_t cell = lj_arena_cellof(run);
   return !arena_lifetime_managed(a) ||
     (cell < LJ_ARENA_CELLS &&
-     lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+     lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE &&
+     arena_side_owners_none(a, cell));
 }
 
 static LJ_AINLINE int arena_free_run_valid_knownptr(const LJArenaFreeRun *run,
@@ -4848,7 +4970,8 @@ static void arena_retain_free_boundaries(GCArena *a, uint32_t start,
 	arena_recovery_block_bits(a, wi) |
 	arena_root_block_bits(a, wi) |
 	arena_dtor_block_bits(a, wi) |
-	arena_lifetime_block_bits(a, wi);
+	arena_lifetime_block_bits(a, wi) |
+	arena_gc2_token_block_bits(a, wi);
     boundaries &= mask;
     if (pos == start)
       boundaries |= (uint64_t)1 << lo;
@@ -5015,6 +5138,10 @@ static void arena_prepare_bump_tail(GCArena *a)
   cell = la_load32_acq(&a->hdr.prep_bump_cell);
   end = la_load32_acq(&a->hdr.prep_bump_end);
   if (cell >= LJ_AFIRST_CELL && cell < end && end <= LJ_ARENA_CELLS) {
+    if (!arena_range_ownership_preflight(a, cell, end - cell, 0, 0)) {
+      arena_retain_free_boundaries(a, cell, end - cell);
+      goto done;
+    }
     /* Committed PREP readers may mark another live cell in the same word.
     ** Structural publication must therefore update only the tail mask with
     ** atomic RMWs. Do this once per bitmap word rather than four locked RMWs
@@ -5049,6 +5176,7 @@ static void arena_prepare_bump_tail(GCArena *a)
       } while (!la_cas64(&a->mark[w], &old, next, LA_RLX, LA_RLX));
     }
   }
+done:
   la_store32_rel(&a->hdr.prep_bump_cell, 0);
   la_store32_rel(&a->hdr.prep_bump_end, 0);
 }
@@ -5298,7 +5426,9 @@ static uint32_t arena_count_live_cells(const GCArena *a)
       i++;
       continue;
     }
-    while (j < LJ_ARENA_CELLS && lj_arena_state(a, j) == 0)
+    while (j < LJ_ARENA_CELLS && lj_arena_state(a, j) == 0 &&
+	   arena_side_owners_none(a, j) &&
+	   lj_arena_lifetime_state_acq(a, j) == LJ_ARENA_LIFETIME_FREE)
       j++;
     if (st & 2u)
       n += j - i;
@@ -5751,6 +5881,11 @@ static int arena_quarantine_bitmap_ready(GCArena *a, uint32_t *retry_cell)
       uint32_t state;
       if (!(b & ((uint64_t)1 << j)))
 	continue;
+      if (!arena_gc2_token_none_acq(a, (w << 6) + j)) {
+	if (retry_cell)
+	  *retry_cell = (w << 6) + j;
+	return 0;
+      }
       if (lj_arena_recovery_state_acq(a, (w << 6) + j) !=
 	  LJ_ARENA_RECOVERY_IDLE) {
 	if (retry_cell)
@@ -5816,6 +5951,10 @@ static int arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
       uint32_t state;
       if (!(b & ((uint64_t)1 << j)))
 	continue;
+      if (!arena_gc2_token_none_acq(a, cell)) {
+	live |= (uint64_t)1 << j;
+	continue;
+      }
       if ((recovery | root) & ((uint64_t)1 << j)) {
 	live |= (uint64_t)1 << j;
 	continue;
@@ -5880,7 +6019,8 @@ static int arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
 	  }
 	}
 	if (life == LJ_ARENA_LIFETIME_FREE &&
-	    state == LJ_ARENA_SWEEP_FREEING) {
+	    state == LJ_ARENA_SWEEP_FREEING &&
+	    arena_gc2_token_none_acq(a, cell)) {
 	  freeing |= bit;
 	} else {
 	  live |= bit;  /* Constructor/link/recovery owner: retain without wait. */
@@ -6344,13 +6484,31 @@ static int arena_reserve_lifetime(GCArena *a, uint32_t cell, uint32_t flags)
   if (flags & LJ_AF_DTOR_CONSTRUCT) {
     if (lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE)
       return 0;
-    return lj_arena_lifetime_state_cas(a, cell,
-	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT);
+    if (!arena_gc2_token_none_acq(a, cell) ||
+	!lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_FREE,
+					 LJ_ARENA_LIFETIME_CONSTRUCT))
+      return 0;
+    if (!arena_gc2_prepare_incarnation(a, cell)) {
+      ok = lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
+      lj_assertX(ok, "arena dtor bump GC2 rollback lost");
+      UNUSED(ok);
+      return 0;
+    }
+    return 1;
   }
-  ok = lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_FREE,
-				    LJ_ARENA_LIFETIME_MUTATING);
-  if (ok)
+  if (!arena_gc2_token_none_acq(a, cell) ||
+      !lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_FREE,
+					   LJ_ARENA_LIFETIME_MUTATING))
+    return 0;
+  if (!arena_gc2_prepare_incarnation(a, cell)) {
     ok = lj_arena_lifetime_state_cas(a, cell,
+	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_FREE);
+    lj_assertX(ok, "arena bump GC2 rollback lost");
+    UNUSED(ok);
+    return 0;
+  }
+  ok = lj_arena_lifetime_state_cas(a, cell,
 	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_LIVE);
   lj_assertX(ok, "arena bump reservation lifetime publication failed");
   return ok;
@@ -6368,36 +6526,70 @@ static int arena_reserve_lifetime_pair(GCArena *a, uint32_t first,
     return 0;
   if (dtor_construct) {
     if (lj_arena_root_state_acq(a, first) != LJ_ARENA_ROOT_NONE ||
-	lj_arena_root_state_acq(a, second) != LJ_ARENA_ROOT_NONE)
+        lj_arena_root_state_acq(a, second) != LJ_ARENA_ROOT_NONE ||
+	!arena_gc2_token_none_acq(a, first) ||
+	!arena_gc2_token_none_acq(a, second))
       return 0;
     if (first / LJ_ARENA_LIFETIME_CELLS_PER_WORD ==
-	second / LJ_ARENA_LIFETIME_CELLS_PER_WORD)
-      return lj_arena_lifetime_state_cas_pair(a, first, second,
+	second / LJ_ARENA_LIFETIME_CELLS_PER_WORD) {
+      lifeok = lj_arena_lifetime_state_cas_pair(a, first, second,
 	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT);
+      if (!lifeok)
+	return 0;
+      if (arena_gc2_prepare_incarnation(a, first) &&
+	  arena_gc2_prepare_incarnation(a, second))
+	return 1;
+      lifeok = lj_arena_lifetime_state_cas_pair(a, first, second,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
+      lj_assertX(lifeok, "arena pair dtor GC2 rollback lost");
+      UNUSED(lifeok);
+      return 0;
+    }
     if (!lj_arena_lifetime_state_cas(a, first,
 	  LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT))
       return 0;
-    if (lj_arena_lifetime_state_cas(a, second,
-	  LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT))
-      return 1;
-    lifeok = lj_arena_lifetime_state_cas(a, first,
+    if (!lj_arena_lifetime_state_cas(a, second,
+	  LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT)) {
+      lifeok = lj_arena_lifetime_state_cas(a, first,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
-    lj_assertX(lifeok, "arena split typed construction rollback lost");
-    UNUSED(lifeok);
+      lj_assertX(lifeok, "arena split typed construction rollback lost");
+      UNUSED(lifeok);
+      return 0;
+    }
+    if (arena_gc2_prepare_incarnation(a, first) &&
+	arena_gc2_prepare_incarnation(a, second))
+      return 1;
+    rootok = lj_arena_lifetime_state_cas(a, second,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
+    lifeok = rootok && lj_arena_lifetime_state_cas(a, first,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
+    lj_assertX(rootok && lifeok, "arena split dtor GC2 rollback lost");
+    UNUSED(rootok); UNUSED(lifeok);
     return 0;
   }
   if (first / LJ_ARENA_LIFETIME_CELLS_PER_WORD ==
-	second / LJ_ARENA_LIFETIME_CELLS_PER_WORD &&
+      second / LJ_ARENA_LIFETIME_CELLS_PER_WORD &&
       first / LJ_ARENA_ROOT_CELLS_PER_WORD ==
-	second / LJ_ARENA_ROOT_CELLS_PER_WORD) {
+      second / LJ_ARENA_ROOT_CELLS_PER_WORD) {
+    if (!arena_gc2_token_none_acq(a, first) ||
+	!arena_gc2_token_none_acq(a, second))
+      return 0;
     lifeok = lj_arena_lifetime_state_cas_pair(a, first, second,
 	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT);
     if (!lifeok)
       return 0;
     rootok = lj_arena_root_state_cas_pair(a, first, second,
 	LJ_ARENA_ROOT_NONE, LJ_ARENA_ROOT_LINKING);
-    if (rootok)
+    if (rootok && arena_gc2_prepare_incarnation(a, first) &&
+	arena_gc2_prepare_incarnation(a, second))
       return 1;
+    if (rootok) {
+      rootok = lj_arena_root_state_cas_pair(a, first, second,
+	LJ_ARENA_ROOT_LINKING, LJ_ARENA_ROOT_NONE);
+      lj_assertX(rootok, "arena pair root GC2 rollback lost");
+      if (!rootok)
+	return 0;
+    }
     lifeok = lj_arena_lifetime_state_cas_pair(a, first, second,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE);
     lj_assertX(lifeok, "arena pair construction claim rollback lost");

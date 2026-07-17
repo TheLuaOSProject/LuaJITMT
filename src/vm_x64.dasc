@@ -345,6 +345,12 @@ LJ_STATIC_ASSERT(sizeof(GCtab) == 80u);
 #define ARENA_ROOT_OFS		((int)offsetof(GCArena, root))
 #define ARENA_LIFETIME_OFS	((int)offsetof(GCArena, lifetime))
 #define ARENA_READY_OFS		((int)offsetof(GCArena, ready))
+#define ARENA_GC2_TABSTAMP_OFS	((int)offsetof(GCAhdr, gc2_tabstamp))
+#define TABSTAMP_STATE_OFS	((int)offsetof(LJGC2TabStamp, state))
+#define TABSTAMP_TOKEN_CONTROL_OFS \
+  ((int)(offsetof(LJGC2TabStamp, token) + \
+	 offsetof(LJGC2TableToken, control)))
+#define TABSTAMP_TOKEN_STATE_MASK ((int)LJ_GC2_TABLE_TOKEN_STATE_MASK)
 #define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
 #define TABARRAY_ACAP_OFS	\
   (TABARRAY_ASIZE_OFS + (int)offsetof(TabArrayHdr, acap))
@@ -4450,6 +4456,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea r9d, [RA+TAB_EMPTY_NCELLS]
     |  cmp r9d, ITYPEd
     |  ja >7
+    |  // A traversable bump cell always has a persistent GC2 side entry.
+    |  // Reject an exact rescan owner before consuming the private cursor.
+    |  mov RC, [r8+ARENA_GC2_TABSTAMP_OFS]
+    |  test RC, RC
+    |  jz >7
+    |  mov ITYPEd, RAd
+    |  shl ITYPE, 4
+    |  test byte [RC+ITYPE+TABSTAMP_TOKEN_CONTROL_OFS], TABSTAMP_TOKEN_STATE_MASK
+    |  jnz >7
     |  mov dword [DISPATCH+DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell)], r9d
     |  mov ITYPEd, RAd			// Preserve cell index until publication.
     |  shl RA, LJ_CELL_SHIFT
@@ -4552,6 +4567,83 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov ITYPE, RC
     |  sub ITYPE, r8
     |  shr ITYPE, LJ_CELL_SHIFT
+    |  // Recheck after both non-readable claims close the precheck race. A
+    |  // token is the physical-reuse owner and may lawfully coexist with FREE,
+    |  // so a crossover rolls both unpublished claims back before fallback.
+    |  // Only a stable NONE token permits reincarnation.
+    |  mov RA, [r8+ARENA_GC2_TABSTAMP_OFS]
+    |  test RA, RA
+    |  jz >8
+    |  mov r9, ITYPE
+    |  shl r9, 4
+    |  add RA, r9
+    |  test byte [RA+TABSTAMP_TOKEN_CONTROL_OFS], TABSTAMP_TOKEN_STATE_MASK
+    |  jz >4
+|8:
+    |  // Undo root LINKING(01)->NONE(00) exactly. No body or sidecar word was
+    |  // touched, and every descriptor mismatch remains terminal fail-closed.
+    |  mov r8, TMP1
+    |  and r8, -LJ_ARENA_SIZE
+    |  mov ITYPE, TMP1
+    |  sub ITYPE, r8
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_ROOT_CELLS_PER_WORD-1
+    |  shl r9d, 1
+    |  shr ITYPEd, 5
+    |  lea r8, [r8+ITYPE*8]
+    |  mov RC, [r8+ARENA_ROOT_OFS]
+|9:
+    |  mov ITYPE, RC
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  sub r9d, 1
+    |  lock
+    |  cmpxchg aword [r8+ARENA_ROOT_OFS], ITYPE
+    |  jne <9
+    |  // Then undo lifetime CONSTRUCT(0010)->FREE(0000) exactly. The token
+    |  // remains the sole reuse veto until its owner completes it.
+    |  mov r8, TMP1
+    |  and r8, -LJ_ARENA_SIZE
+    |  mov ITYPE, TMP1
+    |  sub ITYPE, r8
+    |  shr ITYPE, LJ_CELL_SHIFT
+    |  mov r9d, ITYPEd
+    |  and r9d, LJ_ARENA_LIFETIME_CELLS_PER_WORD-1
+    |  shl r9d, 2
+    |  shr ITYPEd, 4
+    |  lea r8, [r8+ITYPE*8]
+    |  mov RC, [r8+ARENA_LIFETIME_OFS]
+|9:
+    |  mov ITYPE, RC
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  add r9d, 1
+    |  btr ITYPE, r9
+    |  jnc >2
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  add r9d, 1
+    |  bts ITYPE, r9
+    |  jc >2
+    |  btr ITYPE, r9
+    |  sub r9d, 3
+    |  lock
+    |  cmpxchg aword [r8+ARENA_LIFETIME_OFS], ITYPE
+    |  jne <9
+    |  jmp >7
+|4:
+    |  // The scan proof belongs to the old cell incarnation; the persistent
+    |  // token generation deliberately survives. This precedes body, READY
+    |  // and block publication and is release-ordered by x64 TSO.
+    |  mov qword [RA+TABSTAMP_STATE_OFS], 0
     |  movzx r9d, byte [TMPR+GL_OFS(gc.currentwhite)]
     |  and r9d, LJ_GC_WHITES
     |  mov byte TAB:RC->marked, r9b

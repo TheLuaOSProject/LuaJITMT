@@ -124,17 +124,33 @@ static void assert_empty_table_body(global_State *g, GCtab *t)
   }
 }
 
-static void poison_recycled_empty_table_fields(GCArena *a, uint32_t cell)
+static uint64_t poison_recycled_empty_table_fields(GCArena *a, uint32_t cell)
 {
   GCtab *stale = (GCtab *)lj_arena_cellptr(a, cell);
+  LJGC2TabStamp *stamp = lj_arena_gc2_stamp_acq(stale);
+  LJGC2TableTokenTicket ticket;
+  uint64_t control;
   /* A private FREE bump cell may contain bytes from an older incarnation.
   ** Poison only the fields under test, without creating allocator-visible
-  ** free-run metadata, so the inline constructor must overwrite both. */
+  ** free-run metadata, so the inline constructor must overwrite them. The
+  ** side token generation is persistent identity and must not be cleared. */
   assert(lj_arena_state(a, cell) == 0);
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&stamp->token.control);
+  assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(lj_gc2_table_token_generation(control) != 0);
+  la_store64_rel(&stamp->state,
+	(UINT64_C(0xa5a5a5a5) << 32) | UINT64_C(0x5a5a5a5a));
   lj_tab_weak_cycle_store_rlx(stale, UINT32_C(0xa5a5a5a5));
   lj_tab_gc2_rescan_state_store_rlx(stale, LJ_TAB_RESCAN_CANCELLED);
+  assert(la_load64_acq(&stamp->state) != 0);
   assert(lj_tab_weak_cycle_acq(stale) == UINT32_C(0xa5a5a5a5));
   assert(lj_tab_gc2_rescan_state_acq(stale) == LJ_TAB_RESCAN_CANCELLED);
+  return control;
 }
 
 static ReusableRun create_reusable_empty_table_run(TGState *tg)
@@ -201,7 +217,9 @@ static void test_inline_empty_tnew_clears_recycled_fields(lua_State *L,
   LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
   GCArena *a0;
   uint32_t cell0, calls0;
+  uint64_t token0;
   GCtab *t;
+  LJGC2TabStamp *stamp;
 
   load_empty_table_chunk(L);
   a0 = b->a;
@@ -211,14 +229,62 @@ static void test_inline_empty_tnew_clears_recycled_fields(lua_State *L,
   assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
   assert(lj_tg_local_total_acq(tg) <
 	 LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
-  poison_recycled_empty_table_fields(a0, cell0);
+  token0 = poison_recycled_empty_table_fields(a0, cell0);
 
   ljt_lua_pcall(L, 0, 1, "recycled-field empty TNEW inline pcall");
   t = tabV(L->top - 1);
 
   assert(lj_tab_test_new0_calls() == calls0);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
+  stamp = lj_arena_gc2_stamp_acq(t);
+  assert(stamp != NULL);
+  assert(la_load64_acq(&stamp->state) == 0);
+  assert(la_load64_acq(&stamp->token.control) == token0);
   assert_empty_table_body(g, t);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
+  assert(root_chain_contains(g, obj2gco(t)));
+  lua_pop(L, 1);
+}
+
+static void test_pending_token_uses_helper(lua_State *L, global_State *g,
+				    TGState *tg)
+{
+  LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  GCArena *a0;
+  LJGC2TabStamp *stamp;
+  LJGC2TableTokenTicket ticket;
+  uint32_t cell0, calls0;
+  GCtab *t;
+
+  load_empty_table_chunk(L);
+  a0 = b->a;
+  cell0 = b->cell;
+  calls0 = lj_tab_test_new0_calls();
+  assert(a0 != NULL);
+  assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
+  assert(lj_arena_state(a0, cell0) == 0);
+  stamp = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a0, cell0));
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+
+  ljt_lua_pcall(L, 0, 1, "pending-token empty TNEW helper pcall");
+  t = tabV(L->top - 1);
+
+  assert(lj_tab_test_new0_calls() == calls0 + 1u);
+  assert((void *)t != lj_arena_cellptr(a0, cell0));
+  /* The helper may publish the abandoned private bump tail as free-run
+  ** metadata, but the protected cell must never acquire object lifetime. */
+  assert(lj_arena_lifetime_state_acq(a0, cell0) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(lj_arena_root_state_acq(a0, cell0) == LJ_ARENA_ROOT_NONE);
+  assert(!lj_arena_ready_get(a0, cell0));
+  assert(la_load64_acq(&stamp->token.control) == ticket.control);
+  assert(lj_gc2_table_token_state(ticket.control) ==
+	 LJ_GC2_TABLE_TOKEN_PENDING);
+  assert_empty_table_body(g, t);
+  assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
   assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(root_chain_contains(g, obj2gco(t)));
   lua_pop(L, 1);
@@ -739,6 +805,7 @@ int main(void)
 
   test_inline_empty_tnew(L, g, tg);
   test_inline_empty_tnew_clears_recycled_fields(L, g, tg);
+  test_pending_token_uses_helper(L, g, tg);
   test_plain_new0_inline_empty(L, g, tg);
   test_plain_new_inline_empty(L, g, tg);
   test_capi_newtable_rooted_empty(L, g, tg);

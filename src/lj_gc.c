@@ -1629,16 +1629,26 @@ static int gc2_sweep_exclusive_leaf_claim(global_State *g, GCobj *o,
 {
   GCArena *a = info ? (GCArena *)info->arena : NULL;
   uint32_t gct = info ? info->gct : 0;
+  int claimed;
   if (!g || mt_gc_exclusive_acq(g) == 0 || !a ||
       info->base != (void *)o || lj_arena_ishuge(a) ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
       G2TG(g) != g->main_tg || lj_tg_any_jit_active(g) || info->marked ||
+      !lj_arena_gc2_token_none_acq(a, info->start) ||
       (gct != (uint32_t)~LJ_TFUNC &&
 	(gct != (uint32_t)~LJ_TUPVAL || !gco2uv(o)->closed)) ||
       lj_arena_sweep_state_acq(a, info->start) != LJ_ARENA_SWEEP_WHITE)
     return 0;
-  return lj_arena_lifetime_state_cas(a, info->start,
+  claimed = lj_arena_lifetime_state_cas(a, info->start,
 	LJ_ARENA_LIFETIME_LIVE, LJ_ARENA_LIFETIME_DESTRUCT);
+  if (claimed && !lj_arena_gc2_token_none_acq(a, info->start)) {
+    int restored = lj_arena_lifetime_state_cas(a, info->start,
+	LJ_ARENA_LIFETIME_DESTRUCT, LJ_ARENA_LIFETIME_LIVE);
+    lj_assertG(restored, "exclusive leaf token rollback lost ownership");
+    UNUSED(restored);
+    return 0;
+  }
+  return claimed;
 }
 
 static void gc2_sweep_exclusive_leaf_commit(global_State *g, GCobj *o,
@@ -1675,16 +1685,22 @@ static int gc2_sweep_exclusive_pair(global_State *g, GCRef *incoming,
       fninfo->base != (void *)fno || fninfo->gct != (uint32_t)~LJ_TFUNC ||
       fninfo->marked || lj_arena_ishuge(a) ||
       mt_active_or_entering_acq(g) || gc2_n_workers_acq(g) != 0 ||
-      G2TG(g) != g->main_tg || lj_tg_any_jit_active(g))
+      G2TG(g) != g->main_tg || lj_tg_any_jit_active(g) ||
+      !lj_arena_gc2_token_none_acq(a, fninfo->start))
     return 0;
   fn = gco2func(fno);
   if (!isluafunc(fn) || lj_funcL_nupvalues(&fn->l) != 1)
     return 0;
   uvo = lj_obj_gcw_acq(fno);
   if (!uvo || uvo == fno || func_uvptr_acq(&fn->l, 0) != uvo ||
-      !lj_gc2_obj_queued_info_held(g, uvo, a, &uvinfo) ||
-      uvinfo.arena != a || uvinfo.base != (void *)uvo || uvinfo.marked ||
-      uvinfo.gct != (uint32_t)~LJ_TUPVAL || !gco2uv(uvo)->closed ||
+      lj_arena_of(uvo) != a || lj_arena_cellof(uvo) < LJ_AFIRST_CELL ||
+      !lj_arena_gc2_token_none_acq(a, lj_arena_cellof(uvo)) ||
+      !lj_gc2_obj_queued_info_held(g, uvo, a, &uvinfo))
+    return 0;
+  if (uvinfo.arena != a || uvinfo.base != (void *)uvo || uvinfo.marked ||
+      uvinfo.gct != (uint32_t)~LJ_TUPVAL ||
+      !lj_arena_gc2_token_none_acq(a, uvinfo.start) ||
+      !gco2uv(uvo)->closed ||
       (lj_obj_gcflags(fno) & (LJ_GC_FIXED|LJ_GC_SFIXED)) ||
       (lj_obj_gcflags(uvo) & (LJ_GC_FIXED|LJ_GC_SFIXED)) ||
       !gc2_sweep_info_old_generation(g, uvo, &uvinfo) ||
@@ -1710,6 +1726,17 @@ static int gc2_sweep_exclusive_pair(global_State *g, GCRef *incoming,
 	LJ_ARENA_ROOT_UNLINKING, LJ_ARENA_ROOT_MEMBER);
     lj_assertG(rootok, "exclusive pair root rollback lost ownership");
     UNUSED(rootok);
+    return 0;
+  }
+  if (!lj_arena_gc2_token_none_acq(a, fncell) ||
+      !lj_arena_gc2_token_none_acq(a, uvcell)) {
+    lifeok = lj_arena_lifetime_state_cas_pair(a, fncell, uvcell,
+	LJ_ARENA_LIFETIME_DESTRUCT, LJ_ARENA_LIFETIME_LIVE);
+    rootok = lj_arena_root_state_cas_pair(a, fncell, uvcell,
+	LJ_ARENA_ROOT_UNLINKING, LJ_ARENA_ROOT_MEMBER);
+    lj_assertG(lifeok && rootok,
+	       "exclusive pair token rollback lost ownership");
+    UNUSED(lifeok); UNUSED(rootok);
     return 0;
   }
   successor = lj_obj_gcw_acq(uvo);
@@ -2376,6 +2403,7 @@ static LJ_AINLINE int gc2_sweep_pregrace_obj_ready(GCArena *a,
       !lj_arena_ready_get(a, cell) ||
       lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE ||
       lj_arena_recovery_state_acq(a, cell) != LJ_ARENA_RECOVERY_IDLE ||
+      !lj_arena_gc2_token_none_acq(a, cell) ||
       lj_arena_lifetime_state_acq(a, cell) != expected_lifetime ||
       lj_arena_late_get(a, cell))
     return 0;
@@ -2610,6 +2638,9 @@ static LJ_AINLINE int gc2_sweep_pregrace_batch_ready(
   for (i = 0; i < LJ_ARENA_DTOR_PLANES; i++)
     if ((la_load64_acq(&a->dtor[i][batch->bitmap_word]) & batch->cells) !=
 	batch->dtor[i])
+      return 0;
+  for (i = 0; i < batch->n; i++)
+    if (!lj_arena_gc2_token_none_acq(a, batch->entry[i].cell))
       return 0;
   return 1;
 }
@@ -2988,6 +3019,12 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	scanned++;
 	continue;
       }
+      if (!lj_arena_gc2_token_none_acq(a, cell)) {
+	pending = 1;
+	cell++;
+	scanned++;
+	continue;
+      }
       life = lj_arena_lifetime_state_acq(a, cell);
       if (life == LJ_ARENA_LIFETIME_LIVE) {
 	if (!lj_arena_lifetime_state_cas(a, cell,
@@ -3002,7 +3039,8 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
 	    !lj_arena_late_get(a, cell) ||
 	    lj_arena_root_state_acq(a, cell) != LJ_ARENA_ROOT_NONE ||
 	    lj_arena_recovery_state_acq(a, cell) !=
-	      LJ_ARENA_RECOVERY_IDLE) {
+	      LJ_ARENA_RECOVERY_IDLE ||
+	    !lj_arena_gc2_token_none_acq(a, cell)) {
 	  (void)lj_arena_lifetime_state_cas(a, cell,
 	    LJ_ARENA_LIFETIME_DESTRUCT, LJ_ARENA_LIFETIME_LIVE);
 	  pending = 1;

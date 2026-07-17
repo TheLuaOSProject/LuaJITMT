@@ -33,6 +33,22 @@ static void assert_no_bins(TGAlloc *alloc, uint32_t kind)
 }
 
 #if defined(LJ_ARENA_TEST_HELPERS)
+typedef struct RunCapture {
+  uint32_t count;
+  uint32_t first_start;
+  uint32_t first_len;
+} RunCapture;
+
+static void capture_run(uint32_t start, uint32_t len, void *ud)
+{
+  RunCapture *capture = (RunCapture *)ud;
+  if (capture->count == 0) {
+    capture->first_start = start;
+    capture->first_len = len;
+  }
+  capture->count++;
+}
+
 static void test_packed_range_preflight(PRNGState *rs)
 {
   GCArena *a = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
@@ -46,6 +62,10 @@ static void test_packed_range_preflight(PRNGState *rs)
   uint32_t recoverycell = word + 32u;
   uint32_t before = start - 1u;
   uint32_t after = start + len;
+  uint32_t tokencell = start + 5u;
+  LJGC2TabStamp *token_stamp;
+  LJGC2TableTokenTicket token_ticket;
+  RunCapture capture;
   uint32_t i;
 
   assert(a != NULL);
@@ -53,6 +73,25 @@ static void test_packed_range_preflight(PRNGState *rs)
   assert((start >> 6) == (recoverycell >> 6));
   snapshot = (GCArena *)malloc(sizeof(*snapshot));
   assert(snapshot != NULL);
+
+  /* Token-only ownership has no arena bitmap lane. It must still split free
+  ** enumeration and veto a coalesced range before any structural mutation. */
+  token_stamp = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, tokencell));
+  assert(token_stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&token_stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  lj_arena_bm_set(a->mark, start);
+  memset(&capture, 0, sizeof(capture));
+  lj_arena_scan_free_runs(a, capture_run, &capture);
+  assert(capture.count == 1u);
+  assert(capture.first_start == start);
+  assert(capture.first_len == tokencell - start);
+  lj_arena_bm_clear(a->mark, start);
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, start, len));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+  assert(lj_gc2_table_token_complete(&token_stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
 
   /* A zero-length request must not bypass the start lifetime check or mutate
   ** its structural bits. Out-of-range requests are equally side-effect free. */
@@ -150,6 +189,8 @@ static void test_terminal_freeing_word_fast_path(PRNGState *rs)
   uint32_t lifecell = base + 9u;
   uint32_t outside = base + 1u;
   uint64_t block, mark, whole_before;
+  LJGC2TabStamp *token_stamp;
+  LJGC2TableTokenTicket token_ticket;
   void *reuse;
   uint32_t i, reason = LJ_ARENA_FINISH_NONE;
 
@@ -174,6 +215,34 @@ static void test_terminal_freeing_word_fast_path(PRNGState *rs)
     assert(lj_arena_sweep_state_cas(a, terminal[i],
 	  LJ_ARENA_SWEEP_WHITE, LJ_ARENA_SWEEP_FREEING));
   }
+  assert(lj_arena_test_terminal_freeing_word(a, word));
+
+  assert(lj_arena_lifetime_state_cas(a, lifecell,
+	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_LIVE));
+  token_stamp = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, lifecell));
+  assert(token_stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&token_stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_arena_lifetime_clear_terminal(a, lifecell) ==
+	 LJ_ARENA_LIFETIME_CLEAR_BLOCKED);
+  assert(lj_arena_lifetime_state_acq(a, lifecell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_gc2_table_token_complete(&token_stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_arena_lifetime_clear_terminal(a, lifecell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+
+  /* A token is a physical side owner even after lifetime reached FREE. The
+  ** word certificate and bitmap apply must retain the whole allocation until
+  ** exact completion changes it back to NONE. */
+  token_stamp = lj_arena_gc2_stamp_acq(
+    lj_arena_cellptr(a, terminal[0]));
+  assert(token_stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&token_stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(!lj_arena_test_terminal_freeing_word(a, word));
+  assert(lj_gc2_table_token_complete(&token_stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
   assert(lj_arena_test_terminal_freeing_word(a, word));
 
   assert(lj_arena_root_state_cas(a, rootcell, LJ_ARENA_ROOT_NONE,
@@ -411,6 +480,9 @@ static void test_dtor_pair_reservation_preflight(PRNGState *rs)
   TGAlloc alloc;
   GCArena *a, *got;
   uint32_t word, first, second, outside, cell, plane;
+  LJGC2TabStamp *first_stamp, *second_stamp;
+  LJGC2TableTokenTicket first_ticket, second_ticket;
+  uint64_t first_control, second_control;
 
   lj_arena_alloc_init(&alloc);
   a = lj_arena_map(rs, LJ_AF_TRAVERSABLE);
@@ -426,6 +498,18 @@ static void test_dtor_pair_reservation_preflight(PRNGState *rs)
   alloc.bump[LJ_ARENAK_TRAVERSABLE].a = a;
   alloc.bump[LJ_ARENAK_TRAVERSABLE].cell = first;
   alloc.bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
+
+  first_stamp = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, first));
+  second_stamp = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, second));
+  assert(first_stamp != NULL && second_stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&first_stamp->token, &first_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(!lj_arena_reserve_bump_dtor_pair(&alloc, rs, LJ_AF_TRAVERSABLE,
+	4u, 2u, LJ_ARENA_DTOR_LFUNC1, LJ_ARENA_DTOR_CLOSED_UV,
+	&got, &cell));
+  assert(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell == first);
+  assert(lj_gc2_table_token_complete(&first_stamp->token, &first_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
 
   /* Discovery and every destructor plane veto before either lifetime lane is
   ** claimed. Clearing the injected authority must make the exact same private
@@ -465,10 +549,26 @@ static void test_dtor_pair_reservation_preflight(PRNGState *rs)
   lj_arena_bm_set(a->block, outside);
   lj_arena_bm_set(a->ready, outside);
   lj_arena_bm_set(a->dtor[3], outside);
+  assert(lj_gc2_table_token_refresh(&first_stamp->token, &first_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete(&first_stamp->token, &first_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_refresh(&second_stamp->token, &second_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete(&second_stamp->token, &second_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  first_control = la_load64_acq(&first_stamp->token.control);
+  second_control = la_load64_acq(&second_stamp->token.control);
+  la_store64_rel(&first_stamp->state, (UINT64_C(23) << 32) | 5u);
+  la_store64_rel(&second_stamp->state, (UINT64_C(29) << 32) | 7u);
   assert(lj_arena_reserve_bump_dtor_pair(&alloc, rs, LJ_AF_TRAVERSABLE,
 	4u, 2u, LJ_ARENA_DTOR_LFUNC1, LJ_ARENA_DTOR_CLOSED_UV,
 	&got, &cell));
   assert(got == a && cell == first);
+  assert(la_load64_acq(&first_stamp->state) == 0);
+  assert(la_load64_acq(&second_stamp->state) == 0);
+  assert(la_load64_acq(&first_stamp->token.control) == first_control);
+  assert(la_load64_acq(&second_stamp->token.control) == second_control);
   assert(lj_arena_bm_get(a->block, outside));
   assert(lj_arena_ready_get(a, outside));
   assert(lj_arena_dtor_kind_acq(a, outside) == ((uint32_t)1u << 3));

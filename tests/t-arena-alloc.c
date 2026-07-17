@@ -35,10 +35,10 @@ static void test_table_token_generation_survives_reuse(PRNGState *rs)
 {
   TGAlloc alloc;
   GCArena *a;
-  LJGC2TabStamp *stamp;
+  LJGC2TabStamp *stamp, *bump_stamp;
   LJGC2TableTokenTicket ticket;
-  uint64_t completed;
-  void *p, *reuse;
+  uint64_t completed, bump_control;
+  void *p, *reuse, *bump;
 
   lj_arena_alloc_init(&alloc);
   p = lj_arena_alloc(&alloc, rs, LJ_CELL_SIZE, LJ_AF_TRAVERSABLE);
@@ -54,6 +54,23 @@ static void test_table_token_generation_survives_reuse(PRNGState *rs)
   completed = la_load64_acq(&stamp->token.control);
   assert(lj_gc2_table_token_state(completed) == LJ_GC2_TABLE_TOKEN_NONE);
   assert(lj_gc2_table_token_generation(completed) == 2u);
+  la_store64_rel(&stamp->state, (UINT64_C(0x12345678) << 32) | 91u);
+
+  /* The owner-private bump path has the same reincarnation contract as bin
+  ** reuse: clear the old scan proof, never the persistent token generation. */
+  bump = lj_arena_cellptr(a, alloc.bump[LJ_ARENAK_TRAVERSABLE].cell);
+  bump_stamp = lj_arena_gc2_stamp_acq(bump);
+  assert(bump_stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&bump_stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete(&bump_stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  bump_control = la_load64_acq(&bump_stamp->token.control);
+  la_store64_rel(&bump_stamp->state, (UINT64_C(0x87654321) << 32) | 37u);
+  assert(lj_arena_alloc(&alloc, rs, LJ_CELL_SIZE, LJ_AF_TRAVERSABLE) == bump);
+  assert(la_load64_acq(&bump_stamp->state) == 0);
+  assert(la_load64_acq(&bump_stamp->token.control) == bump_control);
+  lj_arena_free(&alloc, bump, LJ_CELL_SIZE);
 
   /* Make the exact freed run the next allocation candidate. No allocator
   ** path may zero the persistent side entry when this cell is reused. */
@@ -63,6 +80,7 @@ static void test_table_token_generation_survives_reuse(PRNGState *rs)
   reuse = lj_arena_alloc(&alloc, rs, LJ_CELL_SIZE, LJ_AF_TRAVERSABLE);
   assert(reuse == p);
   assert(lj_arena_gc2_stamp_acq(reuse) == stamp);
+  assert(la_load64_acq(&stamp->state) == 0);
   assert(la_load64_acq(&stamp->token.control) == completed);
 
   lj_arena_free(&alloc, reuse, LJ_CELL_SIZE);

@@ -895,6 +895,47 @@ static void test_typed_dtor_pregrace_exclusive(void)
   lua_close(fx.L);
 }
 
+static void test_typed_dtor_gc2_token_veto(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  LJGC2TabStamp *stamp;
+  LJGC2TableTokenTicket ticket;
+  GCSize total0;
+  unsigned char body[sizeof(GCfunc)];
+
+  typed_dtor_fixture_init(&fx);
+  assert(fx.f1size <= sizeof(body));
+  memcpy(body, fx.f1, fx.f1size);
+  stamp = lj_arena_gc2_stamp_acq(fx.f1);
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  typed_dtor_drop_fixture_roots(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC0|LJ_ARENA_DTOR_LFUNC1|
+	LJ_ARENA_DTOR_CLOSED_UV);
+
+  /* The token is a type-independent physical side owner. Even an injected
+  ** impossible function/token pairing must prevent pre-grace body access and
+  ** terminal lifetime commit while independent objects keep progressing. */
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_bm_get(fx.a->block, fx.f1cell));
+  assert(memcmp(body, fx.f1, fx.f1size) == 0);
+  assert(lj_gc_total_load(fx.g) == total0 - fx.f0size - fx.uvsize);
+
+  assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f0size - fx.f1size - fx.uvsize);
+  assert(!lj_arena_bm_get(fx.a->block, fx.f1cell));
+  lua_close(fx.L);
+}
+
 static void test_typed_dtor_no_adjacency_match(void)
 {
   TypedDtorFixture fx;
@@ -2372,6 +2413,7 @@ int main(void)
   test_boundary_lazy_sweep();
   test_boundary_lazy_sweep_extra_tg();
   test_typed_dtor_pregrace_exclusive();
+  test_typed_dtor_gc2_token_veto();
   test_typed_dtor_dense_batch(5u);
   test_typed_dtor_dense_batch(6u);
   test_typed_dtor_no_adjacency_match();

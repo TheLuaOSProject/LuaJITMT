@@ -513,6 +513,39 @@ static size_t find_mem_test_imm8_jcc(const uint8_t *mc, size_t len,
   return (size_t)-1;
 }
 
+static size_t find_mem_qword_zero_store(const uint8_t *mc, size_t len,
+	 size_t start, int32_t field, int required_base, X64MemInsn *found)
+{
+  size_t i;
+  for (i = start; i + 7u < len; i++) {
+    size_t j = i;
+    uint8_t rex = 0, modrm;
+    uint32_t imm;
+    X64MemInsn ins;
+    if (is_rex(mc[j]))
+      rex = mc[j++];
+    if (!(rex & 8u) || j + 2u > len || mc[j++] != 0xc7u)
+      continue;
+    modrm = mc[j++];
+    if (((modrm >> 3) & 7u) != 0u)
+      continue;
+    ins.start = i;
+    if (!decode_x64_mem_modrm(mc, len, &j, rex, modrm, &ins) ||
+	ins.indexed || (required_base >= 0 && ins.base != required_base) ||
+	ins.disp != field || j + 4u > len)
+      continue;
+    imm = (uint32_t)mc[j] | ((uint32_t)mc[j+1] << 8) |
+	  ((uint32_t)mc[j+2] << 16) | ((uint32_t)mc[j+3] << 24);
+    if (imm != 0)
+      continue;
+    ins.end = j + 4u;
+    if (found)
+      *found = ins;
+    return i;
+  }
+  return (size_t)-1;
+}
+
 static size_t find_bitmap_regop(const uint8_t *mc, size_t len, size_t start,
 	uint8_t opcode, int32_t disp, X64MemInsn *found)
 {
@@ -1044,10 +1077,11 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     size_t fn_dtor, uv_dtor, ready1, ready2, block1, block2;
     size_t pending_hint, pending_cas;
     size_t root_claim, root_commit, root_rollback;
-    size_t pair_claim, pair_commit;
+    size_t pair_claim, pair_commit, pair_rollback;
     size_t pair_claim_bad = (size_t)-1;
     size_t pair_commit_repair = (size_t)-1;
-    size_t split_claim1, split_claim2, split_rollback;
+    size_t split_claim1, split_claim2;
+    size_t split_rollback1, split_rollback2, split_rollback3;
     size_t repair_commit1, repair_commit2;
     size_t repair_live1, repair_live2, repair_mut1, repair_mut2;
     size_t live_bad1 = (size_t)-1, live_bad2 = (size_t)-1;
@@ -1056,6 +1090,8 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     size_t cycle_load, cycle_nonzero, resume_guard, cert_cycle_guard;
     size_t cert_pt_guard, cert_env_guard, env_load, env_store, helper_call;
     size_t cert_fallback = (size_t)-1, target = (size_t)-1;
+    size_t token_check[4], token_target[4];
+    size_t stamp_zero1, stamp_zero2;
     size_t dtor_check[LJ_ARENA_DTOR_PLANES][2];
     size_t dtor_check_bad[LJ_ARENA_DTOR_PLANES][2];
     X64MemInsn dtor_check_insn[LJ_ARENA_DTOR_PLANES][2];
@@ -1130,6 +1166,9 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     pair_commit = find_lifetime_pair_transition(mc, len, 0, fncells,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_LIVE,
 	&state_insn, &pair_commit_repair);
+    pair_rollback = find_lifetime_pair_transition(mc, len, 0, fncells,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE,
+	NULL, NULL);
     split_claim1 = find_lifetime_transition(mc, len, 0,
 	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
 	NULL, NULL);
@@ -1137,7 +1176,15 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
       find_lifetime_transition(mc, len, split_claim1 + 1u,
 	LJ_ARENA_LIFETIME_FREE, LJ_ARENA_LIFETIME_CONSTRUCT,
 	NULL, NULL);
-    split_rollback = find_lifetime_transition(mc, len, 0,
+    split_rollback1 = find_lifetime_transition(mc, len, 0,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE,
+	NULL, NULL);
+    split_rollback2 = split_rollback1 == (size_t)-1 ? (size_t)-1 :
+      find_lifetime_transition(mc, len, split_rollback1 + 1u,
+	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE,
+	NULL, NULL);
+    split_rollback3 = split_rollback2 == (size_t)-1 ? (size_t)-1 :
+      find_lifetime_transition(mc, len, split_rollback2 + 1u,
 	LJ_ARENA_LIFETIME_CONSTRUCT, LJ_ARENA_LIFETIME_FREE,
 	NULL, NULL);
     repair_commit1 = find_lifetime_transition(mc, len, 0,
@@ -1221,6 +1268,20 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     }
     helper_call = find_rel_call_target_at(mc, len, mcaddr,
 	(const void *)lj_func_newL_gc1num_forjit);
+    for (plane = 0; plane < 4u; plane++) {
+      token_target[plane] = (size_t)-1;
+      token_check[plane] = find_mem_test_imm8_jcc(mc, len,
+	plane == 0 ? 0 : token_check[plane-1] + 8u,
+	(int32_t)(offsetof(LJGC2TabStamp, token) +
+		  offsetof(LJGC2TableToken, control)),
+	-1, (uint8_t)LJ_GC2_TABLE_TOKEN_STATE_MASK, CC_NZ,
+	&token_target[plane]);
+    }
+    stamp_zero1 = find_mem_qword_zero_store(mc, len, pair_claim,
+	(int32_t)offsetof(LJGC2TabStamp, state), -1, NULL);
+    stamp_zero2 = stamp_zero1 == (size_t)-1 ? (size_t)-1 :
+      find_mem_qword_zero_store(mc, len, stamp_zero1 + 1u,
+	(int32_t)offsetof(LJGC2TabStamp, state), -1, NULL);
     repair_live1 = find_packed_sample_validate(mc, len,
 	pair_commit_repair, 4u, LJ_ARENA_LIFETIME_LIVE, &live_bad1);
     repair_live2 = repair_live1 == (size_t)-1 ? (size_t)-1 :
@@ -1241,9 +1302,12 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     assert(root_claim == (size_t)-1);
     assert(root_commit == (size_t)-1);
     assert(root_rollback == (size_t)-1);
-    assert(pair_claim != (size_t)-1 && pair_commit != (size_t)-1);
+    assert(pair_claim != (size_t)-1 && pair_commit != (size_t)-1 &&
+	   pair_rollback != (size_t)-1);
     assert(split_claim1 != (size_t)-1 && split_claim2 != (size_t)-1);
-    assert(split_rollback != (size_t)-1);
+    assert(split_rollback1 != (size_t)-1 &&
+	   split_rollback2 != (size_t)-1 &&
+	   split_rollback3 != (size_t)-1);
     assert(repair_commit1 != (size_t)-1 && repair_commit2 != (size_t)-1);
     assert(repair_live1 != (size_t)-1 && repair_live2 != (size_t)-1);
     assert(repair_mut1 != (size_t)-1 && repair_mut2 != (size_t)-1);
@@ -1256,6 +1320,17 @@ static void assert_traced_fnew_descriptor_order(lua_State *L)
     assert(cert_pt_guard != (size_t)-1 && cert_env_guard != (size_t)-1);
     assert(env_load != (size_t)-1 && env_store != (size_t)-1);
     assert(helper_call != (size_t)-1 && cert_fallback <= helper_call);
+    for (plane = 0; plane < 4u; plane++)
+      assert(token_check[plane] != (size_t)-1);
+    assert(token_check[0] < token_check[1] &&
+	   token_check[1] < pair_claim && pair_claim < token_check[2] &&
+	   token_check[2] < token_check[3]);
+    assert(token_target[0] == cert_fallback &&
+	   token_target[1] == cert_fallback);
+    assert(token_target[2] == token_target[3] &&
+	   token_target[2] <= pair_rollback);
+    assert(token_check[3] < stamp_zero1 && stamp_zero1 < stamp_zero2 &&
+	   stamp_zero2 < fn_header && stamp_zero2 < uv_header);
     assert(env_load < mark_guard && mark_guard < phase_guard &&
 	   phase_guard < allocblack_guard && allocblack_guard < gate_guard &&
 	   gate_guard < cycle_load && cycle_load < cycle_nonzero &&
@@ -1434,6 +1509,25 @@ static void prime_traversable_bump_window(TGState *tg)
   assert(lj_arena_alloc_register_existing(alloc));
 }
 
+static uint64_t seed_gc2_stamp_none(GCArena *a, uint32_t cell,
+				     uint64_t state)
+{
+  LJGC2TabStamp *stamp = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, cell));
+  LJGC2TableTokenTicket ticket;
+  uint64_t control;
+  assert(stamp != NULL && state != 0);
+  assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&stamp->token.control);
+  assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(lj_gc2_table_token_generation(control) != 0);
+  la_store64_rel(&stamp->state, state);
+  return control;
+}
+
 static void test_vm_tnew_root_member(lua_State *L, global_State *g,
 				     TGState *tg)
 {
@@ -1555,11 +1649,19 @@ static void test_traced_behavior(lua_State *L)
 static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
 {
   TGState *tg = L2TG(L);
+  const uint32_t fncells = lj_arena_ncells(sizeLfunc(1));
+  const uint32_t uvcells = lj_arena_ncells(sizeof(GCupval));
+  const uint32_t ncells = fncells + uvcells;
   uint32_t old_mark_active = lj_tg_mark_active_acq(tg);
   uint8_t old_alloc_black = lj_tg_alloc_black_acq(tg);
   uint32_t helper0, helper1;
+  uint32_t stamp_fncell, stamp_uvcell;
+  uint64_t fncontrol, uvcontrol;
+  GCArena *stamp_a;
+  LJGC2TabStamp *fnstamp, *uvstamp;
   GCobj *pending0;
-  GCfunc *survivor;
+  GCfunc *first, *survivor;
+  GCupval *firstuv;
   const char *setup =
     "require'jit.util'\n"
     "jit.flush()\n"
@@ -1596,6 +1698,24 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
   lj_gcroot_pending_hint_rel(g, 0);
   pending0 = lj_tg_gcroot_pending_acq(tg);
   assert(pending0 == NULL);
+
+  /* Give the already-recorded trace a deterministic fresh pair whose old
+  ** per-cell scan proofs and persistent NONE generations are observable. */
+  prime_traversable_bump_window(tg);
+  stamp_a = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a;
+  stamp_fncell = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].cell;
+  stamp_uvcell = stamp_fncell + fncells;
+  assert(stamp_fncell + ncells <=
+	 tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].end);
+  fncontrol = seed_gc2_stamp_none(stamp_a, stamp_fncell,
+	(UINT64_C(0x13572468) << 32) | UINT64_C(0x11111111));
+  uvcontrol = seed_gc2_stamp_none(stamp_a, stamp_uvcell,
+	(UINT64_C(0x24681357) << 32) | UINT64_C(0x22222222));
+  fnstamp = lj_arena_gc2_stamp_acq(
+	lj_arena_cellptr(stamp_a, stamp_fncell));
+  uvstamp = lj_arena_gc2_stamp_acq(
+	lj_arena_cellptr(stamp_a, stamp_uvcell));
+  assert(fnstamp != NULL && uvstamp != NULL);
   reset_gc1num_bump_counters();
   helper0 = gc1num_bump_helper_calls();
 
@@ -1613,7 +1733,17 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
   assert(lua_istable(L, -1));
   lua_rawgeti(L, -1, 1);
   assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
-  (void)assert_fnew_typed_layout(funcV(L->top - 1));
+  first = funcV(L->top - 1);
+  firstuv = func_uv_acq(&first->l, 0);
+  assert(lj_arena_of(first) == stamp_a &&
+	 lj_arena_cellof(first) == stamp_fncell);
+  assert(lj_arena_of(firstuv) == stamp_a &&
+	 lj_arena_cellof(firstuv) == stamp_uvcell);
+  assert(la_load64_acq(&fnstamp->state) == 0);
+  assert(la_load64_acq(&uvstamp->state) == 0);
+  assert(la_load64_acq(&fnstamp->token.control) == fncontrol);
+  assert(la_load64_acq(&uvstamp->token.control) == uvcontrol);
+  (void)assert_fnew_typed_layout(first);
   lua_pop(L, 1);
   {
     int i, found_cross_word = 0;
@@ -1628,6 +1758,72 @@ static void test_traced_immutable_numeric_inline(lua_State *L, global_State *g)
     assert(found_cross_word);
   }
   lua_pop(L, 1);
+
+  /* A PENDING token on either start must reject the whole adjacent inline
+  ** pair before cursor consumption. Exercise each start independently. The C
+  ** path may still use the other FREE span, but it must leave the protected
+  ** identity untouched until exact completion. */
+  {
+    int which;
+    for (which = 0; which < 2; which++) {
+      LJGC2TableTokenTicket ticket;
+      GCArena *a;
+      LJGC2TabStamp *stamp;
+      uint32_t fncell, uvcell, protected_cell;
+      lua_Number offset = 1500.5 + 200.0 * which;
+      GCfunc *fn;
+      GCupval *uv;
+
+      prime_traversable_bump_window(tg);
+      a = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a;
+      fncell = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].cell;
+      uvcell = fncell + fncells;
+      protected_cell = which == 0 ? fncell : uvcell;
+      assert(fncell + ncells <= tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].end);
+      stamp = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, protected_cell));
+      assert(stamp != NULL);
+      assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	     LJ_GC2_TABLE_TOKEN_RESULT_OK);
+      helper0 = gc1num_bump_helper_calls();
+
+      lua_getglobal(L, "__fnew_hint_run");
+      assert(lua_isfunction(L, -1));
+      lua_pushnumber(L, offset);
+      ljt_lua_pcall(L, 1, 2, "immutable numeric FNEW pending-token veto");
+      assert(lua_tonumber(L, -2) == offset + 1.0);
+      assert(lua_tonumber(L, -1) == offset + 100.0);
+      lua_pop(L, 2);
+      helper1 = gc1num_bump_helper_calls();
+      assert(helper1 > helper0);
+
+      lua_getglobal(L, "__fnew_hint_t");
+      assert(lua_istable(L, -1));
+      lua_rawgeti(L, -1, 1);
+      assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
+      fn = funcV(L->top - 1);
+      uv = func_uv_acq(&fn->l, 0);
+      if (which == 0)
+	assert((void *)fn != lj_arena_cellptr(a, fncell));
+      else
+	assert((void *)uv != lj_arena_cellptr(a, uvcell));
+      assert(lj_arena_lifetime_state_acq(a, protected_cell) ==
+	     LJ_ARENA_LIFETIME_FREE);
+      assert(lj_arena_root_state_acq(a, protected_cell) ==
+	     LJ_ARENA_ROOT_NONE);
+      assert(!lj_arena_ready_get(a, protected_cell));
+      assert(la_load64_acq(&stamp->token.control) == ticket.control);
+      lua_pop(L, 2);
+      assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	     LJ_GC2_TABLE_TOKEN_RESULT_OK);
+    }
+  }
+  /* The deliberate veto can take the generic C allocation chain, whose
+  ** ordinary ownership publication is unrelated to the rootless inline
+  ** invariant checked below. Drain it before establishing that baseline. */
+  (void)lj_gc_flush_root_pending(g);
+  lj_gcroot_pending_hint_rel(g, 0);
+  pending0 = lj_tg_gcroot_pending_acq(tg);
+  assert(pending0 == NULL);
 
   /* Reuse this exact decoded FNEW trace to prove mark_active diverts compiled
   ** mcode to the C helper. Real MARK closes stale native entry, so manual

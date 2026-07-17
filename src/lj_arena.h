@@ -880,9 +880,12 @@ LJ_FUNC int lj_arena_dtor_construct_commit(GCArena *a, uint32_t cell);
 LJ_FUNC int lj_arena_dtor_construct_commit_pair(GCArena *a, uint32_t first,
 						 uint32_t second);
 LJ_FUNC int lj_arena_lifetime_empty(const GCArena *a);
+#define LJ_ARENA_LIFETIME_CLEAR_BLOCKED UINT32_MAX
 /* Quiescent terminal cleanup only. Returns the state it replaced with FREE.
-** The caller owns all semantic destruction; this only discards the locator
-** lane after no runtime actor can observe or resume the allocation. */
+** LJ_ARENA_LIFETIME_CLEAR_BLOCKED means a physical GC2 token still owns the
+** exact body and no transition occurred. The caller owns all semantic
+** destruction; this only discards the locator lane after no runtime actor can
+** observe or resume the allocation. */
 LJ_FUNC uint32_t lj_arena_lifetime_clear_terminal(GCArena *a,
 						    uint32_t cell);
 LJ_FUNC int lj_arena_reclaim_seal(GCArena *a);
@@ -946,6 +949,30 @@ static LJ_AINLINE LJGC2TabStamp *lj_arena_gc2_stamp_acq(const void *p)
     return NULL;
   side = lj_arena_gc2_tabstamp_acq(a);
   return side ? &side->cell[cell] : NULL;
+}
+
+/* Physical table-rescan ownership for one retained small mapping. Logical
+** lifetime may already be FREE: only NONE permits body reuse or destruction.
+** A missing sidecar on a published traversable arena fails closed. */
+static LJ_AINLINE int lj_arena_gc2_token_none_acq(const GCArena *a,
+						   uint32_t cell)
+{
+  LJGC2TabStampArena *side;
+  uint32_t flags;
+  if (!a)
+    return 0;
+  flags = lj_arena_flags_acq(a);
+  if ((flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC ||
+      !(flags & LJ_AF_TRAVERSABLE))
+    return 1;
+  if (cell < LJ_AFIRST_CELL)
+    return 1;
+  if (cell >= LJ_ARENA_CELLS)
+    return 0;
+  side = lj_arena_gc2_tabstamp_acq(a);
+  return side && lj_gc2_table_token_state(
+    la_load64_acq(&side->cell[cell].token.control)) ==
+      LJ_GC2_TABLE_TOKEN_NONE;
 }
 
 static LJ_AINLINE uint32_t lj_arena_bm_get(const uint64_t *bm, uint32_t i)
