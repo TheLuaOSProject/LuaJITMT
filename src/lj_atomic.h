@@ -78,10 +78,11 @@ LA_INLINE int la_casptr(void **p,void **exp,void *des,int mo_s,int mo_f)
 typedef struct la_u128 { uint64_t lo, hi; } __attribute__((aligned(16))) la_u128;
 LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
 {
-#if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
-  /* gcc ≥7 routes the 16-byte builtin through libatomic even with -mcx16
-  ** (PR80878). libatomic is lock-free here, but the PLT call costs and
-  ** the lockless fast path wants the real instruction: inline it. */
+#if defined(__x86_64__)
+  /* GCC ≥7 may route the 16-byte builtin through libatomic even with -mcx16
+  ** (PR80878). Clang 19.1 may also miscompile its builtin when ASan inlines it
+  ** by reusing the desired-low register as the memory base. The lockless fast
+  ** path wants the real instruction on every supported x86-64 compiler. */
   uint8_t ok;
   __asm__ __volatile__("lock cmpxchg16b %1"
                        : "=@ccz"(ok), "+m"(*p), "+a"(exp->lo), "+d"(exp->hi)
