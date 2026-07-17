@@ -333,6 +333,13 @@
 #define TAB_EMPTY_SIZE		((int)sizeof(GCtab))
 #define TAB_EMPTY_NCELLS	((int)((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT))
 #define TAB_EMPTY_BINMASK	((int32_t)(~((1u << (TAB_EMPTY_NCELLS-1))-1u)))
+/* BC_TNEW initializes these fields with fixed-width stores below. Keep the
+** generated x64 offsets and the empty-table allocation size tied to GCtab. */
+LJ_STATIC_ASSERT(offsetof(GCtab, nomm) == 10u);
+LJ_STATIC_ASSERT(offsetof(GCtab, colo) == 11u);
+LJ_STATIC_ASSERT(offsetof(GCtab, gc2_rescan_state) == 12u);
+LJ_STATIC_ASSERT(offsetof(GCtab, array) == 16u);
+LJ_STATIC_ASSERT(sizeof(GCtab) == 80u);
 #define ARENA_BLOCK_OFS		((int)offsetof(GCArena, block))
 #define ARENA_MARK_OFS		((int)offsetof(GCArena, mark))
 #define ARENA_ROOT_OFS		((int)offsetof(GCArena, root))
@@ -4557,6 +4564,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov dword TAB:RC->hmask, 0
     |  mov dword TAB:RC->acap, 0
     |  mov dword TAB:RC->struct_owner, 0
+    |  mov dword TAB:RC->weak_cycle, 0
+    |  mov byte TAB:RC->gc2_rescan_state, LJ_TAB_RESCAN_NONE
     |  lea r9, [TMPR+GL_OFS(nilnode)]
     |  mov TAB:RC->node, r9
     |  mov TAB:RC->freetop, r9

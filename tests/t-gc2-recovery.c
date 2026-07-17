@@ -115,6 +115,22 @@ static void recovery_drain_all(global_State *g, TGState *tg)
   assert(lj_gc2_test_ssb_empty(g));
 }
 
+static uint32_t recovery_fill_active_ssb(RecoveryFixture *f, GCstr *filler,
+						 GCRef *end)
+{
+  uint32_t n = 0;
+  GCRef *next;
+  assert(f != NULL && filler != NULL && end != NULL);
+  next = lj_tg_ssb_next_acq(f->tg);
+  while (next != end) {
+    assert(next < end && n < TG_GC2_SSB_SLOTS);
+    assert(lj_gc2_test_ssb_push(f->g, obj2gco(filler)) == 1);
+    n++;
+    next = lj_tg_ssb_next_acq(f->tg);
+  }
+  return n;
+}
+
 static void recovery_wait_paused(uint32_t stage)
 {
   while (lj_gc2_test_recovery_paused() != stage)
@@ -336,8 +352,8 @@ static void test_full_active_ssb_fallback(void)
 
   lua_pushliteral(f.L, "gc2 full SSB filler");
   filler = strV(f.L->top - 1);
-  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  i = recovery_fill_active_ssb(&f, filler, end);
+  assert(i <= TG_GC2_SSB_SLOTS);
   assert(lj_tg_ssb_next_acq(f.tg) == end);
   assert(gcref_acq(active->slot[0]) == obj2gco(filler));
   assert(gcref_acq(active->slot[TG_GC2_SSB_SLOTS - 1u]) ==
@@ -436,8 +452,8 @@ static void test_full_ssb_barrier_coalesces_reserved_recovery(void)
   assert(end == base + TG_GC2_SSB_SLOTS);
   lua_pushliteral(f.L, "gc2 reserved recovery filler");
   filler = strV(f.L->top - 1);
-  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  i = recovery_fill_active_ssb(&f, filler, end);
+  assert(i <= TG_GC2_SSB_SLOTS);
   assert(lj_tg_ssb_next_acq(f.tg) == end);
 
   recovery_published0 = gc2_recovery_published_acq(f.g);
@@ -1359,8 +1375,8 @@ static void test_huge_reader_recovery_bypasses_smr_writer(void)
   assert(end == base + TG_GC2_SSB_SLOTS);
   lua_pushliteral(f.L, "gc2 held huge reader filler");
   filler = strV(f.L->top - 1);
-  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  i = recovery_fill_active_ssb(&f, filler, end);
+  assert(i <= TG_GC2_SSB_SLOTS);
   assert(lj_tg_ssb_next_acq(f.tg) == end);
 
   published0 = gc2_recovery_published_acq(f.g);
@@ -1445,8 +1461,8 @@ static void test_huge_sweep_stable_preadmission_arbitrates_stale_writer(void)
     ** that reader before the stale writer is allowed to continue. */
     lua_pushliteral(f.L, "gc2 sweep stable preadmission filler");
     filler = strV(f.L->top - 1);
-    for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-      assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+    i = recovery_fill_active_ssb(&f, filler, end);
+    assert(i <= TG_GC2_SSB_SLOTS);
     assert(lj_tg_ssb_next_acq(f.tg) == end);
     assert(lj_gc2_markobj(f.g, obj2gco(ud)) == 1);
     assert(gc2_recovery_failed_acq(f.g) == 0);
@@ -1527,8 +1543,8 @@ static void test_huge_sweep_saturated_reader_failclosed(void)
     end = lj_tg_ssb_end_acq(f.tg);
     lua_pushliteral(f.L, "gc2 saturated sweep admission filler");
     filler = strV(f.L->top - 1);
-    for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-      assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+    i = recovery_fill_active_ssb(&f, filler, end);
+    assert(i <= TG_GC2_SSB_SLOTS);
     assert(lj_tg_ssb_next_acq(f.tg) == end);
 
     recovery_publish_sweep_phase(f.g);
@@ -1760,8 +1776,8 @@ static void test_current_cyclic_table_private_edge_is_consumed(void)
   assert(active != NULL && base == active->slot);
   lua_pushliteral(f.L, "gc2 cyclic recovery filler");
   filler = strV(f.L->top - 1);
-  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  i = recovery_fill_active_ssb(&f, filler, end);
+  assert(i <= TG_GC2_SSB_SLOTS);
   assert(lj_tg_ssb_next_acq(f.tg) == end);
 
   redirtied0 = gc2_recovery_redirtied_acq(f.g);
@@ -1851,8 +1867,8 @@ static void test_current_self_metatable_metadata_is_private(void)
   assert(active != NULL && base == active->slot);
   lua_pushliteral(f.L, "gc2 self metatable recovery filler");
   filler = strV(f.L->top - 1);
-  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-    assert(lj_gc2_test_ssb_push(f.g, obj2gco(filler)) == 1);
+  i = recovery_fill_active_ssb(&f, filler, end);
+  assert(i <= TG_GC2_SSB_SLOTS);
   assert(lj_tg_ssb_next_acq(f.tg) == end);
 
   redirtied0 = gc2_recovery_redirtied_acq(f.g);
@@ -1901,8 +1917,8 @@ static void recovery_assert_cyclic_container_bounded(RecoveryFixture *f,
   assert(active != NULL && base == active->slot);
   lua_pushstring(f->L, filler_text);
   filler = strV(f->L->top - 1);
-  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
-    assert(lj_gc2_test_ssb_push(f->g, obj2gco(filler)) == 1);
+  i = recovery_fill_active_ssb(f, filler, end);
+  assert(i <= TG_GC2_SSB_SLOTS);
   assert(lj_tg_ssb_next_acq(f->tg) == end);
 
   redirtied0 = gc2_recovery_redirtied_acq(f->g);

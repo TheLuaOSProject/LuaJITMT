@@ -27,6 +27,7 @@
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
+#include "lj_meta.h"
 #if LJ_HASFFI
 #include "lj_cdata.h"
 #endif
@@ -2146,12 +2147,12 @@ static void test_weak_snapshot_keylock_replays_same_index(lua_State *L,
   setkeylockV(&keylock);
   tv_rawstore_rel(&modeslot->key, tv_rawload(&keylock));
   assert(lj_gc2_smr_read_try(g));
-  assert(lj_tab_getstr_gc_held(g, mt, modekey, &modeout) ==
+  assert(lj_tab_getstr_held_try(g, mt, modekey, &modeout) ==
 	 LJ_TAB_GC_LOOKUP_RETRY);
   lj_gc2_smr_read_leave(g);
   tv_rawstore_rel(&modeslot->key, tv_rawload(&savedmodekey));
   assert(lj_gc2_smr_read_try(g));
-  assert(lj_tab_getstr_gc_held(g, mt, modekey, &modeout) ==
+  assert(lj_tab_getstr_held_try(g, mt, modekey, &modeout) ==
 	 LJ_TAB_GC_LOOKUP_FOUND);
   lj_gc2_smr_read_leave(g);
   assert(tvisstr(&modeout));
@@ -4556,6 +4557,1017 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
 }
 
 #if defined(LJ_GC2_TEST_HELPERS)
+typedef struct TableRescanSetCtx {
+  global_State *g;
+  GCtab *t;
+  int installed;
+} TableRescanSetCtx;
+
+typedef struct ExpectedMarkTransitionCtx {
+  GCArena *arena;
+  uint32_t cell;
+} ExpectedMarkTransitionCtx;
+
+static void *table_rescan_set_thread(void *arg)
+{
+  TableRescanSetCtx *ctx = (TableRescanSetCtx *)arg;
+  ctx->installed = lj_gc2_test_table_rescan_set(ctx->g, ctx->t);
+  return NULL;
+}
+
+static void *expected_mark_transition_thread(void *arg)
+{
+  ExpectedMarkTransitionCtx *ctx = (ExpectedMarkTransitionCtx *)arg;
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_gc2_test_queue_post_admit_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(spin < 1000000u);
+  assert(lj_arena_lifetime_state_cas(
+    ctx->arena, ctx->cell, LJ_ARENA_LIFETIME_LIVE,
+    LJ_ARENA_LIFETIME_DESTRUCT));
+  lj_gc2_test_queue_post_admit_release();
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_gc2_test_queue_retry_witness_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(spin < 1000000u);
+  assert(lj_arena_lifetime_state_cas(
+    ctx->arena, ctx->cell, LJ_ARENA_LIFETIME_DESTRUCT,
+    LJ_ARENA_LIFETIME_LIVE));
+  lj_gc2_test_queue_retry_witness_release();
+  return NULL;
+}
+
+static void *table_rescan_stale_hint_clear_thread(void *arg)
+{
+  TableRescanSetCtx *ctx = (TableRescanSetCtx *)arg;
+  lj_gc2_test_table_rescan_stale_hint_clear(ctx->g, ctx->t);
+  return NULL;
+}
+
+static void *queue_post_admit_ssb_drain_thread(void *arg)
+{
+  WorkerDrainCtx *ctx = (WorkerDrainCtx *)arg;
+  ctx->drained = lj_gc2_test_ssb_drain(ctx->g);
+  return NULL;
+}
+
+static void test_queue_post_admit_wait_paused(void)
+{
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_gc2_test_queue_post_admit_paused())
+      return;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(!"queue post-admission hook did not pause");
+}
+
+static void test_queue_retry_witness_wait_paused(void)
+{
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_gc2_test_queue_retry_witness_paused())
+      return;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(!"queue retry-witness hook did not pause");
+}
+
+static void test_table_rescan_wait_paused(uint32_t stage)
+{
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_gc2_test_table_rescan_paused() == stage)
+      return;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(!"table rescan hook did not pause");
+}
+
+static void test_table_rescan_exact_membership(lua_State *L, global_State *g)
+{
+  TableRescanSetCtx ctx;
+  GCtab *counted, *stale_hint;
+  pthread_t publisher;
+  uint32_t pending0 = gc2_table_rescan_pending_acq(g);
+  int base = lua_gettop(L);
+
+  assert(pending0 == 0);
+  lua_newtable(L);
+  counted = tabV(L->top - 1);
+  lua_newtable(L);
+  stale_hint = tabV(L->top - 1);
+  assert(lj_tab_gc2_rescan_state_acq(counted) == LJ_TAB_RESCAN_NONE);
+  assert(lj_tab_gc2_rescan_state_acq(stale_hint) == LJ_TAB_RESCAN_NONE);
+
+  /* A header-only stale hint must never steal another table's exact credit. */
+  assert(lj_gc2_test_table_rescan_set(g, counted));
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  lj_obj_addgcflags_atomic(obj2gco(stale_hint), LJ_GC_NEEDSCAN);
+  assert(lj_gc2_test_table_rescan_clear(g, stale_hint) == 1);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_tab_gc2_rescan_state_acq(counted) == LJ_TAB_RESCAN_COUNTED);
+  assert(lj_gc2_test_table_rescan_clear(g, counted) == 1);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+
+  /* A consumer meets the provisional installer after exact table identity and
+  ** its advisory hint are visible but before settlement. CANCELLED leaves the
+  ** one aggregate credit with the publisher, which settles it exactly. The
+  ** earlier count-before-identity progress gap is documented separately and
+  ** requires the helpable descriptor/token replacement. */
+  lj_gc2_test_table_rescan_pause(LJ_GC2_TABLE_RESCAN_TEST_INSTALLING);
+  ctx.g = g;
+  ctx.t = counted;
+  ctx.installed = 0;
+  assert(pthread_create(&publisher, NULL, table_rescan_set_thread, &ctx) == 0);
+  test_table_rescan_wait_paused(LJ_GC2_TABLE_RESCAN_TEST_INSTALLING);
+  assert(lj_tab_gc2_rescan_state_acq(counted) ==
+	 LJ_TAB_RESCAN_INSTALLING);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_obj_gcflags(obj2gco(counted)) & LJ_GC_NEEDSCAN);
+  assert(lj_gc2_test_table_rescan_clear(g, counted) == 0);
+  assert(lj_tab_gc2_rescan_state_acq(counted) ==
+	 LJ_TAB_RESCAN_CANCELLED);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  lj_gc2_test_table_rescan_release();
+  assert(pthread_join(publisher, NULL) == 0);
+  assert(ctx.installed == 1);
+  assert(lj_tab_gc2_rescan_state_acq(counted) == LJ_TAB_RESCAN_NONE);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  assert((lj_obj_gcflags(obj2gco(counted)) & LJ_GC_NEEDSCAN) == 0);
+
+  assert(lj_gc2_test_table_rescan_set(g, counted));
+  assert(lj_tab_gc2_rescan_state_acq(counted) == LJ_TAB_RESCAN_COUNTED);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_gc2_test_table_rescan_clear(g, counted) == 1);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  lua_settop(L, base);
+}
+
+static void test_table_rescan_ssb_exact_gate(lua_State *L, global_State *g,
+					      TGState *tg)
+{
+  TableRescanSetCtx ctx;
+  GCtab *t;
+  GCobj *o;
+  pthread_t clearer;
+  uint32_t pending0;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  flush_and_drain(g, tg);
+  pending0 = gc2_table_rescan_pending_acq(g);
+  assert(pending0 == 0);
+
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  o = obj2gco(t);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  assert(lj_gc2_markobj(g, o));
+  (void)lj_gc2_flush_ssb(g, tg);
+  worker_drain_all(g);
+  assert(lj_gc2_test_table_scan_current(g, t));
+
+  /* Establish and retire an earlier membership generation, then reinstall an
+  ** exact token and its SSB locator. A delayed old hint-clear may erase the
+  ** header bit during the new generation's COUNTED lifetime, but it must not
+  ** make the SSB locator look stale while the exact token remains installed. */
+  assert(lj_gc2_test_table_rescan_set(g, t));
+  assert(lj_gc2_test_table_rescan_clear(g, t) == 1);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
+  assert(lj_gc2_test_table_rescan_set(g, t));
+  assert(lj_gc2_test_ssb_push(g, o));
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_COUNTED);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+
+  lj_gc2_test_table_rescan_pause(LJ_GC2_TABLE_RESCAN_TEST_HINT_CLEARED);
+  ctx.g = g;
+  ctx.t = t;
+  ctx.installed = 0;
+  assert(pthread_create(&clearer, NULL, table_rescan_stale_hint_clear_thread,
+			&ctx) == 0);
+  test_table_rescan_wait_paused(LJ_GC2_TABLE_RESCAN_TEST_HINT_CLEARED);
+  assert((lj_obj_gcflags(o) & LJ_GC_NEEDSCAN) == 0);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_COUNTED);
+  assert(lj_gc2_test_table_scan_current(g, t));
+
+  /* The old header+stamp-only shortcut consumed this sole locator and left
+  ** COUNTED orphaned. Exact-state classification sends it through grey, whose
+  ** admitted traversal discharges both the token and the aggregate credit. */
+  assert(lj_gc2_test_ssb_drain(g) != 0);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+
+  lj_gc2_test_table_rescan_release();
+  assert(pthread_join(clearer, NULL) == 0);
+  assert((lj_obj_gcflags(o) & LJ_GC_NEEDSCAN) == 0);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+}
+
+static void test_table_rescan_queue_admission_retry(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
+{
+  ExpectedMarkTransitionCtx expected_ctx;
+  WorkerDrainCtx ctx;
+  GCtab *t, *child;
+  GCArena *a;
+  GCobj *o;
+  pthread_t drainer;
+  uint32_t cell, pending0, i;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  flush_and_drain(g, tg);
+  pending0 = gc2_table_rescan_pending_acq(g);
+  assert(pending0 == 0);
+
+  /* Expected-type admission uses the same mark transition, but returns a
+  ** semantic tri-state rather than owning the original SSB/grey locator. The
+  ** parent mark wins before DESTRUCT, then final validation reports RETRY and
+  ** the owner restores LIVE before classification. Exact retry discharge must
+  ** still schedule the already-marked parent's child graph. */
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushliteral(L, "expected retry child");
+  lua_pushvalue(L, -2);
+  lua_rawset(L, base + 1);
+  lua_pop(L, 1);  /* Only the parent remains a Lua stack root. */
+  o = obj2gco(t);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  expected_ctx.arena = a;
+  expected_ctx.cell = cell;
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  assert(lj_gc2_ismarked(g, o) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  lj_gc2_test_queue_post_admit_pause(o);
+  lj_gc2_test_queue_retry_witness_pause(o);
+  assert(pthread_create(&drainer, NULL, expected_mark_transition_thread,
+			&expected_ctx) == 0);
+  assert(lj_gc2_test_table_expected_status(g, t) ==
+	 LJ_GC2_TV_EDGE_RETRY);
+  assert(pthread_join(drainer, NULL) == 0);
+  assert(lj_gc2_flush_ssb(g, tg) != 0);
+  worker_drain_all(g);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) > 0);
+  settle_automatic_cycle(g);
+  lua_pop(L, 1);
+
+  /* SSB conversion must retain its owned slot when exact table admission is
+  ** transient. Consuming it would orphan the COUNTED close veto. */
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  o = obj2gco(t);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  assert(lj_gc2_test_table_rescan_set(g, t));
+  assert(lj_gc2_test_ssb_push(g, o));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_MUTATING));
+  assert(lj_gc2_test_ssb_drain(g) == 0);
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_COUNTED);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_LIVE));
+  assert(lj_gc2_test_ssb_drain(g) != 0);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  settle_automatic_cycle(g);
+  lua_pop(L, 1);
+
+  /* A grey owner-pop has already removed its locator. RETRY must republish it
+  ** before yielding, and the bounded worker turn must not spin on that item. */
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  o = obj2gco(t);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  assert(lj_gc2_test_table_rescan_set(g, t));
+  assert(lj_gc2_test_grey_push(g, o));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_RECOVERY));
+  assert(lj_gc2_worker_drain(g, 1) == 0);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_COUNTED);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_gc2_test_grey_steal(g) == o);
+  assert(lj_gc2_test_grey_steal(g) == NULL);
+  assert(lj_gc2_test_grey_push(g, o));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_RECOVERY,
+				     LJ_ARENA_LIFETIME_LIVE));
+  for (i = 0; i < 32u &&
+	 lj_tab_gc2_rescan_state_acq(t) != LJ_TAB_RESCAN_NONE; i++)
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  settle_automatic_cycle(g);
+  lua_pop(L, 1);
+
+  /* Validation can succeed while the counted admission is held and still
+  ** lose the semantic lifetime immediately before the mark transition. The
+  ** SSB consumer must classify that late DEAD as RETRY and leave its exact
+  ** published slot (and COUNTED table token) owned. */
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  o = obj2gco(t);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  assert(lj_gc2_test_table_rescan_set(g, t));
+  assert(lj_gc2_test_ssb_push(g, o));
+  assert(lj_gc2_flush_ssb(g, tg) != 0);
+  ctx.g = g;
+  ctx.limit = 0;
+  ctx.drained = ~(uint32_t)0;
+  lj_gc2_test_queue_post_admit_pause(o);
+  lj_gc2_test_queue_retry_witness_pause(o);
+  assert(pthread_create(&drainer, NULL, queue_post_admit_ssb_drain_thread,
+			&ctx) == 0);
+  test_queue_post_admit_wait_paused();
+  assert(lj_arena_remote_active_acq(a) != 0);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_DESTRUCT));
+  lj_gc2_test_queue_post_admit_release();
+  test_queue_retry_witness_wait_paused();
+  /* The rejecting acquire, rather than a later reload, is the retry witness.
+  ** Restore the cancellable owner before the queue caller classifies DEAD. */
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+				     LJ_ARENA_LIFETIME_LIVE));
+  lj_gc2_test_queue_retry_witness_release();
+  assert(pthread_join(drainer, NULL) == 0);
+  assert(ctx.drained == 0);
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_COUNTED);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_gc2_test_ssb_drain(g) != 0);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  settle_automatic_cycle(g);
+  lua_pop(L, 1);
+
+  /* A grey owner has already popped its sole locator at the same pause. Its
+  ** RETRY path must republish that exact pointer before yielding the quantum;
+  ** after LIVE is restored, a later drain consumes the token normally. */
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  o = obj2gco(t);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  assert(lj_gc2_test_table_rescan_set(g, t));
+  assert(lj_gc2_test_grey_push(g, o));
+  ctx.g = g;
+  ctx.limit = 1;
+  ctx.drained = ~(uint32_t)0;
+  lj_gc2_test_queue_post_admit_pause(o);
+  lj_gc2_test_queue_retry_witness_pause(o);
+  assert(pthread_create(&drainer, NULL, grey_worker_drain_thread, &ctx) == 0);
+  test_queue_post_admit_wait_paused();
+  assert(lj_arena_remote_active_acq(a) != 0);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_DESTRUCT));
+  lj_gc2_test_queue_post_admit_release();
+  test_queue_retry_witness_wait_paused();
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+				     LJ_ARENA_LIFETIME_LIVE));
+  lj_gc2_test_queue_retry_witness_release();
+  assert(pthread_join(drainer, NULL) == 0);
+  assert(ctx.drained == 0);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_COUNTED);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_gc2_test_grey_steal(g) == o);
+  assert(lj_gc2_test_grey_steal(g) == NULL);
+  assert(lj_gc2_test_grey_push(g, o));
+  for (i = 0; i < 32u &&
+	 lj_tab_gc2_rescan_state_acq(t) != LJ_TAB_RESCAN_NONE; i++)
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+}
+
+static void test_tvalue_edge_status(lua_State *L, global_State *g)
+{
+  TValue tv;
+  GCtab *t;
+  GCArena *a;
+  uint32_t cell;
+  int base = lua_gettop(L);
+
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  settabV(L, &tv, t);
+  assert(lj_gc2_tv_gcref_status_edge(g, &tv) == LJ_GC2_TV_EDGE_VALID);
+
+  lj_gc2_test_stack_admission_retry_once(obj2gco(t));
+  assert(lj_gc2_tv_gcref_status_edge(g, &tv) == LJ_GC2_TV_EDGE_RETRY);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(lj_gc2_tv_gcref_status_edge(g, &tv) == LJ_GC2_TV_EDGE_VALID);
+
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_MUTATING));
+  assert(lj_gc2_tv_gcref_status_edge(g, &tv) == LJ_GC2_TV_EDGE_RETRY);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_LIVE));
+
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_RECOVERY));
+  assert(lj_gc2_tv_gcref_status_edge(g, &tv) == LJ_GC2_TV_EDGE_RETRY);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_RECOVERY,
+				     LJ_ARENA_LIFETIME_LIVE));
+
+  assert(!lj_arena_late_get(a, cell));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_DESTRUCT));
+  assert(lj_gc2_tv_gcref_status_edge(g, &tv) == LJ_GC2_TV_EDGE_RETRY);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+				     LJ_ARENA_LIFETIME_LIVE));
+
+  /* A stable body with the wrong TValue tag is terminal stale, not RETRY. */
+  setgcVraw(&tv, obj2gco(t), LJ_TFUNC);
+  assert(lj_gc2_tv_gcref_status_edge(g, &tv) == LJ_GC2_TV_EDGE_STALE);
+  lua_settop(L, base);
+}
+
+static void enter_sweep_tvalue_fixture(lua_State *L, global_State *g,
+					TGState *tg)
+{
+  uint32_t i;
+  int complete = 0;
+  lj_gc2_mark_begin(g);
+  lj_gc2_test_scan_roots(g, L);
+  flush_and_drain(g, tg);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  for (i = 0; i < 4096u && !complete; i++)
+    complete = lj_gc2_weak_complete(g, L, NULL,
+				    LJ_GC2_WEAK_DRAIN_BATCH);
+  assert(complete);
+  lj_gc2_weak_to_sweep(g, L);
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+}
+
+static void test_sweep_tvalue_edge_tristate(lua_State *L, global_State *g,
+					     TGState *tg)
+{
+  TValue good, wrong, unmapped;
+  GCtab *t;
+  GCArena *a;
+  uint32_t cell;
+  uint64_t items0, published0;
+  int veto0;
+  int base = lua_gettop(L);
+
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  settabV(L, &good, t);
+  setgcVraw(&wrong, obj2gco(t), LJ_TFUNC);
+  setgcVraw(&unmapped, (GCobj *)(uintptr_t)0x10000u, LJ_TTAB);
+  enter_sweep_tvalue_fixture(L, g, tg);
+  assert(gc2_recovery_failed_acq(g) == 0);
+  items0 = gc2_recovery_items_acq(g);
+  published0 = gc2_recovery_published_acq(g);
+  veto0 = lj_gc2_activation_reclaim_veto(g);
+
+  /* A live body paired with the wrong TValue tag and an unregistered pointer
+  ** are stable stale snapshots. Neither is semantic recovery authority. */
+  lj_gc2_barrier_tv_g(g, &wrong);
+  lj_gc2_barrier_tv_g(g, &unmapped);
+  assert(gc2_recovery_items_acq(g) == items0);
+  assert(gc2_recovery_published_acq(g) == published0);
+  assert(gc2_recovery_failed_acq(g) == 0);
+  assert(lj_gc2_activation_reclaim_veto(g) == veto0);
+
+  /* Cancellable DESTRUCT is transient, not stale. The barrier must cancel it
+  ** into exact recovery work, restore LIVE, and let the worker consume it. */
+  assert(!lj_arena_late_get(a, cell));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_DESTRUCT));
+  lj_gc2_barrier_tv_g(g, &good);
+  assert(lj_arena_lifetime_state_acq(a, cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_recovery_state_acq(a, cell) ==
+	 LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(g) == items0 + 1u);
+  assert(gc2_recovery_published_acq(g) == published0 + 1u);
+  assert(gc2_recovery_failed_acq(g) == 0);
+  assert(lj_gc2_test_recovery_drain(g, 1) == 1u);
+  assert(lj_arena_recovery_state_acq(a, cell) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(g) == items0);
+  flush_and_drain(g, tg);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, base);
+}
+
+typedef struct ForjitLeaseTransitionCtx {
+  global_State *g;
+  GCstr *key;
+  GCArena *arena;
+  uint32_t cell;
+} ForjitLeaseTransitionCtx;
+
+typedef struct ForjitResizeTransitionCtx {
+  lua_State *L;
+  GCtab *tab;
+  uint32_t asize;
+  uint32_t hbits;
+  uint32_t ready;
+  int status;
+} ForjitResizeTransitionCtx;
+
+typedef struct ForjitResultLeaseCtx {
+  global_State *g;
+  TGState *tg;
+  GCudata *value;
+  uint32_t smr_readers0;
+  uint32_t huge_readers;
+} ForjitResultLeaseCtx;
+
+typedef struct MetaMtCaptureCtx {
+  global_State *g;
+  GCtab *source;
+  GCtab *replacement;
+  GCArena *source_arena;
+  GCArena *target_arena;
+  uint64_t source_remote0;
+  uint64_t target_remote0;
+  uint32_t smr_readers0;
+  uint32_t observed;
+  uint32_t target_observed;
+} MetaMtCaptureCtx;
+
+static void *forjit_lease_transition_thread(void *arg)
+{
+  ForjitLeaseTransitionCtx *ctx = (ForjitLeaseTransitionCtx *)arg;
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_tab_test_forjit_lease_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(spin < 1000000u);
+  /* Both the source table and key have exact body leases at this hook. */
+  assert(lj_arena_remote_active_acq(ctx->arena) != 0);
+  assert(lj_arena_lifetime_state_cas(ctx->arena, ctx->cell,
+				     LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_MUTATING));
+  /* Force the nested legacy lookup validation to reject once. The helper must
+  ** resolve the current hash while its outer key lease remains held. */
+  lj_gc2_test_stack_admission_retry_once(obj2gco(ctx->key));
+  lj_tab_test_forjit_lease_release();
+  return NULL;
+}
+
+static void *forjit_resize_transition_thread(void *arg)
+{
+  ForjitResizeTransitionCtx *ctx = (ForjitResizeTransitionCtx *)arg;
+  uint32_t spin;
+  if (!lj_threading_attach(ctx->L)) {
+    ctx->status = 1;
+    la_store32_rel(&ctx->ready, 1);
+    lj_tab_test_forjit_snapshot_release();
+    return NULL;
+  }
+  ctx->status = 0;
+  la_store32_rel(&ctx->ready, 1);
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_tab_test_forjit_snapshot_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  if (spin == 1000000u) {
+    ctx->status = 2;
+  } else {
+    lj_tab_resize(ctx->L, ctx->tab, ctx->asize, ctx->hbits);
+    ctx->status = 3;
+  }
+  lj_tab_test_forjit_snapshot_release();
+  lj_threading_detach(ctx->L, 1);
+  return NULL;
+}
+
+static void *forjit_result_lease_thread(void *arg)
+{
+  ForjitResultLeaseCtx *ctx = (ForjitResultLeaseCtx *)arg;
+  LJHugeInfo hi;
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_tab_test_forjit_result_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(spin < 1000000u);
+  /* A huge weak value has no arena admission in common with its small table
+  ** and scalar key. Its HugeTab reader therefore proves the copied result has
+  ** its own exact lease, while the SMR count proves that lease was acquired
+  ** before the source vector's read interval closed. */
+  assert(gc2_smr_readers_acq(ctx->g) > ctx->smr_readers0);
+  assert(lj_arena_hugetab_lookup(&ctx->tg->huge, ctx->value, &hi));
+  assert(hi.readers != 0);
+  ctx->huge_readers = hi.readers;
+  lj_tab_test_forjit_result_release();
+  return NULL;
+}
+
+static void *meta_mt_capture_transition_thread(void *arg)
+{
+  MetaMtCaptureCtx *ctx = (MetaMtCaptureCtx *)arg;
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_meta_test_mt_capture_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(spin < 1000000u);
+  /* The receiver lease precedes its metatable field load, and the SMR scope
+  ** remains open until the captured target has its own exact lease. */
+  assert(gc2_smr_readers_acq(ctx->g) > ctx->smr_readers0);
+  assert((lj_arena_remote_active_acq(ctx->source_arena) &
+	  LJ_ARENA_REMOTE_COUNT_MASK) >
+	 (ctx->source_remote0 & LJ_ARENA_REMOTE_COUNT_MASK));
+  lj_tab_metatable_rel(ctx->source, ctx->replacement);
+  lj_tab_nomm_rel(ctx->replacement, 0);
+  lj_gc2_barrier_obj_pair_g(ctx->g, obj2gco(ctx->source),
+			     obj2gco(ctx->replacement));
+  la_store32_rel(&ctx->observed, 1);
+  lj_meta_test_mt_capture_release();
+
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_meta_test_mt_lease_paused())
+      break;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(spin < 1000000u);
+  /* source and old target deliberately occupy different arenas. Once the
+  ** replacement store above removes the old target's sole semantic edge, this
+  ** count delta can only be supplied by the exact target admission. */
+  assert(gc2_smr_readers_acq(ctx->g) > ctx->smr_readers0);
+  assert((lj_arena_remote_active_acq(ctx->target_arena) &
+	  LJ_ARENA_REMOTE_COUNT_MASK) >
+	 (ctx->target_remote0 & LJ_ARENA_REMOTE_COUNT_MASK));
+  la_store32_rel(&ctx->target_observed, 1);
+  lj_meta_test_mt_lease_release();
+  return NULL;
+}
+
+static void test_forjit_current_hash_key_lease(lua_State *L, global_State *g)
+{
+  ForjitLeaseTransitionCtx ctx;
+  TValue key, out;
+  GCtab *t;
+  GCstr *s;
+  pthread_t transition;
+  int base = lua_gettop(L);
+
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  lua_pushliteral(L, "forjit leased key");
+  s = strV(L->top - 1);
+  lua_pushboolean(L, 1);
+  lua_rawset(L, -3);
+  setstrV(L, &key, s);
+  ctx.g = g;
+  ctx.key = s;
+  ctx.arena = lj_arena_of(s);
+  ctx.cell = lj_arena_cellof(s);
+
+  lj_tab_test_forjit_lease_pause();
+  assert(pthread_create(&transition, NULL, forjit_lease_transition_thread,
+			&ctx) == 0);
+  assert(lj_tab_gettv_forjit(L, t, &key, &out) == &out);
+  assert(pthread_join(transition, NULL) == 0);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(tvistrue(&out));
+  assert(lj_arena_lifetime_state_cas(ctx.arena, ctx.cell,
+				     LJ_ARENA_LIFETIME_MUTATING,
+				     LJ_ARENA_LIFETIME_LIVE));
+  lua_settop(L, base);
+}
+
+static void test_forjit_hash_to_array_retry(lua_State *L)
+{
+  uint32_t kind;
+  int base = lua_gettop(L);
+  for (kind = 0; kind < 2u; kind++) {
+    ForjitResizeTransitionCtx ctx;
+    TValue key, val, out;
+    TValue *array;
+    TValue *slot;
+    GCtab *t;
+    lua_State *peer;
+    MSize asize, hmask;
+    pthread_t transition;
+    uint32_t spin;
+    const int32_t ik = 7;
+
+    lua_createtable(L, 0, 4);
+    t = tabV(L->top - 1);
+    setboolV(&val, 1);
+    slot = lj_tab_setinth(L, t, ik);
+    assert(slot != NULL);
+    (void)lj_tab_storetv(L, slot, &val);
+    asize = lj_tab_array_snapshot_acq(t, &array);
+    assert((MSize)ik >= asize);  /* The fixture starts in the hash side. */
+    (void)lj_tab_node_snapshot_acq(t, &hmask);
+    assert(hmask > 0);
+    if (kind == 0)
+      setintV(&key, ik);
+    else
+      setnumV(&key, (lua_Number)ik);
+
+    peer = lua_newthread(L);
+    assert(peer != NULL);
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.L = peer;
+    ctx.tab = t;
+    ctx.asize = (uint32_t)ik + 1u;
+    ctx.hbits = lj_fls((uint32_t)hmask) + 1u;
+    ctx.status = -1;
+    assert(pthread_create(&transition, NULL, forjit_resize_transition_thread,
+			  &ctx) == 0);
+    for (spin = 0; spin < 1000000u && !la_load32_acq(&ctx.ready); spin++)
+      (void)lj_thr_retry_yield(L);
+    assert(spin < 1000000u && ctx.status == 0);
+
+    /* Simulate the already-observed first-generation miss, then resize exactly
+    ** between the fallback's integral-array and hash observations. The paired
+    ** snapshot must reject that mixed generation and retry into the new array. */
+    lj_tab_test_forjit_initial_miss_once();
+    lj_tab_test_forjit_snapshot_pause();
+    assert(lj_tab_gettv_forjit(L, t, &key, &out) == &out);
+    assert(pthread_join(transition, NULL) == 0);
+    assert(ctx.status == 3);
+    assert(tvistrue(&out));
+    asize = lj_tab_array_snapshot_acq(t, &array);
+    assert((MSize)ik < asize);
+    lj_tv_load_acq(&out, &array[ik]);
+    assert(tvistrue(&out));
+    lua_settop(L, base);
+  }
+}
+
+static void test_forjit_weak_result_lease(lua_State *L, global_State *g,
+					   TGState *tg)
+{
+  ForjitResultLeaseCtx ctx;
+  LJHugeInfo hi;
+  TValue key, out;
+  TValue *slot;
+  GCtab *weak;
+  GCudata *value;
+  pthread_t transition;
+  int base = lua_gettop(L);
+
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_rawset(L, -3);
+  assert(lua_setmetatable(L, -2) == 1);
+
+  value = lj_udata_new(L, (MSize)LJ_HUGE_THRESHOLD + 1024u, NULL);
+  setudataV(L, L->top, value);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  assert(lj_arena_ishuge(lj_arena_of(value)));
+  lua_pushinteger(L, 1);
+  lua_pushvalue(L, -2);
+  lua_rawset(L, base + 1);
+  setintV(&key, 1);
+
+  /* A transient result admission retries the whole semantic read. It must not
+  ** turn the weak value into a false miss. */
+  lj_gc2_test_stack_admission_retry_once(obj2gco(value));
+  assert(lj_tab_gettv_forjit(L, weak, &key, &out) == &out);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(tvisudata(&out) && udataV(&out) == value);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.value = value;
+  ctx.smr_readers0 = gc2_smr_readers_acq(g);
+  assert(lj_arena_hugetab_lookup(&tg->huge, value, &hi));
+  assert(hi.readers == 0);
+  lj_tab_test_forjit_result_pause();
+  assert(pthread_create(&transition, NULL, forjit_result_lease_thread,
+			&ctx) == 0);
+  assert(lj_tab_gettv_forjit(L, weak, &key, &out) == &out);
+  assert(pthread_join(transition, NULL) == 0);
+  assert(ctx.huge_readers != 0);
+  assert(tvisudata(&out) && udataV(&out) == value);
+  assert(gc2_smr_readers_acq(g) == ctx.smr_readers0);
+  assert(lj_arena_hugetab_lookup(&tg->huge, value, &hi));
+  assert(hi.readers == 0);
+
+  /* A stable tag/header mismatch is terminal stale. Returning nil is required;
+  ** treating it like RETRY would spin forever on the unchanged weak slot. */
+  slot = lj_tab_setinth(L, weak, 1);
+  assert(slot != NULL);
+  setgcVraw(slot, obj2gco(value), LJ_TFUNC);
+  assert(lj_tab_gettv_forjit(L, weak, &key, &out) == &out);
+  assert(tvisnil(&out));
+  setudataV(L, slot, value);
+  lua_settop(L, base);
+}
+
+static void test_forjit_nil_key(lua_State *L)
+{
+  TValue key, out;
+  GCtab *t;
+  int base = lua_gettop(L);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  setnilV(&key);
+  assert(lj_tab_gettv_forjit(L, t, &key, &out) == &out);
+  assert(tvisnil(&out));
+  lua_settop(L, base);
+#if LJ_HASJIT
+  assert(luaL_dostring(L,
+    "local jit, util = require('jit'), require('jit.util')\n"
+    "jit.flush()\n"
+    "local t = {}\n"
+    "jit.off()\n"
+    "assert(t[nil] == nil)\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function readnil(tab, key, n)\n"
+    "  local seen = 0\n"
+    "  for i = 1, n do\n"
+    "    if tab[key] == nil then seen = seen + 1 end\n"
+    "  end\n"
+    "  return seen\n"
+    "end\n"
+    "assert(readnil(t, nil, 100) == 100)\n"
+    "assert(util.traceinfo(1), 'nil-key table read did not record')\n"
+    "jit.flush()\n") == LUA_OK);
+  lua_settop(L, base);
+#endif
+}
+
+static void test_meta_metatable_capture_lease(lua_State *L, global_State *g)
+{
+  MetaMtCaptureCtx ctx;
+  TValue obj, out;
+  GCtab *source, *oldmt, *newmt;
+  pthread_t transition;
+  uint32_t allocs;
+  int base = lua_gettop(L);
+
+  lua_newtable(L);
+  source = tabV(L->top - 1);
+  oldmt = NULL;
+  /* Isolate the receiver and captured target admissions. Popped filler tables
+  ** consume the current traversable arena without becoming long-lived roots. */
+  for (allocs = 0; allocs < 100000u; allocs++) {
+    lua_newtable(L);
+    oldmt = tabV(L->top - 1);
+    if (lj_arena_of(oldmt) != lj_arena_of(source))
+      break;
+    lua_pop(L, 1);
+    oldmt = NULL;
+  }
+  assert(oldmt != NULL && allocs < 100000u);
+  lua_pushliteral(L, "__index");
+  lua_pushinteger(L, 11);
+  lua_rawset(L, -3);
+  lua_pushvalue(L, -1);
+  assert(lua_setmetatable(L, base + 1) == 1);
+  lua_newtable(L);
+  newmt = tabV(L->top - 1);
+  lua_pushliteral(L, "__index");
+  lua_pushinteger(L, 22);
+  lua_rawset(L, -3);
+  settabV(L, &obj, source);
+  /* source->metatable is now oldmt's only semantic root. The replacement at
+  ** the first hook makes the second hook's exact target lease authoritative. */
+  lua_remove(L, base + 2);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.source = source;
+  ctx.replacement = newmt;
+  ctx.source_arena = lj_arena_of(source);
+  ctx.target_arena = lj_arena_of(oldmt);
+  assert(ctx.source_arena != ctx.target_arena);
+  ctx.source_remote0 = lj_arena_remote_active_acq(ctx.source_arena);
+  ctx.target_remote0 = lj_arena_remote_active_acq(ctx.target_arena);
+  ctx.smr_readers0 = gc2_smr_readers_acq(g);
+  assert(lj_tab_metatable_acq(source) == oldmt);
+  lj_meta_test_mt_capture_pause(obj2gco(source));
+  lj_meta_test_mt_lease_pause(obj2gco(oldmt));
+  assert(pthread_create(&transition, NULL,
+			meta_mt_capture_transition_thread, &ctx) == 0);
+  assert(lj_meta_lookuptv(L, &out, &obj, MM_index) == &out);
+  assert(pthread_join(transition, NULL) == 0);
+  assert(la_load32_acq(&ctx.observed) == 1);
+  assert(la_load32_acq(&ctx.target_observed) == 1);
+  /* The first lookup linearizes at the captured old metatable; the next sees
+  ** the release-published replacement. Neither can cross an incarnation. */
+  assert((tvisint(&out) && intV(&out) == 11) ||
+	 (tvisnum(&out) && numV(&out) == 11.0));
+  assert(lj_meta_lookuptv(L, &out, &obj, MM_index) == &out);
+  assert((tvisint(&out) && intV(&out) == 22) ||
+	 (tvisnum(&out) && numV(&out) == 22.0));
+  lua_settop(L, base);
+}
+
+static void test_meta_tset_admission_retries(lua_State *L, global_State *g)
+{
+  TValue obj, key, val, out;
+  GCfunc *mmfn;
+  GCtab *t;
+  GCstr *s;
+  int base = lua_gettop(L);
+
+  /* Existing-key assignment must retry the semantic root gate, then resolve a
+  ** fresh current slot instead of returning a pre-retry vector pointer. */
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  lua_pushliteral(L, "tset existing retry");
+  s = strV(L->top - 1);
+  lua_pushboolean(L, 0);
+  lua_rawset(L, -3);
+  settabV(L, &obj, t);
+  setstrV(L, &key, s);
+  setboolV(&val, 1);
+  lj_gc2_test_stack_admission_retry_once(obj2gco(t));
+  assert(lj_meta_tsettv_pair(L, &obj, &key, &val) != NULL);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(lj_tab_gettv_forjit(L, t, &key, &out) == &out && tvistrue(&out));
+  lua_settop(L, base);
+
+  /* A missing collectable key is rooted and retried before any new-key or
+  ** __newindex decision, then inserted exactly once. */
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  lua_pushliteral(L, "tset missing retry");
+  s = strV(L->top - 1);
+  settabV(L, &obj, t);
+  setstrV(L, &key, s);
+  setboolV(&val, 1);
+  lj_gc2_test_stack_admission_retry_once(obj2gco(s));
+  assert(lj_meta_tsettv_pair(L, &obj, &key, &val) != NULL);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(lj_tab_gettv_forjit(L, t, &key, &out) == &out && tvistrue(&out));
+  lua_settop(L, base);
+
+  /* Function-valued __newindex dispatch must survive a transient result lease
+  ** without duplicating the metamethod call. This lookup goes through the same
+  ** lease-aware copied-value path as ordinary helper-backed table reads. */
+  assert(luaL_dostring(L,
+    "local sink, proxy, calls = {}, {}, 0\n"
+    "local mm = function(_, k, v)\n"
+    "  calls = calls + 1; sink[k] = v\n"
+    "end\n"
+    "setmetatable(proxy, { __newindex = mm })\n"
+    "return proxy, sink, function() return calls end, mm\n") == LUA_OK);
+  assert(tvisfunc(L->top - 1));
+  mmfn = funcV(L->top - 1);
+  lua_pushliteral(L, "tset newindex retry");
+  lua_pushinteger(L, 37);
+  lj_gc2_test_stack_admission_retry_once(obj2gco(mmfn));
+  lua_settable(L, base + 1);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  lua_getfield(L, base + 1, "tset newindex retry");
+  assert(tvisnil(L->top - 1));
+  lua_pop(L, 1);
+  lua_getfield(L, base + 2, "tset newindex retry");
+  assert(lua_isnumber(L, -1) && lua_tointeger(L, -1) == 37);
+  lua_pop(L, 1);
+  lua_pushvalue(L, base + 3);
+  lua_call(L, 0, 1);
+  assert(lua_isnumber(L, -1) && lua_tointeger(L, -1) == 1);
+  lua_settop(L, base);
+  UNUSED(g);
+}
+
 static void test_stack_admission_tristate(lua_State *L, global_State *g,
 					   TGState *tg)
 {
@@ -7135,6 +8147,17 @@ int main(void)
   test_minor_root_scan(L, g, tg);
   test_thread(L, g, tg);
 #if defined(LJ_GC2_TEST_HELPERS)
+  test_table_rescan_exact_membership(L, g);
+  test_table_rescan_ssb_exact_gate(L, g, tg);
+  test_table_rescan_queue_admission_retry(L, g, tg);
+  test_tvalue_edge_status(L, g);
+  test_sweep_tvalue_edge_tristate(L, g, tg);
+  test_forjit_current_hash_key_lease(L, g);
+  test_forjit_hash_to_array_retry(L);
+  test_forjit_weak_result_lease(L, g, tg);
+  test_forjit_nil_key(L);
+  test_meta_metatable_capture_lease(L, g);
+  test_meta_tset_admission_retries(L, g);
   test_stack_admission_tristate(L, g, tg);
   test_thread_needscan_exact_count_isolation(L, g);
 #endif

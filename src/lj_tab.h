@@ -219,12 +219,12 @@ LJ_FUNC int lj_tab_array_snapshot_gc_held(global_State *g, const GCtab *t,
 					  MSize *acapp);
 LJ_FUNC int lj_tab_node_snapshot_gc_held(global_State *g, const GCtab *t,
 					 Node **nodep, MSize *hmaskp);
-/* Nonwaiting string-key lookup for collector/finalizer code already retaining
-** an exact table scope and SMR reader. RETRY covers structural publication,
+/* Nonwaiting string-key lookup for any caller already retaining an exact table
+** scope and SMR reader. RETRY covers structural publication,
 ** KEYLOCK/FORWARD/claim sentinels and malformed generation chains; it must
 ** never be interpreted as semantic absence. */
-LJ_FUNC int lj_tab_getstr_gc_held(global_State *g, GCtab *t,
-				  const GCstr *key, TValue *out);
+LJ_FUNC int lj_tab_getstr_held_try(global_State *g, GCtab *t,
+				   const GCstr *key, TValue *out);
 /* Long C-side generation scans publish an owner-written epoch pin before
 ** acquiring any raw array/node pointer and drop it after the final dereference.
 ** Nested scopes retain the epoch of the outermost reader. */
@@ -250,8 +250,25 @@ LJ_FUNCA cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key);
 LJ_FUNCA cTValue * LJ_FASTCALL lj_tab_getint_hop(GCtab *t, int32_t key);
 LJ_FUNC cTValue *lj_tab_getstr(GCtab *t, const GCstr *key);
 LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
+/* Copy one semantic value without exporting a raw vector slot. A returned GC
+** value was type-validated under an exact result lease acquired before the
+** vector SMR scope closed, then published while that lease remained held.
+** Terminal stale snapshots are normalized to nil; callers need not repeat an
+** unleased GC-header validation on out. */
 LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 				     TValue *out);
+#if defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC void lj_tab_test_forjit_lease_pause(void);
+LJ_FUNC uint32_t lj_tab_test_forjit_lease_paused(void);
+LJ_FUNC void lj_tab_test_forjit_lease_release(void);
+LJ_FUNC void lj_tab_test_forjit_snapshot_pause(void);
+LJ_FUNC uint32_t lj_tab_test_forjit_snapshot_paused(void);
+LJ_FUNC void lj_tab_test_forjit_snapshot_release(void);
+LJ_FUNC void lj_tab_test_forjit_initial_miss_once(void);
+LJ_FUNC void lj_tab_test_forjit_result_pause(void);
+LJ_FUNC uint32_t lj_tab_test_forjit_result_paused(void);
+LJ_FUNC void lj_tab_test_forjit_result_release(void);
+#endif
 /*
 ** Cursor traversal helpers for VM/JIT paths that hold an LJ_KEYINDEX cursor.
 ** They copy visible key/value snapshots into caller-owned TValue slots and

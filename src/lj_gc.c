@@ -202,6 +202,11 @@ int lj_gc_tv_gcref_valid(global_State *g, cTValue *tv)
   return lj_gc2_tv_gcref_valid_edge(g, tv);
 }
 
+int lj_gc_tv_gcref_status(global_State *g, cTValue *tv)
+{
+  return lj_gc2_tv_gcref_status_edge(g, tv);
+}
+
 static MSize gc_udata_io_file_size(void)
 {
   /*

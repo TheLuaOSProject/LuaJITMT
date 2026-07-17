@@ -112,6 +112,8 @@ static void assert_empty_table_body(global_State *g, GCtab *t)
   assert(t->hmask == 0);
   assert(t->acap == 0);
   assert(t->struct_owner == 0);
+  assert(lj_tab_weak_cycle_acq(t) == 0);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
   assert(node == &g->nilnode);
   assert(getfreetop(t, node) == &g->nilnode);
   if (g->allocf == lj_arena_allocf) {
@@ -120,6 +122,19 @@ static void assert_empty_table_body(global_State *g, GCtab *t)
     assert(lj_arena_bm_get(a->block, cell));
     assert(lj_arena_ready_get(a, cell));
   }
+}
+
+static void poison_recycled_empty_table_fields(GCArena *a, uint32_t cell)
+{
+  GCtab *stale = (GCtab *)lj_arena_cellptr(a, cell);
+  /* A private FREE bump cell may contain bytes from an older incarnation.
+  ** Poison only the fields under test, without creating allocator-visible
+  ** free-run metadata, so the inline constructor must overwrite both. */
+  assert(lj_arena_state(a, cell) == 0);
+  lj_tab_weak_cycle_store_rlx(stale, UINT32_C(0xa5a5a5a5));
+  lj_tab_gc2_rescan_state_store_rlx(stale, LJ_TAB_RESCAN_CANCELLED);
+  assert(lj_tab_weak_cycle_acq(stale) == UINT32_C(0xa5a5a5a5));
+  assert(lj_tab_gc2_rescan_state_acq(stale) == LJ_TAB_RESCAN_CANCELLED);
 }
 
 static ReusableRun create_reusable_empty_table_run(TGState *tg)
@@ -175,6 +190,36 @@ static void test_inline_empty_tnew(lua_State *L, global_State *g, TGState *tg)
   assert(lj_obj_gcw_acq(obj2gco(t)) == pending0);
   assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(lj_gcroot_pending_hint_acq(g) == 0);
+  assert(root_chain_contains(g, obj2gco(t)));
+  lua_pop(L, 1);
+}
+
+static void test_inline_empty_tnew_clears_recycled_fields(lua_State *L,
+						   global_State *g,
+						   TGState *tg)
+{
+  LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
+  GCArena *a0;
+  uint32_t cell0, calls0;
+  GCtab *t;
+
+  load_empty_table_chunk(L);
+  a0 = b->a;
+  cell0 = b->cell;
+  calls0 = lj_tab_test_new0_calls();
+  assert(a0 != NULL);
+  assert(cell0 + TNEW_EMPTY_NCELLS <= b->end);
+  assert(lj_tg_local_total_acq(tg) <
+	 LJ_GC2_ACCT_FLUSH - TNEW_EMPTY_SIZE);
+  poison_recycled_empty_table_fields(a0, cell0);
+
+  ljt_lua_pcall(L, 0, 1, "recycled-field empty TNEW inline pcall");
+  t = tabV(L->top - 1);
+
+  assert(lj_tab_test_new0_calls() == calls0);
+  assert((void *)t == lj_arena_cellptr(a0, cell0));
+  assert_empty_table_body(g, t);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(root_chain_contains(g, obj2gco(t)));
   lua_pop(L, 1);
 }
@@ -263,7 +308,7 @@ static void test_plain_new_inline_empty(lua_State *L, global_State *g,
   assert(root_chain_contains(g, obj2gco(t)));
 }
 
-static void test_capi_newtable_inline_empty(lua_State *L, global_State *g,
+static void test_capi_newtable_rooted_empty(lua_State *L, global_State *g,
 					    TGState *tg)
 {
   LJArenaBump *b = &tg->alloc.bump[LJ_ARENAK_TRAVERSABLE];
@@ -289,7 +334,9 @@ static void test_capi_newtable_inline_empty(lua_State *L, global_State *g,
   lua_newtable(L);
   t = tabV(L->top - 1);
 
-  assert(lj_tab_test_new0_calls() == calls0 + 1u);
+  /* The public API uses the explicitly rooted constructor while its target
+  ** state claim is released, so it must bypass the unrooted new0 helper. */
+  assert(lj_tab_test_new0_calls() == calls0);
   assert_empty_table_body(g, t);
   assert((void *)t == lj_arena_cellptr(a0, cell0));
   assert(b->cell == cell0 + TNEW_EMPTY_NCELLS);
@@ -691,9 +738,10 @@ int main(void)
     prime_traversable_bump_window(tg);
 
   test_inline_empty_tnew(L, g, tg);
+  test_inline_empty_tnew_clears_recycled_fields(L, g, tg);
   test_plain_new0_inline_empty(L, g, tg);
   test_plain_new_inline_empty(L, g, tg);
-  test_capi_newtable_inline_empty(L, g, tg);
+  test_capi_newtable_rooted_empty(L, g, tg);
   test_active_black_empty_tables_publish_exact(L, g, tg);
   test_active_black_grown_table_publishes_exact(L, g, tg);
 #if LJ_HASJIT

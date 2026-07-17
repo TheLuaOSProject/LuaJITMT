@@ -449,6 +449,7 @@ LJ_FUNC void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
 LJ_FUNC int lj_gc2_weak_write_candidate(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_weak_write_begin(lua_State *L, GCtab *t);
 LJ_FUNC void lj_gc2_weak_write_end(lua_State *L, int active);
+LJ_FUNC int lj_gc_tv_gcref_status(global_State *g, cTValue *tv);
 LJ_FUNC int lj_gc_tv_gcref_valid(global_State *g, cTValue *tv);
 LJ_FUNC void lj_gc_tbar_trace_g(global_State *g, GCtab *t, cTValue *key);
 LJ_FUNCA void lj_gc_barrierback_tab_g(global_State *g, GCtab *t);

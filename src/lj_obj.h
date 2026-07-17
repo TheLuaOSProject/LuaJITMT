@@ -722,6 +722,7 @@ typedef struct GCtab {
   GCHeader;
   uint8_t nomm;		/* Negative cache for fast metamethods. */
   int8_t colo;		/* Colocated-array size; high bit means it was split. */
+  uint8_t gc2_rescan_state;  /* Exact GC2 table NEEDSCAN count membership. */
   MRef array;		/* Array part. */
   GCRef gclist;
   GCRef metatable;	/* Must be at same offset in GCudata. */
@@ -733,6 +734,13 @@ typedef struct GCtab {
   uint32_t struct_owner;  /* Table resize/compound array op owner tid. */
   uint32_t weak_cycle;	/* Classic-GC weak-list publication epoch. */
 } GCtab;
+
+enum {
+  LJ_TAB_RESCAN_NONE = 0,
+  LJ_TAB_RESCAN_COUNTED = 1,
+  LJ_TAB_RESCAN_INSTALLING = 2,
+  LJ_TAB_RESCAN_CANCELLED = 3
+};
 
 static LJ_AINLINE uint8_t lj_tab_nomm_acq(const GCtab *t)
 {
@@ -752,6 +760,28 @@ static LJ_AINLINE int8_t lj_tab_colo_acq(const GCtab *t)
 static LJ_AINLINE void lj_tab_colo_rel(GCtab *t, int8_t colo)
 {
   la_store8_rel((uint8_t *)&t->colo, (uint8_t)colo);
+}
+
+static LJ_AINLINE uint8_t lj_tab_gc2_rescan_state_acq(const GCtab *t)
+{
+  return la_load8_acq(&t->gc2_rescan_state);
+}
+
+static LJ_AINLINE void lj_tab_gc2_rescan_state_store_rlx(GCtab *t,
+						  uint8_t state)
+{
+  la_store8_rlx(&t->gc2_rescan_state, state);
+}
+
+static LJ_AINLINE void lj_tab_gc2_rescan_state_rel(GCtab *t, uint8_t state)
+{
+  la_store8_rel(&t->gc2_rescan_state, state);
+}
+
+static LJ_AINLINE int lj_tab_gc2_rescan_state_cas(GCtab *t, uint8_t *oldp,
+						   uint8_t state)
+{
+  return la_cas8(&t->gc2_rescan_state, oldp, state, LA_ACQ_REL, LA_ACQ);
 }
 
 #define LJ_TAB_COLO_MASK	0x7fu

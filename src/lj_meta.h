@@ -18,6 +18,14 @@ LJ_FUNC cTValue *lj_meta_cachetv_l(lua_State *L, GCtab *mt, MMS mm,
 LJ_FUNC cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm);
 LJ_FUNC cTValue *lj_meta_lookuptv(lua_State *L, TValue *out,
 				  cTValue *o, MMS mm);
+#if defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC void lj_meta_test_mt_capture_pause(GCobj *target);
+LJ_FUNC uint32_t lj_meta_test_mt_capture_paused(void);
+LJ_FUNC void lj_meta_test_mt_capture_release(void);
+LJ_FUNC void lj_meta_test_mt_lease_pause(GCobj *target);
+LJ_FUNC uint32_t lj_meta_test_mt_lease_paused(void);
+LJ_FUNC void lj_meta_test_mt_lease_release(void);
+#endif
 #if LJ_HASFFI
 LJ_FUNC int lj_meta_tailcall(lua_State *L, cTValue *tv);
 #endif
@@ -29,9 +37,6 @@ LJ_FUNC int lj_meta_tailcall(lua_State *L, cTValue *tv);
 #define lj_meta_fasttv(g, mt, mm, out) \
   ((mt) == NULL ? NULL : (lj_tab_nomm_acq(mt) & (1u<<(mm))) ? NULL : \
    lj_meta_cachetv(mt, mm, mmname_str(g, mm), (out)))
-#define lj_meta_fasttv_l(L, mt, mm, out) \
-  ((mt) == NULL ? NULL : (lj_tab_nomm_acq(mt) & (1u<<(mm))) ? NULL : \
-   lj_meta_cachetv_l((L), mt, mm, mmname_str(G(L), mm), (out)))
 
 /* C helpers for some instructions, called from assembler VM. */
 LJ_FUNCA cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k);

@@ -407,6 +407,8 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_BEFORE_SET	1u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_AFTER_SET	2u
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING	3u
+#define LJ_GC2_TABLE_RESCAN_TEST_INSTALLING	1u
+#define LJ_GC2_TABLE_RESCAN_TEST_HINT_CLEARED	2u
 LJ_FUNC void lj_gc2_test_jit_mark_checkpoint_reset(void);
 LJ_FUNC uint64_t lj_gc2_test_jit_mark_checkpoint_closes(void);
 LJ_FUNC void lj_gc2_test_jit_sweep_checkpoint_reset(void);
@@ -425,6 +427,20 @@ LJ_FUNC void lj_gc2_test_thread_needscan_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_gc2_test_thread_needscan_paused(void);
 LJ_FUNC void lj_gc2_test_thread_needscan_release(void);
 LJ_FUNC int lj_gc2_test_thread_needscan_clear(global_State *g, lua_State *L);
+LJ_FUNC void lj_gc2_test_table_rescan_pause(uint32_t stage);
+LJ_FUNC uint32_t lj_gc2_test_table_rescan_paused(void);
+LJ_FUNC void lj_gc2_test_table_rescan_release(void);
+LJ_FUNC void lj_gc2_test_queue_post_admit_pause(GCobj *target);
+LJ_FUNC uint32_t lj_gc2_test_queue_post_admit_paused(void);
+LJ_FUNC void lj_gc2_test_queue_post_admit_release(void);
+LJ_FUNC void lj_gc2_test_queue_retry_witness_pause(GCobj *target);
+LJ_FUNC uint32_t lj_gc2_test_queue_retry_witness_paused(void);
+LJ_FUNC void lj_gc2_test_queue_retry_witness_release(void);
+LJ_FUNC int lj_gc2_test_table_rescan_set(global_State *g, GCtab *t);
+LJ_FUNC int lj_gc2_test_table_rescan_clear(global_State *g, GCtab *t);
+LJ_FUNC int lj_gc2_test_table_expected_status(global_State *g, GCtab *t);
+LJ_FUNC void lj_gc2_test_table_rescan_stale_hint_clear(global_State *g,
+							GCtab *t);
 LJ_FUNC int lj_gc2_test_weak_overflow_clear_bridge(global_State *g,
 						     GCobj *bridge_head);
 LJ_FUNC int lj_gc2_test_weak_trace_close_frontier(global_State *g,
@@ -492,7 +508,10 @@ LJ_FUNC void lj_gc2_test_rescan_pending_clear_if_table(global_State *g,
 						      GCobj *o);
 LJ_FUNC void lj_gc2_test_rescan_pending_clear_cycle(global_State *g,
 						   GCobj *o);
+#if defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC int lj_gc2_test_grey_push(global_State *g, GCobj *o);
 LJ_FUNC GCobj *lj_gc2_test_grey_steal(global_State *g);
+#endif
 LJ_FUNC void lj_gc2_test_worker_wake(global_State *g);
 LJ_FUNC int lj_gc2_test_finalizer_try_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_enter(global_State *g);
@@ -567,8 +586,18 @@ LJ_FUNC int lj_gc2_obj_queued_info_held(global_State *g, GCobj *o,
 LJ_FUNC int lj_gc2_obj_queued_brief_held(global_State *g, GCobj *o,
 					  void *known_arena,
 					  LJGC2QueuedInfo *info);
+enum {
+  LJ_GC2_TV_EDGE_RETRY = -1,
+  LJ_GC2_TV_EDGE_STALE = 0,
+  LJ_GC2_TV_EDGE_VALID = 1
+};
 /* Validate a structured, authoritative TValue edge (table/root publication). */
+LJ_FUNC int lj_gc2_tv_gcref_status_edge(global_State *g, cTValue *tv);
 LJ_FUNC int lj_gc2_tv_gcref_valid_edge(global_State *g, cTValue *tv);
+/* Retain the exact allocation named by a TValue through its final use. The
+** result uses LJ_GC2_TV_EDGE_* and release is required only for VALID. */
+LJ_FUNC int lj_gc2_tv_lease_acquire(global_State *g, cTValue *tv,
+				      LJGC2Lease *lease);
 LJ_FUNC int lj_gc2_mem_registered(global_State *g, const void *p);
 LJ_FUNC int lj_gc2_mem_registered_known(global_State *g, const void *p);
 /* Current-thread sweep-reclaimer certificate. This does not acquire lifetime:

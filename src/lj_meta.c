@@ -25,6 +25,90 @@
 #include "lj_strfmt.h"
 #include "lj_lib.h"
 
+#if defined(LJ_GC2_TEST_HELPERS)
+static uintptr_t meta_test_mt_capture_target;
+static uint32_t meta_test_mt_capture_armed;
+static uint32_t meta_test_mt_capture_paused;
+static uint32_t meta_test_mt_capture_release;
+static uintptr_t meta_test_mt_lease_target;
+static uint32_t meta_test_mt_lease_armed;
+static uint32_t meta_test_mt_lease_paused;
+static uint32_t meta_test_mt_lease_release;
+
+void lj_meta_test_mt_capture_pause(GCobj *target)
+{
+  la_store32_rel(&meta_test_mt_capture_release, 0);
+  la_store32_rel(&meta_test_mt_capture_paused, 0);
+  la_storeuptr_rel(&meta_test_mt_capture_target,
+		   (uintptr_t)(void *)target);
+  la_store32_rel(&meta_test_mt_capture_armed, target != NULL);
+}
+
+uint32_t lj_meta_test_mt_capture_paused(void)
+{
+  return la_load32_acq(&meta_test_mt_capture_paused);
+}
+
+void lj_meta_test_mt_capture_release(void)
+{
+  la_store32_rel(&meta_test_mt_capture_release, 1);
+}
+
+void lj_meta_test_mt_lease_pause(GCobj *target)
+{
+  la_store32_rel(&meta_test_mt_lease_release, 0);
+  la_store32_rel(&meta_test_mt_lease_paused, 0);
+  la_storeuptr_rel(&meta_test_mt_lease_target, (uintptr_t)(void *)target);
+  la_store32_rel(&meta_test_mt_lease_armed, target != NULL);
+}
+
+uint32_t lj_meta_test_mt_lease_paused(void)
+{
+  return la_load32_acq(&meta_test_mt_lease_paused);
+}
+
+void lj_meta_test_mt_lease_release(void)
+{
+  la_store32_rel(&meta_test_mt_lease_release, 1);
+}
+
+static void meta_test_pause_after_mt_capture(cTValue *o, GCtab *mt)
+{
+  uint32_t expect = 1;
+  if (!mt || !tvisgcv(o) ||
+      (GCobj *)(void *)la_loaduptr_acq(&meta_test_mt_capture_target) !=
+	gcV(o) ||
+      !la_cas32(&meta_test_mt_capture_armed, &expect, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return;
+  la_store32_rel(&meta_test_mt_capture_paused, 1);
+  while (la_load32_acq(&meta_test_mt_capture_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&meta_test_mt_capture_paused, 0);
+  la_storeuptr_rel(&meta_test_mt_capture_target, 0);
+}
+
+static void meta_test_pause_after_mt_lease(GCtab *mt)
+{
+  uint32_t expect = 1;
+  if (!mt ||
+      (GCobj *)(void *)la_loaduptr_acq(&meta_test_mt_lease_target) !=
+	obj2gco(mt) ||
+      !la_cas32(&meta_test_mt_lease_armed, &expect, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return;
+  la_store32_rel(&meta_test_mt_lease_paused, 1);
+  while (la_load32_acq(&meta_test_mt_lease_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&meta_test_mt_lease_paused, 0);
+  la_storeuptr_rel(&meta_test_mt_lease_target, 0);
+}
+#else
+#define meta_test_pause_after_mt_capture(o, mt) \
+  ((void)(o), (void)(mt))
+#define meta_test_pause_after_mt_lease(mt) ((void)(mt))
+#endif
+
 /* -- Metamethod handling ------------------------------------------------- */
 
 /* String interning of metamethod names for fast indexing. */
@@ -83,7 +167,9 @@ cTValue *lj_meta_cachetv_l(lua_State *L, GCtab *mt, MMS mm, GCstr *name,
   lj_assertX(mm <= MM_FAST, "bad metamethod %d", mm);
   setstrV(L, &key, name);
   (void)lj_tab_gettv_forjit(L, mt, &key, out);
-  return (!lj_tv_gcref_type_match(out) || tvisnil(out)) ? NULL : out;
+  /* The copied helper normalizes stale GC snapshots to nil and publishes every
+  ** valid GC result under its exact lease. Do not re-read an unleased header. */
+  return tvisnil(out) ? NULL : out;
 }
 
 /* Lookup metamethod for object. */
@@ -106,22 +192,103 @@ cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
 
 cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
 {
-  GCtab *mt;
-  if (tvistab(o))
-    mt = lj_tab_metatable_acq(tabV(o));
-  else if (tvisudata(o))
-    mt = lj_udata_metatable_acq(udataV(o));
-  else
-    mt = lj_basemt_obj_acq(G(L), o);
-  if (mt) {
-    cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), mm));
-    if (mo) {
-      lj_tv_load_acq(out, mo);
+  global_State *g = G(L);
+  TValue osnap, mtv;
+  for (;;) {
+    LJGC2Lease objlease, mtlease, resultlease;
+    GCtab *mt;
+    int ostatus, mtstatus, lookupstatus, resultstatus;
+
+    /* One acquired receiver snapshot is the lookup's linearization candidate.
+    ** A deliberately racy Lua writer may replace o at any point; never lease
+    ** one incarnation and then branch through a second read of the slot. */
+    lj_tv_load_acq(&osnap, o);
+    lj_gc_pubroot(L, &osnap);
+    ostatus = lj_gc2_tv_lease_acquire(g, &osnap, &objlease);
+    if (LJ_UNLIKELY(ostatus != LJ_GC2_TV_EDGE_VALID)) {
+      if (ostatus == LJ_GC2_TV_EDGE_RETRY) {
+	lj_tab_wait_l(L);
+	continue;
+      }
+      setnilV(out);
       return out;
     }
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+      lj_gc2_lease_release(&objlease);
+      lj_tab_wait_l(L);
+      continue;
+    }
+    if (tvistab(&osnap))
+      mt = lj_tab_metatable_acq(tabV(&osnap));
+    else if (tvisudata(&osnap))
+      mt = lj_udata_metatable_acq(udataV(&osnap));
+    else
+      mt = lj_basemt_obj_acq(g, &osnap);
+    meta_test_pause_after_mt_capture(&osnap, mt);
+    if (!mt) {
+      lj_gc2_smr_read_leave(g);
+      lj_gc2_lease_release(&objlease);
+      setnilV(out);
+      return out;
+    }
+
+    /* The source-side SMR interval prevents reclamation/reuse between pointer
+    ** capture and target admission. Replacement of the receiver's metatable
+    ** therefore chooses the old or new table as a valid linearization, never a
+    ** new incarnation at the same address. */
+    setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
+    mtstatus = lj_gc2_tv_lease_acquire(g, &mtv, &mtlease);
+    if (mtstatus == LJ_GC2_TV_EDGE_VALID)
+      meta_test_pause_after_mt_lease(mt);
+    lj_gc2_smr_read_leave(g);
+    if (LJ_UNLIKELY(mtstatus != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_lease_release(&objlease);
+      if (mtstatus == LJ_GC2_TV_EDGE_RETRY) {
+	lj_tab_wait_l(L);
+	continue;
+      }
+      setnilV(out);
+      return out;
+    }
+    /* This lookup is deliberately one-shot. lj_tab_gettv_forjit() owns a retry
+    ** loop which may service a safepoint and longjmp; calling it with objlease
+    ** and mtlease held would strand both leases. The held nonwaiting lookup is
+    ** bounded and never waits. Admit its copied result before closing SMR, then
+    ** release every outer lease before the caller-visible retry wait. */
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+      lj_gc2_lease_release(&mtlease);
+      lj_gc2_lease_release(&objlease);
+      lj_tab_wait_l(L);
+      continue;
+    }
+    lookupstatus = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm), out);
+    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
+        LJ_UNLIKELY(tvistabinternal(out)))
+      lookupstatus = LJ_TAB_GC_LOOKUP_RETRY;
+    resultstatus = lookupstatus == LJ_TAB_GC_LOOKUP_FOUND ?
+      lj_gc2_tv_lease_acquire(g, out, &resultlease) :
+      LJ_GC2_TV_EDGE_VALID;
+    lj_gc2_smr_read_leave(g);
+    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
+        resultstatus == LJ_GC2_TV_EDGE_VALID) {
+      lj_gc_pubroot(L, out);
+      lj_gc2_lease_release(&resultlease);
+      lj_gc2_lease_release(&mtlease);
+      lj_gc2_lease_release(&objlease);
+      return out;
+    }
+    lj_gc2_lease_release(&mtlease);
+    lj_gc2_lease_release(&objlease);
+    if (lookupstatus == LJ_TAB_GC_LOOKUP_RETRY ||
+        resultstatus == LJ_GC2_TV_EDGE_RETRY) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    /* A stable absent slot, or a stale result incarnation observed before its
+    ** SMR scope closed, both have the semantic value nil for this lookup. */
+    setnilV(out);
+    return out;
   }
-  setnilV(out);
-  return out;
 }
 
 #if LJ_HASFFI
@@ -190,17 +357,31 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
   int loop;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
+    int ostatus, kstatus;
+  retry_semantic_root:
     lj_gc_pubroot(L, o);
     lj_gc_pubroot(L, k);
-    if (LJ_UNLIKELY(!lj_gc_tv_gcref_valid(G(L), o) ||
-		    !lj_gc_tv_gcref_valid(G(L), k)))
+    ostatus = lj_gc_tv_gcref_status(G(L), o);
+    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_RETRY)) {
+      lj_tab_wait_l(L);
+      goto retry_semantic_root;
+    }
+    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_STALE))
+      return niltv(L);
+    kstatus = lj_gc_tv_gcref_status(G(L), k);
+    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_RETRY)) {
+      lj_tab_wait_l(L);
+      goto retry_semantic_root;
+    }
+    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_STALE))
       return niltv(L);
     if (LJ_LIKELY(tvistab(o))) {
       GCtab *t = tabV(o);
       cTValue *tv = lj_tab_gettv_forjit(L, t, k, tvv);
-      if (!tvisnil(tv) ||
-	  !(mo = lj_meta_fasttv_l(L, lj_tab_metatable_acq(t),
-			  MM_index, &motv)))
+      if (!tvisnil(tv))
+	return tv;
+      mo = lj_meta_lookuptv(L, &motv, o, MM_index);
+      if (tvisnil(mo))
 	return tv;
     } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_index))) {
       lj_err_optype(L, o, LJ_ERR_OPINDEX);
@@ -218,41 +399,58 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
 
 static TValue *meta_tset(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
 {
-  TValue tmp, motv;
+  TValue tmp, motv, lookup;
   int loop;
   if (owner)
     *owner = NULL;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
+    int ostatus, kstatus;
+  retry_semantic_root:
     lj_gc_pubroot(L, o);
     lj_gc_pubroot(L, k);
+    ostatus = lj_gc_tv_gcref_status(G(L), o);
+    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_RETRY)) {
+      lj_tab_wait_l(L);
+      goto retry_semantic_root;
+    }
+    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_STALE)) {
+      lj_err_optype(L, o, LJ_ERR_OPINDEX);
+      return NULL;  /* unreachable */
+    }
+    kstatus = lj_gc_tv_gcref_status(G(L), k);
+    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_RETRY)) {
+      lj_tab_wait_l(L);
+      goto retry_semantic_root;
+    }
+    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_STALE)) {
+      lj_err_msg(L, LJ_ERR_NILIDX);
+      return NULL;  /* unreachable */
+    }
     if (LJ_LIKELY(tvistab(o))) {
       GCtab *t = tabV(o);
-      cTValue *tv = lj_tab_get(L, t, k);
+      /* The copied helper retains exact table/key leases through hashing and
+      ** current-generation miss resolution. Use its value only for metamethod
+      ** semantics; resolve a fresh current write slot afterwards, since a raw
+      ** decision-time vector pointer cannot survive resize or reclamation. */
+      cTValue *tv = lj_tab_gettv_forjit(L, t, k, &lookup);
       if (LJ_LIKELY(!tvisnil(tv))) {
+	TValue *dst = lj_tab_set(L, t, k);
 	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
 	lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);
 	if (owner)
 	  *owner = t;
-	return (TValue *)tv;
-      } else if (!(mo = lj_meta_fasttv(G(L), lj_tab_metatable_acq(t),
-				       MM_newindex, &motv))) {
+	return dst;
+	} else if (tvisnil(mo = lj_meta_lookuptv(
+			 L, &motv, o, MM_newindex))) {
 	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
-	if (tv != niltv(L))
-	  lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);
-	if (tv != niltv(L)) {
-	  if (owner)
-	    *owner = t;
-	  return (TValue *)tv;
-	}
 	if (tvisnil(k)) lj_err_msg(L, LJ_ERR_NILIDX);
-	else if (tvisint(k)) { setnumV(&tmp, (lua_Number)intV(k)); k = &tmp; }
 	else if (tvisnum(k) && tvisnan(k)) lj_err_msg(L, LJ_ERR_NANIDX);
 	if (owner)
 	  *owner = t;
-	return lj_tab_newkey(L, t, k);
+	return lj_tab_set(L, t, k);
       }
     } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_newindex))) {
       lj_err_optype(L, o, LJ_ERR_OPINDEX);

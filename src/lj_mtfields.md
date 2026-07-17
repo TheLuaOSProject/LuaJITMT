@@ -14,6 +14,7 @@ whenever a shared field is introduced or migrated.
 | GCtab.struct_owner | structural mutation claim | CAS acq_rel; owner reads acq; private bootstrap store rlx |
 | GCtab.metatable, GCudata.metatable | shared ptr | rlx; publish rel |
 | GCtab.nomm | advisory byte | load acq / store rel; construction masks and explicit clears only |
+| GCtab.gc2_rescan_state | exact table-rescan aggregate membership | load acq; private construction store rlx; state transitions CAS acq_rel; terminal publication store rel only with exclusive ownership |
 | GCobj.gch.gct | immutable after publish | plain read; written pre-publish |
 | arena bitmaps (block/mark) | atomic bitset | fetch_or rlx; sweep owns exclusive |
 | g->gc2.phase | phase word | load rlx in fast paths; transitions rel + handshake |
@@ -45,3 +46,10 @@ whenever a shared field is introduced or migrated.
 | L->thr_owner | claim word | CAS acq_rel |
 | g->str.tabh | RCU pointer | acq / rel |
 | cts->tabh / cts->top | RCU vector + ticket | see 11 §11.2 |
+
+`GCtab.gc2_rescan_state` is not an advisory copy of `LJ_GC_NEEDSCAN`.
+`NONE` owns no aggregate credit, `INSTALLING` owns a provisional credit,
+`COUNTED` owns one committed credit, and `CANCELLED` leaves settlement to the
+installer that owns the provisional credit. Shared code must use the atomic
+accessors in `lj_obj.h`; constructors initialize `NONE` before publishing the
+table body.
