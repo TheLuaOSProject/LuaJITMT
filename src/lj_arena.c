@@ -125,6 +125,30 @@ static LJ_NORET void arena_remote_overflow(void)
   abort();
 }
 
+/* Bind both pointers while the arena is private or owned by a quiescent
+** transfer source. The descriptor is published first, so any observer which
+** acquires progress_g also has a stable reclamation authority. Arena transfer
+** is only valid within one global state; rebinding would make a dormant
+** descriptor from the old global impossible to classify safely. */
+static void arena_progress_bind_rel(GCArena *a, global_State *g)
+{
+  global_State *oldg;
+  LJGC2TableDesc *desc, *olddesc;
+  if (!a || !g)
+    return;
+  desc = &g->gc2.table_rescan_desc;
+  oldg = (global_State *)lj_arena_progress_g_acq(a);
+  olddesc = lj_arena_gc2_tabledesc_acq(a);
+  if ((oldg && oldg != g) || (olddesc && olddesc != desc)) {
+    lj_assertX(0, "arena table descriptor rebound across global states");
+    abort();
+  }
+  if (!olddesc)
+    lj_arena_gc2_tabledesc_rel(a, desc);
+  if (!oldg)
+    lj_arena_progress_g_rel(a, g);
+}
+
 static void arena_progress_wake(GCArena *a)
 {
   global_State *g = a ? (global_State *)lj_arena_progress_g_acq(a) : NULL;
@@ -305,6 +329,34 @@ static LJ_AINLINE uint64_t arena_gc2_token_block_bits(const GCArena *a,
   return bits;
 }
 
+/* One exact descriptor observation converted to allocation-bit geometry.
+** IDLE and an ACTIVE table outside this word contribute no bit. PINNED,
+** malformed, or a published-global/missing-descriptor mismatch are global
+** no-reclaim authority and therefore conservatively fill the complete word. */
+static LJ_AINLINE uint64_t arena_gc2_desc_block_bits(const GCArena *a,
+					      uint32_t wi)
+{
+  LJGC2TableDesc *desc;
+  LJGC2TableDescSnap snap;
+  uint32_t cell;
+  if (!arena_lifetime_managed(a) || wi >= LJ_ARENA_WORDS)
+    return 0;
+  desc = lj_arena_gc2_tabledesc_acq(a);
+  if (!desc)
+    return lj_arena_progress_g_acq(a) == NULL ? 0 : ~(uint64_t)0;
+  snap = lj_gc2_tabledesc_snapshot(desc);
+  if (snap.state == LJ_GC2_TABLEDESC_IDLE)
+    return 0;
+  if (snap.state != LJ_GC2_TABLEDESC_ACTIVE)
+    return ~(uint64_t)0;
+  if (lj_arena_of((const void *)snap.table) != a)
+    return 0;
+  cell = lj_arena_cellof((const void *)snap.table);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+    return ~(uint64_t)0;
+  return (cell >> 6) == wi ? (uint64_t)1 << (cell & 63u) : 0;
+}
+
 /* The caller has changed FREE to a non-readable construction/mutation lane,
 ** after proving the old token NONE. Lawful token publishers must acquire the
 ** reciprocal allocation lifetime before refresh, so the token cannot change
@@ -367,7 +419,8 @@ static LJ_AINLINE int arena_quarantine_terminal_freeing_word(
   for (k = 0; k < 4u; k++)
     if (la_load64_acq(&a->lifetime[(w << 2) + k]) != 0)
       return 0;
-  if (arena_gc2_token_block_bits(a, w) != 0)
+  if ((arena_gc2_token_block_bits(a, w) |
+       arena_gc2_desc_block_bits(a, w)) != 0)
     return 0;
   even = arena_dilate32_even((uint32_t)block);
   expect_lo = even | (even << 1);
@@ -416,7 +469,7 @@ uint32_t lj_arena_lifetime_clear_terminal(GCArena *a, uint32_t cell)
     /* A token may legitimately coexist with FREE, but this quiescent cleanup
     ** helper promises that no runtime actor can resume the allocation. Refuse
     ** to discard its locator while that promise is visibly false. */
-    if (!arena_gc2_token_none_acq(a, cell))
+    if (!lj_arena_gc2_reclaim_clear_acq(a, cell))
       return LJ_ARENA_LIFETIME_CLEAR_BLOCKED;
     if (lj_arena_lifetime_state_cas(a, cell, state,
 					    LJ_ARENA_LIFETIME_FREE))
@@ -1435,14 +1488,15 @@ void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud)
   int32_t run_start = -1;
   uint32_t i = LJ_AFIRST_CELL;
   uint32_t token_wi = UINT32_MAX;
-  uint64_t token_bits = 0;
+  uint64_t gc2_bits = 0;
   while (i < LJ_ARENA_CELLS) {
     uint32_t wi = i >> 6;
     uint64_t starts;
     uint32_t st;
     if (wi != token_wi) {
       token_wi = wi;
-      token_bits = arena_gc2_token_block_bits(a, wi);
+      gc2_bits = arena_gc2_token_block_bits(a, wi) |
+	 arena_gc2_desc_block_bits(a, wi);
     }
     starts = (la_load64_rlx(&a->block[i >> 6]) |
 		       la_load64_rlx(&a->mark[i >> 6]) |
@@ -1450,7 +1504,7 @@ void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud)
 		       arena_root_block_bits(a, i >> 6) |
 		       arena_dtor_block_bits(a, i >> 6) |
 		       arena_lifetime_block_bits(a, i >> 6) |
-		       token_bits) >> (i & 63);
+		       gc2_bits) >> (i & 63);
     if (!starts) {
       i = (i | 63u) + 1u;
       continue;
@@ -1728,7 +1782,8 @@ static LJ_AINLINE int arena_unmap_side_empty(const GCArena *a)
 {
   return a && lj_arena_recovery_empty(a) && arena_root_empty(a) &&
     lj_arena_lifetime_empty(a) && arena_dtor_empty(a) &&
-    lj_arena_gc2_tokens_empty_acq(a);
+    lj_arena_gc2_tokens_empty_acq(a) &&
+    lj_arena_gc2_desc_mapping_clear_acq(a);
 }
 
 static void arena_unmap_claimed(GCArena *a)
@@ -1788,8 +1843,15 @@ void lj_arena_huge_unmap(void *p, size_t size)
 {
   int olderr = errno;
   size_t mapsize = lj_arena_huge_mapsize(size);
-  if (p && mapsize)
-    arena_unmap_aligned((void *)lj_arena_of(p), mapsize);
+  if (p && mapsize) {
+    GCArena *a = lj_arena_of(p);
+    /* Last-resort mapping certificate. Normal callers prove this before
+    ** deleting the HugeTab locator; retain a violated mapping rather than
+    ** erasing a live scan owner if a terminal caller regresses. */
+    if (lj_arena_gc2_tokens_empty_acq(a) &&
+	lj_arena_gc2_desc_mapping_clear_acq(a))
+      arena_unmap_aligned((void *)a, mapsize);
+  }
   errno = olderr;
 }
 
@@ -3949,7 +4011,8 @@ static int arena_destruct_claim_live(GCArena *a, uint32_t cell,
   arena_test_lifetime_pause_after_claim();
   if (!arena_mutation_open_quiet(a, own_open_count) ||
       !lj_arena_bm_get(a->block, cell) ||
-      !arena_side_owners_none(a, cell)) {
+      !arena_side_owners_none(a, cell) ||
+      !lj_arena_gc2_desc_clear_acq(a, cell)) {
     (void)arena_destruct_restore_live(a, cell);
     return 0;
   }
@@ -3960,8 +4023,8 @@ static int arena_destruct_commit_free(GCArena *a, uint32_t cell)
 {
   if (!arena_lifetime_managed(a))
     return 1;
-  if (!arena_gc2_token_none_acq(a, cell)) {
-    /* Token ownership is a conservative live result. Restore the tentative
+  if (!lj_arena_gc2_reclaim_clear_acq(a, cell)) {
+    /* GC2 scan ownership is a conservative live result. Restore the tentative
     ** lane here because several sweep callers historically relied on a failed
     ** FREE CAS meaning that a rescue actor had already performed restoration. */
     (void)lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
@@ -3990,7 +4053,8 @@ static int arena_mutation_claim_live(GCArena *a, uint32_t cell,
     return 0;
   if (!arena_mutation_open_quiet(a, own_open_count) ||
       !lj_arena_bm_get(a->block, cell) ||
-      !arena_side_owners_none(a, cell)) {
+      !arena_side_owners_none(a, cell) ||
+      !lj_arena_gc2_desc_clear_acq(a, cell)) {
     (void)lj_arena_lifetime_state_cas(a, cell,
 	LJ_ARENA_LIFETIME_MUTATING, LJ_ARENA_LIFETIME_LIVE);
     return 0;
@@ -4068,7 +4132,8 @@ static LJ_AINLINE int arena_range_ownership_preflight(GCArena *a,
     mask = arena_range_mask(lo, take);
     recovery = arena_recovery_block_bits(a, wi) & mask;
     blockers = arena_root_block_bits(a, wi) |
-	       arena_dtor_block_bits(a, wi);
+	       arena_dtor_block_bits(a, wi) |
+	       arena_gc2_desc_block_bits(a, wi);
     if (lifetime_managed)
       blockers |= arena_lifetime_block_bits(a, wi);
     if (require_ready_clear)
@@ -4257,6 +4322,7 @@ static int arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
   uint32_t b = arena_bin(len);
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
   if (!arena_side_owners_none(a, start) ||
+      !lj_arena_gc2_desc_clear_acq(a, start) ||
       (arena_lifetime_managed(a) &&
        lj_arena_lifetime_state_acq(a, start) != LJ_ARENA_LIFETIME_FREE))
     return 0;
@@ -4294,7 +4360,8 @@ static LJ_AINLINE int arena_free_run_body_readable(const LJArenaFreeRun *run)
   return !arena_lifetime_managed(a) ||
     (cell < LJ_ARENA_CELLS &&
      lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE &&
-     arena_side_owners_none(a, cell));
+     arena_side_owners_none(a, cell) &&
+     lj_arena_gc2_desc_clear_acq(a, cell));
 }
 
 static LJ_AINLINE int arena_free_run_valid_knownptr(const LJArenaFreeRun *run,
@@ -5375,6 +5442,7 @@ static GCArena *arena_unmap_list(TGAlloc *alloc, GCArena *a)
       ** remain external owners and must still drain explicitly. */
       if (lj_arena_recovery_empty(a) && arena_root_empty(a) &&
 	  lj_arena_gc2_tokens_empty_acq(a) &&
+	  lj_arena_gc2_desc_mapping_clear_acq(a) &&
 	  arena_registry_delete(alloc, a)) {
 	arena_unmap_claimed(a);
 	unmapped = 1;
@@ -5881,7 +5949,7 @@ static int arena_quarantine_bitmap_ready(GCArena *a, uint32_t *retry_cell)
       uint32_t state;
       if (!(b & ((uint64_t)1 << j)))
 	continue;
-      if (!arena_gc2_token_none_acq(a, (w << 6) + j)) {
+      if (!lj_arena_gc2_reclaim_clear_acq(a, (w << 6) + j)) {
 	if (retry_cell)
 	  *retry_cell = (w << 6) + j;
 	return 0;
@@ -5951,7 +6019,7 @@ static int arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
       uint32_t state;
       if (!(b & ((uint64_t)1 << j)))
 	continue;
-      if (!arena_gc2_token_none_acq(a, cell)) {
+      if (!lj_arena_gc2_reclaim_clear_acq(a, cell)) {
 	live |= (uint64_t)1 << j;
 	continue;
       }
@@ -6020,7 +6088,7 @@ static int arena_quarantine_apply_bitmap(GCArena *a, int preserve_marks)
 	}
 	if (life == LJ_ARENA_LIFETIME_FREE &&
 	    state == LJ_ARENA_SWEEP_FREEING &&
-	    arena_gc2_token_none_acq(a, cell)) {
+	    lj_arena_gc2_reclaim_clear_acq(a, cell)) {
 	  freeing |= bit;
 	} else {
 	  live |= bit;  /* Constructor/link/recovery owner: retain without wait. */
@@ -6376,7 +6444,7 @@ static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
   while (a) {
     GCArena *next = lj_arena_next_acq(a);
     lj_arena_owner_rel(a, owner_tid);
-    lj_arena_progress_g_rel(a, progress_g);
+    arena_progress_bind_rel(a, progress_g);
     lj_arena_next_rel(a, *dstp);
     *dstp = a;
     a = next;
@@ -6431,7 +6499,7 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
 	GCArena *next = lj_arena_next_acq(a);
 	GCArena *head = arena_reclaimed_acq(dst, k);
 	lj_arena_owner_rel(a, owner_tid);
-	lj_arena_progress_g_rel(a, progress_g);
+	arena_progress_bind_rel(a, progress_g);
 	do {
 	  lj_arena_next_rel(a, head);
 	} while (!arena_reclaimed_cas(dst, k, &head, a));
@@ -6460,7 +6528,7 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
   {
     TGState *owner_tg = (TGState *)lj_arena_alloc_owner_tg_acq(alloc);
-    lj_arena_progress_g_rel(a, owner_tg ? owner_tg->gl : NULL);
+    arena_progress_bind_rel(a, owner_tg ? owner_tg->gl : NULL);
   }
   if (!arena_registry_insert_fresh(alloc, a, flags)) {
     lj_arena_unmap(a);
@@ -6782,8 +6850,13 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
     if (flags & LJ_AF_ROOT_CONSTRUCT)
       return NULL;
     p = lj_arena_huge_map(rs, size, flags);
-    if (p)
-      lj_arena_owner_rel(lj_arena_of(p), lj_arena_alloc_owner_acq(alloc));
+    if (p) {
+      GCArena *a = lj_arena_of(p);
+      TGState *owner_tg =
+	(TGState *)lj_arena_alloc_owner_tg_acq(alloc);
+      lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
+      arena_progress_bind_rel(a, owner_tg ? owner_tg->gl : NULL);
+    }
     return p;
   }
   ncells = lj_arena_ncells(size);
@@ -6980,8 +7053,18 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
       abort();
   }
   if (!arena_insert_run(alloc, a, start, ncells)) {
-    if (claim == 1 || plain_held)
-      abort();  /* Terminal ownership cannot be restored after body mutation. */
+    if (claim == 1 || plain_held) {
+      /* A descriptor may become globally PINNED after the exact FREE LP, or a
+      ** defensive free-run validation may otherwise refuse body publication.
+      ** FREE cannot be restored, but block+FREEING+late is already the normal
+      ** fail-closed quarantine representation. Preserve it and let a later
+      ** sweep retry instead of treating a legitimate authority crossover as
+      ** corruption. */
+      int pinned = arena_late_pin(a, p, size);
+      lj_assertX(pinned == 1,
+	"arena terminal free-run refusal lost late quarantine");
+      UNUSED(pinned);
+    }
   } else if (claim == 1 || plain_held) {
     (void)lj_arena_sweep_state_cas(a, start, LJ_ARENA_SWEEP_FREEING,
 					   LJ_ARENA_SWEEP_WHITE);
@@ -7194,7 +7277,7 @@ static void *arena_allocf_new(LJArenaAllocD *ad, size_t size, uint32_t flags)
     /* A final counted reader may turn a deferred plain free into actionable
     ** FREEING|SWEEP_OLD work. Publish the process owner before the HugeTab
     ** entry so that handoff can wake an already-active sweep. */
-    lj_arena_progress_g_rel(a, owner_tg ? owner_tg->gl : NULL);
+    arena_progress_bind_rel(a, owner_tg ? owner_tg->gl : NULL);
   }
   if (p && lj_arena_hugetab_insert(ad->huge, p, size,
 				   arena_allocf_hflags(ad, flags)) != 1) {

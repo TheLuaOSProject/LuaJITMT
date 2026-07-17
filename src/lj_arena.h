@@ -147,7 +147,9 @@ typedef struct GCAhdr {
   /* Huge allocations have no external cell sidecar. This tail is initialized
   ** before mapping publication and remains allocation-local until unmap. */
   LJGC2TabStamp huge_tabstamp;
-  uint8_t pad[8];
+  /* Stable global table-rescan authority. Published before progress_g and
+  ** never rebound to a different global while the mapping is reachable. */
+  LJGC2TableDesc *gc2_tabledesc;
 } GCAhdr;
 
 /*
@@ -312,6 +314,19 @@ static LJ_AINLINE void *lj_arena_progress_g_acq(const GCArena *a)
 static LJ_AINLINE void lj_arena_progress_g_rel(GCArena *a, void *g)
 {
   la_storeptr_rel((void **)&a->hdr.progress_g, g);
+}
+
+static LJ_AINLINE LJGC2TableDesc *
+lj_arena_gc2_tabledesc_acq(const GCArena *a)
+{
+  return a ? (LJGC2TableDesc *)la_loadptr_acq(
+    (void *const *)&a->hdr.gc2_tabledesc) : NULL;
+}
+
+static LJ_AINLINE void lj_arena_gc2_tabledesc_rel(GCArena *a,
+						   LJGC2TableDesc *desc)
+{
+  la_storeptr_rel((void **)&a->hdr.gc2_tabledesc, desc);
 }
 
 static LJ_AINLINE GCArena *lj_arena_next_acq(const GCArena *a)
@@ -962,9 +977,14 @@ static LJ_AINLINE int lj_arena_gc2_token_none_acq(const GCArena *a,
   if (!a)
     return 0;
   flags = lj_arena_flags_acq(a);
-  if ((flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC ||
-      !(flags & LJ_AF_TRAVERSABLE))
+  if (!(flags & LJ_AF_TRAVERSABLE))
     return 1;
+  if ((flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC) {
+    uint32_t body_cell = (uint32_t)(sizeof(GCAhdr) >> LJ_CELL_SHIFT);
+    return cell == body_cell && lj_gc2_table_token_state(
+      la_load64_acq(&a->hdr.huge_tabstamp.token.control)) ==
+        LJ_GC2_TABLE_TOKEN_NONE;
+  }
   if (cell < LJ_AFIRST_CELL)
     return 1;
   if (cell >= LJ_ARENA_CELLS)
@@ -973,6 +993,104 @@ static LJ_AINLINE int lj_arena_gc2_token_none_acq(const GCArena *a,
   return side && lj_gc2_table_token_state(
     la_load64_acq(&side->cell[cell].token.control)) ==
       LJ_GC2_TABLE_TOKEN_NONE;
+}
+
+/* Cold terminal-reclamation veto for the dormant helpable table handoff.
+** The exact CX16 snapshot deliberately avoids relying on overlapping
+** mixed-width atomics. A lawful ACTIVE publisher retains admission until it
+** has installed the per-table token and cleared the descriptor; this check is
+** the fail-closed terminal backstop for that reciprocal lifetime protocol.
+**
+** An unattached private arena has neither progress_g nor a descriptor and
+** cannot have a publisher. Once progress_g is visible, a missing descriptor
+** is malformed and therefore retains the allocation. Plain arenas never host
+** GC tables and do not participate in this authority. */
+static LJ_AINLINE int lj_arena_gc2_desc_ptr_clear_acq(const GCArena *a,
+						       const void *p)
+{
+  LJGC2TableDesc *desc;
+  LJGC2TableDescSnap snap;
+  uint32_t flags;
+  if (!a || !p)
+    return 0;
+  flags = lj_arena_flags_acq(a);
+  if (!(flags & LJ_AF_TRAVERSABLE))
+    return 1;
+  desc = lj_arena_gc2_tabledesc_acq(a);
+  if (!desc)
+    return lj_arena_progress_g_acq(a) == NULL;
+  snap = lj_gc2_tabledesc_snapshot(desc);
+  if (snap.state == LJ_GC2_TABLEDESC_IDLE)
+    return 1;
+  if (snap.state != LJ_GC2_TABLEDESC_ACTIVE)
+    return 0;
+  return snap.table != (uintptr_t)p;
+}
+
+static LJ_AINLINE int lj_arena_gc2_desc_clear_acq(const GCArena *a,
+						   uint32_t cell)
+{
+  if (!a ||
+      (lj_arena_flags_acq(a) & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC ||
+      cell < LJ_AFIRST_CELL ||
+      cell >= LJ_ARENA_CELLS)
+    return 0;
+  return lj_arena_gc2_desc_ptr_clear_acq(
+    a, lj_arena_cellptr((GCArena *)a, cell));
+}
+
+/* Exact physical ownership predicate used immediately before destruction or
+** DESTRUCT->FREE. Logical FREE may coexist with a token, so this is not a
+** semantic-liveness query and must not be used to admit ordinary readers. */
+static LJ_AINLINE int lj_arena_gc2_reclaim_clear_acq(const GCArena *a,
+						      uint32_t cell)
+{
+  return lj_arena_gc2_desc_clear_acq(a, cell) &&
+    lj_arena_gc2_token_none_acq(a, cell);
+}
+
+/* Huge mappings contain one exact allocation at the end of GCAhdr. This
+** pointer form applies the identical descriptor/token certificate without
+** pretending the small-arena LJ_AFIRST_CELL geometry applies to that body. */
+static LJ_AINLINE int lj_arena_gc2_reclaim_ptr_clear_acq(const GCArena *a,
+						  const void *p)
+{
+  if (!a || !p)
+    return 0;
+  if ((lj_arena_flags_acq(a) & LJ_AF_HUGE_MAGIC) != LJ_AF_HUGE_MAGIC) {
+    if (lj_arena_of(p) != a)
+      return 0;
+    return lj_arena_gc2_reclaim_clear_acq(a, lj_arena_cellof(p));
+  }
+  if (p != (const void *)((const char *)a + sizeof(GCAhdr)))
+    return 0;
+  return lj_arena_gc2_desc_ptr_clear_acq(a, p) &&
+    lj_arena_gc2_token_none_acq(
+      a, (uint32_t)(sizeof(GCAhdr) >> LJ_CELL_SHIFT));
+}
+
+/* Mapping-wide descriptor certificate for small-arena terminal unmap. An
+** ACTIVE table anywhere in this mapping retains it; PINNED/INVALID and a
+** published-global/missing-descriptor mismatch retain conservatively. */
+static LJ_AINLINE int lj_arena_gc2_desc_mapping_clear_acq(const GCArena *a)
+{
+  LJGC2TableDesc *desc;
+  LJGC2TableDescSnap snap;
+  uint32_t flags;
+  if (!a)
+    return 0;
+  flags = lj_arena_flags_acq(a);
+  if (!(flags & LJ_AF_TRAVERSABLE))
+    return 1;
+  desc = lj_arena_gc2_tabledesc_acq(a);
+  if (!desc)
+    return lj_arena_progress_g_acq(a) == NULL;
+  snap = lj_gc2_tabledesc_snapshot(desc);
+  if (snap.state == LJ_GC2_TABLEDESC_IDLE)
+    return 1;
+  if (snap.state != LJ_GC2_TABLEDESC_ACTIVE)
+    return 0;
+  return lj_arena_of((const void *)snap.table) != a;
 }
 
 static LJ_AINLINE uint32_t lj_arena_bm_get(const uint64_t *bm, uint32_t i)
@@ -1331,6 +1449,7 @@ LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
 LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
 LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == LJ_ARENA_SIZE);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, huge_tabstamp) == 104u);
+LJ_STATIC_ASSERT(offsetof(GCAhdr, gc2_tabledesc) == 120u);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_active) == 56u);
 LJ_STATIC_ASSERT((offsetof(GCAhdr, remote_active) & 7u) == 0);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_free) == 64u);

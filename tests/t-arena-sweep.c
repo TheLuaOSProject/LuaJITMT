@@ -65,6 +65,9 @@ static void test_packed_range_preflight(PRNGState *rs)
   uint32_t tokencell = start + 5u;
   LJGC2TabStamp *token_stamp;
   LJGC2TableTokenTicket token_ticket;
+  LJGC2TableDesc desc;
+  LJGC2TableDescTicket desc_ticket;
+  LJGC2TableDescSnap desc_snap;
   RunCapture capture;
   uint32_t i;
 
@@ -92,6 +95,27 @@ static void test_packed_range_preflight(PRNGState *rs)
   assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
   assert(lj_gc2_table_token_complete(&token_stamp->token, &token_ticket) ==
 	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+
+  /* The global handoff descriptor has no sidecar bit. Exact ACTIVE must split
+  ** enumeration and veto coalescing just like its eventual token, without
+  ** turning an unrelated cell into a global stop. */
+  lj_gc2_tabledesc_init_unpublished(&desc, 0);
+  lj_arena_gc2_tabledesc_rel(a, &desc);
+  assert(lj_gc2_tabledesc_try_publish(&desc,
+	lj_arena_cellptr(a, tokencell), &desc_ticket, &desc_snap) ==
+	LJ_GC2_TABLEDESC_RESULT_OK);
+  lj_arena_bm_set(a->mark, start);
+  memset(&capture, 0, sizeof(capture));
+  lj_arena_scan_free_runs(a, capture_run, &capture);
+  assert(capture.count == 1u);
+  assert(capture.first_start == start);
+  assert(capture.first_len == tokencell - start);
+  lj_arena_bm_clear(a->mark, start);
+  memcpy(snapshot, a, sizeof(*snapshot));
+  assert(!lj_arena_test_set_free_run(a, start, len));
+  assert(memcmp(snapshot, a, sizeof(*snapshot)) == 0);
+  assert(lj_gc2_tabledesc_finish_help(&desc, &desc_ticket, &desc_snap) ==
+	LJ_GC2_TABLEDESC_RESULT_OK);
 
   /* A zero-length request must not bypass the start lifetime check or mutate
   ** its structural bits. Out-of-range requests are equally side-effect free. */
@@ -1276,6 +1300,9 @@ int main(void)
     TGAlloc recovery;
     LJArenaAllocD recovery_ad;
     GCArena *a, *raw;
+    LJGC2TableDesc desc;
+    LJGC2TableDescTicket desc_ticket;
+    LJGC2TableDescSnap desc_snap;
     void *p, *allocfp, *deferredp;
     uint32_t cell;
     lj_arena_alloc_init(&recovery);
@@ -1361,6 +1388,17 @@ int main(void)
 	   LJ_ARENA_RECOVERY_PENDING);
     assert(lj_arena_recovery_state_cas(raw, LJ_AFIRST_CELL,
 	   LJ_ARENA_RECOVERY_PENDING, LJ_ARENA_RECOVERY_IDLE));
+    /* Descriptor authority must be checked before unmap, not after the
+    ** mapping's registry/sidecar locator has already disappeared. */
+    lj_gc2_tabledesc_init_unpublished(&desc, 0);
+    lj_arena_gc2_tabledesc_rel(raw, &desc);
+    assert(lj_gc2_tabledesc_try_publish(&desc,
+	lj_arena_cellptr(raw, LJ_AFIRST_CELL), &desc_ticket, &desc_snap) ==
+	LJ_GC2_TABLEDESC_RESULT_OK);
+    lj_arena_unmap(raw);
+    assert(!lj_arena_gc2_desc_clear_acq(raw, LJ_AFIRST_CELL));
+    assert(lj_gc2_tabledesc_finish_help(&desc, &desc_ticket, &desc_snap) ==
+	LJ_GC2_TABLEDESC_RESULT_OK);
     /* A destructor kind is allocation authority even when every lifetime lane
     ** is FREE. Direct unmap must retain malformed/stale authority instead of
     ** erasing the only information which prevents unsafe address reuse. */

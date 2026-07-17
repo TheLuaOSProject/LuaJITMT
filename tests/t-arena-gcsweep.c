@@ -936,6 +936,241 @@ static void test_typed_dtor_gc2_token_veto(void)
   lua_close(fx.L);
 }
 
+static LJGC2TableDesc *typed_dtor_tabledesc(TypedDtorFixture *fx)
+{
+  LJGC2TableDesc *desc = &fx->g->gc2.table_rescan_desc;
+  assert(lj_arena_gc2_tabledesc_acq(fx->a) == desc);
+  return desc;
+}
+
+/* PINNED is deliberately absorbing in production. These fixtures inject a
+** terminal fault into an otherwise isolated global_State, then use one exact
+** CX16 transition solely to restore that fixture for ordinary lua_close.
+** Never use this helper in runtime code. */
+static void tabledesc_fixture_exact_reset(LJGC2TableDesc *desc,
+	uint64_t from_table, uint64_t generation)
+{
+  la_u128 expected, desired;
+  expected.lo = from_table;
+  expected.hi = generation;
+  desired.lo = 0;
+  desired.hi = generation;
+  assert(la_cas128(&desc->value, &expected, desired));
+}
+
+static void test_typed_dtor_gc2_desc_exact_veto(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  LJGC2TableDesc *desc;
+  LJGC2TableDescTicket first, second;
+  LJGC2TableDescSnap initial, observed;
+  GCSize total0;
+  unsigned char body[sizeof(GCfunc)];
+
+  typed_dtor_fixture_init(&fx);
+  assert(fx.f1size <= sizeof(body));
+  memcpy(body, fx.f1, fx.f1size);
+  desc = typed_dtor_tabledesc(&fx);
+  initial = lj_gc2_tabledesc_snapshot(desc);
+  assert(initial.state == LJ_GC2_TABLEDESC_IDLE);
+  assert(lj_gc2_tabledesc_try_publish(desc, fx.f1, &first, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+	 observed.table == (uintptr_t)fx.f1 &&
+	 observed.generation == initial.generation + 1u);
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.f1cell));
+  assert(!lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f1cell));
+  assert(lj_arena_gc2_desc_clear_acq(fx.a, fx.f0cell));
+  assert(lj_arena_gc2_desc_clear_acq(fx.a, fx.uvcell));
+
+  typed_dtor_drop_fixture_roots(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC0|LJ_ARENA_DTOR_LFUNC1|
+	LJ_ARENA_DTOR_CLOSED_UV);
+
+  /* ACTIVE is a type-independent physical lifetime claim. The injected
+  ** function identity protects only its exact start; independent bodies in
+  ** the same arena still make progress. */
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_bm_get(fx.a->block, fx.f1cell));
+  assert(memcmp(body, fx.f1, fx.f1size) == 0);
+  assert(lj_gc_total_load(fx.g) == total0 - fx.f0size - fx.uvsize);
+
+  assert(lj_gc2_tabledesc_finish_help(desc, &first, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(observed.state == LJ_GC2_TABLEDESC_IDLE &&
+	 observed.generation == first.generation);
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f1cell));
+
+  /* Reusing the exact address immediately creates a new authority. A stale
+  ** release must not create a false IDLE interval for reclamation. */
+  assert(lj_gc2_tabledesc_try_publish(desc, fx.f1, &second, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(second.generation == first.generation + 1u);
+  assert(!lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f1cell));
+  assert(lj_gc2_tabledesc_finish_help(desc, &first, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_BUSY);
+  assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+	 observed.table == (uintptr_t)fx.f1 &&
+	 observed.generation == second.generation);
+  assert(!lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f1cell));
+  assert(lj_gc2_tabledesc_finish_help(desc, &second, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(observed.state == LJ_GC2_TABLEDESC_IDLE &&
+	 observed.generation == second.generation);
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f1cell));
+
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f0size - fx.f1size - fx.uvsize);
+  assert(!lj_arena_bm_get(fx.a->block, fx.f1cell));
+  lua_close(fx.L);
+}
+
+static void test_typed_dtor_gc2_desc_unrelated_progress(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  LJGC2TableDesc *desc;
+  LJGC2TableDescTicket ticket;
+  LJGC2TableDescSnap observed;
+  GCSize total0;
+
+  typed_dtor_fixture_init(&fx);
+  desc = typed_dtor_tabledesc(&fx);
+  assert(lj_gc2_tabledesc_try_publish(desc, fx.f0, &ticket, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.f0cell));
+  assert(lj_arena_gc2_desc_clear_acq(fx.a, fx.f1cell));
+  assert(lj_arena_gc2_desc_clear_acq(fx.a, fx.uvcell));
+
+  typed_dtor_drop_fixture_roots(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC1|LJ_ARENA_DTOR_CLOSED_UV);
+
+  /* An ACTIVE identity in this same arena must not turn the single global
+  ** descriptor into a global stop-the-world reclamation gate. */
+  assert(lj_gc_total_load(fx.g) == total0 - fx.f1size - fx.uvsize);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_FREEING);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_SWEEP_FREEING);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_LIFETIME_FREE);
+  assert(lj_gc2_tabledesc_finish_help(desc, &ticket, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(observed.state == LJ_GC2_TABLEDESC_IDLE);
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f1size - fx.uvsize);
+  lua_close(fx.L);
+}
+
+static void test_typed_dtor_gc2_desc_pinned_veto(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  LJGC2TableDesc *desc;
+  LJGC2TableDescSnap snap, observed;
+  GCSize total0;
+
+  typed_dtor_fixture_init(&fx);
+  desc = typed_dtor_tabledesc(&fx);
+  snap = lj_gc2_tabledesc_snapshot(desc);
+  assert(snap.state == LJ_GC2_TABLEDESC_IDLE);
+  assert(lj_gc2_tabledesc_pin(desc, snap, &observed) ==
+	 LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(observed.state == LJ_GC2_TABLEDESC_PINNED);
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.f0cell));
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.f1cell));
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.uvcell));
+
+  typed_dtor_drop_fixture_roots(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC0|LJ_ARENA_DTOR_LFUNC1|
+	LJ_ARENA_DTOR_CLOSED_UV);
+  assert(lj_gc_total_load(fx.g) == total0);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+
+  tabledesc_fixture_exact_reset(desc, 1u, observed.generation);
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f0cell));
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f1cell));
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.uvcell));
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f0size - fx.f1size - fx.uvsize);
+  lua_close(fx.L);
+}
+
+static void test_typed_dtor_gc2_desc_malformed_veto(void)
+{
+  TypedDtorFixture fx;
+  GCArena *other;
+  LJGC2TableDesc *desc;
+  LJGC2TableDescSnap snap;
+  la_u128 expected, malformed;
+  GCSize total0;
+
+  typed_dtor_fixture_init(&fx);
+  desc = typed_dtor_tabledesc(&fx);
+  snap = lj_gc2_tabledesc_snapshot(desc);
+  assert(snap.state == LJ_GC2_TABLEDESC_IDLE);
+  expected.lo = 0;
+  expected.hi = snap.generation;
+  malformed.lo = 3;
+  malformed.hi = snap.generation;
+  assert(la_cas128(&desc->value, &expected, malformed));
+  assert(lj_gc2_tabledesc_snapshot(desc).state ==
+	 LJ_GC2_TABLEDESC_INVALID);
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.f0cell));
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.f1cell));
+  assert(!lj_arena_gc2_desc_clear_acq(fx.a, fx.uvcell));
+
+  typed_dtor_drop_fixture_roots(&fx);
+  total0 = lj_gc_total_load(fx.g);
+  other = typed_dtor_prepare_target(&fx,
+	LJ_ARENA_DTOR_LFUNC0|LJ_ARENA_DTOR_LFUNC1|
+	LJ_ARENA_DTOR_CLOSED_UV);
+  assert(lj_gc_total_load(fx.g) == total0);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_sweep_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_SWEEP_RETIRED);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f0cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.f1cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_lifetime_state_acq(fx.a, fx.uvcell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+
+  tabledesc_fixture_exact_reset(desc, 3u, snap.generation);
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f0cell));
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.f1cell));
+  assert(lj_arena_gc2_reclaim_clear_acq(fx.a, fx.uvcell));
+  assert(typed_dtor_finish_target(&fx, other) ==
+	 total0 - fx.f0size - fx.f1size - fx.uvsize);
+  lua_close(fx.L);
+}
+
 static void test_typed_dtor_no_adjacency_match(void)
 {
   TypedDtorFixture fx;
@@ -2414,6 +2649,10 @@ int main(void)
   test_boundary_lazy_sweep_extra_tg();
   test_typed_dtor_pregrace_exclusive();
   test_typed_dtor_gc2_token_veto();
+  test_typed_dtor_gc2_desc_exact_veto();
+  test_typed_dtor_gc2_desc_unrelated_progress();
+  test_typed_dtor_gc2_desc_pinned_veto();
+  test_typed_dtor_gc2_desc_malformed_veto();
   test_typed_dtor_dense_batch(5u);
   test_typed_dtor_dense_batch(6u);
   test_typed_dtor_no_adjacency_match();
