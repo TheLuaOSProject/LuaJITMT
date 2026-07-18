@@ -1868,6 +1868,14 @@ static void threading_gc_stats_push(lua_State *L)
 			    s.worker_async_progress);
   threading_gc_stats_setnum(L, t, "thread_scan_frame_fallbacks",
 			    s.thread_scan_frame_fallbacks);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_attempts",
+			    s.ffi_native_scan_attempts);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_stable_frames",
+			    s.ffi_native_scan_stable_frames);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_retries",
+			    s.ffi_native_scan_retries);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_invalid",
+			    s.ffi_native_scan_invalid);
   threading_gc_stats_setnum(L, t, "sweep_owner_runs", s.sweep_owner_runs);
   threading_gc_stats_setnum(L, t, "sweep_owner_arenas",
 			    s.sweep_owner_arenas);

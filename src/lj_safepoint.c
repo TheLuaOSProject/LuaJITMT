@@ -202,7 +202,8 @@ static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
   return oldepoch != epoch;
 }
 
-void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
+static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
+				    uint32_t actions, int native_parked)
 {
   if (actions & LJ_GC2_HS_ENABLE_BARRIER) {
     /* Mark activation runs with native entry closed. Invalidate comparison
@@ -223,7 +224,10 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     ** must not be used to rediscover the owner tid for NEEDSCAN handoffs. A
     ** full SCAN_ROOTS epoch adds the once-per-snapshot global pass below;
     ** SCAN_OWNER_ROOTS intentionally services only an existing owner handoff. */
-    lj_gc2_scan_cycle_owner_tg_roots(g, tg);  /* 05 section 5.7.1/5.7.2. */
+    if (native_parked)
+      lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
+    else
+      lj_gc2_scan_cycle_owner_tg_roots(g, tg);
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB) {
     /*
@@ -279,8 +283,16 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     lj_tg_flags_or_rlx(tg, TGF_STOPREQ|TGF_STOPREQ_FRESH);
 }
 
+void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
+{
+  /* Attach/TG-only catch-up is not proof that the caller owns a stable Lua
+  ** stack. Keep the public entry on the conservative owner-root path. */
+  safepoint_apply_tg_mode(g, tg, actions, 0);
+}
+
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
-				 int note_latency, int wait_consumed)
+				 int note_latency, int wait_consumed,
+				 int native_parked)
 {
   uint64_t epoch;
   uint32_t actions, oldpending;
@@ -328,7 +340,7 @@ retry:
       goto retry;
     return 0;
   }
-  lj_safepoint_apply_tg(g, tg, actions);
+  safepoint_apply_tg_mode(g, tg, actions, native_parked);
   if (note_latency)
     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
   {
@@ -397,10 +409,10 @@ uint32_t lj_safepoint_ack(lua_State *L)
   lj_profile_owner_poll(L);
 #endif
   if (L->base == NULL || tvref(L->stack) == NULL)
-    return safepoint_ack_tg(G(L), L2TG(L), 1, 1);
+    return safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0);
   oldbase = savestack(L, L->base);
   oldtop = savestack(L, L->top);
-  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1);
+  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0);
   L->base = restorestack(L, oldbase);
   L->top = restorestack(L, oldtop);
   return actions;  /* Safepoints must preserve the interrupted VM/C frame. */
@@ -432,7 +444,7 @@ uint32_t lj_safepoint_poll_tg(TGState *tg)
   /* Worker/no-Lua-stack TGs still own private allocator and SSB state. They
   ** therefore participate at the same consumed-poll boundary instead of
   ** silently resuming after a remote native acknowledgement. */
-  return safepoint_ack_tg(tg->gl, tg, 1, 1);
+  return safepoint_ack_tg(tg->gl, tg, 1, 1, 0);
 }
 
 void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
@@ -626,10 +638,15 @@ static void safepoint_ack_native(global_State *g, uint32_t actions)
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (tg == self)
-      (void)safepoint_ack_tg(g, tg, 0, 0);
+      (void)safepoint_ack_tg(g, tg, 0, 0, 0);
     else if (lj_tg_in_native_acq(tg) &&
-	     safepoint_native_ack_allowed(tg, actions))
-      (void)safepoint_ack_tg(g, tg, 0, 0);
+	     safepoint_native_ack_allowed(tg, actions)) {
+      /* Only this remote-native branch carries the consumed-poll stability
+      ** certificate. If it wins reqmask, native leave must remain parked until
+      ** the leader clears poll, so published frame offsets cannot race stack
+      ** relocation or release during the exact scan. */
+      (void)safepoint_ack_tg(g, tg, 0, 0, 1);
+    }
   }
 }
 
@@ -716,7 +733,7 @@ static uint32_t safepoint_leader_enter(global_State *g)
     {
       TGState *self = lj_thr_get_tg();
       if (self && self->gl == g)
-	safepoint_ack_tg(g, self, 0, 0);
+	safepoint_ack_tg(g, self, 0, 0, 0);
     }
     if (expect == 0)
       continue;

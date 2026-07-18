@@ -785,6 +785,7 @@ int main(void)
   uint64_t ssb_items_published0, ssb_items_drained0;
   uint64_t epoch0;
   uint64_t ack_samples0, ack_sum0, ack_max0;
+  uint64_t ffi_native_attempts0;
   uint32_t actions;
   ASMFunction saved_dispatch;
 
@@ -1029,6 +1030,7 @@ int main(void)
   native_tab = tabV(L->top - 1);
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 0);
+  ffi_native_attempts0 = gc2_ffi_native_scan_attempts_acq(g);
   lj_native_enter(tg);
   assert(lj_tg_in_native_acq(tg) == 1);
   epoch0 = g->gc2.hs_epoch;
@@ -1037,6 +1039,9 @@ int main(void)
   assert(g->gc2.hs_pending == 0);
   assert(lj_tg_in_native_acq(tg) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 1);
+  /* A same-TG handshake is synchronous owner code, not the consumed remote
+  ** native-poll certificate used by the exact published-frame scanner. */
+  assert(gc2_ffi_native_scan_attempts_acq(g) == ffi_native_attempts0);
   assert(lj_native_leave(L) == 0);
   assert(lj_tg_in_native_acq(tg) == 0);
   /* The remote/native scan may publish its SSB before native leave. Seed an
@@ -1570,7 +1575,9 @@ int main(void)
 
   epoch0 = g->gc2.hs_epoch;
   ack_samples0 = la_load64_acq(&g->gc2.hs_ack_latency_samples);
-  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
+  ffi_native_attempts0 = gc2_ffi_native_scan_attempts_acq(g);
+  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
+	    LJ_GC2_HS_SCAN_OWNER_ROOTS;
   assert(lj_gc2_handshake(g, actions) == 2);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
@@ -1580,6 +1587,10 @@ int main(void)
   assert(extra_tg.mark_active == 1);
   assert(extra_tg.alloc.alloc_black == 1);
   assert(lj_tg_in_native_acq(&extra_tg) == 1);
+  /* extra_tg is remote to the TLS owner and remains native while the leader
+  ** consumes its request. EMPTY still records certified-path admission. */
+  assert(gc2_ffi_native_scan_attempts_acq(g) ==
+	 ffi_native_attempts0 + 1u);
   assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0);
 
   lj_tg_detach(g, &extra_tg);

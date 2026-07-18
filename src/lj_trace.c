@@ -1318,6 +1318,128 @@ static void trace_preserve_kgc(global_State *g, GCtrace *T)
   }
 }
 
+/* Checked preservation is reserved for a certified parked native frame. The
+** ordinary retired-body walk above remains best-effort and preserves every
+** edge it can; this variant instead rejects the frame snapshot when any exact
+** child cannot be admitted, so GC2 never counts a partial graph as stable. */
+static int trace_preserve_kgc_checked(global_State *g, GCtrace *T)
+{
+  IRIns *irbase = trace_ir_acq(T);
+  IRRef ref;
+  if (!irbase)
+    return 0;
+  for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
+    IRIns *ir = &irbase[ref];
+    IRIns irs = ir_load_acq(ir);
+    if (irs.o == IR_KGC) {
+      GCobj *o = ir_kgc_load_acq(ir);
+      if (!o || lj_gc2_markobj_status(g, o, NULL) < 0)
+	return 0;
+    }
+    if (irt_is64(irs.t) && irs.o != IR_KNULL)
+      ref++;
+  }
+  return 1;
+}
+
+static int trace_preserve_snapshot_pcs_checked(global_State *g, GCtrace *T)
+{
+  LJGC2Lease startlease;
+  SnapShot *snap = trace_snap_acq(T);
+  SnapEntry *snapmap = trace_snapmap_acq(T);
+  GCobj *startpt = trace_startptgco_acq(T);
+  const BCIns *startbc, *startend;
+  MSize nsnapmap = trace_nsnapmap_acq(T);
+  SnapNo i, nsnap = trace_nsnap_acq(T);
+  GCproto *pt;
+  int status;
+
+  memset(&startlease, 0, sizeof(startlease));
+  if (!snap || !snapmap || !startpt)
+    return 0;
+  status = lj_gc2_obj_lease_acquire(g, startpt, (uint32_t)~LJ_TPROTO,
+				     NULL, &startlease);
+  if (status < 0)
+    return 0;
+  pt = gco2pt(startpt);
+  if (!lj_gc2_valid_proto_for_traverse_held(g, pt, &startlease)) {
+    lj_gc2_lease_release(&startlease);
+    return 0;
+  }
+  startbc = proto_bc(pt);
+  startend = startbc + pt->sizebc;
+  (void)lj_gc_flush_root_pending(g);
+  for (i = 0; i < nsnap; i++) {
+    SnapShot *s = &snap[i];
+    MSize ofs = snap_mapofs_acq(s);
+    MSize nent = snap_nent_acq(s);
+    MSize nextofs = snap_nextofs_acq(T, s);
+    MSize remaining;
+    SnapEntry *map;
+    const BCIns *pc;
+    if (ofs >= nsnapmap || nextofs < ofs || nextofs > nsnapmap) {
+      lj_gc2_lease_release(&startlease);
+      return 0;
+    }
+    remaining = nextofs - ofs;
+    if (nent > remaining || remaining - nent < (MSize)(1 + LJ_FR2)) {
+      lj_gc2_lease_release(&startlease);
+      return 0;
+    }
+    map = &snapmap[ofs];
+    pc = snap_pc_acq(&map[nent]);
+    if (!trace_pc_in_proto_range(pc, startbc,
+				 (MSize)(startend - startbc)) &&
+	!lj_gc2_mark_proto_for_pc(g, pc)) {
+      lj_gc2_lease_release(&startlease);
+      return 0;
+    }
+  }
+  lj_gc2_lease_release(&startlease);
+  return 1;
+}
+
+static int trace_preservebody_inner_checked(global_State *g, GCtrace *T)
+{
+  LJGC2Lease bodylease, exitlease;
+  GCobj *startpt;
+  MCode **exittab;
+  int status;
+
+  memset(&bodylease, 0, sizeof(bodylease));
+  memset(&exitlease, 0, sizeof(exitlease));
+  status = lj_gc2_mem_lease_acquire(g, T, &bodylease);
+  if (status < 0)
+    return 0;
+  if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)) ||
+      !trace_preserve_kgc_checked(g, T))
+    goto fail;
+  startpt = trace_startptgco_acq(T);
+  if (!startpt || lj_gc2_markobj_expected_status(
+	      g, startpt, (uint32_t)~LJ_TPROTO, NULL) < 0)
+    goto fail;
+  if (!trace_preserve_snapshot_pcs_checked(g, T))
+    goto fail;
+  if (!lj_gc2_mark_trace_slot_status(g, trace_link_acq(T)) ||
+      !lj_gc2_mark_trace_slot_status(g, trace_nextroot_acq(T)) ||
+      !lj_gc2_mark_trace_slot_status(g, trace_nextside_acq(T)))
+    goto fail;
+  exittab = trace_exittab_acq(T);
+  if (exittab && !trace_exittab_ismcode(T)) {
+    status = lj_gc2_mem_lease_acquire(g, exittab, &exitlease);
+    if (status < 0)
+      goto fail;
+  }
+  lj_gc2_lease_release(&exitlease);
+  lj_gc2_lease_release(&bodylease);
+  return 1;
+
+fail:
+  lj_gc2_lease_release(&exitlease);
+  lj_gc2_lease_release(&bodylease);
+  return 0;
+}
+
 static void trace_preservebody_inner(global_State *g, GCtrace *T)
 {
   /* Retired traces are SMR-protected bodies, but stale bytecode readers can
@@ -1352,6 +1474,36 @@ static void trace_preservebody(global_State *g, GCtrace *T)
   lj_gc2_smr_read_enter(g);
   trace_preservebody_inner(g, T);
   lj_gc2_smr_read_leave(g);
+}
+
+/* Preserve the complete semantic graph of an exact native-pinned body. A
+** normal GC2 trace traversal deliberately ignores traceno==0, but retirement
+** may clear that field while a generated native frame still owns the body.
+** Validate through the reserved public slot before the first T dereference;
+** the caller's frame pin keeps its IR/snapshot payload and allocation resident.
+** Outgoing routing fields remain retirement-owned until post-call activation
+** supplies the separate FLUSHJ/JIT-base exclusion documented for that path. */
+int lj_trace_native_mark_pinned(global_State *g, GCtrace *T, TraceNo traceno)
+{
+  jit_State *J;
+  GCtrace *slot;
+  int valid = 0;
+  if (!g || !T || traceno == 0)
+    return 0;
+  J = G2J(g);
+  if (!lj_gc2_smr_read_try(g))
+    return 0;
+  slot = traceref_safe(J, traceno);
+  if (slot != T || trace_native_pins_acq(slot) == 0 ||
+      !trace_body_refs_valid(g, slot, NULL))
+    goto out;
+  if (!trace_preservebody_inner_checked(g, slot))
+    goto out;
+  slot = traceref_safe(J, traceno);
+  valid = slot == T && trace_native_pins_acq(slot) != 0;
+out:
+  lj_gc2_smr_read_leave(g);
+  return valid;
 }
 
 static int trace_retired_slot_clear(jit_State *J, TraceVec *tv, TraceNo traceno,

@@ -112,6 +112,10 @@ typedef struct GC2StatsSnapshot {
   uint64_t worker_parks;
   uint64_t worker_async_progress;
   uint64_t thread_scan_frame_fallbacks;
+  uint64_t ffi_native_scan_attempts;
+  uint64_t ffi_native_scan_stable_frames;
+  uint64_t ffi_native_scan_retries;
+  uint64_t ffi_native_scan_invalid;
   uint64_t sweep_owner_runs;
   uint64_t sweep_owner_arenas;
   uint64_t sweep_owner_live_cells;
@@ -318,6 +322,9 @@ LJ_FUNC void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s);
 LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_scan_cycle_global_roots(global_State *g);
 LJ_FUNC void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg);
+/* Caller must own the consumed-poll remote-native stability certificate. */
+LJ_FUNC void lj_gc2_scan_cycle_owner_tg_roots_native_parked(
+  global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_scan_cycle_owner_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
 					     uint32_t tid);
@@ -456,6 +463,9 @@ LJ_FUNC void lj_gc2_test_weak_frontier_fault_once(uint32_t kind,
 LJ_FUNC uint32_t lj_gc2_test_weak_frontier_fault_hits(void);
 LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 					      lua_State *L);
+#if LJ_HASFFI && LJ_HASJIT
+LJ_FUNC int lj_gc2_test_scan_ffi_native_frames(global_State *g, TGState *tg);
+#endif
 LJ_FUNC void lj_gc2_test_thread_root_rescan_marked_obj(global_State *g,
 						       GCobj *o);
 LJ_FUNC int lj_gc2_test_recovery_publish(global_State *g, GCobj *o);
@@ -570,8 +580,10 @@ LJ_FUNC int lj_gc2_mem_lease_acquire(global_State *g, void *p,
 /* Release is idempotent and zeros the public token before dropping admission. */
 LJ_FUNC void lj_gc2_lease_release(LJGC2Lease *lease);
 /* Resolve an interior bytecode pointer through allocator identity and retain
-** its exact prototype owner. The caller must hold a GC2 SMR read scope while
-** allocator ownership can transfer between TG registries. */
+** its exact prototype owner, or accept permanent global C/fast-function
+** pseudo-PCs.
+** The caller must hold a GC2 SMR read scope while allocator ownership can
+** transfer between TG registries. */
 LJ_FUNC int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc);
 /* Retain the table allocation non-semantically while comparing one current
 ** vector root. Returns 1 for the same generation, 0 for a valid different or
@@ -637,6 +649,9 @@ LJ_FUNC int lj_gc2_valid_proto_for_traverse_held(global_State *g,
 LJ_FUNC uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 #if LJ_HASJIT
+/* Mark one currently published trace slot and report whether its exact body
+** was admitted. Trace number zero is the empty edge and succeeds. */
+LJ_FUNC int lj_gc2_mark_trace_slot_status(global_State *g, uint32_t traceno);
 LJ_FUNC void lj_gc2_mark_trace_slot(global_State *g, uint32_t traceno);
 #endif
 LJ_FUNC void lj_gc2_remember_root(global_State *g, GCobj *o);

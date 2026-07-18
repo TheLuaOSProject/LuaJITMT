@@ -39,6 +39,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #include "lj_lex.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
+#include "lj_ccall.h"
 #include "lj_cdata.h"
 #include "lj_clib.h"
 #endif
@@ -1134,6 +1135,7 @@ static void *gc2_worker_main(void *arg);
 static uint32_t gc2_worker_drain_logical(global_State *g, TGState *tg,
 					 uint32_t limit, int hold_mark_gate);
 typedef struct GC2MarkScope GC2MarkScope;
+static int gc2_mark_thread_root_obj_status(global_State *g, GCobj *o);
 static void gc2_mark_thread_root_obj(global_State *g, GCobj *o);
 static void gc2_mark_thread_root_obj_worker(global_State *g, GCobj *o);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
@@ -1657,6 +1659,10 @@ void lj_gc2_init(global_State *g)
   gc2_table_rescan_pending_store_rlx(g, 0);
   gc2_thread_scan_dirty_misses_store_rlx(g, 0);
   gc2_thread_scan_frame_fallbacks_store_rlx(g, 0);
+  gc2_ffi_native_scan_attempts_store_rlx(g, 0);
+  gc2_ffi_native_scan_stable_frames_store_rlx(g, 0);
+  gc2_ffi_native_scan_retries_store_rlx(g, 0);
+  gc2_ffi_native_scan_invalid_store_rlx(g, 0);
   gc2_sweep_owner_runs_store_rlx(g, 0);
   gc2_sweep_owner_arenas_store_rlx(g, 0);
   gc2_sweep_owner_live_cells_store_rlx(g, 0);
@@ -3666,18 +3672,30 @@ static int gc2_trace_geometry_valid(GCtrace *T)
 }
 
 static void gc2_traverse_trace(global_State *g, GCtrace *T);
-static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
+static int gc2_mark_trace_root_status(global_State *g, TraceNo traceno)
 {
-  GCtrace *T = gc2_traceref_safe(g, traceno);
+  GCtrace *T;
+  if (traceno == 0)
+    return 1;
+  T = gc2_traceref_safe(g, traceno);
   if (!T)
     return 0;
-  gc2_mark_thread_root_obj(g, obj2gco(T));
-  return 1;
+  return gc2_mark_thread_root_obj_status(g, obj2gco(T));
+}
+
+static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
+{
+  return traceno != 0 && gc2_mark_trace_root_status(g, traceno);
+}
+
+int lj_gc2_mark_trace_slot_status(global_State *g, uint32_t traceno)
+{
+  return gc2_mark_trace_root_status(g, (TraceNo)traceno);
 }
 
 void lj_gc2_mark_trace_slot(global_State *g, uint32_t traceno)
 {
-  (void)gc2_mark_trace_root(g, (TraceNo)traceno);
+  (void)lj_gc2_mark_trace_slot_status(g, traceno);
 }
 
 static GCproto *gc2_trace_pc_proto_candidate(global_State *g, GCobj *o,
@@ -6391,6 +6409,11 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
   s->worker_async_progress = gc2_worker_async_progress_acq(g);
   s->thread_scan_frame_fallbacks =
     gc2_thread_scan_frame_fallbacks_acq(g);
+  s->ffi_native_scan_attempts = gc2_ffi_native_scan_attempts_acq(g);
+  s->ffi_native_scan_stable_frames =
+    gc2_ffi_native_scan_stable_frames_acq(g);
+  s->ffi_native_scan_retries = gc2_ffi_native_scan_retries_acq(g);
+  s->ffi_native_scan_invalid = gc2_ffi_native_scan_invalid_acq(g);
   s->sweep_owner_runs = gc2_sweep_owner_runs_acq(g);
   s->sweep_owner_arenas = gc2_sweep_owner_arenas_acq(g);
   s->sweep_owner_live_cells = gc2_sweep_owner_live_cells_acq(g);
@@ -8408,6 +8431,262 @@ static void gc2_scan_tg_thread_root(global_State *g, TGState *tg,
   gc2_mark_scope_leave(&scope);
 }
 
+#if LJ_HASFFI && LJ_HASJIT
+typedef enum GC2FFINativeScanStatus {
+  GC2_FFI_NATIVE_SCAN_INVALID = -1,
+  GC2_FFI_NATIVE_SCAN_RETRY = 0,
+  GC2_FFI_NATIVE_SCAN_OK = 1
+} GC2FFINativeScanStatus;
+
+typedef struct GC2FFINativeGeometry {
+  lua_State *L;
+  TValue *stack;
+  TValue *maxstack;
+  TValue *root;
+  TValue *base;
+  TValue *top;
+  TValue *jitbase;
+  LJGC2Lease stacklease;
+} GC2FFINativeGeometry;
+
+static int gc2_ffi_native_offset_ptr(uintptr_t stack, uintptr_t maxstack,
+				     uint64_t offset, TValue **result)
+{
+  uint64_t extent;
+  if (maxstack < stack)
+    return 0;
+  extent = (uint64_t)(maxstack - stack);
+  if (offset > extent || (offset % sizeof(TValue)) != 0)
+    return 0;
+  *result = (TValue *)(void *)(stack + (uintptr_t)offset);
+  return 1;
+}
+
+/* Convert saved byte offsets only after the frame's raw L pointer has matched
+** the TG's trusted current-state publication and that identity has acquired a
+** GC2 observation scope. The native-park certificate, not this scope or the
+** sequence word, is what prevents stack storage relocation during the reads. */
+static GC2FFINativeScanStatus gc2_ffi_native_frame_geometry(
+  global_State *g, TGState *tg, const LJFFINativeFrame *frame,
+  GC2FFINativeGeometry *geo, GC2MarkScope *scope)
+{
+  lua_State *L = lj_ffi_native_frame_L_acq(frame);
+  TValue *stack, *maxstack;
+  uintptr_t stack_addr, maxstack_addr;
+  uint64_t root_offset, base_offset, top_offset, jitbase_offset;
+  uint64_t prefix = (uint64_t)(1 + LJ_FR2) * sizeof(TValue);
+  uint32_t tid;
+  int status;
+
+  gc2_mark_scope_init(scope);
+  memset(geo, 0, sizeof(*geo));
+  if (!L || L != lj_tg_load_cur_L(tg))
+    return GC2_FFI_NATIVE_SCAN_INVALID;
+  status = gc2_admit_thread_identity(g, L, scope);
+  if (status == GC2_MARK_DEAD)
+    return GC2_FFI_NATIVE_SCAN_RETRY;
+  tid = lj_tg_tid_acq(tg);
+  if (!lj_thr_id_is_owner(tid) || lj_state_owner_acq(L) != tid ||
+      mref(L->glref, global_State) != g ||
+      !gc2_valid_thread_for_traverse_held(g, L, scope))
+    goto invalid;
+  stack = tvref(L->stack);
+  maxstack = tvref(L->maxstack);
+  if (!stack || !maxstack)
+    goto invalid;
+  stack_addr = (uintptr_t)(void *)stack;
+  maxstack_addr = (uintptr_t)(void *)maxstack;
+  if (maxstack_addr < stack_addr ||
+      ((maxstack_addr - stack_addr) % sizeof(TValue)) != 0)
+    goto invalid;
+  status = lj_gc2_mem_lease_acquire(g, stack, &geo->stacklease);
+  if (status < 0)
+    goto retry;
+
+  root_offset = lj_ffi_native_frame_root_offset_acq(frame);
+  base_offset = lj_ffi_native_frame_base_offset_acq(frame);
+  top_offset = lj_ffi_native_frame_top_offset_acq(frame);
+  jitbase_offset = lj_ffi_native_frame_jit_base_offset_acq(frame);
+  if (root_offset < prefix ||
+      root_offset >= (uint64_t)(maxstack_addr-stack_addr) ||
+      base_offset >= (uint64_t)(maxstack_addr-stack_addr) ||
+      jitbase_offset < prefix ||
+      jitbase_offset >= (uint64_t)(maxstack_addr-stack_addr) ||
+      root_offset > base_offset || base_offset > top_offset ||
+      jitbase_offset > top_offset ||
+      !gc2_ffi_native_offset_ptr(stack_addr, maxstack_addr, root_offset,
+					&geo->root) ||
+      !gc2_ffi_native_offset_ptr(stack_addr, maxstack_addr, base_offset,
+					&geo->base) ||
+      !gc2_ffi_native_offset_ptr(stack_addr, maxstack_addr, top_offset,
+					&geo->top) ||
+      !gc2_ffi_native_offset_ptr(stack_addr, maxstack_addr, jitbase_offset,
+					&geo->jitbase))
+    goto invalid;
+  geo->L = L;
+  geo->stack = stack;
+  geo->maxstack = maxstack;
+  return GC2_FFI_NATIVE_SCAN_OK;
+
+invalid:
+  lj_gc2_lease_release(&geo->stacklease);
+  gc2_mark_scope_leave(scope);
+  return GC2_FFI_NATIVE_SCAN_INVALID;
+
+retry:
+  lj_gc2_lease_release(&geo->stacklease);
+  gc2_mark_scope_leave(scope);
+  return GC2_FFI_NATIVE_SCAN_RETRY;
+}
+
+/* The slot lookup is the lifetime-safe first dereference. A frame pointer is
+** never inspected until the current TraceVec proves that it is the exact body
+** reserved by trace_no, and the body's count word proves the native lease. */
+static GC2FFINativeScanStatus gc2_ffi_native_mark_trace(
+  global_State *g, const LJFFINativeFrame *frame)
+{
+  GCtrace *trace = lj_ffi_native_frame_trace_acq(frame);
+  TraceNo traceno = (TraceNo)lj_ffi_native_frame_trace_no_acq(frame);
+  GCtrace *slot = gc2_traceref_safe(g, traceno);
+  if (!slot || slot != trace || trace_native_pins_acq(slot) == 0)
+    return GC2_FFI_NATIVE_SCAN_INVALID;
+  /* Retirement may already have cleared T->traceno. Queueing T alone would
+  ** then make gc2_traverse_trace() intentionally skip its graph, so preserve
+  ** every KGC/link/start-proto/snapshot-PC/exittab edge synchronously. */
+  if (!lj_trace_native_mark_pinned(g, slot, traceno))
+    return GC2_FFI_NATIVE_SCAN_RETRY;
+  if (!gc2_mark_thread_root_obj_status(g, obj2gco(slot)))
+    return GC2_FFI_NATIVE_SCAN_RETRY;
+  /* The frame owner brackets unpin/slot handoff with an odd sequence. This
+  ** second exact check catches a violated or transient publication before the
+  ** result can be counted as a completed exact scan. */
+  slot = gc2_traceref_safe(g, traceno);
+  if (!slot || slot != trace || trace_native_pins_acq(slot) == 0)
+    return GC2_FFI_NATIVE_SCAN_RETRY;
+  return GC2_FFI_NATIVE_SCAN_OK;
+}
+
+static GC2FFINativeScanStatus gc2_ffi_native_mark_frame_funcs(
+  global_State *g, const GC2FFINativeGeometry *geo)
+{
+  TValue *frame = geo->base - 1;
+  uint32_t n = 0;
+  while (frame > geo->stack + LJ_FR2 && frame < geo->maxstack) {
+    GCfunc *fn;
+    TValue *prev;
+    GC2FrameScope scope;
+    if (!gc2_frame_prev_safe(g, geo->stack, geo->maxstack, frame,
+			     &prev, &fn, &scope))
+      return GC2_FFI_NATIVE_SCAN_RETRY;
+    if (fn && !gc2_mark_thread_root_obj_status(g, obj2gco(fn))) {
+      gc2_frame_scope_leave(&scope);
+      return GC2_FFI_NATIVE_SCAN_RETRY;
+    }
+    gc2_frame_scope_leave(&scope);
+    if (prev >= frame || prev >= geo->maxstack)
+      return GC2_FFI_NATIVE_SCAN_INVALID;
+    if (prev < geo->stack + LJ_FR2)
+      return GC2_FFI_NATIVE_SCAN_INVALID;
+    if (prev == geo->stack + LJ_FR2)
+      break;
+    frame = prev;
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      return GC2_FFI_NATIVE_SCAN_RETRY;
+  }
+  return GC2_FFI_NATIVE_SCAN_OK;
+}
+
+static GC2FFINativeScanStatus gc2_ffi_native_scan_one(
+  global_State *g, TGState *tg, const LJFFINativeFrame *frame, int top_frame)
+{
+  GC2FFINativeGeometry geo;
+  GC2MarkScope scope;
+  GC2FFINativeScanStatus status;
+  TValue *o;
+
+  status = gc2_ffi_native_frame_geometry(g, tg, frame, &geo, &scope);
+  if (status != GC2_FFI_NATIVE_SCAN_OK)
+    return status;
+  if (top_frame && geo.jitbase != lj_tg_load_jit_base(tg)) {
+    status = GC2_FFI_NATIVE_SCAN_INVALID;
+    goto out;
+  }
+  status = gc2_ffi_native_mark_trace(g, frame);
+  if (status != GC2_FFI_NATIVE_SCAN_OK)
+    goto out;
+  if (!gc2_mark_thread_root_obj_status(g, obj2gco(geo.L))) {
+    status = GC2_FFI_NATIVE_SCAN_RETRY;
+    goto out;
+  }
+  for (o = geo.stack + 1 + LJ_FR2; o < geo.top; o++) {
+    TValue tv;
+    lj_tv_load_acq(&tv, o);
+    if (!gc2_mark_thread_root_tv_status(g, &tv)) {
+      status = GC2_FFI_NATIVE_SCAN_RETRY;
+      goto out;
+    }
+  }
+  status = gc2_ffi_native_mark_frame_funcs(g, &geo);
+out:
+  if (status == GC2_FFI_NATIVE_SCAN_OK &&
+      (lj_tg_load_cur_L(tg) != geo.L ||
+       lj_state_owner_acq(geo.L) != lj_tg_tid_acq(tg) ||
+       mref(geo.L->glref, global_State) != g ||
+       !gc2_valid_thread_for_traverse_held(g, geo.L, &scope) ||
+       tvref(geo.L->stack) != geo.stack ||
+       tvref(geo.L->maxstack) != geo.maxstack ||
+       (top_frame && lj_tg_load_jit_base(tg) != geo.jitbase)))
+    status = GC2_FFI_NATIVE_SCAN_RETRY;
+  lj_gc2_lease_release(&geo.stacklease);
+  gc2_mark_scope_leave(&scope);
+  return status;
+}
+
+static int gc2_scan_ffi_native_frames_parked(global_State *g, TGState *tg)
+{
+  LJFFINativeFrameSnapshot snapshot;
+  LJFFINativeFrameSnapshotResult result;
+  GC2FFINativeScanStatus status;
+  uint32_t i;
+
+  gc2_ffi_native_scan_attempts_add(g, 1);
+  result = lj_ffi_native_frame_snapshot(tg, &snapshot);
+  if (result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY)
+    return 1;
+  if (result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_RETRY) {
+    gc2_ffi_native_scan_retries_add(g, 1);
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  if (result != LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE) {
+    gc2_ffi_native_scan_invalid_add(g, 1);
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  for (i = 0; i < snapshot.depth; i++) {
+    status = gc2_ffi_native_scan_one(g, tg, &snapshot.frame[i],
+				     i + 1u == snapshot.depth);
+    if (status != GC2_FFI_NATIVE_SCAN_OK) {
+      if (status == GC2_FFI_NATIVE_SCAN_INVALID)
+	gc2_ffi_native_scan_invalid_add(g, 1);
+      else
+	gc2_ffi_native_scan_retries_add(g, 1);
+      gc2_root_scan_retry(g);
+      return 0;
+    }
+  }
+  /* Validate after the final stack/body read. This is diagnostic under the
+  ** consumed-poll certificate, but fail-closed if a future caller misuses it. */
+  if (lj_ffi_native_frame_sequence_acq(tg) != snapshot.sequence) {
+    gc2_ffi_native_scan_retries_add(g, 1);
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  gc2_ffi_native_scan_stable_frames_add(g, snapshot.depth);
+  return 1;
+}
+#endif
+
 static void gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
 {
   lua_State *thread_L, *cur_L;
@@ -8697,7 +8976,8 @@ void lj_gc2_scan_cycle_owner_roots(global_State *g, lua_State *L)
     lj_gc2_scan_cycle_owner_tg_roots(g, L2TG(L));
 }
 
-void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg)
+static void gc2_scan_cycle_owner_tg_roots_mode(global_State *g, TGState *tg,
+					       int native_parked)
 {
   if (!g || !tg || tg->gl != g)
     return;
@@ -8708,8 +8988,28 @@ void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg)
     gc2_root_scan_retry(g);
     return;
   }
+#if LJ_HASFFI && LJ_HASJIT
+  if (native_parked)
+    (void)gc2_scan_ffi_native_frames_parked(g, tg);
+#else
+  UNUSED(native_parked);
+#endif
+  /* Exact native-frame marking is deliberately additive. The conservative
+  ** owner scan, including native/JIT maxstack widening and every NEEDSCAN
+  ** handoff, remains authoritative until the later narrowing proof. */
   gc2_scan_owner_tg_roots(g, tg);
   lj_gc2_smr_read_leave(g);
+}
+
+void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg)
+{
+  gc2_scan_cycle_owner_tg_roots_mode(g, tg, 0);
+}
+
+void lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g,
+						     TGState *tg)
+{
+  gc2_scan_cycle_owner_tg_roots_mode(g, tg, 1);
 }
 
 void lj_gc2_test_scan_roots(global_State *g, lua_State *L)
@@ -8718,6 +9018,18 @@ void lj_gc2_test_scan_roots(global_State *g, lua_State *L)
 }
 
 #if defined(LJ_GC2_TEST_HELPERS)
+#if LJ_HASFFI && LJ_HASJIT
+int lj_gc2_test_scan_ffi_native_frames(global_State *g, TGState *tg)
+{
+  int result;
+  if (!g || !tg || tg->gl != g || !lj_gc2_smr_read_try(g))
+    return 0;
+  result = gc2_scan_ffi_native_frames_parked(g, tg);
+  lj_gc2_smr_read_leave(g);
+  return result;
+}
+#endif
+
 void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 				      lua_State *L)
 {
@@ -9005,6 +9317,17 @@ int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc)
   uintptr_t p, bc, end;
   if (!g || !pc || !checkptrGC(pc))
     return 0;
+  /* C and fast-function snapshots encode synthetic bytecode PCs in permanent
+  ** global storage. Their owner is the global allocation itself, not a
+  ** GCproto discoverable through the arena registries. */
+  p = (uintptr_t)(const void *)pc;
+  if (p == (uintptr_t)(const void *)&g->bc_cfunc_int ||
+      p == (uintptr_t)(const void *)&g->bc_cfunc_ext)
+    return 1;
+  bc = (uintptr_t)(const void *)&G2GG(g)->bcff[0];
+  end = (uintptr_t)(const void *)&G2GG(g)->bcff[GG_NUM_ASMFF];
+  if (p >= bc && p < end && ((p - bc) % sizeof(BCIns)) == 0)
+    return 1;
   /* IDLE has no concurrent reclaiming cycle to close. Do not seed a future
   ** minor/major mark plane merely because a diagnostic caller resolves a PC. */
   if (gc2_phase_acq(g) == LJ_GC2_IDLE)
@@ -17304,6 +17627,7 @@ static int gc2_stack_mem_valid(global_State *g, TValue *st, MSize stacksize)
   TGState *tg, *curtg;
   GCArena *a;
   uint32_t cell, ncells;
+  int registered;
   if (!st || stacksize == 0 || !checkptrGC(st))
     return 0;
   if (g->allocf != lj_arena_allocf)
@@ -17311,26 +17635,39 @@ static int gc2_stack_mem_valid(global_State *g, TValue *st, MSize stacksize)
   a = lj_arena_of(st);
   cell = lj_arena_cellof(st);
   ncells = lj_arena_ncells((size_t)stacksize * sizeof(TValue));
-  {
-    int registered = gc2_small_arena_registered(g, a, NULL);
-    if (registered > 0)
-      return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
-	     ncells <= LJ_ARENA_CELLS - cell &&
-	     lj_arena_bm_get(a->block, cell);
-    if (registered == 0)
-      return 0;
-  }
-  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
-    if (gc2_stack_mem_valid_tg(tg, a, cell, ncells))
+  registered = gc2_small_arena_registered(g, a, NULL);
+  if (registered > 0)
+    return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+	   ncells <= LJ_ARENA_CELLS - cell &&
+	   lj_arena_bm_get(a->block, cell);
+  if (registered < 0) {
+    for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+      if (gc2_stack_mem_valid_tg(tg, a, cell, ncells))
+	return 1;
+    }
+    if (gc2_stack_mem_valid_tg(g->main_tg, a, cell, ncells))
+      return 1;
+    curtg = G2TG(g);
+    if (curtg != g->main_tg && curtg && curtg->gl == g &&
+	gc2_stack_mem_valid_tg(curtg, a, cell, ncells))
       return 1;
   }
-  if (gc2_stack_mem_valid_tg(g->main_tg, a, cell, ncells))
-    return 1;
-  curtg = G2TG(g);
-  if (curtg != g->main_tg && curtg && curtg->gl == g &&
-      gc2_stack_mem_valid_tg(curtg, a, cell, ncells))
-    return 1;
-  return 0;
+  /* Large Lua stacks are exact HugeTab allocations, not small arenas. Acquire
+  ** a counted reader before validating the complete stack byte interval. */
+  {
+    GC2MarkScope scope;
+    size_t bytes = (size_t)stacksize * sizeof(TValue);
+    int status, valid = 0;
+    gc2_mark_scope_init(&scope);
+    if (bytes / sizeof(TValue) != (size_t)stacksize)
+      return 0;
+    status = gc2_mark_huge_exact_scoped_status(g, st, &scope);
+    if (status != GC2_MARK_DEAD &&
+	scope.admission == GC2_SCOPE_HUGE_READER)
+      valid = lj_arena_hugetab_reader_covers_range(&scope.huge, st, bytes);
+    gc2_mark_scope_leave(&scope);
+    return valid;
+  }
 }
 
 /* The body scope is separate from stack-owner authority. Callers retain both:

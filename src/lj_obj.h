@@ -1628,6 +1628,10 @@ typedef struct GC2State {
   uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
   uint64_t thread_scan_frame_fallbacks;  /* Invalid frame walks using maxstack. */
+  uint64_t ffi_native_scan_attempts;  /* Certified parked-owner scan calls. */
+  uint64_t ffi_native_scan_stable_frames;  /* Exact frames fully validated. */
+  uint64_t ffi_native_scan_retries;  /* Incomplete/retry scan results. */
+  uint64_t ffi_native_scan_invalid;  /* Malformed certificate/frame failures. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
@@ -4622,6 +4626,14 @@ static LJ_AINLINE void gc2_table_rescan_pending_dec(global_State *g)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_dirty_misses, thread_scan_dirty_misses)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_frame_fallbacks,
 			   thread_scan_frame_fallbacks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_attempts,
+			   ffi_native_scan_attempts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_stable_frames,
+			   ffi_native_scan_stable_frames)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_retries,
+			   ffi_native_scan_retries)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_invalid,
+			   ffi_native_scan_invalid)
 
 static LJ_AINLINE void *gc2_finalizer_mpsc_acq(global_State *g)
 {

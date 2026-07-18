@@ -32,6 +32,8 @@ LJ_FUNC int LJ_FASTCALL lj_trace_retire_gc_claim(global_State *g,
 LJ_FUNC int LJ_FASTCALL lj_trace_body_destroyed_acq(const GCtrace *T);
 LJ_FUNC int LJ_FASTCALL lj_trace_native_pin(GCtrace *T);
 LJ_FUNC void LJ_FASTCALL lj_trace_native_unpin(global_State *g, GCtrace *T);
+LJ_FUNC int lj_trace_native_mark_pinned(global_State *g, GCtrace *T,
+					 TraceNo traceno);
 LJ_FUNC void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T);
 LJ_FUNC void lj_trace_reenableproto(GCproto *pt);
 LJ_FUNC uint32_t lj_trace_flushproto(global_State *g, GCproto *pt);
