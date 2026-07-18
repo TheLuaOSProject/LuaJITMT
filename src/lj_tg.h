@@ -153,8 +153,8 @@ struct TGState {
   LJTGRegistryKey registry_key;
   uint8_t registry_shadow_missed;  /* Legacy-only attach after slot OOM. */
 #if LJ_HASFFI
-  /* Keep the dormant generic frame substrate last so it cannot perturb any
-  ** existing VM/ABI-sensitive TG offset before generated entry code lands. */
+  /* Keep generic frame publication last so production CALLXS does not perturb
+  ** any existing VM/ABI-sensitive TG offset. */
   uint64_t ffi_native_seq;	/* Even stable, odd owner transition. */
   uint32_t ffi_native_depth;
   LJFFINativeFrame ffi_native_frame[LJ_FFI_NATIVE_FRAME_MAX];

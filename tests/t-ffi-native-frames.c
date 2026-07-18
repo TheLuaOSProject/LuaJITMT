@@ -1,6 +1,6 @@
 /*
-** Deterministic structural tests for the dormant generic FFI native-frame
-** publisher. No test frame grants GC authority or enters native/JIT state.
+** Deterministic structural tests for the generic FFI native-frame publisher.
+** No synthetic test frame grants GC authority or enters native/JIT state.
 */
 
 #include <assert.h>

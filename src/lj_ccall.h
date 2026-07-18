@@ -199,10 +199,10 @@ typedef struct CCallNativeState {
   uint32_t post_winerr;		/* Paired Win32 LastError; zero elsewhere. */
 } CCallNativeState;
 
-/* Dormant structural substrate for generated generic FFI calls. Push/pop are
-** single-owner and allocation-free. Capacity exhaustion is the only ordinary
-** push failure and leaves sequence, depth and payload unchanged. Snapshot
-** copies every active frame without dereferencing any published stack offset.
+/* Published structural substrate for generated generic FFI calls. Push/pop
+** are single-owner and allocation-free. Capacity exhaustion is the only
+** ordinary push failure and leaves sequence, depth and payload unchanged.
+** Snapshot copies every active frame without dereferencing a stack offset.
 */
 LJ_FUNC void lj_ffi_native_frame_init(TGState *tg);
 LJ_FUNC void lj_ffi_native_frame_fini(const TGState *tg);
@@ -219,9 +219,9 @@ LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
 ** allocation-free and nonwaiting; every attempt consumes XSAVE staging and
 ** zero requests a pre-call interpreter exit. Ordinary leave removes the frame.
 ** A forced leave converts it to POSTCALL and retains its exact pin until the
-** non-side-linkable caller-state trace exit invokes cleanup. The default
-** recorder remains gated; explicit test-only activation exercises the admitted
-** scalar lifecycle, including callback suspension and nested generated calls.
+** non-side-linkable caller-state trace exit invokes cleanup. Production x64
+** recording admits the nonallocating scalar result classes whose complete
+** lifecycle includes callback suspension and nested generated calls.
 */
 #define LJ_FFI_NATIVE_LEAVE_FORCE_EXIT	0x80000000u
 LJ_FUNC int lj_ffi_native_trace_enter(lua_State *L, struct GCtrace *T,

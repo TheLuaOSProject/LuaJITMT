@@ -687,8 +687,8 @@ static void LJ_FASTCALL recff_math_abs(jit_State *J, RecordFFData *rd)
 {
   TRef tr = lj_ir_tonum(J, J->base[0]);
 #ifdef LJ_XSAVE_TEST_HELPERS
-  /* Test-only dormant-path injection. Production recorders do not emit XSAVE
-  ** until the generic native-call protocol consumes its pending TG fields. */
+  /* Test-only math-path injection. Production generic native calls emit XSAVE
+  ** at their exact entry boundary and consume its pending TG fields there. */
   lj_ffrecord_xsave(J);
 #endif
   J->base[0] = emitir(IRTN(IR_ABS), tr, lj_ir_ksimd(J, LJ_KSIMD_ABS));

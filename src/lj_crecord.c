@@ -947,38 +947,6 @@ static IRType crec_ct2irt_snapshot(jit_State *J, CTState *cts, CType *ct)
   return IRT_CDATA;
 }
 
-/* Convert CType to IRType (if possible). */
-static IRType crec_ct2irt(CTState *cts, CType *ct)
-{
-  CTInfo info = ctype_info_acq(ct);
-  CTSize size;
-  if (ctype_isenum(info)) {
-    ct = ctype_child(cts, ct);
-    info = ctype_info_acq(ct);
-  }
-  size = ctype_size_acq(ct);
-  if (LJ_LIKELY(ctype_isnum(info))) {
-    if ((info & CTF_FP)) {
-      if (size == sizeof(double))
-	return IRT_NUM;
-      else if (size == sizeof(float))
-	return IRT_FLOAT;
-    } else {
-      uint32_t b = lj_fls(size);
-      if (b <= 3)
-	return IRT_I8 + 2*b + ((info & CTF_UNSIGNED) ? 1 : 0);
-    }
-  } else if (ctype_isptr(info)) {
-    return (LJ_64 && size == 8) ? IRT_P64 : IRT_P32;
-  } else if (ctype_iscomplex(info)) {
-    if (size == 2*sizeof(double))
-      return IRT_NUM;
-    else if (size == 2*sizeof(float))
-      return IRT_FLOAT;
-  }
-  return IRT_CDATA;
-}
-
 /* -- Optimized memory fill and copy -------------------------------------- */
 
 /* Maximum length and unroll of inlined copy/fill. */
@@ -1278,8 +1246,9 @@ static int crec_isnonzero(CType *s, void *p)
 static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
 		       void *svisnz)
 {
-  IRType dt = crec_ct2irt(ctype_ctsG(J2G(J)), d);
-  IRType st = crec_ct2irt(ctype_ctsG(J2G(J)), s);
+  CTState *cts = ctype_ctsG(J2G(J));
+  IRType dt = crec_ct2irt_snapshot(J, cts, d);
+  IRType st = crec_ct2irt_snapshot(J, cts, s);
   CTSize dsize = ctype_size_acq(d), ssize = ctype_size_acq(s);
   CTInfo dinfo = ctype_info_acq(d), sinfo = ctype_info_acq(s);
 

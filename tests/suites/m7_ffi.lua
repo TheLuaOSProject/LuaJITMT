@@ -50,6 +50,8 @@ local function assert_generic_ccall_source(t)
   local recorder = read_all(files[1])
   assert(plain_count(recorder, "LJ_FFI_CALLXS_TEST_ACTIVATE") == 0,
          "generic CALLXS still has a test-only production gate")
+  assert(plain_count(recorder, "static IRType crec_ct2irt(") == 0,
+         "recorder retained a non-snapshot CType-to-IR conversion")
   assert(plain_count(recorder, "static TRef crec_call_args(") == 1,
          "generic C-call argument recorder is not unique")
   assert(plain_count(recorder, "IRT(IR_CALLXS, t)") == 1,

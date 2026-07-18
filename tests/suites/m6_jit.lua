@@ -936,7 +936,7 @@ assert(threading.gcworkers(0) == 1)
 
   add({
     name = "m6_jit_xsave",
-    description = "dormant XSAVE snapshots retain materialized allocation roots",
+    description = "exact XSAVE snapshots retain materialized allocation roots",
     run = function(t)
       local flags = "-DLUA_USE_ASSERT -DLJ_XSAVE_TEST_HELPERS " ..
                     "-DLJ_GC2_TEST_HELPERS"

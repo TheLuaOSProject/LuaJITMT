@@ -117,6 +117,13 @@ activation changes this call site to `crec_ct2irt_snapshot()`. Scalar behavior
 is identical, while enum child relocation now retries or aborts recording
 instead of racing the table.
 
+A follow-up production audit removed the older `crec_ct2irt()` surface
+entirely. Its last caller, the generic cdata-to-cdata recorder conversion, now
+uses the same snapshot-aware helper for both source and destination types.
+Current callers normally pre-resolve enum children, so this does not add work
+to ordinary scalar conversion; it closes the latent unsafe fallback if a
+future conversion reaches that helper with an enum still wrapped.
+
 ## Why boxed results remain interpreted
 
 The existing post-CALLXS `IR_CNEWI` code is not an activation path. CNEWI can

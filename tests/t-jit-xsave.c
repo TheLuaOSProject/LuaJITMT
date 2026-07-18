@@ -1,5 +1,5 @@
 /*
-** Focused dormant-path test for IR_XSAVE snapshot identity, allocation
+** Focused exact-path test for IR_XSAVE snapshot identity, allocation
 ** materialization and x64 TG-private root staging.
 */
 
