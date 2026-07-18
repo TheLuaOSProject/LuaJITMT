@@ -34,19 +34,19 @@ static LJ_AINLINE void asm_mcode_u8(ASMState *as, MCode **pp, MCode v)
 
 static LJ_AINLINE void asm_mcode_u64(ASMState *as, MCode **pp, uint64_t v)
 {
-  *(uint64_t *)lj_mcode_rw(as->J, *pp) = v;
+  memcpy(lj_mcode_rw(as->J, *pp), &v, sizeof(v));
   *pp += 8;
 }
 
 static LJ_AINLINE void asm_mcode_i32(ASMState *as, MCode **pp, int32_t v)
 {
-  *(int32_t *)lj_mcode_rw(as->J, *pp) = v;
+  memcpy(lj_mcode_rw(as->J, *pp), &v, sizeof(v));
   *pp += 4;
 }
 
 static LJ_AINLINE void asm_mcode_ptr(ASMState *as, MCode **pp, const void *v)
 {
-  *(const void **)lj_mcode_rw(as->J, *pp) = v;
+  memcpy(lj_mcode_rw(as->J, *pp), &v, sizeof(v));
   *pp += sizeof(void *);
 }
 
@@ -64,27 +64,27 @@ static LJ_AINLINE void asm_mcode_put_u8(ASMState *as, MCode *p, MCode v)
 
 static LJ_AINLINE void asm_mcode_put_u16(ASMState *as, MCode *p, uint16_t v)
 {
-  *(uint16_t *)lj_mcode_rw(as->J, p) = v;
+  memcpy(lj_mcode_rw(as->J, p), &v, sizeof(v));
 }
 
 static LJ_AINLINE void asm_mcode_put_i32(ASMState *as, MCode *p, int32_t v)
 {
-  *(int32_t *)lj_mcode_rw(as->J, p) = v;
+  memcpy(lj_mcode_rw(as->J, p), &v, sizeof(v));
 }
 
 static LJ_AINLINE void asm_mcode_put_u32(ASMState *as, MCode *p, uint32_t v)
 {
-  *(uint32_t *)lj_mcode_rw(as->J, p) = v;
+  memcpy(lj_mcode_rw(as->J, p), &v, sizeof(v));
 }
 
 static LJ_AINLINE void asm_mcode_put_u64(ASMState *as, MCode *p, uint64_t v)
 {
-  *(uint64_t *)lj_mcode_rw(as->J, p) = v;
+  memcpy(lj_mcode_rw(as->J, p), &v, sizeof(v));
 }
 
 static LJ_AINLINE void asm_mcode_patch_i32(jit_State *J, MCode *p, int32_t v)
 {
-  *(int32_t *)lj_mcode_rw(J, p) = v;
+  memcpy(lj_mcode_rw(J, p), &v, sizeof(v));
 }
 
 #define emit_i8(as, i) \
@@ -476,7 +476,7 @@ static void emit_rma(ASMState *as, x86Op xo, Reg rr, const void *addr)
       uint32_t i32 = 0;
       uint8_t i8 = xo == XO_GROUP3b ? *as->mcp++ : 0;
       if (xo == XO_MOVmi) {
-	i32 = *(uint32_t *)as->mcp;
+	memcpy(&i32, as->mcp, sizeof(i32));
 	as->mcp += 4;
       }
       emit_popx(as, ra);

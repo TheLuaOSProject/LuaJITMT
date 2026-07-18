@@ -328,17 +328,27 @@ MSize lj_ccallback_ptr2slot(CTState *cts, void *p)
 /* Disabled callback support. */
 #define callback_mcode_init(g, p)	(p)
 #elif LJ_TARGET_X86ORX64
+static LJ_AINLINE void callback_mcode_write32(uint8_t *p, uint32_t value)
+{
+  memcpy(p, &value, sizeof(value));
+}
+
+static LJ_AINLINE void callback_mcode_write64(uint8_t *p, uint64_t value)
+{
+  memcpy(p, &value, sizeof(value));
+}
+
 static void *callback_mcode_init(global_State *g, uint8_t *page)
 {
   uint8_t *p = page;
   uint8_t *target = (uint8_t *)(void *)lj_vm_ffi_callback;
   MSize slot;
 #if LJ_64
-  *(void **)p = target; p += 8;
+  callback_mcode_write64(p, (uint64_t)(uintptr_t)target); p += 8;
 #endif
   for (slot = 0; slot < CALLBACK_MAX_SLOT; slot++) {
 #if LJ_ABI_BRANCH_TRACK
-    *(uint32_t *)p = XI_ENDBR64; p += 4;
+    callback_mcode_write32(p, XI_ENDBR64); p += 4;
 #endif
     /* mov al, slot; jmp group */
     *p++ = XI_MOVrib | RID_EAX; *p++ = (uint8_t)slot;
@@ -349,18 +359,19 @@ static void *callback_mcode_init(global_State *g, uint8_t *page)
       *p++ = XI_MOVrib | (RID_EAX+4); *p++ = (uint8_t)(slot >> 8);
 #if LJ_GC64
       *p++ = 0x48; *p++ = XI_MOVri | RID_EBP;
-      *(uint64_t *)p = (uint64_t)(g); p += 8;
+      callback_mcode_write64(p, (uint64_t)(uintptr_t)g); p += 8;
 #else
       *p++ = XI_MOVri | RID_EBP;
-      *(int32_t *)p = i32ptr(g); p += 4;
+      callback_mcode_write32(p, (uint32_t)i32ptr(g)); p += 4;
 #endif
 #if LJ_64
       /* jmp [rip-pageofs] where lj_vm_ffi_callback is stored. */
       *p++ = XI_GROUP5; *p++ = XM_OFS0 + (XOg_JMP<<3) + RID_EBP;
-      *(int32_t *)p = (int32_t)(page-(p+4)); p += 4;
+      callback_mcode_write32(p, (uint32_t)(int32_t)(page-(p+4))); p += 4;
 #else
       /* jmp lj_vm_ffi_callback. */
-      *p++ = XI_JMP; *(int32_t *)p = target-(p+4); p += 4;
+      *p++ = XI_JMP;
+      callback_mcode_write32(p, (uint32_t)(int32_t)(target-(p+4))); p += 4;
 #endif
     } else {
       *p++ = XI_JMPs;
