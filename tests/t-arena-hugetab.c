@@ -1215,6 +1215,7 @@ static void test_table_token_slot_leases(PRNGState *rs)
   const size_t size = LJ_HUGE_THRESHOLD + 2819u;
   HugeTab ht = { NULL };
   LJHugeTokenLease lease = { NULL, NULL, 0, 0 };
+  LJHugeTokenLease badlease;
   LJHugeReader reader = { NULL, NULL, 0 };
   LJGC2TableTokenTicket ticket;
   LJGC2TabStamp *stamp;
@@ -1253,6 +1254,15 @@ static void test_table_token_slot_leases(PRNGState *rs)
   assert(observed == p && hi.size == size && hi.readers == 1u);
   assert(lease.h == ht.h && lease.base == p && lease.size == size &&
 	 lease.body_authorized == 1u);
+  stamp = lj_arena_gc2_stamp_acq(p);
+  assert(stamp != NULL &&
+	 lj_arena_hugetab_table_token_lease_stamp_acq(&lease) == stamp);
+  /* A lease which does not name the exact huge body must never turn an
+  ** aligned mapping header into embedded-token authority. Mutate only a
+  ** copied lease so the registry retains a lawful, reclaimable identity. */
+  badlease = lease;
+  badlease.base = (void *)((char *)p + LJ_CELL_SIZE);
+  assert(lj_arena_hugetab_table_token_lease_stamp_acq(&badlease) == NULL);
   assert(lj_arena_hugetab_table_token_lease_take_reader(&lease, &reader));
   assert(lease.h == NULL && lease.base == NULL && lease.size == 0u &&
 	 lease.body_authorized == 0u);
@@ -1266,8 +1276,6 @@ static void test_table_token_slot_leases(PRNGState *rs)
   ** locator. DEFERRED admits the mapping header and embedded stamp only. Once
   ** exact completion clears that generation, releasing the last header lease
   ** performs the ordinary DEFER_FREE -> FREEING handoff. */
-  stamp = lj_arena_gc2_stamp_acq(p);
-  assert(stamp != NULL);
   assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
 	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
   assert(!lj_arena_hugetab_claim_external_free(&ht, p, &hi));
@@ -1281,6 +1289,7 @@ static void test_table_token_slot_leases(PRNGState *rs)
 	 (hi.flags & LJ_HUGEF_DEFER_FREE) != 0);
   assert(lease.h == ht.h && lease.base == p && lease.size == size &&
 	 lease.body_authorized == 0u);
+  assert(lj_arena_hugetab_table_token_lease_stamp_acq(&lease) == stamp);
   assert(!lj_arena_hugetab_table_token_lease_take_reader(&lease, &reader));
   assert(lj_gc2_table_token_complete_exact(&stamp->token, &ticket) ==
 	 LJ_GC2_TABLE_TOKEN_RESULT_OK);

@@ -1628,6 +1628,10 @@ typedef struct GC2State {
   uint64_t table_token_scan_requested;  /* Sticky dormant exact-generation hint. */
   uint32_t table_token_small_slot;  /* Small-registry resume slot. */
   uint32_t table_token_small_cell;  /* Small-sidecar resume cell. */
+  LJTGRegistrySlot *table_token_huge_node;  /* Stable TG-slot resume identity. */
+  uint64_t table_token_huge_incarnation;  /* Exact TG incarnation at cursor. */
+  uint32_t table_token_huge_slot;  /* Physical HugeTab resume slot. */
+  uint32_t table_token_huge_pad;  /* Keep following counters naturally aligned. */
   uint64_t table_token_scan_visited;  /* Side identities inspected. */
   uint64_t table_token_scan_completed;  /* Exact PENDING -> NONE wins. */
   uint64_t table_token_scan_terminal;  /* Payload-free FREE/DEFER cancels. */
@@ -4684,6 +4688,42 @@ static LJ_AINLINE void gc2_table_token_small_cell_store_rlx(global_State *g,
 						     uint32_t cell)
 {
   la_store32_rlx(&g->gc2.table_token_small_cell, cell);
+}
+
+static LJ_AINLINE LJTGRegistrySlot *gc2_table_token_huge_node_acq(
+  global_State *g)
+{
+  return (LJTGRegistrySlot *)la_loadptr_acq(
+    (void *const *)&g->gc2.table_token_huge_node);
+}
+
+static LJ_AINLINE void gc2_table_token_huge_node_store_rlx(
+  global_State *g, LJTGRegistrySlot *node)
+{
+  la_storeptr_rlx((void **)&g->gc2.table_token_huge_node, node);
+}
+
+static LJ_AINLINE uint64_t gc2_table_token_huge_incarnation_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.table_token_huge_incarnation);
+}
+
+static LJ_AINLINE void gc2_table_token_huge_incarnation_store_rlx(
+  global_State *g, uint64_t incarnation)
+{
+  la_store64_rlx(&g->gc2.table_token_huge_incarnation, incarnation);
+}
+
+static LJ_AINLINE uint32_t gc2_table_token_huge_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.table_token_huge_slot);
+}
+
+static LJ_AINLINE void gc2_table_token_huge_slot_store_rlx(global_State *g,
+						    uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.table_token_huge_slot, slot);
 }
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_visited,

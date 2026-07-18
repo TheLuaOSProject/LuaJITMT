@@ -3393,6 +3393,19 @@ int lj_arena_hugetab_table_token_lease_take_reader(
   return 1;
 }
 
+LJGC2TabStamp *lj_arena_hugetab_table_token_lease_stamp_acq(
+  const LJHugeTokenLease *lease)
+{
+  GCArena *a;
+  if (!lease || !lease->h || !lease->base || !lease->size)
+    return NULL;
+  a = lj_arena_of(lease->base);
+  if (lease->base != (void *)((char *)a + sizeof(GCAhdr)) ||
+      (lj_arena_flags_acq(a) & LJ_AF_HUGE_MAGIC) != LJ_AF_HUGE_MAGIC)
+    return NULL;
+  return &a->hdr.huge_tabstamp;
+}
+
 int lj_arena_hugetab_sweep_reader_acquire(HugeTab *ht, const void *p,
 					    LJHugeReader *reader,
 					    LJHugeInfo *hi)

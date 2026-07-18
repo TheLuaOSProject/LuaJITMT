@@ -473,6 +473,8 @@ LJ_FUNC int lj_gc2_test_table_token_request(global_State *g, GCtab *t,
 					      uint64_t generation);
 LJ_FUNC uint32_t lj_gc2_test_table_token_scan_small(global_State *g,
 						     uint32_t budget);
+LJ_FUNC uint32_t lj_gc2_test_table_token_scan_huge(global_State *g,
+						    uint32_t budget);
 LJ_FUNC int lj_gc2_test_table_token_scan_one(global_State *g, GCtab *t);
 LJ_FUNC void lj_gc2_test_table_token_cursor_reset(global_State *g);
 LJ_FUNC void lj_gc2_test_table_dirty_bump(global_State *g, GCtab *t);

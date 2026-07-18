@@ -715,6 +715,11 @@ LJ_FUNC int lj_arena_hugetab_reader_acquire(HugeTab *ht, const void *p,
 LJ_FUNC int lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
   HugeTab *ht, uint32_t slot, void **pp, LJHugeTokenLease *lease,
   LJHugeInfo *hi);
+/* Return the allocation-local stamp while an exact physical-slot lease is
+** active. This authorizes only the fixed allocator header; callers still need
+** a transferred ordinary reader before inspecting a GC header or payload. */
+LJ_FUNC LJGC2TabStamp *lj_arena_hugetab_table_token_lease_stamp_acq(
+  const LJHugeTokenLease *lease);
 /* Exact acquisition results. LIVE may be explicitly transferred to an
 ** LJHugeReader after the embedded token is captured; DEFERRED is permanently
 ** header-only. Every other result returns no lease, leaves pp NULL, and

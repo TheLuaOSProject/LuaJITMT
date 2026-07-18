@@ -1,5 +1,10 @@
 # GC2 dormant small-table token enumerator (2026-07-18)
 
+Historical checkpoint: statements below that the Huge lane is absent describe
+this small-only commit and are superseded by
+`gc2-table-token-huge-enumerator-2026-07-18.md`; the small-lane contracts remain
+applicable.
+
 ## Status and scope
 
 This checkpoint adds an executable, test-helper-only consumer for persistent

@@ -91,6 +91,7 @@ static int table_retry_locator_visible(global_State *g, GCobj *o)
     recovery == LJ_ARENA_RECOVERY_CLAIMED ||
     recovery == LJ_ARENA_RECOVERY_REDIRTY;
 }
+
 #endif
 #if LJ_HASFFI
 static int gc2_cdata_counting_finalizer(lua_State *L);
@@ -5190,40 +5191,295 @@ static void test_table_token_request_observational_stale(lua_State *L,
   lua_settop(L, base);
 }
 
-static void test_table_token_huge_request_rejected(global_State *g,
-						    TGState *tg)
+static GCtab *table_token_huge_new(global_State *g, TGState *tg,
+				    size_t size, GCtab *mt)
+{
+  GCArena *a;
+  GCtab *t;
+  void *p;
+
+  assert(g != NULL && tg != NULL && size > LJ_HUGE_THRESHOLD);
+  assert(lj_tg_flags_all_acq(tg, TGF_ARENA_INTERNAL|TGF_HUGETAB));
+  p = lj_arena_huge_map(&tg->prng, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  t = (GCtab *)p;
+  memset(t, 0, sizeof(*t));
+  la_store8_rel(&t->gct, (uint8_t)~LJ_TTAB);
+  newwhite(g, t);
+  lj_tab_nomm_rel(t, (uint8_t)~0u);
+  lj_tab_colo_rel(t, 0);
+  lj_tab_gc2_rescan_state_store_rlx(t, LJ_TAB_RESCAN_NONE);
+  lj_tab_array_set(t, NULL);
+  if (mt)
+    lj_tab_metatable_rel(t, mt);
+  lj_tab_asize_rel(t, 0);
+  lj_tab_acap_rel(t, 0);
+  lj_tab_hmask_rel(t, 0);
+  lj_tab_node_rel(t, &g->nilnode);
+  lj_tab_freetop_rel(t, &g->nilnode);
+  lj_tab_struct_owner_store_rlx(t, 0);
+  lj_tab_weak_cycle_store_rlx(t, 0);
+
+  a = lj_arena_of(t);
+  lj_arena_owner_rel(a, lj_tg_tid_acq(tg));
+  lj_arena_gc2_tabledesc_rel(a, &g->gc2.table_rescan_desc);
+  lj_arena_progress_g_rel(a, g);
+  assert(lj_arena_hugetab_insert(
+    &tg->huge, t, size, LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) == 1);
+  return t;
+}
+
+static uint32_t table_token_huge_physical_slot(HugeTab *ht,
+						const void *target)
+{
+  uint32_t cap = lj_arena_hugetab_slot_count(ht), slot;
+  for (slot = 0; slot < cap; slot++) {
+    void *p = NULL;
+    LJHugeInfo hi;
+    int snap = lj_arena_hugetab_slot_snapshot_bounded(ht, slot, &p, &hi);
+    assert(snap != LJ_ARENA_HUGETAB_SLOT_BUSY);
+    if (snap == LJ_ARENA_HUGETAB_SLOT_PRESENT && p == target)
+      return slot;
+  }
+  assert(!"huge table fixture lacks a physical slot");
+  return 0;
+}
+
+static void table_token_huge_delete(TGState *tg, GCtab *t, size_t size)
+{
+  LJHugeInfo hi;
+  assert(lj_arena_hugetab_delete(&tg->huge, t, &hi) == 1);
+  assert(hi.size == size && hi.readers == 0u);
+  assert(lj_arena_hugetab_lookup(&tg->huge, t, NULL) == 0);
+  lj_arena_huge_unmap(t, hi.size);
+}
+
+static void table_token_current_cycle_to_weak(lua_State *L,
+					       global_State *g, TGState *tg)
+{
+  lj_gc2_test_scan_roots(g, L);
+  flush_and_drain(g, tg);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+}
+
+static void table_token_current_cycle_to_sweep(lua_State *L,
+						global_State *g, TGState *tg)
+{
+  uint32_t i;
+  int complete = 0;
+  table_token_current_cycle_to_weak(L, g, tg);
+  for (i = 0; i < 4096u && !complete; i++)
+    complete = lj_gc2_weak_complete(g, L, NULL,
+				    LJ_GC2_WEAK_DRAIN_BATCH);
+  assert(complete);
+  lj_gc2_weak_to_sweep(g, L);
+  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
+}
+
+static void test_table_token_huge_live_exact(lua_State *L, global_State *g,
+					      TGState *tg)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 4096u;
   LJGC2TabStamp *stamp;
-  LJHugeInfo hi;
-  GCobj *o;
-  void *p;
-  uint64_t control, generation;
+  GCtab *t, *child;
+  uint64_t control, generation, hint, payload0, visited0;
+  uint32_t incomplete, slot;
+  int base = lua_gettop(L);
 
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(tg != NULL && lj_tg_flags_test_acq(tg, TGF_HUGETAB));
-  p = lj_arena_huge_map(&tg->prng, size, LJ_AF_TRAVERSABLE);
-  assert(p != NULL);
-  o = (GCobj *)p;
-  la_store8_rel(&o->gch.gct, (uint8_t)~LJ_TTAB);
-  assert(lj_arena_hugetab_insert(
-    &tg->huge, p, size, LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) == 1);
-  stamp = lj_arena_gc2_stamp_acq(p);
-  assert(stamp != NULL);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  t = table_token_huge_new(g, tg, size, child);
+  stamp = table_token_test_stamp(t);
   control = la_load64_acq(&stamp->token.control);
-  generation = lj_gc2_table_token_generation(control);
-  assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE);
-  assert(generation < LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+  generation = lj_gc2_table_token_generation(control) + 1u;
+  assert(generation <= LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
 
   lj_gc2_mark_begin(g);
-  /* The small-only request must reject from registry identity. It may not
-  ** inspect the synthetic table body or create an unreachable huge token. */
-  assert(!lj_gc2_test_table_token_request(
-    g, gco2tab(o), generation + 1u));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  incomplete = gc2_tg_registry_incomplete_acq(g);
+  assert(incomplete == 0u);
+  gc2_tg_registry_incomplete_store_rlx(g, 1);
+  assert(!lj_gc2_test_table_token_request(g, t, generation));
   assert(la_load64_acq(&stamp->token.control) == control);
-  assert(lj_arena_hugetab_delete(&tg->huge, p, &hi) == 1);
-  assert(hi.size == size);
-  lj_arena_huge_unmap(p, hi.size);
+  gc2_tg_registry_incomplete_store_rlx(g, incomplete);
+
+  assert(lj_gc2_test_table_token_request(g, t, generation));
+  payload0 = gc2_table_token_scan_payloads_acq(g);
+  assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+  assert(gc2_table_token_scan_payloads_acq(g) == payload0 + 1u);
+  assert(lj_gc2_test_table_scan_current(g, t));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_NONE);
+
+  /* A durable token is independently enumerable if its publisher stops before
+  ** raising the sticky wake hint. Place the cursor on the exact stable TG and
+  ** physical slot so one budget unit is both necessary and sufficient. */
+  hint = gc2_table_token_scan_requested_acq(g);
+  assert(hint != 0u && generation < LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+  gc2_table_token_scan_requested_store_rlx(g, 0);
+  generation++;
+  assert(lj_gc2_table_token_transfer_exact(&stamp->token, generation) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  slot = table_token_huge_physical_slot(&tg->huge, t);
+  gc2_table_token_huge_incarnation_store_rlx(
+    g, tg->registry_key.incarnation);
+  gc2_table_token_huge_slot_store_rlx(g, slot);
+  gc2_table_token_huge_node_store_rlx(g, tg->registry_key.slot);
+  visited0 = gc2_table_token_scan_visited_acq(g);
+  payload0 = gc2_table_token_scan_payloads_acq(g);
+  assert(lj_gc2_test_table_token_scan_huge(g, 1) == 1u);
+  assert(gc2_table_token_scan_visited_acq(g) == visited0 + 1u);
+  assert(gc2_table_token_scan_payloads_acq(g) == payload0 + 1u);
+  assert(gc2_table_token_scan_requested_acq(g) == 0u);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_NONE);
+  gc2_table_token_scan_requested_store_rlx(g, hint);
+
+  table_token_huge_delete(tg, t, size);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+}
+
+static void test_table_token_huge_phase_behavior(lua_State *L,
+						  global_State *g,
+						  TGState *tg)
+{
+  const uint32_t phases[] = { LJ_GC2_MARK, LJ_GC2_WEAK, LJ_GC2_SWEEP };
+  const size_t size = LJ_HUGE_THRESHOLD + 8192u;
+  uint32_t n;
+  int base = lua_gettop(L);
+
+  for (n = 0; n < sizeof(phases)/sizeof(phases[0]); n++) {
+    LJGC2TabStamp *stamp;
+    LJHugeInfo hi;
+    GCtab *t = table_token_huge_new(g, tg, size + n, NULL);
+    uint64_t payload0, terminal0;
+    uint8_t gct;
+
+    assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+    stamp = table_token_test_stamp(t);
+    lj_gc2_mark_begin(g);
+    (void)table_token_test_request_next(g, t);
+    if (phases[n] == LJ_GC2_WEAK)
+      table_token_current_cycle_to_weak(L, g, tg);
+    else if (phases[n] == LJ_GC2_SWEEP)
+      table_token_current_cycle_to_sweep(L, g, tg);
+    assert(gc2_phase_acq(g) == phases[n]);
+
+    /* MARK was covered above. WEAK retains full body authority; SWEEP must
+    ** leave a LIVE graph pending without sampling any payload byte. */
+    if (phases[n] == LJ_GC2_WEAK) {
+      payload0 = gc2_table_token_scan_payloads_acq(g);
+      assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+      assert(gc2_table_token_scan_payloads_acq(g) == payload0 + 1u);
+      (void)table_token_test_request_next(g, t);
+    } else if (phases[n] == LJ_GC2_SWEEP) {
+      gct = la_load8_acq(&t->gct);
+      la_store8_rel(&t->gct, 0);
+      payload0 = gc2_table_token_scan_payloads_acq(g);
+      assert(lj_gc2_test_table_token_scan_one(g, t) == 0);
+      assert(gc2_table_token_scan_payloads_acq(g) == payload0);
+      assert(lj_gc2_table_token_state(
+	la_load64_acq(&stamp->token.control)) ==
+	LJ_GC2_TABLE_TOKEN_PENDING);
+      la_store8_rel(&t->gct, gct);
+    }
+
+    /* DEFER_FREE is irreversible logical death in every admitted phase. Its
+    ** exact terminal completion is header-only, including with a poisoned GC
+    ** type byte, and the last token lease performs the FREEING handoff. */
+    gct = la_load8_acq(&t->gct);
+    la_store8_rel(&t->gct, 0);
+    assert(!lj_arena_hugetab_claim_external_free(&tg->huge, t, &hi));
+    assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0 && hi.readers == 0u);
+    payload0 = gc2_table_token_scan_payloads_acq(g);
+    terminal0 = gc2_table_token_scan_terminal_acq(g);
+    assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+    assert(gc2_table_token_scan_payloads_acq(g) == payload0);
+    assert(gc2_table_token_scan_terminal_acq(g) == terminal0 + 1u);
+    assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_NONE);
+    assert(lj_arena_hugetab_lookup(&tg->huge, t, &hi) == 1);
+    assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	   (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+    assert((hi.flags & LJ_HUGEF_DEFER_FREE) == 0 && hi.readers == 0u);
+    table_token_huge_delete(tg, t, size + n);
+    settle_automatic_cycle(g);
+  }
+  lua_settop(L, base);
+}
+
+static void test_table_token_huge_reclaiming_owner(global_State *g,
+						     TGState *main_tg)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 12289u;
+  LJTGRegistryBodySnap body;
+  LJTGRegistryKey key;
+  LJTGSlotSnap snap;
+  LJGC2TabStamp *stamp;
+  TGState dead;
+  GCtab *t;
+  uint64_t payload0;
+  uint32_t physical_slot;
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(main_tg == g->main_tg);
+  lj_tg_init_thread(g, &dead, NULL, 1);
+  lj_tg_tid_rel(&dead, lj_thr_newid());
+  t = table_token_huge_new(g, &dead, size, NULL);
+  stamp = table_token_test_stamp(t);
+  physical_slot = table_token_huge_physical_slot(&dead.huge, t);
+
+  /* Begin the cycle before publishing the synthetic TG so attach catch-up can
+  ** acknowledge the active phase like a real late mutator. */
+  lj_gc2_mark_begin(g);
+  lj_tg_attach(g, &dead);
+  key = dead.registry_key;
+  assert(lj_tgregistry_key_valid(&key));
+  (void)table_token_test_request_next(g, t);
+  lj_tg_detach(g, &dead);
+  assert(lj_tg_flags_test_acq(&dead, TGF_DEAD));
+
+  /* Stable admission closes first. Transfer cannot erase the only HugeTab
+  ** locator while its embedded token is pending, so legacy raw-list ownership
+  ** and the exact RECLAIMING body remain available to the scanner. */
+  assert(lj_tg_reclaim_dead(g) == 0u);
+  assert(lj_tgregistry_key_snapshot(&key, &snap) == LJ_TGSLOT_OK);
+  assert(snap.state == LJ_TGSLOT_RECLAIMING && snap.lease_count == 0u);
+  body = lj_tgregistry_slot_body_snapshot(key.slot);
+  assert(body.body == &dead && body.incarnation == key.incarnation);
+  assert(lj_arena_hugetab_lookup(&dead.huge, t, NULL) == 1);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_PENDING);
+
+  gc2_table_token_huge_incarnation_store_rlx(g, key.incarnation);
+  gc2_table_token_huge_slot_store_rlx(g, physical_slot);
+  gc2_table_token_huge_node_store_rlx(g, key.slot);
+  payload0 = gc2_table_token_scan_payloads_acq(g);
+  assert(lj_gc2_test_table_token_scan_huge(g, 1) == 1u);
+  assert(gc2_table_token_scan_payloads_acq(g) == payload0 + 1u);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(lj_tgregistry_key_snapshot(&key, &snap) == LJ_TGSLOT_OK);
+  assert(snap.state == LJ_TGSLOT_RECLAIMING && snap.lease_count == 0u);
+  body = lj_tgregistry_slot_body_snapshot(key.slot);
+  assert(body.body == &dead && body.incarnation == key.incarnation);
+
+  /* With exact token ownership discharged, the ordinary reclaimer transfers
+  ** the mapping to main, unlinks the dead raw TG and clears its tagged slot. */
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tgregistry_key_snapshot(&key, &snap) == LJ_TGSLOT_OK);
+  assert(snap.state == LJ_TGSLOT_EMPTY && snap.lease_count == 0u);
+  body = lj_tgregistry_slot_body_snapshot(key.slot);
+  assert(body.body == NULL && body.incarnation == key.incarnation);
+  assert(lj_arena_hugetab_lookup(&dead.huge, t, NULL) == 0);
+  assert(lj_arena_hugetab_lookup(&main_tg->huge, t, NULL) == 1);
+  table_token_huge_delete(main_tg, t, size);
+  assert(lj_tg_fini_thread(g, &dead));
+  lj_gc2_test_table_token_cursor_reset(g);
   settle_automatic_cycle(g);
 }
 
@@ -8800,7 +9056,9 @@ int main(void)
   test_table_token_small_live_exact(L, g, tg);
   test_table_token_small_cursor_budget(L, g);
   test_table_token_request_observational_stale(L, g);
-  test_table_token_huge_request_rejected(g, tg);
+  test_table_token_huge_live_exact(L, g, tg);
+  test_table_token_huge_phase_behavior(L, g, tg);
+  test_table_token_huge_reclaiming_owner(g, tg);
   test_table_token_small_free_no_body(L, g);
   test_table_token_small_proof_races(L, g);
   test_table_token_small_weak_oom_progress(L, g);
