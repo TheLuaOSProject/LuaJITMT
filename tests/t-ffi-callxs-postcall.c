@@ -433,6 +433,23 @@ static void run_aligned_value(lua_State *L, const char *name, lua_Integer n)
   lua_pop(L, 1);
 }
 
+static void run_interpreted_aligned_values(lua_State *L, const char *name)
+{
+  int i, top = lua_gettop(L);
+  assert(lua_checkstack(L, 32));
+  /* Retain consecutive results so the fixed allocator cannot reuse one
+  ** accidentally aligned slot and make this regression oracle pass by luck. */
+  for (i = 0; i < 16; i++) {
+    const void *payload;
+    lua_getglobal(L, name);
+    assert(lua_pcall(L, 0, 1, 0) == 0);
+    payload = lua_topointer(L, -1);
+    assert(payload != NULL);
+    assert(((uintptr_t)payload & (uintptr_t)31) == 0);
+  }
+  lua_settop(L, top);
+}
+
 static lua_Integer run_entry_named(lua_State *L, const char *name,
 				    lua_Integer n)
 {
@@ -849,6 +866,10 @@ int main(void)
     "  end\n"
     "  return value\n"
     "end\n"
+    "function _G.__callxs_postcall_aligned_interpreted()\n"
+    "  return lib.lj_callxs_auth_aggregate_aligned_result(0)\n"
+    "end\n"
+    "jit.off(__callxs_postcall_aligned_interpreted, true)\n"
     "function _G.__callxs_postcall_void_run(n)\n"
     "  for i = 1, n do lib.lj_callxs_auth_store(result_p, i, i + 300) end\n"
     "  for i = n-3, n do assert(result_p[i % 4] == i + 300) end\n"
@@ -1126,8 +1147,10 @@ int main(void)
     "__callxs_postcall_callm_once", BC_CALLM, 9, 1);
 
   /* The declared 32-byte alignment is an outer CType attribute, not part of
-  ** the raw struct child. Prove the trace carries an exact CNEW size operand
-  ** into lj_cdata_newv and that the returned payload is actually aligned. */
+  ** the raw struct child. Prove interpreted preallocation and the generated
+  ** CNEW/newv path both expose an actually aligned ABI result payload. */
+  run_interpreted_aligned_values(L,
+    "__callxs_postcall_aligned_interpreted");
   ljt_lua_dostring(L,
     "jit.flush()\n"
     "__callxs_postcall_lib.lj_callxs_auth_aggregate_reset()\n");

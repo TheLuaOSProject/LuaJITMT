@@ -30,10 +30,15 @@ enum lj_callxs_auth_enum {
   LJ_CALLXS_AUTH_ENUM_SEVEN = 7
 };
 enum lj_callxs_auth_enum lj_callxs_auth_enum_result(int32_t);
+typedef enum lj_callxs_auth_enum
+  lj_callxs_auth_attr_enum_t __attribute__((aligned(32)));
+lj_callxs_auth_attr_enum_t lj_callxs_auth_attributed_enum_result(int32_t);
 int64_t lj_callxs_auth_i64_result(int32_t);
 uint64_t lj_callxs_auth_u64_result(int32_t);
-typedef uint64_t __attribute__((aligned(8))) lj_callxs_auth_attr_u64_t;
+typedef uint64_t __attribute__((aligned(32))) lj_callxs_auth_attr_u64_t;
 lj_callxs_auth_attr_u64_t lj_callxs_auth_attributed_u64_result(int32_t);
+typedef int32_t *lj_callxs_auth_attr_ptr_t __attribute__((aligned(32)));
+lj_callxs_auth_attr_ptr_t lj_callxs_auth_attributed_ptr_result(int32_t *);
 int32_t &lj_callxs_auth_reference_result(void);
 struct lj_callxs_auth_aggregate_alpha {
   uint64_t cookie;
@@ -50,16 +55,31 @@ struct lj_callxs_auth_aggregate_beta {
 typedef struct {
   uint64_t lane[3];
 } lj_callxs_auth_aggregate_aligned __attribute__((aligned(32)));
+union lj_callxs_auth_aggregate_union {
+  uint64_t lane[3];
+  struct { int64_t signed_lane; double ratio; uint64_t token; } fields;
+};
 struct lj_callxs_auth_aggregate_alpha
   lj_callxs_auth_aggregate_alpha_result(double, int32_t);
 struct lj_callxs_auth_aggregate_beta
   lj_callxs_auth_aggregate_beta_result(uint32_t, float);
 lj_callxs_auth_aggregate_aligned
   lj_callxs_auth_aggregate_aligned_result(uint64_t);
+struct lj_callxs_auth_aggregate_alpha
+  lj_callxs_auth_aggregate_zero_result(void);
+union lj_callxs_auth_aggregate_union
+  lj_callxs_auth_aggregate_union_result(uint64_t);
+struct lj_callxs_auth_aggregate_beta
+  lj_callxs_auth_aggregate_wide_result(uint64_t, uint64_t, uint64_t,
+                                       uint64_t, uint64_t, uint64_t,
+                                       uint64_t, uint64_t);
 void lj_callxs_auth_aggregate_reset(void);
 uint32_t lj_callxs_auth_aggregate_alpha_count(void);
 uint32_t lj_callxs_auth_aggregate_beta_count(void);
 uint32_t lj_callxs_auth_aggregate_aligned_count(void);
+uint32_t lj_callxs_auth_aggregate_zero_count(void);
+uint32_t lj_callxs_auth_aggregate_union_count(void);
+uint32_t lj_callxs_auth_aggregate_wide_count(void);
 void lj_callxs_auth_reset(void);
 int32_t lj_callxs_auth_count(void);
 int32_t lj_callxs_auth_once(int32_t);
@@ -264,23 +284,27 @@ assert(lib.lj_callxs_auth_count() == n)
 assert((trace_op_counts()["CALLXS"] or 0) > 0,
        "ITERC frame did not activate production CALLXS")
 
--- Unrelated fixed aggregates exercise the generic sret path. The third type
--- also requires the aligned CNEW/newv allocation path before its payload is
--- passed as the hidden ABI result pointer.
+-- Unrelated fixed aggregates exercise the generic sret path. The matrix also
+-- covers an over-aligned result, a union, a hidden-only zero-argument call and
+-- enough public GPR arguments to spill after the hidden ABI result pointer.
 assert(ffi.sizeof("struct lj_callxs_auth_aggregate_alpha") == 24)
 assert(ffi.sizeof("struct lj_callxs_auth_aggregate_beta") == 24)
 assert(ffi.sizeof("lj_callxs_auth_aggregate_aligned") == 24)
 assert(ffi.alignof("lj_callxs_auth_aggregate_aligned") == 32)
+assert(ffi.sizeof("union lj_callxs_auth_aggregate_union") == 24)
 
 local function reset_aggregate_counts()
   lib.lj_callxs_auth_aggregate_reset()
 end
 jit.off(reset_aggregate_counts, true)
 
-local function assert_aggregate_counts(alpha, beta, aligned)
-  assert(lib.lj_callxs_auth_aggregate_alpha_count() == alpha)
-  assert(lib.lj_callxs_auth_aggregate_beta_count() == beta)
+local function assert_aggregate_counts(alpha, beta, aligned, zero, union, wide)
+  assert(lib.lj_callxs_auth_aggregate_alpha_count() == (alpha or 0))
+  assert(lib.lj_callxs_auth_aggregate_beta_count() == (beta or 0))
   assert(lib.lj_callxs_auth_aggregate_aligned_count() == (aligned or 0))
+  assert(lib.lj_callxs_auth_aggregate_zero_count() == (zero or 0))
+  assert(lib.lj_callxs_auth_aggregate_union_count() == (union or 0))
+  assert(lib.lj_callxs_auth_aggregate_wide_count() == (wide or 0))
 end
 jit.off(assert_aggregate_counts, true)
 
@@ -307,28 +331,60 @@ local function assert_aggregate_aligned(value, seed)
   assert(value.lane[2] == 0xfedcba9876540000ULL + seed)
 end
 
+local function assert_aggregate_zero(value)
+  assert(ffi.istype("struct lj_callxs_auth_aggregate_alpha", value))
+  assert(value.cookie == 0x0102030405060708ULL)
+  assert(value.weight == 6.25)
+  assert(value.code == -90210)
+  assert(value.stamp == 0xc001d00d)
+end
+
+local function assert_aggregate_union(value, seed)
+  assert(ffi.istype("union lj_callxs_auth_aggregate_union", value))
+  assert(value.lane[0] == 0x8899aabbccdd0000ULL + seed)
+  assert(value.lane[1] == 0x3ff4000000000000ULL)
+  assert(value.lane[2] == 0x1020304050600000ULL + seed)
+end
+
+local function assert_aggregate_wide(value, seed)
+  local sum = seed * 8 + 28
+  assert(ffi.istype("struct lj_callxs_auth_aggregate_beta", value))
+  assert(value.debt == -sum)
+  assert(value.stamp == 0x600d0000 + sum)
+  assert(value.ratio == sum * 0.25)
+  assert(value.token == 0xabcdef0000000000ULL + sum)
+end
+
 local function aggregate_pair(nagg)
-  local alpha, beta, aligned
+  local alpha, beta, aligned, zero, union, wide
   for i = 1, nagg do
     alpha = lib.lj_callxs_auth_aggregate_alpha_result(0.5, i)
     beta = lib.lj_callxs_auth_aggregate_beta_result(i, 1.25)
     aligned = lib.lj_callxs_auth_aggregate_aligned_result(i)
+    zero = lib.lj_callxs_auth_aggregate_zero_result()
+    union = lib.lj_callxs_auth_aggregate_union_result(i)
+    wide = lib.lj_callxs_auth_aggregate_wide_result(
+      i, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7)
   end
-  return alpha, beta, aligned
+  return alpha, beta, aligned, zero, union, wide
 end
 
 jit.flush()
 reset_aggregate_counts()
-local aggregate_alpha, aggregate_beta, aggregate_aligned = aggregate_pair(n)
+local aggregate_alpha, aggregate_beta, aggregate_aligned,
+      aggregate_zero, aggregate_union, aggregate_wide = aggregate_pair(n)
 assert_aggregate_alpha(aggregate_alpha, n)
 assert_aggregate_beta(aggregate_beta, n)
 assert_aggregate_aligned(aggregate_aligned, n)
-assert_aggregate_counts(n, n, n)
+assert_aggregate_zero(aggregate_zero)
+assert_aggregate_union(aggregate_union, n)
+assert_aggregate_wide(aggregate_wide, n)
+assert_aggregate_counts(n, n, n, n, n, n)
 local aggregate_counts = trace_op_counts()
-assert((aggregate_counts["XSAVE "] or 0) >= 3,
+assert((aggregate_counts["XSAVE "] or 0) >= 6,
        "aggregate path omitted XSAVE")
-assert((aggregate_counts["CALLXS"] or 0) >= 3,
-       "unrelated and over-aligned aggregate results omitted CALLXS")
+assert((aggregate_counts["CALLXS"] or 0) >= 6,
+       "aggregate ABI edge matrix omitted CALLXS")
 
 local function ignore_aggregate_alpha(nagg)
   for i = 1, nagg do
@@ -428,6 +484,14 @@ local function boxed_pointer(nbox)
   return value
 end
 
+local function boxed_attributed_pointer(nbox)
+  local value
+  for _ = 1, nbox do
+    value = lib.lj_callxs_auth_attributed_ptr_result(p)
+  end
+  return value
+end
+
 local function bool_true(nbox)
   local value
   for _ = 1, nbox do value = lib.lj_callxs_auth_bool(1) end
@@ -452,6 +516,14 @@ local function boxed_enum(nbox)
   return value
 end
 
+local function boxed_attributed_enum(nbox)
+  local value
+  for i = 1, nbox do
+    value = lib.lj_callxs_auth_attributed_enum_result(i)
+  end
+  return value
+end
+
 local function boxed_i64(nbox)
   local value
   for i = 1, nbox do value = lib.lj_callxs_auth_i64_result(i) end
@@ -472,14 +544,56 @@ local function boxed_attributed_u64(nbox)
   return value
 end
 
+local function interpreted_attributed_u64()
+  return lib.lj_callxs_auth_attributed_u64_result(0)
+end
+jit.off(interpreted_attributed_u64, true)
+local interpreted_attributed_type = ffi.typeof(interpreted_attributed_u64())
+
+local function interpreted_attributed_pointer()
+  return lib.lj_callxs_auth_attributed_ptr_result(p)
+end
+jit.off(interpreted_attributed_pointer, true)
+local interpreted_attributed_pointer_type =
+  ffi.typeof(interpreted_attributed_pointer())
+
+local function interpreted_attributed_enum()
+  return lib.lj_callxs_auth_attributed_enum_result(0)
+end
+jit.off(interpreted_attributed_enum, true)
+local interpreted_attributed_enum_type = ffi.typeof(interpreted_attributed_enum())
+
 local function boxed_reference(nbox)
   local value
   for _ = 1, nbox do value = lib.lj_callxs_auth_reference_result() end
   return value
 end
 
+
+local function interpreted_reference()
+  return lib.lj_callxs_auth_reference_result()
+end
+jit.off(interpreted_reference, true)
+local interpreted_reference_type = ffi.typeof(interpreted_reference())
+
+assert(ffi.alignof("lj_callxs_auth_attr_u64_t") == 32)
+assert(ffi.alignof("lj_callxs_auth_attr_ptr_t") == 32)
+assert(ffi.alignof("lj_callxs_auth_attr_enum_t") == 32)
+assert(interpreted_attributed_type == ffi.typeof("uint64_t"))
+assert(interpreted_attributed_pointer_type == ffi.typeof("int32_t *"))
+assert(interpreted_attributed_enum_type ==
+       ffi.typeof("enum lj_callxs_auth_enum"))
+assert(interpreted_reference_type == ffi.typeof("int32_t &"))
+
 for _, case in ipairs({
   { "pointer", boxed_pointer, function(value) assert(value == p) end, true },
+  { "attributed pointer", boxed_attributed_pointer, function(value)
+      assert(ffi.istype("lj_callxs_auth_attr_ptr_t", value))
+      assert(ffi.typeof(value) == interpreted_attributed_pointer_type)
+      assert(ffi.alignof(ffi.typeof(value)) ==
+             ffi.alignof(interpreted_attributed_pointer_type))
+      assert(value == p)
+    end, true },
   { "bool true", bool_true, function(value)
       assert(type(value) == "boolean" and value == true)
     end, true },
@@ -494,6 +608,13 @@ for _, case in ipairs({
       assert(tonumber(value) == 7)
     end,
     true },
+  { "attributed enum", boxed_attributed_enum, function(value)
+      assert(ffi.istype("lj_callxs_auth_attr_enum_t", value))
+      assert(ffi.typeof(value) == interpreted_attributed_enum_type)
+      assert(ffi.alignof(ffi.typeof(value)) ==
+             ffi.alignof(interpreted_attributed_enum_type))
+      assert(tonumber(value) == 7)
+    end, true },
   { "i64", boxed_i64, function(value)
       assert(ffi.istype("int64_t", value))
       assert(value == ffi.new("int64_t", -123456789))
@@ -504,10 +625,15 @@ for _, case in ipairs({
     end, true },
   { "attributed u64", boxed_attributed_u64, function(value)
       assert(ffi.istype("lj_callxs_auth_attr_u64_t", value))
+      assert(ffi.typeof(value) == interpreted_attributed_type,
+             "CALLXS retained an attribute the interpreter strips")
+      assert(ffi.alignof(ffi.typeof(value)) ==
+             ffi.alignof(interpreted_attributed_type))
       assert(value == ffi.new("uint64_t", 0xfedcba9876543210ULL))
     end, true },
   { "reference", boxed_reference, function(value)
       assert(ffi.istype("int32_t &", value))
+      assert(ffi.typeof(value) == interpreted_reference_type)
       assert(tonumber(value) == 0x345678)
     end, true },
 }) do

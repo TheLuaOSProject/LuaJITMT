@@ -14,6 +14,22 @@ static int32_t lj_callxs_flush_release = 1;
 static int32_t lj_callxs_flush_entered;
 static int32_t lj_callxs_flush_entries;
 static int32_t lj_callxs_flush_effects;
+static int32_t lj_callxs_flush_aggregate_calls;
+
+/* Larger than two SysV eightbytes and not scalar-sized on Win64, so this
+** result is returned through the ABI's hidden destination pointer on every
+** supported x64 target. Keep every field independently checkable from Lua.
+*/
+struct lj_callxs_flush_aggregate {
+  uint32_t magic_hi;
+  uint32_t magic_lo;
+  double weight;
+  int32_t code;
+  uint32_t stamp;
+};
+
+typedef char lj_callxs_flush_aggregate_size[
+  sizeof(struct lj_callxs_flush_aggregate) == 24 ? 1 : -1];
 
 static int32_t lj_callxs_flush_load(const int32_t *value)
 {
@@ -39,6 +55,7 @@ void lj_callxs_flush_configure(int32_t gate_value, int32_t block)
   lj_callxs_flush_store(&lj_callxs_flush_entered, 0);
   lj_callxs_flush_store(&lj_callxs_flush_entries, 0);
   lj_callxs_flush_store(&lj_callxs_flush_effects, 0);
+  lj_callxs_flush_store(&lj_callxs_flush_aggregate_calls, 0);
   lj_callxs_flush_store(&lj_callxs_flush_gate_value, gate_value);
   lj_callxs_flush_store(&lj_callxs_flush_release, block ? 0 : 1);
 }
@@ -61,6 +78,11 @@ int32_t lj_callxs_flush_entry_count(void)
 int32_t lj_callxs_flush_effect_count(void)
 {
   return lj_callxs_flush_load(&lj_callxs_flush_effects);
+}
+
+int32_t lj_callxs_flush_aggregate_call_count(void)
+{
+  return lj_callxs_flush_load(&lj_callxs_flush_aggregate_calls);
 }
 
 static void lj_callxs_flush_wait(int32_t value)
@@ -92,4 +114,19 @@ _Bool lj_callxs_flush_bool_maybe_block(int32_t value, int32_t truth)
 {
   lj_callxs_flush_wait(value);
   return truth != 0;
+}
+
+struct lj_callxs_flush_aggregate
+lj_callxs_flush_aggregate_maybe_block(double bias, int32_t value)
+{
+  struct lj_callxs_flush_aggregate result;
+  (void)__atomic_add_fetch(&lj_callxs_flush_aggregate_calls, 1,
+                           __ATOMIC_ACQ_REL);
+  lj_callxs_flush_wait(value);
+  result.magic_hi = UINT32_C(0xfedc0000) + (uint32_t)value;
+  result.magic_lo = UINT32_C(0x76540000) + (uint32_t)value;
+  result.weight = bias + (double)value * 0.25;
+  result.code = value * 3 - 17;
+  result.stamp = UINT32_C(0x13570000) + (uint32_t)value;
+  return result;
 }

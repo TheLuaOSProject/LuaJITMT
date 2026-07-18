@@ -9,19 +9,21 @@ activation gate: these result classes use the same ABI-driven argument
 recorder, native-frame lifecycle, and CALLXS emission as the unboxed scalar
 classes.
 
-Bool remains interpreted because normalization still needs a replay-safe
-post-side-effect contract. Aggregate and multi-register results remain future
-work. No file under `plan/` was changed.
+At this checkpoint bool remained interpreted and aggregate results remained
+future work. Subsequent same-day tranches admitted replay-safe bool and
+ABI-indirect aggregate results; this note is retained as the historical boxed
+admission checkpoint. No file under `plan/` was changed.
 
 ## Recorder protocol
 
 The recorder captures the exact raw child CType ID, immutable return info,
 size, and raw IR type before recording arguments. This is necessary because
 vararg inference may grow and relocate the CType table. Raw-child lookup strips
-attributes exactly as the interpreter does, while preserving reference and enum
-identity. Consequently attributed integer typedefs, explicit C references, and
-enum results retain the correct box type without consulting a stale CType
-pointer.
+outer attributes exactly as the interpreter does, while preserving reference
+and enum identity. Consequently attributed integer, pointer, and enum
+declarations produce the same raw box CType as a cold call; explicit C
+references remain references because `CTF_REF` is not an outer attribute node.
+No classification consults a stale CType pointer.
 
 After all argument guards and conversions, a boxed result follows this order:
 
@@ -56,12 +58,13 @@ managed-edge aggregates without a write-barrier design.
 
 ## Compatibility and cost
 
-The public LuaJIT API and ABI are unchanged. The interpreter-visible values
-keep their exact CType identity, including reference and attributed return
-types. The generated path allocates the result box immediately before the
-foreign call instead of immediately after it; this enables safe rooting without
-adding a signature-specific wrapper or a post-return allocation. The only
-post-return addition is the raw payload store.
+The public LuaJIT API and ABI are unchanged. Generated values keep the
+interpreter's exact resolved CType identity: outer scalar/pointer/enum
+attributes are stripped, enums retain their enum node, and references retain
+their reference node. The generated path allocates the result box immediately
+before the foreign call instead of immediately after it; this enables safe
+rooting without adding a signature-specific wrapper or a post-return
+allocation. The only post-return addition is the raw payload store.
 
 As previously authorized for the beta line, custom `lua_Alloc` remains
 temporarily ignored by the GC2/internal allocator policy. This admission uses
@@ -72,8 +75,9 @@ silently treated as complete.
 ## Evidence
 
 - The authentic Lua fixture mechanically requires CALLXS for pointer,
-  reference, enum, i64, u64, high-bit u64, and an attributed u64 typedef; bool
-  mechanically remains interpreted.
+  reference, enum, i64, u64, high-bit u64, and attributed integer/pointer/enum
+  declarations. JIT-disabled baselines require exact `ffi.typeof()` and
+  `ffi.alignof()` equality after outer attributes are stripped.
 - The generated ABI catalogue requires the generic path for all 320 admitted
   rows: 211 unboxed scalar rows and 109 newly admitted boxed rows.
 - IR inspection proves one exact `IR_CNEW` root, inclusion only in the XSAVE
@@ -99,12 +103,13 @@ silently treated as complete.
 Clean default, `LUAJIT_DISABLE_JIT`, and `LUAJIT_DISABLE_FFI` builds and runtime
 smokes pass independently of the sanitizer builds.
 
-## Next work
+## Next work at this checkpoint
 
-The immediate FFI/JIT follow-ups are replay-safe bool results, broader
-protected/continuation and root/tail trace shapes, and aggregate or
-multi-register ABI results. These remain generic ABI-lowering problems; they
-must not reintroduce explicit C-signature matching. Cross-platform deep
-validation and performance work remain b1.2.1 tasks, with the temporary custom
-allocator exception and the separate Lua `atomic` library scheduled after the
-core correctness tranches.
+Replay-safe bool and ABI-indirect aggregate results were the immediate
+follow-ups and are now covered by their later notes. Broader
+protected/continuation and root/tail trace shapes, direct/multi-register
+aggregate ABI results, cross-platform deep validation, and performance work
+remain b1.2.1 tasks. They must remain generic ABI-lowering work and must not
+reintroduce explicit C-signature matching. The temporary custom allocator
+exception and separate Lua `atomic` library remain scheduled after the core
+correctness tranches.

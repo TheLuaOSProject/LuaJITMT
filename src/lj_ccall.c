@@ -1135,6 +1135,8 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
   CTypeID fid;
   CTInfo info = ctype_info_acq(ct);  /* Vararg inference may invalidate ct. */
   CType ctrsnap, *ctr;
+  CTInfo result_info;
+  CTSize result_size;
   MSize maxgpr, ngpr = 0, nsp = 0, narg;
 #if CCALL_NARG_FPR
   MSize nfpr = 0;
@@ -1162,17 +1164,21 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 #endif
 
   /* Perform required setup for some result types. */
-  ctr = ccall_rawchild_wait(L, cts, ct, NULL, &ctrsnap);
+  if (lj_ctype_info_wait(L, cts, ctype_cid(info), &result_info,
+			 &result_size, NULL, &ctrsnap) <= 0)
+    lj_err_caller(L, LJ_ERR_FFI_INVTYPE);
+  ctr = &ctrsnap;
   {
     CTInfo rinfo = ctype_info_acq(ctr);
-    CTSize rsize = ctype_size_acq(ctr);
+    CTSize rsize = result_size;
     if (ctype_isvector(rinfo)) {
       if (!(CCALL_VECTOR_REG && (rsize == 8 || rsize == 16)))
 	goto err_nyi;
     } else if (ctype_iscomplex(rinfo) || ctype_isstruct(rinfo)) {
       /* Preallocate cdata object and anchor it after arguments. */
       CTSize sz = rsize;
-      GCcdata *cd = lj_cdata_new_l(L, cts, ctype_cid(info), sz);
+      GCcdata *cd = lj_cdata_newx_l(L, cts, ctype_cid(info), sz,
+				     result_info);
       void *dp = cdataptr(cd);
       ccall_push_cdata_root(L, cd);
       *has_result_root = 1;

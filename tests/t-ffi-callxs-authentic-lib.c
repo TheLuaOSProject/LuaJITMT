@@ -10,6 +10,9 @@ static int32_t lj_callxs_auth_reference_value = 0x345678;
 static uint32_t lj_callxs_auth_aggregate_alpha_counter;
 static uint32_t lj_callxs_auth_aggregate_beta_counter;
 static uint32_t lj_callxs_auth_aggregate_aligned_counter;
+static uint32_t lj_callxs_auth_aggregate_zero_counter;
+static uint32_t lj_callxs_auth_aggregate_union_counter;
+static uint32_t lj_callxs_auth_aggregate_wide_counter;
 
 /* These deliberately unrelated 24-byte return types both use the fixed-size
 ** aggregate sret ABI on the supported x64 targets. Their distinct field
@@ -33,6 +36,15 @@ typedef struct {
   uint64_t lane[3];
 } lj_callxs_auth_aggregate_aligned __attribute__((aligned(32)));
 
+union lj_callxs_auth_aggregate_union {
+  uint64_t lane[3];
+  struct {
+    int64_t signed_lane;
+    double ratio;
+    uint64_t token;
+  } fields;
+};
+
 typedef char lj_callxs_auth_aggregate_alpha_size[
   sizeof(struct lj_callxs_auth_aggregate_alpha) == 24 ? 1 : -1];
 typedef char lj_callxs_auth_aggregate_beta_size[
@@ -41,6 +53,8 @@ typedef char lj_callxs_auth_aggregate_aligned_size[
   sizeof(lj_callxs_auth_aggregate_aligned) == 24 ? 1 : -1];
 typedef char lj_callxs_auth_aggregate_aligned_align[
   __alignof__(lj_callxs_auth_aggregate_aligned) == 32 ? 1 : -1];
+typedef char lj_callxs_auth_aggregate_union_size[
+  sizeof(union lj_callxs_auth_aggregate_union) == 24 ? 1 : -1];
 
 int32_t lj_callxs_auth_add(int32_t a, int32_t b)
 {
@@ -124,6 +138,11 @@ int32_t *lj_callxs_auth_ptr(int32_t *p)
   return p;
 }
 
+int32_t *lj_callxs_auth_attributed_ptr_result(int32_t *p)
+{
+  return p;
+}
+
 _Bool lj_callxs_auth_bool(int32_t value)
 {
   lj_callxs_auth_counter++;
@@ -152,6 +171,13 @@ enum lj_callxs_auth_enum {
 };
 
 enum lj_callxs_auth_enum lj_callxs_auth_enum_result(int32_t value)
+{
+  (void)value;
+  return LJ_CALLXS_AUTH_ENUM_SEVEN;
+}
+
+enum lj_callxs_auth_enum
+lj_callxs_auth_attributed_enum_result(int32_t value)
 {
   (void)value;
   return LJ_CALLXS_AUTH_ENUM_SEVEN;
@@ -221,11 +247,55 @@ lj_callxs_auth_aggregate_aligned_result(uint64_t seed)
   return result;
 }
 
+struct lj_callxs_auth_aggregate_alpha
+lj_callxs_auth_aggregate_zero_result(void)
+{
+  struct lj_callxs_auth_aggregate_alpha result;
+  lj_callxs_auth_counter++;
+  lj_callxs_auth_aggregate_zero_counter++;
+  result.cookie = UINT64_C(0x0102030405060708);
+  result.weight = 6.25;
+  result.code = INT32_C(-90210);
+  result.stamp = UINT32_C(0xc001d00d);
+  return result;
+}
+
+union lj_callxs_auth_aggregate_union
+lj_callxs_auth_aggregate_union_result(uint64_t seed)
+{
+  union lj_callxs_auth_aggregate_union result;
+  lj_callxs_auth_counter++;
+  lj_callxs_auth_aggregate_union_counter++;
+  result.lane[0] = UINT64_C(0x8899aabbccdd0000) + seed;
+  result.lane[1] = UINT64_C(0x3ff4000000000000);
+  result.lane[2] = UINT64_C(0x1020304050600000) + seed;
+  return result;
+}
+
+struct lj_callxs_auth_aggregate_beta
+lj_callxs_auth_aggregate_wide_result(uint64_t a, uint64_t b, uint64_t c,
+				     uint64_t d, uint64_t e, uint64_t f,
+				     uint64_t g, uint64_t h)
+{
+  struct lj_callxs_auth_aggregate_beta result;
+  uint64_t sum = a + b + c + d + e + f + g + h;
+  lj_callxs_auth_counter++;
+  lj_callxs_auth_aggregate_wide_counter++;
+  result.debt = -(int64_t)sum;
+  result.stamp = UINT32_C(0x600d0000) + (uint32_t)sum;
+  result.ratio = (float)sum * 0.25f;
+  result.token = UINT64_C(0xabcdef0000000000) + sum;
+  return result;
+}
+
 void lj_callxs_auth_aggregate_reset(void)
 {
   lj_callxs_auth_aggregate_alpha_counter = 0;
   lj_callxs_auth_aggregate_beta_counter = 0;
   lj_callxs_auth_aggregate_aligned_counter = 0;
+  lj_callxs_auth_aggregate_zero_counter = 0;
+  lj_callxs_auth_aggregate_union_counter = 0;
+  lj_callxs_auth_aggregate_wide_counter = 0;
 }
 
 uint32_t lj_callxs_auth_aggregate_alpha_count(void)
@@ -241,6 +311,21 @@ uint32_t lj_callxs_auth_aggregate_beta_count(void)
 uint32_t lj_callxs_auth_aggregate_aligned_count(void)
 {
   return lj_callxs_auth_aggregate_aligned_counter;
+}
+
+uint32_t lj_callxs_auth_aggregate_zero_count(void)
+{
+  return lj_callxs_auth_aggregate_zero_counter;
+}
+
+uint32_t lj_callxs_auth_aggregate_union_count(void)
+{
+  return lj_callxs_auth_aggregate_union_counter;
+}
+
+uint32_t lj_callxs_auth_aggregate_wide_count(void)
+{
+  return lj_callxs_auth_aggregate_wide_counter;
 }
 
 void lj_callxs_auth_reset(void)

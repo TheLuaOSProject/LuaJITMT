@@ -93,6 +93,18 @@ operand. The backend therefore uses `lj_cdata_newv()` and returns an interior
 GCcdata header whose payload satisfies the declared alignment. Ordinary
 aggregates retain the cheaper fixed allocation path.
 
+The interpreter now uses the same combined result info when it preallocates
+aggregate or complex return storage. Previously it retained the declared CType
+ID but called the ordinary allocator, so a cold over-aligned sret call could
+hand native code an under-aligned result buffer. This is a common FFI
+correctness fix rather than a JIT-only semantic change.
+
+Non-aggregate boxed results deliberately remain different: the interpreter
+strips outer attributes from integer, pointer, and enum results before boxing.
+CALLXS therefore allocates those results with the resolved raw CType ID too.
+Keeping the declared ID for every rooted result would make interpreter and JIT
+`ffi.typeof()` disagree and could claim alignment the fixed box did not have.
+
 ## Compatibility and cost
 
 Lua receives the same by-value cdata type and field bytes as the interpreter.
@@ -114,10 +126,13 @@ unchanged.
 The authentic fixture exports two unrelated 24-byte struct result types with
 different field layouts and scalar argument mixtures, plus an exact 24-byte,
 32-byte-aligned result which forces the interior aligned-cdata allocation
-path. Tests require exact CType identity, size/alignment, every field value,
-exact native effect counts, and production `XSAVE`/`CALLXS` IR for all three
-functions. Separate ignored, excess-fixed, open, CALLM, CALLT, and CALLMT cases
-cover the admitted caller/result modes.
+path. A zero-public-argument result proves the hidden pointer can be the whole
+argument tree, a union proves the admission is not struct-tag-specific, and an
+eight-GPR input forces public arguments onto the stack after the hidden ABI
+slot. Tests require exact CType identity, size/alignment, every field value,
+exact native effect counts, and production `XSAVE`/`CALLXS` IR. Separate
+ignored, excess-fixed, open, CALLM, CALLT, and CALLMT cases cover the admitted
+caller/result modes.
 
 The C IR inspector distinguishes scalar boxed results (one raw `XSTORE`) from
 indirect aggregate results (`IRT_NIL`, no `XSTORE`, and exactly one payload
@@ -126,6 +141,11 @@ over-aligned trace's `CNEW` to carry the exact 24-byte size operand and checks
 the returned payload address modulo 32. Forced POSTCALL, deliberate entry
 rejection, and fresh STOPREQ cases verify exact restoration, no completed-call
 replay, and empty native-frame/trace-pin state.
+
+A blocked generated sret call is also held ACTIVE while a remote thread
+completes a full GC and global `jit.flush()`. The result box is reachable only
+through the certified native frame during that interval; exact counters remain
+at eight before release and prove the completed call is never replayed.
 
 Focused validation passed the complete production CALLXS lifecycle suite, the
 full generic scalar/boxed ABI matrix, target-runtime Clang ASan, the documented

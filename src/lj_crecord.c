@@ -2364,7 +2364,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     TRef args, entered, func, callfunc, tr, result_box, result_payload;
     CType ctrsnap;
     CType *ctr;
-    CTypeID result_id;
+    CTypeID result_id, raw_result_id, result_box_id;
     CTInfo ctr_info, result_info;
     CTSize result_size;
     MSize nargs;
@@ -2391,15 +2391,17 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     }
 
     func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-    /* Preserve the declared return CType ID on the cdata, exactly like the
-    ** interpreter. Classification uses the resolved raw child snapshot. */
+    /* Aggregates retain the declared return CType ID because the interpreter
+    ** preallocates their storage from the function child. Scalar, pointer and
+    ** enum conversion strips outer attributes, so their boxes must use the raw
+    ** ID to remain exactly interpreter-compatible. */
     result_id = ctype_cid(info);
     /* Resolve the declared result once, retaining both the raw layout child
     ** and the accumulated attributes. In particular, an outer CTA_ALIGN must
     ** survive resolution so CNEW selects lj_cdata_newv before its payload
     ** is exposed as the ABI sret pointer. */
     if (!crec_direct_ctype_info(J, cts, result_id, &result_info, &result_size,
-				NULL, &ctrsnap))
+				&raw_result_id, &ctrsnap))
       lj_trace_err(J, LJ_TRERR_BADTYPE);
     ctr = &ctrsnap;
     ctr_info = ctype_info_acq(ctr);
@@ -2407,6 +2409,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     ** result classes must use the recorder's snapshot/retry reader contract. */
     t = crec_ct2irt_snapshot(J, cts, ctr);
     indirect_result = crec_call_indirect_struct_result(ctr_info, result_size);
+    result_box_id = indirect_result ? result_id : raw_result_id;
     if (ctype_isvoid(ctr_info)) {
       t = IRT_NIL;
       rd->nres = 0;
@@ -2456,7 +2459,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       /* Over-aligned sret storage must take the CNEW/newv path. The returned
       ** GCcdata is an interior aligned header, so payload is still cd+1. */
       result_box = emitir(IRTG(IR_CNEW, IRT_CDATA),
-			  lj_ir_kint(J, result_id),
+			  lj_ir_kint(J, result_box_id),
 			  indirect_result &&
 			    ctype_align(result_info) > CT_MEMALIGN ?
 			    lj_ir_kint(J, result_size) : TREF_NIL);
