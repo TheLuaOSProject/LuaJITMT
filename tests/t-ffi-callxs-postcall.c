@@ -86,6 +86,8 @@ typedef struct EnterArgShape {
   unsigned leaves;
   unsigned trace_constants;
   unsigned null_result_roots;
+  unsigned boxed_result_roots;
+  IRRef boxed_result_root;
 } EnterArgShape;
 
 static void inspect_enter_args(IRIns *ir, IRRef ref, GCtrace *T,
@@ -102,6 +104,24 @@ static void inspect_enter_args(IRIns *ir, IRRef ref, GCtrace *T,
     shape->trace_constants++;
   if (ins->o == IR_KNULL && irt_type(ins->t) == IRT_CDATA)
     shape->null_result_roots++;
+  if (ins->o == IR_CNEW && irt_type(ins->t) == IRT_CDATA) {
+    shape->boxed_result_roots++;
+    shape->boxed_result_root = ref;
+  }
+}
+
+static unsigned snapshot_ref_count(GCtrace *T, const SnapShot *snap,
+				   IRRef wanted)
+{
+  SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
+  MSize i, nent = snap_nent_acq(snap);
+  unsigned count = 0;
+  for (i = 0; i < nent; i++) {
+    SnapEntry entry = snapentry_acq(&map[i]);
+    if (!(entry & SNAP_FRAME) && snap_ref(entry) == wanted)
+      count++;
+  }
+  return count;
 }
 
 static void assert_exact_enter_constant(GCtrace *T)
@@ -119,7 +139,8 @@ static void assert_exact_enter_constant(GCtrace *T)
       inspect_enter_args(ir, ir[ref].op1, T, &shape);
       assert(shape.leaves == 3);
       assert(shape.trace_constants == 1);
-      assert(shape.null_result_roots == 1);
+      assert(shape.null_result_roots + shape.boxed_result_roots == 1);
+      assert(shape.boxed_result_roots <= 1);
       found++;
     }
   }
@@ -146,6 +167,7 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
     if (ir[ref].o == IR_CALLXS) {
       IRIns *preguard;
       IRRef enter, leave, scan;
+      EnterArgShape shape;
       int saw_xsave = 0;
       assert(ref > REF_FIRST);
       preguard = &ir[ref - 1];
@@ -156,12 +178,19 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
 	      preguard->op1 : preguard->op2;
       assert(enter >= REF_FIRST && ir[enter].o == IR_CALLS &&
 	     ir[enter].op2 == IRCALL_lj_ffi_native_trace_enter);
+      memset(&shape, 0, sizeof(shape));
+      inspect_enter_args(ir, ir[enter].op1, T, &shape);
+      assert(shape.leaves == 3 && shape.trace_constants == 1);
+      assert(shape.null_result_roots + shape.boxed_result_roots == 1);
       for (scan = enter; scan > REF_FIRST; ) {
 	IRIns *prev = &ir[--scan];
 	if (prev->o == IR_XSAVE) {
 	  for (sn = 0; sn < nsnap; sn++) {
 	    if (snap_ref_acq(&snap[sn]) == scan) {
 	      assert(snap_count_acq(&snap[sn]) == SNAPCOUNT_DONE);
+	      if (shape.boxed_result_roots)
+		assert(snapshot_ref_count(T, &snap[sn],
+			shape.boxed_result_root) == 1);
 	      prefound++;
 	    }
 	  }
@@ -171,11 +200,50 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
 	assert(prev->o != IR_CALLXS);
       }
       assert(saw_xsave);
-      /* Integer-width and float/u32 result normalization is deliberately pure
-      ** and nonthrowing. It may insert CONV between CALLXS and native leave;
-      ** no other operation may enter that post-side-effect window. */
+      if (shape.boxed_result_roots) {
+	unsigned alloc_snapshots = 0, replay_snapshots = 0;
+	for (sn = 0; sn < nsnap; sn++) {
+	  IRRef snapref = snap_ref_acq(&snap[sn]);
+	  if (snapref == shape.boxed_result_root) {
+	    assert(snap_count_acq(&snap[sn]) == SNAPCOUNT_DONE);
+	    assert(snapshot_ref_count(T, &snap[sn],
+		  shape.boxed_result_root) == 0);
+	    alloc_snapshots++;
+	  }
+	  /* lj_ir_call() emits the three-argument CARG tree before enter, so the
+	  ** explicit replay snapshot names the first pure CARG in this interval. */
+	  if (snapref > scan && snapref <= enter) {
+	    assert(snap_count_acq(&snap[sn]) == SNAPCOUNT_DONE);
+	    assert(snapshot_ref_count(T, &snap[sn],
+		  shape.boxed_result_root) == 0);
+	    replay_snapshots++;
+	  }
+	}
+	assert(alloc_snapshots == 1);
+	assert(replay_snapshots == 1);
+      }
+      /* Boxed results perform exactly one raw store into the preallocated root.
+      ** Unboxed integer-width and float/u32 normalization may insert pure CONV
+      ** instructions. No guard, allocation or helper call may enter this
+      ** post-side-effect window. */
       leave = ref + 1;
+      if (leave < nins && ir[leave].o == IR_XSTORE) {
+	IRIns *store = &ir[leave];
+	IRIns *addr;
+	assert(shape.boxed_result_roots == 1);
+	assert(!irt_isguard(store->t));
+	assert(store->op2 == ref);
+	assert(irt_type(store->t) == irt_type(ir[ref].t));
+	addr = &ir[store->op1];
+	assert(addr->o == IR_ADD);
+	assert(addr->op1 == shape.boxed_result_root ||
+	       addr->op2 == shape.boxed_result_root);
+	leave++;
+      } else {
+	assert(shape.null_result_roots == 1);
+      }
       while (leave < nins && ir[leave].o == IR_CONV) {
+	assert(shape.boxed_result_roots == 0);
 	assert(!irt_isguard(ir[leave].t));
 	leave++;
       }
@@ -426,6 +494,7 @@ int main(void)
     "uint8_t lj_callxs_auth_u8(int32_t);\n"
     "int16_t lj_callxs_auth_i16(int32_t);\n"
     "uint16_t lj_callxs_auth_u16(int32_t);\n"
+    "uint64_t lj_callxs_auth_u64_result(int32_t);\n"
     "void lj_callxs_auth_store(int32_t *, int32_t, int32_t);\n"
     "]]\n"
     "local lib = ffi.load(assert(os.getenv('LJ_M7_FFI_CALLXS_SO')))\n"
@@ -520,6 +589,15 @@ int main(void)
     "  local sum = 0\n"
     "  for i = 1, n do sum = sum + lib.lj_callxs_auth_u16(i) end\n"
     "  assert(sum == 54321*n)\n"
+    "  return n\n"
+    "end\n"
+    "local boxed_u64_expected = ffi.new('uint64_t', 4000000000)\n"
+    "function _G.__callxs_postcall_u64_run(n)\n"
+    "  local value\n"
+    "  for i = 1, n do\n"
+    "    value = lib.lj_callxs_auth_u64_result(i)\n"
+    "    assert(value == boxed_u64_expected)\n"
+    "  end\n"
     "  return n\n"
     "end\n"
     "function _G.__callxs_postcall_void_run(n)\n"
@@ -622,6 +700,26 @@ int main(void)
   lua_pushinteger(L, 20);
   assert(lua_pcall(L, 1, 1, 0) == 0);
   assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
+  lua_pop(L, 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  lj_tg_in_native_rel(tg, 0);
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_calls == 0);
+  ljt_lua_dostring(L,
+    "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 20)\n");
+
+  /* Repeat deliberate entry rejection with a preallocated boxed result. The
+  ** replay snapshot must omit the hidden root slot, re-execute the original
+  ** call exactly once per iteration, and preserve the exact u64 value checked
+  ** inside the Lua runner. */
+  ljt_lua_dostring(L, "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  finish_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(observe_unexpected_finish);
+  lj_tg_in_native_rel(tg, 1);
+  lua_getglobal(L, "__callxs_postcall_u64_run");
+  lua_pushinteger(L, 20);
+  assert(lua_pcall(L, 1, 1, 0) == 0);
+  assert(lua_tointeger(L, -1) == 20);
   lua_pop(L, 1);
   assert(lj_tg_in_native_acq(tg) == 1);
   lj_tg_in_native_rel(tg, 0);
@@ -778,9 +876,9 @@ int main(void)
     "__callxs_postcall_callm_once",
     "__callxs_postcall_callm_once", BC_CALLM, 9, 1);
 
-  /* A forced epoch exit restores each admitted scalar normalization from the
-  ** post-call snapshot. Exact counters prove no completed foreign call is
-  ** replayed, while each Lua runner validates its restored value or effect. */
+  /* A forced epoch exit restores each admitted scalar normalization or boxed
+  ** result from the post-call snapshot. Exact counters prove no completed
+  ** foreign call is replayed, while each runner validates its value/effect. */
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_u32_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_double_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_float_run");
@@ -788,6 +886,7 @@ int main(void)
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_u8_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_i16_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_u16_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u64_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_void_run");
 
   assert(lj_ffi_native_frame_depth_acq(tg) == old_depth);

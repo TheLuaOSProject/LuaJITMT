@@ -55,7 +55,7 @@ local function assert_generic_ccall_source(t)
   assert(plain_count(recorder, "static TRef crec_call_args(") == 1,
          "generic C-call argument recorder is not unique")
   assert(plain_count(recorder, "IRT(IR_CALLXS, t)") == 1,
-         "generic scalar CALLXS emission is not unique")
+         "generic CALLXS emission is not unique")
 end
 
 local m7_cases = {
@@ -98,7 +98,7 @@ end
 return function(add)
   add({
     name = "m7_ffi_callxs_authentic",
-    description = "production generic scalar CALLXS lifecycle and remote flush",
+    description = "production generic CALLXS boxed/scalar lifecycle",
     run = function(t)
       local flags = table.concat({
         "-DLUA_USE_ASSERT",
@@ -134,13 +134,13 @@ return function(add)
           timeout = "30s"
         })
       end)
-      print("M7 production generic scalar CALLXS lifecycle passed")
+      print("M7 production generic CALLXS lifecycle passed")
     end
   })
 
   add({
     name = "m7_ffi_ccall_native",
-    description = "FFI native state and production scalar CALLXS",
+    description = "FFI native state and production generic CALLXS",
     run = function(t)
       local root_so, struct_so, jit_so
       assert_generic_ccall_source(t)
@@ -164,8 +164,8 @@ return function(add)
                         timeout = "30s"
                       })
       -- The focused production fixture mechanically requires XSAVE/CALLXS.
-      -- The larger ABI catalogue below remains a result/side-effect oracle
-      -- while boxed result classes are admitted in a following tranche.
+      -- The larger ABI catalogue below proves the same generic recorder across
+      -- the complete admitted scalar and boxed result matrix.
       run_luajit_script(t, "t-ffi-callxs-production.lua")
       run_luajit_script(t, "t-ffi-ccall-temp-roots.lua", nil, {
         env = { LJ_M7_FFI_CCALL_ROOT_SO = root_so },
@@ -184,9 +184,8 @@ return function(add)
         timeout = "20s"
       })
       -- Keep every legacy ABI/result assertion live. No production wrapper or
-      -- signature dispatcher backs these calls. Dedicated fixtures prove the
-      -- currently admitted scalar classes; zero-count boxed cases use a
-      -- positive sentinel here until pre-rooted result handoff lands.
+      -- signature dispatcher backs these calls; all admitted scalar and boxed
+      -- rows must execute the one generic CALLXS lifecycle.
       run_luajit_script(t, "t-ffi-ccall-native.lua", nil, {
         env = {
           LJ_M7_FFI_CCALL_JIT_SO = jit_so,

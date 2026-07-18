@@ -2,10 +2,9 @@ local ffi = require"ffi"
 local th = require"threading"
 local trace_count = require"jit_harness".trace_count
 
--- Preserve the generated ABI/result matrix while production scalar CALLXS is
--- enabled incrementally. Each generated row explicitly names its result class
--- and must prove the corresponding CALLXS/fallback boundary, so an unrelated
--- prefix trace cannot conceal a recorder or lowering regression.
+-- Preserve the generated ABI/result matrix while generic CALLXS expands. Each
+-- generated row explicitly names its result class and must prove CALLXS, so an
+-- unrelated prefix trace cannot conceal a recorder or lowering regression.
 function callxs_count()
   local bit = require"bit"
   local util = require"jit.util"
@@ -40,12 +39,8 @@ function expected_trace_count(result_class)
   if mixed then
     assert(result_class == "scalar" or result_class == "boxed",
            "missing explicit FFI result-class oracle")
-    if result_class == "scalar" then
-      assert(nx > 0, "admitted scalar result omitted production CALLXS")
-    else
-      assert(nx == 0, "boxed result crossed the pre-rooting gate")
-      return 1  -- Retain the historical positive assertion below each row.
-    end
+    assert(nx > 0, "admitted " .. result_class ..
+                   " result omitted production CALLXS")
   end
   return n
 end

@@ -16,6 +16,13 @@ int lj_m7_ccall_jit_sleep_i32(int ms)
   return ms + 7;
 }
 
+uint64_t lj_m7_ccall_jit_sleep_u64(int ms)
+{
+  if (ms > 0)
+    sleep_ns((long)ms * 1000000L);
+  return UINT64_C(0x100000000) + (uint64_t)(uint32_t)ms + UINT64_C(7);
+}
+
 int lj_m7_ccall_jit_add2_i32(int a, int b)
 {
   return a + b + 3;

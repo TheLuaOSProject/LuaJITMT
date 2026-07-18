@@ -63,7 +63,7 @@ int32_t lj_callxs_flush_effect_count(void)
   return lj_callxs_flush_load(&lj_callxs_flush_effects);
 }
 
-int32_t lj_callxs_flush_maybe_block(int32_t value)
+static void lj_callxs_flush_wait(int32_t value)
 {
   if (value == lj_callxs_flush_load(&lj_callxs_flush_gate_value)) {
     (void)__atomic_add_fetch(&lj_callxs_flush_entries, 1,
@@ -74,5 +74,16 @@ int32_t lj_callxs_flush_maybe_block(int32_t value)
     (void)__atomic_add_fetch(&lj_callxs_flush_effects, 1,
                              __ATOMIC_ACQ_REL);
   }
+}
+
+int32_t lj_callxs_flush_maybe_block(int32_t value)
+{
+  lj_callxs_flush_wait(value);
   return value + 9;
+}
+
+int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *ptr, int32_t value)
+{
+  lj_callxs_flush_wait(value);
+  return ptr;
 }

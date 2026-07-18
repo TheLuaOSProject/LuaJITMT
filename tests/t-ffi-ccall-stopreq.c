@@ -112,16 +112,17 @@ static void run_generated_fresh_stopreq_interrupt(lua_State *L, global_State *g,
     "local bit = require('bit')\n"
     "local util = require('jit.util')\n"
     "local lib = assert(lj_m7_ccall_jit_lib)\n"
-    "local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32\n"
+    "local sleep_u64 = lib.lj_m7_ccall_jit_sleep_u64\n"
     "function lj_m7_generated_sleep(n, ms)\n"
     "  local r = 0\n"
-    "  for _ = 1, n do r = sleep_i32(ms) end\n"
+    "  for _ = 1, n do r = sleep_u64(ms) end\n"
     "  return r\n"
     "end\n"
     "jit.on()\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
-    "assert(lj_m7_generated_sleep(80, 0) == 7)\n"
+    "assert(lj_m7_generated_sleep(80, 0) ==\n"
+    "       ffi.new('uint64_t', 0x100000007ULL))\n"
     "local callxs, xsave = 0, 0\n"
     "for tr = 1, 128 do\n"
     "  local info = util.traceinfo(tr)\n"
@@ -137,7 +138,7 @@ static void run_generated_fresh_stopreq_interrupt(lua_State *L, global_State *g,
     "  end\n"
     "end\n"
     "assert(callxs > 0 and xsave > 0,\n"
-    "       'scalar FFI C call omitted production XSAVE/CALLXS')\n");
+    "       'boxed FFI C call omitted production XSAVE/CALLXS')\n");
 
   ctx.g = g;
   ctx.tg = tg;
@@ -189,6 +190,7 @@ int main(void)
     "int getpid(void);\n"
     "int poll(void *fds, unsigned long nfds, int timeout);\n"
     "int lj_m7_ccall_jit_sleep_i32(int);\n"
+    "uint64_t lj_m7_ccall_jit_sleep_u64(int);\n"
     "]]\n");
   if (getenv("LJ_M7_FFI_CCALL_JIT_SO") != NULL) {
     ljt_lua_dostring(L,

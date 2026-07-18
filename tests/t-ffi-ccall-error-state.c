@@ -283,9 +283,9 @@ int main(void)
       getenv("LJ_FFI_ERRSTATE_ALLOC_STRESS") == NULL)
     goto done;
 
-  /* Boxed C-call results remain interpreted, while the nonallocating i32
-  ** result may now cross production CALLXS before a following aligned/VLA
-  ** constructor. Exercise both sides of that result-class boundary. */
+  /* Boxed C-call results allocate before native entry, then perform only the
+  ** raw result store before leave. The nonallocating i32 result may cross
+  ** CALLXS before a following aligned/VLA constructor. Exercise both orders. */
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
 #endif
@@ -305,14 +305,17 @@ int main(void)
     "  end\n"
     "end\n"
     "lj_probe_boxed_run(200)\n"
-    "assert(lj_probe_callxs_count() == 0,\n"
-    "       'boxed u64 result crossed the pre-rooting gate')\n");
+    "assert(lj_probe_callxs_count() > 0,\n"
+    "       'boxed u64 result omitted pre-rooted CALLXS')\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
 #endif
   ljt_lua_dostring(L, "lj_probe_boxed_run(4000)\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  require_armed_alloc(&alloc, "interpreted boxed CNEWI result", 0);
+  /* The result box is allocated before probe_u64 arms the observer. There may
+  ** be no generated or interpreter allocation between foreign return and the
+  ** explicit disarm. */
+  assert(alloc.armed_calls == 0);
   assert(alloc.armed_jit_calls == 0);
 
   reset_armed_allocs(&alloc);

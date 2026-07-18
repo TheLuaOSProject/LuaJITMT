@@ -2290,28 +2290,6 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
   return tr;
 }
 
-/* Create a caller snapshot which simulates a false boolean result. */
-static void crec_snap_caller(jit_State *J)
-{
-  lua_State *L = J->L;
-  TValue *base = L->base, *top = L->top;
-  const BCIns *pc = J->pc;
-  TRef ftr = J->base[-1-LJ_FR2];
-  ptrdiff_t delta;
-  if (!frame_islua(base-1) || J->framedepth <= 0)
-    lj_trace_err(J, LJ_TRERR_NYICALL);
-  J->pc = frame_pc(base-1); delta = 1+LJ_FR2+bc_a(J->pc[-1]);
-  L->top = base; L->base = base - delta;
-  J->base[-1-LJ_FR2] = TREF_FALSE;
-  J->base -= delta; J->baseslot -= (BCReg)delta;
-  J->maxslot = (BCReg)delta-LJ_FR2; J->framedepth--;
-  lj_snap_add(J);
-  L->base = base; L->top = top;
-  J->framedepth++; J->maxslot = 1;
-  J->base += delta; J->baseslot += (BCReg)delta;
-  J->base[-1-LJ_FR2] = ftr; J->pc = pc;
-}
-
 /* Obtain the one exact-body placeholder patched to J->curfinal by every
 ** assembly attempt. A stitched trace may already own the same placeholder. */
 static TRef crec_call_trace(jit_State *J)
@@ -2327,7 +2305,7 @@ static TRef crec_call_trace(jit_State *J)
   }
 }
 
-/* Record a function call through the single generic scalar CALLXS path. */
+/* Record a function call through the single generic CALLXS path. */
 static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
@@ -2344,11 +2322,14 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     info = ctype_info_acq(ct);
   }
   if (ctype_isfunc(info)) {
-    TRef args, entered, func, callfunc, tr;
+    TRef args, entered, func, callfunc, tr, result_box, result_payload;
     CType ctrsnap;
     CType *ctr;
+    CTypeID result_id;
     CTInfo ctr_info;
+    CTSize result_size;
     IRType t;
+    int boxed_result;
 
 #if !LJ_TARGET_X64
     /* Only the x64 CALLXS/native-frame lowering has the production lifecycle
@@ -2370,8 +2351,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     }
 
     func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-    ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+    ctr = crec_ctype_rawchildid(J, cts, ct, &result_id, &ctrsnap);
     ctr_info = ctype_info_acq(ctr);
+    result_size = ctype_size_acq(ctr);
     /* Enum children live in the relocatable CType table too. Even rejected
     ** result classes must use the recorder's snapshot/retry reader contract. */
     t = crec_ct2irt_snapshot(J, cts, ctr);
@@ -2383,13 +2365,13 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       lj_trace_err(J, LJ_TRERR_NYICALL);
     }
 
-    /* After CALLXS, no guard, allocation or throwing result normalization may
-    ** precede the caller snapshot and native leave. Boxed pointer/enum/i64
-    ** results and boolean specialization stay interpreted until their result
-    ** handoff is rooted and covered by authentic unwind tests. */
-    if (ctype_isbool(ctr_info) || t == IRT_PTR ||
-	(LJ_64 && t == IRT_P32) || t == IRT_I64 || t == IRT_U64 ||
-	ctype_isenum(ctr_info))
+    boxed_result = t == IRT_PTR || (LJ_64 && t == IRT_P32) ||
+	 t == IRT_I64 || t == IRT_U64 || ctype_isenum(ctr_info);
+    /* Boolean specialization still needs a post-side-effect guard contract.
+    ** All other scalar boxes use preallocated exact-CType storage below. */
+    if (ctype_isbool(ctr_info))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+    if (boxed_result && result_size != lj_ir_type_size[t])
       lj_trace_err(J, LJ_TRERR_NYICALL);
 
     args = crec_call_args(J, rd, cts, ct);
@@ -2401,37 +2383,52 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 	)
       callfunc = emitir(IRT(IR_CARG, IRT_NIL), callfunc, lj_ir_kint(J, id));
 
+    result_box = TREF_NIL;
+    result_payload = TREF_NIL;
+    if (boxed_result) {
+      BCReg oldmax = J->maxslot;
+      /* An allocation exit must replay the original call, while XSAVE needs a
+      ** physical Lua root for the fresh box. Append a hidden slot rather than
+      ** replacing the callable or an argument, then remove it before the
+      ** distinct entry-rejection snapshot. */
+      if (J->baseslot + oldmax >= LJ_MAX_JSLOTS)
+	lj_trace_err(J, LJ_TRERR_STACKOV);
+      lj_assertJ(J->base[oldmax] == 0, "missing FFI argument sentinel");
+      lj_snap_add(J);
+      J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+      result_box = emitir(IRTG(IR_CNEW, IRT_CDATA),
+			  lj_ir_kint(J, result_id), TREF_NIL);
+      result_payload = emitir(IRT(IR_ADD, IRT_PTR), result_box,
+			      lj_ir_kintp(J, sizeof(GCcdata)));
+      J->base[oldmax] = result_box;
+      J->maxslot = oldmax + 1;
+      lj_ffrecord_xsave(J);
+      J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+      J->maxslot = oldmax;
+      J->base[oldmax] = 0;
+      lj_snap_add(J);
+      J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+    } else {
+      lj_ffrecord_xsave(J);
+      J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+    }
+
     /* Materialize roots before publishing the exact pinned native frame. Entry
     ** is nonthrowing and consumes XSAVE staging on both success and rejection.
     ** Keep its pre-call exit interpreter-only too: admission is transient and
     ** a side trace must not grow across this native lifecycle boundary. Leave
-    ** is literally the first C call after CALLXS, so it captures errno or
-    ** LastError immediately. */
-    lj_ffrecord_xsave(J);
-    J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+    ** is the first C call after CALLXS, so it captures errno or LastError
+    ** immediately; a boxed result performs only one nonthrowing raw store in
+    ** between. */
     entered = lj_ir_call(J, IRCALL_lj_ffi_native_trace_enter,
 			 crec_call_trace(J), func,
-			 lj_ir_knull(J, IRT_CDATA));
+			 boxed_result ? result_box :
+			   lj_ir_knull(J, IRT_CDATA));
     emitir(IRTG(IR_NE, IRT_INT), entered, lj_ir_kint(J, 0));
     tr = emitir(IRT(IR_CALLXS, t), args, callfunc);
-    if (ctype_isbool(ctr_info)) {
-      if (frame_islua(J->L->base-1) &&
-	  bc_b(frame_pc(J->L->base-1)[-1]) == 1) {
-	tr = TREF_NIL;
-      } else {
-	crec_snap_caller(J);
-#if LJ_TARGET_X86ORX64
-	lj_ir_set(J, IRTG(IR_NE, IRT_U8), tr, lj_ir_kint(J, 0));
-#else
-	lj_ir_set(J, IRTGI(IR_NE), tr, lj_ir_kint(J, 0));
-#endif
-	J->postproc = LJ_POST_FIXGUARDSNAP;
-	tr = TREF_TRUE;
-      }
-    } else if (t == IRT_PTR || (LJ_64 && t == IRT_P32) ||
-	       t == IRT_I64 || t == IRT_U64 || ctype_isenum(ctr_info)) {
-      TRef trid = lj_ir_kint(J, ctype_cid(info));
-      tr = emitir(IRTG(IR_CNEWI, IRT_CDATA), trid, tr);
+    if (boxed_result) {
+      emitir(IRT(IR_XSTORE, t), result_payload, tr);
+      tr = result_box;
       if (t == IRT_I64 || t == IRT_U64) lj_needsplit(J);
     } else if (t == IRT_FLOAT || t == IRT_U32) {
       tr = emitconv(tr, IRT_NUM, t, 0);
@@ -2443,8 +2440,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     J->base[0] = tr;
     J->needsnap = 1;
     /* lj_ffrecord_func() emits the potentially throwing native leave only
-    ** after these pure result conversions and lj_record_ret() have constructed
-    ** the exact Lua caller state. */
+    ** after this nonthrowing result handoff and lj_record_ret() have
+    ** constructed the exact Lua caller state. */
     rd->postcall_native = 1;
     return 1;
   }

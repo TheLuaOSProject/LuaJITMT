@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 static int32_t lj_callxs_auth_counter;
+static int32_t lj_callxs_auth_reference_value = 0x345678;
 
 int32_t lj_callxs_auth_add(int32_t a, int32_t b)
 {
@@ -114,7 +115,21 @@ int64_t lj_callxs_auth_i64_result(int32_t value)
 uint64_t lj_callxs_auth_u64_result(int32_t value)
 {
   (void)value;
+  lj_callxs_auth_counter++;
   return UINT64_C(4000000000);
+}
+
+uint64_t lj_callxs_auth_attributed_u64_result(int32_t value)
+{
+  (void)value;
+  lj_callxs_auth_counter++;
+  return UINT64_C(0xfedcba9876543210);
+}
+
+int32_t *lj_callxs_auth_reference_result(void)
+{
+  lj_callxs_auth_counter++;
+  return &lj_callxs_auth_reference_value;
 }
 
 void lj_callxs_auth_reset(void)

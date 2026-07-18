@@ -41,9 +41,10 @@ static uint32_t nested_interpreted_entries;
 static uint32_t nested_interpreted_returns;
 static uint32_t nested_callback_observations;
 static uint32_t callback_markers;
+static GCcdata *current_outer_result_root;
 
-static int32_t callback_outer(AuthCallback cb, int32_t value);
-static int32_t nested_leaf(int32_t value);
+static int64_t callback_outer(AuthCallback cb, int32_t value);
+static int64_t nested_leaf(int32_t value);
 static int32_t interpreted_callback_call(AuthCallback cb, int32_t value);
 
 static uint32_t frame_state(const LJFFINativeFrame *frame)
@@ -51,10 +52,12 @@ static uint32_t frame_state(const LJFFINativeFrame *frame)
   return lj_ffi_native_frame_flags_acq(frame) & NATIVE_FRAME_STATE;
 }
 
-static void assert_active_top(const LJFFINativeFrameSnapshot *snapshot,
-			      void *func, int callback_seen)
+static GCcdata *assert_active_top(const LJFFINativeFrameSnapshot *snapshot,
+				  void *func, int callback_seen,
+				  int boxed_result)
 {
   const LJFFINativeFrame *frame;
+  GCcdata *result_root;
   lua_State *L;
   TValue *stack, *jitbase;
   uint64_t offset;
@@ -70,6 +73,8 @@ static void assert_active_top(const LJFFINativeFrameSnapshot *snapshot,
   assert(lj_ffi_native_frame_func_acq(frame) == func);
   assert(lj_ffi_native_frame_trace_acq(frame) != NULL);
   assert(lj_ffi_native_frame_trace_no_acq(frame) != 0);
+  result_root = lj_ffi_native_frame_result_root_acq(frame);
+  assert((result_root != NULL) == boxed_result);
   L = lj_ffi_native_frame_L_acq(frame);
   assert(L != NULL && L == lj_tg_load_cur_L(test_tg));
   assert(lj_tg_in_native_acq(test_tg) == 1u);
@@ -80,6 +85,7 @@ static void assert_active_top(const LJFFINativeFrameSnapshot *snapshot,
   assert(stack != NULL && (offset % sizeof(TValue)) == 0);
   jitbase = (TValue *)(void *)((char *)stack + (uintptr_t)offset);
   assert(lj_tg_load_jit_base(test_tg) == jitbase);
+  return result_root;
 }
 
 static int snapshot_outer_suspended(LJFFINativeFrameSnapshot *snapshot)
@@ -100,6 +106,10 @@ static int snapshot_outer_suspended(LJFFINativeFrameSnapshot *snapshot)
 	 (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
 	  LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN));
   assert(lj_ffi_native_frame_func_acq(frame) == (void *)callback_outer);
+  assert(lj_ffi_native_frame_result_root_acq(frame) != NULL);
+  if (current_outer_result_root)
+    assert(lj_ffi_native_frame_result_root_acq(frame) ==
+	   current_outer_result_root);
   assert(lj_ffi_native_frame_L_acq(frame) ==
 	 lj_tg_load_cur_L(test_tg));
   assert(lj_tg_load_jit_base(test_tg) == NULL);
@@ -118,6 +128,8 @@ static int callback_mark(lua_State *L)
     assert(depth != 0);
     assert(test_tg->cb.frame[depth - 1u].native_frame_depth == 1u);
     suspended_observations++;
+    assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+    assert(snapshot_outer_suspended(&snapshot));
   }
   return 0;
 }
@@ -147,7 +159,7 @@ static int callback_should_throw(lua_State *L)
   return 1;
 }
 
-static int32_t nested_leaf(int32_t value)
+static int64_t nested_leaf(int32_t value)
 {
   LJFFINativeFrameSnapshot snapshot;
   LJFFINativeFrameSnapshotResult result;
@@ -161,11 +173,14 @@ static int32_t nested_leaf(int32_t value)
 	      LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN) != 0);
       assert(lj_ffi_native_frame_func_acq(outer) ==
 	     (void *)callback_outer);
-      assert_active_top(&snapshot, (void *)nested_leaf, 0);
+      assert(lj_ffi_native_frame_result_root_acq(outer) ==
+	     current_outer_result_root);
+      assert(assert_active_top(&snapshot, (void *)nested_leaf, 0, 1) !=
+	     current_outer_result_root);
       nested_generated_entries++;
     } else if (snapshot.depth == 1u &&
 	       frame_state(top) == LJ_FFI_NATIVE_FRAME_F_ACTIVE) {
-      assert_active_top(&snapshot, (void *)nested_leaf, 0);
+      (void)assert_active_top(&snapshot, (void *)nested_leaf, 0, 1);
     } else {
       /* An interpreter fallback inside the outer callback legitimately sees
       ** only its older SUSPENDED continuation. */
@@ -198,7 +213,7 @@ static int32_t interpreted_callback_call(AuthCallback cb, int32_t value)
   return result + 30;
 }
 
-static int32_t callback_outer(AuthCallback cb, int32_t value)
+static int64_t callback_outer(AuthCallback cb, int32_t value)
 {
   LJFFINativeFrameSnapshot snapshot;
   LJFFINativeFrameSnapshotResult snapshot_result;
@@ -208,7 +223,8 @@ static int32_t callback_outer(AuthCallback cb, int32_t value)
   snapshot_result = lj_ffi_native_frame_snapshot(test_tg, &snapshot);
   if (snapshot_result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE) {
     assert(snapshot.depth == 1u);
-    assert_active_top(&snapshot, (void *)callback_outer, 0);
+    current_outer_result_root = assert_active_top(
+	&snapshot, (void *)callback_outer, 0, 1);
     generated = 1;
     generated_outer_entries++;
   } else {
@@ -229,14 +245,17 @@ static int32_t callback_outer(AuthCallback cb, int32_t value)
     assert(lj_ffi_native_frame_snapshot(test_tg, &snapshot) ==
 	   LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
     assert(snapshot.depth == 1u);
-    assert_active_top(&snapshot, (void *)callback_outer,
-		      callbacks_enabled != 0);
+    assert(assert_active_top(&snapshot, (void *)callback_outer,
+		      callbacks_enabled != 0, 1) ==
+	   current_outer_result_root);
     generated_outer_returns++;
   } else {
     assert(lj_ffi_native_frame_snapshot(test_tg, &snapshot) ==
 	   LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY);
   }
-  return call_result + 100;
+  if (generated)
+    current_outer_result_root = NULL;
+  return (int64_t)call_result + 100;
 }
 
 static void assert_callback_frames_empty(TGState *tg)
@@ -349,8 +368,8 @@ int main(void)
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "typedef int32_t (*lj_callxs_callback_t)(int32_t);\n"
-    "typedef int32_t (*lj_callxs_outer_t)(lj_callxs_callback_t, int32_t);\n"
-    "typedef int32_t (*lj_callxs_leaf_t)(int32_t);\n"
+    "typedef int64_t (*lj_callxs_outer_t)(lj_callxs_callback_t, int32_t);\n"
+    "typedef int64_t (*lj_callxs_leaf_t)(int32_t);\n"
     "typedef int32_t (*lj_callxs_inner_t)(lj_callxs_callback_t, int32_t);\n"
     "]]\n"
     "local outer = ffi.cast('lj_callxs_outer_t',\n"
@@ -360,7 +379,7 @@ int main(void)
     "                       lj_callxs_interpreted_callback_ptr)\n"
     "local function nested_run(x)\n"
     "  local s = 0\n"
-    "  for i = 1, 6 do s = s + leaf(x + i) end\n"
+    "  for i = 1, 6 do s = s + tonumber(leaf(x + i)) end\n"
     "  return s\n"
     "end\n"
     "local function cb2_body(x)\n"
@@ -370,6 +389,8 @@ int main(void)
     "jit.off(cb2_body)\n"
     "local cb2 = ffi.cast('lj_callxs_callback_t', cb2_body)\n"
     "local function cb1_body(x)\n"
+    "  local churn = { x, tostring(x) }\n"
+    "  assert(churn[1] == x and #churn[2] > 0)\n"
     "  lj_callxs_callback_mark()\n"
     "  if lj_callxs_callback_should_throw() then\n"
     "    error('authentic generated callback error')\n"
@@ -380,7 +401,9 @@ int main(void)
     "local cb1 = ffi.cast('lj_callxs_callback_t', cb1_body)\n"
     "function __callxs_callback_run(n, seed)\n"
     "  local sum = 0\n"
-    "  for i = 1, n do sum = sum + outer(cb1, seed + i) end\n"
+    "  for i = 1, n do\n"
+    "    sum = sum + tonumber(outer(cb1, seed + i))\n"
+    "  end\n"
     "  return sum\n"
     "end\n"
     "jit.flush()\n"
@@ -443,6 +466,7 @@ int main(void)
   assert(generated_outer_entries - entries0 == 1u);
   assert(generated_outer_returns - returns0 == 0u);
   current_outer_generated = 0;
+  current_outer_result_root = NULL;
   assert_runtime_clean(L, old_func, old_slot, old_stopreq);
 
   ljt_lua_dostring(L,

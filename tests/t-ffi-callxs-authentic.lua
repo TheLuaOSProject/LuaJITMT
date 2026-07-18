@@ -30,6 +30,9 @@ enum lj_callxs_auth_enum {
 enum lj_callxs_auth_enum lj_callxs_auth_enum_result(int32_t);
 int64_t lj_callxs_auth_i64_result(int32_t);
 uint64_t lj_callxs_auth_u64_result(int32_t);
+typedef uint64_t __attribute__((aligned(8))) lj_callxs_auth_attr_u64_t;
+lj_callxs_auth_attr_u64_t lj_callxs_auth_attributed_u64_result(int32_t);
+int32_t &lj_callxs_auth_reference_result(void);
 void lj_callxs_auth_reset(void);
 int32_t lj_callxs_auth_count(void);
 int32_t lj_callxs_auth_once(int32_t);
@@ -234,9 +237,9 @@ assert(lib.lj_callxs_auth_count() == n)
 assert((trace_op_counts()["CALLXS"] or 0) > 0,
        "ITERC frame did not activate production CALLXS")
 
--- Boxed results deliberately retain the interpreted fallback until
--- pre-rooted result storage and forced-unwind coverage land. This is a return-
--- class boundary, not a declaration/signature matcher.
+-- Pointer, enum and 64-bit results use a preallocated exact-CType box rooted
+-- through XSAVE and the native frame. Bool remains interpreted until its
+-- post-side-effect normalization has a guard/snapshot contract.
 local function boxed_pointer(nbox)
   local value
   for i = 1, nbox do
@@ -269,22 +272,51 @@ local function boxed_u64(nbox)
   return value
 end
 
+local function boxed_attributed_u64(nbox)
+  local value
+  for i = 1, nbox do
+    value = lib.lj_callxs_auth_attributed_u64_result(i)
+  end
+  return value
+end
+
+local function boxed_reference(nbox)
+  local value
+  for _ = 1, nbox do value = lib.lj_callxs_auth_reference_result() end
+  return value
+end
+
 for _, case in ipairs({
-  { "pointer", boxed_pointer, function(value) assert(value == p) end },
-  { "bool", boxed_bool, function(value) assert(value == true) end },
-  { "enum", boxed_enum, function(value) assert(tonumber(value) == 7) end },
+  { "pointer", boxed_pointer, function(value) assert(value == p) end, true },
+  { "bool", boxed_bool, function(value) assert(value == true) end, false },
+  { "enum", boxed_enum, function(value)
+      assert(ffi.istype("enum lj_callxs_auth_enum", value))
+      assert(tonumber(value) == 7)
+    end,
+    true },
   { "i64", boxed_i64, function(value)
+      assert(ffi.istype("int64_t", value))
       assert(value == ffi.new("int64_t", -123456789))
-    end },
+    end, true },
   { "u64", boxed_u64, function(value)
+      assert(ffi.istype("uint64_t", value))
       assert(value == ffi.new("uint64_t", 4000000000))
-    end },
+    end, true },
+  { "attributed u64", boxed_attributed_u64, function(value)
+      assert(ffi.istype("lj_callxs_auth_attr_u64_t", value))
+      assert(value == ffi.new("uint64_t", 0xfedcba9876543210ULL))
+    end, true },
+  { "reference", boxed_reference, function(value)
+      assert(ffi.istype("int32_t &", value))
+      assert(tonumber(value) == 0x345678)
+    end, true },
 }) do
   jit.flush()
   case[3](case[2](200))
   local boxed_counts = trace_op_counts()
-  assert((boxed_counts["CALLXS"] or 0) == 0,
-         case[1] .. " result crossed the pre-rooting gate")
+  local has_callxs = (boxed_counts["CALLXS"] or 0) > 0
+  assert(has_callxs == case[4],
+         case[1] .. " result crossed the CALLXS admission boundary")
 end
 
 print("t-ffi-callxs-authentic OK: production XSAVE/native/CALLXS path executed")
