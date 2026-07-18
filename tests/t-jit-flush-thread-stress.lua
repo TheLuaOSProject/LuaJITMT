@@ -11,10 +11,23 @@ local churn = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_CHURN", rounds * 2)
 local trace_limit = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_TRACE_LIMIT", 128)
 local ready_timeout = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_READY_TIMEOUT", 20)
 local join_timeout = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_JOIN_TIMEOUT", 40)
+local gcworkers = harness.env_number("LJ_M6_JIT_FLUSH_THREAD_GC_WORKERS", 0)
+assert(gcworkers >= 0 and gcworkers == math.floor(gcworkers),
+       "invalid GC worker count")
 local progress = th.channel(nthreads + churn + 16)
 local progress_log = {}
 local progress_seen = 0
 local started_at = th.now() or 0
+local gcstats0 = th.gcstats()
+
+if gcworkers > 0 then
+  assert(th.gcworkers(gcworkers) == 0, "unexpected preconfigured GC workers")
+  -- Make the combined stress enter repeated MARK/SWEEP cycles while traces
+  -- are recording, executing and being retired. This is a crash/corruption/
+  -- liveness gate, not a throughput benchmark.
+  collectgarbage("setpause", 40)
+  collectgarbage("setstepmul", 400)
+end
 
 local function expected(seed, flag)
   local extra = flag and (17 + 34 + 51 + 68) * 6 or 0
@@ -148,9 +161,11 @@ local ready, start = harness.channels(nthreads)
 local workers = {}
 
 for id = 1, nthreads do
-  workers[id] = th.spawn(function(ready_ch, start_ch, progress_ch, worker, count)
+  workers[id] = th.spawn(function(ready_ch, start_ch, progress_ch, worker,
+				   count, gc_pressure)
     assert(type(worker) == "number", "missing worker id")
     assert(type(count) == "number", "missing worker round count")
+    assert(type(gc_pressure) == "boolean", "missing GC pressure mode")
     local preheat_traces = 0
     local preheat_ok, preheat_err = pcall(function()
       local deadline = (th.now() or 0) + ready_timeout
@@ -179,9 +194,28 @@ for id = 1, nthreads do
     assert(ok == true and token == "go")
 
     local observed = preheat_traces
+    local keep = {}
+    local weak = gc_pressure and setmetatable({}, { __mode = "kv" }) or nil
     for r = 1, count do
       local seed = worker * 1000000 + r
       heat_pair(seed)
+      if gc_pressure then
+	-- Exercise traced TNEW/SNEW/FNEW publication and weak discovery in the
+	-- same interval as trace-slot retirement and background GC2 progress.
+	local payload = {
+	  seed, tostring(seed),
+	  child = { seed + 1, seed + 2, seed + 3, seed + 4 }
+	}
+	payload.call = function(x) return payload[1] + x end
+	assert(payload.call(7) == seed + 7)
+	keep[(r % 24) + 1] = payload
+	weak[payload] = payload.call
+	if r % 8 == 0 and type(newproxy) == "function" then
+	  local proxy = newproxy(true)
+	  getmetatable(proxy).__gc = function() end
+	  keep[((r + 11) % 24) + 1] = proxy
+	end
+      end
       observed = observed + live_trace_count()
       if r % 2 == 0 then flush_one_live() end
       if r % 3 == 0 then jit_flush(1) end
@@ -198,7 +232,7 @@ for id = 1, nthreads do
     end
 
     return observed
-  end, ready, start, progress, id, rounds)
+  end, ready, start, progress, id, rounds, gcworkers > 0)
 end
 
 harness.wait_ready(ready, nthreads, ready_timeout, "jit flush thread stress")
@@ -248,6 +282,18 @@ collectgarbage("collect")
 collectgarbage("collect")
 assert(live_trace_count() == 0, "full flush left visible live traces")
 
+if gcworkers > 0 then
+  local stats = th.gcstats()
+  assert(stats.cycle_starts > gcstats0.cycle_starts,
+	 "combined stress did not start a GC2 cycle")
+  assert(stats.worker_runs > gcstats0.worker_runs,
+	 "configured GC2 workers made no progress")
+  assert(stats.major_root_scans > gcstats0.major_root_scans,
+	 "combined stress did not complete a GC2 root scan")
+  assert(stats.phase == 0, "full collection did not return GC2 to IDLE")
+end
+
 print("t-jit-flush-thread-stress OK: " .. tostring(nthreads) ..
       " workers, " .. tostring(rounds) .. " rounds, " ..
-      tostring(short_lived) .. " short-lived threads")
+      tostring(short_lived) .. " short-lived threads, " ..
+      tostring(gcworkers) .. " GC2 workers")

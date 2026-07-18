@@ -444,7 +444,8 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
   int mm = mode & LUAJIT_MODE_MASK;
   lj_trace_abort(g);  /* Abort recording on any state change. */
   /* Avoid pulling the rug from under our own feet. */
-  if ((hookmask_load(g) & HOOK_GC))
+  if ((hookmask_load(g) & HOOK_GC) &&
+      lj_gc2_finalizer_owned_by_current(g))
     lj_err_caller(L, LJ_ERR_NOGCMM);
   switch (mm) {
 #if LJ_HASJIT

@@ -55,6 +55,8 @@ local function run_default_matrix(t)
   run_luajit_script_jit_modes(t, "t-weak-modes.lua")
   run_luajit_script_jit_modes(t, "t-m8-finalizer-spawn-live.lua", nil,
                               { timeout = "10s" })
+  run_luajit_script_jit_modes(t, "t-gc2-finalizer-peer-collect.lua", nil,
+                              { timeout = "30s" })
   run_luajit_script_jit_modes(t, "t-ffi-gc-finreg.lua", { "3", "72" })
   build.run_c_fixtures(t, M8_C_FIXTURES, {
     output_suffix = "_m8",
@@ -136,6 +138,17 @@ return function(add)
     run = function(t)
       run_finalizer_error_native_stdio(t)
       print("M8 finalizer error native stdio behavior passed")
+    end
+  })
+
+  add({
+    name = "m8_finalizer_peer_collect",
+    description = "peer full collection defers across finalizer join",
+    run = function(t)
+      t:build({ quiet = true })
+      run_luajit_script_jit_modes(t, "t-gc2-finalizer-peer-collect.lua", nil,
+                                  { timeout = "30s" })
+      print("M8 finalizer peer-collection liveness passed")
     end
   })
 

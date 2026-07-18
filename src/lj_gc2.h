@@ -373,6 +373,7 @@ LJ_FUNC size_t lj_gc2_finreg_udata_finalize(global_State *g, int all);
 LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L);
 LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
 				  GCSize finalize_cost, GCSize *cost);
+LJ_FUNC int lj_gc2_finalizer_owned_by_current(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
 LJ_FUNC int lj_gc2_finalizer_deferred(global_State *g);

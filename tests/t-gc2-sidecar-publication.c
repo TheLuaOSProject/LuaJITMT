@@ -143,6 +143,13 @@ int main(void)
   assert(raw_marked(retired));
   lj_gc2_cycle_to_idle(g);
 
+  /* The active node above models only the raw publication/root-scan shape; it
+  ** deliberately has no child state or TG and is not a valid live child.
+  ** Tombstone that synthetic root before lua_close, which reserves non-null
+  ** live nodes after threading shutdown for exact provisional-TG retries.
+  ** The ordinary close-time live-list drain still owns and frees the node. */
+  lj_thread_live_udata_ref_rel(live, NULL);
+
   lua_close(L);
   printf("t-gc2-sidecar-publication OK: tactical misses retained by mandatory scans\n");
   return 0;

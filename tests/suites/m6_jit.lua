@@ -37,12 +37,14 @@ local m6_cases = {
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
   "m6_jit_flush_gc_current_stack",
+  "m6_jit_flush_peer_finalizer",
   "m6_jit_util_flush_race",
   "m6_jit_flush_thread_stress",
   "m6_jit_flush_atomic_redispatch",
   "m6_jit_flush_join_token_liveness",
   "m6_jit_park_vmevent_reentrant",
   "m6_jit_flush_thread_heavy_stress",
+  "m6_jit_gc2_worker_flush_heavy_stress",
   "m6_jit_mt_activation_flush",
   "m6_jit_gcworkers_activation_flush",
   "m6_jit_vmevent_flush",
@@ -2209,6 +2211,19 @@ assert(live >= 4, live)
   })
 
   add({
+    name = "m6_jit_flush_peer_finalizer",
+    description = "peer JIT flush during GC2 finalizer hook ownership",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-flush-peer-finalizer.lua"), {
+        lua_path = true,
+        timeout = "45s"
+      })
+      print("M6 peer-finalizer JIT flush ownership passed")
+    end
+  })
+
+  add({
     name = "m6_jit_util_flush_race",
     description = "jit.util trace readers tolerate concurrent trace flushes",
     run = function(t)
@@ -2299,6 +2314,32 @@ assert(live >= 4, live)
         }
       })
       print("M6 JIT threaded flush heavy stress passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_gc2_worker_flush_heavy_stress",
+    description = "JIT record/execute/flush stress during background GC2 cycles",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-flush-thread-stress.lua"), {
+        lua_path = true,
+        timeout =
+          os.getenv("LJ_M6_JIT_GC2_FLUSH_HEAVY_TIMEOUT") or "120s",
+        env = {
+          LJ_M6_JIT_FLUSH_THREAD_THREADS =
+            os.getenv("LJ_M6_JIT_GC2_FLUSH_HEAVY_THREADS") or "4",
+          LJ_M6_JIT_FLUSH_THREAD_ROUNDS =
+            os.getenv("LJ_M6_JIT_GC2_FLUSH_HEAVY_ROUNDS") or "128",
+          LJ_M6_JIT_FLUSH_THREAD_CHURN =
+            os.getenv("LJ_M6_JIT_GC2_FLUSH_HEAVY_CHURN") or "256",
+          LJ_M6_JIT_FLUSH_THREAD_JOIN_TIMEOUT =
+            os.getenv("LJ_M6_JIT_GC2_FLUSH_HEAVY_JOIN_TIMEOUT") or "75",
+          LJ_M6_JIT_FLUSH_THREAD_GC_WORKERS =
+            os.getenv("LJ_M6_JIT_GC2_FLUSH_HEAVY_WORKERS") or "2"
+        }
+      })
+      print("M6 JIT and background GC2 worker heavy stress passed")
     end
   })
 

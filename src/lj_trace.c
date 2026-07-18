@@ -2712,9 +2712,12 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
 				 int send_event)
 {
   jit_State *J = L2J(L);
+  global_State *g = J2G(J);
   ptrdiff_t i;
   int token;
-  if (!allow_gc_hook && (hookmask_load(J2G(J)) & HOOK_GC))
+  /* This raw path has no remote EXIT_TRACES handshake. Keep its conservative
+  ** process-wide GC-hook veto; peer callers use trace_flushall_hs_impl(). */
+  if (!allow_gc_hook && (hookmask_load(g) & HOOK_GC))
     return 1;
   token = lj_jit_token_acquire_wait(J);
   /*
@@ -2807,8 +2810,16 @@ static int trace_flushall_hs_impl(lua_State *L, int send_event)
   jit_State *J = L2J(L);
   int errcode;
   int token;
-  if ((hookmask_load(g) & HOOK_GC))
-    return 1;
+  if ((hookmask_load(g) & HOOK_GC)) {
+    if (lj_gc2_finalizer_owned_by_current(g))
+      return 1;
+    /* HOOK_GC is process-wide, but the stock no-JIT-action rule belongs only
+    ** to the TG executing the finalizer. A peer may safely request the normal
+    ** trace-exit handshake. Suppress its TRACE callback while the finalizer's
+    ** global hook exclusion is active, just as a busy VM event is skipped.
+    */
+    send_event = 0;
+  }
   if (gc2_n_threads_acq(g) <= 1 && mt_active_acq(g) == 0) {
     /* Before the first MT generation there is no remote trace user to quiesce.
     ** Use the direct path so the stock single-mutator jit.flush() keeps its TRACE

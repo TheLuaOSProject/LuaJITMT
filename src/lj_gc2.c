@@ -1115,7 +1115,7 @@ static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g,
 					     TValue *fin, int *has_fin);
 static GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 static int lj_gc2_finalizer_try_enter(global_State *g);
-static int gc2_finalizer_owned_by_current(global_State *g);
+int lj_gc2_finalizer_owned_by_current(global_State *g);
 static int gc2_finalizer_queue_pending(global_State *g);
 static int gc2_finalizer_sweep_pending(global_State *g);
 static void gc2_peer_wait_no_l(void);
@@ -2692,16 +2692,15 @@ int lj_gc2_collect_active(lua_State *L)
     return 0;
   }
 #endif
-  /* gc2_call_finalizer deliberately retains the finalized object's body scope
-  ** across the Lua callback. A recursive full collection by that same owner
-  ** can help bounded phase work, but it can never finish sweeping the retained
-  ** arena until the callback returns. Do not self-wait in SWEEP (or start a new
-  ** cycle from an IDLE callback); the outer collector resumes immediately
-  ** after dropping the callback scope. This matches the historical deferred
-  ** nested-__gc collection contract while peer collectors still back off on
-  ** finalizer_active normally. */
-  if (gc2_finalizer_active_acq(g) != 0 &&
-      gc2_finalizer_owned_by_current(g))
+  /* gc2_call_finalizer retains the finalized object's body scope across the
+  ** Lua callback, so no full collector can close SWEEP until that callback
+  ** returns. This is not only a same-owner recursion hazard: a finalizer may
+  ** join a pre-existing peer which concurrently calls collectgarbage(). If
+  ** that peer waits for finalizer_active, each TG waits for the other forever.
+  ** Treat every active finalizer as an asynchronous full-collection deferral;
+  ** the outer collector or a later request resumes the already-open cycle.
+  */
+  if (gc2_finalizer_active_acq(g) != 0)
     return 0;
   /* A sticky classification failure deliberately has no synthetic queue
   ** identity. Once all real identities drain, full collection must return
@@ -2713,6 +2712,11 @@ int lj_gc2_collect_active(lua_State *L)
   }
   for (;;) {
     uint32_t phase = gc2_phase_acq(g);
+    /* A peer callback can enter after the admission check above. Never turn
+    ** that race into a SWEEP-close wait; bounded steps and GC workers retain
+    ** responsibility for progress after the callback releases its scope. */
+    if (gc2_finalizer_active_acq(g) != 0)
+      return 0;
     if (gc2_recovery_stalled_failed(g))
       return 0;
     /* Gate closure is an asynchronous request, not permission for explicit
@@ -4194,7 +4198,7 @@ static uint32_t gc2_finalizer_current_owner(global_State *g)
   return tid != 0 ? tid : ~(uint32_t)0;
 }
 
-static int gc2_finalizer_owned_by_current(global_State *g)
+int lj_gc2_finalizer_owned_by_current(global_State *g)
 {
   TGState *tg;
   uint32_t owner;
@@ -4281,7 +4285,7 @@ static void lj_gc2_finalizer_drain_owned(global_State *g)
   size_t n = 0;
   if (!g)
     return;
-  lj_assertG(gc2_finalizer_owned_by_current(g),
+  lj_assertG(lj_gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer drain requires owner");
   stack = (GC2FinalizerNode *)gc2_finalizer_mpsc_xchg_acqrel(g, NULL);
   while (stack) {
@@ -4340,7 +4344,7 @@ static GC2FinalizerNode *gc2_finalizer_dequeue_node_owned(global_State *g,
     return NULL;
   if (has_fin)
     *has_fin = 0;
-  lj_assertG(gc2_finalizer_owned_by_current(g),
+  lj_assertG(lj_gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer dequeue requires owner");
   tail = (GC2FinalizerNode *)gc2_finalizer_tail_acq(g);
   if (!tail) {
@@ -4407,7 +4411,7 @@ static void gc2_finalizer_requeue_front_owned(global_State *g,
 					      GC2FinalizerNode *node)
 {
   GC2FinalizerNode *tail;
-  lj_assertG(gc2_finalizer_owned_by_current(g),
+  lj_assertG(lj_gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer retry requires owner");
   if (!node)
     return;
@@ -4758,7 +4762,7 @@ static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
     return 1;
   if (gc2_finalizer_active_acq(g) == 0)
     return 0;
-  return !(owner_ok && gc2_finalizer_owned_by_current(g));
+  return !(owner_ok && lj_gc2_finalizer_owned_by_current(g));
 }
 
 static int gc2_finalizer_queue_pending(global_State *g)
@@ -8046,7 +8050,7 @@ static void gc2_finalizer_mark_queued_owned(global_State *g,
   GC2FinalizerNode *tail, *node;
   if (!g || !mark)
     return;
-  lj_assertG(gc2_finalizer_owned_by_current(g),
+  lj_assertG(lj_gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer mark requires owner");
   tail = (GC2FinalizerNode *)gc2_finalizer_tail_acq(g);
   if (!tail)
