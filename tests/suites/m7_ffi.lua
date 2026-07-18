@@ -117,6 +117,12 @@ return function(add)
           env = { LJ_M7_FFI_CALLXS_SO = callxs_so },
           timeout = "30s"
         })
+        build_and_run_c(t, t:tmp("lj_t-ffi-callxs-callback"),
+                        "t-ffi-callxs-callback.c", {
+          build = false,
+          cflags = flags,
+          timeout = "30s"
+        })
       end)
       print("M7 authentic generic scalar CALLXS lifecycle passed")
     end
