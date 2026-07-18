@@ -3212,8 +3212,10 @@ static int gc2_small_registered_rescue_enter_reclaim_held(global_State *g,
   return lj_arena_rescue_enter(a);
 }
 
-#if defined(_WIN32)
+#if defined(_WIN32) && defined(_MSC_VER)
 #define GC2_RECLAIM_TLS __declspec(thread)
+#elif defined(_WIN32)
+#define GC2_RECLAIM_TLS __thread
 #else
 #define GC2_RECLAIM_TLS LJ_TLS
 #endif

@@ -332,6 +332,8 @@ case "$platform" in
     )
     make_clean
     build_make "${windows_make_args[@]}"
+    "$test_root/tools/ci/windows_gc2_tls_gate.sh" \
+      "${cross}objdump" "$root/src/lj_gc2.o"
     make -C "$root" install DESTDIR="$stage" PREFIX="$prefix" \
       "${windows_install_args[@]}"
     install_doc "${stage}${prefix}/share/doc/luajitmt" "make install DESTDIR prefix tree"

@@ -71,6 +71,14 @@ print(jit.os, jit.arch)
 local threading = require("threading")
 assert(type(threading.spawn) == "function")
 assert(type(threading.gcstats) == "function")
+local worker = assert(threading.spawn(function()
+  local s = 0
+  for i = 1, 1000 do s = s + i end
+  collectgarbage("collect")
+  return s
+end))
+local joined, result = worker:join(10)
+assert(joined == true and result == 500500)
 local ffi = require("ffi")
 ffi.cdef("unsigned long GetCurrentProcessId(void);")
 local k = ffi.load("kernel32")
@@ -133,6 +141,8 @@ case "$platform" in
     )
     make_clean
     build_make "${windows_make_args[@]}"
+    "$root/tools/ci/windows_gc2_tls_gate.sh" \
+      "${cross}objdump" "$root/src/lj_gc2.o"
     # The shared release Lua harness is POSIX-shell based. Running it inside the
     # native Windows luajit.exe routes os.execute() through cmd.exe, which loses
     # the harness status-file contract. CI only needs a platform-native build/run
