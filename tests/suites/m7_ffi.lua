@@ -94,7 +94,7 @@ end
 return function(add)
   add({
     name = "m7_ffi_callxs_authentic",
-    description = "authentic generic scalar CALLXS lifecycle",
+    description = "authentic generic scalar CALLXS lifecycle and remote flush",
     run = function(t)
       local flags = table.concat({
         "-DLUA_USE_ASSERT",
@@ -104,10 +104,17 @@ return function(add)
       local callxs_so = build_shared_library(t,
         t:tmp("lj_t-ffi-callxs-authentic.so"),
         "t-ffi-callxs-authentic-lib.c")
+      local callxs_flush_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-callxs-remote-flush.so"),
+        "t-ffi-callxs-remote-flush-lib.c")
       build.with_default_build_restore(t, function()
         clean_build(t, { quiet = true, xcflags = flags })
         run_luajit_script(t, "t-ffi-callxs-authentic.lua", nil, {
           env = { LJ_M7_FFI_CALLXS_SO = callxs_so },
+          timeout = "30s"
+        })
+        run_luajit_script(t, "t-ffi-callxs-remote-flush.lua", nil, {
+          env = { LJ_M7_FFI_CALLXS_FLUSH_SO = callxs_flush_so },
           timeout = "30s"
         })
         build_and_run_c(t, t:tmp("lj_t-ffi-callxs-postcall"),

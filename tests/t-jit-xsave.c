@@ -522,6 +522,20 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   xsave_stage(tg, root, baseslot, nslots);
   assert(lj_ffi_native_trace_enter(L, T, func) == 1);
   assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 1);
+  {
+    LJFFINativeFrame *live = &tg->ffi_native_frame[0];
+    uint64_t certified_seq = 0;
+    assert(lj_ffi_native_trace_remote_certify(tg, &certified_seq) == 0);
+    lj_tg_poll_rel(tg, 1);
+    assert(lj_ffi_native_trace_remote_certify(tg, &certified_seq) == 1);
+    assert(certified_seq == lj_ffi_native_frame_sequence_acq(tg));
+    /* Slot-first proof compares but never dereferences a poisoned publication. */
+    lj_ffi_native_frame_trace_rel(live, (GCtrace *)(uintptr_t)3u);
+    assert(lj_ffi_native_trace_remote_certify(tg, NULL) == 0);
+    lj_ffi_native_frame_trace_rel(live, T);
+    assert(lj_ffi_native_trace_remote_certify(tg, NULL) == 1);
+    lj_tg_poll_rel(tg, 0);
+  }
   assert(lj_ffi_native_trace_callback_suspend(L) == 1);
   assert(lj_tg_in_native_acq(tg) == 1);
   assert(lj_tg_load_jit_base(tg) == NULL);
@@ -591,6 +605,19 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(lj_ffi_native_frame_depth_acq(tg) == 2);
   assert(trace_native_pins_acq(T) == pins + 2u);
   assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 1);
+  {
+    uint32_t pinword = trace_native_pinword_acq(T);
+    lj_tg_poll_rel(tg, 1);
+    assert(lj_ffi_native_trace_remote_certify(tg, NULL) == 1);
+    /* Two recursive frames naming one body require two local leases. */
+    la_store32_rel(&T->native_pins,
+	(pinword & TRACE_NATIVE_PIN_CLOSED) |
+	((pinword & TRACE_NATIVE_PIN_COUNT_MASK) - 1u));
+    assert(lj_ffi_native_trace_remote_certify(tg, NULL) == 0);
+    la_store32_rel(&T->native_pins, pinword);
+    assert(lj_ffi_native_trace_remote_certify(tg, NULL) == 1);
+    lj_tg_poll_rel(tg, 0);
+  }
   assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
 	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
   assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &

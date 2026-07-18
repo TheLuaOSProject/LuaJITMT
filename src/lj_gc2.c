@@ -9067,40 +9067,43 @@ void lj_gc2_scan_cycle_owner_roots(global_State *g, lua_State *L)
     lj_gc2_scan_cycle_owner_tg_roots(g, L2TG(L));
 }
 
-static void gc2_scan_cycle_owner_tg_roots_mode(global_State *g, TGState *tg,
-					       int native_parked)
+static int gc2_scan_cycle_owner_tg_roots_mode(global_State *g, TGState *tg,
+					      int native_parked)
 {
+  int exact = 1;
   if (!g || !tg || tg->gl != g)
-    return;
+    return 0;
   /* TG storage, allocator membership validation and owner lookup all share the
   ** same tactical SMR lease as the global pass. Reclaim is opportunistic and
   ** abandons its writer attempt instead of waiting for owner acknowledgements. */
   if (!lj_gc2_smr_read_try(g)) {
     gc2_root_scan_retry(g);
-    return;
+    return 0;
   }
 #if LJ_HASFFI && LJ_HASJIT
   if (native_parked)
-    (void)gc2_scan_ffi_native_frames_parked(g, tg);
+    exact = gc2_scan_ffi_native_frames_parked(g, tg);
 #else
   UNUSED(native_parked);
 #endif
   /* Exact native-frame marking is deliberately additive. The conservative
   ** owner scan, including native/JIT maxstack widening and every NEEDSCAN
   ** handoff, remains authoritative until the later narrowing proof. */
-  gc2_scan_owner_tg_roots(g, tg);
+  if (exact)
+    gc2_scan_owner_tg_roots(g, tg);
   lj_gc2_smr_read_leave(g);
+  return exact;
 }
 
 void lj_gc2_scan_cycle_owner_tg_roots(global_State *g, TGState *tg)
 {
-  gc2_scan_cycle_owner_tg_roots_mode(g, tg, 0);
+  (void)gc2_scan_cycle_owner_tg_roots_mode(g, tg, 0);
 }
 
-void lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g,
-						     TGState *tg)
+int lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g,
+						    TGState *tg)
 {
-  gc2_scan_cycle_owner_tg_roots_mode(g, tg, 1);
+  return gc2_scan_cycle_owner_tg_roots_mode(g, tg, 1);
 }
 
 void lj_gc2_test_scan_roots(global_State *g, lua_State *L)

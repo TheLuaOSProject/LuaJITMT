@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_arena.h"
+#include "lj_ccall.h"
 #include "lj_err.h"
 #include "lj_gc2.h"
 #include "lj_mcode.h"
@@ -86,7 +87,11 @@ static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
     ** the trace slot is still protected by jit_base while this frame unwinds.
     */
     if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
-	lj_tg_load_jit_base(tg) != NULL)
+	lj_tg_load_jit_base(tg) != NULL
+#if LJ_HASFFI && LJ_HASJIT
+	&& !lj_ffi_native_trace_consumed_poll_wait_required(tg)
+#endif
+	)
       return 0;
     if (lj_tg_reqmask_acq(tg) != 0)
       return 1;
@@ -203,7 +208,8 @@ static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
 }
 
 static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
-				    uint32_t actions, int native_parked)
+				    uint32_t actions, int native_parked,
+				    int roots_already_scanned)
 {
   if (actions & LJ_GC2_HS_ENABLE_BARRIER) {
     /* Mark activation runs with native entry closed. Invalidate comparison
@@ -218,7 +224,8 @@ static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
     lj_tg_alloc_black_rel(tg, 1);
   if (actions & LJ_GC2_HS_ALLOC_WHITE)
     lj_tg_alloc_black_rel(tg, 0);
-  if (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) {
+  if (!roots_already_scanned &&
+      (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS))) {
     /* Each stopped TG publishes its complete private root set. Passing the TG
     ** directly is essential: cur_L may be NULL, may differ from thread_L, and
     ** must not be used to rediscover the owner tid for NEEDSCAN handoffs. A
@@ -287,18 +294,35 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
 {
   /* Attach/TG-only catch-up is not proof that the caller owns a stable Lua
   ** stack. Keep the public entry on the conservative owner-root path. */
-  safepoint_apply_tg_mode(g, tg, actions, 0);
+  safepoint_apply_tg_mode(g, tg, actions, 0, 0);
+}
+
+static void safepoint_requeue_consumed(TGState *tg, uint32_t actions)
+{
+  /* Handshake leadership serializes counted request publication. Preserve the
+  ** original pending slot and return the exact mask to the owner; it will
+  ** consume this after closing native state if remote certification failed. */
+  lj_tg_reqmask_rel(tg, actions);
+  lj_tg_poll_rel(tg, 1);
+  la_fence_seq();
+  lj_tg_poll_futex_wake(tg, 1);
 }
 
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
 				 int note_latency, int wait_consumed,
-				 int native_parked)
+				 int native_parked,
+				 int native_trace_cert_required)
 {
   uint64_t epoch;
   uint32_t actions, oldpending;
+  int roots_scanned;
   if (!g || !tg)
     return 0;
+#if !(LJ_HASFFI && LJ_HASJIT)
+  UNUSED(native_trace_cert_required);
+#endif
 retry:
+  roots_scanned = 0;
   actions = lj_tg_reqmask_xchg_acqrel(tg, 0);  /* 05 section 5.4.2. */
   if (actions == 0) {
     if (lj_tg_poll_acq(tg) != 0) {
@@ -323,6 +347,25 @@ retry:
     return 0;
   }
   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
+  if (native_parked && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
+#if LJ_HASFFI && LJ_HASJIT
+    /* Admission captured this obligation before reqmask consumption. Never
+    ** re-decide it from jit_base here: an ACTIVE->SUSPENDED callback
+    ** transition can clear jit_base in the intervening window. */
+    if (native_trace_cert_required &&
+	!lj_ffi_native_trace_remote_certify(tg, NULL)) {
+      safepoint_requeue_consumed(tg, actions);
+      return 0;
+    }
+#endif
+    if (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS)) {
+      if (!lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg)) {
+	safepoint_requeue_consumed(tg, actions);
+	return 0;
+      }
+      roots_scanned = 1;
+    }
+  }
   if (!safepoint_claim_epoch(tg, epoch)) {
     int hold;
     /* A nonzero reqmask consumed here owns a pending-count slot even when the
@@ -340,7 +383,7 @@ retry:
       goto retry;
     return 0;
   }
-  safepoint_apply_tg_mode(g, tg, actions, native_parked);
+  safepoint_apply_tg_mode(g, tg, actions, native_parked, roots_scanned);
   if (note_latency)
     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
   {
@@ -409,10 +452,10 @@ uint32_t lj_safepoint_ack(lua_State *L)
   lj_profile_owner_poll(L);
 #endif
   if (L->base == NULL || tvref(L->stack) == NULL)
-    return safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0);
+    return safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0);
   oldbase = savestack(L, L->base);
   oldtop = savestack(L, L->top);
-  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0);
+  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1, 0, 0);
   L->base = restorestack(L, oldbase);
   L->top = restorestack(L, oldtop);
   return actions;  /* Safepoints must preserve the interrupted VM/C frame. */
@@ -444,7 +487,7 @@ uint32_t lj_safepoint_poll_tg(TGState *tg)
   /* Worker/no-Lua-stack TGs still own private allocator and SSB state. They
   ** therefore participate at the same consumed-poll boundary instead of
   ** silently resuming after a remote native acknowledgement. */
-  return safepoint_ack_tg(tg->gl, tg, 1, 1, 0);
+  return safepoint_ack_tg(tg->gl, tg, 1, 1, 0, 0);
 }
 
 void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
@@ -602,8 +645,11 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
   return signaled;
 }
 
-static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
+static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions,
+					int *trace_cert_required)
 {
+  if (trace_cert_required)
+    *trace_cert_required = 0;
   /* A sanctioned native-to-Lua reentry clears in_native with release ordering
   ** and polls before changing the Lua stack, C frame, root anchors, SSB or
   ** allocator. If a remote acknowledgement consumed the request first, its
@@ -612,16 +658,23 @@ static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions)
   ** allocator boundary actions. Trace retirement has the extra JIT gate below.
   */
 #if LJ_HASJIT
-  /* Trace entry publishes jit_base before it loads a trace body/mcode pointer,
-  ** and trace exit keeps jit_base set until snapshot restore has completed.
-  ** Trace-flush boundaries must not remotely ack that window,
-  ** otherwise the leader can retire the slot still needed by exit restore. A
-  ** positive vmstate without jit_base is only a conservative trace root for GC;
-  ** it is not a mcode/slot dependency and may be acknowledged normally.
+  /* Trace entry publishes jit_base before it loads a body/mcode pointer, and
+  ** ordinary trace exit retains it through snapshot restore. Only generated
+  ** FFI frames add an exact even-frame, pinned-slot certificate; all other
+  ** jit_base windows continue to veto remote trace acknowledgment. A positive
+  ** vmstate without jit_base is merely a conservative trace root for GC.
   */
   if ((actions & (LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
-      lj_tg_load_jit_base(tg) != NULL)
+      lj_tg_load_jit_base(tg) != NULL) {
+#if LJ_HASFFI
+    if (!lj_ffi_native_trace_remote_shape_allowed(tg))
+      return 0;
+    if (trace_cert_required)
+      *trace_cert_required = 1;
+#else
     return 0;
+#endif
+  }
 #else
   UNUSED(tg); UNUSED(actions);
 #endif
@@ -638,14 +691,17 @@ static void safepoint_ack_native(global_State *g, uint32_t actions)
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (tg == self)
-      (void)safepoint_ack_tg(g, tg, 0, 0, 0);
-    else if (lj_tg_in_native_acq(tg) &&
-	     safepoint_native_ack_allowed(tg, actions)) {
+      (void)safepoint_ack_tg(g, tg, 0, 0, 0, 0);
+    else if (lj_tg_in_native_acq(tg)) {
+      int trace_cert_required = 0;
+      if (!safepoint_native_ack_allowed(tg, actions,
+					&trace_cert_required))
+	continue;
       /* Only this remote-native branch carries the consumed-poll stability
       ** certificate. If it wins reqmask, native leave must remain parked until
       ** the leader clears poll, so published frame offsets cannot race stack
       ** relocation or release during the exact scan. */
-      (void)safepoint_ack_tg(g, tg, 0, 0, 1);
+      (void)safepoint_ack_tg(g, tg, 0, 0, 1, trace_cert_required);
     }
   }
 }
@@ -671,8 +727,19 @@ static int safepoint_trace_tg_active(global_State *g)
     */
     if (tg == self && leader != 0 && lj_tg_tid_acq(tg) == leader)
       continue;
-    if (lj_tg_load_jit_base(tg) != NULL)
+    if (lj_tg_load_jit_base(tg) != NULL) {
+#if LJ_HASFFI
+      uint64_t epoch = gc2_hs_epoch_acq(g);
+      /* A current-epoch consumed poll freezes this exact generated frame until
+      ** leader completion. Revalidate its TraceVec slot/pin before exempting it
+      ** from quiescence; every ordinary trace-exit jit_base still vetoes. */
+      if (lj_tg_poll_acq(tg) != 0 && lj_tg_reqmask_acq(tg) == 0 &&
+	  lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+	  lj_ffi_native_trace_remote_certify(tg, NULL))
+	continue;
+#endif
       return 1;
+    }
   }
 #else
   UNUSED(g);
@@ -733,7 +800,7 @@ static uint32_t safepoint_leader_enter(global_State *g)
     {
       TGState *self = lj_thr_get_tg();
       if (self && self->gl == g)
-	safepoint_ack_tg(g, self, 0, 0, 0);
+	safepoint_ack_tg(g, self, 0, 0, 0, 0);
     }
     if (expect == 0)
       continue;

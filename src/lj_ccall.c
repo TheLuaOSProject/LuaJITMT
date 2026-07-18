@@ -1849,6 +1849,33 @@ static int ffi_native_frame_jitbase_ptr(lua_State *L,
   return 1;
 }
 
+static int ffi_native_frame_offsets_valid(lua_State *L,
+					 const LJFFINativeFrame *frame)
+{
+  TValue *stack, *maxstack;
+  uintptr_t stackp, maxstackp;
+  uint64_t extent, root, base, top, jitbase;
+  uint64_t prefix = (uint64_t)(1 + LJ_FR2) * sizeof(TValue);
+  if (!L || !frame)
+    return 0;
+  stack = mref_acq(L->stack, TValue);
+  maxstack = mref_acq(L->maxstack, TValue);
+  stackp = (uintptr_t)(void *)stack;
+  maxstackp = (uintptr_t)(void *)maxstack;
+  if (!stack || !maxstack || maxstackp <= stackp)
+    return 0;
+  extent = (uint64_t)(maxstackp - stackp);
+  root = lj_ffi_native_frame_root_offset_acq(frame);
+  base = lj_ffi_native_frame_base_offset_acq(frame);
+  top = lj_ffi_native_frame_top_offset_acq(frame);
+  jitbase = lj_ffi_native_frame_jit_base_offset_acq(frame);
+  return (extent % sizeof(TValue)) == 0 && root >= prefix &&
+    jitbase >= prefix && root <= base && base <= top && jitbase <= top &&
+    root < extent && base < extent && top <= extent && jitbase < extent &&
+    (root % sizeof(TValue)) == 0 && (base % sizeof(TValue)) == 0 &&
+    (top % sizeof(TValue)) == 0 && (jitbase % sizeof(TValue)) == 0;
+}
+
 static LJFFINativeFrame *ffi_native_frame_transition_begin(
   TGState *tg, lua_State *L, uint32_t from, uint32_t expected_depth,
   uint64_t *seqp, uint32_t *depthp)
@@ -2031,45 +2058,123 @@ int lj_ffi_native_trace_callback_unwind(lua_State *L, uint32_t frame_depth)
   return 1;
 }
 
-/* Non-dereferencing shape prefilter only. A remote trace action must still
-** prove TraceVec identity and a nonzero exact pin under SMR after it consumes
-** the request; this predicate alone never authorizes acknowledgment. */
-int lj_ffi_native_trace_remote_shape_allowed(TGState *tg)
+/* Copy and validate the non-dereferencing portion of the generated native
+** certificate. require_native is used before request consumption; afterwards
+** the owner may already have closed native state and be parked on the still-
+** held poll without changing the exact even frame. */
+static int ffi_native_trace_remote_snapshot(
+  TGState *tg, LJFFINativeFrameSnapshot *snapshot, int require_native)
 {
-  LJFFINativeFrameSnapshot snapshot;
+  LJFFINativeFrameSnapshot copy;
   lua_State *L;
   TValue *jitbase;
   uint32_t i;
-  if (!tg || lj_tg_in_native_acq(tg) != 1u ||
-      lj_ffi_native_frame_snapshot(tg, &snapshot) !=
+  if (!tg || (require_native ? lj_tg_in_native_acq(tg) != 1u :
+			       lj_tg_in_native_acq(tg) > 1u) ||
+      lj_ffi_native_frame_snapshot(tg, &copy) !=
         LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE ||
-      snapshot.depth == 0)
+      copy.depth == 0)
     return 0;
   L = lj_tg_load_cur_L(tg);
   if (!L || mref_acq(L->glref, global_State) != tg->gl ||
       lj_state_owner_acq(L) != lj_tg_tid_acq(tg))
     return 0;
-  for (i = 0; i < snapshot.depth; i++) {
-    const LJFFINativeFrame *frame = &snapshot.frame[i];
+  for (i = 0; i < copy.depth; i++) {
+    const LJFFINativeFrame *frame = &copy.frame[i];
     uint32_t state = lj_ffi_native_frame_flags_acq(frame) &
       LJ_FFI_NATIVE_FRAME_F_STATE;
-    uint32_t expected = i + 1u == snapshot.depth ?
+    uint32_t expected = i + 1u == copy.depth ?
       LJ_FFI_NATIVE_FRAME_F_ACTIVE : LJ_FFI_NATIVE_FRAME_F_SUSPENDED;
-    if (state != expected || lj_ffi_native_frame_L_acq(frame) != L)
+    if (state != expected || lj_ffi_native_frame_L_acq(frame) != L ||
+	!ffi_native_frame_offsets_valid(L, frame))
       return 0;
   }
   if (!ffi_native_frame_jitbase_ptr(L,
-      &snapshot.frame[snapshot.depth - 1u], &jitbase) ||
+      &copy.frame[copy.depth - 1u], &jitbase) ||
       jitbase != lj_tg_load_jit_base(tg) ||
       lj_tg_vmstate_load_acq(tg) !=
         (int32_t)lj_ffi_native_frame_trace_no_acq(
-          &snapshot.frame[snapshot.depth - 1u]) ||
+          &copy.frame[copy.depth - 1u]) ||
       lj_tg_ffi_call_func_acq(tg) !=
-        lj_ffi_native_frame_func_acq(&snapshot.frame[snapshot.depth - 1u]))
+        lj_ffi_native_frame_func_acq(&copy.frame[copy.depth - 1u]))
     return 0;
   la_fence_acq();
-  return lj_tg_in_native_acq(tg) == 1u &&
-    lj_ffi_native_frame_sequence_acq(tg) == snapshot.sequence;
+  if ((require_native ? lj_tg_in_native_acq(tg) != 1u :
+			lj_tg_in_native_acq(tg) > 1u) ||
+      lj_ffi_native_frame_sequence_acq(tg) != copy.sequence)
+    return 0;
+  if (snapshot)
+    *snapshot = copy;
+  return 1;
+}
+
+/* Non-dereferencing prefilter only. A remote trace action must still prove
+** TraceVec identity and a nonzero exact pin after consuming the request. */
+int lj_ffi_native_trace_remote_shape_allowed(TGState *tg)
+{
+  return ffi_native_trace_remote_snapshot(tg, NULL, 1);
+}
+
+/* An ACTIVE generated frame which has closed native state is the one trace-exit
+** case that must wait on a remotely consumed poll. Ordinary exit C frames have
+** no exact native-frame stack and retain the historical deadlock-avoidance
+** bypass. */
+int lj_ffi_native_trace_consumed_poll_wait_required(TGState *tg)
+{
+  return ffi_native_trace_remote_snapshot(tg, NULL, 0);
+}
+
+/* Exact post-consumption proof. Slot lookup precedes every trace-body access,
+** so a poisoned frame pointer is compared but never dereferenced. Retirement
+** may have cleared T->traceno while retaining this reserved TraceVec slot. */
+int lj_ffi_native_trace_remote_certify(TGState *tg, uint64_t *sequencep)
+{
+  LJFFINativeFrameSnapshot snapshot;
+  global_State *g;
+  jit_State *J;
+  uint32_t i;
+  int certified = 0;
+  if (!tg || !(g = tg->gl) || lj_tg_poll_acq(tg) == 0 ||
+      lj_tg_reqmask_acq(tg) != 0 ||
+      !ffi_native_trace_remote_snapshot(tg, &snapshot, 0) ||
+      !lj_gc2_smr_read_try(g))
+    return 0;
+  J = G2J(g);
+  for (i = 0; i < snapshot.depth; i++) {
+    const LJFFINativeFrame *frame = &snapshot.frame[i];
+    uint32_t raw = lj_ffi_native_frame_trace_no_acq(frame);
+    uint32_t required_pins = 1u;
+    uint32_t j;
+    TraceNo traceno = (TraceNo)raw;
+    GCtrace *trace = lj_ffi_native_frame_trace_acq(frame);
+    GCtrace *slot;
+    if ((uint32_t)traceno != raw)
+      goto out;
+    slot = traceref_safe(J, traceno);
+    if (!slot || slot != trace)
+      goto out;
+    /* Recursive callback reentry may put the same exact trace in this frame
+    ** stack more than once. Require one live lease for every local occurrence,
+    ** not merely one lease for the shared body. */
+    for (j = 0; j < i; j++) {
+      const LJFFINativeFrame *older = &snapshot.frame[j];
+      if (lj_ffi_native_frame_trace_acq(older) == trace &&
+	  lj_ffi_native_frame_trace_no_acq(older) == raw)
+	required_pins++;
+    }
+    if (trace_native_pins_acq(slot) < required_pins)
+      goto out;
+  }
+  la_fence_acq();
+  if (lj_tg_poll_acq(tg) == 0 ||
+      lj_ffi_native_frame_sequence_acq(tg) != snapshot.sequence)
+    goto out;
+  certified = 1;
+  if (sequencep)
+    *sequencep = snapshot.sequence;
+out:
+  lj_gc2_smr_read_leave(g);
+  return certified;
 }
 
 /* The executing trace's published jit_base is the independent lifetime proof

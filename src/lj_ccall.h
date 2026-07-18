@@ -221,8 +221,7 @@ LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
 ** A forced leave converts it to POSTCALL and retains its exact pin until the
 ** non-side-linkable caller-state trace exit invokes cleanup. The default
 ** recorder remains gated; explicit test-only activation exercises the admitted
-** scalar lifecycle. Nested/callback entry remains gated until suspended-frame
-** publication exists.
+** scalar lifecycle, including callback suspension and nested generated calls.
 */
 #define LJ_FFI_NATIVE_LEAVE_FORCE_EXIT	0x80000000u
 LJ_FUNC int lj_ffi_native_trace_enter(lua_State *L, struct GCtrace *T,
@@ -234,6 +233,9 @@ LJ_FUNC int lj_ffi_native_trace_callback_resume(lua_State *L,
 LJ_FUNC int lj_ffi_native_trace_callback_unwind(lua_State *L,
 						 uint32_t frame_depth);
 LJ_FUNC int lj_ffi_native_trace_remote_shape_allowed(TGState *tg);
+LJ_FUNC int lj_ffi_native_trace_consumed_poll_wait_required(TGState *tg);
+LJ_FUNC int lj_ffi_native_trace_remote_certify(TGState *tg,
+						uint64_t *sequencep);
 LJ_FUNC int lj_ffi_native_trace_exit_cleanup(lua_State *L,
 					     struct GCtrace *T,
 					     uint32_t traceno);

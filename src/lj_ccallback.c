@@ -926,9 +926,13 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
     uint8_t auto_detach = frame->auto_detach;
     uint32_t native_frame_depth = frame->native_frame_depth;
     if (native_frame_depth != 0) {
+#if LJ_HASJIT
       if (LJ_UNLIKELY(!lj_ffi_native_trace_callback_unwind(
 				      L, native_frame_depth)))
 	abort();
+#else
+      abort();  /* Generated native frames cannot exist without the JIT. */
+#endif
     } else {
       lj_tg_ffi_call_func_rel(tg, NULL);
       ccallback_native_had_stopreq_rel(cb, 0);
@@ -1247,7 +1251,9 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
     ** owner to acknowledge here. */
     ffi_call_func = lj_tg_ffi_call_func_acq(tg);
     had_stopreq = ccallback_had_stopreq(cb);
+#if LJ_HASJIT
     native_frame_depth = lj_ffi_native_trace_callback_suspend(L);
+#endif
     lj_tg_in_native_rel(tg, 0);
     /* Pair with the leader's post-request fence: callback reentry either owns
     ** this acknowledgement or waits for the completed remote snapshot. */
@@ -1336,9 +1342,13 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   callback_frame_pop(cb);
   ccallback_auto_detach_rel(cb, 0);
   if (native_frame_depth != 0) {
+#if LJ_HASJIT
     if (LJ_UNLIKELY(!lj_ffi_native_trace_callback_resume(
 				    L, native_frame_depth)))
       abort();
+#else
+    abort();  /* Generated native frames cannot exist without the JIT. */
+#endif
   } else if (native_depth != 0) {
     lj_tg_in_native_rel(tg, native_depth);
   }
