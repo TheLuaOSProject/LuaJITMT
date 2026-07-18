@@ -25,8 +25,11 @@
 #include "lj_cconv.h"
 #include "lj_cdata.h"
 #include "lj_ccall.h"
+#include "lj_gc2.h"
+#include "lj_jit.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
+#include "lj_thr.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
 
@@ -1629,6 +1632,246 @@ LJFFINativeFrameSnapshotResult lj_ffi_native_frame_snapshot(
   return depth == 0 ? LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY :
     LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE;
 }
+
+#if LJ_HASJIT
+typedef struct CCallJITGeometry {
+  uint64_t root_offset;
+  uint64_t base_offset;
+  uint64_t top_offset;
+  uint64_t jitbase_offset;
+} CCallJITGeometry;
+
+LJ_STATIC_ASSERT((LJ_FFI_NATIVE_LEAVE_FORCE_EXIT & 0x0000ffffu) == 0);
+
+/* Validate owner-private staging entirely through integer byte geometry. This
+** avoids undefined pointer arithmetic on corrupt pending state and keeps every
+** ordinary failure before trace pinning or publication. */
+static int ccall_jit_geometry(lua_State *L, TGState *tg,
+			      CCallJITGeometry *geo)
+{
+  TValue *stack, *maxstack, *root, *jitbase;
+  uintptr_t stackp, maxstackp, rootp, jitbasep;
+  uint64_t extent, root_extent, base_index, top_index;
+  uint64_t prefix = (uint64_t)(1 + LJ_FR2) * sizeof(TValue);
+  uint32_t baseslot, nslots, tid;
+  global_State *g;
+  if (!L || !tg || !geo || lj_tg_load_cur_L(tg) != L)
+    return 0;
+  g = G(L);
+  tid = lj_tg_tid_acq(tg);
+  if (!g || !lj_thr_id_is_owner(tid) || lj_state_owner_acq(L) != tid ||
+      mref(L->glref, global_State) != g)
+    return 0;
+  stack = tvref(L->stack);
+  maxstack = tvref(L->maxstack);
+  root = (TValue *)la_loadptr_acq((void *const *)&tg->ffi_xsave_root);
+  baseslot = la_load32_acq(&tg->ffi_xsave_baseslot);
+  nslots = la_load32_acq(&tg->ffi_xsave_nslots);
+  jitbase = lj_tg_load_jit_base(tg);
+  if (!stack || !maxstack || !root || !jitbase ||
+      nslots < (uint32_t)(1 + LJ_FR2))
+    return 0;
+  stackp = (uintptr_t)(void *)stack;
+  maxstackp = (uintptr_t)(void *)maxstack;
+  rootp = (uintptr_t)(void *)root;
+  jitbasep = (uintptr_t)(void *)jitbase;
+  if (maxstackp < stackp || rootp < stackp || rootp >= maxstackp ||
+      jitbasep < stackp || jitbasep >= maxstackp)
+    return 0;
+  extent = (uint64_t)(maxstackp - stackp);
+  root_extent = (uint64_t)(maxstackp - rootp);
+  if ((extent % sizeof(TValue)) != 0 ||
+      ((uint64_t)(rootp - stackp) % sizeof(TValue)) != 0 ||
+      ((uint64_t)(jitbasep - stackp) % sizeof(TValue)) != 0 ||
+      (uint64_t)(rootp - stackp) < prefix ||
+      (uint64_t)(jitbasep - stackp) < prefix ||
+      (uint64_t)nslots > root_extent / sizeof(TValue))
+    return 0;
+  top_index = (uint64_t)nslots - 1u - LJ_FR2;
+  base_index = (uint64_t)baseslot;
+  if (base_index > top_index)
+    return 0;
+  geo->root_offset = (uint64_t)(rootp - stackp);
+  geo->base_offset = geo->root_offset + base_index * sizeof(TValue);
+  geo->top_offset = geo->root_offset + top_index * sizeof(TValue);
+  geo->jitbase_offset = (uint64_t)(jitbasep - stackp);
+  if (geo->root_offset > geo->base_offset ||
+      geo->base_offset > geo->top_offset ||
+      geo->top_offset > extent || geo->jitbase_offset > geo->top_offset)
+    return 0;
+  return 1;
+}
+
+/* The executing trace's published jit_base is the independent lifetime proof
+** required before the first T read. SMR then validates the exact public slot
+** while native-pin admission races retirement without waiting. */
+static int ccall_jit_trace_pin(global_State *g, GCtrace *T,
+			       TraceNo *tracenop)
+{
+  jit_State *J = G2J(g);
+  TraceNo traceno;
+  GCtrace *slot;
+  int pinned = 0;
+  if (!T || !tracenop)
+    return 0;
+  traceno = trace_traceno_acq(T);
+  if (traceno == 0 || !lj_gc2_smr_read_try(g))
+    return 0;
+  slot = traceref_safe(J, traceno);
+  if (slot == T && trace_traceno_acq(slot) == traceno &&
+      lj_trace_native_pin(slot)) {
+    /* Retirement may close admission and clear T->traceno after the pin. Its
+    ** slot must nevertheless remain reserved by exact body identity. */
+    slot = traceref_safe(J, traceno);
+    if (slot == T && trace_native_pins_acq(slot) != 0) {
+      *tracenop = traceno;
+      pinned = 1;
+    } else {
+      lj_trace_native_unpin(g, T);
+    }
+  }
+  lj_gc2_smr_read_leave(g);
+  return pinned;
+}
+
+int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func)
+{
+  CCallErrorState err;
+  CCallJITGeometry geo;
+  LJFFINativeFrame frame;
+  global_State *g;
+  TGState *tg;
+  CCallbackRuntime *cb;
+  TraceNo traceno;
+  uint32_t depth;
+  uint8_t had_stopreq;
+  int ok = 0;
+  /* This must remain the first operation: entry validation and SMR admission
+  ** must not replace the errno/LastError pair observed by the foreign call. */
+  ccall_error_save(&err);
+  if (!L || !T || !func)
+    goto out;
+  tg = L2TG(L);
+  g = G(L);
+  if (!tg || !g)
+    goto out;
+  /* Capacity is the expected nonexceptional failure. Check it before the raw
+  ** trace constant so a full stack always side-exits without touching it. */
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  if (LJ_UNLIKELY(depth > LJ_FFI_NATIVE_FRAME_MAX ||
+      (lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0))
+    abort();
+  /* Only an outermost native transition reaches the consumed-poll wait on
+  ** leave. Nested/callback activation needs the later suspended-frame
+  ** protocol; side-exit before trace/pin access until that exists. */
+  if (depth != 0 || lj_tg_in_native_acq(tg) != 0)
+    goto out;
+  if (!ccall_jit_geometry(L, tg, &geo) ||
+      !ccall_jit_trace_pin(g, T, &traceno))
+    goto out;
+
+  cb = &tg->cb;
+  had_stopreq = (uint8_t)(lj_safepoint_had_stopreq(L) != 0);
+  memset(&frame, 0, sizeof(frame));
+  lj_ffi_native_frame_trace_rel(&frame, T);
+  lj_ffi_native_frame_L_rel(&frame, L);
+  lj_ffi_native_frame_func_rel(&frame, func);
+  lj_ffi_native_frame_old_func_rel(&frame, lj_tg_ffi_call_func_acq(tg));
+  lj_ffi_native_frame_root_offset_rel(&frame, geo.root_offset);
+  lj_ffi_native_frame_base_offset_rel(&frame, geo.base_offset);
+  lj_ffi_native_frame_top_offset_rel(&frame, geo.top_offset);
+  lj_ffi_native_frame_jit_base_offset_rel(&frame, geo.jitbase_offset);
+  lj_ffi_native_frame_entry_exit_epoch_rel(
+    &frame, lj_tg_hs_epoch_ack_acq(tg));
+  lj_ffi_native_frame_trace_no_rel(&frame, (uint32_t)traceno);
+  lj_ffi_native_frame_old_callback_slot_rel(
+    &frame, ccallback_slot_acq(cb));
+  lj_ffi_native_frame_flags_rel(&frame,
+    LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED | LJ_FFI_NATIVE_FRAME_F_ACTIVE);
+  lj_ffi_native_frame_old_stopreq_rel(
+    &frame, ccallback_native_had_stopreq_acq(cb));
+  lj_ffi_native_frame_had_stopreq_rel(&frame, had_stopreq);
+
+  if (!lj_ffi_native_frame_push(tg, &frame)) {
+    lj_trace_native_unpin(g, T);
+    goto out;
+  }
+  /* The exact even frame precedes every remotely acknowledged native state.
+  ** Consume staging only after publication; every earlier failure leaves it
+  ** intact for the pre-call side exit. */
+  la_storeptr_rel((void **)&tg->ffi_xsave_root, NULL);
+  la_store32_rel(&tg->ffi_xsave_baseslot, 0);
+  la_store32_rel(&tg->ffi_xsave_nslots, 0);
+  ccallback_slot_rel(cb, ~0u);
+  lj_tg_ffi_call_func_rel(tg, func);
+  ccallback_native_had_stopreq_rel(cb, had_stopreq);
+  lj_native_enter(tg);
+  ok = 1;
+out:
+  ccall_error_restore(&err);
+  return ok;
+}
+
+uint32_t lj_ffi_native_trace_leave(lua_State *L)
+{
+  CCallErrorState err;
+  LJFFINativeFrame frame;
+  global_State *g;
+  TGState *tg;
+  CCallbackRuntime *cb;
+  GCtrace *T;
+  uint32_t actions, depth, force = 0;
+  MSize callback_slot;
+  uint8_t had_stopreq;
+  /* This must remain the first operation after the foreign return. */
+  ccall_error_save(&err);
+  if (LJ_UNLIKELY(L == NULL))
+    abort();
+  tg = L2TG(L);
+  g = G(L);
+  if (LJ_UNLIKELY(tg == NULL || g == NULL ||
+      lj_tg_load_cur_L(tg) != L))
+    abort();
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  if (LJ_UNLIKELY(depth == 0 || depth > LJ_FFI_NATIVE_FRAME_MAX ||
+      (lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0))
+    abort();
+  ffi_native_frame_copy(&frame, &tg->ffi_native_frame[depth - 1u]);
+  if (LJ_UNLIKELY(!ffi_native_frame_valid(&frame) ||
+      lj_ffi_native_frame_L_acq(&frame) != L))
+    abort();
+  if (LJ_UNLIKELY(lj_tg_in_native_acq(tg) != 1u))
+    abort();  /* Nested leave lacks the consumed-poll stability certificate. */
+  T = lj_ffi_native_frame_trace_acq(&frame);
+  had_stopreq = lj_ffi_native_frame_had_stopreq_acq(&frame);
+
+  /* The certified scanner may be reading this same-even frame while a remote
+  ** leader owns its consumed poll. Do not change any payload or pin until
+  ** native_leave has closed native state and returned from that wait. */
+  actions = lj_native_leave(L);
+  cb = &tg->cb;
+  callback_slot = ccallback_slot_acq(cb);
+  if (callback_slot != (MSize)~0u ||
+      lj_tg_hs_epoch_ack_acq(tg) !=
+        lj_ffi_native_frame_entry_exit_epoch_acq(&frame))
+    force = LJ_FFI_NATIVE_LEAVE_FORCE_EXIT;
+
+  ccallback_slot_rel(cb,
+    lj_ffi_native_frame_old_callback_slot_acq(&frame));
+  lj_tg_ffi_call_func_rel(tg, lj_ffi_native_frame_old_func_acq(&frame));
+  ccallback_native_had_stopreq_rel(
+    cb, lj_ffi_native_frame_old_stopreq_acq(&frame));
+  lj_ffi_native_frame_pop(tg, NULL);
+  /* No stable frame names T after pop's final even publication. jit_base is
+  ** still the conservative independent trace lifetime proof. */
+  lj_trace_native_unpin(g, T);
+
+  ccall_error_restore(&err);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  ccall_error_restore(&err);
+  return actions | force;
+}
+#endif
 
 void lj_ccall_native_save(lua_State *L, CCallNativeState *st)
 {

@@ -4,6 +4,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 #include "lj_gc2.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
+#include "lj_oserr.h"
 #include "lj_state.h"
 #include "lj_target.h"
 #include "lj_tg.h"
@@ -284,6 +286,136 @@ static void native_frame_init(LJFFINativeFrame *frame, lua_State *L,
 	LJ_FFI_NATIVE_FRAME_F_ACTIVE);
 }
 
+static void xsave_stage(TGState *tg, TValue *root, uint32_t baseslot,
+			uint32_t nslots)
+{
+  la_storeptr_rel((void **)&tg->ffi_xsave_root, root);
+  la_store32_rel(&tg->ffi_xsave_baseslot, baseslot);
+  la_store32_rel(&tg->ffi_xsave_nslots, nslots);
+}
+
+static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
+				       TGState *tg, GCtrace *T)
+{
+  LJFFINativeFrameSnapshot snapshot;
+  TValue *stack = tvref(L->stack);
+  TValue *root = (TValue *)la_loadptr_acq(
+    (void *const *)&tg->ffi_xsave_root);
+  uint32_t baseslot = la_load32_acq(&tg->ffi_xsave_baseslot);
+  uint32_t nslots = la_load32_acq(&tg->ffi_xsave_nslots);
+  TValue *base = root + baseslot;
+  TValue *top = root + nslots - 1u - LJ_FR2;
+  TValue *old_jitbase = lj_tg_load_jit_base(tg);
+  void *old_func = lj_tg_ffi_call_func_acq(tg);
+  MSize old_slot = ccallback_slot_acq(&tg->cb);
+  uint8_t old_stopreq = ccallback_native_had_stopreq_acq(&tg->cb);
+  void *func = (void *)(uintptr_t)UINT64_C(0x12345000);
+  uint64_t seq = lj_ffi_native_frame_sequence_acq(tg);
+  uint32_t pins = trace_native_pins_acq(T);
+  uint32_t actions;
+
+  assert(old_jitbase == NULL);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  lj_tg_store_jit_base(tg, base);
+
+  /* A malformed pending extent requests a pre-call side exit and preserves
+  ** every staged/mirror/lifetime word, including the foreign error pair. */
+  la_store32_rel(&tg->ffi_xsave_nslots, 0);
+  errno = EDOM;
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)0x13572468u);
+#endif
+  assert(lj_ffi_native_trace_enter(L, T, func) == 0);
+  assert(errno == EDOM);
+#if LJ_TARGET_WINDOWS
+  assert(GetLastError() == (DWORD)0x13572468u);
+#endif
+  assert(la_loadptr_acq((void *const *)&tg->ffi_xsave_root) == root);
+  assert(la_load32_acq(&tg->ffi_xsave_baseslot) == baseslot);
+  assert(la_load32_acq(&tg->ffi_xsave_nslots) == 0);
+  assert(lj_ffi_native_frame_sequence_acq(tg) == seq);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_ffi_call_func_acq(tg) == old_func);
+  assert(ccallback_slot_acq(&tg->cb) == old_slot);
+  assert(ccallback_native_had_stopreq_acq(&tg->cb) == old_stopreq);
+  xsave_stage(tg, root, baseslot, nslots);
+
+  errno = EDOM;
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)0x24681357u);
+#endif
+  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(errno == EDOM);
+#if LJ_TARGET_WINDOWS
+  assert(GetLastError() == (DWORD)0x24681357u);
+#endif
+  assert(lj_ffi_native_frame_sequence_acq(tg) == seq + 2u);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  assert(trace_native_pins_acq(T) == pins + 1u);
+  assert(la_loadptr_acq((void *const *)&tg->ffi_xsave_root) == NULL);
+  assert(la_load32_acq(&tg->ffi_xsave_baseslot) == 0);
+  assert(la_load32_acq(&tg->ffi_xsave_nslots) == 0);
+  assert(lj_tg_ffi_call_func_acq(tg) == func);
+  assert(ccallback_slot_acq(&tg->cb) == (MSize)~0u);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+    LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert(snapshot.depth == 1 && snapshot.sequence == seq + 2u);
+  assert(lj_ffi_native_frame_trace_acq(&snapshot.frame[0]) == T);
+  assert(lj_ffi_native_frame_L_acq(&snapshot.frame[0]) == L);
+  assert(lj_ffi_native_frame_func_acq(&snapshot.frame[0]) == func);
+  assert(lj_ffi_native_frame_root_offset_acq(&snapshot.frame[0]) ==
+    (uint64_t)((char *)root - (char *)stack));
+  assert(lj_ffi_native_frame_base_offset_acq(&snapshot.frame[0]) ==
+    (uint64_t)((char *)base - (char *)stack));
+  assert(lj_ffi_native_frame_top_offset_acq(&snapshot.frame[0]) ==
+    (uint64_t)((char *)top - (char *)stack));
+  assert(lj_ffi_native_frame_jit_base_offset_acq(&snapshot.frame[0]) ==
+    (uint64_t)((char *)base - (char *)stack));
+  assert(lj_ffi_native_frame_trace_no_acq(&snapshot.frame[0]) ==
+    (uint32_t)trace_traceno_acq(T));
+
+  errno = ERANGE;  /* Simulated immediate foreign return pair. */
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)0x55aa33ccu);
+#endif
+  actions = lj_ffi_native_trace_leave(L);
+  assert(actions == 0);
+  assert(errno == ERANGE);
+#if LJ_TARGET_WINDOWS
+  assert(GetLastError() == (DWORD)0x55aa33ccu);
+#endif
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+    LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY);
+  assert(lj_ffi_native_frame_sequence_acq(tg) == seq + 4u);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
+  assert(lj_tg_ffi_call_func_acq(tg) == old_func);
+  assert(ccallback_slot_acq(&tg->cb) == old_slot);
+  assert(ccallback_native_had_stopreq_acq(&tg->cb) == old_stopreq);
+
+  /* Callback observation is declaration-independent and requests the future
+  ** caller-state exit while this dormant slice still pops/unpins normally. */
+  xsave_stage(tg, root, baseslot, nslots);
+  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  ccallback_slot_rel(&tg->cb, 7);
+  actions = lj_ffi_native_trace_leave(L);
+  assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
+  assert(lj_tg_ffi_call_func_acq(tg) == old_func);
+  assert(ccallback_slot_acq(&tg->cb) == old_slot);
+
+  lj_tg_store_jit_base(tg, old_jitbase);
+  /* A native leave may service a previously pending GC handshake. Keep the
+  ** following mark-plane oracle independent of that lawful scheduling edge. */
+  lj_gc2_cycle_to_idle(g);
+}
+
 static void test_certified_native_frame_scanner(lua_State *L, global_State *g,
 					 TGState *tg, jit_State *J,
 					 GCtrace *T)
@@ -502,6 +634,7 @@ int main(void)
   assert(tg->ffi_xsave_nslots > tg->ffi_xsave_baseslot + LJ_FR2);
   assert(tg->ffi_xsave_root + tg->ffi_xsave_nslots <= maxstack);
 
+  test_xsave_native_owner_lifecycle(L, g, tg, scan_trace);
   test_certified_native_frame_scanner(L, g, tg, J, scan_trace);
 
   lua_close(L);

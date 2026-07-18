@@ -4,6 +4,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -268,6 +269,12 @@ int main(void)
   before_overflow = snapshot;
   frame_make(&frame, L, LJ_FFI_NATIVE_FRAME_MAX);
   assert(lj_ffi_native_frame_push(tg, &frame) == 0);
+  errno = EDOM;
+  /* Capacity is checked before the raw generated trace constant. A future
+  ** caller can side-exit without dereferencing this deliberate poison value. */
+  assert(lj_ffi_native_trace_enter(L, (GCtrace *)(uintptr_t)3u,
+				   (void *)(uintptr_t)5u) == 0);
+  assert(errno == EDOM);
   assert(lj_ffi_native_frame_sequence_acq(tg) == seq);
   assert(lj_ffi_native_frame_depth_acq(tg) == LJ_FFI_NATIVE_FRAME_MAX);
   assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==

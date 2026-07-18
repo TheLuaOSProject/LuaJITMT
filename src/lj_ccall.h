@@ -213,6 +213,18 @@ LJ_FUNC LJFFINativeFrameSnapshotResult lj_ffi_native_frame_snapshot(
   const TGState *tg, LJFFINativeFrameSnapshot *snapshot);
 LJ_FUNC uint64_t lj_ffi_native_frame_sequence_acq(const TGState *tg);
 LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
+
+#if LJ_HASJIT
+/* Owner-only XSAVE consumer for the future generic IR_CALLXS seam. Entry is
+** allocation-free and nonwaiting; zero requests a pre-call side exit without
+** consuming XSAVE state. Leave removes the frame and releases its exact trace
+** pin before checking fresh STOPREQ. Nested/callback entry remains gated until
+** suspended-frame publication exists. No recorder emits these calls yet. */
+#define LJ_FFI_NATIVE_LEAVE_FORCE_EXIT	0x80000000u
+LJ_FUNC int lj_ffi_native_trace_enter(lua_State *L, struct GCtrace *T,
+				      void *func);
+LJ_FUNC uint32_t lj_ffi_native_trace_leave(lua_State *L);
+#endif
 #if defined(LJ_FFI_NATIVE_FRAME_TEST_HELPERS)
 typedef void (*LJFFINativeFrameSnapshotHook)(TGState *tg);
 LJ_FUNC void lj_ffi_native_frame_test_set_snapshot_hook(
