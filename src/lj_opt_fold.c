@@ -268,15 +268,18 @@ LJFOLDF(kfold_numcomp)
 static int32_t kfold_intop(int32_t k1, int32_t k2, IROp op)
 {
   switch (op) {
-  case IR_ADD: k1 += k2; break;
-  case IR_SUB: k1 -= k2; break;
-  case IR_MUL: k1 *= k2; break;
+  /* IR integer arithmetic is defined modulo 2^32. Keep the fold in the
+  ** unsigned domain instead of relying on compiler signed-overflow wrapping.
+  */
+  case IR_ADD: k1 = (int32_t)((uint32_t)k1 + (uint32_t)k2); break;
+  case IR_SUB: k1 = (int32_t)((uint32_t)k1 - (uint32_t)k2); break;
+  case IR_MUL: k1 = (int32_t)((uint32_t)k1 * (uint32_t)k2); break;
   case IR_MOD: k1 = lj_vm_modi(k1, k2); break;
   case IR_NEG: k1 = (int32_t)(~(uint32_t)k1+1u); break;
   case IR_BAND: k1 &= k2; break;
   case IR_BOR: k1 |= k2; break;
   case IR_BXOR: k1 ^= k2; break;
-  case IR_BSHL: k1 <<= (k2 & 31); break;
+  case IR_BSHL: k1 = (int32_t)((uint32_t)k1 << (k2 & 31)); break;
   case IR_BSHR: k1 = (int32_t)((uint32_t)k1 >> (k2 & 31)); break;
   case IR_BSAR: k1 >>= (k2 & 31); break;
   case IR_BROL: k1 = (int32_t)lj_rol((uint32_t)k1, (k2 & 31)); break;
