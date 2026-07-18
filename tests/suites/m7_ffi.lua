@@ -52,8 +52,12 @@ local function assert_generic_ccall_source(t)
          "generic CALLXS still has a test-only production gate")
   assert(plain_count(recorder, "static IRType crec_ct2irt(") == 0,
          "recorder retained a non-snapshot CType-to-IR conversion")
-  assert(plain_count(recorder, "static TRef crec_call_args(") == 1,
-         "generic C-call argument recorder is not unique")
+  assert(plain_count(recorder,
+         "static MSize crec_call_args_collect(") == 1,
+         "generic C-call argument collector is not unique")
+  assert(plain_count(recorder,
+         "static TRef crec_call_args_emit(") == 1,
+         "generic C-call argument emitter is not unique")
   assert(plain_count(recorder, "IRT(IR_CALLXS, t)") == 1,
          "generic CALLXS emission is not unique")
 end
@@ -98,7 +102,7 @@ end
 return function(add)
   add({
     name = "m7_ffi_callxs_authentic",
-    description = "production generic CALLXS scalar/boxed/bool lifecycle",
+    description = "production generic CALLXS scalar/boxed/bool/sret lifecycle",
     run = function(t)
       local flags = table.concat({
         "-DLUA_USE_ASSERT",

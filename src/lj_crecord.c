@@ -2161,18 +2161,22 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
     crec_finalizer(J, trcd, 0, fin);
 }
 
-/* Record scalar argument conversions for one ABI-driven CALLXS.
+/* Collect scalar argument conversions for one ABI-driven CALLXS.
+** Building the CARG tree is deliberately separate: indirect aggregate results
+** need to allocate and root their hidden result box after every conversion and
+** guard, then prepend its payload pointer as ABI argument zero.
 ** Note: vararg inference may grow the C type table and invalidate CType
 ** pointers, so all CType accesses use snapshots.
 */
-static TRef crec_call_args(jit_State *J, RecordFFData *rd,
-			   CTState *cts, CType *ct)
+static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
+				    CTState *cts, CType *ct, TRef *args,
+				    MSize reserve)
 {
-  TRef args[CCI_NARGS_MAX];
   CType ctfcopy, dcopy;
   CTypeID fid;
   CTInfo info = ctype_info_acq(ct);
-  MSize i, n;
+  MSize limit = CCI_NARGS_MAX - reserve;
+  MSize n;
   TRef tr, *base;
   cTValue *o;
 #if LJ_TARGET_X86
@@ -2196,7 +2200,6 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
     if (!ctype_isattrib(ctfinfo)) break;
     fid = ctype_sib_acq(ctf);
   }
-  args[0] = TREF_NIL;
   for (n = 0, base = J->base+1, o = rd->argv+1; *base;
        n++, base++, o++) {
     CTypeID did;
@@ -2204,7 +2207,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
     CTInfo dinfo;
     CTSize dsize;
 
-    if (n >= CCI_NARGS_MAX)
+    if (n >= limit)
       lj_trace_err(J, LJ_TRERR_NYICALL);
 
     if (fid) {
@@ -2220,7 +2223,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
       if (ngpr >= 0) {
 	ngpr = -1;
 	args[n++] = TREF_NIL;
-	if (n >= CCI_NARGS_MAX)
+	if (n >= limit)
 	  lj_trace_err(J, LJ_TRERR_NYICALL);
       }
 #endif
@@ -2284,10 +2287,45 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 #endif
     args[n] = tr;
   }
-  tr = args[0];
-  for (i = 1; i < n; i++)
+  return n;
+}
+
+/* Emit a collected CARG tree, optionally with one hidden ABI argument first. */
+static TRef crec_call_args_emit(jit_State *J, const TRef *args, MSize n,
+				TRef hidden)
+{
+  MSize i = 0;
+  TRef tr;
+  if (hidden) {
+    tr = hidden;
+  } else {
+    if (n == 0) return TREF_NIL;
+    tr = args[i++];
+  }
+  for (; i < n; i++)
     tr = emitir(IRT(IR_CARG, IRT_NIL), tr, args[i]);
   return tr;
+}
+
+/* Match the interpreter's x64 ABI rules for the subset whose result storage
+** is unconditionally indirect. Small SysV aggregates still need recursive
+** eightbyte classification, while small Win64 aggregates may return in RAX;
+** leave both classes to the interpreter until multi-register lowering exists.
+*/
+static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
+{
+  if (!ctype_isstruct(info) || ctype_isvltype(info) || size == 0 ||
+      size == CTSIZE_INVALID)
+    return 0;
+#if LJ_TARGET_X64
+#if LJ_ABI_WIN
+  return !(size == 1 || size == 2 || size == 4 || size == 8);
+#else
+  return size > 16;
+#endif
+#else
+  return 0;
+#endif
 }
 
 /* Obtain the one exact-body placeholder patched to J->curfinal by every
@@ -2322,14 +2360,16 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     info = ctype_info_acq(ct);
   }
   if (ctype_isfunc(info)) {
+    TRef callargs[CCI_NARGS_MAX];
     TRef args, entered, func, callfunc, tr, result_box, result_payload;
     CType ctrsnap;
     CType *ctr;
     CTypeID result_id;
-    CTInfo ctr_info;
+    CTInfo ctr_info, result_info;
     CTSize result_size;
+    MSize nargs;
     IRType t;
-    int boxed_result;
+    int boxed_result, indirect_result, rooted_result;
 
 #if !LJ_TARGET_X64
     /* Only the x64 CALLXS/native-frame lowering has the production lifecycle
@@ -2351,15 +2391,28 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     }
 
     func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-    ctr = crec_ctype_rawchildid(J, cts, ct, &result_id, &ctrsnap);
+    /* Preserve the declared return CType ID on the cdata, exactly like the
+    ** interpreter. Classification uses the resolved raw child snapshot. */
+    result_id = ctype_cid(info);
+    /* Resolve the declared result once, retaining both the raw layout child
+    ** and the accumulated attributes. In particular, an outer CTA_ALIGN must
+    ** survive resolution so CNEW selects lj_cdata_newv before its payload
+    ** is exposed as the ABI sret pointer. */
+    if (!crec_direct_ctype_info(J, cts, result_id, &result_info, &result_size,
+				NULL, &ctrsnap))
+      lj_trace_err(J, LJ_TRERR_BADTYPE);
+    ctr = &ctrsnap;
     ctr_info = ctype_info_acq(ctr);
-    result_size = ctype_size_acq(ctr);
     /* Enum children live in the relocatable CType table too. Even rejected
     ** result classes must use the recorder's snapshot/retry reader contract. */
     t = crec_ct2irt_snapshot(J, cts, ctr);
+    indirect_result = crec_call_indirect_struct_result(ctr_info, result_size);
     if (ctype_isvoid(ctr_info)) {
       t = IRT_NIL;
       rd->nres = 0;
+    } else if (indirect_result) {
+      /* The hidden payload pointer is the actual ABI result channel. */
+      t = IRT_NIL;
     } else if (!(ctype_isnum(ctr_info) || ctype_isptr(ctr_info) ||
 		 ctype_isenum(ctr_info)) || t == IRT_CDATA) {
       lj_trace_err(J, LJ_TRERR_NYICALL);
@@ -2367,6 +2420,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 
     boxed_result = t == IRT_PTR || (LJ_64 && t == IRT_P32) ||
 	 t == IRT_I64 || t == IRT_U64 || ctype_isenum(ctr_info);
+    rooted_result = boxed_result || indirect_result;
     /* Dynamic booleans use a marked integer until native leave, then specialize
     ** in the caller. Reject nonstandard representations rather than guessing. */
     if (ctype_isbool(ctr_info) && t != IRT_U8 && t != IRT_U32)
@@ -2374,7 +2428,10 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     if (boxed_result && result_size != lj_ir_type_size[t])
       lj_trace_err(J, LJ_TRERR_NYICALL);
 
-    args = crec_call_args(J, rd, cts, ct);
+    /* Finish every conversion and guard before allocating a result root. The
+    ** pure CARG tree is emitted below once the hidden sret pointer exists. */
+    nargs = crec_call_args_collect(J, rd, cts, ct, callargs,
+				    indirect_result ? 1 : 0);
     callfunc = func;
     if ((info & CTF_VARARG)
 #if LJ_TARGET_X86
@@ -2385,7 +2442,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 
     result_box = TREF_NIL;
     result_payload = TREF_NIL;
-    if (boxed_result) {
+    if (rooted_result) {
       BCReg oldmax = J->maxslot;
       /* An allocation exit must replay the original call, while XSAVE needs a
       ** physical Lua root for the fresh box. Append a hidden slot rather than
@@ -2396,8 +2453,13 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       lj_assertJ(J->base[oldmax] == 0, "missing FFI argument sentinel");
       lj_snap_add(J);
       J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+      /* Over-aligned sret storage must take the CNEW/newv path. The returned
+      ** GCcdata is an interior aligned header, so payload is still cd+1. */
       result_box = emitir(IRTG(IR_CNEW, IRT_CDATA),
-			  lj_ir_kint(J, result_id), TREF_NIL);
+			  lj_ir_kint(J, result_id),
+			  indirect_result &&
+			    ctype_align(result_info) > CT_MEMALIGN ?
+			    lj_ir_kint(J, result_size) : TREF_NIL);
       result_payload = emitir(IRT(IR_ADD, IRT_PTR), result_box,
 			      lj_ir_kintp(J, sizeof(GCcdata)));
       J->base[oldmax] = result_box;
@@ -2413,6 +2475,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
     }
 
+    args = crec_call_args_emit(J, callargs, nargs,
+			       indirect_result ? result_payload : 0);
+
     /* Materialize roots before publishing the exact pinned native frame. Entry
     ** is nonthrowing and consumes XSAVE staging on both success and rejection.
     ** Keep its pre-call exit interpreter-only too: admission is transient and
@@ -2422,11 +2487,15 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     ** between. */
     entered = lj_ir_call(J, IRCALL_lj_ffi_native_trace_enter,
 			 crec_call_trace(J), func,
-			 boxed_result ? result_box :
+			 rooted_result ? result_box :
 			   lj_ir_knull(J, IRT_CDATA));
     emitir(IRTG(IR_NE, IRT_INT), entered, lj_ir_kint(J, 0));
     tr = emitir(IRT(IR_CALLXS, t), args, callfunc);
-    if (boxed_result) {
+    if (indirect_result) {
+      /* The callee filled the rooted payload directly. No post-call helper or
+      ** store may precede native leave. */
+      tr = result_box;
+    } else if (boxed_result) {
       emitir(IRT(IR_XSTORE, t), result_payload, tr);
       tr = result_box;
       if (t == IRT_I64 || t == IRT_U64) lj_needsplit(J);

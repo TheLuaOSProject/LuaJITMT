@@ -7,6 +7,40 @@
 
 static int32_t lj_callxs_auth_counter;
 static int32_t lj_callxs_auth_reference_value = 0x345678;
+static uint32_t lj_callxs_auth_aggregate_alpha_counter;
+static uint32_t lj_callxs_auth_aggregate_beta_counter;
+static uint32_t lj_callxs_auth_aggregate_aligned_counter;
+
+/* These deliberately unrelated 24-byte return types both use the fixed-size
+** aggregate sret ABI on the supported x64 targets. Their distinct field
+** layouts prevent a recorder test from accidentally validating one explicit
+** function/result shape twice. */
+struct lj_callxs_auth_aggregate_alpha {
+  uint64_t cookie;
+  double weight;
+  int32_t code;
+  uint32_t stamp;
+};
+
+struct lj_callxs_auth_aggregate_beta {
+  int64_t debt;
+  uint32_t stamp;
+  float ratio;
+  uint64_t token;
+};
+
+typedef struct {
+  uint64_t lane[3];
+} lj_callxs_auth_aggregate_aligned __attribute__((aligned(32)));
+
+typedef char lj_callxs_auth_aggregate_alpha_size[
+  sizeof(struct lj_callxs_auth_aggregate_alpha) == 24 ? 1 : -1];
+typedef char lj_callxs_auth_aggregate_beta_size[
+  sizeof(struct lj_callxs_auth_aggregate_beta) == 24 ? 1 : -1];
+typedef char lj_callxs_auth_aggregate_aligned_size[
+  sizeof(lj_callxs_auth_aggregate_aligned) == 24 ? 1 : -1];
+typedef char lj_callxs_auth_aggregate_aligned_align[
+  __alignof__(lj_callxs_auth_aggregate_aligned) == 32 ? 1 : -1];
 
 int32_t lj_callxs_auth_add(int32_t a, int32_t b)
 {
@@ -147,6 +181,66 @@ int32_t *lj_callxs_auth_reference_result(void)
 {
   lj_callxs_auth_counter++;
   return &lj_callxs_auth_reference_value;
+}
+
+struct lj_callxs_auth_aggregate_alpha
+lj_callxs_auth_aggregate_alpha_result(double bias, int32_t seed)
+{
+  struct lj_callxs_auth_aggregate_alpha result;
+  lj_callxs_auth_counter++;
+  lj_callxs_auth_aggregate_alpha_counter++;
+  result.cookie = UINT64_C(0xfedcba9876540000) + (uint32_t)seed;
+  result.weight = bias + (double)seed * 0.5;
+  result.code = seed * 3 - 17;
+  result.stamp = UINT32_C(0x13570000) + (uint32_t)seed;
+  return result;
+}
+
+struct lj_callxs_auth_aggregate_beta
+lj_callxs_auth_aggregate_beta_result(uint32_t seed, float scale)
+{
+  struct lj_callxs_auth_aggregate_beta result;
+  lj_callxs_auth_counter++;
+  lj_callxs_auth_aggregate_beta_counter++;
+  result.debt = -INT64_C(0x0123456789abcdef);
+  result.stamp = UINT32_C(0xa5a50000) + seed;
+  result.ratio = scale + (float)seed * 0.25f;
+  result.token = UINT64_C(0x0123456789ab0000) + seed;
+  return result;
+}
+
+lj_callxs_auth_aggregate_aligned
+lj_callxs_auth_aggregate_aligned_result(uint64_t seed)
+{
+  lj_callxs_auth_aggregate_aligned result;
+  lj_callxs_auth_counter++;
+  lj_callxs_auth_aggregate_aligned_counter++;
+  result.lane[0] = UINT64_C(0x8000000000000000) + seed;
+  result.lane[1] = UINT64_C(0x123456789abc0000) + seed;
+  result.lane[2] = UINT64_C(0xfedcba9876540000) + seed;
+  return result;
+}
+
+void lj_callxs_auth_aggregate_reset(void)
+{
+  lj_callxs_auth_aggregate_alpha_counter = 0;
+  lj_callxs_auth_aggregate_beta_counter = 0;
+  lj_callxs_auth_aggregate_aligned_counter = 0;
+}
+
+uint32_t lj_callxs_auth_aggregate_alpha_count(void)
+{
+  return lj_callxs_auth_aggregate_alpha_counter;
+}
+
+uint32_t lj_callxs_auth_aggregate_beta_count(void)
+{
+  return lj_callxs_auth_aggregate_beta_counter;
+}
+
+uint32_t lj_callxs_auth_aggregate_aligned_count(void)
+{
+  return lj_callxs_auth_aggregate_aligned_counter;
 }
 
 void lj_callxs_auth_reset(void)

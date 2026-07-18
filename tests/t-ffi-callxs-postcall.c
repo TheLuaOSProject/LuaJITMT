@@ -124,6 +124,73 @@ static unsigned snapshot_ref_count(GCtrace *T, const SnapShot *snap,
   return count;
 }
 
+static unsigned callarg_ref_count(IRIns *ir, IRRef ref, IRRef wanted)
+{
+  IRIns *ins;
+  if (ref == wanted)
+    return 1;
+  ins = &ir[ref];
+  if (ins->o != IR_CARG)
+    return 0;
+  return callarg_ref_count(ir, ins->op1, wanted) +
+	 callarg_ref_count(ir, ins->op2, wanted);
+}
+
+static IRRef callarg_first_ref(IRIns *ir, IRRef ref)
+{
+  while (ir[ref].o == IR_CARG)
+    ref = ir[ref].op1;
+  return ref;
+}
+
+static IRRef aggregate_payload_ref(IRIns *ir, IRRef root, IRRef enter)
+{
+  IRRef ref, payload = 0;
+  for (ref = root + 1; ref < enter; ref++) {
+    IRIns *ins = &ir[ref];
+    if (ins->o == IR_ADD && irt_type(ins->t) == IRT_P64 &&
+	(ins->op1 == root || ins->op2 == root)) {
+      assert(payload == 0);
+      payload = ref;
+    }
+  }
+  return payload;
+}
+
+static void assert_sized_aggregate_root(GCtrace *T, int32_t expected_size)
+{
+  IRIns *ir = trace_ir_acq(T);
+  IRRef ref, nins = trace_nins_acq(T);
+  unsigned found = 0;
+  for (ref = REF_FIRST; ref < nins; ref++) {
+    IRIns *preguard;
+    IRRef enter, sizeref;
+    EnterArgShape shape;
+    if (ir[ref].o != IR_CALLXS || irt_type(ir[ref].t) != IRT_NIL)
+      continue;
+    assert(ref > REF_FIRST);
+    preguard = &ir[ref - 1];
+    assert(preguard->o == IR_NE && irt_isguard(preguard->t));
+    enter = (preguard->op1 >= REF_FIRST &&
+	     ir[preguard->op1].o == IR_CALLS &&
+	     ir[preguard->op1].op2 == IRCALL_lj_ffi_native_trace_enter) ?
+	    preguard->op1 : preguard->op2;
+    assert(enter >= REF_FIRST && ir[enter].o == IR_CALLS &&
+	   ir[enter].op2 == IRCALL_lj_ffi_native_trace_enter);
+    memset(&shape, 0, sizeof(shape));
+    inspect_enter_args(ir, ir[enter].op1, T, &shape);
+    if (!shape.boxed_result_roots)
+      continue;
+    assert(shape.boxed_result_roots == 1);
+    assert(ir[shape.boxed_result_root].o == IR_CNEW);
+    sizeref = ir[shape.boxed_result_root].op2;
+    assert(sizeref != 0 && ir[sizeref].o == IR_KINT);
+    assert(ir[sizeref].i == expected_size);
+    found++;
+  }
+  assert(found != 0);
+}
+
 static void assert_exact_enter_constant(GCtrace *T)
 {
   IRIns *ir = trace_ir_acq(T);
@@ -222,15 +289,25 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
 	assert(alloc_snapshots == 1);
 	assert(replay_snapshots == 1);
       }
-      /* Boxed results perform exactly one raw store into the preallocated root.
-      ** Unboxed integer-width and float/u32 normalization may insert pure CONV
-      ** instructions. No guard, allocation or helper call may enter this
-      ** post-side-effect window. */
+      /* Scalar boxed results perform exactly one raw store into their root.
+      ** Fixed aggregate sret passes the same root's payload as CALLXS argument
+      ** zero, so the foreign function fills it directly and CALLXS returns
+      ** NIL. Unboxed normalization may insert only pure CONV instructions. */
       leave = ref + 1;
-      if (leave < nins && ir[leave].o == IR_XSTORE) {
+      if (shape.boxed_result_roots && irt_type(ir[ref].t) == IRT_NIL) {
+	IRRef payload = aggregate_payload_ref(ir,
+	  shape.boxed_result_root, enter);
+	/* An indirect aggregate has no machine result to copy. The rooted box's
+	** payload must be ABI argument zero and native leave must immediately
+	** follow the side effect. */
+	assert(leave < nins && ir[leave].o != IR_XSTORE);
+	assert(payload != 0);
+	assert(callarg_first_ref(ir, ir[ref].op1) == payload);
+	assert(callarg_ref_count(ir, ir[ref].op1, payload) == 1);
+      } else if (shape.boxed_result_roots) {
 	IRIns *store = &ir[leave];
 	IRIns *addr;
-	assert(shape.boxed_result_roots == 1);
+	assert(leave < nins && store->o == IR_XSTORE);
 	assert(!irt_isguard(store->t));
 	assert(store->op2 == ref);
 	assert(irt_type(store->t) == irt_type(ir[ref].t));
@@ -343,6 +420,19 @@ static lua_Integer run_named(lua_State *L, const char *name, lua_Integer n)
   return result;
 }
 
+static void run_aligned_value(lua_State *L, const char *name, lua_Integer n)
+{
+  const void *payload;
+  lua_getglobal(L, "__callxs_postcall_compile_entry");
+  lua_getglobal(L, name);
+  lua_pushinteger(L, n);
+  assert(lua_pcall(L, 2, 1, 0) == 0);
+  payload = lua_topointer(L, -1);
+  assert(payload != NULL);
+  assert(((uintptr_t)payload & (uintptr_t)31) == 0);
+  lua_pop(L, 1);
+}
+
 static lua_Integer run_entry_named(lua_State *L, const char *name,
 				    lua_Integer n)
 {
@@ -373,20 +463,48 @@ static void auth_reset(lua_State *L)
   ljt_lua_dostring(L, "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
 }
 
+static lua_Integer auth_aggregate_alpha_count(lua_State *L)
+{
+  lua_Integer count;
+  ljt_lua_loadstring(L,
+    "return __callxs_postcall_lib.lj_callxs_auth_aggregate_alpha_count()");
+  ljt_lua_pcall(L, 0, 1, "read aggregate-alpha foreign count");
+  count = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  return count;
+}
+
+static void auth_result_reset(lua_State *L, int aggregate_result)
+{
+  auth_reset(L);
+  if (aggregate_result)
+    ljt_lua_dostring(L,
+      "__callxs_postcall_lib.lj_callxs_auth_aggregate_reset()\n");
+}
+
+static void assert_auth_result_count(lua_State *L, lua_Integer expected,
+				     int aggregate_result)
+{
+  assert(auth_count(L) == expected);
+  if (aggregate_result)
+    assert(auth_aggregate_alpha_count(L) == expected);
+}
+
 static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
-				       TGState *tg, const char *run_name)
+				       TGState *tg, const char *run_name,
+				       int aggregate_result)
 {
   GCproto *pt;
   GCtrace *T;
+  uint8_t old_flags;
 
-  ljt_lua_dostring(L,
-    "jit.flush()\n"
-    "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  ljt_lua_dostring(L, "jit.flush()\n");
+  auth_result_reset(L, aggregate_result);
   /* The compile entry supplies the physical Lua caller required while the
   ** loop root is recorded; subsequent direct invocations exercise that root. */
   assert(run_entry_named(L, run_name, 200) == 200);
-  assert(auth_count(L) == 200);
-  auth_reset(L);
+  assert_auth_result_count(L, 200, aggregate_result);
+  auth_result_reset(L, aggregate_result);
 
   pt = global_lua_proto(L, run_name);
   assert(proto_has_bc(pt, BC_CALL));
@@ -404,10 +522,52 @@ static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
   lj_ffi_native_trace_test_set_finish_hook(NULL);
   assert(finish_calls != 0);
   lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
-  assert(auth_count(L) == 20);
+  assert_auth_result_count(L, 20, aggregate_result);
   assert(lj_ffi_native_frame_depth_acq(tg) == 0);
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(trace_native_pins_acq(T) == 0);
+
+  if (aggregate_result) {
+    /* Reject generated entry after the hidden result root was allocated and
+    ** staged. The replay snapshot must omit that box and execute each foreign
+    ** call exactly once through the interpreter. */
+    auth_result_reset(L, aggregate_result);
+    finish_calls = 0;
+    lj_ffi_native_trace_test_set_finish_hook(observe_unexpected_finish);
+    assert(lj_tg_in_native_acq(tg) == 0);
+    lj_tg_in_native_rel(tg, 1);
+    assert(run_named(L, run_name, 20) == 20);
+    assert(lj_tg_in_native_acq(tg) == 1);
+    lj_tg_in_native_rel(tg, 0);
+    lj_ffi_native_trace_test_set_finish_hook(NULL);
+    assert(finish_calls == 0);
+    assert_auth_result_count(L, 20, aggregate_result);
+    assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+    assert(trace_native_pins_acq(T) == 0);
+
+    /* A fresh STOPREQ throws after the completed sret call. The post-call
+    ** snapshot must restore the filled aggregate without replaying its foreign
+    ** effect; one interpreted and one generated call are therefore exact. */
+    auth_result_reset(L, aggregate_result);
+    old_flags = lj_tg_flags_acq(tg);
+    leave_hook_calls = 0;
+    lj_ffi_native_trace_test_set_leave_hook(
+      force_fresh_stopreq_after_native_leave);
+    lua_getglobal(L, run_name);
+    lua_pushinteger(L, 20);
+    assert(lua_pcall(L, 1, 1, 0) != 0);
+    lj_ffi_native_trace_test_set_leave_hook(NULL);
+    assert(leave_hook_calls == 1);
+    assert(lua_tostring(L, -1) != NULL);
+    assert(strstr(lua_tostring(L, -1),
+		  "thread interrupted: VM shutdown") != NULL);
+    lua_pop(L, 1);
+    lj_tg_flags_store_rlx(tg, old_flags);
+    assert_auth_result_count(L, 2, aggregate_result);
+    assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+    assert(lj_tg_in_native_acq(tg) == 0);
+    assert(trace_native_pins_acq(T) == 0);
+  }
   return T;
 }
 
@@ -523,6 +683,18 @@ int main(void)
     "uint16_t lj_callxs_auth_u16(int32_t);\n"
     "_Bool lj_callxs_auth_bool(int32_t);\n"
     "uint64_t lj_callxs_auth_u64_result(int32_t);\n"
+    "struct lj_callxs_auth_aggregate_alpha {\n"
+    "  uint64_t cookie; double weight; int32_t code; uint32_t stamp;\n"
+    "};\n"
+    "struct lj_callxs_auth_aggregate_alpha\n"
+    "  lj_callxs_auth_aggregate_alpha_result(double, int32_t);\n"
+    "typedef struct { uint64_t lane[3]; }\n"
+    "  lj_callxs_auth_aggregate_aligned __attribute__((aligned(32)));\n"
+    "lj_callxs_auth_aggregate_aligned\n"
+    "  lj_callxs_auth_aggregate_aligned_result(uint64_t);\n"
+    "void lj_callxs_auth_aggregate_reset(void);\n"
+    "uint32_t lj_callxs_auth_aggregate_alpha_count(void);\n"
+    "uint32_t lj_callxs_auth_aggregate_aligned_count(void);\n"
     "void lj_callxs_auth_store(int32_t *, int32_t, int32_t);\n"
     "]]\n"
     "local lib = ffi.load(assert(os.getenv('LJ_M7_FFI_CALLXS_SO')))\n"
@@ -654,6 +826,28 @@ int main(void)
     "    assert(value == boxed_u64_expected)\n"
     "  end\n"
     "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_aggregate_run(n)\n"
+    "  for i = 1, n do\n"
+    "    local value = lib.lj_callxs_auth_aggregate_alpha_result(0.5, i)\n"
+    "    assert(ffi.istype('struct lj_callxs_auth_aggregate_alpha', value))\n"
+    "    assert(value.cookie == 0xfedcba9876540000ULL + i)\n"
+    "    assert(value.weight == 0.5 + i*0.5)\n"
+    "    assert(value.code == i*3 - 17)\n"
+    "    assert(value.stamp == 0x13570000 + i)\n"
+    "  end\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_aligned_value(n)\n"
+    "  local value\n"
+    "  for i = 1, n do\n"
+    "    value = lib.lj_callxs_auth_aggregate_aligned_result(i)\n"
+    "    assert(ffi.istype('lj_callxs_auth_aggregate_aligned', value))\n"
+    "    assert(value.lane[0] == 0x8000000000000000ULL + i)\n"
+    "    assert(value.lane[1] == 0x123456789abc0000ULL + i)\n"
+    "    assert(value.lane[2] == 0xfedcba9876540000ULL + i)\n"
+    "  end\n"
+    "  return value\n"
     "end\n"
     "function _G.__callxs_postcall_void_run(n)\n"
     "  for i = 1, n do lib.lj_callxs_auth_store(result_p, i, i + 300) end\n"
@@ -931,20 +1125,39 @@ int main(void)
     "__callxs_postcall_callm_once",
     "__callxs_postcall_callm_once", BC_CALLM, 9, 1);
 
+  /* The declared 32-byte alignment is an outer CType attribute, not part of
+  ** the raw struct child. Prove the trace carries an exact CNEW size operand
+  ** into lj_cdata_newv and that the returned payload is actually aligned. */
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "__callxs_postcall_lib.lj_callxs_auth_aggregate_reset()\n");
+  run_aligned_value(L, "__callxs_postcall_aligned_value", 200);
+  ljt_lua_dostring(L,
+    "assert(__callxs_postcall_lib."
+    "lj_callxs_auth_aggregate_aligned_count() == 200)\n");
+  T = find_callxs_trace(J);
+  assert(T != NULL);
+  assert_sized_aggregate_root(T, 24);
+  assert(trace_native_pins_acq(T) == 0);
+
   /* A forced epoch exit restores each admitted scalar normalization or boxed
   ** result from the post-call snapshot. Exact counters prove no completed
   ** foreign call is replayed, while each runner validates its value/effect. */
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u32_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_double_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_float_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_i8_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u8_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_i16_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u16_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_bool_true_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_bool_false_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u64_run");
-  T = exercise_forced_result(L, J, tg, "__callxs_postcall_void_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u32_run", 0);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_double_run", 0);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_float_run", 0);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_i8_run", 0);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u8_run", 0);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_i16_run", 0);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u16_run", 0);
+  T = exercise_forced_result(L, J, tg,
+    "__callxs_postcall_bool_true_run", 0);
+  T = exercise_forced_result(L, J, tg,
+    "__callxs_postcall_bool_false_run", 0);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u64_run", 0);
+  T = exercise_forced_result(L, J, tg,
+    "__callxs_postcall_aggregate_run", 1);
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_void_run", 0);
 
   /* Record the dynamic bool as true, then force POSTCALL on a false result.
   ** The leave guard runs before boolean specialization, so its marked snapshot

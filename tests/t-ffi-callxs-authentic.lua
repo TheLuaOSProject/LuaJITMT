@@ -35,6 +35,31 @@ uint64_t lj_callxs_auth_u64_result(int32_t);
 typedef uint64_t __attribute__((aligned(8))) lj_callxs_auth_attr_u64_t;
 lj_callxs_auth_attr_u64_t lj_callxs_auth_attributed_u64_result(int32_t);
 int32_t &lj_callxs_auth_reference_result(void);
+struct lj_callxs_auth_aggregate_alpha {
+  uint64_t cookie;
+  double weight;
+  int32_t code;
+  uint32_t stamp;
+};
+struct lj_callxs_auth_aggregate_beta {
+  int64_t debt;
+  uint32_t stamp;
+  float ratio;
+  uint64_t token;
+};
+typedef struct {
+  uint64_t lane[3];
+} lj_callxs_auth_aggregate_aligned __attribute__((aligned(32)));
+struct lj_callxs_auth_aggregate_alpha
+  lj_callxs_auth_aggregate_alpha_result(double, int32_t);
+struct lj_callxs_auth_aggregate_beta
+  lj_callxs_auth_aggregate_beta_result(uint32_t, float);
+lj_callxs_auth_aggregate_aligned
+  lj_callxs_auth_aggregate_aligned_result(uint64_t);
+void lj_callxs_auth_aggregate_reset(void);
+uint32_t lj_callxs_auth_aggregate_alpha_count(void);
+uint32_t lj_callxs_auth_aggregate_beta_count(void);
+uint32_t lj_callxs_auth_aggregate_aligned_count(void);
 void lj_callxs_auth_reset(void);
 int32_t lj_callxs_auth_count(void);
 int32_t lj_callxs_auth_once(int32_t);
@@ -238,6 +263,159 @@ assert(run_iter(n) == triangle)
 assert(lib.lj_callxs_auth_count() == n)
 assert((trace_op_counts()["CALLXS"] or 0) > 0,
        "ITERC frame did not activate production CALLXS")
+
+-- Unrelated fixed aggregates exercise the generic sret path. The third type
+-- also requires the aligned CNEW/newv allocation path before its payload is
+-- passed as the hidden ABI result pointer.
+assert(ffi.sizeof("struct lj_callxs_auth_aggregate_alpha") == 24)
+assert(ffi.sizeof("struct lj_callxs_auth_aggregate_beta") == 24)
+assert(ffi.sizeof("lj_callxs_auth_aggregate_aligned") == 24)
+assert(ffi.alignof("lj_callxs_auth_aggregate_aligned") == 32)
+
+local function reset_aggregate_counts()
+  lib.lj_callxs_auth_aggregate_reset()
+end
+jit.off(reset_aggregate_counts, true)
+
+local function assert_aggregate_counts(alpha, beta, aligned)
+  assert(lib.lj_callxs_auth_aggregate_alpha_count() == alpha)
+  assert(lib.lj_callxs_auth_aggregate_beta_count() == beta)
+  assert(lib.lj_callxs_auth_aggregate_aligned_count() == (aligned or 0))
+end
+jit.off(assert_aggregate_counts, true)
+
+local function assert_aggregate_alpha(value, seed)
+  assert(ffi.istype("struct lj_callxs_auth_aggregate_alpha", value))
+  assert(value.cookie == 0xfedcba9876540000ULL + seed)
+  assert(value.weight == 0.5 + seed * 0.5)
+  assert(value.code == seed * 3 - 17)
+  assert(value.stamp == 0x13570000 + seed)
+end
+
+local function assert_aggregate_beta(value, seed)
+  assert(ffi.istype("struct lj_callxs_auth_aggregate_beta", value))
+  assert(value.debt == -0x0123456789abcdefLL)
+  assert(value.stamp == 0xa5a50000 + seed)
+  assert(value.ratio == 1.25 + seed * 0.25)
+  assert(value.token == 0x0123456789ab0000ULL + seed)
+end
+
+local function assert_aggregate_aligned(value, seed)
+  assert(ffi.istype("lj_callxs_auth_aggregate_aligned", value))
+  assert(value.lane[0] == 0x8000000000000000ULL + seed)
+  assert(value.lane[1] == 0x123456789abc0000ULL + seed)
+  assert(value.lane[2] == 0xfedcba9876540000ULL + seed)
+end
+
+local function aggregate_pair(nagg)
+  local alpha, beta, aligned
+  for i = 1, nagg do
+    alpha = lib.lj_callxs_auth_aggregate_alpha_result(0.5, i)
+    beta = lib.lj_callxs_auth_aggregate_beta_result(i, 1.25)
+    aligned = lib.lj_callxs_auth_aggregate_aligned_result(i)
+  end
+  return alpha, beta, aligned
+end
+
+jit.flush()
+reset_aggregate_counts()
+local aggregate_alpha, aggregate_beta, aggregate_aligned = aggregate_pair(n)
+assert_aggregate_alpha(aggregate_alpha, n)
+assert_aggregate_beta(aggregate_beta, n)
+assert_aggregate_aligned(aggregate_aligned, n)
+assert_aggregate_counts(n, n, n)
+local aggregate_counts = trace_op_counts()
+assert((aggregate_counts["XSAVE "] or 0) >= 3,
+       "aggregate path omitted XSAVE")
+assert((aggregate_counts["CALLXS"] or 0) >= 3,
+       "unrelated and over-aligned aggregate results omitted CALLXS")
+
+local function ignore_aggregate_alpha(nagg)
+  for i = 1, nagg do
+    lib.lj_callxs_auth_aggregate_alpha_result(0.5, i)
+  end
+  return true
+end
+
+local function fixed_aggregate_beta(nagg)
+  local result
+  for i = 1, nagg do
+    local value, extra1, extra2 =
+      lib.lj_callxs_auth_aggregate_beta_result(i, 1.25)
+    if extra1 ~= nil or extra2 ~= nil then return false end
+    result = value
+  end
+  return result
+end
+
+local function open_aggregate_alpha(nagg)
+  local result
+  for i = 1, nagg do
+    local count, value, extra = forward_results(
+      lib.lj_callxs_auth_aggregate_alpha_result(0.5, i))
+    if count ~= 1 or extra ~= nil then return false end
+    result = value
+  end
+  return result
+end
+
+jit.flush()
+reset_aggregate_counts()
+assert(ignore_aggregate_alpha(n))
+assert_aggregate_counts(n, 0)
+assert((trace_op_counts()["CALLXS"] or 0) > 0,
+       "ignored aggregate result omitted CALLXS")
+
+jit.flush()
+reset_aggregate_counts()
+assert_aggregate_beta(fixed_aggregate_beta(n), n)
+assert_aggregate_counts(0, n)
+assert((trace_op_counts()["CALLXS"] or 0) > 0,
+       "fixed aggregate result omitted CALLXS")
+
+jit.flush()
+reset_aggregate_counts()
+assert_aggregate_alpha(open_aggregate_alpha(n), n)
+assert_aggregate_counts(n, 0)
+assert((trace_op_counts()["CALLXS"] or 0) > 0,
+       "open aggregate result omitted CALLXS")
+
+local function aggregate_alpha_call_multres(x)
+  local value = lib.lj_callxs_auth_aggregate_alpha_result(
+    0.5, produce_one(x))
+  return value
+end
+
+local function aggregate_alpha_tail(x)
+  return lib.lj_callxs_auth_aggregate_alpha_result(0.5, x)
+end
+
+local function aggregate_alpha_tail_multres(x)
+  return lib.lj_callxs_auth_aggregate_alpha_result(0.5, produce_one(x))
+end
+
+local function run_aggregate_wrapper(nagg, fn)
+  local result
+  for i = 1, nagg do result = fn(i) end
+  return result
+end
+
+assert(hasbc(aggregate_alpha_call_multres, "CALLM"))
+assert(hasbc(aggregate_alpha_tail, "CALLT"))
+assert(hasbc(aggregate_alpha_tail_multres, "CALLMT"))
+
+for _, case in ipairs({
+  { "aggregate CALLM", aggregate_alpha_call_multres },
+  { "aggregate CALLT", aggregate_alpha_tail },
+  { "aggregate CALLMT", aggregate_alpha_tail_multres },
+}) do
+  jit.flush()
+  reset_aggregate_counts()
+  assert_aggregate_alpha(run_aggregate_wrapper(n, case[2]), n)
+  assert_aggregate_counts(n, 0)
+  assert((trace_op_counts()["CALLXS"] or 0) > 0,
+         case[1] .. " omitted CALLXS")
+end
 
 -- Pointer, enum and 64-bit results use a preallocated exact-CType box rooted
 -- through XSAVE and the native frame. Bool uses a dynamic snapshot marker and
