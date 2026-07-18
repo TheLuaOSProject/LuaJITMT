@@ -115,11 +115,15 @@ The focused `m7_ffi_native_frames` gate builds the runtime and fixture with
 install/runtime, foreign carrier detach, terminal orphan cleanup, and threaded
 shutdown gates also pass with this substrate.
 
-The broader pre-existing `t-ffi-ccall-native-helpers` fixture currently lets
-an expected STOPREQ escape its nested Lua `pcall`. A clean archive of pushed
-commit `387dbfd4` reproduces the identical failure without this change, so it is
-not a native-frame regression. It remains a real FFI/error-unwind defect to
-diagnose before activating generic traced calls.
+The broader pre-existing `t-ffi-ccall-native-helpers` fixture initially appeared
+to let an expected STOPREQ escape its nested Lua `pcall`. A clean archive of
+pushed commit `387dbfd4` reproduced the identical failure without this change.
+Debugger evidence then located the throw in `lua_loadx`, before the chunk had
+executed and created its inner `pcall`: the loader is itself an L-aware
+safepoint and correctly rejects a request already pending during compilation.
+The follow-up fixture correction precompiles the probe before publishing
+STOPREQ, then executes the retained closure with `lua_pcall`, so the test now
+isolates the intended post-foreign-call unwind rather than loader behavior.
 
 ## Next activation slices
 

@@ -61,6 +61,15 @@ static TGState *pending_tg;
 static uint32_t pending_actions;
 static NativeHelperRedispatchCtx *errno_redispatch_ctx;
 
+static const char fresh_stopreq_chunk[] =
+  "local ok, err = pcall(ccall_native_checkstop_probe)\n"
+  "local e, w = ccall_error_state_probe()\n"
+  "assert(ok == false, 'fresh STOPREQ helper check did not interrupt')\n"
+  "assert(e == ccall_expected_errno, e)\n"
+  "assert(w == ccall_expected_winerr, w)\n"
+  "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
+  "       tostring(err))\n";
+
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 static void *clobber_error_alloc(void *ud, void *ptr, size_t osize,
 				 size_t nsize)
@@ -263,6 +272,12 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   void *func = (void *)(uintptr_t)&dummy_foreign;
 
   ljt_tg_clear_stopreq(tg);
+  /* Compile before publishing STOPREQ. The loader is itself an L-aware
+  ** safepoint boundary and correctly throws a pending request before this
+  ** chunk can establish its inner pcall frame. Keep the compiled closure on
+  ** the Lua stack through the allocation-free native-state probe, then test
+  ** only the intended post-call checkstop unwind below. */
+  ljt_lua_loadstring(L, fresh_stopreq_chunk);
   ctx.g = g;
   ctx.tg = tg;
   ctx.published = 0;
@@ -308,14 +323,7 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   alloc.clobbers = 0;
   lua_setallocf(L, clobber_error_alloc, &alloc);
 #endif
-  ljt_lua_dostring(L,
-    "local ok, err = pcall(ccall_native_checkstop_probe)\n"
-    "local e, w = ccall_error_state_probe()\n"
-    "assert(ok == false, 'fresh STOPREQ helper check did not interrupt')\n"
-    "assert(e == ccall_expected_errno, e)\n"
-    "assert(w == ccall_expected_winerr, w)\n"
-    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
-    "       tostring(err))\n");
+  ljt_lua_pcall(L, 0, 0, "fresh STOPREQ pcall probe");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   lua_setallocf(L, alloc.oldf, alloc.oldud);
   assert(alloc.clobbers != 0);
