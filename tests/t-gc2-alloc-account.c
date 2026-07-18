@@ -917,21 +917,27 @@ int main(void)
   setintV(&vals[0], 1);
   /*
   ** Direct meta stores use the same public table-store publication route as
-  ** VM fallback stores: the owner is remembered once, and the helper also
-  ** observes the already-old source through the temporary-root, weak-value,
-  ** and final pair routes while resolving/publishing the slot.
+  ** VM fallback stores. A missing-key resolution remembers the owner once and
+  ** observes four already-old edges: the source temporary root, the direct
+  ** receiver root, the metamethod lookup's receiver snapshot, and the final
+  ** owner/value pair. The weak-value helper is WEAK-phase-only and contributes
+  ** no IDLE remembered telemetry.
   */
   settabV(L, &vals[1], grandchild);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
   assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
-  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0 + 3u);
+  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0 + 4u);
   assert(active_ssb_last(tg) == obj2gco(parent));
+  /* Existing-key resolution additionally publishes the copied old value as a
+  ** root and owner/value pair. Together with the source root, receiver root,
+  ** and final pair this filters five more old edges; the copied-read and
+  ** returned-owner routes remember the table twice. */
   settabV(L, &vals[1], child);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
   assert(gc2_remembered_filtered_acq(g) ==
-	 remembered_filtered0 + 6u);
+	 remembered_filtered0 + 9u);
   assert(gc2_remembered_pushed_acq(g) ==
-	 remembered_pushed0 + 2u);
+	 remembered_pushed0 + 3u);
   assert(active_ssb_last(tg) == obj2gco(parent));
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_test_ssb_drain(g);
