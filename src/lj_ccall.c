@@ -1400,6 +1400,8 @@ static void ffi_native_frame_copy(LJFFINativeFrame *dst,
   lj_ffi_native_frame_trace_rel(dst, lj_ffi_native_frame_trace_acq(src));
   lj_ffi_native_frame_L_rel(dst, lj_ffi_native_frame_L_acq(src));
   lj_ffi_native_frame_func_rel(dst, lj_ffi_native_frame_func_acq(src));
+  lj_ffi_native_frame_result_root_rel(dst,
+	lj_ffi_native_frame_result_root_acq(src));
   lj_ffi_native_frame_old_func_rel(dst,
 	lj_ffi_native_frame_old_func_acq(src));
   lj_ffi_native_frame_root_offset_rel(dst,
@@ -1428,6 +1430,7 @@ static void ffi_native_frame_clear(LJFFINativeFrame *frame)
   lj_ffi_native_frame_trace_rel(frame, NULL);
   lj_ffi_native_frame_L_rel(frame, NULL);
   lj_ffi_native_frame_func_rel(frame, NULL);
+  lj_ffi_native_frame_result_root_rel(frame, NULL);
   lj_ffi_native_frame_old_func_rel(frame, NULL);
   lj_ffi_native_frame_root_offset_rel(frame, 0);
   lj_ffi_native_frame_base_offset_rel(frame, 0);
@@ -1446,6 +1449,7 @@ static int ffi_native_frame_empty(const LJFFINativeFrame *frame)
   return lj_ffi_native_frame_trace_acq(frame) == NULL &&
     lj_ffi_native_frame_L_acq(frame) == NULL &&
     lj_ffi_native_frame_func_acq(frame) == NULL &&
+    lj_ffi_native_frame_result_root_acq(frame) == NULL &&
     lj_ffi_native_frame_old_func_acq(frame) == NULL &&
     lj_ffi_native_frame_root_offset_acq(frame) == 0 &&
     lj_ffi_native_frame_base_offset_acq(frame) == 0 &&
@@ -2209,7 +2213,8 @@ static int ccall_jit_trace_pin(global_State *g, GCtrace *T,
   return pinned;
 }
 
-int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func)
+int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func,
+			      GCcdata *result_root)
 {
   CCallErrorState err;
   CCallJITGeometry geo;
@@ -2268,6 +2273,7 @@ int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func)
   lj_ffi_native_frame_trace_rel(&frame, T);
   lj_ffi_native_frame_L_rel(&frame, L);
   lj_ffi_native_frame_func_rel(&frame, func);
+  lj_ffi_native_frame_result_root_rel(&frame, result_root);
   lj_ffi_native_frame_old_func_rel(&frame, lj_tg_ffi_call_func_acq(tg));
   lj_ffi_native_frame_root_offset_rel(&frame, geo.root_offset);
   lj_ffi_native_frame_base_offset_rel(&frame, geo.base_offset);

@@ -8566,6 +8566,31 @@ static GC2FFINativeScanStatus gc2_ffi_native_mark_trace(
   return GC2_FFI_NATIVE_SCAN_OK;
 }
 
+/* The generated-call result box is deliberately outside the materialized Lua
+** stack until CALLXS has returned and the caller snapshot is constructed.
+** Its native frame is therefore the stable direct root across ACTIVE foreign
+** execution, callback SUSPENDED continuations and the POSTCALL exit handoff. */
+static GC2FFINativeScanStatus gc2_ffi_native_mark_result_root(
+  global_State *g, const LJFFINativeFrame *frame)
+{
+  GCcdata *root = lj_ffi_native_frame_result_root_acq(frame);
+  LJGC2Lease lease;
+  int status;
+  if (!root)
+    return GC2_FFI_NATIVE_SCAN_OK;
+  if (!gc2_mark_thread_root_obj_status(g, obj2gco(root)))
+    return GC2_FFI_NATIVE_SCAN_RETRY;
+  /* Re-admit with an exact type lease instead of dereferencing the raw frame
+  ** word after a SWEEP recovery. A stale or corrupted publication which names
+  ** another live allocation is stable invalidity, never an exact cdata root. */
+  status = lj_gc2_obj_lease_acquire(g, obj2gco(root),
+	(uint32_t)~LJ_TCDATA, NULL, &lease);
+  if (status < 0)
+    return GC2_FFI_NATIVE_SCAN_INVALID;
+  lj_gc2_lease_release(&lease);
+  return GC2_FFI_NATIVE_SCAN_OK;
+}
+
 static GC2FFINativeScanStatus gc2_ffi_native_mark_frame_funcs(
   global_State *g, const GC2FFINativeGeometry *geo)
 {
@@ -8621,6 +8646,9 @@ static GC2FFINativeScanStatus gc2_ffi_native_scan_one(
     goto out;
   }
   status = gc2_ffi_native_mark_trace(g, frame);
+  if (status != GC2_FFI_NATIVE_SCAN_OK)
+    goto out;
+  status = gc2_ffi_native_mark_result_root(g, frame);
   if (status != GC2_FFI_NATIVE_SCAN_OK)
     goto out;
   if (!gc2_mark_thread_root_obj_status(g, obj2gco(geo.L))) {
@@ -8711,9 +8739,13 @@ static int gc2_scan_ffi_native_frames_parked(global_State *g, TGState *tg)
     ** pre-callback top/base geometry is not authority for the current stack.
     ** A suspended-only stack means an unrelated interpreted native helper is
     ** parked; the conservative owner scan below remains stack authority. */
-    status = (state == LJ_FFI_NATIVE_FRAME_F_ACTIVE) ?
-      gc2_ffi_native_scan_one(g, tg, frame, 1) :
-      gc2_ffi_native_mark_trace(g, frame);
+    if (state == LJ_FFI_NATIVE_FRAME_F_ACTIVE) {
+      status = gc2_ffi_native_scan_one(g, tg, frame, 1);
+    } else {
+      status = gc2_ffi_native_mark_trace(g, frame);
+      if (status == GC2_FFI_NATIVE_SCAN_OK)
+	status = gc2_ffi_native_mark_result_root(g, frame);
+    }
     if (status != GC2_FFI_NATIVE_SCAN_OK) {
       if (status == GC2_FFI_NATIVE_SCAN_INVALID)
 	gc2_ffi_native_scan_invalid_add(g, 1);
@@ -8734,12 +8766,12 @@ static int gc2_scan_ffi_native_frames_parked(global_State *g, TGState *tg)
   return 1;
 }
 
-/* Callback Lua is ordinary owner execution, so its current stack is covered by
-** the conservative owner scan. Preserve any older generated continuations as
-** exact trace graphs as well: retirement may already have cleared T->traceno,
-** making positive vmstate alone insufficient (and callback vmstate is INTERP
-** in any case). */
-static void gc2_mark_ffi_native_suspended_owner(global_State *g, TGState *tg)
+/* Owner execution covers the current Lua stack conservatively, but a generated
+** result box is not stack-visible until the protected post-call snapshot has
+** restored it. Preserve the exact trace and result root of every published
+** ACTIVE, SUSPENDED or POSTCALL frame. This also covers older callback
+** continuations after retirement has cleared T->traceno. */
+static int gc2_mark_ffi_native_owner_frames(global_State *g, TGState *tg)
 {
   LJFFINativeFrameSnapshot snapshot;
   LJFFINativeFrameSnapshotResult result;
@@ -8747,42 +8779,48 @@ static void gc2_mark_ffi_native_suspended_owner(global_State *g, TGState *tg)
   uint32_t i;
   result = lj_ffi_native_frame_snapshot(tg, &snapshot);
   if (result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY)
-    return;
-  if (result != LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE) {
-    gc2_root_scan_retry(g);
-    return;
-  }
+    return 1;
+  if (result != LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE)
+    goto retry;
   L = lj_tg_load_cur_L(tg);
-  if (!L) {
-    gc2_root_scan_retry(g);
-    return;
-  }
+  if (!L)
+    goto retry;
   for (i = 0; i < snapshot.depth; i++) {
     const LJFFINativeFrame *frame = &snapshot.frame[i];
     uint32_t state = lj_ffi_native_frame_flags_acq(frame) &
       (LJ_FFI_NATIVE_FRAME_F_ACTIVE | LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
        LJ_FFI_NATIVE_FRAME_F_POSTCALL);
-    if (state != LJ_FFI_NATIVE_FRAME_F_SUSPENDED)
-      continue;
+    if ((i + 1u < snapshot.depth &&
+	 state != LJ_FFI_NATIVE_FRAME_F_SUSPENDED) ||
+	(i + 1u == snapshot.depth &&
+	 state != LJ_FFI_NATIVE_FRAME_F_ACTIVE &&
+	 state != LJ_FFI_NATIVE_FRAME_F_SUSPENDED &&
+	 state != LJ_FFI_NATIVE_FRAME_F_POSTCALL))
+      goto retry;
     if (lj_ffi_native_frame_L_acq(frame) != L ||
-	gc2_ffi_native_mark_trace(g, frame) != GC2_FFI_NATIVE_SCAN_OK) {
-      gc2_root_scan_retry(g);
-      return;
-    }
+	gc2_ffi_native_mark_trace(g, frame) != GC2_FFI_NATIVE_SCAN_OK ||
+	gc2_ffi_native_mark_result_root(g, frame) !=
+	  GC2_FFI_NATIVE_SCAN_OK)
+      goto retry;
   }
   if (lj_ffi_native_frame_sequence_acq(tg) != snapshot.sequence)
-    gc2_root_scan_retry(g);
+    goto retry;
+  return 1;
+retry:
+  gc2_root_scan_retry(g);
+  return 0;
 }
 #endif
 
-static void gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
+static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
 {
   lua_State *thread_L, *cur_L;
   TValue tv;
+  int complete = 1;
   if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
-    return;
+    return 1;
 #if LJ_HASFFI && LJ_HASJIT
-  gc2_mark_ffi_native_suspended_owner(g, tg);
+  complete = gc2_mark_ffi_native_owner_frames(g, tg);
 #endif
   /* Detach tears down tmpbuf before publishing DEAD. Every remaining live TG
   ** scans this owner-private backing only at its acknowledgement boundary. */
@@ -8817,6 +8855,7 @@ static void gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
   }
 #endif
   gc2_scan_owned_needscan(g, tg);
+  return complete;
 }
 
 #if LJ_HASJIT
@@ -9090,7 +9129,7 @@ static int gc2_scan_cycle_owner_tg_roots_mode(global_State *g, TGState *tg,
   ** owner scan, including native/JIT maxstack widening and every NEEDSCAN
   ** handoff, remains authoritative until the later narrowing proof. */
   if (exact)
-    gc2_scan_owner_tg_roots(g, tg);
+    exact = gc2_scan_owner_tg_roots(g, tg);
   lj_gc2_smr_read_leave(g);
   return exact;
 }

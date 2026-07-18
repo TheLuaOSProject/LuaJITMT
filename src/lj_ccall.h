@@ -225,7 +225,7 @@ LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
 */
 #define LJ_FFI_NATIVE_LEAVE_FORCE_EXIT	0x80000000u
 LJ_FUNC int lj_ffi_native_trace_enter(lua_State *L, struct GCtrace *T,
-				      void *func);
+				      void *func, GCcdata *result_root);
 LJ_FUNC uint32_t lj_ffi_native_trace_leave(lua_State *L);
 LJ_FUNC uint32_t lj_ffi_native_trace_callback_suspend(lua_State *L);
 LJ_FUNC int lj_ffi_native_trace_callback_resume(lua_State *L,

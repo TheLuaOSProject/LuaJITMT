@@ -424,6 +424,7 @@ typedef LJ_ALIGN(8) struct LJFFINativeFrame {
   struct GCtrace *trace;		/* Exact body, never a reusable slot lookup. */
   lua_State *L;		/* Lua carrier owning the materialized stack. */
   void *func;			/* Foreign function entered by this frame. */
+  GCcdata *result_root;		/* Preallocated generated-call result box. */
   void *old_ffi_call_func;	/* Surrounding callback-discovery mirror. */
   uint64_t root_offset;		/* Materialized root interval, stack-relative. */
   uint64_t base_offset;
@@ -487,6 +488,18 @@ static LJ_AINLINE void lj_ffi_native_frame_func_rel(LJFFINativeFrame *frame,
 					     void *func)
 {
   la_storeptr_rel((void **)&frame->func, func);
+}
+
+static LJ_AINLINE GCcdata *lj_ffi_native_frame_result_root_acq(
+  const LJFFINativeFrame *frame)
+{
+  return (GCcdata *)la_loadptr_acq((void *const *)&frame->result_root);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_result_root_rel(
+  LJFFINativeFrame *frame, GCcdata *result_root)
+{
+  la_storeptr_rel((void **)&frame->result_root, result_root);
 }
 
 static LJ_AINLINE void *lj_ffi_native_frame_old_func_acq(

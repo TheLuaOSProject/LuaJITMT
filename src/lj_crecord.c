@@ -2410,7 +2410,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     lj_ffrecord_xsave(J);
     J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
     entered = lj_ir_call(J, IRCALL_lj_ffi_native_trace_enter,
-			 crec_call_trace(J), func);
+			 crec_call_trace(J), func,
+			 lj_ir_knull(J, IRT_CDATA));
     emitir(IRTG(IR_NE, IRT_INT), entered, lj_ir_kint(J, 0));
     tr = emitir(IRT(IR_CALLXS, t), args, callfunc);
     if (ctype_isbool(ctr_info)) {

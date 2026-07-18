@@ -82,6 +82,28 @@ static int proto_has_bc(GCproto *pt, BCOp wanted)
   return 0;
 }
 
+typedef struct EnterArgShape {
+  unsigned leaves;
+  unsigned trace_constants;
+  unsigned null_result_roots;
+} EnterArgShape;
+
+static void inspect_enter_args(IRIns *ir, IRRef ref, GCtrace *T,
+			       EnterArgShape *shape)
+{
+  IRIns *ins = &ir[ref];
+  if (ins->o == IR_CARG) {
+    inspect_enter_args(ir, ins->op1, T, shape);
+    inspect_enter_args(ir, ins->op2, T, shape);
+    return;
+  }
+  shape->leaves++;
+  if (ins->o == IR_KGC && ir_kgc_acq(ins) == obj2gco(T))
+    shape->trace_constants++;
+  if (ins->o == IR_KNULL && irt_type(ins->t) == IRT_CDATA)
+    shape->null_result_roots++;
+}
+
 static void assert_exact_enter_constant(GCtrace *T)
 {
   IRIns *ir = trace_ir_acq(T);
@@ -92,12 +114,12 @@ static void assert_exact_enter_constant(GCtrace *T)
       callxs++;
     if (ir[ref].o == IR_CALLS &&
 	ir[ref].op2 == IRCALL_lj_ffi_native_trace_enter) {
-      IRIns *carg = &ir[ir[ref].op1];
-      IRIns *ktrace;
-      assert(carg->o == IR_CARG);
-      ktrace = &ir[carg->op1];
-      assert(ktrace->o == IR_KGC);
-      assert(ir_kgc_acq(ktrace) == obj2gco(T));
+      EnterArgShape shape;
+      memset(&shape, 0, sizeof(shape));
+      inspect_enter_args(ir, ir[ref].op1, T, &shape);
+      assert(shape.leaves == 3);
+      assert(shape.trace_constants == 1);
+      assert(shape.null_result_roots == 1);
       found++;
     }
   }

@@ -16,7 +16,9 @@
 #include "lj_obj.h"
 #include "lj_arena.h"
 #include "lj_ccall.h"
+#include "lj_cdata.h"
 #include "lj_dispatch.h"
+#include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
@@ -340,6 +342,8 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   uint64_t seq = lj_ffi_native_frame_sequence_acq(tg);
   uint32_t pins = trace_native_pins_acq(T);
   uint32_t actions;
+  GCcdata *callback_result_root;
+  GCcdata *outer_nested_root, *inner_nested_root;
 
   assert(old_jitbase == NULL);
   assert(lj_tg_in_native_acq(tg) == 0);
@@ -354,7 +358,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
 #if LJ_TARGET_WINDOWS
   SetLastError((DWORD)0x13572468u);
 #endif
-  assert(lj_ffi_native_trace_enter(L, T, func) == 0);
+  assert(lj_ffi_native_trace_enter(L, T, func, NULL) == 0);
   assert(errno == EDOM);
 #if LJ_TARGET_WINDOWS
   assert(GetLastError() == (DWORD)0x13572468u);
@@ -375,7 +379,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   ** different trace. Callback resume would otherwise restore the wrong parent
   ** identity for side-exit selection. */
   lj_tg_vmstate_store_rel(tg, trace_vmstate + 1);
-  assert(lj_ffi_native_trace_enter(L, T, func) == 0);
+  assert(lj_ffi_native_trace_enter(L, T, func, NULL) == 0);
   assert(lj_ffi_native_frame_sequence_acq(tg) == seq);
   assert(lj_ffi_native_frame_depth_acq(tg) == 0);
   assert(trace_native_pins_acq(T) == pins);
@@ -387,7 +391,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
 #if LJ_TARGET_WINDOWS
   SetLastError((DWORD)0x24681357u);
 #endif
-  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_enter(L, T, func, NULL) == 1);
   assert(errno == EDOM);
 #if LJ_TARGET_WINDOWS
   assert(GetLastError() == (DWORD)0x24681357u);
@@ -407,6 +411,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(lj_ffi_native_frame_trace_acq(&snapshot.frame[0]) == T);
   assert(lj_ffi_native_frame_L_acq(&snapshot.frame[0]) == L);
   assert(lj_ffi_native_frame_func_acq(&snapshot.frame[0]) == func);
+  assert(lj_ffi_native_frame_result_root_acq(&snapshot.frame[0]) == NULL);
   assert(lj_ffi_native_frame_root_offset_acq(&snapshot.frame[0]) ==
     (uint64_t)((char *)root - (char *)stack));
   assert(lj_ffi_native_frame_base_offset_acq(&snapshot.frame[0]) ==
@@ -442,7 +447,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   ** body pin to a stable POSTCALL frame until the caller-state trace exit has
   ** completed protected snapshot restoration. */
   xsave_stage(tg, root, baseslot, nslots);
-  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_enter(L, T, func, NULL) == 1);
   finish_hook_mode = FINISH_HOOK_CALLBACK;
   finish_hook_calls = 0;
   lj_ffi_native_trace_test_set_finish_hook(native_finish_hook);
@@ -499,7 +504,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   /* A changed remotely acknowledged epoch takes the same non-replaying
   ** handoff, and the final epoch sample is made only after odd publication. */
   xsave_stage(tg, root, baseslot, nslots);
-  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_enter(L, T, func, NULL) == 1);
   finish_hook_mode = FINISH_HOOK_EPOCH;
   finish_hook_calls = 0;
   lj_ffi_native_trace_test_set_finish_hook(native_finish_hook);
@@ -518,9 +523,15 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   /* Generated callbacks park the exact continuation, let callback Lua own and
   ** relocate the stack, then reconstruct the JIT base and trace vmstate before
   ** reopening native state. CALLBACK_SEEN makes the eventual foreign return a
-  ** retained-pin POSTCALL exit even in this deterministic helper fixture. */
+  ** retained-pin POSTCALL exit even in this deterministic helper fixture. The
+  ** result box is not stack-visible in either state, so its frame root is the
+  ** only authority during both complete mark cycles below. */
+  lj_gc2_cycle_to_idle(g);
+  callback_result_root = lj_cdata_new_forjit(
+    L, CTID_INT32, (CTSize)sizeof(int32_t));
   xsave_stage(tg, root, baseslot, nslots);
-  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_enter(
+	L, T, func, callback_result_root) == 1);
   assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 1);
   {
     LJFFINativeFrame *live = &tg->ffi_native_frame[0];
@@ -542,6 +553,8 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(lj_tg_vmstate_load_acq(tg) == ~LJ_VMST_INTERP);
   assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
 	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert(lj_ffi_native_frame_result_root_acq(&snapshot.frame[0]) ==
+	 callback_result_root);
   assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
 	  (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
 	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
@@ -549,6 +562,12 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
 	 LJ_FFI_NATIVE_FRAME_F_SUSPENDED);
   lj_tg_in_native_rel(tg, 0);
   assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 0);
+  lj_gc2_force_major(g);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(callback_result_root)) == 0);
+  lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(callback_result_root)) == 1);
+  lj_gc2_cycle_to_idle(g);
   assert(lj_ffi_native_trace_callback_resume(L, 1) == 1);
   assert(lj_tg_in_native_acq(tg) == 1);
   assert(lj_tg_load_jit_base(tg) == base);
@@ -557,6 +576,18 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
   assert(lj_ffi_native_frame_depth_acq(tg) == 1);
   assert(trace_native_pins_acq(T) == pins + 1u);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert(lj_ffi_native_frame_result_root_acq(&snapshot.frame[0]) ==
+	 callback_result_root);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
+	  LJ_FFI_NATIVE_FRAME_F_POSTCALL) != 0);
+  lj_gc2_cycle_to_idle(g);
+  lj_gc2_force_major(g);
+  lj_gc2_mark_begin(g);
+  lj_gc2_scan_cycle_owner_tg_roots(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(callback_result_root)) == 1);
+  lj_gc2_cycle_to_idle(g);
   assert(lj_ffi_native_trace_exit_cleanup(L, T,
 	(uint32_t)trace_vmstate) == 1);
   assert(lj_ffi_native_frame_depth_acq(tg) == 0);
@@ -566,7 +597,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   ** positive trace vmstate and enclosing FFI mirrors must be restored before
   ** the platform unwinder crosses the generated body; native stays closed. */
   xsave_stage(tg, root, baseslot, nslots);
-  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_enter(L, T, func, NULL) == 1);
   assert(lj_ffi_native_trace_callback_suspend(L) == 1);
   lj_tg_in_native_rel(tg, 0);
   ccallback_slot_rel(&tg->cb, 9);
@@ -592,16 +623,24 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(trace_native_pins_acq(T) == pins);
 
   /* Callback Lua may itself enter generated CALLXS. Older continuations remain
-  ** SUSPENDED, exactly one top frame is ACTIVE, and both pins unwind LIFO. */
+  ** SUSPENDED, exactly one top frame is ACTIVE, and both pins unwind LIFO. Each
+  ** recursive frame owns a distinct result root. */
+  lj_gc2_cycle_to_idle(g);
+  outer_nested_root = lj_cdata_new_forjit(
+    L, CTID_INT64, (CTSize)sizeof(int64_t));
   xsave_stage(tg, root, baseslot, nslots);
-  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_enter(
+	L, T, func, outer_nested_root) == 1);
   assert(lj_ffi_native_trace_callback_suspend(L) == 1);
   lj_tg_in_native_rel(tg, 0);
+  inner_nested_root = lj_cdata_new_forjit(
+    L, CTID_UINT64, (CTSize)sizeof(uint64_t));
   lj_tg_store_jit_base(tg, base);
   lj_tg_vmstate_store_rel(tg, trace_vmstate);
   xsave_stage(tg, root, baseslot, nslots);
   assert(lj_ffi_native_trace_enter(
-	L, T, (void *)(uintptr_t)UINT64_C(0x12346000)) == 1);
+	L, T, (void *)(uintptr_t)UINT64_C(0x12346000),
+	inner_nested_root) == 1);
   assert(lj_ffi_native_frame_depth_acq(tg) == 2);
   assert(trace_native_pins_acq(T) == pins + 2u);
   assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 1);
@@ -620,6 +659,10 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   }
   assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
 	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert(lj_ffi_native_frame_result_root_acq(&snapshot.frame[0]) ==
+	 outer_nested_root);
+  assert(lj_ffi_native_frame_result_root_acq(&snapshot.frame[1]) ==
+	 inner_nested_root);
   assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
 	  (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
 	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
@@ -638,6 +681,16 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
 	  LJ_FFI_NATIVE_FRAME_F_SUSPENDED) != 0);
   assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[1]) &
 	  LJ_FFI_NATIVE_FRAME_F_SUSPENDED) != 0);
+  lj_gc2_cycle_to_idle(g);
+  lj_gc2_force_major(g);
+  lj_gc2_mark_begin(g);
+  lj_gc2_test_root_semantic_retry_once(obj2gco(outer_nested_root));
+  assert(lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg) == 0);
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(outer_nested_root)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(inner_nested_root)) == 1);
+  lj_gc2_cycle_to_idle(g);
   assert(lj_ffi_native_trace_callback_resume(L, 2) == 1);
   actions = lj_ffi_native_trace_leave(L);
   assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
@@ -646,6 +699,10 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(lj_ffi_native_frame_depth_acq(tg) == 1);
   assert(trace_native_pins_acq(T) == pins + 1u);
   assert(lj_tg_ffi_call_func_acq(tg) == func);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert(lj_ffi_native_frame_result_root_acq(&snapshot.frame[0]) ==
+	 outer_nested_root);
   /* Simulate the inner trace exit's return to callback interpretation. */
   lj_tg_store_jit_base(tg, NULL);
   lj_tg_vmstate_store_rel(tg, ~LJ_VMST_INTERP);
@@ -674,11 +731,13 @@ static void test_certified_native_frame_scanner(lua_State *L, global_State *g,
 {
   LJFFINativeFrame frame;
   GCtab *root;
+  GCcdata *result_root;
   GCproto *startpt = trace_startpt_acq(T);
   GCproto *snapshotpt;
   GCobj *kgc;
   TraceNo traceno = trace_traceno_acq(T);
   TValue *old_jitbase = lj_tg_load_jit_base(tg);
+  int32_t old_vmstate = lj_tg_vmstate_load_acq(tg);
   uint64_t attempts, invalid, retries, stable, seq;
 
   assert(traceno != 0 && traceref_safe(J, traceno) == T);
@@ -744,30 +803,68 @@ static void test_certified_native_frame_scanner(lua_State *L, global_State *g,
   assert(trace_nextroot_acq(T) == traceno);
   assert(traceref_safe(J, traceno) == T);
 
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  result_root = lj_cdata_new_forjit(
+    L, CTID_INT64, (CTSize)sizeof(int64_t));
+  setcdataV(L, L->top, result_root);
+  incr_top(L);
+  (void)lj_gc_flush_root_pending(g);
+
+  /* Transfer the fresh object's only semantic root from the temporary stack
+  ** slot to the even native frame before starting a fresh major bitmap. */
+  lj_ffi_native_frame_result_root_rel(&frame, result_root);
+  lj_tg_store_jit_base(tg, L->base);
+  lj_tg_vmstate_store_rel(tg, ~LJ_VMST_INTERP);
+  attempts = gc2_ffi_native_scan_attempts_acq(g);
+  stable = gc2_ffi_native_scan_stable_frames_acq(g);
+  seq = lj_ffi_native_frame_sequence_acq(tg);
+  assert(lj_ffi_native_frame_push(tg, &frame) == 1);
+  L->top--;
+  setnilV(L->top);
+  lj_gc2_force_major(g);
   lj_gc2_mark_begin(g);
   /* Stopped/stitched C-call traces use these permanent global-owned PCs when
   ** no Lua prototype is recording. They are valid graph leaves too. */
   assert(lj_gc2_mark_proto_for_pc(g, &g->bc_cfunc_int) == 1);
   assert(lj_gc2_mark_proto_for_pc(g, &g->bc_cfunc_ext) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(root)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(result_root)) == 0);
   kgc = find_unmarked_trace_kgc(g, T);
-  assert(kgc != NULL);
-  lj_tg_store_jit_base(tg, L->base);
-  attempts = gc2_ffi_native_scan_attempts_acq(g);
-  stable = gc2_ffi_native_scan_stable_frames_acq(g);
-  seq = lj_ffi_native_frame_sequence_acq(tg);
-  assert(lj_ffi_native_frame_push(tg, &frame) == 1);
+  /* Earlier owner-frame cycles may already have preserved every KGC. The
+  ** injected result-root retry below can only be reached after the exact trace
+  ** graph stage has independently authenticated and completed. */
+  retries = gc2_ffi_native_scan_retries_acq(g);
+  lj_gc2_test_root_semantic_retry_once(obj2gco(result_root));
+  assert(lj_gc2_test_scan_ffi_native_frames(g, tg) == 0);
+  assert(lj_gc2_test_root_semantic_retry_hits() == 1u);
+  assert(gc2_ffi_native_scan_retries_acq(g) == retries + 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(result_root)) == 0);
   assert(lj_gc2_test_scan_ffi_native_frames(g, tg) == 1);
-  assert(gc2_ffi_native_scan_attempts_acq(g) == attempts + 1u);
+  assert(gc2_ffi_native_scan_attempts_acq(g) == attempts + 2u);
   assert(gc2_ffi_native_scan_stable_frames_acq(g) == stable + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(root)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(result_root)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(startpt)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(snapshotpt)) == 1);
-  assert(lj_gc2_ismarked(g, kgc) == 1);
+  if (kgc)
+    assert(lj_gc2_ismarked(g, kgc) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 1);
   assert(trace_native_pins_acq(T) == 1u);
   assert(lj_ffi_native_frame_sequence_acq(tg) == seq + 2u);
   lj_ffi_native_frame_pop(tg, NULL);
+  lj_tg_vmstate_store_rel(tg, old_vmstate);
+
+  /* A successfully admitted object of the wrong immutable GC type is stable
+  ** invalidity. It must never be accepted merely because generic root marking
+  ** could preserve it. */
+  lj_ffi_native_frame_result_root_rel(&frame, (GCcdata *)(void *)root);
+  invalid = gc2_ffi_native_scan_invalid_acq(g);
+  assert(lj_ffi_native_frame_push(tg, &frame) == 1);
+  assert(lj_gc2_test_scan_ffi_native_frames(g, tg) == 0);
+  assert(gc2_ffi_native_scan_invalid_acq(g) == invalid + 1u);
+  lj_ffi_native_frame_pop(tg, NULL);
+  lj_ffi_native_frame_result_root_rel(&frame, NULL);
 
   /* Checked byte geometry rejects a stable misaligned offset. */
   lj_ffi_native_frame_base_offset_rel(&frame,

@@ -32,6 +32,8 @@ static void frame_make(LJFFINativeFrame *frame, lua_State *L, uint32_t n)
   lj_ffi_native_frame_L_rel(frame, L);
   lj_ffi_native_frame_func_rel(frame,
     (void *)(uintptr_t)(UINT64_C(0x20000) + (uint64_t)n * 16u));
+  lj_ffi_native_frame_result_root_rel(frame,
+    (GCcdata *)(uintptr_t)(UINT64_C(0x28000) + (uint64_t)n * 16u));
   lj_ffi_native_frame_old_func_rel(frame,
     n == 0 ? NULL :
       (void *)(uintptr_t)(UINT64_C(0x30000) + (uint64_t)n * 16u));
@@ -59,6 +61,8 @@ static void frame_assert(const LJFFINativeFrame *frame, lua_State *L,
   assert(lj_ffi_native_frame_L_acq(frame) == L);
   assert(lj_ffi_native_frame_func_acq(frame) ==
     (void *)(uintptr_t)(UINT64_C(0x20000) + (uint64_t)n * 16u));
+  assert(lj_ffi_native_frame_result_root_acq(frame) ==
+    (GCcdata *)(uintptr_t)(UINT64_C(0x28000) + (uint64_t)n * 16u));
   assert(lj_ffi_native_frame_old_func_acq(frame) ==
     (n == 0 ? NULL :
       (void *)(uintptr_t)(UINT64_C(0x30000) + (uint64_t)n * 16u)));
@@ -274,7 +278,7 @@ int main(void)
   ** caller can exit without dereferencing this deliberate poison value, while
   ** consuming the one-shot XSAVE staging for the rejected attempt. */
   assert(lj_ffi_native_trace_enter(L, (GCtrace *)(uintptr_t)3u,
-				   (void *)(uintptr_t)5u) == 0);
+				   (void *)(uintptr_t)5u, NULL) == 0);
   assert(errno == EDOM);
   assert(lj_ffi_native_frame_sequence_acq(tg) == seq);
   assert(lj_ffi_native_frame_depth_acq(tg) == LJ_FFI_NATIVE_FRAME_MAX);

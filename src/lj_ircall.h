@@ -273,7 +273,7 @@ typedef struct CCallInfo {
   _(FFI,	lj_cdata_new_forjit,	3,   S, CDATA, CCI_L) \
   _(FFI,	lj_cdata_newv,		4,   S, CDATA, CCI_L) \
   _(FFI,	lj_cdata_setfin,	4,   S, NIL, CCI_L) \
-  _(FFI,	lj_ffi_native_trace_enter, 3, S, INT, CCI_L) \
+  _(FFI,	lj_ffi_native_trace_enter, 4, S, INT, CCI_L) \
   _(FFI,	lj_ffi_native_trace_leave, 1, S, INT, CCI_L|CCI_T) \
   _(FFI,	strlen,			1,   L, INTP, 0) \
   _(FFI,	memcpy,			3,   S, PTR, 0) \
