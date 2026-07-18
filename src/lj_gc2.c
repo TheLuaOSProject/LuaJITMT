@@ -8602,8 +8602,16 @@ static GC2FFINativeScanStatus gc2_ffi_native_scan_one(
   GC2FFINativeGeometry geo;
   GC2MarkScope scope;
   GC2FFINativeScanStatus status;
+  uint32_t flags = lj_ffi_native_frame_flags_acq(frame);
   TValue *o;
 
+  /* POSTCALL retains a trace lifetime but is not a parked-stack certificate:
+  ** native state is already closed and the owner is running the exit guard.
+  ** It must never widen exact remote scanning authority. */
+  if ((flags & (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+		LJ_FFI_NATIVE_FRAME_F_POSTCALL)) !=
+      LJ_FFI_NATIVE_FRAME_F_ACTIVE)
+    return GC2_FFI_NATIVE_SCAN_INVALID;
   status = gc2_ffi_native_frame_geometry(g, tg, frame, &geo, &scope);
   if (status != GC2_FFI_NATIVE_SCAN_OK)
     return status;

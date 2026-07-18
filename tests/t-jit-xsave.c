@@ -294,6 +294,30 @@ static void xsave_stage(TGState *tg, TValue *root, uint32_t baseslot,
   la_store32_rel(&tg->ffi_xsave_nslots, nslots);
 }
 
+enum {
+  FINISH_HOOK_NONE,
+  FINISH_HOOK_CALLBACK,
+  FINISH_HOOK_EPOCH
+};
+
+static uint32_t finish_hook_mode;
+static uint32_t finish_hook_calls;
+static uint64_t finish_hook_old_epoch;
+
+static void native_finish_hook(TGState *tg)
+{
+  assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0);
+  finish_hook_calls++;
+  if (finish_hook_mode == FINISH_HOOK_CALLBACK) {
+    ccallback_slot_rel(&tg->cb, 7);
+  } else if (finish_hook_mode == FINISH_HOOK_EPOCH) {
+    finish_hook_old_epoch = lj_tg_hs_epoch_ack_acq(tg);
+    lj_tg_hs_epoch_ack_rel(tg, finish_hook_old_epoch + 1u);
+  } else {
+    assert(0);
+  }
+}
+
 static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
 				       TGState *tg, GCtrace *T)
 {
@@ -397,18 +421,82 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(ccallback_slot_acq(&tg->cb) == old_slot);
   assert(ccallback_native_had_stopreq_acq(&tg->cb) == old_stopreq);
 
-  /* Callback observation is declaration-independent and requests the future
-  ** caller-state exit while this dormant slice still pops/unpins normally. */
+  /* Callback observation is declaration-independent. It transfers the exact
+  ** body pin to a stable POSTCALL frame until the caller-state trace exit has
+  ** completed protected snapshot restoration. */
   xsave_stage(tg, root, baseslot, nslots);
   assert(lj_ffi_native_trace_enter(L, T, func) == 1);
-  ccallback_slot_rel(&tg->cb, 7);
+  finish_hook_mode = FINISH_HOOK_CALLBACK;
+  finish_hook_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(native_finish_hook);
+  errno = EOVERFLOW;
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)0x778899aau);
+#endif
   actions = lj_ffi_native_trace_leave(L);
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_hook_calls == 1);
   assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
-  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(errno == EOVERFLOW);
+#if LJ_TARGET_WINDOWS
+  assert(GetLastError() == (DWORD)0x778899aau);
+#endif
+  assert(lj_ffi_native_frame_depth_acq(tg) == 1);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+    LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert(snapshot.depth == 1);
+  assert(lj_ffi_native_frame_trace_acq(&snapshot.frame[0]) == T);
+  assert(lj_ffi_native_frame_L_acq(&snapshot.frame[0]) == L);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
+    (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
+     LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+     LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN |
+     LJ_FFI_NATIVE_FRAME_F_POSTCALL)) ==
+    (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
+     LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN |
+     LJ_FFI_NATIVE_FRAME_F_POSTCALL));
   assert(lj_tg_in_native_acq(tg) == 0);
-  assert(trace_native_pins_acq(T) == pins);
+  assert(trace_native_pins_acq(T) == pins + 1u);
   assert(lj_tg_ffi_call_func_acq(tg) == old_func);
   assert(ccallback_slot_acq(&tg->cb) == old_slot);
+
+  /* POSTCALL is a lifetime handoff, never a parked-stack scan certificate. */
+  assert(lj_gc2_test_scan_ffi_native_frames(g, tg) == 0);
+  errno = EOVERFLOW;
+#if LJ_TARGET_WINDOWS
+  SetLastError((DWORD)0xaabbccddu);
+#endif
+  assert(lj_ffi_native_trace_exit_cleanup(L, T,
+	(uint32_t)lj_ffi_native_frame_trace_no_acq(&snapshot.frame[0])) == 1);
+  assert(errno == EOVERFLOW);
+#if LJ_TARGET_WINDOWS
+  assert(GetLastError() == (DWORD)0xaabbccddu);
+#endif
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+    LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY);
+  assert(trace_native_pins_acq(T) == pins);
+  assert(lj_ffi_native_trace_exit_cleanup(L, T,
+	(uint32_t)trace_traceno_acq(T)) == 0);
+
+  /* A changed remotely acknowledged epoch takes the same non-replaying
+  ** handoff, and the final epoch sample is made only after odd publication. */
+  xsave_stage(tg, root, baseslot, nslots);
+  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  finish_hook_mode = FINISH_HOOK_EPOCH;
+  finish_hook_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(native_finish_hook);
+  actions = lj_ffi_native_trace_leave(L);
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_hook_calls == 1);
+  assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
+  lj_tg_hs_epoch_ack_rel(tg, finish_hook_old_epoch);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 1);
+  assert(trace_native_pins_acq(T) == pins + 1u);
+  assert(lj_ffi_native_trace_exit_cleanup(L, T,
+	(uint32_t)trace_traceno_acq(T)) == 1);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
 
   lj_tg_store_jit_base(tg, old_jitbase);
   /* A native leave may service a previously pending GC handshake. Keep the

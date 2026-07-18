@@ -33,6 +33,9 @@
 #include "lj_dispatch.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#if LJ_HASFFI && LJ_HASJIT
+#include "lj_ccall.h"
+#endif
 #if LJ_HASPROFILE
 #include "lj_profile.h"
 #endif
@@ -4415,6 +4418,12 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   ** concurrent grace pass can free metadata still needed to compute exd.pc.
   */
   errcode = lj_vm_cpcall(L, NULL, &exd, trace_exit_cp);
+#if LJ_HASFFI && LJ_HASJIT
+  /* A forced non-replayable foreign call transfers its exact body pin to this
+  ** exit. Snapshot restore (or its protected error) has finished, while the
+  ** SMR reader still keeps T valid for exact-match cleanup. */
+  (void)lj_ffi_native_trace_exit_cleanup(L, T, (uint32_t)parent);
+#endif
   lj_gc2_smr_read_leave(g);
   if (errcode) {
     ERRNO_RESTORE

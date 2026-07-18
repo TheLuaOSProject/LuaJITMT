@@ -1466,14 +1466,15 @@ static int ffi_native_frame_valid(const LJFFINativeFrame *frame)
   uint64_t top = lj_ffi_native_frame_top_offset_acq(frame);
   uint64_t jitbase = lj_ffi_native_frame_jit_base_offset_acq(frame);
   uint32_t flags = lj_ffi_native_frame_flags_acq(frame);
+  uint32_t state = flags & (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+			    LJ_FFI_NATIVE_FRAME_F_POSTCALL);
   return lj_ffi_native_frame_trace_acq(frame) != NULL &&
     lj_ffi_native_frame_L_acq(frame) != NULL &&
     lj_ffi_native_frame_func_acq(frame) != NULL &&
     lj_ffi_native_frame_trace_no_acq(frame) != 0 &&
-    (flags & (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
-	      LJ_FFI_NATIVE_FRAME_F_ACTIVE)) ==
-      (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
-       LJ_FFI_NATIVE_FRAME_F_ACTIVE) &&
+    (flags & LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED) != 0 &&
+    (state == LJ_FFI_NATIVE_FRAME_F_ACTIVE ||
+     state == LJ_FFI_NATIVE_FRAME_F_POSTCALL) &&
     (flags & ~LJ_FFI_NATIVE_FRAME_F_MASK) == 0 &&
     root <= base && base <= top && jitbase <= top &&
     lj_ffi_native_frame_old_stopreq_acq(frame) <= 1 &&
@@ -1534,9 +1535,16 @@ int lj_ffi_native_frame_push(TGState *tg, const LJFFINativeFrame *frame)
 {
   LJFFINativeFrame *dst;
   uint64_t seq;
-  uint32_t depth;
+  uint32_t depth, flags;
   if (LJ_UNLIKELY(tg == NULL || frame == NULL ||
 		  !ffi_native_frame_valid(frame)))
+    abort();
+  flags = lj_ffi_native_frame_flags_acq(frame);
+  /* POSTCALL is produced only by the in-place owner finish transaction. A
+  ** generic push always begins a new parked ACTIVE lifetime. */
+  if (LJ_UNLIKELY((flags & (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+			    LJ_FFI_NATIVE_FRAME_F_POSTCALL)) !=
+		  LJ_FFI_NATIVE_FRAME_F_ACTIVE))
     abort();
   seq = lj_ffi_native_frame_sequence_acq(tg);
   depth = lj_ffi_native_frame_depth_acq(tg);
@@ -1590,6 +1598,72 @@ void lj_ffi_native_frame_pop(TGState *tg, LJFFINativeFrame *frame)
   la_store64_rel(&tg->ffi_native_seq, seq + 2u);
 }
 
+#if LJ_HASJIT
+/* Begin the owner's final ACTIVE-frame transition. The odd sequence precedes
+** the last callback/epoch decision, so a future remote flush admission can
+** never certify the old even frame while the owner independently decides to
+** drop its pin. No payload is changed until the odd word is visible. */
+static LJFFINativeFrame *ffi_native_frame_finish_begin(
+  TGState *tg, const LJFFINativeFrame *expected, uint64_t *seqp,
+  uint32_t *depthp)
+{
+  LJFFINativeFrame *src;
+  uint64_t seq;
+  uint32_t depth, flags;
+  if (LJ_UNLIKELY(tg == NULL || expected == NULL || seqp == NULL ||
+		  depthp == NULL))
+    abort();
+  seq = lj_ffi_native_frame_sequence_acq(tg);
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  if (LJ_UNLIKELY((seq & 1u) != 0 || depth == 0 ||
+		  depth > LJ_FFI_NATIVE_FRAME_MAX ||
+		  seq > UINT64_MAX - 2u))
+    abort();
+  src = &tg->ffi_native_frame[depth - 1u];
+  flags = lj_ffi_native_frame_flags_acq(src);
+  if (LJ_UNLIKELY(!ffi_native_frame_valid(src) ||
+	  (flags & (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+		    LJ_FFI_NATIVE_FRAME_F_POSTCALL)) !=
+	    LJ_FFI_NATIVE_FRAME_F_ACTIVE ||
+	  lj_ffi_native_frame_trace_acq(src) !=
+	    lj_ffi_native_frame_trace_acq(expected) ||
+	  lj_ffi_native_frame_L_acq(src) !=
+	    lj_ffi_native_frame_L_acq(expected) ||
+	  lj_ffi_native_frame_trace_no_acq(src) !=
+	    lj_ffi_native_frame_trace_no_acq(expected)))
+    abort();
+  la_store64_rel(&tg->ffi_native_seq, seq + 1u);
+  /* The following force decision performs acquire loads. A full fence is
+  ** required here: release alone does not order this store before later loads
+  ** on x86 or in the C memory model. */
+  la_fence_seq();
+  *seqp = seq;
+  *depthp = depth;
+  return src;
+}
+
+static void ffi_native_frame_finish_end(TGState *tg, LJFFINativeFrame *src,
+					uint64_t seq, uint32_t depth,
+					int retain, int callback_seen)
+{
+  if (LJ_UNLIKELY(tg == NULL || src == NULL || (seq & 1u) != 0 ||
+		  lj_ffi_native_frame_sequence_acq(tg) != seq + 1u ||
+		  lj_ffi_native_frame_depth_acq(tg) != depth))
+    abort();
+  if (retain) {
+    uint32_t flags = LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
+	LJ_FFI_NATIVE_FRAME_F_POSTCALL;
+    if (callback_seen)
+      flags |= LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN;
+    lj_ffi_native_frame_flags_rel(src, flags);
+  } else {
+    ffi_native_frame_clear(src);
+    la_store32_rel(&tg->ffi_native_depth, depth - 1u);
+  }
+  la_store64_rel(&tg->ffi_native_seq, seq + 2u);
+}
+#endif
+
 LJFFINativeFrameSnapshotResult lj_ffi_native_frame_snapshot(
   const TGState *tg, LJFFINativeFrameSnapshot *snapshot)
 {
@@ -1642,6 +1716,16 @@ typedef struct CCallJITGeometry {
 } CCallJITGeometry;
 
 LJ_STATIC_ASSERT((LJ_FFI_NATIVE_LEAVE_FORCE_EXIT & 0x0000ffffu) == 0);
+
+#if defined(LJ_XSAVE_TEST_HELPERS)
+static LJFFINativeTraceFinishHook ffi_native_trace_finish_hook;
+
+void lj_ffi_native_trace_test_set_finish_hook(
+  LJFFINativeTraceFinishHook hook)
+{
+  la_storefunc_rel(&ffi_native_trace_finish_hook, hook);
+}
+#endif
 
 /* Validate owner-private staging entirely through integer byte geometry. This
 ** avoids undefined pointer arithmetic on corrupt pending state and keeps every
@@ -1819,10 +1903,13 @@ uint32_t lj_ffi_native_trace_leave(lua_State *L)
   global_State *g;
   TGState *tg;
   CCallbackRuntime *cb;
+  LJFFINativeFrame *src;
   GCtrace *T;
-  uint32_t actions, depth, force = 0;
+  uint64_t seq;
+  uint32_t actions, depth, finish_depth;
   MSize callback_slot;
   uint8_t had_stopreq;
+  int callback_seen, force, retain, stop;
   /* This must remain the first operation after the foreign return. */
   ccall_error_save(&err);
   if (LJ_UNLIKELY(L == NULL))
@@ -1849,27 +1936,100 @@ uint32_t lj_ffi_native_trace_leave(lua_State *L)
   ** leader owns its consumed poll. Do not change any payload or pin until
   ** native_leave has closed native state and returned from that wait. */
   actions = lj_native_leave(L);
+  /* This predicate may perform one final owner poll, but never throws. If it
+  ** reports a fresh STOPREQ, no generated post-call guard can be relied upon:
+  ** the frame and pin must be released before checkstop unwinds the trace. */
+  stop = lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
+  src = ffi_native_frame_finish_begin(tg, &frame, &seq, &finish_depth);
+#if defined(LJ_XSAVE_TEST_HELPERS)
+  {
+    LJFFINativeTraceFinishHook hook =
+      la_loadfunc_acq(&ffi_native_trace_finish_hook);
+    if (hook)
+      hook(tg);
+  }
+#endif
   cb = &tg->cb;
   callback_slot = ccallback_slot_acq(cb);
-  if (callback_slot != (MSize)~0u ||
-      lj_tg_hs_epoch_ack_acq(tg) !=
-        lj_ffi_native_frame_entry_exit_epoch_acq(&frame))
-    force = LJ_FFI_NATIVE_LEAVE_FORCE_EXIT;
+  callback_seen = callback_slot != (MSize)~0u;
+  /* The sequence is odd before this final decision. A remote reader therefore
+  ** cannot certify the old ACTIVE frame and race a zero-pin ordinary finish. */
+  force = actions != 0 || callback_seen || lj_tg_poll_acq(tg) != 0 ||
+    lj_tg_reqmask_acq(tg) != 0 ||
+    lj_tg_hs_epoch_ack_acq(tg) !=
+      lj_ffi_native_frame_entry_exit_epoch_acq(&frame);
+  retain = force && !stop;
 
   ccallback_slot_rel(cb,
     lj_ffi_native_frame_old_callback_slot_acq(&frame));
   lj_tg_ffi_call_func_rel(tg, lj_ffi_native_frame_old_func_acq(&frame));
   ccallback_native_had_stopreq_rel(
     cb, lj_ffi_native_frame_old_stopreq_acq(&frame));
-  lj_ffi_native_frame_pop(tg, NULL);
-  /* No stable frame names T after pop's final even publication. jit_base is
-  ** still the conservative independent trace lifetime proof. */
-  lj_trace_native_unpin(g, T);
+  ffi_native_frame_finish_end(tg, src, seq, finish_depth, retain,
+			      callback_seen);
+  if (!retain) {
+    /* No stable frame names T after the final even publication. jit_base is
+    ** still the conservative independent trace lifetime proof. */
+    lj_trace_native_unpin(g, T);
+  }
 
   ccall_error_restore(&err);
-  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  if (stop)
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
   ccall_error_restore(&err);
-  return actions | force;
+  return actions | (retain ? LJ_FFI_NATIVE_LEAVE_FORCE_EXIT : 0);
+}
+
+/* Release the exact POSTCALL lifetime transferred to an unconditional trace
+** exit. This is called after protected snapshot restore on both its success and
+** error paths. Absence is ordinary: almost every trace exit is unrelated to a
+** generic foreign call. A present POSTCALL frame must match exactly. */
+int lj_ffi_native_trace_exit_cleanup(lua_State *L, GCtrace *T,
+				     uint32_t traceno)
+{
+  CCallErrorState err;
+  LJFFINativeFrame frame;
+  global_State *g;
+  TGState *tg;
+  uint64_t seq;
+  uint32_t depth, flags;
+  int cleaned = 0;
+  ccall_error_save(&err);
+  if (LJ_UNLIKELY(L == NULL || T == NULL || traceno == 0))
+    goto out;
+  g = G(L);
+  if (LJ_UNLIKELY(g == NULL))
+    abort();
+  /* Trace exit runs on the current carrier. L->tg_hint may describe an older
+  ** carrier after migration, so use the same TLS/fallback route as unwind. */
+  tg = G2TG(g);
+  if (LJ_UNLIKELY(tg == NULL || lj_tg_load_cur_L(tg) != L))
+    abort();
+  seq = lj_ffi_native_frame_sequence_acq(tg);
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  if (LJ_UNLIKELY((seq & 1u) != 0 ||
+		  depth > LJ_FFI_NATIVE_FRAME_MAX))
+    abort();
+  if (depth == 0)
+    goto out;
+  ffi_native_frame_copy(&frame, &tg->ffi_native_frame[depth - 1u]);
+  if (LJ_UNLIKELY(!ffi_native_frame_valid(&frame)))
+    abort();
+  flags = lj_ffi_native_frame_flags_acq(&frame);
+  if ((flags & LJ_FFI_NATIVE_FRAME_F_POSTCALL) == 0)
+    goto out;
+  if (LJ_UNLIKELY((flags & LJ_FFI_NATIVE_FRAME_F_ACTIVE) != 0 ||
+	  lj_ffi_native_frame_L_acq(&frame) != L ||
+	  lj_ffi_native_frame_trace_acq(&frame) != T ||
+	  lj_ffi_native_frame_trace_no_acq(&frame) != traceno ||
+	  lj_tg_in_native_acq(tg) != 0))
+    abort();
+  lj_ffi_native_frame_pop(tg, NULL);
+  lj_trace_native_unpin(g, T);
+  cleaned = 1;
+out:
+  ccall_error_restore(&err);
+  return cleaned;
 }
 #endif
 

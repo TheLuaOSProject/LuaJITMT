@@ -401,16 +401,18 @@ typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 /* Generic traced-FFI native frame publication. This is deliberately distinct
 ** from CCallNativeState: generated code cannot retain a C automatic across a
 ** foreign call, while a remote GC/JIT observer needs stable per-TG storage.
-** The first dormant slice only publishes structural state. It does not grant
-** root-scanning authority, consume XSAVE staging or change native/JIT gates.
+** ACTIVE frames certify a parked foreign call. POSTCALL frames have closed
+** native state but retain the exact trace pin for the unconditional caller-
+** state exit which follows a non-replayable foreign side effect.
 */
 #define LJ_FFI_NATIVE_FRAME_MAX		16
 #define LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED	0x01u
 #define LJ_FFI_NATIVE_FRAME_F_ACTIVE		0x02u
 #define LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN	0x04u
+#define LJ_FFI_NATIVE_FRAME_F_POSTCALL		0x08u
 #define LJ_FFI_NATIVE_FRAME_F_MASK \
   (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED | LJ_FFI_NATIVE_FRAME_F_ACTIVE | \
-   LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN)
+   LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN | LJ_FFI_NATIVE_FRAME_F_POSTCALL)
 
 struct GCtrace;
 
@@ -424,7 +426,7 @@ typedef LJ_ALIGN(8) struct LJFFINativeFrame {
   uint64_t top_offset;
   uint64_t jit_base_offset;	/* Saved JIT base, stack-relative. */
   uint64_t entry_exit_epoch;	/* Future forced-exit epoch snapshot. */
-  uint32_t trace_no;		/* Diagnostic only; trace is authoritative. */
+  uint32_t trace_no;		/* Original reserved slot for exact cleanup. */
   MSize old_callback_slot;
   uint32_t flags;
   uint8_t old_native_had_stopreq;
