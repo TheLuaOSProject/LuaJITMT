@@ -123,11 +123,18 @@ int main(void)
   IdleReclaimCtx ctx;
   PatchedPC loop_patch, ret_patch, itern_patch;
   pthread_t reclaimer;
+  int cache_base, jfuncf_idx, loop_idx, ret_idx, itern_idx, itern_input_idx;
+  int probe_idx, generic_idx, generic_input_idx;
 
   assert(g != NULL);
   lua_gc(L, LUA_GCSTOP, 0);
   publish_ptr(L, "__idle_reclaim_vmstate", &G2TG(g)->vmstate);
   publish_ptr(L, "__idle_reclaim_hits", &native_hits);
+  /* The native-entry probe intentionally uses FFI/cdata metadata and therefore
+  ** runs only while the metadata SMR writer can make progress. The separate
+  ** closed-window numeric and generic traces below use scalar/upvalue state;
+  ** an unrelated retained metadata lookup would correctly wait for the test's
+  ** deliberately frozen exclusive writer and obscure the JIT-entry proof. */
   ljt_lua_dostring(L,
     "jit.flush()\n"
     "jit.on()\n"
@@ -151,11 +158,20 @@ int main(void)
     "  return x\n"
     "end\n"
     "for _ = 1, 20 do assert(__idle_reclaim_probe(400) == 80200) end\n"
-    "generic_input = {11, 22, 33, 44, 55}\n"
-    "function __idle_reclaim_generic(t)\n"
+    "function __idle_reclaim_closed_probe(n)\n"
+    "  local x = 0\n"
+    "  for i = 1, n do x = x + i end\n"
+    "  return x\n"
+    "end\n"
+    "for _ = 1, 20 do assert(__idle_reclaim_closed_probe(400) == 80200) end\n"
+    "local function idle_generic_iter(limit, i)\n"
+    "  i = i + 1\n"
+    "  if i <= limit then return i, i * 11 end\n"
+    "end\n"
+    "generic_input = 5\n"
+    "function __idle_reclaim_generic(limit)\n"
     "  local n, x = 0, 0\n"
-    "  for _, v in ipairs(t) do\n"
-    "    hits[0] = hits[0] + bit.rshift(bit.bnot(vmstate[0]), 31)\n"
+    "  for _, v in idle_generic_iter, limit, 0 do\n"
     "    n, x = n + 1, x + v\n"
     "  end\n"
     "  return n, x\n"
@@ -175,9 +191,11 @@ int main(void)
     "function __idle_shadow_ret(x) return x + 7 end\n"
     "jit.off(__idle_shadow_ret, true)\n"
     "idle_shadow_input = {11, 22, 33, 44, 55}\n"
-    "idle_real_next = next\n"
+    "local idle_real_next = next\n"
+    "local next = idle_real_next\n"
     "function idle_next_wrapper(t, k) return idle_real_next(t, k) end\n"
     "jit.off(idle_next_wrapper, true)\n"
+    "function __idle_shadow_set_next(f) next = f end\n"
     "function __idle_shadow_itern(t)\n"
     "  local n, x = 0, 0\n"
     "  for _, v in next, t do n, x = n + 1, x + v end\n"
@@ -221,6 +239,32 @@ int main(void)
   }
   lj_gc2_test_idle_reclaim_leave(g);
 
+  /* Retained table lookup now takes a short SMR reader while copying a global
+  ** value. Preload every value needed below before the test hook freezes the
+  ** exclusive reclaimer; otherwise lua_getglobal() would correctly wait for
+  ** the deliberately paused writer and the fixture would deadlock itself
+  ** before exercising closed-gate bytecode recovery. Keep the cached values on
+  ** the Lua stack as ordinary roots and duplicate them for each call. */
+  cache_base = lua_gettop(L);
+  lua_getglobal(L, "__idle_reclaim_jfuncf");
+  jfuncf_idx = lua_gettop(L);
+  lua_getglobal(L, "__idle_shadow_loop");
+  loop_idx = lua_gettop(L);
+  lua_getglobal(L, "__idle_shadow_ret");
+  ret_idx = lua_gettop(L);
+  lua_getglobal(L, "__idle_shadow_itern");
+  itern_idx = lua_gettop(L);
+  lua_getglobal(L, "idle_shadow_input");
+  itern_input_idx = lua_gettop(L);
+  lua_getglobal(L, "__idle_reclaim_closed_probe");
+  probe_idx = lua_gettop(L);
+  assert(lua_isfunction(L, jfuncf_idx));
+  assert(lua_isfunction(L, loop_idx));
+  assert(lua_isfunction(L, ret_idx));
+  assert(lua_isfunction(L, itern_idx));
+  assert(lua_istable(L, itern_input_idx));
+  assert(lua_isfunction(L, probe_idx));
+
   ctx.g = g;
   ctx.epoch = lj_gc2_retire_epoch(g) + 1u;
   ctx.reclaimed = ~(uint32_t)0;
@@ -235,12 +279,15 @@ int main(void)
   ** immediately before its trace/mcode retired-slot release pass. A real
   ** BC_JLOOP entry attempt must remain interpreted while the owned gate is
   ** closed. Prototype-owned startins recovery must let the interpreter finish
-  ** every iteration before the paused SMR writer is released. */
+  ** every iteration before the paused SMR writer is released. The scalar
+  ** closed probe's displaced counter is the authoritative native-entry veto;
+  ** the FFI/vmstate probe independently proves native execution before and
+  ** after this artificial pause. */
   assert(gc2_smr_reclaiming_acq(g) != 0);
   assert(gc2_jit_phase_gate_acq(g) == 0);
   assert(!lj_gc2_jit_entry_open(g));
   gc2_jit_sweep_displaced_rel(g, 0);
-  lua_getglobal(L, "__idle_reclaim_jfuncf");
+  lua_pushvalue(L, jfuncf_idx);
   lua_pushinteger(L, 37);
   ljt_lua_pcall(L, 1, 1, "closed IDLE JFUNCF entry");
   assert(lua_tointeger(L, -1) == 112);
@@ -248,7 +295,7 @@ int main(void)
   assert(gc2_jit_sweep_displaced_acq(g) != 0);
 
   gc2_jit_sweep_displaced_rel(g, 0);
-  lua_getglobal(L, "__idle_shadow_loop");
+  lua_pushvalue(L, loop_idx);
   lua_pushinteger(L, 1000);
   ljt_lua_pcall(L, 1, 2, "closed IDLE LOOP shadow");
   assert(lua_tointeger(L, -2) == 1000);
@@ -257,7 +304,7 @@ int main(void)
   assert(gc2_jit_sweep_displaced_acq(g) != 0);
 
   gc2_jit_sweep_displaced_rel(g, 0);
-  lua_getglobal(L, "__idle_shadow_ret");
+  lua_pushvalue(L, ret_idx);
   lua_pushinteger(L, 35);
   ljt_lua_pcall(L, 1, 1, "closed IDLE RET shadow");
   assert(lua_tointeger(L, -1) == 42);
@@ -266,8 +313,8 @@ int main(void)
 
   gc2_jit_sweep_displaced_rel(g, 0);
   lj_trace_test_force_startins_retry(1);
-  lua_getglobal(L, "__idle_shadow_itern");
-  lua_getglobal(L, "idle_shadow_input");
+  lua_pushvalue(L, itern_idx);
+  lua_pushvalue(L, itern_input_idx);
   ljt_lua_pcall(L, 1, 2, "closed IDLE ITERN shadow");
   assert(lua_tointeger(L, -2) == 5);
   assert(lua_tointeger(L, -1) == 165);
@@ -278,7 +325,7 @@ int main(void)
 
   gc2_jit_sweep_displaced_rel(g, 0);
   lj_trace_test_force_startins_retry(1);
-  lua_getglobal(L, "__idle_reclaim_probe");
+  lua_pushvalue(L, probe_idx);
   lua_pushinteger(L, 20000);
   ljt_lua_pcall(L, 1, 1, "closed IDLE reclaim entry");
   assert(lua_tonumber(L, -1) == 200010000.0);
@@ -293,6 +340,7 @@ int main(void)
   assert(la_load32_acq(&ctx.done) != 0);
   assert(gc2_smr_reclaiming_acq(g) == 0);
   assert(gc2_jit_phase_gate_acq(g) != 0);
+  lua_settop(L, cache_base);
 
   /* A failed ISNEXT must take a trace-body lease before deciding whether the
   ** observed JLOOP still names the exact live ITERN generation and before
@@ -300,8 +348,9 @@ int main(void)
   ** after the deliberately paused exclusive SMR writer has left. During the
   ** pause the real builtin above still exercises closed-gate JLOOP recovery
   ** through the immutable sidecar without waiting for body admission. */
+  lua_getglobal(L, "__idle_shadow_set_next");
   lua_getglobal(L, "idle_next_wrapper");
-  lua_setglobal(L, "next");
+  ljt_lua_pcall(L, 1, 0, "set ITERN invalidation iterator");
   lua_getglobal(L, "__idle_shadow_itern");
   lua_getglobal(L, "idle_shadow_input");
   ljt_lua_pcall(L, 1, 2, "reopened IDLE ITERN invalidation");
@@ -310,8 +359,9 @@ int main(void)
   lua_pop(L, 2);
   assert(bc_op((BCIns)la_load32_acq((const uint32_t *)itern_patch.pc)) ==
 	 BC_ITERC);
-  lua_getglobal(L, "idle_real_next");
-  lua_setglobal(L, "next");
+  lua_getglobal(L, "__idle_shadow_set_next");
+  lua_getglobal(L, "next");
+  ljt_lua_pcall(L, 1, 0, "restore ITERN iterator");
   restore_patch(&loop_patch);
   restore_patch(&ret_patch);
   restore_patch(&itern_patch);
@@ -323,12 +373,19 @@ int main(void)
   ctx.done = 0;
   la_store32_rel(&native_hits, 0);
   gc2_jit_sweep_displaced_rel(g, 0);
+  cache_base = lua_gettop(L);
+  lua_getglobal(L, "__idle_reclaim_generic");
+  generic_idx = lua_gettop(L);
+  lua_getglobal(L, "generic_input");
+  generic_input_idx = lua_gettop(L);
+  assert(lua_isfunction(L, generic_idx));
+  assert(lua_isnumber(L, generic_input_idx));
   lj_gc2_test_idle_reclaim_pause_after_jit_quiescence();
   assert(pthread_create(&reclaimer, NULL, idle_reclaim_main, &ctx) == 0);
   wait_for_idle_reclaim_pause(&ctx);
   lj_trace_test_force_startins_retry(1);
-  lua_getglobal(L, "__idle_reclaim_generic");
-  lua_getglobal(L, "generic_input");
+  lua_pushvalue(L, generic_idx);
+  lua_pushvalue(L, generic_input_idx);
   ljt_lua_pcall(L, 1, 2, "closed IDLE generic-loop entry");
   assert(lua_tointeger(L, -2) == 5);
   assert(lua_tointeger(L, -1) == 165);
@@ -344,6 +401,7 @@ int main(void)
   assert(la_load32_acq(&ctx.done) != 0);
   assert(gc2_smr_reclaiming_acq(g) == 0);
   assert(gc2_jit_phase_gate_acq(g) != 0);
+  lua_settop(L, cache_base);
 
   lua_getglobal(L, "__idle_reclaim_probe");
   lua_pushinteger(L, 20000);
