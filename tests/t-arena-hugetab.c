@@ -39,6 +39,24 @@ static void check_info(const LJHugeInfo *hi, size_t size, uint32_t flags)
   assert(hi->readers == 0);
 }
 
+static uint32_t hugetab_physical_slot(HugeTab *ht, const void *target)
+{
+  uint32_t cap = lj_arena_hugetab_slot_count(ht);
+  uint32_t slot;
+  for (slot = 0; slot < cap; slot++) {
+    void *p = NULL;
+    LJHugeInfo hi;
+    int result = lj_arena_hugetab_slot_snapshot_bounded(ht, slot, &p, &hi);
+    /* A single-threaded fixture has no writer which can defeat the one-shot
+    ** validation CAS. BUSY would therefore indicate an internal instability. */
+    assert(result != LJ_ARENA_HUGETAB_SLOT_BUSY);
+    if (result == LJ_ARENA_HUGETAB_SLOT_PRESENT && p == target)
+      return slot;
+  }
+  assert(!"HugeTab target lacks a physical slot");
+  return 0;
+}
+
 static void delete_unmap(HugeTab *ht, void *p)
 {
   LJHugeInfo hi;
@@ -1192,6 +1210,119 @@ static void test_huge_reader_lifetime(PRNGState *rs)
   lj_arena_hugetab_fini(&dst);
 }
 
+static void test_table_token_slot_leases(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 2819u;
+  HugeTab ht = { NULL };
+  LJHugeTokenLease lease = { NULL, NULL, 0, 0 };
+  LJHugeReader reader = { NULL, NULL, 0 };
+  LJGC2TableTokenTicket ticket;
+  LJGC2TabStamp *stamp;
+  LJHugeInfo hi;
+  void *p, *observed = NULL;
+  uint32_t slot;
+
+  assert(lj_arena_hugetab_init(&ht, 2));
+  assert(lj_arena_hugetab_slot_count(&ht) == 4u);
+  observed = (void *)(uintptr_t)1u;
+  hi.size = hi.flags = hi.readers = ~(uint32_t)0;
+  assert(lj_arena_hugetab_slot_snapshot_bounded(
+	&ht, lj_arena_hugetab_slot_count(&ht), &observed, &hi) ==
+	LJ_ARENA_HUGETAB_SLOT_EMPTY);
+  assert(observed == NULL && hi.size == 0u && hi.flags == 0u &&
+	 hi.readers == 0u);
+  observed = (void *)(uintptr_t)1u;
+  hi.size = hi.flags = hi.readers = ~(uint32_t)0;
+  assert(lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
+	&ht, lj_arena_hugetab_slot_count(&ht), &observed, &lease, &hi) ==
+	LJ_ARENA_HUGE_TOKEN_LEASE_MISSING);
+  assert(observed == NULL && hi.size == 0u && hi.flags == 0u &&
+	 hi.readers == 0u);
+  p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&ht, p, size,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) == 1);
+  slot = hugetab_physical_slot(&ht, p);
+
+  /* The direct physical-slot operation is the scanner's mapping-lifetime LP.
+  ** LIVE can transfer that exact counted ownership into the ordinary body
+  ** reader without a second lookup or a reader-count gap. */
+  assert(lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
+	&ht, slot, &observed, &lease, &hi) ==
+	LJ_ARENA_HUGE_TOKEN_LEASE_LIVE);
+  assert(observed == p && hi.size == size && hi.readers == 1u);
+  assert(lease.h == ht.h && lease.base == p && lease.size == size &&
+	 lease.body_authorized == 1u);
+  assert(lj_arena_hugetab_table_token_lease_take_reader(&lease, &reader));
+  assert(lease.h == NULL && lease.base == NULL && lease.size == 0u &&
+	 lease.body_authorized == 0u);
+  assert(reader.h == ht.h && reader.base == p && reader.size == size);
+  assert(lj_arena_hugetab_reader_covers_range(&reader, p, size));
+  assert(lj_arena_hugetab_reader_release(&reader, &hi) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+  assert(hi.readers == 0u);
+
+  /* A physical table token prevents the logical free from erasing its only
+  ** locator. DEFERRED admits the mapping header and embedded stamp only. Once
+  ** exact completion clears that generation, releasing the last header lease
+  ** performs the ordinary DEFER_FREE -> FREEING handoff. */
+  stamp = lj_arena_gc2_stamp_acq(p);
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(!lj_arena_hugetab_claim_external_free(&ht, p, &hi));
+  assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0 && hi.readers == 0u);
+  memset(&lease, 0, sizeof(lease));
+  observed = NULL;
+  assert(lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
+	&ht, slot, &observed, &lease, &hi) ==
+	LJ_ARENA_HUGE_TOKEN_LEASE_DEFERRED);
+  assert(observed == p && hi.readers == 1u &&
+	 (hi.flags & LJ_HUGEF_DEFER_FREE) != 0);
+  assert(lease.h == ht.h && lease.base == p && lease.size == size &&
+	 lease.body_authorized == 0u);
+  assert(!lj_arena_hugetab_table_token_lease_take_reader(&lease, &reader));
+  assert(lj_gc2_table_token_complete_exact(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_arena_hugetab_table_token_lease_release(&lease, &hi) ==
+	 LJ_ARENA_HUGE_READER_HANDOFF);
+  assert(lease.h == NULL && lease.base == NULL && lease.size == 0u &&
+	 lease.body_authorized == 0u);
+  assert(hi.readers == 0u &&
+	 (hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+  assert((hi.flags & LJ_HUGEF_DEFER_FREE) == 0);
+
+  /* FREEING and BUSY are allocator-metadata classifications, not leases.
+  ** The scanner may advance its physical cursor but receives no authority to
+  ** inspect even the embedded mapping header. */
+  memset(&lease, 0, sizeof(lease));
+  observed = NULL;
+  assert(lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
+	&ht, slot, &observed, &lease, &hi) ==
+	LJ_ARENA_HUGE_TOKEN_LEASE_FREEING);
+  assert(observed == NULL && lease.h == NULL && lease.base == NULL &&
+	 lease.size == 0u && lease.body_authorized == 0u && hi.readers == 0u);
+  delete_unmap(&ht, p);
+
+  p = lj_arena_huge_map(rs, size + 1u, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&ht, p, size + 1u,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_BUSY) == 1);
+  slot = hugetab_physical_slot(&ht, p);
+  memset(&lease, 0, sizeof(lease));
+  observed = NULL;
+  assert(lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
+	&ht, slot, &observed, &lease, &hi) ==
+	LJ_ARENA_HUGE_TOKEN_LEASE_BUSY);
+  assert(observed == NULL && lease.h == NULL && lease.base == NULL &&
+	 lease.size == 0u && lease.body_authorized == 0u && hi.readers == 0u);
+  assert(lj_arena_hugetab_forget_terminal(&ht, p, &hi) == 1);
+  lj_arena_huge_unmap(p, hi.size);
+  lj_arena_hugetab_fini(&ht);
+  assert(ht.h == NULL);
+}
+
 static void test_huge_sweep_reader_exact_admission(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2167u;
@@ -1567,7 +1698,9 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
   TGAlloc alloc;
   RegistryRescueRace race;
   pthread_t thread;
-  void *p;
+  void *p, *observed = NULL;
+  uint32_t slot;
+  int admission;
 
   assert(lj_arena_hugetab_init(&registry, 2));
   lj_arena_alloc_init(&alloc);
@@ -1576,6 +1709,18 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
   assert(p != NULL);
   memset(p, 0xa6, 64u);
   assert(lj_arena_alloc_registry_lookup(&alloc, lj_arena_of(p), NULL));
+  slot = hugetab_physical_slot(&registry, lj_arena_of(p));
+  assert(lj_arena_hugetab_slot_snapshot_bounded(
+	&registry, slot, &observed, NULL) == LJ_ARENA_HUGETAB_SLOT_PRESENT);
+  assert(observed == lj_arena_of(p));
+  admission = lj_arena_hugetab_rescue_slot_enter_bounded(
+	&registry, slot, lj_arena_of(p), NULL);
+  assert(admission == LJ_ARENA_RESCUE_FULL);
+  assert(*(const unsigned char *)p == 0xa6);
+  lj_arena_rescue_leave(lj_arena_of(p));
+  assert(lj_arena_hugetab_rescue_slot_enter_bounded(
+	&registry, lj_arena_hugetab_slot_count(&registry), lj_arena_of(p),
+	NULL) == LJ_ARENA_RESCUE_RETRY);
 
   race.registry = &registry;
   race.a = lj_arena_of(p);
@@ -2591,6 +2736,7 @@ int main(void)
 
   lj_prng_seed_fixed(&rs);
   test_huge_reader_lifetime(&rs);
+  test_table_token_slot_leases(&rs);
   test_huge_reader_root_recovery_orders(&rs);
   test_huge_reader_shapes_and_realloc(&rs);
   test_huge_reader_overflow_and_size(&rs);

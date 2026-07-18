@@ -80,6 +80,18 @@ static void pin_mark_closed_for_worker_fixture(global_State *g)
 }
 
 static int weak_snapshot_has(global_State *g, GCtab *t);
+
+#if defined(LJ_GC2_TEST_HELPERS)
+static int table_retry_locator_visible(global_State *g, GCobj *o)
+{
+  uint32_t recovery = lj_gc2_test_recovery_state(g, o);
+  return !lj_gc2_test_ssb_empty(g) ||
+    gc2_grey_top_acq(g) != gc2_grey_bottom_acq(g) ||
+    recovery == LJ_ARENA_RECOVERY_PENDING ||
+    recovery == LJ_ARENA_RECOVERY_CLAIMED ||
+    recovery == LJ_ARENA_RECOVERY_REDIRTY;
+}
+#endif
 #if LJ_HASFFI
 static int gc2_cdata_counting_finalizer(lua_State *L);
 #endif
@@ -4574,11 +4586,56 @@ typedef struct ExpectedMarkTransitionCtx {
   uint32_t cell;
 } ExpectedMarkTransitionCtx;
 
+typedef struct TableTokenScanCtx {
+  global_State *g;
+  GCtab *t;
+  int completed;
+} TableTokenScanCtx;
+
 static void *table_rescan_set_thread(void *arg)
 {
   TableRescanSetCtx *ctx = (TableRescanSetCtx *)arg;
   ctx->installed = lj_gc2_test_table_rescan_set(ctx->g, ctx->t);
   return NULL;
+}
+
+static void *table_token_scan_thread(void *arg)
+{
+  TableTokenScanCtx *ctx = (TableTokenScanCtx *)arg;
+  ctx->completed = lj_gc2_test_table_token_scan_one(ctx->g, ctx->t);
+  return NULL;
+}
+
+static LJGC2TabStamp *table_token_test_stamp(GCtab *t)
+{
+  LJGC2TabStamp *stamp = lj_arena_gc2_stamp_acq(t);
+  assert(stamp != NULL);
+  return stamp;
+}
+
+static uint64_t table_token_test_request_next(global_State *g, GCtab *t)
+{
+  LJGC2TabStamp *stamp = table_token_test_stamp(t);
+  uint64_t control = la_load64_acq(&stamp->token.control);
+  uint64_t generation = lj_gc2_table_token_generation(control) + 1u;
+  assert(generation > 0 &&
+	 generation <= LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+  assert(lj_gc2_test_table_token_request(g, t, generation));
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) ==
+	 LJ_GC2_TABLE_TOKEN_PENDING);
+  return generation;
+}
+
+static void table_token_test_wait_paused(uint32_t count)
+{
+  uint32_t spin;
+  for (spin = 0; spin < 1000000u; spin++) {
+    if (lj_gc2_test_table_token_paused() == count)
+      return;
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(!"table token scanner hook did not pause");
 }
 
 static void *expected_mark_transition_thread(void *arg)
@@ -4971,6 +5028,583 @@ static void test_table_rescan_queue_admission_retry(lua_State *L,
   assert(gc2_table_rescan_pending_acq(g) == pending0);
   settle_automatic_cycle(g);
   lua_settop(L, base);
+}
+
+static void test_table_token_small_live_exact(lua_State *L, global_State *g,
+					       TGState *tg)
+{
+  GCtab *parent, *child;
+  LJGC2TabStamp *stamp;
+  uint64_t grey0, pending0;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, base + 1, "token-child");
+  lj_gc2_mark_begin(g);
+  pending0 = gc2_table_rescan_pending_acq(g);
+  grey0 = gc2_grey_pushed_acq(g);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  (void)table_token_test_request_next(g, parent);
+  stamp = table_token_test_stamp(parent);
+  /* The dormant request helper publishes no SSB/grey/legacy membership. */
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(gc2_grey_pushed_acq(g) == grey0);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  assert(lj_gc2_test_table_token_scan_one(g, parent) == 1);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(lj_gc2_test_table_scan_current(g, parent));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+  UNUSED(tg);
+}
+
+static void test_table_token_small_cursor_budget(lua_State *L,
+						 global_State *g)
+{
+  HugeTab *registry;
+  GCArena *want;
+  GCtab *t = NULL, *child;
+  LJGC2TabStamp *stamp;
+  uint64_t maxsteps = 0, steps;
+  uint32_t cap, slot, target_cell, done = 0;
+  int base = lua_gettop(L), parent_index = 0;
+  int attempt;
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  /* Avoid the degenerate cursor origin: a same-kind second allocation is past
+  ** the first arena cell unless the preceding attempt crossed an arena end. */
+  for (attempt = 0; attempt < 8; attempt++) {
+    lua_newtable(L);
+    t = tabV(L->top - 1);
+    if (lj_arena_cellof(t) > LJ_AFIRST_CELL) {
+      parent_index = lua_gettop(L);
+      break;
+    }
+  }
+  assert(t != NULL && parent_index != 0);
+  target_cell = lj_arena_cellof(t);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, parent_index, "cursor-child");
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  (void)table_token_test_request_next(g, t);
+  stamp = table_token_test_stamp(t);
+  registry = (HugeTab *)gc2_small_arena_tab_acq(g);
+  want = lj_arena_of(t);
+  assert(registry != NULL);
+  cap = lj_arena_hugetab_slot_count(registry);
+  assert(cap != 0);
+
+  /* Derive a finite no-churn bound from the public physical snapshots. Empty
+  ** slots cost one identity; every present mapping costs one turn per cell. */
+  for (slot = 0; slot < cap; slot++) {
+    void *p = NULL;
+    LJHugeInfo hi;
+    int snap = lj_arena_hugetab_slot_snapshot_bounded(
+      registry, slot, &p, &hi);
+    if (snap == LJ_ARENA_HUGETAB_SLOT_PRESENT) {
+      assert(hi.size == LJ_ARENA_SIZE && p != NULL);
+      if (p == (void *)want) {
+        maxsteps += (uint64_t)(target_cell - LJ_AFIRST_CELL) + 1u;
+        break;
+      }
+      maxsteps += (uint64_t)(LJ_ARENA_CELLS - LJ_AFIRST_CELL);
+    } else {
+      maxsteps++;
+    }
+  }
+  assert(slot < cap && maxsteps > 1u);
+  lj_gc2_test_table_token_cursor_reset(g);
+  for (steps = 0; steps < maxsteps; steps++) {
+    done = lj_gc2_test_table_token_scan_small(g, 1);
+    if (done != 0)
+      break;
+    assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_PENDING);
+  }
+  assert(done == 1u && steps > 0 && steps < maxsteps);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+}
+
+static void test_table_token_request_observational_stale(lua_State *L,
+						  global_State *g)
+{
+  GCtab *parent, *child;
+  LJGC2TabStamp *stamp;
+  uint64_t control0, generation;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, base + 1, "stale-child");
+  stamp = table_token_test_stamp(parent);
+  control0 = la_load64_acq(&stamp->token.control);
+  generation = lj_gc2_table_token_generation(control0);
+  assert(generation + 2u <= LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+
+  /* IDLE cannot manufacture work which this tranche's scanner refuses. */
+  assert(!lj_gc2_test_table_token_request(g, parent, generation + 1u));
+  assert(la_load64_acq(&stamp->token.control) == control0);
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_test_table_token_request(g, parent, generation + 2u));
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_test_table_token_scan_one(g, parent) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  settle_automatic_cycle(g);
+
+  /* A stale D<G request in a fresh cycle is purely observational. It neither
+  ** rewinds NONE(G) nor marks a table whose graph has no durable dispatcher. */
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  control0 = la_load64_acq(&stamp->token.control);
+  assert(lj_gc2_table_token_generation(control0) == generation + 2u);
+  assert(lj_gc2_table_token_state(control0) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(!lj_gc2_test_table_token_request(g, parent, generation + 1u));
+  assert(la_load64_acq(&stamp->token.control) == control0);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+}
+
+static void test_table_token_huge_request_rejected(global_State *g,
+						    TGState *tg)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 4096u;
+  LJGC2TabStamp *stamp;
+  LJHugeInfo hi;
+  GCobj *o;
+  void *p;
+  uint64_t control, generation;
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(tg != NULL && lj_tg_flags_test_acq(tg, TGF_HUGETAB));
+  p = lj_arena_huge_map(&tg->prng, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  o = (GCobj *)p;
+  la_store8_rel(&o->gch.gct, (uint8_t)~LJ_TTAB);
+  assert(lj_arena_hugetab_insert(
+    &tg->huge, p, size, LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) == 1);
+  stamp = lj_arena_gc2_stamp_acq(p);
+  assert(stamp != NULL);
+  control = la_load64_acq(&stamp->token.control);
+  generation = lj_gc2_table_token_generation(control);
+  assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE);
+  assert(generation < LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+
+  lj_gc2_mark_begin(g);
+  /* The small-only request must reject from registry identity. It may not
+  ** inspect the synthetic table body or create an unreachable huge token. */
+  assert(!lj_gc2_test_table_token_request(
+    g, gco2tab(o), generation + 1u));
+  assert(la_load64_acq(&stamp->token.control) == control);
+  assert(lj_arena_hugetab_delete(&tg->huge, p, &hi) == 1);
+  assert(hi.size == size);
+  lj_arena_huge_unmap(p, hi.size);
+  settle_automatic_cycle(g);
+}
+
+static void test_table_token_small_free_no_body(lua_State *L,
+						 global_State *g)
+{
+  GCtab *t;
+  GCobj *o;
+  GCArena *a;
+  LJGC2TabStamp *stamp;
+  uint64_t payload0, terminal0;
+  uint32_t cell;
+  uint8_t gct;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  o = obj2gco(t);
+  a = lj_arena_of(t);
+  cell = lj_arena_cellof(t);
+  lj_gc2_mark_begin(g);
+  (void)table_token_test_request_next(g, t);
+  stamp = table_token_test_stamp(t);
+  payload0 = gc2_table_token_scan_payloads_acq(g);
+  terminal0 = gc2_table_token_scan_terminal_acq(g);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+				     LJ_ARENA_LIFETIME_DESTRUCT));
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_DESTRUCT,
+				     LJ_ARENA_LIFETIME_FREE));
+  gct = la_load8_acq(&o->gch.gct);
+  la_store8_rel(&o->gch.gct, 0);  /* Any body/header read must reject. */
+  assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+  assert(gc2_table_token_scan_payloads_acq(g) == payload0);
+  assert(gc2_table_token_scan_terminal_acq(g) == terminal0 + 1u);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_NONE);
+  la_store8_rel(&o->gch.gct, gct);
+  assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_FREE,
+				     LJ_ARENA_LIFETIME_LIVE));
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+}
+
+static void test_table_token_small_proof_races(lua_State *L,
+						global_State *g)
+{
+  TableTokenScanCtx ctx;
+  pthread_t scanner;
+  GCtab *t;
+  LJGC2TabStamp *stamp;
+  uint64_t generation, completed0;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  lj_gc2_mark_begin(g);
+  generation = table_token_test_request_next(g, t);
+  stamp = table_token_test_stamp(t);
+  ctx.g = g;
+  ctx.t = t;
+  ctx.completed = -1;
+
+  /* Dirty publication before the proof CAS makes exact traversal RETRY and
+  ** leaves the captured generation PENDING. */
+  lj_gc2_test_table_token_pause(LJ_GC2_TABLE_TOKEN_TEST_PRE_PROOF);
+  assert(pthread_create(&scanner, NULL, table_token_scan_thread, &ctx) == 0);
+  table_token_test_wait_paused(1);
+  /* worker_active is the scanner-owner LP: a peer scanner cannot enter the
+  ** same proof or complete the captured generation concurrently. */
+  assert(lj_gc2_test_table_token_scan_one(g, t) == 0);
+  lj_gc2_test_table_dirty_bump(g, t);
+  lj_gc2_test_table_token_release();
+  assert(pthread_join(scanner, NULL) == 0);
+  assert(ctx.completed == 0);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_PENDING);
+  assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+
+  /* Refresh after a stable proof invalidates only the old completion ticket.
+  ** The newer exact generation remains discoverable for the next scanner. */
+  generation++;
+  assert(lj_gc2_test_table_token_request(g, t, generation));
+  completed0 = gc2_table_token_scan_completed_acq(g);
+  ctx.completed = -1;
+  lj_gc2_test_table_token_pause(LJ_GC2_TABLE_TOKEN_TEST_POST_PROOF);
+  assert(pthread_create(&scanner, NULL, table_token_scan_thread, &ctx) == 0);
+  table_token_test_wait_paused(1);
+  generation++;
+  assert(lj_gc2_test_table_token_request(g, t, generation));
+  lj_gc2_test_table_token_release();
+  assert(pthread_join(scanner, NULL) == 0);
+  assert(ctx.completed == 0);
+  assert(gc2_table_token_scan_completed_acq(g) == completed0);
+  assert(lj_gc2_table_token_generation(
+	 la_load64_acq(&stamp->token.control)) == generation);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&stamp->token.control)) == LJ_GC2_TABLE_TOKEN_PENDING);
+  assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+}
+
+static void test_table_token_small_weak_oom_progress(lua_State *L,
+						      global_State *g)
+{
+  GCtab *first, *first_key, *first_val;
+  GCtab *later, *later_key, *later_val;
+  LJGC2TabStamp *first_stamp, *later_stamp;
+  MSize cap;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  make_weak_table(L, "v", &first, &first_key, &first_val);
+  make_weak_table(L, "v", &later, &later_key, &later_val);
+  lj_gc2_mark_begin(g);
+  (void)table_token_test_request_next(g, first);
+  (void)table_token_test_request_next(g, later);
+  first_stamp = table_token_test_stamp(first);
+  later_stamp = table_token_test_stamp(later);
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0);
+
+  /* Remove vector capacity for one exact attempt and fail its raw overflow
+  ** node. Telemetry is not identity: first remains PENDING. Restoring capacity
+  ** lets a later token complete before the transient first token. The
+  ** head-nonnull B-overflow close matrix remains future live-cutover work. */
+  gc2_weak_capacity_store_rlx(g, 0);
+  lj_gc2_test_weak_overflow_fail_alloc(1);
+  assert(lj_gc2_test_table_token_scan_one(g, first) == 0);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&first_stamp->token.control)) ==
+	 LJ_GC2_TABLE_TOKEN_PENDING);
+  assert(gc2_weak_overflow_acq(g) == NULL);
+  gc2_weak_capacity_store_rlx(g, cap);
+  assert(lj_gc2_test_table_token_scan_one(g, later) == 1);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&later_stamp->token.control)) ==
+	 LJ_GC2_TABLE_TOKEN_NONE);
+  assert(lj_gc2_table_token_state(
+	 la_load64_acq(&first_stamp->token.control)) ==
+	 LJ_GC2_TABLE_TOKEN_PENDING);
+  assert(lj_gc2_test_table_token_scan_one(g, first) == 1);
+  lj_gc2_test_weak_overflow_fail_alloc(0);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+  UNUSED(first_key); UNUSED(first_val);
+  UNUSED(later_key); UNUSED(later_val);
+}
+
+static void test_legacy_weak_oom_requeues(lua_State *L, global_State *g,
+					  TGState *tg)
+{
+  GCtab *weak, *key, *val;
+  GCobj *o;
+  MSize cap;
+  uint64_t defer0, defer1;
+  uint32_t pending0, i;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  make_weak_table(L, "v", &weak, &key, &val);
+  o = obj2gco(weak);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  pending0 = gc2_table_rescan_pending_acq(g);
+  assert(pending0 == 0);
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0);
+  assert(lj_gc2_test_table_rescan_set(g, weak));
+  assert(lj_gc2_test_grey_push(g, o));
+
+  /* Exercise the production legacy traversal, not the exact-token wrapper.
+  ** Failed overflow allocation must retain exact COUNTED membership and
+  ** republish a concrete traversal identity before this bounded worker turn
+  ** returns. */
+  gc2_weak_capacity_store_rlx(g, 0);
+  lj_gc2_test_weak_overflow_fail_alloc(4096u);
+  assert(lj_gc2_worker_drain(g, 1) == 1u);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_tab_gc2_rescan_state_acq(weak) == LJ_TAB_RESCAN_COUNTED);
+  assert(gc2_weak_overflow_acq(g) == NULL);
+  assert(!weak_snapshot_has(g, weak));
+  assert(table_retry_locator_visible(g, o));
+
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  assert(!lj_gc2_weak_complete(g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH));
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(gc2_weak_mark_closed_acq(g) == 0);
+
+  /* Persistent failure is a scheduling outcome, not unbounded work. Both
+  ** public drivers yield after one durable retry quantum even with a very
+  ** large explicit budget, preserving membership and a concrete locator. */
+  defer0 = gc2_deferred_epoch_acq(g);
+  assert(lj_gc2_collect_active(L) == 0);
+  defer1 = gc2_deferred_epoch_acq(g);
+  assert(defer1 > defer0 && defer1 - defer0 <= 32u);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_tab_gc2_rescan_state_acq(weak) == LJ_TAB_RESCAN_COUNTED);
+  assert(table_retry_locator_visible(g, o));
+
+  defer0 = gc2_deferred_epoch_acq(g);
+  assert(lj_gc2_step_explicit(L, 1u << 20) == 0);
+  defer1 = gc2_deferred_epoch_acq(g);
+  assert(defer1 > defer0 && defer1 - defer0 <= 32u);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_tab_gc2_rescan_state_acq(weak) == LJ_TAB_RESCAN_COUNTED);
+  assert(table_retry_locator_visible(g, o));
+
+  /* Keep the fault armed across the forced all-work drain. The pre-fix path
+  ** consumed its own SSB retry thousands of times in this one call. A prompt
+  ** abort-to-IDLE now stops after the already-requeued outcome and preserves
+  ** both exact membership and a concrete locator for the next MARK. */
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_tab_gc2_rescan_state_acq(weak) == LJ_TAB_RESCAN_COUNTED);
+  assert(table_retry_locator_visible(g, o));
+
+  /* Once weak identity storage is available, the republished legacy item
+  ** survives into a new cycle, completes normally, and releases the exact
+  ** aggregate close veto. */
+  lj_gc2_test_weak_overflow_fail_alloc(0);
+  gc2_weak_capacity_store_rlx(g, cap);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  for (i = 0; i < 64u &&
+	 gc2_table_rescan_pending_acq(g) != pending0; i++)
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  assert(lj_tab_gc2_rescan_state_acq(weak) == LJ_TAB_RESCAN_NONE);
+  assert(weak_snapshot_has(g, weak));
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+  UNUSED(tg); UNUSED(key); UNUSED(val);
+}
+
+static void test_legacy_weak_oom_recovery_quantum(lua_State *L,
+						   global_State *g,
+						   TGState *tg)
+{
+  GCtab *weak, *key, *val;
+  GCobj *o;
+  GCRef *next0, *end0;
+  MSize cap;
+  uint64_t items0, defer0;
+  uint32_t pending0, i;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  make_weak_table(L, "v", &weak, &key, &val);
+  o = obj2gco(weak);
+  lj_gc2_mark_begin(g);
+  pin_mark_closed_for_worker_fixture(g);
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0);
+  items0 = gc2_recovery_items_acq(g);
+  pending0 = gc2_table_rescan_pending_acq(g);
+  assert(lj_gc2_test_recovery_publish(g, o));
+  assert(lj_gc2_test_recovery_state(g, o) == LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(g) == items0 + 1u);
+
+  /* Remove only this logical TG's SSB publication lane. The failed weak-node
+  ** retry must REDIRTY its already-CLAIMED recovery identity, so an UINT_MAX
+  ** recovery drain performs one scheduling attempt and promptly yields with
+  ** the exact count/state still PENDING. */
+  next0 = lj_tg_ssb_next_acq(tg);
+  end0 = lj_tg_ssb_end_acq(tg);
+  assert(next0 != NULL && end0 != NULL && next0 <= end0);
+  lj_tg_ssb_next_rel(tg, NULL);
+  lj_tg_ssb_end_rel(tg, NULL);
+  gc2_weak_capacity_store_rlx(g, 0);
+  lj_gc2_test_weak_overflow_fail_alloc(4096u);
+  defer0 = gc2_deferred_epoch_acq(g);
+  assert(lj_gc2_test_recovery_drain(g, ~(uint32_t)0) == 1u);
+  assert(gc2_deferred_epoch_acq(g) > defer0);
+  assert(lj_gc2_test_recovery_state(g, o) == LJ_ARENA_RECOVERY_PENDING);
+  assert(gc2_recovery_items_acq(g) == items0 + 1u);
+  assert(gc2_table_rescan_pending_acq(g) == pending0 + 1u);
+  assert(lj_tab_gc2_rescan_state_acq(weak) == LJ_TAB_RESCAN_COUNTED);
+
+  lj_tg_ssb_end_rel(tg, end0);
+  lj_tg_ssb_next_rel(tg, next0);
+  lj_gc2_test_weak_overflow_fail_alloc(0);
+  gc2_weak_capacity_store_rlx(g, cap);
+  assert(lj_gc2_test_recovery_drain(g, ~(uint32_t)0) == 1u);
+  assert(lj_gc2_test_recovery_state(g, o) == LJ_ARENA_RECOVERY_IDLE);
+  assert(gc2_recovery_items_acq(g) == items0);
+  /* The recovered weak table is complete. Its newly marked metatable may own
+  ** an independent table token/grey item, so test per-object completion first
+  ** and then drain that ordinary child frontier to the aggregate baseline. */
+  assert(lj_tab_gc2_rescan_state_acq(weak) == LJ_TAB_RESCAN_NONE);
+  assert(weak_snapshot_has(g, weak));
+  for (i = 0; i < 64u &&
+	 gc2_table_rescan_pending_acq(g) != pending0; i++)
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+  assert(gc2_table_rescan_pending_acq(g) == pending0);
+  settle_automatic_cycle(g);
+  lua_settop(L, base);
+  UNUSED(key); UNUSED(val);
+}
+
+static void test_weak_overflow_headless_reservation_guard(lua_State *L,
+						   global_State *g)
+{
+  GCtab *weak, *key, *val;
+  MSize cap, i;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  make_weak_table(L, "v", &weak, &key, &val);
+  lj_gc2_mark_begin(g);
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0 && gc2_weak_stack_acq(g) != NULL &&
+	 gc2_weak_ready_acq(g) != NULL && gc2_weak_overflow_acq(g) == NULL);
+  /* Model a completely published vector followed by one reserved overflow
+  ** whose raw node allocation failed. This directly exercises reserved>cap
+  ** with no head, independent of the cap==0 traversal fallback. */
+  for (i = 0; i < cap; i++) {
+    setgcrefrel(gc2_weak_stack_acq(g)[i], obj2gco(weak));
+    la_store8_rel(&gc2_weak_ready_acq(g)[i], 1);
+  }
+  gc2_weak_count_store_rlx(g, (uint64_t)cap + 1u);
+  lj_gc2_mark_to_weak(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  assert(!lj_gc2_test_weak_overflow_clear_bridge(g, NULL));
+  lj_gc2_cycle_to_idle(g);  /* Next MARK reset discards this synthetic gap. */
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lua_settop(L, base);
+  UNUSED(key); UNUSED(val);
+}
+
+static void test_weak_overflow_full_oom_count_bounded(lua_State *L,
+						       global_State *g)
+{
+  GCtab *weak, *key, *val;
+  GC2WeakOverflow *node;
+  MSize cap, i;
+  uint32_t attempt;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  make_weak_table(L, "v", &weak, &key, &val);
+  lj_gc2_mark_begin(g);
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0 && gc2_weak_stack_acq(g) != NULL &&
+	 gc2_weak_ready_acq(g) != NULL && gc2_weak_overflow_acq(g) == NULL);
+  for (i = 0; i < cap; i++) {
+    setgcrefrel(gc2_weak_stack_acq(g)[i], obj2gco(weak));
+    la_store8_rel(&gc2_weak_ready_acq(g)[i], 1);
+  }
+  gc2_weak_count_store_rlx(g, (uint64_t)cap);
+
+  /* Real cap-full record attempts reserve beyond the contiguous vector, then
+  ** roll that aggregate reservation back if the raw overflow node cannot be
+  ** published. Persistent OOM therefore cannot amplify next-cycle sizing. */
+  lj_gc2_test_weak_overflow_fail_alloc(64u);
+  for (attempt = 0; attempt < 64u; attempt++) {
+    assert(!lj_gc2_test_weak_record(g, weak));
+    assert(gc2_weak_count_acq(g) == (uint64_t)cap);
+    assert(gc2_weak_overflow_acq(g) == NULL);
+  }
+
+  lj_gc2_test_weak_overflow_fail_alloc(0);
+  assert(lj_gc2_test_weak_record(g, weak));
+  assert(gc2_weak_count_acq(g) == (uint64_t)cap + 1u);
+  node = gc2_weak_overflow_acq(g);
+  assert(node != NULL && lj_gc2_test_weak_overflow_singleton(g, weak));
+
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  /* The next MARK reset consumes the successful raw overflow identity. */
+  lj_gc2_mark_begin(g);
+  assert(gc2_weak_overflow_acq(g) == NULL);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, base);
+  UNUSED(key); UNUSED(val);
 }
 
 static void test_tvalue_edge_status(lua_State *L, global_State *g)
@@ -8163,6 +8797,17 @@ int main(void)
   test_table_rescan_exact_membership(L, g);
   test_table_rescan_ssb_exact_gate(L, g, tg);
   test_table_rescan_queue_admission_retry(L, g, tg);
+  test_table_token_small_live_exact(L, g, tg);
+  test_table_token_small_cursor_budget(L, g);
+  test_table_token_request_observational_stale(L, g);
+  test_table_token_huge_request_rejected(g, tg);
+  test_table_token_small_free_no_body(L, g);
+  test_table_token_small_proof_races(L, g);
+  test_table_token_small_weak_oom_progress(L, g);
+  test_weak_overflow_full_oom_count_bounded(L, g);
+  test_weak_overflow_headless_reservation_guard(L, g);
+  test_legacy_weak_oom_requeues(L, g, tg);
+  test_legacy_weak_oom_recovery_quantum(L, g, tg);
   test_tvalue_edge_status(L, g);
   test_sweep_tvalue_edge_tristate(L, g, tg);
   test_forjit_current_hash_key_lease(L, g);

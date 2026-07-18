@@ -2792,11 +2792,51 @@ int lj_arena_hugetab_next(HugeTab *ht, uint32_t *cursor, void **pp,
   return 0;
 }
 
+uint32_t lj_arena_hugetab_slot_count(HugeTab *ht)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  return h ? h->mask + 1u : 0;
+}
+
+int lj_arena_hugetab_slot_snapshot_bounded(
+  HugeTab *ht, uint32_t slot, void **pp, LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  LJHugeEnt *e;
+  uint64_t addr, meta;
+  la_u128 exp, des;
+  if (pp)
+    *pp = NULL;
+  if (hi) {
+    hi->size = 0;
+    hi->flags = 0;
+    hi->readers = 0;
+  }
+  if (!h || slot > h->mask)
+    return LJ_ARENA_HUGETAB_SLOT_EMPTY;
+  e = &h->ent[slot];
+  addr = la_load64_acq(&e->slot.lo);
+  if (addr <= LJ_HUGETAB_TOMBSTONE)
+    return LJ_ARENA_HUGETAB_SLOT_EMPTY;
+  meta = la_load64_acq(&e->slot.hi);
+  if (la_load64_acq(&e->slot.lo) != addr)
+    return LJ_ARENA_HUGETAB_SLOT_BUSY;
+  exp.lo = addr;
+  exp.hi = meta;
+  des = exp;
+  if (!la_cas128(&e->slot, &exp, des))
+    return LJ_ARENA_HUGETAB_SLOT_BUSY;
+  if (pp)
+    *pp = (void *)(uintptr_t)addr;
+  hugetab_decode(meta, hi);
+  return LJ_ARENA_HUGETAB_SLOT_PRESENT;
+}
+
 int lj_arena_hugetab_recovery_next(HugeTab *ht, uint32_t *cursor,
 					    void **pp, LJHugeInfo *hi)
 {
   void *p;
-  LJHugeInfo snap;
+  LJHugeInfo snap = { 0, 0, 0 };
   if (pp)
     *pp = NULL;
   while (lj_arena_hugetab_next(ht, cursor, &p, &snap)) {
@@ -3275,6 +3315,84 @@ int lj_arena_hugetab_reader_acquire(HugeTab *ht, const void *p,
 	 LJ_ARENA_HUGE_READER_MISSING : result;
 }
 
+int lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
+  HugeTab *ht, uint32_t slot, void **pp, LJHugeTokenLease *lease,
+  LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  LJHugeEnt *e;
+  uint64_t addr, meta, next;
+  la_u128 exp, des;
+  if (pp)
+    *pp = NULL;
+  if (hi) {
+    hi->size = 0;
+    hi->flags = 0;
+    hi->readers = 0;
+  }
+  if (!h || slot > h->mask || !lease || lease->h || lease->base ||
+      lease->size || lease->body_authorized)
+    return LJ_ARENA_HUGE_TOKEN_LEASE_MISSING;
+  e = &h->ent[slot];
+  addr = la_load64_acq(&e->slot.lo);
+  if (addr <= LJ_HUGETAB_TOMBSTONE)
+    return LJ_ARENA_HUGE_TOKEN_LEASE_MISSING;
+  meta = la_load64_acq(&e->slot.hi);
+  if (la_load64_acq(&e->slot.lo) != addr)
+    return LJ_ARENA_HUGE_TOKEN_LEASE_BUSY;
+  exp.lo = addr;
+  exp.hi = meta;
+  if (meta & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) {
+    des = exp;
+    if (!la_cas128(&e->slot, &exp, des))
+      return LJ_ARENA_HUGE_TOKEN_LEASE_BUSY;
+    hugetab_decode(meta, hi);
+    return (meta & LJ_HUGEF_FREEING) ?
+      LJ_ARENA_HUGE_TOKEN_LEASE_FREEING :
+      LJ_ARENA_HUGE_TOKEN_LEASE_BUSY;
+  }
+  if ((meta & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) !=
+        (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) ||
+      (meta & (LJ_HUGEF_CDATA|LJ_HUGEF_INTERIOR_CDATA))) {
+    des = exp;
+    if (!la_cas128(&e->slot, &exp, des))
+      return LJ_ARENA_HUGE_TOKEN_LEASE_BUSY;
+    return LJ_ARENA_HUGE_TOKEN_LEASE_MISSING;
+  }
+  if (hugetab_readers(meta) == LJ_HUGETAB_READER_MAX)
+    return LJ_ARENA_HUGE_TOKEN_LEASE_OVERFLOW;
+  next = meta + LJ_HUGETAB_READER_ONE;
+  des.lo = addr;
+  des.hi = next;
+  if (!la_cas128(&e->slot, &exp, des))
+    return LJ_ARENA_HUGE_TOKEN_LEASE_BUSY;
+  lease->h = h;
+  lease->base = (void *)(uintptr_t)addr;
+  lease->size = (uint32_t)hugetab_size(next);
+  lease->body_authorized = (next & LJ_HUGEF_DEFER_FREE) == 0;
+  if (pp)
+    *pp = lease->base;
+  hugetab_decode(next, hi);
+  return lease->body_authorized ? LJ_ARENA_HUGE_TOKEN_LEASE_LIVE :
+    LJ_ARENA_HUGE_TOKEN_LEASE_DEFERRED;
+}
+
+int lj_arena_hugetab_table_token_lease_take_reader(
+  LJHugeTokenLease *lease, LJHugeReader *reader)
+{
+  if (!lease || !reader || !lease->h || !lease->base || !lease->size ||
+      !lease->body_authorized || reader->h || reader->base || reader->size)
+    return 0;
+  reader->h = lease->h;
+  reader->base = lease->base;
+  reader->size = lease->size;
+  lease->h = NULL;
+  lease->base = NULL;
+  lease->size = 0;
+  lease->body_authorized = 0;
+  return 1;
+}
+
 int lj_arena_hugetab_sweep_reader_acquire(HugeTab *ht, const void *p,
 					    LJHugeReader *reader,
 					    LJHugeInfo *hi)
@@ -3366,19 +3484,11 @@ int lj_arena_hugetab_mark_cdata_range_reader_acquire(
 	LJ_HUGE_READER_CDATA_SHAPE, 1);
 }
 
-int lj_arena_hugetab_reader_release(LJHugeReader *reader, LJHugeInfo *hi)
+static int hugetab_counted_lease_release(LJHugeTabHdr *h, void *base,
+					 LJHugeInfo *hi)
 {
-  void *base;
-  LJHugeTabHdr *h;
   LJHugeEnt *e;
   uint64_t addr, meta;
-  if (!reader)
-    return LJ_ARENA_HUGE_READER_RELEASE_LOST;
-  h = reader->h;
-  base = reader->base;
-  reader->h = NULL;
-  reader->base = NULL;
-  reader->size = 0;
   if (!h || !base)
     return LJ_ARENA_HUGE_READER_RELEASE_LOST;
   addr = (uint64_t)(uintptr_t)base;
@@ -3398,6 +3508,36 @@ int lj_arena_hugetab_reader_release(LJHugeReader *reader, LJHugeInfo *hi)
       return LJ_ARENA_HUGE_READER_HANDOFF;
     return LJ_ARENA_HUGE_READER_RELEASED;
   }
+}
+
+int lj_arena_hugetab_reader_release(LJHugeReader *reader, LJHugeInfo *hi)
+{
+  void *base;
+  LJHugeTabHdr *h;
+  if (!reader)
+    return LJ_ARENA_HUGE_READER_RELEASE_LOST;
+  h = reader->h;
+  base = reader->base;
+  reader->h = NULL;
+  reader->base = NULL;
+  reader->size = 0;
+  return hugetab_counted_lease_release(h, base, hi);
+}
+
+int lj_arena_hugetab_table_token_lease_release(
+  LJHugeTokenLease *lease, LJHugeInfo *hi)
+{
+  void *base;
+  LJHugeTabHdr *h;
+  if (!lease)
+    return LJ_ARENA_HUGE_READER_RELEASE_LOST;
+  h = lease->h;
+  base = lease->base;
+  lease->h = NULL;
+  lease->base = NULL;
+  lease->size = 0;
+  lease->body_authorized = 0;
+  return hugetab_counted_lease_release(h, base, hi);
 }
 
 int lj_arena_hugetab_reader_covers_range(const LJHugeReader *reader,
@@ -6011,6 +6151,73 @@ int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
     return LJ_ARENA_RESCUE_RETRY;
   arena_test_registry_pause_after_reader();
   admission = lj_arena_rescue_enter(a);
+  (void)lj_arena_hugetab_reader_release(&reader, NULL);
+  return admission;
+}
+
+static int arena_rescue_enter_bounded(GCArena *a)
+{
+  uint64_t active, expect, next;
+  int committed;
+  if (!a || arena_terminal_closed_acq(a))
+    return LJ_ARENA_RESCUE_RETRY;
+  active = lj_arena_remote_active_acq(a);
+  if ((!arena_lifetime_managed(a) &&
+       (active & LJ_ARENA_REMOTE_STATE_MASK)) ||
+      arena_remote_count(active) == LJ_ARENA_REMOTE_COUNT_MASK)
+    return LJ_ARENA_RESCUE_RETRY;
+  committed = (active & LJ_ARENA_REMOTE_SEALED) &&
+    !(active & LJ_ARENA_REMOTE_CLOSED);
+  next = active + 1u;
+  if (!committed &&
+      (active & (LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_SEALED)))
+    next |= LJ_ARENA_REMOTE_PENDING;
+  expect = active;
+  if (!la_cas64(&a->hdr.remote_active, &expect, next,
+		LA_ACQ_REL, LA_ACQ))
+    return LJ_ARENA_RESCUE_RETRY;
+  return committed ? LJ_ARENA_RESCUE_COMMITTED :
+    ((active & LJ_ARENA_REMOTE_SEALED) ?
+     LJ_ARENA_RESCUE_BIT_ONLY : LJ_ARENA_RESCUE_FULL);
+}
+
+int lj_arena_hugetab_rescue_slot_enter_bounded(
+  HugeTab *registry, uint32_t slot, GCArena *a, LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = registry ? registry->h : NULL;
+  LJHugeEnt *e;
+  LJHugeReader reader = { NULL, NULL, 0 };
+  uint64_t addr, meta, next;
+  la_u128 exp, des;
+  int admission;
+  if (hi) {
+    hi->size = 0;
+    hi->flags = 0;
+    hi->readers = 0;
+  }
+  if (!h || slot > h->mask || !a)
+    return LJ_ARENA_RESCUE_RETRY;
+  e = &h->ent[slot];
+  addr = la_load64_acq(&e->slot.lo);
+  if (addr != (uint64_t)(uintptr_t)a)
+    return LJ_ARENA_RESCUE_RETRY;
+  meta = la_load64_acq(&e->slot.hi);
+  if (la_load64_acq(&e->slot.lo) != addr ||
+      (meta & (LJ_HUGEF_FREEING|LJ_HUGEF_DEFER_FREE|LJ_HUGEF_BUSY)) ||
+      hugetab_readers(meta) == LJ_HUGETAB_READER_MAX)
+    return LJ_ARENA_RESCUE_RETRY;
+  exp.lo = addr;
+  exp.hi = meta;
+  next = meta + LJ_HUGETAB_READER_ONE;
+  des.lo = addr;
+  des.hi = next;
+  if (!la_cas128(&e->slot, &exp, des))
+    return LJ_ARENA_RESCUE_RETRY;
+  reader.h = h;
+  reader.base = a;
+  reader.size = (uint32_t)hugetab_size(next);
+  hugetab_decode(next, hi);
+  admission = arena_rescue_enter_bounded(a);
   (void)lj_arena_hugetab_reader_release(&reader, NULL);
   return admission;
 }

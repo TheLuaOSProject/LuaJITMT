@@ -84,6 +84,7 @@ typedef struct LJHugeTabHdr LJHugeTabHdr;
 typedef struct HugeTab HugeTab;
 typedef struct LJHugeInfo LJHugeInfo;
 typedef struct LJHugeReader LJHugeReader;
+typedef struct LJHugeTokenLease LJHugeTokenLease;
 typedef struct LJArenaRemoteFree LJArenaRemoteFree;
 typedef struct TGAlloc TGAlloc;
 
@@ -117,6 +118,17 @@ struct LJHugeReader {
   LJHugeTabHdr *h;
   void *base;
   uint32_t size;
+};
+
+/* Exact-slot mapping/header authority for the dormant table-token scanner.
+** This is deliberately not an LJHugeReader: DEFER_FREE is an irreversible
+** logical body-ownership LP, so this lease may inspect only the allocator
+** header's embedded token. It never authorizes a GC header or payload read. */
+struct LJHugeTokenLease {
+  LJHugeTabHdr *h;
+  void *base;
+  uint32_t size;
+  uint32_t body_authorized;
 };
 
 typedef struct GCAhdr {
@@ -640,6 +652,17 @@ LJ_FUNC int lj_arena_hugetab_recovery_discard_terminal(HugeTab *ht,
 ** reading the named mapping. */
 LJ_FUNC int lj_arena_hugetab_next(HugeTab *ht, uint32_t *cursor,
 				   void **pp, LJHugeInfo *hi);
+/* Constant-work physical-slot view for resumable directory scanners. The
+** caller retains the HugeTab wrapper/topology. PRESENT is one exact no-op
+** CX16 snapshot, EMPTY consumes an empty/tombstone slot, and BUSY consumes a
+** slot whose split sample or single CX16 lost. A later wrapped pass retries
+** BUSY; this helper never loops on a contested slot. */
+#define LJ_ARENA_HUGETAB_SLOT_EMPTY	0
+#define LJ_ARENA_HUGETAB_SLOT_PRESENT	1
+#define LJ_ARENA_HUGETAB_SLOT_BUSY	2
+LJ_FUNC uint32_t lj_arena_hugetab_slot_count(HugeTab *ht);
+LJ_FUNC int lj_arena_hugetab_slot_snapshot_bounded(
+  HugeTab *ht, uint32_t slot, void **pp, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_recovery_next(HugeTab *ht, uint32_t *cursor,
 					    void **pp, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p,
@@ -685,6 +708,27 @@ LJ_FUNC int lj_arena_hugetab_mark_cdata_range(HugeTab *ht, const void *p,
 LJ_FUNC int lj_arena_hugetab_reader_acquire(HugeTab *ht, const void *p,
 					      LJHugeReader *reader,
 					      LJHugeInfo *hi);
+/* Scanner-only physical-slot admission. This performs at most one split
+** validation and one CX16. Contention is reported as TOKEN_LEASE_BUSY and the
+** caller advances its resume cursor; an acquired lease must still be released
+** to completion. pp remains NULL unless LIVE/DEFERRED grants a mapping lease. */
+LJ_FUNC int lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
+  HugeTab *ht, uint32_t slot, void **pp, LJHugeTokenLease *lease,
+  LJHugeInfo *hi);
+/* Exact acquisition results. LIVE may be explicitly transferred to an
+** LJHugeReader after the embedded token is captured; DEFERRED is permanently
+** header-only. Every other result returns no lease, leaves pp NULL, and
+** authorizes no mapping read. Callers must handle every result explicitly. */
+#define LJ_ARENA_HUGE_TOKEN_LEASE_OVERFLOW	(-2)
+#define LJ_ARENA_HUGE_TOKEN_LEASE_MISSING	0
+#define LJ_ARENA_HUGE_TOKEN_LEASE_LIVE		1
+#define LJ_ARENA_HUGE_TOKEN_LEASE_DEFERRED	2
+#define LJ_ARENA_HUGE_TOKEN_LEASE_FREEING	3
+#define LJ_ARENA_HUGE_TOKEN_LEASE_BUSY		4
+LJ_FUNC int lj_arena_hugetab_table_token_lease_take_reader(
+  LJHugeTokenLease *lease, LJHugeReader *reader);
+LJ_FUNC int lj_arena_hugetab_table_token_lease_release(
+  LJHugeTokenLease *lease, LJHugeInfo *hi);
 /* Admit one exact bounded sweep view after iterator enumeration. The full-slot
 ** CAS revalidates SWEEP_OLD and rejects DEFER_FREE/BUSY in the same operation
 ** which pins the mapping. The caller must release the ordinary reader token
@@ -829,6 +873,12 @@ LJ_FUNC int lj_arena_alloc_registry_lookup(const TGAlloc *alloc,
 ** so terminal registry deletion and arena unmap cannot both miss the reader. */
 LJ_FUNC int lj_arena_hugetab_rescue_enter(HugeTab *registry, GCArena *a,
 					    LJHugeInfo *hi);
+/* Constant-attempt scanner bridge for an already-enumerated physical registry
+** slot. Slot validation, reader acquisition, and remote_active acquisition
+** each get one CAS attempt; any loss returns RETRY after releasing an acquired
+** registry reader to completion. */
+LJ_FUNC int lj_arena_hugetab_rescue_slot_enter_bounded(
+  HugeTab *registry, uint32_t slot, GCArena *a, LJHugeInfo *hi);
 LJ_FUNC int lj_arena_alloc_register_existing(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 /* Exact-arena form for the immediate pre-destructor check after an earlier

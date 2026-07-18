@@ -1614,6 +1614,7 @@ typedef struct GC2State {
   uint64_t worker_wakes;  /* Parked worker wake publications. */
   uint64_t worker_parks;  /* Parked worker sleeps after no progress. */
   uint64_t worker_async_progress;  /* Work completed by parked workers. */
+  uint64_t deferred_epoch;  /* Durable retry quanta which must yield/back off. */
   uint64_t tg_thread_roots;  /* Live TG thread_L roots marked by GC2. */
   uint64_t tg_cur_roots;  /* Live TG cur_L roots marked by GC2. */
   uint64_t tg_trace_roots;  /* Live TG executing traces marked by GC2. */
@@ -1624,6 +1625,16 @@ typedef struct GC2State {
   uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
   uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
   LJ_ALIGN(16) LJGC2TableDesc table_rescan_desc;  /* Dormant helpable handoff. */
+  uint64_t table_token_scan_requested;  /* Sticky dormant exact-generation hint. */
+  uint32_t table_token_small_slot;  /* Small-registry resume slot. */
+  uint32_t table_token_small_cell;  /* Small-sidecar resume cell. */
+  uint64_t table_token_scan_visited;  /* Side identities inspected. */
+  uint64_t table_token_scan_completed;  /* Exact PENDING -> NONE wins. */
+  uint64_t table_token_scan_terminal;  /* Payload-free FREE/DEFER cancels. */
+  uint64_t table_token_scan_transient;  /* Retryable admission/snapshot losses. */
+  uint64_t table_token_scan_structural;  /* Fail-closed malformed identities. */
+  uint64_t table_token_scan_smr_skips;  /* Full-SMR admission unavailable. */
+  uint64_t table_token_scan_payloads;  /* Admitted payload traversals entered. */
   uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
   uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
@@ -2914,6 +2925,11 @@ static LJ_AINLINE void gc2_weak_count_store_rlx(global_State *g, uint64_t n)
 static LJ_AINLINE uint64_t gc2_weak_count_add(global_State *g, uint64_t n)
 {
   return la_add64_rlx(&g->gc2.weak_count, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_count_sub(global_State *g, uint64_t n)
+{
+  return la_sub64_rlx(&g->gc2.weak_count, n);
 }
 
 static LJ_AINLINE GCRef *gc2_weak_stack_acq(global_State *g)
@@ -4549,6 +4565,7 @@ LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_busy_retries, worker_busy_retries)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_wakes, worker_wakes)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_parks, worker_parks)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_async_progress, worker_async_progress)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_deferred_epoch, deferred_epoch)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_thread_roots, tg_thread_roots)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_cur_roots, tg_cur_roots)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_trace_roots, tg_trace_roots)
@@ -4622,6 +4639,67 @@ static LJ_AINLINE void gc2_table_rescan_pending_dec(global_State *g)
   lj_assertG(old > 0, "table NEEDSCAN pending underflow");
   UNUSED(old);
 }
+
+static LJ_AINLINE uint64_t gc2_table_token_scan_requested_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.table_token_scan_requested);
+}
+
+static LJ_AINLINE void gc2_table_token_scan_requested_store_rlx(
+  global_State *g, uint64_t generation)
+{
+  la_store64_rlx(&g->gc2.table_token_scan_requested, generation);
+}
+
+static LJ_AINLINE void gc2_table_token_scan_requested_max_rel(
+  global_State *g, uint64_t generation)
+{
+  uint64_t old = gc2_table_token_scan_requested_acq(g);
+  while (old < generation) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.table_token_scan_requested, &expect, generation,
+		 LA_ACQ_REL, LA_ACQ))
+      return;
+    old = expect;
+  }
+}
+
+static LJ_AINLINE uint32_t gc2_table_token_small_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.table_token_small_slot);
+}
+
+static LJ_AINLINE void gc2_table_token_small_slot_store_rlx(global_State *g,
+						     uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.table_token_small_slot, slot);
+}
+
+static LJ_AINLINE uint32_t gc2_table_token_small_cell_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.table_token_small_cell);
+}
+
+static LJ_AINLINE void gc2_table_token_small_cell_store_rlx(global_State *g,
+						     uint32_t cell)
+{
+  la_store32_rlx(&g->gc2.table_token_small_cell, cell);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_visited,
+			   table_token_scan_visited)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_completed,
+			   table_token_scan_completed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_terminal,
+			   table_token_scan_terminal)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_transient,
+			   table_token_scan_transient)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_structural,
+			   table_token_scan_structural)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_smr_skips,
+			   table_token_scan_smr_skips)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_payloads,
+			   table_token_scan_payloads)
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_dirty_misses, thread_scan_dirty_misses)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_frame_fallbacks,

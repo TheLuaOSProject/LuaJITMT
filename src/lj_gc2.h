@@ -422,6 +422,8 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING	3u
 #define LJ_GC2_TABLE_RESCAN_TEST_INSTALLING	1u
 #define LJ_GC2_TABLE_RESCAN_TEST_HINT_CLEARED	2u
+#define LJ_GC2_TABLE_TOKEN_TEST_PRE_PROOF	2u
+#define LJ_GC2_TABLE_TOKEN_TEST_POST_PROOF	3u
 LJ_FUNC void lj_gc2_test_jit_mark_checkpoint_reset(void);
 LJ_FUNC uint64_t lj_gc2_test_jit_mark_checkpoint_closes(void);
 LJ_FUNC void lj_gc2_test_jit_sweep_checkpoint_reset(void);
@@ -461,6 +463,19 @@ LJ_FUNC int lj_gc2_test_weak_trace_close_frontier(global_State *g,
 LJ_FUNC void lj_gc2_test_weak_frontier_fault_once(uint32_t kind,
 						   uint32_t skip);
 LJ_FUNC uint32_t lj_gc2_test_weak_frontier_fault_hits(void);
+LJ_FUNC void lj_gc2_test_weak_overflow_fail_alloc(uint32_t count);
+LJ_FUNC int lj_gc2_test_weak_record(global_State *g, GCtab *t);
+LJ_FUNC int lj_gc2_test_weak_overflow_singleton(global_State *g, GCtab *t);
+LJ_FUNC void lj_gc2_test_table_token_pause(uint32_t stage);
+LJ_FUNC uint32_t lj_gc2_test_table_token_paused(void);
+LJ_FUNC void lj_gc2_test_table_token_release(void);
+LJ_FUNC int lj_gc2_test_table_token_request(global_State *g, GCtab *t,
+					      uint64_t generation);
+LJ_FUNC uint32_t lj_gc2_test_table_token_scan_small(global_State *g,
+						     uint32_t budget);
+LJ_FUNC int lj_gc2_test_table_token_scan_one(global_State *g, GCtab *t);
+LJ_FUNC void lj_gc2_test_table_token_cursor_reset(global_State *g);
+LJ_FUNC void lj_gc2_test_table_dirty_bump(global_State *g, GCtab *t);
 LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 					      lua_State *L);
 #if LJ_HASFFI && LJ_HASJIT
