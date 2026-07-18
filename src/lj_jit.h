@@ -221,7 +221,7 @@ typedef struct SnapShot {
   uint8_t count;	/* Count of taken exits for this snapshot. */
 } SnapShot;
 
-#define SNAPCOUNT_DONE	255	/* Already compiled and linked a side trace. */
+#define SNAPCOUNT_DONE	255	/* Side trace linked, or exit is non-recordable. */
 
 /* Compressed snapshot entry. */
 typedef uint32_t SnapEntry;

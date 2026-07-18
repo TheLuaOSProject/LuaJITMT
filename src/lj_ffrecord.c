@@ -662,7 +662,7 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
 
 /* -- Math library fast functions ----------------------------------------- */
 
-/* Materialize the current caller state for a future generic native call.
+/* Materialize the current caller state for a generic native call.
 ** Keep the snapshot number out of the IR: LOOP substitution copies and
 ** reindexes snapshots, while backward assembly already tracks the matching
 ** snapshot for the copied marker.

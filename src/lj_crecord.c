@@ -2384,10 +2384,11 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     IRType t;
 
 #if !defined(LJ_FFI_CALLXS_TEST_ACTIVATE)
-    /* Default safety boundary: first-time callbacks still need ACTIVE ->
-    ** SUSPENDED publication, and boxed results need pre-rooted storage before
-    ** arbitrary generic calls can record by default. The test activation uses
-    ** this exact production seam for the already non-allocating return class. */
+    /* Default recorder safety boundary: first-time callbacks still need
+    ** ACTIVE -> SUSPENDED publication, and boxed results need pre-rooted
+    ** storage before arbitrary generic calls can record by default. The test
+    ** activation uses this exact production seam for the nonallocating
+    ** result-handoff classes. */
     lj_trace_err(J, LJ_TRERR_BLACKL);
 #else
     /* Until continuation/pcall/tail-return handoff has its own exact snapshot
