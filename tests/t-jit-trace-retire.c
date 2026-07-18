@@ -191,6 +191,108 @@ static uint32_t reclaim_trace_at(global_State *g, uint64_t epoch)
   return n;
 }
 
+static void test_native_pin_blocks_exact_body_reclaim(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  TraceVec *tv;
+  GCtrace *T;
+  GCproto *pt;
+  TraceNo i, traceno;
+  uint32_t attempts;
+  uint64_t epoch, completed;
+  int top = lua_gettop(L);
+
+  assert(trace_retired_head_acq(J) == NULL);
+  assert(luaL_dostring(L,
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function f(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 40 do assert(f(120) == 7260) end\n"
+    "return f\n") == LUA_OK);
+  assert(isluafunc(funcV(L->top - 1)));
+  pt = funcproto(funcV(L->top - 1));
+  settle_automatic_cycle(g);
+  assert(trace_retired_head_acq(J) == NULL);
+  /* Hand the exact pointer from an ordinary SMR lease to the native pin. */
+  lj_gc2_smr_read_enter(g);
+  T = NULL;
+  tv = tracevec_acq(J);
+  for (i = 1; tv && (MSize)i < tv->sizetrace; i++) {
+    GCtrace *candidate = traceref_safe(J, i);
+    if (candidate && trace_runnable_acq(candidate, i) &&
+	trace_startpt_acq(candidate) == pt) {
+      T = candidate;
+      break;
+    }
+  }
+  assert(T != NULL);
+  traceno = trace_traceno_acq(T);
+  assert(traceno != 0 && tv != NULL && (MSize)traceno < tv->sizetrace);
+  assert(gcref_acq(tv->slot[traceno]) == obj2gco(T));
+  assert(trace_native_pins_acq(T) == 0);
+
+  /* Nested native calls share the exact body but own independent leases. */
+  assert(lj_trace_native_pin(T));
+  lj_gc2_smr_read_leave(g);
+  assert(lj_trace_native_pin(T));
+  assert(trace_native_pins_acq(T) == 2u);
+
+  /* A pin independently forces the MT-style public slot reservation. */
+  assert(lj_trace_flushall_gc(L) == 0);
+  assert(retired_find(J, T) == T);
+  assert(trace_native_pin_closed_acq(T));
+  assert(!lj_trace_native_pin(T));
+  assert(trace_traceno_acq(T) == 0);
+  assert(trace_nextroot_acq(T) == traceno);
+  assert(gcref_acq(tv->slot[traceno]) == obj2gco(T));
+  epoch = la_load64_acq(&T->retire_epoch) - 1u;
+  completed = epoch + LJ_FLUSH_EPOCHS;
+
+  /* Maturity alone cannot tear down either the slot or the exact body. Drain
+  ** unrelated bodies, then prove the stable pinned-only list is memoized. */
+  J->trace_reclaim_epoch = 0;
+  for (attempts = 0;
+       attempts < 32u &&
+       (J->trace_reclaim_epoch != completed ||
+	J->trace_reclaim_pin_seq !=
+	  la_load64_acq(&J->trace_pin_release_seq));
+       attempts++)
+    (void)reclaim_trace_at(g, completed);
+  assert(attempts < 32u);
+  assert(J->trace_reclaim_epoch == completed);
+  assert(J->trace_reclaim_pin_seq ==
+	 la_load64_acq(&J->trace_pin_release_seq));
+  assert(retired_find(J, T) == T);
+  assert(gcref_acq(tv->slot[traceno]) == obj2gco(T));
+  assert(trace_native_pins_acq(T) == 2u);
+
+  lj_trace_native_unpin(g, T);
+  assert(trace_native_pins_acq(T) == 1u);
+  assert(reclaim_trace_at(g, completed) == 0);
+  assert(J->trace_reclaim_epoch == completed);
+  assert(retired_find(J, T) == T);
+  assert(gcref_acq(tv->slot[traceno]) == obj2gco(T));
+
+  lj_trace_native_unpin(g, T);
+  assert(trace_native_pins_acq(T) == 0);
+  assert(J->trace_reclaim_pin_seq !=
+	 la_load64_acq(&J->trace_pin_release_seq));
+  /* IDLE ownership-spine unlink may deliberately require proof retries. */
+  for (attempts = 0;
+       attempts < 32u &&
+	 gcref_acq(tv->slot[traceno]) == obj2gco(T);
+       attempts++)
+    (void)reclaim_trace_at(g, completed);
+  assert(attempts < 32u);
+  assert(gcref_acq(tv->slot[traceno]) == NULL);
+  /* T may be unmapped by the successful reclaim. */
+  lua_settop(L, top);
+}
+
 static void test_huge_reader_reclaim_retry(lua_State *L, GCproto *pt)
 {
   enum {
@@ -664,6 +766,7 @@ int main(void)
   test_reclaim_requeue_is_raw_and_retryable(L, pt);
   test_pending_trace_arena_requests_full_grace(L, pt);
   test_idle_reclaim_requires_proven_root_unlink(L, pt);
+  test_native_pin_blocks_exact_body_reclaim(L);
 
   memset(&tmpl, 0, sizeof(tmpl));
   tmpl.nk = REF_BASE;

@@ -394,6 +394,7 @@ typedef struct GCtrace {
   uint8_t topslot;	/* Top stack slot already checked to be allocated. */
   uint8_t linktype;	/* Type of link. */
   uint8_t unused1;
+  uint32_t native_pins;  /* Closed admission bit + exact-body native leases. */
   uint64_t retire_epoch;  /* Safepoint epoch + 1 when retirement is claimed. */
   struct GCtrace *retired_next;  /* Token-owned tagged retire-list link. */
 #ifdef LUAJIT_USE_GDBJIT
@@ -406,6 +407,9 @@ typedef struct GCtrace {
 #define TRACE_ENTRY_INVALIDATED		0x04
 #define TRACE_ENTRY_GATED \
   (TRACE_SCOPE_FLUSH_PENDING|TRACE_ENTRY_INVALIDATED)
+
+#define TRACE_NATIVE_PIN_CLOSED		0x80000000u
+#define TRACE_NATIVE_PIN_COUNT_MASK	0x7fffffffu
 
 /* Low tags in GCtrace.retired_next. GCtrace allocations are pointer-aligned. */
 #define TRACE_RETIRED_LINK_UNLINKED	((uintptr_t)1u)
@@ -425,6 +429,21 @@ static LJ_AINLINE void trace_exittab_mcode_set(GCtrace *T)
 static LJ_AINLINE void trace_exittab_mcode_clear(GCtrace *T)
 {
   (void)la_and8_rlx(&T->unused1, (uint8_t)~TRACE_EXITTAB_MCODE);
+}
+
+static LJ_AINLINE uint32_t trace_native_pinword_acq(const GCtrace *T)
+{
+  return la_load32_acq(&T->native_pins);
+}
+
+static LJ_AINLINE uint32_t trace_native_pins_acq(const GCtrace *T)
+{
+  return trace_native_pinword_acq(T) & TRACE_NATIVE_PIN_COUNT_MASK;
+}
+
+static LJ_AINLINE int trace_native_pin_closed_acq(const GCtrace *T)
+{
+  return (trace_native_pinword_acq(T) & TRACE_NATIVE_PIN_CLOSED) != 0;
 }
 
 #define gco2trace(o)	check_exp((o)->gch.gct == ~LJ_TTRACE, (GCtrace *)(o))
@@ -943,8 +962,11 @@ typedef struct jit_State {
   BCLine prev_line;	/* Previous line. */
   int prof_mode;	/* Profiling mode: 0, 'f', 'l'. */
 #endif
-  uint64_t trace_reclaim_epoch;  /* Last completed epoch retire list scanned. */
-  uint64_t mcode_reclaim_epoch;  /* Last completed epoch young list scanned. */
+  uint64_t trace_reclaim_epoch;  /* Last stable completed-epoch trace scan. */
+  uint64_t mcode_reclaim_epoch;  /* Last stable completed-epoch mcode scan. */
+  uint64_t trace_pin_release_seq;  /* Atomic final-release notification. */
+  uint64_t trace_reclaim_pin_seq;  /* Token-owned trace-scan notification. */
+  uint64_t mcode_reclaim_pin_seq;  /* Token-owned mcode-scan notification. */
 } jit_State;
 
 /* J->L is token-private while recording, but dispatch, VM events and GC-side

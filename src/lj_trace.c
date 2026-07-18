@@ -773,11 +773,23 @@ static void trace_retired_push_preserved_reclaim(jit_State *J, GCtrace *T)
 
 /*
 ** The retirement LP is the encoded epoch claim while holding the sole recorder
-** token. The same token owner immediately publishes the intrusive retire node
-** before releasing ownership; slot or semantic unlink can only follow that
-** publication. GC never waits for the token and simply retries its bounded
+** token. The same owner then closes native-pin admission in the count word and
+** publishes the intrusive retire node before releasing ownership; slot or
+** semantic unlink can only follow both publications. Thus a native pin either
+** increments before CLOSED and is retained by slot disposition, or observes
+** CLOSED and fails. GC never waits for the token and simply retries its bounded
 ** root/quarantine item after requesting an asynchronous recorder abort.
 */
+static void trace_native_pin_close(GCtrace *T)
+{
+  uint32_t word = trace_native_pinword_acq(T);
+  while ((word & TRACE_NATIVE_PIN_CLOSED) == 0) {
+    if (la_cas32(&T->native_pins, &word, word | TRACE_NATIVE_PIN_CLOSED,
+		 LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
 static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
 					uint64_t epoch, int unpublished)
 {
@@ -801,6 +813,7 @@ static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
     trace_preserve_retired_publish(g, T);
   }
   (void)la_cas64(&T->retire_epoch, &expect, stamp, LA_ACQ_REL, LA_ACQ);
+  trace_native_pin_close(T);
 }
 
 static int trace_retire_discoverable_acq(jit_State *J, GCtrace *T)
@@ -943,6 +956,65 @@ static void trace_retire(global_State *g, GCtrace *T)
   trace_retire_at_epoch(g, T, lj_gc2_retire_epoch(g));
 }
 
+/*
+** Acquire an exact trace-body lease for native execution. The caller must
+** already own an independent lifetime proof for T (currently jit_base/JIT
+** activity; later the generic FFI entry handoff). This prerequisite closes the
+** zero-to-one race with a reclaimer which has already observed no pins. A raw
+** pointer obtained without such a lease is not safe input to this API.
+**
+** Retirement may start before or after this increment. Once published, the
+** pin keeps the retired body, its public slot reservation and every referenced
+** mcode area alive until the matching release.
+*/
+int LJ_FASTCALL lj_trace_native_pin(GCtrace *T)
+{
+  uint32_t word;
+  if (LJ_UNLIKELY(T == NULL))
+    return 0;
+  word = trace_native_pinword_acq(T);
+  while ((word & TRACE_NATIVE_PIN_CLOSED) == 0 &&
+	 (word & TRACE_NATIVE_PIN_COUNT_MASK) != TRACE_NATIVE_PIN_COUNT_MASK) {
+    if (la_cas32(&T->native_pins, &word, word + 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+  return 0;
+}
+
+static void trace_native_pin_release_notify(global_State *g)
+{
+  jit_State *J = G2J(g);
+  uint64_t seq = la_load64_acq(&J->trace_pin_release_seq);
+  while (!la_cas64(&J->trace_pin_release_seq, &seq, seq + 1u,
+		   LA_ACQ_REL, LA_ACQ))
+    ;
+}
+
+void LJ_FASTCALL lj_trace_native_unpin(global_State *g, GCtrace *T)
+{
+  uint32_t word;
+  if (LJ_UNLIKELY(g == NULL || T == NULL))
+    abort();
+  word = trace_native_pinword_acq(T);
+  for (;;) {
+    uint32_t count = word & TRACE_NATIVE_PIN_COUNT_MASK;
+    uint32_t next;
+    if (LJ_UNLIKELY(count == 0)) {
+      lj_assertX(0, "trace native pin underflow");
+      abort();
+    }
+    next = (word & TRACE_NATIVE_PIN_CLOSED) | (count - 1u);
+    if (la_cas32(&T->native_pins, &word, next, LA_ACQ_REL, LA_ACQ)) {
+      /* Only a final release of a retired body can unblock a memoized mature
+      ** trace/mcode scan. Publish one shared notification after the count. */
+      if (count == 1u && (word & TRACE_NATIVE_PIN_CLOSED) != 0)
+	trace_native_pin_release_notify(g);
+      return;
+    }
+  }
+}
+
 static int trace_freebody_(global_State *g, GCtrace *T, int reclaim_held,
 			   int terminal)
 {
@@ -950,6 +1022,16 @@ static int trace_freebody_(global_State *g, GCtrace *T, int reclaim_held,
   SnapNo nsnap;
   LJGCDestructCtx dctx;
   int acquired;
+  if (LJ_UNLIKELY(trace_native_pins_acq(T) != 0)) {
+    /* Runtime retirement leaves the exact body list-owned and retries. VM close
+    ** has no later retry point: an outstanding native frame is a violated
+    ** teardown precondition and must never become a silent executable UAF. */
+    if (terminal) {
+      lj_assertG(0, "terminal trace destruction with native execution pin");
+      abort();
+    }
+    return 0;
+  }
   if (LJ_UNLIKELY(!trace_size_checked(g, T, &size, &nsnap)))
     return 0;
   if (terminal && g->allocf == lj_arena_allocf &&
@@ -996,6 +1078,10 @@ static void trace_free_immediate(global_State *g, GCtrace *T)
   SnapNo nsnap;
   LJGCDestructCtx dctx;
   int acquired;
+  if (LJ_UNLIKELY(trace_native_pins_acq(T) != 0)) {
+    lj_assertG(0, "immediate trace destruction with native execution pin");
+    abort();
+  }
   if (LJ_UNLIKELY(!trace_size_checked(g, T, &size, &nsnap)))
     return;
   acquired = lj_gc_destructor_enter(g, T, size, &dctx);
@@ -1291,6 +1377,10 @@ static void trace_retired_slot_release(jit_State *J, GCtrace *T)
   TraceVec *tv;
   lj_assertJ(lj_jit_token_held(J),
 	     "trace slot release without recorder-token ownership");
+  if (LJ_UNLIKELY(trace_native_pins_acq(T) != 0)) {
+    lj_assertJ(0, "trace slot released with native execution pin");
+    abort();
+  }
   if (traceno == 0 && la_load64_acq(&T->retire_epoch) != 0)
     traceno = trace_nextroot_acq(T);
   tv = tracevec_acq(J);
@@ -1323,7 +1413,8 @@ static void trace_slot_retire(jit_State *J, GCtrace *T, TraceNo traceno)
   global_State *g = J2G(J);
   lj_assertJ(lj_jit_token_held(J),
 	     "trace slot retirement without recorder-token ownership");
-  if (mt_active_or_entering_acq(g) || gc2_n_threads_acq(g) > 1) {
+  if (mt_active_or_entering_acq(g) || gc2_n_threads_acq(g) > 1 ||
+      trace_native_pins_acq(T) != 0) {
     /*
     ** Keep the public trace slot reserved with the retired body until stale
     ** bytecode readers and in-flight exits have aged out. T->traceno and
@@ -1387,6 +1478,7 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
   jit_State *J;
   TraceVec *tv;
   GCtrace *rt;
+  uint64_t pin_release_seq;
   uint32_t reclaimed = 0;
   int token = 0, retry_same_epoch = 0;
   if (!g || completed_epoch == 0)
@@ -1408,13 +1500,15 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
       lj_jit_token_release(J);
     return 0;
   }
-  /* The previous scan records this epoch only when every requeue was strictly
-  ** not old enough. Sweep otherwise calls this routine once per 64-cell
-  ** quarantine slice and repeatedly detaches the same epoch-young list,
-  ** turning bounded arena progress into quadratic work. A trace retired after
-  ** that scan cannot be ready in this same epoch and its publisher already
-  ** preserves it on both sides of list publication. */
-  if (J->trace_reclaim_epoch == completed_epoch) {
+  pin_release_seq = la_load64_acq(&J->trace_pin_release_seq);
+  /* The previous scan records this epoch only when every requeue is stable
+  ** until either the epoch advances or a final native unpin changes the paired
+  ** sequence. Sweep otherwise calls this routine once per 64-cell quarantine
+  ** slice and repeatedly detaches the same list, turning bounded arena progress
+  ** into quadratic work. A trace retired after that scan cannot be ready in
+  ** this same epoch and its publisher preserves both sides of list publication. */
+  if (J->trace_reclaim_epoch == completed_epoch &&
+      J->trace_reclaim_pin_seq == pin_release_seq) {
     if (token)
       lj_jit_token_release(J);
     return 0;
@@ -1451,6 +1545,14 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
     GCtrace *next = trace_retired_next_acq(rt);
     trace_retired_link_unlinked_rel(rt);
     if (trace_body_retire_ready(rt, completed_epoch)) {
+      if (trace_native_pins_acq(rt) != 0) {
+	/* A final unpin publishes trace_pin_release_seq. Memoize this stable
+	** blocked scan instead of detaching the same mature list on every bounded
+	** reclaim quantum during a long foreign call. */
+	trace_retired_push_preserved_reclaim(J, rt);
+	rt = next;
+	continue;
+      }
       if (trace_has_runnable_inbound_link(J, rt)) {
 	retry_same_epoch = 1;
 	trace_retired_push_preserved_reclaim(J, rt);
@@ -1505,13 +1607,15 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     rt = next;
   }
-  /* A list containing only epoch-young bodies cannot change readiness until a
-  ** completed grace epoch advances. Ready bodies with transient inbound,
-  ** debugger, or validation failures must remain eligible for a same-epoch
-  ** retry: another body later in this detached batch may remove their last
-  ** inbound link, and quarantine progress can depend on that retry. */
-  if (!retry_same_epoch)
+  /* Epoch-young and native-pin-blocked bodies are stable until the paired epoch
+  ** or release sequence changes. Ready bodies with transient inbound, debugger,
+  ** or validation failures remain eligible for a same-epoch retry: another body
+  ** later in this batch may remove their last inbound link, and quarantine
+  ** progress can depend on that retry. */
+  if (!retry_same_epoch) {
+    J->trace_reclaim_pin_seq = pin_release_seq;
     J->trace_reclaim_epoch = completed_epoch;
+  }
   if (token)
     lj_jit_token_release(J);
   return reclaimed;
@@ -1566,6 +1670,7 @@ int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
   GCtrace *T;
   MCode *rwarea;
   uintptr_t rxlo, rxhi, rwlo, rwhi;
+  int pinned_ref = 0;
   if (!g || !area || size == 0)
     return 0;
   J = G2J(g);
@@ -1576,10 +1681,14 @@ int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
   rwhi = rwlo + size;
   {
     TraceNo i, sizetrace = trace_sizetrace_acq(J);
-    for (i = 1; i < sizetrace; i++)
-      if (trace_mcode_area_refs(g, traceref_safe(J, i),
-				rxlo, rxhi, rwlo, rwhi))
-	return 1;
+    for (i = 1; i < sizetrace; i++) {
+      GCtrace *slot = traceref_safe(J, i);
+      if (trace_mcode_area_refs(g, slot, rxlo, rxhi, rwlo, rwhi)) {
+	if (trace_native_pins_acq(slot) == 0)
+	  return LJ_TRACE_MCODE_REF_ACTIVE;
+	pinned_ref = 1;
+      }
+    }
   }
   for (T = trace_retired_head_acq(J); T != NULL;) {
     GCtrace *next;
@@ -1592,11 +1701,15 @@ int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
       abort();
     }
     next = trace_retired_next_acq(T);
-    if (trace_mcode_area_refs(g, T, rxlo, rxhi, rwlo, rwhi))
-      return 1;
+    if (trace_mcode_area_refs(g, T, rxlo, rxhi, rwlo, rwhi)) {
+      if (trace_native_pins_acq(T) == 0)
+	return LJ_TRACE_MCODE_REF_ACTIVE;
+      pinned_ref = 1;
+    }
     T = next;
   }
-  return 0;
+  return pinned_ref ? LJ_TRACE_MCODE_REF_PINNED_ONLY :
+	 LJ_TRACE_MCODE_REF_NONE;
 }
 
 void lj_trace_freeretired(global_State *g)
@@ -1858,6 +1971,7 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->topslot = 0;
   T2->linktype = 0;
   T2->unused1 = 0;
+  T2->native_pins = 0;
   T2->retire_epoch = 0;
   trace_retired_link_unlinked_rel(T2);
   memcpy(p, T->ir + T->nk, szins);
@@ -1913,6 +2027,7 @@ static void trace_save(jit_State *J, GCtrace *T)
   memcpy(T, &J->cur, sizeof(GCtrace));
   newwhite(g, T);
   T->gct = ~LJ_TTRACE;
+  T->native_pins = 0;
   T->retire_epoch = 0;
   trace_retired_link_unlinked_rel(T);
   T->ir = (IRIns *)p - J->cur.nk;  /* The IR has already been copied above. */
@@ -2891,6 +3006,9 @@ void lj_trace_initstate(global_State *g)
 
   J->trace_reclaim_epoch = 0;
   J->mcode_reclaim_epoch = 0;
+  J->trace_pin_release_seq = 0;
+  J->trace_reclaim_pin_seq = 0;
+  J->mcode_reclaim_pin_seq = 0;
 
   /* Initialize aligned SIMD constants. */
   tv = LJ_KSIMD(J, LJ_KSIMD_ABS);
@@ -2937,10 +3055,45 @@ void lj_trace_initstate(global_State *g)
 #endif
 }
 
+static void trace_terminal_pin_preflight(global_State *g)
+{
+  jit_State *J = G2J(g);
+  TraceVec *tv = tracevec_acq(J);
+  GCtrace *T;
+  TraceNo i, sizetrace = trace_sizetrace_acq(J);
+  if (J->curfinal && trace_native_pins_acq(J->curfinal) != 0) {
+    lj_assertG(0, "unfinished recorder body pinned at VM close");
+    abort();
+  }
+  if (tv) {
+    for (i = 1; i < sizetrace; i++) {
+      T = traceref_safe(J, i);
+      if (T && trace_native_pins_acq(T) != 0) {
+	lj_assertG(0, "trace slot retains native execution pin at VM close");
+	abort();
+      }
+    }
+  }
+  for (T = trace_retired_head_acq(J); T != NULL;
+       T = trace_retired_next_acq(T)) {
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered(g, T))) {
+      lj_assertG(0, "invalid retired trace during terminal pin preflight");
+      abort();
+    }
+    if (trace_native_pins_acq(T) != 0) {
+      lj_assertG(0, "retired trace retains native execution pin at VM close");
+      abort();
+    }
+  }
+}
+
 /* Free everything associated with the JIT compiler state. */
 void lj_trace_freestate(global_State *g)
 {
   jit_State *J = G2J(g);
+  /* Fail before buffers or the active vector disappear. A live native frame is
+  ** a universe-lifetime violation, not terminal garbage to repair by force. */
+  trace_terminal_pin_preflight(g);
 #ifdef LUA_USE_ASSERT
   {  /* Live slots are gone. Reserved retired slots may still name bodies until
       ** the active vector is freed below and the retire list drains. */

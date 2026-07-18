@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -63,6 +64,44 @@ static MCodeRetire *active_find(jit_State *J, MCode *needle)
   return NULL;
 }
 
+static GCtrace *trace_retired_find(jit_State *J, GCtrace *needle)
+{
+  GCtrace *T;
+  for (T = trace_retired_head_acq(J);
+       T != NULL;
+       T = trace_retired_next_acq(T))
+    if (T == needle)
+      return T;
+  return NULL;
+}
+
+static GCtrace *pin_trace_in_mcode_area(global_State *g, MCode *area,
+					 size_t size)
+{
+  jit_State *J = G2J(g);
+  uintptr_t lo = (uintptr_t)area;
+  uintptr_t hi = lo + size;
+  TraceNo i, sizetrace;
+  GCtrace *pinned = NULL;
+  /* The SMR reader is the independent lifetime proof required for the
+  ** zero-to-one native-pin handoff. */
+  lj_gc2_smr_read_enter(g);
+  sizetrace = trace_sizetrace_acq(J);
+  for (i = 1; i < sizetrace; i++) {
+    GCtrace *T = traceref_safe(J, i);
+    uintptr_t mcode;
+    if (!T || !trace_runnable_acq(T, i))
+      continue;
+    mcode = (uintptr_t)trace_mcode_acq(T);
+    if (mcode >= lo && mcode < hi && lj_trace_native_pin(T)) {
+      pinned = T;
+      break;
+    }
+  }
+  lj_gc2_smr_read_leave(g);
+  return pinned;
+}
+
 static int reclaim_gate_enter(global_State *g)
 {
   uint32_t worker = 0;
@@ -108,7 +147,8 @@ int main(void)
   jit_State *J;
   MCode *oldmc;
   MCodeRetire *ret;
-  size_t szall;
+  GCtrace *pinned_trace;
+  size_t oldmc_size, szall;
   uint64_t epoch;
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   FailAllocCtx alloc;
@@ -137,6 +177,14 @@ int main(void)
   assert(ret != NULL);
   assert(ret->retire_epoch == MCODE_RETIRE_EPOCH_ACTIVE);
   assert(mcode_retired_head_acq(J) == NULL);
+  oldmc_size = ret->size;
+  assert(oldmc_size != 0 && oldmc_size <= szall);
+  pinned_trace = pin_trace_in_mcode_area(g, oldmc, oldmc_size);
+  assert(pinned_trace != NULL);
+  assert((uintptr_t)trace_mcode_acq(pinned_trace) >= (uintptr_t)oldmc);
+  assert((uintptr_t)trace_mcode_acq(pinned_trace) <
+	 (uintptr_t)oldmc + oldmc_size);
+  assert(trace_native_pins_acq(pinned_trace) == 1u);
 
   /* Ordinary IDLE retire ownership is not evidence of a broken activation.
   ** Force the exact collision which used to pin NO_RECLAIM from the mcode
@@ -194,6 +242,7 @@ int main(void)
   assert(J->szallmcarea == szall);
   ret = retired_find(J, oldmc);
   assert(ret != NULL);
+  assert(trace_retired_find(J, pinned_trace) == pinned_trace);
 
   epoch = ret->retire_epoch;
   assert(epoch == g->gc2.hs_epoch);
@@ -226,6 +275,15 @@ int main(void)
   {
     int sweep = reclaim_gate_enter(g);
     assert(lj_jit_token_try(J));
+    (void)lj_trace_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS);
+    assert(trace_retired_find(J, pinned_trace) == pinned_trace);
+    assert(trace_native_pins_acq(pinned_trace) == 1u);
+    assert(J->trace_reclaim_epoch == epoch + LJ_FLUSH_EPOCHS);
+    assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) == 0);
+    assert(J->mcode_reclaim_epoch == epoch + LJ_FLUSH_EPOCHS);
+    assert(retired_find(J, oldmc) != NULL);
+    lj_trace_native_unpin(g, pinned_trace);
+    assert(trace_native_pins_acq(pinned_trace) == 0);
     assert(lj_trace_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
     assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
     lj_jit_token_release(J);
