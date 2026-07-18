@@ -893,6 +893,12 @@ static void snap_unsink(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
 			SnapNo snapno, BloomFilter rfilt,
 			IRIns *ir, TValue *o);
 
+static LJ_AINLINE int snap_restore_isbool(const IRIns *ir)
+{
+  return ir->o == IR_CONV &&
+    (ir->op2 & IRCONV_CONVMASK) == IRCONV_BOOL;
+}
+
 /* Restore a value from the trace exit state. */
 static void snap_restoreval(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
 			    SnapNo snapno, BloomFilter rfilt,
@@ -917,7 +923,10 @@ static void snap_restoreval(lua_State *L, jit_State *J, GCtrace *T, ExitState *e
   if (ra_hasspill(regsp_spill(rs))) {  /* Restore from spill slot. */
     int32_t *sps = &ex->spill[regsp_spill(rs)];
     if (irt_isinteger(t)) {
-      setintV(o, *sps);
+      if (snap_restore_isbool(ir))
+	setboolV(o, *sps != 0);
+      else
+	setintV(o, *sps);
 #if !LJ_SOFTFP32
     } else if (irt_isnum(t)) {
       o->u64 = *(uint64_t *)sps;
@@ -929,13 +938,30 @@ static void snap_restoreval(lua_State *L, jit_State *J, GCtrace *T, ExitState *e
   } else {  /* Restore from register. */
     Reg r = regsp_reg(rs);
     if (ra_noreg(r)) {
+      if (snap_restore_isbool(ir)) {
+	TValue tmp;
+	IRType st = irt_type(trace_ir_acq(T)[ir->op1].t);
+	snap_restoreval(L, J, T, ex, snapno, rfilt, ir->op1, &tmp);
+	lj_assertJ(tvisint(&tmp), "non-integer dynamic boolean source");
+	lj_assertJ(st == IRT_U8 || st == IRT_U32,
+		   "bad dynamic boolean source type");
+	/* A byte result only defines its low ABI byte. The conversion normally
+	** zero-extends it, but a snapshot-only conversion may be rematerialized
+	** from the raw call result with unspecified upper register bits. */
+	setboolV(o, st == IRT_U8 ? (uint8_t)intV(&tmp) != 0 :
+				  (uint32_t)intV(&tmp) != 0);
+	return;
+      }
       lj_assertJ(ir->o == IR_CONV && ir->op2 == IRCONV_NUM_INT,
 		 "restore from IR %04d has no reg", ref - REF_BIAS);
       snap_restoreval(L, J, T, ex, snapno, rfilt, ir->op1, o);
       if (LJ_DUALNUM) setnumV(o, (lua_Number)intV(o));
       return;
     } else if (irt_isinteger(t)) {
-      setintV(o, (int32_t)ex->gpr[r-RID_MIN_GPR]);
+      if (snap_restore_isbool(ir))
+	setboolV(o, ex->gpr[r-RID_MIN_GPR] != 0);
+      else
+	setintV(o, (int32_t)ex->gpr[r-RID_MIN_GPR]);
 #if !LJ_SOFTFP
     } else if (irt_isnum(t)) {
       setnumV(o, ex->fpr[r-RID_MIN_FPR]);

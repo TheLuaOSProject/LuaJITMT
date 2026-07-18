@@ -35,6 +35,10 @@ static int current_outer_generated;
 static uint32_t outer_effects;
 static uint32_t generated_outer_entries;
 static uint32_t generated_outer_returns;
+static uint32_t bool_outer_effects;
+static uint32_t generated_bool_entries;
+static uint32_t generated_bool_returns;
+static uint32_t generated_bool_callback_returns;
 static uint32_t suspended_observations;
 static uint32_t nested_generated_entries;
 static uint32_t nested_interpreted_entries;
@@ -44,6 +48,7 @@ static uint32_t callback_markers;
 static GCcdata *current_outer_result_root;
 
 static int64_t callback_outer(AuthCallback cb, int32_t value);
+static _Bool callback_bool_outer(AuthCallback cb, int32_t value);
 static int64_t nested_leaf(int32_t value);
 static int32_t interpreted_callback_call(AuthCallback cb, int32_t value);
 
@@ -258,6 +263,44 @@ static int64_t callback_outer(AuthCallback cb, int32_t value)
   return (int64_t)call_result + 100;
 }
 
+static _Bool callback_bool_outer(AuthCallback cb, int32_t value)
+{
+  LJFFINativeFrameSnapshot snapshot;
+  LJFFINativeFrameSnapshotResult snapshot_result;
+  int generated = 0;
+  int32_t call_result;
+
+  snapshot_result = lj_ffi_native_frame_snapshot(test_tg, &snapshot);
+  if (snapshot_result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE) {
+    assert(snapshot.depth == 1u);
+    assert(assert_active_top(&snapshot, (void *)callback_bool_outer, 0, 0) ==
+	   NULL);
+    generated = 1;
+    generated_bool_entries++;
+  } else {
+    assert(snapshot_result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY);
+  }
+
+  bool_outer_effects++;
+  assert(cb != NULL);
+  call_result = callbacks_enabled ? cb(value) : value;
+
+  if (generated) {
+    assert(lj_ffi_native_frame_snapshot(test_tg, &snapshot) ==
+	   LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+    assert(snapshot.depth == 1u);
+    assert(assert_active_top(&snapshot, (void *)callback_bool_outer,
+			      callbacks_enabled != 0, 0) == NULL);
+    generated_bool_returns++;
+    if (callbacks_enabled)
+      generated_bool_callback_returns++;
+  } else {
+    assert(lj_ffi_native_frame_snapshot(test_tg, &snapshot) ==
+	   LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY);
+  }
+  return call_result != 0;
+}
+
 static void assert_callback_frames_empty(TGState *tg)
 {
   MSize i;
@@ -330,6 +373,21 @@ static lua_Integer call_callback_run(lua_State *L, int n, int seed,
   return result;
 }
 
+static int call_callback_bool_run(lua_State *L, int n, int value)
+{
+  int status, result;
+  lua_getglobal(L, "__callxs_callback_bool_run");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, n);
+  lua_pushinteger(L, value);
+  status = lua_pcall(L, 2, 1, 0);
+  assert(status == LUA_OK);
+  assert(lua_isboolean(L, -1));
+  result = lua_toboolean(L, -1);
+  lua_pop(L, 1);
+  return result;
+}
+
 int main(void)
 {
 #if !LJ_TARGET_X64
@@ -343,6 +401,7 @@ int main(void)
   uint8_t old_stopreq = ccallback_native_had_stopreq_acq(&tg->cb);
   uint32_t effects0, markers0, entries0, returns0;
   uint32_t suspended0, nested0, interp0, interp_ret0, inner_cb0;
+  uint32_t bool_effects0, bool_entries0, bool_returns0, bool_callbacks0;
   lua_Integer got, expected;
   const int n = 16, seed = 9;
 
@@ -350,6 +409,8 @@ int main(void)
   assert(tg != NULL && lj_ffi_native_frame_depth_acq(tg) == 0);
   lua_pushlightuserdata(L, (void *)callback_outer);
   lua_setglobal(L, "lj_callxs_callback_outer_ptr");
+  lua_pushlightuserdata(L, (void *)callback_bool_outer);
+  lua_setglobal(L, "lj_callxs_callback_bool_outer_ptr");
   lua_pushlightuserdata(L, (void *)nested_leaf);
   lua_setglobal(L, "lj_callxs_nested_leaf_ptr");
   lua_pushlightuserdata(L, (void *)interpreted_callback_call);
@@ -369,11 +430,14 @@ int main(void)
     "ffi.cdef[[\n"
     "typedef int32_t (*lj_callxs_callback_t)(int32_t);\n"
     "typedef int64_t (*lj_callxs_outer_t)(lj_callxs_callback_t, int32_t);\n"
+    "typedef _Bool (*lj_callxs_bool_outer_t)(lj_callxs_callback_t, int32_t);\n"
     "typedef int64_t (*lj_callxs_leaf_t)(int32_t);\n"
     "typedef int32_t (*lj_callxs_inner_t)(lj_callxs_callback_t, int32_t);\n"
     "]]\n"
     "local outer = ffi.cast('lj_callxs_outer_t',\n"
     "                       lj_callxs_callback_outer_ptr)\n"
+    "local bool_outer = ffi.cast('lj_callxs_bool_outer_t',\n"
+    "                            lj_callxs_callback_bool_outer_ptr)\n"
     "local leaf = ffi.cast('lj_callxs_leaf_t', lj_callxs_nested_leaf_ptr)\n"
     "local inner = ffi.cast('lj_callxs_inner_t',\n"
     "                       lj_callxs_interpreted_callback_ptr)\n"
@@ -388,6 +452,9 @@ int main(void)
     "end\n"
     "jit.off(cb2_body)\n"
     "local cb2 = ffi.cast('lj_callxs_callback_t', cb2_body)\n"
+    "local function bool_cb_body(x) return x end\n"
+    "jit.off(bool_cb_body)\n"
+    "local bool_cb = ffi.cast('lj_callxs_callback_t', bool_cb_body)\n"
     "local function cb1_body(x)\n"
     "  local churn = { x, tostring(x) }\n"
     "  assert(churn[1] == x and #churn[2] > 0)\n"
@@ -406,6 +473,12 @@ int main(void)
     "  end\n"
     "  return sum\n"
     "end\n"
+    "function __callxs_callback_bool_run(n, value)\n"
+    "  local result\n"
+    "  for _ = 1, n do result = bool_outer(bool_cb, value) end\n"
+    "  assert(type(result) == 'boolean')\n"
+    "  return result\n"
+    "end\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "for x = 1, 80 do assert(nested_run(x) == 6*x + 63) end\n"
@@ -414,15 +487,35 @@ int main(void)
     "  assert(__callxs_callback_run(n, seed) ==\n"
     "         n*seed + n*(n+1)/2 + 110*n)\n"
     "end\n"
-    "__callxs_callback_keep = { outer, leaf, inner, nested_run }\n"
+    "assert(__callxs_callback_bool_run(200, 1) == true)\n"
+    "__callxs_callback_keep = { outer, bool_outer, leaf, inner, nested_run }\n"
     "__callxs_callback_cb1 = cb1\n"
-    "__callxs_callback_cb2 = cb2\n");
+    "__callxs_callback_cb2 = cb2\n"
+    "__callxs_callback_bool_cb = bool_cb\n");
 
   assert(generated_outer_entries != 0);
   assert(generated_outer_entries == generated_outer_returns);
+  assert(generated_bool_entries != 0);
+  assert(generated_bool_entries == generated_bool_returns);
   assert_runtime_clean(L, old_func, old_slot, old_stopreq);
 
   callbacks_enabled = 1;
+  /* The trace specialized the result as true during callback-free warm-up.
+  ** Reenter Lua and return false now: callback_seen forces native leave before
+  ** the value guard, whose DONE snapshot must restore a real Lua false. */
+  bool_effects0 = bool_outer_effects;
+  bool_entries0 = generated_bool_entries;
+  bool_returns0 = generated_bool_returns;
+  bool_callbacks0 = generated_bool_callback_returns;
+  assert(call_callback_bool_run(L, n, 0) == 0);
+  assert(bool_outer_effects - bool_effects0 == (uint32_t)n);
+  assert(generated_bool_entries - bool_entries0 != 0);
+  assert(generated_bool_entries - bool_entries0 ==
+	 generated_bool_returns - bool_returns0);
+  assert(generated_bool_callback_returns - bool_callbacks0 ==
+	 generated_bool_returns - bool_returns0);
+  assert_runtime_clean(L, old_func, old_slot, old_stopreq);
+
   effects0 = outer_effects;
   markers0 = callback_markers;
   entries0 = generated_outer_entries;
@@ -472,10 +565,13 @@ int main(void)
   ljt_lua_dostring(L,
     "__callxs_callback_cb1:free()\n"
     "__callxs_callback_cb2:free()\n"
+    "__callxs_callback_bool_cb:free()\n"
     "__callxs_callback_cb1 = nil\n"
     "__callxs_callback_cb2 = nil\n"
+    "__callxs_callback_bool_cb = nil\n"
     "__callxs_callback_keep = nil\n"
-    "__callxs_callback_run = nil\n");
+    "__callxs_callback_run = nil\n"
+    "__callxs_callback_bool_run = nil\n");
   lua_close(L);
   printf("t-ffi-callxs-callback OK: generated callbacks suspend, nest and unwind exactly\n");
   return 0;

@@ -2367,9 +2367,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 
     boxed_result = t == IRT_PTR || (LJ_64 && t == IRT_P32) ||
 	 t == IRT_I64 || t == IRT_U64 || ctype_isenum(ctr_info);
-    /* Boolean specialization still needs a post-side-effect guard contract.
-    ** All other scalar boxes use preallocated exact-CType storage below. */
-    if (ctype_isbool(ctr_info))
+    /* Dynamic booleans use a marked integer until native leave, then specialize
+    ** in the caller. Reject nonstandard representations rather than guessing. */
+    if (ctype_isbool(ctr_info) && t != IRT_U8 && t != IRT_U32)
       lj_trace_err(J, LJ_TRERR_NYICALL);
     if (boxed_result && result_size != lj_ir_type_size[t])
       lj_trace_err(J, LJ_TRERR_NYICALL);
@@ -2430,6 +2430,12 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       emitir(IRT(IR_XSTORE, t), result_payload, tr);
       tr = result_box;
       if (t == IRT_I64 || t == IRT_U64) lj_needsplit(J);
+    } else if (ctype_isbool(ctr_info)) {
+      /* Preserve the raw result across native leave. The marked conversion is
+      ** restored as a Lua boolean by every forced post-call snapshot; the
+      ** specialization direction is chosen only after the interpreter runs. */
+      tr = emitconv(tr, IRT_INT, t, IRCONV_BOOL);
+      rd->postcall_bool = tr;
     } else if (t == IRT_FLOAT || t == IRT_U32) {
       tr = emitconv(tr, IRT_NUM, t, 0);
     } else if (t == IRT_I8 || t == IRT_I16) {

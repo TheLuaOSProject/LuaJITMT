@@ -87,3 +87,9 @@ int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *ptr, int32_t value)
   lj_callxs_flush_wait(value);
   return ptr;
 }
+
+_Bool lj_callxs_flush_bool_maybe_block(int32_t value, int32_t truth)
+{
+  lj_callxs_flush_wait(value);
+  return truth != 0;
+}

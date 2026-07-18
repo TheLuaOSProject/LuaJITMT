@@ -1591,6 +1591,21 @@ static void ffrecord_postcall_snap(jit_State *J, TValue *ffbase)
   L->base = base;
 }
 
+static int ffrecord_result_ref_slot(jit_State *J, TRef result, BCReg *slotp)
+{
+  BCReg s;
+  int found = 0;
+  for (s = 0; s < J->maxslot; s++) {
+    if (J->base[s] == result) {
+      if (found)
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      *slotp = s;
+      found = 1;
+    }
+  }
+  return found;
+}
+
 /* Record entry to a fast function or C function. */
 void lj_ffrecord_func(jit_State *J)
 {
@@ -1599,6 +1614,7 @@ void lj_ffrecord_func(jit_State *J)
   rd.data = m & 0xff;
   rd.nres = 1;  /* Default is one result. */
   rd.argv = J->L->base;
+  rd.postcall_bool = 0;
   rd.postcall_native = 0;
   J->base[J->maxslot] = 0;  /* Mark end of arguments. */
   (recff_func[m >> 8])(J, &rd);  /* Call recff_* handler. */
@@ -1607,12 +1623,25 @@ void lj_ffrecord_func(jit_State *J)
     lj_record_ret(J, 0, rd.nres);
     if (rd.postcall_native) {
       TRef postcall_exit;
+      BCReg bool_slot = 0;
+      int bool_used = rd.postcall_bool != 0 &&
+	ffrecord_result_ref_slot(J, rd.postcall_bool, &bool_slot);
       /* The snapshot is installed before native leave. Thus both its CCI_T
-      ** STOPREQ unwind and the following forced guard restore in the caller
-      ** after CALLXS, and neither can replay the completed foreign call. */
+      ** STOPREQ unwind and both following guards dynamically restore the exact
+      ** Lua boolean in the caller after CALLXS, without replaying the call. */
       ffrecord_postcall_snap(J, rd.argv);
       postcall_exit = lj_ir_call(J, IRCALL_lj_ffi_native_trace_leave);
       emitir(IRTG(IR_EQ, IRT_INT), postcall_exit, lj_ir_kint(J, 0));
+      if (bool_used) {
+	/* This must be the final IR setup in this recorder turn. The interpreter
+	** publishes the actual result in tmptv2 before the next turn; FIXGUARD then
+	** chooses NE/EQ and fixes the provisional true slot without moving the
+	** guard ahead of native cleanup. */
+	lj_ir_set(J, IRTG(IR_NE, IRT_INT), rd.postcall_bool,
+		  lj_ir_kint(J, 0));
+	J->base[bool_slot] = TREF_TRUE;
+	J->postproc = LJ_POST_FIXGUARD;
+      }
       J->needsnap = 1;
     }
   }

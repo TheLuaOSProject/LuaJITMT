@@ -92,7 +92,24 @@ int32_t *lj_callxs_auth_ptr(int32_t *p)
 
 _Bool lj_callxs_auth_bool(int32_t value)
 {
+  lj_callxs_auth_counter++;
   return value != 0;
+}
+
+/* Export a byte-return ABI twin. The Lua declaration intentionally names it
+** _Bool so the generated and interpreted paths must normalize any nonzero
+** foreign return bits instead of assuming the producer canonicalized them. */
+uint8_t lj_callxs_auth_bool_raw_bits(int32_t value)
+{
+  lj_callxs_auth_counter++;
+  return (uint8_t)value;
+}
+
+_Bool lj_callxs_auth_bool_iter(int32_t state, int32_t control)
+{
+  (void)control;
+  lj_callxs_auth_counter++;
+  return state != 0;
 }
 
 enum lj_callxs_auth_enum {

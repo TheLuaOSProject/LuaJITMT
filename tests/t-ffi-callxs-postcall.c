@@ -166,7 +166,7 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
   for (ref = REF_FIRST; ref < nins; ref++) {
     if (ir[ref].o == IR_CALLXS) {
       IRIns *preguard;
-      IRRef enter, leave, scan;
+      IRRef bool_marker = 0, enter, leave, scan;
       EnterArgShape shape;
       int saw_xsave = 0;
       assert(ref > REF_FIRST);
@@ -245,9 +245,36 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
       while (leave < nins && ir[leave].o == IR_CONV) {
 	assert(shape.boxed_result_roots == 0);
 	assert(!irt_isguard(ir[leave].t));
+	if ((ir[leave].op2 & IRCONV_CONVMASK) == IRCONV_BOOL) {
+	  assert(bool_marker == 0);
+	  assert(irt_type(ir[leave].t) == IRT_INT);
+	  assert(ir[leave].op1 == ref);
+	  bool_marker = leave;
+	}
 	leave++;
       }
       assert(leave < nins && ref_is_leave(ir, leave));
+      if (bool_marker) {
+	unsigned marker_snapshots = 0;
+	IRIns *force_guard, *bool_guard;
+	for (sn = 0; sn < nsnap; sn++) {
+	  if (snap_ref_acq(&snap[sn]) == leave) {
+	    assert(snap_count_acq(&snap[sn]) == SNAPCOUNT_DONE);
+	    assert(snapshot_ref_count(T, &snap[sn], bool_marker) == 1);
+	    marker_snapshots++;
+	  }
+	}
+	assert(marker_snapshots == 1);
+	assert(leave + 2 < nins);
+	force_guard = &ir[leave + 1];
+	assert(force_guard->o == IR_EQ && irt_isguard(force_guard->t));
+	assert(force_guard->op1 == leave || force_guard->op2 == leave);
+	bool_guard = &ir[leave + 2];
+	assert((bool_guard->o == IR_NE || bool_guard->o == IR_EQ) &&
+	       irt_isguard(bool_guard->t));
+	assert(bool_guard->op1 == bool_marker ||
+	       bool_guard->op2 == bool_marker);
+      }
       callxs++;
     }
   }
@@ -494,6 +521,7 @@ int main(void)
     "uint8_t lj_callxs_auth_u8(int32_t);\n"
     "int16_t lj_callxs_auth_i16(int32_t);\n"
     "uint16_t lj_callxs_auth_u16(int32_t);\n"
+    "_Bool lj_callxs_auth_bool(int32_t);\n"
     "uint64_t lj_callxs_auth_u64_result(int32_t);\n"
     "void lj_callxs_auth_store(int32_t *, int32_t, int32_t);\n"
     "]]\n"
@@ -589,6 +617,33 @@ int main(void)
     "  local sum = 0\n"
     "  for i = 1, n do sum = sum + lib.lj_callxs_auth_u16(i) end\n"
     "  assert(sum == 54321*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_bool_true_run(n)\n"
+    "  local value\n"
+    "  for _ = 1, n do\n"
+    "    value = lib.lj_callxs_auth_bool(1)\n"
+    "    assert(type(value) == 'boolean' and value == true)\n"
+    "  end\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_bool_false_run(n)\n"
+    "  local value\n"
+    "  for _ = 1, n do\n"
+    "    value = lib.lj_callxs_auth_bool(0)\n"
+    "    assert(type(value) == 'boolean' and value == false)\n"
+    "  end\n"
+    "  return n\n"
+    "end\n"
+    "_G.__callxs_postcall_bool_dynamic_state = 1\n"
+    "function _G.__callxs_postcall_bool_dynamic_run(n)\n"
+    "  local state = __callxs_postcall_bool_dynamic_state\n"
+    "  local expected = state ~= 0\n"
+    "  local value\n"
+    "  for _ = 1, n do\n"
+    "    value = lib.lj_callxs_auth_bool(state)\n"
+    "    assert(type(value) == 'boolean' and value == expected)\n"
+    "  end\n"
     "  return n\n"
     "end\n"
     "local boxed_u64_expected = ffi.new('uint64_t', 4000000000)\n"
@@ -886,8 +941,70 @@ int main(void)
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_u8_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_i16_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_u16_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_bool_true_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_bool_false_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_u64_run");
   T = exercise_forced_result(L, J, tg, "__callxs_postcall_void_run");
+
+  /* Record the dynamic bool as true, then force POSTCALL on a false result.
+  ** The leave guard runs before boolean specialization, so its marked snapshot
+  ** must restore the actual false TValue and central cleanup must release the
+  ** retained frame/pin without replaying the foreign effect. */
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n"
+    "__callxs_postcall_bool_dynamic_state = 1\n");
+  assert(run_entry_named(L, "__callxs_postcall_bool_dynamic_run", 200) == 200);
+  assert(auth_count(L) == 200);
+  auth_reset(L);
+  runpt = global_lua_proto(L, "__callxs_postcall_bool_dynamic_run");
+  T = find_callxs_trace(J);
+  assert(T != NULL);
+  assert_exact_enter_constant(T);
+  assert_postcall_snapshot_pc(T, runpt, BC_CALL);
+  ljt_lua_dostring(L, "__callxs_postcall_bool_dynamic_state = 0\n");
+  finish_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
+  assert(run_named(L, "__callxs_postcall_bool_dynamic_run", 20) == 20);
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_calls != 0);
+  lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
+  assert(auth_count(L) == 20);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == 0);
+
+  /* Exercise the CCI_T path itself with a runtime-false marker from a trace
+  ** recorded true. Fresh STOPREQ throws inside native leave before the value
+  ** guard; protected snapshot restore must still normalize the marker and
+  ** central cleanup must release the exact retained lifetime. */
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n"
+    "__callxs_postcall_bool_dynamic_state = 1\n");
+  assert(run_entry_named(L, "__callxs_postcall_bool_dynamic_run", 200) == 200);
+  auth_reset(L);
+  T = find_callxs_trace(J);
+  assert(T != NULL);
+  ljt_lua_dostring(L, "__callxs_postcall_bool_dynamic_state = 0\n");
+  old_flags = lj_tg_flags_acq(tg);
+  leave_hook_calls = 0;
+  lj_ffi_native_trace_test_set_leave_hook(
+    force_fresh_stopreq_after_native_leave);
+  lua_getglobal(L, "__callxs_postcall_bool_dynamic_run");
+  lua_pushinteger(L, 20);
+  assert(lua_pcall(L, 1, 1, 0) != 0);
+  lj_ffi_native_trace_test_set_leave_hook(NULL);
+  assert(leave_hook_calls == 1);
+  assert(lua_tostring(L, -1) != NULL);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  lj_tg_flags_store_rlx(tg, old_flags);
+  assert(auth_count(L) == 2);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == 0);
 
   assert(lj_ffi_native_frame_depth_acq(tg) == old_depth);
   assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) == 0);

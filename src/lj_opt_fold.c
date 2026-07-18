@@ -1317,13 +1317,14 @@ LJFOLD(CONV any any)
 LJFOLDF(cse_conv)
 {
   if (LJ_LIKELY(jit_flags_acq(J) & JIT_F_OPT_CSE)) {
-    IRRef op1 = fins->op1, op2 = (fins->op2 & IRCONV_MODEMASK);
+    uint32_t cmask = IRCONV_MODEMASK|IRCONV_BOOL;
+    IRRef op1 = fins->op1, op2 = (fins->op2 & cmask);
     uint8_t guard = irt_isguard(fins->t);
     IRRef ref = J->chain[IR_CONV];
     while (ref > op1) {
       IRIns *ir = IR(ref);
       /* Commoning with stronger checks is ok. */
-      if (ir->op1 == op1 && (ir->op2 & IRCONV_MODEMASK) == op2 &&
+      if (ir->op1 == op1 && (ir->op2 & cmask) == op2 &&
 	  irt_isguard(ir->t) >= guard)
 	return ref;
       ref = ir->prev;

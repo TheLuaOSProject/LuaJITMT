@@ -15,6 +15,7 @@ typedef struct RecordFFData {
   TValue *argv;		/* Runtime argument values. */
   ptrdiff_t nres;	/* Number of returned results (defaults to 1). */
   uint32_t data;	/* Per-ffid auxiliary data (opcode, literal etc.). */
+  TRef postcall_bool;	/* Raw dynamic boolean result, or zero. */
   uint8_t postcall_native; /* Emit native leave in caller state, if nonzero. */
 } RecordFFData;
 

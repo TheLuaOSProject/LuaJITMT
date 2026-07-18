@@ -98,7 +98,7 @@ end
 return function(add)
   add({
     name = "m7_ffi_callxs_authentic",
-    description = "production generic CALLXS boxed/scalar lifecycle",
+    description = "production generic CALLXS scalar/boxed/bool lifecycle",
     run = function(t)
       local flags = table.concat({
         "-DLUA_USE_ASSERT",

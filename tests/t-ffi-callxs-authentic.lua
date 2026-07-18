@@ -23,6 +23,8 @@ void lj_callxs_auth_store(int32_t *, int32_t, int32_t);
 double lj_callxs_auth_vararg(int32_t, ...);
 int32_t *lj_callxs_auth_ptr(int32_t *);
 _Bool lj_callxs_auth_bool(int32_t);
+_Bool lj_callxs_auth_bool_raw_bits(int32_t);
+_Bool lj_callxs_auth_bool_iter(int32_t, int32_t);
 enum lj_callxs_auth_enum {
   LJ_CALLXS_AUTH_ENUM_ZERO,
   LJ_CALLXS_AUTH_ENUM_SEVEN = 7
@@ -238,8 +240,8 @@ assert((trace_op_counts()["CALLXS"] or 0) > 0,
        "ITERC frame did not activate production CALLXS")
 
 -- Pointer, enum and 64-bit results use a preallocated exact-CType box rooted
--- through XSAVE and the native frame. Bool remains interpreted until its
--- post-side-effect normalization has a guard/snapshot contract.
+-- through XSAVE and the native frame. Bool uses a dynamic snapshot marker and
+-- specializes only after native leave has closed or transferred that frame.
 local function boxed_pointer(nbox)
   local value
   for i = 1, nbox do
@@ -248,9 +250,21 @@ local function boxed_pointer(nbox)
   return value
 end
 
-local function boxed_bool(nbox)
+local function bool_true(nbox)
   local value
-  for i = 1, nbox do value = lib.lj_callxs_auth_bool(i) end
+  for _ = 1, nbox do value = lib.lj_callxs_auth_bool(1) end
+  return value
+end
+
+local function bool_false(nbox)
+  local value
+  for _ = 1, nbox do value = lib.lj_callxs_auth_bool(0) end
+  return value
+end
+
+local function bool_noncanonical(nbox)
+  local value
+  for _ = 1, nbox do value = lib.lj_callxs_auth_bool_raw_bits(0xa6) end
   return value
 end
 
@@ -288,7 +302,15 @@ end
 
 for _, case in ipairs({
   { "pointer", boxed_pointer, function(value) assert(value == p) end, true },
-  { "bool", boxed_bool, function(value) assert(value == true) end, false },
+  { "bool true", bool_true, function(value)
+      assert(type(value) == "boolean" and value == true)
+    end, true },
+  { "bool false", bool_false, function(value)
+      assert(type(value) == "boolean" and value == false)
+    end, true },
+  { "bool noncanonical nonzero", bool_noncanonical, function(value)
+      assert(type(value) == "boolean" and value == true)
+    end, true },
   { "enum", boxed_enum, function(value)
       assert(ffi.istype("enum lj_callxs_auth_enum", value))
       assert(tonumber(value) == 7)
@@ -318,5 +340,150 @@ for _, case in ipairs({
   assert(has_callxs == case[4],
          case[1] .. " result crossed the CALLXS admission boundary")
 end
+
+-- Reuse a trace recorded with true and feed it false. The post-leave value
+-- guard must restore an actual Lua false (not integer zero), without replaying
+-- the foreign call or growing a side trace across the DONE snapshot.
+local function bool_value(value, nbool)
+  local result
+  for _ = 1, nbool do result = lib.lj_callxs_auth_bool(value) end
+  return result
+end
+
+local function bool_raw_value(value, nbool)
+  local result
+  for _ = 1, nbool do
+    result = lib.lj_callxs_auth_bool_raw_bits(value)
+  end
+  return result
+end
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+lib.lj_callxs_auth_reset()
+assert(bool_value(1, 200) == true)
+assert(lib.lj_callxs_auth_count() == 200)
+assert((trace_op_counts()["CALLXS"] or 0) > 0,
+       "dynamic boolean fixture omitted CALLXS")
+lib.lj_callxs_auth_reset()
+local mismatched_bool = bool_value(0, 20)
+assert(type(mismatched_bool) == "boolean" and mismatched_bool == false)
+assert(lib.lj_callxs_auth_count() == 20,
+       "dynamic boolean mismatch replayed the foreign call")
+
+-- Prove the inverse specialization too: EQ(marker, 0) must restore true when
+-- a trace recorded false observes nonzero raw return bits.
+jit.flush()
+lib.lj_callxs_auth_reset()
+assert(bool_raw_value(0, 200) == false)
+assert(lib.lj_callxs_auth_count() == 200)
+assert((trace_op_counts()["CALLXS"] or 0) > 0,
+       "false-specialized boolean fixture omitted CALLXS")
+lib.lj_callxs_auth_reset()
+local inverse_mismatched_bool = bool_raw_value(0xa6, 20)
+assert(type(inverse_mismatched_bool) == "boolean" and
+       inverse_mismatched_bool == true)
+assert(lib.lj_callxs_auth_count() == 20,
+       "inverse boolean mismatch replayed the foreign call")
+
+local function bool_call_multres(x)
+  local value = lib.lj_callxs_auth_bool(produce_one(x))
+  return value
+end
+
+local function bool_tail(x)
+  return lib.lj_callxs_auth_bool(x)
+end
+
+local function bool_tail_multres(x)
+  return lib.lj_callxs_auth_bool(produce_one(x))
+end
+
+local function run_bool_wrapper(nbool, fn, value)
+  local result
+  for _ = 1, nbool do result = fn(value) end
+  return result
+end
+
+assert(hasbc(bool_call_multres, "CALLM"))
+assert(hasbc(bool_tail, "CALLT"))
+assert(hasbc(bool_tail_multres, "CALLMT"))
+
+for _, case in ipairs({
+  { "bool CALLM", bool_call_multres },
+  { "bool CALLT", bool_tail },
+  { "bool CALLMT", bool_tail_multres },
+}) do
+  jit.flush()
+  lib.lj_callxs_auth_reset()
+  assert(run_bool_wrapper(200, case[2], 1) == true)
+  assert(lib.lj_callxs_auth_count() == 200)
+  local before = trace_op_counts()["CALLXS"] or 0
+  assert(before > 0, case[1] .. " omitted CALLXS")
+  lib.lj_callxs_auth_reset()
+  local value = run_bool_wrapper(20, case[2], 0)
+  assert(type(value) == "boolean" and value == false)
+  assert(lib.lj_callxs_auth_count() == 20,
+         case[1] .. " mismatch replayed the call")
+end
+
+local function ignore_bool_results(nbool)
+  for i = 1, nbool do lib.lj_callxs_auth_bool(bit.band(i, 1)) end
+  return true
+end
+
+local function excess_bool_results(nbool)
+  local result
+  for _ = 1, nbool do
+    local value, extra1, extra2 = lib.lj_callxs_auth_bool(0)
+    assert(extra1 == nil and extra2 == nil)
+    result = value
+  end
+  return result
+end
+
+local function open_bool_results(nbool)
+  local result
+  for _ = 1, nbool do
+    local count, value, extra = forward_results(lib.lj_callxs_auth_bool(0))
+    assert(count == 1 and extra == nil)
+    result = value
+  end
+  return result
+end
+
+for _, case in ipairs({
+  { "ignored bool", ignore_bool_results, true },
+  { "excess fixed bool", excess_bool_results, false },
+  { "open bool", open_bool_results, false },
+}) do
+  jit.flush()
+  lib.lj_callxs_auth_reset()
+  local value = case[2](200)
+  assert(type(value) == "boolean" and value == case[3])
+  assert(lib.lj_callxs_auth_count() == 200)
+  assert((trace_op_counts()["CALLXS"] or 0) > 0,
+         case[1] .. " result mode omitted CALLXS")
+end
+
+local function run_bool_iter(nbool, state)
+  local result
+  for _ = 1, nbool do
+    for value in lib.lj_callxs_auth_bool_iter, state, 0 do
+      result = value
+      break
+    end
+  end
+  return result
+end
+assert(hasbc(run_bool_iter, "ITERC"))
+jit.flush()
+lib.lj_callxs_auth_reset()
+assert(run_bool_iter(200, 1) == true)
+assert(lib.lj_callxs_auth_count() == 200)
+local iter_callxs = trace_op_counts()["CALLXS"] or 0
+assert(iter_callxs > 0, "bool ITERC omitted CALLXS")
+lib.lj_callxs_auth_reset()
+assert(run_bool_iter(20, 0) == false)
+assert(lib.lj_callxs_auth_count() == 20)
 
 print("t-ffi-callxs-authentic OK: production XSAVE/native/CALLXS path executed")
