@@ -333,11 +333,13 @@ static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 1);
 }
 
+#if defined(LJ_GC2_TEST_HELPERS)
 typedef struct GreyRaceCtx {
   global_State *g;
   ljt_barrier_t barrier;
   GCobj *stolen;
 } GreyRaceCtx;
+#endif
 
 typedef struct WorkerDrainCtx {
   global_State *g;
@@ -379,6 +381,7 @@ static void grey_wait(ljt_barrier_t *barrier)
   assert(rc == 0 || rc == LJT_BARRIER_SERIAL_THREAD);
 }
 
+#if defined(LJ_GC2_TEST_HELPERS)
 static void *grey_owner_thread(void *arg)
 {
   GreyRaceCtx *ctx = (GreyRaceCtx *)arg;
@@ -394,6 +397,7 @@ static void *grey_thief_thread(void *arg)
   ctx->stolen = lj_gc2_test_grey_steal(ctx->g);
   return NULL;
 }
+#endif
 
 static void *grey_worker_drain_thread(void *arg)
 {
@@ -446,6 +450,7 @@ static void *weak_peer_write_thread(void *arg)
   return NULL;
 }
 
+#if defined(LJ_GC2_TEST_HELPERS)
 static void grey_publish_test_item(global_State *g, GCobj *o)
 {
   uint64_t top = la_load64_acq(&g->gc2.grey_top);
@@ -514,6 +519,7 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
 
   lj_gc2_cycle_to_idle(g);
 }
+#endif
 
 static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
 {
@@ -8076,7 +8082,9 @@ int main(void)
   test_retired_table_root_cycle_retries(L, g);
   test_embedded_empty_string_mark(g);
   test_grey_deque_growth(L, g, tg);
+#if defined(LJ_GC2_TEST_HELPERS)
   test_grey_deque_steal_race(L, g, tg);
+#endif
   test_worker_drain(L, g, tg);
   test_worker_drain_race(L, g, tg);
   test_worker_leaf_ssb(L, g, tg);
