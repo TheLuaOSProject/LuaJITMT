@@ -251,7 +251,11 @@ static void loop_subst_snap(jit_State *J, SnapShot *osnap,
   snap->mcofs = 0;
   snap->nslots = nslots;
   snap->topslot = osnap->topslot;
-  snap->count = 0;
+  /* SNAPCOUNT_DONE is also an explicit "never record this exit" marker for
+  ** native-call boundaries which must not link directly to side code. Preserve
+  ** that semantic marker when LOOP copies/reindexes snapshots, but never copy
+  ** an ordinary runtime hot-exit count into a new trace. */
+  snap->count = osnap->count == SNAPCOUNT_DONE ? SNAPCOUNT_DONE : 0;
   nmap = &J->cur.snapmap[nmapofs];
   /* Substitute snapshot slots. */
   on = ln = nn = 0;

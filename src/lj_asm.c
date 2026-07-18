@@ -2397,12 +2397,6 @@ static void asm_tail_link(ASMState *as)
   emit_addptr(as, RID_BASE, 8*(int32_t)baseslot);
   checkmclim(as);
 
-  if (as->J->ktrace) {  /* Patch ktrace slot with the final GCtrace pointer. */
-    IRIns *ir = IR(as->J->ktrace);
-    ir_kgc_store_rel(ir, obj2gco(as->J->curfinal));
-    la_store8_rel((uint8_t *)&ir->o, IR_KGC);  /* 05 section 5.7.4 trace root. */
-  }
-
   /* Sync the interpreter state with the on-trace state. */
   checkmclim(as);
   asm_stack_restore(as, snap);
@@ -2410,6 +2404,22 @@ static void asm_tail_link(ASMState *as)
   /* Root traces that add frames need to check the stack at the end. */
   if (!as->parent && gotframe)
     asm_stack_check(as, as->topslot, NULL, as->freeset & RSET_GPR, snapno);
+}
+
+/* Patch the exact-body constant in every assembly attempt. Loop traces skip
+** asm_tail_link(), and an IR-growth retry allocates a fresh curfinal copy, so
+** neither tail linking nor a one-time patch is sufficient. Assembly proceeds
+** backwards after this point and therefore observes the final KGC value when
+** lowering native-entry arguments. */
+static void asm_patch_ktrace(ASMState *as)
+{
+  if (as->J->ktrace) {
+    IRIns *ir = IR(as->J->ktrace);
+    lj_assertA(ir->o == IR_KNUM || ir->o == IR_KNULL || ir->o == IR_KGC,
+	       "bad exact trace constant op %d", ir->o);
+    ir_kgc_store_rel(ir, obj2gco(as->J->curfinal));
+    la_store8_rel((uint8_t *)&ir->o, IR_KGC);  /* Trace-owned GC root. */
+  }
 }
 
 /* -- Trace setup --------------------------------------------------------- */
@@ -2772,6 +2782,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     as->mcp_prev = as->mcp;
 #endif
     as->ir = J->curfinal->ir;  /* Use the copied IR. */
+    asm_patch_ktrace(as);
     as->curins = J->cur.nins = as->orignins;
 #ifdef LUAJIT_RANDOM_RA
     as->prngstate = J2TG(J)->prng;  /* Must (re)start from identical state. */

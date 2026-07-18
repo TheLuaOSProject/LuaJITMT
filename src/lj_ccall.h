@@ -215,12 +215,14 @@ LJ_FUNC uint64_t lj_ffi_native_frame_sequence_acq(const TGState *tg);
 LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
 
 #if LJ_HASJIT
-/* Owner-only XSAVE consumer for the future generic IR_CALLXS seam. Entry is
-** allocation-free and nonwaiting; zero requests a pre-call side exit without
-** consuming XSAVE state. Ordinary leave removes the frame. A forced leave
-** converts it to POSTCALL and retains its exact pin until the unconditional
-** caller-state trace exit invokes cleanup. Nested/callback entry remains gated
-** until suspended-frame publication exists. No recorder emits these calls yet.
+/* Owner-only XSAVE consumer for the generic IR_CALLXS seam. Entry is
+** allocation-free and nonwaiting; every attempt consumes XSAVE staging and
+** zero requests a pre-call interpreter exit. Ordinary leave removes the frame.
+** A forced leave converts it to POSTCALL and retains its exact pin until the
+** non-side-linkable caller-state trace exit invokes cleanup. The default
+** recorder remains gated; explicit test-only activation exercises the admitted
+** scalar lifecycle. Nested/callback entry remains gated until suspended-frame
+** publication exists.
 */
 #define LJ_FFI_NATIVE_LEAVE_FORCE_EXIT	0x80000000u
 LJ_FUNC int lj_ffi_native_trace_enter(lua_State *L, struct GCtrace *T,
@@ -231,8 +233,11 @@ LJ_FUNC int lj_ffi_native_trace_exit_cleanup(lua_State *L,
 					     uint32_t traceno);
 #if defined(LJ_XSAVE_TEST_HELPERS)
 typedef void (*LJFFINativeTraceFinishHook)(TGState *tg);
+typedef void (*LJFFINativeTraceLeaveHook)(TGState *tg);
 LJ_FUNC void lj_ffi_native_trace_test_set_finish_hook(
   LJFFINativeTraceFinishHook hook);
+LJ_FUNC void lj_ffi_native_trace_test_set_leave_hook(
+  LJFFINativeTraceLeaveHook hook);
 #endif
 #endif
 #if defined(LJ_FFI_NATIVE_FRAME_TEST_HELPERS)

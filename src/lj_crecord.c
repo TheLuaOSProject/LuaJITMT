@@ -2345,6 +2345,21 @@ static void crec_snap_caller(jit_State *J)
   J->base[-1-LJ_FR2] = ftr; J->pc = pc;
 }
 
+/* Obtain the one exact-body placeholder patched to J->curfinal by every
+** assembly attempt. A stitched trace may already own the same placeholder. */
+static TRef crec_call_trace(jit_State *J)
+{
+  if (J->ktrace) {
+    lj_assertJ(irt_type(IR(J->ktrace)->t) == IRT_P64,
+	       "bad exact trace constant type");
+    return TREF(J->ktrace, IRT_P64);
+  } else {
+    TRef tr = lj_ir_ktrace(J);
+    J->ktrace = (IRRef1)tref_ref(tr);
+    return tr;
+  }
+}
+
 /* Record a function call through the single generic scalar CALLXS path. */
 static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 {
@@ -2362,18 +2377,30 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     info = ctype_info_acq(ct);
   }
   if (ctype_isfunc(info)) {
-    TRef func, tr;
+    TRef args, entered, func, callfunc, tr;
     CType ctrsnap;
     CType *ctr;
     CTInfo ctr_info;
     IRType t;
 
-    /*
-    ** Hard safety boundary: CALLXS cannot run until XSAVE has materialized
-    ** every root, native frames pin the exact trace continuation, and the
-    ** leave path exits from caller state without replaying the C call.
-    */
+#if !defined(LJ_FFI_CALLXS_TEST_ACTIVATE)
+    /* Default safety boundary: first-time callbacks still need ACTIVE ->
+    ** SUSPENDED publication, and boxed results need pre-rooted storage before
+    ** arbitrary generic calls can record by default. The test activation uses
+    ** this exact production seam for the already non-allocating return class. */
     lj_trace_err(J, LJ_TRERR_BLACKL);
+#else
+    /* Until continuation/pcall/tail-return handoff has its own exact snapshot
+    ** contract, exercise the authentic path only for an ordinary Lua call
+    ** frame which lj_record_ret() resolves by one caller-base adjustment. */
+    if (J->framedepth <= 0 || !frame_islua(J->L->base-1)) {
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+    } else {
+      BCOp callop = bc_op(frame_pc(J->L->base-1)[-1]);
+      if (!(callop == BC_CALL || callop == BC_CALLM || callop == BC_ITERC))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+    }
+#endif
 
     func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
     ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
@@ -2389,13 +2416,37 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 		 ctype_isenum(ctr_info)) || t == IRT_CDATA) {
       lj_trace_err(J, LJ_TRERR_NYICALL);
     }
+
+    /* After CALLXS, no guard, allocation or throwing result normalization may
+    ** precede the caller snapshot and native leave. Boxed pointer/enum/i64
+    ** results and boolean specialization stay interpreted until their result
+    ** handoff is rooted and covered by authentic unwind tests. */
+    if (ctype_isbool(ctr_info) || t == IRT_PTR ||
+	(LJ_64 && t == IRT_P32) || t == IRT_I64 || t == IRT_U64 ||
+	ctype_isenum(ctr_info))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+
+    args = crec_call_args(J, rd, cts, ct);
+    callfunc = func;
     if ((info & CTF_VARARG)
 #if LJ_TARGET_X86
 	|| ctype_cconv(info) != CTCC_CDECL
 #endif
 	)
-      func = emitir(IRT(IR_CARG, IRT_NIL), func, lj_ir_kint(J, id));
-    tr = emitir(IRT(IR_CALLXS, t), crec_call_args(J, rd, cts, ct), func);
+      callfunc = emitir(IRT(IR_CARG, IRT_NIL), callfunc, lj_ir_kint(J, id));
+
+    /* Materialize roots before publishing the exact pinned native frame. Entry
+    ** is nonthrowing and consumes XSAVE staging on both success and rejection.
+    ** Keep its pre-call exit interpreter-only too: admission is transient and
+    ** a side trace must not grow across this native lifecycle boundary. Leave
+    ** is literally the first C call after CALLXS, so it captures errno or
+    ** LastError immediately. */
+    lj_ffrecord_xsave(J);
+    J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+    entered = lj_ir_call(J, IRCALL_lj_ffi_native_trace_enter,
+			 crec_call_trace(J), func);
+    emitir(IRTG(IR_NE, IRT_INT), entered, lj_ir_kint(J, 0));
+    tr = emitir(IRT(IR_CALLXS, t), args, callfunc);
     if (ctype_isbool(ctr_info)) {
       if (frame_islua(J->L->base-1) &&
 	  bc_b(frame_pc(J->L->base-1)[-1]) == 1) {
@@ -2424,6 +2475,10 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     }
     J->base[0] = tr;
     J->needsnap = 1;
+    /* lj_ffrecord_func() emits the potentially throwing native leave only
+    ** after these pure result conversions and lj_record_ret() have constructed
+    ** the exact Lua caller state. */
+    rd->postcall_native = 1;
     return 1;
   }
   return 0;

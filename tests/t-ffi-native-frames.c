@@ -270,8 +270,9 @@ int main(void)
   frame_make(&frame, L, LJ_FFI_NATIVE_FRAME_MAX);
   assert(lj_ffi_native_frame_push(tg, &frame) == 0);
   errno = EDOM;
-  /* Capacity is checked before the raw generated trace constant. A future
-  ** caller can side-exit without dereferencing this deliberate poison value. */
+  /* Capacity is checked before the raw generated trace constant. A generated
+  ** caller can exit without dereferencing this deliberate poison value, while
+  ** consuming the one-shot XSAVE staging for the rejected attempt. */
   assert(lj_ffi_native_trace_enter(L, (GCtrace *)(uintptr_t)3u,
 				   (void *)(uintptr_t)5u) == 0);
   assert(errno == EDOM);
@@ -283,6 +284,9 @@ int main(void)
   assert(snapshot.depth == before_overflow.depth);
   for (i = 0; i < LJ_FFI_NATIVE_FRAME_MAX; i++)
     frame_assert(&snapshot.frame[i], L, i);
+  dormant.ffi_xsave_root = NULL;
+  dormant.ffi_xsave_baseslot = 0;
+  dormant.ffi_xsave_nslots = 0;
   dormant_state_assert(tg, &dormant);
 
   for (i = LJ_FFI_NATIVE_FRAME_MAX; i > 0; i--) {

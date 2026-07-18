@@ -1532,6 +1532,65 @@ static uint32_t recdef_lookup(GCfunc *fn)
     return 0;
 }
 
+/* Add the forced post-call snapshot in the Lua caller, not at the synthetic
+** FUNCC instruction currently being reported to the recorder. lj_record_ret()
+** has already moved the IR base/baseslot/framedepth back to the caller, but the
+** live interpreter frame and J->pc/J->pt still describe the fast function
+** until its retry completes. Mixing those two views records the FUNCC pseudo
+** PC with caller slots; an exit then restores the values but resumes through a
+** bogus C continuation and can replay or jump through non-code memory.
+**
+** This helper supplies the matching interpreter view only while the snapshot
+** is built. Recorder errors unwind the surrounding protected trace_state()
+** entry, while the successful path restores the still-live fast-function
+** view before returning to the VM. */
+static void ffrecord_postcall_snap(jit_State *J, TValue *ffbase)
+{
+  lua_State *L = J->L;
+  TValue *base = L->base, *top = L->top;
+  TValue *frame, *callerbase;
+  const BCIns *pc = J->pc, *callerpc;
+  GCfunc *fn = J->fn, *callerfn;
+  GCproto *pt = J->pt, *callerpt;
+  ptrdiff_t delta;
+
+  if (base != ffbase || J->cur.linktype != LJ_TRLINK_NONE ||
+      !frame_islua(ffbase-1))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  callerpc = frame_pc(ffbase-1);
+  delta = 1 + LJ_FR2 + bc_a(callerpc[-1]);
+  callerbase = ffbase - delta;
+  if (callerbase < tvref(L->stack) + 1 + LJ_FR2 || callerbase > ffbase)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  frame = callerbase - 1;
+  if (!frame_islua(frame))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  callerfn = frame_func(frame);
+  if (!isluafunc(callerfn))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  callerpt = funcproto(callerfn);
+  if (callerpc < proto_bc(callerpt) ||
+      callerpc >= proto_bc(callerpt) + callerpt->sizebc)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+
+  L->base = callerbase;
+  L->top = ffbase;
+  J->pc = callerpc;
+  J->fn = callerfn;
+  J->pt = callerpt;
+  lj_snap_add(J);
+  /* A completed foreign call may retain an exact trace pin in a POSTCALL
+  ** frame. Only the central trace-exit path releases it after restoring this
+  ** caller snapshot. A linked side trace would bypass that cleanup entirely,
+  ** so this exit is permanently interpreter-only. */
+  J->cur.snap[J->cur.nsnap-1].count = SNAPCOUNT_DONE;
+  J->pt = pt;
+  J->fn = fn;
+  J->pc = pc;
+  L->top = top;
+  L->base = base;
+}
+
 /* Record entry to a fast function or C function. */
 void lj_ffrecord_func(jit_State *J)
 {
@@ -1540,18 +1599,20 @@ void lj_ffrecord_func(jit_State *J)
   rd.data = m & 0xff;
   rd.nres = 1;  /* Default is one result. */
   rd.argv = J->L->base;
-  rd.postcall_exit = 0;
+  rd.postcall_native = 0;
   J->base[J->maxslot] = 0;  /* Mark end of arguments. */
   (recff_func[m >> 8])(J, &rd);  /* Call recff_* handler. */
   if (rd.nres >= 0) {
     if (J->postproc == LJ_POST_NONE) J->postproc = LJ_POST_FFRETRY;
     lj_record_ret(J, 0, rd.nres);
-    if (rd.postcall_exit) {
-      /* This snapshot is in the caller after lj_record_ret(). Thus the
-      ** unconditional generated guard cannot replay a completed C call even
-      ** when return processing has already selected a trace tail. */
-      lj_snap_add(J);
-      emitir(IRTG(IR_EQ, IRT_INT), rd.postcall_exit, lj_ir_kint(J, 0));
+    if (rd.postcall_native) {
+      TRef postcall_exit;
+      /* The snapshot is installed before native leave. Thus both its CCI_T
+      ** STOPREQ unwind and the following forced guard restore in the caller
+      ** after CALLXS, and neither can replay the completed foreign call. */
+      ffrecord_postcall_snap(J, rd.argv);
+      postcall_exit = lj_ir_call(J, IRCALL_lj_ffi_native_trace_leave);
+      emitir(IRTG(IR_EQ, IRT_INT), postcall_exit, lj_ir_kint(J, 0));
       J->needsnap = 1;
     }
   }

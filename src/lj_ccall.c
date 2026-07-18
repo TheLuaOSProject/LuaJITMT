@@ -1719,11 +1719,18 @@ LJ_STATIC_ASSERT((LJ_FFI_NATIVE_LEAVE_FORCE_EXIT & 0x0000ffffu) == 0);
 
 #if defined(LJ_XSAVE_TEST_HELPERS)
 static LJFFINativeTraceFinishHook ffi_native_trace_finish_hook;
+static LJFFINativeTraceLeaveHook ffi_native_trace_leave_hook;
 
 void lj_ffi_native_trace_test_set_finish_hook(
   LJFFINativeTraceFinishHook hook)
 {
   la_storefunc_rel(&ffi_native_trace_finish_hook, hook);
+}
+
+void lj_ffi_native_trace_test_set_leave_hook(
+  LJFFINativeTraceLeaveHook hook)
+{
+  la_storefunc_rel(&ffi_native_trace_leave_hook, hook);
 }
 #endif
 
@@ -1786,6 +1793,17 @@ static int ccall_jit_geometry(lua_State *L, TGState *tg,
   return 1;
 }
 
+/* XSAVE staging is a single generated-entry attempt, not persistent carrier
+** state. Consume it after successful publication or before any ordinary
+** rejection returns. This avoids leaving raw stack geometry live while the
+** pre-call exit resumes in the interpreter. */
+static void ccall_jit_xsave_clear(TGState *tg)
+{
+  la_storeptr_rel((void **)&tg->ffi_xsave_root, NULL);
+  la_store32_rel(&tg->ffi_xsave_baseslot, 0);
+  la_store32_rel(&tg->ffi_xsave_nslots, 0);
+}
+
 /* The executing trace's published jit_base is the independent lifetime proof
 ** required before the first T read. SMR then validates the exact public slot
 ** while native-pin admission races retirement without waiting. */
@@ -1823,8 +1841,9 @@ int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func)
   CCallErrorState err;
   CCallJITGeometry geo;
   LJFFINativeFrame frame;
-  global_State *g;
-  TGState *tg;
+  global_State *g = NULL;
+  TGState *tg = NULL;
+  TGState *current = NULL;
   CCallbackRuntime *cb;
   TraceNo traceno;
   uint32_t depth;
@@ -1833,11 +1852,19 @@ int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func)
   /* This must remain the first operation: entry validation and SMR admission
   ** must not replace the errno/LastError pair observed by the foreign call. */
   ccall_error_save(&err);
-  if (!L || !T || !func)
+  if (!L)
     goto out;
-  tg = L2TG(L);
   g = G(L);
-  if (!tg || !g)
+  if (!g)
+    goto out;
+  /* IR_XSAVE writes through RID_DISPATCH, which the x64 VM loads directly
+  ** from L->tg_hint. Require that staged/dispatch carrier to be the current
+  ** TLS carrier before reading or clearing any owner-private word. */
+  tg = L->tg_hint;
+  current = G2TG(g);
+  if (!tg || tg != current || lj_tg_load_cur_L(tg) != L)
+    goto out;
+  if (!T || !func)
     goto out;
   /* Capacity is the expected nonexceptional failure. Check it before the raw
   ** trace constant so a full stack always side-exits without touching it. */
@@ -1881,17 +1908,21 @@ int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func)
     goto out;
   }
   /* The exact even frame precedes every remotely acknowledged native state.
-  ** Consume staging only after publication; every earlier failure leaves it
-  ** intact for the pre-call side exit. */
-  la_storeptr_rel((void **)&tg->ffi_xsave_root, NULL);
-  la_store32_rel(&tg->ffi_xsave_baseslot, 0);
-  la_store32_rel(&tg->ffi_xsave_nslots, 0);
+  ** Successful entry consumes staging here after publication; every ordinary
+  ** earlier rejection consumes it at the common return. */
+  ccall_jit_xsave_clear(tg);
   ccallback_slot_rel(cb, ~0u);
   lj_tg_ffi_call_func_rel(tg, func);
   ccallback_native_had_stopreq_rel(cb, had_stopreq);
   lj_native_enter(tg);
   ok = 1;
 out:
+  /* A valid current-carrier route owns the staged words even when admission
+  ** rejects before geometry, pinning or frame publication. The equality checks
+  ** above prevent a stale hint from mutating a different carrier. */
+  if (!ok && tg != NULL && tg == current &&
+      lj_tg_load_cur_L(tg) == L)
+    ccall_jit_xsave_clear(tg);
   ccall_error_restore(&err);
   return ok;
 }
@@ -1901,7 +1932,7 @@ uint32_t lj_ffi_native_trace_leave(lua_State *L)
   CCallErrorState err;
   LJFFINativeFrame frame;
   global_State *g;
-  TGState *tg;
+  TGState *tg, *current;
   CCallbackRuntime *cb;
   LJFFINativeFrame *src;
   GCtrace *T;
@@ -1914,9 +1945,10 @@ uint32_t lj_ffi_native_trace_leave(lua_State *L)
   ccall_error_save(&err);
   if (LJ_UNLIKELY(L == NULL))
     abort();
-  tg = L2TG(L);
   g = G(L);
-  if (LJ_UNLIKELY(tg == NULL || g == NULL ||
+  tg = L->tg_hint;
+  current = g ? G2TG(g) : NULL;
+  if (LJ_UNLIKELY(tg == NULL || tg != current || g == NULL ||
       lj_tg_load_cur_L(tg) != L))
     abort();
   depth = lj_ffi_native_frame_depth_acq(tg);
@@ -1936,6 +1968,16 @@ uint32_t lj_ffi_native_trace_leave(lua_State *L)
   ** leader owns its consumed poll. Do not change any payload or pin until
   ** native_leave has closed native state and returned from that wait. */
   actions = lj_native_leave(L);
+#if defined(LJ_XSAVE_TEST_HELPERS)
+  {
+    /* Deterministic injection point after the native poll and before the
+    ** fresh-STOPREQ decision. Production builds contain no hook load/call. */
+    LJFFINativeTraceLeaveHook hook =
+      la_loadfunc_acq(&ffi_native_trace_leave_hook);
+    if (hook)
+      hook(tg);
+  }
+#endif
   /* This predicate may perform one final owner poll, but never throws. If it
   ** reports a fresh STOPREQ, no generated post-call guard can be relied upon:
   ** the frame and pin must be released before checkstop unwinds the trace. */

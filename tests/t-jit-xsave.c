@@ -342,8 +342,9 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(lj_tg_in_native_acq(tg) == 0);
   lj_tg_store_jit_base(tg, base);
 
-  /* A malformed pending extent requests a pre-call side exit and preserves
-  ** every staged/mirror/lifetime word, including the foreign error pair. */
+  /* A malformed pending extent requests a pre-call interpreter exit and
+  ** consumes its one-shot staging. Mirrors, lifetimes and the foreign error
+  ** pair remain unchanged. */
   la_store32_rel(&tg->ffi_xsave_nslots, 0);
   errno = EDOM;
 #if LJ_TARGET_WINDOWS
@@ -354,8 +355,8 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
 #if LJ_TARGET_WINDOWS
   assert(GetLastError() == (DWORD)0x13572468u);
 #endif
-  assert(la_loadptr_acq((void *const *)&tg->ffi_xsave_root) == root);
-  assert(la_load32_acq(&tg->ffi_xsave_baseslot) == baseslot);
+  assert(la_loadptr_acq((void *const *)&tg->ffi_xsave_root) == NULL);
+  assert(la_load32_acq(&tg->ffi_xsave_baseslot) == 0);
   assert(la_load32_acq(&tg->ffi_xsave_nslots) == 0);
   assert(lj_ffi_native_frame_sequence_acq(tg) == seq);
   assert(lj_ffi_native_frame_depth_acq(tg) == 0);

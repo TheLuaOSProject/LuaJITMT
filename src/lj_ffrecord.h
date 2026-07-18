@@ -15,7 +15,7 @@ typedef struct RecordFFData {
   TValue *argv;		/* Runtime argument values. */
   ptrdiff_t nres;	/* Number of returned results (defaults to 1). */
   uint32_t data;	/* Per-ffid auxiliary data (opcode, literal etc.). */
-  TRef postcall_exit;	/* Caller-state exit guard, or zero if none. */
+  uint8_t postcall_native; /* Emit native leave in caller state, if nonzero. */
 } RecordFFData;
 
 LJ_FUNC int32_t lj_ffrecord_select_mode(jit_State *J, TRef tr, TValue *tv);

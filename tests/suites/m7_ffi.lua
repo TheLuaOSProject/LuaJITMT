@@ -79,6 +79,7 @@ local m7_cases = {
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
+  "m7_ffi_callxs_authentic",
   "m7_ffi_ccall_native",
   "m7_ffi_native_frames"
 }
@@ -91,6 +92,36 @@ local function build_clib_ldscript_fixture(t)
 end
 
 return function(add)
+  add({
+    name = "m7_ffi_callxs_authentic",
+    description = "authentic generic scalar CALLXS lifecycle",
+    run = function(t)
+      local flags = table.concat({
+        "-DLUA_USE_ASSERT",
+        "-DLJ_XSAVE_TEST_HELPERS",
+        "-DLJ_FFI_CALLXS_TEST_ACTIVATE"
+      }, " ")
+      local callxs_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-callxs-authentic.so"),
+        "t-ffi-callxs-authentic-lib.c")
+      build.with_default_build_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        run_luajit_script(t, "t-ffi-callxs-authentic.lua", nil, {
+          env = { LJ_M7_FFI_CALLXS_SO = callxs_so },
+          timeout = "30s"
+        })
+        build_and_run_c(t, t:tmp("lj_t-ffi-callxs-postcall"),
+                        "t-ffi-callxs-postcall.c", {
+          build = false,
+          cflags = flags,
+          env = { LJ_M7_FFI_CALLXS_SO = callxs_so },
+          timeout = "30s"
+        })
+      end)
+      print("M7 authentic generic scalar CALLXS lifecycle passed")
+    end
+  })
+
   add({
     name = "m7_ffi_ccall_native",
     description = "FFI native state and temporary traced-call safety gate",
