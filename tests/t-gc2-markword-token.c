@@ -527,6 +527,7 @@ typedef struct TableTokenCompleteArg {
   LJGC2TableTokenTicket ticket;
   uint32_t *ready;
   uint32_t *go;
+  int exact;
   LJGC2TableTokenResult result;
 } TableTokenCompleteArg;
 
@@ -536,8 +537,286 @@ static void *table_token_complete_thread(void *ud)
   (void)la_add32_acqrel(arg->ready, 1);
   while (!la_load32_acq(arg->go))
     la_cpu_pause();
-  arg->result = lj_gc2_table_token_complete(arg->token, &arg->ticket);
+  arg->result = arg->exact ?
+    lj_gc2_table_token_complete_exact(arg->token, &arg->ticket) :
+    lj_gc2_table_token_complete(arg->token, &arg->ticket);
   return NULL;
+}
+
+typedef struct TableTokenTransferArg {
+  LJGC2TableToken *token;
+  uint64_t generation;
+  uint32_t *ready;
+  uint32_t *go;
+  LJGC2TableTokenResult result;
+} TableTokenTransferArg;
+
+static void *table_token_transfer_thread(void *ud)
+{
+  TableTokenTransferArg *arg = (TableTokenTransferArg *)ud;
+  (void)la_add32_acqrel(arg->ready, 1);
+  while (!la_load32_acq(arg->go))
+    la_cpu_pause();
+  arg->result = lj_gc2_table_token_transfer_exact(arg->token,
+                                                   arg->generation);
+  return NULL;
+}
+
+static void test_table_exact_target_token_primitives(void)
+{
+  LJGC2TableDesc desc, fake_table;
+  LJGC2TableDescTicket desc_ticket, invalid_desc_ticket;
+  LJGC2TableDescSnap desc_observed;
+  LJGC2TableToken token;
+  LJGC2TableTokenTicket scan_first, scan_second;
+  TableTokenTransferArg delayed, transfer[2];
+  TableTokenCompleteArg scanner[2];
+  pthread_t thread[2];
+  uint32_t ready = 0, go = 0;
+  uint64_t control;
+  unsigned i;
+
+  /* One helper may be delayed until another has transferred and completed D.
+  ** Its idempotent transfer must observe NONE(D), not recreate PENDING(D). */
+  assert(lj_gc2_table_token_init_unpublished(&token, 0));
+  memset(&delayed, 0, sizeof(delayed));
+  delayed.token = &token;
+  delayed.generation = 11;
+  delayed.ready = &ready;
+  delayed.go = &go;
+  assert(pthread_create(&thread[0], NULL, table_token_transfer_thread,
+                        &delayed) == 0);
+  while (la_load32_acq(&ready) != 1)
+    la_cpu_pause();
+  assert(lj_gc2_table_token_transfer_exact(&token, 11) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_capture_pending(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete_exact(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  la_store32_rel(&go, 1);
+  assert(pthread_join(thread[0], NULL) == 0);
+  assert(delayed.result == LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&token.control);
+  assert(control == lj_gc2_table_token_pack(11,
+                                            LJ_GC2_TABLE_TOKEN_NONE));
+
+  /* Same-generation transfer is idempotent both before and after completion. */
+  assert(lj_gc2_table_token_transfer_exact(&token, 12) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&token.control);
+  assert(control == lj_gc2_table_token_pack(12,
+                                            LJ_GC2_TABLE_TOKEN_PENDING));
+  assert(lj_gc2_table_token_transfer_exact(&token, 12) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(la_load64_acq(&token.control) == control);
+  assert(lj_gc2_table_token_capture_pending(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete_exact(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&token.control);
+  assert(control == lj_gc2_table_token_pack(12,
+                                            LJ_GC2_TABLE_TOKEN_NONE));
+  assert(lj_gc2_table_token_transfer_exact(&token, 12) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(la_load64_acq(&token.control) == control);
+
+  /* Two helpers racing one target are both successful and idempotent. Two
+  ** scanners sharing the resulting exact ticket have exactly one clear
+  ** winner, and completion does not advance the generation. */
+  assert(lj_gc2_table_token_init_unpublished(&token, 12));
+  ready = go = 0;
+  memset(transfer, 0, sizeof(transfer));
+  for (i = 0; i < 2; i++) {
+    transfer[i].token = &token;
+    transfer[i].generation = 13;
+    transfer[i].ready = &ready;
+    transfer[i].go = &go;
+    assert(pthread_create(&thread[i], NULL, table_token_transfer_thread,
+                          &transfer[i]) == 0);
+  }
+  while (la_load32_acq(&ready) != 2)
+    la_cpu_pause();
+  la_store32_rel(&go, 1);
+  for (i = 0; i < 2; i++) {
+    assert(pthread_join(thread[i], NULL) == 0);
+    assert(transfer[i].result == LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  }
+  assert(la_load64_acq(&token.control) ==
+         lj_gc2_table_token_pack(13, LJ_GC2_TABLE_TOKEN_PENDING));
+  assert(lj_gc2_table_token_capture_pending(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+
+  ready = go = 0;
+  memset(scanner, 0, sizeof(scanner));
+  for (i = 0; i < 2; i++) {
+    scanner[i].token = &token;
+    scanner[i].ticket = scan_first;
+    scanner[i].ready = &ready;
+    scanner[i].go = &go;
+    scanner[i].exact = 1;
+    assert(pthread_create(&thread[i], NULL, table_token_complete_thread,
+                          &scanner[i]) == 0);
+  }
+  while (la_load32_acq(&ready) != 2)
+    la_cpu_pause();
+  la_store32_rel(&go, 1);
+  for (i = 0; i < 2; i++)
+    assert(pthread_join(thread[i], NULL) == 0);
+  assert((scanner[0].result == LJ_GC2_TABLE_TOKEN_RESULT_OK) +
+         (scanner[1].result == LJ_GC2_TABLE_TOKEN_RESULT_OK) == 1);
+  assert((scanner[0].result == LJ_GC2_TABLE_TOKEN_RESULT_BUSY) +
+         (scanner[1].result == LJ_GC2_TABLE_TOKEN_RESULT_BUSY) == 1);
+  assert(la_load64_acq(&token.control) ==
+         lj_gc2_table_token_pack(13, LJ_GC2_TABLE_TOKEN_NONE));
+
+  /* A descriptor refresh invalidates the prior scanner without incrementing
+  ** on completion. The stale scanner cannot clear the newer PENDING token. */
+  assert(lj_gc2_table_token_transfer_exact(&token, 20) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_capture_pending(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_transfer_exact(&token, 21) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_capture_pending(&token, &scan_second) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete_exact(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_BUSY);
+  assert(la_load64_acq(&token.control) == scan_second.control);
+  assert(lj_gc2_table_token_complete_exact(&token, &scan_second) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&token.control);
+  assert(control == lj_gc2_table_token_pack(21,
+                                            LJ_GC2_TABLE_TOKEN_NONE));
+  assert(lj_gc2_table_token_transfer_exact(&token, 20) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_BUSY);
+  assert(la_load64_acq(&token.control) == control);
+  assert(lj_gc2_table_token_transfer_exact(&token, 21) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(la_load64_acq(&token.control) == control);
+
+  /* A helper for an older descriptor is ordinary stale work, regardless of
+  ** whether the newer exact generation is still pending or is complete. */
+  assert(lj_gc2_table_token_transfer_exact(&token, 30) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&token.control);
+  assert(lj_gc2_table_token_transfer_exact(&token, 29) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_BUSY);
+  assert(la_load64_acq(&token.control) == control);
+  assert(lj_gc2_table_token_capture_pending(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete_exact(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  control = la_load64_acq(&token.control);
+  assert(lj_gc2_table_token_transfer_exact(&token, 29) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_BUSY);
+  assert(la_load64_acq(&token.control) == control);
+
+  /* D == the shared 62-bit maximum is transferable and completable. Only the
+  ** next descriptor publication saturates into sticky PINNED authority. */
+  lj_gc2_tabledesc_init_unpublished(
+    &desc, LJ_GC2_TABLE_TOKEN_MAX_GENERATION - 1u);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table, &desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(desc_ticket.generation == LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+  assert(lj_gc2_table_token_init_unpublished(
+           &token, LJ_GC2_TABLE_TOKEN_MAX_GENERATION - 1u));
+  assert(lj_gc2_table_token_transfer_exact(&token,
+           desc_ticket.generation) == LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_capture_pending(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_gc2_table_token_complete_exact(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(la_load64_acq(&token.control) == lj_gc2_table_token_pack(
+           LJ_GC2_TABLE_TOKEN_MAX_GENERATION, LJ_GC2_TABLE_TOKEN_NONE));
+  assert(lj_gc2_tabledesc_finish_help(&desc, &desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(desc_observed.state == LJ_GC2_TABLEDESC_IDLE &&
+         desc_observed.generation == LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table, &desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(desc_observed.state == LJ_GC2_TABLEDESC_PINNED &&
+         desc_observed.generation == LJ_GC2_TABLE_TOKEN_MAX_GENERATION);
+
+  /* ACTIVE/IDLE descriptor generations outside the shared namespace are
+  ** malformed and fail closed instead of ever wrapping through 64 bits. */
+  lj_gc2_tabledesc_init_unpublished(
+    &desc, LJ_GC2_TABLE_TOKEN_MAX_GENERATION + 1u);
+  assert(lj_gc2_tabledesc_snapshot(&desc).state ==
+         LJ_GC2_TABLEDESC_INVALID);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table, &desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(desc_observed.state == LJ_GC2_TABLEDESC_PINNED &&
+         desc_observed.generation ==
+           LJ_GC2_TABLE_TOKEN_MAX_GENERATION + 1u);
+
+  /* ACTIVE(0) is impossible even though IDLE(0) is the valid initial state.
+  ** finish_help contains the malformed stored authority rather than clearing
+  ** it, while an invalid ticket cannot poison a different valid descriptor. */
+  desc.value.lo = (uint64_t)(uintptr_t)&fake_table;
+  desc.value.hi = 0;
+  invalid_desc_ticket.table = (uint64_t)(uintptr_t)&fake_table;
+  invalid_desc_ticket.generation = 0;
+  assert(lj_gc2_tabledesc_snapshot(&desc).state ==
+         LJ_GC2_TABLEDESC_INVALID);
+  assert(lj_gc2_tabledesc_finish_help(&desc, &invalid_desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(desc_observed.state == LJ_GC2_TABLEDESC_PINNED &&
+         desc_observed.generation == 0);
+
+  lj_gc2_tabledesc_init_unpublished(&desc, 7);
+  assert(lj_gc2_tabledesc_try_publish(&desc, &fake_table, &desc_ticket,
+           NULL) == LJ_GC2_TABLEDESC_RESULT_OK);
+  assert(lj_gc2_tabledesc_finish_help(&desc, &invalid_desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_INVALID);
+  assert(desc_observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+         desc_observed.generation == desc_ticket.generation);
+  invalid_desc_ticket.generation =
+    LJ_GC2_TABLE_TOKEN_MAX_GENERATION + 1u;
+  assert(lj_gc2_tabledesc_finish_help(&desc, &invalid_desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_INVALID);
+  assert(desc_observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+         desc_observed.generation == desc_ticket.generation);
+  assert(lj_gc2_tabledesc_finish_help(&desc, &desc_ticket, NULL) ==
+         LJ_GC2_TABLEDESC_RESULT_OK);
+
+  desc.value.lo = (uint64_t)(uintptr_t)&fake_table;
+  desc.value.hi = LJ_GC2_TABLE_TOKEN_MAX_GENERATION + 1u;
+  desc_ticket.table = (uint64_t)(uintptr_t)&fake_table;
+  desc_ticket.generation = LJ_GC2_TABLE_TOKEN_MAX_GENERATION + 1u;
+  assert(lj_gc2_tabledesc_finish_help(&desc, &desc_ticket,
+           &desc_observed) == LJ_GC2_TABLEDESC_RESULT_PINNED);
+  assert(desc_observed.state == LJ_GC2_TABLEDESC_PINNED &&
+         desc_observed.generation ==
+           LJ_GC2_TABLE_TOKEN_MAX_GENERATION + 1u);
+  assert(lj_gc2_table_token_transfer_exact(
+           &token, LJ_GC2_TABLE_TOKEN_MAX_GENERATION + 1u) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_INVALID);
+
+  /* Malformed token state is sticky containment at the target generation. A
+  ** stale helper observing a newer malformed generation must not pin it. */
+  token.control = lj_gc2_table_token_pack(40,
+                                           LJ_GC2_TABLE_TOKEN_INVALID);
+  assert(lj_gc2_table_token_transfer_exact(&token, 40) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED);
+  assert(token.control == lj_gc2_table_token_pack(40,
+                                                   LJ_GC2_TABLE_TOKEN_PINNED));
+  token.control = lj_gc2_table_token_pack(41,
+                                           LJ_GC2_TABLE_TOKEN_INVALID);
+  assert(lj_gc2_table_token_transfer_exact(&token, 40) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_BUSY);
+  assert(token.control == lj_gc2_table_token_pack(41,
+                                                   LJ_GC2_TABLE_TOKEN_INVALID));
+  assert(lj_gc2_table_token_transfer_exact(&token, 41) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED);
+  scan_first.control = lj_gc2_table_token_pack(
+    42, LJ_GC2_TABLE_TOKEN_PENDING);
+  token.control = lj_gc2_table_token_pack(42,
+                                           LJ_GC2_TABLE_TOKEN_INVALID);
+  assert(lj_gc2_table_token_complete_exact(&token, &scan_first) ==
+         LJ_GC2_TABLE_TOKEN_RESULT_PINNED);
+  assert(token.control == lj_gc2_table_token_pack(42,
+                                                   LJ_GC2_TABLE_TOKEN_PINNED));
 }
 
 static void test_table_descriptor_and_token_primitives(void)
@@ -1222,6 +1501,7 @@ int main(void)
   test_activation_root_gate();
   test_root_gate_edge_policy();
   test_concurrent_close_pending_commit();
+  test_table_exact_target_token_primitives();
   test_table_descriptor_and_token_primitives();
   test_concurrent_tabledesc_publish_help_reuse();
   test_tabledesc_delayed_helper_malformed_race();

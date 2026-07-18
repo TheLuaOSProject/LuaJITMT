@@ -361,6 +361,16 @@ lj_gc2_activation_try_gate(LJGC2Activation *token,
 
 /* ---- Helpable table-rescan descriptor and exact per-table token ----- */
 
+/* Descriptor publication and the durable table token share one exact
+** generation namespace.  The token's two state bits leave 62 non-wrapping
+** generation bits; an ACTIVE descriptor must therefore never exceed this
+** same maximum. */
+#define LJ_GC2_TABLE_TOKEN_STATE_BITS 2u
+#define LJ_GC2_TABLE_TOKEN_STATE_MASK \
+  ((UINT64_C(1) << LJ_GC2_TABLE_TOKEN_STATE_BITS) - 1u)
+#define LJ_GC2_TABLE_TOKEN_MAX_GENERATION \
+  (UINT64_MAX >> LJ_GC2_TABLE_TOKEN_STATE_BITS)
+
 /* The descriptor's low word is zero while idle, one when sticky-pinned, and
 ** otherwise an aligned GCtab identity. The high word is a non-wrapping
 ** publication generation. A token must be installed before ACTIVE is cleared,
@@ -416,6 +426,11 @@ lj_gc2_tabledesc_snap_from_words(uint64_t table, uint64_t generation)
   snap.table = (uintptr_t)table;
   snap.generation = generation;
   snap.state = lj_gc2_tabledesc_state(table);
+  if ((snap.state == LJ_GC2_TABLEDESC_ACTIVE && generation == 0) ||
+      (generation > LJ_GC2_TABLE_TOKEN_MAX_GENERATION &&
+       (snap.state == LJ_GC2_TABLEDESC_IDLE ||
+        snap.state == LJ_GC2_TABLEDESC_ACTIVE)))
+    snap.state = LJ_GC2_TABLEDESC_INVALID;
   return snap;
 }
 
@@ -497,7 +512,7 @@ lj_gc2_tabledesc_try_publish(LJGC2TableDesc *desc, const void *table,
       *observed = snap;
     return LJ_GC2_TABLEDESC_RESULT_BUSY;
   }
-  if (snap.generation == UINT64_MAX)
+  if (snap.generation >= LJ_GC2_TABLE_TOKEN_MAX_GENERATION)
     return lj_gc2_tabledesc_pin(desc, snap, observed);
   expected.lo = 0;
   expected.hi = snap.generation;
@@ -532,6 +547,17 @@ lj_gc2_tabledesc_finish_help(LJGC2TableDesc *desc,
   if (!desc || !ticket || ticket->table <= 1u ||
       (ticket->table & 15u) != 0)
     return LJ_GC2_TABLEDESC_RESULT_INVALID;
+  if (ticket->generation == 0 ||
+      ticket->generation > LJ_GC2_TABLE_TOKEN_MAX_GENERATION) {
+    snap = lj_gc2_tabledesc_snapshot(desc);
+    if (observed)
+      *observed = snap;
+    if (snap.state == LJ_GC2_TABLEDESC_INVALID)
+      return lj_gc2_tabledesc_pin(desc, snap, observed);
+    return snap.state == LJ_GC2_TABLEDESC_PINNED ?
+           LJ_GC2_TABLEDESC_RESULT_PINNED :
+           LJ_GC2_TABLEDESC_RESULT_INVALID;
+  }
   expected.lo = ticket->table;
   expected.hi = ticket->generation;
   desired.lo = 0;
@@ -549,12 +575,6 @@ lj_gc2_tabledesc_finish_help(LJGC2TableDesc *desc,
   return snap.state == LJ_GC2_TABLEDESC_PINNED ?
          LJ_GC2_TABLEDESC_RESULT_PINNED : LJ_GC2_TABLEDESC_RESULT_BUSY;
 }
-
-#define LJ_GC2_TABLE_TOKEN_STATE_BITS 2u
-#define LJ_GC2_TABLE_TOKEN_STATE_MASK \
-  ((UINT64_C(1) << LJ_GC2_TABLE_TOKEN_STATE_BITS) - 1u)
-#define LJ_GC2_TABLE_TOKEN_MAX_GENERATION \
-  (UINT64_MAX >> LJ_GC2_TABLE_TOKEN_STATE_BITS)
 
 typedef enum LJGC2TableTokenState {
   LJ_GC2_TABLE_TOKEN_NONE = 0,
@@ -630,8 +650,53 @@ lj_gc2_table_token_pin(LJGC2TableToken *token, uint64_t control)
   }
 }
 
-/* Every logical request advances the generation, including PENDING refreshes.
-** This invalidates a scanner which may already have published its scan proof. */
+/* Transfer one exact ACTIVE descriptor generation to the durable token.
+** Descriptor and token generations are the same authority: an older NONE or
+** PENDING value becomes PENDING(target_generation), while the exact target is
+** idempotent.  In particular, NONE(target_generation) means another helper
+** already completed the request and must never be recreated as PENDING.
+**
+** A helper delayed behind a newer generation is merely stale (BUSY).  This is
+** deliberately checked before malformed-state containment so a stale helper
+** cannot pin a later authority it never owned. */
+LA_INLINE LJGC2TableTokenResult
+lj_gc2_table_token_transfer_exact(LJGC2TableToken *token,
+                                  uint64_t target_generation)
+{
+  uint64_t control, generation, desired;
+  uint8_t state;
+  if (!token || target_generation == 0 ||
+      target_generation > LJ_GC2_TABLE_TOKEN_MAX_GENERATION)
+    return LJ_GC2_TABLE_TOKEN_RESULT_INVALID;
+  control = la_load64_acq(&token->control);
+  for (;;) {
+    generation = lj_gc2_table_token_generation(control);
+    state = lj_gc2_table_token_state(control);
+    if (state == LJ_GC2_TABLE_TOKEN_PINNED)
+      return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+    if (generation > target_generation)
+      return LJ_GC2_TABLE_TOKEN_RESULT_BUSY;
+    if (state == LJ_GC2_TABLE_TOKEN_INVALID) {
+      desired = lj_gc2_table_token_pack(generation,
+                                         LJ_GC2_TABLE_TOKEN_PINNED);
+      if (la_cas64(&token->control, &control, desired,
+                   LA_ACQ_REL, LA_ACQ))
+        return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+      continue;
+    }
+    if (generation == target_generation)
+      return LJ_GC2_TABLE_TOKEN_RESULT_OK;
+    desired = lj_gc2_table_token_pack(target_generation,
+                                       LJ_GC2_TABLE_TOKEN_PENDING);
+    if (la_cas64(&token->control, &control, desired,
+                 LA_ACQ_REL, LA_ACQ))
+      return LJ_GC2_TABLE_TOKEN_RESULT_OK;
+  }
+}
+
+/* Legacy local-generation fixture primitive. Production table-rescan handoff
+** must use transfer_exact(): mixing this with the shared descriptor namespace
+** can recreate a completed request after its descriptor has been cleared. */
 LA_INLINE LJGC2TableTokenResult
 lj_gc2_table_token_refresh(LJGC2TableToken *token,
                            LJGC2TableTokenTicket *ticket)
@@ -682,9 +747,49 @@ lj_gc2_table_token_capture_pending(LJGC2TableToken *token,
   return lj_gc2_table_token_pin(token, control);
 }
 
-/* Completion is an exact generation CAS performed only after the matching
-** dirty-epoch scan proof. The NONE generation also advances, preventing an
-** old completion ticket from becoming valid after a full token lifecycle. */
+/* Complete only the captured descriptor generation.  Unlike the provisional
+** refresh-owned lifecycle below, exact completion preserves the generation:
+** PENDING(D) -> NONE(D).  This permits D == MAX; only a subsequent descriptor
+** publication attempt saturates and pins. */
+LA_INLINE LJGC2TableTokenResult
+lj_gc2_table_token_complete_exact(LJGC2TableToken *token,
+                                  const LJGC2TableTokenTicket *ticket)
+{
+  uint64_t expected, generation, desired;
+  uint8_t state;
+  if (!token || !ticket ||
+      lj_gc2_table_token_state(ticket->control) !=
+        LJ_GC2_TABLE_TOKEN_PENDING)
+    return LJ_GC2_TABLE_TOKEN_RESULT_INVALID;
+  generation = lj_gc2_table_token_generation(ticket->control);
+  if (generation == 0 ||
+      generation > LJ_GC2_TABLE_TOKEN_MAX_GENERATION)
+    return LJ_GC2_TABLE_TOKEN_RESULT_INVALID;
+  expected = ticket->control;
+  desired = lj_gc2_table_token_pack(generation, LJ_GC2_TABLE_TOKEN_NONE);
+  if (la_cas64(&token->control, &expected, desired,
+               LA_ACQ_REL, LA_ACQ))
+    return LJ_GC2_TABLE_TOKEN_RESULT_OK;
+  for (;;) {
+    uint64_t observed_generation =
+      lj_gc2_table_token_generation(expected);
+    state = lj_gc2_table_token_state(expected);
+    if (state == LJ_GC2_TABLE_TOKEN_PINNED)
+      return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+    if (observed_generation > generation)
+      return LJ_GC2_TABLE_TOKEN_RESULT_BUSY;
+    if (state != LJ_GC2_TABLE_TOKEN_INVALID)
+      return LJ_GC2_TABLE_TOKEN_RESULT_BUSY;
+    desired = lj_gc2_table_token_pack(observed_generation,
+                                       LJ_GC2_TABLE_TOKEN_PINNED);
+    if (la_cas64(&token->control, &expected, desired,
+                 LA_ACQ_REL, LA_ACQ))
+      return LJ_GC2_TABLE_TOKEN_RESULT_PINNED;
+  }
+}
+
+/* Legacy companion to table_token_refresh(). Production scanners must use
+** complete_exact(), which retains the descriptor generation in NONE. */
 LA_INLINE LJGC2TableTokenResult
 lj_gc2_table_token_complete(LJGC2TableToken *token,
                             const LJGC2TableTokenTicket *ticket)

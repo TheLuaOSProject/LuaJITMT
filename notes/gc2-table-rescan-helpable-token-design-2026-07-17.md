@@ -4,6 +4,12 @@ Date: 2026-07-17
 
 Status: design for implementation; no source change is made by this note.
 
+Correction: the locally incremented token-generation transitions below are
+superseded by
+`notes/gc2-table-token-exact-target-correction-2026-07-18.md`. Production
+handoff must target the exact global descriptor generation so delayed helpers
+cannot recreate a completed request.
+
 ## Outcome
 
 Replace the provisional global table-rescan count with two overlapping exact
