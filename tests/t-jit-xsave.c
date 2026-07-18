@@ -330,6 +330,9 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   TValue *base = root + baseslot;
   TValue *top = root + nslots - 1u - LJ_FR2;
   TValue *old_jitbase = lj_tg_load_jit_base(tg);
+  int32_t old_vmstate = lj_tg_vmstate_load_acq(tg);
+  int32_t old_global_vmstate = vmstate_load_acq(g);
+  int32_t trace_vmstate = (int32_t)trace_traceno_acq(T);
   void *old_func = lj_tg_ffi_call_func_acq(tg);
   MSize old_slot = ccallback_slot_acq(&tg->cb);
   uint8_t old_stopreq = ccallback_native_had_stopreq_acq(&tg->cb);
@@ -341,6 +344,7 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(old_jitbase == NULL);
   assert(lj_tg_in_native_acq(tg) == 0);
   lj_tg_store_jit_base(tg, base);
+  lj_tg_vmstate_store_rel(tg, trace_vmstate);
 
   /* A malformed pending extent requests a pre-call interpreter exit and
   ** consumes its one-shot staging. Mirrors, lifetimes and the foreign error
@@ -365,6 +369,18 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(lj_tg_ffi_call_func_acq(tg) == old_func);
   assert(ccallback_slot_acq(&tg->cb) == old_slot);
   assert(ccallback_native_had_stopreq_acq(&tg->cb) == old_stopreq);
+  xsave_stage(tg, root, baseslot, nslots);
+
+  /* A valid body pin is insufficient if the generated carrier vmstate names a
+  ** different trace. Callback resume would otherwise restore the wrong parent
+  ** identity for side-exit selection. */
+  lj_tg_vmstate_store_rel(tg, trace_vmstate + 1);
+  assert(lj_ffi_native_trace_enter(L, T, func) == 0);
+  assert(lj_ffi_native_frame_sequence_acq(tg) == seq);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
+  assert(la_loadptr_acq((void *const *)&tg->ffi_xsave_root) == NULL);
+  lj_tg_vmstate_store_rel(tg, trace_vmstate);
   xsave_stage(tg, root, baseslot, nslots);
 
   errno = EDOM;
@@ -499,7 +515,127 @@ static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
   assert(lj_ffi_native_frame_depth_acq(tg) == 0);
   assert(trace_native_pins_acq(T) == pins);
 
+  /* Generated callbacks park the exact continuation, let callback Lua own and
+  ** relocate the stack, then reconstruct the JIT base and trace vmstate before
+  ** reopening native state. CALLBACK_SEEN makes the eventual foreign return a
+  ** retained-pin POSTCALL exit even in this deterministic helper fixture. */
+  xsave_stage(tg, root, baseslot, nslots);
+  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 1);
+  assert(lj_ffi_native_trace_callback_suspend(L) == 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(lj_tg_vmstate_load_acq(tg) == ~LJ_VMST_INTERP);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
+	  (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
+	   LJ_FFI_NATIVE_FRAME_F_POSTCALL)) ==
+	 LJ_FFI_NATIVE_FRAME_F_SUSPENDED);
+  lj_tg_in_native_rel(tg, 0);
+  assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 0);
+  assert(lj_ffi_native_trace_callback_resume(L, 1) == 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  assert(lj_tg_load_jit_base(tg) == base);
+  assert(lj_tg_vmstate_load_acq(tg) == trace_vmstate);
+  actions = lj_ffi_native_trace_leave(L);
+  assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 1);
+  assert(trace_native_pins_acq(T) == pins + 1u);
+  assert(lj_ffi_native_trace_exit_cleanup(L, T,
+	(uint32_t)trace_vmstate) == 1);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
+
+  /* A callback throw transfers SUSPENDED directly to POSTCALL. The JIT base,
+  ** positive trace vmstate and enclosing FFI mirrors must be restored before
+  ** the platform unwinder crosses the generated body; native stays closed. */
+  xsave_stage(tg, root, baseslot, nslots);
+  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_callback_suspend(L) == 1);
+  lj_tg_in_native_rel(tg, 0);
+  ccallback_slot_rel(&tg->cb, 9);
+  lj_tg_ffi_call_func_rel(tg, (void *)(uintptr_t)UINT64_C(0xdeadbeef));
+  ccallback_native_had_stopreq_rel(&tg->cb, (uint8_t)!old_stopreq);
+  assert(lj_ffi_native_trace_callback_unwind(L, 1) == 1);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_load_jit_base(tg) == base);
+  assert(lj_tg_vmstate_load_acq(tg) == trace_vmstate);
+  assert(lj_tg_ffi_call_func_acq(tg) == old_func);
+  assert(ccallback_slot_acq(&tg->cb) == old_slot);
+  assert(ccallback_native_had_stopreq_acq(&tg->cb) == old_stopreq);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
+	  (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
+	   LJ_FFI_NATIVE_FRAME_F_POSTCALL)) ==
+	 LJ_FFI_NATIVE_FRAME_F_POSTCALL);
+  assert(lj_ffi_native_trace_exit_cleanup(L, T,
+	(uint32_t)trace_vmstate) == 1);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
+
+  /* Callback Lua may itself enter generated CALLXS. Older continuations remain
+  ** SUSPENDED, exactly one top frame is ACTIVE, and both pins unwind LIFO. */
+  xsave_stage(tg, root, baseslot, nslots);
+  assert(lj_ffi_native_trace_enter(L, T, func) == 1);
+  assert(lj_ffi_native_trace_callback_suspend(L) == 1);
+  lj_tg_in_native_rel(tg, 0);
+  lj_tg_store_jit_base(tg, base);
+  lj_tg_vmstate_store_rel(tg, trace_vmstate);
+  xsave_stage(tg, root, baseslot, nslots);
+  assert(lj_ffi_native_trace_enter(
+	L, T, (void *)(uintptr_t)UINT64_C(0x12346000)) == 1);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 2);
+  assert(trace_native_pins_acq(T) == pins + 2u);
+  assert(lj_ffi_native_trace_remote_shape_allowed(tg) == 1);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
+	  (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
+	   LJ_FFI_NATIVE_FRAME_F_POSTCALL)) ==
+	 LJ_FFI_NATIVE_FRAME_F_SUSPENDED);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[1]) &
+	  (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
+	   LJ_FFI_NATIVE_FRAME_F_POSTCALL)) ==
+	 LJ_FFI_NATIVE_FRAME_F_ACTIVE);
+  assert(lj_ffi_native_trace_callback_suspend(L) == 2);
+  lj_tg_in_native_rel(tg, 0);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[0]) &
+	  LJ_FFI_NATIVE_FRAME_F_SUSPENDED) != 0);
+  assert((lj_ffi_native_frame_flags_acq(&snapshot.frame[1]) &
+	  LJ_FFI_NATIVE_FRAME_F_SUSPENDED) != 0);
+  assert(lj_ffi_native_trace_callback_resume(L, 2) == 1);
+  actions = lj_ffi_native_trace_leave(L);
+  assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
+  assert(lj_ffi_native_trace_exit_cleanup(L, T,
+	(uint32_t)trace_vmstate) == 1);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 1);
+  assert(trace_native_pins_acq(T) == pins + 1u);
+  assert(lj_tg_ffi_call_func_acq(tg) == func);
+  /* Simulate the inner trace exit's return to callback interpretation. */
+  lj_tg_store_jit_base(tg, NULL);
+  lj_tg_vmstate_store_rel(tg, ~LJ_VMST_INTERP);
+#if LJ_TARGET_X64 && LJ_ABI_WIN
+  vmstate_store_rel(g, ~LJ_VMST_INTERP);
+#endif
+  assert(lj_ffi_native_trace_callback_resume(L, 1) == 1);
+  actions = lj_ffi_native_trace_leave(L);
+  assert((actions & LJ_FFI_NATIVE_LEAVE_FORCE_EXIT) != 0);
+  assert(lj_ffi_native_trace_exit_cleanup(L, T,
+	(uint32_t)trace_vmstate) == 1);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == pins);
+
   lj_tg_store_jit_base(tg, old_jitbase);
+  lj_tg_vmstate_store_rel(tg, old_vmstate);
+  vmstate_store_rel(g, old_global_vmstate);
   /* A native leave may service a previously pending GC handshake. Keep the
   ** following mark-plane oracle independent of that lawful scheduling edge. */
   lj_gc2_cycle_to_idle(g);

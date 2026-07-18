@@ -2407,9 +2407,6 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
     ctr_info = ctype_info_acq(ctr);
     t = crec_ct2irt(cts, ctr);
-    if (lj_ctype_cb_isblacklisted(cts,
-	  cdata_getptr(cdataptr(cd), (LJ_64 && tp == IRT_P64) ? 8 : 4)))
-      lj_trace_err(J, LJ_TRERR_BLACKL);
     if (ctype_isvoid(ctr_info)) {
       t = IRT_NIL;
       rd->nres = 0;

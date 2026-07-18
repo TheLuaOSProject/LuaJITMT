@@ -8605,12 +8605,13 @@ static GC2FFINativeScanStatus gc2_ffi_native_scan_one(
   uint32_t flags = lj_ffi_native_frame_flags_acq(frame);
   TValue *o;
 
-  /* POSTCALL retains a trace lifetime but is not a parked-stack certificate:
-  ** native state is already closed and the owner is running the exit guard.
-  ** It must never widen exact remote scanning authority. */
+  /* Only the top ACTIVE frame can certify a materialized parked stack. Lower
+  ** callback continuations are SUSPENDED and are handled as trace-graph roots
+  ** by the enclosing whole-stack scanner. POSTCALL is never scan authority. */
   if ((flags & (LJ_FFI_NATIVE_FRAME_F_ACTIVE |
+		LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
 		LJ_FFI_NATIVE_FRAME_F_POSTCALL)) !=
-      LJ_FFI_NATIVE_FRAME_F_ACTIVE)
+      LJ_FFI_NATIVE_FRAME_F_ACTIVE || !top_frame)
     return GC2_FFI_NATIVE_SCAN_INVALID;
   status = gc2_ffi_native_frame_geometry(g, tg, frame, &geo, &scope);
   if (status != GC2_FFI_NATIVE_SCAN_OK)
@@ -8655,7 +8656,8 @@ static int gc2_scan_ffi_native_frames_parked(global_State *g, TGState *tg)
   LJFFINativeFrameSnapshot snapshot;
   LJFFINativeFrameSnapshotResult result;
   GC2FFINativeScanStatus status;
-  uint32_t i;
+  lua_State *L;
+  uint32_t i, top_state;
 
   gc2_ffi_native_scan_attempts_add(g, 1);
   result = lj_ffi_native_frame_snapshot(tg, &snapshot);
@@ -8671,9 +8673,47 @@ static int gc2_scan_ffi_native_frames_parked(global_State *g, TGState *tg)
     gc2_root_scan_retry(g);
     return 0;
   }
+  L = lj_tg_load_cur_L(tg);
+  if (!L) {
+    gc2_ffi_native_scan_invalid_add(g, 1);
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  top_state = lj_ffi_native_frame_flags_acq(
+    &snapshot.frame[snapshot.depth - 1u]) &
+    (LJ_FFI_NATIVE_FRAME_F_ACTIVE | LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
+     LJ_FFI_NATIVE_FRAME_F_POSTCALL);
+  if (top_state != LJ_FFI_NATIVE_FRAME_F_ACTIVE &&
+      top_state != LJ_FFI_NATIVE_FRAME_F_SUSPENDED) {
+    gc2_ffi_native_scan_invalid_add(g, 1);
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  if (top_state == LJ_FFI_NATIVE_FRAME_F_SUSPENDED &&
+      lj_tg_load_jit_base(tg) != NULL) {
+    gc2_ffi_native_scan_invalid_add(g, 1);
+    gc2_root_scan_retry(g);
+    return 0;
+  }
   for (i = 0; i < snapshot.depth; i++) {
-    status = gc2_ffi_native_scan_one(g, tg, &snapshot.frame[i],
-				     i + 1u == snapshot.depth);
+    const LJFFINativeFrame *frame = &snapshot.frame[i];
+    uint32_t state = lj_ffi_native_frame_flags_acq(frame) &
+      (LJ_FFI_NATIVE_FRAME_F_ACTIVE | LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
+       LJ_FFI_NATIVE_FRAME_F_POSTCALL);
+    uint32_t expected = i + 1u == snapshot.depth ? top_state :
+      LJ_FFI_NATIVE_FRAME_F_SUSPENDED;
+    if (state != expected || lj_ffi_native_frame_L_acq(frame) != L) {
+      gc2_ffi_native_scan_invalid_add(g, 1);
+      gc2_root_scan_retry(g);
+      return 0;
+    }
+    /* A lower continuation contributes its exact pinned trace graph, but its
+    ** pre-callback top/base geometry is not authority for the current stack.
+    ** A suspended-only stack means an unrelated interpreted native helper is
+    ** parked; the conservative owner scan below remains stack authority. */
+    status = (state == LJ_FFI_NATIVE_FRAME_F_ACTIVE) ?
+      gc2_ffi_native_scan_one(g, tg, frame, 1) :
+      gc2_ffi_native_mark_trace(g, frame);
     if (status != GC2_FFI_NATIVE_SCAN_OK) {
       if (status == GC2_FFI_NATIVE_SCAN_INVALID)
 	gc2_ffi_native_scan_invalid_add(g, 1);
@@ -8693,6 +8733,46 @@ static int gc2_scan_ffi_native_frames_parked(global_State *g, TGState *tg)
   gc2_ffi_native_scan_stable_frames_add(g, snapshot.depth);
   return 1;
 }
+
+/* Callback Lua is ordinary owner execution, so its current stack is covered by
+** the conservative owner scan. Preserve any older generated continuations as
+** exact trace graphs as well: retirement may already have cleared T->traceno,
+** making positive vmstate alone insufficient (and callback vmstate is INTERP
+** in any case). */
+static void gc2_mark_ffi_native_suspended_owner(global_State *g, TGState *tg)
+{
+  LJFFINativeFrameSnapshot snapshot;
+  LJFFINativeFrameSnapshotResult result;
+  lua_State *L;
+  uint32_t i;
+  result = lj_ffi_native_frame_snapshot(tg, &snapshot);
+  if (result == LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY)
+    return;
+  if (result != LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE) {
+    gc2_root_scan_retry(g);
+    return;
+  }
+  L = lj_tg_load_cur_L(tg);
+  if (!L) {
+    gc2_root_scan_retry(g);
+    return;
+  }
+  for (i = 0; i < snapshot.depth; i++) {
+    const LJFFINativeFrame *frame = &snapshot.frame[i];
+    uint32_t state = lj_ffi_native_frame_flags_acq(frame) &
+      (LJ_FFI_NATIVE_FRAME_F_ACTIVE | LJ_FFI_NATIVE_FRAME_F_SUSPENDED |
+       LJ_FFI_NATIVE_FRAME_F_POSTCALL);
+    if (state != LJ_FFI_NATIVE_FRAME_F_SUSPENDED)
+      continue;
+    if (lj_ffi_native_frame_L_acq(frame) != L ||
+	gc2_ffi_native_mark_trace(g, frame) != GC2_FFI_NATIVE_SCAN_OK) {
+      gc2_root_scan_retry(g);
+      return;
+    }
+  }
+  if (lj_ffi_native_frame_sequence_acq(tg) != snapshot.sequence)
+    gc2_root_scan_retry(g);
+}
 #endif
 
 static void gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
@@ -8701,6 +8781,9 @@ static void gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
   TValue tv;
   if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
     return;
+#if LJ_HASFFI && LJ_HASJIT
+  gc2_mark_ffi_native_suspended_owner(g, tg);
+#endif
   /* Detach tears down tmpbuf before publishing DEAD. Every remaining live TG
   ** scans this owner-private backing only at its acknowledgement boundary. */
   lj_gc2_markmem(g, lj_buf_bptr_acq(&tg->tmpbuf));

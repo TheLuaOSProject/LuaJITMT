@@ -401,18 +401,22 @@ typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 /* Generic traced-FFI native frame publication. This is deliberately distinct
 ** from CCallNativeState: generated code cannot retain a C automatic across a
 ** foreign call, while a remote GC/JIT observer needs stable per-TG storage.
-** ACTIVE frames certify a parked foreign call. POSTCALL frames have closed
-** native state but retain the exact trace pin for the unconditional caller-
-** state exit which follows a non-replayable foreign side effect.
+** ACTIVE frames certify a parked foreign call. SUSPENDED frames retain the
+** generated continuation while a C-to-Lua callback owns and may relocate the
+** carrier stack. POSTCALL frames have closed native state but retain the exact
+** trace pin for the unconditional caller-state exit which follows a
+** non-replayable foreign side effect or callback unwind.
 */
 #define LJ_FFI_NATIVE_FRAME_MAX		16
 #define LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED	0x01u
 #define LJ_FFI_NATIVE_FRAME_F_ACTIVE		0x02u
 #define LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN	0x04u
 #define LJ_FFI_NATIVE_FRAME_F_POSTCALL		0x08u
+#define LJ_FFI_NATIVE_FRAME_F_SUSPENDED		0x10u
 #define LJ_FFI_NATIVE_FRAME_F_MASK \
   (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED | LJ_FFI_NATIVE_FRAME_F_ACTIVE | \
-   LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN | LJ_FFI_NATIVE_FRAME_F_POSTCALL)
+   LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN | LJ_FFI_NATIVE_FRAME_F_POSTCALL | \
+   LJ_FFI_NATIVE_FRAME_F_SUSPENDED)
 
 struct GCtrace;
 
@@ -631,6 +635,7 @@ typedef struct CCallbackFrame {
   lua_State *L;			/* Callback carrier Lua state. */
   ptrdiff_t cont;		/* Stack-relative continuation frame offset. */
   uint32_t native_depth;	/* Callback entered from a native region. */
+  uint32_t native_frame_depth; /* Exact SUSPENDED generated-frame depth. */
   uint8_t auto_detach;		/* Scoped foreign-thread auto-attach. */
   uint8_t errphase;		/* Which saved/current OS error pair owns unwind. */
   int errnum;			/* errno to expose on normal/error return. */

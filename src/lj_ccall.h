@@ -228,6 +228,12 @@ LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
 LJ_FUNC int lj_ffi_native_trace_enter(lua_State *L, struct GCtrace *T,
 				      void *func);
 LJ_FUNC uint32_t lj_ffi_native_trace_leave(lua_State *L);
+LJ_FUNC uint32_t lj_ffi_native_trace_callback_suspend(lua_State *L);
+LJ_FUNC int lj_ffi_native_trace_callback_resume(lua_State *L,
+						 uint32_t frame_depth);
+LJ_FUNC int lj_ffi_native_trace_callback_unwind(lua_State *L,
+						 uint32_t frame_depth);
+LJ_FUNC int lj_ffi_native_trace_remote_shape_allowed(TGState *tg);
 LJ_FUNC int lj_ffi_native_trace_exit_cleanup(lua_State *L,
 					     struct GCtrace *T,
 					     uint32_t traceno);
