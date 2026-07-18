@@ -22,10 +22,6 @@
 #ifndef LJ_XSAVE_TEST_HELPERS
 #error "t-ffi-callxs-callback requires LJ_XSAVE_TEST_HELPERS"
 #endif
-#ifndef LJ_FFI_CALLXS_TEST_ACTIVATE
-#error "t-ffi-callxs-callback requires authentic CALLXS activation"
-#endif
-
 #define NATIVE_FRAME_STATE \
   (LJ_FFI_NATIVE_FRAME_F_ACTIVE | LJ_FFI_NATIVE_FRAME_F_SUSPENDED | \
    LJ_FFI_NATIVE_FRAME_F_POSTCALL)

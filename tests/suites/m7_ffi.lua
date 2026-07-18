@@ -48,6 +48,8 @@ local function assert_generic_ccall_source(t)
            path .. ": explicit signature enum survived")
   end
   local recorder = read_all(files[1])
+  assert(plain_count(recorder, "LJ_FFI_CALLXS_TEST_ACTIVATE") == 0,
+         "generic CALLXS still has a test-only production gate")
   assert(plain_count(recorder, "static TRef crec_call_args(") == 1,
          "generic C-call argument recorder is not unique")
   assert(plain_count(recorder, "IRT(IR_CALLXS, t)") == 1,
@@ -94,12 +96,11 @@ end
 return function(add)
   add({
     name = "m7_ffi_callxs_authentic",
-    description = "authentic generic scalar CALLXS lifecycle and remote flush",
+    description = "production generic scalar CALLXS lifecycle and remote flush",
     run = function(t)
       local flags = table.concat({
         "-DLUA_USE_ASSERT",
-        "-DLJ_XSAVE_TEST_HELPERS",
-        "-DLJ_FFI_CALLXS_TEST_ACTIVATE"
+        "-DLJ_XSAVE_TEST_HELPERS"
       }, " ")
       local callxs_so = build_shared_library(t,
         t:tmp("lj_t-ffi-callxs-authentic.so"),
@@ -131,13 +132,13 @@ return function(add)
           timeout = "30s"
         })
       end)
-      print("M7 authentic generic scalar CALLXS lifecycle passed")
+      print("M7 production generic scalar CALLXS lifecycle passed")
     end
   })
 
   add({
     name = "m7_ffi_ccall_native",
-    description = "FFI native state and temporary traced-call safety gate",
+    description = "FFI native state and production scalar CALLXS",
     run = function(t)
       local root_so, struct_so, jit_so
       assert_generic_ccall_source(t)
@@ -156,11 +157,14 @@ return function(add)
       build_and_run_c(t, t:tmp("lj_t-ffi-ccall-native-helpers"),
                       "t-ffi-ccall-native-helpers.c")
       build_and_run_c(t, t:tmp("lj_t-ffi-ccall-error-state"),
-                      "t-ffi-ccall-error-state.c", { timeout = "30s" })
-      -- The ABI fixture remains an interpreted generic-CALLXS oracle. The
-      -- smaller STOPREQ and boxing/error-state probes run with explicit
-      -- no-trace assertions while the temporary XSAVE safety gate is active.
-      run_luajit_script(t, "t-ffi-ccall-trace-gate.lua")
+                      "t-ffi-ccall-error-state.c", {
+                        env = { LJ_FFI_ERRSTATE_ALLOC_STRESS = "1" },
+                        timeout = "30s"
+                      })
+      -- The focused production fixture mechanically requires XSAVE/CALLXS.
+      -- The larger ABI catalogue below remains a result/side-effect oracle
+      -- while boxed result classes are admitted in a following tranche.
+      run_luajit_script(t, "t-ffi-callxs-production.lua")
       run_luajit_script(t, "t-ffi-ccall-temp-roots.lua", nil, {
         env = { LJ_M7_FFI_CCALL_ROOT_SO = root_so },
         timeout = "60s"
@@ -177,14 +181,14 @@ return function(add)
         env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
         timeout = "20s"
       })
-      -- Keep every legacy ABI/result assertion live. No production wrapper
-      -- or signature dispatcher backs these calls. Only the historical
-      -- positive trace-count checks invert under this explicit temporary-gate
-      -- mode; unmatched/fast-function trace checks stay exact.
+      -- Keep every legacy ABI/result assertion live. No production wrapper or
+      -- signature dispatcher backs these calls. Dedicated fixtures prove the
+      -- currently admitted scalar classes; zero-count boxed cases use a
+      -- positive sentinel here until pre-rooted result handoff lands.
       run_luajit_script(t, "t-ffi-ccall-native.lua", nil, {
         env = {
           LJ_M7_FFI_CCALL_JIT_SO = jit_so,
-          LJ_M7_FFI_CCALL_GATE = "1"
+          LJ_M7_FFI_CCALL_MIXED_RESULTS = "1"
         },
         timeout = "60s"
       })

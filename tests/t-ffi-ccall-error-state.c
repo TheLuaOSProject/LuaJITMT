@@ -13,6 +13,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_ir.h"
 #include "lj_state.h"
 #include "lj_tg.h"
 
@@ -189,6 +190,8 @@ int main(void)
   lua_setglobal(L, "lj_probe_expected_errno");
   lua_pushinteger(L, (lua_Integer)(LJ_TARGET_WINDOWS ? PROBE_WINERR : 0));
   lua_setglobal(L, "lj_probe_expected_winerr");
+  lua_pushinteger(L, IR_CALLXS);
+  lua_setglobal(L, "lj_probe_ir_callxs");
 
   ljt_lua_dostring(L,
     "ffi = require('ffi')\n"
@@ -206,7 +209,28 @@ int main(void)
     "lj_probe_disarm = ffi.cast('void (*)(void)', lj_probe_disarm)\n"
     "lj_probe_align_t = ffi.typeof('lj_probe_align_t')\n"
     "lj_probe_vla_t = ffi.typeof('uint8_t[?]')\n"
-    "lj_probe_keep = {}\n");
+    "lj_probe_keep = {}\n"
+    "local bit = require('bit')\n"
+    "local util = require('jit.util')\n"
+    "function lj_probe_callxs_count()\n"
+    "  local count = 0\n"
+    "  for tr = 1, 128 do\n"
+    "    local info = util.traceinfo(tr)\n"
+    "    if info then\n"
+    "      for ref = 1, info.nins do\n"
+    "        local _, ot = util.traceir(tr, ref)\n"
+    "        if ot then\n"
+    "          local op = bit.rshift(ot, 8)\n"
+    "          if op == lj_probe_ir_callxs then\n"
+    "            count = count + 1\n"
+    "          end\n"
+    "        end\n"
+    "      end\n"
+    "    end\n"
+    "  end\n"
+    "  return count\n"
+    "end\n"
+    "jit.off(lj_probe_callxs_count, true)\n");
 
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   lua_setallocf(L, probe_clobber_alloc, &alloc);
@@ -259,10 +283,9 @@ int main(void)
       getenv("LJ_FFI_ERRSTATE_ALLOC_STRESS") == NULL)
     goto done;
 
-  /* The ordinary-call recorder is temporarily gated until XSAVE-backed
-  ** CALLXS publication lands. Keep exercising the same boxed/aligned/VLA
-  ** post-call allocation windows in the interpreter and require that none of
-  ** those allocations happened under a generated-code jit_base. */
+  /* Boxed C-call results remain interpreted, while the nonallocating i32
+  ** result may now cross production CALLXS before a following aligned/VLA
+  ** constructor. Exercise both sides of that result-class boundary. */
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
 #endif
@@ -282,16 +305,14 @@ int main(void)
     "  end\n"
     "end\n"
     "lj_probe_boxed_run(200)\n"
-    "local util = require('jit.util')\n"
-    "local n = 0\n"
-    "for tr = 1, 128 do if util.traceinfo(tr) then n = n + 1 end end\n"
-    "assert(n == 0, 'ordinary FFI C call bypassed the XSAVE safety gate')\n");
+    "assert(lj_probe_callxs_count() == 0,\n"
+    "       'boxed u64 result crossed the pre-rooting gate')\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
 #endif
   ljt_lua_dostring(L, "lj_probe_boxed_run(4000)\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  require_armed_alloc(&alloc, "gated boxed CNEWI result", 0);
+  require_armed_alloc(&alloc, "interpreted boxed CNEWI result", 0);
   assert(alloc.armed_jit_calls == 0);
 
   reset_armed_allocs(&alloc);
@@ -314,17 +335,15 @@ int main(void)
     "  end\n"
     "end\n"
     "lj_probe_aligned_run(200)\n"
-    "local util = require('jit.util')\n"
-    "local n = 0\n"
-    "for tr = 1, 128 do if util.traceinfo(tr) then n = n + 1 end end\n"
-    "assert(n == 0, 'ordinary FFI C call bypassed the XSAVE safety gate')\n");
+    "assert(lj_probe_callxs_count() > 0,\n"
+    "       'i32 result omitted production CALLXS before aligned CNEW')\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
 #endif
   ljt_lua_dostring(L, "lj_probe_aligned_run(4000)\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  require_armed_alloc(&alloc, "gated aligned CNEW result", 0);
-  assert(alloc.armed_jit_calls == 0);
+  require_armed_alloc(&alloc, "generated aligned CNEW result", 1);
+  assert(alloc.armed_jit_calls != 0);
 
   reset_armed_allocs(&alloc);
 #endif
@@ -346,16 +365,14 @@ int main(void)
     "  end\n"
     "end\n"
     "lj_probe_vla_run(200)\n"
-    "local util = require('jit.util')\n"
-    "local n = 0\n"
-    "for tr = 1, 128 do if util.traceinfo(tr) then n = n + 1 end end\n"
-    "assert(n == 0, 'ordinary FFI C call bypassed the XSAVE safety gate')\n");
+    "assert(lj_probe_callxs_count() == 0,\n"
+    "       'variable CNEW unexpectedly left a partial CALLXS trace')\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   reset_armed_allocs(&alloc);
 #endif
   ljt_lua_dostring(L, "lj_probe_vla_run(4000)\n");
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
-  require_armed_alloc(&alloc, "gated variable CNEW result", 0);
+  require_armed_alloc(&alloc, "interpreted variable CNEW result", 0);
   assert(alloc.armed_jit_calls == 0);
 
   assert(alloc.calls != 0);
@@ -368,6 +385,6 @@ done:
 #endif
   probe_ctx = NULL;
   lua_close(L);
-  printf("t-ffi-ccall-error-state OK: gated post-call boxing preserves native errors\n");
+  printf("t-ffi-ccall-error-state OK: post-call allocation preserves native errors\n");
   return 0;
 }

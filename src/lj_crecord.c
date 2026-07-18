@@ -44,12 +44,10 @@
 #define emitconv(a, dt, st, flags) \
   emitir(IRT(IR_CONV, (dt)), (a), (st)|((dt) << 5)|(flags))
 
-/*
-** Generic IR_CALLXS FFI calls need a snapshot-safe native-state protocol.
-** The recorder below is deliberately held behind a hard safety gate until
-** XSAVE publication, exact trace pinning and post-call exits form one
-** protocol. Interpreted calls use the compact native enter/leave helpers.
-*/
+/* Generic IR_CALLXS FFI calls use the same exact native-state protocol as
+** interpreted calls: XSAVE-backed frame publication, trace pinning, callback
+** suspension, post-call cleanup and non-replaying forced exits. Result and
+** Lua-frame classes without an exact handoff still reject independently. */
 
 /* -- C type checks ------------------------------------------------------- */
 
@@ -2383,17 +2381,17 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     CTInfo ctr_info;
     IRType t;
 
-#if !defined(LJ_FFI_CALLXS_TEST_ACTIVATE)
-    /* Default recorder safety boundary: first-time callbacks still need
-    ** ACTIVE -> SUSPENDED publication, and boxed results need pre-rooted
-    ** storage before arbitrary generic calls can record by default. The test
-    ** activation uses this exact production seam for the nonallocating
-    ** result-handoff classes. */
-    lj_trace_err(J, LJ_TRERR_BLACKL);
-#else
-    /* Until continuation/pcall/tail-return handoff has its own exact snapshot
-    ** contract, exercise the authentic path only for an ordinary Lua call
-    ** frame which lj_record_ret() resolves by one caller-base adjustment. */
+#if !LJ_TARGET_X64
+    /* Only the x64 CALLXS/native-frame lowering has the production lifecycle
+    ** certificate. Other architectures retain the exact interpreter path. */
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+#endif
+
+    /* Until continuation, protected and root-tail handoff have their own
+    ** exact snapshot contracts, admit only a Lua frame which lj_record_ret()
+    ** resolves by one caller-base adjustment. This also covers an inlined Lua
+    ** tailcall: the VM deliberately retains its outer CALL/CALLM/ITERC PC in
+    ** the reused physical frame, and the post-call snapshot resumes there. */
     if (J->framedepth <= 0 || !frame_islua(J->L->base-1)) {
       lj_trace_err(J, LJ_TRERR_NYICALL);
     } else {
@@ -2401,12 +2399,13 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       if (!(callop == BC_CALL || callop == BC_CALLM || callop == BC_ITERC))
 	lj_trace_err(J, LJ_TRERR_NYICALL);
     }
-#endif
 
     func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
     ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
     ctr_info = ctype_info_acq(ctr);
-    t = crec_ct2irt(cts, ctr);
+    /* Enum children live in the relocatable CType table too. Even rejected
+    ** result classes must use the recorder's snapshot/retry reader contract. */
+    t = crec_ct2irt_snapshot(J, cts, ctr);
     if (ctype_isvoid(ctr_info)) {
       t = IRT_NIL;
       rd->nres = 0;

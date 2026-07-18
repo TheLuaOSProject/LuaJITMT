@@ -1,4 +1,4 @@
-/* Controlled no-callback ABI targets for the authentic generic CALLXS gate. */
+/* Controlled no-callback ABI targets for production generic CALLXS. */
 
 #include <errno.h>
 #include <stdarg.h>
@@ -14,6 +14,7 @@ int32_t lj_callxs_auth_add(int32_t a, int32_t b)
 
 uint32_t lj_callxs_auth_u32(uint32_t a, int32_t b)
 {
+  lj_callxs_auth_counter++;
   return UINT32_C(0x80000000) + a + (uint32_t)b;
 }
 
@@ -26,30 +27,35 @@ double lj_callxs_auth_mix(int32_t a, double b, float c, uint64_t d,
 
 float lj_callxs_auth_float(float a, int32_t b)
 {
+  lj_callxs_auth_counter++;
   return a + (float)b + 0.25f;
 }
 
 int8_t lj_callxs_auth_i8(int32_t value)
 {
   (void)value;
+  lj_callxs_auth_counter++;
   return INT8_C(-101);
 }
 
 uint8_t lj_callxs_auth_u8(int32_t value)
 {
   (void)value;
+  lj_callxs_auth_counter++;
   return UINT8_C(201);
 }
 
 int16_t lj_callxs_auth_i16(int32_t value)
 {
   (void)value;
+  lj_callxs_auth_counter++;
   return INT16_C(-12345);
 }
 
 uint16_t lj_callxs_auth_u16(int32_t value)
 {
   (void)value;
+  lj_callxs_auth_counter++;
   return UINT16_C(54321);
 }
 
@@ -61,6 +67,7 @@ int32_t lj_callxs_auth_errno(int32_t value)
 
 void lj_callxs_auth_store(int32_t *p, int32_t index, int32_t value)
 {
+  lj_callxs_auth_counter++;
   p[(uint32_t)index & 3u] = value;
 }
 
@@ -73,6 +80,7 @@ double lj_callxs_auth_vararg(int32_t n, ...)
   for (i = 0; i < n; i++)
     sum += va_arg(ap, double);
   va_end(ap);
+  lj_callxs_auth_counter++;
   return sum;
 }
 
@@ -123,4 +131,11 @@ int32_t lj_callxs_auth_once(int32_t value)
 {
   lj_callxs_auth_counter++;
   return value + 9;
+}
+
+int32_t lj_callxs_auth_iter(int32_t state, int32_t control)
+{
+  (void)state;
+  lj_callxs_auth_counter++;
+  return control + 1;
 }

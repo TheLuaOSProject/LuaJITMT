@@ -23,10 +23,6 @@
 #ifndef LJ_XSAVE_TEST_HELPERS
 #error "t-ffi-callxs-postcall requires LJ_XSAVE_TEST_HELPERS"
 #endif
-#ifndef LJ_FFI_CALLXS_TEST_ACTIVATE
-#error "t-ffi-callxs-postcall requires authentic CALLXS activation"
-#endif
-
 static uint32_t finish_calls;
 static uint32_t leave_hook_calls;
 static uint64_t finish_old_epoch;
@@ -77,6 +73,15 @@ static GCtrace *find_callxs_trace(jit_State *J)
   return NULL;
 }
 
+static int proto_has_bc(GCproto *pt, BCOp wanted)
+{
+  BCPos pc;
+  for (pc = 0; pc < pt->sizebc; pc++)
+    if (bc_op(proto_bc(pt)[pc]) == wanted)
+      return 1;
+  return 0;
+}
+
 static void assert_exact_enter_constant(GCtrace *T)
 {
   IRIns *ir = trace_ir_acq(T);
@@ -105,7 +110,8 @@ static int ref_is_leave(IRIns *ir, IRRef ref)
 	 ir[ref].op2 == IRCALL_lj_ffi_native_trace_leave;
 }
 
-static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt)
+static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt,
+					BCOp expected_callop)
 {
   IRIns *ir = trace_ir_acq(T);
   SnapShot *snap = trace_snap_acq(T);
@@ -117,7 +123,7 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt)
   for (ref = REF_FIRST; ref < nins; ref++) {
     if (ir[ref].o == IR_CALLXS) {
       IRIns *preguard;
-      IRRef enter, scan;
+      IRRef enter, leave, scan;
       int saw_xsave = 0;
       assert(ref > REF_FIRST);
       preguard = &ir[ref - 1];
@@ -143,8 +149,15 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt)
 	assert(prev->o != IR_CALLXS);
       }
       assert(saw_xsave);
-      assert(ref + 1 < nins);
-      assert(ref_is_leave(ir, ref + 1));
+      /* Integer-width and float/u32 result normalization is deliberately pure
+      ** and nonthrowing. It may insert CONV between CALLXS and native leave;
+      ** no other operation may enter that post-side-effect window. */
+      leave = ref + 1;
+      while (leave < nins && ir[leave].o == IR_CONV) {
+	assert(!irt_isguard(ir[leave].t));
+	leave++;
+      }
+      assert(leave < nins && ref_is_leave(ir, leave));
       callxs++;
     }
   }
@@ -183,13 +196,177 @@ static void assert_postcall_snapshot_pc(GCtrace *T, GCproto *pt)
       assert((pcbase & UINT64_C(0xff)) == 0);
 #endif
       assert(snap_topslot_acq(&snap[sn]) == pt->framesize);
-      assert(bc_op(pc[-1]) == BC_CALL || bc_op(pc[-1]) == BC_CALLM ||
-	     bc_op(pc[-1]) == BC_ITERC);
+      assert(bc_op(pc[-1]) == expected_callop);
       found++;
     }
   }
   assert(prefound == callxs);
   assert(found == callxs);
+}
+
+static GCproto *global_lua_proto(lua_State *L, const char *name)
+{
+  GCproto *pt;
+  lua_getglobal(L, name);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  pt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+  return pt;
+}
+
+static lua_Integer run_named(lua_State *L, const char *name, lua_Integer n)
+{
+  lua_Integer result;
+  lua_getglobal(L, name);
+  lua_pushinteger(L, n);
+  assert(lua_pcall(L, 1, 1, 0) == 0);
+  assert(lua_isnumber(L, -1));
+  result = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  return result;
+}
+
+static lua_Integer run_entry_named(lua_State *L, const char *name,
+				    lua_Integer n)
+{
+  lua_Integer result;
+  lua_getglobal(L, "__callxs_postcall_compile_entry");
+  lua_getglobal(L, name);
+  lua_pushinteger(L, n);
+  assert(lua_pcall(L, 2, 1, 0) == 0);
+  assert(lua_isnumber(L, -1));
+  result = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  return result;
+}
+
+static lua_Integer auth_count(lua_State *L)
+{
+  lua_Integer count;
+  ljt_lua_loadstring(L,
+    "return __callxs_postcall_lib.lj_callxs_auth_count()");
+  ljt_lua_pcall(L, 0, 1, "read generated-topology foreign count");
+  count = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  return count;
+}
+
+static void auth_reset(lua_State *L)
+{
+  ljt_lua_dostring(L, "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+}
+
+static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
+				       TGState *tg, const char *run_name)
+{
+  GCproto *pt;
+  GCtrace *T;
+
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  /* The compile entry supplies the physical Lua caller required while the
+  ** loop root is recorded; subsequent direct invocations exercise that root. */
+  assert(run_entry_named(L, run_name, 200) == 200);
+  assert(auth_count(L) == 200);
+  auth_reset(L);
+
+  pt = global_lua_proto(L, run_name);
+  assert(proto_has_bc(pt, BC_CALL));
+  T = find_callxs_trace(J);
+  if (T == NULL)
+    fprintf(stderr, "%s did not produce a CALLXS trace\n", run_name);
+  assert(T != NULL);
+  assert_exact_enter_constant(T);
+  assert_postcall_snapshot_pc(T, pt, BC_CALL);
+  assert(trace_native_pins_acq(T) == 0);
+
+  finish_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
+  assert(run_named(L, run_name, 20) == 20);
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_calls != 0);
+  lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
+  assert(auth_count(L) == 20);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == 0);
+  return T;
+}
+
+static GCtrace *exercise_generated_topology(lua_State *L, jit_State *J,
+					    TGState *tg,
+					    const char *run_name,
+					    const char *opcode_name,
+					    const char *snapshot_name,
+					    BCOp expected_callop,
+					    lua_Integer result_offset,
+					    lua_Integer stop_effects)
+{
+  GCproto *opcode_pt, *snapshot_pt;
+  GCtrace *T;
+  lua_Integer expected;
+  uint8_t old_flags;
+  unsigned pass;
+
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  expected = 200 * 201 / 2 + result_offset * 200;
+  assert(run_named(L, run_name, 200) == expected);
+  assert(auth_count(L) == 200);
+  auth_reset(L);
+
+  opcode_pt = global_lua_proto(L, opcode_name);
+  assert(proto_has_bc(opcode_pt, expected_callop));
+  snapshot_pt = global_lua_proto(L, snapshot_name);
+  T = find_callxs_trace(J);
+  if (T == NULL)
+    fprintf(stderr, "%s did not produce a CALLXS trace\n", run_name);
+  assert(T != NULL);
+  assert_exact_enter_constant(T);
+  assert_postcall_snapshot_pc(T, snapshot_pt, expected_callop);
+  assert(trace_native_pins_acq(T) == 0);
+
+  finish_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
+  expected = 20 * 21 / 2 + result_offset * 20;
+  for (pass = 0; pass < 2; pass++) {
+    uint32_t before = finish_calls;
+    assert(run_named(L, run_name, 20) == expected);
+    assert(finish_calls > before);
+    assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+    assert(trace_native_pins_acq(T) == 0);
+  }
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_calls >= 2);
+  lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
+  assert(auth_count(L) == 40);
+
+  auth_reset(L);
+  old_flags = lj_tg_flags_acq(tg);
+  leave_hook_calls = 0;
+  lj_ffi_native_trace_test_set_leave_hook(
+    force_fresh_stopreq_after_native_leave);
+  lua_getglobal(L, run_name);
+  lua_pushinteger(L, 20);
+  assert(lua_pcall(L, 1, 1, 0) != 0);
+  lj_ffi_native_trace_test_set_leave_hook(NULL);
+  assert(leave_hook_calls == 1);
+  assert(lua_tostring(L, -1) != NULL);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  lj_tg_flags_store_rlx(tg, old_flags);
+  expected = auth_count(L);
+  if (expected != stop_effects)
+    fprintf(stderr, "%s STOPREQ foreign count: %lld\n", run_name,
+	    (long long)expected);
+  assert(expected == stop_effects);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == 0);
+  return T;
 }
 
 int main(void)
@@ -219,6 +396,15 @@ int main(void)
     "void lj_callxs_auth_reset(void);\n"
     "int32_t lj_callxs_auth_count(void);\n"
     "int32_t lj_callxs_auth_once(int32_t);\n"
+    "int32_t lj_callxs_auth_iter(int32_t, int32_t);\n"
+    "uint32_t lj_callxs_auth_u32(uint32_t, int32_t);\n"
+    "double lj_callxs_auth_vararg(int32_t, ...);\n"
+    "float lj_callxs_auth_float(float, int32_t);\n"
+    "int8_t lj_callxs_auth_i8(int32_t);\n"
+    "uint8_t lj_callxs_auth_u8(int32_t);\n"
+    "int16_t lj_callxs_auth_i16(int32_t);\n"
+    "uint16_t lj_callxs_auth_u16(int32_t);\n"
+    "void lj_callxs_auth_store(int32_t *, int32_t, int32_t);\n"
     "]]\n"
     "local lib = ffi.load(assert(os.getenv('LJ_M7_FFI_CALLXS_SO')))\n"
     "_G.__callxs_postcall_lib = lib\n"
@@ -226,6 +412,98 @@ int main(void)
     "  local sum = 0\n"
     "  for i = 1, n do sum = sum + lib.lj_callxs_auth_once(i) end\n"
     "  return sum\n"
+    "end\n"
+    "function _G.__callxs_postcall_tail_once(x)\n"
+    "  return lib.lj_callxs_auth_once(x)\n"
+    "end\n"
+    "function _G.__callxs_postcall_tail_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + __callxs_postcall_tail_once(i) end\n"
+    "  return sum\n"
+    "end\n"
+    "function _G.__callxs_postcall_produce_one(x) return x end\n"
+    "function _G.__callxs_postcall_tail_multres(x)\n"
+    "  return lib.lj_callxs_auth_once(__callxs_postcall_produce_one(x))\n"
+    "end\n"
+    "function _G.__callxs_postcall_tailm_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + __callxs_postcall_tail_multres(i) end\n"
+    "  return sum\n"
+    "end\n"
+    "function _G.__callxs_postcall_callm_once(x)\n"
+    "  local y = lib.lj_callxs_auth_once(__callxs_postcall_produce_one(x))\n"
+    "  return y\n"
+    "end\n"
+    "function _G.__callxs_postcall_callm_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + __callxs_postcall_callm_once(i) end\n"
+    "  return sum\n"
+    "end\n"
+    "function _G.__callxs_postcall_iter_run(n)\n"
+    "  local sum = 0\n"
+    "  for value in lib.lj_callxs_auth_iter, 0, 0 do\n"
+    "    sum = sum + value\n"
+    "    if value == n then break end\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "function _G.__callxs_postcall_iter_entry(n)\n"
+    "  local result = __callxs_postcall_iter_run(n)\n"
+    "  return result\n"
+    "end\n"
+    "function _G.__callxs_postcall_compile_entry(run, n)\n"
+    "  local result = run(n)\n"
+    "  return result\n"
+    "end\n"
+    "local result_p = ffi.new('int32_t[4]')\n"
+    "function _G.__callxs_postcall_u32_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + lib.lj_callxs_auth_u32(i, 5) end\n"
+    "  assert(sum == n*0x80000000 + n*(n+1)/2 + 5*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_double_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    sum = sum + lib.lj_callxs_auth_vararg(2, i + 0.0, 0.5)\n"
+    "  end\n"
+    "  assert(sum == n*(n+1)/2 + 0.5*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_float_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + lib.lj_callxs_auth_float(0.5, i) end\n"
+    "  assert(sum == n*(n+1)/2 + 0.75*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_i8_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + lib.lj_callxs_auth_i8(i) end\n"
+    "  assert(sum == -101*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_u8_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + lib.lj_callxs_auth_u8(i) end\n"
+    "  assert(sum == 201*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_i16_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + lib.lj_callxs_auth_i16(i) end\n"
+    "  assert(sum == -12345*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_u16_run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + lib.lj_callxs_auth_u16(i) end\n"
+    "  assert(sum == 54321*n)\n"
+    "  return n\n"
+    "end\n"
+    "function _G.__callxs_postcall_void_run(n)\n"
+    "  for i = 1, n do lib.lj_callxs_auth_store(result_p, i, i + 300) end\n"
+    "  for i = n-3, n do assert(result_p[i % 4] == i + 300) end\n"
+    "  return n\n"
     "end\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
@@ -242,7 +520,7 @@ int main(void)
   T = find_callxs_trace(J);
   assert(T != NULL);
   assert_exact_enter_constant(T);
-  assert_postcall_snapshot_pc(T, runpt);
+  assert_postcall_snapshot_pc(T, runpt, BC_CALL);
   assert(trace_native_pins_acq(T) == 0);
 
   finish_calls = 0;
@@ -329,6 +607,166 @@ int main(void)
   assert(finish_calls == 0);
   ljt_lua_dostring(L,
     "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 20)\n");
+
+  /* CALLT reuses the caller's physical Lua frame and preserves its outer CALL
+  ** PC. Exercise that admitted one-adjustment topology independently, then
+  ** force both epoch and throwing STOPREQ cleanup from its POSTCALL snapshot. */
+  assert(trace_native_pins_acq(T) == 0);
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n"
+    "assert(__callxs_postcall_tail_run(200) == 200*201/2 + 9*200)\n"
+    "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 200)\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+
+  lua_getglobal(L, "__callxs_postcall_tail_once");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  assert(proto_has_bc(funcproto(funcV(L->top-1)), BC_CALLT));
+  lua_pop(L, 1);
+  lua_getglobal(L, "__callxs_postcall_tail_run");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  runpt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+
+  T = find_callxs_trace(J);
+  assert(T != NULL);
+  assert_exact_enter_constant(T);
+  assert_postcall_snapshot_pc(T, runpt, BC_CALL);
+  assert(trace_native_pins_acq(T) == 0);
+
+  finish_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
+  for (pass = 0; pass < 2; pass++) {
+    uint32_t before = finish_calls;
+    lua_getglobal(L, "__callxs_postcall_tail_run");
+    lua_pushinteger(L, 20);
+    assert(lua_pcall(L, 1, 1, 0) == 0);
+    assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
+    lua_pop(L, 1);
+    assert(finish_calls > before);
+    assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+    assert(trace_native_pins_acq(T) == 0);
+  }
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_calls >= 2);
+  lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
+
+  ljt_lua_dostring(L,
+    "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 40)\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  old_flags = lj_tg_flags_acq(tg);
+  leave_hook_calls = 0;
+  lj_ffi_native_trace_test_set_leave_hook(
+    force_fresh_stopreq_after_native_leave);
+  lua_getglobal(L, "__callxs_postcall_tail_run");
+  lua_pushinteger(L, 20);
+  assert(lua_pcall(L, 1, 1, 0) != 0);
+  lj_ffi_native_trace_test_set_leave_hook(NULL);
+  assert(leave_hook_calls == 1);
+  assert(lua_tostring(L, -1) != NULL);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  lj_tg_flags_store_rlx(tg, old_flags);
+  ljt_lua_loadstring(L,
+    "return __callxs_postcall_lib.lj_callxs_auth_count()");
+  ljt_lua_pcall(L, 0, 1, "read tail STOPREQ foreign count");
+  stop_count = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  assert(stop_count == 2);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == 0);
+
+  /* CALLMT has the same reused-frame handoff, but also consumes the producer's
+  ** open results. Authenticate it separately so CALLT cannot mask a recorder
+  ** regression in the multiple-result tail opcode. */
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n"
+    "assert(__callxs_postcall_tailm_run(200) == 200*201/2 + 9*200)\n"
+    "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 200)\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+
+  lua_getglobal(L, "__callxs_postcall_tail_multres");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  assert(proto_has_bc(funcproto(funcV(L->top-1)), BC_CALLMT));
+  lua_pop(L, 1);
+  lua_getglobal(L, "__callxs_postcall_tailm_run");
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  runpt = funcproto(funcV(L->top-1));
+  lua_pop(L, 1);
+
+  T = find_callxs_trace(J);
+  assert(T != NULL);
+  assert_exact_enter_constant(T);
+  assert_postcall_snapshot_pc(T, runpt, BC_CALL);
+  assert(trace_native_pins_acq(T) == 0);
+
+  finish_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
+  for (pass = 0; pass < 2; pass++) {
+    uint32_t before = finish_calls;
+    lua_getglobal(L, "__callxs_postcall_tailm_run");
+    lua_pushinteger(L, 20);
+    assert(lua_pcall(L, 1, 1, 0) == 0);
+    assert(lua_tointeger(L, -1) == 20 * 21 / 2 + 9 * 20);
+    lua_pop(L, 1);
+    assert(finish_calls > before);
+    assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+    assert(trace_native_pins_acq(T) == 0);
+  }
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(finish_calls >= 2);
+  lj_tg_hs_epoch_ack_rel(tg, finish_old_epoch);
+
+  ljt_lua_dostring(L,
+    "assert(__callxs_postcall_lib.lj_callxs_auth_count() == 40)\n"
+    "__callxs_postcall_lib.lj_callxs_auth_reset()\n");
+  old_flags = lj_tg_flags_acq(tg);
+  leave_hook_calls = 0;
+  lj_ffi_native_trace_test_set_leave_hook(
+    force_fresh_stopreq_after_native_leave);
+  lua_getglobal(L, "__callxs_postcall_tailm_run");
+  lua_pushinteger(L, 20);
+  assert(lua_pcall(L, 1, 1, 0) != 0);
+  lj_ffi_native_trace_test_set_leave_hook(NULL);
+  assert(leave_hook_calls == 1);
+  assert(lua_tostring(L, -1) != NULL);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  lj_tg_flags_store_rlx(tg, old_flags);
+  ljt_lua_loadstring(L,
+    "return __callxs_postcall_lib.lj_callxs_auth_count()");
+  ljt_lua_pcall(L, 0, 1, "read tailm STOPREQ foreign count");
+  stop_count = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  assert(stop_count == 2);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(trace_native_pins_acq(T) == 0);
+
+  T = exercise_generated_topology(L, J, tg,
+    "__callxs_postcall_iter_entry",
+    "__callxs_postcall_iter_run",
+    "__callxs_postcall_iter_run", BC_ITERC, 0, 2);
+  T = exercise_generated_topology(L, J, tg,
+    "__callxs_postcall_callm_run",
+    "__callxs_postcall_callm_once",
+    "__callxs_postcall_callm_once", BC_CALLM, 9, 1);
+
+  /* A forced epoch exit restores each admitted scalar normalization from the
+  ** post-call snapshot. Exact counters prove no completed foreign call is
+  ** replayed, while each Lua runner validates its restored value or effect. */
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u32_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_double_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_float_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_i8_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u8_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_i16_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_u16_run");
+  T = exercise_forced_result(L, J, tg, "__callxs_postcall_void_run");
 
   assert(lj_ffi_native_frame_depth_acq(tg) == old_depth);
   assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) == 0);

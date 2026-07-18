@@ -30,6 +30,10 @@ enum lj_callxs_auth_enum {
 enum lj_callxs_auth_enum lj_callxs_auth_enum_result(int32_t);
 int64_t lj_callxs_auth_i64_result(int32_t);
 uint64_t lj_callxs_auth_u64_result(int32_t);
+void lj_callxs_auth_reset(void);
+int32_t lj_callxs_auth_count(void);
+int32_t lj_callxs_auth_once(int32_t);
+int32_t lj_callxs_auth_iter(int32_t, int32_t);
 ]]
 
 local lib = ffi.load(assert(os.getenv("LJ_M7_FFI_CALLXS_SO")))
@@ -104,29 +108,183 @@ local counts = trace_op_counts()
 assert((counts["XSAVE "] or 0) >= 11, "authentic path omitted XSAVE")
 assert((counts["CALLXS"] or 0) >= 11, "authentic path omitted CALLXS")
 
--- Boxed pointer results deliberately retain the interpreted fallback until
+local function hasbc(fn, wanted)
+  for pc = 1, 1000 do
+    local ins = util.funcbc(fn, pc)
+    if not ins then return false end
+    local op = bit.band(ins, 0xff)
+    local name = vmdef.bcnames:sub(op * 6 + 1, op * 6 + 6):gsub("%s+$", "")
+    if name == wanted then return true end
+  end
+  return false
+end
+jit.off(hasbc, true)
+
+local function produce_one(x)
+  return x
+end
+
+local function call_multres(x)
+  local y = lib.lj_callxs_auth_once(produce_one(x))
+  return y
+end
+
+local function tail_once(x)
+  return lib.lj_callxs_auth_once(x)
+end
+
+local function tail_multres(x)
+  return lib.lj_callxs_auth_once(produce_one(x))
+end
+
+local function run_wrapper(nrun, fn)
+  local sum = 0
+  for i = 1, nrun do sum = sum + fn(i) end
+  return sum
+end
+
+local function run_iter(nrun)
+  local sum = 0
+  for value in lib.lj_callxs_auth_iter, 0, 0 do
+    sum = sum + value
+    if value == nrun then break end
+  end
+  return sum
+end
+
+assert(hasbc(call_multres, "CALLM"))
+assert(hasbc(tail_once, "CALLT"))
+assert(hasbc(tail_multres, "CALLMT"))
+assert(hasbc(run_iter, "ITERC"))
+
+for _, case in ipairs({
+  { "CALLM", call_multres },
+  { "CALLT", tail_once },
+  { "CALLMT", tail_multres },
+}) do
+  jit.flush()
+  lib.lj_callxs_auth_reset()
+  assert(run_wrapper(120, case[2]) == triangle + 9 * n)
+  assert(lib.lj_callxs_auth_count() == n)
+  assert((trace_op_counts()["CALLXS"] or 0) > 0,
+         case[1] .. " frame did not activate production CALLXS")
+end
+
+local function ignore_results(nrun)
+  for i = 1, nrun do lib.lj_callxs_auth_once(i) end
+  return true
+end
+
+local function excess_results(nrun)
+  local sum = 0
+  for i = 1, nrun do
+    local value, extra1, extra2 = lib.lj_callxs_auth_once(i)
+    if extra1 ~= nil or extra2 ~= nil then return false end
+    sum = sum + value
+  end
+  return sum
+end
+
+local function forward_results(...)
+  return select("#", ...), ...
+end
+
+local function open_results(nrun)
+  local sum = 0
+  for i = 1, nrun do
+    local count, value, extra = forward_results(lib.lj_callxs_auth_once(i))
+    if count ~= 1 or extra ~= nil then return false end
+    sum = sum + value
+  end
+  return sum
+end
+
+for _, case in ipairs({
+  { "ignored", ignore_results, true },
+  { "excess fixed", excess_results, triangle + 9 * n },
+  { "open", open_results, triangle + 9 * n },
+}) do
+  jit.flush()
+  lib.lj_callxs_auth_reset()
+  assert(case[2](n) == case[3], case[1] .. " result semantics changed")
+  assert(lib.lj_callxs_auth_count() == n)
+  assert((trace_op_counts()["CALLXS"] or 0) > 0,
+         case[1] .. " result mode did not activate production CALLXS")
+end
+
+local function void_open_results(nrun)
+  for i = 1, nrun do
+    if select("#", lib.lj_callxs_auth_store(p, i, i + 200)) ~= 0 then
+      return false
+    end
+  end
+  return true
+end
+
+jit.flush()
+assert(void_open_results(n))
+assert(p[bit.band(n, 3)] == n + 200)
+assert((trace_op_counts()["CALLXS"] or 0) > 0,
+       "void open-result mode did not activate production CALLXS")
+
+jit.flush()
+lib.lj_callxs_auth_reset()
+assert(run_iter(n) == triangle)
+assert(lib.lj_callxs_auth_count() == n)
+assert((trace_op_counts()["CALLXS"] or 0) > 0,
+       "ITERC frame did not activate production CALLXS")
+
+-- Boxed results deliberately retain the interpreted fallback until
 -- pre-rooted result storage and forced-unwind coverage land. This is a return-
 -- class boundary, not a declaration/signature matcher.
-jit.flush()
-local function boxed(nbox)
-  local q, b, e, i64, u64
+local function boxed_pointer(nbox)
+  local value
   for i = 1, nbox do
-    q = lib.lj_callxs_auth_ptr(p)
-    b = lib.lj_callxs_auth_bool(i)
-    e = lib.lj_callxs_auth_enum_result(i)
-    i64 = lib.lj_callxs_auth_i64_result(i)
-    u64 = lib.lj_callxs_auth_u64_result(i)
+    value = lib.lj_callxs_auth_ptr(p)
   end
-  return q, b, e, i64, u64
+  return value
 end
-local q, b, e, i64, boxed_u64 = boxed(200)
-assert(q == p)
-assert(b == true)
-assert(tonumber(e) == 7)
-assert(i64 == ffi.new("int64_t", -123456789))
-assert(boxed_u64 == ffi.new("uint64_t", 4000000000))
-local boxed_counts = trace_op_counts()
-assert((boxed_counts["CALLXS"] or 0) == 0,
-       "boxed result crossed the pre-rooting gate")
 
-print("t-ffi-callxs-authentic OK: generic XSAVE/native/CALLXS path executed")
+local function boxed_bool(nbox)
+  local value
+  for i = 1, nbox do value = lib.lj_callxs_auth_bool(i) end
+  return value
+end
+
+local function boxed_enum(nbox)
+  local value
+  for i = 1, nbox do value = lib.lj_callxs_auth_enum_result(i) end
+  return value
+end
+
+local function boxed_i64(nbox)
+  local value
+  for i = 1, nbox do value = lib.lj_callxs_auth_i64_result(i) end
+  return value
+end
+
+local function boxed_u64(nbox)
+  local value
+  for i = 1, nbox do value = lib.lj_callxs_auth_u64_result(i) end
+  return value
+end
+
+for _, case in ipairs({
+  { "pointer", boxed_pointer, function(value) assert(value == p) end },
+  { "bool", boxed_bool, function(value) assert(value == true) end },
+  { "enum", boxed_enum, function(value) assert(tonumber(value) == 7) end },
+  { "i64", boxed_i64, function(value)
+      assert(value == ffi.new("int64_t", -123456789))
+    end },
+  { "u64", boxed_u64, function(value)
+      assert(value == ffi.new("uint64_t", 4000000000))
+    end },
+}) do
+  jit.flush()
+  case[3](case[2](200))
+  local boxed_counts = trace_op_counts()
+  assert((boxed_counts["CALLXS"] or 0) == 0,
+         case[1] .. " result crossed the pre-rooting gate")
+end
+
+print("t-ffi-callxs-authentic OK: production XSAVE/native/CALLXS path executed")

@@ -1,5 +1,5 @@
 /*
-** Focused regression test for interpreted FFI C-call native STOPREQ freshness.
+** Focused regression test for FFI C-call native STOPREQ freshness.
 */
 
 #include <assert.h>
@@ -16,6 +16,8 @@
 #include "lib/lua_fixture_helpers.h"
 #include "lib/tg_stopreq_fixture_helpers.h"
 
+#include "lj_ccall.h"
+#include "lj_ir.h"
 #include "lj_obj.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
@@ -25,14 +27,18 @@ typedef struct CCallStopReqCtx {
   TGState *tg;
   uint32_t published;
   uint32_t saw_native;
+  uint32_t require_generated_frame;
 } CCallStopReqCtx;
 
 static void *publish_stopreq_while_native(void *arg)
 {
   CCallStopReqCtx *ctx = (CCallStopReqCtx *)arg;
   int i;
-  for (i = 0; i < 500; i++) {
-    if (lj_tg_in_native_acq(ctx->tg)) {
+  for (i = 0; i < 1000; i++) {
+    if (ctx->require_generated_frame ?
+	(lj_tg_in_native_acq(ctx->tg) != 0 &&
+	 lj_ffi_native_frame_depth_acq(ctx->tg) > 0) :
+	lj_tg_in_native_acq(ctx->tg)) {
       ctx->saw_native = 1;
       break;
     }
@@ -66,6 +72,7 @@ static void run_fresh_stopreq_interrupt(lua_State *L, global_State *g,
   ctx.tg = tg;
   ctx.published = 0;
   ctx.saw_native = 0;
+  ctx.require_generated_frame = 0;
 
   assert(pthread_create(&thread, NULL, publish_stopreq_while_native, &ctx) == 0);
   rc = luaL_dostring(L,
@@ -84,13 +91,14 @@ static void run_fresh_stopreq_interrupt(lua_State *L, global_State *g,
   }
   assert(rc == LUA_OK);
   assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == NULL);
   assert(ljt_tg_has_stopreq(tg));
   ljt_tg_clear_stopreq(tg);
 }
 
-static void run_gated_fresh_stopreq_interrupt(lua_State *L, global_State *g,
-					      TGState *tg)
+static void run_generated_fresh_stopreq_interrupt(lua_State *L, global_State *g,
+						  TGState *tg)
 {
   CCallStopReqCtx ctx;
   pthread_t thread;
@@ -101,10 +109,11 @@ static void run_gated_fresh_stopreq_interrupt(lua_State *L, global_State *g,
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
+    "local bit = require('bit')\n"
     "local util = require('jit.util')\n"
     "local lib = assert(lj_m7_ccall_jit_lib)\n"
     "local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32\n"
-    "function lj_m7_gated_sleep(n, ms)\n"
+    "function lj_m7_generated_sleep(n, ms)\n"
     "  local r = 0\n"
     "  for _ = 1, n do r = sleep_i32(ms) end\n"
     "  return r\n"
@@ -112,32 +121,51 @@ static void run_gated_fresh_stopreq_interrupt(lua_State *L, global_State *g,
     "jit.on()\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
-    "assert(lj_m7_gated_sleep(80, 0) == 7)\n"
-    "assert(not util.traceinfo(1),\n"
-    "       'ordinary FFI C call bypassed the XSAVE safety gate')\n");
+    "assert(lj_m7_generated_sleep(80, 0) == 7)\n"
+    "local callxs, xsave = 0, 0\n"
+    "for tr = 1, 128 do\n"
+    "  local info = util.traceinfo(tr)\n"
+    "  if info then\n"
+    "    for ref = 1, info.nins do\n"
+    "      local _, ot = util.traceir(tr, ref)\n"
+    "      if ot then\n"
+    "        local op = bit.rshift(ot, 8)\n"
+    "        if op == lj_m7_ir_callxs then callxs = callxs + 1 end\n"
+    "        if op == lj_m7_ir_xsave then xsave = xsave + 1 end\n"
+    "      end\n"
+    "    end\n"
+    "  end\n"
+    "end\n"
+    "assert(callxs > 0 and xsave > 0,\n"
+    "       'scalar FFI C call omitted production XSAVE/CALLXS')\n");
 
   ctx.g = g;
   ctx.tg = tg;
   ctx.published = 0;
   ctx.saw_native = 0;
+  /* A trace may exist while the first iteration of this invocation still
+  ** enters the C function through the interpreter. Wait for the XSAVE-backed
+  ** frame itself so the request demonstrably lands during generated CALLXS. */
+  ctx.require_generated_frame = 1;
 
   assert(pthread_create(&thread, NULL, publish_stopreq_while_native, &ctx) == 0);
   rc = luaL_dostring(L,
     "local ok, err = pcall(function()\n"
-    "  return lj_m7_gated_sleep(2, 200)\n"
+    "  return lj_m7_generated_sleep(2, 200)\n"
     "end)\n"
-    "assert(ok == false, 'fresh STOPREQ did not interrupt gated FFI ccall')\n"
+    "assert(ok == false, 'fresh STOPREQ did not interrupt generated FFI ccall')\n"
     "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
     "       tostring(err))\n");
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.published);
   if (rc != LUA_OK) {
     const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "gated fresh STOPREQ chunk failed: %s\n",
+    fprintf(stderr, "generated fresh STOPREQ chunk failed: %s\n",
 	    err ? err : "(nil)");
   }
   assert(rc == LUA_OK);
   assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_ffi_native_frame_depth_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == NULL);
   assert(ljt_tg_has_stopreq(tg));
   ljt_tg_clear_stopreq(tg);
@@ -148,6 +176,11 @@ int main(void)
   lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   TGState *tg;
+
+  lua_pushinteger(L, IR_CALLXS);
+  lua_setglobal(L, "lj_m7_ir_callxs");
+  lua_pushinteger(L, IR_XSAVE);
+  lua_setglobal(L, "lj_m7_ir_xsave");
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -176,7 +209,7 @@ int main(void)
   run_fresh_stopreq_interrupt(L, g, tg);
   assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) == 0);
 
-  run_gated_fresh_stopreq_interrupt(L, g, tg);
+  run_generated_fresh_stopreq_interrupt(L, g, tg);
   assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) == 0);
 
   lua_close(L);
