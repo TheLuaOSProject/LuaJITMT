@@ -43,6 +43,8 @@ static int threading_arena_internal(global_State *g)
 	 lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
 }
 
+static int threading_tg_is_registered(global_State *g, TGState *target);
+
 /* -- Thread methods ------------------------------------------------------ */
 
 static LJThread *threading_tothread(lua_State *L)
@@ -751,6 +753,17 @@ void lj_threading_shutdown(lua_State *L)
       if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ))
 	(void)lj_thr_join(&th->thr, NULL);
     }
+    /* pthread_create failure can leave an unregistered provisional TG whose
+    ** checked allocator teardown saw a real reader/certificate veto. Its live
+    ** node is the durable retry owner: close finalizers are one-shot, so keep
+    ** that node through finalization and let the joined-worker terminal drain
+    ** below close the TG before native-root storage is released. */
+    if (th->tg && la_load32_acq(&th->joined) != 0 &&
+	lj_tg_fini_state_acq(th->tg) == TG_FINI_RETRY &&
+	!threading_tg_is_registered(g, th->tg)) {
+      lj_gc2_lease_release(&lease);
+      continue;
+    }
     threading_live_remove(g, th);
     (void)lj_tg_reclaim_dead(g);
     lj_gc2_lease_release(&lease);
@@ -903,7 +916,14 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
   lj_state_stack_pubrange(L, L1);
-  lj_mem_free(g, oldst, sz);
+  /* This TG never reached attach publication, so generic pointer routing
+  ** cannot resolve its allocator owner and would fall back to the main TG.
+  ** Free through the exact allocator which issued oldst; otherwise a small
+  ** run enters the main bins while its arena remains child-owned, and a huge
+  ** stack consults the wrong HugeTab. Preserve lj_mem_free's accounting. */
+  lj_gc_total_sub(g, (GCSize)sz);
+  if (LJ_UNLIKELY(lj_arena_allocf(&tg->allocd, oldst, sz, 0) != NULL))
+    abort();
 }
 
 typedef struct ThreadingWorkerCtx {
@@ -1143,6 +1163,58 @@ static int threading_tg_is_registered(global_State *g, TGState *target)
   return 0;
 }
 
+int lj_threading_live_retry_tgs_terminal(global_State *g)
+{
+  LJThreadLive *node;
+  uint32_t n = 0;
+  if (!g)
+    return 1;
+  /* threading_shutdown has joined every child and deliberately retained only
+  ** provisional RETRY TGs on this live-root spine. GC2 workers are joined by
+  ** the caller, so a failed checked retry is a persistent terminal veto, not
+  ** permission to drop the one raw owner. */
+  node = lj_thread_live_head_acq(g);
+  while (node != NULL) {
+    LJThreadLive *next = lj_thread_live_next_acq(node);
+    LJGC2Lease lease;
+    GCudata *ud;
+    if (next == node)
+      return 0;
+    if (lj_thread_live_udata_ref_acq(node) == NULL)
+      goto next_node;  /* Ordinary shutdown tombstone; storage drains later. */
+    ud = lj_thread_live_udata_acq(g, node, &lease);
+    if (!ud)
+      return 0;  /* A non-null terminal root must have an exact typed body. */
+    {
+      LJThread *th = (LJThread *)uddata(ud);
+      TGState *tg = th->tg;
+      if (!tg || la_load32_acq(&th->state) != LJ_THREAD_DONE ||
+	  la_load32_acq(&th->joined) == 0 ||
+	  lj_tg_fini_state_acq(tg) != TG_FINI_RETRY ||
+	  threading_tg_is_registered(g, tg)) {
+	lj_gc2_lease_release(&lease);
+	return 0;
+      }
+      if (!lj_tg_fini_thread(g, tg)) {
+	lj_gc2_lease_release(&lease);
+	return 0;
+      }
+      /* Close every userdata-facing raw pointer before tombstoning the live
+      ** root or releasing TG storage. The body lease spans the full handoff. */
+      th->tg = NULL;
+      lj_thread_state_store_rel(th, NULL);
+      threading_live_remove(g, th);
+      lj_mem_freet(g, tg);
+      lj_gc2_lease_release(&lease);
+    }
+next_node:
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      return 0;  /* Corrupt/cyclic native-root metadata cannot be skipped. */
+    node = next;
+  }
+  return 1;
+}
+
 typedef struct ThreadingAttachCtx {
   global_State *g;
   TGState *tg;
@@ -1215,7 +1287,8 @@ static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
   if (ctx->tls_set)
     lj_thr_set_tg(NULL);
   if (!was_attached) {
-    lj_tg_fini_thread(ctx->g, ctx->tg);
+    if (!lj_tg_fini_thread(ctx->g, ctx->tg))
+      abort();
     free(ctx->tg);
   }
   /* Do not reclaim a registered foreign TG inline. Apart from competing with
@@ -1367,6 +1440,28 @@ static void threading_join_aborted_start(lua_State *L, LJThread *th,
   (void)lj_tg_reclaim_dead(G(L));
 }
 
+/* Finish a TG for which pthread_create never published a worker owner. A
+** racing GC arena/HugeTab admission may make checked physical teardown refuse
+** without waiting. In that case the existing live-root node keeps both the
+** userdata and th->tg authoritative until joined-world shutdown removes the
+** node and the userdata finalizer retries. joined=1 prevents shutdown from
+** attempting pthread_join on a handle which was never created. */
+static void threading_unstarted_tg_finish(lua_State *L, LJThread *th,
+					   TGState *tg)
+{
+  global_State *g = G(L);
+  if (!lj_tg_fini_thread(g, tg)) {
+    la_store32_rel(&th->joined, 1);
+    la_store32_rel(&th->state, LJ_THREAD_DONE);
+    threading_wake_thread(th);
+    return;
+  }
+  threading_live_remove(g, th);
+  th->tg = NULL;
+  lj_mem_freet(g, tg);
+  la_store32_rel(&th->state, LJ_THREAD_DONE);
+}
+
 #define LJLIB_MODULE_threading_thread
 
 LJLIB_CF(threading_thread_join)
@@ -1412,11 +1507,21 @@ LJLIB_CF(threading_thread___gc)
 	la_load32_acq(&th->joined) != 0) {
       (void)lj_tg_reclaim_dead(g);
       if (!threading_tg_is_registered(g, th->tg)) {
-	lj_tg_fini_thread(g, th->tg);
-	lj_mem_freet(g, th->tg);
+	TGState *tg = th->tg;
+	if (!lj_tg_fini_thread(g, tg)) {
+	  /* lua_close finalizes every userdata, including native-rooted ones.
+	  ** A retained live node is therefore the repeatable terminal owner; leave
+	  ** both pointers intact for lj_threading_live_retry_tgs_terminal(). */
+	  if (lj_tg_fini_state_acq(tg) == TG_FINI_RETRY &&
+	      lj_thread_live_node_acq(th) != NULL)
+	    return 0;
+	  abort();
+	}
 	th->tg = NULL;
 	lj_thread_state_store_rel(th, NULL);
-	} else {
+	threading_live_remove(g, th);
+	lj_mem_freet(g, tg);
+      } else {
 	/* The userdata is relinquishing the last external owner while an SSB
 	** publication still pins the embedded node storage. Let registry reclaim
 	** finalize it through lj_mem_* after the final pin is dropped. */
@@ -1990,21 +2095,13 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lj_tg_derive_prng(G(L), tg, th->thr.tid);
   lj_tg_store_thread_ud(tg, ud);
   if (!lj_state_rehome_stack(L1)) {
-    threading_live_remove(G(L), th);
     L1->tg_hint = L2TG(L);
-    lj_tg_fini_thread(G(L), tg);
-    lj_mem_freet(G(L), tg);
-    th->tg = NULL;
-    th->state = LJ_THREAD_DONE;
+    threading_unstarted_tg_finish(L, th, tg);
     lj_err_mem(L);
   }
   if (!threading_gc_enter(L, ud)) {
-    threading_live_remove(G(L), th);
     threading_rehome_unstarted_stack(L, L1, tg);
-    lj_tg_fini_thread(G(L), tg);
-    lj_mem_freet(G(L), tg);
-    th->tg = NULL;
-    th->state = LJ_THREAD_DONE;
+    threading_unstarted_tg_finish(L, th, tg);
     lj_err_callermsg(L, "VM shutdown in progress");
   }
   {
@@ -2015,12 +2112,8 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     if (rc != 0) {
       char errbuf[LJ_ERR_ERRNO_BUFSZ];
       const char *emsg = lj_err_strerrno(rc, errbuf, sizeof(errbuf));
-      threading_live_remove(G(L), th);
       threading_rehome_unstarted_stack(L, L1, tg);
-      lj_tg_fini_thread(G(L), tg);
-      lj_mem_freet(G(L), tg);
-      th->tg = NULL;
-      th->state = LJ_THREAD_DONE;
+      threading_unstarted_tg_finish(L, th, tg);
       threading_gc_leave(G(L));
       lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
       lj_err_callermsg(L, emsg);

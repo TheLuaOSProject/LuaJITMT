@@ -301,9 +301,11 @@ void lj_tg_fini(global_State *g)
     tg_root_anchor_fini(g, g->main_tg);
     lj_tg_fini_ssb(g->main_tg);
     lj_buf_free(g, &g->main_tg->tmpbuf);
-    if (lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB))
-      lj_arena_hugetab_fini(&g->main_tg->huge);
-    lj_arena_alloc_fini(&g->main_tg->alloc);
+    if (lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB) &&
+	!lj_arena_hugetab_fini_try(&g->main_tg->huge))
+      abort();
+    if (!lj_arena_alloc_fini_try(&g->main_tg->alloc))
+      abort();
   }
 }
 
@@ -341,36 +343,63 @@ void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid)
 
 static int tg_fini_thread(global_State *g, TGState *tg, int terminal)
 {
-  uint8_t expect = TG_FINI_LIVE;
+  uint8_t expect;
   if (!tg)
     return 1;
-  /* LIVE->BUSY is the physical-finalization LP. Valid runtime reclaimers and
-  ** the worker-retire owner are serialized, so observing BUSY is an ownership
-  ** violation, never a reason to wait. DONE release-publishes every pointer
-  ** clear and allocator unmap; a later worker-retire storage owner may then
-  ** call this routine idempotently before free(tg). */
-  if (!lj_tg_fini_state_cas(tg, &expect, TG_FINI_BUSY)) {
+  /* LIVE/RETRY->BUSY is one physical-finalization attempt. RETRY keeps the
+  ** enclosing TG authoritative when an inner HugeTab/arena certificate
+  ** refuses teardown; DONE release-publishes every pointer clear and unmap.
+  ** Valid reclaimers are serialized, so observing BUSY is still an ownership
+  ** violation rather than a reason to wait. */
+  for (;;) {
+    expect = lj_tg_fini_state_acq(tg);
     if (expect == TG_FINI_DONE)
       return 1;
-    /* Storage owners commonly finalize immediately before free(tg). BUSY can
-    ** therefore never degrade to a failed try result: doing so would let an
-    ** older void-style caller release storage under the active finalizer. */
-    abort();
+    if (expect == TG_FINI_BUSY ||
+	(expect != TG_FINI_LIVE && expect != TG_FINI_RETRY))
+      abort();
+    if (lj_tg_fini_state_cas(tg, &expect, TG_FINI_BUSY))
+      break;
+  }
+  /* PRE is non-destructive except for exact count-zero C|P reconciliation.
+  ** It keeps a blocked attempt retryable before owner-private roots/buffers
+  ** are discarded. Joined-world callers exclude a new lawful publisher after
+  ** this certificate pass. */
+  if (terminal && lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+      !lj_arena_hugetab_terminal_ready(&tg->huge)) {
+    lj_tg_fini_state_rel(tg, TG_FINI_RETRY);
+    return 0;
+  }
+  if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) &&
+      !lj_arena_alloc_terminal_ready(&tg->alloc)) {
+    lj_tg_fini_state_rel(tg, TG_FINI_RETRY);
+    return 0;
+  }
+  if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+    int done;
+    if (terminal) {
+      uint32_t unmapped;
+      done = lj_arena_hugetab_fini_all_try(&tg->huge, &unmapped);
+      UNUSED(unmapped);
+    } else {
+      done = lj_arena_hugetab_fini_try(&tg->huge);
+    }
+    if (!done) {
+      lj_tg_fini_state_rel(tg, TG_FINI_RETRY);
+      return 0;
+    }
+    lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_HUGETAB);
+    lj_arena_allocd_sethugetab(&tg->allocd, NULL);
   }
   lj_str_flush_num_credit(g, tg);
   tg_root_anchor_fini(g, tg);
   lj_tg_fini_ssb(tg);
   lj_buf_free(g, &tg->tmpbuf);
   lj_buf_init(NULL, &tg->tmpbuf);
-  if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
-    if (terminal)
-      (void)lj_arena_hugetab_fini_all(&tg->huge);
-    else
-      lj_arena_hugetab_fini(&tg->huge);
-    lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_HUGETAB);
-    lj_arena_allocd_sethugetab(&tg->allocd, NULL);
+  if (!lj_arena_alloc_fini_try(&tg->alloc)) {
+    lj_tg_fini_state_rel(tg, TG_FINI_RETRY);
+    return 0;
   }
-  lj_arena_alloc_fini(&tg->alloc);
   lj_tg_fini_state_rel(tg, TG_FINI_DONE);
   return 1;
 }
@@ -738,7 +767,8 @@ static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
 	!lj_arena_hugetab_transfer(&main_tg->huge, &tg->huge,
 				   lj_arena_alloc_owner_acq(&main_tg->alloc)))
       return 0;
-    lj_arena_hugetab_fini(&tg->huge);
+    if (!lj_arena_hugetab_fini_try(&tg->huge))
+      return 0;
     lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, NULL);
   }
@@ -920,7 +950,12 @@ restart:
 	continue;
       }
 	if (orphan && !tg_fini_thread(g, tg, 1)) {
-	  abort();  /* RECLAIMING cannot be rolled back to registry visibility. */
+	  /* RECLAIMING is already closed to new stable borrowers. Keep both the
+	  ** legacy-list link and raw storage owner for a later terminal retry; the
+	  ** next reclaim_begin explicitly accepts this exact zero-lease state. */
+	  prev = tg;
+	  tg = next;
+	  continue;
 	}
       if (prev) {
 	lj_tg_next_rel(prev, next);

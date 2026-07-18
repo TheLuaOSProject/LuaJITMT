@@ -1855,6 +1855,15 @@ void lj_arena_huge_unmap(void *p, size_t size)
   errno = olderr;
 }
 
+void lj_arena_huge_unmap_claimed(void *p, size_t size)
+{
+  int olderr = errno;
+  size_t mapsize = lj_arena_huge_mapsize(size);
+  if (p && mapsize)
+    arena_unmap_aligned((void *)lj_arena_of(p), mapsize);
+  errno = olderr;
+}
+
 static size_t hugetab_mapsize(uint32_t hbits)
 {
   size_t cap, hdr = offsetof(LJHugeTabHdr, ent);
@@ -1931,24 +1940,69 @@ static LJ_AINLINE int hugetab_root_pending(uint64_t meta)
   return (meta & LJ_HUGEF_ROOT_MASK) != 0;
 }
 
+/* The HugeTab slot retains mapping lifetime while this exact pointer-form
+** certificate is sampled. Plain mappings have no table-scan authority;
+** traversable mappings require both descriptor clearance and embedded token
+** NONE before a transition can expose destruction, reuse, or locator loss. */
+static LJ_AINLINE int hugetab_gc2_reclaim_clear_acq(const void *p,
+						     uint64_t meta)
+{
+  GCArena *a;
+  if (!p)
+    return 0;
+  /* Plain entries cannot publish a GC2 table traversal, and HugeTab accepts
+  ** synthetic addresses in metadata-only users/tests. Do not derive and
+  ** dereference a mapping header unless the slot itself says the allocation
+  ** is traversable. */
+  if (!(meta & LJ_HUGEF_TRAVERSABLE))
+    return 1;
+  a = lj_arena_of(p);
+  /* The same HugeTab implementation is also the small-arena registry. Its
+  ** key is the mapping base (cell zero), so it requires a mapping-wide
+  ** certificate rather than the one-huge-body exact-pointer predicate. */
+  if (p == (const void *)a)
+    return lj_arena_gc2_tokens_empty_acq(a) &&
+      lj_arena_gc2_desc_mapping_clear_acq(a);
+  return lj_arena_gc2_reclaim_ptr_clear_acq(a, p);
+}
+
+enum {
+  LJ_HUGETAB_FOLD_NONE = 0,
+  LJ_HUGETAB_FOLD_BLOCKED = 1,
+  LJ_HUGETAB_FOLD_SCHEDULED = 2,
+  LJ_HUGETAB_FOLD_FREEING = 3
+};
+
 /* Complete an irrevocable logical free only after the final slot-local owner
 ** has left. The fresh sentinel is release-published before the full-slot CAS
 ** which exposes FREEING without DEFER_FREE. A failed CAS may leave an earlier
-** sentinel, which is conservative and is repaired by any later live finish. */
+** sentinel, which is conservative and is repaired by any later live finish.
+** The caller must already retain the mapping through a reader/root/recovery/
+** BUSY claim; a stable HugeTab lookup alone is not a header lifetime lease. */
 static uint64_t hugetab_fold_deferred_free(const void *p, uint64_t meta,
-					    int *foldedp)
+					    int *progressp)
 {
-  int folded = (meta & LJ_HUGEF_DEFER_FREE) != 0 &&
+  int eligible = (meta & LJ_HUGEF_DEFER_FREE) != 0 &&
     hugetab_readers(meta) == 0 && !hugetab_recovery_pending(meta) &&
     !hugetab_root_pending(meta) && !(meta & LJ_HUGEF_BUSY);
+  int folded = eligible && hugetab_gc2_reclaim_clear_acq(p, meta);
+  int scheduled = eligible && !folded && !(meta & LJ_HUGEF_SWEEP_OLD);
   if (folded) {
     la_store64_rel(&lj_arena_of(p)->hdr.retire_epoch, ~(uint64_t)0);
     meta = (meta & ~(uint64_t)(LJ_HUGEF_DEFER_FREE|LJ_HUGEF_MARK|
 			       LJ_HUGEF_RETIRED|LJ_HUGEF_BUSY)) |
 	   LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD;
+  } else if (eligible) {
+    /* No slot-local owner remains, but a physical table scan still names the
+    ** mapping. Keep the logical free opaque and make it discoverable by the
+    ** bounded huge sweep, which retries only this certificate while DEFER is
+    ** present. The successful retry publishes the fresh-grace sentinel. */
+    meta |= LJ_HUGEF_SWEEP_OLD;
   }
-  if (foldedp)
-    *foldedp = folded;
+  if (progressp)
+    *progressp = folded ? LJ_HUGETAB_FOLD_FREEING :
+      (scheduled ? LJ_HUGETAB_FOLD_SCHEDULED :
+       (eligible ? LJ_HUGETAB_FOLD_BLOCKED : LJ_HUGETAB_FOLD_NONE));
   return meta;
 }
 
@@ -1992,6 +2046,75 @@ static int hugetab_cas_meta(LJHugeEnt *e, uint64_t addr, uint64_t oldmeta,
   return la_cas128(&e->slot, &exp, des);
 }
 
+/* Acquire one internal counted mapping lease from an exact stable slot. No
+** mapping byte is read before this full-slot CAS. A destructive transition
+** consumes the lease by requiring reader count one in its own full-slot CAS;
+** a nonterminal path releases it with the helper below. */
+static int hugetab_cert_lease_acquire(LJHugeEnt *e, uint64_t addr,
+				      uint64_t meta, uint64_t *leasedp)
+{
+  uint64_t leased;
+  if (hugetab_readers(meta) != 0)
+    return 0;
+  leased = meta + LJ_HUGETAB_READER_ONE;
+  if (!hugetab_cas_meta(e, addr, meta, leased))
+    return -1;
+  if (leasedp)
+    *leasedp = leased;
+  return 1;
+}
+
+static int hugetab_cert_lease_release(LJHugeEnt *e, uint64_t addr,
+				      const void *p, LJHugeInfo *hi)
+{
+  for (;;) {
+    uint64_t meta, next;
+    int progress;
+    if (la_load64_acq(&e->slot.lo) != addr)
+      return 0;
+    meta = la_load64_acq(&e->slot.hi);
+    if (la_load64_acq(&e->slot.lo) != addr || hugetab_readers(meta) == 0)
+      return 0;
+    next = meta - LJ_HUGETAB_READER_ONE;
+    next = hugetab_fold_deferred_free(p, next, &progress);
+    if (!hugetab_cas_meta(e, addr, meta, next))
+      continue;
+    hugetab_decode(next, hi);
+    if (progress != LJ_HUGETAB_FOLD_NONE)
+      arena_progress_wake(lj_arena_of(p));
+    return 1;
+  }
+}
+
+/* Consume this caller's counted lease while durably publishing an irrevocable
+** logical free. The actual slot remains reader-pinned while the held-only fold
+** samples descriptor/token state; another reader/root/recovery owner simply
+** carries DEFER_FREE onward to its own release. */
+static int hugetab_cert_lease_defer(LJHugeEnt *e, uint64_t addr,
+				    const void *p, LJHugeInfo *hi,
+				    int *progressp)
+{
+  for (;;) {
+    uint64_t meta, next;
+    int progress;
+    if (la_load64_acq(&e->slot.lo) != addr)
+      return 0;
+    meta = la_load64_acq(&e->slot.hi);
+    if (la_load64_acq(&e->slot.lo) != addr || hugetab_readers(meta) == 0)
+      return 0;
+    next = (meta - LJ_HUGETAB_READER_ONE) | LJ_HUGEF_DEFER_FREE;
+    next = hugetab_fold_deferred_free(p, next, &progress);
+    if (!hugetab_cas_meta(e, addr, meta, next))
+      continue;
+    hugetab_decode(next, hi);
+    if (progressp)
+      *progressp = progress;
+    if (progress != LJ_HUGETAB_FOLD_NONE)
+      arena_progress_wake(lj_arena_of(p));
+    return 1;
+  }
+}
+
 static int hugetab_has_lifetime_claim(LJHugeTabHdr *h)
 {
   uint32_t i, cap;
@@ -2001,13 +2124,11 @@ static int hugetab_has_lifetime_claim(LJHugeTabHdr *h)
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
     uint64_t addr = la_load64_acq(&e->slot.lo);
-    if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) == addr &&
-	  (hugetab_recovery_pending(meta) || hugetab_root_pending(meta) ||
-	   hugetab_readers(meta) != 0 || (meta & LJ_HUGEF_DEFER_FREE)))
-	return 1;
-    }
+    /* Ordinary fini only releases an empty side table. Any live slot is an
+    ** authoritative locator regardless of its transient metadata, and must
+    ** be transferred/tombstoned by the terminal owner before table unmap. */
+    if (addr > LJ_HUGETAB_TOMBSTONE)
+      return 1;
   }
   return 0;
 }
@@ -2030,7 +2151,7 @@ int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits)
   return 1;
 }
 
-void lj_arena_hugetab_fini(HugeTab *ht)
+int lj_arena_hugetab_fini_try(HugeTab *ht)
 {
   int olderr = errno;
   if (ht && ht->h) {
@@ -2038,21 +2159,31 @@ void lj_arena_hugetab_fini(HugeTab *ht)
     size_t mapsize = h->mapsize;
     if (hugetab_has_lifetime_claim(h)) {
       errno = olderr;
-      return;  /* Retain the authoritative locator until recovery drains. */
+      return 0;  /* Retain the authoritative locator until recovery drains. */
     }
     ht->h = NULL;
     arena_os_unmap((void *)h, mapsize);
   }
   errno = olderr;
+  return 1;
 }
 
-uint32_t lj_arena_hugetab_fini_all(HugeTab *ht)
+void lj_arena_hugetab_fini(HugeTab *ht)
+{
+  (void)lj_arena_hugetab_fini_try(ht);
+}
+
+int lj_arena_hugetab_fini_all_try(HugeTab *ht, uint32_t *unmappedp)
 {
   int olderr = errno;
   LJHugeTabHdr *h = ht ? ht->h : NULL;
   uint32_t i, cap, unmapped = 0, blocked = 0;
-  if (!h)
-    return 0;
+  if (unmappedp)
+    *unmappedp = 0;
+  if (!h) {
+    errno = olderr;
+    return 1;
+  }
   /* Terminal single-owner destruction. Ordinary fini deliberately releases
   ** only the side table because live mappings may already have transferred to
   ** another allocator. Here every slot is detached first and a mapping is
@@ -2069,7 +2200,8 @@ uint32_t lj_arena_hugetab_fini_all(HugeTab *ht)
     LJHugeEnt *e = &h->ent[i];
     for (;;) {
       uint64_t addr = la_load64_acq(&e->slot.lo);
-      uint64_t meta;
+      uint64_t meta, leased;
+      int lease;
       la_u128 exp, des;
       if (addr <= LJ_HUGETAB_TOMBSTONE)
 	break;
@@ -2081,15 +2213,33 @@ uint32_t lj_arena_hugetab_fini_all(HugeTab *ht)
 	blocked = 1;
 	break;  /* A lifetime owner still names this exact mapping. */
       }
+      lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+      if (lease < 0)
+	continue;
+      if (lease == 0) {
+	blocked = 1;
+	break;
+      }
+      if (!hugetab_gc2_reclaim_clear_acq(
+	    (const void *)(uintptr_t)addr, leased)) {
+	(void)hugetab_cert_lease_release(e, addr,
+	  (const void *)(uintptr_t)addr, NULL);
+	blocked = 1;
+	break;
+      }
       exp.lo = addr;
-      exp.hi = meta;
+      exp.hi = leased;
       des.lo = LJ_HUGETAB_TOMBSTONE;
       des.hi = 0;
-      if (!la_cas128(&e->slot, &exp, des))
-	continue;
+	if (!la_cas128(&e->slot, &exp, des)) {
+	(void)hugetab_cert_lease_release(e, addr,
+	  (const void *)(uintptr_t)addr, NULL);
+	blocked = 1;
+	break;
+      }
       {
 	size_t size = hugetab_size(meta);
-	lj_arena_huge_unmap((void *)(uintptr_t)addr, size);
+	lj_arena_huge_unmap_claimed((void *)(uintptr_t)addr, size);
 	unmapped++;
       }
       break;
@@ -2098,14 +2248,104 @@ uint32_t lj_arena_hugetab_fini_all(HugeTab *ht)
   /* Keep the table itself mapped while any recovery entry remains. A later
   ** terminal retry may clear/discard that state and finish the exact suffix;
   ** dropping the table now would erase the only locator for retained maps. */
-  if (!blocked)
-    lj_arena_hugetab_fini(ht);
+  if (!blocked && !lj_arena_hugetab_fini_try(ht))
+    blocked = 1;
+  if (unmappedp)
+    *unmappedp = unmapped;
   errno = olderr;
+  return !blocked && (!ht || ht->h == NULL);
+}
+
+uint32_t lj_arena_hugetab_fini_all(HugeTab *ht)
+{
+  uint32_t unmapped = 0;
+  (void)lj_arena_hugetab_fini_all_try(ht, &unmapped);
   return unmapped;
 }
 
+int lj_arena_hugetab_terminal_certificate_ready(HugeTab *ht)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint32_t i, cap;
+  if (!h)
+    return 1;
+  /* This is earlier than object freeall, so root/recovery/destructor owners
+  ** may legitimately remain. The caller has joined every thread and worker;
+  ** that outer quiescence retains each live slot while this read-only pass
+  ** rejects only table-scan authority that freeall cannot safely overtake. */
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    LJHugeEnt *e = &h->ent[i];
+    for (;;) {
+      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t meta;
+      if (addr <= LJ_HUGETAB_TOMBSTONE)
+	break;
+      meta = la_load64_acq(&e->slot.hi);
+      if (la_load64_acq(&e->slot.lo) != addr)
+	continue;
+      /* Root/recovery/destructor lanes are intentionally left for freeall,
+      ** but an ordinary counted reader is external byte authority. Recovery
+      ** plus DEFER/root is also not terminal-discardable without that owner. */
+      if (hugetab_readers(meta) != 0 ||
+	  (hugetab_recovery_pending(meta) &&
+	   (meta & LJ_HUGEF_DEFER_FREE) && hugetab_root_pending(meta)))
+	return 0;
+      if (!hugetab_gc2_reclaim_clear_acq(
+	    (const void *)(uintptr_t)addr, meta))
+	return 0;
+      break;
+    }
+  }
+  return ht->h == h;
+}
+
+int lj_arena_hugetab_terminal_ready(HugeTab *ht)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint32_t i, cap;
+  if (!h)
+    return 1;
+  /* Joined-world preflight still takes the ordinary counted lease: this keeps
+  ** the certificate proof local to the same protocol as destructive teardown
+  ** and makes an accidental lawful publisher lose one exact slot CAS. The
+  ** wrapper itself remains protected by the caller's joined-world contract. */
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    LJHugeEnt *e = &h->ent[i];
+    for (;;) {
+      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t meta, leased;
+      int lease, clear;
+      if (addr <= LJ_HUGETAB_TOMBSTONE)
+	break;
+      meta = la_load64_acq(&e->slot.hi);
+      if (la_load64_acq(&e->slot.lo) != addr)
+	continue;
+      if (hugetab_recovery_pending(meta) || hugetab_root_pending(meta) ||
+	  hugetab_readers(meta) != 0)
+	return 0;
+      lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+      if (lease < 0)
+	continue;
+      if (lease == 0)
+	return 0;
+      clear = hugetab_gc2_reclaim_clear_acq(
+	(const void *)(uintptr_t)addr, leased);
+      if (!hugetab_cert_lease_release(e, addr,
+	    (const void *)(uintptr_t)addr, NULL))
+	return 0;
+      if (!clear)
+	return 0;
+      break;
+    }
+  }
+  return ht->h == h;
+}
+
 static int hugetab_forget_terminal(HugeTab *ht, const void *p,
-				    LJHugeInfo *hi, int allow_root)
+				    LJHugeInfo *hi, int allow_root,
+				    int alternate_locator)
 {
   int olderr = errno;
   LJHugeTabHdr *h = ht ? ht->h : NULL;
@@ -2115,32 +2355,48 @@ static int hugetab_forget_terminal(HugeTab *ht, const void *p,
     return 0;
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
+    uint64_t leased;
+    int lease;
     la_u128 exp, des;
     if (!hugetab_search(h, addr, &e, &meta)) {
       errno = olderr;
       return 0;
     }
-	if (hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
+    if (hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
 	(!allow_root && hugetab_root_pending(meta))) {
       errno = olderr;
       return 0;
     }
+    lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+    if (lease < 0)
+      continue;
+    if (lease == 0) {
+      errno = olderr;
+      return 0;
+    }
+    if (!alternate_locator &&
+	!hugetab_gc2_reclaim_clear_acq(p, leased)) {
+	(void)hugetab_cert_lease_release(e, addr, p, NULL);
+      errno = olderr;
+      return 0;
+    }
     exp.lo = addr;
-    exp.hi = meta;
+    exp.hi = leased;
     des.lo = LJ_HUGETAB_TOMBSTONE;
     des.hi = 0;
     if (la_cas128(&e->slot, &exp, des)) {
-      hugetab_decode(meta, hi);
+      hugetab_decode(leased - LJ_HUGETAB_READER_ONE, hi);
       errno = olderr;
       return 1;
     }
+    (void)hugetab_cert_lease_release(e, addr, p, NULL);
   }
 }
 
 int lj_arena_hugetab_forget_terminal(HugeTab *ht, const void *p,
 				      LJHugeInfo *hi)
 {
-  return hugetab_forget_terminal(ht, p, hi, 0);
+  return hugetab_forget_terminal(ht, p, hi, 0, 0);
 }
 
 static int hugetab_insert(HugeTab *ht, void *p, size_t size,
@@ -2307,18 +2563,21 @@ static int hugetab_root_complete(HugeTab *ht, const void *p,
       return LJ_ARENA_HUGE_ROOT_COMPLETE_LOST;
     if (from != LJ_ARENA_ROOT_NONE && to == LJ_ARENA_ROOT_NONE &&
 	(meta & LJ_HUGEF_DEFER_FREE)) {
-      int folded;
+      int progress;
       /* Relinquish root ownership in either completion order. A remaining
       ** reader/recovery/BUSY owner keeps DEFER_FREE durable; its final CAS is
       ** then responsible for the same fold. */
       next = meta & ~(uint64_t)LJ_HUGEF_ROOT_MASK;
-      next = hugetab_fold_deferred_free(p, next, &folded);
-      if (folded && retire_epoch)
+      next = hugetab_fold_deferred_free(p, next, &progress);
+      if (progress == LJ_HUGETAB_FOLD_FREEING && retire_epoch)
 	la_store64_rel(&lj_arena_of(p)->hdr.retire_epoch, retire_epoch);
       if (hugetab_cas_meta(e, addr, meta, next)) {
 	hugetab_decode(next, hi);
-	return folded ? LJ_ARENA_HUGE_ROOT_COMPLETE_SWEEP :
-			LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE;
+	if (progress != LJ_HUGETAB_FOLD_NONE)
+	  arena_progress_wake(lj_arena_of(p));
+	return progress == LJ_HUGETAB_FOLD_FREEING ?
+	       LJ_ARENA_HUGE_ROOT_COMPLETE_SWEEP :
+	       LJ_ARENA_HUGE_ROOT_COMPLETE_LIVE;
       }
       continue;
     }
@@ -2439,16 +2698,19 @@ int lj_arena_hugetab_recovery_complete(HugeTab *ht, const void *p,
       continue;
     }
     {
-      int folded;
+      int progress;
       /* Clear this recovery owner in either reader-completion order. With an
       ** admitted reader, IDLE|DEFER_FREE is the intentional handoff state and
       ** the last reader performs the terminal CAS. */
       next = meta & ~(uint64_t)LJ_HUGEF_RECOVERY_MASK;
-      next = hugetab_fold_deferred_free(p, next, &folded);
+      next = hugetab_fold_deferred_free(p, next, &progress);
       if (hugetab_cas_meta(e, addr, meta, next)) {
 	hugetab_decode(next, hi);
-	return folded ? LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP :
-			LJ_ARENA_HUGE_RECOVERY_COMPLETE_LIVE;
+	if (progress != LJ_HUGETAB_FOLD_NONE)
+	  arena_progress_wake(lj_arena_of(p));
+	return progress == LJ_HUGETAB_FOLD_FREEING ?
+	       LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP :
+	       LJ_ARENA_HUGE_RECOVERY_COMPLETE_LIVE;
       }
     }
   }
@@ -2472,6 +2734,8 @@ int lj_arena_hugetab_recovery_discard_terminal(HugeTab *ht, const void *p,
       return LJ_ARENA_HUGE_RECOVERY_TERMINAL_LOST;
     if (meta & LJ_HUGEF_DEFER_FREE) {
       la_u128 exp, des;
+      if (!hugetab_gc2_reclaim_clear_acq(p, meta))
+	return LJ_ARENA_HUGE_RECOVERY_TERMINAL_LOST;
       exp.lo = addr;
       exp.hi = meta;
       des.lo = LJ_HUGETAB_TOMBSTONE;
@@ -3011,6 +3275,44 @@ int lj_arena_hugetab_reader_acquire(HugeTab *ht, const void *p,
 	 LJ_ARENA_HUGE_READER_MISSING : result;
 }
 
+int lj_arena_hugetab_sweep_reader_acquire(HugeTab *ht, const void *p,
+					    LJHugeReader *reader,
+					    LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  LJHugeEnt *e;
+  uint64_t addr, meta, next;
+  if (!h || !p || !reader || reader->h || reader->base || reader->size)
+    return LJ_ARENA_HUGE_READER_MISSING;
+  addr = (uint64_t)(uintptr_t)p;
+  if (!hugetab_search(h, addr, &e, &meta))
+    return LJ_ARENA_HUGE_READER_MISSING;
+  /* Enumeration is only a hint. This exact CAS is the body/header admission
+  ** LP and therefore closes a DEFER/BUSY publication race without reading a
+  ** single mapping byte first. FREEING needs only the allocator header for its
+  ** grace epoch; an ordinary live body additionally requires READY identity. */
+  if (!(meta & LJ_HUGEF_SWEEP_OLD) ||
+      (meta & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_BUSY)) ||
+      (!(meta & LJ_HUGEF_FREEING) &&
+       (meta & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY)) !=
+	 (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY))) {
+    hugetab_decode(meta, hi);
+    return LJ_ARENA_HUGE_READER_MISSING;
+  }
+  if (hugetab_readers(meta) == LJ_HUGETAB_READER_MAX) {
+    hugetab_decode(meta, hi);
+    return LJ_ARENA_HUGE_READER_OVERFLOW;
+  }
+  next = meta + LJ_HUGETAB_READER_ONE;
+  if (!hugetab_cas_meta(e, addr, meta, next))
+    return LJ_ARENA_HUGE_READER_MISSING;
+  reader->h = h;
+  reader->base = (void *)(uintptr_t)addr;
+  reader->size = (uint32_t)hugetab_size(next);
+  hugetab_decode(next, hi);
+  return LJ_ARENA_HUGE_READER_ACQUIRED;
+}
+
 int lj_arena_hugetab_reader_range_acquire(HugeTab *ht, const void *p,
 					    void **basep,
 					    LJHugeReader *reader,
@@ -3082,18 +3384,18 @@ int lj_arena_hugetab_reader_release(LJHugeReader *reader, LJHugeInfo *hi)
   addr = (uint64_t)(uintptr_t)base;
   for (;;) {
     uint64_t next;
-    int folded;
+    int progress;
     if (!hugetab_search(h, addr, &e, &meta) || hugetab_readers(meta) == 0)
       return LJ_ARENA_HUGE_READER_RELEASE_LOST;
     next = meta - LJ_HUGETAB_READER_ONE;
-    next = hugetab_fold_deferred_free(base, next, &folded);
+    next = hugetab_fold_deferred_free(base, next, &progress);
     if (!hugetab_cas_meta(e, addr, meta, next))
       continue;
     hugetab_decode(next, hi);
-    if (folded) {
+    if (progress != LJ_HUGETAB_FOLD_NONE)
       arena_progress_wake(lj_arena_of(base));
+    if (progress == LJ_HUGETAB_FOLD_FREEING)
       return LJ_ARENA_HUGE_READER_HANDOFF;
-    }
     return LJ_ARENA_HUGE_READER_RELEASED;
   }
 }
@@ -3234,7 +3536,8 @@ void lj_arena_hugetab_abort_sweep(HugeTab *ht)
       while (la_load64_acq(&e->slot.lo) == addr &&
 	     (meta & LJ_HUGEF_SWEEP_OLD) &&
 	     !(meta & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING|
-		       LJ_HUGEF_TICKET|LJ_HUGEF_BUSY))) {
+		       LJ_HUGEF_TICKET|LJ_HUGEF_BUSY|
+		       LJ_HUGEF_DEFER_FREE))) {
 	uint64_t next = (meta | LJ_HUGEF_MARK) &
 			~(uint64_t)LJ_HUGEF_SWEEP_OLD;
 	if (hugetab_cas_meta(e, addr, meta, next))
@@ -3256,33 +3559,63 @@ void lj_arena_hugetab_finish_sweep(HugeTab *ht, int preserve_marks)
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
-    if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
+    for (;;) {
+      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t meta;
+      int lease;
+      const void *p;
+      if (addr <= LJ_HUGETAB_TOMBSTONE)
+	break;
+      meta = la_load64_acq(&e->slot.hi);
+      if (la_load64_acq(&e->slot.lo) != addr)
+	continue;
+      if (!(meta & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK)) ||
+	  (meta & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK)) !=
+	    (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK) ||
+	  hugetab_recovery_pending(meta) || hugetab_readers(meta) != 0 ||
+	  (meta & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING|LJ_HUGEF_TICKET|
+		   LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE)))
+	break;
+      lease = hugetab_cert_lease_acquire(e, addr, meta, NULL);
+      if (lease < 0)
+	continue;
+      if (lease == 0)
+	break;
+      p = (const void *)(uintptr_t)addr;
       for (;;) {
+	uint64_t current = la_load64_acq(&e->slot.hi);
 	uint64_t next;
+	GCArena *a;
 	if (la_load64_acq(&e->slot.lo) != addr ||
-	    !(meta & LJ_HUGEF_SWEEP_OLD) ||
-	    !(meta & LJ_HUGEF_MARK) ||
-	    hugetab_recovery_pending(meta) ||
-	    (meta & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING|
-		     LJ_HUGEF_TICKET|LJ_HUGEF_BUSY)) ||
-	    la_loadptr_acq((void *const *)&lj_arena_of(
-	      (void *)(uintptr_t)addr)->hdr.retire_obj) != NULL)
+	    hugetab_readers(current) == 0)
 	  break;
-	next = meta & ~(uint64_t)LJ_HUGEF_SWEEP_OLD;
-	if (!preserve_marks)
-	  next &= ~(uint64_t)LJ_HUGEF_MARK;
-	if (hugetab_cas_meta(e, addr, meta, next)) {
-	  GCArena *a = lj_arena_of((void *)(uintptr_t)addr);
-	  la_store64_rel(&a->hdr.retire_epoch, 0);
-	  la_storeptr_rel(&a->hdr.retire_obj, NULL);
+	if ((current & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK)) !=
+	      (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK) ||
+	    hugetab_recovery_pending(current) ||
+	    (current & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING|
+		       LJ_HUGEF_TICKET|LJ_HUGEF_BUSY|
+		       LJ_HUGEF_DEFER_FREE))) {
+	  (void)hugetab_cert_lease_release(e, addr, p, NULL);
 	  break;
 	}
-	if (la_load64_acq(&e->slot.lo) != addr)
+	a = lj_arena_of(p);
+	if (la_loadptr_acq((void *const *)&a->hdr.retire_obj) != NULL) {
+	  (void)hugetab_cert_lease_release(e, addr, p, NULL);
 	  break;
-	meta = la_load64_acq(&e->slot.hi);
+	}
+	next = current & ~(uint64_t)LJ_HUGEF_SWEEP_OLD;
+	if (!preserve_marks)
+	  next &= ~(uint64_t)LJ_HUGEF_MARK;
+	if (!hugetab_cas_meta(e, addr, current, next))
+	  continue;
+	/* The reader remains in next until both final header stores publish. A
+	** racing free can only add DEFER and is folded by the release below. */
+	la_store64_rel(&a->hdr.retire_epoch, 0);
+	la_storeptr_rel(&a->hdr.retire_obj, NULL);
+	(void)hugetab_cert_lease_release(e, addr, p, NULL);
+	break;
       }
+      break;
     }
   }
 }
@@ -3367,7 +3700,7 @@ int lj_arena_hugetab_retire(HugeTab *ht, const void *p, const void *obj,
     /* MARK may be added while BUSY is held. Preserve it and publish TICKET
     ** only after the exact header fields are release-visible. */
     for (;;) {
-      int folded;
+      int progress;
       next = (busy | LJ_HUGEF_TICKET) & ~(uint64_t)LJ_HUGEF_BUSY;
 	if (hugetab_recovery_pending(busy))
 	  next = (next | LJ_HUGEF_MARK) & ~(uint64_t)LJ_HUGEF_RETIRED;
@@ -3375,9 +3708,11 @@ int lj_arena_hugetab_retire(HugeTab *ht, const void *p, const void *obj,
 	  next |= LJ_HUGEF_RETIRED;
       else
 	next &= ~(uint64_t)LJ_HUGEF_RETIRED;
-      next = hugetab_fold_deferred_free(p, next, &folded);
+      next = hugetab_fold_deferred_free(p, next, &progress);
       if (hugetab_cas_meta(e, addr, busy, next)) {
 	hugetab_decode(next, hi);
+	if (progress != LJ_HUGETAB_FOLD_NONE)
+	  arena_progress_wake(lj_arena_of(p));
 	return (next & LJ_HUGEF_MARK) ? 2 : 1;
       }
       if (la_load64_acq(&e->slot.lo) != addr)
@@ -3389,6 +3724,9 @@ int lj_arena_hugetab_retire(HugeTab *ht, const void *p, const void *obj,
   }
 }
 
+static int hugetab_destruct_abandon(LJHugeEnt *e, uint64_t addr,
+				    uint64_t prior);
+
 int lj_arena_hugetab_claim_freeing(HugeTab *ht, const void *p,
 					    LJHugeInfo *hi)
 {
@@ -3399,7 +3737,8 @@ int lj_arena_hugetab_claim_freeing(HugeTab *ht, const void *p,
     return 0;
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
-    uint64_t next;
+    uint64_t leased;
+    int lease;
     if (!hugetab_search(h, addr, &e, &meta))
       return 0;
     if (!(meta & LJ_HUGEF_RETIRED) || hugetab_readers(meta) != 0 ||
@@ -3408,10 +3747,58 @@ int lj_arena_hugetab_claim_freeing(HugeTab *ht, const void *p,
 	(meta & (LJ_HUGEF_MARK|LJ_HUGEF_FREEING|LJ_HUGEF_BUSY|
 		 LJ_HUGEF_DEFER_FREE)))
       return 0;
-    next = (meta & ~(uint64_t)LJ_HUGEF_RETIRED) | LJ_HUGEF_FREEING;
-    if (hugetab_cas_meta(e, addr, meta, next)) {
-      hugetab_decode(next, hi);
-      return 1;
+    lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+    if (lease < 0)
+      continue;
+    if (lease == 0)
+      return 0;
+    if (!hugetab_gc2_reclaim_clear_acq(p, leased)) {
+      (void)hugetab_cert_lease_release(e, addr, p, NULL);
+      return 0;
+    }
+    for (;;) {
+      uint64_t current = la_load64_acq(&e->slot.hi);
+      uint64_t prior, next;
+      if (la_load64_acq(&e->slot.lo) != addr ||
+	  hugetab_readers(current) == 0)
+	return 0;
+      if (hugetab_readers(current) != 1 ||
+	  !(current & LJ_HUGEF_RETIRED) ||
+	  hugetab_recovery_pending(current) ||
+	  hugetab_root_pending(current) ||
+	  (current & (LJ_HUGEF_MARK|LJ_HUGEF_FREEING|LJ_HUGEF_BUSY|
+		      LJ_HUGEF_DEFER_FREE))) {
+	(void)hugetab_cert_lease_release(e, addr, p, NULL);
+	return 0;
+      }
+      prior = current - LJ_HUGETAB_READER_ONE;
+      next = (prior & ~(uint64_t)LJ_HUGEF_RETIRED) |
+	LJ_HUGEF_FREEING|LJ_HUGEF_BUSY;
+      if (!hugetab_cas_meta(e, addr, current, next))
+	continue;
+      /* BUSY atomically replaces the counted lease. Recheck the independent
+      ** descriptor/token word before returning semantic body ownership. */
+      for (;;) {
+	uint64_t owned = la_load64_acq(&e->slot.hi);
+	uint64_t publish;
+	if (la_load64_acq(&e->slot.lo) != addr ||
+	    (owned & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) !=
+	      (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY))
+	  return 0;
+	if ((owned & (LJ_HUGEF_MARK|LJ_HUGEF_DEFER_FREE)) ||
+	    hugetab_readers(owned) != 0 ||
+	    hugetab_recovery_pending(owned) ||
+	    hugetab_root_pending(owned) ||
+	    !hugetab_gc2_reclaim_clear_acq(p, owned)) {
+	  (void)hugetab_destruct_abandon(e, addr, prior);
+	  return 0;
+	}
+	publish = owned & ~(uint64_t)LJ_HUGEF_BUSY;
+	if (hugetab_cas_meta(e, addr, owned, publish)) {
+	  hugetab_decode(publish, hi);
+	  return 1;
+	}
+      }
     }
   }
 }
@@ -3455,7 +3842,7 @@ int lj_arena_hugetab_finish_live_ticket(HugeTab *ht, const void *p,
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
     uint64_t next;
-    int folded;
+    int progress;
     if (!hugetab_search(h, addr, &e, &meta))
       return 0;
     if ((meta & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET|LJ_HUGEF_BUSY)) !=
@@ -3463,9 +3850,11 @@ int lj_arena_hugetab_finish_live_ticket(HugeTab *ht, const void *p,
 	(meta & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING)))
       return 0;
     next = meta & ~(uint64_t)(LJ_HUGEF_TICKET|LJ_HUGEF_BUSY);
-    next = hugetab_fold_deferred_free(p, next, &folded);
+    next = hugetab_fold_deferred_free(p, next, &progress);
     if (hugetab_cas_meta(e, addr, meta, next)) {
       hugetab_decode(next, hi);
+      if (progress != LJ_HUGETAB_FOLD_NONE)
+	arena_progress_wake(lj_arena_of(p));
       return 1;
     }
   }
@@ -3478,6 +3867,45 @@ enum {
   LJ_HUGE_EXT_CONTENDED = 3
 };
 
+/* Undo only this pre-destructor's opaque claim after a late descriptor veto.
+** FREEING rejects new readers/roots/recovery, but an external logical free may
+** still add DEFER_FREE while BUSY is held. Preserve that durable intent and
+** every unrelated concurrent metadata change. MARK/RETIRED were cleared by
+** the claim itself, so conservatively restore their pre-claim liveness state
+** (with MARK dominant) before releasing or handing off the opaque claim. */
+static int hugetab_destruct_abandon(LJHugeEnt *e, uint64_t addr,
+				    uint64_t prior)
+{
+  for (;;) {
+    uint64_t current = la_load64_acq(&e->slot.hi);
+    uint64_t restore;
+    int wake = 0;
+    if (la_load64_acq(&e->slot.lo) != addr ||
+	(current & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) !=
+	  (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY))
+      return 0;
+    restore = current & ~(uint64_t)(LJ_HUGEF_FREEING|LJ_HUGEF_BUSY);
+    if ((current | prior) & LJ_HUGEF_MARK) {
+      restore = (restore | LJ_HUGEF_MARK) & ~(uint64_t)LJ_HUGEF_RETIRED;
+    } else if (prior & LJ_HUGEF_RETIRED) {
+      restore |= LJ_HUGEF_RETIRED;
+    }
+    if (restore & LJ_HUGEF_DEFER_FREE) {
+      uint64_t before = restore;
+      int progress;
+      restore = hugetab_fold_deferred_free(
+	(const void *)(uintptr_t)addr, restore, &progress);
+      wake = progress != LJ_HUGETAB_FOLD_NONE ||
+	(!(before & LJ_HUGEF_SWEEP_OLD) && (restore & LJ_HUGEF_SWEEP_OLD));
+    }
+    if (hugetab_cas_meta(e, addr, current, restore)) {
+      if (wake)
+	arena_progress_wake(lj_arena_of((void *)(uintptr_t)addr));
+      return 1;
+    }
+  }
+}
+
 int lj_arena_hugetab_destruct_acquire(HugeTab *ht, const void *p,
 					       LJHugeInfo *hi)
 {
@@ -3488,7 +3916,8 @@ int lj_arena_hugetab_destruct_acquire(HugeTab *ht, const void *p,
     return LJ_ARENA_DESTRUCT_LOST;
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
-    uint64_t next;
+    uint64_t leased;
+    int lease;
     if (!hugetab_search(h, addr, &e, &meta))
       return LJ_ARENA_DESTRUCT_LOST;
     if (meta & LJ_HUGEF_FREEING) {
@@ -3501,14 +3930,47 @@ int lj_arena_hugetab_destruct_acquire(HugeTab *ht, const void *p,
     if ((meta & LJ_HUGEF_DEFER_FREE) || hugetab_readers(meta) != 0 ||
 	hugetab_recovery_pending(meta) || hugetab_root_pending(meta) ||
 	(meta & LJ_HUGEF_BUSY)) {
-      hugetab_decode(meta, hi);
-      return LJ_ARENA_DESTRUCT_LOST;
+	hugetab_decode(meta, hi);
+	return LJ_ARENA_DESTRUCT_LOST;
     }
-    next = (meta & ~(uint64_t)(LJ_HUGEF_MARK|LJ_HUGEF_RETIRED)) |
-	   LJ_HUGEF_FREEING|LJ_HUGEF_BUSY;
-    if (hugetab_cas_meta(e, addr, meta, next)) {
-      if (next & LJ_HUGEF_SWEEP_OLD)
-	la_store64_rel(&lj_arena_of(p)->hdr.retire_epoch, ~(uint64_t)0);
+    lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+    if (lease < 0)
+	continue;
+    if (lease == 0)
+	return LJ_ARENA_DESTRUCT_LOST;
+    if (!hugetab_gc2_reclaim_clear_acq(p, leased)) {
+	(void)hugetab_cert_lease_release(e, addr, p, NULL);
+	return LJ_ARENA_DESTRUCT_LOST;
+    }
+    for (;;) {
+	uint64_t current = la_load64_acq(&e->slot.hi);
+	uint64_t prior, next;
+	if (la_load64_acq(&e->slot.lo) != addr ||
+	    hugetab_readers(current) == 0)
+	  return LJ_ARENA_DESTRUCT_LOST;
+	if (hugetab_readers(current) != 1 ||
+	    hugetab_recovery_pending(current) ||
+	    hugetab_root_pending(current) ||
+	    (current & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING|
+			LJ_HUGEF_BUSY))) {
+	  (void)hugetab_cert_lease_release(e, addr, p, NULL);
+	  return LJ_ARENA_DESTRUCT_LOST;
+	}
+	prior = current - LJ_HUGETAB_READER_ONE;
+	next = (prior & ~(uint64_t)(LJ_HUGEF_MARK|LJ_HUGEF_RETIRED)) |
+	  LJ_HUGEF_FREEING|LJ_HUGEF_BUSY;
+	if (!hugetab_cas_meta(e, addr, current, next))
+	  continue;
+	if (next & LJ_HUGEF_SWEEP_OLD)
+	  la_store64_rel(&lj_arena_of(p)->hdr.retire_epoch, ~(uint64_t)0);
+	/* Lawful publishers participate in the counted-reader handshake and would
+	** have defeated the sole-reader CAS above. This second sample is defensive
+	** containment for joined-world raw fault injection; the successful first
+	** sample plus destructive CAS is the production reclamation cutoff. */
+	if (!hugetab_gc2_reclaim_clear_acq(p, next)) {
+	  (void)hugetab_destruct_abandon(e, addr, prior);
+	  return LJ_ARENA_DESTRUCT_LOST;
+      }
       hugetab_decode(next, hi);
       return LJ_ARENA_DESTRUCT_ACQUIRED;
     }
@@ -3529,7 +3991,8 @@ static int hugetab_claim_external_free(HugeTab *ht, const void *p,
     return LJ_HUGE_EXT_MISSING;
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
-    uint64_t next;
+    uint64_t leased;
+    int lease;
     if (!hugetab_search(h, addr, &e, &meta))
       return LJ_HUGE_EXT_MISSING;
     if (require_sweep && !(meta & LJ_HUGEF_SWEEP_OLD))
@@ -3547,6 +4010,8 @@ static int hugetab_claim_external_free(HugeTab *ht, const void *p,
       uint64_t deferred = meta | LJ_HUGEF_DEFER_FREE;
 	if (hugetab_cas_meta(e, addr, meta, deferred)) {
 	hugetab_decode(deferred, hi);
+	if (deferred & LJ_HUGEF_SWEEP_OLD)
+	  arena_progress_wake(lj_arena_of(p));
 	return LJ_HUGE_EXT_CONTENDED;
       }
       continue;
@@ -3555,11 +4020,61 @@ static int hugetab_claim_external_free(HugeTab *ht, const void *p,
       hugetab_decode(meta, hi);
       return LJ_HUGE_EXT_OWNED;
     }
-    next = (meta & ~(uint64_t)(LJ_HUGEF_MARK|LJ_HUGEF_RETIRED)) |
-	   LJ_HUGEF_FREEING|LJ_HUGEF_BUSY;
-    if (hugetab_cas_meta(e, addr, meta, next)) {
+    lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+    if (lease < 0)
+      continue;
+    if (lease == 0)
+      continue;
+    if (!hugetab_gc2_reclaim_clear_acq(p, leased)) {
+      (void)hugetab_cert_lease_defer(e, addr, p, hi, NULL);
+      return LJ_HUGE_EXT_CONTENDED;
+    }
+    for (;;) {
+      uint64_t current = la_load64_acq(&e->slot.hi);
+      uint64_t prior, next;
+      if (la_load64_acq(&e->slot.lo) != addr ||
+	  hugetab_readers(current) == 0)
+	return LJ_HUGE_EXT_CONTENDED;
+      /* Any owner admitted after our counted pin wins body access. The free
+      ** itself is already irrevocable, so consume only our count while
+      ** publishing its durable handoff. */
+      if (hugetab_readers(current) != 1 ||
+	  hugetab_recovery_pending(current) ||
+	  hugetab_root_pending(current) ||
+	  (current & (LJ_HUGEF_DEFER_FREE|LJ_HUGEF_FREEING|
+		      LJ_HUGEF_BUSY))) {
+	(void)hugetab_cert_lease_defer(e, addr, p, hi, NULL);
+	return LJ_HUGE_EXT_CONTENDED;
+      }
+      prior = current - LJ_HUGETAB_READER_ONE;
+      next = (prior & ~(uint64_t)(LJ_HUGEF_MARK|LJ_HUGEF_RETIRED)) |
+	LJ_HUGEF_FREEING|LJ_HUGEF_BUSY;
+      if (!hugetab_cas_meta(e, addr, current, next))
+	continue;
       if (next & LJ_HUGEF_SWEEP_OLD)
 	la_store64_rel(&lj_arena_of(p)->hdr.retire_epoch, ~(uint64_t)0);
+      if (!hugetab_gc2_reclaim_clear_acq(p, next)) {
+	/* BUSY atomically replaced the lease. This defensive raw-fault sample can
+	** still hand the logical free to sweep; lawful publishers would instead
+	** have changed the reader count and defeated the claim CAS above. */
+	for (;;) {
+	  uint64_t owned = la_load64_acq(&e->slot.hi);
+	  uint64_t deferred;
+	  int progress;
+	  if (la_load64_acq(&e->slot.lo) != addr ||
+	      (owned & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) !=
+		(LJ_HUGEF_FREEING|LJ_HUGEF_BUSY))
+	    return LJ_HUGE_EXT_CONTENDED;
+	  deferred = (owned & ~(uint64_t)LJ_HUGEF_BUSY) |
+	    LJ_HUGEF_DEFER_FREE|LJ_HUGEF_SWEEP_OLD;
+	  deferred = hugetab_fold_deferred_free(p, deferred, &progress);
+	  if (!hugetab_cas_meta(e, addr, owned, deferred))
+	    continue;
+	  hugetab_decode(deferred, hi);
+	  arena_progress_wake(lj_arena_of(p));
+	  return LJ_HUGE_EXT_CONTENDED;
+	}
+      }
       hugetab_decode(next, hi);
       return LJ_HUGE_EXT_CLAIMED;
     }
@@ -3644,12 +4159,12 @@ static int hugetab_finish_realloc_keep(HugeTab *ht, const void *p,
 	!(meta & LJ_HUGEF_BUSY) || (meta & LJ_HUGEF_FREEING))
       return LJ_HUGE_REALLOC_KEEP_LOST;
     if (meta & LJ_HUGEF_DEFER_FREE) {
-      int folded;
+      int progress;
       next = meta & ~(uint64_t)LJ_HUGEF_BUSY;
-      next = hugetab_fold_deferred_free(p, next, &folded);
+      next = hugetab_fold_deferred_free(p, next, &progress);
       if (hugetab_cas_meta(e, addr, meta, next)) {
 	hugetab_decode(next, hi);
-	if (folded)
+	if (progress != LJ_HUGETAB_FOLD_NONE)
 	  arena_progress_wake(lj_arena_of(p));
 	return LJ_HUGE_REALLOC_KEEP_PREEMPTED;
       }
@@ -3683,15 +4198,15 @@ static int hugetab_release_realloc(HugeTab *ht, const void *p,
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
     uint64_t next;
-    int folded;
+    int progress;
     if (!hugetab_search(h, addr, &e, &meta) ||
 	!(meta & LJ_HUGEF_BUSY) || (meta & LJ_HUGEF_FREEING))
       return 0;
     next = meta & ~(uint64_t)LJ_HUGEF_BUSY;
-    next = hugetab_fold_deferred_free(p, next, &folded);
+    next = hugetab_fold_deferred_free(p, next, &progress);
     if (hugetab_cas_meta(e, addr, meta, next)) {
       hugetab_decode(next, hi);
-      if (folded)
+      if (progress != LJ_HUGETAB_FOLD_NONE)
 	arena_progress_wake(lj_arena_of(p));
       return 1;
     }
@@ -3709,16 +4224,16 @@ static int hugetab_realloc_to_external_free(HugeTab *ht, const void *p,
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
     uint64_t next;
-    int folded;
+    int progress;
     if (!hugetab_search(h, addr, &e, &meta) ||
 	!(meta & LJ_HUGEF_BUSY) || (meta & LJ_HUGEF_FREEING))
       return LJ_HUGE_REALLOC_MOVE_LOST;
     if (meta & LJ_HUGEF_DEFER_FREE) {
       next = meta & ~(uint64_t)LJ_HUGEF_BUSY;
-      next = hugetab_fold_deferred_free(p, next, &folded);
+      next = hugetab_fold_deferred_free(p, next, &progress);
       if (hugetab_cas_meta(e, addr, meta, next)) {
 	hugetab_decode(next, hi);
-	if (folded)
+	if (progress != LJ_HUGETAB_FOLD_NONE)
 	  arena_progress_wake(lj_arena_of(p));
 	return LJ_HUGE_REALLOC_MOVE_PREEMPTED;
       }
@@ -3729,10 +4244,10 @@ static int hugetab_realloc_to_external_free(HugeTab *ht, const void *p,
       /* This owner won before the ordinary readers. Publish its logical move
       ** while retaining their old geometry and exact lifetime tokens. */
       next = (meta & ~(uint64_t)LJ_HUGEF_BUSY) | LJ_HUGEF_DEFER_FREE;
-      next = hugetab_fold_deferred_free(p, next, &folded);
+      next = hugetab_fold_deferred_free(p, next, &progress);
       if (hugetab_cas_meta(e, addr, meta, next)) {
 	hugetab_decode(next, hi);
-	if (folded)
+	if (progress != LJ_HUGETAB_FOLD_NONE)
 	  arena_progress_wake(lj_arena_of(p));
 	return LJ_HUGE_REALLOC_MOVE_DEFERRED;
       }
@@ -3768,6 +4283,23 @@ int lj_arena_hugetab_finish_external_free(HugeTab *ht, const void *p,
       return LJ_ARENA_HUGE_FINISH_LOST;
     exp.lo = addr;
     exp.hi = meta;
+    if (!hugetab_gc2_reclaim_clear_acq(p, meta)) {
+      uint64_t next = (meta & ~(uint64_t)LJ_HUGEF_BUSY) |
+	LJ_HUGEF_DEFER_FREE;
+      /* The caller's logical free is irrevocable, but physical scan authority
+      ** appeared after its BUSY claim. Relinquish opaque ownership and leave a
+      ** durable helper-visible intent; exact token/descriptor completion will
+      ** retry the common fold and wake sweep progress. */
+      next = hugetab_fold_deferred_free(p, next, NULL);
+      des.lo = addr;
+      des.hi = next;
+      if (la_cas128(&e->slot, &exp, des)) {
+	hugetab_decode(next, hi);
+	arena_progress_wake(lj_arena_of(p));
+	return LJ_ARENA_HUGE_FINISH_DEFERRED;
+      }
+      continue;
+    }
     if (meta & LJ_HUGEF_SWEEP_OLD) {
       uint64_t next = meta &
 	~(uint64_t)(LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE);
@@ -3810,6 +4342,51 @@ int lj_arena_hugetab_defer_external_free(HugeTab *ht, const void *p,
   if (hi)
     *hi = snap;
   return 1;
+}
+
+int lj_arena_hugetab_retry_deferred(HugeTab *ht, const void *p,
+				     LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t addr, meta;
+  LJHugeEnt *e;
+  if (!h || !p)
+    return 0;
+  addr = (uint64_t)(uintptr_t)p;
+  for (;;) {
+    int lease;
+    if (!hugetab_search(h, addr, &e, &meta) ||
+	!(meta & LJ_HUGEF_DEFER_FREE))
+      return 0;
+    if (hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta) ||
+	hugetab_root_pending(meta) || (meta & LJ_HUGEF_BUSY))
+      return 0;
+    lease = hugetab_cert_lease_acquire(e, addr, meta, NULL);
+    if (lease < 0)
+      continue;
+    if (lease == 0)
+      return 0;
+    /* The retry's counted reader is the mapping lease while the held-only
+    ** fold samples the independent certificate. Its exact CAS consumes that
+    ** count and either retains the durable marker or publishes FREEING. */
+    for (;;) {
+      uint64_t current = la_load64_acq(&e->slot.hi);
+      uint64_t next;
+      int progress;
+      if (la_load64_acq(&e->slot.lo) != addr ||
+	  hugetab_readers(current) == 0)
+	return 0;
+      next = current - LJ_HUGETAB_READER_ONE;
+      next = hugetab_fold_deferred_free(p, next, &progress);
+      if (!hugetab_cas_meta(e, addr, current, next))
+	continue;
+      hugetab_decode(next, hi);
+      if (progress == LJ_HUGETAB_FOLD_SCHEDULED ||
+	  progress == LJ_HUGETAB_FOLD_FREEING)
+	arena_progress_wake(lj_arena_of(p));
+      return progress == LJ_HUGETAB_FOLD_FREEING;
+    }
+  }
 }
 
 int lj_arena_hugetab_revert_retired(HugeTab *ht, const void *p)
@@ -3882,22 +4459,39 @@ int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src, uint32_t owner_tid)
 	void *p = (void *)(uintptr_t)addr;
 	size_t size = hugetab_size(meta);
 	uint32_t hflags = (uint32_t)(meta & LJ_HUGETAB_META_MASK);
-	int inserted;
+	uint64_t leased;
+	la_u128 exp, des;
+	int inserted, lease;
 	/* Recovery count/claim ownership is table-local. Without an explicit
 	** MOVING descriptor, copying the state and tombstoning the source would
 	** create two apparent owners for one eventual decrement. Retain the dead
 	** source owner until recovery drains instead. */
 	if (hugetab_readers(meta) != 0 || hugetab_recovery_pending(meta))
 	  return 0;
-	inserted = hugetab_insert(dst, p, size, hflags, 1);
-	if (inserted < 0)
+	lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+	if (lease < 0) {
+	  i--;
+	  continue;
+	}
+	if (lease == 0)
 	  return 0;
+	if (!hugetab_gc2_reclaim_clear_acq(p, leased)) {
+	  (void)hugetab_cert_lease_release(e, addr, p, NULL);
+	  return 0;
+	}
+	inserted = hugetab_insert(dst, p, size, hflags, 1);
+	if (inserted < 0) {
+	  (void)hugetab_cert_lease_release(e, addr, p, NULL);
+	  return 0;
+	}
 	if (inserted == 0) {
 	  LJHugeInfo existing;
 	  if (lj_arena_hugetab_lookup(dst, p, &existing) != 1 ||
 	      existing.size != size || existing.flags != hflags ||
-	      existing.readers != 0)
+	      existing.readers != 0) {
+	    (void)hugetab_cert_lease_release(e, addr, p, NULL);
 	    return 0;
+	  }
 	}
 	/* The source owner is dead and the surrounding TG writer gate has proved
 	** quiescence. Make each entry transfer transactional even if an abandoned
@@ -3905,10 +4499,15 @@ int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src, uint32_t owner_tid)
 	** insert/confirm, exact source tombstone, then and only then publish the new
 	** header owner. A later capacity failure can never leave a stale source
 	** duplicate pointing at a mapping which the destination may unmap. */
-	if (!hugetab_forget_terminal(src, p, NULL, 1)) {
+	exp.lo = addr;
+	exp.hi = leased;
+	des.lo = LJ_HUGETAB_TOMBSTONE;
+	des.hi = 0;
+	if (!la_cas128(&e->slot, &exp, des)) {
 	  if (inserted > 0 &&
-	      !hugetab_forget_terminal(dst, p, NULL, 1))
+	      !hugetab_forget_terminal(dst, p, NULL, 1, 1))
 	    abort();  /* Never return while leaving a new duplicate behind. */
+	  (void)hugetab_cert_lease_release(e, addr, p, NULL);
 	  return 0;
 	}
 	lj_arena_owner_rel(lj_arena_of(p), owner_tid);
@@ -3927,7 +4526,8 @@ int lj_arena_hugetab_delete(HugeTab *ht, const void *p, LJHugeInfo *hi)
   addr = (uint64_t)(uintptr_t)p;
   for (;;) {
     LJHugeEnt *e;
-    uint64_t meta;
+    uint64_t meta, leased;
+    int lease;
     la_u128 exp, des;
     if (!hugetab_search(h, addr, &e, &meta))
       return 0;
@@ -3935,13 +4535,39 @@ int lj_arena_hugetab_delete(HugeTab *ht, const void *p, LJHugeInfo *hi)
 	(meta & (LJ_HUGEF_BUSY|LJ_HUGEF_RECOVERY_MASK|
 		 LJ_HUGEF_ROOT_MASK|LJ_HUGEF_DEFER_FREE)))
       return 0;  /* Header publication/reanchor still owns the mapping. */
-    exp.lo = addr;
-    exp.hi = meta;
-    des.lo = LJ_HUGETAB_TOMBSTONE;
-    des.hi = 0;
-    if (la_cas128(&e->slot, &exp, des)) {  /* 04 §4.5.1 delete publish. */
-      hugetab_decode(meta, hi);
-      return 1;
+    lease = hugetab_cert_lease_acquire(e, addr, meta, &leased);
+    if (lease < 0)
+      continue;
+    if (lease == 0)
+      return 0;
+    if (!hugetab_gc2_reclaim_clear_acq(p, leased)) {
+      (void)hugetab_cert_lease_release(e, addr, p, NULL);
+      return 0;
+    }
+    /* Tombstone consumes the sole counted certificate lease atomically. A
+    ** racing reader/root/recovery admission changes this exact metadata word,
+    ** so deletion loses without ever exposing an unpinned header read. */
+    for (;;) {
+      uint64_t current = la_load64_acq(&e->slot.hi);
+      if (la_load64_acq(&e->slot.lo) != addr ||
+	  hugetab_readers(current) == 0)
+	return 0;
+      if (hugetab_readers(current) != 1 ||
+	  hugetab_recovery_pending(current) ||
+	  hugetab_root_pending(current) ||
+	  (current & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE)) ||
+	  !hugetab_gc2_reclaim_clear_acq(p, current)) {
+	(void)hugetab_cert_lease_release(e, addr, p, NULL);
+	return 0;
+      }
+      exp.lo = addr;
+      exp.hi = current;
+      des.lo = LJ_HUGETAB_TOMBSTONE;
+      des.hi = 0;
+      if (la_cas128(&e->slot, &exp, des)) {  /* 04 §4.5.1 delete LP. */
+	hugetab_decode(current - LJ_HUGETAB_READER_ONE, hi);
+	return 1;
+      }
     }
   }
 }
@@ -5421,7 +6047,12 @@ static int arena_registry_delete(TGAlloc *alloc, GCArena *a)
   HugeTab *tab = lj_arena_alloc_registry_acq(alloc);
   if (!a)
     return 0;
-  if (tab && lj_arena_hugetab_delete(tab, a, NULL) != 1)
+  /* Private/bootstrap/test mappings may lawfully predate registry attachment.
+  ** Conversely, a published REGISTERED bit requires the exact directory: a
+  ** missing wrapper is never permission to erase a stale locator. */
+  if (!(lj_arena_flags_acq(a) & LJ_AF_REGISTERED))
+    return 1;
+  if (!tab || lj_arena_hugetab_delete(tab, a, NULL) != 1)
     return 0;
   arena_registered_clear(a);  /* Only after the exact slot is unreachable. */
   return 1;
@@ -5716,15 +6347,79 @@ int lj_arena_alloc_terminal_reconcile(TGAlloc *alloc)
   return ok;
 }
 
+static int arena_terminal_ready_list(GCArena *a, int all_owners)
+{
+  GCArena *slow = a, *fast = a;
+  int ok = 1;
+  while (a) {
+    GCArena *next = lj_arena_next_acq(a);
+    if (!lj_arena_terminal_reconcile(a) ||
+	!lj_arena_gc2_tokens_empty_acq(a) ||
+	!lj_arena_gc2_desc_mapping_clear_acq(a) ||
+	(all_owners &&
+	 (!lj_arena_recovery_empty(a) || !arena_root_empty(a))))
+      ok = 0;
+    slow = slow ? lj_arena_next_acq(slow) : NULL;
+    if (fast)
+      fast = lj_arena_next_acq(fast);
+    if (fast)
+      fast = lj_arena_next_acq(fast);
+    if (fast && fast == slow)
+      return 0;
+    a = next;
+  }
+  return ok;
+}
+
+int lj_arena_alloc_terminal_ready(TGAlloc *alloc)
+{
+  uint32_t k;
+  int ok = 1;
+  if (!alloc)
+    return 1;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    if (!arena_terminal_ready_list(alloc->owned[k], 1))
+      ok = 0;
+    if (!arena_terminal_ready_list(alloc->needsweep[k], 1))
+      ok = 0;
+    if (!arena_terminal_ready_list(alloc->quarantine[k], 1))
+      ok = 0;
+    if (!arena_terminal_ready_list(arena_reclaimed_acq(alloc, k), 1))
+      ok = 0;
+  }
+  return ok;
+}
+
+int lj_arena_alloc_terminal_certificate_ready(TGAlloc *alloc)
+{
+  uint32_t k;
+  int ok = 1;
+  if (!alloc)
+    return 1;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    if (!arena_terminal_ready_list(alloc->owned[k], 0))
+      ok = 0;
+    if (!arena_terminal_ready_list(alloc->needsweep[k], 0))
+      ok = 0;
+    if (!arena_terminal_ready_list(alloc->quarantine[k], 0))
+      ok = 0;
+    if (!arena_terminal_ready_list(arena_reclaimed_acq(alloc, k), 0))
+      ok = 0;
+  }
+  return ok;
+}
+
 void lj_arena_alloc_init(TGAlloc *alloc)
 {
   memset(alloc, 0, sizeof(*alloc));
 }
 
-void lj_arena_alloc_fini(TGAlloc *alloc)
+int lj_arena_alloc_fini_try(TGAlloc *alloc)
 {
   uint32_t k;
   int retained = 0;
+  if (!alloc)
+    return 1;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     alloc->owned[k] = arena_unmap_list(alloc, alloc->owned[k]);
     alloc->needsweep[k] = arena_unmap_list(alloc, alloc->needsweep[k]);
@@ -5737,8 +6432,16 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
     memset(alloc->bins[k], 0, sizeof(alloc->bins[k]));
     alloc->binmask[k] = 0;
   }
-  if (!retained)
+  if (!retained) {
     lj_arena_alloc_init(alloc);
+    return 1;
+  }
+  return 0;
+}
+
+void lj_arena_alloc_fini(TGAlloc *alloc)
+{
+  (void)lj_arena_alloc_fini_try(alloc);
 }
 
 static void arena_clear_marks_list(GCArena *a)
@@ -7304,7 +8007,7 @@ static void arena_allocf_free(LJArenaAllocD *ad, void *ptr, size_t osize)
       lj_assertX(finish != LJ_ARENA_HUGE_FINISH_LOST,
 		 "huge external-free ownership lost");
       if (finish == LJ_ARENA_HUGE_FINISH_UNMAP)
-	lj_arena_huge_unmap(ptr, hi.size);
+	lj_arena_huge_unmap_claimed(ptr, hi.size);
       return;
     }
     lj_arena_free(ad->alloc, ptr, osize);
@@ -7383,7 +8086,7 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
   lj_assertX(finish != LJ_ARENA_HUGE_FINISH_LOST,
 	     "huge realloc ownership lost");
   if (finish == LJ_ARENA_HUGE_FINISH_UNMAP) {
-    lj_arena_huge_unmap(ptr, hi.size);
+    lj_arena_huge_unmap_claimed(ptr, hi.size);
   } else if (finish == LJ_ARENA_HUGE_FINISH_LOST) {
     arena_allocf_free(ad, np, nsize);
     return NULL;

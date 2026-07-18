@@ -542,9 +542,27 @@ LJ_FUNC void lj_arena_unmap(GCArena *a);
 LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
 LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
 LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
+/* Physical unmap after an exact HugeTab destructive CAS consumed a counted
+** certificate lease (or an equivalent terminal recovery claim). The cutoff
+** grandfathered that mapping against later prospective global fault pins. */
+LJ_FUNC void lj_arena_huge_unmap_claimed(void *p, size_t size);
 LJ_FUNC int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits);
+/* Checked finalization keeps ht->h authoritative on BLOCKED. fini_all_try may
+** make partial mapping progress; DONE means the side table itself is gone.
+** The terminal helpers require joined-world ownership of the HugeTab wrapper. */
+LJ_FUNC int lj_arena_hugetab_fini_try(HugeTab *ht);
+LJ_FUNC int lj_arena_hugetab_fini_all_try(HugeTab *ht,
+					   uint32_t *unmappedp);
 LJ_FUNC void lj_arena_hugetab_fini(HugeTab *ht);
 LJ_FUNC uint32_t lj_arena_hugetab_fini_all(HugeTab *ht);
+/* Joined-world full-owner preflight for every live entry. It never unmaps;
+** releasing its temporary lease may finish an already-irrevocable DEFER. */
+LJ_FUNC int lj_arena_hugetab_terminal_ready(HugeTab *ht);
+/* Earlier close preflight checks only descriptor/token authority. Existing
+** root/recovery/destructor owners are consumed by freeall itself. */
+LJ_FUNC int lj_arena_hugetab_terminal_certificate_ready(HugeTab *ht);
+/* Joined-world terminal ownership may supersede abandoned BUSY/FREEING state.
+** The public form has no alternate-locator exemption. */
 LJ_FUNC int lj_arena_hugetab_forget_terminal(HugeTab *ht, const void *p,
 					      LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_insert(HugeTab *ht, void *p, size_t size,
@@ -667,6 +685,14 @@ LJ_FUNC int lj_arena_hugetab_mark_cdata_range(HugeTab *ht, const void *p,
 LJ_FUNC int lj_arena_hugetab_reader_acquire(HugeTab *ht, const void *p,
 					      LJHugeReader *reader,
 					      LJHugeInfo *hi);
+/* Admit one exact bounded sweep view after iterator enumeration. The full-slot
+** CAS revalidates SWEEP_OLD and rejects DEFER_FREE/BUSY in the same operation
+** which pins the mapping. The caller must release the ordinary reader token
+** before any transition which requires a zero reader count. */
+LJ_FUNC int lj_arena_hugetab_sweep_reader_acquire(HugeTab *ht,
+						    const void *p,
+						    LJHugeReader *reader,
+						    LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_reader_range_acquire(HugeTab *ht,
 						    const void *p,
 						    void **basep,
@@ -746,9 +772,15 @@ LJ_FUNC int lj_arena_hugetab_finish_external_free(HugeTab *ht,
 LJ_FUNC int lj_arena_hugetab_defer_external_free(HugeTab *ht,
 						  const void *p,
 						  LJHugeInfo *hi);
+/* Retry the durable DEFER_FREE handoff after an exact descriptor/token owner
+** completes. Returns 1 only when this caller publishes FREEING|SWEEP_OLD. */
+LJ_FUNC int lj_arena_hugetab_retry_deferred(HugeTab *ht, const void *p,
+					     LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_revert_retired(HugeTab *ht, const void *p);
 LJ_FUNC uint64_t lj_arena_hugetab_live_bytes(HugeTab *ht,
 					     uint32_t required_flags);
+/* Source-wrapper quiescence is required. Each moved entry gains its exact
+** destination locator before the source locator is consumed. */
 LJ_FUNC int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src,
 				      uint32_t owner_tid);
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
@@ -811,6 +843,13 @@ LJ_FUNC int lj_arena_terminal_reconcile(GCArena *a);
 ** bit pattern fails the pass. No allocation side plane is inspected or
 ** changed, so late/root/recovery/lifetime ownership remains authoritative. */
 LJ_FUNC int lj_arena_alloc_terminal_reconcile(TGAlloc *alloc);
+/* Joined-world outer-owner preflight. In addition to reconciling count-zero
+** gates, require every side-plane authority needed by allocator fini to be
+** clear. No list head is detached. */
+LJ_FUNC int lj_arena_alloc_terminal_ready(TGAlloc *alloc);
+LJ_FUNC int lj_arena_alloc_terminal_certificate_ready(TGAlloc *alloc);
+/* BLOCKED preserves all retained list heads and the registry pointer. */
+LJ_FUNC int lj_arena_alloc_fini_try(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_clear_marks(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t kind);

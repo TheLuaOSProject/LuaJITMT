@@ -1439,14 +1439,6 @@ static HugeTab *gc2_small_arena_registry_new(void)
   return tab;
 }
 
-static void gc2_small_arena_registry_free(HugeTab *tab)
-{
-  if (tab) {
-    lj_arena_hugetab_fini(tab);
-    free(tab);
-  }
-}
-
 static void gc2_clear_tg_arena_registry(TGState *tg)
 {
   if (tg)
@@ -1477,25 +1469,33 @@ static int gc2_small_arena_registry_init(global_State *g)
   gc2_small_arena_tab_rel(g, tab);
   lj_arena_alloc_set_registry(&g->main_tg->alloc, tab);
   if (!lj_arena_alloc_register_existing(&g->main_tg->alloc)) {
-    lj_arena_alloc_set_registry(&g->main_tg->alloc, NULL);
-    gc2_small_arena_tab_store_rlx(g, NULL);
-    gc2_small_arena_registry_free(tab);
-    return 0;
+    /* Fixed-capacity boot registration cannot be rolled back by merely
+    ** clearing aliases: an inserted prefix remains the authoritative locator.
+    ** The configured table has vastly more slots than boot can consume, so a
+    ** failure here is corruption/capacity misconfiguration, not recoverable
+    ** allocation failure. Keep every owner published and fail closed. */
+    abort();
   }
   return 1;
 }
 
-static void gc2_small_arena_registry_fini(global_State *g)
+int lj_gc2_small_arena_registry_fini_try(global_State *g)
 {
   HugeTab *tab;
   if (!g)
-    return;
+    return 1;
   tab = (HugeTab *)gc2_small_arena_tab_acq(g);
   if (!tab)
-    return;
+    return 1;
+  /* Keep every TGAlloc.smalltab and the global wrapper owner published while
+  ** a live registry entry refuses teardown. Once the backing table is gone,
+  ** joined-world shutdown can clear the now-non-owning aliases and wrapper. */
+  if (!lj_arena_hugetab_fini_try(tab))
+    return 0;
   gc2_small_arena_registry_clear_refs(g);
   gc2_small_arena_tab_store_rlx(g, NULL);
-  gc2_small_arena_registry_free(tab);
+  free(tab);
+  return 1;
 }
 
 void lj_gc2_init(global_State *g)
@@ -1781,7 +1781,6 @@ void lj_gc2_fini(global_State *g)
   else
     (void)lj_tg_reclaim_dead(g);
   gc2_worker_reclaim_retired_tgs(g);
-  gc2_small_arena_registry_fini(g);
   if (g) {
     GCRef *grey_stack = gc2_grey_stack_acq(g);
     if (grey_stack && grey_stack != g->gc2.grey_embedded) {
@@ -1926,12 +1925,6 @@ static int gc2_worker_tg_registered(global_State *g, TGState *target)
   return 0;
 }
 
-static void gc2_worker_free_tg(global_State *g, TGState *tg)
-{
-  if (lj_tg_fini_thread(g, tg))
-    free(tg);
-}
-
 static int gc2_worker_retire_tg(global_State *g, TGState *tg)
 {
   if (!g || !tg)
@@ -1954,12 +1947,19 @@ static void gc2_worker_reclaim_retired_tgs(global_State *g)
   while (tg) {
     TGState *next = lj_tg_worker_retire_next_acq(tg);
     if (!gc2_worker_tg_registered(g, tg)) {
+      /* Do not unlink the last raw owner until checked inner finalization has
+      ** published DONE. A retained HugeTab/arena remains retryable in place. */
+      if (!lj_tg_fini_thread(g, tg)) {
+	prev = tg;
+	tg = next;
+	continue;
+      }
       if (prev)
 	lj_tg_worker_retire_next_rel(prev, next);
       else
 	gc2_worker_tg_retired_rel(g, next);
       lj_tg_worker_retire_next_rel(tg, NULL);
-      gc2_worker_free_tg(g, tg);
+      free(tg);
       tg = next;
       continue;
     }
@@ -1980,8 +1980,10 @@ uint32_t lj_gc2_terminal_reclaim_tgs(global_State *g)
   lj_assertG(gc2_n_workers_acq(g) == 0 &&
 	     gc2_worker_active_acq(g) == 0,
 	     "terminal TG drain overlaps GC worker");
-  lj_assertG(gc2_small_arena_tab_acq(g) == NULL &&
-	     gc2_grey_stack_acq(g) == NULL &&
+  /* The small-arena directory deliberately survives this raw GC2 teardown:
+  ** terminal TG allocators still need it to delete their exact mapping slots.
+  ** It is released after the main allocator drains at the close-state tail. */
+  lj_assertG(gc2_grey_stack_acq(g) == NULL &&
 	     gc2_weak_stack_acq(g) == NULL,
 	     "terminal TG drain precedes GC2 raw teardown");
   reclaimed = lj_tg_reclaim_dead_terminal_orphans(g);
@@ -2019,8 +2021,12 @@ static int gc2_worker_release_tg_slot(global_State *g, uint32_t i)
     gc2_worker_tg_store_rlx(g, i, NULL);
     return 1;
   }
-  gc2_worker_free_tg(g, tg);
+  if (!lj_tg_fini_thread(g, tg))
+    return 0;
+  /* Keep the slot as the raw owner through checked finalization, then close
+  ** the publication before releasing the body. */
   gc2_worker_tg_store_rlx(g, i, NULL);
+  free(tg);
   return 1;
 }
 
@@ -2271,7 +2277,8 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
       if (rc != 0) {
 	gc2_worker_thread_store_rlx(g, i, NULL);
 	gc2_worker_tg_store_rlx(g, i, NULL);
-	lj_tg_fini_thread(g, tg);
+	if (!lj_tg_fini_thread(g, tg))
+	  abort();  /* Never release a wrapper around retained allocator state. */
 	free(tg);
 	free(thr);
 	(void)gc2_worker_stop_locked_l(g, waitL, actionsp);
@@ -5399,6 +5406,16 @@ static uint32_t gc2_sweep_huge_progress(global_State *g, TGState *tg,
   if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
     return 0;
   if (lj_arena_hugetab_sweep_next(&tg->huge, &cursor, &p, &hi)) {
+    /* DEFER_FREE means the logical free is complete but a descriptor/token or
+    ** another exact lifetime owner still names the mapping. Never interpret
+    ** payload bytes in this state. Bounded passes retry the certificate until
+    ** one owner atomically publishes the ordinary FREEING sweep handoff. */
+    if ((hi.flags & LJ_HUGEF_DEFER_FREE) &&
+	!lj_arena_hugetab_retry_deferred(&tg->huge, p, &hi)) {
+      alloc->huge_reclaim_cursor = cursor;
+      alloc->huge_retire_done = 0;
+      return 1;
+    }
     uint32_t n = lj_gc_reclaim_gc2_huge(g, tg, p, &hi, &pending);
     alloc->huge_reclaim_cursor = cursor;
     if (pending)
@@ -17651,7 +17668,7 @@ static void gc2_recovery_complete_huge(global_State *g, HugeTab *ht,
       completed == LJ_ARENA_HUGE_RECOVERY_COMPLETE_UNMAP) {
     gc2_recovery_huge_count_complete(g);
     if (completed == LJ_ARENA_HUGE_RECOVERY_COMPLETE_UNMAP)
-      lj_arena_huge_unmap(base, hi.size);
+      lj_arena_huge_unmap_claimed(base, hi.size);
     else if (completed == LJ_ARENA_HUGE_RECOVERY_COMPLETE_SWEEP) {
       gc2_sweep_grace_needed_rel(g, 1);
       lj_gc2_worker_wake(g);
@@ -17942,7 +17959,7 @@ static uint32_t gc2_recovery_discard_hugetab_terminal(HugeTab *ht)
 	discarded == LJ_ARENA_HUGE_RECOVERY_TERMINAL_UNMAP) {
       n++;
       if (discarded == LJ_ARENA_HUGE_RECOVERY_TERMINAL_UNMAP)
-	lj_arena_huge_unmap(p, hi.size);
+	lj_arena_huge_unmap_claimed(p, hi.size);
     }
   }
   return n;
@@ -18099,6 +18116,7 @@ static uint32_t gc2_recovery_discard_terminal(global_State *g)
 int lj_gc2_terminal_prefree(global_State *g)
 {
   TGState *tg;
+  HugeTab *registry;
   int saw_main = 0;
   if (!g)
     return 1;
@@ -18109,28 +18127,59 @@ int lj_gc2_terminal_prefree(global_State *g)
       gc2_ssb_consumer_active_acq(g) != 0 ||
       gc2_finalizer_active_acq(g) != 0 || gc2_n_threads_acq(g) > 1u)
     abort();
-  (void)gc2_recovery_discard_terminal(g);
-  if (!gc2_recovery_empty(g) || gc2_recovery_items_acq(g) != 0)
-    abort();
+  /* Prove every mapping certificate before discarding any recovery identity.
+  ** Recovery discard is deliberately destructive: on a later reader or
+  ** descriptor veto there is no sound way to reconstruct the exact locator
+  ** which was just consumed. The allocator certificate pass may collapse the
+  ** sole joined-world CLOSED|PENDING gate generation, but that repair is
+  ** exact, idempotent and retains every object/recovery locator. */
+  registry = (HugeTab *)gc2_small_arena_tab_acq(g);
+  if (registry &&
+      !lj_arena_hugetab_terminal_certificate_ready(registry))
+    return 0;
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
     if (tg == g->main_tg)
       saw_main = 1;
-    if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
-      /* Joined-world terminal ownership must not trust the opportunistic
-      ** remote-free hint. Consume every durable owned-arena queue before gate
-      ** reconciliation, including a record whose advisory wake was cleared
-      ** by an earlier failed/diagnostic drain. */
-      (void)lj_arena_remote_free_drain_force(&tg->alloc);
-      if (!lj_arena_alloc_terminal_reconcile(&tg->alloc))
-	abort();
-    }
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+	!lj_arena_hugetab_terminal_certificate_ready(&tg->huge))
+      return 0;
   }
   /* Partial initialization can leave the embedded main TG outside the list;
   ** it still owns allocator lists which terminal free must reconcile. */
+  if (!saw_main && g->main_tg) {
+    if (lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB) &&
+	!lj_arena_hugetab_terminal_certificate_ready(&g->main_tg->huge))
+      return 0;
+  }
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) &&
+	!lj_arena_alloc_terminal_certificate_ready(&tg->alloc))
+      return 0;
+  }
+  if (!saw_main && g->main_tg &&
+      lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL) &&
+      !lj_arena_alloc_terminal_certificate_ready(&g->main_tg->alloc))
+    return 0;
+
+  (void)gc2_recovery_discard_terminal(g);
+  if (!gc2_recovery_empty(g) || gc2_recovery_items_acq(g) != 0)
+    abort();
+
+  /* Joined-world terminal ownership must not trust the opportunistic
+  ** remote-free hint. Consume every durable owned-arena queue after the full
+  ** certificate pass, including a record whose advisory wake was cleared by
+  ** an earlier failed/diagnostic drain, then recheck the gates it touched. */
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
+      (void)lj_arena_remote_free_drain_force(&tg->alloc);
+      if (!lj_arena_alloc_terminal_certificate_ready(&tg->alloc))
+	abort();
+    }
+  }
   if (!saw_main && g->main_tg &&
       lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL)) {
     (void)lj_arena_remote_free_drain_force(&g->main_tg->alloc);
-    if (!lj_arena_alloc_terminal_reconcile(&g->main_tg->alloc))
+    if (!lj_arena_alloc_terminal_certificate_ready(&g->main_tg->alloc))
       abort();
   }
   return 1;

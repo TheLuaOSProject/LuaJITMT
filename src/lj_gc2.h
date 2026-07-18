@@ -213,10 +213,15 @@ enum {
 
 LJ_FUNC void lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_fini(global_State *g);
+/* The small-arena directory outlives GC2 worker/raw teardown. It is released
+** only after every registered allocator has deleted its exact entries. The
+** caller owns joined-world GC2/TG teardown authority. */
+LJ_FUNC int lj_gc2_small_arena_registry_fini_try(global_State *g);
 LJ_FUNC uint32_t lj_gc2_shutdown_discard_ssb(global_State *g);
 /* Joined-world terminal PRE/POST fence. Reconciles every durable recovery
-** identity and count-zero arena admission gate, but never clears root/late or
-** lifecycle planes. Safe and required to repeat between freeall rounds. */
+** identity and count-zero arena admission gate, and requires descriptor/token
+** authority clear. It never clears root/late or lifecycle planes, which
+** freeall consumes. Safe and required to repeat between freeall rounds. */
 LJ_FUNC int lj_gc2_terminal_prefree(global_State *g);
 LJ_FUNC void lj_gc2_freeall(global_State *g);
 LJ_FUNC void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes);

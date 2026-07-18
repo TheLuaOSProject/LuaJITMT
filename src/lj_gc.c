@@ -3311,13 +3311,26 @@ uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
   return cell < LJ_ARENA_CELLS && scanned != 0 ? 1u : 0u;
 }
 
+static void gc2_huge_sweep_reader_drop(LJHugeReader *reader, int *pendingp)
+{
+  int released;
+  if (!reader || !reader->h)
+    return;
+  released = lj_arena_hugetab_reader_release(reader, NULL);
+  if (released != LJ_ARENA_HUGE_READER_RELEASED && pendingp)
+    *pendingp = 1;
+}
+
 uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 				 const LJHugeInfo *hi, int *pendingp)
 {
   GCArena *a;
   GCobj *o;
+  LJHugeReader view = { NULL, NULL, 0 };
+  LJHugeInfo fresh;
+  uint32_t result = 0;
   uint32_t flags, rootmem;
-  int rootq;
+  int rootq, admitted;
   if (pendingp)
     *pendingp = 0;
   if (!g || !tg || !p || !hi)
@@ -3328,18 +3341,28 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
       *pendingp = 1;
     return 0;
   }
+  memset(&fresh, 0, sizeof(fresh));
+  admitted = lj_arena_hugetab_sweep_reader_acquire(
+    &tg->huge, p, &view, &fresh);
+  if (admitted != LJ_ARENA_HUGE_READER_ACQUIRED) {
+    if (pendingp)
+      *pendingp = 1;
+    return 0;
+  }
+#define LJ_GC2_HUGE_DONE(value) \
+  do { result = (uint32_t)(value); goto huge_done; } while (0)
   a = lj_arena_of(p);
-  flags = hi->flags;
+  flags = fresh.flags;  /* Iterator metadata is a hint, never body authority. */
   if (flags & LJ_HUGEF_BUSY) {
     if (pendingp) *pendingp = 1;
-    return 0;  /* Publisher/reanchor owns all mapping-header access. */
+    LJ_GC2_HUGE_DONE(0);  /* Publisher/reanchor owns all header access. */
   }
   o = (flags & LJ_HUGEF_TICKET) ?
       (GCobj *)la_loadptr_acq((void *const *)&a->hdr.retire_obj) : NULL;
   rootq = lj_arena_hugetab_root_state_acq(&tg->huge, p, NULL);
   if (rootq < 0) {
     if (pendingp) *pendingp = 1;
-    return 0;
+    LJ_GC2_HUGE_DONE(0);
   }
   rootmem = (uint32_t)rootq;
   if (rootmem == LJ_ARENA_ROOT_LINKING ||
@@ -3349,9 +3372,9 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
     ** create a valid detach ticket or leave reclamation to a future cycle. */
     if (!(flags & LJ_HUGEF_MARK)) {
       (void)lj_arena_hugetab_mark(&tg->huge, p, NULL);
-      return 1;
+      LJ_GC2_HUGE_DONE(1);
     }
-    return 0;
+    LJ_GC2_HUGE_DONE(0);
   }
   if (rootmem == LJ_ARENA_ROOT_MEMBER &&
       (flags & (LJ_HUGEF_MARK|LJ_HUGEF_TICKET)) !=
@@ -3361,9 +3384,9 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
     ** reanchor work or keeping the huge sweep pending forever. */
     if (!(flags & LJ_HUGEF_MARK)) {
       (void)lj_arena_hugetab_mark(&tg->huge, p, NULL);
-      return 1;
+      LJ_GC2_HUGE_DONE(1);
     }
-    return 0;
+    LJ_GC2_HUGE_DONE(0);
   }
 
   if (flags & LJ_HUGEF_FREEING) {
@@ -3373,11 +3396,11 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
       la_store64_rel(&a->hdr.retire_epoch, now);
       gc2_sweep_grace_needed_rel(g, 1);
       if (pendingp) *pendingp = 1;
-      return 1;
+      LJ_GC2_HUGE_DONE(1);
     }
     if (retire_epoch >= now) {
       if (pendingp) *pendingp = 1;
-      return 0;
+      LJ_GC2_HUGE_DONE(0);
     }
   }
 
@@ -3388,63 +3411,67 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 #if LJ_HASJIT
       if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
 	  la_load64_acq(&gco2trace(o)->retire_epoch) != 0) {
+	gc2_huge_sweep_reader_drop(&view, pendingp);
 	(void)lj_trace_free_gc(g, gco2trace(o));
 	gc2_sweep_grace_needed_rel(g, 1);
 	if (pendingp) *pendingp = 1;
-	return 0;
+	LJ_GC2_HUGE_DONE(0);
       }
 #endif
       if (!gc2_valid_freeable_obj(g, o, 1)) {
 	if (pendingp) *pendingp = 1;
-	return 0;
+	LJ_GC2_HUGE_DONE(0);
       }
       if (rootmem == LJ_ARENA_ROOT_MEMBER) {
 	/* A prior pass committed the exact intrusive edge and only lost the
 	** ticket-finishing tail. Never insert it again. */
+	gc2_huge_sweep_reader_drop(&view, pendingp);
 	if (!lj_arena_hugetab_claim_live_ticket(&tg->huge, p, NULL)) {
 	  if (pendingp) *pendingp = 1;
-	  return 0;
+	  LJ_GC2_HUGE_DONE(0);
 	}
 	la_storeptr_rel(&a->hdr.retire_obj, NULL);
 	if (!lj_arena_hugetab_finish_live_ticket(&tg->huge, p, NULL)) {
 	  lj_assertG(0, "huge live ticket lost after member reconciliation");
 	  if (pendingp) *pendingp = 1;
-	  return 0;
+	  LJ_GC2_HUGE_DONE(0);
 	}
-	return 1;
+	LJ_GC2_HUGE_DONE(1);
       }
       link = gc_root_link_claim_at(g, o, p, &rootstate);
       if (link == LJ_GC_ROOT_LINK_ALREADY) {
 	/* Another publisher completed between the fresh state sample and claim. */
+	gc2_huge_sweep_reader_drop(&view, pendingp);
 	if (!lj_arena_hugetab_claim_live_ticket(&tg->huge, p, NULL)) {
 	  if (pendingp) *pendingp = 1;
-	  return 0;
+	  LJ_GC2_HUGE_DONE(0);
 	}
 	la_storeptr_rel(&a->hdr.retire_obj, NULL);
 	if (!lj_arena_hugetab_finish_live_ticket(&tg->huge, p, NULL)) {
 	  lj_assertG(0, "huge live ticket lost after concurrent member");
 	  if (pendingp) *pendingp = 1;
-	  return 0;
+	  LJ_GC2_HUGE_DONE(0);
 	}
-	return 1;
+	LJ_GC2_HUGE_DONE(1);
       }
       if (link != LJ_GC_ROOT_LINKED) {
 	if (pendingp) *pendingp = 1;
-	return 0;
+	LJ_GC2_HUGE_DONE(0);
       }
       /* Membership must precede BUSY: after BUSY, a losing claim cannot safely
       ** roll ownership back through a mapping operation it does not own. */
+      gc2_huge_sweep_reader_drop(&view, pendingp);
       if (!lj_arena_hugetab_claim_live_ticket(&tg->huge, p, NULL)) {
 	gc_root_link_rollback(g, &rootstate);
 	if (pendingp) *pendingp = 1;
-	return 0;
+	LJ_GC2_HUGE_DONE(0);
       }
       /* Every old nonfixed root was detached before the grace. One mapping has
       ** one allocation, so retire_obj is an exact single reanchor ticket. */
       if (gc_root_publish_claimed(g, o, &rootstate) !=
 	  LJ_GC_ROOT_LINKED) {
 	if (pendingp) *pendingp = 1;
-	return 0;
+	LJ_GC2_HUGE_DONE(0);
       }
       la_storeptr_rel(&a->hdr.retire_obj, NULL);
       {
@@ -3452,16 +3479,18 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 	lj_assertG(finished, "huge live ticket lost after root reanchor");
 	if (!finished) {
 	  if (pendingp) *pendingp = 1;
-	  return 0;
+	  LJ_GC2_HUGE_DONE(0);
 	}
       }
-      return 1;
+      LJ_GC2_HUGE_DONE(1);
     }
-    return 0;  /* Marked raw/fixed huge storage was never detached. */
+    LJ_GC2_HUGE_DONE(0);  /* Marked raw/fixed storage was never detached. */
   }
 
   if (!(flags & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING))) {
-    int ticketed = o ? lj_arena_hugetab_retire(
+    int ticketed;
+    gc2_huge_sweep_reader_drop(&view, pendingp);
+    ticketed = o ? lj_arena_hugetab_retire(
 	&tg->huge, p, o, lj_gc2_retire_epoch(g), NULL) : 0;
     if (ticketed) {
       /* Return 2 means the final TICKET contains MARK. HugeTab deliberately
@@ -3471,54 +3500,64 @@ uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg, void *p,
 	(void)lj_gc2_trace_sweep_root(g, o);
       gc2_sweep_grace_needed_rel(g, 1);
       if (pendingp) *pendingp = 1;
-      return 1;
+      LJ_GC2_HUGE_DONE(1);
     }
     /* Opaque huge storage has no GC destructor proof. Preserve it rather than
     ** interpreting payload bytes as a header. */
     (void)lj_arena_hugetab_mark(&tg->huge, p, NULL);
-    return 1;
+    LJ_GC2_HUGE_DONE(1);
   }
 
   if (!o) {
     /* An external subsystem owns the logical free. FREEING is enough to let
     ** this sole huge-table owner perform the final delete after the grace. */
-    if (!(flags & LJ_HUGEF_FREEING) &&
+    if (!(flags & LJ_HUGEF_FREEING)) {
+      gc2_huge_sweep_reader_drop(&view, pendingp);
+      if (
 	!lj_arena_hugetab_claim_freeing(&tg->huge, p, NULL)) {
-      if (pendingp) *pendingp = 1;
-      return 0;
+	  if (pendingp) *pendingp = 1;
+	  LJ_GC2_HUGE_DONE(0);
+      }
     }
   } else {
 #if LJ_HASJIT
     if (o->gch.gct == (uint32_t)~LJ_TTRACE &&
 	!lj_trace_body_destroyed_acq(gco2trace(o))) {
+      gc2_huge_sweep_reader_drop(&view, pendingp);
       (void)lj_trace_free_gc(g, gco2trace(o));
       gc2_sweep_grace_needed_rel(g, 1);
       if (pendingp) *pendingp = 1;
-      return 0;
+      LJ_GC2_HUGE_DONE(0);
     }
 #endif
     if (!(flags & LJ_HUGEF_FREEING)) {
+      gc2_huge_sweep_reader_drop(&view, pendingp);
       if (!lj_arena_hugetab_claim_freeing(&tg->huge, p, NULL)) {
 	if (pendingp) *pendingp = 1;
-	return 0;
+	LJ_GC2_HUGE_DONE(0);
       }
       if (o->gch.gct != 0 &&
 	  gc2_free_unmarked_obj(g, o, 1, 1) == LJ_GC_DESTRUCT_LOST) {
 	(void)lj_arena_hugetab_revert_retired(&tg->huge, p);
 	if (pendingp) *pendingp = 1;
-	return 0;
+	LJ_GC2_HUGE_DONE(0);
       }
     }
   }
+  gc2_huge_sweep_reader_drop(&view, pendingp);
   {
     LJHugeInfo snap;
     if (lj_arena_hugetab_delete(&tg->huge, p, &snap) == 1) {
       /* No access to a/a->hdr is legal after this unmap. */
-      lj_arena_huge_unmap(p, snap.size);
-      return 1;
+      lj_arena_huge_unmap_claimed(p, snap.size);
+      LJ_GC2_HUGE_DONE(1);
     }
   }
-  return 0;
+  LJ_GC2_HUGE_DONE(0);
+huge_done:
+  gc2_huge_sweep_reader_drop(&view, pendingp);
+#undef LJ_GC2_HUGE_DONE
+  return result;
 }
 
 /* Check whether we can clear a key or a value slot from a table. */
@@ -4630,7 +4669,7 @@ void lj_gc_destructor_leave(global_State *g, LJGCDestructCtx *ctx)
     int finish = lj_arena_hugetab_finish_external_free(
 	      ht, ctx->base, &hi);
     if (finish == LJ_ARENA_HUGE_FINISH_UNMAP) {
-      lj_arena_huge_unmap(ctx->base, hi.size);
+      lj_arena_huge_unmap_claimed(ctx->base, hi.size);
     } else if (finish == LJ_ARENA_HUGE_FINISH_DEFERRED) {
       gc2_sweep_grace_needed_rel(g, 1);
       lj_gc2_sweep_publish_wake(g);

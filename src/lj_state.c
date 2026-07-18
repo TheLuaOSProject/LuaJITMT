@@ -973,10 +973,22 @@ static void close_state(lua_State *L)
   ** destructors; lj_gc2_fini() repeats this idempotently for partial states. */
   if (LJ_UNLIKELY(!lj_gc2_worker_stop(g)))
     abort();  /* A failed join is not permission to reclaim worker storage. */
+  /* A failed pthread_create has no OS-thread owner to detach its provisional
+  ** TG. If runtime checked teardown met a reader/certificate veto, its live
+  ** node survived shutdown and all-userdata finalization as the retry owner.
+  ** Resolve it now, before either recovery identities or native roots move. */
+  if (!lj_threading_live_retry_tgs_terminal(g))
+    abort();
   /* A worker may have crossed a child THREAD's irreversible FREE LP just
   ** before shutdown. Finish its semantic/side-allocation handoff while CTState,
   ** callback slots, TG registries and arena routing are all still intact. */
   lj_state_gcprep_drain_terminal(g);
+  /* First joined-world ownership certificate, before close_state destroys
+  ** live-root metadata, traces, objects, or allocator owners. lua_close is a
+  ** one-shot ABI, so a persistent debug PINNED/malformed descriptor fails
+  ** closed here instead of discovering a non-resumable veto at the tail. */
+  if (!lj_gc2_terminal_prefree(g))
+    abort();
   /* threading_shutdown tombstones native live-root nodes before entering this
   ** terminal path. Only now are all collector readers joined, so their raw
   ** arena storage may be physically released. */
@@ -1114,13 +1126,12 @@ static void close_state(lua_State *L)
   if (arena_alloc) {
     GG_State *GG = G2GG(g);
     int gghuge = lj_arena_ishuge(lj_arena_of(GG));
-    TGAlloc alloc;
-    if (g->main_tg)
-      alloc = g->main_tg->alloc;
-    else
-      lj_arena_alloc_init(&alloc);
+    TGAlloc *alloc = &g->main_tg->alloc;
+    if (!gghuge)
+      abort();  /* Internal x64 GG must retain itself outside small slabs. */
     if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB)) {
       LJHugeInfo gghi;
+      uint32_t unmapped;
       /* All subsystem/TG finalizers and owner lookups are complete. Destroy
       ** any residual main-owner huge mapping before the side table itself;
       ** dead source tables were drained first at the final owner-lookup
@@ -1135,13 +1146,22 @@ static void close_state(lua_State *L)
 	    !lj_arena_hugetab_forget_terminal(&g->main_tg->huge, GG, NULL))
 	  abort();
       }
-      (void)lj_arena_hugetab_fini_all(&g->main_tg->huge);
+      if (!lj_arena_hugetab_fini_all_try(&g->main_tg->huge, &unmapped))
+	abort();  /* PRE proved joined-world authority; retain/fail closed. */
+      lj_tg_flags_and_rlx(g->main_tg, (uint8_t)~TGF_HUGETAB);
+      lj_arena_allocd_sethugetab(&g->main_tg->allocd, NULL);
     }
-    lj_arena_alloc_fini(&alloc);
-    if (gghuge)
-      lj_arena_huge_unmap(GG, sizeof(GG_State));
+    /* Finalize the authoritative in-place owner. A stack copy could make
+    ** partial unmap progress and leave the original heads naming freed maps. */
+    if (!lj_arena_alloc_fini_try(alloc))
+      abort();
+    if (!lj_gc2_small_arena_registry_fini_try(g))
+      abort();
+    lj_arena_huge_unmap_claimed(GG, sizeof(GG_State));
     return;
   }
+  if (!lj_gc2_small_arena_registry_fini_try(g))
+    abort();
 #ifndef LUAJIT_USE_SYSMALLOC
   if (g->allocf == lj_alloc_f)
     lj_alloc_destroy(g->allocd);

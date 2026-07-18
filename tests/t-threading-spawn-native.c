@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +18,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
@@ -38,6 +40,12 @@ static uint32_t pause_seen;
 static uint32_t pause_release;
 static uint32_t child_ran;
 static uint32_t worker_cpcall_seen;
+static uint32_t fail_spawn_create;
+static uint32_t block_unstarted_fini;
+static uint32_t blocked_unstarted_fini_calls;
+static uint32_t retried_unstarted_fini;
+static size_t failed_spawn_stack_bytes;
+static TGState *blocked_unstarted_tg;
 static pthread_t fixture_main_thread;
 
 
@@ -46,6 +54,31 @@ extern int __real_pthread_create(pthread_t *thread,
 				 void *(*start_routine)(void *), void *arg);
 extern int __real_lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
 			       lua_CPFunction cp);
+extern int __real_lj_tg_fini_thread(global_State *g, TGState *tg);
+
+int __wrap_lj_tg_fini_thread(global_State *g, TGState *tg)
+{
+  uint32_t remaining = la_load32_acq(&block_unstarted_fini);
+  while (remaining != 0) {
+    uint32_t expect = remaining;
+    if (la_cas32(&block_unstarted_fini, &expect, remaining - 1u,
+		 LA_ACQ_REL, LA_ACQ)) {
+      if (blocked_unstarted_tg)
+	assert(blocked_unstarted_tg == tg);
+      else
+	blocked_unstarted_tg = tg;
+      la_add32_rlx(&blocked_unstarted_fini_calls, 1);
+      /* Model the checked finalizer's real BLOCKED publication. The linker
+      ** wrapper bypasses its LIVE/RETRY -> BUSY -> RETRY state machine. */
+      lj_tg_fini_state_rel(tg, TG_FINI_RETRY);
+      return 0;
+    }
+    remaining = expect;
+  }
+  if (tg == blocked_unstarted_tg)
+    la_store32_rel(&retried_unstarted_fini, 1);
+  return __real_lj_tg_fini_thread(g, tg);
+}
 
 int __wrap_lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud,
 			lua_CPFunction cp)
@@ -71,6 +104,15 @@ int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 			  void *(*start_routine)(void *), void *arg)
 {
   uint32_t expect = 1;
+  if (la_cas32(&fail_spawn_create, &expect, 0, LA_ACQ_REL, LA_ACQ)) {
+    LJThread *th = (LJThread *)arg;
+    lua_State *child = lj_thread_state_load_acq(th);
+    assert(child != NULL);
+    failed_spawn_stack_bytes =
+      (size_t)child->stacksize * sizeof(TValue);
+    return EAGAIN;
+  }
+  expect = 1;
   if (pause_tg != NULL && lj_tg_in_native_acq(pause_tg) &&
       la_cas32(&pause_spawn_create, &expect, 2, LA_ACQ_REL, LA_ACQ)) {
     la_store32_rel(&pause_seen, 1);
@@ -240,12 +282,85 @@ static void test_spawn_preserves_active_gc_cycle(void)
   lua_close(L);
 }
 
+static void churn_main_allocator_after_failed_spawn(lua_State *L)
+{
+  int i, j;
+  lua_settop(L, 0);
+  for (i = 0; i < 128; i++) {
+    lua_createtable(L, 64, 0);
+    for (j = 1; j <= 64; j++) {
+      lua_pushinteger(L, i * 64 + j);
+      lua_rawseti(L, -2, j);
+    }
+    lua_pop(L, 1);
+    if ((i & 15) == 15)
+      lua_gc(L, LUA_GCSTEP, 1);
+  }
+  lua_gc(L, LUA_GCCOLLECT, 0);
+}
+
+static void run_create_failure_retry_case(uint32_t nargs, uint32_t blocks)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  global_State *g = G(L);
+  uint32_t i;
+  int rc;
+
+  require_threading(L);
+  assert(lua_checkstack(L, (int)nargs + 4));
+  lua_getfield(L, -1, "spawn");
+  lua_pushcfunction(L, child_marker);
+  for (i = 0; i < nargs; i++)
+    lua_pushinteger(L, (lua_Integer)i);
+  blocked_unstarted_tg = NULL;
+  failed_spawn_stack_bytes = 0;
+  la_store32_rel(&blocked_unstarted_fini_calls, 0);
+  la_store32_rel(&retried_unstarted_fini, 0);
+  /* The first veto is spawn error cleanup. With two blocks, lua_close's
+  ** all-userdata finalization also vetoes and the joined-worker live-root
+  ** drain must own the third try; with one, finalization closes the live node. */
+  assert(blocks == 1 || blocks == 2);
+  la_store32_rel(&block_unstarted_fini, blocks);
+  la_store32_rel(&fail_spawn_create, 1);
+  rc = lua_pcall(L, (int)nargs + 1, 1, 0);
+  assert(rc != LUA_OK);
+  assert(lua_tostring(L, -1) != NULL);
+  if (nargs == 0)
+    assert(failed_spawn_stack_bytes < LJ_HUGE_THRESHOLD);
+  else
+    assert(failed_spawn_stack_bytes >= LJ_HUGE_THRESHOLD);
+  assert(la_load32_acq(&fail_spawn_create) == 0);
+  assert(la_load32_acq(&block_unstarted_fini) == blocks - 1u);
+  assert(la_load32_acq(&blocked_unstarted_fini_calls) == 1);
+  assert(la_load32_acq(&retried_unstarted_fini) == 0);
+  assert(blocked_unstarted_tg != NULL);
+  assert(la_load32_acq(&g->threading_live_count) == 1);
+
+  /* Generic freeing used to route the provisional child stack into the main
+  ** allocator. Exercise small-bin reuse before close and a separate huge
+  ** child stack so the exact child allocd/HugeTab route is required. */
+  churn_main_allocator_after_failed_spawn(L);
+  lua_close(L);
+  assert(la_load32_acq(&block_unstarted_fini) == 0);
+  assert(la_load32_acq(&blocked_unstarted_fini_calls) == blocks);
+  assert(la_load32_acq(&retried_unstarted_fini) == 1);
+  blocked_unstarted_tg = NULL;
+}
+
+static void test_create_failure_retains_retry_tg_until_joined_close(void)
+{
+  run_create_failure_retry_case(0, 1);
+  run_create_failure_retry_case(0, 2);
+  run_create_failure_retry_case(3000, 2);
+}
+
 int main(void)
 {
   fixture_main_thread = pthread_self();
   test_sticky_stopreq_spawn_ok();
   test_fresh_stopreq_aborts_before_child_runs();
   test_spawn_preserves_active_gc_cycle();
-  printf("t-threading-spawn-native OK: spawn native STOPREQ verified\n");
+  test_create_failure_retains_retry_tg_until_joined_close();
+  printf("t-threading-spawn-native OK: STOPREQ and retry teardown verified\n");
   return 0;
 }

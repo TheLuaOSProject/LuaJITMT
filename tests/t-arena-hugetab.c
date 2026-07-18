@@ -1103,6 +1103,7 @@ static void test_huge_reader_lifetime(PRNGState *rs)
   HugeTab ht = { NULL }, dst = { NULL };
   LJHugeReader reader = { NULL, NULL, 0 }, rejected = { NULL, NULL, 0 };
   LJHugeInfo hi;
+  uint32_t unmapped = ~(uint32_t)0;
   void *p;
 
   assert(lj_arena_hugetab_init(&ht, 2));
@@ -1116,9 +1117,9 @@ static void test_huge_reader_lifetime(PRNGState *rs)
   assert(reader.h == ht.h && reader.base == p && hi.readers == 1u);
 
   /* Every table/mapping terminal route observes the same slot-local count. */
-  lj_arena_hugetab_fini(&ht);
-  assert(ht.h != NULL);
-  assert(lj_arena_hugetab_fini_all(&ht) == 0u && ht.h != NULL);
+  assert(!lj_arena_hugetab_fini_try(&ht) && ht.h != NULL);
+  assert(!lj_arena_hugetab_fini_all_try(&ht, &unmapped));
+  assert(unmapped == 0u && ht.h != NULL);
   assert(!lj_arena_hugetab_forget_terminal(&ht, p, NULL));
   assert(!lj_arena_hugetab_delete(&ht, p, NULL));
   assert(!lj_arena_hugetab_transfer(&dst, &ht, 0x9911u));
@@ -1189,6 +1190,66 @@ static void test_huge_reader_lifetime(PRNGState *rs)
   delete_unmap(&dst, p);
   lj_arena_hugetab_fini(&ht);
   lj_arena_hugetab_fini(&dst);
+}
+
+static void test_huge_sweep_reader_exact_admission(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 2167u;
+  HugeTab ht = { NULL };
+  LJHugeReader owner = { NULL, NULL, 0 };
+  LJHugeReader sweep = { NULL, NULL, 0 };
+  LJHugeInfo hi;
+  uint32_t cursor;
+  void *p, *found;
+
+  /* Iterator metadata is deliberately stale: a later logical free publishes
+  ** DEFER behind another reader. Exact sweep admission must reject it in the
+  ** same full-slot CAS that would otherwise authorize body/header access. */
+  assert(lj_arena_hugetab_init(&ht, 2));
+  p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&ht, p, size,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_MARK));
+  lj_arena_hugetab_prepare_sweep(&ht);
+  cursor = 0;
+  assert(lj_arena_hugetab_sweep_next(&ht, &cursor, &found, &hi));
+  assert(found == p && !(hi.flags & LJ_HUGEF_DEFER_FREE));
+  assert(lj_arena_hugetab_reader_acquire(&ht, p, &owner, NULL) ==
+	 LJ_ARENA_HUGE_READER_ACQUIRED);
+  assert(!lj_arena_hugetab_claim_external_free(&ht, p, &hi));
+  assert((hi.flags & LJ_HUGEF_DEFER_FREE) && hi.readers == 1u);
+  assert(lj_arena_hugetab_sweep_reader_acquire(&ht, found, &sweep, &hi) ==
+	 LJ_ARENA_HUGE_READER_MISSING);
+  assert(sweep.h == NULL && sweep.base == NULL);
+  assert(lj_arena_hugetab_reader_release(&owner, &hi) ==
+	 LJ_ARENA_HUGE_READER_HANDOFF);
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+  delete_unmap(&ht, p);
+  lj_arena_hugetab_fini(&ht);
+
+  /* Opposite order: exact sweep admission wins first. External free records
+  ** DEFER without touching the mapping; the sweep release is the unique fold. */
+  assert(lj_arena_hugetab_init(&ht, 2));
+  p = lj_arena_huge_map(rs, size + 1u, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&ht, p, size + 1u,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_MARK));
+  lj_arena_hugetab_prepare_sweep(&ht);
+  cursor = 0;
+  assert(lj_arena_hugetab_sweep_next(&ht, &cursor, &found, &hi));
+  assert(found == p);
+  assert(lj_arena_hugetab_sweep_reader_acquire(&ht, found, &sweep, &hi) ==
+	 LJ_ARENA_HUGE_READER_ACQUIRED);
+  assert(hi.readers == 1u && !(hi.flags & LJ_HUGEF_DEFER_FREE));
+  assert(!lj_arena_hugetab_claim_external_free(&ht, p, &hi));
+  assert((hi.flags & LJ_HUGEF_DEFER_FREE) && hi.readers == 1u);
+  assert(lj_arena_hugetab_reader_release(&sweep, &hi) ==
+	 LJ_ARENA_HUGE_READER_HANDOFF);
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+  delete_unmap(&ht, p);
+  lj_arena_hugetab_fini(&ht);
 }
 
 static void test_huge_reader_root_recovery_orders(PRNGState *rs)
@@ -1287,10 +1348,12 @@ static void test_huge_reader_shapes_and_realloc(PRNGState *rs)
   TGAlloc alloc;
   LJArenaAllocD ad;
   TGState *owner;
-  global_State *progress = (global_State *)(uintptr_t)0x12340000u;
+  global_State *progress = (global_State *)calloc(1, sizeof(*progress));
   void *p, *q, *sweepp, *base = NULL;
   uint32_t cursor;
 
+  assert(progress != NULL);
+  lj_gc2_tabledesc_init_unpublished(&progress->gc2.table_rescan_desc, 0);
   assert(lj_arena_hugetab_init(&ht, 2));
   p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
   assert(p != NULL);
@@ -1394,6 +1457,7 @@ static void test_huge_reader_shapes_and_realloc(PRNGState *rs)
   free(owner);
   lj_arena_alloc_fini(&alloc);
   lj_arena_hugetab_fini(&ht);
+  free(progress);
 }
 
 static void test_huge_reader_overflow_and_size(PRNGState *rs)
@@ -1528,7 +1592,7 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
 
   /* The registry reader defeats its exact delete. REGISTERED and the allocator
   ** list remain intact, so terminal fini cannot proceed to unmap. */
-  lj_arena_alloc_fini(&alloc);
+  assert(!lj_arena_alloc_fini_try(&alloc));
   assert(lj_arena_alloc_registry_lookup(&alloc, race.a, NULL));
   assert((lj_arena_flags_acq(race.a) & LJ_AF_REGISTERED) != 0);
 
@@ -1538,14 +1602,14 @@ static void test_registry_rescue_unmap_handoff(PRNGState *rs)
   assert(race.admission == LJ_ARENA_RESCUE_FULL && race.observed == 0xa6);
   /* After the bridge drops its registry count, the arena admission itself
   ** defeats terminal close. A second fini still retains the locator. */
-  lj_arena_alloc_fini(&alloc);
+  assert(!lj_arena_alloc_fini_try(&alloc));
   assert(lj_arena_alloc_registry_lookup(&alloc, race.a, NULL));
   la_store32_rel(&race.leave, 1);
   assert(pthread_join(thread, NULL) == 0);
 
   /* With both admissions gone, close -> registry delete -> unmap succeeds in
   ** that order. The stale address is used only as a HugeTab key afterward. */
-  lj_arena_alloc_fini(&alloc);
+  assert(lj_arena_alloc_fini_try(&alloc));
   assert(!lj_arena_hugetab_lookup(&registry, race.a, NULL));
   lj_arena_hugetab_fini(&registry);
 #else
@@ -2091,6 +2155,370 @@ static void test_huge_reader_destructor_retry(PRNGState *rs)
   lj_arena_hugetab_fini(&ht);
 }
 
+enum {
+  HUGE_GC2_EXACT_ACTIVE = 1,
+  HUGE_GC2_PENDING = 2,
+  HUGE_GC2_UNRELATED_ACTIVE = 3,
+  HUGE_GC2_PINNED = 4,
+  HUGE_GC2_INVALID = 5
+};
+
+typedef struct HugeGC2Fixture {
+  HugeTab ht;
+  void *p;
+  size_t size;
+  LJGC2TableDesc desc;
+  LJGC2TableDesc identity;
+  LJGC2TableDescTicket desc_ticket;
+  LJGC2TableTokenTicket token_ticket;
+  uint64_t reset_table;
+  uint64_t reset_generation;
+  uint32_t authority;
+} HugeGC2Fixture;
+
+/* Keep GCC object-size analysis from treating the 64-KiB alignment mask in
+** lj_arena_of() as a possible constant-null destination for the atomic store. */
+static LJ_NOINLINE void huge_gc2_bind_desc(GCArena *a,
+	LJGC2TableDesc *desc)
+{
+  if (!a)
+    abort();
+  lj_arena_gc2_tabledesc_rel(a, desc);
+}
+
+static void huge_gc2_fixture_init(HugeGC2Fixture *fx, PRNGState *rs,
+	size_t size, uint32_t aflags, uint32_t hflags)
+{
+  GCArena *a;
+  memset(fx, 0, sizeof(*fx));
+  fx->size = size;
+  lj_gc2_tabledesc_init_unpublished(&fx->desc, 0);
+  assert(lj_arena_hugetab_init(&fx->ht, 2));
+  fx->p = lj_arena_huge_map(rs, size, aflags);
+  assert(fx->p != NULL);
+  a = lj_arena_of(fx->p);
+  assert(lj_arena_gc2_tabledesc_acq(a) == NULL);
+  huge_gc2_bind_desc(a, &fx->desc);
+  assert(lj_arena_gc2_tabledesc_acq(a) == &fx->desc);
+  assert(lj_arena_hugetab_insert(&fx->ht, fx->p, size, hflags) == 1);
+}
+
+static void huge_gc2_exact_reset(LJGC2TableDesc *desc, uint64_t from_table,
+	uint64_t generation)
+{
+  la_u128 expected, desired;
+  expected.lo = from_table;
+  expected.hi = generation;
+  desired.lo = 0;
+  desired.hi = generation;
+  assert(la_cas128(&desc->value, &expected, desired));
+}
+
+static void huge_gc2_authority_publish(HugeGC2Fixture *fx,
+	uint32_t authority)
+{
+  LJGC2TableDescSnap snap, observed;
+  LJGC2TabStamp *stamp = lj_arena_gc2_stamp_acq(fx->p);
+  la_u128 expected, malformed;
+  assert(fx->authority == 0 && stamp != NULL);
+  assert(lj_gc2_table_token_state(la_load64_acq(&stamp->token.control)) ==
+	 LJ_GC2_TABLE_TOKEN_NONE);
+  snap = lj_gc2_tabledesc_snapshot(&fx->desc);
+  assert(snap.state == LJ_GC2_TABLEDESC_IDLE);
+  fx->authority = authority;
+  if (authority == HUGE_GC2_EXACT_ACTIVE ||
+      authority == HUGE_GC2_UNRELATED_ACTIVE) {
+    const void *identity = authority == HUGE_GC2_EXACT_ACTIVE ?
+	fx->p : (const void *)&fx->identity;
+    assert(lj_gc2_tabledesc_try_publish(&fx->desc, identity,
+	&fx->desc_ticket, &observed) == LJ_GC2_TABLEDESC_RESULT_OK);
+    assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+	   observed.table == (uintptr_t)identity);
+  } else if (authority == HUGE_GC2_PENDING) {
+    assert(lj_gc2_table_token_refresh(&stamp->token, &fx->token_ticket) ==
+	   LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  } else if (authority == HUGE_GC2_PINNED) {
+    assert(lj_gc2_tabledesc_pin(&fx->desc, snap, &observed) ==
+	   LJ_GC2_TABLEDESC_RESULT_PINNED);
+    assert(observed.state == LJ_GC2_TABLEDESC_PINNED);
+    fx->reset_table = 1;
+    fx->reset_generation = observed.generation;
+  } else {
+    assert(authority == HUGE_GC2_INVALID);
+    expected.lo = 0;
+    expected.hi = snap.generation;
+    malformed.lo = 3;
+    malformed.hi = snap.generation;
+    assert(la_cas128(&fx->desc.value, &expected, malformed));
+    assert(lj_gc2_tabledesc_snapshot(&fx->desc).state ==
+	   LJ_GC2_TABLEDESC_INVALID);
+    fx->reset_table = 3;
+    fx->reset_generation = snap.generation;
+  }
+}
+
+static void huge_gc2_authority_release(HugeGC2Fixture *fx)
+{
+  LJGC2TableDescSnap observed;
+  LJGC2TabStamp *stamp = lj_arena_gc2_stamp_acq(fx->p);
+  assert(fx->authority != 0 && stamp != NULL);
+  if (fx->authority == HUGE_GC2_EXACT_ACTIVE ||
+      fx->authority == HUGE_GC2_UNRELATED_ACTIVE) {
+    assert(lj_gc2_tabledesc_finish_help(&fx->desc, &fx->desc_ticket,
+	&observed) == LJ_GC2_TABLEDESC_RESULT_OK);
+    assert(observed.state == LJ_GC2_TABLEDESC_IDLE);
+  } else if (fx->authority == HUGE_GC2_PENDING) {
+    assert(lj_gc2_table_token_complete(&stamp->token, &fx->token_ticket) ==
+	   LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  } else {
+    assert(fx->authority == HUGE_GC2_PINNED ||
+	   fx->authority == HUGE_GC2_INVALID);
+    /* PINNED is absorbing in production. These isolated fault fixtures use
+    ** one exact test-only reset so their mapping can be safely torn down. */
+    huge_gc2_exact_reset(&fx->desc, fx->reset_table,
+	fx->reset_generation);
+  }
+  fx->authority = 0;
+  assert(lj_gc2_tabledesc_snapshot(&fx->desc).state ==
+	 LJ_GC2_TABLEDESC_IDLE);
+  assert(lj_gc2_table_token_state(la_load64_acq(&stamp->token.control)) ==
+	 LJ_GC2_TABLE_TOKEN_NONE);
+}
+
+static void huge_gc2_delete_unmap(HugeGC2Fixture *fx)
+{
+  LJHugeInfo hi;
+  assert(fx->authority == 0);
+  assert(lj_arena_hugetab_delete(&fx->ht, fx->p, &hi));
+  assert(hi.size == fx->size);
+  lj_arena_huge_unmap(fx->p, hi.size);
+  lj_arena_hugetab_fini(&fx->ht);
+  assert(fx->ht.h == NULL);
+}
+
+static void test_huge_gc2_exact_authority_gates(PRNGState *rs)
+{
+  static const uint32_t modes[] = {
+    HUGE_GC2_EXACT_ACTIVE, HUGE_GC2_PENDING
+  };
+  const size_t base = LJ_HUGE_THRESHOLD + 2901u;
+  uint32_t mode, serial = 0;
+
+  for (mode = 0; mode < sizeof(modes) / sizeof(modes[0]); mode++) {
+    HugeGC2Fixture fx;
+    LJHugeInfo before, after;
+    GCArena *a;
+    uint32_t unmapped;
+
+    /* Pre-destructor acquisition must not authorize any body access or
+    ** terminal metadata while either physical scan authority is present. */
+    huge_gc2_fixture_init(&fx, rs, base + serial++, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_MARK);
+    a = lj_arena_of(fx.p);
+    lj_arena_hugetab_prepare_sweep(&fx.ht);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &before));
+    huge_gc2_authority_publish(&fx, modes[mode]);
+    assert(!lj_arena_gc2_reclaim_ptr_clear_acq(a, fx.p));
+    assert(lj_arena_hugetab_destruct_acquire(&fx.ht, fx.p, &after) ==
+	 LJ_ARENA_DESTRUCT_LOST);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &after));
+    assert(after.flags == before.flags && after.readers == 0);
+    huge_gc2_authority_release(&fx);
+    assert(lj_arena_gc2_reclaim_ptr_clear_acq(a, fx.p));
+    assert(lj_arena_hugetab_destruct_acquire(&fx.ht, fx.p, &after) ==
+	 LJ_ARENA_DESTRUCT_ACQUIRED);
+    assert(lj_arena_hugetab_finish_external_free(&fx.ht, fx.p, &after) ==
+	 LJ_ARENA_HUGE_FINISH_DEFERRED);
+    huge_gc2_delete_unmap(&fx);
+
+    /* The post-grace RETIRED->FREEING claim is independently gated. */
+    huge_gc2_fixture_init(&fx, rs, base + serial++, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_SWEEP_OLD|
+	LJ_HUGEF_RETIRED);
+    a = lj_arena_of(fx.p);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &before));
+    huge_gc2_authority_publish(&fx, modes[mode]);
+    assert(!lj_arena_hugetab_claim_freeing(&fx.ht, fx.p, &after));
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &after));
+    assert(after.flags == before.flags);
+    huge_gc2_authority_release(&fx);
+    assert(lj_arena_gc2_reclaim_ptr_clear_acq(a, fx.p));
+    assert(lj_arena_hugetab_claim_freeing(&fx.ht, fx.p, &after));
+    assert((after.flags & LJ_HUGEF_FREEING) != 0);
+    huge_gc2_delete_unmap(&fx);
+
+    /* Generic tombstoning must retain the authoritative HugeTab locator. */
+    huge_gc2_fixture_init(&fx, rs, base + serial++, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &before));
+    huge_gc2_authority_publish(&fx, modes[mode]);
+    assert(!lj_arena_hugetab_delete(&fx.ht, fx.p, &after));
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &after));
+    assert(after.flags == before.flags && after.size == before.size);
+    huge_gc2_authority_release(&fx);
+    huge_gc2_delete_unmap(&fx);
+
+    /* A conflict already present at external-free claim time records the
+    ** irrevocable logical free without granting opaque BUSY ownership. */
+    huge_gc2_fixture_init(&fx, rs, base + serial++, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+    huge_gc2_authority_publish(&fx, modes[mode]);
+    assert(!lj_arena_hugetab_claim_external_free(&fx.ht, fx.p, &after));
+    assert((after.flags & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_DEFER_FREE)) ==
+	   (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_DEFER_FREE));
+    assert((after.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) == 0);
+    assert(!lj_arena_hugetab_retry_deferred(&fx.ht, fx.p, NULL));
+    huge_gc2_authority_release(&fx);
+    assert(lj_arena_hugetab_retry_deferred(&fx.ht, fx.p, &after));
+    assert((after.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	   (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+    assert((after.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE)) == 0);
+    huge_gc2_delete_unmap(&fx);
+
+    /* Joined-world raw-fault containment: primitive injection deliberately
+    ** bypasses the required counted publisher admission after FREEING|BUSY.
+    ** Finish still hands the logical free to sweep and never strands BUSY;
+    ** this is not a lawful runtime publisher interleaving. */
+    huge_gc2_fixture_init(&fx, rs, base + serial++, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+    assert(lj_arena_hugetab_claim_external_free(&fx.ht, fx.p, &before));
+    assert((before.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) ==
+	   (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY));
+    huge_gc2_authority_publish(&fx, modes[mode]);
+    assert(lj_arena_hugetab_finish_external_free(&fx.ht, fx.p, &after) ==
+	 LJ_ARENA_HUGE_FINISH_DEFERRED);
+    assert((after.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD|
+	   LJ_HUGEF_DEFER_FREE)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_DEFER_FREE));
+    assert((after.flags & LJ_HUGEF_BUSY) == 0);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &before));
+    assert(before.flags == after.flags);
+    assert(!lj_arena_hugetab_retry_deferred(&fx.ht, fx.p, NULL));
+    assert(!lj_arena_hugetab_delete(&fx.ht, fx.p, NULL));
+    huge_gc2_authority_release(&fx);
+    assert(lj_arena_hugetab_retry_deferred(&fx.ht, fx.p, &after));
+    assert((after.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	   (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+    assert((after.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE)) == 0);
+    huge_gc2_delete_unmap(&fx);
+
+    /* Terminal table destruction must not discard the only locator merely
+    ** because the last-resort unmap certificate would retain the mapping. */
+    huge_gc2_fixture_init(&fx, rs, base + serial++, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+    huge_gc2_authority_publish(&fx, modes[mode]);
+    unmapped = ~(uint32_t)0;
+    assert(!lj_arena_hugetab_fini_all_try(&fx.ht, &unmapped));
+    assert(unmapped == 0u);
+    assert(fx.ht.h != NULL &&
+	   lj_arena_hugetab_lookup(&fx.ht, fx.p, &after));
+    huge_gc2_authority_release(&fx);
+    assert(lj_arena_hugetab_fini_all_try(&fx.ht, &unmapped));
+    assert(unmapped == 1u);
+    assert(fx.ht.h == NULL);
+
+    /* Direct unmap is a final independent backstop. Prove the first attempt
+    ** retained the payload, then clear the current generation and retry. */
+    huge_gc2_fixture_init(&fx, rs, base + serial++, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+    memset(fx.p, 0x6d, 64u);
+    huge_gc2_authority_publish(&fx, modes[mode]);
+    lj_arena_huge_unmap(fx.p, fx.size);
+    assert(((unsigned char *)fx.p)[0] == 0x6d &&
+	   ((unsigned char *)fx.p)[63] == 0x6d);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &after));
+    huge_gc2_authority_release(&fx);
+    assert(lj_arena_hugetab_delete(&fx.ht, fx.p, &after));
+    lj_arena_huge_unmap_claimed(fx.p, fx.size);
+    lj_arena_hugetab_fini(&fx.ht);
+    assert(fx.ht.h == NULL);
+  }
+}
+
+static void test_huge_gc2_unrelated_and_faults(PRNGState *rs)
+{
+  static const uint32_t faults[] = { HUGE_GC2_PINNED, HUGE_GC2_INVALID };
+  const size_t base = LJ_HUGE_THRESHOLD + 3031u;
+  HugeGC2Fixture fx;
+  LJHugeInfo before, after;
+  GCArena *a;
+  uint32_t i;
+
+  /* ACTIVE is exact, not a global performance stop. An unrelated identity
+  ** permits the ordinary pre-sweep external-free path to finish and unmap. */
+  huge_gc2_fixture_init(&fx, rs, base, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+  a = lj_arena_of(fx.p);
+  huge_gc2_authority_publish(&fx, HUGE_GC2_UNRELATED_ACTIVE);
+  assert(lj_arena_gc2_reclaim_ptr_clear_acq(a, fx.p));
+  assert(lj_arena_hugetab_claim_external_free(&fx.ht, fx.p, &before));
+  assert(lj_arena_hugetab_finish_external_free(&fx.ht, fx.p, &after) ==
+	 LJ_ARENA_HUGE_FINISH_UNMAP);
+  assert(!lj_arena_hugetab_lookup(&fx.ht, fx.p, NULL));
+  huge_gc2_authority_release(&fx);
+  lj_arena_huge_unmap(fx.p, fx.size);
+  lj_arena_hugetab_fini(&fx.ht);
+
+  /* PINNED and malformed descriptor states are allocation-independent global
+  ** vetoes. They retain both semantic destruction and terminal table state. */
+  for (i = 0; i < sizeof(faults) / sizeof(faults[0]); i++) {
+    huge_gc2_fixture_init(&fx, rs, base + i + 1u, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|LJ_HUGEF_MARK);
+    a = lj_arena_of(fx.p);
+    lj_arena_hugetab_prepare_sweep(&fx.ht);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &before));
+    huge_gc2_authority_publish(&fx, faults[i]);
+    assert(!lj_arena_gc2_reclaim_ptr_clear_acq(a, fx.p));
+    assert(lj_arena_hugetab_destruct_acquire(&fx.ht, fx.p, &after) ==
+	   LJ_ARENA_DESTRUCT_LOST);
+    assert(!lj_arena_hugetab_delete(&fx.ht, fx.p, NULL));
+    assert(lj_arena_hugetab_fini_all(&fx.ht) == 0u);
+    assert(fx.ht.h != NULL &&
+	   lj_arena_hugetab_lookup(&fx.ht, fx.p, &after));
+    assert(after.flags == before.flags);
+    huge_gc2_authority_release(&fx);
+    assert(lj_arena_gc2_reclaim_ptr_clear_acq(a, fx.p));
+    assert(lj_arena_hugetab_destruct_acquire(&fx.ht, fx.p, &after) ==
+	   LJ_ARENA_DESTRUCT_ACQUIRED);
+    assert(lj_arena_hugetab_finish_external_free(&fx.ht, fx.p, &after) ==
+	   LJ_ARENA_HUGE_FINISH_DEFERRED);
+    huge_gc2_delete_unmap(&fx);
+  }
+}
+
+static void test_plain_huge_ignores_gc2_authority(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 3079u;
+  HugeGC2Fixture fx;
+  LJGC2TabStamp *stamp;
+  LJGC2TableTokenTicket token_ticket;
+  LJHugeInfo hi;
+  GCArena *a;
+
+  huge_gc2_fixture_init(&fx, rs, size, 0, 0);
+  a = lj_arena_of(fx.p);
+  huge_gc2_authority_publish(&fx, HUGE_GC2_EXACT_ACTIVE);
+  stamp = lj_arena_gc2_stamp_acq(fx.p);
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_arena_gc2_reclaim_ptr_clear_acq(a, fx.p));
+
+  /* Plain mappings can never host table-rescan work. Even impossible injected
+  ** authority must not penalize their ordinary metadata arbitration. */
+  assert(lj_arena_hugetab_destruct_acquire(&fx.ht, fx.p, &hi) ==
+	 LJ_ARENA_DESTRUCT_ACQUIRED);
+  assert(lj_arena_hugetab_finish_external_free(&fx.ht, fx.p, &hi) ==
+	 LJ_ARENA_HUGE_FINISH_UNMAP);
+  assert(!lj_arena_hugetab_lookup(&fx.ht, fx.p, NULL));
+  assert(lj_gc2_table_token_complete(&stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  huge_gc2_authority_release(&fx);
+  lj_arena_huge_unmap(fx.p, fx.size);
+  lj_arena_hugetab_fini(&fx.ht);
+  assert(fx.ht.h == NULL);
+}
+
 #if defined(LJ_ARENA_TEST_HELPERS)
 static void test_gc2_sidecar_prealloc_and_fini_veto(PRNGState *rs)
 {
@@ -2128,7 +2556,7 @@ static void test_gc2_sidecar_prealloc_and_fini_veto(PRNGState *rs)
   assert(stamp != NULL);
   assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
 	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
-  lj_arena_alloc_fini(&alloc);
+  assert(!lj_arena_alloc_fini_try(&alloc));
   assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == a);
   assert(lj_arena_remote_active_acq(a) == 0);
   assert(!lj_arena_gc2_tokens_empty_acq(a));
@@ -2137,7 +2565,7 @@ static void test_gc2_sidecar_prealloc_and_fini_veto(PRNGState *rs)
   assert(lj_gc2_table_token_generation(
 	   la_load64_acq(&stamp->token.control)) == 2u);
   assert(lj_arena_gc2_tokens_empty_acq(a));
-  lj_arena_alloc_fini(&alloc);
+  assert(lj_arena_alloc_fini_try(&alloc));
   assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
 }
 #endif
@@ -2159,7 +2587,7 @@ int main(void)
   void *racep;
   void *rangep, *rangebase;
   LJHugeInfo hi;
-  uint32_t i;
+  uint32_t i, terminal_unmapped;
 
   lj_prng_seed_fixed(&rs);
   test_huge_reader_lifetime(&rs);
@@ -2167,6 +2595,10 @@ int main(void)
   test_huge_reader_shapes_and_realloc(&rs);
   test_huge_reader_overflow_and_size(&rs);
   test_huge_reader_destructor_retry(&rs);
+  test_huge_sweep_reader_exact_admission(&rs);
+  test_huge_gc2_exact_authority_gates(&rs);
+  test_huge_gc2_unrelated_and_faults(&rs);
+  test_plain_huge_ignores_gc2_authority(&rs);
   test_alloc_committed_prefix_tail_veto(&rs);
   test_managed_shrink_suffix_veto(&rs);
   test_plain_reader_mutation_gate(&rs);
@@ -2465,7 +2897,9 @@ int main(void)
   assert(errno == EDOM);
   assert(src.h == NULL);
   errno = ERANGE;
-  assert(lj_arena_hugetab_fini_all(&dst) == 0u);
+  terminal_unmapped = ~(uint32_t)0;
+  assert(lj_arena_hugetab_fini_all_try(&dst, &terminal_unmapped));
+  assert(terminal_unmapped == 0u);
   assert(errno == ERANGE);
   assert(dst.h == NULL);
 

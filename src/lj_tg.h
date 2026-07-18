@@ -51,6 +51,7 @@ typedef uint16_t HotCount;
 #define TG_FINI_LIVE		0u
 #define TG_FINI_BUSY		1u
 #define TG_FINI_DONE		2u
+#define TG_FINI_RETRY		3u
 
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;

@@ -83,6 +83,24 @@ static int tg_list_contains(global_State *g, TGState *target)
   return 0;
 }
 
+static GCArena *first_registered_arena(TGAlloc *alloc)
+{
+  uint32_t k;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    GCArena *a = alloc->owned[k];
+    if (!a)
+      a = alloc->needsweep[k];
+    if (!a)
+      a = alloc->quarantine[k];
+    if (!a)
+      a = (GCArena *)la_loadptr_acq(
+	(void *const *)&alloc->reclaimed[k]);
+    if (a && (lj_arena_flags_acq(a) & LJ_AF_REGISTERED))
+      return a;
+  }
+  return NULL;
+}
+
 static void init_live_tg(global_State *g, TGState *tg, uint8_t flags,
 			 uint32_t slot)
 {
@@ -107,6 +125,11 @@ int main(void)
   TGState *parent_tg;
   TGState *child_tg;
   TGState *worker_tg;
+  HugeTab *small_registry;
+  LJHugeTabHdr *small_registry_h;
+  GCArena *registered_arena;
+  LJHugeReader worker_reader = { NULL, NULL, 0 };
+  LJTGSlotSnap slot_snap;
   size_t child_size = sizeof(TGState);
   uint32_t i;
 
@@ -115,6 +138,21 @@ int main(void)
   lj_thr_set_tg(g->main_tg);
   assert(gc2_n_threads_acq(g) == 1u);
   assert(lj_arena_hugetab_lookup(&g->main_tg->huge, G2GG(g), NULL) == 0);
+
+  /* Raw GC2 teardown cannot free the small-arena directory while allocator
+  ** entries remain. A blocked try preserves every enclosing alias and exact
+  ** lookup; close retries only after main allocator deletion drains it. */
+  small_registry = (HugeTab *)gc2_small_arena_tab_acq(g);
+  assert(small_registry != NULL && small_registry->h != NULL);
+  small_registry_h = small_registry->h;
+  registered_arena = first_registered_arena(&g->main_tg->alloc);
+  assert(registered_arena != NULL);
+  assert(lj_arena_hugetab_lookup(small_registry, registered_arena, NULL));
+  assert(!lj_gc2_small_arena_registry_fini_try(g));
+  assert(gc2_small_arena_tab_acq(g) == small_registry);
+  assert(g->main_tg->alloc.smalltab == small_registry);
+  assert(small_registry->h == small_registry_h);
+  assert(lj_arena_hugetab_lookup(small_registry, registered_arena, NULL));
 
   parent_tg = (TGState *)malloc(sizeof(*parent_tg));
   worker_tg = (TGState *)malloc(sizeof(*worker_tg));
@@ -151,6 +189,40 @@ int main(void)
   assert(tg_list_contains(g, worker_tg));
   assert(gc2_worker_tg_retired_acq(g) == worker_tg);
   gc2_worker_active_rel(g, 0);
+
+  /* First force the ordinary transfer route to visit every dead TG. The
+  ** wrapper rejects each transfer, leaving terminal orphan ownership as the
+  ** capacity-independent fallback. */
+  assert(lj_tg_reclaim_dead_terminal(g) == 0u);
+  assert(lj_arena_hugetab_reader_acquire(
+	   &worker_tg->huge, forced_payload[2], &worker_reader, NULL) ==
+	 LJ_ARENA_HUGE_READER_ACQUIRED);
+
+  /* Checked inner refusal must retain both enclosing owners. The stable slot
+  ** stays non-borrowable RECLAIMING and the embedded retire list remains the
+  ** raw storage owner until a later retry observes DONE. */
+  assert(lj_tg_reclaim_dead_terminal_orphans(g) == 2u);
+  assert(tg_list_contains(g, worker_tg));
+  assert(gc2_worker_tg_retired_acq(g) == worker_tg);
+  assert(lj_tg_fini_state_acq(worker_tg) == TG_FINI_RETRY);
+  assert(lj_tg_flags_test_acq(worker_tg, TGF_HUGETAB));
+  assert(worker_tg->huge.h != NULL);
+  assert(lj_arena_hugetab_lookup(
+	   &worker_tg->huge, forced_payload[2], NULL));
+  assert(map_record[2].unmaps == 0u);
+  assert(lj_tgregistry_key_snapshot(&worker_tg->registry_key, &slot_snap) ==
+	 LJ_TGSLOT_OK);
+  assert(slot_snap.state == LJ_TGSLOT_RECLAIMING &&
+	 slot_snap.lease_count == 0u);
+
+  assert(lj_arena_hugetab_reader_release(&worker_reader, NULL) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+  assert(lj_tg_reclaim_dead_terminal_orphans(g) == 1u);
+  assert(!tg_list_contains(g, worker_tg));
+  assert(gc2_worker_tg_retired_acq(g) == worker_tg);
+  assert(lj_tg_fini_state_acq(worker_tg) == TG_FINI_DONE);
+  assert(map_record[2].unmaps == 1u);
+
   mt_shutdown_rel(g, 0);
 
   lua_close(L);
