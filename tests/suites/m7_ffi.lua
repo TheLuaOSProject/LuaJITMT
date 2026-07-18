@@ -79,7 +79,8 @@ local m7_cases = {
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
-  "m7_ffi_ccall_native"
+  "m7_ffi_ccall_native",
+  "m7_ffi_native_frames"
 }
 
 local function build_clib_ldscript_fixture(t)
@@ -155,6 +156,24 @@ assert(util.traceinfo(1), "bulk ffi.fill loop did not trace")
 print("bulk fill ok")
 ]], { timeout = "60s" })
       print("M7 FFI native blocking-call behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_native_frames",
+    description = "generic FFI native-frame sequence and nesting substrate",
+    run = function(t)
+      local flags = "-DLUA_USE_ASSERT -DLJ_FFI_NATIVE_FRAME_TEST_HELPERS"
+      build.with_default_build_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-ffi-native-frames"),
+                        "t-ffi-native-frames.c", {
+          build = false,
+          cflags = flags,
+          timeout = "20s"
+        })
+      end)
+      print("M7 FFI native-frame substrate passed")
     end
   })
 

@@ -152,6 +152,13 @@ struct TGState {
   ** its one non-reused runtime incarnation until legacy reclaim clears it. */
   LJTGRegistryKey registry_key;
   uint8_t registry_shadow_missed;  /* Legacy-only attach after slot OOM. */
+#if LJ_HASFFI
+  /* Keep the dormant generic frame substrate last so it cannot perturb any
+  ** existing VM/ABI-sensitive TG offset before generated entry code lands. */
+  uint64_t ffi_native_seq;	/* Even stable, odd owner transition. */
+  uint32_t ffi_native_depth;
+  LJFFINativeFrame ffi_native_frame[LJ_FFI_NATIVE_FRAME_MAX];
+#endif
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);

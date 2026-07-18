@@ -199,6 +199,26 @@ typedef struct CCallNativeState {
   uint32_t post_winerr;		/* Paired Win32 LastError; zero elsewhere. */
 } CCallNativeState;
 
+/* Dormant structural substrate for generated generic FFI calls. Push/pop are
+** single-owner and allocation-free. Capacity exhaustion is the only ordinary
+** push failure and leaves sequence, depth and payload unchanged. Snapshot
+** copies every active frame without dereferencing any published stack offset.
+*/
+LJ_FUNC void lj_ffi_native_frame_init(TGState *tg);
+LJ_FUNC void lj_ffi_native_frame_fini(const TGState *tg);
+LJ_FUNC int lj_ffi_native_frame_push(TGState *tg,
+				     const LJFFINativeFrame *frame);
+LJ_FUNC void lj_ffi_native_frame_pop(TGState *tg, LJFFINativeFrame *frame);
+LJ_FUNC LJFFINativeFrameSnapshotResult lj_ffi_native_frame_snapshot(
+  const TGState *tg, LJFFINativeFrameSnapshot *snapshot);
+LJ_FUNC uint64_t lj_ffi_native_frame_sequence_acq(const TGState *tg);
+LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
+#if defined(LJ_FFI_NATIVE_FRAME_TEST_HELPERS)
+typedef void (*LJFFINativeFrameSnapshotHook)(TGState *tg);
+LJ_FUNC void lj_ffi_native_frame_test_set_snapshot_hook(
+  LJFFINativeFrameSnapshotHook hook);
+#endif
+
 /* -- C call handling ----------------------------------------------------- */
 
 /* Really belongs to lj_vm.h. */

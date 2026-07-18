@@ -398,6 +398,223 @@ static LJ_AINLINE void fin_order_slot_rel(FinRegOrderNode *ord, TValue *slot)
 
 typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 
+/* Generic traced-FFI native frame publication. This is deliberately distinct
+** from CCallNativeState: generated code cannot retain a C automatic across a
+** foreign call, while a remote GC/JIT observer needs stable per-TG storage.
+** The first dormant slice only publishes structural state. It does not grant
+** root-scanning authority, consume XSAVE staging or change native/JIT gates.
+*/
+#define LJ_FFI_NATIVE_FRAME_MAX		16
+#define LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED	0x01u
+#define LJ_FFI_NATIVE_FRAME_F_ACTIVE		0x02u
+#define LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN	0x04u
+#define LJ_FFI_NATIVE_FRAME_F_MASK \
+  (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED | LJ_FFI_NATIVE_FRAME_F_ACTIVE | \
+   LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN)
+
+struct GCtrace;
+
+typedef LJ_ALIGN(8) struct LJFFINativeFrame {
+  struct GCtrace *trace;		/* Exact body, never a reusable slot lookup. */
+  lua_State *L;		/* Lua carrier owning the materialized stack. */
+  void *func;			/* Foreign function entered by this frame. */
+  void *old_ffi_call_func;	/* Surrounding callback-discovery mirror. */
+  uint64_t root_offset;		/* Materialized root interval, stack-relative. */
+  uint64_t base_offset;
+  uint64_t top_offset;
+  uint64_t jit_base_offset;	/* Saved JIT base, stack-relative. */
+  uint64_t entry_exit_epoch;	/* Future forced-exit epoch snapshot. */
+  uint32_t trace_no;		/* Diagnostic only; trace is authoritative. */
+  MSize old_callback_slot;
+  uint32_t flags;
+  uint8_t old_native_had_stopreq;
+  uint8_t had_stopreq;
+} LJFFINativeFrame;
+
+typedef struct LJFFINativeFrameSnapshot {
+  uint64_t sequence;
+  uint32_t depth;
+  LJFFINativeFrame frame[LJ_FFI_NATIVE_FRAME_MAX];
+} LJFFINativeFrameSnapshot;
+
+typedef enum LJFFINativeFrameSnapshotResult {
+  LJ_FFI_NATIVE_FRAME_SNAPSHOT_INVALID = -1,
+  LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY = 0,
+  LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE = 1,
+  LJ_FFI_NATIVE_FRAME_SNAPSHOT_RETRY = 2
+} LJFFINativeFrameSnapshotResult;
+
+/* Every payload word has an atomic access surface even though the enclosing
+** even/odd sequence validates a coherent snapshot. C data races remain
+** undefined without these accesses; a seqlock is ordering, not atomicity. */
+static LJ_AINLINE struct GCtrace *lj_ffi_native_frame_trace_acq(
+  const LJFFINativeFrame *frame)
+{
+  return (struct GCtrace *)la_loadptr_acq((void *const *)&frame->trace);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_trace_rel(LJFFINativeFrame *frame,
+					      struct GCtrace *trace)
+{
+  la_storeptr_rel((void **)&frame->trace, trace);
+}
+
+static LJ_AINLINE lua_State *lj_ffi_native_frame_L_acq(
+  const LJFFINativeFrame *frame)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&frame->L);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_L_rel(LJFFINativeFrame *frame,
+					  lua_State *L)
+{
+  la_storeptr_rel((void **)&frame->L, L);
+}
+
+static LJ_AINLINE void *lj_ffi_native_frame_func_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_loadptr_acq((void *const *)&frame->func);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_func_rel(LJFFINativeFrame *frame,
+					     void *func)
+{
+  la_storeptr_rel((void **)&frame->func, func);
+}
+
+static LJ_AINLINE void *lj_ffi_native_frame_old_func_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_loadptr_acq((void *const *)&frame->old_ffi_call_func);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_old_func_rel(
+  LJFFINativeFrame *frame, void *func)
+{
+  la_storeptr_rel((void **)&frame->old_ffi_call_func, func);
+}
+
+static LJ_AINLINE uint64_t lj_ffi_native_frame_root_offset_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load64_acq(&frame->root_offset);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_root_offset_rel(
+  LJFFINativeFrame *frame, uint64_t offset)
+{
+  la_store64_rel(&frame->root_offset, offset);
+}
+
+static LJ_AINLINE uint64_t lj_ffi_native_frame_base_offset_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load64_acq(&frame->base_offset);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_base_offset_rel(
+  LJFFINativeFrame *frame, uint64_t offset)
+{
+  la_store64_rel(&frame->base_offset, offset);
+}
+
+static LJ_AINLINE uint64_t lj_ffi_native_frame_top_offset_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load64_acq(&frame->top_offset);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_top_offset_rel(
+  LJFFINativeFrame *frame, uint64_t offset)
+{
+  la_store64_rel(&frame->top_offset, offset);
+}
+
+static LJ_AINLINE uint64_t lj_ffi_native_frame_jit_base_offset_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load64_acq(&frame->jit_base_offset);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_jit_base_offset_rel(
+  LJFFINativeFrame *frame, uint64_t offset)
+{
+  la_store64_rel(&frame->jit_base_offset, offset);
+}
+
+static LJ_AINLINE uint64_t lj_ffi_native_frame_entry_exit_epoch_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load64_acq(&frame->entry_exit_epoch);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_entry_exit_epoch_rel(
+  LJFFINativeFrame *frame, uint64_t epoch)
+{
+  la_store64_rel(&frame->entry_exit_epoch, epoch);
+}
+
+static LJ_AINLINE uint32_t lj_ffi_native_frame_trace_no_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load32_acq(&frame->trace_no);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_trace_no_rel(
+  LJFFINativeFrame *frame, uint32_t traceno)
+{
+  la_store32_rel(&frame->trace_no, traceno);
+}
+
+static LJ_AINLINE MSize lj_ffi_native_frame_old_callback_slot_acq(
+  const LJFFINativeFrame *frame)
+{
+  return (MSize)la_load32_acq(&frame->old_callback_slot);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_old_callback_slot_rel(
+  LJFFINativeFrame *frame, MSize slot)
+{
+  la_store32_rel(&frame->old_callback_slot, (uint32_t)slot);
+}
+
+static LJ_AINLINE uint32_t lj_ffi_native_frame_flags_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load32_acq(&frame->flags);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_flags_rel(LJFFINativeFrame *frame,
+					      uint32_t flags)
+{
+  la_store32_rel(&frame->flags, flags);
+}
+
+static LJ_AINLINE uint8_t lj_ffi_native_frame_old_stopreq_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load8_acq(&frame->old_native_had_stopreq);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_old_stopreq_rel(
+  LJFFINativeFrame *frame, uint8_t had_stopreq)
+{
+  la_store8_rel(&frame->old_native_had_stopreq, had_stopreq);
+}
+
+static LJ_AINLINE uint8_t lj_ffi_native_frame_had_stopreq_acq(
+  const LJFFINativeFrame *frame)
+{
+  return la_load8_acq(&frame->had_stopreq);
+}
+
+static LJ_AINLINE void lj_ffi_native_frame_had_stopreq_rel(
+  LJFFINativeFrame *frame, uint8_t had_stopreq)
+{
+  la_store8_rel(&frame->had_stopreq, had_stopreq);
+}
+
 /* C callback state. Defined here, to avoid dragging in lj_ccall.h. */
 
 #define CCALLBACK_MAX_NEST	LJ_MAX_XLEVEL

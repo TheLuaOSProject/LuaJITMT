@@ -1391,6 +1391,245 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
   return lj_cconv_tv_ct_l(L, cts, ctr, rid, L->top-1, sp);
 }
 
+static void ffi_native_frame_copy(LJFFINativeFrame *dst,
+				  const LJFFINativeFrame *src)
+{
+  lj_ffi_native_frame_trace_rel(dst, lj_ffi_native_frame_trace_acq(src));
+  lj_ffi_native_frame_L_rel(dst, lj_ffi_native_frame_L_acq(src));
+  lj_ffi_native_frame_func_rel(dst, lj_ffi_native_frame_func_acq(src));
+  lj_ffi_native_frame_old_func_rel(dst,
+	lj_ffi_native_frame_old_func_acq(src));
+  lj_ffi_native_frame_root_offset_rel(dst,
+	lj_ffi_native_frame_root_offset_acq(src));
+  lj_ffi_native_frame_base_offset_rel(dst,
+	lj_ffi_native_frame_base_offset_acq(src));
+  lj_ffi_native_frame_top_offset_rel(dst,
+	lj_ffi_native_frame_top_offset_acq(src));
+  lj_ffi_native_frame_jit_base_offset_rel(dst,
+	lj_ffi_native_frame_jit_base_offset_acq(src));
+  lj_ffi_native_frame_entry_exit_epoch_rel(dst,
+	lj_ffi_native_frame_entry_exit_epoch_acq(src));
+  lj_ffi_native_frame_trace_no_rel(dst,
+	lj_ffi_native_frame_trace_no_acq(src));
+  lj_ffi_native_frame_old_callback_slot_rel(dst,
+	lj_ffi_native_frame_old_callback_slot_acq(src));
+  lj_ffi_native_frame_flags_rel(dst, lj_ffi_native_frame_flags_acq(src));
+  lj_ffi_native_frame_old_stopreq_rel(dst,
+	lj_ffi_native_frame_old_stopreq_acq(src));
+  lj_ffi_native_frame_had_stopreq_rel(dst,
+	lj_ffi_native_frame_had_stopreq_acq(src));
+}
+
+static void ffi_native_frame_clear(LJFFINativeFrame *frame)
+{
+  lj_ffi_native_frame_trace_rel(frame, NULL);
+  lj_ffi_native_frame_L_rel(frame, NULL);
+  lj_ffi_native_frame_func_rel(frame, NULL);
+  lj_ffi_native_frame_old_func_rel(frame, NULL);
+  lj_ffi_native_frame_root_offset_rel(frame, 0);
+  lj_ffi_native_frame_base_offset_rel(frame, 0);
+  lj_ffi_native_frame_top_offset_rel(frame, 0);
+  lj_ffi_native_frame_jit_base_offset_rel(frame, 0);
+  lj_ffi_native_frame_entry_exit_epoch_rel(frame, 0);
+  lj_ffi_native_frame_trace_no_rel(frame, 0);
+  lj_ffi_native_frame_old_callback_slot_rel(frame, 0);
+  lj_ffi_native_frame_flags_rel(frame, 0);
+  lj_ffi_native_frame_old_stopreq_rel(frame, 0);
+  lj_ffi_native_frame_had_stopreq_rel(frame, 0);
+}
+
+static int ffi_native_frame_empty(const LJFFINativeFrame *frame)
+{
+  return lj_ffi_native_frame_trace_acq(frame) == NULL &&
+    lj_ffi_native_frame_L_acq(frame) == NULL &&
+    lj_ffi_native_frame_func_acq(frame) == NULL &&
+    lj_ffi_native_frame_old_func_acq(frame) == NULL &&
+    lj_ffi_native_frame_root_offset_acq(frame) == 0 &&
+    lj_ffi_native_frame_base_offset_acq(frame) == 0 &&
+    lj_ffi_native_frame_top_offset_acq(frame) == 0 &&
+    lj_ffi_native_frame_jit_base_offset_acq(frame) == 0 &&
+    lj_ffi_native_frame_entry_exit_epoch_acq(frame) == 0 &&
+    lj_ffi_native_frame_trace_no_acq(frame) == 0 &&
+    lj_ffi_native_frame_old_callback_slot_acq(frame) == 0 &&
+    lj_ffi_native_frame_flags_acq(frame) == 0 &&
+    lj_ffi_native_frame_old_stopreq_acq(frame) == 0 &&
+    lj_ffi_native_frame_had_stopreq_acq(frame) == 0;
+}
+
+static int ffi_native_frame_valid(const LJFFINativeFrame *frame)
+{
+  uint64_t root = lj_ffi_native_frame_root_offset_acq(frame);
+  uint64_t base = lj_ffi_native_frame_base_offset_acq(frame);
+  uint64_t top = lj_ffi_native_frame_top_offset_acq(frame);
+  uint64_t jitbase = lj_ffi_native_frame_jit_base_offset_acq(frame);
+  uint32_t flags = lj_ffi_native_frame_flags_acq(frame);
+  return lj_ffi_native_frame_trace_acq(frame) != NULL &&
+    lj_ffi_native_frame_L_acq(frame) != NULL &&
+    lj_ffi_native_frame_func_acq(frame) != NULL &&
+    lj_ffi_native_frame_trace_no_acq(frame) != 0 &&
+    (flags & (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
+	      LJ_FFI_NATIVE_FRAME_F_ACTIVE)) ==
+      (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
+       LJ_FFI_NATIVE_FRAME_F_ACTIVE) &&
+    (flags & ~LJ_FFI_NATIVE_FRAME_F_MASK) == 0 &&
+    root <= base && base <= top && jitbase <= top &&
+    lj_ffi_native_frame_old_stopreq_acq(frame) <= 1 &&
+    lj_ffi_native_frame_had_stopreq_acq(frame) <= 1;
+}
+
+#if defined(LJ_FFI_NATIVE_FRAME_TEST_HELPERS)
+static LJFFINativeFrameSnapshotHook ffi_native_frame_snapshot_hook;
+
+void lj_ffi_native_frame_test_set_snapshot_hook(
+  LJFFINativeFrameSnapshotHook hook)
+{
+  la_storefunc_rel(&ffi_native_frame_snapshot_hook, hook);
+}
+#endif
+
+uint64_t lj_ffi_native_frame_sequence_acq(const TGState *tg)
+{
+  return tg ? la_load64_acq(&tg->ffi_native_seq) : 0;
+}
+
+uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg)
+{
+  return tg ? la_load32_acq(&tg->ffi_native_depth) : 0;
+}
+
+void lj_ffi_native_frame_init(TGState *tg)
+{
+  uint32_t i;
+  if (LJ_UNLIKELY(tg == NULL))
+    abort();
+  for (i = 0; i < LJ_FFI_NATIVE_FRAME_MAX; i++)
+    ffi_native_frame_clear(&tg->ffi_native_frame[i]);
+  la_store32_rlx(&tg->ffi_native_depth, 0);
+  la_store64_rlx(&tg->ffi_native_seq, 0);
+}
+
+void lj_ffi_native_frame_fini(const TGState *tg)
+{
+  uint32_t i;
+  uint64_t seq;
+  if (LJ_UNLIKELY(tg == NULL))
+    abort();
+  seq = lj_ffi_native_frame_sequence_acq(tg);
+  if (LJ_UNLIKELY((seq & 1u) != 0 ||
+		  lj_ffi_native_frame_depth_acq(tg) != 0))
+    abort();
+  for (i = 0; i < LJ_FFI_NATIVE_FRAME_MAX; i++)
+    if (LJ_UNLIKELY(!ffi_native_frame_empty(&tg->ffi_native_frame[i])))
+      abort();
+  /* Close a final-reader race in debug/lifecycle callers: a lawful owner is
+  ** excluded here, so any sequence change is internal lifecycle corruption. */
+  if (LJ_UNLIKELY(lj_ffi_native_frame_sequence_acq(tg) != seq))
+    abort();
+}
+
+int lj_ffi_native_frame_push(TGState *tg, const LJFFINativeFrame *frame)
+{
+  LJFFINativeFrame *dst;
+  uint64_t seq;
+  uint32_t depth;
+  if (LJ_UNLIKELY(tg == NULL || frame == NULL ||
+		  !ffi_native_frame_valid(frame)))
+    abort();
+  seq = lj_ffi_native_frame_sequence_acq(tg);
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  if (LJ_UNLIKELY((seq & 1u) != 0 || depth > LJ_FFI_NATIVE_FRAME_MAX))
+    abort();
+  if (depth == LJ_FFI_NATIVE_FRAME_MAX)
+    return 0;  /* Future lowering takes a pre-call side exit. */
+  if (LJ_UNLIKELY(seq > UINT64_MAX - 2u)) {
+    la_store64_rel(&tg->ffi_native_seq, UINT64_MAX);
+    abort();  /* Poison: never allow a remotely visible seqlock ABA. */
+  }
+  dst = &tg->ffi_native_frame[depth];
+  if (LJ_UNLIKELY(!ffi_native_frame_empty(dst)))
+    abort();
+  la_store64_rel(&tg->ffi_native_seq, seq + 1u);
+  /* An odd word must become observable before any following payload change.
+  ** Atomic release orders prior accesses; this explicit writer barrier also
+  ** prevents the compiler from sinking the transition behind frame stores. */
+  la_fence_rel();
+  ffi_native_frame_copy(dst, frame);
+  la_store32_rel(&tg->ffi_native_depth, depth + 1u);
+  la_store64_rel(&tg->ffi_native_seq, seq + 2u);
+  return 1;
+}
+
+void lj_ffi_native_frame_pop(TGState *tg, LJFFINativeFrame *frame)
+{
+  LJFFINativeFrame *src;
+  uint64_t seq;
+  uint32_t depth;
+  if (LJ_UNLIKELY(tg == NULL))
+    abort();
+  seq = lj_ffi_native_frame_sequence_acq(tg);
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  if (LJ_UNLIKELY((seq & 1u) != 0 || depth == 0 ||
+		  depth > LJ_FFI_NATIVE_FRAME_MAX))
+    abort();
+  if (LJ_UNLIKELY(seq > UINT64_MAX - 2u)) {
+    la_store64_rel(&tg->ffi_native_seq, UINT64_MAX);
+    abort();  /* Poison: never allow a remotely visible seqlock ABA. */
+  }
+  src = &tg->ffi_native_frame[depth - 1u];
+  if (LJ_UNLIKELY(!ffi_native_frame_valid(src)))
+    abort();
+  la_store64_rel(&tg->ffi_native_seq, seq + 1u);
+  la_fence_rel();
+  if (frame)
+    ffi_native_frame_copy(frame, src);
+  ffi_native_frame_clear(src);
+  la_store32_rel(&tg->ffi_native_depth, depth - 1u);
+  la_store64_rel(&tg->ffi_native_seq, seq + 2u);
+}
+
+LJFFINativeFrameSnapshotResult lj_ffi_native_frame_snapshot(
+  const TGState *tg, LJFFINativeFrameSnapshot *snapshot)
+{
+  LJFFINativeFrameSnapshot copy;
+  uint64_t seq0, seq1;
+  uint32_t depth, i;
+  if (LJ_UNLIKELY(tg == NULL))
+    return LJ_FFI_NATIVE_FRAME_SNAPSHOT_INVALID;
+  seq0 = lj_ffi_native_frame_sequence_acq(tg);
+  if (seq0 & 1u)
+    return LJ_FFI_NATIVE_FRAME_SNAPSHOT_RETRY;
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  if (depth > LJ_FFI_NATIVE_FRAME_MAX) {
+    seq1 = lj_ffi_native_frame_sequence_acq(tg);
+    return seq1 != seq0 || (seq1 & 1u) ?
+      LJ_FFI_NATIVE_FRAME_SNAPSHOT_RETRY :
+      LJ_FFI_NATIVE_FRAME_SNAPSHOT_INVALID;
+  }
+  memset(&copy, 0, sizeof(copy));
+  for (i = 0; i < depth; i++)
+    ffi_native_frame_copy(&copy.frame[i], &tg->ffi_native_frame[i]);
+#if defined(LJ_FFI_NATIVE_FRAME_TEST_HELPERS)
+  {
+    LJFFINativeFrameSnapshotHook hook =
+      la_loadfunc_acq(&ffi_native_frame_snapshot_hook);
+    if (hook)
+      hook((TGState *)tg);
+  }
+#endif
+  seq1 = lj_ffi_native_frame_sequence_acq(tg);
+  if (seq1 != seq0 || (seq1 & 1u))
+    return LJ_FFI_NATIVE_FRAME_SNAPSHOT_RETRY;
+  copy.sequence = seq0;
+  copy.depth = depth;
+  for (i = 0; i < depth; i++)
+    if (LJ_UNLIKELY(!ffi_native_frame_valid(&copy.frame[i])))
+      return LJ_FFI_NATIVE_FRAME_SNAPSHOT_INVALID;
+  if (snapshot)
+    *snapshot = copy;
+  return depth == 0 ? LJ_FFI_NATIVE_FRAME_SNAPSHOT_EMPTY :
+    LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE;
+}
+
 void lj_ccall_native_save(lua_State *L, CCallNativeState *st)
 {
   CCallErrorState err;

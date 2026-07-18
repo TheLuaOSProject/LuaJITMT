@@ -11,6 +11,9 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_buf.h"
+#if LJ_HASFFI
+#include "lj_ccall.h"
+#endif
 #include "lj_dispatch.h"
 #include "lj_err.h"
 #include "lj_gc.h"
@@ -274,6 +277,11 @@ void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
   lua_State *L = &GG->L;
   lj_assertG(lj_thr_id_is_owner(tid),
 	     "invalid main TG owner id");
+#if LJ_HASFFI
+  /* Initialize remote-visible frame storage before publishing any path to
+  ** this embedded TG through global state, the Lua carrier, or TLS. */
+  lj_ffi_native_frame_init(tg);
+#endif
   g->main_tg = tg;
   lj_tg_tid_rel(tg, tid);
   L->tg_hint = tg;
@@ -297,6 +305,9 @@ void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
 void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
+#if LJ_HASFFI
+    lj_ffi_native_frame_fini(g->main_tg);
+#endif
     lj_str_flush_num_credit(g, g->main_tg);
     tg_root_anchor_fini(g, g->main_tg);
     lj_tg_fini_ssb(g->main_tg);
@@ -313,6 +324,10 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
 		       int arena_internal)
 {
   memset(tg, 0, sizeof(*tg));
+#if LJ_HASFFI
+  /* L->tg_hint is the first external path to this heap TG. */
+  lj_ffi_native_frame_init(tg);
+#endif
   if (L) {
     L->tg_hint = tg;
     setmref(L->glref, g);
@@ -346,6 +361,12 @@ static int tg_fini_thread(global_State *g, TGState *tg, int terminal)
   uint8_t expect;
   if (!tg)
     return 1;
+#if LJ_HASFFI
+  /* Physical teardown has no recovery path for a generated return PC or its
+  ** published roots. Detach should have proved this already; terminal orphan
+  ** cleanup repeats the fail-stop invariant before freeing any TG storage. */
+  lj_ffi_native_frame_fini(tg);
+#endif
   /* LIVE/RETRY->BUSY is one physical-finalization attempt. RETRY keeps the
   ** enclosing TG authoritative when an inner HugeTab/arena certificate
   ** refuses teardown; DONE release-publishes every pointer clear and unmap.
@@ -635,6 +656,9 @@ void lj_tg_detach(global_State *g, TGState *tg)
   lua_State *cur_L, *thread_L;
   if (!g || !tg)
     return;
+#if LJ_HASFFI
+  lj_ffi_native_frame_fini(tg);
+#endif
   /* A table-vector pin names raw generation storage. Detaching its TG would
   ** make the owner-written publication disappear from reclamation scans while
   ** a C frame could still dereference that storage. This is an internal scope
