@@ -1475,16 +1475,29 @@ static void test_huge_sweep_stable_preadmission_arbitrates_stale_writer(void)
     assert(lj_arena_huge_recovery_state(hi.flags) ==
 	   LJ_ARENA_RECOVERY_PENDING);
 
+    /* Iterator metadata is only a hint. The writer's certified fresh reader
+    ** observes the late MARK+PENDING state, safely reanchors the live object,
+    ** and finishes its retirement ticket. Operation-local retry telemetry is
+    ** therefore clear even though the durable recovery item independently
+    ** vetoes the next reclaim scope until its semantic traversal is drained. */
     la_store32_rel(&reclaim.run, 1);
     assert(pthread_join(thread, NULL) == 0);
     assert(la_load32_acq(&reclaim.done) == 1);
-    assert(reclaim.result == 0 && reclaim.pending == 1);
+    assert(reclaim.result == 1 && reclaim.pending == 0);
+    assert(gc2_recovery_items_acq(f.g) == 1u);
+    assert(gc2_recovery_huge_items_acq(f.g) == 1u);
     assert(gc2_smr_reclaiming_acq(f.g) == LJ_GC2_SMR_OPEN);
     assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
-    assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_FREEING)) ==
+    assert(hi.readers == 0);
+    assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET|
+			 LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) ==
 	   LJ_HUGEF_MARK);
     assert(lj_arena_huge_recovery_state(hi.flags) ==
 	   LJ_ARENA_RECOVERY_PENDING);
+    assert(lj_arena_hugetab_root_state_acq(&f.tg->huge, ud, NULL) ==
+	   LJ_ARENA_ROOT_MEMBER);
+    assert(la_loadptr_acq((void *const *)&lj_arena_of(ud)->hdr.retire_obj) ==
+	   NULL);
     alarm(0);
     _exit(0);  /* Isolated stale-writer fixture intentionally keeps work live. */
   }
