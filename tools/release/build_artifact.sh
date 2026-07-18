@@ -333,7 +333,7 @@ case "$platform" in
     make_clean
     build_make "${windows_make_args[@]}"
     "$test_root/tools/ci/windows_gc2_tls_gate.sh" \
-      "${cross}objdump" "$root/src/lj_gc2.o"
+      "${cross}objdump" "$root/src/lj_gc2.o" "$root/src/lj_thr.o"
     make -C "$root" install DESTDIR="$stage" PREFIX="$prefix" \
       "${windows_install_args[@]}"
     install_doc "${stage}${prefix}/share/doc/luajitmt" "make install DESTDIR prefix tree"
@@ -343,6 +343,14 @@ case "$platform" in
     } >> "${stage}${prefix}/share/doc/luajitmt/BUILDINFO"
     windows_stage_runtime "$cross" "$cc" "${stage}${prefix}/bin" \
       "${stage}${prefix}/share/doc/luajitmt/BUILDINFO"
+    if [ "$run_tests" != "0" ]; then
+      gc2_cell_fixture="${stage}${prefix}/bin/lj-windows-gc2-cell.exe"
+      "$test_root/tools/ci/build_windows_gc2_cell_fixture.sh" \
+        "${cross}${cc}" "$root" "$test_root" "$gc2_cell_fixture"
+      WINEDEBUG=${WINEDEBUG:--all} \
+        "${LJ_RELEASE_WINDOWS_RUNNER:-wine}" "$gc2_cell_fixture"
+      rm -f "$gc2_cell_fixture"
+    fi
     windows_verify_import_closure "$cross" "${stage}${prefix}/bin"
     run_release_test
     archive=$(archive_zip_stage)

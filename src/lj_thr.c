@@ -16,11 +16,13 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #if LJ_TARGET_WINDOWS
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <malloc.h>
 #else
 #include <sched.h>
 #include <time.h>
@@ -49,9 +51,14 @@ typedef char lj_thr_tg_tag_requires_pointer_width[
 ** low bit one means TLS owns one exact registry lease for the masked body.
 ** This indirection makes every mutation after first admission an atomic cell
 ** store instead of another fallible TlsSetValue call. */
+#define LJ_THR_TG_CELL_SIZE 64u
 typedef struct LJThrTGCell {
   uintptr_t tagged_word;
+  LJThrGC2TLS gc2;
+  uint8_t pad[LJ_THR_TG_CELL_SIZE - sizeof(uintptr_t) - sizeof(LJThrGC2TLS)];
 } LJThrTGCell;
+typedef char lj_thr_tg_cell_is_one_cacheline[
+  sizeof(LJThrTGCell) == LJ_THR_TG_CELL_SIZE ? 1 : -1];
 
 static uint32_t lj_tls_tg_key = TLS_OUT_OF_INDEXES;
 static INIT_ONCE lj_tls_tg_once = INIT_ONCE_STATIC_INIT;
@@ -106,7 +113,8 @@ static LJThrTGCell *lj_thr_tls_alloc_cell(void)
     return NULL;
   }
 #endif
-  return (LJThrTGCell *)malloc(sizeof(LJThrTGCell));
+  return (LJThrTGCell *)_aligned_malloc(sizeof(LJThrTGCell),
+					       LJ_THR_TG_CELL_SIZE);
 }
 
 static BOOL lj_thr_tls_publish_cell(DWORD key, LJThrTGCell *cell)
@@ -871,9 +879,9 @@ int lj_thr_tg_tls_init(void)
   cell = lj_thr_tls_alloc_cell();
   if (!cell)
     return 0;
-  la_storeuptr_rel(&cell->tagged_word, 0);
+  memset(cell, 0, sizeof(*cell));
   if (!lj_thr_tls_publish_cell(key, cell)) {
-    free(cell);
+    _aligned_free(cell);
     return 0;
   }
   return 1;
@@ -882,6 +890,22 @@ int lj_thr_tg_tls_init(void)
 static DWORD lj_thr_tls_key(void)
 {
   return (DWORD)la_load32_acq(&lj_tls_tg_key);
+}
+
+LJThrGC2TLS *lj_thr_gc2_tls_current(void)
+{
+  DWORD key = lj_thr_tls_key();
+  LJThrTGCell *cell;
+  DWORD saved_error;
+  if (key == TLS_OUT_OF_INDEXES)
+    return NULL;
+  /* TlsGetValue clears LastError on a successful NULL or non-NULL lookup.
+  ** GC/SMR can run between a foreign call/callback body and the exact error
+  ** snapshot, so the lookup must be invisible to that API contract. */
+  saved_error = GetLastError();
+  cell = (LJThrTGCell *)TlsGetValue(key);
+  SetLastError(saved_error);
+  return cell ? &cell->gc2 : NULL;
 }
 
 static uintptr_t lj_thr_tls_word_get(void)

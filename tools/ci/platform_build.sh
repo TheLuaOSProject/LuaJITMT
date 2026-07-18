@@ -142,7 +142,11 @@ case "$platform" in
     make_clean
     build_make "${windows_make_args[@]}"
     "$root/tools/ci/windows_gc2_tls_gate.sh" \
-      "${cross}objdump" "$root/src/lj_gc2.o"
+      "${cross}objdump" "$root/src/lj_gc2.o" "$root/src/lj_thr.o"
+    gc2_cell_fixture="$root/src/lj-windows-gc2-cell.exe"
+    "$root/tools/ci/build_windows_gc2_cell_fixture.sh" \
+      "${cross}${cc}" "$root" "$root" "$gc2_cell_fixture"
+    "$gc2_cell_fixture"
     # The shared release Lua harness is POSIX-shell based. Running it inside the
     # native Windows luajit.exe routes os.execute() through cmd.exe, which loses
     # the harness status-file contract. CI only needs a platform-native build/run

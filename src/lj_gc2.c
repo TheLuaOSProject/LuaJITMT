@@ -3212,58 +3212,74 @@ static int gc2_small_registered_rescue_enter_reclaim_held(global_State *g,
   return lj_arena_rescue_enter(a);
 }
 
-#if defined(_WIN32) && defined(_MSC_VER)
-#define GC2_RECLAIM_TLS __declspec(thread)
-#elif defined(_WIN32)
-#define GC2_RECLAIM_TLS __thread
+/* The global reclaimer bit excludes new SMR readers, but only this per-thread
+** record identifies its owner. It also holds the same-thread borrowed IDLE
+** gate and nested-reader elision state. These are capabilities, not hints:
+** sharing the record would authorize reclamation behind another OS thread.
+**
+** Windows embeds the record in the process-lifetime thread cell admitted by
+** the TG lifecycle. A foreign thread without a cell gets NULL: ordinary SMR
+** remains safe through the fully-counted fallback, while exclusive ownership
+** fails closed and no GC hot path lazily allocates. POSIX uses native TLS. */
+#if LJ_TARGET_WINDOWS
+static LJ_AINLINE LJThrGC2TLS *gc2_tls_current(void)
+{
+  return lj_thr_gc2_tls_current();
+}
 #else
-#define GC2_RECLAIM_TLS LJ_TLS
+static LJ_TLS LJThrGC2TLS gc2_tls_state;
+
+static LJ_AINLINE LJThrGC2TLS *gc2_tls_current(void)
+{
+  return &gc2_tls_state;
+}
 #endif
 
-/* The global reclaimer bit excludes new SMR readers, but it does not identify
-** its owner. Pair it with a current-thread marker installed only by the winner
-** of either the IDLE retire drain or SWEEP quarantine drain. This is a
-** capability for already-ticketed validation, never a substitute for an object
-** lifetime/list lease. */
-static GC2_RECLAIM_TLS global_State *gc2_reclaim_tls_g;
-/* A phase-close owner may lend its already-SC-closed JIT gate only to the
-** same-thread IDLE grace callback. The reclaimer records whether it acquired
-** the gate itself, so borrowed closure is never reopened by the nested drain. */
-static GC2_RECLAIM_TLS global_State *gc2_idle_transition_gate_tls_g;
-static GC2_RECLAIM_TLS uint32_t gc2_idle_reclaim_gate_owned_tls;
-/* One process-visible reader count covers arbitrarily nested reads by the same
-** OS thread and universe. Besides avoiding needless global RMWs, this lets a
-** container operation retain registry identity across detach and all nested
-** raw HugeTab lookups even if a writer briefly publishes its exclusion bit. */
-static GC2_RECLAIM_TLS global_State *gc2_smr_reader_tls_g;
-static GC2_RECLAIM_TLS uint32_t gc2_smr_reader_tls_depth;
+static LJ_AINLINE int gc2_reclaim_tls_active_state(const LJThrGC2TLS *tls,
+						    global_State *g)
+{
+  return g && tls && tls->reclaim_g == g &&
+	 lj_gc2_jit_reclaim_context_acq(g);
+}
+
+static LJ_AINLINE int gc2_smr_reader_tls_active_state(const LJThrGC2TLS *tls,
+						       global_State *g)
+{
+  return g && tls && tls->smr_reader_g == g && tls->smr_reader_depth != 0;
+}
 
 static LJ_AINLINE int gc2_reclaim_tls_active(global_State *g)
 {
-  return g && gc2_reclaim_tls_g == g &&
-	 lj_gc2_jit_reclaim_context_acq(g);
+  return gc2_reclaim_tls_active_state(gc2_tls_current(), g);
 }
 
 static LJ_AINLINE int gc2_smr_reader_tls_active(global_State *g)
 {
-  return g && gc2_smr_reader_tls_g == g &&
-	 gc2_smr_reader_tls_depth != 0;
+  return gc2_smr_reader_tls_active_state(gc2_tls_current(), g);
 }
 
-static int gc2_reclaim_tls_enter(global_State *g)
+static LJ_AINLINE int gc2_reclaim_tls_enter_state(LJThrGC2TLS *tls,
+						   global_State *g)
 {
-  if (!g || gc2_reclaim_tls_g != NULL)
+  if (!g || !tls || tls->reclaim_g != NULL)
     return 0;
-  gc2_reclaim_tls_g = g;
+  tls->reclaim_g = g;
   return 1;
+}
+
+static LJ_AINLINE void gc2_reclaim_tls_leave_state(LJThrGC2TLS *tls,
+						    global_State *g)
+{
+  if (LJ_UNLIKELY(!tls || tls->reclaim_g != g)) {
+    lj_assertG(0, "GC2 reclaimer TLS ownership mismatch");
+    abort();
+  }
+  tls->reclaim_g = NULL;
 }
 
 static void gc2_reclaim_tls_leave(global_State *g)
 {
-  lj_assertG(gc2_reclaim_tls_g == g,
-	     "GC2 reclaimer TLS ownership mismatch");
-  if (gc2_reclaim_tls_g == g)
-    gc2_reclaim_tls_g = NULL;
+  gc2_reclaim_tls_leave_state(gc2_tls_current(), g);
 }
 
 static int gc2_tg_owns_huge_ptr(TGState *tg, const void *p)
@@ -3921,17 +3937,28 @@ static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
 static uint32_t gc2_idle_transition_handshake(global_State *g,
 					       uint32_t actions)
 {
+  LJThrGC2TLS *tls = gc2_tls_current();
   uint32_t result;
-  lj_assertG(g && gc2_phase_acq(g) == LJ_GC2_IDLE &&
-	     gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN &&
-	     gc2_jit_phase_gate_acq(g) == 0 &&
-	     gc2_idle_transition_gate_tls_g == NULL,
-	     "invalid borrowed IDLE transition gate");
-  if (!g || gc2_idle_transition_gate_tls_g != NULL)
+  if (!g)
     return 0;
-  gc2_idle_transition_gate_tls_g = g;
+  /* Callers publish the IDLE phase before invoking this mandatory close. A
+  ** missing per-thread capability therefore cannot be reported as an
+  ** optional zero result without leaving the phase half-transitioned. Every
+  ** valid controller/worker path is admitted before it can get here. */
+  if (LJ_UNLIKELY(!tls)) {
+    lj_assertG(0, "GC2 IDLE transition lacks an admitted thread cell");
+    abort();
+  }
+  if (LJ_UNLIKELY(gc2_phase_acq(g) != LJ_GC2_IDLE ||
+		  gc2_cycle_leader_acq(g) != LJ_THREAD_GCSCAN ||
+		  gc2_jit_phase_gate_acq(g) != 0 ||
+		  tls->idle_transition_gate_g != NULL)) {
+    lj_assertG(0, "invalid borrowed IDLE transition gate");
+    abort();
+  }
+  tls->idle_transition_gate_g = g;
   result = lj_gc2_handshake(g, actions);
-  gc2_idle_transition_gate_tls_g = NULL;
+  tls->idle_transition_gate_g = NULL;
   return result;
 }
 
@@ -5312,8 +5339,12 @@ static void gc2_sweep_reclaim_leave(global_State *g);
 
 static int gc2_sweep_reclaim_enter(global_State *g)
 {
+  LJThrGC2TLS *tls;
   uint32_t expect = LJ_GC2_SMR_OPEN;
-  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
+  if (!g)
+    return 0;
+  tls = gc2_tls_current();
+  if (!tls || gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_worker_active_acq(g) == 0 ||
       gc2_jit_phase_gate_acq(g) != 0 || lj_tg_any_jit_active(g) ||
       gc2_jit_recorder_active(g) || gc2_sweep_root_scanned_acq(g) != 1 ||
@@ -5329,7 +5360,7 @@ static int gc2_sweep_reclaim_enter(global_State *g)
     gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
     return 0;
   }
-  if (!gc2_reclaim_tls_enter(g)) {
+  if (!gc2_reclaim_tls_enter_state(tls, g)) {
     gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
     return 0;
   }
@@ -6444,14 +6475,16 @@ static LJ_AINLINE int gc2_reclaim_retired_ready(global_State *g)
 
 int lj_gc2_smr_read_try(global_State *g)
 {
+  LJThrGC2TLS *tls;
   if (!g)
     return 1;
-  if (gc2_smr_reader_tls_active(g)) {
-    if (LJ_UNLIKELY(gc2_smr_reader_tls_depth == ~(uint32_t)0)) {
+  tls = gc2_tls_current();
+  if (gc2_smr_reader_tls_active_state(tls, g)) {
+    if (LJ_UNLIKELY(tls->smr_reader_depth == ~(uint32_t)0)) {
       lj_assertG(0, "gc2 nested SMR reader overflow");
       abort();
     }
-    gc2_smr_reader_tls_depth++;
+    tls->smr_reader_depth++;
     return 1;
   }
   if (gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_OPEN)
@@ -6460,9 +6493,9 @@ int lj_gc2_smr_read_try(global_State *g)
   if (gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_OPEN) {
     /* A nested read of a different independent Lua universe remains a normal
     ** counted reader. Only the outer tracked universe gets reentrant elision. */
-    if (gc2_smr_reader_tls_g == NULL) {
-      gc2_smr_reader_tls_g = g;
-      gc2_smr_reader_tls_depth = 1;
+    if (tls && tls->smr_reader_g == NULL) {
+      tls->smr_reader_g = g;
+      tls->smr_reader_depth = 1;
     }
     return 1;
   }
@@ -6541,17 +6574,19 @@ void lj_gc2_smr_read_enter(global_State *g)
 
 void lj_gc2_smr_read_leave(global_State *g)
 {
+  LJThrGC2TLS *tls;
   uint32_t old;
   if (!g)
     return;
-  if (gc2_smr_reader_tls_g == g) {
-    if (LJ_UNLIKELY(gc2_smr_reader_tls_depth == 0)) {
+  tls = gc2_tls_current();
+  if (tls && tls->smr_reader_g == g) {
+    if (LJ_UNLIKELY(tls->smr_reader_depth == 0)) {
       lj_assertG(0, "gc2 TLS SMR reader underflow");
       abort();
     }
-    if (--gc2_smr_reader_tls_depth != 0)
+    if (--tls->smr_reader_depth != 0)
       return;
-    gc2_smr_reader_tls_g = NULL;
+    tls->smr_reader_g = NULL;
   }
   old = gc2_smr_readers_sub(g, 1);
   lj_assertG(old != 0, "gc2 SMR reader underflow");
@@ -6565,14 +6600,18 @@ int lj_gc2_reclaim_context_held(global_State *g)
 
 static int gc2_idle_reclaim_enter(global_State *g)
 {
+  LJThrGC2TLS *tls;
   uint32_t expect = LJ_GC2_SMR_OPEN;
   int gate_owned = 0;
   if (!g)
     return 0;
-  lj_assertG(gc2_idle_reclaim_gate_owned_tls == 0,
+  tls = gc2_tls_current();
+  if (!tls)
+    return 0;
+  lj_assertG(tls->idle_reclaim_gate_owned == 0,
 	     "nested IDLE reclaim gate ownership");
   if (gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN &&
-      gc2_idle_transition_gate_tls_g != g)
+      tls->idle_transition_gate_g != g)
     return 0;
   if (!gc2_reclaim_retired_ready(g) ||
       !gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_META_EXCLUSIVE))
@@ -6582,7 +6621,7 @@ static int gc2_idle_reclaim_enter(global_State *g)
   ** admission which raced our initial readiness sample, and this reclaimer
   ** must neither destroy behind nor reopen that actor's closure. */
   if (gc2_jit_phase_gate_acq(g) == 0 &&
-      gc2_idle_transition_gate_tls_g == g &&
+      tls->idle_transition_gate_g == g &&
       gc2_cycle_leader_acq(g) == LJ_THREAD_GCSCAN) {
     /* The transition owner retains gate0 and GCSCAN around this same-thread
     ** callback. Repeat the SC fence before the nested zero-active proof, but
@@ -6600,9 +6639,9 @@ static int gc2_idle_reclaim_enter(global_State *g)
   ** retired string/table/ctype/trace/mcode body can be released. */
   if (!gc2_reclaim_retired_ready(g) ||
       gc2_smr_readers_acq(g) != 0 || lj_tg_any_jit_active(g) ||
-      !gc2_reclaim_tls_enter(g))
+      !gc2_reclaim_tls_enter_state(tls, g))
     goto fail_gate;
-  gc2_idle_reclaim_gate_owned_tls = (uint32_t)gate_owned;
+  tls->idle_reclaim_gate_owned = (uint32_t)gate_owned;
   gc2_idle_reclaim_test_pause_after_jit_quiescence();
   return 1;
 
@@ -6626,8 +6665,14 @@ fail_unowned:
 
 static void gc2_idle_reclaim_leave(global_State *g)
 {
+  LJThrGC2TLS *tls = gc2_tls_current();
   uint32_t request;
-  uint32_t gate_owned = gc2_idle_reclaim_gate_owned_tls;
+  uint32_t gate_owned;
+  if (LJ_UNLIKELY(!tls)) {
+    lj_assertG(0, "GC2 IDLE reclaimer lost its thread cell");
+    abort();
+  }
+  gate_owned = tls->idle_reclaim_gate_owned;
   lj_assertG(gc2_jit_phase_gate_acq(g) == 0,
 	     "IDLE reclaim scope outlived owned closed JIT gate");
   lj_assertG(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_META_EXCLUSIVE,
@@ -6643,11 +6688,11 @@ static void gc2_idle_reclaim_leave(global_State *g)
     (void)gc2_jit_phase_gate_cas(g, &closed, 1);
   }
   if (!gate_owned)
-    lj_assertG(gc2_idle_transition_gate_tls_g == g &&
+    lj_assertG(tls->idle_transition_gate_g == g &&
 	       request == LJ_THREAD_GCSCAN,
 	       "borrowed IDLE reclaim escaped transition owner");
-  gc2_idle_reclaim_gate_owned_tls = 0;
-  gc2_reclaim_tls_leave(g);
+  tls->idle_reclaim_gate_owned = 0;
+  gc2_reclaim_tls_leave_state(tls, g);
   gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
   if (request != 0 || gc2_cycle_leader_acq(g) != 0)
     lj_gc2_worker_wake(g);

@@ -23,6 +23,18 @@
 typedef void *(*LJThrFunc)(void *);
 struct LJGC2Lease;
 
+/* Per-OS-thread GC2 capabilities. On Windows this record lives beside the
+** tagged TG binding in the already-admitted process-lifetime TLS cell. POSIX
+** keeps the same record in native compiler TLS. None of these fields may be
+** shared by two OS threads: they are ownership proofs, not cached hints. */
+typedef struct LJThrGC2TLS {
+  global_State *reclaim_g;
+  global_State *idle_transition_gate_g;
+  global_State *smr_reader_g;
+  uint32_t idle_reclaim_gate_owned;
+  uint32_t smr_reader_depth;
+} LJThrGC2TLS;
+
 typedef struct LJThr {
 #if LJ_TARGET_WINDOWS
   HANDLE handle;
@@ -318,6 +330,12 @@ LJ_FUNC uint32_t lj_thr_id(const LJThr *thr);
 LJ_FUNC uint32_t lj_thr_current_id(global_State *g);
 LJ_FUNC uint64_t lj_thr_now_ns(void);
 LJ_FUNC int lj_thr_tg_tls_init(void);
+#if LJ_TARGET_WINDOWS
+/* Lookup only: never initializes the process key or admits the current
+** thread. GC2 uses NULL as an allocation-free, fully-counted SMR fallback and
+** as a fail-closed result for exclusive per-thread capabilities. */
+LJ_FUNC LJThrGC2TLS *lj_thr_gc2_tls_current(void);
+#endif
 LJ_FUNC LJThrTGResult lj_thr_tg_install(LJTGRegistryBorrow *new_hold);
 LJ_FUNC LJThrTGResult lj_thr_tg_swap(const LJTGRegistryKey *expected_old,
 				     LJTGRegistryBorrow *new_hold,

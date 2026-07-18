@@ -12,6 +12,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 
+#include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
@@ -24,6 +25,12 @@ typedef struct BindingThreadCtx {
   uint32_t go;
   uint32_t done;
 } BindingThreadCtx;
+
+typedef struct GC2TLSIsolationCtx {
+  global_State *g;
+  uint32_t *ready;
+  uint32_t *go;
+} GC2TLSIsolationCtx;
 
 #if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
 #define LJ_TLS_INIT_RACE_THREADS 8
@@ -45,6 +52,14 @@ typedef struct InitRaceThreadCtx {
   uint32_t *successes;
   int result;
 } InitRaceThreadCtx;
+
+typedef struct GC2TLSFallbackCtx {
+  global_State *g;
+  LJThrGC2TLS *before;
+  LJThrGC2TLS *after;
+  int read_result;
+  int init_result;
+} GC2TLSFallbackCtx;
 #endif
 
 #if !LJ_TARGET_WINDOWS
@@ -102,7 +117,35 @@ static void *binding_thread(void *arg)
   return ctx->body;
 }
 
+static void *gc2_tls_isolation_thread(void *arg)
+{
+  GC2TLSIsolationCtx *ctx = (GC2TLSIsolationCtx *)arg;
+  assert(lj_thr_tg_tls_init());
+  assert(lj_gc2_smr_read_try(ctx->g));
+  assert(lj_gc2_smr_read_try(ctx->g));
+  (void)la_add32_acqrel(ctx->ready, 1);
+  while (la_load32_acq(ctx->go) == 0)
+    (void)lj_thr_yield(NULL);
+  lj_gc2_smr_read_leave(ctx->g);
+  lj_gc2_smr_read_leave(ctx->g);
+  return NULL;
+}
+
 #if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
+static void *gc2_tls_fallback_thread(void *arg)
+{
+  GC2TLSFallbackCtx *ctx = (GC2TLSFallbackCtx *)arg;
+  ctx->before = lj_thr_gc2_tls_current();
+  ctx->read_result = lj_gc2_smr_read_try(ctx->g);
+  ctx->after = lj_thr_gc2_tls_current();
+  if (ctx->read_result)
+    lj_gc2_smr_read_leave(ctx->g);
+  /* The armed allocation failure must still be pending: SMR lookup and its
+  ** fully-counted fallback are forbidden from admitting this thread. */
+  ctx->init_result = lj_thr_tg_tls_init();
+  return NULL;
+}
+
 static void *admission_failure_thread(void *arg)
 {
   AdmissionFailureThreadCtx *ctx = (AdmissionFailureThreadCtx *)arg;
@@ -285,6 +328,9 @@ int main(int argc, char **argv)
   LJTGRegistryBorrow ahold, bhold, old;
   BindingThreadCtx actx, bctx;
   LJThr athr = {0}, bthr = {0};
+  LJThr gc2_tls_thr[2] = {{0}, {0}};
+  GC2TLSIsolationCtx gc2_tls_ctx[2];
+  uint32_t gc2_tls_ready = 0, gc2_tls_go = 0;
   LJTGSlotSnap snap, pinned;
   la_u128 saved_token;
   void *aret = NULL, *bret = NULL;
@@ -292,7 +338,9 @@ int main(int argc, char **argv)
   void *mis_storage = NULL, *mis_body;
 #if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
   AdmissionFailureThreadCtx alloc_fail, publish_fail;
+  GC2TLSFallbackCtx fallback;
   LJThr alloc_fail_thr = {0}, publish_fail_thr = {0};
+  LJThr fallback_thr = {0};
   void *failure_ret = (void *)(uintptr_t)1u;
 #endif
 
@@ -318,7 +366,38 @@ int main(int argc, char **argv)
   SetLastError(ERROR_INVALID_DATA);
   assert(lj_thr_get_tg() == NULL);
   assert(GetLastError() == ERROR_SUCCESS);
+
+  /* A raw foreign thread may take ordinary SMR reads before Lua admission.
+  ** It must use the global count without allocating a cell; exclusive GC2
+  ** ownership remains unavailable until admission. */
+  memset(&fallback, 0, sizeof(fallback));
+  fallback.g = g;
+  lj_thr_tls_test_fail_cell_alloc(1);
+  assert(lj_thr_create(&fallback_thr, gc2_tls_fallback_thread, &fallback) == 0);
+  assert(lj_thr_join(&fallback_thr, NULL) == 0);
+  assert(fallback.before == NULL && fallback.after == NULL);
+  assert(fallback.read_result && !fallback.init_result);
+  assert(gc2_smr_readers_acq(g) == 0);
 #endif
+
+  /* Two same-universe readers must each own an independent nesting record.
+  ** A process-global capability would incorrectly collapse this count to one. */
+  memset(gc2_tls_ctx, 0, sizeof(gc2_tls_ctx));
+  gc2_tls_ctx[0].g = g;
+  gc2_tls_ctx[1].g = g;
+  gc2_tls_ctx[0].ready = gc2_tls_ctx[1].ready = &gc2_tls_ready;
+  gc2_tls_ctx[0].go = gc2_tls_ctx[1].go = &gc2_tls_go;
+  assert(lj_thr_create(&gc2_tls_thr[0], gc2_tls_isolation_thread,
+                       &gc2_tls_ctx[0]) == 0);
+  assert(lj_thr_create(&gc2_tls_thr[1], gc2_tls_isolation_thread,
+                       &gc2_tls_ctx[1]) == 0);
+  while (la_load32_acq(&gc2_tls_ready) != 2u)
+    (void)lj_thr_yield(NULL);
+  assert(gc2_smr_readers_acq(g) == 2u);
+  la_store32_rel(&gc2_tls_go, 1);
+  assert(lj_thr_join(&gc2_tls_thr[0], NULL) == 0);
+  assert(lj_thr_join(&gc2_tls_thr[1], NULL) == 0);
+  assert(gc2_smr_readers_acq(g) == 0);
 #if !LJ_TARGET_WINDOWS
   assert(signal(SIGPROF, sample_handler) != SIG_ERR);
 #endif
