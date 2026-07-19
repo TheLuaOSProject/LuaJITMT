@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -30,6 +31,37 @@ typedef struct WriterArg {
   TValue *slot;
   int32_t base;
 } WriterArg;
+
+typedef struct PostCasStaleCtx {
+  lua_State *L;
+  GCtab *table;
+  TValue *oldarray;
+  TValue *newarray;
+  GCtab *value;
+  TValue key_value;
+  MSize newasize;
+  int32_t key;
+  uint8_t called;
+} PostCasStaleCtx;
+
+static PostCasStaleCtx postcas_stale;
+
+static void postcas_make_array_stale(lua_State *L, GCtab *t, TValue *dst,
+				     cTValue *key, cTValue *value)
+{
+  TGState *tg = L2TG(L);
+  assert(L == postcas_stale.L && t == postcas_stale.table);
+  assert(dst == &postcas_stale.oldarray[postcas_stale.key]);
+  assert(lj_obj_equal(key, &postcas_stale.key_value));
+  assert(tvistab(value) && tabV(value) == postcas_stale.value);
+  assert(tg != NULL &&
+         lj_gc2_rootdesc_snapshot(&tg->root_desc, NULL) ==
+           LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
+  assert(!postcas_stale.called);
+  postcas_stale.called = 1;
+  lj_tab_asize_rel(t, postcas_stale.newasize);
+  lj_tab_array_rel(t, postcas_stale.newarray);
+}
 
 static void *writer_main(void *arg)
 {
@@ -76,7 +108,7 @@ static void exercise_direct_cas(lua_State *L)
 static void exercise_keyed_cas_array_stale(lua_State *L)
 {
   GCtab *t;
-  TValue *oldarray, *newarray, key, src;
+  TValue *oldarray, *newarray, key, src, nilv, observed;
   MSize oldasize, newasize;
   int32_t k = 4;
   MSize i;
@@ -98,6 +130,21 @@ static void exercise_keyed_cas_array_stale(lua_State *L)
 
   setintV(&key, k);
   setintV(&src, 12345);
+  setnilV(&nilv);
+  /* RETIRING is published before separated-array owner copy. Re-expose that
+  ** root tuple with a still-nil successor and ensure neither delete nor
+  ** put-if-absent can linearize before the per-slot FORWARD handoff. */
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lj_tab_storenilraw(&newarray[k]);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &newarray[k], &key, &nilv) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  assert(lj_tab_trysetnil_cas_keyed(L, t, &newarray[k], &key, &src,
+				    &observed) == LJ_TAB_STORE_CAS_STALE);
+  assert(lj_tv_isnil_acq(&newarray[k]));
+  lj_tab_storeint(L, &newarray[k], k + 12000);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
   assert(lj_tab_trystoretv_cas_keyed(L, t, &oldarray[k], &key, &src) ==
 	 LJ_TAB_STORE_CAS_STALE);
   tabfwd_assert_i32(&oldarray[k], k + 12000);
@@ -147,6 +194,242 @@ static void exercise_keyed_cas_hash_stale(lua_State *L)
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);
+}
+
+static void exercise_keyed_cas_hash_to_array_handoff(lua_State *L)
+{
+  GCtab *t, *value;
+  TValue *oldarray, *newarray, key, src, nilv, observed, stored;
+  Node *oldnode, *newnode;
+  TValue *oldslot;
+  MSize oldasize, newasize, oldhmask, newhmask;
+  int32_t k;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 8);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  k = (int32_t)oldasize + 4;
+  lj_tab_storeint(L, lj_tab_setint(L, t, k), 14040);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldslot = tabfwd_find_num_slot(oldnode, oldhmask, k);
+  assert(oldslot != NULL);
+  tabfwd_assert_i32(oldslot, 14040);
+
+  /* Keep a traced value live while resize moves k from hash to array. */
+  lua_newtable(L);
+  value = tabV(L->top-1);
+  lj_tab_resize(L, t, (uint32_t)k + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newarray != oldarray && (MSize)k < newasize);
+  assert(lj_tab_array_is_retiring(t, oldarray));
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert(lj_tab_node_is_retiring(oldnode));
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  tabfwd_assert_forward(oldslot);
+  tabfwd_assert_i32(&newarray[k], 14040);
+
+  /* Recreate the coherent pre-root-publication window. A hash FORWARD marker
+  ** precedes successor-array value installation, so this tuple cannot safely
+  ** authorize either delete or put-if-absent semantics. It must retry until
+  ** the new array becomes the table root. */
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lj_tab_node_rel(t, oldnode);
+  lj_tab_hmask_rel(t, oldhmask);
+
+  setintV(&key, k);
+  setnilV(&nilv);
+  /* Model the real freeze/key-publish/value-fill gap, in which the logical
+  ** old hash edge is FORWARD but the successor value is still nil. */
+  lj_tab_storenilraw(&newarray[k]);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &newarray[k], &key, &nilv) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  assert(lj_tv_isnil_acq(&newarray[k]));
+  settabV(L, &src, value);
+  assert(lj_tab_trysetnil_cas_keyed(L, t, &newarray[k], &key, &src,
+				    &observed) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  assert(lj_tv_isnil_acq(&newarray[k]));
+  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+	 LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+
+  lj_tab_storeint(L, &newarray[k], 14040);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &newarray[k], &key, &src) ==
+	 LJ_TAB_STORE_CAS_OK);
+  lj_tv_load_acq(&stored, &newarray[k]);
+  assert(tvistab(&stored) && tabV(&stored) == value);
+  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+	 LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+
+  lj_tv_load_acq(&stored, lj_tab_getint(t, k));
+  assert(tvistab(&stored) && tabV(&stored) == value);
+}
+
+static void exercise_keyed_cas_array_to_hash_handoff(lua_State *L)
+{
+  GCtab *t, *value;
+  TValue *oldarray, *newarray, *newslot, key, src, nilv, observed, stored;
+  GCstr *sidekey;
+  Node *oldnode, *newnode;
+  MSize oldasize, newasize, oldhmask, newhmask;
+  uint32_t shrink_asize = LJ_MAX_COLOSIZE + 4u;
+  int32_t k;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 24, 8);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert(oldasize > shrink_asize + 2u);
+  k = (int32_t)oldasize - 2;
+  lj_tab_storeint(L, &oldarray[k], 15050);
+  sidekey = lj_str_newlit(L, "array_to_hash_handoff_side");
+  lj_tab_storeint(L, lj_tab_setstr(L, t, sidekey), 15151);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+
+  /* Keep a traced value live while resize moves k from array to hash. */
+  lua_newtable(L);
+  value = tabV(L->top-1);
+  lj_tab_resize(L, t, shrink_asize, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newarray != oldarray && newasize == shrink_asize);
+  assert((MSize)k >= newasize && newhmask > 0);
+  assert(lj_tab_array_is_retiring(t, oldarray));
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert(newnode != oldnode && lj_tab_node_is_retiring(oldnode));
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  /* Separated-array migration deliberately retains the old edge; RETIRING,
+  ** rather than a per-slot FORWARD marker, is the handoff certificate. */
+  tabfwd_assert_i32(&oldarray[k], 15050);
+  newslot = tabfwd_find_num_slot(newnode, newhmask, k);
+  assert(newslot != NULL);
+  tabfwd_assert_i32(newslot, 15050);
+
+  /* Re-expose both retiring roots from the owner migration window. The old
+  ** hash does not contain this array key, and its next pointer alone does not
+  ** prove the successor value installation is complete. */
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lj_tab_node_rel(t, oldnode);
+  lj_tab_hmask_rel(t, oldhmask);
+
+  setintV(&key, k);
+  setnilV(&nilv);
+  lj_tab_storenilraw(newslot);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, newslot, &key, &nilv) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  assert(lj_tv_isnil_acq(newslot));
+  settabV(L, &src, value);
+  assert(lj_tab_trysetnil_cas_keyed(L, t, newslot, &key, &src, &observed) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  assert(lj_tv_isnil_acq(newslot));
+
+  /* Hash publication follows all migration stores and is the safe cross-part
+  ** certificate while the old array root remains retiring. */
+  lj_tab_storeint(L, newslot, 15050);
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, newslot, &key, &src) ==
+	 LJ_TAB_STORE_CAS_OK);
+  lj_tv_load_acq(&stored, newslot);
+  assert(tvistab(&stored) && tabV(&stored) == value);
+  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+	 LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tv_load_acq(&stored, lj_tab_getint(t, k));
+  assert(tvistab(&stored) && tabV(&stored) == value);
+  tabfwd_assert_str_i32(t, sidekey, 15151);
+}
+
+static void exercise_guarded_commit_then_stale(lua_State *L)
+{
+  GCtab *t, *value;
+  TValue *oldarray, *newarray;
+  TValue key, src, committed;
+  LJGC2TabStamp *stamp;
+  uint32_t dirty0, dirty1;
+  MSize oldasize, newasize, oldacap;
+  int32_t k = 6;
+  MSize i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  assert((MSize)k < oldasize);
+  for (i = 0; i < oldasize; i++)
+    lj_tab_storeint(L, &oldarray[i], (int32_t)i + 15000);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray && lj_tab_array_nextgen_acq(oldarray) == newarray);
+
+  /* Re-expose the old vector as a coherent synthetic current generation. The
+  ** post-CAS hook publishes the prepared next generation before currentness. */
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+
+  lua_newtable(L);
+  value = tabV(L->top-1);
+  setintV(&key, k);
+  settabV(L, &src, value);
+  stamp = lj_arena_gc2_stamp_acq(t);
+  assert(stamp != NULL);
+  dirty0 = (uint32_t)la_load64_acq(&stamp->state);
+  assert(dirty0 != UINT32_MAX);
+
+  postcas_stale.L = L;
+  postcas_stale.table = t;
+  postcas_stale.oldarray = oldarray;
+  postcas_stale.newarray = newarray;
+  postcas_stale.value = value;
+  postcas_stale.key_value = key;
+  postcas_stale.newasize = newasize;
+  postcas_stale.key = k;
+  postcas_stale.called = 0;
+  lj_tab_test_set_store_post_cas_hook(postcas_make_array_stale);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &oldarray[k], &key, &src) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  lj_tab_test_set_store_post_cas_hook(NULL);
+  assert(postcas_stale.called);
+  lj_tv_load_acq(&committed, &oldarray[k]);
+  assert(tvistab(&committed) && tabV(&committed) == value);
+  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+	 LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+  assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_COUNTED);
+  dirty1 = (uint32_t)la_load64_acq(&stamp->state);
+  assert(dirty1 == dirty0 + 1u);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  memset(&postcas_stale, 0, sizeof(postcas_stale));
 }
 
 static void exercise_helper_stores_ignore_side_mirrors(lua_State *L)
@@ -273,6 +556,8 @@ static void exercise_meta_forward_retry(lua_State *L)
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
 
   settabV(L, &L->top[0], t);
   setintV(&key, k);
@@ -315,6 +600,8 @@ static void exercise_capi_rawseti_forward_retry(lua_State *L)
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
 
   lua_pushinteger(L, 5252);
   lua_rawseti(L, -2, k);
@@ -354,6 +641,8 @@ static void exercise_capi_settable_forward_retry(lua_State *L)
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
 
   lua_pushinteger(L, k);
   lua_pushinteger(L, 6262);
@@ -393,6 +682,10 @@ static void exercise_capi_rawset_forward_retry(lua_State *L)
   la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
+  /* A hash FORWARD marker precedes successor-value installation, so the
+  ** mutator waits for root publication before using the new slot. */
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
 
   setstrV(L, L->top, key);
   incr_top(L);
@@ -401,8 +694,6 @@ static void exercise_capi_rawset_forward_retry(lua_State *L)
   tabfwd_assert_forward(&oldn->val);
   tabfwd_assert_i32(&newn->val, 7272);
 
-  lj_tab_node_rel(t, newnode);
-  lj_tab_hmask_rel(t, newhmask);
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
 }
 
@@ -434,14 +725,14 @@ static void exercise_capi_setfield_forward_retry(lua_State *L)
   la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
 
   lua_pushinteger(L, 8282);
   lua_setfield(L, -2, name);
   tabfwd_assert_forward(&oldn->val);
   tabfwd_assert_i32(&newn->val, 8282);
 
-  lj_tab_node_rel(t, newnode);
-  lj_tab_hmask_rel(t, newhmask);
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
 }
 
@@ -485,6 +776,8 @@ static void exercise_table_insert_forward_retry(lua_State *L)
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
 
   call_table_insert(L, pos, 9090);
   for (i = (MSize)pos; i <= 6; i++)
@@ -529,6 +822,8 @@ static void exercise_tsetm_helper_forward_retry(lua_State *L)
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
 
   setintV(&src[0], 6161);
   setintV(&src[1], 6262);
@@ -635,6 +930,16 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   setintV(&src[0], 8181);
   setintV(&src[1], 8282);
   setintV(&src[2], 8383);
+  {
+    TValue keytv;
+    setintV(&keytv, start);
+    assert(lj_tab_trystoretv_cas_keyed(L, t, &newarray[start], &keytv,
+				       &src[0]) == LJ_TAB_STORE_CAS_STALE);
+  }
+  /* FORWARD/RETIRING cannot prove that every copier with a captured value has
+  ** finished. Publish the completed owner generation before semantic stores. */
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
   lj_tab_test_reset_wait_no_l_calls();
   lj_tab_storetvn_forvm_array(L, t, (uint32_t)start, src, 3);
   wait0 = lj_tab_test_wait_no_l_calls();
@@ -723,6 +1028,8 @@ static void exercise_luaL_newmetatable_forward_retry(lua_State *L)
   la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
   lj_tab_hmask_rel(reg, oldhmask);
   lj_tab_node_rel(reg, oldnode);
+  lj_tab_node_rel(reg, newnode);
+  lj_tab_hmask_rel(reg, newhmask);
 
   assert(luaL_newmetatable(L, name) == 1);
   tabfwd_assert_forward(&oldn->val);
@@ -730,8 +1037,6 @@ static void exercise_luaL_newmetatable_forward_retry(lua_State *L)
   assert(tvistab(&nv));
   assert(tabV(&nv) == tabV(L->top-1));
 
-  lj_tab_node_rel(reg, newnode);
-  lj_tab_hmask_rel(reg, newhmask);
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
   lua_pop(L, 1);
 }
@@ -745,6 +1050,9 @@ int main(void)
   exercise_direct_cas(L);
   exercise_keyed_cas_array_stale(L);
   exercise_keyed_cas_hash_stale(L);
+  exercise_keyed_cas_hash_to_array_handoff(L);
+  exercise_keyed_cas_array_to_hash_handoff(L);
+  exercise_guarded_commit_then_stale(L);
   exercise_helper_stores_ignore_side_mirrors(L);
   exercise_keyed_nil_cas_hash_stale(L);
   exercise_meta_forward_retry(L);
@@ -761,6 +1069,6 @@ int main(void)
   exercise_luaL_newmetatable_forward_retry(L);
 
   lua_close(L);
-  printf("t-tab-cas-store OK: CAS table stores preserve FORWARD slots\n");
+  printf("t-tab-cas-store OK: CAS stores fail closed until root publication\n");
   return 0;
 }
