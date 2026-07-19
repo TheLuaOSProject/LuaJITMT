@@ -33,6 +33,7 @@ local m3_scaffold_deps = {
   "m3_gcflags_atomic",
   "m3_gc2_markword_token_model",
   "m3_gc2_root_gate_store_model",
+  "m3_gc2_weak_resize_retry",
   "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
@@ -90,6 +91,23 @@ return function(add)
         cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
       })
       print("M3 GC2 root-gate/store exhaustive model passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_weak_resize_retry",
+    description = "weak clear replays array/hash resize generation cutovers",
+    run = function(t)
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-weak-resize-retry"),
+                          "t-gc2-weak-resize-retry.c", {
+          cflags = flags,
+          timeout = "20s"
+        })
+      end)
+      print("M3 GC2 weak resize replay regression passed")
     end
   })
 

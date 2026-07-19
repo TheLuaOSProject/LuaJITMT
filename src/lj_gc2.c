@@ -298,9 +298,28 @@ static uint32_t gc2_test_weak_frontier_fault_skip;
 static uint32_t gc2_test_weak_frontier_fault_armed;
 static uint32_t gc2_test_weak_frontier_fault_hits;
 static uint32_t gc2_test_weak_overflow_fail_alloc;
+static LJGC2WeakClearTestHook gc2_test_weak_clear_before_cas_hook;
 static uint32_t gc2_table_token_test_pause_stage;
 static uint32_t gc2_table_token_test_paused_count;
 static uint32_t gc2_table_token_test_pause_release;
+
+void lj_gc2_test_weak_clear_before_cas(
+  LJGC2WeakClearTestHook hook)
+{
+  gc2_test_weak_clear_before_cas_hook = hook;
+}
+
+static void gc2_test_weak_clear_before_cas(global_State *g, GCtab *t,
+					   TValue *slot, cTValue *key,
+					   cTValue *val)
+{
+  LJGC2WeakClearTestHook hook = gc2_test_weak_clear_before_cas_hook;
+  if (hook) {
+    /* One shot: a hook may publish a replacement generation synchronously. */
+    gc2_test_weak_clear_before_cas_hook = NULL;
+    hook(g, t, slot, key, val);
+  }
+}
 
 void lj_gc2_test_jit_mark_checkpoint_reset(void)
 {
@@ -676,6 +695,7 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define gc2_queue_post_admit_test_pause_at(o) ((void)(o))
 #define gc2_queue_retry_witness_test_pause_at(o) ((void)(o))
 #define gc2_table_token_test_pause_at(stage) ((void)0)
+#define gc2_test_weak_clear_before_cas(g, t, slot, key, val) ((void)0)
 #define gc2_test_jit_mark_checkpoint_closed() ((void)0)
 #define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
 #define gc2_root_test_take_semantic_retry(o) (0)
@@ -11246,6 +11266,7 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
 	  if (clear) {
 	    TValue key;
 	    setintV(&key, (int32_t)i);
+	    gc2_test_weak_clear_before_cas(g, t, slot, &key, &val);
 	    (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
 	  }
 	}
@@ -11297,8 +11318,10 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
 	  goto out;
 	if (keyclass == GC2_WEAK_CLEAR || valclass == GC2_WEAK_CLEAR) {
 	  (*clearable)++;
-	  if (clear)
+	  if (clear) {
+	    gc2_test_weak_clear_before_cas(g, t, slot, &key, &val);
 	    (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
+	  }
 	}
       }
     }

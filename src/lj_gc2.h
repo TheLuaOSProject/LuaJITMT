@@ -473,6 +473,11 @@ LJ_FUNC uint32_t lj_gc2_test_weak_frontier_fault_hits(void);
 LJ_FUNC void lj_gc2_test_weak_overflow_fail_alloc(uint32_t count);
 LJ_FUNC int lj_gc2_test_weak_record(global_State *g, GCtab *t);
 LJ_FUNC int lj_gc2_test_weak_overflow_singleton(global_State *g, GCtab *t);
+typedef void (*LJGC2WeakClearTestHook)(global_State *g, GCtab *t,
+				       TValue *slot, cTValue *key,
+				       cTValue *val);
+LJ_FUNC void lj_gc2_test_weak_clear_before_cas(
+  LJGC2WeakClearTestHook hook);
 LJ_FUNC void lj_gc2_test_table_token_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_gc2_test_table_token_paused(void);
 LJ_FUNC void lj_gc2_test_table_token_release(void);
