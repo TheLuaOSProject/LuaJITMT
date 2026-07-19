@@ -16,6 +16,7 @@ local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
   "m6_jit_event_session",
+  "m6_jit_flush_stream_gate",
   "m6_jit_hotcall_missing_args",
   "m6_jit_recursive_call_unroll",
   "m6_jit_recursive_retention",
@@ -796,6 +797,20 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
                         build = false, clean = false, timeout = "20s"
                       }))
       print("M6 immutable JIT event-session substrate passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_flush_stream_gate",
+    description = "universe-global token-free TRACE FLUSH stream admission",
+    run = function(t)
+      clean_build(t, build.gc2_test_helper_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-jit-flush-stream-gate"),
+                      "t-jit-flush-stream-gate.c",
+                      build.gc2_test_helper_opts({
+                        build = false, clean = false, timeout = "30s"
+                      }))
+      print("M6 token-free TRACE FLUSH stream gate passed")
     end
   })
 

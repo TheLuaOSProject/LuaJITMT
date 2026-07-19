@@ -185,6 +185,44 @@ typedef struct LJJitEventSessions {
   uint32_t active_slot;
   LJJitEventSessionSlot slot[LJ_JIT_EVENT_SESSION_SLOTS];
 } LJJitEventSessions;
+
+/* The TRACE event grammar is universe-global even though the immutable event
+** payload and its roots are owned by one TG.  This descriptor therefore lives
+** in the append-only tail of the embedded main TG; copies in secondary TGs are
+** initialized but never consulted.  Every field is accessed atomically under
+** the even/odd sequence protocol, so readers refuse rather than wait on an
+** in-progress scalar publication. */
+typedef enum LJJitTraceStreamPhase {
+  LJ_JIT_STREAM_IDLE = 0,
+  LJ_JIT_STREAM_OPEN,
+  LJ_JIT_STREAM_CONT_CALLBACK,
+  LJ_JIT_STREAM_CONT_TERMINAL_PENDING,
+  LJ_JIT_STREAM_DETACHED_PENDING,
+  LJ_JIT_STREAM_DETACHED_CALLBACK
+} LJJitTraceStreamPhase;
+
+typedef struct LJJitTraceStream {
+  uint64_t sequence;              /* Even stable, odd scalar publication. */
+  uint64_t next_generation;       /* Monotonic; zero is invalid. */
+  uint64_t generation;            /* Current stream, or zero when IDLE. */
+  uint64_t event_ordinal;         /* Standalone FLUSH is ordinal one. */
+
+  LJTGRegistryKey owner_key;      /* Stable registry slot plus incarnation. */
+  uint32_t owner_tid;
+  uint32_t owner_actor;
+  uint32_t phase;
+  uint32_t traceno;
+
+  uint32_t callback_event;
+  uint32_t callback_slot;
+  uint64_t callback_session_generation;
+
+  uint32_t terminal_event;
+  uint32_t terminal_slot;
+  uint64_t terminal_session_generation;
+  uint32_t terminal_reason;
+  uint32_t flags;
+} LJJitTraceStream;
 #endif
 
 #define TG_FINI_LIVE		0u
@@ -302,6 +340,10 @@ struct TGState {
 #if LJ_HASJIT
   /* Append-only: no pre-existing VM/ABI-sensitive TG offset may move. */
   LJJitEventSessions jit_event_sessions;
+  /* Main-TG storage is the one universe-global TRACE grammar descriptor.
+  ** Keeping it after the already-landed session substrate preserves that
+  ** substrate's offsets as well as every original LuaJIT offset. */
+  LJJitTraceStream jit_trace_stream;
 #endif
 };
 
@@ -323,11 +365,23 @@ LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
 			  slot[1].attachment_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
 			  slot[1].control_borrow_generation) & 7u) == 0);
-LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) +
-		 sizeof(LJJitEventSessions) <= sizeof(TGState));
+LJ_STATIC_ASSERT((offsetof(TGState, jit_trace_stream.sequence) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitTraceStream, next_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitTraceStream, generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitTraceStream, event_ordinal) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitTraceStream, owner_key.incarnation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitTraceStream,
+			  callback_session_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitTraceStream,
+			  terminal_session_generation) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_stream) >=
+		 offsetof(TGState, jit_event_sessions) +
+		 sizeof(LJJitEventSessions));
+LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_stream) +
+		 sizeof(LJJitTraceStream) <= sizeof(TGState));
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, jit_event_sessions) +
-		  sizeof(LJJitEventSessions)) < __alignof__(TGState));
+		 (offsetof(TGState, jit_trace_stream) +
+		  sizeof(LJJitTraceStream)) < __alignof__(TGState));
 #if LJ_HASFFI
 LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 		 offsetof(TGState, ffi_native_frame) +

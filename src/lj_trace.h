@@ -111,9 +111,46 @@ typedef struct LJJitEventSessionSnapshot {
   uint64_t attachment_generation;
 } LJJitEventSessionSnapshot;
 
+/* Linear handle for one structurally admitted standalone TRACE "flush"
+** stream.  The caller-supplied attachment generation is provisional until
+** jit.attach() gains its own publication clock; it is nevertheless part of
+** the exact close identity and must be nonzero. */
+typedef struct LJJitTraceStreamHandle {
+  uint64_t generation;
+  uint64_t attachment_generation;
+  LJTGRegistryKey owner_key;
+  uint32_t owner_tid;
+  uint32_t owner_actor;
+  LJJitEventSessionHandle terminal_session;
+} LJJitTraceStreamHandle;
+
+typedef struct LJJitTraceStreamSnapshot {
+  uint64_t sequence;
+  uint64_t next_generation;
+  uint64_t generation;
+  uint64_t event_ordinal;
+  LJTGRegistryKey owner_key;
+  uint32_t owner_tid;
+  uint32_t owner_actor;
+  uint32_t phase;
+  uint32_t traceno;
+  uint32_t callback_event;
+  uint32_t callback_slot;
+  uint64_t callback_session_generation;
+  uint32_t terminal_event;
+  uint32_t terminal_slot;
+  uint64_t terminal_session_generation;
+  uint32_t terminal_reason;
+  uint32_t flags;
+} LJJitTraceStreamSnapshot;
+
 #define LJ_JIT_EVENT_SNAPSHOT_RETRY	(-1)
 #define LJ_JIT_EVENT_SNAPSHOT_IDLE	0
 #define LJ_JIT_EVENT_SNAPSHOT_ACTIVE	1
+
+#define LJ_JIT_STREAM_SNAPSHOT_RETRY	(-1)
+#define LJ_JIT_STREAM_SNAPSHOT_IDLE	0
+#define LJ_JIT_STREAM_SNAPSHOT_ACTIVE	1
 
 LJ_FUNC void lj_jit_event_sessions_init(TGState *tg);
 LJ_FUNC int lj_jit_event_sessions_fini(global_State *g, TGState *tg);
@@ -142,6 +179,20 @@ LJ_FUNC int lj_jit_event_session_snapshot_acquire(
 LJ_FUNC int lj_jit_event_session_snapshot_release(
   LJJitEventSessionSnapshot *snapshot);
 LJ_FUNC int lj_jit_event_frozen_view_valid(const LJJitEventFrozenView *view);
+/* Structural-only FLUSH transaction. Admission publishes the payload-free
+** detached session and exact universe descriptor before releasing low-token
+** ownership to zero. No production VM-event callback is invoked by this API.
+** Close makes the grammar IDLE first, then closes the detached session; an
+** impossible latter failure is fail-stop. */
+LJ_FUNC int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
+					uint64_t attachment_generation,
+					LJJitTraceStreamHandle *handle);
+LJ_FUNC int lj_jit_trace_flush_close_l(lua_State *L, jit_State *J,
+					const LJJitTraceStreamHandle *handle);
+LJ_FUNC int lj_jit_trace_stream_snapshot(global_State *g,
+					  LJJitTraceStreamSnapshot *snapshot);
+LJ_FUNC int lj_jit_trace_stream_idle(global_State *g);
+LJ_FUNC int lj_jit_trace_stream_names_tg(global_State *g, TGState *tg);
 /* Copy into non-aliasing unpublished frozen backing and compare a live
 ** snapshot without racing the runtime-mutated
 ** atomic exit count or depending on structure padding bytes. Count is copied
