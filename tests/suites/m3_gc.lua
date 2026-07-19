@@ -32,6 +32,7 @@ local m3_scaffold_deps = {
   "m3_gc_root_pending_race",
   "m3_gcflags_atomic",
   "m3_gc2_markword_token_model",
+  "m3_gc2_root_gate_store_model",
   "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
@@ -73,6 +74,22 @@ return function(add)
         cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
       })
       print("M3 GC2 markword and activation model passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_root_gate_store_model",
+    description = "exhaustive root-gate and scalar table-store cutover model",
+    run = function(t)
+      compile_and_run_sources(t, t:tmp("lj-t-gc2-root-gate-store-model"),
+        { t:path("tests", "t-gc2-root-gate-store-model.c") }, {
+        default_cflags = false,
+        include_src = true,
+        link_luajit = false,
+        libs = {},
+        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
+      })
+      print("M3 GC2 root-gate/store exhaustive model passed")
     end
   })
 

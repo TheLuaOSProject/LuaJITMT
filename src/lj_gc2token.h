@@ -960,7 +960,10 @@ enum {
   LJ_GC2_ROOTDESC_F_RANGE1 = 0x08u,
   LJ_GC2_ROOTDESC_F_MOVE_DOWN = 0x10u,
   LJ_GC2_ROOTDESC_F_MOVE_UP = 0x20u,
-  LJ_GC2_ROOTDESC_F_ALL = 0x3fu
+  LJ_GC2_ROOTDESC_F_AUX = 0x40u,
+  /* A scalar table store uses OLD=parent, NEW=key and AUX=value. */
+  LJ_GC2_ROOTDESC_F_TABLE_STORE = 0x80u,
+  LJ_GC2_ROOTDESC_F_ALL = 0xffu
 };
 
 typedef struct LJGC2RootRange {
@@ -974,26 +977,41 @@ typedef struct LJGC2RootDesc {
   uint32_t reserved;
   uint64_t old_root;  /* Raw TValue snapshot; valid when F_OLD is set. */
   uint64_t new_root;  /* Raw TValue snapshot; valid when F_NEW is set. */
+  uint64_t aux_root;  /* Third raw TValue snapshot; valid when F_AUX is set. */
   /* Half-open TValue spans. RANGE1 requires an equal-sized RANGE0; MOVE_DOWN
   ** means helpers scan their merged overlap high-to-low, MOVE_UP low-to-high.
   */
   LJGC2RootRange range[2];
+  /* Helpers publish {exact ACTIVE control, activation generation}. The
+  ** certificate is never cleared or moved backwards; a later descriptor or
+  ** close generation invalidates it by exact comparison. Keep helper-written
+  ** coverage after owner-written payload to reduce control-word false sharing.
+  */
+  la_u128 coverage;
 } __attribute__((aligned(16))) LJGC2RootDesc;
 
 typedef struct LJGC2RootDescSpec {
   uint32_t flags;
   uint64_t old_root;
   uint64_t new_root;
+  uint64_t aux_root;
   LJGC2RootRange range[2];
 } LJGC2RootDescSpec;
 
 typedef struct LJGC2RootDescView {
+  const LJGC2RootDesc *descriptor;
   uint64_t generation;
   uint32_t flags;
   uint64_t old_root;
   uint64_t new_root;
+  uint64_t aux_root;
   LJGC2RootRange range[2];
 } LJGC2RootDescView;
+
+typedef struct LJGC2RootDescCoverage {
+  uint64_t descriptor_control;
+  uint64_t activation_generation;
+} LJGC2RootDescCoverage;
 
 typedef struct LJGC2RootDescTicket {
   uint64_t control;
@@ -1013,10 +1031,14 @@ typedef enum LJGC2RootDescSnapshotResult {
   LJ_GC2_ROOTDESC_SNAPSHOT_RETRY = 2
 } LJGC2RootDescSnapshotResult;
 
-typedef char lj_gc2_rootdesc_size_must_be_64[
-  sizeof(LJGC2RootDesc) == 64 ? 1 : -1];
+typedef char lj_gc2_rootdesc_size_must_be_96[
+  sizeof(LJGC2RootDesc) == 96 ? 1 : -1];
 typedef char lj_gc2_rootdesc_align_must_be_16[
   __alignof__(LJGC2RootDesc) >= 16 ? 1 : -1];
+typedef char lj_gc2_rootdesc_coverage_align_must_be_16[
+  (offsetof(LJGC2RootDesc, coverage) & 15u) == 0 ? 1 : -1];
+typedef char lj_gc2_rootdesc_coverage_size_must_be_16[
+  sizeof(LJGC2RootDescCoverage) == 16 ? 1 : -1];
 
 LA_INLINE uint64_t lj_gc2_rootdesc_pack_control(uint64_t generation,
                                                  uint8_t state)
@@ -1047,6 +1069,7 @@ LA_INLINE int lj_gc2_rootdesc_spec_valid(const LJGC2RootDescSpec *spec)
   if (!spec || (spec->flags & ~LJ_GC2_ROOTDESC_F_ALL) != 0)
     return 0;
   roots = spec->flags & (LJ_GC2_ROOTDESC_F_OLD | LJ_GC2_ROOTDESC_F_NEW |
+                         LJ_GC2_ROOTDESC_F_AUX |
                          LJ_GC2_ROOTDESC_F_RANGE0 |
                          LJ_GC2_ROOTDESC_F_RANGE1);
   direction = spec->flags & (LJ_GC2_ROOTDESC_F_MOVE_DOWN |
@@ -1063,6 +1086,12 @@ LA_INLINE int lj_gc2_rootdesc_spec_valid(const LJGC2RootDescSpec *spec)
   }
   if ((spec->flags & LJ_GC2_ROOTDESC_F_RANGE1) &&
       !(spec->flags & LJ_GC2_ROOTDESC_F_RANGE0))
+    return 0;
+  if ((spec->flags & LJ_GC2_ROOTDESC_F_TABLE_STORE) &&
+      (spec->flags & (LJ_GC2_ROOTDESC_F_OLD | LJ_GC2_ROOTDESC_F_NEW |
+                      LJ_GC2_ROOTDESC_F_AUX)) !=
+       (LJ_GC2_ROOTDESC_F_OLD | LJ_GC2_ROOTDESC_F_NEW |
+        LJ_GC2_ROOTDESC_F_AUX))
     return 0;
   if ((spec->flags & LJ_GC2_ROOTDESC_F_RANGE0) &&
       !lj_gc2_rootdesc_range_valid(&spec->range[0]))
@@ -1085,6 +1114,9 @@ LA_INLINE int lj_gc2_rootdesc_init_unpublished(LJGC2RootDesc *desc,
   la_store32_rlx(&desc->reserved, 0);
   la_store64_rlx(&desc->old_root, 0);
   la_store64_rlx(&desc->new_root, 0);
+  desc->coverage.lo = 0;
+  desc->coverage.hi = 0;
+  la_store64_rlx(&desc->aux_root, 0);
   la_storeptr_rlx(&desc->range[0].lo, NULL);
   la_storeptr_rlx(&desc->range[0].hi, NULL);
   la_storeptr_rlx(&desc->range[1].lo, NULL);
@@ -1148,6 +1180,7 @@ lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
   la_store32_rlx(&desc->reserved, 0);
   la_store64_rlx(&desc->old_root, spec->old_root);
   la_store64_rlx(&desc->new_root, spec->new_root);
+  la_store64_rlx(&desc->aux_root, spec->aux_root);
   la_storeptr_rlx(&desc->range[0].lo,
                   spec->flags & LJ_GC2_ROOTDESC_F_RANGE0 ?
                     spec->range[0].lo : NULL);
@@ -1183,8 +1216,10 @@ lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
   before = la_load64_acq(&desc->control);
   state = lj_gc2_rootdesc_state(before);
   if (state == LJ_GC2_ROOTDESC_IDLE) {
-    if (view)
+    if (view) {
+      view->descriptor = desc;
       view->generation = lj_gc2_rootdesc_generation(before);
+    }
     return LJ_GC2_ROOTDESC_SNAPSHOT_IDLE;
   }
   if (state != LJ_GC2_ROOTDESC_ACTIVE)
@@ -1193,6 +1228,7 @@ lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
   spec.flags = la_load32_rlx(&desc->flags);
   spec.old_root = la_load64_rlx(&desc->old_root);
   spec.new_root = la_load64_rlx(&desc->new_root);
+  spec.aux_root = la_load64_rlx(&desc->aux_root);
   spec.range[0].lo = la_loadptr_rlx((void *const *)&desc->range[0].lo);
   spec.range[0].hi = la_loadptr_rlx((void *const *)&desc->range[0].hi);
   spec.range[1].lo = la_loadptr_rlx((void *const *)&desc->range[1].lo);
@@ -1205,14 +1241,208 @@ lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
   if (!lj_gc2_rootdesc_spec_valid(&spec))
     return LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM;
   if (view) {
+    view->descriptor = desc;
     view->generation = lj_gc2_rootdesc_generation(before);
     view->flags = spec.flags;
     view->old_root = spec.old_root;
     view->new_root = spec.new_root;
+    view->aux_root = spec.aux_root;
     view->range[0] = spec.range[0];
     view->range[1] = spec.range[1];
   }
   return LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE;
+}
+
+/* Exact acquire snapshot of the helper-written CX16 coverage word. The
+** compare-with-zero operation is a no-op on success and returns the exact
+** current pair on failure; this avoids accepting a mixed pair when multiple
+** helpers cover successive descriptor generations in one close generation. */
+LA_INLINE LJGC2RootDescCoverage
+lj_gc2_rootdesc_coverage_snapshot(LJGC2RootDesc *desc)
+{
+  LJGC2RootDescCoverage coverage;
+  la_u128 expected, zero;
+  expected.lo = zero.lo = 0;
+  expected.hi = zero.hi = 0;
+  (void)la_cas128(&desc->coverage, &expected, zero);
+  coverage.descriptor_control = expected.lo;
+  coverage.activation_generation = expected.hi;
+  return coverage;
+}
+
+LA_INLINE int
+lj_gc2_rootdesc_coverage_valid(const LJGC2RootDescCoverage *coverage)
+{
+  uint64_t generation;
+  if (!coverage)
+    return 0;
+  if (coverage->descriptor_control == 0 &&
+      coverage->activation_generation == 0)
+    return 1;
+  generation = lj_gc2_rootdesc_generation(coverage->descriptor_control);
+  return coverage->activation_generation != 0 &&
+         coverage->activation_generation <= LJ_GC2_ACT_MAX_GENERATION &&
+         generation != 0 && generation <= LJ_GC2_ROOTDESC_MAX_GENERATION &&
+         lj_gc2_rootdesc_state(coverage->descriptor_control) ==
+           LJ_GC2_ROOTDESC_ACTIVE;
+}
+
+LA_INLINE int
+lj_gc2_rootdesc_closing_snapshot_valid(const LJGC2ActivationSnap *closing)
+{
+  return closing &&
+         lj_gc2_activation_value_valid(closing->mark_epoch,
+                                       closing->generation, closing->state,
+                                       closing->gate) &&
+         closing->state != LJ_GC2_ACT_NO_RECLAIM &&
+         closing->gate == LJ_GC2_ROOT_GATE_CLOSING;
+}
+
+/* Advance a helper certificate from one exact CX16 observation. A failed CAS
+** replaces |expected| with the winning pair, which is validated on every loop
+** iteration before it can be compared or overwritten. Keeping this primitive
+** separate also lets deterministic tests inject a winner between snapshot and
+** CAS without adding a production pause hook. */
+LA_INLINE LJGC2RootDescResult
+lj_gc2_rootdesc_coverage_advance(LJGC2RootDesc *desc, uint64_t control,
+                                 uint64_t activation_generation,
+                                 la_u128 expected)
+{
+  la_u128 desired;
+  if (!desc || activation_generation == 0 ||
+      activation_generation > LJ_GC2_ACT_MAX_GENERATION ||
+      lj_gc2_rootdesc_state(control) != LJ_GC2_ROOTDESC_ACTIVE ||
+      lj_gc2_rootdesc_generation(control) == 0 ||
+      lj_gc2_rootdesc_generation(control) > LJ_GC2_ROOTDESC_MAX_GENERATION)
+    return LJ_GC2_ROOTDESC_INVALID;
+  desired.lo = control;
+  desired.hi = activation_generation;
+  for (;;) {
+    LJGC2RootDescCoverage coverage;
+    coverage.descriptor_control = expected.lo;
+    coverage.activation_generation = expected.hi;
+    if (!lj_gc2_rootdesc_coverage_valid(&coverage))
+      return lj_gc2_rootdesc_pin(desc, control);
+    if (expected.hi > desired.hi ||
+        (expected.hi == desired.hi && expected.lo >= desired.lo)) {
+      return expected.lo == desired.lo && expected.hi == desired.hi ?
+             LJ_GC2_ROOTDESC_OK : LJ_GC2_ROOTDESC_BUSY;
+    }
+    if (la_cas128(&desc->coverage, &expected, desired))
+      return LJ_GC2_ROOTDESC_OK;
+  }
+}
+
+/*
+** Publish helper coverage only after conservatively tracing a stable ACTIVE
+** view captured under the supplied CLOSING snapshot. Coverage is monotonic by
+** activation generation and then exact descriptor control, so a delayed helper
+** cannot overwrite a newer close certificate. Exact descriptor and activation
+** rechecks make any post-trace race a retry, never a false certificate.
+*/
+LA_INLINE LJGC2RootDescResult
+lj_gc2_rootdesc_cover_after_trace(LJGC2RootDesc *desc,
+                                  const LJGC2RootDescView *view,
+                                  const LJGC2Activation *activation,
+                                  const LJGC2ActivationSnap *closing)
+{
+  uint64_t control;
+  la_u128 expected;
+  LJGC2ActivationSnap current;
+  LJGC2RootDescResult advance;
+  if (!desc || !view || view->descriptor != desc || !activation ||
+      !lj_gc2_rootdesc_closing_snapshot_valid(closing) ||
+      view->generation == 0 ||
+      view->generation > LJ_GC2_ROOTDESC_MAX_GENERATION)
+    return LJ_GC2_ROOTDESC_INVALID;
+  control = lj_gc2_rootdesc_pack_control(view->generation,
+                                         LJ_GC2_ROOTDESC_ACTIVE);
+  {
+    uint64_t observed = la_load64_acq(&desc->control);
+    if (observed != control)
+      return lj_gc2_rootdesc_state(observed) == LJ_GC2_ROOTDESC_NO_RECLAIM ?
+             LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY;
+  }
+  current = lj_gc2_activation_snapshot(activation);
+  if (!lj_gc2_activation_equal(&current, closing))
+    return current.state == LJ_GC2_ACT_NO_RECLAIM ?
+           LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY;
+
+  {
+    LJGC2RootDescCoverage coverage =
+      lj_gc2_rootdesc_coverage_snapshot(desc);
+    expected.lo = coverage.descriptor_control;
+    expected.hi = coverage.activation_generation;
+  }
+  advance = lj_gc2_rootdesc_coverage_advance(
+    desc, control, closing->generation, expected);
+  if (advance != LJ_GC2_ROOTDESC_OK)
+    return advance;
+  {
+    uint64_t observed = la_load64_acq(&desc->control);
+    if (observed != control)
+      return lj_gc2_rootdesc_state(observed) == LJ_GC2_ROOTDESC_NO_RECLAIM ?
+             LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY;
+  }
+  current = lj_gc2_activation_snapshot(activation);
+  if (!lj_gc2_activation_equal(&current, closing))
+    return current.state == LJ_GC2_ACT_NO_RECLAIM ?
+           LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY;
+  return LJ_GC2_ROOTDESC_OK;
+}
+
+/*
+** A closer may accept IDLE directly, or ACTIVE only when a helper certificate
+** names this exact descriptor and this exact CLOSING activation generation.
+** It still must use the supplied CLOSING snapshot for its final COMMIT CAS;
+** a publisher which appears after this observation changes that CAS to LOST.
+*/
+LA_INLINE LJGC2RootDescResult
+lj_gc2_rootdesc_covered(LJGC2RootDesc *desc,
+                        const LJGC2Activation *activation,
+                        const LJGC2ActivationSnap *closing)
+{
+  LJGC2RootDescView view;
+  LJGC2RootDescCoverage coverage;
+  LJGC2ActivationSnap current;
+  LJGC2RootDescSnapshotResult result;
+  if (!desc || !activation ||
+      !lj_gc2_rootdesc_closing_snapshot_valid(closing))
+    return LJ_GC2_ROOTDESC_INVALID;
+  current = lj_gc2_activation_snapshot(activation);
+  if (!lj_gc2_activation_equal(&current, closing))
+    return current.state == LJ_GC2_ACT_NO_RECLAIM ?
+           LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY;
+  result = lj_gc2_rootdesc_snapshot(desc, &view);
+  if (result == LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM)
+    return LJ_GC2_ROOTDESC_PINNED;
+  if (result == LJ_GC2_ROOTDESC_SNAPSHOT_RETRY)
+    return LJ_GC2_ROOTDESC_BUSY;
+  if (result == LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE) {
+    coverage = lj_gc2_rootdesc_coverage_snapshot(desc);
+    if (!lj_gc2_rootdesc_coverage_valid(&coverage))
+      return lj_gc2_rootdesc_pin(desc,
+        lj_gc2_rootdesc_pack_control(view.generation,
+                                     LJ_GC2_ROOTDESC_ACTIVE));
+    if (coverage.descriptor_control !=
+        lj_gc2_rootdesc_pack_control(view.generation,
+                                     LJ_GC2_ROOTDESC_ACTIVE) ||
+        coverage.activation_generation != closing->generation)
+      return LJ_GC2_ROOTDESC_BUSY;
+    {
+      uint64_t observed = la_load64_acq(&desc->control);
+      if (observed != lj_gc2_rootdesc_pack_control(
+                         view.generation, LJ_GC2_ROOTDESC_ACTIVE))
+        return lj_gc2_rootdesc_state(observed) ==
+               LJ_GC2_ROOTDESC_NO_RECLAIM ? LJ_GC2_ROOTDESC_PINNED :
+                                            LJ_GC2_ROOTDESC_BUSY;
+    }
+  }
+  current = lj_gc2_activation_snapshot(activation);
+  return lj_gc2_activation_equal(&current, closing) ?
+         LJ_GC2_ROOTDESC_OK :
+         (current.state == LJ_GC2_ACT_NO_RECLAIM ?
+          LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY);
 }
 
 /* Owner-only completion; exact CAS cannot erase a sticky NO_RECLAIM. */
