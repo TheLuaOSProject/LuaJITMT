@@ -360,6 +360,10 @@ struct TGState {
   LJJitEventAttachmentClock
     jit_event_attachment[LJ_JIT_EVENT_ATTACHMENT_SLOTS];
 #endif
+  /* Append-only, universe-global when reached through |g->main_tg|.  The
+  ** canonical string is fixed during state bootstrap, so this comparison
+  ** pointer is not a separate GC edge.  Secondary TG copies remain NULL. */
+  GCstr *vmevent_regkey;
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
@@ -407,16 +411,21 @@ LJ_STATIC_ASSERT(sizeof(((TGState *)0)->jit_event_attachment) ==
 		 sizeof(LJJitEventAttachmentClock));
 LJ_STATIC_ASSERT(offsetof(TGState, jit_event_attachment) +
 		 sizeof(((TGState *)0)->jit_event_attachment) <= sizeof(TGState));
-LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, jit_event_attachment) +
-		  sizeof(((TGState *)0)->jit_event_attachment)) <
-		 __alignof__(TGState));
+LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) >=
+		 offsetof(TGState, jit_event_attachment) +
+		 sizeof(((TGState *)0)->jit_event_attachment));
 #if LJ_HASFFI
 LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 		 offsetof(TGState, ffi_native_frame) +
 		 sizeof(((TGState *)0)->ffi_native_frame));
 #endif
 #endif
+LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
+		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
+LJ_STATIC_ASSERT(sizeof(TGState) -
+		 (offsetof(TGState, vmevent_regkey) +
+		  sizeof(((TGState *)0)->vmevent_regkey)) <
+		 __alignof__(TGState));
 
 static LJ_AINLINE int32_t lj_tg_vmstate_load_acq(TGState *tg)
 {

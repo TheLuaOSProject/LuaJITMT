@@ -2067,6 +2067,21 @@ static LJ_AINLINE uint8_t vmevmask_update(global_State *g, uint8_t clear,
   }
 }
 
+/* Bounded bit-only VM-event cache updates. Unlike vmevmask_update(), each is
+** exactly one atomic RMW and cannot spin behind a continuously changing peer.
+** Fetch-and/or/and also preserves every unrelated event bit. */
+static LJ_AINLINE uint8_t vmevmask_clear_bits_acqrel(global_State *g,
+						      uint8_t bits)
+{
+  return la_and8_acqrel(&g->vmevmask, (uint8_t)~bits);
+}
+
+static LJ_AINLINE uint8_t vmevmask_set_bits_acqrel(global_State *g,
+						    uint8_t bits)
+{
+  return la_or8_acqrel(&g->vmevmask, bits);
+}
+
 static LJ_AINLINE uint32_t vmevent_owner_acq(global_State *g)
 {
   return la_load32_acq(&g->vmevent_owner);

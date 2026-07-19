@@ -5259,6 +5259,7 @@ static TValue *gc2_errfin_vmevent_cp(lua_State *L, lua_CFunction dummy,
 {
   GC2ErrFinEvent *ctx = (GC2ErrFinEvent *)ud;
   UNUSED(dummy);
+  UNUSED(ctx);  /* ERRFIN send compiles out with LUAJIT_DISABLE_VMEVENT. */
   lj_vmevent_send_l(L, ERRFIN,
     copyTV(V, V->top++, restorestack(L, ctx->errslot));
   );

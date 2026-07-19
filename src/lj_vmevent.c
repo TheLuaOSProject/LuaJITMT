@@ -13,6 +13,7 @@
 #include "lj_obj.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_gc.h"
 #include "lj_state.h"
 #include "lj_dispatch.h"
 #include "lj_gc2.h"
@@ -23,6 +24,37 @@
 #include "lj_thr.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
+
+#if defined(LJ_GC2_TEST_HELPERS)
+static LJVMEVENTPrepareTestHook vmevent_prepare_test_hook;
+static void *vmevent_prepare_test_ud;
+
+void lj_vmevent_test_set_prepare_hook(LJVMEVENTPrepareTestHook hook,
+				       void *ud)
+{
+  vmevent_prepare_test_hook = hook;
+  vmevent_prepare_test_ud = ud;
+}
+#endif
+
+void lj_vmevent_init(lua_State *L)
+{
+#ifndef LUAJIT_DISABLE_VMEVENT
+  global_State *g = G(L);
+  TGState *tg = g->main_tg;
+  GCstr *key;
+  if (LJ_UNLIKELY(!tg))
+    abort();
+  key = lj_str_newlit(L, LJ_VMEVENTS_REGKEY);
+  /* This is the sole allocating/string-table admission for the internal
+  ** registry key. VM-event observations only acquire-load this immutable
+  ** pointer and therefore never enter strtab_wait(). */
+  fixstring(g, key);
+  la_storeptr_rel((void **)&tg->vmevent_regkey, key);
+#else
+  UNUSED(L);
+#endif
+}
 
 int lj_jit_event_attachment_clock_slot(int32_t registry_key, uint32_t *slot)
 {
@@ -198,68 +230,274 @@ void lj_jit_event_attachment_writer_publish(
 #endif
 }
 
-static int vmevent_handler_acq(global_State *g, GCstr *s, VMEvent ev,
-			       TValue *fnv)
+typedef struct VMEVENTPrepareRoots {
+  ptrdiff_t oldtop;
+  ptrdiff_t handler;
+  ptrdiff_t key;
+  ptrdiff_t table;
+  ptrdiff_t argbase;
+  ptrdiff_t rootend;
+} VMEVENTPrepareRoots;
+
+static void vmevent_prepare_result_reset(LJVMEVENTPrepareResult *result)
 {
-  cTValue *tv = lj_tab_getstr(lj_registry_tab_acq(g), s);
-  TValue tabv;
-  if (tv) {
-    lj_tv_load_acq(&tabv, tv);
-    if (tvistab(&tabv)) {
-      int hash = VMEVENT_HASH(ev);
-      tv = lj_tab_getint(tabV(&tabv), hash);
-      if (tv)
-	lj_tv_load_acq(fnv, tv);
-      return tv && tvisfunc(fnv);
-    }
+  memset(result, 0, sizeof(*result));
+  result->slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+  result->attachment_state = LJ_VMEVENT_ATTACHMENT_INVALID;
+}
+
+static int vmevent_event_slot(VMEvent ev, uint32_t *slot)
+{
+  switch (ev) {
+  case LJ_VMEVENT_BC:
+  case LJ_VMEVENT_TRACE:
+  case LJ_VMEVENT_RECORD:
+  case LJ_VMEVENT_TEXIT:
+  case LJ_VMEVENT_ERRFIN:
+    return lj_jit_event_attachment_clock_slot(VMEVENT_HASH(ev), slot);
+  default:
+    *slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+    return 0;
   }
-  return 0;
+}
+
+#ifndef LUAJIT_DISABLE_VMEVENT
+static GCstr *vmevent_regkey_acq(global_State *g)
+{
+  TGState *tg = g ? g->main_tg : NULL;
+  return tg ? (GCstr *)la_loadptr_acq(
+    (void *const *)&tg->vmevent_regkey) : NULL;
+}
+
+static int vmevent_prepare_roots_open(lua_State *L,
+				       VMEVENTPrepareRoots *roots)
+{
+  GCstr *key;
+  roots->oldtop = savestack(L, L->top);
+  key = vmevent_regkey_acq(G(L));
+  if (LJ_UNLIKELY(!key || key->gct != (uint8_t)~LJ_TSTR))
+    return 0;
+
+  /* All allocation and possible stack relocation precedes clock A and both
+  ** bounded table observations. The key was interned and fixed once during
+  ** state bootstrap; this path never enters the string-table writer gate. */
+  lj_state_checkstack(L, LUA_MINSTACK);
+  roots->handler = savestack(L, L->top);
+  setnilV(L->top++);
+  if (LJ_FR2)
+    setnilV(L->top++);
+  roots->argbase = savestack(L, L->top);
+  roots->key = savestack(L, L->top);
+  setstrV(L, L->top, key);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  roots->table = savestack(L, L->top);
+  setnilV(L->top++);
+  roots->rootend = savestack(L, L->top);
+  return 1;
+}
+
+static void vmevent_prepare_roots_close(lua_State *L,
+					 const VMEVENTPrepareRoots *roots,
+					 int ready)
+{
+  L->top = restorestack(L, ready ? roots->argbase : roots->oldtop);
+}
+
+#if defined(LJ_GC2_TEST_HELPERS)
+static void vmevent_prepare_test_call(lua_State *L, VMEvent ev, int stage,
+				      const VMEVENTPrepareRoots *roots)
+{
+  LJVMEVENTPrepareTestHook hook = vmevent_prepare_test_hook;
+  void *ud = vmevent_prepare_test_ud;
+  if (hook) {
+    /* One-shot before the callout: a hook which invokes reader-adjacent test
+    ** code cannot recursively re-enter itself. A staged fixture may arm the
+    ** same hook again explicitly for a later point. */
+    vmevent_prepare_test_hook = NULL;
+    vmevent_prepare_test_ud = NULL;
+    hook(L, ev, stage, ud);
+  }
+  /* Hooks may force a relocation or leave scratch values above the four
+  ** semantic roots. Never retain a raw stack address across that callout. */
+  L->top = restorestack(L, roots->rootend);
+}
+#else
+#define vmevent_prepare_test_call(L, ev, stage, roots) \
+  ((void)(L), (void)(ev), (void)(stage), (void)(roots))
+#endif
+
+/* A complete two-level raw registry observation. Every table/vector authority
+** interval ends inside the bounded rooted getter before a test hook can run.
+** FOUND with a non-function value is semantic absence, matching stock VM-event
+** dispatch and deliberately bypassing metatables at both levels. */
+static int vmevent_handler_lookup_try(lua_State *L, VMEvent ev,
+				      const VMEVENTPrepareRoots *roots)
+{
+  TValue *key = restorestack(L, roots->key);
+  TValue *table = restorestack(L, roots->table);
+  TValue *handler = restorestack(L, roots->handler);
+  int status = lj_tab_gettv_rooted_try(L, registry(L), key, table);
+
+  vmevent_prepare_test_call(L, ev,
+			    LJ_VMEVENT_TEST_AFTER_REGISTRY_LOOKUP, roots);
+  if (status == LJ_TAB_ROOTED_GET_RETRY)
+    return LJ_VMEVENT_PREPARE_RETRY;
+  if (status == LJ_TAB_ROOTED_GET_ABSENT)
+    return LJ_VMEVENT_PREPARE_ABSENT;
+
+  table = restorestack(L, roots->table);
+  handler = restorestack(L, roots->handler);
+  status = lj_tab_getinttv_rooted_try(L, table, VMEVENT_HASH(ev), handler);
+  vmevent_prepare_test_call(L, ev, LJ_VMEVENT_TEST_AFTER_EVENT_LOOKUP,
+			    roots);
+  if (status == LJ_TAB_ROOTED_GET_RETRY)
+    return LJ_VMEVENT_PREPARE_RETRY;
+  handler = restorestack(L, roots->handler);
+  return status == LJ_TAB_ROOTED_GET_FOUND && tvisfunc(handler) ?
+    LJ_VMEVENT_PREPARE_READY : LJ_VMEVENT_PREPARE_ABSENT;
+}
+
+#if LJ_HASJIT
+static int vmevent_attachment_snapshots_equal(
+  int state_a, const LJJitEventAttachmentSnapshot *a,
+  int state_b, const LJJitEventAttachmentSnapshot *b)
+{
+  return state_a == state_b &&
+    (state_a == LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_INITIAL ||
+     state_a == LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED) &&
+    a->sequence == b->sequence &&
+    a->next_generation == b->next_generation &&
+    a->generation == b->generation;
+}
+#endif
+
+static void vmevent_prepare_accept(LJVMEVENTPrepareResult *result,
+				    uint32_t slot, uint32_t state,
+				    const LJJitEventAttachmentSnapshot *snapshot,
+				    ptrdiff_t argbase)
+{
+  result->argbase = argbase;
+  if (snapshot)
+    result->attachment = *snapshot;
+  result->slot = slot;
+  result->attachment_state = state;
+}
+#endif /* !LUAJIT_DISABLE_VMEVENT */
+
+int lj_vmevent_prepare_try(lua_State *L, VMEvent ev,
+			    LJVMEVENTPrepareResult *result)
+{
+  uint32_t slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+  if (!result)
+    return LJ_VMEVENT_PREPARE_RETRY;
+  vmevent_prepare_result_reset(result);
+  if (!L || !vmevent_event_slot(ev, &slot))
+    return LJ_VMEVENT_PREPARE_RETRY;
+
+#ifdef LUAJIT_DISABLE_VMEVENT
+  result->slot = slot;
+  result->attachment_state = LJ_VMEVENT_ATTACHMENT_UNCLOCKED;
+  return LJ_VMEVENT_PREPARE_ABSENT;
+#else
+  {
+    global_State *g = G(L);
+    VMEVENTPrepareRoots roots;
+    int lookup;
+    uint8_t event_mask = VMEVENT_MASK(ev);
+
+    if (!vmevent_prepare_roots_open(L, &roots))
+      return LJ_VMEVENT_PREPARE_RETRY;
+
+#if LJ_HASJIT
+    {
+      LJJitEventAttachmentSnapshot snapshot_a, snapshot_b;
+      int clock_a = lj_jit_event_attachment_snapshot(g, slot, &snapshot_a);
+      int clock_b;
+      int cleared = 0;
+
+      vmevent_prepare_test_call(L, ev, LJ_VMEVENT_TEST_AFTER_CLOCK_A,
+				&roots);
+      if (clock_a == LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_RETRY) {
+	vmevent_prepare_roots_close(L, &roots, 0);
+	return LJ_VMEVENT_PREPARE_RETRY;
+      }
+
+      lookup = vmevent_handler_lookup_try(L, ev, &roots);
+      if (lookup == LJ_VMEVENT_PREPARE_RETRY) {
+	vmevent_prepare_roots_close(L, &roots, 0);
+	return LJ_VMEVENT_PREPARE_RETRY;
+      }
+      if (lookup == LJ_VMEVENT_PREPARE_ABSENT) {
+	vmevent_prepare_test_call(L, ev, LJ_VMEVENT_TEST_BEFORE_MASK_CLEAR,
+				  &roots);
+	(void)vmevmask_clear_bits_acqrel(g, event_mask);
+	cleared = 1;
+	vmevent_prepare_test_call(L, ev, LJ_VMEVENT_TEST_AFTER_MASK_CLEAR,
+				  &roots);
+      }
+
+      /* Pairs the handler/rooted-table reads and any cache-bit clear with the
+      ** writer's release publication before accepting clock B. */
+      la_fence_acq();
+      clock_b = lj_jit_event_attachment_snapshot(g, slot, &snapshot_b);
+      if (!vmevent_attachment_snapshots_equal(
+	    clock_a, &snapshot_a, clock_b, &snapshot_b)) {
+	if (cleared)
+	  (void)vmevmask_set_bits_acqrel(g, event_mask);
+	vmevent_prepare_roots_close(L, &roots, 0);
+	return LJ_VMEVENT_PREPARE_RETRY;
+      }
+
+      vmevent_prepare_accept(result, slot,
+	clock_b == LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_INITIAL ?
+	  LJ_VMEVENT_ATTACHMENT_INITIAL : LJ_VMEVENT_ATTACHMENT_PUBLISHED,
+	&snapshot_b, lookup == LJ_VMEVENT_PREPARE_READY ? roots.argbase : 0);
+      vmevent_prepare_roots_close(
+	L, &roots, lookup == LJ_VMEVENT_PREPARE_READY);
+      return lookup;
+    }
+#else
+    vmevent_prepare_test_call(L, ev, LJ_VMEVENT_TEST_AFTER_CLOCK_A, &roots);
+    lookup = vmevent_handler_lookup_try(L, ev, &roots);
+    if (lookup == LJ_VMEVENT_PREPARE_READY) {
+      vmevent_prepare_accept(result, slot, LJ_VMEVENT_ATTACHMENT_UNCLOCKED,
+			     NULL, roots.argbase);
+      vmevent_prepare_roots_close(L, &roots, 1);
+      return LJ_VMEVENT_PREPARE_READY;
+    }
+    if (lookup == LJ_VMEVENT_PREPARE_RETRY) {
+      vmevent_prepare_roots_close(L, &roots, 0);
+      return LJ_VMEVENT_PREPARE_RETRY;
+    }
+
+    vmevent_prepare_test_call(L, ev, LJ_VMEVENT_TEST_BEFORE_MASK_CLEAR,
+			      &roots);
+    (void)vmevmask_clear_bits_acqrel(g, event_mask);
+    vmevent_prepare_test_call(L, ev, LJ_VMEVENT_TEST_AFTER_MASK_CLEAR,
+			      &roots);
+    la_fence_acq();
+    lookup = vmevent_handler_lookup_try(L, ev, &roots);
+    if (lookup != LJ_VMEVENT_PREPARE_ABSENT) {
+      (void)vmevmask_set_bits_acqrel(g, event_mask);
+      vmevent_prepare_roots_close(L, &roots, 0);
+      return LJ_VMEVENT_PREPARE_RETRY;
+    }
+
+    vmevent_prepare_accept(result, slot, LJ_VMEVENT_ATTACHMENT_UNCLOCKED,
+			   NULL, 0);
+    vmevent_prepare_roots_close(L, &roots, 0);
+    return LJ_VMEVENT_PREPARE_ABSENT;
+#endif
+  }
+#endif
 }
 
 ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
 {
-  global_State *g = G(L);
-  GCstr *s;
-  TValue fnv;
-  /* Reserve before acquiring the handler. A concurrent jit.attach() may
-  ** remove the registry's last reference immediately after the lookup; stack
-  ** growth can allocate, poll and run GC, so carrying fnv only in a C local
-  ** across that call would expose a reclaimed function. Once loaded below,
-  ** the copy to L->top is allocation- and safepoint-free. */
-  lj_state_checkstack(L, LUA_MINSTACK);
-  s = lj_str_newlit(L, LJ_VMEVENTS_REGKEY);
-  /* Detach may remove the registry's last source reference after the load.
-  ** Keep the source generation alive through publication of the replacement
-  ** stack root, then hand it to the active mark cycle before ending the SMR
-  ** read section. This is a single-slot publication, not an O(stack) rescan. */
-  if (!lj_gc2_smr_read_try(g))
-    return 0;  /* Observational event: never wait behind reclamation. */
-  if (vmevent_handler_acq(g, s, ev, &fnv)) {
-    TValue *dst = L->top;
-    setfuncV(L, dst, funcV(&fnv));
-    lj_state_stack_pubtv(L, L, dst);
-    L->top = dst + 1;
-    if (LJ_FR2) setnilV(L->top++);
-    lj_gc2_smr_read_leave(g);
-    return savestack(L, L->top);
-  }
-  lj_gc2_smr_read_leave(g);
-  vmevmask_update(g, VMEVENT_MASK(ev), 0);  /* No handler: cache this fact. */
-  /* jit.attach() publishes the registry entry before invalidating the mask
-  ** cache. If it raced our first lookup, a blind clear after that invalidation
-  ** could permanently suppress the newly attached event. Validate the miss
-  ** once after the clear; a later attachment will publish NOCACHE itself.
-  */
-  if (!lj_gc2_smr_read_try(g)) {
-    /* The first miss already cleared this cache bit. Keep it retryable: an
-    ** attach may have raced that clear while reclamation owns the read gate. */
-    (void)vmevmask_update(g, 0, VMEVENT_MASK(ev));
-    return 0;
-  }
-  if (vmevent_handler_acq(g, s, ev, &fnv))
-    (void)vmevmask_update(g, 0, VMEVENT_MASK(ev));
-  lj_gc2_smr_read_leave(g);
-  return 0;
+  LJVMEVENTPrepareResult result;
+  return lj_vmevent_prepare_try(L, ev, &result) == LJ_VMEVENT_PREPARE_READY ?
+    result.argbase : 0;
 }
 
 lua_State *lj_vmevent_state(global_State *g)

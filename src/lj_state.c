@@ -35,6 +35,7 @@
 #include "lj_lex.h"
 #include "lj_alloc.h"
 #include "lj_mcode.h"
+#include "lj_vmevent.h"
 #include "luajit.h"
 
 /* -- Stack handling ------------------------------------------------------ */
@@ -327,6 +328,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   lj_state_env_rel(L, lj_tab_new(L, 0, LJ_MIN_GLOBAL));
   lj_registry_settab_rel(L, lj_tab_new(L, 0, LJ_MIN_REGISTRY));
   lj_str_init(L);
+  lj_vmevent_init(L);
   lj_meta_init(L);
   lj_lex_init(L);
   fixstring(g, lj_err_str(L, LJ_ERR_ERRMEM));  /* Preallocate memory error msg. */

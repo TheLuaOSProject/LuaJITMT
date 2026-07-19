@@ -871,6 +871,36 @@ return function(add)
   })
 
   add({
+    name = "m5_vmevent_prepare_clocked",
+    description = "bounded rooted and clocked VM-event handler preparation",
+    run = function(t)
+      build.with_default_build_restore(t, function()
+        local base = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS"
+        local profiles = {
+          { suffix = "", flags = base },
+          { suffix = "-nojit", flags = base .. " -DLUAJIT_DISABLE_JIT" },
+          { suffix = "-novmevent",
+            flags = base .. " -DLUAJIT_DISABLE_VMEVENT" },
+          { suffix = "-nojit-novmevent",
+            flags = base .. " -DLUAJIT_DISABLE_JIT" ..
+                    " -DLUAJIT_DISABLE_VMEVENT" }
+        }
+        for i = 1, #profiles do
+          local profile = profiles[i]
+          build.clean_build(t, { quiet = true, xcflags = profile.flags })
+          build_and_run_c(t,
+            t:tmp("lj_t-vmevent-prepare-clocked" .. profile.suffix),
+            "t-vmevent-prepare-clocked.c", {
+              build = false, clean = false, timeout = "30s",
+              cflags = profile.flags
+            })
+        end
+      end)
+      print("M5 bounded rooted/clocked VM-event preparation passed")
+    end
+  })
+
+  add({
     name = "m5_tab_value_publish",
     description = "C-side table value release-publication behavior",
     run = function(t)

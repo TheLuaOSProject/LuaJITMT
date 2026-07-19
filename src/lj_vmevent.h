@@ -80,6 +80,51 @@ LJ_FUNC int lj_jit_event_attachment_writer_claim(
 LJ_FUNC void lj_jit_event_attachment_writer_publish(
   LJJitEventAttachmentWriter *writer);
 
+/* One bounded VM-event handler observation. READY leaves exactly the handler
+** and optional FR2 slot on |L| and reports the saved argument base. ABSENT
+** and RETRY restore the exact entry top. Clocked builds accept INITIAL as a
+** real state because luaL_newstate() installs ERRFIN before any jit.attach()
+** writer publication. Runtime jit.off remains clocked; only a compile-time
+** no-JIT build reports UNCLOCKED. */
+typedef struct LJVMEVENTPrepareResult {
+  ptrdiff_t argbase;
+  LJJitEventAttachmentSnapshot attachment;
+  uint32_t slot;
+  uint32_t attachment_state;
+} LJVMEVENTPrepareResult;
+
+enum {
+  LJ_VMEVENT_PREPARE_RETRY = -1,
+  LJ_VMEVENT_PREPARE_ABSENT = 0,
+  LJ_VMEVENT_PREPARE_READY = 1
+};
+
+enum {
+  LJ_VMEVENT_ATTACHMENT_INVALID = 0,
+  LJ_VMEVENT_ATTACHMENT_INITIAL = 1,
+  LJ_VMEVENT_ATTACHMENT_PUBLISHED = 2,
+  LJ_VMEVENT_ATTACHMENT_UNCLOCKED = 3
+};
+
+LJ_FUNC void lj_vmevent_init(lua_State *L);
+LJ_FUNC int lj_vmevent_prepare_try(lua_State *L, VMEvent ev,
+				    LJVMEVENTPrepareResult *result);
+LJ_FUNC ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev);
+
+enum {
+  LJ_VMEVENT_TEST_AFTER_CLOCK_A = 1,
+  LJ_VMEVENT_TEST_AFTER_REGISTRY_LOOKUP = 2,
+  LJ_VMEVENT_TEST_AFTER_EVENT_LOOKUP = 3,
+  LJ_VMEVENT_TEST_BEFORE_MASK_CLEAR = 4,
+  LJ_VMEVENT_TEST_AFTER_MASK_CLEAR = 5
+};
+#if defined(LJ_GC2_TEST_HELPERS)
+typedef void (*LJVMEVENTPrepareTestHook)(lua_State *L, VMEvent ev,
+					 int stage, void *ud);
+LJ_FUNC void lj_vmevent_test_set_prepare_hook(
+  LJVMEVENTPrepareTestHook hook, void *ud);
+#endif
+
 #ifdef LUAJIT_DISABLE_VMEVENT
 #define lj_vmevent_send(g, ev, args)		UNUSED(g)
 #define lj_vmevent_send_(g, ev, args, post)	UNUSED(g)
@@ -126,7 +171,6 @@ LJ_FUNC void lj_jit_event_attachment_writer_publish(
     if (vmevL) lj_vmevent_send_l_(vmevL, ev, args, post); \
   } while (0)
 
-LJ_FUNC ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev);
 LJ_FUNC lua_State *lj_vmevent_state(global_State *g);
 LJ_FUNC void lj_vmevent_call(lua_State *L, ptrdiff_t argbase,
 			     ptrdiff_t oldtop);
