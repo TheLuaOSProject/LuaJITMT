@@ -1694,17 +1694,18 @@ int lj_jit_trace_stream_snapshot(global_State *g,
   if (snapshot->phase == LJ_JIT_STREAM_IDLE)
     return jit_trace_stream_idle_snapshot(snapshot) ?
       LJ_JIT_STREAM_SNAPSHOT_IDLE : LJ_JIT_STREAM_SNAPSHOT_RETRY;
-  /* This structural milestone implements exactly one phase shape. Reject all
-  ** forward phases until their complete ownership/session grammars land. */
-  if (snapshot->phase != LJ_JIT_STREAM_DETACHED_PENDING ||
+  /* Standalone FLUSH may be structurally pending without a handler, pending
+  ** with one exact rooted callback session, or already claimed for callback
+  ** execution.  Every callback identity is the same detached terminal
+  ** session; no half-populated or cross-session shape is authoritative. */
+  if ((snapshot->phase != LJ_JIT_STREAM_DETACHED_PENDING &&
+       snapshot->phase != LJ_JIT_STREAM_DETACHED_CALLBACK) ||
       snapshot->generation == 0 || snapshot->event_ordinal != 1u ||
       snapshot->next_generation != snapshot->generation ||
       !lj_tgregistry_key_valid(&snapshot->owner_key) ||
       snapshot->owner_tid == 0 || snapshot->owner_actor == 0 ||
       snapshot->owner_actor == LJ_THR_ACTOR_RETIRED ||
-      snapshot->traceno != 0 || snapshot->callback_event != 0 ||
-      snapshot->callback_slot != LJ_JIT_EVENT_SESSION_SLOTS ||
-      snapshot->callback_session_generation != 0 ||
+      snapshot->traceno != 0 ||
       snapshot->terminal_event != LJ_JIT_EVENT_TRACE_FLUSH ||
       snapshot->terminal_slot >= LJ_JIT_EVENT_SESSION_SLOTS ||
       snapshot->terminal_session_generation == 0 ||
@@ -1712,6 +1713,17 @@ int lj_jit_trace_stream_snapshot(global_State *g,
       lj_tgregistry_key_snapshot(&snapshot->owner_key, &owner_slot) !=
 	LJ_TGSLOT_OK || owner_slot.state != LJ_TGSLOT_LIVE)
     goto retry;
+  if (snapshot->callback_event == 0) {
+    if (snapshot->phase != LJ_JIT_STREAM_DETACHED_PENDING ||
+	snapshot->callback_slot != LJ_JIT_EVENT_SESSION_SLOTS ||
+	snapshot->callback_session_generation != 0)
+      goto retry;
+  } else if (snapshot->callback_event != LJ_JIT_EVENT_TRACE_FLUSH ||
+	     snapshot->callback_slot != snapshot->terminal_slot ||
+	     snapshot->callback_session_generation !=
+	       snapshot->terminal_session_generation) {
+    goto retry;
+  }
   owner_body = lj_tgregistry_slot_body_snapshot(snapshot->owner_key.slot);
   /* The stable registry node may be inspected without a body lease, but its
   ** published TG body may be reclaimed immediately after our scalar sequence
@@ -1751,15 +1763,15 @@ int lj_jit_trace_stream_names_tg(global_State *g, TGState *tg)
 }
 
 static int jit_trace_stream_writer_claim(LJJitTraceStream *stream,
-					 uint64_t *sequence, int admission)
+					 uint64_t *sequence, uint64_t reserve)
 {
   uint64_t value;
-  if (!stream || !sequence)
+  if (!stream || !sequence || reserve < 2u || (reserve & 1u) != 0)
     return 0;
   value = la_load64_acq(&stream->sequence);
-  /* Admission must leave a second +2 transition for exact close. */
-  if ((value & 1u) != 0 ||
-      value > (admission ? ~(uint64_t)4 : ~(uint64_t)2))
+  /* The first publication reserves every remaining even-to-even transition
+  ** in its linear lifetime.  Refuse rather than wrap a stable sequence. */
+  if ((value & 1u) != 0 || value > ~(uint64_t)0 - reserve)
     return 0;
   if (!la_cas64(&stream->sequence, &value, value + 1u,
 		LA_ACQ_REL, LA_ACQ))
@@ -1812,7 +1824,12 @@ static int jit_trace_flush_session_exact(
   if (!tg || !L || !handle || handle->terminal_session.generation == 0 ||
       handle->terminal_session.slot >= LJ_JIT_EVENT_SESSION_SLOTS ||
       handle->terminal_session.owner_mode !=
-	LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE)
+	LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE ||
+      !lj_vmevent_attachment_identity_valid(handle->attachment_state,
+					     handle->attachment_generation) ||
+      handle->callback_root_count > 1u ||
+      ((handle->callback_handler != NULL) !=
+	(handle->callback_root_count == 1u)))
     return 0;
   sessions = &tg->jit_event_sessions;
   slot = &sessions->slot[handle->terminal_session.slot];
@@ -1837,14 +1854,18 @@ static int jit_trace_flush_session_exact(
       la_load64_acq(&slot->attachment_generation) !=
 	handle->attachment_generation ||
       la_load32_acq(&slot->attachment_state) !=
-	LJ_VMEVENT_ATTACHMENT_PUBLISHED ||
-      la_load32_acq(&slot->flags) != 0 ||
+	handle->attachment_state ||
+      la_load32_acq(&slot->flags) !=
+	(handle->callback_root_count != 0 ?
+	 LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT : 0) ||
       la_load32_acq(&slot->control_borrow_state) != 0 ||
       la_load64_acq(&slot->control_borrow_generation) != 0 ||
       la_loadptr_acq((void *const *)&slot->saved_jit_owner_L) != NULL ||
       nroots != 0 ||
-      la_load32_acq(&slot->callback_root_count) != 0 ||
-      jit_event_callback_handler_acq(roots, nroots) != NULL ||
+      la_load32_acq(&slot->callback_root_count) !=
+	handle->callback_root_count ||
+      jit_event_callback_handler_acq(roots, nroots) !=
+	handle->callback_handler ||
       la_load32_acq(&slot->owner_tid) != handle->owner_tid ||
       la_load32_acq(&slot->owner_actor) != handle->owner_actor ||
       la_loadptr_acq((void *const *)&slot->owner_L) != L ||
@@ -1863,22 +1884,27 @@ static int jit_trace_flush_session_exact(
   return la_load64_acq(&sessions->sequence) == sequence;
 }
 
-static int jit_trace_flush_descriptor_exact(
-  const LJJitTraceStream *stream, const LJJitTraceStreamHandle *handle)
+static int jit_trace_flush_descriptor_exact_phase(
+  const LJJitTraceStream *stream, const LJJitTraceStreamHandle *handle,
+  uint32_t phase)
 {
   LJTGRegistryKey key = jit_trace_stream_owner_key_acq(stream);
+  uint32_t callback = handle->callback_root_count;
   return la_load64_acq(&stream->next_generation) == handle->generation &&
     la_load64_acq(&stream->generation) == handle->generation &&
     la_load64_acq(&stream->event_ordinal) == 1u &&
     lj_tgregistry_key_equal(&key, &handle->owner_key) &&
     la_load32_acq(&stream->owner_tid) == handle->owner_tid &&
     la_load32_acq(&stream->owner_actor) == handle->owner_actor &&
-    la_load32_acq(&stream->phase) == LJ_JIT_STREAM_DETACHED_PENDING &&
+    la_load32_acq(&stream->phase) == phase &&
     la_load32_acq(&stream->traceno) == 0 &&
-    la_load32_acq(&stream->callback_event) == 0 &&
+    la_load32_acq(&stream->callback_event) ==
+      (callback ? LJ_JIT_EVENT_TRACE_FLUSH : 0) &&
     la_load32_acq(&stream->callback_slot) ==
-      LJ_JIT_EVENT_SESSION_SLOTS &&
-    la_load64_acq(&stream->callback_session_generation) == 0 &&
+      (callback ? handle->terminal_session.slot :
+	LJ_JIT_EVENT_SESSION_SLOTS) &&
+    la_load64_acq(&stream->callback_session_generation) ==
+      (callback ? handle->terminal_session.generation : 0) &&
     la_load32_acq(&stream->terminal_event) == LJ_JIT_EVENT_TRACE_FLUSH &&
     la_load32_acq(&stream->terminal_slot) ==
       handle->terminal_session.slot &&
@@ -1908,16 +1934,17 @@ static void jit_trace_stream_clear_locked(LJJitTraceStream *stream)
 }
 
 static int jit_trace_flush_clear_exact(
-  TGState *tg, lua_State *L, const LJJitTraceStreamHandle *handle)
+  TGState *tg, lua_State *L, const LJJitTraceStreamHandle *handle,
+  uint32_t phase)
 {
   LJJitTraceStream *stream = jit_trace_stream(tg ? tg->gl : NULL);
   uint64_t sequence;
   if (!stream || !jit_trace_flush_session_exact(tg, L, handle) ||
-      !jit_trace_flush_descriptor_exact(stream, handle) ||
-      !jit_trace_stream_writer_claim(stream, &sequence, 0))
+      !jit_trace_flush_descriptor_exact_phase(stream, handle, phase) ||
+      !jit_trace_stream_writer_claim(stream, &sequence, 2u))
     return 0;
   if (!jit_trace_flush_session_exact(tg, L, handle) ||
-      !jit_trace_flush_descriptor_exact(stream, handle)) {
+      !jit_trace_flush_descriptor_exact_phase(stream, handle, phase)) {
     jit_trace_stream_writer_release(stream, sequence);
     return 0;
   }
@@ -1926,9 +1953,15 @@ static int jit_trace_flush_clear_exact(
   return 1;
 }
 
-int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
-			       uint64_t attachment_generation,
-			       LJJitTraceStreamHandle *handle)
+/* Publish the rooted detached session and pending universe stream while the
+** exact low token remains held.  The caller either binds a callback and then
+** hands off, or performs the structural handoff directly. */
+static int jit_trace_flush_publish_l(lua_State *L, jit_State *J,
+				     uint32_t attachment_state,
+				     uint64_t attachment_generation,
+				     GCfunc *callback_handler,
+				     uint64_t stream_reserve,
+				     LJJitTraceStreamHandle *handle)
 {
   LJJitEventSessionSpec spec;
   LJJitTraceStreamSnapshot before;
@@ -1939,11 +1972,14 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
   LJTGSlotSnap slotsnap;
   uint64_t sequence, generation;
   uint32_t tid, actor;
-  int forced_handoff_failure;
   if (!handle)
     return 0;
   memset(handle, 0, sizeof(*handle));
-  if (!L || !J || attachment_generation == 0 || G(L) != J2G(J) ||
+  if (!L || !J ||
+      !lj_vmevent_attachment_identity_valid(attachment_state,
+					     attachment_generation) ||
+      stream_reserve < 4u || (stream_reserve & 1u) != 0 ||
+      G(L) != J2G(J) ||
       !(tg = jit_event_owner_tg(L)) || tg != lj_jit_owner_tg_l(L, J))
     return 0;
   g = tg->gl;
@@ -1960,7 +1996,7 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
       jit_owner_l_acq(J) != L ||
       lj_jit_trace_stream_snapshot(g, &before) !=
 	LJ_JIT_STREAM_SNAPSHOT_IDLE ||
-      before.sequence > ~(uint64_t)4 ||
+      before.sequence > ~(uint64_t)0 - stream_reserve ||
       before.next_generation == ~(uint64_t)0 ||
       la_load64_acq(&tg->jit_event_sessions.sequence) > ~(uint64_t)4)
     return 0;
@@ -1970,13 +2006,15 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
   spec.owner_mode = LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE;
   spec.edge_proof = LJ_JIT_EVENT_EDGE_NONE;
   spec.attachment_generation = attachment_generation;
-  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
+  spec.attachment_state = attachment_state;
+  spec.callback_root_count = callback_handler ? 1u : 0u;
+  spec.callback_handler = callback_handler;
   if (!jit_event_session_publish_l(L, J, &spec, &handle->terminal_session))
     return 0;
 
   /* No allocator, GC action, handler lookup or Lua execution is permitted
   ** between this odd claim and its paired even release. */
-  if (!jit_trace_stream_writer_claim(stream, &sequence, 1))
+  if (!jit_trace_stream_writer_claim(stream, &sequence, stream_reserve))
     goto rollback_session;
   if (la_load32_acq(&stream->phase) != LJ_JIT_STREAM_IDLE ||
       la_load64_acq(&stream->generation) != 0 ||
@@ -1993,6 +2031,9 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
   handle->owner_key = key;
   handle->owner_tid = tid;
   handle->owner_actor = actor;
+  handle->attachment_state = attachment_state;
+  handle->callback_root_count = callback_handler ? 1u : 0u;
+  handle->callback_handler = callback_handler;
   if (!jit_trace_flush_session_exact(tg, L, handle)) {
     jit_trace_stream_writer_release(stream, sequence);
     goto rollback_handle;
@@ -2005,9 +2046,13 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
   la_store32_rel(&stream->owner_actor, actor);
   la_store32_rel(&stream->phase, LJ_JIT_STREAM_DETACHED_PENDING);
   la_store32_rel(&stream->traceno, 0);
-  la_store32_rel(&stream->callback_event, 0);
-  la_store32_rel(&stream->callback_slot, LJ_JIT_EVENT_SESSION_SLOTS);
-  la_store64_rel(&stream->callback_session_generation, 0);
+  la_store32_rel(&stream->callback_event,
+		 callback_handler ? LJ_JIT_EVENT_TRACE_FLUSH : 0);
+  la_store32_rel(&stream->callback_slot,
+		 callback_handler ? handle->terminal_session.slot :
+		 LJ_JIT_EVENT_SESSION_SLOTS);
+  la_store64_rel(&stream->callback_session_generation,
+		 callback_handler ? handle->terminal_session.generation : 0);
   la_store32_rel(&stream->terminal_event, LJ_JIT_EVENT_TRACE_FLUSH);
   la_store32_rel(&stream->terminal_slot, handle->terminal_session.slot);
   la_store64_rel(&stream->terminal_session_generation,
@@ -2015,29 +2060,199 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
   la_store32_rel(&stream->terminal_reason, 0);
   la_store32_rel(&stream->flags, 0);
   jit_trace_stream_writer_release(stream, sequence);
-
-  forced_handoff_failure = trace_test_take_event_handoff_failure();
-  if (!forced_handoff_failure) {
-    jit_owner_l_rel(J, NULL);
-    if (jit_token_release_exact(g, tid))
-      return 1;
-    if (jit_owner_word_acq(g) != jit_owner_pack(tid, 0))
-      abort();  /* No legal peer can steal this exact low-half token. */
-    jit_owner_l_rel(J, L);
-  }
-  if (!jit_trace_flush_clear_exact(tg, L, handle) ||
-      !jit_event_session_unpublish_l(L, J, &handle->terminal_session))
-    abort();
-  memset(handle, 0, sizeof(*handle));
-  return 0;
+  return 1;
 
 rollback_handle:
-  memset(handle, 0, offsetof(LJJitTraceStreamHandle, terminal_session));
 rollback_session:
   if (LJ_UNLIKELY(!jit_event_session_unpublish_l(
 	L, J, &handle->terminal_session)))
     abort();
   memset(handle, 0, sizeof(*handle));
+  return 0;
+}
+
+static int jit_trace_flush_handoff_l(lua_State *L, jit_State *J,
+				     const LJJitTraceStreamHandle *handle)
+{
+  global_State *g = G(L);
+  uint32_t tid = handle->owner_tid;
+  if (trace_test_take_event_handoff_failure())
+    return 0;
+  jit_owner_l_rel(J, NULL);
+  if (jit_token_release_exact(g, tid))
+    return 1;
+  if (jit_owner_word_acq(g) != jit_owner_pack(tid, 0))
+    abort();  /* No legal peer can steal this exact low-half token. */
+  jit_owner_l_rel(J, L);
+  return 0;
+}
+
+static int jit_trace_flush_callback_owner_exact(
+  TGState *tg, lua_State *L, const LJJitTraceStreamHandle *stream_handle,
+  const LJJitEventCallbackHandle *callback_handle)
+{
+  LJJitEventCallbackSnapshot snapshot;
+  return callback_handle &&
+    lj_jit_event_callback_snapshot(tg, &snapshot) ==
+      LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE &&
+    snapshot.tg == tg && snapshot.owner_L == L &&
+    snapshot.generation == callback_handle->generation &&
+    snapshot.next_generation == callback_handle->generation &&
+    snapshot.stream_generation == stream_handle->generation &&
+    snapshot.stream_generation == callback_handle->stream_generation &&
+    snapshot.session_generation ==
+      stream_handle->terminal_session.generation &&
+    snapshot.session_generation == callback_handle->session_generation &&
+    snapshot.state == LJ_JIT_EVENT_CALLBACK_CALLING &&
+    snapshot.owner_actor == stream_handle->owner_actor &&
+    snapshot.owner_actor == callback_handle->owner_actor &&
+    snapshot.event == LJ_JIT_EVENT_TRACE_FLUSH &&
+    snapshot.event == callback_handle->event &&
+    snapshot.session_slot == stream_handle->terminal_session.slot &&
+    snapshot.session_slot == callback_handle->session_slot;
+}
+
+static int jit_trace_flush_callback_phase_l(
+  TGState *tg, lua_State *L, const LJJitTraceStreamHandle *stream_handle,
+  const LJJitEventCallbackHandle *callback_handle)
+{
+  LJJitTraceStream *stream = jit_trace_stream(tg ? tg->gl : NULL);
+  uint64_t sequence;
+  if (!stream || stream_handle->callback_root_count != 1u ||
+      !jit_trace_flush_session_exact(tg, L, stream_handle) ||
+      !jit_trace_flush_descriptor_exact_phase(
+	stream, stream_handle, LJ_JIT_STREAM_DETACHED_PENDING) ||
+      !jit_trace_flush_callback_owner_exact(
+	tg, L, stream_handle, callback_handle) ||
+      !jit_trace_stream_writer_claim(stream, &sequence, 4u))
+    return 0;
+  if (!jit_trace_flush_session_exact(tg, L, stream_handle) ||
+      !jit_trace_flush_descriptor_exact_phase(
+	stream, stream_handle, LJ_JIT_STREAM_DETACHED_PENDING) ||
+      !jit_trace_flush_callback_owner_exact(
+	tg, L, stream_handle, callback_handle)) {
+    jit_trace_stream_writer_release(stream, sequence);
+    return 0;
+  }
+  la_store32_rel(&stream->phase, LJ_JIT_STREAM_DETACHED_CALLBACK);
+  jit_trace_stream_writer_release(stream, sequence);
+  return 1;
+}
+
+static void jit_trace_flush_rollback_l(
+  lua_State *L, jit_State *J, TGState *tg,
+  LJJitTraceStreamHandle *stream_handle,
+  LJJitEventCallbackHandle *callback_handle, uint32_t phase)
+{
+  if (callback_handle && callback_handle->generation != 0) {
+    if (LJ_UNLIKELY(!lj_jit_event_callback_unwind_l(
+	    L, callback_handle) ||
+	  !lj_jit_event_callback_release_l(L, callback_handle)))
+      abort();
+  }
+  if (LJ_UNLIKELY(!jit_trace_flush_clear_exact(
+	  tg, L, stream_handle, phase) ||
+	!jit_event_session_unpublish_l(
+	  L, J, &stream_handle->terminal_session)))
+    abort();
+  memset(stream_handle, 0, sizeof(*stream_handle));
+  if (callback_handle)
+    memset(callback_handle, 0, sizeof(*callback_handle));
+}
+
+int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
+			       uint64_t attachment_generation,
+			       LJJitTraceStreamHandle *handle)
+{
+  TGState *tg;
+  if (!handle)
+    return 0;
+  memset(handle, 0, sizeof(*handle));
+  if (!L || !J || attachment_generation == 0 || G(L) != J2G(J) ||
+      !(tg = jit_event_owner_tg(L)) ||
+      !jit_trace_flush_publish_l(
+	L, J, LJ_VMEVENT_ATTACHMENT_PUBLISHED, attachment_generation,
+	NULL, 4u, handle))
+    return 0;
+  if (jit_trace_flush_handoff_l(L, J, handle))
+    return 1;
+  jit_trace_flush_rollback_l(
+    L, J, tg, handle, NULL, LJ_JIT_STREAM_DETACHED_PENDING);
+  return 0;
+}
+
+int lj_jit_trace_flush_callback_admit_l(
+  lua_State *L, jit_State *J, uint32_t attachment_state,
+  uint64_t attachment_generation, GCfunc *callback_handler,
+  LJJitTraceStreamHandle *stream_handle,
+  LJJitEventCallbackHandle *callback_handle)
+{
+  LJJitEventSessionSnapshot session;
+  TGState *tg;
+  int snapshot_state;
+  if (!stream_handle || !callback_handle)
+    return 0;
+  memset(stream_handle, 0, sizeof(*stream_handle));
+  memset(callback_handle, 0, sizeof(*callback_handle));
+  if (!L || !J || !callback_handler ||
+      (attachment_state != LJ_VMEVENT_ATTACHMENT_INITIAL &&
+	attachment_state != LJ_VMEVENT_ATTACHMENT_PUBLISHED) ||
+      !lj_vmevent_attachment_identity_valid(attachment_state,
+					     attachment_generation) ||
+      G(L) != J2G(J) || !(tg = jit_event_owner_tg(L)) ||
+      !jit_trace_flush_publish_l(
+	L, J, attachment_state, attachment_generation, callback_handler,
+	6u, stream_handle))
+    return 0;
+
+  memset(&session, 0, sizeof(session));
+  snapshot_state = lj_jit_event_session_snapshot_acquire(
+    G(L), tg, &session);
+  if (snapshot_state != LJ_JIT_EVENT_SNAPSHOT_ACTIVE ||
+      session.generation != stream_handle->terminal_session.generation ||
+      session.slot_index != stream_handle->terminal_session.slot ||
+      session.event != LJ_JIT_EVENT_TRACE_FLUSH ||
+      session.owner_mode != LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE ||
+      session.edge_proof != LJ_JIT_EVENT_EDGE_NONE ||
+      session.attachment_state != attachment_state ||
+      session.attachment_generation != attachment_generation ||
+      session.callback_root_count != 1u ||
+      session.callback_handler != callback_handler) {
+    if (snapshot_state == LJ_JIT_EVENT_SNAPSHOT_ACTIVE &&
+	LJ_UNLIKELY(!lj_jit_event_session_snapshot_release(&session)))
+      abort();
+    jit_trace_flush_rollback_l(
+      L, J, tg, stream_handle, NULL, LJ_JIT_STREAM_DETACHED_PENDING);
+    return 0;
+  }
+  if (!lj_jit_event_callback_claim_l(
+	L, stream_handle->generation, &session, callback_handle)) {
+    if (LJ_UNLIKELY(!lj_jit_event_session_snapshot_release(&session)))
+      abort();
+    jit_trace_flush_rollback_l(
+      L, J, tg, stream_handle, NULL, LJ_JIT_STREAM_DETACHED_PENDING);
+    return 0;
+  }
+  /* Claim makes the session immutable-close exclusion durable.  Never carry
+  ** its temporary GC2 reader across token release or arbitrary Lua. */
+  if (LJ_UNLIKELY(!lj_jit_event_session_snapshot_release(&session))) {
+    jit_trace_flush_rollback_l(
+      L, J, tg, stream_handle, callback_handle,
+      LJ_JIT_STREAM_DETACHED_PENDING);
+    return 0;
+  }
+  if (!jit_trace_flush_callback_phase_l(
+	tg, L, stream_handle, callback_handle)) {
+    jit_trace_flush_rollback_l(
+      L, J, tg, stream_handle, callback_handle,
+      LJ_JIT_STREAM_DETACHED_PENDING);
+    return 0;
+  }
+  if (jit_trace_flush_handoff_l(L, J, stream_handle))
+    return 1;
+  jit_trace_flush_rollback_l(
+    L, J, tg, stream_handle, callback_handle,
+    LJ_JIT_STREAM_DETACHED_CALLBACK);
   return 0;
 }
 
@@ -2048,11 +2263,18 @@ int lj_jit_trace_flush_close_l(lua_State *L, jit_State *J,
   TGState *tg;
   global_State *g;
   LJJitOwnerWord owner_word;
+  uint32_t phase;
   if (!L || !J || !handle || handle->generation == 0 ||
-      handle->attachment_generation == 0 || G(L) != J2G(J) ||
+      !lj_vmevent_attachment_identity_valid(handle->attachment_state,
+					     handle->attachment_generation) ||
+      handle->callback_root_count > 1u ||
+      ((handle->callback_handler != NULL) !=
+	(handle->callback_root_count == 1u)) || G(L) != J2G(J) ||
       !(tg = jit_event_owner_tg(L)) || tg != lj_jit_owner_tg_l(L, J))
     return 0;
   g = tg->gl;
+  phase = handle->callback_root_count != 0 ?
+    LJ_JIT_STREAM_DETACHED_CALLBACK : LJ_JIT_STREAM_DETACHED_PENDING;
   if (!lj_tgregistry_key_equal(&handle->owner_key, &tg->registry_key) ||
       handle->owner_tid != lj_tg_tid_acq(tg) ||
       handle->owner_actor != lj_tg_actor_acq(tg) ||
@@ -2061,7 +2283,8 @@ int lj_jit_trace_flush_close_l(lua_State *L, jit_State *J,
       lj_jit_trace_stream_snapshot(g, &snapshot) !=
 	LJ_JIT_STREAM_SNAPSHOT_ACTIVE ||
       snapshot.generation != handle->generation ||
-      !jit_trace_flush_descriptor_exact(jit_trace_stream(g), handle) ||
+      !jit_trace_flush_descriptor_exact_phase(
+	jit_trace_stream(g), handle, phase) ||
       !jit_trace_flush_session_exact(tg, L, handle))
     return 0;
   owner_word = jit_owner_word_acq(g);
@@ -2072,7 +2295,7 @@ int lj_jit_trace_flush_close_l(lua_State *L, jit_State *J,
   /* Storage-level detached safety permits a peer recorder. The global grammar
   ** becomes IDLE first; then the old immutable session is closed exactly and
   ** cannot invalidate that peer's owner word. */
-  if (!jit_trace_flush_clear_exact(tg, L, handle))
+  if (!jit_trace_flush_clear_exact(tg, L, handle, phase))
     return 0;
   if (LJ_UNLIKELY(!lj_jit_event_session_end_l(
 	L, J, &handle->terminal_session)))

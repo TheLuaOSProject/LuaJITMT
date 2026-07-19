@@ -123,13 +123,19 @@ The first production consumer remains standalone TRACE `"flush"`:
 
 1. prepare the exact clocked handler while the low JIT token is held;
 2. publish a detached FLUSH session carrying that callback root;
-3. publish the global stream callback phase and release the JIT token;
-4. acquire an exact session snapshot, claim this per-TG owner, then release the
-   snapshot reader before invoking Lua;
+3. acquire an exact session snapshot, claim this per-TG owner, then release the
+   snapshot reader;
+4. publish the global stream callback phase and release the JIT token before
+   invoking Lua;
 5. catch error/STOPREQ and move CALLING to UNWINDING;
 6. restore stack/base/current-state/TG/J fields;
 7. release the callback owner, close stream/session, and only then propagate
-   deferred STOPREQ.
+deferred STOPREQ.
+
+The follow-up admission implementation deliberately closes the sketched
+release-before-claim gap; see
+`jit-flush-callback-admission-substrate-2026-07-19.md` for the exact rollback
+and GC proof.
 
 After FLUSH, the same mechanism will be applied to detached STOP/ABORT and then
 to START/RECORD continuation sessions.  Legacy non-JIT VM events can migrate

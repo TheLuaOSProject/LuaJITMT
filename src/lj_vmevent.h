@@ -7,6 +7,9 @@
 #define _LJ_VMEVENT_H
 
 #include "lj_obj.h"
+#if LJ_HASJIT
+#include "lj_trace.h"
+#endif
 
 /* Registry key for VM event handler table. */
 #define LJ_VMEVENTS_REGKEY	"_VMEVENTS"
@@ -121,6 +124,27 @@ LJ_FUNC void lj_vmevent_init(lua_State *L);
 LJ_FUNC int lj_vmevent_prepare_try(lua_State *L, VMEvent ev,
 				    LJVMEVENTPrepareResult *result);
 LJ_FUNC ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev);
+
+#if LJ_HASJIT
+/* Outcome from one already-admitted per-TG JIT VM-event callback. status is
+** the protected Lua call result. actions and had_stopreq are intentionally
+** returned without checking them: the caller must first close the rooted
+** session and stream, then use lj_safepoint_checkstop_fresh(). */
+typedef struct LJJitVMEVENTCallResult {
+  int status;
+  uint32_t actions;
+  int had_stopreq;
+} LJJitVMEVENTCallResult;
+
+LJ_FUNC int lj_jit_vmevent_call_l(
+  lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop,
+  const LJJitEventCallbackHandle *handle, LJJitVMEVENTCallResult *result);
+#if defined(LJ_GC2_TEST_HELPERS)
+typedef void (*LJJitVMEVENTCallTestHook)(lua_State *L, void *ud);
+LJ_FUNC void lj_jit_vmevent_call_test_set_hook(
+  LJJitVMEVENTCallTestHook hook, void *ud);
+#endif
+#endif
 
 enum {
   LJ_VMEVENT_TEST_AFTER_CLOCK_A = 1,

@@ -9160,6 +9160,7 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
 {
   LJJitEventSessionSnapshot snapshot;
   LJJitEventCallbackSnapshot callback_owner;
+  LJJitTraceStreamSnapshot callback_stream;
   const LJJitEventSessionSlot *slot;
   GCRef *roots;
   lua_State *owner_L;
@@ -9219,7 +9220,25 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
 	callback_owner.owner_actor != owner_actor ||
 	snapshot.callback_root_count != 1u ||
 	(lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) !=
-	  (HOOK_ACTIVE|HOOK_VMEVENT))) ||
+	  (HOOK_ACTIVE|HOOK_VMEVENT) ||
+	lj_jit_trace_stream_snapshot(g, &callback_stream) !=
+	  LJ_JIT_STREAM_SNAPSHOT_ACTIVE ||
+	callback_owner.event != LJ_JIT_EVENT_TRACE_FLUSH ||
+	callback_stream.generation != callback_owner.stream_generation ||
+	!lj_tgregistry_key_equal(&callback_stream.owner_key,
+				 &tg->registry_key) ||
+	callback_stream.owner_tid != owner_tid ||
+	callback_stream.owner_actor != callback_owner.owner_actor ||
+	(callback_stream.phase != LJ_JIT_STREAM_DETACHED_PENDING &&
+	 callback_stream.phase != LJ_JIT_STREAM_DETACHED_CALLBACK) ||
+	callback_stream.callback_event != callback_owner.event ||
+	callback_stream.callback_slot != callback_owner.session_slot ||
+	callback_stream.callback_session_generation !=
+	  callback_owner.session_generation ||
+	callback_stream.terminal_event != callback_owner.event ||
+	callback_stream.terminal_slot != callback_owner.session_slot ||
+	callback_stream.terminal_session_generation !=
+	  callback_owner.session_generation)) ||
       (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE &&
        (lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) != 0))
     complete = 0;

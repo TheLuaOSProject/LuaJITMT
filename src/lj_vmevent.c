@@ -29,6 +29,10 @@
 #if defined(LJ_GC2_TEST_HELPERS)
 static LJVMEVENTPrepareTestHook vmevent_prepare_test_hook;
 static void *vmevent_prepare_test_ud;
+#if LJ_HASJIT
+static LJJitVMEVENTCallTestHook jit_vmevent_call_test_hook;
+static void *jit_vmevent_call_test_ud;
+#endif
 
 void lj_vmevent_test_set_prepare_hook(LJVMEVENTPrepareTestHook hook,
 				       void *ud)
@@ -36,6 +40,15 @@ void lj_vmevent_test_set_prepare_hook(LJVMEVENTPrepareTestHook hook,
   vmevent_prepare_test_hook = hook;
   vmevent_prepare_test_ud = ud;
 }
+
+#if LJ_HASJIT
+void lj_jit_vmevent_call_test_set_hook(
+  LJJitVMEVENTCallTestHook hook, void *ud)
+{
+  jit_vmevent_call_test_hook = hook;
+  jit_vmevent_call_test_ud = ud;
+}
+#endif
 #endif
 
 void lj_vmevent_init(lua_State *L)
@@ -856,6 +869,172 @@ static uint32_t vmevent_report_failure(lua_State *L)
   actions = lj_native_leave(L);
   return actions;
 }
+
+#if LJ_HASJIT
+static int jit_vmevent_callback_stream_exact(
+  lua_State *L, const LJJitEventCallbackHandle *handle)
+{
+  LJJitTraceStreamSnapshot stream;
+  TGState *tg = handle ? handle->tg : NULL;
+  if (!L || !tg || handle->event != LJ_JIT_EVENT_TRACE_FLUSH ||
+      lj_jit_trace_stream_snapshot(G(L), &stream) !=
+	LJ_JIT_STREAM_SNAPSHOT_ACTIVE)
+    return 0;
+  return stream.generation == handle->stream_generation &&
+    stream.event_ordinal == 1u &&
+    lj_tgregistry_key_equal(&stream.owner_key, &tg->registry_key) &&
+    stream.owner_tid == lj_tg_tid_acq(tg) &&
+    stream.owner_actor == handle->owner_actor &&
+    stream.phase == LJ_JIT_STREAM_DETACHED_CALLBACK &&
+    stream.traceno == 0 &&
+    stream.callback_event == handle->event &&
+    stream.callback_slot == handle->session_slot &&
+    stream.callback_session_generation == handle->session_generation &&
+    stream.terminal_event == handle->event &&
+    stream.terminal_slot == handle->session_slot &&
+    stream.terminal_session_generation == handle->session_generation;
+}
+
+/* The callback owner prevents exact session close, so its immutable root
+** vector may be checked directly without reacquiring a GC2 reader.  Keep the
+** scalar publication checks on both sides of the root load: this helper is a
+** bounded refusal for malformed internal geometry, never permission to call a
+** merely stack-shaped function. */
+static int jit_vmevent_callback_handler_exact(
+  lua_State *L, const LJJitEventCallbackHandle *handle, GCfunc *handler)
+{
+  LJJitEventSessions *sessions;
+  const LJJitEventSessionSlot *slot;
+  GCRef *roots;
+  uint64_t sequence;
+  uint32_t capacity, nroots;
+  TGState *tg = handle ? handle->tg : NULL;
+  if (!L || !tg || !handler || handle->session_generation == 0 ||
+      handle->session_slot >= LJ_JIT_EVENT_SESSION_SLOTS)
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  sequence = la_load64_acq(&sessions->sequence);
+  if ((sequence & 1u) != 0 ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_ACTIVE ||
+      la_load32_acq(&sessions->active_slot) != handle->session_slot ||
+      la_load64_acq(&sessions->active_generation) !=
+	handle->session_generation ||
+      la_load64_acq(&sessions->next_generation) !=
+	handle->session_generation)
+    return 0;
+  slot = &sessions->slot[handle->session_slot];
+  roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  capacity = la_load32_acq(&slot->root_capacity);
+  nroots = la_load32_acq(&slot->root_count);
+  if (!roots || ((uintptr_t)roots & (__alignof__(GCRef) - 1u)) != 0 ||
+      capacity < LJ_JIT_EVENT_SESSION_ROOTS || nroots >= capacity ||
+      nroots > LJ_ROOT_SCAN_LIMIT ||
+      ((roots == slot->root_inline) !=
+	(capacity == LJ_JIT_EVENT_SESSION_ROOTS)))
+    return 0;
+  return la_load64_acq(&sessions->sequence) == sequence &&
+    la_load32_acq(&sessions->state) == LJ_JIT_EVENT_PUBLICATION_ACTIVE &&
+    la_load32_acq(&sessions->active_slot) == handle->session_slot &&
+    la_load64_acq(&sessions->active_generation) ==
+      handle->session_generation &&
+    la_load64_acq(&slot->generation) == handle->session_generation &&
+    la_load32_acq(&slot->state) == LJ_JIT_EVENT_SLOT_ACTIVE &&
+    la_load32_acq(&slot->event) == handle->event &&
+    la_load32_acq(&slot->callback_root_count) == 1u &&
+    (la_load32_acq(&slot->flags) &
+      LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) != 0 &&
+    la_load32_acq(&slot->owner_tid) == lj_tg_tid_acq(tg) &&
+    la_load32_acq(&slot->owner_actor) == handle->owner_actor &&
+    la_loadptr_acq((void *const *)&slot->owner_L) == L &&
+    gcref_acq(slot->owner_root) == obj2gco(L) &&
+    gcref_acq(roots[nroots]) == obj2gco(handler) &&
+    la_load64_acq(&sessions->sequence) == sequence;
+}
+
+int lj_jit_vmevent_call_l(
+  lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop,
+  const LJJitEventCallbackHandle *handle, LJJitVMEVENTCallResult *result)
+{
+  LJJitVMEVENTCallResult out;
+  LJJitEventCallbackOwner *owner;
+  global_State *g;
+  TGState *tg;
+  lua_State *oldL;
+  TGState *old_tg_hint;
+  ptrdiff_t currenttop;
+  ptrdiff_t oldbase;
+  GCfunc *handler;
+
+  if (!result)
+    return 0;
+  memset(result, 0, sizeof(*result));
+  if (!L || !handle || !(tg = handle->tg) ||
+      !jit_event_callback_handle_owner(L, handle, &owner) ||
+      !jit_event_callback_owner_matches(
+	owner, handle, LJ_JIT_EVENT_CALLBACK_CALLING))
+    return 0;
+  currenttop = savestack(L, L->top);
+  if (oldtop < 0 || oldtop > currenttop ||
+      argbase < oldtop || argbase > currenttop ||
+      ((uintptr_t)oldtop % sizeof(TValue)) != 0 ||
+      ((uintptr_t)argbase % sizeof(TValue)) != 0 ||
+      argbase - oldtop !=
+	(ptrdiff_t)((1u+LJ_FR2) * sizeof(TValue)) ||
+      !tvisfunc(restorestack(L, oldtop)))
+    return 0;
+  handler = funcV(restorestack(L, oldtop));
+  if (!jit_vmevent_callback_stream_exact(L, handle) ||
+      !jit_vmevent_callback_handler_exact(L, handle, handler) ||
+      !jit_event_callback_owner_matches(
+	owner, handle, LJ_JIT_EVENT_CALLBACK_CALLING))
+    return 0;
+
+  memset(&out, 0, sizeof(out));
+  g = G(L);
+  oldL = lj_tg_load_cur_L(tg);
+  old_tg_hint = L->tg_hint;
+  oldbase = savestack(L, L->base);
+  out.had_stopreq = lj_safepoint_had_stopreq(L);
+  L->tg_hint = tg;
+
+  out.status = lj_vm_pcall_unwind(
+    L, restorestack(L, argbase), 0+1, 0);
+  /* No Lua or allocation is legal between protected return and publishing
+  ** UNWINDING. From this point onward only exact owner-local cleanup remains. */
+  L->tg_hint = tg;
+  if (LJ_UNLIKELY(!lj_jit_event_callback_unwind_l(L, handle)))
+    abort();
+  if (LJ_UNLIKELY(out.status)) {
+    /* Preserve legacy diagnostic behavior. STOPREQ observed while reporting
+    ** is returned to the transaction owner and cannot throw until the rooted
+    ** session and stream have both closed. */
+    L->top--;
+    out.actions = vmevent_report_failure(L);
+  }
+#if defined(LJ_GC2_TEST_HELPERS)
+  if (jit_vmevent_call_test_hook) {
+    LJJitVMEVENTCallTestHook hook = jit_vmevent_call_test_hook;
+    void *ud = jit_vmevent_call_test_ud;
+    jit_vmevent_call_test_hook = NULL;
+    jit_vmevent_call_test_ud = NULL;
+    hook(L, ud);
+  }
+#endif
+
+  L->base = restorestack(L, oldbase);
+  L->top = restorestack(L, oldtop);
+  if (oldL)
+    lj_tg_setcur_L(g, oldL);
+  else
+    lj_tg_clearcur_L(g);
+  L->tg_hint = old_tg_hint;
+  if (LJ_UNLIKELY(!lj_jit_event_callback_release_l(L, handle)))
+    abort();
+
+  *result = out;
+  return 1;
+}
+#endif
 
 void lj_vmevent_call(lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop)
 {

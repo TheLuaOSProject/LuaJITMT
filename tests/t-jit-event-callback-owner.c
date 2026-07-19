@@ -18,6 +18,8 @@
 #include "lj_atomic.h"
 #include "lj_jit.h"
 #include "lj_profile.h"
+#include "lj_safepoint.h"
+#include "lj_state.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
@@ -43,6 +45,18 @@ typedef struct CallbackWorkerCtx {
   uint32_t done;
 } CallbackWorkerCtx;
 
+enum {
+  PROTECTED_CALL_SUCCESS = 1,
+  PROTECTED_CALL_ERROR = 2
+};
+
+typedef struct ProtectedCallCtx {
+  TGState *tg;
+  uint32_t mode;
+  uint32_t calls;
+  uint32_t restore_hooks;
+} ProtectedCallCtx;
+
 #if LJ_PROFILE_TGLOCAL
 typedef struct ProfileCallbackCtx {
   TGState *tg;
@@ -53,11 +67,49 @@ typedef struct ProfileCallbackCtx {
 #endif
 
 static uint32_t callback_debug_hits;
+static ProtectedCallCtx protected_call_ctx;
+
+static void run_callback_lua(lua_State *L);
 
 static int callback_handler(lua_State *L)
 {
   UNUSED(L);
   return 0;
+}
+
+static int protected_call_handler(lua_State *L)
+{
+  ProtectedCallCtx *ctx = &protected_call_ctx;
+  assert(L2TG(L) == ctx->tg);
+  assert(lua_gettop(L) == 1);
+  assert(lua_tonumber(L, 1) == 42);
+  assert((lj_tg_hookmask_load(ctx->tg) &
+          (HOOK_ACTIVE|HOOK_VMEVENT)) ==
+         (HOOK_ACTIVE|HOOK_VMEVENT));
+  run_callback_lua(L);
+  ctx->calls++;
+  if (ctx->mode == PROTECTED_CALL_ERROR)
+    return luaL_error(L, "injected protected JIT VM-event failure");
+  assert(ctx->mode == PROTECTED_CALL_SUCCESS);
+  return 0;
+}
+
+static void protected_call_restore_hook(lua_State *L, void *ud)
+{
+  ProtectedCallCtx *ctx = (ProtectedCallCtx *)ud;
+  LJJitEventCallbackSnapshot owner;
+  assert(ctx == &protected_call_ctx);
+  assert(lj_jit_event_callback_snapshot(ctx->tg, &owner) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(owner.state == LJ_JIT_EVENT_CALLBACK_UNWINDING);
+  assert((lj_tg_hookmask_load(ctx->tg) &
+          (HOOK_ACTIVE|HOOK_VMEVENT)) ==
+         (HOOK_ACTIVE|HOOK_VMEVENT));
+  /* The VM has finished unwinding. Disturb both owner-local caches now, with
+  ** no callout or GC before the helper's exact restoration stores. */
+  L->tg_hint = NULL;
+  lj_tg_clearcur_L(G(L));
+  ctx->restore_hooks++;
 }
 
 static void callback_debug_hook(lua_State *L, lua_Debug *ar)
@@ -175,6 +227,68 @@ static void complete_callback(lua_State *L,
   assert(lj_jit_event_callback_release_l(L, handle));
   assert((lj_tg_hookmask_load(handle->tg) &
           (HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
+}
+
+static void publish_gc_callback_stream(
+  lua_State *L, const LJJitEventSessionSnapshot *session,
+  uint64_t generation)
+{
+  TGState *tg = session->tg;
+  LJJitTraceStream *stream = &G(L)->main_tg->jit_trace_stream;
+  uint64_t sequence = la_load64_acq(&stream->sequence);
+  assert(tg == L2TG(L));
+  assert(generation != 0 && (sequence & 1u) == 0);
+  assert(lj_jit_trace_stream_idle(G(L)));
+  la_store64_rel(&stream->sequence, sequence + 1u);
+  la_store64_rel(&stream->next_generation, generation);
+  la_store64_rel(&stream->generation, generation);
+  la_store64_rel(&stream->event_ordinal, 1u);
+  la_storeptr_rel((void **)&stream->owner_key.slot, tg->registry_key.slot);
+  la_store64_rel(&stream->owner_key.incarnation,
+                 tg->registry_key.incarnation);
+  la_store32_rel(&stream->owner_tid, lj_tg_tid_acq(tg));
+  la_store32_rel(&stream->owner_actor, lj_tg_actor_acq(tg));
+  la_store32_rel(&stream->phase, LJ_JIT_STREAM_DETACHED_CALLBACK);
+  la_store32_rel(&stream->traceno, 0);
+  la_store32_rel(&stream->callback_event, session->event);
+  la_store32_rel(&stream->callback_slot, session->slot_index);
+  la_store64_rel(&stream->callback_session_generation,
+                 session->generation);
+  la_store32_rel(&stream->terminal_event, session->event);
+  la_store32_rel(&stream->terminal_slot, session->slot_index);
+  la_store64_rel(&stream->terminal_session_generation,
+                 session->generation);
+  la_store32_rel(&stream->terminal_reason, 0);
+  la_store32_rel(&stream->flags, 0);
+  la_store64_rel(&stream->sequence, sequence + 2u);
+  assert(!lj_jit_trace_stream_idle(G(L)));
+}
+
+static void clear_gc_callback_stream(lua_State *L)
+{
+  LJJitTraceStream *stream = &G(L)->main_tg->jit_trace_stream;
+  uint64_t sequence = la_load64_acq(&stream->sequence);
+  assert((sequence & 1u) == 0);
+  la_store64_rel(&stream->sequence, sequence + 1u);
+  la_store64_rel(&stream->generation, 0);
+  la_store64_rel(&stream->event_ordinal, 0);
+  la_storeptr_rel((void **)&stream->owner_key.slot, NULL);
+  la_store64_rel(&stream->owner_key.incarnation,
+                 LJ_TGSLOT_INCARNATION_NONE);
+  la_store32_rel(&stream->owner_tid, 0);
+  la_store32_rel(&stream->owner_actor, 0);
+  la_store32_rel(&stream->phase, LJ_JIT_STREAM_IDLE);
+  la_store32_rel(&stream->traceno, 0);
+  la_store32_rel(&stream->callback_event, 0);
+  la_store32_rel(&stream->callback_slot, 0);
+  la_store64_rel(&stream->callback_session_generation, 0);
+  la_store32_rel(&stream->terminal_event, 0);
+  la_store32_rel(&stream->terminal_slot, 0);
+  la_store64_rel(&stream->terminal_session_generation, 0);
+  la_store32_rel(&stream->terminal_reason, 0);
+  la_store32_rel(&stream->flags, 0);
+  la_store64_rel(&stream->sequence, sequence + 2u);
+  assert(lj_jit_trace_stream_idle(G(L)));
 }
 
 static void *callback_worker(void *arg)
@@ -333,6 +447,7 @@ static void test_gc_while_owner_active(
   lua_State *L, TGState *tg, LJJitEventSessionSnapshot *session)
 {
   LJJitEventCallbackHandle callback;
+  publish_gc_callback_stream(L, session, 9u);
   assert(lj_jit_event_callback_claim_l(L, 9u, session, &callback));
   /* Claim binds the immutable publication. Drop the temporary SMR reader
   ** before executing callback-like Lua/GC work; the active owner prevents the
@@ -346,6 +461,7 @@ static void test_gc_while_owner_active(
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   expect_owner_active(tg, &callback, LJ_JIT_EVENT_CALLBACK_CALLING);
   complete_callback(L, &callback);
+  clear_gc_callback_stream(L);
   la_store32_rel(&callback_debug_hits, 0);
   run_callback_lua(L);
   assert(la_load32_acq(&callback_debug_hits) != 0);
@@ -396,6 +512,154 @@ static void test_two_tg_overlap(lua_State *L, jit_State *J, GCfunc *handler,
   assert(hookmask_load(G(L)) == global);
   assert(vmevent_owner_acq(G(L)) == 0);
   lua_pop(L, 1);  /* secondary_L root */
+}
+
+static void prepare_protected_call(lua_State *L, GCfunc *handler,
+                                   ptrdiff_t *oldtop, ptrdiff_t *argbase)
+{
+  TValue *top;
+  lj_state_checkstack(L, LUA_MINSTACK);
+  *oldtop = savestack(L, L->top);
+  top = L->top;
+  setfuncV(L, top, handler);
+  lj_state_stack_pubtv(L, L, top++);
+  if (LJ_FR2)
+    setnilV(top++);
+  *argbase = savestack(L, top);
+  setnumV(top, 42);
+  lj_state_stack_pubtv(L, L, top++);
+  L->top = top;
+}
+
+static void test_protected_call_case(lua_State *L, jit_State *J, TGState *tg,
+                                     GCfunc *handler, uint32_t mode)
+{
+  global_State *g = G(L);
+  LJJitEventSessionHandle session_handle;
+  LJJitEventSessionSnapshot session;
+  LJJitEventCallbackHandle callback, stale;
+  LJJitEventCallbackSnapshot owner_before, owner_after;
+  LJJitVMEVENTCallResult bad, result;
+  GCfunc *wrong_handler;
+  lua_State *oldcur;
+  lua_State *oldJL;
+  TGState *oldhint;
+  ptrdiff_t oldbase, oldtop, prepared_top, argbase;
+  uint64_t old_jit_owner;
+  uint32_t old_vmevent_owner;
+  uint8_t old_global_hookmask;
+  int old_had_stopreq;
+
+  assert(mode == PROTECTED_CALL_SUCCESS || mode == PROTECTED_CALL_ERROR);
+  memset(&protected_call_ctx, 0, sizeof(protected_call_ctx));
+  protected_call_ctx.tg = tg;
+  protected_call_ctx.mode = mode;
+  lua_pushcfunction(L, callback_handler);
+  wrong_handler = funcV(L->top - 1);
+  assert(wrong_handler != handler);
+  publish_callback_session(L, J, handler, 400u + mode, &session_handle);
+  prepare_protected_call(L, handler, &oldtop, &argbase);
+  prepared_top = savestack(L, L->top);
+  oldbase = savestack(L, L->base);
+  oldcur = lj_tg_load_cur_L(tg);
+  oldhint = L->tg_hint;
+  old_jit_owner = jit_owner_word_acq(g);
+  oldJL = jit_owner_l_acq(J);
+  old_vmevent_owner = vmevent_owner_acq(g);
+  old_global_hookmask = hookmask_load(g);
+  old_had_stopreq = lj_safepoint_had_stopreq(L);
+
+  acquire_callback_session(L, tg, &session);
+  publish_gc_callback_stream(L, &session, 4000u + mode);
+  assert(lj_jit_event_callback_claim_l(
+    L, 4000u + mode, &session, &callback));
+  assert(lj_jit_event_session_snapshot_release(&session));
+  assert(lj_jit_event_callback_snapshot(tg, &owner_before) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+
+  /* Bad geometry and stale authority are bounded refusals. They must not
+  ** consume or advance the already-CALLING owner. */
+  memset(&bad, 0xa5, sizeof(bad));
+  assert(!lj_jit_vmevent_call_l(
+    L, argbase + (ptrdiff_t)sizeof(TValue), oldtop,
+    &callback, &bad));
+  assert(bad.status == 0 && bad.actions == 0 && bad.had_stopreq == 0);
+  assert(lj_jit_event_callback_snapshot(tg, &owner_after) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(owner_after.sequence == owner_before.sequence);
+  assert(owner_after.generation == owner_before.generation);
+  assert(owner_after.state == LJ_JIT_EVENT_CALLBACK_CALLING);
+  assert(savestack(L, L->top) == prepared_top);
+
+  /* Equal-distance but byte-misaligned offsets must be rejected before any
+  ** TValue load. */
+  memset(&bad, 0xa5, sizeof(bad));
+  assert(!lj_jit_vmevent_call_l(
+    L, argbase + 1, oldtop + 1, &callback, &bad));
+  assert(bad.status == 0 && bad.actions == 0 && bad.had_stopreq == 0);
+  assert(lj_jit_event_callback_snapshot(tg, &owner_after) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(owner_after.sequence == owner_before.sequence);
+
+  /* Stack shape alone is not callback authority. Even another valid function
+  ** must be refused unless it is the exact function rooted by this session. */
+  setfuncV(L, restorestack(L, oldtop), wrong_handler);
+  memset(&bad, 0xa5, sizeof(bad));
+  assert(!lj_jit_vmevent_call_l(L, argbase, oldtop, &callback, &bad));
+  assert(bad.status == 0 && bad.actions == 0 && bad.had_stopreq == 0);
+  assert(lj_jit_event_callback_snapshot(tg, &owner_after) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(owner_after.sequence == owner_before.sequence);
+  setfuncV(L, restorestack(L, oldtop), handler);
+
+  stale = callback;
+  stale.generation--;
+  memset(&bad, 0xa5, sizeof(bad));
+  assert(!lj_jit_vmevent_call_l(L, argbase, oldtop, &stale, &bad));
+  assert(bad.status == 0 && bad.actions == 0 && bad.had_stopreq == 0);
+  assert(lj_jit_event_callback_snapshot(tg, &owner_after) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(owner_after.sequence == owner_before.sequence);
+  assert(owner_after.generation == owner_before.generation);
+  assert(owner_after.state == LJ_JIT_EVENT_CALLBACK_CALLING);
+
+  lj_jit_vmevent_call_test_set_hook(
+    protected_call_restore_hook, &protected_call_ctx);
+  memset(&result, 0xa5, sizeof(result));
+  assert(lj_jit_vmevent_call_l(L, argbase, oldtop, &callback, &result));
+  assert(protected_call_ctx.calls == 1u);
+  assert(protected_call_ctx.restore_hooks == 1u);
+  if (mode == PROTECTED_CALL_SUCCESS)
+    assert(result.status == LUA_OK);
+  else
+    assert(result.status != LUA_OK);
+  assert(result.had_stopreq == old_had_stopreq);
+  assert(savestack(L, L->base) == oldbase);
+  assert(savestack(L, L->top) == oldtop);
+  assert(lj_tg_load_cur_L(tg) == oldcur);
+  assert(L->tg_hint == oldhint);
+  assert(jit_owner_word_acq(g) == old_jit_owner);
+  assert(jit_owner_l_acq(J) == oldJL);
+  assert(vmevent_owner_acq(g) == old_vmevent_owner);
+  assert(hookmask_load(g) == old_global_hookmask);
+  assert((lj_tg_hookmask_load(tg) &
+          (HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
+  expect_owner_idle(tg, callback.generation);
+  clear_gc_callback_stream(L);
+  assert(lj_jit_event_session_end_l(L, J, &session_handle));
+  lua_pop(L, 1);  /* wrong_handler root */
+}
+
+static void test_protected_callback_calls(lua_State *L, jit_State *J,
+                                          TGState *tg)
+{
+  GCfunc *handler;
+  lua_pushcfunction(L, protected_call_handler);
+  handler = funcV(L->top - 1);
+  assert(handler && handler->c.f == protected_call_handler);
+  test_protected_call_case(L, J, tg, handler, PROTECTED_CALL_SUCCESS);
+  test_protected_call_case(L, J, tg, handler, PROTECTED_CALL_ERROR);
+  lua_pop(L, 1);
 }
 
 #if LJ_PROFILE_TGLOCAL
@@ -508,6 +772,7 @@ int main(void)
   assert(lj_jit_event_session_snapshot_release(&session));
   assert(lj_jit_event_session_end_l(L, J, &session_handle));
   assert(lj_jit_event_sessions_quiescent(tg));
+  test_protected_callback_calls(L, J, tg);
 #if LJ_PROFILE_TGLOCAL
   test_profile_callback_exclusion(L, J, tg, handler);
 #endif

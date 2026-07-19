@@ -16,6 +16,7 @@
 #include "lj_atomic.h"
 #include "lj_gc2.h"
 #include "lj_jit.h"
+#include "lj_state.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
@@ -53,6 +54,13 @@ typedef struct FlushDetachCtx {
   uint32_t close_now;
   uint32_t done;
 } FlushDetachCtx;
+
+static int flush_callback_handler(lua_State *L)
+{
+  assert(lua_gettop(L) == 1);
+  assert(lua_tonumber(L, 1) == 17);
+  return 0;
+}
 
 static void wait_flag(uint32_t *flag)
 {
@@ -227,6 +235,78 @@ static void expect_empty_flush_session(global_State *g, TGState *owner,
   assert(la_loadptr_acq((void *const *)&slot->source) == NULL);
   assert(slot->view.size == 0);
   assert(slot->view.format == LJ_JIT_EVENT_VIEW_FORMAT_NONE);
+}
+
+static void expect_callback_flush(
+  global_State *g, TGState *owner,
+  const LJJitTraceStreamHandle *stream_handle,
+  const LJJitEventCallbackHandle *callback_handle)
+{
+  LJJitTraceStreamSnapshot stream;
+  LJJitEventCallbackSnapshot callback;
+  memset(&stream, 0, sizeof(stream));
+  assert(stream_snapshot_wait(g, &stream) == LJ_JIT_STREAM_SNAPSHOT_ACTIVE);
+  assert(stream.generation == stream_handle->generation);
+  assert(stream.phase == LJ_JIT_STREAM_DETACHED_CALLBACK);
+  assert(stream.callback_event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(stream.callback_slot == stream_handle->terminal_session.slot);
+  assert(stream.callback_session_generation ==
+         stream_handle->terminal_session.generation);
+  assert(stream.terminal_event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(stream.terminal_slot == stream.callback_slot);
+  assert(stream.terminal_session_generation ==
+         stream.callback_session_generation);
+  assert(lj_tgregistry_key_equal(&stream.owner_key,
+                                 &stream_handle->owner_key));
+  assert(lj_tgregistry_key_equal(&stream.owner_key,
+                                 &owner->registry_key));
+
+  assert(lj_jit_event_callback_snapshot(owner, &callback) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(callback.state == LJ_JIT_EVENT_CALLBACK_CALLING);
+  assert(callback.generation == callback_handle->generation);
+  assert(callback.stream_generation == stream.generation);
+  assert(callback.stream_generation == callback_handle->stream_generation);
+  assert(callback.session_generation ==
+         stream.callback_session_generation);
+  assert(callback.session_generation ==
+         callback_handle->session_generation);
+  assert(callback.session_slot == stream.callback_slot);
+  assert(callback.event == stream.callback_event);
+  assert(callback.owner_actor == stream.owner_actor);
+  assert(callback.owner_L == callback_handle->owner_L);
+}
+
+static void expect_callback_flush_session(
+  global_State *g, TGState *owner,
+  const LJJitTraceStreamHandle *stream_handle,
+  LJJitEventSessionSnapshot *snapshot)
+{
+  const LJJitEventSessionSlot *slot;
+  GCRef *roots;
+  memset(snapshot, 0, sizeof(*snapshot));
+  assert(session_snapshot_wait(g, owner, snapshot) ==
+         LJ_JIT_EVENT_SNAPSHOT_ACTIVE);
+  assert(snapshot->generation ==
+         stream_handle->terminal_session.generation);
+  assert(snapshot->slot_index == stream_handle->terminal_session.slot);
+  assert(snapshot->event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(snapshot->owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE);
+  assert(snapshot->edge_proof == LJ_JIT_EVENT_EDGE_NONE);
+  assert(snapshot->attachment_state == stream_handle->attachment_state);
+  assert(snapshot->attachment_generation ==
+         stream_handle->attachment_generation);
+  assert(snapshot->callback_root_count == 1u);
+  assert(snapshot->callback_handler == stream_handle->callback_handler);
+  slot = snapshot->slot;
+  assert(slot != NULL);
+  assert(la_load32_acq(&slot->flags) ==
+         LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT);
+  assert(la_load32_acq(&slot->root_count) == 0);
+  assert(la_load32_acq(&slot->callback_root_count) == 1u);
+  roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  assert(roots != NULL &&
+         gcref_acq(roots[0]) == obj2gco(stream_handle->callback_handler));
 }
 
 static void expect_same_active_generation(global_State *g,
@@ -737,6 +817,157 @@ static void test_owner_detach_gate(lua_State *L, jit_State *J)
   lua_pop(L, 1);
 }
 
+static void test_callback_admission(lua_State *L, jit_State *J, TGState *tg)
+{
+  global_State *g = G(L);
+  LJJitTraceStream *descriptor = &g->main_tg->jit_trace_stream;
+  LJJitTraceStreamHandle stream;
+  LJJitEventCallbackHandle callback, stale_callback;
+  LJJitEventSessionSnapshot session;
+  LJJitTraceStreamSnapshot stream_snapshot;
+  LJJitEventCallbackSnapshot owner_snapshot;
+  LJJitVMEVENTCallResult call_result;
+  GCfunc *handler;
+  TValue *top;
+  ptrdiff_t argbase, oldtop;
+  uint64_t sequence;
+
+  lua_pushcfunction(L, flush_callback_handler);
+  handler = funcV(L->top-1);
+  assert(handler != NULL);
+
+  /* Production admission reserves publish, callback-phase and close
+  ** transitions before it roots a session. UINT64_MAX-5 is even but cannot
+  ** provide all three +2 publications without wrapping. */
+  sequence = la_load64_acq(&descriptor->sequence);
+  assert((sequence & 1u) == 0);
+  claim_for_flush(L, J);
+  la_store64_rel(&descriptor->sequence, UINT64_MAX - 5u);
+  memset(&stream, 0xa5, sizeof(stream));
+  memset(&callback, 0xa5, sizeof(callback));
+  assert(!lj_jit_trace_flush_callback_admit_l(
+    L, J, LJ_VMEVENT_ATTACHMENT_PUBLISHED, 70u, handler,
+    &stream, &callback));
+  assert(stream.generation == 0 && callback.generation == 0);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(lj_tg_tid_acq(tg), 0));
+  assert(jit_owner_l_acq(J) == L);
+  assert(lj_jit_event_sessions_quiescent(tg));
+  la_store64_rel(&descriptor->sequence, sequence);
+  release_failed_claim(L, J);
+  expect_stream_idle(g);
+
+  /* A same-TG local exclusion collision occurs only after the rooted pending
+  ** session/stream exist. It must release its temporary snapshot and roll
+  ** both publications back while retaining the original low token. */
+  claim_for_flush(L, J);
+  (void)lj_tg_hookmask_update(tg, 0, HOOK_PROFILE);
+  memset(&stream, 0xa5, sizeof(stream));
+  memset(&callback, 0xa5, sizeof(callback));
+  assert(!lj_jit_trace_flush_callback_admit_l(
+    L, J, LJ_VMEVENT_ATTACHMENT_PUBLISHED, 71u, handler,
+    &stream, &callback));
+  assert(stream.generation == 0 && callback.generation == 0);
+  assert((lj_tg_hookmask_load(tg) & HOOK_PROFILE) != 0);
+  assert((lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(lj_tg_tid_acq(tg), 0));
+  assert(jit_owner_l_acq(J) == L);
+  assert(lj_jit_event_sessions_quiescent(tg));
+  (void)lj_tg_hookmask_update(tg, HOOK_PROFILE, 0);
+  release_failed_claim(L, J);
+  expect_stream_idle(g);
+
+  /* Handoff failure occurs after exact callback claim and stream phase
+  ** publication. Rollback must unwind the callback owner first, then clear
+  ** the stream/session and preserve the still-exact low token. */
+  claim_for_flush(L, J);
+  lj_trace_test_force_event_handoff_failure(1);
+  memset(&stream, 0xa5, sizeof(stream));
+  memset(&callback, 0xa5, sizeof(callback));
+  assert(!lj_jit_trace_flush_callback_admit_l(
+    L, J, LJ_VMEVENT_ATTACHMENT_PUBLISHED, 72u, handler,
+    &stream, &callback));
+  assert(stream.generation == 0 && callback.generation == 0);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(lj_tg_tid_acq(tg), 0));
+  assert(jit_owner_l_acq(J) == L);
+  assert(lj_jit_event_callback_snapshot(tg, &owner_snapshot) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE);
+  assert((lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
+  assert(lj_jit_event_sessions_quiescent(tg));
+  release_failed_claim(L, J);
+  expect_stream_idle(g);
+
+  /* Success crosses the low-to-zero edge only after the exact rooted session,
+  ** callback owner and DETACHED_CALLBACK stream generation agree. */
+  claim_for_flush(L, J);
+  memset(&stream, 0, sizeof(stream));
+  memset(&callback, 0, sizeof(callback));
+  assert(lj_jit_trace_flush_callback_admit_l(
+    L, J, LJ_VMEVENT_ATTACHMENT_PUBLISHED, 73u, handler,
+    &stream, &callback));
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(stream.attachment_state == LJ_VMEVENT_ATTACHMENT_PUBLISHED);
+  assert(stream.attachment_generation == 73u);
+  assert(stream.callback_root_count == 1u);
+  assert(stream.callback_handler == handler);
+  expect_callback_flush(g, tg, &stream, &callback);
+  expect_callback_flush_session(g, tg, &stream, &session);
+  assert(lj_jit_event_session_snapshot_release(&session));
+
+  /* The prepared callback phase is independently canonical while its exact
+  ** owner remains the close exclusion. The production close cannot silently
+  ** consume a callback which has not completed owner unwind. */
+  assert(!lj_jit_trace_flush_close_l(L, J, &stream));
+  assert(stream_snapshot_wait(g, &stream_snapshot) ==
+         LJ_JIT_STREAM_SNAPSHOT_ACTIVE);
+  assert(stream_snapshot.phase == LJ_JIT_STREAM_DETACHED_CALLBACK);
+  stale_callback = callback;
+  stale_callback.stream_generation++;
+  assert(stale_callback.stream_generation != 0);
+  assert(!lj_jit_event_callback_unwind_l(L, &stale_callback));
+  expect_callback_flush(g, tg, &stream, &callback);
+
+  /* Exercise the complete admitted substrate transaction before production
+  ** callsites adopt it: exact prepared function -> protected Lua -> owner
+  ** release -> token-free stream/session close. */
+  lj_state_checkstack(L, LUA_MINSTACK);
+  oldtop = savestack(L, L->top);
+  top = L->top;
+  setfuncV(L, top, handler);
+  lj_state_stack_pubtv(L, L, top++);
+  if (LJ_FR2)
+    setnilV(top++);
+  argbase = savestack(L, top);
+  setnumV(top, 17);
+  lj_state_stack_pubtv(L, L, top++);
+  L->top = top;
+  memset(&call_result, 0xa5, sizeof(call_result));
+  assert(lj_jit_vmevent_call_l(
+    L, argbase, oldtop, &callback, &call_result));
+  assert(call_result.status == LUA_OK);
+  assert(savestack(L, L->top) == oldtop);
+  assert(lj_jit_event_callback_idle(tg));
+  assert(lj_jit_trace_flush_close_l(L, J, &stream));
+  expect_stream_idle(g);
+
+  /* INITIAL/zero is a real exact attachment identity for direct registry
+  ** manipulation. The rooted production path must not retain the structural
+  ** API's provisional nonzero-only restriction. */
+  claim_for_flush(L, J);
+  assert(lj_jit_trace_flush_callback_admit_l(
+    L, J, LJ_VMEVENT_ATTACHMENT_INITIAL, 0, handler,
+    &stream, &callback));
+  assert(stream.attachment_state == LJ_VMEVENT_ATTACHMENT_INITIAL);
+  assert(stream.attachment_generation == 0);
+  expect_callback_flush(g, tg, &stream, &callback);
+  assert(lj_jit_event_callback_unwind_l(L, &callback));
+  assert(lj_jit_event_callback_release_l(L, &callback));
+  assert(lj_jit_trace_flush_close_l(L, J, &stream));
+  expect_stream_idle(g);
+
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -786,6 +1017,7 @@ int main(void)
   release_failed_claim(L, J);
 
   test_reader_retry_and_generation_saturation(L, J);
+  test_callback_admission(L, J, tg);
 
   claim_for_flush(L, J);
   memset(&first, 0, sizeof(first));
