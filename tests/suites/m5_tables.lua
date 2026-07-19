@@ -30,6 +30,18 @@ return function(add)
       message = "M5 authoritative-root table reader tests passed"
     },
     {
+      name = "m5_tab_rooted_get_try",
+      description = "bounded tri-state authoritative-root table point reads",
+      output = "lj_t-tab-rooted-get-try",
+      cfile = "t-tab-rooted-get-try.c",
+      opts = build.gc2_test_helper_opts({
+        timeout = "20s",
+        xcflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS",
+        cflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS"
+      }),
+      message = "M5 bounded rooted table point-read tests passed"
+    },
+    {
       name = "m5_meta_rooted_chain",
       description = "rooted __index/__newindex chains and explicit C result ABI",
       output = "lj_t-meta-rooted-chain",

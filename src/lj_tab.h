@@ -250,6 +250,29 @@ LJ_FUNCA cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key);
 LJ_FUNCA cTValue * LJ_FASTCALL lj_tab_getint_hop(GCtab *t, int32_t key);
 LJ_FUNC cTValue *lj_tab_getstr(GCtab *t, const GCstr *key);
 LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
+/* One bounded authoritative-root point read.  FOUND release-publishes the
+** exact current value into |outroot|; an authority-confirmed ABSENT or RETRY
+** release-publishes nil.  Invalid operands or a lost exact owner return RETRY
+** without touching output, since no safe publication authority exists.
+** The helper never waits, allocates or throws.  RETRY covers transient GC2
+** admission, changing/retiring table generations, internal table sentinels
+** and a lost exact state owner.  ABSENT includes a non-table parent, nil/NaN
+** key misses, a structurally present nil slot and an ordinary missing key.
+**
+** All TValue pointers must name live semantic roots owned by |L| for the
+** duration of the call.  Output may alias either input: exact table/key root
+** confirmation and owner confirmation precede the terminal output store.
+** The integer convenience form has no collectable key edge to retain or
+** confirm, but otherwise provides the same contract. */
+enum {
+  LJ_TAB_ROOTED_GET_RETRY = -1,
+  LJ_TAB_ROOTED_GET_ABSENT = 0,
+  LJ_TAB_ROOTED_GET_FOUND = 1
+};
+LJ_FUNC int lj_tab_gettv_rooted_try(lua_State *L, cTValue *tabroot,
+				     cTValue *keyroot, TValue *outroot);
+LJ_FUNC int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot,
+					int32_t key, TValue *outroot);
 /* Copy one semantic value starting from an authoritative table TValue root.
 ** The helper retains the exact parent, key and result incarnations across its
 ** current-generation SMR read, and release-publishes into an already
@@ -360,6 +383,10 @@ LJ_FUNC uint32_t lj_tab_test_vm_strhash_store_calls(void);
 LJ_FUNC void lj_tab_test_reset_vm_strhash_store_calls(void);
 LJ_FUNC uint32_t lj_tab_test_wait_no_l_calls(void);
 LJ_FUNC void lj_tab_test_reset_wait_no_l_calls(void);
+LJ_FUNC uint32_t lj_tab_test_wait_l_calls(void);
+LJ_FUNC void lj_tab_test_reset_wait_l_calls(void);
+LJ_FUNC uint32_t lj_tab_test_store_wait_l_calls(void);
+LJ_FUNC void lj_tab_test_reset_store_wait_l_calls(void);
 #endif
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key);

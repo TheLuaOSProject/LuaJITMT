@@ -22,6 +22,7 @@ local m5_concurrent_cases = {
   "m5_tab_cas_store",
   "m5_tab_keyed_store_txn",
   "m5_tab_keyed_slot_resolver",
+  "m5_tab_rooted_get_try",
   "m5_jit_attach_clocked",
   "m5_tab_clear_entering",
   "m5_table_insert_entering",

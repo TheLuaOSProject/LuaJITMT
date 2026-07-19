@@ -206,8 +206,12 @@ void lj_tab_test_reset_##name(void) \
 }
 
 TAB_TEST_COUNTER(wait_no_l_calls, wait_no_l_call)
+TAB_TEST_COUNTER(wait_l_calls, wait_l_call)
+TAB_TEST_COUNTER(store_wait_l_calls, store_wait_l_call)
 #else
 #define tab_test_wait_no_l_call()	((void)0)
+#define tab_test_wait_l_call()		((void)0)
+#define tab_test_store_wait_l_call()	((void)0)
 #define tab_test_constructor_prepublish(L, t)	((void)0)
 #endif
 
@@ -221,6 +225,7 @@ LJ_FUNCA void lj_tab_wait_l(lua_State *L)
 {
   int had_stopreq = lj_safepoint_had_stopreq(L);
   uint32_t actions;
+  tab_test_wait_l_call();
   /*
   ** L-aware table retry waits make C/API callers native and safepoint-visible
   ** while preserving the no-state helper for VM/JIT/internal paths where only
@@ -3650,6 +3655,189 @@ static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
   return status;
 }
 
+static LJ_AINLINE int tab_rooted_get_key_valid(cTValue *key)
+{
+  /* Nil and NaN are ordinary lookup misses.  Reject only table-internal
+  ** encodings and malformed GC snapshots which must never reach hashing or
+  ** become Lua-visible output.  A collectable key is checked only while its
+  ** exact lease and the encompassing SMR reader are live. */
+  return key && !tvistabinternal(key) &&
+	 !tab_val_is_publish_claim(key) && key->u32.hi != LJ_KEYINDEX &&
+	 tab_tv_snapshot_valid(key);
+}
+
+static LJ_AINLINE void tab_rooted_get_publish_nil(TValue *outroot)
+{
+  TValue nilv;
+  if (!outroot)
+    return;
+  setnilV(&nilv);
+  tv_rawstore_rel(outroot, tv_rawload(&nilv));
+}
+
+/* Bounded authoritative-root table point read.  This deliberately shares the
+** paired array/hash generation resolver with exact keyed publishers, but it
+** keeps the copied value under a separate lease until terminal publication.
+** No pointer into either table vector survives the SMR interval. */
+static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
+				      cTValue *keyroot,
+				      const TValue *fixedkey,
+				      TValue *outroot)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 };
+  LJGC2Lease key_lease = { 0 };
+  LJGC2Lease result_lease = { 0 };
+  TValue tablev, keysnap, result, table_confirm, key_confirm;
+  cTValue *curtab, *curkey;
+  TValue *curout;
+  GCtab *t = NULL;
+  ptrdiff_t tabofs = 0, keyofs = 0, outofs = 0;
+  int tabstack = 0, keystack = 0, outstack = 0;
+  int status = LJ_TAB_ROOTED_GET_RETRY;
+  int smr_active = 0;
+  int table_lease_active = 0;
+  int key_lease_active = 0;
+  int result_lease_active = 0;
+  int table_snapshot = 0;
+  int key_snapshot = 0;
+
+  if (!outroot)
+    return LJ_TAB_ROOTED_GET_RETRY;
+  /* An invalid call or failed initial owner admission has no authority to
+  ** touch a possibly foreign stack root.  Valid calls defer every output store
+  ** because output is explicitly allowed to alias either input root. */
+  if (!L || !tabroot || (!keyroot && !fixedkey) ||
+      !tab_keyed_slot_owner_snapshot(L, &owner))
+    return LJ_TAB_ROOTED_GET_RETRY;
+
+  tabstack = tab_key_on_stack(L, tabroot);
+  keystack = keyroot && tab_key_on_stack(L, keyroot);
+  outstack = tab_key_on_stack(L, outroot);
+  tabofs = tabstack ? savestack(L, (TValue *)(void *)tabroot) : 0;
+  keyofs = keystack ? savestack(L, (TValue *)(void *)keyroot) : 0;
+  outofs = outstack ? savestack(L, outroot) : 0;
+  curtab = tabstack ? restorestack(L, tabofs) : tabroot;
+  curkey = keyroot ? (keystack ? restorestack(L, keyofs) : keyroot) :
+		     fixedkey;
+  curout = outstack ? restorestack(L, outofs) : outroot;
+
+  /* SMR begins before loading either mutable root.  This prevents a copied
+  ** pointer from validating as an address-reused successor before its exact
+  ** lease has been acquired. */
+  if (!lj_gc2_smr_read_try(owner.g)) {
+    if (tab_keyed_slot_owner_current(L, &owner))
+      tab_rooted_get_publish_nil(curout);
+    return LJ_TAB_ROOTED_GET_RETRY;
+  }
+  smr_active = 1;
+
+  lj_tv_load_acq(&tablev, curtab);
+  table_snapshot = 1;
+  if (!tvistab(&tablev)) {
+    status = LJ_TAB_ROOTED_GET_ABSENT;
+    goto confirm;
+  }
+  if (lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+      LJ_GC2_TV_EDGE_VALID)
+    goto confirm;
+  table_lease_active = 1;
+  t = tabV(&tablev);
+
+  lj_tv_load_acq(&keysnap, curkey);
+  key_snapshot = 1;
+  if (lj_gc2_tv_lease_acquire(owner.g, &keysnap, &key_lease) !=
+      LJ_GC2_TV_EDGE_VALID)
+    goto confirm;
+  key_lease_active = 1;
+  if (!tab_rooted_get_key_valid(&keysnap))
+    goto confirm;
+
+  status = tab_get_current_forjit(t, &keysnap, &result);
+  if (status == LJ_TAB_ROOTED_GET_FOUND) {
+    if (lj_gc2_tv_lease_acquire(owner.g, &result, &result_lease) !=
+	LJ_GC2_TV_EDGE_VALID) {
+      status = LJ_TAB_ROOTED_GET_RETRY;
+      goto confirm;
+    }
+    result_lease_active = 1;
+    if (!tab_tv_forjit_loadable(&result)) {
+      status = LJ_TAB_ROOTED_GET_RETRY;
+      goto confirm;
+    }
+  } else if (status != LJ_TAB_ROOTED_GET_ABSENT) {
+    status = LJ_TAB_ROOTED_GET_RETRY;
+  }
+
+confirm:
+  /* Confirm the exact roots and state owner before the terminal store.  This
+  ** ordering is what permits outroot == tabroot and outroot == keyroot: no
+  ** input cell is required again after publication. */
+  if (table_snapshot) {
+    curtab = tabstack ? restorestack(L, tabofs) : tabroot;
+    lj_tv_load_acq(&table_confirm, curtab);
+  }
+  if (keyroot && key_snapshot) {
+    curkey = keystack ? restorestack(L, keyofs) : keyroot;
+    lj_tv_load_acq(&key_confirm, curkey);
+  }
+  if (!tab_keyed_slot_owner_current(L, &owner)) {
+    /* Cleanup still belongs to this physical TLS actor, but a different actor
+    ** may now own the output root.  Never use a stale semantic pointer merely
+    ** to publish nil. */
+    status = LJ_TAB_ROOTED_GET_RETRY;
+    goto cleanup;
+  }
+  if ((table_snapshot &&
+       tv_rawload(&table_confirm) != tv_rawload(&tablev)) ||
+      (keyroot && key_snapshot &&
+       tv_rawload(&key_confirm) != tv_rawload(&keysnap)))
+    status = LJ_TAB_ROOTED_GET_RETRY;
+
+  curout = outstack ? restorestack(L, outofs) : outroot;
+  if (status == LJ_TAB_ROOTED_GET_FOUND) {
+    copyTVrel(L, curout, &result);
+  } else {
+    tab_rooted_get_publish_nil(curout);
+  }
+
+cleanup:
+  /* Drop all vector pointer provenance before ending the retaining interval.
+  ** Exact semantic leases remain live through the stack/root publication
+  ** barrier below. */
+  t = NULL;
+  if (smr_active)
+    lj_gc2_smr_read_leave(owner.g);
+  if (status == LJ_TAB_ROOTED_GET_FOUND) {
+    curout = outstack ? restorestack(L, outofs) : outroot;
+    if (outstack)
+      lj_state_stack_pubtv(L, L, curout);
+    else
+      lj_gc_pubroot(L, curout);
+  }
+  if (result_lease_active)
+    lj_gc2_lease_release(&result_lease);
+  if (key_lease_active)
+    lj_gc2_lease_release(&key_lease);
+  if (table_lease_active)
+    lj_gc2_lease_release(&table_lease);
+  return status;
+}
+
+int lj_tab_gettv_rooted_try(lua_State *L, cTValue *tabroot,
+			     cTValue *keyroot, TValue *outroot)
+{
+  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot);
+}
+
+int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot, int32_t key,
+				TValue *outroot)
+{
+  TValue keytv;
+  setintV(&keytv, key);
+  return tab_gettv_rooted_try_impl(L, tabroot, NULL, &keytv, outroot);
+}
+
 static int tab_resolve_current_keyed_try(global_State *g, GCtab *t,
 					  cTValue *key, TValue **slotp)
 {
@@ -4732,6 +4920,7 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
 
 LJ_FUNCA void lj_tab_store_wait_l(lua_State *L)
 {
+  tab_test_store_wait_l_call();
   lj_tab_wait_l(L);
 }
 
