@@ -2141,19 +2141,13 @@ LUA_API void lua_settable(lua_State *L, int idx)
     o = lj_meta_tset_owner(L, t, L->top-2, &owner);
     if (o) {
       TValue *key = L->top-2, *val = L->top-1;
-      int weakwr = lj_gc2_weak_write_begin(L, owner);
       int rc;
-      if (weakwr)
-	lj_gc2_barrier_weak_write(L, owner, key, val);
       rc = lj_tab_trystoretv_cas_keyed(L, owner, o, key, val);
-      if (weakwr) {
-	lj_gc2_barrier_weak_write(L, owner, key, val);
-	lj_gc2_barrier_tv_pair(L, obj2gco(owner), val);
-	lj_gc2_weak_write_end(L, weakwr);
-      }
       if (rc == LJ_TAB_STORE_CAS_OK) {
-	if (!weakwr)
-	  lj_gc2_barrier_weak_write(L, owner, key, val);
+	/* The guarded keyed transaction owns the exact weak-write window. Keep
+	** only the success-side publication here: the public helper may perform an
+	** L-aware CAS_CHANGED retry, which must never retain an outer weak token. */
+	lj_gc2_barrier_weak_write(L, owner, key, val);
 	lj_gc_pubtabkey(L, owner, key);
 	lj_gc_pubtabtv(L, owner, val);
 	L->top = key;
@@ -2203,19 +2197,12 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
     if (o) {
       TValue *val = L->top-1;
       TValue *key = L->top-2;
-      int weakwr = lj_gc2_weak_write_begin(L, owner);
       int rc;
-      if (weakwr)
-	lj_gc2_barrier_weak_write(L, owner, key, val);
       rc = lj_tab_trystoretv_cas_keyed(L, owner, o, key, val);
-      if (weakwr) {
-	lj_gc2_barrier_weak_write(L, owner, key, val);
-	lj_gc2_barrier_tv_pair(L, obj2gco(owner), val);
-	lj_gc2_weak_write_end(L, weakwr);
-      }
       if (rc == LJ_TAB_STORE_CAS_OK) {
-	if (!weakwr)
-	  lj_gc2_barrier_weak_write(L, owner, key, val);
+	/* See lua_settable(): public keyed retries cannot span an outer weak
+	** window. The central transaction already protected the semantic store. */
+	lj_gc2_barrier_weak_write(L, owner, key, val);
 	lj_gc_pubtabkey(L, owner, key);
 	lj_gc_pubtabtv(L, owner, val);
 	L->top = key;
@@ -2242,33 +2229,20 @@ LUA_API void lua_rawset(lua_State *L, int idx)
   TValue snap;
   GCtab *t;
   TValue *dst, *key;
-  int barrier_done = 0;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
   lj_checkapi_slot(2);
   t = tabV(index2adr_read(L, idx, &snap));
   key = L->top-2;
   for (;;) {
-    int weakwr, rc;
+    int rc;
     dst = lj_tab_set(L, t, key);
-    weakwr = lj_gc2_weak_write_begin(L, t);
-    if (weakwr)
-      lj_gc2_barrier_weak_write(L, t, key, key+1);
     rc = lj_tab_trystoretv_cas_keyed(L, t, dst, key, key+1);
-    if (weakwr) {
-      lj_gc2_barrier_weak_write(L, t, key, key+1);
-      lj_gc2_barrier_tv_pair(L, obj2gco(t), key+1);
-      lj_gc_pubtab(L, t);
-      lj_gc2_weak_write_end(L, weakwr);
-      if (rc == LJ_TAB_STORE_CAS_OK)
-	barrier_done = 1;
-    }
     if (rc == LJ_TAB_STORE_CAS_OK)
       break;
     lj_tab_store_wait_l(L);  /* C API rawset saw stale/FORWARD slot. */
   }
-  if (!barrier_done)
-    lj_gc2_barrier_weak_write(L, t, key, key+1);
+  lj_gc2_barrier_weak_write(L, t, key, key+1);
   lj_gc_pubtabkey(L, t, key);
   lj_gc_pubtabtv(L, t, key+1);
   L->top = key;
@@ -2283,7 +2257,6 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
   GCtab *t;
   TValue *dst, *src;
   TValue key;
-  int barrier_done = 0;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
   lj_checkapi_slot(1);
@@ -2291,26 +2264,14 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
   src = L->top-1;
   setintV(&key, n);
   for (;;) {
-    int weakwr, rc;
+    int rc;
     dst = lj_tab_setint(L, t, n);
-    weakwr = lj_gc2_weak_write_begin(L, t);
-    if (weakwr)
-      lj_gc2_barrier_weak_write(L, t, &key, src);
     rc = lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src);
-    if (weakwr) {
-      lj_gc2_barrier_weak_write(L, t, &key, src);
-      lj_gc2_barrier_tv_pair(L, obj2gco(t), src);
-      lj_gc_pubtabtv(L, t, dst);
-      lj_gc2_weak_write_end(L, weakwr);
-      if (rc == LJ_TAB_STORE_CAS_OK)
-	barrier_done = 1;
-    }
     if (rc == LJ_TAB_STORE_CAS_OK)
       break;
     lj_tab_store_wait_l(L);  /* C API rawseti saw stale/FORWARD slot. */
   }
-  if (!barrier_done)
-    lj_gc2_barrier_weak_write(L, t, &key, src);
+  lj_gc2_barrier_weak_write(L, t, &key, src);
   lj_gc_pubtabtv(L, t, src);
   L->top = src;
   lj_state_dropresumeclaim(&claim);
