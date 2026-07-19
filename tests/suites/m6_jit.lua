@@ -17,6 +17,7 @@ local m6_cases = {
   "m6_jit_token",
   "m6_jit_event_session",
   "m6_jit_flush_stream_gate",
+  "m6_jit_attachment_clock",
   "m6_jit_hotcall_missing_args",
   "m6_jit_recursive_call_unroll",
   "m6_jit_recursive_retention",
@@ -811,6 +812,29 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
                         build = false, clean = false, timeout = "30s"
                       }))
       print("M6 token-free TRACE FLUSH stream gate passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_attachment_clock",
+    description = "dormant universe-global jit.attach publication clocks",
+    run = function(t)
+      clean_build(t, build.gc2_test_helper_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-jit-attachment-clock"),
+                      "t-jit-attachment-clock.c",
+                      build.gc2_test_helper_opts({
+                        build = false, clean = false, timeout = "20s"
+                      }))
+      build.with_default_build_restore(t, function()
+        local nojit = gc2_test_cflags .. " -DLUAJIT_DISABLE_JIT"
+        clean_build(t, { quiet = true, xcflags = nojit })
+        build_and_run_c(t, t:tmp("lj_t-jit-attachment-clock-nojit"),
+                        "t-jit-attachment-clock.c", {
+                          build = false, clean = false, timeout = "20s",
+                          cflags = nojit
+                        })
+      end)
+      print("M6 JIT attachment-clock substrate passed")
     end
   })
 

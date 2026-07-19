@@ -55,6 +55,7 @@ typedef uint16_t HotCount;
 ** disguised as a GCtrace merely to reuse the trace traversal. */
 #define LJ_JIT_EVENT_SESSION_SLOTS	2u
 #define LJ_JIT_EVENT_SESSION_ROOTS	8u
+#define LJ_JIT_EVENT_ATTACHMENT_SLOTS	8u
 
 #define LJ_JIT_EVENT_VIEW_FORMAT_NONE	0u
 #define LJ_JIT_EVENT_VIEW_FORMAT_TRACE_V1 1u
@@ -223,6 +224,16 @@ typedef struct LJJitTraceStream {
   uint32_t terminal_reason;
   uint32_t flags;
 } LJJitTraceStream;
+
+/* One universe-global publication clock for each VM-event hash lane.  The
+** authoritative array is the copy embedded in g->main_tg; secondary copies
+** exist only to keep TG allocation/bootstrap symmetric.  Production
+** jit.attach() does not update these dormant clocks yet. */
+typedef struct LJJitEventAttachmentClock {
+  uint64_t sequence;              /* Even stable, odd scalar publication. */
+  uint64_t next_generation;       /* Monotonic; zero is initial-only. */
+  uint64_t generation;            /* Exact last publication generation. */
+} LJJitEventAttachmentClock;
 #endif
 
 #define TG_FINI_LIVE		0u
@@ -344,6 +355,10 @@ struct TGState {
   ** Keeping it after the already-landed session substrate preserves that
   ** substrate's offsets as well as every original LuaJIT offset. */
   LJJitTraceStream jit_trace_stream;
+  /* Tail-only dormant attachment clocks.  Do not insert new fields before
+  ** this array: the preceding stream descriptor now has published offsets. */
+  LJJitEventAttachmentClock
+    jit_event_attachment[LJ_JIT_EVENT_ATTACHMENT_SLOTS];
 #endif
 };
 
@@ -379,9 +394,23 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_stream) >=
 		 sizeof(LJJitEventSessions));
 LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_stream) +
 		 sizeof(LJJitTraceStream) <= sizeof(TGState));
+LJ_STATIC_ASSERT((offsetof(TGState, jit_event_attachment[0].sequence) & 7u) ==
+		 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventAttachmentClock,
+			  next_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventAttachmentClock, generation) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(TGState, jit_event_attachment) >=
+		 offsetof(TGState, jit_trace_stream) +
+		 sizeof(LJJitTraceStream));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->jit_event_attachment) ==
+		 LJ_JIT_EVENT_ATTACHMENT_SLOTS *
+		 sizeof(LJJitEventAttachmentClock));
+LJ_STATIC_ASSERT(offsetof(TGState, jit_event_attachment) +
+		 sizeof(((TGState *)0)->jit_event_attachment) <= sizeof(TGState));
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, jit_trace_stream) +
-		  sizeof(LJJitTraceStream)) < __alignof__(TGState));
+		 (offsetof(TGState, jit_event_attachment) +
+		  sizeof(((TGState *)0)->jit_event_attachment)) <
+		 __alignof__(TGState));
 #if LJ_HASFFI
 LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 		 offsetof(TGState, ffi_native_frame) +

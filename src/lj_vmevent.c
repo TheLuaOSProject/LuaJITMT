@@ -4,6 +4,7 @@
 */
 
 #include <stdio.h>
+#include <string.h>
 
 #define lj_vmevent_c
 #define LUA_CORE
@@ -21,6 +22,60 @@
 #include "lj_thr.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
+
+#if LJ_HASJIT
+static int vmevent_attachment_snapshot_canonical(
+  const LJJitEventAttachmentSnapshot *snapshot)
+{
+  if (!snapshot || (snapshot->sequence & 1u) != 0 ||
+      snapshot->next_generation != snapshot->generation)
+    return 0;
+  /* Zero is the unique untouched state.  A future writer which completes an
+  ** odd interval must publish a nonzero generation, including conservative
+  ** invalidation after a post-claim store collision.  A pre-semantic abort
+  ** may instead restore the exact original even sequence.  Thus a nonzero
+  ** stable sequence paired with generation zero is corruption, not idle. */
+  return (snapshot->sequence == 0) == (snapshot->generation == 0);
+}
+
+static int vmevent_attachment_snapshot_initial_idle(
+  const LJJitEventAttachmentSnapshot *snapshot)
+{
+  return snapshot && snapshot->sequence == 0 &&
+    snapshot->next_generation == 0 && snapshot->generation == 0;
+}
+#endif
+
+int lj_jit_event_attachment_snapshot(
+  global_State *g, uint32_t slot, LJJitEventAttachmentSnapshot *snapshot)
+{
+  if (!snapshot)
+    return LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_RETRY;
+  memset(snapshot, 0, sizeof(*snapshot));
+#if LJ_HASJIT
+  if (g && g->main_tg && slot < LJ_JIT_EVENT_ATTACHMENT_SLOTS) {
+    LJJitEventAttachmentClock *clock =
+      &g->main_tg->jit_event_attachment[slot];
+    uint64_t sequence = la_load64_acq(&clock->sequence);
+    if ((sequence & 1u) == 0) {
+      snapshot->sequence = sequence;
+      snapshot->next_generation =
+	la_load64_acq(&clock->next_generation);
+      snapshot->generation = la_load64_acq(&clock->generation);
+      if (la_load64_acq(&clock->sequence) == sequence &&
+	  vmevent_attachment_snapshot_canonical(snapshot))
+	return vmevent_attachment_snapshot_initial_idle(snapshot) ?
+	  LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_INITIAL :
+	  LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED;
+    }
+  }
+#else
+  UNUSED(g);
+  UNUSED(slot);
+#endif
+  memset(snapshot, 0, sizeof(*snapshot));
+  return LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_RETRY;
+}
 
 static int vmevent_handler_acq(global_State *g, GCstr *s, VMEvent ev,
 			       TValue *fnv)

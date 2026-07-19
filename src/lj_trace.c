@@ -771,6 +771,9 @@ void lj_jit_event_sessions_init(TGState *tg)
   ** append-only TG copy here keeps secondary allocation/bootstrap symmetric
   ** without ever publishing those unused copies. */
   memset(&tg->jit_trace_stream, 0, sizeof(tg->jit_trace_stream));
+  /* As with the stream, only the main-TG attachment-clock array is an
+  ** authority.  Production jit.attach() does not publish it yet. */
+  memset(tg->jit_event_attachment, 0, sizeof(tg->jit_event_attachment));
   la_store32_rlx(&sessions->active_slot, LJ_JIT_EVENT_SESSION_SLOTS);
   for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
     LJJitEventSessionSlot *slot = &sessions->slot[i];

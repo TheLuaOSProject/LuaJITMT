@@ -31,6 +31,22 @@ typedef enum {
   LJ_VMEVENT__MAX
 } VMEvent;
 
+/* Dormant universe-global jit.attach() publication-clock substrate.  The
+** snapshot API is deliberately available in no-JIT builds, where it returns
+** RETRY, so internal users can remain fail-closed across configurations. */
+typedef struct LJJitEventAttachmentSnapshot {
+  uint64_t sequence;
+  uint64_t next_generation;
+  uint64_t generation;
+} LJJitEventAttachmentSnapshot;
+
+#define LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_RETRY		(-1)
+#define LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_INITIAL	0
+#define LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED	1
+
+LJ_FUNC int lj_jit_event_attachment_snapshot(
+  global_State *g, uint32_t slot, LJJitEventAttachmentSnapshot *snapshot);
+
 #ifdef LUAJIT_DISABLE_VMEVENT
 #define lj_vmevent_send(g, ev, args)		UNUSED(g)
 #define lj_vmevent_send_(g, ev, args, post)	UNUSED(g)
