@@ -106,6 +106,17 @@ enum {
   LJ_VMEVENT_ATTACHMENT_UNCLOCKED = 3
 };
 
+/* Canonical immutable session identity available in every build profile.
+** INITIAL and compile-time UNCLOCKED have no publication generation;
+** PUBLISHED always names one nonzero clock generation. */
+static LJ_AINLINE int lj_vmevent_attachment_identity_valid(
+  uint32_t state, uint64_t generation)
+{
+  return state == LJ_VMEVENT_ATTACHMENT_PUBLISHED ? generation != 0 :
+    (state == LJ_VMEVENT_ATTACHMENT_INITIAL ||
+     state == LJ_VMEVENT_ATTACHMENT_UNCLOCKED) ? generation == 0 : 0;
+}
+
 LJ_FUNC void lj_vmevent_init(lua_State *L);
 LJ_FUNC int lj_vmevent_prepare_try(lua_State *L, VMEvent ev,
 				    LJVMEVENTPrepareResult *result);

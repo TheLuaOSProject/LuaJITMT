@@ -9136,6 +9136,22 @@ retry:
 #endif
 
 #if LJ_HASJIT
+static int gc2_mark_jit_event_callback_root(global_State *g, GCobj *root)
+{
+  LJGC2Lease lease;
+  int status;
+  if (!root || !gc2_mark_thread_root_obj_status(g, root))
+    return 0;
+  /* The sentinel is a semantic callback root, not raw-view proof evidence.
+  ** Re-admit its exact type before any function-body dereference can occur. */
+  status = lj_gc2_obj_lease_acquire(g, root, (uint32_t)~LJ_TFUNC,
+				    NULL, &lease);
+  if (status < 0)
+    return 0;
+  lj_gc2_lease_release(&lease);
+  return 1;
+}
+
 /* Scan the one immutable event publication for this TG.  The caller already
 ** holds the outer TG/allocator SMR lease.  Slot readers prevent raw backing
 ** reuse; the final exact sequence check converts any overlapping close into a
@@ -9146,11 +9162,12 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
   const LJJitEventSessionSlot *slot;
   GCRef *roots;
   lua_State *owner_L;
-  GCobj *owner_root;
+  GCobj *owner_root, *callback_root = NULL;
   GCtrace *source;
   TraceNo source_traceno;
   LJJitOwnerWord owner_word = jit_owner_pack(0, 0);
   uint32_t flags, nroots, root_capacity, owner_mode, edge_proof, i;
+  uint32_t attachment_state, callback_root_count, proof_flags;
   uint32_t owner_tid, owner_actor, tg_tid, tg_actor;
   int acquired, complete = 1;
   acquired = lj_jit_event_session_snapshot_acquire(g, tg, &snapshot);
@@ -9167,28 +9184,48 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
   source_traceno = (TraceNo)la_load32_acq(&slot->source_traceno);
   owner_mode = la_load32_acq(&slot->owner_mode);
   edge_proof = la_load32_acq(&slot->edge_proof);
+  attachment_state = la_load32_acq(&slot->attachment_state);
+  callback_root_count = la_load32_acq(&slot->callback_root_count);
   owner_tid = la_load32_acq(&slot->owner_tid);
   owner_actor = la_load32_acq(&slot->owner_actor);
   tg_tid = lj_tg_tid_acq(tg);
   tg_actor = lj_tg_actor_acq(tg);
   owner_L = (lua_State *)la_loadptr_acq((void *const *)&slot->owner_L);
   owner_root = gcref_acq(slot->owner_root);
+  if (roots && ((uintptr_t)roots & (__alignof__(GCRef) - 1u)) == 0 &&
+      root_capacity >= LJ_JIT_EVENT_SESSION_ROOTS &&
+      nroots < root_capacity && nroots <= LJ_ROOT_SCAN_LIMIT &&
+      ((roots == slot->root_inline) ==
+	(root_capacity == LJ_JIT_EVENT_SESSION_ROOTS)))
+    callback_root = gcref_acq(roots[nroots]);
+  proof_flags = flags & (LJ_JIT_EVENT_SLOT_F_VIEW |
+			 LJ_JIT_EVENT_SLOT_F_SOURCE_PIN);
   if (owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE)
     owner_word = jit_owner_word_acq(g);
   if (snapshot.generation == 0 ||
       snapshot.owner_mode != owner_mode || snapshot.edge_proof != edge_proof ||
-      snapshot.attachment_generation == 0 ||
+      snapshot.attachment_state != attachment_state ||
+      snapshot.callback_root_count != callback_root_count ||
+      (GCobj *)(void *)snapshot.callback_handler != callback_root ||
+      !lj_vmevent_attachment_identity_valid(
+	attachment_state, snapshot.attachment_generation) ||
+      callback_root_count > 1u ||
+      ((callback_root != NULL) != (callback_root_count == 1u)) ||
+      (((flags & LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) != 0) !=
+	(callback_root_count == 1u)) ||
       !lj_jit_event_session_contract_valid(
 	snapshot.event, owner_mode, edge_proof,
-	(flags & LJ_JIT_EVENT_SLOT_F_VIEW) != 0, source != NULL, nroots) ||
+	(flags & LJ_JIT_EVENT_SLOT_F_VIEW) != 0, source != NULL, nroots,
+	attachment_state, snapshot.attachment_generation,
+	callback_root_count) ||
       owner_tid == 0 || owner_tid != tg_tid || owner_actor == 0 ||
       owner_actor == LJ_THR_ACTOR_RETIRED || owner_actor != tg_actor ||
       owner_L == NULL || owner_root != obj2gco(owner_L) ||
       la_load32_acq(&slot->control_borrow_state) != 0 ||
       la_load64_acq(&slot->control_borrow_generation) != 0 ||
       la_loadptr_acq((void *const *)&slot->saved_jit_owner_L) != NULL ||
-      !roots || ((uintptr_t)roots & 7u) != 0 ||
-      root_capacity < LJ_JIT_EVENT_SESSION_ROOTS || nroots > root_capacity ||
+      !roots || ((uintptr_t)roots & (__alignof__(GCRef) - 1u)) != 0 ||
+      root_capacity < LJ_JIT_EVENT_SESSION_ROOTS || nroots >= root_capacity ||
       nroots > LJ_ROOT_SCAN_LIMIT ||
       ((roots == slot->root_inline) !=
 	(root_capacity == LJ_JIT_EVENT_SESSION_ROOTS)) ||
@@ -9196,7 +9233,8 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
       (((flags & LJ_JIT_EVENT_SLOT_F_SOURCE_PIN) != 0) !=
 	(source != NULL)) ||
       (flags & ~(LJ_JIT_EVENT_SLOT_F_VIEW |
-		 LJ_JIT_EVENT_SLOT_F_SOURCE_PIN)) != 0) {
+		 LJ_JIT_EVENT_SLOT_F_SOURCE_PIN |
+		 LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT)) != 0) {
     complete = 0;
   }
   /* A continuation view can retain unpinned native addresses. Its ACTIVE
@@ -9239,6 +9277,9 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
     if (!root || !gc2_mark_thread_root_obj_status(g, root))
       complete = 0;
   }
+  if (complete && callback_root_count == 1u &&
+      !gc2_mark_jit_event_callback_root(g, callback_root))
+    complete = 0;
   if (complete && (flags & LJ_JIT_EVENT_SLOT_F_SOURCE_PIN) != 0) {
     /* Exact slot validation inside mark_pinned is the first source
     ** dereference. It preserves KGC/start-proto/snapshot-PC/mcode edges even
@@ -9249,14 +9290,13 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
       complete = 0;
   }
   if (complete && edge_proof == LJ_JIT_EVENT_EDGE_PINNED_SOURCE &&
-      (flags & (LJ_JIT_EVENT_SLOT_F_VIEW |
-		LJ_JIT_EVENT_SLOT_F_SOURCE_PIN)) !=
+      proof_flags !=
       (LJ_JIT_EVENT_SLOT_F_VIEW | LJ_JIT_EVENT_SLOT_F_SOURCE_PIN))
     complete = 0;
   if (complete && edge_proof == LJ_JIT_EVENT_EDGE_EXACT_ROOTS &&
-      flags != LJ_JIT_EVENT_SLOT_F_VIEW)
+      proof_flags != LJ_JIT_EVENT_SLOT_F_VIEW)
     complete = 0;
-  if (complete && edge_proof == LJ_JIT_EVENT_EDGE_NONE && flags != 0)
+  if (complete && edge_proof == LJ_JIT_EVENT_EDGE_NONE && proof_flags != 0)
     complete = 0;
   /* Handoff is forbidden while the session is nonquiescent. Recheck the
   ** captured actor on both sides of reader release so a corruption/retire

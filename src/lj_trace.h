@@ -90,6 +90,10 @@ typedef struct LJJitEventSessionSpec {
   uint32_t root_count;
   GCtrace *source;
   TraceNo source_traceno;
+  /* Appended internal schema: all pre-existing member offsets stay stable. */
+  uint32_t attachment_state;
+  uint32_t callback_root_count;
+  GCfunc *callback_handler;
 } LJJitEventSessionSpec;
 
 typedef struct LJJitEventSessionHandle {
@@ -109,6 +113,12 @@ typedef struct LJJitEventSessionSnapshot {
   uint32_t owner_mode;
   uint32_t edge_proof;
   uint64_t attachment_generation;
+  /* The reader's SMR scope keeps this address memory-stable through release.
+  ** It is a callable ACTIVE-session root only while the publication remains
+  ** exact; a stale release after close grants no callback authority. */
+  uint32_t attachment_state;
+  uint32_t callback_root_count;
+  GCfunc *callback_handler;
 } LJJitEventSessionSnapshot;
 
 /* Linear handle for one structurally admitted standalone TRACE "flush"
@@ -171,7 +181,10 @@ LJ_FUNC int lj_jit_event_session_contract_valid(uint32_t event,
 						 uint32_t edge_proof,
 						 int has_view,
 						 int has_source,
-						 uint32_t root_count);
+						 uint32_t root_count,
+						 uint32_t attachment_state,
+						 uint64_t attachment_generation,
+						 uint32_t callback_root_count);
 /* The caller must already own an exact live TG identity. This function adds a
 ** nonwaiting GC2 SMR lease and retains it in ACTIVE snapshots until release. */
 LJ_FUNC int lj_jit_event_session_snapshot_acquire(

@@ -520,8 +520,15 @@ int lj_jit_event_frozen_view_valid(const LJJitEventFrozenView *view)
 int lj_jit_event_session_contract_valid(uint32_t event, uint32_t owner_mode,
 					uint32_t edge_proof, int has_view,
 					int has_source,
-					uint32_t root_count)
+					uint32_t root_count,
+					uint32_t attachment_state,
+					uint64_t attachment_generation,
+					uint32_t callback_root_count)
 {
+  if (!lj_vmevent_attachment_identity_valid(attachment_state,
+						    attachment_generation) ||
+      callback_root_count > 1u)
+    return 0;
   if (owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE) {
     return (event == LJ_JIT_EVENT_TRACE_START ||
 	    event == LJ_JIT_EVENT_RECORD) &&
@@ -570,18 +577,83 @@ static TGState *jit_event_owner_tg(lua_State *L)
   return actor != 0 && lj_tg_actor_acq(tg) == actor ? tg : NULL;
 }
 
+static int jit_event_root_need(uint32_t proof_count, uint32_t *need)
+{
+  if (!need || proof_count > LJ_ROOT_SCAN_LIMIT ||
+      proof_count == ~(uint32_t)0)
+    return 0;
+  *need = proof_count + 1u;  /* Dedicated callback-root sentinel lane. */
+  return *need > proof_count;
+}
+
+static int jit_event_size_mul(uint32_t count, size_t width, size_t *bytes)
+{
+  if (!bytes || width == 0 || (size_t)count > ~(size_t)0 / width)
+    return 0;
+  *bytes = (size_t)count * width;
+  return 1;
+}
+
+static int jit_event_slot_root_geometry(const LJJitEventSessionSlot *slot,
+					GCRef **rootsp, uint32_t *nrootsp,
+					uint32_t *capacityp)
+{
+  GCRef *roots;
+  uint32_t nroots, capacity;
+  if (!slot)
+    return 0;
+  roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  nroots = la_load32_acq(&slot->root_count);
+  capacity = la_load32_acq(&slot->root_capacity);
+  if (!roots || ((uintptr_t)roots & (__alignof__(GCRef) - 1u)) != 0 ||
+      capacity < LJ_JIT_EVENT_SESSION_ROOTS || nroots >= capacity ||
+      nroots > LJ_ROOT_SCAN_LIMIT ||
+      ((roots == slot->root_inline) !=
+	(capacity == LJ_JIT_EVENT_SESSION_ROOTS)))
+    return 0;
+  if (rootsp) *rootsp = roots;
+  if (nrootsp) *nrootsp = nroots;
+  if (capacityp) *capacityp = capacity;
+  return 1;
+}
+
+static GCfunc *jit_event_callback_handler_acq(GCRef *roots, uint32_t nroots)
+{
+  return (GCfunc *)(void *)gcref_acq(roots[nroots]);
+}
+
+static int jit_event_callback_handler_type(global_State *g, GCfunc *handler)
+{
+  LJGC2Lease lease;
+  int status;
+  if (!handler)
+    return 1;
+  status = lj_gc2_obj_lease_acquire(g, obj2gco(handler),
+				    (uint32_t)~LJ_TFUNC, NULL, &lease);
+  if (status < 0)
+    return 0;
+  lj_gc2_lease_release(&lease);
+  return 1;
+}
+
 static void jit_event_slot_reset_fields(LJJitEventSessionSlot *slot)
 {
-  GCRef *roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
-  uint32_t capacity = la_load32_acq(&slot->root_capacity);
-  uint32_t nroots = la_load32_acq(&slot->root_count);
+  GCRef *roots;
+  uint32_t nroots;
   uint32_t i;
+  /* CLEANING owns the slot, but corrupt geometry still must fail-stop before
+  ** the first sentinel/proof-vector write. */
+  if (LJ_UNLIKELY(!jit_event_slot_root_geometry(
+	  slot, &roots, &nroots, NULL)))
+    abort();
   la_store64_rel(&slot->generation, 0);
   la_store32_rel(&slot->flags, 0);
   la_store32_rel(&slot->event, 0);
   la_store32_rel(&slot->owner_mode, 0);
   la_store32_rel(&slot->edge_proof, 0);
   la_store64_rel(&slot->attachment_generation, 0);
+  la_store32_rel(&slot->attachment_state, LJ_VMEVENT_ATTACHMENT_INVALID);
+  la_store32_rel(&slot->callback_root_count, 0);
   la_store32_rel(&slot->control_borrow_state, 0);
   la_store64_rel(&slot->control_borrow_generation, 0);
   la_storeptr_rel((void **)&slot->saved_jit_owner_L, NULL);
@@ -591,8 +663,9 @@ static void jit_event_slot_reset_fields(LJJitEventSessionSlot *slot)
   setgcrefrel(slot->owner_root, NULL);
   la_storeptr_rel((void **)&slot->source, NULL);
   la_store32_rel(&slot->source_traceno, 0);
-  if (LJ_UNLIKELY(!roots || nroots > capacity))
-    abort();
+  /* Clear the callback lane independently: it is not one of nroots frozen
+  ** proof edges and must not survive CLOSED-to-FREE reuse. */
+  setgcrefrel(roots[nroots], NULL);
   for (i = 0; i < nroots; i++)
     setgcrefrel(roots[i], NULL);
   la_store32_rel(&slot->root_count, 0);
@@ -781,6 +854,9 @@ void lj_jit_event_sessions_init(TGState *tg)
       setgcrefrel(slot->root_inline[j], NULL);
     la_storeptr_rlx((void **)&slot->root_data, slot->root_inline);
     la_store32_rlx(&slot->root_capacity, LJ_JIT_EVENT_SESSION_ROOTS);
+    la_store32_rlx(&slot->callback_root_count, 0);
+    la_store32_rlx(&slot->attachment_state,
+		   LJ_VMEVENT_ATTACHMENT_INVALID);
     setgcrefrel(slot->owner_root, NULL);
     la_store32_rlx(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
   }
@@ -930,10 +1006,14 @@ int lj_jit_event_sessions_fini(global_State *g, TGState *tg)
 static int jit_event_slot_root_reserve(LJJitEventSessionSlot *slot,
 				       uint32_t need)
 {
-  GCRef *roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
-  uint32_t capacity = la_load32_acq(&slot->root_capacity);
+  GCRef *roots;
+  uint32_t capacity;
   uint32_t next, i;
+  size_t bytes;
   void *data;
+  if (need == 0 ||
+      !jit_event_slot_root_geometry(slot, &roots, NULL, &capacity))
+    return 0;
   if (need <= capacity)
     return 1;
   next = capacity ? capacity : LJ_JIT_EVENT_SESSION_ROOTS;
@@ -944,13 +1024,15 @@ static int jit_event_slot_root_reserve(LJJitEventSessionSlot *slot,
     }
     next *= 2u;
   }
+  if (!jit_event_size_mul(next, sizeof(GCRef), &bytes))
+    return 0;
   if (roots == slot->root_inline) {
-    data = malloc((size_t)next * sizeof(GCRef));
+    data = malloc(bytes);
     if (data)
       for (i = 0; i < next; i++)
         setgcrefrel(((GCRef *)data)[i], NULL);
   } else {
-    data = realloc(roots, (size_t)next * sizeof(GCRef));
+    data = realloc(roots, bytes);
     if (data)
       for (i = capacity; i < next; i++)
         setgcrefrel(((GCRef *)data)[i], NULL);
@@ -979,16 +1061,18 @@ static int jit_event_ranges_overlap(const void *a, size_t asize,
 static int jit_event_inputs_alias_retained(
   const LJJitEventSessions *sessions, const LJJitEventSessionSpec *spec)
 {
-  size_t input_root_bytes =
-    (size_t)spec->root_count * sizeof(*spec->roots);
+  size_t input_root_bytes;
   uint32_t i;
+  if (!jit_event_size_mul(spec->root_count, sizeof(*spec->roots),
+			  &input_root_bytes))
+    return 1;
   for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
     const LJJitEventSessionSlot *slot = &sessions->slot[i];
-    GCRef *roots = (GCRef *)
-      la_loadptr_acq((void *const *)&slot->root_data);
-    uint32_t capacity = la_load32_acq(&slot->root_capacity);
-    size_t root_bytes = (size_t)capacity * sizeof(*roots);
-    if (!roots || capacity < LJ_JIT_EVENT_SESSION_ROOTS)
+    GCRef *roots;
+    uint32_t capacity;
+    size_t root_bytes;
+    if (!jit_event_slot_root_geometry(slot, &roots, NULL, &capacity) ||
+	!jit_event_size_mul(capacity, sizeof(*roots), &root_bytes))
       return 1;
     if (spec->root_count != 0 &&
 	(jit_event_ranges_overlap(spec->roots, input_root_bytes,
@@ -1015,18 +1099,25 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
   LJJitEventSessions *sessions;
   LJJitEventSessionSlot *slot;
   GCRef *slot_roots;
+  LJGC2Lease callback_lease;
   uint64_t sequence, generation;
-  uint32_t slot_index, i, tid, flags = 0;
+  uint32_t slot_index, i, tid, flags = 0, root_need;
+  int callback_lease_held = 0;
   if (!J || !tg || G(L) != J2G(J) || !spec || !handle ||
-      spec->attachment_generation == 0 ||
-      spec->root_count > LJ_ROOT_SCAN_LIMIT ||
+      !jit_event_root_need(spec->root_count, &root_need) ||
       (spec->root_count != 0 && !spec->roots) ||
+      spec->callback_root_count > 1u ||
+      ((spec->callback_handler != NULL) !=
+	(spec->callback_root_count == 1u)) ||
       (!!spec->source != (spec->source_traceno != 0)) ||
       !lj_jit_event_session_contract_valid(spec->event, spec->owner_mode,
 					  spec->edge_proof,
 					  spec->view != NULL,
 					  spec->source != NULL,
-					  spec->root_count) ||
+					  spec->root_count,
+					  spec->attachment_state,
+					  spec->attachment_generation,
+					  spec->callback_root_count) ||
       !jit_event_view_spec_valid(spec->view))
     return 0;
   if (spec->event == LJ_JIT_EVENT_TRACE_ABORT &&
@@ -1037,21 +1128,32 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
        spec->view->trace.exitstub_addr != 0))
     return 0;  /* No native/source lease survives detached low->zero. */
   g = tg->gl;
+  /* Admission precedes the first handler-body read and remains held until the
+  ** sentinel, even publication and second active-cycle barrier are durable.
+  ** Besides lifetime, the exact lease rejects stale, foreign and non-FUNC
+  ** candidates without peeking through an unauthorised raw pointer. */
+  if (spec->callback_handler) {
+    if (lj_gc2_obj_lease_acquire(g, obj2gco(spec->callback_handler),
+				 (uint32_t)~LJ_TFUNC, NULL,
+				 &callback_lease) < 0)
+      return 0;
+    callback_lease_held = 1;
+  }
   tid = lj_tg_tid_acq(tg);
   /* Building the immutable continuation is a recorder/control operation. The
   ** future callback cutover publishes it completely before yielding this exact
   ** low-half token into the high-half lifecycle reservation. */
   if (tid == 0 || jit_owner_word_acq(g) != jit_owner_pack(tid, 0) ||
       jit_owner_l_acq(J) != L)
-    return 0;
+    goto fail_callback_lease;
   sessions = &tg->jit_event_sessions;
   /* This must precede even the first root-element load: a CLOSED slot's last
   ** reader may concurrently zero its retained vector. */
   if (jit_event_inputs_alias_retained(sessions, spec))
-    return 0;
+    goto fail_callback_lease;
   for (i = 0; i < spec->root_count; i++)
     if (!spec->roots[i])
-      return 0;
+      goto fail_callback_lease;
   sequence = la_load64_acq(&sessions->sequence);
   /* Reserve sequence headroom for both this even->even publication and the
   ** matching close. An ACTIVE session at MAX-1 could never be unpublished. */
@@ -1060,28 +1162,28 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
       la_load32_acq(&sessions->active_slot) != LJ_JIT_EVENT_SESSION_SLOTS ||
       la_load64_acq(&sessions->active_generation) != 0 ||
       !jit_event_slot_claim(g, sessions, &slot_index))
-    return 0;
+    goto fail_callback_lease;
   slot = &sessions->slot[slot_index];
   generation = la_load64_acq(&sessions->next_generation);
   if (generation == ~(uint64_t)0) {
     la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
-    return 0;
+    goto fail_callback_lease;
   }
   generation++;
-  if (!jit_event_slot_root_reserve(slot, spec->root_count)) {
+  if (!jit_event_slot_root_reserve(slot, root_need)) {
     la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
-    return 0;
+    goto fail_callback_lease;
   }
   if (spec->source &&
       spec->view->trace.traceno != spec->source_traceno) {
     la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
-    return 0;
+    goto fail_callback_lease;
   }
   if (spec->view && spec->view->size > slot->view.capacity) {
     void *data = realloc(slot->view.data, spec->view->size);
     if (!data) {
       la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
-      return 0;
+      goto fail_callback_lease;
     }
     slot->view.data = data;
     slot->view.capacity = spec->view->size;
@@ -1090,10 +1192,12 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
       !jit_event_source_pin(g, spec->source, spec->source_traceno,
 			    spec->view)) {
     la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
-    return 0;
+    goto fail_callback_lease;
   }
   if (spec->source)
     flags |= LJ_JIT_EVENT_SLOT_F_SOURCE_PIN;
+  if (spec->callback_root_count != 0)
+    flags |= LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT;
   if (spec->view) {
     memcpy(slot->view.data, spec->view->data, spec->view->size);
     slot->view.size = spec->view->size;
@@ -1112,6 +1216,7 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
   la_store32_rel(&slot->edge_proof, spec->edge_proof);
   la_store64_rel(&slot->attachment_generation,
 		 spec->attachment_generation);
+  la_store32_rel(&slot->attachment_state, spec->attachment_state);
   la_store32_rel(&slot->control_borrow_state, 0);
   la_store64_rel(&slot->control_borrow_generation, 0);
   la_storeptr_rel((void **)&slot->saved_jit_owner_L, NULL);
@@ -1129,6 +1234,11 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
     if (root)
       lj_gc_pubobjroot(L, root);  /* Pre-publication active-cycle barrier. */
   }
+  setgcrefrel(slot_roots[spec->root_count],
+	      spec->callback_handler ? obj2gco(spec->callback_handler) : NULL);
+  la_store32_rel(&slot->callback_root_count, spec->callback_root_count);
+  if (spec->callback_handler)
+    lj_gc_pubobjroot(L, obj2gco(spec->callback_handler));
   lj_gc_pubobjroot(L, obj2gco(L));
   if (spec->source)
     lj_gc_pubobjroot(L, obj2gco(spec->source));
@@ -1136,7 +1246,7 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
 		LA_ACQ_REL, LA_ACQ)) {
     la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_CLOSED);
     (void)jit_event_slot_cleanup(g, slot, LJ_JIT_EVENT_SLOT_CLOSED);
-    return 0;
+    goto fail_callback_lease;
   }
   if (LJ_UNLIKELY(la_load32_acq(&sessions->state) !=
 		   LJ_JIT_EVENT_PUBLICATION_IDLE))
@@ -1151,13 +1261,22 @@ static int jit_event_session_publish_l(lua_State *L, jit_State *J,
   for (i = 0; i < spec->root_count; i++)
     if (spec->roots[i])
       lj_gc_pubobjroot(L, spec->roots[i]);
+  if (spec->callback_handler)
+    lj_gc_pubobjroot(L, obj2gco(spec->callback_handler));
   lj_gc_pubobjroot(L, obj2gco(L));
   if (spec->source)
     lj_gc_pubobjroot(L, obj2gco(spec->source));
   handle->generation = generation;
   handle->slot = slot_index;
   handle->owner_mode = spec->owner_mode;
+  if (callback_lease_held)
+    lj_gc2_lease_release(&callback_lease);
   return 1;
+
+fail_callback_lease:
+  if (callback_lease_held)
+    lj_gc2_lease_release(&callback_lease);
+  return 0;
 }
 
 static int jit_event_session_unpublish_l(
@@ -1331,8 +1450,10 @@ int lj_jit_event_session_snapshot_acquire(
 {
   LJJitEventSessions *sessions;
   LJJitEventSessionSlot *slot;
+  GCRef *roots;
+  GCfunc *callback_handler;
   uint64_t sequence, generation;
-  uint32_t slot_index, readers;
+  uint32_t slot_index, readers, nroots, callback_root_count, flags;
   if (!snapshot)
     return LJ_JIT_EVENT_SNAPSHOT_RETRY;
   memset(snapshot, 0, sizeof(*snapshot));
@@ -1392,9 +1513,38 @@ int lj_jit_event_session_snapshot_acquire(
   snapshot->edge_proof = la_load32_acq(&slot->edge_proof);
   snapshot->attachment_generation =
     la_load64_acq(&slot->attachment_generation);
+  snapshot->attachment_state = la_load32_acq(&slot->attachment_state);
+  if (!lj_vmevent_attachment_identity_valid(snapshot->attachment_state,
+						    snapshot->attachment_generation)) {
+    jit_event_slot_reader_drop(tg, slot);
+    memset(snapshot, 0, sizeof(*snapshot));
+    goto retry_leave;
+  }
+  if (!jit_event_slot_root_geometry(slot, &roots, &nroots, NULL)) {
+    jit_event_slot_reader_drop(tg, slot);
+    memset(snapshot, 0, sizeof(*snapshot));
+    goto retry_leave;
+  }
+  callback_handler = jit_event_callback_handler_acq(roots, nroots);
+  callback_root_count = la_load32_acq(&slot->callback_root_count);
+  flags = la_load32_acq(&slot->flags);
+  if (callback_root_count > 1u ||
+      ((callback_handler != NULL) != (callback_root_count == 1u)) ||
+      (((flags & LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) != 0) !=
+	(callback_root_count == 1u)) ||
+      !jit_event_callback_handler_type(g, callback_handler)) {
+    jit_event_slot_reader_drop(tg, slot);
+    memset(snapshot, 0, sizeof(*snapshot));
+    goto retry_leave;
+  }
+  snapshot->callback_root_count = callback_root_count;
+  snapshot->callback_handler = callback_handler;
   if (la_load64_acq(&sessions->sequence) != sequence ||
       la_load64_acq(&sessions->next_generation) != generation ||
-      la_load32_acq(&slot->state) != LJ_JIT_EVENT_SLOT_ACTIVE) {
+      la_load32_acq(&slot->state) != LJ_JIT_EVENT_SLOT_ACTIVE ||
+      la_load32_acq(&slot->attachment_state) != snapshot->attachment_state ||
+      la_load32_acq(&slot->callback_root_count) != callback_root_count ||
+      jit_event_callback_handler_acq(roots, nroots) != callback_handler) {
     jit_event_slot_reader_drop(tg, slot);
     memset(snapshot, 0, sizeof(*snapshot));
     lj_gc2_smr_read_leave(g);
@@ -1414,12 +1564,27 @@ int lj_jit_event_session_snapshot_release(
   global_State *g;
   LJJitEventSessions *sessions;
   LJJitEventSessionSlot *slot;
+  GCRef *roots = NULL;
+  GCfunc *callback_handler = NULL;
+  uint32_t nroots = 0, callback_root_count = 0, flags = 0;
   int stable;
   if (!snapshot || !(g = snapshot->g) || !(tg = snapshot->tg) ||
       !(slot = (LJJitEventSessionSlot *)snapshot->slot))
     return 0;
   sessions = &tg->jit_event_sessions;
-  stable = la_load64_acq(&sessions->sequence) == snapshot->sequence &&
+  if (jit_event_slot_root_geometry(slot, &roots, &nroots, NULL)) {
+    callback_handler = jit_event_callback_handler_acq(roots, nroots);
+    callback_root_count = la_load32_acq(&slot->callback_root_count);
+    flags = la_load32_acq(&slot->flags);
+  }
+  stable = roots != NULL &&
+    lj_vmevent_attachment_identity_valid(snapshot->attachment_state,
+					 snapshot->attachment_generation) &&
+    callback_root_count <= 1u &&
+    ((callback_handler != NULL) == (callback_root_count == 1u)) &&
+    (((flags & LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) != 0) ==
+      (callback_root_count == 1u)) &&
+    la_load64_acq(&sessions->sequence) == snapshot->sequence &&
     la_load32_acq(&sessions->state) == LJ_JIT_EVENT_PUBLICATION_ACTIVE &&
     la_load32_acq(&sessions->active_slot) == snapshot->slot_index &&
     la_load64_acq(&sessions->active_generation) == snapshot->generation &&
@@ -1430,7 +1595,10 @@ int lj_jit_event_session_snapshot_release(
     la_load32_acq(&slot->owner_mode) == snapshot->owner_mode &&
     la_load32_acq(&slot->edge_proof) == snapshot->edge_proof &&
     la_load64_acq(&slot->attachment_generation) ==
-      snapshot->attachment_generation;
+      snapshot->attachment_generation &&
+    la_load32_acq(&slot->attachment_state) == snapshot->attachment_state &&
+    callback_root_count == snapshot->callback_root_count &&
+    callback_handler == snapshot->callback_handler;
   jit_event_slot_reader_drop(tg, slot);
   memset(snapshot, 0, sizeof(*snapshot));
   lj_gc2_smr_read_leave(g);
@@ -1631,6 +1799,8 @@ static int jit_trace_flush_session_exact(
 {
   LJJitEventSessions *sessions;
   LJJitEventSessionSlot *slot;
+  GCRef *roots;
+  uint32_t nroots;
   uint64_t sequence;
   if (!tg || !L || !handle || handle->terminal_session.generation == 0 ||
       handle->terminal_session.slot >= LJ_JIT_EVENT_SESSION_SLOTS ||
@@ -1639,6 +1809,8 @@ static int jit_trace_flush_session_exact(
     return 0;
   sessions = &tg->jit_event_sessions;
   slot = &sessions->slot[handle->terminal_session.slot];
+  if (!jit_event_slot_root_geometry(slot, &roots, &nroots, NULL))
+    return 0;
   sequence = la_load64_acq(&sessions->sequence);
   if ((sequence & 1u) != 0 ||
       la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_ACTIVE ||
@@ -1657,11 +1829,15 @@ static int jit_trace_flush_session_exact(
       la_load32_acq(&slot->edge_proof) != LJ_JIT_EVENT_EDGE_NONE ||
       la_load64_acq(&slot->attachment_generation) !=
 	handle->attachment_generation ||
+      la_load32_acq(&slot->attachment_state) !=
+	LJ_VMEVENT_ATTACHMENT_PUBLISHED ||
       la_load32_acq(&slot->flags) != 0 ||
       la_load32_acq(&slot->control_borrow_state) != 0 ||
       la_load64_acq(&slot->control_borrow_generation) != 0 ||
       la_loadptr_acq((void *const *)&slot->saved_jit_owner_L) != NULL ||
-      la_load32_acq(&slot->root_count) != 0 ||
+      nroots != 0 ||
+      la_load32_acq(&slot->callback_root_count) != 0 ||
+      jit_event_callback_handler_acq(roots, nroots) != NULL ||
       la_load32_acq(&slot->owner_tid) != handle->owner_tid ||
       la_load32_acq(&slot->owner_actor) != handle->owner_actor ||
       la_loadptr_acq((void *const *)&slot->owner_L) != L ||
@@ -1786,6 +1962,7 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
   spec.owner_mode = LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE;
   spec.edge_proof = LJ_JIT_EVENT_EDGE_NONE;
   spec.attachment_generation = attachment_generation;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   if (!jit_event_session_publish_l(L, J, &spec, &handle->terminal_session))
     return 0;
 

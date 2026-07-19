@@ -22,6 +22,7 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
+#include "lj_vmevent.h"
 
 #include "lib/test_sleep.h"
 
@@ -32,6 +33,12 @@
 #define TEST_ROOTS 17u
 #define TEST_WAIT_ATTEMPTS 5000u
 #define TEST_WAIT_NS 1000000L
+
+static int test_callback_handler(lua_State *L)
+{
+  (void)L;
+  return 0;
+}
 
 typedef struct JitEventDetachCtx {
   lua_State *L;
@@ -204,6 +211,7 @@ static void *secondary_closed_reader_worker(void *arg)
   spec.owner_mode = LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE;
   spec.edge_proof = LJ_JIT_EVENT_EDGE_NONE;
   spec.attachment_generation = 6;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   assert(lj_jit_event_session_begin_l(ctx->L, ctx->J, &spec, &handle));
   assert(handle.slot == 0 && handle.generation == 1u);
   assert(jit_owner_word_acq(tg->gl) == jit_owner_pack(0, 0));
@@ -290,6 +298,8 @@ static void test_secondary_closed_reader_detach(lua_State *L, jit_State *J)
   assert(held.owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE);
   assert(held.edge_proof == LJ_JIT_EVENT_EDGE_NONE);
   assert(held.attachment_generation == 6u);
+  assert(held.attachment_state == LJ_VMEVENT_ATTACHMENT_PUBLISHED);
+  assert(held.callback_root_count == 0 && held.callback_handler == NULL);
   closed_slot = held.slot;
   assert(closed_slot != NULL);
   assert(la_load32_acq(&closed_slot->state) == LJ_JIT_EVENT_SLOT_ACTIVE);
@@ -347,12 +357,14 @@ int main(void)
   LJJitEventFrozenViewSpec view, malformed_view, mismatch_view, alias_view;
   LJJitEventSessionSpec spec, stop_spec, abort_spec;
   LJJitEventSessionHandle h1, h2, h3, h4, rejected;
-  LJJitEventSessionSnapshot held;
+  LJJitEventSessionSnapshot held, probe;
   const LJJitEventSessionSlot *held_slot;
+  GCfunc *callback_handler;
   GCRef *retained_roots;
   GCobj *const *saved_roots;
   void *view_storage;
   uint32_t i;
+  int callback_weak_ref;
   assert(L != NULL);
   luaL_openlibs(L);
   g = G(L);
@@ -370,6 +382,21 @@ int main(void)
   assert(T != NULL);
   pt = trace_startpt_acq(T);
   assert(pt != NULL);
+
+  lua_pushcfunction(L, test_callback_handler);
+  callback_handler = funcV(L->top - 1);
+  assert(callback_handler != NULL && callback_handler->c.f ==
+	 test_callback_handler);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_rawset(L, -3);
+  assert(lua_setmetatable(L, -2));
+  lua_pushinteger(L, 1);
+  lua_pushvalue(L, -3);  /* Exact callback closure below the weak table. */
+  lua_rawset(L, -3);
+  callback_weak_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
   for (i = 0; i < TEST_ROOTS; i++) {
     lua_newtable(L);
@@ -397,6 +424,7 @@ int main(void)
   stop_spec.owner_mode = LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE;
   stop_spec.edge_proof = LJ_JIT_EVENT_EDGE_PINNED_SOURCE;
   stop_spec.attachment_generation = 1;
+  stop_spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   stop_spec.view = &mismatch_view;
   stop_spec.source = T;
   stop_spec.source_traceno = trace_traceno_acq(T);
@@ -436,6 +464,7 @@ int main(void)
   abort_spec.owner_mode = LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE;
   abort_spec.edge_proof = LJ_JIT_EVENT_EDGE_EXACT_ROOTS;
   abort_spec.attachment_generation = 2;
+  abort_spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   abort_spec.view = &view;
   abort_spec.roots = roots;
   abort_spec.root_count = TEST_ROOTS;
@@ -451,9 +480,82 @@ int main(void)
   spec.owner_mode = LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE;
   spec.edge_proof = LJ_JIT_EVENT_EDGE_EXACT_ROOTS;
   spec.attachment_generation = 2;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   spec.view = &view;
   spec.roots = roots;
   spec.root_count = TEST_ROOTS;
+  spec.callback_root_count = 1;
+  spec.callback_handler = callback_handler;
+
+  /* Attachment classification and generation are one canonical identity.
+  ** INVALID/unknown never publish; INITIAL and UNCLOCKED require zero, while
+  ** PUBLISHED requires nonzero (including the final uint64_t value). */
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_INVALID;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_INITIAL;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
+  spec.attachment_generation = 0;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_UNCLOCKED;
+  spec.attachment_generation = 2;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.attachment_state = UINT32_MAX;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+
+  /* Callback cardinality is explicit and the sentinel may only name FUNC. */
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
+  spec.callback_root_count = 0;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.callback_handler = NULL;
+  spec.callback_root_count = 1;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.callback_handler = callback_handler;
+  spec.callback_root_count = 2;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.callback_root_count = 1;
+  spec.callback_handler = (GCfunc *)(void *)roots[0];
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.callback_handler = callback_handler;
+
+  /* Seven proof roots plus the callback sentinel fit the eight inline lanes.
+  ** Eight proof roots require a ninth lane and therefore the grow path. */
+  spec.root_count = LJ_JIT_EVENT_SESSION_ROOTS - 1u;
+  spec.attachment_generation = 0;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_INITIAL;
+  assert(lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  {
+    LJJitEventSessionSlot *slot =
+      &tg->jit_event_sessions.slot[rejected.slot];
+    GCRef *slot_roots = (GCRef *)la_loadptr_acq(
+      (void *const *)&slot->root_data);
+    assert(slot_roots == slot->root_inline);
+    assert(la_load32_acq(&slot->root_capacity) ==
+	   LJ_JIT_EVENT_SESSION_ROOTS);
+    assert(gcref_acq(slot_roots[spec.root_count]) ==
+	   obj2gco(callback_handler));
+  }
+  assert(lj_jit_event_session_end_l(L, J, &rejected));
+
+  spec.root_count = LJ_JIT_EVENT_SESSION_ROOTS;
+  spec.attachment_generation = UINT64_MAX;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
+  assert(lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  {
+    LJJitEventSessionSlot *slot =
+      &tg->jit_event_sessions.slot[rejected.slot];
+    GCRef *slot_roots = (GCRef *)la_loadptr_acq(
+      (void *const *)&slot->root_data);
+    assert(slot_roots != slot->root_inline);
+    assert(la_load32_acq(&slot->root_capacity) > spec.root_count);
+    assert(gcref_acq(slot_roots[spec.root_count]) ==
+	   obj2gco(callback_handler));
+  }
+  assert(lj_jit_event_session_end_l(L, J, &rejected));
+
+  spec.root_count = TEST_ROOTS;
+  spec.attachment_generation = 0;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_INITIAL;
 
   malformed_view = view;
   malformed_view.ir.stride++;
@@ -527,6 +629,14 @@ int main(void)
   saved_roots = spec.roots;
   spec.roots = (GCobj *const *)(void *)retained_roots;
   assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  /* The reserved callback lane is covered by retained-allocation alias
+  ** rejection even though it lies outside the proof-only root_count. */
+  setgcrefrel(retained_roots[TEST_ROOTS], obj2gco(callback_handler));
+  spec.roots = (GCobj *const *)(void *)&retained_roots[TEST_ROOTS];
+  spec.root_count = 1;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.root_count = TEST_ROOTS;
+  setgcrefrel(retained_roots[TEST_ROOTS], NULL);
   spec.roots = saved_roots;
   alias_view = view;
   alias_view.data = tg->jit_event_sessions.slot[0].view.data;
@@ -540,7 +650,7 @@ int main(void)
   assert(h1.owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE);
   assert(jit_owner_word_acq(g) ==
 	 jit_owner_pack(0, lj_tg_tid_acq(tg)));
-  lua_pop(L, TEST_ROOTS);  /* The session is now their only tested root. */
+  lua_pop(L, TEST_ROOTS);  /* Keep handler rooted until detached GC oracle. */
   assert(trace_native_pins_acq(T) == 0);
   assert(lj_jit_event_session_snapshot_acquire(g, tg, &held) ==
 	 LJ_JIT_EVENT_SNAPSHOT_ACTIVE);
@@ -548,9 +658,20 @@ int main(void)
   assert(held.event == LJ_JIT_EVENT_RECORD);
   assert(held.owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE);
   assert(held.edge_proof == LJ_JIT_EVENT_EDGE_EXACT_ROOTS);
-  assert(held.attachment_generation == 2);
+  assert(held.attachment_state == LJ_VMEVENT_ATTACHMENT_INITIAL);
+  assert(held.attachment_generation == 0);
+  assert(held.callback_root_count == 1);
+  assert(held.callback_handler == callback_handler);
   assert(held_slot->root_data != held_slot->root_inline);
-  assert(la_load32_acq(&held_slot->root_capacity) >= TEST_ROOTS);
+  assert(la_load32_acq(&held_slot->root_capacity) > TEST_ROOTS);
+  assert(la_load32_acq(&held_slot->root_count) == TEST_ROOTS);
+  assert(la_load32_acq(&held_slot->callback_root_count) == 1u);
+  assert((la_load32_acq(&held_slot->flags) &
+	  LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) != 0);
+  retained_roots = (GCRef *)la_loadptr_acq(
+    (void *const *)&held_slot->root_data);
+  assert(gcref_acq(retained_roots[TEST_ROOTS]) ==
+	 obj2gco(callback_handler));
   assert(held_slot->view.data != view.data);
   assert(memcmp(held_slot->view.data, view.data, view.size) == 0);
   assert(lj_jit_event_frozen_view_valid(&held_slot->view));
@@ -579,13 +700,69 @@ int main(void)
     la_store32_rel(&tg->jit_event_sessions.slot[h1.slot].owner_actor, actor);
   }
 
+  /* Snapshot release compares the new immutable identity and callback lane,
+  ** not merely the outer session generation. A held peer reader keeps the
+  ** backing stable while each exactness failure is injected and restored. */
+  assert(lj_jit_event_session_snapshot_acquire(g, tg, &probe) ==
+	 LJ_JIT_EVENT_SNAPSHOT_ACTIVE);
+  la_store32_rel(&tg->jit_event_sessions.slot[h1.slot].attachment_state,
+		 LJ_VMEVENT_ATTACHMENT_PUBLISHED);
+  assert(!lj_jit_event_session_snapshot_release(&probe));
+  la_store32_rel(&tg->jit_event_sessions.slot[h1.slot].attachment_state,
+		 LJ_VMEVENT_ATTACHMENT_INITIAL);
+
+  assert(lj_jit_event_session_snapshot_acquire(g, tg, &probe) ==
+	 LJ_JIT_EVENT_SNAPSHOT_ACTIVE);
+  setgcrefrel(retained_roots[TEST_ROOTS], NULL);
+  assert(!lj_jit_event_session_snapshot_release(&probe));
+  setgcrefrel(retained_roots[TEST_ROOTS], obj2gco(callback_handler));
+
+  {
+    LJJitEventSessionSlot *slot =
+      &tg->jit_event_sessions.slot[h1.slot];
+    uint32_t flags = la_load32_acq(&slot->flags);
+    uint32_t capacity = la_load32_acq(&slot->root_capacity);
+
+    la_store32_rel(&slot->attachment_state, LJ_VMEVENT_ATTACHMENT_INVALID);
+    assert(!lj_gc2_test_scan_jit_event_sessions(g, tg));
+    la_store32_rel(&slot->attachment_state, LJ_VMEVENT_ATTACHMENT_INITIAL);
+
+    la_store64_rel(&slot->attachment_generation, 1u);
+    assert(!lj_gc2_test_scan_jit_event_sessions(g, tg));
+    la_store64_rel(&slot->attachment_generation, 0);
+
+    la_store32_rel(&slot->callback_root_count, 2u);
+    assert(!lj_gc2_test_scan_jit_event_sessions(g, tg));
+    la_store32_rel(&slot->callback_root_count, 1u);
+
+    la_store32_rel(&slot->flags,
+		   flags & ~LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT);
+    assert(!lj_gc2_test_scan_jit_event_sessions(g, tg));
+    la_store32_rel(&slot->flags, flags);
+
+    setgcrefrel(retained_roots[TEST_ROOTS], NULL);
+    assert(!lj_gc2_test_scan_jit_event_sessions(g, tg));
+    setgcrefrel(retained_roots[TEST_ROOTS], roots[0]);
+    assert(lj_jit_event_session_snapshot_acquire(g, tg, &probe) ==
+	   LJ_JIT_EVENT_SNAPSHOT_RETRY);
+    assert(!lj_gc2_test_scan_jit_event_sessions(g, tg));
+    setgcrefrel(retained_roots[TEST_ROOTS], obj2gco(callback_handler));
+
+    la_store32_rel(&slot->root_count, capacity);
+    assert(!lj_gc2_test_scan_jit_event_sessions(g, tg));
+    la_store32_rel(&slot->root_count, TEST_ROOTS);
+  }
+
   for (i = 0; i < TEST_ROOTS; i++) {
     unmark_small(roots[i]);
     assert(lj_gc2_ismarked(g, roots[i]) == 0);
   }
+  unmark_small(obj2gco(callback_handler));
+  assert(lj_gc2_ismarked(g, obj2gco(callback_handler)) == 0);
   assert(lj_gc2_test_scan_jit_event_sessions(g, tg));
   for (i = 0; i < TEST_ROOTS; i++)
     assert(lj_gc2_ismarked(g, roots[i]) > 0);
+  assert(lj_gc2_ismarked(g, obj2gco(callback_handler)) > 0);
 
   /* END resumes high->low while roots remain ACTIVE, then closes without
   ** waiting for this retained reader. Slot 1 remains available. */
@@ -596,6 +773,12 @@ int main(void)
   assert(!lj_jit_event_sessions_quiescent(tg));
   assert(lj_jit_event_sessions_logical_detach_ready(tg));
   assert(!lj_jit_event_sessions_fini(g, tg));
+  assert(la_load32_acq(&held_slot->state) == LJ_JIT_EVENT_SLOT_CLOSED);
+  assert(la_load32_acq(&held_slot->callback_root_count) == 1u);
+  retained_roots = (GCRef *)la_loadptr_acq(
+    (void *const *)&held_slot->root_data);
+  assert(gcref_acq(retained_roots[TEST_ROOTS]) ==
+	 obj2gco(callback_handler));
 
   /* Slot 1 would be selected while the held reader keeps slot 0 CLOSED. Input
   ** aliases against that other retained slot must be rejected before even
@@ -605,6 +788,10 @@ int main(void)
   saved_roots = spec.roots;
   spec.roots = (GCobj *const *)(void *)retained_roots;
   assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.roots = (GCobj *const *)(void *)&retained_roots[TEST_ROOTS];
+  spec.root_count = 1;
+  assert(!lj_jit_event_session_begin_l(L, J, &spec, &rejected));
+  spec.root_count = TEST_ROOTS;
   spec.roots = saved_roots;
   alias_view = view;
   alias_view.data = held_slot->view.data;
@@ -613,6 +800,7 @@ int main(void)
   spec.view = &view;
 
   spec.attachment_generation = 3;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   assert(lj_jit_event_session_begin_l(L, J, &spec, &h2));
   assert(h2.slot == 1 && h2.generation > h1.generation);
   assert(!lj_jit_event_session_end_l(L, J, &h1));
@@ -620,19 +808,40 @@ int main(void)
 	 jit_owner_pack(0, lj_tg_tid_acq(tg)));
   assert(lj_jit_event_session_end_l(L, J, &h2));
   assert(!lj_jit_event_session_snapshot_release(&held));
+  assert(la_load32_acq(&held_slot->state) == LJ_JIT_EVENT_SLOT_FREE);
+  assert(la_load32_acq(&held_slot->callback_root_count) == 0);
+  assert(la_load32_acq(&held_slot->attachment_state) ==
+	 LJ_VMEVENT_ATTACHMENT_INVALID);
+  assert((la_load32_acq(&held_slot->flags) &
+	  LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) == 0);
+  assert(gcref_acq(retained_roots[TEST_ROOTS]) == NULL);
   assert(lj_jit_event_sessions_quiescent(tg));
 
   /* A completed STOP owns only immutable bytes plus an exact published source.
   ** BEGIN releases low->zero, so an unrelated recorder may run concurrently. */
   lj_trace_state_store(J, LJ_TRACE_IDLE);
   stop_spec.attachment_generation = 4;
+  stop_spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   stop_spec.view = &view;
+  stop_spec.callback_root_count = 1;
+  stop_spec.callback_handler = callback_handler;
   assert(lj_jit_event_session_begin_l(L, J, &stop_spec, &h3));
   assert(h3.slot == 0 && h3.generation > h2.generation);
   assert(h3.owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE);
   assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
   assert(jit_owner_l_acq(J) == NULL);
   assert(trace_native_pins_acq(T) == 1u);
+
+  /* The weak registry table is now the only non-session reference. Unlike a
+  ** yielded continuation, this detached owner-word-zero contract legitimately
+  ** permits a complete GC without the future same-owner control borrow. */
+  lua_pop(L, 1);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, callback_weak_ref);
+  lua_rawgeti(L, -1, 1);
+  assert(lua_isfunction(L, -1));
+  assert(funcV(L->top - 1) == callback_handler);
+  lua_pop(L, 2);
 
   /* A leaked same-TG reentrant token cannot authorize detached close. */
   claim_for_session(L, J);
@@ -672,6 +881,18 @@ int main(void)
   assert(trace_native_pins_acq(T) == 0);
   assert(!lj_jit_event_session_end_l(L, J, &h3));
 
+  /* The direct scanner probe above deliberately set the handler mark outside
+  ** a collector cycle. Remove that test-only mark after closing the last
+  ** semantic root, then prove no retained lane keeps the weak value alive. */
+  unmark_small(obj2gco(callback_handler));
+  assert(lj_gc2_ismarked(g, obj2gco(callback_handler)) == 0);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, callback_weak_ref);
+  lua_rawgeti(L, -1, 1);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 2);
+  luaL_unref(L, LUA_REGISTRYINDEX, callback_weak_ref);
+
   /* Payload-free FLUSH is the other detached storage contract. Isolate the
   ** same-owner lua_close fast-path gate from the owner word. */
   claim_for_session(L, J);
@@ -679,9 +900,16 @@ int main(void)
   spec.event = LJ_JIT_EVENT_TRACE_FLUSH;
   spec.owner_mode = LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE;
   spec.edge_proof = LJ_JIT_EVENT_EDGE_NONE;
-  spec.attachment_generation = 5;
+  spec.attachment_generation = 0;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_UNCLOCKED;
   assert(lj_jit_event_session_begin_l(L, J, &spec, &h4));
   assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(lj_jit_event_session_snapshot_acquire(g, tg, &held) ==
+	 LJ_JIT_EVENT_SNAPSHOT_ACTIVE);
+  assert(held.attachment_state == LJ_VMEVENT_ATTACHMENT_UNCLOCKED);
+  assert(held.attachment_generation == 0);
+  assert(held.callback_root_count == 0 && held.callback_handler == NULL);
+  assert(lj_jit_event_session_snapshot_release(&held));
   {
     uint32_t actor = lj_tg_actor_acq(tg);
     assert(!lj_thr_tg_handoff_current(tg));

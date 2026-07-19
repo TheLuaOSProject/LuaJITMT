@@ -20,6 +20,7 @@
 #include "lj_thr.h"
 #include "lj_trace.h"
 #include "lj_tgregistry.h"
+#include "lj_vmevent.h"
 
 #include "lib/test_sleep.h"
 
@@ -164,12 +165,23 @@ static void expect_empty_flush_session(global_State *g, TGState *owner,
   assert(snapshot->owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE);
   assert(snapshot->edge_proof == LJ_JIT_EVENT_EDGE_NONE);
   assert(snapshot->attachment_generation == attachment_generation);
+  assert(snapshot->attachment_state == LJ_VMEVENT_ATTACHMENT_PUBLISHED);
+  assert(snapshot->callback_root_count == 0);
+  assert(snapshot->callback_handler == NULL);
   slot = snapshot->slot;
   assert(slot != NULL);
   assert(la_load32_acq(&slot->state) == LJ_JIT_EVENT_SLOT_ACTIVE);
   assert(la_load32_acq(&slot->readers) != 0);
   assert(la_load32_acq(&slot->flags) == 0);
   assert(la_load32_acq(&slot->root_count) == 0);
+  assert(la_load32_acq(&slot->callback_root_count) == 0);
+  assert(la_load32_acq(&slot->attachment_state) ==
+         LJ_VMEVENT_ATTACHMENT_PUBLISHED);
+  {
+    GCRef *roots = (GCRef *)la_loadptr_acq(
+      (void *const *)&slot->root_data);
+    assert(roots != NULL && gcref_acq(roots[0]) == NULL);
+  }
   assert(la_loadptr_acq((void *const *)&slot->source) == NULL);
   assert(slot->view.size == 0);
   assert(slot->view.format == LJ_JIT_EVENT_VIEW_FORMAT_NONE);
@@ -315,6 +327,7 @@ static void test_reader_retry_and_generation_saturation(lua_State *L,
   spec.owner_mode = LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE;
   spec.edge_proof = LJ_JIT_EVENT_EDGE_NONE;
   spec.attachment_generation = 54u;
+  spec.attachment_state = LJ_VMEVENT_ATTACHMENT_PUBLISHED;
   session_sequence = la_load64_acq(&sessions->sequence);
   session_next_generation = la_load64_acq(&sessions->next_generation);
   assert((session_sequence & 1u) == 0);
@@ -412,8 +425,13 @@ static void test_active_shape_fail_closed(
 {
   global_State *g = G(L);
   LJJitTraceStream *stream = &g->main_tg->jit_trace_stream;
+  LJJitEventSessionSlot *slot =
+    &owner->jit_event_sessions.slot[live->terminal_session.slot];
+  GCRef *roots = (GCRef *)la_loadptr_acq(
+    (void *const *)&slot->root_data);
   uint32_t tid = la_load32_acq(&stream->owner_tid);
   uint32_t actor = la_load32_acq(&stream->owner_actor);
+  uint32_t slot_flags = la_load32_acq(&slot->flags);
   uint32_t peer_tid = tid == UINT32_MAX ? tid - 1u : tid + 1u;
   uint32_t peer_actor = actor == LJ_THR_ACTOR_RETIRED - 1u ? actor - 1u :
     actor + 1u;
@@ -421,6 +439,36 @@ static void test_active_shape_fail_closed(
   assert(peer_tid != 0 && peer_tid != tid);
   assert(peer_actor != 0 && peer_actor != actor &&
          peer_actor != LJ_THR_ACTOR_RETIRED);
+  assert(roots != NULL && la_load32_acq(&slot->root_count) == 0);
+
+  /* The stream descriptor is insufficient close authority: its exact
+  ** terminal session must retain canonical attachment identity and an empty
+  ** structural callback lane throughout this pre-delivery slice. */
+  la_store32_rel(&slot->attachment_state, LJ_VMEVENT_ATTACHMENT_INITIAL);
+  assert(!lj_jit_trace_flush_close_l(L, J, live));
+  expect_same_active_generation(g, live->generation);
+  la_store32_rel(&slot->attachment_state, LJ_VMEVENT_ATTACHMENT_PUBLISHED);
+
+  la_store64_rel(&slot->attachment_generation, 0);
+  assert(!lj_jit_trace_flush_close_l(L, J, live));
+  expect_same_active_generation(g, live->generation);
+  la_store64_rel(&slot->attachment_generation, live->attachment_generation);
+
+  la_store32_rel(&slot->callback_root_count, 1u);
+  assert(!lj_jit_trace_flush_close_l(L, J, live));
+  expect_same_active_generation(g, live->generation);
+  la_store32_rel(&slot->callback_root_count, 0);
+
+  la_store32_rel(&slot->flags,
+		 slot_flags | LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT);
+  assert(!lj_jit_trace_flush_close_l(L, J, live));
+  expect_same_active_generation(g, live->generation);
+  la_store32_rel(&slot->flags, slot_flags);
+
+  setgcrefrel(roots[0], obj2gco(L));
+  assert(!lj_jit_trace_flush_close_l(L, J, live));
+  expect_same_active_generation(g, live->generation);
+  setgcrefrel(roots[0], NULL);
 
   /* Exact registry identity still names the owner, so a torn tid/actor must
   ** never turn names_tg(owner) into false detach authority. A snapshot may
@@ -628,6 +676,18 @@ static void test_owner_detach_gate(lua_State *L, jit_State *J)
   assert(lj_tg_actor_acq(ctx.tg) == LJ_THR_ACTOR_RETIRED);
   assert(!lj_jit_trace_flush_close_l(L, J, &ctx.handle));
   assert(lj_tg_reclaim_dead(g) == 0u);  /* Held session SMR pins this TG. */
+  {
+    const LJJitEventSessionSlot *slot = held.slot;
+    GCRef *roots = (GCRef *)la_loadptr_acq(
+      (void *const *)&slot->root_data);
+    assert(la_load32_acq(&slot->state) == LJ_JIT_EVENT_SLOT_CLOSED);
+    assert(la_load32_acq(&slot->attachment_state) ==
+	   LJ_VMEVENT_ATTACHMENT_PUBLISHED);
+    assert(la_load32_acq(&slot->callback_root_count) == 0);
+    assert((la_load32_acq(&slot->flags) &
+	    LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) == 0);
+    assert(roots != NULL && gcref_acq(roots[0]) == NULL);
+  }
   assert(!lj_jit_event_session_snapshot_release(&held));
   /* Public detach performed the terminal allocation-free SSB flush. With the
   ** final reader gone, exactly this one heap TG is now reclaimable. */

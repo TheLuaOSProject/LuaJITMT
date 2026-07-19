@@ -62,6 +62,7 @@ typedef uint16_t HotCount;
 
 #define LJ_JIT_EVENT_SLOT_F_VIEW		0x01u
 #define LJ_JIT_EVENT_SLOT_F_SOURCE_PIN	0x02u
+#define LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT	0x04u
 
 typedef enum LJJitEventKind {
   LJ_JIT_EVENT_TRACE_START = 1,
@@ -170,11 +171,17 @@ typedef struct LJJitEventSessionSlot {
   GCRef owner_root;  /* Explicit callback-state root; owner_L is identity. */
   struct GCtrace *source;
   uint32_t source_traceno;
-  uint32_t pad;
+  /* Exact VM-event attachment classification. This consumes the original
+  ** spare word so every following session/TG offset remains unchanged. */
+  uint32_t attachment_state;
   LJJitEventFrozenView view;
   GCRef *root_data;
   uint32_t root_capacity;
-  uint32_t root_pad;
+  /* Independent 0/1 cardinality for root_data[root_count]. */
+  uint32_t callback_root_count;
+  /* root_count covers frozen-view proof roots only. The independently flagged
+  ** callback handler root is the mandatory reserved lane root_data[root_count]
+  ** and is never evidence for LJ_JIT_EVENT_EDGE_EXACT_ROOTS. */
   GCRef root_inline[LJ_JIT_EVENT_SESSION_ROOTS];
 } LJJitEventSessionSlot;
 
@@ -384,6 +391,31 @@ LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
 			  slot[1].attachment_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
 			  slot[1].control_borrow_generation) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, attachment_state) ==
+		 offsetof(LJJitEventSessionSlot, source_traceno) +
+		 sizeof(((LJJitEventSessionSlot *)0)->source_traceno));
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, view) ==
+		 offsetof(LJJitEventSessionSlot, attachment_state) +
+		 sizeof(((LJJitEventSessionSlot *)0)->attachment_state));
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, root_inline) ==
+		 offsetof(LJJitEventSessionSlot, callback_root_count) +
+		 sizeof(((LJJitEventSessionSlot *)0)->callback_root_count));
+LJ_STATIC_ASSERT(sizeof(LJJitEventSessionSlot) ==
+		 offsetof(LJJitEventSessionSlot, root_inline) +
+		 sizeof(((LJJitEventSessionSlot *)0)->root_inline));
+#if LJ_64
+/* Published x86-64 substrate offsets: both new scalars consume old spare
+** words and the callback sentinel consumes vector capacity, not structure
+** bytes. Keep downstream stream/clock offsets byte-for-byte stable. */
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, source_traceno) == 104u);
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, attachment_state) == 108u);
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, view) == 112u);
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, root_data) == 264u);
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, root_capacity) == 272u);
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, callback_root_count) == 276u);
+LJ_STATIC_ASSERT(offsetof(LJJitEventSessionSlot, root_inline) == 280u);
+LJ_STATIC_ASSERT(sizeof(LJJitEventSessionSlot) == 344u);
+#endif
 LJ_STATIC_ASSERT((offsetof(TGState, jit_trace_stream.sequence) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitTraceStream, next_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitTraceStream, generation) & 7u) == 0);
