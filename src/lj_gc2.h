@@ -45,7 +45,7 @@ typedef enum LJGC2TableStoreGuardResult {
 typedef struct LJGC2TableStoreGuard {
   global_State *g;
   TGState *tg;
-  TGState *owner_raw_tg;
+  LJStateOwner owner_state;
   GCtab *parent_tab;
   LJTGRegistryBorrow tg_borrow;
   LJGC2RootDescTicket ticket;
@@ -70,6 +70,7 @@ typedef struct LJGC2TableStoreGuard {
   uint8_t committed;
   uint8_t finished;
   uint8_t cleanup_failed;
+  uint32_t owner_actor;
 } LJGC2TableStoreGuard;
 /* Non-semantic snapshot for an object whose queue/root/detached ticket already
 ** pins its incarnation. The caller must hold this universe's SMR reader (or
@@ -379,7 +380,8 @@ LJ_FUNC int lj_gc2_scan_cycle_owner_tg_roots_native_parked(
   global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_scan_cycle_owner_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
-					     uint32_t tid);
+					     uint32_t tid,
+					     int force_recovery);
 LJ_FUNC void lj_gc2_trace_sweep_roots(global_State *g);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_flush_ssb_detach(global_State *g, TGState *tg);

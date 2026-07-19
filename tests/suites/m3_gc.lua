@@ -33,6 +33,7 @@ local m3_scaffold_deps = {
   "m3_gcflags_atomic",
   "m3_gc2_markword_token_model",
   "m3_gc2_root_gate_store_model",
+  "m3_state_actor_carrier",
   "m3_gc2_table_store_guard",
   "m3_gc2_public_store_weak_window",
   "m3_gc2_weak_resize_retry",
@@ -93,6 +94,23 @@ return function(add)
         cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
       })
       print("M3 GC2 root-gate/store exhaustive model passed")
+    end
+  })
+
+  register({
+    name = "m3_state_actor_carrier",
+    description = "physical actor identity and packed state-claim authority",
+    run = function(t)
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-state-actor-carrier"),
+                          "t-state-actor-carrier.c", {
+          cflags = flags,
+          timeout = "20s"
+        })
+      end)
+      print("M3 physical actor carrier regression passed")
     end
   })
 

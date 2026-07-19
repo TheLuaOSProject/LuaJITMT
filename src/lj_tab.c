@@ -1778,7 +1778,8 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   lj_tab_hmask_rel(t, 0);
   lj_tab_node_set(t, nilnode);
   lj_tab_struct_owner_store_rlx(t, 0);
-  lj_tab_weak_cycle_store_rlx(t, 0);
+  lj_tab_weak_record_store_rlx(t, lj_tab_weak_record_pack(
+    0, LJ_TAB_WEAK_RECORD_NONE));
   lj_tab_gc2_rescan_state_store_rlx(t, LJ_TAB_RESCAN_NONE);
   lj_tab_freetop_rel(t, nilnode);
 }
@@ -3371,12 +3372,24 @@ static int tab_resolve_current_keyed_try(global_State *g, GCtab *t,
   return status;
 }
 
-LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
-				     TValue *out)
+static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
+				     GCtab *trusted_t, cTValue *key,
+				     TValue *outroot)
 {
+  int tabstack = tabroot && tab_key_on_stack(L, tabroot);
+  int keystack = key && tab_key_on_stack(L, key);
+  int outstack = outroot && tab_key_on_stack(L, outroot);
+  ptrdiff_t tabofs = tabstack ? savestack(L, tabroot) : 0;
+  ptrdiff_t keyofs = keystack ? savestack(L, key) : 0;
+  ptrdiff_t outofs = outstack ? savestack(L, outroot) : 0;
+
   for (;;) {
     LJGC2Lease table_lease, key_lease, result_lease;
-    TValue tablev, result;
+    cTValue *curtab = tabstack ? restorestack(L, tabofs) : tabroot;
+    cTValue *curkey = keystack ? restorestack(L, keyofs) : key;
+    TValue *curout = outstack ? restorestack(L, outofs) : outroot;
+    TValue tablev, keysnap, result;
+    GCtab *t;
     int table_status, key_status, result_status;
 
     /* Hashing a GC key dereferences its exact string/cdata/object identity.
@@ -3384,9 +3397,22 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
     ** allocations across the initial lookup and any current-generation miss
     ** resolution; validation without this lease has a use-after-validation
     ** gap when GC2 owns a lifetime transition. */
-    /* Synthetic tag only: assertion-enabled settabV would read t->gct before
-    ** the lifetime lease which is meant to validate this possibly raced input. */
-    setgcVraw(&tablev, obj2gco(t), LJ_TTAB);
+    if (curtab) {
+      /* Bind one exact authoritative parent edge first. Merely seeing a table
+      ** tag does not authorize a body dereference; tabV() follows only after
+      ** the tag/header lease has admitted that incarnation. */
+      lj_tv_load_acq(&tablev, curtab);
+      if (LJ_UNLIKELY(!tvistab(&tablev))) {
+	setnilV(&result);
+	copyTVrel(L, curout, &result);
+	return curout;
+      }
+    } else {
+      /* Compatibility-only JIT ABI: old generated code passes a naked table
+      ** pointer. New C readers must enter through an original TValue root. The
+      ** raw tag avoids reading t->gct before the validating lifetime lease. */
+      setgcVraw(&tablev, obj2gco(trusted_t), LJ_TTAB);
+    }
     table_status = lj_gc2_tv_lease_acquire(G(L), &tablev, &table_lease);
     if (LJ_UNLIKELY(table_status != LJ_GC2_TV_EDGE_VALID)) {
       if (table_status == LJ_GC2_TV_EDGE_RETRY) {
@@ -3394,10 +3420,15 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 	continue;
       }
       setnilV(&result);
-      copyTVrel(L, out, &result);
-      return out;
+      copyTVrel(L, curout, &result);
+      return curout;
     }
-    key_status = lj_gc2_tv_lease_acquire(G(L), key, &key_lease);
+    t = tabV(&tablev);
+    /* Hash and compare the same key incarnation whose lifetime is retained.
+    ** Loading a mutable root again after admission would create a different,
+    ** unleased edge even if both snapshots happened to share a tag. */
+    lj_tv_load_acq(&keysnap, curkey);
+    key_status = lj_gc2_tv_lease_acquire(G(L), &keysnap, &key_lease);
     if (LJ_UNLIKELY(key_status != LJ_GC2_TV_EDGE_VALID)) {
       lj_gc2_lease_release(&table_lease);
       if (key_status == LJ_GC2_TV_EDGE_RETRY) {
@@ -3405,8 +3436,9 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 	continue;
       }
       setnilV(&result);
-      copyTVrel(L, out, &result);
-      return out;
+      curout = outstack ? restorestack(L, outofs) : outroot;
+      copyTVrel(L, curout, &result);
+      return curout;
     }
 
     tab_forjit_test_pause_after_leases();
@@ -3420,7 +3452,7 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
     ** reader was active. Resolve exactly once from a paired current-root
     ** snapshot instead; RETRY is handled only after the reader is closed. */
     if (tab_forjit_test_take_initial_miss() ||
-	tab_get_current_forjit(t, key, &result) < 0) {
+	tab_get_current_forjit(t, &keysnap, &result) < 0) {
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
@@ -3436,46 +3468,71 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
     if (LJ_UNLIKELY(result_status != LJ_GC2_TV_EDGE_VALID)) {
       if (result_status == LJ_GC2_TV_EDGE_STALE) {
 	setnilV(&result);
-	copyTVrel(L, out, &result);
+	curout = outstack ? restorestack(L, outofs) : outroot;
+	copyTVrel(L, curout, &result);
       }
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
       if (result_status == LJ_GC2_TV_EDGE_STALE)
-	return out;
+	return curout;
       lj_tab_wait_l(L);
       continue;
     }
-    /* `out` may itself be an enumerated TG/stack root. Publish it with release
-    ** ordering only after the copied referent has an exact lifetime lease, and
-    ** before the source vector SMR interval closes. This lets concurrent root
-    ** scanners acquire the complete TValue instead of observing a plain C
-    ** temporary store. */
-    copyTVrel(L, out, &result);
-    tab_forjit_test_pause_after_result_lease(out);
+    /* `outroot` may itself be an enumerated TG/stack root. Publish it with
+    ** release ordering only after the copied referent has an exact lifetime
+    ** lease, and before the source vector SMR interval closes. This lets
+    ** concurrent root scanners acquire the complete TValue instead of
+    ** observing a plain C temporary store. */
+    curout = outstack ? restorestack(L, outofs) : outroot;
+    copyTVrel(L, curout, &result);
+    tab_forjit_test_pause_after_result_lease(curout);
     lj_gc2_smr_read_leave(G(L));
-    if (LJ_LIKELY(tab_tv_forjit_loadable(out))) {
+    if (LJ_LIKELY(tab_tv_forjit_loadable(&result))) {
       /*
       ** Helper-backed trace reads return through a temporary TValue, not a Lua
       ** stack slot. Publish GC values and the source table before later trace
       ** helpers can allocate or assist GC with only the temporary live.
       */
-      if (tvisgcv(out)) {
-	lj_gc_pubroot(L, out);
+	if (tvisgcv(&result)) {
+	if (outstack)
+	  lj_state_stack_pubtv(L, L, curout);
+	else
+	  lj_gc_pubroot(L, curout);
 	tab_publish_storage(L, t);
-	lj_gc_pubtabtv(L, t, out);
+	lj_gc_pubtabtv(L, t, &result);
 	lj_gc_pubtab(L, t);
       }
       lj_gc2_lease_release(&result_lease);
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
-      return out;
+      return outstack ? restorestack(L, outofs) : outroot;
     }
     lj_gc2_lease_release(&result_lease);
     lj_gc2_lease_release(&key_lease);
     lj_gc2_lease_release(&table_lease);
     lj_tab_wait_l(L);
   }
+}
+
+LJ_FUNCA TValue *lj_tab_gettv_rooted(lua_State *L, cTValue *tabroot,
+				     cTValue *key, TValue *outroot)
+{
+  return tab_gettv_rooted_impl(L, tabroot, NULL, key, outroot);
+}
+
+LJ_FUNCA TValue *lj_tab_getinttv_rooted(lua_State *L, cTValue *tabroot,
+					int32_t key, TValue *outroot)
+{
+  TValue keytv;
+  setintV(&keytv, key);
+  return tab_gettv_rooted_impl(L, tabroot, NULL, &keytv, outroot);
+}
+
+LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
+				     TValue *out)
+{
+  return tab_gettv_rooted_impl(L, NULL, t, key, out);
 }
 
 /* -- Table setters ------------------------------------------------------- */
@@ -4926,7 +4983,8 @@ static int tab_clear_weak_slot_once(global_State *g, GCtab *parent,
     /* A dead weak key cannot be hashed or semantically compared. Prove the
     ** scanner's raw slot belongs to the exact current hash generation before
     ** dereferencing it, then compare only the stable TValue word. */
-    if (!tab_store_node_snapshot_try(parent, &node, &hmask) || hmask == 0 ||
+    if (!tab_store_node_snapshot_try(parent, &node, &hmask) ||
+	(hmask == 0 && node == &g->nilnode) ||
 	lj_tab_node_is_retiring(node))
       goto leave;
     n = (Node *)(void *)dst;  /* Node.val is statically the first field. */

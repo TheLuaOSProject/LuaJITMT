@@ -18,6 +18,14 @@ return function(add)
       message = "M5 table hash-node TValue snapshot tests passed"
     },
     {
+      name = "m5_tab_rooted_reader",
+      description = "authoritative-root table reader parent/key/result lifetime fixture",
+      output = "lj_t-tab-rooted-reader",
+      cfile = "t-tab-rooted-reader.c",
+      opts = build.gc2_test_helper_opts({ timeout = "20s" }),
+      message = "M5 authoritative-root table reader tests passed"
+    },
+    {
       name = "m5_tab_keylock_lookup",
       description = "table KEYLOCK lookup filtering C fixture",
       output = "lj_t-tab-keylock-lookup",
@@ -141,6 +149,19 @@ return function(add)
   })
 
   runtime.add_luajit_script_cases(add, {
+    {
+      name = "m5_tab_rooted_readers",
+      description = "unpack and table.concat retain protected results across resize and GC",
+      script = "t-tab-rooted-readers.lua",
+      opts = {
+	timeout = os.getenv("LJ_M5_TAB_ROOTED_READER_TIMEOUT") or "40s",
+	env = {
+	  LJ_M5_TAB_ROOTED_READER_ROUNDS =
+	    os.getenv("LJ_M5_TAB_ROOTED_READER_ROUNDS") or "2400"
+	}
+      },
+      message = "M5 rooted unpack/table.concat stress passed"
+    },
     {
       name = "m5_gc2_weakmeta_bridge",
       description = "GC2-discovered weak metatable chains survive bridge sweep",

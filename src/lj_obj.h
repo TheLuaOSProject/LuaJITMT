@@ -732,8 +732,10 @@ typedef struct GCtab {
   MRef freetop;		/* Top of free elements. */
   uint32_t acap;	/* Allocated array capacity. */
   uint32_t struct_owner;  /* Table resize/compound array op owner tid. */
-  uint32_t weak_cycle;	/* Classic-GC weak-list publication epoch. */
+  uint64_t weak_record;	/* Exact GC2 weak snapshot cycle/publication state. */
 } GCtab;
+
+LJ_STATIC_ASSERT((offsetof(GCtab, weak_record) & 7u) == 0);
 
 enum {
   LJ_TAB_RESCAN_NONE = 0,
@@ -857,20 +859,55 @@ static LJ_AINLINE int lj_tab_struct_owner_cas(GCtab *t, uint32_t *oldp,
   return la_cas32(&t->struct_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
 }
 
+enum {
+  LJ_TAB_WEAK_RECORD_NONE = 0,
+  LJ_TAB_WEAK_RECORD_INSTALLING = 1,
+  LJ_TAB_WEAK_RECORD_PUBLISHED = 2
+};
+
+static LJ_AINLINE uint64_t lj_tab_weak_record_pack(uint32_t cycle,
+						   uint32_t state)
+{
+  return ((uint64_t)cycle << 32) | (uint64_t)state;
+}
+
+static LJ_AINLINE uint32_t lj_tab_weak_record_cycle(uint64_t record)
+{
+  return (uint32_t)(record >> 32);
+}
+
+static LJ_AINLINE uint32_t lj_tab_weak_record_state(uint64_t record)
+{
+  return (uint32_t)record;
+}
+
+static LJ_AINLINE uint64_t lj_tab_weak_record_acq(const GCtab *t)
+{
+  return la_load64_acq(&t->weak_record);
+}
+
+static LJ_AINLINE void lj_tab_weak_record_store_rlx(GCtab *t,
+						     uint64_t record)
+{
+  la_store64_rlx(&t->weak_record, record);
+}
+
+static LJ_AINLINE int lj_tab_weak_record_cas(GCtab *t, uint64_t *oldp,
+					      uint64_t record)
+{
+  return la_cas64(&t->weak_record, oldp, record, LA_ACQ_REL, LA_ACQ);
+}
+
+/* White-box compatibility accessors used by the recycled-inline-TNEW test. */
 static LJ_AINLINE uint32_t lj_tab_weak_cycle_acq(const GCtab *t)
 {
-  return la_load32_acq(&t->weak_cycle);
+  return lj_tab_weak_record_cycle(lj_tab_weak_record_acq(t));
 }
 
 static LJ_AINLINE void lj_tab_weak_cycle_store_rlx(GCtab *t, uint32_t cycle)
 {
-  la_store32_rlx(&t->weak_cycle, cycle);
-}
-
-static LJ_AINLINE int lj_tab_weak_cycle_cas(GCtab *t, uint32_t *oldp,
-					    uint32_t cycle)
-{
-  return la_cas32(&t->weak_cycle, oldp, cycle, LA_ACQ_REL, LA_ACQ);
+  lj_tab_weak_record_store_rlx(t, lj_tab_weak_record_pack(
+    cycle, cycle ? LJ_TAB_WEAK_RECORD_PUBLISHED : LJ_TAB_WEAK_RECORD_NONE));
 }
 
 static LJ_AINLINE int lj_tab_array_separated(const GCtab *t)
@@ -1741,7 +1778,7 @@ typedef struct GC2State {
   void *finalizer_mpsc;  /* Producer-published finalizer stack. */
   void *finalizer_tail;  /* Single-consumer finalizer ring tail. */
   uint32_t finalizer_active;  /* Finalizer callbacks currently executing. */
-  uint32_t finalizer_owner_tid;  /* TG allowed to finish nested finalizer GC. */
+  uint32_t finalizer_owner_actor;  /* Physical actor owning finalizer FIFO. */
   uint32_t finalizer_spawn_latch;  /* Callback-active/deferred bit latch. */
   uint64_t finalizer_queued;  /* Objects published to the GC2 finalizer queue. */
   uint64_t finalizer_dequeued;  /* Objects popped from the GC2 finalizer queue. */
@@ -2311,6 +2348,13 @@ static LJ_AINLINE void hookcount_reset(global_State *g)
   hookcount_store(g, hookcstart_load(g));
 }
 
+/* One exact lua_State mutator claim. The low half remains the futex-visible
+** logical TG id/sentinel; the high half is the process-issued physical
+** OS-thread actor. A normal owner is authoritative only when both halves
+** match its TG. Protocol sentinels retain the exact scanner/reclaimer actor;
+** only the ownerless state is the all-zero word. */
+typedef uint64_t LJStateOwner;
+
 /* Per-thread state object. */
 struct lua_State {
   GCHeader;
@@ -2330,7 +2374,7 @@ struct lua_State {
   void *cframe;		/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
-  uint32_t thr_owner;	/* OS-thread owner tid or claim sentinel. */
+  LJStateOwner thr_owner;  /* Atomic {actor32, TG tid32} claim. */
   uint32_t grayagain_cycle;  /* Classic-GC grayagain membership cycle. */
   uint64_t scan_epoch;	/* Last thread-snapshot generation scanned. */
   uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
@@ -2339,9 +2383,13 @@ struct lua_State {
   uint32_t gcprep_state;  /* Terminal THREAD destructor handoff state. */
 };
 
+LJ_STATIC_ASSERT(sizeof(LJStateOwner) == 8);
+LJ_STATIC_ASSERT((offsetof(lua_State, thr_owner) & 7u) == 0);
+
 #define G(L)			(mref(L->glref, global_State))
 LJ_FUNC TGState *lj_thr_get_tg(void);
 LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
+LJ_FUNC uint32_t lj_thr_actor_current(void);
 #define G2TG(gl)		(lj_thr_get_tg_fallback((gl)))
 #define L2TG(L)			((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
 static LJ_AINLINE TValue *lj_registry_ref(global_State *g)
@@ -2351,20 +2399,69 @@ static LJ_AINLINE TValue *lj_registry_ref(global_State *g)
 
 #define registry(L)		(lj_registry_ref(G(L)))
 
+static LJ_AINLINE LJStateOwner lj_state_owner_pack(uint32_t owner,
+						    uint32_t actor)
+{
+  return ((uint64_t)actor << 32) | (uint64_t)owner;
+}
+
+static LJ_AINLINE uint32_t lj_state_owner_tid(LJStateOwner owner)
+{
+  return (uint32_t)owner;
+}
+
+static LJ_AINLINE uint32_t lj_state_owner_actor(LJStateOwner owner)
+{
+  return (uint32_t)(owner >> 32);
+}
+
+static LJ_AINLINE LJStateOwner lj_state_owner_word_acq(const lua_State *L)
+{
+  return la_load64_acq((const uint64_t *)&L->thr_owner);
+}
+
+static LJ_AINLINE void lj_state_owner_word_rel(lua_State *L,
+					       LJStateOwner owner)
+{
+  la_store64_rel((uint64_t *)&L->thr_owner, owner);
+}
+
+static LJ_AINLINE int lj_state_owner_word_cas(lua_State *L,
+					      LJStateOwner *oldp,
+					      LJStateOwner owner)
+{
+  return la_cas64((uint64_t *)&L->thr_owner, (uint64_t *)oldp, owner,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE uint32_t lj_state_owner_acq(const lua_State *L)
 {
-  return la_load32_acq((uint32_t *)&L->thr_owner);
+  return lj_state_owner_tid(lj_state_owner_word_acq(L));
 }
 
+static LJ_AINLINE uint32_t lj_state_owner_actor_acq(const lua_State *L)
+{
+  return lj_state_owner_actor(lj_state_owner_word_acq(L));
+}
+
+/* Internal white-box fixtures historically injected only the logical owner.
+** Keep that source-level helper while making its publication one atomic full
+** pair. Runtime ownership paths use the explicit word/CAS interfaces above. */
 static LJ_AINLINE void lj_state_owner_rel(lua_State *L, uint32_t owner)
 {
-  la_store32_rel(&L->thr_owner, owner);
+  uint32_t actor = 0;
+  if (owner != 0) {
+    actor = lj_state_owner_actor_acq(L);
+    if (actor == 0)
+      actor = lj_thr_actor_current();
+  }
+  lj_state_owner_word_rel(L, lj_state_owner_pack(owner, actor));
 }
 
-static LJ_AINLINE int lj_state_owner_cas(lua_State *L, uint32_t *oldp,
-					 uint32_t owner)
+static LJ_AINLINE uint32_t *lj_state_owner_futex_word(lua_State *L)
 {
-  return la_cas32(&L->thr_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
+  /* thr_owner's numeric low half contains tid on every target. */
+  return (uint32_t *)((char *)&L->thr_owner + LJ_ENDIAN_SELECT(0, 4));
 }
 
 static LJ_AINLINE uint32_t lj_state_grayagain_cycle_acq(const lua_State *L)
@@ -2389,12 +2486,12 @@ static LJ_AINLINE void lj_state_owner_futex_wait(lua_State *L,
 						 uint32_t owner,
 						 int64_t timeout_ns)
 {
-  (void)la_futex_wait(&L->thr_owner, owner, timeout_ns);
+  (void)la_futex_wait(lj_state_owner_futex_word(L), owner, timeout_ns);
 }
 
 static LJ_AINLINE void lj_state_owner_futex_wake(lua_State *L, int n)
 {
-  la_futex_wake(&L->thr_owner, n);
+  la_futex_wake(lj_state_owner_futex_word(L), n);
 }
 
 static LJ_AINLINE uint64_t lj_state_scan_epoch_acq(const lua_State *L)
@@ -4903,19 +5000,19 @@ static LJ_AINLINE int gc2_finalizer_active_cas(global_State *g,
 
 static LJ_AINLINE uint32_t gc2_finalizer_owner_acq(global_State *g)
 {
-  return la_load32_acq(&g->gc2.finalizer_owner_tid);
+  return la_load32_acq(&g->gc2.finalizer_owner_actor);
 }
 
 static LJ_AINLINE void gc2_finalizer_owner_store_rlx(global_State *g,
 						     uint32_t owner)
 {
-  la_store32_rlx(&g->gc2.finalizer_owner_tid, owner);
+  la_store32_rlx(&g->gc2.finalizer_owner_actor, owner);
 }
 
 static LJ_AINLINE void gc2_finalizer_owner_rel(global_State *g,
 					       uint32_t owner)
 {
-  la_store32_rel(&g->gc2.finalizer_owner_tid, owner);
+  la_store32_rel(&g->gc2.finalizer_owner_actor, owner);
 }
 
 #define LJ_GC2_FINSPAWN_CALLBACK_ACTIVE	0x00000001u

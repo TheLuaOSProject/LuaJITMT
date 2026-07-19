@@ -141,6 +141,7 @@ struct TGState {
   lua_State *thread_L;
   GCudata *thread_ud;
   uint32_t tid;
+  uint32_t actor_id;  /* Physical actor, zero handoff, or terminal sentinel. */
   TGState *next_tg;
   TGState *worker_retire_next;  /* Worker-TG retirement, outside registry. */
   uint64_t local_total;
@@ -778,6 +779,35 @@ static LJ_AINLINE GCobj *lj_tg_gcroot_pending_after_main_xchg_acqrel(
 static LJ_AINLINE uint32_t lj_tg_tid_acq(const TGState *tg)
 {
   return la_load32_acq(&tg->tid);  /* 05 section 5.4.1 TG owner id. */
+}
+
+static LJ_AINLINE uint32_t lj_tg_actor_acq(const TGState *tg)
+{
+  return tg ? la_load32_acq(&tg->actor_id) : 0;
+}
+
+static LJ_AINLINE void lj_tg_actor_rel(TGState *tg, uint32_t actor)
+{
+  la_store32_rel(&tg->actor_id, actor);
+}
+
+static LJ_AINLINE int lj_tg_actor_cas(TGState *tg, uint32_t *oldp,
+				      uint32_t actor)
+{
+  return la_cas32(&tg->actor_id, oldp, actor, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE int lj_tg_owns_state_acq(const TGState *tg,
+					    const lua_State *L)
+{
+  LJStateOwner owner;
+  uint32_t actor;
+  if (!tg || !L || !(actor = lj_tg_actor_acq(tg)))
+    return 0;
+  owner = lj_state_owner_word_acq(L);
+  return lj_state_owner_tid(owner) == lj_tg_tid_acq(tg) &&
+    lj_state_owner_actor(owner) == actor &&
+    lj_tg_actor_acq(tg) == actor;
 }
 
 static LJ_AINLINE void lj_tg_tid_rel(TGState *tg, uint32_t tid)

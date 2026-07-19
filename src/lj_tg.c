@@ -283,9 +283,12 @@ void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
   lj_ffi_native_frame_init(tg);
 #endif
   g->main_tg = tg;
+  if (!lj_thr_tg_bind_current(tg))
+    abort();
   lj_tg_tid_rel(tg, tid);
   L->tg_hint = tg;
-  lj_state_owner_rel(L, tid);
+  lj_state_owner_word_rel(L,
+    lj_state_owner_pack(tid, lj_thr_actor_current()));
   if (!lj_thr_get_tg())
     lj_thr_set_tg(tg);  /* 03 section 3.2: bootstrap main OS-thread TLS. */
   if (!alloc_ready)
@@ -566,6 +569,10 @@ void lj_tg_attach(global_State *g, TGState *tg)
   int new_slot;
   if (!g || !tg)
     return;
+  if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+    abort();  /* A completed detach/RETIRE is terminal for this TG body. */
+  if (!lj_thr_tg_bind_current(tg))
+    abort();  /* Lifecycle publication is owned by this physical actor. */
   new_slot = !lj_tgregistry_key_valid(&tg->registry_key);
   if (new_slot) {
     if (lj_gc2_rootdesc_snapshot(&tg->root_desc, NULL) !=
@@ -672,6 +679,11 @@ void lj_tg_detach(global_State *g, TGState *tg)
   lua_State *cur_L, *thread_L;
   if (!g || !tg)
     return;
+  if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return;  /* Completed detach already published terminal actor state. */
+  if (lj_thr_actor_current() == 0 ||
+      lj_tg_actor_acq(tg) != lj_thr_actor_current())
+    abort();  /* Detach is an owner-thread operation, never remote teardown. */
 #if LJ_HASFFI
   lj_ffi_native_frame_fini(tg);
 #endif
@@ -740,14 +752,25 @@ void lj_tg_detach(global_State *g, TGState *tg)
   ** observes NULL; it can never retain a post-decrement raw pointer. */
   if (lj_thr_get_tg() == tg)
     lj_thr_set_tg(NULL);
+  /* RETIRED is only a registry admission close. Legacy list/SMR/raw-holder
+  ** predicates remain mandatory before any TG body can be reclaimed. A
+  ** shadow-missed TG never acquired a stable registry key and is the sole
+  ** documented exception. Once a valid-key detach reached DETACHING, failure
+  ** to publish RETIRED is an internal lifecycle split: fail-stop while this
+  ** physical actor still owns the TG instead of publishing transferable zero. */
+  if (!lj_tg_registry_shadow_missed_acq(tg) && !tg_registry_retire(tg))
+    abort();
+  /* Every owner-private publication is now closed and raw/signal discovery was
+  ** cleared above. Permanently leave the zero/handoff CAS domain before DEAD:
+  ** a binder which sampled the old live flag can observe only the old actor or
+  ** this terminal sentinel, never a resurrectable zero. */
+  if (!lj_thr_tg_retire_current(tg))
+    abort();
   la_fence_rel();
   oldflags = lj_tg_flags_or_rlx(tg, TGF_DEAD);  /* 05 section 5.4.1. */
   (void)lj_safepoint_retire_dead_tg(g, tg);
   if (!(oldflags & TGF_DEAD))
     (void)gc2_n_threads_sub_acqrel(g, 1);
-  /* RETIRED is only a registry admission close. Legacy list/SMR/raw-holder
-  ** predicates remain mandatory before any TG body can be reclaimed. */
-  (void)tg_registry_retire(tg);
 }
 
 /* Called only by the legacy TG-list writer after all of its existing global,
@@ -951,6 +974,8 @@ restart:
       uint8_t deferred_lua_tg = (uint8_t)
 	((flags & (TGF_LUA_ALLOC|TGF_DEFER_FREE)) ==
 	 (TGF_LUA_ALLOC|TGF_DEFER_FREE));
+      if (lj_tg_actor_acq(tg) != LJ_THR_ACTOR_RETIRED)
+	abort();  /* DEAD is published only after terminal actor retirement. */
       if ((heap_tg && lua_tg) ||
 	  ((flags & TGF_DEFER_FREE) && !lua_tg))
 	abort();
@@ -1149,6 +1174,7 @@ TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
 
 TGState *lj_tg_thread_active(global_State *g, lua_State *L)
 {
+  LJStateOwner owner_word;
   uint32_t owner;
   TGState *tg = NULL;
   /*
@@ -1158,12 +1184,14 @@ TGState *lj_tg_thread_active(global_State *g, lua_State *L)
   */
   if (!g || !L)
     return NULL;
-  owner = lj_state_owner_acq(L);
+  owner_word = lj_state_owner_word_acq(L);
+  owner = lj_state_owner_tid(owner_word);
   if (lj_thr_id_is_owner(owner))
     tg = lj_tg_find_owner(g, owner);
   else if (L == lj_tg_cur_L(g))
     tg = G2TG(g);
-  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+  if (!tg || !lj_tg_owns_state_acq(tg, L) ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
       lj_tg_load_cur_L(tg) != L)
     return NULL;
   return tg;

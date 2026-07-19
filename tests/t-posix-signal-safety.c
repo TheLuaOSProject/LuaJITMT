@@ -198,8 +198,27 @@ static void release_borrow(LJTGRegistryBorrow *hold)
   assert(!hold->active);
 }
 
+/* Signal-cache fixtures use synthetic TGs without a paired lua_State. Give
+** each such body the exact actor whose TLS/signal transaction is exercised;
+** a production registry-LIVE actor zero denotes a paired handoff and generic
+** binding must reject it. */
+static void fixture_adopt_unpaired_tg(TGState *tg)
+{
+  uint32_t actor = lj_thr_actor_ensure();
+  uint32_t owner = 0;
+  assert(actor != 0);
+  assert(lj_tg_actor_cas(tg, &owner, actor) || owner == actor);
+}
+
+static void fixture_release_unpaired_tg(TGState *tg)
+{
+  uint32_t actor = lj_thr_actor_current();
+  uint32_t owner = actor;
+  assert(actor != 0 && lj_tg_actor_cas(tg, &owner, 0));
+}
+
 static LJTGRegistryKey publish_body(global_State *g, TGState *tg,
-                                    LJTGRegistrySlot *slot)
+                                    LJTGRegistrySlot *slot, int adopt_current)
 {
   LJTGRegistryKey key;
   LJTGSlotSnap snap;
@@ -215,6 +234,8 @@ static LJTGRegistryKey publish_body(global_State *g, TGState *tg,
   assert(gc2_tg_registry_head_cas(g, &head, slot));
   (void)gc2_tg_registry_nodes_add(g, 1);
   assert(lj_tgregistry_try_publish(&key, &snap) == LJ_TGSLOT_OK);
+  if (adopt_current)
+    fixture_adopt_unpaired_tg(tg);
   assert(lease_count(&key, LJ_TGSLOT_LIVE) == 1u);
   return key;
 }
@@ -239,6 +260,7 @@ typedef struct ExitBindingCtx {
 static void *exit_with_binding(void *arg)
 {
   ExitBindingCtx *ctx = (ExitBindingCtx *)arg;
+  fixture_adopt_unpaired_tg(ctx->body);
   assert(lj_thr_tg_install(&ctx->hold) == LJ_THR_TG_OK);
   assert(!ctx->hold.active);
   assert(lj_thr_get_tg_signal() == ctx->body);
@@ -276,8 +298,8 @@ static void test_signal_cache(void)
   sigemptyset(&sa.sa_mask);
   assert(sigaction(SIGPROF, &sa, &oldsa) == 0);
   lj_thr_set_tg(NULL);
-  akey = publish_body(g, a, aslot);
-  bkey = publish_body(g, b, bslot);
+  akey = publish_body(g, a, aslot, 1);
+  bkey = publish_body(g, b, bslot, 1);
   lj_tgregistry_borrow_init(&ahold);
   lj_tgregistry_borrow_init(&bhold);
   lj_tgregistry_borrow_init(&old);
@@ -440,6 +462,7 @@ static void test_signal_cache(void)
   ** count afterward solely to leave the model reclaimable. */
   memset(&exit_ctx, 0, sizeof(exit_ctx));
   exit_ctx.body = a;
+  fixture_release_unpaired_tg(a);
   assert(lj_tgregistry_try_borrow(&akey, &exit_ctx.hold, &snap) ==
          LJ_TGSLOT_OK);
   lj_thr_tg_signal_test_reset_destructors();
@@ -516,6 +539,7 @@ static void assert_inert_profile_handler(void)
 typedef struct ProfileSignalCtx {
   LJTGRegistryBorrow hold;
   LJTGRegistryKey key;
+  TGState *body;
 } ProfileSignalCtx;
 
 static void *raise_profile_signal(void *arg)
@@ -523,10 +547,12 @@ static void *raise_profile_signal(void *arg)
   ProfileSignalCtx *ctx = (ProfileSignalCtx *)arg;
   LJTGRegistryBorrow old;
   lj_tgregistry_borrow_init(&old);
+  fixture_adopt_unpaired_tg(ctx->body);
   assert(lj_thr_tg_install(&ctx->hold) == LJ_THR_TG_OK);
   assert(raise(SIGPROF) == 0);
   assert(lj_thr_tg_clear(&ctx->key, &old) == LJ_THR_TG_OK);
   release_borrow(&old);
+  fixture_release_unpaired_tg(ctx->body);
   return NULL;
 }
 
@@ -535,12 +561,14 @@ static void *raise_profile_signal_after_before_arm(void *arg)
   ProfileSignalCtx *ctx = (ProfileSignalCtx *)arg;
   LJTGRegistryBorrow old;
   lj_tgregistry_borrow_init(&old);
+  fixture_adopt_unpaired_tg(ctx->body);
   assert(lj_thr_tg_install(&ctx->hold) == LJ_THR_TG_OK);
   while (lj_profile_timer_test_before_arm_entered() == 0)
     (void)sched_yield();
   assert(raise(SIGPROF) == 0);
   assert(lj_thr_tg_clear(&ctx->key, &old) == LJ_THR_TG_OK);
   release_borrow(&old);
+  fixture_release_unpaired_tg(ctx->body);
   return NULL;
 }
 
@@ -572,7 +600,10 @@ static void test_profile_timer(void)
   struct sigaction sa, oldsa;
   lua_State *L;
   TGState *tg;
+  TGState signal_tg;
+  LJTGRegistrySlot *signal_slot;
   LJTGRegistryKey key;
+  LJTGRegistryKey signal_key;
   LJTGRegistryBorrow exact, old;
   LJTGSlotSnap snap;
   ProfileSignalCtx signal_ctx;
@@ -586,6 +617,8 @@ static void test_profile_timer(void)
   assert(sigaction(SIGPROF, &sa, &oldsa) == 0);
   L = luaL_newstate();
   assert(L);
+  signal_slot = (LJTGRegistrySlot *)malloc(sizeof(*signal_slot));
+  assert(signal_slot != NULL);  /* Registry teardown owns the linked slot. */
   tg = L2TG(L);
   assert(tg != NULL);
   key = tg->registry_key;
@@ -594,6 +627,7 @@ static void test_profile_timer(void)
   lj_thr_set_tg(NULL);
   assert(lj_tgregistry_try_borrow(&key, &exact, &snap) == LJ_TGSLOT_OK);
   assert(lj_thr_tg_install(&exact) == LJ_THR_TG_OK);
+  signal_key = publish_body(G(L), &signal_tg, signal_slot, 0);
 #if LJ_HASJIT
   luaL_openlibs(L);
 #endif
@@ -734,8 +768,9 @@ static void test_profile_timer(void)
   lj_profile_timer_test_pause_before_arm(1);
   lj_profile_timer_test_pause_signal(1);
   memset(&signal_ctx, 0, sizeof(signal_ctx));
-  signal_ctx.key = key;
-  assert(lj_tgregistry_try_borrow(&key, &signal_ctx.hold, &snap) ==
+  signal_ctx.key = signal_key;
+  signal_ctx.body = &signal_tg;
+  assert(lj_tgregistry_try_borrow(&signal_key, &signal_ctx.hold, &snap) ==
          LJ_TGSLOT_OK);
   assert(pthread_create(&signal_thread, NULL,
                         raise_profile_signal_after_before_arm,
@@ -833,8 +868,9 @@ static void test_profile_timer(void)
   assert(lj_profile_active(L));
   lj_profile_timer_test_pause_signal(1);
   memset(&signal_ctx, 0, sizeof(signal_ctx));
-  signal_ctx.key = key;
-  assert(lj_tgregistry_try_borrow(&key, &signal_ctx.hold, &snap) ==
+  signal_ctx.key = signal_key;
+  signal_ctx.body = &signal_tg;
+  assert(lj_tgregistry_try_borrow(&signal_key, &signal_ctx.hold, &snap) ==
          LJ_TGSLOT_OK);
   assert(pthread_create(&signal_thread, NULL, raise_profile_signal,
                         &signal_ctx) == 0);
@@ -892,6 +928,7 @@ static void test_profile_timer(void)
   assert(!lj_profile_active(L));
 #endif
 
+  retire_reclaim(&signal_key, &signal_tg);
   assert(lj_thr_tg_clear(&key, &old) == LJ_THR_TG_OK);
   release_borrow(&old);
   lj_thr_set_tg(tg);

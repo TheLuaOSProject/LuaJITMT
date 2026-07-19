@@ -273,9 +273,11 @@ TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J)
   if (!lj_thr_id_is_owner(owner))
     return NULL;
   tg = L->tg_hint;
-  if (tg && tg->gl == g && lj_tg_tid_acq(tg) == owner)
+  if (tg && tg->gl == g && lj_tg_tid_acq(tg) == owner &&
+      lj_tg_owns_state_acq(tg, L))
     return tg;
-  return lj_tg_find_owner(g, owner);
+  tg = lj_tg_find_owner(g, owner);
+  return tg && lj_tg_owns_state_acq(tg, L) ? tg : NULL;
 }
 
 static LJ_AINLINE uint32_t jit_token_tid_l(lua_State *L, jit_State *J)

@@ -250,11 +250,23 @@ LJ_FUNCA cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key);
 LJ_FUNCA cTValue * LJ_FASTCALL lj_tab_getint_hop(GCtab *t, int32_t key);
 LJ_FUNC cTValue *lj_tab_getstr(GCtab *t, const GCstr *key);
 LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
+/* Copy one semantic value starting from an authoritative table TValue root.
+** The helper retains the exact parent, key and result incarnations across its
+** current-generation SMR read, and release-publishes into an already
+** enumerated output root. Stack-backed inputs/outputs are restored after any
+** retry wait. The input and output roots must not alias. */
+LJ_FUNCA TValue *lj_tab_gettv_rooted(lua_State *L, cTValue *tabroot,
+				     cTValue *key, TValue *outroot);
+LJ_FUNCA TValue *lj_tab_getinttv_rooted(lua_State *L, cTValue *tabroot,
+					int32_t key, TValue *outroot);
 /* Copy one semantic value without exporting a raw vector slot. A returned GC
 ** value was type-validated under an exact result lease acquired before the
 ** vector SMR scope closed, then published while that lease remained held.
 ** Terminal stale snapshots are normalized to nil; callers need not repeat an
-** unleased GC-header validation on out. */
+** unleased GC-header validation on out. This naked-table ABI is retained for
+** existing JIT helpers and legacy C consumers which still lack a retained
+** parent edge. New readers which start from a TValue root must use
+** lj_tab_gettv_rooted(). */
 LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 				     TValue *out);
 #if defined(LJ_GC2_TEST_HELPERS)

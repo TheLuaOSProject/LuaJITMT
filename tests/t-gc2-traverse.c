@@ -100,7 +100,7 @@ static int gc2_cdata_counting_finalizer(lua_State *L);
 static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *parent, *child;
-  uint64_t grey_pushed0, grey_drained0;
+  uint64_t grey_pushed0, grey_drained0, grey_pushed1, grey_drained1;
 
   lua_newtable(L);
   parent = tabV(L->top - 1);
@@ -124,8 +124,12 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   assert(parent->hmask > 0);
   assert(lj_gc2_ismarkedmem(g, lj_tab_array_hdrw(lj_tab_array_acq(parent))) == 1);
   assert(lj_gc2_ismarkedmem(g, lj_tab_node_hdrw(lj_tab_node_acq(parent))) == 1);
-  assert(gc2_grey_pushed_acq(g) == grey_pushed0 + 2u);
-  assert(gc2_grey_drained_acq(g) == grey_drained0 + 2u);
+  grey_pushed1 = gc2_grey_pushed_acq(g);
+  grey_drained1 = gc2_grey_drained_acq(g);
+  /* The explicit parent/child graph requires two traversals. The live-store
+  ** guard may also retain one exact parent rescan from the pre-MARK writes. */
+  assert(grey_pushed1 >= grey_pushed0 + 2u);
+  assert(grey_drained1 >= grey_drained0 + 2u);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 2);
 }
@@ -146,6 +150,11 @@ static void test_retired_table_owner_nonsemantic(lua_State *L,
   (void)lj_tab_node_snapshot_acq(parent, &hmask);
   asize = lj_tab_array_snapshot_acq(parent, &array);
   assert(hmask > 0);
+
+  /* Isolate retire-record semantics from the legitimate rescan retained by
+  ** the setup store itself. Both table roots remain on the Lua stack. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
 
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
@@ -317,7 +326,7 @@ static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
 {
   enum { GC2_DEQUE_GROW_N = 300 };
   GCtab *parent, *child[GC2_DEQUE_GROW_N];
-  uint64_t grey_pushed0, grey_drained0;
+  uint64_t grey_pushed0, grey_drained0, grey_pushed1, grey_drained1;
   int i;
 
   lua_createtable(L, GC2_DEQUE_GROW_N, 0);
@@ -338,10 +347,10 @@ static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   for (i = 0; i < GC2_DEQUE_GROW_N; i++)
     assert(lj_gc2_ismarked(g, obj2gco(child[i])) == 1);
-  assert(gc2_grey_pushed_acq(g) ==
-	 grey_pushed0 + GC2_DEQUE_GROW_N + 1u);
-  assert(gc2_grey_drained_acq(g) ==
-	 grey_drained0 + GC2_DEQUE_GROW_N + 1u);
+  grey_pushed1 = gc2_grey_pushed_acq(g);
+  grey_drained1 = gc2_grey_drained_acq(g);
+  assert(grey_pushed1 >= grey_pushed0 + GC2_DEQUE_GROW_N + 1u);
+  assert(grey_drained1 >= grey_drained0 + GC2_DEQUE_GROW_N + 1u);
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 1);
 }
@@ -576,15 +585,20 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(pthread_create(&worker, NULL, grey_worker_drain_thread, &ctx) == 0);
   assert(pthread_join(worker, NULL) == 0);
 
-  assert(ctx.drained == 4);
+  /* One SSB conversion plus the three-object graph is mandatory. Guarded
+  ** setup stores may contribute additional exact rescans. */
+  assert(ctx.drained >= 4);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   assert(lj_gc2_test_ssb_empty(g));
-  assert(gc2_grey_drained_acq(g) == grey_drained0 + 3u);
+  assert(gc2_grey_drained_acq(g) >= grey_drained0 + 3u);
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
-  assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
-  assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
+  assert(gc2_worker_grey_drained_acq(g) >= worker_grey0 + 3u);
+  assert(gc2_worker_ssb_converted_acq(g) >= worker_ssb0 + 1u);
+  assert((uint64_t)ctx.drained ==
+	 gc2_worker_grey_drained_acq(g) - worker_grey0 +
+	 gc2_worker_ssb_converted_acq(g) - worker_ssb0);
 
   lj_gc2_cycle_to_idle(g);
   lua_pop(L, 3);
@@ -641,11 +655,14 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
   assert(ljt_barrier_destroy(&ctx.barrier) == 0);
 
   total = ctx.progress[0] + ctx.progress[1];
-  assert(total == 4u);
+  assert(total >= 4u);
   assert(gc2_worker_active_acq(g) == 0);
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
-  assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
-  assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
+  assert(gc2_worker_grey_drained_acq(g) >= worker_grey0 + 3u);
+  assert(gc2_worker_ssb_converted_acq(g) >= worker_ssb0 + 1u);
+  assert((uint64_t)total ==
+	 gc2_worker_grey_drained_acq(g) - worker_grey0 +
+	 gc2_worker_ssb_converted_acq(g) - worker_ssb0);
   /* The loser either observes the drain token/empty queue, or arrives after
   ** the winner republishes the next bounded native lease and defers there. */
   assert(gc2_worker_idle_declares_acq(g) > idle0 ||
@@ -745,10 +762,10 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
   /*
   ** A one-unit round is bounded by worker progress, not object-graph depth. The
   ** owner acknowledgement marks the stack root, then its single post-root item
-  ** may only detach/convert that TG's SSB publication. Child traversal remains
-  ** behind the open frontier and the round must not report a fixpoint.
+  ** may only detach/convert one retained publication. The live-store guard is
+  ** allowed to expose the child through its exact parent rescan, but the
+  ** grandchild frontier remains open and the round must not report a fixpoint.
   */
-  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
   assert(!lj_gc2_test_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
@@ -2259,7 +2276,13 @@ static void test_weak_snapshot_bridge_coverage(lua_State *L, global_State *g,
   setgcrefnull(weak_head);
   lua_settop(L, 0);
   make_weak_table(L, "v", &weak, &key, &val);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   make_weak_table(L, "v", &absent, &akey, &aval);
+  /* The coverage oracle needs `absent` genuinely absent from this cycle's
+  ** snapshot, rather than retained by its own construction-store rescan. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
 
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
@@ -2364,6 +2387,10 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
 
   make_weak_table(L, "v", &weak, &key, &val);
   make_weak_table(L, "v", &missing, &mkey, &mval);
+  /* Backfill coverage requires `missing` to have no construction-rescan
+  ** snapshot in the cycle under test. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   /*
   ** As above, keep the bridge tables alive through explicit GC2/root links
   ** rather than through the fixture's Lua stack.
@@ -2424,8 +2451,18 @@ static void test_weak_bridge_fallback_hmask0(lua_State *L, global_State *g,
   key = tabV(L->top - 1);
   lua_newtable(L);
   val = tabV(L->top - 1);
+  /* Give the synthetic hmask==0 body a real weak-value mode. Frontier closure
+  ** recomputes current mode from the metatable; gcflags alone are only the
+  ** captured bridge-list classification. */
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  assert(lua_setmetatable(L, -4) == 1);
   node = install_hmask0_node(L, weak, key, val);
   assert(!tvisnil(&node->val));
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   /* The GC2 weak bridge decides liveness from GC2 marks, not retired color
   ** bits. Drop the synthetic key/value stack roots before beginning the cycle
   ** so this fixture models genuinely clearable weak edges. */
@@ -2506,10 +2543,12 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   assert_weak_mode_marked(g, weakv);
   assert_weak_mode_marked(g, weakk);
   assert_weak_mode_marked(g, weakkv);
-  assert(gc2_weak_tables_seen_acq(g) == seen0 + 3u);
-  assert(gc2_weak_tables_weakkey_acq(g) == weakkey0 + 2u);
-  assert(gc2_weak_tables_weakval_acq(g) == weakval0 + 2u);
-  assert(gc2_weak_tables_allweak_acq(g) == allweak0 + 1u);
+  /* Traversal-attempt telemetry may include guarded setup rescans. Snapshot
+  ** publication below remains exactly once per table and cycle. */
+  assert(gc2_weak_tables_seen_acq(g) >= seen0 + 3u);
+  assert(gc2_weak_tables_weakkey_acq(g) >= weakkey0 + 2u);
+  assert(gc2_weak_tables_weakval_acq(g) >= weakval0 + 2u);
+  assert(gc2_weak_tables_allweak_acq(g) >= allweak0 + 1u);
   assert(gc2_weak_tables_queued_acq(g) == queued0 + 3u);
   assert(gc2_weak_tables_overflow_acq(g) == overflow0);
   assert(lj_gc2_test_weak_snapshot_count(g) == 3u);
@@ -2884,6 +2923,10 @@ static void test_weak_frontier_vector_retry(lua_State *L, global_State *g,
   lua_settop(L, 0);
   make_weak_table(L, "v", &weak, &key, &value);
   late = make_weak_mode_metatable(L);
+  /* Clear setup-store rescans while every synthetic object is still rooted;
+  ** the fixture then controls the only late edge with a deliberate raw store. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   lua_settop(L, 0);
 
   lj_gc2_mark_begin(g);
@@ -2961,6 +3004,8 @@ static void test_weak_frontier_overflow_retries(lua_State *L,
   make_weak_table(L, "v", &weak1, &key1, &value1);
   for (i = 0; i < 6u; i++)
     late[i] = make_weak_mode_metatable(L);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   lua_settop(L, 0);
 
   lj_gc2_mark_begin(g);
@@ -3967,6 +4012,7 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   /* Detach publishes DEAD before some lifecycle wrappers release their state
   ** owner. A DEAD-but-registered tid is not stale: the collector must requeue
   ** without validating or CAS-taking the state until release completes. */
+  lj_gc2_smr_read_enter(g);  /* Retain the retired TG through late release. */
   lj_tg_detach(g, &extra_tg);
   assert(lj_tg_flags_test_acq(&extra_tg, TGF_DEAD));
   lj_state_scan_epoch_rel(fail_L, 0);
@@ -3984,6 +4030,7 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   assert(lj_state_scan_epoch_acq(fail_L) == 0);
   fail_L->stacksize = fail_stacksize;
   lj_state_release(fail_L, extra_tg.tid);
+  lj_gc2_smr_read_leave(g);
   claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
   for (round = 0; round < 64 &&
        lj_state_scan_epoch_acq(fail_L) != gc2_thread_scan_cycle_acq(g); round++)
@@ -4177,15 +4224,27 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
 
   lua_newtable(L);
   registry_tab = tabV(L->top - 1);
-  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_root_scan");
+  {
+    GCtab *reg = tabV(registry(L));
+    TValue *slot = lj_tab_setstr(
+      L, reg, lj_str_newlit(L, "gc2_minor_root_scan"));
+    /* This fixture measures root-class policy, not the public table-store
+    ** barrier. Install its registry-only edge raw while the value is rooted. */
+    copyTVrel(L, slot, L->top - 1);
+    lua_pop(L, 1);
+  }
   lua_newtable(L);
   stack_tab = tabV(L->top - 1);
 #if LJ_HASFFI
   preclaim_cd = lj_cdata_new_(L, CTID_INT32, 4);
   setcdataV(L, L->top++, preclaim_cd);
   /* Keep the raw cdata anchored until later FFI tests initialize CTState. */
-  lua_pushvalue(L, -1);
-  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_preclaim_cdata");
+  {
+    GCtab *reg = tabV(registry(L));
+    TValue *slot = lj_tab_setstr(
+      L, reg, lj_str_newlit(L, "gc2_minor_preclaim_cdata"));
+    copyTVrel(L, slot, L->top - 1);
+  }
   lua_pushcfunction(L, gc2_cdata_counting_finalizer);
   assert(lj_gc2_test_finreg_cdata_preclaim(L, g, obj2gco(preclaim_cd),
 				      L->top - 1));
@@ -4258,8 +4317,12 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   }
 #endif
 
-  lua_pushnil(L);
-  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_root_scan");
+  {
+    GCtab *reg = tabV(registry(L));
+    TValue *slot = lj_tab_setstr(
+      L, reg, lj_str_newlit(L, "gc2_minor_root_scan"));
+    lj_tab_storenilraw(slot);
+  }
   lua_pop(L, 1);
 }
 
@@ -5185,6 +5248,8 @@ static void test_table_token_small_live_exact(lua_State *L, global_State *g,
   child = tabV(L->top - 1);
   lua_pushvalue(L, -1);
   lua_setfield(L, base + 1, "token-child");
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   lj_gc2_mark_begin(g);
   pending0 = gc2_table_rescan_pending_acq(g);
   grey0 = gc2_grey_pushed_acq(g);
@@ -5934,6 +5999,8 @@ static void test_legacy_weak_oom_requeues(lua_State *L, global_State *g,
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   make_weak_table(L, "v", &weak, &key, &val);
   o = obj2gco(weak);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   lj_gc2_mark_begin(g);
   pin_mark_closed_for_worker_fixture(g);
   pending0 = gc2_table_rescan_pending_acq(g);
@@ -6026,6 +6093,8 @@ static void test_legacy_weak_oom_recovery_quantum(lua_State *L,
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   make_weak_table(L, "v", &weak, &key, &val);
   o = obj2gco(weak);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   lj_gc2_mark_begin(g);
   pin_mark_closed_for_worker_fixture(g);
   cap = gc2_weak_capacity_acq(g);
@@ -6148,6 +6217,79 @@ static void test_weak_overflow_full_oom_count_bounded(lua_State *L,
   /* The next MARK reset consumes the successful raw overflow identity. */
   lj_gc2_mark_begin(g);
   assert(gc2_weak_overflow_acq(g) == NULL);
+  lj_gc2_cycle_to_idle(g);
+  lua_settop(L, base);
+  UNUSED(key); UNUSED(val);
+}
+
+static void test_weak_record_publication_protocol(lua_State *L,
+						  global_State *g)
+{
+  GCtab *weak, *key, *val;
+  uint64_t prior, expect, installing, published, count0;
+  MSize cap;
+  uint32_t cycle, next_cycle;
+  int base = lua_gettop(L);
+
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  make_weak_table(L, "v", &weak, &key, &val);
+  lj_gc2_mark_begin(g);
+  cycle = gc2_cycle_acq(g);
+  assert(cycle != 0);
+  prior = lj_tab_weak_record_acq(weak);
+  installing = lj_tab_weak_record_pack(
+    cycle, LJ_TAB_WEAK_RECORD_INSTALLING);
+  count0 = gc2_weak_count_acq(g);
+
+  /* A duplicate may not mistake the claim CAS for durable publication. */
+  expect = prior;
+  assert(lj_tab_weak_record_cas(weak, &expect, installing));
+  assert(!lj_gc2_test_weak_record(g, weak));
+  assert(lj_tab_weak_record_acq(weak) == installing);
+  assert(gc2_weak_count_acq(g) == count0);
+  expect = installing;
+  assert(lj_tab_weak_record_cas(weak, &expect, prior));
+  installing = lj_tab_weak_record_pack(
+    cycle ^ UINT32_C(0x80000000), LJ_TAB_WEAK_RECORD_INSTALLING);
+  expect = prior;
+  assert(lj_tab_weak_record_cas(weak, &expect, installing));
+  assert(!lj_gc2_test_weak_record(g, weak));
+  assert(lj_tab_weak_record_acq(weak) == installing);
+  expect = installing;
+  assert(lj_tab_weak_record_cas(weak, &expect, prior));
+  installing = lj_tab_weak_record_pack(
+    cycle, LJ_TAB_WEAK_RECORD_INSTALLING);
+
+  /* Failed publication restores the exact prior cycle/state only after its
+  ** aggregate reservation has been repaired. A retry then publishes once. */
+  cap = gc2_weak_capacity_acq(g);
+  assert(cap > 0);
+  gc2_weak_capacity_store_rlx(g, 0);
+  lj_gc2_test_weak_overflow_fail_alloc(1);
+  assert(!lj_gc2_test_weak_record(g, weak));
+  assert(lj_tab_weak_record_acq(weak) == prior);
+  assert(gc2_weak_count_acq(g) == count0);
+  lj_gc2_test_weak_overflow_fail_alloc(0);
+  gc2_weak_capacity_store_rlx(g, cap);
+
+  assert(lj_gc2_test_weak_record(g, weak));
+  published = lj_tab_weak_record_pack(
+    cycle, LJ_TAB_WEAK_RECORD_PUBLISHED);
+  assert(lj_tab_weak_record_acq(weak) == published);
+  assert(gc2_weak_count_acq(g) == count0 + 1u);
+  assert(lj_gc2_test_weak_record(g, weak));
+  assert(gc2_weak_count_acq(g) == count0 + 1u);
+
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lj_gc2_mark_begin(g);
+  next_cycle = gc2_cycle_acq(g);
+  assert(next_cycle != 0 && next_cycle != cycle);
+  assert(gc2_weak_count_acq(g) == 0);
+  assert(lj_gc2_test_weak_record(g, weak));
+  assert(lj_tab_weak_record_acq(weak) == lj_tab_weak_record_pack(
+    next_cycle, LJ_TAB_WEAK_RECORD_PUBLISHED));
+  assert(gc2_weak_count_acq(g) == 1u);
   lj_gc2_cycle_to_idle(g);
   lua_settop(L, base);
   UNUSED(key); UNUSED(val);
@@ -6322,8 +6464,9 @@ static void *forjit_lease_transition_thread(void *arg)
   assert(lj_arena_lifetime_state_cas(ctx->arena, ctx->cell,
 				     LJ_ARENA_LIFETIME_LIVE,
 				     LJ_ARENA_LIFETIME_MUTATING));
-  /* Force the nested legacy lookup validation to reject once. The helper must
-  ** resolve the current hash while its outer key lease remains held. */
+  /* Arm the old nested-admission rejection hook. The rooted reader must not
+  ** consume it: one exact key lease now covers the paired current-generation
+  ** lookup from hashing through result publication. */
   lj_gc2_test_stack_admission_retry_once(obj2gco(ctx->key));
   lj_tab_test_forjit_lease_release();
   return NULL;
@@ -6447,7 +6590,10 @@ static void test_forjit_current_hash_key_lease(lua_State *L, global_State *g)
 			&ctx) == 0);
   assert(lj_tab_gettv_forjit(L, t, &key, &out) == &out);
   assert(pthread_join(transition, NULL) == 0);
-  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 0u);
+  /* Do not leave the deliberately unconsumed process-global hook armed for a
+  ** later fixture that happens to admit the same string. */
+  lj_gc2_test_stack_admission_retry_once(NULL);
   assert(tvistrue(&out));
   assert(lj_arena_lifetime_state_cas(ctx.arena, ctx.cell,
 				     LJ_ARENA_LIFETIME_MUTATING,
@@ -7152,6 +7298,13 @@ static void test_thread_needscan_owner_release_same_cycle(lua_State *L,
     old_tg = lj_thr_get_tg();
     ssb_next0 = lj_tg_ssb_next_acq(&extra_tg);
     lj_thr_set_tg(&extra_tg);
+  } else if (release_mode == THREAD_RELEASE_RECOVERY) {
+    /* A closed metadata-reader gate is legitimate during stable sweeping.
+    ** The cold exact capability must still release without waiting/aborting
+    ** and retain its identity directly on the recovery plane. */
+    assert(gc2_smr_readers_acq(g) == 0);
+    assert(gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_OPEN);
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_SWEEP_STABLE);
   }
   if (release_mode == THREAD_RELEASE_REGISTRY_FALLBACK) {
     lj_state_owner_rel(owner_L, 0);
@@ -7166,6 +7319,7 @@ static void test_thread_needscan_owner_release_same_cycle(lua_State *L,
   } else if (release_mode == THREAD_RELEASE_RECOVERY) {
     /* A synthetic owner without matching TLS must never append main_tg's SSB. */
     assert(gc2_recovery_published_acq(g) > recovery0);
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
   }
   owner_L->tg_hint = tg;
   busy->tg_hint = tg;
@@ -7304,12 +7458,12 @@ static void test_thread_needscan_release_race(lua_State *L, global_State *g,
 
   gc2_mark_root_scanned_rel(g, 1);
   recovery0 = gc2_recovery_published_acq(g);
+  /* This synthetic owner is deliberately not the raw TLS TG. Its exact state
+  ** capability therefore takes the cold path, which unconditionally retains
+  ** both releases even when the racing NEEDSCAN bit is not visible yet. */
   lj_state_release(owner_L, extra_tg.tid);
   lj_state_release(busy, extra_tg.tid);
-  if (stage == LJ_GC2_THREAD_NEEDSCAN_TEST_BEFORE_SET)
-    assert(gc2_recovery_published_acq(g) == recovery0);
-  else
-    assert(gc2_recovery_published_acq(g) > recovery0);
+  assert(gc2_recovery_published_acq(g) > recovery0);
 
   lj_gc2_test_thread_needscan_release();
   assert(pthread_join(worker, NULL) == 0);
@@ -9230,6 +9384,11 @@ int main(void)
 #if LJ_HASJIT || LJ_HASFFI
   luaL_openlibs(L);
 #endif
+  /* Library registration performs real live table stores. The GC2 store gate
+  ** deliberately preserves their IDLE rescan work, so settle that bootstrap
+  ** frontier before fixtures take exact per-operation queue baselines. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(L, LUA_GCSTOP, 0) == 0);
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -9358,6 +9517,7 @@ int main(void)
   test_table_token_small_proof_races(L, g);
   test_table_token_small_weak_oom_progress(L, g);
   test_weak_overflow_full_oom_count_bounded(L, g);
+  test_weak_record_publication_protocol(L, g);
   test_weak_overflow_headless_reservation_guard(L, g);
   test_legacy_weak_oom_requeues(L, g, tg);
   test_legacy_weak_oom_recovery_quantum(L, g, tg);

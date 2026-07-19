@@ -51,6 +51,8 @@ typedef struct LJThr {
 typedef struct LJStateClaim {
   lua_State *L;
   TGState *tg_hint;
+  TGState *owner_tg;
+  LJStateOwner owner_word;
   uint32_t tid;
   uint8_t release;
 } LJStateClaim;
@@ -102,6 +104,11 @@ typedef enum LJThrTGResult {
 #define LJ_THREAD_ABORTING	3u
 #define LJ_THREAD_GCPREP	0xfffffffeu
 #define LJ_THREAD_GCSCAN	0xffffffffu
+
+/* TG actor zero is a live, explicitly transferable handoff state. Terminal
+** detach instead publishes a value outside the process-issued actor range, so
+** a binder which sampled pre-DEAD state can never CAS a retired TG from zero. */
+#define LJ_THR_ACTOR_RETIRED	0xffffffffu
 
 /* Only process-issued ids may name a live OS-thread/TG owner. The top two
 ** values are non-TG protocol claims and must never enter owner lookup, cycle
@@ -327,6 +334,10 @@ LJ_FUNC int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg);
 LJ_FUNC int lj_thr_join(LJThr *thr, void **ret);
 LJ_FUNC uint32_t lj_thr_newid(void);
 LJ_FUNC uint32_t lj_thr_id(const LJThr *thr);
+/* Physical OS-thread actors are process-issued and never reused. The current
+** accessor never admits/allocates; ensure is the cold retryable admission. */
+LJ_FUNC uint32_t lj_thr_actor_current(void);
+LJ_FUNC uint32_t lj_thr_actor_ensure(void);
 LJ_FUNC uint32_t lj_thr_current_id(global_State *g);
 LJ_FUNC uint64_t lj_thr_now_ns(void);
 LJ_FUNC int lj_thr_tg_tls_init(void);
@@ -372,6 +383,13 @@ LJ_FUNC uintptr_t lj_thr_tg_signal_test_last_destructor_word(void);
 #endif
 LJ_FUNC void lj_thr_set_tg(TGState *tg);
 LJ_FUNC TGState *lj_thr_get_tg(void);
+/* Consume actor zero only for a private/ATTACHING TG. LIVE zero is paired
+** handoff authority and may be consumed only by lj_thr_main_close_claim(). */
+LJ_FUNC int lj_thr_tg_bind_current(TGState *tg);
+LJ_FUNC int lj_thr_tg_retire_current(TGState *tg);
+/* Explicit quiescent raw-carrier handoff. This is not a general live-TG
+** migration primitive. It clears same-thread TLS before publishing actor 0. */
+LJ_FUNC int lj_thr_tg_handoff_current(TGState *expected_tg);
 /* Handler-only exact TG lookup. It never consults compiler TLS/TLV state and
 ** never returns raw compatibility bindings. */
 LJ_FUNC TGState *lj_thr_get_tg_signal(void);
@@ -389,6 +407,12 @@ LJ_FUNC int lj_thr_tg_signal_prepare_current(TGState *expected_tg);
 LJ_FUNC int lj_thr_tg_signal_process_snapshot(uint64_t *generation,
                                                uint32_t *advanced);
 LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
+/* Main-state close arbitration accepts the owning actor, an explicit actor-0
+** handoff, or (on Linux) a quiescent actor proven dead by its stable record and
+** kernel task-lifetime witness. Stock live-yet-quiescent cross-thread close
+** still lacks a public remotely invalidatable carrier/handoff and remains a
+** b1.2.1 compatibility blocker; macOS/Windows exited actors fail closed too. */
+LJ_FUNC int lj_thr_main_close_claim(lua_State *L);
 LJ_FUNC int lj_threading_attach(lua_State *L);
 LJ_FUNC int lj_threading_attach_wait(lua_State *L);
 LJ_FUNC void lj_threading_detach(lua_State *L, int disown_callbacks);

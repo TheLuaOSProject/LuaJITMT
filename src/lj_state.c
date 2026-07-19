@@ -743,14 +743,55 @@ static void state_gcprep_queue_push(global_State *g, lua_State *L)
   } while (!lj_state_gcprep_head_cas(g, &head, L));
 }
 
+static LJStateOwner state_gcprep_current_claim(lua_State *L)
+{
+  uint32_t actor = lj_thr_actor_current();
+  LJStateOwner owner;
+  if (!L || actor == 0)
+    return 0;
+  owner = lj_state_owner_word_acq(L);
+  return owner == lj_state_owner_pack(LJ_THREAD_GCPREP, actor) ? owner : 0;
+}
+
+/* A unique queue pop transfers the physical GCPREP capability before the
+** drainer reads or destroys any state body field. Queue linkage itself is
+** protected by the MPSC token: after publication the old actor performs no L
+** access, so this exact CAS is the actor handoff LP. */
+static LJStateOwner state_gcprep_transfer_to_current(lua_State *L)
+{
+  LJStateOwner owner, desired, expect;
+  uint32_t actor, old_actor;
+  if (!L || !(actor = lj_thr_actor_ensure()))
+    return 0;
+  owner = lj_state_owner_word_acq(L);
+  old_actor = lj_state_owner_actor(owner);
+  if (lj_state_owner_tid(owner) != LJ_THREAD_GCPREP || old_actor == 0)
+    return 0;
+  desired = lj_state_owner_pack(LJ_THREAD_GCPREP, actor);
+  if (owner != desired) {
+    expect = owner;
+    if (!lj_state_owner_word_cas(L, &expect, desired))
+      return 0;
+    /* The numeric futex half is unchanged, so make any full-pair observer
+    ** sleeping on the sentinel re-evaluate the actor explicitly. */
+    lj_state_owner_futex_wake(L, 0x7fffffff);
+  }
+  return lj_thr_actor_current() == actor &&
+    lj_state_owner_word_acq(L) == desired ? desired : 0;
+}
+
 int lj_state_gcprep_claim_and_pin(global_State *g, lua_State *L)
 {
   GCArena *a;
-  uint32_t cell, expect = 0, old;
+  LJStateOwner expect = 0, desired;
+  uint32_t actor, cell, old;
+  actor = lj_thr_actor_ensure();
+  desired = lj_state_owner_pack(LJ_THREAD_GCPREP, actor);
   if (!g || !L || !lj_gc2_reclaim_context_held(g) ||
+      actor == 0 || lj_thr_actor_current() != actor ||
       L->gct != ~LJ_TTHREAD || mref(L->glref, global_State) != g ||
       lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE ||
-      !lj_state_owner_cas(L, &expect, LJ_THREAD_GCPREP))
+      !lj_state_owner_word_cas(L, &expect, desired))
     return 0;
   if (!state_gcprep_roots_absent(g, L)) {
     lj_state_release(L, LJ_THREAD_GCPREP);
@@ -786,6 +827,10 @@ void lj_state_gcprep_cancel(global_State *g, lua_State *L)
   uint32_t old;
   if (!g || !L)
     return;
+  if (LJ_UNLIKELY(state_gcprep_current_claim(L) == 0)) {
+    lj_assertG(0, "foreign actor cancelled THREAD preparation");
+    abort();
+  }
   a = lj_arena_of(L);
   old = la_sub32_acqrel(&g->thread_gcprep_pending, 1);
   lj_assertG(old != 0, "THREAD preparation cancel underflow");
@@ -806,7 +851,7 @@ void lj_state_gcprep_publish(global_State *g, lua_State *L)
   a = lj_arena_of(L);
   cell = lj_arena_cellof(L);
   if (LJ_UNLIKELY(!lj_gc2_reclaim_context_held(g) ||
-	  lj_state_owner_acq(L) != LJ_THREAD_GCPREP ||
+	  state_gcprep_current_claim(L) == 0 ||
 	  lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE ||
 	  lj_arena_lifetime_state_acq(a, cell) != LJ_ARENA_LIFETIME_FREE ||
 	  lj_arena_sweep_state_acq(a, cell) != LJ_ARENA_SWEEP_FREEING ||
@@ -844,10 +889,14 @@ uint32_t lj_state_gcprep_drain(global_State *g, uint32_t limit)
     uint32_t old;
     if (!L)
       break;
+    if (LJ_UNLIKELY(state_gcprep_transfer_to_current(L) == 0)) {
+      lj_assertG(0, "queued THREAD preparation actor transfer failed");
+      abort();
+    }
     a = lj_arena_of(L);
     if (LJ_UNLIKELY(lj_state_gcprep_state_acq(L) !=
 		    LJ_STATE_GCPREP_PENDING ||
-		    lj_state_owner_acq(L) != LJ_THREAD_GCPREP ||
+		    state_gcprep_current_claim(L) == 0 ||
 		    lj_arena_gcprep_pending_acq(a) == 0)) {
       lj_assertG(0, "invalid queued terminal THREAD body");
       abort();
@@ -1236,7 +1285,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_obj_setgcflags(obj2gco(L), LJ_GC_WHITE0 | LJ_GC_FIXED | LJ_GC_SFIXED);
   L->dummy_ffid = FF_C;
   setmref(L->glref, g);
-  lj_state_owner_rel(L, 0);
+  lj_state_owner_word_rel(L, 0);
   lj_state_gcprep_next_rel(L, NULL);
   lj_state_gcprep_state_store_rlx(L, LJ_STATE_GCPREP_NONE);
   lj_state_grayagain_cycle_store_rlx(L, 0);
@@ -1332,6 +1381,8 @@ LUA_API void lua_close(lua_State *L)
 {
   global_State *g = G(L);
   L = mainthread_acq(g);  /* Only the main thread can be closed. */
+  if (!lj_thr_main_close_claim(L))
+    return;  /* Foreign/racing closer never receives main-TG authority. */
 #if LJ_HASPROFILE
   luaJIT_profile_stop(L);
 #endif
@@ -1387,7 +1438,7 @@ static lua_State *state_new_withenv_at_anchor(lua_State *L, GCtab *env,
   L1->tg_hint = NULL;
   lj_state_thread_registry_next_rel(L1, NULL);
   lj_state_gcprep_next_rel(L1, NULL);
-  lj_state_owner_rel(L1, 0);
+  lj_state_owner_word_rel(L1, 0);
   lj_state_gcprep_state_store_rlx(L1, LJ_STATE_GCPREP_NONE);
   lj_state_grayagain_cycle_store_rlx(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);

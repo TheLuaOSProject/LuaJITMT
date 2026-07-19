@@ -17,6 +17,7 @@ local M8_C_FIXTURES = {
   "t-m8-ffi-weak-newindex",
   "t-m8-close-finalizers",
   "t-m8-close-moved-state",
+  "t-m8-close-actor-handoff",
   "t-m8-finalizer-state"
 }
 
@@ -130,6 +131,20 @@ return function(add)
         timeout = "20s"
       })
       print("M8 userdata FINREG raw-root lifetime passed")
+    end
+  })
+
+  add({
+    name = "m8_close_actor_handoff",
+    description = "quiescent moved close admits exactly one physical actor",
+    run = function(t)
+      t:build({ clean = true, quiet = true, xcflags = gc2_test_cflags })
+      build.run_c_fixtures(t, { "t-m8-close-actor-handoff" }, {
+        output_suffix = "_m8",
+        cflags = gc2_test_cflags,
+        timeout = "20s"
+      })
+      print("M8 physical close-actor handoff passed")
     end
   })
 

@@ -66,14 +66,18 @@ typedef struct TaggedMatchCtx {
 static TaggedMatchCtx tagged_match_ctx;
 
 typedef struct CanonRaceCtx {
-  lua_State *L;
+  lua_State *driver_L;
+  lua_State *worker_L;
+  TGState *worker_tg;
   GCstr *s;
   StrCanonRec *rec;
   StrCanonHdr *qhdr;
+  int driver_top;
   uint32_t pause_stage;
   uint32_t reached;
   uint32_t release;
   uint32_t done;
+  uint32_t active_cleared;
   int result;
 } CanonRaceCtx;
 
@@ -82,8 +86,8 @@ static CanonRaceCtx *canon_race_ctx;
 static void test_sleep_without_tg(int64_t ns)
 {
   TGState *saved = lj_thr_get_tg();
-  /* These deterministic test barriers hand one TG between OS threads. Never
-  ** let the polling sleep mutate that TG's non-RMW in_native depth. */
+  /* Keep deterministic barrier sleeps outside the caller's attached TG. The
+  ** raw unbind/rebind remains on the same physical actor. */
   lj_thr_set_tg(NULL);
   (void)lj_thr_sleep_ns(NULL, ns);
   lj_thr_set_tg(saved);
@@ -358,7 +362,7 @@ static void canonical_race_hook(lua_State *L, GCstr *s, StrCanonRec *rec,
   CanonRaceCtx *ctx = canon_race_ctx;
   if (!ctx || ctx->pause_stage != stage || ctx->s != s)
     return;
-  assert(ctx->L == L);
+  assert(ctx->worker_L == L);
   assert(rec != NULL);
   ctx->rec = rec;
   if (stage == LJ_STR_TEST_CANON_Q_PINNED_BEFORE_PUBLISH) {
@@ -374,13 +378,18 @@ static void canonical_race_hook(lua_State *L, GCstr *s, StrCanonRec *rec,
 static void *canonical_detach_worker(void *arg)
 {
   CanonRaceCtx *ctx = (CanonRaceCtx *)arg;
-  TGState *oldtg = lj_thr_get_tg();
-  /* The hook's release/acquire handoff serializes every main-TG mutation with
-  ** the driver thread. The driver polls without a TLS TG; the worker stops
-  ** touching the TG before handing ownership back at either pause. */
-  lj_thr_set_tg(L2TG(ctx->L));
-  ctx->result = lj_str_test_quarantine_detach(ctx->L, ctx->s);
-  lj_thr_set_tg(oldtg);
+  lua_State *L = ctx->worker_L;
+  if (!lj_threading_attach_wait(L)) {
+    la_store32_rel(&ctx->done, 1);
+    return NULL;
+  }
+  ctx->worker_tg = lj_thr_get_tg();
+  assert(ctx->worker_tg != NULL && L2TG(L) == ctx->worker_tg);
+  ctx->result = lj_str_test_quarantine_detach(L, ctx->s);
+  ctx->active_cleared =
+    lj_tg_strq_active_hdr_acq(ctx->worker_tg) == NULL &&
+    lj_tg_strq_active_depth_acq(ctx->worker_tg) == 0;
+  lj_threading_detach(L, 1);
   la_store32_rel(&ctx->done, 1);
   return NULL;
 }
@@ -390,7 +399,10 @@ static void canonical_race_start(CanonRaceCtx *ctx, lua_State *L, GCstr *s,
 {
   int i;
   memset(ctx, 0, sizeof(*ctx));
-  ctx->L = L;
+  ctx->driver_L = L;
+  ctx->driver_top = lua_gettop(L);
+  ctx->worker_L = lua_newthread(L);  /* Driver stack is the lifetime root. */
+  assert(ctx->worker_L != NULL && lua_gettop(L) == ctx->driver_top + 1);
   ctx->s = s;
   ctx->pause_stage = stage;
   canon_race_ctx = ctx;
@@ -409,8 +421,16 @@ static void canonical_race_finish(CanonRaceCtx *ctx, LJThr *thr)
   assert(lj_thr_join(thr, NULL) == 0);
   assert(la_load32_acq(&ctx->done) != 0);
   assert(ctx->result == 1);
+  assert(ctx->active_cleared != 0);
   lj_str_test_set_canon_hook(NULL);
   canon_race_ctx = NULL;
+  /* Detach leaves a registry-retired TG for the ordinary opportunistic
+  ** reclaimer. Drain it before later fixture stages assert that no unrelated
+  ** metadata owner vetoes string-header SMR reclamation. */
+  assert(lj_tg_reclaim_dead(G(ctx->driver_L)) >= 1u);
+  assert(lua_gettop(ctx->driver_L) == ctx->driver_top + 1);
+  assert(lua_tothread(ctx->driver_L, -1) == ctx->worker_L);
+  lua_pop(ctx->driver_L, 1);
 }
 
 static int canonical_qbucket_contains(StrCanonHdr *hdr, StrCanonRec *want)
@@ -431,7 +451,6 @@ static void exercise_canonical_quarantine(lua_State *L)
   static const char unlink_name[] =
     "m5-strtab-canonical-unlink-qcount-race";
   global_State *g = G(L);
-  TGState *tg = L2TG(L);
   CanonRaceCtx ctx;
   LJThr worker;
   MSize before = lj_str_qcount_acq(g);
@@ -471,13 +490,12 @@ static void exercise_canonical_quarantine(lua_State *L)
   assert(!canonical_qbucket_contains(ctx.qhdr, ctx.rec));
   assert(la_load32_acq(&ctx.rec->status) == LJ_STR_CANONREC_LIST_ONLY);
   assert(lj_str_canon_acq(spublish) == LJ_STR_CANON_LIVE);
-  assert(lj_tg_strq_active_hdr_acq(tg) == oldhdr);
-  assert(lj_tg_strq_active_depth_acq(tg) == 1u);
+  assert(ctx.worker_tg != NULL);
+  assert(lj_tg_strq_active_hdr_acq(ctx.worker_tg) == oldhdr);
+  assert(lj_tg_strq_active_depth_acq(ctx.worker_tg) == 1u);
   assert(lj_str_quarantine_resize(L, (oldmask << 1) + 1u) == 0);
   assert(lj_str_qtabh_acq(g) == oldhdr);
   canonical_race_finish(&ctx, &worker);
-  assert(lj_tg_strq_active_hdr_acq(tg) == NULL);
-  assert(lj_tg_strq_active_depth_acq(tg) == 0);
   assert(lj_str_qcount_acq(g) == 2u);
   canon = lj_str_canon_acq(spublish);
   assert(lj_str_canon_state(canon) == LJ_STR_CANON_QACTIVE);
@@ -799,6 +817,20 @@ int main(void)
   exercise_tagged_link_protocol(L);
   exercise_rehash_ignores_legacy_colors(L);
   exercise_canonical_layout(L);
+  /* Allocation volume may legitimately leave an asynchronous IDLE request.
+  ** Root the identity used by later assertions and service that request before
+  ** beginning the isolated retired-header grace-period model. */
+  lua_pushlstring(L, strdata(s1), s1->len);
+  assert(strV(L->top - 1) == s1);
+  for (i = 0; i < 64 &&
+       (gc2_phase_acq(g) != LJ_GC2_IDLE ||
+	gc2_cycle_leader_acq(g) != 0); i++)
+    (void)lj_gc2_step_explicit(L, 1u << 20);
+  assert(i < 64 && gc2_phase_acq(g) == LJ_GC2_IDLE &&
+	 gc2_cycle_leader_acq(g) == 0 &&
+	 gc2_jit_phase_gate_acq(g) != 0);
+  (void)lua_gc(L, LUA_GCSTOP, 0);
+  assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
   retire_epoch = gc2_hs_epoch_acq(g);
   (void)lj_gc2_reclaim_retired(g, retire_epoch + 1u);
   assert(lj_str_retired_head_acq(g) == NULL);
@@ -865,8 +897,11 @@ int main(void)
   lj_gc2_smr_read_leave(g);
   assert(lj_thr_join(&reclaim_thr, NULL) == 0);
   assert(gc2_smr_reclaiming_acq(g) == 0);
+  assert(gc2_cycle_leader_acq(g) == 0 &&
+	 gc2_jit_phase_gate_acq(g) != 0);
   assert(lj_gc2_reclaim_retired(g, retire_epoch + 1u) >= 1u);
   assert(lj_str_retired_head_acq(g) == NULL);
+  (void)lua_gc(L, LUA_GCRESTART, 0);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
 

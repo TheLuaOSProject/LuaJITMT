@@ -12,6 +12,7 @@
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_state.h"
 #include "lj_strfmt.h"
 
 /* -- Buffer management --------------------------------------------------- */
@@ -335,29 +336,63 @@ SBuf *lj_buf_putstr_rep(SBuf *sb, GCstr *s, int32_t rep)
   return sb;
 }
 
-SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep, int32_t i, int32_t e)
+static LJ_AINLINE int buf_tv_on_stack(lua_State *L, cTValue *tv)
 {
+  uintptr_t p, lo, hi;
+  if (!L || !tv)
+    return 0;
+  p = (uintptr_t)(const void *)tv;
+  lo = (uintptr_t)(const void *)tvref(L->stack);
+  hi = (uintptr_t)(const void *)tvref(L->maxstack);
+  return p >= lo && p < hi;
+}
+
+static SBuf *buf_puttab_impl(SBuf *sb, cTValue *tabroot, GCtab *trusted_t,
+			     GCstr *sep, int32_t i, int32_t e,
+			     int32_t *badtype)
+{
+  lua_State *L = sbufL(sb);
+  TGState *tg = L2TG(L);
+  int tabstack = buf_tv_on_stack(L, tabroot);
+  ptrdiff_t tabofs = tabstack ? savestack(L, tabroot) : 0;
   MSize seplen = sep ? sep->len : 0;
+  TValue nilv;
+  TValue *resultroot;
+  uint32_t rootidx;
+  if (badtype)
+    *badtype = ~LJ_TNIL;
   if (i <= e) {
+    setnilV(&nilv);
+    resultroot = lj_tg_root_anchor_push(L, tg, &nilv, &rootidx);
     for (;;) {
-      cTValue *o = lj_tab_getint(t, i);
-      TValue tv;
+      cTValue *curtab = tabstack ? restorestack(L, tabofs) : tabroot;
       char *w;
-      if (!o) {
-      badtype:  /* Error: bad element type. */
+      resultroot = lj_tg_root_anchor_slot_acq(tg, rootidx);
+      if (curtab) {
+	(void)lj_tab_getinttv_rooted(L, curtab, i, resultroot);
+      } else {
+	TValue keytv;
+	setintV(&keytv, i);
+	(void)lj_tab_gettv_forjit(L, trusted_t, &keytv, resultroot);
+      }
+      resultroot = lj_tg_root_anchor_slot_acq(tg, rootidx);
+      if (tvisstr(resultroot)) {
+	MSize len = strV(resultroot)->len;
+	w = lj_buf_more(sb, len + seplen);
+	resultroot = lj_tg_root_anchor_slot_acq(tg, rootidx);
+	w = lj_buf_wmem(w, strVdata(resultroot), len);
+      } else if (tvisint(resultroot)) {
+	w = lj_strfmt_wint(lj_buf_more(sb, STRFMT_MAXBUF_INT+seplen),
+			      intV(resultroot));
+      } else if (tvisnum(resultroot)) {
+	w = lj_buf_more(lj_strfmt_putfnum(sb, STRFMT_G14,
+					 numV(resultroot)), seplen);
+      } else {
+	if (badtype)
+	  *badtype = itypemap(resultroot);
+	lj_tg_root_anchor_pop(tg, rootidx);
 	lj_buf_wptr_rel(sb, (char *)(intptr_t)i);  /* Store failing index. */
 	return NULL;
-      }
-      lj_tv_load_acq(&tv, o);
-      if (tvisstr(&tv)) {
-	MSize len = strV(&tv)->len;
-	w = lj_buf_wmem(lj_buf_more(sb, len + seplen), strVdata(&tv), len);
-      } else if (tvisint(&tv)) {
-	w = lj_strfmt_wint(lj_buf_more(sb, STRFMT_MAXBUF_INT+seplen), intV(&tv));
-      } else if (tvisnum(&tv)) {
-	w = lj_buf_more(lj_strfmt_putfnum(sb, STRFMT_G14, numV(&tv)), seplen);
-      } else {
-	goto badtype;
       }
       if (i++ == e) {
 	lj_buf_wptr_rel(sb, w);
@@ -366,8 +401,23 @@ SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep, int32_t i, int32_t e)
       if (seplen) w = lj_buf_wmem(w, strdata(sep), seplen);
       lj_buf_wptr_rel(sb, w);
     }
+    lj_tg_root_anchor_pop(tg, rootidx);
   }
   return sb;
+}
+
+SBuf *lj_buf_puttab_rooted(SBuf *sb, cTValue *tabroot, GCstr *sep,
+			   int32_t i, int32_t e, int32_t *badtype)
+{
+  return buf_puttab_impl(sb, tabroot, NULL, sep, i, e, badtype);
+}
+
+/* Keep the generated-trace ABI stable. The traced table IR is a naked GCtab
+** pointer, but each semantic read still acquires the compatibility helper's
+** exact parent lease and publishes its result through the same TG anchor. */
+SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep, int32_t i, int32_t e)
+{
+  return buf_puttab_impl(sb, NULL, t, sep, i, e, NULL);
 }
 
 /* -- Miscellaneous buffer operations ------------------------------------- */

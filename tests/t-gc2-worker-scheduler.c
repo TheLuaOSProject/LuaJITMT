@@ -32,6 +32,7 @@
 #include "lj_gc2.h"
 #include "lj_dispatch.h"
 #include "lj_safepoint.h"
+#include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -61,8 +62,10 @@ static void test_publish_sweep_phase(global_State *g)
            LJ_GC2_ACT_SWEEP_OPEN, &sweep) == LJ_GC2_TRANSITION_OK);
   gc2_phase_rel(g, LJ_GC2_SWEEP);
   /* Synthetic SWEEP skips the real root driver, so model its completed
-  ** prerequisite explicitly before publishing READY below. */
+  ** prerequisite explicitly before publishing READY below. It also skips the
+  ** real WEAK->SWEEP edge, which initializes the bounded string subphase. */
   gc2_sweep_root_scanned_rel(g, 1);
+  lj_str_gc2_sweep_begin(g, 0);
   assert(!lj_gc2_activation_reclaim_veto(g));
 }
 
@@ -76,6 +79,7 @@ static void test_reset_sweep_phase(global_State *g)
   assert(sweep.gate == LJ_GC2_ROOT_GATE_OPEN);
   assert(lj_gc2_activation_try_abandon_sweep_open(&g->gc2.activation,
            &sweep, &idle) == LJ_GC2_TRANSITION_OK);
+  lj_str_gc2_sweep_abort(g);
   assert(idle.state == LJ_GC2_ACT_IDLE);
   assert(!lj_gc2_activation_reclaim_veto(g));
 }
@@ -238,6 +242,7 @@ typedef struct FinalizerOwnerHold {
   TGState *wait_tg;
   TGState *tg;
   uint32_t tid;
+  uint32_t actor;
   uint32_t entered;
   uint32_t saw_native;
 } FinalizerOwnerHold;
@@ -278,6 +283,7 @@ static void *finalizer_owner_hold_thread(void *arg)
   lj_tg_derive_prng(ctx->g, tg, ctx->tid);
   lj_thr_set_tg(tg);
   lj_tg_attach(ctx->g, tg);
+  ctx->actor = lj_thr_actor_current();
   lj_gc2_test_finalizer_enter(ctx->g);
   la_store32_rel(&ctx->entered, 1);
   for (i = 0; i < 10000; i++) {
@@ -878,8 +884,8 @@ static void test_worker_finalizer_sweep_mpsc_drain(lua_State *L,
   lua_settop(L, 0);
 }
 
-static void test_worker_finalizer_requires_real_tg(lua_State *L,
-						   global_State *g)
+static void test_worker_finalizer_uses_physical_actor(lua_State *L,
+						      global_State *g)
 {
   NoTLSWorkerDrain ctx;
   pthread_t thread;
@@ -913,15 +919,14 @@ static void test_worker_finalizer_requires_real_tg(lua_State *L,
 			&ctx) == 0);
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.saw_tg == NULL);
-  assert(ctx.drained == 0);
-  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0);
-  assert(gc2_finalizer_mpsc_acq(g) != NULL);
-  assert(gc2_finalizer_tail_acq(g) == NULL);
-
-  assert(lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) == 2u);
+  /* TLS-less helpers no longer alias one pseudo owner. Actor admission gives
+  ** this pthread a unique physical FIFO capability, so it may drain without
+  ** borrowing or impersonating a Lua TG. */
+  assert(ctx.drained == 2u);
   assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 2u);
   assert(gc2_finalizer_mpsc_acq(g) == NULL);
   assert(gc2_finalizer_tail_acq(g) != NULL);
+  assert(lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) == 0u);
   assert(lj_gc2_test_finalizer_dequeue(g) == a);
   assert(lj_gc2_test_finalizer_dequeue(g) == b);
   assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
@@ -1039,7 +1044,7 @@ static void test_finalizer_dispatch_all_waits_native(lua_State *L,
   for (i = 0; i < 1000 && la_load32_acq(&hold.entered) == 0; i++)
     sleep_ns(1000000L);
   assert(la_load32_acq(&hold.entered) == 1);
-  assert(gc2_finalizer_owner_acq(g) == hold.tid);
+  assert(gc2_finalizer_owner_acq(g) == hold.actor);
 
   lj_gc2_finalizer_dispatch_all(L);
   assert(pthread_join(thread, NULL) == 0);
@@ -1253,7 +1258,9 @@ static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
   grey0 = gc2_worker_grey_drained_acq(g);
 
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
-  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  /* Setup/store rescans may share or fill this suffix and publish it before
+  ** the explicit flush. The semantic assertion is eventual graph progress. */
+  (void)lj_gc2_flush_ssb(g, tg);
   assert(wait_until_marked(g, obj2gco(grandchild)));
   assert(wait_ssb_empty(g));
   assert(gc2_worker_async_progress_acq(g) > async0);
@@ -1277,7 +1284,7 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
 
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
-  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  (void)lj_gc2_flush_ssb(g, tg);
   /* Snapshot readiness is published at weak-table discovery, before the same
   ** bounded traversal reaches its strong key. Wait for both independent
   ** effects; the snapshot counter alone is not a traversal-complete fence. */
@@ -1437,6 +1444,10 @@ int main(void)
   TGState *tg;
 
   assert(L != NULL);
+  /* lua_newstate() performs guarded table stores whose IDLE remembered/rescan
+  ** work is intentionally durable. Drain it with a real cycle so the worker
+  ** contention case below owns the only synthetic SSB item it measures. */
+  lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   g = G(L);
   tg = G2TG(g);
@@ -1457,7 +1468,7 @@ int main(void)
   test_worker_wake_between_snapshot_and_park(L, g);
   test_worker_finalizer_mpsc_drain(L, g);
   test_worker_finalizer_sweep_mpsc_drain(L, g);
-  test_worker_finalizer_requires_real_tg(L, g);
+  test_worker_finalizer_uses_physical_actor(L, g);
   test_worker_real_finalizer_dispatch(L, g);
   test_finalizer_dispatch_all_waits_native(L, g, tg);
   test_finalizer_owner_leave_rewakes_worker(L, g);

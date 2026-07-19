@@ -96,12 +96,32 @@ static void release_borrow(LJTGRegistryBorrow *hold)
   assert(!hold->active);
 }
 
+/* This fixture synthesizes registry bodies without a lua_State or lifecycle
+** owner. Stamp that deliberately incomplete model with the physical actor
+** whose TLS transaction is under test. Production LIVE actor-zero bodies are
+** paired handoffs and must never be consumed by the generic binder. */
+static void fixture_adopt_unpaired_tg(TGState *tg)
+{
+  uint32_t actor = lj_thr_actor_ensure();
+  uint32_t owner = 0;
+  assert(actor != 0);
+  assert(lj_tg_actor_cas(tg, &owner, actor) || owner == actor);
+}
+
+static void fixture_release_unpaired_tg(TGState *tg)
+{
+  uint32_t actor = lj_thr_actor_current();
+  uint32_t owner = actor;
+  assert(actor != 0 && lj_tg_actor_cas(tg, &owner, 0));
+}
+
 static void *binding_thread(void *arg)
 {
   BindingThreadCtx *ctx = (BindingThreadCtx *)arg;
   LJTGRegistryBorrow old;
   LJTGRegistryKey key;
   lj_tgregistry_borrow_init(&old);
+  fixture_adopt_unpaired_tg(ctx->body);
   assert(lj_thr_tg_install(&ctx->hold) == LJ_THR_TG_OK);
   assert(!ctx->hold.active && lj_thr_get_tg() == ctx->body);
   assert(lj_thr_tg_current_key(&key) == LJ_THR_TG_OK);
@@ -113,6 +133,7 @@ static void *binding_thread(void *arg)
   assert(lj_thr_tg_clear(&ctx->key, &old) == LJ_THR_TG_OK);
   assert(lj_thr_get_tg() == NULL && old.active && old.body == ctx->body);
   release_borrow(&old);
+  fixture_release_unpaired_tg(ctx->body);
   la_store32_rel(&ctx->done, 1);
   return ctx->body;
 }
@@ -163,6 +184,7 @@ static void raw_admission_abort_handler(int signo)
 static void raw_admission_abort_child(void)
 {
   TGState raw;
+  memset(&raw, 0, sizeof(raw));
   assert(signal(SIGABRT, raw_admission_abort_handler) != SIG_ERR);
   lj_thr_tls_test_fail_cell_alloc(1);
   lj_thr_set_tg(&raw);
@@ -447,6 +469,8 @@ int main(int argc, char **argv)
   assert(aret == a && bret == b && actx.done && bctx.done);
   assert(lease_count(&akey, LJ_TGSLOT_LIVE) == 1u);
   assert(lease_count(&bkey, LJ_TGSLOT_LIVE) == 1u);
+  fixture_adopt_unpaired_tg(a);
+  fixture_adopt_unpaired_tg(b);
 
   lj_tgregistry_borrow_init(&ahold);
   lj_tgregistry_borrow_init(&bhold);
@@ -523,6 +547,7 @@ int main(int argc, char **argv)
   assert(lease_count(&bkey, LJ_TGSLOT_RETIRED) == 2u);
   assert(lj_tgregistry_try_reclaim(&bkey, &body, &snap) == LJ_TGSLOT_BUSY);
   release_borrow(&old);
+  fixture_release_unpaired_tg(b);
   reclaim_body(&bkey, b);
 
 #if LJ_TARGET_WINDOWS && defined(LJ_THR_TLS_TEST_HELPERS)
@@ -541,12 +566,14 @@ int main(int argc, char **argv)
   release_borrow(&publish_fail.hold);
 #endif
 
+  fixture_release_unpaired_tg(a);
   retire_body(&akey);
   reclaim_body(&akey, a);
   stale = akey;
 
   /* Reuse the same stable slot and body address under a new incarnation. */
   akey = publish_body(g, a, aslot, 0);
+  fixture_adopt_unpaired_tg(a);
   assert(akey.incarnation != stale.incarnation && akey.slot == stale.slot);
   assert(lj_tgregistry_try_borrow(&akey, &ahold, &snap) == LJ_TGSLOT_OK);
   assert(lj_thr_tg_install(&ahold) == LJ_THR_TG_OK);
@@ -555,6 +582,7 @@ int main(int argc, char **argv)
   assert(lj_thr_tg_clear(&akey, &old) == LJ_THR_TG_OK);
   assert(old.active && old.key.incarnation == akey.incarnation);
   release_borrow(&old);
+  fixture_release_unpaired_tg(a);
   retire_body(&akey);
   reclaim_body(&akey, a);
 
@@ -578,6 +606,7 @@ int main(int argc, char **argv)
   /* PINNED is absorbing for reclamation, but a valid current binding can be
   ** cleared and return its exact count without leaving TLS stuck. */
   bkey = publish_body(g, b, bslot, 0);
+  fixture_adopt_unpaired_tg(b);
   assert(lj_tgregistry_try_borrow(&bkey, &bhold, &snap) == LJ_TGSLOT_OK);
   assert(lj_thr_tg_install(&bhold) == LJ_THR_TG_OK);
   assert(lj_tgregistry_key_snapshot(&bkey, &snap) == LJ_TGSLOT_OK);
@@ -592,6 +621,7 @@ int main(int argc, char **argv)
   assert(lj_tgregistry_key_snapshot(&bkey, &snap) ==
          LJ_TGSLOT_PINNED_RESULT);
   assert(snap.state == LJ_TGSLOT_PINNED && snap.lease_count == 1u);
+  fixture_release_unpaired_tg(b);
   body = (void *)(uintptr_t)1u;
   assert(lj_tgregistry_try_reclaim(&bkey, &body, &snap) ==
          LJ_TGSLOT_PINNED_RESULT);

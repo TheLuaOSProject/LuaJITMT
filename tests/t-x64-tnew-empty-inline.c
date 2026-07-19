@@ -112,7 +112,8 @@ static void assert_empty_table_body(global_State *g, GCtab *t)
   assert(t->hmask == 0);
   assert(t->acap == 0);
   assert(t->struct_owner == 0);
-  assert(lj_tab_weak_cycle_acq(t) == 0);
+  assert(lj_tab_weak_record_acq(t) == lj_tab_weak_record_pack(
+    0, LJ_TAB_WEAK_RECORD_NONE));
   assert(lj_tab_gc2_rescan_state_acq(t) == LJ_TAB_RESCAN_NONE);
   assert(node == &g->nilnode);
   assert(getfreetop(t, node) == &g->nilnode);
@@ -149,6 +150,8 @@ static uint64_t poison_recycled_empty_table_fields(GCArena *a, uint32_t cell)
   lj_tab_gc2_rescan_state_store_rlx(stale, LJ_TAB_RESCAN_CANCELLED);
   assert(la_load64_acq(&stamp->state) != 0);
   assert(lj_tab_weak_cycle_acq(stale) == UINT32_C(0xa5a5a5a5));
+  assert(lj_tab_weak_record_state(lj_tab_weak_record_acq(stale)) ==
+	 LJ_TAB_WEAK_RECORD_PUBLISHED);
   assert(lj_tab_gc2_rescan_state_acq(stale) == LJ_TAB_RESCAN_CANCELLED);
   return control;
 }

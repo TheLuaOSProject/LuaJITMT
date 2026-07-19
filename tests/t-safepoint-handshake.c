@@ -750,7 +750,7 @@ static void test_multistate_public_api_gc(lua_State *L1)
   assert(tg2->hs_epoch_ack == g2->gc2.hs_epoch);
 
   assert(lj_gc2_test_finalizer_try_enter(g2));
-  assert(gc2_finalizer_owner_acq(g2) == lj_tg_tid_acq(tg2));
+  assert(gc2_finalizer_owner_acq(g2) == lj_thr_actor_current());
   lj_gc2_test_finalizer_leave(g2);
   assert(gc2_finalizer_owner_acq(g2) == 0);
 
@@ -824,6 +824,10 @@ int main(void)
   lua_pushcfunction(L, join_native_stopreq_c);
   lua_setglobal(L, "join_native_stopreq");
 
+  /* Live scalar table stores now retain setup-time library/global writes as
+  ** durable IDLE remembered/rescan work. Establish an explicit collected
+  ** baseline before this fixture begins asserting an empty SSB. */
+  lua_gc(L, LUA_GCCOLLECT, 0);
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -832,8 +836,9 @@ int main(void)
   epoch0 = g->gc2.hs_epoch;
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.ssb_head == NULL);
-  assert(gc2_ssb_published_acq(g) == 0);
-  assert(gc2_ssb_items_published_acq(g) == 0);
+  assert(gc2_ssb_published_acq(g) == gc2_ssb_drained_acq(g));
+  assert(gc2_ssb_items_published_acq(g) ==
+	 gc2_ssb_items_drained_acq(g));
   assert(lj_gc2_test_ssb_empty(g));
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);

@@ -952,21 +952,31 @@ static int threading_worker_claim(ThreadingWorkerCtx *ctx)
 {
   lua_State *L = ctx->L;
   uint32_t tid = ctx->tid;
+  uint32_t actor = lj_thr_actor_current();
+  LJStateOwner desired = lj_state_owner_pack(tid, actor);
+  if (actor == 0 || lj_tg_actor_acq(ctx->tg) != actor ||
+      lj_tg_tid_acq(ctx->tg) != tid)
+    abort();
   for (;;) {
+    LJStateOwner current;
     uint32_t owner, gcprep;
-    owner = lj_state_owner_acq(L);
+    current = lj_state_owner_word_acq(L);
+    owner = lj_state_owner_tid(current);
     gcprep = lj_state_gcprep_state_acq(L);
     /* The parent-published TG root makes terminal preparation impossible.
     ** PENDING/DONE here would mean a live-rooted state was reclaimed. */
     if (LJ_UNLIKELY(gcprep != LJ_STATE_GCPREP_NONE))
       abort();
     if (owner == tid) {
+      if (current != desired)
+	abort();
       ctx->claimed = 1;
       return !threading_worker_start_cancelled(ctx);
     }
     if (owner == 0) {
-      uint32_t expect = 0;
-      if (!lj_state_owner_cas(L, &expect, tid))
+      LJStateOwner expect = 0;
+      if (current != 0 ||
+	  !lj_state_owner_word_cas(L, &expect, desired))
 	continue;
       if (LJ_UNLIKELY(lj_state_gcprep_state_acq(L) !=
 		      LJ_STATE_GCPREP_NONE))
@@ -1289,6 +1299,9 @@ static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
   if (!was_attached) {
     if (!lj_tg_fini_thread(ctx->g, ctx->tg))
       abort();
+    if (lj_tg_actor_acq(ctx->tg) != 0 &&
+	!lj_thr_tg_handoff_current(ctx->tg))
+      abort();  /* Provisional local TG dies only after disowning its actor. */
     free(ctx->tg);
   }
   /* Do not reclaim a registered foreign TG inline. Apart from competing with

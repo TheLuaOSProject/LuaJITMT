@@ -30,6 +30,7 @@ typedef struct ReclaimCtx {
   global_State *g;
   lua_State *target;
   uint32_t done;
+  uint32_t actor;
   int result;
 } ReclaimCtx;
 
@@ -46,7 +47,7 @@ static void *reclaim_main(void *arg)
     (void)lj_thr_retry_yield(NULL);
   ctx->result = lj_gc_test_reclaim_thread(ctx->g, ctx->target);
   lj_gc2_test_idle_reclaim_leave(ctx->g);
-  (void)lj_state_gcprep_drain(ctx->g, LJ_GC2_ROOT_SCAN_LIMIT);
+  ctx->actor = lj_thr_actor_current();
   (void)lj_gc2_test_recovery_drain(ctx->g, LJ_GC2_ROOT_SCAN_LIMIT);
   la_store32_rel(&ctx->done, 1);
   return NULL;
@@ -178,6 +179,7 @@ static void test_late_rescue_cancel(void)
   ctx.g = g;
   ctx.target = co;
   ctx.done = 0;
+  ctx.actor = 0;
   ctx.result = -1;
 
   /* Pause the target after its owner/root preflight, then arm the allocator's
@@ -274,6 +276,7 @@ static void test_terminal_queue_open_upvalue(void)
   ctx.g = g;
   ctx.target = co;
   ctx.done = 0;
+  ctx.actor = 0;
   ctx.result = -1;
   lj_state_test_gcprep_pause(1);
   assert(pthread_create(&collector, NULL, reclaim_main, &ctx) == 0);
@@ -295,6 +298,12 @@ static void test_terminal_queue_open_upvalue(void)
   lj_state_test_gcprep_pause(0);
   assert(pthread_join(collector, NULL) == 0);
   assert(ctx.result == LJ_GC_DESTRUCT_ACQUIRED);
+  assert(ctx.actor != 0 && ctx.actor != lj_thr_actor_current());
+  assert(lj_state_owner_word_acq(co) ==
+	 lj_state_owner_pack(LJ_THREAD_GCPREP, ctx.actor));
+  /* The publishing reclaimer has left its exclusive scope. Main now owns the
+  ** unique pop and must retag GCPREP to its actor before destructing co. */
+  assert(lj_state_gcprep_drain(g, LJ_GC2_ROOT_SCAN_LIMIT) == 1);
   assert(lj_state_gcprep_pending_acq(g) == 0);
 
   /* Preparation copied the stack cell into the escaped upvalue before the

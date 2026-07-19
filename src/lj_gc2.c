@@ -4522,33 +4522,24 @@ void lj_gc2_weak_to_sweep(global_State *g, lua_State *L)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
-static TGState *gc2_finalizer_current_tg(global_State *g)
-{
-  TGState *tg = lj_thr_get_tg();
-  if (!g || !tg || tg->gl == g)
-    return tg;
-  /* Missing TLS can be an unattached helper; only stale TLS can fallback. */
-  return g->main_tg;
-}
-
 static uint32_t gc2_finalizer_current_owner(global_State *g)
 {
-  TGState *tg = gc2_finalizer_current_tg(g);
-  uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
-  return tid != 0 ? tid : ~(uint32_t)0;
+  /* The FIFO is process memory and reentrancy is physical-thread-local. A
+  ** logical TG tid (or a shared TLS-less pseudo owner) lets another pthread
+  ** impersonate the active drainer. Lazy actor admission gives every caller a
+  ** stable, never-reused capability even when it has no Lua TG. */
+  return g ? lj_thr_actor_ensure() : 0;
 }
 
 int lj_gc2_finalizer_owned_by_current(global_State *g)
 {
-  TGState *tg;
   uint32_t owner;
   if (!g)
     return 0;
   owner = gc2_finalizer_owner_acq(g);
   if (owner == 0)
     return 0;
-  tg = gc2_finalizer_current_tg(g);
-  return owner == (tg ? lj_tg_tid_acq(tg) : ~(uint32_t)0);
+  return owner == lj_thr_actor_current();
 }
 
 static GC2FinalizerNode *gc2_finalizer_node_new(global_State *g, GCobj *o,
@@ -4919,6 +4910,8 @@ static int lj_gc2_finalizer_try_enter(global_State *g)
   if (!g)
     return 0;
   owner = gc2_finalizer_current_owner(g);
+  if (owner == 0)
+    return 0;
   for (;;) {
     old = gc2_finalizer_active_acq(g);
     if (old != 0) {
@@ -4978,7 +4971,7 @@ static void gc2_peer_wait_owned_l(lua_State *L)
     goto no_l;
   tid = lj_tg_tid_acq(tg);
   if (lj_thr_id_is_owner(tid) &&
-      lj_state_owner_acq(L) == tid) {
+      lj_tg_owns_state_acq(tg, L)) {
     gc2_peer_wait_l(L);
     return;
   }
@@ -7625,18 +7618,21 @@ static void gc2_mark_jit_frame_funcs(global_State *g, lua_State *L)
 
 static int gc2_thread_is_current(global_State *g, lua_State *L)
 {
+  LJStateOwner owner_word;
   uint32_t owner;
   TGState *tg;
   if (!g || !L)
     return 0;
-  owner = lj_state_owner_acq(L);
+  owner_word = lj_state_owner_word_acq(L);
+  owner = lj_state_owner_tid(owner_word);
   if (lj_thr_id_is_owner(owner)) {
     tg = lj_tg_find_owner(g, owner);
     if (tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
-	lj_tg_load_cur_L(tg) == L)
+	lj_tg_owns_state_acq(tg, L) && lj_tg_load_cur_L(tg) == L &&
+	lj_tg_owns_state_acq(tg, L))
       return 1;
   }
-  return L == lj_tg_cur_L(g);
+  return 0;
 }
 
 static int gc2_thread_is_jit_current(global_State *g, lua_State *L)
@@ -7704,17 +7700,20 @@ static int gc2_thread_is_native_current(global_State *g, lua_State *L)
 
 static int gc2_thread_is_remote_current(global_State *g, lua_State *L)
 {
+  LJStateOwner owner_word;
   uint32_t owner;
   TGState *tg;
   if (!g || !L)
     return 0;
-  owner = lj_state_owner_acq(L);
+  owner_word = lj_state_owner_word_acq(L);
+  owner = lj_state_owner_tid(owner_word);
   if (!lj_thr_id_is_owner(owner))
     return 0;
   tg = lj_tg_find_owner(g, owner);
   return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
-	 tg != lj_thr_get_tg() &&
-	 lj_tg_load_cur_L(tg) == L && L != lj_tg_cur_L(g);
+	 lj_tg_owns_state_acq(tg, L) &&
+	 tg != lj_thr_get_tg_fallback(g) &&
+	 lj_tg_load_cur_L(tg) == L && lj_tg_owns_state_acq(tg, L);
 }
 
 static int gc2_thread_stack_scan_authoritative(global_State *g, lua_State *L)
@@ -7917,10 +7916,11 @@ static void gc2_thread_set_needscan(global_State *g, lua_State *L)
   ** exact identity on the MPMC recovery plane without touching a foreign SSB or
   ** the single-owner grey deque. Duplicate publication is harmless. */
   {
-    uint32_t owner = lj_state_owner_acq(L);
-    uint32_t owner_expect = owner;
+    LJStateOwner owner_word = lj_state_owner_word_acq(L);
+    LJStateOwner owner_expect = owner_word;
+    uint32_t owner = lj_state_owner_tid(owner_word);
     if (!lj_thr_id_is_owner(owner) ||
-	!lj_state_owner_cas(L, &owner_expect, owner)) {
+	!lj_state_owner_word_cas(L, &owner_expect, owner_word)) {
       if (!gc2_recovery_publish(g, obj2gco(L)))
 	gc2_recovery_fail_closed(g);
       lj_gc2_worker_wake(g);
@@ -8096,21 +8096,28 @@ static int gc2_thread_needscan(lua_State *L)
 static uint64_t gc2_thread_owner_dirty(global_State *g, lua_State *L,
 				       TGState **ptg)
 {
+  LJStateOwner owner_word;
+  uint64_t dirty;
   uint32_t owner;
   TGState *tg;
   if (ptg)
     *ptg = NULL;
   if (!g || !L)
     return 0;
-  owner = lj_state_owner_acq(L);
+  owner_word = lj_state_owner_word_acq(L);
+  owner = lj_state_owner_tid(owner_word);
   if (!lj_thr_id_is_owner(owner))
     return 0;
   tg = lj_tg_find_owner(g, owner);
-  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !lj_tg_owns_state_acq(tg, L))
+    return 0;
+  dirty = lj_tg_stack_dirty_epoch_acq(tg);
+  if (!lj_tg_owns_state_acq(tg, L))
     return 0;
   if (ptg)
     *ptg = tg;
-  return lj_tg_stack_dirty_epoch_acq(tg);
+  return dirty;
 }
 
 static int gc2_thread_scan_current(global_State *g, lua_State *L)
@@ -8221,7 +8228,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   return gc2_thread_clear_needscan(g, L);
 }
 
-static void gc2_scan_owned_needscan_chain(global_State *g, uint32_t tid,
+static void gc2_scan_owned_needscan_chain(global_State *g, TGState *tg,
 					  GCobj *head)
 {
   GCobj *o = head;
@@ -8238,7 +8245,7 @@ static void gc2_scan_owned_needscan_chain(global_State *g, uint32_t tid,
     th = gco2th(o);
     if (!gc2_thread_needscan(th))
       goto next_root;
-    if (lj_state_owner_acq(th) != tid)
+    if (!lj_tg_owns_state_acq(tg, th))
       goto next_root;
     (void)gc2_scan_thread_stack(g, th, &scope);
     gc2_thread_scan_owner_needscans_add(g, 1);
@@ -8258,7 +8265,7 @@ next_root:
   }
 }
 
-static void gc2_scan_owned_needscan_registry(global_State *g, uint32_t tid)
+static void gc2_scan_owned_needscan_registry(global_State *g, TGState *tg)
 {
   lua_State *th = lj_state_thread_registry_head_acq(g);
   GC2MarkScope scope;
@@ -8279,7 +8286,7 @@ static void gc2_scan_owned_needscan_registry(global_State *g, uint32_t tid)
       break;
     }
     next = lj_state_thread_registry_next_acq(th);
-    if (gc2_thread_needscan(th) && lj_state_owner_acq(th) == tid) {
+    if (gc2_thread_needscan(th) && lj_tg_owns_state_acq(tg, th)) {
       (void)gc2_scan_thread_stack(g, th, &scope);
       gc2_thread_scan_owner_needscans_add(g, 1);
     }
@@ -8311,15 +8318,15 @@ static void gc2_scan_owned_needscan(global_State *g, TGState *tg)
     return;
   (void)lj_gc_flush_root_pending(g);
   (void)lj_gc_repair_root_spine(g);
-  gc2_scan_owned_needscan_chain(g, tid, lj_gc_root_acq(g));
+  gc2_scan_owned_needscan_chain(g, tg, lj_gc_root_acq(g));
   if (gc2_thread_scan_needscan_pending_acq(g) != 0) {
     lua_State *mainL = mainthread_acq(g);
     if (mainL)
-      gc2_scan_owned_needscan_chain(g, tid,
+      gc2_scan_owned_needscan_chain(g, tg,
 				    lj_obj_gcw_acq(obj2gco(mainL)));
   }
   if (gc2_thread_scan_needscan_pending_acq(g) != 0)
-    gc2_scan_owned_needscan_registry(g, tid);
+    gc2_scan_owned_needscan_registry(g, tg);
 }
 
 #if LJ_HASFFI
@@ -8726,7 +8733,7 @@ static void gc2_scan_tg_thread_root(global_State *g, TGState *tg,
   ** just moved. Stack contents/frame geometry remain strictly tid-owned. */
   tid = lj_tg_tid_acq(tg);
   if (!lj_thr_id_is_owner(tid) ||
-      lj_state_owner_acq(L) != tid || tvref(L->stack) == NULL) {
+      !lj_tg_owns_state_acq(tg, L) || tvref(L->stack) == NULL) {
     /* A stale live alias still needs ordinary identity traversal so its actual
     ** owner can satisfy a NEEDSCAN handoff; admission only pins the body. */
     gc2_mark_thread_root_obj(g, obj2gco(L));
@@ -8739,7 +8746,7 @@ static void gc2_scan_tg_thread_root(global_State *g, TGState *tg,
     ** already-marked thread body. */
     gc2_mark_thread_root_obj(g, obj2gco(L));
   }
-  if (LJ_UNLIKELY(lj_state_owner_acq(L) != tid) &&
+  if (LJ_UNLIKELY(!lj_tg_owns_state_acq(tg, L)) &&
       gc2_thread_has_live_owner(g, L))
     gc2_thread_set_needscan(g, L);
   gc2_mark_scope_leave(&scope);
@@ -8800,7 +8807,7 @@ static GC2FFINativeScanStatus gc2_ffi_native_frame_geometry(
   if (status == GC2_MARK_DEAD)
     return GC2_FFI_NATIVE_SCAN_RETRY;
   tid = lj_tg_tid_acq(tg);
-  if (!lj_thr_id_is_owner(tid) || lj_state_owner_acq(L) != tid ||
+  if (!lj_thr_id_is_owner(tid) || !lj_tg_owns_state_acq(tg, L) ||
       mref(L->glref, global_State) != g ||
       !gc2_valid_thread_for_traverse_held(g, L, scope))
     goto invalid;
@@ -8981,12 +8988,13 @@ static GC2FFINativeScanStatus gc2_ffi_native_scan_one(
 out:
   if (status == GC2_FFI_NATIVE_SCAN_OK &&
       (lj_tg_load_cur_L(tg) != geo.L ||
-       lj_state_owner_acq(geo.L) != lj_tg_tid_acq(tg) ||
+       !lj_tg_owns_state_acq(tg, geo.L) ||
        mref(geo.L->glref, global_State) != g ||
        !gc2_valid_thread_for_traverse_held(g, geo.L, &scope) ||
        tvref(geo.L->stack) != geo.stack ||
        tvref(geo.L->maxstack) != geo.maxstack ||
-       (top_frame && lj_tg_load_jit_base(tg) != geo.jitbase)))
+       (top_frame && lj_tg_load_jit_base(tg) != geo.jitbase) ||
+       !lj_tg_owns_state_acq(tg, geo.L)))
     status = GC2_FFI_NATIVE_SCAN_RETRY;
   lj_gc2_lease_release(&geo.stacklease);
   gc2_mark_scope_leave(&scope);
@@ -10891,16 +10899,68 @@ static void gc2_finclaim_reset(global_State *g)
   gc2_finreg_cdata_preclaim_count_rel(g, pending);
 }
 
+static void gc2_weak_record_unclaim(global_State *g, GCtab *t,
+				    uint64_t installing, uint64_t prior)
+{
+  uint64_t expect = installing;
+  if (!lj_tab_weak_record_cas(t, &expect, prior)) {
+    /* Cycle ownership excludes a legitimate writer here. Preserve safety if
+    ** a corrupted/reused body nevertheless changed the exact dedupe word. */
+    gc2_recovery_fail_closed(g);
+  }
+}
+
+static int gc2_weak_record_publish(global_State *g, GCtab *t,
+				    uint64_t installing)
+{
+  uint64_t expect = installing;
+  uint64_t published = lj_tab_weak_record_pack(
+    lj_tab_weak_record_cycle(installing), LJ_TAB_WEAK_RECORD_PUBLISHED);
+  /* The vector ready byte or overflow node/count is durable before this
+  ** release publication. Only PUBLISHED may suppress another traversal. */
+  if (!lj_tab_weak_record_cas(t, &expect, published)) {
+    gc2_recovery_fail_closed(g);
+    return 0;
+  }
+  return 1;
+}
+
 static int gc2_weak_record(global_State *g, GCtab *t)
 {
   MSize cap;
   GCRef *stack;
   uint8_t *ready;
   uint64_t idx;
+  uint64_t prior, installing;
+  uint32_t cycle;
   if (!g || !t) {
     if (g)
       gc2_weak_tables_overflow_add(g, 1);
     return 0;
+  }
+  cycle = gc2_cycle_acq(g);
+  if (cycle == 0)
+    return 0;
+  prior = lj_tab_weak_record_acq(t);
+  installing = lj_tab_weak_record_pack(cycle,
+					LJ_TAB_WEAK_RECORD_INSTALLING);
+  for (;;) {
+    uint64_t expect;
+    uint32_t state = lj_tab_weak_record_state(prior);
+    if (state == LJ_TAB_WEAK_RECORD_INSTALLING)
+      return 0;  /* An in-flight publication is not a durable identity. */
+    if (LJ_UNLIKELY(state != LJ_TAB_WEAK_RECORD_NONE &&
+			    state != LJ_TAB_WEAK_RECORD_PUBLISHED)) {
+      gc2_recovery_fail_closed(g);
+      return 0;
+    }
+    if (lj_tab_weak_record_cycle(prior) == cycle &&
+	state == LJ_TAB_WEAK_RECORD_PUBLISHED)
+      return 1;  /* This exact table already has a durable cycle snapshot. */
+    expect = prior;
+    if (lj_tab_weak_record_cas(t, &expect, installing))
+      break;
+    prior = expect;
   }
   cap = gc2_weak_capacity_acq(g);
   stack = gc2_weak_stack_acq(g);
@@ -10909,8 +10969,10 @@ static int gc2_weak_record(global_State *g, GCtab *t)
     int published = gc2_weak_overflow_push(g, t);
     if (published)
       (void)gc2_weak_count_add(g, 1);
+    else
+      gc2_weak_record_unclaim(g, t, installing, prior);
     gc2_weak_tables_overflow_add(g, 1);
-    return published;
+    return published ? gc2_weak_record_publish(g, t, installing) : 0;
   }
   idx = gc2_weak_count_add(g, 1);  /* 05 section 5.8 MPSC slot. */
   if (idx < (uint64_t)cap) {
@@ -10918,7 +10980,7 @@ static int gc2_weak_record(global_State *g, GCtab *t)
     /* 05 section 5.8: publish weak snapshot slot before ready byte. */
     la_store8_rel(&ready[(MSize)idx], 1);
     gc2_weak_tables_queued_add(g, 1);
-    return 1;
+    return gc2_weak_record_publish(g, t, installing);
   } else {
     int published = gc2_weak_overflow_push(g, t);
     if (!published) {
@@ -10929,9 +10991,10 @@ static int gc2_weak_record(global_State *g, GCtab *t)
       lj_assertG(old > (uint64_t)cap,
 		 "weak discovery count rollback crossed vector prefix");
       UNUSED(old);
+      gc2_weak_record_unclaim(g, t, installing, prior);
     }
     gc2_weak_tables_overflow_add(g, 1);
-    return published;
+    return published ? gc2_weak_record_publish(g, t, installing) : 0;
   }
 }
 
@@ -14139,15 +14202,24 @@ static int gc2_publish_mutator_nodrain(global_State *g, GCobj *o)
 }
 
 void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
-				     uint32_t tid)
+				     uint32_t tid, int force_recovery)
 {
   TGState *tg;
+  LJStateOwner owner_word;
+  uint32_t actor;
   int pushed = 0;
   if (!g || !L || !lj_thr_id_is_owner(tid) ||
-      lj_state_owner_acq(L) != LJ_THREAD_GCSCAN ||
       lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE ||
-      !gc2_thread_needscan(L))
+      (!force_recovery && !gc2_thread_needscan(L)))
     return;
+
+  actor = lj_thr_actor_current();
+  owner_word = lj_state_owner_word_acq(L);
+  if (actor == 0 ||
+      owner_word != lj_state_owner_pack(LJ_THREAD_GCSCAN, actor)) {
+    gc2_recovery_fail_closed(g);
+    return;
+  }
 
   /*
   ** The releasing thread still owns the state through the temporary GCSCAN
@@ -14157,9 +14229,11 @@ void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
   ** object directly to the MPMC recovery plane instead. Both representations
   ** pin the state before the caller publishes owner zero.
   */
-  tg = lj_thr_get_tg();
-  if (tg && tg->gl == g && lj_tg_tid_acq(tg) == tid &&
-      !lj_tg_flags_test_acq(tg, TGF_DEAD))
+  tg = force_recovery ? NULL : lj_thr_get_tg();
+  if (tg && tg->gl == g && lj_tg_actor_acq(tg) == actor &&
+      lj_tg_tid_acq(tg) == tid && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+      lj_state_owner_word_acq(L) == owner_word &&
+      lj_tg_actor_acq(tg) == actor)
     pushed = gc2_ssb_push_tg(g, tg, obj2gco(L), 0);
   if (!pushed)
     pushed = gc2_recovery_publish(g, obj2gco(L));
@@ -15410,36 +15484,28 @@ static int gc2_table_store_owner_current(lua_State *L,
 					 LJGC2TableStoreGuard *guard)
 {
   global_State *g;
-  TGState *raw;
   TGState *tg;
+  LJStateOwner owner;
+  uint32_t actor;
   uint32_t tid;
   int terminal;
   if (!L || !guard || !(g = guard->g) || G(L) != g)
     return 0;
-  raw = lj_thr_get_tg();
-  if (raw != guard->owner_raw_tg)
+  actor = lj_thr_actor_current();
+  if (actor == 0 || actor != guard->owner_actor)
     return 0;
   tg = lj_thr_get_tg_fallback(g);
   if (!tg || tg != guard->tg || tg->gl != g ||
-      lj_tg_flags_test_acq(tg, TGF_DEAD))
+      lj_tg_actor_acq(tg) != actor || lj_tg_flags_test_acq(tg, TGF_DEAD))
     return 0;
   terminal = mt_shutdown_acq(g) != 0 && tg == g->main_tg &&
 	     L == mainthread_acq(g);
-  /* A quiescent universe may be moved to an unbound OS thread for lua_close.
-  ** Joined-world shutdown is the sole raw-NULL carrier; ordinary live guards
-  ** still require the immutable non-NULL owner_raw_tg certificate. */
-  if (!raw && !terminal)
-    return 0;
-  /* Creating or using a second Lua universe on the same OS thread preserves
-  ** the first universe's raw TLS binding. owner_raw_tg is the immutable local
-  ** thread certificate for this guard; the established fallback contract then
-  ** carries the second universe on its exact main TG. Require the claimed
-  ** state's matching hint before accepting that cross-universe case. */
-  if (raw != tg &&
-      (tg != g->main_tg || L->tg_hint != tg))
-    return 0;
   tid = lj_tg_tid_acq(tg);
-  if (!lj_thr_id_is_owner(tid) || lj_state_owner_acq(L) != tid)
+  owner = lj_state_owner_word_acq(L);
+  if (!lj_thr_id_is_owner(tid) || owner != guard->owner_state ||
+      lj_state_owner_tid(owner) != tid ||
+      lj_state_owner_actor(owner) != actor ||
+      lj_tg_actor_acq(tg) != actor)
     return 0;
   if (lj_tg_load_cur_L(tg) == L)
     return 1;
@@ -15448,8 +15514,7 @@ static int gc2_table_store_owner_current(lua_State *L,
   ** only while this same owner id holds the state claim. */
   if (L->tg_hint == tg)
     return 1;
-  /* lua_close clears cur_L before running joined-world finalizers. Raw TLS,
-  ** main-state ownership and mt_shutdown together remain exact owner proof. */
+  /* lua_close clears cur_L after atomically migrating the main state/TG actor. */
   return terminal;
 }
 
@@ -15522,7 +15587,8 @@ lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
   }
   g = G(L);
   guard->g = g;
-  guard->owner_raw_tg = lj_thr_get_tg();
+  guard->owner_actor = lj_thr_actor_current();
+  guard->owner_state = lj_state_owner_word_acq(L);
   guard->parent_tab = parent;
   /* Raw tagging must precede the first header read. The expected-type parent
   ** lease below is the admission that makes the body safe to inspect. */
@@ -20144,15 +20210,18 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th)
 
 static int gc2_thread_has_live_owner(global_State *g, lua_State *th)
 {
+  LJStateOwner owner_word;
   uint32_t owner;
   TGState *tg;
   if (!g || !th)
     return 0;
-  owner = lj_state_owner_acq(th);
+  owner_word = lj_state_owner_word_acq(th);
+  owner = lj_state_owner_tid(owner_word);
   if (!lj_thr_id_is_owner(owner))
     return 0;
   tg = lj_tg_find_owner(g, owner);
-  return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD);
+  return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+    lj_tg_owns_state_acq(tg, th);
 }
 
 static int gc2_stack_in_arena(GCArena *a, GCArena *want, uint32_t cell,
@@ -20284,12 +20353,16 @@ static int gc2_traverse_thread(global_State *g, lua_State *th,
   TValue *o, *top;
   TValue tv;
   uint64_t dirty_epoch, cycle;
-  uint32_t owner, current_tid;
+  LJStateOwner owner_word;
+  TGState *current_tg;
+  uint32_t owner;
   int sweep, registry_lease = 0;
   int conservative = 0;
   int stack_retry = 0;
   claim.L = NULL;
   claim.tg_hint = NULL;
+  claim.owner_tg = NULL;
+  claim.owner_word = 0;
   claim.tid = 0;
   claim.release = 0;
   /* Identity traversal may originate in the process-global registry scan. Do
@@ -20299,9 +20372,11 @@ static int gc2_traverse_thread(global_State *g, lua_State *th,
   if (!lj_gc2_smr_read_try(g))
     goto requeue_thread;
   registry_lease = 1;
-  owner = lj_state_owner_acq(th);
-  current_tid = lj_thr_current_id(g);
-  if (owner != current_tid || !lj_thr_id_is_owner(current_tid)) {
+  owner_word = lj_state_owner_word_acq(th);
+  owner = lj_state_owner_tid(owner_word);
+  current_tg = lj_thr_get_tg_fallback(g);
+  if (!current_tg || lj_tg_flags_test_acq(current_tg, TGF_DEAD) ||
+      !lj_tg_owns_state_acq(current_tg, th)) {
     if (lj_state_gcscan_claim(th, &claim))
       goto scan_thread;
     gc2_thread_scan_busy_add(g, 1);
@@ -20310,7 +20385,8 @@ static int gc2_traverse_thread(global_State *g, lua_State *th,
       gc2_thread_scan_owner_scans_add(g, 1);
     } else {
       if (!gc2_thread_has_live_owner(g, th)) {
-	uint32_t expect;
+	LJStateOwner expect, desired;
+	uint32_t actor;
 	/*
 	** A state left owned by a dead TG has no mutator to acknowledge NEEDSCAN,
 	** but dead-owner detection alone is not stack authority. Convert the exact
@@ -20319,14 +20395,19 @@ static int gc2_traverse_thread(global_State *g, lua_State *th,
 	** must be retried. The lease makes physical absence stable; a concurrent
 	** state release/claim loses the CAS without exposing stack fields.
 	*/
-	owner = lj_state_owner_acq(th);
+	expect = lj_state_owner_word_acq(th);
+	owner = lj_state_owner_tid(expect);
 	if (owner == 0 && lj_state_gcscan_claim(th, &claim))
 	  goto scan_thread;
-	expect = owner;
+	actor = lj_thr_actor_ensure();
+	desired = lj_state_owner_pack(LJ_THREAD_GCSCAN, actor);
 	if (lj_thr_id_is_owner(owner) &&
+	    actor != 0 && lj_thr_actor_current() == actor &&
 	    lj_tg_find_owner(g, owner) == NULL &&
-	    lj_state_owner_cas(th, &expect, LJ_THREAD_GCSCAN)) {
+	    lj_state_owner_word_cas(th, &expect, desired)) {
 	  claim.L = th;
+	  claim.owner_tg = NULL;
+	  claim.owner_word = desired;
 	  claim.tid = LJ_THREAD_GCSCAN;
 	  claim.release = 1;
 	  goto scan_thread;
@@ -21534,8 +21615,8 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
   ** SWEEP the queue already blocks arena reclamation until callbacks run.
   */
   owner = gc2_finalizer_current_owner(g);
-  if (owner == 0 || owner == ~(uint32_t)0)
-    return 0;  /* Do not share the TLS-less pseudo-owner across workers. */
+  if (owner == 0)
+    return 0;  /* Physical actor admission failed; never invent an owner. */
   if (!lj_gc2_finalizer_try_enter(g))
     return 0;
   if (!gc2_worker_finalizer_drain_phase(g) ||

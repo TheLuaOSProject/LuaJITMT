@@ -1764,7 +1764,7 @@ static int ccall_jit_geometry(lua_State *L, TGState *tg,
     return 0;
   g = G(L);
   tid = lj_tg_tid_acq(tg);
-  if (!g || !lj_thr_id_is_owner(tid) || lj_state_owner_acq(L) != tid ||
+  if (!g || !lj_thr_id_is_owner(tid) || !lj_tg_owns_state_acq(tg, L) ||
       mref(L->glref, global_State) != g)
     return 0;
   stack = tvref(L->stack);
@@ -2087,7 +2087,7 @@ static int ffi_native_trace_remote_snapshot(
     return 0;
   L = lj_tg_load_cur_L(tg);
   if (!L || mref_acq(L->glref, global_State) != tg->gl ||
-      lj_state_owner_acq(L) != lj_tg_tid_acq(tg))
+      !lj_tg_owns_state_acq(tg, L))
     return 0;
   for (i = 0; i < copy.depth; i++) {
     const LJFFINativeFrame *frame = &copy.frame[i];

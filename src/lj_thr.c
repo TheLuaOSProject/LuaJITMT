@@ -29,6 +29,7 @@
 #include <unistd.h>
 #if LJ_TARGET_LINUX
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #ifndef MADV_WIPEONFORK
 #define MADV_WIPEONFORK 18
 #endif
@@ -55,7 +56,9 @@ typedef char lj_thr_tg_tag_requires_pointer_width[
 typedef struct LJThrTGCell {
   uintptr_t tagged_word;
   LJThrGC2TLS gc2;
-  uint8_t pad[LJ_THR_TG_CELL_SIZE - sizeof(uintptr_t) - sizeof(LJThrGC2TLS)];
+  uint32_t actor_id;
+  uint8_t pad[LJ_THR_TG_CELL_SIZE - sizeof(uintptr_t) -
+	      sizeof(LJThrGC2TLS) - sizeof(uint32_t)];
 } LJThrTGCell;
 typedef char lj_thr_tg_cell_is_one_cacheline[
   sizeof(LJThrTGCell) == LJ_THR_TG_CELL_SIZE ? 1 : -1];
@@ -129,8 +132,37 @@ static BOOL lj_thr_tls_publish_cell(DWORD key, LJThrTGCell *cell)
 }
 #else
 static LJ_TLS uintptr_t lj_tls_tg_word;
+static LJ_TLS uint32_t lj_tls_actor_id;
 #endif
 static uint32_t lj_thr_next_tid;
+static uint32_t lj_thr_next_actor;
+
+#if !LJ_TARGET_WINDOWS
+/* Actor records are process-lifetime identity nodes. The destructor-cleared
+** live bit is the sole mutable field and only gates the stable Linux kernel
+** death query; it is not authority by itself. Teardown never touches a TG or
+** Lua universe. Nodes are deliberately never reclaimed: actor ids are never
+** reused, and close-time lookup must remain valid after the originating
+** pthread and its TLS storage have disappeared. */
+typedef struct LJThrActorRecord {
+  struct LJThrActorRecord *next;
+  uint32_t actor_id;
+  uint32_t live;
+#if LJ_TARGET_LINUX
+  uint32_t process_id;
+  uint32_t native_tid;
+#endif
+} LJThrActorRecord;
+
+#define LJ_THR_ACTOR_KEY_EMPTY 0u
+#define LJ_THR_ACTOR_KEY_BUILDING 1u
+#define LJ_THR_ACTOR_KEY_READY 2u
+#define LJ_THR_ACTOR_KEY_DEAD 3u
+
+static LJThrActorRecord *lj_thr_actor_records;
+static pthread_key_t lj_thr_actor_key;
+static uint32_t lj_thr_actor_key_state;
+#endif
 
 #if LJ_THR_TG_SIGNAL_CACHE
 /* Immutable hash nodes are never reclaimed. A signal handler snapshots one
@@ -847,6 +879,141 @@ uint32_t lj_thr_newid(void)
   return lj_thr_id_alloc(&lj_thr_next_tid);  /* 09 section 9.2. */
 }
 
+static uint32_t lj_thr_actor_newid(void)
+{
+  /* Actor ids occupy a separate non-wrapping namespace from logical TG ids. */
+  return lj_thr_id_alloc(&lj_thr_next_actor);
+}
+
+#if !LJ_TARGET_WINDOWS
+static void lj_thr_actor_record_destructor(void *ptr)
+{
+  LJThrActorRecord *record = (LJThrActorRecord *)ptr;
+  if (record)
+    la_store32_rel(&record->live, 0);
+}
+
+static int lj_thr_actor_key_ensure(void)
+{
+  int saved_errno = errno;
+  for (;;) {
+    uint32_t state = la_load32_acq(&lj_thr_actor_key_state);
+    if (state == LJ_THR_ACTOR_KEY_READY) {
+      errno = saved_errno;
+      return 1;
+    }
+    if (state == LJ_THR_ACTOR_KEY_DEAD) {
+      errno = saved_errno;
+      return 0;
+    }
+    if (state == LJ_THR_ACTOR_KEY_EMPTY) {
+      uint32_t expected = LJ_THR_ACTOR_KEY_EMPTY;
+      if (la_cas32(&lj_thr_actor_key_state, &expected,
+                   LJ_THR_ACTOR_KEY_BUILDING, LA_ACQ_REL, LA_ACQ)) {
+        int rc = pthread_key_create(&lj_thr_actor_key,
+                                    lj_thr_actor_record_destructor);
+        la_store32_rel(&lj_thr_actor_key_state,
+                       rc == 0 ? LJ_THR_ACTOR_KEY_READY :
+                                 LJ_THR_ACTOR_KEY_EMPTY);
+        errno = saved_errno;
+        return rc == 0;
+      }
+      continue;
+    }
+    (void)sched_yield();
+  }
+}
+
+static LJThrActorRecord *lj_thr_actor_record_new(uint32_t actor)
+{
+  LJThrActorRecord *record, *head;
+  int saved_errno = errno;
+#if LJ_TARGET_LINUX
+  pid_t process = getpid();
+  long native_tid = syscall(SYS_gettid);
+  if (process <= 0 || native_tid <= 0 ||
+      (uint64_t)native_tid > UINT32_MAX) {
+    errno = saved_errno;
+    return NULL;
+  }
+#endif
+  record = (LJThrActorRecord *)malloc(sizeof(*record));
+  if (!record) {
+    errno = saved_errno;
+    return NULL;
+  }
+  record->actor_id = actor;
+  la_store32_rlx(&record->live, 1);
+#if LJ_TARGET_LINUX
+  record->process_id = (uint32_t)process;
+  record->native_tid = (uint32_t)native_tid;
+#endif
+  head = (LJThrActorRecord *)
+    la_loadptr_acq((void *const *)&lj_thr_actor_records);
+  do {
+    record->next = head;
+  } while (!la_casptr((void **)&lj_thr_actor_records, (void **)&head, record,
+                      LA_REL, LA_ACQ));
+  errno = saved_errno;
+  return record;
+}
+
+static int lj_thr_actor_is_dead(uint32_t actor)
+{
+  LJThrActorRecord *record = (LJThrActorRecord *)
+    la_loadptr_acq((void *const *)&lj_thr_actor_records);
+  while (record) {
+    if (record->actor_id == actor) {
+      /* A pthread destructor can run before unrelated TLS destructors, so its
+      ** bit is only a cheap prerequisite. It is never sufficient death proof. */
+      if (la_load32_acq(&record->live) != 0)
+        return 0;
+#if LJ_TARGET_LINUX
+      {
+        int saved_errno = errno;
+        int dead = 0;
+        /* PID mismatch rejects fork copies. tgkill signal zero is a kernel
+        ** lifetime query: ESRCH is observed only after userspace TLS teardown
+        ** and task exit. TID reuse returns live and therefore fails closed. */
+        if (record->process_id == (uint32_t)getpid() &&
+            syscall(SYS_tgkill, (pid_t)record->process_id,
+                    (pid_t)record->native_tid, 0) == -1 && errno == ESRCH)
+          dead = 1;
+        errno = saved_errno;
+        return dead;
+      }
+#else
+      /* macOS currently has no equivalent stable kernel death witness in this
+      ** carrier. A destructor hint alone cannot authorize moved close. */
+      return 0;
+#endif
+    }
+    record = record->next;
+  }
+  return 0;  /* Unknown identities never authorize ownership migration. */
+}
+
+/* Avoid retaining a pthread destructor callback into an unloaded image.
+** Concurrent unload/use is outside the ABI contract; stopped-user unload
+** leaves all records intact but permanently closes new actor admission. */
+static void __attribute__((destructor)) lj_thr_actor_registry_fini(void)
+{
+  if (la_load32_acq(&lj_thr_actor_key_state) ==
+      LJ_THR_ACTOR_KEY_READY) {
+    la_store32_rel(&lj_thr_actor_key_state, LJ_THR_ACTOR_KEY_DEAD);
+    (void)pthread_key_delete(lj_thr_actor_key);
+  }
+}
+#else
+static int lj_thr_actor_is_dead(uint32_t actor)
+{
+  UNUSED(actor);
+  /* TlsAlloc has no foreign-thread destructor. Until the Windows carrier uses
+  ** FLS or another stable death witness, unknown exited actors fail closed. */
+  return 0;
+}
+#endif
+
 #if LJ_TARGET_WINDOWS
 static BOOL CALLBACK lj_thr_tls_init(PINIT_ONCE once, PVOID param,
 				     PVOID *ctx)
@@ -867,24 +1034,40 @@ static BOOL CALLBACK lj_thr_tls_init(PINIT_ONCE once, PVOID param,
 int lj_thr_tg_tls_init(void)
 {
   LJThrTGCell *cell;
+  uint32_t actor;
   DWORD key;
+  DWORD saved_error = GetLastError();
+  int ok = 0;
   if (!InitOnceExecuteOnce(&lj_tls_tg_once, lj_thr_tls_init, NULL, NULL))
-    return 0;
+    goto out;
   key = (DWORD)la_load32_acq(&lj_tls_tg_key);
   if (key == TLS_OUT_OF_INDEXES)
-    return 0;
+    goto out;
   cell = (LJThrTGCell *)TlsGetValue(key);
-  if (cell)
-    return 1;
+  if (cell) {
+    ok = la_load32_acq(&cell->actor_id) != 0;
+    goto out;
+  }
   cell = lj_thr_tls_alloc_cell();
   if (!cell)
-    return 0;
+    goto out;
   memset(cell, 0, sizeof(*cell));
+  actor = lj_thr_actor_newid();
+  if (actor == 0) {
+    _aligned_free(cell);
+    goto out;
+  }
+  la_store32_rel(&cell->actor_id, actor);
   if (!lj_thr_tls_publish_cell(key, cell)) {
     _aligned_free(cell);
-    return 0;
+    goto out;
   }
-  return 1;
+  ok = 1;
+out:
+  /* Admission is internal bookkeeping and must not overwrite the foreign
+  ** call's thread-local Win32 error value, on either the hot or cold path. */
+  SetLastError(saved_error);
+  return ok;
 }
 
 static DWORD lj_thr_tls_key(void)
@@ -916,6 +1099,19 @@ static uintptr_t lj_thr_tls_word_get(void)
   return cell ? la_loaduptr_acq(&cell->tagged_word) : 0;
 }
 
+static uint32_t lj_thr_tls_actor_get(void)
+{
+  DWORD key = lj_thr_tls_key();
+  LJThrTGCell *cell = NULL;
+  DWORD saved_error = GetLastError();
+  if (key != TLS_OUT_OF_INDEXES)
+    cell = (LJThrTGCell *)TlsGetValue(key);
+  /* Actor checks sit on FFI/API authorization paths. They must be invisible
+  ** to the Win32 last-error contract just like the GC2 TLS accessor above. */
+  SetLastError(saved_error);
+  return cell ? la_load32_acq(&cell->actor_id) : 0;
+}
+
 static void lj_thr_tls_word_set(uintptr_t word)
 {
   DWORD key = lj_thr_tls_key();
@@ -935,6 +1131,31 @@ static DWORD WINAPI lj_thr_windows_main(void *arg)
 #else
 int lj_thr_tg_tls_init(void)
 {
+  uint32_t actor = la_load32_acq(&lj_tls_actor_id);
+  if (actor == 0) {
+    LJThrActorRecord *record;
+    int saved_errno = errno;
+    int ok = 0;
+    if (!lj_thr_actor_key_ensure())
+      goto out;
+    actor = lj_thr_actor_newid();
+    if (actor == 0)
+      goto out;
+    record = lj_thr_actor_record_new(actor);
+    if (!record)
+      goto out;
+    /* Publish the destructor witness before the hot TLS actor id. On failure
+    ** the process-lifetime node is made dead and the consumed id stays unique. */
+    if (pthread_setspecific(lj_thr_actor_key, record) != 0) {
+      la_store32_rel(&record->live, 0);
+      goto out;
+    }
+    la_store32_rel(&lj_tls_actor_id, actor);
+    ok = 1;
+  out:
+    errno = saved_errno;
+    return ok;
+  }
   return 1;
 }
 
@@ -947,7 +1168,22 @@ static void lj_thr_tls_word_set(uintptr_t word)
 {
   la_storeuptr_rel(&lj_tls_tg_word, word);
 }
+
+static uint32_t lj_thr_tls_actor_get(void)
+{
+  return la_load32_acq(&lj_tls_actor_id);
+}
 #endif
+
+uint32_t lj_thr_actor_current(void)
+{
+  return lj_thr_tls_actor_get();
+}
+
+uint32_t lj_thr_actor_ensure(void)
+{
+  return lj_thr_tg_tls_init() ? lj_thr_tls_actor_get() : 0;
+}
 
 #if defined(LJ_THR_TLS_TEST_HELPERS)
 void lj_thr_tls_test_set_word(uintptr_t word)
@@ -974,7 +1210,9 @@ int lj_thr_tg_signal_prepare_current(TGState *expected_tg)
   ** sample safely. Likewise, tags other than the exact TLS lease are corrupt
   ** here: raw compatibility pointers are naturally aligned and untagged. */
   if (word == 0 || (tag != 0 && tag != LJ_THR_TG_EXACT_TAG) ||
-      (TGState *)(word & ~LJ_THR_TG_SIGNAL_TAG_MASK) != expected_tg) {
+      (TGState *)(word & ~LJ_THR_TG_SIGNAL_TAG_MASK) != expected_tg ||
+      lj_thr_actor_current() == 0 ||
+      lj_tg_actor_acq(expected_tg) != lj_thr_actor_current()) {
     errno = saved_errno;
     return 0;
   }
@@ -1174,6 +1412,63 @@ static void lj_thr_tg_move_out(LJTGRegistryBorrow *hold,
   hold->active = 1;
 }
 
+static int lj_thr_tg_unowned_bind_admissible(TGState *tg)
+{
+  LJTGRegistryKey key = tg->registry_key;
+  LJTGRegistryBodySnap body;
+  LJTGSlotSnap snap;
+  /* Actor zero on a LIVE TG is an explicit quiescent handoff. Generic TLS or
+  ** lifecycle binding must not consume it: only the paired main-state close
+  ** transaction may migrate both TG and lua_State authority. The generic CAS
+  ** remains available while the body is still private, or while its stable
+  ** registry incarnation is visibly ATTACHING. A shadow-publication failure
+  ** makes an invalid key ambiguous with an already-live TG, so it fails closed.
+  **
+  ** ATTACHING -> LIVE is an owner-only lifecycle transition. Publishing actor
+  ** zero is itself quiescent, hence a lawful ATTACHING adoption cannot race a
+  ** LIVE publication by the old actor. */
+  if (!lj_tgregistry_key_valid(&key))
+    return !lj_tg_registry_shadow_missed_acq(tg);
+  if (lj_tgregistry_key_snapshot(&key, &snap) != LJ_TGSLOT_OK ||
+      snap.state != LJ_TGSLOT_ATTACHING)
+    return 0;
+  body = lj_tgregistry_slot_body_snapshot(key.slot);
+  return lj_tgregistry_body_snap_is(&body, tg, key.incarnation);
+}
+
+int lj_thr_tg_bind_current(TGState *tg)
+{
+  uint32_t actor, owner;
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !(actor = lj_thr_actor_ensure()))
+    return 0;
+  owner = lj_tg_actor_acq(tg);
+  if (owner == actor)
+    return 1;
+  if (owner != 0)
+    return 0;
+  if (!lj_thr_tg_unowned_bind_admissible(tg))
+    return 0;
+  return lj_tg_actor_cas(tg, &owner, actor) || owner == actor;
+}
+
+/* Raw actor-zero publication is intentionally private. Callers must use the
+** quiescent handoff below, which first closes any TLS/signal alias. */
+static int lj_thr_tg_release_current_raw(TGState *tg)
+{
+  uint32_t actor = lj_thr_actor_current();
+  uint32_t owner = actor;
+  return tg && actor != 0 && lj_tg_actor_cas(tg, &owner, 0);
+}
+
+int lj_thr_tg_retire_current(TGState *tg)
+{
+  uint32_t actor = lj_thr_actor_current();
+  uint32_t owner = actor;
+  return tg && actor != 0 && actor != LJ_THR_ACTOR_RETIRED &&
+    lj_tg_actor_cas(tg, &owner, LJ_THR_ACTOR_RETIRED);
+}
+
 LJThrTGResult lj_thr_tg_install(LJTGRegistryBorrow *new_hold)
 {
   LJThrTGView current, incoming;
@@ -1198,6 +1493,8 @@ LJThrTGResult lj_thr_tg_install(LJTGRegistryBorrow *new_hold)
     return result;
   if (!lj_thr_signal_cell_prepare())
     return LJ_THR_TG_TLS_FAILURE;
+  if (!lj_thr_tg_bind_current(incoming.body))
+    return LJ_THR_TG_EXPECT_MISMATCH;
   word = (uintptr_t)incoming.body | LJ_THR_TG_EXACT_TAG;
   /* TLS acquires ownership before the signal-visible mirror. A handler in the
   ** gap merely drops a sample; once it sees the mirror, the lease is live. */
@@ -1239,6 +1536,9 @@ LJThrTGResult lj_thr_tg_swap(const LJTGRegistryKey *expected_old,
   ** first admit a child-local mirror before either binding is changed. */
   if (!lj_thr_signal_cell_prepare())
     return LJ_THR_TG_TLS_FAILURE;
+  if (lj_tg_actor_acq(current.body) != lj_thr_actor_current() ||
+      !lj_thr_tg_bind_current(incoming.body))
+    return LJ_THR_TG_EXPECT_MISMATCH;
   word = (uintptr_t)incoming.body | LJ_THR_TG_EXACT_TAG;
   /* The old lease remains operation-owned until old_hold is materialized.
   ** Publish the new TLS owner before changing the signal mirror. */
@@ -1268,6 +1568,8 @@ LJThrTGResult lj_thr_tg_clear(const LJTGRegistryKey *expected_old,
   result = lj_thr_tg_validate_view(&current, 0);
   if (result != LJ_THR_TG_OK)
     return result;
+  if (lj_tg_actor_acq(current.body) != lj_thr_actor_current())
+    return LJ_THR_TG_EXPECT_MISMATCH;
   /* A handler must stop seeing the body before TLS relinquishes ownership and
   ** before the caller can receive and release the reconstructed lease. */
   lj_thr_signal_word_set(0);
@@ -1329,6 +1631,8 @@ static void lj_thr_tls_set_raw(TGState *tg)
 
 void lj_thr_set_tg(TGState *tg)
 {
+  if (tg && !lj_thr_tg_bind_current(tg))
+    abort();
   lj_thr_tls_set_raw(tg);  /* Raw compatibility until lifecycle migration. */
 }
 
@@ -1337,12 +1641,99 @@ TGState *lj_thr_get_tg(void)
   return lj_thr_tls_get();
 }
 
+int lj_thr_tg_handoff_current(TGState *expected_tg)
+{
+  uint32_t actor = lj_thr_actor_current();
+  uintptr_t word = lj_thr_tls_word_get();
+  TGState *bound = (TGState *)(word & ~LJ_THR_TG_TAG_MASK);
+  if (!expected_tg || actor == 0 ||
+      lj_tg_actor_acq(expected_tg) != actor)
+    return 0;
+  if (bound == expected_tg) {
+    if ((word & LJ_THR_TG_EXACT_TAG) != 0)
+      return 0;  /* The caller must first return the exact registry lease. */
+    /* Handler/TLS visibility closes before actor zero becomes transferable. */
+    lj_thr_tls_set_raw(NULL);
+  } else if (bound && lj_tg_actor_acq(bound) != actor) {
+    return 0;  /* Do not preserve an already-corrupt unrelated binding. */
+  }
+  /* Nested Lua universes can share one physical actor while raw TLS continues
+  ** to name the outer TG. That unrelated binding/signal mirror is preserved:
+  ** it contains no alias to expected_tg and therefore needs no teardown. */
+  return lj_thr_tg_release_current_raw(expected_tg);
+}
+
 TGState *lj_thr_get_tg_fallback(global_State *g)
 {
+  uint32_t actor = lj_thr_actor_current();
   TGState *tg = lj_thr_tls_get();
+  if (actor == 0)
+    return NULL;
   if (!g)
+    return tg && lj_tg_actor_acq(tg) == actor ? tg : NULL;
+  if (tg && tg->gl == g && lj_tg_actor_acq(tg) == actor)
     return tg;
-  return tg && tg->gl == g ? tg : g->main_tg;
+  tg = g->main_tg;
+  return tg && lj_tg_actor_acq(tg) == actor ? tg : NULL;
+}
+
+int lj_thr_main_close_claim(lua_State *L)
+{
+  global_State *g;
+  TGState *tg;
+  LJStateOwner owner, desired, expect;
+  uint32_t actor, old_actor, prior_actor, tid, tg_expect;
+  if (!L || !(g = G(L)) || L != mainthread_acq(g) ||
+      mt_shutdown_acq(g) != 0 || !(tg = g->main_tg) ||
+      !(actor = lj_thr_actor_ensure()))
+    return 0;
+  tid = lj_tg_tid_acq(tg);
+  owner = lj_state_owner_word_acq(L);
+  if (!lj_thr_id_is_owner(tid) || lj_state_owner_tid(owner) != tid)
+    return 0;
+  old_actor = lj_state_owner_actor(owner);
+  if (old_actor == 0)
+    return 0;
+  desired = lj_state_owner_pack(tid, actor);
+  if (lj_tg_actor_acq(tg) == actor && owner == desired &&
+      lj_tg_actor_acq(tg) == actor)
+    return 1;
+  prior_actor = lj_tg_actor_acq(tg);
+  /* Actor zero is published by an explicit quiescent handoff. A nonzero actor
+  ** may be adopted only after its process-lifetime record plus stable kernel
+  ** witness prove the originating pthread exited, and the paired state claim
+  ** still names that exact actor.
+  ** Raw-NULL TLS alone is never migration authority. A live-yet-quiescent
+  ** creator still needs an explicit/public handoff; arbitrary close-vs-free
+  ** lifetime races remain outside this carrier arbitration. */
+  if ((prior_actor != 0 &&
+       (prior_actor != old_actor || !lj_thr_actor_is_dead(prior_actor))) ||
+      L->cframe != NULL ||
+      lj_tg_in_native_acq(tg) != 0 || lj_tg_tab_read_depth_acq(tg) != 0 ||
+      lj_tg_strtab_active_depth_acq(tg) != 0 ||
+      lj_tg_strq_active_depth_acq(tg) != 0 ||
+      lj_tg_lexstate_acq(tg) != NULL || lj_tg_jit_active_acq(tg) ||
+      lj_gc2_rootdesc_snapshot(&tg->root_desc, NULL) !=
+	LJ_GC2_ROOTDESC_SNAPSHOT_IDLE)
+    return 0;
+  tg_expect = prior_actor;
+  if (!lj_tg_actor_cas(tg, &tg_expect, actor))
+    return 0;
+  expect = owner;
+  if (!lj_state_owner_word_cas(L, &expect, desired)) {
+    tg_expect = actor;
+    if (!lj_tg_actor_cas(tg, &tg_expect, prior_actor))
+      abort();
+    return 0;
+  }
+  /* Actor-only migration leaves the low futex word unchanged. Wake owner
+  ** waiters explicitly so they re-evaluate the full claim. */
+  lj_state_owner_futex_wake(L, 0x7fffffff);
+  if (lj_tg_actor_acq(tg) != actor ||
+      lj_state_owner_word_acq(L) != desired ||
+      lj_tg_actor_acq(tg) != actor)
+    abort();
+  return 1;
 }
 
 static void state_gcscan_wait_no_l(void)
@@ -1350,20 +1741,78 @@ static void state_gcscan_wait_no_l(void)
   (void)lj_thr_retry_yield(NULL);
 }
 
+static void state_claim_init(LJStateClaim *claim)
+{
+  if (claim) {
+    claim->L = NULL;
+    claim->tg_hint = NULL;
+    claim->owner_tg = NULL;
+    claim->owner_word = 0;
+    claim->tid = 0;
+    claim->release = 0;
+  }
+}
+
+static int state_current_normal_owner(lua_State *L, uint32_t tid,
+				      TGState **tgp,
+				      LJStateOwner *ownerp)
+{
+  uint32_t actor;
+  TGState *tg;
+  if (!L || !lj_thr_id_is_owner(tid) ||
+      !(actor = lj_thr_actor_current()) ||
+      !(tg = lj_thr_get_tg_fallback(G(L))) ||
+      tg->gl != G(L) || lj_tg_actor_acq(tg) != actor ||
+      lj_tg_tid_acq(tg) != tid || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_actor_acq(tg) != actor)
+    return 0;
+  if (tgp)
+    *tgp = tg;
+  if (ownerp)
+    *ownerp = lj_state_owner_pack(tid, actor);
+  return 1;
+}
+
+static int state_current_protocol_owner(lua_State *L, uint32_t sentinel,
+					TGState **tgp,
+					LJStateOwner *ownerp)
+{
+  uint32_t actor;
+  if (!L || (sentinel != LJ_THREAD_GCSCAN &&
+	     sentinel != LJ_THREAD_GCPREP) ||
+      !(actor = lj_thr_actor_ensure()) || lj_thr_actor_current() != actor)
+    return 0;
+  /* Protocol claims are physical-actor capabilities, not logical TG claims.
+  ** A collector admitted outside a Lua TG (including embedders and focused
+  ** reclaim helpers) can therefore own GCSCAN/GCPREP without forging a TG.
+  ** If this actor does have a universe TG, retain it only as a diagnostic hint. */
+  if (tgp)
+    *tgp = lj_thr_get_tg_fallback(G(L));
+  if (ownerp)
+    *ownerp = lj_state_owner_pack(sentinel, actor);
+  return 1;
+}
+
 int lj_state_claim(lua_State *L, uint32_t tid)
 {
+  LJStateOwner current, desired;
+  TGState *tg;
   uint32_t owner;
-  if (!L || !lj_thr_id_is_owner(tid))
+  if (!state_current_normal_owner(L, tid, &tg, &desired))
     return 0;
+  UNUSED(tg);
   for (;;) {
     if (lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE)
       return 0;
-    owner = lj_state_owner_acq(L);
+    current = lj_state_owner_word_acq(L);
+    owner = lj_state_owner_tid(current);
     if (owner == tid)
-      return 1;
+      return current == desired;
     if (owner == 0) {
-      uint32_t expect = 0;
-      if (lj_state_owner_cas(L, &expect, tid)) {
+      LJStateOwner expect = 0;
+      if (current != 0)
+	return 0;
+      if (lj_state_owner_word_cas(L, &expect, desired)) {
 	if (LJ_LIKELY(lj_state_gcprep_state_acq(L) ==
 		      LJ_STATE_GCPREP_NONE))
 	  return 1;
@@ -1384,29 +1833,33 @@ int lj_state_claim(lua_State *L, uint32_t tid)
 
 int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
 {
+  LJStateOwner current, desired;
+  TGState *tg;
   uint32_t owner;
-  if (claim) {
-    claim->L = NULL;
-    claim->tg_hint = NULL;
-    claim->tid = 0;
-    claim->release = 0;
-  }
-  if (!L || !lj_thr_id_is_owner(tid))
+  state_claim_init(claim);
+  if (!state_current_normal_owner(L, tid, &tg, &desired))
     return 0;
   for (;;) {
     if (lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE)
       return 0;
-    owner = lj_state_owner_acq(L);
+    current = lj_state_owner_word_acq(L);
+    owner = lj_state_owner_tid(current);
     if (owner == tid) {
+      if (current != desired)
+	return 0;
       if (claim) {
 	claim->L = L;
+	claim->owner_tg = tg;
+	claim->owner_word = desired;
 	claim->tid = tid;
       }
       return 1;
     }
     if (owner == 0) {
-      uint32_t expect = 0;
-      if (lj_state_owner_cas(L, &expect, tid)) {
+      LJStateOwner expect = 0;
+      if (current != 0)
+	return 0;
+      if (lj_state_owner_word_cas(L, &expect, desired)) {
 	if (LJ_UNLIKELY(lj_state_gcprep_state_acq(L) !=
 			LJ_STATE_GCPREP_NONE)) {
 	  lj_state_release(L, tid);
@@ -1415,6 +1868,8 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
 	if (claim) {
 	  claim->L = L;
 	  claim->tg_hint = NULL;
+	  claim->owner_tg = tg;
+	  claim->owner_word = desired;
 	  claim->tid = tid;
 	  claim->release = 1;
 	}
@@ -1451,25 +1906,27 @@ int lj_state_resumeclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
 
 int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
 {
+  LJStateOwner current, desired;
+  TGState *tg;
   uint32_t owner;
-  if (claim) {
-    claim->L = NULL;
-    claim->tg_hint = NULL;
-    claim->tid = 0;
-    claim->release = 0;
-  }
-  if (!L)
+  state_claim_init(claim);
+  if (!state_current_protocol_owner(L, LJ_THREAD_GCSCAN, &tg, &desired))
     return 0;
   for (;;) {
     if (lj_state_gcprep_state_acq(L) != LJ_STATE_GCPREP_NONE)
       return 0;
-    owner = lj_state_owner_acq(L);
+    current = lj_state_owner_word_acq(L);
+    owner = lj_state_owner_tid(current);
     if (owner == 0) {
-      uint32_t expect = 0;
-      if (lj_state_owner_cas(L, &expect, LJ_THREAD_GCSCAN)) {
+      LJStateOwner expect = 0;
+      if (current != 0)
+	return 0;
+      if (lj_state_owner_word_cas(L, &expect, desired)) {
 	if (claim) {
 	  claim->L = L;
 	  claim->tg_hint = NULL;
+	  claim->owner_tg = tg;
+	  claim->owner_word = desired;
 	  claim->tid = LJ_THREAD_GCSCAN;
 	  claim->release = 1;
 	}
@@ -1479,7 +1936,7 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
     }
     if (owner == LJ_THREAD_GCSCAN) {
       /*
-      ** The scan sentinel intentionally carries no owner id. A GC scanner can
+      ** The scan sentinel carries an actor but no logical TG owner id. A scanner can
       ** rediscover the same lua_State through another grey edge while it owns
       ** that sentinel, so waiting here can self-deadlock. Report the state as
       ** busy; GC2 will requeue it or let the owning thread satisfy NEEDSCAN.
@@ -1492,20 +1949,96 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
   }
 }
 
-static void state_stack_dirty(lua_State *L, uint32_t tid)
+static void state_stack_dirty(lua_State *L, TGState *tg, uint32_t tid)
 {
-  TGState *tg;
-  if (!L || !lj_thr_id_is_owner(tid))
+  if (!L || !tg || !lj_thr_id_is_owner(tid) || tg->gl != G(L) ||
+      lj_tg_tid_acq(tg) != tid)
     return;
-  tg = lj_tg_find_owner(G(L), tid);
-  if (tg)
-    lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
+  lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
+}
+
+static int state_release_exact(lua_State *L, TGState *tg,
+			       LJStateOwner expected)
+{
+  global_State *g;
+  uint32_t actor = lj_state_owner_actor(expected);
+  uint32_t tid = lj_state_owner_tid(expected);
+  LJStateOwner current = expected;
+  if (!L || !(g = G(L)) || actor == 0 ||
+      lj_thr_actor_current() != actor)
+    return 0;
+  if (lj_thr_id_is_owner(tid)) {
+    LJStateOwner sentinel = lj_state_owner_pack(LJ_THREAD_GCSCAN, actor);
+    uint32_t tgactor;
+    if (!tg || tg->gl != g || lj_tg_tid_acq(tg) != tid)
+      return 0;
+    tgactor = lj_tg_actor_acq(tg);
+    if (tgactor != actor || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+	lj_tg_actor_acq(tg) != actor)
+      return 0;
+    state_stack_dirty(L, tg, tid);
+    if (!lj_state_owner_word_cas(L, &current, sentinel))
+      return 0;
+    if (lj_thr_actor_current() != actor || lj_tg_tid_acq(tg) != tid ||
+	lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+	lj_tg_actor_acq(tg) != actor)
+      abort();  /* Never continue cleanup after paired authority was lost. */
+    lj_gc2_thread_owner_releasing(g, L, tid, 0);
+    /* Wake while the protocol sentinel still pins every byte of L. A waiter
+    ** which races after this wake either observes GCSCAN and yields, or its
+    ** old-tid futex comparison fails. Owner zero is therefore the final L
+    ** access and cannot race a terminal THREAD body reuse. */
+    lj_state_owner_futex_wake(L, 0x7fffffff);
+    lj_state_owner_word_rel(L, 0);
+  } else {
+    if (tid != LJ_THREAD_GCSCAN && tid != LJ_THREAD_GCPREP)
+      return 0;
+    if (lj_thr_actor_current() != actor)
+      abort();
+    /* Protocol waiters never sleep on sentinel words. Wake first anyway so
+    ** an old-tid waiter from a completed transfer is conservatively released,
+    ** then make the exact CAS the final access to L. */
+    lj_state_owner_futex_wake(L, 0x7fffffff);
+    if (!lj_state_owner_word_cas(L, &current, 0))
+      return 0;
+  }
+  return 1;
+}
+
+/* Release an exact physical state capability without dereferencing its TG.
+** This covers nested/non-TLS carriers when the nonwaiting metadata reader is
+** closed, and post-detach wrappers whose TG is already terminal. Invalidate
+** the prior owner-scan certificate after taking the GCSCAN sentinel, then
+** publish an unconditional recovery identity before owner zero. */
+static int state_release_cold_exact(global_State *g, lua_State *L,
+				    LJStateOwner expected)
+{
+  uint32_t actor = lj_state_owner_actor(expected);
+  uint32_t tid = lj_state_owner_tid(expected);
+  LJStateOwner current = expected;
+  LJStateOwner sentinel = lj_state_owner_pack(LJ_THREAD_GCSCAN, actor);
+  if (!g || !L || G(L) != g || !lj_thr_id_is_owner(tid) || actor == 0 ||
+      lj_thr_actor_current() != actor ||
+      !lj_state_owner_word_cas(L, &current, sentinel))
+    return 0;
+  if (lj_thr_actor_current() != actor)
+    abort();
+  lj_state_scan_epoch_rel(L, 0);
+  lj_state_scan_dirty_epoch_rel(L, ~(uint64_t)0);
+  lj_gc2_thread_owner_releasing(g, L, tid, 1);
+  /* Recovery is durable before this wake. As in the hot path, the sentinel
+  ** keeps the address live and owner zero is the final body access. */
+  lj_state_owner_futex_wake(L, 0x7fffffff);
+  lj_state_owner_word_rel(L, 0);
+  return 1;
 }
 
 void lj_state_dropclaim(LJStateClaim *claim)
 {
   if (claim && claim->release) {
-    lj_state_release(claim->L, claim->tid);
+    if (!state_release_exact(claim->L, claim->owner_tg,
+			     claim->owner_word))
+      abort();  /* A stack handle cannot durably retain lost claim authority. */
     claim->release = 0;
   }
 }
@@ -1528,8 +2061,13 @@ uint32_t lj_state_resume_release_result(lua_State *L, uint32_t tid,
 void lj_state_dropresumeclaim(LJStateClaim *claim)
 {
   if (claim && claim->release) {
+    TGState *running_hint = claim->L->tg_hint;
     claim->L->tg_hint = claim->tg_hint;
-    lj_state_release(claim->L, claim->tid);
+    if (!state_release_exact(claim->L, claim->owner_tg,
+			     claim->owner_word)) {
+      claim->L->tg_hint = running_hint;
+      abort();  /* Keep the running carrier attached on impossible cleanup. */
+    }
     claim->release = 0;
   }
 }
@@ -1540,6 +2078,16 @@ uint32_t lj_state_owner_wait(lua_State *L, lua_State *target, uint32_t owner,
   TGState *tg = L ? L2TG(L) : lj_thr_tls_get();
   uint32_t actions = 0;
   if (!target || owner == 0)
+    return 0;
+  /* A releasing normal owner first publishes GCSCAN and wakes the old tid.
+  ** Never enqueue a futex waiter on either protocol sentinel: this closes the
+  ** wake-before-owner0 protocol even for a future caller using an infinite
+  ** timeout. A stale ordinary owner sample is rechecked immediately before
+  ** the kernel comparison; a concurrent sentinel CAS makes that comparison
+  ** fail instead of missing the preceding wake. */
+  if (owner == LJ_THREAD_GCSCAN || owner == LJ_THREAD_GCPREP)
+    return lj_thr_retry_yield(L);
+  if (lj_state_owner_acq(target) != owner)
     return 0;
   /*
   ** State-owner waits are native waits, not VM stalls. Mark the TG native so
@@ -1558,32 +2106,26 @@ uint32_t lj_state_owner_wait(lua_State *L, lua_State *target, uint32_t owner,
 
 void lj_state_release(lua_State *L, uint32_t tid)
 {
-  if (L && tid != 0) {
-    uint32_t owner = lj_state_owner_acq(L);
-    lj_assertX(owner == tid, "lua_State owner mismatch");
-    state_stack_dirty(L, tid);
-    if (lj_thr_id_is_owner(tid)) {
-      uint32_t expect = tid;
-      /*
-      ** Publish a short terminal ownership interval before making the state
-      ** claimable. A collector which sampled the old owner either publishes
-      ** NEEDSCAN before this CAS (and is observed below), or observes GCSCAN
-      ** and retains concrete work. This closes the set-NEEDSCAN/release race
-      ** without a lock, wait, or post-release body access.
-      */
-      if (LJ_UNLIKELY(!lj_state_owner_cas(
-			 L, &expect, LJ_THREAD_GCSCAN))) {
-	lj_assertX(0, "lua_State release sentinel CAS failed");
-	return;
-      }
-      lj_gc2_thread_owner_releasing(G(L), L, tid);
-      lj_state_owner_rel(L, 0);
-    } else {
-      UNUSED(owner);
-      lj_state_owner_rel(L, 0);
+  global_State *g;
+  TGState *tg = NULL;
+  LJStateOwner expected = 0;
+  if (!L || tid == 0)
+    return;
+  g = G(L);  /* Retain before owner0 makes L eligible for reclamation. */
+  if (lj_thr_id_is_owner(tid)) {
+    if (!state_current_normal_owner(L, tid, &tg, &expected)) {
+      uint32_t actor = lj_thr_actor_current();
+      expected = lj_state_owner_pack(tid, actor);
+      if (actor == 0 || lj_state_owner_word_acq(L) != expected ||
+	  !state_release_cold_exact(g, L, expected))
+	abort();
+      return;
     }
-    lj_state_owner_futex_wake(L, 0x7fffffff);
+  } else if (!state_current_protocol_owner(L, tid, &tg, &expected)) {
+    abort();
   }
+  if (!state_release_exact(L, tg, expected))
+    abort();
 }
 
 uint32_t lj_thr_cpucount(void)
