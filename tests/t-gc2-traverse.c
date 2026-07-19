@@ -4695,6 +4695,65 @@ static LJGC2TabStamp *table_token_test_stamp(GCtab *t)
   return stamp;
 }
 
+static void test_table_authority_saturation(void)
+{
+  lua_State *L;
+  global_State *g;
+  TGState *tg;
+  GCtab *t;
+  LJGC2TabStamp *stamp;
+  LJGC2ActivationSnap activation;
+  uint64_t state;
+
+  /* Dirty saturation must invalidate the covered scan cycle without wrapping
+  ** the persistent per-cell identity back to one. Use a private universe
+  ** because NO_RECLAIM is intentionally absorbing. */
+  L = luaL_newstate();
+  assert(L != NULL);
+  lua_gc(L, LUA_GCSTOP, 0);
+  g = G(L);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  stamp = table_token_test_stamp(t);
+  la_store64_rel(&stamp->state,
+		 ((uint64_t)UINT32_C(17) << 32) | (UINT32_MAX - 1u));
+  lj_gc2_test_table_dirty_bump(g, t);
+  state = la_load64_acq(&stamp->state);
+  assert((uint32_t)state == UINT32_MAX);
+  assert((uint32_t)(state >> 32) == 0u);
+  activation = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(activation.state == LJ_GC2_ACT_IDLE);
+  lj_gc2_test_table_dirty_bump(g, t);
+  state = la_load64_acq(&stamp->state);
+  assert((uint32_t)state == UINT32_MAX);
+  assert((uint32_t)(state >> 32) == 0u);
+  activation = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(activation.state == LJ_GC2_ACT_NO_RECLAIM);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lua_close(L);
+
+  /* Cycle saturation is rejected before either typed or legacy MARK becomes
+  ** visible. The exact request is consumed, and later requests remain bounded
+  ** no-ops under the absorbing reclaim veto. */
+  L = luaL_newstate();
+  assert(L != NULL);
+  lua_gc(L, LUA_GCSTOP, 0);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  gc2_cycle_store_rlx(g, UINT32_MAX);
+  assert(lj_gc2_request_cycle_explicit(g, tg));
+  lj_gc2_mark_begin(g);
+  activation = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(activation.state == LJ_GC2_ACT_NO_RECLAIM);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_cycle_acq(g) == UINT32_MAX);
+  assert(gc2_cycle_leader_acq(g) == 0u);
+  assert(!lj_gc2_request_cycle_explicit(g, tg));
+  assert(gc2_cycle_leader_acq(g) == 0u);
+  lua_close(L);
+}
+
 static uint64_t table_token_test_request_next(global_State *g, GCtab *t)
 {
   LJGC2TabStamp *stamp = table_token_test_stamp(t);
@@ -9181,6 +9240,7 @@ int main(void)
   }
 #if defined(LJ_GC2_TEST_HELPERS)
   test_table_topology_primitive();
+  test_table_authority_saturation();
   test_table_token_pass_certificate();
 #endif
 

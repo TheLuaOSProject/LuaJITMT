@@ -2741,6 +2741,13 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
 {
   uint32_t old = gc2_cycle_acq(g), next;
   do {
+    /* Cycle zero is the unpublished/reset value and exact table scan proofs
+    ** retain this 32-bit identity. Never wrap a live authority through zero.
+    ** The cycle-start owner detects saturation before phase publication and
+    ** moves the typed activation token to sticky NO_RECLAIM. Keep this helper
+    ** saturating as a mechanical backstop for any future caller. */
+    if (old == ~(uint32_t)0)
+      return old;
     next = old + 1u;
   } while (!la_cas32(&g->gc2.cycle, &old, next, LA_ACQ_REL, LA_ACQ));
   return next;

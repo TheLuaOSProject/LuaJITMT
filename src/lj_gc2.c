@@ -2771,10 +2771,16 @@ static void gc2_request_threshold(global_State *g)
 static int gc2_request_cycle_start(global_State *g, TGState *tg,
 				   int honor_stop)
 {
+  LJGC2ActivationSnap activation;
   uint32_t expect = 0;
   uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
+  if (!g)
+    return 0;
   if (!lj_thr_id_is_owner(tid))
     return 0;
+  activation = lj_gc2_activation_snapshot(&g->gc2.activation);
+  if (activation.state == LJ_GC2_ACT_NO_RECLAIM)
+    return 0;  /* Saturated exact authority is absorbing by construction. */
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     return 0;
   if (honor_stop && gc2_logical_stopped(g))
@@ -3995,6 +4001,21 @@ static int gc2_mark_begin(global_State *g)
     gc2_worker_release(g);
     return 0;
   }
+  /* The 32-bit cycle is embedded in per-table scan proofs. Wrapping MAX to
+  ** zero would make an old proof indistinguishable from the reserved reset
+  ** state and, after another wrap, from a later cycle. Saturation is not an
+  ** invitation to run a last major cycle: pin reclamation before any typed or
+  ** legacy phase edge, consume only this exact request, and leave mutators
+  ** operational. This path is lock-free and cannot strand the requester. */
+  if (gc2_cycle_acq(g) == ~(uint32_t)0) {
+    uint32_t expect = leader;
+    gc2_activation_pin_no_reclaim(g);
+    if (LJ_UNLIKELY(!gc2_cycle_leader_cas(g, &expect, 0)))
+      gc2_activation_pin_no_reclaim(g);
+    gc2_worker_release(g);
+    lj_gc2_worker_wake(g);
+    return 0;
+  }
   /* Close native entry before staging typed MARK or consuming any request,
   ** force-major bit, counter, mark or queue state. The SC fence pairs with the
   ** x64 entry publication/recheck. If a trace is still active (including a
@@ -4037,13 +4058,6 @@ static int gc2_mark_begin(global_State *g)
   }
   tg = G2TG(g);
   forced_major = gc2_force_major_xchg_acqrel(g, 0);
-  /*
-  ** Cycle zero is reserved as the prototype-scan reset value. Make the
-  ** uint32_t wrap cycle major so all survivor marks are rebuilt while
-  ** per-prototype deduplication is disabled for that one cycle.
-  */
-  if (gc2_cycle_acq(g) == ~(uint32_t)0)
-    forced_major = 1;
   minor_requested = !forced_major && gc2_generational_acq(g) != 0;
   sweep_minor = minor_requested &&
     gc2_minor_sweep_enabled_acq(g) != 0;
@@ -14985,10 +14999,23 @@ static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t)
     return;
   old = la_load64_acq(&s->state);
   for (;;) {
-    uint32_t dirty = gc2_tabstamp_dirty(old) + 1u;
+    uint32_t old_dirty = gc2_tabstamp_dirty(old);
+    uint32_t dirty;
     uint64_t next;
-    if (dirty == 0)
-      dirty = 1;
+    if (old_dirty == ~(uint32_t)0) {
+      /* Dirty epochs share the scan-proof word and therefore must not ABA.
+      ** Clear the covered cycle while retaining the absorbing maximum, then
+      ** pin global reclamation. Mutator writes continue normally; only false
+      ** reclamation authority is forbidden after this practically unreachable
+      ** saturation edge. */
+      next = gc2_tabstamp_pack(0, old_dirty);
+      if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ)) {
+	gc2_activation_pin_no_reclaim(g);
+	return;
+      }
+      continue;
+    }
+    dirty = old_dirty + 1u;
     /*
     ** Dirtying a table invalidates its same-cycle scan proof in the same atomic
     ** word used by the scanner. The scanner's post-clear check repairs the
