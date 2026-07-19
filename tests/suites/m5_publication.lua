@@ -817,6 +817,18 @@ return function(add)
   })
 
   add({
+    name = "m5_tab_keyed_store_txn",
+    description = "prepared exact keyed table-store transaction",
+    run = function(t)
+      t:build(build.tab_helper_build_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-tab-keyed-store-txn"),
+                      "t-tab-keyed-store-txn.c",
+                      build.tab_helper_c_opts({ timeout = "20s" }))
+      print("M5 prepared exact keyed table-store transaction passed")
+    end
+  })
+
+  add({
     name = "m5_tab_value_publish",
     description = "C-side table value release-publication behavior",
     run = function(t)

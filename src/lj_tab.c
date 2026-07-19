@@ -18,6 +18,7 @@
 #include "lj_arena.h"
 #include "lj_safepoint.h"
 #include "lj_tab.h"
+#include "lj_tabtxn.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #if LJ_HASFFI
@@ -4719,7 +4720,7 @@ static int tab_store_array_successor_slot_bounded(GCtab *parent,
 						   TValue *array,
 						   MSize asize,
 						   MSize key,
-						   TValue *dst,
+						   uintptr_t dst_addr,
 						   int *to_hash)
 {
   TValue before, confirm;
@@ -4758,7 +4759,7 @@ static int tab_store_array_successor_slot_bounded(GCtab *parent,
     ** resume after a delete and refill the nil destination. Until migration
     ** owns a unique persistent MOVING descriptor, same-index successor stores
     ** retry until the new array is the published table root. */
-    UNUSED(dst);
+    UNUSED(dst_addr);
     return 0;
   }
   /* Array shrink transfers this old integer slot to the successor hash part.
@@ -4769,8 +4770,14 @@ static int tab_store_array_successor_slot_bounded(GCtab *parent,
   return 0;
 }
 
-static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
-					     cTValue *key)
+/* Validate an address-only slot candidate and derive fresh pointer provenance
+** from the current table roots.  Integer comparison is required here: a
+** candidate may name a vector whose allocation lifetime ended before this
+** SMR interval, so merely evaluating a retained pointer value would be UB. */
+static int tab_current_slot_addr_for_key_bounded(GCtab *parent,
+						  uintptr_t dst_addr,
+						  cTValue *key,
+						  TValue **currentp)
 {
   int32_t k;
   int64_t i64;
@@ -4778,6 +4785,8 @@ static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
   TValue hkey;
   cTValue *keyh = key;
   int array_to_hash = 0;
+  if (currentp)
+    *currentp = NULL;
   if (tvisint(key)) {
     k = intV(key);
     intkey = 1;
@@ -4792,12 +4801,16 @@ static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
     if (!tab_store_array_snapshot_try(parent, &array, &asize))
       return 0;
     if (array) {
-      if ((MSize)k < asize && dst == &array[k] &&
+      if ((MSize)k < asize &&
+	  dst_addr == (uintptr_t)(void *)&array[k] &&
 	  !lj_tab_array_is_retiring(parent, array) &&
-	  array == lj_tab_array_acq(parent))
+	  array == lj_tab_array_acq(parent)) {
+	if (currentp)
+	  *currentp = &array[k];
 	return 1;
+      }
       if (tab_store_array_successor_slot_bounded(
-	    parent, array, asize, (MSize)k, dst, &array_to_hash))
+	    parent, array, asize, (MSize)k, dst_addr, &array_to_hash))
 	return 1;
       if ((MSize)k < asize && !array_to_hash)
 	return 0;
@@ -4810,9 +4823,12 @@ static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
     if (!tab_store_node_snapshot_try(parent, &node, &hmask) || hmask == 0)
       return 0;
     slot = tab_store_hash_slot_for_key_bounded(node, hmask, keyh);
-    if (slot == dst && !lj_tab_node_is_retiring(node) &&
-	node == lj_tab_node_acq(parent))
+    if (slot && dst_addr == (uintptr_t)(void *)slot &&
+	!lj_tab_node_is_retiring(node) && node == lj_tab_node_acq(parent)) {
+      if (currentp)
+	*currentp = slot;
       return 1;
+    }
     /* Hash FORWARD/RETIRING is published before the successor value. Exact
     ** next-generation key lookup therefore cannot distinguish an installed
     ** edge from the migration's transient nil slot. Wait for successor-root
@@ -4820,6 +4836,13 @@ static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
     ** delete or NIL-mode claim to be resurrected by put-if-absent migration. */
     return 0;
   }
+}
+
+static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
+					     cTValue *key)
+{
+  return tab_current_slot_addr_for_key_bounded(
+    parent, (uintptr_t)(void *)dst, key, NULL);
 }
 
 LJ_FUNCA int lj_tab_read_current_keyed(global_State *g, GCtab *parent,
@@ -4859,6 +4882,349 @@ static void tab_store_guard_finish_checked(lua_State *L,
     lj_assertL(0, "table-store guard lost cleanup authority");
     abort();
   }
+}
+
+enum {
+  TAB_KEYED_STORE_TXN_IDLE,
+  TAB_KEYED_STORE_TXN_PREPARED,
+  TAB_KEYED_STORE_TXN_FINISHED
+};
+
+#ifdef LJ_TAB_TEST_HELPERS
+static LJTabKeyedStoreTxnPostCasHook tab_keyed_store_txn_post_cas_hook;
+
+void lj_tab_keyed_store_test_set_post_cas_hook(
+  LJTabKeyedStoreTxnPostCasHook hook)
+{
+  tab_keyed_store_txn_post_cas_hook = hook;
+}
+
+static LJ_AINLINE void tab_keyed_store_txn_test_post_cas(
+  LJTabKeyedStoreTxn *txn)
+{
+  if (tab_keyed_store_txn_post_cas_hook)
+    tab_keyed_store_txn_post_cas_hook(txn);
+}
+#else
+#define tab_keyed_store_txn_test_post_cas(txn) ((void)(txn))
+#endif
+
+void lj_tab_keyed_store_txn_init(LJTabKeyedStoreTxn *txn)
+{
+  if (txn)
+    memset(txn, 0, sizeof(*txn));
+}
+
+static void tab_keyed_store_txn_drop_expected(LJTabKeyedStoreTxn *txn)
+{
+  if (txn->expected_lease_active) {
+    lj_gc2_lease_release(&txn->expected_lease);
+    txn->expected_lease_active = 0;
+  }
+}
+
+static int tab_keyed_store_txn_owner_current(lua_State *L,
+					      const LJTabKeyedStoreTxn *txn)
+{
+  const LJGC2TableStoreGuard *guard;
+  global_State *g;
+  TGState *tg;
+  LJStateOwner owner;
+  uint32_t actor, tid;
+  int terminal;
+  if (!L || !txn || L != txn->owner_L)
+    return 0;
+  guard = &txn->guard;
+  g = guard->g;
+  if (!g || G(L) != g)
+    return 0;
+  actor = lj_thr_actor_current();
+  if (actor == 0 || actor != guard->owner_actor)
+    return 0;
+  tg = lj_thr_get_tg_fallback(g);
+  if (!tg || tg != guard->tg || tg->gl != g ||
+      lj_tg_actor_acq(tg) != actor || lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return 0;
+  terminal = mt_shutdown_acq(g) != 0 && tg == g->main_tg &&
+	     L == mainthread_acq(g);
+  tid = lj_tg_tid_acq(tg);
+  owner = lj_state_owner_word_acq(L);
+  if (!lj_thr_id_is_owner(tid) || owner != guard->owner_state ||
+      lj_state_owner_tid(owner) != tid ||
+      lj_state_owner_actor(owner) != actor ||
+      lj_tg_actor_acq(tg) != actor)
+    return 0;
+  if (lj_tg_load_cur_L(tg) == L || L->tg_hint == tg)
+    return 1;
+  return terminal;
+}
+
+static int tab_keyed_store_txn_cleanup(lua_State *L,
+					LJTabKeyedStoreTxn *txn,
+					int committed)
+{
+  if (!L || !txn || txn->state != TAB_KEYED_STORE_TXN_PREPARED ||
+      !txn->smr_active || !txn->guard_active || !txn->guard.g ||
+      G(L) != txn->guard.g || !tab_keyed_store_txn_owner_current(L, txn))
+    return 0;
+  /* No raw vector pointer is used by the durable GC handoff.  End the bounded
+  ** commit reader first so finish cannot retain a reclaimer veto through its
+  ** marking/rescan work; the guard and expected lease still retain every
+  ** semantic object until that handoff completes. */
+  txn->dst = NULL;  /* Drop pointer provenance before its SMR lifetime ends. */
+  lj_gc2_smr_read_leave(G(L));
+  txn->smr_active = 0;
+  tab_store_guard_finish_checked(L, &txn->guard, committed);
+  txn->guard_active = 0;
+  tab_keyed_store_txn_drop_expected(txn);
+  txn->state = TAB_KEYED_STORE_TXN_FINISHED;
+  return txn->guard.finished && !txn->guard.cleanup_failed;
+}
+
+static int tab_keyed_store_txn_fail(lua_State *L, LJTabKeyedStoreTxn *txn,
+				     int status)
+{
+  if (txn->smr_active) {
+    lj_gc2_smr_read_leave(G(L));
+    txn->smr_active = 0;
+  }
+  if (txn->guard_active) {
+    tab_store_guard_finish_checked(L, &txn->guard, 0);
+    txn->guard_active = 0;
+  }
+  tab_keyed_store_txn_drop_expected(txn);
+  txn->state = TAB_KEYED_STORE_TXN_FINISHED;
+  return status;
+}
+
+static int tab_keyed_store_txn_lease_expected(lua_State *L,
+					       LJTabKeyedStoreTxn *txn)
+{
+  int edge;
+  if (!tvisgcv(&txn->expected))
+    return 1;
+  edge = lj_gc2_tv_lease_acquire(G(L), &txn->expected,
+				  &txn->expected_lease);
+  if (edge != LJ_GC2_TV_EDGE_VALID)
+    return 0;
+  txn->expected_lease_active = 1;
+  return 1;
+}
+
+static LJ_AINLINE int tab_keyed_store_value_valid(cTValue *value)
+{
+  return !tvistabinternal(value) && !tab_val_is_publish_claim(value) &&
+	 tab_tv_snapshot_valid(value);
+}
+
+static LJ_AINLINE int tab_keyed_store_key_valid(cTValue *key)
+{
+  return !tab_hash_key_hidden(key) && !tvisforward(key) &&
+	 !tab_val_is_publish_claim(key) &&
+	 !(tvisnum(key) && tvisnan(key)) && tab_tv_snapshot_valid(key);
+}
+
+static int tab_keyed_store_prepare(lua_State *L, LJTabKeyedStoreTxn *txn,
+				    GCtab *parent, uintptr_t dst_addr,
+				    cTValue *key, cTValue *expected,
+				    cTValue *desired, int snapshot_expected)
+{
+  LJGC2TableStoreGuardResult stage;
+  TValue current;
+  TValue *current_dst;
+  if (!L || !txn || !parent || dst_addr == 0 || !key || !desired ||
+      txn->state != TAB_KEYED_STORE_TXN_IDLE)
+    return LJ_TAB_STORE_CAS_STALE;
+  txn->owner_L = L;
+  txn->parent = parent;
+  txn->dst_addr = dst_addr;
+  lj_tv_load_acq(&txn->key, key);
+  lj_tv_load_acq(&txn->desired, desired);
+  if (tab_hash_key_hidden(&txn->key) || tvisforward(&txn->key) ||
+      tab_val_is_publish_claim(&txn->key) ||
+      (tvisnum(&txn->key) && tvisnan(&txn->key)) ||
+      tvistabinternal(&txn->desired) ||
+      tab_val_is_publish_claim(&txn->desired))
+    return tab_keyed_store_txn_fail(L, txn,
+	 tvisforward(&txn->desired) ? LJ_TAB_STORE_CAS_FORWARD :
+	 LJ_TAB_STORE_CAS_STALE);
+  if (!snapshot_expected) {
+    if (!expected)
+      return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+    lj_tv_load_acq(&txn->expected, expected);
+    if (tvistabinternal(&txn->expected) ||
+	tab_val_is_publish_claim(&txn->expected))
+      return tab_keyed_store_txn_fail(L, txn,
+	 tvisforward(&txn->expected) ? LJ_TAB_STORE_CAS_FORWARD :
+	 LJ_TAB_STORE_CAS_STALE);
+  }
+
+  /* Run every semantic/L-aware publication action before either retained SMR
+  ** interval.  The barrier helpers fail closed on malformed GC snapshots; the
+  ** short reader below then performs the stronger exact tag/header checks. */
+  tab_store_barrier_write(L, parent, &txn->key, &txn->desired);
+
+  if (!lj_gc2_smr_read_try(G(L)))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  txn->smr_active = 1;
+  if (!tab_keyed_store_key_valid(&txn->key) ||
+      !tab_keyed_store_value_valid(&txn->desired) ||
+      (!snapshot_expected &&
+       !tab_keyed_store_value_valid(&txn->expected)))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  if (!tab_current_slot_addr_for_key_bounded(parent, txn->dst_addr,
+					       &txn->key, &current_dst))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  lj_tv_load_acq(&current, current_dst);
+  if (tvisforward(&current))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_FORWARD);
+  if (!tab_keyed_store_value_valid(&current))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  if (snapshot_expected) {
+    txn->expected = current;
+  } else if (tv_rawload(&current) != tv_rawload(&txn->expected)) {
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_CHANGED);
+  }
+  if (!tab_keyed_store_txn_lease_expected(L, txn))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  /* Close a weak-clear/replacement race after acquiring the expected lease.
+  ** A mismatch is ordinary lost exact authority, never an ABA retry. */
+  if (!tab_current_slot_addr_for_key_bounded(parent, txn->dst_addr,
+					       &txn->key, &current_dst))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  lj_tv_load_acq(&current, current_dst);
+  if (tvisforward(&current))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_FORWARD);
+  if (tv_rawload(&current) != tv_rawload(&txn->expected))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_CHANGED);
+
+  /* The first reader exists only to acquire the exact expectation safely.
+  ** Guard admission may retry activation/TG transitions, so never retain a
+  ** vector reclaimer veto across it. */
+  lj_gc2_smr_read_leave(G(L));
+  txn->smr_active = 0;
+
+  stage = lj_gc2_table_store_begin(L, &txn->guard, parent, &txn->key,
+				    &txn->desired);
+  if (stage != LJ_GC2_TABLE_STORE_GUARD_OK &&
+      stage != LJ_GC2_TABLE_STORE_GUARD_PINNED) {
+    if (!txn->guard.finished && txn->guard.g && txn->guard.tg) {
+      txn->guard_active = 1;
+      return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+    }
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  }
+  txn->guard_active = 1;
+  stage = lj_gc2_table_store_admit(L, &txn->guard);
+  if ((stage != LJ_GC2_TABLE_STORE_GUARD_OK &&
+       stage != LJ_GC2_TABLE_STORE_GUARD_PINNED) ||
+      !txn->guard.gate_admitted)
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  stage = lj_gc2_table_store_revalidate(L, &txn->guard);
+  if ((stage != LJ_GC2_TABLE_STORE_GUARD_OK &&
+       stage != LJ_GC2_TABLE_STORE_GUARD_PINNED) ||
+      !txn->guard.store_authorized)
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+
+  /* This final nonwaiting reader is the only vector-generation authority
+  ** retained across the caller's bounded odd interval and exact CAS. */
+  if (!lj_gc2_smr_read_try(G(L)))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  txn->smr_active = 1;
+  if (!tab_current_slot_addr_for_key_bounded(parent, txn->dst_addr,
+					       &txn->key, &current_dst))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_STALE);
+  lj_tv_load_acq(&current, current_dst);
+  if (tvisforward(&current))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_FORWARD);
+  if (tv_rawload(&current) != tv_rawload(&txn->expected))
+    return tab_keyed_store_txn_fail(L, txn, LJ_TAB_STORE_CAS_CHANGED);
+
+  /* Retain only this pointer freshly derived from a live current root, and
+  ** only for the lifetime of the final SMR reader. */
+  txn->dst = current_dst;
+  txn->state = TAB_KEYED_STORE_TXN_PREPARED;
+  return LJ_TAB_STORE_CAS_OK;
+}
+
+int lj_tab_keyed_store_prepare_snapshot(lua_State *L,
+					LJTabKeyedStoreTxn *txn,
+					GCtab *parent, uintptr_t dst_addr,
+					cTValue *key, cTValue *desired)
+{
+  return tab_keyed_store_prepare(L, txn, parent, dst_addr, key, NULL, desired,
+				 1);
+}
+
+int lj_tab_keyed_store_prepare_exact(lua_State *L,
+				     LJTabKeyedStoreTxn *txn,
+				     GCtab *parent, uintptr_t dst_addr,
+				     cTValue *key, cTValue *expected,
+				     cTValue *desired)
+{
+  return tab_keyed_store_prepare(L, txn, parent, dst_addr, key, expected,
+				 desired, 0);
+}
+
+cTValue *lj_tab_keyed_store_expected(const LJTabKeyedStoreTxn *txn)
+{
+  return txn && txn->state == TAB_KEYED_STORE_TXN_PREPARED ?
+	 &txn->expected : NULL;
+}
+
+int lj_tab_keyed_store_commit(LJTabKeyedStoreTxn *txn, int *status)
+{
+  TValue observed;
+  int rc;
+  if (!status)
+    return 0;
+  *status = LJ_TAB_STORE_CAS_STALE;
+  if (!txn || txn->state != TAB_KEYED_STORE_TXN_PREPARED ||
+      !txn->smr_active || !txn->guard_active || txn->commit_attempted ||
+      !txn->guard.store_authorized ||
+      !tab_keyed_store_txn_owner_current(txn->owner_L, txn))
+    return 0;
+  txn->commit_attempted = 1;
+  if (!tab_current_slot_for_key_bounded(txn->parent, txn->dst, &txn->key))
+    return 0;
+  lj_tv_load_acq(&observed, txn->dst);
+  if (tvisforward(&observed)) {
+    *status = LJ_TAB_STORE_CAS_FORWARD;
+    return 0;
+  }
+  if (tv_rawload(&observed) != tv_rawload(&txn->expected)) {
+    *status = LJ_TAB_STORE_CAS_CHANGED;
+    return 0;
+  }
+  if (!lj_tv_cas(txn->dst, &observed, &txn->desired)) {
+    *status = tvisforward(&observed) ? LJ_TAB_STORE_CAS_FORWARD :
+	      LJ_TAB_STORE_CAS_CHANGED;
+    return 0;
+  }
+  txn->committed = 1;
+  /* Test builds may publish a preconstructed successor root here to prove the
+  ** committed-plus-STALE authority split.  Production expands to a no-op. */
+  tab_keyed_store_txn_test_post_cas(txn);
+  rc = tab_current_slot_for_key_bounded(txn->parent, txn->dst, &txn->key) ?
+       LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
+  *status = rc;
+  return 1;
+}
+
+int lj_tab_keyed_store_finish(lua_State *L, LJTabKeyedStoreTxn *txn)
+{
+  if (!L || !txn || txn->state != TAB_KEYED_STORE_TXN_PREPARED ||
+      !txn->commit_attempted || !txn->committed)
+    return 0;
+  return tab_keyed_store_txn_cleanup(L, txn, 1);
+}
+
+int lj_tab_keyed_store_abort(lua_State *L, LJTabKeyedStoreTxn *txn)
+{
+  if (!L || !txn || txn->state != TAB_KEYED_STORE_TXN_PREPARED ||
+      txn->committed)
+    return 0;
+  return tab_keyed_store_txn_cleanup(L, txn, 0);
 }
 
 static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,

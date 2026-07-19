@@ -20,6 +20,7 @@ local m5_concurrent_cases = {
   "m5_tab_resize_weakfinjit_stress",
   "m5_tab_capi_resize_stress",
   "m5_tab_cas_store",
+  "m5_tab_keyed_store_txn",
   "m5_tab_clear_entering",
   "m5_table_insert_entering",
   "m5_tab_value_publish",
