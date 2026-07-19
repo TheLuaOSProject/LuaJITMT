@@ -841,6 +841,36 @@ return function(add)
   })
 
   add({
+    name = "m5_jit_attach_clocked",
+    description = "clocked exact jit.attach publication and compatibility",
+    run = function(t)
+      build.with_default_build_restore(t, function()
+        local base = "-DLJ_TAB_TEST_HELPERS"
+        local profiles = {
+          { suffix = "", flags = base },
+          { suffix = "-nojit", flags = base .. " -DLUAJIT_DISABLE_JIT" },
+          { suffix = "-novmevent",
+            flags = base .. " -DLUAJIT_DISABLE_VMEVENT" },
+          { suffix = "-nojit-novmevent",
+            flags = base .. " -DLUAJIT_DISABLE_JIT" ..
+                    " -DLUAJIT_DISABLE_VMEVENT" }
+        }
+        for i = 1, #profiles do
+          local profile = profiles[i]
+          build.clean_build(t, { quiet = true, xcflags = profile.flags })
+          build_and_run_c(t,
+            t:tmp("lj_t-jit-attach-clocked" .. profile.suffix),
+            "t-jit-attach-clocked.c", {
+              build = false, clean = false, timeout = "30s",
+              cflags = profile.flags
+            })
+        end
+      end)
+      print("M5 clocked exact jit.attach publication passed")
+    end
+  })
+
+  add({
     name = "m5_tab_value_publish",
     description = "C-side table value release-publication behavior",
     run = function(t)

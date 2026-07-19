@@ -3,6 +3,8 @@
 ** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 */
 
+#include <stdlib.h>
+
 #define lib_jit_c
 #define LUA_LIB
 
@@ -19,6 +21,7 @@
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_tabtxn.h"
 #include "lj_state.h"
 #include "lj_thr.h"
 #include "lj_bc.h"
@@ -128,42 +131,355 @@ LJLIB_CF(jit_security)
   return 1;
 }
 
-static TValue *jit_attach_event_store(lua_State *L, GCtab *tab, cTValue *key,
-				      cTValue *src)
+#ifndef LUAJIT_DISABLE_VMEVENT
+
+static LJ_AINLINE int jit_attach_raw_equal(cTValue *a, cTValue *b)
 {
-  TValue *dst;
+  return a && b && tv_rawload(a) == tv_rawload(b);
+}
+
+/* Preserve the stock event-name hash exactly: the full string length seeds
+** the hash, but mixing stops at the first embedded NUL. */
+static int32_t jit_attach_event_key(GCstr *s)
+{
+  const uint8_t *p = (const uint8_t *)strdata(s);
+  uint32_t h = s->len;
+  while (*p)
+    h = h ^ (lj_rol(h, 6) + *p++);
+  return VMEVENT_HASHIDX(h);
+}
+
+static void jit_attach_txn_abort_checked(lua_State *L,
+					 LJTabKeyedStoreTxn *txn)
+{
+  if (LJ_UNLIKELY(!lj_tab_keyed_store_abort(L, txn)))
+    abort();
+}
+
+static void jit_attach_txn_finish_checked(lua_State *L,
+					  LJTabKeyedStoreTxn *txn)
+{
+  if (LJ_UNLIKELY(!lj_tab_keyed_store_finish(L, txn)))
+    abort();
+}
+
+#if LJ_HASJIT
+/* VM-event readers index clocks with the final numeric registry key, not the
+** original event string. Iteration canonicalizes some negative integer hash
+** keys to doubles, so accept either exact integral representation. */
+static int jit_attach_clock_slot(cTValue *key, uint32_t *slot)
+{
+  int64_t i64;
+  int32_t registry_key;
+  if (tvisint(key)) {
+    registry_key = intV(key);
+  } else if (tvisnum(key)) {
+    if (!lj_num2int_check(numV(key), i64, registry_key))
+      return 0;
+  } else {
+    return 0;
+  }
+  return lj_jit_event_attachment_clock_slot(registry_key, slot);
+}
+
+/* Return zero only after a BUSY claim has dropped every prepared authority
+** and completed one L-aware wait. Once a writer is CLAIMED, commit and
+** publish are deliberately adjacent: there is no cancellation path and no
+** branch, wait, throw or semantic runtime call can strand the lane odd. */
+static int jit_attach_clocked_commit(lua_State *L,
+				     LJTabKeyedStoreTxn *txn, uint32_t slot,
+				     int *committed, int *status)
+{
+  LJJitEventAttachmentWriter writer;
+  int claim = lj_jit_event_attachment_writer_claim(G(L), slot, &writer);
+  if (claim == LJ_JIT_EVENT_ATTACHMENT_WRITER_BUSY) {
+    jit_attach_txn_abort_checked(L, txn);
+    lj_tab_store_wait_l(L);
+    return 0;
+  }
+  if (claim == LJ_JIT_EVENT_ATTACHMENT_WRITER_EXHAUSTED) {
+    jit_attach_txn_abort_checked(L, txn);
+    lj_err_callermsg(L, "jit.attach event clock exhausted");
+  }
+  if (claim != LJ_JIT_EVENT_ATTACHMENT_WRITER_CLAIMED) {
+    jit_attach_txn_abort_checked(L, txn);
+    abort();
+  }
+
+  *committed = lj_tab_keyed_store_commit(txn, status);
+  lj_jit_event_attachment_writer_publish(&writer);
+
+  if (*committed)
+    jit_attach_txn_finish_checked(L, txn);
+  else
+    jit_attach_txn_abort_checked(L, txn);
+  return 1;
+}
+#endif
+
+static void jit_attach_unclocked_commit(lua_State *L,
+					LJTabKeyedStoreTxn *txn,
+					int invalidate_cache,
+					int *committed, int *status)
+{
+  *committed = lj_tab_keyed_store_commit(txn, status);
+  if (*committed && invalidate_cache)
+    vmevmask_store_rel(G(L), VMEVENT_NOCACHE);
+  if (*committed)
+    jit_attach_txn_finish_checked(L, txn);
+  else
+    jit_attach_txn_abort_checked(L, txn);
+}
+
+static int jit_attach_event(lua_State *L, ptrdiff_t tabofs,
+			    ptrdiff_t keyofs, ptrdiff_t fnoffs,
+			    int32_t registry_key)
+{
+  int confirm_committed_stale = 0;
+#if LJ_HASJIT
+  uint32_t clock_slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+  int clocked =
+    lj_jit_event_attachment_clock_slot(registry_key, &clock_slot);
+#else
+  UNUSED(registry_key);
+#endif
+
   for (;;) {
-    dst = lj_tab_set(L, tab, key);
-    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, key, src) ==
-	LJ_TAB_STORE_CAS_OK)
-      return dst;
-    lj_tab_store_wait_l(L);  /* jit.attach event table saw stale/FORWARD slot. */
+    LJTabKeyedStoreTxn txn;
+    cTValue *tabroot = restorestack(L, tabofs);
+    cTValue *keyroot = restorestack(L, keyofs);
+    cTValue *fnroot;
+    cTValue *expected;
+    uintptr_t dst_addr = 0;
+    int resolve_status, prepare_status, committed, status;
+
+    resolve_status = lj_tab_keyed_slot_resolve_or_insert_rooted_l(
+      L, &tabroot, &keyroot, &dst_addr);
+    if (LJ_UNLIKELY(resolve_status != LJ_TAB_KEYED_SLOT_FOUND))
+      lj_err_callermsg(L, "thread busy");
+
+    /* resolve_or_insert() returns rebased stack roots. No raw stack pointer or
+    ** table body from an earlier L-aware operation crosses this boundary. */
+    fnroot = restorestack(L, fnoffs);
+    if (LJ_UNLIKELY(!tvistab(tabroot) || !tvisfunc(fnroot)))
+      abort();
+    lj_tab_keyed_store_txn_init(&txn);
+    prepare_status = lj_tab_keyed_store_prepare_snapshot(
+      L, &txn, tabV(tabroot), dst_addr, keyroot, fnroot);
+    if (prepare_status != LJ_TAB_STORE_CAS_OK) {
+      if (LJ_UNLIKELY(prepare_status != LJ_TAB_STORE_CAS_CHANGED &&
+		      prepare_status != LJ_TAB_STORE_CAS_STALE &&
+		      prepare_status != LJ_TAB_STORE_CAS_FORWARD))
+	abort();
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+
+    /* A same-value initial attach must still publish an invalidation. Only a
+    ** previous committed-plus-STALE attempt earns this fresh confirmation. */
+    expected = lj_tab_keyed_store_expected(&txn);
+    fnroot = restorestack(L, fnoffs);
+    if (LJ_UNLIKELY(!expected || !tvisfunc(fnroot))) {
+      jit_attach_txn_abort_checked(L, &txn);
+      abort();
+    }
+    if (confirm_committed_stale && jit_attach_raw_equal(expected, fnroot)) {
+      jit_attach_txn_abort_checked(L, &txn);
+      return 0;
+    }
+
+#if LJ_HASJIT
+    if (clocked) {
+      if (!jit_attach_clocked_commit(L, &txn, clock_slot,
+				     &committed, &status))
+	continue;
+    } else
+#endif
+    {
+      jit_attach_unclocked_commit(L, &txn, 1, &committed, &status);
+    }
+
+    if (!committed) {
+      if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_CHANGED &&
+		      status != LJ_TAB_STORE_CAS_STALE &&
+		      status != LJ_TAB_STORE_CAS_FORWARD))
+	abort();
+      /* Attach never treats a failed semantic CAS as success. Resolve and
+      ** prepare afresh against the same captured registry table. */
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    if (status == LJ_TAB_STORE_CAS_OK)
+      return 0;
+    if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_STALE))
+      abort();
+    confirm_committed_stale = 1;
+    lj_tab_store_wait_l(L);
   }
 }
+
+static int jit_detach_events(lua_State *L, ptrdiff_t tabofs,
+			     ptrdiff_t ctrlofs, ptrdiff_t keyofs,
+			     ptrdiff_t valofs, ptrdiff_t fnoffs)
+{
+  for (;;) {
+    cTValue *tabroot = restorestack(L, tabofs);
+    TValue *ctrl = restorestack(L, ctrlofs);
+    int next_status = lj_tab_itern_rooted(L, tabroot, ctrl);
+    if (next_status == 0)
+      return 0;
+    if (LJ_UNLIKELY(next_status != 1))
+      abort();
+
+    /* The rooted iterator may wait and rehome the stack. Its structural
+    ** cursor, actual key and exact value are the only durable traversal state. */
+    {
+      cTValue *valroot = restorestack(L, valofs);
+      cTValue *fnroot = restorestack(L, fnoffs);
+      if (LJ_UNLIKELY(!tvisfunc(fnroot)))
+	abort();
+      if (!tvisfunc(valroot) || funcV(valroot) != funcV(fnroot))
+	continue;
+    }
+
+    for (;;) {
+      LJTabKeyedStoreTxn txn;
+      cTValue *keyroot;
+      cTValue *valroot;
+      uintptr_t dst_addr = 0;
+      int resolve_status, prepare_status, committed, status;
+#if LJ_HASJIT
+      uint32_t clock_slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+      int clocked;
+#endif
+
+      tabroot = restorestack(L, tabofs);
+      keyroot = restorestack(L, keyofs);
+      resolve_status = lj_tab_keyed_slot_resolve_rooted_try(
+        L, tabroot, keyroot, &dst_addr);
+      if (resolve_status == LJ_TAB_KEYED_SLOT_RETRY) {
+	lj_tab_store_wait_l(L);
+	continue;
+      }
+      if (resolve_status == LJ_TAB_KEYED_SLOT_ABSENT)
+	break;
+      if (LJ_UNLIKELY(resolve_status != LJ_TAB_KEYED_SLOT_FOUND))
+	abort();
+
+      tabroot = restorestack(L, tabofs);
+      keyroot = restorestack(L, keyofs);
+      valroot = restorestack(L, valofs);
+      if (LJ_UNLIKELY(!tvistab(tabroot) || !tvisfunc(valroot)))
+	abort();
+      lj_tab_keyed_store_txn_init(&txn);
+      prepare_status = lj_tab_keyed_store_prepare_exact(
+        L, &txn, tabV(tabroot), dst_addr, keyroot, valroot, niltv(L));
+      if (prepare_status == LJ_TAB_STORE_CAS_CHANGED)
+	break;  /* A replacement (or nil) won; never erase it. */
+      if (prepare_status != LJ_TAB_STORE_CAS_OK) {
+	if (LJ_UNLIKELY(prepare_status != LJ_TAB_STORE_CAS_STALE &&
+			prepare_status != LJ_TAB_STORE_CAS_FORWARD))
+	  abort();
+	lj_tab_store_wait_l(L);
+	continue;
+      }
+
+#if LJ_HASJIT
+      keyroot = restorestack(L, keyofs);
+      clocked = jit_attach_clock_slot(keyroot, &clock_slot);
+      if (clocked) {
+	if (!jit_attach_clocked_commit(L, &txn, clock_slot,
+				       &committed, &status))
+	  continue;
+      } else
+#endif
+      {
+	jit_attach_unclocked_commit(L, &txn, 0, &committed, &status);
+      }
+
+      if (!committed) {
+	if (status == LJ_TAB_STORE_CAS_CHANGED)
+	  break;  /* Preserve the exact competing replacement. */
+	if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_STALE &&
+			status != LJ_TAB_STORE_CAS_FORWARD))
+	  abort();
+	lj_tab_store_wait_l(L);
+	continue;
+      }
+      if (status == LJ_TAB_STORE_CAS_OK)
+	break;
+      if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_STALE))
+	abort();
+      /* The CAS committed into an old generation. Resolve the same rooted key
+      ** again; prepare_exact advances if the current value is no longer fn. */
+      lj_tab_store_wait_l(L);
+    }
+  }
+}
+
+#endif /* !LUAJIT_DISABLE_VMEVENT */
 
 LJLIB_CF(jit_attach)
 {
 #ifdef LUAJIT_DISABLE_VMEVENT
   luaL_error(L, "vmevent API disabled");
 #else
-  GCfunc *fn = lj_lib_checkfunc(L, 1);
-  GCstr *s = lj_lib_optstr(L, 2);
-  luaL_findtable(L, LUA_REGISTRYINDEX, LJ_VMEVENTS_REGKEY, LJ_VMEVENTS_HSIZE);
-  if (s) {  /* Attach to given event. */
-    const uint8_t *p = (const uint8_t *)strdata(s);
-    uint32_t h = s->len;
-    while (*p) h = h ^ (lj_rol(h, 6) + *p++);
-    lua_pushvalue(L, 1);
-    lua_rawseti(L, -2, VMEVENT_HASHIDX(h));
-    vmevmask_store_rel(G(L), VMEVENT_NOCACHE);  /* Invalidate cache. */
-  } else {  /* Detach if no event given. */
-    setnilV(L->top++);
-    while (lua_next(L, -2)) {
-      L->top--;
-      if (tvisfunc(L->top) && funcV(L->top) == fn) {
-	jit_attach_event_store(L, tabV(L->top-2), L->top-1, niltv(L));
-      }
-    }
+  int attach;
+  const char *conflict;
+  ptrdiff_t tabofs, fnoffs;
+
+  /* Compatibility order is observable: disabled builds reject first; enabled
+  ** builds validate the function, then the optional event name, then perform
+  ** exactly one registry lookup/creation. */
+  (void)lj_lib_checkfunc(L, 1);
+  attach = lj_lib_optstr(L, 2) != NULL;
+  if (attach)
+    lj_state_stack_pubtv(L, L, L->base + 1);
+  conflict = luaL_findtable(L, LUA_REGISTRYINDEX, LJ_VMEVENTS_REGKEY,
+			    LJ_VMEVENTS_HSIZE);
+  if (LJ_UNLIKELY(conflict != NULL))
+    lj_err_callerv(L, LJ_ERR_BADMODN, conflict);
+
+  if (attach) {
+    cTValue *eventroot;
+    ptrdiff_t eventofs, keyofs;
+    int32_t registry_key;
+
+    lj_state_checkstack(L, 1);
+    fnoffs = savestack(L, L->base);
+    eventofs = savestack(L, L->base + 1);
+    tabofs = savestack(L, L->top - 1);
+    eventroot = restorestack(L, eventofs);
+    if (LJ_UNLIKELY(!tvisstr(eventroot)))
+      abort();
+    registry_key = jit_attach_event_key(strV(eventroot));
+    keyofs = savestack(L, L->top);
+    setintV(L->top, registry_key);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
+    return jit_attach_event(L, tabofs, keyofs, fnoffs, registry_key);
+  } else {
+    TValue *ctrl;
+    ptrdiff_t ctrlofs, keyofs, valofs;
+
+    /* Keep one table and three contiguous traversal roots. The LJ_KEYINDEX
+    ** cursor survives concurrent resize without reusing an invalid actual key. */
+    lj_state_checkstack(L, 3);
+    fnoffs = savestack(L, L->base);
+    tabofs = savestack(L, L->top - 1);
+    ctrl = L->top;
+    ctrlofs = savestack(L, ctrl);
+    keyofs = savestack(L, ctrl + 1);
+    valofs = savestack(L, ctrl + 2);
+    ctrl->u32.lo = 0;
+    ctrl->u32.hi = LJ_KEYINDEX;
+    setnilV(ctrl + 1);
+    setnilV(ctrl + 2);
+    lj_state_stack_pubtv(L, L, ctrl);
+    lj_state_stack_pubtv(L, L, ctrl + 1);
+    lj_state_stack_pubtv(L, L, ctrl + 2);
+    L->top += 3;
+    return jit_detach_events(L, tabofs, ctrlofs, keyofs, valofs, fnoffs);
   }
 #endif
   return 0;
