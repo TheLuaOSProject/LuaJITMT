@@ -4490,6 +4490,7 @@ LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
   }
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
 static LJ_AINLINE int tab_ptr_index(uintptr_t base, uintptr_t elem,
 				    size_t elemsz, MSize count, MSize *idx)
 {
@@ -4500,6 +4501,7 @@ static LJ_AINLINE int tab_ptr_index(uintptr_t base, uintptr_t elem,
   }
   return 0;
 }
+#endif
 
 static LJ_AINLINE MSize tab_store_array_snapshot_acq(GCtab *parent,
 						      TValue **arrayp)
@@ -4522,132 +4524,6 @@ static LJ_AINLINE MSize tab_store_array_snapshot_acq(GCtab *parent,
     }
     lj_tab_wait_no_l();
   }
-}
-
-static LJ_AINLINE MSize tab_store_node_snapshot_acq(GCtab *parent,
-						    Node **nodep)
-{
-  for (;;) {
-    Node *node = lj_tab_node_acq(parent);
-    MSize hmask = lj_tab_node_hmask_acq(node);
-    if (node == lj_tab_node_acq(parent)) {
-      *nodep = node;
-      return hmask;
-    }
-    lj_tab_wait_no_l();
-  }
-}
-
-static LJ_AINLINE int tab_array_forward_hop_writer(const GCtab *t,
-						   TValue **arrayp,
-						   MSize *asizep)
-{
-  TValue *array = *arrayp;
-  TValue *root;
-  TValue *next;
-  if (!array || lj_tab_array_is_colocated(t, array))
-    return 0;
-  root = lj_tab_array_acq(t);
-  if (root != array) {
-    *asizep = lj_tab_array_snapshot_acq(t, arrayp);
-    return *arrayp != NULL;
-  }
-  if (!lj_tab_array_is_retiring(t, array))
-    return 0;
-  next = lj_tab_array_nextgen_acq(array);
-  if (next && next != array && !lj_tab_array_is_colocated(t, next)) {
-    *arrayp = next;
-    *asizep = lj_tab_array_hdr_asize_acq(next);
-    return 1;
-  }
-  return 0;
-}
-
-static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
-					  int32_t key)
-{
-  TValue *array;
-  MSize asize;
-  if (key < 0)
-    return 0;
-  asize = tab_store_array_snapshot_acq(parent, &array);
-  if (!array || (MSize)key >= asize)
-    return 0;
-  if (dst == &array[key] && !lj_tab_array_is_retiring(parent, array))
-    return 1;
-  {
-    TValue val;
-    TValue *next = array;
-    MSize nextasize = asize;
-    lj_tv_load_acq(&val, &array[key]);
-    if ((lj_tab_array_is_retiring(parent, array) || tvisforward(&val)) &&
-	(tvisforward(&val) ?
-	 lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
-	 tab_array_forward_hop_writer(parent, &next, &nextasize)) &&
-	(MSize)key < nextasize)
-      return dst == &next[key] && !lj_tab_array_is_retiring(parent, next);
-  }
-  return 0;
-}
-
-static int tab_current_hash_slot_for_key(GCtab *parent, TValue *dst,
-					 cTValue *key)
-{
-  Node *node;
-  MSize hmask = tab_store_node_snapshot_acq(parent, &node);
-  MSize idx;
-  TValue nk;
-  if (lj_tab_node_is_retiring(node)) {
-    node = lj_tab_node_nextgen_acq(node);
-    if (!node)
-      return 0;
-    hmask = lj_tab_node_hmask_acq(node);
-    if (lj_tab_node_is_retiring(node))
-      return 0;
-  }
-  if (hmask == 0)
-    return 0;
-  if (!tab_ptr_index((uintptr_t)node, (uintptr_t)dst, sizeof(Node),
-		     hmask + 1u, &idx) || dst != &node[idx].val) {
-    Node *n = hashkey_node(node, hmask, key);
-    do {
-      lj_tv_load_acq(&nk, &n->key);
-      if (!tab_key_islocked(&nk) && !tvisnil(&nk) && lj_obj_equal(&nk, key)) {
-	TValue val;
-	lj_tv_load_acq(&val, &n->val);
-	if (tvisforward(&val)) {
-	  Node *nextnode = node;
-	  MSize nexthmask = hmask;
-	  TValue *slot = tab_forwarded_setslot(parent, &nextnode, &nexthmask,
-					       key);
-	  return slot == dst;
-	}
-	return 0;
-      }
-    } while ((n = lj_tab_nextnode_acq(n)));
-    return 0;
-  }
-  lj_tv_load_acq(&nk, &node[idx].key);
-  return !tab_key_islocked(&nk) && !tvisnil(&nk) && lj_obj_equal(&nk, key);
-}
-
-static int tab_current_slot_for_key(GCtab *parent, TValue *dst, cTValue *key)
-{
-  int32_t k;
-  int64_t i64;
-  TValue hkey;
-  cTValue *keyh = key;
-  if (tvisint(key)) {
-    k = intV(key);
-    if (tab_current_array_slot_for_key(parent, dst, k))
-      return 1;
-    setnumV(&hkey, (lua_Number)k);
-    keyh = &hkey;
-  } else if (tvisnum(key) && lj_num2int_check(numV(key), i64, k)) {
-    if (tab_current_array_slot_for_key(parent, dst, k))
-      return 1;
-  }
-  return tab_current_hash_slot_for_key(parent, dst, keyh);
 }
 
 /* Single-attempt current-generation validation for descriptor-active stores.
@@ -5083,9 +4959,12 @@ int lj_tab_clear_weak_slot_keyed(global_State *g, GCtab *parent, TValue *dst,
     if (tv_rawload(&old) != tv_rawload(val))
       return LJ_TAB_STORE_CAS_CHANGED;
     expect = old;
-    if (lj_tv_cas(dst, &expect, &nilv))
-      return tab_current_slot_for_key(parent, dst, key) ?
+    if (lj_tv_cas(dst, &expect, &nilv)) {
+      TValue confirm;
+      int current = lj_tab_read_current_keyed(g, parent, dst, key, &confirm);
+      return current == LJ_TAB_STORE_CAS_OK && tvisnil(&confirm) ?
 	     LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
+    }
     if (tvisforward(&expect))
       return LJ_TAB_STORE_CAS_FORWARD;
     if (tv_rawload(&expect) != tv_rawload(val))
@@ -5131,8 +5010,11 @@ static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
       continue;
     }
     expect = old;
-    if (lj_tv_cas(dst, &expect, &nilv))
-      return tab_current_slot_for_key(parent, dst, key);
+    if (lj_tv_cas(dst, &expect, &nilv)) {
+      TValue confirm;
+      return lj_tab_read_current_keyed(G(L), parent, dst, key, &confirm) ==
+	     LJ_TAB_STORE_CAS_OK && tvisnil(&confirm);
+    }
     if (tvisforward(&expect))
       return 0;
     if (tab_val_is_publish_claim(&expect)) {
