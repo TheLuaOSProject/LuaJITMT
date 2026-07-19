@@ -829,6 +829,18 @@ return function(add)
   })
 
   add({
+    name = "m5_tab_keyed_slot_resolver",
+    description = "held and rooted address-only keyed table-slot resolution",
+    run = function(t)
+      t:build(build.tab_helper_build_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj-t-tab-keyed-slot-resolver"),
+                      "t-tab-keyed-slot-resolver.c",
+                      build.tab_helper_c_opts({ timeout = "20s" }))
+      print("M5 address-only keyed table-slot resolver passed")
+    end
+  })
+
+  add({
     name = "m5_tab_value_publish",
     description = "C-side table value release-publication behavior",
     run = function(t)

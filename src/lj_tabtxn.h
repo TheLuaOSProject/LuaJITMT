@@ -9,6 +9,46 @@
 #include "lj_gc2.h"
 #include "lj_tab.h"
 
+/* Address-only keyed-slot resolution for prepared table publishers.  The
+** held form is one bounded, non-allocating scan: the caller must already own
+** exact leases for |t| and |key| and a GC2 SMR reader which retains both table
+** vectors.  FOUND includes an in-range nil array cell and an existing hash key
+** whose value is nil.  ABSENT means that no structural slot exists.  RETRY
+** covers a changing/retiring generation, FORWARD/KEYLOCK/finalizer claims,
+** malformed snapshots and invalid operands.  |addr| is set to zero before
+** validation and on every non-FOUND return.  FOUND integerizes the slot while
+** the caller's authority is still live; no TValue pointer crosses the API.
+**
+** resolve_rooted_try supplies those leases and the SMR reader from exact
+** authoritative TValue roots.  It performs one bounded attempt, validates the
+** exact lua_State owner before and after the scan, never waits or allocates,
+** and releases all authority before returning.  The exact main-state/main-TG
+** owner remains valid while lua_close runs user finalizers after cur_L is
+** cleared; no secondary state receives that terminal exception.
+**
+** resolve_or_insert_rooted_l is the L-aware attach path.  It may wait, grow or
+** allocate to ensure an absent key has a structural slot, but it discards the
+** legacy setter's pointer result and derives |addr| only in a wholly fresh
+** rooted resolve.  |tabrootp| and |keyrootp| are in/out because either root may
+** live on a Lua stack which is rehomed across a wait or allocation.  Callers
+** must use the returned/rebased pointers after every normal return, including
+** RETRY.  Non-stack inputs must be fixed-address, owner-stable enumerated
+** semantic root cells for the whole invocation; concurrently mutable external
+** cells are not valid inputs to the allocation-capable form.  A STOPREQ or
+** allocation error throws only after resolver authority has been closed. */
+#define LJ_TAB_KEYED_SLOT_RETRY		(-1)
+#define LJ_TAB_KEYED_SLOT_ABSENT		0
+#define LJ_TAB_KEYED_SLOT_FOUND		1
+
+LJ_FUNC int lj_tab_keyed_slot_resolve_held(GCtab *t, cTValue *key,
+					    uintptr_t *addr);
+LJ_FUNC int lj_tab_keyed_slot_resolve_rooted_try(lua_State *L,
+						  cTValue *tabroot,
+						  cTValue *keyroot,
+						  uintptr_t *addr);
+LJ_FUNC int lj_tab_keyed_slot_resolve_or_insert_rooted_l(
+  lua_State *L, cTValue **tabrootp, cTValue **keyrootp, uintptr_t *addr);
+
 /* Prepared exact keyed store for a caller-owned publication clock.  The
 ** caller resolves and integerizes |dst_addr| while the resolver still owns
 ** the slot/vector lifetime, before prepare and while allocation, resize
@@ -103,6 +143,8 @@ LJ_FUNC int lj_tab_keyed_store_abort(lua_State *L,
 typedef void (*LJTabKeyedStoreTxnPostCasHook)(LJTabKeyedStoreTxn *txn);
 LJ_FUNC void lj_tab_keyed_store_test_set_post_cas_hook(
   LJTabKeyedStoreTxnPostCasHook hook);
+LJ_FUNC void lj_tab_keyed_slot_test_retry_stack_grow_once(void);
+LJ_FUNC uint32_t lj_tab_keyed_slot_test_retry_stack_grow_hits(void);
 #endif
 
 #endif /* _LJ_TABTXN_H */

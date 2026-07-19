@@ -3208,9 +3208,9 @@ typedef struct TabForjitSnapshot {
 } TabForjitSnapshot;
 
 enum {
-  TAB_RESOLVE_RETRY = -1,
-  TAB_RESOLVE_ABSENT = 0,
-  TAB_RESOLVE_FOUND = 1
+  TAB_RESOLVE_RETRY = LJ_TAB_KEYED_SLOT_RETRY,
+  TAB_RESOLVE_ABSENT = LJ_TAB_KEYED_SLOT_ABSENT,
+  TAB_RESOLVE_FOUND = LJ_TAB_KEYED_SLOT_FOUND
 };
 
 /* Capture both table side vectors as one retryable logical generation. A
@@ -3273,10 +3273,10 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
   TValue *slot = NULL;
   int result = TAB_RESOLVE_ABSENT;
 
+  if (slotp) *slotp = NULL;
+  if (out) setnilV(out);
   /* Nil is a terminal absent key, not a generation retry. */
   if (tvisnil(key)) {
-    if (slotp) *slotp = NULL;
-    if (out) setnilV(out);
     return TAB_RESOLVE_ABSENT;
   }
   if (!tab_forjit_snapshot_acq(t, &snap))
@@ -3301,7 +3301,8 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
       return TAB_RESOLVE_RETRY;
     slot = &snap.array[ik];
     lj_tv_load_acq(&val, slot);
-    if (tvisforward(&val) || tab_val_is_publish_claim(&val))
+    if (tvisforward(&val) || tab_val_is_publish_claim(&val) ||
+	!tab_tv_snapshot_valid(&val))
       return TAB_RESOLVE_RETRY;
     if (out) *out = val;
     result = TAB_RESOLVE_FOUND;
@@ -3322,15 +3323,22 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
 		    visited++ > snap.hmask))
       return TAB_RESOLVE_RETRY;
     lj_tv_load_acq(&nk, &n->key);
-    if (tab_key_islocked(&nk))
+    if (tab_key_islocked(&nk) || tvisforward(&nk) ||
+	tab_val_is_publish_claim(&nk))
       return TAB_RESOLVE_RETRY;
-    if ((isnumkey && tvisnum(&nk) && nk.n == hkeyp->n) ||
-	(tvisstr(hkeyp) && tvisstr(&nk) && strV(&nk) == strV(hkeyp)) ||
-	(!isnumkey && !tvisstr(hkeyp) && lj_obj_equal(&nk, hkeyp))) {
+    /* A dead weak-key snapshot can remain in an otherwise current collision
+    ** chain until its clearing pass.  It is not the exact leased/type-valid
+    ** target and cannot safely enter lj_obj_equal(), but it also must not turn
+    ** an unrelated lookup into a permanent retry. */
+    if (tab_tv_snapshot_valid(&nk) &&
+	((isnumkey && tvisnum(&nk) && nk.n == hkeyp->n) ||
+	 (tvisstr(hkeyp) && tvisstr(&nk) && strV(&nk) == strV(hkeyp)) ||
+	 (!isnumkey && !tvisstr(hkeyp) && lj_obj_equal(&nk, hkeyp)))) {
       TValue val;
       slot = &n->val;
       lj_tv_load_acq(&val, slot);
-      if (tvisforward(&val) || tab_val_is_publish_claim(&val))
+      if (tvisforward(&val) || tab_val_is_publish_claim(&val) ||
+	  !tab_tv_snapshot_valid(&val))
 	return TAB_RESOLVE_RETRY;
       if (out) *out = val;
       result = TAB_RESOLVE_FOUND;
@@ -3351,6 +3359,287 @@ validate:
     return TAB_RESOLVE_RETRY;
   if (slotp) *slotp = slot;
   return result;
+}
+
+static LJ_AINLINE int tab_keyed_slot_key_valid(cTValue *key)
+{
+  return key && !tab_hash_key_hidden(key) && !tvisforward(key) &&
+	 !tab_val_is_publish_claim(key) &&
+	 key->u32.hi != LJ_KEYINDEX &&
+	 !(tvisnum(key) && tvisnan(key)) && tab_tv_snapshot_valid(key);
+}
+
+int lj_tab_keyed_slot_resolve_held(GCtab *t, cTValue *key,
+				    uintptr_t *addr)
+{
+  TValue *slot = NULL;
+  int status;
+  if (addr)
+    *addr = 0;
+  if (!t || !key || !addr || !tab_keyed_slot_key_valid(key))
+    return LJ_TAB_KEYED_SLOT_RETRY;
+  status = tab_resolve_current_keyed_held(t, key, &slot, NULL);
+  if (status != TAB_RESOLVE_FOUND || !slot)
+    return status;
+  /* Integerize before the caller closes its exact vector SMR authority. */
+  *addr = (uintptr_t)(void *)slot;
+  return LJ_TAB_KEYED_SLOT_FOUND;
+}
+
+typedef struct TabKeyedSlotOwnerSnapshot {
+  global_State *g;
+  TGState *tg;
+  LJStateOwner owner;
+  uint32_t actor;
+  uint32_t tid;
+} TabKeyedSlotOwnerSnapshot;
+
+/* The rooted resolver owns a TLS-accounted SMR reader.  Bind it to the exact
+** physical actor, TG and lua_State claim before admission, and require the
+** same identity at close.  lua_close user finalizers retain only the existing
+** exact main-state/main-TG terminal exception after cur_L is cleared. */
+static int tab_keyed_slot_owner_snapshot(lua_State *L,
+					 TabKeyedSlotOwnerSnapshot *snap)
+{
+  global_State *g;
+  TGState *tg;
+  LJStateOwner owner;
+  uint32_t actor, tid;
+  int terminal;
+  if (!L || !snap || !(g = G(L)) || !(actor = lj_thr_actor_current()))
+    return 0;
+  tg = lj_thr_get_tg_fallback(g);
+  if (!tg || tg->gl != g || lj_tg_actor_acq(tg) != actor ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return 0;
+  tid = lj_tg_tid_acq(tg);
+  owner = lj_state_owner_word_acq(L);
+  terminal = mt_shutdown_acq(g) != 0 && tg == g->main_tg &&
+	     L == mainthread_acq(g);
+  if (!lj_thr_id_is_owner(tid) || owner != lj_state_owner_pack(tid, actor) ||
+      (mt_shutdown_acq(g) != 0 && !terminal) ||
+      (lj_tg_load_cur_L(tg) != L && L->tg_hint != tg && !terminal) ||
+      lj_tg_actor_acq(tg) != actor || lj_thr_actor_current() != actor ||
+      lj_state_owner_word_acq(L) != owner)
+    return 0;
+  snap->g = g;
+  snap->tg = tg;
+  snap->owner = owner;
+  snap->actor = actor;
+  snap->tid = tid;
+  return 1;
+}
+
+static int tab_keyed_slot_owner_current(
+  lua_State *L, const TabKeyedSlotOwnerSnapshot *snap)
+{
+  TGState *tg;
+  int terminal;
+  if (!L || !snap || G(L) != snap->g ||
+      lj_thr_actor_current() != snap->actor)
+    return 0;
+  tg = lj_thr_get_tg_fallback(snap->g);
+  if (tg != snap->tg || !tg || tg->gl != snap->g)
+    return 0;
+  terminal = mt_shutdown_acq(snap->g) != 0 && tg == snap->g->main_tg &&
+	     L == mainthread_acq(snap->g);
+  return (mt_shutdown_acq(snap->g) == 0 || terminal) &&
+    !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+    lj_tg_actor_acq(tg) == snap->actor &&
+    lj_tg_tid_acq(tg) == snap->tid && lj_thr_id_is_owner(snap->tid) &&
+    lj_state_owner_word_acq(L) == snap->owner &&
+    lj_state_owner_tid(snap->owner) == snap->tid &&
+    lj_state_owner_actor(snap->owner) == snap->actor &&
+    (lj_tg_load_cur_L(tg) == L || L->tg_hint == tg || terminal) &&
+    lj_tg_actor_acq(tg) == snap->actor;
+}
+
+int lj_tab_keyed_slot_resolve_rooted_try(lua_State *L, cTValue *tabroot,
+					  cTValue *keyroot,
+					  uintptr_t *addr)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease, key_lease;
+  TValue tablev, keysnap, table_confirm, key_confirm;
+  GCtab *t = NULL;
+  int table_lease_active = 0;
+  int key_lease_active = 0;
+  int status = LJ_TAB_KEYED_SLOT_RETRY;
+
+  if (addr)
+    *addr = 0;
+  if (!L || !tabroot || !keyroot || !addr ||
+      !tab_keyed_slot_owner_snapshot(L, &owner) ||
+      !lj_gc2_smr_read_try(owner.g))
+    return LJ_TAB_KEYED_SLOT_RETRY;
+
+  /* Load each mutable semantic root once under SMR, then retain that exact
+  ** incarnation before body/hash use. */
+  lj_tv_load_acq(&tablev, tabroot);
+  if (!tvistab(&tablev))
+    goto leave;
+  if (lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+      LJ_GC2_TV_EDGE_VALID)
+    goto leave;
+  table_lease_active = 1;
+  t = tabV(&tablev);
+
+  lj_tv_load_acq(&keysnap, keyroot);
+  if (lj_gc2_tv_lease_acquire(owner.g, &keysnap, &key_lease) !=
+      LJ_GC2_TV_EDGE_VALID)
+    goto leave;
+  key_lease_active = 1;
+  if (!tab_keyed_slot_key_valid(&keysnap))
+    goto leave;
+
+  status = lj_tab_keyed_slot_resolve_held(t, &keysnap, addr);
+  /* A mutable root is authority for exactly the edge which was leased.  Do
+  ** not let an address derived for an earlier table/key escape after either
+  ** authoritative cell has changed. */
+  lj_tv_load_acq(&table_confirm, tabroot);
+  lj_tv_load_acq(&key_confirm, keyroot);
+  if (tv_rawload(&table_confirm) != tv_rawload(&tablev) ||
+      tv_rawload(&key_confirm) != tv_rawload(&keysnap) ||
+      !tab_keyed_slot_owner_current(L, &owner)) {
+    *addr = 0;
+    status = LJ_TAB_KEYED_SLOT_RETRY;
+  }
+
+leave:
+  if (status != LJ_TAB_KEYED_SLOT_FOUND)
+    *addr = 0;
+  /* Drop all pointer provenance before ending the retaining interval. */
+  t = NULL;
+  lj_gc2_smr_read_leave(owner.g);
+  if (key_lease_active)
+    lj_gc2_lease_release(&key_lease);
+  if (table_lease_active)
+    lj_gc2_lease_release(&table_lease);
+  return status;
+}
+
+#ifdef LJ_TAB_TEST_HELPERS
+static uint32_t tab_keyed_slot_test_retry_stack_grow;
+static uint32_t tab_keyed_slot_test_retry_stack_grow_count;
+
+void lj_tab_keyed_slot_test_retry_stack_grow_once(void)
+{
+  tab_keyed_slot_test_retry_stack_grow_count = 0;
+  tab_keyed_slot_test_retry_stack_grow = 1;
+}
+
+uint32_t lj_tab_keyed_slot_test_retry_stack_grow_hits(void)
+{
+  return tab_keyed_slot_test_retry_stack_grow_count;
+}
+
+static LJ_AINLINE int tab_keyed_slot_test_retry_stack_grow_take(void)
+{
+  if (tab_keyed_slot_test_retry_stack_grow) {
+    tab_keyed_slot_test_retry_stack_grow = 0;
+    return 1;
+  }
+  return 0;
+}
+
+static void tab_keyed_slot_test_stack_grow(lua_State *L)
+{
+  TValue *oldstack = tvref(L->stack);
+  lj_state_growstack(L, 1);
+  if (tvref(L->stack) != oldstack)
+    tab_keyed_slot_test_retry_stack_grow_count++;
+}
+#endif
+
+/* Structural insertion is intentionally isolated behind a void wrapper.  The
+** legacy API necessarily returns a naked TValue pointer; attach must never
+** retain, compare or integerize it.  The next loop iteration derives the
+** candidate from wholly fresh rooted leases and SMR authority. */
+static void tab_keyed_slot_ensure_key_l(lua_State *L, GCtab *t, cTValue *key)
+{
+  (void)lj_tab_set(L, t, key);
+}
+
+int lj_tab_keyed_slot_resolve_or_insert_rooted_l(
+  lua_State *L, cTValue **tabrootp, cTValue **keyrootp, uintptr_t *addr)
+{
+  cTValue *tabroot;
+  cTValue *keyroot;
+  int tabstack, keystack;
+  ptrdiff_t tabofs, keyofs;
+
+  if (addr)
+    *addr = 0;
+  if (!L || !tabrootp || !keyrootp || !addr ||
+      !(tabroot = *tabrootp) || !(keyroot = *keyrootp))
+    return LJ_TAB_KEYED_SLOT_RETRY;
+  tabstack = tab_key_on_stack(L, tabroot);
+  keystack = tab_key_on_stack(L, keyroot);
+  tabofs = tabstack ? savestack(L, (TValue *)(void *)tabroot) : 0;
+  keyofs = keystack ? savestack(L, (TValue *)(void *)keyroot) : 0;
+
+  for (;;) {
+    TabKeyedSlotOwnerSnapshot owner;
+    cTValue *curtab = tabstack ? restorestack(L, tabofs) : tabroot;
+    cTValue *curkey = keystack ? restorestack(L, keyofs) : keyroot;
+    int status;
+#ifdef LJ_TAB_TEST_HELPERS
+    int force_retry;
+#endif
+
+    /* Publish rebased in/out roots before every attempt and every normal
+    ** return.  The saved offsets, not stale pointer bits, cross L-aware work. */
+    *tabrootp = curtab;
+    *keyrootp = curkey;
+    *addr = 0;
+    if (!tab_keyed_slot_owner_snapshot(L, &owner))
+      return LJ_TAB_KEYED_SLOT_RETRY;
+    status = lj_tab_keyed_slot_resolve_rooted_try(L, curtab, curkey, addr);
+#ifdef LJ_TAB_TEST_HELPERS
+    force_retry = tab_keyed_slot_test_retry_stack_grow_take();
+    if (force_retry) {
+      status = LJ_TAB_KEYED_SLOT_RETRY;
+      *addr = 0;
+    }
+#endif
+    if (status == LJ_TAB_KEYED_SLOT_FOUND)
+      return status;
+    if (status == LJ_TAB_KEYED_SLOT_ABSENT) {
+      TValue tablev, keysnap;
+      /* No resolver lease/reader survives this allocation-capable call.  The
+      ** source cells remain semantic roots; reload their current values and
+      ** let the ordinary setter perform its own barriers/anchoring. */
+      lj_tv_load_acq(&tablev, curtab);
+      lj_tv_load_acq(&keysnap, curkey);
+      if (!tvistab(&tablev) || !tab_tv_snapshot_valid(&tablev) ||
+          !tab_keyed_slot_key_valid(&keysnap) ||
+          !tab_keyed_slot_owner_current(L, &owner))
+        return LJ_TAB_KEYED_SLOT_RETRY;
+      tab_keyed_slot_ensure_key_l(L, tabV(&tablev), &keysnap);
+      continue;
+    }
+    /* A lost state claim is terminal for this invocation.  Structural
+    ** generation collisions are retried only after all leases/SMR scopes from
+    ** resolve_rooted_try have already been released. */
+    {
+      TValue tablev, keysnap;
+      lj_tv_load_acq(&tablev, curtab);
+      lj_tv_load_acq(&keysnap, curkey);
+      /* Immutable invalid semantic roots cannot become valid merely because
+      ** this owner yields.  Classify them after the bounded resolver has
+      ** closed all authority, instead of turning RETRY into a permanent wait. */
+      if (!tvistab(&tablev) || !tab_tv_snapshot_valid(&tablev) ||
+	  !tab_keyed_slot_key_valid(&keysnap))
+	return LJ_TAB_KEYED_SLOT_RETRY;
+    }
+    if (!tab_keyed_slot_owner_current(L, &owner))
+      return LJ_TAB_KEYED_SLOT_RETRY;
+    lj_tab_store_wait_l(L);
+#ifdef LJ_TAB_TEST_HELPERS
+    if (force_retry)
+      tab_keyed_slot_test_stack_grow(L);
+#endif
+  }
 }
 
 static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
@@ -5021,6 +5310,7 @@ static LJ_AINLINE int tab_keyed_store_key_valid(cTValue *key)
 {
   return !tab_hash_key_hidden(key) && !tvisforward(key) &&
 	 !tab_val_is_publish_claim(key) &&
+	 key->u32.hi != LJ_KEYINDEX &&
 	 !(tvisnum(key) && tvisnan(key)) && tab_tv_snapshot_valid(key);
 }
 
@@ -5042,6 +5332,7 @@ static int tab_keyed_store_prepare(lua_State *L, LJTabKeyedStoreTxn *txn,
   lj_tv_load_acq(&txn->desired, desired);
   if (tab_hash_key_hidden(&txn->key) || tvisforward(&txn->key) ||
       tab_val_is_publish_claim(&txn->key) ||
+      txn->key.u32.hi == LJ_KEYINDEX ||
       (tvisnum(&txn->key) && tvisnan(&txn->key)) ||
       tvistabinternal(&txn->desired) ||
       tab_val_is_publish_claim(&txn->desired))

@@ -131,6 +131,24 @@ static void exercise_snapshot_replace(lua_State *L, GCtab *t)
   lua_pop(L, 2);
 }
 
+static void exercise_hidden_key_refusal(lua_State *L, GCtab *t)
+{
+  LJTabKeyedStoreTxn txn;
+  TValue key, desired;
+  TValue *array = lj_tab_array_acq(t);
+  uint32_t readers0 = smr_readers(L);
+
+  assert(array != NULL && lj_tab_asize_acq(t) > 1u);
+  key.u32.lo = 1;
+  key.u32.hi = LJ_KEYINDEX;
+  setnilV(&desired);
+  lj_tab_keyed_store_txn_init(&txn);
+  assert(lj_tab_keyed_store_prepare_snapshot(
+	   L, &txn, t, slot_addr(&array[1]), &key, &desired) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  assert_txn_released(L, readers0);
+}
+
 static void exercise_changed_and_forward(lua_State *L, GCtab *t)
 {
   LJTabKeyedStoreTxn txn;
@@ -424,6 +442,7 @@ int main(void)
   t = tabV(L->top-1);
 
   exercise_snapshot_replace(L, t);
+  exercise_hidden_key_refusal(L, t);
   exercise_changed_and_forward(L, t);
   exercise_stale_generation(L, t);
   exercise_exact_delete(L, wrong, t);
