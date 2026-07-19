@@ -1625,6 +1625,7 @@ typedef struct GC2State {
   uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
   uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
   LJ_ALIGN(16) LJGC2TableDesc table_rescan_desc;  /* Dormant helpable handoff. */
+  LJ_ALIGN(16) LJGC2TableTopology table_token_topology;  /* Completed membership changes. */
   uint64_t table_token_scan_requested;  /* Sticky dormant exact-generation hint. */
   uint32_t table_token_small_slot;  /* Small-registry resume slot. */
   uint32_t table_token_small_cell;  /* Small-sidecar resume cell. */
@@ -1639,6 +1640,22 @@ typedef struct GC2State {
   uint64_t table_token_scan_structural;  /* Fail-closed malformed identities. */
   uint64_t table_token_scan_smr_skips;  /* Full-SMR admission unavailable. */
   uint64_t table_token_scan_payloads;  /* Admitted payload traversals entered. */
+  uint64_t table_token_pass_epoch;  /* Membership sequence at pass start. */
+  uint64_t table_token_pass_desc;  /* Exact IDLE descriptor generation. */
+  uint64_t table_token_pass_ack_epoch;  /* Membership sequence paired with ack. */
+  uint64_t table_token_pass_ack_desc;  /* Descriptor generation paired with ack. */
+  uint64_t table_token_pass_act_epoch;  /* Activation mark epoch at pass start. */
+  uint64_t table_token_pass_act_control;  /* Packed generation/gate/state. */
+  uint64_t table_token_pass_ack_act_epoch;  /* Activation epoch paired with ack. */
+  uint64_t table_token_pass_ack_act_control;  /* Activation authority paired with ack. */
+  uint64_t table_token_pass_restarts;  /* Invalidated/incomplete full passes. */
+  uint64_t table_token_pass_acks;  /* Exact full-pass certificates published. */
+  uint32_t table_token_pass_cycle;  /* GC cycle retained across bounded turns. */
+  uint32_t table_token_pass_phase;  /* Exact MARK/WEAK/SWEEP phase. */
+  uint32_t table_token_pass_lane;  /* Small then stable-spine Huge lane. */
+  uint32_t table_token_pass_hazard;  /* Transient/structural skip in this pass. */
+  uint32_t table_token_pass_ack_cycle;  /* GC cycle paired with last ack. */
+  uint32_t table_token_pass_ack_phase;  /* GC phase paired with last ack. */
   uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
   uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
@@ -4668,6 +4685,60 @@ static LJ_AINLINE void gc2_table_token_scan_requested_max_rel(
   }
 }
 
+static LJ_AINLINE LJGC2TableTopologySnap gc2_table_token_topology_snapshot(
+  global_State *g)
+{
+  return lj_gc2_table_topology_snapshot(&g->gc2.table_token_topology);
+}
+
+#define LJ_GC2_TABLE_PASS_U64_ACCESSORS(name, field) \
+static LJ_AINLINE uint64_t name##_acq(global_State *g) \
+{ return la_load64_acq(&g->gc2.field); } \
+static LJ_AINLINE void name##_store_rlx(global_State *g, uint64_t value) \
+{ la_store64_rlx(&g->gc2.field, value); } \
+static LJ_AINLINE void name##_rel(global_State *g, uint64_t value) \
+{ la_store64_rel(&g->gc2.field, value); }
+
+#define LJ_GC2_TABLE_PASS_U32_ACCESSORS(name, field) \
+static LJ_AINLINE uint32_t name##_acq(global_State *g) \
+{ return la_load32_acq(&g->gc2.field); } \
+static LJ_AINLINE void name##_store_rlx(global_State *g, uint32_t value) \
+{ la_store32_rlx(&g->gc2.field, value); } \
+static LJ_AINLINE void name##_rel(global_State *g, uint32_t value) \
+{ la_store32_rel(&g->gc2.field, value); }
+
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_epoch,
+				table_token_pass_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_desc,
+				table_token_pass_desc)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_epoch,
+				table_token_pass_ack_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_desc,
+				table_token_pass_ack_desc)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_act_epoch,
+				table_token_pass_act_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_act_control,
+				table_token_pass_act_control)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_act_epoch,
+				table_token_pass_ack_act_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_act_control,
+				table_token_pass_ack_act_control)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_cycle,
+				table_token_pass_cycle)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_phase,
+				table_token_pass_phase)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_lane,
+				table_token_pass_lane)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_hazard,
+				table_token_pass_hazard)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_ack_cycle,
+				table_token_pass_ack_cycle)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_ack_phase,
+				table_token_pass_ack_phase)
+
+#undef LJ_GC2_TABLE_PASS_U64_ACCESSORS
+#undef LJ_GC2_TABLE_PASS_U32_ACCESSORS
+
 static LJ_AINLINE uint32_t gc2_table_token_small_slot_rlx(global_State *g)
 {
   return la_load32_rlx(&g->gc2.table_token_small_slot);
@@ -4740,6 +4811,10 @@ LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_smr_skips,
 			   table_token_scan_smr_skips)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_payloads,
 			   table_token_scan_payloads)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_pass_restarts,
+			   table_token_pass_restarts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_pass_acks,
+			   table_token_pass_acks)
 
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_dirty_misses, thread_scan_dirty_misses)
 LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_frame_fallbacks,

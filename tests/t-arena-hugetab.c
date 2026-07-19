@@ -69,7 +69,7 @@ static void delete_unmap(HugeTab *ht, void *p)
 static void test_recovery_state(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 1901u;
-  HugeTab src = { NULL }, dst = { NULL };
+  HugeTab src = { 0 }, dst = { 0 };
   LJHugeInfo hi;
   void *p, *found = NULL;
   uint32_t cursor, seen;
@@ -237,7 +237,7 @@ static void test_root_state(PRNGState *rs)
   const size_t size = LJ_HUGE_THRESHOLD + 2039u;
   const uint32_t baseflags = LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY|
     LJ_HUGEF_CDATA|LJ_HUGEF_MARK;
-  HugeTab src = { NULL }, dst = { NULL };
+  HugeTab src = { 0 }, dst = { 0 };
   LJHugeInfo hi;
   void *p;
 
@@ -426,7 +426,7 @@ static void test_root_free_race(PRNGState *rs)
   const size_t size = LJ_HUGE_THRESHOLD + 2081u;
   uint32_t i;
   for (i = 0; i < 32u; i++) {
-    HugeTab ht = { NULL };
+    HugeTab ht = { 0 };
     RootFreeRace race;
     pthread_t free_thread, complete_thread;
     LJHugeInfo hi;
@@ -502,7 +502,7 @@ static void huge_realloc_race_wait_busy(void)
 static void test_huge_realloc_busy_preemption(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2601u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   TGAlloc primary_alloc, follower_alloc;
   LJArenaAllocD primary_ad, follower_ad;
   PRNGState follower_rs;
@@ -638,7 +638,7 @@ static void retire_race_cleanup(HugeTab *ht, void *p, void *obj)
 static void test_retire_busy_mark_intent(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 1537u;
-  HugeTab raceht = { NULL };
+  HugeTab raceht = { 0 };
   RetireRace race;
   pthread_t thread;
   LJHugeInfo hi;
@@ -694,7 +694,7 @@ static void test_retire_busy_mark_intent(PRNGState *rs)
 static void test_realloc_shaped_busy_mark_only(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 1777u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   LJHugeInfo hi;
   void *p, *base = (void *)(uintptr_t)1u;
 
@@ -722,7 +722,7 @@ static void test_realloc_shaped_busy_mark_only(PRNGState *rs)
 static void test_retire_busy_exact_mark(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 1663u;
-  HugeTab raceht = { NULL };
+  HugeTab raceht = { 0 };
   RetireRace race;
   pthread_t thread;
   LJHugeInfo hi;
@@ -761,7 +761,7 @@ static void test_retire_busy_exact_mark(PRNGState *rs)
 static void test_recovery_deferred_busy_requeue(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 1811u;
-  HugeTab raceht = { NULL };
+  HugeTab raceht = { 0 };
   RetireRace race;
   pthread_t thread;
   LJHugeInfo hi;
@@ -814,7 +814,7 @@ static void test_recovery_deferred_busy_requeue(PRNGState *rs)
 static void test_retire_busy_deferred_terminal(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 1877u;
-  HugeTab raceht = { NULL };
+  HugeTab raceht = { 0 };
   RetireRace race;
   pthread_t thread;
   LJHugeInfo hi;
@@ -1118,7 +1118,7 @@ static void test_small_lifetime_descriptor(PRNGState *rs)
 static void test_huge_reader_lifetime(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2111u;
-  HugeTab ht = { NULL }, dst = { NULL };
+  HugeTab ht = { 0 }, dst = { 0 };
   LJHugeReader reader = { NULL, NULL, 0 }, rejected = { NULL, NULL, 0 };
   LJHugeInfo hi;
   uint32_t unmapped = ~(uint32_t)0;
@@ -1213,7 +1213,7 @@ static void test_huge_reader_lifetime(PRNGState *rs)
 static void test_table_token_slot_leases(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2819u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   LJHugeTokenLease lease = { NULL, NULL, 0, 0 };
   LJHugeTokenLease badlease;
   LJHugeReader reader = { NULL, NULL, 0 };
@@ -1335,7 +1335,7 @@ static void test_table_token_slot_leases(PRNGState *rs)
 static void test_huge_sweep_reader_exact_admission(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2167u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   LJHugeReader owner = { NULL, NULL, 0 };
   LJHugeReader sweep = { NULL, NULL, 0 };
   LJHugeInfo hi;
@@ -1395,7 +1395,7 @@ static void test_huge_sweep_reader_exact_admission(PRNGState *rs)
 static void test_huge_reader_root_recovery_orders(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2237u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   LJHugeReader reader = { NULL, NULL, 0 };
   LJHugeInfo hi;
   void *p;
@@ -1482,7 +1482,7 @@ static void test_huge_reader_root_recovery_orders(PRNGState *rs)
 static void test_huge_reader_shapes_and_realloc(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2309u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   LJHugeReader reader = { NULL, NULL, 0 };
   LJHugeInfo hi;
   TGAlloc alloc;
@@ -1603,7 +1603,7 @@ static void test_huge_reader_shapes_and_realloc(PRNGState *rs)
 static void test_huge_reader_overflow_and_size(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2417u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   LJHugeReader *readers, extra = { NULL, NULL, 0 };
   LJHugeInfo hi;
   void *p;
@@ -1625,25 +1625,27 @@ static void test_huge_reader_overflow_and_size(PRNGState *rs)
   p = lj_arena_huge_map(rs, size, 0);
   assert(p != NULL);
   assert(lj_arena_hugetab_insert(&ht, p, size, 0));
-  readers = (LJHugeReader *)calloc(0xffffu, sizeof(*readers));
+  /* The all-ones encoding is the transient destructive admission close, so
+  ** ordinary counted readers saturate at the preceding value. */
+  readers = (LJHugeReader *)calloc(0xfffeu, sizeof(*readers));
   assert(readers != NULL);
-  for (i = 0; i < 0xffffu; i++) {
+  for (i = 0; i < 0xfffeu; i++) {
     assert(lj_arena_hugetab_reader_acquire(&ht, p, &readers[i], &hi) == 1);
     assert(hi.readers == i + 1u);
   }
   assert(lj_arena_hugetab_mark_reader_acquire(&ht, p, &extra, &hi) ==
 	 LJ_ARENA_HUGE_MARK_SATURATED);
-  assert(extra.h == NULL && extra.base == NULL && hi.readers == 0xffffu);
+  assert(extra.h == NULL && extra.base == NULL && hi.readers == 0xfffeu);
   assert((hi.flags & LJ_HUGEF_MARK) != 0);  /* Saturation never drops liveness. */
   assert(lj_arena_hugetab_reader_acquire(&ht, p, &extra, &hi) ==
 	 LJ_ARENA_HUGE_READER_OVERFLOW);
   assert(extra.h == NULL && extra.base == NULL);
   assert(!lj_arena_hugetab_claim_external_free(&ht, p, &hi));
-  assert(hi.readers == 0xffffu && (hi.flags & LJ_HUGEF_DEFER_FREE));
-  for (i = 0; i < 0xfffeu; i++)
+  assert(hi.readers == 0xfffeu && (hi.flags & LJ_HUGEF_DEFER_FREE));
+  for (i = 0; i < 0xfffdu; i++)
     assert(lj_arena_hugetab_reader_release(&readers[i], NULL) ==
 	   LJ_ARENA_HUGE_READER_RELEASED);
-  assert(lj_arena_hugetab_reader_release(&readers[0xfffeu], &hi) ==
+  assert(lj_arena_hugetab_reader_release(&readers[0xfffdu], &hi) ==
 	 LJ_ARENA_HUGE_READER_HANDOFF);
   assert(hi.readers == 0u &&
 	 (hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
@@ -1703,7 +1705,7 @@ static void *registry_rescue_race_thread(void *ud)
 static void test_registry_rescue_unmap_handoff(PRNGState *rs)
 {
 #if defined(LJ_ARENA_TEST_HELPERS)
-  HugeTab registry = { NULL };
+  HugeTab registry = { 0 };
   TGAlloc alloc;
   RegistryRescueRace race;
   pthread_t thread;
@@ -2268,7 +2270,7 @@ static void test_terminal_reconcile(PRNGState *rs)
 static void test_huge_reader_destructor_retry(PRNGState *rs)
 {
   const size_t size = LJ_HUGE_THRESHOLD + 2711u;
-  HugeTab ht = { NULL };
+  HugeTab ht = { 0 };
   LJHugeReader reader = { NULL, NULL, 0 };
   LJHugeInfo hi;
   void *p;
@@ -2449,6 +2451,287 @@ static void huge_gc2_delete_unmap(HugeGC2Fixture *fx)
   lj_arena_hugetab_fini(&fx->ht);
   assert(fx->ht.h == NULL);
 }
+
+#if defined(LJ_ARENA_TEST_HELPERS)
+typedef struct HugeGC2CloseRace {
+  HugeGC2Fixture *fx;
+  LJHugeInfo hi;
+  int deleted;
+} HugeGC2CloseRace;
+
+static void *huge_gc2_close_delete_thread(void *ud)
+{
+  HugeGC2CloseRace *race = (HugeGC2CloseRace *)ud;
+  race->deleted = lj_arena_hugetab_delete(
+    &race->fx->ht, race->fx->p, &race->hi);
+  return NULL;
+}
+
+static void huge_gc2_close_race_start(HugeGC2CloseRace *race,
+	HugeGC2Fixture *fx, pthread_t *thread, uint32_t stage)
+{
+  assert(stage == 1u || stage == 2u);
+  memset(race, 0, sizeof(*race));
+  race->fx = fx;
+  lj_arena_hugetab_test_admission_close_pause((int)stage);
+  assert(pthread_create(thread, NULL, huge_gc2_close_delete_thread, race) ==
+	 0);
+  while (lj_arena_hugetab_test_admission_close_paused() != stage)
+    la_cpu_pause();
+}
+
+static void huge_gc2_close_race_finish(HugeGC2CloseRace *race,
+	pthread_t thread)
+{
+  lj_arena_hugetab_test_admission_close_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(!race->deleted);
+  assert(!lj_arena_hugetab_test_admission_close_paused());
+}
+
+typedef struct HugeGC2TransferRace {
+  HugeTab *dst;
+  HugeGC2Fixture *fx;
+  uint32_t owner_tid;
+  int transferred;
+} HugeGC2TransferRace;
+
+static void *huge_gc2_transfer_thread(void *ud)
+{
+  HugeGC2TransferRace *race = (HugeGC2TransferRace *)ud;
+  race->transferred = lj_arena_hugetab_transfer(
+    race->dst, &race->fx->ht, race->owner_tid);
+  return NULL;
+}
+
+static void test_huge_gc2_destructive_admission_close(PRNGState *rs)
+{
+  const size_t base = LJ_HUGE_THRESHOLD + 2879u;
+  HugeGC2Fixture fx;
+  HugeGC2CloseRace race;
+  LJGC2TabStamp *stamp;
+  LJGC2TableTokenTicket token_ticket;
+  LJHugeReader publisher = { NULL, NULL, 0 };
+  LJHugeInfo hi;
+  pthread_t thread;
+
+  /* Capture the destructive owner's exact reader=1 snapshot, then run a
+  ** publisher through the complete 1->2->1 metadata ABA while installing
+  ** PENDING. The old slot value is identical when the owner resumes, so this
+  ** deterministically proves that post-close token validation—not a lucky
+  ** CAS failure—retains the locator and reopens admission. */
+  huge_gc2_fixture_init(&fx, rs, base, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+  stamp = lj_arena_gc2_stamp_acq(fx.p);
+  assert(stamp != NULL);
+  huge_gc2_close_race_start(&race, &fx, &thread, 1u);
+  assert(lj_arena_hugetab_reader_acquire(
+	&fx.ht, fx.p, &publisher, &hi) == LJ_ARENA_HUGE_READER_ACQUIRED);
+  assert(hi.readers == 2u);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_arena_hugetab_reader_release(&publisher, &hi) ==
+	 LJ_ARENA_HUGE_READER_RELEASED);
+  assert(hi.readers == 1u);
+  huge_gc2_close_race_finish(&race, thread);
+  assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &hi) && hi.readers == 0u);
+  assert(lj_gc2_table_token_state(la_load64_acq(&stamp->token.control)) ==
+	 LJ_GC2_TABLE_TOKEN_PENDING);
+  assert(lj_gc2_table_token_complete(&stamp->token, &token_ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  huge_gc2_delete_unmap(&fx);
+
+  /* The exact descriptor bridges the harder release-before-token window.
+  ** Once ACTIVE is visible, the publisher may relinquish its counted reader:
+  ** a racing close must observe ACTIVE, reopen, and leave the mapping intact
+  ** until PENDING is durable and the descriptor is returned to IDLE. */
+  {
+    LJGC2TableDescSnap observed;
+    LJGC2TableDescTicket desc_ticket;
+    memset(&publisher, 0, sizeof(publisher));
+    huge_gc2_fixture_init(&fx, rs, base + 1u, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+    stamp = lj_arena_gc2_stamp_acq(fx.p);
+    assert(stamp != NULL);
+    huge_gc2_close_race_start(&race, &fx, &thread, 1u);
+    assert(lj_arena_hugetab_reader_acquire(
+	  &fx.ht, fx.p, &publisher, &hi) == LJ_ARENA_HUGE_READER_ACQUIRED);
+    assert(lj_gc2_tabledesc_try_publish(
+	  &fx.desc, fx.p, &desc_ticket, &observed) ==
+	  LJ_GC2_TABLEDESC_RESULT_OK);
+    assert(observed.state == LJ_GC2_TABLEDESC_ACTIVE &&
+	   observed.table == (uintptr_t)fx.p);
+    assert(lj_arena_hugetab_reader_release(&publisher, &hi) ==
+	  LJ_ARENA_HUGE_READER_RELEASED);
+    huge_gc2_close_race_finish(&race, thread);
+    assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &hi) && hi.readers == 0u);
+    assert(!lj_arena_hugetab_delete(&fx.ht, fx.p, NULL));
+    assert(lj_gc2_table_token_transfer_exact(
+	  &stamp->token, desc_ticket.generation) ==
+	  LJ_GC2_TABLE_TOKEN_RESULT_OK);
+    token_ticket.control = lj_gc2_table_token_pack(
+	  desc_ticket.generation, LJ_GC2_TABLE_TOKEN_PENDING);
+    assert(lj_gc2_tabledesc_finish_help(
+	  &fx.desc, &desc_ticket, &observed) == LJ_GC2_TABLEDESC_RESULT_OK);
+    assert(observed.state == LJ_GC2_TABLEDESC_IDLE);
+    assert(lj_gc2_table_token_complete_exact(
+	  &stamp->token, &token_ticket) == LJ_GC2_TABLE_TOKEN_RESULT_OK);
+    huge_gc2_delete_unmap(&fx);
+  }
+}
+
+static void test_huge_gc2_closed_mark_reopens(PRNGState *rs)
+{
+  const size_t base = LJ_HUGE_THRESHOLD + 2883u;
+  HugeGC2Fixture fx;
+  HugeGC2CloseRace race;
+  LJHugeReader reader = { NULL, NULL, 0 };
+  LJHugeInfo hi;
+  pthread_t thread;
+
+  /* Pause after delete has replaced its sole certificate with CLOSED. A
+  ** semantic mark cannot return an unfulfillable intent: it must atomically
+  ** reopen the slot, retain liveness and report the bounded retry result. */
+  huge_gc2_fixture_init(&fx, rs, base, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+  huge_gc2_close_race_start(&race, &fx, &thread, 2u);
+  assert(lj_arena_hugetab_mark_reader_acquire(
+	&fx.ht, fx.p, &reader, &hi) == LJ_ARENA_HUGE_MARK_SATURATED);
+  assert(reader.h == NULL && reader.base == NULL && reader.size == 0u);
+  assert(hi.readers == 0u && (hi.flags & LJ_HUGEF_MARK) != 0);
+  huge_gc2_close_race_finish(&race, thread);
+  assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &hi));
+  assert(hi.readers == 0u && (hi.flags & LJ_HUGEF_MARK) != 0);
+  huge_gc2_delete_unmap(&fx);
+
+  /* Metadata-only roots use the same close-defeat rule, but preserve the
+  ** ordinary first-mark result because they require no reader certificate. */
+  huge_gc2_fixture_init(&fx, rs, base + 1u, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+  huge_gc2_close_race_start(&race, &fx, &thread, 2u);
+  assert(lj_arena_hugetab_mark(&fx.ht, fx.p, &hi) == 1);
+  assert(hi.readers == 0u && (hi.flags & LJ_HUGEF_MARK) != 0);
+  huge_gc2_close_race_finish(&race, thread);
+  assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &hi));
+  assert(hi.readers == 0u && (hi.flags & LJ_HUGEF_MARK) != 0);
+  huge_gc2_delete_unmap(&fx);
+}
+
+static void test_huge_gc2_transfer_defer_veto(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 2887u;
+  HugeGC2Fixture fx;
+  HugeGC2TransferRace race;
+  HugeTab dst = { 0 };
+  LJHugeInfo hi;
+  pthread_t thread;
+
+  huge_gc2_fixture_init(&fx, rs, size, LJ_AF_TRAVERSABLE,
+	LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY);
+  assert(lj_arena_hugetab_init(&dst, 2));
+  memset(&race, 0, sizeof(race));
+  race.dst = &dst;
+  race.fx = &fx;
+  race.owner_tid = 0x89abu;
+
+  /* Stop transfer after its internal reader=1 snapshot. External free then
+  ** installs irrevocable DEFER_FREE. Transfer may subsequently close the
+  ** same slot, but it must veto before destination publication and reopen so
+  ** the last-reader fold hands the mapping to the sweep owner. */
+  lj_arena_hugetab_test_admission_close_pause(1);
+  assert(pthread_create(&thread, NULL, huge_gc2_transfer_thread, &race) == 0);
+  while (lj_arena_hugetab_test_admission_close_paused() != 1u)
+    la_cpu_pause();
+  assert(!lj_arena_hugetab_claim_external_free(&fx.ht, fx.p, &hi));
+  assert(hi.readers == 1u && (hi.flags & LJ_HUGEF_DEFER_FREE) != 0);
+  assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, NULL));
+  assert(!lj_arena_hugetab_lookup(&dst, fx.p, NULL));
+  lj_arena_hugetab_test_admission_close_pause(0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(!race.transferred);
+  assert(!lj_arena_hugetab_test_admission_close_paused());
+
+  assert(lj_arena_hugetab_lookup(&fx.ht, fx.p, &hi));
+  assert(hi.readers == 0u);
+  assert((hi.flags & (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD)) ==
+	 (LJ_HUGEF_FREEING|LJ_HUGEF_SWEEP_OLD));
+  assert((hi.flags & (LJ_HUGEF_BUSY|LJ_HUGEF_DEFER_FREE)) == 0);
+  assert(!lj_arena_hugetab_lookup(&dst, fx.p, NULL));
+  /* The contended external caller never acquired BUSY; the reopened slot is
+  ** now sweep-owned and can be terminally removed through the normal path. */
+  assert(lj_arena_hugetab_finish_external_free(&fx.ht, fx.p, NULL) ==
+	 LJ_ARENA_HUGE_FINISH_LOST);
+  huge_gc2_delete_unmap(&fx);
+  lj_arena_hugetab_fini(&dst);
+  assert(dst.h == NULL);
+}
+
+static void test_huge_gc2_bound_membership_contract(PRNGState *rs)
+{
+  const size_t size = LJ_HUGE_THRESHOLD + 2891u;
+  LJGC2TableTopology topology, other_topology;
+  LJGC2TableTopologySnap before, after;
+  LJGC2TableTokenTicket ticket;
+  LJGC2TabStamp *stamp;
+  HugeTab ht = { 0 }, src = { 0 }, same = { 0 };
+  HugeTab other = { 0 }, unbound = { 0 };
+  LJHugeInfo hi;
+  void *p;
+
+  assert(lj_gc2_table_topology_init_unpublished(&topology, 1u));
+  assert(lj_gc2_table_topology_init_unpublished(&other_topology, 1u));
+  assert(lj_arena_hugetab_init(&ht, 2));
+  lj_arena_hugetab_bind_table_topology(&ht, &topology);
+  p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
+  assert(p != NULL);
+  stamp = lj_arena_gc2_stamp_acq(p);
+  assert(stamp != NULL);
+  assert(lj_gc2_table_token_refresh(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  before = lj_gc2_table_topology_snapshot(&topology);
+  /* Bound membership must never publish a preseed PENDING token. The failed
+  ** insertion is not a topology mutation and leaves the mapping private. */
+  assert(lj_arena_hugetab_insert(
+	&ht, p, size, LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) == -1);
+  after = lj_gc2_table_topology_snapshot(&topology);
+  assert(lj_gc2_table_topology_equal(&before, &after));
+  assert(!lj_arena_hugetab_lookup(&ht, p, NULL));
+  assert(lj_gc2_table_token_complete(&stamp->token, &ticket) ==
+	 LJ_GC2_TABLE_TOKEN_RESULT_OK);
+  assert(lj_arena_hugetab_insert(
+	&ht, p, size, LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_READY) == 1);
+  assert(lj_arena_hugetab_delete(&ht, p, &hi));
+  lj_arena_huge_unmap(p, hi.size);
+  lj_arena_hugetab_fini(&ht);
+
+  /* A transfer is a membership move, not two unrelated mutations. If either
+  ** side is bound, both directories must name the exact same authority. */
+  assert(lj_arena_hugetab_init(&src, 2));
+  assert(lj_arena_hugetab_init(&same, 2));
+  assert(lj_arena_hugetab_init(&other, 2));
+  assert(lj_arena_hugetab_init(&unbound, 2));
+  lj_arena_hugetab_bind_table_topology(&src, &topology);
+  lj_arena_hugetab_bind_table_topology(&same, &topology);
+  lj_arena_hugetab_bind_table_topology(&other, &other_topology);
+  p = lj_arena_huge_map(rs, size + 1u, 0);
+  assert(p != NULL);
+  assert(lj_arena_hugetab_insert(&src, p, size + 1u, 0) == 1);
+  assert(!lj_arena_hugetab_transfer(&other, &src, 17u));
+  assert(!lj_arena_hugetab_transfer(&unbound, &src, 17u));
+  assert(lj_arena_hugetab_lookup(&src, p, NULL));
+  assert(!lj_arena_hugetab_lookup(&other, p, NULL));
+  assert(!lj_arena_hugetab_lookup(&unbound, p, NULL));
+  assert(lj_arena_hugetab_transfer(&same, &src, 17u));
+  assert(!lj_arena_hugetab_lookup(&src, p, NULL));
+  assert(lj_arena_hugetab_lookup(&same, p, NULL));
+  assert(lj_arena_hugetab_delete(&same, p, &hi));
+  lj_arena_huge_unmap(p, hi.size);
+  lj_arena_hugetab_fini(&src);
+  lj_arena_hugetab_fini(&same);
+  lj_arena_hugetab_fini(&other);
+  lj_arena_hugetab_fini(&unbound);
+}
+#endif
 
 static void test_huge_gc2_exact_authority_gates(PRNGState *rs)
 {
@@ -2733,10 +3016,10 @@ int main(void)
     (size_t)LJ_ARENA_SIZE * 2u + 333u
   };
   PRNGState rs;
-  HugeTab ht = { NULL };
-  HugeTab tiny = { NULL };
-  HugeTab src = { NULL };
-  HugeTab dst = { NULL };
+  HugeTab ht = { 0 };
+  HugeTab tiny = { 0 };
+  HugeTab src = { 0 };
+  HugeTab dst = { 0 };
   void *ptrs[sizeof(sizes)/sizeof(sizes[0])];
   void *racep;
   void *rangep, *rangebase;
@@ -2763,6 +3046,10 @@ int main(void)
   test_root_state(&rs);
   test_root_free_race(&rs);
 #if defined(LJ_ARENA_TEST_HELPERS)
+  test_huge_gc2_destructive_admission_close(&rs);
+  test_huge_gc2_closed_mark_reopens(&rs);
+  test_huge_gc2_transfer_defer_veto(&rs);
+  test_huge_gc2_bound_membership_contract(&rs);
   test_gc2_sidecar_prealloc_and_fini_veto(&rs);
   test_huge_realloc_busy_preemption(&rs);
   test_small_lifetime_descriptor(&rs);

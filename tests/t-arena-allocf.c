@@ -34,7 +34,7 @@ int main(void)
   for (round = 0; round < 8; round++) {
     TGAlloc alloc;
     LJArenaAllocD ad;
-    HugeTab ht = { NULL };
+    HugeTab ht = { 0 };
     LJHugeInfo hi;
     void *p, *q, *typed, *huge, *huge_same, *huge2, *small;
     void *recovery_huge;

@@ -1539,14 +1539,16 @@ static void test_huge_sweep_saturated_reader_failclosed(void)
 	   (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_RETIRED|LJ_HUGEF_TICKET));
     assert((reclaim.stale.flags & LJ_HUGEF_MARK) == 0);
 
-    readers = (LJHugeReader *)calloc(0xffffu, sizeof(*readers));
+    readers = (LJHugeReader *)calloc(
+	LJ_ARENA_HUGE_READER_MAX, sizeof(*readers));
     assert(readers != NULL);
-    for (i = 0; i < 0xffffu; i++)
+    for (i = 0; i < LJ_ARENA_HUGE_READER_MAX; i++)
       assert(lj_arena_hugetab_reader_acquire(
 	       &f.tg->huge, ud, &readers[i], NULL) ==
 	     LJ_ARENA_HUGE_READER_ACQUIRED);
     assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
-    assert(hi.readers == 0xffffu && (hi.flags & LJ_HUGEF_MARK) == 0);
+    assert(hi.readers == LJ_ARENA_HUGE_READER_MAX &&
+	   (hi.flags & LJ_HUGEF_MARK) == 0);
 
     /* Remove the only spare node and fill the production SSB. A saturated
     ** semantic mark can therefore neither take a body token nor enqueue its
@@ -1589,7 +1591,7 @@ static void test_huge_sweep_saturated_reader_failclosed(void)
     assert(activation.state == LJ_GC2_ACT_NO_RECLAIM);
     assert(lj_gc2_activation_reclaim_veto(f.g));
     assert(lj_arena_hugetab_lookup(&f.tg->huge, ud, &hi) == 1);
-    assert(hi.readers == 0xffffu);
+    assert(hi.readers == LJ_ARENA_HUGE_READER_MAX);
     assert((hi.flags & (LJ_HUGEF_MARK|LJ_HUGEF_RETIRED|
 			 LJ_HUGEF_FREEING)) == LJ_HUGEF_MARK);
     assert(lj_arena_huge_recovery_state(hi.flags) ==
@@ -1598,7 +1600,7 @@ static void test_huge_sweep_saturated_reader_failclosed(void)
     /* Remove reader saturation before waking the stale writer so the tokens
     ** themselves cannot explain its loss. Durable MARK plus sticky
     ** NO_RECLAIM must remain sufficient after the final release. */
-    for (i = 0; i < 0xffffu; i++)
+    for (i = 0; i < LJ_ARENA_HUGE_READER_MAX; i++)
       assert(lj_arena_hugetab_reader_release(&readers[i], NULL) ==
 	     LJ_ARENA_HUGE_READER_RELEASED);
     free(readers);

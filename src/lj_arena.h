@@ -104,6 +104,9 @@ typedef struct LJGC2TabStampArena {
 
 struct HugeTab {
   LJHugeTabHdr *h;
+  /* Immutable after private binding and before any membership publication.
+  ** NULL keeps standalone/pre-GC2 tables operational without pass authority. */
+  LJGC2TableTopology *table_topology;
 };
 
 /* Counted HugeTab body admission. The stable table header and exact allocation
@@ -113,7 +116,9 @@ struct HugeTab {
 ** once. They are single-caller objects (concurrent release of one token is not
 ** supported). The stable table header outlives every admitted token, while the
 ** wrapper need not; fini/fini_all and every slot-removal operation mechanically
-** refuse a nonzero reader count. */
+** refuse a nonzero reader count. Destructive paths consume their sole internal
+** certificate lease into a reserved all-ones admission-close encoding before
+** validating the embedded token/descriptor and removing membership. */
 struct LJHugeReader {
   LJHugeTabHdr *h;
   void *base;
@@ -559,6 +564,10 @@ LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
 ** grandfathered that mapping against later prospective global fault pins. */
 LJ_FUNC void lj_arena_huge_unmap_claimed(void *p, size_t size);
 LJ_FUNC int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits);
+/* Bind a privately initialized HugeTab to its global physical-enumeration
+** universe. The authority must already be initialized and may not be rebound. */
+LJ_FUNC void lj_arena_hugetab_bind_table_topology(
+  HugeTab *ht, LJGC2TableTopology *topology);
 /* Checked finalization keeps ht->h authoritative on BLOCKED. fini_all_try may
 ** make partial mapping progress; DONE means the side table itself is gone.
 ** The terminal helpers require joined-world ownership of the HugeTab wrapper. */
@@ -687,8 +696,9 @@ LJ_FUNC int lj_arena_hugetab_mark_cdata_range(HugeTab *ht, const void *p,
 ** as the metadata-only mark APIs. MARK_INTENT records liveness behind a
 ** pre-ticket retire owner but deliberately returns no reader token or base.
 ** MARK_SATURATED likewise publishes MARK but returns no token when the bounded
-** reader field is full; the caller must arrange a later traversal/retry and
-** must not inspect body bytes from that result.
+** reader field is full or a destructive admission close is atomically
+** defeated; the caller must arrange a later traversal/retry and must not
+** inspect body bytes from that result.
 **
 ** Reader acquire returns ACQUIRED, MISSING, or OVERFLOW. Mark-reader acquire
 ** returns -1 for rejection/missing, MARK_SATURATED for a full bounded counter,
@@ -701,6 +711,8 @@ LJ_FUNC int lj_arena_hugetab_mark_cdata_range(HugeTab *ht, const void *p,
 #define LJ_ARENA_HUGE_READER_OVERFLOW	(-2)
 #define LJ_ARENA_HUGE_READER_MISSING	0
 #define LJ_ARENA_HUGE_READER_ACQUIRED	1
+/* The all-ones encoding is reserved for destructive admission close. */
+#define LJ_ARENA_HUGE_READER_MAX	0xfffeu
 #define LJ_ARENA_HUGE_READER_RELEASE_LOST	0
 #define LJ_ARENA_HUGE_READER_RELEASED	1
 #define LJ_ARENA_HUGE_READER_HANDOFF	2
@@ -835,6 +847,8 @@ LJ_FUNC int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src,
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
 #if defined(LJ_ARENA_TEST_HELPERS)
+LJ_FUNC void lj_arena_hugetab_test_admission_close_pause(int enabled);
+LJ_FUNC uint32_t lj_arena_hugetab_test_admission_close_paused(void);
 LJ_FUNC void lj_arena_hugetab_test_realloc_pause(int enabled);
 LJ_FUNC uint32_t lj_arena_hugetab_test_realloc_paused(void);
 LJ_FUNC void lj_arena_hugetab_test_retire_pause(int enabled);

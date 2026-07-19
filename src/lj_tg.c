@@ -341,6 +341,10 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   lj_arena_alloc_owner_tg_rel(&tg->alloc, tg);
   if (arena_internal && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
+    /* Secondary TG creation runs after GC2 global initialization. Bind before
+    ** TGF_HUGETAB or attach can expose this directory to a physical pass. */
+    lj_arena_hugetab_bind_table_topology(
+      &tg->huge, &g->gc2.table_token_topology);
     lj_tg_flags_or_rlx(tg, TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
   }
@@ -492,6 +496,14 @@ static LJ_NORET void tg_registry_attach_corrupt(LJTGRegistrySlot *slot)
   abort();
 }
 
+/* A pinned authority permanently vetoes scanner acknowledgement but must not
+** turn stable-registry publication or teardown into a progress lock. */
+static LJ_AINLINE void tg_table_topology_changed(global_State *g)
+{
+  if (g)
+    (void)lj_gc2_table_topology_changed(&g->gc2.table_token_topology);
+}
+
 static int tg_registry_link_attaching(global_State *g, TGState *tg)
 {
   LJTGRegistrySlot *head;
@@ -518,12 +530,16 @@ static int tg_registry_link_attaching(global_State *g, TGState *tg)
   /* A legacy-only missed attach may retry idempotently. Clear its per-body
   ** exception before the stable head release makes this slot discoverable. */
   lj_tg_registry_shadow_missed_rel(tg, 0);
-  do {
+  for (;;) {
     head = gc2_tg_registry_head_acq(g);
     /* The slot is still private after a failed head CAS, so next_all may be
     ** refreshed. The successful release CAS is its one immutable-link LP. */
     slot->next_all = head;
-  } while (!gc2_tg_registry_head_cas(g, &head, slot));
+    if (gc2_tg_registry_head_cas(g, &head, slot)) {
+      tg_table_topology_changed(g);
+      break;
+    }
+  }
   (void)gc2_tg_registry_nodes_add(g, 1);
   return 1;
 }
@@ -767,13 +783,19 @@ static int tg_registry_reclaim_begin(TGState *tg, LJTGRegistryKey *keyp)
   return result == LJ_TGSLOT_OK && reclaim_body == tg;
 }
 
-static void tg_registry_reclaim_finish(const LJTGRegistryKey *key)
+static void tg_registry_reclaim_finish(global_State *g,
+				       const LJTGRegistryKey *key)
 {
   for (;;) {
     LJTGSlotSnap snap;
     LJTGSlotResult result = lj_tgregistry_try_clear(key, &snap);
-    if (result == LJ_TGSLOT_OK)
+    if (result == LJ_TGSLOT_OK) {
+      /* The helper may report an idempotent EMPTY observation. A conservative
+      ** extra epoch step is harmless and keeps the hidden body-clear CAS
+      ** fail-closed without changing the generic registry primitive. */
+      tg_table_topology_changed(g);
       return;
+    }
     if (result != LJ_TGSLOT_LOST)
       abort();  /* RECLAIMING rejects all borrowers; mismatch is corruption. */
   }
@@ -1015,7 +1037,7 @@ restart:
       ** after unlink; zero stable borrows is established before their slot is
       ** cleared. Slots are not reused and stay linked until shutdown. */
       if (lj_tgregistry_key_valid(&registry_key))
-	tg_registry_reclaim_finish(&registry_key);
+	tg_registry_reclaim_finish(g, &registry_key);
       tg = next;
       continue;
     }
@@ -1085,10 +1107,12 @@ void lj_tg_registry_fini(global_State *g)
       abort();
     g->main_tg->registry_key.slot = NULL;
     g->main_tg->registry_key.incarnation = LJ_TGSLOT_INCARNATION_NONE;
-    tg_registry_reclaim_finish(&key);
+    tg_registry_reclaim_finish(g, &key);
   }
   expected = gc2_tg_registry_nodes_acq(g);
   slot = gc2_tg_registry_head_xchg_acqrel(g, NULL);
+  if (slot)
+    tg_table_topology_changed(g);
   while (slot) {
     LJTGRegistryBodySnap body = lj_tgregistry_slot_body_snapshot(slot);
     LJTGSlotSnap snap = lj_tgslot_snapshot(&slot->token);

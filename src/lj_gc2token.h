@@ -822,6 +822,123 @@ lj_gc2_table_token_complete(LJGC2TableToken *token,
          LJ_GC2_TABLE_TOKEN_RESULT_PINNED : LJ_GC2_TABLE_TOKEN_RESULT_BUSY;
 }
 
+/* ---- Exact table-enumeration universe authority ------------------- */
+
+/*
+** A physical table-token pass spans the stable TG spine, every owner HugeTab,
+** and the global small-arena directory. Neither a cursor wrap nor the sticky
+** requested-generation maximum proves that this universe stayed unchanged.
+**
+** Each completed physical membership change advances this exact sequence
+** before its operation returns or destroys the old mapping. New identities
+** are published with token NONE, while PENDING mechanically vetoes removal or
+** transfer. Thus a publisher paused between its membership LP and this bump
+** can expose only a tokenless identity; any later token publication is covered
+** by the separate helpable table descriptor generation. This avoids an
+** anonymous in-flight count which a paused owner could strand forever.
+**
+** PINNED is absorbing: mutations continue, but no later pass may manufacture
+** reclamation authority after counter saturation or malformed ownership.
+*/
+#define LJ_GC2_TABLE_TOPOLOGY_OPEN	UINT64_C(0)
+#define LJ_GC2_TABLE_TOPOLOGY_PINNED	UINT64_C(1)
+
+typedef struct LJGC2TableTopology {
+  /* lo = nonzero completed-mutation epoch; hi = OPEN or PINNED. */
+  la_u128 value;
+} LJGC2TableTopology;
+
+typedef struct LJGC2TableTopologySnap {
+  uint64_t epoch;
+  uint8_t pinned;
+  uint8_t valid;
+} LJGC2TableTopologySnap;
+
+typedef enum LJGC2TableTopologyResult {
+  LJ_GC2_TABLE_TOPOLOGY_INVALID = -2,
+  LJ_GC2_TABLE_TOPOLOGY_PINNED_RESULT = -1,
+  LJ_GC2_TABLE_TOPOLOGY_OK = 1
+} LJGC2TableTopologyResult;
+
+typedef char lj_gc2_table_topology_size_must_be_16[
+  sizeof(LJGC2TableTopology) == 16 ? 1 : -1];
+typedef char lj_gc2_table_topology_align_must_be_16[
+  __alignof__(LJGC2TableTopology) >= 16 ? 1 : -1];
+
+/* Valid only before the containing universe is published. */
+LA_INLINE int lj_gc2_table_topology_init_unpublished(
+  LJGC2TableTopology *topology, uint64_t epoch)
+{
+  if (!topology || epoch == 0)
+    return 0;
+  topology->value.lo = epoch;
+  topology->value.hi = LJ_GC2_TABLE_TOPOLOGY_OPEN;
+  return 1;
+}
+
+/* Exact CX16 observation, matching the table descriptor's artifact contract. */
+LA_INLINE LJGC2TableTopologySnap lj_gc2_table_topology_snapshot(
+  const LJGC2TableTopology *topology)
+{
+  LJGC2TableTopologySnap snap;
+  la_u128 exact, zero;
+  if (!topology) {
+    snap.epoch = 0;
+    snap.pinned = 1;
+    snap.valid = 0;
+    return snap;
+  }
+  exact.lo = exact.hi = 0;
+  zero = exact;
+  (void)la_cas128((la_u128 *)(void *)&topology->value, &exact, zero);
+  snap.epoch = exact.lo;
+  snap.pinned = (uint8_t)(exact.hi == LJ_GC2_TABLE_TOPOLOGY_PINNED);
+  snap.valid = (uint8_t)(exact.lo != 0 &&
+    (exact.hi == LJ_GC2_TABLE_TOPOLOGY_OPEN || snap.pinned));
+  return snap;
+}
+
+LA_INLINE int lj_gc2_table_topology_equal(
+  const LJGC2TableTopologySnap *a, const LJGC2TableTopologySnap *b)
+{
+  return a && b && a->epoch == b->epoch && a->pinned == b->pinned &&
+         a->valid == b->valid;
+}
+
+LA_INLINE int lj_gc2_table_topology_open(
+  const LJGC2TableTopologySnap *snap)
+{
+  return snap && snap->valid && !snap->pinned;
+}
+
+/* Publish one completed physical membership change. The CAS loop is lock-free
+** and contains no peer wait. Saturation pins instead of wrapping to zero. */
+LA_INLINE LJGC2TableTopologyResult lj_gc2_table_topology_changed(
+  LJGC2TableTopology *topology)
+{
+  for (;;) {
+    LJGC2TableTopologySnap snap =
+      lj_gc2_table_topology_snapshot(topology);
+    la_u128 expected, desired;
+    if (!topology || !snap.valid)
+      return LJ_GC2_TABLE_TOPOLOGY_INVALID;
+    if (snap.pinned)
+      return LJ_GC2_TABLE_TOPOLOGY_PINNED_RESULT;
+    expected.lo = snap.epoch;
+    expected.hi = LJ_GC2_TABLE_TOPOLOGY_OPEN;
+    desired = expected;
+    if (snap.epoch == UINT64_MAX) {
+      desired.hi = LJ_GC2_TABLE_TOPOLOGY_PINNED;
+      if (la_cas128(&topology->value, &expected, desired))
+        return LJ_GC2_TABLE_TOPOLOGY_PINNED_RESULT;
+      continue;
+    }
+    desired.lo = snap.epoch + 1u;
+    if (la_cas128(&topology->value, &expected, desired))
+      return LJ_GC2_TABLE_TOPOLOGY_OK;
+  }
+}
+
 /* ---- Per-TG helpable root-operation descriptor -------------------- */
 
 #define LJ_GC2_ROOTDESC_STATE_BITS 2u
