@@ -327,7 +327,10 @@ void lj_jit_token_release(jit_State *J)
   if (tid != 0 && jit_token_acq(g) == tid) {
     if (lj_trace_state_load(J) == LJ_TRACE_IDLE)
       jit_owner_l_rel(J, NULL);  /* Never publish an idle detachable state. */
-    jit_token_rel(g, 0);
+    if (!jit_token_release_exact(g, tid)) {
+      lj_assertJ(0, "recorder-token release lost exact owner word");
+      abort();
+    }
   }
 }
 
@@ -338,8 +341,44 @@ void lj_jit_token_release_l(lua_State *L, jit_State *J)
   if (tid != 0 && jit_token_acq(g) == tid) {
     if (lj_trace_state_load(J) == LJ_TRACE_IDLE)
       jit_owner_l_rel(J, NULL);  /* The explicit L is valid for this release. */
-    jit_token_rel(g, 0);
+    if (!jit_token_release_exact(g, tid)) {
+      lj_assertJ(0, "recorder-token release lost exact owner word");
+      abort();
+    }
   }
+}
+
+/* Atomically make recorder scratch immutable across a future token-free VM
+** event. IDLE is intentionally valid here for token-free flush callbacks.
+** These primitives are deliberately not wired into callbacks until every
+** waiting control caller recognizes lifecycle ownership and defers. */
+int lj_jit_lifecycle_yield_l(lua_State *L, jit_State *J)
+{
+  global_State *g = J2G(J);
+  uint32_t tid = jit_token_tid_l(L, J);
+  LJJitOwnerWord old;
+  if (tid == 0 || jit_owner_l_acq(J) != L)
+    return 0;
+  old = jit_owner_pack(tid, 0);
+  return jit_owner_word_cas(g, &old, jit_owner_pack(0, tid));
+}
+
+int lj_jit_lifecycle_resume_l(lua_State *L, jit_State *J)
+{
+  global_State *g = J2G(J);
+  uint32_t tid = jit_token_tid_l(L, J);
+  LJJitOwnerWord old;
+  if (tid == 0 || jit_owner_l_acq(J) != L)
+    return 0;
+  old = jit_owner_pack(0, tid);
+  return jit_owner_word_cas(g, &old, jit_owner_pack(tid, 0));
+}
+
+int lj_jit_lifecycle_held_l(lua_State *L, jit_State *J)
+{
+  uint32_t tid = jit_token_tid_l(L, J);
+  return tid != 0 && jit_owner_l_acq(J) == L &&
+    jit_owner_word_acq(J2G(J)) == jit_owner_pack(0, tid);
 }
 
 int lj_jit_token_acquire_wait(jit_State *J)
@@ -3317,6 +3356,10 @@ static void trace_terminal_pin_preflight(global_State *g)
 void lj_trace_freestate(global_State *g)
 {
   jit_State *J = G2J(g);
+  if (LJ_UNLIKELY(jit_owner_word_acq(g) != jit_owner_pack(0, 0))) {
+    lj_assertG(0, "JIT owner word remained reserved at VM close");
+    abort();
+  }
   /* Fail before buffers or the active vector disappear. A live native frame is
   ** a universe-lifetime violation, not terminal garbage to repair by force. */
   trace_terminal_pin_preflight(g);

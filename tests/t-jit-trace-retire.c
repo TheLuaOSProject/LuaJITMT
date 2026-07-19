@@ -786,10 +786,10 @@ int main(void)
   ** recorder makes the nonwaiting GC claim defer without an epoch-only LP; its
   ** actual token owner then publishes the only authoritative discovery edge.
   */
-  jit_token_rel(g, 0x7fffffffu);
+  jit_owner_test_rel(g, 0x7fffffffu, 0);
   assert(lj_trace_retire_gc_claim(g, T) == 0);
   assert(la_load64_acq(&T->retire_epoch) == 0);
-  jit_token_rel(g, 0);
+  jit_owner_test_rel(g, 0, 0);
   assert(lj_jit_token_try(J));
   lj_trace_free_unpublished(g, T);
   lj_jit_token_release(J);

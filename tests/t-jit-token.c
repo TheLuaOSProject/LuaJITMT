@@ -131,14 +131,14 @@ static void expect_vmevent_owner_and_jit_pointer(lua_State *L)
   ** pointer owned by a foreign recorder TG with this event's initiating L. */
   calls = la_load32_acq(&vmevent_calls);
   jit_owner_l_rel(J, sentinel);
-  jit_token_rel(g, foreign);
+  jit_owner_test_rel(g, foreign, 0);
   lj_vmevent_send_l(L, TRACE,
     lua_pushliteral(V, "flush");
   );
   assert(la_load32_acq(&vmevent_calls) == calls + 1u);
   assert(jit_owner_l_acq(J) == sentinel);
   assert(jit_token_acq(g) == foreign);
-  jit_token_rel(g, 0);
+  jit_owner_test_rel(g, 0, 0);
   jit_owner_l_rel(J, NULL);
 
   ljt_lua_dostring(L, "jit.attach(lj_m6_count_vmevent)\n");
@@ -421,7 +421,7 @@ static void *release_jit_token_after_delay(void *arg)
   (void)lj_thr_sleep_ns(NULL, 30000000);
   assert(jit_token_acq(ctx->g) == ctx->owner);
   la_store32_rel(&ctx->released, 1);
-  jit_token_rel(ctx->g, 0);
+  jit_owner_test_rel(ctx->g, 0, 0);
   return NULL;
 }
 
@@ -440,7 +440,7 @@ static void *publish_stopreq_while_token_waits(void *arg)
   la_store32_rel(&ctx->signaled,
 		 lj_safepoint_handshake(ctx->g, LJ_GC2_HS_STOPREQ));
   assert(jit_token_acq(ctx->g) == ctx->owner);
-  jit_token_rel(ctx->g, 0);
+  jit_owner_test_rel(ctx->g, 0, 0);
   la_store32_rel(&ctx->released, 1);
   return NULL;
 }
@@ -512,7 +512,7 @@ static void expect_gc_trace_free_defers_for_token(lua_State *L)
   assert(traceno != 0 && traceref_safe(J, traceno) == T);
   freetrace = J->freetrace;
 
-  jit_token_rel(g, foreign);
+  jit_owner_test_rel(g, foreign, 0);
   /* A GC claimant never races the recorder's target validate->publish window.
   ** Losing the single nonwaiting token try requests async abort and authorizes
   ** neither an epoch claim nor a root-spine splice.
@@ -531,7 +531,7 @@ static void expect_gc_trace_free_defers_for_token(lua_State *L)
   ** The detached-body destructor disconnects the exact public slot; a gated
   ** pass before the full epoch margin must retain the body and reservation.
   */
-  jit_token_rel(g, 0);
+  jit_owner_test_rel(g, 0, 0);
   assert(lj_trace_retire_gc_claim(g, T) == 1);
   retire_epoch = la_load64_acq(&T->retire_epoch) - 1u;
   assert(trace_retired_link_listed_acq(T));
@@ -578,7 +578,7 @@ static void expect_flush_waits_for_token(lua_State *L, const char *code,
   ctx.g = g;
   ctx.owner = foreign_token_owner(L);
   ctx.released = 0;
-  jit_token_rel(g, ctx.owner);
+  jit_owner_test_rel(g, ctx.owner, 0);
   assert(pthread_create(&th, NULL, release_jit_token_after_delay, &ctx) == 0);
   ljt_lua_dostring(L, code);
   assert(pthread_join(th, NULL) == 0);
@@ -596,7 +596,7 @@ static void expect_opt_start_waits_for_token(lua_State *L)
   ctx.g = g;
   ctx.owner = foreign_token_owner(L);
   ctx.released = 0;
-  jit_token_rel(g, ctx.owner);
+  jit_owner_test_rel(g, ctx.owner, 0);
   assert(pthread_create(&th, NULL, release_jit_token_after_delay, &ctx) == 0);
   ljt_lua_dostring(L, "jit.opt.start('hotloop=3', 'hotexit=4', '-sink')\n");
   assert(pthread_join(th, NULL) == 0);
@@ -625,7 +625,7 @@ static void expect_token_wait_stopreq(lua_State *L, const char *code)
   ctx.tg = L2TG(L);
   ctx.owner = foreign_token_owner(L);
   ljt_tg_clear_stopreq(ctx.tg);
-  jit_token_rel(g, ctx.owner);
+  jit_owner_test_rel(g, ctx.owner, 0);
 
   assert(pthread_create(&th, NULL, publish_stopreq_while_token_waits,
 			&ctx) == 0);
@@ -654,6 +654,44 @@ static int assert_flush_event_token_owner(lua_State *L)
   return 0;
 }
 
+static void expect_jit_lifecycle_word_roundtrip(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = L2J(L);
+  TGState *tg = L2TG(L);
+  uint32_t tid = lj_tg_tid_acq(tg);
+
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(lj_jit_token_try_l(L, J));
+  jit_owner_l_rel(J, L);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(tid, 0));
+  assert(lj_jit_token_held_l(L, J));
+
+  assert(lj_jit_lifecycle_yield_l(L, J));
+  assert(jit_token_acq(g) == 0);
+  assert(jit_lifecycle_acq(g) == tid);
+  assert(!lj_jit_token_held_l(L, J));
+  assert(lj_jit_lifecycle_held_l(L, J));
+  assert(!lj_jit_token_try_l(L, J));
+  assert(!lj_jit_token_try(J));
+
+  /* Ordinary token release must neither erase the high-half reservation nor
+  ** detach its lua_State owner while a callback lifecycle is active. */
+  lj_jit_token_release(J);
+  lj_jit_token_release_l(L, J);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, tid));
+  assert(jit_owner_l_acq(J) == L);
+
+  assert(lj_jit_lifecycle_resume_l(L, J));
+  assert(jit_owner_word_acq(g) == jit_owner_pack(tid, 0));
+  assert(lj_jit_token_held_l(L, J));
+  assert(!lj_jit_lifecycle_held_l(L, J));
+  lj_jit_token_release_l(L, J);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(J) == NULL);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -661,6 +699,7 @@ int main(void)
 
   g = G(L);
   assert(jit_token_acq(g) == 0);
+  expect_jit_lifecycle_word_roundtrip(L);
   expect_vmevent_smr_try_drop(L);
   expect_vmevent_owner_and_jit_pointer(L);
 
@@ -844,13 +883,13 @@ int main(void)
     "  for i = 1, n do s = s + i end\n"
     "  return s\n"
     "end\n");
-  jit_token_rel(g, 0x7fffffffu);
+  jit_owner_test_rel(g, 0x7fffffffu, 0);
   ljt_lua_dostring(L,
     "for _ = 1, 40 do assert(lj_m6_busy_f(80) == 3240) end\n"
     "assert(lj_m6_busy_tracecount() == 0, 'busy recorder token must skip tracing')\n");
   assert(jit_token_acq(g) == 0x7fffffffu);
 
-  jit_token_rel(g, 0);
+  jit_owner_test_rel(g, 0, 0);
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"

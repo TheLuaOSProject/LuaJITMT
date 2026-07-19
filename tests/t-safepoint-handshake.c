@@ -591,7 +591,7 @@ static void test_dispatch_update_never_writes_peer(lua_State *L)
   assert(lj_tg_owns_state_acq(&peer, L));
   assert(lj_tg_load_cur_L(&peer) == L);
   jit_owner_l_rel(J, L);
-  jit_token_rel(g, peer_tid);
+  jit_owner_test_rel(g, peer_tid, 0);
   lj_trace_state_store(J, LJ_TRACE_RECORD);
 
   /* The explicit stopped-owner/ACK path is authorized to install the peer's
@@ -616,7 +616,7 @@ static void test_dispatch_update_never_writes_peer(lua_State *L)
 
   lj_trace_state_store(J, LJ_TRACE_IDLE);
   jit_owner_l_rel(J, NULL);
-  jit_token_rel(g, 0);
+  jit_owner_test_rel(g, 0, 0);
   L->tg_hint = saved_hint;
   lj_state_owner_word_rel(L, saved_owner);
   lj_tg_store_cur_L(&peer, NULL);

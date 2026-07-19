@@ -1856,11 +1856,16 @@ typedef struct global_State {
   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
 #if LJ_HASJIT
   jit_State *jitp;	/* Pointer to the universe-global JIT state. */
-  uint32_t jit_token;	/* Recorder token owner tid, 0 if idle. */
-  uint32_t jit_mcode_synccore;  /* Sync-core membarrier is registered. */
+  /* Exact atomic state: low 32 bits recorder token, high 32 bits callback
+  ** lifecycle reservation. Keep this qword in the former token/synccore
+  ** footprint so every downstream GG/J/dispatch offset remains unchanged. */
+  LJ_ALIGN(8) uint64_t jit_owner_word;
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
   uint32_t gcroot_pending_hint;  /* Conservative non-empty pending-root hint. */
+#if LJ_HASJIT
+  uint32_t jit_mcode_synccore;  /* Occupies former alignment padding. */
+#endif
   uint64_t gcroot_repair_epoch;  /* Root-spine publications needing repair. */
   uint64_t gcroot_repaired_epoch;  /* Last root-spine repair scan epoch. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
@@ -1885,6 +1890,13 @@ LJ_FUNC_NORET void lj_assert_fail(global_State *g, const char *file, int line,
 
 LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
 		 offsetof(global_State, nilnodehdr) + sizeof(TabNodeHdr));
+#if LJ_HASJIT
+LJ_STATIC_ASSERT((offsetof(global_State, jit_owner_word) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(global_State, main_tg) ==
+		 offsetof(global_State, jit_owner_word) + sizeof(uint64_t));
+LJ_STATIC_ASSERT(offsetof(global_State, jit_mcode_synccore) ==
+		 offsetof(global_State, gcroot_pending_hint) + sizeof(uint32_t));
+#endif
 
 #define niltv(L) \
   check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
@@ -1942,21 +1954,74 @@ static LJ_AINLINE void vmstate_store_rel(global_State *g, int32_t vmstate)
 #define setvmstate(g, st)	vmstate_store_rel((g), ~LJ_VMST_##st)
 
 #if LJ_HASJIT
-static LJ_AINLINE uint32_t jit_token_acq(global_State *g)
+typedef uint64_t LJJitOwnerWord;
+
+#define LJ_JIT_OWNER_TOKEN_MASK UINT64_C(0xffffffff)
+
+static LJ_AINLINE LJJitOwnerWord jit_owner_pack(uint32_t token,
+						 uint32_t lifecycle)
 {
-  return la_load32_acq(&g->jit_token);
+  return (LJJitOwnerWord)token | ((LJJitOwnerWord)lifecycle << 32);
 }
 
-static LJ_AINLINE void jit_token_rel(global_State *g, uint32_t owner)
+static LJ_AINLINE uint32_t jit_owner_token(LJJitOwnerWord owner)
 {
-  la_store32_rel(&g->jit_token, owner);
+  return (uint32_t)(owner & LJ_JIT_OWNER_TOKEN_MASK);
+}
+
+static LJ_AINLINE uint32_t jit_owner_lifecycle(LJJitOwnerWord owner)
+{
+  return (uint32_t)(owner >> 32);
+}
+
+static LJ_AINLINE LJJitOwnerWord jit_owner_word_acq(global_State *g)
+{
+  return la_load64_acq(&g->jit_owner_word);
+}
+
+static LJ_AINLINE int jit_owner_word_cas(global_State *g,
+					  LJJitOwnerWord *oldp,
+					  LJJitOwnerWord owner)
+{
+  return la_cas64(&g->jit_owner_word, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t jit_token_acq(global_State *g)
+{
+  return jit_owner_token(jit_owner_word_acq(g));
+}
+
+static LJ_AINLINE uint32_t jit_lifecycle_acq(global_State *g)
+{
+  return jit_owner_lifecycle(jit_owner_word_acq(g));
 }
 
 static LJ_AINLINE int jit_token_cas(global_State *g, uint32_t *oldp,
 				    uint32_t owner)
 {
-  return la_cas32(&g->jit_token, oldp, owner, LA_ACQ_REL, LA_ACQ);
+  LJJitOwnerWord old = jit_owner_pack(*oldp, 0);
+  int ok = jit_owner_word_cas(g, &old, jit_owner_pack(owner, 0));
+  if (!ok)
+    *oldp = jit_owner_token(old);
+  return ok;
 }
+
+static LJ_AINLINE int jit_token_release_exact(global_State *g,
+					       uint32_t owner)
+{
+  LJJitOwnerWord old = jit_owner_pack(owner, 0);
+  return owner != 0 && jit_owner_word_cas(g, &old, jit_owner_pack(0, 0));
+}
+
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
+/* Tests which synthesize a foreign owner must replace the complete word. A
+** token-only store could erase a future live lifecycle reservation. */
+static LJ_AINLINE void jit_owner_test_rel(global_State *g, uint32_t token,
+					   uint32_t lifecycle)
+{
+  la_store64_rel(&g->jit_owner_word, jit_owner_pack(token, lifecycle));
+}
+#endif
 #endif
 
 static LJ_AINLINE uint8_t dispatchmode_load_acq(global_State *g)

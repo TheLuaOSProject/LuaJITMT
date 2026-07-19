@@ -39,6 +39,15 @@ typedef struct BlockingNativeCtx {
   uint32_t ready;
 } BlockingNativeCtx;
 
+/* This fixture also runs against the default (non-test-helper) library. Keep
+** its synthetic foreign-owner publication local and replace the whole qword,
+** so it cannot accidentally erase a lifecycle reservation. */
+static void test_jit_owner_rel(global_State *g, uint32_t token,
+			       uint32_t lifecycle)
+{
+  la_store64_rel(&g->jit_owner_word, jit_owner_pack(token, lifecycle));
+}
+
 static void *blocking_native_main(void *arg)
 {
   BlockingNativeCtx *ctx = (BlockingNativeCtx *)arg;
@@ -140,7 +149,7 @@ static void test_stalled_recorder_snapshot_retry(lua_State *L,
   if (owner == 0 || owner == lj_tg_tid_acq(tg))
     owner = 1u;
   assert(owner != 0 && owner != lj_tg_tid_acq(tg));
-  jit_token_rel(g, owner);
+  test_jit_owner_rel(g, owner, 0);
   lj_trace_state_store(J, LJ_TRACE_RECORD);
 
   for (i = 0; i < 2000000u && !lj_trace_state_aborted(
@@ -166,7 +175,7 @@ static void test_stalled_recorder_snapshot_retry(lua_State *L,
   /* Model the recorder observing the asynchronous abort and releasing its
   ** token. A later closed snapshot can now certify the roots and finish. */
   lj_trace_state_store(J, LJ_TRACE_IDLE);
-  jit_token_rel(g, 0);
+  test_jit_owner_rel(g, 0, 0);
   drive_to_idle(L, g);
 
   /* The retry belongs only to the generation that observed the stalled

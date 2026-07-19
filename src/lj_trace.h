@@ -64,6 +64,9 @@ LJ_FUNC int lj_jit_token_held_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_token_acquire_wait(jit_State *J);
 LJ_FUNC void lj_jit_token_release(jit_State *J);
 LJ_FUNC void lj_jit_token_release_l(lua_State *L, jit_State *J);
+LJ_FUNC int lj_jit_lifecycle_yield_l(lua_State *L, jit_State *J);
+LJ_FUNC int lj_jit_lifecycle_resume_l(lua_State *L, jit_State *J);
+LJ_FUNC int lj_jit_lifecycle_held_l(lua_State *L, jit_State *J);
 LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 LJ_FUNC void lj_trace_abort(global_State *g);
 LJ_FUNC void lj_trace_abort_owner(lua_State *L);
@@ -197,6 +200,9 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 #define lj_jit_token_acquire_wait(J)	(UNUSED(J), 0)
 #define lj_jit_token_release(J)	UNUSED(J)
 #define lj_jit_token_release_l(L, J)	(UNUSED(L), UNUSED(J))
+#define lj_jit_lifecycle_yield_l(L, J)	(UNUSED(L), UNUSED(J), 0)
+#define lj_jit_lifecycle_resume_l(L, J)	(UNUSED(L), UNUSED(J), 0)
+#define lj_jit_lifecycle_held_l(L, J)	(UNUSED(L), UNUSED(J), 0)
 #define lj_jit_owner_tg_l(L, J)	(UNUSED(L), UNUSED(J), NULL)
 #define lj_trace_initstate(g)	UNUSED(g)
 #define lj_trace_freestate(g)	UNUSED(g)
