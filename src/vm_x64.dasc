@@ -1058,16 +1058,41 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |//-- Table indexing metamethods -----------------------------------------
   |
+  |->vmeta_ggets:
+  |  // The mutable function->environment edge must be captured from the
+  |  // authoritative frame function root. A pre-copied env in TG scratch can
+  |  // be reclaimed while the meta helper initializes its anchor set.
+  |  settp STR:RC, LJ_TSTR
+  |  mov TMP1, STR:RC
+  |  lea RC, TMP1
+  |  movzx RAd, PC_RA
+  |  mov L:TMPR, SAVE_L
+  |  mov L:TMPR->base, BASE
+  |  mov SAVE_PC, PC
+  |.if X64WIN
+  |  lea CARG4, [BASE+RA*8]		// Enumerated destination root.
+  |  mov CARG3, RC			// Constant-key TValue root.
+  |  lea CARG2, [BASE-16]		// Authoritative frame function root.
+  |  mov L:RB, L:TMPR
+  |  mov CARG1, L:RB
+  |.else
+  |  lea CARG2, [BASE-16]		// Save before CARG3 clobbers BASE.
+  |  lea CARG4, [BASE+RA*8]
+  |  mov CARG3, RC			// CARG3 == BASE.
+  |  mov L:RB, L:TMPR
+  |  mov CARG1, L:RB
+  |.endif
+  |  call extern lj_meta_tgetenv_rooted	// (L, fnroot, keyroot, outroot)
+  |  mov BASE, L:RB->base
+  |  test RC, RC
+  |  jz >3
+  |  jmp ->cont_ra
+  |
   |->vmeta_tgets:
   |  settp STR:RC, LJ_TSTR		// STR:RC = GCstr *
   |  mov TMP1, STR:RC
   |  lea RC, TMP1
-  |  cmp PC_OP, BC_GGET
-  |  jne >1
-  |  settp TAB:RA, TAB:RB, LJ_TTAB	// TAB:RB = GCtab *
-  |  lea RB, [DISPATCH+DISPATCH_TG(tmptv)]  // Store fn->l.env in tg->tmptv.
-  |  mov [RB], TAB:RA
-  |  jmp >2
+  |  jmp >1
   |
   |->vmeta_tgetb:
   |  movzx RCd, PC_RC
@@ -1087,7 +1112,6 @@ static void build_subroutines(BuildCtx *ctx)
   |1:
   |  movzx RBd, PC_RB			// Reload TValue *t from RB.
   |  lea RB, [BASE+RB*8]
-  |2:
   |  mov L:CARG1, SAVE_L
   |  mov L:CARG1->base, BASE		// Caveat: CARG2/CARG3 may be BASE.
   |  mov CARG2, RB
@@ -1120,30 +1144,67 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->vm_call_dispatch_f
   |
   |->vmeta_tgetr:
-  |  mov CARG1, TAB:RB
-  |  mov RB, BASE			// Save BASE.
-  |  mov CARG2d, RCd			// Caveat: CARG2 == BASE
-  |  call extern lj_tab_getinth		// (GCtab *t, int32_t key)
-  |  // cTValue * or NULL returned in eax (RC).
+  |  // TGETR is the raw, integer-specialized table read used by library
+  |  // bytecode. Reload all three register numbers: the rooted helper may
+  |  // retry and its output is allowed to alias either input register.
+  |  movzx RBd, PC_RB
+  |  movzx RCd, PC_RC
   |  movzx RAd, PC_RA
-  |  mov BASE, RB			// Restore BASE.
-  |  test RC, RC
-  |  jnz ->BC_TGETR_Z
-  |  mov ITYPE, LJ_TNIL
-  |  jmp ->BC_TGETR2_Z
+  |  mov L:TMPR, SAVE_L
+  |  mov L:TMPR->base, BASE		// Complete frame for retry/STOPREQ.
+  |  mov SAVE_PC, PC
+  |.if X64WIN
+  |  lea CARG4, [BASE+RA*8]		// Enumerated destination root.
+  |  lea CARG3, [BASE+RC*8]		// Actual key TValue root.
+  |  lea CARG2, [BASE+RB*8]		// Actual table TValue root; clobbers BASE.
+  |  mov L:RB, L:TMPR
+  |  mov CARG1, L:RB
+  |.else
+  |  lea CARG2, [BASE+RB*8]		// Actual table TValue root.
+  |  lea CARG4, [BASE+RA*8]		// Enumerated destination root.
+  |  mov L:RB, L:TMPR			// RB is free after table-root address.
+  |  lea CARG3, [BASE+RC*8]		// Actual key root; clobbers BASE.
+  |  mov CARG1, L:RB
+  |.endif
+  |  call extern lj_tab_gettv_rooted	// (L, tabroot, keyroot, outroot)
+  |  mov BASE, L:RB->base		// Helper may have restored a moved stack.
+  |  // The helper release-published the complete result into Stk[RA]. Mark
+  |  // every overwrite (including GC-to-nil) visible to concurrent scans.
+  |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+  |  ins_next
   |
   |//-----------------------------------------------------------------------
+  |
+  |->vmeta_gsets:
+  |  // See vmeta_ggets: pass the frame function root, never a naked env.
+  |  settp STR:RC, LJ_TSTR
+  |  mov TMP1, STR:RC
+  |  lea RC, TMP1
+  |  movzx RAd, PC_RA
+  |  mov L:TMPR, SAVE_L
+  |  mov L:TMPR->base, BASE
+  |  mov SAVE_PC, PC
+  |.if X64WIN
+  |  lea CARG4, [BASE+RA*8]		// Source value root.
+  |  mov CARG3, RC			// Constant-key TValue root.
+  |  lea CARG2, [BASE-16]		// Authoritative frame function root.
+  |  mov L:RB, L:TMPR
+  |  mov CARG1, L:RB
+  |.else
+  |  lea CARG2, [BASE-16]		// Save before CARG3 clobbers BASE.
+  |  lea CARG4, [BASE+RA*8]
+  |  mov CARG3, RC			// CARG3 == BASE.
+  |  mov L:RB, L:TMPR
+  |  mov CARG1, L:RB
+  |.endif
+  |  call extern lj_meta_tsetenvtv_pair	// (L, fnroot, keyroot, valroot)
+  |  jmp ->vmeta_tset_done
   |
   |->vmeta_tsets:
   |  settp STR:RC, LJ_TSTR		// STR:RC = GCstr *
   |  mov TMP1, STR:RC
   |  lea RC, TMP1
-  |  cmp PC_OP, BC_GSET
-  |  jne >1
-  |  settp TAB:RA, TAB:RB, LJ_TTAB	// TAB:RB = GCtab *
-  |  lea RB, [DISPATCH+DISPATCH_TG(tmptv)]  // Store fn->l.env in tg->tmptv.
-  |  mov [RB], TAB:RA
-  |  jmp >2
+  |  jmp >1
   |
   |->vmeta_tsetb:
   |  movzx RCd, PC_RC
@@ -1163,7 +1224,6 @@ static void build_subroutines(BuildCtx *ctx)
   |1:
   |  movzx RBd, PC_RB			// Reload TValue *t from RB.
   |  lea RB, [BASE+RB*8]
-  |2:
   |  movzx RAd, PC_RA
   |  lea CARG4, [BASE+RA*8]
   |  mov L:CARG1, SAVE_L
@@ -1173,6 +1233,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB, L:CARG1
   |  mov SAVE_PC, PC
   |  call extern lj_meta_tsettv_pair	// (lua_State *L, TValue *o, TValue *k, TValue *v)
+  |->vmeta_tset_done:
   |  // TValue * (finished) or NULL (metamethod) returned in eax (RC).
   |  mov BASE, L:RB->base
   |  test RC, RC
@@ -1628,27 +1689,26 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->fff_res1
   |
   |.ffunc_2 rawget
-  |.if X64WIN
   |  mov TAB:RA, [BASE]
   |  checktab TAB:RA, ->fff_fallback
-  |  mov RB, BASE			// Save BASE.
-  |  lea CARG3, [BASE+8]
-  |  mov CARG2, TAB:RA			// Caveat: CARG2 == BASE.
-  |  mov CARG1, SAVE_L
-  |.else
-  |  mov TAB:CARG2, [BASE]
-  |  checktab TAB:CARG2, ->fff_fallback
-  |  mov RB, BASE			// Save BASE.
-  |  lea CARG3, [BASE+8]		// Caveat: CARG3 == BASE.
-  |  mov CARG1, SAVE_L
-  |.endif
-  |  call extern lj_tab_get	// (lua_State *L, GCtab *t, cTValue *key)
-  |  // cTValue * returned in eax (RD).
-  |  mov BASE, RB			// Restore BASE.
-  |  // Copy table slot.
-  |  mov RB, [RD]
   |  mov PC, [BASE-8]
-  |  mov [BASE-16], RB
+  |  mov L:RB, SAVE_L
+  |  mov L:RB->base, BASE		// Complete frame for retry/STOPREQ.
+  |  mov SAVE_PC, PC
+  |.if X64WIN
+  |  lea CARG4, [BASE-16]		// Result replaces the fast function.
+  |  lea CARG3, [BASE+8]		// Actual key TValue root.
+  |  mov CARG2, BASE			// Actual table TValue root.
+  |  mov CARG1, L:RB
+  |.else
+  |  mov CARG2, BASE			// Save table root before clobbering BASE.
+  |  lea CARG4, [BASE-16]		// Result replaces the fast function.
+  |  lea CARG3, [BASE+8]		// Actual key root; CARG3 == BASE.
+  |  mov CARG1, L:RB
+  |.endif
+  |  call extern lj_tab_gettv_rooted	// (L, tabroot, keyroot, outroot)
+  |  mov BASE, L:RB->base		// Helper may have restored a moved stack.
+  |  mov PC, [BASE-8]
   |  jmp ->fff_res1
   |
   |//-- Base library: conversions ------------------------------------------
@@ -4957,19 +5017,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_GGET:
     |  ins_AND	// RA = dst, RD = str const (~)
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  x64_vm_gcref_acq TAB:RB, LFUNC:RB->env
     |  mov STR:RC, [KBASE+RD*8]
-    |  jmp ->vmeta_tgets
+    |  jmp ->vmeta_ggets
     break;
   case BC_GSET:
     |  ins_AND	// RA = src, RD = str const (~)
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  x64_vm_gcref_acq TAB:RB, LFUNC:RB->env
+    |  // An activation check cannot retain a pre-copied environment across a
+    |  // racing first secondary entrant. Resolve it from the frame function
+    |  // root in the same anchored helper used after steady-state activation.
     |  mov STR:RC, [KBASE+RD*8]
-    |  jmp ->BC_TSETS_Z
+    |  jmp ->vmeta_gsets
     break;
 
   case BC_TGETV:
@@ -5122,45 +5179,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp <1
     break;
   case BC_TGETR:
-    |  ins_ABC	// RA = dst, RB = table, RC = key
-    |  mov TAB:RB, [BASE+RB*8]
-    |  cleartp TAB:RB
-    |.if DUALNUM
-    |  mov RCd, dword [BASE+RC*8]
-    |.else
-    |  cvttsd2si RCd, qword [BASE+RC*8]
-    |.endif
-    |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
-    |  x64_vm_tab_array_acq TMPR, TAB:RB
-    |  test TMPR, TMPR; jz >3
-    |  lea r8, [RB+TAB_COLO_SLOTS]
-    |  cmp TMPR, r8; je >3
-    |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
-    |  x64_vm_tab_array_flags_acq r9d, TMPR
-    |  test r9d, TABARRAY_FLAG_RETIRING
-    |  jnz ->vmeta_tgetr
-    |3:
-    |  cmp RCd, ITYPEd
-    |  jae ->vmeta_tgetr		// Not in array part? Use fallback.
-    |  mov r9d, RCd
-    |  shl RCd, 3
-    |  add RC, TMPR
-    |  // Get array slot.
-    |  mov ITYPE, [RC]
-    |  mov64 r8, LJ_TFORWARD_BITS
-    |  cmp ITYPE, r8
-    |  jne >4
-    |  mov RCd, r9d
+    |  // Library bytecode proves the table/key shapes, but those proofs do
+    |  // not retain either allocation across a concurrent resize or sweep.
+    |  // Resolve from the original stack roots and publish directly into RA.
     |  jmp ->vmeta_tgetr
-    |4:
-    |  jmp ->BC_TGETR2_Z
-    |->BC_TGETR_Z:
-    |  mov ITYPE, [RC]
-    |->BC_TGETR2_Z:
-    |  mov [BASE+RA*8], ITYPE
-    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-    |  x64_vm_tvalue_isgcv ITYPE, r8, r8d, ->vm_gc2_pubroot
-    |  ins_next
     break;
 
   case BC_TSETV:
@@ -5329,17 +5351,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov BASE, L:RB->base
     |  movzx RAd, PC_RA
     |  lea RC, [BASE+RA*8]		// Stable source; returned dst left SMR.
-    |  cmp PC_OP, BC_GSET
-    |  je >7
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
-    |  jmp >9
-    |7:
-    |  mov LFUNC:RB, [BASE-16]
-    |  cleartp LFUNC:RB
-    |  x64_vm_gcref_acq TAB:RB, LFUNC:RB->env
-    |9:
     |  cmp TGMARK, 0
     |  jnz ->vm_gc2_barriertv_tab
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)

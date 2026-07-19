@@ -2013,26 +2013,101 @@ int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
   }
 }
 
-/* Sequence-checked ctype metamethod lookup for stable ctype readers. */
-int lj_ctype_metatv_snapshot(CTState *cts, TValue *out, CTypeID id, MMS mm)
+int lj_ctype_metaroot_init_nothrow(lua_State *L, LJCTypeMetaRoot *root)
 {
-  uint32_t seq0 = ctype_parse_token_acq(cts);
+  TValue nilv, *slot;
+  TGState *tg;
+  uint32_t idx;
+  if (!L || !root)
+    return 0;
+  root->tg = NULL;
+  root->idx = 0;
+  root->active = 0;
+  tg = L2TG(L);
+  if (!tg || !lj_tg_root_anchor_reserve_nothrow(L, tg))
+    return 0;
+  setnilV(&nilv);
+  slot = lj_tg_root_anchor_push(L, tg, &nilv, &idx);
+  if (!slot)
+    return 0;
+  root->tg = tg;
+  root->idx = idx;
+  root->active = 1;
+  return 1;
+}
+
+TValue *lj_ctype_metaroot_tv(const LJCTypeMetaRoot *root)
+{
+  return root && root->active ?
+    lj_tg_root_anchor_slot_acq(root->tg, root->idx) : NULL;
+}
+
+void lj_ctype_metaroot_release(LJCTypeMetaRoot *root)
+{
+  if (!root || !root->active)
+    return;
+  lj_assertX(lj_tg_root_anchor_top_acq(root->tg) == root->idx + 1u,
+	     "ctype metamethod roots must be released in LIFO order");
+  lj_tg_root_anchor_pop(root->tg, root->idx);
+  root->tg = NULL;
+  root->idx = 0;
+  root->active = 0;
+}
+
+/* Root one ctype metamethod without waiting. The ctype table header and every
+** Lua table vector are read in one SMR interval. Exact object leases bridge
+** each CTState-owned raw root to the final release-published TG root. Parser
+** sequencing validates only CType topology; metatype CAS and ordinary table
+** mutation linearize independently through acquire/held table reads.
+**
+** The function-pointer case is semantic topology, not an ABI/signature shape:
+** every pointer-to-function CType uses the same miscmap -> shared metatable
+** hop, irrespective of argument and result classes. */
+int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts, TValue *outroot,
+			       CTypeID id, MMS mm)
+{
+  global_State *g = G(L);
+  LJGC2Lease sourcelease = { 0 }, mtlease = { 0 }, resultlease = { 0 };
   CTypeTab *tabh;
   CTypeID top;
   CType ct;
   CTInfo info;
   MSize budget;
-  cTValue *tv = NULL;
-  if (seq0 & 1u)
-    return -1;
+  uint32_t seq0;
+  TValue sourcev, mtv, result, nilv;
+  GCtab *source, *mt;
+  int source_status, mt_status, result_status;
+  int function_meta = 0;
+  int lookup;
+  int rc = LJ_CTYPE_METATV_RETRY;
+  int smr = 0;
+
+  if (!L || !cts || !outroot)
+    return LJ_CTYPE_METATV_RETRY;
+  setnilV(&nilv);
+  if (lj_ctype_predefined_nometa(cts, id)) {
+    copyTVrel(L, outroot, &nilv);
+    return LJ_CTYPE_METATV_ABSENT;
+  }
+  if (!lj_gc2_smr_read_try(g))
+    return LJ_CTYPE_METATV_RETRY;
+  smr = 1;
+  seq0 = ctype_parse_token_acq(cts);
+  if (seq0 & 1u) {
+    rc = LJ_CTYPE_METATV_CTBUSY;
+    goto done;
+  }
+
+  /* SMR starts before acquiring the current RCU CTypeTab header. A sequence
+  ** check alone cannot retain a retired header against the GC2 reclaimer. */
   top = ctype_top_acq(cts);
   tabh = ctype_tabh_acq(cts);
   budget = top ? (MSize)top * 4u : 1u;
   for (;;) {
     if (budget-- == 0)
-      return -1;
+      goto retry;
     if (!ctype_snapshot_copy(tabh, top, id, &ct))
-      return ctype_snapshot_done(cts, seq0, 0);
+      goto absent;
     info = ctype_info_acq(&ct);
     if (!(ctype_isattrib(info) || ctype_isref(info)))
       break;
@@ -2042,61 +2117,94 @@ int lj_ctype_metatv_snapshot(CTState *cts, TValue *out, CTypeID id, MMS mm)
     CType cct;
     CTypeID cid = ctype_cid(info);
     if (budget-- == 0)
-      return -1;
+      goto retry;
     if (!ctype_snapshot_copy(tabh, top, cid, &cct))
-      return ctype_snapshot_done(cts, seq0, 0);
-    if (ctype_isfunc(ctype_info_acq(&cct))) {
-      GCtab *miscmap;
-      TValue tabv;
-      if (ctype_snapshot_done(cts, seq0, 1) < 0)
-	return -1;
-      miscmap = ctype_miscmap_acq(cts);
-      tv = miscmap ? lj_tab_getstr(miscmap, &cts->g->strempty) : NULL;
-      if (tv) {
-	lj_tv_load_acq(&tabv, tv);
-	if (tvistab(&tabv)) {
-	  tv = lj_tab_getstr(tabV(&tabv), mmname_str(cts->g, mm));
-	  if (tv) {
-	    lj_tv_load_acq(out, tv);
-	    return tvisnil(out) ? 0 : 1;
-	  }
-	}
-      }
-      setnilV(out);
-      return 0;
-    }
+      goto absent;
+    function_meta = ctype_isfunc(ctype_info_acq(&cct));
   }
-  if (ctype_snapshot_done(cts, seq0, 1) < 0)
-    return -1;
-  {
-    GCtab *mt = ctype_meta_tab(cts, id);
-    if (mt) {
-      tv = lj_tab_getstr(mt, mmname_str(cts->g, mm));
-      if (tv) {
-	lj_tv_load_acq(out, tv);
-	return tvisnil(out) ? 0 : 1;
-      }
-    }
-  }
-  setnilV(out);
-  return 0;
-}
 
-cTValue *lj_ctype_metatv_wait(lua_State *L, CTState *cts, TValue *out,
-			      CTypeID id, MMS mm)
-{
-  if (lj_ctype_predefined_nometa(cts, id)) {
-    setnilV(out);
-    return NULL;
+  if (function_meta) {
+    source = ctype_miscmap_acq(cts);
+  } else {
+    source = ctype_meta_tab(cts, id);
   }
-  for (;;) {
-    int ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
-    if (ok > 0)
-      return out;
-    if (ok == 0)
-      return NULL;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  if (!source)
+    goto absent;
+
+  /* CTState carries raw GC roots, not TValues. Manufacture only the known TAB
+  ** tag, then validate/retain the exact incarnation before dereferencing it. */
+  setgcVraw(&sourcev, obj2gco(source), LJ_TTAB);
+  source_status = lj_gc2_tv_lease_acquire(g, &sourcev, &sourcelease);
+  if (source_status != LJ_GC2_TV_EDGE_VALID)
+    goto retry;
+  mt = source;
+
+  if (function_meta) {
+    lookup = lj_tab_getstr_held_try(g, source, &g->strempty, &mtv);
+    if (lookup == LJ_TAB_GC_LOOKUP_RETRY)
+      goto retry;
+    if (lookup != LJ_TAB_GC_LOOKUP_FOUND)
+      goto absent;
+    if (LJ_UNLIKELY(tvistabinternal(&mtv)))
+      goto retry;
+    mt_status = lj_gc2_tv_lease_acquire(g, &mtv, &mtlease);
+    if (mt_status == LJ_GC2_TV_EDGE_RETRY)
+      goto retry;
+    if (mt_status != LJ_GC2_TV_EDGE_VALID || !tvistab(&mtv) ||
+	LJ_UNLIKELY(!lj_tv_gcref_type_match(&mtv)))
+      goto absent;
+    mt = tabV(&mtv);
   }
+
+  lookup = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm), &result);
+  if (lookup == LJ_TAB_GC_LOOKUP_RETRY)
+    goto retry;
+  if (lookup != LJ_TAB_GC_LOOKUP_FOUND)
+    goto absent;
+  if (LJ_UNLIKELY(tvistabinternal(&result)))
+    goto retry;
+  result_status = lj_gc2_tv_lease_acquire(g, &result, &resultlease);
+  if (result_status == LJ_GC2_TV_EDGE_RETRY)
+    goto retry;
+  /* A weak metatable value may become terminally stale after the point read.
+  ** Normalize that legal race to absence; permanent CTState table roots use
+  ** the stricter RETRY handling above. */
+  if (result_status != LJ_GC2_TV_EDGE_VALID)
+    goto absent;
+  if (LJ_UNLIKELY(!lj_tv_gcref_type_match(&result)))
+    goto retry;
+
+  if (ctype_parse_token_acq(cts) != seq0) {
+    rc = LJ_CTYPE_METATV_CTBUSY;
+    goto done;
+  }
+  copyTVrel(L, outroot, &result);
+  rc = LJ_CTYPE_METATV_FOUND;
+  goto done;
+
+absent:
+  if (ctype_parse_token_acq(cts) != seq0) {
+    rc = LJ_CTYPE_METATV_CTBUSY;
+    goto done;
+  }
+  copyTVrel(L, outroot, &nilv);
+  rc = LJ_CTYPE_METATV_ABSENT;
+  goto done;
+
+retry:
+  rc = LJ_CTYPE_METATV_RETRY;
+
+done:
+  if (smr)
+    lj_gc2_smr_read_leave(g);
+  /* Publish only a terminal, sequence-valid result. The exact result lease
+  ** remains held across GC2's publication hook and is released afterwards. */
+  if (rc == LJ_CTYPE_METATV_FOUND)
+    lj_gc_pubroot(L, outroot);
+  lj_gc2_lease_release(&resultlease);
+  lj_gc2_lease_release(&mtlease);
+  lj_gc2_lease_release(&sourcelease);
+  return rc;
 }
 
 /* -- C type information -------------------------------------------------- */
@@ -2239,25 +2347,22 @@ int lj_ctype_rawref_predefined(CTState *cts, CTypeID id, CTypeID *ridp,
 
 int lj_ctype_predefined_nometa(CTState *cts, CTypeID id)
 {
-  CTypeTab *tabh;
-  CType *ct;
   CTInfo info;
+  UNUSED(cts);
   if (!ctype_predefined_id(id))
     return 0;
-  tabh = ctype_tabh_acq(cts);
-  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
-    return 0;
-  ct = ctype_tab_slot(tabh, id);
-  info = ctype_info_acq(ct);
-  if (ctype_isabandoned(info) || ctype_isstruct(info) ||
-      ctype_iscomplex(info) || ctype_isvector(info))
+  /* These bootstrap records are immutable compile-time data. Reading the
+  ** current RCU CTypeTab merely to classify them would require an SMR reader
+  ** and would defeat the parser-busy fast miss this predicate exists for. */
+  info = lj_ctype_typeinfo[id] & 0xffff03ffu;
+  if (ctype_isstruct(info) || ctype_iscomplex(info) || ctype_isvector(info))
     return 0;
   if (ctype_isptr(info)) {
     CTypeID cid = ctype_cid(info);
     if (!ctype_predefined_id(cid))
       return 0;
-    info = ctype_info_acq(ctype_tab_slot(tabh, cid));
-    if (ctype_isabandoned(info) || ctype_isfunc(info))
+    info = lj_ctype_typeinfo[cid] & 0xffff03ffu;
+    if (ctype_isfunc(info))
       return 0;
   }
   return 1;
@@ -2518,75 +2623,6 @@ CTInfo lj_ctype_info_raw(CTState *cts, CTypeID id, CTSize *szp)
   CTInfo info = ctype_info_acq(ct);
   if (ctype_isref(info)) id = ctype_cid(info);
   return lj_ctype_info(cts, id, szp);
-}
-
-/* Get ctype metamethod. */
-cTValue *lj_ctype_meta(CTState *cts, CTypeID id, MMS mm)
-{
-  CType *ct = ctype_get(cts, id);
-  cTValue *tv;
-  CTInfo info;
-  for (;;) {
-    info = ctype_info_acq(ct);
-    if (!(ctype_isattrib(info) || ctype_isref(info)))
-      break;
-    id = ctype_cid(info);
-    ct = ctype_get(cts, id);
-  }
-  if (ctype_isptr(info) &&
-      ctype_isfunc(ctype_info_acq(ctype_get(cts, ctype_cid(info)))))
-    tv = lj_tab_getstr(ctype_miscmap_acq(cts), &cts->g->strempty);
-  else {
-    GCtab *mt = ctype_meta_tab(cts, id);
-    tv = mt ? lj_tab_getstr(mt, mmname_str(cts->g, mm)) : NULL;
-    return (tv && !tvisnil(tv)) ? tv : NULL;
-  }
-  if (tv && tvistab(tv) &&
-      (tv = lj_tab_getstr(tabV(tv), mmname_str(cts->g, mm))) && !tvisnil(tv))
-    return tv;
-  return NULL;
-}
-
-cTValue *lj_ctype_metatv(CTState *cts, TValue *out, CTypeID id, MMS mm)
-{
-  CType *ct = ctype_get(cts, id);
-  cTValue *tv;
-  TValue tabv;
-  CTInfo info;
-  for (;;) {
-    info = ctype_info_acq(ct);
-    if (!(ctype_isattrib(info) || ctype_isref(info)))
-      break;
-    id = ctype_cid(info);
-    ct = ctype_get(cts, id);
-  }
-  if (ctype_isptr(info) &&
-      ctype_isfunc(ctype_info_acq(ctype_get(cts, ctype_cid(info)))))
-    tv = lj_tab_getstr(ctype_miscmap_acq(cts), &cts->g->strempty);
-  else {
-    GCtab *mt = ctype_meta_tab(cts, id);
-    if (mt) {
-      tv = lj_tab_getstr(mt, mmname_str(cts->g, mm));
-      if (tv) {
-	lj_tv_load_acq(out, tv);
-	return tvisnil(out) ? NULL : out;
-      }
-    }
-    setnilV(out);
-    return NULL;
-  }
-  if (tv) {
-    lj_tv_load_acq(&tabv, tv);
-    if (tvistab(&tabv)) {
-      tv = lj_tab_getstr(tabV(&tabv), mmname_str(cts->g, mm));
-      if (tv) {
-	lj_tv_load_acq(out, tv);
-	return tvisnil(out) ? NULL : out;
-      }
-    }
-  }
-  setnilV(out);
-  return NULL;
 }
 
 /* -- C type representation ----------------------------------------------- */

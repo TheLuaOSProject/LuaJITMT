@@ -1647,18 +1647,24 @@ static void crec_tailcall(jit_State *J, RecordFFData *rd, cTValue *tv)
   rd->nres = -1;  /* Pending tailcall. */
 }
 
-static cTValue *crec_ctype_metatv(jit_State *J, CTState *cts, TValue *out,
-				  CTypeID id, MMS mm)
+static cTValue *crec_ctype_metatv(jit_State *J, CTState *cts,
+				  LJCTypeMetaRoot *root, CTypeID id, MMS mm)
 {
-  int ok;
-  if (lj_ctype_predefined_nometa(cts, id)) {
-    setnilV(out);
+  int status;
+  if (lj_ctype_predefined_nometa(cts, id))
     return NULL;
-  }
-  ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
-  if (ok < 0)
+  if (LJ_UNLIKELY(!lj_ctype_metaroot_init_nothrow(J->L, root)))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  status = lj_ctype_metatv_rooted_try(
+    J->L, cts, lj_ctype_metaroot_tv(root), id, mm);
+  if (status == LJ_CTYPE_METATV_FOUND)
+    return lj_ctype_metaroot_tv(root);
+  lj_ctype_metaroot_release(root);
+  if (status == LJ_CTYPE_METATV_CTBUSY)
     lj_trace_err(J, LJ_TRERR_CTBUSY);
-  return ok ? out : NULL;
+  if (status == LJ_CTYPE_METATV_RETRY)
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  return NULL;
 }
 
 static CTypeID crec_ctype_ptr_metaid(jit_State *J, CTState *cts, CTypeID id)
@@ -1683,27 +1689,22 @@ static CTypeID crec_ctype_ptr_metaid(jit_State *J, CTState *cts, CTypeID id)
 static void crec_index_meta(jit_State *J, CTState *cts, CTypeID id,
 			    RecordFFData *rd)
 {
-  TValue metatv;
-  cTValue *tv = crec_ctype_metatv(J, cts, &metatv, id,
+  LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
+  cTValue *tv = crec_ctype_metatv(J, cts, &metaroot, id,
 				  rd->data ? MM_newindex : MM_index);
   if (!tv)
     lj_trace_err(J, LJ_TRERR_BADTYPE);
   if (tvisfunc(tv)) {
     crec_tailcall(J, rd, tv);
-  } else if (rd->data == 0 && tvistab(tv) && tref_isstr(J->base[1])) {
-    /* Specialize to result of __index lookup. */
-    cTValue *o = lj_tab_get(J->L, tabV(tv), &rd->argv[1]);
-    J->base[0] = lj_record_constify(J, o);
-    if (!J->base[0])
-      lj_trace_err(J, LJ_TRERR_BADTYPE);
-    /* Always specialize to the key. */
-    emitir(IRTG(IR_EQ, IRT_STR), J->base[1], lj_ir_kstr(J, strV(&rd->argv[1])));
-  } else {
-    /* NYI: resolving of non-function metamethods. */
-    /* NYI: non-string keys for __index table. */
-    /* NYI: stores to __newindex table. */
-    lj_trace_err(J, LJ_TRERR_BADTYPE);
+    lj_ctype_metaroot_release(&metaroot);
+    return;
   }
+  /* A table-valued __index needs a second rooted, nonwaiting lookup plus a
+  ** runtime generation guard. Fail closed for this recording turn instead of
+  ** reviving the old raw lj_tab_get() constant sampler. The interpreter path
+  ** remains fully functional through lj_meta_tgettv_rooted(). */
+  lj_ctype_metaroot_release(&metaroot);
+  lj_trace_err(J, LJ_TRERR_BADTYPE);
 }
 
 /* Record bitfield load/store. */
@@ -2000,7 +2001,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   CTypeID rid;
   TRef trcd, trid = lj_ir_kint(J, id);
   cTValue *fin;
-  TValue fintv;
+  LJCTypeMetaRoot finroot = LJ_CTYPE_META_ROOT_INIT;
   {
     int ok = lj_ctype_info_predefined(cts, id, &info, &sz, &rid, &dsnap);
     if (ok <= 0) {
@@ -2157,9 +2158,10 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   }
   J->base[0] = trcd;
   /* Handle __gc metamethod. */
-  fin = crec_ctype_metatv(J, cts, &fintv, id, MM_gc);
+  fin = crec_ctype_metatv(J, cts, &finroot, id, MM_gc);
   if (fin)
     crec_finalizer(J, trcd, 0, fin);
+  lj_ctype_metaroot_release(&finroot);
 }
 
 /* Collect scalar argument conversions for one ABI-driven CALLXS.
@@ -2532,7 +2534,7 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
   CTState *cts = ctype_ctsG(J2G(J));
   GCcdata *cd = argv2cdata(J, J->base[0], &rd->argv[0]);
   CTypeID id = cd->ctypeid;
-  TValue metatv;
+  LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
   cTValue *tv;
   MMS mm = MM_call;
   if (id == CTID_CTYPEID) {
@@ -2542,11 +2544,12 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
     return;
   }
   /* Record ctype __call/__new metamethod. */
-  tv = crec_ctype_metatv(J, cts, &metatv,
+  tv = crec_ctype_metatv(J, cts, &metaroot,
 			 crec_ctype_ptr_metaid(J, cts, id), mm);
   if (tv) {
     if (tvisfunc(tv)) {
       crec_tailcall(J, rd, tv);
+      lj_ctype_metaroot_release(&metaroot);
       return;
     }
   } else if (mm == MM_new) {
@@ -2554,6 +2557,7 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
     return;
   }
   /* No metamethod or NYI: non-function metamethods. */
+  lj_ctype_metaroot_release(&metaroot);
   lj_trace_err(J, LJ_TRERR_BADTYPE);
 }
 
@@ -2697,23 +2701,24 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 static TRef crec_arith_meta(jit_State *J, TRef *sp, CType **s, CTState *cts,
 			    RecordFFData *rd)
 {
-  TValue metatv;
+  LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
   cTValue *tv = NULL;
   if (J->base[0]) {
     if (tviscdata(&rd->argv[0])) {
       CTypeID id = argv2cdata(J, J->base[0], &rd->argv[0])->ctypeid;
       id = crec_ctype_ptr_metaid(J, cts, id);
-      tv = crec_ctype_metatv(J, cts, &metatv, id, (MMS)rd->data);
+      tv = crec_ctype_metatv(J, cts, &metaroot, id, (MMS)rd->data);
     }
     if (!tv && J->base[1] && tviscdata(&rd->argv[1])) {
       CTypeID id = argv2cdata(J, J->base[1], &rd->argv[1])->ctypeid;
       id = crec_ctype_ptr_metaid(J, cts, id);
-      tv = crec_ctype_metatv(J, cts, &metatv, id, (MMS)rd->data);
+      tv = crec_ctype_metatv(J, cts, &metaroot, id, (MMS)rd->data);
     }
   }
   if (tv) {
     if (tvisfunc(tv)) {
       crec_tailcall(J, rd, tv);
+      lj_ctype_metaroot_release(&metaroot);
       return 0;
     }  /* NYI: non-function metamethods. */
   } else if ((MMS)rd->data == MM_eq) {  /* Fallback cdata pointer comparison. */
@@ -2729,6 +2734,7 @@ static TRef crec_arith_meta(jit_State *J, TRef *sp, CType **s, CTState *cts,
     }
     return TREF_FALSE;
   }
+  lj_ctype_metaroot_release(&metaroot);
   lj_trace_err(J, LJ_TRERR_BADTYPE);
   return 0;
 }

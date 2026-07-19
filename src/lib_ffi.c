@@ -1056,34 +1056,55 @@ static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
 }
 
 static cTValue *ffi_ctype_metatv_read(lua_State *L, CTState *cts,
-				      TValue *out, CTypeID id, MMS mm)
+				      LJCTypeMetaRoot *root,
+				      CTypeID id, MMS mm)
 {
-  int ok;
-  if (lj_ctype_predefined_nometa(cts, id)) {
-    setnilV(out);
+  if (lj_ctype_predefined_nometa(cts, id))
     return NULL;
-  }
-  ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
-  if (ok < 0) {
+  if (LJ_UNLIKELY(!lj_ctype_metaroot_init_nothrow(L, root)))
+    lj_err_mem(L);
+  for (;;) {
+    int status = lj_ctype_metatv_rooted_try(
+      L, cts, lj_ctype_metaroot_tv(root), id, mm);
+    if (status == LJ_CTYPE_METATV_FOUND)
+      return lj_ctype_metaroot_tv(root);
+    if (status == LJ_CTYPE_METATV_ABSENT) {
+      lj_ctype_metaroot_release(root);
+      return NULL;
+    }
 #if LJ_HASJIT
-    jit_State *J = ffi_active_recorder(L);
-    if (J)
-      lj_trace_err(J, LJ_TRERR_CTBUSY);
+    {
+      jit_State *J = ffi_active_recorder(L);
+      if (J) {
+	lj_ctype_metaroot_release(root);
+	lj_trace_err(J, status == LJ_CTYPE_METATV_CTBUSY ?
+			     LJ_TRERR_CTBUSY : LJ_TRERR_NYIBC);
+      }
+    }
 #endif
-    return lj_ctype_metatv_wait(L, cts, out, id, mm);
+    /* The bounded helper has closed SMR and every lease before either wait.
+    ** cdef remains an allowed control-plane wait; structural retries stay on
+    ** the ordinary table help/yield path and can become fully helpable later. */
+    lj_ctype_metaroot_release(root);
+    if (status == LJ_CTYPE_METATV_CTBUSY)
+      lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+    else
+      lj_tab_wait_l(L);
+    if (LJ_UNLIKELY(!lj_ctype_metaroot_init_nothrow(L, root)))
+      lj_err_mem(L);
   }
-  return ok ? out : NULL;
 }
 
 /* Handle ctype __index/__newindex metamethods. */
 static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
 {
-  TValue metatv;
-  cTValue *tv = ffi_ctype_metatv_read(L, cts, &metatv, id, mm);
+  LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
+  cTValue *tv = ffi_ctype_metatv_read(L, cts, &metaroot, id, mm);
   TValue *base = L->base;
   if (!tv) {
     const char *s;
   err_index:
+    lj_ctype_metaroot_release(&metaroot);
     s = strdata(lj_ctype_repr_wait(L, id, NULL));
     if (tvisstr(L->base+1)) {
       lj_err_callerv(L, LJ_ERR_FFI_BADMEMBER, s, strVdata(L->base+1));
@@ -1095,13 +1116,29 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
     }
   }
   if (!tvisfunc(tv)) {
+    /* The original cdata receiver is no longer needed once its ctype
+    ** metamethod has resolved to a table. Transfer that table into the
+    ** existing, unconditionally enumerated argument slot before entering the
+    ** generic table-chain helpers. They may allocate, wait or throw; none of
+    ** those paths should have to rely on protected-call cleanup for this
+    ** private ctype root. */
+    copyTVrel(L, base, tv);
+    lj_state_stack_pubtv(L, L, base);
+    lj_ctype_metaroot_release(&metaroot);
+    tv = base;
     if (mm == MM_index) {
-      cTValue *o = lj_meta_tget(L, tv, base+1);
+      cTValue *o;
+      /* Preserve the original key for the bad-member diagnostic. Receiver and
+      ** output may alias because the rooted meta helper captures both inputs
+      ** before publishing its result. */
+      o = lj_meta_tgettv_rooted(L, tv, base+1, base);
       if (o) {
 	if (tvisnil(o)) goto err_index;
-	copyTV(L, L->top-1, o);
+	copyTVrel(L, L->top-1, o);
+	lj_state_stack_pubtv(L, L, L->top-1);
 	return 1;
       }
+      base = L->base;  /* Metamethod resolution may relocate the Lua stack. */
     } else {
       /* Use the same generation-aware guarded table-store transaction as VM,
       ** C API and ordinary metamethod writes. This also removes the former
@@ -1113,7 +1150,11 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
     copyTV(L, base, L->top);
     tv = L->top-1-LJ_FR2;
   }
-  return lj_meta_tailcall(L, tv);
+  {
+    int rc = lj_meta_tailcall(L, tv);
+    lj_ctype_metaroot_release(&metaroot);
+    return rc;
+  }
 }
 
 LJLIB_CF(ffi_meta___index)	LJLIB_REC(cdata_index 0)
@@ -1197,7 +1238,7 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
   CTState *cts = ctype_cts(L);
   GCcdata *cd = ffi_checkcdata(L, 1);
   CTypeID id = cd->ctypeid;
-  TValue metatv;
+  LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
   cTValue *tv;
   MMS mm = MM_call;
   if (cd->ctypeid == CTID_CTYPEID) {
@@ -1221,10 +1262,12 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
     info = ctype_info_acq(&snap);
     if (ctype_isptr(info)) id = ctype_cid(info);
   }
-  tv = ffi_ctype_metatv_read(L, cts, &metatv, id, mm);
-  if (tv)
-    return lj_meta_tailcall(L, tv);
-  else if (mm == MM_call)
+  tv = ffi_ctype_metatv_read(L, cts, &metaroot, id, mm);
+  if (tv) {
+    int rc = lj_meta_tailcall(L, tv);
+    lj_ctype_metaroot_release(&metaroot);
+    return rc;
+  } else if (mm == MM_call)
     lj_err_callerv(L, LJ_ERR_FFI_BADCALL,
 		   strdata(lj_ctype_repr_wait(L, id, NULL)));
   return lj_cf_ffi_new(L);
@@ -1319,11 +1362,14 @@ LJLIB_CF(ffi_meta___tostring)
       }
       if (ctype_isstruct(info) || ctype_isvector(info)) {
 	/* Handle ctype __tostring metamethod. */
-	TValue metatv;
-	cTValue *tv = ffi_ctype_metatv_read(L, cts, &metatv, rid,
+	LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
+	cTValue *tv = ffi_ctype_metatv_read(L, cts, &metaroot, rid,
 					    MM_tostring);
-	if (tv)
-	  return lj_meta_tailcall(L, tv);
+	if (tv) {
+	  int rc = lj_meta_tailcall(L, tv);
+	  lj_ctype_metaroot_release(&metaroot);
+	  return rc;
+	}
       }
     }
   }
@@ -1337,7 +1383,7 @@ static int ffi_pairs(lua_State *L, MMS mm)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = ffi_checkcdata(L, 1)->ctypeid;
-  TValue metatv;
+  LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
   cTValue *tv;
   {
     CType snap;
@@ -1350,12 +1396,16 @@ static int ffi_pairs(lua_State *L, MMS mm)
     info = ctype_info_acq(&snap);
     if (ctype_isptr(info)) id = ctype_cid(info);
   }
-  tv = ffi_ctype_metatv_read(L, cts, &metatv, id, mm);
+  tv = ffi_ctype_metatv_read(L, cts, &metaroot, id, mm);
   if (!tv)
     lj_err_callerv(L, LJ_ERR_FFI_BADMM,
 		   strdata(lj_ctype_repr_wait(L, id, NULL)),
 		   strdata(mmname_str(G(L), mm)));
-  return lj_meta_tailcall(L, tv);
+  {
+    int rc = lj_meta_tailcall(L, tv);
+    lj_ctype_metaroot_release(&metaroot);
+    return rc;
+  }
 }
 
 LJLIB_CF(ffi_meta___pairs)
@@ -1624,11 +1674,25 @@ got_layout:
   lj_cconv_ct_init_l(L, cts, NULL, rid, sz, cdataptr(cd),
 		     o, (MSize)(L->top - o));  /* Initialize cdata. */
   if (ctype_isstruct(info)) {
-    /* Handle ctype __gc metamethod. Use the fast lookup here. */
-    TValue gctv;
-    cTValue *tv = ffi_ctype_metatv_read(L, cts, &gctv, id, MM_gc);
-    if (tv)
-      lj_cdata_setfin(L, cd, gcV(tv), itype(tv));
+    ptrdiff_t resultofs = savestack(L, o-1);
+    LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
+    cTValue *tv;
+    /* Reserve the natural finalizer root before acquiring the private ctype
+    ** root. Once found, transfer the finalizer onto the enumerated Lua stack
+    ** and release the private root before FINREG allocation/retry paths. */
+    lj_state_checkstack(L, 1);
+    tv = ffi_ctype_metatv_read(L, cts, &metaroot, id, MM_gc);
+    if (tv) {
+      TValue *fin = L->top;
+      copyTVrel(L, fin, tv);
+      lj_state_stack_pubtv(L, L, fin);
+      L->top = fin + 1;
+      lj_ctype_metaroot_release(&metaroot);
+      cd = cdataV(restorestack(L, resultofs));
+      lj_cdata_setfin(L, cd, gcV(fin), itype(fin));
+    }
+    lj_ctype_metaroot_release(&metaroot);
+    o = restorestack(L, resultofs) + 1;
   }
   L->top = o;  /* Only return the cdata itself. */
   lj_gc_check(L);

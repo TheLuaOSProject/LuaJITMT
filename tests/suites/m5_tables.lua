@@ -22,8 +22,34 @@ return function(add)
       description = "authoritative-root table reader parent/key/result lifetime fixture",
       output = "lj_t-tab-rooted-reader",
       cfile = "t-tab-rooted-reader.c",
-      opts = build.gc2_test_helper_opts({ timeout = "20s" }),
+      opts = build.gc2_test_helper_opts({
+        timeout = "20s",
+        xcflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS",
+        cflags = build.gc2_test_helper_flag .. " -DLJ_TAB_TEST_HELPERS"
+      }),
       message = "M5 authoritative-root table reader tests passed"
+    },
+    {
+      name = "m5_meta_rooted_chain",
+      description = "rooted __index/__newindex chains and explicit C result ABI",
+      output = "lj_t-meta-rooted-chain",
+      cfile = "t-meta-rooted-chain.c",
+      opts = build.gc2_test_helper_opts({ timeout = "20s" }),
+      message = "M5 rooted metamethod-chain tests passed"
+    },
+    {
+      name = "m5_x64_rooted_reads",
+      description = "x64 rawget/TGETR rooted VM reads and STOPREQ unwind fixture",
+      output = "lj_t-x64-rooted-reads",
+      cfile = "t-x64-rooted-reads.c",
+      opts = build.gc2_test_helper_opts({
+        timeout = "20s",
+        xcflags = "-Werror " .. build.gc2_test_helper_flag ..
+                  " -DLJ_TG_ROOT_TEST_HELPERS",
+        cflags = build.gc2_test_helper_flag ..
+                 " -DLJ_TG_ROOT_TEST_HELPERS"
+      }),
+      message = "M5 x64 rooted VM point-read tests passed"
     },
     {
       name = "m5_tab_keylock_lookup",

@@ -653,25 +653,26 @@ local function exercise_jit_store_resize()
 end
 
 local function jit_read_worker(tbl, ready, start, array_key, hash_key, want, n)
+  local assertf, typef, collect = assert, type, collectgarbage
   local okjit, jitmod = pcall(require, "jit")
   if okjit and jitmod.status() then
     jitmod.opt.start("hotloop=1", "hotexit=1")
   end
   local traces0 = jith.trace_count(256)
-  assert(ready:send(true, 10) == true)
+  assertf(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
-  assert(ok == true)
+  assertf(ok == true)
   local i = 1
   while i <= n do
     local av = tbl[array_key]
     local hv = tbl[hash_key]
-    assert(av == want, "traced array read changed across resize")
-    assert(hv == want, "traced hash read changed across resize")
-    assert(type(av) ~= "userdata" and type(av) ~= "cdata",
-	   "traced array read exposed an internal sentinel")
-    assert(type(hv) ~= "userdata" and type(hv) ~= "cdata",
-	   "traced hash read exposed an internal sentinel")
-    if i % 251 == 0 then collectgarbage("step") end
+    assertf(av == want, "traced array read changed across resize")
+    assertf(hv == want, "traced hash read changed across resize")
+    assertf(typef(av) ~= "userdata" and typef(av) ~= "cdata",
+	    "traced array read exposed an internal sentinel")
+    assertf(typef(hv) ~= "userdata" and typef(hv) ~= "cdata",
+	    "traced hash read exposed an internal sentinel")
+    if i % 251 == 0 then collect("step") end
     i = i + 1
   end
   return true, jith.trace_count(256) - traces0

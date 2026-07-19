@@ -161,18 +161,40 @@ static int carith_ctype_shallow_predef_ptr(CTState *cts, CTypeID id,
 }
 
 static cTValue *carith_ctype_metatv_read(lua_State *L, CTState *cts,
-					 TValue *out, CTypeID id, MMS mm)
+					 LJCTypeMetaRoot *root,
+					 CTypeID id, MMS mm)
 {
-  int ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
-  if (ok < 0) {
+  if (lj_ctype_predefined_nometa(cts, id))
+    return NULL;
+  if (LJ_UNLIKELY(!lj_ctype_metaroot_init_nothrow(L, root)))
+    lj_err_mem(L);
+  for (;;) {
+    int status = lj_ctype_metatv_rooted_try(
+      L, cts, lj_ctype_metaroot_tv(root), id, mm);
+    if (status == LJ_CTYPE_METATV_FOUND)
+      return lj_ctype_metaroot_tv(root);
+    if (status == LJ_CTYPE_METATV_ABSENT) {
+      lj_ctype_metaroot_release(root);
+      return NULL;
+    }
 #if LJ_HASJIT
-    jit_State *J = carith_active_recorder(L);
-    if (J)
-      lj_trace_err(J, LJ_TRERR_CTBUSY);
+    {
+      jit_State *J = carith_active_recorder(L);
+      if (J) {
+	lj_ctype_metaroot_release(root);
+	lj_trace_err(J, status == LJ_CTYPE_METATV_CTBUSY ?
+			     LJ_TRERR_CTBUSY : LJ_TRERR_NYIBC);
+      }
+    }
 #endif
-    return lj_ctype_metatv_wait(L, cts, out, id, mm);
+    lj_ctype_metaroot_release(root);
+    if (status == LJ_CTYPE_METATV_CTBUSY)
+      lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+    else
+      lj_tab_wait_l(L);
+    if (LJ_UNLIKELY(!lj_ctype_metaroot_init_nothrow(L, root)))
+      lj_err_mem(L);
   }
-  return ok ? out : NULL;
 }
 
 static int carith_ctype_raw_read(lua_State *L, CTState *cts, CTypeID id,
@@ -476,7 +498,7 @@ static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 /* Handle ctype arithmetic metamethods. */
 static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 {
-  TValue metatv;
+  LJCTypeMetaRoot metaroot = LJ_CTYPE_META_ROOT_INIT;
   cTValue *tv = NULL;
   if (tviscdata(L->base)) {
     CTypeID id = cdataV(L->base)->ctypeid;
@@ -488,7 +510,7 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     if (ok > 0) {
       info = ctype_info_acq(&snap);
       if (ctype_isptr(info)) id = ctype_cid(info);
-      tv = carith_ctype_metatv_read(L, cts, &metatv, id, mm);
+      tv = carith_ctype_metatv_read(L, cts, &metaroot, id, mm);
     }
   }
   if (!tv && L->base+1 < L->top && tviscdata(L->base+1)) {
@@ -501,7 +523,7 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     if (ok > 0) {
       info = ctype_info_acq(&snap);
       if (ctype_isptr(info)) id = ctype_cid(info);
-      tv = carith_ctype_metatv_read(L, cts, &metatv, id, mm);
+      tv = carith_ctype_metatv_read(L, cts, &metaroot, id, mm);
     }
   }
   if (!tv) {
@@ -529,7 +551,11 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 		      mm < MM_add ? LJ_ERR_FFI_BADCOMP : LJ_ERR_FFI_BADARITH,
 		   repr[0], repr[1]);
   }
-  return lj_meta_tailcall(L, tv);
+  {
+    int rc = lj_meta_tailcall(L, tv);
+    lj_ctype_metaroot_release(&metaroot);
+    return rc;
+  }
 }
 
 /* Arithmetic operators for cdata. */

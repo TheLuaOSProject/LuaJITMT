@@ -24,6 +24,7 @@
 #include "lj_strscan.h"
 #include "lj_strfmt.h"
 #include "lj_lib.h"
+#include "lj_tg.h"
 
 #if defined(LJ_GC2_TEST_HELPERS)
 static uintptr_t meta_test_mt_capture_target;
@@ -193,30 +194,34 @@ cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
 cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
 {
   global_State *g = G(L);
-  TValue osnap, mtv;
+  TValue osnap, mtv, result;
   for (;;) {
     LJGC2Lease objlease, mtlease, resultlease;
     GCtab *mt;
     int ostatus, mtstatus, lookupstatus, resultstatus;
 
-    /* One acquired receiver snapshot is the lookup's linearization candidate.
-    ** A deliberately racy Lua writer may replace o at any point; never lease
-    ** one incarnation and then branch through a second read of the slot. */
+    /* Open source SMR before copying the authoritative receiver root. A lease
+    ** acquired from a pre-SMR pointer could otherwise admit a same-address
+    ** successor after a raced root replacement/reclaim. One acquired snapshot
+    ** is the lookup's linearization candidate: never lease one incarnation and
+    ** then branch through a second read of the slot. Callers which pre-copy a
+    ** mutable registry/upvalue edge into a C local have not supplied an
+    ** authoritative root and must be converted at that call site. */
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+      lj_tab_wait_l(L);
+      continue;
+    }
     lj_tv_load_acq(&osnap, o);
-    lj_gc_pubroot(L, &osnap);
     ostatus = lj_gc2_tv_lease_acquire(g, &osnap, &objlease);
     if (LJ_UNLIKELY(ostatus != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_smr_read_leave(g);
       if (ostatus == LJ_GC2_TV_EDGE_RETRY) {
 	lj_tab_wait_l(L);
 	continue;
       }
-      setnilV(out);
+      setnilV(&result);
+      copyTVrel(L, out, &result);
       return out;
-    }
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
-      lj_gc2_lease_release(&objlease);
-      lj_tab_wait_l(L);
-      continue;
     }
     if (tvistab(&osnap))
       mt = lj_tab_metatable_acq(tabV(&osnap));
@@ -228,7 +233,8 @@ cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
     if (!mt) {
       lj_gc2_smr_read_leave(g);
       lj_gc2_lease_release(&objlease);
-      setnilV(out);
+      setnilV(&result);
+      copyTVrel(L, out, &result);
       return out;
     }
 
@@ -247,7 +253,8 @@ cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
 	lj_tab_wait_l(L);
 	continue;
       }
-      setnilV(out);
+      setnilV(&result);
+      copyTVrel(L, out, &result);
       return out;
     }
     /* This lookup is deliberately one-shot. lj_tab_gettv_forjit() owns a retry
@@ -261,22 +268,28 @@ cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
       lj_tab_wait_l(L);
       continue;
     }
-    lookupstatus = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm), out);
+    lookupstatus = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm),
+					  &result);
     if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
-        LJ_UNLIKELY(tvistabinternal(out)))
+        LJ_UNLIKELY(tvistabinternal(&result)))
       lookupstatus = LJ_TAB_GC_LOOKUP_RETRY;
     resultstatus = lookupstatus == LJ_TAB_GC_LOOKUP_FOUND ?
-      lj_gc2_tv_lease_acquire(g, out, &resultlease) :
+      lj_gc2_tv_lease_acquire(g, &result, &resultlease) :
       LJ_GC2_TV_EDGE_VALID;
-    lj_gc2_smr_read_leave(g);
     if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
         resultstatus == LJ_GC2_TV_EDGE_VALID) {
+      /* Publish from the admitted local into the caller-provided result root
+      ** before the source vector SMR interval closes. No raw vector value or
+      ** unleased GC result crosses this helper boundary. */
+      copyTVrel(L, out, &result);
+      lj_gc2_smr_read_leave(g);
       lj_gc_pubroot(L, out);
       lj_gc2_lease_release(&resultlease);
       lj_gc2_lease_release(&mtlease);
       lj_gc2_lease_release(&objlease);
       return out;
     }
+    lj_gc2_smr_read_leave(g);
     lj_gc2_lease_release(&mtlease);
     lj_gc2_lease_release(&objlease);
     if (lookupstatus == LJ_TAB_GC_LOOKUP_RETRY ||
@@ -286,7 +299,8 @@ cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
     }
     /* A stable absent slot, or a stale result incarnation observed before its
     ** SMR scope closed, both have the semantic value nil for this lookup. */
-    setnilV(out);
+    setnilV(&result);
+    copyTVrel(L, out, &result);
     return out;
   }
 }
@@ -297,17 +311,26 @@ int lj_meta_tailcall(lua_State *L, cTValue *tv)
 {
   TValue *base = L->base;
   TValue *top = L->top;
+  TValue *funcslot = base-1-LJ_FR2;
+  TValue *dummyslot;
   const BCIns *pc = frame_pc(base-1);  /* Preserve old PC from frame. */
-  copyTV(L, base-1-LJ_FR2, tv);  /* Replace frame with new object. */
+  copyTV(L, funcslot, tv);  /* Replace frame with new object. */
   if (LJ_FR2)
     (top++)->u64 = LJ_CONT_TAILCALL;
   else
     top->u32.lo = LJ_CONT_TAILCALL;
   setframe_pc(top++, pc);
-  setframe_gc(top, obj2gco(L), LJ_TTHREAD);  /* Dummy frame object. */
+  dummyslot = top;
+  setframe_gc(dummyslot, obj2gco(L), LJ_TTHREAD);  /* Dummy frame object. */
   if (LJ_FR2) top++;
   setframe_ftsz(top, ((char *)(top+1) - (char *)base) + FRAME_CONT);
   L->base = L->top = top+1;
+  /* CType metamethod callers release their exact private anchor immediately
+  ** after this handoff. Publish the complete replacement frame first, so a
+  ** concurrent stack scan acquires both the new callable/object and the dummy
+  ** continuation-frame owner instead of relying on the removed metatable edge. */
+  lj_state_stack_pubtv(L, L, funcslot);
+  lj_state_stack_pubtv(L, L, dummyslot);
   /*
   ** before:   [old_mo|PC]    [... ...]
   **                         ^base     ^top
@@ -349,123 +372,521 @@ static TValue *mmcall(lua_State *L, ASMFunction cont, cTValue *mo,
 
 /* -- C helpers for some instructions, called from assembler VM ----------- */
 
-/* Helper for TGET*. __index chain and metamethod. */
-cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
+enum {
+  META_CHAIN_RECEIVER,
+  META_CHAIN_KEY,
+  META_CHAIN_RESULT,
+  META_CHAIN_METHOD,
+  META_CHAIN_NROOTS
+};
+
+typedef struct MetaChainRoots {
+  TGState *tg;
+  uint32_t idx[META_CHAIN_NROOTS];
+} MetaChainRoots;
+
+typedef struct MetaSourceRef {
+  cTValue *tv;
+  ptrdiff_t ofs;
+  uint8_t stack;
+  uint8_t funcenv;
+} MetaSourceRef;
+
+typedef struct MetaOutputRef {
+  TValue *tv;
+  ptrdiff_t ofs;
+  uint8_t stack;
+} MetaOutputRef;
+
+enum {
+  META_CAPTURE_VALID,
+  META_CAPTURE_RECEIVER_STALE,
+  META_CAPTURE_KEY_STALE
+};
+
+static LJ_AINLINE int meta_tv_on_stack(lua_State *L, cTValue *tv)
 {
-  TValue motv;
-  TValue *tvv = &L2TG(L)->tmptv2;
+  uintptr_t p, lo, hi;
+  if (!L || !tv)
+    return 0;
+  p = (uintptr_t)(const void *)tv;
+  lo = (uintptr_t)(const void *)tvref(L->stack);
+  hi = (uintptr_t)(const void *)tvref(L->maxstack);
+  return p >= lo && p < hi;
+}
+
+static LJ_AINLINE MetaSourceRef meta_source_ref(lua_State *L, cTValue *tv)
+{
+  MetaSourceRef ref;
+  ref.tv = tv;
+  ref.stack = (uint8_t)meta_tv_on_stack(L, tv);
+  ref.funcenv = 0;
+  ref.ofs = ref.stack ? savestack(L, (TValue *)(void *)tv) : 0;
+  return ref;
+}
+
+/* A global bytecode starts from the authoritative current-function stack
+** root, not from a pre-copied fn->env pointer. Resolve that mutable child edge
+** only after the chain anchors exist and source SMR has opened. */
+static LJ_AINLINE MetaSourceRef meta_funcenv_source_ref(lua_State *L,
+						 cTValue *tv)
+{
+  MetaSourceRef ref = meta_source_ref(L, tv);
+  ref.funcenv = 1;
+  return ref;
+}
+
+static LJ_AINLINE cTValue *meta_source_current(lua_State *L,
+					       const MetaSourceRef *ref)
+{
+  return ref->stack ? restorestack(L, ref->ofs) : ref->tv;
+}
+
+static LJ_AINLINE MetaOutputRef meta_output_ref(lua_State *L, TValue *tv)
+{
+  MetaOutputRef ref;
+  ref.tv = tv;
+  ref.stack = (uint8_t)meta_tv_on_stack(L, tv);
+  ref.ofs = ref.stack ? savestack(L, tv) : 0;
+  return ref;
+}
+
+static LJ_AINLINE TValue *meta_output_current(lua_State *L,
+					      const MetaOutputRef *ref)
+{
+  return ref->stack ? restorestack(L, ref->ofs) : ref->tv;
+}
+
+static LJ_AINLINE TValue *meta_chain_root(const MetaChainRoots *roots,
+					   uint32_t which)
+{
+  return lj_tg_root_anchor_slot_acq(roots->tg, roots->idx[which]);
+}
+
+static void meta_chain_roots_init(lua_State *L, MetaChainRoots *roots)
+{
+  TValue nilv;
+  uint32_t i;
+  roots->tg = L2TG(L);
+  setnilV(&nilv);
+  for (i = 0; i < META_CHAIN_NROOTS; i++) {
+    TValue *slot;
+    if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(L, roots->tg))) {
+      /* Reserve before push so an allocation failure can explicitly unwind
+      ** every already-published member of this root set. The protected-call
+      ** checkpoint remains a second line of defence for unrelated throws. */
+      while (i != 0) {
+	i--;
+	lj_tg_root_anchor_pop(roots->tg, roots->idx[i]);
+      }
+      lj_err_mem(L);
+    }
+    slot = lj_tg_root_anchor_push(L, roots->tg, &nilv, &roots->idx[i]);
+    lj_assertL(slot != NULL, "metamethod chain root allocation failed");
+    UNUSED(slot);
+  }
+}
+
+static void meta_chain_roots_fini(MetaChainRoots *roots)
+{
+  uint32_t i = META_CHAIN_NROOTS;
+  while (i-- != 0)
+    lj_tg_root_anchor_pop(roots->tg, roots->idx[i]);
+}
+
+/* Capture the caller's authoritative receiver/key pair before any semantic
+** lookup. Source SMR starts before both mutable-root loads, and both exact
+** leases survive release-publication into owner-private enumerated anchors.
+** VM stack roots and VM scratch/constant roots satisfy this contract. A C
+** caller which first copied a replaceable registry/upvalue edge into a local
+** has already lost source authority and must root that edge at its call site.
+**
+** The remaining lj_tab_wait_l() calls are deliberate b1.2.1 zero-wait debt:
+** every lease and SMR interval is closed before servicing the retry. */
+static int meta_chain_capture_inputs(lua_State *L, MetaChainRoots *roots,
+				     const MetaSourceRef *oref,
+				     const MetaSourceRef *kref)
+{
+  global_State *g = G(L);
+  for (;;) {
+    LJGC2Lease olease, envlease, klease;
+    TValue osnap, ksnap;
+    cTValue *o, *k;
+    int ostatus, envstatus, kstatus;
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    o = meta_source_current(L, oref);
+    k = meta_source_current(L, kref);
+    lj_tv_load_acq(&osnap, o);
+    ostatus = lj_gc2_tv_lease_acquire(g, &osnap, &olease);
+    if (LJ_UNLIKELY(ostatus != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_smr_read_leave(g);
+      if (ostatus == LJ_GC2_TV_EDGE_RETRY) {
+	lj_tab_wait_l(L);
+	continue;
+      }
+      return META_CAPTURE_RECEIVER_STALE;
+    }
+    if (oref->funcenv) {
+      GCtab *env;
+      /* The function lease authorizes the child-edge load. The surrounding
+      ** source SMR interval then prevents replacement-to-reuse ABA until the
+      ** exact environment incarnation has acquired its own lease. */
+      if (LJ_UNLIKELY(!tvisfunc(&osnap))) {
+	lj_gc2_smr_read_leave(g);
+	lj_gc2_lease_release(&olease);
+	return META_CAPTURE_RECEIVER_STALE;
+      }
+      env = lj_func_env_acq(funcV(&osnap));
+      if (env)
+	setgcVraw(&osnap, obj2gco(env), LJ_TTAB);
+      else
+	setnilV(&osnap);
+      envstatus = lj_gc2_tv_lease_acquire(g, &osnap, &envlease);
+      if (LJ_UNLIKELY(envstatus != LJ_GC2_TV_EDGE_VALID)) {
+	lj_gc2_smr_read_leave(g);
+	lj_gc2_lease_release(&olease);
+	if (envstatus == LJ_GC2_TV_EDGE_RETRY) {
+	  lj_tab_wait_l(L);
+	  continue;
+	}
+	return META_CAPTURE_RECEIVER_STALE;
+      }
+    }
+    lj_tv_load_acq(&ksnap, k);
+    kstatus = lj_gc2_tv_lease_acquire(g, &ksnap, &klease);
+    if (LJ_UNLIKELY(kstatus != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_smr_read_leave(g);
+      if (oref->funcenv)
+	lj_gc2_lease_release(&envlease);
+      lj_gc2_lease_release(&olease);
+      if (kstatus == LJ_GC2_TV_EDGE_RETRY) {
+	lj_tab_wait_l(L);
+	continue;
+      }
+      return META_CAPTURE_KEY_STALE;
+    }
+    copyTVrel(L, meta_chain_root(roots, META_CHAIN_RECEIVER), &osnap);
+    copyTVrel(L, meta_chain_root(roots, META_CHAIN_KEY), &ksnap);
+    lj_gc2_smr_read_leave(g);
+    lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_RECEIVER));
+    lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_KEY));
+    lj_gc2_lease_release(&klease);
+    if (oref->funcenv)
+      lj_gc2_lease_release(&envlease);
+    lj_gc2_lease_release(&olease);
+    return META_CAPTURE_VALID;
+  }
+}
+
+/* Transfer a rooted point-read result directly to the caller's enumerated
+** result slot. Re-admit the exact anchored value before release-publication;
+** returning this slot makes the caller's legacy immediate copy idempotent. */
+static TValue *meta_chain_value_publish(lua_State *L,
+					const MetaChainRoots *roots,
+					uint32_t which,
+					const MetaOutputRef *outref)
+{
+  global_State *g = G(L);
+  for (;;) {
+    LJGC2Lease lease;
+    TValue *out;
+    TValue snap;
+    int status;
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    lj_tv_load_acq(&snap, meta_chain_root(roots, which));
+    status = lj_gc2_tv_lease_acquire(g, &snap, &lease);
+    out = meta_output_current(L, outref);
+    if (status == LJ_GC2_TV_EDGE_VALID) {
+      copyTVrel(L, out, &snap);
+      lj_gc2_smr_read_leave(g);
+      if (outref->stack)
+	lj_state_stack_pubtv(L, L, out);
+      else
+	lj_gc_pubroot(L, out);
+      lj_gc2_lease_release(&lease);
+      return meta_output_current(L, outref);
+    }
+    lj_gc2_smr_read_leave(g);
+    if (status == LJ_GC2_TV_EDGE_STALE) {
+      setnilV(&snap);
+      copyTVrel(L, out, &snap);
+      if (outref->stack)
+	lj_state_stack_pubtv(L, L, out);
+      else
+	lj_gc_pubroot(L, out);
+      return meta_output_current(L, outref);
+    }
+    lj_tab_wait_l(L);
+  }
+}
+
+static TValue *meta_error_stack_slot(lua_State *L,
+				      const MetaSourceRef *oref,
+				      const MetaSourceRef *kref)
+{
+  cTValue *src;
+  if (!oref->funcenv) {
+    src = meta_source_current(L, oref);
+    if (meta_tv_on_stack(L, src))
+      return (TValue *)(void *)src;
+  }
+  src = meta_source_current(L, kref);
+  if (meta_tv_on_stack(L, src))
+    return (TValue *)(void *)src;
+  return L->base;
+}
+
+/* Preserve a valid chain-derived operand in an existing enumerated stack
+** register before releasing the private anchor set. Semantic error
+** construction may allocate and collect, and lj_err_optype() expects a real
+** frame-relative operand rather than a C-local or beyond-top scratch slot. */
+static TValue *meta_chain_error_operand(lua_State *L,
+					const MetaChainRoots *roots,
+					const MetaSourceRef *oref,
+					const MetaSourceRef *kref)
+{
+  TValue *slot = meta_error_stack_slot(L, oref, kref);
+  copyTVrel(L, slot, meta_chain_root(roots, META_CHAIN_RECEIVER));
+  lj_state_stack_pubtv(L, L, slot);
+  return slot;
+}
+
+/* A terminal stale source is safe only for its tag/type diagnostic. If it is
+** not already a frame-relative slot, copy the raw word into one without a
+** liveness assertion; lj_err_optype() reads the tag before it can allocate. */
+static TValue *meta_stale_error_operand(lua_State *L,
+					const MetaSourceRef *oref,
+					const MetaSourceRef *kref)
+{
+  cTValue *src = meta_source_current(L, oref);
+  TValue *slot = meta_error_stack_slot(L, oref, kref);
+  if (slot != src)
+    tv_rawstore_rel(slot, tv_rawload_acq(src));
+  return slot;
+}
+
+/* Materialize a function-valued chain result in the VM continuation frame and
+** publish every collectable slot before dropping the anchor roots which fed
+** it. The returned base points at the first argument; the function is one
+** TValue (plus the FR2 companion) below it. L->top deliberately remains at
+** that first argument until the VM/C caller completes the call frame, but all
+** three values receive release stack publication and a root barrier here.
+** Remote/native/JIT-current scanners conservatively cover maxstack in this
+** owner-private transition window, and the owner executes no local safepoint
+** between anchor release and return to the caller which advances top. */
+static void meta_chain_mmcall(lua_State *L, ASMFunction cont, cTValue *method,
+			      cTValue *receiver, cTValue *key)
+{
+  TValue *base = mmcall(L, cont, method, receiver, key);
+  L->top = base;
+  lj_state_stack_pubtv(L, L, base - 1 - LJ_FR2);
+  lj_state_stack_pubtv(L, L, base);
+  lj_state_stack_pubtv(L, L, base + 1);
+}
+
+/* Shared rooted implementation for TGET*. __index chain and metamethod. */
+static cTValue *meta_tget_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
+				      TValue *out, int funcenv)
+{
+  MetaChainRoots roots;
+  MetaSourceRef oref = funcenv ? meta_funcenv_source_ref(L, o) :
+				 meta_source_ref(L, o);
+  MetaSourceRef kref = meta_source_ref(L, k);
+  MetaOutputRef outref = meta_output_ref(L, out);
+  TValue *receiver, *key, *result, *method;
+  cTValue *ret;
+  int capture;
   int loop;
+
+  meta_chain_roots_init(L, &roots);
+  capture = meta_chain_capture_inputs(L, &roots, &oref, &kref);
+  if (LJ_UNLIKELY(capture != META_CAPTURE_VALID)) {
+    ret = meta_chain_value_publish(L, &roots, META_CHAIN_RESULT, &outref);
+    meta_chain_roots_fini(&roots);
+    return ret;
+  }
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
-    cTValue *mo;
-    int ostatus, kstatus;
-  retry_semantic_root:
-    lj_gc_pubroot(L, o);
-    lj_gc_pubroot(L, k);
-    ostatus = lj_gc_tv_gcref_status(G(L), o);
-    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_RETRY)) {
-      lj_tab_wait_l(L);
-      goto retry_semantic_root;
+    receiver = meta_chain_root(&roots, META_CHAIN_RECEIVER);
+    key = meta_chain_root(&roots, META_CHAIN_KEY);
+    result = meta_chain_root(&roots, META_CHAIN_RESULT);
+    method = meta_chain_root(&roots, META_CHAIN_METHOD);
+    if (LJ_LIKELY(tvistab(receiver))) {
+      (void)lj_tab_gettv_rooted(L, receiver, key, result);
+      result = meta_chain_root(&roots, META_CHAIN_RESULT);
+      if (!tvisnil(result)) {
+	ret = meta_chain_value_publish(L, &roots, META_CHAIN_RESULT, &outref);
+	meta_chain_roots_fini(&roots);
+	return ret;
+      }
+      receiver = meta_chain_root(&roots, META_CHAIN_RECEIVER);
+      method = meta_chain_root(&roots, META_CHAIN_METHOD);
+      (void)lj_meta_lookuptv(L, method, receiver, MM_index);
+      method = meta_chain_root(&roots, META_CHAIN_METHOD);
+      if (tvisnil(method)) {
+	ret = meta_chain_value_publish(L, &roots, META_CHAIN_RESULT, &outref);
+	meta_chain_roots_fini(&roots);
+	return ret;
+      }
+    } else {
+      (void)lj_meta_lookuptv(L, method, receiver, MM_index);
+      method = meta_chain_root(&roots, META_CHAIN_METHOD);
+      if (tvisnil(method)) {
+        TValue *errslot = meta_chain_error_operand(L, &roots, &oref, &kref);
+        meta_chain_roots_fini(&roots);
+        lj_err_optype(L, errslot, LJ_ERR_OPINDEX);
+        return NULL;  /* unreachable */
+      }
     }
-    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_STALE))
-      return niltv(L);
-    kstatus = lj_gc_tv_gcref_status(G(L), k);
-    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_RETRY)) {
-      lj_tab_wait_l(L);
-      goto retry_semantic_root;
-    }
-    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_STALE))
-      return niltv(L);
-    if (LJ_LIKELY(tvistab(o))) {
-      GCtab *t = tabV(o);
-      cTValue *tv = lj_tab_gettv_forjit(L, t, k, tvv);
-      if (!tvisnil(tv))
-	return tv;
-      mo = lj_meta_lookuptv(L, &motv, o, MM_index);
-      if (tvisnil(mo))
-	return tv;
-    } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_index))) {
-      lj_err_optype(L, o, LJ_ERR_OPINDEX);
-      return NULL;  /* unreachable */
-    }
-    if (tvisfunc(mo)) {
-      L->top = mmcall(L, lj_cont_ra, mo, o, k);
+    receiver = meta_chain_root(&roots, META_CHAIN_RECEIVER);
+    key = meta_chain_root(&roots, META_CHAIN_KEY);
+    if (tvisfunc(method)) {
+      meta_chain_mmcall(L, lj_cont_ra, method, receiver, key);
+      meta_chain_roots_fini(&roots);
       return NULL;  /* Trigger metamethod call. */
     }
-    o = mo;
+    copyTVrel(L, receiver, method);
+    lj_gc_pubroot(L, receiver);
   }
+  meta_chain_roots_fini(&roots);
   lj_err_msg(L, LJ_ERR_GETLOOP);
+  return NULL;  /* unreachable */
+}
+
+/* Explicit-output C helper. `out` must be an enumerated root and may alias
+** either input; stack offsets are captured before any allocation/retry. */
+cTValue *lj_meta_tgettv_rooted(lua_State *L, cTValue *o, cTValue *k,
+				TValue *out)
+{
+  return meta_tget_rooted_mode(L, o, k, out, 0);
+}
+
+/* Global-bytecode variant. `fnroot` is the authoritative frame function
+** TValue; its mutable environment child is admitted inside source SMR instead
+** of being copied into transient VM scratch before anchor initialization. */
+cTValue *lj_meta_tgetenv_rooted(lua_State *L, cTValue *fnroot, cTValue *k,
+				       TValue *out)
+{
+  return meta_tget_rooted_mode(L, fnroot, k, out, 1);
+}
+
+/* VM-only compatibility ABI: the assembler saves the next PC before calling,
+** so pc[-1].A identifies the authoritative bytecode destination. */
+cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
+{
+  const BCIns *pc = cframe_Lpc(L) - 1;
+  return meta_tget_rooted_mode(L, o, k, L->base + bc_a(*pc), 0);
+}
+
+static TValue *meta_tset_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
+				     GCtab **owner,
+				     MetaChainRoots *kept_roots, int funcenv)
+{
+  MetaChainRoots local_roots;
+  MetaChainRoots *roots = kept_roots ? kept_roots : &local_roots;
+  MetaSourceRef oref = funcenv ? meta_funcenv_source_ref(L, o) :
+				 meta_source_ref(L, o);
+  MetaSourceRef kref = meta_source_ref(L, k);
+  TValue *receiver, *key, *result, *method;
+  int capture;
+  int loop;
+  if (owner)
+    *owner = NULL;
+
+  meta_chain_roots_init(L, roots);
+  capture = meta_chain_capture_inputs(L, roots, &oref, &kref);
+  if (LJ_UNLIKELY(capture == META_CAPTURE_RECEIVER_STALE)) {
+    TValue *errslot = meta_stale_error_operand(L, &oref, &kref);
+    meta_chain_roots_fini(roots);
+    lj_err_optype(L, errslot, LJ_ERR_OPINDEX);
+    return NULL;  /* unreachable */
+  }
+  if (LJ_UNLIKELY(capture == META_CAPTURE_KEY_STALE)) {
+    meta_chain_roots_fini(roots);
+    lj_err_msg(L, LJ_ERR_NILIDX);
+    return NULL;  /* unreachable */
+  }
+  for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
+    receiver = meta_chain_root(roots, META_CHAIN_RECEIVER);
+    key = meta_chain_root(roots, META_CHAIN_KEY);
+    result = meta_chain_root(roots, META_CHAIN_RESULT);
+    method = meta_chain_root(roots, META_CHAIN_METHOD);
+    if (LJ_LIKELY(tvistab(receiver))) {
+      GCtab *t = tabV(receiver);
+      /* The copied helper retains exact table/key leases through hashing and
+      ** current-generation miss resolution. Use its value only for metamethod
+      ** semantics; resolve a fresh current write slot afterwards, since a raw
+      ** decision-time vector pointer cannot survive resize or reclamation. */
+      (void)lj_tab_gettv_rooted(L, receiver, key, result);
+      receiver = meta_chain_root(roots, META_CHAIN_RECEIVER);
+      key = meta_chain_root(roots, META_CHAIN_KEY);
+      result = meta_chain_root(roots, META_CHAIN_RESULT);
+      t = tabV(receiver);
+      if (LJ_LIKELY(!tvisnil(result))) {
+	TValue *dst = lj_tab_set(L, t, key);
+	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
+	lj_gc2_barrier_weak_key(L, t, key);
+	lj_gc_pubtab(L, t);
+	if (owner)
+	  *owner = t;
+	if (!kept_roots)
+	  meta_chain_roots_fini(roots);
+	return dst;
+      }
+      method = meta_chain_root(roots, META_CHAIN_METHOD);
+      (void)lj_meta_lookuptv(L, method, receiver, MM_newindex);
+      method = meta_chain_root(roots, META_CHAIN_METHOD);
+      if (tvisnil(method)) {
+	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
+	lj_gc_pubtab(L, t);
+	if (tvisnil(key)) {
+	  meta_chain_roots_fini(roots);
+	  lj_err_msg(L, LJ_ERR_NILIDX);
+	} else if (tvisnum(key) && tvisnan(key)) {
+	  meta_chain_roots_fini(roots);
+	  lj_err_msg(L, LJ_ERR_NANIDX);
+	}
+	if (owner)
+	  *owner = t;
+	result = lj_tab_set(L, t, key);
+	if (!kept_roots)
+	  meta_chain_roots_fini(roots);
+	return result;
+      }
+    } else {
+      (void)lj_meta_lookuptv(L, method, receiver, MM_newindex);
+      method = meta_chain_root(roots, META_CHAIN_METHOD);
+      if (tvisnil(method)) {
+        TValue *errslot = meta_chain_error_operand(L, roots, &oref, &kref);
+        meta_chain_roots_fini(roots);
+        lj_err_optype(L, errslot, LJ_ERR_OPINDEX);
+        return NULL;  /* unreachable */
+      }
+    }
+    receiver = meta_chain_root(roots, META_CHAIN_RECEIVER);
+    key = meta_chain_root(roots, META_CHAIN_KEY);
+    if (tvisfunc(method)) {
+      meta_chain_mmcall(L, lj_cont_nop, method, receiver, key);
+      /* L->top+2 = v filled in by caller. */
+      meta_chain_roots_fini(roots);
+      return NULL;  /* Trigger metamethod call. */
+    }
+    copyTVrel(L, receiver, method);
+    lj_gc_pubroot(L, receiver);
+  }
+  meta_chain_roots_fini(roots);
+  lj_err_msg(L, LJ_ERR_SETLOOP);
   return NULL;  /* unreachable */
 }
 
 static TValue *meta_tset(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
 {
-  TValue tmp, motv, lookup;
-  int loop;
-  if (owner)
-    *owner = NULL;
-  for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
-    cTValue *mo;
-    int ostatus, kstatus;
-  retry_semantic_root:
-    lj_gc_pubroot(L, o);
-    lj_gc_pubroot(L, k);
-    ostatus = lj_gc_tv_gcref_status(G(L), o);
-    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_RETRY)) {
-      lj_tab_wait_l(L);
-      goto retry_semantic_root;
-    }
-    if (LJ_UNLIKELY(ostatus == LJ_GC2_TV_EDGE_STALE)) {
-      lj_err_optype(L, o, LJ_ERR_OPINDEX);
-      return NULL;  /* unreachable */
-    }
-    kstatus = lj_gc_tv_gcref_status(G(L), k);
-    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_RETRY)) {
-      lj_tab_wait_l(L);
-      goto retry_semantic_root;
-    }
-    if (LJ_UNLIKELY(kstatus == LJ_GC2_TV_EDGE_STALE)) {
-      lj_err_msg(L, LJ_ERR_NILIDX);
-      return NULL;  /* unreachable */
-    }
-    if (LJ_LIKELY(tvistab(o))) {
-      GCtab *t = tabV(o);
-      /* The copied helper retains exact table/key leases through hashing and
-      ** current-generation miss resolution. Use its value only for metamethod
-      ** semantics; resolve a fresh current write slot afterwards, since a raw
-      ** decision-time vector pointer cannot survive resize or reclamation. */
-      cTValue *tv = lj_tab_gettv_forjit(L, t, k, &lookup);
-      if (LJ_LIKELY(!tvisnil(tv))) {
-	TValue *dst = lj_tab_set(L, t, k);
-	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
-	lj_gc2_barrier_weak_key(L, t, k);
-	lj_gc_pubtab(L, t);
-	if (owner)
-	  *owner = t;
-	return dst;
-	} else if (tvisnil(mo = lj_meta_lookuptv(
-			 L, &motv, o, MM_newindex))) {
-	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
-	lj_gc_pubtab(L, t);
-	if (tvisnil(k)) lj_err_msg(L, LJ_ERR_NILIDX);
-	else if (tvisnum(k) && tvisnan(k)) lj_err_msg(L, LJ_ERR_NANIDX);
-	if (owner)
-	  *owner = t;
-	return lj_tab_set(L, t, k);
-      }
-    } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_newindex))) {
-      lj_err_optype(L, o, LJ_ERR_OPINDEX);
-      return NULL;  /* unreachable */
-    }
-    if (tvisfunc(mo)) {
-      L->top = mmcall(L, lj_cont_nop, mo, o, k);
-      /* L->top+2 = v filled in by caller. */
-      return NULL;  /* Trigger metamethod call. */
-    }
-    copyTV(L, &tmp, mo);
-    o = &tmp;
-  }
-  lj_err_msg(L, LJ_ERR_SETLOOP);
-  return NULL;  /* unreachable */
+  return meta_tset_rooted_mode(L, o, k, owner, NULL, 0);
 }
 
 /* Helper for TSET*. __newindex chain and metamethod. */
@@ -480,19 +901,9 @@ TValue *lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
   return meta_tset(L, o, k, owner);
 }
 
-static LJ_AINLINE int meta_tv_on_stack(lua_State *L, cTValue *tv)
-{
-  uintptr_t p, lo, hi;
-  if (!L || !tv)
-    return 0;
-  p = (uintptr_t)(const void *)tv;
-  lo = (uintptr_t)(const void *)tvref(L->stack);
-  hi = (uintptr_t)(const void *)tvref(L->maxstack);
-  return p >= lo && p < hi;
-}
-
 /* VM helper that resolves the target table, stores the value and barriers it. */
-TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
+static TValue *meta_tsettv_pair_mode(lua_State *L, cTValue *o, cTValue *k,
+				     cTValue *v, int funcenv)
 {
   int stack_o = meta_tv_on_stack(L, o);
   int stack_k = meta_tv_on_stack(L, k);
@@ -501,7 +912,9 @@ TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
   ptrdiff_t kofs = stack_k ? savestack(L, (TValue *)(void *)k) : 0;
   ptrdiff_t vofs = stack_v ? savestack(L, (TValue *)(void *)v) : 0;
   for (;;) {
+    MetaChainRoots roots;
     GCtab *owner = NULL;
+    TValue *keyroot;
     TValue *dst;
     int rc;
     if (stack_o) o = restorestack(L, oofs);
@@ -514,23 +927,42 @@ TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
     ** until the CAS publishes the real edge.
     */
     lj_gc_pubroot(L, v);
-    dst = meta_tset(L, o, k, &owner);
+    /* Keep the resolved table-valued __newindex carrier rooted through the
+    ** keyed CAS and every post-store barrier. Popping it inside meta_tset()
+    ** would let a peer remove the metamethod edge and reclaim owner/dst in the
+    ** return-to-caller window. */
+    dst = meta_tset_rooted_mode(L, o, k, &owner, &roots, funcenv);
     if (stack_o) o = restorestack(L, oofs);
     if (stack_k) k = restorestack(L, kofs);
     if (stack_v) v = restorestack(L, vofs);
     if (!dst)
       return NULL;
-    rc = lj_tab_trystoretv_cas_keyed(L, owner, dst, k, v);
+    keyroot = meta_chain_root(&roots, META_CHAIN_KEY);
+    rc = lj_tab_trystoretv_cas_keyed(L, owner, dst, keyroot, v);
     if (rc == LJ_TAB_STORE_CAS_OK) {
       /* The keyed transaction owns weak-write exclusion through its CAS and
       ** handoff. Do not retain an outer token across its L-aware CHANGED retry. */
-      lj_gc2_barrier_weak_key(L, owner, k);
+      lj_gc2_barrier_weak_key(L, owner, keyroot);
       lj_gc2_barrier_weak_value(L, owner, v);
       lj_gc2_barrier_tv_pair(L, owner ? obj2gco(owner) : NULL, v);
+      meta_chain_roots_fini(&roots);
       return dst;
     }
+    meta_chain_roots_fini(&roots);
     lj_tab_store_wait_l(L);  /* Slot became stale/FORWARD; re-resolve. */
   }
+}
+
+TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
+{
+  return meta_tsettv_pair_mode(L, o, k, v, 0);
+}
+
+/* Store counterpart to lj_meta_tgetenv_rooted(). */
+TValue *lj_meta_tsetenvtv_pair(lua_State *L, cTValue *fnroot, cTValue *k,
+				      cTValue *v)
+{
+  return meta_tsettv_pair_mode(L, fnroot, k, v, 1);
 }
 
 static cTValue *str2num(cTValue *o, TValue *n)

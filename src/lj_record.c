@@ -1495,6 +1495,15 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
   RecordIndex mix;
   GCtab *mt;
   TValue motv, motv2;
+  /*
+  ** The stock recorder samples a receiver's metatable pointer before it emits
+  ** the corresponding FLOAD guard. In active MT, a peer may replace that edge
+  ** and GC2 may reclaim the old target between those two operations. Keep the
+  ** operation interpreted until the trace ABI has a rooted receiver-to-meta
+  ** lookup helper; an acquire-load alone is not lifetime authority.
+  */
+  if (lj_record_mt_runtime_shared(J2G(J), J->L))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
   if (tref_istab(ix->tab)) {
     mt = lj_tab_metatable_acq(tabV(&ix->tabv));
     mix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_TAB_META);
@@ -1947,7 +1956,24 @@ static void rec_idx_abc(jit_State *J, TRef asizeref, TRef ikey, uint32_t asize)
   emitir(IRTGI(IR_ABC), asizeref, ikey);  /* Emit regular bounds check. */
 }
 
-static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
+#if LJ_HAS_X64_MT_JIT_HELPERS
+static int rec_idx_tab_direct_array(jit_State *J, TRef tab)
+{
+  /* Pre-MT traces cannot race a secondary table resize, and first activation
+  ** flushes all existing traces before secondary Lua code can run. After
+  ** mt_entering or mt_active is visible, no TNEW/TDUP result is presumed local:
+  ** it may have escaped through a peer-visible edge earlier in the same trace.
+  ** Restore a local-table exemption only with explicit escape tracking.
+  */
+  UNUSED(tab);
+  return !lj_record_mt_runtime_shared(J2G(J), J->L);
+}
+#endif
+
+/* A recorder allocation is not proven thread-local until escape tracking can
+** show that no earlier store/call published it. This predicate is only a
+** fail-closed fence; it must never restore the old direct-access exemption. */
+static int rec_idx_tab_unproven_alloc(jit_State *J, TRef tab)
 {
   IRIns *ir;
   if (tref_ref(tab) < REF_FIRST)
@@ -1956,22 +1982,10 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
-static int rec_idx_tab_direct_array(jit_State *J, TRef tab)
-{
-  if (rec_idx_tab_trace_local(J, tab))
-    return 1;
-  /* Pre-MT traces cannot race a secondary table resize, and first activation
-  ** flushes all existing traces before secondary Lua code can run. After
-  ** mt_entering or mt_active is visible, published arrays keep the shared
-  ** header/generation guards.
-  */
-  return !lj_record_mt_runtime_shared(J2G(J), J->L);
-}
-
 int lj_record_mt_shared_tab(jit_State *J, TRef tab)
 {
-  return lj_record_mt_runtime_shared(J2G(J), J->L) &&
-	 !rec_idx_tab_trace_local(J, tab);
+  UNUSED(tab);
+  return lj_record_mt_runtime_shared(J2G(J), J->L);
 }
 
 static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
@@ -1981,11 +1995,73 @@ static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
 
 static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode);
 
+/* Sample one active-MT lookup through the same enumerated roots used by mcode. */
+static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
+				       TValue *snap)
+{
+  /* Protected-call rollback checkpoints L2TG(J->L). Anchor the recorder
+  ** inputs in that same authoritative owner TG instead of relying on the
+  ** normally-equivalent TLS fallback returned through J2TG(J). */
+  TGState *tg = L2TG(J->L);
+  TValue *parentout, *keyroot;
+  uint32_t parentidx, keyidx;
+  int invalid;
+#ifdef LUA_USE_ASSERT
+  uint32_t anchorbase = lj_tg_root_anchor_top_acq(tg);
+  uint64_t scratch1 = tg->tmptv.u64;
+  uint64_t scratch2 = tg->tmptv2.u64;
+#endif
+  /*
+  ** ix carries recorder snapshots, not roots enumerated by GC2. Materialize
+  ** both inputs in dedicated root anchors before a helper retry can safepoint.
+  ** tmptv/tmptv2 are not available here: besides ordinary TValues, tmptv may
+  ** encode a raw comparison-fixup PC, so saving it in a C local and restoring
+  ** it after a safepoint would not retain a possible GC value. The rooted
+  ** lookup/lease/wait call graph does not write either scratch word; keep the
+  ** assert below as a regression invariant. The parent root is also the result
+  ** root, matching the generated ABI.
+  **
+  ** Every local recorder-abort edge below either precedes the first push or
+  ** explicitly pops in reverse order. If the lookup itself throws STOPREQ,
+  ** lj_trace_ins()'s enclosing lj_vm_cpcall() restores the root-anchor top to
+  ** its pre-trace_state checkpoint before propagating the external error.
+  */
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(J->L, tg)))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  parentout = lj_tg_root_anchor_push(J->L, tg, &ix->tabv, &parentidx);
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(J->L, tg))) {
+    lj_tg_root_anchor_pop(tg, parentidx);
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  }
+  keyroot = lj_tg_root_anchor_push(J->L, tg, &ix->keyv, &keyidx);
+  lj_assertJ(parentout != NULL && keyroot != NULL,
+	     "missing active-MT recorder lookup roots");
+  lj_gc_pubroot(J->L, parentout);
+  lj_gc_pubroot(J->L, keyroot);
+  (void)lj_tab_gettv_rooted(J->L, parentout, keyroot, parentout);
+  /* Inspect while the result is still an enumerated root. The local copy is
+  ** only a scalar type-selection snapshot and is never dereferenced later.
+  */
+  lj_tv_load_acq(snap, parentout);
+  invalid = tvistabinternal(snap) || !lj_tv_gcref_type_match(snap);
+  lj_tg_root_anchor_pop(tg, keyidx);
+  lj_tg_root_anchor_pop(tg, parentidx);
+  lj_assertJ(tg->tmptv.u64 == scratch1 && tg->tmptv2.u64 == scratch2,
+	     "rooted recorder lookup clobbered VM comparison scratch");
+  lj_assertJ(lj_tg_root_anchor_top_acq(tg) == anchorbase,
+	     "rooted recorder lookup leaked a root anchor");
+  if (LJ_UNLIKELY(invalid))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  return itype2irt(snap);
+}
+
 static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
 {
-  TRef key = rec_tmpref(J, ix->key);
-  TRef out = emitir(IRT(IR_TMPREF, IRT_PGC), TREF_NIL, IRTMPREF_OUT1);
-  TRef res = lj_ir_call(J, IRCALL_lj_tab_gettv_forjit, ix->tab, key, out);
+  TRef parentout = rec_tmpref_mode(J, ix->tab,
+				   IRTMPREF_IN1|IRTMPREF_OUT1);
+  TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN2);
+  TRef res = lj_ir_call(J, IRCALL_lj_tab_gettv_rooted,
+			 parentout, key, parentout);
   /*
   ** The helper has side effects and copies a raced shared-table value into its
   ** temporary result. Its following VLOAD guard belongs after those side effects,
@@ -2346,40 +2422,32 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       return res;
     if (rec_idx_mt_shared_tabop(J, ix)) {
       TValue oldsnap;
-      ix->oldv = lj_tab_get(J->L, tabV(&ix->tabv), &ix->keyv);
-      lj_tv_load_acq(&oldsnap, ix->oldv);
+      IRType t = rec_idx_mt_shared_sample(J, ix, &oldsnap);
       /*
-      ** Active-MT table lookups may sample a slot while resize/clear helpers are
-      ** moving it through internal sentinels or while a retiring generation is
-      ** still visible to the recorder. The traced helper will re-read the live
-      ** slot at runtime; only use the sampled value to choose a guard type when
-      ** it is a publishable Lua value.
+      ** Sample through the same rooted protocol used by generated code. The
+      ** recorder uses this copy only to choose the VLOAD guard type; it must
+      ** never retain a raw slot from a generation which a peer can retire.
       */
-      if (tvistabinternal(&oldsnap) || !lj_tv_gcref_type_match(&oldsnap))
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);
       if (tvisnil(&oldsnap) && ix->idxchain &&
 	  lj_record_mm_lookup(J, ix, MM_index))
 	goto handlemm;
-      if (tvisnil(&oldsnap))
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);
-      return rec_idx_mt_shared_load(J, ix, itype2irt(&oldsnap));
+      return rec_idx_mt_shared_load(J, ix, t);
     }
   } else {
     mt_shared_store = rec_idx_mt_shared_tabop(J, ix);
     if (mt_shared_store) {
-      GCtab *mt = lj_tab_metatable_acq(tabV(&ix->tabv));
       int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
-      oldv = lj_tab_get(J->L, tabV(&ix->tabv), &ix->keyv);
-      lj_tv_load_acq(&oldsnap, oldv);
+      if (rec_idx_tab_unproven_alloc(J, ix->tab))
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);
+      (void)rec_idx_mt_shared_sample(J, ix, &oldsnap);
       /*
       ** Active-MT stores must not record raw HREF/AREF/NEWREF probes: a
       ** concurrent resize can retire that generation before generated code
-      ** reaches the store. Sample the current Lua-visible state only to pick the
+      ** reaches the store. Sample from enumerated TG roots only to pick the
       ** semantic store class, then route the runtime operation through helpers
-      ** that re-lookup the key and own resize/forwarding retries.
+      ** that re-lookup the key and own resize/forwarding retries. A previous-nil
+      ** metamethod-sensitive store fails closed in lj_record_mm_lookup().
       */
-      if (tvistabinternal(&oldsnap) || !lj_tv_gcref_type_match(&oldsnap))
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);
       if (tvisnil(&oldsnap)) {
 	if (ix->idxchain && lj_record_mm_lookup(J, ix, MM_newindex))
 	  goto handlemm;
@@ -2396,7 +2464,9 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	    emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
 	  else if (keybarrier)
 	    emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
-	  if (mt && !nommstr(J, ix->key)) {
+	  /* Clearing nomm without first sampling a mutable metatable edge is
+	  ** conservative and semantically harmless for tables with no metatable. */
+	  if (!nommstr(J, ix->key)) {
 	    TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab, IRFL_TAB_NOMM);
 	    emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
 	  }
@@ -2417,7 +2487,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
 	else if (keybarrier)
 	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
-	if (mt && !nommstr(J, ix->key)) {
+	if (!nommstr(J, ix->key)) {
 	  TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab, IRFL_TAB_NOMM);
 	  emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
 	}
@@ -4013,6 +4083,13 @@ void lj_record_ins(jit_State *J)
   /* -- Table ops --------------------------------------------------------- */
 
   case BC_GGET: case BC_GSET:
+    /* The function environment edge is mutable shared state. FLOAD cannot
+    ** provide lifetime authority for a target captured before the trace starts;
+    ** keep globals interpreted until their recorder/runtime path starts from a
+    ** rooted function and admits the exact environment incarnation.
+    */
+    if (lj_record_mt_runtime_shared(J2G(J), J->L))
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
     settabV(J->L, &ix.tabv, lj_func_env_acq(J->fn));
     ix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), getcurrf(J), IRFL_FUNC_ENV);
     ix.idxchain = LJ_MAX_IDXCHAIN;
@@ -4402,7 +4479,7 @@ void lj_record_setup(jit_State *J, BCIns root_iterl)
       lj_snap_add(J);
   sidecheck:
     if ((trace_nchild_acq(rec_traceref_live(J, J->cur.root)) >=
-	 jit_param_acq(J, JIT_P_maxside) ||
+	 (MSize)jit_param_acq(J, JIT_P_maxside) ||
 	 snap_count_acq(&snap[J->exitno]) >=
 	 (uint32_t)jit_param_acq(J, JIT_P_hotexit) +
 	 (uint32_t)jit_param_acq(J, JIT_P_tryside))) {

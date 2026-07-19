@@ -759,6 +759,25 @@ typedef struct CTState {
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
+/* One caller-owned, enumerated result root for a ctype metamethod lookup.
+** The lookup implementation never exports a GC-valued C temporary: callers
+** keep this anchor live through their final funcV/tabV/gcV use and release it
+** afterwards. An inactive root is safe to release. */
+typedef struct LJCTypeMetaRoot {
+  TGState *tg;
+  uint32_t idx;
+  uint8_t active;
+} LJCTypeMetaRoot;
+
+#define LJ_CTYPE_META_ROOT_INIT { NULL, 0, 0 }
+
+enum {
+  LJ_CTYPE_METATV_CTBUSY = -2,
+  LJ_CTYPE_METATV_RETRY = -1,
+  LJ_CTYPE_METATV_ABSENT = 0,
+  LJ_CTYPE_METATV_FOUND = 1
+};
+
 static LJ_AINLINE uint32_t ctype_parse_token_acq(const CTState *cts)
 {
   return la_load32_acq(&cts->parse_token);
@@ -1540,14 +1559,16 @@ LJ_FUNC int lj_ctype_getname_wait(lua_State *L, CTState *cts, GCstr *name,
 LJ_FUNC CTSize lj_ctype_vlsize(CTState *cts, CType *ct, CTSize nelem);
 LJ_FUNC CTInfo lj_ctype_info(CTState *cts, CTypeID id, CTSize *szp);
 LJ_FUNC CTInfo lj_ctype_info_raw(CTState *cts, CTypeID id, CTSize *szp);
-LJ_FUNC cTValue *lj_ctype_meta(CTState *cts, CTypeID id, MMS mm);
-LJ_FUNC cTValue *lj_ctype_metatv(CTState *cts, TValue *out,
-				 CTypeID id, MMS mm);
 LJ_FUNC int lj_ctype_predefined_nometa(CTState *cts, CTypeID id);
-LJ_FUNC int lj_ctype_metatv_snapshot(CTState *cts, TValue *out,
-				     CTypeID id, MMS mm);
-LJ_FUNC cTValue *lj_ctype_metatv_wait(lua_State *L, CTState *cts,
-				      TValue *out, CTypeID id, MMS mm);
+LJ_FUNC int lj_ctype_metaroot_init_nothrow(lua_State *L,
+					   LJCTypeMetaRoot *root);
+LJ_FUNC TValue *lj_ctype_metaroot_tv(const LJCTypeMetaRoot *root);
+LJ_FUNC void lj_ctype_metaroot_release(LJCTypeMetaRoot *root);
+/* Nonwaiting lookup. `outroot` must already be an enumerated root. CTBUSY is
+** reserved for the cdef/parser sequence; RETRY covers SMR admission and table
+** structural publication. No retry path parks while SMR or a lease is held. */
+LJ_FUNC int lj_ctype_metatv_rooted_try(lua_State *L, CTState *cts,
+				       TValue *outroot, CTypeID id, MMS mm);
 LJ_FUNC GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_wait(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned);

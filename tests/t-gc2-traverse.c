@@ -1458,6 +1458,8 @@ static void test_jit_table_store_helper_barrier(lua_State *L, global_State *g,
 						TGState *tg)
 {
   GCtab *parent, *child;
+  cTValue *stored;
+  TValue key;
 
   assert(luaL_dostring(L,
     "jit.flush()\n"
@@ -1477,11 +1479,18 @@ static void test_jit_table_store_helper_barrier(lua_State *L, global_State *g,
   /* M6: existing non-weak table stores trace through the helper bridge. */
   assert(find_trace(g) != NULL);
   lua_pop(L, 2);
+  settle_automatic_cycle(g);
 
   lua_createtable(L, 1, 0);
   parent = tabV(L->top - 1);
   lua_newtable(L);
   child = tabV(L->top - 1);
+  /* Give the active-MT existing-store helper the semantic shape recorded by
+  ** the warm trace. The authentic trace above proves the generated lowering;
+  ** call the same helper directly below so an entry checkpoint cannot close
+  ** the deliberately synthetic MARK cycle before the barrier under test. */
+  lua_pushinteger(L, 0);
+  lua_rawseti(L, -3, 1);
 
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
@@ -1489,11 +1498,11 @@ static void test_jit_table_store_helper_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
 
-  lua_pushvalue(L, -3);
-  lua_pushvalue(L, -3);
-  lua_pushvalue(L, -3);
-  lua_pushinteger(L, 20);
-  lua_call(L, 3, 0);
+  setintV(&key, 1);
+  assert(lj_tab_storetv_existing_forjit(L, parent, &key, L->top - 1) == 1);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  stored = lj_tab_getint(parent, 1);
+  assert(tvistab(stored) && tabV(stored) == child);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
@@ -6757,7 +6766,10 @@ static void test_forjit_nil_key(lua_State *L)
     "  return seen\n"
     "end\n"
     "assert(readnil(t, nil, 100) == 100)\n"
-    "assert(util.traceinfo(1), 'nil-key table read did not record')\n"
+    /* The fixture activated MT earlier. A nil result is metamethod-sensitive,
+    ** so the recorder must fail closed until receiver-to-metatable capture is
+    ** represented by a rooted generated helper. */
+    "assert(not util.traceinfo(1), 'nil-key read crossed MT meta fence')\n"
     "jit.flush()\n") == LUA_OK);
   lua_settop(L, base);
 #endif

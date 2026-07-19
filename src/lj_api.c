@@ -41,17 +41,31 @@
 static lua_State *api_errstate(lua_State *L);
 static void api_checkclaim(lua_State *L, LJStateClaim *claim);
 
-/* Materialize a thread/function environment edge in the enumerated TG scratch
-** root. Source SMR begins before the GCRef load and the exact child lease is
-** retained until after release publication, closing replacement-to-reuse ABA
-** in LUA_GLOBALSINDEX/LUA_ENVIRONINDEX lookups. `fn == NULL` selects L->env;
-** an executing C closure is itself retained by L's claimed frame chain. */
-static TValue *index2adr_envroot(lua_State *L, GCfunc *fn)
+static LJ_AINLINE int api_tv_on_stack(lua_State *L, cTValue *tv)
 {
-  TValue *root = &L2TG(L)->tmptv;
+  uintptr_t p, lo, hi;
+  if (!L || !tv)
+    return 0;
+  p = (uintptr_t)(const void *)tv;
+  lo = (uintptr_t)(const void *)tvref(L->stack);
+  hi = (uintptr_t)(const void *)tvref(L->maxstack);
+  return p >= lo && p < hi;
+}
+
+/* Materialize a thread/function environment edge in an enumerated root.
+** Source SMR begins before the GCRef load and the exact child lease is retained
+** until after release publication, closing replacement-to-reuse ABA in
+** LUA_GLOBALSINDEX/LUA_ENVIRONINDEX lookups. `fn == NULL` selects L->env; an
+** executing C closure is itself retained by L's claimed frame chain. A stack
+** destination must already be below L->top before this function is called. */
+static TValue *index2adr_envcapture(lua_State *L, GCfunc *fn, TValue *root,
+				    int stackroot)
+{
+  ptrdiff_t rootofs = stackroot ? savestack(L, root) : 0;
   for (;;) {
     LJGC2Lease lease;
     TValue snap;
+    TValue *curroot = stackroot ? restorestack(L, rootofs) : root;
     GCtab *env;
     int status;
     if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
@@ -61,22 +75,34 @@ static TValue *index2adr_envroot(lua_State *L, GCfunc *fn)
     env = fn ? lj_func_env_acq(fn) : lj_state_env_acq(L);
     if (!env) {
       setnilV(&snap);
-      copyTVrel(L, root, &snap);
+      copyTVrel(L, curroot, &snap);
       lj_gc2_smr_read_leave(G(L));
+      if (stackroot) {
+	lj_state_stack_pubtv(L, L, curroot);
+	return restorestack(L, rootofs);
+      }
       return root;
     }
     setgcVraw(&snap, obj2gco(env), LJ_TTAB);
     status = lj_gc2_tv_lease_acquire(G(L), &snap, &lease);
     if (status == LJ_GC2_TV_EDGE_VALID) {
-      copyTVrel(L, root, &snap);
+      copyTVrel(L, curroot, &snap);
       lj_gc2_smr_read_leave(G(L));
-      lj_gc_pubroot(L, root);
+      if (stackroot)
+	lj_state_stack_pubtv(L, L, curroot);
+      else
+	lj_gc_pubroot(L, curroot);
       lj_gc2_lease_release(&lease);
-      return root;
+      return stackroot ? restorestack(L, rootofs) : root;
     }
     lj_gc2_smr_read_leave(G(L));
     lj_tab_wait_l(L);
   }
+}
+
+static TValue *index2adr_envroot(lua_State *L, GCfunc *fn)
+{
+  return index2adr_envcapture(L, fn, &L2TG(L)->tmptv, 0);
 }
 
 static TValue *index2adr(lua_State *L, int idx)
@@ -205,36 +231,43 @@ static TValue *api_gcroot_push_reserved(lua_State *L, cTValue *tv,
   return slot;
 }
 
-/* Capture an edge whose storage address is stable across retries (currently
-** the global registry root). Source SMR starts before the TValue load and the
-** exact allocation lease is acquired inside that interval. Transfer first to
-** the enumerated owner-private scratch root, then release SMR and the lease
-** before publishing the durable anchor. This closes replacement-to-reuse ABA
-** without holding either reclamation admission across anchor debug hooks,
-** which are allowed to run a complete collection. The caller must reserve the
-** next anchor slot first. */
-static TValue *api_gcroot_capture_stable_reserved(lua_State *L,
-						  cTValue *edge,
-						  ApiGCRoot *root)
+/* Capture an edge whose storage address is stable for this operation (for
+** example a claimed stack/upvalue slot or the global registry root). Push a
+** nil anchor first, so the allocation/debug hook cannot observe an unretained
+** candidate. Source SMR then starts before the TValue load and the exact
+** allocation lease remains live while the already-enumerated fixed anchor
+** slot is release-filled and barrier-published. This closes both
+** replacement-to-reuse ABA and the non-JIT TG.tmptv root gap. The caller must
+** reserve the next anchor slot first. */
+static TValue *api_gcroot_capture_edge_reserved(lua_State *L,
+						cTValue *edge,
+						ApiGCRoot *root)
 {
+  TValue nilv;
+  TValue *slot;
+  int edgestack = api_tv_on_stack(L, edge);
+  ptrdiff_t edgeofs = edgestack ?
+			   savestack(L, (TValue *)(void *)edge) : 0;
+  setnilV(&nilv);
+  slot = api_gcroot_push_reserved(L, &nilv, root);
   for (;;) {
     LJGC2Lease lease;
     TValue snap;
-    TValue *slot;
+    cTValue *curedge = edgestack ? restorestack(L, edgeofs) : edge;
     int status;
     if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
       lj_tab_wait_l(L);
       continue;
     }
-    lj_tv_load_acq(&snap, edge);
+    lj_tv_load_acq(&snap, curedge);
     status = lj_gc2_tv_lease_acquire(G(L), &snap, &lease);
     if (status == LJ_GC2_TV_EDGE_VALID) {
-      TValue *scratch = &L2TG(L)->tmptv;
-      copyTVrel(L, scratch, &snap);
+      slot = lj_tg_root_anchor_slot_acq(root->tg, root->idx);
+      lj_assertL(slot != NULL, "lost reserved API capture root");
+      copyTVrel(L, slot, &snap);
       lj_gc2_smr_read_leave(G(L));
-      lj_gc_pubroot(L, scratch);
+      lj_gc_pubroot(L, slot);
       lj_gc2_lease_release(&lease);
-      slot = api_gcroot_push_reserved(L, scratch, root);
       return slot;
     }
     lj_gc2_smr_read_leave(G(L));
@@ -244,15 +277,94 @@ static TValue *api_gcroot_capture_stable_reserved(lua_State *L,
   }
 }
 
-/* Clone an owner-private enumerated root into a durable anchor. This is used
-** immediately after index2adr_envroot() publishes TG tmptv. No peer can mutate
-** that scratch slot, and it remains an enumerated source throughout the
-** reserved non-allocating anchor publication. */
-static TValue *api_gcroot_capture_env_reserved(lua_State *L, int idx,
-					       ApiGCRoot *root)
+/* Transfer a stable authoritative edge into an already-enumerated stack slot.
+** Source SMR precedes the edge load and the exact child lease remains live
+** until release-publication, so mutable registry/upvalue roots
+** cannot cross replacement-to-reuse ABA. No durable anchor or cleanup action
+** survives a catchable error. */
+static TValue *api_stackroot_capture_edge(lua_State *L, cTValue *edge,
+					   TValue *out)
 {
-  TValue *edge = index2adr(L, idx);
-  return api_gcroot_push_reserved(L, edge, root);
+  int edgestack = api_tv_on_stack(L, edge);
+  ptrdiff_t edgeofs = edgestack ?
+			   savestack(L, (TValue *)(void *)edge) : 0;
+  ptrdiff_t outofs;
+  lj_assertL(api_tv_on_stack(L, out),
+	     "API stack-root destination is not on the stack");
+  outofs = savestack(L, out);
+  for (;;) {
+    LJGC2Lease lease;
+    TValue snap;
+    cTValue *curedge = edgestack ? restorestack(L, edgeofs) : edge;
+    TValue *curout = restorestack(L, outofs);
+    int status;
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    lj_tv_load_acq(&snap, curedge);
+    status = lj_gc2_tv_lease_acquire(G(L), &snap, &lease);
+    if (status == LJ_GC2_TV_EDGE_VALID) {
+      copyTVrel(L, curout, &snap);
+      lj_gc2_smr_read_leave(G(L));
+      lj_state_stack_pubtv(L, L, curout);
+      lj_gc2_lease_release(&lease);
+      return restorestack(L, outofs);
+    }
+    lj_gc2_smr_read_leave(G(L));
+    lj_tab_wait_l(L);
+  }
+}
+
+static LJ_AINLINE int api_index_is_envroot(int idx)
+{
+  return idx == LUA_GLOBALSINDEX || idx == LUA_ENVIRONINDEX;
+}
+
+/* Capture a pseudo-index from its authoritative mutable GCRef, never from the
+** shared TG scratch returned by index2adr(). The current C closure is retained
+** by the claimed frame while its environment edge is admitted. */
+static TValue *api_stackroot_capture_envindex(lua_State *L, int idx,
+					       TValue *out)
+{
+  GCfunc *fn = NULL;
+  lj_assertL(api_index_is_envroot(idx), "bad API environment pseudo-index");
+  if (idx == LUA_ENVIRONINDEX) {
+    fn = curr_func(L);
+    lj_checkapi(fn->c.gct == ~LJ_TFUNC && !isluafunc(fn),
+		"calling frame is not a C function");
+  }
+  return index2adr_envcapture(L, fn, out, 1);
+}
+
+/* Push an exact indexed value as a natural stack root. Ordinary negative
+** indices are resolved before top moves, preserving receiver/key/value
+** self-aliasing. Environment pseudo-indices bypass TG scratch and transfer
+** directly from their authoritative mutable source. The caller has already
+** reserved one stack slot. */
+static TValue *api_stackroot_push_index(lua_State *L, int idx)
+{
+  TValue *edge = NULL;
+  TValue *out;
+  ptrdiff_t edgeofs = 0, outofs;
+  int edgestack = 0;
+  if (!api_index_is_envroot(idx)) {
+    edge = index2adr(L, idx);
+    edgestack = api_tv_on_stack(L, edge);
+    if (edgestack)
+      edgeofs = savestack(L, edge);
+  }
+  out = L->top;
+  outofs = savestack(L, out);
+  setnilV(out);
+  lj_state_stack_pubtv(L, L, out);
+  L->top++;
+  out = restorestack(L, outofs);
+  if (api_index_is_envroot(idx))
+    return api_stackroot_capture_envindex(L, idx, out);
+  if (edgestack)
+    edge = restorestack(L, edgeofs);
+  return api_stackroot_capture_edge(L, edge, out);
 }
 
 static uint32_t api_envroot_claimed(lua_State *errL, GCtab *env,
@@ -1616,7 +1728,7 @@ static TValue *api_newmetatable_cp(lua_State *errL, lua_CFunction dummy,
   cframe_errfunc(errL->cframe) = -1;
   if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL))))
     lj_err_mem(errL);
-  regslot = api_gcroot_capture_stable_reserved(
+  regslot = api_gcroot_capture_edge_reserved(
     errL, registry(errL), &regroot);
   lj_assertX(tvistab(regslot), "registry root is not a table");
   regt = tabV(regslot);
@@ -1840,20 +1952,31 @@ LUA_API void lua_concat(lua_State *L, int n)
 LUA_API void lua_gettable(lua_State *L, int idx)
 {
   LJStateClaim claim;
-  TValue snap;
+  lua_State *errL = api_errstate(L);
+  TValue *out;
   cTValue *t, *v;
+  int receiver_root = api_index_is_envroot(idx);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(api_errstate(L), "thread busy");
-  t = index2adr_check_read(L, idx, &snap);
-  v = lj_meta_tget(L, t, L->top-1);
+    lj_err_callermsg(errL, "thread busy");
+  if (receiver_root) {
+    api_checkstack1_claimed(L, errL, &claim);
+    t = api_stackroot_push_index(L, idx);
+  } else {
+    t = index2adr_check(L, idx);
+  }
+  out = L->top - (receiver_root ? 2 : 1);
+  v = lj_meta_tgettv_rooted(L, t, out, out);
   if (v == NULL) {
     L->top += 2;
     api_vm_call_claimed(L, L->top-2, 1+1, &claim);
     L->top -= 2+LJ_FR2;
     v = L->top+1+LJ_FR2;
   }
-  copyTV(L, L->top-1, v);
-  lj_state_stack_pubtv(L, L, L->top-1);
+  out = L->top - (receiver_root ? 2 : 1);
+  copyTV(L, out, v);
+  lj_state_stack_pubtv(L, L, out);
+  if (receiver_root)
+    L->top--;  /* Pop the temporary receiver; the result replaced the key. */
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -1861,86 +1984,73 @@ LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 {
   LJStateClaim claim;
   lua_State *errL = api_errstate(L);
-  TValue snap;
+  TValue *out;
   cTValue *v, *t;
+  int receiver_root = api_index_is_envroot(idx);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
   api_checkstack1_claimed(L, errL, &claim);
-  t = index2adr_check_read(L, idx, &snap);
-  /* Use the eventual result slot as the key root. The __index retry/call path
-  ** can safepoint, but it now has exactly the same natural stack shape as
-  ** lua_gettable() instead of retaining a generated GCstr only in C. */
+  /* Materialize the key first, then resolve the authoritative table edge
+  ** immediately before rooted meta capture. This avoids a durable API anchor
+  ** across a throwing allocation. Ordinary negative indices move down by one
+  ** when the key is pushed; pseudo and positive indices do not. */
   setstrV(L, L->top, lj_str_newz(L, k));
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
-  v = lj_meta_tget(L, t, L->top-1);
+  if (receiver_root) {
+    api_checkstack1_claimed(L, errL, &claim);
+    t = api_stackroot_push_index(L, idx);
+  } else {
+    if (idx < 0 && idx > LUA_REGISTRYINDEX)
+      idx--;
+    t = index2adr_check(L, idx);
+  }
+  out = L->top - (receiver_root ? 2 : 1);
+  v = lj_meta_tgettv_rooted(L, t, out, out);
   if (v == NULL) {
     L->top += 2;
     api_vm_call_claimed(L, L->top-2, 1+1, &claim);
     L->top -= 2+LJ_FR2;
     v = L->top+1+LJ_FR2;
   }
-  copyTV(L, L->top-1, v);
-  lj_state_stack_pubtv(L, L, L->top-1);
+  out = L->top - (receiver_root ? 2 : 1);
+  copyTV(L, out, v);
+  lj_state_stack_pubtv(L, L, out);
+  if (receiver_root)
+    L->top--;
   lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_rawget(lua_State *L, int idx)
 {
   LJStateClaim claim;
-  ApiGCRoot tabhold = { NULL, 0 };
   lua_State *errL = api_errstate(L);
-  TValue snap;
   TValue *troot;
   api_checkclaim(L, &claim);
-  /* Resolve the real enumerated root, not index2adr_read()'s by-value snapshot.
-  ** The rooted helper snapshots the key before publishing over the same stack
-  ** slot, preserving stock lua_rawget()'s consume-key/result shape. */
-  if (idx == LUA_GLOBALSINDEX || idx == LUA_ENVIRONINDEX) {
-    if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(L, L2TG(L)))) {
-      lj_state_dropclaim(&claim);
-      lj_err_mem(errL);
-    }
-    troot = api_gcroot_capture_env_reserved(L, idx, &tabhold);
-  } else {
-    troot = index2adr(L, idx);
-  }
-  lj_tv_load_acq(&snap, troot);
-  lj_checkapi(tvistab(&snap), "stack slot %d is not a table", idx);
-  (void)lj_tab_gettv_rooted(L, troot, L->top-1, L->top-1);
-  api_gcroot_release(&tabhold);
+  /* Resolve idx before extending top, then capture its exact incarnation into
+  ** a temporary stack parent. This covers mutable pseudo/upvalue roots and the
+  ** valid table/key self-alias without a durable anchor. */
+  api_checkstack1_preclaimed(L, errL, &claim);
+  troot = api_stackroot_push_index(L, idx);
+  lj_checkapi(tvistab(troot), "stack slot %d is not a table", idx);
+  (void)lj_tab_gettv_rooted(L, troot, L->top-2, L->top-2);
+  L->top--;  /* Pop the temporary parent; result replaced the key. */
   lj_state_dropclaim(&claim);
 }
 
 LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
 {
   LJStateClaim claim;
-  ApiGCRoot tabhold = { NULL, 0 };
   lua_State *errL = api_errstate(L);
-  TValue snap;
   TValue *troot;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
   api_checkstack1_claimed(L, errL, &claim);
-  /* Resolve idx before extending top: negative API indices are relative to the
-  ** pre-result stack. The nil publication makes the destination an enumerated
-  ** root for the helper's leased result. */
-  if (idx == LUA_GLOBALSINDEX || idx == LUA_ENVIRONINDEX) {
-    if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(L, L2TG(L)))) {
-      lj_state_dropresumeclaim(&claim);
-      lj_err_mem(errL);
-    }
-    troot = api_gcroot_capture_env_reserved(L, idx, &tabhold);
-  } else {
-    troot = index2adr(L, idx);
-  }
-  lj_tv_load_acq(&snap, troot);
-  lj_checkapi(tvistab(&snap), "stack slot %d is not a table", idx);
-  setnilV(L->top);
-  lj_state_stack_pubtv(L, L, L->top);
-  incr_top(L);
-  (void)lj_tab_getinttv_rooted(L, troot, n, L->top-1);
-  api_gcroot_release(&tabhold);
+  /* Resolve idx before extending top. Parent/output aliasing is supported, so
+  ** the exact captured table can become the eventual result in place. */
+  troot = api_stackroot_push_index(L, idx);
+  lj_checkapi(tvistab(troot), "stack slot %d is not a table", idx);
+  (void)lj_tab_getinttv_rooted(L, troot, n, troot);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -2197,7 +2307,7 @@ LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
     api_gcroot_release(&root);
     lj_err_mem(errL);
   }
-  regslot = api_gcroot_capture_stable_reserved(
+  regslot = api_gcroot_capture_edge_reserved(
     errL, registry(errL), &regroot);
   lj_assertX(tvistab(regslot), "registry root is not a table");
   if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL)))) {
@@ -2277,61 +2387,56 @@ LUALIB_API void *luaL_checkudata(lua_State *L, int idx, const char *tname)
 LUA_API void lua_settable(lua_State *L, int idx)
 {
   LJStateClaim claim;
-  TValue *o;
-  TValue snap;
+  lua_State *errL = api_errstate(L);
+  TValue *key, *val;
   cTValue *t;
-  GCtab *owner;
+  ptrdiff_t keyofs, valofs;
+  int receiver_root = api_index_is_envroot(idx);
   lj_checkapi_slot(2);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(api_errstate(L), "thread busy");
-  t = index2adr_check_read(L, idx, &snap);
-  for (;;) {
-    o = lj_meta_tset_owner(L, t, L->top-2, &owner);
-    if (o) {
-      TValue *key = L->top-2, *val = L->top-1;
-      int rc;
-      rc = lj_tab_trystoretv_cas_keyed(L, owner, o, key, val);
-      if (rc == LJ_TAB_STORE_CAS_OK) {
-	/* The guarded keyed transaction owns the exact weak-write window. Keep
-	** only the success-side publication here: the public helper may perform an
-	** L-aware CAS_CHANGED retry, which must never retain an outer weak token. */
-	lj_gc2_barrier_weak_write(L, owner, key, val);
-	lj_gc_pubtabkey(L, owner, key);
-	lj_gc_pubtabtv(L, owner, val);
-	L->top = key;
-	lj_state_dropresumeclaim(&claim);
-	return;
-      }
-      lj_tab_store_wait_l(L);  /* C API settable saw stale/FORWARD slot. */
-    } else {
-      TValue *base = L->top;
-      copyTV(L, base+2, base-3-2*LJ_FR2);
-      L->top = base+3;
-      api_vm_call_claimed(L, base, 0+1, &claim);
-      L->top -= 3+LJ_FR2;
-      lj_state_dropresumeclaim(&claim);
-      return;
-    }
+    lj_err_callermsg(errL, "thread busy");
+  if (receiver_root) {
+    api_checkstack1_claimed(L, errL, &claim);
+    t = api_stackroot_push_index(L, idx);
+  } else {
+    t = index2adr_check(L, idx);
   }
+  key = L->top - (receiver_root ? 3 : 2);
+  val = key + 1;
+  keyofs = savestack(L, key);
+  valofs = savestack(L, val);
+  if (lj_meta_tsettv_pair(L, t, key, val)) {
+    L->top = restorestack(L, keyofs);
+    lj_state_dropresumeclaim(&claim);
+    return;
+  }
+  {
+    TValue *base = L->top;
+    copyTV(L, base+2, restorestack(L, valofs));
+    L->top = base+3;
+    api_vm_call_claimed(L, base, 0+1, &claim);
+    L->top = restorestack(L, keyofs);
+  }
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 {
   LJStateClaim claim;
   lua_State *errL = api_errstate(L);
-  TValue *o;
   TValue valtmp;
-  TValue snap;
+  TValue *key, *val;
   cTValue *t;
-  GCtab *owner;
+  ptrdiff_t keyofs, valofs;
+  int receiver_root = api_index_is_envroot(idx);
   lj_checkapi_slot(1);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
   api_checkstack1_claimed(L, errL, &claim);
-  t = index2adr_check_read(L, idx, &snap);
   /* Materialize |key|value| on the real stack. This roots both operands across
   ** stale-generation waits and gives __newindex the same frame contract as
-  ** lua_settable(). */
+  ** lua_settable(). Resolve the table only after this shuffle, so no durable
+  ** API anchor spans string allocation or a catchable metamethod error. */
   setstrV(L, L->top, lj_str_newz(L, k));
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
@@ -2340,60 +2445,89 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
   copyTVrel(L, L->top-1, &valtmp);
   lj_state_stack_pubtv(L, L, L->top-2);
   lj_state_stack_pubtv(L, L, L->top-1);
-  for (;;) {
-    o = lj_meta_tset_owner(L, t, L->top-2, &owner);
-    if (o) {
-      TValue *val = L->top-1;
-      TValue *key = L->top-2;
-      int rc;
-      rc = lj_tab_trystoretv_cas_keyed(L, owner, o, key, val);
-      if (rc == LJ_TAB_STORE_CAS_OK) {
-	/* See lua_settable(): public keyed retries cannot span an outer weak
-	** window. The central transaction already protected the semantic store. */
-	lj_gc2_barrier_weak_write(L, owner, key, val);
-	lj_gc_pubtabkey(L, owner, key);
-	lj_gc_pubtabtv(L, owner, val);
-	L->top = key;
-	lj_state_dropresumeclaim(&claim);
-	return;
-      }
-      lj_tab_store_wait_l(L);  /* C API setfield saw stale/FORWARD slot. */
-    } else {
-      TValue *base = L->top;
-      copyTV(L, base+2, base-3-2*LJ_FR2);
-      L->top = base+3;
-      api_vm_call_claimed(L, base, 0+1, &claim);
-      L->top -= 3+LJ_FR2;
-      lj_state_dropresumeclaim(&claim);
-      return;
-    }
+  /* Pushing the key moves an older ordinary negative index down one slot. The
+  ** valid -1 extreme is special: its selected table/value moved with the
+  ** shuffle and is still the new top-1 value slot. */
+  if (receiver_root) {
+    api_checkstack1_claimed(L, errL, &claim);
+    t = api_stackroot_push_index(L, idx);
+  } else {
+    if (idx < 0 && idx > LUA_REGISTRYINDEX && idx != -1)
+      idx--;
+    else if (idx > 0 && idx == (int)(L->top - L->base) - 1)
+      idx++;  /* Positive index named the old top value, now at new top-1. */
+    t = index2adr_check(L, idx);
   }
+  key = L->top - (receiver_root ? 3 : 2);
+  val = key + 1;
+  keyofs = savestack(L, key);
+  valofs = savestack(L, val);
+  if (lj_meta_tsettv_pair(L, t, key, val)) {
+    L->top = restorestack(L, keyofs);
+    lj_state_dropresumeclaim(&claim);
+    return;
+  }
+  {
+    TValue *base = L->top;
+    copyTV(L, base+2, restorestack(L, valofs));
+    L->top = base+3;
+    api_vm_call_claimed(L, base, 0+1, &claim);
+    L->top = restorestack(L, keyofs);
+  }
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_rawset(lua_State *L, int idx)
 {
   LJStateClaim claim;
   lua_State *errL = api_errstate(L);
-  TValue snap;
+  TValue *troot;
   GCtab *t;
-  TValue *dst, *key;
+  TValue *dst, *key, *val;
+  ptrdiff_t trootofs, keyofs, valofs;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
   lj_checkapi_slot(2);
-  t = tabV(index2adr_read(L, idx, &snap));
-  key = L->top-2;
+  api_checkstack1_claimed(L, errL, &claim);
+  troot = api_stackroot_push_index(L, idx);
+  lj_checkapi(tvistab(troot), "stack slot %d is not a table", idx);
+  key = L->top-3;
+  val = key+1;
+  trootofs = savestack(L, troot);
+  keyofs = savestack(L, key);
+  valofs = savestack(L, val);
   for (;;) {
     int rc;
+    troot = restorestack(L, trootofs);
+    key = restorestack(L, keyofs);
+    val = restorestack(L, valofs);
+    t = tabV(troot);
     dst = lj_tab_set(L, t, key);
-    rc = lj_tab_trystoretv_cas_keyed(L, t, dst, key, key+1);
+    /* lj_tab_set() may resize, wait or relocate L's stack. Rebind every
+    ** stack-backed operand before the keyed CAS. */
+    troot = restorestack(L, trootofs);
+    key = restorestack(L, keyofs);
+    val = restorestack(L, valofs);
+    t = tabV(troot);
+    rc = lj_tab_trystoretv_cas_keyed(L, t, dst, key, val);
     if (rc == LJ_TAB_STORE_CAS_OK)
       break;
     lj_tab_store_wait_l(L);  /* C API rawset saw stale/FORWARD slot. */
   }
-  lj_gc2_barrier_weak_write(L, t, key, key+1);
+  troot = restorestack(L, trootofs);
+  key = restorestack(L, keyofs);
+  val = restorestack(L, valofs);
+  t = tabV(troot);
+  lj_gc2_barrier_weak_write(L, t, key, val);
+  troot = restorestack(L, trootofs);
+  key = restorestack(L, keyofs);
+  t = tabV(troot);
   lj_gc_pubtabkey(L, t, key);
-  lj_gc_pubtabtv(L, t, key+1);
-  L->top = key;
+  troot = restorestack(L, trootofs);
+  val = restorestack(L, valofs);
+  t = tabV(troot);
+  lj_gc_pubtabtv(L, t, val);
+  L->top = restorestack(L, keyofs);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -2401,27 +2535,45 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
 {
   LJStateClaim claim;
   lua_State *errL = api_errstate(L);
-  TValue snap;
+  TValue *troot;
   GCtab *t;
   TValue *dst, *src;
   TValue key;
+  ptrdiff_t trootofs, srcofs;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
   lj_checkapi_slot(1);
-  t = tabV(index2adr_read(L, idx, &snap));
-  src = L->top-1;
+  api_checkstack1_claimed(L, errL, &claim);
+  troot = api_stackroot_push_index(L, idx);
+  lj_checkapi(tvistab(troot), "stack slot %d is not a table", idx);
+  src = L->top-2;
+  trootofs = savestack(L, troot);
+  srcofs = savestack(L, src);
   setintV(&key, n);
   for (;;) {
     int rc;
+    troot = restorestack(L, trootofs);
+    src = restorestack(L, srcofs);
+    t = tabV(troot);
     dst = lj_tab_setint(L, t, n);
+    /* Rebind the receiver and source after a resize/wait-capable lookup. */
+    troot = restorestack(L, trootofs);
+    src = restorestack(L, srcofs);
+    t = tabV(troot);
     rc = lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src);
     if (rc == LJ_TAB_STORE_CAS_OK)
       break;
     lj_tab_store_wait_l(L);  /* C API rawseti saw stale/FORWARD slot. */
   }
+  troot = restorestack(L, trootofs);
+  src = restorestack(L, srcofs);
+  t = tabV(troot);
   lj_gc2_barrier_weak_write(L, t, &key, src);
+  troot = restorestack(L, trootofs);
+  src = restorestack(L, srcofs);
+  t = tabV(troot);
   lj_gc_pubtabtv(L, t, src);
-  L->top = src;
+  L->top = restorestack(L, srcofs);
   lj_state_dropresumeclaim(&claim);
 }
 

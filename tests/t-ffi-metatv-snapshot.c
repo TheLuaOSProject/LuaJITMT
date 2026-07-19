@@ -46,6 +46,20 @@ static void assert_predefined_metatv_avoids_wait(lua_State *L, CTState *cts)
   ljt_ctype_release_parse_token(cts, release_seq);
 }
 
+static void assert_caught_metatv_errors_balance_roots(lua_State *L,
+					       TGState *tg)
+{
+  uint32_t roots0 = lj_tg_root_anchor_top_acq(tg);
+  uint32_t i;
+
+  for (i = 0; i < 64u; i++) {
+    ljt_lua_dostring(L, "lj_m7_metatv_error_round()\n");
+    /* Each error is caught by an inner Lua pcall. The anchor top must already
+    ** be repaired there, not by this fixture's outer protected boundary. */
+    assert(lj_tg_root_anchor_top_acq(tg) == roots0);
+  }
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -76,6 +90,47 @@ int main(void)
     "lj_m7_metatv_obj = ct(40)\n"
     "lj_m7_metatv_rhs = ct(2)\n");
 
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef[[\n"
+    "typedef struct { int x; } lj_m7_metatv_index_loop_t;\n"
+    "typedef struct { int x; } lj_m7_metatv_newindex_loop_t;\n"
+    "typedef struct { int x; } lj_m7_metatv_index_call_t;\n"
+    "typedef struct { int x; } lj_m7_metatv_newindex_call_t;\n"
+    "]]\n"
+    "local ri, rj = {}, {}\n"
+    "setmetatable(ri, { __index = rj })\n"
+    "setmetatable(rj, { __index = ri })\n"
+    "local wi, wj = {}, {}\n"
+    "setmetatable(wi, { __newindex = wj })\n"
+    "setmetatable(wj, { __newindex = wi })\n"
+    "local rcall = setmetatable({}, { __index = function()\n"
+    "  collectgarbage('collect'); error('rooted ffi index call')\n"
+    "end })\n"
+    "local wcall = setmetatable({}, { __newindex = function()\n"
+    "  collectgarbage('collect'); error('rooted ffi newindex call')\n"
+    "end })\n"
+    "local rloopct = ffi.metatype('lj_m7_metatv_index_loop_t',\n"
+    "  { __index = ri })\n"
+    "local wloopct = ffi.metatype('lj_m7_metatv_newindex_loop_t',\n"
+    "  { __newindex = wi })\n"
+    "local rcallct = ffi.metatype('lj_m7_metatv_index_call_t',\n"
+    "  { __index = rcall })\n"
+    "local wcallct = ffi.metatype('lj_m7_metatv_newindex_call_t',\n"
+    "  { __newindex = wcall })\n"
+    "local rloop, wloop = rloopct(), wloopct()\n"
+    "local rcallobj, wcallobj = rcallct(), wcallct()\n"
+    "lj_m7_metatv_error_round = function()\n"
+    "  local ok, err = pcall(function() return rloop.absent end)\n"
+    "  assert(not ok and tostring(err):find('loop in gettable', 1, true))\n"
+    "  ok, err = pcall(function() wloop.absent = true end)\n"
+    "  assert(not ok and tostring(err):find('loop in settable', 1, true))\n"
+    "  ok, err = pcall(function() return rcallobj.absent end)\n"
+    "  assert(not ok and tostring(err):find('rooted ffi index call', 1, true))\n"
+    "  ok, err = pcall(function() wcallobj.absent = true end)\n"
+    "  assert(not ok and tostring(err):find('rooted ffi newindex call', 1, true))\n"
+    "end\n");
+
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
   tg = L2TG(L);
@@ -95,6 +150,10 @@ int main(void)
     "assert(tmp.x == 77)\n"
     "tmp = nil\n"
     "collectgarbage('collect')\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0);
+
+  assert_caught_metatv_errors_balance_roots(L, tg);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 

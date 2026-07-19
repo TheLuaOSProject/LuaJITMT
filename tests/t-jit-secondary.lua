@@ -86,12 +86,10 @@ local worker = th.spawn(function()
     assert(table_alloc(80) == 6560)
   end
   local table_traces = trace_count(trace_limit)
-  if table_traces <= 0 then
-    local st = th.gcstats()
-    error(("table allocation did not trace (phase=%s cycles=%s workers=%s)")
-      :format(tostring(st.phase), tostring(st.cycle_starts),
-              tostring(st.worker_runs)))
-  end
+  -- TNEW/TDUP has no active-MT locality exemption until the recorder tracks
+  -- escapes. This loop inserts a previous-nil key and must fail closed at the
+  -- metatable-sensitive store boundary.
+  assert(table_traces == 0)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -133,7 +131,30 @@ local worker = th.spawn(function()
     assert(table_index_read(80) == 1040)
   end
   local index_traces = trace_count(trace_limit)
-  assert(index_traces > 0)
+  -- Runtime __index chains stay interpreted until their receiver-to-metatable
+  -- capture is represented by a rooted trace helper.
+  assert(index_traces == 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local debug_getmetatable = debug.getmetatable
+  local debug_mt = {}
+  local debug_obj = setmetatable({}, debug_mt)
+
+  local function debug_getmetatable_loop(obj, want, n)
+    local seen = 0
+    for _ = 1, n do
+      if debug_getmetatable(obj) == want then seen = seen + 1 end
+    end
+    return seen
+  end
+
+  for _ = 1, 20 do
+    assert(debug_getmetatable_loop(debug_obj, debug_mt, 80) == 80)
+  end
+  assert(trace_count(trace_limit) == 0,
+	 "active-MT debug.getmetatable crossed raw metatable fence")
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -326,7 +347,7 @@ local worker = th.spawn(function()
     assert(table_next(80) == 3240)
   end
   local next_traces = trace_count(trace_limit)
-  assert(next_traces > 0)
+  assert(next_traces == 0)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -484,20 +505,20 @@ assert(type(local_cell_root_traces) == "number" and
        local_cell_root_traces > 0)
 assert(type(local_cell_side_traces) == "number" and
        local_cell_side_traces > local_cell_root_traces)
-assert(type(table_traces) == "number" and table_traces > 0)
+assert(type(table_traces) == "number" and table_traces == 0)
 assert(type(read_traces) == "number" and read_traces > 0)
-assert(type(index_traces) == "number" and index_traces > 0)
+assert(type(index_traces) == "number" and index_traces == 0)
 assert(type(write_traces) == "number" and write_traces > 0)
 assert(type(meta_write_traces) == "number" and meta_write_traces > 0)
 assert(type(meta_nil_hash_traces) == "number" and meta_nil_hash_traces == 0)
 assert(type(meta_nil_array_traces) == "number" and meta_nil_array_traces == 0)
 assert(type(table_clear_traces) == "number" and table_clear_traces == 0)
 assert(type(ipairs_traces) == "number" and ipairs_traces == 0)
-assert(type(next_traces) == "number" and next_traces > 0)
+assert(type(next_traces) == "number" and next_traces == 0)
 assert(type(shared_next_start_traces) == "number" and
        shared_next_start_traces == 0)
 assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
 assert(type(shared_pairs_traces) == "number" and shared_pairs_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, traces local-cell FORL roots/sides, allocates tables, reads/writes shared tables, traces existing metatable stores, keeps previous-nil metatable stores and active-MT shared table.clear/next()/ipairs()/pairs() interpreted, traces trace-local next(), keeps resize-churn safe, and preserves __index/__newindex semantics in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, traces local-cell FORL roots/sides, uses rooted shared table reads/writes, keeps unproven trace-local allocation reads, metamethod chains, previous-nil metatable stores, and active-MT table.clear/next()/ipairs()/pairs() interpreted, keeps resize-churn safe, and preserves __index/__newindex semantics")

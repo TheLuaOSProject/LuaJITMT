@@ -1505,6 +1505,14 @@ static void LJ_FASTCALL recff_debug_getmetatable(jit_State *J, RecordFFData *rd)
   GCtab *mt;
   TRef mtref;
   TRef tr = J->base[0];
+  /*
+  ** The fast recorder samples the mutable receiver->metatable edge before its
+  ** FLOAD guard. In active MT, acquire ordering does not retain that target
+  ** against replacement and GC2 reclamation. Abort without stitching until a
+  ** rooted receiver-to-metatable trace helper owns the capture.
+  */
+  if (lj_record_mt_runtime_shared(J2G(J), J->L))
+    lj_trace_err_info(J, LJ_TRERR_NYIFFU);
   if (tref_istab(tr)) {
     mt = lj_tab_metatable_acq(tabV(&rd->argv[0]));
     mtref = emitir(IRT(IR_FLOAD, IRT_TAB), tr, IRFL_TAB_META);

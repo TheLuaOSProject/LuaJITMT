@@ -265,6 +265,18 @@ local function producer(n)
   return out
 end
 
+local function read_markers(items, nitems, npasses)
+  local bytes = 0
+  for _ = 1, npasses do
+    for i = 1, nitems do
+      local marker = items[i]
+      if marker.kind ~= "readpub" then return -1 end
+      bytes = bytes + #marker.token
+    end
+  end
+  return bytes
+end
+
 for _ = 1, rounds do
   local ok, result = th.spawn(producer, nmarkers):join(30)
   assert(ok == true)
@@ -272,9 +284,15 @@ for _ = 1, rounds do
   local weak = setmetatable({}, { __mode = "v" })
   collectgarbage("collect")
   jit.flush()
+  jit.on()
   jit.opt.start("hotloop=1", "hotexit=1")
+  assert(read_markers(result, nmarkers, passes) > 0)
+  assert(trace_count(200) > 0, "helper-backed marker-token read loop did not trace")
+  -- Weak previous-nil stores deliberately remain outside the trace while the
+  -- active-MT recorder has no rooted receiver-to-metatable guard helper.
+  jit.off()
   for pass = 1, passes do
-    for i = 1, #result do
+    for i = 1, nmarkers do
       local marker = result[i]
       assert(marker.kind == "readpub")
       local token = marker.token
@@ -285,12 +303,12 @@ for _ = 1, rounds do
     end
     if pass % 4 == 0 then collectgarbage("step") end
   end
-  assert(trace_count(200) > 0, "helper-backed marker-token read loop did not trace")
   collectgarbage("collect")
-  for i = 1, #result do
+  for i = 1, nmarkers do
     assert(type(result[i].token) == "string")
     assert(weak[result[i].token] == result[i])
   end
+  jit.on()
 end
 ]=]
 end
@@ -1317,7 +1335,8 @@ local function hash(n)
 end
 local h = hash(80)
 assert(h.stable == 80.5)
-assert(trace_count(200) > 0, "trace-local hash store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT trace-local hash store crossed escape-safety fence")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1332,7 +1351,8 @@ local function array(n)
 end
 local a = array(80)
 assert(a[1] == 80.5)
-assert(trace_count(200) > 0, "trace-local array store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT trace-local array store crossed escape-safety fence")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1356,7 +1376,8 @@ local function hash(n)
 end
 local h = hash(80)
 assert(h.stable[1] == 80)
-assert(trace_count(200) > 0, "trace-local GC hash store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT trace-local GC hash store crossed escape-safety fence")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -1371,7 +1392,8 @@ local function array(n)
 end
 local a = array(80)
 assert(a[1][1] == 80)
-assert(trace_count(200) > 0, "trace-local GC array store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT trace-local GC array store crossed escape-safety fence")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1441,7 +1463,8 @@ local function make_escaped_store()
 end
 local escaped_store = make_escaped_store()
 assert(escaped_store(80) == 80.5)
-assert(trace_count(200) > 0, "escaped trace-local store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT escaped trace-local store crossed escape-safety fence")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1503,7 +1526,8 @@ for i = 1, 80 do
   h.stable = nil
 end
 assert(h.stable == nil)
-assert(trace_count(200) > 0, "active-MT previous-nil hash store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT previous-nil hash store crossed metatable safety fence")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1513,7 +1537,8 @@ for i = 1, 80 do
   a[2] = nil
 end
 assert(a[2] == nil)
-assert(trace_count(200) > 0, "active-MT previous-nil array store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT previous-nil array store crossed metatable safety fence")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[
@@ -1531,7 +1556,8 @@ for i = 1, 80 do
   h[keys[(i % 128) + 1]] = i
 end
 assert(h.k80 == 79)
-assert(trace_count(200) > 0, "active-MT new hash store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT new hash store crossed metatable safety fence")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1540,7 +1566,8 @@ for i = 1, 80 do
   a[i] = i
 end
 assert(a[80] == 80)
-assert(trace_count(200) > 0, "active-MT new numeric array store did not trace")
+assert(trace_count(200) == 0,
+       "active-MT new numeric array store crossed metatable safety fence")
 ]=], { timeout = "20s" })
       print("M6 JIT table-store helper behavior passed")
     end
@@ -1634,6 +1661,39 @@ assert(util.traceinfo(1), "out-of-array miss loop did not trace")
       luajit_code(t, [=[
 local threading = require("threading")
 local trace_count = require("jit_harness").trace_count
+local bit = require("bit")
+local util = require("jit.util")
+local vmdef = require("jit.vmdef")
+
+local function rooted_read_ir(limit)
+  local rooted, parentout, keyin, vload, rawload = 0, 0, 0, 0, 0
+  for tr = 1, limit do
+    local info = util.traceinfo(tr)
+    if info then
+      for ref = 1, info.nins do
+        local _, ot, _, op2 = util.traceir(tr, ref)
+        if ot then
+          local op = bit.rshift(ot, 8)
+          local name = vmdef.irnames:sub(op * 6 + 1, op * 6 + 6)
+          if name == "CALLS " and
+             vmdef.ircall[op2] == "lj_tab_gettv_rooted" then
+            rooted = rooted + 1
+          elseif name == "TMPREF" then
+            if op2 == 3 then parentout = parentout + 1 end
+            if op2 == 8 then keyin = keyin + 1 end
+          elseif name == "VLOAD " then
+            vload = vload + 1
+          elseif name == "ALOAD " or name == "HLOAD " then
+            rawload = rawload + 1
+          end
+        end
+      end
+    end
+  end
+  return rooted, parentout, keyin, vload, rawload
+end
+jit.off(rooted_read_ir, true)
+
 assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1648,6 +1708,10 @@ for i = 1, 80 do
 end
 assert(s > 0)
 assert(trace_count(200) > 0, "active-MT shared array read did not trace")
+local rooted, parentout, keyin, vload, rawload = rooted_read_ir(200)
+assert(rooted > 0 and parentout >= rooted and keyin >= rooted and
+       vload >= rooted and rawload == 0,
+       "active-MT read IR omitted rooted parent/key/result ABI")
 ]=], { timeout = "20s" })
 
       luajit_code(t, [=[

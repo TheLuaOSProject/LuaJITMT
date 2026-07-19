@@ -322,6 +322,8 @@ LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
 LJ_FUNC void lj_tab_test_set_constructor_prepublish_hook(
   LJTabConstructorPrepublishHook hook);
 LJ_FUNC void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook);
+LJ_FUNC void lj_tab_test_keyed_cas_changed_stack_grow_once(void);
+LJ_FUNC uint32_t lj_tab_test_keyed_cas_changed_stack_grow_hits(void);
 LJ_FUNC int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src,
 					      MSize idx, GCtab *dst,
 					      int freeze_old);

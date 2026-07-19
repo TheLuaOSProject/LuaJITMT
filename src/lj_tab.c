@@ -3722,6 +3722,8 @@ static LJTabNewkeyReserveHook tab_test_newkey_anchor_after_reserve_hook;
 static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
 static LJTabNextAfterKeyindexHook tab_test_next_after_keyindex_hook;
 static LJTabStorePostCasHook tab_test_store_post_cas_hook;
+static uint32_t tab_test_keyed_cas_changed_stack_grow;
+static uint32_t tab_test_keyed_cas_changed_stack_grow_count;
 
 void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook)
@@ -3750,6 +3752,34 @@ void lj_tab_test_set_next_after_keyindex_hook(
 void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook)
 {
   tab_test_store_post_cas_hook = hook;
+}
+
+void lj_tab_test_keyed_cas_changed_stack_grow_once(void)
+{
+  tab_test_keyed_cas_changed_stack_grow_count = 0;
+  tab_test_keyed_cas_changed_stack_grow = 1;
+}
+
+uint32_t lj_tab_test_keyed_cas_changed_stack_grow_hits(void)
+{
+  return tab_test_keyed_cas_changed_stack_grow_count;
+}
+
+static LJ_AINLINE int tab_test_keyed_cas_changed_stack_grow_take(void)
+{
+  if (tab_test_keyed_cas_changed_stack_grow) {
+    tab_test_keyed_cas_changed_stack_grow = 0;
+    return 1;
+  }
+  return 0;
+}
+
+static void tab_test_keyed_cas_stack_grow(lua_State *L)
+{
+  TValue *oldstack = tvref(L->stack);
+  lj_state_growstack(L, 1);
+  if (tvref(L->stack) != oldstack)
+    tab_test_keyed_cas_changed_stack_grow_count++;
 }
 
 static LJ_AINLINE void tab_test_newkey_anchor_after_reserve(lua_State *L,
@@ -4941,12 +4971,37 @@ LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
 					 TValue *dst, cTValue *key,
 					 cTValue *src)
 {
+  int keystack = tab_key_on_stack(L, key);
+  int srcstack = tab_key_on_stack(L, src);
+  ptrdiff_t keyofs = keystack ?
+			 savestack(L, (TValue *)(void *)key) : 0;
+  ptrdiff_t srcofs = srcstack ?
+			 savestack(L, (TValue *)(void *)src) : 0;
   int rc;
   for (;;) {
-    rc = tab_trystoretv_cas_keyed_once(L, parent, dst, key, src);
+    cTValue *curkey = keystack ? restorestack(L, keyofs) : key;
+    cTValue *cursrc = srcstack ? restorestack(L, srcofs) : src;
+#ifdef LJ_TAB_TEST_HELPERS
+    int force_changed = tab_test_keyed_cas_changed_stack_grow_take();
+#endif
+    /* A CHANGED retry reaches an L-aware safepoint, which may rehome L's
+    ** stack. Stack operands therefore travel as offsets between attempts.
+    ** Non-stack operands remain address-stable here: C locals keep their
+    ** native frame, and TG root anchors live in fixed embedded/linked blocks
+    ** (reserving another anchor only appends a block). */
+#ifdef LJ_TAB_TEST_HELPERS
+    rc = force_changed ? LJ_TAB_STORE_CAS_CHANGED :
+	 tab_trystoretv_cas_keyed_once(L, parent, dst, curkey, cursrc);
+#else
+    rc = tab_trystoretv_cas_keyed_once(L, parent, dst, curkey, cursrc);
+#endif
     if (rc != LJ_TAB_STORE_CAS_CHANGED)
       return rc;
     lj_tab_store_wait_l(L);
+#ifdef LJ_TAB_TEST_HELPERS
+    if (force_changed)
+      tab_test_keyed_cas_stack_grow(L);
+#endif
   }
 }
 
