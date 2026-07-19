@@ -15,6 +15,7 @@ local shell_quote = utils.shell_quote
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
+  "m6_jit_event_session",
   "m6_jit_hotcall_missing_args",
   "m6_jit_recursive_call_unroll",
   "m6_jit_recursive_retention",
@@ -781,6 +782,20 @@ assert(sum == 3320)
 assert(util.traceinfo(1), "Lua tailcall loop did not trace")
 ]=], { timeout = "20s" })
       print("M6 JIT recorder token behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_event_session",
+    description = "rooted immutable JIT event-session publication substrate",
+    run = function(t)
+      clean_build(t, build.gc2_test_helper_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-jit-event-session"),
+                      "t-jit-event-session.c",
+                      build.gc2_test_helper_opts({
+                        build = false, clean = false, timeout = "20s"
+                      }))
+      print("M6 immutable JIT event-session substrate passed")
     end
   })
 

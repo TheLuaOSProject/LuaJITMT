@@ -48,6 +48,145 @@ typedef uint16_t HotCount;
 #define TG_GC2_SSB_REMEMBERED_SHIFT 1u
 #define TG_ROOT_ANCHOR_SLOTS	16u
 
+#if LJ_HASJIT
+/* Two retained raw views let an owner start the next event without waiting for
+** a reader of the just-closed event. The growable retained root vector uses
+** ordinary GCRefs (with eight inline): an unpublished recorder is never
+** disguised as a GCtrace merely to reuse the trace traversal. */
+#define LJ_JIT_EVENT_SESSION_SLOTS	2u
+#define LJ_JIT_EVENT_SESSION_ROOTS	8u
+
+#define LJ_JIT_EVENT_VIEW_FORMAT_NONE	0u
+#define LJ_JIT_EVENT_VIEW_FORMAT_TRACE_V1 1u
+
+#define LJ_JIT_EVENT_SLOT_F_VIEW		0x01u
+#define LJ_JIT_EVENT_SLOT_F_SOURCE_PIN	0x02u
+
+typedef enum LJJitEventKind {
+  LJ_JIT_EVENT_TRACE_START = 1,
+  LJ_JIT_EVENT_TRACE_STOP,
+  LJ_JIT_EVENT_TRACE_ABORT,
+  LJ_JIT_EVENT_TRACE_FLUSH,
+  LJ_JIT_EVENT_RECORD
+} LJJitEventKind;
+
+/* A continuation keeps mutable recorder scratch reserved in the high half of
+** jit_owner_word.  A detached immutable event owns only its copied payload and
+** exact TG identity, so it may coexist with an unrelated recorder owner. */
+typedef enum LJJitEventOwnerMode {
+  LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE = 1,
+  LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE
+} LJJitEventOwnerMode;
+
+/* Proof carried by a frozen view for every GC edge encoded in its raw bytes.
+** EXACT_ROOTS is structurally enforced here; decoder equality/range checks are
+** a required production-builder follow-up before callback wiring. */
+typedef enum LJJitEventEdgeProof {
+  LJ_JIT_EVENT_EDGE_NONE = 1,
+  LJ_JIT_EVENT_EDGE_PINNED_SOURCE,
+  LJ_JIT_EVENT_EDGE_EXACT_ROOTS
+} LJJitEventEdgeProof;
+
+typedef enum LJJitEventSlotState {
+  LJ_JIT_EVENT_SLOT_FREE,
+  LJ_JIT_EVENT_SLOT_BUILDING,
+  LJ_JIT_EVENT_SLOT_ACTIVE,
+  LJ_JIT_EVENT_SLOT_CLOSED,
+  LJ_JIT_EVENT_SLOT_CLEANING
+} LJJitEventSlotState;
+
+typedef enum LJJitEventPublicationState {
+  LJ_JIT_EVENT_PUBLICATION_IDLE,
+  LJ_JIT_EVENT_PUBLICATION_ACTIVE
+} LJJitEventPublicationState;
+
+typedef struct LJJitEventFrozenSpan {
+  uint32_t offset;
+  uint32_t count;
+  uint32_t stride;
+} LJJitEventFrozenSpan;
+
+#define LJ_JIT_EVENT_FROZEN_TRACE_VERSION 1u
+
+/* Immutable scalar semantics paired with the raw IR/snapshot byte spans. No
+** field is a GC header and no pointer here is traversed as a GCtrace. */
+typedef struct LJJitEventFrozenTraceHeader {
+  uint32_t version;
+  uint32_t flags;
+  uint32_t traceno;
+  uint32_t root;
+  uint32_t link;
+  uint32_t linktype;
+  uint32_t nins;
+  uint32_t nk;
+  uint32_t nsnap;
+  uint32_t nsnapmap;
+  uint32_t ir_ref_first;
+  uint32_t ir_ref_count;
+  uint32_t startpc_pos;
+  BCIns startins;
+  uint64_t mcode_addr;
+  uint32_t szmcode;
+  uint32_t mcloop;
+  uint64_t exitstub_addr;
+  uint32_t nexits;
+  uint32_t pad;
+} LJJitEventFrozenTraceHeader;
+
+/* This is raw C storage, not a GC object.  `data` owns a byte-for-byte frozen
+** recorder view whose three bounded spans are decoded only while a slot reader
+** is held.  Reallocation is restricted to an unpublished zero-reader slot. */
+typedef struct LJJitEventFrozenView {
+  void *data;
+  uint32_t capacity;
+  uint32_t size;
+  uint32_t format;
+  uint32_t flags;
+  LJJitEventFrozenTraceHeader trace;
+  LJJitEventFrozenSpan ir;
+  LJJitEventFrozenSpan snap;
+  LJJitEventFrozenSpan snapmap;
+} LJJitEventFrozenView;
+
+typedef struct LJJitEventSessionSlot {
+  uint64_t generation;
+  uint32_t state;
+  uint32_t readers;
+  uint32_t flags;
+  uint32_t event;
+  uint32_t owner_mode;
+  uint32_t edge_proof;
+  uint64_t attachment_generation;
+  /* Reserved for the later same-owner control-borrow transaction which
+  ** temporarily resumes {tid,0} without ending this session. */
+  uint32_t control_borrow_state;
+  uint64_t control_borrow_generation;
+  lua_State *saved_jit_owner_L;
+  uint32_t root_count;
+  uint32_t owner_tid;
+  uint32_t owner_actor;
+  lua_State *owner_L;
+  GCRef owner_root;  /* Explicit callback-state root; owner_L is identity. */
+  struct GCtrace *source;
+  uint32_t source_traceno;
+  uint32_t pad;
+  LJJitEventFrozenView view;
+  GCRef *root_data;
+  uint32_t root_capacity;
+  uint32_t root_pad;
+  GCRef root_inline[LJ_JIT_EVENT_SESSION_ROOTS];
+} LJJitEventSessionSlot;
+
+typedef struct LJJitEventSessions {
+  uint64_t sequence;  /* Even stable, odd owner publication transition. */
+  uint64_t next_generation;
+  uint64_t active_generation;
+  uint32_t state;
+  uint32_t active_slot;
+  LJJitEventSessionSlot slot[LJ_JIT_EVENT_SESSION_SLOTS];
+} LJJitEventSessions;
+#endif
+
 #define TG_FINI_LIVE		0u
 #define TG_FINI_BUSY		1u
 #define TG_FINI_DONE		2u
@@ -154,11 +293,15 @@ struct TGState {
   LJTGRegistryKey registry_key;
   uint8_t registry_shadow_missed;  /* Legacy-only attach after slot OOM. */
 #if LJ_HASFFI
-  /* Keep generic frame publication last so production CALLXS does not perturb
-  ** any existing VM/ABI-sensitive TG offset. */
+  /* Generic frame publication remains after all pre-existing VM-sensitive TG
+  ** fields.  New append-only JIT event metadata follows it below. */
   uint64_t ffi_native_seq;	/* Even stable, odd owner transition. */
   uint32_t ffi_native_depth;
   LJFFINativeFrame ffi_native_frame[LJ_FFI_NATIVE_FRAME_MAX];
+#endif
+#if LJ_HASJIT
+  /* Append-only: no pre-existing VM/ABI-sensitive TG offset may move. */
+  LJJitEventSessions jit_event_sessions;
 #endif
 };
 
@@ -166,6 +309,31 @@ LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
 LJ_STATIC_ASSERT((offsetof(TGState, poll) & 7u) == 0);
 LJ_STATIC_ASSERT(offsetof(TGState, profile_request) ==
 		 offsetof(TGState, poll) + sizeof(uint32_t));
+#if LJ_HASJIT
+LJ_STATIC_ASSERT((offsetof(TGState, jit_event_sessions.sequence) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, next_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, active_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, slot[0].generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
+			  slot[0].attachment_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
+			  slot[0].control_borrow_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, slot[1].generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
+			  slot[1].attachment_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventSessions,
+			  slot[1].control_borrow_generation) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) +
+		 sizeof(LJJitEventSessions) <= sizeof(TGState));
+LJ_STATIC_ASSERT(sizeof(TGState) -
+		 (offsetof(TGState, jit_event_sessions) +
+		  sizeof(LJJitEventSessions)) < __alignof__(TGState));
+#if LJ_HASFFI
+LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
+		 offsetof(TGState, ffi_native_frame) +
+		 sizeof(((TGState *)0)->ffi_native_frame));
+#endif
+#endif
 
 static LJ_AINLINE int32_t lj_tg_vmstate_load_acq(TGState *tg)
 {

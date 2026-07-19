@@ -502,8 +502,15 @@ LJ_FUNCA int lj_err_unwind_win(EXCEPTION_RECORD *rec,
     }
     /* Unwind internal frames. */
     err_os_restore(&err);
-    err_unwind(L, cf, errcode);
+    cf2 = err_unwind(L, cf, errcode);
     err_os_save(&err);
+#if LJ_HASFFI
+    /* This handler is the last code which may inspect the callback L. A NULL
+    ** result after callback_unwind marks the unprotected callback boundary;
+    ** discharge its scoped auto-attach before SEH continues to the catcher. */
+    if (cf2 == NULL)
+      lj_ccallback_unwind_detach();
+#endif
   } else {
     err_os_restore(&err);
     cf2 = err_unwind(L, cf, 0);
@@ -822,6 +829,10 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
     ** later personality invocation through the exception object itself. */
     err_os_save(&err);
     if ((actions & _UA_FORCE_UNWIND)) {
+#if LJ_HASFFI
+      if (cf == NULL)
+	lj_ccallback_unwind_detach();
+#endif
       return err_uex_os_leave(uexclass, uex, &err,
 			      _URC_CONTINUE_UNWIND);
     } else if (cf) {
@@ -862,6 +873,14 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
 #endif
 #endif
   }
+#if LJ_HASFFI
+  /* Only the actual CONTINUE_UNWIND edge is safe. INSTALL_CONTEXT landings use
+  ** SAVE_L, so a pending auto-attach may be released only after all handler
+  ** branches have declined. This is the last LuaJIT L/g access before the
+  ** unwinder physically disposes the callback frame. */
+  if ((actions & _UA_CLEANUP_PHASE) && cf == NULL)
+    lj_ccallback_unwind_detach();
+#endif
   return err_uex_os_leave(uexclass, uex, &err, _URC_CONTINUE_UNWIND);
 }
 
@@ -1110,6 +1129,10 @@ LJ_FUNCA int lj_err_unwind_arm(int state, _Unwind_Control_Block *ucb,
     err_os_restore(&err);
     cf = err_unwind(L, cf, errcode);
     err_os_save(&err);
+#if LJ_HASFFI
+    if (cf == NULL)
+      lj_ccallback_unwind_detach();
+#endif
     if ((state & _US_FORCE_UNWIND) || cf == NULL) break;
     _Unwind_SetGR(ctx, 15, (uint32_t)lj_vm_unwind_ext);
     _Unwind_SetGR(ctx, 0, (uint32_t)ucb);
@@ -1290,6 +1313,12 @@ LJ_NOINLINE void LJ_FASTCALL lj_err_throw(lua_State *L, int errcode)
     ** frame restoration performed by err_unwind(). */
     err_os_restore(&err);
     cf = err_unwind(L, NULL, errcode);
+    if (cf == NULL) {
+#if LJ_HASFFI
+      lj_ccallback_unwind_detach();
+#endif
+      exit(EXIT_FAILURE);
+    }
     if (cframe_unwind_ff(cf))
       lj_vm_unwind_ff(cframe_raw(cf));
     else

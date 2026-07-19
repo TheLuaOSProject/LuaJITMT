@@ -24,6 +24,7 @@
 #include "lj_str.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lj_trace.h"
 #include "lj_vm.h"
 
 static void tg_root_anchor_block_init(TGRootAnchorBlock *block)
@@ -311,6 +312,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   lj_tg_fnew_cert_reset_rel(tg);
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT
+  lj_jit_event_sessions_init(tg);
   memcpy(tg->hotcount, G2GG(g)->hotcount, sizeof(tg->hotcount));
 #endif
   memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
@@ -354,6 +356,10 @@ void lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
 void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
+#if LJ_HASJIT
+    if (!lj_jit_event_sessions_fini(g, g->main_tg))
+      abort();
+#endif
 #if LJ_HASFFI
     lj_ffi_native_frame_fini(g->main_tg);
 #endif
@@ -414,12 +420,6 @@ static int tg_fini_thread(global_State *g, TGState *tg, int terminal)
   uint8_t expect;
   if (!tg)
     return 1;
-#if LJ_HASFFI
-  /* Physical teardown has no recovery path for a generated return PC or its
-  ** published roots. Detach should have proved this already; terminal orphan
-  ** cleanup repeats the fail-stop invariant before freeing any TG storage. */
-  lj_ffi_native_frame_fini(tg);
-#endif
   /* LIVE/RETRY->BUSY is one physical-finalization attempt. RETRY keeps the
   ** enclosing TG authoritative when an inner HugeTab/arena certificate
   ** refuses teardown; DONE release-publishes every pointer clear and unmap.
@@ -435,6 +435,22 @@ static int tg_fini_thread(global_State *g, TGState *tg, int terminal)
     if (lj_tg_fini_state_cas(tg, &expect, TG_FINI_BUSY))
       break;
   }
+#if LJ_HASJIT
+  /* BUSY is the first destructive arbiter for the whole TG. In particular,
+  ** two reclaim paths must never race the CLOSED->FREE event-slot transition.
+  ** A retained CLOSED reader is a retryable refusal, while ACTIVE/BUILDING is
+  ** fail-stop corruption inside sessions_fini(). */
+  if (!lj_jit_event_sessions_fini(g, tg)) {
+    lj_tg_fini_state_rel(tg, TG_FINI_RETRY);
+    return 0;
+  }
+#endif
+#if LJ_HASFFI
+  /* Physical teardown has no recovery path for a generated return PC or its
+  ** published roots. Detach should have proved this already; terminal orphan
+  ** cleanup repeats the fail-stop invariant before freeing any TG storage. */
+  lj_ffi_native_frame_fini(tg);
+#endif
   /* PRE is non-destructive except for exact count-zero C|P reconciliation.
   ** It keeps a blocked attempt retryable before owner-private roots/buffers
   ** are discarded. Joined-world callers exclude a new lawful publisher after
@@ -671,9 +687,22 @@ void lj_tg_attach(global_State *g, TGState *tg)
 
 int lj_tg_registry_detach_begin(global_State *g, TGState *tg)
 {
-  UNUSED(g);
   if (!tg)
     return 0;
+#if LJ_HASJIT
+  if (!g || tg->gl != g)
+    return 0;
+  {
+    LJJitOwnerWord word = jit_owner_word_acq(g);
+    uint32_t tid = lj_tg_tid_acq(tg);
+    if ((tid != 0 && (jit_owner_token(word) == tid ||
+		      jit_owner_lifecycle(word) == tid)) ||
+	!lj_jit_event_sessions_logical_detach_ready(tg))
+      return 0;
+  }
+#else
+  UNUSED(g);
+#endif
   if (lj_tg_registry_shadow_missed_acq(tg))
     return 1;  /* Shadow lifecycle is unavailable; legacy gates stay exact. */
   if (!lj_tgregistry_key_valid(&tg->registry_key))
@@ -730,6 +759,20 @@ void lj_tg_detach(global_State *g, TGState *tg)
   if (lj_thr_actor_current() == 0 ||
       lj_tg_actor_acq(tg) != lj_thr_actor_current())
     abort();  /* Detach is an owner-thread operation, never remote teardown. */
+#if LJ_HASJIT
+  /* This is the first subsystem teardown check. The exact target tid may be in
+  ** neither owner-word half and no slot may still be BUILDING/ACTIVE. CLOSED
+  ** readers retain GC2 SMR, so logical detach may publish DEAD while physical
+  ** finalization keeps retrying until strict fini() succeeds. */
+  {
+    LJJitOwnerWord word = jit_owner_word_acq(g);
+    uint32_t tid = lj_tg_tid_acq(tg);
+    if ((tid != 0 && (jit_owner_token(word) == tid ||
+		      jit_owner_lifecycle(word) == tid)) ||
+	!lj_jit_event_sessions_logical_detach_ready(tg))
+      abort();
+  }
+#endif
 #if LJ_HASFFI
   lj_ffi_native_frame_fini(tg);
 #endif

@@ -6,6 +6,9 @@
 #define lj_trace_c
 #define LUA_CORE
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "lj_obj.h"
 
 #if LJ_HASJIT
@@ -161,10 +164,29 @@ static uint32_t trace_test_force_startins_retries;
 static uint32_t trace_test_exit_calls;
 static uint32_t trace_test_last_exit_parent;
 static uint32_t trace_test_last_exitno;
+static uint32_t trace_test_force_event_handoff_failures;
 
 void lj_trace_test_force_startins_retry(uint32_t count)
 {
   la_store32_rel(&trace_test_force_startins_retries, count);
+}
+
+void lj_trace_test_force_event_handoff_failure(uint32_t count)
+{
+  la_store32_rel(&trace_test_force_event_handoff_failures, count);
+}
+
+static int trace_test_take_event_handoff_failure(void)
+{
+  uint32_t old = la_load32_acq(&trace_test_force_event_handoff_failures);
+  while (old != 0) {
+    uint32_t expect = old;
+    if (la_cas32(&trace_test_force_event_handoff_failures, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
 }
 
 static int trace_test_take_startins_retry(void)
@@ -220,6 +242,7 @@ static void trace_test_note_exit(TraceNo parent, ExitNo exitno)
 }
 #else
 #define trace_test_take_startins_retry() 0
+#define trace_test_take_event_handoff_failure() 0
 #define trace_test_note_exit(parent, exitno) \
   ((void)(parent), (void)(exitno))
 #endif
@@ -379,6 +402,1004 @@ int lj_jit_lifecycle_held_l(lua_State *L, jit_State *J)
   uint32_t tid = jit_token_tid_l(L, J);
   return tid != 0 && jit_owner_l_acq(J) == L &&
     jit_owner_word_acq(J2G(J)) == jit_owner_pack(0, tid);
+}
+
+/* -- Rooted immutable JIT event sessions ------------------------------- */
+
+static int jit_event_span_valid(uintptr_t base, uint32_t size,
+				const LJJitEventFrozenSpan *span,
+				uint32_t stride, uint32_t alignment)
+{
+  uintptr_t address, bytes;
+  uint32_t available;
+  if (span->stride != stride || span->offset > size ||
+      (alignment != 0 && span->offset % alignment) != 0)
+    return 0;
+  if ((uintptr_t)span->offset > ~(uintptr_t)0 - base)
+    return 0;
+  address = base + (uintptr_t)span->offset;
+  if (alignment != 0 && address % alignment != 0)
+    return 0;
+  if (span->count == 0)
+    return 1;
+  available = size - span->offset;
+  if (span->count > available / span->stride)
+    return 0;
+  bytes = (uintptr_t)span->count * (uintptr_t)span->stride;
+  return bytes <= ~(uintptr_t)0 - address;
+}
+
+static int jit_event_view_geometry_valid(
+  const void *data, uint32_t size, uint32_t format, uint32_t flags,
+  const LJJitEventFrozenTraceHeader *trace,
+  const LJJitEventFrozenSpan *ir, const LJJitEventFrozenSpan *snap,
+  const LJJitEventFrozenSpan *snapmap)
+{
+  uintptr_t base = (uintptr_t)data;
+  uint64_t irend, snapend, snapmapend;
+  if (!data || size == 0 || (uintptr_t)size > ~(uintptr_t)0 - base ||
+      format != LJ_JIT_EVENT_VIEW_FORMAT_TRACE_V1 || flags != 0 ||
+      trace->version != LJ_JIT_EVENT_FROZEN_TRACE_VERSION ||
+      trace->flags != 0 || trace->traceno == 0 || trace->nins < trace->nk ||
+      trace->nk > REF_BASE || trace->nins < REF_BASE ||
+      trace->linktype > LJ_TRLINK_STITCH ||
+      trace->ir_ref_first != trace->nk ||
+      trace->ir_ref_count != trace->nins - trace->nk ||
+      trace->ir_ref_count != ir->count || trace->nsnap != snap->count ||
+      trace->nsnapmap != snapmap->count || trace->nexits != trace->nsnap ||
+      trace->mcloop > trace->szmcode ||
+      ((trace->mcode_addr == 0) != (trace->szmcode == 0)) ||
+      (trace->mcode_addr == 0 &&
+       (trace->mcloop != 0 || trace->exitstub_addr != 0)) ||
+      !jit_event_span_valid(base, size, ir, sizeof(IRIns),
+			    __alignof__(IRIns)) ||
+      !jit_event_span_valid(base, size, snap, sizeof(SnapShot),
+			    __alignof__(SnapShot)) ||
+      !jit_event_span_valid(base, size, snapmap, sizeof(SnapEntry),
+			    __alignof__(SnapEntry)))
+    return 0;
+  irend = (uint64_t)ir->offset + (uint64_t)ir->count * ir->stride;
+  snapend = (uint64_t)snap->offset + (uint64_t)snap->count * snap->stride;
+  snapmapend = (uint64_t)snapmap->offset +
+    (uint64_t)snapmap->count * snapmap->stride;
+  return irend <= snap->offset && snapend <= snapmap->offset &&
+    snapmapend <= size;
+}
+
+void lj_jit_event_snapshot_copy_canonical(SnapShot *dst,
+					  const SnapShot *src)
+{
+  uint32_t mapofs;
+  uint16_t ref, mcofs;
+  uint8_t nslots, topslot, nent, count;
+  if (LJ_UNLIKELY(!dst || !src || dst == src))
+    abort();
+  /* Read every live field independently. In particular, count is changed by
+  ** native exits and must never participate in a plain structure load. */
+  mapofs = (uint32_t)snap_mapofs_acq(src);
+  ref = (uint16_t)snap_ref_acq(src);
+  mcofs = (uint16_t)snap_mcofs_acq(src);
+  nslots = (uint8_t)snap_nslots_acq(src);
+  topslot = (uint8_t)snap_topslot_acq(src);
+  nent = (uint8_t)snap_nent_acq(src);
+  count = (uint8_t)snap_count_acq(src);
+  /* The destination is private frozen backing. Zeroing first canonicalizes any
+  ** present or future padding; release stores then prevent a compiler from
+  ** coalescing the live-count access with adjacent fields. */
+  memset(dst, 0, sizeof(*dst));
+  la_store32_rel(&dst->mapofs, mapofs);
+  la_store16_rel(&dst->ref, ref);
+  la_store16_rel(&dst->mcofs, mcofs);
+  la_store8_rel(&dst->nslots, nslots);
+  la_store8_rel(&dst->topslot, topslot);
+  la_store8_rel(&dst->nent, nent);
+  snap_count_rel(dst, count);
+}
+
+int lj_jit_event_snapshot_matches_live(const SnapShot *frozen,
+					const SnapShot *live)
+{
+  return frozen && live &&
+    snap_mapofs_acq(frozen) == snap_mapofs_acq(live) &&
+    snap_ref_acq(frozen) == snap_ref_acq(live) &&
+    snap_mcofs_acq(frozen) == snap_mcofs_acq(live) &&
+    snap_nslots_acq(frozen) == snap_nslots_acq(live) &&
+    snap_topslot_acq(frozen) == snap_topslot_acq(live) &&
+    snap_nent_acq(frozen) == snap_nent_acq(live);
+}
+
+int lj_jit_event_frozen_view_valid(const LJJitEventFrozenView *view)
+{
+  return view && view->data && view->size <= view->capacity &&
+    jit_event_view_geometry_valid(view->data, view->size, view->format,
+				  view->flags,
+				  &view->trace, &view->ir, &view->snap,
+				  &view->snapmap);
+}
+
+int lj_jit_event_session_contract_valid(uint32_t event, uint32_t owner_mode,
+					uint32_t edge_proof, int has_view,
+					int has_source,
+					uint32_t root_count)
+{
+  if (owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE) {
+    return (event == LJ_JIT_EVENT_TRACE_START ||
+	    event == LJ_JIT_EVENT_RECORD) &&
+      edge_proof == LJ_JIT_EVENT_EDGE_EXACT_ROOTS && has_view &&
+      !has_source && root_count != 0;
+  }
+  if (owner_mode != LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE)
+    return 0;
+  switch (event) {
+  case LJ_JIT_EVENT_TRACE_STOP:
+    return edge_proof == LJ_JIT_EVENT_EDGE_PINNED_SOURCE && has_view &&
+      has_source && root_count == 0;
+  case LJ_JIT_EVENT_TRACE_ABORT:
+    return has_view &&
+      ((edge_proof == LJ_JIT_EVENT_EDGE_PINNED_SOURCE && has_source &&
+	root_count == 0) ||
+       (edge_proof == LJ_JIT_EVENT_EDGE_EXACT_ROOTS && !has_source &&
+	root_count != 0));
+  case LJ_JIT_EVENT_TRACE_FLUSH:
+    return edge_proof == LJ_JIT_EVENT_EDGE_NONE && !has_view &&
+      !has_source && root_count == 0;
+  default:
+    return 0;
+  }
+}
+
+static int jit_event_view_spec_valid(const LJJitEventFrozenViewSpec *view)
+{
+  return !view || (view->data &&
+    jit_event_view_geometry_valid(view->data, view->size, view->format,
+				  view->flags,
+				  &view->trace, &view->ir, &view->snap,
+				  &view->snapmap));
+}
+
+static TGState *jit_event_owner_tg(lua_State *L)
+{
+  TGState *tg;
+  global_State *g;
+  uint32_t actor;
+  if (!L || !(g = G(L)) || !(tg = L->tg_hint) || tg->gl != g ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != L || !lj_tg_owns_state_acq(tg, L))
+    return NULL;
+  actor = lj_thr_actor_current();
+  return actor != 0 && lj_tg_actor_acq(tg) == actor ? tg : NULL;
+}
+
+static void jit_event_slot_reset_fields(LJJitEventSessionSlot *slot)
+{
+  GCRef *roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  uint32_t capacity = la_load32_acq(&slot->root_capacity);
+  uint32_t nroots = la_load32_acq(&slot->root_count);
+  uint32_t i;
+  la_store64_rel(&slot->generation, 0);
+  la_store32_rel(&slot->flags, 0);
+  la_store32_rel(&slot->event, 0);
+  la_store32_rel(&slot->owner_mode, 0);
+  la_store32_rel(&slot->edge_proof, 0);
+  la_store64_rel(&slot->attachment_generation, 0);
+  la_store32_rel(&slot->control_borrow_state, 0);
+  la_store64_rel(&slot->control_borrow_generation, 0);
+  la_storeptr_rel((void **)&slot->saved_jit_owner_L, NULL);
+  la_store32_rel(&slot->owner_tid, 0);
+  la_store32_rel(&slot->owner_actor, 0);
+  la_storeptr_rel((void **)&slot->owner_L, NULL);
+  setgcrefrel(slot->owner_root, NULL);
+  la_storeptr_rel((void **)&slot->source, NULL);
+  la_store32_rel(&slot->source_traceno, 0);
+  if (LJ_UNLIKELY(!roots || nroots > capacity))
+    abort();
+  for (i = 0; i < nroots; i++)
+    setgcrefrel(roots[i], NULL);
+  la_store32_rel(&slot->root_count, 0);
+  slot->view.size = 0;
+  slot->view.format = LJ_JIT_EVENT_VIEW_FORMAT_NONE;
+  slot->view.flags = 0;
+  memset(&slot->view.trace, 0, sizeof(slot->view.trace));
+  memset(&slot->view.ir, 0, sizeof(slot->view.ir));
+  memset(&slot->view.snap, 0, sizeof(slot->view.snap));
+  memset(&slot->view.snapmap, 0, sizeof(slot->view.snapmap));
+}
+
+static int jit_event_slot_cleanup(global_State *g,
+				  LJJitEventSessionSlot *slot,
+				  uint32_t expected_state)
+{
+  uint32_t state = expected_state;
+  uint32_t flags;
+  GCtrace *source;
+  if (la_load32_acq(&slot->readers) != 0 ||
+      !la_cas32(&slot->state, &state, LJ_JIT_EVENT_SLOT_CLEANING,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  /* No admitted reader can name the immutable fields after CLEANING wins.
+  ** A late pre-close reader may transiently increment readers, but its global
+  ** sequence recheck fails before the first field dereference. */
+  flags = la_load32_acq(&slot->flags);
+  source = (GCtrace *)la_loadptr_acq((void *const *)&slot->source);
+  if ((flags & LJ_JIT_EVENT_SLOT_F_SOURCE_PIN) != 0) {
+    if (LJ_UNLIKELY(!source))
+      abort();
+    lj_trace_native_unpin(g, source);
+  }
+  jit_event_slot_reset_fields(slot);
+  la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+  return 1;
+}
+
+static void jit_event_slot_reader_drop(TGState *tg,
+				       LJJitEventSessionSlot *slot)
+{
+  uint32_t old = la_sub32_acqrel(&slot->readers, 1);
+  if (LJ_UNLIKELY(old == 0))
+    abort();
+  if (old == 1 && la_load32_acq(&slot->state) == LJ_JIT_EVENT_SLOT_CLOSED)
+    (void)jit_event_slot_cleanup(tg->gl, slot, LJ_JIT_EVENT_SLOT_CLOSED);
+}
+
+static int jit_event_slot_claim(global_State *g, LJJitEventSessions *sessions,
+				uint32_t *slot_index)
+{
+  uint32_t i;
+  for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
+    LJJitEventSessionSlot *slot = &sessions->slot[i];
+    uint32_t state = la_load32_acq(&slot->state);
+    if (state == LJ_JIT_EVENT_SLOT_CLOSED &&
+	la_load32_acq(&slot->readers) == 0) {
+      (void)jit_event_slot_cleanup(g, slot, LJ_JIT_EVENT_SLOT_CLOSED);
+      state = la_load32_acq(&slot->state);
+    }
+    if (state == LJ_JIT_EVENT_SLOT_FREE) {
+      uint32_t expect = LJ_JIT_EVENT_SLOT_FREE;
+      if (la_cas32(&slot->state, &expect, LJ_JIT_EVENT_SLOT_BUILDING,
+		   LA_ACQ_REL, LA_ACQ)) {
+	/* A stale reader is allowed to arrive after cleanup, but cannot pass its
+	** publication recheck.  Do not overwrite its slot until it leaves. */
+	if (la_load32_acq(&slot->readers) == 0) {
+	  *slot_index = i;
+	  return 1;
+	}
+	la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+      }
+    }
+  }
+  return 0;
+}
+
+static int jit_event_view_matches_source(const LJJitEventFrozenViewSpec *view,
+					 GCtrace *source, TraceNo traceno)
+{
+  const LJJitEventFrozenTraceHeader *h;
+  const unsigned char *data;
+  const IRIns *source_ir;
+  const SnapShot *source_snap;
+  const SnapEntry *source_snapmap;
+  GCproto *pt;
+  const BCIns *pc, *bc;
+  uintptr_t pca, bca, bce;
+  uint32_t pcpos, i;
+  if (!view)
+    return 1;
+  h = &view->trace;
+  data = (const unsigned char *)view->data;
+  pt = trace_startpt_acq(source);
+  pc = trace_startpc_acq(source);
+  if (!pt || !pc)
+    return 0;
+  bc = proto_bc(pt);
+  pca = (uintptr_t)pc;
+  bca = (uintptr_t)bc;
+  bce = bca + (uintptr_t)pt->sizebc * sizeof(BCIns);
+  if (bce < bca || pca < bca || pca >= bce ||
+      (pca - bca) % sizeof(BCIns) != 0)
+    return 0;
+  pcpos = (uint32_t)((pca - bca) / sizeof(BCIns));
+  /* Prove every live allocation bound before using frozen counts to index the
+  ** source arrays. Geometry alone constrains only the copied byte buffer. */
+  if (h->traceno != traceno || h->root != trace_root_acq(source) ||
+      h->link != trace_link_acq(source) ||
+      h->linktype != (uint32_t)trace_linktype_acq(source) ||
+      h->nins != (uint32_t)trace_nins_acq(source) ||
+      h->nk != (uint32_t)trace_nk_acq(source) ||
+      h->nsnap != (uint32_t)trace_nsnap_acq(source) ||
+      h->nsnapmap != (uint32_t)trace_nsnapmap_acq(source) ||
+      h->startpc_pos != pcpos || h->startins != trace_startins_acq(source) ||
+      h->mcode_addr != (uint64_t)(uintptr_t)trace_mcode_acq(source) ||
+      h->szmcode != (uint32_t)trace_szmcode_acq(source) ||
+      h->mcloop != (uint32_t)trace_mcloop_acq(source) ||
+      h->exitstub_addr !=
+	(uint64_t)(uintptr_t)trace_exitstub_acq(source) ||
+      h->nexits != (uint32_t)trace_nsnap_acq(source))
+    return 0;
+  source_ir = trace_ir_acq(source);
+  source_snap = trace_snap_acq(source);
+  source_snapmap = trace_snapmap_acq(source);
+  if ((view->ir.count != 0 && !source_ir) ||
+      (view->snap.count != 0 && !source_snap) ||
+      (view->snapmap.count != 0 && !source_snapmap))
+    return 0;
+  for (i = 0; i < view->snap.count; i++) {
+    const SnapShot *frozen =
+      (const SnapShot *)(const void *)(data + view->snap.offset) + i;
+    if (!lj_jit_event_snapshot_matches_live(frozen, source_snap + i))
+      return 0;
+  }
+  return (view->ir.count == 0 ||
+     memcmp(data + view->ir.offset, source_ir + h->nk,
+	    (size_t)view->ir.count * sizeof(IRIns)) == 0) &&
+    (view->snapmap.count == 0 ||
+     memcmp(data + view->snapmap.offset, source_snapmap,
+	    (size_t)view->snapmap.count * sizeof(SnapEntry)) == 0);
+}
+
+static int jit_event_source_pin(global_State *g, GCtrace *source,
+				TraceNo traceno,
+				const LJJitEventFrozenViewSpec *view)
+{
+  jit_State *J = G2J(g);
+  GCtrace *published;
+  int pinned = 0;
+  if (!source || traceno == 0 || !lj_gc2_smr_read_try(g))
+    return 0;
+  published = traceref_safe(J, traceno);
+  if (published == source && lj_trace_native_pin(source)) {
+    published = traceref_safe(J, traceno);
+	if (published == source && jit_event_view_matches_source(view, source,
+							traceno) &&
+	lj_trace_native_mark_pinned(g, source, traceno))
+      pinned = 1;
+    if (!pinned)
+      lj_trace_native_unpin(g, source);
+  }
+  lj_gc2_smr_read_leave(g);
+  return pinned;
+}
+
+void lj_jit_event_sessions_init(TGState *tg)
+{
+  LJJitEventSessions *sessions;
+  uint32_t i, j;
+  if (LJ_UNLIKELY(!tg))
+    abort();
+  sessions = &tg->jit_event_sessions;
+  memset(sessions, 0, sizeof(*sessions));
+  la_store32_rlx(&sessions->active_slot, LJ_JIT_EVENT_SESSION_SLOTS);
+  for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
+    LJJitEventSessionSlot *slot = &sessions->slot[i];
+    for (j = 0; j < LJ_JIT_EVENT_SESSION_ROOTS; j++)
+      setgcrefrel(slot->root_inline[j], NULL);
+    la_storeptr_rlx((void **)&slot->root_data, slot->root_inline);
+    la_store32_rlx(&slot->root_capacity, LJ_JIT_EVENT_SESSION_ROOTS);
+    setgcrefrel(slot->owner_root, NULL);
+    la_store32_rlx(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+  }
+}
+
+int lj_jit_event_sessions_quiescent(TGState *tg)
+{
+  LJJitEventSessions *sessions;
+  uint64_t sequence;
+  uint32_t i;
+  if (!tg)
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  sequence = la_load64_acq(&sessions->sequence);
+  if ((sequence & 1u) != 0 ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_IDLE ||
+      la_load32_acq(&sessions->active_slot) != LJ_JIT_EVENT_SESSION_SLOTS ||
+      la_load64_acq(&sessions->active_generation) != 0)
+    return 0;
+  for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
+    LJJitEventSessionSlot *slot = &sessions->slot[i];
+    uint32_t state = la_load32_acq(&slot->state);
+    if (state == LJ_JIT_EVENT_SLOT_CLOSED &&
+	la_load32_acq(&slot->readers) == 0) {
+      (void)jit_event_slot_cleanup(tg->gl, slot, LJ_JIT_EVENT_SLOT_CLOSED);
+      state = la_load32_acq(&slot->state);
+    }
+    if (state != LJ_JIT_EVENT_SLOT_FREE ||
+	la_load32_acq(&slot->readers) != 0)
+      return 0;
+  }
+  return la_load64_acq(&sessions->sequence) == sequence &&
+    la_load32_acq(&sessions->state) == LJ_JIT_EVENT_PUBLICATION_IDLE &&
+    la_load32_acq(&sessions->active_slot) == LJ_JIT_EVENT_SESSION_SLOTS &&
+    la_load64_acq(&sessions->active_generation) == 0;
+}
+
+int lj_jit_event_sessions_logical_detach_ready(TGState *tg)
+{
+  LJJitEventSessions *sessions;
+  uint64_t sequence;
+  uint32_t i;
+  if (!tg)
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  sequence = la_load64_acq(&sessions->sequence);
+  if ((sequence & 1u) != 0 ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_IDLE ||
+      la_load32_acq(&sessions->active_slot) != LJ_JIT_EVENT_SESSION_SLOTS ||
+      la_load64_acq(&sessions->active_generation) != 0)
+    return 0;
+  for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
+    uint32_t state = la_load32_acq(&sessions->slot[i].state);
+    /* CLEANING is either this single actor's completed-before-detach path or a
+    ** last snapshot reader which still owns GC2 SMR. In the latter case TG
+    ** physical reclaim cannot pass until cleanup and read-leave both finish. */
+    if (state != LJ_JIT_EVENT_SLOT_FREE &&
+	state != LJ_JIT_EVENT_SLOT_CLOSED &&
+	state != LJ_JIT_EVENT_SLOT_CLEANING)
+      return 0;
+  }
+  return la_load64_acq(&sessions->sequence) == sequence &&
+    la_load32_acq(&sessions->state) == LJ_JIT_EVENT_PUBLICATION_IDLE &&
+    la_load32_acq(&sessions->active_slot) == LJ_JIT_EVENT_SESSION_SLOTS &&
+    la_load64_acq(&sessions->active_generation) == 0;
+}
+
+int lj_jit_event_sessions_detach_ready(TGState *tg)
+{
+  LJJitOwnerWord owner_word;
+  uint32_t tid;
+  if (!tg || !(tid = lj_tg_tid_acq(tg)))
+    return 0;
+  owner_word = jit_owner_word_acq(tg->gl);
+  return jit_owner_token(owner_word) != tid &&
+    jit_owner_lifecycle(owner_word) != tid &&
+    lj_jit_event_sessions_quiescent(tg);
+}
+
+int lj_jit_event_sessions_fini(global_State *g, TGState *tg)
+{
+  LJJitEventSessions *sessions;
+  uint64_t sequence;
+  uint32_t i;
+  if (!g || !tg || tg->gl != g)
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  sequence = la_load64_acq(&sessions->sequence);
+  /* Physical finalization may follow a DEAD TG whose owner word was already
+  ** cleared. Secondary logical detach may leave CLOSED readers under their SMR
+  ** leases; physical finalization repeats strict slot quiescence so post-DEAD
+  ** cleanup remains retryable and idempotent. */
+  if ((sequence & 1u) != 0 ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_IDLE ||
+      la_load32_acq(&sessions->active_slot) != LJ_JIT_EVENT_SESSION_SLOTS ||
+      la_load64_acq(&sessions->active_generation) != 0)
+    return 0;
+  for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
+    LJJitEventSessionSlot *slot = &sessions->slot[i];
+    uint32_t state = la_load32_acq(&slot->state);
+    if (state == LJ_JIT_EVENT_SLOT_CLOSED &&
+	la_load32_acq(&slot->readers) == 0) {
+      (void)jit_event_slot_cleanup(g, slot, LJ_JIT_EVENT_SLOT_CLOSED);
+      state = la_load32_acq(&slot->state);
+    }
+    if (state != LJ_JIT_EVENT_SLOT_FREE ||
+	la_load32_acq(&slot->readers) != 0)
+      return 0;
+  }
+  if (la_load64_acq(&sessions->sequence) != sequence ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_IDLE ||
+      la_load32_acq(&sessions->active_slot) != LJ_JIT_EVENT_SESSION_SLOTS ||
+      la_load64_acq(&sessions->active_generation) != 0)
+    return 0;
+  for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
+    LJJitEventFrozenView *view = &sessions->slot[i].view;
+    LJJitEventSessionSlot *slot = &sessions->slot[i];
+    GCRef *roots = (GCRef *)
+      la_loadptr_acq((void *const *)&slot->root_data);
+    free(view->data);
+    view->data = NULL;
+    view->capacity = 0;
+    if (roots != slot->root_inline)
+      free(roots);
+    la_storeptr_rel((void **)&slot->root_data, slot->root_inline);
+    la_store32_rel(&slot->root_capacity, LJ_JIT_EVENT_SESSION_ROOTS);
+  }
+  return 1;
+}
+
+static int jit_event_slot_root_reserve(LJJitEventSessionSlot *slot,
+				       uint32_t need)
+{
+  GCRef *roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  uint32_t capacity = la_load32_acq(&slot->root_capacity);
+  uint32_t next, i;
+  void *data;
+  if (need <= capacity)
+    return 1;
+  next = capacity ? capacity : LJ_JIT_EVENT_SESSION_ROOTS;
+  while (next < need) {
+    if (next > ~(uint32_t)0 / 2u) {
+      next = need;
+      break;
+    }
+    next *= 2u;
+  }
+  if (roots == slot->root_inline) {
+    data = malloc((size_t)next * sizeof(GCRef));
+    if (data)
+      for (i = 0; i < next; i++)
+        setgcrefrel(((GCRef *)data)[i], NULL);
+  } else {
+    data = realloc(roots, (size_t)next * sizeof(GCRef));
+    if (data)
+      for (i = capacity; i < next; i++)
+        setgcrefrel(((GCRef *)data)[i], NULL);
+  }
+  if (!data)
+    return 0;
+  la_storeptr_rel((void **)&slot->root_data, data);
+  la_store32_rel(&slot->root_capacity, next);
+  return 1;
+}
+
+static int jit_event_ranges_overlap(const void *a, size_t asize,
+				    const void *b, size_t bsize)
+{
+  uintptr_t ap = (uintptr_t)a, bp = (uintptr_t)b;
+  uintptr_t ae, be;
+  if (!a || !b || asize == 0 || bsize == 0)
+    return 0;
+  if (asize > ~(uintptr_t)0 - ap || bsize > ~(uintptr_t)0 - bp)
+    return 1;
+  ae = ap + asize;
+  be = bp + bsize;
+  return ap < be && bp < ae;
+}
+
+static int jit_event_inputs_alias_retained(
+  const LJJitEventSessions *sessions, const LJJitEventSessionSpec *spec)
+{
+  size_t input_root_bytes =
+    (size_t)spec->root_count * sizeof(*spec->roots);
+  uint32_t i;
+  for (i = 0; i < LJ_JIT_EVENT_SESSION_SLOTS; i++) {
+    const LJJitEventSessionSlot *slot = &sessions->slot[i];
+    GCRef *roots = (GCRef *)
+      la_loadptr_acq((void *const *)&slot->root_data);
+    uint32_t capacity = la_load32_acq(&slot->root_capacity);
+    size_t root_bytes = (size_t)capacity * sizeof(*roots);
+    if (!roots || capacity < LJ_JIT_EVENT_SESSION_ROOTS)
+      return 1;
+    if (spec->root_count != 0 &&
+	(jit_event_ranges_overlap(spec->roots, input_root_bytes,
+				  roots, root_bytes) ||
+	 jit_event_ranges_overlap(spec->roots, input_root_bytes,
+				  slot->view.data, slot->view.capacity)))
+      return 1;
+    if (spec->view &&
+	(jit_event_ranges_overlap(spec->view->data, spec->view->size,
+				  roots, root_bytes) ||
+	 jit_event_ranges_overlap(spec->view->data, spec->view->size,
+				  slot->view.data, slot->view.capacity)))
+      return 1;
+  }
+  return 0;
+}
+
+static int jit_event_session_publish_l(lua_State *L, jit_State *J,
+				       const LJJitEventSessionSpec *spec,
+				       LJJitEventSessionHandle *handle)
+{
+  TGState *tg = jit_event_owner_tg(L);
+  global_State *g;
+  LJJitEventSessions *sessions;
+  LJJitEventSessionSlot *slot;
+  GCRef *slot_roots;
+  uint64_t sequence, generation;
+  uint32_t slot_index, i, tid, flags = 0;
+  if (!J || !tg || G(L) != J2G(J) || !spec || !handle ||
+      spec->attachment_generation == 0 ||
+      spec->root_count > LJ_ROOT_SCAN_LIMIT ||
+      (spec->root_count != 0 && !spec->roots) ||
+      (!!spec->source != (spec->source_traceno != 0)) ||
+      !lj_jit_event_session_contract_valid(spec->event, spec->owner_mode,
+					  spec->edge_proof,
+					  spec->view != NULL,
+					  spec->source != NULL,
+					  spec->root_count) ||
+      !jit_event_view_spec_valid(spec->view))
+    return 0;
+  if (spec->event == LJ_JIT_EVENT_TRACE_ABORT &&
+      spec->owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE &&
+      spec->edge_proof == LJ_JIT_EVENT_EDGE_EXACT_ROOTS &&
+      (spec->view->trace.mcode_addr != 0 ||
+       spec->view->trace.szmcode != 0 || spec->view->trace.mcloop != 0 ||
+       spec->view->trace.exitstub_addr != 0))
+    return 0;  /* No native/source lease survives detached low->zero. */
+  g = tg->gl;
+  tid = lj_tg_tid_acq(tg);
+  /* Building the immutable continuation is a recorder/control operation. The
+  ** future callback cutover publishes it completely before yielding this exact
+  ** low-half token into the high-half lifecycle reservation. */
+  if (tid == 0 || jit_owner_word_acq(g) != jit_owner_pack(tid, 0) ||
+      jit_owner_l_acq(J) != L)
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  /* This must precede even the first root-element load: a CLOSED slot's last
+  ** reader may concurrently zero its retained vector. */
+  if (jit_event_inputs_alias_retained(sessions, spec))
+    return 0;
+  for (i = 0; i < spec->root_count; i++)
+    if (!spec->roots[i])
+      return 0;
+  sequence = la_load64_acq(&sessions->sequence);
+  if ((sequence & 1u) != 0 || sequence > ~(uint64_t)2 ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_IDLE ||
+      !jit_event_slot_claim(g, sessions, &slot_index))
+    return 0;
+  slot = &sessions->slot[slot_index];
+  generation = la_load64_acq(&sessions->next_generation);
+  if (generation == ~(uint64_t)0) {
+    la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+    return 0;
+  }
+  generation++;
+  if (!jit_event_slot_root_reserve(slot, spec->root_count)) {
+    la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+    return 0;
+  }
+  if (spec->source &&
+      spec->view->trace.traceno != spec->source_traceno) {
+    la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+    return 0;
+  }
+  if (spec->view && spec->view->size > slot->view.capacity) {
+    void *data = realloc(slot->view.data, spec->view->size);
+    if (!data) {
+      la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+      return 0;
+    }
+    slot->view.data = data;
+    slot->view.capacity = spec->view->size;
+  }
+  if (spec->source &&
+      !jit_event_source_pin(g, spec->source, spec->source_traceno,
+			    spec->view)) {
+    la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_FREE);
+    return 0;
+  }
+  if (spec->source)
+    flags |= LJ_JIT_EVENT_SLOT_F_SOURCE_PIN;
+  if (spec->view) {
+    memcpy(slot->view.data, spec->view->data, spec->view->size);
+    slot->view.size = spec->view->size;
+    slot->view.format = spec->view->format;
+    slot->view.flags = spec->view->flags;
+    slot->view.trace = spec->view->trace;
+    slot->view.ir = spec->view->ir;
+    slot->view.snap = spec->view->snap;
+    slot->view.snapmap = spec->view->snapmap;
+    flags |= LJ_JIT_EVENT_SLOT_F_VIEW;
+  }
+  la_store64_rel(&slot->generation, generation);
+  la_store32_rel(&slot->flags, flags);
+  la_store32_rel(&slot->event, spec->event);
+  la_store32_rel(&slot->owner_mode, spec->owner_mode);
+  la_store32_rel(&slot->edge_proof, spec->edge_proof);
+  la_store64_rel(&slot->attachment_generation,
+		 spec->attachment_generation);
+  la_store32_rel(&slot->control_borrow_state, 0);
+  la_store64_rel(&slot->control_borrow_generation, 0);
+  la_storeptr_rel((void **)&slot->saved_jit_owner_L, NULL);
+  la_store32_rel(&slot->root_count, spec->root_count);
+  la_store32_rel(&slot->owner_tid, tid);
+  la_store32_rel(&slot->owner_actor, lj_tg_actor_acq(tg));
+  la_storeptr_rel((void **)&slot->owner_L, L);
+  setgcrefrel(slot->owner_root, obj2gco(L));
+  la_storeptr_rel((void **)&slot->source, spec->source);
+  la_store32_rel(&slot->source_traceno, spec->source_traceno);
+  slot_roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  for (i = 0; i < spec->root_count; i++) {
+    GCobj *root = spec->roots[i];
+    setgcrefrel(slot_roots[i], root);
+    if (root)
+      lj_gc_pubobjroot(L, root);  /* Pre-publication active-cycle barrier. */
+  }
+  lj_gc_pubobjroot(L, obj2gco(L));
+  if (spec->source)
+    lj_gc_pubobjroot(L, obj2gco(spec->source));
+  if (!la_cas64(&sessions->sequence, &sequence, sequence + 1u,
+		LA_ACQ_REL, LA_ACQ)) {
+    la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_CLOSED);
+    (void)jit_event_slot_cleanup(g, slot, LJ_JIT_EVENT_SLOT_CLOSED);
+    return 0;
+  }
+  if (LJ_UNLIKELY(la_load32_acq(&sessions->state) !=
+		   LJ_JIT_EVENT_PUBLICATION_IDLE))
+    abort();
+  la_store64_rel(&sessions->next_generation, generation);
+  la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_ACTIVE);
+  la_store64_rel(&sessions->active_generation, generation);
+  la_store32_rel(&sessions->active_slot, slot_index);
+  la_store32_rel(&sessions->state, LJ_JIT_EVENT_PUBLICATION_ACTIVE);
+  la_store64_rel(&sessions->sequence, sequence + 2u);
+  /* Close a MARK/WEAK/SWEEP activation edge which crossed the even publish. */
+  for (i = 0; i < spec->root_count; i++)
+    if (spec->roots[i])
+      lj_gc_pubobjroot(L, spec->roots[i]);
+  lj_gc_pubobjroot(L, obj2gco(L));
+  if (spec->source)
+    lj_gc_pubobjroot(L, obj2gco(spec->source));
+  handle->generation = generation;
+  handle->slot = slot_index;
+  handle->owner_mode = spec->owner_mode;
+  return 1;
+}
+
+static int jit_event_session_unpublish_l(
+  lua_State *L, jit_State *J, const LJJitEventSessionHandle *handle)
+{
+  TGState *tg = jit_event_owner_tg(L);
+  LJJitEventSessions *sessions;
+  LJJitEventSessionSlot *slot;
+  uint64_t sequence;
+  uint32_t tid;
+  if (!J || !tg || G(L) != J2G(J) || !handle ||
+      handle->generation == 0 || handle->slot >= LJ_JIT_EVENT_SESSION_SLOTS ||
+      (handle->owner_mode != LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE &&
+       handle->owner_mode != LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE))
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  tid = lj_tg_tid_acq(tg);
+  if (tid == 0 ||
+      (handle->owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE &&
+       (jit_owner_word_acq(tg->gl) != jit_owner_pack(tid, 0) ||
+	jit_owner_l_acq(J) != L)))
+    return 0;
+  slot = &sessions->slot[handle->slot];
+  sequence = la_load64_acq(&sessions->sequence);
+  if ((sequence & 1u) != 0 || sequence > ~(uint64_t)2 ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_ACTIVE ||
+      la_load32_acq(&sessions->active_slot) != handle->slot ||
+      la_load64_acq(&sessions->active_generation) != handle->generation ||
+      la_load32_acq(&slot->state) != LJ_JIT_EVENT_SLOT_ACTIVE ||
+      la_load64_acq(&slot->generation) != handle->generation ||
+      la_load32_acq(&slot->owner_mode) != handle->owner_mode ||
+      !la_cas64(&sessions->sequence, &sequence, sequence + 1u,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  la_store32_rel(&slot->state, LJ_JIT_EVENT_SLOT_CLOSED);
+  la_store64_rel(&sessions->active_generation, 0);
+  la_store32_rel(&sessions->active_slot, LJ_JIT_EVENT_SESSION_SLOTS);
+  la_store32_rel(&sessions->state, LJ_JIT_EVENT_PUBLICATION_IDLE);
+  la_store64_rel(&sessions->sequence, sequence + 2u);
+  if (la_load32_acq(&slot->readers) == 0)
+    (void)jit_event_slot_cleanup(tg->gl, slot, LJ_JIT_EVENT_SLOT_CLOSED);
+  return 1;
+}
+
+static int jit_event_session_active_handle(
+  TGState *tg, const LJJitEventSessionHandle *handle)
+{
+  LJJitEventSessions *sessions;
+  LJJitEventSessionSlot *slot;
+  uint64_t sequence;
+  if (!tg || !handle || handle->generation == 0 ||
+      handle->slot >= LJ_JIT_EVENT_SESSION_SLOTS)
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  sequence = la_load64_acq(&sessions->sequence);
+  if ((sequence & 1u) != 0 ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_ACTIVE ||
+      la_load32_acq(&sessions->active_slot) != handle->slot ||
+      la_load64_acq(&sessions->active_generation) != handle->generation)
+    return 0;
+  slot = &sessions->slot[handle->slot];
+  return la_load32_acq(&slot->state) == LJ_JIT_EVENT_SLOT_ACTIVE &&
+    la_load64_acq(&slot->generation) == handle->generation &&
+    la_load32_acq(&slot->owner_mode) == handle->owner_mode &&
+    la_load64_acq(&sessions->sequence) == sequence;
+}
+
+int lj_jit_event_session_begin_l(lua_State *L, jit_State *J,
+				 const LJJitEventSessionSpec *spec,
+				 LJJitEventSessionHandle *handle)
+{
+  TGState *tg;
+  global_State *g;
+  TraceState trace_state;
+  uint32_t tid;
+  if (!handle)
+    return 0;
+  memset(handle, 0, sizeof(*handle));
+  if (!L || !J || G(L) != J2G(J) || !(tg = jit_event_owner_tg(L)) ||
+      tg != lj_jit_owner_tg_l(L, J) || !spec)
+    return 0;
+  g = tg->gl;
+  tid = lj_tg_tid_acq(tg);
+  trace_state = lj_trace_state_load(J);
+  if (tid == 0 || jit_owner_word_acq(g) != jit_owner_pack(tid, 0) ||
+      jit_owner_l_acq(J) != L ||
+      (spec->owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE &&
+       ((spec->event == LJ_JIT_EVENT_TRACE_START &&
+	 trace_state != LJ_TRACE_START) ||
+	(spec->event == LJ_JIT_EVENT_RECORD &&
+	 trace_state != LJ_TRACE_RECORD &&
+	 trace_state != LJ_TRACE_RECORD_1ST))) ||
+      (spec->owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE &&
+       trace_state != LJ_TRACE_IDLE) ||
+      !jit_event_session_publish_l(L, J, spec, handle))
+    return 0;
+
+  /* Deterministic coverage of the post-publication rollback edge. Production
+  ** CAS failure has the same low-owner cleanup, unless ownership corruption
+  ** makes a safe rollback impossible. */
+  if (trace_test_take_event_handoff_failure()) {
+    if (LJ_UNLIKELY(jit_owner_word_acq(g) != jit_owner_pack(tid, 0) ||
+		    jit_owner_l_acq(J) != L ||
+		    !jit_event_session_unpublish_l(L, J, handle)))
+      abort();
+    memset(handle, 0, sizeof(*handle));
+    return 0;
+  }
+
+  if (spec->owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE) {
+    if (lj_jit_lifecycle_yield_l(L, J))
+      return 1;
+    if (LJ_UNLIKELY(jit_owner_word_acq(g) != jit_owner_pack(tid, 0) ||
+		    jit_owner_l_acq(J) != L ||
+		    !jit_event_session_unpublish_l(L, J, handle)))
+      abort();
+    memset(handle, 0, sizeof(*handle));
+    return 0;
+  }
+
+  if (LJ_UNLIKELY(spec->owner_mode !=
+		  LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE))
+    abort();  /* The publication contract rejected every other mode. */
+  jit_owner_l_rel(J, NULL);
+  if (jit_token_release_exact(g, tid))
+    return 1;
+  if (jit_owner_word_acq(g) == jit_owner_pack(tid, 0)) {
+    jit_owner_l_rel(J, L);
+    if (LJ_UNLIKELY(!jit_event_session_unpublish_l(L, J, handle)))
+      abort();
+    memset(handle, 0, sizeof(*handle));
+    return 0;
+  }
+  abort();  /* No legal peer may steal an exact low-half token. */
+}
+
+int lj_jit_event_session_end_l(lua_State *L, jit_State *J,
+			       const LJJitEventSessionHandle *handle)
+{
+  TGState *tg;
+  global_State *g;
+  LJJitOwnerWord owner_word;
+  uint32_t tid;
+  if (!L || !J || G(L) != J2G(J) || !(tg = jit_event_owner_tg(L)) ||
+      !handle || !jit_event_session_active_handle(tg, handle))
+    return 0;
+  g = tg->gl;
+  tid = lj_tg_tid_acq(tg);
+  if (handle->owner_mode ==
+      LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE) {
+    if (tid == 0 || jit_owner_word_acq(g) != jit_owner_pack(0, tid) ||
+	jit_owner_l_acq(J) != L || !lj_jit_lifecycle_resume_l(L, J))
+      return 0;
+    if (LJ_UNLIKELY(!jit_event_session_unpublish_l(L, J, handle)))
+      abort();
+    return 1;
+  }
+  if (handle->owner_mode != LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE)
+    return 0;
+  owner_word = jit_owner_word_acq(g);
+  if (jit_owner_token(owner_word) == tid ||
+      jit_owner_lifecycle(owner_word) == tid)
+    return 0;
+  return jit_event_session_unpublish_l(L, J, handle);
+}
+
+int lj_jit_event_session_snapshot_acquire(
+  global_State *g, TGState *tg, LJJitEventSessionSnapshot *snapshot)
+{
+  LJJitEventSessions *sessions;
+  LJJitEventSessionSlot *slot;
+  uint64_t sequence, generation;
+  uint32_t slot_index, readers;
+  if (!snapshot)
+    return LJ_JIT_EVENT_SNAPSHOT_RETRY;
+  memset(snapshot, 0, sizeof(*snapshot));
+  if (!g || !tg || !lj_gc2_smr_read_try(g))
+    return LJ_JIT_EVENT_SNAPSHOT_RETRY;
+  if (tg->gl != g) {
+    lj_gc2_smr_read_leave(g);
+    return LJ_JIT_EVENT_SNAPSHOT_RETRY;
+  }
+  sessions = &tg->jit_event_sessions;
+  sequence = la_load64_acq(&sessions->sequence);
+  if ((sequence & 1u) != 0) {
+    lj_gc2_smr_read_leave(g);
+    return LJ_JIT_EVENT_SNAPSHOT_RETRY;
+  }
+  if (la_load32_acq(&sessions->state) == LJ_JIT_EVENT_PUBLICATION_IDLE) {
+    int idle = la_load64_acq(&sessions->sequence) == sequence &&
+      la_load32_acq(&sessions->state) == LJ_JIT_EVENT_PUBLICATION_IDLE ?
+      LJ_JIT_EVENT_SNAPSHOT_IDLE : LJ_JIT_EVENT_SNAPSHOT_RETRY;
+    lj_gc2_smr_read_leave(g);
+    return idle;
+  }
+  slot_index = la_load32_acq(&sessions->active_slot);
+  generation = la_load64_acq(&sessions->active_generation);
+  if (slot_index >= LJ_JIT_EVENT_SESSION_SLOTS || generation == 0)
+    goto retry_leave;
+  slot = &sessions->slot[slot_index];
+  readers = la_load32_acq(&slot->readers);
+  for (;;) {
+    if (readers == ~(uint32_t)0)
+      goto retry_leave;
+    if (la_cas32(&slot->readers, &readers, readers + 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+  if (la_load64_acq(&sessions->sequence) != sequence ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_ACTIVE ||
+      la_load32_acq(&sessions->active_slot) != slot_index ||
+      la_load64_acq(&sessions->active_generation) != generation ||
+      la_load32_acq(&slot->state) != LJ_JIT_EVENT_SLOT_ACTIVE ||
+      la_load64_acq(&slot->generation) != generation) {
+    jit_event_slot_reader_drop(tg, slot);
+    goto retry_leave;
+  }
+  snapshot->g = g;
+  snapshot->tg = tg;
+  snapshot->slot = slot;
+  snapshot->sequence = sequence;
+  snapshot->generation = generation;
+  snapshot->slot_index = slot_index;
+  snapshot->event = la_load32_acq(&slot->event);
+  snapshot->owner_mode = la_load32_acq(&slot->owner_mode);
+  snapshot->edge_proof = la_load32_acq(&slot->edge_proof);
+  snapshot->attachment_generation =
+    la_load64_acq(&slot->attachment_generation);
+  if (la_load64_acq(&sessions->sequence) != sequence ||
+      la_load32_acq(&slot->state) != LJ_JIT_EVENT_SLOT_ACTIVE) {
+    jit_event_slot_reader_drop(tg, slot);
+    memset(snapshot, 0, sizeof(*snapshot));
+    lj_gc2_smr_read_leave(g);
+    return LJ_JIT_EVENT_SNAPSHOT_RETRY;
+  }
+  return LJ_JIT_EVENT_SNAPSHOT_ACTIVE;
+
+retry_leave:
+  lj_gc2_smr_read_leave(g);
+  return LJ_JIT_EVENT_SNAPSHOT_RETRY;
+}
+
+int lj_jit_event_session_snapshot_release(
+  LJJitEventSessionSnapshot *snapshot)
+{
+  TGState *tg;
+  global_State *g;
+  LJJitEventSessions *sessions;
+  LJJitEventSessionSlot *slot;
+  int stable;
+  if (!snapshot || !(g = snapshot->g) || !(tg = snapshot->tg) ||
+      !(slot = (LJJitEventSessionSlot *)snapshot->slot))
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  stable = la_load64_acq(&sessions->sequence) == snapshot->sequence &&
+    la_load32_acq(&sessions->state) == LJ_JIT_EVENT_PUBLICATION_ACTIVE &&
+    la_load32_acq(&sessions->active_slot) == snapshot->slot_index &&
+    la_load64_acq(&sessions->active_generation) == snapshot->generation &&
+    la_load32_acq(&slot->state) == LJ_JIT_EVENT_SLOT_ACTIVE &&
+    la_load64_acq(&slot->generation) == snapshot->generation &&
+    la_load32_acq(&slot->event) == snapshot->event &&
+    la_load32_acq(&slot->owner_mode) == snapshot->owner_mode &&
+    la_load32_acq(&slot->edge_proof) == snapshot->edge_proof &&
+    la_load64_acq(&slot->attachment_generation) ==
+      snapshot->attachment_generation;
+  jit_event_slot_reader_drop(tg, slot);
+  memset(snapshot, 0, sizeof(*snapshot));
+  lj_gc2_smr_read_leave(g);
+  return stable;
 }
 
 int lj_jit_token_acquire_wait(jit_State *J)
@@ -3358,6 +4379,13 @@ void lj_trace_freestate(global_State *g)
   jit_State *J = G2J(g);
   if (LJ_UNLIKELY(jit_owner_word_acq(g) != jit_owner_pack(0, 0))) {
     lj_assertG(0, "JIT owner word remained reserved at VM close");
+    abort();
+  }
+  /* Main-TG teardown may bypass lj_tg_fini() for the embedded arena path.
+  ** Close and free retained raw views while trace slots are still available,
+  ** and fail before trace retirement could invalidate a leaked source pin. */
+  if (g->main_tg && !lj_jit_event_sessions_fini(g, g->main_tg)) {
+    lj_assertG(0, "JIT event session remained live at VM close");
     abort();
   }
   /* Fail before buffers or the active vector disappear. A live native frame is

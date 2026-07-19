@@ -958,9 +958,12 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
       err.winerr = frame->winerr;
     }
     callback_frame_pop(cb);
-    ccallback_auto_detach_rel(cb, 0);
-    if (auto_detach)
-      lj_threading_detach(L, 0);
+    /* An auto-attached throw still has a physical callback/JIT unwind frame
+    ** above the foreign catcher. Keep its lifetime token and a single pending
+    ** detach bit until the personality has declined every LuaJIT landing and
+    ** is about to dispose this frame. Ordinary attached callbacks have no
+    ** debt. */
+    ccallback_auto_detach_rel(cb, auto_detach);
   } else {
     uint8_t auto_detach = ccallback_auto_detach_acq(cb);
     lj_tg_ffi_call_func_rel(tg, NULL);
@@ -968,12 +971,29 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
     ccallback_slot_rel(cb, 0);
     if (ccallback_depth_acq(cb) == 0)
       ccallback_L_rel(cb, NULL);  /* Setup failed before a frame was pushed. */
-    if (auto_detach) {
-      ccallback_auto_detach_rel(cb, 0);
-      lj_threading_detach(L, 0);
-    }
+    ccallback_auto_detach_rel(cb, auto_detach);
   }
   /* The frame is popped first, so no per-TG error state survives the unwind. */
+  ccallback_error_restore(&err);
+}
+
+void lj_ccallback_unwind_detach(void)
+{
+  CCallbackErrorState err;
+  TGState *tg;
+  lua_State *L;
+  ccallback_error_save(&err);
+  tg = lj_thr_get_tg();
+  if (tg == NULL || ccallback_auto_detach_acq(&tg->cb) == 0) {
+    ccallback_error_restore(&err);
+    return;
+  }
+  L = lj_tg_load_thread_L(tg);
+  /* This is the final LuaJIT cleanup edge, not a retryable public request.
+  ** Refusal would strand the sole TG/universe lifetime token as the physical
+  ** callback frame is disposed, so make any invariant split fail-stop. */
+  if (L == NULL || !lj_threading_detach_callback_unwind(L))
+    abort();
   ccallback_error_restore(&err);
 }
 

@@ -14,6 +14,17 @@ local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script
 local run_stock = runtime.run_stock
 
+local function build_and_run_cpp(t, out, cppfile, opts)
+  local old_compiler = t.compiler
+  local ok, err
+  t.compiler = getenv("CXX", "c++")
+  ok, err = xpcall(function()
+    build_and_run_c(t, out, cppfile, opts)
+  end, debug.traceback)
+  t.compiler = old_compiler
+  if not ok then error(err, 0) end
+end
+
 local function read_all(path)
   local f = assert(io.open(path, "rb"))
   local s = assert(f:read("*a"))
@@ -287,6 +298,16 @@ print("bulk fill ok")
         { output = "lj_t-ffi-callback-auto-attach",
           cfile = "t-ffi-callback-auto-attach.c",
           opts = { timeout = "20s" } }
+      })
+      build_and_run_cpp(t, t:tmp("lj_t-ffi-callback-auto-unwind"),
+                        "t-ffi-callback-auto-unwind.cpp", {
+        build = false,
+        default_cflags = false,
+        cflags = table.concat({
+          "-std=gnu++11", "-O2", "-Wall", "-Wextra", "-Werror",
+          "-mcx16", "-fexceptions", "-funwind-tables"
+        }, " "),
+        timeout = "20s"
       })
       run_luajit_script(t, "t-ffi-callback-runtime.lua", {
         getenv("LJ_M7_FFI_CBACK_RT_THREADS", "6"),

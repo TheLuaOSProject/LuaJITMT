@@ -551,6 +551,9 @@ LJ_FUNC int lj_gc2_test_table_token_pass_step(global_State *g,
 LJ_FUNC void lj_gc2_test_table_token_pass_reset(global_State *g);
 LJ_FUNC int lj_gc2_test_table_token_pass_ack_current(global_State *g);
 LJ_FUNC void lj_gc2_test_table_dirty_bump(global_State *g, GCtab *t);
+#if LJ_HASJIT
+LJ_FUNC int lj_gc2_test_scan_jit_event_sessions(global_State *g, TGState *tg);
+#endif
 LJ_FUNC void lj_gc2_test_scan_tg_thread_root(global_State *g, TGState *tg,
 					      lua_State *L);
 #if LJ_HASFFI && LJ_HASJIT

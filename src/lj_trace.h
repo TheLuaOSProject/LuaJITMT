@@ -68,6 +68,88 @@ LJ_FUNC int lj_jit_lifecycle_yield_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_lifecycle_resume_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_lifecycle_held_l(lua_State *L, jit_State *J);
 LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
+
+typedef struct LJJitEventFrozenViewSpec {
+  const void *data;
+  uint32_t size;
+  uint32_t format;
+  uint32_t flags;
+  LJJitEventFrozenTraceHeader trace;
+  LJJitEventFrozenSpan ir;
+  LJJitEventFrozenSpan snap;
+  LJJitEventFrozenSpan snapmap;
+} LJJitEventFrozenViewSpec;
+
+typedef struct LJJitEventSessionSpec {
+  uint32_t event;
+  uint32_t owner_mode;
+  uint32_t edge_proof;
+  uint64_t attachment_generation;
+  const LJJitEventFrozenViewSpec *view;
+  GCobj *const *roots;
+  uint32_t root_count;
+  GCtrace *source;
+  TraceNo source_traceno;
+} LJJitEventSessionSpec;
+
+typedef struct LJJitEventSessionHandle {
+  uint64_t generation;
+  uint32_t slot;
+  uint32_t owner_mode;
+} LJJitEventSessionHandle;
+
+typedef struct LJJitEventSessionSnapshot {
+  global_State *g;
+  TGState *tg;
+  const LJJitEventSessionSlot *slot;
+  uint64_t sequence;
+  uint64_t generation;
+  uint32_t slot_index;
+  uint32_t event;
+  uint32_t owner_mode;
+  uint32_t edge_proof;
+  uint64_t attachment_generation;
+} LJJitEventSessionSnapshot;
+
+#define LJ_JIT_EVENT_SNAPSHOT_RETRY	(-1)
+#define LJ_JIT_EVENT_SNAPSHOT_IDLE	0
+#define LJ_JIT_EVENT_SNAPSHOT_ACTIVE	1
+
+LJ_FUNC void lj_jit_event_sessions_init(TGState *tg);
+LJ_FUNC int lj_jit_event_sessions_fini(global_State *g, TGState *tg);
+LJ_FUNC int lj_jit_event_sessions_quiescent(TGState *tg);
+LJ_FUNC int lj_jit_event_sessions_logical_detach_ready(TGState *tg);
+LJ_FUNC int lj_jit_event_sessions_detach_ready(TGState *tg);
+/* Composite owner transitions. CONTINUATION publishes before low->high and
+** resumes high->low before unpublishing. DETACHED publishes an immutable
+** payload before releasing low->zero and later closes by exact TG actor and
+** generation without touching a peer's global JIT owner word. */
+LJ_FUNC int lj_jit_event_session_begin_l(lua_State *L, jit_State *J,
+					  const LJJitEventSessionSpec *spec,
+					  LJJitEventSessionHandle *handle);
+LJ_FUNC int lj_jit_event_session_end_l(lua_State *L, jit_State *J,
+					const LJJitEventSessionHandle *handle);
+LJ_FUNC int lj_jit_event_session_contract_valid(uint32_t event,
+						 uint32_t owner_mode,
+						 uint32_t edge_proof,
+						 int has_view,
+						 int has_source,
+						 uint32_t root_count);
+/* The caller must already own an exact live TG identity. This function adds a
+** nonwaiting GC2 SMR lease and retains it in ACTIVE snapshots until release. */
+LJ_FUNC int lj_jit_event_session_snapshot_acquire(
+  global_State *g, TGState *tg, LJJitEventSessionSnapshot *snapshot);
+LJ_FUNC int lj_jit_event_session_snapshot_release(
+  LJJitEventSessionSnapshot *snapshot);
+LJ_FUNC int lj_jit_event_frozen_view_valid(const LJJitEventFrozenView *view);
+/* Copy into non-aliasing unpublished frozen backing and compare a live
+** snapshot without racing the runtime-mutated
+** atomic exit count or depending on structure padding bytes. Count is copied
+** as point-in-time information but excluded from exact-source equality. */
+LJ_FUNC void lj_jit_event_snapshot_copy_canonical(SnapShot *dst,
+						   const SnapShot *src);
+LJ_FUNC int lj_jit_event_snapshot_matches_live(const SnapShot *frozen,
+						const SnapShot *live);
 LJ_FUNC void lj_trace_abort(global_State *g);
 LJ_FUNC void lj_trace_abort_owner(lua_State *L);
 LJ_FUNC void lj_trace_abort_owner_before_park(lua_State *L);
@@ -91,6 +173,7 @@ LJ_FUNC void lj_trace_test_reset_exit_stats(void);
 LJ_FUNC uint32_t lj_trace_test_exit_calls(void);
 LJ_FUNC TraceNo lj_trace_test_last_exit_parent(void);
 LJ_FUNC ExitNo lj_trace_test_last_exitno(void);
+LJ_FUNC void lj_trace_test_force_event_handoff_failure(uint32_t count);
 #endif
 
 #ifdef LJ_TRACE_TEST_HELPERS
@@ -204,6 +287,12 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 #define lj_jit_lifecycle_resume_l(L, J)	(UNUSED(L), UNUSED(J), 0)
 #define lj_jit_lifecycle_held_l(L, J)	(UNUSED(L), UNUSED(J), 0)
 #define lj_jit_owner_tg_l(L, J)	(UNUSED(L), UNUSED(J), NULL)
+#define lj_jit_event_sessions_init(tg)	UNUSED(tg)
+#define lj_jit_event_sessions_fini(g, tg) \
+  (UNUSED(g), UNUSED(tg), 1)
+#define lj_jit_event_sessions_quiescent(tg)	(UNUSED(tg), 1)
+#define lj_jit_event_sessions_logical_detach_ready(tg) (UNUSED(tg), 1)
+#define lj_jit_event_sessions_detach_ready(tg)	(UNUSED(tg), 1)
 #define lj_trace_initstate(g)	UNUSED(g)
 #define lj_trace_freestate(g)	UNUSED(g)
 #define lj_trace_reclaim_retired(g, e)	(UNUSED(g), UNUSED(e), 0)

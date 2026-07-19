@@ -13,6 +13,7 @@
 #include "lj_state.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lj_trace.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -1649,6 +1650,26 @@ int lj_thr_tg_handoff_current(TGState *expected_tg)
   if (!expected_tg || actor == 0 ||
       lj_tg_actor_acq(expected_tg) != actor)
     return 0;
+#if LJ_HASJIT
+  {
+    global_State *g = expected_tg->gl;
+    uint32_t tid;
+    LJJitOwnerWord owner;
+    if (!g)
+      return 0;
+    tid = lj_tg_tid_acq(expected_tg);
+    owner = jit_owner_word_acq(g);
+    /* Actor zero would strand any target-owned recorder/lifecycle half without
+    ** changing its event-session sequence. Synthetic fixtures may use tid 0;
+    ** skip equality in that case so an empty {0,0} word is not a false owner.
+    ** Handoff is stricter than logical detach: even CLOSED readers retain the
+    ** old actor identity and therefore veto migration. */
+    if ((tid != 0 &&
+	 (jit_owner_token(owner) == tid || jit_owner_lifecycle(owner) == tid)) ||
+	!lj_jit_event_sessions_quiescent(expected_tg))
+      return 0;
+  }
+#endif
   if (bound == expected_tg) {
     if ((word & LJ_THR_TG_EXACT_TAG) != 0)
       return 0;  /* The caller must first return the exact registry lease. */
@@ -1694,6 +1715,15 @@ int lj_thr_main_close_claim(lua_State *L)
   old_actor = lj_state_owner_actor(owner);
   if (old_actor == 0)
     return 0;
+#if LJ_HASJIT
+  /* This preflight is deliberately before the same-owner fast return. A
+  ** callback may call lua_close() with an otherwise exact actor/state tuple;
+  ** neither its lifecycle reservation nor rooted session may be discarded by
+  ** that shortcut. Detach readiness requires every slot FREE/readers-zero. */
+  if (jit_owner_word_acq(g) != jit_owner_pack(0, 0) ||
+      !lj_jit_event_sessions_detach_ready(tg))
+    return 0;
+#endif
   desired = lj_state_owner_pack(tid, actor);
   if (lj_tg_actor_acq(tg) == actor && owner == desired &&
       lj_tg_actor_acq(tg) == actor)

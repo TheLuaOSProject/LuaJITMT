@@ -9134,6 +9134,150 @@ retry:
 }
 #endif
 
+#if LJ_HASJIT
+/* Scan the one immutable event publication for this TG.  The caller already
+** holds the outer TG/allocator SMR lease.  Slot readers prevent raw backing
+** reuse; the final exact sequence check converts any overlapping close into a
+** root-snapshot retry instead of silently accepting a partial publication. */
+static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
+{
+  LJJitEventSessionSnapshot snapshot;
+  const LJJitEventSessionSlot *slot;
+  GCRef *roots;
+  lua_State *owner_L;
+  GCobj *owner_root;
+  GCtrace *source;
+  TraceNo source_traceno;
+  LJJitOwnerWord owner_word = jit_owner_pack(0, 0);
+  uint32_t flags, nroots, root_capacity, owner_mode, edge_proof, i;
+  uint32_t owner_tid, owner_actor, tg_tid, tg_actor;
+  int acquired, complete = 1;
+  acquired = lj_jit_event_session_snapshot_acquire(g, tg, &snapshot);
+  if (acquired == LJ_JIT_EVENT_SNAPSHOT_IDLE)
+    return 1;
+  if (acquired != LJ_JIT_EVENT_SNAPSHOT_ACTIVE)
+    goto retry_without_reader;
+  slot = snapshot.slot;
+  flags = la_load32_acq(&slot->flags);
+  nroots = la_load32_acq(&slot->root_count);
+  root_capacity = la_load32_acq(&slot->root_capacity);
+  roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  source = (GCtrace *)la_loadptr_acq((void *const *)&slot->source);
+  source_traceno = (TraceNo)la_load32_acq(&slot->source_traceno);
+  owner_mode = la_load32_acq(&slot->owner_mode);
+  edge_proof = la_load32_acq(&slot->edge_proof);
+  owner_tid = la_load32_acq(&slot->owner_tid);
+  owner_actor = la_load32_acq(&slot->owner_actor);
+  tg_tid = lj_tg_tid_acq(tg);
+  tg_actor = lj_tg_actor_acq(tg);
+  owner_L = (lua_State *)la_loadptr_acq((void *const *)&slot->owner_L);
+  owner_root = gcref_acq(slot->owner_root);
+  if (owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE)
+    owner_word = jit_owner_word_acq(g);
+  if (snapshot.generation == 0 ||
+      snapshot.owner_mode != owner_mode || snapshot.edge_proof != edge_proof ||
+      snapshot.attachment_generation == 0 ||
+      !lj_jit_event_session_contract_valid(
+	snapshot.event, owner_mode, edge_proof,
+	(flags & LJ_JIT_EVENT_SLOT_F_VIEW) != 0, source != NULL, nroots) ||
+      owner_tid == 0 || owner_tid != tg_tid || owner_actor == 0 ||
+      owner_actor == LJ_THR_ACTOR_RETIRED || owner_actor != tg_actor ||
+      owner_L == NULL || owner_root != obj2gco(owner_L) ||
+      la_load32_acq(&slot->control_borrow_state) != 0 ||
+      la_load64_acq(&slot->control_borrow_generation) != 0 ||
+      la_loadptr_acq((void *const *)&slot->saved_jit_owner_L) != NULL ||
+      !roots || ((uintptr_t)roots & 7u) != 0 ||
+      root_capacity < LJ_JIT_EVENT_SESSION_ROOTS || nroots > root_capacity ||
+      nroots > LJ_ROOT_SCAN_LIMIT ||
+      ((roots == slot->root_inline) !=
+	(root_capacity == LJ_JIT_EVENT_SESSION_ROOTS)) ||
+      (!!source != (source_traceno != 0)) ||
+      (((flags & LJ_JIT_EVENT_SLOT_F_SOURCE_PIN) != 0) !=
+	(source != NULL)) ||
+      (flags & ~(LJ_JIT_EVENT_SLOT_F_VIEW |
+		 LJ_JIT_EVENT_SLOT_F_SOURCE_PIN)) != 0) {
+    complete = 0;
+  }
+  /* A continuation view can retain unpinned native addresses. Its ACTIVE
+  ** lifetime is therefore valid only while this exact TG owns either the
+  ** recorder half (publish/pre-yield or resume/pre-close) or lifecycle half
+  ** (yielded callback), and J->L still names the published carrier. Detached
+  ** immutable sessions deliberately remain independent of the owner word. */
+  if (complete && owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE &&
+      !((owner_word == jit_owner_pack(tg_tid, 0) ||
+	 owner_word == jit_owner_pack(0, tg_tid)) &&
+	jit_owner_l_acq(G2J(g)) == owner_L))
+    complete = 0;
+  /* Admit the raw state identity as a GC object before dereferencing it for
+  ** same-universe/TG ownership validation. This root remains independent of
+  ** tg->cur_L, which a same-TG coroutine callback may temporarily replace. */
+  if (complete) {
+    GC2MarkScope owner_scope;
+    int owner_status = gc2_admit_thread_identity(g, owner_L, &owner_scope);
+    /* ACTIVE publication admitted the exact TG/state identity. Once close
+    ** makes logical detach legal, a retained reader may overlap tg_hint/state
+    ** ownership teardown; its SMR lease still keeps this marked THREAD body
+    ** and universe pointer valid until the final sequence recheck. */
+    if (owner_status == GC2_MARK_DEAD || owner_root != obj2gco(owner_L) ||
+	G(owner_L) != g ||
+	!gc2_mark_thread_root_obj_status(g, owner_root))
+      complete = 0;
+    gc2_mark_scope_leave(&owner_scope);
+  }
+  if (complete && (flags & LJ_JIT_EVENT_SLOT_F_VIEW) != 0) {
+    const LJJitEventFrozenView *view = &slot->view;
+    if (!lj_jit_event_frozen_view_valid(view))
+      complete = 0;
+  } else if (complete &&
+      (slot->view.size != 0 ||
+       slot->view.format != LJ_JIT_EVENT_VIEW_FORMAT_NONE)) {
+    complete = 0;
+  }
+  for (i = 0; complete && i < nroots; i++) {
+    GCobj *root = gcref_acq(roots[i]);
+    if (!root || !gc2_mark_thread_root_obj_status(g, root))
+      complete = 0;
+  }
+  if (complete && (flags & LJ_JIT_EVENT_SLOT_F_SOURCE_PIN) != 0) {
+    /* Exact slot validation inside mark_pinned is the first source
+    ** dereference. It preserves KGC/start-proto/snapshot-PC/mcode edges even
+    ** when retirement has already cleared source->traceno. */
+    if (!source || source_traceno == 0 ||
+	!lj_trace_native_mark_pinned(g, source, source_traceno) ||
+	!gc2_mark_thread_root_obj_status(g, obj2gco(source)))
+      complete = 0;
+  }
+  if (complete && edge_proof == LJ_JIT_EVENT_EDGE_PINNED_SOURCE &&
+      (flags & (LJ_JIT_EVENT_SLOT_F_VIEW |
+		LJ_JIT_EVENT_SLOT_F_SOURCE_PIN)) !=
+      (LJ_JIT_EVENT_SLOT_F_VIEW | LJ_JIT_EVENT_SLOT_F_SOURCE_PIN))
+    complete = 0;
+  if (complete && edge_proof == LJ_JIT_EVENT_EDGE_EXACT_ROOTS &&
+      flags != LJ_JIT_EVENT_SLOT_F_VIEW)
+    complete = 0;
+  if (complete && edge_proof == LJ_JIT_EVENT_EDGE_NONE && flags != 0)
+    complete = 0;
+  /* Handoff is forbidden while the session is nonquiescent. Recheck the
+  ** captured actor on both sides of reader release so a corruption/retire
+  ** overlap becomes a root-scan retry without touching freed slot backing. */
+  if (lj_tg_actor_acq(tg) != owner_actor)
+    complete = 0;
+  if (!lj_jit_event_session_snapshot_release(&snapshot))
+    complete = 0;
+  if (lj_tg_actor_acq(tg) != owner_actor)
+    complete = 0;
+  if (!complete) {
+    gc2_root_scan_retry(g);
+    return 0;
+  }
+  return 1;
+
+retry_without_reader:
+  gc2_root_scan_retry(g);
+  return 0;
+}
+#endif
+
 static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
 {
   lua_State *thread_L, *cur_L;
@@ -9141,8 +9285,13 @@ static int gc2_scan_owner_tg_roots(global_State *g, TGState *tg)
   int complete = 1;
   if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
     return 1;
+#if LJ_HASJIT
+  if (!gc2_mark_jit_event_owner_session(g, tg))
+    complete = 0;
+#endif
 #if LJ_HASFFI && LJ_HASJIT
-  complete = gc2_mark_ffi_native_owner_frames(g, tg);
+  if (!gc2_mark_ffi_native_owner_frames(g, tg))
+    complete = 0;
 #endif
   /* Detach tears down tmpbuf before publishing DEAD. Every remaining live TG
   ** scans this owner-private backing only at its acknowledgement boundary. */
@@ -9473,6 +9622,17 @@ void lj_gc2_test_scan_roots(global_State *g, lua_State *L)
 }
 
 #if defined(LJ_GC2_TEST_HELPERS)
+#if LJ_HASJIT
+int lj_gc2_test_scan_jit_event_sessions(global_State *g, TGState *tg)
+{
+  int result;
+  if (!g || !tg || tg->gl != g || !lj_gc2_smr_read_try(g))
+    return 0;
+  result = gc2_mark_jit_event_owner_session(g, tg);
+  lj_gc2_smr_read_leave(g);
+  return result;
+}
+#endif
 #if LJ_HASFFI && LJ_HASJIT
 int lj_gc2_test_scan_ffi_native_frames(global_State *g, TGState *tg)
 {

@@ -21,6 +21,9 @@
 #include "lj_arena.h"
 #include "lj_chan.h"
 #include "lj_ccallback.h"
+#if LJ_HASFFI
+#include "lj_ccall.h"
+#endif
 #include "lj_err.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -44,6 +47,48 @@ static int threading_arena_internal(global_State *g)
 }
 
 static int threading_tg_is_registered(global_State *g, TGState *target);
+
+static int threading_jit_detach_preabort_ready(global_State *g, TGState *tg)
+{
+#if LJ_HASJIT
+  LJJitOwnerWord word;
+  uint32_t tid;
+  if (!g || !tg || tg->gl != g || !(tid = lj_tg_tid_acq(tg)))
+    return 0;
+  word = jit_owner_word_acq(g);
+  /* A low-half recorder is cancellable by the immediately following
+  ** abort_owner. A high-half callback lifecycle is not. */
+  return jit_owner_lifecycle(word) != tid &&
+    lj_jit_event_sessions_logical_detach_ready(tg);
+#else
+  UNUSED(g);
+  UNUSED(tg);
+  return 1;
+#endif
+}
+
+static int threading_detach_scope_quiescent(global_State *g, TGState *tg,
+					     lua_State *L)
+{
+  uint32_t tid;
+  if (!g || !tg || tg->gl != g || !(tid = lj_tg_tid_acq(tg)) ||
+      vmevent_owner_acq(g) == tid || (L && L->cframe != NULL) ||
+      lj_tg_in_native_acq(tg) != 0)
+    return 0;
+#if LJ_HASFFI
+  if (ccallback_depth_acq(&tg->cb) != 0 ||
+      ccallback_L_acq(&tg->cb) != NULL ||
+      ccallback_slot_acq(&tg->cb) != 0 ||
+      ccallback_auto_detach_acq(&tg->cb) != 0 ||
+      lj_tg_ffi_call_func_acq(tg) != NULL)
+    return 0;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg) != 0)
+    return 0;
+#endif
+#endif
+  return 1;
+}
 
 /* -- Thread methods ------------------------------------------------------ */
 
@@ -1084,6 +1129,15 @@ static void threading_worker_cleanup(ThreadingWorkerCtx *ctx)
   TGState *tg = ctx->tg;
   global_State *g = ctx->g;
   int was_attached = ctx->attached || threading_tg_is_registered(g, tg);
+  /* Worker cleanup is internal and cannot report a retry. Fail before aborting
+  ** recorder state, disowning callbacks or changing registry/state ownership
+  ** if a protected VM/native scope, an uncancellable JIT lifecycle, or an
+  ** immutable event session still names this exact TG. A low recorder token is
+  ** deliberately cancelled by abort_owner immediately below. */
+  if (was_attached &&
+      (!threading_detach_scope_quiescent(g, tg, L) ||
+       !threading_jit_detach_preabort_ready(g, tg)))
+    abort();
   /* A BC_FUNCF hot edge can start the recorder immediately before the worker
   ** returns to this C boundary. Cancel its unpublished state while L and the
   ** owner TG are still claimed and published; detaching first would strand the
@@ -1271,6 +1325,11 @@ static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
   ** dead-TG reclamation, including provisional attach cleanup before claim. */
   int was_attached = ctx->attached ||
     threading_tg_is_registered(ctx->g, ctx->tg);
+  if (was_attached &&
+      (!threading_detach_scope_quiescent(
+	ctx->g, ctx->tg, ctx->tg_state_set ? L : NULL) ||
+       !threading_jit_detach_preabort_ready(ctx->g, ctx->tg)))
+    abort();  /* No mutation is safe past an unfinished JIT owner/session. */
   /* Foreign attached threads have the same recorder lifetime boundary as
   ** spawned workers: no recorder state may retain this TG's soon-dead tid.
   */
@@ -2417,17 +2476,11 @@ int lj_threading_attach_wait(lua_State *L)
   return threading_attach(L, 1);
 }
 
-void lj_threading_detach(lua_State *L, int disown_callbacks)
+static void threading_detach_commit(lua_State *L, TGState *tg,
+				    int disown_callbacks)
 {
-  global_State *g;
-  TGState *tg;
+  global_State *g = G(L);
   uint32_t tid;
-  if (!L)
-    return;
-  g = G(L);
-  tg = lj_thr_get_tg();
-  if (!tg || tg == g->main_tg || lj_tg_load_thread_L(tg) != L)
-    return;
   tid = lj_tg_tid_acq(tg);
   lj_trace_abort_owner(L);
   if (disown_callbacks)
@@ -2442,6 +2495,63 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   lj_tg_detach(g, tg);
   lj_thr_set_tg(NULL);
   threading_gc_leave(g);
+}
+
+void lj_threading_detach(lua_State *L, int disown_callbacks)
+{
+  global_State *g;
+  TGState *tg;
+  if (!L)
+    return;
+  g = G(L);
+  tg = lj_thr_get_tg();
+  if (!tg || tg == g->main_tg || lj_tg_load_thread_L(tg) != L)
+    return;
+  /* Public detach is a retryable no-op. Test the exact target tid in both JIT
+  ** owner-word halves, every protected VM/native/callback scope, and every
+  ** event slot before abort/disown, registry, state-owner or TLS mutation. */
+  if (!threading_detach_scope_quiescent(g, tg, L) ||
+      !threading_jit_detach_preabort_ready(g, tg))
+    return;
+  threading_detach_commit(L, tg, disown_callbacks);
+}
+
+int lj_threading_detach_callback_unwind(lua_State *L)
+{
+#if LJ_HASFFI
+  global_State *g;
+  TGState *tg;
+  CCallbackRuntime *cb;
+  if (!L)
+    return 0;
+  g = G(L);
+  tg = lj_thr_get_tg();
+  if (!tg || tg == g->main_tg || tg->gl != g || L2TG(L) != tg ||
+      lj_tg_load_cur_L(tg) != L || lj_tg_load_thread_L(tg) != L)
+    return 0;
+  cb = &tg->cb;
+  /* Only the unwind hook may consume this bit. Every callback/native root has
+  ** already been popped, and err_unwind() has removed the logical C frame.
+  ** Clear just this one debt so the unchanged public scope predicate can
+  ** certify all remaining detach invariants. */
+  if (ccallback_auto_detach_acq(cb) != 1 ||
+      ccallback_depth_acq(cb) != 0 || ccallback_L_acq(cb) != NULL ||
+      ccallback_slot_acq(cb) != 0 ||
+      ccallback_native_had_stopreq_acq(cb) != 0 ||
+      lj_tg_ffi_call_func_acq(tg) != NULL)
+    return 0;
+  ccallback_auto_detach_rel(cb, 0);
+  if (!threading_detach_scope_quiescent(g, tg, L) ||
+      !threading_jit_detach_preabort_ready(g, tg)) {
+    ccallback_auto_detach_rel(cb, 1);
+    return 0;
+  }
+  threading_detach_commit(L, tg, 0);
+  return 1;
+#else
+  UNUSED(L);
+  return 0;
+#endif
 }
 
 #include "lj_libdef.h"
