@@ -2,11 +2,12 @@
 
 ## Scope and current limitation
 
-This tranche adds only the dormant publication-clock storage and bounded
-reader contract required before `jit.attach()` can be coupled atomically to
-the handler table. It does not change `jit.attach()`, handler replacement,
-handler lookup, VM-event callback ownership, TRACE delivery, or callback
-behavior. Every clock therefore remains zero in production today.
+This tranche now includes dormant publication-clock storage, bounded readers,
+exact registry-key-to-lane mapping and a no-cancel writer state machine. It
+still does not change `jit.attach()`, handler replacement, handler lookup,
+VM-event callback ownership, TRACE delivery, or callback behavior. No
+production caller claims a writer yet, so every clock remains zero in ordinary
+execution today.
 
 In particular, the provisional nonzero attachment nonce accepted by the
 structural TRACE FLUSH stream gate is not replaced by this tranche. A later
@@ -54,19 +55,68 @@ Each clock has two accepted stable shapes:
   `next_generation == generation` exactly.
 
 There is intentionally no stable `sequence != 0, generation == 0` idle shape.
-A future writer that completes an odd interval must publish a nonzero
-generation, including a conservative invalidation after it has claimed the
-clock but collides during the exact handler-table store. A failure before any
-semantic mutation may instead restore the exact original even sequence.
-Consequently, advancing the stable sequence without a generation would mean
-that the table/clock transaction was only partly published and readers must
-refuse it rather than silently call a mismatched handler.
+Every successful writer claim must publish a nonzero generation, including a
+conservative invalidation after it has claimed the clock but collides during
+the exact handler-table store. There is no writer cancellation API and no
+restore-the-old-even escape after claim. Consequently, advancing the stable
+sequence without a generation would mean that the table/clock transaction was
+only partly published and readers must refuse it rather than silently call a
+mismatched handler.
 
 Generation and sequence zero are never reused after a completed publication.
 The final nonzero generation (`UINT64_MAX`) and final even sequence
-(`UINT64_MAX-1`) remain readable canonical states. The future writer must
-refuse before either counter would wrap; this structural tranche intentionally
-does not add that writer yet.
+(`UINT64_MAX-1`) remain readable canonical states. The writer refuses before
+either counter would wrap.
+
+## Exact event lanes and defined hashing
+
+Clock selection starts from the final signed 32-bit integer key used by the
+`_VMEVENTS` table, not from a string comparison. This preserves stock
+hash-collision behavior: any event name which produces a known table key names
+the corresponding known lane.
+
+| Registry-key bits | Event | Lane |
+| --- | --- | ---: |
+| `0x0001c418` | BC | 0 |
+| `0x96c8a338` | TRACE | 1 |
+| `0x9425fa78` | RECORD | 2 |
+| `0x94ef9580` | TEXIT | 3 |
+| `0x96c9c440` | ERRFIN | 4 |
+
+Unknown final keys return no lane and clear the output to `UINT32_MAX`. Lanes
+5 through 7 remain reserved for future events. Mapping remains available in a
+no-JIT build even though that build has no clock storage.
+
+Both `VMEVENT_HASHIDX` and the event-enum constructor now shift an unsigned
+32-bit value before explicitly converting the final bits to `int32_t`. The old
+signed shifts overflowed for TRACE, RECORD, TEXIT and ERRFIN under the C
+abstract machine even though the target compilers produced the intended x86
+bits.
+
+## Mandatory writer completion
+
+`lj_jit_event_attachment_writer_claim()` reports four distinct results:
+
+- `CLAIMED`: the exact stable even sequence was changed to odd and the next
+  generation was reserved;
+- `BUSY`: an odd writer, changing snapshot or losing sequence CAS was observed;
+- `EXHAUSTED`: the stable canonical clock cannot advance both counters without
+  wrapping; or
+- `CORRUPT`: configuration, lane, main-TG or stable-shape authority is invalid.
+
+Failed claims clear their handle. A successful claim records only the global,
+old sequence, new generation and lane. It does not retain a secondary-TG or
+raw clock pointer. `writer_publish()` rederives the authoritative main-TG
+clock, fail-stops on an impossible handle/storage mismatch, release-publishes
+`VMEVENT_NOCACHE`, then the reserved generation, and finally the exact matching
+even sequence. It clears the consumed handle only after the clock is even.
+
+There is deliberately no cancel operation. Between claim and publish a future
+`jit.attach()` caller may perform only its already-prepared bounded table CAS.
+It cannot wait, allocate, use a `lua_State`, safepoint, throw, run a barrier or
+invoke a hook. Even an uncommitted post-claim table collision must call publish
+once and use that generation as conservative invalidation before aborting its
+table guard outside the odd interval.
 
 ## Bounded readers
 
@@ -103,21 +153,36 @@ involved in their transaction.
 `m6_jit_attachment_clock`, covers:
 
 - zero initialization of all eight main and secondary clocks;
+- exact signed registry keys for all five known event lanes and unknown-key
+  refusal;
+- explicit-length embedded-NUL compatibility with the stock hash seed/mixing
+  split;
 - valid lane endpoints plus one-past-end and `UINT32_MAX` refusal;
 - odd sequence and malformed stable-state refusal;
 - exact initial and published canonical shapes;
-- final sequence/generation observability without wrap;
+- writer `CLAIMED`, `BUSY`, `EXHAUSTED` and `CORRUPT` classifications;
+- mandatory cache invalidation and canonical even completion;
+- final sequence/generation publication without wrap;
+- deterministic same-lane exclusion and different-lane overlap;
+- real same-lane and independent-lane contention through the portable `LJThr`
+  substrate;
 - proof that only the main-TG copy is read; and
-- a real `LUAJIT_DISABLE_JIT` library/fixture build in which the API remains
-  fail-closed.
+- a real `LUAJIT_DISABLE_JIT` library/fixture build in which mapping remains
+  available while snapshot and writer authority remain fail-closed.
 
 ## Required next transaction
 
-Production wiring still needs one nonthrowing odd interval which composes the
-already-prepared handler-table mutation with generation publication. All
-allocating, rooting, hashing, table growth and potentially throwing work must
-happen before that interval. Handler preparation must then become tri-state:
-an exact function plus generation, a stable absence plus generation, or a
-bounded retry. Only after that transaction and durable pending delivery are
-implemented may the TRACE stream consume this clock instead of its provisional
-caller-supplied nonce.
+Production wiring must now compose the prepared exact handler-table mutation
+with `writer_claim()` and mandatory `writer_publish()`. All allocating,
+rooting, hashing, table growth and potentially throwing work happens before
+claim. A committed-plus-STALE table CAS still owns this publication: it must
+publish and finish before a higher layer performs any fresh semantic retry.
+An uncommitted post-claim collision publishes conservatively before abort.
+
+Handler preparation must then become tri-state: an exact rooted function plus
+generation, a stable absence plus generation, or a bounded retry. Only after
+that reader and durable pending delivery are implemented may the TRACE stream
+consume this clock instead of its provisional caller-supplied nonce. Direct
+debug-registry mutation remains deliberately unclocked and racy; attachment
+generation therefore never substitutes for rooting or exact function
+identity.

@@ -13,13 +13,18 @@
 #define LJ_VMEVENTS_HSIZE	4
 
 #define VMEVENT_MASK(ev)	((uint8_t)1 << ((int)(ev) & 7))
-#define VMEVENT_HASH(ev)	((int)(ev) & ~7)
-#define VMEVENT_HASHIDX(h)	((int)(h) << 3)
+#define VMEVENT_HASH(ev) \
+  ((int32_t)((uint32_t)(int32_t)(ev) & ~(uint32_t)7))
+/* Preserve the stock signed 32-bit registry key bits without shifting a
+** negative signed value or overflowing signed int. */
+#define VMEVENT_HASHIDX(h)	((int32_t)((uint32_t)(h) << 3))
 #define VMEVENT_NOCACHE		255
 
 #define VMEVENT_DEF(name, hash) \
   LJ_VMEVENT_##name##_, \
-  LJ_VMEVENT_##name = ((LJ_VMEVENT_##name##_) & 7)|((hash) << 3)
+  LJ_VMEVENT_##name = \
+    (int32_t)(((uint32_t)LJ_VMEVENT_##name##_ & 7u) | \
+	      ((uint32_t)(hash) << 3))
 
 /* VM event IDs. */
 typedef enum {
@@ -43,9 +48,37 @@ typedef struct LJJitEventAttachmentSnapshot {
 #define LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_RETRY		(-1)
 #define LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_INITIAL	0
 #define LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED	1
+#define LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE		UINT32_MAX
+
+/* A claimed writer has made one authoritative lane odd. There is
+** intentionally no cancel operation: after claim, the caller performs only
+** its bounded external semantic CAS and writer_publish(). publish first
+** invalidates the VM-event cache, then exposes the reserved generation and
+** finally restores the exact lane sequence to even. Invalid handle use is a
+** fail-stop invariant violation, never a recoverable path which could strand
+** an odd lane. publish rederives the authoritative main-TG clock and
+** fail-stops if it no longer exactly names this handle. */
+typedef struct LJJitEventAttachmentWriter {
+  global_State *g;
+  uint64_t sequence;
+  uint64_t generation;
+  uint32_t slot;
+  uint32_t claimed;
+} LJJitEventAttachmentWriter;
+
+#define LJ_JIT_EVENT_ATTACHMENT_WRITER_CORRUPT		(-2)
+#define LJ_JIT_EVENT_ATTACHMENT_WRITER_EXHAUSTED	(-1)
+#define LJ_JIT_EVENT_ATTACHMENT_WRITER_BUSY		0
+#define LJ_JIT_EVENT_ATTACHMENT_WRITER_CLAIMED		1
 
 LJ_FUNC int lj_jit_event_attachment_snapshot(
   global_State *g, uint32_t slot, LJJitEventAttachmentSnapshot *snapshot);
+LJ_FUNC int lj_jit_event_attachment_clock_slot(int32_t registry_key,
+					       uint32_t *slot);
+LJ_FUNC int lj_jit_event_attachment_writer_claim(
+  global_State *g, uint32_t slot, LJJitEventAttachmentWriter *writer);
+LJ_FUNC void lj_jit_event_attachment_writer_publish(
+  LJJitEventAttachmentWriter *writer);
 
 #ifdef LUAJIT_DISABLE_VMEVENT
 #define lj_vmevent_send(g, ev, args)		UNUSED(g)
