@@ -45,7 +45,8 @@ but snapshots currently accept only two canonical shapes:
    terminal identity, reason and flags all empty; or
 2. standalone FLUSH in `DETACHED_PENDING`, generation equal to
    `next_generation`, ordinal one, trace number zero, no callback session, and
-   one exact terminal `TRACE_FLUSH` event session.
+   one exact terminal `TRACE_FLUSH` event-session identity. Admission and close
+   additionally validate the complete underlying session slot.
 
 Any reserved future phase, half-empty registry key, noncanonical idle field or
 malformed active tuple is `RETRY`, never an authority to start recording,
@@ -145,11 +146,13 @@ identity or unknown phase is conservative failure; none spins for a peer.
 Admission reserves two complete even-to-even sequence transitions: one for
 publication and one for close. Both the stream and generic event-session
 publication therefore reject a sequence above `UINT64_MAX-4`; close rejects a
-sequence above `UINT64_MAX-2`. A generation of `UINT64_MAX` is terminal
-refusal, never wrap to zero. Event-session selectors are canonicalized as
-well: stable IDLE requires the out-of-range active-slot sentinel and generation
-zero, while ACTIVE requires `next_generation`, `active_generation` and the
-selected slot generation to agree exactly.
+sequence above `UINT64_MAX-2`. An already-published `next_generation` of
+`UINT64_MAX` is terminal refusal, never wrap to zero; `UINT64_MAX` itself may
+be the final active generation when its predecessor was observed at admission.
+Event-session selectors are canonicalized as well: stable IDLE requires the
+out-of-range active-slot sentinel and generation zero, while ACTIVE requires
+`next_generation`, `active_generation` and the selected slot generation to
+agree exactly.
 
 Quiescence, logical detach and strict finalization fail closed when the global
 stream names the target TG. Main-TG quiescence/finalization additionally
