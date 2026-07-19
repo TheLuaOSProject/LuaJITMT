@@ -48,6 +48,17 @@ static GCtab *root_expect_tab;
 static uint32_t root_hook_hits;
 static GCtab *race_mt;
 static GCstr *race_hold_key;
+static uint32_t race_anchor_base;
+static uint32_t race_existing_hits;
+static uint32_t race_competing_hits;
+
+enum NewMetatableRaceMode {
+  NEWMT_RACE_NONE,
+  NEWMT_RACE_EXISTING,
+  NEWMT_RACE_COMPETING
+};
+
+static enum NewMetatableRaceMode race_mode;
 
 static void full_cycle(lua_State *L)
 {
@@ -209,9 +220,39 @@ static void newmetatable_race_hook(lua_State *L, int stage, GCtab *regt,
 				   TValue *rootslot)
 {
   TValue keytv, mtv, nilv, old;
+  TGState *tg = L2TG(L);
   int rc;
   setstrV(L, &keytv, key);
-  if (stage == 1) {
+  if (stage == 0) {
+    TValue snap;
+    TValue *slot;
+    assert(race_mode == NEWMT_RACE_EXISTING);
+    assert(valueslot == NULL && rootslot != NULL);
+    assert(lj_tg_root_anchor_top_acq(tg) == race_anchor_base + 3u);
+    assert(rootslot ==
+	   lj_tg_root_anchor_slot_acq(tg, race_anchor_base + 2u));
+    lj_tv_load_acq(&snap, rootslot);
+    assert(tvistab(&snap) && tabV(&snap) == race_mt);
+
+    /* The lookup helper has returned, but luaL_newmetatable has not yet
+    ** acquired/grown the target stack. Remove the registry's sole edge and
+    ** collect at this first caller-visible boundary. Only the release-published
+    ** dedicated winner anchor can preserve the table. */
+    slot = lj_tab_setstr(L, regt, key);
+    setnilV(&nilv);
+    rc = lj_tab_trystoretv_cas_keyed(L, regt, slot, &keytv, &nilv);
+    assert(rc == LJ_TAB_STORE_CAS_OK);
+    full_cycle(L);
+    lj_tv_load_acq(&snap, rootslot);
+    assert(tvistab(&snap) && tabV(&snap) == race_mt);
+    assert(lj_tg_root_anchor_top_acq(tg) == race_anchor_base + 3u);
+    race_existing_hits++;
+  } else if (stage == 1) {
+    assert(race_mode == NEWMT_RACE_COMPETING);
+    assert(valueslot != NULL && rootslot != NULL);
+    assert(lj_tg_root_anchor_top_acq(tg) == race_anchor_base + 4u);
+    assert(rootslot ==
+	   lj_tg_root_anchor_slot_acq(tg, race_anchor_base + 1u));
     settabV(L, &mtv, race_mt);
     rc = lj_tab_trysetnil_cas_keyed(L, regt, valueslot, &keytv, &mtv,
 				    &old);
@@ -222,7 +263,11 @@ static void newmetatable_race_hook(lua_State *L, int stage, GCtab *regt,
     TValue snap;
     TValue holdkeytv;
     TValue *holdslot;
+    assert(race_mode == NEWMT_RACE_COMPETING);
     assert(stage == 2 && rootslot != NULL);
+    assert(lj_tg_root_anchor_top_acq(tg) == race_anchor_base + 4u);
+    assert(rootslot ==
+	   lj_tg_root_anchor_slot_acq(tg, race_anchor_base + 2u));
     lj_tv_load_acq(&snap, rootslot);
     assert(tvistab(&snap) && tabV(&snap) == race_mt);
     setnilV(&nilv);
@@ -236,6 +281,8 @@ static void newmetatable_race_hook(lua_State *L, int stage, GCtab *regt,
     full_cycle(L);
     lj_tv_load_acq(&snap, rootslot);
     assert(tvistab(&snap) && tabV(&snap) == race_mt);
+    assert(lj_tg_root_anchor_top_acq(tg) == race_anchor_base + 4u);
+    race_competing_hits++;
   }
 }
 
@@ -293,6 +340,8 @@ static void test_meta_roots(lua_State *L)
   TGState *tg = L2TG(L);
   uint32_t baseline = lj_tg_root_anchor_top_acq(tg);
   uint32_t hits = root_hook_hits;
+  uint32_t existing_hits = race_existing_hits;
+  uint32_t competing_hits = race_competing_hits;
   void *ud;
   LJTabRoot race_root;
 
@@ -306,9 +355,29 @@ static void test_meta_roots(lua_State *L)
   assert(luaL_newmetatable(L, "api.gc.handoff.mt") == 0);
   lua_pop(L, 1);
 
+  /* A pre-existing winner starts with the registry slot as its only semantic
+  ** edge. Stage 0 runs immediately after the by-value lookup has transferred
+  ** it into the helper's dedicated enumerated output root. */
+  lua_newtable(L);
+  race_mt = tabV(L->top-1);
+  lua_pushinteger(L, 73);
+  lua_setfield(L, -2, "__winner");
+  lua_setfield(L, LUA_REGISTRYINDEX, "api.gc.handoff.existing");
+  race_mode = NEWMT_RACE_EXISTING;
+  race_anchor_base = lj_tg_root_anchor_top_acq(tg);
+  lj_api_test_set_newmetatable_hook(newmetatable_race_hook);
+  assert(luaL_newmetatable(L, "api.gc.handoff.existing") == 0);
+  assert(race_existing_hits == existing_hits + 1u);
+  assert(tvistab(L->top-1) && tabV(L->top-1) == race_mt);
+  lua_getfield(L, -1, "__winner");
+  assert(lua_tointeger(L, -1) == 73);
+  lua_pop(L, 2);
+  assert(lj_tg_root_anchor_top_acq(tg) == baseline);
+
   /* Inject a peer winner between construction and the nil-slot CAS, then
-  ** delete the registry edge after `old` has been rooted. The forced cycle
-  ** proves the CAS-loser return does not rely on either registry snapshot. */
+  ** delete both registry edges at stage 2, immediately after the rooted CAS
+  ** helper has transferred the observed winner. The forced cycle proves the
+  ** CAS-loser return does not rely on either registry snapshot. */
   race_mt = lj_tab_new_ah_rooted(L, 0, 1, &race_root);
   /* Give the peer table an ordinary root before entering the transaction, so
   ** no older constructor anchor sits below the API's reg/key/table anchors. */
@@ -319,10 +388,14 @@ static void test_meta_roots(lua_State *L)
   lj_tab_root_release(&race_root);
   lua_setfield(L, LUA_REGISTRYINDEX, "api.gc.handoff.race.hold");
   race_hold_key = lj_str_newz(L, "api.gc.handoff.race.hold");
+  race_mode = NEWMT_RACE_COMPETING;
+  race_anchor_base = lj_tg_root_anchor_top_acq(tg);
   lj_api_test_set_newmetatable_hook(newmetatable_race_hook);
   assert(luaL_newmetatable(L, "api.gc.handoff.race") == 0);
+  assert(race_competing_hits == competing_hits + 1u);
   assert(tvistab(L->top-1) && tabV(L->top-1) == race_mt);
   lua_pop(L, 1);
+  race_mode = NEWMT_RACE_NONE;
   full_cycle(L);
 
   ud = lua_newuserdata(L, 8);
