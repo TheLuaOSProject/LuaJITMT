@@ -1684,6 +1684,7 @@ void lj_gc2_init(global_State *g)
   gc2_interp_hard_checks_store_rlx(g, 0);
   gc2_jit_scoped_slots_retired_store_rlx(g, 0);
   gc2_clib_cache_retired_store_rlx(g, NULL);
+  gc2_clib_handle_retired_store_rlx(g, NULL);
   gc2_assist_active_store_rlx(g, 0);
   gc2_generational_store_rlx(g, 0);
   for (i = 0; i < LJ_GC2_GREY_EMBEDDED; i++)
@@ -1883,6 +1884,8 @@ void lj_gc2_fini(global_State *g)
 		    gc2_ssb_drain_acq(g) == NULL &&
 		    gc2_ssb_consumer_active_acq(g) == 0),
 	     "published SSB survived terminal pre-free drain");
+  lj_assertG(!g || gc2_clib_handle_retired_acq(g) == NULL,
+	     "retired CLibrary handle survived terminal trace teardown");
   if (g && mt_shutdown_acq(g) != 0)
     (void)lj_tg_reclaim_dead_terminal(g);
   else

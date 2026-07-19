@@ -1392,7 +1392,7 @@ LJLIB_PUSH("ffi") LJLIB_SET(__metatable)
 #define LJLIB_MODULE_ffi_clib
 
 /* Index C library by a name. */
-static TValue *ffi_clib_index(lua_State *L)
+static TValue *ffi_clib_index(lua_State *L, TValue *out)
 {
   TValue *o = L->base;
   if (!(o < L->top && tvisudata(o) &&
@@ -1403,14 +1403,14 @@ static TValue *ffi_clib_index(lua_State *L)
   {
     GCudata *ud = udataV(o);
     CLibrary *cl = (CLibrary *)uddata(ud);
-    return lj_clib_index(L, cl, strV(o+1));
+    return lj_clib_index(L, cl, strV(o+1), out);
   }
 }
 
 LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
 {
   TValue tv;
-  lj_tv_load_acq(&tv, ffi_clib_index(L));
+  lj_tv_load_acq(&tv, ffi_clib_index(L, L->top-1));
   if (tviscdata(&tv)) {
     CTState *cts = ctype_cts(L);
     GCcdata *cd = cdataV(&tv);
@@ -1442,9 +1442,17 @@ LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
 LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
 {
   TValue tv;
-  TValue *o = L->base+2;
-  lj_tv_load_acq(&tv, ffi_clib_index(L));
-  if (o < L->top && tviscdata(&tv)) {
+  ptrdiff_t vofs = savestack(L, L->base+2);
+  ptrdiff_t anchorofs;
+  TValue *anchor;
+  lj_state_checkstack(L, 1);
+  anchor = L->top;
+  anchorofs = savestack(L, anchor);
+  setnilV(anchor);
+  lj_state_stack_pubtv(L, L, anchor);
+  L->top++;
+  lj_tv_load_acq(&tv, ffi_clib_index(L, anchor));
+  if (restorestack(L, vofs) < L->top && tviscdata(&tv)) {
     CTState *cts = ctype_cts(L);
     GCcdata *cd = cdataV(&tv);
     CTypeID did = cd->ctypeid;
@@ -1463,7 +1471,9 @@ LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
       if (ok <= 0)
 	lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
       if (!(dinfo & CTF_CONST)) {
+	TValue *o = restorestack(L, vofs);
 	lj_cconv_ct_tv_l(L, cts, &dsnap, rid, *(void **)cdataptr(cd), o, 0);
+	L->top = restorestack(L, anchorofs);
 	return 0;
       }
     }

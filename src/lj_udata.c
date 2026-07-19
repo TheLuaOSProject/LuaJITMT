@@ -227,7 +227,8 @@ void LJ_FASTCALL lj_udata_free(global_State *g, GCudata *ud)
   if (lj_udata_udtype_acq(ud) == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(ud);
     if (LJ_UNLIKELY(lj_gc2_reclaim_context_held(g) &&
-		    (cl->handle != NULL || lj_clib_cache_head_acq(cl) != NULL))) {
+		    (lj_clib_handle_acq(cl) != NULL ||
+		     lj_clib_cache_head_acq(cl) != NULL))) {
       /* Runtime physical reclaim owns the exclusive GC2 writer and must never
       ** enter dlclose/FreeLibrary or walk an unbounded live symbol cache. The
       ** registered ffi_clib finalizer performs both semantic operations before

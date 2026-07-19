@@ -31,6 +31,7 @@
 #include "lj_snap.h"
 #include "lj_crecord.h"
 #include "lj_dispatch.h"
+#include "lj_tg.h"
 #include "lj_str.h"
 #include "lj_strfmt.h"
 #include "lj_strscan.h"
@@ -2870,24 +2871,37 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     GCstr *name = strV(&rd->argv[1]);
     CType snap, *ct = &snap;
     CTypeID id;
-    cTValue *envtv = env ? lj_tab_getstr(env, name) : NULL;
-    cTValue *ctv = lj_clib_cache_get(cl, name);
-    TValue tv;
-    int ok;
+    TGState *tg = J2TG(J);
+    TValue envtmp, key, nilv;
+    TValue *envtv, *tv;
+    uint32_t envidx, tvidx;
+    int cache_status, ok;
     rd->nres = rd->data;
+    setnilV(&nilv);
+    envtv = lj_tg_root_anchor_push(J->L, tg, &nilv, &envidx);
+    tv = lj_tg_root_anchor_push(J->L, tg, &nilv, &tvidx);
+    lj_assertJ(envtv != NULL && tv != NULL, "missing CLibrary recorder roots");
+    setstrV(J->L, &key, name);
+    if (env) {
+      (void)lj_tab_gettv_forjit(J->L, env, &key, &envtmp);
+      copyTVrel(J->L, envtv, &envtmp);
+      lj_gc_pubroot(J->L, envtv);
+    }
+    cache_status = lj_clib_cache_snapshot(J->L, cl, name, tv);
+    if (cache_status <= 0)
+      lj_trace_err(J, LJ_TRERR_NOCACHE);
     ok = lj_ctype_getname_snapshot(cts, name, CLNS_INDEX, &id, &snap, NULL);
     if (ok < 0) {
       lj_trace_err(J, LJ_TRERR_CTBUSY);
     } else if (!ok) {
       id = 0;
     }
-    if (envtv && !lj_tv_isnil_acq(envtv)) {
-      if (!ctv || lj_tv_isnil_acq(ctv) || !lj_obj_equal(envtv, ctv))
-	lj_trace_err(J, LJ_TRERR_NOCACHE);
-    }
-    if (ctv)
-      lj_tv_load_acq(&tv, ctv);
-    if (id && ctv && !tvisnil(&tv)) {
+    /* The original debug environment is the GC root for the recorder's
+    ** by-value cache snapshot. A concurrent deletion or override is a normal
+    ** side-exit instead of exporting either table-vector or cache-entry slots. */
+    if (tvisnil(envtv) || !lj_obj_equal(envtv, tv))
+      lj_trace_err(J, LJ_TRERR_NOCACHE);
+    if (id && !tvisnil(tv)) {
       CTInfo info = ctype_info_acq(ct);
       /* Specialize to the symbol name and make the result a constant. */
       emitir(IRTG(IR_EQ, IRT_STR), J->base[1], lj_ir_kstr(J, name));
@@ -2903,7 +2917,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
       } else if (ctype_isextern(info)) {
 	CTypeID sid = ctype_cid(info);
 	CType ctsnap;
-	void *sp = *(void **)cdataptr(cdataV(&tv));
+	void *sp = *(void **)cdataptr(cdataV(tv));
 	TRef ptr;
 	ct = crec_ctype_rawid(J, cts, sid, NULL, &ctsnap);
 	if (LJ_64 && !checkptr32(sp))
@@ -2917,11 +2931,13 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
 	  crec_ct_tv(J, ct, ptr, J->base[2], &rd->argv[2]);
 	}
       } else {
-	J->base[0] = lj_ir_kgc(J, obj2gco(cdataV(&tv)), IRT_CDATA);
+	J->base[0] = lj_ir_kgc(J, obj2gco(cdataV(tv)), IRT_CDATA);
       }
     } else {
       lj_trace_err(J, LJ_TRERR_NOCACHE);
     }
+    lj_tg_root_anchor_pop(tg, tvidx);
+    lj_tg_root_anchor_pop(tg, envidx);
   }  /* else: interpreter will throw. */
 }
 

@@ -391,29 +391,44 @@ print("bulk fill ok")
     name = "m7_ffi_clib_cache",
     description = "FFI C library cache miss/fill behavior",
     run = function(t)
-      clean_build(t)
-      local extern_so = build_shared_library(t,
-        t:tmp("lj_t-ffi-clib-extern-snapshot.so"),
-        "t-ffi-clib-extern-snapshot-lib.c")
-      build_and_run_c(t, t:tmp("lj_t-ffi-clib-extern-snapshot"),
-                      "t-ffi-clib-extern-snapshot.c", {
-        build = false,
-        env = { LJ_M7_FFI_CLIB_EXTERN_SO = extern_so },
-        timeout = "20s"
-      })
-      build_and_run_c(t, t:tmp("lj_t-ffi-clib-cache-retire"),
-                      "t-ffi-clib-cache-retire.c", {
-        build = false,
-        timeout = "20s"
-      })
-      run_luajit_script(t, "t-ffi-clib-cache.lua", {
-        getenv("LJ_M7_FFI_CLIB_THREADS", "6"),
-        getenv("LJ_M7_FFI_CLIB_ITERS", "300")
-      }, { joff = true })
-      run_luajit_script(t, "t-ffi-clib-cache.lua", {
-        getenv("LJ_M7_FFI_CLIB_JIT_THREADS", "2"),
-        getenv("LJ_M7_FFI_CLIB_JIT_ITERS", "180")
-      })
+      build.with_default_build_restore(t, function()
+        local helper_flag = "-DLJ_CLIB_TEST_HELPERS"
+        clean_build(t, { quiet = true, xcflags = helper_flag })
+        local extern_so = build_shared_library(t,
+          t:tmp("lj_t-ffi-clib-extern-snapshot.so"),
+          "t-ffi-clib-extern-snapshot-lib.c")
+        build_and_run_c(t, t:tmp("lj_t-ffi-clib-extern-snapshot"),
+                        "t-ffi-clib-extern-snapshot.c", {
+          build = false,
+          env = { LJ_M7_FFI_CLIB_EXTERN_SO = extern_so },
+          timeout = "20s"
+        })
+        build_and_run_c(t, t:tmp("lj_t-ffi-clib-cache-retire"),
+                        "t-ffi-clib-cache-retire.c", {
+          build = false,
+          timeout = "20s"
+        })
+        build_and_run_c(t, t:tmp("lj_t-ffi-clib-deferred-close"),
+                        "t-ffi-clib-deferred-close.c", {
+          build = false,
+          cflags = helper_flag,
+          env = { LJ_M7_FFI_CLIB_CLOSE_SO = extern_so },
+          timeout = "20s"
+        })
+        run_luajit_script(t, "t-ffi-clib-close-race.lua", nil, {
+          env = { LJ_M7_FFI_CLIB_CLOSE_SO = extern_so },
+          joff = true,
+          timeout = "20s"
+        })
+        run_luajit_script(t, "t-ffi-clib-cache.lua", {
+          getenv("LJ_M7_FFI_CLIB_THREADS", "6"),
+          getenv("LJ_M7_FFI_CLIB_ITERS", "300")
+        }, { joff = true })
+        run_luajit_script(t, "t-ffi-clib-cache.lua", {
+          getenv("LJ_M7_FFI_CLIB_JIT_THREADS", "2"),
+          getenv("LJ_M7_FFI_CLIB_JIT_ITERS", "180")
+        })
+      end)
       print("M7 FFI clib cache behavior passed")
     end
   })

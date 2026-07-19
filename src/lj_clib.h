@@ -21,6 +21,15 @@ typedef struct CLibCacheEntry {
   TValue val;
 } CLibCacheEntry;
 
+/* Native handles outlive semantic namespace close. Recorded FFI calls may
+** embed a dlsym/GetProcAddress result without retaining the originating
+** CLibrary, so physical unload is only safe after joined-world trace teardown.
+** One node is preallocated per namespace; close therefore never allocates. */
+typedef struct CLibHandleRetire {
+  struct CLibHandleRetire *next;
+  void *handle;
+} CLibHandleRetire;
+
 static LJ_AINLINE CLibCacheEntry *lj_clib_cache_next_acq(
   const CLibCacheEntry *e)
 {
@@ -84,7 +93,39 @@ typedef struct CLibrary {
   void *handle;		/* Opaque handle for dynamic library loader. */
   GCRef cache_env;	/* Original cache table, stock debug env behavior. */
   CLibCacheEntry *cache_head;	/* 11.7 side cache, CAS-prepended. */
+  CLibHandleRetire *handle_retire;  /* Preallocated terminal-close record. */
+  uint32_t lifecycle;  /* Closing bit plus admitted index/cache readers. */
 } CLibrary;
+
+#define LJ_CLIB_CLOSING		0x80000000u
+#define LJ_CLIB_READER_MASK	0x7fffffffu
+
+static LJ_AINLINE void *lj_clib_handle_acq(const CLibrary *cl)
+{
+  return la_loadptr_acq((void *const *)&cl->handle);
+}
+
+static LJ_AINLINE void lj_clib_handle_rel(CLibrary *cl, void *handle)
+{
+  la_storeptr_rel((void **)&cl->handle, handle);
+}
+
+static LJ_AINLINE void *lj_clib_handle_xchg_acqrel(CLibrary *cl, void *handle)
+{
+  return la_xchgptr_acqrel((void **)&cl->handle, handle);
+}
+
+static LJ_AINLINE uint32_t lj_clib_lifecycle_acq(const CLibrary *cl)
+{
+  return la_load32_acq(&cl->lifecycle);
+}
+
+static LJ_AINLINE CLibHandleRetire *
+lj_clib_handle_retire_xchg_acqrel(CLibrary *cl, CLibHandleRetire *retire)
+{
+  return (CLibHandleRetire *)
+    la_xchgptr_acqrel((void **)&cl->handle_retire, retire);
+}
 
 static LJ_AINLINE GCtab *lj_clib_cache_env_acq(const CLibrary *cl)
 {
@@ -118,17 +159,32 @@ static LJ_AINLINE CLibCacheEntry *lj_clib_cache_head_xchg_acqrel(
   return (CLibCacheEntry *)la_xchgptr_acqrel((void **)&cl->cache_head, head);
 }
 
-LJ_FUNC cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name);
+/* Copy a side-cache value under the namespace lifecycle protocol. Returns
+** one for a hit, zero for a miss, and -1 once semantic close has begun. */
+LJ_FUNC int lj_clib_cache_snapshot(lua_State *L, CLibrary *cl, GCstr *name,
+				   TValue *out);
 LJ_FUNC CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g);
 /* Runtime drain only: caller holds GC2's exact-thread exclusive-reclaimer
 ** scope. Joined-world close uses lj_clib_cache_freeretired(). */
 LJ_FUNC uint32_t lj_clib_cache_reclaim_retired(global_State *g,
 					       uint64_t completed_epoch);
 LJ_FUNC void lj_clib_cache_freeretired(global_State *g);
-LJ_FUNC TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name);
+/* Resolve into an active Lua-stack slot and return its post-relocation
+** address. Never exports a raw table-vector or side-cache slot. */
+LJ_FUNC TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name,
+			      TValue *out);
 LJ_FUNC void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global);
 LJ_FUNC void lj_clib_unload(lua_State *L, global_State *g, CLibrary *cl);
 LJ_FUNC void lj_clib_default(lua_State *L, GCtab *mt);
+
+#if defined(LJ_CLIB_TEST_HELPERS)
+LUA_API void lj_clib_test_publish_pause(void);
+LUA_API uint32_t lj_clib_test_publish_paused(void);
+LUA_API void lj_clib_test_publish_release(void);
+LUA_API void lj_clib_test_counters_reset(void);
+LUA_API uint32_t lj_clib_test_retired_handles(void);
+LUA_API uint32_t lj_clib_test_native_closes(void);
+#endif
 
 #endif
 

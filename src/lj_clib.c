@@ -16,6 +16,7 @@
 #include "lj_str.h"
 #include "lj_udata.h"
 #include "lj_state.h"
+#include "lj_vm.h"
 #include "lj_ctype.h"
 #include "lj_cconv.h"
 #include "lj_cdata.h"
@@ -23,6 +24,8 @@
 #include "lj_strfmt.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+
+#include <stdlib.h>
 
 /* -- OS-specific functions ----------------------------------------------- */
 
@@ -260,18 +263,22 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
   return h;
 }
 
-static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
+static int clib_handle_closeable(void *handle)
 {
-  if (cl->handle && cl->handle != CLIB_DEFHANDLE)
-    return clib_native_dlclose(L, cl->handle);
-  return 0;
+  return handle && handle != CLIB_DEFHANDLE;
+}
+
+static uint32_t clib_unloadhandle(lua_State *L, void *handle)
+{
+  return clib_handle_closeable(handle) ?
+    clib_native_dlclose(L, handle) : 0;
 }
 
 static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
 {
   uint32_t actions;
   int had_stopreq = lj_safepoint_had_stopreq(L);
-  void *p = clib_native_dlsym(L, cl->handle, name, &actions);
+  void *p = clib_native_dlsym(L, lj_clib_handle_acq(cl), name, &actions);
   lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return p;
 }
@@ -385,22 +392,18 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
   return h;
 }
 
-static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
+static int clib_handle_closeable(void *handle)
+{
+  /* Default handles are process-global and shared by all Lua universes. OS
+  ** process teardown owns them until a separate exact global refcount exists. */
+  return handle != NULL && handle != CLIB_DEFHANDLE;
+}
+
+static uint32_t clib_unloadhandle(lua_State *L, void *handle)
 {
   uint32_t actions = 0;
-  if (cl->handle == CLIB_DEFHANDLE) {
-#if !LJ_TARGET_UWP
-    MSize i;
-    for (i = CLIB_HANDLE_KERNEL32; i < CLIB_HANDLE_MAX; i++) {
-      void *h = clib_def_handle[i];
-      if (h) {
-	clib_def_handle[i] = NULL;
-	actions |= clib_native_freelib(L, h);
-      }
-    }
-#endif
-  } else if (cl->handle) {
-    actions |= clib_native_freelib(L, cl->handle);
+  if (clib_handle_closeable(handle)) {
+    actions |= clib_native_freelib(L, handle);
   }
   return actions;
 }
@@ -411,12 +414,14 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
 static void *clib_getsym_raw(CLibrary *cl, const char *name)
 {
+  void *handle = lj_clib_handle_acq(cl);
   void *p = NULL;
-  if (cl->handle == CLIB_DEFHANDLE) {  /* Search default libraries. */
+  if (handle == CLIB_DEFHANDLE) {  /* Search default libraries. */
     MSize i;
     for (i = 0; i < CLIB_HANDLE_MAX; i++) {
-      HINSTANCE h = (HINSTANCE)clib_def_handle[i];
+      HINSTANCE h = (HINSTANCE)la_loadptr_acq(&clib_def_handle[i]);
       if (!(void *)h) {  /* Resolve default library handles (once). */
+        int owns_ref = 0;
 #if LJ_TARGET_UWP
 	h = (HINSTANCE)&__ImageBase;
 #else
@@ -430,19 +435,30 @@ static void *clib_getsym_raw(CLibrary *cl, const char *name)
 	  GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 			     (const char *)&_fmode, &h);
 	  break;
-	case CLIB_HANDLE_KERNEL32: h = LJ_WIN_LOADLIBA("kernel32.dll"); break;
-	case CLIB_HANDLE_USER32: h = LJ_WIN_LOADLIBA("user32.dll"); break;
-	case CLIB_HANDLE_GDI32: h = LJ_WIN_LOADLIBA("gdi32.dll"); break;
+	case CLIB_HANDLE_KERNEL32:
+	  h = LJ_WIN_LOADLIBA("kernel32.dll"); owns_ref = 1; break;
+	case CLIB_HANDLE_USER32:
+	  h = LJ_WIN_LOADLIBA("user32.dll"); owns_ref = 1; break;
+	case CLIB_HANDLE_GDI32:
+	  h = LJ_WIN_LOADLIBA("gdi32.dll"); owns_ref = 1; break;
 	}
 	if (!h) continue;
 #endif
-	clib_def_handle[i] = (void *)h;
+	{
+	  void *expect = NULL;
+	  if (!la_casptr(&clib_def_handle[i], &expect, (void *)h,
+			 LA_REL, LA_ACQ)) {
+	    if (owns_ref)
+	      (void)FreeLibrary(h);  /* Drop the losing LoadLibrary reference. */
+	    h = (HINSTANCE)expect;
+	  }
+	}
       }
       p = (void *)GetProcAddress(h, name);
       if (p) break;
     }
   } else {
-    p = (void *)GetProcAddress((HINSTANCE)cl->handle, name);
+    p = (void *)GetProcAddress((HINSTANCE)handle, name);
   }
   return p;
 }
@@ -479,9 +495,15 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
   return NULL;
 }
 
-static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
+static int clib_handle_closeable(void *handle)
 {
-  UNUSED(L); UNUSED(cl);
+  UNUSED(handle);
+  return 0;
+}
+
+static uint32_t clib_unloadhandle(lua_State *L, void *handle)
+{
+  UNUSED(L); UNUSED(handle);
   return 0;
 }
 
@@ -506,22 +528,95 @@ static CLibCacheEntry *clib_cache_find(CLibCacheEntry *head, GCstr *name)
   return NULL;
 }
 
-cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name)
+static int clib_reader_enter(CLibrary *cl)
+{
+  uint32_t state = lj_clib_lifecycle_acq(cl);
+  for (;;) {
+    uint32_t readers = state & LJ_CLIB_READER_MASK;
+    if (state & LJ_CLIB_CLOSING)
+      return 0;
+    if (LJ_UNLIKELY(readers == LJ_CLIB_READER_MASK))
+      abort();
+    if (la_cas32(&cl->lifecycle, &state, state + 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static int clib_cache_snapshot_held(lua_State *L, CLibrary *cl, GCstr *name,
+				    TValue *out)
 {
   CLibCacheEntry *head = lj_clib_cache_head_acq(cl);
   CLibCacheEntry *e = clib_cache_find(head, name);
-  return e ? (cTValue *)&e->val : NULL;
+  TValue tmp;
+  if (!e) {
+    setnilV(out);
+    return 0;
+  }
+  lj_clib_cache_val_acq(&tmp, e);
+  copyTVrel(L, out, &tmp);
+  return !tvisnil(out);
 }
 
-static void clib_cache_publish_wait(lua_State *L)
+static void clib_reader_leave(lua_State *L, global_State *g,
+			      CLibrary *cl, int *closingp);
+
+#if defined(LJ_CLIB_TEST_HELPERS)
+static uint32_t clib_test_publish_armed;
+static uint32_t clib_test_publish_is_paused;
+static uint32_t clib_test_publish_do_release;
+static uint32_t clib_test_retired_handle_count;
+static uint32_t clib_test_native_close_count;
+
+LUA_API void lj_clib_test_publish_pause(void)
 {
-  /*
-  ** CLibrary cache publication is a short CAS window. Wait as native time for
-  ** the current TG, so safepoint handshakes can observe a cache-fill loser
-  ** while another mutator publishes the winning side entry.
-  */
-  (void)lj_thr_retry_yield(L);
+  la_store32_rel(&clib_test_publish_do_release, 0);
+  la_store32_rel(&clib_test_publish_is_paused, 0);
+  la_store32_rel(&clib_test_publish_armed, 1);
 }
+
+LUA_API uint32_t lj_clib_test_publish_paused(void)
+{
+  return la_load32_acq(&clib_test_publish_is_paused);
+}
+
+LUA_API void lj_clib_test_publish_release(void)
+{
+  la_store32_rel(&clib_test_publish_do_release, 1);
+}
+
+LUA_API void lj_clib_test_counters_reset(void)
+{
+  la_store32_rel(&clib_test_publish_armed, 0);
+  la_store32_rel(&clib_test_publish_is_paused, 0);
+  la_store32_rel(&clib_test_publish_do_release, 0);
+  la_store32_rel(&clib_test_retired_handle_count, 0);
+  la_store32_rel(&clib_test_native_close_count, 0);
+}
+
+LUA_API uint32_t lj_clib_test_retired_handles(void)
+{
+  return la_load32_acq(&clib_test_retired_handle_count);
+}
+
+LUA_API uint32_t lj_clib_test_native_closes(void)
+{
+  return la_load32_acq(&clib_test_native_close_count);
+}
+
+static void clib_test_cache_publish_pause(lua_State *L)
+{
+  uint32_t armed = 1;
+  if (!la_cas32(&clib_test_publish_armed, &armed, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return;
+  la_store32_rel(&clib_test_publish_is_paused, 1);
+  while (!la_load32_acq(&clib_test_publish_do_release))
+    (void)lj_thr_retry_yield(L);
+}
+#else
+#define clib_test_cache_publish_pause(L)	((void)0)
+#endif
 
 CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g)
 {
@@ -538,6 +633,23 @@ static CLibCacheEntry *clib_cache_retired_xchg_acqrel(global_State *g,
 						      CLibCacheEntry *head)
 {
   return (CLibCacheEntry *)gc2_clib_cache_retired_xchg_acqrel(g, head);
+}
+
+static CLibHandleRetire *clib_handle_retired_head_acq(global_State *g)
+{
+  return (CLibHandleRetire *)gc2_clib_handle_retired_acq(g);
+}
+
+static void clib_handle_retired_push(global_State *g,
+				     CLibHandleRetire *retire)
+{
+  CLibHandleRetire *head = clib_handle_retired_head_acq(g);
+  do {
+    la_storeptr_rel((void **)&retire->next, head);
+  } while (!gc2_clib_handle_retired_cas(g, (void **)&head, retire));
+#if defined(LJ_CLIB_TEST_HELPERS)
+  (void)la_add32_acqrel(&clib_test_retired_handle_count, 1);
+#endif
 }
 
 static void clib_cache_retired_push(global_State *g, CLibCacheEntry *entry)
@@ -636,6 +748,7 @@ uint32_t lj_clib_cache_reclaim_retired(global_State *g,
 void lj_clib_cache_freeretired(global_State *g)
 {
   CLibCacheEntry *entry;
+  CLibHandleRetire *retire;
   if (!g)
     return;
   entry = clib_cache_retired_xchg_acqrel(g, NULL);
@@ -652,10 +765,24 @@ void lj_clib_cache_freeretired(global_State *g)
     lj_mem_freet(g, entry);
     entry = next;
   }
+  /* close_state calls this after lj_trace_freestate(). No generated CALLXS or
+  ** recorder constant can still execute a pointer from these handles. */
+  retire = (CLibHandleRetire *)
+    gc2_clib_handle_retired_xchg_acqrel(g, NULL);
+  while (retire) {
+    CLibHandleRetire *next = (CLibHandleRetire *)
+      la_loadptr_acq((void *const *)&retire->next);
+    (void)clib_unloadhandle(NULL, retire->handle);
+#if defined(LJ_CLIB_TEST_HELPERS)
+    (void)la_add32_acqrel(&clib_test_native_close_count, 1);
+#endif
+    free(retire);
+    retire = next;
+  }
 }
 
-static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
-				  cTValue *val)
+static void clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
+			       cTValue *val, TValue *out)
 {
   TValue key;
   CLibCacheEntry *e;
@@ -673,46 +800,68 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
     CLibCacheEntry *old = clib_cache_find(head, name);
     CLibCacheEntry *expect;
     if (old) {
+      TValue tmp;
+      lj_clib_cache_val_acq(&tmp, old);
+      copyTVrel(L, out, &tmp);
+      lj_state_stack_pubtv(L, L, out);
       lj_mem_freet(G(L), e);
-      return &old->val;
+      return;
     }
     lj_clib_cache_next_rel(e, head);
+    clib_test_cache_publish_pause(L);
     expect = head;
     if (lj_clib_cache_head_cas_rel(cl, &expect, e)) {
       lj_gc_arena_markmem(G(L), e);  /* 11.7 side-entry publish barrier. */
       lj_gc_pubroot(L, &key);  /* Publish-race barrier, see 11.7. */
       lj_gc_pubroot(L, &e->val);
-      return &e->val;
+      if (out != val) {
+	copyTVrel(L, out, val);
+	lj_state_stack_pubtv(L, L, out);
+      }
+      return;
     }
-    clib_cache_publish_wait(L);
+    /* A losing prepend has made no semantic claim. Re-read the new head and
+    ** retry directly; no publisher-dependent wait edge is required. */
   }
 }
 
-static cTValue *clib_env_get(GCtab *env, GCstr *name)
+static int clib_env_get(lua_State *L, GCtab *env, GCstr *name, TValue *out)
 {
-  cTValue *tv = env ? lj_tab_getstr(env, name) : NULL;
-  return tv && !lj_tv_isnil_acq(tv) ? tv : NULL;
+  TValue key;
+  if (!env) {
+    setnilV(out);
+    return 0;
+  }
+  setstrV(L, &key, name);
+  (void)lj_tab_gettv_forjit(L, env, &key, out);
+  lj_state_stack_pubtv(L, L, out);
+  return !tvisnil(out);
 }
 
-static TValue *clib_env_publish(lua_State *L, GCtab *env, GCstr *name,
-				cTValue *val)
+static void clib_env_publish(lua_State *L, GCtab *env, GCstr *name,
+			     cTValue *val, TValue *out)
 {
   TValue keytv, old, *dst;
-  if (!env)
-    return (TValue *)(void *)val;
+  if (!env) {
+    lj_tv_load_acq(out, val);
+    lj_state_stack_pubtv(L, L, out);
+    return;
+  }
   setstrV(L, &keytv, name);
   lj_gc_pubroot(L, &keytv);
   lj_gc_pubroot(L, val);
   for (;;) {
-    cTValue *cur = clib_env_get(env, name);
     int rc;
-    if (cur)
-      return (TValue *)(void *)cur;
+    if (clib_env_get(L, env, name, out))
+      return;
     dst = lj_tab_setstr(L, env, name);
     rc = lj_tab_trysetnil_cas_keyed(L, env, dst, &keytv, val, &old);
     if (rc == LJ_TAB_STORE_CAS_OK) {
       lj_gc_pubtab(L, env);
-      return dst;
+      lj_tv_load_acq(out, val);
+      lj_gc_pubroot(L, out);
+      lj_state_stack_pubtv(L, L, out);
+      return;
     }
     lj_tab_store_wait_l(L);  /* CLibrary env mirror saw stale/FORWARD slot. */
   }
@@ -726,6 +875,63 @@ static void clib_cache_free(lua_State *L, global_State *g, CLibrary *cl)
     clib_cache_retire(L, g, e);
     e = next;
   }
+}
+
+/* The unique zero-reader close owner detaches semantic cache state and moves
+** the native handle to a preallocated terminal list. Physical unload here
+** would invalidate pointers already embedded in traces or escaped cdata. */
+static void clib_close_cleanup(lua_State *L, global_State *g, CLibrary *cl)
+{
+  CLibHandleRetire *retire;
+  void *handle;
+  clib_cache_free(L, g, cl);
+  handle = lj_clib_handle_xchg_acqrel(cl, NULL);
+  retire = lj_clib_handle_retire_xchg_acqrel(cl, NULL);
+  if (clib_handle_closeable(handle)) {
+    if (LJ_UNLIKELY(!retire)) {
+      lj_assertG(0, "CLibrary close lost preallocated handle record");
+      abort();
+    }
+    retire->handle = handle;
+    clib_handle_retired_push(g, retire);
+  } else {
+    free(retire);
+  }
+}
+
+static void clib_reader_leave(lua_State *L, global_State *g, CLibrary *cl,
+			      int *closingp)
+{
+  uint32_t old = la_sub32_acqrel(&cl->lifecycle, 1);
+  if (LJ_UNLIKELY((old & LJ_CLIB_READER_MASK) == 0)) {
+    lj_assertG(0, "CLibrary reader count underflow");
+    abort();
+  }
+  if (old == (LJ_CLIB_CLOSING | 1u))
+    clib_close_cleanup(L, g, cl);
+  if (closingp)
+    *closingp = (old & LJ_CLIB_CLOSING) != 0 ||
+      (lj_clib_lifecycle_acq(cl) & LJ_CLIB_CLOSING) != 0;
+}
+
+int lj_clib_cache_snapshot(lua_State *L, CLibrary *cl, GCstr *name,
+			   TValue *out)
+{
+  global_State *g = G(L);
+  int found, closing = 0;
+  if (!clib_reader_enter(cl)) {
+    setnilV(out);
+    return -1;
+  }
+  found = clib_cache_snapshot_held(L, cl, name, out);
+  if (found)
+    lj_gc_pubroot(L, out);
+  clib_reader_leave(L, g, cl, &closing);
+  if (closing) {
+    setnilV(out);
+    return -1;
+  }
+  return found;
 }
 
 #if LJ_TARGET_X86 && LJ_ABI_WIN
@@ -749,22 +955,43 @@ static CTSize clib_func_argsize(CTState *cts, CType *ct)
 }
 #endif
 
-/* Index a C library by name. */
-TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
+typedef struct CLibIndexCtx {
+  CLibrary *cl;
+  GCtab *cache_env;
+  ptrdiff_t keyofs;
+  ptrdiff_t outofs;
+} CLibIndexCtx;
+
+static TValue *clib_index_miss_cp(lua_State *L, lua_CFunction dummy, void *ud)
 {
-  GCtab *cache_env = lj_clib_cache_env_acq(cl);
-  cTValue *envtv = clib_env_get(cache_env, name);
-  cTValue *ctv = lj_clib_cache_get(cl, name);
-  if (envtv)
-    return (TValue *)(void *)envtv;
-  if (LJ_LIKELY(ctv && !lj_tv_isnil_acq(ctv)))
-    return clib_env_publish(L, cache_env, name, ctv);
-  {
+  CLibIndexCtx *ctx = (CLibIndexCtx *)ud;
+  ptrdiff_t sourceofs, resultofs;
+  TValue *key, *source, *result, *out;
+  GCstr *name;
+  UNUSED(dummy);
+  lj_state_checkstack(L, 2);
+  key = restorestack(L, ctx->keyofs);
+  name = strV(key);
+  source = L->top;
+  sourceofs = savestack(L, source);
+  setnilV(source);
+  lj_state_stack_pubtv(L, L, source);
+  L->top++;
+  result = L->top;
+  resultofs = savestack(L, result);
+  setnilV(result);
+  lj_state_stack_pubtv(L, L, result);
+  L->top++;
+
+  if (clib_cache_snapshot_held(L, ctx->cl, name, source)) {
+    lj_state_stack_pubtv(L, L, source);
+    clib_env_publish(L, ctx->cache_env, name, source, result);
+  } else {
     CTState *cts = ctype_cts(L);
     CType snap, *ct = &snap;
     CTypeID id;
     GCstr *symname = name;
-    TValue tmp, *tv, *anchor;
+    TValue tmp;
     CTInfo info;
     int ok = lj_ctype_getname_snapshot(cts, name, CLNS_INDEX, &id, &snap,
 				       &symname);
@@ -804,7 +1031,7 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 #if LJ_TARGET_WINDOWS
       DWORD oldwerr = GetLastError();
 #endif
-      void *p = clib_getsym(L, cl, sym);
+      void *p = clib_getsym(L, ctx->cl, sym);
       GCcdata *cd;
       lj_assertCTS(ctype_isfunc(info) || ctype_isextern(info),
 		   "unexpected ctype %08x in clib", info);
@@ -819,7 +1046,7 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 			       cconv == CTCC_FASTCALL ? "@%s@%d" : "_%s@%d",
 			       sym, sz);
 	  lj_state_stack_pubtv(L, L, L->top-1);
-	  p = clib_getsym(L, cl, symd);
+	  p = clib_getsym(L, ctx->cl, symd);
 	  L->top = restorestack(L, oldtop);
 	}
       }
@@ -833,14 +1060,74 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       *(void **)cdataptr(cd) = p;
       setcdataV(L, &tmp, cd);
     }
-    anchor = L->top++;
-    copyTV(L, anchor, &tmp);  /* Root tmp while allocating/publishing entry. */
-    lj_state_stack_pubtv(L, L, anchor);
-    tv = clib_cache_publish(L, cl, name, anchor);
-    tv = clib_env_publish(L, cache_env, name, tv);
-    L->top--;
-    return tv;
+    source = restorestack(L, sourceofs);
+    copyTV(L, source, &tmp);  /* Root tmp before cache entry allocation. */
+    lj_state_stack_pubtv(L, L, source);
+    clib_cache_publish(L, ctx->cl, name, source, source);
+    source = restorestack(L, sourceofs);
+    result = restorestack(L, resultofs);
+    clib_env_publish(L, ctx->cache_env, name, source, result);
   }
+
+  result = restorestack(L, resultofs);
+  out = restorestack(L, ctx->outofs);
+  copyTVrel(L, out, result);
+  lj_state_stack_pubtv(L, L, out);
+  L->top = restorestack(L, sourceofs);
+  return NULL;
+}
+
+static LJ_NORET void clib_closed_error(lua_State *L)
+{
+  lj_err_callermsg(L, "attempt to use a closed C library");
+}
+
+/* Index a C library by name. Fast environment hits only need a short reader;
+** miss/fill work is protected so every throwing edge releases its reader. */
+TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name, TValue *out)
+{
+  CLibIndexCtx ctx;
+  GCtab *cache_env = lj_clib_cache_env_acq(cl);
+  ptrdiff_t outofs = savestack(L, out);
+  ptrdiff_t keyofs;
+  TValue *key;
+  int closing = 0, errcode;
+
+  lj_state_checkstack(L, 1);
+  key = L->top;
+  keyofs = savestack(L, key);
+  setstrV(L, key, name);
+  lj_state_stack_pubtv(L, L, key);
+  L->top++;
+  out = restorestack(L, outofs);
+  if (clib_env_get(L, cache_env, name, out)) {
+    if (!clib_reader_enter(cl)) {
+      L->top = restorestack(L, keyofs);
+      clib_closed_error(L);
+    }
+    clib_reader_leave(L, G(L), cl, &closing);
+    L->top = restorestack(L, keyofs);
+    if (closing)
+      clib_closed_error(L);
+    return restorestack(L, outofs);
+  }
+
+  if (!clib_reader_enter(cl)) {
+    L->top = restorestack(L, keyofs);
+    clib_closed_error(L);
+  }
+  ctx.cl = cl;
+  ctx.cache_env = cache_env;
+  ctx.keyofs = keyofs;
+  ctx.outofs = outofs;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, clib_index_miss_cp);
+  clib_reader_leave(L, G(L), cl, &closing);
+  L->top = restorestack(L, keyofs);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+  if (closing)
+    clib_closed_error(L);
+  return restorestack(L, outofs);
 }
 
 /* -- C library management ------------------------------------------------ */
@@ -849,6 +1136,7 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 static CLibrary *clib_new(lua_State *L, GCtab *mt)
 {
   LJUdataRoot root;
+  CLibHandleRetire *retire;
   GCtab *t;
   GCudata *ud;
   CLibrary *cl;
@@ -861,15 +1149,28 @@ static CLibrary *clib_new(lua_State *L, GCtab *mt)
   L->top++;
   ud = lj_udata_newrooted(L, sizeof(CLibrary), t, &root);
   cl = (CLibrary *)uddata(ud);
-  cl->handle = NULL;
+  lj_clib_handle_rel(cl, NULL);
   lj_clib_cache_env_rel(cl, t);
-  cl->cache_head = NULL;
+  la_storeptr_rel((void **)&cl->cache_head, NULL);
+  la_storeptr_rel((void **)&cl->handle_retire, NULL);
+  la_store32_rel(&cl->lifecycle, 0);
   lj_gc_pubobjobj(L, ud, t);
   lj_udata_metatable_rel(ud, mt);
   lj_gc_pubobjobj(L, ud, mt);
   /* Keep the object generic and constructor-rooted across the throwing raw
   ** FINREG-node allocation.  handle/cache fields are now destructor-safe. */
   lj_udata_finreg_mt_rooted(L, ud, mt, &root);
+  /* Semantic close can race an admitted index reader and is not allowed to
+  ** allocate. Preallocate its raw terminal-handle record before publishing
+  ** the specialized userdata tag. */
+  retire = (CLibHandleRetire *)malloc(sizeof(*retire));
+  if (LJ_UNLIKELY(!retire)) {
+    lj_udata_root_release(&root);
+    lj_err_mem(L);
+  }
+  retire->next = NULL;
+  retire->handle = NULL;
+  la_storeptr_rel((void **)&cl->handle_retire, retire);
   lj_udata_specialize(L, ud, UDTYPE_FFI_CLIB);
   /* Replace the temporary cache-table root with the public CLibrary result.
   ** The constructor anchor overlaps this root transition. */
@@ -886,26 +1187,33 @@ void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global)
   /* Construct/root/register first.  Any loader error now unwinds an object
   ** whose NULL handle is safe to finalize, and successful native handles are
   ** never stranded by a later userdata allocation failure. */
-  cl->handle = clib_loadlib(L, strdata(name), global);
+  lj_clib_handle_rel(cl, clib_loadlib(L, strdata(name), global));
 }
 
 /* Unload a C library. */
 void lj_clib_unload(lua_State *L, global_State *g, CLibrary *cl)
 {
-  uint32_t actions;
-  int had_stopreq = lj_safepoint_had_stopreq(L);
-  clib_cache_free(L, g, cl);
-  actions = clib_unloadlib(L, cl);
-  cl->handle = NULL;
-  if (L)
-    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  uint32_t state = lj_clib_lifecycle_acq(cl);
+  for (;;) {
+    uint32_t closed = state | LJ_CLIB_CLOSING;
+    if (state & LJ_CLIB_CLOSING)
+      return;
+    if (la_cas32(&cl->lifecycle, &state, closed,
+		 LA_ACQ_REL, LA_ACQ)) {
+      /* Unload never waits for admitted users. The last reader owns cleanup;
+      ** with no readers this CAS winner is the cleanup owner itself. */
+      if ((state & LJ_CLIB_READER_MASK) == 0)
+	clib_close_cleanup(L, g, cl);
+      break;
+    }
+  }
 }
 
 /* Create the default C library object. */
 void lj_clib_default(lua_State *L, GCtab *mt)
 {
   CLibrary *cl = clib_new(L, mt);
-  cl->handle = CLIB_DEFHANDLE;
+  lj_clib_handle_rel(cl, CLIB_DEFHANDLE);
 }
 
 #endif

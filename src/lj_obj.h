@@ -1583,6 +1583,7 @@ typedef struct GC2State {
   uint64_t interp_hard_checks;  /* Interpreter GC checks past hard limit. */
   uint64_t jit_scoped_slots_retired;  /* Scoped flush trace slots retired. */
   void *clib_cache_retired;  /* Unloaded FFI CLibrary cache entries. */
+  void *clib_handle_retired;  /* Handles retained through trace teardown. */
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
   uint32_t assist_active;  /* Nonblocking owner token for mark assists. */
@@ -5134,6 +5135,30 @@ static LJ_AINLINE void *gc2_clib_cache_retired_xchg_acqrel(global_State *g,
 							   void *head)
 {
   return la_xchgptr_acqrel((void **)&g->gc2.clib_cache_retired, head);
+}
+
+static LJ_AINLINE void *gc2_clib_handle_retired_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.clib_handle_retired);
+}
+
+static LJ_AINLINE void gc2_clib_handle_retired_store_rlx(global_State *g,
+							  void *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.clib_handle_retired, head);
+}
+
+static LJ_AINLINE int gc2_clib_handle_retired_cas(global_State *g,
+						   void **oldp, void *head)
+{
+  return la_casptr((void **)&g->gc2.clib_handle_retired, oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void *gc2_clib_handle_retired_xchg_acqrel(global_State *g,
+							    void *head)
+{
+  return la_xchgptr_acqrel((void **)&g->gc2.clib_handle_retired, head);
 }
 
 static LJ_AINLINE void gc2_assist_active_store_rlx(global_State *g,
