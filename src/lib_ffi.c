@@ -2906,23 +2906,28 @@ static void ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
 /* Register FFI module as loaded. */
 static void ffi_register_module(lua_State *L)
 {
-  GCtab *registry = lj_registry_tab_acq(G(L));
-  GCstr *loaded_name = lj_str_newlit(L, "_LOADED");
-  TValue loaded_key;
-  ptrdiff_t moduleofs = savestack(L, L->top-1);
-  ptrdiff_t anchorofs;
-  TValue *anchor;
-  setstrV(L, &loaded_key, loaded_name);
-  /* Make the lookup destination an enumerated root before the helper can
-  ** release its result lease. A by-value C local plus a later stack copy has
-  ** a reclaim window if a peer removes package.loaded meanwhile. */
-  lj_state_checkstack(L, 1);
+  GCstr *loaded_name;
+  ptrdiff_t moduleofs, keyofs, anchorofs;
+  TValue *keyroot, *anchor;
+  /* Keep the generated key and lookup result in distinct enumerated slots.
+  ** The registry itself is a stable-address global TValue root and the rooted
+  ** helper opens source SMR before copying it. */
+  lj_state_checkstack(L, 2);
+  moduleofs = savestack(L, L->top-1);
+  loaded_name = lj_str_newlit(L, "_LOADED");
+  keyroot = L->top;
+  keyofs = savestack(L, keyroot);
+  setstrV(L, keyroot, loaded_name);
+  lj_state_stack_pubtv(L, L, keyroot);
+  L->top++;
   anchor = L->top;
   anchorofs = savestack(L, anchor);
   setnilV(anchor);
   lj_state_stack_pubtv(L, L, anchor);
   L->top++;
-  (void)lj_tab_gettv_forjit(L, registry, &loaded_key, anchor);
+  (void)lj_tab_gettv_rooted(L, registry(L),
+			    restorestack(L, keyofs),
+			    restorestack(L, anchorofs));
   anchor = restorestack(L, anchorofs);
   if (tvistab(anchor)) {
     GCtab *t;
@@ -2936,7 +2941,7 @@ static void ffi_register_module(lua_State *L)
     lj_gc2_barrier_weak_write(L, t, &key, restorestack(L, moduleofs));
     lj_gc_pubtab(L, t);
   }
-  L->top = restorestack(L, anchorofs);
+  L->top = restorestack(L, keyofs);
 }
 
 LUALIB_API int luaopen_ffi(lua_State *L)

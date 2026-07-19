@@ -254,7 +254,9 @@ LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
 ** The helper retains the exact parent, key and result incarnations across its
 ** current-generation SMR read, and release-publishes into an already
 ** enumerated output root. Stack-backed inputs/outputs are restored after any
-** retry wait. The input and output roots must not alias. */
+** retry wait. Inputs are snapshotted and leased before terminal output
+** publication, so the output may alias either input (as required by the
+** consume-key and self-key forms of lua_rawget()). */
 LJ_FUNCA TValue *lj_tab_gettv_rooted(lua_State *L, cTValue *tabroot,
 				     cTValue *key, TValue *outroot);
 LJ_FUNCA TValue *lj_tab_getinttv_rooted(lua_State *L, cTValue *tabroot,

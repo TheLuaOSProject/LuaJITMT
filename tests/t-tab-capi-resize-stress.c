@@ -79,6 +79,9 @@ static void *worker_main(void *arg)
 
     lua_pushinteger(L, id * 1000000 + i);
     lua_rawseti(L, 1, array_key);
+    lua_rawgeti(L, 1, array_key);
+    assert(lua_tointeger(L, -1) == id * 1000000 + i);
+    lua_pop(L, 1);
     if (i > 32 && (i & 7) == 0) {
       lua_pushnil(L);
       lua_rawseti(L, 1, array_key - 32);
@@ -97,6 +100,10 @@ static void *worker_main(void *arg)
     lua_pushstring(L, rawkey);
     lua_pushinteger(L, id * 3000000 + i);
     lua_rawset(L, 1);
+    lua_pushstring(L, rawkey);
+    lua_rawget(L, 1);
+    assert(lua_tointeger(L, -1) == id * 3000000 + i);
+    lua_pop(L, 1);
     if (i > 64 && (i % 13) == 0) {
       snprintf(rawkey, sizeof(rawkey), "raw:%d:%d", id, i - 52);
       lua_pushstring(L, rawkey);
@@ -253,6 +260,6 @@ int main(void)
   verify_sentinel(L);
 
   lua_close(L);
-  printf("t-tab-capi-resize-stress OK: public C setters survived concurrent resize\n");
+  printf("t-tab-capi-resize-stress OK: public C point reads/writes survived concurrent resize\n");
   return 0;
 }

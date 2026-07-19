@@ -3392,6 +3392,14 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     GCtab *t;
     int table_status, key_status, result_status;
 
+    /* Open the source-side retirement interval before copying either mutable
+    ** root. A lease acquired from a pre-SMR pointer could otherwise validate a
+    ** same-address successor after a concurrent root replacement/reclaim. The
+    ** same interval then protects the paired table-vector snapshot below. */
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
+      lj_tab_wait_l(L);
+      continue;
+    }
     /* Hashing a GC key dereferences its exact string/cdata/object identity.
     ** Likewise every vector snapshot starts from the table body. Retain both
     ** allocations across the initial lookup and any current-generation miss
@@ -3404,6 +3412,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
       lj_tv_load_acq(&tablev, curtab);
       if (LJ_UNLIKELY(!tvistab(&tablev))) {
 	setnilV(&result);
+	lj_gc2_smr_read_leave(G(L));
 	copyTVrel(L, curout, &result);
 	return curout;
       }
@@ -3415,6 +3424,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     }
     table_status = lj_gc2_tv_lease_acquire(G(L), &tablev, &table_lease);
     if (LJ_UNLIKELY(table_status != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_smr_read_leave(G(L));
       if (table_status == LJ_GC2_TV_EDGE_RETRY) {
 	lj_tab_wait_l(L);
 	continue;
@@ -3430,6 +3440,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     lj_tv_load_acq(&keysnap, curkey);
     key_status = lj_gc2_tv_lease_acquire(G(L), &keysnap, &key_lease);
     if (LJ_UNLIKELY(key_status != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&table_lease);
       if (key_status == LJ_GC2_TV_EDGE_RETRY) {
 	lj_tab_wait_l(L);
@@ -3442,12 +3453,6 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     }
 
     tab_forjit_test_pause_after_leases();
-    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
-      lj_gc2_lease_release(&key_lease);
-      lj_gc2_lease_release(&table_lease);
-      lj_tab_wait_l(L);
-      continue;
-    }
     /* The old two-stage lookup could call a yielding resolver while this SMR
     ** reader was active. Resolve exactly once from a paired current-root
     ** snapshot instead; RETRY is handled only after the reader is closed. */
@@ -3479,6 +3484,19 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
       lj_tab_wait_l(L);
       continue;
     }
+    /* Publication is the terminal linearization point for this invocation.
+    ** Reject transient internal values while the original inputs are still
+    ** intact; retrying after copyTVrel() would make an aliased key/output root
+    ** name the previous result instead of the requested key. It would also
+    ** briefly expose an internal marker to a concurrent root scanner. */
+    if (LJ_UNLIKELY(!tab_tv_forjit_loadable(&result))) {
+      lj_gc2_smr_read_leave(G(L));
+      lj_gc2_lease_release(&result_lease);
+      lj_gc2_lease_release(&key_lease);
+      lj_gc2_lease_release(&table_lease);
+      lj_tab_wait_l(L);
+      continue;
+    }
     /* `outroot` may itself be an enumerated TG/stack root. Publish it with
     ** release ordering only after the copied referent has an exact lifetime
     ** lease, and before the source vector SMR interval closes. This lets
@@ -3488,30 +3506,22 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     copyTVrel(L, curout, &result);
     tab_forjit_test_pause_after_result_lease(curout);
     lj_gc2_smr_read_leave(G(L));
-    if (LJ_LIKELY(tab_tv_forjit_loadable(&result))) {
-      /*
-      ** Helper-backed trace reads return through a temporary TValue, not a Lua
-      ** stack slot. Publish GC values and the source table before later trace
-      ** helpers can allocate or assist GC with only the temporary live.
-      */
-	if (tvisgcv(&result)) {
-	if (outstack)
-	  lj_state_stack_pubtv(L, L, curout);
-	else
-	  lj_gc_pubroot(L, curout);
-	tab_publish_storage(L, t);
-	lj_gc_pubtabtv(L, t, &result);
-	lj_gc_pubtab(L, t);
-      }
-      lj_gc2_lease_release(&result_lease);
-      lj_gc2_lease_release(&key_lease);
-      lj_gc2_lease_release(&table_lease);
-      return outstack ? restorestack(L, outofs) : outroot;
+    /* Helper-backed trace reads return through a temporary TValue, not a Lua
+    ** stack slot. Publish GC values and the source table before later trace
+    ** helpers can allocate or assist GC with only the temporary live. */
+    if (tvisgcv(&result)) {
+      if (outstack)
+	lj_state_stack_pubtv(L, L, curout);
+      else
+	lj_gc_pubroot(L, curout);
+      tab_publish_storage(L, t);
+      lj_gc_pubtabtv(L, t, &result);
+      lj_gc_pubtab(L, t);
     }
     lj_gc2_lease_release(&result_lease);
     lj_gc2_lease_release(&key_lease);
     lj_gc2_lease_release(&table_lease);
-    lj_tab_wait_l(L);
+    return outstack ? restorestack(L, outofs) : outroot;
   }
 }
 

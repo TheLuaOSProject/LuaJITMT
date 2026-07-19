@@ -22,6 +22,9 @@ static void populate(lua_State *L)
   lua_pushliteral(L, "named");
   lua_pushliteral(L, "hash-value");
   lua_rawset(L, 1);
+  lua_pushvalue(L, 1);
+  lua_pushliteral(L, "self-value");
+  lua_rawset(L, 1);
 }
 
 static void check_integer_stack_result(lua_State *L)
@@ -65,6 +68,93 @@ static void check_anchor_result(lua_State *L)
   assert(tvisstr(anchor));
   assert(strcmp(strVdata(anchor), "array-value") == 0);
   lj_tg_root_anchor_pop(tg, idx);
+}
+
+static int check_environment_rawget_c(lua_State *L)
+{
+  lua_pushliteral(L, "rooted-env");
+  lua_rawget(L, LUA_ENVIRONINDEX);
+  assert(lua_isstring(L, -1));
+  assert(strcmp(lua_tostring(L, -1), "env-hash-value") == 0);
+  lua_pop(L, 1);
+
+  lua_rawgeti(L, LUA_ENVIRONINDEX, 7);
+  assert(lua_isstring(L, -1));
+  assert(strcmp(lua_tostring(L, -1), "env-array-value") == 0);
+  lua_pop(L, 1);
+  return 0;
+}
+
+static void check_pseudo_index_public_api(lua_State *L)
+{
+  lua_pushliteral(L, "global-hash-value");
+  lua_setfield(L, LUA_GLOBALSINDEX, "rooted-global");
+  lua_pushliteral(L, "global-array-value");
+  lua_rawseti(L, LUA_GLOBALSINDEX, 9);
+
+  lua_pushliteral(L, "rooted-global");
+  lua_rawget(L, LUA_GLOBALSINDEX);
+  assert(lua_isstring(L, -1));
+  assert(strcmp(lua_tostring(L, -1), "global-hash-value") == 0);
+  lua_pop(L, 1);
+  lua_rawgeti(L, LUA_GLOBALSINDEX, 9);
+  assert(lua_isstring(L, -1));
+  assert(strcmp(lua_tostring(L, -1), "global-array-value") == 0);
+  lua_pop(L, 1);
+
+  lua_newtable(L);
+  lua_pushliteral(L, "env-hash-value");
+  lua_setfield(L, -2, "rooted-env");
+  lua_pushliteral(L, "env-array-value");
+  lua_rawseti(L, -2, 7);
+  lua_pushcfunction(L, check_environment_rawget_c);
+  lua_pushvalue(L, -2);
+  assert(lua_setfenv(L, -2));
+  lua_call(L, 0, 0);
+  lua_pop(L, 1);
+}
+
+static void check_alias_and_public_api(lua_State *L)
+{
+  TValue *slot;
+  GCstr *key;
+
+  /* Consume-key publication aliases key and result. A transient key admission
+  ** must retry before overwriting the only key root. */
+  lua_pushliteral(L, "named");
+  key = strV(L->top - 1);
+  lj_gc2_test_stack_admission_retry_once(obj2gco(key));
+  slot = lj_tab_gettv_rooted(L, L->base, L->top - 1, L->top - 1);
+  assert(slot == L->top - 1 && tvisstr(slot));
+  assert(strcmp(strVdata(slot), "hash-value") == 0);
+  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
+  lua_pop(L, 1);
+
+  /* The valid lua_rawget(L, -1) extreme uses one table TValue as parent, key
+  ** and result. Exact table/key leases retain both snapshots until terminal
+  ** publication, while the base slot keeps the table semantically rooted. */
+  lua_pushvalue(L, 1);
+  slot = L->top - 1;
+  assert(lj_tab_gettv_rooted(L, slot, slot, slot) == slot);
+  assert(tvisstr(slot) && strcmp(strVdata(slot), "self-value") == 0);
+  lua_pop(L, 1);
+
+  lua_pushliteral(L, "named");
+  lua_rawget(L, 1);
+  assert(lua_isstring(L, -1));
+  assert(strcmp(lua_tostring(L, -1), "hash-value") == 0);
+  lua_pop(L, 1);
+
+  lua_pushvalue(L, 1);
+  lua_rawget(L, -1);
+  assert(lua_isstring(L, -1));
+  assert(strcmp(lua_tostring(L, -1), "self-value") == 0);
+  lua_pop(L, 1);
+
+  lua_rawgeti(L, 1, 1);
+  assert(lua_isstring(L, -1));
+  assert(strcmp(lua_tostring(L, -1), "array-value") == 0);
+  lua_pop(L, 1);
 }
 
 static void check_transient_retries(lua_State *L)
@@ -120,6 +210,8 @@ int main(void)
   check_integer_stack_result(L);
   check_generic_stack_key(L);
   check_anchor_result(L);
+  check_alias_and_public_api(L);
+  check_pseudo_index_public_api(L);
   check_transient_retries(L);
   check_non_table_root(L);
   lua_close(L);
