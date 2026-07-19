@@ -559,7 +559,14 @@ static void check_structural_readers(lua_State *L)
   assert_rooted_reader_retry(LJ_TAB_ROOTED_READER_LEN, 0);
   lua_pop(L, 1);
 
-  assert(luaL_loadstring(L, "local t=...; return next(t, nil)") == 0);
+  /* The SysV helper argument registers overlap the VM BASE register. Verify
+  ** both the first output location and its use as the second cursor: forming
+  ** the output pointer after CARG3 used to return the iterator function as the
+  ** key and make this second next() fail with an invalid cursor. */
+  assert(luaL_loadstring(L,
+    "local t=...; local k,v=next(t,nil); assert(k~=nil and t[k]==v); "
+    "local k2,v2=next(t,k); if k2~=nil then assert(t[k2]==v2) end; "
+    "return k,v") == 0);
   lua_pushvalue(L, tabidx);
   arm_rooted_reader_retry(0);
   assert(lua_pcall(L, 1, 2, 0) == 0);

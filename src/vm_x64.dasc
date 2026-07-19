@@ -1773,9 +1773,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:CARG1, L:RB
   |.else
   |  mov L:CARG1, L:RB
+  |  // SysV CARG3 aliases BASE. Form the output root before CARG3 advances
+  |  // that register, otherwise out becomes the key slot instead of BASE-16.
+  |  lea CARG4, [BASE-16]
   |  lea CARG2, [BASE]
   |  lea CARG3, [BASE+8]
-  |  lea CARG4, [BASE-16]
   |.endif
   |  call extern lj_tab_next_pair_rooted
   |  // (lua_State *L, cTValue *tabroot, cTValue *keyroot, TValue *out)
