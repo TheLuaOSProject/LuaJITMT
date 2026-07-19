@@ -49,7 +49,7 @@ int main(void)
   oldnode = lj_tab_node_acq(held.tab);
   hmask = lj_tab_node_hmask_acq(oldnode);
   assert(hmask > 0);
-  assert(lj_tab_read_current_keyed(held.tab, oldslot, &key, &old) ==
+  assert(lj_tab_read_current_keyed(G(L), held.tab, oldslot, &key, &old) ==
 	 LJ_TAB_STORE_CAS_OK);
   assert(!tvisnil(&old) && !lj_cdata_fin_isclaim(&old));
   copyTVrel(L, L->top, &old);

@@ -618,8 +618,8 @@ static int ctype_fin_slot_lookup_held(CTypeFinLease *lease, cTValue *key,
       return LJ_CTYPE_FIN_RETRY;
     if (lj_obj_equal(&nk, key)) {
       TValue current;
-      int rc = lj_tab_read_current_keyed(lease->tab, &n->val, key,
-					 &current);
+      int rc = lj_tab_read_current_keyed(lease->g, lease->tab, &n->val,
+					 key, &current);
       if (rc != LJ_TAB_STORE_CAS_OK || tvisforward(&current))
 	return LJ_CTYPE_FIN_RETRY;
       if (slotp)

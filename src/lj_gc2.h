@@ -28,6 +28,49 @@ typedef struct LJGC2Lease {
   intptr_t admission;
   LJHugeReader huge;
 } LJGC2Lease;
+
+/* One scalar table-store publication transaction. The guard is linear and
+** owner-only: begin captures parent/key/value by value, then finish releases
+** every retained authority exactly once. Result codes describe the stage;
+** only store_authorized after final revalidation permits the semantic CAS.
+** A retained PINNED guard may reach that state only after global activation
+** has entered absorbing NO_RECLAIM. INVALID/RETRY never authorize a store. */
+typedef enum LJGC2TableStoreGuardResult {
+  LJ_GC2_TABLE_STORE_GUARD_INVALID = -2,
+  LJ_GC2_TABLE_STORE_GUARD_PINNED = -1,
+  LJ_GC2_TABLE_STORE_GUARD_RETRY = 0,
+  LJ_GC2_TABLE_STORE_GUARD_OK = 1
+} LJGC2TableStoreGuardResult;
+
+typedef struct LJGC2TableStoreGuard {
+  global_State *g;
+  TGState *tg;
+  TGState *owner_raw_tg;
+  GCtab *parent_tab;
+  LJTGRegistryBorrow tg_borrow;
+  LJGC2RootDescTicket ticket;
+  LJGC2ActivationSnap admitted;
+  LJGC2Lease parent_lease;
+  LJGC2Lease key_lease;
+  LJGC2Lease value_lease;
+  TValue parent;
+  TValue key;
+  TValue value;
+  uint8_t active;
+  uint8_t globally_pinned;
+  uint8_t weak_active;
+  uint8_t parent_lease_active;
+  uint8_t key_lease_active;
+  uint8_t value_lease_active;
+  uint8_t begun;
+  uint8_t legacy_carrier;
+  uint8_t gate_admitted;
+  uint8_t gate_revalidated;
+  uint8_t store_authorized;
+  uint8_t committed;
+  uint8_t finished;
+  uint8_t cleanup_failed;
+} LJGC2TableStoreGuard;
 /* Non-semantic snapshot for an object whose queue/root/detached ticket already
 ** pins its incarnation. The caller must hold this universe's SMR reader (or
 ** the exact sweep-reclaimer certificate) through the final use. */
@@ -293,6 +336,15 @@ LJ_FUNC uint64_t lj_gc2_retire_epoch(global_State *g);
 LJ_FUNC int lj_gc2_smr_read_try(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_enter(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
+LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_begin(
+  lua_State *L, LJGC2TableStoreGuard *guard, GCtab *parent,
+  cTValue *key, cTValue *value);
+LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_admit(
+  lua_State *L, LJGC2TableStoreGuard *guard);
+LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_revalidate(
+  lua_State *L, LJGC2TableStoreGuard *guard);
+LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_finish(
+  lua_State *L, LJGC2TableStoreGuard *guard, int cas_committed);
 /* True only for the current OS thread which won the active IDLE/SWEEP
 ** exclusive-reclaimer CAS. This is an identity certificate, not lifetime. */
 LJ_FUNC int lj_gc2_reclaim_context_held(global_State *g);
@@ -452,6 +504,9 @@ LJ_FUNC int lj_gc2_test_thread_needscan_clear(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_test_table_rescan_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_gc2_test_table_rescan_paused(void);
 LJ_FUNC void lj_gc2_test_table_rescan_release(void);
+LJ_FUNC void lj_gc2_test_table_store_gate_pause_arm(void);
+LJ_FUNC uint32_t lj_gc2_test_table_store_gate_pause_waiting(void);
+LJ_FUNC void lj_gc2_test_table_store_gate_pause_release(void);
 LJ_FUNC void lj_gc2_test_queue_post_admit_pause(GCobj *target);
 LJ_FUNC uint32_t lj_gc2_test_queue_post_admit_paused(void);
 LJ_FUNC void lj_gc2_test_queue_post_admit_release(void);

@@ -117,7 +117,8 @@ static void assert_registered(lua_State *L, const char *cdname,
   rc = lj_ctype_fin_get(L, cts, &key, &held);
   assert(rc == LJ_CTYPE_FIN_FOUND);
   assert(held.tab != NULL && held.slot != NULL && held.smr_held);
-  assert(lj_tab_read_current_keyed(held.tab, held.slot, &key, &callback) ==
+  assert(lj_tab_read_current_keyed(G(L), held.tab, held.slot, &key,
+				   &callback) ==
          LJ_TAB_STORE_CAS_OK);
   assert(!tvisnil(&callback));
   assert(!tvisforward(&callback));
@@ -146,7 +147,8 @@ static void assert_cleared(lua_State *L, const char *cdname)
   setcdataV(L, &key, cd);
   rc = lj_ctype_fin_get(L, cts, &key, &held);
   assert(rc == LJ_CTYPE_FIN_FOUND);
-  assert(lj_tab_read_current_keyed(held.tab, held.slot, &key, &callback) ==
+  assert(lj_tab_read_current_keyed(G(L), held.tab, held.slot, &key,
+				   &callback) ==
          LJ_TAB_STORE_CAS_OK);
   assert(tvisnil(&callback));
   lj_ctype_fin_lease_release(&held);

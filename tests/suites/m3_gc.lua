@@ -33,6 +33,8 @@ local m3_scaffold_deps = {
   "m3_gcflags_atomic",
   "m3_gc2_markword_token_model",
   "m3_gc2_root_gate_store_model",
+  "m3_gc2_table_store_guard",
+  "m3_gc2_public_store_weak_window",
   "m3_gc2_weak_resize_retry",
   "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
@@ -91,6 +93,42 @@ return function(add)
         cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
       })
       print("M3 GC2 root-gate/store exhaustive model passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_table_store_guard",
+    description = "table-store root guard substrate transition contract",
+    run = function(t)
+      local flags = gc2_test_cflags ..
+                    " -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-table-store-guard"),
+                          "t-gc2-table-store-guard.c", {
+          cflags = flags,
+          timeout = "20s"
+        })
+      end)
+      print("M3 GC2 table-store root guard substrate passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_public_store_weak_window",
+    description = "public scalar stores release weak tokens before retries",
+    run = function(t)
+      local flags = gc2_test_cflags ..
+                    " -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-public-store-weak-window"),
+                          "t-gc2-public-store-weak-window.c", {
+          cflags = flags,
+          timeout = "20s"
+        })
+      end)
+      print("M3 public scalar weak-window regression passed")
     end
   })
 

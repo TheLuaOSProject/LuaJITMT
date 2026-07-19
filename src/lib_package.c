@@ -774,7 +774,7 @@ static void package_claim_clear(lua_State *L, GCtab *claims, GCstr *key,
     if (!slot)
       return;
     dst = (TValue *)(void *)slot;
-    rc = lj_tab_read_current_keyed(claims, dst, &keytv, &old);
+    rc = lj_tab_read_current_keyed(G(L), claims, dst, &keytv, &old);
     if (rc == LJ_TAB_STORE_CAS_OK) {
       if (!package_claim_is_owner(&old, tid))
 	return;

@@ -277,6 +277,9 @@ static uint32_t gc2_thread_needscan_test_pause_release;
 static uint32_t gc2_table_rescan_test_pause_stage;
 static uint32_t gc2_table_rescan_test_paused_stage;
 static uint32_t gc2_table_rescan_test_pause_release;
+static uint32_t gc2_table_store_gate_test_armed;
+static uint32_t gc2_table_store_gate_test_waiting;
+static uint32_t gc2_table_store_gate_test_release;
 static uintptr_t gc2_queue_post_admit_test_target;
 static uint32_t gc2_queue_post_admit_test_armed;
 static uint32_t gc2_queue_post_admit_test_paused;
@@ -492,6 +495,34 @@ void lj_gc2_test_table_token_release(void)
   la_store32_rel(&gc2_table_token_test_pause_release, 1);
 }
 
+void lj_gc2_test_table_store_gate_pause_arm(void)
+{
+  la_store32_rel(&gc2_table_store_gate_test_release, 0);
+  la_store32_rel(&gc2_table_store_gate_test_waiting, 0);
+  la_store32_rel(&gc2_table_store_gate_test_armed, 1);
+}
+
+uint32_t lj_gc2_test_table_store_gate_pause_waiting(void)
+{
+  return la_load32_acq(&gc2_table_store_gate_test_waiting);
+}
+
+void lj_gc2_test_table_store_gate_pause_release(void)
+{
+  la_store32_rel(&gc2_table_store_gate_test_armed, 0);
+  la_store32_rel(&gc2_table_store_gate_test_release, 1);
+}
+
+static void gc2_table_store_gate_test_pause(void)
+{
+  if (la_load32_acq(&gc2_table_store_gate_test_armed) == 0)
+    return;
+  la_store32_rel(&gc2_table_store_gate_test_waiting, 1);
+  while (la_load32_acq(&gc2_table_store_gate_test_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&gc2_table_store_gate_test_waiting, 0);
+}
+
 static void gc2_recovery_test_pause_at(uint32_t stage)
 {
   if (la_load32_acq(&gc2_recovery_test_pause_stage) != stage)
@@ -695,6 +726,7 @@ uint32_t lj_gc2_test_worker_table_skips(void)
 #define gc2_queue_post_admit_test_pause_at(o) ((void)(o))
 #define gc2_queue_retry_witness_test_pause_at(o) ((void)(o))
 #define gc2_table_token_test_pause_at(stage) ((void)0)
+#define gc2_table_store_gate_test_pause() ((void)0)
 #define gc2_test_weak_clear_before_cas(g, t, slot, key, val) ((void)0)
 #define gc2_test_jit_mark_checkpoint_closed() ((void)0)
 #define gc2_test_jit_sweep_checkpoint_closed() ((void)0)
@@ -9470,7 +9502,9 @@ void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L)
   lj_gc2_scan_minor_roots(g, L);
 }
 
+#if LJ_GC2_PARANOIA
 static LJ_AINLINE void *gc2_mark_base(global_State *g, GCobj *o);
+#endif
 static LJ_AINLINE int gc2_obj_may_traverse(GCobj *o);
 static LJ_AINLINE int gc2_rescan_pending_set(GCobj *o);
 static LJ_AINLINE uint8_t gc2_rescan_pending_clear(GCobj *o);
@@ -11265,9 +11299,16 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
 	  (*clearable)++;
 	  if (clear) {
 	    TValue key;
+	    int clear_status;
 	    setintV(&key, (int32_t)i);
 	    gc2_test_weak_clear_before_cas(g, t, slot, &key, &val);
-	    (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
+	    clear_status = lj_tab_clear_weak_slot_keyed(
+	      g, t, slot, &key, &val);
+	    /* Resize migration may already have captured this dead edge. A
+	    ** non-OK clear requires a fresh current-root pass; otherwise weak
+	    ** completion could sweep the child while its successor edge lives. */
+	    if (LJ_UNLIKELY(clear_status != LJ_TAB_STORE_CAS_OK))
+	      goto out;
 	  }
 	}
       }
@@ -11319,8 +11360,12 @@ static int gc2_weak_process_tab(global_State *g, GCtab *t,
 	if (keyclass == GC2_WEAK_CLEAR || valclass == GC2_WEAK_CLEAR) {
 	  (*clearable)++;
 	  if (clear) {
+	    int clear_status;
 	    gc2_test_weak_clear_before_cas(g, t, slot, &key, &val);
-	    (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
+	    clear_status = lj_tab_clear_weak_slot_keyed(
+	      g, t, slot, &key, &val);
+	    if (LJ_UNLIKELY(clear_status != LJ_TAB_STORE_CAS_OK))
+	      goto out;
 	  }
 	}
       }
@@ -12607,7 +12652,8 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     }
     slot = finlease.slot;
     setcdataV(L, &key, gco2cd(o));
-    slot_status = lj_tab_read_current_keyed(finlease.tab, slot, &key, &fin);
+    slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
+					    &fin);
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -12805,7 +12851,8 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     }
     slot = finlease.slot;
     setcdataV(L, &key, gco2cd(o));
-    slot_status = lj_tab_read_current_keyed(finlease.tab, slot, &key, &fin);
+    slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
+					    &fin);
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -12956,7 +13003,8 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
     }
     slot = finlease.slot;
     setcdataV(L, &key, gco2cd(o));
-    slot_status = lj_tab_read_current_keyed(finlease.tab, slot, &key, &fin);
+    slot_status = lj_tab_read_current_keyed(g, finlease.tab, slot, &key,
+					    &fin);
     if (slot_status != LJ_TAB_STORE_CAS_OK || tvisforward(&fin) ||
 	lj_cdata_fin_isclaim(&fin)) {
       gc2_finreg_cdata_order_scopes_leave(&objscope, &finlease);
@@ -15348,6 +15396,504 @@ void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
     gc2_weak_values_marked_add(g, 1);
 }
 
+static LJGC2TableStoreGuardResult
+gc2_table_store_guard_pin(LJGC2TableStoreGuard *guard)
+{
+  if (!guard || !guard->g)
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  gc2_activation_pin_no_reclaim(guard->g);
+  guard->globally_pinned = 1;
+  return LJ_GC2_TABLE_STORE_GUARD_PINNED;
+}
+
+static int gc2_table_store_owner_current(lua_State *L,
+					 LJGC2TableStoreGuard *guard)
+{
+  global_State *g;
+  TGState *raw;
+  TGState *tg;
+  uint32_t tid;
+  int terminal;
+  if (!L || !guard || !(g = guard->g) || G(L) != g)
+    return 0;
+  raw = lj_thr_get_tg();
+  if (raw != guard->owner_raw_tg)
+    return 0;
+  tg = lj_thr_get_tg_fallback(g);
+  if (!tg || tg != guard->tg || tg->gl != g ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return 0;
+  terminal = mt_shutdown_acq(g) != 0 && tg == g->main_tg &&
+	     L == mainthread_acq(g);
+  /* A quiescent universe may be moved to an unbound OS thread for lua_close.
+  ** Joined-world shutdown is the sole raw-NULL carrier; ordinary live guards
+  ** still require the immutable non-NULL owner_raw_tg certificate. */
+  if (!raw && !terminal)
+    return 0;
+  /* Creating or using a second Lua universe on the same OS thread preserves
+  ** the first universe's raw TLS binding. owner_raw_tg is the immutable local
+  ** thread certificate for this guard; the established fallback contract then
+  ** carries the second universe on its exact main TG. Require the claimed
+  ** state's matching hint before accepting that cross-universe case. */
+  if (raw != tg &&
+      (tg != g->main_tg || L->tg_hint != tg))
+    return 0;
+  tid = lj_tg_tid_acq(tg);
+  if (!lj_thr_id_is_owner(tid) || lj_state_owner_acq(L) != tid)
+    return 0;
+  if (lj_tg_load_cur_L(tg) == L)
+    return 1;
+  /* A C API resume claim owns a suspended coroutine without replacing the
+  ** TG's executing cur_L. Its exact temporary carrier is tg_hint, installed
+  ** only while this same owner id holds the state claim. */
+  if (L->tg_hint == tg)
+    return 1;
+  /* lua_close clears cur_L before running joined-world finalizers. Raw TLS,
+  ** main-state ownership and mt_shutdown together remain exact owner proof. */
+  return terminal;
+}
+
+static LJTGSlotResult
+gc2_table_store_guard_release_resources(lua_State *L,
+					LJGC2TableStoreGuard *guard)
+{
+  LJTGSlotResult released = LJ_TGSLOT_OK;
+  if (!guard)
+    return LJ_TGSLOT_INVALID;
+  if (guard->weak_active) {
+    lj_gc2_weak_write_end(L, guard->weak_active);
+    guard->weak_active = 0;
+  }
+  if (guard->value_lease_active) {
+    lj_gc2_lease_release(&guard->value_lease);
+    guard->value_lease_active = 0;
+  }
+  if (guard->key_lease_active) {
+    lj_gc2_lease_release(&guard->key_lease);
+    guard->key_lease_active = 0;
+  }
+  if (guard->parent_lease_active) {
+    lj_gc2_lease_release(&guard->parent_lease);
+    guard->parent_lease_active = 0;
+  }
+  if (guard->tg_borrow.active)
+    released = lj_tgregistry_release_to_completion(&guard->tg_borrow, NULL);
+  return released;
+}
+
+static LJGC2TableStoreGuardResult
+gc2_table_store_guard_abort(lua_State *L, LJGC2TableStoreGuard *guard,
+			    LJGC2TableStoreGuardResult result)
+{
+  LJTGSlotResult released;
+  if (!guard)
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  released = gc2_table_store_guard_release_resources(L, guard);
+  if (released != LJ_TGSLOT_OK) {
+    (void)gc2_table_store_guard_pin(guard);
+    guard->cleanup_failed = 1;
+  } else {
+    guard->finished = 1;
+  }
+  /* An aborted guard owns no weak-write token or body lease. Even absorbing
+  ** global NO_RECLAIM therefore cannot authorize a semantic store. */
+  return result;
+}
+
+LJGC2TableStoreGuardResult
+lj_gc2_table_store_begin(lua_State *L, LJGC2TableStoreGuard *guard,
+			 GCtab *parent, cTValue *key, cTValue *value)
+{
+  global_State *g;
+  TGState *tg;
+  LJGC2RootDescSpec spec;
+  LJTGSlotSnap slot;
+  LJTGSlotResult borrowed;
+  LJGC2RootDescResult published;
+  uint64_t desc_control;
+  void *body = NULL;
+  int lease;
+  if (!guard)
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  memset(guard, 0, sizeof(*guard));
+  if (!L || !parent || !key || !value) {
+    guard->finished = 1;
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  }
+  g = G(L);
+  guard->g = g;
+  guard->owner_raw_tg = lj_thr_get_tg();
+  guard->parent_tab = parent;
+  /* Raw tagging must precede the first header read. The expected-type parent
+  ** lease below is the admission that makes the body safe to inspect. */
+  setgcVraw(&guard->parent, obj2gco(parent), LJ_TTAB);
+  lj_tv_load_acq(&guard->key, key);
+  lj_tv_load_acq(&guard->value, value);
+  lj_tgregistry_borrow_init(&guard->tg_borrow);
+
+  /* Prefer raw TLS in its own universe and otherwise use the canonical exact
+  ** main-TG fallback. This matches lj_thr_current_id()/resumeclaim without
+  ** replacing a different universe's raw TLS binding. */
+  tg = lj_thr_get_tg_fallback(g);
+  guard->tg = tg;
+  if (!g || !tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !gc2_table_store_owner_current(L, guard)) {
+    (void)gc2_table_store_guard_pin(guard);
+    guard->finished = 1;
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  }
+
+  guard->legacy_carrier =
+    gc2_tg_registry_incomplete_acq(g) != 0 ||
+    lj_tg_registry_shadow_missed_acq(tg);
+  if (!guard->legacy_carrier) {
+    for (;;) {
+      borrowed = lj_tgregistry_try_borrow(&tg->registry_key,
+					   &guard->tg_borrow, &slot);
+      if (borrowed != LJ_TGSLOT_LOST)
+	break;
+    }
+    if (borrowed != LJ_TGSLOT_OK ||
+	lj_tgregistry_try_body_snapshot(&guard->tg_borrow, &body, &slot) !=
+	  LJ_TGSLOT_OK || body != tg || slot.state != LJ_TGSLOT_LIVE) {
+      (void)gc2_table_store_guard_pin(guard);
+      return gc2_table_store_guard_abort(
+	L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
+    }
+  } else {
+    /* Registry shadow OOM is recoverable and intentionally leaves the legacy
+    ** TG attachment authoritative. Canonical TLS/universe carrier plus exact
+    ** state owner is local authority; pin before this non-enumerable store. */
+    (void)gc2_table_store_guard_pin(guard);
+  }
+
+  lease = lj_gc2_obj_lease_acquire(g, obj2gco(parent),
+				   (uint32_t)~LJ_TTAB, NULL,
+				   &guard->parent_lease);
+  if (lease < 0) {
+    (void)gc2_table_store_guard_pin(guard);
+    return gc2_table_store_guard_abort(
+      L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
+  }
+  guard->parent_lease_active = 1;
+  if (tvisgcv(&guard->key)) {
+    lease = lj_gc2_tv_lease_acquire(g, &guard->key, &guard->key_lease);
+    if (lease != LJ_GC2_TV_EDGE_VALID) {
+      (void)gc2_table_store_guard_pin(guard);
+      return gc2_table_store_guard_abort(
+        L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
+    }
+    guard->key_lease_active = 1;
+  }
+  if (tvisgcv(&guard->value)) {
+    lease = lj_gc2_tv_lease_acquire(g, &guard->value,
+				    &guard->value_lease);
+    if (lease != LJ_GC2_TV_EDGE_VALID) {
+      (void)gc2_table_store_guard_pin(guard);
+      return gc2_table_store_guard_abort(
+        L, guard, LJ_GC2_TABLE_STORE_GUARD_RETRY);
+    }
+    guard->value_lease_active = 1;
+  }
+
+  /* The legacy closer is still positive authority during this migration
+  ** tranche and does not enumerate root descriptors. Publish the stable
+  ** by-value payload semantically before ACTIVE can become observable. */
+  lj_gc_pubroot(L, &guard->parent);
+  lj_gc_pubroot(L, &guard->key);
+  lj_gc_pubroot(L, &guard->value);
+  guard->weak_active = (uint8_t)lj_gc2_weak_write_begin(L, parent);
+  if (guard->weak_active)
+    lj_gc2_barrier_weak_write(L, parent, &guard->key, &guard->value);
+
+  memset(&spec, 0, sizeof(spec));
+  spec.flags = LJ_GC2_ROOTDESC_F_OLD | LJ_GC2_ROOTDESC_F_NEW |
+	       LJ_GC2_ROOTDESC_F_AUX | LJ_GC2_ROOTDESC_F_TABLE_STORE;
+  spec.old_root = tv_rawload(&guard->parent);
+  spec.new_root = tv_rawload(&guard->key);
+  spec.aux_root = tv_rawload(&guard->value);
+  if (guard->legacy_carrier) {
+    guard->begun = 1;
+    return LJ_GC2_TABLE_STORE_GUARD_PINNED;
+  }
+  desc_control = la_load64_acq(&tg->root_desc.control);
+  if (lj_gc2_rootdesc_state(desc_control) != LJ_GC2_ROOTDESC_IDLE) {
+    /* A legitimate owner-local outer transaction must retain its exact ticket.
+    ** Global pin plus this guard's own leases/weak token is the nested fallback;
+    ** never poison the outer descriptor merely by attempting publication. */
+    guard->begun = 1;
+    (void)gc2_table_store_guard_pin(guard);
+    return LJ_GC2_TABLE_STORE_GUARD_PINNED;
+  }
+  published = lj_gc2_rootdesc_publish(&tg->root_desc, &spec, &guard->ticket);
+  guard->begun = 1;
+  if (published == LJ_GC2_ROOTDESC_OK) {
+    guard->active = 1;
+    return LJ_GC2_TABLE_STORE_GUARD_OK;
+  }
+
+  /* Descriptor nesting/NO_RECLAIM cannot retain this transaction's payload,
+  ** so pin global reclamation and keep the exact borrow, leases and weak token
+  ** live. Only this unfinished conservative guard makes PINNED store-safe. */
+  (void)gc2_table_store_guard_pin(guard);
+  return LJ_GC2_TABLE_STORE_GUARD_PINNED;
+}
+
+static LJGC2TableStoreGuardResult
+gc2_table_store_admit_(lua_State *L, LJGC2TableStoreGuard *guard,
+		       int revalidate)
+{
+  void *body = NULL;
+  LJTGSlotSnap slot;
+  LJGC2TableStoreGuardResult authorized;
+  if (!guard || guard->finished || !guard->g || !guard->tg)
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  if (!gc2_table_store_owner_current(L, guard)) {
+    /* A foreign actor may pin global authority, but must not mutate the
+    ** owner's SSB or abandon its descriptor/leases during cleanup. */
+    gc2_activation_pin_no_reclaim(guard->g);
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  }
+  if ((!revalidate && (guard->gate_admitted || guard->gate_revalidated)) ||
+      (revalidate && (!guard->gate_admitted || guard->gate_revalidated))) {
+    (void)gc2_table_store_guard_pin(guard);
+    guard->store_authorized = 0;
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  }
+  if (!guard->legacy_carrier) {
+    if (lj_tgregistry_try_body_snapshot(&guard->tg_borrow, &body, &slot) !=
+	  LJ_TGSLOT_OK || body != guard->tg || slot.state != LJ_TGSLOT_LIVE) {
+      (void)gc2_table_store_guard_pin(guard);
+      return LJ_GC2_TABLE_STORE_GUARD_RETRY;
+    }
+  } else if (!guard->globally_pinned) {
+    return gc2_table_store_guard_pin(guard);
+  }
+
+  for (;;) {
+    LJGC2ActivationSnap snap =
+      lj_gc2_activation_snapshot(&guard->g->gc2.activation);
+    LJGC2ActivationSnap observed;
+    LJGC2TransitionResult result;
+    /* Helpers may convert the exact ACTIVE descriptor to NO_RECLAIM. A store
+    ** may continue only after matching that loss with the global sticky pin. */
+    if (guard->active &&
+	la_load64_acq(&guard->tg->root_desc.control) != guard->ticket.control) {
+      authorized = gc2_table_store_guard_pin(guard);
+      guard->admitted =
+	lj_gc2_activation_snapshot(&guard->g->gc2.activation);
+      break;
+    }
+    if (guard->globally_pinned) {
+      guard->admitted =
+	lj_gc2_activation_snapshot(&guard->g->gc2.activation);
+      authorized = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+      break;
+    }
+    if (!lj_gc2_activation_value_valid(snap.mark_epoch, snap.generation,
+				       snap.state, snap.gate))
+      authorized = gc2_table_store_guard_pin(guard);
+    else if (snap.state == LJ_GC2_ACT_NO_RECLAIM) {
+      guard->admitted = snap;
+      guard->globally_pinned = 1;
+      authorized = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+    } else if (snap.gate == LJ_GC2_ROOT_GATE_OPEN ||
+	       snap.gate == LJ_GC2_ROOT_GATE_PENDING) {
+      /* A second exact descriptor read closes the snapshot-to-return window.
+      ** A later helper pin remains fail-closed and cannot erase the payload. */
+      if (guard->active &&
+	  la_load64_acq(&guard->tg->root_desc.control) !=
+	    guard->ticket.control) {
+	authorized = gc2_table_store_guard_pin(guard);
+	guard->admitted =
+	  lj_gc2_activation_snapshot(&guard->g->gc2.activation);
+      } else {
+	guard->admitted = snap;
+	authorized = LJ_GC2_TABLE_STORE_GUARD_OK;
+      }
+    } else if (snap.gate != LJ_GC2_ROOT_GATE_CLOSING &&
+	       snap.gate != LJ_GC2_ROOT_GATE_COMMIT) {
+      authorized = gc2_table_store_guard_pin(guard);
+    } else {
+      gc2_table_store_gate_test_pause();
+      result = lj_gc2_activation_try_gate(&guard->g->gc2.activation, &snap,
+					  LJ_GC2_ROOT_GATE_PENDING,
+					  &observed);
+      if (result == LJ_GC2_TRANSITION_OK) {
+	if (guard->active &&
+	    la_load64_acq(&guard->tg->root_desc.control) !=
+	      guard->ticket.control) {
+	  authorized = gc2_table_store_guard_pin(guard);
+	  guard->admitted =
+	    lj_gc2_activation_snapshot(&guard->g->gc2.activation);
+	} else {
+	  guard->admitted = observed;
+	  authorized = LJ_GC2_TABLE_STORE_GUARD_OK;
+	}
+      } else if (result == LJ_GC2_TRANSITION_PINNED) {
+        guard->admitted = observed;
+        guard->globally_pinned = 1;
+        authorized = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+      } else if (result == LJ_GC2_TRANSITION_LOST) {
+        continue;
+      } else {
+        authorized = gc2_table_store_guard_pin(guard);
+      }
+    }
+    break;
+  }
+  if (revalidate)
+    guard->gate_revalidated = 1;
+  else
+    guard->gate_admitted = 1;
+  if (revalidate) {
+    LJGC2ActivationSnap final =
+      lj_gc2_activation_snapshot(&guard->g->gc2.activation);
+    /* PINNED is authorizing only because begin retained every applicable
+    ** authority and the exact global state is now absorbing NO_RECLAIM. */
+    if (authorized == LJ_GC2_TABLE_STORE_GUARD_OK ||
+	(authorized == LJ_GC2_TABLE_STORE_GUARD_PINNED && guard->begun &&
+	 (guard->tg_borrow.active || guard->legacy_carrier) &&
+	 guard->parent_lease_active &&
+	 (!tvisgcv(&guard->key) || guard->key_lease_active) &&
+	 (!tvisgcv(&guard->value) || guard->value_lease_active) &&
+	 final.state == LJ_GC2_ACT_NO_RECLAIM))
+      guard->store_authorized = 1;
+  }
+  return authorized;
+}
+
+LJGC2TableStoreGuardResult
+lj_gc2_table_store_admit(lua_State *L, LJGC2TableStoreGuard *guard)
+{
+  return gc2_table_store_admit_(L, guard, 0);
+}
+
+LJGC2TableStoreGuardResult
+lj_gc2_table_store_revalidate(lua_State *L, LJGC2TableStoreGuard *guard)
+{
+  return gc2_table_store_admit_(L, guard, 1);
+}
+
+static void gc2_table_store_preserve_edge(global_State *g, GCobj *parent,
+					   cTValue *tv)
+{
+  TValue snap;
+  uint32_t phase;
+  int status;
+  if (!g || !tv)
+    return;
+  lj_tv_load_acq(&snap, tv);
+  if (!tvisgcv(&snap) ||
+      LJ_UNLIKELY(!gc2_tv_gcref_type_match_known(g, &snap)))
+    return;
+  phase = gc2_phase_acq(g);
+  if (phase == LJ_GC2_SWEEP) {
+    (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+    return;
+  }
+  if (phase == LJ_GC2_IDLE) {
+    gc2_remember_pair(g, parent, gcV(&snap));
+    return;
+  }
+  status = gc2_markobj_expected_status(g, gcV(&snap),
+				       (uint32_t)~itype(&snap), NULL);
+  if (status == GC2_MARK_DEAD && gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    (void)gc2_trace_sweep_tv_edge(g, &snap, 0);
+  else if (status == GC2_MARK_LIVE_ALREADY)
+    gc2_thread_root_rescan_marked_obj(g, gcV(&snap));
+}
+
+static void gc2_table_store_preserve_key(global_State *g, GCtab *parent,
+					  cTValue *key)
+{
+  TGState *tg;
+  if (!g || !parent || !key || !tvisgcv(key))
+    return;
+  /* SWEEP recovery retains the concrete edge regardless of weak mode. The
+  ** later weak pass still decides semantic liveness for subsequent cycles. */
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    gc2_table_store_preserve_edge(g, obj2gco(parent), key);
+    return;
+  }
+  tg = G2TG(g);
+  if (!tg || !lj_tg_mark_active_acq(tg) ||
+      (gc2_tab_weak_write_candidate(g, parent) & LJ_GC_WEAKKEY))
+    return;
+  gc2_table_store_preserve_edge(g, obj2gco(parent), key);
+}
+
+static int gc2_table_store_handoff(lua_State *L,
+				    LJGC2TableStoreGuard *guard)
+{
+  global_State *g = guard->g;
+  GCtab *parent = guard->parent_tab;
+  /* Every committed edge invalidates the same-cycle table scan proof. SWEEP
+  ** additionally rescues the body; it never replaces the dirty epoch. */
+  gc2_table_dirty_bump(g, parent);
+  lj_gc2_barrier_weak_write(L, parent, &guard->key, &guard->value);
+  /* The dirty epoch above is the transaction's single parent invalidation.
+  ** Preserve child identities without invoking the general pair barriers,
+  ** which intentionally dirty their parent for standalone call sites. */
+  gc2_table_store_preserve_key(g, parent, &guard->key);
+  gc2_table_store_preserve_edge(g, obj2gco(parent), &guard->value);
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    lj_gc2_barrier_tab_g(g, parent);
+  if (!gc2_table_rescan_later_force(g, parent)) {
+    gc2_activation_pin_no_reclaim(g);
+    guard->globally_pinned = 1;
+    return 0;
+  }
+  return 1;
+}
+
+LJGC2TableStoreGuardResult
+lj_gc2_table_store_finish(lua_State *L, LJGC2TableStoreGuard *guard,
+			  int cas_committed)
+{
+  LJGC2TableStoreGuardResult result = LJ_GC2_TABLE_STORE_GUARD_OK;
+  LJTGSlotResult released;
+  if (!L || !guard || guard->finished || !guard->g || G(L) != guard->g)
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  if (!gc2_table_store_owner_current(L, guard)) {
+    gc2_activation_pin_no_reclaim(guard->g);
+    return LJ_GC2_TABLE_STORE_GUARD_INVALID;
+  }
+  guard->committed = cas_committed != 0;
+  if (guard->committed && !guard->store_authorized) {
+    /* The edge already exists, so finish must still publish its durable
+    ** handoff; the global pin prevents this API misuse becoming authority. */
+    (void)gc2_table_store_guard_pin(guard);
+    result = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+  }
+  if (guard->committed && !gc2_table_store_handoff(L, guard))
+    result = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+  if (guard->active) {
+    LJGC2RootDescResult finished =
+      lj_gc2_rootdesc_finish(&guard->tg->root_desc, &guard->ticket);
+    if (finished != LJ_GC2_ROOTDESC_OK) {
+      (void)gc2_table_store_guard_pin(guard);
+      result = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+    }
+    guard->active = 0;
+  }
+  released = gc2_table_store_guard_release_resources(L, guard);
+  if (released != LJ_TGSLOT_OK) {
+    /* The registry release contract leaves the exact slot/lease absorbing on
+    ** any non-LOST failure. Global NO_RECLAIM and that sticky slot are the
+    ** durable quarantine; do not pretend this handle was released. */
+    (void)gc2_table_store_guard_pin(guard);
+    guard->cleanup_failed = 1;
+    result = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+  } else {
+    guard->finished = 1;
+  }
+  if (guard->globally_pinned)
+    result = LJ_GC2_TABLE_STORE_GUARD_PINNED;
+  return result;
+}
+
+#if LJ_GC2_PARANOIA
 static LJ_AINLINE void *gc2_mark_base(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
@@ -15362,6 +15908,7 @@ static LJ_AINLINE void *gc2_mark_base(global_State *g, GCobj *o)
 #endif
   return o;
 }
+#endif
 
 static LJ_AINLINE int gc2_gct_may_traverse(uint32_t gct)
 {

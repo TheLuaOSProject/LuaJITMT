@@ -300,7 +300,7 @@ int lj_cdata_fin_claim_held(CTypeFinLease *lease, cTValue *key, TValue *old,
   int rc;
   if (!lease || !lease->tab || !lease->slot || !key || !old)
     return LJ_CTYPE_FIN_RETRY;
-  rc = lj_tab_read_current_keyed(lease->tab, lease->slot, key, old);
+  rc = lj_tab_read_current_keyed(lease->g, lease->tab, lease->slot, key, old);
   if (rc != LJ_TAB_STORE_CAS_OK || tvisforward(old) ||
       lj_cdata_fin_isclaim(old))
     return LJ_CTYPE_FIN_RETRY;
@@ -329,7 +329,8 @@ int lj_cdata_fin_store_claim_held(CTypeFinLease *lease, cTValue *key,
     return 0;
   for (retry = 0; retry < 4; retry++) {
     TValue old, expect;
-    if (lj_tab_read_current_keyed(lease->tab, lease->slot, key, &old) !=
+    if (lj_tab_read_current_keyed(lease->g, lease->tab, lease->slot, key,
+				  &old) !=
 	LJ_TAB_STORE_CAS_OK || tvisforward(&old) ||
 	!lj_cdata_fin_isclaim(&old))
       return 0;

@@ -2872,7 +2872,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     CType snap, *ct = &snap;
     CTypeID id;
     TGState *tg = J2TG(J);
-    TValue envtmp, key, nilv;
+    TValue key, nilv;
     TValue *envtv, *tv;
     uint32_t envidx, tvidx;
     int cache_status, ok;
@@ -2882,11 +2882,8 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     tv = lj_tg_root_anchor_push(J->L, tg, &nilv, &tvidx);
     lj_assertJ(envtv != NULL && tv != NULL, "missing CLibrary recorder roots");
     setstrV(J->L, &key, name);
-    if (env) {
-      (void)lj_tab_gettv_forjit(J->L, env, &key, &envtmp);
-      copyTVrel(J->L, envtv, &envtmp);
-      lj_gc_pubroot(J->L, envtv);
-    }
+    if (env)
+      (void)lj_tab_gettv_forjit(J->L, env, &key, envtv);
     cache_status = lj_clib_cache_snapshot(J->L, cl, name, tv);
     if (cache_status <= 0)
       lj_trace_err(J, LJ_TRERR_NOCACHE);

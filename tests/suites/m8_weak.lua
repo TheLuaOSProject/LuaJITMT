@@ -16,6 +16,7 @@ local M8_C_FIXTURES = {
   "t-gc2-traverse",
   "t-m8-ffi-weak-newindex",
   "t-m8-close-finalizers",
+  "t-m8-close-moved-state",
   "t-m8-finalizer-state"
 }
 
@@ -129,6 +130,20 @@ return function(add)
         timeout = "20s"
       })
       print("M8 userdata FINREG raw-root lifetime passed")
+    end
+  })
+
+  add({
+    name = "m8_close_moved_state",
+    description = "raw-NULL moved lua_close finalizer table stores",
+    run = function(t)
+      t:build({ clean = true, quiet = true, xcflags = gc2_test_cflags })
+      build.run_c_fixtures(t, { "t-m8-close-moved-state" }, {
+        output_suffix = "_m8",
+        cflags = gc2_test_cflags,
+        timeout = "20s"
+      })
+      print("M8 raw-NULL moved-state close finalizer stores passed")
     end
   })
 

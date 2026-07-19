@@ -363,6 +363,12 @@ LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
 LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
 					TValue *dst, cTValue *key,
 					cTValue *src, TValue *oldp);
+/* oldroot is an already-enumerated TG/stack root. A competing value is
+** release-published there, with its root barrier, before vector SMR is left. */
+LJ_FUNCA int lj_tab_trysetnil_cas_keyed_rooted(lua_State *L, GCtab *parent,
+					       TValue *dst, cTValue *key,
+					       cTValue *src,
+					       TValue *oldroot);
 LJ_FUNC int lj_tab_clear_weak_slot_keyed(global_State *g, GCtab *parent,
 					 TValue *dst, cTValue *key,
 					 cTValue *val);

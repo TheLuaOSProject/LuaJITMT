@@ -8,6 +8,7 @@ local iters = harness.arg_number(2, "LJ_M7_FFI_META_ITERS", 60)
 ffi.cdef[[
 typedef struct { int x; } lj_m7_meta_shared_t;
 typedef struct { int x; } lj_m7_meta_ctype_object_t;
+typedef struct { int x; } lj_m7_meta_table_newindex_t;
 ]]
 
 for tid = 1, nthreads do
@@ -92,6 +93,22 @@ do
   mt = nil
   harness.fullgc()
   assert(ct(35):get() == 42)
+end
+
+-- A table-valued FFI __newindex used to bypass the generation-aware table
+-- store path and write its resolved slot directly. Keep a GC value live across
+-- active-MT publication and exercise the weak-table bookkeeping at the same
+-- time.
+do
+  local sink = setmetatable({}, { __mode = "v" })
+  local ct = ffi.metatype("lj_m7_meta_table_newindex_t", {
+    __newindex = sink,
+  })
+  local obj = ct()
+  local value = { marker = "ffi-table-newindex" }
+  obj.published = value
+  harness.fullgc()
+  assert(sink.published == value)
 end
 
 harness.fullgc()

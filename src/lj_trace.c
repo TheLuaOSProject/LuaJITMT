@@ -1611,6 +1611,8 @@ static int trace_finish_slot_retire(jit_State *J, GCtrace *T)
   return debug_done;
 }
 
+#if defined(EXITSTATE_PCREG) || (LJ_UNWIND_JIT && !EXITTRACE_VMSTATE) || \
+    defined(LUA_USE_ASSERT)
 static LJ_AINLINE int trace_exit_body_match(const GCtrace *T, TraceNo traceno)
 {
   if (T == NULL || traceno == 0)
@@ -1627,6 +1629,7 @@ static LJ_AINLINE int trace_exit_body_match(const GCtrace *T, TraceNo traceno)
 	 la_load64_acq(&T->retire_epoch) != 0 &&
 	 trace_nextroot_acq(T) == traceno;
 }
+#endif
 
 uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {

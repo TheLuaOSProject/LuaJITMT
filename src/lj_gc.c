@@ -3624,7 +3624,7 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 	  if (gc_mayclear(g, &val, 1)) {
 	    TValue key;
 	    setintV(&key, (int32_t)i);
-	    (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
+	    (void)lj_tab_clear_weak_slot_keyed(g, t, slot, &key, &val);
 	  }
 	}
       }
@@ -3662,7 +3662,7 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 	      lj_tv_load_acq(&key, &n->key);
 	    }
 	    if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
-	      (void)lj_tab_clear_weak_slot_keyed(t, slot, &key, &val);
+	      (void)lj_tab_clear_weak_slot_keyed(g, t, slot, &key, &val);
 	  }
 	}
       }

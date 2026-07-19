@@ -1485,7 +1485,7 @@ static void api_test_newmetatable(lua_State *L, int stage, GCtab *regt,
 {
   LJApiNewMetatableHook hook = api_test_newmetatable_hook;
   if (hook) {
-    if (stage == 2)
+    if (stage == 0 || stage == 2)
       api_test_newmetatable_hook = NULL;
     hook(L, stage, regt, key, valueslot, rootslot);
   }
@@ -1523,10 +1523,11 @@ static TValue *api_newmetatable_cp(lua_State *errL, lua_CFunction dummy,
   ApiNewMetatableCtx *ctx = (ApiNewMetatableCtx *)ud;
   ApiGCRoot regroot = { NULL, 0 };
   ApiGCRoot keyroot = { NULL, 0 };
+  ApiGCRoot winnerroot = { NULL, 0 };
   GCtab *regt;
   GCstr *key;
-  TValue regtv;
-  TValue *keyslot;
+  TValue regtv, nilv;
+  TValue *keyslot, *winner;
   UNUSED(dummy);
   cframe_errfunc(errL->cframe) = -1;
   if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL))))
@@ -1537,57 +1538,62 @@ static TValue *api_newmetatable_cp(lua_State *errL, lua_CFunction dummy,
   key = api_str_newz_rooted(errL, ctx->tname, &keyroot);
   keyslot = lj_tg_root_anchor_slot_acq(keyroot.tg, keyroot.idx);
   lj_assertX(keyslot != NULL, "missing new-metatable key root");
+  if (LJ_UNLIKELY(!lj_tg_root_anchor_reserve_nothrow(errL, L2TG(errL))))
+    lj_err_mem(errL);
+  setnilV(&nilv);
+  winner = api_gcroot_push_reserved(errL, &nilv, &winnerroot);
   for (;;) {
-    TValue *tv = lj_tab_setstr(errL, regt, key);
-    TValue old;
-    int rc = lj_tab_read_current_keyed(regt, tv, keyslot, &old);
-    if (rc != LJ_TAB_STORE_CAS_OK) {
-      lj_tab_store_wait_l(errL);
-      continue;
-    }
-    if (tvisnil(&old)) {
+    TValue *tv;
+    int rc;
+    keyslot = lj_tg_root_anchor_slot_acq(keyroot.tg, keyroot.idx);
+    winner = lj_tg_root_anchor_slot_acq(winnerroot.tg, winnerroot.idx);
+    lj_assertX(keyslot != NULL && winner != NULL,
+	       "missing new-metatable transaction root");
+    (void)lj_tab_gettv_forjit(errL, regt, keyslot, winner);
+    if (!tvisnil(winner))
+      api_test_newmetatable(errL, 0, regt, key, NULL, winner);
+    if (tvisnil(winner)) {
       LJTabRoot mtroot;
       GCtab *mt = lj_tab_new_ah_rooted(errL, 0, 1, &mtroot);
       TValue mtv;
       settabV(errL, &mtv, mt);
+      tv = lj_tab_setstr(errL, regt, key);
       api_test_newmetatable(errL, 1, regt, key, tv, keyslot);
-      rc = lj_tab_trysetnil_cas_keyed(errL, regt, tv, keyslot, &mtv,
-				      &old);
+      rc = lj_tab_trysetnil_cas_keyed_rooted(
+	errL, regt, tv, keyslot, &mtv, winner);
       if (rc == LJ_TAB_STORE_CAS_OK) {
 	lj_gc_pubtab(errL, regt);
-	/* Transfer the result to the older key slot before dropping the top
-	** constructor root. A racing registry delete therefore cannot reclaim
-	** the new table during target-state claim/growth. */
-	api_gcroot_replace(errL, &keyroot, &mtv);
+	/* Transfer the result into the dedicated enumerated output root before
+	** dropping the top constructor root. */
+	api_gcroot_replace(errL, &winnerroot, &mtv);
 	lj_tab_root_release(&mtroot);
 	ctx->result = 1;
-	api_newmetatable_push(errL, ctx, &keyroot);
+	api_newmetatable_push(errL, ctx, &winnerroot);
+	api_gcroot_release(&keyroot);
 	api_gcroot_release(&regroot);
 	return NULL;
       }
       if (rc == LJ_TAB_STORE_CAS_EXISTS) {
-	/* old is consumed before any wait. Root it in the still-live lower slot,
-	** then retire the losing constructor root in LIFO order. */
-	api_gcroot_replace(errL, &keyroot, &old);
+	/* The NIL-CAS published the competing winner directly into winnerroot
+	** before releasing its vector lifetime. */
 	api_test_newmetatable(errL, 2, regt, key, tv,
-	  lj_tg_root_anchor_slot_acq(keyroot.tg, keyroot.idx));
+	  lj_tg_root_anchor_slot_acq(winnerroot.tg, winnerroot.idx));
 	lj_tab_root_release(&mtroot);
 	ctx->result = 0;
-	api_newmetatable_push(errL, ctx, &keyroot);
+	api_newmetatable_push(errL, ctx, &winnerroot);
+	api_gcroot_release(&keyroot);
 	api_gcroot_release(&regroot);
 	return NULL;
       }
       lj_tab_root_release(&mtroot);
       lj_tab_store_wait_l(errL);
-      keyslot = lj_tg_root_anchor_slot_acq(keyroot.tg, keyroot.idx);
       continue;
     }
-    /* The old registry snapshot must become a root before claim reacquisition
-    ** or stack growth: a racing peer may remove the registry edge immediately
-    ** after this read. The key is no longer needed on this return path. */
-    api_gcroot_replace(errL, &keyroot, &old);
+    /* The by-value lookup copied the winner into an enumerated root and ran
+    ** its publication barrier before releasing result/vector leases. */
     ctx->result = 0;
-    api_newmetatable_push(errL, ctx, &keyroot);
+    api_newmetatable_push(errL, ctx, &winnerroot);
+    api_gcroot_release(&keyroot);
     api_gcroot_release(&regroot);
     return NULL;
   }

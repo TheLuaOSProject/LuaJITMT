@@ -401,16 +401,6 @@ static LJ_AINLINE int tab_hash_key_hidden(cTValue *key)
   return tvisnil(key) || tab_key_islocked(key);
 }
 
-static LJ_AINLINE int tab_key_retry_once(cTValue *key, int *retry)
-{
-  if (tab_key_islocked(key) && *retry) {
-    *retry = 0;
-    lj_tab_wait_no_l();
-    return 1;
-  }
-  return 0;
-}
-
 static LJ_AINLINE int tab_key_read_retry_once(cTValue *key, int *retry)
 {
   if (tab_key_islocked(key) && *retry) {
@@ -1041,14 +1031,6 @@ static LJ_AINLINE void newhpart_publish(lua_State *L, GCtab *t, Node *node,
   setfreetop(t, node, freetop);
   lj_tab_node_rel(t, node);
   lj_tab_hmask_rel(t, hmask);
-}
-
-/* Create new hash part for table. */
-static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
-{
-  MSize hmask;
-  Node *node = newhpart_alloc(L, hbits, &hmask);
-  newhpart_publish(L, t, node, hmask, &node[hmask+1], hmask + 1u);
 }
 
 static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
@@ -1766,14 +1748,6 @@ static LJ_AINLINE void clearhpart_node(Node *node, MSize hmask)
     lj_tab_storenilraw(&n->val);
     lj_tab_storenilraw(&n->key);
   }
-}
-
-/* Clear hash part of table. */
-static LJ_AINLINE void clearhpart(GCtab *t)
-{
-  MSize hmask;
-  Node *node = lj_tab_node_snapshot_acq(t, &hmask);
-  clearhpart_node(node, hmask);
 }
 
 /* Clear array part of table. */
@@ -3402,7 +3376,7 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 {
   for (;;) {
     LJGC2Lease table_lease, key_lease, result_lease;
-    TValue tablev;
+    TValue tablev, result;
     int table_status, key_status, result_status;
 
     /* Hashing a GC key dereferences its exact string/cdata/object identity.
@@ -3419,7 +3393,8 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 	lj_tab_wait_l(L);
 	continue;
       }
-      setnilV(out);
+      setnilV(&result);
+      copyTVrel(L, out, &result);
       return out;
     }
     key_status = lj_gc2_tv_lease_acquire(G(L), key, &key_lease);
@@ -3429,7 +3404,8 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
 	lj_tab_wait_l(L);
 	continue;
       }
-      setnilV(out);
+      setnilV(&result);
+      copyTVrel(L, out, &result);
       return out;
     }
 
@@ -3444,7 +3420,7 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
     ** reader was active. Resolve exactly once from a paired current-root
     ** snapshot instead; RETRY is handled only after the reader is closed. */
     if (tab_forjit_test_take_initial_miss() ||
-	tab_get_current_forjit(t, key, out) < 0) {
+	tab_get_current_forjit(t, key, &result) < 0) {
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
@@ -3456,10 +3432,12 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
     ** or concurrent sweep cannot reclaim/reuse the body between copy, header
     ** validation and publication. RETRY is a transient ownership collision;
     ** STALE is a terminal old incarnation and therefore reads as nil. */
-    result_status = lj_gc2_tv_lease_acquire(G(L), out, &result_lease);
+    result_status = lj_gc2_tv_lease_acquire(G(L), &result, &result_lease);
     if (LJ_UNLIKELY(result_status != LJ_GC2_TV_EDGE_VALID)) {
-      if (result_status == LJ_GC2_TV_EDGE_STALE)
-	setnilV(out);
+      if (result_status == LJ_GC2_TV_EDGE_STALE) {
+	setnilV(&result);
+	copyTVrel(L, out, &result);
+      }
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
@@ -3468,6 +3446,12 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
       lj_tab_wait_l(L);
       continue;
     }
+    /* `out` may itself be an enumerated TG/stack root. Publish it with release
+    ** ordering only after the copied referent has an exact lifetime lease, and
+    ** before the source vector SMR interval closes. This lets concurrent root
+    ** scanners acquire the complete TValue instead of observing a plain C
+    ** temporary store. */
+    copyTVrel(L, out, &result);
     tab_forjit_test_pause_after_result_lease(out);
     lj_gc2_smr_read_leave(G(L));
     if (LJ_LIKELY(tab_tv_forjit_loadable(out))) {
@@ -4442,19 +4426,48 @@ enum {
   TAB_STORE_MODE_NIL
 };
 
-static LJ_AINLINE int tab_trystoretv_cas_expected(TValue *dst,
+static LJ_AINLINE int tab_store_observed(lua_State *L, TValue *observed,
+					 cTValue *value, int rooted)
+{
+  LJGC2Lease lease;
+  int leased = 0;
+  if (!observed)
+    return 1;
+  if (rooted) {
+    /* Vector SMR retains the slot storage, not a weak/replaceable referent.
+    ** Admit a GC-valued winner before release-publishing it into the caller's
+    ** enumerated root. RETRY/STALE must re-resolve instead of exporting raw
+    ** bits which may already name a reclaimed incarnation. */
+    if (tvisgcv(value)) {
+      int status = lj_gc2_tv_lease_acquire(G(L), value, &lease);
+      if (LJ_UNLIKELY(status != LJ_GC2_TV_EDGE_VALID))
+	return 0;
+      leased = 1;
+    }
+    copyTVrel(L, observed, value);
+    lj_gc_pubroot(L, observed);
+    if (leased)
+      lj_gc2_lease_release(&lease);
+  } else {
+    *observed = *value;
+  }
+  return 1;
+}
+
+static LJ_AINLINE int tab_trystoretv_cas_expected(lua_State *L, TValue *dst,
 						   TValue *expected,
 						   cTValue *src,
 						   int mode,
-						   TValue *observed)
+						   TValue *observed,
+						   int observed_rooted)
 {
   if (tvisforward(expected))
     return LJ_TAB_STORE_CAS_FORWARD;
   if (tab_val_is_publish_claim(expected))
     return LJ_TAB_STORE_CAS_CHANGED;
   if (mode == TAB_STORE_MODE_NIL) {
-    if (observed)
-      *observed = *expected;
+    if (!tab_store_observed(L, observed, expected, observed_rooted))
+      return LJ_TAB_STORE_CAS_CHANGED;
     if (!tvisnil(expected))
       return LJ_TAB_STORE_CAS_EXISTS;
   } else {
@@ -4468,8 +4481,8 @@ static LJ_AINLINE int tab_trystoretv_cas_expected(TValue *dst,
   if (tab_val_is_publish_claim(expected))
     return LJ_TAB_STORE_CAS_CHANGED;
   if (mode == TAB_STORE_MODE_NIL) {
-    if (observed)
-      *observed = *expected;
+    if (!tab_store_observed(L, observed, expected, observed_rooted))
+      return LJ_TAB_STORE_CAS_CHANGED;
     if (!tvisnil(expected))
       return LJ_TAB_STORE_CAS_EXISTS;
   } else {
@@ -4738,7 +4751,8 @@ static void tab_store_guard_finish_checked(lua_State *L,
 static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
 					       GCtab *parent, TValue *dst,
 					       cTValue *key, cTValue *src,
-					       int mode, TValue *observed)
+					       int mode, TValue *observed,
+					       int observed_rooted)
 {
   global_State *g;
   TValue keysnap, valuesnap, expected;
@@ -4783,8 +4797,10 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
     rc = LJ_TAB_STORE_CAS_CHANGED;
     goto leave;
   } else if (mode == TAB_STORE_MODE_NIL) {
-    if (observed)
-      *observed = expected;
+    if (!tab_store_observed(L, observed, &expected, observed_rooted)) {
+      rc = LJ_TAB_STORE_CAS_CHANGED;
+      goto leave;
+    }
     if (!tvisnil(&expected)) {
       rc = LJ_TAB_STORE_CAS_EXISTS;
       goto leave;
@@ -4818,8 +4834,8 @@ static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
       goto guarded_finish;
     /* Final revalidation is immediately adjacent to the semantic CAS. The
     ** expected old value and by-value guard payload are the only operands. */
-    rc = tab_trystoretv_cas_expected(dst, &expected, &guard.value,
-					     mode, observed);
+    rc = tab_trystoretv_cas_expected(L, dst, &expected, &guard.value,
+					     mode, observed, observed_rooted);
     committed = rc == LJ_TAB_STORE_CAS_OK;
     if (committed)
       tab_test_store_post_cas(L, parent, dst, &guard.key, &guard.value);
@@ -4831,8 +4847,8 @@ guarded_finish:
     ** Every other exit clears ACTIVE before the caller may wait or retry. */
     tab_store_guard_finish_checked(L, &guard, committed);
   } else {
-    rc = tab_trystoretv_cas_expected(dst, &expected, &valuesnap,
-					     mode, observed);
+    rc = tab_trystoretv_cas_expected(L, dst, &expected, &valuesnap,
+					     mode, observed, observed_rooted);
     if (rc == LJ_TAB_STORE_CAS_OK &&
 	!tab_current_slot_for_key_bounded(parent, dst, &keysnap)) {
       lj_gc_pubtabtv(L, parent, &valuesnap);
@@ -4851,7 +4867,7 @@ static LJ_AINLINE int tab_trystoretv_cas_keyed_once(lua_State *L,
 						    cTValue *src)
 {
   return tab_trystoretv_cas_keyed_once_mode(
-    L, parent, dst, key, src, TAB_STORE_MODE_ANY, NULL);
+    L, parent, dst, key, src, TAB_STORE_MODE_ANY, NULL, 0);
 }
 
 LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
@@ -4890,41 +4906,93 @@ static int tab_trystoretv_cas_keyed_weak(lua_State *L, GCtab *parent,
   return rc;
 }
 
-static int tab_clear_weak_slot_rawkey(TValue *dst, cTValue *key, cTValue *val)
+static int tab_clear_weak_slot_once(global_State *g, GCtab *parent,
+				    TValue *dst, cTValue *key,
+				    cTValue *val)
 {
-  Node *n;
-  TValue old, expect, curkey, nilv;
-  if (!dst || !key || !val || !tvisgcv(key) || tvisstr(key))
+  Node *node = NULL, *n = NULL;
+  MSize hmask = 0;
+  TValue keysnap, valsnap, old, expect, curkey, nilv;
+  int rawkey, rc = LJ_TAB_STORE_CAS_STALE;
+  if (!g || !parent || !dst || !key || !val)
     return LJ_TAB_STORE_CAS_STALE;
-  n = (Node *)(void *)dst;  /* Node.val is the first field. */
-  setnilV(&nilv);
-  for (;;) {
-    /*
-    ** Weak-key clearing often runs after the key object is already dead. The
-    ** table intentionally keeps the stale raw key bits until resize, so a normal
-    ** keyed lookup may be unable to hash or compare the key safely. The weak
-    ** scanner already owns a concrete hash slot snapshot; compare that slot's raw
-    ** key and value words and clear only that exact stale entry.
-    */
+  lj_tv_load_acq(&keysnap, key);
+  lj_tv_load_acq(&valsnap, val);
+  rawkey = tvisgcv(&keysnap) && !tvisstr(&keysnap);
+  if (!lj_gc2_smr_read_try(g))
+    return LJ_TAB_STORE_CAS_STALE;
+
+  if (rawkey) {
+    /* A dead weak key cannot be hashed or semantically compared. Prove the
+    ** scanner's raw slot belongs to the exact current hash generation before
+    ** dereferencing it, then compare only the stable TValue word. */
+    if (!tab_store_node_snapshot_try(parent, &node, &hmask) || hmask == 0 ||
+	lj_tab_node_is_retiring(node))
+      goto leave;
+    n = (Node *)(void *)dst;  /* Node.val is statically the first field. */
+    if (!tab_node_in_snapshot(node, hmask, n) || dst != &n->val ||
+	node != lj_tab_node_acq(parent))
+      goto leave;
     lj_tv_load_acq(&curkey, &n->key);
-    if (tv_rawload(&curkey) != tv_rawload(key))
-      return LJ_TAB_STORE_CAS_STALE;
-    lj_tv_load_acq(&old, dst);
-    if (tvisnil(&old))
-      return LJ_TAB_STORE_CAS_OK;
-    if (tv_rawload(&old) != tv_rawload(val))
-      return LJ_TAB_STORE_CAS_CHANGED;
-    expect = old;
-    if (lj_tv_cas(dst, &expect, &nilv)) {
+    if (tv_rawload(&curkey) != tv_rawload(&keysnap))
+      goto leave;
+  } else if (!tab_current_slot_for_key_bounded(parent, dst, &keysnap)) {
+    goto leave;
+  }
+
+  setnilV(&nilv);
+  lj_tv_load_acq(&old, dst);
+  if (tvisnil(&old)) {
+    if (rawkey) {
       lj_tv_load_acq(&curkey, &n->key);
-      return tv_rawload(&curkey) == tv_rawload(key) ?
-	     LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
+      rc = node == lj_tab_node_acq(parent) &&
+	   !lj_tab_node_is_retiring(node) &&
+	   tv_rawload(&curkey) == tv_rawload(&keysnap) ?
+	   LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
+    } else {
+      rc = tab_current_slot_for_key_bounded(parent, dst, &keysnap) ?
+	   LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
     }
-    if (tvisforward(&expect))
-      return LJ_TAB_STORE_CAS_FORWARD;
-    if (tv_rawload(&expect) != tv_rawload(val))
-      return LJ_TAB_STORE_CAS_CHANGED;
-    lj_tab_wait_no_l();
+    goto leave;
+  }
+  if (tv_rawload(&old) != tv_rawload(&valsnap)) {
+    rc = LJ_TAB_STORE_CAS_CHANGED;
+    goto leave;
+  }
+  expect = old;
+  if (lj_tv_cas(dst, &expect, &nilv)) {
+    if (rawkey) {
+      lj_tv_load_acq(&curkey, &n->key);
+      rc = node == lj_tab_node_acq(parent) &&
+	   !lj_tab_node_is_retiring(node) &&
+	   tv_rawload(&curkey) == tv_rawload(&keysnap) ?
+	   LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
+    } else {
+      rc = tab_current_slot_for_key_bounded(parent, dst, &keysnap) ?
+	   LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
+    }
+  } else if (tvisforward(&expect)) {
+    rc = LJ_TAB_STORE_CAS_FORWARD;
+  } else {
+    rc = LJ_TAB_STORE_CAS_CHANGED;
+  }
+leave:
+  lj_gc2_smr_read_leave(g);
+  return rc;
+}
+
+static int tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
+				   TValue *dst, cTValue *key, cTValue *src,
+				   TValue *oldp, int oldp_rooted)
+{
+  int rc;
+  for (;;) {
+    rc = tab_trystoretv_cas_keyed_once_mode(
+	      L, parent, dst, key, src, TAB_STORE_MODE_NIL, oldp,
+	      oldp_rooted);
+    if (rc != LJ_TAB_STORE_CAS_CHANGED)
+      return rc;
+    lj_tab_store_wait_l(L);
   }
 }
 
@@ -4932,45 +5000,24 @@ LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
 					TValue *dst, cTValue *key,
 					cTValue *src, TValue *oldp)
 {
-  int rc;
-  for (;;) {
-    rc = tab_trystoretv_cas_keyed_once_mode(
-      L, parent, dst, key, src, TAB_STORE_MODE_NIL, oldp);
-    if (rc != LJ_TAB_STORE_CAS_CHANGED)
-      return rc;
-    lj_tab_store_wait_l(L);
-  }
+  return tab_trysetnil_cas_keyed(L, parent, dst, key, src, oldp, 0);
+}
+
+LJ_FUNCA int lj_tab_trysetnil_cas_keyed_rooted(lua_State *L, GCtab *parent,
+					       TValue *dst, cTValue *key,
+					       cTValue *src,
+					       TValue *oldroot)
+{
+  return tab_trysetnil_cas_keyed(L, parent, dst, key, src, oldroot, 1);
 }
 
 int lj_tab_clear_weak_slot_keyed(global_State *g, GCtab *parent, TValue *dst,
 				 cTValue *key, cTValue *val)
 {
-  TValue old, expect, nilv;
-  setnilV(&nilv);
-  for (;;) {
-    int rc = lj_tab_read_current_keyed(g, parent, dst, key, &old);
-    if (rc != LJ_TAB_STORE_CAS_OK) {
-      if (rc == LJ_TAB_STORE_CAS_STALE)
-	return tab_clear_weak_slot_rawkey(dst, key, val);
-      return rc;
-    }
-    if (tvisnil(&old))
-      return LJ_TAB_STORE_CAS_OK;
-    if (tv_rawload(&old) != tv_rawload(val))
-      return LJ_TAB_STORE_CAS_CHANGED;
-    expect = old;
-    if (lj_tv_cas(dst, &expect, &nilv)) {
-      TValue confirm;
-      int current = lj_tab_read_current_keyed(g, parent, dst, key, &confirm);
-      return current == LJ_TAB_STORE_CAS_OK && tvisnil(&confirm) ?
-	     LJ_TAB_STORE_CAS_OK : LJ_TAB_STORE_CAS_STALE;
-    }
-    if (tvisforward(&expect))
-      return LJ_TAB_STORE_CAS_FORWARD;
-    if (tv_rawload(&expect) != tv_rawload(val))
-      return LJ_TAB_STORE_CAS_CHANGED;
-    lj_tab_wait_no_l();
-  }
+  /* One bounded attempt owns the complete raw-slot lifetime. A concurrent
+  ** publisher is responsible for the normal dirty/rescan handoff, so weak
+  ** clearing never waits while retaining a vector generation. */
+  return tab_clear_weak_slot_once(g, parent, dst, key, val);
 }
 
 static LJ_AINLINE void tab_clear_store_wait(lua_State *L, int guarded)
@@ -4998,29 +5045,48 @@ static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
 				   cTValue *key, int guarded)
 {
   TValue old, expect, nilv;
+  global_State *g = G(L);
   setnilV(&nilv);
   for (;;) {
-    int rc = lj_tab_read_current_keyed(G(L), parent, dst, key, &old);
-    if (rc != LJ_TAB_STORE_CAS_OK)
-      return 0;
-    if (tvisnil(&old))
-      return 1;
-    if (tab_val_is_publish_claim(&old)) {
-      tab_clear_wait(L, guarded);
+    int result = 0;
+    int claim = 0;
+    int stale = 0;
+    if (!lj_gc2_smr_read_try(g)) {
+      tab_clear_store_wait(L, guarded);
       continue;
+    }
+    if (!tab_current_slot_for_key_bounded(parent, dst, key)) {
+      stale = 1;
+      goto leave;
+    }
+    lj_tv_load_acq(&old, dst);
+    if (tvisnil(&old)) {
+      result = 1;
+      goto leave;
+    }
+    if (tab_val_is_publish_claim(&old)) {
+      claim = 1;
+      goto leave;
     }
     expect = old;
     if (lj_tv_cas(dst, &expect, &nilv)) {
-      TValue confirm;
-      return lj_tab_read_current_keyed(G(L), parent, dst, key, &confirm) ==
-	     LJ_TAB_STORE_CAS_OK && tvisnil(&confirm);
+      result = tab_current_slot_for_key_bounded(parent, dst, key);
+      stale = !result;
+      goto leave;
     }
-    if (tvisforward(&expect))
+    claim = tab_val_is_publish_claim(&expect);
+leave:
+    lj_gc2_smr_read_leave(g);
+    if (result)
+      return 1;
+    if (stale)
       return 0;
-    if (tab_val_is_publish_claim(&expect)) {
+    if (claim) {
       tab_clear_wait(L, guarded);
       continue;
     }
+    if (tvisforward(&expect))
+      return 0;
     tab_clear_store_wait(L, guarded);
   }
 }
@@ -5116,7 +5182,7 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
       continue;
     }
     rc = tab_trystoretv_cas_keyed_once_mode(
-      L, parent, dst, key, src, TAB_STORE_MODE_EXISTING, NULL);
+	      L, parent, dst, key, src, TAB_STORE_MODE_EXISTING, NULL, 0);
     if (rc == LJ_TAB_STORE_CAS_OK) {
       tab_store_barrier_write(L, parent, key, src);
       return 1;
@@ -5212,8 +5278,9 @@ static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
     int status = tab_resolve_current_keyed_try(G(L), parent, key, &slot);
     if (status == TAB_RESOLVE_FOUND)
       return slot;
-    if (status == TAB_RESOLVE_ABSENT)
+    if (status == TAB_RESOLVE_ABSENT) {
       return lj_tab_set(L, parent, key);
+    }
     /* No raw generation survives this wait. */
     lj_tab_store_wait_l(L);
   }
@@ -5227,8 +5294,9 @@ static TValue *tab_current_keyed_slot(lua_State *L, GCtab *parent,
     int status = tab_resolve_current_keyed_try(G(L), parent, key, &slot);
     if (status == TAB_RESOLVE_FOUND)
       return slot;
-    if (status == TAB_RESOLVE_ABSENT)
+    if (status == TAB_RESOLVE_ABSENT) {
       return lj_tab_set(L, parent, key);
+    }
     /* Retry only after the bounded SMR attempt has released all vectors. */
       lj_tab_store_wait_l(L);
   }

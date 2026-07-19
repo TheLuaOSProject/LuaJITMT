@@ -60,8 +60,8 @@ static void lib_weak_write_str(lua_State *L, GCtab *tab, GCstr *key,
   lj_gc2_barrier_weak_write(L, tab, &keyv, val);
 }
 
-static TValue *lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
-				 GCfunc *fn)
+static void lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
+			      GCfunc *fn)
 {
   TValue keytv, tv, *dst;
   setfuncV(L, &tv, fn);
@@ -80,14 +80,17 @@ static TValue *lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
 	LJ_TAB_STORE_CAS_OK) {
       lj_gc_pubtabkey(L, tab, &keytv);
       lj_gc_pubtabtv(L, tab, &tv);
-      return dst;
+      /* The keyed helper's SMR lifetime ends before it returns, so dst is no
+      ** longer a valid barrier operand. Publish from the stable by-value edge. */
+      lib_weak_write_str(L, tab, key, &tv);
+      return;
     }
     lj_tab_store_wait_l(L);  /* Library string store saw stale/FORWARD slot. */
   }
 }
 
-static TValue *lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
-			       cTValue *val)
+static void lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
+			    cTValue *val)
 {
   TValue keytv, valtv;
   TValue *dst;
@@ -108,7 +111,7 @@ static TValue *lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
       lj_gc2_barrier_weak_write(L, tab, &keytv, &valtv);
       lj_gc_pubtabkey(L, tab, &keytv);
       lj_gc_pubtabtv(L, tab, &valtv);
-      return dst;
+      return;
     }
     lj_tab_store_wait_l(L);  /* Library generic store saw stale/FORWARD slot. */
   }
@@ -149,12 +152,7 @@ static const uint8_t *lib_read_lfunc_body(lua_State *L, const uint8_t *p,
   pt = lj_bcread_proto(&ls, &anchoridx);
   pt->firstline = ~(BCLine)0;
   fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L), anchoridx);
-  {
-    TValue *slot;
-    /* NOBARRIER: See below for common barrier. */
-    slot = lib_storefunc_str(L, tab, name, fn);
-    lib_weak_write_str(L, tab, name, slot);
-  }
+  lib_storefunc_str(L, tab, name, fn);
   lj_tg_root_anchor_pop(tg, anchoridx);
   lj_tg_root_anchor_pop(tg, nameanchoridx);
   return (const uint8_t *)ls.p;
@@ -246,10 +244,7 @@ static void lib_register_body(lua_State *L, const char *libname,
       lj_func_ffid_rel(fn, this_ffid);
       if (len) {
 	GCstr *key = lj_str_new(L, name, len);
-	TValue *slot;
-	/* NOBARRIER: See above for common barrier. */
-	slot = lib_storefunc_str(L, tab, key, fn);
-	lib_weak_write_str(L, tab, key, slot);
+	lib_storefunc_str(L, tab, key, fn);
       }
       setfuncV(L, &fnv, fn);
       copyTVrel(L, ofnanchor, &fnv);
@@ -368,8 +363,7 @@ int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id, const char *name)
   GCtab *t = lj_func_env_acq(curr_func(L));  /* Reference to parent table. */
   GCstr *key = lj_str_newz(L, name);
   TValue fnv;
-  TValue *slot = lib_storefunc_str(L, t, key, fn);
-  lib_weak_write_str(L, t, key, slot);
+  lib_storefunc_str(L, t, key, fn);
   lj_gc_pubtab(L, t);
   setfuncV(L, &fnv, fn);
   copyTVrel(L, L->top, &fnv);

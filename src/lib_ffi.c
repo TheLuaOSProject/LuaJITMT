@@ -1103,27 +1103,12 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
 	return 1;
       }
     } else {
-      GCtab *owner;
-      TValue *o = lj_meta_tset_owner(L, tv, base+1, &owner);
-      if (o) {
-	int weakwr = lj_gc2_weak_write_begin(L, owner);
-	if (weakwr) {
-	  lj_gc2_barrier_weak_key(L, owner, base+1);
-	  lj_gc2_barrier_weak_value(L, owner, base+2);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), base+2);
-	}
-	copyTVrel(L, o, base+2);
-	if (weakwr) {
-	  lj_gc2_barrier_weak_key(L, owner, base+1);
-	  lj_gc2_barrier_weak_value(L, owner, base+2);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), base+2);
-	  lj_gc2_weak_write_end(L, weakwr);
-	} else {
-	  lj_gc2_barrier_weak_write(L, owner, base+1, base+2);
-	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
-	}
+      /* Use the same generation-aware guarded table-store transaction as VM,
+      ** C API and ordinary metamethod writes. This also removes the former
+      ** FFI-shape-specific raw slot/barrier sequence. */
+      if (lj_meta_tsettv_pair(L, tv, base+1, base+2))
 	return 0;
-      }
+      base = L->base;  /* Metamethod resolution may relocate the Lua stack. */
     }
     copyTV(L, base, L->top);
     tv = L->top-1-LJ_FR2;
@@ -2883,31 +2868,37 @@ LJLIB_PUSH(top-2) LJLIB_SET(arch)
 
 /* ------------------------------------------------------------------------ */
 
-static TValue *ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,
-				cTValue *src)
+static void ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,
+			     cTValue *src)
 {
+  ptrdiff_t srcofs = savestack(L, src);
   TValue keytv, *dst;
   setstrV(L, &keytv, name);
   for (;;) {
     dst = lj_tab_setstr(L, t, name);
+    /* Resolution and retry waits are L-aware and may relocate the stack. */
+    src = restorestack(L, srcofs);
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
-      return dst;
+      return;
     lj_tab_store_wait_l(L);  /* FFI module registry saw stale/FORWARD slot. */
   }
 }
 
-static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
-				 cTValue *src)
+static void ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
+			      cTValue *src)
 {
   GCtab *miscmap = ctype_miscmap_acq(cts);
+  ptrdiff_t srcofs = savestack(L, src);
   TValue keytv, *dst;
   setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, miscmap, key);
+    /* Resolution and retry waits are L-aware and may relocate the stack. */
+    src = restorestack(L, srcofs);
     if (lj_tab_trystoretv_cas_keyed(L, miscmap, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
-      return dst;
+      return;
     lj_tab_store_wait_l(L);  /* FFI miscmap store saw stale/FORWARD slot. */
   }
 }
@@ -2915,21 +2906,37 @@ static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
 /* Register FFI module as loaded. */
 static void ffi_register_module(lua_State *L)
 {
-  cTValue *tmp = lj_tab_getstr(lj_registry_tab_acq(G(L)),
-			       lj_str_newlit(L, "_LOADED"));
-  if (tmp) {
-    TValue loaded;
-    lj_tv_load_acq(&loaded, tmp);
-    if (tvistab(&loaded)) {
-      GCtab *t = tabV(&loaded);
-      GCstr *name = lj_str_newlit(L, LUA_FFILIBNAME);
-      TValue key;
-      setstrV(L, &key, name);
-      ffi_loaded_store(L, t, name, L->top-1);
-      lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
-      lj_gc_pubtab(L, t);
-    }
+  GCtab *registry = lj_registry_tab_acq(G(L));
+  GCstr *loaded_name = lj_str_newlit(L, "_LOADED");
+  TValue loaded_key;
+  ptrdiff_t moduleofs = savestack(L, L->top-1);
+  ptrdiff_t anchorofs;
+  TValue *anchor;
+  setstrV(L, &loaded_key, loaded_name);
+  /* Make the lookup destination an enumerated root before the helper can
+  ** release its result lease. A by-value C local plus a later stack copy has
+  ** a reclaim window if a peer removes package.loaded meanwhile. */
+  lj_state_checkstack(L, 1);
+  anchor = L->top;
+  anchorofs = savestack(L, anchor);
+  setnilV(anchor);
+  lj_state_stack_pubtv(L, L, anchor);
+  L->top++;
+  (void)lj_tab_gettv_forjit(L, registry, &loaded_key, anchor);
+  anchor = restorestack(L, anchorofs);
+  if (tvistab(anchor)) {
+    GCtab *t;
+    GCstr *name;
+    TValue key;
+    name = lj_str_newlit(L, LUA_FFILIBNAME);
+    anchor = restorestack(L, anchorofs);
+    t = tabV(anchor);
+    setstrV(L, &key, name);
+    ffi_loaded_store(L, t, name, restorestack(L, moduleofs));
+    lj_gc2_barrier_weak_write(L, t, &key, restorestack(L, moduleofs));
+    lj_gc_pubtab(L, t);
   }
+  L->top = restorestack(L, anchorofs);
 }
 
 LUALIB_API int luaopen_ffi(lua_State *L)
