@@ -16,6 +16,7 @@ local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
   "m6_jit_event_session",
+  "m6_jit_event_callback_owner",
   "m6_jit_flush_stream_gate",
   "m6_jit_attachment_clock",
   "m6_jit_hotcall_missing_args",
@@ -798,6 +799,20 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
                         build = false, clean = false, timeout = "20s"
                       }))
       print("M6 immutable JIT event-session substrate passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_event_callback_owner",
+    description = "per-TG bounded JIT VM-event callback ownership",
+    run = function(t)
+      clean_build(t, build.gc2_test_helper_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-jit-event-callback-owner"),
+                      "t-jit-event-callback-owner.c",
+                      build.gc2_test_helper_opts({
+                        build = false, clean = false, timeout = "30s"
+                      }))
+      print("M6 per-TG JIT event callback owner passed")
     end
   })
 

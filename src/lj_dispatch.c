@@ -623,8 +623,10 @@ LUA_API int lua_gethookcount(lua_State *L)
 static void callhook(lua_State *L, int event, BCLine line)
 {
   global_State *g = G(L);
+  TGState *tg = L2TG(L);
   lua_Hook hookf = hookf_load(g);
-  if (hookf && !hook_active(g)) {
+  if (hookf &&
+      !(lj_tg_hookmask_combined_load(g, tg) & HOOK_ACTIVE)) {
     lua_Debug ar;
     lj_trace_abort(g);  /* Abort recording on any hook call. */
     ar.event = event;
@@ -683,7 +685,9 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
     jit_State *J = G2J(g);
     if (lj_trace_state_load(J) != LJ_TRACE_IDLE &&
 	jit_owner_l_acq(J) == L && lj_jit_token_held_l(L, J) &&
-	lj_trace_state_load(J) != LJ_TRACE_IDLE) {
+	lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+	!(lj_tg_hookmask_combined_load(g, L2TG(L)) &
+	  (HOOK_GC|HOOK_VMEVENT))) {
 #ifdef LUA_USE_ASSERT
       ptrdiff_t delta = L->top - L->base;
 #endif
@@ -696,13 +700,13 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
     }
   }
 #endif
-  hookmask = hookmask_load(g);
+  hookmask = lj_tg_hookmask_combined_load(g, L2TG(L));
   if ((hookmask & LUA_MASKCOUNT) && hookcount_load(g) <= 0) {
     hookcount_reset(g);
     callhook(L, LUA_HOOKCOUNT, -1);
     L->top = L->base + slots;  /* Fix top again. */
   }
-  hookmask = hookmask_load(g);
+  hookmask = lj_tg_hookmask_combined_load(g, L2TG(L));
   if ((hookmask & LUA_MASKLINE)) {
     BCPos npc = proto_bcpos(pt, pc) - 1;
     BCPos opc = proto_bcpos(pt, oldpc) - 1;
@@ -712,7 +716,7 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
       L->top = L->base + slots;  /* Fix top again. */
     }
   }
-  hookmask = hookmask_load(g);
+  hookmask = lj_tg_hookmask_combined_load(g, L2TG(L));
   if ((hookmask & LUA_MASKRET) && bc_isret(bc_op(pc[-1])))
     callhook(L, LUA_HOOKRET, -1);
   ERRNO_RESTORE
@@ -788,10 +792,11 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 	       "unbalanced stack after hot call");
     goto out;
   } else if (lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-		     jit_owner_l_acq(J) == L &&
+	     jit_owner_l_acq(J) == L &&
 	     lj_jit_token_held_l(L, J) &&
 	     lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-	     !(hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT))) {
+	     !(lj_tg_hookmask_combined_load(g, L2TG(L)) &
+	       (HOOK_GC|HOOK_VMEVENT))) {
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
 #endif
@@ -801,7 +806,7 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 	       "unbalanced stack after hot instruction");
   }
 #endif
-  hookmask = hookmask_load(g);
+  hookmask = lj_tg_hookmask_combined_load(g, L2TG(L));
   if ((hookmask & LUA_MASKCALL)) {
     int i, nmissing = missing;
     if (missing > 0)  /* Add missing parameters. */
@@ -835,11 +840,11 @@ void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc, lua_State *L,
 void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc)
 #endif
 {
-  if (!(hookmask_load(J2G(J)) & HOOK_VMEVENT)) {
-    ERRNO_SAVE
 #if !LJ_TARGET_X64
-    lua_State *L = jit_owner_l_acq(J);
+  lua_State *L = jit_owner_l_acq(J);
 #endif
+  if (!(lj_tg_hookmask_combined_load(J2G(J), L2TG(L)) & HOOK_VMEVENT)) {
+    ERRNO_SAVE
     void *cf = cframe_raw(L->cframe);
     const BCIns *oldpc = cframe_pc(cf);
     setcframe_pc(cf, pc);

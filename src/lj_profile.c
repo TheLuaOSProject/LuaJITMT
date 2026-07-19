@@ -411,7 +411,8 @@ void LJ_FASTCALL lj_profile_owner_poll(lua_State *L)
   if (!profile_tg_eligible(g, tg) || !profile_state_active_g(ps, g))
     return;
   if (!(hookmask_load(g) & (HOOK_VMEVENT|HOOK_GC)) &&
-      lj_tg_hookmask_set_if_clear(tg, HOOK_PROFILE, HOOK_PROFILE))
+      lj_tg_hookmask_set_if_clear(tg,
+	HOOK_PROFILE|HOOK_ACTIVE|HOOK_VMEVENT, HOOK_PROFILE))
     profile_tg_sethook(tg);
   /* A concurrent stop either clears after this publication or is observed by
   ** this second check, in which case the owner removes its own stale overlay. */
@@ -438,6 +439,14 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
     (void)lj_tg_profile_request_xchg_acqrel(tg, 0);
   if (!profile_tg_eligible(g, tg) || !(lj_tg_hookmask_load(tg) & HOOK_PROFILE))
     return;
+  /* A profile overlay which raced a local VM-event claim is consumed without
+  ** entering another user callback. Keep accumulated samples for a later
+  ** timer tick; clearhook removes only PROFILE and preserves the callback's
+  ** owner-local ACTIVE|VMEVENT exclusion. */
+  if (lj_tg_hookmask_load(tg) & HOOK_VMEVENT) {
+    profile_tg_clearhook(L, tg);
+    return;
+  }
   if (!profile_state_active_g(ps, g)) {
     profile_tg_clearhook(L, tg);  /* Drop stale profile hooks. */
     (void)lj_tg_profile_samples_xchg(tg, 0);
@@ -509,9 +518,11 @@ static void profile_trigger(ProfileState *ps)
     lj_tg_profile_samples_add(tg, 1);
     st = profile_sample_vmstate_tg(g, tg);
     lj_tg_profile_vmstate_store_rel(tg, st);
-    if (hookmask_load(g) & (HOOK_VMEVENT|HOOK_GC))
+    if ((hookmask_load(g) & (HOOK_VMEVENT|HOOK_GC)) ||
+	(lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)))
       return;
-    if (lj_tg_hookmask_set_if_clear(tg, HOOK_PROFILE, HOOK_PROFILE))
+    if (lj_tg_hookmask_set_if_clear(tg,
+	  HOOK_PROFILE|HOOK_ACTIVE|HOOK_VMEVENT, HOOK_PROFILE))
       profile_tg_sethook(tg);
   }
 #else

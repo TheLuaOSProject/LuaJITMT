@@ -241,6 +241,29 @@ typedef struct LJJitEventAttachmentClock {
   uint64_t next_generation;       /* Monotonic; zero is initial-only. */
   uint64_t generation;            /* Exact last publication generation. */
 } LJJitEventAttachmentClock;
+
+/* Protected JIT VM-event callbacks are owned per TG.  The owner carries only
+** scalar identity: owner_L remains rooted by the exact event session named by
+** {session_slot, session_generation}.  Appending this descriptor after every
+** previously published TG member preserves all established byte offsets. */
+typedef enum LJJitEventCallbackState {
+  LJ_JIT_EVENT_CALLBACK_IDLE = 0,
+  LJ_JIT_EVENT_CALLBACK_CALLING,
+  LJ_JIT_EVENT_CALLBACK_UNWINDING
+} LJJitEventCallbackState;
+
+typedef struct LJJitEventCallbackOwner {
+  uint64_t sequence;              /* Even stable, odd scalar publication. */
+  uint64_t next_generation;       /* Monotonic; zero is initial-only. */
+  uint64_t generation;            /* Current callback, or zero when IDLE. */
+  uint64_t stream_generation;     /* Exact nonzero JIT TRACE stream. */
+  uint64_t session_generation;    /* Exact rooted event session. */
+  uint32_t state;                 /* IDLE/CALLING/UNWINDING. */
+  uint32_t owner_actor;           /* Exact physical actor. */
+  uint32_t event;                 /* LJJitEventKind. */
+  uint32_t session_slot;          /* Exact event-session slot. */
+  lua_State *owner_L;             /* Comparison identity; rooted by session. */
+} LJJitEventCallbackOwner;
 #endif
 
 #define TG_FINI_LIVE		0u
@@ -371,6 +394,11 @@ struct TGState {
   ** canonical string is fixed during state bootstrap, so this comparison
   ** pointer is not a separate GC edge.  Secondary TG copies remain NULL. */
   GCstr *vmevent_regkey;
+#if LJ_HASJIT
+  /* Per-TG and tail-only.  Do not move this before vmevent_regkey: that key's
+  ** offset is part of the already published attachment/session substrate. */
+  LJJitEventCallbackOwner jit_event_callback_owner;
+#endif
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
@@ -446,6 +474,23 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_event_attachment) +
 LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) >=
 		 offsetof(TGState, jit_event_attachment) +
 		 sizeof(((TGState *)0)->jit_event_attachment));
+LJ_STATIC_ASSERT((offsetof(TGState,
+			  jit_event_callback_owner.sequence) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventCallbackOwner,
+			  next_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventCallbackOwner, generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventCallbackOwner,
+			  stream_generation) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(LJJitEventCallbackOwner,
+			  session_generation) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(TGState, jit_event_callback_owner) >=
+		 offsetof(TGState, vmevent_regkey) +
+		 sizeof(((TGState *)0)->vmevent_regkey));
+LJ_STATIC_ASSERT(offsetof(TGState, jit_event_callback_owner) +
+		 sizeof(LJJitEventCallbackOwner) <= sizeof(TGState));
+#if LJ_64
+LJ_STATIC_ASSERT(sizeof(LJJitEventCallbackOwner) == 64u);
+#endif
 #if LJ_HASFFI
 LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 		 offsetof(TGState, ffi_native_frame) +
@@ -454,10 +499,17 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 #endif
 LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
 		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
+#if LJ_HASJIT
+LJ_STATIC_ASSERT(sizeof(TGState) -
+		 (offsetof(TGState, jit_event_callback_owner) +
+		  sizeof(((TGState *)0)->jit_event_callback_owner)) <
+		 __alignof__(TGState));
+#else
 LJ_STATIC_ASSERT(sizeof(TGState) -
 		 (offsetof(TGState, vmevent_regkey) +
 		  sizeof(((TGState *)0)->vmevent_regkey)) <
 		 __alignof__(TGState));
+#endif
 
 static LJ_AINLINE int32_t lj_tg_vmstate_load_acq(TGState *tg)
 {
@@ -640,6 +692,43 @@ static LJ_AINLINE int lj_tg_hookmask_set_if_clear(TGState *tg,
     if (la_cas8(&tg->hookmask_th, &old, next, LA_ACQ_REL, LA_ACQ))
       return 1;
   }
+}
+
+/* One-shot callback admission.  Unlike the generic helper above, a collision
+** is a bounded BUSY result rather than a reason to retry behind a profile
+** publication.  PROFILE and a protected VM event are mutually exclusive on
+** one TG, while different TGs remain independent. */
+static LJ_AINLINE int lj_tg_hookmask_callback_enter_try(TGState *tg)
+{
+  uint8_t old, next;
+  if (!tg)
+    return 0;
+  old = lj_tg_hookmask_load(tg);
+  if (old & (HOOK_ACTIVE|HOOK_VMEVENT|HOOK_PROFILE))
+    return 0;
+  next = (uint8_t)(old | HOOK_ACTIVE | HOOK_VMEVENT);
+  return la_cas8(&tg->hookmask_th, &old, next, LA_ACQ_REL, LA_ACQ);
+}
+
+/* Exact owner cleanup is non-refusable. Fetch-and-clear preserves every
+** unrelated bit and completes in one atomic operation; false reports an
+** internal owner/hook mismatch to the caller. */
+static LJ_AINLINE int lj_tg_hookmask_callback_leave_exact(TGState *tg)
+{
+  uint8_t old;
+  if (!tg)
+    return 0;
+  old = la_and8_acqrel(&tg->hookmask_th,
+	(uint8_t)~(HOOK_ACTIVE|HOOK_VMEVENT));
+  return (old & (HOOK_ACTIVE|HOOK_VMEVENT)) ==
+    (HOOK_ACTIVE|HOOK_VMEVENT);
+}
+
+static LJ_AINLINE uint8_t lj_tg_hookmask_combined_load(
+  global_State *g, const TGState *tg)
+{
+  return (uint8_t)((g ? hookmask_load(g) : 0) |
+		   (tg ? lj_tg_hookmask_load(tg) : 0));
 }
 
 static LJ_AINLINE uint32_t lj_tg_profile_samples_xchg(TGState *tg,

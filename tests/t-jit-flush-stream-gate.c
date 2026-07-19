@@ -77,6 +77,48 @@ static void release_failed_claim(lua_State *L, jit_State *J)
   assert(jit_owner_l_acq(J) == NULL);
 }
 
+static void inject_callback_owner(TGState *tg, lua_State *L,
+                                  const LJJitTraceStreamHandle *stream)
+{
+  LJJitEventCallbackOwner *owner = &tg->jit_event_callback_owner;
+  uint64_t sequence = la_load64_acq(&owner->sequence);
+  uint64_t generation = la_load64_acq(&owner->next_generation) + 1u;
+  assert((sequence & 1u) == 0 && generation != 0);
+  la_store64_rel(&owner->sequence, sequence + 1u);
+  assert(lj_tg_hookmask_callback_enter_try(tg));
+  la_store64_rel(&owner->next_generation, generation);
+  la_store64_rel(&owner->generation, generation);
+  la_store64_rel(&owner->stream_generation, stream->generation);
+  la_store64_rel(&owner->session_generation,
+                 stream->terminal_session.generation);
+  la_store32_rel(&owner->state, LJ_JIT_EVENT_CALLBACK_CALLING);
+  la_store32_rel(&owner->owner_actor, lj_tg_actor_acq(tg));
+  la_store32_rel(&owner->event, LJ_JIT_EVENT_TRACE_FLUSH);
+  la_store32_rel(&owner->session_slot, stream->terminal_session.slot);
+  la_storeptr_rel((void **)&owner->owner_L, L);
+  la_store64_rel(&owner->sequence, sequence + 2u);
+  assert(!lj_jit_event_callback_idle(tg));
+}
+
+static void clear_injected_callback_owner(TGState *tg)
+{
+  LJJitEventCallbackOwner *owner = &tg->jit_event_callback_owner;
+  uint64_t sequence = la_load64_acq(&owner->sequence);
+  assert((sequence & 1u) == 0);
+  la_store64_rel(&owner->sequence, sequence + 1u);
+  assert(lj_tg_hookmask_callback_leave_exact(tg));
+  la_store64_rel(&owner->generation, 0);
+  la_store64_rel(&owner->stream_generation, 0);
+  la_store64_rel(&owner->session_generation, 0);
+  la_store32_rel(&owner->state, LJ_JIT_EVENT_CALLBACK_IDLE);
+  la_store32_rel(&owner->owner_actor, 0);
+  la_store32_rel(&owner->event, 0);
+  la_store32_rel(&owner->session_slot, 0);
+  la_storeptr_rel((void **)&owner->owner_L, NULL);
+  la_store64_rel(&owner->sequence, sequence + 2u);
+  assert(lj_jit_event_callback_idle(tg));
+}
+
 static int stream_snapshot_wait(global_State *g,
                                 LJJitTraceStreamSnapshot *snapshot)
 {
@@ -767,6 +809,10 @@ int main(void)
   }
 
   test_pending_contention(L, J, &first);
+  inject_callback_owner(tg, L, &first);
+  assert(!lj_jit_trace_flush_close_l(L, J, &first));
+  expect_active_flush(g, tg, &first, &stream);
+  clear_injected_callback_owner(tg);
   assert(lj_jit_trace_flush_close_l(L, J, &first));
   expect_stream_idle(g);
 

@@ -500,6 +500,325 @@ ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
     result.argbase : 0;
 }
 
+#if LJ_HASJIT
+static int jit_event_callback_event_valid(uint32_t event)
+{
+  return event >= LJ_JIT_EVENT_TRACE_START && event <= LJ_JIT_EVENT_RECORD;
+}
+
+static int jit_event_callback_owner_idle_raw(
+  const LJJitEventCallbackOwner *owner)
+{
+  return la_load64_acq(&owner->generation) == 0 &&
+    la_load64_acq(&owner->stream_generation) == 0 &&
+    la_load64_acq(&owner->session_generation) == 0 &&
+    la_load32_acq(&owner->state) == LJ_JIT_EVENT_CALLBACK_IDLE &&
+    la_load32_acq(&owner->owner_actor) == 0 &&
+    la_load32_acq(&owner->event) == 0 &&
+    la_load32_acq(&owner->session_slot) == 0 &&
+    la_loadptr_acq((void *const *)&owner->owner_L) == NULL;
+}
+
+static int jit_event_callback_owner_active_raw(
+  const LJJitEventCallbackOwner *owner, uint32_t state)
+{
+  uint64_t generation = la_load64_acq(&owner->generation);
+  uint32_t actor = la_load32_acq(&owner->owner_actor);
+  return (state == LJ_JIT_EVENT_CALLBACK_CALLING ||
+	  state == LJ_JIT_EVENT_CALLBACK_UNWINDING) &&
+    generation != 0 &&
+    la_load64_acq(&owner->next_generation) == generation &&
+    la_load64_acq(&owner->stream_generation) != 0 &&
+    la_load64_acq(&owner->session_generation) != 0 &&
+    actor != 0 && actor != LJ_THR_ACTOR_RETIRED &&
+    jit_event_callback_event_valid(la_load32_acq(&owner->event)) &&
+    la_load32_acq(&owner->session_slot) < LJ_JIT_EVENT_SESSION_SLOTS &&
+    la_loadptr_acq((void *const *)&owner->owner_L) != NULL;
+}
+
+int lj_jit_event_callback_snapshot(
+  TGState *tg, LJJitEventCallbackSnapshot *snapshot)
+{
+  LJJitEventCallbackOwner *owner;
+  uint64_t sequence;
+  if (!snapshot)
+    return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY;
+  memset(snapshot, 0, sizeof(*snapshot));
+  if (!tg)
+    return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY;
+  owner = &tg->jit_event_callback_owner;
+  sequence = la_load64_acq(&owner->sequence);
+  if ((sequence & 1u) != 0)
+    return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY;
+  snapshot->tg = tg;
+  snapshot->sequence = sequence;
+  snapshot->next_generation = la_load64_acq(&owner->next_generation);
+  snapshot->generation = la_load64_acq(&owner->generation);
+  snapshot->stream_generation =
+    la_load64_acq(&owner->stream_generation);
+  snapshot->session_generation =
+    la_load64_acq(&owner->session_generation);
+  snapshot->state = la_load32_acq(&owner->state);
+  snapshot->owner_actor = la_load32_acq(&owner->owner_actor);
+  snapshot->event = la_load32_acq(&owner->event);
+  snapshot->session_slot = la_load32_acq(&owner->session_slot);
+  snapshot->owner_L = (lua_State *)
+    la_loadptr_acq((void *const *)&owner->owner_L);
+  if (la_load64_acq(&owner->sequence) != sequence)
+    goto retry;
+  if (snapshot->state == LJ_JIT_EVENT_CALLBACK_IDLE) {
+    if (!jit_event_callback_owner_idle_raw(owner) ||
+	(lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) != 0 ||
+	la_load64_acq(&owner->sequence) != sequence)
+      goto retry;
+    return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE;
+  }
+  if (!jit_event_callback_owner_active_raw(owner, snapshot->state) ||
+      snapshot->generation != snapshot->next_generation ||
+      snapshot->stream_generation == 0 ||
+      snapshot->session_generation == 0 ||
+      snapshot->owner_actor == 0 ||
+      snapshot->owner_actor == LJ_THR_ACTOR_RETIRED ||
+      snapshot->owner_actor != lj_tg_actor_acq(tg) ||
+      !jit_event_callback_event_valid(snapshot->event) ||
+      snapshot->session_slot >= LJ_JIT_EVENT_SESSION_SLOTS ||
+      snapshot->owner_L == NULL ||
+      (lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) !=
+	(HOOK_ACTIVE|HOOK_VMEVENT) ||
+      la_load64_acq(&owner->sequence) != sequence)
+    goto retry;
+  return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE;
+retry:
+  memset(snapshot, 0, sizeof(*snapshot));
+  return LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY;
+}
+
+int lj_jit_event_callback_idle(TGState *tg)
+{
+  LJJitEventCallbackSnapshot snapshot;
+  return lj_jit_event_callback_snapshot(tg, &snapshot) ==
+    LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE;
+}
+
+static int jit_event_callback_session_exact(
+  lua_State *L, const LJJitEventSessionSnapshot *snapshot)
+{
+  TGState *tg;
+  LJJitEventSessions *sessions;
+  const LJJitEventSessionSlot *slot;
+  GCRef *roots;
+  uint32_t nroots, capacity, actor;
+  uint64_t sequence;
+  if (!L || !snapshot || !(tg = snapshot->tg) || snapshot->g != G(L) ||
+      tg->gl != snapshot->g || L2TG(L) != tg || G2TG(G(L)) != tg ||
+      snapshot->slot_index >= LJ_JIT_EVENT_SESSION_SLOTS ||
+      snapshot->generation == 0 || snapshot->callback_root_count != 1u ||
+      !snapshot->callback_handler ||
+      !jit_event_callback_event_valid(snapshot->event))
+    return 0;
+  sessions = &tg->jit_event_sessions;
+  slot = &sessions->slot[snapshot->slot_index];
+  if (snapshot->slot != slot)
+    return 0;
+  sequence = la_load64_acq(&sessions->sequence);
+  nroots = la_load32_acq(&slot->root_count);
+  capacity = la_load32_acq(&slot->root_capacity);
+  roots = (GCRef *)la_loadptr_acq((void *const *)&slot->root_data);
+  actor = lj_tg_actor_acq(tg);
+  if ((sequence & 1u) != 0 || sequence != snapshot->sequence ||
+      la_load32_acq(&sessions->state) != LJ_JIT_EVENT_PUBLICATION_ACTIVE ||
+      la_load32_acq(&sessions->active_slot) != snapshot->slot_index ||
+      la_load64_acq(&sessions->active_generation) != snapshot->generation ||
+      la_load64_acq(&sessions->next_generation) != snapshot->generation ||
+      la_load32_acq(&slot->state) != LJ_JIT_EVENT_SLOT_ACTIVE ||
+      la_load64_acq(&slot->generation) != snapshot->generation ||
+      la_load32_acq(&slot->event) != snapshot->event ||
+      la_load32_acq(&slot->owner_mode) != snapshot->owner_mode ||
+      la_load32_acq(&slot->edge_proof) != snapshot->edge_proof ||
+      la_load64_acq(&slot->attachment_generation) !=
+	snapshot->attachment_generation ||
+      la_load32_acq(&slot->attachment_state) != snapshot->attachment_state ||
+      la_load32_acq(&slot->callback_root_count) != 1u ||
+      (la_load32_acq(&slot->flags) &
+	LJ_JIT_EVENT_SLOT_F_CALLBACK_ROOT) == 0 ||
+      !roots || nroots >= capacity ||
+      gcref_acq(roots[nroots]) != obj2gco(snapshot->callback_handler) ||
+      la_load32_acq(&slot->owner_actor) != actor ||
+      actor == 0 || actor == LJ_THR_ACTOR_RETIRED ||
+      actor != lj_thr_actor_current() ||
+      la_loadptr_acq((void *const *)&slot->owner_L) != L ||
+      gcref_acq(slot->owner_root) != obj2gco(L) ||
+      lj_tg_load_cur_L(tg) != L || !lj_tg_owns_state_acq(tg, L))
+    return 0;
+  return la_load64_acq(&sessions->sequence) == sequence;
+}
+
+static int jit_event_callback_owner_matches(
+  const LJJitEventCallbackOwner *owner,
+  const LJJitEventCallbackHandle *handle, uint32_t state)
+{
+  return handle && owner && handle->tg && handle->owner_L &&
+    handle->generation != 0 && handle->stream_generation != 0 &&
+    handle->session_generation != 0 &&
+    la_load64_acq(&owner->generation) == handle->generation &&
+    la_load64_acq(&owner->next_generation) == handle->generation &&
+    la_load64_acq(&owner->stream_generation) == handle->stream_generation &&
+    la_load64_acq(&owner->session_generation) ==
+      handle->session_generation &&
+    la_load32_acq(&owner->state) == state &&
+    la_load32_acq(&owner->owner_actor) == handle->owner_actor &&
+    la_load32_acq(&owner->event) == handle->event &&
+    la_load32_acq(&owner->session_slot) == handle->session_slot &&
+    la_loadptr_acq((void *const *)&owner->owner_L) == handle->owner_L;
+}
+
+static int jit_event_callback_sequence_claim(
+  LJJitEventCallbackOwner *owner, uint64_t reserve, uint64_t *sequence)
+{
+  uint64_t value;
+  if (!owner || !sequence || reserve == 0 || (reserve & 1u) != 0)
+    return 0;
+  value = la_load64_acq(&owner->sequence);
+  if ((value & 1u) != 0 || value > ~(uint64_t)0 - reserve)
+    return 0;
+  if (!la_cas64(&owner->sequence, &value, value + 1u,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  *sequence = value;
+  return 1;
+}
+
+static void jit_event_callback_sequence_publish(
+  LJJitEventCallbackOwner *owner, uint64_t sequence)
+{
+  la_store64_rel(&owner->sequence, sequence + 2u);
+}
+
+int lj_jit_event_callback_claim_l(
+  lua_State *L, uint64_t stream_generation,
+  const LJJitEventSessionSnapshot *session,
+  LJJitEventCallbackHandle *handle)
+{
+  LJJitEventCallbackOwner *owner;
+  LJJitEventCallbackSnapshot before;
+  TGState *tg;
+  uint64_t sequence, generation;
+  uint32_t actor, tid;
+  if (!handle)
+    return 0;
+  memset(handle, 0, sizeof(*handle));
+  if (!L || stream_generation == 0 || !session || !(tg = session->tg) ||
+      !jit_event_callback_session_exact(L, session) ||
+      lj_jit_event_callback_snapshot(tg, &before) !=
+	LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE ||
+      before.next_generation == ~(uint64_t)0)
+    return 0;
+  owner = &tg->jit_event_callback_owner;
+  actor = lj_tg_actor_acq(tg);
+  tid = lj_tg_tid_acq(tg);
+  if (tid == 0 || vmevent_owner_acq(tg->gl) == tid ||
+      actor == 0 || actor == LJ_THR_ACTOR_RETIRED ||
+      actor != lj_thr_actor_current() ||
+      !jit_event_callback_sequence_claim(owner, 6u, &sequence))
+    return 0;
+  if (!jit_event_callback_owner_idle_raw(owner) ||
+      la_load64_acq(&owner->next_generation) != before.next_generation ||
+      !jit_event_callback_session_exact(L, session) ||
+      lj_tg_tid_acq(tg) != tid || vmevent_owner_acq(tg->gl) == tid ||
+      lj_tg_actor_acq(tg) != actor || actor != lj_thr_actor_current() ||
+      !lj_tg_hookmask_callback_enter_try(tg)) {
+    jit_event_callback_sequence_publish(owner, sequence);
+    return 0;
+  }
+  generation = before.next_generation + 1u;
+  la_store64_rel(&owner->next_generation, generation);
+  la_store64_rel(&owner->generation, generation);
+  la_store64_rel(&owner->stream_generation, stream_generation);
+  la_store64_rel(&owner->session_generation, session->generation);
+  la_store32_rel(&owner->state, LJ_JIT_EVENT_CALLBACK_CALLING);
+  la_store32_rel(&owner->owner_actor, actor);
+  la_store32_rel(&owner->event, session->event);
+  la_store32_rel(&owner->session_slot, session->slot_index);
+  la_storeptr_rel((void **)&owner->owner_L, L);
+  jit_event_callback_sequence_publish(owner, sequence);
+
+  handle->tg = tg;
+  handle->owner_L = L;
+  handle->generation = generation;
+  handle->stream_generation = stream_generation;
+  handle->session_generation = session->generation;
+  handle->owner_actor = actor;
+  handle->event = session->event;
+  handle->session_slot = session->slot_index;
+  return 1;
+}
+
+static int jit_event_callback_handle_owner(
+  lua_State *L, const LJJitEventCallbackHandle *handle,
+  LJJitEventCallbackOwner **ownerp)
+{
+  TGState *tg;
+  if (!L || !handle || !(tg = handle->tg) || handle->owner_L != L ||
+      G(L) != tg->gl || L2TG(L) != tg || G2TG(G(L)) != tg ||
+      handle->owner_actor == 0 ||
+      handle->owner_actor == LJ_THR_ACTOR_RETIRED ||
+      handle->owner_actor != lj_tg_actor_acq(tg) ||
+      handle->owner_actor != lj_thr_actor_current())
+    return 0;
+  *ownerp = &tg->jit_event_callback_owner;
+  return 1;
+}
+
+int lj_jit_event_callback_unwind_l(
+  lua_State *L, const LJJitEventCallbackHandle *handle)
+{
+  LJJitEventCallbackOwner *owner;
+  uint64_t sequence;
+  if (!jit_event_callback_handle_owner(L, handle, &owner) ||
+      !jit_event_callback_owner_matches(
+	owner, handle, LJ_JIT_EVENT_CALLBACK_CALLING) ||
+      !jit_event_callback_sequence_claim(owner, 4u, &sequence))
+    return 0;
+  if (!jit_event_callback_owner_matches(
+	owner, handle, LJ_JIT_EVENT_CALLBACK_CALLING)) {
+    jit_event_callback_sequence_publish(owner, sequence);
+    return 0;
+  }
+  la_store32_rel(&owner->state, LJ_JIT_EVENT_CALLBACK_UNWINDING);
+  jit_event_callback_sequence_publish(owner, sequence);
+  return 1;
+}
+
+int lj_jit_event_callback_release_l(
+  lua_State *L, const LJJitEventCallbackHandle *handle)
+{
+  LJJitEventCallbackOwner *owner;
+  uint64_t sequence;
+  if (!jit_event_callback_handle_owner(L, handle, &owner) ||
+      !jit_event_callback_owner_matches(
+	owner, handle, LJ_JIT_EVENT_CALLBACK_UNWINDING) ||
+      !jit_event_callback_sequence_claim(owner, 2u, &sequence))
+    return 0;
+  if (!jit_event_callback_owner_matches(
+	owner, handle, LJ_JIT_EVENT_CALLBACK_UNWINDING)) {
+    jit_event_callback_sequence_publish(owner, sequence);
+    return 0;
+  }
+  if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(handle->tg)))
+    abort();
+  la_store64_rel(&owner->generation, 0);
+  la_store64_rel(&owner->stream_generation, 0);
+  la_store64_rel(&owner->session_generation, 0);
+  la_store32_rel(&owner->state, LJ_JIT_EVENT_CALLBACK_IDLE);
+  la_store32_rel(&owner->owner_actor, 0);
+  la_store32_rel(&owner->event, 0);
+  la_store32_rel(&owner->session_slot, 0);
+  la_storeptr_rel((void **)&owner->owner_L, NULL);
+  jit_event_callback_sequence_publish(owner, sequence);
+  return 1;
+}
+#endif
+
 lua_State *lj_vmevent_state(global_State *g)
 {
   lua_State *L = g ? lj_tg_cur_L(g) : NULL;
@@ -543,6 +862,12 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop)
   ** only the protected callback and universe-global hook/mask state. A loser
   ** never waits: discard this racy instrumentation event and restore its exact
   ** pre-prepare stack top, which may have moved while building arguments. */
+#if LJ_HASJIT
+  if (tg && (lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT))) {
+    L->top = restorestack(L, oldtop);
+    return;  /* Same-TG recursion into the legacy global callback path. */
+  }
+#endif
   if (tid == 0 || !vmevent_owner_cas(g, &expect, tid)) {
     L->top = restorestack(L, oldtop);
     return;
@@ -552,6 +877,15 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase, ptrdiff_t oldtop)
     vmevent_owner_rel(g, tid);
     return;
   }
+#if LJ_HASJIT
+  /* Close the local-owner/global-owner observation race without waiting. */
+  if (tg && (lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT))) {
+    L->top = restorestack(L, oldtop);
+    hookmask_vmevent_leave(g);
+    vmevent_owner_rel(g, tid);
+    return;
+  }
+#endif
 
   old_tg_hint = L->tg_hint;
   oldbase = savestack(L, L->base);

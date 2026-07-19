@@ -373,7 +373,9 @@ LJ_STATIC_ASSERT(sizeof(GCtab) == 80u);
 |  mov reg, [reg+GL_OFS(jitp)]
 |.endmacro
 |.macro x64_vm_hookmask_acq, dst, g
+|  movzx TMPRd, byte [DISPATCH+DISPATCH_TG(hookmask_th)]
 |  movzx dst, byte GL:g->hookmask	// x64_vm_hookmask_acq: TSO acquire load.
+|  or dst, TMPRd
 |.endmacro
 |.macro x64_vm_tab_node_acq, dst, tab
 |  mov dst, tab->node		// x64_vm_tab_node_acq: TSO acquire load.

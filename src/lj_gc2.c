@@ -9159,6 +9159,7 @@ static int gc2_mark_jit_event_callback_root(global_State *g, GCobj *root)
 static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
 {
   LJJitEventSessionSnapshot snapshot;
+  LJJitEventCallbackSnapshot callback_owner;
   const LJJitEventSessionSlot *slot;
   GCRef *roots;
   lua_State *owner_L;
@@ -9169,12 +9170,22 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
   uint32_t flags, nroots, root_capacity, owner_mode, edge_proof, i;
   uint32_t attachment_state, callback_root_count, proof_flags;
   uint32_t owner_tid, owner_actor, tg_tid, tg_actor;
-  int acquired, complete = 1;
+  int acquired, callback_owner_state, complete = 1;
   acquired = lj_jit_event_session_snapshot_acquire(g, tg, &snapshot);
-  if (acquired == LJ_JIT_EVENT_SNAPSHOT_IDLE)
-    return 1;
+  if (acquired == LJ_JIT_EVENT_SNAPSHOT_IDLE) {
+    callback_owner_state =
+      lj_jit_event_callback_snapshot(tg, &callback_owner);
+    if (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE)
+      return 1;
+    goto retry_without_reader;
+  }
   if (acquired != LJ_JIT_EVENT_SNAPSHOT_ACTIVE)
     goto retry_without_reader;
+  callback_owner_state = lj_jit_event_callback_snapshot(tg, &callback_owner);
+  if (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY) {
+    (void)lj_jit_event_session_snapshot_release(&snapshot);
+    goto retry_without_reader;
+  }
   slot = snapshot.slot;
   flags = la_load32_acq(&slot->flags);
   nroots = la_load32_acq(&slot->root_count);
@@ -9200,6 +9211,18 @@ static int gc2_mark_jit_event_owner_session(global_State *g, TGState *tg)
     callback_root = gcref_acq(roots[nroots]);
   proof_flags = flags & (LJ_JIT_EVENT_SLOT_F_VIEW |
 			 LJ_JIT_EVENT_SLOT_F_SOURCE_PIN);
+  if ((callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE &&
+       (callback_owner.tg != tg || callback_owner.owner_L != owner_L ||
+	callback_owner.session_generation != snapshot.generation ||
+	callback_owner.session_slot != snapshot.slot_index ||
+	callback_owner.event != snapshot.event ||
+	callback_owner.owner_actor != owner_actor ||
+	snapshot.callback_root_count != 1u ||
+	(lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) !=
+	  (HOOK_ACTIVE|HOOK_VMEVENT))) ||
+      (callback_owner_state == LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE &&
+       (lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) != 0))
+    complete = 0;
   if (owner_mode == LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE)
     owner_word = jit_owner_word_acq(g);
   if (snapshot.generation == 0 ||

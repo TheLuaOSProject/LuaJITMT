@@ -274,6 +274,11 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
 {
   tg->gl = g;
   la_storeptr_rlx((void **)&tg->vmevent_regkey, NULL);
+#if LJ_HASJIT
+  /* Tail-only callback ownership is private until this TG is published. */
+  memset(&tg->jit_event_callback_owner, 0,
+	 sizeof(tg->jit_event_callback_owner));
+#endif
   lj_tg_store_cur_L(tg, L);
   lj_tg_lexstate_rel(tg, NULL);
   lj_tg_store_thread_L(tg, L);

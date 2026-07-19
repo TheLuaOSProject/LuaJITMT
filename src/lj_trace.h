@@ -121,6 +121,36 @@ typedef struct LJJitEventSessionSnapshot {
   GCfunc *callback_handler;
 } LJJitEventSessionSnapshot;
 
+/* Linear authority for one per-TG protected JIT event callback. The immutable
+** ACTIVE session publication supplied to claim remains the handler/root
+** authority; its temporary snapshot reader may be released after claim so Lua
+** callback code never carries a long GC2 SMR read scope. This handle only
+** names bounded owner-state transitions. */
+typedef struct LJJitEventCallbackHandle {
+  TGState *tg;
+  lua_State *owner_L;
+  uint64_t generation;
+  uint64_t stream_generation;
+  uint64_t session_generation;
+  uint32_t owner_actor;
+  uint32_t event;
+  uint32_t session_slot;
+} LJJitEventCallbackHandle;
+
+typedef struct LJJitEventCallbackSnapshot {
+  TGState *tg;
+  lua_State *owner_L;
+  uint64_t sequence;
+  uint64_t next_generation;
+  uint64_t generation;
+  uint64_t stream_generation;
+  uint64_t session_generation;
+  uint32_t state;
+  uint32_t owner_actor;
+  uint32_t event;
+  uint32_t session_slot;
+} LJJitEventCallbackSnapshot;
+
 /* Linear handle for one structurally admitted standalone TRACE "flush"
 ** stream.  The caller-supplied attachment generation is provisional until
 ** jit.attach() gains its own publication clock; it is nevertheless part of
@@ -158,6 +188,10 @@ typedef struct LJJitTraceStreamSnapshot {
 #define LJ_JIT_EVENT_SNAPSHOT_IDLE	0
 #define LJ_JIT_EVENT_SNAPSHOT_ACTIVE	1
 
+#define LJ_JIT_EVENT_CALLBACK_SNAPSHOT_RETRY	(-1)
+#define LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE	0
+#define LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE	1
+
 #define LJ_JIT_STREAM_SNAPSHOT_RETRY	(-1)
 #define LJ_JIT_STREAM_SNAPSHOT_IDLE	0
 #define LJ_JIT_STREAM_SNAPSHOT_ACTIVE	1
@@ -191,6 +225,22 @@ LJ_FUNC int lj_jit_event_session_snapshot_acquire(
   global_State *g, TGState *tg, LJJitEventSessionSnapshot *snapshot);
 LJ_FUNC int lj_jit_event_session_snapshot_release(
   LJJitEventSessionSnapshot *snapshot);
+/* Claim requires a reader-held exact ACTIVE session with one rooted handler.
+** Once claim succeeds the owner prevents session close, so release the reader
+** before entering Lua. CALLING->UNWINDING occurs only after the protected call
+** returns; release is valid only after every owner-local VM/stack field has
+** been restored. */
+LJ_FUNC int lj_jit_event_callback_claim_l(
+  lua_State *L, uint64_t stream_generation,
+  const LJJitEventSessionSnapshot *session,
+  LJJitEventCallbackHandle *handle);
+LJ_FUNC int lj_jit_event_callback_unwind_l(
+  lua_State *L, const LJJitEventCallbackHandle *handle);
+LJ_FUNC int lj_jit_event_callback_release_l(
+  lua_State *L, const LJJitEventCallbackHandle *handle);
+LJ_FUNC int lj_jit_event_callback_snapshot(
+  TGState *tg, LJJitEventCallbackSnapshot *snapshot);
+LJ_FUNC int lj_jit_event_callback_idle(TGState *tg);
 LJ_FUNC int lj_jit_event_frozen_view_valid(const LJJitEventFrozenView *view);
 /* Structural-only FLUSH transaction. Admission publishes the payload-free
 ** detached session and exact universe descriptor before releasing low-token

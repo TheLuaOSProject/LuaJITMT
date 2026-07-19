@@ -868,6 +868,7 @@ int lj_jit_event_sessions_quiescent(TGState *tg)
   uint64_t sequence;
   uint32_t i;
   if (!tg ||
+      !lj_jit_event_callback_idle(tg) ||
       (tg->gl && tg == tg->gl->main_tg &&
        !lj_jit_trace_stream_idle(tg->gl)) ||
       lj_jit_trace_stream_names_tg(tg->gl, tg))
@@ -906,6 +907,7 @@ int lj_jit_event_sessions_logical_detach_ready(TGState *tg)
   uint64_t sequence;
   uint32_t i;
   if (!tg ||
+      !lj_jit_event_callback_idle(tg) ||
       (tg->gl && tg == tg->gl->main_tg &&
        !lj_jit_trace_stream_idle(tg->gl)) ||
       lj_jit_trace_stream_names_tg(tg->gl, tg))
@@ -953,7 +955,7 @@ int lj_jit_event_sessions_fini(global_State *g, TGState *tg)
   LJJitEventSessions *sessions;
   uint64_t sequence;
   uint32_t i;
-  if (!g || !tg || tg->gl != g ||
+  if (!g || !tg || tg->gl != g || !lj_jit_event_callback_idle(tg) ||
       (tg == g->main_tg && !lj_jit_trace_stream_idle(g)) ||
       lj_jit_trace_stream_names_tg(g, tg))
     return 0;
@@ -1291,6 +1293,11 @@ static int jit_event_session_unpublish_l(
       handle->generation == 0 || handle->slot >= LJ_JIT_EVENT_SESSION_SLOTS ||
       (handle->owner_mode != LJ_JIT_EVENT_OWNER_CONTINUATION_LIFECYCLE &&
        handle->owner_mode != LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE))
+    return 0;
+  /* The callback descriptor's owner_L is comparison-only; the ACTIVE session
+  ** is its sole root authority.  Exact owner teardown must therefore precede
+  ** every normal, rollback, stream-close, or terminal session unpublication. */
+  if (!lj_jit_event_callback_idle(tg))
     return 0;
   sessions = &tg->jit_event_sessions;
   tid = lj_tg_tid_acq(tg);
@@ -1945,6 +1952,7 @@ int lj_jit_trace_flush_admit_l(lua_State *L, jit_State *J,
   actor = lj_tg_actor_acq(tg);
   if (!stream || tid == 0 || actor == 0 || actor == LJ_THR_ACTOR_RETIRED ||
       actor != lj_thr_actor_current() || !jit_trace_stream_live_key(tg, &key) ||
+      !lj_jit_event_callback_idle(tg) ||
       lj_tgregistry_key_snapshot(&key, &slotsnap) != LJ_TGSLOT_OK ||
       slotsnap.state != LJ_TGSLOT_LIVE ||
       lj_trace_state_load(J) != LJ_TRACE_IDLE ||
@@ -2049,6 +2057,7 @@ int lj_jit_trace_flush_close_l(lua_State *L, jit_State *J,
       handle->owner_tid != lj_tg_tid_acq(tg) ||
       handle->owner_actor != lj_tg_actor_acq(tg) ||
       handle->owner_actor != lj_thr_actor_current() ||
+      !lj_jit_event_callback_idle(tg) ||
       lj_jit_trace_stream_snapshot(g, &snapshot) !=
 	LJ_JIT_STREAM_SNAPSHOT_ACTIVE ||
       snapshot.generation != handle->generation ||
@@ -6005,7 +6014,8 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if ((jit_flags_acq(J) & JIT_F_ON) &&
       lj_trace_state_load(J) == LJ_TRACE_IDLE &&
-      !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
+      !(lj_tg_hookmask_combined_load(J2G(J), L2TG(L)) &
+	(HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_trace_stream_idle(J2G(J)) &&
       lj_jit_token_try_l(L, J)) {
     jit_owner_l_rel(J, L);
@@ -6063,7 +6073,8 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       goto out;
   }
   snap = &trace_snap_acq(parentT)[exitno];
-  if (!(hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT)) &&
+  if (!(lj_tg_hookmask_combined_load(g, L2TG(L)) &
+	(HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_trace_stream_idle(g) &&
       isluafunc(curr_func(L))) {
     for (;;) {
@@ -6409,7 +6420,8 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 	** none may overwrite the active recorder's patchpc/patchins/bcskip. */
 	if (lj_trace_state_load(J) != LJ_TRACE_RECORD ||
 	    !lj_jit_token_held_l(L, J) || jit_owner_l_acq(J) != L ||
-	    (hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT)) != 0)
+	    (lj_tg_hookmask_combined_load(g, L2TG(L)) &
+	     (HOOK_GC|HOOK_VMEVENT)) != 0)
 	  return -17;
 	/* Unpatch only the trace generation validated above. ISNEXT may have
 	** terminally installed ITERC while this exit recovered metadata. */
