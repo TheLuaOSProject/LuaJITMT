@@ -482,7 +482,13 @@ TValue *lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
 
 static LJ_AINLINE int meta_tv_on_stack(lua_State *L, cTValue *tv)
 {
-  return L && tv && tv >= tvref(L->stack) && tv < tvref(L->maxstack);
+  uintptr_t p, lo, hi;
+  if (!L || !tv)
+    return 0;
+  p = (uintptr_t)(const void *)tv;
+  lo = (uintptr_t)(const void *)tvref(L->stack);
+  hi = (uintptr_t)(const void *)tvref(L->maxstack);
+  return p >= lo && p < hi;
 }
 
 /* VM helper that resolves the target table, stores the value and barriers it. */
