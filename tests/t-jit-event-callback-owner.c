@@ -7,14 +7,17 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "luajit.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_jit.h"
+#include "lj_profile.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
@@ -39,6 +42,15 @@ typedef struct CallbackWorkerCtx {
   uint32_t release;
   uint32_t done;
 } CallbackWorkerCtx;
+
+#if LJ_PROFILE_TGLOCAL
+typedef struct ProfileCallbackCtx {
+  TGState *tg;
+  TGState *other_tg;
+  uint64_t next_generation;
+  uint32_t calls;
+} ProfileCallbackCtx;
+#endif
 
 static uint32_t callback_debug_hits;
 
@@ -386,6 +398,83 @@ static void test_two_tg_overlap(lua_State *L, jit_State *J, GCfunc *handler,
   lua_pop(L, 1);  /* secondary_L root */
 }
 
+#if LJ_PROFILE_TGLOCAL
+static void profile_callback_claim(void *data, lua_State *L, int samples,
+                                   int vmstate)
+{
+  ProfileCallbackCtx *ctx = (ProfileCallbackCtx *)data;
+  LJJitEventSessionSnapshot session;
+  LJJitEventCallbackSnapshot owner;
+  LJJitEventCallbackHandle rejected;
+
+  UNUSED(vmstate);
+  assert(samples > 0);
+  assert(L2TG(L) == ctx->tg);
+  assert(lj_profile_callback_active_tg(ctx->tg));
+  assert(!lj_profile_callback_active_tg(ctx->other_tg));
+  /* PROFILE has already handed exclusion to callback_tg. Neither the local
+  ** overlay nor the legacy VM-event owner word blocks this claim. */
+  assert((lj_tg_hookmask_load(ctx->tg) &
+          (HOOK_PROFILE|HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
+  assert((hookmask_load(G(L)) & HOOK_VMEVENT) != 0);
+  assert(vmevent_owner_acq(G(L)) == 0);
+  acquire_callback_session(L, ctx->tg, &session);
+  assert(!lj_jit_event_callback_claim_l(L, 3003u, &session, &rejected));
+  assert(rejected.tg == NULL && rejected.owner_L == NULL);
+  assert(lj_jit_event_callback_snapshot(ctx->tg, &owner) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE);
+  assert(owner.next_generation == ctx->next_generation);
+  assert(lj_jit_event_session_snapshot_release(&session));
+  ctx->calls++;
+}
+
+static void test_profile_callback_exclusion(lua_State *L, jit_State *J,
+                                            TGState *tg, GCfunc *handler)
+{
+  ProfileCallbackCtx ctx;
+  static TGState other_tg;
+  LJJitEventSessionHandle session_handle;
+  LJJitEventSessionSnapshot session;
+  LJJitEventCallbackSnapshot before;
+  LJJitEventCallbackHandle callback;
+
+  memset(&ctx, 0, sizeof(ctx));
+  assert(lj_jit_event_callback_snapshot(tg, &before) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_IDLE);
+  ctx.tg = tg;
+  ctx.other_tg = &other_tg;
+  ctx.next_generation = before.next_generation;
+
+  luaJIT_profile_start(L, "i1000000", profile_callback_claim, &ctx);
+  assert(lj_profile_active(L));
+  assert(!lj_profile_callback_active_tg(tg));
+  publish_callback_session(L, J, handler, 303u, &session_handle);
+
+  assert(raise(SIGPROF) == 0);
+  assert(lj_tg_profile_request_acq(tg));
+  lj_profile_owner_poll(L);
+  assert(!lj_tg_profile_request_acq(tg));
+  assert((lj_tg_hookmask_load(tg) & HOOK_PROFILE) != 0);
+  lj_profile_interpreter(L);
+  assert(ctx.calls == 1u);
+  assert(!lj_profile_callback_active_tg(tg));
+  assert((lj_tg_hookmask_load(tg) &
+          (HOOK_PROFILE|HOOK_ACTIVE|HOOK_VMEVENT)) == 0);
+
+  /* The exact same structural claim is immediately admissible once the
+  ** profiler callback has returned. */
+  acquire_callback_session(L, tg, &session);
+  assert(lj_jit_event_callback_claim_l(L, 3004u, &session, &callback));
+  assert(callback.generation == ctx.next_generation + 1u);
+  assert(lj_jit_event_session_snapshot_release(&session));
+  complete_callback(L, &callback);
+  assert(lj_jit_event_session_end_l(L, J, &session_handle));
+  luaJIT_profile_stop(L);
+  assert(!lj_profile_active(L));
+  assert(!lj_profile_callback_active_tg(tg));
+}
+#endif
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -419,6 +508,9 @@ int main(void)
   assert(lj_jit_event_session_snapshot_release(&session));
   assert(lj_jit_event_session_end_l(L, J, &session_handle));
   assert(lj_jit_event_sessions_quiescent(tg));
+#if LJ_PROFILE_TGLOCAL
+  test_profile_callback_exclusion(L, J, tg, handler);
+#endif
   lua_pop(L, 1);  /* callback handler */
   lua_close(L);
   puts("t-jit-event-callback-owner OK: per-TG ownership and ABA verified");

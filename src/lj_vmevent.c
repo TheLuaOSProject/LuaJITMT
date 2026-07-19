@@ -22,6 +22,7 @@
 #include "lj_trace.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lj_profile.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 
@@ -717,6 +718,9 @@ int lj_jit_event_callback_claim_l(
   actor = lj_tg_actor_acq(tg);
   tid = lj_tg_tid_acq(tg);
   if (tid == 0 || vmevent_owner_acq(tg->gl) == tid ||
+#if LJ_HASPROFILE
+      lj_profile_callback_active_tg(tg) ||
+#endif
       actor == 0 || actor == LJ_THR_ACTOR_RETIRED ||
       actor != lj_thr_actor_current() ||
       !jit_event_callback_sequence_claim(owner, 6u, &sequence))
@@ -725,11 +729,24 @@ int lj_jit_event_callback_claim_l(
       la_load64_acq(&owner->next_generation) != before.next_generation ||
       !jit_event_callback_session_exact(L, session) ||
       lj_tg_tid_acq(tg) != tid || vmevent_owner_acq(tg->gl) == tid ||
+#if LJ_HASPROFILE
+      lj_profile_callback_active_tg(tg) ||
+#endif
       lj_tg_actor_acq(tg) != actor || actor != lj_thr_actor_current() ||
       !lj_tg_hookmask_callback_enter_try(tg)) {
     jit_event_callback_sequence_publish(owner, sequence);
     return 0;
   }
+#if LJ_HASPROFILE
+  /* Close a stale-read race with PROFILE -> callback_tg handoff before any
+  ** callback owner is published. The local hook reservation is reversible. */
+  if (lj_profile_callback_active_tg(tg)) {
+    if (LJ_UNLIKELY(!lj_tg_hookmask_callback_leave_exact(tg)))
+      abort();
+    jit_event_callback_sequence_publish(owner, sequence);
+    return 0;
+  }
+#endif
   generation = before.next_generation + 1u;
   la_store64_rel(&owner->next_generation, generation);
   la_store64_rel(&owner->generation, generation);

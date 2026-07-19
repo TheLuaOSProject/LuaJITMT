@@ -84,6 +84,7 @@ typedef struct ProfileState {
   uint32_t state;		/* Serialized lifecycle state. */
   uint32_t callbacks;		/* Active callbacks using callback data. */
   uint32_t callback_tid;	/* OS thread currently in a callback. */
+  TGState *callback_tg;		/* Exact TG currently invoking callback. */
   uint32_t samples;		/* Number of samples for next callback. */
   int32_t vmstate;		/* VM state when profile timer triggered. */
 #if LJ_PROFILE_SIGPROF
@@ -191,7 +192,8 @@ static LJ_AINLINE int profile_state_active_g(ProfileState *ps, global_State *g)
 static void profile_callback_leave(ProfileState *ps);
 
 #if !LJ_PROFILE_TGLOCAL
-static int profile_callback_enter(ProfileState *ps, global_State *g)
+static int profile_callback_enter(ProfileState *ps, global_State *g,
+				  TGState *tg)
 {
   uint32_t old = 0;
   if (!profile_state_active_g(ps, g))
@@ -199,6 +201,7 @@ static int profile_callback_enter(ProfileState *ps, global_State *g)
   if (!la_cas32(&ps->callbacks, &old, 1, LA_ACQ_REL, LA_ACQ))
     return 0;
   la_store32_rel(&ps->callback_tid, lj_thr_current_id(g));
+  la_storeptr_rel((void **)&ps->callback_tg, tg);
   if (profile_state_active_g(ps, g))
     return 1;
   profile_callback_leave(ps);
@@ -207,7 +210,8 @@ static int profile_callback_enter(ProfileState *ps, global_State *g)
 #endif
 
 #if LJ_PROFILE_TGLOCAL
-static int profile_callback_tryenter(ProfileState *ps, global_State *g)
+static int profile_callback_tryenter(ProfileState *ps, global_State *g,
+				     TGState *tg)
 {
   uint32_t old = 0;
   if (!profile_state_active_g(ps, g))
@@ -215,6 +219,7 @@ static int profile_callback_tryenter(ProfileState *ps, global_State *g)
   if (!la_cas32(&ps->callbacks, &old, 1, LA_ACQ_REL, LA_ACQ))
     return 0;
   la_store32_rel(&ps->callback_tid, lj_thr_current_id(g));
+  la_storeptr_rel((void **)&ps->callback_tg, tg);
   if (profile_state_active_g(ps, g))
     return 1;
   profile_callback_leave(ps);
@@ -224,9 +229,16 @@ static int profile_callback_tryenter(ProfileState *ps, global_State *g)
 
 static void profile_callback_leave(ProfileState *ps)
 {
+  la_storeptr_rel((void **)&ps->callback_tg, NULL);
   la_store32_rel(&ps->callback_tid, 0);
   if (la_sub32_acqrel(&ps->callbacks, 1) == 1)
     la_futex_wake(&ps->callbacks, INT_MAX);
+}
+
+int lj_profile_callback_active_tg(TGState *tg)
+{
+  return tg != NULL &&
+    (TGState *)la_loadptr_acq((void *const *)&profile_state.callback_tg) == tg;
 }
 
 static uint32_t profile_callbacks_wait(lua_State *L, ProfileState *ps)
@@ -432,8 +444,11 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
   global_State *g = G(L);
 #if LJ_PROFILE_TGLOCAL
   TGState *tg = L2TG(L);
+  luaJIT_profile_callback cb = NULL;
+  void *data = NULL;
   uint32_t samples;
   int32_t vmstate;
+  int entered = 0;
   uint8_t saved;
   if (tg)
     (void)lj_tg_profile_request_xchg_acqrel(tg, 0);
@@ -457,16 +472,20 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
     profile_tg_clearhook(L, tg);
     return;
   }
-  profile_tg_clearhook(L, tg);
   samples = lj_tg_profile_samples_xchg(tg, 0);
   vmstate = lj_tg_profile_vmstate_load_acq(tg);
   if (samples != 0) {
-    luaJIT_profile_callback cb = profile_cb_load_acq(ps);
-    void *data = profile_data_load_acq(ps);
-    if (cb && profile_callback_tryenter(ps, g)) {
-      cb(data, L, (int)samples, (int)vmstate);  /* Invoke user callback. */
-      profile_callback_leave(ps);
-    }
+    cb = profile_cb_load_acq(ps);
+    data = profile_data_load_acq(ps);
+    if (cb)
+      entered = profile_callback_tryenter(ps, g, tg);
+  }
+  /* Publish the exact callback TG before removing PROFILE. A bounded JIT
+  ** event claim therefore observes one exclusion marker or the other. */
+  profile_tg_clearhook(L, tg);
+  if (entered) {
+    cb(data, L, (int)samples, (int)vmstate);  /* Invoke user callback. */
+    profile_callback_leave(ps);
   }
   hookmask_profile_leave(g, saved);
 #else
@@ -482,7 +501,7 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
     uint32_t samples = profile_samples_xchg(ps, 0);
     int32_t vmstate = profile_vmstate_load_acq(ps);
     lj_dispatch_update(g, 1);
-    if (cb && profile_callback_enter(ps, g)) {
+    if (cb && profile_callback_enter(ps, g, L2TG(L))) {
       cb(data, L, (int)samples, (int)vmstate);  /* Invoke user callback. */
       profile_callback_leave(ps);
     }

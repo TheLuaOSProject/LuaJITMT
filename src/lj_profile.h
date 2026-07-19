@@ -16,6 +16,7 @@ LJ_FUNC void LJ_FASTCALL lj_profile_interpreter(lua_State *L);
 LJ_FUNC void LJ_FASTCALL lj_profile_owner_poll(lua_State *L);
 LJ_FUNC int lj_profile_pending(lua_State *L);
 LJ_FUNC int lj_profile_active(lua_State *L);
+LJ_FUNC int lj_profile_callback_active_tg(TGState *tg);
 LJ_FUNC int lj_profile_poll_required(global_State *g);
 LJ_FUNC uint32_t lj_profile_stop_hs(lua_State *L);
 #if LJ_PROFILE_SIGPROF && defined(LJ_PROFILE_TIMER_TEST_HELPERS)

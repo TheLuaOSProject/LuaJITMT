@@ -93,6 +93,14 @@ callback recursion before claiming its temporary global owner, and the JIT
 owner symmetrically refuses when that legacy owner already names the same TG.
 An unrelated TG's legacy owner does not serialize this local path.
 
+The profiler's actual user C callback has a separate exact `callback_tg`
+marker.  TG-local dispatch publishes that marker before clearing PROFILE and
+clears it before releasing the profiler callback count.  JIT callback claim
+checks the marker before its sequence claim, again while the owner sequence is
+odd, and once after reserving the local hook bits.  Thus every same-TG race
+observes either PROFILE, the exact callback marker, or the JIT callback's
+ACTIVE/VMEVENT reservation; an unrelated TG remains independent.
+
 ## GC and lifecycle coupling
 
 GC2 continues to mark roots exclusively through the event session.  Alongside
@@ -131,7 +139,9 @@ off the global owner separately.
 
 - focused owner regression, including same-TG refusal, simultaneous owners on
   two TGs, stale-handle rejection, hook/profile collision, saturation, and a
-  full GC with owner active after releasing the temporary session reader;
+  full GC with owner active after releasing the temporary session reader; the
+  follow-up profile gate also drives a real SIGPROF callback and proves claim
+  refusal during the PROFILE-to-callback-marker handoff;
 - event-session, FLUSH stream-gate, dispatch/redispatch, recorder-token,
   secondary-recorder, and x86-64 explicit-exit gates;
 - strict default, no-JIT, disabled-VM-event, and combined no-JIT/no-VM-event
