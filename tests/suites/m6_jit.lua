@@ -38,6 +38,7 @@ local m6_cases = {
   "m6_jit_flush_hs",
   "m6_jit_flush_gc_current_stack",
   "m6_jit_flush_peer_finalizer",
+  "m6_jit_util_tracesnap_getpos",
   "m6_jit_util_flush_race",
   "m6_jit_flush_thread_stress",
   "m6_jit_flush_atomic_redispatch",
@@ -2287,6 +2288,18 @@ assert(live >= 4, live)
         timeout = "45s"
       })
       print("M6 peer-finalizer JIT flush ownership passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_util_tracesnap_getpos",
+    description = "jit.util.tracesnap optional snapshot-PC position behavior",
+    run = function(t)
+      build_default(t)
+      build_and_run_c(t, t:tmp("lj_t-jit-util-tracesnap-getpos"),
+                      "t-jit-util-tracesnap-getpos.c",
+                      { build = false, timeout = "20s" })
+      print("M6 jit.util tracesnap PC-position behavior passed")
     end
   })
 

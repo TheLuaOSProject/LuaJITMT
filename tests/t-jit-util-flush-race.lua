@@ -47,12 +47,24 @@ call_ok(function()
   assert(traceexitstub(32, 0) == nil)
 end)
 
+local function probe_snap_pos(tr, sn)
+  local snap, pcpos = tracesnap(tr, sn, true)
+  if snap == nil then
+    assert(pcpos == nil)
+  else
+    assert(type(snap) == "table")
+    assert(type(pcpos) == "number")
+    assert(pcpos >= 0 and pcpos % 1 == 0)
+  end
+end
+
 local function probe_trace(tr)
   local info = traceinfo(tr)
   if not info then
     call_ok(function() traceir(tr, 1) end)
     call_ok(function() tracek(tr, -1) end)
     call_ok(function() tracesnap(tr, 0) end)
+    call_ok(function() probe_snap_pos(tr, 0) end)
     call_ok(function() tracemc(tr) end)
     call_ok(function() traceexitstub(tr, 0) end)
     return 0
@@ -68,7 +80,11 @@ local function probe_trace(tr)
   tracek(tr, -1)
   if info.nk > 0 then tracek(tr, -info.nk) end
   tracesnap(tr, 0)
-  if info.nexit > 0 then tracesnap(tr, info.nexit - 1) end
+  probe_snap_pos(tr, 0)
+  if info.nexit > 0 then
+    tracesnap(tr, info.nexit - 1)
+    probe_snap_pos(tr, info.nexit - 1)
+  end
   tracemc(tr)
   traceexitstub(tr, 0)
   return 1

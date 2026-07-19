@@ -559,17 +559,19 @@ LJLIB_CF(jit_util_tracek)
   return 0;
 }
 
-/* local snap = jit.util.tracesnap(tr, sn) */
+/* local snap = jit.util.tracesnap(tr, sn[, getpos]) */
 LJLIB_CF(jit_util_tracesnap)
 {
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   SnapNo sn = (SnapNo)lj_lib_checkint(L, 2);
+  int getpos = (L->base+2 < L->top && tvistruecond(L->base+2));
   jit_State *J = L2J(L);
   int token = jit_trace_read_lock(L, J);
   GCtrace *T;
   SnapEntry mapcopy[256];
   IRRef snapref = 0;
   MSize nslots = 0, nent = 0, n;
+  int32_t pcpos = 0;
   int have = 0;
   if (token < 0)
     return 0;
@@ -584,6 +586,14 @@ LJLIB_CF(jit_util_tracesnap)
     nslots = snap_nslots_acq(snap);
     for (n = 0; n < nent; n++)
       mapcopy[n] = snapentry_acq(&map[n]);
+    if (getpos) {
+      const BCIns *pc = snap_pc_acq(&map[nent]);
+      const BCIns *startpc = pc;
+      while (bc_op((BCIns)la_load32_acq(
+	       (const uint32_t *)startpc)) < BC_FUNCF)
+	startpc--;
+      pcpos = (int32_t)(pc - startpc);
+    }
     have = 1;
   }
   lj_gc2_smr_read_leave(G(L));
@@ -601,6 +611,10 @@ LJLIB_CF(jit_util_tracesnap)
       setintindex(L, t, (int32_t)(n+2), (int32_t)mapcopy[n]);
     setintindex(L, t, (int32_t)(nent+2), (int32_t)SNAP(255, 0, 0));
     lj_gc_pubtab(L, t);
+    if (getpos) {
+      setintV(L->top++, pcpos);
+      return 2;
+    }
     return 1;
   }
   return 0;
