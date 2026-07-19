@@ -215,6 +215,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_tab_len_hint,	2,  FL, INT, 0) \
   _(ANY,	lj_gc_step_jit,		2,  FS, NIL, CCI_L) \
   _(ANY,	lj_gc_pubuv,		2,  FS, NIL, 0) \
+  _(ANY,	lj_tg_root_anchor_top_forjit, 1, S, INT, CCI_L) \
   _(ANY,	lj_gc2_barrier_tab_g,	2,   S, NIL, 0) \
   _(ANY,	lj_gc2_barrier_key_g,	3,   S, NIL, 0) \
   _(ANY,	lj_gc_tbar_trace_g,	3,   S, NIL, 0) \

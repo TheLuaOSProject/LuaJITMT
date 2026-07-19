@@ -93,20 +93,6 @@ static void resizestack(lua_State *L, MSize n)
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
 }
 
-static void state_root_anchor_unwind(TGState *tg, uint32_t saved_top)
-{
-  uint32_t top;
-  if (!tg)
-    abort();
-  top = lj_tg_root_anchor_top_acq(tg);
-  if (top < saved_top)
-    abort();
-  while (top > saved_top) {
-    lj_tg_root_anchor_pop(tg, top - 1u);
-    top = lj_tg_root_anchor_top_acq(tg);
-  }
-}
-
 int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
 {
   LJTabReadCheckpoint tabread;
@@ -127,7 +113,7 @@ int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
   status = lj_vm_cpcall_asm(L, func, ud, cp);
   lj_tab_read_unwind(&tabread);
   if (status != LUA_OK)
-    state_root_anchor_unwind(tabread.tg, root_anchor_top);
+    lj_tg_root_anchor_rollback(tabread.tg, root_anchor_top);
   if (LJ_UNLIKELY(oldtg == NULL && owner == 0 && lj_state_owner_acq(L) == 0))
     L->tg_hint = NULL;  /* Ownerless coroutine states stay TG-neutral. */
   return status;
@@ -143,7 +129,7 @@ int lj_vm_pcall_unwind(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)
   status = lj_vm_pcall(L, base, nres1, ef);
   lj_tab_read_unwind(&tabread);
   if (status != LUA_OK)
-    state_root_anchor_unwind(tabread.tg, root_anchor_top);
+    lj_tg_root_anchor_rollback(tabread.tg, root_anchor_top);
   return status;
 }
 
@@ -157,7 +143,7 @@ int lj_vm_resume_unwind(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)
   status = lj_vm_resume(L, base, nres1, ef);
   lj_tab_read_unwind(&tabread);
   if (status != LUA_OK)
-    state_root_anchor_unwind(tabread.tg, root_anchor_top);
+    lj_tg_root_anchor_rollback(tabread.tg, root_anchor_top);
   return status;
 }
 

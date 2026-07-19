@@ -12,8 +12,226 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_err.h"
+#include "lj_frame.h"
 #include "lj_meta.h"
+#include "lj_safepoint.h"
 #include "lj_tg.h"
+
+static uint32_t protected_anchor_base;
+
+/* Deliberately abandon one exact object root at a nonlocal throw edge. The
+** nested Lua fast pcall in check_protected_anchor_unwind() must own cleanup;
+** its outer C lua_pcall returns success and cannot repair the leak for it. */
+static int protected_anchor_throw_c(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  TValue *anchor;
+  uint32_t anchoridx;
+  int mode = (int)luaL_checkinteger(L, 3);
+
+  luaL_checktype(L, 1, LUA_TTABLE);
+  luaL_checktype(L, 2, LUA_TTABLE);
+  anchor = lj_tg_root_anchor_push(L, tg, L->base, &anchoridx);
+  assert(anchor != NULL);
+  assert(lj_tg_root_anchor_top_acq(tg) == protected_anchor_base + 1u);
+
+  /* Remove the call argument as a natural root. A full collection must still
+  ** preserve the weak value through the dynamic anchor alone. */
+  lua_pushnil(L);
+  lua_replace(L, 1);
+  lua_gc(L, LUA_GCRESTART, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_pushinteger(L, 1);
+  lua_rawget(L, 2);
+  assert(lua_istable(L, -1));
+  lua_pop(L, 1);
+  lua_settop(L, 0);
+
+  UNUSED(anchoridx);  /* Intentionally not popped: exercise protected unwind. */
+  if (mode == 0)
+    lj_safepoint_checkstop(L, LJ_GC2_HS_STOPREQ);
+  else if (mode == 1)
+    lj_err_mem(L);
+  else
+    lj_err_msg(L, LJ_ERR_TABOV);
+  abort();
+  return 0;
+}
+
+static int protected_anchor_depth_c(lua_State *L)
+{
+  uint32_t top = lj_tg_root_anchor_top_acq(L2TG(L));
+  lua_pushinteger(L, (lua_Integer)top);
+  return 1;
+}
+
+#if LJ_HASJIT && LJ_FRAME_PCALL_ROOT_ANCHOR
+/* Enter an already-recorded pcall loop at a different ambient anchor depth.
+** The trace must take its entry guard before materializing the recorder-time
+** pcall checkpoint; otherwise the caught type error rolls this outer root
+** back to the stale depth even though the enclosing C lua_pcall succeeds. */
+static int protected_anchor_traced_call_c(lua_State *L)
+{
+  TGState *tg = G2TG(G(L));
+  TValue *anchor;
+  uint32_t anchoridx;
+  uint32_t top0 = lj_tg_root_anchor_top_acq(tg);
+
+  luaL_checktype(L, 1, LUA_TFUNCTION);
+  luaL_checktype(L, 2, LUA_TTABLE);  /* Bad math.sqrt argument. */
+  luaL_checktype(L, 3, LUA_TTABLE);  /* Outer-root sentinel. */
+  assert(top0 == protected_anchor_base);
+  anchor = lj_tg_root_anchor_push(L, tg, L->base + 2, &anchoridx);
+  assert(anchor != NULL && tvistab(anchor));
+  lua_pushnil(L);
+  lua_replace(L, 3);  /* Leave the sentinel live only in the outer anchor. */
+
+  /* Same-type input enters the warmed loop and executes the anchor-depth
+  ** helper before its mismatch guard exits to the interpreter. */
+  lua_pushvalue(L, 1);
+  lua_pushnumber(L, 9.0);
+  assert(lua_pcall(L, 1, 2, 0) == LUA_OK);
+  assert(lua_isboolean(L, -2) && lua_toboolean(L, -2));
+  assert(lua_isnumber(L, -1));
+  lua_pop(L, 2);
+  assert(lj_tg_root_anchor_top_acq(tg) == top0 + 1u);
+
+  /* The interpreted replay then builds a checkpoint at this ambient depth;
+  ** its caught type error must retain the outer sentinel. */
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  assert(lua_pcall(L, 1, 2, 0) == LUA_OK);
+  assert(lua_isboolean(L, -2) && !lua_toboolean(L, -2));
+  assert(lua_isstring(L, -1));
+  assert(lj_tg_root_anchor_top_acq(tg) == top0 + 1u);
+  anchor = lj_tg_root_anchor_slot_acq(tg, anchoridx);
+  assert(anchor != NULL && tvistab(anchor));
+
+  lj_tg_root_anchor_pop(tg, anchoridx);
+  assert(lj_tg_root_anchor_top_acq(tg) == top0);
+  lua_settop(L, 0);
+  return 0;
+}
+#endif
+
+static void check_protected_anchor_unwind(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  uint32_t roots0 = lj_tg_root_anchor_top_acq(tg);
+  const char *script =
+    "local throw, depth = protected_anchor_throw, protected_anchor_depth\n"
+    "local baseline = depth()\n"
+    "for pass = 1, 12 do\n"
+    "  for mode = 0, 2 do\n"
+    "    local weak = setmetatable({}, { __mode = 'v' })\n"
+    "    weak[1] = { pass = pass, mode = mode }\n"
+    "    local outer_ok, inner_ok, err, caught_depth, retained = pcall(function()\n"
+    "      local ok, why\n"
+    "      if pass % 2 == 0 then\n"
+    "        ok, why = pcall(throw, weak[1], weak, mode)\n"
+    "      else\n"
+    "        ok, why = xpcall(function()\n"
+    "          return throw(weak[1], weak, mode)\n"
+    "        end, function(e) return e end)\n"
+    "      end\n"
+    "      local now = depth()\n"
+    "      collectgarbage('collect')\n"
+    "      return ok, why, now, weak[1] ~= nil\n"
+    "    end)\n"
+    "    assert(outer_ok)\n"
+    "    assert(not inner_ok and type(err) == 'string')\n"
+    "    assert(caught_depth == baseline)\n"
+    "    assert(not retained)\n"
+    "  end\n"
+    "end\n";
+
+  protected_anchor_base = roots0;
+  lua_pushcfunction(L, protected_anchor_throw_c);
+  lua_setglobal(L, "protected_anchor_throw");
+  lua_pushcfunction(L, protected_anchor_depth_c);
+  lua_setglobal(L, "protected_anchor_depth");
+  assert(luaL_dostring(L, script) == LUA_OK);
+  assert(lj_tg_root_anchor_top_acq(tg) == roots0);
+
+#if LJ_HASJIT && LJ_FRAME_PCALL_ROOT_ANCHOR
+#if defined(LJ_TG_ROOT_TEST_HELPERS)
+  uint32_t guard_hits;
+  lj_tg_root_test_forjit_guard_reset();
+#endif
+  lua_pushcfunction(L, protected_anchor_traced_call_c);
+  lua_setglobal(L, "protected_anchor_traced_call");
+  assert(luaL_dostring(L,
+    "local jit, util = require('jit'), require('jit.util')\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local trace_stops = 0\n"
+    "local function trace_event(what)\n"
+    "  if what == 'stop' then trace_stops = trace_stops + 1 end\n"
+    "end\n"
+    "jit.attach(trace_event, 'trace')\n"
+    "local function traced_catcher(x)\n"
+    "  local total = 0\n"
+    "  for i = 1, 6 do\n"
+    "    local ok, value = pcall(math.sqrt, x)\n"
+    "    if not ok then return ok, value end\n"
+    "    total = total + value\n"
+    "  end\n"
+    "  return true, total\n"
+    "end\n"
+    "local function traced_xcatcher(x)\n"
+    "  local total = 0\n"
+    "  for i = 1, 6 do\n"
+    "    local ok, value = xpcall(math.sqrt, tostring, x)\n"
+    "    if not ok then return ok, value end\n"
+    "    total = total + value\n"
+    "  end\n"
+    "  return true, total\n"
+    "end\n"
+    "for i = 1, 80 do\n"
+    "  local ok, value = traced_catcher(i)\n"
+    "  assert(ok and value > 0)\n"
+    "  ok, value = traced_xcatcher(i)\n"
+    "  assert(ok and value > 0)\n"
+    "end\n"
+    "jit.attach(trace_event)\n"
+    "assert(trace_stops > 0 and util.traceinfo(1),\n"
+    "       'pcall anchor-depth guard path did not record')\n"
+    "protected_anchor_traced_catcher = traced_catcher\n"
+    "protected_anchor_traced_xcatcher = traced_xcatcher\n") == LUA_OK);
+#if defined(LJ_TG_ROOT_TEST_HELPERS)
+  guard_hits = lj_tg_root_test_forjit_guard_hits();
+  assert(guard_hits > 0u);  /* The recorded pcall executed its runtime helper. */
+#endif
+  assert(luaL_dostring(L,
+    "protected_anchor_traced_call(protected_anchor_traced_catcher, {}, {})\n")
+    == LUA_OK);
+#if defined(LJ_TG_ROOT_TEST_HELPERS)
+  /* The different-depth entry reached the helper before the equality guard
+  ** side exit, while the semantic check above proved the outer root survived. */
+  assert(lj_tg_root_test_forjit_guard_hits() > guard_hits);
+  guard_hits = lj_tg_root_test_forjit_guard_hits();
+#endif
+  assert(luaL_dostring(L,
+    "protected_anchor_traced_call(protected_anchor_traced_xcatcher, {}, {})\n")
+    == LUA_OK);
+#if defined(LJ_TG_ROOT_TEST_HELPERS)
+  assert(lj_tg_root_test_forjit_guard_hits() > guard_hits);
+#endif
+  assert(lj_tg_root_anchor_top_acq(tg) == roots0);
+  lua_pushnil(L);
+  lua_setglobal(L, "protected_anchor_traced_catcher");
+  lua_pushnil(L);
+  lua_setglobal(L, "protected_anchor_traced_xcatcher");
+  lua_pushnil(L);
+  lua_setglobal(L, "protected_anchor_traced_call");
+#endif
+
+  lua_pushnil(L);
+  lua_setglobal(L, "protected_anchor_throw");
+  lua_pushnil(L);
+  lua_setglobal(L, "protected_anchor_depth");
+}
 
 #if defined(LJ_TG_ROOT_TEST_HELPERS)
 static void check_partial_root_oom(lua_State *L)
@@ -235,6 +453,7 @@ int main(void)
   check_caught_c_api_errors(L);
   check_chain_semantics(L);
   check_repeated_semantic_errors(L);
+  check_protected_anchor_unwind(L);
 
 #if LJ_HASFFI
   assert(luaL_dostring(L,

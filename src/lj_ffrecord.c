@@ -554,9 +554,24 @@ static void LJ_FASTCALL recff_xpairs(jit_State *J, RecordFFData *rd)
   }
 }
 
+static void recff_pcall_anchor_guard(jit_State *J)
+{
+#if LJ_FRAME_PCALL_ROOT_ANCHOR
+  uint32_t top = lj_tg_root_anchor_top_acq(J2TG(J));
+  TRef trtop = lj_ir_call(J, IRCALL_lj_tg_root_anchor_top_forjit);
+  /* Snapshot frame links retain the recorder's complete 64-bit pcall word.
+  ** Guard its packed depth at runtime so a trace entered under a different
+  ** lexical anchor scope exits before installing that stale checkpoint. */
+  emitir(IRTGI(IR_EQ), trtop, lj_ir_kint(J, (int32_t)top));
+#else
+  UNUSED(J);
+#endif
+}
+
 static void LJ_FASTCALL recff_pcall(jit_State *J, RecordFFData *rd)
 {
   if (J->maxslot >= 1) {
+    recff_pcall_anchor_guard(J);
 #if LJ_FR2
     /* Shift function arguments up. */
     memmove(J->base + 1, J->base, sizeof(TRef) * J->maxslot);
@@ -581,6 +596,7 @@ static void LJ_FASTCALL recff_xpcall(jit_State *J, RecordFFData *rd)
     TValue argv0, argv1;
     TRef tmp;
     int errcode;
+    recff_pcall_anchor_guard(J);
     /* Swap function and traceback. */
     tmp = J->base[0]; J->base[0] = J->base[1]; J->base[1] = tmp;
     copyTV(J->L, &argv0, &rd->argv[0]);

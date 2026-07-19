@@ -1091,13 +1091,20 @@ local function traversal_observer(tbl, ready, start, id, rounds)
   for round = 1, rounds do
     if enabled_traversal_modes.pairs then
       local count = 0
-      for k, v in pairs(tbl) do
-	local err = check(k, "pairs traversal")
-	if err then return nil, err end
-	err = check(v, "pairs traversal")
-	if err then return nil, err end
-	count = count + 1
-	if count >= 256 then break end
+      local walkerr
+      local ok, why = pcall(function()
+	for k, v in pairs(tbl) do
+	  walkerr = check(k, "pairs traversal")
+	  if walkerr then return end
+	  walkerr = check(v, "pairs traversal")
+	  if walkerr then return end
+	  count = count + 1
+	  if count >= 256 then break end
+	end
+      end)
+      if walkerr then return nil, walkerr end
+      if not ok and not tostring(why):match("invalid key to 'next'") then
+	return nil, "pairs traversal failed: " .. tostring(why)
       end
     end
 
@@ -1115,14 +1122,19 @@ local function traversal_observer(tbl, ready, start, id, rounds)
     end
 
     if enabled_traversal_modes.next then
-      local k, v = next(tbl, nil)
+      local ok, k, v = pcall(next, tbl, nil)
+      if not ok then return nil, "next(nil) failed: " .. tostring(k) end
       local count = 0
       while k ~= nil and count < 32 do
 	local err = check(k, "next(nil) traversal")
 	if err then return nil, err end
 	err = check(v, "next(nil) traversal")
 	if err then return nil, err end
-	k, v = next(tbl, k)
+	ok, k, v = pcall(next, tbl, k)
+	if not ok then
+	  if tostring(k):match("invalid key to 'next'") then break end
+	  return nil, "next traversal failed: " .. tostring(k)
+	end
 	count = count + 1
       end
     end
@@ -1287,9 +1299,8 @@ local function exercise_next_invalid_cursor_boundary()
   harness.wait_ready(ready, 1, 10, "next invalid cursor")
 
   local ok, k, v = pcall(next, t, key)
-  assert(ok == true, tostring(k))
-  assert(k == nil and v == nil,
-	 "live MT invalid-cursor next() should terminate traversal")
+  assert(ok == false and tostring(k):match("invalid key"),
+	 "generation-stable invalid cursor must error during live MT")
 
   assert(release:send("go", 10) == true)
   harness.join_each({ worker }, function(result)

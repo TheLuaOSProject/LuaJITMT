@@ -1097,12 +1097,25 @@ LJ_FUNC TValue *lj_tg_root_anchor_push(lua_State *L, TGState *tg,
 ** non-allocating publication. */
 LJ_FUNC int lj_tg_root_anchor_reserve_nothrow(lua_State *L, TGState *tg);
 LJ_FUNC void lj_tg_root_anchor_pop(TGState *tg, uint32_t idx);
+/* Restore an owner TG's lexical anchor stack to a protected checkpoint.
+** This is allocation-free and is safe on a nonlocal-error cleanup path. */
+LJ_FUNC void lj_tg_root_anchor_rollback(TGState *tg, uint32_t saved_top);
 LJ_FUNC TValue *lj_tg_root_anchor_slot_acq(TGState *tg, uint32_t idx);
+#if LJ_HASJIT
+/* Runtime guard source for recorded pcall/xpcall frames. Traces bake the
+** protected frame word, so they may run only at the anchor depth recorded in
+** its upper checkpoint word. */
+LJ_FUNCA uint32_t lj_tg_root_anchor_top_forjit(lua_State *L);
+#endif
 #if defined(LJ_TG_ROOT_TEST_HELPERS)
 typedef void (*LJTGRootPushHook)(lua_State *L, TGState *tg, uint32_t idx,
 				 TValue *slot);
 LJ_FUNC void lj_tg_root_test_fail_reserve_after(uint32_t nth);
 LJ_FUNC void lj_tg_root_test_set_push_hook(LJTGRootPushHook hook);
+#if LJ_HASJIT
+LJ_FUNC void lj_tg_root_test_forjit_guard_reset(void);
+LJ_FUNC uint32_t lj_tg_root_test_forjit_guard_hits(void);
+#endif
 #endif
 
 #define TG_DISP2HOT	(-(int)(HOTCOUNT_SIZE*sizeof(HotCount)))

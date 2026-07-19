@@ -37,6 +37,9 @@ static void tg_root_anchor_block_init(TGRootAnchorBlock *block)
 #if defined(LJ_TG_ROOT_TEST_HELPERS)
 static uint32_t tg_root_test_fail_reserve;
 static LJTGRootPushHook tg_root_test_push_hook;
+#if LJ_HASJIT
+static uint32_t tg_root_test_forjit_guard_calls;
+#endif
 
 void lj_tg_root_test_fail_reserve_after(uint32_t nth)
 {
@@ -47,6 +50,18 @@ void lj_tg_root_test_set_push_hook(LJTGRootPushHook hook)
 {
   la_storeptr_rel((void **)&tg_root_test_push_hook, (void *)hook);
 }
+
+#if LJ_HASJIT
+void lj_tg_root_test_forjit_guard_reset(void)
+{
+  la_store32_rel(&tg_root_test_forjit_guard_calls, 0);
+}
+
+uint32_t lj_tg_root_test_forjit_guard_hits(void)
+{
+  return la_load32_acq(&tg_root_test_forjit_guard_calls);
+}
+#endif
 
 static int tg_root_test_fail_reserve_take(void)
 {
@@ -165,6 +180,37 @@ void lj_tg_root_anchor_pop(TGState *tg, uint32_t idx)
   if (top == idx + 1)
     lj_tg_root_anchor_top_rel(tg, idx);
 }
+
+void lj_tg_root_anchor_rollback(TGState *tg, uint32_t saved_top)
+{
+  uint32_t top;
+  if (!tg)
+    abort();
+  top = lj_tg_root_anchor_top_acq(tg);
+  if (top < saved_top)
+    abort();
+  while (top > saved_top) {
+    uint32_t next;
+    lj_tg_root_anchor_pop(tg, top - 1u);
+    next = lj_tg_root_anchor_top_acq(tg);
+    /* The owner-private LIFO pop must make exact progress. A missing anchor
+    ** block or mismatched top is corruption, not a retry condition. */
+    if (next != top - 1u)
+      abort();
+    top = next;
+  }
+}
+
+#if LJ_HASJIT
+uint32_t lj_tg_root_anchor_top_forjit(lua_State *L)
+{
+  TGState *tg = L ? G2TG(G(L)) : NULL;
+#if defined(LJ_TG_ROOT_TEST_HELPERS)
+  (void)la_add32_rlx(&tg_root_test_forjit_guard_calls, 1u);
+#endif
+  return tg ? lj_tg_root_anchor_top_acq(tg) : 0;
+}
+#endif
 
 static void tg_root_anchor_fini(global_State *g, TGState *tg)
 {

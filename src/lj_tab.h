@@ -311,6 +311,12 @@ typedef void (*LJTabNextAfterKeyindexHook)(GCtab *t, uint32_t idx);
 typedef void (*LJTabConstructorPrepublishHook)(lua_State *L, GCtab *t);
 typedef void (*LJTabStorePostCasHook)(lua_State *L, GCtab *t, TValue *dst,
 				      cTValue *key, cTValue *value);
+typedef void (*LJTabRootedReaderRetryHook)(lua_State *L, GCtab *t,
+					   int reader);
+enum {
+  LJ_TAB_ROOTED_READER_NEXT = 1,
+  LJ_TAB_ROOTED_READER_LEN = 2
+};
 LJ_FUNC void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_chain_after_reserve_hook(
@@ -324,6 +330,8 @@ LJ_FUNC void lj_tab_test_set_constructor_prepublish_hook(
 LJ_FUNC void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook);
 LJ_FUNC void lj_tab_test_keyed_cas_changed_stack_grow_once(void);
 LJ_FUNC uint32_t lj_tab_test_keyed_cas_changed_stack_grow_hits(void);
+LJ_FUNC void lj_tab_test_set_rooted_reader_retry_hook(
+  LJTabRootedReaderRetryHook hook);
 LJ_FUNC int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src,
 					      MSize idx, GCtab *dst,
 					      int freeze_old);
@@ -515,7 +523,22 @@ genarray:
 
 LJ_FUNC uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key);
 LJ_FUNCA int lj_tab_next(GCtab *t, cTValue *key, TValue *o);
+/* Generation-bound structural traversal starting from authoritative TValue
+** roots. Inputs and outputs may alias as required by lua_next(); all
+** stack-backed locations are restored after L-aware retry points. */
+LJ_FUNCA int lj_tab_next_rooted(lua_State *L, cTValue *tabroot,
+				cTValue *keyroot, TValue *outkey,
+				TValue *outval, uint32_t *nextidx);
+LJ_FUNCA int lj_tab_next_pair_rooted(lua_State *L, cTValue *tabroot,
+				     cTValue *keyroot, TValue *out);
+LJ_FUNCA int32_t LJ_FASTCALL lj_tab_itern_rooted(lua_State *L,
+						 cTValue *tabroot,
+						 TValue *ctrl);
 LJ_FUNCA MSize LJ_FASTCALL lj_tab_len(GCtab *t);
+/* Bounded current-generation length search from an authoritative table root.
+** The exact table and both structural vectors remain retained throughout each
+** attempt; waits occur only after the SMR interval and lease are closed. */
+LJ_FUNCA MSize lj_tab_len_rooted(lua_State *L, cTValue *tabroot);
 #if LJ_HASJIT
 LJ_FUNC MSize LJ_FASTCALL lj_tab_len_hint(GCtab *t, size_t hint);
 #endif

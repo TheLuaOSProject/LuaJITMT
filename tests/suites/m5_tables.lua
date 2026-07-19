@@ -34,7 +34,13 @@ return function(add)
       description = "rooted __index/__newindex chains and explicit C result ABI",
       output = "lj_t-meta-rooted-chain",
       cfile = "t-meta-rooted-chain.c",
-      opts = build.gc2_test_helper_opts({ timeout = "20s" }),
+      opts = build.gc2_test_helper_opts({
+        timeout = "20s",
+        xcflags = build.gc2_test_helper_flag ..
+                  " -DLJ_TG_ROOT_TEST_HELPERS",
+        cflags = build.gc2_test_helper_flag ..
+                 " -DLJ_TG_ROOT_TEST_HELPERS"
+      }),
       message = "M5 rooted metamethod-chain tests passed"
     },
     {

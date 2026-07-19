@@ -81,8 +81,24 @@ enum {
 #define frame_ispcall(f)	((frame_ftsz(f) & 6) == FRAME_PCALL)
 
 #define frame_func(f)		(&frame_gc(f)->fn)
+#if LJ_TARGET_X64 && LJ_FR2
+/* Fast pcall/xpcall delta frames use only the low 32 bits of the 64-bit frame
+** word. The x64 VM stores the lexical TG root-anchor checkpoint in the upper
+** half. All delta walkers must ignore that checkpoint payload. Lua frames keep
+** using the complete word as their return PC. */
+#define LJ_FRAME_PCALL_ROOT_ANCHOR	1
+#define frame_pcall_root_top(f) \
+  ((uint32_t)((uint64_t)frame_ftsz(f) >> 32))
+#define frame_delta(f) \
+  ((ptrdiff_t)((uint32_t)frame_ftsz(f) >> 3))
+#define frame_sized(f) \
+  ((ptrdiff_t)((uint32_t)frame_ftsz(f) & ~(uint32_t)FRAME_TYPEP))
+#else
+#define LJ_FRAME_PCALL_ROOT_ANCHOR	0
+#define frame_pcall_root_top(f)		((uint32_t)0)
 #define frame_delta(f)		(frame_ftsz(f) >> 3)
 #define frame_sized(f)		(frame_ftsz(f) & ~FRAME_TYPEP)
+#endif
 
 enum { LJ_CONT_TAILCALL, LJ_CONT_FFI_CALLBACK };  /* Special continuations. */
 

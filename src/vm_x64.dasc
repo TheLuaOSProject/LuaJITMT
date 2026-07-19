@@ -582,6 +582,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  jz ->cont_dispatch
   |
   |  // Return from pcall or xpcall fast func.
+  |  // The upper word is the protected TG root-anchor checkpoint, not delta.
+  |  mov PCd, PCd
   |  and PC, -8
   |  sub BASE, PC			// Restore caller base.
   |  lea RA, [RA+PC-8]			// Rebase RA and prepend one result.
@@ -1761,17 +1763,24 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG1, [BASE]
   |  mov PC, [BASE-8]
   |  checktab CARG1, ->fff_fallback
-  |  mov RB, BASE			// Save BASE.
+  |  mov L:RB, SAVE_L
+  |  mov L:RB->base, BASE
+  |  mov SAVE_PC, PC
   |.if X64WIN
-  |  lea CARG3, [BASE-16]
-  |  lea CARG2, [BASE+8]		// Caveat: CARG2 == BASE.
+  |  lea CARG4, [BASE-16]
+  |  lea CARG3, [BASE+8]
+  |  lea CARG2, [BASE]
+  |  mov L:CARG1, L:RB
   |.else
-  |  lea CARG2, [BASE+8]
-  |  lea CARG3, [BASE-16]		// Caveat: CARG3 == BASE.
+  |  mov L:CARG1, L:RB
+  |  lea CARG2, [BASE]
+  |  lea CARG3, [BASE+8]
+  |  lea CARG4, [BASE-16]
   |.endif
-  |  call extern lj_tab_next		// (GCtab *t, cTValue *key, TValue *o)
+  |  call extern lj_tab_next_pair_rooted
+  |  // (lua_State *L, cTValue *tabroot, cTValue *keyroot, TValue *out)
   |  // 1=found, 0=end, -1=error returned in eax (RD).
-  |  mov BASE, RB			// Restore BASE.
+  |  mov BASE, L:RB->base
   |  test RDd, RDd;  jg ->fff_res2	// Found key/value.
   |  js ->fff_fallback_2		// Invalid key.
   |  // End of traversal: return nil.
@@ -1924,6 +1933,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  shr RB, HOOK_ACTIVE_SHIFT
   |  and RB, 1
   |  add PC, RB				// Remember active hook before pcall.
+  |  // Pack the allocation-free anchor-depth checkpoint above the 32-bit
+  |  // delta/type word. Error unwinding restores it; normal return discards it.
+  |  mov ITYPEd, [DISPATCH+DISPATCH_TG(root_anchor_top)]
+  |  shl ITYPE, 32
+  |  or PC, ITYPE
   |  // Note: this does a (harmless) copy of the function to the PC slot, too.
   |  mov KBASE, RD
   |2:
@@ -4024,29 +4038,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp ITYPEd, LJ_TTAB; jne ->vmeta_len
     |  mov TAB:CARG1, TAB:RD
 #if LJ_52
-    |  x64_vm_gcref_acq TAB:RB, TAB:RD->metatable
-    |  cmp TAB:RB, 0
-    |  jnz >9
-    |3:
+    |  // Metatable lookup is itself a mutable GC edge. Route through the
+    |  // rooted meta helper before deciding whether raw length is applicable.
+    |  jmp ->vmeta_len
 #endif
     |->BC_LEN_Z:
-    |  mov RB, BASE			// Save BASE.
-    |  call extern lj_tab_len		// (GCtab *t)
+    |  movzx RDd, PC_RD
+    |  mov L:RB, SAVE_L
+    |  mov L:RB->base, BASE
+    |  mov SAVE_PC, PC
+    |  lea CARG2, [BASE+RD*8]
+    |  mov L:CARG1, L:RB
+    |  call extern lj_tab_len_rooted	// (lua_State *L, cTValue *tabroot)
     |  // Length of table returned in eax (RD).
     |.if DUALNUM
     |  // Nothing to do.
     |.else
     |  cvtsi2sd xmm0, RDd
     |.endif
-    |  mov BASE, RB			// Restore BASE.
+    |  mov BASE, L:RB->base
     |  movzx RAd, PC_RA
     |  jmp <1
-#if LJ_52
-    |9:  // Check for __len.
-    |  test byte TAB:RB->nomm, 1<<MM_len
-    |  jnz <3
-    |  jmp ->vmeta_len			// 'no __len' flag NOT set: check.
-#endif
     break;
 
   /* -- Binary ops -------------------------------------------------------- */
@@ -5734,49 +5746,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  endbr
     |.endif
     |  ins_A	// RA = base, (RB = nresults+1, RC = nargs+1 (2+1))
-    |  mov TAB:RB, [BASE+RA*8-16]
-    |  cleartp TAB:RB
-    |  mov RCd, [BASE+RA*8-8]		// Get index from control var.
-    |  x64_vm_tab_asize_acq TMPRd, TAB:RB
     |  add PC, 4
-    |  // Shared active-MT traversal must use the generation-following C path;
-    |  // the raw VM fast path below cannot validate racy GC tag/header snapshots.
-    |  load_G r8
-    |  cmp dword GL:r8->mt_active, 0
-    |  jne >8
-    |  cmp dword GL:r8->mt_entering, 0
-    |  jne >8
-    |  x64_vm_tab_array_acq ITYPE, TAB:RB
-    |  test ITYPE, ITYPE; jz >1
-    |  lea r8, [RB+TAB_COLO_SLOTS]
-    |  cmp ITYPE, r8; je >1
-    |  x64_vm_tab_array_asize_acq TMPRd, ITYPE
-    |  x64_vm_tab_array_flags_acq r9d, ITYPE
-    |  test r9d, TABARRAY_FLAG_RETIRING
-    |  jnz >8
-    |1:  // Traverse array part.
-    |  cmp RCd, TMPRd; jae >5		// Index points after array part?
-    |  mov r8, [ITYPE+RC*8]
-    |  mov64 r9, LJ_TFORWARD_BITS
-    |  cmp r8, r9; je >8
-    |  cmp r8, LJ_TNIL; je >4
-    |.if not DUALNUM
-    |  cvtsi2sd xmm0, RCd
-    |.endif
-    |  // Copy array slot to returned value.
-    |  mov [BASE+RA*8+8], r8
-    |  // Return array index as a numeric key.
-    |.if DUALNUM
-    |  setint ITYPE, RC
-    |  mov [BASE+RA*8], ITYPE
+    |  // Structural traversal is rooted and generation-bound. The helper may
+    |  // take an L-aware retry safepoint and relocate the Lua stack.
+    |  mov L:RB, SAVE_L
+    |  mov L:RB->base, BASE
+    |  mov SAVE_PC, PC
+    |.if X64WIN
+    |  lea CARG3, [BASE+RA*8-8]
+    |  lea CARG2, [BASE+RA*8-16]
+    |  mov L:CARG1, L:RB
     |.else
-    |  movsd qword [BASE+RA*8], xmm0
+    |  mov L:CARG1, L:RB
+    |  lea CARG2, [BASE+RA*8-16]
+    |  lea CARG3, [BASE+RA*8-8]
     |.endif
-    |  add RCd, 1
-    |  mov64 ITYPE, ((uint64_t)LJ_KEYINDEX << 32)
-    |  or ITYPE, RC
-    |  mov [BASE+RA*8-8], ITYPE		// Update control var.
+    |  call extern lj_tab_itern_rooted
+    |  mov BASE, L:RB->base
     |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+    |  test RDd, RDd
+    |  jg >2
+    |  jmp >3
     |2:
     |  // ITERL/JITERL publication replaces the complete following word. A
     |  // stale ITERN may reach here after a peer despecialized the loop.
@@ -5791,81 +5781,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jnz ->vm_safepoint
     |3:
     |  ins_next
-    |
-    |4:  // Skip holes in array part.
-    |  add RCd, 1
-    |  jmp <1
-    |
-    |8:  // Resolve a forwarded array slot in C.
-    |  mov ITYPE, BASE
-    |.if X64WIN
-    |  lea CARG3, [ITYPE+RA*8-8]
-    |  mov CARG1, TAB:RB
-    |  mov CARG2d, RCd
-    |.else
-    |  mov CARG1, TAB:RB
-    |  mov CARG2d, RCd
-    |  lea CARG3, [ITYPE+RA*8-8]
-    |.endif
-    |  mov RB, ITYPE
-    |  call extern lj_tab_itern_forward	// (GCtab *t, uint32_t idx, TValue *ctrl)
-    |  mov BASE, RB
-    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-    |  test RDd, RDd
-    |  jg <2
-    |  jmp <3
-    |
-    |5:  // Traverse hash part.
-    |  sub RCd, TMPRd
-    |6:
-    |  x64_vm_tab_node_acq r8, TAB:RB
-    |  x64_vm_tab_node_flags_acq r9d, r8
-    |  test r9d, TABNODE_FLAG_RETIRING
-    |  jnz >9
-    |  x64_vm_tab_node_hmask_acq r9d, r8
-    |  cmp RCd, r9d; ja <3	// End of iteration? Branch to ITERL+1.
-    |  imul ITYPEd, RCd, #NODE
-    |  add NODE:ITYPE, r8
-    |  mov r8, NODE:ITYPE->val
-    |  mov64 r9, LJ_TFORWARD_BITS
-    |  cmp r8, r9; je >9
-    |  cmp r8, LJ_TNIL; je >7
-    |  // Copy key and value from hash slot.
-    |  mov r9, NODE:ITYPE->key
-    |  cmp r9, LJ_TNIL; je >7
-    |  mov64 ITYPE, LJ_TKEYLOCK_BITS
-    |  cmp r9, ITYPE; je >9
-    |  lea TMPRd, [RCd+TMPRd+1]
-    |  mov [BASE+RA*8], r9
-    |  mov [BASE+RA*8+8], r8
-    |  mov64 ITYPE, ((uint64_t)LJ_KEYINDEX << 32)
-    |  or ITYPE, TMPR
-    |  mov [BASE+RA*8-8], ITYPE
-    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-    |  jmp <2
-    |
-    |7:  // Skip holes in hash part.
-    |  add RCd, 1
-    |  jmp <6
-    |
-    |9:  // Resolve a forwarded hash slot in C.
-    |  mov ITYPE, BASE
-    |.if X64WIN
-    |  lea CARG3, [ITYPE+RA*8-8]
-    |  mov CARG1, TAB:RB
-    |  lea CARG2d, [RCd+TMPRd]
-    |.else
-    |  mov CARG1, TAB:RB
-    |  lea CARG2d, [RCd+TMPRd]
-    |  lea CARG3, [ITYPE+RA*8-8]
-    |.endif
-    |  mov RB, ITYPE
-    |  call extern lj_tab_itern_forward	// (GCtab *t, uint32_t idx, TValue *ctrl)
-    |  mov BASE, RB
-    |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
-    |  test RDd, RDd
-    |  jg <2
-    |  jmp <3
     break;
 
   case BC_ISNEXT:

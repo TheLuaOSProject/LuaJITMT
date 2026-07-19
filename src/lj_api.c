@@ -1328,27 +1328,33 @@ LUALIB_API int luaL_checkoption(lua_State *L, int idx, const char *def,
 LUA_API size_t lua_objlen(lua_State *L, int idx)
 {
   LJStateClaim claim;
-  TValue snap;
-  cTValue *o;
+  lua_State *errL = api_errstate(L);
+  TValue *o;
+  ptrdiff_t rootoffs;
   size_t len;
-  api_checkclaim(L, &claim);
-  o = index2adr_read(L, idx, &snap);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
+  o = api_stackroot_push_index(L, idx);
+  rootoffs = savestack(L, o);
   if (tvisstr(o)) {
     len = strV(o)->len;
   } else if (tvistab(o)) {
-    len = (size_t)lj_tab_len(tabV(o));
+    len = (size_t)lj_tab_len_rooted(L, o);
   } else if (tvisudata(o)) {
     len = udataV(o)->len;
   } else if (tvisnumber(o)) {
     int status;
     GCstr *s;
-    lj_state_dropclaim(&claim);
+    L->top = restorestack(L, rootoffs);
+    lj_state_dropresumeclaim(&claim);
     s = api_tolstring_claimed(L, idx, &status);
     return status == API_TOSTR_OK ? s->len : 0;
   } else {
     len = 0;
   }
-  lj_state_dropclaim(&claim);
+  L->top = restorestack(L, rootoffs);
+  lj_state_dropresumeclaim(&claim);
   return len;
 }
 
@@ -2187,22 +2193,40 @@ LUA_API int lua_next(lua_State *L, int idx)
 {
   LJStateClaim claim;
   lua_State *errL = api_errstate(L);
-  TValue snap;
-  cTValue *t;
+  TValue *troot, *key, *out;
+  ptrdiff_t trootofs, keyofs, outofs;
   int more;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
+  lj_checkapi_slot(1);
   api_checkstack1_claimed(L, errL, &claim);
-  t = index2adr_read(L, idx, &snap);
-  lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
-  more = lj_tab_next(tabV(t), L->top-1, L->top-1);
+  /* Resolve and publish the receiver before moving top, preserving the valid
+  ** self-key form lua_next(L, -1). The receiver slot is later recycled as the
+  ** returned value so the public two-result stack layout remains unchanged. */
+  troot = api_stackroot_push_index(L, idx);
+  lj_checkapi(tvistab(troot), "stack slot %d is not a table", idx);
+  trootofs = savestack(L, troot);
+  key = L->top-2;
+  keyofs = savestack(L, key);
+  api_checkstack1_claimed(L, errL, &claim);
+  troot = restorestack(L, trootofs);
+  key = restorestack(L, keyofs);
+  out = L->top;
+  outofs = savestack(L, out);
+  setnilV(out);
+  lj_state_stack_pubtv(L, L, out);
+  L->top++;
+  more = lj_tab_next_rooted(L, troot, key, key, out, NULL);
   if (more > 0) {
-    lj_state_stack_pubtv(L, L, L->top-1);
-    lj_state_stack_pubtv(L, L, L->top);
-    incr_top(L);  /* Return new key and value slot. */
+    troot = restorestack(L, trootofs);
+    out = restorestack(L, outofs);
+    copyTVrel(L, troot, out);
+    lj_state_stack_pubtv(L, L, troot);
+    L->top = restorestack(L, trootofs) + 1;
   } else if (!more) {  /* End of traversal. */
-    L->top--;  /* Remove key slot. */
+    L->top = restorestack(L, keyofs);  /* Remove key and temporary roots. */
   } else {
+    L->top = restorestack(L, keyofs);
     lj_state_dropresumeclaim(&claim);
     lj_err_msg(L, LJ_ERR_NEXTIDX);
   }

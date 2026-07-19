@@ -8,6 +8,7 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_gc2.h"
@@ -411,6 +412,174 @@ static void check_rawset_stack_relocation(lua_State *L)
   lua_pop(L, 1);
 }
 
+static uint32_t rooted_reader_retry_hits;
+static uint32_t rooted_reader_retry_kind;
+static uint32_t rooted_reader_stack_moves;
+static int rooted_reader_require_move;
+
+static void rooted_reader_resize_gc_grow(lua_State *L, GCtab *t, int reader)
+{
+  TValue *array, *oldstack = tvref(L->stack);
+  Node *node;
+  MSize asize, hmask;
+  uint32_t hbits;
+  int attempt;
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  hbits = hmask ? lj_fls((uint32_t)hmask) + 1u : 0;
+  UNUSED(array);
+  UNUSED(node);
+  lj_tab_resize(L, t, (uint32_t)asize + 17u, hbits);
+  for (attempt = 0; attempt < (rooted_reader_require_move ? 4 : 1);
+	 attempt++) {
+    lj_state_growstack(L, 1);
+    if (tvref(L->stack) != oldstack) {
+      rooted_reader_stack_moves++;
+      break;
+    }
+  }
+  /* The rooted reader has closed SMR and released every exact lease before
+  ** invoking this hook. Complete collection here, while its only authority is
+  ** the caller-visible root, so the retry really covers resize+relocation+GC
+  ** rather than merely collecting after the helper has republished results. */
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  rooted_reader_retry_kind = (uint32_t)reader;
+  rooted_reader_retry_hits++;
+}
+
+static void arm_rooted_reader_retry(int require_move)
+{
+  rooted_reader_retry_hits = 0;
+  rooted_reader_retry_kind = 0;
+  rooted_reader_stack_moves = 0;
+  rooted_reader_require_move = require_move;
+  lj_tab_test_set_rooted_reader_retry_hook(rooted_reader_resize_gc_grow);
+}
+
+static void assert_rooted_reader_retry(uint32_t reader, int require_move)
+{
+  assert(rooted_reader_retry_hits == 1u);
+  assert(rooted_reader_retry_kind == reader);
+  if (require_move)
+    assert(rooted_reader_stack_moves == 1u);
+}
+
+static int invalid_next_c(lua_State *L)
+{
+  assert(lua_gettop(L) == 2);
+  lua_pushvalue(L, 2);
+  (void)lua_next(L, 1);
+  return 2;  /* Unreachable for a stable invalid cursor. */
+}
+
+static void check_structural_readers(lua_State *L)
+{
+  int tabidx, i;
+  int more;
+
+  /* Length never counts key zero; verify the empty, zero-only and first
+  ** positive boundaries before exercising a denser resize snapshot. */
+  lua_newtable(L);
+  assert(lua_objlen(L, -1) == 0u);
+  lua_pushliteral(L, "zero-boundary");
+  lua_rawseti(L, -2, 0);
+  assert(lua_objlen(L, -1) == 0u);
+  lua_pushliteral(L, "one-boundary");
+  lua_rawseti(L, -2, 1);
+  assert(lua_objlen(L, -1) == 1u);
+  lua_pop(L, 1);
+
+  lua_newtable(L);
+  tabidx = lua_gettop(L);
+  for (i = 1; i <= 16; i++) {
+    lua_pushinteger(L, i * 3);
+    lua_rawseti(L, tabidx, i);
+  }
+  lua_pushliteral(L, "zero-array-value");
+  lua_rawseti(L, tabidx, 0);
+  lua_pushvalue(L, tabidx);
+  lua_pushliteral(L, "self-key-value");
+  lua_rawset(L, tabidx);
+
+  arm_rooted_reader_retry(1);
+  assert(lua_objlen(L, tabidx) == 16u);
+  assert_rooted_reader_retry(LJ_TAB_ROOTED_READER_LEN, 1);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+
+  /* lua_next consumes its input key in place. Force a resize, complete GC and
+  ** physical stack move between rooted attempts before that alias is written. */
+  lua_pushnil(L);
+  arm_rooted_reader_retry(1);
+  more = lua_next(L, tabidx);
+  assert(more == 1);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(!lua_isnil(L, -2) && !lua_isnil(L, -1));
+  assert_rooted_reader_retry(LJ_TAB_ROOTED_READER_NEXT, 1);
+  lua_pop(L, 2);
+
+  /* The selected receiver may itself be the current table-valued key. */
+  lua_pushvalue(L, tabidx);
+  arm_rooted_reader_retry(0);
+  more = lua_next(L, -1);
+  assert(more == 0 || more == 1);
+  assert_rooted_reader_retry(LJ_TAB_ROOTED_READER_NEXT, 0);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  if (more)
+    lua_pop(L, 2);
+  assert(lua_gettop(L) == tabidx);
+
+  /* LuaJIT deliberately stores key zero in array[0] when capacity permits.
+  ** Its traversal cursor advances from zero to the first positive slot. */
+  lua_pushinteger(L, 0);
+  assert(lua_next(L, tabidx) == 1);
+  assert(lua_tointeger(L, -2) == 1);
+  assert(lua_tointeger(L, -1) == 3);
+  lua_pop(L, 2);
+
+  /* A generation-validated miss remains an invalid-key error even while MT
+  ** is live; the old process-sticky concurrent-mode suppression is gone. */
+  lua_pushcfunction(L, invalid_next_c);
+  lua_pushvalue(L, tabidx);
+  lua_newtable(L);
+  (void)mt_live_add_rlx(G(L), 1);
+  i = lua_pcall(L, 2, 2, 0);
+  (void)mt_live_sub_acqrel(G(L), 1);
+  assert(i == LUA_ERRRUN);
+  lua_pop(L, 1);
+
+  /* Exercise bytecode LEN, the base next fast function, and specialized
+  ** ITERN. Each x64 entry now passes authoritative frame roots to the same
+  ** generation-bound helpers and restores BASE after stack movement. */
+  assert(luaL_loadstring(L, "local t=...; return #t") == 0);
+  lua_pushvalue(L, tabidx);
+  arm_rooted_reader_retry(0);
+  assert(lua_pcall(L, 1, 1, 0) == 0);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(lua_tointeger(L, -1) == 16);
+  assert_rooted_reader_retry(LJ_TAB_ROOTED_READER_LEN, 0);
+  lua_pop(L, 1);
+
+  assert(luaL_loadstring(L, "local t=...; return next(t, nil)") == 0);
+  lua_pushvalue(L, tabidx);
+  arm_rooted_reader_retry(0);
+  assert(lua_pcall(L, 1, 2, 0) == 0);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(!lua_isnil(L, -2));
+  assert_rooted_reader_retry(LJ_TAB_ROOTED_READER_NEXT, 0);
+  lua_pop(L, 2);
+
+  assert(luaL_loadstring(L, "local t=...; local n=0; "
+			    "for k,v in pairs(t) do n=n+1 end; return n") == 0);
+  lua_pushvalue(L, tabidx);
+  arm_rooted_reader_retry(0);
+  assert(lua_pcall(L, 1, 1, 0) == 0);
+  (void)lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(lua_tointeger(L, -1) > 0);
+  assert_rooted_reader_retry(LJ_TAB_ROOTED_READER_NEXT, 0);
+  lua_pop(L, 1);
+  lua_pop(L, 1);
+}
+
 static void check_transient_retries(lua_State *L)
 {
   GCtab *t = tabV(L->base);
@@ -459,6 +628,9 @@ int main(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
+  lua_pushcfunction(L, luaopen_base);
+  lua_pushliteral(L, "_G");
+  lua_call(L, 1, 0);
   populate(L);
   assert(L->base == L->top - 1 && tvistab(L->base));
   check_integer_stack_result(L);
@@ -466,10 +638,12 @@ int main(void)
   check_anchor_result(L);
   check_alias_and_public_api(L);
   check_rawset_stack_relocation(L);
+  check_structural_readers(L);
   check_pseudo_index_public_api(L);
   check_pseudo_meta_and_caught_errors(L);
   check_transient_retries(L);
   check_non_table_root(L);
+  assert(lj_tg_root_anchor_top_acq(L2TG(L)) == 0u);
   lua_close(L);
   printf("t-tab-rooted-reader OK: rooted table snapshots preserve parent/key/result lifetimes\n");
   return 0;
