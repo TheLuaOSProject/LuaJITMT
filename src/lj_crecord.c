@@ -2164,7 +2164,147 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   lj_ctype_metaroot_release(&finroot);
 }
 
-/* Collect scalar argument conversions for one ABI-driven CALLXS.
+/* SysV x64 register classes used by the generic CALLXS aggregate subset. */
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+#define CREC_CALL_RCL_INT	1
+#define CREC_CALL_RCL_SSE	2
+#define CREC_CALL_RCL_MEM	4
+
+static int crec_call_sysv_classify_struct(jit_State *J, CTState *cts,
+					  CType *ct, int *rcl,
+					  CTSize ofs);
+
+/* Recursively classify one aggregate child without retaining CType pointers. */
+static void crec_call_sysv_classify_ct(jit_State *J, CTState *cts, CType *ct,
+				       int *rcl, CTSize ofs)
+{
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size = ctype_size_acq(ct);
+  /* The interpreter classifier still labels vector classes NYI. Complex
+  ** members also have distinct ABI rules. Do not reinterpret either as an
+  ** ordinary element array merely because both use CT_ARRAY storage. */
+  if (ctype_isvector(info) || ctype_iscomplex(info)) {
+    rcl[0] |= CREC_CALL_RCL_MEM;
+  } else if (ctype_isarray(info)) {
+    CType childsnap;
+    CType *child = crec_ctype_rawchild(J, cts, ct, &childsnap);
+    CTSize eofs, esz = ctype_size_acq(child);
+    if (size == CTSIZE_INVALID || esz == 0 || esz == CTSIZE_INVALID ||
+	(size % esz) != 0) {
+      rcl[0] |= CREC_CALL_RCL_MEM;
+      return;
+    }
+    for (eofs = 0; eofs < size; eofs += esz)
+      crec_call_sysv_classify_ct(J, cts, child, rcl, ofs+eofs);
+  } else if (ctype_isstruct(info)) {
+    if (crec_call_sysv_classify_struct(J, cts, ct, rcl, ofs))
+      rcl[0] |= CREC_CALL_RCL_MEM;
+  } else {
+    int cl;
+    if (!ctype_hassize(info) || size == 0 || size == CTSIZE_INVALID ||
+	ofs >= 16 || size > 16-ofs) {
+      rcl[0] |= CREC_CALL_RCL_MEM;
+      return;
+    }
+    cl = ctype_isfp(info) ? CREC_CALL_RCL_SSE : CREC_CALL_RCL_INT;
+    if ((ofs & (size-1)) != 0) cl = CREC_CALL_RCL_MEM;
+    rcl[ofs >= 8] |= cl;
+  }
+}
+
+/* Mirror lj_ccall.c's recursive SysV classifier using recorder snapshots. */
+static int crec_call_sysv_classify_struct(jit_State *J, CTState *cts,
+					  CType *ct, int *rcl,
+					  CTSize ofs)
+{
+  CTypeID fid;
+  CTSize size = ctype_size_acq(ct);
+  if (size == 0 || size == CTSIZE_INVALID || size > 16 || ofs >= 16 ||
+      size > 16-ofs)
+    return CREC_CALL_RCL_MEM;
+  for (fid = ctype_sib_acq(ct); fid; ) {
+    CType fieldsnap, childsnap;
+    CType *field = crec_ctype_snapshot(J, cts, fid, &fieldsnap);
+    CTInfo info = ctype_info_acq(field);
+    CTSize fofs = ofs + ctype_size_acq(field);
+    fid = ctype_sib_acq(field);
+    if (fofs >= 16) return CREC_CALL_RCL_MEM;
+    if (ctype_isfield(info)) {
+      crec_call_sysv_classify_ct(J, cts,
+	crec_ctype_rawchild(J, cts, field, &childsnap), rcl, fofs);
+    } else if (ctype_isbitfield(info) && ctype_bitbsz(info)) {
+      rcl[fofs >= 8] |= CREC_CALL_RCL_INT;
+    } else if (ctype_isxattrib(info, CTA_SUBTYPE)) {
+      CType *child = crec_ctype_rawchild(J, cts, field, &childsnap);
+      if (!ctype_isstruct(ctype_info_acq(child)) ||
+	  crec_call_sysv_classify_struct(J, cts, child, rcl, fofs))
+	rcl[0] |= CREC_CALL_RCL_MEM;
+    }
+    if ((rcl[0]|rcl[1]) & CREC_CALL_RCL_MEM)
+      return CREC_CALL_RCL_MEM;
+  }
+  return 0;
+}
+
+/* Return the raw scalar carrier for a one-class SysV aggregate.
+** A one-component aggregate cannot partially consume registers: ordinary
+** scalar lowering therefore gives the SysV all-register-or-stack rule and
+** its rollback semantics without an explicit signature or shape descriptor.
+*/
+static IRType crec_call_sysv_aggregate_type(jit_State *J, CTState *cts,
+					    CType *ct, CTSize size)
+{
+  int rcl[2] = { 0, 0 };
+  IRType it;
+  CTInfo info = ctype_info_acq(ct);
+  if (!ctype_isstruct(info) || ctype_isvltype(info) || size == 0 || size > 8)
+    return IRT_CDATA;
+  if (crec_call_sysv_classify_struct(J, cts, ct, rcl, 0) || rcl[1] ||
+      rcl[0] == 0)
+    return IRT_CDATA;
+  switch (size) {
+  case 1: it = IRT_U8; break;
+  case 2: it = IRT_U16; break;
+  case 4: it = IRT_U32; break;
+  case 8: it = IRT_U64; break;
+  default: return IRT_CDATA;  /* Avoid rounded loads beyond the payload. */
+  }
+  if (rcl[0] & CREC_CALL_RCL_INT)
+    return it;  /* INTEGER takes precedence over SSE for a mixed eightbyte. */
+  if (rcl[0] & CREC_CALL_RCL_SSE)
+    return size == 4 ? IRT_FLOAT : size == 8 ? IRT_NUM : IRT_CDATA;
+  return IRT_CDATA;
+}
+
+/* Specialize an exact aggregate cdata argument and load its raw ABI carrier. */
+static TRef crec_call_sysv_aggregate_arg(jit_State *J, CTState *cts,
+					 CTypeID did, TRef sp, cTValue *o,
+					 IRType t)
+{
+  GCcdata *cd = argv2cdata(J, sp, o);
+  CType srcsnap, rawsnap;
+  CTypeID rid;
+  CType *src = crec_ctype_rawid(J, cts, cd->ctypeid, NULL, &srcsnap);
+  CTInfo sinfo = ctype_info_acq(src);
+  TRef ptr;
+  crec_ctype_rawrefid(J, cts, cd->ctypeid, &rid, &rawsnap);
+  if (rid != did || !ctype_isstruct(ctype_info_acq(&rawsnap)))
+    lj_trace_err(J, LJ_TRERR_NYICONV);
+  if (ctype_isref(sinfo))
+    ptr = emitir(IRT(IR_FLOAD, IRT_PTR), sp, IRFL_CDATA_PTR);
+  else
+    ptr = emitir(IRT(IR_ADD, IRT_PTR), sp,
+		  lj_ir_kintp(J, sizeof(GCcdata)));
+  if (t == IRT_U64) lj_needsplit(J);
+  return emitir(IRT(IR_XLOAD, t), ptr, 0);
+}
+#undef CREC_CALL_RCL_INT
+#undef CREC_CALL_RCL_SSE
+#undef CREC_CALL_RCL_MEM
+#endif
+
+/* Collect scalar and admitted aggregate argument conversions for one
+** ABI-driven CALLXS.
 ** Building the CARG tree is deliberately separate: indirect aggregate results
 ** need to allocate and root their hidden result box after every conversion and
 ** guard, then prepend its payload pointer as ABI argument zero.
@@ -2235,9 +2375,18 @@ static MSize crec_call_args_collect(jit_State *J, RecordFFData *rd,
     d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
     dinfo = ctype_info_acq(d);
     dsize = ctype_size_acq(d);
-    if (!(ctype_isnum(dinfo) || ctype_isptr(dinfo) || ctype_isenum(dinfo)))
+    if (!(ctype_isnum(dinfo) || ctype_isptr(dinfo) || ctype_isenum(dinfo))) {
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+      IRType at = crec_call_sysv_aggregate_type(J, cts, d, dsize);
+      if (at == IRT_CDATA)
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      tr = crec_call_sysv_aggregate_arg(J, cts, did, *base, o, at);
+#else
       lj_trace_err(J, LJ_TRERR_NYICALL);
-    tr = crec_ct_tv(J, d, 0, *base, o);
+#endif
+    } else {
+      tr = crec_ct_tv(J, d, 0, *base, o);
+    }
     if (ctype_isinteger_or_bool(dinfo)) {
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
       if (!ngpr) {
@@ -2372,7 +2521,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     CTSize result_size;
     MSize nargs;
     IRType t;
-    int boxed_result, indirect_result, rooted_result;
+    int boxed_result, direct_aggregate_result, indirect_result, rooted_result;
 
 #if !LJ_TARGET_X64
     /* Only the x64 CALLXS/native-frame lowering has the production lifecycle
@@ -2412,21 +2561,33 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     ** result classes must use the recorder's snapshot/retry reader contract. */
     t = crec_ct2irt_snapshot(J, cts, ctr);
     indirect_result = crec_call_indirect_struct_result(ctr_info, result_size);
-    result_box_id = indirect_result ? result_id : raw_result_id;
+    direct_aggregate_result = 0;
     if (ctype_isvoid(ctr_info)) {
       t = IRT_NIL;
       rd->nres = 0;
     } else if (indirect_result) {
       /* The hidden payload pointer is the actual ABI result channel. */
       t = IRT_NIL;
+    } else if (ctype_isstruct(ctr_info)) {
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+      t = crec_call_sysv_aggregate_type(J, cts, ctr, result_size);
+      if (t == IRT_CDATA)
+	lj_trace_err(J, LJ_TRERR_NYICALL);
+      direct_aggregate_result = 1;
+#else
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+#endif
     } else if (!(ctype_isnum(ctr_info) || ctype_isptr(ctr_info) ||
 		 ctype_isenum(ctr_info)) || t == IRT_CDATA) {
       lj_trace_err(J, LJ_TRERR_NYICALL);
     }
 
-    boxed_result = t == IRT_PTR || (LJ_64 && t == IRT_P32) ||
-	 t == IRT_I64 || t == IRT_U64 || ctype_isenum(ctr_info);
-    rooted_result = boxed_result || indirect_result;
+    result_box_id = (indirect_result || direct_aggregate_result) ?
+		    result_id : raw_result_id;
+    boxed_result = !direct_aggregate_result &&
+	(t == IRT_PTR || (LJ_64 && t == IRT_P32) ||
+	 t == IRT_I64 || t == IRT_U64 || ctype_isenum(ctr_info));
+    rooted_result = boxed_result || direct_aggregate_result || indirect_result;
     /* Dynamic booleans use a marked integer until native leave, then specialize
     ** in the caller. Reject nonstandard representations rather than guessing. */
     if (ctype_isbool(ctr_info) && t != IRT_U8 && t != IRT_U32)
@@ -2463,7 +2624,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       ** GCcdata is an interior aligned header, so payload is still cd+1. */
       result_box = emitir(IRTG(IR_CNEW, IRT_CDATA),
 			  lj_ir_kint(J, result_box_id),
-			  indirect_result &&
+			  (indirect_result || direct_aggregate_result) &&
 			    ctype_align(result_info) > CT_MEMALIGN ?
 			    lj_ir_kint(J, result_size) : TREF_NIL);
       result_payload = emitir(IRT(IR_ADD, IRT_PTR), result_box,
@@ -2501,7 +2662,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       /* The callee filled the rooted payload directly. No post-call helper or
       ** store may precede native leave. */
       tr = result_box;
-    } else if (boxed_result) {
+    } else if (boxed_result || direct_aggregate_result) {
       emitir(IRT(IR_XSTORE, t), result_payload, tr);
       tr = result_box;
       if (t == IRT_I64 || t == IRT_U64) lj_needsplit(J);

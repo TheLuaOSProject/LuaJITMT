@@ -88,6 +88,7 @@ local m7_cases = {
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
   "m7_ffi_callxs_authentic",
+  "m7_ffi_callxs_sysv_small_aggregate",
   "m7_ffi_ccall_native",
   "m7_ffi_native_frames"
 }
@@ -139,6 +140,22 @@ return function(add)
         })
       end)
       print("M7 production generic CALLXS lifecycle passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_callxs_sysv_small_aggregate",
+    description = "generic SysV x64 one-class aggregate CALLXS ABI",
+    run = function(t)
+      clean_build(t)
+      local aggregate_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-callxs-sysv-small-aggregate.so"),
+        "t-ffi-callxs-sysv-small-aggregate-lib.c")
+      run_luajit_script(t, "t-ffi-callxs-sysv-small-aggregate.lua", nil, {
+        env = { LJ_M7_FFI_CALLXS_SYSV_AGG_SO = aggregate_so },
+        timeout = "30s"
+      })
+      print("M7 generic SysV small-aggregate CALLXS ABI passed")
     end
   })
 
