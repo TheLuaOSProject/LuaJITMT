@@ -10215,7 +10215,7 @@ static int gc2_recovery_publish_scoped(global_State *g, GCobj *o,
   if (scope && scope->admission == GC2_SCOPE_HUGE_READER &&
       scope->huge.h && scope->huge.base == (void *)o &&
       lj_arena_hugetab_reader_covers(&scope->huge, o)) {
-    HugeTab held = { scope->huge.h };
+    HugeTab held = { .h = scope->huge.h };
     /* The counted entry reader is stronger than TG-list SMR for this exact
     ** mapping: transfer, delete and table-header teardown all refuse it. Use
     ** that already-paid lifetime admission directly so an unrelated registry
