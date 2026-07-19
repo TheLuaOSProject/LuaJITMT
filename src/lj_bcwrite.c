@@ -336,7 +336,8 @@ static void bcwrite_knum(BCWriteCtx *ctx, GCproto *pt)
 
 /* Write bytecode instructions. */
 #if LJ_HASJIT
-static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)
+static int bcwrite_unpatch_jitins(jit_State *J, GCproto *pt,
+				  const BCIns *pc, BCIns ins, BCIns *out)
 {
   BCOp op = bc_op(ins);
   if (op == BC_IFORL || op == BC_IITERL || op == BC_ILOOP ||
@@ -347,7 +348,19 @@ static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)
   } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
     TraceNo traceno = bc_d(ins);
     GCtrace *T;
-    lj_gc2_smr_read_enter(J2G(J));
+    BCIns shadow = proto_jit_startins_acq(pt, pc);
+    /* Every published root patch first records its immutable original beside
+    ** the prototype. Prefer that state-owned recovery copy, which remains
+    ** available while trace-body SMR is exclusively closed. */
+    if (shadow != 0) {
+      *out = shadow;
+      return 1;
+    }
+    /* Compatibility fallback for a pre-sidecar or concurrently superseded
+    ** patch is one-shot. The bounded outer resample may observe a new live
+    ** instruction; bytecode dumping never waits for the trace reclaimer. */
+    if (!lj_gc2_smr_read_try(J2G(J)))
+      return 0;
     T = traceref_safe(J, traceno);
     if (trace_runnable_acq(T, traceno)) {
       *out = trace_startins_acq(T);
@@ -365,40 +378,34 @@ static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)
 static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
 {
   MSize nbc = pt->sizebc-1;  /* Omit the [JI]FUNC* header. */
+  MSize i;
 #if LJ_HASJIT
-  uint8_t *q = (uint8_t *)p;
-#endif
-  p = lj_buf_wmem(p, proto_bc(pt)+1, nbc*(MSize)sizeof(BCIns));
+  jit_State *J = L2J(sbufL(&ctx->sb));
+#else
   UNUSED(ctx);
-#if LJ_HASJIT
-  /* Unpatch modified bytecode containing ILOOP/JLOOP etc. */
-  if ((pt->flags & PROTO_ILOOP) || proto_trace_acq(pt)) {
-    jit_State *J = L2J(sbufL(&ctx->sb));
-    MSize i;
-    for (i = 0; i < nbc; i++, q += sizeof(BCIns)) {
-      BCIns ins, out;
-      BCOp op;
-      memcpy(&ins, q, sizeof(ins));
-      op = bc_op(ins);
-      if (op == BC_IFORL || op == BC_IITERL || op == BC_ILOOP ||
-	  op == BC_JFORI || op == BC_JFORL || op == BC_JITERL ||
-	  op == BC_JLOOP) {
-	int retry;
-	if (!bcwrite_unpatch_jitins(J, ins, &out)) {
-	  for (retry = 0; retry < 8; retry++) {
-	    BCIns live = (BCIns)la_load32_acq((uint32_t *)&proto_bc(pt)[1+i]);
-	    if (bcwrite_unpatch_jitins(J, live, &out))
-	      break;
-	  }
-	  if (retry == 8)
-	    lj_err_callermsg(sbufL(&ctx->sb),
-			     "cannot dump bytecode during trace flush");
-	}
-	memcpy(q, &out, sizeof(out));
-      }
-    }
-  }
 #endif
+  /* Patch publication is atomic, but a bulk copy can tear an instruction while
+  ** a peer flushes or publishes a root trace. Capture each word independently
+  ** and serialize one complete generation after JIT-op recovery. */
+  for (i = 0; i < nbc; i++) {
+    const BCIns *pc = &proto_bc(pt)[1+i];
+    BCIns out;
+#if LJ_HASJIT
+    int retry;
+    for (retry = 0; retry < 8; retry++) {
+      BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
+      if (bcwrite_unpatch_jitins(J, pt, pc, ins, &out))
+	break;
+    }
+    if (retry == 8)
+      lj_err_callermsg(sbufL(&ctx->sb),
+		       "cannot dump bytecode during trace flush");
+#else
+    out = (BCIns)la_load32_acq((const uint32_t *)pc);
+#endif
+    memcpy(p, &out, sizeof(out));
+    p += sizeof(out);
+  }
   return p;
 }
 

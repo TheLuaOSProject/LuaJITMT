@@ -575,6 +575,34 @@ static int trace_body_refs_valid(global_State *g, GCtrace *T, SnapNo *nsnapp)
   return 1;
 }
 
+/* Validate only the immutable fields which distinguish an assembler scratch
+** allocation from a semantic trace body. Retire-list consumers use this before
+** exact destruction; they must never infer snapshot, prototype, exit-table or
+** native-code ownership from a scratch body's reserved compact storage. */
+static int trace_unpublished_scratch_valid(GCtrace *T)
+{
+  uint8_t flags;
+  if (!T || !trace_retired_unpublished_acq(T))
+    return 0;
+  flags = la_load8_acq(&T->unused1);
+  if (flags != TRACE_RETIRED_UNPUBLISHED ||
+      trace_traceno_acq(T) != 0 || trace_link_acq(T) != 0 ||
+      trace_root_acq(T) != 0 || trace_nextroot_acq(T) != 0 ||
+      trace_nextside_acq(T) != 0 || trace_startptgco_acq(T) != NULL ||
+      trace_startpc_acq(T) != NULL || trace_snap_acq(T) != NULL ||
+      trace_snapmap_acq(T) != NULL || trace_szmcode_acq(T) != 0 ||
+      trace_mcode_acq(T) != NULL || trace_exittab_acq(T) != NULL ||
+      trace_exitstub_acq(T) != NULL || trace_native_pins_acq(T) != 0 ||
+      !trace_native_pin_closed_acq(T) ||
+      la_load64_acq(&T->retire_epoch) == 0)
+    return 0;
+#ifdef LUAJIT_USE_GDBJIT
+  if (trace_gdbjit_entry_acq(T) != NULL)
+    return 0;
+#endif
+  return 1;
+}
+
 /*
 ** Insert an embedded trace body while owning the sole recorder token. GC uses
 ** the same one-shot, nonwaiting token protocol as the recorder, so reclaimer
@@ -629,6 +657,8 @@ static int trace_retired_payload_grace_active(global_State *g, GCtrace *T)
 
 static int trace_retired_needs_payload_preserve(global_State *g, GCtrace *T)
 {
+  if (trace_retired_unpublished_acq(T))
+    return 0;
   /*
   ** A public slot reservation remains an exit-restore name through its SMR grace
   ** generations. The raw body alone is not enough: snapshot restore and stale
@@ -650,7 +680,12 @@ static int trace_preservebody_raw_(global_State *g, GCtrace *T,
   } else {
     (void)lj_gc2_markmem(g, T);
   }
-  if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
+  /* An unpublished assembler copy has only an immutable compact IR payload.
+  ** It never owns snapshot, exit-table or native-code fields, and its KGC
+  ** operands cease to be semantic roots when the failed recording is aborted.
+  ** Retain the exact allocation without decoding it as a published trace. */
+  if (trace_retired_unpublished_acq(T) ||
+      LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL)))
     return 1;  /* The exact body is preserved; malformed children stay opaque. */
   {
     MCode **exittab = trace_exittab_acq(T);
@@ -671,53 +706,22 @@ static void trace_preservebody_raw(global_State *g, GCtrace *T)
   (void)trace_preservebody_raw_(g, T, 0);
 }
 
-/* Pre-claim preservation for a recorder-owned, unpublished compact body. The
-** local construction owner retains T and its exittab until the epoch/list
-** publication below, so losing an opportunistic registry admission requests a
-** root retry but is not an unclassified edge. This deliberately preserves no
-** semantic child graph; the mandatory post-claim path does that before token
-** release. */
-static int trace_preservebody_raw_publish(global_State *g, GCtrace *T)
+/* Tactical publication for a recorder-owned assembler scratch allocation.
+** The construction owner retains T until its retire-list CAS, and list
+** membership owns it afterwards. A failed one-shot admission requests a root
+** retry without reading T; no semantic child graph exists for this body kind. */
+static int trace_preserve_unpublished_publish(global_State *g, GCtrace *T)
 {
   if (!g || !T)
     return 0;
-  /* Identity ownership alone does not authorize any body/header read while a
-  ** huge-table/arena registry writer is active. Keep one outer admission over
-  ** validation and exittab discovery; the nested publication markers are then
-  ** reentrant. On loss, use the public helper solely to publish phase retry
-  ** work for T and return without dereferencing either allocation. */
-  if (!lj_gc2_smr_read_try(g)) {
-    (void)lj_gc2_markmem_registered_publish_try(g, T);
-    return 0;
-  }
-  (void)lj_gc2_markmem_registered_publish_try(g, T);
-  if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, NULL))) {
-    lj_gc2_smr_read_leave(g);
-    return 1;  /* Exact local body ownership remains authoritative. */
-  }
-  {
-    MCode **exittab = trace_exittab_acq(T);
-    if (exittab && !trace_exittab_ismcode(T))
-      (void)lj_gc2_markmem_registered_publish_try(g, exittab);
-  }
-  lj_gc2_smr_read_leave(g);
-  return 1;
+  return lj_gc2_markmem_registered_publish_try(g, T);
 }
-
-#ifdef LJ_TRACE_TEST_HELPERS
-int lj_trace_test_preserve_unpublished_publish(global_State *g, GCtrace *T)
-{
-  if (!g || !T || trace_traceno_acq(T) != 0 ||
-      trace_nextroot_acq(T) != 0 || la_load64_acq(&T->retire_epoch) != 0 ||
-      trace_retired_link_listed_acq(T))
-    return 0;
-  return trace_preservebody_raw_publish(g, T);
-}
-#endif
 
 static void trace_preserve_retired_body(global_State *g, GCtrace *T)
 {
-  if (trace_retired_needs_payload_preserve(g, T))
+  if (trace_retired_unpublished_acq(T))
+    trace_preservebody_raw(g, T);
+  else if (trace_retired_needs_payload_preserve(g, T))
     trace_preservebody(g, T);
   else
     trace_preservebody_raw(g, T);
@@ -806,15 +810,17 @@ static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
   /* Preserve in GC2 before the unique entry gate; a root-prune caller can then
   ** unlink only after this helper returns without opening an unpreserved gap.
   ** Only the recorder's exact unpublished construction may use the tactical
-  ** raw marker. Once the epoch is claimed, the ordinary preserved-list path
-  ** below performs the mandatory semantic graph preservation before release. */
+  ** raw marker. It is an explicitly nonsemantic retire-list kind. */
   if (unpublished) {
     lj_assertG(trace_traceno_acq(T) == 0 && trace_nextroot_acq(T) == 0 &&
 	       la_load64_acq(&T->retire_epoch) == 0 &&
 	       !trace_retired_link_listed_acq(T),
 	       "invalid unpublished trace pre-claim publication");
-    (void)trace_preservebody_raw_publish(g, T);
+    trace_retired_unpublished_set_rel(T);
+    (void)trace_preserve_unpublished_publish(g, T);
   } else {
+    lj_assertG(!trace_retired_unpublished_acq(T),
+	       "published trace carries unpublished retire kind");
     trace_preserve_retired_publish(g, T);
   }
   (void)la_cas64(&T->retire_epoch, &expect, stamp, LA_ACQ_REL, LA_ACQ);
@@ -953,7 +959,12 @@ static void trace_retire_unpublished(global_State *g, GCtrace *T)
   lj_assertJ(lj_jit_token_held(J),
 	     "unpublished trace retire-list publication without recorder token");
   trace_retire_claim_at_epoch(g, T, lj_gc2_retire_epoch(g), 1);
-  trace_retired_push_preserved(J, T);
+  /* The token/local-construction owner covers the pre-CAS side; the tagged
+  ** retire-list node is the exact lifetime descriptor afterwards. The second
+  ** tactical mark closes a root snapshot between the first mark and list CAS.
+  ** Both operations are one-shot and neither decodes semantic trace fields. */
+  trace_retired_publish_token(J, T);
+  (void)trace_preserve_unpublished_publish(g, T);
 }
 
 static void trace_retire(global_State *g, GCtrace *T)
@@ -1027,6 +1038,18 @@ static int trace_freebody_(global_State *g, GCtrace *T, int reclaim_held,
   SnapNo nsnap;
   LJGCDestructCtx dctx;
   int acquired;
+  int unpublished = trace_retired_unpublished_acq(T);
+  if (LJ_UNLIKELY(unpublished &&
+		  !trace_unpublished_scratch_valid(T))) {
+    /* The immutable kind bit is exact destruction authority only together with
+    ** the scratch shape. Runtime reclaim retries fail-closed; terminal close
+    ** cannot safely guess which side allocation a corrupt body might own. */
+    if (terminal) {
+      lj_assertG(0, "invalid unpublished trace scratch at VM close");
+      abort();
+    }
+    return 0;
+  }
   if (LJ_UNLIKELY(trace_native_pins_acq(T) != 0)) {
     /* Runtime retirement leaves the exact body list-owned and retries. VM close
     ** has no later retry point: an outstanding native frame is a violated
@@ -1060,7 +1083,8 @@ static int trace_freebody_(global_State *g, GCtrace *T, int reclaim_held,
   lj_assertG(trace_gdbjit_entry_acq(T) == NULL,
 	     "trace freed with live GDB JIT descriptor");
 #endif
-  trace_exittab_free(g, T, nsnap);
+  if (!unpublished)
+    trace_exittab_free(g, T, nsnap);
   /* This release is the exact physical-destructor completion signal consumed
   ** by bounded arena quarantine. The trace retire list is the sole owner of
   ** payload/exittab destruction; a quarantined arena retains the allocation
@@ -1713,6 +1737,22 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
 	rt = next;
 	continue;
       }
+      if (trace_retired_unpublished_acq(rt)) {
+	/* Scratch bodies never had a trace slot, prototype/root-spine edge,
+	** debugger registration or executable mcode publication. The completed
+	** epoch plus this exclusive owner is sufficient for exact destruction;
+	** running public-trace unlink logic would manufacture semantic meaning
+	** from deliberately NULL compact fields. */
+	if (!trace_freebody_(g, rt, 1, 0)) {
+	  retry_same_epoch = 1;
+	  trace_retired_push_preserved_reclaim(J, rt);
+	  rt = next;
+	  continue;
+	}
+	reclaimed++;
+	rt = next;
+	continue;
+      }
       if (trace_has_runnable_inbound_link(J, rt)) {
 	retry_same_epoch = 1;
 	trace_retired_push_preserved_reclaim(J, rt);
@@ -1804,6 +1844,11 @@ static int trace_mcode_area_refs(global_State *g, GCtrace *T, uintptr_t rxlo,
   MCode **exittab;
   SnapNo i, nsnap;
   if (!T)
+    return 0;
+  /* Partial assembler output is never committed, linked or registered with a
+  ** debugger. Its active mcode area has independent list ownership, so the
+  ** raw scratch retire node contributes no executable-area reference. */
+  if (trace_retired_unpublished_acq(T))
     return 0;
   if (LJ_UNLIKELY(!trace_body_refs_valid(g, T, &nsnap)))
     return 1;  /* Keep mcode if a stale retired body cannot be decoded safely. */
@@ -1898,7 +1943,8 @@ void lj_trace_freeretired(global_State *g)
     ** vector. Do not route close-time body draining through the runtime slot
     ** release helper: there is no slot left to clear and no token-free write to
     ** J->freetrace is permitted. */
-    lj_gdbjit_deltrace_close(g, rt);
+    if (!trace_retired_unpublished_acq(rt))
+      lj_gdbjit_deltrace_close(g, rt);
     freed = trace_freebody_(g, rt, 0, 1);
     lj_assertG(freed, "invalid retired trace body at VM close");
     UNUSED(freed);
@@ -2105,14 +2151,21 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   GCtrace *T2 = (GCtrace *)lj_mem_newgco_raw(
     L, (MSize)sz, LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
   char *p = (char *)T2 + sztr;
+  setgcrefnull(T2->nextgc);
   T2->gct = ~LJ_TTRACE;
   lj_obj_setgcflags(obj2gco(T2), 0);
+#if LJ_GC64
+  T2->unused_gc64 = 0;
+#endif
+  setgcrefnull(T2->gclist);
   T2->traceno = 0;
   T2->ir = (IRIns *)p - T->nk;
   T2->nins = T->nins;
   T2->nk = T->nk;
   T2->nsnap = T->nsnap;
   T2->nsnapmap = T->nsnapmap;
+  T2->snap = NULL;
+  T2->snapmap = NULL;
   trace_startpt_clear(T2);
   setmref(T2->startpc, NULL);
   T2->startins = 0;
@@ -2120,6 +2173,9 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->mcode = NULL;
   T2->exittab = NULL;
   T2->exitstub = NULL;
+#if LJ_ABI_PAUTH
+  T2->mcauth = NULL;
+#endif
   T2->mcloop = 0;
   T2->nchild = 0;
   T2->spadjust = 0;
@@ -2134,6 +2190,9 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->native_pins = 0;
   T2->retire_epoch = 0;
   trace_retired_link_unlinked_rel(T2);
+#ifdef LUAJIT_USE_GDBJIT
+  T2->gdbjit_entry = NULL;
+#endif
   memcpy(p, T->ir + T->nk, szins);
   return T2;
 }
@@ -2821,6 +2880,8 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
     for (T = trace_retired_head_acq(J);
 	 T != NULL && lj_gc2_mem_registered(g, T);
 	 T = trace_retired_next_acq(T)) {
+      if (trace_retired_unpublished_acq(T))
+	continue;
       startins = trace_stale_startins_match_valid(g, T, pc, owner);
       if (startins != 0)
 	break;
@@ -3240,6 +3301,11 @@ static void trace_terminal_pin_preflight(global_State *g)
       lj_assertG(0, "invalid retired trace during terminal pin preflight");
       abort();
     }
+    if (trace_retired_unpublished_acq(T) &&
+	LJ_UNLIKELY(!trace_unpublished_scratch_valid(T))) {
+      lj_assertG(0, "invalid unpublished trace during terminal preflight");
+      abort();
+    }
     if (trace_native_pins_acq(T) != 0) {
       lj_assertG(0, "retired trace retains native execution pin at VM close");
       abort();
@@ -3441,8 +3507,16 @@ static int trace_root_itern_tuple(GCproto *pt, const BCIns *pc,
   return 1;
 }
 
-/* Start tracing. */
-static void trace_start(jit_State *J)
+typedef enum TraceStartResult {
+  TRACE_START_RESULT_ACTIVE = 0,
+  TRACE_START_RESULT_IDLE,
+  TRACE_START_RESULT_FLUSH_ALL
+} TraceStartResult;
+
+/* Start tracing. Terminal work is returned to trace_state(), which first
+** publishes IDLE and releases the recorder token before dispatch repair or a
+** full flush. */
+static TraceStartResult trace_start(jit_State *J)
 {
   TraceNo traceno;
   uint32_t gc2phase = gc2_phase_acq(J2G(J));
@@ -3460,15 +3534,11 @@ static void trace_start(jit_State *J)
   if (J->parent == 0) {
     root_startins =
       (BCIns)la_load32_acq((const uint32_t *)J->pc);
-    if (!trace_root_startins_valid(root_startins, J->exitno)) {
-      lj_trace_state_store(J, LJ_TRACE_IDLE);
-      return;
-    }
+    if (!trace_root_startins_valid(root_startins, J->exitno))
+      return TRACE_START_RESULT_IDLE;
     if (bc_op(root_startins) == BC_ITERN &&
-	!trace_root_itern_tuple(J->pt, J->pc, root_startins, &root_iterl)) {
-      lj_trace_state_store(J, LJ_TRACE_IDLE);
-      return;
-    }
+	!trace_root_itern_tuple(J->pt, J->pc, root_startins, &root_iterl))
+      return TRACE_START_RESULT_IDLE;
   }
 
   /* Cooperative MARK admits recording only after activation installed black
@@ -3491,8 +3561,7 @@ static void trace_start(jit_State *J)
     ** to publish anything until the phase is safe. */
     if (J->parent == 0 && J->pc != NULL)
       hotcount_setg(J2G(J), J->pc+1, 16);
-    lj_trace_state_store(J, LJ_TRACE_IDLE);
-    return;
+    return TRACE_START_RESULT_IDLE;
   }
   trace_mark_active_startpt(J);
   if ((J->pt->flags & PROTO_NOJIT)) {  /* JIT disabled for this proto? */
@@ -3508,8 +3577,7 @@ static void trace_start(jit_State *J)
 	  J->pt->flags |= PROTO_ILOOP;
       }
     }
-    lj_trace_state_store(J, LJ_TRACE_IDLE);  /* Silently ignored. */
-    return;
+    return TRACE_START_RESULT_IDLE;  /* Silently ignored. */
   }
 
   /* Get a new trace number. */
@@ -3517,9 +3585,7 @@ static void trace_start(jit_State *J)
   if (LJ_UNLIKELY(traceno == 0)) {  /* No free trace? */
     lj_assertJ((hookmask_load(J2G(J)) & HOOK_GC) == 0,
 	       "recorder called from GC hook");
-    (void)lj_trace_flushall_hs(J->L);
-    lj_trace_state_store(J, LJ_TRACE_IDLE);  /* Silently ignored. */
-    return;
+    return TRACE_START_RESULT_FLUSH_ALL;  /* Silently ignored. */
   }
   traceslot_pending(J, traceno);
 
@@ -3569,6 +3635,7 @@ static void trace_start(jit_State *J)
     J->exitno = exitno;
   );
   lj_record_setup(J, root_iterl);
+  return TRACE_START_RESULT_ACTIVE;
 }
 
 /* Stop tracing. */
@@ -3753,7 +3820,7 @@ static int trace_stop(jit_State *J)
 }
 
 /* Start a new root trace for down-recursion. */
-static int trace_downrec(jit_State *J)
+static TraceStartResult trace_downrec(jit_State *J)
 {
   BCIns ins;
   /* Restart recording at the return instruction. */
@@ -3761,17 +3828,23 @@ static int trace_downrec(jit_State *J)
   ins = (BCIns)la_load32_acq((const uint32_t *)J->pc);
   lj_assertJ(bc_isret(bc_op(ins)), "not at a return bytecode");
   if (bc_op(ins) == BC_RETM)
-    return 0;  /* NYI: down-recursion with RETM. */
+    return TRACE_START_RESULT_IDLE;  /* NYI: down-recursion with RETM. */
   J->parent = 0;
   J->exitno = 0;
   if (lj_trace_state_aborted(lj_trace_state_store_active(J, LJ_TRACE_RECORD)))
-    return 0;
-  trace_start(J);
-  return 1;
+    return TRACE_START_RESULT_IDLE;
+  return trace_start(J);
 }
 
-/* Abort tracing. */
-static int trace_abort(jit_State *J)
+typedef enum TraceAbortResult {
+  TRACE_ABORT_DONE = 0,
+  TRACE_ABORT_RETRY,
+  TRACE_ABORT_FLUSH_ALL
+} TraceAbortResult;
+
+/* Abort tracing. Return any work which must run only after terminal recorder
+** state has been published and the JIT token has been released. */
+static TraceAbortResult trace_abort(jit_State *J)
 {
   lua_State *L = J->L;
   TraceError e = LJ_TRERR_RECERR;
@@ -3781,37 +3854,49 @@ static int trace_abort(jit_State *J)
   J->root_startins_pending = 0;
   lj_mcode_abort(J);
   if (J->curfinal) {
-    lj_trace_free_unpublished(J2G(J), J->curfinal);
+    GCtrace *scratch = J->curfinal;
+    /* Close the token-private observation before publishing the raw retire
+    ** descriptor. A pre-clear observer is covered by the retirement epoch. */
     J->curfinal = NULL;
+    lj_trace_free_unpublished(J2G(J), scratch);
   }
   if (tvisnumber(L->top-1))
     e = (TraceError)numberVint(L->top-1);
   /* MCODELM retries rebuild per-trace exit stubs in a fresh mcode area. */
   trace_exittab_free(J2G(J), &J->cur, J->cur.nsnap);
   if (e == LJ_TRERR_MCODELM) {
-    L->top--;  /* Remove error object */
-    if (lj_trace_state_aborted(lj_trace_state_store_active(J, LJ_TRACE_ASM)))
-      return 0;
-    return 1;  /* Retry ASM with new MCode area. */
+    if (!lj_trace_state_aborted(
+	  lj_trace_state_store_active(J, LJ_TRACE_ASM))) {
+      L->top--;  /* Remove error object. */
+      return TRACE_ABORT_RETRY;  /* Retry ASM with new MCode area. */
+    }
+    /* An asynchronous abort won before the restart. Continue through ordinary
+    ** slot/error cleanup; publishing IDLE here would leak J->cur's reservation. */
+    e = LJ_TRERR_RECERR;
+    setintV(L->top-1, (int32_t)e);
   }
   /* Penalize or blacklist starting bytecode instruction. */
   if (J->parent == 0 && !bc_isret(bc_op(J->cur.startins))) {
     if (J->exitno == 0) {
       BCIns *startpc = mref(J->cur.startpc, BCIns);
-      if (e == LJ_TRERR_RETRY)
+      if (e == LJ_TRERR_RETRY || e == LJ_TRERR_SMRRETRY)
 	hotcount_setg(J2G(J), startpc+1, 1);  /* Immediate retry. */
       else
 	penalty_pc(J, trace_startpt_acq(&J->cur), startpc, e);
     } else {
       TraceNo selflink = (TraceNo)J->exitno;
       GCtrace *T;
-      lj_gc2_smr_read_enter(J2G(J));
-      T = traceref_safe(J, selflink);
-      if (T && trace_traceno_acq(T) == selflink) {
-	trace_test_note_abort_selflink(selflink);
-	trace_link_rel(T, selflink);  /* Self-link is blacklisted. */
+      /* Blacklisting is a retry-suppression optimization. Error cleanup still
+      ** owns the recorder token, so it must not wait behind an exclusive body
+      ** reclaimer which may need that token to finish. */
+      if (lj_gc2_smr_read_try(J2G(J))) {
+	T = traceref_safe(J, selflink);
+	if (T && trace_traceno_acq(T) == selflink) {
+	  trace_test_note_abort_selflink(selflink);
+	  trace_link_rel(T, selflink);  /* Self-link is blacklisted. */
+	}
+	lj_gc2_smr_read_leave(J2G(J));
       }
-      lj_gc2_smr_read_leave(J2G(J));
     }
   }
 
@@ -3820,32 +3905,39 @@ static int trace_abort(jit_State *J)
   if (traceno) {
     J->cur.link = 0;
     J->cur.linktype = LJ_TRLINK_NONE;
-    lj_vmevent_send_l(L, TRACE,
-      cTValue *bot = tvref(L->stack)+LJ_FR2;
-      cTValue *frame;
-      const BCIns *pc;
-      BCPos pos = 0;
-      setstrV(V, V->top++, lj_str_newlit(V, "abort"));
-      setintV(V->top++, traceno);
-      /* Find original Lua function call to generate a better error message. */
-      for (frame = L->base-1, pc = J->pc; ; frame = frame_prev(frame)) {
-	if (isluafunc(frame_func(frame))) {
-	  pos = proto_bcpos(funcproto(frame_func(frame)), pc);
-	  break;
-	} else if (frame_prev(frame) <= bot) {
-	  break;
-	} else if (frame_iscont(frame)) {
-	  pc = frame_contpc(frame) - 1;
-	} else {
-	  pc = frame_pc(frame) - 1;
+    /* SMRRETRY is the exact fail-closed transition raised when trace-body SMR
+    ** is already exclusively closed. The abort event is observational and
+    ** arbitrary handler code can enter another reader while this callback
+    ** still owns the recorder token, so only this collision path suppresses
+    ** instrumentation. Ordinary RETRY remains API-visible. */
+    if (e != LJ_TRERR_SMRRETRY) {
+      lj_vmevent_send_l(L, TRACE,
+	cTValue *bot = tvref(L->stack)+LJ_FR2;
+	cTValue *frame;
+	const BCIns *pc;
+	BCPos pos = 0;
+	setstrV(V, V->top++, lj_str_newlit(V, "abort"));
+	setintV(V->top++, traceno);
+	/* Find original Lua function call to generate a better error message. */
+	for (frame = L->base-1, pc = J->pc; ; frame = frame_prev(frame)) {
+	  if (isluafunc(frame_func(frame))) {
+	    pos = proto_bcpos(funcproto(frame_func(frame)), pc);
+	    break;
+	  } else if (frame_prev(frame) <= bot) {
+	    break;
+	  } else if (frame_iscont(frame)) {
+	    pc = frame_contpc(frame) - 1;
+	  } else {
+	    pc = frame_pc(frame) - 1;
+	  }
 	}
-      }
-      setfuncV(V, V->top++, frame_func(frame));
-      setintV(V->top++, pos);
-      copyTV(V, V->top++, restorestack(L, vmevtop)-1);
-      copyTV(V, V->top++, &J->errinfo);
-    );
-    /* Drop aborted trace after the vmevent (which may still access it). */
+	setfuncV(V, V->top++, frame_func(frame));
+	setintV(V->top++, pos);
+	copyTV(V, V->top++, restorestack(L, vmevtop)-1);
+	copyTV(V, V->top++, &J->errinfo);
+      );
+    }
+    /* Drop aborted trace after the optional vmevent (which may still access it). */
     traceslot_clear(J, traceno);
     if (traceno < J->freetrace)
       J->freetrace = traceno;
@@ -3853,15 +3945,22 @@ static int trace_abort(jit_State *J)
   }
   L->top--;  /* Remove error object */
   if (e == LJ_TRERR_DOWNREC) {
-    return trace_downrec(J);
+    TraceStartResult start_result = trace_downrec(J);
+    if (start_result == TRACE_START_RESULT_FLUSH_ALL)
+      return TRACE_ABORT_FLUSH_ALL;
+    if (start_result == TRACE_START_RESULT_ACTIVE &&
+	lj_trace_state_load(J) != LJ_TRACE_IDLE)
+      return TRACE_ABORT_RETRY;
+    return TRACE_ABORT_DONE;
   } else if (e == LJ_TRERR_MCODEAL) {
     if (!J->mcarea) {  /* Disable JIT compiler if first mcode alloc fails. */
       jit_flags_setmask(J, JIT_F_ON, 0);
-      lj_dispatch_update(J2G(J), 0);
     }
-    (void)lj_trace_flushall_hs(L);
+    /* Full flush may cross a safepoint boundary and reacquire the recorder
+    ** token. Defer it to trace_state() after terminal token release. */
+    return TRACE_ABORT_FLUSH_ALL;
   }
-  return 0;
+  return TRACE_ABORT_DONE;
 }
 
 /* Perform pending re-patch of a bytecode instruction. */
@@ -3875,16 +3974,21 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 	  op == BC_JFUNCF) {
 	TraceNo traceno = bc_d(patchins);
 	GCtrace *T;
-	lj_gc2_smr_read_enter(J2G(J));
-	T = traceref_safe(J, traceno);
-	if (trace_runnable_acq(T, traceno)) {
-	  BCIns expected = trace_startins_acq(T);
-	  /* A failed ISNEXT may have terminally despecialized ITERN while the
-	  ** recorder used a temporary original instruction. Never resurrect the
-	  ** saved JLOOP over that newer ITERC generation. */
-	  (void)bc_publish_cas(J->patchpc, (uint32_t *)&expected, patchins);
+	/* Re-patching is optional for correctness: on contention, retaining the
+	** immutable original bytecode merely leaves this trace detached from its
+	** root entry. Never loop on SMR here—the synchronous recorder-error path
+	** still owns the JIT token and a peer reclaimer may be waiting for it. */
+	if (lj_gc2_smr_read_try(J2G(J))) {
+	  T = traceref_safe(J, traceno);
+	  if (trace_runnable_acq(T, traceno)) {
+	    BCIns expected = trace_startins_acq(T);
+	    /* A failed ISNEXT may have terminally despecialized ITERN while the
+	    ** recorder used a temporary original instruction. Never resurrect the
+	    ** saved JLOOP over that newer ITERC generation. */
+	    (void)bc_publish_cas(J->patchpc, (uint32_t *)&expected, patchins);
+	  }
+	  lj_gc2_smr_read_leave(J2G(J));
 	}
-	lj_gc2_smr_read_leave(J2G(J));
       } else {
 	bc_publish(J->patchpc, patchins);
       }
@@ -3893,6 +3997,19 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
       J->bcskip = 0;
     }
   }
+}
+
+/* Publish terminal recorder state before any operation which may itself need
+** the JIT token or enter a safepoint/dispatch refresh. The release helper also
+** clears jit_owner_l while IDLE, so ordinary dispatch rebuilding cannot expose
+** a stale detachable owner. */
+static void trace_terminal_release(lua_State *L, jit_State *J)
+{
+  global_State *g = J2G(J);
+  setvmstate(g, INTERP);
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  lj_jit_token_release_l(L, J);
+  lj_dispatch_update(g, 0);
 }
 
 /* State machine for the trace compiler. Protected callback. */
@@ -3904,15 +4021,24 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
   retry:
     switch ((uint32_t)lj_trace_state_load(J)) {
     case LJ_TRACE_START:
-      if (lj_trace_state_aborted(
-	    lj_trace_state_store_active(J, LJ_TRACE_RECORD)))
-	goto retry;  /* trace_start() may change state. */
-      trace_start(J);
-      lj_dispatch_update(J2G(J), 0);
-      if (lj_trace_state_aborted(lj_trace_state_load(J)))
-	goto retry;
-      if (lj_trace_state_load(J) != LJ_TRACE_RECORD_1ST)
-	break;
+      {
+	TraceStartResult start_result;
+	if (lj_trace_state_aborted(
+	      lj_trace_state_store_active(J, LJ_TRACE_RECORD)))
+	  goto retry;
+	start_result = trace_start(J);
+	if (start_result != TRACE_START_RESULT_ACTIVE) {
+	  trace_terminal_release(J->L, J);
+	  if (start_result == TRACE_START_RESULT_FLUSH_ALL)
+	    (void)lj_trace_flushall_hs(L);
+	  return NULL;
+	}
+	lj_dispatch_update(J2G(J), 0);
+	if (lj_trace_state_aborted(lj_trace_state_load(J)))
+	  goto retry;
+	if (lj_trace_state_load(J) != LJ_TRACE_RECORD_1ST)
+	  break;
+      }
       /* fallthrough */
 
     case LJ_TRACE_RECORD_1ST:
@@ -3976,10 +4102,7 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
         if (lj_trace_state_aborted(lj_trace_state_load(J)))
 	  goto retry;
         gc_pressure = trace_stop(J);
-        setvmstate(J2G(J), INTERP);
-        lj_trace_state_store(J, LJ_TRACE_IDLE);
-        lj_dispatch_update(J2G(J), 0);
-        lj_jit_token_release_l(J->L, J);
+        trace_terminal_release(J->L, J);
         if (gc_pressure)
 	  (void)lj_gc2_request_cycle_pressure(G(L), L2TG(L));
         if (gc2_phase_acq(G(L)) != LJ_GC2_IDLE || lj_gc_should_step(G(L)))
@@ -3993,14 +4116,17 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
     /* lj_err_throw() clears ACTIVE for synchronous recorder errors, too. */
     case (LJ_TRACE_ERR & ~LJ_TRACE_ACTIVE):
     case LJ_TRACE_ERR:
+      {
+      TraceAbortResult abort_result;
       trace_pendpatch(J, 1);
-      if (trace_abort(J))
+      abort_result = trace_abort(J);
+      if (abort_result == TRACE_ABORT_RETRY)
 	goto retry;
-      setvmstate(J2G(J), INTERP);
-      lj_trace_state_store(J, LJ_TRACE_IDLE);
-      lj_dispatch_update(J2G(J), 0);
-      lj_jit_token_release_l(J->L, J);
+      trace_terminal_release(J->L, J);
+      if (abort_result == TRACE_ABORT_FLUSH_ALL)
+	(void)lj_trace_flushall_hs(L);
       return NULL;
+      }
     }
   } while (lj_trace_state_load(J) > LJ_TRACE_RECORD);
   if (lj_trace_state_aborted(lj_trace_state_load(J)))
@@ -4030,8 +4156,11 @@ void lj_trace_abort_owner(lua_State *L)
   J->postproc = LJ_POST_NONE;
   lj_mcode_abort(J);
   if (J->curfinal) {
-    lj_trace_free_unpublished(g, J->curfinal);
+    GCtrace *scratch = J->curfinal;
+    /* Detach teardown may release the recorder token immediately below. Make
+    ** the raw retire node, not J->curfinal, the sole lifetime descriptor. */
     J->curfinal = NULL;
+    lj_trace_free_unpublished(g, scratch);
   }
   trace_exittab_free(g, &J->cur, J->cur.nsnap);
   traceno = J->cur.traceno;
@@ -4059,10 +4188,7 @@ void lj_trace_abort_owner(lua_State *L)
   ** recorded frame, so penalty, down-recursion and TRACE-abort event paths must
   ** not inspect J->pc or walk L's now-different frame chain.
   */
-  setvmstate(g, INTERP);
-  lj_trace_state_store(J, LJ_TRACE_IDLE);
-  lj_dispatch_update(g, 0);
-  lj_jit_token_release_l(L, J);
+  trace_terminal_release(L, J);
 }
 
 /* Retire an interrupted recorder before its owner parks outside the recorder
@@ -4130,7 +4256,8 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   /* Reset hotcount. */
   hotcount_setg(J2G(J), pc, jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
-  if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
+  if ((jit_flags_acq(J) & JIT_F_ON) &&
+      lj_trace_state_load(J) == LJ_TRACE_IDLE &&
       !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_token_try_l(L, J)) {
     jit_owner_l_rel(J, L);
@@ -4159,7 +4286,10 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   SnapShot *snap;
   uint32_t hotexit = (uint32_t)jit_param_acq(J, JIT_P_hotexit);
   uint8_t count;
-  lj_gc2_smr_read_enter(g);
+  /* Side recording is speculative. If an exclusive trace reclaimer won the
+  ** body gate, stay in the interpreter instead of waiting at a hot exit. */
+  if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g)))
+    return;
   parentT = traceref_safe(J, parent);
   if (!trace_runnable_acq(parentT, parent) || exitno >= trace_nsnap_acq(parentT))
     goto out;
@@ -4499,7 +4629,10 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
       TraceNo targetno = bc_d(exitins);
       GCtrace *target;
       BCIns startins;
-      lj_gc2_smr_read_enter(g);
+      /* This is only a stale-patch optimization after snapshot restoration.
+      ** A closed trace-body gate means redispatch, not a peer-dependent wait. */
+      if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g)))
+	return 0;
       target = traceref_safe(J, targetno);
       if (!trace_runnable_acq(target, targetno) ||
 	  trace_startpc_acq(target) != pc) {

@@ -391,35 +391,39 @@ static void test_unpublished_preclaim_smr_collision(lua_State *L, GCproto *pt)
   global_State *g = G(L);
   jit_State *J = G2J(g);
   GCtrace tmpl, *T, *cancelT;
-  static IRIns dummyir[REF_TRUE+1];
-  MCode **exittab;
+  static IRIns dummyir[REF_BASE+1];
   GCArena *a;
   uint32_t cell;
   GCSize cancel_size;
+  uint64_t epoch;
   LJGC2ActivationSnap before, after;
 
+  memset(dummyir, 0, sizeof(dummyir));
   memset(&tmpl, 0, sizeof(tmpl));
-  tmpl.nk = REF_BASE;
+  tmpl.nk = REF_BASE - (LJ_GC64 ? 2 : 1);
   tmpl.nins = REF_BASE;
   tmpl.nsnap = 1;
   tmpl.ir = dummyir;
+  /* A failed assembler copy can contain KGC operands, but those operands are
+  ** still rooted by J->cur until the recording aborts. The retired scratch is
+  ** an exact-allocation lifetime descriptor, not a semantic trace graph. */
+  ir_kgc_publish(&dummyir[tmpl.nk], obj2gco(pt), IRT_PROTO);
   T = lj_trace_alloc(L, &tmpl);
-  test_trace_complete_payload_layout(T);
   test_trace_publish_header(g, T);
-  setgcref(T->startpt, obj2gco(pt));
-  exittab = lj_mem_newvec(L, 1, MCode *);
-  exittab[0] = NULL;
-  T->exittab = exittab;
   assert(trace_traceno_acq(T) == 0);
   assert(trace_nextroot_acq(T) == 0);
+  assert(trace_startptgco_acq(T) == NULL);
+  assert(trace_startpc_acq(T) == NULL);
+  assert(trace_snap_acq(T) == NULL);
+  assert(trace_snapmap_acq(T) == NULL);
+  assert(trace_mcode_acq(T) == NULL);
+  assert(trace_exittab_acq(T) == NULL);
   assert(la_load64_acq(&T->retire_epoch) == 0);
   assert(!trace_retired_link_listed_acq(T));
 
-  /* Keep the semantic-retirement body in its original constructor state.
-  ** This second compact trace exercises cancellation and is freed directly
-  ** after the writer releases, so abandon remains strictly one-shot. */
+  /* This second compact trace isolates constructor cancellation and is freed
+  ** directly after the writer releases, so abandon remains strictly one-shot. */
   cancelT = lj_trace_alloc(L, &tmpl);
-  test_trace_complete_payload_layout(cancelT);
   test_trace_publish_header(g, cancelT);
   cancel_size = test_trace_allocation_size(cancelT);
 
@@ -429,19 +433,7 @@ static void test_unpublished_preclaim_smr_collision(lua_State *L, GCproto *pt)
   assert(gc2_smr_reclaiming_acq(g) != 0);
   assert(gc2_smr_readers_acq(g) == 0);
   test_gc2_unmark_mem(T);
-  test_gc2_unmark_mem(exittab);
   test_gc2_unmark_small(obj2gco(pt));
-  before = lj_gc2_activation_snapshot(&g->gc2.activation);
-  assert(!lj_trace_test_preserve_unpublished_publish(g, T));
-  after = lj_gc2_activation_snapshot(&g->gc2.activation);
-  assert(lj_gc2_activation_equal(&before, &after));
-  assert(gc2_smr_reclaiming_acq(g) != 0);
-  assert(gc2_smr_readers_acq(g) == 0);
-  assert(!lj_arena_bm_get(lj_arena_of(T)->mark, lj_arena_cellof(T)));
-  assert(!lj_arena_bm_get(lj_arena_of(exittab)->mark,
-			  lj_arena_cellof(exittab)));
-  assert(!lj_arena_bm_get(lj_arena_of(pt)->mark, lj_arena_cellof(pt)));
-  assert(!lj_gc2_activation_reclaim_veto(g));
   a = lj_arena_of(cancelT);
   cell = lj_arena_cellof(cancelT);
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_LINKING);
@@ -454,34 +446,44 @@ static void test_unpublished_preclaim_smr_collision(lua_State *L, GCproto *pt)
   assert(lj_gc2_activation_equal(&before, &after));
   assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
   assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_LIVE);
+
+  /* Exercise the real runtime retirement while this thread owns the closed
+  ** metadata writer and the recorder token. Both tactical raw marks must lose
+  ** admission without waiting, semantic KGC traversal, or activation changes. */
+  before = lj_gc2_activation_snapshot(&g->gc2.activation);
+  lj_trace_free_unpublished(g, T);
+  after = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(lj_gc2_activation_equal(&before, &after));
+  assert(gc2_smr_reclaiming_acq(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(!lj_arena_bm_get(lj_arena_of(T)->mark, lj_arena_cellof(T)));
+  assert(!lj_arena_bm_get(lj_arena_of(pt)->mark, lj_arena_cellof(pt)));
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  assert(retired_find(J, T) == T);
+  assert(trace_retired_unpublished_acq(T));
+  assert(la_load8_acq(&T->unused1) == TRACE_RETIRED_UNPUBLISHED);
+  assert(la_load64_acq(&T->retire_epoch) != 0);
+  assert(trace_retired_link_listed_acq(T));
+  assert(trace_startptgco_acq(T) == NULL);
+  assert(trace_startpc_acq(T) == NULL);
+  assert(trace_snap_acq(T) == NULL);
+  assert(trace_snapmap_acq(T) == NULL);
+  assert(trace_mcode_acq(T) == NULL);
+  assert(trace_exittab_acq(T) == NULL);
+  assert(trace_native_pin_closed_acq(T));
+  assert(trace_native_pins_acq(T) == 0);
+  epoch = la_load64_acq(&T->retire_epoch) - 1u;
+
   lj_gc2_test_idle_reclaim_leave(g);
+  lj_jit_token_release(J);
   lj_mem_free(g, cancelT, cancel_size);
 
-  /* The exact runtime path retries its tactical pre-claim mark, claims the
-  ** epoch, and then performs mandatory full preservation before token release. */
-  lj_gc2_mark_begin(g);
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
-  /* pt is still a Lua-stack root, so remove any mark a start/root handshake
-  ** may have published. The only operation between this check and the later
-  ** assertion is the unpublished trace's mandatory post-claim traversal. */
-  test_gc2_unmark_mem(T);
-  test_gc2_unmark_mem(exittab);
-  test_gc2_unmark_small(obj2gco(pt));
-  assert(!lj_arena_bm_get(lj_arena_of(T)->mark, lj_arena_cellof(T)));
-  assert(!lj_arena_bm_get(lj_arena_of(exittab)->mark,
-			  lj_arena_cellof(exittab)));
-  assert(!lj_arena_bm_get(lj_arena_of(pt)->mark, lj_arena_cellof(pt)));
-  lj_trace_free_unpublished(g, T);
-  lj_jit_token_release(J);
+  J->trace_reclaim_epoch = 0;
+  (void)reclaim_trace_at(g, epoch);
   assert(retired_find(J, T) == T);
-  assert(lj_gc2_ismarked(g, obj2gco(T)) > 0);
-  assert(lj_gc2_ismarkedmem(g, exittab) == 1);
-  assert(lj_gc2_ismarked(g, obj2gco(pt)) > 0);
-  lj_gc2_cycle_to_idle(g);
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  /* The transition may already drain the now-proven retired body, otherwise
-  ** normal later grace/terminal teardown retains ownership. Do not dereference
-  ** T after this point. */
+  J->trace_reclaim_epoch = 0;
+  assert(reclaim_trace_at(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
+  assert(retired_find(J, T) == NULL);
 }
 
 static void test_gc_claim_rescues_runnable_inbound(lua_State *L)
@@ -634,8 +636,7 @@ static void test_reclaim_requeue_is_raw_and_retryable(lua_State *L,
   assert(reclaim_trace_at(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
 }
 
-static void test_pending_trace_arena_requests_full_grace(lua_State *L,
-						  GCproto *pt)
+static void test_pending_trace_arena_requests_full_grace(lua_State *L)
 {
   global_State *g = G(L);
   jit_State *J = G2J(g);
@@ -651,9 +652,9 @@ static void test_pending_trace_arena_requests_full_grace(lua_State *L,
   tmpl.nins = REF_BASE;
   tmpl.ir = dummyir;
   T = lj_trace_alloc(L, &tmpl);
-  test_trace_complete_payload_layout(T);
-  setgcref(T->startpt, obj2gco(pt));
   test_trace_publish_header(g, T);
+  assert(trace_snap_acq(T) == NULL && trace_snapmap_acq(T) == NULL);
+  assert(trace_startptgco_acq(T) == NULL && trace_exittab_acq(T) == NULL);
   assert(lj_jit_token_try(J));
   lj_trace_free_unpublished(g, T);
   lj_jit_token_release(J);
@@ -764,7 +765,7 @@ int main(void)
   test_huge_reader_reclaim_retry(L, pt);
   test_gc_claim_rescues_runnable_inbound(L);
   test_reclaim_requeue_is_raw_and_retryable(L, pt);
-  test_pending_trace_arena_requests_full_grace(L, pt);
+  test_pending_trace_arena_requests_full_grace(L);
   test_idle_reclaim_requires_proven_root_unlink(L, pt);
   test_native_pin_blocks_exact_body_reclaim(L);
 
@@ -776,10 +777,11 @@ int main(void)
   tmpl.ir = dummyir;
 
   T = lj_trace_alloc(L, &tmpl);
-  test_trace_complete_payload_layout(T);
   test_trace_publish_header(g, T);
   trace_colors = test_gc_colors(obj2gco(T));
   assert(gcref(T->startpt) == NULL);
+  assert(trace_snap_acq(T) == NULL && trace_snapmap_acq(T) == NULL);
+  assert(trace_exittab_acq(T) == NULL && trace_mcode_acq(T) == NULL);
   /* A scratch body has neither a public slot nor a retire-list node. A foreign
   ** recorder makes the nonwaiting GC claim defer without an epoch-only LP; its
   ** actual token owner then publishes the only authoritative discovery edge.
@@ -792,6 +794,7 @@ int main(void)
   lj_trace_free_unpublished(g, T);
   lj_jit_token_release(J);
   assert(retired_find(J, T) == T);
+  assert(trace_retired_unpublished_acq(T));
   lj_trace_markvecs(g, 0);  /* Compatibility argument cannot select color GC. */
   assert(lj_gc2_ismarked(g, obj2gco(T)) > 0);
   assert(test_gc_colors(obj2gco(T)) == trace_colors);

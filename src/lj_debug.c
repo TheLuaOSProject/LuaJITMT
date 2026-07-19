@@ -64,7 +64,11 @@ static BCPos debug_jit_startpc(jit_State *J, GCproto *pt, const BCIns *ins)
   TraceVec *tv;
   BCPos pos = NO_BCPOS;
   MSize i;
-  lj_gc2_smr_read_enter(g);
+  /* Debug position recovery is observational. A concurrent exclusive trace
+  ** reclaimer makes this position temporarily unavailable; it must not make
+  ** the executing mutator wait. */
+  if (!lj_gc2_smr_read_try(g))
+    return pos;
   tv = tracevec_acq(J);
   if (tv == NULL) {
     lj_gc2_smr_read_leave(g);

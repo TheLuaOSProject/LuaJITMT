@@ -16,6 +16,7 @@
 #include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_debug.h"
+#include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_state.h"
@@ -379,6 +380,19 @@ static LJ_AINLINE void jit_trace_read_unlock(lua_State *L, jit_State *J,
     lj_jit_token_release_l(L, J);
 }
 
+/* Trace reflection is observational. A concurrent exclusive SMR reclaimer is
+** therefore a transient "trace unavailable" result, never permission to wait
+** behind that peer. Drop the temporary recorder token before returning so a
+** reclaimer which needs it cannot form a token/SMR dependency cycle. */
+static LJ_AINLINE int jit_trace_read_smr_try(lua_State *L, jit_State *J,
+					     int token)
+{
+  if (lj_gc2_smr_read_try(G(L)))
+    return 1;
+  jit_trace_read_unlock(L, J, token);
+  return 0;
+}
+
 /* Names of link types. ORDER LJ_TRLINK */
 static const char *const jit_trlinkname[] = {
   "none", "root", "loop", "tail-recursion", "up-recursion", "down-recursion",
@@ -416,7 +430,8 @@ LJLIB_CF(jit_util_traceinfo)
   TraceNo link = 0;
   if (token < 0)
     return 0;
-  lj_gc2_smr_read_enter(G(L));
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
   T = jit_checktrace_tr(L, tr);
   if (T) {
     GCtab *t;
@@ -456,7 +471,8 @@ LJLIB_CF(jit_util_traceir)
   int have = 0;
   if (token < 0)
     return 0;
-  lj_gc2_smr_read_enter(G(L));
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
   T = jit_checktrace_tr(L, tr);
   if (T && ref >= REF_BIAS && ref < trace_nins_acq(T)) {
     ir = ir_load_acq(&trace_ir_acq(T)[ref]);
@@ -485,11 +501,14 @@ LJLIB_CF(jit_util_tracek)
   int token = jit_trace_read_lock(L, J);
   GCtrace *T;
   IRIns kir[2];
+  TValue kgcv;
+  LJGC2Lease kgclease;
   int32_t slot = -1;
-  int have = 0;
+  int have = 0, have_kgc = 0;
   if (token < 0)
     return 0;
-  lj_gc2_smr_read_enter(G(L));
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
   T = jit_checktrace_tr(L, tr);
   if (T && ref >= trace_nk_acq(T) && ref < REF_BIAS) {
     IRIns *irbase = trace_ir_acq(T);
@@ -503,6 +522,19 @@ LJLIB_CF(jit_util_tracek)
     kir[0] = irs;
     if (ir_isk64(&kir[0]))
       kir[1] = ir_load_acq(&ir[1]);
+    if (kir[0].o == IR_KGC) {
+      /* The copied IR word still names a reclaimable child. Retain that exact
+      ** allocation after the trace-body interval closes and through stack-root
+      ** publication; a native TValue copy alone is not a GC root. */
+      lj_ir_kvalue(L, &kgcv, &kir[0]);
+      if (lj_gc2_tv_lease_acquire(G(L), &kgcv, &kgclease) !=
+	  LJ_GC2_TV_EDGE_VALID) {
+	lj_gc2_smr_read_leave(G(L));
+	jit_trace_read_unlock(L, J, token);
+	return 0;
+      }
+      have_kgc = 1;
+    }
     have = 1;
   }
   lj_gc2_smr_read_leave(G(L));
@@ -511,7 +543,13 @@ LJLIB_CF(jit_util_tracek)
 #if LJ_HASFFI
     if (kir[0].o == IR_KINT64) ctype_loadffi(L);
 #endif
-    lj_ir_kvalue(L, L->top-2, &kir[0]);
+    if (have_kgc) {
+      copyTVrel(L, L->top-2, &kgcv);
+      lj_state_stack_pubtv(L, L, L->top-2);
+      lj_gc2_lease_release(&kgclease);
+    } else {
+      lj_ir_kvalue(L, L->top-2, &kir[0]);
+    }
     setintV(L->top-1, (int32_t)irt_type(kir[0].t));
     if (slot == -1)
       return 2;
@@ -529,29 +567,42 @@ LJLIB_CF(jit_util_tracesnap)
   jit_State *J = L2J(L);
   int token = jit_trace_read_lock(L, J);
   GCtrace *T;
+  SnapEntry mapcopy[256];
+  IRRef snapref = 0;
+  MSize nslots = 0, nent = 0, n;
+  int have = 0;
   if (token < 0)
     return 0;
-  lj_gc2_smr_read_enter(G(L));
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
   T = jit_checktrace_tr(L, tr);
   if (T && sn < trace_nsnap_acq(T)) {
     SnapShot *snap = &trace_snap_acq(T)[sn];
     SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
-    MSize n, nent = snap_nent_acq(snap);
-    GCtab *t;
-    lua_createtable(L, nent+2, 0);
-    t = tabV(L->top-1);
-    setintindex(L, t, 0, (int32_t)snap_ref_acq(snap) - REF_BIAS);
-    setintindex(L, t, 1, (int32_t)snap_nslots_acq(snap));
+    nent = snap_nent_acq(snap);
+    snapref = snap_ref_acq(snap);
+    nslots = snap_nslots_acq(snap);
     for (n = 0; n < nent; n++)
-      setintindex(L, t, (int32_t)(n+2), (int32_t)snapentry_acq(&map[n]));
-    setintindex(L, t, (int32_t)(nent+2), (int32_t)SNAP(255, 0, 0));
-    lj_gc_pubtab(L, t);
-    lj_gc2_smr_read_leave(G(L));
-    jit_trace_read_unlock(L, J, token);
-    return 1;
+      mapcopy[n] = snapentry_acq(&map[n]);
+    have = 1;
   }
   lj_gc2_smr_read_leave(G(L));
   jit_trace_read_unlock(L, J, token);
+  if (have) {
+    GCtab *t;
+    /* Allocation and table publication happen only after the trace body has
+    ** been reduced to bounded scalar copies. A reclaimer never waits behind a
+    ** reflective Lua allocation while the body SMR interval is open. */
+    lua_createtable(L, nent+2, 0);
+    t = tabV(L->top-1);
+    setintindex(L, t, 0, (int32_t)snapref - REF_BIAS);
+    setintindex(L, t, 1, (int32_t)nslots);
+    for (n = 0; n < nent; n++)
+      setintindex(L, t, (int32_t)(n+2), (int32_t)mapcopy[n]);
+    setintindex(L, t, (int32_t)(nent+2), (int32_t)SNAP(255, 0, 0));
+    lj_gc_pubtab(L, t);
+    return 1;
+  }
   return 0;
 }
 
@@ -562,24 +613,57 @@ LJLIB_CF(jit_util_tracemc)
   jit_State *J = L2J(L);
   int token = jit_trace_read_lock(L, J);
   GCtrace *T;
+  MSize szmcode = 0;
+  MSize mcloop = 0;
   if (token < 0)
     return 0;
-  lj_gc2_smr_read_enter(G(L));
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
   T = jit_checktrace_tr(L, tr);
   if (T) {
     MCode *mcode = trace_mcode_acq(T);
-    if (mcode != NULL) {
-      setstrV(L, L->top-1,
-	      lj_str_new(L, (const char *)mcode, trace_szmcode_acq(T)));
-      setintptrV(L->top++, (intptr_t)(void *)mcode);
-      setintV(L->top++, trace_mcloop_acq(T));
-      lj_gc2_smr_read_leave(G(L));
-      jit_trace_read_unlock(L, J, token);
-      return 3;
-    }
+    if (mcode != NULL)
+      szmcode = trace_szmcode_acq(T);
   }
   lj_gc2_smr_read_leave(G(L));
   jit_trace_read_unlock(L, J, token);
+  if (szmcode != 0) {
+    char *copy = lj_buf_tmp(L, szmcode);
+    MSize capacity = szmcode;
+    intptr_t mcodeaddr = 0;
+    int have = 0;
+
+    /* Scratch growth may allocate, so do it before reacquiring body SMR. The
+    ** second one-shot lookup is the linearization point: a reused trace number
+    ** may name a different immutable body, but it is copied only when it fits
+    ** the already-owned TG scratch storage. */
+    token = jit_trace_read_lock(L, J);
+    if (token < 0)
+      return 0;
+    if (!jit_trace_read_smr_try(L, J, token))
+      return 0;
+    T = jit_checktrace_tr(L, tr);
+    if (T) {
+      MCode *mcode = trace_mcode_acq(T);
+      szmcode = trace_szmcode_acq(T);
+      if (mcode != NULL && szmcode != 0 && szmcode <= capacity) {
+	memcpy(copy, mcode, szmcode);
+	mcodeaddr = (intptr_t)(void *)mcode;
+	mcloop = trace_mcloop_acq(T);
+	have = 1;
+      }
+    }
+    lj_gc2_smr_read_leave(G(L));
+    jit_trace_read_unlock(L, J, token);
+    if (have) {
+      /* The managed scratch copy survives trace retirement and is reclaimed
+      ** with its TG even if string interning throws. */
+      setstrV(L, L->top-1, lj_str_new(L, copy, szmcode));
+      setintptrV(L->top++, mcodeaddr);
+      setintV(L->top++, (int32_t)mcloop);
+      return 3;
+    }
+  }
   return 0;
 }
 
@@ -593,10 +677,11 @@ LJLIB_CF(jit_util_traceexitstub)
     jit_State *J = L2J(L);
     int token = jit_trace_read_lock(L, J);
     GCtrace *T;
-    MCode *addr = NULL;
+    intptr_t addr = 0;
     if (token < 0)
       return 0;
-    lj_gc2_smr_read_enter(G(L));
+    if (!jit_trace_read_smr_try(L, J, token))
+      return 0;
     T = jit_checktrace_tr(L, tr);
     if (T) {
 #ifdef EXITSTUBS_PER_GROUP
@@ -606,14 +691,15 @@ LJLIB_CF(jit_util_traceexitstub)
       if (trace_root_acq(T) != 0)
 	maxexit++;
 #endif
-      if (exitno < maxexit) {
-	addr = jit_traceexitstub_addr_acq(T, exitno);
-      }
+      if (exitno < maxexit)
+	/* Reduce the borrowed pointer to a scalar while its trace body is still
+	** admitted. Evaluating the pointer itself after leave is a C lifetime bug. */
+	addr = (intptr_t)(void *)jit_traceexitstub_addr_acq(T, exitno);
     }
     lj_gc2_smr_read_leave(G(L));
     jit_trace_read_unlock(L, J, token);
-    if (addr != NULL) {
-      setintptrV(L->top-1, (intptr_t)(void *)addr);
+    if (addr != 0) {
+      setintptrV(L->top-1, addr);
       return 1;
     }
     /*

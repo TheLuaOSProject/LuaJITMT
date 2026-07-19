@@ -723,6 +723,8 @@ return function(add)
     name = "m6_jit_token",
     description = "M6 JIT recorder token and x64 XPOLL behavior",
     run = function(t)
+      t:run({ "sh", t:path("tools", "ci", "nonblocking_jit_smr_gate.sh") },
+            { timeout = "15s" })
       clean_build(t, build.gc2_test_helper_opts({ quiet = true }))
       build_and_run_c(t, t:tmp("lj_t-jit-token"), "t-jit-token.c",
                       build.gc2_test_helper_opts({

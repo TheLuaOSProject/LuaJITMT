@@ -106,8 +106,6 @@ LJ_FUNC uint32_t lj_trace_test_findfree_grows(void);
 LJ_FUNC uint32_t lj_trace_test_last_unlinked(void);
 LJ_FUNC uint32_t lj_trace_test_last_findfree(void);
 LJ_FUNC uint32_t lj_trace_test_last_released(void);
-LJ_FUNC int lj_trace_test_preserve_unpublished_publish(global_State *g,
-						       GCtrace *T);
 LJ_FUNC int lj_trace_test_preserve_body_candidate(global_State *g, GCobj *o);
 LJ_FUNC int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
 					     const BCIns *pc);

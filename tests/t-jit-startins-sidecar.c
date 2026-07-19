@@ -322,6 +322,41 @@ static void assert_no_live_root_at(lua_State *L, PatchedPC *patch)
   lj_gc2_smr_read_leave(g);
 }
 
+static void expect_dump_from_sidecar_with_smr_closed(lua_State *L,
+						      const char *global)
+{
+  global_State *g = G(L);
+  uint32_t expect = LJ_GC2_SMR_OPEN;
+  int base = lua_gettop(L);
+  int status;
+  const char *dump;
+  size_t len;
+
+  lua_getglobal(L, "string");
+  lua_getfield(L, -1, "dump");
+  lua_remove(L, -2);
+  lua_getglobal(L, global);
+  assert(lua_isfunction(L, -1));
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(gc2_smr_reclaiming_cas(
+	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+  status = lua_pcall(L, 1, 1, 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+  if (status != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "closed-SMR bytecode dump failed: %s\n",
+	    err ? err : "(nil)");
+  }
+  assert(status == LUA_OK);
+  assert(gc2_smr_readers_acq(g) == 0);
+  dump = lua_tolstring(L, -1, &len);
+  assert(dump != NULL && len != 0);
+  assert(luaL_loadbuffer(L, dump, len, "=closed-smr-sidecar") == LUA_OK);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  assert(lua_toboolean(L, -1));
+  lua_settop(L, base);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -588,6 +623,8 @@ int main(void)
     post_publish_body = T;
     lj_gc2_smr_read_leave(g);
   }
+  expect_dump_from_sidecar_with_smr_closed(
+    L, "__sidecar_post_publish_itern");
   lua_getglobal(L, "sidecar_next_wrapper");
   lua_setglobal(L, "next");
   call_itern_empty(L, "__sidecar_post_publish_itern",

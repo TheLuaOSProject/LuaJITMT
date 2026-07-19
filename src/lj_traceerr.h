@@ -55,6 +55,10 @@ TREDEF(NYIIR,	"NYI: cannot assemble IR instruction %d")
 TREDEF(NYIPHI,	"NYI: PHI shuffling too complex")
 TREDEF(NYICOAL,	"NYI: register coalescing too complex")
 
+/* Keep admission-only errors appended so existing TraceError values remain
+** ABI-stable for external diagnostics which expose the numeric reason. */
+TREDEF(SMRRETRY,	"retry recording")
+
 #undef TREDEF
 
 /* When adding/removing trace errors, keep this catalog synchronized with

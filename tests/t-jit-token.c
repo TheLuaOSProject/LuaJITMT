@@ -186,6 +186,62 @@ static void expect_vmevent_smr_try_drop(lua_State *L)
   vmevent_expected_L = NULL;
 }
 
+static GCtrace *first_live_trace(jit_State *J);
+
+static void expect_jit_util_smr_try_drop_one(lua_State *L, const char *name,
+					      TraceNo tr, int second,
+					      int have_second)
+{
+  global_State *g = G(L);
+  int base = lua_gettop(L);
+  int status;
+  uint32_t expect = LJ_GC2_SMR_OPEN;
+
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "jit.util");
+  assert(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_getfield(L, -1, name);
+  lua_remove(L, -2);
+  if (!lua_isfunction(L, -1)) {
+    lua_settop(L, base);
+    return;  /* Target-specific optional reflection entry. */
+  }
+  lua_pushinteger(L, (lua_Integer)tr);
+  if (have_second)
+    lua_pushinteger(L, (lua_Integer)second);
+
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);
+  assert(gc2_smr_reclaiming_cas(
+	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+  status = lua_pcall(L, have_second ? 2 : 1, LUA_MULTRET, 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+  if (status != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "jit.util %s under closed SMR failed: %s\n", name,
+	    err ? err : "(nil)");
+  }
+  assert(status == LUA_OK);
+  assert(lua_gettop(L) == base);  /* Contention is a no-result observation. */
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);  /* Failed SMR admission released its token. */
+}
+
+static void expect_jit_util_smr_try_drop(lua_State *L)
+{
+  GCtrace *T = first_live_trace(L2J(L));
+  TraceNo tr;
+  assert(T != NULL);
+  tr = trace_traceno_acq(T);
+  assert(tr != 0);
+  expect_jit_util_smr_try_drop_one(L, "traceinfo", tr, 0, 0);
+  expect_jit_util_smr_try_drop_one(L, "traceir", tr, 1, 1);
+  expect_jit_util_smr_try_drop_one(L, "tracek", tr, -1, 1);
+  expect_jit_util_smr_try_drop_one(L, "tracesnap", tr, 0, 1);
+  expect_jit_util_smr_try_drop_one(L, "tracemc", tr, 0, 0);
+  expect_jit_util_smr_try_drop_one(L, "traceexitstub", tr, 0, 1);
+}
+
 static GCtrace *first_live_trace(jit_State *J)
 {
   TraceNo i;
@@ -293,11 +349,14 @@ static void expect_tail_xpoll_snapshot(lua_State *L)
     "end\n");
   for (tr = 1; tr < trace_sizetrace_acq(J); tr++) {
     GCtrace *T = traceref_safe(J, tr);
-    if (trace_runnable_acq(T, tr) && trace_root_acq(T) != 0 &&
-	T->linktype == LJ_TRLINK_ROOT)
+    if (trace_runnable_acq(T, tr) && trace_root_acq(T) != 0) {
       found += expect_nonloop_xpoll_snapshots(T, NULL);
+    }
   }
-  assert(found > 0 && "hot side trace did not publish a terminal XPOLL");
+  /* Rooted mutable-global recording may now end the side trace at the
+  ** interpreter instead of linking it as LJ_TRLINK_ROOT. The safety invariant
+  ** is the exact non-loop XPOLL snapshot on every runnable side topology. */
+  assert(found > 0 && "hot side trace did not publish an exact XPOLL snapshot");
 }
 
 static void expect_func_xpoll_snapshot(lua_State *L)
@@ -671,6 +730,7 @@ int main(void)
     "for _ = 1, 20 do assert(f(80) == 3240) end\n"
     "assert(tracecount() > 0, 'expected token-owned recording')\n");
   assert(jit_token_acq(g) == 0);
+  expect_jit_util_smr_try_drop(L);
 
   assert(gc2_n_threads_acq(g) == 1);
   assert(gc2_n_workers_acq(g) == 0);

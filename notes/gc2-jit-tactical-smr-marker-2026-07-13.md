@@ -70,30 +70,30 @@ active node.
 The same ordinary collision existed one level later in trace compilation.
 `lj_trace_free_unpublished()` retires a compact trace which has no public trace
 number, epoch, or retire-list link. Its recorder token/local construction owner
-is the sole body authority. Before publishing the epoch, the old path called
-the generic raw marker for the trace and non-mcode exit table; an IDLE writer
-loss could therefore pin `NO_RECLAIM` even though no semantic edge was missing.
+is the sole body authority. The assembler copy is not a partially published
+semantic trace: it has copied IR bytes, but no trace slot, prototype/root-spine
+edge, snapshots, exit table, debugger descriptor or executable mcode. Its KGC
+operands remain rooted by token-private `J->cur` until the failed recording is
+aborted. Treating the copy as a semantic body required a looping post-claim
+traversal and manufactured ownership for fields the allocation never acquired.
 
-Only that explicitly unpublished pre-claim step now uses the publication
-marker. It first tries one outer SMR admission covering every trace-body
-validation and exit-table load. On admission loss it publishes only T's root
-retry request and returns without dereferencing T or the exit table. On
-success, the nested T/exit-table publication marks are reentrant. The epoch
-claim is immediately followed by the existing mandatory
-`trace_preservebody()` pass and retire-list publication before the recorder
-token is released. That pass still marks KGC/prototype/snapshot/link children
-and retains its fail-closed behavior. Public trace retirement, aged retired-root
-scans, and exclusive-reclaimer requeue continue using their mandatory or
-reclaim-held marker variants.
+Unpublished retirement now sets the immutable
+`TRACE_RETIRED_UNPUBLISHED` kind, claims an epoch, publishes the exact body on
+the token-owned retire list, and performs only one-shot pre/post raw marks.
+Admission loss requests a root retry and returns without reading the compact
+payload. There is deliberately no `trace_preservebody()` pass. Root scans mark
+the exact listed allocation without decoding children; mature reclaim skips
+public-slot, inbound-link, debugger, root-spine, exit-table and mcode teardown,
+validates the strict scratch shape, and frees that allocation exactly. Public
+trace retirement keeps the existing semantic preservation policy.
 
-The trace-retire fixture holds the IDLE writer while the recorder token owns a
-synthetic unpublished body and exit table. It proves both marks remain clear,
-SMR remains writer-owned with zero readers, and the activation snapshot is
-bit-for-bit unchanged. After release, it starts MARK and the exact runtime
-retirement path marks both allocations plus a real starting-prototype child,
-then claims/lists the trace for normal later grace/terminal drain. This
-distinguishes the pre-claim raw publication from the mandatory post-claim
-semantic traversal.
+The trace-retire fixture holds the IDLE metadata writer while the recorder
+token calls the real `lj_trace_free_unpublished()` path. The scratch includes a
+deliberately unmarked KGC operand, while snapshots, start prototype, exit table
+and mcode remain NULL. Both tactical marks lose without waiting; the exact body
+and KGC marks remain clear, SMR stays writer-owned with zero readers, and the
+activation snapshot is unchanged. The tagged/listed body then survives young
+grace and is physically reclaimed at the mature epoch.
 
 ## Adjacent audit item
 

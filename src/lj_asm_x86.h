@@ -4344,7 +4344,11 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
     else {
       global_State *g = J2G(as->J);
       GCtrace *targetT;
-      lj_gc2_smr_read_enter(g);
+      if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+	/* Link assembly is speculative and still owns no published tail. */
+	lj_trace_err(as->J, LJ_TRERR_SMRRETRY);
+	target = NULL;  /* Unreachable, but keeps analyzers precise. */
+      }
       targetT = traceref_safe(as->J, lnk);
       if (LJ_LIKELY(trace_runnable_acq(targetT, lnk) &&
 		    (target = trace_mcode_acq(targetT)) != NULL)) {

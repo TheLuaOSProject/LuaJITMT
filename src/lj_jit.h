@@ -405,8 +405,28 @@ typedef struct GCtrace {
 #define TRACE_EXITTAB_MCODE		0x01
 #define TRACE_SCOPE_FLUSH_PENDING	0x02
 #define TRACE_ENTRY_INVALIDATED		0x04
+#define TRACE_RETIRED_UNPUBLISHED	0x08
 #define TRACE_ENTRY_GATED \
   (TRACE_SCOPE_FLUSH_PENDING|TRACE_ENTRY_INVALIDATED)
+
+/* An assembler scratch copy is never a semantic trace body. Once this bit is
+** published it is immutable until the retire-list owner destroys the exact
+** allocation. Acquire readers may therefore select the raw-only consumer path
+** without inspecting uninitialized compact snapshot or native-code fields. */
+static LJ_AINLINE int trace_retired_unpublished_acq(const GCtrace *T)
+{
+  return (la_load8_acq(&T->unused1) & TRACE_RETIRED_UNPUBLISHED) != 0;
+}
+
+static LJ_AINLINE void trace_retired_unpublished_set_rel(GCtrace *T)
+{
+  uint8_t flags = la_load8_acq(&T->unused1);
+  while ((flags & TRACE_RETIRED_UNPUBLISHED) == 0) {
+    uint8_t next = (uint8_t)(flags | TRACE_RETIRED_UNPUBLISHED);
+    if (la_cas8(&T->unused1, &flags, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
 
 #define TRACE_NATIVE_PIN_CLOSED		0x80000000u
 #define TRACE_NATIVE_PIN_COUNT_MASK	0x7fffffffu

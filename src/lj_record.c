@@ -814,7 +814,10 @@ static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)
 {
   global_State *g = J2G(J);
   GCtrace *T;
-  lj_gc2_smr_read_enter(g);
+  /* Recording can fail closed and retry from bytecode. It must never park the
+  ** recorder token behind an exclusive trace-body reclaimer. */
+  if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g)))
+    lj_trace_err(J, LJ_TRERR_SMRRETRY);
   T = traceref_safe(J, traceno);
   if (LJ_UNLIKELY(!trace_runnable_acq(T, traceno))) {
     lj_gc2_smr_read_leave(g);

@@ -855,7 +855,11 @@ void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
   MSize parentspadj = 0;
   if (parent) {
     GCtrace *parentT;
-    lj_gc2_smr_read_enter(J2G(J));
+    /* Debugger metadata is optional. Omitting one entry is preferable to
+    ** parking the recorder behind an exclusive trace-body reclaimer, and a
+    ** guessed parent stack adjustment would describe invalid unwind state. */
+    if (!lj_gc2_smr_read_try(J2G(J)))
+      return;
     parentT = traceref_safe(J, parent);
     if (parentT && trace_traceno_acq(parentT) == parent)
       parentspadj = trace_spadjust_acq(parentT);
