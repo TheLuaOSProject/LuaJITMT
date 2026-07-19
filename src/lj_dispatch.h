@@ -141,7 +141,12 @@ static LJ_AINLINE void hotcount_setg(global_State *g, const BCIns *pc, HotCount 
 LJ_FUNC void lj_dispatch_init(GG_State *GG);
 #if LJ_HASJIT
 LJ_FUNC void lj_dispatch_init_hotcount(global_State *g);
+/* Install/preserve the exact recorder owner's TG-local dispatch overlay.
+** Both helpers are bounded and never acquire the global dispatch update
+** claim. */
+LJ_FUNC int lj_dispatch_record_start(lua_State *L, jit_State *J);
 #endif
+LJ_FUNC void lj_dispatch_sync_tg(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock);
 
 /* Instruction dispatch callback for hooks or when recording. */

@@ -21,10 +21,12 @@
 #include "lj_arena.h"
 #include "lj_gc2.h"
 #include "lj_dispatch.h"
+#include "lj_profile.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
+#include "lj_vm.h"
 
 #include "lib/test_sleep.h"
 
@@ -475,6 +477,158 @@ static void test_dispatch_update_async_return(lua_State *L)
   assert(dispatchmode_load_acq(g) == mode);
 }
 
+#if LJ_HASJIT
+#define DISPMODE_PROF_TEST 0x40
+
+static ASMFunction dispatch_record_target(uint8_t mode)
+{
+  return (mode & DISPMODE_PROF_TEST) ? lj_vm_profhook : lj_vm_record;
+}
+
+static void test_dispatch_record_owner_overlay(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  TGState *tg = L2TG(L);
+  uint8_t mode = dispatchmode_load_acq(g);
+#if LJ_PROFILE_TGLOCAL
+  uint8_t tg_hookmask = lj_tg_hookmask_load(tg);
+#endif
+  ASMFunction ordinary_ins;
+
+  assert(tg != NULL);
+  assert(lj_tg_load_cur_L(tg) == L);
+  assert(lj_tg_owns_state_acq(tg, L));
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_token_acq(g) == 0);
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+
+  lj_tg_sync_dispatch_tg(g, tg);
+  ordinary_ins = tg->dispatch[BC_ADDVN];
+  assert(ordinary_ins == G2GG(g)->dispatch[BC_ADDVN]);
+  assert(lj_jit_token_try_l(L, J));
+  jit_owner_l_rel(J, L);
+  lj_trace_state_store_active(J, LJ_TRACE_RECORD);
+
+#if LJ_PROFILE_TGLOCAL
+  /* A pending TG-local profile sample takes precedence for exactly one
+  ** interpreter hook; clearing it reinstalls the recorder overlay. */
+  (void)lj_tg_hookmask_update(tg, 0, HOOK_PROFILE);
+  assert(lj_dispatch_record_start(L, J));
+  assert(tg->dispatch[BC_ADDVN] == lj_vm_profhook);
+  lj_dispatch_sync_tg(g, tg);
+  assert(tg->dispatch[BC_ADDVN] == lj_vm_profhook);
+  (void)lj_tg_hookmask_update(tg, HOOK_PROFILE,
+	(uint8_t)(tg_hookmask & HOOK_PROFILE));
+  assert(lj_dispatch_record_start(L, J));
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+#endif
+
+  /* A peer may own the global template update claim. Recorder entry is a
+  ** bounded owner-local overlay and must neither wait for nor disturb it. */
+  dispatchmode_store_rel(g, (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  assert(lj_dispatch_record_start(L, J));
+  assert(dispatchmode_load_acq(g) ==
+	 (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+  assert(tg->dispatch[BC_FUNCF] == lj_vm_callhook);
+
+  /* REDISPATCH must preserve the overlay even after an asynchronous abort;
+  ** trace_state() needs one more callback to consume it and release J. */
+  lj_safepoint_apply_tg(g, tg, LJ_GC2_HS_REDISPATCH);
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+  assert(tg->dispatch[BC_FUNCF] == lj_vm_callhook);
+  lj_trace_state_abort(J);
+  assert(lj_trace_state_aborted(lj_trace_state_load(J)));
+  lj_dispatch_sync_tg(g, tg);
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+  assert(tg->dispatch[BC_FUNCF] == lj_vm_callhook);
+
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  lj_dispatch_sync_tg(g, tg);
+  assert(tg->dispatch[BC_ADDVN] == ordinary_ins);
+  lj_jit_token_release_l(L, J);
+  assert(jit_token_acq(g) == 0);
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(!lj_dispatch_record_start(L, J));
+  dispatchmode_store_rel(g, mode);
+}
+
+static void dispatch_peer_sentinel(void)
+{
+}
+
+static void test_dispatch_update_never_writes_peer(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  TGState *main_tg = G2TG(g);
+  TGState peer;
+  TGState *saved_hint = L->tg_hint;
+  LJStateOwner saved_owner = lj_state_owner_word_acq(L);
+  uint8_t mode = dispatchmode_load_acq(g);
+  uint32_t peer_tid = lj_thr_newid();
+  ASMFunction baseline;
+
+  assert(main_tg != NULL && saved_hint == main_tg);
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_token_acq(g) == 0);
+  assert(lj_thr_id_is_owner(peer_tid));
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+
+  lj_tg_init_thread(g, &peer, NULL, 0);
+  lj_tg_tid_rel(&peer, peer_tid);
+  lj_tg_derive_prng(g, &peer, peer_tid);
+  lj_tg_attach(g, &peer);
+  assert(lj_tg_actor_acq(&peer) != 0);
+  assert(G2TG(g) == main_tg);  /* Attach does not transfer raw TLS. */
+
+  lj_tg_store_cur_L(&peer, L);
+  lj_tg_store_thread_L(&peer, L);
+  L->tg_hint = &peer;
+  lj_state_owner_word_rel(L,
+	lj_state_owner_pack(peer_tid, lj_tg_actor_acq(&peer)));
+  assert(lj_tg_owns_state_acq(&peer, L));
+  assert(lj_tg_load_cur_L(&peer) == L);
+  jit_owner_l_rel(J, L);
+  jit_token_rel(g, peer_tid);
+  lj_trace_state_store(J, LJ_TRACE_RECORD);
+
+  /* The explicit stopped-owner/ACK path is authorized to install the peer's
+  ** overlay. Replace one cell with a sentinel afterward so any foreign write
+  ** by the ordinary updater is observable. */
+  lj_dispatch_sync_tg(g, &peer);
+  assert(peer.dispatch[BC_MOV] == dispatch_record_target(mode));
+  baseline = G2GG(g)->dispatch[BC_MOV];
+  assert(baseline != dispatch_record_target(mode));
+  peer.dispatch[BC_MOV] = dispatch_peer_sentinel;
+
+  /* The main-TG updater sees the foreign recorder but has no certificate to
+  ** write its table. With no policy change this is bounded and
+  ** handshake-free. */
+  lj_dispatch_update(g, 0);
+  assert(dispatchmode_load_acq(g) == mode);
+  assert(peer.dispatch[BC_MOV] == dispatch_peer_sentinel);
+  assert(main_tg->dispatch[BC_MOV] == baseline);
+
+  lj_dispatch_sync_tg(g, &peer);
+  assert(peer.dispatch[BC_MOV] == dispatch_record_target(mode));
+
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  jit_owner_l_rel(J, NULL);
+  jit_token_rel(g, 0);
+  L->tg_hint = saved_hint;
+  lj_state_owner_word_rel(L, saved_owner);
+  lj_tg_store_cur_L(&peer, NULL);
+  lj_tg_store_thread_L(&peer, NULL);
+  lj_tg_detach(g, &peer);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tg_fini_thread(g, &peer));
+  assert(G2TG(g) == main_tg);
+  assert(lj_tg_owns_state_acq(main_tg, L));
+}
+#endif
+
 static void fill_pipe_until_full(int fd)
 {
   char buf[4096];
@@ -894,6 +1048,10 @@ int main(void)
   assert(tg->dispatch[BC_RET] == G2GG(g)->dispatch[BC_RET]);
   test_dispatch_update_regular_wait(L);
   test_dispatch_update_async_return(L);
+#if LJ_HASJIT
+  test_dispatch_record_owner_overlay(L);
+  test_dispatch_update_never_writes_peer(L);
+#endif
 
   assert((tg->tg_flags & TGF_STOPREQ) == 0);
   actions = LJ_GC2_HS_STOPREQ;

@@ -68,6 +68,32 @@ if printf '%s\n' "$trace_start" | rg -q 'lj_trace_flushall_hs'; then
   bad=1
 fi
 
+active_start=$(sed -n '/case LJ_TRACE_START:/,/case LJ_TRACE_RECORD_1ST:/p' \
+  "$ROOT/src/lj_trace.c")
+if printf '%s\n' "$active_start" | rg -q 'lj_dispatch_update'; then
+  printf '%s\n' \
+    'active TRACE_START regained a token-held global dispatch update' >&2
+  bad=1
+fi
+if ! printf '%s\n' "$active_start" | rg -q 'lj_dispatch_record_start'; then
+  printf '%s\n' 'active TRACE_START lost its bounded owner overlay' >&2
+  bad=1
+fi
+
+record_overlays=$(rg -n 'dispatch_setrecord\(tg->dispatch' \
+  "$ROOT/src/lj_dispatch.c" || true)
+record_overlay_count=$(printf '%s\n' "$record_overlays" | \
+  sed '/^$/d' | wc -l | tr -d ' ')
+if [ "$record_overlay_count" -ne 2 ]; then
+  printf 'unexpected direct TG recorder overlays:\n%s\n' \
+    "$record_overlays" >&2
+  bad=1
+fi
+if ! rg -q 'lj_dispatch_sync_tg\(g, tg\)' "$ROOT/src/lj_safepoint.c"; then
+  printf '%s\n' 'REDISPATCH ACK lost recorder-aware TG synchronization' >&2
+  bad=1
+fi
+
 terminal=$(sed -n '/^static void trace_terminal_release(/,/^}/p' \
   "$ROOT/src/lj_trace.c")
 terminal_order=$(printf '%s\n' "$terminal" | rg -o \

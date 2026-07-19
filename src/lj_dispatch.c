@@ -202,30 +202,85 @@ static void dispatch_setrecord(ASMFunction *disp, uint8_t mode)
   dispatch_setins_cells(disp, f);
   dispatch_setcall(disp, lj_vm_callhook);
 }
+
+static uint8_t dispatch_record_mode(global_State *g, TGState *tg)
+{
+  uint8_t mode = dispatchmode_load_acq(g);
+#if LJ_PROFILE_TGLOCAL
+  if (lj_tg_hookmask_load(tg) & HOOK_PROFILE)
+    mode |= DISPMODE_PROF;
+#else
+  UNUSED(tg);
+#endif
+  return mode;
+}
+
+/* Revalidate the complete published recorder-owner tuple. The token contains
+** only the process thread id, so the state/TG actor certificate and current-L
+** publication are required as well. An asynchronously aborted recorder still
+** owns this tuple until trace_state() publishes IDLE and releases the token;
+** it needs one final recording dispatch in order to consume that abort. */
+static int dispatch_recorder_owner(global_State *g, TGState *tg,
+				   lua_State *L, jit_State *J)
+{
+  uint32_t tid;
+  if (!g || !tg || !L || !J || J != G2J(g) || tg->gl != g)
+    return 0;
+  tid = lj_tg_tid_acq(tg);
+  if (tid == 0 || jit_token_acq(g) != tid || jit_owner_l_acq(J) != L ||
+      lj_trace_state_load(J) == LJ_TRACE_IDLE ||
+      lj_tg_load_cur_L(tg) != L)
+    return 0;
+  /* The target TG's current-L publication is the lifetime authority needed
+  ** before dereferencing the sampled state. */
+  return lj_tg_owns_state_acq(tg, L) && G(L) == g;
+}
+
+/* Start recording by modifying only the current owner's private dispatch
+** table. trace_state() is executing outside VM dispatch, so no bytecode can
+** concurrently consume a partially installed owner-local overlay. The
+** global template and DISPMODE_UPDATE claim are deliberately untouched. */
+int lj_dispatch_record_start(lua_State *L, jit_State *J)
+{
+  global_State *g = J ? J2G(J) : NULL;
+  TGState *tg = L ? L2TG(L) : NULL;
+  uint8_t mode;
+  if (!dispatch_recorder_owner(g, tg, L, J))
+    return 0;
+  mode = dispatch_record_mode(g, tg);
+  dispatch_setrecord(tg->dispatch, mode);
+  return dispatch_recorder_owner(g, tg, L, J);
+}
 #endif
 
-static uint8_t dispatch_state_mode(global_State *g
+/* A REDISPATCH acknowledgement must not replace an active or asynchronously
+** aborted recorder's overlay with the ordinary template. Only the stopped TG
+** writes its own table. The global template-generation race in the existing
+** update/handshake protocol is separate from this recorder preservation and
+** remains visible until dispatch templates become immutable generations. */
+void lj_dispatch_sync_tg(global_State *g, TGState *tg)
+{
 #if LJ_HASJIT
-				   , jit_State **Jp, TGState **tgp,
-				   int *rec_ownerp
+  jit_State *J;
+  lua_State *L;
 #endif
-				   )
+  lj_tg_sync_dispatch_tg(g, tg);
+#if LJ_HASJIT
+  if (!g || !tg)
+    return;
+  J = G2J(g);
+  L = lj_tg_load_cur_L(tg);
+  if (dispatch_recorder_owner(g, tg, L, J))
+    dispatch_setrecord(tg->dispatch, dispatch_record_mode(g, tg));
+#endif
+}
+
+static uint8_t dispatch_state_mode(global_State *g)
 {
   uint8_t mode = 0;
   uint8_t hookmask = hookmask_load(g);
 #if LJ_HASJIT
   jit_State *J = G2J(g);
-  TraceState state = lj_trace_state_load(J);
-  uint32_t owner = jit_token_acq(g);
-  lua_State *Lrec = state != LJ_TRACE_IDLE ? jit_owner_l_acq(J) : NULL;
-  TGState *rectg = Lrec && owner != 0 ? lj_tg_find_owner(g, owner) : NULL;
-  if (rectg == NULL || state == LJ_TRACE_IDLE ||
-      lj_tg_load_cur_L(rectg) != Lrec || jit_token_acq(g) != owner ||
-      lj_trace_state_load(J) == LJ_TRACE_IDLE)
-    rectg = NULL;
-  *Jp = J;
-  *tgp = rectg ? rectg : G2TG(g);
-  *rec_ownerp = rectg != NULL;
   mode |= (jit_flags_acq(J) & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
@@ -249,11 +304,6 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 {
   uint32_t redispatch = 0;
   uint8_t oldmode, mode;
-#if LJ_HASJIT
-  jit_State *J;
-  TGState *tg;
-  int rec_owner;
-#endif
 retry:
   oldmode = dispatchmode_load_acq(g);
   if ((oldmode & DISPMODE_UPDATE)) {
@@ -262,11 +312,7 @@ retry:
     dispatch_update_wait_no_l();
     goto retry;
   }
-#if LJ_HASJIT
-  mode = dispatch_state_mode(g, &J, &tg, &rec_owner);
-#else
   mode = dispatch_state_mode(g);
-#endif
   if (oldmode != mode) {  /* Mode changed? */
     uint8_t claim = (uint8_t)(oldmode | DISPMODE_UPDATE);
     ASMFunction *disp;
@@ -359,18 +405,13 @@ retry:
 	if (gc2_n_threads_acq(g) > 1)
 	  redispatch = 1;
     dispatchmode_store_rel(g, mode);
-#if LJ_HASJIT
-    if (dispatch_state_mode(g, &J, &tg, &rec_owner) != mode)
-#else
     if (dispatch_state_mode(g) != mode)
-#endif
       goto retry;
   }
-  lj_tg_sync_dispatch(g);
-#if LJ_HASJIT
-  if (rec_owner && tg)
-    dispatch_setrecord(tg->dispatch, mode);
-#endif
+  /* Never write a live peer's dispatch table here. Refresh only the caller's
+  ** TG and perform a fresh exact-owner revalidation before any local recorder
+  ** overlay. A foreign recorder is repaired by its REDISPATCH ACK. */
+  lj_dispatch_sync_tg(g, G2TG(g));
   if (redispatch && nolock > 1)
     return;  /* Async profile triggers must not run an MT handshake. */
   if (redispatch)

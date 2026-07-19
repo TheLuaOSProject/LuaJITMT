@@ -10,6 +10,7 @@
 #include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_ccall.h"
+#include "lj_dispatch.h"
 #include "lj_err.h"
 #include "lj_gc2.h"
 #include "lj_mcode.h"
@@ -283,7 +284,7 @@ static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
     tg->alloc.huge_retire_done = 0;
   }
   if (actions & LJ_GC2_HS_REDISPATCH)
-    lj_tg_sync_dispatch_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
+    lj_dispatch_sync_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
   if (actions & LJ_GC2_HS_EXIT_TRACES)
     lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
   if (actions & LJ_GC2_HS_STOPREQ)

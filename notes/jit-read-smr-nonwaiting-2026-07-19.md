@@ -78,10 +78,11 @@ full flush until after that terminal release. An asynchronously aborted
 `MCODELM` restart falls through full slot cleanup instead of leaking `J->cur`,
 and down-recursion retries only when its restarted recorder remains non-IDLE.
 
-The normal active `TRACE_START` path still installs its recording dispatch
-overlay while retaining the token. Any wait/dependency hidden in that active
-overlay update is explicit remaining debt; silent-IDLE start exits no longer
-share it.
+The later owner-local dispatch checkpoint replaces the normal active
+`TRACE_START` global update with a bounded TG-local overlay and makes
+REDISPATCH acknowledgements preserve an exact live recorder. See
+`jit-owner-local-record-dispatch-2026-07-19.md`. The mutable global template
+generation and token-held event/control paths remain explicit debt.
 
 ## Evidence
 

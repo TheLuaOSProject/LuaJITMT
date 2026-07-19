@@ -4033,7 +4033,10 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 	    (void)lj_trace_flushall_hs(L);
 	  return NULL;
 	}
-	lj_dispatch_update(J2G(J), 0);
+	if (!lj_dispatch_record_start(J->L, J)) {
+	  lj_trace_state_abort(J);
+	  goto retry;
+	}
 	if (lj_trace_state_aborted(lj_trace_state_load(J)))
 	  goto retry;
 	if (lj_trace_state_load(J) != LJ_TRACE_RECORD_1ST)
