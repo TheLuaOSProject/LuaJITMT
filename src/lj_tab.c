@@ -1342,6 +1342,7 @@ static int tab_resize_copy_array_slot(lua_State *L, GCtab *t,
   return 1;
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
 static TValue *tab_resize_assist_array_slot(lua_State *L, GCtab *t,
 					    TValue *oldarray, MSize oldasize,
 					    MSize idx)
@@ -1397,6 +1398,7 @@ static TValue *tab_resize_assist_array_slot(lua_State *L, GCtab *t,
     return dst;
   }
 }
+#endif
 
 #ifdef LJ_TAB_TEST_HELPERS
 int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src, MSize idx,
@@ -2754,7 +2756,13 @@ static uint32_t bestasize(uint32_t bins[], uint32_t *narray)
 
 static LJ_AINLINE int tab_key_on_stack(lua_State *L, cTValue *key)
 {
-  return L && key && key >= tvref(L->stack) && key < tvref(L->maxstack);
+  uintptr_t p, lo, hi;
+  if (!L || !key)
+    return 0;
+  p = (uintptr_t)(const void *)key;
+  lo = (uintptr_t)(const void *)tvref(L->stack);
+  hi = (uintptr_t)(const void *)tvref(L->maxstack);
+  return p >= lo && p < hi;
 }
 
 typedef struct TabRootAnchor {
@@ -3223,6 +3231,12 @@ typedef struct TabForjitSnapshot {
   MSize hmask;
 } TabForjitSnapshot;
 
+enum {
+  TAB_RESOLVE_RETRY = -1,
+  TAB_RESOLVE_ABSENT = 0,
+  TAB_RESOLVE_FOUND = 1
+};
+
 /* Capture both table side vectors as one retryable logical generation. A
 ** resize publishes the array and hash roots separately, so validating only
 ** the side which contained the key can accept a mixed old/new snapshot and
@@ -3240,8 +3254,7 @@ static int tab_forjit_snapshot_acq(GCtab *t, TabForjitSnapshot *snap)
     lj_tab_array_hdr_asize_acq(array) : lj_tab_asize_acq(t);
   node = lj_tab_node_acq(t);
   hmask = lj_tab_node_hmask_acq(node);
-  if (lj_tab_node_is_retiring(node) || !lj_tab_hmask_value_valid(hmask) ||
-      lj_tab_hmask_acq(t) != hmask)
+  if (lj_tab_node_is_retiring(node) || !lj_tab_hmask_value_valid(hmask))
     return 0;
   snap->array = array;
   snap->asize = asize;
@@ -3257,15 +3270,20 @@ static int tab_forjit_snapshot_current(GCtab *t,
       lj_tab_node_acq(t) != snap->node ||
       lj_tab_array_is_retiring(t, snap->array) ||
       lj_tab_node_is_retiring(snap->node) ||
-      lj_tab_node_hmask_acq(snap->node) != snap->hmask ||
-      lj_tab_hmask_acq(t) != snap->hmask)
+      lj_tab_node_hmask_acq(snap->node) != snap->hmask)
     return 0;
   if (snap->array && !lj_tab_array_is_colocated(t, snap->array))
     return lj_tab_array_hdr_asize_acq(snap->array) == snap->asize;
   return lj_tab_asize_acq(t) == snap->asize;
 }
 
-static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
+/* Resolve one key entirely inside a caller-owned SMR interval. The returned
+** slot is an opaque address hint: callers must close this interval before any
+** wait/allocation and must revalidate the hint in the keyed store transaction
+** before dereferencing it. out, when non-NULL, is copied while the vectors are
+** still retained by SMR. */
+static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
+					 TValue **slotp, TValue *out)
 {
   TabForjitSnapshot snap;
   TValue hkey;
@@ -3276,15 +3294,17 @@ static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
   int32_t ik = 0;
   int isnumkey = 0;
   int isintkey = 0;
-  int result = 0;
+  TValue *slot = NULL;
+  int result = TAB_RESOLVE_ABSENT;
 
   /* Nil is a terminal absent key, not a generation retry. */
   if (tvisnil(key)) {
-    setnilV(out);
-    return 0;
+    if (slotp) *slotp = NULL;
+    if (out) setnilV(out);
+    return TAB_RESOLVE_ABSENT;
   }
   if (!tab_forjit_snapshot_acq(t, &snap))
-    return -1;
+    return TAB_RESOLVE_RETRY;
 
   if (tvisint(key)) {
     ik = intV(key);
@@ -3302,15 +3322,14 @@ static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
   if (isintkey && (MSize)ik < snap.asize) {
     TValue val;
     if (!snap.array)
-      return -1;
-    lj_tv_load_acq(&val, &snap.array[ik]);
+      return TAB_RESOLVE_RETRY;
+    slot = &snap.array[ik];
+    lj_tv_load_acq(&val, slot);
     if (tvisforward(&val) || tab_val_is_publish_claim(&val))
-      return -1;
-    if (!tab_val_absent(&val)) {
-      *out = val;
-      result = 1;
-      goto validate;
-    }
+      return TAB_RESOLVE_RETRY;
+    if (out) *out = val;
+    result = TAB_RESOLVE_FOUND;
+    goto validate;
   }
   if (isintkey)
     tab_forjit_test_pause_after_integral_array();
@@ -3325,33 +3344,57 @@ static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
     Node *next;
     if (LJ_UNLIKELY(!tab_node_in_snapshot(snap.node, snap.hmask, n) ||
 		    visited++ > snap.hmask))
-      return -1;
+      return TAB_RESOLVE_RETRY;
     lj_tv_load_acq(&nk, &n->key);
     if (tab_key_islocked(&nk))
-      return -1;
+      return TAB_RESOLVE_RETRY;
     if ((isnumkey && tvisnum(&nk) && nk.n == hkeyp->n) ||
 	(tvisstr(hkeyp) && tvisstr(&nk) && strV(&nk) == strV(hkeyp)) ||
 	(!isnumkey && !tvisstr(hkeyp) && lj_obj_equal(&nk, hkeyp))) {
-      lj_tv_load_acq(out, &n->val);
-      if (tvisforward(out) || tab_val_is_publish_claim(out))
-	return -1;
-      result = tab_val_absent(out) ? 0 : 1;
+      TValue val;
+      slot = &n->val;
+      lj_tv_load_acq(&val, slot);
+      if (tvisforward(&val) || tab_val_is_publish_claim(&val))
+	return TAB_RESOLVE_RETRY;
+      if (out) *out = val;
+      result = TAB_RESOLVE_FOUND;
       goto validate;
     }
     next = lj_tab_nextnode_acq(n);
     if (LJ_UNLIKELY(next &&
 		    !tab_node_in_snapshot(snap.node, snap.hmask, next)))
-      return -1;
+      return TAB_RESOLVE_RETRY;
     n = next;
   } while (n);
 
 absent:
-  setnilV(out);
-  result = 0;
+  if (out) setnilV(out);
+  result = TAB_RESOLVE_ABSENT;
 validate:
   if (!tab_forjit_snapshot_current(t, &snap))
-    return -1;
+    return TAB_RESOLVE_RETRY;
+  if (slotp) *slotp = slot;
   return result;
+}
+
+static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
+{
+  int status = tab_resolve_current_keyed_held(t, key, NULL, out);
+  if (status == TAB_RESOLVE_FOUND)
+    return tab_val_absent(out) ? 0 : 1;
+  return status;
+}
+
+static int tab_resolve_current_keyed_try(global_State *g, GCtab *t,
+					  cTValue *key, TValue **slotp)
+{
+  int status;
+  *slotp = NULL;
+  if (!g || !t || !key || !lj_gc2_smr_read_try(g))
+    return TAB_RESOLVE_RETRY;
+  status = tab_resolve_current_keyed_held(t, key, slotp, NULL);
+  lj_gc2_smr_read_leave(g);
+  return status;
 }
 
 LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
@@ -3361,7 +3404,6 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
     LJGC2Lease table_lease, key_lease, result_lease;
     TValue tablev;
     int table_status, key_status, result_status;
-    cTValue *src;
 
     /* Hashing a GC key dereferences its exact string/cdata/object identity.
     ** Likewise every vector snapshot starts from the table body. Retain both
@@ -3398,32 +3440,16 @@ LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
       lj_tab_wait_l(L);
       continue;
     }
-    src = lj_tab_get(L, t, key);
-    if (tab_forjit_test_take_initial_miss())
-      src = niltv(L);
-    if (src == niltv(L)) {
-      lj_tv_load_acq(out, src);
-	/* A first lookup can miss an old generation, or reject a GC key while
-	** its arena lifetime is temporarily owned by GC2. The generation may be
-	** completely stable by the time a separate retirement predicate runs, so
-	** that predicate cannot certify the earlier miss. Resolve every miss in
-	** one acquired current table-generation snapshot before returning nil. */
-      if (tab_get_current_forjit(t, key, out) < 0) {
-	lj_gc2_smr_read_leave(G(L));
-	lj_gc2_lease_release(&key_lease);
-	lj_gc2_lease_release(&table_lease);
-	lj_tab_wait_l(L);
-	continue;
-      }
-    } else if (lj_tab_read_current_keyed(t, (TValue *)src, key, out) !=
-	       LJ_TAB_STORE_CAS_OK) {
-      if (tab_get_current_forjit(t, key, out) < 0) {
-	lj_gc2_smr_read_leave(G(L));
-	lj_gc2_lease_release(&key_lease);
-	lj_gc2_lease_release(&table_lease);
-	lj_tab_wait_l(L);
-	continue;
-      }
+    /* The old two-stage lookup could call a yielding resolver while this SMR
+    ** reader was active. Resolve exactly once from a paired current-root
+    ** snapshot instead; RETRY is handled only after the reader is closed. */
+    if (tab_forjit_test_take_initial_miss() ||
+	tab_get_current_forjit(t, key, out) < 0) {
+      lj_gc2_smr_read_leave(G(L));
+      lj_gc2_lease_release(&key_lease);
+      lj_gc2_lease_release(&table_lease);
+      lj_tab_wait_l(L);
+      continue;
     }
     /* The copied slot stops being protected by the vector SMR scope below.
     ** Admit its exact GC allocation before closing that scope, so a weak clear
@@ -3644,6 +3670,7 @@ static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
 static LJTabNewkeyReserveHook tab_test_newkey_anchor_after_reserve_hook;
 static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
 static LJTabNextAfterKeyindexHook tab_test_next_after_keyindex_hook;
+static LJTabStorePostCasHook tab_test_store_post_cas_hook;
 
 void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook)
@@ -3669,6 +3696,11 @@ void lj_tab_test_set_next_after_keyindex_hook(
   tab_test_next_after_keyindex_hook = hook;
 }
 
+void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook)
+{
+  tab_test_store_post_cas_hook = hook;
+}
+
 static LJ_AINLINE void tab_test_newkey_anchor_after_reserve(lua_State *L,
 							    GCtab *t,
 							    Node *nodebase)
@@ -3691,6 +3723,14 @@ static LJ_AINLINE void tab_test_next_after_keyindex(GCtab *t, uint32_t idx)
     tab_test_next_after_keyindex_hook(t, idx);
 }
 
+static LJ_AINLINE void tab_test_store_post_cas(lua_State *L, GCtab *t,
+						TValue *dst, cTValue *key,
+						cTValue *value)
+{
+  if (tab_test_store_post_cas_hook)
+    tab_test_store_post_cas_hook(L, t, dst, key, value);
+}
+
 #else
 #define tab_test_newkey_anchor_after_reserve(L, t, nodebase) \
   ((void)(L), (void)(t), (void)(nodebase))
@@ -3698,6 +3738,8 @@ static LJ_AINLINE void tab_test_next_after_keyindex(GCtab *t, uint32_t idx)
   ((void)(L), (void)(t), (void)(nodebase))
 #define tab_test_next_after_keyindex(t, idx) \
   ((void)(t), (void)(idx))
+#define tab_test_store_post_cas(L, t, dst, key, value) \
+  ((void)(L), (void)(t), (void)(dst), (void)(key), (void)(value))
 #endif
 
 static void tab_release_claimed_anchor(Node *nodebase, Node *n)
@@ -3762,12 +3804,22 @@ static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
 static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key,
 			       int key_anchored)
 {
+  global_State *g = G(L);
   Node *nodebase;
   MSize hmask;
   Node *n;
 retry_insert:
+  /* This interval owns every raw node/header dereference in the insertion
+  ** attempt. All waits, resize allocation and recursive retry paths below
+  ** leave it first; publication inside the interval is bounded and does not
+  ** call an L-aware safepoint. */
+  if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+    lj_tab_wait_l(L);
+    goto retry_insert;
+  }
   nodebase = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0) {
+    lj_gc2_smr_read_leave(g);
     if (key_anchored) {
       rehashtab(L, t, key);
       goto retry_insert;
@@ -3777,16 +3829,21 @@ retry_insert:
   n = hashkey_node(nodebase, hmask, key);
   {
     TValue *slot = tab_newkey_private_empty_anchor(L, t, key, nodebase, n);
-    if (slot)
+    if (slot) {
+      lj_gc2_smr_read_leave(g);
       return slot;
+    }
   }
   if (tab_private_mutation_allowed(L)) {
     int chain_overflow;
     TValue *slot = tab_newkey_private(L, t, key, nodebase, hmask, n,
 				      &chain_overflow);
-    if (slot)
+    if (slot) {
+      lj_gc2_smr_read_leave(g);
       return slot;
+    }
     if (chain_overflow) {
+      lj_gc2_smr_read_leave(g);
       if (key_anchored) {
 	tab_rehash_chain_overflow(L, t, key, hmask);
 	goto retry_insert;
@@ -3798,13 +3855,17 @@ retry_insert:
     int locked;
     MSize chainlen;
     TValue *slot = tab_findkey_or_keylock(n, key, &locked, &chainlen);
-    if (slot)
+    if (slot) {
+      lj_gc2_smr_read_leave(g);
       return slot;
+    }
     if (locked) {
+      lj_gc2_smr_read_leave(g);
       lj_tab_wait_no_l();
       goto retry_insert;
     }
     if (chainlen >= LJ_TAB_MAXCHAIN) {
+      lj_gc2_smr_read_leave(g);
       if (key_anchored) {
 	tab_rehash_chain_overflow(L, t, key, hmask);
 	goto retry_insert;
@@ -3816,6 +3877,7 @@ retry_insert:
     TValue nk, nv;
     lj_tv_load_acq(&nk, &n->key);
     if (tab_key_islocked(&nk)) {
+      lj_gc2_smr_read_leave(g);
       lj_tab_wait_no_l();
       goto retry_insert;
     }
@@ -3823,10 +3885,12 @@ retry_insert:
     if (tvisnil(&nk) && tvisnil(&nv)) {
       int reserved = lj_tab_node_free_reserve(nodebase);
       if (reserved < 0) {
+	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
       if (reserved == 0) {
+	lj_gc2_smr_read_leave(g);
 	if (key_anchored) {
 	  tab_rehash_no_free(L, t, key, hmask);
 	  goto retry_insert;
@@ -3837,12 +3901,14 @@ retry_insert:
 	int claimed = tab_try_claim_nil_key(&n->key);
 	if (claimed < 0) {
 	  lj_tab_node_free_release(nodebase);
+	  lj_gc2_smr_read_leave(g);
 	  lj_tab_wait_no_l();
 	  goto retry_insert;
 	}
 	if (claimed == 1) {
 	  if (!tab_hash_generation_current(t, nodebase)) {
 	    tab_release_claimed_anchor(nodebase, n);
+	    lj_gc2_smr_read_leave(g);
 	    lj_tab_wait_no_l();
 	    goto retry_insert;
 	  }
@@ -3851,15 +3917,19 @@ retry_insert:
 	  lj_gc_pubtabkey(L, t, key);
 	  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
 	  if (!tab_hash_generation_current(t, nodebase)) {
+	    lj_gc2_smr_read_leave(g);
 	    lj_tab_wait_no_l();
 	    if (key_anchored)
 	      goto retry_insert;
 	    return tab_set_anchored_key(L, t, key);
 	  }
+	  lj_gc2_smr_read_leave(g);
 	  return &n->val;
 	}
 	lj_tab_node_free_release(nodebase);
       }
+
+      lj_gc2_smr_read_leave(g);
       goto retry_insert;
     }
   }
@@ -3869,9 +3939,11 @@ retry_insert:
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
     if (!freenode) {
       if (locked) {
+	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
+      lj_gc2_smr_read_leave(g);
       if (key_anchored) {
 	tab_rehash_no_free(L, t, key, hmask);
 	goto retry_insert;
@@ -3883,15 +3955,18 @@ retry_insert:
       TValue *slot = tab_findkey_or_keylock(n, key, &locked, &chainlen);
       if (slot) {
 	tab_release_claimed_free(nodebase, freenode);
+	lj_gc2_smr_read_leave(g);
 	return slot;
       }
       if (locked) {
 	tab_release_claimed_free(nodebase, freenode);
+	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
       if (chainlen >= LJ_TAB_MAXCHAIN) {
 	tab_release_claimed_free(nodebase, freenode);
+	lj_gc2_smr_read_leave(g);
 	if (key_anchored) {
 	  tab_rehash_chain_overflow(L, t, key, hmask);
 	  goto retry_insert;
@@ -3904,6 +3979,7 @@ retry_insert:
       Node *next;
       if (!tab_hash_generation_current(t, nodebase)) {
 	tab_release_claimed_free(nodebase, freenode);
+	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
@@ -3911,6 +3987,7 @@ retry_insert:
       lj_tab_nextnode_set(freenode, next);
       if (!tab_nextnode_cas(n, &next, freenode)) {
 	tab_release_claimed_free(nodebase, freenode);
+	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
@@ -3921,11 +3998,13 @@ retry_insert:
     lj_assertL(lj_tv_isnil_acq(&freenode->val),
 	       "new hash slot is not empty");
     if (!tab_hash_generation_current(t, nodebase)) {
+      lj_gc2_smr_read_leave(g);
       lj_tab_wait_no_l();
       if (key_anchored)
 	goto retry_insert;
       return tab_set_anchored_key(L, t, key);
     }
+    lj_gc2_smr_read_leave(g);
     return &freenode->val;
   }
 }
@@ -3951,77 +4030,112 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
 			     cTValue *claim, TValue **slot)
 {
-  MSize hmask;
-  Node *nodebase = lj_tab_node_snapshot_acq(t, &hmask);
-  Node *n;
-  if (hmask == 0)
-    return 0;
-  n = hashkey_node(nodebase, hmask, key);
+  global_State *g = G(L);
+retry_attempt:
+  if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+    lj_tab_wait_l(L);
+    goto retry_attempt;
+  }
   for (;;) {
+    MSize hmask;
+    Node *nodebase = lj_tab_node_snapshot_acq(t, &hmask);
+    Node *n;
     TValue nk, nv, expect;
-    lj_tv_load_acq(&nk, &n->key);
-    if (lj_obj_equal(&nk, key))
-      return -1;  /* A racing inserter published the key; retry lookup. */
-    if (tviskeylock(&nk)) {
-      lj_tab_wait_no_l();  /* Claimed anchor is publishing key. */
-      continue;
+    if (hmask == 0) {
+      lj_gc2_smr_read_leave(g);
+      return 0;
     }
-    if (!tvisnil(&nk))
+    n = hashkey_node(nodebase, hmask, key);
+    lj_tv_load_acq(&nk, &n->key);
+    if (lj_obj_equal(&nk, key)) {
+      lj_gc2_smr_read_leave(g);
+      return -1;  /* A racing inserter published the key; retry lookup. */
+    }
+    if (tviskeylock(&nk)) {
+      lj_gc2_smr_read_leave(g);
+      lj_tab_wait_no_l();  /* Claimed anchor is publishing key. */
+      goto retry_attempt;
+    }
+    if (!tvisnil(&nk)) {
+      lj_gc2_smr_read_leave(g);
       return 0;  /* Caller handles collision-chain or resize fallback. */
+    }
     lj_tv_load_acq(&nv, &n->val);
     if (!tvisnil(&nv)) {
+      lj_gc2_smr_read_leave(g);
       lj_tab_wait_no_l();  /* Claimed anchor value is publishing. */
-      continue;
+      goto retry_attempt;
     }
     {
       int reserved = lj_tab_node_free_reserve(nodebase);
-      if (reserved <= 0)
+      if (reserved <= 0) {
+	lj_gc2_smr_read_leave(g);
 	return 0;
+      }
     }
     tab_test_newkey_anchor_after_reserve(L, t, nodebase);
     if (!tab_hash_generation_current(t, nodebase)) {
       lj_tab_node_free_release(nodebase);
+      lj_gc2_smr_read_leave(g);
       return -1;
     }
     {
       int claimed = tab_try_claim_nil_key(&n->key);
       if (claimed < 0) {
 	lj_tab_node_free_release(nodebase);
+	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
-	continue;
+	goto retry_attempt;
       }
       if (claimed == 0) {
 	lj_tab_node_free_release(nodebase);
-	continue;
+	lj_gc2_smr_read_leave(g);
+	lj_tab_wait_no_l();
+	goto retry_attempt;
       }
     }
     if (!tab_hash_generation_current(t, nodebase)) {
       tab_release_claimed_anchor(nodebase, n);
+      lj_gc2_smr_read_leave(g);
       return -1;
     }
     setnilV(&expect);
     if (lj_tv_cas(&n->val, &expect, claim)) {
       if (!tab_hash_generation_current(t, nodebase)) {
 	tab_release_claimed_anchor_value(nodebase, n);
+	lj_gc2_smr_read_leave(g);
 	return -1;
       }
       tab_storekeyrel(L, &n->key, key);
-      *slot = lj_tab_set(L, t, key);
+      *slot = &n->val;
+      lj_gc2_smr_read_leave(g);
       return 1;
     }
     tab_release_claimed_anchor(nodebase, n);
+    lj_gc2_smr_read_leave(g);
+    lj_tab_wait_no_l();
+    goto retry_attempt;
   }
 }
 
 int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 			    cTValue *claim, TValue **slot)
 {
-  MSize hmask;
-  Node *nodebase = lj_tab_node_snapshot_acq(t, &hmask);
-  Node *anchor, *reserved = NULL;
-  if (hmask == 0)
-    return 0;
-  anchor = hashkey_node(nodebase, hmask, key);
+  global_State *g = G(L);
+retry_attempt:
+  if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+    lj_tab_wait_l(L);
+    goto retry_attempt;
+  }
+  {
+    MSize hmask;
+    Node *nodebase = lj_tab_node_snapshot_acq(t, &hmask);
+    Node *anchor, *reserved = NULL;
+    if (hmask == 0) {
+      lj_gc2_smr_read_leave(g);
+      return 0;
+    }
+    anchor = hashkey_node(nodebase, hmask, key);
   for (;;) {
     Node *n;
     MSize i;
@@ -4032,20 +4146,27 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       if (lj_obj_equal(&nk, key)) {
 	if (reserved)
 	  tab_release_claimed_free(nodebase, reserved);
+	lj_gc2_smr_read_leave(g);
 	return -1;  /* Existing or racing insert for this key; retry lookup. */
       }
       if (tviskeylock(&nk) || (tvisnil(&nk) && tab_val_isclaim(&nv, claim))) {
+	if (reserved)
+	  tab_release_claimed_free(nodebase, reserved);
+	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();  /* Linked insert is publishing key. */
-	goto retry;
+	goto retry_attempt;
       }
     }
     if (!reserved) {
       int reserve = lj_tab_node_free_reserve(nodebase);
-      if (reserve <= 0)
+      if (reserve <= 0) {
+	lj_gc2_smr_read_leave(g);
 	return 0;
+      }
       tab_test_newkey_chain_after_reserve(L, t, nodebase);
       if (!tab_hash_generation_current(t, nodebase)) {
 	lj_tab_node_free_release(nodebase);
+	lj_gc2_smr_read_leave(g);
 	return -1;
       }
       for (i = 0; i <= hmask; i++) {
@@ -4057,36 +4178,44 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	if (lj_obj_equal(&nk, key))
 	  goto found_existing;
 	if (tviskeylock(&nk)) {
+	  lj_tab_node_free_release(nodebase);
+	  lj_gc2_smr_read_leave(g);
 	  lj_tab_wait_no_l();  /* Free-node key is publishing. */
-	  goto release_retry;
+	  goto retry_attempt;
 	}
 	if (!tvisnil(&nk))
 	  continue;
 	lj_tv_load_acq(&nv, &n->val);
 	if (!tvisnil(&nv)) {
 	  if (tab_val_isclaim(&nv, claim)) {
+	    lj_tab_node_free_release(nodebase);
+	    lj_gc2_smr_read_leave(g);
 	    lj_tab_wait_no_l();  /* Free-node value is publishing. */
-	    goto release_retry;
+	    goto retry_attempt;
 	  }
 	  continue;
 	}
 	{
 	  int claimed = tab_try_claim_nil_key(&n->key);
 	  if (claimed < 0) {
+	    lj_tab_node_free_release(nodebase);
+	    lj_gc2_smr_read_leave(g);
 	    lj_tab_wait_no_l();  /* Free-node key is publishing. */
-	    goto release_retry;
+	    goto retry_attempt;
 	  }
 	  if (claimed == 0)
 	    continue;
 	}
 	if (!tab_hash_generation_current(t, nodebase)) {
 	  tab_release_claimed_free(nodebase, n);
+	  lj_gc2_smr_read_leave(g);
 	  return -1;
 	}
 	setnilV(&expect);
 	if (lj_tv_cas(&n->val, &expect, claim)) {
 	  if (!tab_hash_generation_current(t, nodebase)) {
 	    tab_release_claimed_free(nodebase, n);
+	    lj_gc2_smr_read_leave(g);
 	    return -1;
 	  }
 	  reserved = n;  /* Claimed free node; not visible until CAS-prepend. */
@@ -4096,109 +4225,90 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       }
       if (!reserved) {
 	lj_tab_node_free_release(nodebase);
+	lj_gc2_smr_read_leave(g);
 	return 0;  /* No free node in this hash generation: resize fallback. */
       }
       continue;  /* Re-scan chain before publishing the claimed node. */
     }
     if (LJ_UNLIKELY(anchor == NULL)) {
       tab_release_claimed_free(nodebase, reserved);
+      lj_gc2_smr_read_leave(g);
       return 0;
     }
     if (!tab_hash_generation_current(t, nodebase)) {
       tab_release_claimed_free(nodebase, reserved);
+      lj_gc2_smr_read_leave(g);
       return -1;
     }
     n = lj_tab_nextnode_acq(anchor);
     lj_tab_nextnode_set(reserved, n);
     if (tab_nextnode_cas(anchor, &n, reserved)) {
       tab_storekeyrel(L, &reserved->key, key);
-      *slot = lj_tab_set(L, t, key);
+      *slot = &reserved->val;
+      lj_gc2_smr_read_leave(g);
       return 1;  /* 11.4 FINREG collision insert CAS-prepend. */
     }
-  retry:
-    continue;
-  release_retry:
-    lj_tab_node_free_release(nodebase);
-    continue;
+    tab_release_claimed_free(nodebase, reserved);
+    lj_gc2_smr_read_leave(g);
+    lj_tab_wait_no_l();
+    goto retry_attempt;
   found_existing:
     lj_tab_node_free_release(nodebase);
+    lj_gc2_smr_read_leave(g);
     return -1;
+  }
   }
 }
 
 TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
 {
   TValue k;
-  Node *node;
-  MSize hmask;
-  Node *n;
-  int key_retry = 1;
   k.n = (lua_Number)key;
-retry_lookup:
-  node = lj_tab_node_snapshot_acq(t, &hmask);
-  if (hmask == 0)
-    return lj_tab_newkey(L, t, &k);
-  n = hashnum_node(node, hmask, &k);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (tvisnum(&nk) && nk.n == k.n) {
-      TValue val;
-      lj_tv_load_acq(&val, &n->val);
-      if (tvisforward(&val)) {
-	TValue *slot = tab_forwarded_setslot(t, &node, &hmask, &k);
-	if (slot)
-	  return slot;
-	if (tab_val_forward_retry(t, &val, node))
-	  goto retry_lookup;
-	return tab_rehash_forwarded_key(L, t, &k);
-      }
-      return &n->val;
-    }
-    if (tab_key_retry_once(&nk, &key_retry))
-      goto retry_lookup;
-  } while ((n = lj_tab_nextnode_acq(n)));
-  return lj_tab_newkey(L, t, &k);
+  for (;;) {
+    TValue *slot;
+    int status = tab_resolve_current_keyed_try(G(L), t, &k, &slot);
+    if (status == TAB_RESOLVE_FOUND)
+      return slot;
+    if (status == TAB_RESOLVE_ABSENT)
+      return lj_tab_newkey(L, t, &k);
+    lj_tab_wait_l(L);
+  }
 }
 
 TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
 {
   TValue k;
-  Node *node;
-  MSize hmask;
-  Node *n;
-  int key_retry = 1;
   setstrV(L, &k, key);
-retry_lookup:
-  node = lj_tab_node_snapshot_acq(t, &hmask);
-  if (hmask == 0)
-    return lj_tab_newkey(L, t, &k);
-  n = hashstr_node(node, hmask, key);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (tvisstr(&nk) && strV(&nk) == key) {
-      TValue val;
-      lj_tv_load_acq(&val, &n->val);
-      if (tvisforward(&val)) {
-	TValue *slot = tab_forwarded_setslot(t, &node, &hmask, &k);
-	if (slot)
-	  return slot;
-	if (tab_val_forward_retry(t, &val, node))
-	  goto retry_lookup;
-	return tab_rehash_forwarded_key(L, t, &k);
-      }
-      return &n->val;
-    }
-    if (tab_key_retry_once(&nk, &key_retry))
-      goto retry_lookup;
-  } while ((n = lj_tab_nextnode_acq(n)));
-  return lj_tab_newkey(L, t, &k);
+  for (;;) {
+    TValue *slot;
+    int status = tab_resolve_current_keyed_try(G(L), t, &k, &slot);
+    if (status == TAB_RESOLVE_FOUND)
+      return slot;
+    if (status == TAB_RESOLVE_ABSENT)
+      return lj_tab_newkey(L, t, &k);
+    /* k may be the only exact root for a freshly interned string. Anchor it
+    ** before the first STOPREQ-visible retry. */
+    return tab_set_anchored_key(L, t, &k);
+  }
+}
+
+TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key)
+{
+  TValue k;
+  setintV(&k, key);
+  for (;;) {
+    TValue *slot;
+    int status = tab_resolve_current_keyed_try(G(L), t, &k, &slot);
+    if (status == TAB_RESOLVE_FOUND)
+      return slot;
+    if (status == TAB_RESOLVE_ABSENT)
+      return lj_tab_setinth(L, t, key);  /* Canonical numeric hash key. */
+    lj_tab_wait_l(L);
+  }
 }
 
 TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
 {
-  Node *n;
   lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
   if (tvisstr(key)) {
     return lj_tab_setstr(L, t, strV(key));
@@ -4215,36 +4325,16 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   } else if (tvisnil(key)) {
     lj_err_msg(L, LJ_ERR_NILIDX);
   }
-  {
-    Node *node;
-    MSize hmask;
-    int key_retry = 1;
-  retry_lookup:
-    node = lj_tab_node_snapshot_acq(t, &hmask);
-    if (hmask != 0) {
-      n = hashkey_node(node, hmask, key);
-      do {
-	TValue nk;
-	lj_tv_load_acq(&nk, &n->key);
-	if (lj_obj_equal(&nk, key)) {
-	  TValue val;
-	  lj_tv_load_acq(&val, &n->val);
-	  if (tvisforward(&val)) {
-	    TValue *slot = tab_forwarded_setslot(t, &node, &hmask, key);
-	    if (slot)
-	      return slot;
-	    if (tab_val_forward_retry(t, &val, node))
-	      goto retry_lookup;
-	    return tab_rehash_forwarded_key(L, t, key);
-	  }
-	  return &n->val;
-	}
-	if (tab_key_retry_once(&nk, &key_retry))
-	  goto retry_lookup;
-      } while ((n = lj_tab_nextnode_acq(n)));
-    }
+  for (;;) {
+    TValue *slot;
+    int status = tab_resolve_current_keyed_try(G(L), t, key, &slot);
+    if (status == TAB_RESOLVE_FOUND)
+      return slot;
+    if (status == TAB_RESOLVE_ABSENT)
+      return lj_tab_newkey(L, t, key);
+    /* Generic GC keys can exist only in a C local/TMPREF at this boundary. */
+    return tab_set_anchored_key(L, t, key);
   }
-  return lj_tab_newkey(L, t, key);
 }
 
 LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
@@ -4344,6 +4434,49 @@ static LJ_AINLINE int tab_trystoretv_cas_once(lua_State *L, TValue *dst,
     return LJ_TAB_STORE_CAS_OK;  /* 06 section 6.3.2: CAS-published store. */
   return tvisforward(&old) ? LJ_TAB_STORE_CAS_FORWARD :
 	 LJ_TAB_STORE_CAS_CHANGED;
+}
+
+enum {
+  TAB_STORE_MODE_ANY,
+  TAB_STORE_MODE_EXISTING,
+  TAB_STORE_MODE_NIL
+};
+
+static LJ_AINLINE int tab_trystoretv_cas_expected(TValue *dst,
+						   TValue *expected,
+						   cTValue *src,
+						   int mode,
+						   TValue *observed)
+{
+  if (tvisforward(expected))
+    return LJ_TAB_STORE_CAS_FORWARD;
+  if (tab_val_is_publish_claim(expected))
+    return LJ_TAB_STORE_CAS_CHANGED;
+  if (mode == TAB_STORE_MODE_NIL) {
+    if (observed)
+      *observed = *expected;
+    if (!tvisnil(expected))
+      return LJ_TAB_STORE_CAS_EXISTS;
+  } else {
+    if (mode == TAB_STORE_MODE_EXISTING && tvisnil(expected))
+      return LJ_TAB_STORE_CAS_ABSENT;
+  }
+  if (lj_tv_cas(dst, expected, src))
+    return LJ_TAB_STORE_CAS_OK;  /* 06 section 6.3.2: semantic store LP. */
+  if (tvisforward(expected))
+    return LJ_TAB_STORE_CAS_FORWARD;
+  if (tab_val_is_publish_claim(expected))
+    return LJ_TAB_STORE_CAS_CHANGED;
+  if (mode == TAB_STORE_MODE_NIL) {
+    if (observed)
+      *observed = *expected;
+    if (!tvisnil(expected))
+      return LJ_TAB_STORE_CAS_EXISTS;
+  } else {
+    if (mode == TAB_STORE_MODE_EXISTING && tvisnil(expected))
+      return LJ_TAB_STORE_CAS_ABSENT;
+  }
+  return LJ_TAB_STORE_CAS_CHANGED;
 }
 
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
@@ -4517,17 +4650,322 @@ static int tab_current_slot_for_key(GCtab *parent, TValue *dst, cTValue *key)
   return tab_current_hash_slot_for_key(parent, dst, keyh);
 }
 
-LJ_FUNCA int lj_tab_read_current_keyed(GCtab *parent, TValue *dst,
-				       cTValue *key, TValue *oldp)
+/* Single-attempt current-generation validation for descriptor-active stores.
+** The caller holds GC2 SMR. A racing structural snapshot is reported stale;
+** this routine never assists, waits or follows a retiring vector. */
+static LJ_AINLINE int tab_store_array_snapshot_try(GCtab *parent,
+						    TValue **arrayp,
+						    MSize *asizep)
 {
-  if (!tab_current_slot_for_key(parent, dst, key))
+  MSize asize = lj_tab_asize_acq(parent);
+  TValue *array = lj_tab_array_acq(parent);
+  if (array && !lj_tab_array_is_colocated(parent, array)) {
+    asize = lj_tab_array_hdr_asize_acq(array);
+  } else if (lj_tab_asize_acq(parent) != asize) {
+    return 0;
+  }
+  if (array != lj_tab_array_acq(parent))
+    return 0;
+  *arrayp = array;
+  *asizep = asize;
+  return 1;
+}
+
+static LJ_AINLINE int tab_store_node_snapshot_try(GCtab *parent,
+						  Node **nodep,
+						  MSize *hmaskp)
+{
+  Node *node = lj_tab_node_acq(parent);
+  MSize hmask;
+  if (!node)
+    return 0;
+  hmask = lj_tab_node_hmask_acq(node);
+  if (node != lj_tab_node_acq(parent))
+    return 0;
+  *nodep = node;
+  *hmaskp = hmask;
+  return 1;
+}
+
+static TValue *tab_store_hash_slot_for_key_bounded(Node *node, MSize hmask,
+						    cTValue *key)
+{
+  Node *n;
+  MSize visited = 0;
+  if (!node || hmask == 0)
+    return NULL;
+  n = hashkey_node(node, hmask, key);
+  while (n) {
+    TValue nk;
+    Node *next;
+    if (!tab_node_in_snapshot(node, hmask, n) || visited++ > hmask)
+      return NULL;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tab_key_islocked(&nk))
+      return NULL;
+    if (!tvisnil(&nk) && lj_obj_equal(&nk, key))
+      return &n->val;
+    next = lj_tab_nextnode_acq(n);
+    if (next && !tab_node_in_snapshot(node, hmask, next))
+      return NULL;
+    n = next;
+  }
+  return NULL;
+}
+
+static int tab_store_array_successor_slot_bounded(GCtab *parent,
+						   TValue *array,
+						   MSize asize,
+						   MSize key,
+						   TValue *dst,
+						   int *to_hash)
+{
+  TValue before, confirm;
+  TValue *next;
+  MSize nextasize;
+  int have_old_slot = key < asize;
+  if (to_hash)
+    *to_hash = 0;
+  if (!array || lj_tab_array_is_colocated(parent, array))
+    return 0;
+  /* A key outside this array comes from the old hash part. Its FORWARD marker
+  ** precedes successor value installation, so neither RETIRING nor FORWARD can
+  ** prove a delete/put-if-absent store is safe in the unpublished array. Wait
+  ** for the new array root instead of inventing a cross-part handoff. */
+  if (!have_old_slot)
+    return 0;
+  lj_tv_load_acq(&before, &array[key]);
+  if (!tvisforward(&before) &&
+      !lj_tab_array_is_retiring(parent, array))
+    return 0;
+  next = lj_tab_array_nextgen_acq(array);
+  if (!next || next == array || lj_tab_array_is_colocated(parent, next))
+    return 0;
+  nextasize = lj_tab_array_hdr_asize_acq(next);
+  if (lj_tab_array_is_retiring(parent, next) ||
+      array != lj_tab_array_acq(parent) ||
+      next != lj_tab_array_nextgen_acq(array))
+    return 0;
+  lj_tv_load_acq(&confirm, &array[key]);
+  if (!tvisforward(&confirm) &&
+      !lj_tab_array_is_retiring(parent, array))
+    return 0;
+  if (key < nextasize) {
+    /* Even FORWARD is not a completion certificate: the resize owner may have
+    ** captured the old value before an assist installed the successor, then
+    ** resume after a delete and refill the nil destination. Until migration
+    ** owns a unique persistent MOVING descriptor, same-index successor stores
+    ** retry until the new array is the published table root. */
+    UNUSED(dst);
+    return 0;
+  }
+  /* Array shrink transfers this old integer slot to the successor hash part.
+  ** RETIRING identifies the transfer, but the exact hash proof below must see
+  ** the already-published non-retiring hash root before accepting dst. */
+  if (to_hash)
+    *to_hash = 1;
+  return 0;
+}
+
+static int tab_current_slot_for_key_bounded(GCtab *parent, TValue *dst,
+					     cTValue *key)
+{
+  int32_t k;
+  int64_t i64;
+  int intkey = 0;
+  TValue hkey;
+  cTValue *keyh = key;
+  int array_to_hash = 0;
+  if (tvisint(key)) {
+    k = intV(key);
+    intkey = 1;
+    setnumV(&hkey, (lua_Number)k);
+    keyh = &hkey;
+  } else if (tvisnum(key) && lj_num2int_check(numV(key), i64, k)) {
+    intkey = 1;
+  }
+  if (intkey && k >= 0) {
+    TValue *array;
+    MSize asize;
+    if (!tab_store_array_snapshot_try(parent, &array, &asize))
+      return 0;
+    if (array) {
+      if ((MSize)k < asize && dst == &array[k] &&
+	  !lj_tab_array_is_retiring(parent, array) &&
+	  array == lj_tab_array_acq(parent))
+	return 1;
+      if (tab_store_array_successor_slot_bounded(
+	    parent, array, asize, (MSize)k, dst, &array_to_hash))
+	return 1;
+      if ((MSize)k < asize && !array_to_hash)
+	return 0;
+    }
+  }
+  {
+    Node *node;
+    MSize hmask;
+    TValue *slot;
+    if (!tab_store_node_snapshot_try(parent, &node, &hmask) || hmask == 0)
+      return 0;
+    slot = tab_store_hash_slot_for_key_bounded(node, hmask, keyh);
+    if (slot == dst && !lj_tab_node_is_retiring(node) &&
+	node == lj_tab_node_acq(parent))
+      return 1;
+    /* Hash FORWARD/RETIRING is published before the successor value. Exact
+    ** next-generation key lookup therefore cannot distinguish an installed
+    ** edge from the migration's transient nil slot. Wait for successor-root
+    ** publication, which follows the complete hash copy, rather than allow a
+    ** delete or NIL-mode claim to be resurrected by put-if-absent migration. */
+    return 0;
+  }
+}
+
+LJ_FUNCA int lj_tab_read_current_keyed(global_State *g, GCtab *parent,
+				       TValue *dst, cTValue *key, TValue *oldp)
+{
+  int rc = LJ_TAB_STORE_CAS_STALE;
+  if (!g || !parent || !dst || !key || !oldp || !lj_gc2_smr_read_try(g))
+    return rc;
+  /* dst was resolved before this call. Validate it without dereferencing,
+  ** then keep the matching vector generation alive through load and the
+  ** closing currentness proof. */
+  if (tab_current_slot_for_key_bounded(parent, dst, key)) {
+    lj_tv_load_acq(oldp, dst);
+    if (tvisforward(oldp))
+      rc = LJ_TAB_STORE_CAS_FORWARD;
+    else if (tab_current_slot_for_key_bounded(parent, dst, key))
+      rc = LJ_TAB_STORE_CAS_OK;
+  }
+  lj_gc2_smr_read_leave(g);
+  return rc;
+}
+
+static LJ_AINLINE int tab_store_guard_needed(cTValue *key, cTValue *src)
+{
+  return tvisgcv(src) || (tvisgcv(key) && !tvisnil(src));
+}
+
+static void tab_store_guard_finish_checked(lua_State *L,
+					    LJGC2TableStoreGuard *guard,
+					    int committed)
+{
+  (void)lj_gc2_table_store_finish(L, guard, committed);
+  if (LJ_UNLIKELY(guard->cleanup_failed || !guard->finished)) {
+    /* Any unfinished lifecycle leaves a descriptor, lease, weak token or exact
+    ** registry borrow represented only by this stack guard. Global pins are
+    ** fail-closed, but continuation would discard the owning representation. */
+    lj_assertL(0, "table-store guard lost cleanup authority");
+    abort();
+  }
+}
+
+static int tab_trystoretv_cas_keyed_once_mode(lua_State *L,
+					       GCtab *parent, TValue *dst,
+					       cTValue *key, cTValue *src,
+					       int mode, TValue *observed)
+{
+  global_State *g;
+  TValue keysnap, valuesnap, expected;
+  int committed = 0;
+  int guarded;
+  int rc = LJ_TAB_STORE_CAS_STALE;
+  if (!parent)
+    return tab_trystoretv_cas_once(L, dst, src);
+  lj_tv_load_acq(&keysnap, key);
+  lj_tv_load_acq(&valuesnap, src);
+  guarded = tab_store_guard_needed(&keysnap, &valuesnap);
+  /* Trace/VM scratch operands must become semantic roots before SMR failure,
+  ** retry, or descriptor publication can make their native locations stale. */
+  if (guarded)
+    tab_store_barrier_write(L, parent, &keysnap, &valuesnap);
+  /*
+  ** Keyed CAS validates the slot before and after the store. Hold a short SMR
+  ** reader across that validation/CAS window so the resolved table generation
+  ** cannot be reclaimed between the current-slot proof and the slot load.
+  ** Every validation below is single-attempt: no descriptor-active path waits,
+  ** assists a resize, allocates, throws, or performs an L-aware callout.
+  */
+  g = L ? G(L) : NULL;
+  /* Failure to enter is a generation-stale result, not a reason to wait for
+  ** the opportunistic reclaimer. The keyed caller re-resolves from the table
+  ** root and retries without retaining this raw slot. */
+  if (!lj_gc2_smr_read_try(g))
     return LJ_TAB_STORE_CAS_STALE;
-  lj_tv_load_acq(oldp, dst);
-  if (tvisforward(oldp))
-    return LJ_TAB_STORE_CAS_FORWARD;
-  if (!tab_current_slot_for_key(parent, dst, key))
-    return LJ_TAB_STORE_CAS_STALE;
-  return LJ_TAB_STORE_CAS_OK;
+  if (!tab_current_slot_for_key_bounded(parent, dst, &keysnap)) {
+    /* dst was resolved before this SMR interval and can already name a
+    ** reclaimed generation. Failed currentness is the complete answer: never
+    ** inspect the rejected raw pointer to refine EXISTING into ABSENT/FORWARD.
+    ** The caller re-resolves from the table root outside this interval. */
+    goto leave;
+  }
+  lj_tv_load_acq(&expected, dst);
+  if (tvisforward(&expected)) {
+    rc = LJ_TAB_STORE_CAS_FORWARD;
+    goto leave;
+  }
+  if (tab_val_is_publish_claim(&expected)) {
+    rc = LJ_TAB_STORE_CAS_CHANGED;
+    goto leave;
+  } else if (mode == TAB_STORE_MODE_NIL) {
+    if (observed)
+      *observed = expected;
+    if (!tvisnil(&expected)) {
+      rc = LJ_TAB_STORE_CAS_EXISTS;
+      goto leave;
+    }
+  } else if (mode == TAB_STORE_MODE_EXISTING && tvisnil(&expected)) {
+    rc = LJ_TAB_STORE_CAS_ABSENT;
+    goto leave;
+  }
+  if (guarded) {
+    LJGC2TableStoreGuard guard;
+    LJGC2TableStoreGuardResult stage;
+    stage = lj_gc2_table_store_begin(L, &guard, parent,
+				     &keysnap, &valuesnap);
+    if (stage != LJ_GC2_TABLE_STORE_GUARD_OK &&
+	stage != LJ_GC2_TABLE_STORE_GUARD_PINNED) {
+      if (!guard.finished && guard.g && guard.tg)
+	tab_store_guard_finish_checked(L, &guard, 0);
+      goto leave;
+    }
+    stage = lj_gc2_table_store_admit(L, &guard);
+    if ((stage != LJ_GC2_TABLE_STORE_GUARD_OK &&
+	 stage != LJ_GC2_TABLE_STORE_GUARD_PINNED) ||
+	!guard.gate_admitted)
+      goto guarded_finish;
+    if (!tab_current_slot_for_key_bounded(parent, dst, &guard.key))
+      goto guarded_finish;
+    stage = lj_gc2_table_store_revalidate(L, &guard);
+    if ((stage != LJ_GC2_TABLE_STORE_GUARD_OK &&
+	 stage != LJ_GC2_TABLE_STORE_GUARD_PINNED) ||
+	!guard.store_authorized)
+      goto guarded_finish;
+    /* Final revalidation is immediately adjacent to the semantic CAS. The
+    ** expected old value and by-value guard payload are the only operands. */
+    rc = tab_trystoretv_cas_expected(dst, &expected, &guard.value,
+					     mode, observed);
+    committed = rc == LJ_TAB_STORE_CAS_OK;
+    if (committed)
+      tab_test_store_post_cas(L, parent, dst, &guard.key, &guard.value);
+    if (committed &&
+	!tab_current_slot_for_key_bounded(parent, dst, &guard.key))
+      rc = LJ_TAB_STORE_CAS_STALE;
+guarded_finish:
+    /* A committed CAS must hand off even when post-currentness returns STALE.
+    ** Every other exit clears ACTIVE before the caller may wait or retry. */
+    tab_store_guard_finish_checked(L, &guard, committed);
+  } else {
+    rc = tab_trystoretv_cas_expected(dst, &expected, &valuesnap,
+					     mode, observed);
+    if (rc == LJ_TAB_STORE_CAS_OK &&
+	!tab_current_slot_for_key_bounded(parent, dst, &keysnap)) {
+      lj_gc_pubtabtv(L, parent, &valuesnap);
+      rc = LJ_TAB_STORE_CAS_STALE;
+    }
+  }
+leave:
+  lj_gc2_smr_read_leave(g);
+  return rc;
 }
 
 static LJ_AINLINE int tab_trystoretv_cas_keyed_once(lua_State *L,
@@ -4536,35 +4974,8 @@ static LJ_AINLINE int tab_trystoretv_cas_keyed_once(lua_State *L,
 						    cTValue *key,
 						    cTValue *src)
 {
-  global_State *g;
-  int rc;
-  if (!parent)
-    return tab_trystoretv_cas_once(L, dst, src);
-  /*
-  ** Keyed CAS validates the slot before and after the store. Hold a short SMR
-  ** reader across that validation/CAS window so the resolved table generation
-  ** cannot be reclaimed between the current-slot proof and the slot load. Slot
-  ** lookup and resize assist stay outside this helper; they may allocate or
-  ** perform L-aware safepoint waits before reaching this non-throwing window.
-  */
-  g = L ? G(L) : NULL;
-  /* Failure to enter is a generation-stale result, not a reason to wait for
-  ** the opportunistic reclaimer. The keyed caller re-resolves from the table
-  ** root and retries without retaining this raw slot. */
-  if (!lj_gc2_smr_read_try(g))
-    return LJ_TAB_STORE_CAS_STALE;
-  if (!tab_current_slot_for_key(parent, dst, key))
-    rc = LJ_TAB_STORE_CAS_STALE;
-  else {
-    rc = tab_trystoretv_cas_once(L, dst, src);
-    if (rc == LJ_TAB_STORE_CAS_OK &&
-	!tab_current_slot_for_key(parent, dst, key)) {
-      lj_gc_pubtabtv(L, parent, dst);
-      rc = LJ_TAB_STORE_CAS_STALE;
-    }
-  }
-  lj_gc2_smr_read_leave(g);
-  return rc;
+  return tab_trystoretv_cas_keyed_once_mode(
+    L, parent, dst, key, src, TAB_STORE_MODE_ANY, NULL);
 }
 
 LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
@@ -4645,37 +5056,23 @@ LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
 					TValue *dst, cTValue *key,
 					cTValue *src, TValue *oldp)
 {
-  TValue expect;
   int rc;
   for (;;) {
-    rc = lj_tab_read_current_keyed(parent, dst, key, oldp);
-    if (rc != LJ_TAB_STORE_CAS_OK)
+    rc = tab_trystoretv_cas_keyed_once_mode(
+      L, parent, dst, key, src, TAB_STORE_MODE_NIL, oldp);
+    if (rc != LJ_TAB_STORE_CAS_CHANGED)
       return rc;
-    if (!tvisnil(oldp))
-      return LJ_TAB_STORE_CAS_EXISTS;
-    expect = *oldp;
-    if (lj_tv_cas(dst, &expect, src)) {
-      if (tab_current_slot_for_key(parent, dst, key))
-	return LJ_TAB_STORE_CAS_OK;
-      lj_gc_pubtabtv(L, parent, dst);
-      return LJ_TAB_STORE_CAS_STALE;
-    }
-    *oldp = expect;
-    if (tvisforward(&expect))
-      return LJ_TAB_STORE_CAS_FORWARD;
-    if (!tvisnil(&expect))
-      return LJ_TAB_STORE_CAS_EXISTS;
     lj_tab_store_wait_l(L);
   }
 }
 
-int lj_tab_clear_weak_slot_keyed(GCtab *parent, TValue *dst, cTValue *key,
-				 cTValue *val)
+int lj_tab_clear_weak_slot_keyed(global_State *g, GCtab *parent, TValue *dst,
+				 cTValue *key, cTValue *val)
 {
   TValue old, expect, nilv;
   setnilV(&nilv);
   for (;;) {
-    int rc = lj_tab_read_current_keyed(parent, dst, key, &old);
+    int rc = lj_tab_read_current_keyed(g, parent, dst, key, &old);
     if (rc != LJ_TAB_STORE_CAS_OK) {
       if (rc == LJ_TAB_STORE_CAS_STALE)
 	return tab_clear_weak_slot_rawkey(dst, key, val);
@@ -4724,7 +5121,7 @@ static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
   TValue old, expect, nilv;
   setnilV(&nilv);
   for (;;) {
-    int rc = lj_tab_read_current_keyed(parent, dst, key, &old);
+    int rc = lj_tab_read_current_keyed(G(L), parent, dst, key, &old);
     if (rc != LJ_TAB_STORE_CAS_OK)
       return 0;
     if (tvisnil(&old))
@@ -4827,52 +5224,30 @@ LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
   */
   tab_store_barrier_write(L, parent, key, src);
   for (;;) {
-    TValue *dst = (TValue *)lj_tab_get(L, parent, key);
-    TValue old, expect;
-    int weakwr, casok;
-    lj_tv_load_acq(&old, dst);
-    if (tvisforward(&old)) {
-      lj_tab_store_wait_l(L);
-      continue;
-    }
-    if (tvisnil(&old))
-      return 0;  /* Let the interpreter resolve __newindex/new-key semantics. */
-    if (!tab_current_slot_for_key(parent, dst, key)) {
-      lj_tab_store_wait_l(L);
-      continue;
-    }
-    weakwr = lj_gc2_weak_write_begin(L, parent);
-    if (weakwr)
-      tab_store_barrier_write(L, parent, key, src);
-    expect = old;
-    casok = lj_tv_cas(dst, &expect, src);
-    if (casok) {
-      if (tab_current_slot_for_key(parent, dst, key)) {
-	tab_store_barrier_write(L, parent, key, src);
-	if (weakwr)
-	  lj_gc2_weak_write_end(L, weakwr);
-	return 1;
-      }
-      lj_gc_pubtabtv(L, parent, dst);
-      if (weakwr) {
-	tab_store_barrier_write(L, parent, key, src);
-	lj_gc2_weak_write_end(L, weakwr);
-      }
-      lj_tab_store_wait_l(L);
-      continue;
-    }
-    if (weakwr)
-      lj_gc2_weak_write_end(L, weakwr);
-    if (tvisforward(&expect)) {
-      lj_tab_store_wait_l(L);
-      continue;
-    }
-    if (tvisnil(&expect))
+    TValue *dst;
+    int rc, status;
+    status = tab_resolve_current_keyed_try(G(L), parent, key, &dst);
+    if (status == TAB_RESOLVE_ABSENT)
       return 0;
+    if (status == TAB_RESOLVE_RETRY) {
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    rc = tab_trystoretv_cas_keyed_once_mode(
+      L, parent, dst, key, src, TAB_STORE_MODE_EXISTING, NULL);
+    if (rc == LJ_TAB_STORE_CAS_OK) {
+      tab_store_barrier_write(L, parent, key, src);
+      return 1;
+    }
+    if (rc == LJ_TAB_STORE_CAS_ABSENT)
+      return 0;
+    /* FORWARD/STALE/CHANGED and a publish-claim collision are retried only
+    ** after the guarded core has finished every descriptor/lease authority. */
     lj_tab_store_wait_l(L);
   }
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
 static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
 					    TValue *array, MSize asize,
 					    TValue *dst, MSize key)
@@ -4889,13 +5264,11 @@ static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
     if (!tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
 		       asize, &idx))
       return dst;
-    /*
-    ** Store helpers try the successor hop before resize assist so an ordinary
-    ** old slot can remain a GC-visible edge; assist may turn it into FORWARD.
-    */
-    if (tvisforward(&val) ?
-	lj_tab_array_forward_hop_forward(parent, &array, &asize) :
-	tab_array_forward_hop_writer(parent, &array, &asize)) {
+    /* A separated-array assist installs/preserves the successor value before
+    ** publishing FORWARD. RETIRING alone precedes owner copy and cannot
+    ** authorize a delete or NIL-mode store in the successor. */
+    if (tvisforward(&val) &&
+	lj_tab_array_forward_hop_forward(parent, &array, &asize)) {
       if (idx < asize)
 	return &array[idx];
       return lj_tab_setinth(L, parent, (int32_t)key);
@@ -4943,28 +5316,39 @@ static TValue *tab_forwarded_jit_hash_slot(lua_State *L, GCtab *parent,
     return slot ? slot : lj_tab_set(L, parent, keycopy);
   }
 }
+#endif
 
 static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
 					 TValue *orig, cTValue *key,
 					 TValue *keycopy, cTValue **keyp)
 {
+  UNUSED(orig);
+  UNUSED(keycopy);
+  *keyp = key;
   for (;;) {
-    Node *node;
-    MSize idx, hmask = tab_store_node_snapshot_acq(parent, &node);
-    if (hmask > 0 &&
-	tab_ptr_index((uintptr_t)node, (uintptr_t)orig, sizeof(Node),
-		      hmask + 1u, &idx) &&
-	orig == &node[idx].val)
-      return tab_forwarded_jit_hash_slot(L, parent, node, hmask, orig,
-					 keycopy, keyp, key);
-    if (lj_tab_node_is_retiring(node)) {
-      TValue *slot = tab_forwarded_setslot(parent, &node, &hmask, key);
-      if (slot)
-	return slot;
+    TValue *slot;
+    int status = tab_resolve_current_keyed_try(G(L), parent, key, &slot);
+    if (status == TAB_RESOLVE_FOUND)
+      return slot;
+    if (status == TAB_RESOLVE_ABSENT)
+      return lj_tab_set(L, parent, key);
+    /* No raw generation survives this wait. */
+    lj_tab_store_wait_l(L);
+  }
+}
+
+static TValue *tab_current_keyed_slot(lua_State *L, GCtab *parent,
+				      cTValue *key)
+{
+  for (;;) {
+    TValue *slot;
+    int status = tab_resolve_current_keyed_try(G(L), parent, key, &slot);
+    if (status == TAB_RESOLVE_FOUND)
+      return slot;
+    if (status == TAB_RESOLVE_ABSENT)
+      return lj_tab_set(L, parent, key);
+    /* Retry only after the bounded SMR attempt has released all vectors. */
       lj_tab_store_wait_l(L);
-      continue;
-    }
-    return lj_tab_set(L, parent, key);
   }
 }
 
@@ -5011,34 +5395,10 @@ static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
 static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
 					  TValue *orig, MSize key)
 {
-  for (;;) {
-    TValue *array;
-    MSize asize, idx;
-    asize = tab_store_array_snapshot_acq(parent, &array);
-    if (tab_ptr_index((uintptr_t)array, (uintptr_t)orig, sizeof(TValue),
-		      asize, &idx)) {
-      if (lj_tab_array_is_retiring(parent, array)) {
-	TValue *next = array;
-	MSize nextasize = asize;
-	/* Keep the writer-hop-before-assist ordering from above. */
-	if (tab_array_forward_hop_writer(parent, &next, &nextasize)) {
-	  if (idx < nextasize)
-	    return &next[idx];
-	  return lj_tab_setinth(L, parent, (int32_t)key);
-	}
-	{
-	  TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize,
-						      idx);
-	  if (slot)
-	    return slot;
-	}
-	lj_tab_store_wait_l(L);
-	continue;
-      }
-      return tab_forwarded_jit_array_slot(L, parent, array, asize, orig, key);
-    }
-    return lj_tab_setint(L, parent, (int32_t)key);
-  }
+  TValue keytv;
+  UNUSED(orig);
+  setintV(&keytv, (int32_t)key);
+  return tab_current_keyed_slot(L, parent, &keytv);
 }
 
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
@@ -5223,48 +5583,23 @@ static int tab_tsetm_barrier_needed(lua_State *L, GCtab *parent)
 static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
 					     MSize key)
 {
-  TValue *array;
-  MSize asize;
-  asize = tab_store_array_snapshot_acq(parent, &array);
-  if (array && !lj_tab_array_is_colocated(parent, array)) {
-    if (lj_tab_array_is_retiring(parent, array)) {
-      TValue *next = array;
-      MSize nextasize = asize;
-      TValue val;
-      int observed_forward = 0;
-      if (key < asize) {
-	lj_tv_load_acq(&val, &array[key]);
-	observed_forward = tvisforward(&val);
-      }
-      /* Store helpers preserve ordinary old slots; assist may forward them. */
-      if (observed_forward ?
-	  lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
-	  tab_array_forward_hop_writer(parent, &next, &nextasize)) {
-	if (key < nextasize)
-	  return &next[key];
-	return lj_tab_setinth(L, parent, (int32_t)key);
-      }
-      if (key < asize) {
-	TValue *slot = tab_resize_assist_array_slot(L, parent, array, asize,
-						    key);
-	if (slot)
-	  return slot;
-      }
-    }
-  }
-  if (array && key < asize)
-    return tab_current_jit_array_slot(L, parent, &array[key], key);
-  return lj_tab_setint(L, parent, (int32_t)key);
+  TValue keytv;
+  setintV(&keytv, (int32_t)key);
+  return tab_current_keyed_slot(L, parent, &keytv);
 }
 
-static void tab_tsetm_barrier_range(lua_State *L, GCtab *parent, uint32_t start,
-				    uint32_t n)
+static void tab_tsetm_barrier_range(lua_State *L, GCtab *parent,
+				    cTValue *src, uint32_t n)
 {
   global_State *g = G(L);
   uint32_t i;
   for (i = 0; i < n; i++) {
-    TValue *dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
-    lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), dst);
+    TValue value;
+    /* Keyed stores already released their vector SMR interval. Barrier the
+    ** stable source edge, never re-resolve and dereference a raw destination
+    ** which a concurrent resize may have retired. */
+    lj_tv_load_acq(&value, &src[i]);
+    lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), &value);
   }
   lj_gc2_barrier_tab(L, parent);  /* Preserve the previous TSETM table barrier. */
 }
@@ -5299,13 +5634,19 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
   global_State *g;
   uint32_t i;
   int weakcand;
+  int stack_src;
+  ptrdiff_t srcofs;
   if (!L || !parent || !src || n == 0)
     return;
   g = G(L);
+  stack_src = tab_key_on_stack(L, src);
+  srcofs = stack_src ? savestack(L, (TValue *)(void *)src) : 0;
   weakcand = lj_gc2_weak_write_candidate(L, parent);
+  if (stack_src) src = restorestack(L, srcofs);
   if (!weakcand)
     lj_gc2_barrier_tvn_pair_g(g, obj2gco(parent), src, n);
-  if (!weakcand && !mt_active_or_entering_acq(g)) {
+  if (stack_src) src = restorestack(L, srcofs);
+  if (!weakcand && tab_private_mutation_allowed(L)) {
     TValue *dst = tab_tsetm_fast_range(parent, start, n);
     if (dst) {
       tab_test_tsetm_fast_call();
@@ -5318,19 +5659,24 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
   for (i = 0; i < n; i++) {
     TValue *dst;
     TValue key;
+    if (stack_src) src = restorestack(L, srcofs);
     setintV(&key, (int32_t)(start + i));
     if (weakcand)
       tab_store_barrier_write(L, parent, &key, &src[i]);
     for (;;) {
       dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
+      if (stack_src) src = restorestack(L, srcofs);
       if (tab_trystoretv_cas_keyed_weak(L, parent, dst, &key, &src[i]) ==
 	  LJ_TAB_STORE_CAS_OK)
 	break;
       lj_tab_store_wait_l(L);  /* VM TSETM saw stale/FORWARD slot. */
+      if (stack_src) src = restorestack(L, srcofs);
     }
   }
-  if (weakcand || tab_tsetm_barrier_needed(L, parent))
-    tab_tsetm_barrier_range(L, parent, start, n);
+  if (weakcand || tab_tsetm_barrier_needed(L, parent)) {
+    if (stack_src) src = restorestack(L, srcofs);
+    tab_tsetm_barrier_range(L, parent, src, n);
+  }
 }
 
 TValue *lj_tab_storenilraw(TValue *dst)

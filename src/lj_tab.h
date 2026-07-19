@@ -295,6 +295,8 @@ typedef void (*LJTabResizeArrayHook)(lua_State *L, GCtab *t,
 				     TValue *oldarray, MSize oldasize);
 typedef void (*LJTabNextAfterKeyindexHook)(GCtab *t, uint32_t idx);
 typedef void (*LJTabConstructorPrepublishHook)(lua_State *L, GCtab *t);
+typedef void (*LJTabStorePostCasHook)(lua_State *L, GCtab *t, TValue *dst,
+				      cTValue *key, cTValue *value);
 LJ_FUNC void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_chain_after_reserve_hook(
@@ -305,6 +307,7 @@ LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
   LJTabNextAfterKeyindexHook hook);
 LJ_FUNC void lj_tab_test_set_constructor_prepublish_hook(
   LJTabConstructorPrepublishHook hook);
+LJ_FUNC void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook);
 LJ_FUNC int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src,
 					      MSize idx, GCtab *dst,
 					      int freeze_old);
@@ -335,6 +338,7 @@ LJ_FUNC uint32_t lj_tab_test_wait_no_l_calls(void);
 LJ_FUNC void lj_tab_test_reset_wait_no_l_calls(void);
 #endif
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
+LJ_FUNC TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);
@@ -349,17 +353,19 @@ LJ_FUNCA void lj_tab_store_wait_l(lua_State *L);
 #define LJ_TAB_STORE_CAS_STALE		2
 #define LJ_TAB_STORE_CAS_EXISTS		3
 #define LJ_TAB_STORE_CAS_CHANGED	4
+#define LJ_TAB_STORE_CAS_ABSENT		5
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src);
-LJ_FUNCA int lj_tab_read_current_keyed(GCtab *parent, TValue *dst,
-				       cTValue *key, TValue *oldp);
+LJ_FUNCA int lj_tab_read_current_keyed(global_State *g, GCtab *parent,
+				       TValue *dst, cTValue *key, TValue *oldp);
 LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
 					 TValue *dst, cTValue *key,
 					 cTValue *src);
 LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
 					TValue *dst, cTValue *key,
 					cTValue *src, TValue *oldp);
-LJ_FUNC int lj_tab_clear_weak_slot_keyed(GCtab *parent, TValue *dst,
-					 cTValue *key, cTValue *val);
+LJ_FUNC int lj_tab_clear_weak_slot_keyed(global_State *g, GCtab *parent,
+					 TValue *dst, cTValue *key,
+					 cTValue *val);
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src,
 					     MSize key);
@@ -483,33 +489,6 @@ genarray:
     return &array[key];
   }
   return lj_tab_getinth(t, key);
-}
-
-static LJ_AINLINE TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key)
-{
-  TValue *array;
-retry_array:
-  {
-    MSize asize = lj_tab_array_snapshot_acq(t, &array);
-  genarray:
-    if ((MSize)key < asize) {
-      TValue val;
-      lj_tv_load_acq(&val, &array[key]);
-      if (tvisforward(&val)) {
-	if (lj_tab_array_forward_hop_forward(t, &array, &asize))
-	  goto genarray;
-	if (lj_tab_array_acq(t) != array ||
-	    lj_tab_array_is_retiring(t, array) ||
-	    lj_tab_array_is_colocated(t, array)) {
-	  lj_tab_wait_no_l();
-	  goto retry_array;
-	}
-	return lj_tab_setint_forward(L, t, key);
-      }
-      return &array[key];
-    }
-  }
-  return lj_tab_setinth(L, t, key);
 }
 
 LJ_FUNC uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key);

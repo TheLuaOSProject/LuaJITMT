@@ -81,6 +81,11 @@ static void exercise_array_forward_jit(lua_State *L)
   lj_tab_array_rel(t, oldarray);
 
   setintV(&src, 200);
+  /* A successor pointer is not a completed per-key migration certificate.
+  ** Production helpers must wait for the replacement root publication and
+  ** then treat the recorded old slot as an opaque hint only. */
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
   tabfwd_assert_forward(&oldarray[key]);
   tabfwd_assert_i32(&newarray[key], 200);
@@ -153,6 +158,8 @@ static void exercise_array_current_retiring_jit(lua_State *L)
   lj_tab_array_rel(t, oldarray);
   lj_tab_asize_rel(t, oldasize);
   setintV(&src, 204);
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
   assert_retiring_array_old_i32(&oldarray[key], 18000);
 
@@ -195,7 +202,7 @@ static void exercise_array_retiring_observed_jit(lua_State *L)
 						   oldasize, &oldarray[key],
 						   &src, (MSize)key);
   assert(slot == &newarray[key]);
-  assert_retiring_array_old_i32(&oldarray[key], 18100);
+  tabfwd_assert_forward(&oldarray[key]);
   tabfwd_assert_i32(&newarray[key], 207);
   tabfwd_assert_i32(lj_tab_getint(t, key), 207);
 
@@ -238,6 +245,8 @@ static void exercise_hash_forward_jit(lua_State *L)
 
   setintV(&src, 200);
   setstrV(L, &keytv, hkey);
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
   lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);
   tabfwd_assert_forward(&oldn->val);
   tabfwd_assert_i32(&newn->val, 200);
@@ -397,6 +406,8 @@ static void exercise_hash_current_retiring_jit(lua_State *L)
   lj_tab_hmask_rel(t, oldhmask);
   setintV(&src, 205);
   setstrV(L, &keytv, hkey);
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
   lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);
   lj_tv_load_acq(&oldval, &oldn->val);
   assert(tvisforward(&oldval));
