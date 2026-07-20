@@ -1,11 +1,17 @@
 local th = require("threading")
 local trace_count = require("jit_harness").trace_count
 
-local function exercise(expect_seen)
+local function exercise(expect_seen, nested_flush)
   local seen = 0
+  local nested = false
   local function hook(ev)
     assert(ev == "flush", ev)
     seen = seen + 1
+    if nested_flush and not nested then
+      nested = true
+      jit.flush()
+      nested = false
+    end
     local s = 0
     for i = 1, 8 do s = s + i end
     assert(s == 36)
@@ -16,30 +22,64 @@ local function exercise(expect_seen)
   assert(seen == expect_seen, seen)
 end
 
-exercise(1)
+-- Direct pre-MT FLUSH callbacks run after handing off the recorder token. A
+-- nested public flush may use that token, but the already-active global FLUSH
+-- stream suppresses its observational callback without recursion or waiting.
+exercise(1, true)
+
+-- A handler error remains an observational VM-event failure: it is reported,
+-- the public flush itself succeeds, and the exact stream/session close makes a
+-- following handler immediately usable.
+local error_seen = 0
+local function error_hook(ev)
+  assert(ev == "flush", ev)
+  error_seen = error_seen + 1
+  error("intentional TRACE FLUSH handler failure")
+end
+jit.attach(error_hook, "trace")
+local error_ok, error_result = pcall(jit.flush)
+jit.attach(error_hook)
+assert(error_ok == true, error_result)
+assert(error_seen == 1, error_seen)
+
+local recovery_seen = 0
+local function recovery_hook(ev)
+  assert(ev == "flush", ev)
+  recovery_seen = recovery_seen + 1
+end
+jit.attach(recovery_hook, "trace")
+jit.flush()
+jit.attach(recovery_hook)
+assert(recovery_seen == 1, recovery_seen)
 
 local worker = th.spawn(function()
-  -- The safepoint leader flushes eventlessly, then the initiating state emits
-  -- the public TRACE "flush" event after it regains ownership while retaining
-  -- the recorder token through the callback.
+  -- Once MT has activated, the safepoint leader flushes eventlessly and the
+  -- initiating state emits the public TRACE "flush" event from its detached
+  -- stream transaction.
   exercise(1)
   return true
 end)
 
 assert(worker:join(20) == true)
 
--- Hold a flush callback open while a peer tries to start recording. Before the
--- flush callback retained the recorder token, the peer could enter the recorder
--- and publish J->L; lj_vmevent_call() then restored the flushing state over that
--- live owner. No trace may publish until the callback releases the token; the
--- same peer must record normally immediately afterward.
+-- Hold a detached flush callback open. A peer public flush must complete while
+-- it is paused, proving the callback no longer monopolizes the recorder token;
+-- its colliding TRACE event is suppressed by the already-active global stream.
+-- Another peer must make interpreted progress, but may not publish a trace until
+-- the outer stream closes. The same peer records normally immediately afterward.
 local flush_entered = th.channel(1)
 local flush_release = th.channel(1)
+local competing_flush_done = th.channel(1)
 local recorder_first_done = th.channel(1)
 local recorder_retry = th.channel(1)
+local overlap_seen = 0
 
 local function overlap_hook(ev)
   if ev == "flush" then
+    overlap_seen = overlap_seen + 1
+    -- GC2 must find the exact rooted handler/session/stream while arbitrary Lua
+    -- is active and the universe recorder word is already zero.
+    collectgarbage("collect")
     assert(flush_entered:send(true, 5) == true)
     local token, ok = flush_release:recv(5)
     assert(ok == true and token == "go")
@@ -63,6 +103,14 @@ local flusher = th.spawn(function()
   return true
 end)
 assert(select(2, flush_entered:recv(5)) == true)
+local competing_flush = th.spawn(function(done)
+  jit.flush()
+  assert(done:send(true, 5) == true)
+  return true
+end, competing_flush_done)
+assert(select(2, competing_flush_done:recv(5)) == true,
+       "peer jit.flush did not complete while FLUSH callback was detached")
+assert(competing_flush:join(20) == true)
 local recorder = th.spawn(function(first_done, retry)
   local first = record_after_flush()
   assert(first_done:send(true, 5) == true)
@@ -72,7 +120,7 @@ local recorder = th.spawn(function(first_done, retry)
 end, recorder_first_done, recorder_retry)
 assert(select(2, recorder_first_done:recv(5)) == true)
 assert(trace_count(64) == 0,
-       "peer recorder published while TRACE flush callback held the JIT token")
+       "peer recorder published through an active TRACE FLUSH stream")
 assert(flush_release:send("go", 5) == true)
 assert(recorder_retry:send("go", 5) == true)
 assert(flusher:join(20) == true)
@@ -80,6 +128,7 @@ local ok, result = recorder:join(20)
 assert(ok == true, result)
 assert(result == 2 * 40 * 3240, result)
 assert(trace_count(64) > 0, "peer did not record after flush callback released")
+assert(overlap_seen == 1, overlap_seen)
 jit.attach(overlap_hook)
 
 -- A recorder TRACE callback and a peer native trace exit used to share the

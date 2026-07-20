@@ -2,11 +2,11 @@
 
 ## Scope
 
-This checkpoint completes the bounded admission and protected-call primitives
+This checkpoint completed the bounded admission and protected-call primitives
 needed to move standalone TRACE `"flush"` delivery off the legacy global VM
-event owner.  It does **not** yet switch either production FLUSH callsite.  The
-direct and handshake paths continue to use the legacy delivery path until the
-next cutover commit can exercise the complete transaction end to end.
+event owner.  At this checkpoint it did **not** yet switch either production
+FLUSH callsite.  The follow-up production cutover is documented in
+`jit-flush-callback-production-cutover-2026-07-19.md`.
 
 The substrate is deliberately production-shaped rather than a second
 structural mock:

@@ -278,6 +278,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   /* Tail-only callback ownership is private until this TG is published. */
   memset(&tg->jit_event_callback_owner, 0,
 	 sizeof(tg->jit_event_callback_owner));
+  la_storeptr_rlx((void **)&tg->jit_trace_flush_reason, NULL);
 #endif
   lj_tg_store_cur_L(tg, L);
   lj_tg_lexstate_rel(tg, NULL);

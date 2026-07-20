@@ -13,6 +13,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_err.h"
 #include "lj_gc2.h"
 #include "lj_jit.h"
 #include "lj_safepoint.h"
@@ -21,6 +22,7 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_target.h"
+#include "lj_tgregistry.h"
 #include "lj_vmevent.h"
 
 #include "lib/lua_fixture_helpers.h"
@@ -646,12 +648,143 @@ static void expect_token_wait_stopreq(lua_State *L, const char *code)
   lua_settop(L, 0);
 }
 
-static int assert_flush_event_token_owner(lua_State *L)
+static uint32_t detached_flush_event_calls;
+static uint32_t flush_setup_error_calls;
+static uint32_t deferred_flush_stopreq_calls;
+
+static void acquire_flush_event_session(lua_State *L, TGState *tg,
+                                        LJJitEventSessionSnapshot *session)
 {
+  uint32_t attempt;
+  int state = LJ_JIT_EVENT_SNAPSHOT_RETRY;
+  for (attempt = 0; attempt < 4096u; attempt++) {
+    state = lj_jit_event_session_snapshot_acquire(G(L), tg, session);
+    if (state != LJ_JIT_EVENT_SNAPSHOT_RETRY)
+      break;
+    (void)lj_thr_retry_yield(L);
+  }
+  assert(state == LJ_JIT_EVENT_SNAPSHOT_ACTIVE);
+}
+
+static void assert_flush_event_detached_state(lua_State *L)
+{
+  global_State *g = G(L);
   jit_State *J = L2J(L);
-  assert(lj_jit_token_held_l(L, J));
-  assert(jit_owner_l_acq(J) == L);
+  TGState *tg = L2TG(L);
+  LJJitTraceStreamSnapshot stream;
+  LJJitEventCallbackSnapshot callback;
+  LJJitEventSessionSnapshot session;
+
+  assert(tg != NULL && tg->gl == g);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(!lj_jit_token_held_l(L, J));
+  assert(lj_jit_trace_stream_snapshot(g, &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_ACTIVE);
+  assert(stream.phase == LJ_JIT_STREAM_DETACHED_CALLBACK);
+  assert(stream.generation != 0 && stream.event_ordinal == 1u);
+  assert(lj_tgregistry_key_equal(&stream.owner_key, &tg->registry_key));
+  assert(stream.owner_tid == lj_tg_tid_acq(tg));
+  assert(stream.owner_actor == lj_tg_actor_acq(tg));
+  assert(stream.traceno == 0);
+  assert(stream.callback_event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(stream.callback_slot == stream.terminal_slot);
+  assert(stream.callback_session_generation ==
+         stream.terminal_session_generation);
+  assert(stream.terminal_event == LJ_JIT_EVENT_TRACE_FLUSH);
+
+  assert(lj_jit_event_callback_snapshot(tg, &callback) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(callback.tg == tg && callback.owner_L == L);
+  assert(callback.state == LJ_JIT_EVENT_CALLBACK_CALLING);
+  assert(callback.stream_generation == stream.generation);
+  assert(callback.session_generation ==
+         stream.callback_session_generation);
+  assert(callback.session_slot == stream.callback_slot);
+  assert(callback.event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(callback.owner_actor == stream.owner_actor);
+  assert((lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) ==
+         (HOOK_ACTIVE|HOOK_VMEVENT));
+  assert(vmevent_owner_acq(g) == 0);
+
+  memset(&session, 0, sizeof(session));
+  acquire_flush_event_session(L, tg, &session);
+  assert(session.generation == callback.session_generation);
+  assert(session.slot_index == callback.session_slot);
+  assert(session.event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(session.owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE);
+  assert(session.edge_proof == LJ_JIT_EVENT_EDGE_NONE);
+  assert(session.callback_root_count == 1u);
+  assert(session.callback_handler != NULL);
+  assert(lj_jit_event_session_snapshot_release(&session));
+}
+
+static int assert_flush_event_detached(lua_State *L)
+{
+  assert_flush_event_detached_state(L);
+  /* A full GC must retain and rediscover the exact callback root while both
+  ** the low recorder word and legacy global VM-event owner remain empty. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert_flush_event_detached_state(L);
+  (void)la_add32_acqrel(&detached_flush_event_calls, 1u);
   return 0;
+}
+
+static void inject_flush_setup_error(lua_State *L, VMEvent ev, int stage,
+                                     void *ud)
+{
+  LJJitTraceStreamSnapshot stream;
+  UNUSED(ud);
+  assert(ev == LJ_VMEVENT_TRACE);
+  if (stage != LJ_VMEVENT_TEST_AFTER_EVENT_LOOKUP) {
+    /* Preparation hooks are one-shot at every checkpoint. Walk the same
+    ** reader forward until the handler lookup has actually completed. */
+    lj_vmevent_test_set_prepare_hook(inject_flush_setup_error, NULL);
+    return;
+  }
+  assert(lj_jit_token_held_l(L, L2J(L)));
+  assert(jit_owner_l_acq(L2J(L)) == L);
+  assert(lj_jit_trace_stream_snapshot(G(L), &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_IDLE);
+  assert(lj_jit_event_callback_idle(L2TG(L)));
+  (void)la_add32_acqrel(&flush_setup_error_calls, 1u);
+  /* The protected setup path must preserve this fixed error object, release
+  ** its disposable low token exactly once, and rethrow to the public pcall. */
+  lj_err_mem(L);
+}
+
+static void inject_flush_deferred_stopreq(lua_State *L, void *ud)
+{
+  TGState *tg = (TGState *)ud;
+  LJJitTraceStreamSnapshot stream;
+  LJJitEventCallbackSnapshot callback;
+  assert(tg != NULL && L2TG(L) == tg);
+  assert(jit_owner_word_acq(G(L)) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(L2J(L)) == NULL);
+  assert(lj_jit_trace_stream_snapshot(G(L), &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_ACTIVE);
+  assert(stream.phase == LJ_JIT_STREAM_DETACHED_CALLBACK);
+  assert(lj_jit_event_callback_snapshot(tg, &callback) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(callback.state == LJ_JIT_EVENT_CALLBACK_UNWINDING);
+  assert(callback.stream_generation == stream.generation);
+  assert(callback.session_generation ==
+         stream.callback_session_generation);
+  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ|TGF_STOPREQ_FRESH);
+  (void)la_add32_acqrel(&deferred_flush_stopreq_calls, 1u);
+}
+
+static void assert_flush_event_transaction_idle(lua_State *L)
+{
+  LJJitTraceStreamSnapshot stream;
+  jit_State *J = L2J(L);
+  TGState *tg = L2TG(L);
+  assert(jit_owner_word_acq(G(L)) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(lj_jit_trace_stream_snapshot(G(L), &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_IDLE);
+  assert(lj_jit_event_callback_idle(tg));
+  assert(lj_jit_event_sessions_quiescent(tg));
 }
 
 static void expect_jit_lifecycle_word_roundtrip(lua_State *L)
@@ -702,6 +835,33 @@ int main(void)
   expect_jit_lifecycle_word_roundtrip(L);
   expect_vmevent_smr_try_drop(L);
   expect_vmevent_owner_and_jit_pointer(L);
+
+  lua_pushcfunction(L, assert_flush_event_detached);
+  lua_setglobal(L, "lj_m6_assert_flush_event_detached");
+  {
+    uint32_t before = la_load32_acq(&detached_flush_event_calls);
+    /* Exercise the pre-MT direct callsite. The explicit nested flush must use
+    ** the now-free recorder token but cannot recursively enter the already
+    ** claimed same-TG callback/stream transaction. */
+    ljt_lua_dostring(L,
+      "local calls, nested = 0, false\n"
+      "local function hook(ev)\n"
+      "  assert(ev == 'flush')\n"
+      "  calls = calls + 1\n"
+      "  lj_m6_assert_flush_event_detached()\n"
+      "  if not nested then\n"
+      "    nested = true\n"
+      "    jit.flush()\n"
+      "    nested = false\n"
+      "  end\n"
+      "end\n"
+      "jit.attach(hook, 'trace')\n"
+      "jit.flush()\n"
+      "jit.attach(hook)\n"
+      "assert(calls == 1, calls)\n");
+    assert(la_load32_acq(&detached_flush_event_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+  }
 
   {
     GCtrace trace;
@@ -784,10 +944,9 @@ int main(void)
     assert(gc2_n_workers_acq(g) == 0);
   }
 
-  /* Sticky-MT full flushes use a safepoint leader, but the public TRACE event
-  ** must run afterward on the initiating state while it still owns the recorder
-  ** token. Releasing first lets a peer recorder publish J->L and have the event
-  ** restore this state over the live owner.
+  /* Sticky-MT full flushes use a safepoint leader. Their public TRACE event is
+  ** rooted by the initiating TG's immutable session and universe stream, then
+  ** runs with the recorder owner word and J->L already clear.
   */
   ljt_lua_dostring(L,
     "local th = require('threading')\n"
@@ -856,17 +1015,89 @@ int main(void)
   lua_pushnil(L);
   lua_setglobal(L, "lj_m6_force_vmevent_prepare_stack_growth");
 
-  lua_pushcfunction(L, assert_flush_event_token_owner);
-  lua_setglobal(L, "lj_m6_assert_flush_event_token_owner");
-  ljt_lua_dostring(L,
-    "local function hook(ev)\n"
-    "  if ev == 'flush' then lj_m6_assert_flush_event_token_owner() end\n"
-    "end\n"
-    "jit.attach(hook, 'trace')\n"
-    "jit.flush()\n"
-    "jit.attach(hook)\n");
+  {
+    uint32_t before = la_load32_acq(&detached_flush_event_calls);
+    ljt_lua_dostring(L,
+      "local calls = 0\n"
+      "local function hook(ev)\n"
+      "  assert(ev == 'flush')\n"
+      "  calls = calls + 1\n"
+      "  lj_m6_assert_flush_event_detached()\n"
+      "end\n"
+      "jit.attach(hook, 'trace')\n"
+      "jit.flush()\n"
+      "jit.attach(hook)\n"
+      "assert(calls == 1, calls)\n");
+    assert(la_load32_acq(&detached_flush_event_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+  }
+
+  {
+    uint32_t before = la_load32_acq(&flush_setup_error_calls);
+    int base, status;
+    ljt_lua_dostring(L,
+      "lj_m6_flush_setup_handler_calls = 0\n"
+      "function lj_m6_flush_setup_error_hook(ev)\n"
+      "  assert(ev == 'flush')\n"
+      "  lj_m6_flush_setup_handler_calls = "
+      "lj_m6_flush_setup_handler_calls + 1\n"
+      "end\n"
+      "jit.attach(lj_m6_flush_setup_error_hook, 'trace')\n");
+    lj_vmevent_test_set_prepare_hook(inject_flush_setup_error, NULL);
+    base = lua_gettop(L);
+    lua_getglobal(L, "jit");
+    assert(lua_istable(L, -1));
+    lua_getfield(L, -1, "flush");
+    lua_remove(L, -2);
+    assert(lua_isfunction(L, -1));
+    status = lua_pcall(L, 0, 0, 0);
+    assert(status == LUA_ERRMEM);
+    assert(lua_isstring(L, -1));
+    assert(strstr(lua_tostring(L, -1), "not enough memory") != NULL);
+    assert(la_load32_acq(&flush_setup_error_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+    lj_vmevent_test_set_prepare_hook(NULL, NULL);
+    lua_settop(L, base);
+    ljt_lua_dostring(L,
+      "assert(lj_m6_flush_setup_handler_calls == 0)\n"
+      "jit.attach(lj_m6_flush_setup_error_hook)\n"
+      "lj_m6_flush_setup_error_hook = nil\n"
+      "lj_m6_flush_setup_handler_calls = nil\n");
+  }
+
+  {
+    TGState *tg = L2TG(L);
+    uint32_t before = la_load32_acq(&deferred_flush_stopreq_calls);
+    int base, status;
+    /* Inject a fresh STOPREQ only after protected callback return has published
+    ** UNWINDING. The public flush may throw it only after exact owner/stream/
+    ** session close; otherwise this post-pcall idle proof fails. */
+    ljt_tg_clear_stopreq(tg);
+    ljt_lua_dostring(L,
+      "function lj_m6_deferred_flush_hook(ev) assert(ev == 'flush') end\n"
+      "jit.attach(lj_m6_deferred_flush_hook, 'trace')\n");
+    lj_jit_vmevent_call_test_set_hook(inject_flush_deferred_stopreq, tg);
+    base = lua_gettop(L);
+    lua_getglobal(L, "jit");
+    assert(lua_istable(L, -1));
+    lua_getfield(L, -1, "flush");
+    lua_remove(L, -2);
+    assert(lua_isfunction(L, -1));
+    status = lua_pcall(L, 0, 0, 0);
+    assert(status != LUA_OK);
+    assert(lua_isstring(L, -1));
+    assert(strstr(lua_tostring(L, -1),
+                  "thread interrupted: VM shutdown") != NULL);
+    assert(la_load32_acq(&deferred_flush_stopreq_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+    ljt_tg_clear_stopreq(tg);
+    lua_settop(L, base);
+    ljt_lua_dostring(L,
+      "jit.attach(lj_m6_deferred_flush_hook)\n"
+      "lj_m6_deferred_flush_hook = nil\n");
+  }
   lua_pushnil(L);
-  lua_setglobal(L, "lj_m6_assert_flush_event_token_owner");
+  lua_setglobal(L, "lj_m6_assert_flush_event_detached");
 
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"

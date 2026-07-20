@@ -398,6 +398,10 @@ struct TGState {
   /* Per-TG and tail-only.  Do not move this before vmevent_regkey: that key's
   ** offset is part of the already published attachment/session substrate. */
   LJJitEventCallbackOwner jit_event_callback_owner;
+  /* Main-TG storage is the immutable bootstrap copy used by standalone TRACE
+  ** FLUSH delivery.  Secondary TG copies remain NULL.  Keeping it after the
+  ** callback owner preserves every published event-substrate offset. */
+  GCstr *jit_trace_flush_reason;
 #endif
 };
 
@@ -488,6 +492,12 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_event_callback_owner) >=
 		 sizeof(((TGState *)0)->vmevent_regkey));
 LJ_STATIC_ASSERT(offsetof(TGState, jit_event_callback_owner) +
 		 sizeof(LJJitEventCallbackOwner) <= sizeof(TGState));
+LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_flush_reason) >=
+		 offsetof(TGState, jit_event_callback_owner) +
+		 sizeof(LJJitEventCallbackOwner));
+LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_flush_reason) +
+		 sizeof(((TGState *)0)->jit_trace_flush_reason) <=
+		 sizeof(TGState));
 #if LJ_64
 LJ_STATIC_ASSERT(sizeof(LJJitEventCallbackOwner) == 64u);
 #endif
@@ -501,8 +511,8 @@ LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
 		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
 #if LJ_HASJIT
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, jit_event_callback_owner) +
-		  sizeof(((TGState *)0)->jit_event_callback_owner)) <
+		 (offsetof(TGState, jit_trace_flush_reason) +
+		  sizeof(((TGState *)0)->jit_trace_flush_reason)) <
 		 __alignof__(TGState));
 #else
 LJ_STATIC_ASSERT(sizeof(TGState) -

@@ -126,6 +126,9 @@ LJ_FUNC int lj_vmevent_prepare_try(lua_State *L, VMEvent ev,
 LJ_FUNC ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev);
 
 #if LJ_HASJIT
+/* Fixed at state bootstrap and acquired from the authoritative main TG. */
+LJ_FUNC GCstr *lj_vmevent_trace_flush_reason_acq(global_State *g);
+
 /* Outcome from one already-admitted per-TG JIT VM-event callback. status is
 ** the protected Lua call result. actions and had_stopreq are intentionally
 ** returned without checking them: the caller must first close the rooted

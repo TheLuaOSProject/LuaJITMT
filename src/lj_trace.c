@@ -5005,6 +5005,130 @@ int lj_trace_hasany(global_State *g)
   return 0;
 }
 
+typedef struct TraceFlushVMEVENTCtx {
+  jit_State *J;
+  ptrdiff_t oldtop;
+  LJJitVMEVENTCallResult result;
+  int handed_off;
+  int called;
+  int closed;
+} TraceFlushVMEVENTCtx;
+
+/* Prepare and deliver one standalone TRACE "flush" event. All allocation is
+** protected by the surrounding cpcall. Before handoff, every refusal leaves
+** the exact low token with the caller; after handoff, only nonthrowing exact
+** callback/stream cleanup is legal. */
+static TValue *trace_flush_callback_cp(lua_State *L, lua_CFunction dummy,
+				       void *ud)
+{
+  TraceFlushVMEVENTCtx *ctx = (TraceFlushVMEVENTCtx *)ud;
+  LJVMEVENTPrepareResult prepared;
+  LJJitTraceStreamHandle stream;
+  LJJitEventCallbackHandle callback;
+  TValue *handler_slot, *arg;
+  GCstr *reason;
+  GCfunc *handler;
+  ptrdiff_t argbase;
+  uint32_t trace_slot;
+  int prepare_status;
+  UNUSED(dummy);
+
+  prepare_status = lj_vmevent_prepare_try(
+    L, LJ_VMEVENT_TRACE, &prepared);
+  if (prepare_status != LJ_VMEVENT_PREPARE_READY) {
+    /* ABSENT and RETRY are bounded dropped instrumentation events. The
+    ** preparation contract already restores the entry top; repeat the exact
+    ** restoration defensively before the token owner resumes. */
+    L->top = restorestack(L, ctx->oldtop);
+    return NULL;
+  }
+
+  argbase = prepared.argbase;
+  if (argbase < ctx->oldtop || argbase != savestack(L, L->top) ||
+      argbase - ctx->oldtop !=
+	(ptrdiff_t)((1u+LJ_FR2) * sizeof(TValue)) ||
+      !lj_jit_event_attachment_clock_slot(
+	VMEVENT_HASH(LJ_VMEVENT_TRACE), &trace_slot) ||
+      prepared.slot != trace_slot ||
+      !lj_vmevent_attachment_identity_valid(
+	prepared.attachment_state, prepared.attachment.generation))
+    goto drop;
+
+  /* The argument was interned and fixed at bootstrap, so this load cannot
+  ** enter the concurrent string-table writer/wait protocol. The prepared
+  ** function is rooted at oldtop and recovered after possible relocation. */
+  reason = lj_vmevent_trace_flush_reason_acq(G(L));
+  if (LJ_UNLIKELY(!reason || reason->gct != (uint8_t)~LJ_TSTR))
+    goto drop;
+  handler_slot = restorestack(L, argbase) - (1+LJ_FR2);
+  if (handler_slot != restorestack(L, ctx->oldtop) || !tvisfunc(handler_slot))
+    goto drop;
+  handler = funcV(handler_slot);
+  arg = restorestack(L, argbase);
+  setstrV(L, arg, reason);
+  lj_state_stack_pubtv(L, L, arg);
+  L->top = arg + 1;
+
+  memset(&stream, 0, sizeof(stream));
+  memset(&callback, 0, sizeof(callback));
+  if (!lj_jit_trace_flush_callback_admit_l(
+	L, ctx->J, prepared.attachment_state,
+	prepared.attachment.generation, handler, &stream, &callback))
+    goto drop;
+
+  /* Admission has already published the exact rooted session/callback/stream,
+  ** cleared J->L and released {tid,0}. Publish this fact before any operation
+  ** whose failure path is observed by the outer cpcall. */
+  ctx->handed_off = 1;
+  if (LJ_UNLIKELY(!lj_jit_vmevent_call_l(
+	L, argbase, ctx->oldtop, &callback, &ctx->result)))
+    abort();
+  ctx->called = 1;
+  if (LJ_UNLIKELY(!lj_jit_trace_flush_close_l(L, ctx->J, &stream)))
+    abort();
+  ctx->closed = 1;
+  return NULL;
+
+drop:
+  L->top = restorestack(L, ctx->oldtop);
+  return NULL;
+}
+
+/* Consume responsibility for one newly-acquired disposable low JIT token.
+** The wrapper releases it exactly once on absence, retry, admission refusal or
+** setup error. Successful admission consumes it itself; callback errors are
+** protected and STOPREQ is checked only after owner, stream and session close. */
+static void trace_flush_callback_newtoken(lua_State *L, jit_State *J)
+{
+  TraceFlushVMEVENTCtx ctx;
+  int errcode = 0;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.J = J;
+  ctx.oldtop = savestack(L, L->top);
+
+  lj_assertJ(lj_jit_token_held_l(L, J) && jit_owner_l_acq(J) == L,
+	     "FLUSH callback wrapper requires exact disposable token");
+  if (vmevmask_load_acq(G(L)) & VMEVENT_MASK(LJ_VMEVENT_TRACE))
+    errcode = lj_vm_cpcall(L, NULL, &ctx, trace_flush_callback_cp);
+
+  if (!ctx.handed_off) {
+    /* A successful bounded refusal owns no error object. On cpcall failure the
+    ** protected frame has left that object on the Lua stack for rethrow. */
+    if (!errcode)
+      L->top = restorestack(L, ctx.oldtop);
+    lj_jit_token_release_l(L, J);
+  } else if (LJ_UNLIKELY(errcode || !ctx.called || !ctx.closed)) {
+    /* No production operation between handoff and close may escape the
+    ** protected callback. Continuing would strand linear callback authority. */
+    abort();
+  }
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+  if (ctx.called)
+    lj_safepoint_checkstop_fresh(
+      L, ctx.result.actions, ctx.result.had_stopreq);
+}
+
 static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
 				 int send_event)
 {
@@ -5017,11 +5141,11 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   if (!allow_gc_hook && (hookmask_load(g) & HOOK_GC))
     return 1;
   token = lj_jit_token_acquire_wait(J);
-  /*
-  ** Full flush owns the recorder token on behalf of L. Publish that owner for
-  ** mcode/native helpers used by the trace retirement pass.
-  */
-  jit_owner_l_rel(J, L);
+  /* A newly acquired token belongs to this flush, so publish L for retirement
+  ** helpers and eventual callback admission. A pre-owned token retains the
+  ** enclosing recorder/control transaction's existing J->L identity. */
+  if (token)
+    jit_owner_l_rel(J, L);
   lj_gc2_smr_read_enter(J2G(J));
   for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
     GCtrace *T = traceref_safe(J, i);
@@ -5057,13 +5181,12 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   /* Free the whole machine code and invalidate all exit stub groups. */
   lj_mcode_free(J);
   memset(J->exitstubgroup, 0, sizeof(J->exitstubgroup));
-  if (token)
+  if (token && send_event)
+    trace_flush_callback_newtoken(L, J);  /* Consumes the disposable token. */
+  else if (token)
     lj_jit_token_release(J);
-  if (send_event) {
-    lj_vmevent_send_l(L, TRACE,
-      setstrV(V, V->top++, lj_str_newlit(V, "flush"));
-    );
-  }
+  /* token==0 belongs to an enclosing recorder/control transaction. Never
+  ** detach it merely to deliver nested FLUSH instrumentation. */
   return 0;
 }
 
@@ -5077,26 +5200,6 @@ int lj_trace_flushall_gc(lua_State *L)
   return trace_flushall_direct(L, 1, 0);
 }
 
-static TValue *trace_flush_vmevent_cp(lua_State *L, lua_CFunction dummy,
-				      void *ud)
-{
-  global_State *g = G(L);
-  UNUSED(dummy); UNUSED(ud);
-#ifndef LUAJIT_DISABLE_VMEVENT
-  if (vmevmask_load_acq(g) & VMEVENT_MASK(LJ_VMEVENT_TRACE)) {
-    ptrdiff_t oldtop = savestack(L, L->top);
-    ptrdiff_t argbase = lj_vmevent_prepare(L, LJ_VMEVENT_TRACE);
-    if (argbase) {
-      setstrV(L, L->top++, lj_str_newlit(L, "flush"));
-      lj_vmevent_call(L, argbase, oldtop);
-    }
-  }
-#else
-  UNUSED(g);
-#endif
-  return NULL;
-}
-
 /* Request a leader-owned full trace flush through the safepoint protocol.
 ** Internal policy transitions use the eventless form: invoking a user TRACE
 ** callback while their lifecycle state is transitional permits a same-thread
@@ -5105,7 +5208,6 @@ static int trace_flushall_hs_impl(lua_State *L, int send_event)
 {
   global_State *g = G(L);
   jit_State *J = L2J(L);
-  int errcode;
   int token;
   if ((hookmask_load(g) & HOOK_GC)) {
     if (lj_gc2_finalizer_owned_by_current(g))
@@ -5127,23 +5229,26 @@ static int trace_flushall_hs_impl(lua_State *L, int send_event)
     return trace_flushall_direct(L, 0, send_event);
   }
   token = lj_jit_token_acquire_wait(J);
-  (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
-  /*
-  ** The arbitrary safepoint leader uses the eventless GC flush path, but this
-  ** caller owns L again after the handshake. Deliver the public TRACE "flush"
-  ** event on that state while retaining the recorder token. The shared vmthread
-  ** event path can race a peer TEXIT callback, and releasing the token first
-  ** lets a new recorder have J->L overwritten by either event.
-  */
-  errcode = 0;
-  if (send_event) {
-    jit_owner_l_rel(J, L);
-    errcode = lj_vm_cpcall(L, NULL, NULL, trace_flush_vmevent_cp);
-  }
+  /* FLUSHJ's nested eventless direct pass sees this token as pre-owned. Give
+  ** its retirement/mcode helpers the initiating state before the handshake;
+  ** the direct path must preserve, not replace, that exact outer identity. */
   if (token)
+    jit_owner_l_rel(J, L);
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
+  /* The arbitrary safepoint leader uses the eventless GC flush path. A caller
+  ** which acquired this disposable token now publishes L, roots the exact
+  ** clocked handler in a detached session/stream, and atomically hands the low
+  ** token to zero before protected delivery. Exact close is token-free and
+  ** never restores J->L over a peer recorder.
+  */
+  if (token && send_event) {
+    trace_flush_callback_newtoken(L, J);  /* Consumes the disposable token. */
+  } else if (token) {
     lj_jit_token_release(J);
-  if (errcode)
-    lj_err_throw(L, errcode);  /* Propagate only after releasing the token. */
+  }
+  /* A pre-owned token is part of an enclosing recorder/control transaction.
+  ** The handshake may retire its traces, but nested FLUSH instrumentation is a
+  ** bounded drop and must not release or overwrite that outer ownership. */
   return 0;
 }
 

@@ -57,6 +57,9 @@ void lj_vmevent_init(lua_State *L)
   global_State *g = G(L);
   TGState *tg = g->main_tg;
   GCstr *key;
+#if LJ_HASJIT
+  GCstr *trace_flush_reason;
+#endif
   if (LJ_UNLIKELY(!tg))
     abort();
   key = lj_str_newlit(L, LJ_VMEVENTS_REGKEY);
@@ -65,10 +68,32 @@ void lj_vmevent_init(lua_State *L)
   ** pointer and therefore never enter strtab_wait(). */
   fixstring(g, key);
   la_storeptr_rel((void **)&tg->vmevent_regkey, key);
+#if LJ_HASJIT
+  trace_flush_reason = lj_str_newlit(L, "flush");
+  /* Standalone FLUSH runs after the runtime may be concurrent. Intern and fix
+  ** its sole argument during bootstrap so delivery never enters the string
+  ** table writer/wait protocol while it owns the low JIT token. */
+  fixstring(g, trace_flush_reason);
+  la_storeptr_rel((void **)&tg->jit_trace_flush_reason, trace_flush_reason);
+#endif
 #else
   UNUSED(L);
 #endif
 }
+
+#if LJ_HASJIT
+GCstr *lj_vmevent_trace_flush_reason_acq(global_State *g)
+{
+#ifndef LUAJIT_DISABLE_VMEVENT
+  TGState *tg = g ? g->main_tg : NULL;
+  return tg ? (GCstr *)la_loadptr_acq(
+    (void *const *)&tg->jit_trace_flush_reason) : NULL;
+#else
+  UNUSED(g);
+  return NULL;
+#endif
+}
+#endif
 
 int lj_jit_event_attachment_clock_slot(int32_t registry_key, uint32_t *slot)
 {
