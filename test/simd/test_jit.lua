@@ -215,14 +215,22 @@ test("lane reads on trace", function()
     local rnd = T.rng(SEED + 11 * ti.bits)
     local a = T.rand(ti, rnd)
     local ct = ti.ct
+    -- Accumulate lane values exactly. Summing them as Lua doubles would trip
+    -- over a pre-existing LuaJIT difference in tonumber() for uint64 values
+    -- above 2^63, which has nothing to do with vectors (see SIMD_STATUS.md).
+    local acc64 = ti.bits == 64 and not ti.fp
     diff(ti.name .. " lanes", function(n)
-      local s = 0
+      local s = acc64 and 0LL or 0
       local acc = ct(0)
       for _ = 1, n do
 	acc = acc + a
-	s = s + tonumber(acc[0]) + tonumber(acc[ti.lanes-1])
+	if acc64 then
+	  s = s + ffi.cast("int64_t", acc[0]) + ffi.cast("int64_t", acc[ti.lanes-1])
+	else
+	  s = s + tonumber(acc[0]) + tonumber(acc[ti.lanes-1])
+	end
       end
-      return s, acc
+      return tostring(s), acc
     end, 200)
   end
 end)
@@ -694,6 +702,18 @@ test("ffi.simd bitcast and convert on trace", function()
   diff("convert f32->i32", function(n)
     local acc = i4.ct(0)
     for i = 1, n do acc = acc + simd.convert(i4.ct, f4.ct((i % 11) + 0.75)) end
+    return acc
+  end, 300)
+  -- Float to integer conversion follows the packed instruction: it truncates
+  -- toward zero and yields the indefinite value for NaN or out of range.
+  diff("convert f32->i32 corner values", function(n)
+    local acc = i4.ct(0)
+    local vals = {0/0, 1/0, -1/0, 3e9, -3e9, 2147483647, -2147483648, 0.5}
+    for i = 1, n do
+      local v = f4.ct(vals[(i % 8) + 1], vals[((i+1) % 8) + 1],
+		      vals[((i+2) % 8) + 1], vals[((i+3) % 8) + 1])
+      acc = simd.bxor(acc, simd.convert(i4.ct, v))
+    end
     return acc
   end, 300)
   diff("convert i32->u32", function(n)

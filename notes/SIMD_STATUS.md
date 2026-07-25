@@ -24,6 +24,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M7 | x86-64-v3: AVX/AVX2 detection, VEX three operand encoding, 64-bit lane min/max | done |
 | M8 | Variable lane index, scalar cdata operands, mask predicate guard polarity | done |
 | M9 | Randomized program generator; snapshot replay, type-blind CSE and 64-bit `sar` fixes | done |
+| M10 | NaN quieting in rounding, defined float-to-integer conversion, seed sweep | done |
 
 ## Commands that pass
 
@@ -68,6 +69,21 @@ backend bug that neither of the other two modes reached. Keep it.
 
   The SIMD test suite avoids this pattern in its reference implementations.
   Out of scope for this work; recorded so it is not mistaken for a regression.
+
+* **Pre-existing upstream difference, not caused by this work.**
+  `tonumber(u)` for a `uint64_t` at or above 2^63 can differ by one ulp
+  between the interpreter and the JIT, because the JIT converts as signed and
+  then adds 2^64, which rounds twice. Reproduced on a pristine build of
+  `346ab587` with no vectors involved:
+
+  ```lua
+  local v = ffi.new("uint64_t[1]")
+  v[0] = 58ULL * 0x40d0f21a8ce41712ULL
+  -- interpreted 0x1.5eadb407d75a7p+63, compiled 0x1.5eadb407d75a8p+63
+  ```
+
+  `test_jit.lua` accumulates 64-bit lane values exactly instead of through
+  doubles so the suite does not depend on it.
 
 * LuaJIT has no in-tree test suite, so the regression baseline is an output
   diff of `test/simd/test_noregress.lua` against a pristine build of the base

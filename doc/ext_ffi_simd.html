@@ -160,7 +160,7 @@ if simd.anyof(simd.gt(v, limit)) then ... end
 <tr class="even"><td class="convin"><tt>simd.max(a, b)</tt></td><td class="convop">per lane <tt>a &gt; b and a or b</tt></td></tr>
 <tr class="odd"><td class="convin"><tt>simd.abs(a)</tt></td><td class="convop">absolute value; wraps for the most negative signed lane</td></tr>
 <tr class="even"><td class="convin"><tt>simd.sqrt(a)</tt></td><td class="convop">square root, floating-point only</td></tr>
-<tr class="odd"><td class="convin"><tt>simd.floor/ceil/trunc/round(a)</tt></td><td class="convop">rounding, floating-point only; <tt>round</tt> is ties-to-even</td></tr>
+<tr class="odd"><td class="convin"><tt>simd.floor/ceil/trunc/round(a)</tt></td><td class="convop">rounding, floating-point only; <tt>round</tt> is ties-to-even; a NaN operand comes back quieted</td></tr>
 <tr class="even"><td class="convin"><tt>simd.adds(a, b)</tt>, <tt>simd.subs(a, b)</tt></td><td class="convop">saturating add/subtract, 8 and 16 bit lanes only</td></tr>
 </table>
 <p>
@@ -210,10 +210,12 @@ local one  = simd.insert(v, 2, 42)                -- v with lane 2 set to 42
 </table>
 <p>
 <tt>bitcast</tt> requires equal total size and changes no bits.
-<tt>convert</tt> requires an equal lane count and converts each lane with C
-semantics: floating-point to integer truncates toward zero, integer to
-integer sign- or zero-extends or truncates. <tt>ct</tt> is a ctype from
-<tt>ffi.typeof()</tt>.
+<tt>convert</tt> requires an equal lane count. <tt>ct</tt> is a ctype from
+<tt>ffi.typeof()</tt>. Integer to integer sign- or zero-extends or truncates.
+Floating-point to integer truncates toward zero and yields the <em>integer
+indefinite</em> value &mdash; the minimum signed value of the destination
+width &mdash; for a NaN or for anything outside the destination's signed
+range, which is what the packed conversion instructions do.
 </p>
 <pre class="code">
 local bits = simd.bitcast(int4, v)                -- raw bit pattern

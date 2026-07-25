@@ -276,6 +276,21 @@ test("bitcast and convert", function()
 	  T.T.i64x2.ct(2, -2), "f64->i64 truncates")
   check(not pcall(simd.convert, T.T.i16x8.ct, i.ct(1)),
 	"convert with mismatched lane counts is rejected")
+  -- Float to integer follows the packed instruction: truncate toward zero,
+  -- indefinite value (the minimum signed value) for NaN or out of range.
+  checkeq(simd.convert(i.ct, f.ct(0/0, 1/0, -1/0, 3e9)),
+	  i.ct(-2147483648, -2147483648, -2147483648, -2147483648),
+	  "f32->i32 indefinite for NaN and out of range")
+  checkeq(simd.convert(i.ct, f.ct(2147483520, -2147483648, 0.9, -0.9)),
+	  i.ct(2147483520, -2147483648, 0, 0), "f32->i32 in range truncates")
+  checkeq(simd.convert(T.T.i64x2.ct, T.T.double2.ct(0/0, 1e300)),
+	  T.T.i64x2.ct(-9223372036854775807LL-1, -9223372036854775807LL-1),
+	  "f64->i64 indefinite")
+  -- Rounding quiets a signalling NaN, exactly like ROUNDPS does.
+  local snan = simd.bitcast(f.ct, i.ct(0x7fa00000, 0xffa00000, 0x7fc00000, 1))
+  checkeq(simd.bitcast(i.ct, simd.floor(snan)),
+	  i.ct(0x7fe00000, -2097152, 0x7fc00000, 0),
+	  "floor quiets a signalling NaN")
 end)
 
 test("introspection", function()

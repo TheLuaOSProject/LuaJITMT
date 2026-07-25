@@ -203,11 +203,49 @@ int lj_simd_unop(void *dp, const void *ap, const CTVecInfo *vi, uint32_t op)
   }
 }
 
+/*
+** Rounding. ROUNDPS/ROUNDPD return a NaN source operand *quieted*, so the
+** reference implementation has to do the same, or the two disagree on the
+** payload of a signalling NaN. The libm floor()/ceil() do not necessarily
+** quiet, so NaN lanes are handled here by hand.
+*/
 int lj_simd_round(void *dp, const void *ap, const CTVecInfo *vi, uint32_t mode)
 {
+  uint32_t i, n = vi->lanes;
   if (mode >= VRND__MAX) return 0;
-  if (vi->kind == VECK_F32) VEC_UN(float, (float)vec_round1((double)x, mode))
-  if (vi->kind == VECK_F64) VEC_UN(double, vec_round1(x, mode))
+  if (vi->kind == VECK_F32) {
+    uint32_t *d = (uint32_t *)dp;
+    const uint32_t *a = (const uint32_t *)ap;
+    for (i = 0; i < n; i++) {
+      uint32_t b = a[i];
+      if ((b & 0x7f800000u) == 0x7f800000u && (b & 0x007fffffu)) {
+	d[i] = b | 0x00400000u;  /* NaN: set the quiet bit. */
+      } else {
+	float f;
+	memcpy(&f, &b, 4);
+	f = (float)vec_round1((double)f, mode);
+	memcpy(&d[i], &f, 4);
+      }
+    }
+    return 1;
+  }
+  if (vi->kind == VECK_F64) {
+    uint64_t *d = (uint64_t *)dp;
+    const uint64_t *a = (const uint64_t *)ap;
+    for (i = 0; i < n; i++) {
+      uint64_t b = a[i];
+      if ((b & U64x(7ff00000,00000000)) == U64x(7ff00000,00000000) &&
+	  (b & U64x(000fffff,ffffffff))) {
+	d[i] = b | U64x(00080000,00000000);  /* NaN: set the quiet bit. */
+      } else {
+	double f;
+	memcpy(&f, &b, 8);
+	f = vec_round1(f, mode);
+	memcpy(&d[i], &f, 8);
+      }
+    }
+    return 1;
+  }
   return 0;
 }
 
@@ -469,21 +507,42 @@ static double vec_getlane_num(const void *ap, const CTVecInfo *vi, uint32_t i)
   }
 }
 
-/* Write a double to lane i of a vector, using C conversion rules. */
+/*
+** Truncate a double toward zero into a signed integer of the given width.
+** Matches the packed x86 conversions (CVTTPS2DQ and friends): a NaN or a
+** value outside the *signed* range of the destination yields the "integer
+** indefinite" value, which is the minimum signed value of that width. There
+** is no packed instruction that converts to unsigned, so unsigned lanes get
+** the same signed truncation and the same indefinite value.
+*/
+static int64_t vec_toint(double x, uint32_t esize)
+{
+  int64_t lo, hi;
+  switch (esize) {
+  case 1: lo = -128; hi = 127; break;
+  case 2: lo = -32768; hi = 32767; break;
+  case 4: lo = -2147483647-1; hi = 2147483647; break;
+  default:
+    if (!(x >= -9223372036854775808.0) || x >= 9223372036854775808.0)
+      return (int64_t)(-9223372036854775807LL - 1);  /* NaN or out of range. */
+    return (int64_t)x;
+  }
+  if (!(x >= (double)lo) || x > (double)hi) return lo;  /* NaN or out of range. */
+  return (int64_t)x;
+}
+
+/* Write a double to lane i of a vector. */
 static void vec_setlane_num(void *dp, const CTVecInfo *vi, uint32_t i, double x)
 {
   uint8_t *p = (uint8_t *)dp + i*vi->esize;
   switch (vi->kind) {
-  case VECK_I8: *(int8_t *)p = (int8_t)(int64_t)x; break;
-  case VECK_U8: *(uint8_t *)p = (uint8_t)(int64_t)x; break;
-  case VECK_I16: { int16_t v = (int16_t)(int64_t)x; memcpy(p, &v, 2); break; }
-  case VECK_U16: { uint16_t v = (uint16_t)(int64_t)x; memcpy(p, &v, 2); break; }
-  case VECK_I32: { int32_t v = (int32_t)(int64_t)x; memcpy(p, &v, 4); break; }
-  case VECK_U32: { uint32_t v = (uint32_t)(int64_t)x; memcpy(p, &v, 4); break; }
-  case VECK_I64: { int64_t v = (int64_t)x; memcpy(p, &v, 8); break; }
-  case VECK_U64: { uint64_t v = (uint64_t)x; memcpy(p, &v, 8); break; }
   case VECK_F32: { float v = (float)x; memcpy(p, &v, 4); break; }
-  default: memcpy(p, &x, 8); break;
+  case VECK_F64: memcpy(p, &x, 8); break;
+  default: {
+    int64_t v = vec_toint(x, vi->esize);
+    memcpy(p, &v, vi->esize);  /* Little-endian truncate to the lane width. */
+    break;
+    }
   }
 }
 

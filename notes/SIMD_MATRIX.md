@@ -87,10 +87,24 @@ is `false` and never raises.
 | `simd.bitcast(ct, v)` | yes | yes | equal total size required |
 | `simd.convert(ct, v)` | yes | yes | equal lane count required |
 
-`simd.convert` performs numeric lane conversion with C semantics (FP->int
-truncates toward zero, int->int sign/zero extends or truncates). Conversions
-between different lane counts are rejected; use `bitcast` for pure
-reinterpretation.
+`simd.convert` performs numeric lane conversion. Conversions between different
+lane counts are rejected; use `bitcast` for pure reinterpretation.
+
+* **integer -> integer**: sign- or zero-extends, or truncates, like C.
+* **integer -> float**: exact where the value fits, otherwise correctly
+  rounded.
+* **float -> integer**: truncates toward zero, and yields the *integer
+  indefinite* value (the minimum signed value of the destination width) for a
+  NaN or for anything outside the destination's **signed** range. That is
+  exactly what `CVTTPS2DQ` and the rest of the packed conversions do, and
+  since there is no packed instruction that converts to unsigned, unsigned
+  destinations get the same signed truncation. Choosing anything else would
+  either be undefined C behaviour or would force the operation to differ
+  between the interpreter and the JIT.
+
+Rounding (`floor`/`ceil`/`trunc`/`round`) returns a NaN operand **quieted**,
+which is what `ROUNDPS`/`ROUNDPD` do. The reference implementation handles NaN
+lanes explicitly, because libm's `floor()` need not quiet a signalling NaN.
 
 ## `ffi.simd`
 
