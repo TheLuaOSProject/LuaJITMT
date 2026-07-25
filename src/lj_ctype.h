@@ -458,6 +458,35 @@ static LJ_AINLINE void ctype_setname(CType *ct, GCstr *s)
   setgcref(ct->name, obj2gco(s));
 }
 
+/* -- Vector types -------------------------------------------------------- */
+
+/* Element kind of an FFI vector type. ORDER VECK */
+typedef enum {
+  VECK_I8, VECK_U8, VECK_I16, VECK_U16, VECK_I32, VECK_U32,
+  VECK_I64, VECK_U64, VECK_F32, VECK_F64,
+  VECK__MAX
+} VecKind;
+
+#define veck_isfp(k)		((uint32_t)(k) >= VECK_F32)
+#define veck_isunsigned(k)	(!veck_isfp(k) && ((k) & 1))
+/* Element size in bytes. */
+#define veck_size(k) \
+  (veck_isfp(k) ? (4u << ((uint32_t)(k)-VECK_F32)) : (1u << ((uint32_t)(k)>>1)))
+
+/* Maximum vector size handled by the interpreter helpers. */
+#define LJ_VEC_MAXSIZE		64
+
+/* Classification of an FFI vector ctype. */
+typedef struct CTVecInfo {
+  uint8_t kind;		/* VecKind of the element type. */
+  uint8_t esize;	/* Element size in bytes. */
+  uint16_t lanes;	/* Number of lanes. */
+  CTypeID eid;		/* Element ctype ID. */
+} CTVecInfo;
+
+/* Classify a vector ctype. Returns 0 if this is not a supported vector. */
+LJ_FUNC int lj_ctype_vecinfo(CTState *cts, CType *ct, CTVecInfo *vi);
+
 LJ_FUNC CTypeID lj_ctype_new(CTState *cts, CType **ctp);
 LJ_FUNC CTypeID lj_ctype_intern(CTState *cts, CTInfo info, CTSize size);
 LJ_FUNC void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id);

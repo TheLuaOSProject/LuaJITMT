@@ -511,7 +511,7 @@ LJVM_MODE= elfasm
 
 LJLIB_O= lib_base.o lib_math.o lib_bit.o lib_string.o lib_table.o \
 	 lib_io.o lib_os.o lib_package.o lib_debug.o lib_jit.o lib_ffi.o \
-	 lib_buffer.o
+	 lib_buffer.o lib_simd.o
 LJLIB_C= $(LJLIB_O:.o=.c)
 
 LJCORE_O= lj_assert.o lj_gc.o lj_err.o lj_char.o lj_bc.o lj_obj.o lj_buf.o \
@@ -525,7 +525,7 @@ LJCORE_O= lj_assert.o lj_gc.o lj_err.o lj_char.o lj_bc.o lj_obj.o lj_buf.o \
 	  lj_mcode.o lj_snap.o lj_record.o lj_crecord.o lj_ffrecord.o \
 	  lj_asm.o lj_trace.o lj_gdbjit.o \
 	  lj_ctype.o lj_cdata.o lj_cconv.o lj_ccall.o lj_ccallback.o \
-	  lj_carith.o lj_clib.o lj_cparse.o \
+	  lj_carith.o lj_clib.o lj_cparse.o lj_simd.o \
 	  lj_lib.o lj_alloc.o lib_aux.o \
 	  $(LJLIB_O) lib_init.o
 

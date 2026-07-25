@@ -853,6 +853,7 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   lua_pushliteral(L, LJ_OS_NAME);
   lua_pushliteral(L, LJ_ARCH_NAME);
   LJ_LIB_REG(L, NULL, ffi);  /* Note: no global "ffi" created! */
+  lj_lib_prereg(L, LUA_FFILIBNAME ".simd", luaopen_ffi_simd, tabref(L->env));
   ffi_register_module(L);
   return 1;
 }

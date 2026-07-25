@@ -657,7 +657,9 @@ static uint32_t jit_cpudetect(void)
   uint32_t features[4];
   if (lj_vm_cpuid(0, vendor) && lj_vm_cpuid(1, features)) {
     flags |= ((features[2] >> 0)&1) * JIT_F_SSE3;
+    flags |= ((features[2] >> 9)&1) * JIT_F_SSSE3;
     flags |= ((features[2] >> 19)&1) * JIT_F_SSE4_1;
+    flags |= ((features[2] >> 20)&1) * JIT_F_SSE4_2;
     if (vendor[0] >= 7) {
       uint32_t xfeatures[4];
       lj_vm_cpuid(7, xfeatures);

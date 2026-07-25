@@ -16,6 +16,7 @@
 #include "lj_cconv.h"
 #include "lj_cdata.h"
 #include "lj_carith.h"
+#include "lj_simd.h"
 #include "lj_strscan.h"
 
 /* -- C data arithmetic --------------------------------------------------- */
@@ -90,6 +91,61 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
     }
   }
   return ok;
+}
+
+/* Vector arithmetic. */
+static int carith_vec(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
+{
+  CTVecInfo vi;
+  CType *vct;
+  const uint8_t *ap, *bp;
+  uint8_t sbuf[LJ_VEC_MAXSIZE], rbuf[LJ_VEC_MAXSIZE];
+  int isv0 = ca->ct[0] && ctype_isvector(ca->ct[0]->info);
+  int isv1 = ca->ct[1] && ctype_isvector(ca->ct[1]->info);
+  uint32_t op;
+  CTypeID id;
+  GCcdata *cd;
+  if (!(isv0 || isv1)) return 0;
+  if (isv0 && isv1) {
+    /* Vector ctypes are interned, so identical types are pointer-equal. */
+    if (ca->ct[0] != ca->ct[1]) return 0;
+    vct = ca->ct[0];
+    if (!lj_ctype_vecinfo(cts, vct, &vi)) return 0;
+    ap = ca->p[0]; bp = ca->p[1];
+  } else {  /* Splat the scalar operand to the element type of the vector. */
+    int vn = isv0 ? 0 : 1;
+    CType *sct = ca->ct[1-vn];
+    uint8_t ebuf[8];
+    vct = ca->ct[vn];
+    if (!sct || !ctype_isnum(sct->info) || (sct->info & CTF_BOOL)) return 0;
+    if (!lj_ctype_vecinfo(cts, vct, &vi)) return 0;
+    lj_cconv_ct_ct(cts, ctype_get(cts, vi.eid), sct,
+		   ebuf, ca->p[1-vn], 0);
+    lj_simd_splat(sbuf, ebuf, &vi);
+    ap = isv0 ? ca->p[0] : sbuf;
+    bp = isv0 ? sbuf : ca->p[1];
+  }
+  switch (mm) {
+  case MM_add: op = VOP_ADD; break;
+  case MM_sub: op = VOP_SUB; break;
+  case MM_mul: op = VOP_MUL; break;
+  case MM_div: op = VOP_DIV; break;
+  case MM_unm:
+    if (!lj_simd_unop(rbuf, ap, &vi, VUN_NEG)) return 0;
+    goto mkresult;
+  case MM_eq:
+    setboolV(L->top-1, lj_simd_equal(ap, bp, &vi));
+    return 1;
+  default:
+    return 0;  /* No packed semantics: let the caller raise an error. */
+  }
+  if (!lj_simd_binop(rbuf, ap, bp, &vi, op)) return 0;
+mkresult:
+  id = ctype_typeid(cts, vct);
+  cd = lj_cdata_new(cts, id, (CTSize)vi.esize * vi.lanes);
+  memcpy(cdataptr(cd), rbuf, (size_t)vi.esize * vi.lanes);
+  setcdataV(L, L->top-1, cd);
+  return 1;
 }
 
 /* Pointer arithmetic. */
@@ -272,7 +328,8 @@ int lj_carith_op(lua_State *L, MMS mm)
   CTState *cts = ctype_cts(L);
   CDArith ca;
   if (carith_checkarg(L, cts, &ca) && mm != MM_len && mm != MM_concat) {
-    if (carith_int64(L, cts, &ca, mm) || carith_ptr(L, cts, &ca, mm)) {
+    if (carith_vec(L, cts, &ca, mm) ||
+	carith_int64(L, cts, &ca, mm) || carith_ptr(L, cts, &ca, mm)) {
       copyTV(L, &G(L)->tmptv2, L->top-1);  /* Remember for trace recorder. */
       return 1;
     }

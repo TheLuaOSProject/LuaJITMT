@@ -291,6 +291,41 @@ CType *lj_ctype_rawref(CTState *cts, CTypeID id)
   return ct;
 }
 
+/* Classify a vector ctype. Returns 0 if this is not a supported vector. */
+int lj_ctype_vecinfo(CTState *cts, CType *ct, CTVecInfo *vi)
+{
+  CType *cct;
+  CTSize esz, sz;
+  uint32_t kind;
+  if (!ctype_isvector(ct->info)) return 0;
+  cct = ctype_rawchild(cts, ct);
+  if (!ctype_isnum(cct->info) || (cct->info & CTF_BOOL)) return 0;
+  esz = cct->size;
+  if ((cct->info & CTF_FP)) {
+    if (esz == 4) kind = VECK_F32;
+    else if (esz == 8) kind = VECK_F64;
+    else return 0;
+  } else {
+    uint32_t u = (cct->info & CTF_UNSIGNED) ? 1 : 0;
+    switch (esz) {
+    case 1: kind = VECK_I8 + u; break;
+    case 2: kind = VECK_I16 + u; break;
+    case 4: kind = VECK_I32 + u; break;
+    case 8: kind = VECK_I64 + u; break;
+    default: return 0;
+    }
+  }
+  sz = ct->size;
+  /* Power-of-two total size, at least two lanes, not wider than the helpers. */
+  if (sz == 0 || (sz & (sz-1)) != 0 || sz < 2*esz || sz > LJ_VEC_MAXSIZE)
+    return 0;
+  vi->kind = (uint8_t)kind;
+  vi->esize = (uint8_t)esz;
+  vi->lanes = (uint16_t)(sz / esz);
+  vi->eid = ctype_typeid(cts, cct);
+  return 1;
+}
+
 /* Get size for a C type ID. Does NOT support VLA/VLS. */
 CTSize lj_ctype_size(CTState *cts, CTypeID id)
 {
