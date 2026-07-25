@@ -365,21 +365,44 @@ test("ffi.simd comparisons and masks on trace", function()
 end)
 
 test("ffi.simd shifts on trace", function()
+  -- The count must be a *literal* here. Lane widths without a shift
+  -- instruction (8 bit lanes, and the 64 bit arithmetic shift) are rewritten
+  -- by the recorder only for a constant count, so a variable count silently
+  -- leaves those paths interpreted and untested.
   for _, ti in ipairs(T.T) do
     if not ti.fp then
       local rnd = T.rng(SEED + 37 * ti.bits)
+      local vals = {}
+      for j = 1, 6 do vals[j] = T.rand(ti, rnd) end
+      -- Corner values the random generator is unlikely to produce.
+      local corner = {}
+      for j = 1, ti.lanes do corner[j] = j end
+      vals[#vals+1] = T.vec(ti, corner)
+      for _, op in ipairs({"shl", "shr", "sar"}) do
+	for _, k in ipairs({0, 1, 2, ti.bits-2, ti.bits-1, ti.bits, ti.bits+7}) do
+	  local src = "local simd, a = ...\n" ..
+		      "return function(n) local r\n" ..
+		      "  for _ = 1, n do r = simd." .. op .. "(a, " .. k .. ") end\n" ..
+		      "  return r end"
+	  for _, a in ipairs(vals) do
+	    local fi = loadstring(src)(simd, a)
+	    local fj = loadstring(src)(simd, a)
+	    jit_.off(); jit_.flush()
+	    local ref = fi(2)
+	    jit_.on()
+	    local got
+	    for _ = 1, 3 do got = fj(200) end
+	    jit_.off()
+	    checkeq(got, ref, string.format("%s %s %d of %s",
+		    ti.name, op, k, T.tostr(a)))
+	  end
+	end
+      end
+      -- A variable count as well, where the instruction exists.
       local a = T.rand(ti, rnd)
       local ct = ti.ct
       for _, op in ipairs({"shl", "shr", "sar"}) do
 	local f = simd[op]
-	for _, k in ipairs({0, 1, ti.bits-1, ti.bits, ti.bits+3}) do
-	  diffop(ti, op .. " " .. k, function(n)
-	    local acc = ct(0)
-	    for _ = 1, n do acc = f(simd.bxor(acc, a), k) end
-	    return acc
-	  end, 200)
-	end
-	-- Variable count.
 	diffop(ti, op .. " var", function(n)
 	  local acc = ct(0)
 	  for i = 1, n do acc = f(simd.bxor(acc, a), i % (ti.bits + 2)) end
@@ -482,6 +505,94 @@ test("type punning does not confuse store-to-load forwarding", function()
       s = s + simd.hsum(v)
     end
     return s
+  end, 200)
+end)
+
+test("side traces replay sunk vector boxes", function()
+  -- A rare branch inside a hot loop becomes a hot side exit and grows its own
+  -- side trace, which has to replay the parent's snapshot. When the sunk box
+  -- holds a constant vector that goes through snap_replay_const().
+  local i4, f4 = T.T.i32x4.ct, T.T.float4.ct
+  local sink
+  local function run(f, n)
+    jit_.off(); jit_.flush(); sink = 0
+    local r1, s1 = f(n), sink
+    jit_.on(); sink = 0
+    local r2, s2 = f(n), sink
+    jit_.off()
+    return r1, s1, r2, s2
+  end
+  local cases = {
+    {"constant box", function(n)
+       local acc = i4(0)
+       for i = 1, n do
+	 local k = i4(7)
+	 if i % 50 == 0 then sink = sink + k[0] + k[3] end
+	 acc = acc + k
+       end
+       return acc[0]
+     end},
+    {"runtime box", function(n)
+       local acc, a = i4(1), i4(3)
+       for i = 1, n do
+	 local k = acc + a
+	 if i % 50 == 0 then sink = sink + k[0] end
+	 acc = k
+       end
+       return acc[0]
+     end},
+    {"two sunk boxes", function(n)
+       local acc, a = f4(0), f4(1.5)
+       for i = 1, n do
+	 local p = acc + a
+	 local q = simd.min(p, f4(1000))
+	 if i % 37 == 0 then sink = sink + p[0] + q[1] end
+	 acc = q
+       end
+       return acc[0]
+     end},
+    {"mask box", function(n)
+       local acc, a = i4(0), i4(2)
+       for i = 1, n do
+	 local m = simd.lt(acc, i4(500))
+	 local k = simd.select(m, acc + a, i4(0))
+	 if i % 41 == 0 then sink = sink + simd.movemask(m) + k[2] end
+	 acc = k
+       end
+       return acc[0]
+     end},
+  }
+  for _, c in ipairs(cases) do
+    local r1, s1, r2, s2 = run(c[2], 4000)
+    checkeq(r2, r1, "side trace " .. c[1] .. " result")
+    checkeq(s2, s1, "side trace " .. c[1] .. " side-exit sum")
+  end
+end)
+
+test("comparisons of different lane widths are not merged", function()
+  -- CSE matches on opcode and operands. For vectors the lane type is part of
+  -- the instruction (PCMPEQB is not PCMPEQD), so two compares of the same two
+  -- vectors at different widths must stay separate.
+  local i4, b16 = T.T.i32x4.ct, T.T.i8x16.ct
+  local a = i4(0x00000001, 0x01020304, 5, 6)
+  local b = i4(0x00000101, 0x01020305, 5, 7)
+  diff("byte and dword compare of the same operands", function(n)
+    local whole, m4, m16 = 0, 0, 0
+    for _ = 1, n do
+      if a == b then whole = whole + 1 end       -- byte-wise internally
+      m4 = simd.movemask(simd.eq(a, b))          -- dword-wise
+      m16 = simd.movemask(simd.eq(simd.bitcast(b16, a), simd.bitcast(b16, b)))
+    end
+    return whole, m4, m16
+  end, 200)
+  -- Same shape for the ordering compares and for the shifts.
+  diff("gt at two widths", function(n)
+    local m4, m16 = 0, 0
+    for _ = 1, n do
+      m4 = simd.movemask(simd.gt(a, b))
+      m16 = simd.movemask(simd.gt(simd.bitcast(b16, a), simd.bitcast(b16, b)))
+    end
+    return m4, m16
   end, 200)
 end)
 

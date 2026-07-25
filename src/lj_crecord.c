@@ -1839,18 +1839,17 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
 	  r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, ks), ks);
 	}
       }
-    } else {  /* 64 bit arithmetic shift right. */
+    } else {
+      /* 64 bit arithmetic shift right, which has no instruction before
+      ** AVX-512: sar(x,n) == ((x >>u n) ^ m) - m with m = (1<<63) >>u n.
+      */
       TRef ks;
-      uint64_t sbit;
+      uint64_t m;
       if (sh >= 64) sh = 63;
-      sbit = (uint64_t)1 << 63;
-      memcpy(ebuf, &sbit, 8);
+      m = ((uint64_t)1 << 63) >> sh;
+      memcpy(ebuf, &m, 8);
       ks = crec_vec_kmask(J, vt, &vi, ebuf);
-      r = emitir(IRT(IR_VXOR, vt), a, ks);
-      r = emitir(IRT(IR_VSHR, vt), r, lj_ir_kint(J, (int32_t)sh));
-      sbit >>= sh;
-      memcpy(ebuf, &sbit, 8);
-      ks = crec_vec_kmask(J, vt, &vi, ebuf);
+      r = emitir(IRT(IR_VSHR, vt), a, lj_ir_kint(J, (int32_t)sh));
       r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, ks), ks);
     }
   } else {

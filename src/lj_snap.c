@@ -452,6 +452,10 @@ static TRef snap_replay_const(jit_State *J, IRIns *ir)
   case IR_KGC: return lj_ir_kgc(J, ir_kgc(ir), irt_t(ir->t));
   case IR_KNUM: case IR_KINT64:
     return lj_ir_k64(J, (IROp)ir->o, ir_k64(ir)->u64);
+#if LJ_HASFFI
+  case IR_KVEC:  /* Stored into a sunk vector box, see snap_unsink(). */
+    return lj_ir_kvec(J, irt_type(ir->t), ir_kvec(ir));
+#endif
   case IR_KPTR: return lj_ir_kptr(J, ir_kptr(ir));  /* Continuation. */
   case IR_KNULL: return lj_ir_knull(J, irt_type(ir->t));
   default: lj_assertJ(0, "bad IR constant op %d", ir->o); return TREF_NIL;

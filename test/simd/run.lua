@@ -12,7 +12,7 @@ local dir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 package.path = dir .. "/?.lua;" .. package.path
 
 local ALL = {"test_types", "test_arith", "test_lib", "test_jit", "test_codegen",
-	     "test_ffi_abi"}
+	     "test_ffi_abi", "test_stress"}
 
 -- Child process: run one file in one mode.
 if arg[1] == "--one" then

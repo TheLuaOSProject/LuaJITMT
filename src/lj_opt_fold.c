@@ -2560,8 +2560,25 @@ retry:
   */
   if (LJ_UNLIKELY(fins->o >= IR_VSPLAT ||
 		  (fins->op1 >= J->cur.nk && IR(fins->op1)->o >= IR_VSPLAT))) {
-    if (irm_kind(lj_ir_mode[fins->o]) == IRM_N)
-      return lj_opt_cse(J);
+    if (irm_kind(lj_ir_mode[fins->o]) == IRM_N) {
+      /*
+      ** Type-aware CSE. The generic one matches on opcode and operands only,
+      ** which is fine for scalars because a type pun there yields the same
+      ** bits. It is not fine for vectors: VCMPEQ on V16I8 is PCMPEQB and on
+      ** V4I32 is PCMPEQD, same operands, completely different masks.
+      */
+      IRRef2 op12 = (IRRef2)fins->op1 + ((IRRef2)fins->op2 << 16);
+      if (LJ_LIKELY(J->flags & JIT_F_OPT_CSE)) {
+	IRRef ref = J->chain[fins->o];
+	IRRef lim = fins->op1;
+	if (fins->op2 > lim) lim = fins->op2;
+	while (ref > lim) {
+	  if (IR(ref)->op12 == op12 && irt_sametype(IR(ref)->t, fins->t))
+	    return TREF(ref, irt_t(IR(ref)->t));
+	  ref = IR(ref)->prev;
+	}
+      }
+    }
     return lj_ir_emit(J);
   }
   /* Construct key from opcode and operand opcodes (unless literal/none). */

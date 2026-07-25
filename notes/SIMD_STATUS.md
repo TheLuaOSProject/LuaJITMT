@@ -23,6 +23,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M6 | Vector alias analysis and self-describing VMOVMSK/VEXTRACT | done |
 | M7 | x86-64-v3: AVX/AVX2 detection, VEX three operand encoding, 64-bit lane min/max | done |
 | M8 | Variable lane index, scalar cdata operands, mask predicate guard polarity | done |
+| M9 | Randomized program generator; snapshot replay, type-blind CSE and 64-bit `sar` fixes | done |
 
 ## Commands that pass
 
@@ -115,6 +116,19 @@ notes/*                          design/status/matrix/testing notes (new)
   `ra_rematk()`.
 * Long emitted sequences must call `checkmclim()` in the middle: the mcode
   red zone is only 64 bytes.
+* `snap_replay_const()` has its own switch over constant opcodes, separate
+  from `ra_rematk()`, `lj_ir_kvalue()` and `snap_restoredata()`. It silently
+  returned `TREF_NIL` for `IR_KVEC`, so a side trace that replayed a sunk
+  vector box holding a constant got garbage. Any new constant kind has to be
+  added to *all four*.
+* `lj_opt_cse()` matches on opcode and operands but **not on type**. That is
+  fine for scalars, where a type pun gives the same bits, and wrong for
+  vectors: `VCMPEQ` is PCMPEQB at V16I8 and PCMPEQD at V4I32. Vector opcodes
+  now use a type-aware CSE in `lj_opt_fold()`.
+* A test that passes a *variable* where the recorder needs a constant silently
+  tests nothing: the trace aborts and the interpreter answers. The 64-bit
+  arithmetic shift emulation was wrong for every input and the shift tests
+  still passed, because they used a loop variable as the count.
 * A fast function whose result is recorded as a **guard** must leave that
   result in `G(L)->tmptv2`. `LJ_POST_FIXGUARD` reads it to decide whether to
   flip the guard, so without it the compiled code can answer the opposite of

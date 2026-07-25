@@ -140,9 +140,23 @@ function M.tostr(v)
   return "{" .. table.concat(t, ",") .. "}"
 end
 
+-- Raw bytes as hex, most significant lane first. Safe for any bit pattern:
+-- it never turns a lane into a Lua number, which matters because a
+-- non-canonical NaN cannot be represented as one (see notes/SIMD_MATRIX.md).
+function M.hexbytes(v)
+  local n = ffi.sizeof(v)
+  local box = ffi.new(ffi.typeof("$[1]", ffi.typeof(v)))
+  box[0] = v
+  ffi.copy(M._hexbuf, box, n)
+  local t = {}
+  for i = n-1, 0, -1 do t[#t+1] = string.format("%02x", M._hexbuf[i]) end
+  return "0x" .. table.concat(t)
+end
+
 -- Bit-exact vector comparison (so NaN and -0 mismatches are caught).
 local boxcache = {}
 local sbuf1, sbuf2 = ffi.new("uint8_t[64]"), ffi.new("uint8_t[64]")
+M._hexbuf = ffi.new("uint8_t[64]")
 function M.same(a, b)
   local ta, tb = tostring(ffi.typeof(a)), tostring(ffi.typeof(b))
   if ta ~= tb then return false end

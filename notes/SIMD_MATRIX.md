@@ -163,6 +163,33 @@ Semantics worth pinning down:
 running interpreted, and the result is identical. It never means a wrong
 result and never means a silent per-lane scalarisation.
 
+## Inherited LuaJIT rule: non-canonical NaNs are not Lua numbers
+
+Turning a floating-point lane into a Lua number (`v[i]`, `simd.hsum`,
+`simd.hmin`, `simd.hmax`) uses the ordinary FFI conversion, which **does not
+canonicalise NaNs** -- see the comment in `lj_cconv.c`:
+*"Numbers are NOT canonicalized here! Beware of uninitialized data."* In GC64 a
+negative NaN whose payload reaches into the top mantissa bits collides with the
+type tag space, so it cannot be represented as a `TValue` at all.
+
+This is **not specific to vectors**. Pristine LuaJIT at the base commit
+`346ab587` segfaults on:
+
+```lua
+local p = ffi.new("double[1]")
+ffi.cast("uint64_t *", p)[0] = 0xfff9c624cdc00000ULL
+local x = p[0]
+return x + 1        -- boom, in the interpreter
+```
+
+`simd.hsum(v)` on a float vector is exactly `v[0]` is exactly `doubleptr[0]`,
+so it inherits the same rule, and the interpreter and the JIT agree. Such bit
+patterns can only be *created* by applying bitwise operations to a
+floating-point vector; the documented mask idiom (`simd.band(v, mask)` with an
+all-ones/all-zero mask) cannot produce one. `test_stress.lua` therefore does
+not feed bitwise results on float lanes into a scalar query, and its failure
+messages print raw bytes rather than lane values.
+
 ## ABI
 
 | Case | Status |
