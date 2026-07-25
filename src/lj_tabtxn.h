@@ -13,11 +13,14 @@
 ** held form is one bounded, non-allocating scan: the caller must already own
 ** exact leases for |t| and |key| and a GC2 SMR reader which retains both table
 ** vectors.  FOUND includes an in-range nil array cell and an existing hash key
-** whose value is nil.  ABSENT means that no structural slot exists.  RETRY
-** covers a changing/retiring generation, FORWARD/KEYLOCK/finalizer claims,
-** malformed snapshots and invalid operands.  |addr| is set to zero before
-** validation and on every non-FOUND return.  FOUND integerizes the slot while
-** the caller's authority is still live; no TValue pointer crosses the API.
+** whose value is nil.  ABSENT means either no structural slot exists or the
+** exact slot contains a FORWARD marker proven to belong to a stable current
+** separated-array/hash generation.  Ordinary nil-valued structural slots
+** remain FOUND.  RETRY covers changing/retiring hand-offs, current colocated
+** FORWARD, KEYLOCK/finalizer claims, malformed snapshots and invalid operands.
+** |addr| is set to zero before validation and on every non-FOUND return.
+** FOUND integerizes the slot while the caller's authority is still live; no
+** TValue pointer crosses the API.
 **
 ** resolve_rooted_try supplies those leases and the SMR reader from exact
 ** authoritative TValue roots.  It performs one bounded attempt, validates the

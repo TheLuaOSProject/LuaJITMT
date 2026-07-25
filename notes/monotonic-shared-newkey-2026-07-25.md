@@ -148,6 +148,12 @@ baseline `c832d41d`: that fixture fabricates a stable current-generation
 `f37baada` classifies it as a generic retry forever. This is a separate b1.2.1
 regression to repair; it is not counted as a passing aggregate.
 
+Follow-up on 2026-07-25: the bounded current-FORWARD checkpoint repairs that
+timeout. A subsequent cached aggregate passed the repaired forward block and
+stopped much later at `m5_state_owner` with a `not enough memory` panic which
+reproduces directly at both current source and exact baseline `c832d41d`.
+Neither aggregate attempt is reported as a complete pass.
+
 `m9_newkey_barrier_scope` likewise currently exceeds its fixed grey-drain
 threshold on both this worktree and `c832d41d`. Twenty paired process samples
 gave the same counter ranges for current and baseline, so there is no measured

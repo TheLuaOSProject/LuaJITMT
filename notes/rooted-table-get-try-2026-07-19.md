@@ -38,9 +38,12 @@ One attempt performs the following ordered transaction:
    non-collectable local key value, but passes through the same lease/result
    machinery.
 4. Resolve the key once with `tab_resolve_current_keyed_held()`.  That resolver
-   snapshots both array and hash roots as one logical generation, rejects
-   retiring/FORWARD/KEYLOCK/finalizer-claim state, bounds collision traversal,
-   and confirms the paired generation before returning.
+   snapshots both array and hash roots as one logical generation, distinguishes
+   stable-current separated-array/hash FORWARD from current colocated or live-
+   handoff FORWARD, rejects retiring/KEYLOCK/finalizer-claim state, bounds
+   collision traversal, and confirms the paired generation before returning.
+   The rooted-read wrapper maps the stable raw FORWARD result to logical
+   absence; the live forms remain RETRY.
 5. Convert a nil value in either a structural array cell or an existing hash
    node to semantic ABSENT.  A non-nil result receives its own exact TValue
    lease before the source vector can leave SMR.
@@ -70,7 +73,8 @@ test instrument, not a callback, and is absent from production builds.
 | Stable non-table parent root | ABSENT | nil |
 | Closed SMR admission | RETRY | nil after a fresh owner check |
 | Stale/transient table, key, or result lease | RETRY | nil |
-| Retiring/mixed generation, FORWARD, KEYLOCK, finalizer claim, malformed chain, or hidden `LJ_KEYINDEX` | RETRY | nil |
+| Stable-current separated-array/hash FORWARD with no live hand-off | ABSENT | nil |
+| Current colocated FORWARD, retiring/mixed generation, live-handoff FORWARD, KEYLOCK, finalizer claim, malformed chain, or hidden `LJ_KEYINDEX` | RETRY | nil |
 | Mutable table/key root changed before confirmation | RETRY | nil |
 | Invalid operands, failed initial owner admission, or owner lost before terminal publication | RETRY | untouched |
 
@@ -97,7 +101,8 @@ false certified absence.
   stable non-table ABSENT classifications;
 - key/output, table/output, and table/key/output aliases;
 - deterministic closed-SMR, table-lease, key-lease, and result-lease RETRY;
-- FORWARD, published-retiring array root, and `LJ_KEYINDEX` RETRY;
+- stable-current separated-array FORWARD ABSENT, but current colocated
+  FORWARD, published-retiring array root, and `LJ_KEYINDEX` RETRY;
 - zero leaked SMR readers/root descriptors/root anchors and unchanged counters
   for `wait_no_l`, `wait_l`, and `store_wait_l` around every bounded call;
 - wrong/unclaimed state refusal without modifying output;

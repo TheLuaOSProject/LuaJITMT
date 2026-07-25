@@ -406,7 +406,8 @@ static void exercise_forward(lua_State *L)
   GCtab *t;
   TValue saved, *slot;
   cTValue *tabroot, *keyroot;
-  uintptr_t addr;
+  uintptr_t addr, fresh;
+  int guard;
 
   lua_createtable(L, 8, 8);
   t = tabV(L->top - 1);
@@ -429,13 +430,46 @@ static void exercise_forward(lua_State *L)
   lua_pushinteger(L, -222);
   tabroot = L->top - 2;
   keyroot = L->top - 1;
-  lj_tv_load_acq(&saved, slot);
   tabfwd_store_forward(slot);
   addr = UINTPTR_MAX;
+  guard = lj_tab_struct_enter(L, t);
+  assert(guard != 0);
   assert(lj_tab_keyed_slot_resolve_rooted_try(L, tabroot, keyroot, &addr) ==
 	 LJ_TAB_KEYED_SLOT_RETRY);
   assert(addr == 0);
-  tv_rawstore_rel(slot, tv_rawload(&saved));
+  lj_tab_struct_leave(t, guard);
+
+  addr = UINTPTR_MAX;
+  assert(lj_tab_keyed_slot_resolve_rooted_try(L, tabroot, keyroot, &addr) ==
+	 LJ_TAB_KEYED_SLOT_ABSENT);
+  assert(addr == 0);
+  assert(lj_tab_keyed_slot_resolve_or_insert_rooted_l(
+	   L, &tabroot, &keyroot, &addr) == LJ_TAB_KEYED_SLOT_FOUND);
+  assert(addr != 0);
+  assert(lj_tab_keyed_slot_resolve_rooted_try(
+	   L, tabroot, keyroot, &fresh) == LJ_TAB_KEYED_SLOT_FOUND);
+  assert(fresh == addr);
+
+  lua_settop(L, top);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top - 1);
+  assert(lj_tab_array_separated(t));
+  slot = lj_tab_setint(L, t, 2);
+  lj_tab_storeint(L, slot, 22);
+  lua_pushinteger(L, 2);
+  tabroot = L->top - 2;
+  keyroot = L->top - 1;
+  tabfwd_store_forward(slot);
+  addr = UINTPTR_MAX;
+  assert(lj_tab_keyed_slot_resolve_rooted_try(L, tabroot, keyroot, &addr) ==
+	 LJ_TAB_KEYED_SLOT_ABSENT);
+  assert(addr == 0);
+  assert(lj_tab_keyed_slot_resolve_or_insert_rooted_l(
+	   L, &tabroot, &keyroot, &addr) == LJ_TAB_KEYED_SLOT_FOUND);
+  assert(addr != 0);
+  assert(lj_tab_keyed_slot_resolve_rooted_try(
+	   L, tabroot, keyroot, &fresh) == LJ_TAB_KEYED_SLOT_FOUND);
+  assert(fresh == addr);
   lua_settop(L, top);
 }
 

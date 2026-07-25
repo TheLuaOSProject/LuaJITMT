@@ -15,9 +15,12 @@ SMR reader retaining both vector roots. The result is tri-state:
 
 - `FOUND` includes an in-range array cell whose value is nil and an existing
   hash key whose value is nil;
-- `ABSENT` means no structural slot exists; and
-- `RETRY` covers invalid operands, KEYLOCK/FORWARD/finalizer claims, malformed
-  target values, a retiring vector, or a failed paired-generation proof.
+- `ABSENT` means no structural slot exists, or that the exact slot contains a
+  FORWARD marker proven to belong to a stable current separated-array/hash
+  generation; and
+- `RETRY` covers invalid operands, KEYLOCK/live-handoff FORWARD/finalizer
+  claims, current colocated FORWARD, malformed target values, a retiring
+  vector, or a failed paired-generation proof.
 
 The output is initialized to zero and remains zero for every non-`FOUND`
 result. On `FOUND`, the implementation integerizes the fresh slot pointer while
@@ -84,10 +87,12 @@ while the external attachment clock is odd.
 numeric collision-chain insertion; detach-facing integral `lua_Number` and
 string hash keys; nil/NaN/null-output refusal with zeroed failure addresses;
 VM traversal-cursor refusal in both resolver and early transaction prepare;
-held lease/SMR use; array and hash FORWARD rejection; re-exposed retiring array
-and hash roots; exact root/unclaimed-state refusal; no structural mutation/no
-no-L wait on existing-only resolution; and a forced retry plus physical stack
-relocation which proves both in/out roots are offset-rebased. The existing
+held lease/SMR use; stable separated-array/hash FORWARD as ABSENT, but current
+colocated or live-handoff FORWARD as RETRY; rooted insert-capable repair;
+re-exposed retiring array and hash roots; exact root/unclaimed-state refusal;
+no structural mutation/no no-L wait on existing-only resolution; and a forced
+retry plus physical stack relocation which proves both in/out roots are
+offset-rebased. The existing
 prepared-transaction fixture remains the consumer contract test. A synthetic
 terminal-main-owner case clears both `cur_L` and `tg_hint`, then proves the
 close-finalizer exception can still insert and freshly resolve a slot, with

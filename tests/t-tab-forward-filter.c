@@ -567,6 +567,72 @@ static void exercise_hash_to_array_only_forward_hop(lua_State *L)
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
 }
 
+static void exercise_stable_forward_caller_contracts(lua_State *L)
+{
+  GCtab *t;
+
+  /*
+  ** Existing-only trace stores must deopt on a stable orphan, while an
+  ** insert-capable store treats the same logical absence as a repair request.
+  */
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top - 1);
+  assert(lj_tab_array_separated(t));
+  {
+    const int32_t idx = 3;
+    TValue key, src, *slot, *oldarray = lj_tab_array_acq(t);
+    slot = lj_tab_setint(L, t, idx);
+    lj_tab_storeint(L, slot, 33);
+    setintV(&key, idx);
+    setintV(&src, 333);
+    tabfwd_store_forward(slot);
+
+    assert(lj_tab_storetv_existing_forjit(L, t, &key, &src) == 0);
+    tabfwd_assert_forward(slot);
+    assert(lj_tab_array_acq(t) == oldarray);
+
+    (void)lj_tab_storetv_forjit_array(L, t, slot, &src, (MSize)idx);
+    assert(lj_tab_array_acq(t) != oldarray);
+    tabfwd_assert_i32(lj_tab_getint(t, idx), 333);
+    /* slot/oldarray belong to a retired generation from this point. */
+  }
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  lua_pushliteral(L, "stable-forward-caller-hash");
+  t = tabV(L->top - 2);
+  {
+    GCstr *s = strV(L->top - 1);  /* Durable key root across repair rehash. */
+    TValue key, src, *slot;
+    setstrV(L, &key, s);
+    setintV(&src, 444);
+    slot = lj_tab_setstr(L, t, s);
+    lj_tab_storeint(L, slot, 44);
+    tabfwd_store_forward(slot);
+
+    assert(lj_tab_storetv_existing_forjit(L, t, &key, &src) == 0);
+    tabfwd_assert_forward(slot);
+
+    (void)lj_tab_storetv_forjit_hash(L, t, slot, &src, &key);
+    tabfwd_assert_i32(lj_tab_getstr(t, s), 444);
+    /* slot belongs to the retired hash generation after repair. */
+  }
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top - 1);
+  {
+    const int32_t key = -333;
+    TValue *slot = lj_tab_setinth(L, t, key);
+    lj_tab_storeint(L, slot, 33);
+    tabfwd_store_forward(slot);
+    lj_tab_storeint(L, lj_tab_setinth(L, t, key), 555);
+    tabfwd_assert_i32(lj_tab_getint(t, key), 555);
+  }
+  lua_settop(L, 0);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -583,6 +649,7 @@ int main(void)
   exercise_vm_metadispatch_waits_for_published_successor();
   exercise_meta_tget_return_storage();
   exercise_forward_hops_after_later_publish(L);
+  exercise_stable_forward_caller_contracts(L);
 
   lua_createtable(L, LJ_MAX_COLOSIZE + 16, 4);
   t = tabV(L->top-1);

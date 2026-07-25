@@ -2820,6 +2820,8 @@ static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
 
 static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key,
 			       int key_anchored);
+static TValue *tab_set_anchored_current_key(lua_State *L, GCtab *t,
+					    cTValue *key);
 
 static TValue *tab_set_current_key(lua_State *L, GCtab *t, cTValue *key)
 {
@@ -2846,23 +2848,13 @@ static TValue *tab_set_current_key(lua_State *L, GCtab *t, cTValue *key)
   return tab_newkey_impl(L, t, key, 1);
 }
 
-static TValue *tab_set_anchored_key(lua_State *L, GCtab *t, cTValue *key)
-{
-  TabRootAnchor anchor;
-  TValue *slot;
-  key = tab_anchor_rehash_key(L, key, &anchor);
-  slot = tab_set_current_key(L, t, key);
-  tab_unanchor_rehash_key(&anchor);
-  return slot;
-}
-
 static TValue *tab_rehash_forwarded_key(lua_State *L, GCtab *t, cTValue *key)
 {
   TabRootAnchor anchor;
   TValue *slot;
   key = tab_anchor_rehash_key(L, key, &anchor);
   rehashtab(L, t, key);
-  slot = tab_set_current_key(L, t, key);
+  slot = tab_set_anchored_current_key(L, t, key);
   tab_unanchor_rehash_key(&anchor);
   return slot;
 }
@@ -2896,14 +2888,14 @@ static TValue *tab_rehash_no_free_key(lua_State *L, GCtab *t, cTValue *key,
   TValue *slot;
   key = tab_anchor_rehash_key(L, key, &anchor);
   tab_rehash_no_free(L, t, key, oldhmask);
-  slot = tab_set_current_key(L, t, key);
+  slot = tab_set_anchored_current_key(L, t, key);
   tab_unanchor_rehash_key(&anchor);
   return slot;
 }
 
 TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key)
 {
-  TValue *array, val;
+  TValue *array;
   MSize asize, hmask;
   uint32_t hbits, nasize;
   asize = lj_tab_array_snapshot_acq(t, &array);
@@ -2918,14 +2910,12 @@ TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key)
   if ((MSize)key >= asize && (MSize)key + 1u > (MSize)nasize)
     nasize = (uint32_t)key + 1u;
   lj_tab_resize(L, t, nasize, hbits);
-  asize = lj_tab_array_snapshot_acq(t, &array);
-  if ((MSize)key < asize) {
-    lj_tv_load_acq(&val, &array[key]);
-    if (tvisforward(&val))
-      lj_tab_storenilraw(&array[key]);
-    return &array[key];
-  }
-  return lj_tab_setinth(L, t, key);
+  /*
+  ** Migration drops the orphaned marker. Re-enter the ordinary integer setter,
+  ** whose resolver attempts are bounded, instead of dereferencing or returning
+  ** a fresh raw array snapshot outside SMR.
+  */
+  return lj_tab_setint(L, t, key);
 }
 
 static void tab_rehash_chain_overflow(lua_State *L, GCtab *t, cTValue *ek,
@@ -2948,7 +2938,7 @@ static TValue *tab_rehash_chain_overflow_key(lua_State *L, GCtab *t,
   TValue *slot;
   key = tab_anchor_rehash_key(L, key, &anchor);
   tab_rehash_chain_overflow(L, t, key, oldhmask);
-  slot = tab_set_current_key(L, t, key);
+  slot = tab_set_anchored_current_key(L, t, key);
   tab_unanchor_rehash_key(&anchor);
   return slot;
 }
@@ -3231,10 +3221,18 @@ typedef struct TabForjitSnapshot {
 } TabForjitSnapshot;
 
 enum {
+  TAB_RESOLVE_FORWARD_HASH = -3,
+  TAB_RESOLVE_FORWARD_ARRAY = -2,
   TAB_RESOLVE_RETRY = LJ_TAB_KEYED_SLOT_RETRY,
   TAB_RESOLVE_ABSENT = LJ_TAB_KEYED_SLOT_ABSENT,
   TAB_RESOLVE_FOUND = LJ_TAB_KEYED_SLOT_FOUND
 };
+
+static LJ_AINLINE int tab_resolve_public_status(int status)
+{
+  return status == TAB_RESOLVE_FORWARD_ARRAY ||
+	 status == TAB_RESOLVE_FORWARD_HASH ? TAB_RESOLVE_ABSENT : status;
+}
 
 /* Capture both table side vectors as one retryable logical generation. A
 ** resize publishes the array and hash roots separately, so validating only
@@ -3321,13 +3319,26 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
   ** before the hash side, then validate both roots together below. */
   if (isintkey && (MSize)ik < snap.asize) {
     TValue val;
+    TValue *candidate;
     if (!snap.array)
       return TAB_RESOLVE_RETRY;
-    slot = &snap.array[ik];
-    lj_tv_load_acq(&val, slot);
-    if (tvisforward(&val) || tab_val_is_publish_claim(&val) ||
-	!tab_tv_snapshot_valid(&val))
+    candidate = &snap.array[ik];
+    lj_tv_load_acq(&val, candidate);
+    if (tvisforward(&val)) {
+      /*
+      ** A private colocated resize freezes its still-current inline slots
+      ** without taking struct_owner. No production observer can enter that
+      ** single-mutator window, but keep the established retry contract for
+      ** test-hook/reentrant inspection until the replacement root publishes.
+      */
+      if (lj_tab_array_is_colocated(t, snap.array))
+	return TAB_RESOLVE_RETRY;
+      result = TAB_RESOLVE_FORWARD_ARRAY;
+      goto validate;
+    }
+    if (tab_val_is_publish_claim(&val) || !tab_tv_snapshot_valid(&val))
       return TAB_RESOLVE_RETRY;
+    slot = candidate;
     if (out) *out = val;
     result = TAB_RESOLVE_FOUND;
     goto validate;
@@ -3359,11 +3370,15 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
 	 (tvisstr(hkeyp) && tvisstr(&nk) && strV(&nk) == strV(hkeyp)) ||
 	 (!isnumkey && !tvisstr(hkeyp) && lj_obj_equal(&nk, hkeyp)))) {
       TValue val;
-      slot = &n->val;
-      lj_tv_load_acq(&val, slot);
-      if (tvisforward(&val) || tab_val_is_publish_claim(&val) ||
-	  !tab_tv_snapshot_valid(&val))
+      TValue *candidate = &n->val;
+      lj_tv_load_acq(&val, candidate);
+      if (tvisforward(&val)) {
+	result = TAB_RESOLVE_FORWARD_HASH;
+	goto validate;
+      }
+      if (tab_val_is_publish_claim(&val) || !tab_tv_snapshot_valid(&val))
 	return TAB_RESOLVE_RETRY;
+      slot = candidate;
       if (out) *out = val;
       result = TAB_RESOLVE_FOUND;
       goto validate;
@@ -3379,6 +3394,18 @@ absent:
   if (out) setnilV(out);
   result = TAB_RESOLVE_ABSENT;
 validate:
+  /*
+  ** A shared resize owns struct_owner before it can publish FORWARD into a
+  ** current vector.  Such a marker is a live hand-off, not an orphan to
+  ** repair.  Read the owner before the paired-root validation: observing the
+  ** owner's release also publishes its subsequent root hand-off to the
+  ** validation loads below.  A resize which starts after this check cannot
+  ** have produced the FORWARD value already acquired above.
+  */
+  if ((result == TAB_RESOLVE_FORWARD_ARRAY ||
+       result == TAB_RESOLVE_FORWARD_HASH) &&
+      lj_tab_struct_owner_acq(t) != 0)
+    return TAB_RESOLVE_RETRY;
   if (!tab_forjit_snapshot_current(t, &snap))
     return TAB_RESOLVE_RETRY;
   if (slotp) *slotp = slot;
@@ -3403,6 +3430,7 @@ int lj_tab_keyed_slot_resolve_held(GCtab *t, cTValue *key,
   if (!t || !key || !addr || !tab_keyed_slot_key_valid(key))
     return LJ_TAB_KEYED_SLOT_RETRY;
   status = tab_resolve_current_keyed_held(t, key, &slot, NULL);
+  status = tab_resolve_public_status(status);
   if (status != TAB_RESOLVE_FOUND || !slot)
     return status;
   /* Integerize before the caller closes its exact vector SMR authority. */
@@ -3668,7 +3696,8 @@ int lj_tab_keyed_slot_resolve_or_insert_rooted_l(
 
 static int tab_get_current_forjit(GCtab *t, cTValue *key, TValue *out)
 {
-  int status = tab_resolve_current_keyed_held(t, key, NULL, out);
+  int status = tab_resolve_public_status(
+    tab_resolve_current_keyed_held(t, key, NULL, out));
   if (status == TAB_RESOLVE_FOUND)
     return tab_val_absent(out) ? 0 : 1;
   return status;
@@ -3857,8 +3886,8 @@ int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot, int32_t key,
   return tab_gettv_rooted_try_impl(L, tabroot, NULL, &keytv, outroot);
 }
 
-static int tab_resolve_current_keyed_try(global_State *g, GCtab *t,
-					  cTValue *key, TValue **slotp)
+static int tab_resolve_current_keyed_try_raw(global_State *g, GCtab *t,
+					      cTValue *key, TValue **slotp)
 {
   int status;
   *slotp = NULL;
@@ -3867,6 +3896,63 @@ static int tab_resolve_current_keyed_try(global_State *g, GCtab *t,
   status = tab_resolve_current_keyed_held(t, key, slotp, NULL);
   lj_gc2_smr_read_leave(g);
   return status;
+}
+
+static LJ_AINLINE int tab_resolve_current_keyed_try(global_State *g, GCtab *t,
+						     cTValue *key,
+						     TValue **slotp)
+{
+  return tab_resolve_public_status(
+    tab_resolve_current_keyed_try_raw(g, t, key, slotp));
+}
+
+/*
+** Resolve a key which is already held in a TG root. Slow insertion/rehash
+** helpers may lose another generation after allocating, so their naked
+** pointer result is only a completion hint: discard it and derive the return
+** slot from a fresh bounded paired-generation attempt.
+*/
+static TValue *tab_set_anchored_current_key(lua_State *L, GCtab *t,
+					    cTValue *key)
+{
+  for (;;) {
+    TValue *slot;
+    int status = tab_resolve_current_keyed_try_raw(G(L), t, key, &slot);
+    if (status == TAB_RESOLVE_FOUND)
+      return slot;
+    if (status == TAB_RESOLVE_ABSENT) {
+      (void)tab_set_current_key(L, t, key);
+      continue;
+    }
+    if (status == TAB_RESOLVE_FORWARD_ARRAY) {
+      int64_t i64;
+      int32_t ik;
+      if (tvisint(key))
+	ik = intV(key);
+      else if (!(tvisnum(key) &&
+		 lj_num2int_check(numV(key), i64, ik))) {
+	lj_assertL(0, "non-integral key resolved to array FORWARD");
+	rehashtab(L, t, key);
+	continue;
+      }
+      return lj_tab_setint_forward(L, t, ik);
+    }
+    if (status == TAB_RESOLVE_FORWARD_HASH) {
+      rehashtab(L, t, key);
+      continue;
+    }
+    lj_tab_wait_l(L);
+  }
+}
+
+static TValue *tab_set_anchored_key(lua_State *L, GCtab *t, cTValue *key)
+{
+  TabRootAnchor anchor;
+  TValue *slot;
+  key = tab_anchor_rehash_key(L, key, &anchor);
+  slot = tab_set_anchored_current_key(L, t, key);
+  tab_unanchor_rehash_key(&anchor);
+  return slot;
 }
 
 static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
@@ -4490,6 +4576,31 @@ static TValue *tab_findkey_or_keylock_tail(Node *anchor, cTValue *key,
   return NULL;
 }
 
+enum {
+  TAB_NEWKEY_EXISTING_RETRY,
+  TAB_NEWKEY_EXISTING_FOUND,
+  TAB_NEWKEY_EXISTING_FORWARD
+};
+
+static LJ_AINLINE int tab_newkey_existing_status(GCtab *t, Node *nodebase,
+						  TValue *slot)
+{
+  TValue val;
+  lj_tv_load_acq(&val, slot);
+  /*
+  ** Resize publishes RETIRING before replacing any hash value with FORWARD.
+  ** Validate after the value load so a matched slot is never returned from an
+  ** already-lost generation.
+  */
+  if (!tab_hash_generation_current(t, nodebase))
+    return TAB_NEWKEY_EXISTING_RETRY;
+  if (tvisforward(&val))
+    return TAB_NEWKEY_EXISTING_FORWARD;
+  if (tab_val_is_publish_claim(&val) || !tab_tv_snapshot_valid(&val))
+    return TAB_NEWKEY_EXISTING_RETRY;
+  return TAB_NEWKEY_EXISTING_FOUND;
+}
+
 /* Insert new key. Nodes are never moved within a hash generation. */
 static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key,
 			       int key_anchored)
@@ -4552,8 +4663,22 @@ retry_insert:
     MSize chainlen;
     TValue *slot = tab_findkey_or_keylock(n, key, &locked, &chainlen);
     if (slot) {
+      int existing = tab_newkey_existing_status(t, nodebase, slot);
       lj_gc2_smr_read_leave(g);
-      return slot;
+      if (existing == TAB_NEWKEY_EXISTING_FOUND)
+	return slot;
+      if (existing == TAB_NEWKEY_EXISTING_FORWARD) {
+	if (key_anchored) {
+	  rehashtab(L, t, key);
+	  goto retry_insert;
+	}
+	return tab_rehash_forwarded_key(L, t, key);
+      }
+      if (key_anchored) {
+	lj_tab_wait_no_l();
+	goto retry_insert;
+      }
+      return tab_set_anchored_key(L, t, key);
     }
     if (locked) {
       lj_gc2_smr_read_leave(g);
@@ -4656,8 +4781,22 @@ retry_insert:
       slot = tab_findkey_or_keylock_tail(n, key, &locked, &chainlen,
 					 &tail);
       if (slot) {
+	int existing = tab_newkey_existing_status(t, nodebase, slot);
 	lj_gc2_smr_read_leave(g);
-	return slot;
+	if (existing == TAB_NEWKEY_EXISTING_FOUND)
+	  return slot;
+	if (existing == TAB_NEWKEY_EXISTING_FORWARD) {
+	  if (key_anchored) {
+	    rehashtab(L, t, key);
+	    goto retry_insert;
+	  }
+	  return tab_rehash_forwarded_key(L, t, key);
+	}
+	if (key_anchored) {
+	  lj_tab_wait_no_l();
+	  goto retry_insert;
+	}
+	return tab_set_anchored_key(L, t, key);
       }
       if (locked) {
 	lj_gc2_smr_read_leave(g);
@@ -4951,17 +5090,42 @@ retry_attempt:
   }
 }
 
+static LJ_NOINLINE TValue *tab_repair_current_forward(lua_State *L, GCtab *t,
+						       cTValue *key,
+						       int status)
+{
+  if (status == TAB_RESOLVE_FORWARD_ARRAY) {
+    int64_t i64;
+    int32_t ik;
+    if (tvisint(key))
+      ik = intV(key);
+    else if (tvisnum(key) && lj_num2int_check(numV(key), i64, ik))
+      return lj_tab_setint_forward(L, t, ik);
+    else {
+      lj_assertL(0, "non-integral key resolved to array FORWARD");
+      return tab_rehash_forwarded_key(L, t, key);
+    }
+    return lj_tab_setint_forward(L, t, ik);
+  }
+  lj_assertL(status == TAB_RESOLVE_FORWARD_HASH,
+	     "invalid stable FORWARD resolver status");
+  return tab_rehash_forwarded_key(L, t, key);
+}
+
 TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
 {
   TValue k;
   k.n = (lua_Number)key;
   for (;;) {
     TValue *slot;
-    int status = tab_resolve_current_keyed_try(G(L), t, &k, &slot);
+    int status = tab_resolve_current_keyed_try_raw(G(L), t, &k, &slot);
     if (status == TAB_RESOLVE_FOUND)
       return slot;
     if (status == TAB_RESOLVE_ABSENT)
       return lj_tab_newkey(L, t, &k);
+    if (status == TAB_RESOLVE_FORWARD_ARRAY ||
+	status == TAB_RESOLVE_FORWARD_HASH)
+      return tab_repair_current_forward(L, t, &k, status);
     lj_tab_wait_l(L);
   }
 }
@@ -4972,11 +5136,13 @@ TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
   setstrV(L, &k, key);
   for (;;) {
     TValue *slot;
-    int status = tab_resolve_current_keyed_try(G(L), t, &k, &slot);
+    int status = tab_resolve_current_keyed_try_raw(G(L), t, &k, &slot);
     if (status == TAB_RESOLVE_FOUND)
       return slot;
     if (status == TAB_RESOLVE_ABSENT)
       return lj_tab_newkey(L, t, &k);
+    if (status == TAB_RESOLVE_FORWARD_HASH)
+      return tab_repair_current_forward(L, t, &k, status);
     /* k may be the only exact root for a freshly interned string. Anchor it
     ** before the first STOPREQ-visible retry. */
     return tab_set_anchored_key(L, t, &k);
@@ -4989,11 +5155,14 @@ TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key)
   setintV(&k, key);
   for (;;) {
     TValue *slot;
-    int status = tab_resolve_current_keyed_try(G(L), t, &k, &slot);
+    int status = tab_resolve_current_keyed_try_raw(G(L), t, &k, &slot);
     if (status == TAB_RESOLVE_FOUND)
       return slot;
     if (status == TAB_RESOLVE_ABSENT)
       return lj_tab_setinth(L, t, key);  /* Canonical numeric hash key. */
+    if (status == TAB_RESOLVE_FORWARD_ARRAY ||
+	status == TAB_RESOLVE_FORWARD_HASH)
+      return tab_repair_current_forward(L, t, &k, status);
     lj_tab_wait_l(L);
   }
 }
@@ -5018,11 +5187,13 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   }
   for (;;) {
     TValue *slot;
-    int status = tab_resolve_current_keyed_try(G(L), t, key, &slot);
+    int status = tab_resolve_current_keyed_try_raw(G(L), t, key, &slot);
     if (status == TAB_RESOLVE_FOUND)
       return slot;
     if (status == TAB_RESOLVE_ABSENT)
       return lj_tab_newkey(L, t, key);
+    if (status == TAB_RESOLVE_FORWARD_HASH)
+      return tab_repair_current_forward(L, t, key, status);
     /* Generic GC keys can exist only in a C local/TMPREF at this boundary. */
     return tab_set_anchored_key(L, t, key);
   }

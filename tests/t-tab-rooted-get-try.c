@@ -318,7 +318,7 @@ static void exercise_structural_retries(lua_State *L)
   tabfwd_store_forward(slot);
   lua_pushinteger(L, 88);
   assert(bounded_getint(L, L->top - 2, 3, L->top - 1) ==
-	 LJ_TAB_ROOTED_GET_RETRY);
+	 LJ_TAB_ROOTED_GET_ABSENT);
   assert(tvisnil(L->top - 1));
   tv_rawstore_rel(slot, tv_rawload(&saved));
   lua_pop(L, 1);
