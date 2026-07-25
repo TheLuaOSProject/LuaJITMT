@@ -204,6 +204,37 @@ using them stay interpreted.  Adding 256-bit AVX later means: an `IRT_V*32`
 type group, 32-byte spill slots, ymm-aware `ExitState`, and `vzeroupper`
 placement.  The IR/type layout above was chosen so that is additive.
 
+## D11. x86-64-v3 target, but runtime feature detection
+
+The supported target was raised to **x86-64-v3**: SSE4.2, AVX, AVX2, BMI2.
+Two things follow.
+
+*Three operand encoding.* With AVX every packed instruction is emitted in its
+VEX form, so `dest = a op b` needs no `movaps dest, a` first. `emit_vexrr()`
+in `lj_emit_x86.h` always uses the three byte VEX prefix, which needs no
+special casing for the high registers or for the 0F 38 / 0F 3A maps, and
+`emit_vrr3()` in the vector backend picks the VEX form or falls back to copy
+plus SSE. An 8-bit lane multiply went from 12 instructions with four copies to
+9 with none.
+
+*Feature use stays runtime detected.* A build for v3 still runs on older CPUs:
+`JIT_F_AVX`/`JIT_F_AVX2`/`JIT_F_SSE4_2`/... are probed at startup and an
+operation whose instruction is missing aborts the trace and stays interpreted.
+That is strictly better than a compile-time assumption and costs one predicted
+branch at code generation time, not at run time. AVX detection also checks
+CPUID.1:ECX.OSXSAVE and `XGETBV(0) & 6`, because using VEX when the OS has not
+enabled the YMM state faults.
+
+*FMA is deliberately not used.* `a*b+c` with FMA rounds once instead of twice,
+so it would give different results from the interpreter. Interpreter/JIT
+agreement outranks the extra throughput.
+
+*64-bit lane min/max.* There is still no instruction for it in v3 (VPMINSQ is
+AVX-512), so the recorder expands it to PCMPGTQ plus a three instruction
+blend. That is fully packed, and it is why 64-bit min/max is no longer a NYI
+row in the matrix. Equal lanes may take either side of the blend, which is
+harmless because they are bit-identical.
+
 ## D10. `require("ffi.simd")`
 
 A builtin C module (`lib_simd.c`) registered as `"ffi.simd"` the same way

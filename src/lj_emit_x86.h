@@ -444,6 +444,42 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
   }
 }
 
+/*
+** Derive the VEX opcode map and mandatory prefix from an SSE opcode.
+** Returns (map << 4) | pp, with map 1 = 0F, 2 = 0F 38, 3 = 0F 3A.
+*/
+static uint32_t emit_vexmp(x86Op xo)
+{
+  uint32_t b1 = (xo >> 8) & 0xff, b2 = (xo >> 16) & 0xff;
+  if ((xo & 0xff) == 0xfd) return (1u<<4);	/* 0F, no prefix. */
+  if (b1 == 0x66) return (1u<<4) + 1;		/* 66 0F */
+  if (b1 == 0xf3) return (1u<<4) + 2;		/* F3 0F */
+  if (b1 == 0xf2) return (1u<<4) + 3;		/* F2 0F */
+  if (b2 == 0x38) return (2u<<4) + 1;		/* 66 0F 38 */
+  return (3u<<4) + 1;				/* 66 0F 3A */
+}
+
+/* VEX.vvvv is unused by the two operand forms and must then be all ones. */
+#define VEXNOV	0
+
+/*
+** Emit a VEX-encoded three operand instruction: rr = rv <xo> rb. Always uses
+** the three byte form, which needs no special casing for the high registers
+** or for the 0F 38 / 0F 3A maps.
+*/
+static void emit_vexrr(ASMState *as, x86Op xo, Reg rr, Reg rv, Reg rb)
+{
+  MCode *p = as->mcp - 5;
+  uint32_t mp = emit_vexmp(xo);
+  p[0] = 0xc4;
+  p[1] = (MCode)((((rr>>3)&1) ? 0 : 0x80) | 0x40 |
+		 (((rb>>3)&1) ? 0 : 0x20) | (mp >> 4));
+  p[2] = (MCode)(((~rv & 15) << 3) | (mp & 3));	/* W=0, L=0 (128 bit). */
+  p[3] = (MCode)(xo >> 24);
+  p[4] = MODRM(XM_REG, rr, rb);
+  as->mcp = p;
+}
+
 /* Load a 128 bit vector constant into an FP register. */
 static void emit_loadk128(ASMState *as, Reg r, IRIns *ir)
 {

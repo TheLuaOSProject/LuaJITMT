@@ -33,6 +33,7 @@ LJ_ASMF void lj_vm_unwind_stub(void);
 /* Miscellaneous functions. */
 #if LJ_TARGET_X86ORX64
 LJ_ASMF int lj_vm_cpuid(uint32_t f, uint32_t res[4]);
+LJ_ASMF uint32_t lj_vm_xgetbv(uint32_t xcr);
 #endif
 #if LJ_TARGET_PPC
 void lj_vm_cachesync(void *start, void *end);

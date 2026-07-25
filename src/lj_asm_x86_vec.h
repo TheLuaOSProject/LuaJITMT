@@ -151,6 +151,62 @@ static int asm_vec3byte(x86Op xo)
   return (xo & 0xff) == 0xfc && ((xo >> 8) & 0xff) == 0x0f;
 }
 
+/* -- Three operand emission ---------------------------------------------- */
+
+/*
+** dest = src1 <xo> src2.
+**
+** With AVX this is a single VEX-encoded instruction and dest may alias either
+** source. Without it, the left operand is copied into dest first, so the
+** caller must guarantee dest != src2 unless both sources are the same.
+*/
+static void emit_vrr3(ASMState *as, x86Op xo, Reg dest, Reg src1, Reg src2)
+{
+  if ((as->flags & JIT_F_AVX)) {
+    emit_vexrr(as, xo, dest, src1, src2);
+    return;
+  }
+  lj_assertA(dest != src2 || src1 == src2, "vector operand aliasing");
+  if (asm_vec3byte(xo))
+    emit_vrr66(as, xo, dest, src2);
+  else
+    emit_rr(as, xo, dest, src2);
+  if (dest != src1) emit_rr(as, XO_MOVAPS, dest, src1);
+}
+
+/* dest = <xo> src, a two operand form. VEX.vvvv is unused. */
+static void emit_vrr2(ASMState *as, x86Op xo, Reg dest, Reg src)
+{
+  if ((as->flags & JIT_F_AVX))
+    emit_vexrr(as, xo, dest, VEXNOV, src);
+  else if (asm_vec3byte(xo))
+    emit_vrr66(as, xo, dest, src);
+  else
+    emit_rr(as, xo, dest, src);
+}
+
+/* dest = <xo> src, imm8. */
+static void emit_vrr2i(ASMState *as, x86Op xo, Reg dest, Reg src, int32_t i)
+{
+  emit_i8(as, i);
+  emit_vrr2(as, xo, dest, src);
+}
+
+/* Shift by an immediate: the group number goes in the ModRM reg field and the
+** destination in VEX.vvvv.
+*/
+static void emit_vshift(ASMState *as, x86Op xg, uint32_t grp, Reg dest,
+			Reg src, int32_t i)
+{
+  emit_i8(as, i);
+  if ((as->flags & JIT_F_AVX)) {
+    emit_vexrr(as, xg, (Reg)grp, dest, src);
+    return;
+  }
+  emit_rr(as, xg, (Reg)grp, dest);
+  if (dest != src) emit_rr(as, XO_MOVAPS, dest, src);
+}
+
 /* -- Generic two-operand lowering ---------------------------------------- */
 
 /*
@@ -161,7 +217,19 @@ static void asm_vecbin(ASMState *as, IRIns *ir, x86Op xo, int is3byte)
 {
   IRRef lref = ir->op1, rref = ir->op2;
   RegSet allow = RSET_FPR;
-  Reg dest, right = IR(rref)->r;
+  Reg dest, right;
+  UNUSED(is3byte);  /* The VEX map is derived from the opcode itself. */
+  if ((as->flags & JIT_F_AVX)) {
+    /* Three operands: the destination may alias either source. */
+    Reg left;
+    dest = ra_dest(as, ir, RSET_FPR);
+    left = ra_alloc1(as, lref, RSET_FPR);
+    right = lref == rref ? left :
+	    ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
+    emit_vexrr(as, xo, dest, left, right);
+    return;
+  }
+  right = IR(rref)->r;
   if (ra_hasreg(right)) {
     rset_clear(allow, right);
     ra_noweak(as, right);
@@ -172,7 +240,7 @@ static void asm_vecbin(ASMState *as, IRIns *ir, x86Op xo, int is3byte)
   } else if (ra_noreg(right)) {
     right = ra_alloc1(as, rref, rset_clear(allow, dest));
   }
-  if (is3byte)
+  if (asm_vec3byte(xo))
     emit_vrr66(as, xo, dest, right);
   else
     emit_rr(as, xo, dest, right);
@@ -195,25 +263,19 @@ static void asm_vmul_i32_sse2(ASMState *as, IRIns *ir)
   allow = rset_exclude(allow, t1);
   t2 = ra_scratch(as, allow);
   /* Forward order:
-  **   movaps dest,left; pmuludq dest,right     ; [a0*b0, a2*b2]
-  **   movaps t1,left;   psrlq t1,32
-  **   movaps t2,right;  psrlq t2,32
-  **   pmuludq t1,t2                            ; [a1*b1, a3*b3]
-  **   pshufd dest,dest,0x08; pshufd t1,t1,0x08 ; compact the low dwords
-  **   punpckldq dest,t1                        ; interleave
+  **   dest = pmuludq(left, right)          ; [a0*b0, a2*b2]
+  **   t1 = left >> 32; t2 = right >> 32
+  **   t1 = pmuludq(t1, t2)                 ; [a1*b1, a3*b3]
+  **   compact the low dwords of both, then interleave
   */
-  emit_rr(as, XO_PUNPCKLDQ, dest, t1);
-  emit_vrri(as, XO_PSHUFD, t1, t1, 0x08);
-  emit_vrri(as, XO_PSHUFD, dest, dest, 0x08);
+  emit_vrr3(as, XO_PUNPCKLDQ, dest, dest, t1);
+  emit_vrr2i(as, XO_PSHUFD, t1, t1, 0x08);
+  emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x08);
+  emit_vrr3(as, XO_PMULUDQ, t1, t1, t2);
   checkmclim(as);
-  emit_rr(as, XO_PMULUDQ, t1, t2);
-  emit_vshifti(as, XO_PSHIFTQ, XOg_PSRL, t2, 32);
-  emit_rr(as, XO_MOVAPS, t2, right);
-  emit_vshifti(as, XO_PSHIFTQ, XOg_PSRL, t1, 32);
-  emit_rr(as, XO_MOVAPS, t1, left);
-  checkmclim(as);
-  emit_rr(as, XO_PMULUDQ, dest, right);
-  emit_rr(as, XO_MOVAPS, dest, left);
+  emit_vshift(as, XO_PSHIFTQ, XOg_PSRL, t2, right, 32);
+  emit_vshift(as, XO_PSHIFTQ, XOg_PSRL, t1, left, 32);
+  emit_vrr3(as, XO_PMULUDQ, dest, left, right);
 }
 
 /* 8 bit lane multiply: separate the even and odd byte products. */
@@ -230,26 +292,21 @@ static void asm_vmul_i8(ASMState *as, IRIns *ir)
   allow = rset_exclude(allow, t1);
   t2 = ra_scratch(as, allow);
   /* Forward order:
-  **   movaps t1,left;  psrlw t1,8         ; odd bytes of a
-  **   movaps t2,right; psrlw t2,8         ; odd bytes of b
-  **   pmullw t1,t2;    psllw t1,8         ; odd products, back in place
-  **   movaps dest,left; pmullw dest,right ; even products in the low bytes
-  **   psllw dest,8;    psrlw dest,8       ; mask off the high bytes
-  **   por dest,t1
+  **   t1 = left >> 8; t2 = right >> 8      ; odd bytes
+  **   t1 = pmullw(t1, t2) << 8             ; odd products, back in place
+  **   dest = pmullw(left, right)           ; even products in the low bytes
+  **   dest = (dest << 8) >> 8              ; mask off the high bytes
+  **   dest = dest | t1
   */
-  emit_rr(as, XO_POR, dest, t1);
-  emit_vshifti(as, XO_PSHIFTW, XOg_PSRL, dest, 8);
-  emit_vshifti(as, XO_PSHIFTW, XOg_PSLL, dest, 8);
-  emit_rr(as, XO_PMULLW, dest, right);
-  emit_rr(as, XO_MOVAPS, dest, left);
+  emit_vrr3(as, XO_POR, dest, dest, t1);
+  emit_vshift(as, XO_PSHIFTW, XOg_PSRL, dest, dest, 8);
+  emit_vshift(as, XO_PSHIFTW, XOg_PSLL, dest, dest, 8);
+  emit_vrr3(as, XO_PMULLW, dest, left, right);
   checkmclim(as);
-  emit_vshifti(as, XO_PSHIFTW, XOg_PSLL, t1, 8);
-  emit_rr(as, XO_PMULLW, t1, t2);
-  emit_vshifti(as, XO_PSHIFTW, XOg_PSRL, t2, 8);
-  emit_rr(as, XO_MOVAPS, t2, right);
-  emit_vshifti(as, XO_PSHIFTW, XOg_PSRL, t1, 8);
-  emit_rr(as, XO_MOVAPS, t1, left);
-  checkmclim(as);
+  emit_vshift(as, XO_PSHIFTW, XOg_PSLL, t1, t1, 8);
+  emit_vrr3(as, XO_PMULLW, t1, t1, t2);
+  emit_vshift(as, XO_PSHIFTW, XOg_PSRL, t2, right, 8);
+  emit_vshift(as, XO_PSHIFTW, XOg_PSRL, t1, left, 8);
 }
 
 /* 64 bit lane multiply: lo*lo + ((hi*lo + lo*hi) << 32). */
@@ -265,19 +322,15 @@ static void asm_vmul_i64(ASMState *as, IRIns *ir)
   t1 = ra_scratch(as, allow);
   allow = rset_exclude(allow, t1);
   t2 = ra_scratch(as, allow);
-  emit_rr(as, XO_PADDQ, dest, t1);
-  emit_rr(as, XO_PMULUDQ, dest, right);
-  emit_rr(as, XO_MOVAPS, dest, left);
+  emit_vrr3(as, XO_PADDQ, dest, dest, t1);
+  emit_vrr3(as, XO_PMULUDQ, dest, left, right);
+  emit_vshift(as, XO_PSHIFTQ, XOg_PSLL, t1, t1, 32);
+  emit_vrr3(as, XO_PADDQ, t1, t1, t2);
   checkmclim(as);
-  emit_vshifti(as, XO_PSHIFTQ, XOg_PSLL, t1, 32);
-  emit_rr(as, XO_PADDQ, t1, t2);
-  emit_rr(as, XO_PMULUDQ, t2, left);
-  emit_vshifti(as, XO_PSHIFTQ, XOg_PSRL, t2, 32);
-  emit_rr(as, XO_MOVAPS, t2, right);
-  emit_rr(as, XO_PMULUDQ, t1, right);
-  emit_vshifti(as, XO_PSHIFTQ, XOg_PSRL, t1, 32);
-  emit_rr(as, XO_MOVAPS, t1, left);
-  checkmclim(as);
+  emit_vrr3(as, XO_PMULUDQ, t2, t2, left);
+  emit_vshift(as, XO_PSHIFTQ, XOg_PSRL, t2, right, 32);
+  emit_vrr3(as, XO_PMULUDQ, t1, t1, right);
+  emit_vshift(as, XO_PSHIFTQ, XOg_PSRL, t1, left, 32);
 }
 
 static void asm_vmul(ASMState *as, IRIns *ir)
@@ -305,32 +358,34 @@ static void asm_vsplat(ASMState *as, IRIns *ir)
   IRType t = irt_type(ir->t);
   Reg dest = ra_dest(as, ir, RSET_FPR);
   if (t == IRT_V4F32) {
-    emit_vrri(as, XO_SHUFPS, dest, dest, 0);
-    ra_left(as, dest, ir->op1);
+    Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+    emit_i8(as, 0);
+    if ((as->flags & JIT_F_AVX)) emit_vexrr(as, XO_SHUFPS, dest, left, left);
+    else { emit_rr(as, XO_SHUFPS, dest, dest); ra_left(as, dest, ir->op1); }
   } else if (t == IRT_V2F64) {
-    emit_rr(as, XO_UNPCKLPD, dest, dest);
-    ra_left(as, dest, ir->op1);
+    Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+    emit_vrr3(as, XO_UNPCKLPD, dest, left, left);
   } else {
     /* Integer lanes: move the scalar over from a GPR, then broadcast. */
     Reg src = ra_alloc1(as, ir->op1, RSET_GPR);
     switch (t) {
     case IRT_V2I64:
-      emit_vrri(as, XO_PSHUFD, dest, dest, 0x44);
+      emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x44);
       emit_rr(as, XO_MOVD, dest|REX_64, src|REX_64);
       break;
     case IRT_V4I32:
-      emit_vrri(as, XO_PSHUFD, dest, dest, 0x00);
+      emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x00);
       emit_rr(as, XO_MOVD, dest, src);
       break;
     case IRT_V8I16:
-      emit_vrri(as, XO_PSHUFD, dest, dest, 0x00);
-      emit_vrri(as, XO_PSHUFLW, dest, dest, 0x00);
+      emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x00);
+      emit_vrr2i(as, XO_PSHUFLW, dest, dest, 0x00);
       emit_rr(as, XO_MOVD, dest, src);
       break;
     default:  /* IRT_V16I8 */
-      emit_vrri(as, XO_PSHUFD, dest, dest, 0x00);
-      emit_vrri(as, XO_PSHUFLW, dest, dest, 0x00);
-      emit_rr(as, XO_PUNPCKLBW, dest, dest);
+      emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x00);
+      emit_vrr2i(as, XO_PSHUFLW, dest, dest, 0x00);
+      emit_vrr3(as, XO_PUNPCKLBW, dest, dest, dest);
       emit_rr(as, XO_MOVD, dest, src);
       break;
     }
@@ -362,6 +417,12 @@ static void asm_veccmp(ASMState *as, IRIns *ir)
     dest = ra_dest(as, ir, allow);
     if (lref == rref) other = dest;
     else if (ra_noreg(other)) other = ra_alloc1(as, rref, rset_clear(allow, dest));
+    if ((as->flags & JIT_F_AVX)) {
+      Reg left = ra_alloc1(as, lref, RSET_FPR);
+      emit_i8(as, pred);
+      emit_vexrr(as, xo, dest, left, other == dest ? left : other);
+      return;
+    }
     emit_vrri(as, xo, dest, other, pred);
     ra_left(as, dest, lref);
     return;
@@ -375,10 +436,9 @@ static void asm_veccmp(ASMState *as, IRIns *ir)
     allow = rset_exclude(allow, left);
     right = ir->op1 == ir->op2 ? left : ra_alloc1(as, ir->op2, allow);
     t1 = ra_scratch(as, rset_exclude(allow, right));
-    emit_rr(as, XO_PAND, dest, t1);
-    emit_vrri(as, XO_PSHUFD, t1, dest, 0xb1);  /* Swap the 32 bit halves. */
-    emit_rr(as, XO_PCMPEQD, dest, right);
-    emit_rr(as, XO_MOVAPS, dest, left);
+    emit_vrr3(as, XO_PAND, dest, dest, t1);
+    emit_vrr2i(as, XO_PSHUFD, t1, dest, 0xb1);  /* Swap the 32 bit halves. */
+    emit_vrr3(as, XO_PCMPEQD, dest, left, right);
     return;
   }
   {
@@ -422,18 +482,19 @@ static void asm_vecshift(ASMState *as, IRIns *ir)
     xr = t == IRT_V8I16 ? XO_PSRAW_r : XO_PSRAD_r;
   if (irref_isk(ir->op2)) {
     Reg dest = ra_dest(as, ir, RSET_FPR);
+    Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
     int32_t n = IR(ir->op2)->i;
     if (n > 255) n = 255;  /* Saturate: the instruction flushes to 0 anyway. */
-    emit_vshifti(as, xg, grp, dest, n);
-    ra_left(as, dest, ir->op1);
+    emit_vshift(as, xg, grp, dest, left, n);
   } else {
     /* Variable count: the packed shifts read a 64 bit count from an XMM. */
     Reg dest = ra_dest(as, ir, RSET_FPR);
-    Reg tmp = ra_scratch(as, rset_exclude(RSET_FPR, dest));
+    RegSet allow = rset_exclude(RSET_FPR, dest);
+    Reg left = ra_alloc1(as, ir->op1, allow);
+    Reg tmp = ra_scratch(as, rset_exclude(allow, left));
     Reg cnt = ra_alloc1(as, ir->op2, RSET_GPR);
-    emit_rr(as, xr, dest, tmp);
-    emit_rr(as, XO_MOVD, tmp, cnt);
-    ra_left(as, dest, ir->op1);
+    emit_vrr3(as, xr, dest, left, tmp);
+    emit_vrr2(as, XO_MOVD, tmp, cnt);
   }
 }
 
@@ -443,7 +504,8 @@ static void asm_vecsqrt(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_FPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-  emit_rr(as, irt_type(ir->t) == IRT_V4F32 ? XO_SQRTPS : XO_SQRTPD, dest, left);
+  emit_vrr2(as, irt_type(ir->t) == IRT_V4F32 ? XO_SQRTPS : XO_SQRTPD,
+	    dest, left);
 }
 
 static void asm_vecabs(ASMState *as, IRIns *ir)
@@ -457,7 +519,7 @@ static void asm_vecabs(ASMState *as, IRIns *ir)
   }
   dest = ra_dest(as, ir, RSET_FPR);
   left = ra_alloc1(as, ir->op1, RSET_FPR);
-  emit_vrr66(as, xo, dest, left);
+  emit_vrr2(as, xo, dest, left);
 }
 
 static void asm_vecround(ASMState *as, IRIns *ir)
@@ -465,9 +527,7 @@ static void asm_vecround(ASMState *as, IRIns *ir)
   x86Op xo = irt_type(ir->t) == IRT_V4F32 ? XO_ROUNDPS : XO_ROUNDPD;
   Reg dest = ra_dest(as, ir, RSET_FPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-  emit_i8(as, (int32_t)ir->op2);
-  emit_rr(as, xo, dest, left);
-  emit_prefix66(as, xo);
+  emit_vrr2i(as, xo, dest, left, (int32_t)ir->op2);
 }
 
 static void asm_vecshuf(ASMState *as, IRIns *ir)
@@ -476,14 +536,13 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
   uint32_t mode = lit >> 8;
   int32_t imm = (int32_t)(lit & 255);
   Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
   if (mode == IRVSHUF_PSRLDQ) {
-    emit_vshifti(as, XO_PSHIFTQ, 3, dest, imm);  /* PSRLDQ is group 3. */
-    ra_left(as, dest, ir->op1);
+    emit_vshift(as, XO_PSHIFTQ, 3, dest, left, imm);  /* PSRLDQ is group 3. */
   } else {
     x86Op xo = mode == IRVSHUF_PSHUFD ? XO_PSHUFD :
 	       mode == IRVSHUF_PSHUFLW ? XO_PSHUFLW : XO_PSHUFHW;
-    Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-    emit_vrri(as, xo, dest, left, imm);
+    emit_vrr2i(as, xo, dest, left, imm);
   }
 }
 
@@ -500,20 +559,19 @@ static void asm_vecmovmsk(ASMState *as, IRIns *ir)
   Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
   switch (t) {
   case IRT_V4F32: case IRT_V4I32:
-    emit_rr(as, XO_MOVMSKPS, dest, left);
+    emit_vrr2(as, XO_MOVMSKPS, dest, left);
     break;
   case IRT_V2F64: case IRT_V2I64:
-    emit_rr(as, XO_MOVMSKPD, dest, left);
+    emit_vrr2(as, XO_MOVMSKPD, dest, left);
     break;
   case IRT_V16I8:
-    emit_rr(as, XO_PMOVMSKB, dest, left);
+    emit_vrr2(as, XO_PMOVMSKB, dest, left);
     break;
   default: {  /* 16 bit lanes: saturate down to bytes, then PMOVMSKB. */
     Reg tmp = ra_scratch(as, rset_exclude(RSET_FPR, left));
     emit_gri(as, XG_ARITHi(XOg_AND), dest, 0xff);
-    emit_rr(as, XO_PMOVMSKB, dest, tmp);
-    emit_rr(as, XO_PACKSSWB, tmp, tmp);
-    emit_rr(as, XO_MOVAPS, tmp, left);
+    emit_vrr2(as, XO_PMOVMSKB, dest, tmp);
+    emit_vrr3(as, XO_PACKSSWB, tmp, left, left);
     break;
     }
   }
@@ -544,11 +602,11 @@ static void asm_vecconv(ASMState *as, IRIns *ir)
   Reg dest = ra_dest(as, ir, RSET_FPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
   if (dk == VECK_F32)
-    emit_rr(as, XO_CVTDQ2PS, dest, left);
+    emit_vrr2(as, XO_CVTDQ2PS, dest, left);
   else if (sk == VECK_F32)
-    emit_rr(as, XO_CVTTPS2DQ, dest, left);
+    emit_vrr2(as, XO_CVTTPS2DQ, dest, left);
   else
-    emit_rr(as, XO_MOVAPS, dest, left);  /* Same-width reinterpretation. */
+    emit_vrr2(as, XO_MOVAPS, dest, left);  /* Same-width reinterpretation. */
 }
 
 /* -- Dispatch ------------------------------------------------------------ */

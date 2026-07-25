@@ -554,6 +554,8 @@ static int simd_cf_features(lua_State *L)
     SETFEAT("ssse3", f & JIT_F_SSSE3);
     SETFEAT("sse4_1", f & JIT_F_SSE4_1);
     SETFEAT("sse4_2", f & JIT_F_SSE4_2);
+    SETFEAT("avx", f & JIT_F_AVX);
+    SETFEAT("avx2", f & JIT_F_AVX2);
 #else
     UNUSED(f);
 #endif

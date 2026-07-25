@@ -44,12 +44,19 @@ local function mnemonics(body)
   return t
 end
 
+-- The backend emits the VEX form of every packed instruction when the CPU has
+-- AVX, so "addps" and "vaddps" are the same instruction as far as these tests
+-- are concerned.
+local function count(m, w)
+  return (m[w] or 0) + (m["v" .. w] or 0)
+end
+
 local function checkloop(name, want, unwanted, f, ...)
   local body, isloop = loopcode(f, ...)
   local m = mnemonics(body)
   if not check(body ~= "", name .. ": nothing was compiled") then return end
   for _, w in ipairs(want) do
-    check(m[w] and m[w] > 0,
+    check(count(m, w) > 0,
 	  name .. ": expected '" .. w .. "' in the compiled code, got: " ..
 	  body:gsub("\n", " | "))
   end
@@ -57,7 +64,7 @@ local function checkloop(name, want, unwanted, f, ...)
   -- trace always contains the prologue, which may call the GC step.
   if isloop then
     for _, u in ipairs(unwanted or {}) do
-      check(not m[u],
+      check(count(m, u) == 0,
 	    name .. ": unexpected '" .. u .. "' in the loop body, got: " ..
 	    body:gsub("\n", " | "))
     end
@@ -82,7 +89,8 @@ test("float arithmetic is packed", function()
     for _ = 1, 400 do acc = acc + a end
     return acc
   end)
-  if m then check(m.addps == 1, "float4 add: exactly one ADDPS per iteration") end
+  if m then check(count(m, "addps") == 1,
+		  "float4 add: exactly one packed add per iteration") end
   checkloop("float4 mul/div", {"mulps", "divps"}, {"call", "mulss", "divss"},
     function()
       local acc = f4(1)
@@ -130,7 +138,7 @@ test("integer arithmetic is packed", function()
       for i = 1, 400 do acc = (acc + i8(1)) * k end
       return acc
     end)
-  if m then check(not m.imul, "i8x16 mul: no scalar IMUL") end
+  if m then check(count(m, "imul") == 0, "i8x16 mul: no scalar IMUL") end
 end)
 
 test("ffi.simd operations are packed", function()
@@ -180,6 +188,26 @@ test("ffi.simd operations are packed", function()
   end)
 end)
 
+test("64 bit lane min/max is packed", function()
+  -- There is no PMINSQ before AVX-512, so this must lower to a compare and a
+  -- blend rather than falling back to the interpreter or to scalar code.
+  for _, name in ipairs({"i64x2", "u64x2"}) do
+    local ct = T.T[name].ct
+    local a = ct(3, 5)
+    checkloop(name .. " min/max", {"pcmpgtq", "pand", "pandn", "por"},
+      NOCALL, function()
+	local acc = ct(1)
+	for _ = 1, 400 do acc = simd.max(simd.min(acc + a, ct(100)), ct(-100)) end
+	return acc
+      end)
+    checkloop(name .. " hmin", {"pcmpgtq"}, NOCALL, function()
+      local s, v = 0, ct(0)
+      for _ = 1, 400 do v = v + a; s = s + tonumber(simd.hmin(v)) end
+      return s
+    end)
+  end
+end)
+
 test("horizontal reduction uses shuffles, not lane loads", function()
   local f4 = T.T.float4.ct
   local a = f4(1, 2, 3, 4)
@@ -192,8 +220,8 @@ test("horizontal reduction uses shuffles, not lane loads", function()
     return s
   end)
   if m then
-    check(m.psrldq == 2, "hsum float4: two halving steps, got " ..
-	  tostring(m.psrldq))
+    check(count(m, "psrldq") == 2, "hsum float4: two halving steps, got " ..
+	  tostring(count(m, "psrldq")))
   end
 end)
 
@@ -246,7 +274,8 @@ test("no boxing allocation remains in a hot vector loop", function()
   check(not body:find("call", 1, true),
 	"allocation call left in the loop: " .. body:gsub("\n", " | "))
   local m = mnemonics(body)
-  check(m.addps == 1 and (m.mulps or 0) <= 1 and not m.addss and not m.mulss,
+  check(count(m, "addps") == 1 and count(m, "mulps") <= 1 and
+	count(m, "addss") == 0 and count(m, "mulss") == 0,
 	"loop body should be one packed multiply-add, got: " ..
 	body:gsub("\n", " | "))
 end)

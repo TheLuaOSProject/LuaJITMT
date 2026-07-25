@@ -8,7 +8,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 * Remote: `origin` = https://github.com/TheLuaOSProject/LuaJITMT
 * Upstream: `upstream` = https://github.com/LuaJIT/LuaJIT.git
 * Latest pushed commit: see "Milestones" below.
-* Target: x86-64, SSE2 baseline, 128-bit vectors.
+* Target: **x86-64-v3** (SSE4.2 + AVX2 + BMI2), 128-bit vectors.
+  Feature use is runtime detected, so the binary still runs on older CPUs.
 
 ## Milestones
 
@@ -20,6 +21,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M4 | `ffi.simd` shuffle/insert recording, FFI call/callback ABI tests, benchmarks, user documentation | done |
 | M5 | Fast-function ID budget fix; `simd.shuffle2` compiles | done |
 | M6 | Vector alias analysis and self-describing VMOVMSK/VEXTRACT | done |
+| M7 | x86-64-v3: AVX/AVX2 detection, VEX three operand encoding, 64-bit lane min/max | done |
 
 ## Commands that pass
 
@@ -145,14 +147,15 @@ reintroduced silently: the build fails instead.
 
 ## Benchmarks
 
+
 `./src/luajit test/simd/bench.lua`, N=65536, 200 passes, best of 3, on this
 machine:
 
 ```
-saxpy (float)              scalar     5.4 ms   vector     1.4 ms    3.79x
-dot product (float)        scalar     5.0 ms   vector     1.2 ms    3.97x
+saxpy (float)              scalar     5.4 ms   vector     1.5 ms    3.62x
+dot product (float)        scalar     5.0 ms   vector     1.2 ms    3.99x
 horizontal max (int32)     scalar     3.8 ms   vector     3.7 ms    1.02x
-clamp (float)              scalar    24.7 ms   vector     1.6 ms   15.67x
+clamp (float)              scalar    24.6 ms   vector     1.6 ms   15.54x
 ```
 
 saxpy and the dot product reach ~4x, which is the ceiling for 4 lanes. Clamp

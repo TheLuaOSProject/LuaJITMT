@@ -1621,6 +1621,32 @@ static void crec_simd_need(jit_State *J, int ok)
   if (!ok) lj_trace_err(J, LJ_TRERR_NYIVEC);
 }
 
+static TRef crec_simd_ubias(jit_State *J, IRType vt, const CTVecInfo *vi,
+			    TRef tr);
+
+/*
+** 64 bit lane min/max. There is no instruction for it before AVX-512, so
+** compare and blend instead. That is still fully packed, three instructions
+** plus the compare, and it needs PCMPGTQ from SSE4.2.
+*/
+static TRef crec_simd_minmax64(jit_State *J, IRType vt, const CTVecInfo *vi,
+			       TRef a, TRef b, int ismax)
+{
+  TRef ca = a, cb = b, m;
+  crec_simd_need(J, (J->flags & JIT_F_SSE4_2) != 0);
+  if (veck_isunsigned(vi->kind)) {  /* Bias, so the signed compare answers. */
+    ca = crec_simd_ubias(J, vt, vi, a);
+    cb = crec_simd_ubias(J, vt, vi, b);
+  }
+  m = emitir(IRT(IR_VCMPGT, vt), ca, cb);
+  /* max picks a where a > b, min picks b. Equal lanes are bit-identical, so
+  ** it does not matter which side an a == b lane takes.
+  */
+  return emitir(IRT(IR_VOR, vt),
+		emitir(IRT(IR_VAND, vt), m, ismax ? a : b),
+		emitir(IRT(IR_VANDN, vt), m, ismax ? b : a));
+}
+
 void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
@@ -1637,8 +1663,11 @@ void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd)
   case VOP_MIN: case VOP_MAX:
     if (veck_isfp(vi.kind)) {
       op = rd->data == VOP_MIN ? IR_VMIN : IR_VMAX;
+    } else if (vi.esize == 8) {
+      J->base[0] = crec_vec_box(J,
+	crec_simd_minmax64(J, vt, &vi, a, b, rd->data == VOP_MAX), vt, id);
+      return;
     } else {
-      crec_simd_need(J, vi.esize != 8);  /* No 64 bit lane min/max before AVX-512. */
       crec_simd_need(J, vi.esize == 2 ? (uns ? sse41 : 1) :
 			vi.esize == 1 ? (uns ? 1 : sse41) : sse41);
       op = rd->data == VOP_MIN ? (uns ? IR_VMINU : IR_VMIN)
@@ -2040,14 +2069,17 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
   int uns = veck_isunsigned(vi.kind);
   int sse41 = (J->flags & JIT_F_SSE4_1) != 0;
   IROp op;
+  int mm64 = 0;  /* 64 bit lane min/max needs the compare and blend form. */
   TRef r = a;
   switch (rd->data) {
   case VRD_SUM: op = IR_VADD; break;
   case VRD_MIN: case VRD_MAX:
     if (veck_isfp(vi.kind)) {
       op = rd->data == VRD_MIN ? IR_VMIN : IR_VMAX;
+    } else if (vi.esize == 8) {
+      mm64 = 1;
+      op = IR_VMIN;  /* Unused, see the loop below. */
     } else {
-      crec_simd_need(J, vi.esize != 8);
       crec_simd_need(J, vi.esize == 2 ? (uns ? sse41 : 1) :
 			vi.esize == 1 ? (uns ? 1 : sse41) : sse41);
       op = rd->data == VRD_MIN ? (uns ? IR_VMINU : IR_VMIN)
@@ -2066,7 +2098,8 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     n >>= 1;
     sz >>= 1;
     half = emitir(IRT(IR_VSHUF, vt), r, IRVSHUF(IRVSHUF_PSRLDQ, sz));
-    r = emitir(IRT(op, vt), r, half);
+    r = mm64 ? crec_simd_minmax64(J, vt, &vi, r, half, rd->data == VRD_MAX)
+	     : emitir(IRT(op, vt), r, half);
   }
   {
     IRType et = veck_isfp(vi.kind) ?

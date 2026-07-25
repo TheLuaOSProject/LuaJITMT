@@ -248,9 +248,15 @@ for i = 0, n/4 - 1 do vp[i] = vp[i] * float4(2) end
 <ul>
 <li>Vector lanes are immutable, which is what lets the compiler keep a vector
 in a register. Build a new vector with <tt>simd.insert()</tt> instead.</li>
-<li>An operation without a packed instruction on the current CPU is not
-scalarised: the trace is abandoned and the code keeps running interpreted,
-with identical results. <tt>simd.features()</tt> reports what is available.</li>
+<li>The supported target is <b>x86-64-v3</b>. CPU features are still detected
+at run time, so the same binary works on older machines: an operation without
+a packed instruction is never scalarised, the trace is abandoned and the code
+keeps running interpreted with identical results.
+<tt>simd.features()</tt> reports what was found.</li>
+<li>When AVX is present every packed instruction is emitted in its three
+operand VEX form. FMA is deliberately not used, because fusing a multiply and
+an add rounds once instead of twice and would disagree with the
+interpreter.</li>
 <li>Vectors can be passed to and returned from C functions by value. Passing
 a vector by value to or from an FFI <em>callback</em> is rejected with an
 error; pass a pointer instead.</li>

@@ -660,6 +660,18 @@ static uint32_t jit_cpudetect(void)
     flags |= ((features[2] >> 9)&1) * JIT_F_SSSE3;
     flags |= ((features[2] >> 19)&1) * JIT_F_SSE4_1;
     flags |= ((features[2] >> 20)&1) * JIT_F_SSE4_2;
+    /* AVX needs both the CPU feature and OS support for saving the YMM state.
+    ** Check OSXSAVE first, then ask XGETBV whether XMM and YMM are enabled.
+    */
+    if ((features[2] & (1u<<27)) && (features[2] & (1u<<28)) &&
+	(lj_vm_xgetbv(0) & 6) == 6) {
+      flags |= JIT_F_AVX;
+      if (vendor[0] >= 7) {
+	uint32_t xfeatures[4];
+	lj_vm_cpuid(7, xfeatures);
+	flags |= ((xfeatures[1] >> 5)&1) * JIT_F_AVX2;
+      }
+    }
     if (vendor[0] >= 7) {
       uint32_t xfeatures[4];
       lj_vm_cpuid(7, xfeatures);

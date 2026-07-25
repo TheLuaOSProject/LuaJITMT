@@ -2710,6 +2710,12 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Miscellaneous functions --------------------------------------------
   |//-----------------------------------------------------------------------
   |
+  |// uint32_t lj_vm_xgetbv(uint32_t xcr)
+  |->vm_xgetbv:
+  |  mov ecx, CARG1d
+  |  .byte 0x0f, 0x01, 0xd0		// xgetbv: result in edx:eax.
+  |  ret
+  |
   |// int lj_vm_cpuid(uint32_t f, uint32_t res[4])
   |->vm_cpuid:
   |  mov eax, CARG1d

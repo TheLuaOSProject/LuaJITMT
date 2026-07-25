@@ -3,6 +3,15 @@
 Legend: **I** = interpreter, **J** = JIT (x86-64), — = not supported (clean
 error), n/a = not applicable.
 
+**Target.** The supported target is **x86-64-v3** (SSE4.2 + AVX2 + BMI2). Every
+row marked J is available there. Feature use is still *runtime* detected, so
+the same binary keeps working on older CPUs: an operation whose instruction is
+missing aborts the trace and stays interpreted with an identical result, it is
+never scalarised and never wrong. `simd.features()` reports what was found.
+
+When AVX is present the backend emits the VEX three operand form of every
+packed instruction, so no register copy is needed before a binary operation.
+
 ## Vector shapes
 
 A ctype is a *SIMD vector* when it is an FFI vector type
@@ -92,7 +101,7 @@ operand, exactly like the operators.
 |---|---|---|---|---|---|---|
 | `band/bor/bxor/bandn(a,b)` | same ctype | bitwise | bitwise | bitwise | yes | yes |
 | `bnot(a)` | same ctype | bitwise | bitwise | bitwise | yes | yes |
-| `min(a,b)`, `max(a,b)` | same ctype | yes | yes | yes | yes | yes* |
+| `min(a,b)`, `max(a,b)` | same ctype | yes | yes | yes | yes | yes |
 | `abs(a)` | same ctype | clears sign bit | wraps at the min value | identity | yes | yes |
 | `sqrt(a)` | same ctype | yes | — | — | yes | yes |
 | `floor/ceil/trunc/round(a)` | same ctype | yes | — | — | yes | yes (SSE4.1) |
@@ -138,7 +147,7 @@ Semantics worth pinning down:
 
 | Case | Status |
 |---|---|
-| `min/max` on 64-bit integer lanes | JIT NYI (no SSE instruction before AVX-512); interpreter is correct |
+| `min/max` on 64-bit integer lanes | no instruction before AVX-512, so it lowers to PCMPGTQ plus a three instruction blend (still fully packed). Needs SSE4.2. |
 | `sar` on 64-bit lanes | no instruction before AVX-512, so the recorder rewrites it into `(v^S)>>n - (S>>n)`; needs a **constant** count, otherwise it stays interpreted |
 | `lt/le/gt/ge` on 64-bit integer lanes | requires SSE4.2 (PCMPGTQ); otherwise JIT NYI |
 | `floor/ceil/trunc/round` | requires SSE4.1 (ROUNDPS); otherwise JIT NYI |
