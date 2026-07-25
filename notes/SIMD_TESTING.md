@@ -28,6 +28,7 @@ status is non-zero if anything failed.
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists, memory round trips and callbacks against a small C helper library that it compiles at test time |
 | `bench.lua` | microbenchmarks: saxpy, dot product, horizontal max and clamp, each against equivalent scalar code |
+| `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |
 
 ## Method
 
@@ -60,6 +61,23 @@ The Lua reference code must avoid the pre-existing upstream bug documented in
 `SIMD_STATUS.md` (`ffi.cast("int64_t", x) < ffi.cast("int64_t", y)` inside a
 compiled loop). The min/max references therefore compare the lane values
 directly instead of widening them first.
+
+## Non-vector regression check
+
+LuaJIT has no in-tree test suite, so the baseline for "nothing else changed" is
+an output diff against a pristine build of the base commit:
+
+```
+git worktree add /tmp/ljbase 346ab587 && (cd /tmp/ljbase && make -j$(nproc))
+./src/luajit          test/simd/test_noregress.lua > /tmp/new.txt
+/tmp/ljbase/src/luajit test/simd/test_noregress.lua > /tmp/base.txt
+diff /tmp/base.txt /tmp/new.txt      # must be empty
+```
+
+It covers numbers, strings, tables, metatables, closures, coroutines, sorting,
+`pcall`, the bit library, FFI structs, arrays, 64-bit integers, casts,
+callbacks, ctype reprs and two hot loops. It is currently byte-for-byte
+identical.
 
 ## Build configurations exercised
 

@@ -60,9 +60,10 @@ backend bug that neither of the other two modes reached. Keep it.
   The SIMD test suite avoids this pattern in its reference implementations.
   Out of scope for this work; recorded so it is not mistaken for a regression.
 
-* LuaJIT has no in-tree test suite, so the regression baseline is: the build
-  succeeds, and `test/simd` plus the `-e` smoke tests in this file behave the
-  same as the pristine base commit for non-vector code.
+* LuaJIT has no in-tree test suite, so the regression baseline is an output
+  diff of `test/simd/test_noregress.lua` against a pristine build of the base
+  commit `346ab587`. It is currently **byte-for-byte identical**. See
+  `SIMD_TESTING.md` for the exact commands.
 
 ## Files touched so far
 
