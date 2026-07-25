@@ -5,19 +5,39 @@ local ffi, simd, test, check, checkeq = T.ffi, T.simd, T.test, T.check, T.checke
 local SEED = tonumber(os.getenv("SIMD_SEED") or "20260725")
 
 local ops = {
-  add = function(a, b) return a + b end,
-  sub = function(a, b) return a - b end,
-  mul = function(a, b) return a * b end,
-  div = function(a, b) return a / b end,
+  { "add", function(a, b) return a + b end },
+  { "sub", function(a, b) return a - b end },
+  { "mul", function(a, b) return a * b end },
+  { "div", function(a, b) return a / b end },
 }
+
+-- The order the operators run in decides the order their traces are recorded
+-- and linked, which is worth varying. It must not vary *per process* though:
+-- this used to be a pairs() loop over a string-keyed table, and with
+-- LUAJIT_SECURITY_STRHASH the hash seed differs on every run, so the order
+-- did too. A failure then could not be replayed from its seed. Derive the
+-- permutation from a separate RNG stream instead, which leaves the operand
+-- values for a given seed exactly as they were.
+local function shuffled(rnd, out)
+  for i = 1, #ops do out[i] = ops[i] end
+  for i = #ops, 2, -1 do
+    local j = rnd() % i + 1
+    out[i], out[j] = out[j], out[i]
+  end
+  return out
+end
 
 test("randomized vector/vector arithmetic", function()
   for _, ti in ipairs(T.T) do
     local rnd = T.rng(SEED + ti.bits + (ti.fp and 1000 or 0) +
 		      (ti.signed and 7 or 0))
+    local ord = T.rng(SEED + 990001 + ti.bits + (ti.fp and 1000 or 0) +
+		      (ti.signed and 7 or 0))
+    local order = {}
     for iter = 1, 200 do
       local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
-      for name, f in pairs(ops) do
+      for _, op in ipairs(shuffled(ord, order)) do
+	local name, f = op[1], op[2]
 	if name ~= "div" or ti.fp then
 	  local got = f(a, b)
 	  local want = T.refbin(ti, name, a, b)

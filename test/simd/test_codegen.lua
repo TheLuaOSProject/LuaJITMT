@@ -270,6 +270,35 @@ test("the IR dump renders vector types and constants", function()
   end
 end)
 
+test("a bitcast never produces a conversion between vector types", function()
+  -- simd.bitcast re-boxes a value under a different lane type, so the box's
+  -- XSTORE is typed with the *destination* lane type while the stored value
+  -- still carries the source one. Reading that box back used to make
+  -- lj_opt_fwd_xload() synthesise a CONV between two vector types, which the
+  -- backend cannot assemble: asm_conv takes the integer path and allocates a
+  -- GPR for a value that lives in an XMM register. In an assert build that
+  -- tripped "vector constant needs an FP register" in emit_loadk128; in a
+  -- release build it silently used the wrong register.
+  local i4 = T.T.i32x4.ct
+  local f4 = T.T.float4.ct
+  local function work()
+    local acc = i4(0)
+    for _ = 1, 400 do
+      -- f4(2.5) is a constant splat, so the value boxed by the bitcast is a
+      -- 128 bit constant, and abs then reloads that box with the other type.
+      acc = acc + simd.abs(simd.bitcast(i4, f4(2.5)))
+    end
+    return acc
+  end
+  local want = work()
+  local text = rawdump("i", work)
+  -- "vi4.vf4" and friends: a CONV whose source or destination is a vector.
+  local bad = text:match("CONV%s+%S+%s+(v%w+%.%w+)") or
+	      text:match("CONV%s+%S+%s+(%w+%.v%w+)")
+  check(bad == nil, "CONV between vector types in the IR: " .. tostring(bad))
+  check(T.same(work(), want), "bitcast value changed once compiled")
+end)
+
 test("shifts with a variable count are packed", function()
   -- 8 bit lanes have no shift instruction at all, and there is no 64 bit
   -- arithmetic shift before AVX-512. Both are rewritten by the recorder. A
