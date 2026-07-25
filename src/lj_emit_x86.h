@@ -88,6 +88,20 @@ static void emit_branch_track(ASMState *as)
    p[-2] = MODRM((mode), (rr), RID_ESP), \
    emit_op((xo), (rr), (rb), (rx), (p), -1))
 
+/*
+** Add the mandatory 66 prefix of an SSSE3/SSE4 three byte opcode (0f 38 xx or
+** 0f 3a xx). Those do not fit into the 32 bit x86Op encoding, so the rest of
+** the instruction is emitted first and the prefix is prepended here, moving a
+** REX byte in front of the 0f if one was emitted.
+*/
+static void emit_prefix66(ASMState *as, x86Op xo)
+{
+  if (LJ_64 && as->mcp[1] != (MCode)(xo >> 16)) {
+    as->mcp[0] = as->mcp[1]; as->mcp[1] = 0x0f;  /* Swap 0F and REX. */
+  }
+  *--as->mcp = 0x66;
+}
+
 /* op r1, r2 */
 static void emit_rr(ASMState *as, x86Op xo, Reg r1, Reg r2)
 {
@@ -430,6 +444,38 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
   }
 }
 
+/* Load a 128 bit vector constant into an FP register. */
+static void emit_loadk128(ASMState *as, Reg r, IRIns *ir)
+{
+  const uint8_t *k = ir_kvec(ir);
+  lj_assertA(rset_test(RSET_FPR, r), "vector constant needs an FP register");
+  if (((const uint64_t *)k)[0] == 0 && ((const uint64_t *)k)[1] == 0) {
+    emit_rr(as, XO_PXOR, r, r);
+    return;
+  }
+#if LJ_GC64
+  if (checki32(dispofs(as, k)) && checki32(dispofs(as, k+15))) {
+    emit_rmro(as, XO_MOVUPS, r, RID_DISPATCH, (int32_t)dispofs(as, k));
+  } else if (checki32(mcpofs(as, k)) && checki32(mcpofs(as, k+15)) &&
+	     checki32(mctopofs(as, k)) && checki32(mctopofs(as, k+15))) {
+    emit_rmro(as, XO_MOVUPS, r, RID_RIP, (int32_t)mcpofs(as, k));
+  } else {  /* Intern the constant at the bottom of the mcode area. */
+    if (!ir->i) {
+      while ((uintptr_t)as->mcbot & 15) *as->mcbot++ = XI_INT3;
+      memcpy(as->mcbot, k, 16);
+      ir->i = (int32_t)(as->mctop - as->mcbot);
+      as->mcbot += 16;
+      as->mclim = as->mcbot + MCLIM_REDZONE;
+      lj_mcode_commitbot(as->J, as->mcbot);
+    }
+    emit_rmro(as, XO_MOVUPS, r, RID_RIP,
+	      (int32_t)mcpofs(as, as->mctop - ir->i));
+  }
+#else
+  emit_rma(as, XO_MOVUPS, r, k);
+#endif
+}
+
 /* -- Emit control-flow instructions -------------------------------------- */
 
 /* Label for short jumps. */
@@ -562,6 +608,8 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r < RID_MAX_GPR)
     emit_rmro(as, XO_MOV, REX_64IR(ir, r), base, ofs);
+  else if (irt_isvec(ir->t))
+    emit_rmro(as, XO_MOVUPS, r, base, ofs);  /* Spill slots are not aligned. */
   else
     emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSD : XO_MOVSS, r, base, ofs);
 }
@@ -571,6 +619,8 @@ static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r < RID_MAX_GPR)
     emit_rmro(as, XO_MOVto, REX_64IR(ir, r), base, ofs);
+  else if (irt_isvec(ir->t))
+    emit_rmro(as, XO_MOVUPSto, r, base, ofs);
   else
     emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSDto : XO_MOVSSto, r, base, ofs);
 }

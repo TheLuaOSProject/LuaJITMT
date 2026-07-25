@@ -51,6 +51,7 @@
   _(KNULL,	N , cst, ___) \
   _(KNUM,	N , cst, ___) \
   _(KINT64,	N , cst, ___) \
+  _(KVEC,	N , cst, ___) \
   _(KSLOT,	N , ref, lit) \
   \
   /* Bit ops. ORDER BIT */ \
@@ -146,6 +147,41 @@
   _(CALLS,	S , ref, lit) \
   _(CALLXS,	S , ref, ref) \
   _(CARG,	N , ref, ref) \
+  \
+  /* Vector ops. ORDER VEC */ \
+  _(VSPLAT,	N , ref, ___) \
+  _(VADD,	C , ref, ref) \
+  _(VSUB,	N , ref, ref) \
+  _(VMUL,	C , ref, ref) \
+  _(VDIV,	N , ref, ref) \
+  _(VAND,	C , ref, ref) \
+  _(VOR,	C , ref, ref) \
+  _(VXOR,	C , ref, ref) \
+  _(VANDN,	N , ref, ref) \
+  _(VMIN,	N , ref, ref) \
+  _(VMAX,	N , ref, ref) \
+  _(VMINU,	N , ref, ref) \
+  _(VMAXU,	N , ref, ref) \
+  _(VADDS,	C , ref, ref) \
+  _(VSUBS,	N , ref, ref) \
+  _(VADDSU,	C , ref, ref) \
+  _(VSUBSU,	N , ref, ref) \
+  _(VCMPEQ,	C , ref, ref) \
+  _(VCMPGT,	N , ref, ref) \
+  _(VCMPGE,	N , ref, ref) \
+  _(VSHL,	N , ref, ref) \
+  _(VSHR,	N , ref, ref) \
+  _(VSAR,	N , ref, ref) \
+  _(VSQRT,	N , ref, ___) \
+  _(VABS,	N , ref, ___) \
+  _(VROUND,	N , ref, lit) \
+  _(VSHUF,	N , ref, lit) \
+  _(VSHUFB,	N , ref, ref) \
+  _(VUNPKL,	N , ref, ref) \
+  _(VUNPKH,	N , ref, ref) \
+  _(VCONV,	N , ref, lit) \
+  _(VEXTRACT,	N , ref, lit) \
+  _(VMOVMSK,	N , ref, ___) \
   \
   /* End of list. */
 
@@ -324,7 +360,10 @@ LJ_DATA const uint8_t lj_ir_mode[IR__MAX+1];
   _(UDATA, IRTSIZE_PGC) \
   _(FLOAT, 4) _(NUM, 8) _(I8, 1) _(U8, 1) _(I16, 2) _(U16, 2) \
   _(INT, 4) _(U32, 4) _(I64, 8) _(U64, 8) \
-  _(SOFTFP, 4)  /* There is room for 8 more types. */
+  _(SOFTFP, 4) \
+  /* 128 bit vector types, ordered by lane width. ORDER VECIRT */ \
+  _(V16I8, 16) _(V8I16, 16) _(V4I32, 16) _(V2I64, 16) \
+  _(V4F32, 16) _(V2F64, 16)  /* There is room for 2 more types. */
 
 /* IR result type and flags (8 bit). */
 typedef enum {
@@ -390,6 +429,15 @@ typedef struct IRType1 { uint8_t irt; } IRType1;
 #define irt_isgcv(t)		(irt_typerange((t), IRT_STR, IRT_UDATA))
 #define irt_isaddr(t)		(irt_typerange((t), IRT_LIGHTUD, IRT_UDATA))
 #define irt_isint64(t)		(irt_typerange((t), IRT_I64, IRT_U64))
+#define irt_isvec(t)		(irt_typerange((t), IRT_V16I8, IRT_V2F64))
+#define irt_isvecfp(t)		(irt_typerange((t), IRT_V4F32, IRT_V2F64))
+#define irt_isvecint(t)		(irt_typerange((t), IRT_V16I8, IRT_V2I64))
+/* Lane size in bytes of a vector IR type. */
+#define irt_vecesz(t) \
+  (irt_isvecfp(t) ? (4u << (irt_type(t)-IRT_V4F32)) : \
+		    (1u << (irt_type(t)-IRT_V16I8)))
+/* A value that lives in an FP register. */
+#define irt_isfpr(t)		(irt_isfp(t) || irt_isvec(t))
 
 #if LJ_GC64
 /* Include IRT_NIL, so IR(ASMREF_L) (aka REF_NIL) is considered 64 bit. */
@@ -595,6 +643,8 @@ typedef union IRIns {
 #define ir_kptr(ir) \
   check_exp((ir)->o == IR_KPTR || (ir)->o == IR_KKPTR, \
     mref((ir)[LJ_GC64].ptr, void))
+/* A 128 bit vector constant occupies two extra IR slots after the KVEC. */
+#define ir_kvec(ir)	check_exp((ir)->o == IR_KVEC, (uint8_t *)&(ir)[1])
 
 /* A store or any other op with a non-weak guard has a side-effect. */
 static LJ_AINLINE int ir_sideeff(IRIns *ir)

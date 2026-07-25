@@ -399,6 +399,11 @@ static Reg ra_rematk(ASMState *as, IRRef ref)
     emit_loadk64(as, r, ir);
   } else
 #endif
+#if LJ_TARGET_X86ORX64
+  if (ir->o == IR_KVEC) {
+    emit_loadk128(as, r, ir);
+  } else
+#endif
   if (emit_canremat(REF_BASE) && ir->o == IR_BASE) {
     ra_sethint(ir->r, RID_BASE);  /* Restore BASE register hint. */
     emit_getgl(as, r, jit_base);
@@ -432,7 +437,10 @@ static int32_t ra_spill(ASMState *as, IRIns *ir)
   lj_assertA(ir >= as->ir + REF_TRUE,
 	     "spill of K%03d", REF_BIAS - (int)(ir - as->ir));
   if (!ra_hasspill(slot)) {
-    if (irt_is64(ir->t)) {
+    if (irt_isvec(ir->t)) {  /* 128 bit values need four consecutive slots. */
+      slot = as->evenspill;
+      as->evenspill += 4;
+    } else if (irt_is64(ir->t)) {
       slot = as->evenspill;
       as->evenspill += 2;
     } else if (as->oddspill) {
@@ -810,6 +818,11 @@ static void ra_left(ASMState *as, Reg dest, IRRef lref)
 	  emit_loadk64(as, dest, ir);
 	  return;
 	}
+#if LJ_TARGET_X86ORX64 && LJ_HASFFI
+      } else if (ir->o == IR_KVEC) {
+	emit_loadk128(as, dest, ir);
+	return;
+#endif
 #if LJ_64
       } else if (ir->o == IR_KINT64) {
 	emit_loadk64(as, dest, ir);
@@ -993,7 +1006,7 @@ static void asm_snap_alloc1(ASMState *as, IRRef ref)
 	return;
       }
     nosink:
-      allow = (!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR;
+      allow = (!LJ_SOFTFP && irt_isfpr(ir->t)) ? RSET_FPR : RSET_GPR;
       if ((as->freeset & allow) ||
 	       (allow == RSET_FPR && asm_snap_canremat(as))) {
 	/* Get a weak register if we have a free one or can rematerialize. */
@@ -1571,7 +1584,7 @@ static void asm_phi_copyspill(ASMState *as)
   IRIns *ir;
   for (ir = IR(as->orignins-1); ir->o == IR_PHI; ir--)
     if (ra_hasspill(ir->s) && ra_hasspill(IR(ir->op1)->s))
-      need |= irt_isfp(ir->t) ? 2 : 1;  /* Unsynced spill slot? */
+      need |= irt_isfpr(ir->t) ? 2 : 1;  /* Unsynced spill slot? */
   if ((need & 1)) {  /* Copy integer spill slots. */
 #if !LJ_TARGET_X86ORX64
     Reg r = RID_TMP;
@@ -1585,7 +1598,7 @@ static void asm_phi_copyspill(ASMState *as)
     for (ir = IR(as->orignins-1); ir->o == IR_PHI; ir--) {
       if (ra_hasspill(ir->s)) {
 	IRIns *irl = IR(ir->op1);
-	if (ra_hasspill(irl->s) && !irt_isfp(ir->t)) {
+	if (ra_hasspill(irl->s) && !irt_isfpr(ir->t)) {
 	  emit_spstore(as, irl, r, sps_scale(irl->s));
 	  emit_spload(as, ir, r, sps_scale(ir->s));
 	  checkmclim(as);
@@ -1611,7 +1624,7 @@ static void asm_phi_copyspill(ASMState *as)
     for (ir = IR(as->orignins-1); ir->o == IR_PHI; ir--) {
       if (ra_hasspill(ir->s)) {
 	IRIns *irl = IR(ir->op1);
-	if (ra_hasspill(irl->s) && irt_isfp(ir->t)) {
+	if (ra_hasspill(irl->s) && irt_isfpr(ir->t)) {
 	  emit_spstore(as, irl, r, sps_scale(irl->s));
 	  emit_spload(as, ir, r, sps_scale(ir->s));
 	  checkmclim(as);
@@ -1646,7 +1659,7 @@ static void asm_phi_fixup(ASMState *as)
 /* Setup right PHI reference. */
 static void asm_phi(ASMState *as, IRIns *ir)
 {
-  RegSet allow = ((!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) &
+  RegSet allow = ((!LJ_SOFTFP && irt_isfpr(ir->t)) ? RSET_FPR : RSET_GPR) &
 		 ~as->phiset;
   RegSet afree = (as->freeset & allow);
   IRIns *irl = IR(ir->op1);
@@ -1785,6 +1798,20 @@ static void asm_alen(ASMState *as, IRIns *ir)
 static void asm_ir(ASMState *as, IRIns *ir)
 {
   switch ((IROp)ir->o) {
+#if LJ_HASFFI && LJ_TARGET_X86ORX64
+  /* Vector ops. On other targets these fall through to the NYI default. */
+  case IR_VSPLAT: case IR_VADD: case IR_VSUB: case IR_VMUL: case IR_VDIV:
+  case IR_VAND: case IR_VOR: case IR_VXOR: case IR_VANDN:
+  case IR_VMIN: case IR_VMAX: case IR_VMINU: case IR_VMAXU:
+  case IR_VADDS: case IR_VSUBS: case IR_VADDSU: case IR_VSUBSU:
+  case IR_VCMPEQ: case IR_VCMPGT: case IR_VCMPGE:
+  case IR_VSHL: case IR_VSHR: case IR_VSAR:
+  case IR_VSQRT: case IR_VABS: case IR_VROUND:
+  case IR_VSHUF: case IR_VSHUFB: case IR_VUNPKL: case IR_VUNPKH:
+  case IR_VCONV: case IR_VEXTRACT: case IR_VMOVMSK:
+    asm_vec(as, ir); break;
+#endif
+
   /* Miscellaneous ops. */
   case IR_LOOP: asm_loop(as); break;
   case IR_NOP: case IR_XBAR:
@@ -1792,7 +1819,7 @@ static void asm_ir(ASMState *as, IRIns *ir)
 	       "IR %04d not unused", (int)(ir - as->ir) - REF_BIAS);
     break;
   case IR_USE:
-    ra_alloc1(as, ir->op1, irt_isfp(ir->t) ? RSET_FPR : RSET_GPR); break;
+    ra_alloc1(as, ir->op1, irt_isfpr(ir->t) ? RSET_FPR : RSET_GPR); break;
   case IR_PHI: asm_phi(as, ir); break;
   case IR_HIOP: asm_hiop(as, ir); break;
   case IR_GCSTEP: asm_gcstep(as, ir); break;
@@ -2015,7 +2042,7 @@ static void asm_head_side(ASMState *as)
 	  ra_sethint(ir->r, rs);  /* Hint may be gone, set it again. */
 	else if (sps_scale(regsp_spill(rs))+spdelta == sps_scale(ir->s))
 	  continue;  /* Same spill slot, do nothing. */
-	mask = ((!LJ_SOFTFP && irt_isfp(ir->t)) ? RSET_FPR : RSET_GPR) & allow;
+	mask = ((!LJ_SOFTFP && irt_isfpr(ir->t)) ? RSET_FPR : RSET_GPR) & allow;
 	if (mask == RSET_EMPTY)
 	  lj_trace_err(as->J, LJ_TRERR_NYICOAL);
 	r = ra_allocref(as, i, mask);
@@ -2204,6 +2231,12 @@ static void asm_setup_regsp(ASMState *as)
   /* Clear reg/sp for constants. */
   for (ir = IR(T->nk), lastir = IR(REF_BASE); ir < lastir; ir++) {
     ir->prev = REGSP_INIT;
+    if (irt_isvec(ir->t)) {
+      /* Will become non-zero only for constants interned into the mcode. */
+      ir->i = 0;
+      ir += 2;  /* Skip the two payload slots of a 128 bit constant. */
+      continue;
+    }
     if (irt_is64(ir->t) && ir->o != IR_KNULL) {
 #if LJ_GC64
       /* The false-positive of irt_is64() for ASMREF_L (REF_NIL) is OK here. */

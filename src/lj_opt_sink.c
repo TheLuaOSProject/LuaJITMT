@@ -227,7 +227,9 @@ static void sink_sweep_ins(jit_State *J)
     irt_clearmark(ir->t);
     ir->prev = REGSP_INIT;
     /* The false-positive of irt_is64() for ASMREF_L (REF_NIL) is OK here. */
-    if (irt_is64(ir->t) && ir->o != IR_KNULL)
+    if (irt_isvec(ir->t))
+      ir += 2;
+    else if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ir++;
   }
 }

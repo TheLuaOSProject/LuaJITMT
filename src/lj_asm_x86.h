@@ -1451,7 +1451,7 @@ static void asm_strref(ASMState *as, IRIns *ir)
 
 static void asm_fxload(ASMState *as, IRIns *ir)
 {
-  Reg dest = ra_dest(as, ir, irt_isfp(ir->t) ? RSET_FPR : RSET_GPR);
+  Reg dest = ra_dest(as, ir, irt_isfpr(ir->t) ? RSET_FPR : RSET_GPR);
   x86Op xo;
   if (ir->o == IR_FLOAD)
     asm_fusefref(as, ir, RSET_GPR);
@@ -1466,6 +1466,13 @@ static void asm_fxload(ASMState *as, IRIns *ir)
   case IRT_NUM: xo = XO_MOVSD; break;
   case IRT_FLOAT: xo = XO_MOVSS; break;
   default:
+    if (irt_isvec(ir->t)) {
+      /* Vector cdata payloads are only 8 byte aligned, and a vector may also
+      ** be loaded through a pointer to arbitrary memory. Always unaligned.
+      */
+      xo = XO_MOVUPS;
+      break;
+    }
     if (LJ_64 && irt_is64(ir->t))
       dest |= REX_64;
     else
@@ -1490,9 +1497,9 @@ static void asm_fxstore(ASMState *as, IRIns *ir)
   /* The IRT_I16/IRT_U16 stores should never be simplified for constant
   ** values since mov word [mem], imm16 has a length-changing prefix.
   */
-  if (irt_isi16(ir->t) || irt_isu16(ir->t) || irt_isfp(ir->t) ||
+  if (irt_isi16(ir->t) || irt_isu16(ir->t) || irt_isfpr(ir->t) ||
       !asm_isk32(as, ir->op2, &k)) {
-    RegSet allow8 = irt_isfp(ir->t) ? RSET_FPR :
+    RegSet allow8 = irt_isfpr(ir->t) ? RSET_FPR :
 		    (irt_isi8(ir->t) || irt_isu8(ir->t)) ? RSET_GPR8 : RSET_GPR;
     src = osrc = ra_alloc1(as, ir->op2, allow8);
     if (!LJ_64 && !rset_test(allow8, src)) {  /* Already in wrong register. */
@@ -1514,6 +1521,9 @@ static void asm_fxstore(ASMState *as, IRIns *ir)
     case IRT_I16: case IRT_U16: xo = XO_MOVtow; break;
     case IRT_NUM: xo = XO_MOVSDto; break;
     case IRT_FLOAT: xo = XO_MOVSSto; break;
+    case IRT_V16I8: case IRT_V8I16: case IRT_V4I32:
+    case IRT_V2I64: case IRT_V4F32: case IRT_V2F64:
+      xo = XO_MOVUPSto; break;
 #if LJ_64 && !LJ_GC64
     case IRT_LIGHTUD:
       /* NYI: mask 64 bit lightuserdata. */
@@ -2375,6 +2385,8 @@ static void asm_bitshift(ASMState *as, IRIns *ir, x86Shift xs, x86Op xv)
 #define asm_bsar(as, ir)	asm_bitshift(as, ir, XOg_SAR, XV_SARX)
 #define asm_brol(as, ir)	asm_bitshift(as, ir, XOg_ROL, 0)
 #define asm_bror(as, ir)	asm_bitshift(as, ir, XOg_ROR, 0)
+
+#include "lj_asm_x86_vec.h"
 
 /* -- Comparisons --------------------------------------------------------- */
 

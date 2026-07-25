@@ -858,7 +858,7 @@ static void trace_exit_regs(lua_State *V, ExitState *ex)
   }
 #if !LJ_SOFTFP
   for (i = 0; i < RID_NUM_FPR; i++) {
-    setnumV(V->top, ex->fpr[i]);
+    setnumV(V->top, ex->fpr[i].n);
     if (LJ_UNLIKELY(tvisnan(V->top)))
       setnanV(V->top);
     V->top++;

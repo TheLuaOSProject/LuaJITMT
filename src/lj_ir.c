@@ -92,8 +92,7 @@ static void lj_ir_growbot(jit_State *J)
   IRIns *baseir = J->irbuf + J->irbotlim;
   MSize szins = J->irtoplim - J->irbotlim;
   lj_assertJ(szins != 0, "zero IR size");
-  lj_assertJ(J->cur.nk == J->irbotlim || J->cur.nk-1 == J->irbotlim,
-	     "unexpected IR growth");
+  lj_assertJ(J->cur.nk - J->irbotlim <= 2, "unexpected IR growth");
   if (J->cur.nins + (szins >> 1) < J->irtoplim) {
     /* More than half of the buffer is free on top: shift up by a quarter. */
     MSize ofs = szins >> 2;
@@ -232,6 +231,39 @@ TRef lj_ir_k64(jit_State *J, IROp op, uint64_t u64)
   ir->op12 = 0;
   ir->prev = J->chain[op];
   J->chain[op] = (IRRef1)ref;
+found:
+  return TREF(ref, t);
+}
+
+/* Get ref of next 128 bit IR constant and optionally grow IR.
+** Note: this may invalidate all IRIns *!
+*/
+static LJ_AINLINE IRRef ir_nextk128(jit_State *J)
+{
+  IRRef ref = J->cur.nk - 3;
+  lj_assertJ(J->state != LJ_TRACE_ASM, "bad JIT state");
+  if (LJ_UNLIKELY(ref < J->irbotlim)) lj_ir_growbot(J);
+  ref = J->cur.nk - 3;
+  J->cur.nk = ref;
+  return ref;
+}
+
+/* Intern 128 bit vector constant, given by its raw bytes. */
+TRef lj_ir_kvec(jit_State *J, IRType t, const void *data)
+{
+  IRIns *ir, *cir = J->cur.ir;
+  IRRef ref;
+  for (ref = J->chain[IR_KVEC]; ref; ref = cir[ref].prev)
+    if (irt_type(cir[ref].t) == t && !memcmp(ir_kvec(&cir[ref]), data, 16))
+      goto found;
+  ref = ir_nextk128(J);
+  ir = IR(ref);
+  memcpy(&ir[1], data, 16);
+  ir->t.irt = (uint8_t)t;
+  ir->o = IR_KVEC;
+  ir->op12 = 0;
+  ir->prev = J->chain[IR_KVEC];
+  J->chain[IR_KVEC] = (IRRef1)ref;
 found:
   return TREF(ref, t);
 }
@@ -387,6 +419,20 @@ void lj_ir_kvalue(lua_State *L, TValue *tv, const IRIns *ir)
     GCcdata *cd = lj_cdata_new_(L, CTID_INT64, 8);
     *(uint64_t *)cdataptr(cd) = ir_kint64(ir)->u64;
     setcdataV(L, tv, cd);
+    break;
+    }
+  case IR_KVEC: {
+    /* Render as a hex string: there is no TValue for a 128 bit constant. */
+    static const char hexdig[] = "0123456789abcdef";
+    const uint8_t *p = ir_kvec(ir);
+    char buf[2+2*16];
+    uint32_t i;
+    buf[0] = '0'; buf[1] = 'x';
+    for (i = 0; i < 16; i++) {  /* Most significant byte first. */
+      buf[2+2*i] = hexdig[p[15-i] >> 4];
+      buf[3+2*i] = hexdig[p[15-i] & 15];
+    }
+    setstrV(L, tv, lj_str_new(L, buf, sizeof(buf)));
     break;
     }
 #endif

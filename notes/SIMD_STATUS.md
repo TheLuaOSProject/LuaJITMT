@@ -15,8 +15,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | # | What | State |
 |---|------|-------|
 | M1 | Vector ctype classification, interpreter operator semantics, `ffi.simd` module, test harness | done |
-| M2 | Vector IR types + constants, XLOAD/XSTORE/CNEWI, ExitState widening, register allocation, x64 lowering of arithmetic, recording of `+ - * /` and unary minus | pending |
-| M3 | Recording of `ffi.simd` (bitwise, compare, select, shifts, min/max, abs/sqrt/round, shuffles, converts, reductions) | pending |
+| M2 | Vector IR types + constants, XLOAD/XSTORE/CNEW boxing, ExitState widening, register allocation, x64 lowering of arithmetic, recording of `+ - * /` and unary minus | done |
+| M3 | Recording of `ffi.simd` (bitwise, compare, select, shifts, min/max, abs/sqrt/round, shuffles, converts, reductions) and `==` on trace | pending |
 | M4 | Snapshot/sink/side-exit coverage, spill and register-pressure tests, codegen inspection tests | pending |
 | M5 | FFI call/callback ABI audit and tests, benchmarks, docs | pending |
 
@@ -24,10 +24,15 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 
 ```
 make -j$(nproc)                       # release build
-./src/luajit test/simd/run.lua        # full SIMD suite, interp + jit modes
+./src/luajit test/simd/run.lua        # full suite: interp, jit and mixed modes
 ./src/luajit test/simd/run.lua -interp
 ./src/luajit test/simd/run.lua -jit
+./src/luajit test/simd/run.lua -mixed  # JIT on, but pre-loaded protos off
 ```
+
+The "mixed" mode (`jit.off(true, true)` before loading the test file) produces
+a very different set of traces than plain `-jit` and has already caught one
+backend bug that neither of the other two modes reached. Keep it.
 
 ## Known failing / pre-existing
 
@@ -62,6 +67,21 @@ make -j$(nproc)                       # release build
 ## Files touched so far
 
 ```
+src/lj_ir.h                      IRT_V16I8..IRT_V2F64, IR_KVEC, vector IR ops
+src/lj_ir.c   src/lj_iropt.h     lj_ir_kvec(), 128 bit constant interning
+src/lj_asm.c                     vector register class, 4-slot spills,
+                                 ra_left()/ra_rematk() for IR_KVEC, dispatch
+src/lj_asm_x86.h                 vector XLOAD/XSTORE (MOVUPS)
+src/lj_asm_x86_vec.h             the x86-64 vector backend (new)
+src/lj_emit_x86.h                emit_prefix66(), emit_loadk128(), spills
+src/lj_target_x86.h              packed SSE opcodes, 128 bit ExitState.fpr
+src/vm_x86.dasc src/vm_x64.dasc  save full XMM registers at a trace exit
+src/lj_snap.c                    16 byte restore, sunk vector boxes
+src/lj_crecord.c                 crec_vec2irt(), crec_arith_vec(), boxing
+src/lj_gc.c src/lj_opt_sink.c src/lj_opt_split.c
+                                 skip the two payload slots of a KVEC
+src/lj_traceerr.h                LJ_TRERR_NYIVEC
+src/jit/dump.lua                 vector IR type names
 src/lj_ctype.h  src/lj_ctype.c   lj_ctype_vecinfo(), VecKind, CTVecInfo
 src/lj_simd.h   src/lj_simd.c    interpreter reference semantics (new)
 src/lj_carith.c                  carith_vec(): operators on vector cdata
@@ -75,13 +95,10 @@ notes/*                          design/status/matrix/testing notes (new)
 
 ## Next concrete steps
 
-1. Add `IRT_V16I8 .. IRT_V2F64` to `IRTDEF`, plus `irt_isvec()`.
-2. Add the vector IR opcodes from `SIMD_DESIGN.md` D4 and `IR_KVEC` with a
-   128-bit constant pool in `lj_ir.c`.
-3. Widen `ExitState.fpr` to 16 bytes/register in `lj_target_x86.h` and
-   `vm_x86.dasc`; update `lj_snap.c` and `lj_trace.c` readers.
-4. Teach `lj_asm.c` that vector values live in FPRs and need 4 spill slots,
-   and `lj_emit_x86.h` to spill/reload with MOVUPS.
-5. Record vector arithmetic in `lj_crecord.c` (`crec_arith_vec`), boxing with
-   `IR_CNEWI`.
-6. Lower the arithmetic opcodes in `lj_asm_x86.h`.
+1. Record `==` on vectors (VCMPEQ + VMOVMSK + a guard).
+2. Add recorders for the `ffi.simd` functions and the matching IR lowerings:
+   bitwise, min/max, compares, select, shifts, abs/sqrt/round, saturating
+   arithmetic, movemask, reductions, shuffles, insert, bitcast/convert.
+3. `test_codegen.lua`: assert packed instructions and no scalarisation.
+4. `test_ffi_abi.lua`: vector arguments, returns and callbacks.
+5. Microbenchmarks.

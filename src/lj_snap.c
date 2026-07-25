@@ -744,7 +744,7 @@ static void snap_restoreval(jit_State *J, GCtrace *T, ExitState *ex,
       setintV(o, (int32_t)ex->gpr[r-RID_MIN_GPR]);
 #if !LJ_SOFTFP
     } else if (irt_isnum(t)) {
-      setnumV(o, ex->fpr[r-RID_MIN_FPR]);
+      setnumV(o, ex->fpr[r-RID_MIN_FPR].n);
 #elif LJ_64  /* && LJ_SOFTFP */
     } else if (irt_isnum(t)) {
       o->u64 = ex->gpr[r-RID_MIN_GPR];
@@ -774,7 +774,9 @@ static void snap_restoredata(jit_State *J, GCtrace *T, ExitState *ex,
   uint64_t tmp;
   UNUSED(J);
   if (irref_isk(ref)) {
-    if (ir_isk64(ir)) {
+    if (ir->o == IR_KVEC) {
+      src = (int32_t *)ir_kvec(ir);
+    } else if (ir_isk64(ir)) {
       src = (int32_t *)&ir[1];
     } else if (sz == 8) {
       tmp = (uint64_t)(uint32_t)ir->i;
@@ -820,10 +822,11 @@ static void snap_restoredata(jit_State *J, GCtrace *T, ExitState *ex,
       }
     }
   }
-  lj_assertJ(sz == 1 || sz == 2 || sz == 4 || sz == 8,
+  lj_assertJ(sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16,
 	     "restore from IR %04d with bad size %d", ref - REF_BIAS, sz);
   if (sz == 4) *(int32_t *)dst = *src;
   else if (sz == 8) *(int64_t *)dst = *(int64_t *)src;
+  else if (sz == 16) memcpy(dst, src, 16);  /* Vector value. */
   else if (sz == 1) *(int8_t *)dst = (int8_t)*src;
   else *(int16_t *)dst = (int16_t)*src;
 }
@@ -847,7 +850,8 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
     setcdataV(J->L, o, cd);
     if (ir->o == IR_CNEWI) {
       uint8_t *p = (uint8_t *)cdataptr(cd);
-      lj_assertJ(sz == 4 || sz == 8, "sunk cdata with bad size %d", sz);
+      lj_assertJ(sz == 4 || sz == 8 || sz == 16,
+		 "sunk cdata with bad size %d", sz);
       if (LJ_32 && sz == 8 && ir+1 < T->ir + T->nins && (ir+1)->o == IR_HIOP) {
 	snap_restoredata(J, T, ex, snapno, rfilt, (ir+1)->op2,
 			 LJ_LE ? p+4 : p, 4);
@@ -867,7 +871,8 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 		     "sunk store with bad add op %d", T->ir[irs->op1].o);
 	  lj_assertJ(iro->o == IR_KINT || iro->o == IR_KINT64,
 		     "sunk store with bad const offset op %d", iro->o);
-	  if (irt_is64(irs->t)) szs = 8;
+	  if (irt_isvec(irs->t)) szs = 16;
+	  else if (irt_is64(irs->t)) szs = 8;
 	  else if (irt_isi8(irs->t) || irt_isu8(irs->t)) szs = 1;
 	  else if (irt_isi16(irs->t) || irt_isu16(irs->t)) szs = 2;
 	  else szs = 4;

@@ -18,6 +18,7 @@
 #include "lj_cparse.h"
 #include "lj_cconv.h"
 #include "lj_carith.h"
+#include "lj_simd.h"
 #include "lj_clib.h"
 #include "lj_ccall.h"
 #include "lj_ff.h"
@@ -96,6 +97,28 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
 }
 
 /* Convert CType to IRType (if possible). */
+/* Map a vector ctype to its IR type, or IRT_NIL if the JIT cannot handle it. */
+static IRType crec_vec2irt(CTState *cts, CType *ct)
+{
+#if LJ_SIMD_JITSIZE == 16
+  CTVecInfo vi;
+  if (lj_ctype_vecinfo(cts, ct, &vi) &&
+      (CTSize)vi.esize * vi.lanes == LJ_SIMD_JITSIZE) {
+    if (vi.kind == VECK_F32) return IRT_V4F32;
+    if (vi.kind == VECK_F64) return IRT_V2F64;
+    switch (vi.esize) {
+    case 1: return IRT_V16I8;
+    case 2: return IRT_V8I16;
+    case 4: return IRT_V4I32;
+    default: return IRT_V2I64;
+    }
+  }
+#else
+  UNUSED(cts); UNUSED(ct);
+#endif
+  return IRT_NIL;
+}
+
 static IRType crec_ct2irt(CTState *cts, CType *ct)
 {
   if (ctype_isenum(ct->info)) ct = ctype_child(cts, ct);
@@ -1362,6 +1385,106 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
   lj_trace_err(J, LJ_TRERR_BADTYPE);
 }
 
+/* -- Vector arithmetic --------------------------------------------------- */
+
+/* Box a raw vector value into a fresh cdata object. */
+static TRef crec_vec_box(jit_State *J, TRef val, IRType vt, CTypeID id)
+{
+  TRef dp = emitir(IRTG(IR_CNEW, IRT_CDATA), lj_ir_kint(J, (int32_t)id),
+		   TREF_NIL);
+  TRef ptr = emitir(IRT(IR_ADD, IRT_PTR), dp, lj_ir_kintp(J, sizeof(GCcdata)));
+  emitir(IRT(IR_XSTORE, vt), ptr, val);
+  return dp;
+}
+
+/*
+** Turn a scalar operand into a vector by splatting it across all lanes.
+** A constant scalar is folded into a vector constant, which is both exact
+** (the interpreter does the conversion) and the best possible code.
+*/
+static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
+			   const CTVecInfo *vi, TRef sp, CType *sct,
+			   cTValue *sval)
+{
+  CType *ect = ctype_get(cts, vi->eid);
+  if (sval && !tviscdata(sval) && tref_isk(sp)) {
+    uint8_t ebuf[8], vbuf[LJ_VEC_MAXSIZE];
+    /* Constant: convert and splat with the very same code the VM uses. */
+    lj_cconv_ct_tv(cts, ect, ebuf, (TValue *)sval, 0);
+    lj_simd_splat(vbuf, ebuf, vi);
+    return lj_ir_kvec(J, vt, vbuf);
+  }
+  /* Otherwise convert with the standard FFI rules and broadcast at runtime. */
+  sp = crec_ct_ct(J, ect, sct, 0, sp, NULL);
+  return emitir(IRT(IR_VSPLAT, vt), sp, 0);
+}
+
+/* Record arithmetic on vector cdata. Returns 0 if this is not vector math. */
+static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
+			   RecordFFData *rd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTVecInfo vi;
+  CType *vct;
+  IRType vt;
+  IROp op;
+  TRef tra, trb;
+  CTypeID id;
+  int isv0 = s[0] && ctype_isvector(s[0]->info);
+  int isv1 = s[1] && ctype_isvector(s[1]->info);
+  if (!(isv0 || isv1)) return 0;
+  if (isv0 && isv1) {
+    if (s[0] != s[1]) return 0;  /* Interned, so identical types are equal. */
+    vct = s[0];
+    if (!lj_ctype_vecinfo(cts, vct, &vi)) return 0;
+    vt = crec_vec2irt(cts, vct);
+    if (vt == IRT_NIL) lj_trace_err(J, LJ_TRERR_NYIVEC);
+    tra = sp[0]; trb = sp[1];
+  } else {
+    int vn = isv0 ? 0 : 1;
+    CType *sct = s[1-vn];
+    TRef trs;
+    vct = s[vn];
+    if (!sct || !ctype_isnum(sct->info) || (sct->info & CTF_BOOL)) return 0;
+    if (!lj_ctype_vecinfo(cts, vct, &vi)) return 0;
+    vt = crec_vec2irt(cts, vct);
+    if (vt == IRT_NIL) lj_trace_err(J, LJ_TRERR_NYIVEC);
+    trs = crec_vec_splat(J, cts, vt, &vi, sp[1-vn], sct, &rd->argv[1-vn]);
+    tra = isv0 ? sp[0] : trs;
+    trb = isv0 ? trs : sp[1];
+  }
+  switch (mm) {
+  case MM_add: op = IR_VADD; break;
+  case MM_sub: op = IR_VSUB; break;
+  case MM_mul: op = IR_VMUL; break;
+  case MM_div:
+    if (!veck_isfp(vi.kind)) return 0;
+    op = IR_VDIV;
+    break;
+  case MM_unm:
+    /* Negation: 0 - v for integers, flip the sign bit for floats. */
+    if (veck_isfp(vi.kind)) {
+      uint8_t vbuf[LJ_VEC_MAXSIZE];
+      uint8_t ebuf[8];
+      memset(ebuf, 0, sizeof(ebuf));
+      ebuf[vi.esize-1] = 0x80;  /* Little-endian sign bit of one lane. */
+      lj_simd_splat(vbuf, ebuf, &vi);
+      tra = emitir(IRT(IR_VXOR, vt), sp[0], lj_ir_kvec(J, vt, vbuf));
+    } else {
+      uint8_t vbuf[LJ_VEC_MAXSIZE];
+      memset(vbuf, 0, sizeof(vbuf));
+      tra = emitir(IRT(IR_VSUB, vt), lj_ir_kvec(J, vt, vbuf), sp[0]);
+    }
+    goto box;
+  default:
+    return 0;
+  }
+  tra = emitir(IRT(op, vt), tra, trb);
+box:
+  id = ctype_typeid(cts, vct);
+  return crec_vec_box(J, tra, vt, id);
+}
+
 static TRef crec_arith_int64(jit_State *J, TRef *sp, CType **s, MMS mm)
 {
   if (sp[0] && sp[1] && ctype_isnum(s[0]->info) && ctype_isnum(s[1]->info)) {
@@ -1557,6 +1680,12 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 	  s[0] = ctype_get(cts, id0);  /* cts->tab may have been reallocated. */
 	}
 	goto ok;
+      } else if (ctype_isvector(ct->info)) {
+	IRType vt = crec_vec2irt(cts, ct);
+	if (vt == IRT_NIL) lj_trace_err(J, LJ_TRERR_NYIVEC);
+	tr = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCcdata)));
+	tr = emitir(IRT(IR_XLOAD, vt), tr, 0);
+	goto ok;
       } else {
 	tr = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCcdata)));
       }
@@ -1608,7 +1737,8 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
   {
     TRef tr;
     if ((mm == MM_len || mm == MM_concat ||
-	 (!(tr = crec_arith_int64(J, sp, s, mm)) &&
+	 (!(tr = crec_arith_vec(J, sp, s, mm, rd)) &&
+	  !(tr = crec_arith_int64(J, sp, s, mm)) &&
 	  !(tr = crec_arith_ptr(J, sp, s, mm)))) &&
 	!(tr = crec_arith_meta(J, sp, s, cts, rd)))
       return;

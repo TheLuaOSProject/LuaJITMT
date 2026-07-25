@@ -185,6 +185,12 @@ local irtype_text = {
   "i64",
   "u64",
   "sfp",
+  "vi1",
+  "vi2",
+  "vi4",
+  "vi8",
+  "vf4",
+  "vf8",
 }
 
 local colortype_ansi = {

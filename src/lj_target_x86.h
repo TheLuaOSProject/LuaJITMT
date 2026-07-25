@@ -153,9 +153,17 @@ enum {
 
 /* -- Exit state ---------------------------------------------------------- */
 
+/* A saved FP register. The full 128 bits are kept, because a vector value may
+** be live in an XMM register at a side exit (see lj_snap.c:snap_unsink()).
+*/
+typedef union {
+  lua_Number n;			/* Low half, as used by scalar FP values. */
+  uint8_t b[16];		/* Raw bytes, as used by vector values. */
+} ExitFPR;
+
 /* This definition must match with the *.dasc file(s). */
 typedef struct {
-  lua_Number fpr[RID_NUM_FPR];	/* Floating-point registers. */
+  ExitFPR fpr[RID_NUM_FPR];	/* Floating-point registers. */
   intptr_t gpr[RID_NUM_GPR];	/* General-purpose registers. */
   int32_t spill[256];		/* Spill slots. */
 } ExitState;
@@ -192,6 +200,13 @@ typedef struct {
 #define XO_660f(o)	((uint32_t)(0x0f66fc + (0x##o<<24)))
 #define XO_f20f(o)	((uint32_t)(0x0ff2fc + (0x##o<<24)))
 #define XO_f30f(o)	((uint32_t)(0x0ff3fc + (0x##o<<24)))
+
+/* Three byte opcodes 0f 38 xx / 0f 3a xx. The 66 prefix, which every SSSE3
+** and SSE4 instruction below needs, does not fit into the 32 bit encoding and
+** is added by emit_prefix66().
+*/
+#define XO_0f38(o)	((uint32_t)(0x380ffc + (0x##o<<24)))
+#define XO_0f3a(o)	((uint32_t)(0x3a0ffc + (0x##o<<24)))
 
 #define XV_660f38(o)	((uint32_t)(0x79e2c4 + (0x##o<<24)))
 #define XV_f20f38(o)	((uint32_t)(0x7be2c4 + (0x##o<<24)))
@@ -305,6 +320,138 @@ typedef enum {
   XO_ADDSS =	XO_f30f(58),
   XO_MOVD =	XO_660f(6e),
   XO_MOVDto =	XO_660f(7e),
+  XO_MOVQrm =	XO_f30f(7e),
+  XO_MOVQmr =	XO_660f(d6),
+
+  /* Packed SSE2 instructions used by the vector backend. */
+  XO_MOVUPS =	XO_0f(10),
+  XO_MOVUPSto =	XO_0f(11),
+  XO_MOVAPSto =	XO_0f(29),
+  XO_MOVDDUP =	XO_f20f(12),		/* SSE3 */
+
+  XO_ADDPS =	XO_0f(58),
+  XO_SUBPS =	XO_0f(5c),
+  XO_MULPS =	XO_0f(59),
+  XO_DIVPS =	XO_0f(5e),
+  XO_MINPS =	XO_0f(5d),
+  XO_MAXPS =	XO_0f(5f),
+  XO_SQRTPS =	XO_0f(51),
+  XO_ANDNPS =	XO_0f(55),
+  XO_ORPS =	XO_0f(56),
+  XO_CMPPS =	XO_0f(c2),
+  XO_SHUFPS =	XO_0f(c6),
+  XO_UNPCKLPS =	XO_0f(14),
+  XO_UNPCKHPS =	XO_0f(15),
+  XO_MOVMSKPS =	XO_0f(50),
+
+  XO_ADDPD =	XO_660f(58),
+  XO_SUBPD =	XO_660f(5c),
+  XO_MULPD =	XO_660f(59),
+  XO_DIVPD =	XO_660f(5e),
+  XO_MINPD =	XO_660f(5d),
+  XO_MAXPD =	XO_660f(5f),
+  XO_SQRTPD =	XO_660f(51),
+  XO_ANDPD =	XO_660f(54),
+  XO_ANDNPD =	XO_660f(55),
+  XO_ORPD =	XO_660f(56),
+  XO_XORPD =	XO_660f(57),
+  XO_CMPPD =	XO_660f(c2),
+  XO_SHUFPD =	XO_660f(c6),
+  XO_UNPCKLPD =	XO_660f(14),
+  XO_UNPCKHPD =	XO_660f(15),
+  XO_MOVMSKPD =	XO_660f(50),
+
+  XO_PADDB =	XO_660f(fc),
+  XO_PADDW =	XO_660f(fd),
+  XO_PADDD =	XO_660f(fe),
+  XO_PADDQ =	XO_660f(d4),
+  XO_PSUBB =	XO_660f(f8),
+  XO_PSUBW =	XO_660f(f9),
+  XO_PSUBD =	XO_660f(fa),
+  XO_PSUBQ =	XO_660f(fb),
+  XO_PMULLW =	XO_660f(d5),
+  XO_PMULUDQ =	XO_660f(f4),
+  XO_PAND =	XO_660f(db),
+  XO_PANDN =	XO_660f(df),
+  XO_POR =	XO_660f(eb),
+  XO_PXOR =	XO_660f(ef),
+  XO_PCMPEQB =	XO_660f(74),
+  XO_PCMPEQW =	XO_660f(75),
+  XO_PCMPEQD =	XO_660f(76),
+  XO_PCMPGTB =	XO_660f(64),
+  XO_PCMPGTW =	XO_660f(65),
+  XO_PCMPGTD =	XO_660f(66),
+  XO_PMINUB =	XO_660f(da),
+  XO_PMAXUB =	XO_660f(de),
+  XO_PMINSW =	XO_660f(ea),
+  XO_PMAXSW =	XO_660f(ee),
+  XO_PADDSB =	XO_660f(ec),
+  XO_PADDSW =	XO_660f(ed),
+  XO_PADDUSB =	XO_660f(dc),
+  XO_PADDUSW =	XO_660f(dd),
+  XO_PSUBSB =	XO_660f(e8),
+  XO_PSUBSW =	XO_660f(e9),
+  XO_PSUBUSB =	XO_660f(d8),
+  XO_PSUBUSW =	XO_660f(d9),
+  XO_PMOVMSKB =	XO_660f(d7),
+  XO_PACKSSWB =	XO_660f(63),
+  XO_PACKSSDW =	XO_660f(6b),
+  XO_PACKUSWB =	XO_660f(67),
+  XO_PUNPCKLBW=	XO_660f(60),
+  XO_PUNPCKLWD=	XO_660f(61),
+  XO_PUNPCKLDQ=	XO_660f(62),
+  XO_PUNPCKLQDQ=XO_660f(6c),
+  XO_PUNPCKHBW=	XO_660f(68),
+  XO_PUNPCKHWD=	XO_660f(69),
+  XO_PUNPCKHDQ=	XO_660f(6a),
+  XO_PUNPCKHQDQ=XO_660f(6d),
+  XO_PSHUFD =	XO_660f(70),
+  XO_PSHUFLW =	XO_f20f(70),
+  XO_PSHUFHW =	XO_f30f(70),
+  XO_PSLLW_r =	XO_660f(f1),
+  XO_PSLLD_r =	XO_660f(f2),
+  XO_PSLLQ_r =	XO_660f(f3),
+  XO_PSRLW_r =	XO_660f(d1),
+  XO_PSRLD_r =	XO_660f(d2),
+  XO_PSRLQ_r =	XO_660f(d3),
+  XO_PSRAW_r =	XO_660f(e1),
+  XO_PSRAD_r =	XO_660f(e2),
+  /* Shift by immediate: group opcodes with the /n in the ModRM reg field. */
+  XO_PSHIFTW =	XO_660f(71),
+  XO_PSHIFTD =	XO_660f(72),
+  XO_PSHIFTQ =	XO_660f(73),
+  XOg_PSRL = 2, XOg_PSRA = 4, XOg_PSLL = 6,
+  XO_PEXTRW =	XO_660f(c5),
+  XO_PINSRW =	XO_660f(c4),
+
+  XO_CVTDQ2PS =	XO_0f(5b),
+  XO_CVTTPS2DQ=	XO_f30f(5b),
+  XO_CVTDQ2PD =	XO_f30f(e6),
+  XO_CVTTPD2DQ=	XO_660f(e6),
+  XO_CVTPD2PS =	XO_660f(5a),
+  XO_CVTPS2PD =	XO_0f(5a),
+
+  /* SSSE3 and SSE4: three byte opcodes, need emit_prefix66(). */
+  XO_PSHUFB =	XO_0f38(00),		/* SSSE3 */
+  XO_PABSB =	XO_0f38(1c),		/* SSSE3 */
+  XO_PABSW =	XO_0f38(1d),		/* SSSE3 */
+  XO_PABSD =	XO_0f38(1e),		/* SSSE3 */
+  XO_PMULLD =	XO_0f38(40),		/* SSE4.1 */
+  XO_PMINSB =	XO_0f38(38),		/* SSE4.1 */
+  XO_PMINSD =	XO_0f38(39),		/* SSE4.1 */
+  XO_PMINUW =	XO_0f38(3a),		/* SSE4.1 */
+  XO_PMINUD =	XO_0f38(3b),		/* SSE4.1 */
+  XO_PMAXSB =	XO_0f38(3c),		/* SSE4.1 */
+  XO_PMAXSD =	XO_0f38(3d),		/* SSE4.1 */
+  XO_PMAXUW =	XO_0f38(3e),		/* SSE4.1 */
+  XO_PMAXUD =	XO_0f38(3f),		/* SSE4.1 */
+  XO_PCMPGTQ =	XO_0f38(37),		/* SSE4.2 */
+  XO_ROUNDPS =	XO_0f3a(08),		/* SSE4.1 */
+  XO_ROUNDPD =	XO_0f3a(09),		/* SSE4.1 */
+  XO_PINSRB =	XO_0f3a(20),		/* SSE4.1 */
+  XO_PINSRD =	XO_0f3a(22),		/* SSE4.1 */
+  XO_PEXTRB =	XO_0f3a(14),		/* SSE4.1 */
+  XO_PEXTRD =	XO_0f3a(16),		/* SSE4.1 */
 
   XO_FLDd =	XO_(d9), XOg_FLDd = 0,
   XO_FLDq =	XO_(dd), XOg_FLDq = 0,
