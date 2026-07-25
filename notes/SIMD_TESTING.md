@@ -7,7 +7,8 @@ make -j$(nproc)
 ./src/luajit test/simd/run.lua            # every file, interpreted and JIT
 ./src/luajit test/simd/run.lua -interp    # interpreter only
 ./src/luajit test/simd/run.lua -jit       # JIT only
-./src/luajit test/simd/run.lua test_lib   # one file, both modes
+./src/luajit test/simd/run.lua test_lib   # one file, all modes
+./src/luajit test/simd/bench.lua          # microbenchmarks
 SIMD_SEED=12345 ./src/luajit test/simd/run.lua   # different random seed
 ```
 
@@ -25,8 +26,8 @@ status is non-zero if anything failed.
 | `test_lib.lua` | every `ffi.simd` function, randomized against the scalar reference, plus negative tests |
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens |
-| `test_ffi_abi.lua` | vector arguments, returns, memory round trips and callbacks against a small C helper library |
-| `test_stress.lua` | randomized program generator: builds random vector expressions, runs them interpreted and compiled, compares |
+| `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists, memory round trips and callbacks against a small C helper library that it compiles at test time |
+| `bench.lua` | microbenchmarks: saxpy, dot product, horizontal max and clamp, each against equivalent scalar code |
 
 ## Method
 

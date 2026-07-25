@@ -402,7 +402,7 @@ LJLIB_CF(ffi_simd_hmax)		LJLIB_REC(simd_reduce VRD_MAX)
 
 /* -- Lane insertion and shuffles ----------------------------------------- */
 
-LJLIB_CF(ffi_simd_insert)
+LJLIB_CF(ffi_simd_insert)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTVecInfo vi;
@@ -433,7 +433,7 @@ static void simd_checkidx(lua_State *L, int narg, uint32_t lanes,
   }
 }
 
-LJLIB_CF(ffi_simd_shuffle)
+LJLIB_CF(ffi_simd_shuffle)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTVecInfo vi;
@@ -448,7 +448,7 @@ LJLIB_CF(ffi_simd_shuffle)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_shuffle2)
+LJLIB_CF(ffi_simd_shuffle2)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTVecInfo vi, vi2;

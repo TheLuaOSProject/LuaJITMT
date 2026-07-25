@@ -398,6 +398,39 @@ test("ffi.simd reductions on trace", function()
   end
 end)
 
+test("ffi.simd insert and shuffle on trace", function()
+  for _, ti in ipairs(T.T) do
+    local rnd = T.rng(SEED + 43 * ti.bits)
+    local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
+    local ct = ti.ct
+    local kv = ti.fp and 1.5 or 7
+    for lane = 0, ti.lanes-1 do
+      diffop(ti, "insert " .. lane, function(n)
+	local acc = ct(0)
+	for _ = 1, n do acc = simd.insert(acc + a, lane, kv) end
+	return acc
+      end, 200)
+    end
+    local rev, mix = {}, {}
+    for i = 1, ti.lanes do
+      rev[i] = ti.lanes - i
+      mix[i] = (i % 2 == 1) and (i-1)/2 or ti.lanes + (i-2)/2
+    end
+    diffop(ti, "shuffle", function(n)
+      local acc = ct(0)
+      for _ = 1, n do acc = simd.shuffle(acc + a, unpack(rev, 1, ti.lanes)) end
+      return acc
+    end, 200)
+    diffop(ti, "shuffle2", function(n)
+      local acc = ct(0)
+      for _ = 1, n do
+	acc = simd.shuffle2(acc + a, b, unpack(mix, 1, ti.lanes))
+      end
+      return acc
+    end, 200)
+  end
+end)
+
 test("ffi.simd bitcast and convert on trace", function()
   local f4, i4, u4 = T.T.float4, T.T.i32x4, T.T.u32x4
   diff("bitcast", function(n)

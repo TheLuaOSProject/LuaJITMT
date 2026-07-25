@@ -1920,6 +1920,109 @@ void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
     emitir(IRT(IR_VCONV, dvt), a, IRVCONV(dvi.kind, svi.kind)), dvt, did);
 }
 
+/* Build a PSHUFB byte-permute mask for a lane shuffle. */
+static void crec_simd_shufmask(uint8_t *mask, const CTVecInfo *vi,
+			       const uint8_t *idx, uint32_t base)
+{
+  uint32_t i, j, n = vi->lanes, esz = vi->esize;
+  for (i = 0; i < n; i++) {
+    uint32_t src = idx[i];
+    for (j = 0; j < esz; j++) {
+      /* A byte index with bit 7 set makes PSHUFB store zero. */
+      mask[i*esz+j] = (src >= base && src < base + n) ?
+			(uint8_t)((src - base)*esz + j) : 0x80;
+    }
+  }
+}
+
+/* Collect and validate constant shuffle indices. */
+static void crec_simd_idx(jit_State *J, RecordFFData *rd, int narg,
+			  uint32_t lanes, uint32_t range, uint8_t *idx)
+{
+  uint32_t i;
+  for (i = 0; i < lanes; i++) {
+    TRef tr = J->base[narg + i];
+    int32_t v;
+    if (!tr || !tref_isk(tr) || !tref_isinteger(tr))
+      lj_trace_err(J, LJ_TRERR_NYIVEC);  /* Needs a constant lane index. */
+    v = IR(tref_ref(tr))->i;
+    if ((uint32_t)v >= range) lj_trace_err(J, LJ_TRERR_BADTYPE);
+    idx[i] = (uint8_t)v;
+  }
+  UNUSED(rd);
+}
+
+/* One PSHUFB with a constant mask handles any lane width and any permute. */
+static TRef crec_simd_shuf1(jit_State *J, IRType vt, const CTVecInfo *vi,
+			    TRef a, const uint8_t *idx, uint32_t base)
+{
+  uint8_t mask[LJ_VEC_MAXSIZE];
+  crec_simd_shufmask(mask, vi, idx, base);
+  return emitir(IRT(IR_VSHUFB, vt), a, lj_ir_kvec(J, IRT_V16I8, mask));
+}
+
+void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  uint8_t idx[LJ_VEC_MAXSIZE];
+  crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0);
+  crec_simd_idx(J, rd, 1, vi.lanes, vi.lanes, idx);
+  J->base[0] = crec_vec_box(J, crec_simd_shuf1(J, vt, &vi, a, idx, 0), vt, id);
+}
+
+void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTVecInfo vi, vi2; CTypeID id, id2; IRType vt, vt2;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef b = crec_simd_arg(J, rd, 1, &vi2, &id2, &vt2);
+  uint8_t idx[LJ_VEC_MAXSIZE];
+  TRef ra, rb;
+  /* Compare the raw ctypes: an arithmetic result carries the raw id, while a
+  ** value built from a typedef carries the typedef id.
+  */
+  UNUSED(vi2);
+  /* Compare the raw ctypes: an arithmetic result carries the raw id, while a
+  ** value built from a typedef carries the typedef id.
+  */
+  crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0 && vt == vt2 &&
+		    ctype_raw(cts, id) == ctype_raw(cts, id2));
+  crec_simd_idx(J, rd, 2, vi.lanes, 2*(uint32_t)vi.lanes, idx);
+  /* Two permutes, each zeroing the lanes taken from the other vector. */
+  ra = crec_simd_shuf1(J, vt, &vi, a, idx, 0);
+  rb = crec_simd_shuf1(J, vt, &vi, b, idx, vi.lanes);
+  J->base[0] = crec_vec_box(J, emitir(IRT(IR_VOR, vt), ra, rb), vt, id);
+}
+
+void LJ_FASTCALL recff_ffi_simd_insert(jit_State *J, RecordFFData *rd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef trlane = J->base[1], trval = J->base[2];
+  uint8_t kbuf[LJ_VEC_MAXSIZE];
+  int32_t lane;
+  TRef splat, kmask;
+  CType *sct;
+  if (!trlane || !tref_isk(trlane) || !tref_isinteger(trlane))
+    lj_trace_err(J, LJ_TRERR_NYIVEC);  /* Needs a constant lane index. */
+  lane = IR(tref_ref(trlane))->i;
+  if ((uint32_t)lane >= (uint32_t)vi.lanes) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  if (!trval || !tref_isnumber(trval)) lj_trace_err(J, LJ_TRERR_NYIVEC);
+  sct = ctype_get(cts, tref_isinteger(trval) ? CTID_INT32 : CTID_DOUBLE);
+  splat = crec_vec_splat(J, cts, vt, &vi, trval, sct, &rd->argv[2]);
+  /* select(lanemask, splat(x), v), which is a packed SSE2 sequence. */
+  memset(kbuf, 0, sizeof(kbuf));
+  memset(kbuf + (uint32_t)lane * vi.esize, 0xff, vi.esize);
+  kmask = lj_ir_kvec(J, vt, kbuf);
+  J->base[0] = crec_vec_box(J,
+    emitir(IRT(IR_VOR, vt),
+	   emitir(IRT(IR_VAND, vt), kmask, splat),
+	   emitir(IRT(IR_VANDN, vt), kmask, a)),
+    vt, id);
+}
+
 void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));

@@ -104,8 +104,8 @@ operand, exactly like the operators.
 | `adds/subs(a,b)` | same ctype | — | 8/16-bit only | 8/16-bit only | yes | yes |
 | `hsum/hmin/hmax(a)` | element | yes | yes | yes | yes | yes |
 | `insert(a,i,x)` | same ctype | yes | yes | yes | yes | yes (const i) |
-| `shuffle(a,i...)` | same ctype | yes | yes | yes | yes | yes (const i) |
-| `shuffle2(a,b,i...)` | same ctype | yes | yes | yes | yes | yes (const i) |
+| `shuffle(a,i...)` | same ctype | yes | yes | yes | yes | yes (const i, SSSE3) |
+| `shuffle2(a,b,i...)` | same ctype | yes | yes | yes | yes | no, see below |
 | `bitcast(ct,a)` | ct | yes | yes | yes | yes | yes |
 | `convert(ct,a)` | ct | yes | yes | yes | yes | yes |
 | `lanes/elementtype/isvector/features` | — | yes | yes | yes | yes | no (rare, constant-foldable at most) |
@@ -139,13 +139,16 @@ Semantics worth pinning down:
 | Case | Status |
 |---|---|
 | `min/max` on 64-bit integer lanes | JIT NYI (no SSE instruction before AVX-512); interpreter is correct |
-| `sar` on 64-bit lanes | JIT NYI (VPSRAQ is AVX-512); interpreter is correct |
+| `sar` on 64-bit lanes | no instruction before AVX-512, so the recorder rewrites it into `(v^S)>>n - (S>>n)`; needs a **constant** count, otherwise it stays interpreted |
 | `lt/le/gt/ge` on 64-bit integer lanes | requires SSE4.2 (PCMPGTQ); otherwise JIT NYI |
 | `floor/ceil/trunc/round` | requires SSE4.1 (ROUNDPS); otherwise JIT NYI |
 | `shuffle`/`shuffle2` with 8/16-bit lanes | requires SSSE3 (PSHUFB); otherwise JIT NYI |
-| `abs` on 8/16/32-bit lanes | uses SSSE3 PABS when available, otherwise a packed SSE2 sequence |
-| `abs` on 64-bit lanes | packed SSE2 sequence (PSRAD/shuffle based) |
+| `abs` on 8/16/32-bit integer lanes | uses SSSE3 PABSB/W/D; without SSSE3 it stays interpreted |
+| `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
+| shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a mask, needs a **constant** count |
 | non-constant lane index in `insert`/`shuffle` | rejected at record time, stays interpreted |
+| scalar **cdata** as the second operand of an `ffi.simd` binary call | stays interpreted; a Lua number operand compiles |
+| `simd.shuffle2` | the recorder and the lowering are implemented and produce correct results, but the trace currently stitches at the call instead of compiling it; the code runs interpreted. `simd.shuffle` and `simd.insert` do compile. Tracked in `SIMD_STATUS.md`. |
 
 "JIT NYI" always means: the trace aborts with a NYI reason, the code keeps
 running interpreted, and the result is identical. It never means a wrong
@@ -158,4 +161,4 @@ result and never means a silent per-lane scalarisation.
 | passing a 128-bit vector to a C function | supported (SysV: SSE class, one XMM register; Windows x64: by reference, per the platform ABI) |
 | returning a 128-bit vector from a C function | supported |
 | vectors in structs passed by value | follows the existing LuaJIT struct classification |
-| vector arguments/returns in FFI callbacks | see `SIMD_TESTING.md`; covered by `test_ffi_abi.lua` |
+| vector arguments/returns in FFI **callbacks** | **rejected with a clear error.** LuaJIT's callback trampoline has never classified vector arguments or results and this work does not add that; silently passing the wrong register would be far worse. Pass a pointer to a vector instead, which works and is covered by `test_ffi_abi.lua`. |

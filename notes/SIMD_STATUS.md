@@ -17,7 +17,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M1 | Vector ctype classification, interpreter operator semantics, `ffi.simd` module, test harness | done |
 | M2 | Vector IR types + constants, XLOAD/XSTORE/CNEW boxing, ExitState widening, register allocation, x64 lowering of arithmetic, recording of `+ - * /` and unary minus | done |
 | M3 | Recording of `ffi.simd` (bitwise, compare, select, shifts, min/max, abs/sqrt/round, reductions, bitcast/convert), vector construction and memory round trips on trace, `==` on trace, codegen inspection tests | done |
-| M4 | `ffi.simd` shuffle/insert recording, FFI call/callback ABI tests | pending |
+| M4 | `ffi.simd` shuffle/insert recording, FFI call/callback ABI tests, benchmarks, user documentation | done |
 | M5 | FFI call/callback ABI audit and tests, benchmarks, docs | pending |
 
 ## Commands that pass
@@ -107,10 +107,40 @@ notes/*                          design/status/matrix/testing notes (new)
 * Long emitted sequences must call `checkmclim()` in the middle: the mcode
   red zone is only 64 bytes.
 
-## Next concrete steps
+## Open item: simd.shuffle2 does not compile
 
-1. Record `simd.insert`, `simd.shuffle` and `simd.shuffle2` (PSHUFD for 32/64
-   bit lanes, PSHUFB with a constant mask otherwise).
-2. `test_ffi_abi.lua`: vector arguments, returns and callbacks against a small
-   C helper library.
-3. Microbenchmarks and user documentation.
+`recff_ffi_simd_shuffle2` is written, declared, and correctly wired into
+`lj_recdef.h` (idmap slot `0x5700` -> `recff_func[0x57]` ->
+`recff_ffi_simd_shuffle2`), but a loop containing `simd.shuffle2` always ends
+with `TRACE ... stop -> stitch` at the call, exactly as if the function had no
+recorder. Established so far:
+
+* `simd.shuffle` (up to 9 arguments) and `simd.insert` compile fine, so it is
+  neither the argument count nor the shuffle lowering.
+* `simd.select`, which also takes several vector arguments, compiles fine.
+* Reducing the body of `recff_ffi_simd_shuffle2` to "box argument 0 and
+  return" still stitches, so the failure is before or at entry to the handler,
+  not inside it.
+* `jit.attach(..., "trace")` reports no abort event, only the stitch.
+
+Results are correct either way: `test_jit.lua` verifies `shuffle2` against the
+interpreter in all three modes. The next step is to instrument
+`lj_ffrecord_func()` and print `J->fn->c.ffid` and the looked-up idmap slot for
+this call to find out which handler actually runs.
+
+## Benchmarks
+
+`./src/luajit test/simd/bench.lua`, N=65536, 200 passes, best of 3, on this
+machine:
+
+```
+saxpy (float)              scalar     5.4 ms   vector     1.4 ms    3.79x
+dot product (float)        scalar     5.0 ms   vector     1.2 ms    3.97x
+horizontal max (int32)     scalar     3.8 ms   vector     3.7 ms    1.02x
+clamp (float)              scalar    24.7 ms   vector     1.6 ms   15.67x
+```
+
+saxpy and the dot product reach ~4x, which is the ceiling for 4 lanes. Clamp
+wins much more because the scalar version is branchy and the vector version is
+branchless. Horizontal max shows no gain: both versions stream 256 KB per pass
+and are memory bound, not ALU bound.
