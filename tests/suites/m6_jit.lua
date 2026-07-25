@@ -1670,7 +1670,7 @@ local function table_len_ir(limit)
           if name == "ALEN  " then
             alen = alen + 1
           elseif name == "CALLS " and
-                 vmdef.ircall[op2] == "lj_tab_len_rooted_try" then
+                 vmdef.ircall[op2] == "lj_tab_len_forjit_try" then
             rooted = rooted + 1
           elseif name == "TMPREF" and bit.band(op2, 1) ~= 0 then
             in1 = in1 + 1
@@ -1691,7 +1691,7 @@ end
 
 local function assert_rooted_len_ir(label)
   local alen, rooted, in1 = table_len_ir(256)
-  assert(rooted > 0, label .. " omitted lj_tab_len_rooted_try")
+  assert(rooted > 0, label .. " omitted lj_tab_len_forjit_try")
   assert(in1 >= rooted, label .. " omitted TMPREF IN1 table root")
   assert(alen == 0, label .. " retained unsafe IR_ALEN")
 end

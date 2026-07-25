@@ -29,6 +29,8 @@
 typedef struct CleanState {
   uint32_t readers;
   uint32_t anchors;
+  uint32_t tab_read_depth;
+  uint64_t tab_read_epoch;
 } CleanState;
 
 typedef struct WaitState {
@@ -46,6 +48,7 @@ typedef struct LeaseState {
 
 enum {
   LEN_HOOK_NONE,
+  LEN_HOOK_OBSERVE,
   LEN_HOOK_GENERATION,
   LEN_HOOK_ROOT,
   LEN_HOOK_OWNER
@@ -67,18 +70,24 @@ static LenHookState len_hook;
 static CleanState clean_state(lua_State *L)
 {
   CleanState state;
+  TGState *tg = L2TG(L);
   state.readers = gc2_smr_readers_acq(G(L));
-  state.anchors = lj_tg_root_anchor_top_acq(L2TG(L));
-  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+  state.anchors = lj_tg_root_anchor_top_acq(tg);
+  state.tab_read_depth = lj_tg_tab_read_depth_acq(tg);
+  state.tab_read_epoch = lj_tg_tab_read_epoch_acq(tg);
+  assert(lj_gc2_rootdesc_snapshot(&tg->root_desc, NULL) ==
 	 LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
   return state;
 }
 
 static void assert_clean(lua_State *L, CleanState state)
 {
+  TGState *tg = L2TG(L);
   assert(gc2_smr_readers_acq(G(L)) == state.readers);
-  assert(lj_tg_root_anchor_top_acq(L2TG(L)) == state.anchors);
-  assert(lj_gc2_rootdesc_snapshot(&L2TG(L)->root_desc, NULL) ==
+  assert(lj_tg_root_anchor_top_acq(tg) == state.anchors);
+  assert(lj_tg_tab_read_depth_acq(tg) == state.tab_read_depth);
+  assert(lj_tg_tab_read_epoch_acq(tg) == state.tab_read_epoch);
+  assert(lj_gc2_rootdesc_snapshot(&tg->root_desc, NULL) ==
 	 LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
 }
 
@@ -135,6 +144,20 @@ static int32_t bounded_len(lua_State *L, cTValue *tabroot, GCtab *t)
   return len;
 }
 
+static int32_t bounded_forjit_len(lua_State *L, cTValue *tabroot, GCtab *t)
+{
+  CleanState clean = clean_state(L);
+  WaitState waits = wait_state();
+  LeaseState lease = lease_state(t);
+  GCSize total = lj_gc_total_load(G(L));
+  int32_t len = lj_tab_len_forjit_try(L, tabroot);
+  assert(lj_gc_total_load(G(L)) == total);
+  assert_lease_state(t, lease);
+  assert_wait_state(waits);
+  assert_clean(L, clean);
+  return len;
+}
+
 static void push_dense_table(lua_State *L, int32_t len)
 {
   int32_t i;
@@ -152,7 +175,11 @@ static void len_try_hook(GCtab *t)
   assert(len_hook.action != LEN_HOOK_NONE);
   assert(t == len_hook.table);
   len_hook.hits++;
-  if (len_hook.action == LEN_HOOK_GENERATION) {
+  if (len_hook.action == LEN_HOOK_OBSERVE) {
+    /* Only the generated ABI can reach this hook without first entering the
+    ** general SMR/table-lease helper. */
+    assert(lj_tab_test_len_rooted_try_calls() == 0u);
+  } else if (len_hook.action == LEN_HOOK_GENERATION) {
     assert(len_hook.array != NULL);
     lj_tab_array_rel(t, len_hook.array);
   } else if (len_hook.action == LEN_HOOK_ROOT) {
@@ -177,6 +204,37 @@ static void arm_len_hook(uint32_t action, lua_State *L, GCtab *t,
   if (L)
     len_hook.owner = lj_state_owner_word_acq(L);
   lj_tab_test_set_len_rooted_try_hook(len_try_hook);
+}
+
+static void exercise_forjit_direct_rejections(lua_State *L, lua_State *wrong)
+{
+  int top = lua_gettop(L);
+  CleanState clean;
+  WaitState waits;
+  GCSize total;
+  GCtab *t;
+  cTValue *tabroot;
+
+  /* This ABI is only admitted from generated code while its TG owns L.
+  ** Direct C calls must remain bounded rejections; do not forge JIT state. */
+  push_dense_table(L, 4);
+  tabroot = L->top - 1;
+  t = tabV(tabroot);
+  assert(bounded_forjit_len(L, tabroot, t) == LJ_TAB_LEN_RETRY);
+  assert(bounded_forjit_len(wrong, tabroot, t) == LJ_TAB_LEN_RETRY);
+
+  lua_pushinteger(L, 17);
+  clean = clean_state(L);
+  waits = wait_state();
+  total = lj_gc_total_load(G(L));
+  assert(lj_tab_len_forjit_try(L, L->top - 1) == LJ_TAB_LEN_RETRY);
+  assert(lj_tab_len_forjit_try(L, NULL) == LJ_TAB_LEN_RETRY);
+  assert(lj_tab_len_forjit_try(NULL, tabroot) == LJ_TAB_LEN_RETRY);
+  assert(lj_gc_total_load(G(L)) == total);
+  assert_wait_state(waits);
+  assert_clean(L, clean);
+
+  lua_settop(L, top);
 }
 
 static void exercise_success(lua_State *L)
@@ -309,6 +367,7 @@ static void exercise_jit_retry_side_exit(lua_State *L)
   int top = lua_gettop(L);
   GCtab *t, *replacement;
   TValue *array, *replacement_array;
+  CleanState outer_clean;
   CleanState clean;
   WaitState waits;
 
@@ -341,6 +400,26 @@ static void exercise_jit_retry_side_exit(lua_State *L)
     "assert(jutil.traceinfo(1))\n"
     "rooted_len_trace_call = traced_len\n");
 
+  /* Sample a successful helper at its generation LP and prove it bypasses the
+  ** general SMR/table-body-lease ABI. */
+  lj_tab_test_reset_len_rooted_try_calls();
+  arm_len_hook(LEN_HOOK_OBSERVE, L, t, NULL, NULL, 0);
+  lua_getglobal(L, "rooted_len_trace_call");
+  lua_pushinteger(L, 80);
+  if (lua_pcall(L, 1, 1, 0) != 0) {
+    const char *msg = lua_tostring(L, -1);
+    fprintf(stderr, "%s\n", msg ? msg : "lease-free length call failed");
+    assert(0);
+  }
+  assert(lua_tointeger(L, -1) == 480);
+  lua_pop(L, 1);
+  assert(len_hook.hits == 1u);
+  assert(lj_tab_test_len_rooted_try_calls() == 0u);
+
+  /* Exercise the generated helper under an existing vector-read scope. Its
+  ** nested enter/leave must preserve the caller's exact depth and epoch. */
+  outer_clean = clean_state(L);
+  lj_tab_read_enter(L2TG(L));
   clean = clean_state(L);
   waits = wait_state();
   arm_len_hook(LEN_HOOK_GENERATION, L, t, NULL, replacement_array, 0);
@@ -356,6 +435,27 @@ static void exercise_jit_retry_side_exit(lua_State *L)
   assert(len_hook.hits == 1u && lj_tab_array_acq(t) == replacement_array);
   assert_wait_state(waits);
   assert_clean(L, clean);
+
+  /* TMPREF is the generated ABI's semantic root. Replacing that exact word
+  ** after the generation LP must force another side exit, even though the
+  ** table's paired vectors themselves remain current. */
+  arm_len_hook(LEN_HOOK_ROOT, L, t, &L2TG(L)->tmptv, NULL,
+	       tv_rawload(L->top - 1));
+  lua_getglobal(L, "rooted_len_trace_call");
+  lua_pushinteger(L, 80);
+  if (lua_pcall(L, 1, 1, 0) != 0) {
+    const char *msg = lua_tostring(L, -1);
+    fprintf(stderr, "%s\n", msg ? msg : "root-change length call failed");
+    assert(0);
+  }
+  assert(lua_tointeger(L, -1) == 480);
+  lua_pop(L, 1);
+  assert(len_hook.hits == 1u);
+  assert_wait_state(waits);
+  assert_clean(L, clean);
+
+  lj_tab_read_leave(L2TG(L));
+  assert_clean(L, outer_clean);
 
   /* The first generated helper call returned RETRY after the hook changed the
   ** generation. Its guard side-exited, and the interpreter replayed against
@@ -380,6 +480,7 @@ int main(void)
   lj_tab_test_reset_wait_no_l_calls();
   lj_tab_test_reset_wait_l_calls();
   lj_tab_test_reset_store_wait_l_calls();
+  exercise_forjit_direct_rejections(L, wrong);
   exercise_success(L);
   exercise_admission_retries(L);
   exercise_structural_retries(L);

@@ -125,6 +125,15 @@ LJ_FUNC int lj_cdata_fin_claim_held(CTypeFinLease *lease, cTValue *key,
 LJ_FUNC int lj_cdata_fin_store_claim_held(CTypeFinLease *lease,
 					  cTValue *key, cTValue *src);
 LJ_FUNC int lj_cdata_fin_isclaim(cTValue *tv);
+/* FINCLAIM is checked by every shared table snapshot, including generated
+** numeric reads. Keep the raw-tag test inline for those hot readers while the
+** external helper remains available to cold translation units. */
+#define LJ_CDATA_FINCLAIM_U64 \
+  ((((uint64_t)LJ_TLIGHTUD) << 47) | (((uint64_t)1 << 47) - 1u))
+static LJ_AINLINE int lj_cdata_fin_isclaim_inline(cTValue *tv)
+{
+  return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64;
+}
 
 #if defined(LJ_CDATA_TEST_HELPERS)
 enum {

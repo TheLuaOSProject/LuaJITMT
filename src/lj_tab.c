@@ -208,10 +208,12 @@ void lj_tab_test_reset_##name(void) \
 TAB_TEST_COUNTER(wait_no_l_calls, wait_no_l_call)
 TAB_TEST_COUNTER(wait_l_calls, wait_l_call)
 TAB_TEST_COUNTER(store_wait_l_calls, store_wait_l_call)
+TAB_TEST_COUNTER(len_rooted_try_calls, len_rooted_try_call)
 #else
 #define tab_test_wait_no_l_call()	((void)0)
 #define tab_test_wait_l_call()		((void)0)
 #define tab_test_store_wait_l_call()	((void)0)
+#define tab_test_len_rooted_try_call()	((void)0)
 #define tab_test_constructor_prepublish(L, t)	((void)0)
 #endif
 
@@ -235,7 +237,7 @@ LJ_FUNCA void lj_tab_wait_l(lua_State *L)
   lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
 }
 
-void lj_tab_read_enter(TGState *tg)
+static LJ_AINLINE void tab_read_enter_owner(TGState *tg)
 {
   uint32_t depth;
   if (!tg || !tg->gl)
@@ -253,7 +255,7 @@ void lj_tab_read_enter(TGState *tg)
   lj_tg_tab_read_depth_rel(tg, depth + 1u);
 }
 
-void lj_tab_read_leave(TGState *tg)
+static LJ_AINLINE void tab_read_leave_owner(TGState *tg)
 {
   uint32_t depth;
   if (!tg)
@@ -269,6 +271,16 @@ void lj_tab_read_leave(TGState *tg)
     ** TG owner cannot begin another outer scope concurrently with itself. */
     lj_tg_tab_read_epoch_rel(tg, 0);
   }
+}
+
+void lj_tab_read_enter(TGState *tg)
+{
+  tab_read_enter_owner(tg);
+}
+
+void lj_tab_read_leave(TGState *tg)
+{
+  tab_read_leave_owner(tg);
 }
 
 void lj_tab_read_checkpoint(TGState *tg, LJTabReadCheckpoint *cp)
@@ -445,7 +457,7 @@ static LJ_AINLINE int tab_tv_forjit_loadable(cTValue *tv)
 static LJ_AINLINE int tab_val_is_publish_claim(cTValue *val)
 {
 #if LJ_HASFFI
-  return lj_cdata_fin_isclaim(val);
+  return lj_cdata_fin_isclaim_inline(val);
 #else
   UNUSED(val);
   return 0;
@@ -3224,7 +3236,8 @@ enum {
 ** manufacture a false miss while an integral key moves hash -> array. The SMR
 ** reader held by the caller prevents either captured vector from being freed;
 ** the paired root/metadata recheck below supplies the semantic linearization. */
-static int tab_forjit_snapshot_acq(GCtab *t, TabForjitSnapshot *snap)
+static LJ_AINLINE int tab_forjit_snapshot_acq(GCtab *t,
+					      TabForjitSnapshot *snap)
 {
   TValue *array = lj_tab_array_acq(t);
   Node *node;
@@ -3244,8 +3257,8 @@ static int tab_forjit_snapshot_acq(GCtab *t, TabForjitSnapshot *snap)
   return 1;
 }
 
-static int tab_forjit_snapshot_current(GCtab *t,
-				       const TabForjitSnapshot *snap)
+static LJ_AINLINE int tab_forjit_snapshot_current(
+  GCtab *t, const TabForjitSnapshot *snap)
 {
   if (lj_tab_array_acq(t) != snap->array ||
       lj_tab_node_acq(t) != snap->node ||
@@ -7389,6 +7402,50 @@ validate:
   return 1;
 }
 
+enum {
+  TAB_LEN_DENSE_RETRY = 0,
+  TAB_LEN_DENSE_OK = 1,
+  TAB_LEN_DENSE_FALLBACK = -1
+};
+
+/*
+** Generated lengths overwhelmingly see a dense array with no hash part.
+** Resolve that exact stock ALEN fast case without entering the general
+** widening/binary-search helper. A hole at the array boundary or any hash
+** generation falls back; malformed/internal observations remain a retry.
+*/
+static LJ_AINLINE int tab_len_dense_current_held(GCtab *t, MSize *lenp,
+						  int rooted_try)
+{
+  TabForjitSnapshot snap;
+  MSize len;
+  if (!tab_forjit_snapshot_acq(t, &snap))
+    return TAB_LEN_DENSE_RETRY;
+  if (snap.hmask != 0)
+    return TAB_LEN_DENSE_FALLBACK;
+  if (snap.asize <= 1u) {
+    len = 0;
+  } else {
+    TValue val;
+    MSize hi = snap.asize - 1u;
+    if (!snap.array)
+      return TAB_LEN_DENSE_RETRY;
+    lj_tv_load_acq(&val, &snap.array[hi]);
+    if (LJ_UNLIKELY(tvisforward(&val) ||
+		    tab_val_is_publish_claim(&val) ||
+		    !tab_tv_forjit_loadable(&val)))
+      return TAB_LEN_DENSE_RETRY;
+    if (tvisnil(&val))
+      return TAB_LEN_DENSE_FALLBACK;
+    len = hi;
+  }
+  tab_test_len_rooted_try_before_current(rooted_try, t);
+  if (!tab_forjit_snapshot_current(t, &snap))
+    return TAB_LEN_DENSE_RETRY;
+  *lenp = len;
+  return TAB_LEN_DENSE_OK;
+}
+
 int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot)
 {
   TabKeyedSlotOwnerSnapshot owner;
@@ -7399,6 +7456,7 @@ int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot)
   int32_t result = LJ_TAB_LEN_RETRY;
   int table_lease_active = 0;
 
+  tab_test_len_rooted_try_call();
   if (!L || !tabroot || !tab_keyed_slot_owner_snapshot(L, &owner) ||
       !lj_gc2_smr_read_try(owner.g))
     return LJ_TAB_LEN_RETRY;
@@ -7435,6 +7493,66 @@ leave:
   lj_gc2_smr_read_leave(owner.g);
   if (table_lease_active)
     lj_gc2_lease_release(&table_lease);
+  return result;
+}
+
+/*
+** Generated x64 active-MT length ABI. JLOOP publishes the current TG's
+** jit_base before entering mcode and keeps it live across ordinary CALLS.
+** GC2 therefore retains every GC body while this helper executes and scans
+** tmptv as an exact root before it can later reclaim that body. The owner-
+** written table-read epoch is enough to retain a paired vector generation;
+** unlike the general rooted ABI above, no counted arena lease or global SMR
+** reader is needed on this generated-only path.
+**
+** L->tg_hint is the dispatch carrier used by IR_TMPREF, but it is only a hint
+** after state migration. Cross-check it against the universe-aware current TG
+** before touching tmptv. This ABI has no callback or carrier-changing callout;
+** active JIT/depth also veto remote adoption and teardown. Recheck the exact
+** carrier-owned facts after the LP without paying for a second universe/TLS
+** lookup on every length operation.
+*/
+int32_t lj_tab_len_forjit_try(lua_State *L, cTValue *tabroot)
+{
+  global_State *g;
+  TGState *tg;
+  uint32_t actor;
+  TValue tablev, table_confirm;
+  MSize len = 0;
+  int len_status;
+  int32_t result = LJ_TAB_LEN_RETRY;
+
+  if (!L || !tabroot || !(g = G(L)) || !(tg = G2TG(g)) ||
+      !(actor = lj_tg_actor_acq(tg)) || tg->gl != g ||
+      L->tg_hint != tg || tabroot != &tg->tmptv ||
+      lj_tg_load_cur_L(tg) != L || !lj_tg_jit_active_acq(tg) ||
+      !lj_tg_owns_state_acq(tg, L))
+    return LJ_TAB_LEN_RETRY;
+
+  /*
+  ** Publish retention before acquiring either raw vector root. A reclaimer
+  ** which won before this publication cannot free a still-current generation;
+  ** one which observes the pin requeues any generation retired in its epoch.
+  */
+  tab_read_enter_owner(tg);
+  lj_tv_load_acq(&tablev, tabroot);
+  len_status = tvistab(&tablev) ?
+    tab_len_dense_current_held(tabV(&tablev), &len, 1) :
+    TAB_LEN_DENSE_RETRY;
+  if (len_status == TAB_LEN_DENSE_FALLBACK)
+    len_status = tab_len_current_held(tabV(&tablev), &len, 1) ?
+		 TAB_LEN_DENSE_OK : TAB_LEN_DENSE_RETRY;
+  if (len_status == TAB_LEN_DENSE_OK) {
+    lj_tv_load_acq(&table_confirm, tabroot);
+    if (tv_rawload(&table_confirm) == tv_rawload(&tablev) &&
+	G(L) == g && tg->gl == g &&
+	L->tg_hint == tg && tabroot == &tg->tmptv &&
+	lj_tg_actor_acq(tg) == actor && lj_tg_load_cur_L(tg) == L &&
+	lj_tg_jit_active_acq(tg) && lj_tg_owns_state_acq(tg, L) &&
+	len <= (MSize)INT32_MAX)
+      result = (int32_t)len;
+  }
+  tab_read_leave_owner(tg);
   return result;
 }
 

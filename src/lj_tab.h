@@ -392,6 +392,8 @@ LJ_FUNC uint32_t lj_tab_test_wait_l_calls(void);
 LJ_FUNC void lj_tab_test_reset_wait_l_calls(void);
 LJ_FUNC uint32_t lj_tab_test_store_wait_l_calls(void);
 LJ_FUNC void lj_tab_test_reset_store_wait_l_calls(void);
+LJ_FUNC uint32_t lj_tab_test_len_rooted_try_calls(void);
+LJ_FUNC void lj_tab_test_reset_len_rooted_try_calls(void);
 #endif
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key);
@@ -575,6 +577,11 @@ enum {
   LJ_TAB_LEN_RETRY = -1
 };
 LJ_FUNC int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot);
+/* Generated x64 active-MT length ABI. IR_TMPREF IN1 must place tabroot at the
+** exact current TG tmptv. The active trace retains the table body globally;
+** a caller-owned table-vector epoch retains the paired generation locally.
+** Direct/interpreter calls fail closed. */
+LJ_FUNC int32_t lj_tab_len_forjit_try(lua_State *L, cTValue *tabroot);
 /* Bounded current-generation length search from an authoritative table root.
 ** The exact table and both structural vectors remain retained throughout each
 ** attempt; waits occur only after the SMR interval and lease are closed. */

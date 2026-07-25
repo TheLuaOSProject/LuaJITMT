@@ -210,9 +210,6 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
   }
 }
 
-#define LJ_CDATA_FINCLAIM_U64 \
-  ((((uint64_t)LJ_TLIGHTUD) << 47) | (((uint64_t)1 << 47) - 1u))
-
 static void cdata_fin_setclaim(TValue *tv)
 {
   tv_rawstore(tv, LJ_CDATA_FINCLAIM_U64);
@@ -220,7 +217,7 @@ static void cdata_fin_setclaim(TValue *tv)
 
 int lj_cdata_fin_isclaim(cTValue *tv)
 {
-  return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64;
+  return lj_cdata_fin_isclaim_inline(tv);
 }
 
 #if defined(LJ_CDATA_TEST_HELPERS)

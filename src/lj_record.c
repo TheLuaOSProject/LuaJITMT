@@ -2950,7 +2950,11 @@ TRef lj_record_tab_len(jit_State *J, TRef tab)
 {
   if (lj_record_mt_shared_tab(J, tab)) {
     TRef tabroot = rec_tmpref_mode(J, tab, IRTMPREF_IN1);
+#if LJ_HAS_X64_MT_JIT_HELPERS
+    TRef len = lj_ir_call(J, IRCALL_lj_tab_len_forjit_try, tabroot);
+#else
     TRef len = lj_ir_call(J, IRCALL_lj_tab_len_rooted_try, tabroot);
+#endif
     emitir(IRTGI(IR_NE), len, lj_ir_kint(J, LJ_TAB_LEN_RETRY));
     return len;
   }
