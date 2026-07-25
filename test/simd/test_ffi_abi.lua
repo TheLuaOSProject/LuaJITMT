@@ -172,6 +172,10 @@ test("C calls with vectors inside a hot loop", function()
   local f4 = T.T.float4
   local a, b = f4.ct(1, 2, 3, 4), f4.ct(0.5)
   local jit_ = require("jit")
+  if not pcall(jit_.on) then
+    check(true, "JIT permanently disabled by a build option, skipped")
+    return
+  end
   jit_.off(); jit_.flush()
   local function run(n)
     local acc = f4.ct(0)

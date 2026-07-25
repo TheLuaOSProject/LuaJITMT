@@ -200,9 +200,24 @@ class without a second register class or a variable-width spill area.
 
 Other widths (`vector_size(8)`, `vector_size(32)`, ...) keep working in the
 interpreter with identical semantics; the recorder reports NYI, so hot loops
-using them stay interpreted.  Adding 256-bit AVX later means: an `IRT_V*32`
-type group, 32-byte spill slots, ymm-aware `ExitState`, and `vzeroupper`
-placement.  The IR/type layout above was chosen so that is additive.
+using them stay interpreted.
+
+AVX2 is available on the v3 target, so 256-bit is no longer blocked on the
+instruction set. What blocks it is the IR type encoding: `IRT_TYPE` is 5 bits,
+24 slots were already taken, the six 128-bit vector types take 24..29 and only
+two slots are left. A 256-bit group needs six more, so it needs a different
+encoding for the vector types (splitting the size out of `irt_type()`, or a
+six bit type field, which currently collides with `IRT_MARK`/`IRT_ISPHI`/
+`IRT_GUARD`). On top of that it needs a 32-byte-per-register `ExitState`, eight
+spill slots per value, and `vzeroupper` discipline, because VEX-256 leaves the
+upper YMM state dirty and every legacy SSE instruction after it then pays a
+transition penalty. That is a separate, invasive change and is deliberately
+not attempted here.
+
+Note that the *128-bit* VEX forms this backend emits do not have that problem:
+VEX-128 zeroes the upper YMM half, so mixing them with the legacy SSE
+loads/stores and with the interpreter's own SSE code leaves the state clean and
+costs nothing. No `vzeroupper` is needed anywhere.
 
 ## D11. x86-64-v3 target, but runtime feature detection
 

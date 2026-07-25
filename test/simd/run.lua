@@ -18,13 +18,19 @@ local ALL = {"test_types", "test_arith", "test_lib", "test_jit", "test_codegen",
 if arg[1] == "--one" then
   local mode, name = arg[2], arg[3]
   local jit_ = require("jit")
+  -- A build with -DLUAJIT_DISABLE_JIT raises on jit.on(). Probing with it
+  -- also leaves the engine enabled, which is what the "jit" mode wants.
+  if not pcall(jit_.on) then
+    if mode ~= "interp" then
+      io.write("== ", name, " [", mode, "] skipped: JIT disabled by build\n")
+      os.exit(0)
+    end
   -- jit.off()/on() with no arguments switch the whole engine, which also
   -- covers functions loaded after this point. "mixed" leaves the engine on
   -- but disables the already loaded functions, which produces a very
   -- different (and historically bug-finding) set of traces.
-  if mode == "interp" then jit_.off()
-  elseif mode == "mixed" then jit_.off(true, true)
-  else jit_.on() end
+  elseif mode == "interp" then jit_.off()
+  elseif mode == "mixed" then jit_.off(true, true) end
   local T = assert(loadfile(dir .. "/" .. name .. ".lua"))()
   os.exit(T.run(name .. " [" .. mode .. "]") and 0 or 1)
 end

@@ -94,8 +94,13 @@ identical.
 ## Build configurations exercised
 
 ```
-make -j$(nproc)                                    # default release
+make -j$(nproc)                                     # default release
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT # assertions on
-make -j$(nproc) XCFLAGS=-DLUAJIT_USE_VALGRIND       # if valgrind is available
-make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT        # interpreter-only build
+make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT  # no JIT at all
 ```
+
+All three pass. In the JIT-disabled build the runner skips the `jit` and
+`mixed` modes and `test_jit.lua`/`test_codegen.lua` skip themselves, so the
+interpreter semantics still get their full randomized coverage. Remember
+`make clean` when switching build options: the generated VM does not depend on
+`XCFLAGS` in the dependency file.

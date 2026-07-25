@@ -27,11 +27,15 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 ## Commands that pass
 
 ```
-make -j$(nproc)                       # release build
+make -j$(nproc)                       # release build (x86-64-v3 target)
 ./src/luajit test/simd/run.lua        # full suite: interp, jit and mixed modes
 ./src/luajit test/simd/run.lua -interp
 ./src/luajit test/simd/run.lua -jit
 ./src/luajit test/simd/run.lua -mixed  # JIT on, but pre-loaded protos off
+./src/luajit test/simd/bench.lua       # microbenchmarks
+for s in 1 7 999 31337; do SIMD_SEED=$s ./src/luajit test/simd/run.lua; done
+make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT   # also passes
+make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT          # also passes
 ```
 
 The "mixed" mode (`jit.off(true, true)` before loading the test file) produces

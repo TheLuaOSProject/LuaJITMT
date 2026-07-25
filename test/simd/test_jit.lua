@@ -9,6 +9,14 @@ local jit_ = require("jit")
 
 local SEED = tonumber(os.getenv("SIMD_SEED") or "20260725")
 
+-- This file needs a working JIT compiler.
+if not pcall(jit_.on) then
+  test("JIT compiler", function()
+    check(true, "JIT permanently disabled by a build option, differential tests skipped")
+  end)
+  return T
+end
+
 -- Run f interpreted, then compiled, and compare all return values.
 local function diff(name, f, ...)
   jit_.off()

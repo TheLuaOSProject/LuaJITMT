@@ -11,6 +11,14 @@ local jit_ = require("jit")
 package.path = "src/?.lua;./src/?.lua;" .. package.path
 local ok_dump, dump = pcall(require, "jit.dump")
 
+-- This file needs a working JIT compiler.
+if not pcall(jit_.on) then
+  test("JIT compiler", function()
+    check(true, "JIT permanently disabled by a build option, code generation tests skipped")
+  end)
+  return T
+end
+
 local tmp = os.getenv("TMPDIR") or "/tmp"
 local dumpfile = tmp .. "/luajit_simd_codegen_" .. tostring(os.time()) .. ".txt"
 
