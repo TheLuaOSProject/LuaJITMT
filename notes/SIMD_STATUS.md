@@ -193,10 +193,10 @@ reintroduced silently: the build fails instead.
 machine:
 
 ```
-saxpy (float)              scalar     5.4 ms   vector     1.5 ms    3.62x
-dot product (float)        scalar     5.0 ms   vector     1.2 ms    3.99x
+saxpy (float)              scalar     5.4 ms   vector     1.5 ms    3.65x
+dot product (float)        scalar     5.0 ms   vector     1.2 ms    3.98x
 horizontal max (int32)     scalar     3.8 ms   vector     3.7 ms    1.02x
-clamp (float)              scalar    24.6 ms   vector     1.6 ms   15.54x
+clamp (float)              scalar    24.5 ms   vector     1.6 ms   15.21x
 ```
 
 saxpy and the dot product reach ~4x, which is the ceiling for 4 lanes. Clamp
