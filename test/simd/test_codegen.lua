@@ -205,7 +205,12 @@ test("shuffle and insert are packed", function()
     for _ = 1, 400 do acc = simd.shuffle(acc + a, 3, 2, 1, 0) end
     return acc
   end)
-  -- simd.shuffle2 currently stays interpreted, see notes/SIMD_STATUS.md.
+  checkloop("shuffle2", {"pshufb", "por"}, NOCALL, function()
+    local acc = i4(0)
+    local b = i4(9, 8, 7, 6)
+    for _ = 1, 400 do acc = simd.shuffle2(acc + a, b, 0, 4, 1, 5) end
+    return acc
+  end)
   -- The mask AND the splatted constant fold together, so only the ANDN and
   -- the OR survive in the loop.
   checkloop("insert", {"pandn", "por"}, NOCALL, function()

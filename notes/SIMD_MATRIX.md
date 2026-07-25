@@ -105,10 +105,10 @@ operand, exactly like the operators.
 | `hsum/hmin/hmax(a)` | element | yes | yes | yes | yes | yes |
 | `insert(a,i,x)` | same ctype | yes | yes | yes | yes | yes (const i) |
 | `shuffle(a,i...)` | same ctype | yes | yes | yes | yes | yes (const i, SSSE3) |
-| `shuffle2(a,b,i...)` | same ctype | yes | yes | yes | yes | no, see below |
+| `shuffle2(a,b,i...)` | same ctype | yes | yes | yes | yes | yes (const i, SSSE3) |
 | `bitcast(ct,a)` | ct | yes | yes | yes | yes | yes |
 | `convert(ct,a)` | ct | yes | yes | yes | yes | yes |
-| `lanes/elementtype/isvector/features` | — | yes | yes | yes | yes | no (rare, constant-foldable at most) |
+| `lanes/elementtype/isvector/features` | — | yes | yes | yes | yes | no: plain C functions, deliberately not fast functions (see `SIMD_STATUS.md`) |
 
 `yes*` marks operations whose JIT lowering depends on the lane width; see
 "Backend gaps" below.
@@ -148,7 +148,6 @@ Semantics worth pinning down:
 | shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a mask, needs a **constant** count |
 | non-constant lane index in `insert`/`shuffle` | rejected at record time, stays interpreted |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | stays interpreted; a Lua number operand compiles |
-| `simd.shuffle2` | the recorder and the lowering are implemented and produce correct results, but the trace currently stitches at the call instead of compiling it; the code runs interpreted. `simd.shuffle` and `simd.insert` do compile. Tracked in `SIMD_STATUS.md`. |
 
 "JIT NYI" always means: the trace aborts with a NYI reason, the code keeps
 running interpreted, and the result is identical. It never means a wrong

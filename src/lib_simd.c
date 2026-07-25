@@ -298,21 +298,6 @@ LJLIB_CF(ffi_simd_eq)		LJLIB_REC(simd_cmp VCMP_EQ)
   return simd_cmpop(L, VCMP_EQ);
 }
 
-LJLIB_CF(ffi_simd_ne)		LJLIB_REC(simd_cmp VCMP_NE)
-{
-  return simd_cmpop(L, VCMP_NE);
-}
-
-LJLIB_CF(ffi_simd_lt)		LJLIB_REC(simd_cmp VCMP_LT)
-{
-  return simd_cmpop(L, VCMP_LT);
-}
-
-LJLIB_CF(ffi_simd_le)		LJLIB_REC(simd_cmp VCMP_LE)
-{
-  return simd_cmpop(L, VCMP_LE);
-}
-
 LJLIB_CF(ffi_simd_gt)		LJLIB_REC(simd_cmp VCMP_GT)
 {
   return simd_cmpop(L, VCMP_GT);
@@ -511,7 +496,7 @@ LJLIB_CF(ffi_simd_convert)	LJLIB_REC(.)
 
 /* -- Introspection ------------------------------------------------------- */
 
-LJLIB_CF(ffi_simd_isvector)
+static int simd_cf_isvector(lua_State *L)
 {
   CTState *cts = ctype_cts(L);
   TValue *o = L->base;
@@ -527,7 +512,7 @@ LJLIB_CF(ffi_simd_isvector)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_lanes)
+static int simd_cf_lanes(lua_State *L)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = simd_checkctypeid(L, cts, 1);
@@ -538,7 +523,7 @@ LJLIB_CF(ffi_simd_lanes)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_elementtype)
+static int simd_cf_elementtype(lua_State *L)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = simd_checkctypeid(L, cts, 1);
@@ -553,7 +538,7 @@ LJLIB_CF(ffi_simd_elementtype)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_features)
+static int simd_cf_features(lua_State *L)
 {
   GCtab *t = lj_tab_new(L, 0, 4);
   settabV(L, L->top++, t);
@@ -582,9 +567,38 @@ LJLIB_CF(ffi_simd_features)
 
 #include "lj_libdef.h"
 
+/*
+** Lua source for the handful of functions that are exact rewrites of others.
+** They inline into a trace just as well as a fast function would, and they
+** keep the module inside LuaJIT's budget of 255 fast function IDs.
+*/
+static const char simd_luasrc[] =
+  "local simd = ...\n"
+  "local eq, gt, ge, bnot = simd.eq, simd.gt, simd.ge, simd.bnot\n"
+  "function simd.ne(a, b) return bnot(eq(a, b)) end\n"
+  "function simd.lt(a, b) return gt(b, a) end\n"
+  "function simd.le(a, b) return ge(b, a) end\n";
+
+static const luaL_Reg simd_plaincf[] = {
+  { "isvector",    simd_cf_isvector },
+  { "lanes",       simd_cf_lanes },
+  { "elementtype", simd_cf_elementtype },
+  { "features",    simd_cf_features },
+  { NULL, NULL }
+};
+
 LUALIB_API int luaopen_ffi_simd(lua_State *L)
 {
+  const luaL_Reg *r;
   LJ_LIB_REG(L, NULL, ffi_simd);
+  for (r = simd_plaincf; r->name; r++) {
+    lua_pushcfunction(L, r->func);
+    lua_setfield(L, -2, r->name);
+  }
+  if (luaL_loadbuffer(L, simd_luasrc, sizeof(simd_luasrc)-1, "=ffi.simd") != 0)
+    lua_error(L);
+  lua_pushvalue(L, -2);
+  lua_call(L, 1, 0);
   return 1;
 }
 

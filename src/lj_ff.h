@@ -15,4 +15,12 @@ typedef enum {
   FF__MAX
 } FastFunc;
 
+/*
+** GCfunc.ffid is a uint8_t, so a library that pushes the total past 256 IDs
+** silently truncates the IDs of the last few functions. Those then collide
+** with FF_LUA or FF_C, which makes isluafunc()/iscfunc() lie about them and
+** makes the trace recorder pick the wrong handler. Fail the build instead.
+*/
+LJ_STATIC_ASSERT(FF__MAX <= 256);
+
 #endif

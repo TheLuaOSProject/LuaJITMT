@@ -107,26 +107,26 @@ notes/*                          design/status/matrix/testing notes (new)
 * Long emitted sequences must call `checkmclim()` in the middle: the mcode
   red zone is only 64 bytes.
 
-## Open item: simd.shuffle2 does not compile
+## Trap: LuaJIT only has 255 fast function IDs
 
-`recff_ffi_simd_shuffle2` is written, declared, and correctly wired into
-`lj_recdef.h` (idmap slot `0x5700` -> `recff_func[0x57]` ->
-`recff_ffi_simd_shuffle2`), but a loop containing `simd.shuffle2` always ends
-with `TRACE ... stop -> stitch` at the call, exactly as if the function had no
-recorder. Established so far:
+`GCfunc.c.ffid` is a **uint8_t**. `ffi.simd` originally added 40 `LJLIB_CF`
+functions, which pushed `FF__MAX` to 263. The IDs of the last seven functions
+were silently truncated and collided with `FF_LUA`/`FF_C`, so
+`isluafunc()`/`iscfunc()` lied about them and the recorder looked up the wrong
+handler. The visible symptom was that a loop containing `simd.shuffle2` always
+ended with `TRACE ... stop -> stitch`, as if the function had no recorder,
+while `simd.shuffle` right next to it compiled fine.
 
-* `simd.shuffle` (up to 9 arguments) and `simd.insert` compile fine, so it is
-  neither the argument count nor the shuffle lowering.
-* `simd.select`, which also takes several vector arguments, compiles fine.
-* Reducing the body of `recff_ffi_simd_shuffle2` to "box argument 0 and
-  return" still stitches, so the failure is before or at entry to the handler,
-  not inside it.
-* `jit.attach(..., "trace")` reports no abort event, only the stitch.
+Fixed by getting back under the limit without changing the API:
 
-Results are correct either way: `test_jit.lua` verifies `shuffle2` against the
-interpreter in all three modes. The next step is to instrument
-`lj_ffrecord_func()` and print `J->fn->c.ffid` and the looked-up idmap slot for
-this call to find out which handler actually runs.
+* `simd.ne`, `simd.lt` and `simd.le` are now Lua wrappers over `bnot(eq(..))`,
+  `gt(b,a)` and `ge(b,a)`, which is exactly how the recorder lowered them
+  anyway. They inline into a trace just like a fast function.
+* `simd.isvector/lanes/elementtype/features` are plain C functions registered
+  by hand. They are never recorded, so they do not need an ID.
+
+`lj_ff.h` now carries `LJ_STATIC_ASSERT(FF__MAX <= 256)` so this can never be
+reintroduced silently: the build fails instead.
 
 ## Benchmarks
 
