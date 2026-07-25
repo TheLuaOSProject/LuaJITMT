@@ -90,6 +90,14 @@ return function(add)
       message = "M5 table KEYLOCK lookup filtering tests passed"
     },
     {
+      name = "m5_tab_newkey_monotonic",
+      description = "owner-only monotonic shared table new-key publication",
+      output = "lj_t-tab-newkey-monotonic",
+      cfile = "t-tab-newkey-monotonic.c",
+      opts = build.tab_helper_opts({ timeout = "20s" }),
+      message = "M5 monotonic shared table new-key tests passed"
+    },
+    {
       name = "m5_tab_chain_order",
       description = "stable table-node/hash-chain ordering C fixture",
       output = "lj_t-tab-chain-order",

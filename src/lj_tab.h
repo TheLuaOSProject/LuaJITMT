@@ -328,6 +328,9 @@ LJ_FUNC int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 #ifdef LJ_TAB_TEST_HELPERS
 typedef void (*LJTabNewkeyReserveHook)(lua_State *L, GCtab *t,
 				       Node *nodebase);
+typedef void (*LJTabNewkeyPublishHook)(lua_State *L, GCtab *t,
+				       Node *nodebase, Node *anchor,
+				       Node *claimed, uint32_t stage);
 typedef void (*LJTabResizeArrayHook)(lua_State *L, GCtab *t,
 				     TValue *oldarray, MSize oldasize);
 typedef void (*LJTabNextAfterKeyindexHook)(GCtab *t, uint32_t idx);
@@ -343,10 +346,18 @@ enum {
   LJ_TAB_ROOTED_READER_NEXT = 1,
   LJ_TAB_ROOTED_READER_LEN = 2
 };
+enum {
+  LJ_TAB_NEWKEY_HOOK_ANCHOR_KEY = 1,
+  LJ_TAB_NEWKEY_HOOK_COLLISION_KEY = 2,
+  LJ_TAB_NEWKEY_HOOK_COLLISION_NEXT = 3,
+  LJ_TAB_NEWKEY_HOOK_COLLISION_LINK = 4
+};
 LJ_FUNC void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_chain_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
+LJ_FUNC void lj_tab_test_set_newkey_publish_hook(
+  LJTabNewkeyPublishHook hook);
 LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(

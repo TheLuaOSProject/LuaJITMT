@@ -1051,15 +1051,21 @@ static LJ_AINLINE void newhpart_publish(lua_State *L, GCtab *t, Node *node,
   lj_tab_hmask_rel(t, hmask);
 }
 
+static LJ_AINLINE void tab_canonicalize_key(lua_State *L, TValue *dst,
+					    cTValue *key)
+{
+  if (LJ_UNLIKELY(!tab_tv_snapshot_valid(key)))
+    lj_err_msg(L, LJ_ERR_NILIDX);
+  copyTV(L, dst, key);
+  if (LJ_UNLIKELY(tvismzero(dst)))
+    dst->u64 = 0;
+}
+
 static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
 				       cTValue *key)
 {
   TValue k;
-  if (LJ_UNLIKELY(!tab_tv_snapshot_valid(key)))
-    lj_err_msg(L, LJ_ERR_NILIDX);
-  copyTV(L, &k, key);
-  if (LJ_UNLIKELY(tvismzero(&k)))
-    k.u64 = 0;
+  tab_canonicalize_key(L, &k, key);
   copyTVrel(L, dst, &k);
 }
 
@@ -4211,6 +4217,7 @@ static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
 #ifdef LJ_TAB_TEST_HELPERS
 static LJTabNewkeyReserveHook tab_test_newkey_anchor_after_reserve_hook;
 static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
+static LJTabNewkeyPublishHook tab_test_newkey_publish_hook;
 static LJTabNextAfterKeyindexHook tab_test_next_after_keyindex_hook;
 static LJTabStorePostCasHook tab_test_store_post_cas_hook;
 static LJTabRootedReaderRetryHook tab_test_rooted_reader_retry_hook;
@@ -4228,6 +4235,11 @@ void lj_tab_test_set_newkey_chain_after_reserve_hook(
   LJTabNewkeyReserveHook hook)
 {
   tab_test_newkey_chain_after_reserve_hook = hook;
+}
+
+void lj_tab_test_set_newkey_publish_hook(LJTabNewkeyPublishHook hook)
+{
+  tab_test_newkey_publish_hook = hook;
 }
 
 void lj_tab_test_set_resize_colocated_after_freeze_hook(
@@ -4321,6 +4333,14 @@ static LJ_AINLINE void tab_test_newkey_chain_after_reserve(lua_State *L,
     tab_test_newkey_chain_after_reserve_hook(L, t, nodebase);
 }
 
+static LJ_AINLINE void tab_test_newkey_publish(lua_State *L, GCtab *t,
+					       Node *nodebase, Node *anchor,
+					       Node *claimed, uint32_t stage)
+{
+  if (tab_test_newkey_publish_hook)
+    tab_test_newkey_publish_hook(L, t, nodebase, anchor, claimed, stage);
+}
+
 static LJ_AINLINE void tab_test_next_after_keyindex(GCtab *t, uint32_t idx)
 {
   if (tab_test_next_after_keyindex_hook)
@@ -4340,6 +4360,9 @@ static LJ_AINLINE void tab_test_store_post_cas(lua_State *L, GCtab *t,
   ((void)(L), (void)(t), (void)(nodebase))
 #define tab_test_newkey_chain_after_reserve(L, t, nodebase) \
   ((void)(L), (void)(t), (void)(nodebase))
+#define tab_test_newkey_publish(L, t, nodebase, anchor, claimed, stage) \
+  ((void)(L), (void)(t), (void)(nodebase), (void)(anchor), \
+   (void)(claimed))
 #define tab_test_next_after_keyindex(t, idx) \
   ((void)(t), (void)(idx))
 #define tab_test_store_post_cas(L, t, dst, key, value) \
@@ -4370,8 +4393,29 @@ static void tab_release_claimed_free(Node *nodebase, Node *n)
   lj_tab_node_free_release(nodebase);
 }
 
-static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
-				      const Node *anchor, int *locked)
+/*
+** Publish a canonical ordinary key directly into a nil node.  A successful
+** CAS is deliberately irreversible: the key and its freecount debit remain
+** valid even if this attempt later loses a chain or generation race.  A nil
+** value keeps such a node semantically absent, while resize compacts the
+** capacity debt from an unlinked collision claimant.
+*/
+static int tab_try_publish_nil_key(lua_State *L, GCtab *t, TValue *dst,
+				   cTValue *key)
+{
+  TValue expect;
+  setnilV(&expect);
+  if (!lj_tv_cas(dst, &expect, key))
+    return tab_key_islocked(&expect) ? -1 : 0;
+  lj_gc2_barrier_weak_key(L, t, key);
+  lj_gc_pubtabkey(L, t, key);
+  return 1;
+}
+
+static Node *tab_publish_free_node_scan(lua_State *L, GCtab *t,
+					cTValue *key, Node *nodebase,
+					MSize hmask, const Node *anchor,
+					int *locked)
 {
   MSize start = (MSize)(anchor - nodebase);
   MSize i;
@@ -4388,16 +4432,15 @@ static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
     if (tab_key_islocked(&nk)) {
-      lj_tab_node_free_release(nodebase);
       *locked = 1;
-      return NULL;
+      continue;
     }
-    if (tvisnil(&nk) && lj_tv_isnil_acq(&n->val)) {
-      int claimed = tab_try_claim_nil_key(&n->key);
+    if (tvisnil(&nk) && lj_tv_isnil_acq(&n->val) &&
+	lj_tab_nextnode_acq(n) == NULL) {
+      int claimed = tab_try_publish_nil_key(L, t, &n->key, key);
       if (claimed < 0) {
-	lj_tab_node_free_release(nodebase);
 	*locked = 1;
-	return NULL;
+	continue;
       }
       if (claimed == 1)
 	return n;
@@ -4407,11 +4450,53 @@ static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
   return NULL;
 }
 
+/*
+** Return either the matching value or the exact current tail of one collision
+** chain.  Every shared structural publisher appends with a NULL->node CAS.
+** Thus same-key publishers which scan the same chain either contend on the
+** same tail or observe the winner on their next scan.  Historical private
+** chains may be head-built, but are immutable by the time this path is live.
+*/
+static TValue *tab_findkey_or_keylock_tail(Node *anchor, cTValue *key,
+					   int *locked, MSize *chainlen,
+					   Node **tail)
+{
+  Node *n;
+  MSize len = 0;
+  *locked = 0;
+  *tail = NULL;
+  for (n = anchor; n != NULL; n = lj_tab_nextnode_acq(n)) {
+    TValue nk;
+    Node *next;
+    len++;
+    lj_tv_load_acq(&nk, &n->key);
+    if (lj_obj_equal(&nk, key)) {
+      *chainlen = len;
+      return &n->val;
+    }
+    if (tab_key_islocked(&nk)) {
+      *chainlen = len;
+      *locked = 1;
+      return NULL;
+    }
+    next = lj_tab_nextnode_acq(n);
+    if (next == NULL) {
+      *chainlen = len;
+      *tail = n;
+      return NULL;
+    }
+  }
+  *chainlen = len;
+  return NULL;
+}
+
 /* Insert new key. Nodes are never moved within a hash generation. */
 static TValue *tab_newkey_impl(lua_State *L, GCtab *t, cTValue *key,
 			       int key_anchored)
 {
   global_State *g = G(L);
+  TValue pubkey;
+  int pubkey_ready = 0;
   Node *nodebase;
   MSize hmask;
   Node *n;
@@ -4457,6 +4542,10 @@ retry_insert:
       }
       return tab_rehash_chain_overflow_key(L, t, key, hmask);
     }
+  }
+  if (!pubkey_ready) {
+    tab_canonicalize_key(L, &pubkey, key);
+    pubkey_ready = 1;
   }
   {
     int locked;
@@ -4505,7 +4594,7 @@ retry_insert:
 	return tab_rehash_no_free_key(L, t, key, hmask);
       }
       {
-	int claimed = tab_try_claim_nil_key(&n->key);
+	int claimed = tab_try_publish_nil_key(L, t, &n->key, &pubkey);
 	if (claimed < 0) {
 	  lj_tab_node_free_release(nodebase);
 	  lj_gc2_smr_read_leave(g);
@@ -4513,16 +4602,8 @@ retry_insert:
 	  goto retry_insert;
 	}
 	if (claimed == 1) {
-	  if (!tab_hash_generation_current(t, nodebase)) {
-	    tab_release_claimed_anchor(nodebase, n);
-	    lj_gc2_smr_read_leave(g);
-	    lj_tab_wait_no_l();
-	    goto retry_insert;
-	  }
-	  tab_storekeyrel(L, &n->key, key);
-	  lj_gc2_barrier_weak_key(L, t, key);
-	  lj_gc_pubtabkey(L, t, key);
-	  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
+	  tab_test_newkey_publish(L, t, nodebase, n, n,
+				  LJ_TAB_NEWKEY_HOOK_ANCHOR_KEY);
 	  if (!tab_hash_generation_current(t, nodebase)) {
 	    lj_gc2_smr_read_leave(g);
 	    lj_tab_wait_no_l();
@@ -4542,7 +4623,8 @@ retry_insert:
   }
   {
     int locked;
-    Node *freenode = tab_claim_free_node_scan(nodebase, hmask, n, &locked);
+    Node *freenode = tab_publish_free_node_scan(L, t, &pubkey, nodebase,
+						hmask, n, &locked);
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
     if (!freenode) {
       if (locked) {
@@ -4557,22 +4639,32 @@ retry_insert:
       }
       return tab_rehash_no_free_key(L, t, key, hmask);
     }
-    {
+    tab_test_newkey_publish(L, t, nodebase, n, freenode,
+			    LJ_TAB_NEWKEY_HOOK_COLLISION_KEY);
+    for (;;) {
       MSize chainlen;
-      TValue *slot = tab_findkey_or_keylock(n, key, &locked, &chainlen);
+      Node *tail;
+      Node *expect = NULL;
+      TValue *slot;
+      if (!tab_hash_generation_current(t, nodebase)) {
+	lj_gc2_smr_read_leave(g);
+	lj_tab_wait_no_l();
+	if (key_anchored)
+	  goto retry_insert;
+	return tab_set_anchored_key(L, t, key);
+      }
+      slot = tab_findkey_or_keylock_tail(n, key, &locked, &chainlen,
+					 &tail);
       if (slot) {
-	tab_release_claimed_free(nodebase, freenode);
 	lj_gc2_smr_read_leave(g);
 	return slot;
       }
       if (locked) {
-	tab_release_claimed_free(nodebase, freenode);
 	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
 	goto retry_insert;
       }
       if (chainlen >= LJ_TAB_MAXCHAIN) {
-	tab_release_claimed_free(nodebase, freenode);
 	lj_gc2_smr_read_leave(g);
 	if (key_anchored) {
 	  tab_rehash_chain_overflow(L, t, key, hmask);
@@ -4580,30 +4672,24 @@ retry_insert:
 	}
 	return tab_rehash_chain_overflow_key(L, t, key, hmask);
       }
-    }
-    lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
-    {
-      Node *next;
+      lj_assertL(tail != NULL, "missing shared collision-chain tail");
+      lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
+      tab_test_newkey_publish(L, t, nodebase, n, freenode,
+			      LJ_TAB_NEWKEY_HOOK_COLLISION_NEXT);
       if (!tab_hash_generation_current(t, nodebase)) {
-	tab_release_claimed_free(nodebase, freenode);
 	lj_gc2_smr_read_leave(g);
 	lj_tab_wait_no_l();
-	goto retry_insert;
+	if (key_anchored)
+	  goto retry_insert;
+	return tab_set_anchored_key(L, t, key);
       }
-      next = lj_tab_nextnode_acq(n);
-      lj_tab_nextnode_set(freenode, next);
-      if (!tab_nextnode_cas(n, &next, freenode)) {
-	tab_release_claimed_free(nodebase, freenode);
-	lj_gc2_smr_read_leave(g);
-	lj_tab_wait_no_l();
-	goto retry_insert;
-      }
+      if (tab_nextnode_cas(tail, &expect, freenode))
+	break;
+      /* A successful rival append is system progress.  Retain this exact
+      ** monotonic claimant and rescan instead of consuming another node. */
     }
-    tab_storekeyrel(L, &freenode->key, key);
-    lj_gc2_barrier_weak_key(L, t, key);
-    lj_gc_pubtabkey(L, t, key);
-    lj_assertL(lj_tv_isnil_acq(&freenode->val),
-	       "new hash slot is not empty");
+    tab_test_newkey_publish(L, t, nodebase, n, freenode,
+			    LJ_TAB_NEWKEY_HOOK_COLLISION_LINK);
     if (!tab_hash_generation_current(t, nodebase)) {
       lj_gc2_smr_read_leave(g);
       lj_tab_wait_no_l();
@@ -4744,10 +4830,11 @@ retry_attempt:
     }
     anchor = hashkey_node(nodebase, hmask, key);
   for (;;) {
-    Node *n;
+    Node *n, *tail = NULL;
     MSize i;
-    for (n = anchor; n != NULL; n = lj_tab_nextnode_acq(n)) {
+    for (n = anchor; n != NULL; ) {
       TValue nk, nv;
+      Node *next;
       lj_tv_load_acq(&nv, &n->val);
       lj_tv_load_acq(&nk, &n->key);
       if (lj_obj_equal(&nk, key)) {
@@ -4763,6 +4850,10 @@ retry_attempt:
 	lj_tab_wait_no_l();  /* Linked insert is publishing key. */
 	goto retry_attempt;
       }
+      next = lj_tab_nextnode_acq(n);
+      if (next == NULL)
+	tail = n;
+      n = next;
     }
     if (!reserved) {
       int reserve = lj_tab_node_free_reserve(nodebase);
@@ -4782,8 +4873,6 @@ retry_attempt:
 	if (n == anchor)
 	  continue;
 	lj_tv_load_acq(&nk, &n->key);
-	if (lj_obj_equal(&nk, key))
-	  goto found_existing;
 	if (tviskeylock(&nk)) {
 	  lj_tab_node_free_release(nodebase);
 	  lj_gc2_smr_read_leave(g);
@@ -4793,7 +4882,7 @@ retry_attempt:
 	if (!tvisnil(&nk))
 	  continue;
 	lj_tv_load_acq(&nv, &n->val);
-	if (!tvisnil(&nv)) {
+	if (!tvisnil(&nv) || lj_tab_nextnode_acq(n) != NULL) {
 	  if (tab_val_isclaim(&nv, claim)) {
 	    lj_tab_node_free_release(nodebase);
 	    lj_gc2_smr_read_leave(g);
@@ -4825,7 +4914,7 @@ retry_attempt:
 	    lj_gc2_smr_read_leave(g);
 	    return -1;
 	  }
-	  reserved = n;  /* Claimed free node; not visible until CAS-prepend. */
+	  reserved = n;  /* Claimed free node; not visible until CAS-append. */
 	  break;
 	}
 	lj_tab_storenilraw(&n->key);
@@ -4847,22 +4936,17 @@ retry_attempt:
       lj_gc2_smr_read_leave(g);
       return -1;
     }
-    n = lj_tab_nextnode_acq(anchor);
-    lj_tab_nextnode_set(reserved, n);
-    if (tab_nextnode_cas(anchor, &n, reserved)) {
+    lj_assertL(tail != NULL, "missing FINREG collision-chain tail");
+    n = NULL;
+    if (tab_nextnode_cas(tail, &n, reserved)) {
       tab_storekeyrel(L, &reserved->key, key);
       *slot = &reserved->val;
       lj_gc2_smr_read_leave(g);
-      return 1;  /* 11.4 FINREG collision insert CAS-prepend. */
+      return 1;  /* 11.4 FINREG collision insert exact-tail CAS. */
     }
-    tab_release_claimed_free(nodebase, reserved);
-    lj_gc2_smr_read_leave(g);
-    lj_tab_wait_no_l();
-    goto retry_attempt;
-  found_existing:
-    lj_tab_node_free_release(nodebase);
-    lj_gc2_smr_read_leave(g);
-    return -1;
+    /* All shared chain publishers append.  Keep the exact claim across a
+    ** successful rival append and let the next scan arbitrate duplicates. */
+    continue;
   }
   }
 }
