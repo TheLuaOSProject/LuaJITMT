@@ -97,7 +97,27 @@ identical.
 make -j$(nproc)                                     # default release
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT # assertions on
 make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT  # no JIT at all
+
+# AddressSanitizer. The sanitizer flags must go to the *target* only, or the
+# host build tools fail. LUAJIT_USE_SYSMALLOC routes allocations through
+# malloc so ASan can actually see them; it works because GC64 has no low-2GB
+# constraint.
+make clean && make -j$(nproc) CCDEBUG=-g \
+  TARGET_CFLAGS="-DLUAJIT_USE_SYSMALLOC -fsanitize=address -fno-omit-frame-pointer" \
+  TARGET_LDFLAGS="-fsanitize=address"
+ASAN_OPTIONS=detect_leaks=0 ./src/luajit test/simd/run.lua
+
+# UndefinedBehaviorSanitizer, same flag placement.
+make clean && make -j$(nproc) CCDEBUG=-g \
+  TARGET_CFLAGS="-DLUAJIT_USE_SYSMALLOC -fsanitize=undefined -fno-omit-frame-pointer" \
+  TARGET_LDFLAGS="-fsanitize=undefined"
+./src/luajit test/simd/run.lua 2>&1 | grep "runtime error"
 ```
+
+All of these pass. UBSan is clean for `lj_simd.c`; the remaining reports come
+from stock LuaJIT files (`lj_parse.c`, `lj_buf.c`, `lj_bcread.c`, `lib_jit.c`
+and the deliberately unaligned mcode stores in `lj_emit_x86.h`) and are
+pre-existing.
 
 All three pass. In the JIT-disabled build the runner skips the `jit` and
 `mixed` modes and `test_jit.lua`/`test_codegen.lua` skip themselves, so the

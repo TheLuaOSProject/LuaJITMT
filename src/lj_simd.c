@@ -7,6 +7,10 @@
 **
 ** All integer lane arithmetic is done in unsigned types and wraps around,
 ** which avoids C undefined behaviour and matches the x86 packed instructions.
+** Note that "unsigned lane type" is not enough on its own: anything narrower
+** than int is promoted *to int* by the usual arithmetic conversions, so e.g.
+** 65535 * 65535 on uint16_t lanes would overflow a signed int. The operands
+** are therefore widened to an explicit unsigned type first.
 */
 
 #define lj_simd_c
@@ -24,27 +28,33 @@
 
 /* -- Helpers ------------------------------------------------------------- */
 
-/* Iterate over all lanes of a binary op with C type TY. */
-#define VEC_BIN(TY, EXPR) \
+/* Iterate over all lanes of a binary op, computing in type OTY. */
+#define VEC_BINO(TY, OTY, EXPR) \
   { TY *d = (TY *)dp; const TY *a = (const TY *)ap; const TY *b = (const TY *)bp; \
     uint32_t i, n = vi->lanes; \
-    for (i = 0; i < n; i++) { TY x = a[i], y = b[i]; d[i] = (TY)(EXPR); } \
+    for (i = 0; i < n; i++) { OTY x = a[i], y = b[i]; d[i] = (TY)(EXPR); } \
     return 1; }
 
-/* Iterate over all lanes of a unary op with C type TY. */
-#define VEC_UN(TY, EXPR) \
+#define VEC_BIN(TY, EXPR)	VEC_BINO(TY, TY, EXPR)
+
+/* Iterate over all lanes of a unary op, computing in type OTY. */
+#define VEC_UNO(TY, OTY, EXPR) \
   { TY *d = (TY *)dp; const TY *a = (const TY *)ap; \
     uint32_t i, n = vi->lanes; \
-    for (i = 0; i < n; i++) { TY x = a[i]; d[i] = (TY)(EXPR); } \
+    for (i = 0; i < n; i++) { OTY x = a[i]; d[i] = (TY)(EXPR); } \
     return 1; }
 
-/* Dispatch over the integer lane widths, using the unsigned C type. */
+#define VEC_UN(TY, EXPR)	VEC_UNO(TY, TY, EXPR)
+
+/* Dispatch over the integer lane widths, computing in an unsigned type that
+** is never promoted to a signed int.
+*/
 #define VEC_BIN_UINT(EXPR) \
   switch (vi->esize) { \
-  case 1: VEC_BIN(uint8_t, EXPR) \
-  case 2: VEC_BIN(uint16_t, EXPR) \
-  case 4: VEC_BIN(uint32_t, EXPR) \
-  default: VEC_BIN(uint64_t, EXPR) \
+  case 1: VEC_BINO(uint8_t, uint32_t, EXPR) \
+  case 2: VEC_BINO(uint16_t, uint32_t, EXPR) \
+  case 4: VEC_BINO(uint32_t, uint32_t, EXPR) \
+  default: VEC_BINO(uint64_t, uint64_t, EXPR) \
   }
 
 /* Dispatch over the signed integer lane widths. */
@@ -128,20 +138,24 @@ int lj_simd_binop(void *dp, const void *ap, const void *bp,
     VEC_BIN_SINT(x > y ? x : y)
   case VOP_ADDS:
     switch (k) {
-    case VECK_I8: VEC_BIN(int8_t, x+y < -128 ? -128 : x+y > 127 ? 127 : x+y)
-    case VECK_U8: VEC_BIN(uint8_t, x+y > 255 ? 255 : x+y)
+    case VECK_I8:
+      VEC_BINO(int8_t, int32_t, x+y < -128 ? -128 : x+y > 127 ? 127 : x+y)
+    case VECK_U8: VEC_BINO(uint8_t, uint32_t, x+y > 255 ? 255 : x+y)
     case VECK_I16:
-      VEC_BIN(int16_t, x+y < -32768 ? -32768 : x+y > 32767 ? 32767 : x+y)
-    case VECK_U16: VEC_BIN(uint16_t, x+y > 65535 ? 65535 : x+y)
+      VEC_BINO(int16_t, int32_t,
+	       x+y < -32768 ? -32768 : x+y > 32767 ? 32767 : x+y)
+    case VECK_U16: VEC_BINO(uint16_t, uint32_t, x+y > 65535 ? 65535 : x+y)
     default: return 0;
     }
   case VOP_SUBS:
     switch (k) {
-    case VECK_I8: VEC_BIN(int8_t, x-y < -128 ? -128 : x-y > 127 ? 127 : x-y)
-    case VECK_U8: VEC_BIN(uint8_t, x < y ? 0 : x-y)
+    case VECK_I8:
+      VEC_BINO(int8_t, int32_t, x-y < -128 ? -128 : x-y > 127 ? 127 : x-y)
+    case VECK_U8: VEC_BINO(uint8_t, uint32_t, x < y ? 0 : x-y)
     case VECK_I16:
-      VEC_BIN(int16_t, x-y < -32768 ? -32768 : x-y > 32767 ? 32767 : x-y)
-    case VECK_U16: VEC_BIN(uint16_t, x < y ? 0 : x-y)
+      VEC_BINO(int16_t, int32_t,
+	       x-y < -32768 ? -32768 : x-y > 32767 ? 32767 : x-y)
+    case VECK_U16: VEC_BINO(uint16_t, uint32_t, x < y ? 0 : x-y)
     default: return 0;
     }
   default: return 0;
@@ -158,17 +172,17 @@ int lj_simd_unop(void *dp, const void *ap, const CTVecInfo *vi, uint32_t op)
     if (k == VECK_F32) VEC_UN(float, -x)
     if (k == VECK_F64) VEC_UN(double, -x)
     switch (vi->esize) {
-    case 1: VEC_UN(uint8_t, 0u - x)
-    case 2: VEC_UN(uint16_t, 0u - x)
-    case 4: VEC_UN(uint32_t, 0u - x)
-    default: VEC_UN(uint64_t, 0u - x)
+    case 1: VEC_UNO(uint8_t, uint32_t, 0u - x)
+    case 2: VEC_UNO(uint16_t, uint32_t, 0u - x)
+    case 4: VEC_UNO(uint32_t, uint32_t, 0u - x)
+    default: VEC_UNO(uint64_t, uint64_t, 0u - x)
     }
   case VUN_NOT:
     switch (vi->esize) {
-    case 1: VEC_UN(uint8_t, ~x)
-    case 2: VEC_UN(uint16_t, ~x)
-    case 4: VEC_UN(uint32_t, ~x)
-    default: VEC_UN(uint64_t, ~x)
+    case 1: VEC_UNO(uint8_t, uint32_t, ~x)
+    case 2: VEC_UNO(uint16_t, uint32_t, ~x)
+    case 4: VEC_UNO(uint32_t, uint32_t, ~x)
+    default: VEC_UNO(uint64_t, uint64_t, ~x)
     }
   case VUN_ABS:
     /* FP: clear the sign bit (so |NaN| keeps its payload, |-0| is +0). */
@@ -277,17 +291,17 @@ int lj_simd_shift(void *dp, const void *ap, const CTVecInfo *vi,
   }
   if (op == VSH_SHL) {
     switch (vi->esize) {
-    case 1: VEC_UN(uint8_t, x << sh)
-    case 2: VEC_UN(uint16_t, x << sh)
-    case 4: VEC_UN(uint32_t, x << sh)
-    default: VEC_UN(uint64_t, x << sh)
+    case 1: VEC_UNO(uint8_t, uint32_t, x << sh)
+    case 2: VEC_UNO(uint16_t, uint32_t, x << sh)
+    case 4: VEC_UNO(uint32_t, uint32_t, x << sh)
+    default: VEC_UNO(uint64_t, uint64_t, x << sh)
     }
   } else if (op == VSH_SHR) {
     switch (vi->esize) {
-    case 1: VEC_UN(uint8_t, x >> sh)
-    case 2: VEC_UN(uint16_t, x >> sh)
-    case 4: VEC_UN(uint32_t, x >> sh)
-    default: VEC_UN(uint64_t, x >> sh)
+    case 1: VEC_UNO(uint8_t, uint32_t, x >> sh)
+    case 2: VEC_UNO(uint16_t, uint32_t, x >> sh)
+    case 4: VEC_UNO(uint32_t, uint32_t, x >> sh)
+    default: VEC_UNO(uint64_t, uint64_t, x >> sh)
     }
   }
   return 0;
@@ -399,22 +413,24 @@ uint32_t lj_simd_movemask(const void *ap, const CTVecInfo *vi)
 ** interpreter and JIT agree bit for bit even for non-associative float adds
 ** and for the asymmetric NaN behaviour of MINPS/MAXPS.
 */
-#define VEC_RED(TY, EXPR) \
+#define VEC_REDO(TY, OTY, EXPR) \
   { TY t[LJ_VEC_MAXSIZE/sizeof(TY)]; \
     uint32_t i, n = vi->lanes; \
     memcpy(t, ap, (size_t)n*sizeof(TY)); \
     while (n > 1) { \
       n >>= 1; \
-      for (i = 0; i < n; i++) { TY x = t[i], y = t[i+n]; t[i] = (TY)(EXPR); } \
+      for (i = 0; i < n; i++) { OTY x = t[i], y = t[i+n]; t[i] = (TY)(EXPR); } \
     } \
     *(TY *)dp = t[0]; return 1; }
 
+#define VEC_RED(TY, EXPR)	VEC_REDO(TY, TY, EXPR)
+
 #define VEC_RED_UINT(EXPR) \
   switch (vi->esize) { \
-  case 1: VEC_RED(uint8_t, EXPR) \
-  case 2: VEC_RED(uint16_t, EXPR) \
-  case 4: VEC_RED(uint32_t, EXPR) \
-  default: VEC_RED(uint64_t, EXPR) \
+  case 1: VEC_REDO(uint8_t, uint32_t, EXPR) \
+  case 2: VEC_REDO(uint16_t, uint32_t, EXPR) \
+  case 4: VEC_REDO(uint32_t, uint32_t, EXPR) \
+  default: VEC_REDO(uint64_t, uint64_t, EXPR) \
   }
 
 #define VEC_RED_SINT(EXPR) \

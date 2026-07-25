@@ -25,6 +25,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M8 | Variable lane index, scalar cdata operands, mask predicate guard polarity | done |
 | M9 | Randomized program generator; snapshot replay, type-blind CSE and 64-bit `sar` fixes | done |
 | M10 | NaN quieting in rounding, defined float-to-integer conversion, seed sweep | done |
+| M11 | ASan and UBSan clean; integer-promotion UB removed from the reference implementation | done |
 
 ## Commands that pass
 
