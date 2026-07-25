@@ -298,6 +298,70 @@ different codebase, not a merge, so it is deliberately not attempted here. If
 the work is meant to land in the fork rather than stand alone, that is the
 decision to revisit first, before any further feature work.
 
+## D14. Vectors by value in FFI callbacks (x86-64 SysV only)
+
+Callbacks used to reject vector arguments and results outright. They are now
+supported on x86-64 SysV, which needed four things to agree:
+
+  * **A wide enough save area.** `CCallback.fpr` held 8 bytes per FPR, which
+    is half a vector. `FPRCBArg` is now 16 bytes on this target. It is
+    deliberately *not* over-aligned: `CTState` is an ordinary GC allocation
+    and nothing guarantees 16-byte placement, so the trampoline uses `movups`
+    rather than constraining where `CTState` may live.
+  * **A trampoline that saves it.** `->vm_ffi_callback` now stores all 16
+    bytes of xmm0-xmm7, and `->cont_ffi_callback` reloads all 16 bytes of
+    xmm0 for the result. The Windows x64 path keeps the 8-byte `movsd` form
+    and the narrow `FPRCBArg`, because vectors are not passed in registers
+    there at all.
+  * **Classification that counts registers, not eightbytes.** The generic
+    code derives `n` from the argument size, so a 16 byte value would claim
+    *two* XMM registers. SysV gives a vector one. `CALLBACK_HANDLE_REGARG`
+    now uses `n2 = isvec ? 1 : n`, mirroring what `lj_ccall.c` already does
+    for the outbound direction.
+  * **16-byte stack alignment.** Once xmm0-xmm7 are used a vector goes on the
+    stack, and the caller aligns it to 16 bytes. `callback_conv_args` has to
+    apply the same rule or it reads half of one argument and half of the
+    next. This is load-bearing and has a test that fails without it.
+
+The three parts are tied together by `LJ_STATIC_ASSERT(!CCALL_VECTOR_REG ||
+sizeof(FPRCBArg) == 16)` in `lj_ccall.h`, so widening the save area and
+teaching the trampoline about it cannot drift apart silently.
+
+Everything else is gated by `CCALL_VECTOR_REG`, which is 0 on Windows x64,
+x86 and every non-x86 target. There `callback_isvec()` is constant-false and
+`callback_checkfunc()` rejects vectors exactly as before, with the ordinary
+"cannot convert" error. A vector wider than one register (32 bytes) is
+rejected on every target, including SysV.
+
+## D15. A vector value may be stored under a different lane type
+
+An `XSTORE` that boxes a vector is typed with the *ctype it is boxed as*, not
+with the lane type the value was computed with, and the two genuinely differ:
+`ffi.simd.bitcast` re-boxes a value under a new lane type by design, and a
+compare produces a mask whose IR type is the operand's lane type but whose
+ctype is the corresponding integer vector.
+
+That is deliberate -- it is what lets the very next load of the box forward
+and lets the allocation be sunk -- but it broke `lj_opt_fwd_xload()`, which
+reacts to a load/value type mismatch by synthesising an `IR_CONV`. There is
+no CONV between two vector types. `asm_conv()` would take the integer path,
+allocate a **GPR** for a value that lives in an XMM register, and either trip
+`emit_loadk128`'s assert or, in a release build, quietly use the wrong
+register.
+
+The fix is to forward the value unchanged when both sides are vectors. This
+is sound for a specific reason: every vector IR type is 128 bits wide and they
+all share one register class, so a lane type difference is a pure
+reinterpretation of bits that are already in the right place -- and, by the
+rule in `SIMD_STATUS.md`, no backend routine derives instruction selection
+from an *operand's* type. A vector against a scalar has no such guarantee and
+falls back to a reload.
+
+The alternative -- refusing to forward and reloading -- was measured and
+rejected: it puts `lj_mem_newgco` back inside every compare/select and
+movemask loop, because the box can no longer be sunk. The mask pipeline
+depends on this forward.
+
 ## D11. x86-64-v3 target, but runtime feature detection
 
 The supported target was raised to **x86-64-v3**: SSE4.2, AVX, AVX2, BMI2.

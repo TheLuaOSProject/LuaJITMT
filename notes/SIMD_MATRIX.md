@@ -211,4 +211,7 @@ messages print raw bytes rather than lane values.
 | passing a 128-bit vector to a C function | supported (SysV: SSE class, one XMM register; Windows x64: by reference, per the platform ABI) |
 | returning a 128-bit vector from a C function | supported |
 | vectors in structs passed by value | follows the existing LuaJIT struct classification |
-| vector arguments/returns in FFI **callbacks** | **rejected with a clear error.** LuaJIT's callback trampoline has never classified vector arguments or results and this work does not add that; silently passing the wrong register would be far worse. Pass a pointer to a vector instead, which works and is covered by `test_ffi_abi.lua`. |
+| 8 and 16 byte vector arguments in FFI **callbacks** | supported on x86-64 SysV: classified like an FP argument but consuming one whole XMM register, spilling to a 16-byte-aligned stack slot once xmm0-xmm7 are used |
+| 8 and 16 byte vector **results** from FFI callbacks | supported on x86-64 SysV, returned in xmm0 |
+| vectors wider than one register in callbacks (e.g. 32 byte) | rejected at `ffi.cast` time with the ordinary "cannot convert" error |
+| vector arguments/returns in callbacks on Windows x64, x86 and non-x86 | rejected at `ffi.cast` time. `CCALL_VECTOR_REG` is 0 there, so `callback_isvec()` is constant-false and the check degrades to the pre-existing behaviour. Pass a pointer to a vector instead. |

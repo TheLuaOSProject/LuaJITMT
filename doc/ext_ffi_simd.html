@@ -265,9 +265,13 @@ keeps running interpreted with identical results.
 operand VEX form. FMA is deliberately not used, because fusing a multiply and
 an add rounds once instead of twice and would disagree with the
 interpreter.</li>
-<li>Vectors can be passed to and returned from C functions by value. Passing
-a vector by value to or from an FFI <em>callback</em> is rejected with an
-error; pass a pointer instead.</li>
+<li>Vectors can be passed to and returned from C functions by value. On
+x86-64 SysV this also works for FFI <em>callbacks</em>: a Lua function cast to
+a C function pointer may take and return 8 or 16 byte vectors by value, in
+registers or on the stack, mixed freely with ordinary arguments. On Windows
+x64, on x86, and for vectors wider than one register, such a cast is still
+rejected with a &ldquo;cannot convert&rdquo; error &mdash; pass a pointer
+instead.</li>
 </ul>
 <br class="flush">
 </div>

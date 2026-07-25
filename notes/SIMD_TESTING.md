@@ -26,7 +26,7 @@ status is non-zero if anything failed.
 | `test_lib.lua` | every `ffi.simd` function, randomized against the scalar reference, plus negative tests |
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks that the IR dump itself renders vector types and 128-bit constants in all three colour modes |
-| `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists, memory round trips and callbacks against a small C helper library that it compiles at test time |
+| `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists and memory round trips against a small C helper library compiled at test time; callbacks taking and returning vectors by value for every lane kind, ten vector arguments (registers plus stack), 16-byte stack alignment behind eight register arguments, mixed integer/FP/vector argument lists, and the rejection of vectors too wide for a register |
 | `bench.lua` | microbenchmarks: saxpy, dot product, horizontal max and clamp, each against equivalent scalar code |
 | `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |
 
@@ -45,6 +45,34 @@ compare vectors by their printed lane values.
 **Determinism.** All randomness comes from `M.rng(seed)`, a xorshift32. The
 seed is printed in every failure message together with the operand values, so
 any failure can be replayed exactly. Override with `SIMD_SEED`.
+
+**The seed must determine the whole run.** `test_arith.lua` used to iterate
+its operator table with `pairs()`. `LUAJIT_SECURITY_STRHASH` seeds the string
+hash from the PRNG, so that order differs on *every process*, and with it the
+order the operators were recorded in and the shape of the resulting traces.
+The operand values were still seed-derived, so the suite looked reproducible
+while it was not: a backend bug that only appeared in one ordering could not
+be replayed from its seed. The permutation now comes from a separate seeded
+RNG stream. Do not introduce `pairs()` over a string-keyed table anywhere that
+affects what gets executed or in which order.
+
+**Some bugs need repetition, not a seed.** The `emit_loadk128` failure (see
+`SIMD_STATUS.md`) showed up in roughly 1 run in 300 and never twice at the
+same seed. Running the same command in a loop and keeping the output of the
+failing runs is the tool for that:
+
+```
+for i in $(seq 1 2000); do
+  SIMD_SEED=$(( (i % 8) + 1 )) ./src/luajit test/simd/run.lua --one jit test_lib \
+    > /tmp/h.txt 2>&1 || { echo "HIT $i"; cat /tmp/h.txt; }
+done
+```
+
+Do not pipe the runner through `tail -1` while doing this: the failure detail
+is printed by the child process before the final line, and `tail` throws it
+away. Once it reproduces, put a `fprintf` at the failure point, rebuild, and
+re-run the same loop under `gdb --batch -ex "break <file>:<line>" -ex run
+-ex bt` to get the creator of the bad IR rather than only its consumer.
 
 **Run more than one seed.** A wrong guard polarity in `simd.allof`/`anyof`
 only showed up on some seeds, because it needed a mask whose answer differed
@@ -90,6 +118,13 @@ It covers numbers, strings, tables, metatables, closures, coroutines, sorting,
 `pcall`, the bit library, FFI structs, arrays, 64-bit integers, casts,
 callbacks, ctype reprs and two hot loops. It is currently byte-for-byte
 identical.
+
+The callback coverage deliberately includes a **nine double** callback (eight
+in FPRs, the ninth on the stack) and a mixed float/int/double one. Widening
+the callback FPR save area for vectors changes the offsets the trampoline and
+`lj_ccallback.c` agree on, and an ordinary integer-argument callback would not
+notice. Mis-storing one XMM register into the neighbouring slot changes this
+file's output, which is how that edit is guarded.
 
 ## Build configurations exercised
 

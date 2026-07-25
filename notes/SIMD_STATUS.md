@@ -32,6 +32,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M11 | ASan and UBSan clean; integer-promotion UB removed from the reference implementation | done |
 | M12 | Variable shift counts on 8-bit lanes and on 64-bit `sar` compile to packed code | done |
 | M13 | IR consistency check and `jit.dump` handle vector types and 128-bit constants | done |
+| M14 | Vector arguments and results by value in FFI callbacks (x86-64 SysV) | done |
+| M15 | Vector store-to-load forwarding no longer synthesises a CONV between vector types | done |
 
 ## Commands that pass
 
@@ -113,6 +115,11 @@ src/lj_snap.c                    16 byte restore, sunk vector boxes
 src/lj_crecord.c                 crec_vec2irt(), crec_arith_vec(), boxing
 src/lj_gc.c src/lj_opt_sink.c src/lj_opt_split.c
                                  skip the two payload slots of a KVEC
+src/lj_opt_mem.c                 vector alias analysis; vectors forward as a
+                                 reinterpretation instead of a CONV
+src/lj_ccallback.c               vector args/results in callbacks (SysV)
+src/lj_ccall.h  src/lj_ctype.h   16 byte FPRCBArg, tied by a static assert
+src/vm_x64.dasc                  save/restore full XMM in the callback trampoline
 src/lj_traceerr.h                LJ_TRERR_NYIVEC
 src/jit/dump.lua                 vector IR type names
 src/lj_ctype.h  src/lj_ctype.c   lj_ctype_vecinfo(), VecKind, CTVecInfo
@@ -190,6 +197,22 @@ notes/*                          design/status/matrix/testing notes (new)
   bitcast results used to be stored with the *source* lane type, so the very
   next load of that cdata could not forward and the allocation could not be
   sunk.
+* The consequence of the rule above is that an `XSTORE`'s type is routinely
+  **not** the type of the value it stores. `lj_opt_fwd_xload()` reacts to that
+  mismatch by synthesising an `IR_CONV`, and there is no CONV between two
+  vector types: `asm_conv()` takes the integer path and allocates a **GPR**
+  for a value that lives in an XMM register. Vectors now forward as a pure
+  reinterpretation instead (`SIMD_DESIGN.md` D15). Symptom in an assert build
+  was `emit_loadk128: vector constant needs an FP register`, appearing in
+  roughly 1 run in 300 of `test_lib` and never twice with the same seed --
+  see the testing notes on why the seed did not pin it down.
+* `SIMD_SEED` must actually determine the whole run. `test_arith.lua` iterated
+  its operator table with `pairs()`, and with `LUAJIT_SECURITY_STRHASH` the
+  string hash seed differs on every process, so the order the operators were
+  recorded in -- and therefore the shape of the traces -- changed run to run.
+  A rare backend bug found that way could not be replayed. The permutation is
+  now derived from a separate seeded RNG stream, which keeps the coverage and
+  restores reproducibility.
 
 ## Trap: LuaJIT only has 255 fast function IDs
 
@@ -225,10 +248,11 @@ wrong answer: where the JIT has no lowering the trace aborts with
    time. A runtime permutation would need a `PSHUFB` control mask assembled
    from N separate variable indices, which costs more than it saves.
    `insert` *does* support a variable index.
-3. **Vector arguments and returns in FFI callbacks** are rejected with a clear
-   error rather than guessed at; pass a pointer instead. LuaJIT's callback
-   trampoline never classified vector types. Vector arguments and returns in
-   ordinary FFI *calls* are supported.
+3. **Vectors by value in FFI callbacks are x86-64 SysV only.** Supported for 8
+   and 16 byte vectors there (see `SIMD_DESIGN.md` D14). On Windows x64, x86
+   and non-x86 targets, and for any vector wider than one register, `ffi.cast`
+   still rejects the callback with the ordinary "cannot convert" error; pass a
+   pointer instead.
 4. **No FMA.** `a*b+c` stays a multiply and an add. FMA rounds once where the
    interpreter rounds twice, and interpreter/JIT agreement is worth more here
    than the throughput.
@@ -241,10 +265,10 @@ wrong answer: where the JIT has no lowering the trace aborts with
 machine:
 
 ```
-saxpy (float)              scalar     5.4 ms   vector     1.5 ms    3.66x
-dot product (float)        scalar     5.0 ms   vector     1.2 ms    3.98x
-horizontal max (int32)     scalar     3.7 ms   vector     3.7 ms    0.98x
-clamp (float)              scalar    24.5 ms   vector     1.6 ms   15.46x
+saxpy (float)              scalar     6.8 ms   vector     1.8 ms    3.72x
+dot product (float)        scalar     6.1 ms   vector     1.5 ms    3.99x
+horizontal max (int32)     scalar     4.7 ms   vector     4.0 ms    1.16x
+clamp (float)              scalar    29.1 ms   vector     1.9 ms   15.07x
 ```
 
 saxpy and the dot product reach ~4x, which is the ceiling for 4 lanes. Clamp
