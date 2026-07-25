@@ -16,8 +16,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 |---|------|-------|
 | M1 | Vector ctype classification, interpreter operator semantics, `ffi.simd` module, test harness | done |
 | M2 | Vector IR types + constants, XLOAD/XSTORE/CNEW boxing, ExitState widening, register allocation, x64 lowering of arithmetic, recording of `+ - * /` and unary minus | done |
-| M3 | Recording of `ffi.simd` (bitwise, compare, select, shifts, min/max, abs/sqrt/round, shuffles, converts, reductions) and `==` on trace | pending |
-| M4 | Snapshot/sink/side-exit coverage, spill and register-pressure tests, codegen inspection tests | pending |
+| M3 | Recording of `ffi.simd` (bitwise, compare, select, shifts, min/max, abs/sqrt/round, reductions, bitcast/convert), vector construction and memory round trips on trace, `==` on trace, codegen inspection tests | done |
+| M4 | `ffi.simd` shuffle/insert recording, FFI call/callback ABI tests | pending |
 | M5 | FFI call/callback ABI audit and tests, benchmarks, docs | pending |
 
 ## Commands that pass
@@ -93,12 +93,24 @@ test/simd/*                      test suite (new)
 notes/*                          design/status/matrix/testing notes (new)
 ```
 
+## Traps found the hard way (do not regress these)
+
+* The fold engine key packs the IR opcode into **7 bits**
+  (`key = fins->o << 17` in `lj_opt_fold()`), so any opcode >= 128 spills into
+  the neighbouring field and matches a rule that belongs to a completely
+  different instruction. The vector opcodes are all above 128 and are now
+  excluded from the lookup, guarded by a static assert on `IR_VSPLAT <= 128`.
+* `ra_left()` special-cases constants by opcode and fell through to
+  `emit_loadi()` for `IR_KVEC`, i.e. it emitted `mov r32, imm32` with an XMM
+  register number. Any new constant kind must be added there as well as to
+  `ra_rematk()`.
+* Long emitted sequences must call `checkmclim()` in the middle: the mcode
+  red zone is only 64 bytes.
+
 ## Next concrete steps
 
-1. Record `==` on vectors (VCMPEQ + VMOVMSK + a guard).
-2. Add recorders for the `ffi.simd` functions and the matching IR lowerings:
-   bitwise, min/max, compares, select, shifts, abs/sqrt/round, saturating
-   arithmetic, movemask, reductions, shuffles, insert, bitcast/convert.
-3. `test_codegen.lua`: assert packed instructions and no scalarisation.
-4. `test_ffi_abi.lua`: vector arguments, returns and callbacks.
-5. Microbenchmarks.
+1. Record `simd.insert`, `simd.shuffle` and `simd.shuffle2` (PSHUFD for 32/64
+   bit lanes, PSHUFB with a constant mask otherwise).
+2. `test_ffi_abi.lua`: vector arguments, returns and callbacks against a small
+   C helper library.
+3. Microbenchmarks and user documentation.

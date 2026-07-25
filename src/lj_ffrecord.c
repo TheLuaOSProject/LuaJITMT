@@ -25,6 +25,7 @@
 #include "lj_record.h"
 #include "lj_ffrecord.h"
 #include "lj_crecord.h"
+#include "lj_simd.h"
 #include "lj_dispatch.h"
 #include "lj_vm.h"
 #include "lj_strscan.h"

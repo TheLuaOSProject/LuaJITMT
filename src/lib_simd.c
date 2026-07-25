@@ -197,135 +197,135 @@ static int simd_pushelem(lua_State *L, CTState *cts, const CTVecInfo *vi,
 
 /* -- Bitwise operations -------------------------------------------------- */
 
-LJLIB_CF(ffi_simd_band)
+LJLIB_CF(ffi_simd_band)		LJLIB_REC(simd_binop VOP_AND)
 {
   return simd_binop(L, VOP_AND);
 }
 
-LJLIB_CF(ffi_simd_bor)
+LJLIB_CF(ffi_simd_bor)		LJLIB_REC(simd_binop VOP_OR)
 {
   return simd_binop(L, VOP_OR);
 }
 
-LJLIB_CF(ffi_simd_bxor)
+LJLIB_CF(ffi_simd_bxor)		LJLIB_REC(simd_binop VOP_XOR)
 {
   return simd_binop(L, VOP_XOR);
 }
 
-LJLIB_CF(ffi_simd_bandn)
+LJLIB_CF(ffi_simd_bandn)		LJLIB_REC(simd_binop VOP_ANDN)
 {
   return simd_binop(L, VOP_ANDN);
 }
 
-LJLIB_CF(ffi_simd_bnot)
+LJLIB_CF(ffi_simd_bnot)		LJLIB_REC(simd_unop VUN_NOT)
 {
   return simd_unop(L, VUN_NOT);
 }
 
 /* -- Min/max, saturating arithmetic and math ----------------------------- */
 
-LJLIB_CF(ffi_simd_min)
+LJLIB_CF(ffi_simd_min)		LJLIB_REC(simd_binop VOP_MIN)
 {
   return simd_binop(L, VOP_MIN);
 }
 
-LJLIB_CF(ffi_simd_max)
+LJLIB_CF(ffi_simd_max)		LJLIB_REC(simd_binop VOP_MAX)
 {
   return simd_binop(L, VOP_MAX);
 }
 
-LJLIB_CF(ffi_simd_adds)
+LJLIB_CF(ffi_simd_adds)		LJLIB_REC(simd_binop VOP_ADDS)
 {
   return simd_binop(L, VOP_ADDS);
 }
 
-LJLIB_CF(ffi_simd_subs)
+LJLIB_CF(ffi_simd_subs)		LJLIB_REC(simd_binop VOP_SUBS)
 {
   return simd_binop(L, VOP_SUBS);
 }
 
-LJLIB_CF(ffi_simd_abs)
+LJLIB_CF(ffi_simd_abs)		LJLIB_REC(simd_unop VUN_ABS)
 {
   return simd_unop(L, VUN_ABS);
 }
 
-LJLIB_CF(ffi_simd_sqrt)
+LJLIB_CF(ffi_simd_sqrt)		LJLIB_REC(simd_unop VUN_SQRT)
 {
   return simd_unop(L, VUN_SQRT);
 }
 
-LJLIB_CF(ffi_simd_floor)
+LJLIB_CF(ffi_simd_floor)		LJLIB_REC(simd_round VRND_FLOOR)
 {
   return simd_roundop(L, VRND_FLOOR);
 }
 
-LJLIB_CF(ffi_simd_ceil)
+LJLIB_CF(ffi_simd_ceil)		LJLIB_REC(simd_round VRND_CEIL)
 {
   return simd_roundop(L, VRND_CEIL);
 }
 
-LJLIB_CF(ffi_simd_trunc)
+LJLIB_CF(ffi_simd_trunc)		LJLIB_REC(simd_round VRND_TRUNC)
 {
   return simd_roundop(L, VRND_TRUNC);
 }
 
-LJLIB_CF(ffi_simd_round)
+LJLIB_CF(ffi_simd_round)		LJLIB_REC(simd_round VRND_NEAREST)
 {
   return simd_roundop(L, VRND_NEAREST);
 }
 
 /* -- Shifts -------------------------------------------------------------- */
 
-LJLIB_CF(ffi_simd_shl)
+LJLIB_CF(ffi_simd_shl)		LJLIB_REC(simd_shift VSH_SHL)
 {
   return simd_shiftop(L, VSH_SHL);
 }
 
-LJLIB_CF(ffi_simd_shr)
+LJLIB_CF(ffi_simd_shr)		LJLIB_REC(simd_shift VSH_SHR)
 {
   return simd_shiftop(L, VSH_SHR);
 }
 
-LJLIB_CF(ffi_simd_sar)
+LJLIB_CF(ffi_simd_sar)		LJLIB_REC(simd_shift VSH_SAR)
 {
   return simd_shiftop(L, VSH_SAR);
 }
 
 /* -- Lane-wise comparisons ----------------------------------------------- */
 
-LJLIB_CF(ffi_simd_eq)
+LJLIB_CF(ffi_simd_eq)		LJLIB_REC(simd_cmp VCMP_EQ)
 {
   return simd_cmpop(L, VCMP_EQ);
 }
 
-LJLIB_CF(ffi_simd_ne)
+LJLIB_CF(ffi_simd_ne)		LJLIB_REC(simd_cmp VCMP_NE)
 {
   return simd_cmpop(L, VCMP_NE);
 }
 
-LJLIB_CF(ffi_simd_lt)
+LJLIB_CF(ffi_simd_lt)		LJLIB_REC(simd_cmp VCMP_LT)
 {
   return simd_cmpop(L, VCMP_LT);
 }
 
-LJLIB_CF(ffi_simd_le)
+LJLIB_CF(ffi_simd_le)		LJLIB_REC(simd_cmp VCMP_LE)
 {
   return simd_cmpop(L, VCMP_LE);
 }
 
-LJLIB_CF(ffi_simd_gt)
+LJLIB_CF(ffi_simd_gt)		LJLIB_REC(simd_cmp VCMP_GT)
 {
   return simd_cmpop(L, VCMP_GT);
 }
 
-LJLIB_CF(ffi_simd_ge)
+LJLIB_CF(ffi_simd_ge)		LJLIB_REC(simd_cmp VCMP_GE)
 {
   return simd_cmpop(L, VCMP_GE);
 }
 
 /* -- Masks --------------------------------------------------------------- */
 
-LJLIB_CF(ffi_simd_select)
+LJLIB_CF(ffi_simd_select)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTVecInfo mvi, vi;
@@ -344,7 +344,7 @@ LJLIB_CF(ffi_simd_select)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_movemask)
+LJLIB_CF(ffi_simd_movemask)	LJLIB_REC(simd_movemask)
 {
   CTState *cts = ctype_cts(L);
   CTVecInfo vi;
@@ -353,7 +353,7 @@ LJLIB_CF(ffi_simd_movemask)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_allof)
+LJLIB_CF(ffi_simd_allof)		LJLIB_REC(simd_maskcmp 0)
 {
   CTState *cts = ctype_cts(L);
   CTVecInfo vi;
@@ -363,7 +363,7 @@ LJLIB_CF(ffi_simd_allof)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_anyof)
+LJLIB_CF(ffi_simd_anyof)		LJLIB_REC(simd_maskcmp 1)
 {
   CTState *cts = ctype_cts(L);
   CTVecInfo vi;
@@ -385,17 +385,17 @@ static int simd_reduceop(lua_State *L, uint32_t op)
   return simd_pushelem(L, cts, &vi, rbuf);
 }
 
-LJLIB_CF(ffi_simd_hsum)
+LJLIB_CF(ffi_simd_hsum)		LJLIB_REC(simd_reduce VRD_SUM)
 {
   return simd_reduceop(L, VRD_SUM);
 }
 
-LJLIB_CF(ffi_simd_hmin)
+LJLIB_CF(ffi_simd_hmin)		LJLIB_REC(simd_reduce VRD_MIN)
 {
   return simd_reduceop(L, VRD_MIN);
 }
 
-LJLIB_CF(ffi_simd_hmax)
+LJLIB_CF(ffi_simd_hmax)		LJLIB_REC(simd_reduce VRD_MAX)
 {
   return simd_reduceop(L, VRD_MAX);
 }
@@ -468,7 +468,7 @@ LJLIB_CF(ffi_simd_shuffle2)
 
 /* -- Conversions --------------------------------------------------------- */
 
-LJLIB_CF(ffi_simd_bitcast)
+LJLIB_CF(ffi_simd_bitcast)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTypeID did = simd_checkctypeid(L, cts, 1);
@@ -489,7 +489,7 @@ LJLIB_CF(ffi_simd_bitcast)
   return 1;
 }
 
-LJLIB_CF(ffi_simd_convert)
+LJLIB_CF(ffi_simd_convert)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTypeID did = simd_checkctypeid(L, cts, 1);

@@ -445,6 +445,7 @@ typedef enum {
   XO_PMAXSD =	XO_0f38(3d),		/* SSE4.1 */
   XO_PMAXUW =	XO_0f38(3e),		/* SSE4.1 */
   XO_PMAXUD =	XO_0f38(3f),		/* SSE4.1 */
+  XO_PCMPEQQ =	XO_0f38(29),		/* SSE4.1 */
   XO_PCMPGTQ =	XO_0f38(37),		/* SSE4.2 */
   XO_ROUNDPS =	XO_0f3a(08),		/* SSE4.1 */
   XO_ROUNDPD =	XO_0f3a(09),		/* SSE4.1 */

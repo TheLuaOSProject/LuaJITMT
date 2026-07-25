@@ -262,4 +262,164 @@ test("garbage collection during vector loops", function()
   end, 400)
 end)
 
+-- ffi.simd operations inside hot loops ---------------------------------------
+
+-- Run a unary/binary ffi.simd operation in a loop and diff interp vs JIT.
+local function diffop(ti, name, fn, ...)
+  diff(ti.name .. " " .. name, fn, ...)
+end
+
+test("ffi.simd binary ops on trace", function()
+  local bin = {"band", "bor", "bxor", "bandn", "min", "max"}
+  for _, ti in ipairs(T.T) do
+    local rnd = T.rng(SEED + 23 * ti.bits)
+    local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
+    local ct = ti.ct
+    for _, op in ipairs(bin) do
+      local f = simd[op]
+      diffop(ti, op, function(n)
+	local acc = ct(0)
+	for _ = 1, n do acc = f(f(acc, a), b) end
+	return acc
+      end, 300)
+    end
+    if ti.bits <= 16 and not ti.fp then
+      for _, op in ipairs({"adds", "subs"}) do
+	local f = simd[op]
+	diffop(ti, op, function(n)
+	  local acc = ct(0)
+	  for _ = 1, n do acc = f(f(acc, a), b) end
+	  return acc
+	end, 300)
+      end
+    end
+  end
+end)
+
+test("ffi.simd unary ops on trace", function()
+  for _, ti in ipairs(T.T) do
+    local rnd = T.rng(SEED + 29 * ti.bits)
+    local a = T.rand(ti, rnd)
+    local ct = ti.ct
+    diffop(ti, "bnot", function(n)
+      local acc = ct(0)
+      for _ = 1, n do acc = simd.bnot(simd.bxor(acc, a)) end
+      return acc
+    end, 300)
+    diffop(ti, "abs", function(n)
+      local acc = ct(0)
+      for _ = 1, n do acc = simd.abs(simd.bxor(acc, a)) end
+      return acc
+    end, 300)
+    if ti.fp then
+      diffop(ti, "sqrt", function(n)
+	local acc = ct(4)
+	for _ = 1, n do acc = simd.sqrt(acc + ct(1)) end
+	return acc
+      end, 300)
+      for _, op in ipairs({"floor", "ceil", "trunc", "round"}) do
+	local f = simd[op]
+	diffop(ti, op, function(n)
+	  local acc = ct(0)
+	  for i = 1, n do acc = f(acc + ct(1.5)) end
+	  return acc
+	end, 300)
+      end
+    end
+  end
+end)
+
+test("ffi.simd comparisons and masks on trace", function()
+  local cmps = {"eq", "ne", "lt", "le", "gt", "ge"}
+  for _, ti in ipairs(T.T) do
+    local rnd = T.rng(SEED + 31 * ti.bits)
+    local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
+    local ct = ti.ct
+    for _, op in ipairs(cmps) do
+      local f = simd[op]
+      diffop(ti, op, function(n)
+	local acc, mm = 0, nil
+	for _ = 1, n do
+	  mm = f(a, b)
+	  acc = acc + simd.movemask(mm)
+	  if simd.anyof(mm) then acc = acc + 1 end
+	  if simd.allof(mm) then acc = acc + 100 end
+	end
+	return acc, mm
+      end, 300)
+    end
+    diffop(ti, "select", function(n)
+      local acc = ct(0)
+      for _ = 1, n do acc = simd.select(simd.lt(a, b), acc + a, b) end
+      return acc
+    end, 300)
+  end
+end)
+
+test("ffi.simd shifts on trace", function()
+  for _, ti in ipairs(T.T) do
+    if not ti.fp then
+      local rnd = T.rng(SEED + 37 * ti.bits)
+      local a = T.rand(ti, rnd)
+      local ct = ti.ct
+      for _, op in ipairs({"shl", "shr", "sar"}) do
+	local f = simd[op]
+	for _, k in ipairs({0, 1, ti.bits-1, ti.bits, ti.bits+3}) do
+	  diffop(ti, op .. " " .. k, function(n)
+	    local acc = ct(0)
+	    for _ = 1, n do acc = f(simd.bxor(acc, a), k) end
+	    return acc
+	  end, 200)
+	end
+	-- Variable count.
+	diffop(ti, op .. " var", function(n)
+	  local acc = ct(0)
+	  for i = 1, n do acc = f(simd.bxor(acc, a), i % (ti.bits + 2)) end
+	  return acc
+	end, 200)
+      end
+    end
+  end
+end)
+
+test("ffi.simd reductions on trace", function()
+  for _, ti in ipairs(T.T) do
+    local rnd = T.rng(SEED + 41 * ti.bits)
+    local a = T.rand(ti, rnd)
+    local ct = ti.ct
+    for _, op in ipairs({"hsum", "hmin", "hmax"}) do
+      local f = simd[op]
+      diffop(ti, op, function(n)
+	local last
+	for i = 1, n do last = f(a + ct(i % 3)) end
+	return tostring(last)
+      end, 200)
+    end
+  end
+end)
+
+test("ffi.simd bitcast and convert on trace", function()
+  local f4, i4, u4 = T.T.float4, T.T.i32x4, T.T.u32x4
+  diff("bitcast", function(n)
+    local acc = i4.ct(0)
+    for i = 1, n do acc = acc + simd.bitcast(i4.ct, f4.ct(i % 7)) end
+    return acc
+  end, 300)
+  diff("convert i32->f32", function(n)
+    local acc = f4.ct(0)
+    for i = 1, n do acc = acc + simd.convert(f4.ct, i4.ct(i % 11)) end
+    return acc
+  end, 300)
+  diff("convert f32->i32", function(n)
+    local acc = i4.ct(0)
+    for i = 1, n do acc = acc + simd.convert(i4.ct, f4.ct((i % 11) + 0.75)) end
+    return acc
+  end, 300)
+  diff("convert i32->u32", function(n)
+    local acc = u4.ct(0)
+    for i = 1, n do acc = acc + simd.convert(u4.ct, i4.ct(-i)) end
+    return acc
+  end, 300)
+end)
+
 return T

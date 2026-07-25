@@ -411,6 +411,11 @@ static int crec_isnonzero(CType *s, void *p)
   }
 }
 
+static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
+			   const CTVecInfo *vi, TRef sp, CType *sct,
+			   cTValue *sval);
+static TRef crec_vec_box(jit_State *J, TRef val, IRType vt, CTypeID id);
+
 static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
 		       void *svisnz)
 {
@@ -539,9 +544,30 @@ static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
 
   /* Destination is a vector. */
   case CCX(V, I):
-  case CCX(V, F):
+  case CCX(V, F): {
+    /* Constructing a vector from one scalar splats it across all lanes. */
+    CTState *cts2 = ctype_ctsG(J2G(J));
+    CTVecInfo vi;
+    IRType vt;
+    if (dp == 0 || !lj_ctype_vecinfo(cts2, d, &vi)) goto err_nyi;
+    vt = crec_vec2irt(cts2, d);
+    if (vt == IRT_NIL) goto err_nyi;
+    sp = crec_vec_splat(J, cts2, vt, &vi, sp, s, NULL);
+    emitir(IRT(IR_XSTORE, vt), dp, sp);
+    break;
+    }
+  case CCX(V, V): {
+    /* Same-sized vectors are copied bit for bit, like lj_cconv_ct_ct(). */
+    CTState *cts2 = ctype_ctsG(J2G(J));
+    IRType vt;
+    if (dp == 0 || dsize != ssize) goto err_nyi;
+    vt = crec_vec2irt(cts2, d);
+    if (vt == IRT_NIL) vt = crec_vec2irt(cts2, s);
+    if (vt == IRT_NIL) goto err_nyi;
+    emitir(IRT(IR_XSTORE, vt), dp, emitir(IRT(IR_XLOAD, vt), sp, 0));
+    break;
+    }
   case CCX(V, C):
-  case CCX(V, V):
     goto err_nyi;
 
   /* Destination is a pointer. */
@@ -622,8 +648,11 @@ static TRef crec_tv_ct(jit_State *J, CType *s, CTypeID sid, TRef sp)
     ptr = emitir(IRT(IR_ADD, IRT_PTR), dp, lj_ir_kintp(J, sizeof(GCcdata)+esz));
     emitir(IRT(IR_XSTORE, t), ptr, tr2);
     return dp;
+  } else if (ctype_isvector(sinfo)) {  /* Box a vector value. */
+    IRType vt = crec_vec2irt(cts, s);
+    if (vt == IRT_NIL) goto err_nyi;
+    return crec_vec_box(J, emitir(IRT(IR_XLOAD, vt), sp, 0), vt, sid);
   } else {
-    /* NYI: copyval of vectors. */
   err_nyi:
     lj_trace_err(J, LJ_TRERR_NYICONV);
   }
@@ -1407,12 +1436,24 @@ static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
 			   cTValue *sval)
 {
   CType *ect = ctype_get(cts, vi->eid);
-  if (sval && !tviscdata(sval) && tref_isk(sp)) {
-    uint8_t ebuf[8], vbuf[LJ_VEC_MAXSIZE];
+  if (tref_isk(sp)) {
     /* Constant: convert and splat with the very same code the VM uses. */
-    lj_cconv_ct_tv(cts, ect, ebuf, (TValue *)sval, 0);
-    lj_simd_splat(vbuf, ebuf, vi);
-    return lj_ir_kvec(J, vt, vbuf);
+    TValue tv;
+    cTValue *kv = NULL;
+    IRIns *irk = IR(tref_ref(sp));
+    if (sval && !tviscdata(sval)) {
+      kv = sval;
+    } else if (irk->o == IR_KINT) {
+      setintV(&tv, irk->i); kv = &tv;
+    } else if (irk->o == IR_KNUM) {
+      setnumV(&tv, ir_knum(irk)->n); kv = &tv;
+    }
+    if (kv) {
+      uint8_t ebuf[8], vbuf[LJ_VEC_MAXSIZE];
+      lj_cconv_ct_tv(cts, ect, ebuf, (TValue *)kv, 0);
+      lj_simd_splat(vbuf, ebuf, vi);
+      return lj_ir_kvec(J, vt, vbuf);
+    }
   }
   /* Otherwise convert with the standard FFI rules and broadcast at runtime. */
   sp = crec_ct_ct(J, ect, sct, 0, sp, NULL);
@@ -1461,6 +1502,27 @@ static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
     if (!veck_isfp(vi.kind)) return 0;
     op = IR_VDIV;
     break;
+  case MM_eq: {
+    /* Whole-vector equality: compare, gather the lane sign bits, then guard.
+    ** Integer lanes compare byte-wise, which is the same answer and works on
+    ** every lane width; FP lanes need the real per-lane comparison so that a
+    ** NaN lane is never equal.
+    */
+    TRef mask, mm2;
+    uint32_t all;
+    if (veck_isfp(vi.kind)) {
+      mask = emitir(IRT(IR_VCMPEQ, vt), tra, trb);
+      all = (1u << vi.lanes) - 1;
+    } else {
+      mask = emitir(IRT(IR_VCMPEQ, IRT_V16I8), tra, trb);
+      all = 0xffff;
+    }
+    mm2 = emitir(IRTI(IR_VMOVMSK), mask, 0);
+    /* Assume true comparison. Fixup and emit the pending guard later. */
+    lj_ir_set(J, IRTGI(IR_EQ), mm2, lj_ir_kint(J, (int32_t)all));
+    J->postproc = LJ_POST_FIXGUARD;
+    return TREF_TRUE;
+    }
   case MM_unm:
     /* Negation: 0 - v for integers, flip the sign bit for floats. */
     if (veck_isfp(vi.kind)) {
@@ -1483,6 +1545,443 @@ static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
 box:
   id = ctype_typeid(cts, vct);
   return crec_vec_box(J, tra, vt, id);
+}
+
+/* -- ffi.simd recording -------------------------------------------------- */
+
+/* Splat one byte pattern across all lanes and intern it as a constant. */
+static TRef crec_vec_kmask(jit_State *J, IRType vt, const CTVecInfo *vi,
+			   const uint8_t *elem)
+{
+  uint8_t vbuf[LJ_VEC_MAXSIZE];
+  lj_simd_splat(vbuf, elem, vi);
+  return lj_ir_kvec(J, vt, vbuf);
+}
+
+/* All-ones constant, used to invert a mask. */
+static TRef crec_vec_kones(jit_State *J, IRType vt)
+{
+  uint8_t vbuf[LJ_VEC_MAXSIZE];
+  memset(vbuf, 0xff, sizeof(vbuf));
+  return lj_ir_kvec(J, vt, vbuf);
+}
+
+/* Load the vector value of argument n, with a guard on its ctype. */
+static TRef crec_simd_arg(jit_State *J, RecordFFData *rd, int n,
+			  CTVecInfo *vi, CTypeID *pid, IRType *pvt)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  TRef tr = J->base[n];
+  CType *ct;
+  CTypeID id;
+  IRType vt;
+  if (!tr || !tref_iscdata(tr)) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  id = argv2cdata(J, tr, &rd->argv[n])->ctypeid;
+  ct = ctype_raw(cts, id);
+  if (!lj_ctype_vecinfo(cts, ct, vi)) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  vt = crec_vec2irt(cts, ct);
+  if (vt == IRT_NIL) lj_trace_err(J, LJ_TRERR_NYIVEC);
+  if (pid) *pid = id;
+  if (pvt) *pvt = vt;
+  tr = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCcdata)));
+  return emitir(IRT(IR_XLOAD, vt), tr, 0);
+}
+
+/*
+** Second operand of a binary ffi.simd call: a matching vector, or a Lua
+** number that is converted and splatted. A scalar cdata operand is left to
+** the interpreter.
+*/
+static TRef crec_simd_arg2(jit_State *J, RecordFFData *rd, int n,
+			   const CTVecInfo *vi, CTypeID id, IRType vt)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  TRef tr = J->base[n];
+  if (!tr) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  if (tref_iscdata(tr)) {
+    CTypeID id2 = argv2cdata(J, tr, &rd->argv[n])->ctypeid;
+    CType *ct = ctype_raw(cts, id2);
+    CTVecInfo vi2;
+    if (!lj_ctype_vecinfo(cts, ct, &vi2) || ctype_raw(cts, id) != ct)
+      lj_trace_err(J, LJ_TRERR_NYIVEC);
+    tr = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCcdata)));
+    return emitir(IRT(IR_XLOAD, vt), tr, 0);
+  } else if (tref_isnumber(tr)) {
+    CType *sct = ctype_get(cts, tref_isinteger(tr) ? CTID_INT32 : CTID_DOUBLE);
+    return crec_vec_splat(J, cts, vt, vi, tr, sct, &rd->argv[n]);
+  }
+  lj_trace_err(J, LJ_TRERR_BADTYPE);
+  return 0;
+}
+
+/* Abort unless the backend has a packed lowering for this combination. */
+static void crec_simd_need(jit_State *J, int ok)
+{
+  if (!ok) lj_trace_err(J, LJ_TRERR_NYIVEC);
+}
+
+void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
+  int uns = veck_isunsigned(vi.kind);
+  int sse41 = (J->flags & JIT_F_SSE4_1) != 0;
+  IROp op;
+  switch (rd->data) {
+  case VOP_AND: op = IR_VAND; break;
+  case VOP_OR: op = IR_VOR; break;
+  case VOP_XOR: op = IR_VXOR; break;
+  case VOP_ANDN: op = IR_VANDN; break;
+  case VOP_MIN: case VOP_MAX:
+    if (veck_isfp(vi.kind)) {
+      op = rd->data == VOP_MIN ? IR_VMIN : IR_VMAX;
+    } else {
+      crec_simd_need(J, vi.esize != 8);  /* No 64 bit lane min/max before AVX-512. */
+      crec_simd_need(J, vi.esize == 2 ? (uns ? sse41 : 1) :
+			vi.esize == 1 ? (uns ? 1 : sse41) : sse41);
+      op = rd->data == VOP_MIN ? (uns ? IR_VMINU : IR_VMIN)
+			       : (uns ? IR_VMAXU : IR_VMAX);
+    }
+    break;
+  case VOP_ADDS: case VOP_SUBS:
+    crec_simd_need(J, vi.esize <= 2 && !veck_isfp(vi.kind));
+    op = rd->data == VOP_ADDS ? (uns ? IR_VADDSU : IR_VADDS)
+			      : (uns ? IR_VSUBSU : IR_VSUBS);
+    break;
+  default:
+    lj_trace_err(J, LJ_TRERR_NYIVEC);
+    return;
+  }
+  J->base[0] = crec_vec_box(J, emitir(IRT(op, vt), a, b), vt, id);
+}
+
+void LJ_FASTCALL recff_simd_unop(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef r;
+  switch (rd->data) {
+  case VUN_NOT:
+    r = emitir(IRT(IR_VXOR, vt), a, crec_vec_kones(J, vt));
+    break;
+  case VUN_SQRT:
+    crec_simd_need(J, veck_isfp(vi.kind));
+    r = emitir(IRT(IR_VSQRT, vt), a, 0);
+    break;
+  default: {  /* VUN_ABS */
+    if (veck_isfp(vi.kind)) {
+      uint8_t ebuf[8];
+      memset(ebuf, 0xff, sizeof(ebuf));
+      ebuf[vi.esize-1] = 0x7f;  /* Clear the sign bit of every lane. */
+      r = emitir(IRT(IR_VAND, vt), a, crec_vec_kmask(J, vt, &vi, ebuf));
+    } else if (veck_isunsigned(vi.kind)) {
+      r = a;
+    } else if (vi.esize == 8) {
+      /* SSE2: broadcast the sign of each 64 bit lane, then (v^m)-m. */
+      TRef sh = emitir(IRT(IR_VSAR, IRT_V4I32), a, lj_ir_kint(J, 31));
+      TRef m = emitir(IRT(IR_VSHUF, vt), sh,
+		      IRVSHUF(IRVSHUF_PSHUFD, 0xf5));
+      r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), a, m), m);
+    } else {
+      crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0);
+      r = emitir(IRT(IR_VABS, vt), a, 0);
+    }
+    break;
+    }
+  }
+  J->base[0] = crec_vec_box(J, r, vt, id);
+}
+
+void LJ_FASTCALL recff_simd_round(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  crec_simd_need(J, veck_isfp(vi.kind) && (J->flags & JIT_F_SSE4_1));
+  J->base[0] = crec_vec_box(J, emitir(IRT(IR_VROUND, vt), a, rd->data), vt, id);
+}
+
+/* Bias both operands by the sign bit, so an unsigned compare becomes signed. */
+static TRef crec_simd_ubias(jit_State *J, IRType vt, const CTVecInfo *vi,
+			    TRef tr)
+{
+  uint8_t ebuf[8];
+  memset(ebuf, 0, sizeof(ebuf));
+  ebuf[vi->esize-1] = 0x80;
+  return emitir(IRT(IR_VXOR, vt), tr, crec_vec_kmask(J, vt, vi, ebuf));
+}
+
+void LJ_FASTCALL recff_simd_cmp(jit_State *J, RecordFFData *rd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
+  uint32_t op = rd->data;
+  int isfp = veck_isfp(vi.kind);
+  int inv = 0;
+  TRef r;
+  CTypeID mid;
+  if (op == VCMP_NE) { op = VCMP_EQ; inv = 1; }
+  else if (op == VCMP_LE) { op = VCMP_GE; { TRef t = a; a = b; b = t; } }
+  else if (op == VCMP_LT) { op = VCMP_GT; { TRef t = a; a = b; b = t; } }
+  if (op == VCMP_GE && !isfp) {  /* Integer: a >= b is !(b > a). */
+    TRef t = a; a = b; b = t;
+    op = VCMP_GT;
+    inv ^= 1;
+  }
+  if (op == VCMP_EQ) {
+    crec_simd_need(J, isfp || vi.esize != 8 || (J->flags & JIT_F_SSE4_1) ||
+		      1);  /* V2I64 has an SSE2 fallback in the backend. */
+    r = emitir(IRT(IR_VCMPEQ, vt), a, b);
+  } else if (op == VCMP_GT) {
+    if (!isfp) {
+      if (veck_isunsigned(vi.kind)) {
+	a = crec_simd_ubias(J, vt, &vi, a);
+	b = crec_simd_ubias(J, vt, &vi, b);
+      }
+      crec_simd_need(J, vi.esize != 8 || (J->flags & JIT_F_SSE4_2));
+    }
+    r = emitir(IRT(IR_VCMPGT, vt), a, b);
+  } else {
+    crec_simd_need(J, isfp);
+    r = emitir(IRT(IR_VCMPGE, vt), a, b);
+  }
+  if (inv) r = emitir(IRT(IR_VXOR, vt), r, crec_vec_kones(J, vt));
+  mid = lj_simd_masktype(cts, &vi);
+  J->base[0] = crec_vec_box(J, r, vt, mid);
+}
+
+void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef n = J->base[1];
+  uint32_t op = rd->data;
+  IROp irop = op == VSH_SHL ? IR_VSHL : op == VSH_SHR ? IR_VSHR : IR_VSAR;
+  uint32_t bits = (uint32_t)vi.esize * 8;
+  TRef r;
+  crec_simd_need(J, !veck_isfp(vi.kind));
+  if (!n || !tref_isinteger(n)) {
+    if (n && tref_isnum(n)) n = lj_opt_narrow_toint(J, n);
+    else lj_trace_err(J, LJ_TRERR_BADTYPE);
+  }
+  if (vi.esize == 1 || (vi.esize == 8 && op == VSH_SAR)) {
+    /* No instruction for these: rewrite with wider shifts plus masking.
+    ** This needs a constant count, which is the normal case in hot code.
+    */
+    uint32_t sh;
+    uint8_t ebuf[8];
+    crec_simd_need(J, tref_isk(n));
+    sh = (uint32_t)IR(tref_ref(n))->i;
+    if (vi.esize == 1) {
+      if (sh >= 8) {  /* Flushes to zero, or to a full sign fill. */
+	if (op == VSH_SAR) sh = 7; else {
+	  uint8_t zero[LJ_VEC_MAXSIZE];
+	  memset(zero, 0, sizeof(zero));
+	  J->base[0] = crec_vec_box(J, lj_ir_kvec(J, vt, zero), vt, id);
+	  return;
+	}
+      }
+      if (op == VSH_SHL) {
+	r = emitir(IRT(IR_VSHL, IRT_V8I16), a, lj_ir_kint(J, (int32_t)sh));
+	memset(ebuf, (int)((0xffu << sh) & 0xff), sizeof(ebuf));
+	r = emitir(IRT(IR_VAND, vt), r, crec_vec_kmask(J, vt, &vi, ebuf));
+      } else {
+	r = emitir(IRT(IR_VSHR, IRT_V8I16), a, lj_ir_kint(J, (int32_t)sh));
+	memset(ebuf, (int)((0xffu >> sh) & 0xff), sizeof(ebuf));
+	r = emitir(IRT(IR_VAND, vt), r, crec_vec_kmask(J, vt, &vi, ebuf));
+	if (op == VSH_SAR) {  /* (x ^ s) - s with s = 0x80 >> sh. */
+	  TRef ks;
+	  memset(ebuf, (int)(0x80u >> sh), sizeof(ebuf));
+	  ks = crec_vec_kmask(J, vt, &vi, ebuf);
+	  r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, ks), ks);
+	}
+      }
+    } else {  /* 64 bit arithmetic shift right. */
+      TRef ks;
+      uint64_t sbit;
+      if (sh >= 64) sh = 63;
+      sbit = (uint64_t)1 << 63;
+      memcpy(ebuf, &sbit, 8);
+      ks = crec_vec_kmask(J, vt, &vi, ebuf);
+      r = emitir(IRT(IR_VXOR, vt), a, ks);
+      r = emitir(IRT(IR_VSHR, vt), r, lj_ir_kint(J, (int32_t)sh));
+      sbit >>= sh;
+      memcpy(ebuf, &sbit, 8);
+      ks = crec_vec_kmask(J, vt, &vi, ebuf);
+      r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, ks), ks);
+    }
+  } else {
+    if (tref_isk(n)) {
+      uint32_t sh = (uint32_t)IR(tref_ref(n))->i;
+      if (op == VSH_SAR && sh >= bits) sh = bits - 1;
+      n = lj_ir_kint(J, (int32_t)sh);
+    }
+    /* No clamping is needed for a variable count: the arithmetic shifts fill
+    ** with the sign bit and the logical shifts flush to zero when the 64 bit
+    ** count is out of range, which is the interpreter's definition too.
+    */
+    r = emitir(IRT(irop, vt), a, n);
+  }
+  J->base[0] = crec_vec_box(J, r, vt, id);
+}
+
+void LJ_FASTCALL recff_simd_movemask(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  J->base[0] = emitir(IRTI(IR_VMOVMSK), a, 0);
+}
+
+void LJ_FASTCALL recff_simd_maskcmp(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef mm = emitir(IRTI(IR_VMOVMSK), a, 0);
+  uint32_t all = vi.lanes == 32 ? 0xffffffffu : (1u << vi.lanes) - 1;
+  /* Assume true. Fixup and emit the pending guard later. */
+  if (rd->data == 0)
+    lj_ir_set(J, IRTGI(IR_EQ), mm, lj_ir_kint(J, (int32_t)all));
+  else
+    lj_ir_set(J, IRTGI(IR_NE), mm, lj_ir_kint(J, 0));
+  J->postproc = LJ_POST_FIXGUARD;
+  J->base[0] = TREF_TRUE;
+}
+
+void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo mvi, vi; CTypeID mid, id; IRType mvt, vt;
+  TRef m = crec_simd_arg(J, rd, 0, &mvi, &mid, &mvt);
+  TRef a = crec_simd_arg(J, rd, 1, &vi, &id, &vt);
+  TRef b = crec_simd_arg2(J, rd, 2, &vi, id, vt);
+  TRef r;
+  crec_simd_need(J, (CTSize)mvi.esize * mvi.lanes ==
+		    (CTSize)vi.esize * vi.lanes);
+  /* (mask & a) | (~mask & b), which is what SSE2 needs anyway. */
+  r = emitir(IRT(IR_VOR, vt),
+	     emitir(IRT(IR_VAND, vt), m, a),
+	     emitir(IRT(IR_VANDN, vt), m, b));
+  J->base[0] = crec_vec_box(J, r, vt, id);
+}
+
+void LJ_FASTCALL recff_ffi_simd_bitcast(jit_State *J, RecordFFData *rd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTVecInfo svi, dvi; CTypeID sid; IRType svt, dvt;
+  CTypeID did;
+  TRef trct = J->base[0];
+  TRef a;
+  CType *dct;
+  if (!trct || !tref_iscdata(trct)) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  {
+    GCcdata *cd = argv2cdata(J, trct, &rd->argv[0]);
+    did = cd->ctypeid == CTID_CTYPEID ? *(CTypeID *)cdataptr(cd) : cd->ctypeid;
+  }
+  a = crec_simd_arg(J, rd, 1, &svi, &sid, &svt);
+  dct = ctype_raw(cts, did);
+  if (!lj_ctype_vecinfo(cts, dct, &dvi)) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  dvt = crec_vec2irt(cts, dct);
+  crec_simd_need(J, dvt != IRT_NIL &&
+		    (CTSize)dvi.esize * dvi.lanes ==
+		    (CTSize)svi.esize * svi.lanes);
+  /* A bitcast changes no bits: box the same value under the new ctype. */
+  J->base[0] = crec_vec_box(J, a, svt, did);
+}
+
+void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTVecInfo svi, dvi; CTypeID sid; IRType svt, dvt;
+  CTypeID did;
+  TRef trct = J->base[0];
+  TRef a;
+  CType *dct;
+  if (!trct || !tref_iscdata(trct)) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  {
+    GCcdata *cd = argv2cdata(J, trct, &rd->argv[0]);
+    did = cd->ctypeid == CTID_CTYPEID ? *(CTypeID *)cdataptr(cd) : cd->ctypeid;
+  }
+  a = crec_simd_arg(J, rd, 1, &svi, &sid, &svt);
+  dct = ctype_raw(cts, did);
+  if (!lj_ctype_vecinfo(cts, dct, &dvi)) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  dvt = crec_vec2irt(cts, dct);
+  crec_simd_need(J, dvt != IRT_NIL && dvi.lanes == svi.lanes);
+  if (dvi.kind == svi.kind) {
+    J->base[0] = crec_vec_box(J, a, svt, did);
+    return;
+  }
+  /* Only the conversions with a direct packed instruction are compiled. */
+  crec_simd_need(J,
+    (dvi.kind == VECK_F32 && (svi.kind == VECK_I32)) ||
+    (svi.kind == VECK_F32 && (dvi.kind == VECK_I32 || dvi.kind == VECK_U32)) ||
+    (!veck_isfp(dvi.kind) && !veck_isfp(svi.kind) && dvi.esize == svi.esize));
+  J->base[0] = crec_vec_box(J,
+    emitir(IRT(IR_VCONV, dvt), a, IRVCONV(dvi.kind, svi.kind)), dvt, did);
+}
+
+void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  uint32_t n = vi.lanes, sz = (uint32_t)vi.esize * vi.lanes;
+  int uns = veck_isunsigned(vi.kind);
+  int sse41 = (J->flags & JIT_F_SSE4_1) != 0;
+  IROp op;
+  TRef r = a;
+  switch (rd->data) {
+  case VRD_SUM: op = IR_VADD; break;
+  case VRD_MIN: case VRD_MAX:
+    if (veck_isfp(vi.kind)) {
+      op = rd->data == VRD_MIN ? IR_VMIN : IR_VMAX;
+    } else {
+      crec_simd_need(J, vi.esize != 8);
+      crec_simd_need(J, vi.esize == 2 ? (uns ? sse41 : 1) :
+			vi.esize == 1 ? (uns ? 1 : sse41) : sse41);
+      op = rd->data == VRD_MIN ? (uns ? IR_VMINU : IR_VMIN)
+			       : (uns ? IR_VMAXU : IR_VMAX);
+    }
+    break;
+  default:
+    lj_trace_err(J, LJ_TRERR_NYIVEC);
+    return;
+  }
+  /* The same pairwise halving tree the interpreter uses: shift the vector
+  ** right by half its remaining width and combine.
+  */
+  while (n > 1) {
+    TRef half;
+    n >>= 1;
+    sz >>= 1;
+    half = emitir(IRT(IR_VSHUF, vt), r, IRVSHUF(IRVSHUF_PSRLDQ, sz));
+    r = emitir(IRT(op, vt), r, half);
+  }
+  {
+    IRType et = veck_isfp(vi.kind) ?
+		  (vi.kind == VECK_F32 ? IRT_FLOAT : IRT_NUM) :
+		  (vi.esize == 8 ? (uns ? IRT_U64 : IRT_I64) : IRT_INT);
+    TRef res = emitir(IRT(IR_VEXTRACT, et), r, 0);
+    CType *ect = ctype_get(cts, vi.eid);
+    if (et == IRT_FLOAT) {
+      J->base[0] = emitconv(res, IRT_NUM, IRT_FLOAT, 0);
+    } else if (et == IRT_NUM) {
+      J->base[0] = res;
+    } else if (et == IRT_INT) {
+      IRType st = crec_ct2irt(cts, ect);
+      if (st == IRT_U32) {
+	J->base[0] = emitconv(res, IRT_NUM, IRT_U32, 0);
+      } else if (st != IRT_INT) {  /* Narrow to the lane width. */
+	J->base[0] = emitconv(res, IRT_INT, st, 0);
+      } else {
+	J->base[0] = res;
+      }
+    } else {
+      lj_needsplit(J);
+      J->base[0] = emitir(IRTG(IR_CNEWI, IRT_CDATA),
+			  lj_ir_kint(J, (int32_t)vi.eid), res);
+    }
+  }
 }
 
 static TRef crec_arith_int64(jit_State *J, TRef *sp, CType **s, MMS mm)

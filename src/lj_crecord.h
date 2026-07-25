@@ -14,6 +14,17 @@
 LJ_FUNC void LJ_FASTCALL recff_cdata_index(jit_State *J, RecordFFData *rd);
 LJ_FUNC void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd);
 LJ_FUNC void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_unop(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_round(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_cmp(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_movemask(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_maskcmp(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_ffi_simd_bitcast(jit_State *J, RecordFFData *rd);
+LJ_FUNC void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd);
 LJ_FUNC void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd);
 LJ_FUNC void LJ_FASTCALL recff_ffi_new(jit_State *J, RecordFFData *rd);
 LJ_FUNC void LJ_FASTCALL recff_ffi_errno(jit_State *J, RecordFFData *rd);

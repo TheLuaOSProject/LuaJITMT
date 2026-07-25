@@ -105,6 +105,52 @@ static x86Op asm_vecxo(IROp op, IRType t)
   }
 }
 
+/* Packed min/max, or 0 if the lane type has no instruction. */
+static x86Op asm_vecminmax(ASMState *as, IROp op, IRType t)
+{
+  int sse41 = (as->flags & JIT_F_SSE4_1) != 0;
+  switch (op) {
+  case IR_VMIN:
+    switch (t) {
+    case IRT_V4F32: return XO_MINPS;
+    case IRT_V2F64: return XO_MINPD;
+    case IRT_V16I8: return sse41 ? XO_PMINSB : (x86Op)0;
+    case IRT_V8I16: return XO_PMINSW;
+    case IRT_V4I32: return sse41 ? XO_PMINSD : (x86Op)0;
+    default: return (x86Op)0;
+    }
+  case IR_VMAX:
+    switch (t) {
+    case IRT_V4F32: return XO_MAXPS;
+    case IRT_V2F64: return XO_MAXPD;
+    case IRT_V16I8: return sse41 ? XO_PMAXSB : (x86Op)0;
+    case IRT_V8I16: return XO_PMAXSW;
+    case IRT_V4I32: return sse41 ? XO_PMAXSD : (x86Op)0;
+    default: return (x86Op)0;
+    }
+  case IR_VMINU:
+    switch (t) {
+    case IRT_V16I8: return XO_PMINUB;
+    case IRT_V8I16: return sse41 ? XO_PMINUW : (x86Op)0;
+    case IRT_V4I32: return sse41 ? XO_PMINUD : (x86Op)0;
+    default: return (x86Op)0;
+    }
+  default:
+    switch (t) {
+    case IRT_V16I8: return XO_PMAXUB;
+    case IRT_V8I16: return sse41 ? XO_PMAXUW : (x86Op)0;
+    case IRT_V4I32: return sse41 ? XO_PMAXUD : (x86Op)0;
+    default: return (x86Op)0;
+    }
+  }
+}
+
+/* Is this opcode one of the SSSE3/SSE4 three byte forms? */
+static int asm_vec3byte(x86Op xo)
+{
+  return (xo & 0xff) == 0xfc && ((xo >> 8) & 0xff) == 0x0f;
+}
+
 /* -- Generic two-operand lowering ---------------------------------------- */
 
 /*
@@ -291,6 +337,220 @@ static void asm_vsplat(ASMState *as, IRIns *ir)
   }
 }
 
+/* -- Comparisons --------------------------------------------------------- */
+
+/*
+** dest = op1 <cmp> op2. Integer lanes use the PCMPEQ and PCMPGT forms,
+** which have the
+** same operand order as the IR. Floating-point lanes use CMPPS/CMPPD, whose
+** only ordered greater-than form is a less-than with swapped operands, so
+** the destination takes the right operand instead.
+*/
+static void asm_veccmp(ASMState *as, IRIns *ir)
+{
+  IRType t = irt_type(ir->t);
+  IROp op = (IROp)ir->o;
+  if (t == IRT_V4F32 || t == IRT_V2F64) {
+    x86Op xo = t == IRT_V4F32 ? XO_CMPPS : XO_CMPPD;
+    int32_t pred = op == IR_VCMPEQ ? 0 : op == IR_VCMPGT ? 1 : 2;
+    IRRef lref = ir->op1, rref = ir->op2;
+    RegSet allow = RSET_FPR;
+    Reg dest, other;
+    if (op != IR_VCMPEQ) { IRRef tmp = lref; lref = rref; rref = tmp; }
+    other = IR(rref)->r;
+    if (ra_hasreg(other)) { rset_clear(allow, other); ra_noweak(as, other); }
+    dest = ra_dest(as, ir, allow);
+    if (lref == rref) other = dest;
+    else if (ra_noreg(other)) other = ra_alloc1(as, rref, rset_clear(allow, dest));
+    emit_vrri(as, xo, dest, other, pred);
+    ra_left(as, dest, lref);
+    return;
+  }
+  if (op == IR_VCMPEQ && t == IRT_V2I64 && !(as->flags & JIT_F_SSE4_1)) {
+    /* SSE2: compare the 32 bit halves and AND the two results together. */
+    Reg dest = ra_dest(as, ir, RSET_FPR);
+    RegSet allow = rset_exclude(RSET_FPR, dest);
+    Reg left = ra_alloc1(as, ir->op1, allow);
+    Reg right, t1;
+    allow = rset_exclude(allow, left);
+    right = ir->op1 == ir->op2 ? left : ra_alloc1(as, ir->op2, allow);
+    t1 = ra_scratch(as, rset_exclude(allow, right));
+    emit_rr(as, XO_PAND, dest, t1);
+    emit_vrri(as, XO_PSHUFD, t1, dest, 0xb1);  /* Swap the 32 bit halves. */
+    emit_rr(as, XO_PCMPEQD, dest, right);
+    emit_rr(as, XO_MOVAPS, dest, left);
+    return;
+  }
+  {
+    x86Op xo;
+    if (op == IR_VCMPEQ) {
+      xo = t == IRT_V2I64 ? XO_PCMPEQQ : asm_vecxo(IR_VCMPEQ, t);
+    } else {
+      switch (t) {
+      case IRT_V16I8: xo = XO_PCMPGTB; break;
+      case IRT_V8I16: xo = XO_PCMPGTW; break;
+      case IRT_V4I32: xo = XO_PCMPGTD; break;
+      default: xo = XO_PCMPGTQ; break;
+      }
+    }
+    asm_vecbin(as, ir, xo, asm_vec3byte(xo));
+  }
+}
+
+/* -- Shifts -------------------------------------------------------------- */
+
+/* Lane shifts. 8 bit lanes have no instruction and are handled by the
+** recorder, which rewrites them into 16 bit shifts plus a mask.
+*/
+static void asm_vecshift(ASMState *as, IRIns *ir)
+{
+  IRType t = irt_type(ir->t);
+  IROp op = (IROp)ir->o;
+  x86Op xg, xr;
+  uint32_t grp;
+  switch (t) {
+  case IRT_V8I16: xg = XO_PSHIFTW; break;
+  case IRT_V4I32: xg = XO_PSHIFTD; break;
+  default: xg = XO_PSHIFTQ; break;
+  }
+  grp = op == IR_VSHL ? XOg_PSLL : op == IR_VSHR ? XOg_PSRL : XOg_PSRA;
+  if (op == IR_VSHL)
+    xr = t == IRT_V8I16 ? XO_PSLLW_r : t == IRT_V4I32 ? XO_PSLLD_r : XO_PSLLQ_r;
+  else if (op == IR_VSHR)
+    xr = t == IRT_V8I16 ? XO_PSRLW_r : t == IRT_V4I32 ? XO_PSRLD_r : XO_PSRLQ_r;
+  else
+    xr = t == IRT_V8I16 ? XO_PSRAW_r : XO_PSRAD_r;
+  if (irref_isk(ir->op2)) {
+    Reg dest = ra_dest(as, ir, RSET_FPR);
+    int32_t n = IR(ir->op2)->i;
+    if (n > 255) n = 255;  /* Saturate: the instruction flushes to 0 anyway. */
+    emit_vshifti(as, xg, grp, dest, n);
+    ra_left(as, dest, ir->op1);
+  } else {
+    /* Variable count: the packed shifts read a 64 bit count from an XMM. */
+    Reg dest = ra_dest(as, ir, RSET_FPR);
+    Reg tmp = ra_scratch(as, rset_exclude(RSET_FPR, dest));
+    Reg cnt = ra_alloc1(as, ir->op2, RSET_GPR);
+    emit_rr(as, xr, dest, tmp);
+    emit_rr(as, XO_MOVD, tmp, cnt);
+    ra_left(as, dest, ir->op1);
+  }
+}
+
+/* -- Unary and shuffle operations ---------------------------------------- */
+
+static void asm_vecsqrt(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  emit_rr(as, irt_type(ir->t) == IRT_V4F32 ? XO_SQRTPS : XO_SQRTPD, dest, left);
+}
+
+static void asm_vecabs(ASMState *as, IRIns *ir)
+{
+  x86Op xo;
+  Reg dest, left;
+  switch (irt_type(ir->t)) {
+  case IRT_V16I8: xo = XO_PABSB; break;
+  case IRT_V8I16: xo = XO_PABSW; break;
+  default: xo = XO_PABSD; break;
+  }
+  dest = ra_dest(as, ir, RSET_FPR);
+  left = ra_alloc1(as, ir->op1, RSET_FPR);
+  emit_vrr66(as, xo, dest, left);
+}
+
+static void asm_vecround(ASMState *as, IRIns *ir)
+{
+  x86Op xo = irt_type(ir->t) == IRT_V4F32 ? XO_ROUNDPS : XO_ROUNDPD;
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  emit_i8(as, (int32_t)ir->op2);
+  emit_rr(as, xo, dest, left);
+  emit_prefix66(as, xo);
+}
+
+static void asm_vecshuf(ASMState *as, IRIns *ir)
+{
+  uint32_t lit = (uint32_t)ir->op2;
+  uint32_t mode = lit >> 8;
+  int32_t imm = (int32_t)(lit & 255);
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  if (mode == IRVSHUF_PSRLDQ) {
+    emit_vshifti(as, XO_PSHIFTQ, 3, dest, imm);  /* PSRLDQ is group 3. */
+    ra_left(as, dest, ir->op1);
+  } else {
+    x86Op xo = mode == IRVSHUF_PSHUFD ? XO_PSHUFD :
+	       mode == IRVSHUF_PSHUFLW ? XO_PSHUFLW : XO_PSHUFHW;
+    Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+    emit_vrri(as, xo, dest, left, imm);
+  }
+}
+
+static void asm_vecshufb(ASMState *as, IRIns *ir)
+{
+  asm_vecbin(as, ir, XO_PSHUFB, 1);
+}
+
+/* Sign bits of all lanes, gathered into an integer. */
+static void asm_vecmovmsk(ASMState *as, IRIns *ir)
+{
+  IRType t = irt_type(IR(ir->op1)->t);
+  Reg dest = ra_dest(as, ir, RSET_GPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  switch (t) {
+  case IRT_V4F32: case IRT_V4I32:
+    emit_rr(as, XO_MOVMSKPS, dest, left);
+    break;
+  case IRT_V2F64: case IRT_V2I64:
+    emit_rr(as, XO_MOVMSKPD, dest, left);
+    break;
+  case IRT_V16I8:
+    emit_rr(as, XO_PMOVMSKB, dest, left);
+    break;
+  default: {  /* 16 bit lanes: saturate down to bytes, then PMOVMSKB. */
+    Reg tmp = ra_scratch(as, rset_exclude(RSET_FPR, left));
+    emit_gri(as, XG_ARITHi(XOg_AND), dest, 0xff);
+    emit_rr(as, XO_PMOVMSKB, dest, tmp);
+    emit_rr(as, XO_PACKSSWB, tmp, tmp);
+    emit_rr(as, XO_MOVAPS, tmp, left);
+    break;
+    }
+  }
+}
+
+/* Extract lane 0. Other lanes are handled by an ordinary load from memory. */
+static void asm_vecextract(ASMState *as, IRIns *ir)
+{
+  IRType st = irt_type(IR(ir->op1)->t);
+  if (irt_isfp(ir->t)) {
+    Reg dest = ra_dest(as, ir, RSET_FPR);
+    ra_left(as, dest, ir->op1);  /* Lane 0 is the low part of the register. */
+  } else {
+    Reg dest = ra_dest(as, ir, RSET_GPR);
+    Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+    if (st == IRT_V2I64)
+      emit_rr(as, XO_MOVDto, left|REX_64, dest|REX_64);
+    else
+      emit_rr(as, XO_MOVDto, left, dest);
+  }
+}
+
+/* Lane conversion. Only the pairs with a direct packed instruction get here. */
+static void asm_vecconv(ASMState *as, IRIns *ir)
+{
+  uint32_t lit = (uint32_t)ir->op2;
+  uint32_t dk = irvconv_dst(lit), sk = irvconv_src(lit);
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  if (dk == VECK_F32)
+    emit_rr(as, XO_CVTDQ2PS, dest, left);
+  else if (sk == VECK_F32)
+    emit_rr(as, XO_CVTTPS2DQ, dest, left);
+  else
+    emit_rr(as, XO_MOVAPS, dest, left);  /* Same-width reinterpretation. */
+}
+
 /* -- Dispatch ------------------------------------------------------------ */
 
 static void asm_vec(ASMState *as, IRIns *ir)
@@ -314,6 +574,21 @@ static void asm_vec(ASMState *as, IRIns *ir)
     */
     asm_vecbin(as, ir, asm_vecxo(IR_VANDN, t), 0);
     return;
+  case IR_VMIN: case IR_VMAX: case IR_VMINU: case IR_VMAXU:
+    xo = asm_vecminmax(as, (IROp)ir->o, t);
+    lj_assertA(xo != 0, "no packed min/max for IR op %d type %d", ir->o, t);
+    asm_vecbin(as, ir, xo, asm_vec3byte(xo));
+    return;
+  case IR_VCMPEQ: case IR_VCMPGT: case IR_VCMPGE: asm_veccmp(as, ir); return;
+  case IR_VSHL: case IR_VSHR: case IR_VSAR: asm_vecshift(as, ir); return;
+  case IR_VSQRT: asm_vecsqrt(as, ir); return;
+  case IR_VABS: asm_vecabs(as, ir); return;
+  case IR_VROUND: asm_vecround(as, ir); return;
+  case IR_VSHUF: asm_vecshuf(as, ir); return;
+  case IR_VSHUFB: asm_vecshufb(as, ir); return;
+  case IR_VMOVMSK: asm_vecmovmsk(as, ir); return;
+  case IR_VEXTRACT: asm_vecextract(as, ir); return;
+  case IR_VCONV: asm_vecconv(as, ir); return;
   default:
     lj_assertA(0, "unhandled vector IR op %d", ir->o);
     return;

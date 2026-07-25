@@ -202,6 +202,12 @@ LJ_STATIC_ASSERT(((int)IR_LE^1) == (int)IR_GT);
 LJ_STATIC_ASSERT(((int)IR_LT^3) == (int)IR_GT);
 LJ_STATIC_ASSERT(((int)IR_LT^4) == (int)IR_ULT);
 
+/* The fold engine key has a 7 bit opcode field, so every opcode that may be
+** looked up there must stay below 128. The vector opcodes are above and are
+** deliberately excluded from folding, see lj_opt_fold().
+*/
+LJ_STATIC_ASSERT((int)IR_VSPLAT <= 128);
+
 /* Delta between xLOAD and xSTORE. */
 #define IRDELTA_L2S		((int)IR_ASTORE - (int)IR_ALOAD)
 
@@ -259,6 +265,18 @@ IRFLDEF(FLENUM)
 #undef FLENUM
   IRFL__MAX
 } IRFieldID;
+
+/* VSHUF op2 literal: shuffle mode in bits 8+, immediate in bits 0-7. */
+#define IRVSHUF_PSHUFD		0	/* Permute the four 32 bit lanes. */
+#define IRVSHUF_PSRLDQ		1	/* Shift the whole vector right, bytes. */
+#define IRVSHUF_PSHUFLW		2	/* Permute the low four 16 bit lanes. */
+#define IRVSHUF_PSHUFHW		3	/* Permute the high four 16 bit lanes. */
+#define IRVSHUF(mode, imm)	(((mode)<<8) + (imm))
+
+/* VCONV op2 literal: destination VecKind in bits 8+, source VecKind below. */
+#define IRVCONV(dk, sk)		(((dk)<<8) + (sk))
+#define irvconv_dst(l)		((l) >> 8)
+#define irvconv_src(l)		((l) & 255)
 
 /* TMPREF mode bits, stored in op2. */
 #define IRTMPREF_IN1		0x01	/* First input value. */

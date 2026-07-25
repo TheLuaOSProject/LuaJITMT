@@ -2551,6 +2551,19 @@ TRef LJ_FASTCALL lj_opt_fold(jit_State *J)
 
   /* Fold engine start/retry point. */
 retry:
+  /*
+  ** The fold key only has a 7 bit opcode field, so the vector opcodes, which
+  ** are all above that range and have no fold rules, must not be looked up:
+  ** their opcode would spill into the neighbouring field and match a rule
+  ** belonging to a completely different instruction. The same applies when a
+  ** vector value is the first operand.
+  */
+  if (LJ_UNLIKELY(fins->o >= IR_VSPLAT ||
+		  (fins->op1 >= J->cur.nk && IR(fins->op1)->o >= IR_VSPLAT))) {
+    if (irm_kind(lj_ir_mode[fins->o]) == IRM_N)
+      return lj_opt_cse(J);
+    return lj_ir_emit(J);
+  }
   /* Construct key from opcode and operand opcodes (unless literal/none). */
   key = ((uint32_t)fins->o << 17);
   if (fins->op1 >= J->cur.nk) {
