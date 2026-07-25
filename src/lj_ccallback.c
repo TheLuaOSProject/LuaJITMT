@@ -383,9 +383,10 @@ void lj_ccallback_mcode_free(CTState *cts)
 
 #define CALLBACK_HANDLE_REGARG \
   if (isfp) { \
-    if (nfpr + n <= CCALL_NARG_FPR) { \
+    MSize n2 = isvec ? 1 : n;  /* A vector uses one XMM, not one per eightbyte. */ \
+    if (nfpr + n2 <= CCALL_NARG_FPR) { \
       sp = &cts->cb.fpr[nfpr]; \
-      nfpr += n; \
+      nfpr += n2; \
       goto done; \
     } \
   } else { \
@@ -623,11 +624,14 @@ static void callback_conv_args(CTState *cts, lua_State *L)
       CType *cta;
       void *sp;
       CTSize sz;
-      int isfp;
+      int isfp, isvec;
       MSize n;
       lj_assertCTS(ctype_isfield(ctf->info), "field expected");
       cta = ctype_rawchild(cts, ctf);
-      isfp = ctype_isfp(cta->info);
+      /* Vectors are classified like FP values, but occupy a whole register. */
+      isvec = CCALL_VECTOR_REG && ctype_isvector(cta->info);
+      isfp = isvec || ctype_isfp(cta->info);
+      UNUSED(isvec);
       sz = (cta->size + CTSIZE_PTR-1) & ~(CTSIZE_PTR-1);
       n = sz / CTSIZE_PTR;  /* Number of GPRs or stack slots needed. */
 
@@ -636,6 +640,8 @@ static void callback_conv_args(CTState *cts, lua_State *L)
       /* Otherwise pass argument on stack. */
       if (CCALL_ALIGN_STACKARG && LJ_32 && sz == 8)
 	nsp = (nsp + 1) & ~1u;  /* Align 64 bit argument on stack. */
+      if (isvec && sz == 16)
+	nsp = (nsp + 1) & ~1u;  /* Align 128 bit vector on stack. */
       sp = &stack[nsp];
       nsp += n;
 
@@ -679,7 +685,9 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o)
   if (!ctype_isvoid(ctr->info)) {
     uint8_t *dp = (uint8_t *)&cts->cb.gpr[0];
 #if CCALL_NUM_FPR
-    if (ctype_isfp(ctr->info))
+    /* A vector result is returned in the first FPR, like an FP result. */
+    if (ctype_isfp(ctr->info) ||
+	(CCALL_VECTOR_REG && ctype_isvector(ctr->info)))
       dp = (uint8_t *)&cts->cb.fpr[0];
 #endif
 #if LJ_TARGET_ARM64 && LJ_BE
@@ -787,6 +795,17 @@ found:
   return top;
 }
 
+/*
+** A vector passed or returned by value in a single register. Anything else
+** (a wider vector, or a target whose ABI does not pass vectors in registers)
+** is rejected by callback_checkfunc, exactly as before.
+*/
+static int callback_isvec(CType *ct)
+{
+  return CCALL_VECTOR_REG && ctype_isvector(ct->info) &&
+	 (ct->size == 8 || ct->size == 16);
+}
+
 /* Check for function pointer and supported argument/result types. */
 static CType *callback_checkfunc(CTState *cts, CType *ct)
 {
@@ -798,7 +817,8 @@ static CType *callback_checkfunc(CTState *cts, CType *ct)
     CType *ctr = ctype_rawchild(cts, ct);
     CTypeID fid = ct->sib;
     if (!(ctype_isvoid(ctr->info) || ctype_isenum(ctr->info) ||
-	  ctype_isptr(ctr->info) || (ctype_isnum(ctr->info) && ctr->size <= 8)))
+	  ctype_isptr(ctr->info) || callback_isvec(ctr) ||
+	  (ctype_isnum(ctr->info) && ctr->size <= 8)))
       return NULL;
     if ((ct->info & CTF_VARARG))
       return NULL;
@@ -809,6 +829,7 @@ static CType *callback_checkfunc(CTState *cts, CType *ct)
 	lj_assertCTS(ctype_isfield(ctf->info), "field expected");
 	cta = ctype_rawchild(cts, ctf);
 	if (!(ctype_isenum(cta->info) || ctype_isptr(cta->info) ||
+	      callback_isvec(cta) ||
 	      (ctype_isnum(cta->info) && cta->size <= 8)) ||
 	    ++narg >= LUA_MINSTACK-3)
 	  return NULL;

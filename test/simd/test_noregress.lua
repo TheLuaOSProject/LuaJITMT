@@ -26,6 +26,16 @@ p("u64", tostring(ffi.cast("uint64_t",-1)), tostring(2ULL^63))
 local cb=ffi.cast("int(*)(int,int)", function(a,b) return a*b+1 end)
 p("cb", cb(6,7))
 cb:free()
+-- Nine doubles: eight arrive in FPRs, the ninth on the stack. This is the
+-- shape that a change to the callback FPR save area would break first.
+local cbd=ffi.cast("double(*)(double,double,double,double,double,double,double,double,double)",
+  function(...) local t={...} local s=0 for i=1,9 do s=s+t[i]*i end return s end)
+p("cbd", cbd(1.5,2.25,3.125,4.0625,5,6,7,8,9), cbd(1/3,-0.0,1e308,2^-1074,1,1,1,1,1))
+cbd:free()
+local cbf=ffi.cast("float(*)(float,int,double,int,float)",
+  function(a,b,c,d,e) return a+b+c+d+e end)
+p("cbf", cbf(1.5,2,3.25,4,5.75), cbf(1/3,1,1/7,1,1/9))
+cbf:free()
 p("cast", tonumber(ffi.cast("int8_t",300)), tonumber(ffi.cast("uint16_t",-1)), tonumber(ffi.cast("float",1/3)))
 -- string.format / tostring of cdata types
 p("types", tostring(ffi.typeof("S")), tostring(ffi.typeof("int (*)(void)")))

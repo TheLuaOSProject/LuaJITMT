@@ -2820,20 +2820,25 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CTSTATE->cb.gpr[1], CARG2
   |  mov CTSTATE->cb.gpr[2], CARG3
   |  mov CTSTATE->cb.gpr[3], CARG4
+  |.if X64WIN
   |  movsd qword CTSTATE->cb.fpr[0], xmm0
   |  movsd qword CTSTATE->cb.fpr[1], xmm1
   |  movsd qword CTSTATE->cb.fpr[2], xmm2
   |  movsd qword CTSTATE->cb.fpr[3], xmm3
-  |.if X64WIN
   |  lea rax, [rsp+CFRAME_SIZE+4*8]
   |.else
+  |  // Save all 16 bytes: a vector argument occupies the whole register.
+  |  movups oword CTSTATE->cb.fpr[0], xmm0
+  |  movups oword CTSTATE->cb.fpr[1], xmm1
+  |  movups oword CTSTATE->cb.fpr[2], xmm2
+  |  movups oword CTSTATE->cb.fpr[3], xmm3
+  |  movups oword CTSTATE->cb.fpr[4], xmm4
+  |  movups oword CTSTATE->cb.fpr[5], xmm5
+  |  movups oword CTSTATE->cb.fpr[6], xmm6
+  |  movups oword CTSTATE->cb.fpr[7], xmm7
   |  lea rax, [rsp+CFRAME_SIZE]
   |  mov CTSTATE->cb.gpr[4], CARG5
   |  mov CTSTATE->cb.gpr[5], CARG6
-  |  movsd qword CTSTATE->cb.fpr[4], xmm4
-  |  movsd qword CTSTATE->cb.fpr[5], xmm5
-  |  movsd qword CTSTATE->cb.fpr[6], xmm6
-  |  movsd qword CTSTATE->cb.fpr[7], xmm7
   |.endif
   |  mov CTSTATE->cb.stack, rax
   |  mov CARG2, rsp
@@ -2863,7 +2868,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, RC
   |  call extern lj_ccallback_leave	// (CTState *cts, TValue *o)
   |  mov rax, CTSTATE->cb.gpr[0]
+  |.if X64WIN
   |  movsd xmm0, qword CTSTATE->cb.fpr[0]
+  |.else
+  |  movups xmm0, oword CTSTATE->cb.fpr[0]	// A vector result fills xmm0.
+  |.endif
   |  jmp ->vm_leave_unw
   |.endif
   |

@@ -157,6 +157,10 @@ typedef union FPRArg {
 /* Check against constants in lj_ctype.h. */
 LJ_STATIC_ASSERT(CCALL_NUM_GPR <= CCALL_MAX_GPR);
 LJ_STATIC_ASSERT(CCALL_NUM_FPR <= CCALL_MAX_FPR);
+/* Passing vectors in registers needs a callback save area wide enough to hold
+** one, and a trampoline that actually saves that much. Keep the three in step.
+*/
+LJ_STATIC_ASSERT(!CCALL_VECTOR_REG || sizeof(FPRCBArg) == 16);
 
 #define CCALL_NUM_STACK		31
 #define CCALL_SIZE_STACK	(CCALL_NUM_STACK * CTSIZE_PTR)
