@@ -25,7 +25,7 @@ status is non-zero if anything failed.
 | `test_arith.lua` | the Lua operators, randomized against the scalar reference, splat operands, wraparound, FP edge cases, rejected operators |
 | `test_lib.lua` | every `ffi.simd` function, randomized against the scalar reference, plus negative tests |
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
-| `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens |
+| `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks that the IR dump itself renders vector types and 128-bit constants in all three colour modes |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists, memory round trips and callbacks against a small C helper library that it compiles at test time |
 | `bench.lua` | microbenchmarks: saxpy, dot product, horizontal max and clamp, each against equivalent scalar code |
 | `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |

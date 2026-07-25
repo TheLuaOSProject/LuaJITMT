@@ -22,6 +22,24 @@ end
 local tmp = os.getenv("TMPDIR") or "/tmp"
 local dumpfile = tmp .. "/luajit_simd_codegen_" .. tostring(os.time()) .. ".txt"
 
+-- Compile f in a fresh trace and return the requested dump ("m" = machine
+-- code, "i" = IR, plus a colour mode letter).
+local function rawdump(mode, f, ...)
+  jit_.off()
+  jit_.flush()
+  collectgarbage()
+  dump.on(mode, dumpfile)
+  jit_.on()
+  f(...)
+  jit_.off()
+  dump.off()
+  local fh = assert(io.open(dumpfile))
+  local text = fh:read("*a")
+  fh:close()
+  os.remove(dumpfile)
+  return text
+end
+
 -- Compile f in a fresh trace and return the machine code of its loop body.
 local function loopcode(f, ...)
   jit_.off()
@@ -213,6 +231,42 @@ test("64 bit lane min/max is packed", function()
       for _ = 1, 400 do v = v + a; s = s + tonumber(simd.hmin(v)) end
       return s
     end)
+  end
+end)
+
+test("the IR dump renders vector types and constants", function()
+  -- jit.dump must survive a trace containing vector IR in every colour mode,
+  -- and a 128 bit constant has to be printed in full. Both used to break: the
+  -- ANSI colour table had no entry for the vector types, so the dump stopped
+  -- at the first vector instruction, and the generic string formatting cut
+  -- the hex constant down to 20 characters.
+  local bit_ = require("bit")
+  local i8 = T.T.i8x16.ct
+  local a = i8(1, -2, 3, -4, 127, -128, 0, -1, 55, -99, 17, -17, 64, -64, 7, -7)
+  local f4 = T.T.float4.ct
+  local b = f4(1.5, 2.5, 3.5, 4.5)
+  local function work()
+    local acc, facc = i8(0), f4(0)
+    for i = 1, 400 do
+      acc = acc + simd.sar(a, bit_.band(i, 7))
+      facc = facc + b * 2
+    end
+    return acc, facc
+  end
+  for _, mode in ipairs({"i", "iT", "iH"}) do
+    local ok, text = pcall(rawdump, mode, work)
+    if check(ok, "jit.dump mode " .. mode .. " failed: " .. tostring(text)) then
+      check(text:find("vi1", 1, true) ~= nil,
+	    mode .. ": no 8 bit vector type in the IR dump")
+      check(text:find("vf4", 1, true) ~= nil,
+	    mode .. ": no float vector type in the IR dump")
+      -- A full 128 bit constant is "0x" plus exactly 32 hex digits, and must
+      -- not be followed by the truncation marker.
+      local k = text:match("0x(%x%x%x%x%x%x%x%x%x+)")
+      check(k ~= nil and #k == 32,
+	    mode .. ": vector constant is not 32 hex digits, got " ..
+	    tostring(k and #k))
+    end
   end
 end)
 

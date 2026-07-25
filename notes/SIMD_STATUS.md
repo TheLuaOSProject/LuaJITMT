@@ -31,6 +31,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M10 | NaN quieting in rounding, defined float-to-integer conversion, seed sweep | done |
 | M11 | ASan and UBSan clean; integer-promotion UB removed from the reference implementation | done |
 | M12 | Variable shift counts on 8-bit lanes and on 64-bit `sar` compile to packed code | done |
+| M13 | IR consistency check and `jit.dump` handle vector types and 128-bit constants | done |
 
 ## Commands that pass
 
@@ -143,6 +144,16 @@ notes/*                          design/status/matrix/testing notes (new)
   returned `TREF_NIL` for `IR_KVEC`, so a side trace that replayed a sunk
   vector box holding a constant got garbage. Any new constant kind has to be
   added to *all four*.
+* `src/jit/dump.lua` keeps **three** parallel tables keyed by IR type:
+  `irtype_text`, `colortype_ansi` and the `irt_*` CSS classes in
+  `header_html`. Adding a type name to the first one only is not enough:
+  `colorize_ansi()` does `format(colortype_ansi[t], s)`, so a missing entry
+  raises inside the dump handler and the IR dump simply stops at the first
+  instruction of that type, with no error shown. `formatk()` needs a case too
+  -- a 128-bit constant arrives as a hex string and was being cut to 20
+  characters by the generic string formatting. `test_codegen.lua` now dumps a
+  vector trace in all three colour modes and checks the constant is 32 hex
+  digits.
 * A 128-bit constant occupies **three** IR slots, and every loop that walks the
   constant range from `nk` has to skip the two payload slots or it will decode
   them as instructions. `gc_traverse_trace()`, `lj_opt_sink()` and the

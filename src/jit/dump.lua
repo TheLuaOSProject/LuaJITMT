@@ -160,6 +160,9 @@ end
 
 ------------------------------------------------------------------------------
 
+-- First IRType of the vector block, i.e. the index of "vi1" below.
+local IRT_FIRSTVEC = 24
+
 local irtype_text = {
   [0] = "nil",
   "fal",
@@ -218,6 +221,13 @@ local colortype_ansi = {
   "\027[35m%s\027[m",
   "\027[35m%s\027[m",
   "\027[35m%s\027[m",
+  -- Vector types: integer lanes like the integer types, float lanes like num.
+  "\027[35m%s\027[m",
+  "\027[35m%s\027[m",
+  "\027[35m%s\027[m",
+  "\027[35m%s\027[m",
+  "\027[34m%s\027[m",
+  "\027[34m%s\027[m",
 }
 
 local function colorize_text(s)
@@ -264,6 +274,8 @@ span.irt_tab { color: #c00000; }
 span.irt_udt, span.irt_lud { color: #00c0c0; }
 span.irt_num { color: #4040c0; }
 span.irt_int, span.irt_i8, span.irt_u8, span.irt_i16, span.irt_u16 { color: #b040b0; }
+span.irt_vi1, span.irt_vi2, span.irt_vi4, span.irt_vi8 { color: #b040b0; }
+span.irt_vf4, span.irt_vf8 { color: #4040c0; }
 span.irt_extra { font-style: italic; }
 </style>
 ]]
@@ -340,7 +352,14 @@ local function formatk(tr, idx, sn)
       s = format(0 < k and k < 0x1p-1026 and "%+a" or "%+.14g", k)
     end
   elseif tn == "string" then
-    s = format(#k > 20 and '"%.20s"~' or '"%s"', gsub(k, "%c", ctlsub))
+    if t >= IRT_FIRSTVEC then
+      -- A 128 bit vector constant. lj_ir_kvalue() renders it as a hex string,
+      -- because there is no TValue that can hold one. Print it unquoted and
+      -- in full: the bytes are the entire content of the constant.
+      s = k
+    else
+      s = format(#k > 20 and '"%.20s"~' or '"%s"', gsub(k, "%c", ctlsub))
+    end
   elseif tn == "function" then
     s = fmtfunc(k)
   elseif tn == "table" then
