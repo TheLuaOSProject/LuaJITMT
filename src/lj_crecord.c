@@ -1627,6 +1627,42 @@ static void crec_simd_need(jit_State *J, int ok)
   if (!ok) lj_trace_err(J, LJ_TRERR_NYIVEC);
 }
 
+/* A 16 byte constant built from a repeating 16 bit pattern. */
+static TRef crec_simd_k16(jit_State *J, uint16_t v)
+{
+  uint8_t vbuf[LJ_VEC_MAXSIZE];
+  uint32_t i;
+  for (i = 0; i < sizeof(vbuf); i += 2) memcpy(vbuf+i, &v, 2);
+  return lj_ir_kvec(J, IRT_V8I16, vbuf);
+}
+
+/*
+** Broadcast the low byte of every 16 bit lane into both halves of that lane.
+** Multiplying by 0x0101 is v | (v << 8) for v <= 0xff, cannot carry, and
+** needs only SSE2. Used to turn a 16 bit lane mask into a byte lane mask.
+*/
+static TRef crec_simd_bcastbyte(jit_State *J, TRef m)
+{
+  return emitir(IRT(IR_VMUL, IRT_V8I16), m, crec_simd_k16(J, 0x0101));
+}
+
+/*
+** Clamp a shift count to [0, lim] with *unsigned* saturation, branchlessly,
+** so no guard is needed and the trace stays valid for every count. lim+1
+** must be a power of two. d = n & ~lim is non-zero exactly when n is
+** negative or greater than lim, and (d | -d) >>a 31 turns that into an
+** all-ones mask. This matches the interpreter, which reads the count as
+** uint32_t and treats anything from lim+1 upwards as a full shift.
+*/
+static TRef crec_simd_clampcnt(jit_State *J, TRef n, int32_t lim)
+{
+  TRef d = emitir(IRTI(IR_BAND), n, lj_ir_kint(J, (int32_t)~(uint32_t)lim));
+  TRef m = emitir(IRTI(IR_BOR), d, emitir(IRTI(IR_SUB), lj_ir_kint(J, 0), d));
+  m = emitir(IRTI(IR_BSAR), m, lj_ir_kint(J, 31));
+  return emitir(IRTI(IR_BAND), emitir(IRTI(IR_BOR), n, m),
+		lj_ir_kint(J, lim));
+}
+
 static TRef crec_simd_ubias(jit_State *J, IRType vt, const CTVecInfo *vi,
 			    TRef tr);
 
@@ -1809,11 +1845,47 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
   }
   if (vi.esize == 1 || (vi.esize == 8 && op == VSH_SAR)) {
     /* No instruction for these: rewrite with wider shifts plus masking.
-    ** This needs a constant count, which is the normal case in hot code.
+    ** A constant count folds the masks away; a variable count builds them
+    ** at runtime for a few extra packed instructions.
     */
     uint32_t sh;
     uint8_t ebuf[8];
-    crec_simd_need(J, tref_isk(n));
+    if (!tref_isk(n)) {
+      if (vi.esize == 1) {
+	/* Shift 16 bit lanes and clear the bits that crossed the byte
+	** boundary. The mask is (0xff << n) & 0xff resp. 0xff >> n, which
+	** is zero for an out of range count, exactly like the interpreter.
+	*/
+	TRef m, nc = op == VSH_SAR ? crec_simd_clampcnt(J, n, 7) : n;
+	if (op == VSH_SHL) {
+	  m = emitir(IRT(IR_VSHL, IRT_V8I16), crec_simd_k16(J, 0x00ff), nc);
+	  m = emitir(IRT(IR_VAND, IRT_V8I16), m, crec_simd_k16(J, 0x00ff));
+	  r = emitir(IRT(IR_VSHL, IRT_V8I16), a, nc);
+	} else {
+	  m = emitir(IRT(IR_VSHR, IRT_V8I16), crec_simd_k16(J, 0x00ff), nc);
+	  r = emitir(IRT(IR_VSHR, IRT_V8I16), a, nc);
+	}
+	r = emitir(IRT(IR_VAND, vt), r, crec_simd_bcastbyte(J, m));
+	if (op == VSH_SAR) {  /* (x ^ s) - s with s = 0x80 >> nc. */
+	  TRef s = crec_simd_bcastbyte(J,
+	    emitir(IRT(IR_VSHR, IRT_V8I16), crec_simd_k16(J, 0x0080), nc));
+	  r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, s), s);
+	}
+      } else {
+	/* 64 bit arithmetic shift right, same identity as below but with the
+	** bias vector built at runtime. Clamping the count matters here: an
+	** unclamped PSRLQ would flush the bias to zero and lose the sign.
+	*/
+	TRef ks, nc = crec_simd_clampcnt(J, n, 63);
+	uint64_t s = (uint64_t)1 << 63;
+	memcpy(ebuf, &s, 8);
+	ks = emitir(IRT(IR_VSHR, vt), crec_vec_kmask(J, vt, &vi, ebuf), nc);
+	r = emitir(IRT(IR_VSHR, vt), a, nc);
+	r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, ks), ks);
+      }
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
     sh = (uint32_t)IR(tref_ref(n))->i;
     if (vi.esize == 1) {
       if (sh >= 8) {  /* Flushes to zero, or to a full sign fill. */

@@ -373,10 +373,11 @@ test("ffi.simd comparisons and masks on trace", function()
 end)
 
 test("ffi.simd shifts on trace", function()
-  -- The count must be a *literal* here. Lane widths without a shift
+  -- The count is a *literal* in this first loop. Lane widths without a shift
   -- instruction (8 bit lanes, and the 64 bit arithmetic shift) are rewritten
-  -- by the recorder only for a constant count, so a variable count silently
-  -- leaves those paths interpreted and untested.
+  -- by the recorder, and the rewrite is a different one for a constant count
+  -- than for a variable count, so both have to be covered separately.
+  -- test_codegen.lua asserts that the variable count really does compile.
   for _, ti in ipairs(T.T) do
     if not ti.fp then
       local rnd = T.rng(SEED + 37 * ti.bits)
@@ -406,7 +407,9 @@ test("ffi.simd shifts on trace", function()
 	  end
 	end
       end
-      -- A variable count as well, where the instruction exists.
+      -- A variable count as well. The counts sweep past the lane width and
+      -- go negative, because the interpreter reads the count as uint32_t and
+      -- treats everything from the lane width upwards as a full shift.
       local a = T.rand(ti, rnd)
       local ct = ti.ct
       for _, op in ipairs({"shl", "shr", "sar"}) do
@@ -414,6 +417,11 @@ test("ffi.simd shifts on trace", function()
 	diffop(ti, op .. " var", function(n)
 	  local acc = ct(0)
 	  for i = 1, n do acc = f(simd.bxor(acc, a), i % (ti.bits + 2)) end
+	  return acc
+	end, 200)
+	diffop(ti, op .. " var wrap", function(n)
+	  local acc = ct(0)
+	  for i = 1, n do acc = f(simd.bxor(acc, a), (i * 7) % (2*ti.bits) - 3) end
 	  return acc
 	end, 200)
       end

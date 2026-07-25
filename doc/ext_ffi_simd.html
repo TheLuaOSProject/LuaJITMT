@@ -133,6 +133,12 @@ Integer vectors only. The count is treated as unsigned: a count of at least
 the lane width gives zero for <tt>shl</tt>/<tt>shr</tt> and a full sign fill
 for <tt>sar</tt>, matching the x86 packed shifts.
 </p>
+<p>
+The count may be a constant or a value computed at runtime; both compile to
+packed code. 8-bit lanes and the 64-bit <tt>sar</tt> have no x86 instruction
+and are rewritten into a wider shift plus a mask, which costs a few extra
+instructions when the count is not a constant.
+</p>
 
 <h3>Comparisons and masks</h3>
 <table class="convtable">

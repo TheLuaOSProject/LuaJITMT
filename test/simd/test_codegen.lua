@@ -216,6 +216,40 @@ test("64 bit lane min/max is packed", function()
   end
 end)
 
+test("shifts with a variable count are packed", function()
+  -- 8 bit lanes have no shift instruction at all, and there is no 64 bit
+  -- arithmetic shift before AVX-512. Both are rewritten by the recorder. A
+  -- constant count folds the masks away; these loops use a *variable* count,
+  -- so the masks have to be built at runtime and the whole rewrite has to
+  -- stay packed instead of aborting the trace back to the interpreter.
+  local bit_ = require("bit")
+  local i8 = T.T.i8x16.ct
+  local a8 = i8(1, -2, 3, -4, 127, -128, 0, -1, 55, -99, 17, -17, 64, -64, 7, -7)
+  checkloop("i8x16 shl var", {"psllw", "pmullw", "pand"}, NOCALL, function()
+    local acc = i8(0)
+    for i = 1, 400 do acc = acc + simd.shl(a8, bit_.band(i, 7)) end
+    return acc
+  end)
+  checkloop("i8x16 shr var", {"psrlw", "pmullw", "pand"}, NOCALL, function()
+    local acc = i8(0)
+    for i = 1, 400 do acc = acc + simd.shr(a8, bit_.band(i, 7)) end
+    return acc
+  end)
+  checkloop("i8x16 sar var", {"psrlw", "pmullw", "pxor", "psubb"}, NOCALL,
+    function()
+      local acc = i8(0)
+      for i = 1, 400 do acc = acc + simd.sar(a8, bit_.band(i, 7)) end
+      return acc
+    end)
+  local i64 = T.T.i64x2.ct
+  local a64 = i64(-1234567890123LL, 9007199254740993LL)
+  checkloop("i64x2 sar var", {"psrlq", "pxor", "psubq"}, NOCALL, function()
+    local acc = i64(0)
+    for i = 1, 400 do acc = acc + simd.sar(a64, bit_.band(i, 63)) end
+    return acc
+  end)
+end)
+
 test("horizontal reduction uses shuffles, not lane loads", function()
   local f4 = T.T.float4.ct
   local a = f4(1, 2, 3, 4)

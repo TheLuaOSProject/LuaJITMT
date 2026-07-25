@@ -219,6 +219,85 @@ VEX-128 zeroes the upper YMM half, so mixing them with the legacy SSE
 loads/stores and with the interpreter's own SSE code leaves the state clean and
 costs nothing. No `vzeroupper` is needed anywhere.
 
+## D12. Shifts without an instruction are rewritten, never scalarised
+
+x86 has no 8-bit packed shift at all, and no 64-bit packed arithmetic shift
+right before AVX-512. Both are rewritten by the *recorder* into packed
+sequences rather than being scalarised or left to the interpreter:
+
+  * 8-bit: shift the 16-bit lanes and then clear the bits that crossed the
+    byte boundary. The mask is `(0xff << n) & 0xff` for a left shift and
+    `0xff >> n` for a right shift, which is naturally zero for an out of range
+    count -- the same answer the interpreter gives. `sar` additionally applies
+    the usual `(x^s)-s` sign fill with `s = 0x80 >> n`.
+  * 64-bit `sar`: `((x >>u n) ^ m) - m` with `m = (1<<63) >>u n`.
+
+With a *constant* count every mask is a constant and folds away. With a
+*variable* count the masks are built at runtime from the same count:
+
+  * The byte masks come from shifting a constant `0x00ff`/`0x0080` in 16-bit
+    lanes and broadcasting the low byte into both halves of the lane with
+    `PMULLW` by `0x0101` -- `v * 0x0101 == v | (v << 8)` for `v <= 0xff`, it
+    cannot carry, and it needs only SSE2. `PSHUFB` would be one instruction
+    instead of two but would drag in an SSSE3 dependency for a case that does
+    not otherwise need one.
+  * `m` for the 64-bit `sar` comes from a `PSRLQ` of a constant sign-bit
+    vector.
+
+The counts differ in one important way. The 16-bit shift used for the 8-bit
+rewrite flushes to zero exactly when the byte shift should, so no clamping is
+needed there. The 64-bit `sar` *must* clamp: an unclamped `PSRLQ` with a count
+of 64 or more would flush `m` to zero as well and lose the sign fill, which
+the interpreter does not do. The clamp is branchless and guard-free, so the
+trace stays valid for every count:
+
+```
+d  = n & ~lim            /* non-zero iff n < 0 or n > lim */
+m  = (d | -d) >>a 31     /* all ones iff d != 0           */
+nc = (n | m) & lim
+```
+
+A guard would have been shorter but would specialise the trace on the count
+range and re-trace whenever a loop walked past it. The clamp costs six GPR
+instructions, all outside the vector unit.
+
+Both rewrites apply the interpreter's own definition of an out of range
+count: `lj_simd_shift()` reads the count as `uint32_t`, so a negative count is
+a very large one, logical shifts flush to zero and arithmetic shifts fill with
+the sign bit.
+
+## D13. The branch is based on upstream LuaJIT, not on this repo's `v2.1`
+
+Worth stating explicitly, because it is not visible from the code and it
+determines where this work can land.
+
+`origin` is `TheLuaOSProject/LuaJITMT`, whose `v2.1` is a heavily modified
+LuaJIT (multithreaded VM, a different GC, restructured `lj_asm`/`lj_ctype`/
+`lj_crecord`; about 118k inserted lines under `src/` relative to upstream).
+The `simd` branch is *not* based on it. It was cut from `upstream/v2.1` at
+`346ab587` -- pristine LuaJIT -- and `git merge-base simd origin/v2.1` is
+`b925b3e3`, so the two share only pre-fork history and `origin/v2.1` carries
+about 2600 commits that this branch does not.
+
+Consequences, none of which are hidden:
+
+  * Every claim in these notes -- interpreter/JIT agreement, the regression
+    diff against a pristine build, the benchmark numbers -- is a claim about
+    **upstream LuaJIT plus this branch**, and was measured that way.
+  * This branch is therefore not directly mergeable into `origin/v2.1`. The
+    design (vector ctypes, the IR type block, the boxing/sinking value model,
+    the x86-64 backend file) carries over, but the patch does not: the files
+    it touches most are the ones the fork rewrote most.
+  * Nothing here was written against the fork's threading model. The vector
+    paths add no new global state -- `lj_simd.c` is pure, the ctype and IR
+    additions live in existing per-state structures -- but that is an
+    observation, not a tested claim about a multithreaded VM.
+
+Rebasing onto `origin/v2.1` would be a re-implementation in a substantially
+different codebase, not a merge, so it is deliberately not attempted here. If
+the work is meant to land in the fork rather than stand alone, that is the
+decision to revisit first, before any further feature work.
+
 ## D11. x86-64-v3 target, but runtime feature detection
 
 The supported target was raised to **x86-64-v3**: SSE4.2, AVX, AVX2, BMI2.

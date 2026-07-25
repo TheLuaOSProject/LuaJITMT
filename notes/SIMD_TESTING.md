@@ -114,10 +114,19 @@ make clean && make -j$(nproc) CCDEBUG=-g \
 ./src/luajit test/simd/run.lua 2>&1 | grep "runtime error"
 ```
 
-All of these pass. UBSan is clean for `lj_simd.c`; the remaining reports come
-from stock LuaJIT files (`lj_parse.c`, `lj_buf.c`, `lj_bcread.c`, `lib_jit.c`
-and the deliberately unaligned mcode stores in `lj_emit_x86.h`) and are
-pre-existing.
+All of these pass. UBSan reports nothing at all in `lj_simd.c`, `lj_crecord.c`
+or `lj_record.c`; the remaining reports come from stock LuaJIT files
+(`lj_parse.c`, `lj_buf.c`, `lj_bcread.c`, `lib_jit.c`) and from the
+deliberately unaligned mcode stores, which the compiler attributes to the
+inlining site rather than to the macro: `lj_asm.c` (`emit_setvmstate`, itself
+unmodified in `lj_emit_x86.h`) and `lj_ccallback.c`, a file this work does not
+touch at all. All pre-existing.
+
+Run the **assert** build with more than one seed, not just once. The assert
+build is the only configuration that validates IR structure, and one of its
+checks (`rec_check_ir`) only trips when a 128-bit constant's *payload bytes*
+happen to decode as an invalid instruction, which depends on the constants a
+given test run interns.
 
 All three pass. In the JIT-disabled build the runner skips the `jit` and
 `mixed` modes and `test_jit.lua`/`test_codegen.lua` skip themselves, so the

@@ -162,13 +162,13 @@ Semantics worth pinning down:
 | Case | Status |
 |---|---|
 | `min/max` on 64-bit integer lanes | no instruction before AVX-512, so it lowers to PCMPGTQ plus a three instruction blend (still fully packed). Needs SSE4.2. |
-| `sar` on 64-bit lanes | no instruction before AVX-512, so the recorder rewrites it into `(v^S)>>n - (S>>n)`; needs a **constant** count, otherwise it stays interpreted |
+| `sar` on 64-bit lanes | no instruction before AVX-512, so the recorder rewrites it into `((v>>n)^m)-m` with `m = (1<<63)>>n`. Constant and variable counts are both packed; for a variable count `m` is built at runtime and the count is clamped to 63 with six branchless GPR instructions |
 | `lt/le/gt/ge` on 64-bit integer lanes | requires SSE4.2 (PCMPGTQ); otherwise JIT NYI |
 | `floor/ceil/trunc/round` | requires SSE4.1 (ROUNDPS); otherwise JIT NYI |
 | `shuffle`/`shuffle2` with 8/16-bit lanes | requires SSSE3 (PSHUFB); otherwise JIT NYI |
 | `abs` on 8/16/32-bit integer lanes | uses SSSE3 PABSB/W/D; without SSSE3 it stays interpreted |
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
-| shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a mask, needs a **constant** count |
+| shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a byte mask. Constant and variable counts are both packed; for a variable count the mask is built with the same shift applied to a constant and broadcast across the byte halves with `PMULLW` by `0x0101` |
 | non-constant lane index in `insert` | supported: the range is guarded and the lane mask is built with a packed compare against a constant vector of lane numbers |
 | non-constant lane index in `shuffle`/`shuffle2` | rejected at record time, stays interpreted: a runtime permutation would need a PSHUFB mask built at runtime |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |

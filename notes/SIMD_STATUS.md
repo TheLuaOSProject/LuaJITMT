@@ -7,6 +7,10 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 * Branch: `simd`, forked from `upstream/v2.1` at `346ab587`.
 * Remote: `origin` = https://github.com/TheLuaOSProject/LuaJITMT
 * Upstream: `upstream` = https://github.com/LuaJIT/LuaJIT.git
+* **This branch is based on pristine upstream LuaJIT, not on `origin/v2.1`.**
+  The two share only pre-fork history. See `SIMD_DESIGN.md` D13 for what that
+  means; it is the first thing to revisit if this work is meant to land in
+  the fork rather than stand alone.
 * Latest pushed commit: see "Milestones" below.
 * Target: **x86-64-v3** (SSE4.2 + AVX2 + BMI2), 128-bit vectors.
   Feature use is runtime detected, so the binary still runs on older CPUs.
@@ -26,6 +30,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M9 | Randomized program generator; snapshot replay, type-blind CSE and 64-bit `sar` fixes | done |
 | M10 | NaN quieting in rounding, defined float-to-integer conversion, seed sweep | done |
 | M11 | ASan and UBSan clean; integer-promotion UB removed from the reference implementation | done |
+| M12 | Variable shift counts on 8-bit lanes and on 64-bit `sar` compile to packed code | done |
 
 ## Commands that pass
 
@@ -138,6 +143,16 @@ notes/*                          design/status/matrix/testing notes (new)
   returned `TREF_NIL` for `IR_KVEC`, so a side trace that replayed a sunk
   vector box holding a constant got garbage. Any new constant kind has to be
   added to *all four*.
+* A 128-bit constant occupies **three** IR slots, and every loop that walks the
+  constant range from `nk` has to skip the two payload slots or it will decode
+  them as instructions. `gc_traverse_trace()`, `lj_opt_sink()` and the
+  constant loop in `lj_asm.c` do this with `irt_isvec()`;
+  `rec_check_ir()` in `lj_record.c` did not, so the assert build tripped
+  "IRMref op2 out of range" on a payload word. It stayed hidden until a new
+  constant happened to contain bytes that decode as an opcode with reference
+  operands -- the check only fails for *some* payloads. `lj_opt_split.c` has
+  the same shape of loop but is only built for 32-bit and soft-float targets,
+  which never see vector IR.
 * `lj_opt_cse()` matches on opcode and operands but **not on type**. That is
   fine for scalars, where a type pun gives the same bits, and wrong for
   vectors: `VCMPEQ` is PCMPEQB at V16I8 and PCMPEQD at V4I32. Vector opcodes
@@ -186,6 +201,28 @@ Fixed by getting back under the limit without changing the API:
 `lj_ff.h` now carries `LJ_STATIC_ASSERT(FF__MAX <= 256)` so this can never be
 reintroduced silently: the build fails instead.
 
+## Remaining deliberate limitations
+
+Each of these is a decision, not an unfinished edge. None of them can give a
+wrong answer: where the JIT has no lowering the trace aborts with
+`LJ_TRERR_NYIVEC` and the interpreter produces the same value.
+
+1. **128-bit only in the JIT.** Other widths keep working interpreted.
+   256-bit is blocked by the IR type encoding, not by AVX2; see
+   `SIMD_DESIGN.md` D9 for the full list of what it would take.
+2. **Non-constant lane index in `shuffle`/`shuffle2`.** Rejected at record
+   time. A runtime permutation would need a `PSHUFB` control mask assembled
+   from N separate variable indices, which costs more than it saves.
+   `insert` *does* support a variable index.
+3. **Vector arguments and returns in FFI callbacks** are rejected with a clear
+   error rather than guessed at; pass a pointer instead. LuaJIT's callback
+   trampoline never classified vector types. Vector arguments and returns in
+   ordinary FFI *calls* are supported.
+4. **No FMA.** `a*b+c` stays a multiply and an add. FMA rounds once where the
+   interpreter rounds twice, and interpreter/JIT agreement is worth more here
+   than the throughput.
+5. **This branch does not sit on `origin/v2.1`** -- see D13 above.
+
 ## Benchmarks
 
 
@@ -193,10 +230,10 @@ reintroduced silently: the build fails instead.
 machine:
 
 ```
-saxpy (float)              scalar     5.4 ms   vector     1.5 ms    3.65x
+saxpy (float)              scalar     5.4 ms   vector     1.5 ms    3.66x
 dot product (float)        scalar     5.0 ms   vector     1.2 ms    3.98x
-horizontal max (int32)     scalar     3.8 ms   vector     3.7 ms    1.02x
-clamp (float)              scalar    24.5 ms   vector     1.6 ms   15.21x
+horizontal max (int32)     scalar     3.7 ms   vector     3.7 ms    0.98x
+clamp (float)              scalar    24.5 ms   vector     1.6 ms   15.46x
 ```
 
 saxpy and the dot product reach ~4x, which is the ceiling for 4 lanes. Clamp
