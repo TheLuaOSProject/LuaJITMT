@@ -18,7 +18,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M2 | Vector IR types + constants, XLOAD/XSTORE/CNEW boxing, ExitState widening, register allocation, x64 lowering of arithmetic, recording of `+ - * /` and unary minus | done |
 | M3 | Recording of `ffi.simd` (bitwise, compare, select, shifts, min/max, abs/sqrt/round, reductions, bitcast/convert), vector construction and memory round trips on trace, `==` on trace, codegen inspection tests | done |
 | M4 | `ffi.simd` shuffle/insert recording, FFI call/callback ABI tests, benchmarks, user documentation | done |
-| M5 | FFI call/callback ABI audit and tests, benchmarks, docs | pending |
+| M5 | Fast-function ID budget fix; `simd.shuffle2` compiles | done |
+| M6 | Vector alias analysis and self-describing VMOVMSK/VEXTRACT | done |
 
 ## Commands that pass
 
@@ -107,6 +108,19 @@ notes/*                          design/status/matrix/testing notes (new)
   `ra_rematk()`.
 * Long emitted sequences must call `checkmclim()` in the middle: the mcode
   red zone is only 64 bytes.
+* `aa_xref()` in `lj_opt_mem.c` decided ALIAS_MUST from *size plus FP-ness*.
+  Two different vector types are both 16 bytes and both non-FP by that test,
+  so a `float4` store forwarded into an `int4` load and `lj_opt_fwd_xload()`
+  synthesised a `CONV vi4.vf4`, an instruction the backend was never designed
+  to assemble. Vectors now only forward between identical types.
+* Nothing in the backend may derive instruction selection from an *operand's*
+  IR type: CSE and store-to-load forwarding can legitimately hand over a value
+  whose lane type differs. `VMOVMSK` and `VEXTRACT` used to read
+  `IR(ir->op1)->t`; they now carry the source type in their own literal.
+* A box's `XSTORE` type must match the ctype it is boxed as. Masks and
+  bitcast results used to be stored with the *source* lane type, so the very
+  next load of that cdata could not forward and the allocation could not be
+  sunk.
 
 ## Trap: LuaJIT only has 255 fast function IDs
 

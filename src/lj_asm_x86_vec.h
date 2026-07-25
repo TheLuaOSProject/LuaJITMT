@@ -495,7 +495,7 @@ static void asm_vecshufb(ASMState *as, IRIns *ir)
 /* Sign bits of all lanes, gathered into an integer. */
 static void asm_vecmovmsk(ASMState *as, IRIns *ir)
 {
-  IRType t = irt_type(IR(ir->op1)->t);
+  IRType t = irvsrc_type(ir->op2);
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
   switch (t) {
@@ -522,7 +522,7 @@ static void asm_vecmovmsk(ASMState *as, IRIns *ir)
 /* Extract lane 0. Other lanes are handled by an ordinary load from memory. */
 static void asm_vecextract(ASMState *as, IRIns *ir)
 {
-  IRType st = irt_type(IR(ir->op1)->t);
+  IRType st = irvsrc_type(ir->op2);
   if (irt_isfp(ir->t)) {
     Reg dest = ra_dest(as, ir, RSET_FPR);
     ra_left(as, dest, ir->op1);  /* Lane 0 is the low part of the register. */

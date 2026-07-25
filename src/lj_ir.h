@@ -181,7 +181,7 @@
   _(VUNPKH,	N , ref, ref) \
   _(VCONV,	N , ref, lit) \
   _(VEXTRACT,	N , ref, lit) \
-  _(VMOVMSK,	N , ref, ___) \
+  _(VMOVMSK,	N , ref, lit) \
   \
   /* End of list. */
 
@@ -272,6 +272,14 @@ IRFLDEF(FLENUM)
 #define IRVSHUF_PSHUFLW		2	/* Permute the low four 16 bit lanes. */
 #define IRVSHUF_PSHUFHW		3	/* Permute the high four 16 bit lanes. */
 #define IRVSHUF(mode, imm)	(((mode)<<8) + (imm))
+
+/* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in
+** bits 8+, so instruction selection never depends on an operand's IR type
+** (a forwarded or CSEd value may legitimately have a different lane type).
+*/
+#define IRVSRC(t, imm)		(((t)<<8) + (imm))
+#define irvsrc_type(l)		((IRType)((l) >> 8))
+#define irvsrc_imm(l)		((l) & 255)
 
 /* VCONV op2 literal: destination VecKind in bits 8+, source VecKind below. */
 #define IRVCONV(dk, sk)		(((dk)<<8) + (sk))

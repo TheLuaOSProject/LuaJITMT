@@ -431,6 +431,52 @@ test("ffi.simd insert and shuffle on trace", function()
   end
 end)
 
+test("type punning does not confuse store-to-load forwarding", function()
+  -- A bitcast boxes the value under a new ctype, so the boxing store and the
+  -- next load of the same address have different vector IR types. Forwarding
+  -- must not invent a conversion between them, and must not hand a value with
+  -- the wrong lane type to an instruction that depends on it.
+  local f4, i4, b16 = T.T.float4, T.T.i32x4, T.T.i8x16
+  local v = f4.ct(1.5, -2.5, 3.5, -4.5)
+  diff("bitcast then add", function(n)
+    local acc = i4.ct(0)
+    for _ = 1, n do acc = acc + simd.bitcast(i4.ct, v) end
+    return acc
+  end, 200)
+  -- movemask picks a different instruction per lane width, so a value
+  -- forwarded with the wrong lane type would silently change the result.
+  diff("bitcast then movemask", function(n)
+    local s = 0
+    for _ = 1, n do
+      s = s + simd.movemask(simd.bitcast(b16.ct, v))
+      s = s + simd.movemask(simd.bitcast(i4.ct, v))
+      s = s + simd.movemask(v)
+    end
+    return s
+  end, 200)
+  -- Same memory, read back through two different vector pointer types.
+  local raw = ffi.new("char[64]")
+  local pf = ffi.cast(ffi.typeof("$ *", f4.ct), raw)
+  local pi = ffi.cast(ffi.typeof("$ *", i4.ct), raw)
+  diff("aliasing vector pointers", function(n)
+    local acc = i4.ct(0)
+    for i = 1, n do
+      pf[0] = f4.ct(i)
+      acc = acc + pi[0]
+    end
+    return acc, pf[0]
+  end, 200)
+  -- Reductions extract lane 0 and the extract depends on the lane width too.
+  diff("bitcast then reduce", function(n)
+    local s = 0
+    for _ = 1, n do
+      s = s + tonumber(simd.hsum(simd.bitcast(i4.ct, v)))
+      s = s + simd.hsum(v)
+    end
+    return s
+  end, 200)
+end)
+
 test("ffi.simd bitcast and convert on trace", function()
   local f4, i4, u4 = T.T.float4, T.T.i32x4, T.T.u32x4
   diff("bitcast", function(n)

@@ -1517,7 +1517,8 @@ static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
       mask = emitir(IRT(IR_VCMPEQ, IRT_V16I8), tra, trb);
       all = 0xffff;
     }
-    mm2 = emitir(IRTI(IR_VMOVMSK), mask, 0);
+    mm2 = emitir(IRTI(IR_VMOVMSK), mask,
+		 IRVSRC(veck_isfp(vi.kind) ? vt : IRT_V16I8, 0));
     /* Assume true comparison. Fixup and emit the pending guard later. */
     lj_ir_set(J, IRTGI(IR_EQ), mm2, lj_ir_kint(J, (int32_t)all));
     J->postproc = LJ_POST_FIXGUARD;
@@ -1749,7 +1750,12 @@ void LJ_FASTCALL recff_simd_cmp(jit_State *J, RecordFFData *rd)
   }
   if (inv) r = emitir(IRT(IR_VXOR, vt), r, crec_vec_kones(J, vt));
   mid = lj_simd_masktype(cts, &vi);
-  J->base[0] = crec_vec_box(J, r, vt, mid);
+  /* The mask ctype is the signed integer vector of the same shape, so box it
+  ** with that lane type: the next load of this cdata uses it, and a store and
+  ** a load with different lane types cannot be forwarded.
+  */
+  J->base[0] = crec_vec_box(J, r,
+    isfp ? (vi.esize == 4 ? IRT_V4I32 : IRT_V2I64) : vt, mid);
 }
 
 void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
@@ -1831,14 +1837,14 @@ void LJ_FASTCALL recff_simd_movemask(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
-  J->base[0] = emitir(IRTI(IR_VMOVMSK), a, 0);
+  J->base[0] = emitir(IRTI(IR_VMOVMSK), a, IRVSRC(vt, 0));
 }
 
 void LJ_FASTCALL recff_simd_maskcmp(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
-  TRef mm = emitir(IRTI(IR_VMOVMSK), a, 0);
+  TRef mm = emitir(IRTI(IR_VMOVMSK), a, IRVSRC(vt, 0));
   uint32_t all = vi.lanes == 32 ? 0xffffffffu : (1u << vi.lanes) - 1;
   /* Assume true. Fixup and emit the pending guard later. */
   if (rd->data == 0)
@@ -1885,8 +1891,10 @@ void LJ_FASTCALL recff_ffi_simd_bitcast(jit_State *J, RecordFFData *rd)
   crec_simd_need(J, dvt != IRT_NIL &&
 		    (CTSize)dvi.esize * dvi.lanes ==
 		    (CTSize)svi.esize * svi.lanes);
-  /* A bitcast changes no bits: box the same value under the new ctype. */
-  J->base[0] = crec_vec_box(J, a, svt, did);
+  /* A bitcast changes no bits: box the same value under the new ctype, with
+  ** the destination lane type so that reloading it can forward.
+  */
+  J->base[0] = crec_vec_box(J, a, dvt, did);
 }
 
 void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
@@ -1908,7 +1916,7 @@ void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
   dvt = crec_vec2irt(cts, dct);
   crec_simd_need(J, dvt != IRT_NIL && dvi.lanes == svi.lanes);
   if (dvi.kind == svi.kind) {
-    J->base[0] = crec_vec_box(J, a, svt, did);
+    J->base[0] = crec_vec_box(J, a, dvt, did);
     return;
   }
   /* Only the conversions with a direct packed instruction are compiled. */
@@ -2064,7 +2072,7 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     IRType et = veck_isfp(vi.kind) ?
 		  (vi.kind == VECK_F32 ? IRT_FLOAT : IRT_NUM) :
 		  (vi.esize == 8 ? (uns ? IRT_U64 : IRT_I64) : IRT_INT);
-    TRef res = emitir(IRT(IR_VEXTRACT, et), r, 0);
+    TRef res = emitir(IRT(IR_VEXTRACT, et), r, IRVSRC(vt, 0));
     CType *ect = ctype_get(cts, vi.eid);
     if (et == IRT_FLOAT) {
       J->base[0] = emitconv(res, IRT_NUM, IRT_FLOAT, 0);

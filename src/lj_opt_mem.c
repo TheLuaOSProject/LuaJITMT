@@ -743,6 +743,13 @@ static AliasRet aa_xref(jit_State *J, IRIns *refa, IRIns *xa, IRIns *xb)
   if (basea == baseb) {
     ptrdiff_t sza = irt_size(xa->t), szb = irt_size(xb->t);
     if (ofsa == ofsb) {
+      /* Vectors are same-sized whatever their lane type is, but there is no
+      ** conversion between two vector types and a forwarded value would carry
+      ** the wrong lane type. Only forward identical types, else force a
+      ** reload.
+      */
+      if (irt_isvec(xa->t) || irt_isvec(xb->t))
+	return irt_sametype(xa->t, xb->t) ? ALIAS_MUST : ALIAS_MAY;
       if (sza == szb && irt_isfp(xa->t) == irt_isfp(xb->t))
 	return ALIAS_MUST;  /* Same-sized, same-kind. May need to convert. */
     } else if (ofsa + sza <= ofsb || ofsb + szb <= ofsa) {
