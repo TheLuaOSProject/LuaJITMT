@@ -477,6 +477,89 @@ test("type punning does not confuse store-to-load forwarding", function()
   end, 200)
 end)
 
+test("mask predicates record the right guard polarity", function()
+  -- allof/anyof return a boolean and the recorder turns them into a guard, so
+  -- it has to know which way the interpreter actually answered. Cover both
+  -- polarities of both predicates, and an alternating case that forces the
+  -- guard to fail and take a side exit.
+  local ti = T.T.i32x4
+  local ct = ti.ct
+  local none = simd.lt(ct(1), ct(0))          -- all lanes clear
+  local all = simd.lt(ct(0), ct(1))           -- all lanes set
+  local some = simd.lt(ct(0, 1, 0, 1), ct(1)) -- two lanes set
+  local cases = { {"none", none}, {"all", all}, {"some", some} }
+  for _, c in ipairs(cases) do
+    local m = c[2]
+    diff("anyof " .. c[1], function(n)
+      local x = 0
+      for _ = 1, n do if simd.anyof(m) then x = x + 1 end end
+      return x
+    end, 200)
+    diff("allof " .. c[1], function(n)
+      local x = 0
+      for _ = 1, n do if simd.allof(m) then x = x + 1 end end
+      return x
+    end, 200)
+  end
+  -- The recorder learns the answer from the value the fast function left
+  -- behind, so a preceding operation that answered the other way must not be
+  -- able to leak into the guard.
+  diff("anyof false after a true compare", function(n)
+    local x, v = 0, ct(1)
+    for _ = 1, n do
+      if v == v then x = x + 1 end
+      if simd.anyof(none) then x = x + 100 end
+      if simd.allof(some) then x = x + 1000 end
+    end
+    return x
+  end, 200)
+  diff("anyof true after a false compare", function(n)
+    local x, v = 0, ct(1)
+    for _ = 1, n do
+      if v == ct(2) then x = x + 1 end
+      if simd.anyof(all) then x = x + 100 end
+      if simd.allof(all) then x = x + 1000 end
+    end
+    return x
+  end, 200)
+  diff("alternating masks", function(n)
+    local x = 0
+    for i = 1, n do
+      local m = (i % 2 == 0) and all or none
+      if simd.anyof(m) then x = x + 1 end
+      if simd.allof(m) then x = x + 10 end
+    end
+    return x
+  end, 300)
+end)
+
+test("variable lane index and scalar cdata operands on trace", function()
+  for _, ti in ipairs(T.T) do
+    local rnd = T.rng(SEED + 47 * ti.bits)
+    local a = T.rand(ti, rnd)
+    local ct, lanes = ti.ct, ti.lanes
+    local kv = ti.fp and 1.5 or 7
+    -- The lane index changes every iteration, so it cannot be a constant.
+    diffop(ti, "insert var lane", function(n)
+      local acc = ct(0)
+      for i = 1, n do acc = simd.insert(acc + a, i % lanes, kv) end
+      return acc
+    end, 200)
+    -- An out-of-range index must still raise, from the trace as well.
+    local ok = pcall(function()
+      for i = 1, 200 do simd.insert(a, i % (lanes + 1), kv) end
+    end)
+    check(not ok, ti.name .. ": out-of-range insert index must raise")
+    -- A scalar cdata as the second operand of an ffi.simd call.
+    local sc = ffi.cast(ti.fp and "double" or "int64_t", 3)
+    diffop(ti, "scalar cdata operand", function(n)
+      local acc = ct(0)
+      for _ = 1, n do acc = simd.max(simd.min(acc + a, sc), simd.bxor(acc, sc)) end
+      return acc
+    end, 200)
+  end
+end)
+
 test("ffi.simd bitcast and convert on trace", function()
   local f4, i4, u4 = T.T.float4, T.T.i32x4, T.T.u32x4
   diff("bitcast", function(n)

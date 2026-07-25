@@ -239,6 +239,13 @@ test("shuffle and insert are packed", function()
     for _ = 1, 400 do acc = simd.shuffle2(acc + a, b, 0, 4, 1, 5) end
     return acc
   end)
+  -- A variable lane index builds the mask with a packed compare instead of
+  -- falling back to the interpreter.
+  checkloop("insert var lane", {"pcmpeqd", "pandn", "por"}, NOCALL, function()
+    local acc = i4(0)
+    for i = 1, 400 do acc = simd.insert(acc + a, i % 4, 42) end
+    return acc
+  end)
   -- The mask AND the splatted constant fold together, so only the ANDN and
   -- the OR survive in the loop.
   checkloop("insert", {"pandn", "por"}, NOCALL, function()

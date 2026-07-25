@@ -1,6 +1,10 @@
 -- SIMD test suite runner.
 --
---   luajit test/simd/run.lua [-jit|-interp] [name ...]
+--   luajit test/simd/run.lua [-jit|-interp|-mixed] [name ...]
+--
+-- SIMD_SEED picks the random seed. Run more than one seed before believing
+-- the suite: a wrong guard polarity in a mask predicate only showed up on
+-- some seeds.
 --
 -- Each (file, mode) pair runs in its own process so that ffi.cdef state and
 -- compiled traces from one test cannot influence another.

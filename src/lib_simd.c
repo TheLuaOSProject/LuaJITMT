@@ -344,7 +344,9 @@ LJLIB_CF(ffi_simd_allof)		LJLIB_REC(simd_maskcmp 0)
   CTVecInfo vi;
   const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, NULL);
   uint32_t all = vi.lanes == 32 ? 0xffffffffu : (1u << vi.lanes) - 1;
-  setboolV(L->top++, lj_simd_movemask(ap, &vi) == all);
+  int res = lj_simd_movemask(ap, &vi) == all;
+  setboolV(L->top++, res);
+  setboolV(&G(L)->tmptv2, res);  /* Remember for the trace recorder. */
   return 1;
 }
 
@@ -353,7 +355,11 @@ LJLIB_CF(ffi_simd_anyof)		LJLIB_REC(simd_maskcmp 1)
   CTState *cts = ctype_cts(L);
   CTVecInfo vi;
   const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, NULL);
-  setboolV(L->top++, lj_simd_movemask(ap, &vi) != 0);
+  {
+    int res = lj_simd_movemask(ap, &vi) != 0;
+    setboolV(L->top++, res);
+    setboolV(&G(L)->tmptv2, res);  /* Remember for the trace recorder. */
+  }
   return 1;
 }
 

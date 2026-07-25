@@ -22,6 +22,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M5 | Fast-function ID budget fix; `simd.shuffle2` compiles | done |
 | M6 | Vector alias analysis and self-describing VMOVMSK/VEXTRACT | done |
 | M7 | x86-64-v3: AVX/AVX2 detection, VEX three operand encoding, 64-bit lane min/max | done |
+| M8 | Variable lane index, scalar cdata operands, mask predicate guard polarity | done |
 
 ## Commands that pass
 
@@ -110,6 +111,11 @@ notes/*                          design/status/matrix/testing notes (new)
   `ra_rematk()`.
 * Long emitted sequences must call `checkmclim()` in the middle: the mcode
   red zone is only 64 bytes.
+* A fast function whose result is recorded as a **guard** must leave that
+  result in `G(L)->tmptv2`. `LJ_POST_FIXGUARD` reads it to decide whether to
+  flip the guard, so without it the compiled code can answer the opposite of
+  the interpreter. `lj_carith_op()` does this for the operators;
+  `simd.allof`/`simd.anyof` did not, and only failed on some random seeds.
 * `aa_xref()` in `lj_opt_mem.c` decided ALIAS_MUST from *size plus FP-ness*.
   Two different vector types are both 16 bytes and both non-FP by that test,
   so a `float4` store forwarded into an `int4` load and `lj_opt_fwd_xload()`

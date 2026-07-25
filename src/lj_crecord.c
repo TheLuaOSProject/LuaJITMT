@@ -1603,10 +1603,16 @@ static TRef crec_simd_arg2(jit_State *J, RecordFFData *rd, int n,
     CTypeID id2 = argv2cdata(J, tr, &rd->argv[n])->ctypeid;
     CType *ct = ctype_raw(cts, id2);
     CTVecInfo vi2;
-    if (!lj_ctype_vecinfo(cts, ct, &vi2) || ctype_raw(cts, id) != ct)
+    if (lj_ctype_vecinfo(cts, ct, &vi2)) {
+      if (ctype_raw(cts, id) != ct) lj_trace_err(J, LJ_TRERR_NYIVEC);
+      tr = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCcdata)));
+      return emitir(IRT(IR_XLOAD, vt), tr, 0);
+    }
+    /* A scalar cdata is unboxed, converted and splatted like a Lua number. */
+    if (!ctype_isnum(ct->info) || (ct->info & CTF_BOOL))
       lj_trace_err(J, LJ_TRERR_NYIVEC);
-    tr = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCcdata)));
-    return emitir(IRT(IR_XLOAD, vt), tr, 0);
+    tr = crec_ct_tv(J, ctype_get(cts, vi->eid), 0, tr, &rd->argv[n]);
+    return emitir(IRT(IR_VSPLAT, vt), tr, 0);
   } else if (tref_isnumber(tr)) {
     CType *sct = ctype_get(cts, tref_isinteger(tr) ? CTID_INT32 : CTID_DOUBLE);
     return crec_vec_splat(J, cts, vt, vi, tr, sct, &rd->argv[n]);
@@ -2042,17 +2048,38 @@ void LJ_FASTCALL recff_ffi_simd_insert(jit_State *J, RecordFFData *rd)
   int32_t lane;
   TRef splat, kmask;
   CType *sct;
-  if (!trlane || !tref_isk(trlane) || !tref_isinteger(trlane))
-    lj_trace_err(J, LJ_TRERR_NYIVEC);  /* Needs a constant lane index. */
-  lane = IR(tref_ref(trlane))->i;
-  if ((uint32_t)lane >= (uint32_t)vi.lanes) lj_trace_err(J, LJ_TRERR_BADTYPE);
+  if (!trlane) lj_trace_err(J, LJ_TRERR_NYIVEC);
+  if (!tref_isinteger(trlane)) {
+    if (tref_isnum(trlane)) trlane = lj_opt_narrow_toint(J, trlane);
+    else lj_trace_err(J, LJ_TRERR_NYIVEC);
+  }
   if (!trval || !tref_isnumber(trval)) lj_trace_err(J, LJ_TRERR_NYIVEC);
   sct = ctype_get(cts, tref_isinteger(trval) ? CTID_INT32 : CTID_DOUBLE);
   splat = crec_vec_splat(J, cts, vt, &vi, trval, sct, &rd->argv[2]);
-  /* select(lanemask, splat(x), v), which is a packed SSE2 sequence. */
-  memset(kbuf, 0, sizeof(kbuf));
-  memset(kbuf + (uint32_t)lane * vi.esize, 0xff, vi.esize);
-  kmask = lj_ir_kvec(J, vt, kbuf);
+  if (tref_isk(trlane)) {
+    lane = IR(tref_ref(trlane))->i;
+    if ((uint32_t)lane >= (uint32_t)vi.lanes) lj_trace_err(J, LJ_TRERR_BADTYPE);
+    memset(kbuf, 0, sizeof(kbuf));
+    memset(kbuf + (uint32_t)lane * vi.esize, 0xff, vi.esize);
+    kmask = lj_ir_kvec(J, vt, kbuf);
+  } else {
+    /* Variable index: guard the range, then build the lane mask by comparing
+    ** a constant vector of lane numbers against the splatted index. Still
+    ** fully packed, no memory round trip.
+    */
+    IRType ivt = vi.esize == 1 ? IRT_V16I8 : vi.esize == 2 ? IRT_V8I16 :
+		 vi.esize == 4 ? IRT_V4I32 : IRT_V2I64;
+    TRef tridx, kidx;
+    uint32_t i;
+    emitir(IRTGI(IR_ULT), trlane, lj_ir_kint(J, (int32_t)vi.lanes));
+    memset(kbuf, 0, sizeof(kbuf));
+    for (i = 0; i < vi.lanes; i++) kbuf[i*vi.esize] = (uint8_t)i;
+    kidx = lj_ir_kvec(J, ivt, kbuf);
+    tridx = vi.esize == 8 ?
+	      emitconv(trlane, IRT_I64, IRT_INT, IRCONV_SEXT) : trlane;
+    tridx = emitir(IRT(IR_VSPLAT, ivt), tridx, 0);
+    kmask = emitir(IRT(IR_VCMPEQ, ivt), kidx, tridx);
+  }
   J->base[0] = crec_vec_box(J,
     emitir(IRT(IR_VOR, vt),
 	   emitir(IRT(IR_VAND, vt), kmask, splat),

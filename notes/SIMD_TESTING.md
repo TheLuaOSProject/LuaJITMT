@@ -46,6 +46,18 @@ compare vectors by their printed lane values.
 seed is printed in every failure message together with the operand values, so
 any failure can be replayed exactly. Override with `SIMD_SEED`.
 
+**Run more than one seed.** A wrong guard polarity in `simd.allof`/`anyof`
+only showed up on some seeds, because it needed a mask whose answer differed
+from whatever the previous operation had left behind. Before believing the
+suite:
+
+```
+for s in 1 7 999 20260101 424242; do SIMD_SEED=$s ./src/luajit test/simd/run.lua; done
+```
+
+`test_jit.lua` now also pins that case deterministically ("mask predicates
+record the right guard polarity").
+
 **Corner values.** `M.randlanes` biases the generator towards 0, 1, -1, the
 all-ones pattern, and for FP towards +-0, +-inf and NaN, so those cases appear
 in every run instead of being separate hand-written tests.

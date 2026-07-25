@@ -112,7 +112,7 @@ operand, exactly like the operators.
 | `allof(a)`, `anyof(a)` | boolean | yes | yes | yes | yes | yes |
 | `adds/subs(a,b)` | same ctype | — | 8/16-bit only | 8/16-bit only | yes | yes |
 | `hsum/hmin/hmax(a)` | element | yes | yes | yes | yes | yes |
-| `insert(a,i,x)` | same ctype | yes | yes | yes | yes | yes (const i) |
+| `insert(a,i,x)` | same ctype | yes | yes | yes | yes | yes |
 | `shuffle(a,i...)` | same ctype | yes | yes | yes | yes | yes (const i, SSSE3) |
 | `shuffle2(a,b,i...)` | same ctype | yes | yes | yes | yes | yes (const i, SSSE3) |
 | `bitcast(ct,a)` | ct | yes | yes | yes | yes | yes |
@@ -155,8 +155,9 @@ Semantics worth pinning down:
 | `abs` on 8/16/32-bit integer lanes | uses SSSE3 PABSB/W/D; without SSSE3 it stays interpreted |
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
 | shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a mask, needs a **constant** count |
-| non-constant lane index in `insert`/`shuffle` | rejected at record time, stays interpreted |
-| scalar **cdata** as the second operand of an `ffi.simd` binary call | stays interpreted; a Lua number operand compiles |
+| non-constant lane index in `insert` | supported: the range is guarded and the lane mask is built with a packed compare against a constant vector of lane numbers |
+| non-constant lane index in `shuffle`/`shuffle2` | rejected at record time, stays interpreted: a runtime permutation would need a PSHUFB mask built at runtime |
+| scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |
 
 "JIT NYI" always means: the trace aborts with a NYI reason, the code keeps
 running interpreted, and the result is identical. It never means a wrong
