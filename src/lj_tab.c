@@ -4201,6 +4201,7 @@ static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
 static LJTabNextAfterKeyindexHook tab_test_next_after_keyindex_hook;
 static LJTabStorePostCasHook tab_test_store_post_cas_hook;
 static LJTabRootedReaderRetryHook tab_test_rooted_reader_retry_hook;
+static LJTabLenRootedTryHook tab_test_len_rooted_try_hook;
 static uint32_t tab_test_keyed_cas_changed_stack_grow;
 static uint32_t tab_test_keyed_cas_changed_stack_grow_count;
 
@@ -4239,12 +4240,28 @@ void lj_tab_test_set_rooted_reader_retry_hook(
   tab_test_rooted_reader_retry_hook = hook;
 }
 
+void lj_tab_test_set_len_rooted_try_hook(LJTabLenRootedTryHook hook)
+{
+  tab_test_len_rooted_try_hook = hook;
+}
+
 static LJ_AINLINE LJTabRootedReaderRetryHook
 tab_test_rooted_reader_retry_take(void)
 {
   LJTabRootedReaderRetryHook hook = tab_test_rooted_reader_retry_hook;
   tab_test_rooted_reader_retry_hook = NULL;
   return hook;
+}
+
+static LJ_AINLINE void tab_test_len_rooted_try_before_current(int enabled,
+							      GCtab *t)
+{
+  LJTabLenRootedTryHook hook = tab_test_len_rooted_try_hook;
+  if (!enabled)
+    return;
+  tab_test_len_rooted_try_hook = NULL;
+  if (hook)
+    hook(t);
 }
 
 void lj_tab_test_keyed_cas_changed_stack_grow_once(void)
@@ -4315,6 +4332,8 @@ static LJ_AINLINE void tab_test_store_post_cas(lua_State *L, GCtab *t,
 #define tab_test_store_post_cas(L, t, dst, key, value) \
   ((void)(L), (void)(t), (void)(dst), (void)(key), (void)(value))
 #define tab_test_rooted_reader_retry_take() NULL
+#define tab_test_len_rooted_try_before_current(enabled, t) \
+  ((void)(enabled), (void)(t))
 #endif
 
 static void tab_release_claimed_anchor(Node *nodebase, Node *n)
@@ -7302,9 +7321,10 @@ static int tab_len_snapshot_present(const TabForjitSnapshot *snap,
 /* One bounded length computation against a paired current generation. Unlike
 ** the legacy naked-pointer helper, this never waits or follows a vector after
 ** its snapshot has been taken. */
-static int tab_len_current_held(GCtab *t, MSize *lenp)
+static int tab_len_current_held(GCtab *t, MSize *lenp, int rooted_try)
 {
   TabForjitSnapshot snap;
+  MSize len;
   uint32_t hi, lo, mid;
   int present;
 
@@ -7327,17 +7347,13 @@ static int tab_len_current_held(GCtab *t, MSize *lenp)
 	else
 	  hi = mid;
       }
-      if (!tab_forjit_snapshot_current(t, &snap))
-	return 0;
-      *lenp = (MSize)lo;
-      return 1;
+      len = (MSize)lo;
+      goto validate;
     }
   }
   if (snap.hmask == 0) {
-    if (!tab_forjit_snapshot_current(t, &snap))
-      return 0;
-    *lenp = (MSize)hi;
-    return 1;
+    len = (MSize)hi;
+    goto validate;
   }
 
   lo = hi;
@@ -7349,10 +7365,8 @@ static int tab_len_current_held(GCtab *t, MSize *lenp)
       break;
     lo = hi;
     if (hi == 0x7fffffffu) {
-      if (!tab_forjit_snapshot_current(t, &snap))
-	return 0;
-      *lenp = (MSize)hi;
-      return 1;
+      len = (MSize)hi;
+      goto validate;
     }
     hi = hi > 0x3fffffffu ? 0x7fffffffu : hi << 1;
   }
@@ -7365,10 +7379,63 @@ static int tab_len_current_held(GCtab *t, MSize *lenp)
     else
       hi = mid;
   }
+  len = (MSize)lo;
+
+validate:
+  tab_test_len_rooted_try_before_current(rooted_try, t);
   if (!tab_forjit_snapshot_current(t, &snap))
     return 0;
-  *lenp = (MSize)lo;
+  *lenp = len;
   return 1;
+}
+
+int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot)
+{
+  TabKeyedSlotOwnerSnapshot owner;
+  LJGC2Lease table_lease = { 0 };
+  TValue tablev, table_confirm;
+  GCtab *t = NULL;
+  MSize len = 0;
+  int32_t result = LJ_TAB_LEN_RETRY;
+  int table_lease_active = 0;
+
+  if (!L || !tabroot || !tab_keyed_slot_owner_snapshot(L, &owner) ||
+      !lj_gc2_smr_read_try(owner.g))
+    return LJ_TAB_LEN_RETRY;
+
+  /* Copy the mutable semantic root only after SMR admission, then retain that
+  ** exact table incarnation before following either structural vector. */
+  lj_tv_load_acq(&tablev, tabroot);
+  if (!tvistab(&tablev))
+    goto leave;
+  if (lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
+      LJ_GC2_TV_EDGE_VALID)
+    goto leave;
+  table_lease_active = 1;
+  t = tabV(&tablev);
+
+  if (!tab_len_current_held(t, &len, 1))
+    goto leave;
+
+  /* The generation check above is the length LP. The original root and exact
+  ** physical owner must still authorize returning that result; a stale C
+  ** pointer or transferred state claim can only request a fresh attempt. */
+  if (!tab_keyed_slot_owner_current(L, &owner))
+    goto leave;
+  lj_tv_load_acq(&table_confirm, tabroot);
+  if (tv_rawload(&table_confirm) != tv_rawload(&tablev) ||
+      !tab_keyed_slot_owner_current(L, &owner) ||
+      len > (MSize)INT32_MAX)
+    goto leave;
+  result = (int32_t)len;
+
+leave:
+  /* Drop vector/body provenance before closing its retaining SMR interval. */
+  t = NULL;
+  lj_gc2_smr_read_leave(owner.g);
+  if (table_lease_active)
+    lj_gc2_lease_release(&table_lease);
+  return result;
 }
 
 MSize lj_tab_len_rooted(lua_State *L, cTValue *tabroot)
@@ -7416,7 +7483,7 @@ MSize lj_tab_len_rooted(lua_State *L, cTValue *tabroot)
       }
     }
 #endif
-    if (!tab_len_current_held(t, &len)) {
+    if (!tab_len_current_held(t, &len, 0)) {
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&table_lease);
       lj_tab_wait_l(L);

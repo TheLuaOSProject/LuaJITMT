@@ -29,6 +29,7 @@ local m6_cases = {
   "m6_jit_xbar_xpoll",
   "m6_jit_xsave",
   "m6_jit_table_store_helper",
+  "m6_jit_rooted_table_len",
   "m6_jit_entering_table_store",
   "m6_jit_tbar_gc2_black_gate",
   "m6_jit_aref_pair_boundary",
@@ -1642,6 +1643,99 @@ assert(trace_count(200) == 0,
        "active-MT new numeric array store crossed metatable safety fence")
 ]=], { timeout = "20s" })
       print("M6 JIT table-store helper behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_rooted_table_len",
+    description = "active-MT table length uses a bounded rooted helper",
+    run = function(t)
+      build_default(t)
+      luajit_code(t, [=[
+local bit = require("bit")
+local util = require("jit.util")
+local vmdef = require("jit.vmdef")
+local rawlen_fn = rawlen
+
+local function table_len_ir(limit)
+  local alen, rooted, in1 = 0, 0, 0
+  for tr = 1, limit do
+    local info = util.traceinfo(tr)
+    if info then
+      for ref = 1, info.nins do
+        local _, ot, _, op2 = util.traceir(tr, ref)
+        if ot then
+          local op = bit.rshift(ot, 8)
+          local name = vmdef.irnames:sub(op * 6 + 1, op * 6 + 6)
+          if name == "ALEN  " then
+            alen = alen + 1
+          elseif name == "CALLS " and
+                 vmdef.ircall[op2] == "lj_tab_len_rooted_try" then
+            rooted = rooted + 1
+          elseif name == "TMPREF" and bit.band(op2, 1) ~= 0 then
+            in1 = in1 + 1
+          end
+        end
+      end
+    end
+  end
+  return alen, rooted, in1
+end
+jit.off(table_len_ir, true)
+
+local function assert_stock_len_ir(label)
+  local alen, rooted = table_len_ir(256)
+  assert(alen > 0, label .. " omitted stock IR_ALEN")
+  assert(rooted == 0, label .. " unexpectedly used rooted length helper")
+end
+
+local function assert_rooted_len_ir(label)
+  local alen, rooted, in1 = table_len_ir(256)
+  assert(rooted > 0, label .. " omitted lj_tab_len_rooted_try")
+  assert(in1 >= rooted, label .. " omitted TMPREF IN1 table root")
+  assert(alen == 0, label .. " retained unsafe IR_ALEN")
+end
+jit.off(assert_stock_len_ir, true)
+jit.off(assert_rooted_len_ir, true)
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local pre = { 1, 2, 3 }
+local sum = 0
+for _ = 1, 80 do sum = sum + #pre end
+assert(sum == 240)
+assert_stock_len_ir("pre-MT #table")
+
+if rawlen_fn then
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  local pre_raw = { 1, 2, 3, 4 }
+  local raw_sum = 0
+  for _ = 1, 80 do raw_sum = raw_sum + rawlen_fn(pre_raw) end
+  assert(raw_sum == 320)
+  assert_stock_len_ir("pre-MT rawlen(table)")
+end
+
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+if rawlen_fn then
+  local shared_raw = { 1, 2, 3, 4 }
+  local raw_sum = 0
+  for _ = 1, 80 do raw_sum = raw_sum + rawlen_fn(shared_raw) end
+  assert(raw_sum == 320)
+  assert_rooted_len_ir("active-MT rawlen(table)")
+else
+  local shared = { 1, 2, 3 }
+  sum = 0
+  for _ = 1, 80 do sum = sum + #shared end
+  assert(sum == 240)
+  assert_rooted_len_ir("active-MT #table")
+end
+]=], { timeout = "20s" })
+      print("M6 JIT rooted table-length lowering passed")
     end
   })
 

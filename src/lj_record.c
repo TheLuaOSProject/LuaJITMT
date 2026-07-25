@@ -1644,7 +1644,7 @@ static TRef rec_mm_len(jit_State *J, TRef tr, TValue *tv)
     lj_record_call(J, func, 2);
   } else {
     if (LJ_52 && tref_istab(tr))
-      return emitir(IRTI(IR_ALEN), tr, TREF_NIL);
+      return lj_record_tab_len(J, tr);
     lj_trace_err(J, LJ_TRERR_NOMM);
   }
   return 0;  /* No result yet. */
@@ -2939,6 +2939,24 @@ static TRef rec_tmpref(jit_State *J, TRef tr)
   return rec_tmpref_mode(J, tr, IRTMPREF_IN1);
 }
 
+/*
+** Preserve stock ALEN lowering until the universe has actually entered MT.
+** Thereafter a table vector may be replaced while a trace is running, so keep
+** the table in a generated-frame TValue root and make one bounded snapshot
+** attempt. A retry guard exits before consuming a length and lets the
+** interpreter retry the bytecode; the try helper itself never waits.
+*/
+TRef lj_record_tab_len(jit_State *J, TRef tab)
+{
+  if (lj_record_mt_shared_tab(J, tab)) {
+    TRef tabroot = rec_tmpref_mode(J, tab, IRTMPREF_IN1);
+    TRef len = lj_ir_call(J, IRCALL_lj_tab_len_rooted_try, tabroot);
+    emitir(IRTGI(IR_NE), len, lj_ir_kint(J, LJ_TAB_LEN_RETRY));
+    return len;
+  }
+  return emitir(IRTI(IR_ALEN), tab, TREF_NIL);
+}
+
 /* Look ahead in the current loop body for FNEW promotion of a mutable slot. */
 static int rec_celluv_will_promote(jit_State *J, BCReg slotno)
 {
@@ -3962,7 +3980,7 @@ void lj_record_ins(jit_State *J)
       else
 	rc = emitir(IRTI(IR_FLOAD), rc, IRFL_STR_LEN);
     } else if (!LJ_52 && tref_istab(rc))
-      rc = emitir(IRTI(IR_ALEN), rc, TREF_NIL);
+      rc = lj_record_tab_len(J, rc);
     else
       rc = rec_mm_len(J, rc, rcv);
     break;

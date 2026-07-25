@@ -1210,10 +1210,15 @@ local function next_churn_observer(tbl, ready, start, id, rounds)
     check(k, v, "next churn")
 
     local count = 0
-    for pk, pv in pairs(tbl) do
-      check(pk, pv, "pairs churn")
-      count = count + 1
-      if count >= 96 then break end
+    local ok, why = pcall(function()
+      for pk, pv in pairs(tbl) do
+	check(pk, pv, "pairs churn")
+	count = count + 1
+	if count >= 96 then break end
+      end
+    end)
+    if not ok and not tostring(why):match("invalid key to 'next'") then
+      return nil, "pairs churn failed: " .. tostring(why)
     end
 
     tbl["observer:" .. id .. ":" .. round] = round

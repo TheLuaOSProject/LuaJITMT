@@ -336,6 +336,9 @@ typedef void (*LJTabStorePostCasHook)(lua_State *L, GCtab *t, TValue *dst,
 				      cTValue *key, cTValue *value);
 typedef void (*LJTabRootedReaderRetryHook)(lua_State *L, GCtab *t,
 					   int reader);
+/* Test-only one-shot hook immediately before rooted length validates its
+** captured table generation. Hooks must not wait, allocate or throw. */
+typedef void (*LJTabLenRootedTryHook)(GCtab *t);
 enum {
   LJ_TAB_ROOTED_READER_NEXT = 1,
   LJ_TAB_ROOTED_READER_LEN = 2
@@ -355,6 +358,8 @@ LJ_FUNC void lj_tab_test_keyed_cas_changed_stack_grow_once(void);
 LJ_FUNC uint32_t lj_tab_test_keyed_cas_changed_stack_grow_hits(void);
 LJ_FUNC void lj_tab_test_set_rooted_reader_retry_hook(
   LJTabRootedReaderRetryHook hook);
+LJ_FUNC void lj_tab_test_set_len_rooted_try_hook(
+  LJTabLenRootedTryHook hook);
 LJ_FUNC int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src,
 					      MSize idx, GCtab *dst,
 					      int freeze_old);
@@ -562,6 +567,14 @@ LJ_FUNCA int32_t LJ_FASTCALL lj_tab_itern_rooted(lua_State *L,
 						 cTValue *tabroot,
 						 TValue *ctrl);
 LJ_FUNCA MSize LJ_FASTCALL lj_tab_len(GCtab *t);
+/* One bounded length attempt from an authoritative table TValue root. The
+** exact actor/TG/state owner, table root, table allocation and paired current
+** structural generation must remain valid through the result linearization.
+** The helper never waits, yields, allocates or throws. */
+enum {
+  LJ_TAB_LEN_RETRY = -1
+};
+LJ_FUNC int32_t lj_tab_len_rooted_try(lua_State *L, cTValue *tabroot);
 /* Bounded current-generation length search from an authoritative table root.
 ** The exact table and both structural vectors remain retained throughout each
 ** attempt; waits occur only after the SMR interval and lease are closed. */
