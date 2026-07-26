@@ -147,10 +147,17 @@ XMM and YMM widths, reversed shift order, and both OR and XOR spellings. The
 machine-code checks require exactly one `PSHUFB` and reject the component
 shifts and logical combine. A separate fourteen-accumulator differential loop
 forces vector-register pressure so the x64 constant-memory operand path is
-executed rather than only the low-pressure register-mask path. The enlarged
-ChaCha20 benchmark provides a production-shaped check with sixteen live state
-vectors; its main traces contain 32 byte shuffles and are 62 instructions
-shorter at either width.
+executed rather than only the low-pressure register-mask path.
+
+The constant-shuffle suite separately checks the canonical routes: identity
+emits no shuffle, XMM and repeated lane-local YMM 32/64-bit controls use
+immediate `PSHUFD`, and an exact YMM half exchange uses only `VPERM2I128`,
+including for byte lanes. Interpreter/JIT differentials exercise identity,
+lane-local reverse, half exchange, and full reverse for every YMM lane kind.
+
+The enlarged ChaCha20 benchmark provides a production-shaped check with
+sixteen live state vectors; its main traces contain 32 byte shuffles and are
+62 instructions shorter at either width.
 
 Load-fusion codegen coverage checks both sides of the x86 feature boundary.
 On AVX it requires a cdata `XLOAD` to appear as the memory source of

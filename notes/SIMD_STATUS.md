@@ -70,6 +70,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M47 | Compute signed/unsigned byte `mulhi` squares through absolute bytes and full word products | done |
 | M48 | Lower variable word left shifts through packed power-of-two factors and one native word multiply | done |
 | M49 | Lower word logical-right and YMM arithmetic-right shifts through packed factors and native high products | done |
+| M50 | Canonicalise identity, half-swap, and immediate 32/64-bit constant shuffles before allocating byte controls | done |
 
 ## Commands that pass
 
@@ -618,3 +619,12 @@ the prior dword decomposition: it is about 2% faster in a streaming loop and
 to 407 instructions; dynamic dumps grow from 408 to 411 while removing the
 YMM data-dependent shift chain. `bench_ops.lua` now reports all three
 per-lane word shifts at both widths.
+
+Constant lane shuffles now discard identity, lower an exact YMM half exchange
+directly to `VPERM2I128`, and use immediate `PSHUFD` for every XMM 32/64-bit
+permutation and every repeated lane-local YMM pattern. This removes a control
+vector without lengthening the critical path. Eight independent YMM chains
+with distinct controls improve from 0.169 to 0.138 ns/shuffle, about 18%;
+XMM remains neutral near 0.14 ns. Differential and codegen tests cover
+identity, local reversal, pure half exchange, and arbitrary cross-half
+permutations for all lane kinds.

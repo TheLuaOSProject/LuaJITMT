@@ -1364,10 +1364,14 @@ if simd.features().avx2 then
 
   test("256-bit constant and runtime shuffles cross halves", function()
     for _, ti in ipairs(T.W) do
-      local lanes, rev, mix, raw = {}, {}, {}, {}
+      local lanes, identity, localrev, halfswap, rev, mix, raw =
+	{}, {}, {}, {}, {}, {}, {}
       local half = ti.lanes / 2
       for i = 0, ti.lanes-1 do
 	lanes[i+1] = i + 1
+	identity[i+1] = i
+	localrev[i+1] = i-i%half + half-1-i%half
+	halfswap[i+1] = (i+half) % ti.lanes
 	rev[i+1] = ti.lanes - 1 - i
 	mix[i+1] = i % 2 == 0 and ti.lanes - 1 - i
 				      or ti.lanes + (i + half) % ti.lanes
@@ -1379,6 +1383,27 @@ if simd.features().avx2 then
       local b = ct(101)
       local it = T.masktype(ti)
       local ix = it.ct(unpack(raw, 1, ti.lanes))
+      diff(ti.name .. " ymm identity shuffle", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle(acc + a, unpack(identity, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm lane-local reverse", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle(acc + a, unpack(localrev, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm half swap", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle(acc + a, unpack(halfswap, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
       diff(ti.name .. " ymm constant reverse", function(n)
 	local acc = ct(0)
 	for _ = 1, n do

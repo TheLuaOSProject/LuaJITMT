@@ -2679,6 +2679,34 @@ static void crec_simd_idx(jit_State *J, RecordFFData *rd, int narg,
   UNUSED(rd);
 }
 
+/* An immediate PSHUFD can express every XMM 32/64 bit lane shuffle and a
+** YMM lane-local shuffle when both 128 bit halves use the same pattern.
+** Unlike PSHUFB, it needs no mask vector and therefore no extra register or
+** constant-pool load.
+*/
+static int crec_simd_shufd(const CTVecInfo *vi, const uint8_t *idx,
+			   uint32_t *imm)
+{
+  uint32_t dpl, h, i, j, nph, nh, ctl = 0;
+  if (vi->esize != 4 && vi->esize != 8) return 0;
+  dpl = vi->esize >> 2;
+  nph = 16 / vi->esize;
+  nh = vi->lanes / nph;
+  for (i = 0; i < nph; i++) {
+    uint32_t src = idx[i];
+    if (src >= nph) return 0;
+    for (h = 1; h < nh; h++)
+      if (idx[h*nph+i] != h*nph+src) return 0;
+    for (j = 0; j < dpl; j++) {
+      uint32_t outd = i*dpl+j;
+      uint32_t srcd = src*dpl+j;
+      ctl |= srcd << (outd*2);
+    }
+  }
+  *imm = ctl;
+  return 1;
+}
+
 /* A 128 bit permute is one PSHUFB. A 256 bit permute also shuffles a copy
 ** with its 128 bit halves swapped, then selects the matching bytes.
 */
@@ -2783,6 +2811,7 @@ void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   uint8_t idx[LJ_VEC_MAXSIZE];
+  uint32_t i;
   crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0);
   if (J->base[1] && tref_iscdata(J->base[1])) {
     CTVecInfo ivi; CTypeID iid; IRType ivt;
@@ -2796,8 +2825,32 @@ void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
     return;
   }
   crec_simd_idx(J, rd, 1, vi.lanes, vi.lanes, idx);
+  for (i = 0; i < vi.lanes && idx[i] == i; i++) {}
+  if (i == vi.lanes) {
+    J->base[0] = crec_vec_box(J, a, vt, id);
+    return;
+  }
+  if (vt & IRT_VEC256) {
+    uint32_t nph = 16 / vi.esize;
+    for (i = 0; i < vi.lanes &&
+	 idx[i] == (uint8_t)((i+nph) % vi.lanes); i++) {}
+    if (i == vi.lanes) {
+      J->base[0] = crec_vec_box(J,
+	emitir(IRT(IR_VSHUF, vt), a, IRVSHUF(IRVSHUF_SWAP128, 0)), vt, id);
+      return;
+    }
+  }
+  {
+    uint32_t imm;
+    if (crec_simd_shufd(&vi, idx, &imm)) {
+      J->base[0] = crec_vec_box(J,
+	emitir(IRT(IR_VSHUF, vt), a,
+	       IRVSHUF(IRVSHUF_PSHUFD, imm)), vt, id);
+      return;
+    }
+  }
   if ((vt & IRT_VEC256) && vi.esize == 4) {
-    uint32_t ctl[8], i, routes = 0;
+    uint32_t ctl[8], routes = 0;
     for (i = 0; i < vi.lanes; i++) {
       ctl[i] = idx[i];
       routes |= 1u << ((((i*4) ^ ((uint32_t)idx[i]*4)) & 16) != 0);

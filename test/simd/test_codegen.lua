@@ -1041,11 +1041,17 @@ end)
 test("shuffle and insert are packed", function()
   local i4 = T.T.i32x4.ct
   local a = i4(1, 2, 3, 4)
-  checkloop("shuffle", {"pshufb"}, NOCALL, function()
+  checkloop("shuffle", {"pshufd"}, {"call", "pshufb"}, function()
     local acc = i4(0)
     for _ = 1, 400 do acc = simd.shuffle(acc + a, 3, 2, 1, 0) end
     return acc
   end)
+  checkloop("identity shuffle", {"paddd"},
+    {"call", "pshufb", "pshufd"}, function()
+      local acc = i4(0)
+      for _ = 1, 400 do acc = simd.shuffle(acc + a, 0, 1, 2, 3) end
+      return acc
+    end)
   checkloop("shuffle2", {"pshufb", "por"}, NOCALL, function()
     local acc = i4(0)
     local b = i4(9, 8, 7, 6)
@@ -1776,7 +1782,7 @@ if simd.features().avx2 then
     check(not body:find("vpshufb ymm", 1, true),
 	  "a cross-half 32 bit constant must use one VPERMD")
 
-    body = checkymm("i32x8 same-half shuffle", {"vpshufb ymm"}, function()
+    body = checkymm("i32x8 same-half shuffle", {"vpshufd ymm"}, function()
       local acc = i8(0)
       for _ = 1, 400 do
 	acc = simd.shuffle(acc + a, 3, 2, 1, 0, 7, 6, 5, 4)
@@ -1817,7 +1823,7 @@ if simd.features().avx2 then
     check(not body:find("vpshufb ymm", 1, true),
 	  "a constant 64 bit permute must use VPERMQ")
 
-    body = checkymm("i64x4 same-half shuffle", {"vpshufb ymm"}, function()
+    body = checkymm("i64x4 same-half shuffle", {"vpshufd ymm"}, function()
       local acc = q4(0)
       for _ = 1, 400 do acc = simd.shuffle(acc + q, 1, 0, 3, 2) end
       return acc
@@ -1825,6 +1831,34 @@ if simd.features().avx2 then
     check(not body:find("permq ymm", 1, true) and
 	  not body:find("vperm2i128 ymm", 1, true),
 	  "a same-half 64 bit constant must use one lane-local shuffle")
+
+    body = checkymm("i32x8 half swap", {"vperm2i128 ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle(acc + a, 4, 5, 6, 7, 0, 1, 2, 3)
+      end
+      return acc
+    end)
+    check(not body:find("vpermd ymm", 1, true) and
+	  not body:find("vpshufb ymm", 1, true),
+	  "an exact half swap must not load a lane-control vector")
+
+    local b32 = T.W.i8x32.ct
+    local bv = b32(1, 2, 3, 4, 5, 6, 7, 8,
+		   9, 10, 11, 12, 13, 14, 15, 16,
+		   17, 18, 19, 20, 21, 22, 23, 24,
+		   25, 26, 27, 28, 29, 30, 31, 32)
+    body = checkymm("i8x32 half swap", {"vperm2i128 ymm"}, function()
+      local acc = b32(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle(acc + bv,
+	  16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,
+	  0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true),
+	  "a byte-vector half swap must not retain an identity VPSHUFB")
 
     local b = i8(11, 12, 13, 14, 15, 16, 17, 18)
     checkymm("i32x8 shuffle2",

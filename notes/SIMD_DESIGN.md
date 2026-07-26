@@ -627,7 +627,7 @@ on the measured target.
 The recorder therefore classifies 32- and 64-bit constant YMM shuffles by
 their routes:
 
-* a wholly same-half constant remains one `VPSHUFB`;
+* a wholly same-half constant remains one low-latency lane-local shuffle;
 * a 32-bit constant with any cross-half route becomes one `VPERMD`;
 * a 64-bit constant with any cross-half route becomes one `VPERMQ`.
 
@@ -642,6 +642,15 @@ This is intentionally a cost decision rather than an instruction-count
 fashion: use the direct permute where it removes a cross-lane dependency
 chain, and retain the cheaper lane-local operation where no crossing is
 needed.
+
+Constant shuffles are canonicalised before that route decision. Identity
+returns the input IR directly. An exact exchange of the two 128-bit halves is
+one `VPERM2I128`, including for byte and word vectors, instead of a half swap
+followed by an identity `VPSHUFB`. Every 32/64-bit XMM permutation maps to an
+immediate `PSHUFD`; YMM uses the same form when each half repeats one
+lane-local pattern. This has the same one-cycle dependent latency as
+`PSHUFB`, but the control is in the instruction and consumes neither a vector
+register nor a constant-pool load.
 
 ## D24. Emulate narrow and wide `mulhi` with packed lane-local sequences
 
@@ -1262,3 +1271,22 @@ XMM/YMM root-and-loop traces shrink from 420 to 407 instructions because
 factor construction hoists. With evolving counts they grow slightly from
 408 to 411 instructions, but the YMM throughput gain shows why critical-path
 and pressure measurements take precedence over static instruction count.
+
+## D44. Canonicalise constant lane shuffles before allocating controls
+
+The general constant-shuffle lowering starts from a byte control vector. That
+is necessary for arbitrary byte/word permutations, but it was unnecessary
+work for three common shapes:
+
+* identity now returns its input without emitting an IR instruction;
+* a pure exchange of the YMM halves lowers directly to `VPERM2I128`;
+* XMM 32/64-bit permutations and repeated lane-local YMM permutations encode
+  their control in `PSHUFD`'s immediate.
+
+The last case matters under pressure even though isolated latency is
+unchanged. Eight independent YMM permutation chains with eight different
+controls improve from 0.169 to 0.138 ns per shuffle on the measured host,
+about 18%, because the controls no longer occupy registers or become memory
+operands. XMM remains neutral at roughly 0.14 ns. Differential coverage runs
+identity, lane-local reverse, half swap, and cross-half reverse for every YMM
+lane kind; machine-code checks forbid the eliminated byte-control operations.
