@@ -5,9 +5,11 @@
 local T = require("simdtest")
 local ffi, simd, test, check, checkeq = T.ffi, T.simd, T.test, T.check, T.checkeq
 
-local tmp = os.getenv("TMPDIR") or "/tmp"
-local csrc = tmp .. "/luajit_simd_abi.c"
-local clib = tmp .. "/luajit_simd_abi.so"
+-- Keep parallel test configurations from deleting each other's helper.
+local tmpbase = os.tmpname()
+os.remove(tmpbase)
+local csrc = tmpbase .. ".c"
+local clib = tmpbase .. ".so"
 
 local CSRC = [[
 typedef float	 float4  __attribute__((vector_size(16)));

@@ -19,8 +19,10 @@ if not pcall(jit_.on) then
   return T
 end
 
-local tmp = os.getenv("TMPDIR") or "/tmp"
-local dumpfile = tmp .. "/luajit_simd_codegen_" .. tostring(os.time()) .. ".txt"
+-- A fixed or second-resolution name collides when configurations run in
+-- parallel. os.tmpname() reserves a process-unique path; dump.on() can
+-- truncate and reuse it for each isolated trace below.
+local dumpfile = os.tmpname()
 
 -- Compile f in a fresh trace and return the requested dump ("m" = machine
 -- code, "i" = IR, plus a colour mode letter).
