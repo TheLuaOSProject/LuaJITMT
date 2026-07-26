@@ -56,6 +56,7 @@ typedef struct ASMState {
 
   RegSet freeset;	/* Set of free registers. */
   RegSet modset;	/* Set of registers modified inside the loop. */
+  RegSet vecmodset;	/* FPRs with modified upper vector lanes in the loop. */
   RegSet weakset;	/* Set of weakly referenced registers. */
   RegSet phiset;	/* Set of PHI registers. */
 
@@ -367,6 +368,7 @@ static void ra_setup(ASMState *as)
   /* Initially all regs (except the stack pointer) are free for use. */
   as->freeset = RSET_INIT;
   as->modset = RSET_EMPTY;
+  as->vecmodset = RSET_EMPTY;
   as->weakset = RSET_EMPTY;
   as->phiset = RSET_EMPTY;
   memset(as->phireg, 0, sizeof(as->phireg));
@@ -703,8 +705,11 @@ static Reg ra_allocref(ASMState *as, IRRef ref, RegSet allow)
     }
     /* Invariants should preferably get unmodified registers. */
     if (ref < as->loopref && !irt_isphi(ir->t)) {
-      if ((pick & ~as->modset))
-	pick &= ~as->modset;
+      RegSet modset = as->modset;
+      if (irt_isvec256(ir->t))
+	modset |= as->vecmodset;
+      if ((pick & ~modset))
+	pick &= ~modset;
       r = rset_pickbot(pick);  /* Reduce conflicts with inverse allocation. */
     } else {
       /* We've got plenty of regs, so get callee-save regs if possible. */
@@ -1555,6 +1560,15 @@ static void asm_phi_shuffle(ASMState *as)
   while (work) {
     Reg r = rset_pickbot(work);
     ra_restore(as, regcost_ref(as->cost[r]));
+    rset_clear(work, r);
+    checkmclim(as);
+  }
+  work = as->vecmodset & ~(as->freeset | as->phiset) & RSET_FPR;
+  while (work) {
+    Reg r = rset_pickbot(work);
+    IRRef ref = regcost_ref(as->cost[r]);
+    if (irt_isvec256(IR(ref)->t))
+      ra_restore(as, ref);
     rset_clear(work, r);
     checkmclim(as);
   }

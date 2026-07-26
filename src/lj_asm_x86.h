@@ -583,6 +583,23 @@ static int asm_count_call_slots(ASMState *as, const CCallInfo *ci, IRRef *args)
   return nslots;
 }
 
+/* Add live YMM values to a call's control-flow-safe eviction set. */
+static RegSet asm_call_ymm_clobbers(ASMState *as)
+{
+  RegSet drop = RSET_EMPTY;
+  if (as->flags & JIT_F_AVX) {
+    RegSet work = ~as->freeset & RSET_FPR;
+    as->vecmodset |= RSET_FPR;
+    while (work) {
+      Reg r = rset_pickbot(work);
+      if (irt_isvec256(IR(regcost_ref(as->cost[r]))->t))
+	rset_set(drop, r);
+      rset_clear(work, r);
+    }
+  }
+  return drop;
+}
+
 /* Generate a call to a C function. */
 static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
 {
@@ -700,16 +717,7 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   int hiop = ((ir+1)->o == IR_HIOP && !irt_isnil((ir+1)->t));
   if ((ci->flags & CCI_NOFPRCLOBBER))
     drop &= ~RSET_FPR;
-#if LJ_64 && LJ_ABI_WIN
-  {
-    Reg r;
-    /* The Windows ABI preserves only the low 128 bits of XMM6-XMM15. */
-    for (r = RID_XMM6; r < RID_MAX_FPR; r++)
-      if (!rset_test(as->freeset, r) &&
-	  irt_isvec256(IR(regcost_ref(as->cost[r]))->t))
-	rset_set(drop, r);
-  }
-#endif
+  drop |= asm_call_ymm_clobbers(as);
   if (ra_hasreg(ir->r))
     rset_clear(drop, ir->r);  /* Dest reg handled below. */
   if (hiop && ra_hasreg((ir+1)->r))
@@ -805,6 +813,7 @@ static void asm_callx(ASMState *as, IRIns *ir)
     Reg r = ra_alloc1(as, func, allow);
     if (LJ_32) emit_spsub(as, spadj);  /* Above code may cause restores! */
     emit_rr(as, XO_GROUP5, XOg_CALL, r);
+    if (as->flags & JIT_F_AVX) emit_vzeroupper(as);
   } else if (LJ_32) {
     emit_spsub(as, spadj);
   }
@@ -1121,7 +1130,7 @@ static void asm_strto(ASMState *as, IRIns *ir)
   /* Force a spill slot for the destination register (if any). */
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_strscan_num];
   IRRef args[2];
-  RegSet drop = RSET_SCRATCH;
+  RegSet drop = RSET_SCRATCH | asm_call_ymm_clobbers(as);
   if ((drop & RSET_FPR) != RSET_FPR && ra_hasreg(ir->r))
     rset_set(drop, ir->r);  /* WIN64 doesn't spill all FPRs. */
   ra_evictset(as, drop);
@@ -2021,7 +2030,7 @@ static void asm_obar(ASMState *as, IRIns *ir)
   Reg obj;
   /* No need for other object barriers (yet). */
   lj_assertA(IR(ir->op1)->o == IR_UREFC, "bad OBAR type");
-  ra_evictset(as, RSET_SCRATCH);
+  ra_evictset(as, RSET_SCRATCH | asm_call_ymm_clobbers(as));
   l_end = emit_label(as);
   args[0] = ASMREF_TMP1;  /* global_State *g */
   args[1] = ir->op1;      /* TValue *tv      */
@@ -2096,12 +2105,14 @@ static void asm_fpmath(ASMState *as, IRIns *ir)
     } else {  /* Call helper functions for SSE2 variant. */
       /* The modified regs must match with the *.dasc implementation. */
       RegSet drop = RSET_RANGE(RID_XMM0, RID_XMM3+1)|RID2RSET(RID_EAX);
+      drop |= asm_call_ymm_clobbers(as);
       if (ra_hasreg(ir->r))
 	rset_clear(drop, ir->r);  /* Dest reg handled below. */
       ra_evictset(as, drop);
       ra_destreg(as, ir, RID_XMM0);
       emit_call(as, fpm == IRFPM_FLOOR ? lj_vm_floor_sse :
 		    fpm == IRFPM_CEIL ? lj_vm_ceil_sse : lj_vm_trunc_sse);
+      if (as->flags & JIT_F_AVX) emit_vzeroupper(as);
       ra_left(as, RID_XMM0, ir->op1);
     }
   } else {
@@ -2902,7 +2913,7 @@ static void asm_gc_check(ASMState *as)
   IRRef args[2];
   MCLabel l_end;
   Reg tmp;
-  ra_evictset(as, RSET_SCRATCH);
+  ra_evictset(as, RSET_SCRATCH | asm_call_ymm_clobbers(as));
   l_end = emit_label(as);
   /* Exit trace if in GCSatomic or GCSfinalize. Avoids syncing GC objects. */
   asm_guardcc(as, CC_NE);  /* Assumes asm_snap_prep() already done. */

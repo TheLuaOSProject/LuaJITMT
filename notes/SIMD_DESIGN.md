@@ -821,3 +821,33 @@ an independent ordinary Lua-number add formerly raised that to 76.50 ns;
 after the generic VEX cleanup the mixed loop remains 0.38 ns. A stronger
 codegen test mixes scalar memory load/store, add, multiply, sqrt, comparison
 and YMM arithmetic, and rejects any legacy instruction that names XMM.
+
+## D30. Preserve upper lanes in every control-flow-safe call setup
+
+`VZEROUPPER` is itself a full-YMM clobber. On Windows x64 this matters even
+for XMM6-XMM15: the ABI preserves their low 128 bits only. The original
+wide-value eviction in `asm_setupresult()` covered ordinary recorded calls,
+but not backend paths that invoke C directly, including conditional GC
+steps, allocation helpers, barriers, and indirect FFI calls. A GC side trace
+could therefore keep a live value in YMM6, execute `VZEROUPPER`, and resume
+with valid low lanes and destroyed high lanes.
+
+All x86 call setup paths now share one helper that adds live YMM registers to
+their eviction set. Ordinary calls use it from `asm_setupresult()`; custom
+paths use it before establishing any conditional-call join label. This
+placement matters with reverse code generation: emitting a restore from
+inside the conditional block would put it only on the call-taken edge, while
+the fast edge would skip it. Before any direct or indirect call on an AVX
+host, the setup therefore:
+
+* finds every currently live 256-bit value in the FPR register file;
+* gives it a full eight-slot spill/reload when needed;
+* records all FPR upper halves in a separate `vecmodset`.
+
+`vecmodset` is deliberately separate from the ordinary register `modset`.
+Only 256-bit loop invariants avoid those registers or get restored at the
+loop boundary; scalar and XMM invariants still exploit the Windows
+callee-saved low halves. This preserves the existing 128-bit allocation
+quality while making ordinary calls, GC checks, barriers, scalar conversion
+helpers, and indirect FFI calls YMM-safe. Indirect FFI calls also get the
+missing `VZEROUPPER` discipline.

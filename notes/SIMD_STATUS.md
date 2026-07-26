@@ -56,6 +56,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M33 | Exact call-free `u32 -> float`, `i64/u64 -> double`, and `double -> i64/u64` lowering for XMM/YMM | done |
 | M34 | Every equal-lane numeric conversion between native 16/32-byte vectors; VEX-clean mixed XMM/YMM moves | done |
 | M35 | Generic Lua scalar FP code is VEX-128-clean on AVX, eliminating scalar/YMM transition stalls | done |
+| M36 | Central call-site YMM preservation, including GC/indirect calls; Windows x64 upper-lane runtime correctness | done |
 
 ## Commands that pass
 
@@ -72,6 +73,8 @@ make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT   # also passes
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT          # also passes
 make clean && make -j$(nproc) HOST_CC=gcc \
   CROSS=x86_64-w64-mingw32- TARGET_SYS=Windows               # cross-builds
+WINEDEBUG=-all wine src/luajit.exe test/simd/run.lua \
+  -jit test_codegen                                           # passes
 
 # Every file and mode also passes under these QEMU CPU models:
 # Nehalem-v1 (x86-64-v2/no AVX), SandyBridge-v1 (AVX/no AVX2),
@@ -104,13 +107,18 @@ backend bug that neither of the other two modes reached. Keep it.
   current upstream head `a471ab78`. It is **byte-for-byte identical**. See
   `SIMD_TESTING.md` for the exact commands.
 
-* The Windows x64 target cross-builds, but its runtime is not yet at the same
-  confidence level. Wine reproduces an issue already present at `fa19fcd5`:
-  some YMM dynamic-splat and side-exit tests lose or corrupt their upper
-  128-bit half. MinGW's interpreter-side `fma` also differs from the required
-  single-rounded result. Neither is caused by M34; both are the next Windows
-  SIMD portability work. The `jit.dump` codegen harness additionally needs
-  Windows-safe temporary paths before it can inspect machine code under Wine.
+* The Windows x64 upper-YMM issue is fixed. Wine now passes the dynamic-splat,
+  scalar-call, cross-width guard, side-exit, GC-side-trace, register-pressure,
+  and machine-code inspection coverage. The bug was broader than the ABI
+  setup path: conditional GC/allocation helpers bypassed it, executed
+  `VZEROUPPER`, and retained only the ABI-preserved low half of XMM6-XMM15.
+  Every control-flow-safe call setup now evicts live YMM values and records
+  upper-lane loop clobbers. The codegen harness also makes the Windows CRT's
+  root-relative `os.tmpname()` result local before passing it to `jit.dump`.
+
+* MinGW's interpreter-side `fma` under Wine still differs from the required
+  single-rounded result. The hardware-VFMADD JIT result is correct; this is
+  now the only known Windows SIMD runtime discrepancy.
 
 ## Files touched so far
 

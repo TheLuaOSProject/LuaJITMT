@@ -244,3 +244,24 @@ All three pass. In the JIT-disabled build the runner skips the `jit` and
 interpreter semantics still get their full randomized coverage. Remember
 `make clean` when switching build options: the generated VM does not depend on
 `XCFLAGS` in the dependency file.
+
+## Windows x64 cross-runtime coverage
+
+The MinGW target is executed under Wine, not merely cross-compiled:
+
+```
+make clean && make -j$(nproc) HOST_CC=gcc \
+  CROSS=x86_64-w64-mingw32- TARGET_SYS=Windows
+WINEDEBUG=-all wine src/luajit.exe test/simd/run.lua -jit test_codegen
+WINEDEBUG=-all wine src/luajit.exe test/simd/run.lua -jit test_jit
+```
+
+`test_codegen` passes in full. `test_jit` passes every upper-lane, call, GC,
+side-exit, spill, and conversion check; its two remaining failures are the
+known MinGW/Wine interpreter `fma` results documented in `SIMD_STATUS.md`.
+The hardware-VFMADD trace is not the failing side of those comparisons.
+
+The Windows CRT's `os.tmpname()` returns a root-relative path. The codegen
+harness strips that leading separator on Windows so `jit.dump` writes a
+process-unique file in the working directory instead of failing with
+permission denied at the drive root.

@@ -872,6 +872,33 @@ if simd.features().avx2 then
     end
   end)
 
+  test("256-bit loop invariants survive scalar helper calls", function()
+    local ct = T.W.i32x8.ct
+    local step = ct(1, 2, 3, 4, 5, 6, 7, 8)
+    diff("i32x8 ymm across scalar call", function(n)
+      local acc, sum = ct(0), 0
+      for i = 1, n do
+	acc = acc + step
+	sum = sum + math.sin(i)
+      end
+      return acc, sum, acc[0], acc[7]
+    end, 160)
+  end)
+
+  test("256-bit values survive allocation and GC helper calls", function()
+    local ct = T.W.i32x8.ct
+    local step = ct(1, 2, 3, 4, 5, 6, 7, 8)
+    diff("i32x8 ymm across allocation and gc", function(n)
+      local acc, keep = ct(0), {}
+      for i = 1, n do
+	acc = acc + step
+	keep[(i % 16) + 1] = {i, tostring(i)}
+      end
+      collectgarbage()
+      return acc, acc[0], acc[7], #keep
+    end, 400)
+  end)
+
   test("256-bit min/max, comparisons, masks, select, and equality", function()
     for _, ti in ipairs(T.W) do
       local ct = ti.ct

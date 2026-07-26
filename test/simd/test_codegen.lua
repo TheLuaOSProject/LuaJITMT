@@ -23,6 +23,11 @@ end
 -- parallel. os.tmpname() reserves a process-unique path; dump.on() can
 -- truncate and reuse it for each isolated trace below.
 local dumpfile = os.tmpname()
+if package.config:sub(1, 1) == "\\" then
+  -- The Windows CRT returns a root-relative name (e.g. "\\s123."), which
+  -- Wine and restricted Windows environments may not permit creating.
+  dumpfile = dumpfile:gsub("^[\\/]+", "")
+end
 
 -- Compile f in a fresh trace and return the requested dump ("m" = machine
 -- code, "i" = IR, plus a colour mode letter).
