@@ -1465,6 +1465,8 @@ static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
   return emitir(IRT(IR_VSPLAT, vt), sp, 0);
 }
 
+static TRef crec_simd_k16(jit_State *J, IRType vt, uint16_t v);
+
 /* Record arithmetic on vector cdata. Returns 0 if this is not vector math. */
 static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
 			   RecordFFData *rd)
@@ -1548,6 +1550,19 @@ static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
     goto box;
   default:
     return 0;
+  }
+  if (op == IR_VMUL && !veck_isfp(vi.kind) && vi.esize == 1) {
+    IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
+    TRef even, odd;
+    even = emitir(IRT(IR_VMUL, wvt), tra, trb);
+    even = emitir(IRT(IR_VAND, wvt), even,
+		  crec_simd_k16(J, wvt, 0x00ff));
+    odd = emitir(IRT(IR_VMUL, wvt),
+		 emitir(IRT(IR_VSHR, wvt), tra, lj_ir_kint(J, 8)),
+		 emitir(IRT(IR_VSHR, wvt), trb, lj_ir_kint(J, 8)));
+    tra = emitir(IRT(IR_VOR, vt), even,
+		 emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8)));
+    goto box;
   }
   tra = emitir(IRT(op, vt), tra, trb);
 box:

@@ -852,6 +852,10 @@ if has_ymm then
     function() return i8(0, 1, 2, 3, 4, 5, 6, 7),
 		      i8(7, 6, 5, 4, 3, 2, 1, 0) end,
     function(x, y) return simd.shuffle(x, y) end)
+  width_cost("int8 mul",
+    function() return s8(1), s8(3) end,
+    function() return s8w(1), s8w(3) end,
+    function(x, y) return x * y end)
   width_cost("int16 mulhi",
     function() return i16(30000), i16(30000) end,
     function() return i16w(30000), i16w(30000) end,

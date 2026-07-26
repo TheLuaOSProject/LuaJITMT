@@ -240,14 +240,56 @@ test("integer arithmetic is packed", function()
   end)
   -- 8 bit multiply has none, but must still be packed, not scalarised.
   local i8 = T.T.i8x16.ct
-  local m = checkloop("i8x16 mul", {"pmullw", "psrlw", "psllw", "por"}, NOCALL,
+  local m = checkloop("i8x16 mul",
+    {"pmullw", "psrlw", "psllw", "pand", "por"}, NOCALL,
     function()
       local acc = i8(1)
       local k = i8(3)
       for i = 1, 400 do acc = (acc + i8(1)) * k end
       return acc
     end)
-  if m then check(count(m, "imul") == 0, "i8x16 mul: no scalar IMUL") end
+  if m then
+    check(count(m, "imul") == 0, "i8x16 mul: no scalar IMUL")
+    check(count(m, "pmullw") == 2 and count(m, "psrlw") == 1 and
+	  count(m, "psllw") == 1 and count(m, "pand") == 1 and
+	  count(m, "por") == 1,
+	  "i8x16 mul: expected the masked-word lowering, got: " ..
+	  tostring(count(m, "pmullw")) .. "/" ..
+	  tostring(count(m, "psrlw")) .. "/" ..
+	  tostring(count(m, "psllw")) .. "/" ..
+	  tostring(count(m, "pand")) .. "/" .. tostring(count(m, "por")))
+  end
+end)
+
+test("byte multiply constants use memory only under register pressure", function()
+  if not simd.features().avx then
+    check(true, "no AVX on this CPU, pressure-sensitive VEX constant skipped")
+    return
+  end
+  local ct = T.T.i8x16.ct
+  local body = loopcode(function()
+    local a1,a2,a3,a4,a5,a6,a7 = ct(1),ct(2),ct(3),ct(4),ct(5),ct(6),ct(7)
+    local a8,a9,a10,a11,a12,a13,a14 =
+      ct(8),ct(9),ct(10),ct(11),ct(12),ct(13),ct(14)
+    local one, k = ct(1), ct(3)
+    for _ = 1, 400 do
+      a1=(a1+one)*k; a2=(a2+one)*k; a3=(a3+one)*k
+      a4=(a4+one)*k; a5=(a5+one)*k; a6=(a6+one)*k
+      a7=(a7+one)*k; a8=(a8+one)*k; a9=(a9+one)*k
+      a10=(a10+one)*k; a11=(a11+one)*k; a12=(a12+one)*k
+      a13=(a13+one)*k; a14=(a14+one)*k
+    end
+    return a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14
+  end)
+  local memmask = false
+  for line in body:gmatch("[^\n]+") do
+    if line:find("pand", 1, true) and line:find("[rip", 1, true) then
+      memmask = true
+      break
+    end
+  end
+  check(memmask, "a pressured byte-multiply mask must use VPAND memory: " ..
+	body:gsub("\n", " | "))
 end)
 
 test("ffi.simd operations are packed", function()

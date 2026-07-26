@@ -972,3 +972,41 @@ root and loop traces (210 down to 162); total instructions fall from 2008 to
 is primarily a code-size, decode, and register-pressure win there. Cheaper
 operations have more opportunity to benefit when the surrounding trace is
 front-end or register-pressure limited.
+
+## D35. Expose byte multiplication to IR optimisation
+
+x86 has no packed byte multiply. The original backend treated `i8/u8`
+multiplication as one opaque `IR_VMUL` and expanded each instance into two
+word multiplies, four shifts and an OR. That sequence is correct, but hiding
+it in the assembler prevents common-subexpression elimination. A kernel with
+many byte multiply chains redundantly shifted the same invariant multiplier
+once for every chain.
+
+The recorder now expresses modulo-byte multiplication in ordinary packed IR:
+
+```
+even = (wordmul(a, b) & 0x00ff)
+odd  = wordmul(a >> 8, b >> 8) << 8
+result = even | odd
+```
+
+The word view changes only lane interpretation in IR; it does not change any
+bits or materialise a bitcast. Keeping the low byte with one `VAND` replaces
+the former shift-left/shift-right pair. More importantly, the optimiser now
+shares an invariant `b >> 8` across every multiplication in the trace.
+Signed and unsigned byte multiplication use the same modulo-256 bit result,
+so the expansion is valid for both ctypes and preserves interpreter
+semantics.
+
+Pressure-sensitive constant placement from D32 is now shared by generic AVX
+binary operations. With ample registers, `0x00ff` remains a loop-invariant
+XMM/YMM value. When allocating it would consume either of the last two free
+vector registers, `VPAND` reads the aligned interned constant directly from
+the mcode area. This removes reload instructions without forcing every
+low-pressure multiply to spend a load uop.
+
+On the measured host, a dependent byte-multiply chain improves about 2% and
+four independent chains about 7.5%. Eight, twelve and fourteen independent
+chains improve by 28%, 32% and 33% respectively because they share the
+shifted multiplier. Across those three stressed root/loop traces, total code
+falls from 957 to 829 instructions; word shifts fall from 340 to 139.

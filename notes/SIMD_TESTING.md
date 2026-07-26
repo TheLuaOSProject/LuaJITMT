@@ -172,6 +172,15 @@ integer/float conversion in both directions, and 128/256-bit float/double
 conversion. Nehalem, Sandy Bridge and Haswell codegen runs pin the legacy,
 AVX, and AVX2 boundaries respectively.
 
+Byte multiplication is checked as an IR-visible masked word decomposition.
+The low-pressure loop requires two `PMULLW`s, one run-time right shift, one
+left shift, one `PAND` and one `POR`, and forbids scalar `IMUL`. A separate
+fourteen-accumulator loop exhausts the vector register file and requires the
+`0x00ff` mask to appear as a `VPAND` RIP-relative memory operand. Randomized
+signed and unsigned byte multiplication continues to compare every lane with
+the interpreter. `bench_ops.lua` reports byte multiply in both the dependent
+XMM operation list and the XMM/YMM lane-throughput comparison.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

@@ -61,6 +61,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M38 | Byte-aligned integer rotate idioms collapse to one packed shuffle; constant shuffle masks use memory only under register pressure | done |
 | M39 | Fuse one-use vector loads into AVX arithmetic memory operands, while retaining safe separate loads for legacy SSE | done |
 | M40 | Let ordinary FFI array temporaries fuse into AVX unary, shuffle and conversion memory operands; ignore only virtual sink stores | done |
+| M41 | Expand byte multiply in IR so invariant shifts CSE; use binary constant memory operands only under vector-register pressure | done |
 
 ## Commands that pass
 
@@ -509,3 +510,24 @@ pressure-heavy traces. Runtime codegen tests validate the corresponding
 memory forms for `VPERMD`, `VPERMQ`, packed conversions and integer widening,
 and the Nehalem model continues to reject every legacy-SSE unaligned memory
 arithmetic form.
+
+Byte multiply now exposes its two word products to the optimiser instead of
+expanding an opaque operation in the backend. The low-byte cleanup is one
+`VAND` instead of two shifts, and all chains share an invariant shifted
+multiplier. The dependent and four-chain measurements move from roughly
+1.93 to 1.89 ns/op and 0.67 to 0.62 ns/op respectively. Register-rich
+parallel kernels benefit much more:
+
+```
+independent chains       old       new      improvement
+8                       5.30 ms   3.79 ms       28%
+12                      7.97 ms   5.43 ms       32%
+14                      9.27 ms   6.25 ms       33%
+```
+
+The stressed three-trace dump drops from 957 to 829 instructions. Its
+`PSRLW`/`PSLLW` count drops from 340 to 139. A shared pressure heuristic keeps
+the `0x00ff` mask in a vector register for small loops and lets `VPAND` read
+the interned constant from memory when retaining the register would instead
+cause repeated spill/reload instructions. AVX2 retains the same dependent
+latency as XMM while multiplying twice as many byte lanes.

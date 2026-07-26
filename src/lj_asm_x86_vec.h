@@ -268,6 +268,20 @@ static Reg asm_vecfuseload(ASMState *as, IRRef ref, RegSet allow)
   return ra_alloc1(as, ref, allow);
 }
 
+#if LJ_64
+/*
+** A loop-invariant vector constant is profitable in a register while the
+** trace has room for it. Using either of the final two free vector registers
+** tends to turn that constant into a repeated reload under pressure, so use
+** an instruction's read-only memory operand in that case.
+*/
+static int asm_vecconst_mem(RegSet spare)
+{
+  if (spare) spare &= spare-1;
+  return (spare & (spare-1)) == 0;
+}
+#endif
+
 /*
 ** dest = op1 <xo> op2, using the two operand x86 form. The left operand is
 ** moved into dest, so dest must never alias the right operand.
@@ -290,6 +304,16 @@ static void asm_vecbin(ASMState *as, IRIns *ir, x86Op xo, int is3byte)
     Reg left;
     dest = ra_dest(as, ir, RSET_FPR);
     left = ra_alloc1(as, lref, RSET_FPR);
+#if LJ_64
+    if (lref != rref && IR(rref)->o == IR_KVEC &&
+	ra_noreg(IR(rref)->r) &&
+	asm_vecconst_mem(as->freeset & RSET_FPR)) {
+      const uint8_t *k = emit_internkvec(as, IR(rref));
+      emit_rmro(as, emit_vexopv(xo, left, 0, wide),
+		dest, RID_RIP, (int32_t)mcpofs(as, k));
+      return;
+    }
+#endif
     right = lref == rref ? left :
 	    asm_vecfuseload(as, rref, rset_exclude(RSET_FPR, left));
     emit_mrm(as, emit_vexopv(xo, left, 0, wide), dest, right);
@@ -870,20 +894,6 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
   }
 }
 
-#if LJ_64
-/*
-** A loop-invariant shuffle mask is profitable in a register while the trace
-** has room for it. Using either of the final two free vector registers tends
-** to make high-pressure kernels repeatedly evict and reload the mask, so use
-** PSHUFB's read-only memory operand in that case.
-*/
-static int asm_vecshufb_memk(RegSet spare)
-{
-  if (spare) spare &= spare-1;
-  return (spare & (spare-1)) == 0;
-}
-#endif
-
 static void asm_vecshufb(ASMState *as, IRIns *ir)
 {
 #if LJ_64
@@ -894,7 +904,7 @@ static void asm_vecshufb(ASMState *as, IRIns *ir)
     if ((as->flags & JIT_F_AVX)) {
       Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
       RegSet spare = as->freeset & RSET_FPR;
-      if (asm_vecshufb_memk(spare)) {
+      if (asm_vecconst_mem(spare)) {
 	const uint8_t *k = emit_internkvec(as, irk);
 	emit_rmro(as, emit_vexopv(XO_PSHUFB, left, 0, wide),
 		  dest, RID_RIP, (int32_t)mcpofs(as, k));
@@ -907,7 +917,7 @@ static void asm_vecshufb(ASMState *as, IRIns *ir)
       RegSet allow = rset_exclude(RSET_FPR, dest);
       RegSet spare = as->freeset & allow;
       lj_assertA(!wide, "256 bit byte shuffle without AVX");
-      if (asm_vecshufb_memk(spare)) {
+      if (asm_vecconst_mem(spare)) {
 	const uint8_t *k = emit_internkvec(as, irk);
 	emit_rmro(as, XO_PSHUFB, dest, RID_RIP, (int32_t)mcpofs(as, k));
 	emit_prefix66(as, XO_PSHUFB);
