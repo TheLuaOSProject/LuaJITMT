@@ -539,6 +539,8 @@ constructor_cost("int32 lanes", i4, ctor4, i8, ctor8)
 constructor_cost("int16 lanes", i16, ctor8, i16w, ctor16)
 constructor_cost("int8 lanes", s8, ctor16, s8w, ctor32)
 constructor_cost("int64 lanes", i64, ctor2, i64w, ctor4)
+constructor_cost("int32 half-filled", i4, ctor2, i8, ctor4)
+constructor_cost("int8 half-filled", s8, ctor8, s8w, ctor16)
 
 io.write("\n== per-operation throughput (ns per 128-bit op, loop-carried) ==\n")
 

@@ -420,7 +420,8 @@ static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
 			   const CTVecInfo *vi, TRef sp, CType *sct,
 			   cTValue *sval);
 static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
-			   const CTVecInfo *vi, RecordFFData *rd);
+			   const CTVecInfo *vi, RecordFFData *rd,
+			   MSize nargs);
 static TRef crec_vec_box(jit_State *J, TRef val, IRType vt, CTypeID id);
 
 static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
@@ -1043,30 +1044,30 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   ** scalar stores and a vector reload, and exposes the lane pattern to later
   ** SIMD folds such as constant-mask select.
   */
-  if (ctype_isvector(info) && J->base[2]) {
+  if (ctype_isvector(info) && J->maxslot > 2) {
     CTVecInfo vi;
     IRType vt = crec_vec2irt(cts, d);
     uint64_t vdata[LJ_VEC_MAXSIZE/sizeof(uint64_t)];
     uint8_t *vbuf = (uint8_t *)vdata;
     TRef trv;
     CType *ect;
-    MSize i;
+    MSize i, nargs = J->maxslot-1;
     if (vt != IRT_NIL && lj_ctype_vecinfo(cts, d, &vi) &&
-	!J->base[vi.lanes+1]) {
+	nargs <= vi.lanes) {
       memset(vbuf, 0, sizeof(vdata));
       ect = ctype_get(cts, vi.eid);
-      for (i = 1; i <= vi.lanes && J->base[i]; i++) {
+      for (i = 1; i <= nargs; i++) {
 	if (!tref_isnumber(J->base[i]) || !tref_isk(J->base[i])) break;
 	lj_cconv_ct_tv(cts, ect, vbuf + (i-1)*vi.esize,
 		       &rd->argv[i], 0);
       }
-      if (i > vi.lanes || !J->base[i]) {
+      if (i > nargs) {
 	J->base[0] = crec_vec_box(J, lj_ir_kvec(J, vt, vbuf), vt, id);
 	fin = lj_ctype_meta(cts, id, MM_gc);
 	if (fin) crec_finalizer(J, J->base[0], 0, fin);
 	return;
       }
-      trv = crec_vec_build(J, cts, vt, &vi, rd);
+      trv = crec_vec_build(J, cts, vt, &vi, rd, nargs);
       if (trv) {
 	J->base[0] = crec_vec_box(J, trv, vt, id);
 	fin = lj_ctype_meta(cts, id, MM_gc);
@@ -1527,16 +1528,15 @@ static TRef crec_vec_build_half(jit_State *J, CTState *cts, IRType vt,
 }
 
 /*
-** Build a full native-width initializer directly from scalar values. This is
-** the packed equivalent of the temporary cdata plus lane stores used by
-** generic aggregate initialization. Each XMM half seeds lane zero and inserts
-** the remaining scalars; YMM joins two such halves with one VINSERTF128.
+** Build a native-width initializer directly from scalar values. This is the
+** packed equivalent of the temporary cdata plus lane stores used by generic
+** aggregate initialization. Each XMM half seeds lane zero and inserts the
+** remaining scalars, leaving omitted lanes zero; YMM joins populated halves
+** with one VINSERTF128.
 */
 static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
-			   const CTVecInfo *vi, RecordFFData *rd)
+			   const CTVecInfo *vi, RecordFFData *rd, MSize nargs)
 {
-  if (!J->base[vi->lanes] || J->base[vi->lanes+1])
-    return 0;  /* Partial dynamic initializers use the generic path. */
   if (veck_isfp(vi->kind)) {
     if (vi->esize == 4 && !(J->flags & JIT_F_SSE4_1)) return 0;
   } else {
@@ -1547,13 +1547,16 @@ static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
   if (vt & IRT_VEC256) {
     IRType hvt = (IRType)(vt & ~IRT_VEC256);
     uint32_t n = vi->lanes >> 1;
-    TRef lo = crec_vec_build_half(J, cts, hvt, vi, rd, 1, n);
-    TRef hi = crec_vec_build_half(J, cts, hvt, vi, rd, 1+n, n);
-    TRef ctl = lj_ir_kint(J, (int32_t)IRVSHUF2(IRVSHUF2_BUILD256, 1));
+    uint32_t lon = nargs < n ? nargs : n;
+    TRef lo = crec_vec_build_half(J, cts, hvt, vi, rd, 1, lon);
+    TRef hi = nargs > n ?
+      crec_vec_build_half(J, cts, hvt, vi, rd, 1+n, nargs-n) : lo;
+    uint32_t mode = nargs > n ? IRVSHUF2_BUILD256 : IRVSHUF2_BUILD256Z;
+    TRef ctl = lj_ir_kint(J, (int32_t)IRVSHUF2(mode, 1));
     TRef args = emitir(IRT(IR_CARG, IRT_NIL), hi, ctl);
     return emitir(IRT(IR_VSHUF2, vt), lo, args);
   }
-  return crec_vec_build_half(J, cts, vt, vi, rd, 1, vi->lanes);
+  return crec_vec_build_half(J, cts, vt, vi, rd, 1, nargs);
 }
 
 static TRef crec_simd_k16(jit_State *J, IRType vt, uint16_t v);

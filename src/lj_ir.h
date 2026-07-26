@@ -308,6 +308,7 @@ IRFLDEF(FLENUM)
 #define IRVSHUF2_PBLENDD	6
 #define IRVSHUF2_INSERT		7	/* XMM plus scalar, not two vectors. */
 #define IRVSHUF2_BUILD256	8	/* Join low/high XMM halves into YMM. */
+#define IRVSHUF2_BUILD256Z	9	/* Zero-extend one XMM half into YMM. */
 #define IRVSHUF2(mode, imm)	(((mode)<<8) + (imm))
 
 /* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in

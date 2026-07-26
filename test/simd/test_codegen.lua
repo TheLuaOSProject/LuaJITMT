@@ -175,6 +175,9 @@ test("dynamic vector constructors stay in registers", function()
     check_count("i32x4 dynamic constructor", i4,
 		{"movd", "pinsrd", "paddd"}, "pinsrd", 3,
       function(ct, i) return ct(i, i+1, i+2, i+3) end)
+    check_count("i32x4 partial dynamic constructor", i4,
+		{"movd", "pinsrd", "paddd"}, "pinsrd", 1,
+      function(ct, i) return ct(i, i+1) end)
 
     local b16 = T.T.i8x16.ct
     check_count("i8x16 dynamic constructor", b16,
@@ -209,6 +212,38 @@ test("dynamic vector constructors stay in registers", function()
 	    "i32x8 dynamic constructor: expected one half join")
       check(body:find("vpaddd ymm", 1, true) ~= nil,
 	    "i32x8 dynamic constructor: add must remain YMM-width")
+    end
+
+    m, _, body = checkloop("i32x8 partial dynamic constructor",
+      {"movd", "pinsrd", "paddd"}, {"call", "insertf128"}, function()
+	local acc = i8(0)
+	local function partial(i) return i8(i, i+1) end
+	for i = 1, 400 do acc = acc + partial(i) end
+	return acc
+      end)
+    if m then
+      check(count(m, "pinsrd") == 1,
+	    "i32x8 partial constructor: expected one lane insert")
+      check(body:find("vpaddd ymm", 1, true) ~= nil,
+	    "i32x8 partial constructor: add must remain YMM-width")
+    end
+
+    m, _, body = checkloop("i32x8 cross-half partial constructor",
+      {"movd", "pinsrd", "insertf128", "paddd"}, NOCALL, function()
+	local acc = i8(0)
+	local function partial(i)
+	  return i8(i, i+1, i+2, i+3, i+4, i+5)
+	end
+	for i = 1, 400 do acc = acc + partial(i) end
+	return acc
+      end)
+    if m then
+      check(count(m, "pinsrd") == 4,
+	    "i32x8 cross-half partial constructor: expected four lane inserts")
+      check(count(m, "insertf128") == 1,
+	    "i32x8 cross-half partial constructor: expected one half join")
+      check(body:find("vpaddd ymm", 1, true) ~= nil,
+	    "i32x8 cross-half partial constructor: add must remain YMM-width")
     end
 
     local b32 = T.W.i8x32.ct

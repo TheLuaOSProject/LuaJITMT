@@ -1040,6 +1040,18 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
   lit = (uint32_t)k->i;
   mode = lit >> 8;
   imm = (int32_t)(lit & 255);
+  if (mode == IRVSHUF2_BUILD256Z) {
+    /*
+    ** Every AVX-encoded XMM write clears its physical YMM upper half. The
+    ** narrow vector can therefore be renamed directly to the wide zero-
+    ** extended result; ra_left emits a move only if coalescing is impossible.
+    */
+    lj_assertA(wide && (as->flags & JIT_F_AVX),
+	       "zero-extending a vector without AVX");
+    dest = ra_dest(as, ir, RSET_FPR);
+    ra_left(as, dest, lref);
+    return;
+  }
   if (mode == IRVSHUF2_BUILD256) {
     Reg left;
     lj_assertA(wide && (as->flags & JIT_F_AVX),

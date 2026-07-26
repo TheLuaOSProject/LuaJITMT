@@ -147,6 +147,31 @@ test("multi-lane dynamic vector constructors on trace", function()
     end
   end
 
+  local function partial_half(ct, lanes, i)
+    if lanes == 4 then
+      return ct(i, i+1)
+    elseif lanes == 8 then
+      return ct(i, i+1, i+2, i+3)
+    elseif lanes == 16 then
+      return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
+    else
+      return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
+		i+8, i+9, i+10, i+11, i+12, i+13, i+14, i+15)
+    end
+  end
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      if ti.lanes > 2 then
+	local ct, lanes = ti.ct, ti.lanes
+	diff(ti.name .. " partial dynamic constructor in helper", function(n)
+	  local acc = ct(0)
+	  for i = 1, n do acc = acc + partial_half(ct, lanes, i) end
+	  return acc
+	end, 200)
+      end
+    end
+  end
+
   local i4, u4, f4 = T.T.i32x4.ct, T.T.u32x4.ct, T.T.float4.ct
   diff("partial dynamic vector constructor", function(n)
     local acc = i4(0)
@@ -156,6 +181,22 @@ test("multi-lane dynamic vector constructors on trace", function()
   diff("ffi.new multi-lane dynamic vector", function(n)
     local acc = i4(0)
     for i = 1, n do acc = acc + ffi.new(i4, i, i+1, i+2, i+3) end
+    return acc
+  end, 200)
+  local function partial_new(ct, i)
+    return ffi.new(ct, i, i+1)
+  end
+  diff("ffi.new partial dynamic vector in helper", function(n)
+    local acc = i4(0)
+    for i = 1, n do acc = acc + partial_new(i4, i) end
+    return acc
+  end, 200)
+  local function partial_constant(ct)
+    return ct(7, -3)
+  end
+  diff("partial constant vector in helper", function(n)
+    local acc = i4(0)
+    for _ = 1, n do acc = acc + partial_constant(i4) end
     return acc
   end, 200)
   diff("mixed dynamic vector conversions", function(n)
@@ -168,6 +209,49 @@ test("multi-lane dynamic vector constructors on trace", function()
     for i = 1, n do r = f4(i*0.25, -0.0, i+0.5, 0.0) end
     return simd.bitcast(u4, r)
   end, 200)
+
+  if simd.features().avx2 then
+    local i8 = T.W.i32x8.ct
+    local function partial_cross(i)
+      return i8(i, i+1, i+2, i+3, i+4, i+5)
+    end
+    diff("i32x8 partial constructor crosses XMM halves", function(n)
+      local acc = i8(0)
+      for i = 1, n do acc = acc + partial_cross(i) end
+      return acc
+    end, 200)
+
+    diff("partial i32x8 constructor under register pressure", function(n)
+      local a0, a1, a2, a3 = i8(0), i8(0), i8(0), i8(0)
+      local a4, a5, a6, a7 = i8(0), i8(0), i8(0), i8(0)
+      local a8, a9, aa, ab = i8(0), i8(0), i8(0), i8(0)
+      local ac, ad, ae, af = i8(0), i8(0), i8(0), i8(0)
+      local c1, c2, c3, c4 = i8(1), i8(2), i8(3), i8(4)
+      local c5, c6, c7, c8 = i8(5), i8(6), i8(7), i8(8)
+      local c9, ca, cb, cc = i8(9), i8(10), i8(11), i8(12)
+      local cd, ce, cf = i8(13), i8(14), i8(15)
+      for i = 1, n do
+	local p = i8(i, i+1)
+	a0 = a0 + p
+	a1 = a1 + p + c1
+	a2 = a2 + p + c2
+	a3 = a3 + p + c3
+	a4 = a4 + p + c4
+	a5 = a5 + p + c5
+	a6 = a6 + p + c6
+	a7 = a7 + p + c7
+	a8 = a8 + p + c8
+	a9 = a9 + p + c9
+	aa = aa + p + ca
+	ab = ab + p + cb
+	ac = ac + p + cc
+	ad = ad + p + cd
+	ae = ae + p + ce
+	af = af + p + cf
+      end
+      return a0+a1+a2+a3+a4+a5+a6+a7+a8+a9+aa+ab+ac+ad+ae+af
+    end, 120)
+  end
 
   local q2, int64 = T.T.i64x2.ct, ffi.typeof("int64_t")
   diff("dynamic vector from int64 cdata lanes", function(n)
