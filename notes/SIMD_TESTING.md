@@ -214,6 +214,16 @@ dependent XMM and YMM costs for `shl`, `shr`, and `sar`, while streaming
 stress kernels were used to reject an instruction-count win that did not
 translate into throughput.
 
+Word right-shift codegen covers invariant and evolving counts independently.
+Logical XMM/YMM loops require one `PMULHUW`; invariant factor construction
+must hoist, while evolving counts require exactly two `VPSRLVD`s. Arithmetic
+YMM uses one `PMULHW`, unsigned clamping and two factor shifts. Arithmetic
+XMM deliberately retains two `VPSRAVD`s because low-pressure streaming and
+eight-chain stress measurements both favour the old decomposition. The
+count vectors include 0, 1, 15, 16, values above 16, and signed negative
+encodings; randomized interpreter/JIT tests provide a separate semantic
+oracle. `bench_ops.lua` records `shl`, `shr`, and `sar` at both widths.
+
 Qword `mulhi` codegen distinguishes general multiplication from squaring.
 General signed XMM/YMM loops still require four unsigned dword products but
 now require exactly one packed subtraction. Signed squares require three

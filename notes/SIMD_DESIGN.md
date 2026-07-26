@@ -693,6 +693,12 @@ dependent latency is about 1.23 ns for words and 2.22 ns for bytes, versus
 32.5 ns and 35.1 ns in the interpreter. YMM processes twice the lanes at the
 same latency.
 
+Later cost measurements supersede most of this generic lowering: D38--D39
+replace all byte cases with lookup/product identities, while D42--D43 replace
+word left/logical-right shifts and YMM arithmetic-right shifts. The original
+two-dword arithmetic-right sequence remains deliberately selected for XMM,
+where it has better multi-chain throughput.
+
 ## D26. Build 64-bit `mulhi` from four 32-bit partial products
 
 There is no packed 64x64-to-128 multiply before AVX-512, but `PMULUDQ`
@@ -1217,3 +1223,42 @@ With dynamically changing counts, median streaming throughput improves from
 The representative dynamic root-and-loop dump shrinks from 566 to 550
 instructions: packed ANDs fall from 24 to 8 and dword right shifts from 8 to
 4, while four data-path `VPMULLW`s replace the old extraction work.
+
+## D43. Shift words right through the high half of a product
+
+For a logical word right shift with a non-zero count, the identity
+
+```
+x >> count = high_u16(x * 2^(16-count))
+```
+
+replaces two data-dependent dword variable shifts with one native
+`VPMULHUW`. Two `VPSRLVD`s build and pack the factors for the low and high
+words of each dword. Count zero produces a factor that overflows the word to
+zero, so an equality mask restores the original input; count 16 uses factor
+one and naturally returns zero; larger unsigned counts flush the factor.
+
+Arithmetic right shift uses signed `VPMULHW` after clamping the unsigned count
+to 16. Factors for counts 2 through 16 are positive and directly give the
+arithmetic quotient. The count-one factor is the signed word `-32768`, so the
+high product is `floor(-x/2)`; adding the original word changes it to
+`floor(x/2)`. The same masked addition handles count zero, where the factor
+is zero. A clamped count of 16 and factor one naturally return zero or minus
+one according to the input sign.
+
+This is a cost-selected lowering. Logical right uses it at both XMM and YMM
+width. Arithmetic right uses it only for YMM: the old two-dword
+`VPSRAVD` sequence remains about 2% faster for streaming XMM and about 10%
+faster with eight live XMM chains, despite losing on one- and two-chain
+latency. YMM benefits from the shorter data dependency and lower register
+pressure.
+
+On the measured host, logical dependent latency improves about 2--3%.
+Streaming logical throughput improves from roughly 0.97 to 0.95 ns/vector
+for XMM and from 1.42 to 1.06 ns/vector for YMM. YMM arithmetic latency
+improves about 4%, and streaming throughput from 1.39 to 1.05 ns/vector,
+about 24%; XMM arithmetic is deliberately unchanged. Four invariant
+XMM/YMM root-and-loop traces shrink from 420 to 407 instructions because
+factor construction hoists. With evolving counts they grow slightly from
+408 to 411 instructions, but the YMM throughput gain shows why critical-path
+and pressure measurements take precedence over static instruction count.

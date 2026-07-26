@@ -1780,6 +1780,38 @@ static TRef crec_simd_shiftv_i16_left(jit_State *J, IRType vt, TRef a, TRef nv)
 }
 
 /*
+** For counts from one through 16, multiplying by 2^(16-count) and taking the
+** high word is a right shift. A zero count needs the original word because
+** 2^16 does not fit in the factor lane. For arithmetic shifts, clamp to 16
+** and use signed MULHI. Its factor for count one is the signed value -32768:
+** adding the input corrects floor(-x/2) to floor(x/2). The same addition
+** handles count zero, where MULHI receives a zero factor.
+*/
+static TRef crec_simd_shiftv_i16_right(jit_State *J, IRType vt, TRef a,
+				       TRef nv, int sar)
+{
+  IRType dvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+  TRef base = crec_simd_k32(J, dvt, 0x10000);
+  TRef mask = crec_simd_k32(J, dvt, 0xffff);
+  TRef cnt = nv, lo, hi, factor, correction, r;
+  if (sar)
+    cnt = emitir(IRT(IR_VMINU, vt), nv, crec_simd_k16(J, vt, 16));
+  lo = emitir(IRT(IR_VSHRV, dvt), base,
+	      emitir(IRT(IR_VAND, dvt), cnt, mask));
+  lo = emitir(IRT(IR_VAND, dvt), lo, mask);
+  hi = emitir(IRT(IR_VSHRV, dvt), base,
+	      emitir(IRT(IR_VSHR, dvt), cnt, lj_ir_kint(J, 16)));
+  hi = emitir(IRT(IR_VSHL, dvt), hi, lj_ir_kint(J, 16));
+  factor = emitir(IRT(IR_VOR, vt), lo, hi);
+  correction = sar ?
+    emitir(IRT(IR_VCMPGT, vt), crec_simd_k16(J, vt, 2), cnt) :
+    emitir(IRT(IR_VCMPEQ, vt), cnt, crec_simd_k16(J, vt, 0));
+  r = emitir(IRT(sar ? IR_VMULHI : IR_VMULHIU, vt), a, factor);
+  return emitir(IRT(sar ? IR_VADD : IR_VOR, vt), r,
+		emitir(IRT(IR_VAND, vt), a, correction));
+}
+
+/*
 ** A variable byte left shift is multiplication modulo 256 by 2^count.
 ** PSHUFB obtains that multiplier from an eight-entry table. Saturating 0x78+n
 ** maps valid counts 0..7 to table slots 8..15 and sets the control byte's high
@@ -2110,6 +2142,20 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
     }
     if (vi.esize == 2 && op == VSH_SHL) {
       r = crec_simd_shiftv_i16_left(J, vt, a, nv);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
+    if (vi.esize == 2 && op == VSH_SHR) {
+      r = crec_simd_shiftv_i16_right(J, vt, a, nv, 0);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
+    /*
+    ** The signed high-product path removes YMM register pressure, but the
+    ** two-dword arithmetic-shift path is faster for streaming XMM chains.
+    */
+    if (vi.esize == 2 && op == VSH_SAR && (vt & IRT_VEC256)) {
+      r = crec_simd_shiftv_i16_right(J, vt, a, nv, 1);
       J->base[0] = crec_vec_box(J, r, vt, id);
       return;
     }

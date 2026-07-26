@@ -536,6 +536,16 @@ do
     op_cost("i16x8 shl per-lane",
 	    function() return i16(3), i16(0, 1, 2, 3, 4, 5, 6, 7) end,
 	    function(x, y) return simd.shl(x, y) end)
+    op_cost("i16x8 shr per-lane",
+	    function()
+	      return i16(-12345), i16(0, 1, 15, 16, 2, 7, 14, 20)
+	    end,
+	    function(x, y) return simd.shr(x, y) end)
+    op_cost("i16x8 sar per-lane",
+	    function()
+	      return i16(-12345), i16(0, 1, 15, 16, 2, 7, 14, 20)
+	    end,
+	    function(x, y) return simd.sar(x, y) end)
     op_cost("i8x16 shl per-lane",
 	    function()
 	      return s8(3), s8(0, 1, 2, 3, 4, 5, 6, 7,
@@ -850,6 +860,24 @@ if has_ymm then
 			    0, 1, 2, 3, 4, 5, 6, 7)
     end,
     function(x, y) return simd.shl(x, y) end)
+  width_cost("int16 shr per-lane",
+    function()
+      return i16(-12345), i16(0, 1, 15, 16, 2, 7, 14, 20)
+    end,
+    function()
+      return i16w(-12345), i16w(0, 1, 15, 16, 2, 7, 14, 20,
+				   3, 6, 9, 12, 17, 18, 4, 11)
+    end,
+    function(x, y) return simd.shr(x, y) end)
+  width_cost("int16 sar per-lane",
+    function()
+      return i16(-12345), i16(0, 1, 15, 16, 2, 7, 14, 20)
+    end,
+    function()
+      return i16w(-12345), i16w(0, 1, 15, 16, 2, 7, 14, 20,
+				   3, 6, 9, 12, 17, 18, 4, 11)
+    end,
+    function(x, y) return simd.sar(x, y) end)
   width_cost("int8 shl per-lane",
     function()
       return s8(3), s8(0, 1, 2, 3, 4, 5, 6, 7,

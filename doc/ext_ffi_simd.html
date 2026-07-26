@@ -146,8 +146,8 @@ The count may instead be a <em>vector</em> with the same lane width and lane
 count, in which case each lane shifts by its own amount. The same unsigned
 out-of-range rule applies per lane. This compiles to the AVX2 per-lane shifts
 on every integer lane width. AVX2 has no byte or word form, so 8- and 16-bit
-lanes are split into dword pieces, shifted independently, and recombined in
-packed code.
+lanes use packed lookup, product, or dword-decomposition sequences without
+scalarising.
 </p>
 <pre class="code">
 local v = simd.shl(x, int4(0, 1, 2, 3))   -- each lane shifts differently

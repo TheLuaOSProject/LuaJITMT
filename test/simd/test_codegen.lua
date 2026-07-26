@@ -753,12 +753,33 @@ test("per-lane shift counts use the AVX2 variable shifts", function()
     end)
   check(count(md16, "psllvd") == 2 and count(md16, "pmullw") == 1,
 	"dynamic i16x8 shl must build two factors and use one word multiply")
-  checkloop("i16x8 sar vec", {"psravd", "psrad", "pand"}, NOCALL,
-    function()
+  local mr16 = checkloop("i16x8 shr vec invariant",
+    {"pmulhuw", "pand", "por"}, NOCALL, function()
+      local acc = i16(0)
+      for _ = 1, 400 do acc = simd.shr(acc + a16, c16) end
+      return acc
+    end)
+  check(count(mr16, "psrlvd") == 0 and count(mr16, "pmulhuw") == 1,
+	"invariant i16x8 shr must hoist the factor and use one high multiply")
+  local ma16 = checkloop("i16x8 sar vec",
+    {"psravd", "psrad", "pand"}, NOCALL, function()
       local acc = i16(0)
       for _ = 1, 400 do acc = simd.sar(acc + a16, c16) end
       return acc
     end)
+  check(count(ma16, "psravd") == 2 and count(ma16, "pmulhw") == 0,
+	"i16x8 sar must retain the faster two-shift XMM decomposition")
+  local mrd16 = checkloop("i16x8 shr vec dynamic",
+    {"psrlvd", "pmulhuw", "pcmpeqw", "pand", "por"}, NOCALL, function()
+      local acc, c = i16(0), c16
+      for _ = 1, 400 do
+	acc = simd.shr(acc + a16, c)
+	c = c + i16(1)
+      end
+      return acc + c
+    end)
+  check(count(mrd16, "psrlvd") == 2 and count(mrd16, "pmulhuw") == 1,
+	"dynamic i16x8 shr must build two factors and use one high multiply")
 
   local i8 = T.T.i8x16.ct
   local av8 = i8(-128, -99, -17, -1, 0, 1, 7, 15,
@@ -1227,6 +1248,52 @@ if simd.features().avx2 then
     local _, hdmul = hdbody:gsub("vpmullw ymm", "")
     check(hshift == 2 and hdmul == 1,
 	  "dynamic i16x16 shl must build two factors and use one YMM multiply")
+    local hrbody = checkymm("i16x16 invariant per-lane shr",
+      {"vpmulhuw ymm", "vpand ymm", "vpor ymm"}, function()
+	local acc = h16(1)
+	for _ = 1, 400 do acc = simd.shr(acc + h16(3), hc) end
+	return acc
+      end)
+    local _, hrmul = hrbody:gsub("vpmulhuw ymm", "")
+    check(hrmul == 1 and not hrbody:find("vpsrlvd ymm", 1, true),
+	  "invariant i16x16 shr must hoist the factor and high-multiply once")
+    local habody = checkymm("i16x16 invariant per-lane sar",
+      {"vpmulhw ymm", "vpand ymm", "vpaddw ymm"}, function()
+	local acc = h16(1)
+	for _ = 1, 400 do acc = simd.sar(acc + h16(3), hc) end
+	return acc
+      end)
+    local _, hamul = habody:gsub("vpmulhw ymm", "")
+    check(hamul == 1 and not habody:find("vpsrlvd ymm", 1, true),
+	  "invariant i16x16 sar must hoist the factor and high-multiply once")
+    local hrdbody = checkymm("i16x16 dynamic per-lane shr",
+      {"vpsrlvd ymm", "vpmulhuw ymm", "vpcmpeqw ymm", "vpand ymm",
+       "vpor ymm"}, function()
+	local acc, c = h16(1), hc
+	for _ = 1, 400 do
+	  acc = simd.shr(acc + h16(3), c)
+	  c = c + h16(1)
+	end
+	return acc + c
+      end)
+    local _, hrdshift = hrdbody:gsub("vpsrlvd ymm", "")
+    local _, hrdmul = hrdbody:gsub("vpmulhuw ymm", "")
+    check(hrdshift == 2 and hrdmul == 1,
+	  "dynamic i16x16 shr must build two factors and high-multiply once")
+    local hadbody = checkymm("i16x16 dynamic per-lane sar",
+      {"vpminuw ymm", "vpsrlvd ymm", "vpcmpgtw ymm", "vpmulhw ymm",
+       "vpand ymm", "vpaddw ymm"}, function()
+	local acc, c = h16(1), hc
+	for _ = 1, 400 do
+	  acc = simd.sar(acc + h16(3), c)
+	  c = c + h16(1)
+	end
+	return acc + c
+      end)
+    local _, hadshift = hadbody:gsub("vpsrlvd ymm", "")
+    local _, hadmul = hadbody:gsub("vpmulhw ymm", "")
+    check(hadshift == 2 and hadmul == 1,
+	  "dynamic i16x16 sar must clamp, build two factors and high-multiply")
 
     local sb32 = T.W.i8x32.ct
     checkymm("i8x32 mulhi emulation",
