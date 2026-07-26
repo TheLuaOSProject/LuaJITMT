@@ -171,6 +171,13 @@ control must emit one `PBLENDW`; an otherwise identical control selecting
 the two bytes independently must retain `PSHUFB`/`POR`. This pins the
 fast-path legality boundary as well as its opcode.
 
+Every native two-source immediate family also has an indexed-array codegen
+case: XMM/YMM `SHUFPS`, `SHUFPD`, `PBLENDW`, and YMM `VPERM2I128`. On AVX
+each instruction must contain the final `XLOAD` as its memory operand. The
+Nehalem path must retain a separate load, which guards the legacy unaligned
+memory safety rule. A full-HD RGBA channel-merge benchmark continuously
+exercises the streaming blend form at both XMM and YMM widths.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

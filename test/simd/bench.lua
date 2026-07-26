@@ -521,9 +521,73 @@ local function mandel_ymm()
 	 tonumber(total[2]) + tonumber(total[3])
 end
 
+local real_benches = {}
+
+------------------------------------------------------- RGBA channel merge --
+
+do
+-- Merge alternating channels from two full-HD RGBA layers. This is the
+-- packed form of a common compositor/channel-routing pass: every iteration
+-- reads two independent streams, selects whole channels, and writes one
+-- stream. The vector form maps exactly to one native two-source blend whose
+-- final input can be consumed directly from memory.
+local RGBA_PIXELS = 1920 * 1080
+local RGBA_N = RGBA_PIXELS * 4
+local RGBA_PASSES = 3
+local rgba_a = ffi.new("int32_t[?]", RGBA_N)
+local rgba_b = ffi.new("int32_t[?]", RGBA_N)
+local rgba_out = ffi.new("int32_t[?]", RGBA_N)
+for i = 0, RGBA_N-1 do
+  rgba_a[i] = (i * 17 + 3) % 65521
+  rgba_b[i] = (i * 29 + 11) % 65521
+end
+local rgba_a4 = ffi.cast(ffi.typeof("$ *", i4), rgba_a)
+local rgba_b4 = ffi.cast(ffi.typeof("$ *", i4), rgba_b)
+local rgba_o4 = ffi.cast(ffi.typeof("$ *", i4), rgba_out)
+local rgba_a8 = has_ymm and ffi.cast(ffi.typeof("$ *", i8), rgba_a)
+local rgba_b8 = has_ymm and ffi.cast(ffi.typeof("$ *", i8), rgba_b)
+local rgba_o8 = has_ymm and ffi.cast(ffi.typeof("$ *", i8), rgba_out)
+
+local function rgba_merge_scalar()
+  for _ = 1, RGBA_PASSES do
+    for p = 0, RGBA_PIXELS-1 do
+      local i = p*4
+      rgba_out[i] = rgba_a[i]
+      rgba_out[i+1] = rgba_b[i+1]
+      rgba_out[i+2] = rgba_a[i+2]
+      rgba_out[i+3] = rgba_b[i+3]
+    end
+  end
+  return sample_sum(rgba_out, RGBA_N)
+end
+
+local function rgba_merge_xmm()
+  for _ = 1, RGBA_PASSES do
+    for i = 0, RGBA_PIXELS-1 do
+      rgba_o4[i] = simd.shuffle2(rgba_a4[i], rgba_b4[i], 0, 5, 2, 7)
+    end
+  end
+  return sample_sum(rgba_out, RGBA_N)
+end
+
+local function rgba_merge_ymm()
+  for _ = 1, RGBA_PASSES do
+    for i = 0, RGBA_PIXELS/2-1 do
+      rgba_o8[i] = simd.shuffle2(rgba_a8[i], rgba_b8[i],
+				 0, 9, 2, 11, 4, 13, 6, 15)
+    end
+  end
+  return sample_sum(rgba_out, RGBA_N)
+end
+
+real_benches.rgba = {
+  scalar = rgba_merge_scalar, xmm = rgba_merge_xmm, ymm = rgba_merge_ymm,
+  name = "RGBA channel merge",
+}
+end
+
 -------------------------------------------------------- 1080p Gaussian blur --
 
-local real_benches = {}
 do
 -- A separable 5x5 Gaussian is a production image-processing primitive. This
 -- processes a full 1920x1080 float frame with padded borders, one horizontal
@@ -1162,7 +1226,7 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p blur, %.2fs audio, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, %.2fs audio, %d particles, %d ChaCha blocks\n",
   real_benches.audio.seconds, real_benches.particles.count,
   real_benches.chacha.blocks))
 
@@ -1183,6 +1247,7 @@ local function run_real(b)
   end
 end
 
+run_real(real_benches.rgba)
 run_real(real_benches.blur)
 run_real(real_benches.audio)
 run_real(real_benches.particles)

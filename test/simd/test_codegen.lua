@@ -215,6 +215,75 @@ test("vector loads fuse into AVX unary operations", function()
   end
 end)
 
+test("native two-source shuffles consume their final array load", function()
+  local cases = {
+    {
+      "i32x4 SHUFPS", T.T.i32x4.ct, "shufps",
+      function(a, b) return simd.shuffle2(a, b, 3, 0, 6, 5) end,
+    },
+    {
+      "i64x2 SHUFPD", T.T.i64x2.ct, "shufpd",
+      function(a, b) return simd.shuffle2(a, b, 1, 2) end,
+    },
+  }
+  if simd.features().sse4_1 then
+    cases[#cases+1] = {
+      "i32x4 PBLENDW", T.T.i32x4.ct, "pblendw",
+      function(a, b) return simd.shuffle2(a, b, 0, 5, 2, 7) end,
+    }
+  end
+  if simd.features().avx2 then
+    cases[#cases+1] = {
+      "i32x8 VSHUFPS", T.W.i32x8.ct, "vshufps",
+      function(a, b)
+	return simd.shuffle2(a, b, 3, 0, 10, 9, 7, 4, 14, 13)
+      end,
+    }
+    cases[#cases+1] = {
+      "i64x4 VSHUFPD", T.W.i64x4.ct, "vshufpd",
+      function(a, b) return simd.shuffle2(a, b, 1, 4, 2, 7) end,
+    }
+    cases[#cases+1] = {
+      "i32x8 VPERM2I128", T.W.i32x8.ct, "vperm2i128",
+      function(a, b)
+	return simd.shuffle2(a, b, 4, 5, 6, 7, 8, 9, 10, 11)
+      end,
+    }
+    cases[#cases+1] = {
+      "i32x8 VPBLENDW", T.W.i32x8.ct, "vpblendw",
+      function(a, b)
+	return simd.shuffle2(a, b, 0, 9, 2, 11, 4, 13, 6, 15)
+      end,
+    }
+  end
+  for _, c in ipairs(cases) do
+    local lhs = ffi.new(ffi.typeof("$[400]", c[2]))
+    local rhs = ffi.new(ffi.typeof("$[400]", c[2]))
+    for i = 0, 399 do lhs[i], rhs[i] = c[2](i+1), c[2](i+9) end
+    local body, isloop = loopcode(function()
+      local acc = c[2](0)
+      for i = 0, 399 do acc = c[4](acc + lhs[i], rhs[i]) end
+      return acc
+    end)
+    local memop = false
+    for line in body:gmatch("[^\n]+") do
+      if line:find(c[3], 1, true) and line:find("[", 1, true) then
+	memop = true
+	break
+      end
+    end
+    check(isloop, c[1] .. " memory-source test must compile as a loop")
+    if simd.features().avx then
+      check(memop, c[1] .. " did not consume its final load: " ..
+	    body:gsub("\n", " | "))
+    else
+      check(not memop, c[1] ..
+	    " legacy SSE must keep the unaligned load separate: " ..
+	    body:gsub("\n", " | "))
+    end
+  end
+end)
+
 test("integer arithmetic is packed", function()
   local cases = {
     {"i8x16", "paddb", "psubb"},

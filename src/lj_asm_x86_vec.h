@@ -963,6 +963,24 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
   }
 }
 
+/*
+** VSHUF2's second source is carried through the adjacent CARG. Skip that
+** structural use while checking whether a one-use XLOAD can become the
+** instruction's read-only memory operand.
+*/
+static int asm_vecshuf2canfuseload(ASMState *as, IRRef ref)
+{
+  int ok;
+  if (!asm_veccanfuseload(as, ref))
+    return 0;
+  lj_assertA(IR(as->curins)->op2 + 1 == as->curins,
+	     "VSHUF2 CARG is not adjacent to its user");
+  as->curins--;
+  ok = noconflict(as, ref, IR_XSTORE, 2);
+  as->curins++;
+  return ok;
+}
+
 static void asm_vecshuf2(ASMState *as, IRIns *ir)
 {
   IRIns *arg = IR(ir->op2);
@@ -994,11 +1012,20 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
   }
   if (as->flags & JIT_F_AVX) {
     Reg left;
+    int fuse = asm_vecshuf2canfuseload(as, rref);
     dest = ra_dest(as, ir, RSET_FPR);
     left = ra_alloc1(as, lref, RSET_FPR);
-    right = ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
     emit_i8(as, imm);
-    emit_vexrrl(as, xo, dest, left, right, wide);
+    if (fuse) {
+      as->curins--;
+      right = asm_vecfuseload(as, rref,
+			      rset_exclude(RSET_FPR, left));
+      as->curins++;
+      emit_mrm(as, emit_vexopv(xo, left, 0, wide), dest, right);
+    } else {
+      right = ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
+      emit_vexrrl(as, xo, dest, left, right, wide);
+    }
     return;
   }
   lj_assertA(!wide && mode != IRVSHUF2_PERM2I128,

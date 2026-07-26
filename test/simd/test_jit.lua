@@ -708,6 +708,23 @@ test("fma memory operands do not cross an intervening store", function()
   end, 200)
 end)
 
+test("shuffle2 memory operands do not cross an intervening store", function()
+  local i4 = T.T.i32x4.ct
+  local raw = ffi.new("int32_t[4]")
+  local p = ffi.cast(ffi.typeof("$ *", i4), raw)
+  local q = ffi.cast(ffi.typeof("$ *", i4), raw)
+  diff("aliased load, store, then native shuffle2", function(n)
+    local acc, one = i4(1), i4(1)
+    p[0] = i4(2, 3, 4, 5)
+    for i = 1, n do
+      local old = p[0]
+      q[0] = i4(i)
+      acc = simd.shuffle2(acc + one, old, 3, 0, 6, 5)
+    end
+    return acc, p[0]
+  end, 200)
+end)
+
 test("side traces replay sunk vector boxes", function()
   -- A rare branch inside a hot loop becomes a hot side exit and grows its own
   -- side trace, which has to replay the parent's snapshot. When the sunk box

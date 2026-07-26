@@ -1369,3 +1369,26 @@ preference: `PBLENDW` cannot express those controls.
 Paired-byte and dword dependent blends improve from about 0.571 to 0.386
 ns/vector at both XMM and YMM widths, roughly 32%. Isolated dword blend cost
 is about 0.19 ns/vector and preserves the usual 2x YMM lane throughput.
+
+## D49. Let native two-source shuffles read their final input from memory
+
+The x86 encodings for `SHUFPS`, `SHUFPD`, `PBLENDW`, and `VPERM2I128` all
+accept their final vector source as a memory operand. `VSHUF2` carries that
+source through an adjacent, non-emitting `CARG`, so the ordinary load-fusion
+conflict scan initially treated the carrier as a second use and allocated a
+temporary vector register.
+
+The backend now skips only that structural carrier while checking a one-use
+`XLOAD`. A real intervening `XSTORE` still blocks fusion. On AVX the final
+array load is emitted directly in the shuffle; legacy SSE deliberately keeps
+the separate unaligned `MOVUPS`, preserving the established alignment safety
+boundary.
+
+Ordinary two-stream loops are neutral to a few percent faster because the
+fused instruction has the same loaded execution work but less decode and
+register-allocation traffic. The difference becomes material when live
+vectors fill the register file: a sixteen-chain array benchmark improves from
+about 5.9 to 5.2 ns per sixteen XMM shuffles (roughly 13%) and from about
+11--13 to 9.4--10.0 ns per sixteen YMM shuffles (roughly 10--23%). The
+production benchmark suite now includes a full-HD RGBA channel-routing pass
+that streams two input layers through this exact blend shape.
