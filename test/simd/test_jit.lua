@@ -1632,6 +1632,30 @@ if simd.features().avx2 then
       end
       return a, b
     end, 100)
+    local edge_bits = {
+      su(0, 0x8000000000000000ULL, 1, 0x8000000000000001ULL),
+      su(0x3fefffffffffffffULL, 0xbfefffffffffffffULL,
+	 0x3ff0000000000000ULL, 0xbff0000000000000ULL),
+      su(0x432fffffffffffffULL, 0xc32fffffffffffffULL,
+	 0x4330000000000000ULL, 0xc330000000000000ULL),
+      su(0x43dfffffffffffffULL, 0xc3dfffffffffffffULL,
+	 0x43e0000000000000ULL, 0xc3e0000000000000ULL),
+      su(0x43e0000000000001ULL, 0xc3e0000000000001ULL,
+	 0x7ff0000000000000ULL, 0xfff0000000000000ULL),
+      su(0x7ff8000000001234ULL, 0xfff8000000005678ULL,
+	 0x7ff0000000001234ULL, 0xfff0000000005678ULL),
+    }
+    for i, bits in ipairs(edge_bits) do
+      local v = simd.bitcast(fd, bits)
+      diff("double4 to qword boundary bits " .. i, function(n)
+	local a, b = si(0), su(0)
+	for _ = 1, n do
+	  a = simd.bxor(a, simd.convert(si, v))
+	  b = simd.bxor(b, simd.convert(su, v))
+	end
+	return a, b
+      end, 101)
+    end
   end)
 
   test("256-bit extended conversions randomized bit patterns", function()

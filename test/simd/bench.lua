@@ -1598,6 +1598,81 @@ real_benches.transform = {
 }
 end
 
+----------------------------------------------- 3D voxel fixed-point index --
+
+do
+-- Quantize a million double-precision XYZ points into signed 64-bit voxel
+-- coordinates, combine them into a spatial-grid checksum, and repeat for
+-- eight point-cloud frames. This is the front half of voxel hashing, GIS tile
+-- indexing, and fixed-point point-cloud export: 24 million double-to-qword
+-- conversions plus packed qword shifts and accumulation.
+local VOXEL_N = 1 << 20
+local VOXEL_PASSES = 8
+local voxel_x = ffi.new("double[?]", VOXEL_N)
+local voxel_y = ffi.new("double[?]", VOXEL_N)
+local voxel_z = ffi.new("double[?]", VOXEL_N)
+for i = 0, VOXEL_N-1 do
+  voxel_x[i] = ((i % 100003) - 50001) * 0.0009765625
+  voxel_y[i] = ((i % 65521) - 32760) * 0.001953125
+  voxel_z[i] = ((i % 32749) - 16374) * 0.00390625
+end
+
+local function voxel_scalar()
+  local acc = 0LL
+  for _ = 1, VOXEL_PASSES do
+    for i = 0, VOXEL_N-1 do
+      local x = ffi.cast("int64_t", voxel_x[i] * 1048576.0 + 17.75)
+      local y = ffi.cast("int64_t", voxel_y[i] * 524288.0 - 31.25)
+      local z = ffi.cast("int64_t", voxel_z[i] * 262144.0 + 7.5)
+      acc = acc + x + y * 3LL + z * 5LL
+    end
+  end
+  return acc
+end
+
+local voxel_x2 = ffi.cast(d2p, voxel_x)
+local voxel_y2 = ffi.cast(d2p, voxel_y)
+local voxel_z2 = ffi.cast(d2p, voxel_z)
+local function voxel_xmm()
+  local sx, sy, sz = d2(1048576), d2(524288), d2(262144)
+  local bx, by, bz = d2(17.75), d2(-31.25), d2(7.5)
+  local acc = i64x2(0)
+  for _ = 1, VOXEL_PASSES do
+    for i = 0, VOXEL_N/2-1 do
+      local x = simd.convert(i64x2, voxel_x2[i] * sx + bx)
+      local y = simd.convert(i64x2, voxel_y2[i] * sy + by)
+      local z = simd.convert(i64x2, voxel_z2[i] * sz + bz)
+      acc = acc + x + y + simd.shl(y, 1) + z + simd.shl(z, 2)
+    end
+  end
+  return simd.hsum(acc)
+end
+
+local voxel_x4 = has_ymm and ffi.cast(d4p, voxel_x)
+local voxel_y4 = has_ymm and ffi.cast(d4p, voxel_y)
+local voxel_z4 = has_ymm and ffi.cast(d4p, voxel_z)
+local function voxel_ymm()
+  local sx, sy, sz = d4(1048576), d4(524288), d4(262144)
+  local bx, by, bz = d4(17.75), d4(-31.25), d4(7.5)
+  local acc = i64x4(0)
+  for _ = 1, VOXEL_PASSES do
+    for i = 0, VOXEL_N/4-1 do
+      local x = simd.convert(i64x4, voxel_x4[i] * sx + bx)
+      local y = simd.convert(i64x4, voxel_y4[i] * sy + by)
+      local z = simd.convert(i64x4, voxel_z4[i] * sz + bz)
+      acc = acc + x + y + simd.shl(y, 1) + z + simd.shl(z, 2)
+    end
+  end
+  return simd.hsum(acc)
+end
+
+real_benches.voxel = {
+  scalar = voxel_scalar, xmm = voxel_xmm, ymm = voxel_ymm,
+  name = "3D voxel index checksum",
+  mpoints = VOXEL_N * VOXEL_PASSES / 1000000,
+}
+end
+
 ----------------------------------------------------------- 64-tap audio FIR --
 
 do
@@ -2118,11 +2193,12 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points + %.1fM voxelized points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.residual.mpixels,
   real_benches.checksum.mib, real_benches.activations.mib,
   real_benches.ternary.mib,
   real_benches.transform.mpoints,
+  real_benches.voxel.mpoints,
   real_benches.pcm.seconds, real_benches.pcmfir.seconds,
   real_benches.audio.seconds,
   real_benches.particles.count,
@@ -2157,6 +2233,7 @@ run_real(real_benches.ternary)
 run_real(real_benches.blur)
 run_real(real_benches.morph)
 run_real(real_benches.transform)
+run_real(real_benches.voxel)
 run_real(real_benches.audio)
 run_real(real_benches.particles)
 run_real(real_benches.chacha)

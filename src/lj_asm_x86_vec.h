@@ -1345,14 +1345,29 @@ static void asm_vecconv_f64_i64(ASMState *as, IRIns *ir)
   if (wide) {
     emit_i8(as, 1);
     emit_vexrrl(as, XO_VINSERTF128, dest, dest, upout, 1);
-    emit_vrr3l(as, XO_PUNPCKLQDQ, upout, upout, tmp, 0);
-    emit_vmovq_gpr(as, tmp, g3);
-    emit_vmovq_gpr(as, upout, g2);
+    if (as->flags & JIT_F_SSE4_1) {
+      emit_i8(as, 1);
+      emit_vexrrw(as, XO_PINSRD, upout, upout, g3, 1);
+      emit_vmovq_gpr(as, upout, g2);
+    } else {
+      emit_vrr3l(as, XO_PUNPCKLQDQ, upout, upout, tmp, 0);
+      emit_vmovq_gpr(as, tmp, g3);
+      emit_vmovq_gpr(as, upout, g2);
+    }
     checkmclim(as);
   }
-  emit_vrr3l(as, XO_PUNPCKLQDQ, dest, dest, tmp, 0);
-  emit_vmovq_gpr(as, tmp, g1);
-  emit_vmovq_gpr(as, dest, g0);
+  if (as->flags & JIT_F_SSE4_1) {
+    emit_i8(as, 1);
+    if (as->flags & JIT_F_AVX)
+      emit_vexrrw(as, XO_PINSRD, dest, dest, g1, 1);
+    else
+      emit_vrr66(as, XO_PINSRD, dest|REX_64, g1|REX_64);
+    emit_vmovq_gpr(as, dest, g0);
+  } else {
+    emit_vrr3l(as, XO_PUNPCKLQDQ, dest, dest, tmp, 0);
+    emit_vmovq_gpr(as, tmp, g1);
+    emit_vmovq_gpr(as, dest, g0);
+  }
   if (wide) {
     emit_vcvttsd2si64(as, g3, tmp);
     emit_vrr2il(as, XO_PSHUFD, tmp, upper, 0xee, 0);

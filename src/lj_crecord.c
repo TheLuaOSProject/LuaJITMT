@@ -2728,6 +2728,47 @@ static TRef crec_simd_i64tof64(jit_State *J, IRType svt, IRType dvt, TRef a,
 }
 
 /*
+** Convert four doubles to signed-qword bit patterns entirely in AVX2.
+** Binary64 stores a 53 bit significand and a biased exponent. Aligning that
+** significand at the top of each qword means one variable right shift places
+** every value in the complete signed range. Values below one naturally shift
+** to zero.
+**
+** CVTTSD2SI returns INT64_MIN for NaN and every overflow, including positive
+** values at 2^63. Exponents below 1086 are the complete valid range except
+** for exactly -2^63, whose correct result is the same bit pattern anyway.
+** Consequently one exponent comparison reproduces the hardware result for
+** all exceptional inputs without scalar branches.
+*/
+static TRef crec_simd_f64toi64_avx2(jit_State *J, IRType dvt, TRef a)
+{
+  TRef exp, mant, count, mag, sign, val, valid;
+  TRef k1086 = crec_simd_k64(J, dvt, 1086);
+  exp = emitir(IRT(IR_VSHR, dvt), a, lj_ir_kint(J, 52));
+  exp = emitir(IRT(IR_VAND, dvt), exp,
+	       crec_simd_k64(J, dvt, 0x7ff));
+  /*
+  ** Shift the stored fraction to bits 11..62; this simultaneously discards
+  ** sign and exponent. The hidden one goes in bit 63. Every valid signed
+  ** result has exponent <= 62, so one right shift by 63-exponent suffices.
+  */
+  mant = emitir(IRT(IR_VSHL, dvt), a, lj_ir_kint(J, 11));
+  mant = emitir(IRT(IR_VOR, dvt), mant,
+		crec_simd_k64(J, dvt, U64x(80000000,00000000)));
+  count = emitir(IRT(IR_VSUB, dvt), k1086, exp);
+  mag = emitir(IRT(IR_VSHRV, dvt), mant, count);
+  sign = emitir(IRT(IR_VCMPGT, dvt),
+		crec_simd_k64(J, dvt, 0), a);
+  val = emitir(IRT(IR_VSUB, dvt),
+	       emitir(IRT(IR_VXOR, dvt), mag, sign), sign);
+  valid = emitir(IRT(IR_VCMPGT, dvt), k1086, exp);
+  return emitir(IRT(IR_VOR, dvt),
+		emitir(IRT(IR_VAND, dvt), valid, val),
+		emitir(IRT(IR_VANDN, dvt), valid,
+		       crec_simd_k64(J, dvt, U64x(80000000,00000000))));
+}
+
+/*
 ** Narrow integer lanes from one YMM register to one XMM register, keeping the
 ** low half of every source lane. VPSHUFB compacts the wanted bytes into the
 ** low qword of each 128 bit half; the VCONV backend completes the operation
@@ -2872,6 +2913,13 @@ void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
   if (dvi.kind == VECK_F64 &&
       (svi.kind == VECK_I64 || svi.kind == VECK_U64)) {
     r = crec_simd_i64tof64(J, svt, dvt, a, svi.kind == VECK_U64);
+    J->base[0] = crec_vec_box(J, r, dvt, did);
+    return;
+  }
+  if (svi.kind == VECK_F64 &&
+      (dvi.kind == VECK_I64 || dvi.kind == VECK_U64) &&
+      (dvt & IRT_VEC256) && (J->flags & JIT_F_AVX2)) {
+    r = crec_simd_f64toi64_avx2(J, dvt, a);
     J->base[0] = crec_vec_box(J, r, dvt, did);
     return;
   }

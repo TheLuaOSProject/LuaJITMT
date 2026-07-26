@@ -1193,8 +1193,10 @@ test("extended numeric conversions stay call-free", function()
       return acc
     end)
 
+  local assemble64 = simd.features().sse4_1 and
+    {"cvttsd2si", "pinsrq"} or {"cvttsd2si", "punpcklqdq"}
   local mf64 = checkloop("double2 to i64x2",
-    {"cvttsd2si", "punpcklqdq"}, {"call"}, function()
+    assemble64, {"call"}, function()
       local acc = i2(0)
       local v = d2(123456789.75, -987654321.25)
       local step = d2(0.5, -0.25)
@@ -1207,6 +1209,11 @@ test("extended numeric conversions stay call-free", function()
   if mf64 then
     check(count(mf64, "cvttsd2si") == 2,
 	  "double2 conversion must issue one scalar conversion per lane")
+    if simd.features().sse4_1 then
+      check(count(mf64, "pinsrq") == 1 and
+	    count(mf64, "punpcklqdq") == 0,
+	    "SSE4.1 double2 conversion must assemble with one PINSRQ")
+    end
   end
 end)
 
@@ -2151,8 +2158,8 @@ if simd.features().avx2 then
 	return acc
       end)
 
-    local cvq = checkymm("double4 to i64x4 conversion",
-      {"vextractf128", "vcvttsd2si", "vpunpcklqdq", "vinsertf128"},
+    local cvq = checkymm("double4 to i64x4 packed conversion",
+      {"vpsllq ymm", "vpsrlvq ymm", "vpcmpgtq ymm"},
       function()
 	local acc = siq(0)
 	local v = fd(123456789.75, -987654321.25, 9007199254740991,
@@ -2164,8 +2171,11 @@ if simd.features().avx2 then
 	end
 	return acc
       end)
-    local _, ncvq = cvq:gsub("vcvttsd2si", "")
-    check(ncvq == 4, "double4 conversion must issue one conversion per lane")
+    check(not cvq:find("vcvttsd2si", 1, true) and
+	  not cvq:find("vextractf128", 1, true) and
+	  not cvq:find("vinsertf128", 1, true) and
+	  not cvq:find("vpinsrq", 1, true),
+	  "double4 conversion must remain a full-width packed AVX2 sequence")
 
     local b8, q4 = T.W.i8x32.ct, T.W.i64x4.ct
     checkymm("i8x32 multiply emulation", {"vpmullw ymm"}, function()
