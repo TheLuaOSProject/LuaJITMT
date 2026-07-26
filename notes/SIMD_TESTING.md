@@ -214,6 +214,14 @@ differentials cover overflow, both widths and exact scalar results. The
 full-4K depth-tile benchmark writes and checks both min and max metadata for
 all 518,400 tiles.
 
+Signed-word extrema codegen requires the packed ordering XOR followed by one
+`PHMINPOSUW` for both XMM min and max, with no `PMINSW`, `PMAXSW`, or
+`PSRLDQ` tree left. YMM must use the ordering XOR, half exchange, unsigned
+half minimum, and `VPHMINPOSUW xmm`. The randomized reduction differential
+checks negative values, signed extrema, wraparound and both widths. A
+one-minute PCM16 envelope benchmark writes and validates min/max metadata for
+180,000 independent 16-sample buckets over twelve passes.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

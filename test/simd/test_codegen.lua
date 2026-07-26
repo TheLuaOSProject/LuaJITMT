@@ -1198,6 +1198,29 @@ test("unsigned word extrema use horizontal min-position", function()
   end
 end)
 
+test("signed word extrema use biased horizontal min-position", function()
+  local ct = T.T.i16x8.ct
+  local a = ct(-1, 3, -5, 7, -11, 13, -17, 19)
+  for _, op in ipairs({"hmin", "hmax"}) do
+    local m = checkloop("i16x8 " .. op, {"pxor", "phminposuw"},
+      NOCALL, function()
+	local s, v = 0, ct(0)
+	for _ = 1, 400 do
+	  v = v + a
+	  s = s + tonumber(simd[op](v))
+	end
+	return s
+      end)
+    if m then
+      check(count(m, "phminposuw") == 1,
+	    "i16x8 " .. op .. ": exactly one biased horizontal minimum")
+      check(count(m, "pminsw") == 0 and count(m, "pmaxsw") == 0 and
+	    count(m, "psrldq") == 0,
+	    "i16x8 " .. op .. ": signed shuffle tree must be gone")
+    end
+  end
+end)
+
 test("shuffle and insert are packed", function()
   local i4 = T.T.i32x4.ct
   local a = i4(1, 2, 3, 4)
@@ -2338,6 +2361,27 @@ if simd.features().avx2 then
     check(not body:find("vpmaxuw ymm", 1, true) and
 	  not body:find("vpsrldq ymm", 1, true),
 	  "u16x16 hmax must use the complemented horizontal minimum")
+
+    local sw16 = T.W.i16x16.ct
+    local swv = sw16(-1, 3, -5, 7, -11, 13, -17, 19,
+		     -23, 29, -31, 37, -41, 43, -47, 53)
+    for _, op in ipairs({"hmin", "hmax"}) do
+      body = checkymm("i16x16 " .. op,
+	{"vpxor ymm", "vperm2i128 ymm", "vpminuw ymm",
+	 "vphminposuw xmm"},
+	function()
+	  local v, result = sw16(0), 0
+	  for _ = 1, 400 do
+	    v = v + swv
+	    result = result + tonumber(simd[op](v))
+	  end
+	  return v, result
+	end)
+      check(not body:find("vpminsw ymm", 1, true) and
+	    not body:find("vpmaxsw ymm", 1, true) and
+	    not body:find("vpsrldq ymm", 1, true),
+	    "i16x16 " .. op .. " must use the biased horizontal minimum")
+    end
   end)
 end
 

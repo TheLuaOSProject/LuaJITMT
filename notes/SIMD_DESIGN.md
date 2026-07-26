@@ -1520,3 +1520,36 @@ uint16 depth frame, the structure used by hierarchical-Z culling and depth
 pyramids. Its scalar comparison tree is explicitly unrolled with stable
 branch directions. The optimized XMM/YMM paths improve about 18%/25% over
 the prior packed reduction, reaching roughly 4.8x/4.3x the scalar throughput.
+
+## D54. Bias signed-word order into the unsigned min-position domain
+
+Two's-complement signed-word order becomes unsigned order by flipping its
+sign bit. Signed horizontal minimum can therefore reuse D53 exactly:
+
+```
+min_i16(x) = min_u16(x ^ 0x8000) ^ 0x8000
+```
+
+For maximum, complementing the biased unsigned domain and simplifying the
+two output transforms gives a single different mask:
+
+```
+max_i16(x) = min_u16(x ^ 0x7fff) ^ 0x7fff
+```
+
+The input XOR stays packed and loop-invariant masks are shared normally. The
+output XOR is scalar before the existing i16 narrowing, so only the live low
+word is transformed. YMM still collapses its two biased halves with
+`VPMINUW` before the XMM-only `VPHMINPOSUW`. CPUs without SSE4.1 retain the
+original signed `PMINSW`/`PMAXSW` shuffle tree.
+
+XMM dependency latency stays approximately flat because `PHMINPOSUW` itself
+is the critical path, but eight independent chains improve about 34%. YMM
+removes most of the cross-half tree: dependent min/max improve about
+32%/29%, and eight-chain throughput about 22%/21%.
+
+The production benchmark suite now generates min/max waveform metadata for
+one minute of signed 48 kHz PCM16 audio in 16-sample buckets. It shares the
+fully unrolled, stable scalar comparison tree used by the depth benchmark.
+The optimized XMM/YMM paths improve about 12%/18% over the prior SIMD code,
+reaching roughly 4.4x/4.0x scalar throughput.

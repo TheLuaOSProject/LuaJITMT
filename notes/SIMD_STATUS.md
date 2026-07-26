@@ -80,6 +80,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M57 | Lower non-repeating full-width YMM dword/qword blends through one `VPBLENDD` | done |
 | M58 | Reduce signed/unsigned byte vectors through `PSADBW` qword partial sums | done |
 | M59 | Collapse unsigned-word horizontal min/max through `PHMINPOSUW` | done |
+| M60 | Map signed-word horizontal min/max to biased `PHMINPOSUW` reductions | done |
 
 ## Commands that pass
 
@@ -682,3 +683,10 @@ scalar result path. Eight-chain throughput improves about 34--39% for XMM
 and 32--36% for YMM. YMM dependent latency improves about 43% for min and
 25% for max. A full-4K hierarchical-depth tile benchmark improves from about
 1.7 to 1.4 ms at XMM width and 2.0 to 1.5 ms at YMM width.
+
+Signed-word extrema now flip the ordering bit before the same
+`PHMINPOSUW` path: min uses XOR `0x8000`, while max uses XOR `0x7fff`; the
+same mask restores the scalar result. Eight-chain XMM throughput improves
+about 34%. YMM dependent latency improves 29--32% and eight-chain throughput
+21--22%. A one-minute PCM16 waveform-envelope benchmark improves from about
+2.4 to 2.1 ms at XMM width and 2.8 to 2.3 ms at YMM width.
