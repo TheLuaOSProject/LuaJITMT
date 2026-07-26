@@ -203,6 +203,17 @@ overflowing byte values and every supported CPU feature level. A 16 MiB
 32-byte block-checksum benchmark continuously exercises direct array loads,
 two XMM reductions versus one YMM reduction, and exact scalar output.
 
+Unsigned-word extrema codegen requires one `PHMINPOSUW` for each XMM min or
+max and rejects the former `PSRLDQ`/`PMINUW` or `PMAXUW` trees. YMM min must
+first use one half exchange and one `VPMINUW`, then finish with
+`VPHMINPOSUW xmm`; max additionally requires the packed input complement and
+must not retain `VPMAXUW`. An indexed-array case requires a genuine AVX
+memory operand and a separate legacy-SSE unaligned load, guarding the ModRM
+encoding as well as load-fusion legality. Existing randomized reduction
+differentials cover overflow, both widths and exact scalar results. The
+full-4K depth-tile benchmark writes and checks both min and max metadata for
+all 518,400 tiles.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

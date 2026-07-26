@@ -79,6 +79,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M56 | Collapse lane-local and full-width contiguous two-source windows through `PALIGNR` | done |
 | M57 | Lower non-repeating full-width YMM dword/qword blends through one `VPBLENDD` | done |
 | M58 | Reduce signed/unsigned byte vectors through `PSADBW` qword partial sums | done |
+| M59 | Collapse unsigned-word horizontal min/max through `PHMINPOSUW` | done |
 
 ## Commands that pass
 
@@ -673,3 +674,11 @@ Dependent XMM/YMM reductions improve from roughly 0.96--1.11 to
 0.62--0.79 ns, and eight-chain throughput from 0.86--1.05 to
 0.52--0.68 ns/op. `bench.lua` now includes a 16 MiB, 32-byte block-checksum
 workload with explicitly unrolled scalar, XMM and YMM implementations.
+
+Unsigned-word `hmin` now maps directly to `PHMINPOSUW`; YMM first combines
+its two hardware halves and then applies the XMM-only instruction. `hmax`
+uses the exact identity `max(x) = ~min(~x)`, with the final complement in the
+scalar result path. Eight-chain throughput improves about 34--39% for XMM
+and 32--36% for YMM. YMM dependent latency improves about 43% for min and
+25% for max. A full-4K hierarchical-depth tile benchmark improves from about
+1.7 to 1.4 ms at XMM width and 2.0 to 1.5 ms at YMM width.

@@ -3174,6 +3174,7 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
   int sse41 = (J->flags & JIT_F_SSE4_1) != 0;
   IROp op;
   int mm64 = 0;  /* 64 bit lane min/max needs the compare and blend form. */
+  int invminpos = 0;
   TRef r = a;
   switch (rd->data) {
   case VRD_SUM: op = IR_VADD; break;
@@ -3206,6 +3207,22 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     r = emitir(IRT(IR_VSADU8, qvt), a, lj_ir_kvec(J, vt, zbuf));
     rvt = qvt;
     n = sz >> 3;
+  } else if ((rd->data == VRD_MIN || rd->data == VRD_MAX) &&
+	     uns && vi.esize == 2 && sse41) {
+    TRef half;
+    if (rd->data == VRD_MAX) {
+      uint8_t ones[LJ_VEC_MAXSIZE];
+      memset(ones, 0xff, sizeof(ones));
+      r = emitir(IRT(IR_VXOR, vt), r, lj_ir_kvec(J, vt, ones));
+      invminpos = 1;
+    }
+    if (vt & IRT_VEC256) {
+      half = emitir(IRT(IR_VSHUF, vt), r,
+		    IRVSHUF(IRVSHUF_SWAP128, 0));
+      r = emitir(IRT(IR_VMINU, vt), r, half);
+    }
+    r = emitir(IRT(IR_VHMINPOSU16, vt), r, 0);
+    n = 1;
   }
   /* The same pairwise halving tree the interpreter uses: shift the vector
   ** right by half its remaining width and combine.
@@ -3226,6 +3243,8 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
 		  (vi.esize == 8 ? (uns ? IRT_U64 : IRT_I64) : IRT_INT);
     TRef res = emitir(IRT(IR_VEXTRACT, et), r, IRVSRC(vt, 0));
     CType *ect = ctype_get(cts, vi.eid);
+    if (invminpos)
+      res = emitir(IRT(IR_BXOR, IRT_INT), res, lj_ir_kint(J, 0xffff));
     if (et == IRT_FLOAT) {
       J->base[0] = emitconv(res, IRT_NUM, IRT_FLOAT, 0);
     } else if (et == IRT_NUM) {

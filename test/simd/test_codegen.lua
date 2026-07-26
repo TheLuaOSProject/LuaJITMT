@@ -1150,6 +1150,54 @@ test("horizontal reduction uses shuffles, not lane loads", function()
   end
 end)
 
+test("unsigned word extrema use horizontal min-position", function()
+  local ct = T.T.u16x8.ct
+  local a = ct(1, 3, 5, 7, 11, 13, 17, 19)
+  local m = checkloop("u16x8 hmin", {"phminposuw"}, NOCALL, function()
+    local s, v = 0, ct(0)
+    for _ = 1, 400 do
+      v = v + a
+      s = s + tonumber(simd.hmin(v))
+    end
+    return s
+  end)
+  if m then
+    check(count(m, "phminposuw") == 1,
+	  "u16x8 hmin: exactly one horizontal min-position")
+    check(count(m, "pminuw") == 0 and count(m, "psrldq") == 0,
+	  "u16x8 hmin: generic shuffle tree must be gone")
+  end
+  m = checkloop("u16x8 hmax", {"phminposuw", "pxor"}, NOCALL, function()
+    local s, v = 0, ct(0)
+    for _ = 1, 400 do
+      v = v + a
+      s = s + tonumber(simd.hmax(v))
+    end
+    return s
+  end)
+  if m then
+    check(count(m, "phminposuw") == 1,
+	  "u16x8 hmax: exactly one complemented horizontal minimum")
+    check(count(m, "pmaxuw") == 0 and count(m, "psrldq") == 0,
+	  "u16x8 hmax: generic shuffle tree must be gone")
+  end
+  local arr = ffi.new(ffi.typeof("$[?]", ct), 512)
+  local body = loopcode(function()
+    local s = 0
+    for i = 0, 399 do s = s + tonumber(simd.hmin(arr[i])) end
+    return s
+  end)
+  if simd.features().avx then
+    check(body:match("vphminposuw xmm[^\n]*%[") ~= nil,
+	  "AVX u16 hmin must encode its array load as a real memory operand: " ..
+	  body:gsub("\n", " | "))
+  else
+    check(body:match("phminposuw xmm[^\n]*%[") == nil,
+	  "legacy SSE u16 hmin must retain its separate unaligned load: " ..
+	  body:gsub("\n", " | "))
+  end
+end)
+
 test("shuffle and insert are packed", function()
   local i4 = T.T.i32x4.ct
   local a = i4(1, 2, 3, 4)
@@ -2259,6 +2307,37 @@ if simd.features().avx2 then
       end)
     check(count(mnemonics(body), "paddb") == 1,
 	  "i8x32 hsum must reduce qword partial sums, not every byte lane")
+
+    local w16 = T.W.u16x16.ct
+    local wv = w16(1, 3, 5, 7, 11, 13, 17, 19,
+		   23, 29, 31, 37, 41, 43, 47, 53)
+    body = checkymm("u16x16 hmin",
+      {"vperm2i128 ymm", "vpminuw ymm", "vphminposuw xmm"},
+      function()
+	local v, lo = w16(0), 0
+	for _ = 1, 400 do
+	  v = v + wv
+	  lo = lo + tonumber(simd.hmin(v))
+	end
+	return v, lo
+      end)
+    check(not body:find("vpsrldq ymm", 1, true),
+	  "u16x16 hmin must collapse its low half with VPHMINPOSUW")
+
+    body = checkymm("u16x16 hmax",
+      {"vpxor ymm", "vperm2i128 ymm", "vpminuw ymm",
+       "vphminposuw xmm"},
+      function()
+	local v, hi = w16(0), 0
+	for _ = 1, 400 do
+	  v = v + wv
+	  hi = hi + tonumber(simd.hmax(v))
+	end
+	return v, hi
+      end)
+    check(not body:find("vpmaxuw ymm", 1, true) and
+	  not body:find("vpsrldq ymm", 1, true),
+	  "u16x16 hmax must use the complemented horizontal minimum")
   end)
 end
 

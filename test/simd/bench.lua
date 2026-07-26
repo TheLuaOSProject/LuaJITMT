@@ -709,6 +709,98 @@ real_benches.checksum = {
 }
 end
 
+---------------------------------------------------- 4K depth tile range --
+
+do
+-- Build the 16-pixel min/max tiles used by hierarchical-Z occlusion,
+-- depth-pyramid construction and range-based image codecs. This scans a full
+-- 4K uint16 frame. The scalar comparison tree is explicitly unrolled and has
+-- stable branch directions, so the SIMD result is not inflated by a generic
+-- inner loop or repeated side exits.
+local DEPTH_PIXELS = 3840 * 2160
+local DEPTH_TILES = DEPTH_PIXELS / 16
+local DEPTH_PASSES = 3
+local depth_in = ffi.new("uint16_t[?]", DEPTH_PIXELS)
+local depth_lo_s = ffi.new("uint16_t[?]", DEPTH_TILES)
+local depth_hi_s = ffi.new("uint16_t[?]", DEPTH_TILES)
+local depth_lo_x = ffi.new("uint16_t[?]", DEPTH_TILES)
+local depth_hi_x = ffi.new("uint16_t[?]", DEPTH_TILES)
+local depth_lo_y = has_ymm and ffi.new("uint16_t[?]", DEPTH_TILES)
+local depth_hi_y = has_ymm and ffi.new("uint16_t[?]", DEPTH_TILES)
+local depth_pattern = {
+  9000, 1200, 14800, 5100, 300, 11700, 7300, 2600,
+  13200, 6400, 10100, 50, 8200, 3900, 12500, 1800,
+}
+for i = 0, DEPTH_PIXELS-1 do
+  depth_in[i] = (math.floor(i/16)*37)%50000 + depth_pattern[i%16+1]
+end
+local depth8 = ffi.typeof("u16x8")
+local depth16 = has_ymm and ffi.typeof("u16x16")
+local depth_v8 = ffi.cast(ffi.typeof("$ *", depth8), depth_in)
+local depth_v16 = has_ymm and ffi.cast(ffi.typeof("$ *", depth16), depth_in)
+
+local function depth_extrema_scalar(src, p)
+  local x0, x1, x2, x3 = src[p], src[p+1], src[p+2], src[p+3]
+  local x4, x5, x6, x7 = src[p+4], src[p+5], src[p+6], src[p+7]
+  local x8, x9, xa, xb = src[p+8], src[p+9], src[p+10], src[p+11]
+  local xc, xd, xe, xf = src[p+12], src[p+13], src[p+14], src[p+15]
+  local l0, h0 = x0 < x1 and x0 or x1, x0 > x1 and x0 or x1
+  local l1, h1 = x2 < x3 and x2 or x3, x2 > x3 and x2 or x3
+  local l2, h2 = x4 < x5 and x4 or x5, x4 > x5 and x4 or x5
+  local l3, h3 = x6 < x7 and x6 or x7, x6 > x7 and x6 or x7
+  local l4, h4 = x8 < x9 and x8 or x9, x8 > x9 and x8 or x9
+  local l5, h5 = xa < xb and xa or xb, xa > xb and xa or xb
+  local l6, h6 = xc < xd and xc or xd, xc > xd and xc or xd
+  local l7, h7 = xe < xf and xe or xf, xe > xf and xe or xf
+  l0, h0 = l0 < l1 and l0 or l1, h0 > h1 and h0 or h1
+  l2, h2 = l2 < l3 and l2 or l3, h2 > h3 and h2 or h3
+  l4, h4 = l4 < l5 and l4 or l5, h4 > h5 and h4 or h5
+  l6, h6 = l6 < l7 and l6 or l7, h6 > h7 and h6 or h7
+  l0, h0 = l0 < l2 and l0 or l2, h0 > h2 and h0 or h2
+  l4, h4 = l4 < l6 and l4 or l6, h4 > h6 and h4 or h6
+  return l0 < l4 and l0 or l4, h0 > h4 and h0 or h4
+end
+
+local function depth_scalar()
+  local src, lo, hi = depth_in, depth_lo_s, depth_hi_s
+  for _ = 1, DEPTH_PASSES do
+    for i = 0, DEPTH_TILES-1 do
+      lo[i], hi[i] = depth_extrema_scalar(src, i*16)
+    end
+  end
+  return sample_sum(lo, DEPTH_TILES) + sample_sum(hi, DEPTH_TILES)
+end
+
+local function depth_xmm()
+  local src, lo, hi = depth_v8, depth_lo_x, depth_hi_x
+  for _ = 1, DEPTH_PASSES do
+    for i = 0, DEPTH_TILES-1 do
+      local p = i*2
+      local a, b = src[p], src[p+1]
+      lo[i] = simd.hmin(simd.min(a, b))
+      hi[i] = simd.hmax(simd.max(a, b))
+    end
+  end
+  return sample_sum(lo, DEPTH_TILES) + sample_sum(hi, DEPTH_TILES)
+end
+
+local function depth_ymm()
+  local src, lo, hi = depth_v16, depth_lo_y, depth_hi_y
+  for _ = 1, DEPTH_PASSES do
+    for i = 0, DEPTH_TILES-1 do
+      local v = src[i]
+      lo[i], hi[i] = simd.hmin(v), simd.hmax(v)
+    end
+  end
+  return sample_sum(lo, DEPTH_TILES) + sample_sum(hi, DEPTH_TILES)
+end
+
+real_benches.depth = {
+  scalar = depth_scalar, xmm = depth_xmm, ymm = depth_ymm,
+  name = "4K depth tile extrema", pixels = DEPTH_PIXELS,
+}
+end
+
 -------------------------------------------------------- 1080p Gaussian blur --
 
 do
@@ -1358,7 +1450,7 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, %.0f MiB checksums, %.2fs audio, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.2fs audio, %d particles, %d ChaCha blocks\n",
   real_benches.checksum.mib, real_benches.audio.seconds,
   real_benches.particles.count,
   real_benches.chacha.blocks))
@@ -1382,6 +1474,7 @@ end
 
 run_real(real_benches.rgba)
 run_real(real_benches.checksum)
+run_real(real_benches.depth)
 run_real(real_benches.blur)
 run_real(real_benches.audio)
 run_real(real_benches.particles)

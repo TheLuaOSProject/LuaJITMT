@@ -1831,6 +1831,7 @@ static void asm_ir(ASMState *as, IRIns *ir)
   case IR_VMIN: case IR_VMAX: case IR_VMINU: case IR_VMAXU:
   case IR_VADDS: case IR_VSUBS: case IR_VADDSU: case IR_VSUBSU:
   case IR_VSADU8:
+  case IR_VHMINPOSU16:
   case IR_VCMPEQ: case IR_VCMPGT: case IR_VCMPGE:
   case IR_VSHL: case IR_VSHR: case IR_VSAR:
   case IR_VSHLV: case IR_VSHRV: case IR_VSARV:

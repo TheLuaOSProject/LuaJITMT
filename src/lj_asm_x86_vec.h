@@ -904,6 +904,19 @@ static void asm_vecabs(ASMState *as, IRIns *ir)
     emit_vrr2l(as, xo, dest, left, wide);
 }
 
+static void asm_vechminposu16(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+  /* PHMINPOSUW has no 256 bit form. VEX-128 also clears the unused upper
+  ** half of a logically wide result; only its low word is subsequently read.
+  */
+  if ((as->flags & JIT_F_AVX))
+    emit_mrm(as, emit_vexop(XO_PHMINPOSUW, 0, 0), dest, left);
+  else
+    emit_vrr2(as, XO_PHMINPOSUW, dest, left);
+}
+
 static void asm_vecround(ASMState *as, IRIns *ir)
 {
   x86Op xo = irt_type(ir->t) == IRT_V4F32 ? XO_ROUNDPS : XO_ROUNDPD;
@@ -1470,6 +1483,7 @@ static void asm_vec(ASMState *as, IRIns *ir)
     lj_assertA(xo != 0, "no packed opcode for IR op %d type %d", ir->o, t);
     asm_vecbin(as, ir, xo, 0);
     return;
+  case IR_VHMINPOSU16: asm_vechminposu16(as, ir); return;
   case IR_VMULHI: case IR_VMULHIU: asm_vmulhi(as, ir); return;
   case IR_VANDN:
     /* PANDN computes ~dest & src, so the destination holds the *first*

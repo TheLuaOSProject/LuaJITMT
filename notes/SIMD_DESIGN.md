@@ -1485,3 +1485,38 @@ The production benchmark suite now writes one additive checksum per 32-byte
 block across a 16 MiB payload. Its scalar path is explicitly unrolled across
 all 32 bytes, while XMM uses two reductions and YMM one, so the comparison
 measures packed reduction rather than an inner-loop bookkeeping advantage.
+
+## D53. Use the horizontal unsigned-word minimum instruction
+
+The generic eight-lane unsigned-word min/max reduction needs three shuffle
+and packed-extrema stages, or six vector instructions. SSE4.1 already gates
+these operations and also provides `PHMINPOSUW`, which returns the minimum
+unsigned word in result lane zero. `VHMINPOSU16` exposes that low-128-bit
+operation directly.
+
+XMM `hmin` is one `PHMINPOSUW`. For YMM, which has no 256-bit encoding, the
+recorder first swaps and minimum-combines the two 128-bit halves, then applies
+VEX-128 `VPHMINPOSUW` to the low half. Clearing the unused upper half is
+harmless because reduction extracts only result lane zero.
+
+Maximum uses the monotonic complement identity
+
+```
+max(x) = ~min(~x)
+```
+
+for unsigned words. The input complement remains packed; after
+`PHMINPOSUW`, the output complement is emitted as a scalar integer XOR before
+the ordinary u16 narrowing. This avoids spending another vector instruction
+on lanes that are dead.
+
+The one-chain XMM case is limited by `PHMINPOSUW` latency and improves about
+4--5%, while eight independent XMM chains improve 34--39%. YMM removes most
+of a longer cross-half tree: min/max dependent latency improves about
+43%/25%, and eight-chain throughput about 36%/32%.
+
+`bench.lua` now builds min/max metadata for every 16-pixel tile in a full 4K
+uint16 depth frame, the structure used by hierarchical-Z culling and depth
+pyramids. Its scalar comparison tree is explicitly unrolled with stable
+branch directions. The optimized XMM/YMM paths improve about 18%/25% over
+the prior packed reduction, reaching roughly 4.8x/4.3x the scalar throughput.

@@ -171,6 +171,8 @@
   _(VSUBSU,	N , ref, ref) \
   /* Unsigned byte SAD, producing one qword partial sum per 8 bytes. */ \
   _(VSADU8,	C , ref, ref) \
+  /* Unsigned word minimum and position over the low 128 bits. */ \
+  _(VHMINPOSU16,	N , ref, ___) \
   _(VCMPEQ,	C , ref, ref) \
   _(VCMPGT,	N , ref, ref) \
   _(VCMPGE,	N , ref, ref) \
