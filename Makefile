@@ -167,9 +167,12 @@ amalg:
 	$(MAKE) -C src amalg
 	@echo "==== Successfully built LuaJIT $(MMVERSION) (amalgamation) ===="
 
+lj-fast:
+	./tools/build-lj-fast.sh
+
 clean:
 	$(MAKE) -C src clean
 
-.PHONY: all install amalg clean
+.PHONY: all install amalg lj-fast clean
 
 ##############################################################################

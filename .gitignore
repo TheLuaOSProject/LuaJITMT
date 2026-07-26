@@ -10,3 +10,4 @@
 *.dmp
 *.swp
 .tags
+/lj-fast
