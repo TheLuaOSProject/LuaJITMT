@@ -1461,7 +1461,6 @@ static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
     }
   }
   /* Otherwise convert with the standard FFI rules and broadcast at runtime. */
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   sp = crec_ct_ct(J, ect, sct, 0, sp, NULL);
   return emitir(IRT(IR_VSPLAT, vt), sp, 0);
 }
@@ -1503,12 +1502,7 @@ static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
   switch (mm) {
   case MM_add: op = IR_VADD; break;
   case MM_sub: op = IR_VSUB; break;
-  case MM_mul:
-    if ((vt & IRT_VEC256) && !veck_isfp(vi.kind) &&
-	(vi.esize == 1 || vi.esize == 8))
-      lj_trace_err(J, LJ_TRERR_NYIVEC);
-    op = IR_VMUL;
-    break;
+  case MM_mul: op = IR_VMUL; break;
   case MM_div:
     if (!veck_isfp(vi.kind)) return 0;
     op = IR_VDIV;
@@ -1521,16 +1515,17 @@ static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
     */
     TRef mask, mm2;
     uint32_t all;
-    if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
     if (veck_isfp(vi.kind)) {
       mask = emitir(IRT(IR_VCMPEQ, vt), tra, trb);
       all = (1u << vi.lanes) - 1;
     } else {
-      mask = emitir(IRT(IR_VCMPEQ, IRT_V16I8), tra, trb);
-      all = 0xffff;
+      IRType bt = (IRType)(IRT_V16I8 | (vt & IRT_VEC256));
+      mask = emitir(IRT(IR_VCMPEQ, bt), tra, trb);
+      all = (vt & IRT_VEC256) ? ~(uint32_t)0 : 0xffffu;
     }
     mm2 = emitir(IRTI(IR_VMOVMSK), mask,
-		 IRVSRC(veck_isfp(vi.kind) ? vt : IRT_V16I8, 0));
+		 IRVSRC(veck_isfp(vi.kind) ? vt :
+			 (IRT_V16I8 | (vt & IRT_VEC256)), 0));
     /* Assume true comparison. Fixup and emit the pending guard later. */
     lj_ir_set(J, IRTGI(IR_EQ), mm2, lj_ir_kint(J, (int32_t)all));
     J->postproc = LJ_POST_FIXGUARD;
@@ -1639,13 +1634,13 @@ static void crec_simd_need(jit_State *J, int ok)
   if (!ok) lj_trace_err(J, LJ_TRERR_NYIVEC);
 }
 
-/* A 16 byte constant built from a repeating 16 bit pattern. */
-static TRef crec_simd_k16(jit_State *J, uint16_t v)
+/* A vector constant built from a repeating 16 bit pattern. */
+static TRef crec_simd_k16(jit_State *J, IRType vt, uint16_t v)
 {
   uint8_t vbuf[LJ_VEC_MAXSIZE];
   uint32_t i;
   for (i = 0; i < sizeof(vbuf); i += 2) memcpy(vbuf+i, &v, 2);
-  return lj_ir_kvec(J, IRT_V8I16, vbuf);
+  return lj_ir_kvec(J, vt, vbuf);
 }
 
 /*
@@ -1655,7 +1650,8 @@ static TRef crec_simd_k16(jit_State *J, uint16_t v)
 */
 static TRef crec_simd_bcastbyte(jit_State *J, TRef m)
 {
-  return emitir(IRT(IR_VMUL, IRT_V8I16), m, crec_simd_k16(J, 0x0101));
+  IRType vt = tref_vtype(m);
+  return emitir(IRT(IR_VMUL, vt), m, crec_simd_k16(J, vt, 0x0101));
 }
 
 /*
@@ -1709,9 +1705,6 @@ void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd)
   int uns = veck_isunsigned(vi.kind);
   int sse41 = (J->flags & JIT_F_SSE4_1) != 0;
   IROp op;
-  if ((vt & IRT_VEC256) && rd->data != VOP_AND && rd->data != VOP_OR &&
-      rd->data != VOP_XOR && rd->data != VOP_ANDN)
-    lj_trace_err(J, LJ_TRERR_NYIVEC);
   switch (rd->data) {
   case VOP_AND: op = IR_VAND; break;
   case VOP_OR: op = IR_VOR; break;
@@ -1748,8 +1741,6 @@ void LJ_FASTCALL recff_simd_unop(jit_State *J, RecordFFData *rd)
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   TRef r;
-  if ((vt & IRT_VEC256) && rd->data != VUN_NOT)
-    lj_trace_err(J, LJ_TRERR_NYIVEC);
   switch (rd->data) {
   case VUN_NOT:
     r = emitir(IRT(IR_VXOR, vt), a, crec_vec_kones(J, vt));
@@ -1768,7 +1759,8 @@ void LJ_FASTCALL recff_simd_unop(jit_State *J, RecordFFData *rd)
       r = a;
     } else if (vi.esize == 8) {
       /* SSE2: broadcast the sign of each 64 bit lane, then (v^m)-m. */
-      TRef sh = emitir(IRT(IR_VSAR, IRT_V4I32), a, lj_ir_kint(J, 31));
+      IRType wvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+      TRef sh = emitir(IRT(IR_VSAR, wvt), a, lj_ir_kint(J, 31));
       TRef m = emitir(IRT(IR_VSHUF, vt), sh,
 		      IRVSHUF(IRVSHUF_PSHUFD, 0xf5));
       r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), a, m), m);
@@ -1786,7 +1778,6 @@ void LJ_FASTCALL recff_simd_round(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   crec_simd_need(J, veck_isfp(vi.kind) && (J->flags & JIT_F_SSE4_1));
   J->base[0] = crec_vec_box(J, emitir(IRT(IR_VROUND, vt), a, rd->data), vt, id);
 }
@@ -1812,7 +1803,6 @@ void LJ_FASTCALL recff_simd_cmp(jit_State *J, RecordFFData *rd)
   int inv = 0;
   TRef r;
   CTypeID mid;
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
   if (op == VCMP_NE) { op = VCMP_EQ; inv = 1; }
   else if (op == VCMP_LE) { op = VCMP_GE; { TRef t = a; a = b; b = t; } }
@@ -1845,8 +1835,9 @@ void LJ_FASTCALL recff_simd_cmp(jit_State *J, RecordFFData *rd)
   ** with that lane type: the next load of this cdata uses it, and a store and
   ** a load with different lane types cannot be forwarded.
   */
-  J->base[0] = crec_vec_box(J, r,
-    isfp ? (vi.esize == 4 ? IRT_V4I32 : IRT_V2I64) : vt, mid);
+  J->base[0] = crec_vec_box(J, r, isfp ?
+    ((vi.esize == 4 ? IRT_V4I32 : IRT_V2I64) | (vt & IRT_VEC256)) : vt,
+    mid);
 }
 
 void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
@@ -1858,7 +1849,6 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
   IROp irop = op == VSH_SHL ? IR_VSHL : op == VSH_SHR ? IR_VSHR : IR_VSAR;
   uint32_t bits = (uint32_t)vi.esize * 8;
   TRef r;
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   crec_simd_need(J, !veck_isfp(vi.kind));
   if (n && tref_iscdata(n)) {
     /* A vector count shifts each lane by its own amount. */
@@ -1914,6 +1904,7 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
     */
     uint32_t sh;
     uint8_t ebuf[8];
+    IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
     if (!tref_isk(n)) {
       if (vi.esize == 1) {
 	/* Shift 16 bit lanes and clear the bits that crossed the byte
@@ -1922,17 +1913,20 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
 	*/
 	TRef m, nc = op == VSH_SAR ? crec_simd_clampcnt(J, n, 7) : n;
 	if (op == VSH_SHL) {
-	  m = emitir(IRT(IR_VSHL, IRT_V8I16), crec_simd_k16(J, 0x00ff), nc);
-	  m = emitir(IRT(IR_VAND, IRT_V8I16), m, crec_simd_k16(J, 0x00ff));
-	  r = emitir(IRT(IR_VSHL, IRT_V8I16), a, nc);
+	  m = emitir(IRT(IR_VSHL, wvt),
+		     crec_simd_k16(J, wvt, 0x00ff), nc);
+	  m = emitir(IRT(IR_VAND, wvt), m,
+		     crec_simd_k16(J, wvt, 0x00ff));
+	  r = emitir(IRT(IR_VSHL, wvt), a, nc);
 	} else {
-	  m = emitir(IRT(IR_VSHR, IRT_V8I16), crec_simd_k16(J, 0x00ff), nc);
-	  r = emitir(IRT(IR_VSHR, IRT_V8I16), a, nc);
+	  m = emitir(IRT(IR_VSHR, wvt),
+		     crec_simd_k16(J, wvt, 0x00ff), nc);
+	  r = emitir(IRT(IR_VSHR, wvt), a, nc);
 	}
 	r = emitir(IRT(IR_VAND, vt), r, crec_simd_bcastbyte(J, m));
 	if (op == VSH_SAR) {  /* (x ^ s) - s with s = 0x80 >> nc. */
 	  TRef s = crec_simd_bcastbyte(J,
-	    emitir(IRT(IR_VSHR, IRT_V8I16), crec_simd_k16(J, 0x0080), nc));
+	    emitir(IRT(IR_VSHR, wvt), crec_simd_k16(J, wvt, 0x0080), nc));
 	  r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, s), s);
 	}
       } else {
@@ -1961,11 +1955,11 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
 	}
       }
       if (op == VSH_SHL) {
-	r = emitir(IRT(IR_VSHL, IRT_V8I16), a, lj_ir_kint(J, (int32_t)sh));
+	r = emitir(IRT(IR_VSHL, wvt), a, lj_ir_kint(J, (int32_t)sh));
 	memset(ebuf, (int)((0xffu << sh) & 0xff), sizeof(ebuf));
 	r = emitir(IRT(IR_VAND, vt), r, crec_vec_kmask(J, vt, &vi, ebuf));
       } else {
-	r = emitir(IRT(IR_VSHR, IRT_V8I16), a, lj_ir_kint(J, (int32_t)sh));
+	r = emitir(IRT(IR_VSHR, wvt), a, lj_ir_kint(J, (int32_t)sh));
 	memset(ebuf, (int)((0xffu >> sh) & 0xff), sizeof(ebuf));
 	r = emitir(IRT(IR_VAND, vt), r, crec_vec_kmask(J, vt, &vi, ebuf));
 	if (op == VSH_SAR) {  /* (x ^ s) - s with s = 0x80 >> sh. */
@@ -2007,7 +2001,6 @@ void LJ_FASTCALL recff_simd_movemask(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   J->base[0] = emitir(IRTI(IR_VMOVMSK), a, IRVSRC(vt, 0));
 }
 
@@ -2016,7 +2009,6 @@ void LJ_FASTCALL recff_ffi_simd_mulhi(jit_State *J, RecordFFData *rd)
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   TRef b;
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
   /* PMULHW/PMULHUW cover 16 bit lanes. 8 bit has no instruction, and the
   ** 32 bit form would need two PMULDQ plus shuffles to reassemble the four
@@ -2033,7 +2025,6 @@ void LJ_FASTCALL recff_ffi_simd_fma(jit_State *J, RecordFFData *rd)
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   TRef b, c;
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
   c = crec_simd_arg2(J, rd, 2, &vi, id, vt);
   /* Only lower this where the hardware fuses too. Without FMA the trace
@@ -2112,7 +2103,6 @@ void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
     J->base[0] = crec_vec_box(J, a, dvt, did);
     return;
   }
-  if ((dvt | svt) & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   /* Only the conversions with a direct packed instruction are compiled. */
   crec_simd_need(J,
     (dvi.kind == VECK_F32 && (svi.kind == VECK_I32)) ||

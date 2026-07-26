@@ -14,7 +14,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
   the fork rather than stand alone.
 * Latest pushed commit: see "Milestones" below.
 * Target: **x86-64-v3** (SSE4.2 + AVX2 + BMI2), with complete 128-bit
-  lowering and the first 256-bit YMM lowering slice.
+  lowering and broad 256-bit YMM lowering.
   Feature use is runtime detected, so the binary still runs on older CPUs.
 
 ## Milestones
@@ -46,6 +46,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M23 | Move transient IR marks to a scratch bitset, reserving type bit `0x20` for 256-bit width | done |
 | M24 | 256-bit IR/KVEC values, YMM loads/stores/spills/exits, and AVX2 add/sub/direct-mul/div/logical lowering | done |
 | M25 | Benchmarks compare scalar, 128-bit XMM, and 256-bit AVX2/YMM execution | done |
+| M26 | 256-bit broadcasts, comparisons/equality, min/max, shifts, FMA, rounding, conversions, saturating arithmetic, movemask, mulhi, and 8/64-bit multiply emulations | done |
 
 ## Commands that pass
 
@@ -265,13 +266,13 @@ Each of these is a decision, not an unfinished edge. None of them can give a
 wrong answer: where the JIT has no lowering the trace aborts with
 `LJ_TRERR_NYIVEC` and the interpreter produces the same value.
 
-1. **256-bit lowering is deliberately partial.** AVX2 hosts now JIT
-   vector-vector add/sub, direct hardware multiply (FP and 16/32-bit integer
-   lanes), FP division, unary minus, logical operations, select, bitcast, and
-   unaligned memory round trips. Dynamic scalar splats, equality, reductions,
-   shuffles, comparisons, shifts, FMA, and the remaining `ffi.simd` surface
-   still abort the trace cleanly. Eight- and 64-bit integer multiply also stay
-   interpreted until their emulation sequences become width-aware.
+1. **256-bit cross-lane operations remain staged.** AVX2 hosts now JIT the
+   complete ordinary operator surface, dynamic scalar splats, comparisons and
+   masks, min/max, shifts, abs/sqrt/rounding, FMA, saturating arithmetic,
+   16-bit `mulhi`, direct 32-bit conversions, logical/select/bitcast, and all
+   integer multiply lane widths. Reductions, `insert`, `shuffle`, and
+   `shuffle2` still abort the trace cleanly until their 128-bit lane-crossing
+   sequences are made YMM-aware.
 2. **Separate non-constant scalar indices in `shuffle`/`shuffle2`.** Rejected
    at record time. Pass one runtime index vector instead; that form and
    variable `insert` are supported for 128-bit vectors.
@@ -314,12 +315,19 @@ twice the lane work:
 
 ```
                                   XMM       YMM   lane throughput
-float add                     0.38 ns   0.38 ns       2.00x
+float add                     0.38 ns   0.38 ns       1.99x
 float mul                     0.76 ns   0.76 ns       2.00x
-float div                     2.08 ns   2.09 ns       1.99x
-int32 add                     0.22 ns   0.22 ns       2.00x
+float div                     1.99 ns   2.08 ns       1.91x
+float sqrt                    2.26 ns   2.22 ns       2.04x
+float min                     0.76 ns   0.72 ns       2.11x
+float fma                     0.72 ns   0.72 ns       2.00x
+int32 add                     0.21 ns   0.22 ns       1.95x
 int32 mul                     1.89 ns   1.89 ns       2.00x
-int32 xor                     0.25 ns   0.25 ns       2.01x
+int32 xor                     0.25 ns   0.25 ns       2.00x
+int32 shl const               0.21 ns   0.21 ns       2.01x
+int32 select                  0.62 ns   0.62 ns       2.00x
+int16 mulhi                   0.90 ns   0.89 ns       2.02x
+uint8 saturated add           0.20 ns   0.20 ns       2.01x
 ```
 
 `simd.fma` is worth measuring separately, because whether it helps depends

@@ -745,13 +745,12 @@ if simd.features().avx2 then
     end
   end)
 
-  test("256-bit direct multiply and floating division", function()
-    local names = {"float8", "double4", "i16x16", "u16x16", "i32x8", "u32x8"}
-    for _, name in ipairs(names) do
-      local ct = T.W[name].ct
-      diff(name .. " ymm multiply", function(n)
+  test("256-bit multiply, division, and dynamic scalar splats", function()
+    for _, ti in ipairs(T.W) do
+      local ct = ti.ct
+      diff(ti.name .. " ymm multiply and splat", function(n)
 	local acc, k = ct(1), ct(3)
-	for _ = 1, n do acc = acc * k + ct(1) end
+	for i = 1, n do acc = acc * k + (i % 5) end
 	return acc
       end, 80)
     end
@@ -763,6 +762,161 @@ if simd.features().avx2 then
 	return acc
       end, 300)
     end
+  end)
+
+  test("256-bit min/max, comparisons, masks, select, and equality", function()
+    for _, ti in ipairs(T.W) do
+      local ct = ti.ct
+      local av, bv = {}, {}
+      for i = 1, ti.lanes do
+	av[i] = i % 2 == 0 and i * 3 or 20 - i
+	bv[i] = i % 3 == 0 and i - 9 or i + 2
+      end
+      local a, b = ct(unpack(av, 1, ti.lanes)), ct(unpack(bv, 1, ti.lanes))
+      diff(ti.name .. " ymm compare/select", function(n)
+	local acc, bits, hits = a, 0, 0
+	for i = 1, n do
+	  local lt = simd.lt(acc, b)
+	  local ge = simd.ge(acc, b)
+	  local eq = simd.eq(acc, b)
+	  local ne = simd.ne(acc, b)
+	  bits = bits + simd.movemask(lt) * 3 + simd.movemask(ge) * 5 +
+		 simd.movemask(eq) * 7 + simd.movemask(ne) * 11
+	  acc = simd.select(lt, simd.max(acc, b), simd.min(acc, b))
+	  if acc == b then hits = hits + 1 end
+	end
+	return acc, bits, hits, simd.movemask(simd.eq(acc, acc)),
+	       simd.anyof(simd.ne(acc, b)), simd.allof(simd.eq(acc, acc))
+      end, 120)
+    end
+  end)
+
+  test("256-bit floating comparisons preserve NaN and signed-zero semantics", function()
+    for _, name in ipairs({"float8", "double4"}) do
+      local ti, av, bv = T.W[name], {}, {}
+      for i = 1, ti.lanes do
+	av[i] = i == ti.lanes and 0/0 or i % 2 == 0 and -0.0 or i
+	bv[i] = i == ti.lanes-1 and 0/0 or i % 2 == 0 and 0.0 or ti.lanes-i
+      end
+      local ct = ti.ct
+      local a, b = ct(unpack(av, 1, ti.lanes)), ct(unpack(bv, 1, ti.lanes))
+      diff(name .. " ymm fp edges", function(n)
+	local lo, hi, bits = a, b, 0
+	for _ = 1, n do
+	  bits = bits + simd.movemask(simd.eq(lo, hi)) * 3 +
+		 simd.movemask(simd.lt(lo, hi)) * 5
+	  lo, hi = simd.min(lo, hi), simd.max(lo, hi)
+	end
+	return lo, hi, bits
+      end, 120)
+    end
+  end)
+
+  test("256-bit shifts", function()
+    for _, ti in ipairs(T.W) do
+      if not ti.fp then
+	local ct = ti.ct
+	local lanes = {}
+	for i = 1, ti.lanes do lanes[i] = i % 2 == 0 and -i * 17 or i * 29 end
+	local a = ct(unpack(lanes, 1, ti.lanes))
+	diff(ti.name .. " ymm scalar shifts", function(n)
+	  local acc = a
+	  for i = 1, n do
+	    local sh = i % (ti.bits + 3)
+	    acc = simd.bxor(simd.shl(acc, sh),
+			    simd.bxor(simd.shr(acc, sh), simd.sar(acc, sh)))
+	  end
+	  return acc
+	end, 180)
+      end
+    end
+    for _, name in ipairs({"i32x8", "u32x8", "i64x4", "u64x4"}) do
+      local ti, counts = T.W[name], {}
+      for i = 1, ti.lanes do counts[i] = (i * 11) % (ti.bits + 7) end
+      local ct, c = ti.ct, ti.ct(unpack(counts, 1, ti.lanes))
+      diff(name .. " ymm per-lane shifts", function(n)
+	local acc = ct(-12345)
+	for _ = 1, n do
+	  acc = simd.bxor(simd.shl(acc, c),
+			  simd.bxor(simd.shr(acc, c), simd.sar(acc, c)))
+	end
+	return acc
+      end, 180)
+    end
+  end)
+
+  test("256-bit abs, sqrt, rounding, and fma", function()
+    for _, ti in ipairs(T.W) do
+      local ct, lanes = ti.ct, {}
+      for i = 1, ti.lanes do lanes[i] = i % 2 == 0 and -i - 0.75 or i + 0.25 end
+      local a = ct(unpack(lanes, 1, ti.lanes))
+      if ti.fp then
+	diff(ti.name .. " ymm fp unary", function(n)
+	  local acc = ct(0)
+	  for _ = 1, n do
+	    acc = acc + simd.sqrt(simd.abs(a)) + simd.floor(a) +
+		  simd.ceil(a) + simd.trunc(a) + simd.round(a)
+	  end
+	  return acc
+	end, 120)
+	diff(ti.name .. " ymm fma", function(n)
+	  local acc, k, c = ct(1), ct(1.0001), ct(0.0003)
+	  for _ = 1, n do acc = simd.fma(acc, k, c) end
+	  return acc
+	end, 180)
+      else
+	diff(ti.name .. " ymm integer abs", function(n)
+	  local acc = ct(0)
+	  for _ = 1, n do acc = acc + simd.abs(a) end
+	  return acc
+	end, 120)
+      end
+    end
+  end)
+
+  test("256-bit saturating arithmetic and mulhi", function()
+    for _, name in ipairs({"i8x32", "u8x32", "i16x16", "u16x16"}) do
+      local ti, lanes = T.W[name], {}
+      for i = 1, ti.lanes do
+	lanes[i] = ti.signed and (i % 2 == 0 and -120 or 120) or 245
+      end
+      local ct, a = ti.ct, ti.ct(unpack(lanes, 1, ti.lanes))
+      diff(name .. " ymm saturating", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.subs(simd.adds(acc, a), ct(ti.signed and -7 or 11))
+	end
+	return acc
+      end, 120)
+      if ti.bits == 16 then
+	diff(name .. " ymm mulhi", function(n)
+	  local acc, k = a, ct(ti.signed and -23123 or 53123)
+	  for _ = 1, n do acc = simd.mulhi(acc, k) + a end
+	  return acc
+	end, 120)
+      end
+    end
+  end)
+
+  test("256-bit direct lane conversion", function()
+    local fi, ii, ui = T.W.float8.ct, T.W.i32x8.ct, T.W.u32x8.ct
+    local iv = ii(-100, -7, -1, 0, 1, 7, 100, 123456)
+    local fv = fi(-100.75, -7.5, -1.25, 0, 1.25, 7.5, 100.75, 123456.5)
+    diff("i32x8 to float8", function(n)
+      local acc = fi(0)
+      for _ = 1, n do acc = acc + simd.convert(fi, iv) end
+      return acc
+    end, 120)
+    diff("float8 to i32x8", function(n)
+      local acc = ii(0)
+      for _ = 1, n do acc = acc + simd.convert(ii, fv) end
+      return acc
+    end, 120)
+    diff("float8 to u32x8 hardware-range semantics", function(n)
+      local acc = ui(0)
+      for _ = 1, n do acc = acc + simd.convert(ui, fv) end
+      return acc
+    end, 120)
   end)
 
   test("256-bit constants and logical operations", function()

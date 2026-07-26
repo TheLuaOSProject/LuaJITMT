@@ -51,18 +51,19 @@ All ten ordinary numeric lane kinds have interpreter support and native
 AVX2 host: `float8`, `double4`, `i8x32`, `u8x32`, `i16x16`, `u16x16`,
 `i32x8`, `u32x8`, `i64x4`, and `u64x4`.
 
-The current YMM operation slice compiles:
+The current YMM operation surface compiles:
 
-* vector-vector `+` and `-` for every lane kind;
-* `*` for FP and 16/32-bit integer lanes, and `/` for FP lanes;
-* unary minus and constant scalar operands (folded into a 32-byte KVEC);
-* `band`, `bor`, `bxor`, `bandn`, `bnot`, `select`, and equal-size `bitcast`;
+* the complete ordinary operator surface, including all integer multiply lane
+  widths, whole-vector equality, unary minus, and dynamic scalar splats;
+* logical operations, comparisons/masks, select, min/max, shifts,
+  abs/sqrt/rounding, FMA, saturating arithmetic, 16-bit `mulhi`, equal-size
+  bitcast, and the direct 32-bit lane conversions;
 * unaligned loads/stores, loop-carried values, 32-byte spills, and reconstruction
   of sunk boxes from a trace exit.
 
-Dynamic scalar splats, whole-vector equality, 8/64-bit integer multiply, and
-the other `ffi.simd` operations still abort the trace with `NYIVEC` and run
-interpreted. This is a staged backend boundary, not silent 128-bit truncation.
+Reductions, `insert`, `shuffle`, and `shuffle2` still abort the trace with
+`NYIVEC` and run interpreted. This is a staged cross-lane boundary, not silent
+128-bit truncation.
 
 ## Ordinary Lua operators (complete 128-bit surface)
 
@@ -123,9 +124,8 @@ lane counts are rejected; use `bitcast` for pure reinterpretation.
   either be undefined C behaviour or would force the operation to differ
   between the interpreter and the JIT.
 
-For 256-bit types, zero/multi-lane construction, copies, constants, memory
-loads/stores, and equal-size `bitcast` are native. A non-constant one-value
-constructor needs a YMM broadcast and currently stays interpreted.
+For 256-bit types, zero/multi-lane construction, dynamic splats, copies,
+constants, memory loads/stores, and equal-size `bitcast` are native.
 
 Rounding (`floor`/`ceil`/`trunc`/`round`) returns a NaN operand **quieted**,
 which is what `ROUNDPS`/`ROUNDPD` do. The reference implementation handles NaN
@@ -227,7 +227,7 @@ Semantics worth pinning down:
 | runtime index **vector** in `shuffle` | supported: `shuffle(a, idxvec)` builds the PSHUFB control at runtime. A byte vector is one PSHUFB; a wider lane costs five packed instructions (mask, scale, replicate the byte over its lane, add 0..esize-1, permute) |
 | separate non-constant lane indices in `shuffle`/`shuffle2` | still rejected at record time. Assembling a control mask from N *scalar* indices costs more than it saves; pass an index vector instead |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |
-| 256-bit operation surface | partial: logical operations, select and bitcast are native; the rest stays interpreted as listed above |
+| 256-bit operation surface | broad direct-operation support; reductions and shuffle/insert remain staged as listed above |
 
 "JIT NYI" always means: the trace aborts with a NYI reason, the code keeps
 running interpreted, and the result is identical. It never means a wrong

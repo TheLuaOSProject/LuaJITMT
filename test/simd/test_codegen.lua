@@ -548,6 +548,18 @@ test("no boxing allocation remains in a hot vector loop", function()
 end)
 
 if simd.features().avx2 then
+  local function checkymm(name, want, f)
+    local body, isloop = loopcode(f)
+    check(isloop, name .. " must compile as a loop: " .. body:gsub("\n", " | "))
+    for _, needle in ipairs(want) do
+      check(body:find(needle, 1, true) ~= nil,
+	    name .. " must contain '" .. needle .. "': " ..
+	    body:gsub("\n", " | "))
+    end
+    check(not body:find("call", 1, true),
+	  name .. " must not call a scalar helper: " .. body:gsub("\n", " | "))
+  end
+
   test("256-bit arithmetic uses YMM encodings", function()
     local f8 = T.W.float8.ct
     local a = f8(1, 2, 3, 4, 5, 6, 7, 8)
@@ -574,6 +586,83 @@ if simd.features().avx2 then
 	  "i32x8 add must target YMM registers: " .. body:gsub("\n", " | "))
     check(body:find("vpsubd ymm", 1, true) ~= nil,
 	  "i32x8 sub must target YMM registers: " .. body:gsub("\n", " | "))
+  end)
+
+  test("256-bit direct operations stay in YMM registers", function()
+    local i8 = T.W.i32x8.ct
+    local a, b = i8(3), i8(17)
+    checkymm("i32x8 direct operations",
+      {"vpcmpgtd ymm", "vpminsd ymm", "vpmaxsd ymm", "vpslld ymm",
+       "vpbroadcastd ymm", "vmovmskps"},
+      function()
+	local acc, bits = i8(1), 0
+	for i = 1, 400 do
+	  local m = simd.gt(acc, b)
+	  bits = bits + simd.movemask(m)
+	  acc = simd.select(m, simd.min(acc, b), simd.max(acc, a))
+	  acc = simd.shl(acc, 1) + i
+	end
+	return acc, bits
+      end)
+
+    checkymm("i32x8 whole equality",
+      {"vpcmpeqb ymm", "vpmovmskb"},
+      function()
+	local acc, hits = i8(1), 0
+	for _ = 1, 400 do
+	  acc = acc + a
+	  if acc == b then hits = hits + 1 end
+	end
+	return acc, hits
+      end)
+
+    local f8 = T.W.float8.ct
+    local x = f8(1.25, 2.5, 3.75, 4, 5.25, 6.5, 7.75, 8)
+    checkymm("float8 unary and fma",
+      {"vsqrtps ymm", "vroundps ymm", "vfmadd"},
+      function()
+	local acc, k, c = f8(1), f8(1.0001), f8(0.0003)
+	for _ = 1, 400 do
+	  acc = simd.fma(simd.round(simd.sqrt(simd.abs(acc + x))), k, c)
+	end
+	return acc
+      end)
+
+    local h16 = T.W.i16x16.ct
+    checkymm("i16x16 saturating and mulhi",
+      {"vpaddsw ymm", "vpsubsw ymm", "vpmulhw ymm"},
+      function()
+	local acc, a16, k16 = h16(0), h16(30000), h16(-23123)
+	for _ = 1, 400 do
+	  acc = simd.mulhi(simd.subs(simd.adds(acc, a16), h16(-7)), k16)
+	end
+	return acc
+      end)
+
+    local fi, ii = T.W.float8.ct, T.W.i32x8.ct
+    local fv = fi(-7.5, -1.25, 0, 1.25, 7.5, 100.75, 1234.5, 9999)
+    checkymm("float8 i32x8 conversion",
+      {"vcvttps2dq ymm", "vcvtdq2ps ymm"},
+      function()
+	local acc, v = fi(0), fv
+	for _ = 1, 400 do
+	  v = v + fi(0.25)
+	  acc = acc + simd.convert(fi, simd.convert(ii, v))
+	end
+	return acc
+      end)
+
+    local b8, q4 = T.W.i8x32.ct, T.W.i64x4.ct
+    checkymm("i8x32 multiply emulation", {"vpmullw ymm"}, function()
+      local acc, k = b8(1), b8(3)
+      for _ = 1, 400 do acc = acc * k + b8(1) end
+      return acc
+    end)
+    checkymm("i64x4 multiply emulation", {"vpmuludq ymm"}, function()
+      local acc, k = q4(1), q4(3)
+      for _ = 1, 400 do acc = acc * k + q4(1) end
+      return acc
+    end)
   end)
 end
 

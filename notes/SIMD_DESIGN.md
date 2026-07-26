@@ -564,3 +564,28 @@ logical operations, select, and bitcast. Everything else still raises
 `NYIVEC` while recording and resumes in the interpreter. That boundary is
 intentional: an operation is not called YMM-supported until its tests inspect
 the emitted `ymm` operands and exercise upper lanes, spills, and exit rebuilds.
+
+## D21. Widen direct operations first; keep cross-lane semantics explicit
+
+Most packed instructions become a correct YMM operation by setting VEX.L:
+comparisons, min/max, shifts, sqrt/round, FMA, saturating arithmetic, mulhi,
+and the direct conversions all preserve lane independence. The emitter
+therefore has width-aware forms of its two-operand, three-operand, immediate,
+and shift helpers. The 8- and 64-bit multiply emulations are also lane-local,
+so applying the same width to every instruction makes them operate on both
+128-bit halves without changing their algebra.
+
+Broadcasts use the AVX2 `VPBROADCAST*` forms instead of trying to extend an XMM
+shuffle into an undefined upper half. `VMOVMSKPS/PD` and `VPMOVMSKB` directly
+cover most mask shapes. Sixteen-bit lanes need one extra compression:
+`VPACKSSWB` produces `[lo, lo, hi, hi]` because it packs independently in each
+128-bit half, so the GPR result explicitly selects `lo` and `hi` into adjacent
+bytes. A differential with distinct low/high masks caught the tempting but
+wrong `raw | (raw >> 8)` version, which mixed the duplicate low byte into the
+high byte.
+
+Reductions and shuffles are intentionally separate. Their 128-bit lowering
+uses byte shifts or `PSHUFB`, whose AVX2 forms remain confined to each
+128-bit lane. Merely setting VEX.L would compile, but would implement the
+wrong full-vector permutation. They remain `NYIVEC` until the IR explicitly
+models the required cross-lane step.

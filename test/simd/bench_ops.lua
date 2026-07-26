@@ -30,6 +30,8 @@ local features = simd.features()
 local has_ymm = features.avx2 and features.vecsize >= 32
 local f8 = has_ymm and ffi.typeof("float8")
 local i8 = has_ymm and ffi.typeof("i32x8")
+local i16w = has_ymm and ffi.typeof("i16x16")
+local u8w = has_ymm and ffi.typeof("u8x32")
 
 local failures = 0
 
@@ -550,6 +552,20 @@ if has_ymm then
     function() return f4(1e30), f4(1.0000001) end,
     function() return f8(1e30), f8(1.0000001) end,
     function(x, y) return x / y end)
+  width_cost("float sqrt",
+    function() return f4(1e30), f4(0) end,
+    function() return f8(1e30), f8(0) end,
+    function(x) return simd.sqrt(x) end)
+  width_cost("float min",
+    function() return f4(1.0009765625), f4(1.00048828125) end,
+    function() return f8(1.0009765625), f8(1.00048828125) end,
+    function(x, y) return simd.min(x, y) end)
+  if features.fma then
+    width_cost("float fma",
+      function() return f4(1.0000001), f4(1.00048828125), f4(0.0001) end,
+      function() return f8(1.0000001), f8(1.00048828125), f8(0.0001) end,
+      function(x, y, z) return simd.fma(x, y, z) end)
+  end
   width_cost("int32 add",
     function() return i4(3), i4(5) end,
     function() return i8(3), i8(5) end,
@@ -562,6 +578,22 @@ if has_ymm then
     function() return i4(0x55555555), i4(0x33333333) end,
     function() return i8(0x55555555), i8(0x33333333) end,
     function(x, y) return simd.bxor(x, y) end)
+  width_cost("int32 shl const",
+    function() return i4(3), i4(0) end,
+    function() return i8(3), i8(0) end,
+    function(x) return simd.shl(x, 1) end)
+  width_cost("int32 select",
+    function() return i4(3), i4(5) end,
+    function() return i8(3), i8(5) end,
+    function(x, y) return simd.select(simd.gt(x, y), x, y) end)
+  width_cost("int16 mulhi",
+    function() return i16(30000), i16(30000) end,
+    function() return i16w(30000), i16w(30000) end,
+    function(x, y) return simd.mulhi(x, y) end)
+  width_cost("uint8 saturated add",
+    function() return u8(1), u8(3) end,
+    function() return u8w(1), u8w(3) end,
+    function(x, y) return simd.adds(x, y) end)
 end
 
 if failures > 0 then

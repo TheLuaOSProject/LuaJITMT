@@ -88,7 +88,7 @@ never an error.
 A vector type is supported when its element is a plain number type of 1, 2, 4
 or 8 bytes and it has at least two lanes. The interpreter supports every such
 type at any power-of-two width. The JIT has a complete <b>128-bit</b> backend
-and, on AVX2 machines, a core <b>256-bit</b> backend. Other widths and
+and, on AVX2 machines, a broad <b>256-bit</b> backend. Other widths and
 operations outside the current 256-bit subset keep working but stay
 interpreted.
 </p>
@@ -307,12 +307,12 @@ at run time, so the same binary works on older machines: an operation without
 a packed instruction is never scalarised, the trace is abandoned and the code
 keeps running interpreted with identical results.
 <tt>simd.features()</tt> reports what was found.</li>
-<li>The current 256-bit JIT subset includes vector <tt>+</tt> and
-<tt>-</tt>, floating-point and 16/32-bit integer <tt>*</tt>,
-floating-point <tt>/</tt>, unary minus, bitwise operations,
-<tt>simd.select()</tt>, equal-size <tt>simd.bitcast()</tt>, constant scalar
-splats, and unaligned loads and stores. Other operations on 256-bit values
-currently abandon the trace and continue in the interpreter.</li>
+<li>The 256-bit JIT supports the ordinary vector operators, dynamic scalar
+splats, comparisons and masks, min/max, shifts, abs/sqrt/rounding, FMA,
+saturating arithmetic, 16-bit <tt>mulhi</tt>, direct 32-bit conversions,
+logical/select/bitcast, and unaligned loads and stores. Reductions,
+<tt>insert</tt>, <tt>shuffle</tt>, and <tt>shuffle2</tt> currently abandon
+the trace and continue in the interpreter.</li>
 <li>When AVX is present every packed instruction is emitted in its three
 operand VEX form.</li>
 <li>An ordinary <tt>a*b + c</tt> written with operators is <b>never</b>

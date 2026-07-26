@@ -458,6 +458,12 @@ typedef enum {
   XO_VPSRLV =	XO_0f38(45),		/* AVX2 */
   XO_VPSRAV =	XO_0f38(46),		/* AVX2, W=0 only */
   XO_VPSLLV =	XO_0f38(47),		/* AVX2 */
+  XO_VPBROADCASTD = XO_0f38(58),	/* AVX2 */
+  XO_VPBROADCASTQ = XO_0f38(59),	/* AVX2 */
+  XO_VPBROADCASTB = XO_0f38(78),	/* AVX2 */
+  XO_VPBROADCASTW = XO_0f38(79),	/* AVX2 */
+  XO_VBROADCASTSS = XO_0f38(18),	/* AVX */
+  XO_VBROADCASTSD = XO_0f38(19),	/* AVX */
   /*
   ** The three FMA forms differ only in which operand the destination doubles
   ** as, so the backend can pick the one that needs no register copy:
