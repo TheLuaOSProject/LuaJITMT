@@ -542,6 +542,18 @@ do
 			       0, 1, 2, 3, 4, 5, 6, 7)
 	    end,
 	    function(x, y) return simd.shl(x, y) end)
+    op_cost("i8x16 shr per-lane",
+	    function()
+	      return s8(-119), s8(0, 1, 2, 3, 4, 5, 6, 7,
+				  0, 1, 2, 3, 4, 5, 6, 7)
+	    end,
+	    function(x, y) return simd.shr(x, y) end)
+    op_cost("i8x16 sar per-lane",
+	    function()
+	      return s8(-119), s8(0, 1, 2, 3, 4, 5, 6, 7,
+				  0, 1, 2, 3, 4, 5, 6, 7)
+	    end,
+	    function(x, y) return simd.sar(x, y) end)
   end
   op_cost("i32x4 select", function() return ia, ib end,
 	  function(x, y) return simd.select(simd.gt(x, y), x, y) end)
@@ -838,6 +850,26 @@ if has_ymm then
 			 0, 1, 2, 3, 4, 5, 6, 7)
     end,
     function(x, y) return simd.shl(x, y) end)
+  width_cost("int8 shr per-lane",
+    function()
+      return s8(-119), s8(0, 1, 2, 3, 4, 5, 6, 7,
+			  0, 1, 2, 3, 4, 5, 6, 7)
+    end,
+    function()
+      return s8w(-119), s8w(0, 1, 2, 3, 4, 5, 6, 7,
+			      0, 1, 2, 3, 4, 5, 6, 7)
+    end,
+    function(x, y) return simd.shr(x, y) end)
+  width_cost("int8 sar per-lane",
+    function()
+      return s8(-119), s8(0, 1, 2, 3, 4, 5, 6, 7,
+			  0, 1, 2, 3, 4, 5, 6, 7)
+    end,
+    function()
+      return s8w(-119), s8w(0, 1, 2, 3, 4, 5, 6, 7,
+			      0, 1, 2, 3, 4, 5, 6, 7)
+    end,
+    function(x, y) return simd.sar(x, y) end)
   width_cost("int32 select",
     function() return i4(3), i4(5) end,
     function() return i8(3), i8(5) end,

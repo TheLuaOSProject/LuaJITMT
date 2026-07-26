@@ -65,6 +65,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M42 | Fuse one-use vector loads into the compatible FMA form while retaining accumulator coalescing and alias safety | done |
 | M43 | Fold AVX2 per-lane count loads into shifts only under register pressure, retaining faster prefetched loads otherwise | done |
 | M44 | Lower variable byte left shifts through a packed power-of-two lookup and IR-visible byte multiplication | done |
+| M45 | Lower logical and arithmetic variable byte right shifts through lookup factors and isolated word products | done |
 
 ## Commands that pass
 
@@ -562,3 +563,13 @@ streaming throughput improves from 1.88 to 1.00 ns/vector for XMM and from
 2.48 to 1.14 ns/vector for YMM. The four representative traces shrink from
 634 to 558 instructions, with all 16 `VPSLLVD` operations and 36 dword
 extraction shifts removed.
+
+Logical and arithmetic variable byte right shifts now use lookup factors and
+two isolated word products instead of four dword variable shifts. Median
+streaming logical-shift time improves from 1.85 to 1.03 ns/vector for XMM and
+from 2.26 to 1.26 ns/vector for YMM, about 45%. Arithmetic shift improves
+from 1.95 to 1.11 and from 2.25 to 1.36 ns/vector, about 43%/39%.
+Representative logical root/loop traces shrink from 634 to 570 instructions
+and arithmetic traces from 638 to 586, removing 32 variable and 88 immediate
+dword shifts in total. `bench_ops.lua` now tracks dependent XMM/YMM latency
+for all three per-lane byte shifts.

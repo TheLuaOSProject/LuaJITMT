@@ -204,6 +204,16 @@ signed byte encodings during execution. Randomized interpreter/JIT
 differential tests independently cover valid and out-of-range counts for
 both signed and unsigned byte vectors.
 
+Logical and arithmetic byte right shifts have matching XMM/YMM shape checks.
+Logical right requires one saturated add, one shuffle and exactly two word
+multiplies, with no `VPSRLVD`. Arithmetic right requires one unsigned byte
+minimum, one shuffle and exactly two word multiplies, with no `VPSRAVD`.
+Their count vectors evolve in the loop so the lookup cannot be hoisted out of
+the code under inspection. The per-operation benchmark table records
+dependent XMM and YMM costs for `shl`, `shr`, and `sar`, while streaming
+stress kernels were used to reject an instruction-count win that did not
+translate into throughput.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

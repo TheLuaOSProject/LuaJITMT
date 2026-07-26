@@ -1093,3 +1093,43 @@ improve from 1.88 to 1.00 ns per XMM vector and from 2.48 to 1.14 ns per YMM
 vector, roughly 47% and 54%. Across its XMM/YMM root and loop traces, total
 instructions fall from 634 to 558, all 16 `VPSLLVD` instructions and all 36
 dword extraction shifts disappear.
+
+## D39. Divide byte lanes through signed and unsigned word products
+
+Logical and arithmetic byte right shifts also admit packed multiplication
+identities, but they need the high part of a word-sized intermediate rather
+than byte multiplication modulo 256. For an unsigned byte:
+
+```
+x >> n = (x * 2^(7-n)) >> 7, for n < 8
+x >> n = 0,                  otherwise
+```
+
+The same saturated-add/`VPSHUFB` control as D38 looks up byte factors
+`128, 64, ..., 1` and produces zero for every out-of-range unsigned count.
+Even and odd data/factor bytes are isolated into word lanes, multiplied with
+`VPMULLW`, shifted right by seven, and merged. This replaces four
+`VPSRLVD` operations and their dword extraction/recombination graph with two
+word multiplies and lane-local word shifts.
+
+Arithmetic shift first clamps each unsigned count to seven with `VPMINUB`.
+Its data bytes are sign-extended to words before using the same factors:
+
+```
+sar8(x, n) = (sign_extend(x) * 2^(7-min(n,7))) sar 7
+```
+
+At the clamped limit the factor is one, so the final word arithmetic shift
+already gives zero for a non-negative byte and minus one for a negative byte.
+That is the required full sign fill for every original count at or above
+eight, including negative signed count encodings, without a compare or
+select.
+
+On the measured host, dependent XMM latency falls from about 2.15 to
+1.87 ns for logical right shift and from 2.34 to 2.08 ns for arithmetic
+right shift. The wider gain is in streaming throughput: logical XMM/YMM
+improves about 45% (1.85 to 1.03 and 2.26 to 1.26 ns/vector), while
+arithmetic XMM/YMM improves about 43%/39% (1.95 to 1.11 and 2.25 to
+1.36 ns/vector). Logical root/loop traces shrink from 634 to 570
+instructions and arithmetic traces from 638 to 586; together they remove 32
+dword variable shifts and 88 dword extraction shifts.

@@ -713,20 +713,32 @@ test("per-lane shift counts use the AVX2 variable shifts", function()
   check(count(ml8, "psllvd") == 0 and count(ml8, "pmullw") == 2 and
 	count(ml8, "paddusb") == 1 and count(ml8, "pshufb") == 1,
 	"i8x16 shl must use one lookup and two word multiplies")
-  local m8 = checkloop("i8x16 shr vec", {"psrlvd", "pand"}, NOCALL,
+  local mr8 = checkloop("i8x16 shr vec lookup",
+    {"paddusb", "pshufb", "pmullw", "psrlw", "pand", "por"}, NOCALL,
     function()
-      local acc = i8(0)
-      for _ = 1, 400 do acc = simd.shr(acc + av8, cv8) end
-      return acc
+      local acc, c = i8(0), cv8
+      for _ = 1, 400 do
+	acc = simd.shr(acc + av8, c)
+	c = c + i8(1)
+      end
+      return acc + c
     end)
-  check(count(m8, "psrlvd") == 4,
-	"i8x16 shr must use four dword variable shifts")
-  checkloop("i8x16 sar vec", {"psravd", "psrad", "pand"}, NOCALL,
+  check(count(mr8, "psrlvd") == 0 and count(mr8, "pmullw") == 2 and
+	count(mr8, "paddusb") == 1 and count(mr8, "pshufb") == 1,
+	"i8x16 shr must use one lookup and two word multiplies")
+  local ma8 = checkloop("i8x16 sar vec lookup",
+    {"pminub", "pshufb", "pmullw", "psraw", "pand", "por"}, NOCALL,
     function()
-      local acc = i8(0)
-      for _ = 1, 400 do acc = simd.sar(acc + av8, cv8) end
-      return acc
+      local acc, c = i8(0), cv8
+      for _ = 1, 400 do
+	acc = simd.sar(acc + av8, c)
+	c = c + i8(1)
+      end
+      return acc + c
     end)
+  check(count(ma8, "psravd") == 0 and count(ma8, "pmullw") == 2 and
+	count(ma8, "pminub") == 1 and count(ma8, "pshufb") == 1,
+	"i8x16 sar must use one lookup and two word multiplies")
 
   local function check_regcount(name, ct)
     local counts = ffi.new(ffi.typeof("$[512]", ct))
@@ -1161,14 +1173,33 @@ if simd.features().avx2 then
     check(nbl == 2 and not blbody:find("vpsllvd", 1, true),
 	  "i8x32 shl must use two YMM word multiplies and no dword shift")
 
-    local bbody = checkymm("i8x32 per-lane sar",
-      {"vpsravd ymm", "vpsrad ymm", "vpand ymm"}, function()
-	local acc = sb32(-119)
-	for _ = 1, 400 do acc = simd.sar(acc + sb32(3), bc) end
-	return acc
+    local brbody = checkymm("i8x32 per-lane shr lookup",
+      {"vpaddusb ymm", "vpshufb ymm", "vpmullw ymm", "vpsrlw ymm"},
+      function()
+	local acc, c = sb32(-119), bc
+	for _ = 1, 400 do
+	  acc = simd.shr(acc + sb32(3), c)
+	  c = c + sb32(1)
+	end
+	return acc + c
       end)
-    local _, bn = bbody:gsub("vpsravd ymm", "")
-    check(bn == 4, "i8x32 sar must use four YMM dword variable shifts")
+    local _, nbr = brbody:gsub("vpmullw ymm", "")
+    check(nbr == 2 and not brbody:find("vpsrlvd", 1, true),
+	  "i8x32 shr must use two YMM word multiplies and no dword shift")
+
+    local babody = checkymm("i8x32 per-lane sar lookup",
+      {"vpminub ymm", "vpshufb ymm", "vpmullw ymm", "vpsraw ymm"},
+      function()
+	local acc, c = sb32(-119), bc
+	for _ = 1, 400 do
+	  acc = simd.sar(acc + sb32(3), c)
+	  c = c + sb32(1)
+	end
+	return acc + c
+      end)
+    local _, nba = babody:gsub("vpmullw ymm", "")
+    check(nba == 2 and not babody:find("vpsravd", 1, true),
+	  "i8x32 sar must use two YMM word multiplies and no dword shift")
 
     local d8, ud8 = T.W.i32x8.ct, T.W.u32x8.ct
     checkymm("i32x8 mulhi emulation",

@@ -1781,6 +1781,71 @@ static TRef crec_simd_shiftv_i8_left(jit_State *J, IRType vt, TRef a, TRef nv)
 }
 
 /*
+** Logical byte right shift through (x * 2^(7-count)) >> 7. The factor lookup
+** zeroes out-of-range counts just like the left-shift lookup above. Isolate
+** even and odd bytes before multiplying so adjacent byte products cannot mix.
+*/
+static TRef crec_simd_shiftv_i8_right(jit_State *J, IRType vt, TRef a, TRef nv)
+{
+  IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
+  uint8_t table[LJ_VEC_MAXSIZE];
+  uint32_t i;
+  TRef ctrl, factor, mask, even, odd;
+  for (i = 0; i < sizeof(table); i++) {
+    uint32_t n = i & 15;
+    table[i] = (uint8_t)(n >= 8 ? 0x80u >> (n-8) : 0);
+  }
+  ctrl = emitir(IRT(IR_VADDSU, vt), nv,
+		crec_simd_k16(J, vt, 0x7878));
+  factor = emitir(IRT(IR_VSHUFB, vt), lj_ir_kvec(J, vt, table), ctrl);
+  mask = crec_simd_k16(J, wvt, 0x00ff);
+  even = emitir(IRT(IR_VMUL, wvt),
+		emitir(IRT(IR_VAND, wvt), a, mask),
+		emitir(IRT(IR_VAND, wvt), factor, mask));
+  even = emitir(IRT(IR_VSHR, wvt), even, lj_ir_kint(J, 7));
+  odd = emitir(IRT(IR_VMUL, wvt),
+	       emitir(IRT(IR_VSHR, wvt), a, lj_ir_kint(J, 8)),
+	       emitir(IRT(IR_VSHR, wvt), factor, lj_ir_kint(J, 8)));
+  odd = emitir(IRT(IR_VSHR, wvt), odd, lj_ir_kint(J, 7));
+  return emitir(IRT(IR_VOR, vt), even,
+		emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8)));
+}
+
+/*
+** Arithmetic byte right shift uses the same factors after clamping the count
+** to seven. Sign-extend each byte to a word before multiplication; shifting
+** the signed product by seven then gives floor(x / 2^count). A factor of one
+** at the clamped limit naturally produces the required full sign fill.
+*/
+static TRef crec_simd_shiftv_i8_sar(jit_State *J, IRType vt, TRef a, TRef nv)
+{
+  IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
+  uint8_t table[LJ_VEC_MAXSIZE];
+  uint32_t i;
+  TRef ctrl, factor, mask, even, odd;
+  for (i = 0; i < sizeof(table); i++) {
+    uint32_t n = i & 15;
+    table[i] = (uint8_t)(n < 8 ? 0x80u >> n : 0);
+  }
+  ctrl = emitir(IRT(IR_VMINU, vt), nv, crec_simd_k16(J, vt, 0x0707));
+  factor = emitir(IRT(IR_VSHUFB, vt), lj_ir_kvec(J, vt, table), ctrl);
+  mask = crec_simd_k16(J, wvt, 0x00ff);
+  even = emitir(IRT(IR_VSAR, wvt),
+		emitir(IRT(IR_VSHL, wvt), a, lj_ir_kint(J, 8)),
+		lj_ir_kint(J, 8));
+  even = emitir(IRT(IR_VMUL, wvt), even,
+		emitir(IRT(IR_VAND, wvt), factor, mask));
+  even = emitir(IRT(IR_VSAR, wvt), even, lj_ir_kint(J, 7));
+  even = emitir(IRT(IR_VAND, wvt), even, mask);
+  odd = emitir(IRT(IR_VMUL, wvt),
+	       emitir(IRT(IR_VSAR, wvt), a, lj_ir_kint(J, 8)),
+	       emitir(IRT(IR_VSHR, wvt), factor, lj_ir_kint(J, 8)));
+  odd = emitir(IRT(IR_VSAR, wvt), odd, lj_ir_kint(J, 7));
+  return emitir(IRT(IR_VOR, vt), even,
+		emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8)));
+}
+
+/*
 ** 64 bit lane min/max. There is no instruction for it before AVX-512, so
 ** compare and blend instead. That is still fully packed, three instructions
 ** plus the compare, and it needs PCMPGTQ from SSE4.2.
@@ -2020,6 +2085,16 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
 		      nvi.lanes == vi.lanes);
     if (vi.esize == 1 && op == VSH_SHL) {
       r = crec_simd_shiftv_i8_left(J, vt, a, nv);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
+    if (vi.esize == 1 && op == VSH_SHR) {
+      r = crec_simd_shiftv_i8_right(J, vt, a, nv);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
+    if (vi.esize == 1 && op == VSH_SAR) {
+      r = crec_simd_shiftv_i8_sar(J, vt, a, nv);
       J->base[0] = crec_vec_box(J, r, vt, id);
       return;
     }
