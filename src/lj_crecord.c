@@ -2075,12 +2075,62 @@ static TRef crec_simd_shuf1(jit_State *J, IRType vt, const CTVecInfo *vi,
   return emitir(IRT(IR_VSHUFB, vt), a, lj_ir_kvec(J, IRT_V16I8, mask));
 }
 
+/*
+** Runtime lane permute: turn a vector of lane indices into the byte control
+** vector PSHUFB wants, then do the permute. PSHUFB is byte granular, so a
+** lane index has to be scaled to a byte offset and replicated across the
+** bytes of its lane, with 0..esize-1 added back.
+**
+** Masking the index with lanes-1 first keeps every scaled offset below 16,
+** so the control byte's high bit is always clear and PSHUFB never takes its
+** "write zero" path. That also makes any index value defined without a guard,
+** matching lj_simd_permute().
+*/
+static TRef crec_simd_permute(jit_State *J, IRType vt, const CTVecInfo *vi,
+			      TRef a, TRef ix, IRType ivt)
+{
+  uint8_t rep[LJ_VEC_MAXSIZE], off[LJ_VEC_MAXSIZE];
+  uint32_t i, k, esz = vi->esize, n = vi->lanes;
+  TRef ctrl;
+  {  /* Reduce the index modulo the lane count. */
+    uint8_t kbuf[LJ_VEC_MAXSIZE];
+    uint8_t elem[8];
+    uint64_t m = n - 1;
+    memset(elem, 0, sizeof(elem));
+    memcpy(elem, &m, esz < 8 ? esz : 8);
+    lj_simd_splat(kbuf, elem, vi);
+    ctrl = emitir(IRT(IR_VAND, ivt), ix, lj_ir_kvec(J, ivt, kbuf));
+  }
+  if (esz == 1)
+    return emitir(IRT(IR_VSHUFB, vt), a, ctrl);
+  /* Scale to a byte offset, then spread that byte over the whole lane. */
+  ctrl = emitir(IRT(IR_VSHL, ivt), ctrl, lj_ir_kint(J, (int32_t)lj_fls(esz)));
+  for (i = 0; i < n; i++)
+    for (k = 0; k < esz; k++) {
+      rep[i*esz + k] = (uint8_t)(i*esz);  /* Low byte of lane i. */
+      off[i*esz + k] = (uint8_t)k;
+    }
+  ctrl = emitir(IRT(IR_VSHUFB, IRT_V16I8), ctrl,
+		lj_ir_kvec(J, IRT_V16I8, rep));
+  ctrl = emitir(IRT(IR_VADD, IRT_V16I8), ctrl, lj_ir_kvec(J, IRT_V16I8, off));
+  return emitir(IRT(IR_VSHUFB, vt), a, ctrl);
+}
+
 void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   uint8_t idx[LJ_VEC_MAXSIZE];
   crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0);
+  if (J->base[1] && tref_iscdata(J->base[1])) {
+    CTVecInfo ivi; CTypeID iid; IRType ivt;
+    TRef ix = crec_simd_arg(J, rd, 1, &ivi, &iid, &ivt);
+    crec_simd_need(J, !veck_isfp(ivi.kind) &&
+		      ivi.esize == vi.esize && ivi.lanes == vi.lanes);
+    J->base[0] = crec_vec_box(J, crec_simd_permute(J, vt, &vi, a, ix, ivt),
+			      vt, id);
+    return;
+  }
   crec_simd_idx(J, rd, 1, vi.lanes, vi.lanes, idx);
   J->base[0] = crec_vec_box(J, crec_simd_shuf1(J, vt, &vi, a, idx, 0), vt, id);
 }

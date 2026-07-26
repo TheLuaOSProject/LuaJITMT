@@ -196,16 +196,26 @@ local dot = simd.hsum(acc)
 <table class="convtable">
 <tr class="odd separate"><td class="convin"><tt>simd.insert(v, i, x)</tt></td><td class="convop">copy of <tt>v</tt> with lane <tt>i</tt> replaced by <tt>x</tt></td></tr>
 <tr class="even"><td class="convin"><tt>simd.shuffle(v, i0, ...)</tt></td><td class="convop">permute lanes of <tt>v</tt>; one index per lane</td></tr>
-<tr class="odd"><td class="convin"><tt>simd.shuffle2(a, b, i0, ...)</tt></td><td class="convop">permute the concatenation of <tt>a</tt> and <tt>b</tt></td></tr>
+<tr class="odd"><td class="convin"><tt>simd.shuffle(v, idxvec)</tt></td><td class="convop">permute lanes of <tt>v</tt> by a run-time index vector</td></tr>
+<tr class="even"><td class="convin"><tt>simd.shuffle2(a, b, i0, ...)</tt></td><td class="convop">permute the concatenation of <tt>a</tt> and <tt>b</tt></td></tr>
 </table>
 <p>
 Indices are lane numbers. For <tt>shuffle2</tt>, indices below the lane count
 select from <tt>a</tt> and the rest from <tt>b</tt>. Reading a lane uses
 ordinary indexing (<tt>v[i]</tt>).
 </p>
+<p>
+Given a single <em>vector</em> second argument instead of a list of numbers,
+<tt>simd.shuffle()</tt> takes one index per lane from it at run time. The index
+vector must be an integer vector with the same lane width and lane count as
+<tt>v</tt>. Each index is reduced modulo the lane count, so any value &mdash;
+negative or out of range &mdash; still selects a lane and the operation never
+raises. This compiles to <tt>PSHUFB</tt>, one instruction for a byte vector.
+</p>
 <pre class="code">
 local rev  = simd.shuffle(v, 3, 2, 1, 0)          -- reverse
 local zip  = simd.shuffle2(a, b, 0, 4, 1, 5)      -- interleave low halves
+local tbl  = simd.shuffle(v, idx)                 -- idx chosen at run time
 local one  = simd.insert(v, 2, 42)                -- v with lane 2 set to 42
 </pre>
 

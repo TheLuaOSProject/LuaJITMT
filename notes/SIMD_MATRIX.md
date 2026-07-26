@@ -128,6 +128,7 @@ operand, exactly like the operators.
 | `hsum/hmin/hmax(a)` | element | yes | yes | yes | yes | yes |
 | `insert(a,i,x)` | same ctype | yes | yes | yes | yes | yes |
 | `shuffle(a,i...)` | same ctype | yes | yes | yes | yes | yes (const i, SSSE3) |
+| `shuffle(a,idxvec)` | same ctype | yes | yes | yes | yes | yes (SSSE3) |
 | `shuffle2(a,b,i...)` | same ctype | yes | yes | yes | yes | yes (const i, SSSE3) |
 | `bitcast(ct,a)` | ct | yes | yes | yes | yes | yes |
 | `convert(ct,a)` | ct | yes | yes | yes | yes | yes |
@@ -152,6 +153,11 @@ Semantics worth pinning down:
 * Shifts take the count as *unsigned*: a count `>= lane bits` gives zero for
   `shl`/`shr` and a full sign fill for `sar`, matching the x86 packed shifts.
 * `abs` on signed integers wraps for the most negative lane value (like PABS).
+* `shuffle(a, idxvec)` takes one index per lane from a **signed or unsigned
+  integer vector of the same lane width and lane count**. Each index is
+  reduced modulo the lane count (`idx & (lanes-1)`), so every value, including
+  a negative or huge one, selects a real lane. No guard and no error: this
+  mirrors the existing constant-index rule and keeps the operation total.
 * Reductions use a fixed pairwise halving tree
   (`t[i] = op(t[i], t[i+n/2])`), *not* a left-to-right scan, so interpreter
   and JIT agree bit for bit for non-associative float addition and for the
@@ -170,7 +176,8 @@ Semantics worth pinning down:
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
 | shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a byte mask. Constant and variable counts are both packed; for a variable count the mask is built with the same shift applied to a constant and broadcast across the byte halves with `PMULLW` by `0x0101` |
 | non-constant lane index in `insert` | supported: the range is guarded and the lane mask is built with a packed compare against a constant vector of lane numbers |
-| non-constant lane index in `shuffle`/`shuffle2` | rejected at record time, stays interpreted: a runtime permutation would need a PSHUFB mask built at runtime |
+| runtime index **vector** in `shuffle` | supported: `shuffle(a, idxvec)` builds the PSHUFB control at runtime. A byte vector is one PSHUFB; a wider lane costs five packed instructions (mask, scale, replicate the byte over its lane, add 0..esize-1, permute) |
+| separate non-constant lane indices in `shuffle`/`shuffle2` | still rejected at record time. Assembling a control mask from N *scalar* indices costs more than it saves; pass an index vector instead |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |
 
 "JIT NYI" always means: the trace aborts with a NYI reason, the code keeps

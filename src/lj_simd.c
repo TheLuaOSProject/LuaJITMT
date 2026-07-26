@@ -483,6 +483,32 @@ void lj_simd_shuffle(void *dp, const void *ap, const void *bp,
   memcpy(dp, tmp, (size_t)n*esz);
 }
 
+/*
+** Lane permute with a runtime index vector: dp[i] = ap[ip[i] mod lanes].
+** The index lanes are read as unsigned values of the same width as the data
+** lanes and reduced modulo the lane count, so every index is in range and no
+** input can fault or leave a lane undefined. Integer index lanes only; the
+** caller checks that.
+*/
+void lj_simd_permute(void *dp, const void *ap, const void *ip,
+		     const CTVecInfo *vi)
+{
+  uint8_t tmp[LJ_VEC_MAXSIZE];
+  uint32_t i, n = vi->lanes, esz = vi->esize;
+  for (i = 0; i < n; i++) {
+    const uint8_t *e = (const uint8_t *)ip + i*esz;
+    uint64_t j;
+    switch (esz) {
+    case 1: j = *(const uint8_t *)e; break;
+    case 2: { uint16_t v; memcpy(&v, e, 2); j = v; break; }
+    case 4: { uint32_t v; memcpy(&v, e, 4); j = v; break; }
+    default: { uint64_t v; memcpy(&v, e, 8); j = v; break; }
+    }
+    memcpy(tmp + i*esz, (const uint8_t *)ap + (uint32_t)(j & (n-1))*esz, esz);
+  }
+  memcpy(dp, tmp, (size_t)n*esz);
+}
+
 /* Bitwise select: dp = (mask & a) | (~mask & b). */
 void lj_simd_select(void *dp, const void *mp, const void *ap, const void *bp,
 		    CTSize size)

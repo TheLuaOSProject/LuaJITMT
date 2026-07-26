@@ -432,8 +432,20 @@ LJLIB_CF(ffi_simd_shuffle)	LJLIB_REC(.)
   const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, &id);
   CTSize size = (CTSize)vi.esize * vi.lanes;
   uint8_t idx[LJ_VEC_MAXSIZE], rbuf[LJ_VEC_MAXSIZE];
-  simd_checkidx(L, 2, vi.lanes, vi.lanes, idx);
-  lj_simd_shuffle(rbuf, ap, ap, &vi, idx);
+  TValue *o = L->base + 1;
+  if (o < L->top && tviscdata(o)) {
+    /* A single vector operand holds one index per lane, chosen at run time. */
+    CTVecInfo ivi;
+    const uint8_t *ip = simd_checkvec(L, cts, 2, &ivi, NULL);
+    if (veck_isfp(ivi.kind))
+      lj_err_argtype(L, 2, "integer vector");
+    if (ivi.esize != vi.esize || ivi.lanes != vi.lanes)
+      lj_err_argtype(L, 2, "vector with matching lane count and width");
+    lj_simd_permute(rbuf, ap, ip, &vi);
+  } else {
+    simd_checkidx(L, 2, vi.lanes, vi.lanes, idx);
+    lj_simd_shuffle(rbuf, ap, ap, &vi, idx);
+  }
   memcpy(simd_newvec(L, cts, id, size), rbuf, size);
   lj_gc_check(L);
   return 1;

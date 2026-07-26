@@ -256,6 +256,45 @@ test("insert and shuffle", function()
   end
 end)
 
+test("shuffle with a runtime index vector", function()
+  -- simd.shuffle(a, idxvec) permutes by an index chosen per lane at run time.
+  -- Indices are reduced modulo the lane count, so every value is defined and
+  -- no guard is needed; the reference reduces them the same way.
+  local bit_ = require("bit")
+  for _, ti in ipairs(T.T) do
+    local it = T.masktype(ti)
+    local rnd = T.rng(SEED + ti.bits * 131 + (ti.fp and 3 or 0))
+    for _ = 1, 30 do
+      local a = T.rand(ti, rnd)
+      -- Draw raw index lanes, including out-of-range and negative ones.
+      local raw = {}
+      for i = 1, ti.lanes do raw[i] = rnd() end
+      local ix = it.ct(unpack(raw, 1, ti.lanes))
+      local r = simd.shuffle(a, ix)
+      for i = 0, ti.lanes-1 do
+	local j = tonumber(bit_.band(ix[i], ti.lanes-1))
+	checkeq(tostring(r[i]), tostring(a[j]),
+		ti.name .. " permute lane " .. i .. " idx " .. tostring(ix[i]))
+      end
+    end
+    -- An identity permutation must return the input unchanged.
+    local id = {}
+    for i = 1, ti.lanes do id[i] = i-1 end
+    local a = T.rand(ti, rnd)
+    checkeq(simd.shuffle(a, it.ct(unpack(id, 1, ti.lanes))), a,
+	    ti.name .. " identity permute")
+  end
+end)
+
+test("runtime index vectors are type checked", function()
+  local a = T.T.i32x4.ct(1, 2, 3, 4)
+  check(not pcall(simd.shuffle, a, T.T.float4.ct(0, 1, 2, 3)),
+	"a float index vector must be rejected")
+  check(not pcall(simd.shuffle, a, T.T.i16x8.ct(0)),
+	"an index vector of the wrong shape must be rejected")
+  check(not pcall(simd.shuffle, a, "0"), "a string index must be rejected")
+end)
+
 test("bitcast and convert", function()
   local f, i = T.T.float4, T.T.i32x4
   checkeq(tonumber(simd.bitcast(i.ct, f.ct(1))[0]), 0x3f800000, "bitcast f->i")

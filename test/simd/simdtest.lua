@@ -92,10 +92,16 @@ function M.refneg(ti, a)
   return M.vec(ti, t)
 end
 
+-- The signed integer vector type with the same lane width and lane count.
+-- This is what a comparison returns and what a runtime index vector must be.
+function M.masktype(ti)
+  return M.T[(ti.bits == 8 and "i8x16") or (ti.bits == 16 and "i16x8") or
+	     (ti.bits == 32 and "i32x4") or "i64x2"]
+end
+
 -- Lane-wise reference for a comparison, returns the all-ones/zero mask.
 function M.refcmp(ti, op, a, b)
-  local mt = M.T[(ti.bits == 8 and "i8x16") or (ti.bits == 16 and "i16x8") or
-		 (ti.bits == 32 and "i32x4") or "i64x2"]
+  local mt = M.masktype(ti)
   local t = {}
   for i = 1, ti.lanes do
     local x, y, r = a[i-1], b[i-1]

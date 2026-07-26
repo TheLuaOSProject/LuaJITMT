@@ -270,6 +270,27 @@ test("the IR dump renders vector types and constants", function()
   end
 end)
 
+test("a runtime index permute is packed", function()
+  -- A byte vector is a direct PSHUFB. A wider lane needs the index scaled to
+  -- a byte offset and spread over its lane first, which is still packed: mask,
+  -- shift, replicate, add, permute. Neither may fall back to a call.
+  local i8 = T.T.i8x16.ct
+  local a8, x8 = i8(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16), i8(3)
+  checkloop("i8x16 permute", {"pshufb"}, NOCALL, function()
+    local acc = i8(0)
+    for k = 1, 400 do acc = acc + simd.shuffle(a8, x8 + i8(k)) end
+    return acc
+  end)
+  local i4 = T.T.i32x4.ct
+  local a4, x4 = i4(10, 20, 30, 40), i4(3, 1, 0, 2)
+  checkloop("i32x4 permute", {"pshufb", "pslld", "paddb", "pand"}, NOCALL,
+	    function()
+    local acc = i4(0)
+    for k = 1, 400 do acc = acc + simd.shuffle(a4, x4 + i4(k)) end
+    return acc
+  end)
+end)
+
 test("a bitcast never produces a conversion between vector types", function()
   -- simd.bitcast re-boxes a value under a different lane type, so the box's
   -- XSTORE is typed with the *destination* lane type while the stored value
