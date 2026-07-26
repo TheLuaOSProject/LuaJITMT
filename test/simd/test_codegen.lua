@@ -602,6 +602,40 @@ test("fma compiles to a single fused instruction", function()
   end)
   check(fused(m3) == 1,
 	"double2 fma: expected exactly one fused instruction, got " .. fused(m3))
+
+  local function check_memfma(name, ct)
+    local values = ffi.new(ffi.typeof("$[512]", ct))
+    for i = 0, 511 do values[i] = ct(i * 0.0001 + 0.25) end
+    local function has_memfma(body)
+      for line in body:gmatch("[^\n]+") do
+	if line:find("fmadd", 1, true) and line:find("[", 1, true) then
+	  return true
+	end
+      end
+      return false
+    end
+    local addend = rawdump("m", function()
+      local acc, k = ct(1), ct(1.00001)
+      for i = 0, 399 do acc = simd.fma(acc, k, values[i]) end
+      return acc
+    end)
+    check(has_memfma(addend),
+	  name .. " FMA addend load did not fuse: " ..
+	  addend:gsub("\n", " | "))
+    local multiplier = rawdump("m", function()
+      local acc, c = ct(1), ct(0.0001)
+      for i = 0, 399 do acc = simd.fma(acc, values[i], c) end
+      return acc
+    end)
+    check(has_memfma(multiplier),
+	  name .. " FMA multiplier load did not fuse: " ..
+	  multiplier:gsub("\n", " | "))
+  end
+
+  check_memfma("float4", f4)
+  if simd.features().avx2 then
+    check_memfma("float8", T.W.float8.ct)
+  end
 end)
 
 test("per-lane shift counts use the AVX2 variable shifts", function()

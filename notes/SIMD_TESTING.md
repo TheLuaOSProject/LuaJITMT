@@ -181,6 +181,14 @@ signed and unsigned byte multiplication continues to compare every lane with
 the interpreter. `bench_ops.lua` reports byte multiply in both the dependent
 XMM operation list and the XMM/YMM lane-throughput comparison.
 
+FMA load-fusion coverage exercises both encodable positions: an array value
+used as the addend selects 213, while one used as the multiplier selects 132.
+Both XMM and YMM dumps require the `VFMADD` itself to carry a memory operand.
+A differential alias test loads through one FFI vector pointer, stores through
+another pointer to the same bytes, and then performs FMA; this ensures the
+special handling of the non-emitting `CARG` carrier never skips a real
+intervening store.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

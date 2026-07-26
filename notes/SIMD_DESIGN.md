@@ -1010,3 +1010,30 @@ four independent chains about 7.5%. Eight, twelve and fourteen independent
 chains improve by 28%, 32% and 33% respectively because they share the
 shifted multiplier. Across those three stressed root/loop traces, total code
 falls from 957 to 829 instructions; word shifts fall from 340 to 139.
+
+## D36. Fuse the encodable FMA input without sacrificing the accumulator
+
+FMA has a memory-source form just like ordinary VEX arithmetic, but its three
+encodings make load fusion inseparable from destination selection. The
+destination still has to be the loop-carried operand chosen by D18; moving a
+different operand there merely to expose a load would put copies back on the
+critical path.
+
+Once that operand is fixed, the backend chooses between the two compatible
+forms when a one-use array load can occupy the ModRM input. For example,
+`fma(acc, k, array[i])` keeps `acc` in the destination and selects 213 so the
+addend is read from memory. `fma(acc, array[i], c)` retains 132 and reads the
+multiplier from memory. This preserves the original operand order and still
+removes the separate `VMOVUPS`.
+
+The third and fourth operands travel through an adjacent `CARG`. That IR node
+is only a structural carrier and emits no code, but the generic load-conflict
+scan would otherwise count it as a second consumer. The FMA path skips exactly
+that carrier while retaining the ordinary alias check. A real intervening
+`XSTORE` still prevents fusion, including when two FFI pointers alias.
+
+Across four XMM/YMM addend/multiplier root-and-loop traces, eight vector loads
+disappear and machine code falls from 1572 to 1536 bytes. A dependent FMA
+chain remains execution-latency bound at about 0.76 ns/vector. With twelve and
+fourteen independent streamed accumulators, eliminating the temporary vector
+register improves elapsed time by about 2% and 5% respectively.

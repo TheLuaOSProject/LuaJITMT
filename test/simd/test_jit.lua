@@ -640,6 +640,24 @@ test("type punning does not confuse store-to-load forwarding", function()
   end, 200)
 end)
 
+test("fma memory operands do not cross an intervening store", function()
+  if not simd.features().fma then return end
+  local f4 = T.T.float4.ct
+  local raw = ffi.new("float[4]")
+  local p = ffi.cast(ffi.typeof("$ *", f4), raw)
+  local q = ffi.cast(ffi.typeof("$ *", f4), raw)
+  diff("aliased load, store, then fma", function(n)
+    local acc, k = f4(1), f4(1)
+    p[0] = f4(2)
+    for i = 1, n do
+      local old = p[0]
+      q[0] = f4(i)
+      acc = simd.fma(acc, k, old)
+    end
+    return acc, p[0]
+  end, 200)
+end)
+
 test("side traces replay sunk vector boxes", function()
   -- A rare branch inside a hot loop becomes a hot side exit and grows its own
   -- side trace, which has to replay the parent's snapshot. When the sunk box

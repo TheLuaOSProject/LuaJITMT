@@ -62,6 +62,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M39 | Fuse one-use vector loads into AVX arithmetic memory operands, while retaining safe separate loads for legacy SSE | done |
 | M40 | Let ordinary FFI array temporaries fuse into AVX unary, shuffle and conversion memory operands; ignore only virtual sink stores | done |
 | M41 | Expand byte multiply in IR so invariant shifts CSE; use binary constant memory operands only under vector-register pressure | done |
+| M42 | Fuse one-use vector loads into the compatible FMA form while retaining accumulator coalescing and alias safety | done |
 
 ## Commands that pass
 
@@ -531,3 +532,12 @@ the `0x00ff` mask in a vector register for small loops and lets `VPAND` read
 the interned constant from memory when retaining the register would instead
 cause repeated spill/reload instructions. AVX2 retains the same dependent
 latency as XMM while multiplying twice as many byte lanes.
+
+FMA now selects between its compatible 132/213 forms after the destination
+operand is fixed, allowing a one-use multiplier or addend load to occupy the
+instruction's memory source. Four XMM/YMM root-and-loop traces lose eight
+`VMOVUPS` instructions and shrink from 1572 to 1536 bytes. The latency-bound
+single chain remains flat, while twelve and fourteen independent streaming
+chains improve by roughly 2% and 5% because the loaded operand no longer
+needs a temporary vector register. The conflict scan skips only FMA's
+non-emitting `CARG` carrier; a real aliased store still blocks fusion.

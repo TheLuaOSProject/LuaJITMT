@@ -3,10 +3,10 @@
 ** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 **
 ** Included from lj_asm_x86.h. Vector values are 128 or 256 bits wide and live
-** in an XMM or YMM register. Memory operands are never fused into a packed
-** instruction, because a vector cdata payload is only 8 byte aligned and a
-** vector may also be loaded through a pointer to arbitrary memory: everything
-** goes through MOVUPS.
+** in an XMM or YMM register. AVX instructions may fuse a one-use unaligned
+** vector load into their read-only memory operand. Legacy SSE keeps the load
+** separate because a vector cdata payload is only 8 byte aligned and its
+** packed arithmetic memory operands may require stronger alignment.
 */
 
 #if LJ_HASFFI
@@ -758,6 +758,23 @@ static void asm_vecshiftv(ASMState *as, IRIns *ir)
 ** so always using 213 cost two MOVAPS per iteration and made the fused chain
 ** slower than the separate multiply and add it was meant to replace.
 */
+static int asm_vecfmacanfuseload(ASMState *as, IRRef ref)
+{
+  int ok;
+  if (!asm_veccanfuseload(as, ref))
+    return 0;
+  /*
+  ** CARG is the FMA's structural operand carrier, not a second run-time use.
+  ** Skip it while checking for aliases and actual additional consumers.
+  */
+  lj_assertA(IR(as->curins)->op2 + 1 == as->curins,
+	     "FMA CARG is not adjacent to its user");
+  as->curins--;
+  ok = noconflict(as, ref, IR_XSTORE, 2);
+  as->curins++;
+  return ok;
+}
+
 static void asm_vecfma(ASMState *as, IRIns *ir)
 {
   IRIns *arg = IR(ir->op2);
@@ -790,14 +807,34 @@ static void asm_vecfma(ASMState *as, IRIns *ir)
   if (fma_phi(cref)) {			/* dest = a*b + dest */
     xo = XO_VFMADD231; keep = cref; vref = aref; mref = bref;
   } else if (fma_phi(bref) && !fma_phi(aref)) {	/* dest = a*dest + c */
-    xo = XO_VFMADD213; keep = bref; vref = aref; mref = cref;
+    keep = bref;
+    if (asm_vecfmacanfuseload(as, aref) &&
+	!asm_vecfmacanfuseload(as, cref)) {
+      xo = XO_VFMADD132; vref = cref; mref = aref;
+    } else {
+      xo = XO_VFMADD213; vref = aref; mref = cref;
+    }
   } else {				/* dest = dest*b + c */
-    xo = XO_VFMADD132; keep = aref; vref = cref; mref = bref;
+    keep = aref;
+    if (asm_vecfmacanfuseload(as, cref) &&
+	!asm_vecfmacanfuseload(as, bref)) {
+      xo = XO_VFMADD213; vref = bref; mref = cref;
+    } else {
+      xo = XO_VFMADD132; vref = cref; mref = bref;
+    }
   }
 #undef fma_phi
   rv = ra_alloc1(as, vref, allow);
-  rm = vref == mref ? rv : ra_alloc1(as, mref, rset_exclude(allow, rv));
-  emit_vexrrwl(as, xo, dest, rv, rm, w, wide);
+  if (vref == mref) {
+    rm = rv;
+  } else if (asm_vecfmacanfuseload(as, mref)) {
+    as->curins--;
+    rm = asm_vecfuseload(as, mref, rset_exclude(allow, rv));
+    as->curins++;
+  } else {
+    rm = ra_alloc1(as, mref, rset_exclude(allow, rv));
+  }
+  emit_mrm(as, emit_vexopv(xo, rv, w, wide), dest, rm);
   ra_left(as, dest, keep);
 }
 
