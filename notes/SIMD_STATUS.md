@@ -72,6 +72,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M49 | Lower word logical-right and YMM arithmetic-right shifts through packed factors and native high products | done |
 | M50 | Canonicalise identity, half-swap, and immediate 32/64-bit constant shuffles before allocating byte controls | done |
 | M51 | Collapse lane-local two-source low/high interleaves to one packed unpack instruction | done |
+| M52 | Collapse single-source and equal-source `shuffle2` controls to the ordinary one-source permute path | done |
 
 ## Commands that pass
 
@@ -636,3 +637,10 @@ and an OR. The recogniser follows each 128-bit hardware half at YMM width.
 Dependent XMM/YMM latency improves from about 0.390 to 0.235 ns/vector,
 roughly 40%, and eight-chain throughput from 0.137 to 0.096 ns/op, about 30%.
 Arbitrary two-source permutations retain the general lowering.
+
+Degenerate `shuffle2` controls now share the one-source canonicalizer when
+all lanes select only the first input, only the second input, or both inputs
+are the same IR value. Single-source identity with a loop-carried add improves
+from about 0.571 to 0.238 ns/vector. YMM cross-half reverse improves from
+1.137 to 0.760 ns/vector, and an arbitrary equal-source control from 1.170 to
+0.759 ns/vector, by replacing masked dual routing with one direct permute.

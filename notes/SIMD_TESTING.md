@@ -158,6 +158,9 @@ Two-source coverage additionally constructs low, high, and reversed-operand
 lane-local interleaves for every lane kind. Machine-code checks require one
 `PUNPCKL*`/`PUNPCKH*` and reject both `PSHUFB` and the final `POR`; a separate
 cross-half `shuffle2` keeps the general path covered.
+First-input-only, second-input-only, and equal-input controls have dedicated
+interpreter/JIT differentials. Their codegen checks require the same immediate
+or direct permute as `shuffle` and reject the unused masked route and `POR`.
 
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are

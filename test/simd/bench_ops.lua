@@ -930,6 +930,14 @@ if has_ymm then
     function(x, y)
       return simd.shuffle2(x, y, 0, 8, 1, 9, 4, 12, 5, 13)
     end)
+  width_cost("int32 shuffle2 one src",
+    function() return i4(0, 1, 2, 3), i4(4, 5, 6, 7) end,
+    function() return i8(0, 1, 2, 3, 4, 5, 6, 7),
+		      i8(8, 9, 10, 11, 12, 13, 14, 15) end,
+    function(x, y) return simd.shuffle2(x, y, 3, 2, 1, 0) end,
+    function(x, y)
+      return simd.shuffle2(x, y, 7, 6, 5, 4, 3, 2, 1, 0)
+    end)
   width_cost("int32 shuffle vector",
     function() return i4(0, 1, 2, 3), i4(3, 2, 1, 0) end,
     function() return i8(0, 1, 2, 3, 4, 5, 6, 7),

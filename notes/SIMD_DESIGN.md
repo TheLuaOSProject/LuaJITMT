@@ -1311,3 +1311,19 @@ On the measured host, dependent XMM/YMM interleave latency improves from
 about 0.390 to 0.235 ns/vector, roughly 40%. Eight independent chains improve
 from 0.137 to 0.096 ns/op, about 30%. The generated hot path is one unpack
 instead of two `PSHUFB`s plus `POR`.
+
+## D46. Route degenerate two-source shuffles through one source
+
+`shuffle2` is often produced by generic permutation code even when a
+particular control uses only `a`, only `b`, or the caller supplied the same
+vector twice. Running two masked permutations and an OR in those cases is
+pure overhead. The constant one-source canonicalizer is now shared: controls
+from the second input are rebased, and equal-source controls are reduced
+modulo the lane count before normal identity/`PSHUFD`/`VPERMD`/`VPERMQ`
+selection.
+
+With a loop-carried add, a single-source identity improves from about 0.571
+to 0.238 ns/vector because the shuffle disappears. A YMM cross-half reverse
+improves from 1.137 to 0.760 ns/vector, and an arbitrary equal-source YMM
+control from 1.170 to 0.759 ns/vector. The latter two become one direct
+permute instead of the generic dual-source route.

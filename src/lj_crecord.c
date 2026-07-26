@@ -2773,6 +2773,57 @@ static TRef crec_simd_shuf1(jit_State *J, IRType vt, const CTVecInfo *vi,
   }
 }
 
+/* Lower a validated constant permutation of one source. Shared by shuffle
+** and by shuffle2 patterns that do not actually use both inputs.
+*/
+static TRef crec_simd_constshuffle(jit_State *J, IRType vt,
+				   const CTVecInfo *vi, TRef a,
+				   const uint8_t *idx)
+{
+  uint32_t i;
+  for (i = 0; i < vi->lanes && idx[i] == i; i++) {}
+  if (i == vi->lanes) return a;
+  if (vt & IRT_VEC256) {
+    uint32_t nph = 16 / vi->esize;
+    for (i = 0; i < vi->lanes &&
+	 idx[i] == (uint8_t)((i+nph) % vi->lanes); i++) {}
+    if (i == vi->lanes)
+      return emitir(IRT(IR_VSHUF, vt), a,
+		    IRVSHUF(IRVSHUF_SWAP128, 0));
+  }
+  {
+    uint32_t imm;
+    if (crec_simd_shufd(vi, idx, &imm))
+      return emitir(IRT(IR_VSHUF, vt), a,
+		    IRVSHUF(IRVSHUF_PSHUFD, imm));
+  }
+  if ((vt & IRT_VEC256) && vi->esize == 4) {
+    uint32_t ctl[8], routes = 0;
+    for (i = 0; i < vi->lanes; i++) {
+      ctl[i] = idx[i];
+      routes |= 1u << ((((i*4) ^ ((uint32_t)idx[i]*4)) & 16) != 0);
+    }
+    /* A same-half constant is one low-latency VPSHUFB. Once any lane crosses
+    ** a half, one VPERMD beats the dependent half-swap plus byte shuffle.
+    */
+    return routes == 1 ?
+      crec_simd_shuf1(J, vt, vi, a, idx, 0) :
+      emitir(IRT(IR_VPERMD, vt), a,
+	     lj_ir_kvec(J, (IRType)(IRT_V4I32|IRT_VEC256), ctl));
+  } else if ((vt & IRT_VEC256) && vi->esize == 8) {
+    uint32_t routes = 0;
+    for (i = 0; i < vi->lanes; i++)
+      routes |= 1u << ((((i*8) ^ ((uint32_t)idx[i]*8)) & 16) != 0);
+    /* As above: retain one VPSHUFB for a purely same-half constant. */
+    if (routes != 1) {
+      uint32_t imm = (uint32_t)idx[0] | ((uint32_t)idx[1] << 2) |
+		     ((uint32_t)idx[2] << 4) | ((uint32_t)idx[3] << 6);
+      return emitir(IRT(IR_VSHUF, vt), a, IRVSHUF(IRVSHUF_PERMQ, imm));
+    }
+  }
+  return crec_simd_shuf1(J, vt, vi, a, idx, 0);
+}
+
 /*
 ** Runtime lane permute: turn a vector of lane indices into the byte control
 ** vector PSHUFB wants, then do the permute. PSHUFB is byte granular, so a
@@ -2838,7 +2889,6 @@ void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   uint8_t idx[LJ_VEC_MAXSIZE];
-  uint32_t i;
   crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0);
   if (J->base[1] && tref_iscdata(J->base[1])) {
     CTVecInfo ivi; CTypeID iid; IRType ivt;
@@ -2852,61 +2902,8 @@ void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
     return;
   }
   crec_simd_idx(J, rd, 1, vi.lanes, vi.lanes, idx);
-  for (i = 0; i < vi.lanes && idx[i] == i; i++) {}
-  if (i == vi.lanes) {
-    J->base[0] = crec_vec_box(J, a, vt, id);
-    return;
-  }
-  if (vt & IRT_VEC256) {
-    uint32_t nph = 16 / vi.esize;
-    for (i = 0; i < vi.lanes &&
-	 idx[i] == (uint8_t)((i+nph) % vi.lanes); i++) {}
-    if (i == vi.lanes) {
-      J->base[0] = crec_vec_box(J,
-	emitir(IRT(IR_VSHUF, vt), a, IRVSHUF(IRVSHUF_SWAP128, 0)), vt, id);
-      return;
-    }
-  }
-  {
-    uint32_t imm;
-    if (crec_simd_shufd(&vi, idx, &imm)) {
-      J->base[0] = crec_vec_box(J,
-	emitir(IRT(IR_VSHUF, vt), a,
-	       IRVSHUF(IRVSHUF_PSHUFD, imm)), vt, id);
-      return;
-    }
-  }
-  if ((vt & IRT_VEC256) && vi.esize == 4) {
-    uint32_t ctl[8], routes = 0;
-    for (i = 0; i < vi.lanes; i++) {
-      ctl[i] = idx[i];
-      routes |= 1u << ((((i*4) ^ ((uint32_t)idx[i]*4)) & 16) != 0);
-    }
-    /* A same-half constant is one low-latency VPSHUFB. Once any lane crosses
-    ** a half, one VPERMD beats the dependent half-swap plus byte shuffle.
-    */
-    J->base[0] = crec_vec_box(J, routes == 1 ?
-      crec_simd_shuf1(J, vt, &vi, a, idx, 0) :
-      emitir(IRT(IR_VPERMD, vt), a,
-	     lj_ir_kvec(J, (IRType)(IRT_V4I32|IRT_VEC256), ctl)), vt, id);
-  } else if ((vt & IRT_VEC256) && vi.esize == 8) {
-    uint32_t i, routes = 0;
-    for (i = 0; i < vi.lanes; i++)
-      routes |= 1u << ((((i*8) ^ ((uint32_t)idx[i]*8)) & 16) != 0);
-    /* As above: retain one VPSHUFB for a purely same-half constant. */
-    if (routes != 1) {
-      uint32_t imm = (uint32_t)idx[0] | ((uint32_t)idx[1] << 2) |
-		     ((uint32_t)idx[2] << 4) | ((uint32_t)idx[3] << 6);
-      J->base[0] = crec_vec_box(J,
-	emitir(IRT(IR_VSHUF, vt), a, IRVSHUF(IRVSHUF_PERMQ, imm)), vt, id);
-    } else {
-      J->base[0] = crec_vec_box(J,
-	crec_simd_shuf1(J, vt, &vi, a, idx, 0), vt, id);
-    }
-  } else {
-    J->base[0] = crec_vec_box(J,
-      crec_simd_shuf1(J, vt, &vi, a, idx, 0), vt, id);
-  }
+  J->base[0] = crec_vec_box(J,
+    crec_simd_constshuffle(J, vt, &vi, a, idx), vt, id);
 }
 
 void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)
@@ -2931,6 +2928,26 @@ void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)
     J->base[0] = crec_vec_box(J,
       emitir(IRT(op, vt), swap ? b : a, swap ? a : b), vt, id);
     return;
+  }
+  {
+    uint32_t i, n = vi.lanes, use = 0;
+    TRef one = 0;
+    if (tref_ref(a) == tref_ref(b)) {
+      one = a;
+      for (i = 0; i < n; i++) idx[i] = (uint8_t)(idx[i] % n);
+    } else {
+      for (i = 0; i < n; i++) use |= idx[i] < n ? 1u : 2u;
+      if (use != 3) {
+	one = use == 1 ? a : b;
+	if (use == 2)
+	  for (i = 0; i < n; i++) idx[i] = (uint8_t)(idx[i] - n);
+      }
+    }
+    if (one) {
+      J->base[0] = crec_vec_box(J,
+	crec_simd_constshuffle(J, vt, &vi, one, idx), vt, id);
+      return;
+    }
   }
   /* Two permutes, each zeroing the lanes taken from the other vector. */
   ra = crec_simd_shuf1(J, vt, &vi, a, idx, 0);

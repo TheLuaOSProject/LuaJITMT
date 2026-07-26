@@ -1058,6 +1058,24 @@ test("shuffle and insert are packed", function()
     for _ = 1, 400 do acc = simd.shuffle2(acc + a, b, 0, 4, 1, 5) end
     return acc
   end)
+  checkloop("shuffle2 one source", {"pshufd"},
+    {"call", "pshufb", "por"}, function()
+      local acc = i4(0)
+      local b = i4(9, 8, 7, 6)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, b, 3, 2, 1, 0)
+      end
+      return acc
+    end)
+  checkloop("shuffle2 second source", {"pshufd"},
+    {"call", "pshufb", "por"}, function()
+      local acc = i4(0)
+      local b = i4(9, 8, 7, 6)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(a, acc + b, 7, 6, 5, 4)
+      end
+      return acc
+    end)
   -- A variable lane index builds the mask with a packed compare instead of
   -- falling back to the interpreter.
   checkloop("insert var lane", {"pcmpeqd", "pandn", "por"}, NOCALL, function()
@@ -1896,6 +1914,29 @@ if simd.features().avx2 then
     check(not body:find("vpshufb ymm", 1, true) and
 	  not body:find("vpor ymm", 1, true),
 	  "a byte interleave must use PUNPCKLBW")
+
+    body = checkymm("i32x8 shuffle2 one source", {"vpermd ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, a, 7, 6, 5, 4, 3, 2, 1, 0)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a one-source shuffle2 must reuse the direct permute lowering")
+
+    body = checkymm("i32x8 shuffle2 equal source", {"vpermd ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	local x = acc + a
+	acc = simd.shuffle2(x, x, 7, 14, 5, 12, 3, 10, 1, 8)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "equal shuffle2 sources must collapse before routing")
 
     local b = i8(11, 12, 13, 14, 15, 16, 17, 18)
     checkymm("i32x8 shuffle2",

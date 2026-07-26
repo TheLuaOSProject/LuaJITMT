@@ -593,6 +593,30 @@ test("ffi.simd insert and shuffle on trace", function()
       end
       return acc
     end, 200)
+    diffop(ti, "shuffle2 one source", function(n)
+      local acc = ct(0)
+      for _ = 1, n do
+	acc = simd.shuffle2(acc + a, b, unpack(rev, 1, ti.lanes))
+      end
+      return acc
+    end, 200)
+    local breverse = {}
+    for i = 1, ti.lanes do breverse[i] = ti.lanes + rev[i] end
+    diffop(ti, "shuffle2 second source", function(n)
+      local acc = ct(0)
+      for _ = 1, n do
+	acc = simd.shuffle2(acc + a, b, unpack(breverse, 1, ti.lanes))
+      end
+      return acc
+    end, 200)
+    diffop(ti, "shuffle2 equal sources", function(n)
+      local acc = ct(0)
+      for _ = 1, n do
+	local x = acc + a
+	acc = simd.shuffle2(x, x, unpack(mix, 1, ti.lanes))
+      end
+      return acc
+    end, 200)
   end
 end)
 
@@ -1429,6 +1453,21 @@ if simd.features().avx2 then
 	local acc = ct(0)
 	for _ = 1, n do
 	  acc = simd.shuffle2(acc + a, b, unpack(unpkswap, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm shuffle2 one source", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(rev, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm shuffle2 equal sources", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  local x = acc + a
+	  acc = simd.shuffle2(x, x, unpack(mix, 1, ti.lanes))
 	end
 	return acc
       end, 80)
