@@ -518,6 +518,8 @@ do
   end
   op_cost("i32x4 add", function() return ia, ib end,
 	  function(x, y) return x + y end)
+  op_cost("i32x4 add lane literal", function() return ia, ib end,
+	  function(x) return x + i4(1, 2, 3, 4) end)
   op_cost("i32x4 mul", function() return i4(1), i4(1) end,
 	  function(x, y) return x * y end)
   op_cost("i32x4 shl const", function() return ia, ib end,
@@ -593,6 +595,15 @@ do
   op_cost("i32x4 select true ones", function() return ia, ib, i4(1) end,
 	  function(x, y, z)
 	    return simd.select(simd.gt(x, y), i4(-1), x + z)
+	  end)
+  op_cost("i32x4 select const mask", function() return ia, ib, i4(1) end,
+	  function(x, y, z)
+	    return simd.select(i4(-1, 0, -1, 0), x + z, y)
+	  end)
+  op_cost("i32x4 select runtime mask",
+	  function() return ia, ib, i4(-1, 0, -1, 0) end,
+	  function(x, y, mask)
+	    return simd.select(mask, x + i4(1), y)
 	  end)
   op_cost("u32x4 select max",
 	  function() return u4(3), u4(5) end,
@@ -906,6 +917,15 @@ if has_ymm then
     function() return i4(3), i4(5) end,
     function() return i8(3), i8(5) end,
     function(x, y) return x + y end)
+  width_cost("int32 add lane literal",
+    function() return i4(3), i4(0) end,
+    function() return i8(3), i8(0) end,
+    function(x)
+      return x + i4(1, 2, 3, 4)
+    end,
+    function(x)
+      return x + i8(1, 2, 3, 4, 5, 6, 7, 8)
+    end)
   width_cost("int32 mul",
     function() return i4(1), i4(1) end,
     function() return i8(1), i8(1) end,
@@ -1013,6 +1033,15 @@ if has_ymm then
     end,
     function(x, y, z)
       return simd.select(simd.gt(x, y), x + z, i8(0))
+    end)
+  width_cost("int32 select const mask",
+    function() return i4(3), i4(5), i4(1) end,
+    function() return i8(3), i8(5), i8(1) end,
+    function(x, y, z)
+      return simd.select(i4(-1, 0, -1, 0), x + z, y)
+    end,
+    function(x, y, z)
+      return simd.select(i8(-1, 0, -1, 0, -1, 0, -1, 0), x + z, y)
     end)
   width_cost("uint32 select max",
     function() return u4(3), u4(5) end,

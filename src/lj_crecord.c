@@ -1035,6 +1035,36 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   CType *d = ctype_raw(cts, id);
   TRef trcd, trid = lj_ir_kint(J, id);
   cTValue *fin;
+  /*
+  ** A multi-lane vector literal made only from scalar constants is itself an
+  ** IR constant. Building it directly avoids a temporary cdata allocation,
+  ** scalar stores and a vector reload, and exposes the lane pattern to later
+  ** SIMD folds such as constant-mask select.
+  */
+  if (ctype_isvector(info) && J->base[2]) {
+    CTVecInfo vi;
+    IRType vt = crec_vec2irt(cts, d);
+    uint64_t vdata[LJ_VEC_MAXSIZE/sizeof(uint64_t)];
+    uint8_t *vbuf = (uint8_t *)vdata;
+    CType *ect;
+    MSize i;
+    if (vt != IRT_NIL && lj_ctype_vecinfo(cts, d, &vi) &&
+	!J->base[vi.lanes+1]) {
+      memset(vbuf, 0, sizeof(vdata));
+      ect = ctype_get(cts, vi.eid);
+      for (i = 1; i <= vi.lanes && J->base[i]; i++) {
+	if (!tref_isnumber(J->base[i]) || !tref_isk(J->base[i])) break;
+	lj_cconv_ct_tv(cts, ect, vbuf + (i-1)*vi.esize,
+		       &rd->argv[i], 0);
+      }
+      if (i > vi.lanes || !J->base[i]) {
+	J->base[0] = crec_vec_box(J, lj_ir_kvec(J, vt, vbuf), vt, id);
+	fin = lj_ctype_meta(cts, id, MM_gc);
+	if (fin) crec_finalizer(J, J->base[0], 0, fin);
+	return;
+      }
+    }
+  }
   /* Use special instruction to box pointer or 32/64 bit integer. */
   if (ctype_isptr(info) || (ctype_isinteger(info) && (sz == 4 || sz == 8))) {
     TRef sp = J->base[1] ? crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]) :
@@ -2492,6 +2522,42 @@ static int crec_simd_iskfill(jit_State *J, IRRef ref, uint32_t size,
   return 1;
 }
 
+static TRef crec_simd_shuf2_direct(jit_State *J, IRType vt,
+				   const CTVecInfo *vi, TRef a, TRef b,
+				   const uint8_t *idx);
+
+/*
+** A constant mask made entirely of zero/all-one destination lanes is a
+** two-source lane blend. Return zero when the ISA cannot encode its pattern
+** directly, leaving the generic bitwise select as the exact fallback.
+*/
+static TRef crec_simd_kselect(jit_State *J, IRType vt,
+			      const CTVecInfo *vi, TRef m, TRef a, TRef b)
+{
+  IRIns *k = IR(tref_ref(m));
+  uint8_t idx[LJ_VEC_MAXSIZE];
+  const uint8_t *p;
+  uint32_t i, j, use = 0;
+  if (k->o != IR_KVEC) return 0;
+  p = ir_kvec(k);
+  for (i = 0; i < vi->lanes; i++) {
+    uint8_t fill = p[i*vi->esize];
+    if (fill != 0 && fill != 0xff) return 0;
+    for (j = 1; j < vi->esize; j++)
+      if (p[i*vi->esize+j] != fill) return 0;
+    if (fill) {
+      idx[i] = (uint8_t)i;
+      use |= 1;
+    } else {
+      idx[i] = (uint8_t)(vi->lanes+i);
+      use |= 2;
+    }
+  }
+  if (use == 1) return a;
+  if (use == 2) return b;
+  return crec_simd_shuf2_direct(J, vt, vi, a, b, idx);
+}
+
 /* Match select arms y/-y and return the positive arm's operand. */
 static TRef crec_simd_pmarm(jit_State *J, IRType vt, uint32_t size,
 			    TRef a, TRef b, int *truthpos)
@@ -2653,6 +2719,11 @@ void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
       J->base[0] = crec_vec_box(J, r, vt, id);
       return;
     }
+  }
+  r = crec_simd_kselect(J, vt, &vi, m, a, b);
+  if (r) {
+    J->base[0] = crec_vec_box(J, r, vt, id);
+    return;
   }
   /*
   ** Constant fill arms reduce the generic three-operation bitwise select.

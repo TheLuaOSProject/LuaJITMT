@@ -402,6 +402,62 @@ test("ffi.simd operations are packed", function()
     return acc
   end)
   local i4 = T.T.i32x4.ct
+  local mlit = checkloop("multi-lane constant vector literal",
+    {"paddd"}, {"call"}, function()
+      local acc = i4(0)
+      for _ = 1, 400 do acc = acc + i4(1, 2, 3, 4) end
+      return acc
+    end)
+  if mlit then
+    check(count(mlit, "paddd") == 1,
+	  "a constant vector literal must fold before the packed add")
+  end
+  if simd.features().sse4_1 then
+    local mk = checkloop("integer constant-mask select",
+      {"pblendw"}, {"pand", "pandn", "por", "call"}, function()
+	local acc, step, other = i4(1), i4(3), i4(17)
+	for _ = 1, 400 do
+	  acc = simd.select(i4(-1, 0, -1, 0), acc + step, other)
+	end
+	return acc
+      end)
+    if mk then
+      check(count(mk, "pblendw") == 1,
+	    "a constant XMM lane mask must use exactly one immediate blend")
+    end
+    local u4 = T.T.u32x4.ct
+    checkloop("integer mask selecting float lanes",
+      {"pblendw"}, {"andps", "andnps", "orps", "call"}, function()
+	local acc, step, other = f4(1), f4(3), f4(17)
+	for _ = 1, 400 do
+	  acc = simd.select(u4(-1, 0, -1, 0), acc + step, other)
+	end
+	return acc
+      end)
+  end
+  local marb = checkloop("constant partial-bit mask stays bitwise",
+    {"pand", "pandn", "por"}, {"pblendw", "call"}, function()
+      local acc, step, other = i4(1), i4(3), i4(17)
+      for _ = 1, 400 do
+	other = other + i4(5)
+	acc = simd.select(i4(0x00ff00ff, -1, 0, 0x55555555),
+			  acc + step, other)
+      end
+      return acc + other
+    end)
+  if marb then
+    check(count(marb, "pand") == 1 and count(marb, "pandn") == 1 and
+	  count(marb, "por") == 1,
+	  "a partial-bit constant mask must retain the exact bitwise select")
+  end
+  checkloop("uniform constant mask select",
+    {"paddd"}, {"pand", "pandn", "por", "pblendw", "call"}, function()
+      local acc, step, other = i4(1), i4(3), i4(17)
+      for _ = 1, 400 do
+	acc = simd.select(i4(-1), acc + step, other)
+      end
+      return acc
+    end)
   local mztrue = checkloop("integer compare-select true zero",
     {"pcmpgtd", "pandn"}, {"pand", "por"}, function()
     local acc = i4(0)
@@ -1792,6 +1848,15 @@ if simd.features().avx2 then
 	  "i32x8 add must target YMM registers: " .. body:gsub("\n", " | "))
     check(body:find("vpsubd ymm", 1, true) ~= nil,
 	  "i32x8 sub must target YMM registers: " .. body:gsub("\n", " | "))
+
+    body = loopcode(function()
+      local acc = i8(0)
+      for _ = 1, 400 do acc = acc + i8(1, 2, 3, 4, 5, 6, 7, 8) end
+      return acc
+    end)
+    check(body:find("vpaddd ymm", 1, true) ~= nil and
+	  not body:find("call", 1, true),
+	  "an eight-lane constant literal must fold into one YMM add")
   end)
 
   test("256-bit byte rotate stays one YMM shuffle", function()
@@ -1841,6 +1906,20 @@ if simd.features().avx2 then
 	  not body:find("vpand", 1, true) and
 	  not body:find("vpor", 1, true),
 	  "an exact YMM comparison-select max must be one VPMAXSD")
+
+    body = checkymm("i32x8 constant-mask select", {"vpblendd ymm"},
+      function()
+	local acc, step, other = i8(1), i8(3), i8(17)
+	for _ = 1, 400 do
+	  acc = simd.select(
+	    i8(-1, 0, -1, -1, 0, -1, 0, -1), acc + step, other)
+	end
+	return acc
+      end)
+    local mk = mnemonics(body)
+    check(count(mk, "pblendd") == 1 and count(mk, "pand") == 0 and
+	  count(mk, "pandn") == 0 and count(mk, "por") == 0,
+	  "a constant YMM lane mask must use exactly one immediate blend")
 
     body = checkymm("i32x8 compare-select false zero",
       {"vpcmpgtd ymm", "vpand ymm"}, function()

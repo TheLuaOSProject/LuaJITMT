@@ -643,7 +643,8 @@ end
 local function rgba_merge_xmm()
   for _ = 1, RGBA_PASSES do
     for i = 0, RGBA_PIXELS-1 do
-      rgba_o4[i] = simd.shuffle2(rgba_a4[i], rgba_b4[i], 0, 5, 2, 7)
+      rgba_o4[i] = simd.select(i4(-1, 0, -1, 0),
+			       rgba_a4[i], rgba_b4[i])
     end
   end
   return sample_sum(rgba_out, RGBA_N)
@@ -652,8 +653,8 @@ end
 local function rgba_merge_ymm()
   for _ = 1, RGBA_PASSES do
     for i = 0, RGBA_PIXELS/2-1 do
-      rgba_o8[i] = simd.shuffle2(rgba_a8[i], rgba_b8[i],
-				 0, 9, 2, 11, 4, 13, 6, 15)
+      rgba_o8[i] = simd.select(i8(-1, 0, -1, 0, -1, 0, -1, 0),
+			       rgba_a8[i], rgba_b8[i])
     end
   end
   return sample_sum(rgba_out, RGBA_N)

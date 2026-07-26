@@ -50,6 +50,64 @@ test("loop-carried accumulator", function()
   end
 end)
 
+test("multi-lane constant vector constructors on trace", function()
+  local function literal(ct, lanes)
+    if lanes == 2 then
+      return ct(1, -2)
+    elseif lanes == 4 then
+      return ct(1, -2, 3, -4)
+    elseif lanes == 8 then
+      return ct(1, -2, 3, -4, 5, -6, 7, -8)
+    elseif lanes == 16 then
+      return ct(1, -2, 3, -4, 5, -6, 7, -8,
+		9, -10, 11, -12, 13, -14, 15, -16)
+    else
+      return ct(1, -2, 3, -4, 5, -6, 7, -8,
+		9, -10, 11, -12, 13, -14, 15, -16,
+		17, -18, 19, -20, 21, -22, 23, -24,
+		25, -26, 27, -28, 29, -30, 31, -32)
+    end
+  end
+  local tabs = {T.T}
+  if simd.features().avx2 then tabs[#tabs+1] = T.W end
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      local ct, lanes = ti.ct, ti.lanes
+      diff(ti.name .. " multi-lane constant constructor", function(n)
+	local acc = ct(0)
+	for _ = 1, n do acc = acc + literal(ct, lanes) end
+	return acc
+      end, 200)
+    end
+  end
+
+  local i4, u4, f4 = T.T.i32x4.ct, T.T.u32x4.ct, T.T.float4.ct
+  diff("partial constant vector constructor", function(n)
+    local acc = i4(0)
+    for _ = 1, n do acc = acc + i4(7, -3) end
+    return acc
+  end, 200)
+  diff("ffi.new multi-lane constant vector", function(n)
+    local acc = i4(0)
+    for _ = 1, n do acc = acc + ffi.new(i4, 1, 2, 3, 4) end
+    return acc
+  end, 200)
+  diff("constant byte constructor conversion", function(n)
+    local ct = T.T.u8x16.ct
+    local r
+    for _ = 1, n do
+      r = ct(300, -1, 258, -3, 260, -5, 262, -7,
+	     264, -9, 266, -11, 268, -13, 270, -15)
+    end
+    return r
+  end, 200)
+  diff("constant float constructor preserves zero bits", function(n)
+    local r
+    for _ = 1, n do r = f4(-0.0, 0.0, 1.25, -2.5) end
+    return simd.bitcast(u4, r)
+  end, 200)
+end)
+
 test("packed mulhi emulations", function()
   for _, name in ipairs({
     "i8x16", "u8x16", "i32x4", "u32x4", "i64x2", "u64x2",
@@ -502,6 +560,52 @@ test("ffi.simd comparisons and masks on trace", function()
 	end, 300)
       end
     end
+  end
+end)
+
+test("constant lane-mask selects on trace", function()
+  local f4, u4 = T.T.float4.ct, T.T.u32x4.ct
+  diff("integer constant mask selecting float lanes", function(n)
+    local acc, step, other = f4(1, 2, 3, 4), f4(0.25), f4(-7)
+    for _ = 1, n do
+      acc = simd.select(u4(-1, 0, -1, 0), acc + step, other)
+    end
+    return simd.bitcast(u4, acc)
+  end, 300)
+
+  diff("constant partial-bit mask remains exact", function(n)
+    local acc = u4(0x10203040, 0x50607080, 0x11223344, 0x55667788)
+    local other = u4(0x89abcdef, 0x76543210, 0xa5a5a5a5, 0x5a5a5a5a)
+    for _ = 1, n do
+      acc = simd.select(
+	u4(0x00ff00ff, 0xff00ff00, 0x55555555, 0xaaaaaaaa),
+	acc + u4(0x01010101), other)
+    end
+    return acc
+  end, 300)
+
+  local b16 = T.T.i8x16.ct
+  diff("constant byte-lane mask", function(n)
+    local acc, step, other = b16(1), b16(3), b16(17)
+    for _ = 1, n do
+      acc = simd.select(
+	b16(-1, -1, 0, 0, -1, -1, 0, 0,
+	    -1, -1, 0, 0, -1, -1, 0, 0),
+	acc + step, other)
+    end
+    return acc
+  end, 300)
+
+  if simd.features().avx2 then
+    local i8 = T.W.i32x8.ct
+    diff("constant YMM lane mask", function(n)
+      local acc, step, other = i8(1), i8(3), i8(17)
+      for _ = 1, n do
+	acc = simd.select(
+	  i8(-1, 0, -1, -1, 0, -1, 0, -1), acc + step, other)
+      end
+      return acc
+    end, 300)
   end
 end)
 
