@@ -303,3 +303,16 @@ saxpy and the dot product reach ~4x, which is the ceiling for 4 lanes. Clamp
 wins much more because the scalar version is branchy and the vector version is
 branchless. Horizontal max shows no gain: both versions stream 256 KB per pass
 and are memory bound, not ALU bound.
+
+`simd.fma` is worth measuring separately, because whether it helps depends
+entirely on whether the loop is arithmetic bound:
+
+```
+degree-4 Horner chain, no loads   mul+add 10.6 ms   fma  6.1 ms   1.75x
+degree-5 Horner over an array     mul+add 54.2 ms   fma 52.3 ms   1.03x
+```
+
+The second loop is dominated by the array load and the result boxing, not by
+the multiply-adds, so halving the arithmetic buys almost nothing. Use
+`simd.fma` for the single rounding it guarantees; treat the throughput as a
+bonus that only shows up in ALU-bound code.
