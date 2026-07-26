@@ -196,6 +196,14 @@ the vector register file and requires at least one RIP/base-addressed count
 operand on `VPSLLV`. The existing randomized signed, unsigned, narrow, qword,
 XMM, and YMM shift tests continue to validate every result.
 
+Variable byte left shift has exact XMM and YMM shape checks. Each loop must
+contain one saturated byte add and one byte shuffle, exactly two word
+multiplies, and no `VPSLLVD`; the surrounding masks and merge must remain
+packed too. The evolving count vector crosses 7, 8, 127, 128, and negative
+signed byte encodings during execution. Randomized interpreter/JIT
+differential tests independently cover valid and out-of-range counts for
+both signed and unsigned byte vectors.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

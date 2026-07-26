@@ -700,6 +700,19 @@ test("per-lane shift counts use the AVX2 variable shifts", function()
   local av8 = i8(-128, -99, -17, -1, 0, 1, 7, 15,
 		  31, 63, 99, 127, -64, -7, 3, 42)
   local cv8 = i8(0, 1, 7, 8, 9, -1, 3, 6, 2, 5, 15, 4, 1, 7, 8, 0)
+  local ml8 = checkloop("i8x16 shl vec lookup",
+    {"paddusb", "pshufb", "pmullw", "pand", "por"}, NOCALL,
+    function()
+      local acc, c = i8(0), cv8
+      for _ = 1, 400 do
+	acc = simd.shl(acc + av8, c)
+	c = c + i8(1)
+      end
+      return acc + c
+    end)
+  check(count(ml8, "psllvd") == 0 and count(ml8, "pmullw") == 2 and
+	count(ml8, "paddusb") == 1 and count(ml8, "pshufb") == 1,
+	"i8x16 shl must use one lookup and two word multiplies")
   local m8 = checkloop("i8x16 shr vec", {"psrlvd", "pand"}, NOCALL,
     function()
       local acc = i8(0)
@@ -1135,6 +1148,19 @@ if simd.features().avx2 then
       end)
 
     local bc = sb32(0, 1, 7, 8, 9, -1, 3, 6)
+    local blbody = checkymm("i8x32 per-lane shl lookup",
+      {"vpaddusb ymm", "vpshufb ymm", "vpmullw ymm"}, function()
+	local acc, c = sb32(1), bc
+	for _ = 1, 400 do
+	  acc = simd.shl(acc + sb32(3), c)
+	  c = c + sb32(1)
+	end
+	return acc + c
+      end)
+    local _, nbl = blbody:gsub("vpmullw ymm", "")
+    check(nbl == 2 and not blbody:find("vpsllvd", 1, true),
+	  "i8x32 shl must use two YMM word multiplies and no dword shift")
+
     local bbody = checkymm("i8x32 per-lane sar",
       {"vpsravd ymm", "vpsrad ymm", "vpand ymm"}, function()
 	local acc = sb32(-119)

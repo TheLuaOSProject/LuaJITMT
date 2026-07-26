@@ -64,6 +64,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M41 | Expand byte multiply in IR so invariant shifts CSE; use binary constant memory operands only under vector-register pressure | done |
 | M42 | Fuse one-use vector loads into the compatible FMA form while retaining accumulator coalescing and alias safety | done |
 | M43 | Fold AVX2 per-lane count loads into shifts only under register pressure, retaining faster prefetched loads otherwise | done |
+| M44 | Lower variable byte left shifts through a packed power-of-two lookup and IR-visible byte multiplication | done |
 
 ## Commands that pass
 
@@ -551,3 +552,13 @@ accumulators, using memory for the final count operands instead removes spill
 traffic and improves about 8% (7.33 to 6.75 ms). The three-kernel dump falls
 from 1612 to 1564 instructions and from 59 to 46 spill reloads, while twelve-
 and fourteen-chain timings remain flat.
+
+Variable byte left shift no longer pays for four dword variable-shift
+decompositions. A saturated byte add maps valid counts into a repeated
+power-of-two `PSHUFB` table and maps every out-of-range count to the shuffle's
+zeroing controls; the result then uses the IR-visible modulo-byte multiply.
+Dependent latency improves from about 2.17 to 1.61 ns/vector. Median
+streaming throughput improves from 1.88 to 1.00 ns/vector for XMM and from
+2.48 to 1.14 ns/vector for YMM. The four representative traces shrink from
+634 to 558 instructions, with all 16 `VPSLLVD` operations and 36 dword
+extraction shifts removed.

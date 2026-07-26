@@ -1059,3 +1059,37 @@ take a memory source. Total instructions fall from 1612 to 1564, standalone
 vector loads from 146 to 98, and spill reloads from 59 to 46. This is why
 memory-operand fusion is a cost decision rather than a blanket code-size
 rule.
+
+## D38. Turn variable byte left shifts into lookup multiplication
+
+AVX2 has no variable shift per byte. The general lowering from D25 split each
+dword into four bytes and issued four `VPSLLVD` instructions, along with the
+extraction masks and recombination needed around them. A left shift has a
+cheaper byte-specific identity:
+
+```
+x << n = x * 2^n (mod 256), for n < 8
+x << n = 0,                 otherwise
+```
+
+The recorder builds `2^n` with one `VPSHUFB` from a repeated eight-entry
+table, then feeds that factor into the IR-visible byte multiply from D35. The
+shuffle control is `unsigned_saturating_add(n, 0x78)`: counts zero through
+seven become indices `0x78` through `0x7f`, selecting table slots 8 through
+15 in each 128-bit half. Every larger unsigned byte becomes at least `0x80`,
+so `VPSHUFB`'s control-bit rule returns zero. Negative signed count lanes have
+the same byte encodings as large unsigned counts and therefore also return
+zero, matching the interpreter without a compare or guard.
+
+This remains an ordinary IR graph rather than an opaque backend sequence.
+The optimiser can share constants and shifted byte-multiply inputs, and the
+same lane-local lowering naturally covers XMM and YMM. Right and arithmetic
+byte shifts retain the general dword decomposition because multiplication
+does not express their bit movement.
+
+On the measured host, dependent byte-left-shift latency falls from about
+2.17 to 1.61 ns per vector, roughly 26%. Median repeated streaming runs
+improve from 1.88 to 1.00 ns per XMM vector and from 2.48 to 1.14 ns per YMM
+vector, roughly 47% and 54%. Across its XMM/YMM root and loop traces, total
+instructions fall from 634 to 558, all 16 `VPSLLVD` instructions and all 36
+dword extraction shifts disappear.

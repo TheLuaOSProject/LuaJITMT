@@ -1467,6 +1467,21 @@ static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
 
 static TRef crec_simd_k16(jit_State *J, IRType vt, uint16_t v);
 
+/* Packed byte multiplication through the two word products x86 provides. */
+static TRef crec_simd_mul_i8(jit_State *J, IRType vt, TRef a, TRef b)
+{
+  IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
+  TRef even, odd;
+  even = emitir(IRT(IR_VMUL, wvt), a, b);
+  even = emitir(IRT(IR_VAND, wvt), even,
+		crec_simd_k16(J, wvt, 0x00ff));
+  odd = emitir(IRT(IR_VMUL, wvt),
+	       emitir(IRT(IR_VSHR, wvt), a, lj_ir_kint(J, 8)),
+	       emitir(IRT(IR_VSHR, wvt), b, lj_ir_kint(J, 8)));
+  return emitir(IRT(IR_VOR, vt), even,
+		emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8)));
+}
+
 /* Record arithmetic on vector cdata. Returns 0 if this is not vector math. */
 static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
 			   RecordFFData *rd)
@@ -1552,16 +1567,7 @@ static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
     return 0;
   }
   if (op == IR_VMUL && !veck_isfp(vi.kind) && vi.esize == 1) {
-    IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
-    TRef even, odd;
-    even = emitir(IRT(IR_VMUL, wvt), tra, trb);
-    even = emitir(IRT(IR_VAND, wvt), even,
-		  crec_simd_k16(J, wvt, 0x00ff));
-    odd = emitir(IRT(IR_VMUL, wvt),
-		 emitir(IRT(IR_VSHR, wvt), tra, lj_ir_kint(J, 8)),
-		 emitir(IRT(IR_VSHR, wvt), trb, lj_ir_kint(J, 8)));
-    tra = emitir(IRT(IR_VOR, vt), even,
-		 emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8)));
+    tra = crec_simd_mul_i8(J, vt, tra, trb);
     goto box;
   }
   tra = emitir(IRT(op, vt), tra, trb);
@@ -1751,6 +1757,27 @@ static TRef crec_simd_shiftv_narrow(jit_State *J, IRType vt, uint32_t esize,
     }
   }
   return r;
+}
+
+/*
+** A variable byte left shift is multiplication modulo 256 by 2^count.
+** PSHUFB obtains that multiplier from an eight-entry table. Saturating 0x78+n
+** maps valid counts 0..7 to table slots 8..15 and sets the control byte's high
+** bit for every larger unsigned count, which makes PSHUFB return zero.
+*/
+static TRef crec_simd_shiftv_i8_left(jit_State *J, IRType vt, TRef a, TRef nv)
+{
+  uint8_t table[LJ_VEC_MAXSIZE];
+  uint32_t i;
+  TRef ctrl, factor;
+  for (i = 0; i < sizeof(table); i++) {
+    uint32_t n = i & 15;
+    table[i] = (uint8_t)(n >= 8 ? 1u << (n-8) : 0);
+  }
+  ctrl = emitir(IRT(IR_VADDSU, vt), nv,
+		crec_simd_k16(J, vt, 0x7878));
+  factor = emitir(IRT(IR_VSHUFB, vt), lj_ir_kvec(J, vt, table), ctrl);
+  return crec_simd_mul_i8(J, vt, a, factor);
 }
 
 /*
@@ -1991,6 +2018,11 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
     crec_simd_need(J, (J->flags & JIT_F_AVX2) != 0 &&
 		      !veck_isfp(nvi.kind) && nvi.esize == vi.esize &&
 		      nvi.lanes == vi.lanes);
+    if (vi.esize == 1 && op == VSH_SHL) {
+      r = crec_simd_shiftv_i8_left(J, vt, a, nv);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
     if (vi.esize < 4) {
       r = crec_simd_shiftv_narrow(J, vt, vi.esize, a, nv, vop);
       J->base[0] = crec_vec_box(J, r, vt, id);
