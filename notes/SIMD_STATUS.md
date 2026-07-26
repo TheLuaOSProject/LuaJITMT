@@ -82,6 +82,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M59 | Collapse unsigned-word horizontal min/max through `PHMINPOSUW` | done |
 | M60 | Map signed-word horizontal min/max to biased `PHMINPOSUW` reductions | done |
 | M61 | Widen byte extrema into word pairs and finish with `PHMINPOSUW` | done |
+| M62 | Fuse 16-bit `hsum(a*b)` into `PMADDWD` pair-dot reductions | done |
 
 ## Commands that pass
 
@@ -698,3 +699,11 @@ forms reuse the `0x80`/`0x7f` and `0xff` ordering transforms. XMM dependency
 improves 6--26% and eight-chain throughput 20--31%; YMM dependency improves
 18--25% and throughput 7--18%. A 16 MiB INT8 activation-range benchmark
 improves from about 2.3 to 1.8 ms for XMM and 2.5 to 2.0 ms for YMM.
+
+Word `hsum(a*b)` now bypasses the materialised low-word product and uses one
+`PMADDWD` to form full dword pair sums. Final word narrowing makes this exact
+for signed and unsigned modulo-16-bit semantics. The XMM/YMM reduction falls
+from 7/9 to 5/7 vector instructions. Dependent cost improves about 11%/8% and
+eight-chain throughput about 14%/12%. A 16 MiB PCM16 16-tap polyphase
+decimator improves from about 2.8 to 2.5 ms at XMM width and 1.9 to 1.7 ms at
+YMM width, reaching roughly 5.5x/7.8x scalar throughput.

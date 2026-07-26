@@ -1588,3 +1588,38 @@ activations and emits min/max metadata for every 32-value block, as used by
 quantization calibration and saturation diagnostics. Compared with the prior
 SIMD reduction it improves about 22% at XMM width and 20% at YMM width,
 reaching roughly 6.9x/6.2x the fully unrolled scalar path.
+
+## D56. Fuse word multiply plus horizontal sum into pair dots
+
+The ordinary `i16/u16` multiply keeps each product's low word, after which
+`hsum` reduces those words modulo 65536. When that product has no semantic use
+outside the reduction, the same value can be computed with signed
+`PMADDWD`: it forms full products and adds adjacent pairs into dwords. Adding
+the dword partials and narrowing only once at the end has the same low word as
+narrowing each product first.
+
+Unsigned inputs are exact for the same modular reason. Reinterpreting an
+unsigned word as signed subtracts either zero or 65536. Expanding the signed
+product changes the unsigned product only by multiples of 65536, which cannot
+affect the final word. The `-32768 * -32768` pair-overflow case also wraps in
+the dword domain and retains the same low word.
+
+The recorder recognises `IR_VMUL` directly feeding a word `hsum` and emits a
+dword-result `VPMADW` over the multiply's original operands. XMM then needs
+two dword shuffle/add stages instead of three word stages; YMM needs the same
+two local stages plus its cross-half combine. The complete multiply/reduction
+therefore falls from seven to five vector instructions for XMM and from nine
+to seven for YMM.
+
+The unused original multiply remains in immutable IR until backwards DCE.
+The x86 alias scan now ignores any pure instruction that DCE will discard, so
+that dead node does not falsely count its array operand as a second run-time
+use. AVX can consequently retain the `VPMADDWD` memory-source form, while
+legacy SSE keeps its alignment-safe standalone `MOVUPS`.
+
+Dependent signed/unsigned dots improve about 11% at XMM width and 8% at YMM
+width; eight independent chains improve about 14% and 12%. The production
+suite adds a 16 MiB PCM16 16-tap polyphase decimator whose bounded samples
+make every dot mathematically exact without overflow. It improves from about
+2.8 to 2.5 ms for XMM and 1.9 to 1.7 ms for YMM, reaching roughly 5.5x/7.8x
+the explicitly unrolled scalar implementation.

@@ -230,6 +230,15 @@ requires one half exchange and another `VPMINUW` before
 wraparound. A 16 MiB signed INT8 activation benchmark validates min/max
 metadata for 524,288 independent 32-value blocks over three passes.
 
+Word-dot codegen covers signed and unsigned `hsum(a*b)` at XMM and YMM widths.
+It requires exactly one `PMADDWD`, dword shuffle/add reductions, and no
+materialised `PMULLW`; XMM/YMM array cases additionally prove that AVX folds
+one source load into the pair-dot instruction. Legacy SSE must retain the
+separate unaligned load. Differential vectors include high unsigned words,
+signed extremes, and the `-32768 * -32768` dword-overflow case. The 16 MiB
+PCM16 decimator checks a fully unrolled scalar 16-tap dot against two XMM
+8-tap dots and one YMM 16-tap dot over four passes.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

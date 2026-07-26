@@ -1148,6 +1148,49 @@ test("horizontal reduction uses shuffles, not lane loads", function()
 	    name .. " hsum: byte add is only the loop's vector update")
     end
   end
+  for _, spec in ipairs({
+    {"i16x8", T.T.i16x8.ct,
+      {-32768, 32767, -12345, 23456, -30000, 11111, -22222, 9999}},
+    {"u16x8", T.T.u16x8.ct,
+      {65535, 32768, 12345, 54321, 60000, 11111, 44444, 9999}},
+  }) do
+    local name, ct = spec[1], spec[2]
+    local a = ct(unpack(spec[3], 1, 8))
+    local b = ct(3, 5, 7, 11, 13, 17, 19, 23)
+    local wm = checkloop(name .. " hsum product",
+      {"pmaddwd", "paddd", "psrldq"}, NOCALL, function()
+	local s, v = 0, ct(0)
+	for _ = 1, 400 do
+	  v = v + a
+	  s = s + tonumber(simd.hsum(v * b))
+	end
+	return s
+      end)
+    if wm then
+      check(count(wm, "pmaddwd") == 1,
+	    name .. " hsum product: exactly one packed pair dot")
+      check(count(wm, "paddd") == 2 and count(wm, "pmullw") == 0,
+	    name .. " hsum product: word multiply/reduction tree must be gone")
+    end
+  end
+  local dotct = T.T.i16x8.ct
+  local dotarr = ffi.new(ffi.typeof("$[?]", dotct), 512)
+  local dotk = dotct(3, -5, 7, -11, 13, -17, 19, -23)
+  local dotbody = loopcode(function()
+    local s = 0
+    for i = 0, 399 do s = s + tonumber(simd.hsum(dotarr[i] * dotk)) end
+    return s
+  end)
+  if simd.features().avx then
+    check(dotbody:match("vpmaddwd xmm[^\n]*%[") ~= nil,
+      "AVX word dot must fuse one array operand: " ..
+      dotbody:gsub("\n", " | "))
+  else
+    check(dotbody:match("pmaddwd xmm[^\n]*%[") == nil and
+	  dotbody:find("movups", 1, true),
+      "legacy word dot must retain its separate unaligned load: " ..
+      dotbody:gsub("\n", " | "))
+  end
 end)
 
 test("unsigned word extrema use horizontal min-position", function()
@@ -2360,6 +2403,46 @@ if simd.features().avx2 then
       end)
     check(count(mnemonics(body), "paddb") == 1,
 	  "i8x32 hsum must reduce qword partial sums, not every byte lane")
+
+    for _, spec in ipairs({
+      {"i16x16", T.W.i16x16.ct,
+	{-32768,32767,-12345,23456,-30000,11111,-22222,9999,
+	 -7777,6666,-5555,4444,-3333,2222,-1111,123}},
+      {"u16x16", T.W.u16x16.ct,
+	{65535,32768,12345,54321,60000,11111,44444,9999,
+	 7777,6666,5555,4444,3333,2222,1111,123}},
+    }) do
+      local name, ct = spec[1], spec[2]
+      local a = ct(unpack(spec[3], 1, 16))
+      local k = ct(3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59)
+      body = checkymm(name .. " hsum product",
+	{"vpmaddwd ymm", "vperm2i128 ymm", "vpaddd ymm",
+	 "vpsrldq ymm"}, function()
+	  local v, sum = ct(0), 0
+	  for _ = 1, 400 do
+	    v = v + a
+	    sum = sum + tonumber(simd.hsum(v * k))
+	  end
+	  return v, sum
+	end)
+      local dm = mnemonics(body)
+      check(count(dm, "pmaddwd") == 1 and count(dm, "paddd") == 3 and
+	    count(dm, "pmullw") == 0,
+	    name .. " hsum product must use one pair dot and dword reduction")
+    end
+
+    local dotct = T.W.i16x16.ct
+    local dotarr = ffi.new(ffi.typeof("$[?]", dotct), 512)
+    local dotk = dotct(3,-5,7,-11,13,-17,19,-23,
+		       29,-31,37,-41,43,-47,53,-59)
+    body = loopcode(function()
+      local s = 0
+      for i = 0, 399 do s = s + tonumber(simd.hsum(dotarr[i] * dotk)) end
+      return s
+    end)
+    check(body:match("vpmaddwd ymm[^\n]*%[") ~= nil,
+	  "YMM word dot must fuse one array operand: " ..
+	  body:gsub("\n", " | "))
 
     local w16 = T.W.u16x16.ct
     local wv = w16(1, 3, 5, 7, 11, 13, 17, 19,

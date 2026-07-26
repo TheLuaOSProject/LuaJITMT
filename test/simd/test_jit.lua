@@ -560,6 +560,26 @@ test("ffi.simd reductions on trace", function()
 	return tostring(last)
       end, 200)
     end
+    if ti.bits == 16 then
+      local av, bv
+      if ti.signed then
+	av = {-32768, -32768, 32767, -1, 12345, -23456, 30000, -30000}
+	bv = {-32768, -32768, -32768, 32767, -23456, 12345, -30000, 30000}
+      else
+	av = {65535, 32768, 32767, 1, 54321, 23456, 60000, 30000}
+	bv = {32768, 65535, 32769, 65535, 23456, 54321, 30000, 60000}
+      end
+      local x = ct(unpack(av, 1, ti.lanes))
+      local y = ct(unpack(bv, 1, ti.lanes))
+      diffop(ti, "hsum product", function(n)
+	local product, last
+	for i = 1, n do
+	  product = (x + ct(i % 7)) * y
+	  last = simd.hsum(product)
+	end
+	return product, tostring(last)
+      end, 200)
+    end
   end
 end)
 
@@ -1467,6 +1487,28 @@ if simd.features().avx2 then
 	end
 	return sum, lo, hi
       end, 120)
+      if ti.bits == 16 then
+	local av, bv = {}, {}
+	for i = 1, ti.lanes do
+	  if ti.signed then
+	    av[i] = i % 3 == 0 and -32768 or i % 2 == 0 and 32767 or -30000+i
+	    bv[i] = i % 4 == 0 and -32768 or i % 2 == 0 and -23456 or 30000-i
+	  else
+	    av[i] = i % 3 == 0 and 65535 or i % 2 == 0 and 32768 or 60000-i
+	    bv[i] = i % 4 == 0 and 65535 or i % 2 == 0 and 32769 or 50000+i
+	  end
+	end
+	local x = ct(unpack(av, 1, ti.lanes))
+	local y = ct(unpack(bv, 1, ti.lanes))
+	diff(ti.name .. " ymm hsum product", function(n)
+	  local product, last
+	  for i = 1, n do
+	    product = (x + ct(i % 7)) * y
+	    last = simd.hsum(product)
+	  end
+	  return product, last
+	end, 120)
+      end
     end
   end)
 

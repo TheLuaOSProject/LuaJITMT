@@ -873,6 +873,81 @@ real_benches.pcm = {
 }
 end
 
+---------------------------------------------- PCM16 16-tap decimation --
+
+do
+-- A fixed-point 16:1 polyphase decimator over 16 MiB of PCM16 input. The
+-- deliberately bounded samples and coefficients keep every full dot product
+-- in int16 range, so scalar and SIMD paths compute the same mathematical
+-- result without relying on overflow. This is also a sustained hsum(a*b)
+-- workload rather than a single reduction after a long accumulator loop.
+local PCM_FIR_SAMPLES = 8 * 1024 * 1024
+local PCM_FIR_BLOCKS = PCM_FIR_SAMPLES / 16
+local PCM_FIR_PASSES = 4
+local pcm_fir_in = ffi.new("int16_t[?]", PCM_FIR_SAMPLES)
+local pcm_fir_out_s = ffi.new("int16_t[?]", PCM_FIR_BLOCKS)
+local pcm_fir_out_x = ffi.new("int16_t[?]", PCM_FIR_BLOCKS)
+local pcm_fir_out_y = has_ymm and ffi.new("int16_t[?]", PCM_FIR_BLOCKS)
+local pcm_fir_coeff = {
+  -3, -2, -1, 0, 1, 2, 3, 4, 4, 3, 2, 1, 0, -1, -2, -3,
+}
+for i = 0, PCM_FIR_SAMPLES-1 do
+  pcm_fir_in[i] = (i*29 + math.floor(i/16)*7) % 127 - 63
+end
+local pcm_fir8 = ffi.typeof("i16x8")
+local pcm_fir16 = has_ymm and ffi.typeof("i16x16")
+local pcm_fir_v8 = ffi.cast(ffi.typeof("$ *", pcm_fir8), pcm_fir_in)
+local pcm_fir_v16 = has_ymm and
+		    ffi.cast(ffi.typeof("$ *", pcm_fir16), pcm_fir_in)
+local pcm_fir_c0 = pcm_fir8(unpack(pcm_fir_coeff, 1, 8))
+local pcm_fir_c1 = pcm_fir8(unpack(pcm_fir_coeff, 9, 16))
+local pcm_fir_c16 = has_ymm and pcm_fir16(unpack(pcm_fir_coeff, 1, 16))
+
+local function pcm_fir_scalar()
+  local src, out, c = pcm_fir_in, pcm_fir_out_s, pcm_fir_coeff
+  for _ = 1, PCM_FIR_PASSES do
+    for i = 0, PCM_FIR_BLOCKS-1 do
+      local p = i*16
+      out[i] =
+	src[p]   *c[1]  + src[p+1] *c[2]  + src[p+2] *c[3]  + src[p+3] *c[4] +
+	src[p+4] *c[5]  + src[p+5] *c[6]  + src[p+6] *c[7]  + src[p+7] *c[8] +
+	src[p+8] *c[9]  + src[p+9] *c[10] + src[p+10]*c[11] + src[p+11]*c[12] +
+	src[p+12]*c[13] + src[p+13]*c[14] + src[p+14]*c[15] + src[p+15]*c[16]
+    end
+  end
+  return sample_sum(out, PCM_FIR_BLOCKS)
+end
+
+local function pcm_fir_xmm()
+  local src, out = pcm_fir_v8, pcm_fir_out_x
+  local c0, c1 = pcm_fir_c0, pcm_fir_c1
+  for _ = 1, PCM_FIR_PASSES do
+    for i = 0, PCM_FIR_BLOCKS-1 do
+      local p = i*2
+      out[i] = tonumber(simd.hsum(src[p]*c0)) +
+	       tonumber(simd.hsum(src[p+1]*c1))
+    end
+  end
+  return sample_sum(out, PCM_FIR_BLOCKS)
+end
+
+local function pcm_fir_ymm()
+  local src, out, c = pcm_fir_v16, pcm_fir_out_y, pcm_fir_c16
+  for _ = 1, PCM_FIR_PASSES do
+    for i = 0, PCM_FIR_BLOCKS-1 do
+      out[i] = simd.hsum(src[i]*c)
+    end
+  end
+  return sample_sum(out, PCM_FIR_BLOCKS)
+end
+
+real_benches.pcmfir = {
+  scalar = pcm_fir_scalar, xmm = pcm_fir_xmm, ymm = pcm_fir_ymm,
+  name = "PCM16 16-tap decimator",
+  seconds = PCM_FIR_SAMPLES/48000,
+}
+end
+
 -------------------------------------------------- INT8 activation range --
 
 do
@@ -1593,9 +1668,10 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges, %.0fs PCM envelope, %.2fs FIR audio, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.checksum.mib, real_benches.activations.mib,
-  real_benches.pcm.seconds, real_benches.audio.seconds,
+  real_benches.pcm.seconds, real_benches.pcmfir.seconds,
+  real_benches.audio.seconds,
   real_benches.particles.count,
   real_benches.chacha.blocks))
 
@@ -1620,6 +1696,7 @@ run_real(real_benches.rgba)
 run_real(real_benches.checksum)
 run_real(real_benches.depth)
 run_real(real_benches.pcm)
+run_real(real_benches.pcmfir)
 run_real(real_benches.activations)
 run_real(real_benches.blur)
 run_real(real_benches.audio)

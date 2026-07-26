@@ -3207,6 +3207,18 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     r = emitir(IRT(IR_VSADU8, qvt), a, lj_ir_kvec(J, vt, zbuf));
     rvt = qvt;
     n = sz >> 3;
+  } else if (rd->data == VRD_SUM && vi.esize == 2 &&
+	     IR(tref_ref(a))->o == IR_VMUL) {
+    /*
+    ** Fuse hsum(a*b) into PMADDWD pair sums. Signed interpretation is also
+    ** valid for unsigned inputs: every discrepancy is a multiple of 65536
+    ** and disappears when the extracted result is narrowed back to a word.
+    */
+    IRIns *mul = IR(tref_ref(a));
+    IRType dvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+    r = emitir(IRT(IR_VPMADW, dvt), mul->op1, mul->op2);
+    rvt = dvt;
+    n = sz >> 2;
   } else if ((rd->data == VRD_MIN || rd->data == VRD_MAX) &&
 	     vi.esize == 1 && sse41) {
     IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));

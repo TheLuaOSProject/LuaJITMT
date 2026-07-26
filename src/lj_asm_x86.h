@@ -154,6 +154,13 @@ static int noconflict(ASMState *as, IRRef ref, IROp conflict, int check)
     */
     if (ir[i].o == IR_XSTORE && ir[i].r == RID_SINK)
       continue;
+    /* A pure instruction with no allocated result is removed by the
+    ** backwards DCE pass below. Its operands are therefore not real
+    ** run-time uses and must not block an otherwise safe memory operand.
+    */
+    if (!ra_used(&ir[i]) && !ir_sideeff(&ir[i]) &&
+	(as->flags & JIT_F_OPT_DCE))
+      continue;
     if (ir[i].o == conflict)
       return 0;  /* Conflict found. */
     else if ((check & 1) && (ir[i].o == IR_NEWREF || ir[i].o == IR_CALLS))
