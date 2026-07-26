@@ -2845,7 +2845,7 @@ if simd.features().avx2 then
 	  "u16x16 hmin must collapse its low half with VPHMINPOSUW")
 
     body = checkymm("u16x16 hmax",
-      {"vpxor ymm", "vperm2i128 ymm", "vpminuw ymm",
+      {"vpxor ymm", "vperm2i128 ymm", "vpmaxuw ymm",
        "vphminposuw xmm"},
       function()
 	local v, hi = w16(0), 0
@@ -2855,16 +2855,17 @@ if simd.features().avx2 then
 	end
 	return v, hi
       end)
-    check(not body:find("vpmaxuw ymm", 1, true) and
+    check(not body:find("vpminuw ymm", 1, true) and
 	  not body:find("vpsrldq ymm", 1, true),
-	  "u16x16 hmax must use the complemented horizontal minimum")
+	  "u16x16 hmax must collapse halves before complementing")
 
     local sw16 = T.W.i16x16.ct
     local swv = sw16(-1, 3, -5, 7, -11, 13, -17, 19,
 		     -23, 29, -31, 37, -41, 43, -47, 53)
     for _, op in ipairs({"hmin", "hmax"}) do
       body = checkymm("i16x16 " .. op,
-	{"vpxor ymm", "vperm2i128 ymm", "vpminuw ymm",
+	{"vpxor ymm", "vperm2i128 ymm",
+	 op == "hmin" and "vpminsw ymm" or "vpmaxsw ymm",
 	 "vphminposuw xmm"},
 	function()
 	  local v, result = sw16(0), 0
@@ -2874,10 +2875,9 @@ if simd.features().avx2 then
 	  end
 	  return v, result
 	end)
-      check(not body:find("vpminsw ymm", 1, true) and
-	    not body:find("vpmaxsw ymm", 1, true) and
+      check(not body:find("vpminuw ymm", 1, true) and
 	    not body:find("vpsrldq ymm", 1, true),
-	    "i16x16 " .. op .. " must use the biased horizontal minimum")
+	    "i16x16 " .. op .. " must collapse signed halves before biasing")
     end
 
     for _, spec in ipairs({
@@ -2887,8 +2887,10 @@ if simd.features().avx2 then
       local name, ct, signed = spec[1], spec[2], spec[3]
       local add = ct(1)
       for _, op in ipairs({"hmin", "hmax"}) do
+	local collapse = (signed and "vpminsb" or "vpminub")
+	if op == "hmax" then collapse = signed and "vpmaxsb" or "vpmaxub" end
 	local want = {"vpunpcklbw ymm", "vpunpckhbw ymm",
-		      "vpminuw ymm", "vperm2i128 ymm",
+		      "vpminuw ymm", "vperm2i128 ymm", collapse .. " ymm",
 		      "vphminposuw xmm"}
 	if signed or op == "hmax" then want[#want+1] = "vpxor ymm" end
 	body = checkymm(name .. " " .. op, want, function()
@@ -2899,13 +2901,31 @@ if simd.features().avx2 then
 	  end
 	  return v, result
 	end)
-	check(not body:find("vpminub ymm", 1, true) and
-	      not body:find("vpmaxub ymm", 1, true) and
-	      not body:find("vpminsb ymm", 1, true) and
-	      not body:find("vpmaxsb ymm", 1, true) and
-	      not body:find("vpsrldq ymm", 1, true),
-	      name .. " " .. op .. " must use widened word reduction")
+	check(not body:find("vpsrldq ymm", 1, true),
+	      name .. " " .. op .. " must use the direct half collapse")
       end
+    end
+
+    for _, spec in ipairs({
+      {"u16x16", T.W.u16x16.ct, T.W.u16x16.ct(1)},
+      {"i16x16", T.W.i16x16.ct, T.W.i16x16.ct(1)},
+      {"u8x32", T.W.u8x32.ct, T.W.u8x32.ct(1)},
+      {"i8x32", T.W.i8x32.ct, T.W.i8x32.ct(1)},
+    }) do
+      local name, ct, add = spec[1], spec[2], spec[3]
+      body = checkymm(name .. " paired hmin/hmax",
+	{"vperm2i128 ymm", "vphminposuw xmm"}, function()
+	  local v, lo, hi = ct(0), 0, 0
+	  for _ = 1, 400 do
+	    v = v + add
+	    lo = lo + tonumber(simd.hmin(v))
+	    hi = hi + tonumber(simd.hmax(v))
+	  end
+	  return v, lo, hi
+	end)
+      local _, nperm = body:gsub("vperm2i128 ymm", "")
+      check(nperm == 1,
+	    name .. " paired extrema must share one cross-half permutation")
     end
   end)
 end

@@ -3554,7 +3554,19 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     uint8_t xmask = (uint8_t)(uns ?
       (rd->data == VRD_MAX ? 0xffu : 0) :
       (rd->data == VRD_MAX ? 0x7fu : 0x80u));
-    TRef z, lo, hi, half;
+    TRef z, lo, hi;
+    if (vt & IRT_VEC256) {
+      IROp cop = rd->data == VRD_MAX ?
+	(uns ? IR_VMAXU : IR_VMAX) : (uns ? IR_VMINU : IR_VMIN);
+      TRef half = emitir(IRT(IR_VSHUF, vt), r,
+			 IRVSHUF(IRVSHUF_SWAP128, 0));
+      /*
+      ** Collapse corresponding byte/word lanes across the two halves before
+      ** applying the order-transform. hmin(v) and hmax(v) can then CSE this
+      ** same half swap; complementing first needs one permutation each.
+      */
+      r = emitir(IRT(cop, vt), r, half);
+    }
     if (xmask) {
       memset(mask, xmask, sizeof(mask));
       r = emitir(IRT(IR_VXOR, vt), r, lj_ir_kvec(J, vt, mask));
@@ -3565,19 +3577,20 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     lo = emitir(IRT(IR_VUNPKL, vt), r, z);
     hi = emitir(IRT(IR_VUNPKH, vt), r, z);
     r = emitir(IRT(IR_VMINU, wvt), lo, hi);
-    if (vt & IRT_VEC256) {
-      half = emitir(IRT(IR_VSHUF, wvt), r,
-		    IRVSHUF(IRVSHUF_SWAP128, 0));
-      r = emitir(IRT(IR_VMINU, wvt), r, half);
-    }
     r = emitir(IRT(IR_VHMINPOSU16, wvt), r, 0);
     rvt = wvt;
     n = 1;
   } else if ((rd->data == VRD_MIN || rd->data == VRD_MAX) &&
 	     vi.esize == 2 && sse41) {
-    TRef half;
     uint16_t xmask = uns ? (rd->data == VRD_MAX ? 0xffffu : 0) :
 			   (rd->data == VRD_MAX ? 0x7fffu : 0x8000u);
+    if (vt & IRT_VEC256) {
+      IROp cop = rd->data == VRD_MAX ?
+	(uns ? IR_VMAXU : IR_VMAX) : (uns ? IR_VMINU : IR_VMIN);
+      TRef half = emitir(IRT(IR_VSHUF, vt), r,
+			 IRVSHUF(IRVSHUF_SWAP128, 0));
+      r = emitir(IRT(cop, vt), r, half);
+    }
     if (xmask) {
       uint8_t mask[LJ_VEC_MAXSIZE];
       uint32_t i;
@@ -3587,11 +3600,6 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
       }
       r = emitir(IRT(IR_VXOR, vt), r, lj_ir_kvec(J, vt, mask));
       minposxor = (int32_t)xmask;
-    }
-    if (vt & IRT_VEC256) {
-      half = emitir(IRT(IR_VSHUF, vt), r,
-		    IRVSHUF(IRVSHUF_SWAP128, 0));
-      r = emitir(IRT(IR_VMINU, vt), r, half);
     }
     r = emitir(IRT(IR_VHMINPOSU16, vt), r, 0);
     n = 1;
