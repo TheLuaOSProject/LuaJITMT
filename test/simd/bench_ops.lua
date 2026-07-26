@@ -492,6 +492,14 @@ local function ctor8(ct, i)
   return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
 end
 
+local function ctor4same(ct, i)
+  return ct(i, i, i, i)
+end
+
+local function ctor8same(ct, i)
+  return ct(i, i, i, i, i, i, i, i)
+end
+
 local function ctor16(ct, i)
   return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
 	    i+8, i+9, i+10, i+11, i+12, i+13, i+14, i+15)
@@ -538,6 +546,7 @@ local function constructor_cost(name, xct, xmake, yct, ymake)
 end
 
 constructor_cost("float lanes", f4, ctor4, f8, ctor8)
+constructor_cost("float repeated lane", f4, ctor4same, f8, ctor8same)
 constructor_cost("double lanes", d2, ctor2, d4, ctor4)
 constructor_cost("int32 lanes", i4, ctor4, i8, ctor8)
 constructor_cost("int16 lanes", i16, ctor8, i16w, ctor16)

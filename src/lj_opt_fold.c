@@ -1323,7 +1323,11 @@ LJFOLDF(xstore_conv)
 {
 #if LJ_64
   PHIBARRIER(fright);
-  if (!irt_is64(fins->t) &&
+  /* A narrow integer store performs the truncation itself. A float store
+  ** still needs the numeric conversion -- storing low qword bits is not a
+  ** uint64_t-to-float cast.
+  */
+  if (!irt_is64(fins->t) && !irt_isfp(fins->t) &&
       irt_type(fins->t) == (IRType)((fright->op2&IRCONV_DSTMASK)>>IRCONV_DSH) &&
       ((fright->op2&IRCONV_SRCMASK) == IRT_I64 ||
        (fright->op2&IRCONV_SRCMASK) == IRT_U64)) {

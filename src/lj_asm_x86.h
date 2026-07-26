@@ -905,6 +905,36 @@ static void asm_tobit(ASMState *as, IRIns *ir)
   ra_left(as, tmp, ir->op1);
 }
 
+/*
+** Convert one unsigned qword directly to float with a single final rounding.
+** CVTSI2SS handles values below 2^63. For the upper half, convert
+** (x>>1)|(x&1), whose low bit preserves the required rounding information,
+** then double the rounded result. 'work' may alias 'src' when the source is a
+** disposable temporary; otherwise it preserves the source for another use.
+*/
+static void emit_cvtu64_to_ss_exact(ASMState *as, Reg dest, Reg merge,
+				    Reg src, Reg work, Reg tmp)
+{
+  MCLabel l_done = emit_label(as);
+  MCLabel l_positive;
+  /* Positive path, emitted first because the assembler runs backwards. */
+  emit_mrm(as, asm_sse3op(as, XO_CVTSI2SS, merge, 1),
+	   dest | ((as->flags & JIT_F_AVX) ? 0 : REX_64), src);
+  l_positive = emit_label(as);
+  emit_jmp(as, l_done);
+  emit_rr(as, asm_sse3op(as, XO_ADDSS, dest, 0), dest, dest);
+  emit_mrm(as, asm_sse3op(as, XO_CVTSI2SS, merge, 1),
+	   dest | ((as->flags & JIT_F_AVX) ? 0 : REX_64), work);
+  emit_rr(as, XO_ARITH(XOg_OR), work|REX_64, tmp|REX_64);
+  emit_shifti(as, XOg_SHR|REX_64, work, 1);
+  emit_gri(as, XG_ARITHi(XOg_AND), tmp|REX_64, 1);
+  emit_rr(as, XO_MOV, tmp|REX_64, src|REX_64);
+  if (work != src)
+    emit_rr(as, XO_MOV, work|REX_64, src|REX_64);
+  emit_sjcc(as, CC_NS, l_positive);
+  emit_rr(as, XO_TEST, src|REX_64, src);
+}
+
 static void asm_conv(ASMState *as, IRIns *ir)
 {
   IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
@@ -939,16 +969,21 @@ static void asm_conv(ASMState *as, IRIns *ir)
       Reg left = (LJ_64 && (st == IRT_U32 || st == IRT_U64)) ?
 		 ra_alloc1(as, lref, RSET_GPR) :
 		 asm_fuseloadm(as, lref, RSET_GPR, st64);
-      if (LJ_64 && st == IRT_U64) {
-	MCLabel l_end = emit_label(as);
-	cTValue *k = &as->J->k64[LJ_K64_2P64];
-	emit_rma(as, asm_sse3op(as, XO_ADDSD, dest, 0), dest, k);
-	emit_sjcc(as, CC_NS, l_end);
-	emit_rr(as, XO_TEST, left|REX_64, left);  /* Check if u64 >= 2^63. */
-      }
-      {
+      if (LJ_64 && st == IRT_U64 && irt_isfloat(ir->t)) {
+	Reg work = ra_scratch(as, rset_exclude(RSET_GPR, left));
+	Reg tmp = ra_scratch(as,
+	  rset_exclude(rset_exclude(RSET_GPR, left), work));
+	emit_cvtu64_to_ss_exact(as, dest, dest, left, work, tmp);
+      } else {
 	int w = LJ_64 && (st64 || st == IRT_U32);
 	x86Op xo = irt_isnum(ir->t) ? XO_CVTSI2SD : XO_CVTSI2SS;
+	if (LJ_64 && st == IRT_U64) {
+	  MCLabel l_end = emit_label(as);
+	  cTValue *k = &as->J->k64[LJ_K64_2P64];
+	  emit_rma(as, asm_sse3op(as, XO_ADDSD, dest, 0), dest, k);
+	  emit_sjcc(as, CC_NS, l_end);
+	  emit_rr(as, XO_TEST, left|REX_64, left);
+	}
 	emit_mrm(as, asm_sse3op(as, xo, dest, w),
 		 dest | ((as->flags & JIT_F_AVX) ? 0 : (w ? REX_64 : 0)), left);
       }

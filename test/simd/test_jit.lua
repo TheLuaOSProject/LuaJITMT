@@ -210,6 +210,42 @@ test("multi-lane dynamic vector constructors on trace", function()
     return simd.bitcast(u4, r)
   end, 200)
 
+  local d2, cfloat = T.T.double2.ct, ffi.typeof("float")
+  diff("reused scalar FP sources in vector constructors", function(n)
+    local af, ad = f4(0), d2(0)
+    local sum = 0
+    for i = 1, n do
+      local x = i + 0.25
+      local y = cfloat(i*0.5 + 0.25)
+      af = af + f4(x, x, x+0.5, x)
+      ad = ad + d2(y, y)
+      sum = sum + x
+    end
+    return af, ad, sum
+  end, 200)
+
+  local uint32 = ffi.typeof("uint32_t")
+  local int64, uint64 = ffi.typeof("int64_t"), ffi.typeof("uint64_t")
+  diff("scalar float stores retain qword conversions", function(n)
+    local lo, hi
+    for i = 1, n do
+      lo = cfloat(uint64(i) * 0x100000003ULL)
+      hi = cfloat(0x8000000000000000ULL + uint64(i*31))
+    end
+    return lo, hi
+  end, 160)
+  diff("FP vector constructors from wide integer lanes", function(n)
+    local af, ad = f4(0), d2(0)
+    for i = 1, n do
+      local u = uint32(0x80000000 + i*17)
+      local s = int64(i) * -0x100000003LL
+      local q = uint64(0x8000000000000000ULL) + uint64(i*31)
+      af = af + f4(u, s, q, u)
+      ad = ad + d2(s, q)
+    end
+    return af, ad
+  end, 120)
+
   if simd.features().avx2 then
     local i8 = T.W.i32x8.ct
     local function partial_cross(i)

@@ -588,6 +588,92 @@ static void asm_vmulhi(ASMState *as, IRIns *ir)
 
 /* -- Splat --------------------------------------------------------------- */
 
+/*
+** A scalar FP conversion normally clears its destination before CVTSI2S[SD]
+** or CVTS[SD]2S[SD]. This gives the scalar value deterministic upper bits and
+** breaks the legacy instruction's merge dependency. Vector construction only
+** consumes the converted low lane, though: a live vector input is a better
+** merge source and avoids one clear per inserted lane.
+**
+** Unsigned qwords use the exact range-adjustment sequence shared with scalar
+** conversion. Unsigned dwords on x86 retain the generic bias conversion.
+*/
+static int asm_vecscalarconvcanfuse(ASMState *as, IRRef ref, IRType dt)
+{
+  IRIns *ir = IR(ref);
+  IRType st;
+  IRRef i = as->curins;
+  if (ir->o != IR_CONV || irt_type(ir->t) != dt ||
+      !mayfuse(as, ref) || !ra_noreg(ir->r))
+    return 0;
+  /*
+  ** Do not duplicate a shared conversion for every lane. VSHUF2 carries its
+  ** scalar through the immediately preceding CARG, so exclude that structural
+  ** current use while looking for another consumer.
+  */
+  if (IR(as->curins)->o == IR_VSHUF2) {
+    lj_assertA(IR(as->curins)->op2 + 1 == as->curins,
+	       "VSHUF2 CARG is not adjacent to its user");
+    i--;
+  }
+  if (i > ref + CONFLICT_SEARCH_LIM)
+    return 0;
+  while (--i > ref)
+    if (IR(i)->op1 == ref || IR(i)->op2 == ref)
+      return 0;
+  st = (IRType)(ir->op2 & IRCONV_SRCMASK);
+  if (st == IRT_NUM || st == IRT_FLOAT ||
+      (st >= IRT_I8 && st <= IRT_INT))
+    return 1;
+#if LJ_64
+  if (st == IRT_U32 || st == IRT_I64 || st == IRT_U64)
+    return 1;
+#endif
+  return 0;
+}
+
+/* Emit one fused scalar conversion. Code generation runs backwards, so the
+** caller emits the consuming insert first and any merge initialization last.
+*/
+static void asm_vecscalarconv(ASMState *as, IRRef ref, Reg dest, Reg merge,
+			      RegSet srcallow)
+{
+  IRIns *ir = IR(ref);
+  IRType st = (IRType)(ir->op2 & IRCONV_SRCMASK);
+  Reg src;
+  x86Op xo;
+  int w = 0;
+  if (st == IRT_NUM || st == IRT_FLOAT) {
+    src = asm_fuseload(as, ir->op1, srcallow);
+    xo = st == IRT_NUM ? XO_CVTSD2SS : XO_CVTSS2SD;
+#if LJ_64
+  } else if (st == IRT_U64) {
+    src = ra_alloc1(as, ir->op1, RSET_GPR);
+    if (irt_isfloat(ir->t)) {
+      Reg work = ra_scratch(as, rset_exclude(RSET_GPR, src));
+      Reg tmp = ra_scratch(as,
+	rset_exclude(rset_exclude(RSET_GPR, src), work));
+      emit_cvtu64_to_ss_exact(as, dest, merge, src, work, tmp);
+    } else {
+      MCLabel l_end = emit_label(as);
+      emit_rma(as, asm_sse3op(as, XO_ADDSD, dest, 0), dest,
+	       &as->J->k64[LJ_K64_2P64]);
+      emit_sjcc(as, CC_NS, l_end);
+      emit_rr(as, XO_TEST, src|REX_64, src);
+      emit_mrm(as, asm_sse3op(as, XO_CVTSI2SD, merge, 1),
+	       dest | ((as->flags & JIT_F_AVX) ? 0 : REX_64), src);
+    }
+    return;
+#endif
+  } else {
+    w = LJ_64 && (st == IRT_I64 || st == IRT_U32);
+    src = asm_fuseloadm(as, ir->op1, RSET_GPR, w);
+    xo = irt_isnum(ir->t) ? XO_CVTSI2SD : XO_CVTSI2SS;
+  }
+  emit_mrm(as, asm_sse3op(as, xo, merge, w),
+	   dest | ((as->flags & JIT_F_AVX) ? 0 : (w ? REX_64 : 0)), src);
+}
+
 /* Broadcast a scalar to all lanes. */
 static void asm_vsplat(ASMState *as, IRIns *ir)
 {
@@ -596,6 +682,18 @@ static void asm_vsplat(ASMState *as, IRIns *ir)
   Reg dest = ra_dest(as, ir, RSET_FPR);
   if (ir->op2 == IRVSPLAT_SEED) {
     lj_assertA(!wide, "seeded wide vector");
+    if (irt_isvecfp(ir->t) &&
+	asm_vecscalarconvcanfuse(as, ir->op1,
+				t == IRT_V4F32 ? IRT_FLOAT : IRT_NUM)) {
+      /*
+      ** Start the half in its final register: zeroing it supplies the merge
+      ** lanes for the scalar conversion and removes the following seed move.
+      */
+      asm_vecscalarconv(as, ir->op1, dest, dest,
+			rset_exclude(RSET_FPR, dest));
+      emit_rr(as, asm_sse3op(as, XO_XORPS, dest, 0), dest, dest);
+      return;
+    }
     if (t == IRT_V4F32) {
       Reg src = ra_alloc1(as, ir->op1, RSET_FPR);
       lj_assertA(as->flags & JIT_F_SSE4_1,
@@ -1071,6 +1169,33 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
     lj_assertA(!wide, "scalar insert into a wide vector");
     dest = ra_dest(as, ir, RSET_FPR);
     left = ra_alloc1(as, lref, RSET_FPR);
+    if (fp && asm_vecscalarconvcanfuse(as, rref,
+			t == IRT_V4F32 ? IRT_FLOAT : IRT_NUM)) {
+      right = ra_scratch(as,
+	rset_exclude(rset_exclude(RSET_FPR, dest), left));
+      if (as->flags & JIT_F_AVX) {
+	if (t == IRT_V2F64) {
+	  emit_vexrr(as, imm ? XO_UNPCKLPD : XO_MOVSD,
+		     dest, left, right);
+	} else {
+	  emit_i8(as, imm << 4);
+	  emit_vexrrw(as, XO_INSERTPS, dest, left, right, 0);
+	}
+      } else {
+	if (t == IRT_V2F64) {
+	  emit_rr(as, imm ? XO_UNPCKLPD : XO_MOVSD, dest, right);
+	} else {
+	  emit_i8(as, imm << 4);
+	  if (asm_vec3byte(XO_INSERTPS))
+	    emit_vrr66(as, XO_INSERTPS, dest, right);
+	  else
+	    emit_rr(as, XO_INSERTPS, dest, right);
+	}
+	ra_left(as, dest, lref);
+      }
+      asm_vecscalarconv(as, rref, right, left, RSET_FPR);
+      return;
+    }
     right = ra_alloc1(as, rref, fp ? RSET_FPR : RSET_GPR);
     if (as->flags & JIT_F_AVX) {
       if (t == IRT_V2F64) {
@@ -1338,20 +1463,7 @@ static void emit_vmovq_to_gpr(ASMState *as, Reg dest, Reg src)
 static void emit_vcvtu64_to_ss(ASMState *as, Reg dest, Reg merge, Reg src,
 			       Reg tmp)
 {
-  MCLabel l_done = emit_label(as);
-  MCLabel l_positive;
-  /* Positive path, emitted first because the assembler runs backwards. */
-  emit_vcvtsi2ss64(as, dest, merge, src);
-  l_positive = emit_label(as);
-  emit_jmp(as, l_done);
-  emit_vexrr(as, XO_ADDSS, dest, dest, dest);
-  emit_vcvtsi2ss64(as, dest, merge, src);
-  emit_rr(as, XO_ARITH(XOg_OR), src|REX_64, tmp|REX_64);
-  emit_shifti(as, XOg_SHR|REX_64, src, 1);
-  emit_gri(as, XG_ARITHi(XOg_AND), tmp|REX_64, 1);
-  emit_rr(as, XO_MOV, tmp|REX_64, src|REX_64);
-  emit_sjcc(as, CC_NS, l_positive);
-  emit_rr(as, XO_TEST, src|REX_64, src);
+  emit_cvtu64_to_ss_exact(as, dest, merge, src, src, tmp);
 }
 
 /*

@@ -151,12 +151,21 @@ test("dynamic vector constructors stay in registers", function()
 	    name .. ": expected exactly " .. n .. " " .. opname ..
 	    " instructions in the loop")
     end
+    return m
   end
 
   local d2 = T.T.double2.ct
-  check_count("double2 dynamic constructor", d2, {"movq", "unpcklpd", "addpd"},
-	      "unpcklpd", 1,
+  local dm = check_count("double2 dynamic constructor", d2,
+	      {"cvtsi2sd", "unpcklpd", "addpd"}, "unpcklpd", 1,
     function(ct, i) return ct(i, i+1) end)
+  if dm then
+    check(count(dm, "cvtsi2sd") == 2,
+	  "double2 dynamic constructor: expected two fused lane conversions")
+    check(count(dm, "xorps") == 1,
+	  "double2 dynamic constructor: expected one seed clear")
+    check(count(dm, "movq") == 0,
+	  "double2 dynamic constructor: seed must not need a scalar move")
+  end
 
   local h8 = T.T.i16x8.ct
   check_count("i16x8 dynamic constructor", h8, {"movd", "pinsrw", "paddw"},
@@ -167,9 +176,24 @@ test("dynamic vector constructors stay in registers", function()
 
   if simd.features().sse4_1 then
     local f4 = T.T.float4.ct
-    check_count("float4 dynamic constructor", f4,
-		{"insertps", "addps"}, "insertps", 4,
+    local fm = check_count("float4 dynamic constructor", f4,
+		{"cvtsi2ss", "insertps", "addps"}, "insertps", 3,
       function(ct, i) return ct(i, i+1, i+2, i+3) end)
+    if fm then
+      check(count(fm, "cvtsi2ss") == 4,
+	    "float4 dynamic constructor: expected four fused lane conversions")
+      check(count(fm, "xorps") == 1,
+	    "float4 dynamic constructor: expected one seed clear")
+    end
+    fm = check_count("float4 shared scalar constructor", f4,
+		{"cvtsi2ss", "insertps", "addps"}, "insertps", 4,
+      function(ct, i) return ct(i, i, i, i) end)
+    if fm then
+      check(count(fm, "cvtsi2ss") == 1,
+	    "float4 shared scalar constructor: conversion must be reused")
+      check(count(fm, "xorps") == 1,
+	    "float4 shared scalar constructor: expected one conversion clear")
+    end
 
     local i4 = T.T.i32x4.ct
     check_count("i32x4 dynamic constructor", i4,
@@ -196,8 +220,30 @@ test("dynamic vector constructors stay in registers", function()
   end
 
   if simd.features().avx2 then
+    local f8 = T.W.float8.ct
+    local m, _, body = checkloop("float8 dynamic constructor",
+      {"cvtsi2ss", "insertps", "insertf128", "addps"}, NOCALL, function()
+	local acc = f8(0)
+	for i = 1, 400 do
+	  acc = acc + f8(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
+	end
+	return acc
+      end)
+    if m then
+      check(count(m, "cvtsi2ss") == 8,
+	    "float8 dynamic constructor: expected eight fused lane conversions")
+      check(count(m, "xorps") == 2,
+	    "float8 dynamic constructor: expected two half seed clears")
+      check(count(m, "insertps") == 6,
+	    "float8 dynamic constructor: expected six lane inserts")
+      check(count(m, "insertf128") == 1,
+	    "float8 dynamic constructor: expected one half join")
+      check(body:find("vaddps ymm", 1, true) ~= nil,
+	    "float8 dynamic constructor: add must remain YMM-width")
+    end
+
     local i8 = T.W.i32x8.ct
-    local m, _, body = checkloop("i32x8 dynamic constructor",
+    m, _, body = checkloop("i32x8 dynamic constructor",
       {"movd", "pinsrd", "insertf128", "paddd"}, NOCALL, function()
 	local acc = i8(0)
 	for i = 1, 400 do
