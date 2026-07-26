@@ -2828,6 +2828,46 @@ static TRef crec_simd_shuf2_direct(jit_State *J, IRType vt,
 				    IRVSHUF2_SHUFPD, imm);
     }
   }
+  if (J->flags & JIT_F_SSSE3) {
+    uint32_t sw, shift, nh = n / nph;
+    for (sw = 0; sw < 2; sw++) {
+      uint32_t xbase = sw ? n : 0, ybase = sw ? 0 : n;
+      for (shift = 1; shift < nph; shift++) {
+	uint32_t h;
+	for (h = 0; h < nh; h++) {
+	  uint32_t out;
+	  for (out = 0; out < nph; out++) {
+	    uint32_t src = out + shift;
+	    uint32_t want = h*nph +
+	      (src < nph ? ybase + src : xbase + src-nph);
+	    if (idx[h*nph+out] != want) break;
+	  }
+	  if (out != nph) break;
+	}
+	if (h == nh)
+	  return crec_simd_shuf2_emit(J, vt, sw ? b : a, sw ? a : b,
+				      IRVSHUF2_ALIGNR, shift*vi->esize);
+      }
+    }
+  }
+  if (vt & IRT_VEC256) {
+    uint32_t sw, shift;
+    for (sw = 0; sw < 2; sw++) {
+      uint32_t xbase = sw ? n : 0, ybase = sw ? 0 : n;
+      for (shift = 1; shift < n; shift++) {
+	if (shift == nph) continue;  /* One VPERM2I128, matched above. */
+	for (i = 0; i < n; i++) {
+	  uint32_t src = i + shift;
+	  uint32_t want = src < n ? xbase + src : ybase + src-n;
+	  if (idx[i] != want) break;
+	}
+	if (i == n)
+	  return crec_simd_shuf2_emit(J, vt, sw ? b : a, sw ? a : b,
+				      IRVSHUF2_ALIGNR256,
+				      shift*vi->esize);
+      }
+    }
+  }
   return 0;
 }
 

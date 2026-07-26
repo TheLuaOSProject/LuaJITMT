@@ -954,6 +954,22 @@ if has_ymm then
     function(x, y)
       return simd.shuffle2(x, y, 0, 9, 2, 11, 4, 13, 6, 15)
     end)
+  width_cost("int32 shuffle2 align lane",
+    function() return i4(0, 1, 2, 3), i4(4, 5, 6, 7) end,
+    function() return i8(0, 1, 2, 3, 4, 5, 6, 7),
+		      i8(8, 9, 10, 11, 12, 13, 14, 15) end,
+    function(x, y) return simd.shuffle2(x, y, 5, 6, 7, 0) end,
+    function(x, y)
+      return simd.shuffle2(x, y, 9, 10, 11, 0, 13, 14, 15, 4)
+    end)
+  width_cost("int32 shuffle2 align full",
+    function() return i4(0, 1, 2, 3), i4(4, 5, 6, 7) end,
+    function() return i8(0, 1, 2, 3, 4, 5, 6, 7),
+		      i8(8, 9, 10, 11, 12, 13, 14, 15) end,
+    function(x, y) return simd.shuffle2(x, y, 1, 2, 3, 4) end,
+    function(x, y)
+      return simd.shuffle2(x, y, 1, 2, 3, 4, 5, 6, 7, 8)
+    end)
   width_cost("int32 shuffle vector",
     function() return i4(0, 1, 2, 3), i4(3, 2, 1, 0) end,
     function() return i8(0, 1, 2, 3, 4, 5, 6, 7),

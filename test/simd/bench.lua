@@ -241,6 +241,60 @@ local function clamp_ymm()
   return s
 end
 
+--------------------------------------------------------- delta encoding ----
+
+-- First differences are used by time-series, audio and columnar codecs.
+-- Carrying the current block forward means each iteration performs one new
+-- load; shuffle2 constructs the one-lane-shifted window across the block
+-- boundary. XMM maps that to PALIGNR, while YMM uses one half bridge plus
+-- PALIGNR instead of reloading/scalarising the boundary lanes.
+local DELTA_N = 1 << 18
+local DELTA_PASSES = 80
+local delta_in = ffi.new("int32_t[?]", DELTA_N + 8)
+local delta_out_s = ffi.new("int32_t[?]", DELTA_N)
+local delta_out_x = ffi.new("int32_t[?]", DELTA_N)
+local delta_out_y = has_ymm and ffi.new("int32_t[?]", DELTA_N)
+for i = 0, DELTA_N+7 do
+  delta_in[i] = (i * 1103515245 + 12345) % 1000003
+end
+local delta_i4 = ffi.cast(ffi.typeof("$ *", i4), delta_in)
+local delta_o4 = ffi.cast(ffi.typeof("$ *", i4), delta_out_x)
+local delta_i8 = has_ymm and ffi.cast(ffi.typeof("$ *", i8), delta_in)
+local delta_o8 = has_ymm and ffi.cast(ffi.typeof("$ *", i8), delta_out_y)
+
+local function delta_scalar()
+  for _ = 1, DELTA_PASSES do
+    for i = 0, DELTA_N-1 do
+      delta_out_s[i] = delta_in[i+1] - delta_in[i]
+    end
+  end
+  return sample_sum(delta_out_s, DELTA_N)
+end
+
+local function delta_xmm()
+  for _ = 1, DELTA_PASSES do
+    local cur = delta_i4[0]
+    for i = 0, DELTA_N/4-1 do
+      local next = delta_i4[i+1]
+      delta_o4[i] = simd.shuffle2(cur, next, 1, 2, 3, 4) - cur
+      cur = next
+    end
+  end
+  return sample_sum(delta_out_x, DELTA_N)
+end
+
+local function delta_ymm()
+  for _ = 1, DELTA_PASSES do
+    local cur = delta_i8[0]
+    for i = 0, DELTA_N/8-1 do
+      local next = delta_i8[i+1]
+      delta_o8[i] = simd.shuffle2(cur, next, 1, 2, 3, 4, 5, 6, 7, 8) - cur
+      cur = next
+    end
+  end
+  return sample_sum(delta_out_y, DELTA_N)
+end
+
 ---------------------------------------------------------- eight-tap FIR -----
 
 -- Overlapping loads make this a useful test of sustained unaligned SIMD
@@ -1192,6 +1246,15 @@ if has_ymm then
   report_ymm("clamp (float)", ts, tx, ty, ss, sx, sy)
 else
   report("clamp (float)", ts, tx, ss, sx)
+end
+
+ts, ss = bench("delta scalar", delta_scalar)
+tx, sx = bench("delta XMM", delta_xmm)
+if has_ymm then
+  local ty, sy = bench("delta YMM", delta_ymm)
+  report_ymm("delta encode (int32)", ts, tx, ty, ss, sx, sy)
+else
+  report("delta encode (int32)", ts, tx, ss, sx)
 end
 
 io.write(string.format(

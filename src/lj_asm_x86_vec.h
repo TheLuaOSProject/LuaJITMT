@@ -999,13 +999,51 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
   lit = (uint32_t)k->i;
   mode = lit >> 8;
   imm = (int32_t)(lit & 255);
+  if (mode == IRVSHUF2_ALIGNR256) {
+    Reg left, tmp;
+    lj_assertA(wide && (as->flags & JIT_F_AVX2),
+	       "full-width ALIGNR without AVX2");
+    lj_assertA(imm > 0 && imm < 32 && imm != 16,
+	       "bad full-width ALIGNR control");
+    dest = ra_dest(as, ir, RSET_FPR);
+    left = ra_alloc1(as, lref, RSET_FPR);
+    if (imm < 16 && asm_vecshuf2canfuseload(as, rref)) {
+      tmp = ra_scratch(as, rset_exclude(rset_exclude(RSET_FPR, dest),
+				       left));
+      emit_i8(as, imm);
+      emit_vexrrl(as, XO_PALIGNR, dest, tmp, left, 1);
+      emit_i8(as, 0x21);
+      as->curins--;
+      right = asm_vecfuseload(as, rref,
+			      rset_exclude(rset_exclude(RSET_FPR, left),
+					   tmp));
+      as->curins++;
+      emit_mrm(as, emit_vexopv(XO_VPERM2I128, left, 0, 1), tmp, right);
+    } else {
+      right = ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
+      tmp = ra_scratch(as,
+	rset_exclude(rset_exclude(rset_exclude(RSET_FPR, dest), left),
+		     right));
+      emit_i8(as, imm < 16 ? imm : imm-16);
+      if (imm < 16)
+	emit_vexrrl(as, XO_PALIGNR, dest, tmp, left, 1);
+      else
+	emit_vexrrl(as, XO_PALIGNR, dest, right, tmp, 1);
+      emit_i8(as, 0x21);
+      emit_vexrrl(as, XO_VPERM2I128, tmp, left, right, 1);
+    }
+    return;
+  }
   if (mode == IRVSHUF2_SHUFPS)
     xo = XO_SHUFPS;
   else if (mode == IRVSHUF2_SHUFPD)
     xo = XO_SHUFPD;
   else if (mode == IRVSHUF2_PBLENDW)
     xo = XO_PBLENDW;
-  else {
+  else if (mode == IRVSHUF2_ALIGNR) {
+    lj_assertA(imm > 0 && imm < 16, "bad lane-local ALIGNR control");
+    xo = XO_PALIGNR;
+  } else {
     lj_assertA(mode == IRVSHUF2_PERM2I128 && wide &&
 	       (as->flags & JIT_F_AVX2), "bad VSHUF2 mode");
     xo = XO_VPERM2I128;

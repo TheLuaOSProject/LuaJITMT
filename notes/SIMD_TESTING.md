@@ -178,6 +178,15 @@ Nehalem path must retain a separate load, which guards the legacy unaligned
 memory safety rule. A full-HD RGBA channel-merge benchmark continuously
 exercises the streaming blend form at both XMM and YMM widths.
 
+Aligned-window differentials cover byte, word, dword and qword lane sizes,
+both input orders, lane-local YMM windows, and full-width YMM shifts below
+and above the 128-bit boundary. XMM and lane-local YMM codegen must contain
+one `PALIGNR` and no masked byte route. Full-width YMM codegen must contain
+exactly one `VPERM2I128` and one `VPALIGNR`; the existing irregular
+cross-half control still requires `PSHUFB`/`POR`. Indexed-array cases also
+verify that AVX can consume the final load in lane-local `PALIGNR` and in the
+full-width bridge, while legacy SSE keeps its separate unaligned load.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

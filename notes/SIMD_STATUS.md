@@ -76,6 +76,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M53 | Lower native two-source dword/qword shuffles and YMM half concatenations through direct immediate instructions | done |
 | M54 | Lower representable constant same-position two-source blends through one `PBLENDW` | done |
 | M55 | Fuse one-use final array loads into native AVX two-source shuffle memory operands | done |
+| M56 | Collapse lane-local and full-width contiguous two-source windows through `PALIGNR` | done |
 
 ## Commands that pass
 

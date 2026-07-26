@@ -225,6 +225,10 @@ test("native two-source shuffles consume their final array load", function()
       "i64x2 SHUFPD", T.T.i64x2.ct, "shufpd",
       function(a, b) return simd.shuffle2(a, b, 1, 2) end,
     },
+    {
+      "i32x4 PALIGNR", T.T.i32x4.ct, "palignr",
+      function(a, b) return simd.shuffle2(a, b, 5, 6, 7, 0) end,
+    },
   }
   if simd.features().sse4_1 then
     cases[#cases+1] = {
@@ -253,6 +257,18 @@ test("native two-source shuffles consume their final array load", function()
       "i32x8 VPBLENDW", T.W.i32x8.ct, "vpblendw",
       function(a, b)
 	return simd.shuffle2(a, b, 0, 9, 2, 11, 4, 13, 6, 15)
+      end,
+    }
+    cases[#cases+1] = {
+      "i32x8 VPALIGNR", T.W.i32x8.ct, "vpalignr",
+      function(a, b)
+	return simd.shuffle2(a, b, 9, 10, 11, 0, 13, 14, 15, 4)
+      end,
+    }
+    cases[#cases+1] = {
+      "i32x8 full aligned window", T.W.i32x8.ct, "vperm2i128",
+      function(a, b)
+	return simd.shuffle2(a, b, 1, 2, 3, 4, 5, 6, 7, 8)
       end,
     }
   end
@@ -1173,6 +1189,15 @@ test("shuffle and insert are packed", function()
       end
       return acc
     end)
+  checkloop("shuffle2 aligned window", {"palignr"},
+    {"call", "pshufb", "por"}, function()
+      local acc = i4(0)
+      local b = i4(9, 8, 7, 6)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, b, 5, 6, 7, 0)
+      end
+      return acc
+    end)
   -- A variable lane index builds the mask with a packed compare instead of
   -- falling back to the interpreter.
   checkloop("insert var lane", {"pcmpeqd", "pandn", "por"}, NOCALL, function()
@@ -2037,6 +2062,47 @@ if simd.features().avx2 then
     end)
     check(not body:find("vpblendw ymm", 1, true),
 	  "independent byte selections must not use a word blend")
+
+    body = checkymm("i32x8 lane-local aligned window",
+      {"vpalignr ymm"}, function()
+      local acc, other = i8(0), i8(11, 12, 13, 14, 15, 16, 17, 18)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc+a, other, 9,10,11,0,13,14,15,4)
+      end
+      return acc
+    end)
+    check(not body:find("vperm2i128 ymm", 1, true) and
+	  not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a lane-local aligned window must be one VPALIGNR")
+
+    body = checkymm("i32x8 full aligned window",
+      {"vperm2i128 ymm", "vpalignr ymm"}, function()
+      local acc, other = i8(0), i8(11, 12, 13, 14, 15, 16, 17, 18)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc+a, other, 1,2,3,4,5,6,7,8)
+      end
+      return acc
+    end)
+    local am = mnemonics(body)
+    check(count(am, "perm2i128") == 1 and count(am, "palignr") == 1 and
+	  not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a full aligned window must be VPERM2I128 plus VPALIGNR")
+
+    body = checkymm("i32x8 high full aligned window",
+      {"vperm2i128 ymm", "vpalignr ymm"}, function()
+      local acc, other = i8(0), i8(11, 12, 13, 14, 15, 16, 17, 18)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc+a, other, 5,6,7,8,9,10,11,12)
+      end
+      return acc
+    end)
+    am = mnemonics(body)
+    check(count(am, "perm2i128") == 1 and count(am, "palignr") == 1 and
+	  not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a high full aligned window must be VPERM2I128 plus VPALIGNR")
 
     body = checkymm("i32x8 shuffle2 one source", {"vpermd ymm"}, function()
       local acc = i8(0)

@@ -1392,3 +1392,41 @@ about 5.9 to 5.2 ns per sixteen XMM shuffles (roughly 13%) and from about
 11--13 to 9.4--10.0 ns per sixteen YMM shuffles (roughly 10--23%). The
 production benchmark suite now includes a full-HD RGBA channel-routing pass
 that streams two input layers through this exact blend shape.
+
+## D50. Collapse contiguous two-source windows with `PALIGNR`
+
+A shifted window over the concatenation of two vectors is another common
+`shuffle2` shape. The generic lowering used two zero-masked byte shuffles and
+an OR even though SSSE3 provides exactly that operation. Within each 128-bit
+hardware lane, the recorder now recognises both input orders and every
+lane-aligned split, then emits one `PALIGNR`.
+
+YMM has an additional semantic boundary: `VPALIGNR` operates independently
+in its two 128-bit halves. A full 256-bit window must first bridge the middle
+with `VPERM2I128`, then align both halves in parallel:
+
+```
+bridge = VPERM2I128(a, b, 0x21)  /* a.high, b.low */
+result = VPALIGNR(bridge, a, shift)
+```
+
+For shifts beyond the middle, the same bridge is aligned against `b`.
+The exact half-width shift was already the one-instruction
+`VPERM2I128` case. These routes cover every non-trivial lane-aligned
+contiguous window without changing the arbitrary permutation fallback. A
+one-use final array load can occupy the bridge instruction's memory operand
+for low-half shifts.
+
+On the measured host, a true two-vector dependency chain improves from about
+0.452 to 0.253--0.260 ns/window for both XMM and lane-local YMM, roughly
+43--44%. Eight independent dword chains improve from 0.204 to 0.189 ns/op
+for XMM and from 0.224 to 0.189 for YMM. Full-width YMM chains improve from
+1.026 to 0.756 ns/window for a low shift and from 1.210 to 0.756 for a high
+shift, roughly 26% and 38%.
+
+`bench.lua` now includes a production-shaped first-difference/delta encoder
+over 262,144 int32 values. It carries one block between iterations and uses
+the aligned window to bring in the next lane. The measured scalar time is
+about 5.2--5.4 ms versus 2.2--2.3 ms at either SIMD width, a 2.3--2.4x
+speedup; the YMM form is memory/cross-lane bound rather than arithmetic
+bound.

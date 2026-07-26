@@ -644,6 +644,25 @@ test("two-source immediate shuffles on trace", function()
   end
 end)
 
+test("two-source aligned windows on trace", function()
+  for _, ti in ipairs({T.T.i8x16, T.T.i16x8, T.T.i32x4}) do
+    local n, forward, reverse = ti.lanes, {}, {}
+    for i = 0, n-1 do
+      forward[i+1] = i+1 < n and i+1 or n
+      reverse[i+1] = i+1 < n and n+i+1 or 0
+    end
+    local ct, a, b = ti.ct, ti.ct(1), ti.ct(11)
+    diff(ti.name .. " aligned two-source windows", function(iters)
+      local x, y = ct(0), ct(0)
+      for _ = 1, iters do
+	x = simd.shuffle2(x+a, b, unpack(forward, 1, n))
+	y = simd.shuffle2(y+a, b, unpack(reverse, 1, n))
+      end
+      return x, y
+    end, 200)
+  end
+end)
+
 test("type punning does not confuse store-to-load forwarding", function()
   -- A bitcast boxes the value under a new ctype, so the boxing store and the
   -- next load of the same address have different vector IR types. Forwarding
@@ -1430,8 +1449,9 @@ if simd.features().avx2 then
   test("256-bit constant and runtime shuffles cross halves", function()
     for _, ti in ipairs(T.W) do
       local lanes, identity, localrev, halfswap, halfcat, halfcatrev, blend,
-	    unpklo, unpkhi, unpkswap, rev, mix, raw =
-	{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+	    unpklo, unpkhi, unpkswap, localalign, fullalign,
+	    fullalignrev, fullhigh, rev, mix, raw =
+	{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
       local half = ti.lanes / 2
       local nph = 128 / ti.bits
       for i = 0, ti.lanes-1 do
@@ -1449,6 +1469,11 @@ if simd.features().avx2 then
 	unpklo[i+1] = lolane + (out%2 == 1 and ti.lanes or 0)
 	unpkhi[i+1] = hilane + (out%2 == 1 and ti.lanes or 0)
 	unpkswap[i+1] = lolane + (out%2 == 0 and ti.lanes or 0)
+	localalign[i+1] = out+1 < nph and h*nph+out+1
+					     or ti.lanes+h*nph
+	fullalign[i+1] = i+1 < ti.lanes and i+1 or ti.lanes
+	fullalignrev[i+1] = i+1 < ti.lanes and ti.lanes+i+1 or 0
+	fullhigh[i+1] = i+nph+1
 	rev[i+1] = ti.lanes - 1 - i
 	mix[i+1] = i % 2 == 0 and ti.lanes - 1 - i
 				      or ti.lanes + (i + half) % ti.lanes
@@ -1520,6 +1545,38 @@ if simd.features().avx2 then
 	local acc = ct(0)
 	for _ = 1, n do
 	  acc = simd.shuffle2(acc + a, b, unpack(unpkswap, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm lane-local aligned window", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc+a, b,
+			     unpack(localalign, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm full aligned window", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc+a, b,
+			     unpack(fullalign, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm reversed full aligned window", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc+a, b,
+			     unpack(fullalignrev, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm high full aligned window", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc+a, b,
+			     unpack(fullhigh, 1, ti.lanes))
 	end
 	return acc
       end, 80)
