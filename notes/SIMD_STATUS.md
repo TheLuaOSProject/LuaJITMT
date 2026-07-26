@@ -73,6 +73,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M50 | Canonicalise identity, half-swap, and immediate 32/64-bit constant shuffles before allocating byte controls | done |
 | M51 | Collapse lane-local two-source low/high interleaves to one packed unpack instruction | done |
 | M52 | Collapse single-source and equal-source `shuffle2` controls to the ordinary one-source permute path | done |
+| M53 | Lower native two-source dword/qword shuffles and YMM half concatenations through direct immediate instructions | done |
 
 ## Commands that pass
 
@@ -644,3 +645,10 @@ are the same IR value. Single-source identity with a loop-carried add improves
 from about 0.571 to 0.238 ns/vector. YMM cross-half reverse improves from
 1.137 to 0.760 ns/vector, and an arbitrary equal-source control from 1.170 to
 0.759 ns/vector, by replacing masked dual routing with one direct permute.
+
+Native two-input shuffle shapes now have a `VSHUF2` IR lowering to
+`SHUFPS`, `SHUFPD`, or `VPERM2I128`. Reversed input order is recognised, and
+non-matching controls retain the general path. Dword/qword XMM/YMM patterns
+improve from about 0.571 to 0.386 ns/vector, roughly 32%; mixed YMM half
+concatenation improves from 1.138 to 0.759 ns/vector, about 33%. The isolated
+direct benchmark costs 0.19 ns at either width.

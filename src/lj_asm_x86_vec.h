@@ -963,6 +963,56 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
   }
 }
 
+static void asm_vecshuf2(ASMState *as, IRIns *ir)
+{
+  IRIns *arg = IR(ir->op2);
+  IRIns *k;
+  IRRef lref = ir->op1, rref;
+  uint32_t lit, mode;
+  int32_t imm;
+  int wide = irt_isvec256(ir->t);
+  x86Op xo;
+  RegSet allow = RSET_FPR;
+  Reg dest, right;
+  lj_assertA(arg->o == IR_CARG, "VSHUF2 op2 is not a CARG pair");
+  k = IR(arg->op2);
+  lj_assertA(k->o == IR_KINT, "VSHUF2 control is not an integer constant");
+  rref = arg->op1;
+  lit = (uint32_t)k->i;
+  mode = lit >> 8;
+  imm = (int32_t)(lit & 255);
+  if (mode == IRVSHUF2_SHUFPS)
+    xo = XO_SHUFPS;
+  else if (mode == IRVSHUF2_SHUFPD)
+    xo = XO_SHUFPD;
+  else {
+    lj_assertA(mode == IRVSHUF2_PERM2I128 && wide &&
+	       (as->flags & JIT_F_AVX2), "bad VSHUF2 mode");
+    xo = XO_VPERM2I128;
+  }
+  if (as->flags & JIT_F_AVX) {
+    Reg left;
+    dest = ra_dest(as, ir, RSET_FPR);
+    left = ra_alloc1(as, lref, RSET_FPR);
+    right = ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
+    emit_i8(as, imm);
+    emit_vexrrl(as, xo, dest, left, right, wide);
+    return;
+  }
+  lj_assertA(!wide && mode != IRVSHUF2_PERM2I128,
+	     "wide two-source shuffle without AVX");
+  right = IR(rref)->r;
+  if (ra_hasreg(right)) {
+    rset_clear(allow, right);
+    ra_noweak(as, right);
+  }
+  dest = ra_dest(as, ir, allow);
+  if (ra_noreg(right))
+    right = ra_alloc1(as, rref, rset_clear(allow, dest));
+  emit_vrri(as, xo, dest, right, imm);
+  ra_left(as, dest, lref);
+}
+
 static void asm_vecshufb(ASMState *as, IRIns *ir)
 {
 #if LJ_64
@@ -1361,6 +1411,7 @@ static void asm_vec(ASMState *as, IRIns *ir)
   case IR_VABS: asm_vecabs(as, ir); return;
   case IR_VROUND: asm_vecround(as, ir); return;
   case IR_VSHUF: asm_vecshuf(as, ir); return;
+  case IR_VSHUF2: asm_vecshuf2(as, ir); return;
   case IR_VSHUFB: asm_vecshufb(as, ir); return;
   case IR_VPERMD: asm_vecpermd(as, ir); return;
   case IR_VMOVMSK: asm_vecmovmsk(as, ir); return;

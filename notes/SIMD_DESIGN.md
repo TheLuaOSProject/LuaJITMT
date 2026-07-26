@@ -105,6 +105,7 @@ New IR opcodes (all pure/`N`/`C`, none guarded):
     VABS    ref ___
     VROUND  ref lit   (SSE4.1 rounding mode)
     VSHUF   ref lit   (32-bit lane permute, imm8)
+    VSHUF2  ref carg  (two-source immediate shuffle/half permute)
     VSHUFB  ref ref   (SSSE3 byte permute by mask vector)
     VUNPKL  ref ref   VUNPKH  (interleave, used by shuffle2/convert)
     VCONV   ref lit   (lane conversion, see D6)
@@ -1327,3 +1328,26 @@ to 0.238 ns/vector because the shuffle disappears. A YMM cross-half reverse
 improves from 1.137 to 0.760 ns/vector, and an arbitrary equal-source YMM
 control from 1.170 to 0.759 ns/vector. The latter two become one direct
 permute instead of the generic dual-source route.
+
+## D47. Represent native two-source immediate shuffles directly
+
+The remaining general `shuffle2` path still hid native one-instruction
+patterns behind two byte shuffles and an OR. `VSHUF2` carries two vector
+references plus a constant mode/immediate in an adjacent `CARG`, the same
+extra-operand convention already used by FMA. The x86 backend maps it to:
+
+* `SHUFPS` for 32-bit selections where each 128-bit half takes its low two
+  outputs from one input and its high two from the other;
+* `SHUFPD` for the corresponding 64-bit selection;
+* `VPERM2I128` when each output half is copied intact from either half of
+  either YMM input.
+
+Both `SHUFPS` and `SHUFPD` recognise reversed input order. YMM dword controls
+must repeat the same immediate pattern in both hardware halves; qword
+controls use the instruction's independent high-half bits. Anything that
+does not match exactly continues through the general byte route.
+
+Measured XMM/YMM dword and qword patterns improve from about 0.571 to 0.386
+ns/vector, roughly 32%. A mixed YMM half concatenation improves from 1.138 to
+0.759 ns/vector, about 33%. The direct-operation benchmark reports 0.19
+ns/vector at both XMM and YMM width when the operation is isolated.

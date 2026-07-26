@@ -1076,6 +1076,24 @@ test("shuffle and insert are packed", function()
       end
       return acc
     end)
+  checkloop("shuffle2 shufps", {"shufps"},
+    {"call", "pshufb", "por"}, function()
+      local acc = i4(0)
+      local b = i4(9, 8, 7, 6)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, b, 3, 0, 6, 5)
+      end
+      return acc
+    end)
+  local q2 = T.T.i64x2.ct
+  checkloop("shuffle2 shufpd", {"shufpd"},
+    {"call", "pshufb", "por"}, function()
+      local acc, add, b = q2(0), q2(1, 2), q2(9, 8)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + add, b, 1, 2)
+      end
+      return acc
+    end)
   -- A variable lane index builds the mask with a packed compare instead of
   -- falling back to the interpreter.
   checkloop("insert var lane", {"pcmpeqd", "pandn", "por"}, NOCALL, function()
@@ -1939,6 +1957,40 @@ if simd.features().avx2 then
 	  "equal shuffle2 sources must collapse before routing")
 
     local b = i8(11, 12, 13, 14, 15, 16, 17, 18)
+    body = checkymm("i32x8 direct shuffle2", {"vshufps ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, b, 3, 0, 10, 9, 7, 4, 14, 13)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a direct dword shuffle2 must use VSHUFPS")
+
+    body = checkymm("i32x8 half concatenate", {"vperm2i128 ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, b, 4, 5, 6, 7, 8, 9, 10, 11)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "whole 128-bit source halves must use VPERM2I128")
+
+    body = checkymm("i64x4 direct shuffle2", {"vshufpd ymm"}, function()
+      local q = T.W.i64x4.ct
+      local acc, add, other = q(0), q(1, 2, 3, 4), q(9, 8, 7, 6)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + add, other, 1, 4, 2, 7)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a direct qword shuffle2 must use VSHUFPD")
+
     checkymm("i32x8 shuffle2",
       {"vperm2i128 ymm", "vpshufb ymm", "vpor ymm"},
       function()

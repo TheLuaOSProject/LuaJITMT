@@ -161,6 +161,11 @@ cross-half `shuffle2` keeps the general path covered.
 First-input-only, second-input-only, and equal-input controls have dedicated
 interpreter/JIT differentials. Their codegen checks require the same immediate
 or direct permute as `shuffle` and reject the unused masked route and `POR`.
+Direct two-source dword/qword patterns cover both input orders and require
+`SHUFPS`/`SHUFPD`. Every YMM lane kind also concatenates intact source halves
+in both orders; codegen requires `VPERM2I128`. The deliberately irregular
+cross-half case still requires the generic byte routing, keeping the fallback
+live.
 
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are

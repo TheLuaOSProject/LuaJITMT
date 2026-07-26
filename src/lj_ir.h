@@ -185,6 +185,8 @@
   _(VABS,	N , ref, ___) \
   _(VROUND,	N , ref, lit) \
   _(VSHUF,	N , ref, lit) \
+  /* Two vector refs plus a mode/immediate carried by op2's CARG. */ \
+  _(VSHUF2,	N , ref, ref) \
   _(VSHUFB,	N , ref, ref) \
   _(VPERMD,	N , ref, ref) \
   _(VUNPKL,	N , ref, ref) \
@@ -284,6 +286,12 @@ IRFLDEF(FLENUM)
 #define IRVSHUF_SWAP128		4	/* Swap the two 128 bit halves of YMM. */
 #define IRVSHUF_PERMQ		5	/* Permute four 64 bit lanes of YMM. */
 #define IRVSHUF(mode, imm)	(((mode)<<8) + (imm))
+
+/* VSHUF2 mode/immediate carried by CARG(op2, KINT(control)). */
+#define IRVSHUF2_SHUFPS		0
+#define IRVSHUF2_SHUFPD		1
+#define IRVSHUF2_PERM2I128	2
+#define IRVSHUF2(mode, imm)	(((mode)<<8) + (imm))
 
 /* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in
 ** bits 8+, so instruction selection never depends on an operand's IR type

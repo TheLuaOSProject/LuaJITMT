@@ -620,6 +620,25 @@ test("ffi.simd insert and shuffle on trace", function()
   end
 end)
 
+test("two-source immediate shuffles on trace", function()
+  local cases = {
+    {T.T.i32x4.ct, {3, 0, 6, 5}, {7, 4, 2, 1}},
+    {T.T.i64x2.ct, {1, 2}, {3, 0}},
+  }
+  for i, c in ipairs(cases) do
+    local ct, direct, swapped = c[1], c[2], c[3]
+    local a, b = ct(1), ct(11)
+    diff("shuffle2 immediate " .. i, function(n)
+      local x, y = ct(0), ct(0)
+      for _ = 1, n do
+	x = simd.shuffle2(x + a, b, unpack(direct))
+	y = simd.shuffle2(y + a, b, unpack(swapped))
+      end
+      return x, y
+    end, 200)
+  end
+end)
+
 test("type punning does not confuse store-to-load forwarding", function()
   -- A bitcast boxes the value under a new ctype, so the boxing store and the
   -- next load of the same address have different vector IR types. Forwarding
@@ -1388,8 +1407,9 @@ if simd.features().avx2 then
 
   test("256-bit constant and runtime shuffles cross halves", function()
     for _, ti in ipairs(T.W) do
-      local lanes, identity, localrev, halfswap, unpklo, unpkhi, unpkswap,
-	    rev, mix, raw = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+      local lanes, identity, localrev, halfswap, halfcat, halfcatrev,
+	    unpklo, unpkhi, unpkswap, rev, mix, raw =
+	{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
       local half = ti.lanes / 2
       local nph = 128 / ti.bits
       for i = 0, ti.lanes-1 do
@@ -1400,6 +1420,8 @@ if simd.features().avx2 then
 	identity[i+1] = i
 	localrev[i+1] = i-i%half + half-1-i%half
 	halfswap[i+1] = (i+half) % ti.lanes
+	halfcat[i+1] = i < half and i+half or ti.lanes+i-half
+	halfcatrev[i+1] = i < half and ti.lanes+half+i or i-half
 	unpklo[i+1] = lolane + (out%2 == 1 and ti.lanes or 0)
 	unpkhi[i+1] = hilane + (out%2 == 1 and ti.lanes or 0)
 	unpkswap[i+1] = lolane + (out%2 == 0 and ti.lanes or 0)
@@ -1432,6 +1454,20 @@ if simd.features().avx2 then
 	local acc = ct(0)
 	for _ = 1, n do
 	  acc = simd.shuffle(acc + a, unpack(halfswap, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm half concatenate", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(halfcat, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm half concatenate reverse", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(halfcatrev, 1, ti.lanes))
 	end
 	return acc
       end, 80)
@@ -1496,6 +1532,25 @@ if simd.features().avx2 then
       local acc = ct(7, 0, 6, 1, 5, 2, 4, 3)
       for _ = 1, n do acc = simd.shuffle(acc, acc) end
       return acc
+    end, 80)
+    local d8, q4 = T.W.i32x8.ct, T.W.i64x4.ct
+    diff("i32x8 ymm immediate shuffle2", function(n)
+      local a, b = d8(1), d8(11)
+      local x, y = d8(0), d8(0)
+      for _ = 1, n do
+	x = simd.shuffle2(x+a, b, 3,0,10,9,7,4,14,13)
+	y = simd.shuffle2(y+a, b, 11,8,2,1,15,12,6,5)
+      end
+      return x, y
+    end, 80)
+    diff("i64x4 ymm immediate shuffle2", function(n)
+      local a, b = q4(1), q4(11)
+      local x, y = q4(0), q4(0)
+      for _ = 1, n do
+	x = simd.shuffle2(x+a, b, 1,4,2,7)
+	y = simd.shuffle2(y+a, b, 5,0,6,3)
+      end
+      return x, y
     end, 80)
   end)
 

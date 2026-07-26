@@ -2734,6 +2734,78 @@ static int crec_simd_unpk(const CTVecInfo *vi, const uint8_t *idx,
   return 0;
 }
 
+static TRef crec_simd_shuf2_emit(jit_State *J, IRType vt, TRef a, TRef b,
+				 uint32_t mode, uint32_t imm)
+{
+  TRef ctl = lj_ir_kint(J, (int32_t)IRVSHUF2(mode, imm));
+  TRef args = emitir(IRT(IR_CARG, IRT_NIL), b, ctl);
+  return emitir(IRT(IR_VSHUF2, vt), a, args);
+}
+
+/* Match the two-input immediate permutes that x86 implements directly. */
+static TRef crec_simd_shuf2_direct(jit_State *J, IRType vt,
+				   const CTVecInfo *vi, TRef a, TRef b,
+				   const uint8_t *idx)
+{
+  uint32_t n = vi->lanes, nph = 16 / vi->esize, i;
+  if (vt & IRT_VEC256) {
+    uint32_t imm = 0;
+    for (i = 0; i < 2; i++) {
+      uint32_t j, base = idx[i*nph];
+      if ((base % nph) != 0) break;
+      for (j = 1; j < nph && idx[i*nph+j] == base+j; j++) {}
+      if (j != nph) break;
+      imm |= (base / nph) << (i*4);
+    }
+    if (i == 2)
+      return crec_simd_shuf2_emit(J, vt, a, b,
+				  IRVSHUF2_PERM2I128, imm);
+  }
+  if (vi->esize == 4) {
+    uint32_t sw;
+    for (sw = 0; sw < 2; sw++) {
+      uint32_t h, imm = 0, nh = n / nph;
+      for (h = 0; h < nh; h++) {
+	uint32_t out;
+	for (out = 0; out < nph; out++) {
+	  uint32_t v = idx[h*nph+out], fromb = v >= n;
+	  uint32_t lane = v - (fromb ? n : 0);
+	  uint32_t wantb = (out >= 2) ^ sw;
+	  uint32_t local = lane % nph;
+	  if (fromb != wantb || lane / nph != h ||
+	      (h && local != ((imm >> (out*2)) & 3)))
+	    break;
+	  if (!h) imm |= local << (out*2);
+	}
+	if (out != nph) break;
+      }
+      if (h == nh)
+	return crec_simd_shuf2_emit(J, vt, sw ? b : a, sw ? a : b,
+				    IRVSHUF2_SHUFPS, imm);
+    }
+  } else if (vi->esize == 8) {
+    uint32_t sw;
+    for (sw = 0; sw < 2; sw++) {
+      uint32_t h, imm = 0, nh = n / nph;
+      for (h = 0; h < nh; h++) {
+	uint32_t out;
+	for (out = 0; out < nph; out++) {
+	  uint32_t v = idx[h*nph+out], fromb = v >= n;
+	  uint32_t lane = v - (fromb ? n : 0);
+	  uint32_t wantb = (out != 0) ^ sw;
+	  if (fromb != wantb || lane / nph != h) break;
+	  imm |= (lane % nph) << (h*nph+out);
+	}
+	if (out != nph) break;
+      }
+      if (h == nh)
+	return crec_simd_shuf2_emit(J, vt, sw ? b : a, sw ? a : b,
+				    IRVSHUF2_SHUFPD, imm);
+    }
+  }
+  return 0;
+}
+
 /* A 128 bit permute is one PSHUFB. A 256 bit permute also shuffles a copy
 ** with its 128 bit halves swapped, then selects the matching bytes.
 */
@@ -2948,6 +3020,11 @@ void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)
 	crec_simd_constshuffle(J, vt, &vi, one, idx), vt, id);
       return;
     }
+  }
+  ra = crec_simd_shuf2_direct(J, vt, &vi, a, b, idx);
+  if (ra) {
+    J->base[0] = crec_vec_box(J, ra, vt, id);
+    return;
   }
   /* Two permutes, each zeroing the lanes taken from the other vector. */
   ra = crec_simd_shuf1(J, vt, &vi, a, idx, 0);
