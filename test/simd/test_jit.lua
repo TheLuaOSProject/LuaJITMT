@@ -1116,6 +1116,67 @@ if simd.features().avx2 then
     end
   end)
 
+  test("all AVX2 cross-width conversions", function()
+    local groups = {
+      {{T.T.i8x16, T.T.u8x16},
+       {T.W.i16x16, T.W.u16x16}},
+      {{T.T.i16x8, T.T.u16x8},
+       {T.W.i32x8, T.W.u32x8, T.W.float8}},
+      {{T.T.i32x4, T.T.u32x4, T.T.float4},
+       {T.W.i64x4, T.W.u64x4, T.W.double4}},
+    }
+    local p = 0
+    for _, group in ipairs(groups) do
+      for _, narrow in ipairs(group[1]) do
+	for _, wide in ipairs(group[2]) do
+	  for _, pair in ipairs({{narrow, wide}, {wide, narrow}}) do
+	    p = p + 1
+	    local src, dst = pair[1], pair[2]
+	    local rnd = T.rng(SEED + 4001 + p * 193)
+	    local a = ffi.new(ffi.typeof("$[?]", src.ct), 48)
+	    for i = 0, 47 do a[i] = T.rand(src, rnd) end
+	    diff(src.name .. " to " .. dst.name .. " cross-width", function(n)
+	      local acc = dst.ct(0)
+	      for i = 0, n-1 do
+		acc = simd.bxor(acc, simd.convert(dst.ct, a[i % 48]))
+	      end
+	      return acc
+	    end, 384)
+	  end
+	end
+      end
+    end
+
+    -- These values are one unit beyond qword-to-float rounding midpoints.
+    -- Going through double first chooses the wrong neighbouring float.
+    local f4 = T.T.float4.ct
+    diff("cross-width i64/u64 to float rounds once", function(n)
+      local si = T.W.i64x4.ct(0x4000004000000001LL,
+			      -0x4000004000000001LL, 0, 1)
+      local ui = T.W.u64x4.ct(0x8000008000000001ULL,
+			      0x4000004000000001ULL, 0, 1)
+      local acc = f4(0)
+      for _ = 1, n do
+	acc = simd.bxor(acc, simd.convert(f4, si))
+	acc = simd.bxor(acc, simd.convert(f4, ui))
+	si = si + T.W.i64x4.ct(17)
+	ui = ui + T.W.u64x4.ct(17)
+      end
+      return acc
+    end, 160)
+
+    diff("cross-width float to i16 bounds", function(n)
+      local v = T.W.float8.ct(-32768, -32768.5, 32767, 32767.5,
+			      0/0, 1/0, -1/0, -1.9)
+      local acc = T.T.i16x8.ct(0)
+      for _ = 1, n do
+	acc = simd.bxor(acc, simd.convert(T.T.i16x8.ct, v))
+	v = v + T.W.float8.ct(0, 0, 0, 0, 0, 0, 0, 0.01)
+      end
+      return acc
+    end, 160)
+  end)
+
   test("256-bit constants and logical operations", function()
     local ct = T.W.u32x8.ct
     local a = ct(0xaaaaaaaa, 1, 2, 3, 0x55555555, 5, 6, 7)

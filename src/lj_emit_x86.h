@@ -513,6 +513,7 @@ static void emit_loadkvec(ASMState *as, Reg r, IRIns *ir)
   const uint8_t *k = ir_kvec(ir);
   uint32_t i, size = irt_vecsize(ir->t);
   int wide = irt_isvec256(ir->t);
+  int vex = wide || (as->flags & JIT_F_AVX);
   lj_assertA(rset_test(RSET_FPR, r), "vector constant needs an FP register");
   for (i = 0; i < size; i += 8)
     if (((const uint64_t *)k)[i >> 3] != 0)
@@ -526,11 +527,11 @@ static void emit_loadkvec(ASMState *as, Reg r, IRIns *ir)
   }
 #if LJ_GC64
   if (checki32(dispofs(as, k)) && checki32(dispofs(as, k+size-1))) {
-    emit_rmro(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS,
+    emit_rmro(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS,
 	      r, RID_DISPATCH, (int32_t)dispofs(as, k));
   } else if (checki32(mcpofs(as, k)) && checki32(mcpofs(as, k+size-1)) &&
 	     checki32(mctopofs(as, k)) && checki32(mctopofs(as, k+size-1))) {
-    emit_rmro(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS,
+    emit_rmro(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS,
 	      r, RID_RIP, (int32_t)mcpofs(as, k));
   } else {  /* Intern the constant at the bottom of the mcode area. */
     if (!ir->i) {
@@ -541,11 +542,11 @@ static void emit_loadkvec(ASMState *as, Reg r, IRIns *ir)
       as->mclim = as->mcbot + MCLIM_REDZONE;
       lj_mcode_commitbot(as->J, as->mcbot);
     }
-    emit_rmro(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS, r, RID_RIP,
+    emit_rmro(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS, r, RID_RIP,
 	      (int32_t)mcpofs(as, as->mctop - ir->i));
   }
 #else
-  emit_rma(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS, r, k);
+  emit_rma(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS, r, k);
 #endif
 }
 
@@ -671,8 +672,9 @@ static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 {
   if (dst < RID_MAX_GPR)
     emit_rr(as, XO_MOV, REX_64IR(ir, dst), src);
-  else if (irt_isvec256(ir->t))
-    emit_rr(as, emit_vexop(XO_MOVAPS, 0, 1), dst, src);
+  else if (irt_isvec(ir->t) &&
+	   (irt_isvec256(ir->t) || (as->flags & JIT_F_AVX)))
+    emit_rr(as, emit_vexop(XO_MOVAPS, 0, irt_isvec256(ir->t)), dst, src);
   else
     emit_rr(as, XO_MOVAPS, dst, src);
 }
@@ -683,7 +685,9 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
   if (r < RID_MAX_GPR)
     emit_rmro(as, XO_MOV, REX_64IR(ir, r), base, ofs);
   else if (irt_isvec(ir->t)) {
-    x86Op xo = irt_isvec256(ir->t) ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS;
+    int wide = irt_isvec256(ir->t);
+    x86Op xo = (wide || (as->flags & JIT_F_AVX)) ?
+	       emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS;
     emit_rmro(as, xo, r, base, ofs);  /* Spill slots are not aligned. */
   }
   else
@@ -696,8 +700,9 @@ static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
   if (r < RID_MAX_GPR)
     emit_rmro(as, XO_MOVto, REX_64IR(ir, r), base, ofs);
   else if (irt_isvec(ir->t)) {
-    x86Op xo = irt_isvec256(ir->t) ?
-	       emit_vexop(XO_MOVUPSto, 0, 1) : XO_MOVUPSto;
+    int wide = irt_isvec256(ir->t);
+    x86Op xo = (wide || (as->flags & JIT_F_AVX)) ?
+	       emit_vexop(XO_MOVUPSto, 0, wide) : XO_MOVUPSto;
     emit_rmro(as, xo, r, base, ofs);
   }
   else

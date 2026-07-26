@@ -437,6 +437,12 @@ typedef enum {
   XO_PABSB =	XO_0f38(1c),		/* SSSE3 */
   XO_PABSW =	XO_0f38(1d),		/* SSSE3 */
   XO_PABSD =	XO_0f38(1e),		/* SSSE3 */
+  XO_PMOVSXBW =	XO_0f38(20),		/* SSE4.1, AVX2 when L=1 */
+  XO_PMOVSXWD =	XO_0f38(23),		/* SSE4.1, AVX2 when L=1 */
+  XO_PMOVSXDQ =	XO_0f38(25),		/* SSE4.1, AVX2 when L=1 */
+  XO_PMOVZXBW =	XO_0f38(30),		/* SSE4.1, AVX2 when L=1 */
+  XO_PMOVZXWD =	XO_0f38(33),		/* SSE4.1, AVX2 when L=1 */
+  XO_PMOVZXDQ =	XO_0f38(35),		/* SSE4.1, AVX2 when L=1 */
   XO_PMULLD =	XO_0f38(40),		/* SSE4.1 */
   XO_PMULHW =	XO_660f(e5),
   XO_PMULHUW =	XO_660f(e4),

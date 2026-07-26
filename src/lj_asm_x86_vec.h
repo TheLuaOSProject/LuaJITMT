@@ -199,6 +199,28 @@ static void emit_vrr2l(ASMState *as, x86Op xo, Reg dest, Reg src, int l)
 #define emit_vrr2(as, xo, dest, src) \
   emit_vrr2l((as), (xo), (dest), (src), 0)
 
+/* Move a dword/qword between a GPR and the low vector lane. Use VEX-128 on
+** AVX CPUs even for XMM values, so a mixed XMM/YMM trace never pays a legacy
+** SSE transition penalty.
+*/
+static void emit_vmovd_gpr(ASMState *as, Reg dest, Reg src, int w)
+{
+  if ((as->flags & JIT_F_AVX))
+    emit_vexrrw(as, XO_MOVD, dest, VEXNOV, src, w);
+  else
+    emit_rr(as, XO_MOVD, dest | (w ? REX_64 : 0),
+	    src | (w ? REX_64 : 0));
+}
+
+static void emit_vmovd_to_gpr(ASMState *as, Reg dest, Reg src, int w)
+{
+  if ((as->flags & JIT_F_AVX))
+    emit_vexrrw(as, XO_MOVDto, src, VEXNOV, dest, w);
+  else
+    emit_rr(as, XO_MOVDto, src | (w ? REX_64 : 0),
+	    dest | (w ? REX_64 : 0));
+}
+
 /* dest = <xo> src, imm8. */
 static void emit_vrr2il(ASMState *as, x86Op xo, Reg dest, Reg src, int32_t i,
 			int l)
@@ -513,8 +535,7 @@ static void asm_vsplat(ASMState *as, IRIns *ir)
 		 t == IRT_V8I16 ? XO_VPBROADCASTW :
 		 t == IRT_V4I32 ? XO_VPBROADCASTD : XO_VPBROADCASTQ;
       emit_vrr2l(as, xo, dest, dest, 1);
-      emit_rr(as, XO_MOVD, dest | (t == IRT_V2I64 ? REX_64 : 0),
-	      src | (t == IRT_V2I64 ? REX_64 : 0));
+      emit_vmovd_gpr(as, dest, src, t == IRT_V2I64);
     }
     return;
   }
@@ -532,22 +553,22 @@ static void asm_vsplat(ASMState *as, IRIns *ir)
     switch (t) {
     case IRT_V2I64:
       emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x44);
-      emit_rr(as, XO_MOVD, dest|REX_64, src|REX_64);
+      emit_vmovd_gpr(as, dest, src, 1);
       break;
     case IRT_V4I32:
       emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x00);
-      emit_rr(as, XO_MOVD, dest, src);
+      emit_vmovd_gpr(as, dest, src, 0);
       break;
     case IRT_V8I16:
       emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x00);
       emit_vrr2i(as, XO_PSHUFLW, dest, dest, 0x00);
-      emit_rr(as, XO_MOVD, dest, src);
+      emit_vmovd_gpr(as, dest, src, 0);
       break;
     default:  /* IRT_V16I8 */
       emit_vrr2i(as, XO_PSHUFD, dest, dest, 0x00);
       emit_vrr2i(as, XO_PSHUFLW, dest, dest, 0x00);
       emit_vrr3(as, XO_PUNPCKLBW, dest, dest, dest);
-      emit_rr(as, XO_MOVD, dest, src);
+      emit_vmovd_gpr(as, dest, src, 0);
       break;
     }
   }
@@ -865,20 +886,14 @@ static void asm_vecextract(ASMState *as, IRIns *ir)
   } else {
     Reg dest = ra_dest(as, ir, RSET_GPR);
     Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-    if (st == IRT_V2I64)
-      emit_rr(as, XO_MOVDto, left|REX_64, dest|REX_64);
-    else
-      emit_rr(as, XO_MOVDto, left, dest);
+    emit_vmovd_to_gpr(as, dest, left, st == IRT_V2I64);
   }
 }
 
 /* Move a qword from a GPR into the low lane of an XMM register. */
 static void emit_vmovq_gpr(ASMState *as, Reg dest, Reg src)
 {
-  if ((as->flags & JIT_F_AVX))
-    emit_vexrrw(as, XO_MOVD, dest, VEXNOV, src, 1);
-  else
-    emit_rr(as, XO_MOVD, dest|REX_64, src|REX_64);
+  emit_vmovd_gpr(as, dest, src, 1);
 }
 
 /* Truncate the low double lane to a signed qword (the indefinite result on
@@ -890,6 +905,43 @@ static void emit_vcvttsd2si64(ASMState *as, Reg dest, Reg src)
     emit_vexrrw(as, XO_CVTTSD2SI, dest, VEXNOV, src, 1);
   else
     emit_rr(as, XO_CVTTSD2SI, dest|REX_64, src);
+}
+
+/* VEX scalar qword conversion and qword extraction helpers. The merge source
+** of VCVTSI2SS is a live vector register; only the replaced low float is used.
+*/
+static void emit_vcvtsi2ss64(ASMState *as, Reg dest, Reg merge, Reg src)
+{
+  emit_vexrrw(as, XO_CVTSI2SS, dest, merge, src, 1);
+}
+
+static void emit_vmovq_to_gpr(ASMState *as, Reg dest, Reg src)
+{
+  emit_vmovd_to_gpr(as, dest, src, 1);
+}
+
+/*
+** Convert one unsigned qword exactly. CVTSI2SS handles the low signed half
+** directly. For the high half, convert (x>>1)|(x&1), whose low bit is the
+** required rounding sticky bit, then double the correctly rounded float.
+*/
+static void emit_vcvtu64_to_ss(ASMState *as, Reg dest, Reg merge, Reg src,
+			       Reg tmp)
+{
+  MCLabel l_done = emit_label(as);
+  MCLabel l_positive;
+  /* Positive path, emitted first because the assembler runs backwards. */
+  emit_vcvtsi2ss64(as, dest, merge, src);
+  l_positive = emit_label(as);
+  emit_jmp(as, l_done);
+  emit_vexrr(as, XO_ADDSS, dest, dest, dest);
+  emit_vcvtsi2ss64(as, dest, merge, src);
+  emit_rr(as, XO_ARITH(XOg_OR), src|REX_64, tmp|REX_64);
+  emit_shifti(as, XOg_SHR|REX_64, src, 1);
+  emit_gri(as, XG_ARITHi(XOg_AND), tmp|REX_64, 1);
+  emit_rr(as, XO_MOV, tmp|REX_64, src|REX_64);
+  emit_sjcc(as, CC_NS, l_positive);
+  emit_rr(as, XO_TEST, src|REX_64, src);
 }
 
 /*
@@ -954,6 +1006,85 @@ static void asm_vecconv_f64_i64(ASMState *as, IRIns *ir)
   }
 }
 
+/*
+** There is no packed qword-to-float instruction before AVX-512. Extract the
+** four qwords without a memory round trip, issue one exact scalar conversion
+** per lane, then assemble their low floats. Unsigned lanes use the sticky-bit
+** halving sequence above only when their high bit is set.
+*/
+static void asm_vecconv_i64_f32(ASMState *as, IRIns *ir, int uns)
+{
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  RegSet fallow = rset_exclude(RSET_FPR, dest);
+  Reg left = ra_alloc1(as, ir->op1, fallow);
+  Reg f1, f2, f3, g, tmpg = RID_NONE;
+  fallow = rset_exclude(fallow, left);
+  f1 = ra_scratch(as, fallow);
+  fallow = rset_exclude(fallow, f1);
+  f2 = ra_scratch(as, fallow);
+  fallow = rset_exclude(fallow, f2);
+  f3 = ra_scratch(as, fallow);
+  g = ra_scratch(as, RSET_GPR);
+  if (uns) tmpg = ra_scratch(as, rset_exclude(RSET_GPR, g));
+
+  /* Pack [f0,f1] and [f2,f3], then join the two low pairs. */
+  emit_i8(as, 0x44);
+  emit_vexrr(as, XO_SHUFPS, dest, dest, f2);
+  emit_vrr3(as, XO_UNPCKLPS, f2, f2, f3);
+  emit_vrr3(as, XO_UNPCKLPS, dest, dest, f1);
+
+  /* Upper two qwords. f2/f3 temporarily hold integer source bits. */
+  if (uns) emit_vcvtu64_to_ss(as, f3, left, g, tmpg);
+  else emit_vcvtsi2ss64(as, f3, left, g);
+  checkmclim(as);
+  emit_vmovq_to_gpr(as, g, f3);
+  if (uns) emit_vcvtu64_to_ss(as, f2, left, g, tmpg);
+  else emit_vcvtsi2ss64(as, f2, left, g);
+  checkmclim(as);
+  emit_vmovq_to_gpr(as, g, f2);
+  emit_vrr2i(as, XO_PSHUFD, f3, f2, 0xee);
+  emit_i8(as, 1);
+  emit_vexrrl(as, XO_VEXTRACTF128, left, VEXNOV, f2, 1);
+
+  /* Lower two qwords. */
+  if (uns) emit_vcvtu64_to_ss(as, f1, left, g, tmpg);
+  else emit_vcvtsi2ss64(as, f1, left, g);
+  checkmclim(as);
+  emit_vmovq_to_gpr(as, g, f1);
+  if (uns) emit_vcvtu64_to_ss(as, dest, left, g, tmpg);
+  else emit_vcvtsi2ss64(as, dest, left, g);
+  checkmclim(as);
+  emit_vmovq_to_gpr(as, g, left);
+  emit_vrr2i(as, XO_PSHUFD, f1, left, 0xee);
+}
+
+/* Widen 16 bytes of integer lanes to 32 bytes according to source signedness. */
+static void asm_vecconv_widen_int(ASMState *as, IRIns *ir, uint32_t sk)
+{
+  uint32_t sz = veck_size(sk);
+  x86Op xo;
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  if (sz == 1)
+    xo = veck_isunsigned(sk) ? XO_PMOVZXBW : XO_PMOVSXBW;
+  else if (sz == 2)
+    xo = veck_isunsigned(sk) ? XO_PMOVZXWD : XO_PMOVSXWD;
+  else
+    xo = veck_isunsigned(sk) ? XO_PMOVZXDQ : XO_PMOVSXDQ;
+  emit_vrr2l(as, xo, dest, left, 1);
+}
+
+/* The recorder has already compacted narrowing integer lanes into qwords 0
+** and 2 with VPSHUFB. Select those two qwords into the low XMM result.
+*/
+static void asm_vecconv_narrow_int(ASMState *as, IRIns *ir)
+{
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  emit_i8(as, 0x08);
+  emit_vexrrwl(as, XO_VPERMQ, dest, VEXNOV, left, 1, 1);
+}
+
 /* Lane conversion. Packed emulations are expanded by the recorder; the
 ** double-to-qword case uses the call-free scalar sequence above.
 */
@@ -961,8 +1092,29 @@ static void asm_vecconv(ASMState *as, IRIns *ir)
 {
   uint32_t lit = (uint32_t)ir->op2;
   uint32_t dk = irvconv_dst(lit), sk = irvconv_src(lit);
+  uint32_t dsz = veck_size(dk), ssz = veck_size(sk);
   int wide = irt_isvec256(ir->t);
   Reg dest, left;
+  if (dsz != ssz) {
+    if (!veck_isfp(dk) && !veck_isfp(sk)) {
+      if (dsz > ssz) asm_vecconv_widen_int(as, ir, sk);
+      else asm_vecconv_narrow_int(as, ir);
+      return;
+    }
+    if (dk == VECK_F32 && (sk == VECK_I64 || sk == VECK_U64)) {
+      asm_vecconv_i64_f32(as, ir, sk == VECK_U64);
+      return;
+    }
+    dest = ra_dest(as, ir, RSET_FPR);
+    left = ra_alloc1(as, ir->op1, RSET_FPR);
+    if (dk == VECK_F64)
+      emit_vrr2l(as, sk == VECK_F32 ? XO_CVTPS2PD : XO_CVTDQ2PD,
+		 dest, left, 1);
+    else
+      emit_vrr2l(as, dk == VECK_F32 ? XO_CVTPD2PS : XO_CVTTPD2DQ,
+		 dest, left, 1);
+    return;
+  }
   if (sk == VECK_F64 && (dk == VECK_I64 || dk == VECK_U64)) {
     asm_vecconv_f64_i64(as, ir);
     return;

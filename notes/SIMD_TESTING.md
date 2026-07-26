@@ -117,6 +117,14 @@ Cross-width interpreter tests include integer values just one unit beyond an
 the wrong neighbouring float for those values, so the reference path casts
 64-bit integers directly to `float` when that is the requested lane type.
 
+The native cross-width suite exhaustively checks all 38 directed equal-lane
+pairs between 16- and 32-byte vectors against the interpreter. Codegen checks
+pin the expected AVX2 widening, narrowing and conversion sequences, forbid
+helper calls, and count scalar qword-to-float conversions. A representative
+mixed XMM/YMM loop additionally rejects legacy `MOVAPS` and `MOVUPS`: one such
+loop-PHI move caused a roughly 20 ns AVX-to-SSE transition before the vector
+move/load/store paths were made VEX-128-clean.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the
@@ -212,10 +220,10 @@ make clean && make -j$(nproc) CCDEBUG=-g \
 All of these pass. UBSan reports nothing at all in `lj_simd.c`, `lj_crecord.c`
 or `lj_record.c`; the remaining reports come from stock LuaJIT files
 (`lj_parse.c`, `lj_buf.c`, `lj_bcread.c`, `lib_jit.c`) and from the
-deliberately unaligned mcode stores, which the compiler attributes to the
-inlining site rather than to the macro: `lj_asm.c` (`emit_setvmstate`, itself
-unmodified in `lj_emit_x86.h`) and `lj_ccallback.c`, a file this work does not
-touch at all. All pre-existing.
+deliberately unaligned mcode stores, which the compiler attributes to their
+inlining sites in `lj_asm.c`, `lj_asm_x86.h`, `lj_emit_x86.h`, and
+`lj_ccallback.c`. The modified emitter ranges add no new UBSan site. All are
+pre-existing.
 
 Run the **assert** build with more than one seed, not just once. The assert
 build is the only configuration that validates IR structure, and one of its

@@ -270,11 +270,13 @@ width &mdash; for a NaN or for anything outside the destination's signed
 range, which is what the packed conversion instructions do.
 </p>
 <p>
-The JIT compiles <tt>i32/u32 &harr; float</tt>,
-<tt>i64/u64 &harr; double</tt>, and same-width integer signedness changes for
-both XMM and YMM vectors. The full unsigned input ranges are handled exactly.
-Other equal-lane numeric pairs remain correct in the interpreter and abandon
-the trace rather than being silently scalarised.
+The JIT compiles every equal-lane numeric pair whose source and destination
+vectors are each 16 or 32 bytes. This includes integer widening and narrowing,
+<tt>float4 &harr; double4</tt>, word/dword floating-point conversion, and the
+qword/float cases; the full unsigned input ranges are handled exactly. A pair
+with a 32-byte side requires AVX2. Pairs involving an 8- or 64-byte vector
+remain correct in the interpreter and abandon the trace rather than being
+silently scalarised.
 </p>
 <pre class="code">
 local bits = simd.bitcast(int4, v)                -- raw bit pattern

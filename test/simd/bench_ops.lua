@@ -658,6 +658,69 @@ conversion_cost("double2 -> u64x2", function()
 end, function(x) return simd.convert(u64, x) end)
 
 if has_ymm then
+  io.write("\n== AVX2 cross-width conversion throughput (ns per vector) ==\n")
+
+  conversion_cost("i8x16 -> i16x16", function()
+    return s8(-127), s8(-63), s8(1), s8(65), s8(3), i16w(0)
+  end, function(x) return simd.convert(i16w, x) end)
+  conversion_cost("i16x16 -> i8x16", function()
+    return i16w(0x1234), i16w(-1), i16w(0x80), i16w(0x7f),
+	   i16w(257), s8(0)
+  end, function(x) return simd.convert(s8, x) end)
+  conversion_cost("i16x8 -> float8", function()
+    return i16(-30000, -7, -1, 0, 1, 7, 100, 30000),
+	   i16(-29997, -4, 2, 3, 4, 10, 103, 30003),
+	   i16(-29994, -1, 5, 6, 7, 13, 106, 30006),
+	   i16(-29991, 2, 8, 9, 10, 16, 109, 30009),
+	   i16(3), f8(0)
+  end, function(x) return simd.convert(f8, x) end)
+  conversion_cost("float8 -> i16x8", function()
+    return f8(-32768, -32768.5, 32767, 32767.5,
+	      -100.75, -1.9, 1.9, 100.75),
+	   f8(-32767, -32769, 32766, 32768,
+	      -99.75, -0.9, 2.9, 101.75),
+	   f8(-32766, -32770, 32765, 32769,
+	      -98.75, 0.1, 3.9, 102.75),
+	   f8(-32765, -32771, 32764, 32770,
+	      -97.75, 1.1, 4.9, 103.75),
+	   f8(0.25), i16(0)
+  end, function(x) return simd.convert(i16, x) end)
+  conversion_cost("float4 -> double4", function()
+    return f4(-1000.75, -7.5, 11.25, 1001.75),
+	   f4(-999.75, -5.5, 14.25, 1005.75),
+	   f4(-997.75, -3.5, 17.25, 1009.75),
+	   f4(-995.75, -1.5, 20.25, 1013.75),
+	   f4(0.25, 0.5, 0.75, 1), d4(0)
+  end, function(x) return simd.convert(d4, x) end)
+  conversion_cost("double4 -> float4", function()
+    return d4(-1000.75, -7.5, 11.25, 1001.75),
+	   d4(-999.75, -5.5, 14.25, 1005.75),
+	   d4(-997.75, -3.5, 17.25, 1009.75),
+	   d4(-995.75, -1.5, 20.25, 1013.75),
+	   d4(0.25, 0.5, 0.75, 1), f4(0)
+  end, function(x) return simd.convert(f4, x) end)
+  conversion_cost("u32x4 -> double4", function()
+    return u4(0, 1, 0x80000001, 0xffffffff),
+	   u4(1, 2, 0x80000003, 0xfffffffd),
+	   u4(2, 3, 0x80000005, 0xfffffffb),
+	   u4(3, 4, 0x80000007, 0xfffffff9),
+	   u4(1, 3, 5, 7), d4(0)
+  end, function(x) return simd.convert(d4, x) end)
+  conversion_cost("i64x4 -> float4", function()
+    return i64w(0x4000004000000001LL, -0x4000004000000001LL, 0, 1),
+	   i64w(0x4000004000000005LL, -0x4000003ffffffffdLL, 4, 5),
+	   i64w(0x4000004000000009LL, -0x4000003ffffffff9LL, 8, 9),
+	   i64w(0x400000400000000dLL, -0x4000003ffffffff5LL, 12, 13),
+	   i64w(17), f4(0)
+  end, function(x) return simd.convert(f4, x) end)
+  conversion_cost("u64x4 -> float4", function()
+    return u64w(0x8000008000000001ULL, 0x4000004000000001ULL, 0, 1),
+	   u64w(0x8000008000000005ULL, 0x4000004000000005ULL, 4, 5),
+	   u64w(0x8000008000000009ULL, 0x4000004000000009ULL, 8, 9),
+	   u64w(0x800000800000000dULL, 0x400000400000000dULL, 12, 13),
+	   u64w(17), f4(0)
+  end, function(x) return simd.convert(f4, x) end)
+
   io.write("\n== AVX2 width comparison (dependent ns/op) ==\n")
   io.write("                                      XMM       YMM   lane throughput\n")
 

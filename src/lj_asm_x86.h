@@ -1482,7 +1482,9 @@ static void asm_fxload(ASMState *as, IRIns *ir)
       /* Vector cdata payloads are only 8 byte aligned, and a vector may also
       ** be loaded through a pointer to arbitrary memory. Always unaligned.
       */
-      xo = irt_isvec256(ir->t) ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS;
+      int wide = irt_isvec256(ir->t);
+      xo = (wide || (as->flags & JIT_F_AVX)) ?
+	   emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS;
       break;
     }
     if (LJ_64 && irt_is64(ir->t))
@@ -1535,8 +1537,11 @@ static void asm_fxstore(ASMState *as, IRIns *ir)
     case IRT_FLOAT: xo = XO_MOVSSto; break;
     case IRT_V16I8: case IRT_V8I16: case IRT_V4I32:
     case IRT_V2I64: case IRT_V4F32: case IRT_V2F64:
-      xo = irt_isvec256(ir->t) ?
-	   emit_vexop(XO_MOVUPSto, 0, 1) : XO_MOVUPSto;
+      {
+	int wide = irt_isvec256(ir->t);
+	xo = (wide || (as->flags & JIT_F_AVX)) ?
+	     emit_vexop(XO_MOVUPSto, 0, wide) : XO_MOVUPSto;
+      }
       break;
 #if LJ_64 && !LJ_GC64
     case IRT_LIGHTUD:

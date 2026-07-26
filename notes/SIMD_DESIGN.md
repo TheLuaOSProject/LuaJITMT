@@ -162,13 +162,13 @@ error, `simd.bitcast` / `simd.convert` are explicit.
 
 ## D6. Conversions
 
-  * `simd.bitcast(ct, v)` - reinterpret the 16 bytes, requires equal sizes.
+  * `simd.bitcast(ct, v)` - reinterpret the vector bits, requires equal sizes.
   * `simd.convert(ct, v)` - numeric lane conversion, requiring equal lane
-    counts. The interpreter accepts every numeric pair. The JIT compiles
-    same-width integer signedness changes, `i32/u32 <-> f32`, and
-    `i64/u64 <-> f64`; other pairs abort the trace and continue interpreted.
-    D27 describes the packed emulations needed where x86 has no direct
-    instruction.
+    counts. The interpreter accepts every numeric pair. The JIT compiles every
+    pair whose source and destination vector sizes are each 16 or 32 bytes;
+    pairs involving an 8- or 64-byte vector abort the trace and continue
+    interpreted. D27 and D28 describe the packed and exact call-free
+    emulations needed where x86 has no direct instruction.
   * `V(x)` construction from a Lua number uses the *existing* FFI conversion.
 
 ## D7. `ExitState` becomes 128-bit wide
@@ -753,3 +753,38 @@ Four-way throughput measurements on the AVX2 test host are 0.51 ns/vector for
 process twice the lanes at the same YMM cost. Double-to-qword issues twice as
 many scalar conversions in a YMM value, so its per-lane throughput stays
 constant rather than doubling.
+
+## D28. Compile every native cross-width conversion and keep it VEX-clean
+
+An equal lane count can still change the physical vector width: `float4 ->
+double4`, for example, is XMM to YMM. Every directed conversion whose source
+and destination are each 16 or 32 bytes now compiles, covering all 38
+cross-width pairs as well as the existing equal-width pairs.
+
+The common cases map directly onto AVX2:
+
+* integer widening uses `VPMOVSXBW/WD/DQ` or `VPMOVZXBW/WD/DQ`;
+* integer narrowing uses a lane-local `VPSHUFB`, followed by one `VPERMQ` to
+  compact the two surviving qwords into the low XMM result;
+* `float4 <-> double4` and signed dword/double conversion use the matching
+  `VCVT*` instruction;
+* word-to-float widens to dwords first, while float-to-word checks the signed
+  destination bounds before `VCVTTPS2DQ` and packed narrowing.
+
+The instruction-set holes remain exact and call-free. `u32x4 -> double4`
+zero-extends to qwords, ORs in a binary64 `2^52` exponent, then subtracts the
+bias. Qword-to-float has no packed AVX2 instruction, so each lane uses a
+scalar `VCVTSI2SS` and the four results are packed in registers. Unsigned
+qwords use the standard exact `(x >> 1) | (x & 1)` conversion followed by a
+doubling when the sign bit is set; this avoids the double-rounding error of
+converting through binary64.
+
+Mixed widths exposed a separate performance rule. A legacy SSE instruction
+executed while a YMM upper half is live incurs a severe AVX-to-SSE transition
+on affected CPUs. The loop PHI move for an XMM result was still `MOVAPS`, even
+though the same trace carried YMM inputs, making otherwise sub-nanosecond
+conversions cost roughly 20 ns. On an AVX host, all vector register moves,
+constants, loads, stores, spills, GPR transfers and extracts now use VEX-128
+even for XMM values. VEX-128 preserves the intended low-half semantics,
+zeroes the upper half, and avoids the transition. A codegen test rejects
+legacy `MOVAPS` and `MOVUPS` in a representative mixed XMM/YMM loop.

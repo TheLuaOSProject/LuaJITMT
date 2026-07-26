@@ -57,8 +57,8 @@ The current YMM operation surface compiles:
   widths, whole-vector equality, unary minus, and dynamic scalar splats;
 * logical operations, comparisons/masks, select, min/max, shifts,
   abs/sqrt/rounding, FMA, saturating arithmetic, every integer-width `mulhi`,
-  equal-size bitcast, and the native 32- and 64-bit numeric conversions listed
-  below;
+  equal-size bitcast, and every equal-lane numeric conversion whose source and
+  destination are each a native 16- or 32-byte vector;
 * horizontal reductions, constant and runtime-index shuffles, two-source
   shuffles, and constant or runtime-index insertion across both 128-bit halves;
 * unaligned loads/stores, loop-carried values, 32-byte spills, and reconstruction
@@ -127,16 +127,16 @@ lane counts are rejected; use `bitcast` for pure reinterpretation.
   between the interpreter and the JIT.
 
 The interpreter accepts every numeric source/destination pair with an equal
-lane count. The native XMM/YMM JIT subset (the `yes*` above) is:
-
-* `i32/u32 <-> float`, including the full unsigned input range;
-* `i64/u64 <-> double`;
-* integer signedness changes with the same element width.
+lane count. The native XMM/YMM JIT compiles **every** such pair when both
+vector sizes are 16 or 32 bytes. This includes all 38 directed 16-to-32 and
+32-to-16 byte pairs: integer extension/truncation, `float4 <-> double4`,
+word/dword float conversion, and the qword/float cases. Any pair with a
+32-byte side requires AVX2 under the target policy.
 
 The unsigned float-to-integer forms deliberately have the signed-range
-indefinite semantics described above. Equal-lane conversions that also change
-the vector width, such as `float4 -> double4`, currently abort the trace and
-continue interpreted; they are not silently scalarised.
+indefinite semantics described above. Equal-lane conversions involving an
+8-byte or 64-byte vector remain interpreter-only and abandon the trace rather
+than being silently scalarised.
 
 For 256-bit types, zero/multi-lane construction, dynamic splats, copies,
 constants, memory loads/stores, and equal-size `bitcast` are native.
@@ -240,6 +240,7 @@ Semantics worth pinning down:
 | per-lane count **vector** in `shl`/`shr`/`sar` on 8/16-bit lanes | call-free AVX2 packed decomposition. Each dword is split into two words or four bytes, the pieces use VPSLLVD/VPSRLVD/VPSRAVD independently, then masks and constant shifts reassemble the original lanes |
 | per-lane count **vector** on 64-bit `sar` | no VPSRAVQ before AVX-512, so it lowers to a clamped VPSRLVQ plus the sign-bias trick: eight packed instructions, no call. The clamp is needed because VPSRLVQ flushes to zero past the lane width, which would take the sign bias with it |
 | runtime index **vector** in `shuffle` | supported. XMM and 8/16/64-bit YMM lanes build a PSHUFB byte control at runtime; YMM adds a `VPERM2I128` half-swap, second `VPSHUFB`, and packed half-select to cross the 128-bit boundary. A 32-bit YMM index vector instead maps directly to one `VPERMD`, whose low-three-bit index rule is exactly the documented modulo-eight semantics |
+| numeric conversion between native 16- and 32-byte vectors | all 38 equal-lane directed pairs compile. Widening uses VPMOVSX/ZX or direct VCVT instructions, narrowing uses packed shuffles, and missing unsigned/qword forms use exact call-free arithmetic. Qword-to-float uses four scalar hardware conversions plus packed assembly because AVX2 has no packed instruction, but never calls C or materialises the vector |
 | separate non-constant lane indices in `shuffle`/`shuffle2` | still rejected at record time. Assembling a control mask from N *scalar* indices costs more than it saves; pass an index vector instead |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |
 | 256-bit operation surface | the supported 128-bit operation surface is YMM-aware, including reductions and shuffle/insert; AVX2 is required |

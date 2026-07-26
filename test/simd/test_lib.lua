@@ -495,6 +495,34 @@ test("bitcast and convert", function()
   checkeq(simd.convert(T.T.u64x2.ct, T.T.double2.ct(2.9, -2.9)),
 	  T.T.u64x2.ct(2, 0xfffffffffffffffeULL),
 	  "f64->u64 uses the signed truncation bits")
+  checkeq(simd.convert(T.W.i16x16.ct,
+	  T.T.i8x16.ct(-128, -127, -2, -1, 0, 1, 2, 127)),
+	  T.W.i16x16.ct(-128, -127, -2, -1, 0, 1, 2, 127),
+	  "i8->i16 sign extends")
+  checkeq(simd.convert(T.W.u16x16.ct,
+	  T.T.u8x16.ct(0, 1, 127, 128, 254, 255)),
+	  T.W.u16x16.ct(0, 1, 127, 128, 254, 255),
+	  "u8->u16 zero extends")
+  checkeq(simd.convert(T.T.i8x16.ct,
+	  T.W.i16x16.ct(0x1234, -1, 0x80, 0x7f, 0x100, -129)),
+	  T.T.i8x16.ct(0x34, -1, -128, 127, 0, 127),
+	  "i16->i8 keeps the low byte")
+  checkeq(simd.convert(T.W.double4.ct, f.ct(1.5, -2.25, 0, 16777216)),
+	  T.W.double4.ct(1.5, -2.25, 0, 16777216),
+	  "f32->f64 widens exactly")
+  checkeq(simd.convert(f.ct,
+	  T.W.double4.ct(1.0000000596046448, -2.5, 1e300, 0/0)),
+	  f.ct(1, -2.5, 1/0, 0/0), "f64->f32 rounds")
+  checkeq(simd.convert(T.W.double4.ct,
+	  T.T.u32x4.ct(0, 1, 0x80000001, 0xffffffff)),
+	  T.W.double4.ct(0, 1, 2147483649, 4294967295),
+	  "u32->f64 is exact")
+  checkeq(simd.convert(T.T.i16x8.ct,
+	  T.W.float8.ct(-32768, -32768.5, 32767, 32767.5,
+		       0/0, 1/0, -1/0, -1.9)),
+	  T.T.i16x8.ct(-32768, -32768, 32767, -32768,
+		       -32768, -32768, -32768, -1),
+	  "f32->i16 uses the narrow signed bounds")
   checkeq(simd.convert(f.ct,
 	  T.T.u32x4.ct(0, 1, 16777217, 0xffffffff)),
 	  f.ct(0, 1, 16777216, 4294967296), "u32->f32 rounds correctly")

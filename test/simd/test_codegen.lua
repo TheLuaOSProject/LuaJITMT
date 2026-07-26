@@ -947,6 +947,130 @@ if simd.features().avx2 then
     end)
   end)
 
+  test("cross-width conversions use native AVX2 sequences", function()
+    local b16, ub16 = T.T.i8x16.ct, T.T.u8x16.ct
+    local h16, uh16 = T.W.i16x16.ct, T.W.u16x16.ct
+    checkymm("signed byte widening", {"vpmovsxbw ymm"}, function()
+      local v, acc = b16(-127), h16(0)
+      for _ = 1, 400 do
+	v = v + b16(3)
+	acc = simd.bxor(acc, simd.convert(h16, v))
+      end
+      return acc
+    end)
+    checkymm("unsigned byte widening", {"vpmovzxbw ymm"}, function()
+      local v, acc = ub16(129), uh16(0)
+      for _ = 1, 400 do
+	v = v + ub16(3)
+	acc = simd.bxor(acc, simd.convert(uh16, v))
+      end
+      return acc
+    end)
+    checkymm("integer lane narrowing", {"vpshufb ymm", "permq ymm"},
+      function()
+	local v, acc = h16(0x1234), b16(0)
+	for _ = 1, 400 do
+	  v = v + h16(257)
+	  acc = simd.bxor(acc, simd.convert(b16, v))
+	end
+	return acc
+      end)
+
+    local f4, i4, u4 = T.T.float4.ct, T.T.i32x4.ct, T.T.u32x4.ct
+    local d4 = T.W.double4.ct
+    checkymm("float4 to double4", {"vcvtps2pd ymm"}, function()
+      local v, acc = f4(1.25), d4(0)
+      for _ = 1, 400 do
+	v = v + f4(0.25)
+	acc = simd.bxor(acc, simd.convert(d4, v))
+      end
+      return acc
+    end)
+    local mixedbody = checkymm("double4 to float4", {"vcvtpd2ps"}, function()
+      local v, acc = d4(1.25), f4(0)
+      for _ = 1, 400 do
+	v = v + d4(0.25)
+	acc = simd.bxor(acc, simd.convert(f4, v))
+      end
+      return acc
+    end)
+    for _, legacy in ipairs({" movaps xmm", " movups xmm"}) do
+      check(not mixedbody:find(legacy, 1, true),
+	    "mixed XMM/YMM loop must not contain legacy '" .. legacy .. "': " ..
+	    mixedbody:gsub("\n", " | "))
+    end
+    checkymm("i32x4 to double4", {"vcvtdq2pd ymm"}, function()
+      local v, acc = i4(-1000, -1, 1, 1000), d4(0)
+      for _ = 1, 400 do
+	v = v + i4(3)
+	acc = simd.bxor(acc, simd.convert(d4, v))
+      end
+      return acc
+    end)
+    checkymm("u32x4 to double4",
+      {"vpmovzxdq ymm", "vpor ymm", "vsubpd ymm"}, function()
+	local v = u4(0, 1, 0x80000001, 0xffffffff)
+	local acc = d4(0)
+	for _ = 1, 400 do
+	  v = v + u4(65537)
+	  acc = simd.bxor(acc, simd.convert(d4, v))
+	end
+	return acc
+      end)
+
+    local h8, f8 = T.T.i16x8.ct, T.W.float8.ct
+    checkymm("i16x8 to float8",
+      {"vpmovsxwd ymm", "vcvtdq2ps ymm"}, function()
+	local v, acc = h8(-30000, -7, -1, 0, 1, 7, 100, 30000), f8(0)
+	for _ = 1, 400 do
+	  v = v + h8(3)
+	  acc = simd.bxor(acc, simd.convert(f8, v))
+	end
+	return acc
+      end)
+    checkymm("float8 to i16x8",
+      {"vcmpps ymm", "vcvttps2dq ymm", "vpshufb ymm", "permq ymm"},
+      function()
+	local v = f8(-32768, -32768.5, 32767, 32767.5,
+		     0/0, 1/0, -1/0, -1.9)
+	local step = f8(0, 0, 0, 0, 0, 0, 0, 0.01)
+	local acc = h8(0)
+	for _ = 1, 400 do
+	  v = v + step
+	  acc = simd.bxor(acc, simd.convert(h8, v))
+	end
+	return acc
+      end)
+
+    local sq4, uq4 = T.W.i64x4.ct, T.W.u64x4.ct
+    local sbody = checkymm("i64x4 to float4",
+      {"vextractf128", "vcvtsi2ss", "vunpcklps", "vshufps"}, function()
+	local v = sq4(0x4000004000000001LL, -0x4000004000000001LL, 0, 1)
+	local acc = f4(0)
+	for _ = 1, 400 do
+	  v = v + sq4(17)
+	  acc = simd.bxor(acc, simd.convert(f4, v))
+	end
+	return acc
+      end)
+    local _, nscvt = sbody:gsub("vcvtsi2ss", "")
+    check(nscvt == 4, "i64x4 to float4 must issue one conversion per lane")
+
+    local ubody = checkymm("u64x4 to float4",
+      {"vextractf128", "vcvtsi2ss", "vaddss", "vunpcklps"}, function()
+	local v = uq4(0x8000008000000001ULL, 0x4000004000000001ULL, 0, 1)
+	local acc = f4(0)
+	for _ = 1, 400 do
+	  v = v + uq4(17)
+	  acc = simd.bxor(acc, simd.convert(f4, v))
+	end
+	return acc
+      end)
+    local _, nucvt = ubody:gsub("vcvtsi2ss", "")
+    check(nucvt == 8,
+	  "u64x4 to float4 needs signed/high-half paths for every lane")
+  end)
+
   test("256-bit cross-lane operations stay in YMM registers", function()
     local i8 = T.W.i32x8.ct
     local a = i8(1, 2, 3, 4, 5, 6, 7, 8)

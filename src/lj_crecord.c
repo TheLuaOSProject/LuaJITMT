@@ -2227,6 +2227,74 @@ static TRef crec_simd_i64tof64(jit_State *J, IRType svt, IRType dvt, TRef a,
   return emitir(IRT(IR_VADD, dvt), lo, hi);
 }
 
+/*
+** Narrow integer lanes from one YMM register to one XMM register, keeping the
+** low half of every source lane. VPSHUFB compacts the wanted bytes into the
+** low qword of each 128 bit half; the VCONV backend completes the operation
+** with one VPERMQ that places those two qwords next to each other.
+*/
+static TRef crec_simd_narrow_int(jit_State *J, IRType svt, IRType dvt, TRef a,
+				 uint32_t dk, uint32_t sk,
+				 uint32_t desz, uint32_t sesz)
+{
+  uint8_t mask[LJ_VEC_MAXSIZE];
+  uint32_t half, lane, byte, nph = 16 / sesz;
+  memset(mask, 0x80, sizeof(mask));
+  for (half = 0; half < 2; half++)
+    for (lane = 0; lane < nph; lane++)
+      for (byte = 0; byte < desz; byte++)
+	mask[half*16 + lane*desz + byte] = (uint8_t)(lane*sesz + byte);
+  a = emitir(IRT(IR_VSHUFB, svt), a, lj_ir_kvec(J, svt, mask));
+  return emitir(IRT(IR_VCONV, dvt), a, IRVCONV(dk, sk));
+}
+
+/* Convert four unsigned dwords to four doubles exactly. Zero extension puts
+** every value into the mantissa of 2^52+x, so one packed subtraction removes
+** the exponent bias. This is three AVX2 instructions and rounds no bits.
+*/
+static TRef crec_simd_u32tof64(jit_State *J, IRType dvt, TRef a)
+{
+  IRType qvt = (IRType)(IRT_V2I64 | IRT_VEC256);
+  TRef bias = crec_simd_k64(J, qvt, U64x(43300000,00000000));
+  TRef w = emitir(IRT(IR_VCONV, qvt), a, IRVCONV(VECK_U64, VECK_U32));
+  w = emitir(IRT(IR_VOR, qvt), w, bias);
+  return emitir(IRT(IR_VSUB, dvt), w, bias);
+}
+
+/* Widen signed/unsigned words to dwords before the direct packed dword to
+** float conversion. Both source ranges fit in a signed dword.
+*/
+static TRef crec_simd_i16tof32(jit_State *J, IRType dvt, TRef a, uint32_t sk)
+{
+  IRType ivt = (IRType)(IRT_V4I32 | IRT_VEC256);
+  TRef w = emitir(IRT(IR_VCONV, ivt), a, IRVCONV(VECK_I32, sk));
+  return emitir(IRT(IR_VCONV, dvt), w, IRVCONV(VECK_F32, VECK_I32));
+}
+
+/*
+** Float-to-word conversion has narrower indefinite bounds than CVTTPS2DQ.
+** Check the original floats against [-32768,32767], substitute -32768 for
+** every unordered/out-of-range lane, then truncate the valid lanes and use
+** the ordinary integer narrowing path.
+*/
+static TRef crec_simd_f32toi16(jit_State *J, IRType svt, IRType dvt, TRef a,
+			       uint32_t dk)
+{
+  IRType ivt = (IRType)(IRT_V4I32 | IRT_VEC256);
+  TRef kmin = crec_simd_k32(J, svt, 0xc7000000u);  /* -32768.0f. */
+  TRef kmax = crec_simd_k32(J, svt, 0x46fffe00u);  /*  32767.0f. */
+  TRef valid = emitir(IRT(IR_VAND, svt),
+    emitir(IRT(IR_VCMPGE, svt), a, kmin),
+    emitir(IRT(IR_VCMPGE, svt), kmax, a));
+  TRef q = emitir(IRT(IR_VCONV, ivt), a,
+		  IRVCONV(VECK_I32, VECK_F32));
+  TRef bad = crec_simd_k32(J, ivt, 0xffff8000u);
+  q = emitir(IRT(IR_VOR, ivt),
+	     emitir(IRT(IR_VAND, ivt), valid, q),
+	     emitir(IRT(IR_VANDN, ivt), valid, bad));
+  return crec_simd_narrow_int(J, ivt, dvt, q, dk, VECK_I32, 2, 4);
+}
+
 void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
@@ -2247,6 +2315,53 @@ void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
   crec_simd_need(J, dvt != IRT_NIL && dvi.lanes == svi.lanes);
   if (dvi.kind == svi.kind) {
     J->base[0] = crec_vec_box(J, a, dvt, did);
+    return;
+  }
+  if (dvi.esize != svi.esize) {
+    /*
+    ** Equal-lane cross-width conversions are exactly the 16 <-> 32 byte
+    ** shapes on the native JIT surface. The 32 byte side already guarantees
+    ** AVX2 through crec_vec2irt().
+    */
+    if (!veck_isfp(dvi.kind) && !veck_isfp(svi.kind)) {
+      r = dvi.esize > svi.esize ?
+	  emitir(IRT(IR_VCONV, dvt), a, IRVCONV(dvi.kind, svi.kind)) :
+	  crec_simd_narrow_int(J, svt, dvt, a, dvi.kind, svi.kind,
+			       dvi.esize, svi.esize);
+    } else if (dvi.kind == VECK_F64) {
+      if (svi.kind == VECK_U32)
+	r = crec_simd_u32tof64(J, dvt, a);
+      else {
+	crec_simd_need(J, svi.kind == VECK_F32 || svi.kind == VECK_I32);
+	r = emitir(IRT(IR_VCONV, dvt), a,
+		   IRVCONV(dvi.kind, svi.kind));
+      }
+    } else if (dvi.kind == VECK_F32) {
+      if (svi.kind == VECK_I16 || svi.kind == VECK_U16)
+	r = crec_simd_i16tof32(J, dvt, a, svi.kind);
+      else {
+	crec_simd_need(J, svi.kind == VECK_F64 ||
+			 svi.kind == VECK_I64 || svi.kind == VECK_U64);
+	r = emitir(IRT(IR_VCONV, dvt), a,
+		   IRVCONV(dvi.kind, svi.kind));
+      }
+    } else if (svi.kind == VECK_F32 &&
+	       (dvi.kind == VECK_I64 || dvi.kind == VECK_U64)) {
+      IRType f64vt = (IRType)(IRT_V2F64 | IRT_VEC256);
+      TRef w = emitir(IRT(IR_VCONV, f64vt), a,
+		      IRVCONV(VECK_F64, VECK_F32));
+      r = emitir(IRT(IR_VCONV, dvt), w,
+		 IRVCONV(dvi.kind, VECK_F64));
+    } else if (svi.kind == VECK_F32 &&
+	       (dvi.kind == VECK_I16 || dvi.kind == VECK_U16)) {
+      r = crec_simd_f32toi16(J, svt, dvt, a, dvi.kind);
+    } else {
+      crec_simd_need(J, svi.kind == VECK_F64 &&
+			    (dvi.kind == VECK_I32 || dvi.kind == VECK_U32));
+      r = emitir(IRT(IR_VCONV, dvt), a,
+		 IRVCONV(dvi.kind, svi.kind));
+    }
+    J->base[0] = crec_vec_box(J, r, dvt, did);
     return;
   }
   if (dvi.kind == VECK_F32 && svi.kind == VECK_U32) {

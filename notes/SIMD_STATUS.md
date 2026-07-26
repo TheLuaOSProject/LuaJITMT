@@ -54,6 +54,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M31 | Per-lane AVX2 shifts for 8/16-bit XMM and YMM vectors via packed dword decomposition | done |
 | M32 | Signed and unsigned 64-bit `mulhi` via four packed 32x32 partial products, XMM and YMM | done |
 | M33 | Exact call-free `u32 -> float`, `i64/u64 -> double`, and `double -> i64/u64` lowering for XMM/YMM | done |
+| M34 | Every equal-lane numeric conversion between native 16/32-byte vectors; VEX-clean mixed XMM/YMM moves | done |
 
 ## Commands that pass
 
@@ -68,6 +69,8 @@ make -j$(nproc)                       # release build (x86-64-v3 target)
 for s in 1 7 999 31337; do SIMD_SEED=$s ./src/luajit test/simd/run.lua; done
 make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT   # also passes
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT          # also passes
+make clean && make -j$(nproc) HOST_CC=gcc \
+  CROSS=x86_64-w64-mingw32- TARGET_SYS=Windows               # cross-builds
 
 # Every file and mode also passes under these QEMU CPU models:
 # Nehalem-v1 (x86-64-v2/no AVX), SandyBridge-v1 (AVX/no AVX2),
@@ -99,6 +102,14 @@ backend bug that neither of the other two modes reached. Keep it.
   diff of `test/simd/test_noregress.lua` against a pristine build of the
   current upstream head `a471ab78`. It is **byte-for-byte identical**. See
   `SIMD_TESTING.md` for the exact commands.
+
+* The Windows x64 target cross-builds, but its runtime is not yet at the same
+  confidence level. Wine reproduces an issue already present at `fa19fcd5`:
+  some YMM dynamic-splat and side-exit tests lose or corrupt their upper
+  128-bit half. MinGW's interpreter-side `fma` also differs from the required
+  single-rounded result. Neither is caused by M34; both are the next Windows
+  SIMD portability work. The `jit.dump` codegen harness additionally needs
+  Windows-safe temporary paths before it can inspect machine code under Wine.
 
 ## Files touched so far
 
@@ -396,6 +407,29 @@ double -> uint64              0.64 ns   1.29 ns       1.00x
 The last two rows are deliberately different: x86 has no packed
 double-to-qword conversion before AVX-512, so YMM performs four call-free
 scalar `CVTTSD2SI` instructions and retains XMM's per-lane throughput.
+
+Cross-width conversion throughput, best of five on the same host:
+
+```
+i8x16 -> i16x16             0.20 ns
+i16x16 -> i8x16             0.26 ns
+i16x8 -> float8             0.27 ns
+float8 -> i16x8             0.72 ns
+float4 -> double4           0.29 ns
+double4 -> float4           0.27 ns
+u32x4 -> double4            0.32 ns
+i64x4 -> float4             1.98 ns
+u64x4 -> float4             2.08 ns
+```
+
+The qword-to-float rows use four exact scalar hardware conversions because
+AVX2 has no packed form; all other rows are packed. During this work an XMM
+loop PHI was found to use legacy `MOVAPS` while YMM values were live. That
+AVX-to-SSE transition cost about 19--22 ns per iteration: for example
+`i16x16 -> i8x16` fell from 19.69 ns to 0.26 ns after vector moves, loads,
+stores, constants and spills were made VEX-128-clean whenever AVX is active.
+A codegen assertion now forbids legacy `MOVAPS`/`MOVUPS` in a representative
+mixed-width loop.
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:
