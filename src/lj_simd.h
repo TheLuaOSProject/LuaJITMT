@@ -77,6 +77,8 @@ LJ_FUNC void lj_simd_shuffle(void *dp, const void *ap, const void *bp,
 			     const CTVecInfo *vi, const uint8_t *idx);
 LJ_FUNC void lj_simd_permute(void *dp, const void *ap, const void *ip,
 			     const CTVecInfo *vi);
+LJ_FUNC int lj_simd_shiftv(void *dp, const void *ap, const void *np,
+			   const CTVecInfo *vi, uint32_t op);
 LJ_FUNC void lj_simd_select(void *dp, const void *mp, const void *ap,
 			    const void *bp, CTSize size);
 LJ_FUNC void lj_simd_splat(void *dp, const void *ep, const CTVecInfo *vi);

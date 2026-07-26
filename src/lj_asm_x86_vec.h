@@ -498,6 +498,25 @@ static void asm_vecshift(ASMState *as, IRIns *ir)
   }
 }
 
+/*
+** Per-lane shift counts (AVX2). One instruction, and genuinely three operand,
+** so no register copy is ever needed. 32 and 64 bit lanes only: there is no
+** VPSLLVW before AVX-512 and no VPSRAVQ at all, so the recorder rejects the
+** narrow lane widths and emulates the 64 bit arithmetic shift.
+*/
+static void asm_vecshiftv(ASMState *as, IRIns *ir)
+{
+  IROp op = (IROp)ir->o;
+  x86Op xo = op == IR_VSHLV ? XO_VPSLLV :
+	     op == IR_VSHRV ? XO_VPSRLV : XO_VPSRAV;
+  int w = irt_type(ir->t) == IRT_V2I64;
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  Reg cnt = ra_alloc1(as, ir->op2, rset_exclude(RSET_FPR, left));
+  lj_assertA(op != IR_VSARV || !w, "no VPSRAVQ before AVX-512");
+  emit_vexrrw(as, xo, dest, left, cnt, w);
+}
+
 /* -- Unary and shuffle operations ---------------------------------------- */
 
 static void asm_vecsqrt(ASMState *as, IRIns *ir)
@@ -639,6 +658,7 @@ static void asm_vec(ASMState *as, IRIns *ir)
     return;
   case IR_VCMPEQ: case IR_VCMPGT: case IR_VCMPGE: asm_veccmp(as, ir); return;
   case IR_VSHL: case IR_VSHR: case IR_VSAR: asm_vecshift(as, ir); return;
+  case IR_VSHLV: case IR_VSHRV: case IR_VSARV: asm_vecshiftv(as, ir); return;
   case IR_VSQRT: asm_vecsqrt(as, ir); return;
   case IR_VABS: asm_vecabs(as, ir); return;
   case IR_VROUND: asm_vecround(as, ir); return;

@@ -405,3 +405,38 @@ The module contains only what operators cannot express: bitwise ops (Lua 5.1 has
 no bitwise operators and this fork does not add them), lane-wise comparisons and
 masks, select, shuffles, bitcasts/converts, insert, horizontal reductions,
 min/max, sqrt/abs/round, saturating arithmetic and introspection.
+
+## D16. Per-lane shift counts and runtime permutes: extend, do not add
+
+Both new operations reuse an existing `ffi.simd` name with a *vector* second
+operand instead of introducing a new function. That is partly good API design
+-- `shl(a, n)` and `shl(a, nvec)` are the same operation, differing only in
+whether the count is uniform -- and partly forced: `FF__MAX` is 256 and
+`GCfunc.c.ffid` is a `uint8_t`, so there were **zero** spare fast-function IDs
+(see the trap note in `SIMD_STATUS.md`). Any genuinely new entry point has to
+free one first.
+
+Dispatch is on the observed argument being a cdata, both in the library and in
+the recorder. That is safe to specialise on, because LuaJIT already guards the
+slot's type: a later call passing a number where the trace recorded a vector
+exits on the base type guard, it does not silently take the wrong path.
+
+Two lowering notes worth keeping:
+
+  * The AVX2 per-lane shifts are VEX-only -- there is no legacy SSE encoding
+    for `VPSLLVD` -- so they must always go through the VEX emitter. The same
+    opcode byte selects 32-bit lanes with `VEX.W=0` and 64-bit lanes with
+    `VEX.W=1`, which is why `emit_vexrr` grew an explicit W parameter.
+  * PSHUFB is byte granular, so permuting a wider lane by a runtime index
+    means scaling the index to a byte offset and spreading it over its lane.
+    Masking the index with `lanes-1` *first* is what keeps every scaled offset
+    below 16, so the control byte's high bit stays clear and PSHUFB never
+    takes its "write zero" path. That is also what makes the operation total,
+    so it needs no guard.
+
+A new vector IR opcode is not enough on its own: `asm_ir()` in `lj_asm.c` has
+an explicit `case` list that routes vector opcodes to `asm_vec()`. Forgetting
+to add the new opcodes there does not fail to build and does not fail a
+differential test -- the trace just aborts with "cannot assemble IR
+instruction N" and the interpreter produces the right answer. The codegen
+tests are what catch it.

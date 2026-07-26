@@ -467,18 +467,22 @@ static uint32_t emit_vexmp(x86Op xo)
 ** the three byte form, which needs no special casing for the high registers
 ** or for the 0F 38 / 0F 3A maps.
 */
-static void emit_vexrr(ASMState *as, x86Op xo, Reg rr, Reg rv, Reg rb)
+static void emit_vexrrw(ASMState *as, x86Op xo, Reg rr, Reg rv, Reg rb, int w)
 {
   MCode *p = as->mcp - 5;
   uint32_t mp = emit_vexmp(xo);
   p[0] = 0xc4;
   p[1] = (MCode)((((rr>>3)&1) ? 0 : 0x80) | 0x40 |
 		 (((rb>>3)&1) ? 0 : 0x20) | (mp >> 4));
-  p[2] = (MCode)(((~rv & 15) << 3) | (mp & 3));	/* W=0, L=0 (128 bit). */
+  /* L=0 (128 bit). W selects the lane width of the AVX2 per-lane shifts. */
+  p[2] = (MCode)((w ? 0x80 : 0) | ((~rv & 15) << 3) | (mp & 3));
   p[3] = (MCode)(xo >> 24);
   p[4] = MODRM(XM_REG, rr, rb);
   as->mcp = p;
 }
+
+#define emit_vexrr(as, xo, rr, rv, rb) \
+  emit_vexrrw((as), (xo), (rr), (rv), (rb), 0)
 
 /* Load a 128 bit vector constant into an FP register. */
 static void emit_loadk128(ASMState *as, Reg r, IRIns *ir)

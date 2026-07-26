@@ -172,6 +172,10 @@
   _(VSHL,	N , ref, ref) \
   _(VSHR,	N , ref, ref) \
   _(VSAR,	N , ref, ref) \
+  /* Per-lane shift counts (AVX2). op2 is a vector, one count per lane. */ \
+  _(VSHLV,	N , ref, ref) \
+  _(VSHRV,	N , ref, ref) \
+  _(VSARV,	N , ref, ref) \
   _(VSQRT,	N , ref, ___) \
   _(VABS,	N , ref, ___) \
   _(VROUND,	N , ref, lit) \

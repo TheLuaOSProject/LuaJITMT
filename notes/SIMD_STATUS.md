@@ -34,6 +34,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M13 | IR consistency check and `jit.dump` handle vector types and 128-bit constants | done |
 | M14 | Vector arguments and results by value in FFI callbacks (x86-64 SysV) | done |
 | M15 | Vector store-to-load forwarding no longer synthesises a CONV between vector types | done |
+| M16 | `simd.shuffle` permutes by a runtime index vector (PSHUFB) | done |
+| M17 | `simd.shl/shr/sar` accept a per-lane count vector (AVX2 VPSLLV/VPSRLV/VPSRAV) | done |
 
 ## Commands that pass
 
@@ -179,6 +181,12 @@ notes/*                          design/status/matrix/testing notes (new)
   tests nothing: the trace aborts and the interpreter answers. The 64-bit
   arithmetic shift emulation was wrong for every input and the shift tests
   still passed, because they used a loop variable as the count.
+* The same trap has a second form. A new vector IR opcode also has to be added
+  to the explicit `case` list in `asm_ir()` (`lj_asm.c`) that routes vector
+  opcodes to `asm_vec()`. Miss it and the build succeeds, the differential
+  tests pass, and every trace silently aborts with "cannot assemble IR
+  instruction N". Only the codegen tests notice. This actually happened when
+  `VSHLV`/`VSHRV`/`VSARV` were added.
 * A fast function whose result is recorded as a **guard** must leave that
   result in `G(L)->tmptv2`. `LJ_POST_FIXGUARD` reads it to decide whether to
   flip the guard, so without it the compiled code can answer the opposite of

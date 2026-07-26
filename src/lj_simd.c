@@ -307,6 +307,53 @@ int lj_simd_shift(void *dp, const void *ap, const CTVecInfo *vi,
   return 0;
 }
 
+/*
+** Shift with one count per lane, the count taken from the matching lane of a
+** second vector and read as *unsigned* of the lane width. Out-of-range counts
+** follow the same rule as the scalar form and as the AVX2 instructions:
+** logical shifts flush to zero, an arithmetic shift fills with the sign.
+*/
+#define VEC_SHV(TY, UTY, OTY, EXPR) \
+  { TY *d = (TY *)dp; \
+    const TY *a = (const TY *)ap; const UTY *c = (const UTY *)np; \
+    uint32_t i, n = vi->lanes; \
+    for (i = 0; i < n; i++) { \
+      OTY x = (OTY)a[i]; uint64_t sh = (uint64_t)c[i]; \
+      d[i] = (TY)(EXPR); \
+    } \
+    return 1; }
+
+int lj_simd_shiftv(void *dp, const void *ap, const void *np,
+		   const CTVecInfo *vi, uint32_t op)
+{
+  uint64_t bits = (uint64_t)vi->esize * 8;
+  if (veck_isfp(vi->kind)) return 0;
+  if (op == VSH_SAR) {
+    switch (vi->esize) {
+    case 1: VEC_SHV(int8_t, uint8_t, int32_t, x >> (sh >= bits ? bits-1 : sh))
+    case 2: VEC_SHV(int16_t, uint16_t, int32_t, x >> (sh >= bits ? bits-1 : sh))
+    case 4: VEC_SHV(int32_t, uint32_t, int32_t, x >> (sh >= bits ? bits-1 : sh))
+    default: VEC_SHV(int64_t, uint64_t, int64_t,
+		     x >> (sh >= bits ? bits-1 : sh))
+    }
+  } else if (op == VSH_SHL) {
+    switch (vi->esize) {
+    case 1: VEC_SHV(uint8_t, uint8_t, uint32_t, sh >= bits ? 0 : x << sh)
+    case 2: VEC_SHV(uint16_t, uint16_t, uint32_t, sh >= bits ? 0 : x << sh)
+    case 4: VEC_SHV(uint32_t, uint32_t, uint32_t, sh >= bits ? 0 : x << sh)
+    default: VEC_SHV(uint64_t, uint64_t, uint64_t, sh >= bits ? 0 : x << sh)
+    }
+  } else if (op == VSH_SHR) {
+    switch (vi->esize) {
+    case 1: VEC_SHV(uint8_t, uint8_t, uint32_t, sh >= bits ? 0 : x >> sh)
+    case 2: VEC_SHV(uint16_t, uint16_t, uint32_t, sh >= bits ? 0 : x >> sh)
+    case 4: VEC_SHV(uint32_t, uint32_t, uint32_t, sh >= bits ? 0 : x >> sh)
+    default: VEC_SHV(uint64_t, uint64_t, uint64_t, sh >= bits ? 0 : x >> sh)
+    }
+  }
+  return 0;
+}
+
 /* -- Comparisons --------------------------------------------------------- */
 
 /* Element-wise comparison. Writes an all-ones/all-zero mask of the same width. */

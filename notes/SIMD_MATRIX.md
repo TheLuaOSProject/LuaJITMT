@@ -120,6 +120,7 @@ operand, exactly like the operators.
 | `sqrt(a)` | same ctype | yes | — | — | yes | yes |
 | `floor/ceil/trunc/round(a)` | same ctype | yes | — | — | yes | yes (SSE4.1) |
 | `shl/shr/sar(a,n)` | same ctype | — | yes | yes | yes | yes* |
+| `shl/shr/sar(a,nvec)` | same ctype | — | yes | yes | yes | 32/64-bit lanes only (AVX2) |
 | `eq/ne/lt/le/gt/ge(a,b)` | mask | yes | yes | yes | yes | yes |
 | `select(m,a,b)` | ctype of a | yes | yes | yes | yes | yes |
 | `movemask(a)` | integer | yes | yes | yes | yes | yes |
@@ -153,6 +154,11 @@ Semantics worth pinning down:
 * Shifts take the count as *unsigned*: a count `>= lane bits` gives zero for
   `shl`/`shr` and a full sign fill for `sar`, matching the x86 packed shifts.
 * `abs` on signed integers wraps for the most negative lane value (like PABS).
+* `shl`/`shr`/`sar` also accept a **vector** count with the same lane width
+  and lane count, shifting each lane by its own amount. The per-lane count is
+  read as unsigned of the lane width and follows exactly the same
+  out-of-range rule as a scalar count, which is also what the AVX2
+  instructions do natively.
 * `shuffle(a, idxvec)` takes one index per lane from a **signed or unsigned
   integer vector of the same lane width and lane count**. Each index is
   reduced modulo the lane count (`idx & (lanes-1)`), so every value, including
@@ -176,6 +182,8 @@ Semantics worth pinning down:
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
 | shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a byte mask. Constant and variable counts are both packed; for a variable count the mask is built with the same shift applied to a constant and broadcast across the byte halves with `PMULLW` by `0x0101` |
 | non-constant lane index in `insert` | supported: the range is guarded and the lane mask is built with a packed compare against a constant vector of lane numbers |
+| per-lane count **vector** in `shl`/`shr`/`sar` on 8/16-bit lanes | rejected at record time, stays interpreted. AVX2 has no per-lane shift narrower than 32 bits (VPSLLVW is AVX-512), and emulating one costs an unpack, two shifts and a pack per direction |
+| per-lane count **vector** on 64-bit `sar` | no VPSRAVQ before AVX-512, so it lowers to a clamped VPSRLVQ plus the sign-bias trick: eight packed instructions, no call. The clamp is needed because VPSRLVQ flushes to zero past the lane width, which would take the sign bias with it |
 | runtime index **vector** in `shuffle` | supported: `shuffle(a, idxvec)` builds the PSHUFB control at runtime. A byte vector is one PSHUFB; a wider lane costs five packed instructions (mask, scale, replicate the byte over its lane, add 0..esize-1, permute) |
 | separate non-constant lane indices in `shuffle`/`shuffle2` | still rejected at record time. Assembling a control mask from N *scalar* indices costs more than it saves; pass an index vector instead |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |

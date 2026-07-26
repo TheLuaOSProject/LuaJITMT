@@ -270,6 +270,47 @@ test("the IR dump renders vector types and constants", function()
   end
 end)
 
+test("per-lane shift counts use the AVX2 variable shifts", function()
+  -- Without this the trace just aborts and the interpreter answers, which a
+  -- differential test cannot tell apart from working compiled code.
+  if not simd.features().avx2 then
+    check(true, "no AVX2 on this CPU, per-lane shift codegen skipped")
+    return
+  end
+  local i4 = T.T.i32x4.ct
+  local a4, c4 = i4(1, -8, 256, -1), i4(0, 1, 2, 3)
+  checkloop("i32x4 shl vec", {"psllvd"}, NOCALL, function()
+    local acc = i4(0)
+    for k = 1, 400 do acc = acc + simd.shl(a4, c4 + i4(k)) end
+    return acc
+  end)
+  checkloop("i32x4 shr vec", {"psrlvd"}, NOCALL, function()
+    local acc = i4(0)
+    for k = 1, 400 do acc = acc + simd.shr(a4, c4 + i4(k)) end
+    return acc
+  end)
+  checkloop("i32x4 sar vec", {"psravd"}, NOCALL, function()
+    local acc = i4(0)
+    for k = 1, 400 do acc = acc + simd.sar(a4, c4 + i4(k)) end
+    return acc
+  end)
+  local i64 = T.T.i64x2.ct
+  local a8, c8 = i64(-16, 8), i64(2, 3)
+  checkloop("i64x2 shl vec", {"psllvq"}, NOCALL, function()
+    local acc = i64(0)
+    for k = 1, 400 do acc = acc + simd.shl(a8, c8 + i64(k)) end
+    return acc
+  end)
+  -- There is no VPSRAVQ before AVX-512, so the 64 bit arithmetic shift is
+  -- built from a clamped VPSRLVQ plus the sign-bias trick. Still no call.
+  checkloop("i64x2 sar vec", {"psrlvq", "pcmpeqq", "pxor", "psubq"}, NOCALL,
+	    function()
+    local acc = i64(0)
+    for k = 1, 400 do acc = acc + simd.sar(a8, c8 + i64(k)) end
+    return acc
+  end)
+end)
+
 test("a runtime index permute is packed", function()
   -- A byte vector is a direct PSHUFB. A wider lane needs the index scaled to
   -- a byte offset and spread over its lane first, which is still packed: mask,

@@ -1839,6 +1839,49 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
   uint32_t bits = (uint32_t)vi.esize * 8;
   TRef r;
   crec_simd_need(J, !veck_isfp(vi.kind));
+  if (n && tref_iscdata(n)) {
+    /* A vector count shifts each lane by its own amount. */
+    CTVecInfo nvi; CTypeID nid; IRType nvt;
+    TRef nv = crec_simd_arg(J, rd, 1, &nvi, &nid, &nvt);
+    IROp vop = op == VSH_SHL ? IR_VSHLV : op == VSH_SHR ? IR_VSHRV : IR_VSARV;
+    /* AVX2 has no per-lane shift narrower than 32 bits (VPSLLVW is AVX-512)
+    ** and no VPSRAVQ at all. Emulating the narrow widths would cost an
+    ** unpack, two shifts and a pack per direction, so they stay interpreted.
+    */
+    crec_simd_need(J, (J->flags & JIT_F_AVX2) != 0 &&
+		      !veck_isfp(nvi.kind) && nvi.esize == vi.esize &&
+		      nvi.lanes == vi.lanes && vi.esize >= 4);
+    if (vi.esize == 8 && op == VSH_SAR) {
+      /*
+      ** No VPSRAVQ. Use ((v >>u n) ^ m) - m with m = (1<<63) >>u n, which is
+      ** an arithmetic shift for any n <= 63. The count has to be clamped
+      ** first: VPSRLVQ flushes to zero past the lane width, which would take
+      ** the sign bias with it and lose the sign fill.
+      */
+      uint8_t ebuf[8], zbuf[LJ_VEC_MAXSIZE];
+      TRef k63, khi, kz, n6, hi, lt64, nc, ks;
+      uint64_t s;
+      memset(zbuf, 0, sizeof(zbuf));
+      kz = lj_ir_kvec(J, nvt, zbuf);
+      s = 63; memcpy(ebuf, &s, 8);
+      k63 = crec_vec_kmask(J, nvt, &nvi, ebuf);
+      s = ~(uint64_t)63; memcpy(ebuf, &s, 8);
+      khi = crec_vec_kmask(J, nvt, &nvi, ebuf);
+      n6 = emitir(IRT(IR_VAND, nvt), nv, k63);
+      hi = emitir(IRT(IR_VAND, nvt), nv, khi);
+      lt64 = emitir(IRT(IR_VCMPEQ, nvt), hi, kz);  /* All ones where n < 64. */
+      nc = emitir(IRT(IR_VOR, nvt), n6,
+		  emitir(IRT(IR_VANDN, nvt), lt64, k63));
+      s = (uint64_t)1 << 63; memcpy(ebuf, &s, 8);
+      ks = emitir(IRT(IR_VSHRV, vt), crec_vec_kmask(J, vt, &vi, ebuf), nc);
+      r = emitir(IRT(IR_VSHRV, vt), a, nc);
+      r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), r, ks), ks);
+    } else {
+      r = emitir(IRT(vop, vt), a, nv);
+    }
+    J->base[0] = crec_vec_box(J, r, vt, id);
+    return;
+  }
   if (!n || !tref_isinteger(n)) {
     if (n && tref_isnum(n)) n = lj_opt_narrow_toint(J, n);
     else lj_trace_err(J, LJ_TRERR_BADTYPE);

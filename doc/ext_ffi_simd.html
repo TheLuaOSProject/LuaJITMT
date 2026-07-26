@@ -139,6 +139,16 @@ packed code. 8-bit lanes and the 64-bit <tt>sar</tt> have no x86 instruction
 and are rewritten into a wider shift plus a mask, which costs a few extra
 instructions when the count is not a constant.
 </p>
+<p>
+The count may instead be a <em>vector</em> with the same lane width and lane
+count, in which case each lane shifts by its own amount. The same unsigned
+out-of-range rule applies per lane. This compiles to the AVX2 per-lane shifts
+on 32- and 64-bit lanes; narrower lanes have no such instruction and stay
+interpreted.
+</p>
+<pre class="code">
+local v = simd.shl(x, int4(0, 1, 2, 3))   -- each lane shifts differently
+</pre>
 
 <h3>Comparisons and masks</h3>
 <table class="convtable">

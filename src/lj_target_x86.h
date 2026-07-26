@@ -447,6 +447,15 @@ typedef enum {
   XO_PMAXUD =	XO_0f38(3f),		/* SSE4.1 */
   XO_PCMPEQQ =	XO_0f38(29),		/* SSE4.1 */
   XO_PCMPGTQ =	XO_0f38(37),		/* SSE4.2 */
+  /*
+  ** AVX2 per-lane variable shifts. VEX-only: there is no legacy SSE encoding,
+  ** so these must always go through emit_vexrrw(). The same opcode byte
+  ** selects 32 bit lanes with VEX.W=0 and 64 bit lanes with VEX.W=1.
+  ** There is no VPSRAVQ before AVX-512; the recorder emulates it.
+  */
+  XO_VPSRLV =	XO_0f38(45),		/* AVX2 */
+  XO_VPSRAV =	XO_0f38(46),		/* AVX2, W=0 only */
+  XO_VPSLLV =	XO_0f38(47),		/* AVX2 */
   XO_ROUNDPS =	XO_0f3a(08),		/* SSE4.1 */
   XO_ROUNDPD =	XO_0f3a(09),		/* SSE4.1 */
   XO_PINSRB =	XO_0f3a(20),		/* SSE4.1 */

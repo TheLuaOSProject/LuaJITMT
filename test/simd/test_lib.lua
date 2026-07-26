@@ -286,6 +286,60 @@ test("shuffle with a runtime index vector", function()
   end
 end)
 
+test("shifts with a per-lane count vector", function()
+  -- simd.shl/shr/sar accept a vector count: every lane shifts by its own
+  -- amount. Counts are unsigned, and one at or above the lane width flushes
+  -- to zero (shl/shr) or to a full sign fill (sar), same as a scalar count.
+  for _, ti in ipairs(T.T) do
+    if not ti.fp then
+      local it = T.masktype(ti)
+      local rnd = T.rng(SEED + ti.bits * 577 + (ti.signed and 5 or 0))
+      -- Counts small enough to be exact Lua numbers, so the reference can be
+      -- the scalar form (independently tested) applied one lane at a time.
+      -- They still straddle the lane width, which is the interesting boundary.
+      local pool = {0, 1, ti.bits-1, ti.bits, ti.bits+7, 2*ti.bits}
+      for _, op in ipairs({"shl", "shr", "sar"}) do
+	for _ = 1, 25 do
+	  local a = T.rand(ti, rnd)
+	  local raw = {}
+	  for i = 1, ti.lanes do
+	    local r = rnd() % (#pool + 2)
+	    raw[i] = pool[r+1] or (rnd() % ti.bits)
+	  end
+	  local nv = it.ct(unpack(raw, 1, ti.lanes))
+	  local got = simd[op](a, nv)
+	  for i = 0, ti.lanes-1 do
+	    local want = simd[op](a, raw[i+1])
+	    checkeq(tostring(got[i]), tostring(want[i]),
+		    ti.name .. " " .. op .. " lane " .. i ..
+		    " count " .. tostring(raw[i+1]))
+	  end
+	end
+      end
+      -- A count with bits set far above the lane width is still just a large
+      -- unsigned number: shl/shr flush to zero, sar fills with the sign.
+      local a = T.rand(ti, rnd)
+      local huge = it.ct(-1)  -- All ones: the largest unsigned count there is.
+      local zero = it.ct(0)
+      checkeq(simd.shl(a, huge), ti.ct(0), ti.name .. " shl huge count")
+      checkeq(simd.shr(a, huge), ti.ct(0), ti.name .. " shr huge count")
+      checkeq(simd.sar(a, huge), simd.sar(a, ti.bits),
+	      ti.name .. " sar huge count is a sign fill")
+      checkeq(simd.shl(a, zero), a, ti.name .. " shl by zero is identity")
+    end
+  end
+end)
+
+test("shift count vectors are type checked", function()
+  local a = T.T.i32x4.ct(1, 2, 3, 4)
+  check(not pcall(simd.shl, a, T.T.float4.ct(1)),
+	"a float count vector must be rejected")
+  check(not pcall(simd.shl, a, T.T.i16x8.ct(1)),
+	"a count vector of the wrong shape must be rejected")
+  check(not pcall(simd.shl, T.T.float4.ct(1), T.T.i32x4.ct(1)),
+	"shifting a float vector must be rejected")
+end)
+
 test("runtime index vectors are type checked", function()
   local a = T.T.i32x4.ct(1, 2, 3, 4)
   check(not pcall(simd.shuffle, a, T.T.float4.ct(0, 1, 2, 3)),

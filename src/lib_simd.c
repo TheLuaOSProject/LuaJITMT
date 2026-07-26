@@ -160,9 +160,25 @@ static int simd_shiftop(lua_State *L, uint32_t op)
   CTState *cts = ctype_cts(L);
   CTVecInfo vi; CTypeID id;
   const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, &id);
-  int32_t n = lj_lib_checkint(L, 2);
   uint8_t rbuf[LJ_VEC_MAXSIZE];
   CTSize size = (CTSize)vi.esize * vi.lanes;
+  TValue *o = L->base + 1;
+  int32_t n;
+  if (o < L->top && tviscdata(o)) {
+    /* A vector count shifts each lane by its own amount. */
+    CTVecInfo nvi;
+    const uint8_t *np = simd_checkvec(L, cts, 2, &nvi, NULL);
+    if (veck_isfp(nvi.kind))
+      lj_err_argtype(L, 2, "integer vector");
+    if (nvi.esize != vi.esize || nvi.lanes != vi.lanes)
+      lj_err_argtype(L, 2, "vector with matching lane count and width");
+    if (!lj_simd_shiftv(rbuf, ap, np, &vi, op))
+      lj_err_callermsg(L, "shift not supported for this element type");
+    memcpy(simd_newvec(L, cts, id, size), rbuf, size);
+    lj_gc_check(L);
+    return 1;
+  }
+  n = lj_lib_checkint(L, 2);
   if (!lj_simd_shift(rbuf, ap, &vi, op, n))
     lj_err_callermsg(L, "shift not supported for this element type");
   memcpy(simd_newvec(L, cts, id, size), rbuf, size);
