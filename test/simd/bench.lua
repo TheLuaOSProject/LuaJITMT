@@ -822,6 +822,70 @@ real_benches.sad = {
 }
 end
 
+------------------------------------------------------ 4K luma tile sums --
+
+do
+-- Sum every 16-pixel tile in a full 4K 12-bit luma plane. Image encoders,
+-- local-exposure pipelines and texture-statistics passes build this kind of
+-- block metadata before making larger decisions. Sixteen 12-bit samples fit
+-- in uint16, so every SIMD hsum is the exact mathematical tile sum.
+local LUMA_PIXELS = 3840 * 2160
+local LUMA_TILES = LUMA_PIXELS / 16
+local LUMA_PASSES = 4
+local luma_in = ffi.new("uint16_t[?]", LUMA_PIXELS)
+local luma_out_s = ffi.new("uint16_t[?]", LUMA_TILES)
+local luma_out_x = ffi.new("uint16_t[?]", LUMA_TILES)
+local luma_out_y = has_ymm and ffi.new("uint16_t[?]", LUMA_TILES)
+for i = 0, LUMA_PIXELS-1 do
+  local row = math.floor(i / 3840)
+  luma_in[i] = (i*37 + row*13 + (i%16)*17) % 4096
+end
+local luma8 = ffi.typeof("u16x8")
+local luma16 = has_ymm and ffi.typeof("u16x16")
+local luma_v8 = ffi.cast(ffi.typeof("$ *", luma8), luma_in)
+local luma_v16 = has_ymm and ffi.cast(ffi.typeof("$ *", luma16), luma_in)
+
+local function luma_scalar()
+  local src, out = luma_in, luma_out_s
+  for _ = 1, LUMA_PASSES do
+    for i = 0, LUMA_TILES-1 do
+      local p = i*16
+      out[i] =
+	src[p]   + src[p+1] + src[p+2]  + src[p+3]  +
+	src[p+4] + src[p+5] + src[p+6]  + src[p+7]  +
+	src[p+8] + src[p+9] + src[p+10] + src[p+11] +
+	src[p+12] + src[p+13] + src[p+14] + src[p+15]
+    end
+  end
+  return sample_sum(out, LUMA_TILES)
+end
+
+local function luma_xmm()
+  local src, out = luma_v8, luma_out_x
+  for _ = 1, LUMA_PASSES do
+    for i = 0, LUMA_TILES-1 do
+      local p = i*2
+      out[i] = tonumber(simd.hsum(src[p])) +
+	       tonumber(simd.hsum(src[p+1]))
+    end
+  end
+  return sample_sum(out, LUMA_TILES)
+end
+
+local function luma_ymm()
+  local src, out = luma_v16, luma_out_y
+  for _ = 1, LUMA_PASSES do
+    for i = 0, LUMA_TILES-1 do out[i] = simd.hsum(src[i]) end
+  end
+  return sample_sum(out, LUMA_TILES)
+end
+
+real_benches.luma = {
+  scalar = luma_scalar, xmm = luma_xmm, ymm = luma_ymm,
+  name = "4K 16-pixel luma sum", pixels = LUMA_PIXELS,
+}
+end
+
 ---------------------------------------------------- 4K depth tile range --
 
 do
@@ -2351,7 +2415,7 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums + %.0f MiB block SAD, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points + %.1fM voxelized points, %.0fs PCM envelope, %.0fs float gate, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K luma sums + depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums + %.0f MiB block SAD, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points + %.1fM voxelized points, %.0fs PCM envelope, %.0fs float gate, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.residual.mpixels,
   real_benches.checksum.mib, real_benches.sad.mib,
   real_benches.activations.mib,
@@ -2384,6 +2448,7 @@ end
 run_real(real_benches.rgba)
 run_real(real_benches.checksum)
 run_real(real_benches.sad)
+run_real(real_benches.luma)
 run_real(real_benches.depth)
 run_real(real_benches.pcm)
 run_real(real_benches.gate)

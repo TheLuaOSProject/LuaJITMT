@@ -1631,6 +1631,27 @@ test("horizontal reduction uses shuffles, not lane loads", function()
 	    name .. " hsum: byte add is only the loop's vector update")
     end
   end
+  for _, name in ipairs({"i16x8", "u16x8"}) do
+    local ct = T.T[name].ct
+    local step = ct(1, 3, 5, 7, 11, 13, 17, 19)
+    local wm = checkloop(name .. " hsum",
+      {"pmaddwd", "paddd", "psrldq"}, NOCALL, function()
+	local s, v = 0, ct(0)
+	for _ = 1, 400 do
+	  v = v + step
+	  s = s + tonumber(simd.hsum(v))
+	end
+	return v, s
+      end)
+    if wm then
+      check(count(wm, "pmaddwd") == 1,
+	    name .. " hsum: exactly one packed pair sum")
+      check(count(wm, "paddd") == 2 and count(wm, "psrldq") == 2,
+	    name .. " hsum: expected the shortened dword reduction tree")
+      check(count(wm, "paddw") == 1,
+	    name .. " hsum: word add is only the loop's vector update")
+    end
+  end
   local u8ct = T.T.u8x16.ct
   local ua = u8ct(255,1,254,2,253,3,252,4,251,5,250,6,249,7,248,8)
   local ub = u8ct(0,254,1,253,2,252,3,251,4,250,5,249,6,248,7,247)
@@ -3156,6 +3177,23 @@ if simd.features().avx2 then
       end)
     check(count(mnemonics(body), "paddb") == 1,
 	  "i8x32 hsum must reduce qword partial sums, not every byte lane")
+
+    local w16 = T.W.u16x16.ct
+    local wstep = w16(1,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53)
+    body = checkymm("u16x16 hsum",
+      {"vpmaddwd ymm", "vperm2i128 ymm", "vpaddd ymm",
+       "vpsrldq ymm"}, function()
+	local v, sum = w16(0), 0
+	for _ = 1, 400 do
+	  v = v + wstep
+	  sum = sum + tonumber(simd.hsum(v))
+	end
+	return v, sum
+      end)
+    local wsm = mnemonics(body)
+    check(count(wsm, "pmaddwd") == 1 and count(wsm, "paddd") == 3 and
+	  count(wsm, "psrldq") == 2 and count(wsm, "paddw") == 1,
+	  "u16x16 hsum must pair words before the shortened dword tree")
 
     local u32 = T.W.u8x32.ct
     local ua32 = u32(
