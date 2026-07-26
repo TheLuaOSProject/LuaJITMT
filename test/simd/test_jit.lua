@@ -441,28 +441,67 @@ end)
 
 test("ffi.simd comparisons and masks on trace", function()
   local cmps = {"eq", "ne", "lt", "le", "gt", "ge"}
-  for _, ti in ipairs(T.T) do
-    local rnd = T.rng(SEED + 31 * ti.bits)
-    local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
-    local ct = ti.ct
-    for _, op in ipairs(cmps) do
-      local f = simd[op]
-      diffop(ti, op, function(n)
-	local acc, mm = 0, nil
-	for _ = 1, n do
-	  mm = f(a, b)
-	  acc = acc + simd.movemask(mm)
-	  if simd.anyof(mm) then acc = acc + 1 end
-	  if simd.allof(mm) then acc = acc + 100 end
-	end
-	return acc, mm
+  local tabs = {T.T}
+  if simd.features().avx2 then tabs[#tabs+1] = T.W end
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      local rnd = T.rng(SEED + 31 * ti.bits + ti.lanes)
+      local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
+      local ct = ti.ct
+      for _, op in ipairs(cmps) do
+	local f = simd[op]
+	diffop(ti, op, function(n)
+	  local acc, mm = 0, nil
+	  for _ = 1, n do
+	    mm = f(a, b)
+	    acc = acc + simd.movemask(mm)
+	    if simd.anyof(mm) then acc = acc + 1 end
+	    if simd.allof(mm) then acc = acc + 100 end
+	  end
+	  return acc, mm
+	end, 300)
+      end
+      diffop(ti, "select", function(n)
+	local acc = ct(0)
+	for _ = 1, n do acc = simd.select(simd.lt(a, b), acc + a, b) end
+	return acc
       end, 300)
+      -- select is defined per bit, so these constant-arm identities must also
+      -- hold for non-canonical masks and masks whose lane values are not
+      -- comparison results.
+      local mask = T.rand(ti, rnd)
+      diffop(ti, "select arbitrary mask and zero arms", function(n)
+	local acc, l, r = a
+	for _ = 1, n do
+	  local x = acc + b
+	  l = simd.select(mask, x, ct(0))
+	  r = simd.select(mask, ct(0), x)
+	  acc = simd.bxor(l, r)
+	end
+	return acc, l, r
+      end, 300)
+      diffop(ti, "select identical arms", function(n)
+	local acc = a
+	for _ = 1, n do
+	  local x = acc + b
+	  acc = simd.select(mask, x, x)
+	end
+	return acc
+      end, 300)
+      if not ti.fp then
+	local ones = ct(-1)
+	diffop(ti, "select arbitrary mask and all-ones arms", function(n)
+	  local acc, l, r = a
+	  for _ = 1, n do
+	    local x = acc + b
+	    l = simd.select(mask, ones, x)
+	    r = simd.select(mask, x, ones)
+	    acc = simd.bxor(l, r)
+	  end
+	  return acc, l, r
+	end, 300)
+      end
     end
-    diffop(ti, "select", function(n)
-      local acc = ct(0)
-      for _ = 1, n do acc = simd.select(simd.lt(a, b), acc + a, b) end
-      return acc
-    end, 300)
   end
 end)
 
@@ -544,6 +583,30 @@ test("comparison-select min/max idioms on trace", function()
     for _ = 1, n do r = simd.select(simd.gt(ia, ib), fa, fb) end
     return r
   end, 300)
+end)
+
+test("floating select with a bitwise all-ones arm on trace", function()
+  local function checktype(ft, ut)
+    local mp = {0x01234567, 0x89abcdef, 0x55555555, 0xaaaaaaaa}
+    local ap = {1.25, -2.5, 3.75, -4.125}
+    local mv, av = {}, {}
+    for i = 1, ft.lanes do
+      mv[i], av[i] = mp[(i-1)%4+1], ap[(i-1)%4+1]
+    end
+    local fct, uct = ft.ct, ut.ct
+    local mask = uct(unpack(mv, 1, ft.lanes))
+    local a = fct(unpack(av, 1, ft.lanes))
+    diff(ft.name .. " arbitrary mask and float all-ones arm", function(n)
+      local r
+      for i = 1, n do
+	local x = a + (i % 7)
+	r = simd.select(mask, simd.bitcast(fct, uct(-1)), x)
+      end
+      return simd.bitcast(uct, r)
+    end, 300)
+  end
+  checktype(T.T.float4, T.T.u32x4)
+  if simd.features().avx2 then checktype(T.W.float8, T.W.u32x8) end
 end)
 
 test("signed comparison-select absolute-value idioms on trace", function()

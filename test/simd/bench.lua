@@ -873,6 +873,76 @@ real_benches.pcm = {
 }
 end
 
+--------------------------------------------------- float PCM noise gate --
+
+do
+-- Apply a hard noise gate plus makeup gain to one minute of 48 kHz float
+-- audio. This is the branchless inner stage used by real-time gates, voice
+-- activity preprocessing and sparse audio feature extraction: samples below
+-- the absolute threshold become exact zero, while active samples are scaled.
+local GATE_SECONDS = 60
+local GATE_SAMPLES = 48000 * GATE_SECONDS
+local GATE_PASSES = 8
+local gate_in = ffi.new("float[?]", GATE_SAMPLES)
+local gate_out_s = ffi.new("float[?]", GATE_SAMPLES)
+local gate_out_x = ffi.new("float[?]", GATE_SAMPLES)
+local gate_out_y = has_ymm and ffi.new("float[?]", GATE_SAMPLES)
+local gate_pattern = {
+  -0.91,-0.07, 0.03, 0.44, 0.11,-0.38, 0.72,-0.15,
+   0.02, 0.63,-0.22, 0.09,-0.81, 0.17, 0.35,-0.04,
+   0.56,-0.13,-0.29, 0.06, 0.95,-0.19, 0.14,-0.48,
+  -0.01, 0.27,-0.69, 0.16,-0.33, 0.08, 0.77,-0.12,
+}
+for i = 0, GATE_SAMPLES-1 do
+  gate_in[i] = gate_pattern[i%32+1] * (0.75 + (math.floor(i/32)%17)/64)
+end
+local gate_v4 = ffi.cast(f4p, gate_in)
+local gate_o4 = ffi.cast(f4p, gate_out_x)
+local gate_v8 = has_ymm and ffi.cast(f8p, gate_in)
+local gate_o8 = has_ymm and ffi.cast(f8p, gate_out_y)
+
+local function gate_scalar()
+  local src, out = gate_in, gate_out_s
+  local threshold, gain = 0.18, 1.75
+  for _ = 1, GATE_PASSES do
+    for i = 0, GATE_SAMPLES-1 do
+      local x = src[i]
+      out[i] = math.abs(x) > threshold and x*gain or 0
+    end
+  end
+  return sample_sum(out, GATE_SAMPLES)
+end
+
+local function gate_xmm()
+  local src, out = gate_v4, gate_o4
+  local threshold, gain, zero = f4(0.18), f4(1.75), f4(0)
+  for _ = 1, GATE_PASSES do
+    for i = 0, GATE_SAMPLES/4-1 do
+      local x = src[i]
+      out[i] = simd.select(simd.gt(simd.abs(x), threshold), x*gain, zero)
+    end
+  end
+  return sample_sum(gate_out_x, GATE_SAMPLES)
+end
+
+local function gate_ymm()
+  local src, out = gate_v8, gate_o8
+  local threshold, gain, zero = f8(0.18), f8(1.75), f8(0)
+  for _ = 1, GATE_PASSES do
+    for i = 0, GATE_SAMPLES/8-1 do
+      local x = src[i]
+      out[i] = simd.select(simd.gt(simd.abs(x), threshold), x*gain, zero)
+    end
+  end
+  return sample_sum(gate_out_y, GATE_SAMPLES)
+end
+
+real_benches.gate = {
+  scalar = gate_scalar, xmm = gate_xmm, ymm = gate_ymm,
+  name = "float PCM noise gate", seconds = GATE_SECONDS,
+}
+end
+
 ---------------------------------------------- PCM16 16-tap decimation --
 
 do
@@ -2193,13 +2263,14 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points + %.1fM voxelized points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points + %.1fM voxelized points, %.0fs PCM envelope, %.0fs float gate, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.residual.mpixels,
   real_benches.checksum.mib, real_benches.activations.mib,
   real_benches.ternary.mib,
   real_benches.transform.mpoints,
   real_benches.voxel.mpoints,
-  real_benches.pcm.seconds, real_benches.pcmfir.seconds,
+  real_benches.pcm.seconds, real_benches.gate.seconds,
+  real_benches.pcmfir.seconds,
   real_benches.audio.seconds,
   real_benches.particles.count,
   real_benches.chacha.blocks))
@@ -2225,6 +2296,7 @@ run_real(real_benches.rgba)
 run_real(real_benches.checksum)
 run_real(real_benches.depth)
 run_real(real_benches.pcm)
+run_real(real_benches.gate)
 run_real(real_benches.pcmfir)
 run_real(real_benches.residual)
 run_real(real_benches.signedresidual)

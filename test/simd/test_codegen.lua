@@ -402,11 +402,65 @@ test("ffi.simd operations are packed", function()
     return acc
   end)
   local i4 = T.T.i32x4.ct
-  checkloop("integer compare", {"pcmpgtd"}, NOCALL, function()
+  local mztrue = checkloop("integer compare-select true zero",
+    {"pcmpgtd", "pandn"}, {"pand", "por"}, function()
     local acc = i4(0)
     for _ = 1, 400 do acc = simd.select(simd.gt(acc, i4(100)), i4(0), acc + i4(1)) end
     return acc
   end)
+  if mztrue then
+    check(count(mztrue, "pandn") == 1,
+	  "true-zero select must use exactly one packed AND-NOT")
+  end
+  local mzfalse = checkloop("integer compare-select false zero",
+    {"pcmpgtd", "pand"}, {"pandn", "por"}, function()
+      local acc, cap, step = i4(1), i4(100), i4(3)
+      for _ = 1, 400 do
+	local x = acc + step
+	acc = simd.select(simd.gt(x, cap), x + i4(7), i4(0))
+      end
+      return acc
+    end)
+  if mzfalse then
+    check(count(mzfalse, "pand") == 1,
+	  "false-zero select must use exactly one packed AND")
+  end
+  local monetrue = checkloop("integer compare-select true all-ones",
+    {"pcmpgtd", "por"}, {"pand", "pandn"}, function()
+      local acc, cap, step = i4(1), i4(100), i4(3)
+      for _ = 1, 400 do
+	local x = acc + step
+	acc = simd.select(simd.gt(x, cap), i4(-1), x + i4(7))
+      end
+      return acc
+    end)
+  if monetrue then
+    check(count(monetrue, "por") == 1,
+	  "true-all-ones select must use exactly one packed OR")
+  end
+  local mfonetrue = checkloop("float compare-select true all-ones",
+    {"cmpps", "orps"}, {"andps", "andnps"}, function()
+      local acc, cap, step = f4(1), f4(100), f4(3)
+      for _ = 1, 400 do
+	local x = acc + step
+	acc = simd.select(simd.gt(x, cap),
+	  simd.bitcast(f4, i4(-1)), x + f4(7))
+      end
+      return acc
+    end)
+  if mfonetrue then
+    check(count(mfonetrue, "orps") == 1,
+	  "float true-all-ones select must use exactly one packed OR")
+  end
+  checkloop("integer compare-select identical arms",
+    {"paddd"}, {"pcmpgtd", "pand", "pandn", "por"}, function()
+      local acc, cap, step = i4(1), i4(100), i4(3)
+      for _ = 1, 400 do
+	local x = acc + step
+	acc = simd.select(simd.gt(x, cap), x, x)
+      end
+      return acc
+    end)
   local noselect = {"cmpps", "pcmpgtd", "andps", "andnps", "orps",
 		    "pand", "pandn", "por"}
   checkloop("float compare-select max", {"maxps"}, noselect, function()
@@ -1787,6 +1841,34 @@ if simd.features().avx2 then
 	  not body:find("vpand", 1, true) and
 	  not body:find("vpor", 1, true),
 	  "an exact YMM comparison-select max must be one VPMAXSD")
+
+    body = checkymm("i32x8 compare-select false zero",
+      {"vpcmpgtd ymm", "vpand ymm"}, function()
+	local acc, cap, step = i8(1), i8(100), i8(3)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.gt(x, cap), x + i8(7), i8(0))
+	end
+	return acc
+      end)
+    local mz = mnemonics(body)
+    check(count(mz, "pand") == 1 and count(mz, "pandn") == 0 and
+	  count(mz, "por") == 0,
+	  "false-zero YMM select must use exactly one packed AND")
+
+    body = checkymm("i32x8 compare-select true zero",
+      {"vpcmpgtd ymm", "vpandn ymm"}, function()
+	local acc, cap, step = i8(1), i8(100), i8(3)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.gt(x, cap), i8(0), x + i8(7))
+	end
+	return acc
+      end)
+    mz = mnemonics(body)
+    check(count(mz, "pandn") == 1 and count(mz, "pand") == 0 and
+	  count(mz, "por") == 0,
+	  "true-zero YMM select must use exactly one packed AND-NOT")
 
     body = checkymm("i32x8 compare-select abs", {"vpabsd ymm"},
       function()

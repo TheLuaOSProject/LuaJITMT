@@ -2545,6 +2545,11 @@ void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
   uint32_t size = (uint32_t)vi.esize * vi.lanes;
   crec_simd_need(J, (CTSize)mvi.esize * mvi.lanes ==
 		    (CTSize)vi.esize * vi.lanes);
+  /* The mask is irrelevant when both arms are the same value. */
+  if (tref_ref(a) == tref_ref(b)) {
+    J->base[0] = crec_vec_box(J, a, vt, id);
+    return;
+  }
   /*
   ** A comparison selecting the same operands is exactly min/max. Keep the
   ** operand order: x86 FP min/max returns its second operand for unordered
@@ -2649,10 +2654,23 @@ void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
       return;
     }
   }
-  /* (mask & a) | (~mask & b), which is what SSE2 needs anyway. */
-  r = emitir(IRT(IR_VOR, vt),
-	     emitir(IRT(IR_VAND, vt), m, a),
-	     emitir(IRT(IR_VANDN, vt), m, b));
+  /*
+  ** Constant fill arms reduce the generic three-operation bitwise select.
+  ** These identities hold for every mask bit, not only canonical comparison
+  ** masks, so masks with a different lane type remain valid too.
+  */
+  if (crec_simd_iskfill(J, tref_ref(b), size, 0)) {
+    r = emitir(IRT(IR_VAND, vt), m, a);
+  } else if (crec_simd_iskfill(J, tref_ref(a), size, 0)) {
+    r = emitir(IRT(IR_VANDN, vt), m, b);
+  } else if (crec_simd_iskfill(J, tref_ref(a), size, 0xff)) {
+    r = emitir(IRT(IR_VOR, vt), m, b);
+  } else {
+    /* (mask & a) | (~mask & b), which is what SSE2 needs anyway. */
+    r = emitir(IRT(IR_VOR, vt),
+	       emitir(IRT(IR_VAND, vt), m, a),
+	       emitir(IRT(IR_VANDN, vt), m, b));
+  }
   J->base[0] = crec_vec_box(J, r, vt, id);
 }
 

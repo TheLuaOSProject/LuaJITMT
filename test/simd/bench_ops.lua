@@ -582,6 +582,18 @@ do
 	  function(x, y, z)
 	    return simd.select(simd.gt(x, y), x + z, y)
 	  end)
+  op_cost("i32x4 select false zero", function() return ia, ib, i4(1) end,
+	  function(x, y, z)
+	    return simd.select(simd.gt(x, y), x + z, i4(0))
+	  end)
+  op_cost("i32x4 select true zero", function() return ia, ib, i4(1) end,
+	  function(x, y, z)
+	    return simd.select(simd.gt(x, y), i4(0), x + z)
+	  end)
+  op_cost("i32x4 select true ones", function() return ia, ib, i4(1) end,
+	  function(x, y, z)
+	    return simd.select(simd.gt(x, y), i4(-1), x + z)
+	  end)
   op_cost("u32x4 select max",
 	  function() return u4(3), u4(5) end,
 	  function(x, y) return simd.select(simd.gt(x, y), x, y) end)
@@ -591,6 +603,11 @@ do
 	  function() return fa, fb, f4(0.0001) end,
 	  function(x, y, z)
 	    return simd.select(simd.gt(x, y), x + z, y)
+	  end)
+  op_cost("float4 select false zero",
+	  function() return fa, fb, f4(0.0001) end,
+	  function(x, y, z)
+	    return simd.select(simd.gt(x, y), x + z, f4(0))
 	  end)
   op_cost("i32x4 insert const", function() return ia end,
 	  function(x) return simd.insert(x, 2, 42) end)
@@ -866,6 +883,19 @@ if has_ymm then
       return f8(1.0009765625), f8(1.00048828125), f8(0.0001)
     end,
     function(x, y, z) return simd.select(simd.gt(x, y), x + z, y) end)
+  width_cost("float select zero",
+    function()
+      return f4(1.0009765625), f4(1.00048828125), f4(0.0001)
+    end,
+    function()
+      return f8(1.0009765625), f8(1.00048828125), f8(0.0001)
+    end,
+    function(x, y, z)
+      return simd.select(simd.gt(x, y), x + z, f4(0))
+    end,
+    function(x, y, z)
+      return simd.select(simd.gt(x, y), x + z, f8(0))
+    end)
   if features.fma then
     width_cost("float fma",
       function() return f4(1.0000001), f4(1.00048828125), f4(0.0001) end,
@@ -975,6 +1005,15 @@ if has_ymm then
     function() return i4(3), i4(5), i4(1) end,
     function() return i8(3), i8(5), i8(1) end,
     function(x, y, z) return simd.select(simd.gt(x, y), x + z, y) end)
+  width_cost("int32 select zero",
+    function() return i4(3), i4(5), i4(1) end,
+    function() return i8(3), i8(5), i8(1) end,
+    function(x, y, z)
+      return simd.select(simd.gt(x, y), x + z, i4(0))
+    end,
+    function(x, y, z)
+      return simd.select(simd.gt(x, y), x + z, i8(0))
+    end)
   width_cost("uint32 select max",
     function() return u4(3), u4(5) end,
     function() return u8d(3), u8d(5) end,
