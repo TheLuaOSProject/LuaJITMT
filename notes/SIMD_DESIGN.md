@@ -1133,3 +1133,35 @@ arithmetic XMM/YMM improves about 43%/39% (1.95 to 1.11 and 2.25 to
 1.36 ns/vector). Logical root/loop traces shrink from 634 to 570
 instructions and arithmetic traces from 638 to 586; together they remove 32
 dword variable shifts and 88 dword extraction shifts.
+
+## D40. Reuse the cross-product and sign correction in qword squares
+
+The high half of a signed 64-bit product is obtained from its unsigned high
+half with:
+
+```
+signed_hi = unsigned_hi
+          - (a < 0 ? b : 0)
+          - (b < 0 ? a : 0)
+```
+
+The two conditional values depend only on the inputs, so the backend now
+adds them before the unsigned product is ready and performs one final packed
+subtraction. This keeps the same modulo-64-bit arithmetic while removing one
+operation from the result's critical dependency chain. Ordinary signed
+`mulhi` latency falls from about 3.15 to 2.99 ns/vector on the measured host;
+unsigned multiplication is unchanged.
+
+When both IR operands are identical, the 32-bit partial products
+`a_hi*a_lo` and `a_lo*a_hi` are identical too. The backend retains that
+cross-product instead of issuing it twice, aliases the two extracted high
+halves, and builds one sign mask which it doubles for the signed correction.
+The specialised square uses three `VPMULUDQ` instructions instead of four,
+one fewer qword shift, and half as many sign-mask instructions.
+
+Dependent signed square latency improves from 3.34 to 2.90 ns/vector, about
+13%; unsigned improves from 2.67 to 2.59 ns. With eight independent square
+chains, signed XMM/YMM throughput improves about 20--23% and unsigned about
+8--12%. Across signed/unsigned XMM/YMM square root-and-loop traces, total
+instructions fall from 412 to 392, `VPMULUDQ` from 32 to 24, and qword shifts
+from 48 to 40.

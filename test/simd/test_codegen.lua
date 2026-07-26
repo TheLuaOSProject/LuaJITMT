@@ -542,6 +542,22 @@ test("mulhi uses packed multiplication", function()
     end)
   check(count(mi64, "pmuludq") == 4,
 	"i64x2 mulhi must use four unsigned dword products")
+  check(count(mi64, "psubq") == 1,
+	"i64x2 mulhi must combine both signed corrections before one subtract")
+  local msi64 = checkloop("i64x2 mulhi square",
+    {"pmuludq", "paddq", "psrlq", "psubq", "psrad", "pshufd"},
+    {"call"}, function()
+      local acc = i64(-9223372036854775807LL-1,
+		      0x7000000000000001LL)
+      for _ = 1, 400 do
+	local x = acc + i64(3)
+	acc = simd.mulhi(x, x) + i64(7)
+      end
+      return acc
+    end)
+  check(count(msi64, "pmuludq") == 3 and count(msi64, "psrad") == 1 and
+	count(msi64, "pshufd") == 1 and count(msi64, "psubq") == 1,
+	"i64x2 mulhi square must reuse its cross product and sign mask")
 
   local u64 = T.T.u64x2.ct
   local mu64 = checkloop("u64x2 mulhi", {"pmuludq", "paddq", "psrlq"},
@@ -553,6 +569,17 @@ test("mulhi uses packed multiplication", function()
     end)
   check(count(mu64, "pmuludq") == 4,
 	"u64x2 mulhi must use four unsigned dword products")
+  local msu64 = checkloop("u64x2 mulhi square",
+    {"pmuludq", "paddq", "psrlq"}, {"call", "psubq"}, function()
+      local acc = u64(0xffffffffffffffffULL, 0x8000000000000001ULL)
+      for _ = 1, 400 do
+	local x = acc + u64(3)
+	acc = simd.mulhi(x, x) + u64(7)
+      end
+      return acc
+    end)
+  check(count(msu64, "pmuludq") == 3,
+	"u64x2 mulhi square must reuse its cross product")
 end)
 
 test("fma compiles to a single fused instruction", function()
@@ -1228,7 +1255,26 @@ if simd.features().avx2 then
 	return acc
       end)
     local _, sn = sbody:gsub("vpmuludq ymm", "")
-    check(sn == 4, "i64x4 mulhi must use four YMM dword products")
+    local _, nsub = sbody:gsub("vpsubq ymm", "")
+    check(sn == 4 and nsub == 1,
+	  "i64x4 mulhi must use four products and one signed correction")
+
+    local ssqbody = checkymm("i64x4 mulhi square",
+      {"vpmuludq ymm", "vpaddq ymm", "vpsubq ymm", "vpsrad ymm"},
+      function()
+	local acc = sq4(-9223372036854775807LL-1, -7, 7,
+			0x7000000000000001LL)
+	for _ = 1, 400 do
+	  local x = acc + sq4(3)
+	  acc = simd.mulhi(x, x) + sq4(7)
+	end
+	return acc
+      end)
+    local _, ssqn = ssqbody:gsub("vpmuludq ymm", "")
+    local _, ssqsign = ssqbody:gsub("vpsrad ymm", "")
+    local _, ssqsub = ssqbody:gsub("vpsubq ymm", "")
+    check(ssqn == 3 and ssqsign == 1 and ssqsub == 1,
+	  "i64x4 mulhi square must reuse its product and sign mask")
 
     local ubody = checkymm("u64x4 mulhi emulation",
       {"vpmuludq ymm", "vpaddq ymm", "vpsrlq ymm"}, function()
@@ -1240,6 +1286,20 @@ if simd.features().avx2 then
       end)
     local _, un = ubody:gsub("vpmuludq ymm", "")
     check(un == 4, "u64x4 mulhi must use four YMM dword products")
+
+    local usqbody = checkymm("u64x4 mulhi square",
+      {"vpmuludq ymm", "vpaddq ymm", "vpsrlq ymm"}, function()
+	local acc = uq4(0xffffffffffffffffULL, 0x8000000000000001ULL,
+			7, 0xc000000000000003ULL)
+	for _ = 1, 400 do
+	  local x = acc + uq4(3)
+	  acc = simd.mulhi(x, x) + uq4(7)
+	end
+	return acc
+      end)
+    local _, usqn = usqbody:gsub("vpmuludq ymm", "")
+    check(usqn == 3 and not usqbody:find("vpsubq", 1, true),
+	  "u64x4 mulhi square must reuse its cross product")
 
     local fi, ii = T.W.float8.ct, T.W.i32x8.ct
     local fv = fi(-7.5, -1.25, 0, 1.25, 7.5, 100.75, 1234.5, 9999)

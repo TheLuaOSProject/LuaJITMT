@@ -494,36 +494,50 @@ static void asm_vmulhi_i32(ASMState *as, IRIns *ir)
 **   hi = a1*b1 + high32(t) + high32(low32(t) + a0*b1)
 **
 ** The signed result follows from the unsigned one by subtracting b when a is
-** negative and a when b is negative.
+** negative and a when b is negative. Build both corrections independently,
+** add them, and touch the product with one final subtraction. For a square,
+** the two cross-products and sign masks are identical; retain one of each.
 */
 static void asm_vmulhi_i64(ASMState *as, IRIns *ir)
 {
   int wide = irt_isvec256(ir->t);
   int uns = ir->o == IR_VMULHIU;
+  int same = ir->op1 == ir->op2;
   Reg dest = ra_dest(as, ir, RSET_FPR);
   RegSet allow = rset_exclude(RSET_FPR, dest);
   Reg left = ra_alloc1(as, ir->op1, allow);
   Reg right, ahi, bhi, aux, cross;
   allow = rset_exclude(allow, left);
-  right = ir->op1 == ir->op2 ? left : ra_alloc1(as, ir->op2, allow);
+  right = same ? left : ra_alloc1(as, ir->op2, allow);
   allow = rset_exclude(allow, right);
   ahi = ra_scratch(as, allow);
   allow = rset_exclude(allow, ahi);
-  bhi = ra_scratch(as, allow);
-  allow = rset_exclude(allow, bhi);
+  if (same) {
+    bhi = ahi;
+  } else {
+    bhi = ra_scratch(as, allow);
+    allow = rset_exclude(allow, bhi);
+  }
   aux = ra_scratch(as, allow);
   allow = rset_exclude(allow, aux);
   cross = ra_scratch(as, allow);
 
   /* Signed correction, emitted first because assembly runs backwards. */
   if (!uns) {
-    emit_vrr3l(as, XO_PSUBQ, dest, dest, bhi, wide);
     emit_vrr3l(as, XO_PSUBQ, dest, dest, ahi, wide);
-    emit_vrr3l(as, XO_PAND, bhi, bhi, left, wide);
-    emit_vrr3l(as, XO_PAND, ahi, ahi, right, wide);
-    emit_vrr2il(as, XO_PSHUFD, bhi, bhi, 0xf5, wide);
+    if (same) {
+      emit_vrr3l(as, XO_PADDQ, ahi, ahi, ahi, wide);
+      emit_vrr3l(as, XO_PAND, ahi, ahi, left, wide);
+    } else {
+      emit_vrr3l(as, XO_PADDQ, ahi, ahi, bhi, wide);
+      emit_vrr3l(as, XO_PAND, bhi, bhi, left, wide);
+      emit_vrr3l(as, XO_PAND, ahi, ahi, right, wide);
+    }
+    if (!same) {
+      emit_vrr2il(as, XO_PSHUFD, bhi, bhi, 0xf5, wide);
+      emit_vshiftl(as, XO_PSHIFTD, XOg_PSRA, bhi, right, 31, wide);
+    }
     emit_vrr2il(as, XO_PSHUFD, ahi, ahi, 0xf5, wide);
-    emit_vshiftl(as, XO_PSHIFTD, XOg_PSRA, bhi, right, 31, wide);
     emit_vshiftl(as, XO_PSHIFTD, XOg_PSRA, ahi, left, 31, wide);
     checkmclim(as);
   }
@@ -534,7 +548,8 @@ static void asm_vmulhi_i64(ASMState *as, IRIns *ir)
   emit_vrr3l(as, XO_PADDQ, aux, aux, dest, wide);
   emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, dest, dest, 32, wide);
   emit_vrr3l(as, XO_PADDQ, dest, dest, cross, wide);
-  emit_vrr3l(as, XO_PMULUDQ, cross, left, bhi, wide);
+  if (!same)
+    emit_vrr3l(as, XO_PMULUDQ, cross, left, bhi, wide);
   emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, dest, dest, 32, wide);
   emit_vshiftl(as, XO_PSHIFTQ, XOg_PSLL, dest, dest, 32, wide);
   checkmclim(as);
@@ -542,9 +557,15 @@ static void asm_vmulhi_i64(ASMState *as, IRIns *ir)
   emit_vrr2l(as, XO_MOVAPS, aux, dest, wide);
   emit_vrr3l(as, XO_PADDQ, dest, dest, aux, wide);
   emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, aux, aux, 32, wide);
-  emit_vrr3l(as, XO_PMULUDQ, dest, ahi, right, wide);
+  if (same) {
+    emit_vrr2l(as, XO_MOVAPS, dest, cross, wide);
+    emit_vrr3l(as, XO_PMULUDQ, cross, ahi, right, wide);
+  } else {
+    emit_vrr3l(as, XO_PMULUDQ, dest, ahi, right, wide);
+  }
   emit_vrr3l(as, XO_PMULUDQ, aux, left, right, wide);
-  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, bhi, right, 32, wide);
+  if (!same)
+    emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, bhi, right, 32, wide);
   emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, ahi, left, 32, wide);
 }
 

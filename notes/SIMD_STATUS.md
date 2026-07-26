@@ -66,6 +66,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M43 | Fold AVX2 per-lane count loads into shifts only under register pressure, retaining faster prefetched loads otherwise | done |
 | M44 | Lower variable byte left shifts through a packed power-of-two lookup and IR-visible byte multiplication | done |
 | M45 | Lower logical and arithmetic variable byte right shifts through lookup factors and isolated word products | done |
+| M46 | Shorten signed qword `mulhi` correction and reuse cross-products/sign masks when squaring | done |
 
 ## Commands that pass
 
@@ -573,3 +574,13 @@ Representative logical root/loop traces shrink from 634 to 570 instructions
 and arithmetic traces from 638 to 586, removing 32 variable and 88 immediate
 dword shifts in total. `bench_ops.lua` now tracks dependent XMM/YMM latency
 for all three per-lane byte shifts.
+
+Signed qword `mulhi` now forms both input-sign corrections in parallel and
+applies one final subtraction, reducing dependent latency from about 3.15 to
+2.99 ns/vector. When both operands are the same IR value, one of the four
+32-bit partial products, one qword shift, and half the sign-mask work
+disappear. Signed square latency improves from 3.34 to 2.90 ns/vector and
+eight-chain throughput by about 20--23%; unsigned square throughput improves
+about 8--12%. The XMM/YMM signed/unsigned square dump shrinks from 412 to 392
+instructions and from 32 to 24 `VPMULUDQ`s. `bench_ops.lua` now keeps both
+dependent square paths visible.

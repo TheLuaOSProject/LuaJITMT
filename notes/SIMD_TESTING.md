@@ -214,6 +214,14 @@ dependent XMM and YMM costs for `shl`, `shr`, and `sar`, while streaming
 stress kernels were used to reject an instruction-count win that did not
 translate into throughput.
 
+Qword `mulhi` codegen distinguishes general multiplication from squaring.
+General signed XMM/YMM loops still require four unsigned dword products but
+now require exactly one packed subtraction. Signed squares require three
+products, one dword sign-mask shift, and one final subtraction; unsigned
+squares require three products and no subtraction. Existing randomized
+interpreter/JIT square differentials cover signed/unsigned XMM and YMM values,
+and the operation benchmark records both dependent square widths.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

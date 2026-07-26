@@ -589,6 +589,12 @@ do
 	    return u64(0xf000000000000001ULL), u64(0xc000000000000003ULL)
 	  end,
 	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("i64x2 mulhi square",
+	  function() return i64(-0x7000000000000000LL) end,
+	  function(x) return simd.mulhi(x, x) end)
+  op_cost("u64x2 mulhi square",
+	  function() return u64(0xf000000000000001ULL) end,
+	  function(x) return simd.mulhi(x, x) end)
 end
 
 io.write("\n== conversion throughput (ns per vector, four independent chains) ==\n")
@@ -916,6 +922,14 @@ if has_ymm then
       return u64w(0xf000000000000001ULL), u64w(0xc000000000000003ULL)
     end,
     function(x, y) return simd.mulhi(x, y) end)
+  width_cost("int64 mulhi square",
+    function() return i64(-0x7000000000000000LL) end,
+    function() return i64w(-0x7000000000000000LL) end,
+    function(x) return simd.mulhi(x, x) end)
+  width_cost("uint64 mulhi square",
+    function() return u64(0xf000000000000001ULL) end,
+    function() return u64w(0xf000000000000001ULL) end,
+    function(x) return simd.mulhi(x, x) end)
   width_cost("int8 mulhi",
     function() return s8(-119), s8(117) end,
     function() return s8w(-119), s8w(117) end,
