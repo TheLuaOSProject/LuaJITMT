@@ -17,6 +17,7 @@ package.path = dir .. "/?.lua;" .. package.path
 
 local ffi = require("ffi")
 local simd = require("ffi.simd")
+local jit_ = require("jit")
 require("simdtest")
 
 local REPS = tonumber(arg[1] or "5")
@@ -24,12 +25,15 @@ local REPS = tonumber(arg[1] or "5")
 local f4 = ffi.typeof("float4")
 local i4 = ffi.typeof("i32x4")
 local u4 = ffi.typeof("u32x4")
+local s8 = ffi.typeof("i8x16")
 local i16 = ffi.typeof("i16x8")
 local u8 = ffi.typeof("u8x16")
 local features = simd.features()
 local has_ymm = features.avx2 and features.vecsize >= 32
 local f8 = has_ymm and ffi.typeof("float8")
 local i8 = has_ymm and ffi.typeof("i32x8")
+local u8d = has_ymm and ffi.typeof("u32x8")
+local s8w = has_ymm and ffi.typeof("i8x32")
 local i16w = has_ymm and ffi.typeof("i16x16")
 local u8w = has_ymm and ffi.typeof("u8x32")
 
@@ -466,6 +470,10 @@ io.write("\n== per-operation throughput (ns per 128-bit op, loop-carried) ==\n")
 -- directly comparable between operations. The accumulator is consumed.
 local function op_latency(setup, step)
   local ITERS = 1 << 20
+  -- This helper is deliberately polymorphic in `step`. Flush between rows so
+  -- an NYI or heavily specialised earlier trace cannot blacklist the shared
+  -- loop body and make a later packed operation appear interpreted.
+  jit_.flush()
   local a, b, c = setup()
   local best = math.huge
   for _ = 1, REPS do
@@ -525,6 +533,16 @@ do
   op_cost("i16x8 adds", function() return i16(1), i16(3) end,
 	  function(x, y) return simd.adds(x, y) end)
   op_cost("i16x8 mulhi", function() return i16(30000), i16(30000) end,
+	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("i8x16 mulhi", function() return s8(-119), s8(117) end,
+	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("u8x16 mulhi", function() return u8(241), u8(233) end,
+	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("i32x4 mulhi",
+	  function() return i4(0x40000000), i4(-123456789) end,
+	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("u32x4 mulhi",
+	  function() return u4(0xf0000000), u4(0xc0000001) end,
 	  function(x, y) return simd.mulhi(x, y) end)
 end
 
@@ -599,6 +617,22 @@ if has_ymm then
   width_cost("int16 mulhi",
     function() return i16(30000), i16(30000) end,
     function() return i16w(30000), i16w(30000) end,
+    function(x, y) return simd.mulhi(x, y) end)
+  width_cost("int32 mulhi",
+    function() return i4(0x40000000), i4(-123456789) end,
+    function() return i8(0x40000000), i8(-123456789) end,
+    function(x, y) return simd.mulhi(x, y) end)
+  width_cost("uint32 mulhi",
+    function() return u4(0xf0000000), u4(0xc0000001) end,
+    function() return u8d(0xf0000000), u8d(0xc0000001) end,
+    function(x, y) return simd.mulhi(x, y) end)
+  width_cost("int8 mulhi",
+    function() return s8(-119), s8(117) end,
+    function() return s8w(-119), s8w(117) end,
+    function(x, y) return simd.mulhi(x, y) end)
+  width_cost("uint8 mulhi",
+    function() return u8(241), u8(233) end,
+    function() return u8w(241), u8w(233) end,
     function(x, y) return simd.mulhi(x, y) end)
   width_cost("uint8 saturated add",
     function() return u8(1), u8(3) end,

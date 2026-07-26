@@ -272,7 +272,7 @@ test("the IR dump renders vector types and constants", function()
   end
 end)
 
-test("mulhi is a single packed multiply", function()
+test("mulhi uses packed multiplication", function()
   -- 16 bit lanes have PMULHW/PMULHUW. Signedness picks the instruction, so
   -- both have to be checked: using the wrong one is a wrong answer, not a
   -- slow one, and the differential test alone would not say which was used.
@@ -292,6 +292,44 @@ test("mulhi is a single packed multiply", function()
     for _ = 1, 400 do acc = simd.mulhi(acc, b) + u16(7) end
     return acc
   end)
+
+  local i8 = T.T.i8x16.ct
+  checkloop("i8x16 mulhi", {"pmulhw", "psraw", "psllw"},
+    {"call", "pmulhuw"}, function()
+      local acc = i8(-128, 127, -119, 113, -107, 101, -97, 89,
+		     -83, 79, -73, 67, -61, 59, -53, 47)
+      local b = i8(-117)
+      for _ = 1, 400 do acc = simd.mulhi(acc + i8(3), b) end
+      return acc
+    end)
+
+  local u8 = T.T.u8x16.ct
+  checkloop("u8x16 mulhi", {"pmulhuw", "psrlw", "psllw"},
+    {"call", "pmulhw"}, function()
+      local acc = u8(255, 241, 233, 227, 211, 199, 193, 181,
+		      173, 167, 157, 149, 139, 131, 127, 113)
+      local b = u8(239)
+      for _ = 1, 400 do acc = simd.mulhi(acc + u8(3), b) end
+      return acc
+    end)
+
+  local i32 = T.T.i32x4.ct
+  checkloop("i32x4 mulhi", {"pmuldq", "pblendw", "psrlq"},
+    {"call", "pmuludq"}, function()
+      local acc = i32(0x40000000, -2000000000, 123456789, -987654321)
+      local b = i32(-7, 13, -12345, 0x40000000)
+      for _ = 1, 400 do acc = simd.mulhi(acc + i32(3), b) end
+      return acc
+    end)
+
+  local u32 = T.T.u32x4.ct
+  checkloop("u32x4 mulhi", {"pmuludq", "pblendw", "psrlq"},
+    {"call", "pmuldq xmm"}, function()
+      local acc = u32(0xffffffff, 0x80000000, 123456789, 987654321)
+      local b = u32(7, 13, 12345, 0xc0000000)
+      for _ = 1, 400 do acc = simd.mulhi(acc + u32(3), b) end
+      return acc
+    end)
 end)
 
 test("fma compiles to a single fused instruction", function()
@@ -637,6 +675,31 @@ if simd.features().avx2 then
 	for _ = 1, 400 do
 	  acc = simd.mulhi(simd.subs(simd.adds(acc, a16), h16(-7)), k16)
 	end
+	return acc
+      end)
+
+    local sb32 = T.W.i8x32.ct
+    checkymm("i8x32 mulhi emulation",
+      {"vpmulhw ymm", "vpsraw ymm", "vpsllw ymm"},
+      function()
+	local acc, k = sb32(-119), sb32(117)
+	for _ = 1, 400 do acc = simd.mulhi(acc + sb32(3), k) end
+	return acc
+      end)
+
+    local d8, ud8 = T.W.i32x8.ct, T.W.u32x8.ct
+    checkymm("i32x8 mulhi emulation",
+      {"vpmuldq ymm", "vpblendw ymm", "vpsrlq ymm"},
+      function()
+	local acc, k = d8(0x40000000), d8(-123456789)
+	for _ = 1, 400 do acc = simd.mulhi(acc + d8(7), k) end
+	return acc
+      end)
+    checkymm("u32x8 mulhi emulation",
+      {"vpmuludq ymm", "vpblendw ymm", "vpsrlq ymm"},
+      function()
+	local acc, k = ud8(0xf0000000), ud8(0xc0000001)
+	for _ = 1, 400 do acc = simd.mulhi(acc + ud8(7), k) end
 	return acc
       end)
 

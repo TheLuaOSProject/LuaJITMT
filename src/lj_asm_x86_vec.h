@@ -376,6 +376,60 @@ static void asm_vmul(ASMState *as, IRIns *ir)
   }
 }
 
+/* High 32 bits of each 32x32 product.
+**
+** PMULDQ/PMULUDQ multiply only the even dwords. Shift a second copy of both
+** operands by one dword to get the odd products, then select the high dword
+** of every qword product. PBLENDW mask 0xcc keeps dwords 0/2 from the shifted
+** even products and dwords 1/3 from the unshifted odd products.
+*/
+static void asm_vmulhi_i32(ASMState *as, IRIns *ir)
+{
+  int wide = irt_isvec256(ir->t);
+  int same = ir->op1 == ir->op2;
+  x86Op xo = ir->o == IR_VMULHIU ? XO_PMULUDQ : XO_PMULDQ;
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  RegSet allow = rset_exclude(RSET_FPR, dest);
+  Reg left = ra_alloc1(as, ir->op1, allow);
+  Reg right, oddl, oddr;
+  allow = rset_exclude(allow, left);
+  right = same ? left : ra_alloc1(as, ir->op2, allow);
+  allow = rset_exclude(allow, right);
+  oddl = ra_scratch(as, allow);
+  if (same) {
+    oddr = oddl;
+  } else {
+    allow = rset_exclude(allow, oddl);
+    oddr = ra_scratch(as, allow);
+  }
+  /* Forward order:
+  **   oddl = left >> 32; oddr = right >> 32
+  **   oddl = muldq(oddl, oddr)
+  **   dest = muldq(left, right) >> 32
+  **   dest = blendw(dest, oddl, 0xcc)
+  */
+  emit_i8(as, 0xcc);
+  emit_vrr3l(as, XO_PBLENDW, dest, dest, oddl, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, dest, dest, 32, wide);
+  emit_vrr3l(as, xo, dest, left, right, wide);
+  emit_vrr3l(as, xo, oddl, oddl, oddr, wide);
+  checkmclim(as);
+  if (!same)
+    emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, oddr, right, 32, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, oddl, left, 32, wide);
+}
+
+static void asm_vmulhi(ASMState *as, IRIns *ir)
+{
+  if (irt_type(ir->t) == IRT_V8I16)
+    asm_vecbin(as, ir, asm_vecxo((IROp)ir->o, IRT_V8I16), 1);
+  else {
+    lj_assertA(irt_type(ir->t) == IRT_V4I32,
+	       "no packed mulhi sequence for vector type %d", irt_type(ir->t));
+    asm_vmulhi_i32(as, ir);
+  }
+}
+
 /* -- Splat --------------------------------------------------------------- */
 
 /* Broadcast a scalar to all lanes. */
@@ -785,11 +839,11 @@ static void asm_vec(ASMState *as, IRIns *ir)
   case IR_VAND: case IR_VOR: case IR_VXOR:
   case IR_VUNPKL: case IR_VUNPKH:
   case IR_VADDS: case IR_VSUBS: case IR_VADDSU: case IR_VSUBSU:
-  case IR_VMULHI: case IR_VMULHIU:
     xo = asm_vecxo((IROp)ir->o, t);
     lj_assertA(xo != 0, "no packed opcode for IR op %d type %d", ir->o, t);
     asm_vecbin(as, ir, xo, 0);
     return;
+  case IR_VMULHI: case IR_VMULHIU: asm_vmulhi(as, ir); return;
   case IR_VANDN:
     /* PANDN computes ~dest & src, so the destination holds the *first*
     ** operand, which is exactly the IR_VANDN operand order.

@@ -50,6 +50,26 @@ test("loop-carried accumulator", function()
   end
 end)
 
+test("8- and 32-bit mulhi packed emulation", function()
+  for _, name in ipairs({"i8x16", "u8x16", "i32x4", "u32x4"}) do
+    local ti = T.T[name]
+    local rnd = T.rng(SEED + (ti.signed and 811 or 977))
+    local a, k, ct = T.rand(ti, rnd), T.rand(ti, rnd), ti.ct
+    diff(name .. " mulhi", function(n)
+      local acc = a
+      for _ = 1, n do acc = simd.mulhi(acc + a, k) end
+      return acc
+    end, 240)
+    if ti.bits == 32 then
+      diff(name .. " mulhi square", function(n)
+	local acc = a
+	for _ = 1, n do acc = simd.mulhi(acc, acc) + k end
+	return acc
+      end, 240)
+    end
+  end
+end)
+
 test("division and mixed scalars", function()
   for _, ti in ipairs(T.T) do
     local rnd = T.rng(SEED + 3 * ti.bits)
@@ -888,13 +908,26 @@ if simd.features().avx2 then
 	end
 	return acc
       end, 120)
-      if ti.bits == 16 then
-	diff(name .. " ymm mulhi", function(n)
-	  local acc, k = a, ct(ti.signed and -23123 or 53123)
-	  for _ = 1, n do acc = simd.mulhi(acc, k) + a end
-	  return acc
-	end, 120)
-      end
+      diff(name .. " ymm mulhi", function(n)
+	local k = ti.bits == 8 and ct(ti.signed and -117 or 233)
+			       or ct(ti.signed and -23123 or 53123)
+	local acc = a
+	for _ = 1, n do acc = simd.mulhi(acc, k) + a end
+	return acc
+      end, 120)
+    end
+  end)
+
+  test("256-bit 32-bit mulhi", function()
+    for _, name in ipairs({"i32x8", "u32x8"}) do
+      local ti = T.W[name]
+      local rnd = T.rng(SEED + (ti.signed and 1217 or 1429))
+      local a, k, ct = T.rand(ti, rnd), T.rand(ti, rnd), ti.ct
+      diff(name .. " ymm mulhi", function(n)
+	local acc = a
+	for _ = 1, n do acc = simd.mulhi(acc + a, k) end
+	return acc
+      end, 180)
     end
   end)
 

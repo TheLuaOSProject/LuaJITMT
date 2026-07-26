@@ -642,3 +642,27 @@ This is intentionally a cost decision rather than an instruction-count
 fashion: use the direct permute where it removes a cross-lane dependency
 chain, and retain the cheaper lane-local operation where no crossing is
 needed.
+
+## D24. Emulate narrow and wide `mulhi` with packed lane-local sequences
+
+Only 16-bit lanes have a direct packed high-product instruction, but leaving
+the 8- and 32-bit forms interpreted costs roughly two orders of magnitude in
+a hot loop. Both missing widths have compact packed decompositions.
+
+For byte lanes, one byte in each word is sign- or zero-extended while the
+other is left scaled by `2^8`. `PMULHW`/`PMULHUW` then returns bits 8..15 of
+the original byte product. Repeating this for the even and odd bytes and
+merging their low bytes gives the result in 8 instructions unsigned or 10
+signed.
+
+For 32-bit lanes, `PMULDQ`/`PMULUDQ` first multiply the even dwords. Shifting
+both inputs by 32 within each qword exposes the odd dwords for a second
+multiply. One logical shift selects the high dwords of the even products and
+`PBLENDW 0xcc` takes the high dwords of the odd products. This is a six
+instruction sequence, or five when both operands are the same IR value.
+
+Every step is confined to its 128-bit lane, so the same lowering works for
+XMM and YMM by selecting the VEX width. On the measured host the dependent
+latencies are about 1.8--1.9 ns for byte lanes and 1.5 ns for dword lanes,
+down from roughly 60--80 ns of interpreter fallback; YMM performs twice as
+many lanes at essentially the same latency.

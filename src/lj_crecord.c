@@ -2010,11 +2010,46 @@ void LJ_FASTCALL recff_ffi_simd_mulhi(jit_State *J, RecordFFData *rd)
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   TRef b;
   b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
-  /* PMULHW/PMULHUW cover 16 bit lanes. 8 bit has no instruction, and the
-  ** 32 bit form would need two PMULDQ plus shuffles to reassemble the four
-  ** high halves; both stay interpreted with identical results.
+  if (!veck_isfp(vi.kind) && vi.esize == 1) {
+    IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
+    TRef lo = crec_simd_k16(J, wvt, 0x00ff);
+    TRef hi = crec_simd_k16(J, wvt, 0xff00);
+    TRef even, odd;
+    if (veck_isunsigned(vi.kind)) {
+      /* Scale one byte operand by 2^8, then PMULHUW gives bits 8..15
+      ** of the original byte product in the low byte of each word.
+      */
+      even = emitir(IRT(IR_VMULHIU, wvt),
+		    emitir(IRT(IR_VAND, wvt), a, lo),
+		    emitir(IRT(IR_VSHL, wvt), b, lj_ir_kint(J, 8)));
+      odd = emitir(IRT(IR_VMULHIU, wvt),
+		   emitir(IRT(IR_VSHR, wvt), a, lj_ir_kint(J, 8)),
+		   emitir(IRT(IR_VAND, wvt), b, hi));
+    } else {
+      /* Sign-extend one byte and keep the other scaled by 2^8. PMULHW
+      ** then performs the required signed arithmetic shift by eight.
+      */
+      even = emitir(IRT(IR_VMULHI, wvt),
+		    emitir(IRT(IR_VSAR, wvt),
+		      emitir(IRT(IR_VSHL, wvt), a, lj_ir_kint(J, 8)),
+		      lj_ir_kint(J, 8)),
+		    emitir(IRT(IR_VSHL, wvt), b, lj_ir_kint(J, 8)));
+      odd = emitir(IRT(IR_VMULHI, wvt),
+		   emitir(IRT(IR_VSAR, wvt), a, lj_ir_kint(J, 8)),
+		   emitir(IRT(IR_VAND, wvt), b, hi));
+      even = emitir(IRT(IR_VAND, wvt), even, lo);
+    }
+    J->base[0] = crec_vec_box(J,
+      emitir(IRT(IR_VOR, vt), even,
+	emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8))), vt, id);
+    return;
+  }
+  /* PMULHW/PMULHUW cover 16 bit lanes directly. For 32 bit lanes the backend
+  ** multiplies even and odd dwords separately and blends their high halves.
   */
-  crec_simd_need(J, !veck_isfp(vi.kind) && vi.esize == 2);
+  crec_simd_need(J, !veck_isfp(vi.kind) &&
+		    (vi.esize == 2 ||
+		     (vi.esize == 4 && (J->flags & JIT_F_SSE4_1))));
   J->base[0] = crec_vec_box(J,
     emitir(IRT(veck_isunsigned(vi.kind) ? IR_VMULHIU : IR_VMULHI, vt), a, b),
     vt, id);

@@ -371,6 +371,7 @@ typedef enum {
   XO_PSUBQ =	XO_660f(fb),
   XO_PMULLW =	XO_660f(d5),
   XO_PMULUDQ =	XO_660f(f4),
+  XO_PMULDQ =	XO_0f38(28),		/* SSE4.1 */
   XO_PAND =	XO_660f(db),
   XO_PANDN =	XO_660f(df),
   XO_POR =	XO_660f(eb),
@@ -480,6 +481,7 @@ typedef enum {
   XO_VPERM2I128 = XO_0f3a(46),		/* AVX2 */
   XO_VPERMD =	XO_0f38(36),		/* AVX2 */
   XO_VPERMQ =	XO_0f3a(00),		/* AVX2, W=1 */
+  XO_PBLENDW =	XO_0f3a(0e),		/* SSE4.1 */
   XO_PINSRB =	XO_0f3a(20),		/* SSE4.1 */
   XO_PINSRD =	XO_0f3a(22),		/* SSE4.1 */
   XO_PEXTRB =	XO_0f3a(14),		/* SSE4.1 */

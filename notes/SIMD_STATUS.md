@@ -49,6 +49,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M26 | 256-bit broadcasts, comparisons/equality, min/max, shifts, FMA, rounding, conversions, saturating arithmetic, movemask, mulhi, and 8/64-bit multiply emulations | done |
 | M27 | 256-bit reductions, constant/runtime shuffles, two-source shuffles, and constant/runtime insert via explicit 128-bit half crossing | done |
 | M28 | Cost-selective AVX2 `VPERMD`/`VPERMQ` lowering for 32/64-bit YMM shuffles; v2, AVX-only, and AVX2 CPU-model test matrix | done |
+| M29 | Call-free packed 8- and 32-bit `mulhi` emulations for XMM and YMM | done |
 
 ## Commands that pass
 
@@ -314,8 +315,8 @@ The heavier group covers overlapping unaligned loads, a dependent Horner
 chain, and divergent mask updates rather than only one-instruction kernels.
 
 `bench_ops.lua` also compares dependent XMM and YMM operations directly. On
-this machine the YMM instruction has essentially the same latency while doing
-twice the lane work:
+this machine the YMM instruction or packed sequence has essentially the same
+latency while doing twice the lane work:
 
 ```
                                   XMM       YMM   lane throughput
@@ -333,6 +334,10 @@ int32 select                  0.62 ns   0.62 ns       2.00x
 int32 shuffle const           0.21 ns   0.57 ns       0.73x
 int32 shuffle vector          0.30 ns   0.57 ns       1.04x
 int16 mulhi                   0.90 ns   0.89 ns       2.02x
+int32 mulhi                   1.51 ns   1.43 ns       2.11x
+uint32 mulhi                  1.46 ns   1.51 ns       1.93x
+int8 mulhi                    1.80 ns   1.70 ns       2.12x
+uint8 mulhi                   1.89 ns   1.92 ns       1.97x
 uint8 saturated add           0.20 ns   0.20 ns       2.01x
 ```
 
