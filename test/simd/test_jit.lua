@@ -227,6 +227,23 @@ test("multi-lane dynamic vector constructors on trace", function()
     end
     return acc
   end, 240)
+  local tobit = require("bit").tobit
+  diff("affine float constructor preserves upper overflow", function(n)
+    local acc = f4(0)
+    for i = 1, n do
+      local x = tobit(2147483400+i)
+      acc = acc + f4(x+17, x-31, x+80, x+3)
+    end
+    return acc
+  end, 220)
+  diff("affine float constructor preserves lower overflow", function(n)
+    local acc = f4(0)
+    for i = 1, n do
+      local x = tobit(-2147483400-i)
+      acc = acc + f4(x-17, x+31, x-80, x-3)
+    end
+    return acc
+  end, 220)
   diff("dynamic float constructor preserves zero bits", function(n)
     local r
     for i = 1, n do r = f4(i*0.25, -0.0, i+0.5, 0.0) end
@@ -235,16 +252,18 @@ test("multi-lane dynamic vector constructors on trace", function()
 
   local d2, cfloat = T.T.double2.ct, ffi.typeof("float")
   diff("reused scalar FP sources in vector constructors", function(n)
-    local af, ad = f4(0), d2(0)
+    local af, ar, ad, dr = f4(0), f4(0), d2(0), d2(0)
     local sum = 0
     for i = 1, n do
       local x = i + 0.25
       local y = cfloat(i*0.5 + 0.25)
       af = af + f4(x, x, x+0.5, x)
+      ar = ar + f4(x, x, x, x)
       ad = ad + d2(y, y)
+      dr = dr + d2(x, x)
       sum = sum + x
     end
-    return af, ad, sum
+    return af, ar, ad, dr, sum
   end, 200)
 
   local uint32 = ffi.typeof("uint32_t")

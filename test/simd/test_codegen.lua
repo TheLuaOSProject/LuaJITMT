@@ -166,6 +166,13 @@ test("dynamic vector constructors stay in registers", function()
     check(count(dm, "movq") == 0,
 	  "double2 dynamic constructor: seed must not need a scalar move")
   end
+  dm = check_count("double2 repeated constructor", d2,
+	      {"cvtsi2sd", "unpcklpd", "addpd"}, "unpcklpd", 1,
+    function(ct, i) return ct(i, i) end)
+  if dm then
+    check(count(dm, "cvtsi2sd") == 1,
+	  "double2 repeated constructor: expected one scalar conversion")
+  end
 
   local h8 = T.T.i16x8.ct
   local hm = check_count("i16x8 affine dynamic constructor", h8,
@@ -180,23 +187,33 @@ test("dynamic vector constructors stay in registers", function()
 
   if simd.features().sse4_1 then
     local f4 = T.T.float4.ct
-    local fm = check_count("float4 dynamic constructor", f4,
-		{"cvtsi2ss", "insertps", "addps"}, "insertps", 3,
+    local fm = check_count("float4 affine dynamic constructor", f4,
+		{"movd", "pshufd", "paddd", "cvtdq2ps", "addps"},
+		"paddd", 1,
       function(ct, i) return ct(i, i+1, i+2, i+3) end)
     if fm then
-      check(count(fm, "cvtsi2ss") == 4,
-	    "float4 dynamic constructor: expected four fused lane conversions")
-      check(count(fm, "xorps") == 1,
-	    "float4 dynamic constructor: expected one seed clear")
+      check(count(fm, "cvtdq2ps") == 1,
+	    "float4 affine constructor: expected one packed conversion")
+      check(count(fm, "insertps") == 0,
+	    "float4 affine constructor must not insert individual lanes")
+    end
+    fm = check_count("float4 affine constructor extreme guards", f4,
+		{"paddd", "cvtdq2ps", "jo"}, "jo", 2,
+      function(ct, i) return ct(i+17, i-31, i+80, i+3) end)
+    if fm then
+      check(count(fm, "insertps") == 0,
+	    "float4 guarded affine constructor must stay packed")
     end
     fm = check_count("float4 shared scalar constructor", f4,
-		{"cvtsi2ss", "insertps", "addps"}, "insertps", 4,
+		{"cvtsi2ss", "shufps", "addps"}, "shufps", 1,
       function(ct, i) return ct(i, i, i, i) end)
     if fm then
       check(count(fm, "cvtsi2ss") == 1,
 	    "float4 shared scalar constructor: conversion must be reused")
       check(count(fm, "xorps") == 1,
 	    "float4 shared scalar constructor: expected one conversion clear")
+      check(count(fm, "insertps") == 0,
+	    "float4 shared scalar constructor must broadcast directly")
     end
 
     local i4 = T.T.i32x4.ct
@@ -255,7 +272,8 @@ test("dynamic vector constructors stay in registers", function()
   if simd.features().avx2 then
     local f8 = T.W.float8.ct
     local m, _, body = checkloop("float8 dynamic constructor",
-      {"cvtsi2ss", "insertps", "insertf128", "addps"}, NOCALL, function()
+      {"movd", "pbroadcastd", "paddd", "cvtdq2ps", "addps"}, NOCALL,
+      function()
 	local acc = f8(0)
 	for i = 1, 400 do
 	  acc = acc + f8(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
@@ -263,16 +281,42 @@ test("dynamic vector constructors stay in registers", function()
 	return acc
       end)
     if m then
-      check(count(m, "cvtsi2ss") == 8,
-	    "float8 dynamic constructor: expected eight fused lane conversions")
-      check(count(m, "xorps") == 2,
-	    "float8 dynamic constructor: expected two half seed clears")
-      check(count(m, "insertps") == 6,
-	    "float8 dynamic constructor: expected six lane inserts")
-      check(count(m, "insertf128") == 1,
-	    "float8 dynamic constructor: expected one half join")
+      check(count(m, "cvtdq2ps") == 1,
+	    "float8 dynamic constructor: expected one packed conversion")
+      check(count(m, "insertps") == 0 and count(m, "insertf128") == 0,
+	    "float8 dynamic constructor must not build scalar halves")
       check(body:find("vaddps ymm", 1, true) ~= nil,
 	    "float8 dynamic constructor: add must remain YMM-width")
+    end
+    m, _, body = checkloop("float8 shared scalar constructor",
+      {"cvtsi2ss", "broadcastss", "addps"}, NOCALL, function()
+	local acc = f8(0)
+	for i = 1, 400 do acc = acc + f8(i, i, i, i, i, i, i, i) end
+	return acc
+      end)
+    if m then
+      check(count(m, "cvtsi2ss") == 1 and count(m, "broadcastss") == 1,
+	    "float8 shared scalar constructor must convert and broadcast once")
+      check(count(m, "insertps") == 0 and count(m, "insertf128") == 0,
+	    "float8 shared scalar constructor must not build scalar halves")
+      check(body:find("vaddps ymm", 1, true) ~= nil,
+	    "float8 shared scalar constructor: add must remain YMM-width")
+    end
+
+    local d4 = T.W.double4.ct
+    m, _, body = checkloop("double4 shared scalar constructor",
+      {"cvtsi2sd", "broadcastsd", "addpd"}, NOCALL, function()
+	local acc = d4(0)
+	for i = 1, 400 do acc = acc + d4(i, i, i, i) end
+	return acc
+      end)
+    if m then
+      check(count(m, "cvtsi2sd") == 1 and count(m, "broadcastsd") == 1,
+	    "double4 shared scalar constructor must convert and broadcast once")
+      check(count(m, "insertf128") == 0,
+	    "double4 shared scalar constructor must not build scalar halves")
+      check(body:find("vaddpd ymm", 1, true) ~= nil,
+	    "double4 shared scalar constructor: add must remain YMM-width")
     end
 
     local i8 = T.W.i32x8.ct

@@ -1548,7 +1548,7 @@ static int crec_vec_affine_k(jit_State *J, IRRef ref, int32_t *pk)
 }
 
 /* Split tr = base + k, where base is a non-constant Lua number. */
-static TRef crec_vec_affine_base(jit_State *J, TRef tr, int32_t *pofs)
+static TRef crec_vec_affine_base(jit_State *J, TRef tr, int64_t *pofs)
 {
   IRIns *ir;
   IRRef br;
@@ -1575,13 +1575,13 @@ static TRef crec_vec_affine_base(jit_State *J, TRef tr, int32_t *pofs)
   }
   if ((!irt_isint(IR(br)->t) && !irt_isnum(IR(br)->t)) || irref_isk(br))
     return 0;
-  *pofs = neg ? (int32_t)(0u - (uint32_t)k) : k;
+  *pofs = neg ? -(int64_t)k : (int64_t)k;
   return TREF(br, irt_t(IR(br)->t));
 }
 
 /* Recover tr = base + k for the selected numeric base. */
 static int crec_vec_affine_offset(jit_State *J, TRef tr, TRef base,
-				  int32_t *pofs)
+				  int64_t *pofs)
 {
   IRIns *ir;
   IRRef br = tref_ref(base);
@@ -1607,7 +1607,7 @@ static int crec_vec_affine_offset(jit_State *J, TRef tr, TRef base,
   } else {
     return 0;
   }
-  *pofs = neg ? (int32_t)(0u - (uint32_t)k) : k;
+  *pofs = neg ? -(int64_t)k : (int64_t)k;
   return 1;
 }
 
@@ -1626,7 +1626,7 @@ static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
   TRef base, v;
   uint32_t i;
   int allzero;
-  int32_t baseofs;
+  int64_t baseofs;
   if (veck_isfp(vi->kind) || vi->esize > 4 || nargs != vi->lanes)
     return 0;
   base = crec_vec_affine_base(J, J->base[1], &baseofs);
@@ -1635,11 +1635,11 @@ static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
   ect = ctype_get(cts, vi->eid);
   memset(vbuf, 0, sizeof(vdata));
   for (i = 0; i < vi->lanes; i++) {
-    int32_t ofs;
+    int64_t ofs;
     TValue tv;
     if (!crec_vec_affine_offset(J, J->base[1+i], base, &ofs)) return 0;
     if (ofs) allzero = 0;
-    setintV(&tv, ofs);
+    setintV(&tv, (int32_t)(uint32_t)ofs);
     lj_cconv_ct_tv(cts, ect, vbuf + i*vi->esize, &tv, 0);
   }
   if (tref_isnum(base))
@@ -1648,6 +1648,81 @@ static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
   v = emitir(IRT(IR_VSPLAT, vt), v, IRVSPLAT_BROADCAST);
   return allzero ? v :
     emitir(IRT(IR_VADD, vt), v, lj_ir_kvec(J, vt, vbuf));
+}
+
+/*
+** A full floating-point constructor with the same runtime scalar in every
+** lane needs one conversion and one broadcast, not a seed plus lane inserts.
+*/
+static TRef crec_vec_build_repeat(jit_State *J, CTState *cts, IRType vt,
+				  const CTVecInfo *vi, RecordFFData *rd,
+				  MSize nargs)
+{
+  CType *ect;
+  TRef base, v;
+  uint32_t i;
+  if (!veck_isfp(vi->kind) || nargs != vi->lanes) return 0;
+  base = J->base[1];
+  if (!tref_isnumber(base) || tref_isk(base)) return 0;
+  for (i = 1; i < vi->lanes; i++)
+    if (J->base[1+i] != base) return 0;
+  ect = ctype_get(cts, vi->eid);
+  v = crec_ct_tv(J, ect, 0, base, &rd->argv[1]);
+  return emitir(IRT(IR_VSPLAT, vt), v, IRVSPLAT_BROADCAST);
+}
+
+/*
+** Construct affine float lanes from one Lua integer with packed dword
+** arithmetic and CVTDQ2PS. The original ADDOV/SUBOV results are weak guards;
+** keep them live so values that leave the signed-dword range still side-exit
+** to the exact scalar constructor path.
+*/
+static TRef crec_vec_build_f32_affine(jit_State *J, IRType vt,
+				      const CTVecInfo *vi, MSize nargs)
+{
+  uint32_t vdata[LJ_VEC_MAXSIZE/sizeof(uint32_t)];
+  IRType ivt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+  TRef base, v;
+  uint32_t i, mini = 0, maxi = 0;
+  int allzero;
+  int64_t baseofs, minofs, maxofs;
+  if (vi->kind != VECK_F32 || nargs != vi->lanes) return 0;
+  base = crec_vec_affine_base(J, J->base[1], &baseofs);
+  if (!base || !tref_isint(base)) return 0;
+  allzero = baseofs == 0;
+  minofs = maxofs = baseofs;
+  memset(vdata, 0, sizeof(vdata));
+  for (i = 0; i < vi->lanes; i++) {
+    TRef tr = J->base[1+i];
+    int64_t ofs;
+    if (!tref_isint(tr) ||
+	!crec_vec_affine_offset(J, tr, base, &ofs)) return 0;
+    vdata[i] = (uint32_t)ofs;
+    if (ofs) allzero = 0;
+    if (ofs < minofs) { minofs = ofs; mini = i; }
+    if (ofs > maxofs) { maxofs = ofs; maxi = i; }
+  }
+  /*
+  ** The minimum and maximum offsets imply every intermediate signed-dword
+  ** sum is in range. Keep their weak overflow guards, but let DCE discard
+  ** redundant lane additions.
+  */
+  if (minofs != 0) {
+    TRef tr = J->base[1+mini];
+    IRIns *ir = IR(tref_ref(tr));
+    if (ir->o == IR_ADDOV || ir->o == IR_SUBOV)
+      emitir(IRTI(IR_USE), tr, 0);
+  }
+  if (maxofs != 0 && maxi != mini) {
+    TRef tr = J->base[1+maxi];
+    IRIns *ir = IR(tref_ref(tr));
+    if (ir->o == IR_ADDOV || ir->o == IR_SUBOV)
+      emitir(IRTI(IR_USE), tr, 0);
+  }
+  v = emitir(IRT(IR_VSPLAT, ivt), base, IRVSPLAT_BROADCAST);
+  if (!allzero)
+    v = emitir(IRT(IR_VADD, ivt), v, lj_ir_kvec(J, ivt, vdata));
+  return emitir(IRT(IR_VCONV, vt), v, IRVCONV(VECK_F32, VECK_I32));
 }
 
 /*
@@ -1660,8 +1735,12 @@ static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
 static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
 			   const CTVecInfo *vi, RecordFFData *rd, MSize nargs)
 {
-  TRef affine = crec_vec_build_affine(J, cts, vt, vi, nargs);
-  if (affine) return affine;
+  TRef fast = crec_vec_build_repeat(J, cts, vt, vi, rd, nargs);
+  if (fast) return fast;
+  fast = crec_vec_build_affine(J, cts, vt, vi, nargs);
+  if (fast) return fast;
+  fast = crec_vec_build_f32_affine(J, vt, vi, nargs);
+  if (fast) return fast;
   if (veck_isfp(vi->kind)) {
     if (vi->esize == 4 && !(J->flags & JIT_F_SSE4_1)) return 0;
   } else {
