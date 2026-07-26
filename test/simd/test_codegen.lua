@@ -407,6 +407,71 @@ test("ffi.simd operations are packed", function()
     for _ = 1, 400 do acc = simd.select(simd.gt(acc, i4(100)), i4(0), acc + i4(1)) end
     return acc
   end)
+  local noselect = {"cmpps", "pcmpgtd", "andps", "andnps", "orps",
+		    "pand", "pandn", "por"}
+  checkloop("float compare-select max", {"maxps"}, noselect, function()
+    local acc, cap, step = f4(0), f4(100), f4(1)
+    for _ = 1, 400 do
+      local x = acc + step
+      acc = simd.select(simd.gt(x, cap), x, cap)
+    end
+    return acc
+  end)
+  checkloop("float compare-select min", {"minps"}, noselect, function()
+    local acc, cap, step = f4(0), f4(100), f4(1)
+    for _ = 1, 400 do
+      local x = acc + step
+      acc = simd.select(simd.gt(x, cap), cap, x)
+    end
+    return acc
+  end)
+  checkloop("u8 compare-select max", {"pmaxub"}, noselect, function()
+    local ct = T.T.u8x16.ct
+    local acc, cap, step = ct(0), ct(100), ct(1)
+    for _ = 1, 400 do
+      local x = acc + step
+      acc = simd.select(simd.gt(x, cap), x, cap)
+    end
+    return acc
+  end)
+  if simd.features().sse4_1 then
+    checkloop("i32 compare-select max", {"pmaxsd"}, noselect, function()
+      local acc, cap, step = i4(0), i4(100), i4(1)
+      for _ = 1, 400 do
+	local x = acc + step
+	acc = simd.select(simd.gt(x, cap), x, cap)
+      end
+      return acc
+    end)
+    checkloop("u32 compare-select min", {"pminud"}, noselect, function()
+      local ct = T.T.u32x4.ct
+      local acc, cap, step = ct(0), ct(100), ct(1)
+      for _ = 1, 400 do
+	local x = acc + step
+	acc = simd.select(simd.gt(x, cap), cap, x)
+      end
+      return acc
+    end)
+    checkloop("i32 inclusive compare-select max",
+      {"pmaxsd"}, noselect, function()
+	local acc, cap, step = i4(0), i4(100), i4(1)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.ge(x, cap), x, cap)
+	end
+	return acc
+      end)
+    checkloop("u32 inclusive compare-select min",
+      {"pminud"}, noselect, function()
+	local ct = T.T.u32x4.ct
+	local acc, cap, step = ct(0), ct(100), ct(1)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.le(x, cap), x, cap)
+	end
+	return acc
+      end)
+  end
   checkloop("shifts", {"pslld", "psrad"}, NOCALL, function()
     local acc = i4(1)
     for _ = 1, 400 do acc = simd.sar(simd.shl(acc + i4(1), 3), 2) end
@@ -1605,6 +1670,20 @@ if simd.features().avx2 then
 	end
 	return acc, bits
       end)
+
+    local body = checkymm("i32x8 compare-select max", {"vpmaxsd ymm"},
+      function()
+	local acc, cap, step = i8(0), i8(100), i8(1)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.gt(x, cap), x, cap)
+	end
+	return acc
+      end)
+    check(not body:find("vpcmpgtd", 1, true) and
+	  not body:find("vpand", 1, true) and
+	  not body:find("vpor", 1, true),
+	  "an exact YMM comparison-select max must be one VPMAXSD")
 
     checkymm("i32x8 whole equality",
       {"vpcmpeqb ymm", "vpmovmskb"},

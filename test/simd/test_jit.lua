@@ -466,6 +466,86 @@ test("ffi.simd comparisons and masks on trace", function()
   end
 end)
 
+test("comparison-select min/max idioms on trace", function()
+  local tabs = {T.T}
+  if simd.features().avx2 then tabs[#tabs+1] = T.W end
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      if ti.fp or ti.bits < 64 then
+	local rnd = T.rng(SEED + 131 * ti.bits + ti.lanes)
+	local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
+	diffop(ti, "select max/min operands", function(n)
+	  local hi, lo
+	  for _ = 1, n do
+	    local m = simd.gt(a, b)
+	    hi = simd.select(m, a, b)
+	    lo = simd.select(m, b, a)
+	  end
+	  return hi, lo
+	end, 300)
+	if not ti.fp then
+	  diffop(ti, "select inclusive max/min operands", function(n)
+	    local hi, lo
+	    for _ = 1, n do
+	      hi = simd.select(simd.ge(a, b), a, b)
+	      lo = simd.select(simd.le(a, b), a, b)
+	    end
+	    return hi, lo
+	  end, 300)
+	end
+      end
+    end
+  end
+
+  -- MAXPS/MINPS choose their second operand for unordered inputs and equal
+  -- zeros. These raw patterns prove that the fold preserves the exact false
+  -- arm, including NaN payloads and the sign of zero.
+  local fa = simd.bitcast(T.T.float4.ct,
+    T.T.u32x4.ct(0x80000000, 0, 0x7f801234, 0x3f800000))
+  local fb = simd.bitcast(T.T.float4.ct,
+    T.T.u32x4.ct(0, 0x80000000, 0x40000000, 0x7fc05678))
+  diff("float select max/min special bits", function(n)
+    local hi, lo
+    for _ = 1, n do
+      local m = simd.gt(fa, fb)
+      hi, lo = simd.select(m, fa, fb), simd.select(m, fb, fa)
+    end
+    return hi, lo
+  end, 300)
+
+  local da = simd.bitcast(T.T.double2.ct,
+    T.T.u64x2.ct(0x8000000000000000ULL, 0x7ff0000000001234ULL))
+  local db = simd.bitcast(T.T.double2.ct,
+    T.T.u64x2.ct(0, 0x4000000000000000ULL))
+  diff("double select max/min special bits", function(n)
+    local hi, lo
+    for _ = 1, n do
+      local m = simd.gt(da, db)
+      hi, lo = simd.select(m, da, db), simd.select(m, db, da)
+    end
+    return hi, lo
+  end, 300)
+
+  -- A mask may legally have the same byte size but different comparison
+  -- semantics. Bitcasts make the data refs identical, so this catches an
+  -- over-broad structural matcher that ignores signedness or FP lane type.
+  local sa, sb = T.T.i32x4.ct(-1, 2, -3, 4), T.T.i32x4.ct(1, -2, 3, -4)
+  local ua = simd.bitcast(T.T.u32x4.ct, sa)
+  local ub = simd.bitcast(T.T.u32x4.ct, sb)
+  diff("signed mask selecting unsigned operands", function(n)
+    local r
+    for _ = 1, n do r = simd.select(simd.gt(sa, sb), ua, ub) end
+    return r
+  end, 300)
+  local ia = simd.bitcast(T.T.i32x4.ct, fa)
+  local ib = simd.bitcast(T.T.i32x4.ct, fb)
+  diff("integer mask selecting float operands", function(n)
+    local r
+    for _ = 1, n do r = simd.select(simd.gt(ia, ib), fa, fb) end
+    return r
+  end, 300)
+end)
+
 test("ffi.simd shifts on trace", function()
   -- The count is a *literal* in this first loop. Lane widths without a shift
   -- instruction (8 bit lanes, and the 64 bit arithmetic shift) are rewritten

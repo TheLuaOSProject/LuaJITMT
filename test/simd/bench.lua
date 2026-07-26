@@ -1225,6 +1225,122 @@ real_benches.blur = {
 }
 end
 
+---------------------------------------------------------- 4K max morphology --
+
+do
+-- A 3x3 grayscale dilation over a full 4K frame. The vector kernels spell
+-- max as compare+select on purpose: that is how generic branchless image and
+-- tensor code is commonly generated, and it exercises eight exact min/max
+-- selection idioms per output vector with unaligned memory operands.
+local MORPH_W, MORPH_H = 3840, 2160
+local MORPH_STRIDE = MORPH_W + 2
+local MORPH_N = MORPH_W * MORPH_H
+local MORPH_PASSES = 2
+local morph_in = ffi.new("float[?]", MORPH_STRIDE * (MORPH_H+2))
+local morph_out_s = ffi.new("float[?]", MORPH_N)
+local morph_out_x = ffi.new("float[?]", MORPH_N)
+local morph_out_y = has_ymm and ffi.new("float[?]", MORPH_N)
+for y = 0, MORPH_H+1 do
+  for x = 0, MORPH_STRIDE-1 do
+    morph_in[y*MORPH_STRIDE+x] =
+      ((x*73 + y*151 + (x*y) % 997) % 65536) / 65536
+  end
+end
+
+local function morph_scalar()
+  local src, out = morph_in, morph_out_s
+  for _ = 1, MORPH_PASSES do
+    for y = 0, MORPH_H-1 do
+      local r0, r1, r2 = y*MORPH_STRIDE,
+	(y+1)*MORPH_STRIDE, (y+2)*MORPH_STRIDE
+      local d = y*MORPH_W
+      for x = 0, MORPH_W-1 do
+	local m = src[r0+x]
+	local v = src[r0+x+1]; if v > m then m = v end
+	v = src[r0+x+2]; if v > m then m = v end
+	v = src[r1+x]; if v > m then m = v end
+	v = src[r1+x+1]; if v > m then m = v end
+	v = src[r1+x+2]; if v > m then m = v end
+	v = src[r2+x]; if v > m then m = v end
+	v = src[r2+x+1]; if v > m then m = v end
+	v = src[r2+x+2]; if v > m then m = v end
+	out[d+x] = m
+      end
+    end
+  end
+  return sample_sum(out, MORPH_N)
+end
+
+local function morph_xmm()
+  for _ = 1, MORPH_PASSES do
+    for y = 0, MORPH_H-1 do
+      local r0, r1, r2 = y*MORPH_STRIDE,
+	(y+1)*MORPH_STRIDE, (y+2)*MORPH_STRIDE
+      local s00 = ffi.cast(f4p, morph_in+r0)
+      local s01 = ffi.cast(f4p, morph_in+r0+1)
+      local s02 = ffi.cast(f4p, morph_in+r0+2)
+      local s10 = ffi.cast(f4p, morph_in+r1)
+      local s11 = ffi.cast(f4p, morph_in+r1+1)
+      local s12 = ffi.cast(f4p, morph_in+r1+2)
+      local s20 = ffi.cast(f4p, morph_in+r2)
+      local s21 = ffi.cast(f4p, morph_in+r2+1)
+      local s22 = ffi.cast(f4p, morph_in+r2+2)
+      local d = ffi.cast(f4p, morph_out_x+y*MORPH_W)
+      for x = 0, MORPH_W/4-1 do
+	local m, v = s00[x], s01[x]
+	m = simd.select(simd.gt(v, m), v, m)
+	v = s02[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s10[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s11[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s12[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s20[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s21[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s22[x]; m = simd.select(simd.gt(v, m), v, m)
+	d[x] = m
+      end
+    end
+  end
+  return sample_sum(morph_out_x, MORPH_N)
+end
+
+local function morph_ymm()
+  for _ = 1, MORPH_PASSES do
+    for y = 0, MORPH_H-1 do
+      local r0, r1, r2 = y*MORPH_STRIDE,
+	(y+1)*MORPH_STRIDE, (y+2)*MORPH_STRIDE
+      local s00 = ffi.cast(f8p, morph_in+r0)
+      local s01 = ffi.cast(f8p, morph_in+r0+1)
+      local s02 = ffi.cast(f8p, morph_in+r0+2)
+      local s10 = ffi.cast(f8p, morph_in+r1)
+      local s11 = ffi.cast(f8p, morph_in+r1+1)
+      local s12 = ffi.cast(f8p, morph_in+r1+2)
+      local s20 = ffi.cast(f8p, morph_in+r2)
+      local s21 = ffi.cast(f8p, morph_in+r2+1)
+      local s22 = ffi.cast(f8p, morph_in+r2+2)
+      local d = ffi.cast(f8p, morph_out_y+y*MORPH_W)
+      for x = 0, MORPH_W/8-1 do
+	local m, v = s00[x], s01[x]
+	m = simd.select(simd.gt(v, m), v, m)
+	v = s02[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s10[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s11[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s12[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s20[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s21[x]; m = simd.select(simd.gt(v, m), v, m)
+	v = s22[x]; m = simd.select(simd.gt(v, m), v, m)
+	d[x] = m
+      end
+    end
+  end
+  return sample_sum(morph_out_y, MORPH_N)
+end
+
+real_benches.morph = {
+  scalar = morph_scalar, xmm = morph_xmm, ymm = morph_ymm,
+  name = "3x3 dilation (4K)",
+}
+end
+
 ------------------------------------------------ weighted point transforms --
 
 do
@@ -1835,7 +1951,7 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.checksum.mib, real_benches.activations.mib,
   real_benches.ternary.mib,
   real_benches.transform.mpoints,
@@ -1869,6 +1985,7 @@ run_real(real_benches.pcmfir)
 run_real(real_benches.activations)
 run_real(real_benches.ternary)
 run_real(real_benches.blur)
+run_real(real_benches.morph)
 run_real(real_benches.transform)
 run_real(real_benches.audio)
 run_real(real_benches.particles)

@@ -2468,6 +2468,18 @@ void LJ_FASTCALL recff_ffi_simd_fma(jit_State *J, RecordFFData *rd)
     emitir(IRT(IR_VFMA, vt), a, emitir(IRT(IR_CARG, IRT_NIL), b, c)), vt, id);
 }
 
+static int crec_simd_isones(jit_State *J, IRRef ref, uint32_t size)
+{
+  IRIns *k = IR(ref);
+  const uint8_t *p;
+  uint32_t i;
+  if (k->o != IR_KVEC) return 0;
+  p = ir_kvec(k);
+  for (i = 0; i < size; i++)
+    if (p[i] != 0xff) return 0;
+  return 1;
+}
+
 void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo mvi, vi; CTypeID mid, id; IRType mvt, vt;
@@ -2475,8 +2487,67 @@ void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
   TRef a = crec_simd_arg(J, rd, 1, &vi, &id, &vt);
   TRef b = crec_simd_arg2(J, rd, 2, &vi, id, vt);
   TRef r;
+  IRIns *mc = IR(tref_ref(m));
+  IRRef ca, cb;
+  int directmm, inv = 0;
+  uint32_t size = (uint32_t)vi.esize * vi.lanes;
   crec_simd_need(J, (CTSize)mvi.esize * mvi.lanes ==
 		    (CTSize)vi.esize * vi.lanes);
+  /*
+  ** A comparison selecting the same operands is exactly min/max. Keep the
+  ** operand order: x86 FP min/max returns its second operand for unordered
+  ** inputs and equal signed zeros, just as the false arm of select does.
+  */
+  directmm = veck_isfp(vi.kind) ||
+    (vi.esize != 8 &&
+     (veck_isunsigned(vi.kind) ?
+      (vi.esize == 1 || (J->flags & JIT_F_SSE4_1)) :
+      (vi.esize == 2 || (J->flags & JIT_F_SSE4_1))));
+  if (mc->o == IR_VXOR && !veck_isfp(vi.kind)) {
+    IRIns *x1 = IR(mc->op1), *x2 = IR(mc->op2);
+    if (x1->o == IR_VCMPGT && crec_simd_isones(J, mc->op2, size)) {
+      mc = x1; inv = 1;
+    } else if (x2->o == IR_VCMPGT && crec_simd_isones(J, mc->op1, size)) {
+      mc = x2; inv = 1;
+    }
+  }
+  ca = mc->op1;
+  cb = mc->op2;
+  if (mc->o == IR_VCMPGT && directmm &&
+      irt_isvecfp(mc->t) == veck_isfp(vi.kind) &&
+      irt_vecesz(mc->t) == vi.esize &&
+      mvi.esize == vi.esize && mvi.lanes == vi.lanes) {
+    if (veck_isunsigned(vi.kind)) {
+      uint8_t ebuf[8];
+      IRRef kref;
+      int oka = 0, okb = 0;
+      memset(ebuf, 0, sizeof(ebuf));
+      ebuf[vi.esize-1] = 0x80;
+      kref = tref_ref(crec_vec_kmask(J, vt, &vi, ebuf));
+      if (IR(ca)->o == IR_VXOR) {
+	IRIns *x = IR(ca);
+	if (x->op1 == kref) { ca = x->op2; oka = 1; }
+	else if (x->op2 == kref) { ca = x->op1; oka = 1; }
+      }
+      if (IR(cb)->o == IR_VXOR) {
+	IRIns *x = IR(cb);
+	if (x->op1 == kref) { cb = x->op2; okb = 1; }
+	else if (x->op2 == kref) { cb = x->op1; okb = 1; }
+      }
+      if (!oka || !okb) ca = cb = REF_DROP;
+    }
+    if ((ca == tref_ref(a) && cb == tref_ref(b)) ||
+	(ca == tref_ref(b) && cb == tref_ref(a))) {
+      int normal = ca == tref_ref(a);
+      int ismax = inv ? !normal : normal;
+      IROp op = ismax ?
+	(veck_isunsigned(vi.kind) ? IR_VMAXU : IR_VMAX) :
+	(veck_isunsigned(vi.kind) ? IR_VMINU : IR_VMIN);
+      r = emitir(IRT(op, vt), a, b);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
+  }
   /* (mask & a) | (~mask & b), which is what SSE2 needs anyway. */
   r = emitir(IRT(IR_VOR, vt),
 	     emitir(IRT(IR_VAND, vt), m, a),
