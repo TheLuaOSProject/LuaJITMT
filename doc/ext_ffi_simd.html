@@ -162,6 +162,14 @@ local v = simd.shl(x, int4(0, 1, 2, 3))   -- each lane shifts differently
 Floating-point <tt>ne</tt> is unordered (true if either side is NaN); the
 other five are ordered.
 </p>
+<p>
+<tt>simd.fma(a, b, c)</tt> computes <tt>a*b + c</tt> with a <b>single</b>
+rounding, which is not the same value as the two-step <tt>a*b + c</tt>. It is
+the IEEE 754 fused multiply-add, so <tt>simd.fma(a, b, -(a*b))</tt> is exactly
+the rounding error of the product. The interpreter and the JIT agree bit for
+bit; on a CPU without FMA the operation stays interpreted rather than
+silently rounding differently.
+</p>
 <pre class="code">
 -- Branchless clamp.
 local function clamp(v, lo, hi) return simd.min(simd.max(v, lo), hi) end
@@ -176,6 +184,7 @@ if simd.anyof(simd.gt(v, limit)) then ... end
 <tr class="even"><td class="convin"><tt>simd.max(a, b)</tt></td><td class="convop">per lane <tt>a &gt; b and a or b</tt></td></tr>
 <tr class="odd"><td class="convin"><tt>simd.abs(a)</tt></td><td class="convop">absolute value; wraps for the most negative signed lane</td></tr>
 <tr class="even"><td class="convin"><tt>simd.sqrt(a)</tt></td><td class="convop">square root, floating-point only</td></tr>
+<tr class="odd"><td class="convin"><tt>simd.fma(a, b, c)</tt></td><td class="convop"><tt>a*b + c</tt> with a single rounding, floating-point only</td></tr>
 <tr class="odd"><td class="convin"><tt>simd.floor/ceil/trunc/round(a)</tt></td><td class="convop">rounding, floating-point only; <tt>round</tt> is ties-to-even; a NaN operand comes back quieted</td></tr>
 <tr class="even"><td class="convin"><tt>simd.adds(a, b)</tt>, <tt>simd.subs(a, b)</tt></td><td class="convop">saturating add/subtract, 8 and 16 bit lanes only</td></tr>
 </table>
@@ -282,9 +291,12 @@ a packed instruction is never scalarised, the trace is abandoned and the code
 keeps running interpreted with identical results.
 <tt>simd.features()</tt> reports what was found.</li>
 <li>When AVX is present every packed instruction is emitted in its three
-operand VEX form. FMA is deliberately not used, because fusing a multiply and
-an add rounds once instead of twice and would disagree with the
-interpreter.</li>
+operand VEX form.</li>
+<li>An ordinary <tt>a*b + c</tt> written with operators is <b>never</b>
+contracted into a fused multiply-add: that would round once where the
+interpreter rounds twice. Ask for the fused form explicitly with
+<tt>simd.fma()</tt>, which rounds once in both the interpreter and the
+JIT.</li>
 <li>Vectors can be passed to and returned from C functions by value. On
 x86-64 SysV this also works for FFI <em>callbacks</em>: a Lua function cast to
 a C function pointer may take and return 8 or 16 byte vectors by value, in

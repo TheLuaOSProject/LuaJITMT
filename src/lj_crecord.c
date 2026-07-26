@@ -2004,6 +2004,24 @@ void LJ_FASTCALL recff_simd_maskcmp(jit_State *J, RecordFFData *rd)
   J->base[0] = TREF_TRUE;
 }
 
+void LJ_FASTCALL recff_ffi_simd_fma(jit_State *J, RecordFFData *rd)
+{
+  CTVecInfo vi; CTypeID id; IRType vt;
+  TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
+  TRef b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
+  TRef c = crec_simd_arg2(J, rd, 2, &vi, id, vt);
+  /* Only lower this where the hardware fuses too. Without FMA the trace
+  ** aborts and the interpreter's fma() still gives the single-rounded
+  ** result, so the two never disagree.
+  */
+  crec_simd_need(J, veck_isfp(vi.kind) && (J->flags & JIT_F_FMA) != 0);
+  /* Three operands do not fit in one IR instruction; the second and third
+  ** travel in a CARG pair, which asm_ir() treats as a no-op.
+  */
+  J->base[0] = crec_vec_box(J,
+    emitir(IRT(IR_VFMA, vt), a, emitir(IRT(IR_CARG, IRT_NIL), b, c)), vt, id);
+}
+
 void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo mvi, vi; CTypeID mid, id; IRType mvt, vt;

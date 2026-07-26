@@ -440,3 +440,35 @@ to add the new opcodes there does not fail to build and does not fail a
 differential test -- the trace just aborts with "cannot assemble IR
 instruction N" and the interpreter produces the right answer. The codegen
 tests are what catch it.
+
+## D17. `simd.fma` is opt-in, and that is the whole point
+
+x86-64-v3 includes FMA, so the instruction is available. It is still *not*
+used to contract an ordinary `a*b + c` written with Lua operators, because
+contraction changes the result: FMA rounds once, the two-step form rounds
+twice. Silently doing that in compiled code and not in the interpreter would
+break the one invariant this work is built on.
+
+Exposing it as an explicit `ffi.simd` entry keeps both properties:
+
+  * The user asks for the fused form, so the different rounding is intended.
+  * Interpreter and JIT still agree **bit for bit**, because C99 `fma`/`fmaf`
+    are the IEEE 754 fusedMultiplyAdd operation and correctly rounded, which
+    is exactly what `VFMADD213PS`/`PD` compute. On a CPU without FMA the trace
+    aborts and the interpreter's `fma()` still produces the single-rounded
+    result -- the fallback is *correct*, not merely slower.
+
+Three operands do not fit in one IR instruction, so the second and third
+travel in an `IR_CARG` pair: `VFMA(a, CARG(b, c))`. That is the existing
+LuaJIT idiom for extra operands, `asm_ir()` already treats a CARG as a no-op,
+and the loop optimizer already understands CARG chains, so it costs no code
+and no new machinery. `VFMADD213` computes `dest = vvvv * dest + rm`, so the
+destination doubles as the second multiplicand: `b` is moved into it with
+`ra_left()` and `a` and `c` are allocated out of it so that move cannot
+clobber them.
+
+Note which tests can and cannot see this. Disabling the lowering leaves every
+*value* test passing, because the interpreter produces the identical
+single-rounded answer -- that is the fallback working correctly. Only the
+codegen test notices that `vfmadd213ps` disappeared. Any operation whose
+fallback is exact needs a codegen test to back up a claim of JIT support.

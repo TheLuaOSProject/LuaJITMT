@@ -118,6 +118,7 @@ operand, exactly like the operators.
 | `min(a,b)`, `max(a,b)` | same ctype | yes | yes | yes | yes | yes |
 | `abs(a)` | same ctype | clears sign bit | wraps at the min value | identity | yes | yes |
 | `sqrt(a)` | same ctype | yes | — | — | yes | yes |
+| `fma(a,b,c)` | same ctype | yes | — | — | yes | yes (FMA) |
 | `floor/ceil/trunc/round(a)` | same ctype | yes | — | — | yes | yes (SSE4.1) |
 | `shl/shr/sar(a,n)` | same ctype | — | yes | yes | yes | yes* |
 | `shl/shr/sar(a,nvec)` | same ctype | — | yes | yes | yes | 32/64-bit lanes only (AVX2) |
@@ -153,6 +154,13 @@ Semantics worth pinning down:
   five FP comparisons are ordered.
 * Shifts take the count as *unsigned*: a count `>= lane bits` gives zero for
   `shl`/`shr` and a full sign fill for `sar`, matching the x86 packed shifts.
+* `fma(a,b,c)` is `a*b + c` with a **single** rounding, per lane, for
+  floating-point vectors only. The interpreter uses C99 `fma`/`fmaf`, which
+  are the IEEE 754 fusedMultiplyAdd and correctly rounded, and the JIT emits
+  `VFMADD213PS`/`PD`, which computes the same thing. Without the FMA feature
+  the trace aborts and the interpreter still gives the single-rounded
+  result, so the two never disagree. Integer lanes are rejected: there is no
+  packed integer FMA and an integer `a*b+c` is already exact.
 * `abs` on signed integers wraps for the most negative lane value (like PABS).
 * `shl`/`shr`/`sar` also accept a **vector** count with the same lane width
   and lane count, shifting each lane by its own amount. The per-lane count is
@@ -177,6 +185,7 @@ Semantics worth pinning down:
 | `sar` on 64-bit lanes | no instruction before AVX-512, so the recorder rewrites it into `((v>>n)^m)-m` with `m = (1<<63)>>n`. Constant and variable counts are both packed; for a variable count `m` is built at runtime and the count is clamped to 63 with six branchless GPR instructions |
 | `lt/le/gt/ge` on 64-bit integer lanes | requires SSE4.2 (PCMPGTQ); otherwise JIT NYI |
 | `floor/ceil/trunc/round` | requires SSE4.1 (ROUNDPS); otherwise JIT NYI |
+| `fma` | requires the FMA feature; otherwise JIT NYI. Ordinary `a*b+c` written with operators is **never** fused into it, because that would round once where the interpreter rounds twice |
 | `shuffle`/`shuffle2` with 8/16-bit lanes | requires SSSE3 (PSHUFB); otherwise JIT NYI |
 | `abs` on 8/16/32-bit integer lanes | uses SSSE3 PABSB/W/D; without SSSE3 it stays interpreted |
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |

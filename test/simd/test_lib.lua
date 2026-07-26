@@ -286,6 +286,46 @@ test("shuffle with a runtime index vector", function()
   end
 end)
 
+test("fma is a single rounding", function()
+  -- fma(a, b, -(a*b)) is exactly the rounding error of the product, so it is
+  -- non-zero only if the multiply and the add really are fused. An unfused
+  -- a*b + -(a*b) is exactly zero. That is the whole point of the operation,
+  -- so check it directly instead of trusting a value comparison.
+  for _, ti in ipairs(T.T) do
+    if ti.fp then
+      local rnd = T.rng(SEED + ti.bits * 641)
+      local ulp = ti.bits == 32 and 2^-23 or 2^-52
+      -- Values just above 1 with many mantissa bits: the product always has
+      -- to round, and can never overflow, so the error is finite.
+      local function near1()
+        local t = {}
+        for i = 1, ti.lanes do t[i] = 1 + (rnd() % 1000000) * ulp end
+        return T.vec(ti, t)
+      end
+      local nonzero = 0
+      for _ = 1, 60 do
+        local a, b = near1(), near1()
+        local err = simd.fma(a, b, -(a * b))
+        for i = 0, ti.lanes-1 do
+          check(err[i] == err[i], ti.name .. " fma rounding error is NaN")
+          if err[i] ~= 0 then nonzero = nonzero + 1 end
+        end
+        -- Multiplying by 2 is exact, so there is nothing left to fuse and the
+        -- fused and unfused forms must agree bit for bit.
+        local two = ti.ct(2)
+        checkeq(simd.fma(a, two, b), a * two + b, ti.name .. " exact fma")
+      end
+      check(nonzero > 0,
+            ti.name .. " fma never produced a rounding error: not fused")
+      -- Scalar operands splat, like every other binary entry.
+      checkeq(simd.fma(ti.ct(2), 3, 4), ti.ct(10), ti.name .. " fma scalars")
+    else
+      check(not pcall(simd.fma, ti.ct(1), ti.ct(1), ti.ct(1)),
+            ti.name .. " integer fma rejected")
+    end
+  end
+end)
+
 test("shifts with a per-lane count vector", function()
   -- simd.shl/shr/sar accept a vector count: every lane shifts by its own
   -- amount. Counts are unsigned, and one at or above the lane width flushes

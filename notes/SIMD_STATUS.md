@@ -36,6 +36,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M15 | Vector store-to-load forwarding no longer synthesises a CONV between vector types | done |
 | M16 | `simd.shuffle` permutes by a runtime index vector (PSHUFB) | done |
 | M17 | `simd.shl/shr/sar` accept a per-lane count vector (AVX2 VPSLLV/VPSRLV/VPSRAV) | done |
+| M18 | `simd.fma` with a single rounding (VFMADD213PS/PD, runtime detected) | done |
 
 ## Commands that pass
 
@@ -222,6 +223,23 @@ notes/*                          design/status/matrix/testing notes (new)
   now derived from a separate seeded RNG stream, which keeps the coverage and
   restores reproducibility.
 
+## Trap: the fast function ID budget is *full*
+
+`FF__MAX` was exactly 256 before `simd.fma` was added, i.e. **zero** spare
+IDs. Any new recorded `ffi.simd` entry point has to free one first. `anyof`
+was converted to a Lua wrapper over `movemask` for this (`movemask(a) ~= 0`),
+which costs nothing at run time and also removes its `LJ_POST_FIXGUARD`
+dependency, since the comparison is now ordinary Lua.
+
+Prefer *extending* an existing function with a new operand shape over adding
+a new name. `shl(a, nvec)` and `shuffle(a, idxvec)` both did that and cost no
+ID at all. Check the budget before designing a new entry point:
+
+```
+FF__MAX is asserted <= 256 in lj_ff.h; print it from a scratch C file that
+includes lj_ff.h if you need the exact headroom.
+```
+
 ## Trap: LuaJIT only has 255 fast function IDs
 
 `GCfunc.c.ffid` is a **uint8_t**. `ffi.simd` originally added 40 `LJLIB_CF`
@@ -261,9 +279,11 @@ wrong answer: where the JIT has no lowering the trace aborts with
    and non-x86 targets, and for any vector wider than one register, `ffi.cast`
    still rejects the callback with the ordinary "cannot convert" error; pass a
    pointer instead.
-4. **No FMA.** `a*b+c` stays a multiply and an add. FMA rounds once where the
-   interpreter rounds twice, and interpreter/JIT agreement is worth more here
-   than the throughput.
+4. **`a*b+c` written with operators is never contracted into an FMA.**
+   Contraction would round once where the interpreter rounds twice. The fused
+   form is available explicitly as `simd.fma()`, which rounds once in *both*
+   the interpreter (C99 `fma`/`fmaf`) and the JIT (`VFMADD213`), so the two
+   still agree bit for bit.
 5. **This branch does not sit on `origin/v2.1`** -- see D13 above.
 
 ## Benchmarks

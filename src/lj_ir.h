@@ -176,6 +176,8 @@
   _(VSHLV,	N , ref, ref) \
   _(VSHRV,	N , ref, ref) \
   _(VSARV,	N , ref, ref) \
+  /* Fused multiply-add: op1 * CARG.op1 + CARG.op2, one rounding. */ \
+  _(VFMA,	N , ref, ref) \
   _(VSQRT,	N , ref, ___) \
   _(VABS,	N , ref, ___) \
   _(VROUND,	N , ref, lit) \

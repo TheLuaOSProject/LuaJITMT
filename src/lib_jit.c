@@ -666,6 +666,8 @@ static uint32_t jit_cpudetect(void)
     if ((features[2] & (1u<<27)) && (features[2] & (1u<<28)) &&
 	(lj_vm_xgetbv(0) & 6) == 6) {
       flags |= JIT_F_AVX;
+      /* FMA is VEX-encoded, so it is gated on the same XMM/YMM state check. */
+      flags |= ((features[2] >> 12)&1) * JIT_F_FMA;
       if (vendor[0] >= 7) {
 	uint32_t xfeatures[4];
 	lj_vm_cpuid(7, xfeatures);

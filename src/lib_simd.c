@@ -270,6 +270,23 @@ LJLIB_CF(ffi_simd_sqrt)		LJLIB_REC(simd_unop VUN_SQRT)
   return simd_unop(L, VUN_SQRT);
 }
 
+LJLIB_CF(ffi_simd_fma)		LJLIB_REC(.)
+{
+  CTState *cts = ctype_cts(L);
+  CTVecInfo vi; CTypeID id;
+  uint8_t sbuf[LJ_VEC_MAXSIZE], sbuf2[LJ_VEC_MAXSIZE];
+  const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, &id);
+  const uint8_t *bp = simd_checkvec2(L, cts, 2, &vi, id, sbuf);
+  const uint8_t *cp = simd_checkvec2(L, cts, 3, &vi, id, sbuf2);
+  uint8_t rbuf[LJ_VEC_MAXSIZE];
+  CTSize size = (CTSize)vi.esize * vi.lanes;
+  if (!lj_simd_fma(rbuf, ap, bp, cp, &vi))
+    lj_err_callermsg(L, "fma requires a floating-point vector");
+  memcpy(simd_newvec(L, cts, id, size), rbuf, size);
+  lj_gc_check(L);
+  return 1;
+}
+
 LJLIB_CF(ffi_simd_floor)		LJLIB_REC(simd_round VRND_FLOOR)
 {
   return simd_roundop(L, VRND_FLOOR);
@@ -363,19 +380,6 @@ LJLIB_CF(ffi_simd_allof)		LJLIB_REC(simd_maskcmp 0)
   int res = lj_simd_movemask(ap, &vi) == all;
   setboolV(L->top++, res);
   setboolV(&G(L)->tmptv2, res);  /* Remember for the trace recorder. */
-  return 1;
-}
-
-LJLIB_CF(ffi_simd_anyof)		LJLIB_REC(simd_maskcmp 1)
-{
-  CTState *cts = ctype_cts(L);
-  CTVecInfo vi;
-  const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, NULL);
-  {
-    int res = lj_simd_movemask(ap, &vi) != 0;
-    setboolV(L->top++, res);
-    setboolV(&G(L)->tmptv2, res);  /* Remember for the trace recorder. */
-  }
   return 1;
 }
 
@@ -590,6 +594,7 @@ static int simd_cf_features(lua_State *L)
     SETFEAT("sse4_2", f & JIT_F_SSE4_2);
     SETFEAT("avx", f & JIT_F_AVX);
     SETFEAT("avx2", f & JIT_F_AVX2);
+    SETFEAT("fma", f & JIT_F_FMA);
 #else
     UNUSED(f);
 #endif
@@ -611,9 +616,13 @@ static int simd_cf_features(lua_State *L)
 static const char simd_luasrc[] =
   "local simd = ...\n"
   "local eq, gt, ge, bnot = simd.eq, simd.gt, simd.ge, simd.bnot\n"
+  "local movemask = simd.movemask\n"
   "function simd.ne(a, b) return bnot(eq(a, b)) end\n"
   "function simd.lt(a, b) return gt(b, a) end\n"
-  "function simd.le(a, b) return ge(b, a) end\n";
+  "function simd.le(a, b) return ge(b, a) end\n"
+  /* anyof is exactly this, and as a Lua wrapper it needs no fast function
+  ** ID and no LJ_POST_FIXGUARD dance: the comparison is ordinary Lua. */
+  "function simd.anyof(a) return movemask(a) ~= 0 end\n";
 
 static const luaL_Reg simd_plaincf[] = {
   { "isvector",    simd_cf_isvector },

@@ -270,6 +270,28 @@ test("the IR dump renders vector types and constants", function()
   end
 end)
 
+test("fma compiles to a single fused instruction", function()
+  if not simd.features().fma then
+    check(true, "no FMA on this CPU, codegen skipped")
+    return
+  end
+  local f4 = T.T.float4.ct
+  local a, b = f4(1.5, 2.5, 3.5, 4.5), f4(0.25)
+  -- One vfmadd and no separate packed multiply: the fusion is the point.
+  checkloop("float4 fma", {"fmadd213ps"}, {"call", "mulps"}, function()
+    local acc = f4(0)
+    for _ = 1, 400 do acc = simd.fma(a, b, acc) end
+    return acc
+  end)
+  local d2 = T.T.double2.ct
+  local a2, b2 = d2(1.5, 2.5), d2(0.25)
+  checkloop("double2 fma", {"fmadd213pd"}, {"call", "mulpd"}, function()
+    local acc = d2(0)
+    for _ = 1, 400 do acc = simd.fma(a2, b2, acc) end
+    return acc
+  end)
+end)
+
 test("per-lane shift counts use the AVX2 variable shifts", function()
   -- Without this the trace just aborts and the interpreter answers, which a
   -- differential test cannot tell apart from working compiled code.

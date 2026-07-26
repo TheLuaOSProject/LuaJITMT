@@ -517,6 +517,28 @@ static void asm_vecshiftv(ASMState *as, IRIns *ir)
   emit_vexrrw(as, xo, dest, left, cnt, w);
 }
 
+/*
+** Fused multiply-add. Three inputs do not fit in one IR instruction, so the
+** second and third arrive through a CARG pair: VFMA(a, CARG(b, c)) is
+** a*b + c. asm_ir() treats a CARG as a no-op, so the pair costs no code.
+**
+** VFMADD213PS/PD computes dest = vvvv * dest + rm, i.e. the destination is
+** also the second multiplicand. b is therefore moved into dest by ra_left(),
+** and a and c must be kept out of dest so that move cannot clobber them.
+*/
+static void asm_vecfma(ASMState *as, IRIns *ir)
+{
+  IRIns *arg = IR(ir->op2);
+  int w = irt_type(ir->t) == IRT_V2F64;
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  RegSet allow = rset_exclude(RSET_FPR, dest);
+  Reg ra = ra_alloc1(as, ir->op1, allow);
+  Reg rc = ra_alloc1(as, arg->op2, rset_exclude(allow, ra));
+  lj_assertA(arg->o == IR_CARG, "VFMA op2 is not a CARG pair");
+  emit_vexrrw(as, XO_VFMADD213, dest, ra, rc, w);
+  ra_left(as, dest, arg->op1);
+}
+
 /* -- Unary and shuffle operations ---------------------------------------- */
 
 static void asm_vecsqrt(ASMState *as, IRIns *ir)
@@ -659,6 +681,7 @@ static void asm_vec(ASMState *as, IRIns *ir)
   case IR_VCMPEQ: case IR_VCMPGT: case IR_VCMPGE: asm_veccmp(as, ir); return;
   case IR_VSHL: case IR_VSHR: case IR_VSAR: asm_vecshift(as, ir); return;
   case IR_VSHLV: case IR_VSHRV: case IR_VSARV: asm_vecshiftv(as, ir); return;
+  case IR_VFMA: asm_vecfma(as, ir); return;
   case IR_VSQRT: asm_vecsqrt(as, ir); return;
   case IR_VABS: asm_vecabs(as, ir); return;
   case IR_VROUND: asm_vecround(as, ir); return;

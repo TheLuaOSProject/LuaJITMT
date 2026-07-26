@@ -354,6 +354,33 @@ int lj_simd_shiftv(void *dp, const void *ap, const void *np,
   return 0;
 }
 
+/*
+** Fused multiply-add: dp[i] = ap[i]*bp[i] + cp[i] with a *single* rounding.
+** C99 fma()/fmaf() are the IEEE 754 fusedMultiplyAdd operation and are
+** correctly rounded, which is also what VFMADD computes, so the interpreter
+** and the compiled form agree bit for bit. Floating-point lanes only: there
+** is no packed integer FMA and an integer a*b+c is already exact.
+*/
+int lj_simd_fma(void *dp, const void *ap, const void *bp, const void *cp,
+		const CTVecInfo *vi)
+{
+  uint32_t i, n = vi->lanes;
+  if (vi->kind == VECK_F32) {
+    float *d = (float *)dp;
+    const float *a = (const float *)ap, *b = (const float *)bp;
+    const float *c = (const float *)cp;
+    for (i = 0; i < n; i++) d[i] = fmaf(a[i], b[i], c[i]);
+    return 1;
+  } else if (vi->kind == VECK_F64) {
+    double *d = (double *)dp;
+    const double *a = (const double *)ap, *b = (const double *)bp;
+    const double *c = (const double *)cp;
+    for (i = 0; i < n; i++) d[i] = fma(a[i], b[i], c[i]);
+    return 1;
+  }
+  return 0;
+}
+
 /* -- Comparisons --------------------------------------------------------- */
 
 /* Element-wise comparison. Writes an all-ones/all-zero mask of the same width. */
