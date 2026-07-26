@@ -1527,35 +1527,87 @@ static TRef crec_vec_build_half(jit_State *J, CTState *cts, IRType vt,
   return v;
 }
 
-/* Recover tr = base + k for a Lua integer base. */
+/* Extract an exactly representable int32 vector-lane offset constant. */
+static int crec_vec_affine_k(jit_State *J, IRRef ref, int32_t *pk)
+{
+  IRIns *ir = IR(ref);
+  if (ir->o == IR_KINT) {
+    *pk = ir->i;
+    return 1;
+  }
+  if (ir->o == IR_KNUM) {
+    double n = ir_knum(ir)->n;
+    int32_t k;
+    if (!(n >= -2147483648.0 && n <= 2147483647.0)) return 0;
+    k = (int32_t)n;
+    if ((double)k != n) return 0;
+    *pk = k;
+    return 1;
+  }
+  return 0;
+}
+
+/* Split tr = base + k, where base is a non-constant Lua number. */
+static TRef crec_vec_affine_base(jit_State *J, TRef tr, int32_t *pofs)
+{
+  IRIns *ir;
+  IRRef br;
+  int32_t k;
+  uint32_t neg = 0;
+  if ((!tref_isint(tr) && !tref_isnum(tr)) || tref_isk(tr)) return 0;
+  ir = IR(tref_ref(tr));
+  if (ir->o == IR_ADD || ir->o == IR_ADDOV) {
+    if (crec_vec_affine_k(J, ir->op2, &k)) {
+      br = ir->op1;
+    } else if (crec_vec_affine_k(J, ir->op1, &k)) {
+      br = ir->op2;
+    } else {
+      *pofs = 0;
+      return tr;
+    }
+  } else if ((ir->o == IR_SUB || ir->o == IR_SUBOV) &&
+	     crec_vec_affine_k(J, ir->op2, &k)) {
+    br = ir->op1;
+    neg = 1;
+  } else {
+    *pofs = 0;
+    return tr;
+  }
+  if ((!irt_isint(IR(br)->t) && !irt_isnum(IR(br)->t)) || irref_isk(br))
+    return 0;
+  *pofs = neg ? (int32_t)(0u - (uint32_t)k) : k;
+  return TREF(br, irt_t(IR(br)->t));
+}
+
+/* Recover tr = base + k for the selected numeric base. */
 static int crec_vec_affine_offset(jit_State *J, TRef tr, TRef base,
 				  int32_t *pofs)
 {
   IRIns *ir;
-  IRRef br = tref_ref(base), kr;
+  IRRef br = tref_ref(base);
+  int32_t k;
   uint32_t neg = 0;
-  if (tr == base) {
+  if (tref_type(tr) == tref_type(base) && tref_ref(tr) == br) {
     *pofs = 0;
     return 1;
   }
-  if (!tref_isint(tr)) return 0;
+  if (tref_type(tr) != tref_type(base)) return 0;
   ir = IR(tref_ref(tr));
   if (ir->o == IR_ADD || ir->o == IR_ADDOV) {
-    if (ir->op1 == br && IR(ir->op2)->o == IR_KINT) {
-      kr = ir->op2;
-    } else if (ir->op2 == br && IR(ir->op1)->o == IR_KINT) {
-      kr = ir->op1;
+    if (ir->op1 == br && crec_vec_affine_k(J, ir->op2, &k)) {
+      /* Matched base + k. */
+    } else if (ir->op2 == br && crec_vec_affine_k(J, ir->op1, &k)) {
+      /* Matched k + base. */
     } else {
       return 0;
     }
   } else if ((ir->o == IR_SUB || ir->o == IR_SUBOV) && ir->op1 == br &&
-	     IR(ir->op2)->o == IR_KINT) {
-    kr = ir->op2;
+	     crec_vec_affine_k(J, ir->op2, &k)) {
     neg = 1;
   } else {
     return 0;
   }
-  *pofs = neg ? (int32_t)(0u - (uint32_t)IR(kr)->i) : IR(kr)->i;
+  *pofs = neg ? (int32_t)(0u - (uint32_t)k) : k;
   return 1;
 }
 
@@ -1566,19 +1618,20 @@ static int crec_vec_affine_offset(jit_State *J, TRef tr, TRef base,
 ** broadcast and one constant add.
 */
 static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
-				  const CTVecInfo *vi, RecordFFData *rd,
-				  MSize nargs)
+				  const CTVecInfo *vi, MSize nargs)
 {
   uint64_t vdata[LJ_VEC_MAXSIZE/sizeof(uint64_t)];
   uint8_t *vbuf = (uint8_t *)vdata;
   CType *ect;
   TRef base, v;
   uint32_t i;
-  int allzero = 1;
+  int allzero;
+  int32_t baseofs;
   if (veck_isfp(vi->kind) || vi->esize > 4 || nargs != vi->lanes)
     return 0;
-  base = J->base[1];
-  if (!tref_isint(base) || tref_isk(base)) return 0;
+  base = crec_vec_affine_base(J, J->base[1], &baseofs);
+  if (!base) return 0;
+  allzero = baseofs == 0;
   ect = ctype_get(cts, vi->eid);
   memset(vbuf, 0, sizeof(vdata));
   for (i = 0; i < vi->lanes; i++) {
@@ -1589,7 +1642,9 @@ static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
     setintV(&tv, ofs);
     lj_cconv_ct_tv(cts, ect, vbuf + i*vi->esize, &tv, 0);
   }
-  v = crec_ct_tv(J, ect, 0, base, &rd->argv[1]);
+  if (tref_isnum(base))
+    base = emitir(IRTGI(IR_CONV), base, IRCONV_INT_NUM|IRCONV_CHECK);
+  v = crec_ct_ct(J, ect, ctype_get(cts, CTID_INT32), 0, base, NULL);
   v = emitir(IRT(IR_VSPLAT, vt), v, IRVSPLAT_BROADCAST);
   return allzero ? v :
     emitir(IRT(IR_VADD, vt), v, lj_ir_kvec(J, vt, vbuf));
@@ -1605,7 +1660,7 @@ static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
 static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
 			   const CTVecInfo *vi, RecordFFData *rd, MSize nargs)
 {
-  TRef affine = crec_vec_build_affine(J, cts, vt, vi, rd, nargs);
+  TRef affine = crec_vec_build_affine(J, cts, vt, vi, nargs);
   if (affine) return affine;
   if (veck_isfp(vi->kind)) {
     if (vi->esize == 4 && !(J->flags & JIT_F_SSE4_1)) return 0;

@@ -202,11 +202,28 @@ test("dynamic vector constructors stay in registers", function()
     local i4 = T.T.i32x4.ct
     local im = check_count("i32x4 affine dynamic constructor", i4,
 		{"movd", "pshufd", "paddd"}, "paddd", 2,
-      function(ct, i) return ct(i, i+1, i+2, i+3) end)
+      function(ct, i) return ct(i+7, i+8, i+9, i+10) end)
     if im then
       check(count(im, "pinsrd") == 0,
 	    "i32x4 affine constructor must not insert individual lanes")
     end
+    im = check_count("i32x4 numeric affine constructor", i4,
+		{"cvttsd2si", "movd", "pshufd", "paddd"}, "paddd", 2,
+      function(ct, i)
+	local x = math.sqrt(i*i)*3
+	return ct(x+1, x+2, x+3, x+4)
+      end)
+    if im then
+      check(count(im, "cvttsd2si") == 1,
+	    "i32x4 numeric affine constructor must convert its base once")
+      check(count(im, "pinsrd") == 0,
+	    "i32x4 numeric affine constructor must not insert lanes")
+    end
+    check_count("i32x4 fractional offsets stay scalar", i4,
+		{"cvttsd2si", "pinsrd", "paddd"}, "pinsrd", 3,
+      function(ct, i)
+	return ct(i+0.5, i+1.5, i+2.5, i+3.5)
+      end)
     check_count("i32x4 partial dynamic constructor", i4,
 		{"movd", "pinsrd", "paddd"}, "pinsrd", 1,
       function(ct, i) return ct(i, i+1) end)
