@@ -420,6 +420,43 @@ test("per-lane shift counts use the AVX2 variable shifts", function()
     for k = 1, 400 do acc = acc + simd.sar(a8, c8 + i64(k)) end
     return acc
   end)
+
+  local i16 = T.T.i16x8.ct
+  local a16 = i16(-32768, -123, -1, 0, 1, 255, 12345, 32767)
+  local c16 = i16(0, 1, 15, 16, 17, -1, 3, 9)
+  local m16 = checkloop("i16x8 shl vec", {"psllvd", "pand"}, NOCALL,
+    function()
+      local acc = i16(0)
+      for _ = 1, 400 do acc = simd.shl(acc + a16, c16) end
+      return acc
+    end)
+  check(count(m16, "psllvd") == 2,
+	"i16x8 shl must use two dword variable shifts")
+  checkloop("i16x8 sar vec", {"psravd", "psrad", "pand"}, NOCALL,
+    function()
+      local acc = i16(0)
+      for _ = 1, 400 do acc = simd.sar(acc + a16, c16) end
+      return acc
+    end)
+
+  local i8 = T.T.i8x16.ct
+  local av8 = i8(-128, -99, -17, -1, 0, 1, 7, 15,
+		  31, 63, 99, 127, -64, -7, 3, 42)
+  local cv8 = i8(0, 1, 7, 8, 9, -1, 3, 6, 2, 5, 15, 4, 1, 7, 8, 0)
+  local m8 = checkloop("i8x16 shr vec", {"psrlvd", "pand"}, NOCALL,
+    function()
+      local acc = i8(0)
+      for _ = 1, 400 do acc = simd.shr(acc + av8, cv8) end
+      return acc
+    end)
+  check(count(m8, "psrlvd") == 4,
+	"i8x16 shr must use four dword variable shifts")
+  checkloop("i8x16 sar vec", {"psravd", "psrad", "pand"}, NOCALL,
+    function()
+      local acc = i8(0)
+      for _ = 1, 400 do acc = simd.sar(acc + av8, cv8) end
+      return acc
+    end)
 end)
 
 test("a runtime index permute is packed", function()
@@ -678,6 +715,17 @@ if simd.features().avx2 then
 	return acc
       end)
 
+    local hc = h16(0, 1, 15, 16, 17, -1, 3, 9,
+		    2, 14, 20, 7, 4, 12, 8, 31)
+    local hbody = checkymm("i16x16 per-lane shl",
+      {"vpsllvd ymm", "vpand ymm"}, function()
+	local acc = h16(1)
+	for _ = 1, 400 do acc = simd.shl(acc + h16(3), hc) end
+	return acc
+      end)
+    local _, hn = hbody:gsub("vpsllvd ymm", "")
+    check(hn == 2, "i16x16 shl must use two YMM dword variable shifts")
+
     local sb32 = T.W.i8x32.ct
     checkymm("i8x32 mulhi emulation",
       {"vpmulhw ymm", "vpsraw ymm", "vpsllw ymm"},
@@ -686,6 +734,16 @@ if simd.features().avx2 then
 	for _ = 1, 400 do acc = simd.mulhi(acc + sb32(3), k) end
 	return acc
       end)
+
+    local bc = sb32(0, 1, 7, 8, 9, -1, 3, 6)
+    local bbody = checkymm("i8x32 per-lane sar",
+      {"vpsravd ymm", "vpsrad ymm", "vpand ymm"}, function()
+	local acc = sb32(-119)
+	for _ = 1, 400 do acc = simd.sar(acc + sb32(3), bc) end
+	return acc
+      end)
+    local _, bn = bbody:gsub("vpsravd ymm", "")
+    check(bn == 4, "i8x32 sar must use four YMM dword variable shifts")
 
     local d8, ud8 = T.W.i32x8.ct, T.W.u32x8.ct
     checkymm("i32x8 mulhi emulation",

@@ -599,9 +599,8 @@ static void asm_vecshift(ASMState *as, IRIns *ir)
 
 /*
 ** Per-lane shift counts (AVX2). One instruction, and genuinely three operand,
-** so no register copy is ever needed. 32 and 64 bit lanes only: there is no
-** VPSLLVW before AVX-512 and no VPSRAVQ at all, so the recorder rejects the
-** narrow lane widths and emulates the 64 bit arithmetic shift.
+** so no register copy is ever needed. The recorder decomposes 8/16 bit lanes
+** into dword pieces and emulates the missing 64 bit arithmetic shift.
 */
 static void asm_vecshiftv(ASMState *as, IRIns *ir)
 {

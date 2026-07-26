@@ -84,27 +84,31 @@ local function genexpr(rnd, ti, depth)
     local op = ({"shl", "shr", "sar"})[(rnd() % 3) + 1]
     return "simd." .. op .. "(" .. genexpr(rnd, ti, depth-1) .. ", i % " ..
 	   tostring(ti.bits + 1) .. ")"
-  elseif r < 38 then                              -- select over a comparison
+  elseif r < 36 and not ti.fp then                -- per-lane shift counts
+    local op = ({"shl", "shr", "sar"})[(rnd() % 3) + 1]
+    return "simd." .. op .. "(" .. genexpr(rnd, ti, depth-1) .. ", " ..
+	   genexpr(rnd, ti, depth-1) .. ")"
+  elseif r < 44 then                              -- select over a comparison
     local c = cmps[(rnd() % #cmps) + 1]
     return "simd.select(simd." .. c .. "(" .. genexpr(rnd, ti, depth-1) ..
 	   ", " .. genexpr(rnd, ti, depth-1) .. "), " ..
 	   genexpr(rnd, ti, depth-1) .. ", " .. genexpr(rnd, ti, depth-1) .. ")"
-  elseif r < 44 then                              -- lane insert
+  elseif r < 50 then                              -- lane insert
     return "simd.insert(" .. genexpr(rnd, ti, depth-1) .. ", " ..
 	   ((rnd() % 2 == 0) and tostring(rnd() % ti.lanes) or
 	    ("i % " .. tostring(ti.lanes))) .. ", " ..
 	   tostring(ti.fp and 2.5 or 3) .. ")"
-  elseif r < 50 then                              -- lane shuffle
+  elseif r < 56 then                              -- lane shuffle
     local idx = {}
     for j = 1, ti.lanes do idx[j] = tostring(rnd() % ti.lanes) end
     return "simd.shuffle(" .. genexpr(rnd, ti, depth-1) .. ", " ..
 	   table.concat(idx, ", ") .. ")"
-  elseif r < 56 then                              -- bitcast round trip
+  elseif r < 62 then                              -- bitcast round trip
     local other = ti.bits == 8 and "u8x16" or ti.bits == 16 and "u16x8" or
 		  ti.bits == 32 and "u32x4" or "u64x2"
     return "simd.bitcast(ct, simd.bnot(simd.bitcast(bc, " ..
 	   genexpr(rnd, ti, depth-1) .. ")))"
-  elseif r < 70 then                              -- unary
+  elseif r < 74 then                              -- unary
     return subst(pick(rnd, unary, ti)[1], genexpr(rnd, ti, depth-1), "")
   end
   local e = pick(rnd, binary, ti)                 -- binary

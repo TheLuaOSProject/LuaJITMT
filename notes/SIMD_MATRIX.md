@@ -148,7 +148,7 @@ operand, exactly like the operators.
 | `fma(a,b,c)` | same ctype | yes | — | — | yes | yes (FMA) |
 | `floor/ceil/trunc/round(a)` | same ctype | yes | — | — | yes | yes (SSE4.1) |
 | `shl/shr/sar(a,n)` | same ctype | — | yes | yes | yes | yes* |
-| `shl/shr/sar(a,nvec)` | same ctype | — | yes | yes | yes | 32/64-bit lanes only (AVX2) |
+| `shl/shr/sar(a,nvec)` | same ctype | — | yes | yes | yes | yes (AVX2, every integer lane width) |
 | `eq/ne/lt/le/gt/ge(a,b)` | mask | yes | yes | yes | yes | yes |
 | `select(m,a,b)` | ctype of a | yes | yes | yes | yes | yes |
 | `movemask(a)` | integer | yes | yes | yes | yes | yes |
@@ -223,7 +223,7 @@ Semantics worth pinning down:
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
 | shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a byte mask. Constant and variable counts are both packed; for a variable count the mask is built with the same shift applied to a constant and broadcast across the byte halves with `PMULLW` by `0x0101` |
 | non-constant lane index in `insert` | supported: the range is guarded and the lane mask is built with a packed compare against a constant vector of lane numbers |
-| per-lane count **vector** in `shl`/`shr`/`sar` on 8/16-bit lanes | rejected at record time, stays interpreted. AVX2 has no per-lane shift narrower than 32 bits (VPSLLVW is AVX-512), and emulating one costs an unpack, two shifts and a pack per direction |
+| per-lane count **vector** in `shl`/`shr`/`sar` on 8/16-bit lanes | call-free AVX2 packed decomposition. Each dword is split into two words or four bytes, the pieces use VPSLLVD/VPSRLVD/VPSRAVD independently, then masks and constant shifts reassemble the original lanes |
 | per-lane count **vector** on 64-bit `sar` | no VPSRAVQ before AVX-512, so it lowers to a clamped VPSRLVQ plus the sign-bias trick: eight packed instructions, no call. The clamp is needed because VPSRLVQ flushes to zero past the lane width, which would take the sign bias with it |
 | runtime index **vector** in `shuffle` | supported. XMM and 8/16/64-bit YMM lanes build a PSHUFB byte control at runtime; YMM adds a `VPERM2I128` half-swap, second `VPSHUFB`, and packed half-select to cross the 128-bit boundary. A 32-bit YMM index vector instead maps directly to one `VPERMD`, whose low-three-bit index rule is exactly the documented modulo-eight semantics |
 | separate non-constant lane indices in `shuffle`/`shuffle2` | still rejected at record time. Assembling a control mask from N *scalar* indices costs more than it saves; pass an index vector instead |

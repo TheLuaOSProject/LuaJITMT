@@ -51,6 +51,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M28 | Cost-selective AVX2 `VPERMD`/`VPERMQ` lowering for 32/64-bit YMM shuffles; v2, AVX-only, and AVX2 CPU-model test matrix | done |
 | M29 | Call-free packed 8- and 32-bit `mulhi` emulations for XMM and YMM | done |
 | M30 | Production-sized scalar/XMM/YMM benchmarks: 1080p Gaussian blur, 64-tap audio FIR, particle simulation, and ChaCha20 | done |
+| M31 | Per-lane AVX2 shifts for 8/16-bit XMM and YMM vectors via packed dword decomposition | done |
 
 ## Commands that pass
 
@@ -347,6 +348,8 @@ int32 add                     0.21 ns   0.22 ns       1.95x
 int32 mul                     1.89 ns   1.89 ns       2.00x
 int32 xor                     0.25 ns   0.25 ns       2.00x
 int32 shl const               0.21 ns   0.21 ns       2.01x
+int16 shl per-lane            1.23 ns   1.17 ns       2.11x
+int8 shl per-lane             2.22 ns   2.29 ns       1.94x
 int32 select                  0.62 ns   0.62 ns       2.00x
 int32 shuffle const           0.21 ns   0.57 ns       0.73x
 int32 shuffle vector          0.30 ns   0.57 ns       1.04x
@@ -364,6 +367,11 @@ half-swap-plus-byte-shuffle chain. Runtime YMM indices benefit much more in
 instruction count: one `VPERMD` replaces control expansion, two
 `VPSHUFB`s, a half swap, and a packed select. Same-half constants are not
 represented by this row; they retain one low-latency `VPSHUFB`.
+
+The narrow per-lane shifts replace interpreter fallback (about 32.5 ns for
+words and 35.1 ns for bytes) with packed sequences at 1.23 ns and 2.22 ns:
+roughly 26x and 16x faster. YMM runs the same lane-local sequence at the same
+latency while shifting twice as many lanes.
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:

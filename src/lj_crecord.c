@@ -1643,6 +1643,15 @@ static TRef crec_simd_k16(jit_State *J, IRType vt, uint16_t v)
   return lj_ir_kvec(J, vt, vbuf);
 }
 
+/* A vector constant built from a repeating 32 bit pattern. */
+static TRef crec_simd_k32(jit_State *J, IRType vt, uint32_t v)
+{
+  uint8_t vbuf[LJ_VEC_MAXSIZE];
+  uint32_t i;
+  for (i = 0; i < sizeof(vbuf); i += 4) memcpy(vbuf+i, &v, 4);
+  return lj_ir_kvec(J, vt, vbuf);
+}
+
 /*
 ** Broadcast the low byte of every 16 bit lane into both halves of that lane.
 ** Multiplying by 0x0101 is v | (v << 8) for v <= 0xff, cannot carry, and
@@ -1673,6 +1682,52 @@ static TRef crec_simd_clampcnt(jit_State *J, TRef n, int32_t lim)
 
 static TRef crec_simd_ubias(jit_State *J, IRType vt, const CTVecInfo *vi,
 			    TRef tr);
+
+/*
+** AVX2 has variable shifts only for 32 and 64 bit lanes. Split every dword
+** into two words or four bytes, shift those independently with VPSLLVD,
+** VPSRLVD or VPSRAVD, then put the pieces back in place. Masking after a
+** logical shift makes counts from the narrow lane width through 31 flush to
+** zero; the hardware already flushes at 32. Arithmetic input pieces are
+** sign-extended first, so every count at or above the narrow width produces
+** the required full sign fill.
+*/
+static TRef crec_simd_shiftv_narrow(jit_State *J, IRType vt, uint32_t esize,
+				    TRef a, TRef nv, IROp op)
+{
+  IRType wvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+  uint32_t bits = esize * 8, parts = 4 / esize, i;
+  TRef mask = crec_simd_k32(J, wvt, bits == 8 ? 0xffu : 0xffffu);
+  TRef r = 0;
+  for (i = 0; i < parts; i++) {
+    uint32_t ofs = i * bits;
+    TRef cnt = nv, v, p;
+    if (ofs)
+      cnt = emitir(IRT(IR_VSHR, wvt), cnt, lj_ir_kint(J, (int32_t)ofs));
+    cnt = emitir(IRT(IR_VAND, wvt), cnt, mask);
+    if (op == IR_VSARV) {
+      uint32_t lsh = 32 - bits - ofs;
+      v = lsh ? emitir(IRT(IR_VSHL, wvt), a,
+			lj_ir_kint(J, (int32_t)lsh)) : a;
+      v = emitir(IRT(IR_VSAR, wvt), v,
+		 lj_ir_kint(J, (int32_t)(32-bits)));
+    } else {
+      v = ofs ? emitir(IRT(IR_VSHR, wvt), a,
+			lj_ir_kint(J, (int32_t)ofs)) : a;
+      v = emitir(IRT(IR_VAND, wvt), v, mask);
+    }
+    p = emitir(IRT(op, wvt), v, cnt);
+    p = emitir(IRT(IR_VAND, wvt), p, mask);
+    if (ofs)
+      p = emitir(IRT(IR_VSHL, wvt), p, lj_ir_kint(J, (int32_t)ofs));
+    if (!r) {
+      r = p;
+    } else {
+      r = emitir(IRT(IR_VOR, i == parts-1 ? vt : wvt), r, p);
+    }
+  }
+  return r;
+}
 
 /*
 ** 64 bit lane min/max. There is no instruction for it before AVX-512, so
@@ -1855,13 +1910,14 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
     CTVecInfo nvi; CTypeID nid; IRType nvt;
     TRef nv = crec_simd_arg(J, rd, 1, &nvi, &nid, &nvt);
     IROp vop = op == VSH_SHL ? IR_VSHLV : op == VSH_SHR ? IR_VSHRV : IR_VSARV;
-    /* AVX2 has no per-lane shift narrower than 32 bits (VPSLLVW is AVX-512)
-    ** and no VPSRAVQ at all. Emulating the narrow widths would cost an
-    ** unpack, two shifts and a pack per direction, so they stay interpreted.
-    */
     crec_simd_need(J, (J->flags & JIT_F_AVX2) != 0 &&
 		      !veck_isfp(nvi.kind) && nvi.esize == vi.esize &&
-		      nvi.lanes == vi.lanes && vi.esize >= 4);
+		      nvi.lanes == vi.lanes);
+    if (vi.esize < 4) {
+      r = crec_simd_shiftv_narrow(J, vt, vi.esize, a, nv, vop);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
     if (vi.esize == 8 && op == VSH_SAR) {
       /*
       ** No VPSRAVQ. Use ((v >>u n) ^ m) - m with m = (1<<63) >>u n, which is

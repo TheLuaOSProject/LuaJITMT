@@ -519,6 +519,15 @@ do
   if features.avx2 then
     op_cost("i32x4 shl per-lane", function() return ia, i4(0, 1, 0, 1) end,
 	    function(x, y) return simd.shl(x, y) end)
+    op_cost("i16x8 shl per-lane",
+	    function() return i16(3), i16(0, 1, 2, 3, 4, 5, 6, 7) end,
+	    function(x, y) return simd.shl(x, y) end)
+    op_cost("i8x16 shl per-lane",
+	    function()
+	      return s8(3), s8(0, 1, 2, 3, 4, 5, 6, 7,
+			       0, 1, 2, 3, 4, 5, 6, 7)
+	    end,
+	    function(x, y) return simd.shl(x, y) end)
   end
   op_cost("i32x4 select", function() return ia, ib end,
 	  function(x, y) return simd.select(simd.gt(x, y), x, y) end)
@@ -600,6 +609,23 @@ if has_ymm then
     function() return i4(3), i4(0) end,
     function() return i8(3), i8(0) end,
     function(x) return simd.shl(x, 1) end)
+  width_cost("int16 shl per-lane",
+    function() return i16(3), i16(0, 1, 2, 3, 4, 5, 6, 7) end,
+    function()
+      return i16w(3), i16w(0, 1, 2, 3, 4, 5, 6, 7,
+			    0, 1, 2, 3, 4, 5, 6, 7)
+    end,
+    function(x, y) return simd.shl(x, y) end)
+  width_cost("int8 shl per-lane",
+    function()
+      return s8(3), s8(0, 1, 2, 3, 4, 5, 6, 7,
+		       0, 1, 2, 3, 4, 5, 6, 7)
+    end,
+    function()
+      return s8w(3), s8w(0, 1, 2, 3, 4, 5, 6, 7,
+			 0, 1, 2, 3, 4, 5, 6, 7)
+    end,
+    function(x, y) return simd.shl(x, y) end)
   width_cost("int32 select",
     function() return i4(3), i4(5) end,
     function() return i8(3), i8(5) end,

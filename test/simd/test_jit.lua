@@ -447,6 +447,28 @@ test("ffi.simd shifts on trace", function()
       end
     end
   end
+  if simd.features().avx2 then
+    -- AVX2 only has variable shifts at dword/qword granularity. Byte and
+    -- word lanes are decomposed into dword pieces by the recorder, so cover
+    -- every narrow boundary and a huge unsigned count on linked traces.
+    for _, ti in ipairs(T.T) do
+      if not ti.fp then
+	local it, raw = T.masktype(ti), {}
+	local pool = {0, 1, ti.bits-1, ti.bits, ti.bits+1, 2*ti.bits, -1, 3}
+	for i = 1, ti.lanes do raw[i] = pool[(i-1) % #pool + 1] end
+	local ct, a = ti.ct, T.rand(ti, T.rng(SEED + 43 * ti.bits))
+	local counts = it.ct(unpack(raw, 1, ti.lanes))
+	for _, op in ipairs({"shl", "shr", "sar"}) do
+	  local f = simd[op]
+	  diffop(ti, op .. " per-lane", function(n)
+	    local acc = ct(0)
+	    for _ = 1, n do acc = f(simd.bxor(acc, a), counts) end
+	    return acc
+	  end, 220)
+	end
+      end
+    end
+  end
 end)
 
 test("ffi.simd reductions on trace", function()
@@ -850,7 +872,10 @@ if simd.features().avx2 then
 	end, 180)
       end
     end
-    for _, name in ipairs({"i32x8", "u32x8", "i64x4", "u64x4"}) do
+    for _, name in ipairs({
+      "i8x32", "u8x32", "i16x16", "u16x16",
+      "i32x8", "u32x8", "i64x4", "u64x4",
+    }) do
       local ti, counts = T.W[name], {}
       for i = 1, ti.lanes do counts[i] = (i * 11) % (ti.bits + 7) end
       local ct, c = ti.ct, ti.ct(unpack(counts, 1, ti.lanes))

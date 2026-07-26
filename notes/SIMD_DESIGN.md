@@ -666,3 +666,29 @@ XMM and YMM by selecting the VEX width. On the measured host the dependent
 latencies are about 1.8--1.9 ns for byte lanes and 1.5 ns for dword lanes,
 down from roughly 60--80 ns of interpreter fallback; YMM performs twice as
 many lanes at essentially the same latency.
+
+## D25. Decompose narrow per-lane shifts into dword variable shifts
+
+AVX2 provides variable shifts per 32- or 64-bit lane, but not per byte or
+word. Falling back to the interpreter for the narrow forms was needlessly
+expensive because a dword contains a fixed small number of independent
+pieces.
+
+For 16-bit lanes the recorder extracts the low and high words of every dword,
+extracts their matching unsigned counts, performs two `VPSLLVD`, `VPSRLVD` or
+`VPSRAVD` operations, masks the results, and recombines them. Byte lanes use
+the same construction four times. Arithmetic shifts sign-extend each piece
+before `VPSRAVD`; logical inputs are zero-extended.
+
+The out-of-range semantics fall out of the construction without guards.
+Logical results are masked back to their narrow lane, so counts from the lane
+width through 31 become zero, and AVX2 itself flushes counts of 32 or more.
+Sign-extended arithmetic pieces become all zeroes or all ones for any count
+at or above their lane width. Counts are extracted with a byte/word mask, so
+negative count lanes are treated as the large unsigned values required by the
+interpreter.
+
+The sequence is lane-local and identical at XMM and YMM width. Measured
+dependent latency is about 1.23 ns for words and 2.22 ns for bytes, versus
+32.5 ns and 35.1 ns in the interpreter. YMM processes twice the lanes at the
+same latency.
