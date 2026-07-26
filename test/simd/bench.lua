@@ -1,4 +1,4 @@
--- SIMD microbenchmarks: scalar vs. 128-bit XMM vs. 256-bit AVX2 code.
+-- SIMD benchmarks: scalar vs. 128-bit XMM vs. 256-bit AVX2 code.
 --
 --   luajit test/simd/bench.lua [reps]
 --
@@ -11,6 +11,7 @@ package.path = dir .. "/?.lua;" .. package.path
 local ffi = require("ffi")
 local simd = require("ffi.simd")
 local T = require("simdtest")
+local jit_ = require("jit")
 
 local REPS = tonumber(arg[1] or "5")
 local N = 1 << 16           -- elements per pass
@@ -19,17 +20,20 @@ local PASSES = 200
 local f4 = ffi.typeof("float4")
 local d2 = ffi.typeof("double2")
 local i4 = ffi.typeof("i32x4")
+local u4 = ffi.typeof("u32x4")
 local i64x2 = ffi.typeof("i64x2")
 local features = simd.features()
 local has_ymm = features.avx2 and features.vecsize >= 32
 local f8 = has_ymm and ffi.typeof("float8")
 local d4 = has_ymm and ffi.typeof("double4")
 local i8 = has_ymm and ffi.typeof("i32x8")
+local u8 = has_ymm and ffi.typeof("u32x8")
 local i64x4 = has_ymm and ffi.typeof("i64x4")
 local f4p = ffi.typeof("$ *", f4)
 local d2p = ffi.typeof("$ *", d2)
 local f8p = has_ymm and ffi.typeof("$ *", f8)
 local d4p = has_ymm and ffi.typeof("$ *", d4)
+local failures = 0
 
 local function bench(name, f, ...)
   local best, sink = math.huge, nil
@@ -42,23 +46,45 @@ local function bench(name, f, ...)
   return best, sink
 end
 
-local function report(name, tscalar, tvector, ss, sv)
+local function equal(a, b, cmp)
+  return cmp and cmp(a, b) or a == b
+end
+
+local function approx(a, b, tol)
+  a, b = tonumber(a), tonumber(b)
+  local scale = math.max(1, math.abs(a), math.abs(b))
+  return math.abs(a-b) <= (tol or 1e-5) * scale
+end
+
+local function report(name, tscalar, tvector, ss, sv, cmp)
   io.write(string.format("%-26s scalar %7.1f ms   XMM %7.1f ms   %5.2fx\n",
 			 name, tscalar*1000, tvector*1000, tscalar/tvector))
-  if ss ~= sv then
+  if not equal(ss, sv, cmp) then
+    failures = failures + 1
     io.write(string.format("   ! results differ: %s vs %s\n",
 			   tostring(ss), tostring(sv)))
   end
 end
 
-local function report_ymm(name, ts, tx, ty, ss, sx, sy)
+local function report_ymm(name, ts, tx, ty, ss, sx, sy, cmp)
   io.write(string.format(
     "%-26s scalar %7.1f ms   XMM %7.1f ms %5.2fx   YMM %7.1f ms %5.2fx (%4.2fx/XMM)\n",
     name, ts*1000, tx*1000, ts/tx, ty*1000, ts/ty, tx/ty))
-  if ss ~= sx or ss ~= sy then
+  if not equal(ss, sx, cmp) or not equal(ss, sy, cmp) then
+    failures = failures + 1
     io.write(string.format("   ! results differ: %s vs %s vs %s\n",
 			   tostring(ss), tostring(sx), tostring(sy)))
   end
+end
+
+-- Read a sparse but deterministic checksum after a buffer-producing kernel.
+-- Keeping this outside the hot loop prevents the validation reduction from
+-- becoming the thing being measured.
+local function sample_sum(buf, n)
+  local sum = 0
+  local step = math.max(1, math.floor(n / 257))
+  for i = 0, n-1, step do sum = sum + tonumber(buf[i]) end
+  return sum
 end
 
 ------------------------------------------------------------------ saxpy ----
@@ -495,6 +521,576 @@ local function mandel_ymm()
 	 tonumber(total[2]) + tonumber(total[3])
 end
 
+-------------------------------------------------------- 1080p Gaussian blur --
+
+local real_benches = {}
+do
+-- A separable 5x5 Gaussian is a production image-processing primitive. This
+-- processes a full 1920x1080 float frame with padded borders, one horizontal
+-- and one vertical pass. The source offsets are intentionally unaligned.
+local BLUR_W, BLUR_H = 1920, 1080
+local BLUR_STRIDE = BLUR_W + 4
+local BLUR_ROWS = BLUR_H + 4
+local BLUR_N = BLUR_W * BLUR_H
+local BLUR_PASSES = 2
+local blur_in = ffi.new("float[?]", BLUR_STRIDE * BLUR_ROWS)
+local blur_tmp_s = ffi.new("float[?]", BLUR_W * BLUR_ROWS)
+local blur_tmp_x = ffi.new("float[?]", BLUR_W * BLUR_ROWS)
+local blur_out_s = ffi.new("float[?]", BLUR_N)
+local blur_out_x = ffi.new("float[?]", BLUR_N)
+local blur_tmp_y = has_ymm and ffi.new("float[?]", BLUR_W * BLUR_ROWS)
+local blur_out_y = has_ymm and ffi.new("float[?]", BLUR_N)
+for y = 0, BLUR_ROWS-1 do
+  for x = 0, BLUR_STRIDE-1 do
+    blur_in[y*BLUR_STRIDE+x] =
+      ((x*13 + y*29 + (x*y) % 31) % 1024) / 1024
+  end
+end
+
+local function blur_scalar()
+  local src, tmp, out = blur_in, blur_tmp_s, blur_out_s
+  local w, h, stride = BLUR_W, BLUR_H, BLUR_STRIDE
+  for _ = 1, BLUR_PASSES do
+    for y = 0, BLUR_ROWS-1 do
+      local si, di = y*stride, y*w
+      for x = 0, w-1 do
+	local edge = src[si+x] + src[si+x+4]
+	local near = (src[si+x+1] + src[si+x+3]) * 4
+	tmp[di+x] = (edge + near + src[si+x+2] * 6) * 0.0625
+      end
+    end
+    for y = 0, h-1 do
+      local d, r0 = y*w, y*w
+      local r1, r2, r3, r4 = r0+w, r0+2*w, r0+3*w, r0+4*w
+      for x = 0, w-1 do
+	local edge = tmp[r0+x] + tmp[r4+x]
+	local near = (tmp[r1+x] + tmp[r3+x]) * 4
+	out[d+x] = (edge + near + tmp[r2+x] * 6) * 0.0625
+      end
+    end
+  end
+  return sample_sum(out, BLUR_N)
+end
+
+local function blur_xmm()
+  local four, six, inv = f4(4), f4(6), f4(0.0625)
+  local w, h, stride = BLUR_W, BLUR_H, BLUR_STRIDE
+  for _ = 1, BLUR_PASSES do
+    for y = 0, BLUR_ROWS-1 do
+      local si, di = y*stride, y*w
+      local s0 = ffi.cast(f4p, blur_in + si)
+      local s1 = ffi.cast(f4p, blur_in + si + 1)
+      local s2 = ffi.cast(f4p, blur_in + si + 2)
+      local s3 = ffi.cast(f4p, blur_in + si + 3)
+      local s4 = ffi.cast(f4p, blur_in + si + 4)
+      local d = ffi.cast(f4p, blur_tmp_x + di)
+      for x = 0, w/4-1 do
+	local edge = s0[x] + s4[x]
+	local near = (s1[x] + s3[x]) * four
+	d[x] = (edge + near + s2[x] * six) * inv
+      end
+    end
+    for y = 0, h-1 do
+      local r0 = y*w
+      local s0 = ffi.cast(f4p, blur_tmp_x + r0)
+      local s1 = ffi.cast(f4p, blur_tmp_x + r0 + w)
+      local s2 = ffi.cast(f4p, blur_tmp_x + r0 + 2*w)
+      local s3 = ffi.cast(f4p, blur_tmp_x + r0 + 3*w)
+      local s4 = ffi.cast(f4p, blur_tmp_x + r0 + 4*w)
+      local d = ffi.cast(f4p, blur_out_x + r0)
+      for x = 0, w/4-1 do
+	local edge = s0[x] + s4[x]
+	local near = (s1[x] + s3[x]) * four
+	d[x] = (edge + near + s2[x] * six) * inv
+      end
+    end
+  end
+  return sample_sum(blur_out_x, BLUR_N)
+end
+
+local function blur_ymm()
+  local four, six, inv = f8(4), f8(6), f8(0.0625)
+  local w, h, stride = BLUR_W, BLUR_H, BLUR_STRIDE
+  for _ = 1, BLUR_PASSES do
+    for y = 0, BLUR_ROWS-1 do
+      local si, di = y*stride, y*w
+      local s0 = ffi.cast(f8p, blur_in + si)
+      local s1 = ffi.cast(f8p, blur_in + si + 1)
+      local s2 = ffi.cast(f8p, blur_in + si + 2)
+      local s3 = ffi.cast(f8p, blur_in + si + 3)
+      local s4 = ffi.cast(f8p, blur_in + si + 4)
+      local d = ffi.cast(f8p, blur_tmp_y + di)
+      for x = 0, w/8-1 do
+	local edge = s0[x] + s4[x]
+	local near = (s1[x] + s3[x]) * four
+	d[x] = (edge + near + s2[x] * six) * inv
+      end
+    end
+    for y = 0, h-1 do
+      local r0 = y*w
+      local s0 = ffi.cast(f8p, blur_tmp_y + r0)
+      local s1 = ffi.cast(f8p, blur_tmp_y + r0 + w)
+      local s2 = ffi.cast(f8p, blur_tmp_y + r0 + 2*w)
+      local s3 = ffi.cast(f8p, blur_tmp_y + r0 + 3*w)
+      local s4 = ffi.cast(f8p, blur_tmp_y + r0 + 4*w)
+      local d = ffi.cast(f8p, blur_out_y + r0)
+      for x = 0, w/8-1 do
+	local edge = s0[x] + s4[x]
+	local near = (s1[x] + s3[x]) * four
+	d[x] = (edge + near + s2[x] * six) * inv
+      end
+    end
+  end
+  return sample_sum(blur_out_y, BLUR_N)
+end
+
+real_benches.blur = {
+  scalar = blur_scalar, xmm = blur_xmm, ymm = blur_ymm,
+  name = "5x5 Gaussian (1080p)",
+  cmp = function(a, b) return approx(a, b, 2e-5) end,
+}
+end
+
+----------------------------------------------------------- 64-tap audio FIR --
+
+do
+-- A 64-tap windowed-sinc convolution over more than five seconds of 48 kHz
+-- audio. Four independent accumulators hide multiply/add latency, which is
+-- how a real convolution kernel keeps both SIMD execution pipes occupied.
+local AUDIO_N = 1 << 18
+local AUDIO_TAPS = 64
+local AUDIO_PASSES = 2
+local audio_in = ffi.new("float[?]", AUDIO_N + AUDIO_TAPS-1)
+local audio_coeff = ffi.new("float[?]", AUDIO_TAPS)
+local audio_out_s = ffi.new("float[?]", AUDIO_N)
+local audio_out_x = ffi.new("float[?]", AUDIO_N)
+local audio_out_y = has_ymm and ffi.new("float[?]", AUDIO_N)
+for i = 0, AUDIO_N+AUDIO_TAPS-2 do
+  audio_in[i] = math.sin(i*0.017) * 0.6 + math.sin(i*0.071) * 0.25
+end
+do
+  local sum = 0
+  for k = 0, AUDIO_TAPS-1 do
+    local x = k - (AUDIO_TAPS-1)*0.5
+    local sinc = math.sin(0.22*math.pi*x) / (math.pi*x)
+    local window = 0.54 - 0.46*math.cos(2*math.pi*k/(AUDIO_TAPS-1))
+    audio_coeff[k] = sinc * window
+    sum = sum + audio_coeff[k]
+  end
+  for k = 0, AUDIO_TAPS-1 do audio_coeff[k] = audio_coeff[k] / sum end
+end
+
+local audio_x1, audio_c1 = {}, {}
+local audio_x4, audio_c4 = {}, {}
+for k = 0, AUDIO_TAPS-1 do
+  audio_x1[k] = audio_in + k
+  audio_c1[k] = tonumber(audio_coeff[k])
+  audio_x4[k] = ffi.cast(f4p, audio_in + k)
+  audio_c4[k] = f4(audio_coeff[k])
+end
+local audio_y4 = ffi.cast(f4p, audio_out_x)
+local audio_x8, audio_c8, audio_y8
+if has_ymm then
+  audio_x8, audio_c8 = {}, {}
+  for k = 0, AUDIO_TAPS-1 do
+    audio_x8[k] = ffi.cast(f8p, audio_in + k)
+    audio_c8[k] = f8(audio_coeff[k])
+  end
+  audio_y8 = ffi.cast(f8p, audio_out_y)
+end
+
+-- Literal tap indices let the recorder hoist all pointer/constant table
+-- lookups. The four chains are independent, exposing instruction-level
+-- parallelism without leaving a dynamic Lua loop around each SIMD operation.
+local function audio_dot(i, x, c, zero)
+  local a0, a1, a2, a3 = zero, zero, zero, zero
+  a0 = a0 + x[0][i]*c[0]
+  a1 = a1 + x[16][i]*c[16]
+  a2 = a2 + x[32][i]*c[32]
+  a3 = a3 + x[48][i]*c[48]
+  a0 = a0 + x[1][i]*c[1]
+  a1 = a1 + x[17][i]*c[17]
+  a2 = a2 + x[33][i]*c[33]
+  a3 = a3 + x[49][i]*c[49]
+  a0 = a0 + x[2][i]*c[2]
+  a1 = a1 + x[18][i]*c[18]
+  a2 = a2 + x[34][i]*c[34]
+  a3 = a3 + x[50][i]*c[50]
+  a0 = a0 + x[3][i]*c[3]
+  a1 = a1 + x[19][i]*c[19]
+  a2 = a2 + x[35][i]*c[35]
+  a3 = a3 + x[51][i]*c[51]
+  a0 = a0 + x[4][i]*c[4]
+  a1 = a1 + x[20][i]*c[20]
+  a2 = a2 + x[36][i]*c[36]
+  a3 = a3 + x[52][i]*c[52]
+  a0 = a0 + x[5][i]*c[5]
+  a1 = a1 + x[21][i]*c[21]
+  a2 = a2 + x[37][i]*c[37]
+  a3 = a3 + x[53][i]*c[53]
+  a0 = a0 + x[6][i]*c[6]
+  a1 = a1 + x[22][i]*c[22]
+  a2 = a2 + x[38][i]*c[38]
+  a3 = a3 + x[54][i]*c[54]
+  a0 = a0 + x[7][i]*c[7]
+  a1 = a1 + x[23][i]*c[23]
+  a2 = a2 + x[39][i]*c[39]
+  a3 = a3 + x[55][i]*c[55]
+  a0 = a0 + x[8][i]*c[8]
+  a1 = a1 + x[24][i]*c[24]
+  a2 = a2 + x[40][i]*c[40]
+  a3 = a3 + x[56][i]*c[56]
+  a0 = a0 + x[9][i]*c[9]
+  a1 = a1 + x[25][i]*c[25]
+  a2 = a2 + x[41][i]*c[41]
+  a3 = a3 + x[57][i]*c[57]
+  a0 = a0 + x[10][i]*c[10]
+  a1 = a1 + x[26][i]*c[26]
+  a2 = a2 + x[42][i]*c[42]
+  a3 = a3 + x[58][i]*c[58]
+  a0 = a0 + x[11][i]*c[11]
+  a1 = a1 + x[27][i]*c[27]
+  a2 = a2 + x[43][i]*c[43]
+  a3 = a3 + x[59][i]*c[59]
+  a0 = a0 + x[12][i]*c[12]
+  a1 = a1 + x[28][i]*c[28]
+  a2 = a2 + x[44][i]*c[44]
+  a3 = a3 + x[60][i]*c[60]
+  a0 = a0 + x[13][i]*c[13]
+  a1 = a1 + x[29][i]*c[29]
+  a2 = a2 + x[45][i]*c[45]
+  a3 = a3 + x[61][i]*c[61]
+  a0 = a0 + x[14][i]*c[14]
+  a1 = a1 + x[30][i]*c[30]
+  a2 = a2 + x[46][i]*c[46]
+  a3 = a3 + x[62][i]*c[62]
+  a0 = a0 + x[15][i]*c[15]
+  a1 = a1 + x[31][i]*c[31]
+  a2 = a2 + x[47][i]*c[47]
+  a3 = a3 + x[63][i]*c[63]
+  return (a0+a1) + (a2+a3)
+end
+
+local function audio_fir_scalar()
+  for _ = 1, AUDIO_PASSES do
+    for i = 0, AUDIO_N-1 do
+      audio_out_s[i] = audio_dot(i, audio_x1, audio_c1, 0)
+    end
+  end
+  return sample_sum(audio_out_s, AUDIO_N)
+end
+
+local function audio_fir_xmm()
+  local zero = f4(0)
+  for _ = 1, AUDIO_PASSES do
+    for i = 0, AUDIO_N/4-1 do
+      audio_y4[i] = audio_dot(i, audio_x4, audio_c4, zero)
+    end
+  end
+  return sample_sum(audio_out_x, AUDIO_N)
+end
+
+local function audio_fir_ymm()
+  local zero = f8(0)
+  for _ = 1, AUDIO_PASSES do
+    for i = 0, AUDIO_N/8-1 do
+      audio_y8[i] = audio_dot(i, audio_x8, audio_c8, zero)
+    end
+  end
+  return sample_sum(audio_out_y, AUDIO_N)
+end
+
+real_benches.audio = {
+  scalar = audio_fir_scalar, xmm = audio_fir_xmm, ymm = audio_fir_ymm,
+  name = "64-tap audio FIR", seconds = AUDIO_N/48000,
+  cmp = function(a, b) return approx(a, b, 5e-5) end,
+}
+end
+
+------------------------------------------------------- particle simulation --
+
+do
+-- Independent particles orbit a point mass for 32 integration steps, with a
+-- damped ground-plane collision. Positions and velocities stay in registers
+-- for the whole trajectory. This combines sqrt/divide, multiply/add chains,
+-- comparisons, masks and select instead of benchmarking one instruction.
+local PARTICLE_N = 1 << 17
+local PARTICLE_STEPS = 32
+local particle_x = ffi.new("float[?]", PARTICLE_N)
+local particle_y = ffi.new("float[?]", PARTICLE_N)
+local particle_z = ffi.new("float[?]", PARTICLE_N)
+local particle_vx = ffi.new("float[?]", PARTICLE_N)
+local particle_vy = ffi.new("float[?]", PARTICLE_N)
+local particle_vz = ffi.new("float[?]", PARTICLE_N)
+local particle_out_s = ffi.new("float[?]", PARTICLE_N*3)
+local particle_out_x = ffi.new("float[?]", PARTICLE_N*3)
+local particle_out_y = has_ymm and ffi.new("float[?]", PARTICLE_N*3)
+for i = 0, PARTICLE_N-1 do
+  local a = (i % 4096) * (2*math.pi/4096)
+  local ring = 1.5 + (i % 97) / 97
+  particle_x[i] = math.cos(a) * ring
+  -- A small subset crosses the floor, producing divergent masks in a batch.
+  particle_y[i] = -1.99 + (i % 211) / 140
+  particle_z[i] = math.sin(a) * ring
+  particle_vx[i] = -math.sin(a) * 0.42
+  particle_vy[i] = ((i % 31) - 15) * 0.03
+  particle_vz[i] = math.cos(a) * 0.42
+end
+
+local function particle_scalar()
+  local out = particle_out_s
+  local dt, mu, soft, drag = 0.0125, -1.35, 0.15, 0.9992
+  local floor, bounce = -2, 0.72
+  for i = 0, PARTICLE_N-1 do
+    local x, y, z = particle_x[i], particle_y[i], particle_z[i]
+    local vx, vy, vz = particle_vx[i], particle_vy[i], particle_vz[i]
+    for _ = 1, PARTICLE_STEPS do
+      local r2 = (x*x + y*y) + (z*z + soft)
+      local inv = 1 / math.sqrt(r2)
+      local force = mu * ((inv*inv) * inv)
+      vx = (vx + x*force*dt) * drag
+      vy = (vy + y*force*dt) * drag
+      vz = (vz + z*force*dt) * drag
+      x, y, z = x + vx*dt, y + vy*dt, z + vz*dt
+      if y < floor then
+	y = 2*floor - y
+	vy = -vy * bounce
+      end
+    end
+    out[i], out[PARTICLE_N+i], out[2*PARTICLE_N+i] = x, y, z
+  end
+  return sample_sum(out, PARTICLE_N*3)
+end
+
+local particle_x4 = ffi.cast(f4p, particle_x)
+local particle_y4 = ffi.cast(f4p, particle_y)
+local particle_z4 = ffi.cast(f4p, particle_z)
+local particle_vx4 = ffi.cast(f4p, particle_vx)
+local particle_vy4 = ffi.cast(f4p, particle_vy)
+local particle_vz4 = ffi.cast(f4p, particle_vz)
+local particle_out_x4 = ffi.cast(f4p, particle_out_x)
+
+local function particle_xmm()
+  local dt, mu, soft, drag = f4(0.0125), f4(-1.35), f4(0.15), f4(0.9992)
+  local one, floor, floor2, bounce = f4(1), f4(-2), f4(-4), f4(0.72)
+  local n = PARTICLE_N/4
+  for i = 0, n-1 do
+    local x, y, z = particle_x4[i], particle_y4[i], particle_z4[i]
+    local vx, vy, vz = particle_vx4[i], particle_vy4[i], particle_vz4[i]
+    for _ = 1, PARTICLE_STEPS do
+      local r2 = (x*x + y*y) + (z*z + soft)
+      local inv = one / simd.sqrt(r2)
+      local force = mu * ((inv*inv) * inv)
+      vx = (vx + x*force*dt) * drag
+      vy = (vy + y*force*dt) * drag
+      vz = (vz + z*force*dt) * drag
+      x, y, z = x + vx*dt, y + vy*dt, z + vz*dt
+      local hit = simd.lt(y, floor)
+      y = simd.select(hit, floor2-y, y)
+      vy = simd.select(hit, -vy*bounce, vy)
+    end
+    particle_out_x4[i] = x
+    particle_out_x4[n+i] = y
+    particle_out_x4[2*n+i] = z
+  end
+  return sample_sum(particle_out_x, PARTICLE_N*3)
+end
+
+local particle_x8 = has_ymm and ffi.cast(f8p, particle_x)
+local particle_y8 = has_ymm and ffi.cast(f8p, particle_y)
+local particle_z8 = has_ymm and ffi.cast(f8p, particle_z)
+local particle_vx8 = has_ymm and ffi.cast(f8p, particle_vx)
+local particle_vy8 = has_ymm and ffi.cast(f8p, particle_vy)
+local particle_vz8 = has_ymm and ffi.cast(f8p, particle_vz)
+local particle_out_y8 = has_ymm and ffi.cast(f8p, particle_out_y)
+
+local function particle_ymm()
+  local dt, mu, soft, drag = f8(0.0125), f8(-1.35), f8(0.15), f8(0.9992)
+  local one, floor, floor2, bounce = f8(1), f8(-2), f8(-4), f8(0.72)
+  local n = PARTICLE_N/8
+  for i = 0, n-1 do
+    local x, y, z = particle_x8[i], particle_y8[i], particle_z8[i]
+    local vx, vy, vz = particle_vx8[i], particle_vy8[i], particle_vz8[i]
+    for _ = 1, PARTICLE_STEPS do
+      local r2 = (x*x + y*y) + (z*z + soft)
+      local inv = one / simd.sqrt(r2)
+      local force = mu * ((inv*inv) * inv)
+      vx = (vx + x*force*dt) * drag
+      vy = (vy + y*force*dt) * drag
+      vz = (vz + z*force*dt) * drag
+      x, y, z = x + vx*dt, y + vy*dt, z + vz*dt
+      local hit = simd.lt(y, floor)
+      y = simd.select(hit, floor2-y, y)
+      vy = simd.select(hit, -vy*bounce, vy)
+    end
+    particle_out_y8[i] = x
+    particle_out_y8[n+i] = y
+    particle_out_y8[2*n+i] = z
+  end
+  return sample_sum(particle_out_y, PARTICLE_N*3)
+end
+
+real_benches.particles = {
+  scalar = particle_scalar, xmm = particle_xmm, ymm = particle_ymm,
+  name = "gravity particles x32", count = PARTICLE_N,
+  cmp = function(a, b) return approx(a, b, 2e-4) end,
+}
+end
+
+-------------------------------------------------------- ChaCha20 block core --
+
+do
+-- ChaCha20 is a real integer-SIMD workload: sixteen live 32-bit state words,
+-- 20 rounds of wrapping add/xor/rotate, and no scalar work in the vector
+-- core. SIMD lanes are independent blocks, as in production implementations.
+local CHACHA_BLOCKS = 1 << 13
+local CHACHA_PASSES = 2
+local bit_ = require("bit")
+local bxor, rol, tobit = bit_.bxor, bit_.rol, bit_.tobit
+local cc0, cc1, cc2, cc3 =
+  tobit(0x61707865), tobit(0x3320646e),
+  tobit(0x79622d32), tobit(0x6b206574)
+local ck0, ck1, ck2, ck3 =
+  tobit(0x03020100), tobit(0x07060504),
+  tobit(0x0b0a0908), tobit(0x0f0e0d0c)
+local ck4, ck5, ck6, ck7 =
+  tobit(0x13121110), tobit(0x17161514),
+  tobit(0x1b1a1918), tobit(0x1f1e1d1c)
+local cn0, cn1, cn2 =
+  tobit(0x09000000), tobit(0x4a000000), tobit(0x00000000)
+
+local function chacha_qr_scalar(a, b, c, d)
+  a = tobit(a+b); d = rol(bxor(d, a), 16)
+  c = tobit(c+d); b = rol(bxor(b, c), 12)
+  a = tobit(a+b); d = rol(bxor(d, a), 8)
+  c = tobit(c+d); b = rol(bxor(b, c), 7)
+  return a, b, c, d
+end
+
+local function chacha_scalar()
+  local checksum, counter = 0, 0
+  for _ = 1, CHACHA_PASSES do
+    for _ = 1, CHACHA_BLOCKS do
+      local x0, x1, x2, x3 = cc0, cc1, cc2, cc3
+      local x4, x5, x6, x7 = ck0, ck1, ck2, ck3
+      local x8, x9, x10, x11 = ck4, ck5, ck6, ck7
+      local x12, x13, x14, x15 = counter, cn0, cn1, cn2
+      for _ = 1, 10 do
+	x0, x4, x8, x12 = chacha_qr_scalar(x0, x4, x8, x12)
+	x1, x5, x9, x13 = chacha_qr_scalar(x1, x5, x9, x13)
+	x2, x6, x10, x14 = chacha_qr_scalar(x2, x6, x10, x14)
+	x3, x7, x11, x15 = chacha_qr_scalar(x3, x7, x11, x15)
+	x0, x5, x10, x15 = chacha_qr_scalar(x0, x5, x10, x15)
+	x1, x6, x11, x12 = chacha_qr_scalar(x1, x6, x11, x12)
+	x2, x7, x8, x13 = chacha_qr_scalar(x2, x7, x8, x13)
+	x3, x4, x9, x14 = chacha_qr_scalar(x3, x4, x9, x14)
+      end
+      x0, x1, x2, x3 = tobit(x0+cc0), tobit(x1+cc1),
+		       tobit(x2+cc2), tobit(x3+cc3)
+      x4, x5, x6, x7 = tobit(x4+ck0), tobit(x5+ck1),
+		       tobit(x6+ck2), tobit(x7+ck3)
+      x8, x9, x10, x11 = tobit(x8+ck4), tobit(x9+ck5),
+			 tobit(x10+ck6), tobit(x11+ck7)
+      x12, x13, x14, x15 = tobit(x12+counter), tobit(x13+cn0),
+			   tobit(x14+cn1), tobit(x15+cn2)
+      checksum = tobit(checksum + x0+x1+x2+x3 + x4+x5+x6+x7 +
+		       x8+x9+x10+x11 + x12+x13+x14+x15)
+      counter = counter + 1
+    end
+  end
+  return checksum
+end
+
+local function chacha_qr_vec(a, b, c, d)
+  a = a+b
+  d = simd.bxor(d, a)
+  d = simd.bor(simd.shl(d, 16), simd.shr(d, 16))
+  c = c+d
+  b = simd.bxor(b, c)
+  b = simd.bor(simd.shl(b, 12), simd.shr(b, 20))
+  a = a+b
+  d = simd.bxor(d, a)
+  d = simd.bor(simd.shl(d, 8), simd.shr(d, 24))
+  c = c+d
+  b = simd.bxor(b, c)
+  b = simd.bor(simd.shl(b, 7), simd.shr(b, 25))
+  return a, b, c, d
+end
+
+local function chacha_xmm()
+  local C0, C1, C2, C3 = u4(cc0), u4(cc1), u4(cc2), u4(cc3)
+  local K0, K1, K2, K3 = u4(ck0), u4(ck1), u4(ck2), u4(ck3)
+  local K4, K5, K6, K7 = u4(ck4), u4(ck5), u4(ck6), u4(ck7)
+  local N0, N1, N2 = u4(cn0), u4(cn1), u4(cn2)
+  local counter, step, checksum = u4(0, 1, 2, 3), u4(4), u4(0)
+  for _ = 1, CHACHA_PASSES*CHACHA_BLOCKS/4 do
+    local x0, x1, x2, x3 = C0, C1, C2, C3
+    local x4, x5, x6, x7 = K0, K1, K2, K3
+    local x8, x9, x10, x11 = K4, K5, K6, K7
+    local x12, x13, x14, x15 = counter, N0, N1, N2
+    for _ = 1, 10 do
+      x0, x4, x8, x12 = chacha_qr_vec(x0, x4, x8, x12)
+      x1, x5, x9, x13 = chacha_qr_vec(x1, x5, x9, x13)
+      x2, x6, x10, x14 = chacha_qr_vec(x2, x6, x10, x14)
+      x3, x7, x11, x15 = chacha_qr_vec(x3, x7, x11, x15)
+      x0, x5, x10, x15 = chacha_qr_vec(x0, x5, x10, x15)
+      x1, x6, x11, x12 = chacha_qr_vec(x1, x6, x11, x12)
+      x2, x7, x8, x13 = chacha_qr_vec(x2, x7, x8, x13)
+      x3, x4, x9, x14 = chacha_qr_vec(x3, x4, x9, x14)
+    end
+    x0, x1, x2, x3 = x0+C0, x1+C1, x2+C2, x3+C3
+    x4, x5, x6, x7 = x4+K0, x5+K1, x6+K2, x7+K3
+    x8, x9, x10, x11 = x8+K4, x9+K5, x10+K6, x11+K7
+    x12, x13, x14, x15 = x12+counter, x13+N0, x14+N1, x15+N2
+    checksum = checksum + x0+x1+x2+x3 + x4+x5+x6+x7 +
+	       x8+x9+x10+x11 + x12+x13+x14+x15
+    counter = counter + step
+  end
+  return tobit(tonumber(checksum[0]) + tonumber(checksum[1]) +
+	       tonumber(checksum[2]) + tonumber(checksum[3]))
+end
+
+local function chacha_ymm()
+  local C0, C1, C2, C3 = u8(cc0), u8(cc1), u8(cc2), u8(cc3)
+  local K0, K1, K2, K3 = u8(ck0), u8(ck1), u8(ck2), u8(ck3)
+  local K4, K5, K6, K7 = u8(ck4), u8(ck5), u8(ck6), u8(ck7)
+  local N0, N1, N2 = u8(cn0), u8(cn1), u8(cn2)
+  local counter = u8(0, 1, 2, 3, 4, 5, 6, 7)
+  local step, checksum = u8(8), u8(0)
+  for _ = 1, CHACHA_PASSES*CHACHA_BLOCKS/8 do
+    local x0, x1, x2, x3 = C0, C1, C2, C3
+    local x4, x5, x6, x7 = K0, K1, K2, K3
+    local x8, x9, x10, x11 = K4, K5, K6, K7
+    local x12, x13, x14, x15 = counter, N0, N1, N2
+    for _ = 1, 10 do
+      x0, x4, x8, x12 = chacha_qr_vec(x0, x4, x8, x12)
+      x1, x5, x9, x13 = chacha_qr_vec(x1, x5, x9, x13)
+      x2, x6, x10, x14 = chacha_qr_vec(x2, x6, x10, x14)
+      x3, x7, x11, x15 = chacha_qr_vec(x3, x7, x11, x15)
+      x0, x5, x10, x15 = chacha_qr_vec(x0, x5, x10, x15)
+      x1, x6, x11, x12 = chacha_qr_vec(x1, x6, x11, x12)
+      x2, x7, x8, x13 = chacha_qr_vec(x2, x7, x8, x13)
+      x3, x4, x9, x14 = chacha_qr_vec(x3, x4, x9, x14)
+    end
+    x0, x1, x2, x3 = x0+C0, x1+C1, x2+C2, x3+C3
+    x4, x5, x6, x7 = x4+K0, x5+K1, x6+K2, x7+K3
+    x8, x9, x10, x11 = x8+K4, x9+K5, x10+K6, x11+K7
+    x12, x13, x14, x15 = x12+counter, x13+N0, x14+N1, x15+N2
+    checksum = checksum + x0+x1+x2+x3 + x4+x5+x6+x7 +
+	       x8+x9+x10+x11 + x12+x13+x14+x15
+    counter = counter + step
+  end
+  local sum = 0
+  for i = 0, 7 do sum = sum + tonumber(checksum[i]) end
+  return tobit(sum)
+end
+
+real_benches.chacha = {
+  scalar = chacha_scalar, xmm = chacha_xmm, ymm = chacha_ymm,
+  name = "ChaCha20 block core", blocks = CHACHA_BLOCKS*CHACHA_PASSES,
+}
+end
+
 --------------------------------------------------------------------------
 
 io.write(string.format("N=%d, %d passes, best of %d\n", N, PASSES, REPS))
@@ -563,4 +1159,36 @@ if has_ymm then
   report_ymm("Mandelbrot 64-it (double)", ts, tx, ty, ss, sx, sy)
 else
   report("Mandelbrot 64-it (double)", ts, tx, ss, sx)
+end
+
+io.write(string.format(
+  "\nReal-world kernels: 1080p blur, %.2fs audio, %d particles, %d ChaCha blocks\n",
+  real_benches.audio.seconds, real_benches.particles.count,
+  real_benches.chacha.blocks))
+
+local function run_real(b)
+  -- Several kernels share a polymorphic helper between scalar, XMM and YMM
+  -- forms. Start each measurement with a clean trace cache so a side trace
+  -- specialised for the previous width cannot become the result.
+  jit_.flush()
+  local tsr, ssr = bench(b.name .. " scalar", b.scalar)
+  jit_.flush()
+  local txr, sxr = bench(b.name .. " XMM", b.xmm)
+  if has_ymm then
+    jit_.flush()
+    local tyr, syr = bench(b.name .. " YMM", b.ymm)
+    report_ymm(b.name, tsr, txr, tyr, ssr, sxr, syr, b.cmp)
+  else
+    report(b.name, tsr, txr, ssr, sxr, b.cmp)
+  end
+end
+
+run_real(real_benches.blur)
+run_real(real_benches.audio)
+run_real(real_benches.particles)
+run_real(real_benches.chacha)
+
+if failures > 0 then
+  io.write(string.format("\n%d benchmark(s) produced a wrong result\n", failures))
+  os.exit(1)
 end

@@ -50,6 +50,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M27 | 256-bit reductions, constant/runtime shuffles, two-source shuffles, and constant/runtime insert via explicit 128-bit half crossing | done |
 | M28 | Cost-selective AVX2 `VPERMD`/`VPERMQ` lowering for 32/64-bit YMM shuffles; v2, AVX-only, and AVX2 CPU-model test matrix | done |
 | M29 | Call-free packed 8- and 32-bit `mulhi` emulations for XMM and YMM | done |
+| M30 | Production-sized scalar/XMM/YMM benchmarks: 1080p Gaussian blur, 64-tap audio FIR, particle simulation, and ChaCha20 | done |
 
 ## Commands that pass
 
@@ -59,7 +60,7 @@ make -j$(nproc)                       # release build (x86-64-v3 target)
 ./src/luajit test/simd/run.lua -interp
 ./src/luajit test/simd/run.lua -jit
 ./src/luajit test/simd/run.lua -mixed  # JIT on, but pre-loaded protos off
-./src/luajit test/simd/bench.lua       # scalar/XMM/YMM microbenchmarks
+./src/luajit test/simd/bench.lua       # scalar/XMM/YMM kernel benchmarks
 ./src/luajit test/simd/bench_ops.lua   # kernels and XMM/YMM operation costs
 for s in 1 7 999 31337; do SIMD_SEED=$s ./src/luajit test/simd/run.lua; done
 make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT   # also passes
@@ -291,19 +292,25 @@ wrong answer: where the JIT has no lowering the trace aborts with
 ## Benchmarks
 
 
-`./src/luajit test/simd/bench.lua`, N=65536, 200 passes, best of 3, on this
+`./src/luajit test/simd/bench.lua`, N=65536, 200 passes, best of 5, on this
 AVX2 machine:
 
 ```
-saxpy (float)              scalar     5.4 ms   XMM     1.4 ms  3.80x   YMM     1.2 ms  4.52x (1.19x/XMM)
-dot product (float)        scalar     5.0 ms   XMM     1.2 ms  3.98x   YMM     0.7 ms  7.46x (1.88x/XMM)
-horizontal max (int32)     scalar     3.8 ms   XMM     3.7 ms  1.02x   YMM     1.9 ms  1.99x (1.95x/XMM)
-clamp (float)              scalar    24.4 ms   XMM     1.6 ms 15.41x   YMM     1.3 ms 18.28x (1.19x/XMM)
+saxpy (float)              scalar     5.5 ms   XMM     1.4 ms  3.87x   YMM     1.1 ms  4.85x (1.25x/XMM)
+dot product (float)        scalar     5.0 ms   XMM     1.2 ms  3.98x   YMM     0.7 ms  7.49x (1.88x/XMM)
+horizontal max (int32)     scalar     3.7 ms   XMM     3.7 ms  0.99x   YMM     1.9 ms  1.92x (1.95x/XMM)
+clamp (float)              scalar    28.5 ms   XMM     1.7 ms 17.27x   YMM     1.2 ms 23.91x (1.39x/XMM)
 
 Heavy kernels: FIR 32768x60, polynomial 32768x60, Mandelbrot 16384x4
-8-tap FIR (float)          scalar     3.4 ms   XMM     0.8 ms  4.15x   YMM     0.6 ms  5.38x (1.30x/XMM)
-degree-11 poly (double)    scalar     3.8 ms   XMM     2.2 ms  1.77x   YMM     1.4 ms  2.67x (1.51x/XMM)
-Mandelbrot 64-it (double)  scalar     6.7 ms   XMM     7.6 ms  0.88x   YMM     6.9 ms  0.97x (1.10x/XMM)
+8-tap FIR (float)          scalar     3.4 ms   XMM     0.8 ms  4.10x   YMM     0.6 ms  5.52x (1.35x/XMM)
+degree-11 poly (double)    scalar     4.0 ms   XMM     2.3 ms  1.78x   YMM     1.4 ms  2.85x (1.60x/XMM)
+Mandelbrot 64-it (double)  scalar     6.9 ms   XMM     7.4 ms  0.93x   YMM     6.8 ms  1.00x (1.08x/XMM)
+
+Real-world kernels: 1080p blur, 5.46s audio, 131072 particles, 16384 ChaCha blocks
+5x5 Gaussian (1080p)       scalar     8.5 ms   XMM     2.3 ms  3.70x   YMM     2.3 ms  3.73x (1.01x/XMM)
+64-tap audio FIR           scalar     8.9 ms   XMM     2.3 ms  3.85x   YMM     1.5 ms  6.10x (1.58x/XMM)
+gravity particles x32      scalar    58.2 ms   XMM    19.4 ms  3.00x   YMM    13.9 ms  4.18x (1.39x/XMM)
+ChaCha20 block core        scalar     3.7 ms   XMM     1.4 ms  2.59x   YMM     1.2 ms  3.09x (1.19x/XMM)
 ```
 
 The dot product gets close to the expected second width doubling: 4 lanes are
@@ -313,6 +320,16 @@ scalar version is branchy and the vector version is branchless. Horizontal max
 is memory-bound at either width, but YMM still nearly doubles XMM throughput.
 The heavier group covers overlapping unaligned loads, a dependent Horner
 chain, and divergent mask updates rather than only one-instruction kernels.
+The production-sized group adds four different bottlenecks. The separable
+Gaussian processes a complete 1920x1080 float frame and reaches memory
+bandwidth at XMM width. The windowed-sinc FIR exposes four independent
+64-tap accumulator chains and gains another 1.58x from YMM. The particle
+kernel keeps position and velocity vectors live through 32 gravity/collision
+steps, exercising divide, square root, masks, select and long arithmetic
+chains. ChaCha20 treats SIMD lanes as independent blocks and runs the full
+20-round wrapping add/xor/rotate core with sixteen live vector state words.
+Every buffer-producing kernel validates a deterministic checksum against its
+scalar result outside the timed hot loop.
 
 `bench_ops.lua` also compares dependent XMM and YMM operations directly. On
 this machine the YMM instruction or packed sequence has essentially the same

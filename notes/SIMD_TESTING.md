@@ -28,7 +28,7 @@ status is non-zero if anything failed.
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks vector IR/constants and explicit YMM operands |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists and memory round trips against a small C helper library compiled at test time; callbacks taking and returning vectors by value for every lane kind, ten vector arguments (registers plus stack), 16-byte stack alignment behind eight register arguments, mixed integer/FP/vector argument lists, and the rejection of vectors too wide for a register |
-| `bench.lua` | scalar/XMM/YMM comparisons for saxpy, dot, horizontal max and clamp, plus heavier unaligned 8-tap FIR, degree-11 polynomial and divergent-mask Mandelbrot kernels |
+| `bench.lua` | scalar/XMM/YMM comparisons for small and heavy kernels, plus production-sized 1080p Gaussian blur, 64-tap audio FIR, 32-step particle gravity/collision simulation and 20-round ChaCha20 block processing |
 | `bench_ops.lua` | realistic kernels, per-operation latency, and a direct XMM/YMM lane-throughput comparison for the AVX2 backend |
 | `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |
 
@@ -43,6 +43,15 @@ exact for `+ - * /` and `sqrt` because 53 >= 2*24+2.
 **Bit-exact comparison.** `M.same()` compares the raw bytes of two vectors, so
 NaN payloads, signed zeros and unsigned/signed confusion are all caught. Never
 compare vectors by their printed lane values.
+
+**Benchmark validation.** `bench.lua` consumes every result. Buffer-producing
+kernels compute a sparse deterministic checksum after the hot loop and compare
+scalar, XMM and YMM output, with a scale-relative tolerance only where
+floating-point evaluation order can differ. Integer ChaCha20 must agree
+exactly. The real-world group flushes the trace cache between scalar, XMM and
+YMM runs so a width-specialised trace from a shared helper cannot turn the next
+width into side-exit timing; the default best-of-five run excludes first-run
+recording noise.
 
 **Determinism.** All randomness comes from `M.rng(seed)`, a xorshift32. The
 seed is printed in every failure message together with the operand values, so
