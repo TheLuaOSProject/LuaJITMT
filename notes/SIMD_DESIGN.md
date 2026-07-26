@@ -163,12 +163,12 @@ error, `simd.bitcast` / `simd.convert` are explicit.
 ## D6. Conversions
 
   * `simd.bitcast(ct, v)` - reinterpret the 16 bytes, requires equal sizes.
-  * `simd.convert(ct, v)` - numeric lane conversion.  Supported pairs are the
-    ones with a direct packed instruction:
-      f32x4 <-> i32x4/u32x4 (truncating, C semantics), f64x2 <-> i32 (low 2),
-      f32x4 <-> f64x2 (low 2 lanes), and integer widen/narrow between
-      neighbouring lane widths.
-    Everything else raises a clear error instead of silently scalarising.
+  * `simd.convert(ct, v)` - numeric lane conversion, requiring equal lane
+    counts. The interpreter accepts every numeric pair. The JIT compiles
+    same-width integer signedness changes, `i32/u32 <-> f32`, and
+    `i64/u64 <-> f64`; other pairs abort the trace and continue interpreted.
+    D27 describes the packed emulations needed where x86 has no direct
+    instruction.
   * `V(x)` construction from a Lua number uses the *existing* FFI conversion.
 
 ## D7. `ExitState` becomes 128-bit wide
@@ -719,3 +719,37 @@ On the measured target dependent XMM latency is 3.33 ns signed and 2.75 ns
 unsigned, down from roughly 30 ns interpreted. YMM executes the same
 lane-local sequence in 3.24/2.67 ns while producing twice as many lane
 results.
+
+## D27. Synthesize exact unsigned and qword floating-point conversions
+
+AVX2 still lacks packed `u32 -> float` and every packed conversion between
+qwords and doubles. Falling back to the interpreter forfeits the entire hot
+loop, so the recorder expands the missing integer-to-FP forms into exact
+packed arithmetic.
+
+For `u32 -> float`, split each lane into two 16-bit pieces. Encode each piece
+directly into an IEEE-754 float mantissa under a fixed exponent, subtract the
+matching bias from the high piece, then add the two floats. Both pieces are
+exact; the final packed add performs the one correctly rounded conversion.
+This covers all values through `0xffffffff` without ever feeding a negative
+value to signed `CVTDQ2PS`.
+
+For `i64/u64 -> double`, split each qword into low and high dwords and encode
+those exact pieces under binary64 exponents separated by 32 bits. Unsigned
+conversion subtracts a fixed combined bias. Signed conversion first XOR-biases
+the high dword by `0x80000000` and uses the corresponding signed bias. Again,
+the final `ADDPD` is the only rounding operation.
+
+There is no packed `double -> i64/u64` before AVX-512. The backend therefore
+uses the fastest available call-free sequence: one `CVTTSD2SI r64` per lane,
+`PSHUFD` to expose the high double, and `PUNPCKLQDQ` to assemble the qwords.
+YMM uses `VEXTRACTF128`/`VINSERTF128` around the same two-lane sequence. The
+unsigned destination intentionally receives the same result bits and signed
+indefinite value as every other FP-to-unsigned conversion in this API.
+
+Four-way throughput measurements on the AVX2 test host are 0.51 ns/vector for
+`u32 -> float`, 0.58/0.51 ns for signed/unsigned qword-to-double, and
+0.64 ns for double-to-qword at XMM width. The packed integer-to-FP sequences
+process twice the lanes at the same YMM cost. Double-to-qword issues twice as
+many scalar conversions in a YMM value, so its per-lane throughput stays
+constant rather than doubling.

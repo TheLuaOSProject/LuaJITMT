@@ -773,6 +773,70 @@ test("ffi.simd bitcast and convert on trace", function()
     for i = 1, n do acc = acc + simd.convert(u4.ct, i4.ct(-i)) end
     return acc
   end, 300)
+
+  diff("convert u32->f32", function(n)
+    local acc = f4.ct(0)
+    local v = u4.ct(0, 16777217, 0x80000001, 0xffffffff)
+    local step = u4.ct(1, 257, 65537, 1048577)
+    for _ = 1, n do
+      acc = acc + simd.convert(f4.ct, v)
+      v = v + step
+    end
+    return acc
+  end, 300)
+
+  local d2, i2, u2 = T.T.double2, T.T.i64x2, T.T.u64x2
+  diff("convert i64->f64", function(n)
+    local acc = d2.ct(0)
+    local v = i2.ct(-9007199254740993LL, 0x7000000000000001LL)
+    for _ = 1, n do
+      acc = acc + simd.convert(d2.ct, v)
+      v = v + i2.ct(1048577, -65537)
+    end
+    return acc
+  end, 180)
+  diff("convert u64->f64", function(n)
+    local acc = d2.ct(0)
+    local v = u2.ct(9007199254740993ULL, 0xf000000000000001ULL)
+    for _ = 1, n do
+      acc = acc + simd.convert(d2.ct, v)
+      v = v + u2.ct(1048577, 65537)
+    end
+    return acc
+  end, 180)
+  diff("convert f64->i64/u64", function(n)
+    local si, ui = i2.ct(0), u2.ct(0)
+    local v = d2.ct(0/0, 1e300)
+    for _ = 1, n do
+      si = simd.bxor(si, simd.convert(i2.ct, v))
+      ui = simd.bxor(ui, simd.convert(u2.ct, v))
+      v = v + d2.ct(1, -1)
+    end
+    return si, ui
+  end, 180)
+end)
+
+test("extended conversions randomized bit patterns", function()
+  local pairs = {
+    {T.T.u32x4, T.T.float4},
+    {T.T.i64x2, T.T.double2},
+    {T.T.u64x2, T.T.double2},
+    {T.T.double2, T.T.i64x2},
+    {T.T.double2, T.T.u64x2},
+  }
+  for p, pair in ipairs(pairs) do
+    local src, dst = pair[1], pair[2]
+    local rnd = T.rng(SEED + 2503 + p * 137)
+    local a = ffi.new(ffi.typeof("$[?]", src.ct), 64)
+    for i = 0, 63 do a[i] = T.rand(src, rnd) end
+    diff(src.name .. " to " .. dst.name .. " random", function(n)
+      local acc = dst.ct(0)
+      for i = 0, n-1 do
+	acc = simd.bxor(acc, simd.convert(dst.ct, a[i % 64]))
+      end
+      return acc
+    end, 512)
+  end
 end)
 
 if simd.features().avx2 then
@@ -976,7 +1040,7 @@ if simd.features().avx2 then
     end
   end)
 
-  test("256-bit direct lane conversion", function()
+  test("256-bit lane conversion", function()
     local fi, ii, ui = T.W.float8.ct, T.W.i32x8.ct, T.W.u32x8.ct
     local iv = ii(-100, -7, -1, 0, 1, 7, 100, 123456)
     local fv = fi(-100.75, -7.5, -1.25, 0, 1.25, 7.5, 100.75, 123456.5)
@@ -995,6 +1059,61 @@ if simd.features().avx2 then
       for _ = 1, n do acc = acc + simd.convert(ui, fv) end
       return acc
     end, 120)
+    local uv = ui(0, 1, 16777217, 0x7fffffff,
+		  0x80000001, 0xffffff01, 0xfffffffe, 0xffffffff)
+    diff("u32x8 to float8", function(n)
+      local acc = fi(0)
+      for _ = 1, n do acc = acc + simd.convert(fi, uv) end
+      return acc
+    end, 120)
+
+    local fd, si, su = T.W.double4.ct, T.W.i64x4.ct, T.W.u64x4.ct
+    local sv = si(-9007199254740993LL, 9007199254740993LL,
+		  -0x7000000000000000LL, 0x7000000000000001LL)
+    local uiv = su(0, 9007199254740993ULL, 0x8000000000000001ULL,
+		   0xffffffffffffffffULL)
+    diff("i64x4 to double4", function(n)
+      local acc = fd(0)
+      for _ = 1, n do acc = acc + simd.convert(fd, sv) end
+      return acc
+    end, 100)
+    diff("u64x4 to double4", function(n)
+      local acc = fd(0)
+      for _ = 1, n do acc = acc + simd.convert(fd, uiv) end
+      return acc
+    end, 100)
+    diff("double4 to i64x4/u64x4", function(n)
+      local a, b = si(0), su(0)
+      local v = fd(2.9, -2.9, 0/0, 1e300)
+      for _ = 1, n do
+	a = simd.bxor(a, simd.convert(si, v))
+	b = simd.bxor(b, simd.convert(su, v))
+      end
+      return a, b
+    end, 100)
+  end)
+
+  test("256-bit extended conversions randomized bit patterns", function()
+    local pairs = {
+      {T.W.u32x8, T.W.float8},
+      {T.W.i64x4, T.W.double4},
+      {T.W.u64x4, T.W.double4},
+      {T.W.double4, T.W.i64x4},
+      {T.W.double4, T.W.u64x4},
+    }
+    for p, pair in ipairs(pairs) do
+      local src, dst = pair[1], pair[2]
+      local rnd = T.rng(SEED + 3251 + p * 173)
+      local a = ffi.new(ffi.typeof("$[?]", src.ct), 32)
+      for i = 0, 31 do a[i] = T.rand(src, rnd) end
+      diff(src.name .. " to " .. dst.name .. " ymm random", function(n)
+	local acc = dst.ct(0)
+	for i = 0, n-1 do
+	  acc = simd.bxor(acc, simd.convert(dst.ct, a[i % 32]))
+	end
+	return acc
+      end, 256)
+    end
   end)
 
   test("256-bit constants and logical operations", function()

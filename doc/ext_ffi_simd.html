@@ -269,6 +269,13 @@ indefinite</em> value &mdash; the minimum signed value of the destination
 width &mdash; for a NaN or for anything outside the destination's signed
 range, which is what the packed conversion instructions do.
 </p>
+<p>
+The JIT compiles <tt>i32/u32 &harr; float</tt>,
+<tt>i64/u64 &harr; double</tt>, and same-width integer signedness changes for
+both XMM and YMM vectors. The full unsigned input ranges are handled exactly.
+Other equal-lane numeric pairs remain correct in the interpreter and abandon
+the trace rather than being silently scalarised.
+</p>
 <pre class="code">
 local bits = simd.bitcast(int4, v)                -- raw bit pattern
 local ints = simd.convert(int4, v)                -- 1.9 -> 1, -1.9 -> -1
@@ -310,7 +317,8 @@ keeps running interpreted with identical results.
 <tt>simd.features()</tt> reports what was found.</li>
 <li>The 256-bit JIT supports the ordinary vector operators, dynamic scalar
 splats, comparisons and masks, min/max, shifts, abs/sqrt/rounding, FMA,
-saturating arithmetic, <tt>mulhi</tt> at every integer lane width, direct 32-bit conversions,
+saturating arithmetic, <tt>mulhi</tt> at every integer lane width,
+native 32- and 64-bit integer/floating-point conversions,
 logical/select/bitcast, unaligned loads and stores, horizontal reductions,
 constant and runtime-index shuffles, two-source shuffles, and constant or
 runtime-index insertion.</li>

@@ -123,8 +123,20 @@ test("float edge cases", function()
   local z = f.ct(0) * f.ct(-1)
   checkeq(T.tostr(z), "{-0,-0,-0,-0}", "0 * -1 keeps the sign")
   check((f.ct(1) / f.ct(0))[0] == math.huge, "1/0")
+  local i = T.T.i32x4
+  local snan = simd.bitcast(f.ct, i.ct(0x7fa12345, 0xffa54321,
+				      0x7fc00001, 0x80000000))
+  checkeq(simd.bitcast(i.ct, -snan),
+	  i.ct(0xffa12345, 0x7fa54321, 0xffc00001, 0),
+	  "float negation flips only the sign bit")
   local d = T.T.double2
   check((d.ct(0) / d.ct(0))[0] ~= (d.ct(0) / d.ct(0))[0], "0/0 is NaN")
+  local u = T.T.u64x2
+  local dnan = simd.bitcast(d.ct,
+			    u.ct(0x7ff0123456789abcULL, 0xfff8abcdef012345ULL))
+  checkeq(simd.bitcast(u.ct, -dnan),
+	  u.ct(0xfff0123456789abcULL, 0x7ff8abcdef012345ULL),
+	  "double negation flips only the sign bit")
 end)
 
 test("unsupported operators raise", function()

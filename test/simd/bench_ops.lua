@@ -23,6 +23,7 @@ require("simdtest")
 local REPS = tonumber(arg[1] or "5")
 
 local f4 = ffi.typeof("float4")
+local d2 = ffi.typeof("double2")
 local i4 = ffi.typeof("i32x4")
 local u4 = ffi.typeof("u32x4")
 local s8 = ffi.typeof("i8x16")
@@ -33,6 +34,7 @@ local u64 = ffi.typeof("u64x2")
 local features = simd.features()
 local has_ymm = features.avx2 and features.vecsize >= 32
 local f8 = has_ymm and ffi.typeof("float8")
+local d4 = has_ymm and ffi.typeof("double4")
 local i8 = has_ymm and ffi.typeof("i32x8")
 local u8d = has_ymm and ffi.typeof("u32x8")
 local s8w = has_ymm and ffi.typeof("i8x32")
@@ -569,6 +571,92 @@ do
 	  function(x, y) return simd.mulhi(x, y) end)
 end
 
+io.write("\n== conversion throughput (ns per vector, four independent chains) ==\n")
+
+-- A conversion changes the accumulator's type, so it cannot form the same
+-- simple dependency chain as the operations above. Keep four independent
+-- source and destination chains live instead. This exposes packed throughput
+-- without allowing a loop-invariant conversion to be folded away.
+local conversion_sink
+local function conversion_throughput(setup, convert)
+  local ITERS = 1 << 18
+  jit_.flush()
+  local best = math.huge
+  for _ = 1, REPS do
+    local s0, s1, s2, s3, inc, zero = setup()
+    local a0, a1, a2, a3 = zero, zero, zero, zero
+    local t0 = os.clock()
+    for _ = 1, ITERS do
+      a0 = simd.bxor(a0, convert(s0))
+      a1 = simd.bxor(a1, convert(s1))
+      a2 = simd.bxor(a2, convert(s2))
+      a3 = simd.bxor(a3, convert(s3))
+      s0, s1, s2, s3 = s0+inc, s1+inc, s2+inc, s3+inc
+    end
+    local dt = os.clock() - t0
+    if dt < best then best = dt end
+    local sink = simd.bxor(simd.bxor(a0, a1), simd.bxor(a2, a3))
+    conversion_sink = tonumber(sink[0])
+  end
+  return best*1e9/(ITERS*4)
+end
+
+local function conversion_cost(name, setup, convert)
+  io.write(string.format("  %-24s %6.2f ns\n",
+			 name, conversion_throughput(setup, convert)))
+end
+
+conversion_cost("i32x4 -> float4", function()
+  return i4(-1000, -7, 11, 1001), i4(-999, -5, 14, 1005),
+	 i4(-997, -3, 17, 1009), i4(-995, -1, 20, 1013),
+	 i4(1, 3, 5, 7), f4(0)
+end, function(x) return simd.convert(f4, x) end)
+conversion_cost("u32x4 -> float4", function()
+  return u4(0, 16777217, 0x80000001, 0xffffffff),
+	 u4(1, 16777219, 0x80000003, 0xfffffffd),
+	 u4(2, 16777221, 0x80000005, 0xfffffffb),
+	 u4(3, 16777223, 0x80000007, 0xfffffff9),
+	 u4(1, 3, 5, 7), f4(0)
+end, function(x) return simd.convert(f4, x) end)
+conversion_cost("float4 -> i32x4", function()
+  return f4(-1000.75, -7.5, 11.25, 1001.75),
+	 f4(-999.75, -5.5, 14.25, 1005.75),
+	 f4(-997.75, -3.5, 17.25, 1009.75),
+	 f4(-995.75, -1.5, 20.25, 1013.75),
+	 f4(0.25, 0.5, 0.75, 1), i4(0)
+end, function(x) return simd.convert(i4, x) end)
+conversion_cost("float4 -> u32x4", function()
+  return f4(1.75, 7.5, 101.25, 1001.75),
+	 f4(2.75, 9.5, 104.25, 1005.75),
+	 f4(3.75, 11.5, 107.25, 1009.75),
+	 f4(4.75, 13.5, 110.25, 1013.75),
+	 f4(0.25, 0.5, 0.75, 1), u4(0)
+end, function(x) return simd.convert(u4, x) end)
+conversion_cost("i64x2 -> double2", function()
+  return i64(-9007199254740993LL, 0x7000000000000001LL),
+	 i64(-9007199254740989LL, 0x7000000000000005LL),
+	 i64(-9007199254740985LL, 0x7000000000000009LL),
+	 i64(-9007199254740981LL, 0x700000000000000dLL),
+	 i64(17, 31), d2(0)
+end, function(x) return simd.convert(d2, x) end)
+conversion_cost("u64x2 -> double2", function()
+  return u64(9007199254740993ULL, 0xf000000000000001ULL),
+	 u64(9007199254740997ULL, 0xf000000000000005ULL),
+	 u64(9007199254741001ULL, 0xf000000000000009ULL),
+	 u64(9007199254741005ULL, 0xf00000000000000dULL),
+	 u64(17, 31), d2(0)
+end, function(x) return simd.convert(d2, x) end)
+conversion_cost("double2 -> i64x2", function()
+  return d2(-1000000.75, 1000001.75), d2(-999999.5, 1000003.25),
+	 d2(-999997.25, 1000005.5), d2(-999995.75, 1000007.25),
+	 d2(0.25, 0.5), i64(0)
+end, function(x) return simd.convert(i64, x) end)
+conversion_cost("double2 -> u64x2", function()
+  return d2(1000000.75, 2000001.75), d2(1000002.5, 2000003.25),
+	 d2(1000004.25, 2000005.5), d2(1000006.75, 2000007.25),
+	 d2(0.25, 0.5), u64(0)
+end, function(x) return simd.convert(u64, x) end)
+
 if has_ymm then
   io.write("\n== AVX2 width comparison (dependent ns/op) ==\n")
   io.write("                                      XMM       YMM   lane throughput\n")
@@ -694,6 +782,111 @@ if has_ymm then
     function() return u8(1), u8(3) end,
     function() return u8w(1), u8w(3) end,
     function(x, y) return simd.adds(x, y) end)
+
+  io.write("\n== AVX2 conversion width comparison (ns/vector) ==\n")
+  io.write("                                      XMM       YMM   lane throughput\n")
+
+  local function conversion_width_cost(name, setup_xmm, setup_ymm,
+				       convert_xmm, convert_ymm)
+    local tx = conversion_throughput(setup_xmm, convert_xmm)
+    local ty = conversion_throughput(setup_ymm, convert_ymm)
+    io.write(string.format("  %-24s %6.2f ns  %6.2f ns      %5.2fx\n",
+			   name, tx, ty, 2*tx/ty))
+  end
+
+  conversion_width_cost("uint32 -> float",
+    function()
+      return u4(0, 16777217, 0x80000001, 0xffffffff),
+	     u4(1, 16777219, 0x80000003, 0xfffffffd),
+	     u4(2, 16777221, 0x80000005, 0xfffffffb),
+	     u4(3, 16777223, 0x80000007, 0xfffffff9),
+	     u4(1, 3, 5, 7), f4(0)
+    end,
+    function()
+      return u8d(0, 1, 16777217, 0x7fffffff,
+		 0x80000001, 0xffffff01, 0xfffffffe, 0xffffffff),
+	     u8d(1, 2, 16777219, 0x7ffffffd,
+		 0x80000003, 0xfffffeff, 0xfffffffc, 0xfffffffd),
+	     u8d(2, 3, 16777221, 0x7ffffffb,
+		 0x80000005, 0xfffffefd, 0xfffffffa, 0xfffffffb),
+	     u8d(3, 4, 16777223, 0x7ffffff9,
+		 0x80000007, 0xfffffefb, 0xfffffff8, 0xfffffff9),
+	     u8d(1, 3, 5, 7, 11, 13, 17, 19), f8(0)
+    end,
+    function(x) return simd.convert(f4, x) end,
+    function(x) return simd.convert(f8, x) end)
+  conversion_width_cost("int64 -> double",
+    function()
+      return i64(-9007199254740993LL, 0x7000000000000001LL),
+	     i64(-9007199254740989LL, 0x7000000000000005LL),
+	     i64(-9007199254740985LL, 0x7000000000000009LL),
+	     i64(-9007199254740981LL, 0x700000000000000dLL),
+	     i64(17, 31), d2(0)
+    end,
+    function()
+      return i64w(-9007199254740993LL, 9007199254740993LL,
+		    -0x7000000000000000LL, 0x7000000000000001LL),
+	     i64w(-9007199254740989LL, 9007199254740997LL,
+		    -0x6ffffffffffffffcLL, 0x7000000000000005LL),
+	     i64w(-9007199254740985LL, 9007199254741001LL,
+		    -0x6ffffffffffffff8LL, 0x7000000000000009LL),
+	     i64w(-9007199254740981LL, 9007199254741005LL,
+		    -0x6ffffffffffffff4LL, 0x700000000000000dLL),
+	     i64w(17, 31, 47, 61), d4(0)
+    end,
+    function(x) return simd.convert(d2, x) end,
+    function(x) return simd.convert(d4, x) end)
+  conversion_width_cost("uint64 -> double",
+    function()
+      return u64(9007199254740993ULL, 0xf000000000000001ULL),
+	     u64(9007199254740997ULL, 0xf000000000000005ULL),
+	     u64(9007199254741001ULL, 0xf000000000000009ULL),
+	     u64(9007199254741005ULL, 0xf00000000000000dULL),
+	     u64(17, 31), d2(0)
+    end,
+    function()
+      return u64w(0, 9007199254740993ULL, 0x8000000000000001ULL,
+		    0xffffffffffffffffULL),
+	     u64w(1, 9007199254740997ULL, 0x8000000000000005ULL,
+		    0xfffffffffffffffbULL),
+	     u64w(2, 9007199254741001ULL, 0x8000000000000009ULL,
+		    0xfffffffffffffff7ULL),
+	     u64w(3, 9007199254741005ULL, 0x800000000000000dULL,
+		    0xfffffffffffffff3ULL),
+	     u64w(17, 31, 47, 61), d4(0)
+    end,
+    function(x) return simd.convert(d2, x) end,
+    function(x) return simd.convert(d4, x) end)
+  conversion_width_cost("double -> int64",
+    function()
+      return d2(-1000000.75, 1000001.75), d2(-999999.5, 1000003.25),
+	     d2(-999997.25, 1000005.5), d2(-999995.75, 1000007.25),
+	     d2(0.25, 0.5), i64(0)
+    end,
+    function()
+      return d4(-1000000.75, -7.5, 11.25, 1000001.75),
+	     d4(-999999.5, -5.25, 14.5, 1000003.25),
+	     d4(-999997.25, -3.5, 17.75, 1000005.5),
+	     d4(-999995.75, -1.25, 20.5, 1000007.25),
+	     d4(0.25, 0.5, 0.75, 1), i64w(0)
+    end,
+    function(x) return simd.convert(i64, x) end,
+    function(x) return simd.convert(i64w, x) end)
+  conversion_width_cost("double -> uint64",
+    function()
+      return d2(1000000.75, 2000001.75), d2(1000002.5, 2000003.25),
+	     d2(1000004.25, 2000005.5), d2(1000006.75, 2000007.25),
+	     d2(0.25, 0.5), u64(0)
+    end,
+    function()
+      return d4(1000000.75, 2000001.75, 3000002.25, 4000003.5),
+	     d4(1000002.5, 2000003.25, 3000004.5, 4000005.75),
+	     d4(1000004.25, 2000005.5, 3000006.75, 4000007.25),
+	     d4(1000006.75, 2000007.25, 3000008.5, 4000009.75),
+	     d4(0.25, 0.5, 0.75, 1), u64w(0)
+    end,
+    function(x) return simd.convert(u64, x) end,
+    function(x) return simd.convert(u64w, x) end)
 end
 
 if failures > 0 then

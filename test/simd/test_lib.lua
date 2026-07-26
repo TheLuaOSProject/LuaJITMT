@@ -492,6 +492,30 @@ test("bitcast and convert", function()
 	  T.T.double2.ct(1, -2), "i64->f64")
   checkeq(simd.convert(T.T.i64x2.ct, T.T.double2.ct(2.9, -2.9)),
 	  T.T.i64x2.ct(2, -2), "f64->i64 truncates")
+  checkeq(simd.convert(T.T.u64x2.ct, T.T.double2.ct(2.9, -2.9)),
+	  T.T.u64x2.ct(2, 0xfffffffffffffffeULL),
+	  "f64->u64 uses the signed truncation bits")
+  checkeq(simd.convert(f.ct,
+	  T.T.u32x4.ct(0, 1, 16777217, 0xffffffff)),
+	  f.ct(0, 1, 16777216, 4294967296), "u32->f32 rounds correctly")
+  checkeq(simd.convert(T.T.double2.ct,
+	  T.T.i64x2.ct(-9007199254740993LL, 9007199254740993LL)),
+	  T.T.double2.ct(-9007199254740992, 9007199254740992),
+	  "i64->f64 rounds correctly")
+  checkeq(simd.convert(T.T.double2.ct,
+	  T.T.u64x2.ct(9007199254740993ULL, 0xffffffffffffffffULL)),
+	  T.T.double2.ct(9007199254740992, 18446744073709551616),
+	  "u64->f64 rounds correctly")
+  checkeq(simd.bitcast(T.T.u32x4.ct,
+	  simd.convert(f.ct, T.W.u64x4.ct(
+	    0x8000008000000001ULL, 0x4000004000000001ULL, 0, 1))),
+	  T.T.u32x4.ct(0x5f000001, 0x5e800001, 0, 0x3f800000),
+	  "u64->f32 rounds once instead of through double")
+  checkeq(simd.bitcast(T.T.u32x4.ct,
+	  simd.convert(f.ct, T.W.i64x4.ct(
+	    0x4000004000000001LL, -0x4000004000000001LL, 0, 1))),
+	  T.T.u32x4.ct(0x5e800001, 0xde800001, 0, 0x3f800000),
+	  "i64->f32 rounds once instead of through double")
   check(not pcall(simd.convert, T.T.i16x8.ct, i.ct(1)),
 	"convert with mismatched lane counts is rejected")
   -- Float to integer follows the packed instruction: truncate toward zero,
@@ -504,6 +528,13 @@ test("bitcast and convert", function()
   checkeq(simd.convert(T.T.i64x2.ct, T.T.double2.ct(0/0, 1e300)),
 	  T.T.i64x2.ct(-9223372036854775807LL-1, -9223372036854775807LL-1),
 	  "f64->i64 indefinite")
+  checkeq(simd.convert(T.T.u64x2.ct, T.T.double2.ct(0/0, 1e300)),
+	  T.T.u64x2.ct(0x8000000000000000ULL, 0x8000000000000000ULL),
+	  "f64->u64 has the same signed indefinite bits")
+  checkeq(simd.convert(T.T.i64x2.ct,
+	  T.T.double2.ct(9223372036854774784, 9223372036854775808)),
+	  T.T.i64x2.ct(9223372036854774784LL, -9223372036854775807LL-1),
+	  "f64->i64 signed boundary")
   -- Rounding quiets a signalling NaN, exactly like ROUNDPS does.
   local snan = simd.bitcast(f.ct, i.ct(0x7fa00000, 0xffa00000, 0x7fc00000, 1))
   checkeq(simd.bitcast(i.ct, simd.floor(snan)),

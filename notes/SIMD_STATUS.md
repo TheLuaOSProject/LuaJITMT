@@ -53,6 +53,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M30 | Production-sized scalar/XMM/YMM benchmarks: 1080p Gaussian blur, 64-tap audio FIR, particle simulation, and ChaCha20 | done |
 | M31 | Per-lane AVX2 shifts for 8/16-bit XMM and YMM vectors via packed dword decomposition | done |
 | M32 | Signed and unsigned 64-bit `mulhi` via four packed 32x32 partial products, XMM and YMM | done |
+| M33 | Exact call-free `u32 -> float`, `i64/u64 -> double`, and `double -> i64/u64` lowering for XMM/YMM | done |
 
 ## Commands that pass
 
@@ -379,6 +380,22 @@ latency while shifting twice as many lanes.
 The 64-bit `mulhi` decomposition is 3.33 ns signed and 2.75 ns unsigned,
 versus about 30 ns in the interpreter. The YMM form is 3.24/2.67 ns and
 therefore slightly more than doubles per-lane throughput.
+
+The conversion slice stays packed for every integer-to-FP direction. Four-way
+throughput on this host is:
+
+```
+                                  XMM       YMM   lane throughput
+uint32 -> float               0.51 ns   0.51 ns       2.00x
+int64 -> double               0.58 ns   0.58 ns       2.00x
+uint64 -> double              0.51 ns   0.51 ns       2.00x
+double -> int64               0.64 ns   1.29 ns       1.00x
+double -> uint64              0.64 ns   1.29 ns       1.00x
+```
+
+The last two rows are deliberately different: x86 has no packed
+double-to-qword conversion before AVX-512, so YMM performs four call-free
+scalar `CVTTSD2SI` instructions and retains XMM's per-lane throughput.
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:

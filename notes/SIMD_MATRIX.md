@@ -56,8 +56,9 @@ The current YMM operation surface compiles:
 * the complete ordinary operator surface, including all integer multiply lane
   widths, whole-vector equality, unary minus, and dynamic scalar splats;
 * logical operations, comparisons/masks, select, min/max, shifts,
-  abs/sqrt/rounding, FMA, saturating arithmetic, every integer-width `mulhi`, equal-size
-  bitcast, and the direct 32-bit lane conversions;
+  abs/sqrt/rounding, FMA, saturating arithmetic, every integer-width `mulhi`,
+  equal-size bitcast, and the native 32- and 64-bit numeric conversions listed
+  below;
 * horizontal reductions, constant and runtime-index shuffles, two-source
   shuffles, and constant or runtime-index insertion across both 128-bit halves;
 * unaligned loads/stores, loop-carried values, 32-byte spills, and reconstruction
@@ -108,7 +109,7 @@ is `false` and never raises.
 | `((V*)p)[0] = v` | yes | yes | store, unaligned-safe |
 | struct/array members | yes | yes | 16-byte aligned by the C parser |
 | `simd.bitcast(ct, v)` | yes | yes | equal total size required |
-| `simd.convert(ct, v)` | yes | yes | equal lane count required |
+| `simd.convert(ct, v)` | yes | yes* | equal lane count required |
 
 `simd.convert` performs numeric lane conversion. Conversions between different
 lane counts are rejected; use `bitcast` for pure reinterpretation.
@@ -124,6 +125,18 @@ lane counts are rejected; use `bitcast` for pure reinterpretation.
   destinations get the same signed truncation. Choosing anything else would
   either be undefined C behaviour or would force the operation to differ
   between the interpreter and the JIT.
+
+The interpreter accepts every numeric source/destination pair with an equal
+lane count. The native XMM/YMM JIT subset (the `yes*` above) is:
+
+* `i32/u32 <-> float`, including the full unsigned input range;
+* `i64/u64 <-> double`;
+* integer signedness changes with the same element width.
+
+The unsigned float-to-integer forms deliberately have the signed-range
+indefinite semantics described above. Equal-lane conversions that also change
+the vector width, such as `float4 -> double4`, currently abort the trace and
+continue interpreted; they are not silently scalarised.
 
 For 256-bit types, zero/multi-lane construction, dynamic splats, copies,
 constants, memory loads/stores, and equal-size `bitcast` are native.

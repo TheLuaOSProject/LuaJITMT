@@ -503,6 +503,63 @@ test("a runtime index permute is packed", function()
   end)
 end)
 
+test("extended numeric conversions stay call-free", function()
+  local f4, u4 = T.T.float4.ct, T.T.u32x4.ct
+  local mu32 = checkloop("u32x4 to float4",
+    {"psrld", "por", "subps", "addps"}, {"call", "cvtdq2ps"}, function()
+      local acc = f4(0)
+      local v = u4(0, 16777217, 0x80000001, 0xffffffff)
+      for _ = 1, 400 do
+	acc = acc + simd.convert(f4, v)
+	v = v + u4(65537)
+      end
+      return acc
+    end)
+  if mu32 then
+    check(count(mu32, "cvtdq2ps") == 0,
+	  "u32x4 conversion must not use the signed instruction")
+  end
+
+  local d2, i2, u2 = T.T.double2.ct, T.T.i64x2.ct, T.T.u64x2.ct
+  checkloop("i64x2 to double2",
+    {"psrlq", "por", "pxor", "subpd", "addpd"},
+    {"call", "cvtsi2sd"}, function()
+      local acc = d2(0)
+      local v = i2(-9007199254740993LL, 0x7000000000000001LL)
+      for _ = 1, 400 do
+	acc = acc + simd.convert(d2, v)
+	v = v + i2(65537)
+      end
+      return acc
+    end)
+  checkloop("u64x2 to double2", {"psrlq", "por", "subpd", "addpd"},
+    {"call", "cvtsi2sd"}, function()
+      local acc = d2(0)
+      local v = u2(9007199254740993ULL, 0xf000000000000001ULL)
+      for _ = 1, 400 do
+	acc = acc + simd.convert(d2, v)
+	v = v + u2(65537)
+      end
+      return acc
+    end)
+
+  local mf64 = checkloop("double2 to i64x2",
+    {"cvttsd2si", "punpcklqdq"}, {"call"}, function()
+      local acc = i2(0)
+      local v = d2(123456789.75, -987654321.25)
+      local step = d2(0.5, -0.25)
+      for _ = 1, 400 do
+	acc = simd.bxor(acc, simd.convert(i2, v))
+	v = v + step
+      end
+      return acc
+    end)
+  if mf64 then
+    check(count(mf64, "cvttsd2si") == 2,
+	  "double2 conversion must issue one scalar conversion per lane")
+  end
+end)
+
 test("a bitcast never produces a conversion between vector types", function()
   -- simd.bitcast re-boxes a value under a different lane type, so the box's
   -- XSTORE is typed with the *destination* lane type while the stored value
@@ -820,6 +877,62 @@ if simd.features().avx2 then
 	end
 	return acc
       end)
+
+    local ui = T.W.u32x8.ct
+    checkymm("u32x8 to float8 conversion",
+      {"vpsrld ymm", "vpor ymm", "vsubps ymm", "vaddps ymm"},
+      function()
+	local acc = fi(0)
+	local v = ui(0, 1, 16777217, 0x7fffffff,
+		     0x80000001, 0xffffff01, 0xfffffffe, 0xffffffff)
+	for _ = 1, 400 do
+	  acc = acc + simd.convert(fi, v)
+	  v = v + ui(65537)
+	end
+	return acc
+      end)
+
+    local fd, siq, uiq = T.W.double4.ct, T.W.i64x4.ct, T.W.u64x4.ct
+    checkymm("i64x4 to double4 conversion",
+      {"vpsrlq ymm", "vpor ymm", "vsubpd ymm", "vaddpd ymm"},
+      function()
+	local acc = fd(0)
+	local v = siq(-9007199254740993LL, 9007199254740993LL,
+		      -0x7000000000000000LL, 0x7000000000000001LL)
+	for _ = 1, 400 do
+	  acc = acc + simd.convert(fd, v)
+	  v = v + siq(65537)
+	end
+	return acc
+      end)
+    checkymm("u64x4 to double4 conversion",
+      {"vpsrlq ymm", "vpor ymm", "vsubpd ymm", "vaddpd ymm"},
+      function()
+	local acc = fd(0)
+	local v = uiq(0, 9007199254740993ULL, 0x8000000000000001ULL,
+		      0xffffffffffffffffULL)
+	for _ = 1, 400 do
+	  acc = acc + simd.convert(fd, v)
+	  v = v + uiq(65537)
+	end
+	return acc
+      end)
+
+    local cvq = checkymm("double4 to i64x4 conversion",
+      {"vextractf128", "vcvttsd2si", "vpunpcklqdq", "vinsertf128"},
+      function()
+	local acc = siq(0)
+	local v = fd(123456789.75, -987654321.25, 9007199254740991,
+		     -9007199254740991)
+	local step = fd(0.5, -0.25, 1, -1)
+	for _ = 1, 400 do
+	  acc = simd.bxor(acc, simd.convert(siq, v))
+	  v = v + step
+	end
+	return acc
+      end)
+    local _, ncvq = cvq:gsub("vcvttsd2si", "")
+    check(ncvq == 4, "double4 conversion must issue one conversion per lane")
 
     local b8, q4 = T.W.i8x32.ct, T.W.i64x4.ct
     checkymm("i8x32 multiply emulation", {"vpmullw ymm"}, function()

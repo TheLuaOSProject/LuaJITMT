@@ -29,7 +29,7 @@ status is non-zero if anything failed.
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks vector IR/constants and explicit YMM operands |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists and memory round trips against a small C helper library compiled at test time; callbacks taking and returning vectors by value for every lane kind, ten vector arguments (registers plus stack), 16-byte stack alignment behind eight register arguments, mixed integer/FP/vector argument lists, and the rejection of vectors too wide for a register |
 | `bench.lua` | scalar/XMM/YMM comparisons for small and heavy kernels, plus production-sized 1080p Gaussian blur, 64-tap audio FIR, 32-step particle gravity/collision simulation and 20-round ChaCha20 block processing |
-| `bench_ops.lua` | realistic kernels, per-operation latency, and a direct XMM/YMM lane-throughput comparison for the AVX2 backend |
+| `bench_ops.lua` | realistic kernels, per-operation latency, four-chain numeric-conversion throughput, and direct XMM/YMM lane-throughput comparisons for the AVX2 backend |
 | `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |
 
 ## Method
@@ -104,6 +104,23 @@ record the right guard polarity").
 **Corner values.** `M.randlanes` biases the generator towards 0, 1, -1, the
 all-ones pattern, and for FP towards +-0, +-inf and NaN, so those cases appear
 in every run instead of being separate hand-written tests.
+
+The extended conversion tests also feed arbitrary source bit patterns through
+`u32 -> float`, `i64/u64 -> double`, and `double -> i64/u64`, then XOR-reduce
+the vector results. That keeps every output bit observable, including NaN
+payloads and integer-indefinite lanes. Codegen checks require the packed magic
+number sequences, forbid helper calls, and require exactly two/four
+`CVTTSD2SI` instructions for XMM/YMM double-to-qword conversion.
+
+Cross-width interpreter tests include integer values just one unit beyond an
+`i64/u64 -> float` rounding midpoint. Converting through `double` first gives
+the wrong neighbouring float for those values, so the reference path casts
+64-bit integers directly to `float` when that is the requested lane type.
+
+Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
+This matters under aggressive PGO builds: C arithmetic negation may quiet an
+sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the
+IEEE sign bit explicitly too.
 
 **Interpreter vs JIT.** Every file runs in both modes. In addition,
 `test_jit.lua` runs the *same closure* interpreted once and compiled many

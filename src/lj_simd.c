@@ -169,8 +169,13 @@ int lj_simd_unop(void *dp, const void *ap, const CTVecInfo *vi, uint32_t op)
   uint32_t k = vi->kind;
   switch (op) {
   case VUN_NEG:
-    if (k == VECK_F32) VEC_UN(float, -x)
-    if (k == VECK_F64) VEC_UN(double, -x)
+    /* Flip the sign bit explicitly. Arithmetic negation is allowed to quiet
+    ** a signalling NaN under aggressive optimization, while the JIT XOR
+    ** lowering preserves every payload bit.
+    */
+    if (k == VECK_F32) VEC_UN(uint32_t, x ^ 0x80000000u)
+    if (k == VECK_F64)
+      VEC_UN(uint64_t, x ^ U64x(80000000,00000000))
     switch (vi->esize) {
     case 1: VEC_UNO(uint8_t, uint32_t, 0u - x)
     case 2: VEC_UNO(uint16_t, uint32_t, 0u - x)
@@ -727,13 +732,8 @@ static void vec_setlane_num(void *dp, const CTVecInfo *vi, uint32_t i, double x)
   }
 }
 
-/*
-** Numeric lane conversion. Only conversions with a direct packed lowering are
-** allowed; everything else is rejected by the caller-visible return value.
-**
-** Supported: equal lane count with any element kinds where at least one side
-** is 32/64 bit, plus integer widen/narrow between adjacent widths with an
-** equal *total* size relationship handled by the lane count check below.
+/* Numeric lane conversion. The interpreter accepts every numeric pair with
+** an equal lane count. The recorder separately chooses the native JIT subset.
 */
 int lj_simd_convert(void *dp, const CTVecInfo *dvi,
 		    const void *sp, const CTVecInfo *svi)
@@ -751,20 +751,18 @@ int lj_simd_convert(void *dp, const CTVecInfo *dvi,
 	const uint8_t *p = (const uint8_t *)sp + i*8;
 	if (svi->kind == VECK_I64) {
 	  int64_t v; memcpy(&v, p, 8);
-	  vec_setlane_num(tmp, dvi, i, (double)v);
+	  if (dvi->kind == VECK_F32) {
+	    float f = (float)v; memcpy(tmp + i*4, &f, 4);
+	  } else {
+	    vec_setlane_num(tmp, dvi, i, (double)v);
+	  }
 	} else {
 	  uint64_t v; memcpy(&v, p, 8);
-	  vec_setlane_num(tmp, dvi, i, (double)v);
-	}
-      }
-    } else if (dvi->esize == 8 && !veck_isfp(dvi->kind)) {
-      for (i = 0; i < n; i++) {
-	double x = vec_getlane_num(sp, svi, i);
-	uint8_t *p = tmp + i*8;
-	if (dvi->kind == VECK_I64) {
-	  int64_t v = (int64_t)x; memcpy(p, &v, 8);
-	} else {
-	  uint64_t v = (uint64_t)x; memcpy(p, &v, 8);
+	  if (dvi->kind == VECK_F32) {
+	    float f = (float)v; memcpy(tmp + i*4, &f, 4);
+	  } else {
+	    vec_setlane_num(tmp, dvi, i, (double)v);
+	  }
 	}
       }
     } else {

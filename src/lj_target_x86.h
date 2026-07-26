@@ -478,6 +478,8 @@ typedef enum {
   XO_VFMADD231 = XO_0f38(b8),		/* FMA */
   XO_ROUNDPS =	XO_0f3a(08),		/* SSE4.1 */
   XO_ROUNDPD =	XO_0f3a(09),		/* SSE4.1 */
+  XO_VINSERTF128 = XO_0f3a(18),		/* AVX */
+  XO_VEXTRACTF128 = XO_0f3a(19),	/* AVX */
   XO_VPERM2I128 = XO_0f3a(46),		/* AVX2 */
   XO_VPERMD =	XO_0f38(36),		/* AVX2 */
   XO_VPERMQ =	XO_0f3a(00),		/* AVX2, W=1 */

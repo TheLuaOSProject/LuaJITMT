@@ -872,21 +872,111 @@ static void asm_vecextract(ASMState *as, IRIns *ir)
   }
 }
 
-/* Lane conversion. Only the pairs with a direct packed instruction get here. */
+/* Move a qword from a GPR into the low lane of an XMM register. */
+static void emit_vmovq_gpr(ASMState *as, Reg dest, Reg src)
+{
+  if ((as->flags & JIT_F_AVX))
+    emit_vexrrw(as, XO_MOVD, dest, VEXNOV, src, 1);
+  else
+    emit_rr(as, XO_MOVD, dest|REX_64, src|REX_64);
+}
+
+/* Truncate the low double lane to a signed qword (the indefinite result on
+** NaN or overflow). The VEX form avoids an AVX-to-SSE transition in YMM code.
+*/
+static void emit_vcvttsd2si64(ASMState *as, Reg dest, Reg src)
+{
+  if ((as->flags & JIT_F_AVX))
+    emit_vexrrw(as, XO_CVTTSD2SI, dest, VEXNOV, src, 1);
+  else
+    emit_rr(as, XO_CVTTSD2SI, dest|REX_64, src);
+}
+
+/*
+** There is no packed double-to-qword conversion before AVX-512. Scalar
+** CVTTSD2SI is the fastest available instruction; convert two lanes per XMM
+** half, then assemble the qwords back into one vector without a call or a
+** memory round trip.
+*/
+static void asm_vecconv_f64_i64(ASMState *as, IRIns *ir)
+{
+  int wide = irt_isvec256(ir->t);
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  RegSet fallow = rset_exclude(RSET_FPR, dest);
+  RegSet gallow = RSET_GPR;
+  Reg tmp, upper = RID_NONE, upout = RID_NONE;
+  Reg g0, g1, g2 = RID_NONE, g3 = RID_NONE;
+  fallow = rset_exclude(fallow, left);
+  tmp = ra_scratch(as, fallow);
+  fallow = rset_exclude(fallow, tmp);
+  if (wide) {
+    upper = ra_scratch(as, fallow);
+    fallow = rset_exclude(fallow, upper);
+    upout = ra_scratch(as, fallow);
+  }
+  g0 = ra_scratch(as, gallow);
+  gallow = rset_exclude(gallow, g0);
+  g1 = ra_scratch(as, gallow);
+  gallow = rset_exclude(gallow, g1);
+  if (wide) {
+    g2 = ra_scratch(as, gallow);
+    gallow = rset_exclude(gallow, g2);
+    g3 = ra_scratch(as, gallow);
+  }
+
+  /* Reverse emission of the forward scalar-convert/packed-assemble sequence. */
+  if (wide) {
+    emit_i8(as, 1);
+    emit_vexrrl(as, XO_VINSERTF128, dest, dest, upout, 1);
+    emit_vrr3l(as, XO_PUNPCKLQDQ, upout, upout, tmp, 0);
+    emit_vmovq_gpr(as, tmp, g3);
+    emit_vmovq_gpr(as, upout, g2);
+    checkmclim(as);
+  }
+  emit_vrr3l(as, XO_PUNPCKLQDQ, dest, dest, tmp, 0);
+  emit_vmovq_gpr(as, tmp, g1);
+  emit_vmovq_gpr(as, dest, g0);
+  if (wide) {
+    emit_vcvttsd2si64(as, g3, tmp);
+    emit_vrr2il(as, XO_PSHUFD, tmp, upper, 0xee, 0);
+    emit_vcvttsd2si64(as, g2, upper);
+  }
+  emit_vcvttsd2si64(as, g1, tmp);
+  emit_vrr2il(as, XO_PSHUFD, tmp, left, 0xee, 0);
+  emit_vcvttsd2si64(as, g0, left);
+  if (wide) {
+    emit_i8(as, 1);
+    /* VEXTRACTF128 reverses the usual ModRM direction: the YMM source is
+    ** encoded in reg and the XMM destination in r/m.
+    */
+    emit_vexrrl(as, XO_VEXTRACTF128, left, VEXNOV, upper, 1);
+  }
+}
+
+/* Lane conversion. Packed emulations are expanded by the recorder; the
+** double-to-qword case uses the call-free scalar sequence above.
+*/
 static void asm_vecconv(ASMState *as, IRIns *ir)
 {
   uint32_t lit = (uint32_t)ir->op2;
   uint32_t dk = irvconv_dst(lit), sk = irvconv_src(lit);
   int wide = irt_isvec256(ir->t);
-  Reg dest = ra_dest(as, ir, RSET_FPR);
-  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-  if (dk == VECK_F32)
+  Reg dest, left;
+  if (sk == VECK_F64 && (dk == VECK_I64 || dk == VECK_U64)) {
+    asm_vecconv_f64_i64(as, ir);
+    return;
+  }
+  dest = ra_dest(as, ir, RSET_FPR);
+  left = ra_alloc1(as, ir->op1, RSET_FPR);
+  if (dk == VECK_F32) {
     emit_vrr2l(as, XO_CVTDQ2PS, dest, left, wide);
-  else if (sk == VECK_F32)
+  } else if (sk == VECK_F32) {
     emit_vrr2l(as, XO_CVTTPS2DQ, dest, left, wide);
-  else
+  } else {
     emit_vrr2l(as, XO_MOVAPS, dest, left, wide);
     /* Same-width reinterpretation. */
+  }
 }
 
 /* -- Dispatch ------------------------------------------------------------ */

@@ -1652,6 +1652,15 @@ static TRef crec_simd_k32(jit_State *J, IRType vt, uint32_t v)
   return lj_ir_kvec(J, vt, vbuf);
 }
 
+/* A vector constant built from a repeating 64 bit pattern. */
+static TRef crec_simd_k64(jit_State *J, IRType vt, uint64_t v)
+{
+  uint8_t vbuf[LJ_VEC_MAXSIZE];
+  uint32_t i;
+  for (i = 0; i < sizeof(vbuf); i += 8) memcpy(vbuf+i, &v, 8);
+  return lj_ir_kvec(J, vt, vbuf);
+}
+
 /*
 ** Broadcast the low byte of every 16 bit lane into both halves of that lane.
 ** Multiplying by 0x0101 is v | (v << 8) for v <= 0xff, cannot carry, and
@@ -2173,13 +2182,58 @@ void LJ_FASTCALL recff_ffi_simd_bitcast(jit_State *J, RecordFFData *rd)
   J->base[0] = crec_vec_box(J, a, dvt, did);
 }
 
+/*
+** Convert packed u32 lanes to float without AVX-512. Each source lane is
+** split into two exactly representable 16 bit pieces encoded directly as
+** floats; their biases cancel before the one rounding addition.
+*/
+static TRef crec_simd_u32tof32(jit_State *J, IRType svt, IRType dvt, TRef a)
+{
+  TRef lo = emitir(IRT(IR_VAND, svt), a,
+		   crec_simd_k32(J, svt, 0x0000ffffu));
+  TRef hi = emitir(IRT(IR_VSHR, svt), a, lj_ir_kint(J, 16));
+  lo = emitir(IRT(IR_VOR, svt), lo,
+	      crec_simd_k32(J, svt, 0x4b000000u));
+  hi = emitir(IRT(IR_VOR, svt), hi,
+	      crec_simd_k32(J, svt, 0x53000000u));
+  hi = emitir(IRT(IR_VSUB, dvt), hi,
+	      crec_simd_k32(J, dvt, 0x53000080u));
+  return emitir(IRT(IR_VADD, dvt), lo, hi);
+}
+
+/*
+** Convert packed 64 bit integers to double from exact 32 bit pieces.
+** ORing the pieces into binary64 mantissas makes the integer arithmetic
+** implicit; the constants remove the exponents and leave one final rounded
+** add. For signed input, bias the high dword by 2^31 first.
+*/
+static TRef crec_simd_i64tof64(jit_State *J, IRType svt, IRType dvt, TRef a,
+			       int uns)
+{
+  uint64_t bias = U64x(45300000,00100000);
+  TRef lo = emitir(IRT(IR_VAND, svt), a,
+		   crec_simd_k64(J, svt, U64x(00000000,ffffffff)));
+  TRef hi = emitir(IRT(IR_VSHR, svt), a, lj_ir_kint(J, 32));
+  if (!uns) {
+    hi = emitir(IRT(IR_VXOR, svt), hi,
+		crec_simd_k64(J, svt, U64x(00000000,80000000)));
+    bias = U64x(45300000,80100000);
+  }
+  lo = emitir(IRT(IR_VOR, svt), lo,
+	      crec_simd_k64(J, svt, U64x(43300000,00000000)));
+  hi = emitir(IRT(IR_VOR, svt), hi,
+	      crec_simd_k64(J, svt, U64x(45300000,00000000)));
+  hi = emitir(IRT(IR_VSUB, dvt), hi, crec_simd_k64(J, dvt, bias));
+  return emitir(IRT(IR_VADD, dvt), lo, hi);
+}
+
 void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   CTVecInfo svi, dvi; CTypeID sid; IRType svt, dvt;
   CTypeID did;
   TRef trct = J->base[0];
-  TRef a;
+  TRef a, r;
   CType *dct;
   if (!trct || !tref_iscdata(trct)) lj_trace_err(J, LJ_TRERR_BADTYPE);
   {
@@ -2195,10 +2249,22 @@ void LJ_FASTCALL recff_ffi_simd_convert(jit_State *J, RecordFFData *rd)
     J->base[0] = crec_vec_box(J, a, dvt, did);
     return;
   }
+  if (dvi.kind == VECK_F32 && svi.kind == VECK_U32) {
+    r = crec_simd_u32tof32(J, svt, dvt, a);
+    J->base[0] = crec_vec_box(J, r, dvt, did);
+    return;
+  }
+  if (dvi.kind == VECK_F64 &&
+      (svi.kind == VECK_I64 || svi.kind == VECK_U64)) {
+    r = crec_simd_i64tof64(J, svt, dvt, a, svi.kind == VECK_U64);
+    J->base[0] = crec_vec_box(J, r, dvt, did);
+    return;
+  }
   /* Only the conversions with a direct packed instruction are compiled. */
   crec_simd_need(J,
     (dvi.kind == VECK_F32 && (svi.kind == VECK_I32)) ||
     (svi.kind == VECK_F32 && (dvi.kind == VECK_I32 || dvi.kind == VECK_U32)) ||
+    (svi.kind == VECK_F64 && (dvi.kind == VECK_I64 || dvi.kind == VECK_U64)) ||
     (!veck_isfp(dvi.kind) && !veck_isfp(svi.kind) && dvi.esize == svi.esize));
   J->base[0] = crec_vec_box(J,
     emitir(IRT(IR_VCONV, dvt), a, IRVCONV(dvi.kind, svi.kind)), dvt, did);
