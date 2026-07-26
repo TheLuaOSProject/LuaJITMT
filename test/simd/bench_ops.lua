@@ -573,6 +573,11 @@ do
 	  function(x)
 	    return simd.select(simd.gt(x, i4(0)), x, -x)
 	  end)
+  op_cost("i32x4 restore sign",
+	  function() return i4(7), i4(-1, 0, 1, -2) end,
+	  function(x, sign)
+	    return simd.select(simd.ge(sign, i4(0)), x, -x)
+	  end)
   op_cost("i32x4 select generic", function() return ia, ib, i4(1) end,
 	  function(x, y, z)
 	    return simd.select(simd.gt(x, y), x + z, y)
@@ -957,6 +962,15 @@ if has_ymm then
     function() return i8(-7) end,
     function(x) return simd.select(simd.gt(x, i4(0)), x, -x) end,
     function(x) return simd.select(simd.gt(x, i8(0)), x, -x) end)
+  width_cost("int32 restore sign",
+    function() return i4(7), i4(-1, 0, 1, -2) end,
+    function() return i8(7), i8(-1, 0, 1, -2, 2, -3, 3, -4) end,
+    function(x, sign)
+      return simd.select(simd.ge(sign, i4(0)), x, -x)
+    end,
+    function(x, sign)
+      return simd.select(simd.ge(sign, i8(0)), x, -x)
+    end)
   width_cost("int32 select generic",
     function() return i4(3), i4(5), i4(1) end,
     function() return i8(3), i8(5), i8(1) end,

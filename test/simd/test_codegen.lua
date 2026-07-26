@@ -503,6 +503,41 @@ test("ffi.simd operations are packed", function()
 	end
 	return acc
       end)
+
+    local nosignsel = {"pcmpgtb", "pcmpgtw", "pcmpgtd",
+		       "pand", "pandn", "por", "pxor",
+		       "psubb", "psubw", "psubd"}
+    local msign = checkloop("i8 comparison-select restore sign",
+      {"psignb"}, nosignsel, function()
+	local sign = i1(-1, 0, 1, -2, 2, -3, 3, -4,
+			4, -5, 5, -6, 6, -7, 7, -8)
+	local acc = i1(7)
+	for _ = 1, 400 do
+	  acc = simd.select(simd.ge(sign, i1(0)), acc, -acc)
+	end
+	return acc
+      end)
+    if msign then
+      check(count(msign, "psignb") == 1,
+	    "i8 sign restoration must use exactly one packed sign operation")
+    end
+    checkloop("i16 reversed comparison-select restore sign",
+      {"psignw"}, nosignsel, function()
+	local sign = i2(-1, 0, 1, -2, 2, -3, 3, -4)
+	local acc = i2(17)
+	for _ = 1, 400 do
+	  acc = simd.select(simd.lt(sign, i2(0)), -acc, acc)
+	end
+	return acc
+      end)
+    checkloop("i32 comparison-select restore sign",
+      {"psignd"}, nosignsel, function()
+	local sign, acc = i4(-1, 0, 1, -2), i4(31)
+	for _ = 1, 400 do
+	  acc = simd.select(simd.ge(sign, i4(0)), acc, -acc)
+	end
+	return acc
+      end)
   end
   if simd.features().sse4_2 then
     local q2 = T.T.i64x2.ct
@@ -519,6 +554,18 @@ test("ffi.simd operations are packed", function()
     if mq then
       check(count(mq, "psubq") == 1,
 	    "i64 absolute value must have one subtract, not a separate negation")
+    end
+    local qsign = checkloop("i64 comparison-select restore sign",
+      {"pxor", "psubq"}, {"pand", "pandn", "por"}, function()
+	local sign, acc = q2(-1, 0), q2(63)
+	for _ = 1, 400 do
+	  acc = simd.select(simd.ge(sign, q2(0)), acc, -acc)
+	end
+	return acc
+      end)
+    if qsign then
+      check(count(qsign, "pxor") == 1 and count(qsign, "psubq") == 1,
+	    "i64 sign restoration must be one XOR and one subtract")
     end
   end
   checkloop("shifts", {"pslld", "psrad"}, NOCALL, function()
@@ -1764,6 +1811,34 @@ if simd.features().avx2 then
 	  not body:find("vpand", 1, true) and
 	  not body:find("vpor", 1, true),
 	  "YMM qword absolute value retained compare-select logic")
+
+    body = checkymm("i32x8 comparison-select restore sign",
+      {"vpsignd ymm"}, function()
+	local sign = i8(-1, 0, 1, -2, 2, -3, 3, -4)
+	local acc = i8(31)
+	for _ = 1, 400 do
+	  acc = simd.select(simd.ge(sign, i8(0)), acc, -acc)
+	end
+	return acc
+      end)
+    check(not body:find("vpcmpgtd", 1, true) and
+	  not body:find("vpand", 1, true) and
+	  not body:find("vpor", 1, true) and
+	  not body:find("vpxor", 1, true) and
+	  not body:find("vpsubd", 1, true),
+	  "YMM dword sign restoration must be one VPSIGND")
+
+    body = checkymm("i64x4 comparison-select restore sign",
+      {"vpxor ymm", "vpsubq ymm"}, function()
+	local sign, acc = q4(-1, 0, 1, -2), q4(63)
+	for _ = 1, 400 do
+	  acc = simd.select(simd.ge(sign, q4(0)), acc, -acc)
+	end
+	return acc
+      end)
+    check(not body:find("vpand", 1, true) and
+	  not body:find("vpor", 1, true),
+	  "YMM qword sign restoration retained select logic")
 
     checkymm("i32x8 whole equality",
       {"vpcmpeqb ymm", "vpmovmskb"},

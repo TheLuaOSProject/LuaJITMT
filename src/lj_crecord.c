@@ -2492,6 +2492,46 @@ static int crec_simd_iskfill(jit_State *J, IRRef ref, uint32_t size,
   return 1;
 }
 
+/* Match select arms y/-y and return the positive arm's operand. */
+static TRef crec_simd_pmarm(jit_State *J, IRType vt, uint32_t size,
+			    TRef a, TRef b, int *truthpos)
+{
+  IRIns *na = IR(tref_ref(a)), *nb = IR(tref_ref(b));
+  if (nb->o == IR_VSUB && irt_vtype(nb->t) == vt &&
+      nb->op2 == tref_ref(a) &&
+      crec_simd_iskfill(J, nb->op1, size, 0)) {
+    *truthpos = 1;
+    return a;
+  }
+  if (na->o == IR_VSUB && irt_vtype(na->t) == vt &&
+      na->op2 == tref_ref(b) &&
+      crec_simd_iskfill(J, na->op1, size, 0)) {
+    *truthpos = 0;
+    return b;
+  }
+  return 0;
+}
+
+/* Match a comparison against a literal zero. maskpos says whether a true
+** final mask denotes the positive/non-negative side of the other operand.
+*/
+static TRef crec_simd_cmpzero(jit_State *J, IRIns *mc, IRType vt,
+			      uint32_t size, int inv, int *maskpos,
+			      TRef *pzero)
+{
+  if (crec_simd_iskfill(J, mc->op2, size, 0)) {
+    *maskpos = 1 ^ inv;
+    *pzero = TREF(mc->op2, vt);
+    return TREF(mc->op1, vt);
+  }
+  if (crec_simd_iskfill(J, mc->op1, size, 0)) {
+    *maskpos = inv;
+    *pzero = TREF(mc->op1, vt);
+    return TREF(mc->op2, vt);
+  }
+  return 0;
+}
+
 void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo mvi, vi; CTypeID mid, id; IRType mvt, vt;
@@ -2528,36 +2568,47 @@ void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
   ca = mc->op1;
   cb = mc->op2;
   /*
-  ** select(x > 0, x, -x), and its <, >= and <= equivalents, are signed
-  ** integer absolute value. Match only a literal zero and the exact negated
-  ** selected operand. This preserves wraparound at INT_MIN and avoids
-  ** changing the subtler FP NaN and signed-zero rules.
+  ** A comparison against zero selecting y/-y has two important packed
+  ** forms. Keep this strictly signed-integer: FP has different NaN and
+  ** signed-zero rules, while unsigned comparisons have biased operands.
   */
   if (!veck_isfp(vi.kind) && !veck_isunsigned(vi.kind) &&
       mc->o == IR_VCMPGT && irt_vtype(mc->t) == vt &&
-      mvi.esize == vi.esize && mvi.lanes == vi.lanes &&
-      (vi.esize == 8 || (J->flags & JIT_F_SSSE3))) {
-    TRef x = 0;
-    int truthpos = 0, maskpos = 0, haszero = 0;
-    IRIns *na = IR(tref_ref(a)), *nb = IR(tref_ref(b));
-    if (nb->o == IR_VSUB && irt_vtype(nb->t) == vt &&
-	nb->op2 == tref_ref(a) &&
-	crec_simd_iskfill(J, nb->op1, size, 0)) {
-      x = a; truthpos = 1;
-    } else if (na->o == IR_VSUB && irt_vtype(na->t) == vt &&
-	       na->op2 == tref_ref(b) &&
-	       crec_simd_iskfill(J, na->op1, size, 0)) {
-      x = b; truthpos = 0;
-    }
-    if (x) {
-      if (ca == tref_ref(x) && crec_simd_iskfill(J, cb, size, 0)) {
-	maskpos = 1 ^ inv; haszero = 1;
-      } else if (cb == tref_ref(x) &&
-		 crec_simd_iskfill(J, ca, size, 0)) {
-	maskpos = inv; haszero = 1;
+      mvi.esize == vi.esize && mvi.lanes == vi.lanes) {
+    int truthpos = 0, maskpos = 0;
+    TRef y = crec_simd_pmarm(J, vt, size, a, b, &truthpos);
+    TRef z = 0;
+    TRef x = crec_simd_cmpzero(J, mc, vt, size, inv, &maskpos, &z);
+    if (x && y && truthpos == maskpos) {
+      /*
+      ** select(x > 0, x, -x), and its <, >= and <= equivalents, are
+      ** absolute value. PABS preserves the wrapped INT_MIN bit pattern.
+      */
+      if (tref_ref(x) == tref_ref(y) &&
+	  (vi.esize == 8 || (J->flags & JIT_F_SSSE3))) {
+	r = crec_simd_iabs(J, vt, &vi, y);
+	J->base[0] = crec_vec_box(J, r, vt, id);
+	return;
       }
-      if (haszero && truthpos == maskpos) {
-	r = crec_simd_iabs(J, vt, &vi, x);
+      /*
+      ** select(x >= 0, y, -y) and select(x < 0, -y, y) apply x's sign
+      ** to y. At zero only these inclusive/strict polarities select +y.
+      ** The comparison producing the sign fill is already present and CSEs.
+      */
+      if (inv == maskpos) {
+	if (vi.esize != 8 && (J->flags & JIT_F_SSSE3)) {
+	  uint8_t ebuf[8];
+	  TRef nz;
+	  memset(ebuf, 0, sizeof(ebuf));
+	  ebuf[0] = 1;  /* PSIGN treats a zero control lane as zero. */
+	  nz = emitir(IRT(IR_VOR, vt), x,
+		      crec_vec_kmask(J, vt, &vi, ebuf));
+	  r = emitir(IRT(IR_VSIGN, vt), y, nz);
+	} else {
+	  TRef sign = emitir(IRT(IR_VCMPGT, vt), z, x);
+	  r = emitir(IRT(IR_VSUB, vt),
+		     emitir(IRT(IR_VXOR, vt), y, sign), sign);
+	}
 	J->base[0] = crec_vec_box(J, r, vt, id);
 	return;
       }

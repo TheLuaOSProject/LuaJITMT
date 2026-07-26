@@ -981,6 +981,7 @@ local resid_pp16 = has_ymm and
   ffi.cast(ffi.typeof("$ *", resid16), resid_pred)
 local resid_op16 = has_ymm and
   ffi.cast(ffi.typeof("$ *", resid16), resid_out_y)
+local resid_rshift = require("bit").rshift
 
 local function resid_scalar()
   local cur, pred, out = resid_cur, resid_pred, resid_out_s
@@ -1036,9 +1037,81 @@ local function resid_ymm()
   return sample_sum(resid_out_y, RESID_N)
 end
 
+local function resid_signed_scalar()
+  local cur, pred = resid_cur, resid_pred
+  local rshift = resid_rshift
+  local a1, a3, a5, a7 = 0, 0, 0, 0
+  for _ = 1, RESID_PASSES do
+    for i = 0, RESID_N-1 do
+      local d = cur[i] - pred[i]
+      local mag = d < 0 and -d or d
+      local q1 = rshift(mag + 8, 4)
+      local q3 = rshift(mag*3 + 8, 4)
+      local q5 = rshift(mag*5 + 8, 4)
+      local q7 = rshift(mag*7 + 8, 4)
+      if d < 0 then q1, q3, q5, q7 = -q1, -q3, -q5, -q7 end
+      a1, a3, a5, a7 = a1+q1, a3+q3, a5+q5, a7+q7
+    end
+  end
+  return tonumber(ffi.cast("int16_t", a1)) +
+	 tonumber(ffi.cast("int16_t", a3)) +
+	 tonumber(ffi.cast("int16_t", a5)) +
+	 tonumber(ffi.cast("int16_t", a7))
+end
+
+local function resid_signed_xmm()
+  local cur, pred = resid_cp8, resid_pp8
+  local a1, a3, a5, a7 = resid8(0), resid8(0), resid8(0), resid8(0)
+  for _ = 1, RESID_PASSES do
+    for i = 0, RESID_N/8-1 do
+      local d = cur[i] - pred[i]
+      local mag = simd.select(simd.gt(d, resid8(0)), d, -d)
+      local q1 = simd.shr(mag + resid8(8), 4)
+      local q3 = simd.shr(mag*resid8(3) + resid8(8), 4)
+      local q5 = simd.shr(mag*resid8(5) + resid8(8), 4)
+      local q7 = simd.shr(mag*resid8(7) + resid8(8), 4)
+      q1 = simd.select(simd.ge(d, resid8(0)), q1, -q1)
+      q3 = simd.select(simd.ge(d, resid8(0)), q3, -q3)
+      q5 = simd.select(simd.ge(d, resid8(0)), q5, -q5)
+      q7 = simd.select(simd.ge(d, resid8(0)), q7, -q7)
+      a1, a3, a5, a7 = a1+q1, a3+q3, a5+q5, a7+q7
+    end
+  end
+  return tonumber(simd.hsum(a1)) + tonumber(simd.hsum(a3)) +
+	 tonumber(simd.hsum(a5)) + tonumber(simd.hsum(a7))
+end
+
+local function resid_signed_ymm()
+  local cur, pred = resid_cp16, resid_pp16
+  local a1, a3, a5, a7 = resid16(0), resid16(0), resid16(0), resid16(0)
+  for _ = 1, RESID_PASSES do
+    for i = 0, RESID_N/16-1 do
+      local d = cur[i] - pred[i]
+      local mag = simd.select(simd.gt(d, resid16(0)), d, -d)
+      local q1 = simd.shr(mag + resid16(8), 4)
+      local q3 = simd.shr(mag*resid16(3) + resid16(8), 4)
+      local q5 = simd.shr(mag*resid16(5) + resid16(8), 4)
+      local q7 = simd.shr(mag*resid16(7) + resid16(8), 4)
+      q1 = simd.select(simd.ge(d, resid16(0)), q1, -q1)
+      q3 = simd.select(simd.ge(d, resid16(0)), q3, -q3)
+      q5 = simd.select(simd.ge(d, resid16(0)), q5, -q5)
+      q7 = simd.select(simd.ge(d, resid16(0)), q7, -q7)
+      a1, a3, a5, a7 = a1+q1, a3+q3, a5+q5, a7+q7
+    end
+  end
+  return tonumber(simd.hsum(a1)) + tonumber(simd.hsum(a3)) +
+	 tonumber(simd.hsum(a5)) + tonumber(simd.hsum(a7))
+end
+
 real_benches.residual = {
   scalar = resid_scalar, xmm = resid_xmm, ymm = resid_ymm,
   name = "4K residual codebook", mpixels = RESID_N/1000000,
+}
+real_benches.signedresidual = {
+  scalar = resid_signed_scalar,
+  xmm = resid_signed_xmm,
+  ymm = resid_signed_ymm,
+  name = "4K four-rate quantize",
 }
 end
 
@@ -2045,7 +2118,7 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.residual.mpixels,
   real_benches.checksum.mib, real_benches.activations.mib,
   real_benches.ternary.mib,
@@ -2078,6 +2151,7 @@ run_real(real_benches.depth)
 run_real(real_benches.pcm)
 run_real(real_benches.pcmfir)
 run_real(real_benches.residual)
+run_real(real_benches.signedresidual)
 run_real(real_benches.activations)
 run_real(real_benches.ternary)
 run_real(real_benches.blur)

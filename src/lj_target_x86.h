@@ -436,6 +436,9 @@ typedef enum {
 
   /* SSSE3 and SSE4: three byte opcodes, need emit_prefix66(). */
   XO_PSHUFB =	XO_0f38(00),		/* SSSE3 */
+  XO_PSIGNB =	XO_0f38(08),		/* SSSE3 */
+  XO_PSIGNW =	XO_0f38(09),		/* SSSE3 */
+  XO_PSIGND =	XO_0f38(0a),		/* SSSE3 */
   XO_PALIGNR =	XO_0f3a(0f),		/* SSSE3 */
   XO_PHMINPOSUW=XO_0f38(41),		/* SSE4.1, always XMM */
   XO_PABSB =	XO_0f38(1c),		/* SSSE3 */

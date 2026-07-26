@@ -622,6 +622,74 @@ test("signed comparison-select absolute-value idioms on trace", function()
   end, 300)
 end)
 
+test("signed comparison-select magnitude restoration on trace", function()
+  local tabs = {T.T}
+  if simd.features().avx2 then tabs[#tabs+1] = T.W end
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      if ti.signed and not ti.fp then
+	local min = ti.bits == 64 and
+	  ffi.cast("int64_t", 0x8000000000000000ULL) or
+	  -(2 ^ (ti.bits-1))
+	local max = ti.bits == 64 and
+	  ffi.cast("int64_t", 0x7fffffffffffffffULL) or
+	  (2 ^ (ti.bits-1))-1
+	local slanes, vlanes = {}, {}
+	for i = 1, ti.lanes do
+	  local pick = (i-1) % 5
+	  slanes[i] = pick == 0 and min or pick == 1 and -1 or
+		      pick == 2 and 0 or pick == 3 and 1 or max
+	  vlanes[i] = pick == 0 and min or pick == 1 and -23 or
+		      pick == 2 and 0 or pick == 3 and 17 or max
+	end
+	local sign, value, ct = T.vec(ti, slanes), T.vec(ti, vlanes), ti.ct
+	diffop(ti, "restore sign ge", function(n)
+	  local r = ct(0)
+	  for _ = 1, n do
+	    r = simd.select(simd.ge(sign, ct(0)), value, -value)
+	  end
+	  return r
+	end, 300)
+	diffop(ti, "restore sign lt", function(n)
+	  local r = ct(0)
+	  for _ = 1, n do
+	    r = simd.select(simd.lt(sign, ct(0)), -value, value)
+	  end
+	  return r
+	end, 300)
+
+	-- Strict-positive and inclusive-negative forms deliberately choose
+	-- -value when the sign lane is zero, so they are not sign restoration.
+	local zeros = ct(0)
+	diffop(ti, "strict positive zero polarity", function(n)
+	  local r = value
+	  for _ = 1, n do
+	    r = simd.select(simd.gt(zeros, ct(0)), value, -value)
+	  end
+	  return r
+	end, 300)
+	diffop(ti, "inclusive negative zero polarity", function(n)
+	  local r = value
+	  for _ = 1, n do
+	    r = simd.select(simd.le(zeros, ct(0)), -value, value)
+	  end
+	  return r
+	end, 300)
+      end
+    end
+  end
+
+  local ui = T.T.u32x4.ct(0, 1, 0x80000000, 0xffffffff)
+  local sv = T.T.i32x4.ct(-7, 11, -13, 17)
+  diff("unsigned mask does not restore a signed magnitude", function(n)
+    local r = sv
+    for _ = 1, n do
+      r = simd.select(simd.ge(ui, T.T.u32x4.ct(0)), sv, -sv)
+    end
+    return r
+  end, 300)
+end)
+
 test("ffi.simd shifts on trace", function()
   -- The count is a *literal* in this first loop. Lane widths without a shift
   -- instruction (8 bit lanes, and the 64 bit arithmetic shift) are rewritten

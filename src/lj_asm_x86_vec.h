@@ -1543,6 +1543,12 @@ static void asm_vec(ASMState *as, IRIns *ir)
   case IR_VFMA: asm_vecfma(as, ir); return;
   case IR_VSQRT: asm_vecsqrt(as, ir); return;
   case IR_VABS: asm_vecabs(as, ir); return;
+  case IR_VSIGN:
+    xo = t == IRT_V16I8 ? XO_PSIGNB :
+	 t == IRT_V8I16 ? XO_PSIGNW : XO_PSIGND;
+    lj_assertA(t != IRT_V2I64, "packed qword sign operation");
+    asm_vecbin(as, ir, xo, 1);
+    return;
   case IR_VROUND: asm_vecround(as, ir); return;
   case IR_VSHUF: asm_vecshuf(as, ir); return;
   case IR_VSHUF2: asm_vecshuf2(as, ir); return;

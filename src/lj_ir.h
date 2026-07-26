@@ -189,6 +189,7 @@
   _(VFMA,	N , ref, ref) \
   _(VSQRT,	N , ref, ___) \
   _(VABS,	N , ref, ___) \
+  _(VSIGN,	N , ref, ref) \
   _(VROUND,	N , ref, lit) \
   _(VSHUF,	N , ref, lit) \
   /* Two inputs plus a mode/immediate carried by op2's CARG. */ \
