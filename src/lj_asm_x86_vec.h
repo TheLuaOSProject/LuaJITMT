@@ -522,21 +522,53 @@ static void asm_vecshiftv(ASMState *as, IRIns *ir)
 ** second and third arrive through a CARG pair: VFMA(a, CARG(b, c)) is
 ** a*b + c. asm_ir() treats a CARG as a no-op, so the pair costs no code.
 **
-** VFMADD213PS/PD computes dest = vvvv * dest + rm, i.e. the destination is
-** also the second multiplicand. b is therefore moved into dest by ra_left(),
-** and a and c must be kept out of dest so that move cannot clobber them.
+** Every FMA form overwrites its destination, but the three differ in which
+** operand the destination doubles as. Picking the form whose operand is
+** already in the destination register removes the copy entirely, which
+** matters: the accumulator of a loop-carried chain lives in a fixed register,
+** so always using 213 cost two MOVAPS per iteration and made the fused chain
+** slower than the separate multiply and add it was meant to replace.
 */
 static void asm_vecfma(ASMState *as, IRIns *ir)
 {
   IRIns *arg = IR(ir->op2);
+  IRRef aref = ir->op1, bref = arg->op1, cref = arg->op2;
   int w = irt_type(ir->t) == IRT_V2F64;
   Reg dest = ra_dest(as, ir, RSET_FPR);
   RegSet allow = rset_exclude(RSET_FPR, dest);
-  Reg ra = ra_alloc1(as, ir->op1, allow);
-  Reg rc = ra_alloc1(as, arg->op2, rset_exclude(allow, ra));
+  IRRef keep, vref, mref;
+  x86Op xo;
+  Reg rv, rm;
+  /*
+  ** All three forms overwrite the destination; they differ only in which
+  ** operand it doubles as. Whichever one is chosen is moved into dest by
+  ** ra_left() below, so pick the operand for which that move is free.
+  **
+  ** A PHI operand is the loop-carried accumulator. It has to share a register
+  ** with this instruction's result anyway, so putting anything else in dest
+  ** forces two copies every iteration -- which is what made a fused chain
+  ** slower than the separate multiply and add it replaces.
+  **
+  ** Failing that, use the first multiplicand. In a chain of fmas that is the
+  ** result of the previous one, a temporary that dies here and therefore gets
+  ** dest for free. Preferring the addend instead looks attractive but is
+  ** wrong whenever it is a loop-invariant value: it is still needed on the
+  ** next iteration, so it has to be copied out first.
+  */
+#define fma_phi(x)	(irt_isphi(IR(x)->t))
   lj_assertA(arg->o == IR_CARG, "VFMA op2 is not a CARG pair");
-  emit_vexrrw(as, XO_VFMADD213, dest, ra, rc, w);
-  ra_left(as, dest, arg->op1);
+  if (fma_phi(cref)) {			/* dest = a*b + dest */
+    xo = XO_VFMADD231; keep = cref; vref = aref; mref = bref;
+  } else if (fma_phi(bref) && !fma_phi(aref)) {	/* dest = a*dest + c */
+    xo = XO_VFMADD213; keep = bref; vref = aref; mref = cref;
+  } else {				/* dest = dest*b + c */
+    xo = XO_VFMADD132; keep = aref; vref = cref; mref = bref;
+  }
+#undef fma_phi
+  rv = ra_alloc1(as, vref, allow);
+  rm = vref == mref ? rv : ra_alloc1(as, mref, rset_exclude(allow, rv));
+  emit_vexrrw(as, xo, dest, rv, rm, w);
+  ra_left(as, dest, keep);
 }
 
 /* -- Unary and shuffle operations ---------------------------------------- */

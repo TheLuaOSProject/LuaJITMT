@@ -185,7 +185,7 @@ Semantics worth pinning down:
 | `sar` on 64-bit lanes | no instruction before AVX-512, so the recorder rewrites it into `((v>>n)^m)-m` with `m = (1<<63)>>n`. Constant and variable counts are both packed; for a variable count `m` is built at runtime and the count is clamped to 63 with six branchless GPR instructions |
 | `lt/le/gt/ge` on 64-bit integer lanes | requires SSE4.2 (PCMPGTQ); otherwise JIT NYI |
 | `floor/ceil/trunc/round` | requires SSE4.1 (ROUNDPS); otherwise JIT NYI |
-| `fma` | requires the FMA feature; otherwise JIT NYI. Ordinary `a*b+c` written with operators is **never** fused into it, because that would round once where the interpreter rounds twice |
+| `fma` | requires the FMA feature; otherwise JIT NYI. The backend picks between VFMADD132/213/231 so the operand that has to live in the destination is already there, see `SIMD_DESIGN.md` D18. Ordinary `a*b+c` written with operators is **never** fused into it, because that would round once where the interpreter rounds twice |
 | `shuffle`/`shuffle2` with 8/16-bit lanes | requires SSSE3 (PSHUFB); otherwise JIT NYI |
 | `abs` on 8/16/32-bit integer lanes | uses SSSE3 PABSB/W/D; without SSSE3 it stays interpreted |
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |

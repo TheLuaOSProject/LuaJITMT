@@ -456,8 +456,17 @@ typedef enum {
   XO_VPSRLV =	XO_0f38(45),		/* AVX2 */
   XO_VPSRAV =	XO_0f38(46),		/* AVX2, W=0 only */
   XO_VPSLLV =	XO_0f38(47),		/* AVX2 */
-  /* VFMADD213: dest = vvvv * dest + rm. W=0 float, W=1 double. */
+  /*
+  ** The three FMA forms differ only in which operand the destination doubles
+  ** as, so the backend can pick the one that needs no register copy:
+  **   132: dest = dest * rm   + vvvv
+  **   213: dest = vvvv * dest + rm
+  **   231: dest = vvvv * rm   + dest
+  ** W=0 selects float lanes, W=1 double.
+  */
+  XO_VFMADD132 = XO_0f38(98),		/* FMA */
   XO_VFMADD213 = XO_0f38(a8),		/* FMA */
+  XO_VFMADD231 = XO_0f38(b8),		/* FMA */
   XO_ROUNDPS =	XO_0f3a(08),		/* SSE4.1 */
   XO_ROUNDPD =	XO_0f3a(09),		/* SSE4.1 */
   XO_PINSRB =	XO_0f3a(20),		/* SSE4.1 */

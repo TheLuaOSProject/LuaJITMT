@@ -472,3 +472,48 @@ Note which tests can and cannot see this. Disabling the lowering leaves every
 single-rounded answer -- that is the fallback working correctly. Only the
 codegen test notices that `vfmadd213ps` disappeared. Any operation whose
 fallback is exact needs a codegen test to back up a claim of JIT support.
+
+## D18. Which FMA form to emit
+
+x86 has three encodings of the same fused multiply-add. They differ only in
+which operand the destination register doubles as:
+
+    132: dest = dest * rm   + vvvv
+    213: dest = vvvv * dest + rm
+    231: dest = vvvv * rm   + dest
+
+Every one of them overwrites the destination, so whichever operand the form
+puts there has to be moved in first. Always using one form makes that move
+unconditional, and it is not free: with 213 a loop-carried accumulator chain
+compiled to two MOVAPS plus the fused instruction, three instructions where
+the separate multiply and add it was meant to replace needs two. Measured, the
+"fused" version was *slower*.
+
+The backend now picks the form whose operand is already where it needs to be:
+
+  * A **PHI operand** wins outright. It is the loop-carried accumulator, so it
+    must share a register with this instruction's result anyway; putting
+    anything else in the destination forces a copy out and a copy back every
+    iteration. `fma(a, b, acc)` therefore picks 231, `fma(acc, b, c)` picks
+    132, and both become a single instruction.
+  * Otherwise the **first multiplicand** goes in the destination (132). In a
+    chain of fmas that is the result of the previous one: a temporary that
+    dies here and so is given the destination for free.
+
+Preferring the addend whenever it merely "has no register yet" looks like the
+same idea but is wrong, and was tried: a loop-invariant addend has no register
+at that point either, yet it is still needed on the next iteration, so it has
+to be copied out. Restricting the test to IR constants is also not enough,
+because a vector operand read from a cdata upvalue is a hoisted load, not an
+IR constant.
+
+What is left is one unavoidable copy at the *head* of a chain whose innermost
+operands are all loop-invariant: nothing dies there, so something must be
+moved. A degree-4 Horner chain went from four copies to one.
+
+The benchmark reports fma in two shapes on purpose. On a latency-bound
+loop-carried chain it is 1.75x, close to the 8-cycle versus 4-cycle ratio it
+should be. On a loop whose iterations are independent it is slightly *slower*,
+because the loop is bound by the separate accumulator's dependency chain and
+the one remaining copy lands on the critical path. Reporting only the first
+number would oversell the operation.

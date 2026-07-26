@@ -175,9 +175,17 @@ do
 end
 
 ------------------------------------------------------- horner with fma ----
--- Same polynomial, but asking for the fused form explicitly. The value is a
--- single rounding per step; the speed is a bonus that only shows up here
--- because the loop is arithmetic bound.
+-- Same polynomial, but asking for the fused form explicitly. Reported in two
+-- shapes on purpose, because they answer different questions.
+--
+-- The array version accumulates into a separate total, so its iterations are
+-- independent and the loop is bound by that accumulator's dependency chain,
+-- not by the polynomial. Halving the arithmetic buys nothing there, and the
+-- one register copy the innermost fma needs (none of its operands dies, so
+-- something has to be moved into the destination) lands on the critical path
+-- and makes it slightly slower. The loop-carried version is bound by the
+-- chain itself, which is where fusing two 4-cycle operations into one shows
+-- up as roughly the 2x it should be.
 if simd.features().fma then
   local N = 1 << 14
   local xs = ffi.new(ffi.typeof("$[?]", f4), N)
@@ -208,7 +216,24 @@ if simd.features().fma then
     return tonumber(acc[0])
   end)
   io.write(string.format("%-30s mul+add %6.2f ms   fma %7.2f ms   %5.2fx\n",
-			 "  same, fused", tmul*1000, tfma*1000, tmul/tfma))
+			 "  same, fused (throughput)", tmul*1000, tfma*1000,
+			 tmul/tfma))
+
+  local ITER = 1 << 22
+  local c1, c2 = f4(1.0000001), f4(0.0000001)
+  local tm = time(function()
+    local a = f4(1)
+    for _ = 1, ITER do a = a*c1 + c2 end
+    return tonumber(a[0])
+  end)
+  local tf = time(function()
+    local a = f4(1)
+    for _ = 1, ITER do a = fma(a, c1, c2) end
+    return tonumber(a[0])
+  end)
+  io.write(string.format("%-30s mul+add %6.2f ns   fma %7.2f ns   %5.2fx\n",
+			 "  fused (latency chain)", tm*1e9/ITER, tf*1e9/ITER,
+			 tm/tf))
 end
 
 --------------------------------------------------------------- byte scan ----

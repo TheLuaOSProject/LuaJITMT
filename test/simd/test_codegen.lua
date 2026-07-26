@@ -275,21 +275,48 @@ test("fma compiles to a single fused instruction", function()
     check(true, "no FMA on this CPU, codegen skipped")
     return
   end
+  -- Any of VFMADD132/213/231: which one is chosen depends on where the
+  -- accumulator lives, and all three are equally fused.
+  local function fused(m)
+    local n = 0
+    for k, v in pairs(m or {}) do if k:find("fmadd", 1, true) then n = n + v end end
+    return n
+  end
   local f4 = T.T.float4.ct
   local a, b = f4(1.5, 2.5, 3.5, 4.5), f4(0.25)
-  -- One vfmadd and no separate packed multiply: the fusion is the point.
-  checkloop("float4 fma", {"fmadd213ps"}, {"call", "mulps"}, function()
-    local acc = f4(0)
-    for _ = 1, 400 do acc = simd.fma(a, b, acc) end
-    return acc
-  end)
+  -- Accumulator as the addend: fma(a, b, acc). This must be one instruction
+  -- with no register copy. Using a fixed form instead of picking the one
+  -- whose operand is already in the destination cost two MOVAPS per
+  -- iteration here and made the fused chain slower than mul+add.
+  local m = checkloop("float4 fma acc", {}, {"call", "mulps", "movaps"},
+    function()
+      local acc = f4(0)
+      for _ = 1, 400 do acc = simd.fma(a, b, acc) end
+      return acc
+    end)
+  check(fused(m) == 1,
+	"float4 fma acc: expected exactly one fused instruction, got " ..
+	fused(m))
+  -- Accumulator as the first multiplicand: fma(acc, b, c). Also one
+  -- instruction, via a different form.
+  local m2 = checkloop("float4 fma chain", {}, {"call", "mulps", "movaps"},
+    function()
+      local acc = f4(1)
+      for _ = 1, 400 do acc = simd.fma(acc, b, a) end
+      return acc
+    end)
+  check(fused(m2) == 1,
+	"float4 fma chain: expected exactly one fused instruction, got " ..
+	fused(m2))
   local d2 = T.T.double2.ct
   local a2, b2 = d2(1.5, 2.5), d2(0.25)
-  checkloop("double2 fma", {"fmadd213pd"}, {"call", "mulpd"}, function()
+  local m3 = checkloop("double2 fma", {}, {"call", "mulpd"}, function()
     local acc = d2(0)
     for _ = 1, 400 do acc = simd.fma(a2, b2, acc) end
     return acc
   end)
+  check(fused(m3) == 1,
+	"double2 fma: expected exactly one fused instruction, got " .. fused(m3))
 end)
 
 test("per-lane shift counts use the AVX2 variable shifts", function()
