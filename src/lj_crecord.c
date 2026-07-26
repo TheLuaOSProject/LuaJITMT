@@ -3169,6 +3169,7 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   uint32_t n = vi.lanes, sz = (uint32_t)vi.esize * vi.lanes;
+  IRType rvt = vt;
   int uns = veck_isunsigned(vi.kind);
   int sse41 = (J->flags & JIT_F_SSE4_1) != 0;
   IROp op;
@@ -3193,6 +3194,19 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     lj_trace_err(J, LJ_TRERR_NYIVEC);
     return;
   }
+  if (rd->data == VRD_SUM && vi.esize == 1) {
+    /*
+    ** PSADBW against zero sums each group of eight byte bit-patterns into a
+    ** qword. The final lane-width narrowing makes this identical for signed
+    ** and unsigned byte sums, including wraparound.
+    */
+    IRType qvt = (IRType)(IRT_V2I64 | (vt & IRT_VEC256));
+    uint8_t zbuf[LJ_VEC_MAXSIZE];
+    memset(zbuf, 0, sizeof(zbuf));
+    r = emitir(IRT(IR_VSADU8, qvt), a, lj_ir_kvec(J, vt, zbuf));
+    rvt = qvt;
+    n = sz >> 3;
+  }
   /* The same pairwise halving tree the interpreter uses: shift the vector
   ** right by half its remaining width and combine.
   */
@@ -3200,11 +3214,11 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     TRef half;
     n >>= 1;
     sz >>= 1;
-    half = emitir(IRT(IR_VSHUF, vt), r,
-      IRVSHUF((vt & IRT_VEC256) && sz == 16 ?
+    half = emitir(IRT(IR_VSHUF, rvt), r,
+      IRVSHUF((rvt & IRT_VEC256) && sz == 16 ?
 	      IRVSHUF_SWAP128 : IRVSHUF_PSRLDQ, sz));
     r = mm64 ? crec_simd_minmax64(J, vt, &vi, r, half, rd->data == VRD_MAX)
-	     : emitir(IRT(op, vt), r, half);
+	     : emitir(IRT(op, rvt), r, half);
   }
   {
     IRType et = veck_isfp(vi.kind) ?

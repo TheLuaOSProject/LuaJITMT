@@ -78,6 +78,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M55 | Fuse one-use final array loads into native AVX two-source shuffle memory operands | done |
 | M56 | Collapse lane-local and full-width contiguous two-source windows through `PALIGNR` | done |
 | M57 | Lower non-repeating full-width YMM dword/qword blends through one `VPBLENDD` | done |
+| M58 | Reduce signed/unsigned byte vectors through `PSADBW` qword partial sums | done |
 
 ## Commands that pass
 
@@ -663,3 +664,12 @@ half. Paired-byte and dword dependent blends improve from about 0.571 to
 0.386 ns/vector at both widths, roughly 32%; isolated dword cost is about
 0.19 ns/vector. Unpaired bytes and non-repeating controls retain the generic
 route.
+
+Byte `hsum` now forms eight-byte qword partial sums with `PSADBW` against
+zero, then combines only those partials. The low byte of an unsigned
+bit-pattern sum is identical to modular signed or unsigned byte addition, so
+the existing final sign/zero extension preserves both lane semantics.
+Dependent XMM/YMM reductions improve from roughly 0.96--1.11 to
+0.62--0.79 ns, and eight-chain throughput from 0.86--1.05 to
+0.52--0.68 ns/op. `bench.lua` now includes a 16 MiB, 32-byte block-checksum
+workload with explicitly unrolled scalar, XMM and YMM implementations.

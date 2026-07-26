@@ -169,6 +169,8 @@
   _(VSUBS,	N , ref, ref) \
   _(VADDSU,	C , ref, ref) \
   _(VSUBSU,	N , ref, ref) \
+  /* Unsigned byte SAD, producing one qword partial sum per 8 bytes. */ \
+  _(VSADU8,	C , ref, ref) \
   _(VCMPEQ,	C , ref, ref) \
   _(VCMPGT,	N , ref, ref) \
   _(VCMPGE,	N , ref, ref) \

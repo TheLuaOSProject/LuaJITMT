@@ -104,6 +104,8 @@ static x86Op asm_vecxo(IROp op, IRType t)
     return t == IRT_V16I8 ? XO_PADDUSB : XO_PADDUSW;
   case IR_VSUBSU:
     return t == IRT_V16I8 ? XO_PSUBUSB : XO_PSUBUSW;
+  case IR_VSADU8:
+    return XO_PSADBW;
   default:
     return (x86Op)0;
   }
@@ -1463,6 +1465,7 @@ static void asm_vec(ASMState *as, IRIns *ir)
   case IR_VAND: case IR_VOR: case IR_VXOR:
   case IR_VUNPKL: case IR_VUNPKH:
   case IR_VADDS: case IR_VSUBS: case IR_VADDSU: case IR_VSUBSU:
+  case IR_VSADU8:
     xo = asm_vecxo((IROp)ir->o, t);
     lj_assertA(xo != 0, "no packed opcode for IR op %d type %d", ir->o, t);
     asm_vecbin(as, ir, xo, 0);

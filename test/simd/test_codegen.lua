@@ -1127,6 +1127,27 @@ test("horizontal reduction uses shuffles, not lane loads", function()
     check(count(m, "psrldq") == 2, "hsum float4: two halving steps, got " ..
 	  tostring(count(m, "psrldq")))
   end
+  for _, name in ipairs({"i8x16", "u8x16"}) do
+    local ct = T.T[name].ct
+    local b = ct(1)
+    local bm = checkloop(name .. " hsum", {"psadbw", "paddq"},
+      NOCALL, function()
+	local s, v = 0, ct(0)
+	for _ = 1, 400 do
+	  v = v + b
+	  s = s + tonumber(simd.hsum(v))
+	end
+	return s
+      end)
+    if bm then
+      check(count(bm, "psadbw") == 1,
+	    name .. " hsum: exactly one packed byte partial sum")
+      check(count(bm, "paddq") == 1,
+	    name .. " hsum: exactly one qword combine")
+      check(count(bm, "paddb") == 1,
+	    name .. " hsum: byte add is only the loop's vector update")
+    end
+  end
 end)
 
 test("shuffle and insert are packed", function()
@@ -2223,6 +2244,21 @@ if simd.features().avx2 then
 	end
 	return v, sum
       end)
+
+    local b32 = T.W.i8x32.ct
+    local bv = b32(1)
+    local body = checkymm("i8x32 hsum",
+      {"vpsadbw ymm", "vperm2i128 ymm", "vpaddq ymm", "vpsrldq ymm"},
+      function()
+	local v, sum = b32(0), 0
+	for _ = 1, 400 do
+	  v = v + bv
+	  sum = sum + tonumber(simd.hsum(v))
+	end
+	return v, sum
+      end)
+    check(count(mnemonics(body), "paddb") == 1,
+	  "i8x32 hsum must reduce qword partial sums, not every byte lane")
   end)
 end
 

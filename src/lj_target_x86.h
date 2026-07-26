@@ -371,6 +371,7 @@ typedef enum {
   XO_PSUBQ =	XO_660f(fb),
   XO_PMULLW =	XO_660f(d5),
   XO_PMULUDQ =	XO_660f(f4),
+  XO_PSADBW =	XO_660f(f6),
   XO_PMULDQ =	XO_0f38(28),		/* SSE4.1 */
   XO_PAND =	XO_660f(db),
   XO_PANDN =	XO_660f(df),

@@ -194,6 +194,15 @@ repeating mask must continue to use `PBLENDW`, and the unpaired-byte case
 must continue through the generic route. An indexed-array case requires the
 `VPBLENDD` itself to contain the final memory source.
 
+Byte-reduction codegen checks cover signed and unsigned XMM lanes and signed
+YMM lanes. XMM must contain exactly one `PSADBW`, one qword combine and no
+byte combines beyond the benchmark's loop-carried input update. YMM must
+contain `VPSADBW`, one half exchange, and qword-only final combines. The
+randomized interpreter/JIT reduction differential covers both signednesses,
+overflowing byte values and every supported CPU feature level. A 16 MiB
+32-byte block-checksum benchmark continuously exercises direct array loads,
+two XMM reductions versus one YMM reduction, and exact scalar output.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

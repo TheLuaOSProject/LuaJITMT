@@ -640,6 +640,75 @@ real_benches.rgba = {
 }
 end
 
+-------------------------------------------------------- block checksums --
+
+do
+-- Produce an 8-bit additive checksum for every 32-byte storage/network
+-- block in a 16 MiB payload. Block checksums are used for quick corruption
+-- screening, deduplication chunking and packet framing. The scalar loop is
+-- explicitly unrolled so this measures packed byte reduction rather than
+-- loop overhead; XMM consumes two vectors per block and YMM one.
+local CHECKSUM_N = 16 * 1024 * 1024
+local CHECKSUM_BLOCKS = CHECKSUM_N / 32
+local CHECKSUM_PASSES = 3
+local checksum_in = ffi.new("uint8_t[?]", CHECKSUM_N)
+local checksum_s = ffi.new("uint8_t[?]", CHECKSUM_BLOCKS)
+local checksum_x = ffi.new("uint8_t[?]", CHECKSUM_BLOCKS)
+local checksum_y = has_ymm and ffi.new("uint8_t[?]", CHECKSUM_BLOCKS)
+for i = 0, CHECKSUM_N-1 do checksum_in[i] = (i*29 + i%251 + 17) % 256 end
+local byte16 = ffi.typeof("u8x16")
+local byte32 = has_ymm and ffi.typeof("u8x32")
+local checksum_v16 = ffi.cast(ffi.typeof("$ *", byte16), checksum_in)
+local checksum_v32 = has_ymm and
+		     ffi.cast(ffi.typeof("$ *", byte32), checksum_in)
+
+local function checksum_scalar()
+  local src, out = checksum_in, checksum_s
+  for _ = 1, CHECKSUM_PASSES do
+    for i = 0, CHECKSUM_BLOCKS-1 do
+      local p = i*32
+      out[i] =
+	src[p]    + src[p+1]  + src[p+2]  + src[p+3]  +
+	src[p+4]  + src[p+5]  + src[p+6]  + src[p+7]  +
+	src[p+8]  + src[p+9]  + src[p+10] + src[p+11] +
+	src[p+12] + src[p+13] + src[p+14] + src[p+15] +
+	src[p+16] + src[p+17] + src[p+18] + src[p+19] +
+	src[p+20] + src[p+21] + src[p+22] + src[p+23] +
+	src[p+24] + src[p+25] + src[p+26] + src[p+27] +
+	src[p+28] + src[p+29] + src[p+30] + src[p+31]
+    end
+  end
+  return sample_sum(out, CHECKSUM_BLOCKS)
+end
+
+local function checksum_xmm()
+  local src, out = checksum_v16, checksum_x
+  for _ = 1, CHECKSUM_PASSES do
+    for i = 0, CHECKSUM_BLOCKS-1 do
+      local p = i*2
+      out[i] = tonumber(simd.hsum(src[p])) +
+	       tonumber(simd.hsum(src[p+1]))
+    end
+  end
+  return sample_sum(out, CHECKSUM_BLOCKS)
+end
+
+local function checksum_ymm()
+  local src, out = checksum_v32, checksum_y
+  for _ = 1, CHECKSUM_PASSES do
+    for i = 0, CHECKSUM_BLOCKS-1 do
+      out[i] = tonumber(simd.hsum(src[i]))
+    end
+  end
+  return sample_sum(out, CHECKSUM_BLOCKS)
+end
+
+real_benches.checksum = {
+  scalar = checksum_scalar, xmm = checksum_xmm, ymm = checksum_ymm,
+  name = "32-byte block checksum", mib = CHECKSUM_N/(1024*1024),
+}
+end
+
 -------------------------------------------------------- 1080p Gaussian blur --
 
 do
@@ -1289,8 +1358,9 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, %.2fs audio, %d particles, %d ChaCha blocks\n",
-  real_benches.audio.seconds, real_benches.particles.count,
+  "\nReal-world kernels: 1080p RGBA merge + blur, %.0f MiB checksums, %.2fs audio, %d particles, %d ChaCha blocks\n",
+  real_benches.checksum.mib, real_benches.audio.seconds,
+  real_benches.particles.count,
   real_benches.chacha.blocks))
 
 local function run_real(b)
@@ -1311,6 +1381,7 @@ local function run_real(b)
 end
 
 run_real(real_benches.rgba)
+run_real(real_benches.checksum)
 run_real(real_benches.blur)
 run_real(real_benches.audio)
 run_real(real_benches.particles)

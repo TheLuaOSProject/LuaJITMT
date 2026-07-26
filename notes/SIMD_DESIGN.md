@@ -1453,3 +1453,35 @@ ns/vector, roughly 22--23%. Eight independent chains improve from 0.220 to
 added as another headline benchmark: it saturated memory bandwidth and was
 neutral despite the shorter code, while the permanent operation benchmark
 isolates the execution and register-pressure gain.
+
+## D52. Reduce byte sums through qword partial sums
+
+The ordinary horizontal-reduction tree halves a vector with `PSRLDQ` and
+combines it at the original lane width. That is appropriate for floating
+point, min/max, and wider integer sums, but it spends eight instructions on
+an XMM byte sum and ten on a YMM byte sum.
+
+`VSADU8` represents the packed unsigned-byte sum-of-absolute-differences
+primitive and produces one qword partial sum per eight input bytes. For byte
+`hsum`, the recorder supplies a zero second operand, then runs the existing
+halving tree over the two XMM or four YMM qword partials. A loop-invariant
+zero vector is rematerialised with `PXOR`; AVX can still fuse a one-use byte
+array load into the `VPSADBW` memory source.
+
+Using unsigned byte bit patterns for a signed reduction is exact here. Both
+the interpreter and packed byte adds compute modulo 256, and
+
+```
+sum(unsigned_byte_bits) mod 256 == sum(signed_bytes) mod 256
+```
+
+The existing byte extraction then sign-extends or zero-extends that same low
+byte according to the source ctype. XMM consequently needs one `PSADBW`, one
+qword shift and one `PADDQ`; YMM needs those plus one half swap and one qword
+add. Dependent latency improves by about 35--40%, with a similar gain across
+eight independent chains.
+
+The production benchmark suite now writes one additive checksum per 32-byte
+block across a 16 MiB payload. Its scalar path is explicitly unrolled across
+all 32 bytes, while XMM uses two reductions and YMM one, so the comparison
+measures packed reduction rather than an inner-loop bookkeeping advantage.
