@@ -149,7 +149,7 @@
   _(CARG,	N , ref, ref) \
   \
   /* Vector ops. ORDER VEC */ \
-  _(VSPLAT,	N , ref, ___) \
+  _(VSPLAT,	N , ref, lit) \
   _(VADD,	C , ref, ref) \
   _(VSUB,	N , ref, ref) \
   _(VMUL,	C , ref, ref) \
@@ -285,6 +285,10 @@ IRFLDEF(FLENUM)
   IRFL__MAX
 } IRFieldID;
 
+/* VSPLAT op2 literal. */
+#define IRVSPLAT_BROADCAST	0	/* Broadcast the scalar to every lane. */
+#define IRVSPLAT_SEED		1	/* Scalar in lane zero, other lanes zero. */
+
 /* VSHUF op2 literal: shuffle mode in bits 8+, immediate in bits 0-7. */
 #define IRVSHUF_PSHUFD		0	/* Permute the four 32 bit lanes. */
 #define IRVSHUF_PSRLDQ		1	/* Shift the whole vector right, bytes. */
@@ -303,6 +307,7 @@ IRFLDEF(FLENUM)
 #define IRVSHUF2_ALIGNR256	5
 #define IRVSHUF2_PBLENDD	6
 #define IRVSHUF2_INSERT		7	/* XMM plus scalar, not two vectors. */
+#define IRVSHUF2_BUILD256	8	/* Join low/high XMM halves into YMM. */
 #define IRVSHUF2(mode, imm)	(((mode)<<8) + (imm))
 
 /* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in

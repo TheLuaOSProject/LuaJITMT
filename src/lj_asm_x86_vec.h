@@ -594,6 +594,29 @@ static void asm_vsplat(ASMState *as, IRIns *ir)
   IRType t = irt_type(ir->t);
   int wide = irt_isvec256(ir->t);
   Reg dest = ra_dest(as, ir, RSET_FPR);
+  if (ir->op2 == IRVSPLAT_SEED) {
+    lj_assertA(!wide, "seeded wide vector");
+    if (t == IRT_V4F32) {
+      Reg src = ra_alloc1(as, ir->op1, RSET_FPR);
+      lj_assertA(as->flags & JIT_F_SSE4_1,
+		 "float vector seed without SSE4.1");
+      emit_i8(as, 0x0e);  /* Insert lane zero and zero all other lanes. */
+      if ((as->flags & JIT_F_AVX))
+	emit_vexrrw(as, XO_INSERTPS, dest, src, src, 0);
+      else if (asm_vec3byte(XO_INSERTPS))
+	emit_vrr66(as, XO_INSERTPS, dest, src);
+      else
+	emit_rr(as, XO_INSERTPS, dest, src);
+    } else if (t == IRT_V2F64) {
+      Reg src = ra_alloc1(as, ir->op1, RSET_FPR);
+      emit_vrr2(as, XO_MOVQrm, dest, src);
+    } else {
+      Reg src = ra_alloc1(as, ir->op1, RSET_GPR);
+      emit_vmovd_gpr(as, dest, src, t == IRT_V2I64);
+    }
+    return;
+  }
+  lj_assertA(ir->op2 == IRVSPLAT_BROADCAST, "bad VSPLAT mode");
   if (wide) {
     if (t == IRT_V4F32 || t == IRT_V2F64) {
       Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
@@ -1017,6 +1040,17 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
   lit = (uint32_t)k->i;
   mode = lit >> 8;
   imm = (int32_t)(lit & 255);
+  if (mode == IRVSHUF2_BUILD256) {
+    Reg left;
+    lj_assertA(wide && (as->flags & JIT_F_AVX),
+	       "building a wide vector without AVX");
+    dest = ra_dest(as, ir, RSET_FPR);
+    left = ra_alloc1(as, lref, RSET_FPR);
+    right = ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
+    emit_i8(as, 1);
+    emit_vexrrl(as, XO_VINSERTF128, dest, left, right, 1);
+    return;
+  }
   if (mode == IRVSHUF2_INSERT) {
     IRType t = irt_type(ir->t);
     int fp = irt_isvecfp(ir->t);

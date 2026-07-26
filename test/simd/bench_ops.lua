@@ -470,6 +470,76 @@ do
   end, approx_sum)
 end
 
+io.write("\n== dynamic vector construction (ns/vector, construct + add) ==\n")
+
+-- Assemble vectors from independent runtime scalars. This is common at the
+-- boundary between structure-of-arrays data and packed math (geometry,
+-- colours, audio frames, packet fields). It used to allocate temporary cdata,
+-- store every lane and reload the vector on each iteration.
+local function ctor2(ct, i)
+  return ct(i, i+1)
+end
+
+local function ctor4(ct, i)
+  return ct(i, i+1, i+2, i+3)
+end
+
+local function ctor8(ct, i)
+  return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
+end
+
+local function ctor16(ct, i)
+  return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
+	    i+8, i+9, i+10, i+11, i+12, i+13, i+14, i+15)
+end
+
+local function ctor32(ct, i)
+  return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
+	    i+8, i+9, i+10, i+11, i+12, i+13, i+14, i+15,
+	    i+16, i+17, i+18, i+19, i+20, i+21, i+22, i+23,
+	    i+24, i+25, i+26, i+27, i+28, i+29, i+30, i+31)
+end
+
+local function constructor_latency(ct, make)
+  local ITERS = 1 << 20
+  jit_.flush()
+  local best = math.huge
+  for _ = 1, REPS do
+    local acc = ct(0)
+    local t0 = os.clock()
+    for i = 1, ITERS do acc = acc + make(ct, i) end
+    local dt = os.clock() - t0
+    if dt < best then best = dt end
+    local lane0 = tonumber(acc[0])
+    if lane0 ~= lane0 then io.write("nan\n") end
+  end
+  return best*1e9/ITERS
+end
+
+if has_ymm then
+  io.write("                                      XMM       YMM   lane throughput\n")
+else
+  io.write("                                      XMM\n")
+end
+
+local function constructor_cost(name, xct, xmake, yct, ymake)
+  local tx = constructor_latency(xct, xmake)
+  if yct then
+    local ty = constructor_latency(yct, ymake)
+    io.write(string.format("  %-24s %6.2f ns  %6.2f ns      %5.2fx\n",
+			   name, tx, ty, 2*tx/ty))
+  else
+    io.write(string.format("  %-24s %6.2f ns\n", name, tx))
+  end
+end
+
+constructor_cost("float lanes", f4, ctor4, f8, ctor8)
+constructor_cost("double lanes", d2, ctor2, d4, ctor4)
+constructor_cost("int32 lanes", i4, ctor4, i8, ctor8)
+constructor_cost("int16 lanes", i16, ctor8, i16w, ctor16)
+constructor_cost("int8 lanes", s8, ctor16, s8w, ctor32)
+constructor_cost("int64 lanes", i64, ctor2, i64w, ctor4)
+
 io.write("\n== per-operation throughput (ns per 128-bit op, loop-carried) ==\n")
 
 -- A dependent chain of one operation, so the number is latency bound and

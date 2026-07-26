@@ -108,6 +108,78 @@ test("multi-lane constant vector constructors on trace", function()
   end, 200)
 end)
 
+test("multi-lane dynamic vector constructors on trace", function()
+  local function dynamic(ct, lanes, i)
+    if lanes == 2 then
+      return ct(i*3+1, i*3+2)
+    elseif lanes == 4 then
+      return ct(i*3+1, i*3+2, i*3+3, i*3+4)
+    elseif lanes == 8 then
+      return ct(i*3+1, i*3+2, i*3+3, i*3+4,
+		i*3+5, i*3+6, i*3+7, i*3+8)
+    elseif lanes == 16 then
+      return ct(i*3+1, i*3+2, i*3+3, i*3+4,
+		i*3+5, i*3+6, i*3+7, i*3+8,
+		i*3+9, i*3+10, i*3+11, i*3+12,
+		i*3+13, i*3+14, i*3+15, i*3+16)
+    else
+      return ct(i*3+1, i*3+2, i*3+3, i*3+4,
+		i*3+5, i*3+6, i*3+7, i*3+8,
+		i*3+9, i*3+10, i*3+11, i*3+12,
+		i*3+13, i*3+14, i*3+15, i*3+16,
+		i*3+17, i*3+18, i*3+19, i*3+20,
+		i*3+21, i*3+22, i*3+23, i*3+24,
+		i*3+25, i*3+26, i*3+27, i*3+28,
+		i*3+29, i*3+30, i*3+31, i*3+32)
+    end
+  end
+
+  local tabs = {T.T}
+  if simd.features().avx2 then tabs[#tabs+1] = T.W end
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      local ct, lanes = ti.ct, ti.lanes
+      diff(ti.name .. " multi-lane dynamic constructor", function(n)
+	local acc = ct(0)
+	for i = 1, n do acc = acc + dynamic(ct, lanes, i) end
+	return acc
+      end, 200)
+    end
+  end
+
+  local i4, u4, f4 = T.T.i32x4.ct, T.T.u32x4.ct, T.T.float4.ct
+  diff("partial dynamic vector constructor", function(n)
+    local acc = i4(0)
+    for i = 1, n do acc = acc + i4(i, -i) end
+    return acc
+  end, 200)
+  diff("ffi.new multi-lane dynamic vector", function(n)
+    local acc = i4(0)
+    for i = 1, n do acc = acc + ffi.new(i4, i, i+1, i+2, i+3) end
+    return acc
+  end, 200)
+  diff("mixed dynamic vector conversions", function(n)
+    local acc = i4(0)
+    for i = 1, n do acc = acc + i4(i, -1, i+0x100000000, -i-0.75) end
+    return acc
+  end, 200)
+  diff("dynamic float constructor preserves zero bits", function(n)
+    local r
+    for i = 1, n do r = f4(i*0.25, -0.0, i+0.5, 0.0) end
+    return simd.bitcast(u4, r)
+  end, 200)
+
+  local q2, int64 = T.T.i64x2.ct, ffi.typeof("int64_t")
+  diff("dynamic vector from int64 cdata lanes", function(n)
+    local acc = q2(0)
+    for i = 1, n do
+      local x = int64(i) * 0x100000003LL
+      acc = acc + q2(x, -x-17)
+    end
+    return acc
+  end, 200)
+end)
+
 test("packed mulhi emulations", function()
   for _, name in ipairs({
     "i8x16", "u8x16", "i32x4", "u32x4", "i64x2", "u64x2",

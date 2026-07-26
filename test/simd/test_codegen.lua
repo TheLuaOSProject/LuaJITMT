@@ -102,7 +102,7 @@ local function checkloop(name, want, unwanted, f, ...)
 	    body:gsub("\n", " | "))
     end
   end
-  return m, isloop
+  return m, isloop, body
 end
 
 if not ok_dump then
@@ -137,6 +137,101 @@ test("float arithmetic is packed", function()
     for _ = 1, 400 do acc = acc + c end
     return acc
   end)
+end)
+
+test("dynamic vector constructors stay in registers", function()
+  local function check_count(name, ct, want, opname, n, make)
+    local m = checkloop(name, want, NOCALL, function()
+      local acc = ct(0)
+      for i = 1, 400 do acc = acc + make(ct, i) end
+      return acc
+    end)
+    if m then
+      check(count(m, opname) == n,
+	    name .. ": expected exactly " .. n .. " " .. opname ..
+	    " instructions in the loop")
+    end
+  end
+
+  local d2 = T.T.double2.ct
+  check_count("double2 dynamic constructor", d2, {"movq", "unpcklpd", "addpd"},
+	      "unpcklpd", 1,
+    function(ct, i) return ct(i, i+1) end)
+
+  local h8 = T.T.i16x8.ct
+  check_count("i16x8 dynamic constructor", h8, {"movd", "pinsrw", "paddw"},
+	      "pinsrw", 7,
+    function(ct, i)
+      return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
+    end)
+
+  if simd.features().sse4_1 then
+    local f4 = T.T.float4.ct
+    check_count("float4 dynamic constructor", f4,
+		{"insertps", "addps"}, "insertps", 4,
+      function(ct, i) return ct(i, i+1, i+2, i+3) end)
+
+    local i4 = T.T.i32x4.ct
+    check_count("i32x4 dynamic constructor", i4,
+		{"movd", "pinsrd", "paddd"}, "pinsrd", 3,
+      function(ct, i) return ct(i, i+1, i+2, i+3) end)
+
+    local b16 = T.T.i8x16.ct
+    check_count("i8x16 dynamic constructor", b16,
+		{"movd", "pinsrb", "paddb"}, "pinsrb", 15,
+      function(ct, i)
+	return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
+		  i+8, i+9, i+10, i+11, i+12, i+13, i+14, i+15)
+      end)
+
+    if ffi.abi("64bit") then
+      local q2 = T.T.i64x2.ct
+      check_count("i64x2 dynamic constructor", q2,
+		  {"movq", "pinsrq", "paddq"}, "pinsrq", 1,
+	function(ct, i) return ct(i, i+1) end)
+    end
+  end
+
+  if simd.features().avx2 then
+    local i8 = T.W.i32x8.ct
+    local m, _, body = checkloop("i32x8 dynamic constructor",
+      {"movd", "pinsrd", "insertf128", "paddd"}, NOCALL, function()
+	local acc = i8(0)
+	for i = 1, 400 do
+	  acc = acc + i8(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
+	end
+	return acc
+      end)
+    if m then
+      check(count(m, "pinsrd") == 6,
+	    "i32x8 dynamic constructor: expected six lane inserts")
+      check(count(m, "insertf128") == 1,
+	    "i32x8 dynamic constructor: expected one half join")
+      check(body:find("vpaddd ymm", 1, true) ~= nil,
+	    "i32x8 dynamic constructor: add must remain YMM-width")
+    end
+
+    local b32 = T.W.i8x32.ct
+    m, _, body = checkloop("i8x32 dynamic constructor",
+      {"movd", "pinsrb", "insertf128", "paddb"}, NOCALL, function()
+	local acc = b32(0)
+	for i = 1, 400 do
+	  acc = acc + b32(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
+	    i+8, i+9, i+10, i+11, i+12, i+13, i+14, i+15,
+	    i+16, i+17, i+18, i+19, i+20, i+21, i+22, i+23,
+	    i+24, i+25, i+26, i+27, i+28, i+29, i+30, i+31)
+	end
+	return acc
+      end)
+    if m then
+      check(count(m, "pinsrb") == 30,
+	    "i8x32 dynamic constructor: expected thirty lane inserts")
+      check(count(m, "insertf128") == 1,
+	    "i8x32 dynamic constructor: expected one half join")
+      check(body:find("vpaddb ymm", 1, true) ~= nil,
+	    "i8x32 dynamic constructor: add must remain YMM-width")
+    end
+  end
 end)
 
 test("vector loads fuse only into alignment-safe AVX arithmetic", function()

@@ -419,6 +419,8 @@ static int crec_isnonzero(CType *s, void *p)
 static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
 			   const CTVecInfo *vi, TRef sp, CType *sct,
 			   cTValue *sval);
+static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
+			   const CTVecInfo *vi, RecordFFData *rd);
 static TRef crec_vec_box(jit_State *J, TRef val, IRType vt, CTypeID id);
 
 static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
@@ -1046,6 +1048,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
     IRType vt = crec_vec2irt(cts, d);
     uint64_t vdata[LJ_VEC_MAXSIZE/sizeof(uint64_t)];
     uint8_t *vbuf = (uint8_t *)vdata;
+    TRef trv;
     CType *ect;
     MSize i;
     if (vt != IRT_NIL && lj_ctype_vecinfo(cts, d, &vi) &&
@@ -1059,6 +1062,13 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       }
       if (i > vi.lanes || !J->base[i]) {
 	J->base[0] = crec_vec_box(J, lj_ir_kvec(J, vt, vbuf), vt, id);
+	fin = lj_ctype_meta(cts, id, MM_gc);
+	if (fin) crec_finalizer(J, J->base[0], 0, fin);
+	return;
+      }
+      trv = crec_vec_build(J, cts, vt, &vi, rd);
+      if (trv) {
+	J->base[0] = crec_vec_box(J, trv, vt, id);
 	fin = lj_ctype_meta(cts, id, MM_gc);
 	if (fin) crec_finalizer(J, J->base[0], 0, fin);
 	return;
@@ -1493,6 +1503,57 @@ static TRef crec_vec_splat(jit_State *J, CTState *cts, IRType vt,
   /* Otherwise convert with the standard FFI rules and broadcast at runtime. */
   sp = crec_ct_ct(J, ect, sct, 0, sp, NULL);
   return emitir(IRT(IR_VSPLAT, vt), sp, 0);
+}
+
+/* Build one XMM half from scalar initializer arguments. */
+static TRef crec_vec_build_half(jit_State *J, CTState *cts, IRType vt,
+				const CTVecInfo *vi, RecordFFData *rd,
+				uint32_t base, uint32_t lanes)
+{
+  CType *ect;
+  TRef v;
+  uint32_t i;
+  ect = ctype_get(cts, vi->eid);
+  v = crec_ct_tv(J, ect, 0, J->base[base], &rd->argv[base]);
+  v = emitir(IRT(IR_VSPLAT, vt), v, IRVSPLAT_SEED);
+  for (i = 1; i < lanes; i++) {
+    TRef s = crec_ct_tv(J, ect, 0, J->base[base+i],
+			&rd->argv[base+i]);
+    TRef ctl = lj_ir_kint(J, (int32_t)IRVSHUF2(IRVSHUF2_INSERT, i));
+    TRef args = emitir(IRT(IR_CARG, IRT_NIL), s, ctl);
+    v = emitir(IRT(IR_VSHUF2, vt), v, args);
+  }
+  return v;
+}
+
+/*
+** Build a full native-width initializer directly from scalar values. This is
+** the packed equivalent of the temporary cdata plus lane stores used by
+** generic aggregate initialization. Each XMM half seeds lane zero and inserts
+** the remaining scalars; YMM joins two such halves with one VINSERTF128.
+*/
+static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
+			   const CTVecInfo *vi, RecordFFData *rd)
+{
+  if (!J->base[vi->lanes] || J->base[vi->lanes+1])
+    return 0;  /* Partial dynamic initializers use the generic path. */
+  if (veck_isfp(vi->kind)) {
+    if (vi->esize == 4 && !(J->flags & JIT_F_SSE4_1)) return 0;
+  } else {
+    if (vi->esize == 1 && !(J->flags & JIT_F_SSE4_1)) return 0;
+    if (vi->esize == 4 && !(J->flags & JIT_F_SSE4_1)) return 0;
+    if (vi->esize == 8 && (!(J->flags & JIT_F_SSE4_1) || !LJ_64)) return 0;
+  }
+  if (vt & IRT_VEC256) {
+    IRType hvt = (IRType)(vt & ~IRT_VEC256);
+    uint32_t n = vi->lanes >> 1;
+    TRef lo = crec_vec_build_half(J, cts, hvt, vi, rd, 1, n);
+    TRef hi = crec_vec_build_half(J, cts, hvt, vi, rd, 1+n, n);
+    TRef ctl = lj_ir_kint(J, (int32_t)IRVSHUF2(IRVSHUF2_BUILD256, 1));
+    TRef args = emitir(IRT(IR_CARG, IRT_NIL), hi, ctl);
+    return emitir(IRT(IR_VSHUF2, vt), lo, args);
+  }
+  return crec_vec_build_half(J, cts, vt, vi, rd, 1, vi->lanes);
 }
 
 static TRef crec_simd_k16(jit_State *J, IRType vt, uint16_t v);
