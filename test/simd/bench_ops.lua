@@ -522,6 +522,14 @@ do
 	  function(x, y) return x * y end)
   op_cost("i32x4 shl const", function() return ia, ib end,
 	  function(x) return simd.shl(x, 1) end)
+  op_cost("i32x4 rol 8 idiom", function() return ia, ib end,
+	  function(x)
+	    return simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+	  end)
+  op_cost("i32x4 rol 7 idiom", function() return ia, ib end,
+	  function(x)
+	    return simd.bor(simd.shl(x, 7), simd.shr(x, 25))
+	  end)
   if features.avx2 then
     op_cost("i32x4 shl per-lane", function() return ia, i4(0, 1, 0, 1) end,
 	    function(x, y) return simd.shl(x, y) end)
@@ -807,6 +815,12 @@ if has_ymm then
     function() return i4(3), i4(0) end,
     function() return i8(3), i8(0) end,
     function(x) return simd.shl(x, 1) end)
+  width_cost("int32 rol 8 idiom",
+    function() return i4(0x1020304), i4(0) end,
+    function() return i8(0x1020304), i8(0) end,
+    function(x)
+      return simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+    end)
   width_cost("int16 shl per-lane",
     function() return i16(3), i16(0, 1, 2, 3, 4, 5, 6, 7) end,
     function()

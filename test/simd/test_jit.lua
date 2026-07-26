@@ -136,6 +136,57 @@ test("constant integer modulo is exact at signed extremes", function()
   end, 600)
 end)
 
+test("byte-aligned integer rotate idioms", function()
+  for _, c in ipairs({
+    {T.T.i16x8, function(x)
+       return simd.bor(simd.shl(x, 8), simd.shr(x, 8))
+     end},
+    {T.T.u32x4, function(x)
+       return simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+     end},
+    {T.T.i32x4, function(x)
+       return simd.bxor(simd.shr(x, 24), simd.shl(x, 8))
+     end},
+    {T.T.i64x2, function(x)
+       return simd.bor(simd.shl(x, 32), simd.shr(x, 32))
+     end},
+  }) do
+    local ti, rot = c[1], c[2]
+    local rnd = T.rng(SEED + 1709 + ti.bits)
+    local a, step = T.rand(ti, rnd), T.rand(ti, rnd)
+    diff(ti.name .. " byte rotate", function(n)
+      local acc = a
+      for _ = 1, n do
+	local x = acc + step
+	acc = rot(x)
+      end
+      return acc
+    end, 300)
+  end
+end)
+
+test("byte rotates remain exact under vector register pressure", function()
+  local ct = T.T.u32x4.ct
+  local function rot(x)
+    return simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+  end
+  local k1,k2,k3,k4,k5,k6,k7 = ct(1),ct(2),ct(3),ct(4),ct(5),ct(6),ct(7)
+  local k8,k9,k10,k11,k12,k13,k14 =
+    ct(8),ct(9),ct(10),ct(11),ct(12),ct(13),ct(14)
+  diff("byte rotate pressure", function(n)
+    local a1,a2,a3,a4,a5,a6,a7 = ct(0),ct(0),ct(0),ct(0),ct(0),ct(0),ct(0)
+    local a8,a9,a10,a11,a12,a13,a14 =
+      ct(0),ct(0),ct(0),ct(0),ct(0),ct(0),ct(0)
+    for _ = 1, n do
+      a1=rot(a1+k1); a2=rot(a2+k2); a3=rot(a3+k3); a4=rot(a4+k4)
+      a5=rot(a5+k5); a6=rot(a6+k6); a7=rot(a7+k7); a8=rot(a8+k8)
+      a9=rot(a9+k9); a10=rot(a10+k10); a11=rot(a11+k11)
+      a12=rot(a12+k12); a13=rot(a13+k13); a14=rot(a14+k14)
+    end
+    return a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14
+  end, 200)
+end)
+
 test("vectors from memory", function()
   for _, ti in ipairs(T.T) do
     local rnd = T.rng(SEED + 7 * ti.bits)
@@ -861,6 +912,32 @@ test("extended conversions randomized bit patterns", function()
 end)
 
 if simd.features().avx2 then
+  test("256-bit byte-aligned integer rotate idioms", function()
+    for _, c in ipairs({
+      {T.W.i16x16, function(x)
+	 return simd.bor(simd.shl(x, 8), simd.shr(x, 8))
+       end},
+      {T.W.u32x8, function(x)
+	 return simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+       end},
+      {T.W.i64x4, function(x)
+	 return simd.bor(simd.shl(x, 32), simd.shr(x, 32))
+       end},
+    }) do
+      local ti, rot = c[1], c[2]
+      local rnd = T.rng(SEED + 1877 + ti.bits)
+      local a, step = T.rand(ti, rnd), T.rand(ti, rnd)
+      diff(ti.name .. " ymm byte rotate", function(n)
+	local acc = a
+	for _ = 1, n do
+	  local x = acc + step
+	  acc = rot(x)
+	end
+	return acc
+      end, 300)
+    end
+  end)
+
   test("256-bit add/sub differential", function()
     for _, ti in ipairs(T.W) do
       local lanes = {}

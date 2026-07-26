@@ -520,6 +520,28 @@ static x86Op emit_vexop(x86Op xo, int w, int l)
   return emit_vexopv(xo, VEXNOV, w, l);
 }
 
+#if LJ_64
+/*
+** Copy a vector constant into the stable, naturally aligned constant area at
+** the bottom of the current mcode allocation. Besides ordinary constant
+** loads, packed instructions with a read-only memory operand use this to
+** avoid occupying an extra vector register.
+*/
+static const uint8_t *emit_internkvec(ASMState *as, IRIns *ir)
+{
+  uint32_t size = irt_vecsize(ir->t);
+  if (!ir->i) {
+    while ((uintptr_t)as->mcbot & (size-1)) *as->mcbot++ = XI_INT3;
+    memcpy(as->mcbot, ir_kvec(ir), size);
+    ir->i = (int32_t)(as->mctop - as->mcbot);
+    as->mcbot += size;
+    as->mclim = as->mcbot + MCLIM_REDZONE;
+    lj_mcode_commitbot(as->J, as->mcbot);
+  }
+  return as->mctop - ir->i;
+}
+#endif
+
 /* Load a vector constant into an FP register. */
 static void emit_loadkvec(ASMState *as, Reg r, IRIns *ir)
 {
@@ -547,16 +569,9 @@ static void emit_loadkvec(ASMState *as, Reg r, IRIns *ir)
     emit_rmro(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS,
 	      r, RID_RIP, (int32_t)mcpofs(as, k));
   } else {  /* Intern the constant at the bottom of the mcode area. */
-    if (!ir->i) {
-      while ((uintptr_t)as->mcbot & (size-1)) *as->mcbot++ = XI_INT3;
-      memcpy(as->mcbot, k, size);
-      ir->i = (int32_t)(as->mctop - as->mcbot);
-      as->mcbot += size;
-      as->mclim = as->mcbot + MCLIM_REDZONE;
-      lj_mcode_commitbot(as->J, as->mcbot);
-    }
-    emit_rmro(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS, r, RID_RIP,
-	      (int32_t)mcpofs(as, as->mctop - ir->i));
+    const uint8_t *ki = emit_internkvec(as, ir);
+    emit_rmro(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS,
+	      r, RID_RIP, (int32_t)mcpofs(as, ki));
   }
 #else
   emit_rma(as, vex ? emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS, r, k);

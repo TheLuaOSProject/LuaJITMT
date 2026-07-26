@@ -58,6 +58,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M35 | Generic Lua scalar FP code is VEX-128-clean on AVX, eliminating scalar/YMM transition stalls | done |
 | M36 | Central call-site YMM preservation, including GC/indirect calls; Windows x64 upper-lane runtime correctness | done |
 | M37 | Exact inline constant integer modulo, eliminating helper calls and YMM spill/reload traffic in mixed loops | done |
+| M38 | Byte-aligned integer rotate idioms collapse to one packed shuffle; constant shuffle masks use memory only under register pressure | done |
 
 ## Commands that pass
 
@@ -330,11 +331,11 @@ Heavy kernels: FIR 32768x60, polynomial 32768x60, Mandelbrot 16384x4
 degree-11 poly (double)    scalar     4.0 ms   XMM     2.3 ms  1.78x   YMM     1.4 ms  2.85x (1.60x/XMM)
 Mandelbrot 64-it (double)  scalar     6.9 ms   XMM     7.4 ms  0.93x   YMM     6.8 ms  1.00x (1.08x/XMM)
 
-Real-world kernels: 1080p blur, 5.46s audio, 131072 particles, 16384 ChaCha blocks
+Real-world kernels: 1080p blur, 5.46s audio, 131072 particles, 131072 ChaCha blocks
 5x5 Gaussian (1080p)       scalar     8.5 ms   XMM     2.3 ms  3.70x   YMM     2.3 ms  3.73x (1.01x/XMM)
 64-tap audio FIR           scalar     8.9 ms   XMM     2.3 ms  3.85x   YMM     1.5 ms  6.10x (1.58x/XMM)
 gravity particles x32      scalar    58.2 ms   XMM    19.4 ms  3.00x   YMM    13.9 ms  4.18x (1.39x/XMM)
-ChaCha20 block core        scalar     3.7 ms   XMM     1.4 ms  2.59x   YMM     1.2 ms  3.09x (1.19x/XMM)
+ChaCha20 block core        scalar    29.2 ms   XMM    10.6 ms  2.75x   YMM     6.3 ms  4.63x (1.68x/XMM)
 ```
 
 The dot product gets close to the expected second width doubling: 4 lanes are
@@ -352,6 +353,11 @@ kernel keeps position and velocity vectors live through 32 gravity/collision
 steps, exercising divide, square root, masks, select and long arithmetic
 chains. ChaCha20 treats SIMD lanes as independent blocks and runs the full
 20-round wrapping add/xor/rotate core with sixteen live vector state words.
+Its run is deliberately eight times larger now, both to give stable timings
+and to make it a genuinely sustained integer-SIMD workload. Byte-aligned
+rotates reduce the main XMM/YMM loop from 527/543 to 465/481 instructions;
+against the pre-fold binary, representative pinned runs improve XMM from
+11.8--12.1 ms to 10.5--11.1 ms and YMM from 6.7--6.8 ms to 6.3--6.6 ms.
 Every buffer-producing kernel validates a deterministic checksum against its
 scalar result outside the timed hot loop.
 
@@ -371,6 +377,7 @@ int32 add                     0.21 ns   0.22 ns       1.95x
 int32 mul                     1.89 ns   1.89 ns       2.00x
 int32 xor                     0.25 ns   0.25 ns       2.00x
 int32 shl const               0.21 ns   0.21 ns       2.01x
+int32 rol 8 idiom             0.38 ns   0.38 ns       2.00x
 int16 shl per-lane            1.23 ns   1.17 ns       2.11x
 int8 shl per-lane             2.22 ns   2.29 ns       1.94x
 int32 select                  0.62 ns   0.62 ns       2.00x

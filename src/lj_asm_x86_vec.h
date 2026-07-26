@@ -819,8 +819,56 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
   }
 }
 
+#if LJ_64
+/*
+** A loop-invariant shuffle mask is profitable in a register while the trace
+** has room for it. Using either of the final two free vector registers tends
+** to make high-pressure kernels repeatedly evict and reload the mask, so use
+** PSHUFB's read-only memory operand in that case.
+*/
+static int asm_vecshufb_memk(RegSet spare)
+{
+  if (spare) spare &= spare-1;
+  return (spare & (spare-1)) == 0;
+}
+#endif
+
 static void asm_vecshufb(ASMState *as, IRIns *ir)
 {
+#if LJ_64
+  IRIns *irk = IR(ir->op2);
+  if (irk->o == IR_KVEC && ra_noreg(irk->r) && ir->op1 != ir->op2) {
+    int wide = irt_isvec256(ir->t);
+    Reg dest = ra_dest(as, ir, RSET_FPR);
+    if ((as->flags & JIT_F_AVX)) {
+      Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+      RegSet spare = as->freeset & RSET_FPR;
+      if (asm_vecshufb_memk(spare)) {
+	const uint8_t *k = emit_internkvec(as, irk);
+	emit_rmro(as, emit_vexopv(XO_PSHUFB, left, 0, wide),
+		  dest, RID_RIP, (int32_t)mcpofs(as, k));
+      } else {
+	Reg right = ra_alloc1(as, ir->op2,
+			      rset_exclude(RSET_FPR, left));
+	emit_vexrrl(as, XO_PSHUFB, dest, left, right, wide);
+      }
+    } else {
+      RegSet allow = rset_exclude(RSET_FPR, dest);
+      RegSet spare = as->freeset & allow;
+      lj_assertA(!wide, "256 bit byte shuffle without AVX");
+      if (asm_vecshufb_memk(spare)) {
+	const uint8_t *k = emit_internkvec(as, irk);
+	emit_rmro(as, XO_PSHUFB, dest, RID_RIP, (int32_t)mcpofs(as, k));
+	emit_prefix66(as, XO_PSHUFB);
+      } else {
+	Reg right = ra_alloc1(as, ir->op2, allow);
+	emit_vrr66(as, XO_PSHUFB, dest, right);
+      }
+      ra_left(as, dest, ir->op1);
+    }
+    return;
+  }
+#endif
   asm_vecbin(as, ir, XO_PSHUFB, 1);
 }
 

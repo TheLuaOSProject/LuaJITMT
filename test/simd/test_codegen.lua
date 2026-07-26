@@ -221,6 +221,83 @@ test("ffi.simd operations are packed", function()
   end)
 end)
 
+test("byte-aligned rotate idioms become one packed shuffle", function()
+  if not simd.features().ssse3 then
+    check(true, "no SSSE3 on this CPU, rotate folding skipped")
+    return
+  end
+  local cases = {
+    {"i16x8", function(x)
+       return simd.bor(simd.shl(x, 8), simd.shr(x, 8))
+     end, "psllw", "psrlw"},
+    {"i32x4", function(x)
+       return simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+     end, "pslld", "psrld"},
+    {"i64x2", function(x)
+       return simd.bor(simd.shl(x, 32), simd.shr(x, 32))
+     end, "psllq", "psrlq"},
+  }
+  for _, c in ipairs(cases) do
+    local ct, rot = T.T[c[1]].ct, c[2]
+    local m = checkloop(c[1] .. " byte rotate", {"pshufb"},
+      {"call", c[3], c[4], "por"}, function()
+	local acc, add = ct(0x01020304), ct(0x10101)
+	for _ = 1, 400 do
+	  local x = acc + add
+	  acc = rot(x)
+	end
+	return acc
+      end)
+    check(count(m, "pshufb") == 1,
+	  c[1] .. " byte rotate must be exactly one packed shuffle")
+  end
+  local ct = T.T.i32x4.ct
+  local m = checkloop("i32x4 xor byte rotate", {"pshufb"},
+    {"call", "pslld", "psrld", "pxor"}, function()
+      local acc, add = ct(0x01020304), ct(0x10101)
+      for _ = 1, 400 do
+	local x = acc + add
+	acc = simd.bxor(simd.shr(x, 24), simd.shl(x, 8))
+      end
+      return acc
+    end)
+  check(count(m, "pshufb") == 1,
+	"i32x4 xor byte rotate must be exactly one packed shuffle")
+end)
+
+test("constant rotate masks fuse into memory operands under pressure", function()
+  if not simd.features().ssse3 then
+    check(true, "no SSSE3 on this CPU, memory-mask lowering skipped")
+    return
+  end
+  local ct = T.T.u32x4.ct
+  local function rot(x)
+    return simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+  end
+  local body = loopcode(function()
+    local a1,a2,a3,a4,a5,a6,a7 = ct(1),ct(2),ct(3),ct(4),ct(5),ct(6),ct(7)
+    local a8,a9,a10,a11,a12,a13,a14 =
+      ct(8),ct(9),ct(10),ct(11),ct(12),ct(13),ct(14)
+    for _ = 1, 400 do
+      a1=rot(a1+ct(1)); a2=rot(a2+ct(2)); a3=rot(a3+ct(3))
+      a4=rot(a4+ct(4)); a5=rot(a5+ct(5)); a6=rot(a6+ct(6))
+      a7=rot(a7+ct(7)); a8=rot(a8+ct(8)); a9=rot(a9+ct(9))
+      a10=rot(a10+ct(10)); a11=rot(a11+ct(11)); a12=rot(a12+ct(12))
+      a13=rot(a13+ct(13)); a14=rot(a14+ct(14))
+    end
+    return a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14
+  end)
+  local fused = false
+  for line in body:gmatch("[^\n]+") do
+    if line:find("pshufb", 1, true) and line:find("[rip", 1, true) then
+      fused = true
+      break
+    end
+  end
+  check(fused, "register-pressure shuffle mask was repeatedly loaded: " ..
+	body:gsub("\n", " | "))
+end)
+
 test("64 bit lane min/max is packed", function()
   -- There is no PMINSQ before AVX-512, so this must lower to a compare and a
   -- blend rather than falling back to the interpreter or to scalar code.
@@ -747,6 +824,23 @@ if simd.features().avx2 then
 	  "i32x8 add must target YMM registers: " .. body:gsub("\n", " | "))
     check(body:find("vpsubd ymm", 1, true) ~= nil,
 	  "i32x8 sub must target YMM registers: " .. body:gsub("\n", " | "))
+  end)
+
+  test("256-bit byte rotate stays one YMM shuffle", function()
+    local ct = T.W.i32x8.ct
+    local body = checkymm("i32x8 byte rotate", {"vpshufb ymm"}, function()
+      local acc, add = ct(0x01020304), ct(0x10101)
+      for _ = 1, 400 do
+	local x = acc + add
+	acc = simd.bor(simd.shl(x, 8), simd.shr(x, 24))
+      end
+      return acc
+    end)
+    check(not body:find("vpslld", 1, true) and
+	  not body:find("vpsrld", 1, true) and
+	  not body:find("vpor", 1, true),
+	  "i32x8 byte rotate retained shift/or instructions: " ..
+	  body:gsub("\n", " | "))
   end)
 
   test("256-bit direct operations stay in YMM registers", function()

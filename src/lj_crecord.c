@@ -1761,6 +1761,53 @@ static TRef crec_simd_minmax64(jit_State *J, IRType vt, const CTVecInfo *vi,
 		emitir(IRT(IR_VANDN, vt), m, ismax ? b : a));
 }
 
+/*
+** Fold a byte-aligned rotate idiom into one PSHUFB:
+**
+**   (x << n) | (x >> (bits-n))
+**
+** The shifts have already been recorded by the time bor() sees them. Leaving
+** them behind is harmless: DCE removes both once this packed shuffle becomes
+** their only consumer. The control bytes are lane-local, so the same mask
+** works for XMM and for both 128 bit halves of YMM.
+*/
+static TRef crec_simd_rotbytes(jit_State *J, IRType vt,
+			       const CTVecInfo *vi, TRef a, TRef b)
+{
+  IRIns *ls = IR(tref_ref(a)), *rs = IR(tref_ref(b));
+  uint32_t bits = (uint32_t)vi->esize * 8;
+  uint32_t lsh, rsh, bytes, i;
+  uint8_t mask[LJ_VEC_MAXSIZE];
+  IRRef src;
+
+  if (veck_isfp(vi->kind) || vi->esize < 2 ||
+      !(J->flags & JIT_F_SSSE3))
+    return 0;
+  if (ls->o == IR_VSHR && rs->o == IR_VSHL) {
+    IRIns *tmp = ls; ls = rs; rs = tmp;
+  }
+  if (ls->o != IR_VSHL || rs->o != IR_VSHR || ls->op1 != rs->op1 ||
+      IR(ls->op2)->o != IR_KINT || IR(rs->op2)->o != IR_KINT)
+    return 0;
+  lsh = (uint32_t)IR(ls->op2)->i;
+  rsh = (uint32_t)IR(rs->op2)->i;
+  if (lsh == 0 || lsh >= bits || rsh >= bits ||
+      lsh + rsh != bits || (lsh & 7))
+    return 0;
+
+  bytes = (uint32_t)vi->esize * vi->lanes;
+  for (i = 0; i < bytes; i++) {
+    uint32_t lane = i & ~((uint32_t)vi->esize - 1);
+    uint32_t pos = i & ((uint32_t)vi->esize - 1);
+    mask[i] = (uint8_t)(lane +
+      ((pos + (uint32_t)vi->esize - (lsh >> 3)) &
+       ((uint32_t)vi->esize - 1)));
+  }
+  src = ls->op1;
+  return emitir(IRT(IR_VSHUFB, vt),
+		TREF(src, irt_t(IR(src)->t)), lj_ir_kvec(J, vt, mask));
+}
+
 void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
@@ -1771,8 +1818,15 @@ void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd)
   IROp op;
   switch (rd->data) {
   case VOP_AND: op = IR_VAND; break;
-  case VOP_OR: op = IR_VOR; break;
-  case VOP_XOR: op = IR_VXOR; break;
+  case VOP_OR: case VOP_XOR: {
+    TRef rot = crec_simd_rotbytes(J, vt, &vi, a, b);
+    if (rot) {
+      J->base[0] = crec_vec_box(J, rot, vt, id);
+      return;
+    }
+    op = rd->data == VOP_OR ? IR_VOR : IR_VXOR;
+    break;
+    }
   case VOP_ANDN: op = IR_VANDN; break;
   case VOP_MIN: case VOP_MAX:
     if (veck_isfp(vi.kind)) {

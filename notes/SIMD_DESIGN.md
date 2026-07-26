@@ -876,3 +876,35 @@ benefits scalar traces too. In a loop carrying a YMM add, `i % 37` fell from
 about 1.70 ns to 0.85 ns per iteration on the AVX2 test host; the vector-only
 loop is about 0.37 ns. Machine-code tests require reciprocal multiplies and
 reject both `CALL` and `IDIV` in the x64 YMM loop.
+
+## D32. Recognise byte rotates before lowering their component shifts
+
+Crypto and hashing kernels commonly spell a packed rotate with the existing
+portable operations:
+
+```
+simd.bor(simd.shl(x, n), simd.shr(x, bits-n))
+```
+
+For a byte-aligned count, three packed instructions are unnecessary.
+`PSHUFB` can select the rotated bytes in one instruction. The recorder
+recognises complementary logical shifts of the same integer vector beneath
+either `bor` or `bxor`, in either operand order, and emits one `VSHUFB`.
+Non-byte counts retain the exact shift/shift/logical sequence. This is an
+idiom fold rather than a new API or IR operation, so interpreter behaviour,
+vector ctypes, snapshots and the public ABI do not change.
+
+The shuffle mask is local to each integer lane. That preserves 16-, 32- and
+64-bit lane boundaries and naturally repeats in both 128-bit halves of a YMM
+register. Dead-code elimination removes the two component shifts after the
+replacement has become their only consumer.
+
+Constant-mask placement is pressure-sensitive. In a small loop, keeping the
+mask in an XMM/YMM register is faster than reading it through the instruction.
+In ChaCha20, sixteen live vector state words make that same invariant register
+get evicted and reloaded repeatedly. The x64 backend therefore uses the
+RIP-relative memory form of `PSHUFB` only when allocating the mask would
+consume one of the final two free vector registers. The constant is interned
+in the aligned mcode constant area; traces with room keep the original
+register form. This retains 0.19--0.25 ns low-pressure shuffle/conversion
+costs while eliminating the reload churn in the high-pressure loop.

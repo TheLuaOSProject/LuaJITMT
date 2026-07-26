@@ -142,6 +142,16 @@ with folding disabled so the backend's `+/-1` and power-of-two robustness
 paths were exercised directly. The 32-bit x86 build passes the same
 interpreter/JIT edge cases through its inline `CDQ`/`IDIV` fallback.
 
+Byte-aligned rotate tests cover signed and unsigned 16-, 32- and 64-bit lanes,
+XMM and YMM widths, reversed shift order, and both OR and XOR spellings. The
+machine-code checks require exactly one `PSHUFB` and reject the component
+shifts and logical combine. A separate fourteen-accumulator differential loop
+forces vector-register pressure so the x64 constant-memory operand path is
+executed rather than only the low-pressure register-mask path. The enlarged
+ChaCha20 benchmark provides a production-shaped check with sixteen live state
+vectors; its main traces contain 32 byte shuffles and are 62 instructions
+shorter at either width.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

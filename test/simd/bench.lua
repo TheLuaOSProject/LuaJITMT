@@ -944,7 +944,7 @@ do
 -- 20 rounds of wrapping add/xor/rotate, and no scalar work in the vector
 -- core. SIMD lanes are independent blocks, as in production implementations.
 local CHACHA_BLOCKS = 1 << 13
-local CHACHA_PASSES = 2
+local CHACHA_PASSES = 16
 local bit_ = require("bit")
 local bxor, rol, tobit = bit_.bxor, bit_.rol, bit_.tobit
 local cc0, cc1, cc2, cc3 =
