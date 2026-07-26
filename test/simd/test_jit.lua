@@ -522,10 +522,11 @@ test("ffi.simd shifts on trace", function()
     end
   end
   if simd.features().avx2 then
-    -- AVX2 only has variable shifts at dword/qword granularity. Word lanes
-    -- are decomposed into dword pieces and byte lanes use lookup/multiply
-    -- identities, so cover every narrow boundary and a huge unsigned count
-    -- on linked traces.
+    -- AVX2 only has variable shifts at dword/qword granularity. Word left
+    -- shifts build packed power-of-two factors and multiply, word right shifts
+    -- decompose into dword pieces, and byte lanes use lookup/multiply
+    -- identities. Cover every narrow boundary and a huge unsigned count on
+    -- linked traces.
     for _, ti in ipairs(T.T) do
       if not ti.fp then
 	local it, raw = T.masktype(ti), {}

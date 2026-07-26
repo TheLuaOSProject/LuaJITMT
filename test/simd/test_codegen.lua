@@ -734,14 +734,25 @@ test("per-lane shift counts use the AVX2 variable shifts", function()
   local i16 = T.T.i16x8.ct
   local a16 = i16(-32768, -123, -1, 0, 1, 255, 12345, 32767)
   local c16 = i16(0, 1, 15, 16, 17, -1, 3, 9)
-  local m16 = checkloop("i16x8 shl vec", {"psllvd", "pand"}, NOCALL,
+  local m16 = checkloop("i16x8 shl vec invariant", {"pmullw"}, NOCALL,
     function()
       local acc = i16(0)
       for _ = 1, 400 do acc = simd.shl(acc + a16, c16) end
       return acc
     end)
-  check(count(m16, "psllvd") == 2,
-	"i16x8 shl must use two dword variable shifts")
+  check(count(m16, "psllvd") == 0 and count(m16, "pmullw") == 1,
+	"invariant i16x8 shl must hoist the factor and use one word multiply")
+  local md16 = checkloop("i16x8 shl vec dynamic",
+    {"psllvd", "pmullw", "pand", "por"}, NOCALL, function()
+      local acc, c = i16(0), c16
+      for _ = 1, 400 do
+	acc = simd.shl(acc + a16, c)
+	c = c + i16(1)
+      end
+      return acc + c
+    end)
+  check(count(md16, "psllvd") == 2 and count(md16, "pmullw") == 1,
+	"dynamic i16x8 shl must build two factors and use one word multiply")
   checkloop("i16x8 sar vec", {"psravd", "psrad", "pand"}, NOCALL,
     function()
       local acc = i16(0)
@@ -1194,14 +1205,28 @@ if simd.features().avx2 then
 
     local hc = h16(0, 1, 15, 16, 17, -1, 3, 9,
 		    2, 14, 20, 7, 4, 12, 8, 31)
-    local hbody = checkymm("i16x16 per-lane shl",
-      {"vpsllvd ymm", "vpand ymm"}, function()
+    local hbody = checkymm("i16x16 invariant per-lane shl",
+      {"vpmullw ymm"}, function()
 	local acc = h16(1)
 	for _ = 1, 400 do acc = simd.shl(acc + h16(3), hc) end
 	return acc
       end)
-    local _, hn = hbody:gsub("vpsllvd ymm", "")
-    check(hn == 2, "i16x16 shl must use two YMM dword variable shifts")
+    local _, hmul = hbody:gsub("vpmullw ymm", "")
+    check(hmul == 1 and not hbody:find("vpsllvd ymm", 1, true),
+	  "invariant i16x16 shl must hoist the factor and use one YMM multiply")
+    local hdbody = checkymm("i16x16 dynamic per-lane shl",
+      {"vpsllvd ymm", "vpmullw ymm", "vpand ymm", "vpor ymm"}, function()
+	local acc, c = h16(1), hc
+	for _ = 1, 400 do
+	  acc = simd.shl(acc + h16(3), c)
+	  c = c + h16(1)
+	end
+	return acc + c
+      end)
+    local _, hshift = hdbody:gsub("vpsllvd ymm", "")
+    local _, hdmul = hdbody:gsub("vpmullw ymm", "")
+    check(hshift == 2 and hdmul == 1,
+	  "dynamic i16x16 shl must build two factors and use one YMM multiply")
 
     local sb32 = T.W.i8x32.ct
     checkymm("i8x32 mulhi emulation",

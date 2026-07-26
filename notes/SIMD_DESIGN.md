@@ -1186,3 +1186,34 @@ the signed/unsigned XMM/YMM dependent and eight-chain traces, total
 instructions fall from 1532 to 1418; all 144 high-word multiplies are
 replaced with low-word products and the former 144 left shifts and 72
 arithmetic word shifts disappear.
+
+## D42. Turn variable word left shifts into packed multiplication
+
+AVX2 has per-lane variable shifts only for 32- and 64-bit elements. The
+original 16-bit lowering split every pair of words into dwords, shifted the
+four pieces separately, masked them, and combined them again. A left shift is
+multiplication by a power of two modulo the lane width, so the data path can
+instead use the native packed word multiply:
+
+```
+factor[i] = count[i] < 16 ? 1 << count[i] : 0
+result    = value * factor                 /* modulo 2^16 */
+```
+
+Two `VPSLLVD`s construct the low- and high-word factors in parallel dword
+lanes. The low factors are masked to 16 bits; the high factors are shifted
+into the upper words; one `VOR` then forms the word vector consumed by
+`VPMULLW`. Signed and unsigned vectors share the same bitwise operation.
+Negative signed count encodings and every count at or above 16 naturally
+produce zero because x86 variable dword shifts flush counts at or above 32,
+while factors for counts 16 through 31 overflow when placed into their word.
+
+When the count vector is invariant, ordinary CSE and loop-invariant-code
+motion hoist the entire factor construction, leaving one `VPMULLW` in the
+hot loop. Dependent XMM latency improves from about 1.17 to 0.89 ns/vector;
+the corresponding YMM measurement improves from 1.23 to 0.89 ns/vector.
+With dynamically changing counts, median streaming throughput improves from
+1.01 to 0.91 ns/vector for XMM and from 1.70 to 1.18 ns/vector for YMM.
+The representative dynamic root-and-loop dump shrinks from 566 to 550
+instructions: packed ANDs fall from 24 to 8 and dword right shifts from 8 to
+4, while four data-path `VPMULLW`s replace the old extraction work.

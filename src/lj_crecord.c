@@ -1760,6 +1760,26 @@ static TRef crec_simd_shiftv_narrow(jit_State *J, IRType vt, uint32_t esize,
 }
 
 /*
+** A variable word left shift is multiplication modulo 2^16. Build both word
+** factors with the available dword variable shift, pack them, then multiply
+** both data words at once. Counts at or above 16 lose every low-word bit.
+*/
+static TRef crec_simd_shiftv_i16_left(jit_State *J, IRType vt, TRef a, TRef nv)
+{
+  IRType dvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+  TRef one = crec_simd_k32(J, dvt, 1);
+  TRef mask = crec_simd_k32(J, dvt, 0xffff);
+  TRef lo, hi;
+  lo = emitir(IRT(IR_VSHLV, dvt), one,
+	      emitir(IRT(IR_VAND, dvt), nv, mask));
+  lo = emitir(IRT(IR_VAND, dvt), lo, mask);
+  hi = emitir(IRT(IR_VSHLV, dvt), one,
+	      emitir(IRT(IR_VSHR, dvt), nv, lj_ir_kint(J, 16)));
+  hi = emitir(IRT(IR_VSHL, dvt), hi, lj_ir_kint(J, 16));
+  return emitir(IRT(IR_VMUL, vt), a, emitir(IRT(IR_VOR, vt), lo, hi));
+}
+
+/*
 ** A variable byte left shift is multiplication modulo 256 by 2^count.
 ** PSHUFB obtains that multiplier from an eight-entry table. Saturating 0x78+n
 ** maps valid counts 0..7 to table slots 8..15 and sets the control byte's high
@@ -2085,6 +2105,11 @@ void LJ_FASTCALL recff_simd_shift(jit_State *J, RecordFFData *rd)
 		      nvi.lanes == vi.lanes);
     if (vi.esize == 1 && op == VSH_SHL) {
       r = crec_simd_shiftv_i8_left(J, vt, a, nv);
+      J->base[0] = crec_vec_box(J, r, vt, id);
+      return;
+    }
+    if (vi.esize == 2 && op == VSH_SHL) {
+      r = crec_simd_shiftv_i16_left(J, vt, a, nv);
       J->base[0] = crec_vec_box(J, r, vt, id);
       return;
     }

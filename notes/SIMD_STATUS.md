@@ -68,6 +68,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M45 | Lower logical and arithmetic variable byte right shifts through lookup factors and isolated word products | done |
 | M46 | Shorten signed qword `mulhi` correction and reuse cross-products/sign masks when squaring | done |
 | M47 | Compute signed/unsigned byte `mulhi` squares through absolute bytes and full word products | done |
+| M48 | Lower variable word left shifts through packed power-of-two factors and one native word multiply | done |
 
 ## Commands that pass
 
@@ -594,3 +595,13 @@ is flat, while eight-chain throughput improves about 9% unsigned and 12%
 signed. The XMM/YMM dependent/parallel dump shrinks from 1532 to 1418
 instructions and eliminates all 144 high-word multiplies. Dedicated
 `bench_ops.lua` rows retain both square paths.
+
+Variable word left shift now constructs packed power-of-two factors and
+applies one native `VPMULLW`, replacing the former dword extraction and
+reassembly data path. Invariant factor construction hoists completely:
+dependent XMM latency improves from about 1.17 to 0.89 ns/vector and YMM from
+1.23 to 0.89 ns/vector. With changing counts, median streaming throughput
+improves from 1.01 to 0.91 ns/vector for XMM and from 1.70 to 1.18 ns/vector
+for YMM. The representative dynamic dump shrinks from 566 to 550
+instructions, with packed ANDs falling from 24 to 8 and dword right shifts
+from 8 to 4. Codegen tests pin both the hoisted and dynamic XMM/YMM forms.
