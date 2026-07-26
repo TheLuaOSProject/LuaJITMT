@@ -1044,7 +1044,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   ** scalar stores and a vector reload, and exposes the lane pattern to later
   ** SIMD folds such as constant-mask select.
   */
-  if (ctype_isvector(info) && J->maxslot > 2) {
+  if (ctype_isvector(info) && J->maxslot != 2) {
     CTVecInfo vi;
     IRType vt = crec_vec2irt(cts, d);
     uint64_t vdata[LJ_VEC_MAXSIZE/sizeof(uint64_t)];

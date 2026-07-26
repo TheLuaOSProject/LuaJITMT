@@ -264,6 +264,34 @@ test("multi-lane dynamic vector constructors on trace", function()
   end, 200)
 end)
 
+test("zero vector constructors on trace", function()
+  local function zero(ct)
+    return ct()
+  end
+  local tabs = {T.T}
+  if simd.features().avx2 then tabs[#tabs+1] = T.W end
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      local ct = ti.ct
+      diff(ti.name .. " zero constructor in helper", function(n)
+	local acc = ct(1)
+	for _ = 1, n do acc = acc + zero(ct) end
+	return acc
+      end, 200)
+    end
+  end
+
+  local i4 = T.T.i32x4.ct
+  local function zero_new(ct)
+    return ffi.new(ct)
+  end
+  diff("ffi.new zero vector in helper", function(n)
+    local acc = i4(1)
+    for _ = 1, n do acc = acc + zero_new(i4) end
+    return acc
+  end, 200)
+end)
+
 test("packed mulhi emulations", function()
   for _, name in ipairs({
     "i8x16", "u8x16", "i32x4", "u32x4", "i64x2", "u64x2",

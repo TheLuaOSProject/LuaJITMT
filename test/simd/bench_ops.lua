@@ -480,6 +480,10 @@ local function ctor2(ct, i)
   return ct(i, i+1)
 end
 
+local function ctor0(ct)
+  return ct()
+end
+
 local function ctor4(ct, i)
   return ct(i, i+1, i+2, i+3)
 end
@@ -541,6 +545,7 @@ constructor_cost("int8 lanes", s8, ctor16, s8w, ctor32)
 constructor_cost("int64 lanes", i64, ctor2, i64w, ctor4)
 constructor_cost("int32 half-filled", i4, ctor2, i8, ctor4)
 constructor_cost("int8 half-filled", s8, ctor8, s8w, ctor16)
+constructor_cost("int32 zero", i4, ctor0, i8, ctor0)
 
 io.write("\n== per-operation throughput (ns per 128-bit op, loop-carried) ==\n")
 

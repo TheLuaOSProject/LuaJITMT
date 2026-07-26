@@ -269,6 +269,35 @@ test("dynamic vector constructors stay in registers", function()
   end
 end)
 
+test("zero vector constructors are constants", function()
+  local i4 = T.T.i32x4.ct
+  local m = checkloop("i32x4 zero constructor", {"paddd"}, NOCALL, function()
+    local acc = i4(1)
+    local function zero() return i4() end
+    for _ = 1, 400 do acc = acc + zero() end
+    return acc
+  end)
+  if m then
+    check(count(m, "paddd") == 1,
+	  "i32x4 zero constructor: expected one packed add")
+  end
+
+  if simd.features().avx2 then
+    local i8 = T.W.i32x8.ct
+    local m8, _, body = checkloop("i32x8 zero constructor",
+      {"paddd"}, NOCALL, function()
+	local acc = i8(1)
+	local function zero() return ffi.new(i8) end
+	for _ = 1, 400 do acc = acc + zero() end
+	return acc
+      end)
+    if m8 then
+      check(body:find("vpaddd ymm", 1, true) ~= nil,
+	    "i32x8 zero constructor: add must remain YMM-width")
+    end
+  end
+end)
+
 test("vector loads fuse only into alignment-safe AVX arithmetic", function()
   local i4 = T.T.i32x4.ct
   local c = ffi.new("i32x4[1]")
