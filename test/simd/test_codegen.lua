@@ -1631,6 +1631,50 @@ test("horizontal reduction uses shuffles, not lane loads", function()
 	    name .. " hsum: byte add is only the loop's vector update")
     end
   end
+  local u8ct = T.T.u8x16.ct
+  local ua = u8ct(255,1,254,2,253,3,252,4,251,5,250,6,249,7,248,8)
+  local ub = u8ct(0,254,1,253,2,252,3,251,4,250,5,249,6,248,7,247)
+  local uc = u8ct(17,31,47,63,79,97,113,127,139,151,163,179,193,211,227,239)
+  local am = checkloop("u8x16 hsum absolute difference",
+    {"psadbw", "paddq", "psrldq"},
+    {"pmaxub", "pminub", "psubb", "call"}, function()
+      local s, v = 0, u8ct(0)
+      for _ = 1, 400 do
+	v = v + ua
+	s = s + tonumber(simd.hsum(simd.max(v, ub) - simd.min(ub, v)))
+      end
+      return v, s
+    end)
+  if am then
+    check(count(am, "psadbw") == 1,
+	  "u8x16 hsum absolute difference: exactly one packed SAD")
+    check(count(am, "pmaxub") == 0 and count(am, "pminub") == 0 and
+	  count(am, "psubb") == 0,
+	  "u8x16 hsum absolute difference: extrema tree must be fused")
+  end
+  checkloop("u8x16 hsum extrema near miss",
+    {"pmaxub", "pminub", "psubb", "psadbw"}, NOCALL, function()
+      local s, v = 0, u8ct(0)
+      for _ = 1, 400 do
+	v = v + ua
+	s = s + tonumber(simd.hsum(simd.max(v, ub) - simd.min(uc, v)))
+      end
+      return v, s
+    end)
+  local i8ct = T.T.i8x16.ct
+  local ia = i8ct(-128,127,-127,126,-96,95,-65,64,
+		  -33,32,-17,16,-3,2,-1,0)
+  local ib = i8ct(127,-128,126,-127,95,-96,64,-65,
+		  32,-33,16,-17,2,-3,0,-1)
+  checkloop("i8x16 hsum extrema difference",
+    {"pmaxsb", "pminsb", "psubb", "psadbw"}, NOCALL, function()
+      local s, v = 0, i8ct(0)
+      for _ = 1, 400 do
+	v = v + ia
+	s = s + tonumber(simd.hsum(simd.max(v, ib) - simd.min(ib, v)))
+      end
+      return v, s
+    end)
   for _, spec in ipairs({
     {"i8x16", T.T.i8x16.ct,
       {-128,127,-96,95,-65,64,-33,32,-17,16,-9,8,-5,4,-3,2},
@@ -3112,6 +3156,29 @@ if simd.features().avx2 then
       end)
     check(count(mnemonics(body), "paddb") == 1,
 	  "i8x32 hsum must reduce qword partial sums, not every byte lane")
+
+    local u32 = T.W.u8x32.ct
+    local ua32 = u32(
+      255,1,254,2,253,3,252,4,251,5,250,6,249,7,248,8,
+      247,9,246,10,245,11,244,12,243,13,242,14,241,15,240,16)
+    local ub32 = u32(
+      0,254,1,253,2,252,3,251,4,250,5,249,6,248,7,247,
+      8,246,9,245,10,244,11,243,12,242,13,241,14,240,15,239)
+    body = checkymm("u8x32 hsum absolute difference",
+      {"vpsadbw ymm", "vperm2i128 ymm", "vpaddq ymm", "vpsrldq ymm"},
+      function()
+	local v, sum = u32(0), 0
+	for _ = 1, 400 do
+	  v = v + ua32
+	  sum = sum + tonumber(simd.hsum(
+	    simd.max(v, ub32) - simd.min(ub32, v)))
+	end
+	return v, sum
+      end)
+    local adm = mnemonics(body)
+    check(count(adm, "psadbw") == 1 and count(adm, "pmaxub") == 0 and
+	  count(adm, "pminub") == 0 and count(adm, "psubb") == 0,
+	  "u8x32 hsum absolute difference must fuse to one packed SAD")
 
     for _, spec in ipairs({
       {"i8x32", T.W.i8x32.ct, -1},

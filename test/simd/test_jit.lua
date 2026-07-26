@@ -1192,6 +1192,14 @@ test("ffi.simd reductions on trace", function()
 	-- fused reduction of that multiply on the same trace.
 	return product, tostring(last)
       end, 200)
+      diffop(ti, "hsum extrema difference", function(n)
+	local last
+	for i = 1, n do
+	  local p, q = x + ct(i % 7), y + ct(i % 11)
+	  last = simd.hsum(simd.max(p, q) - simd.min(q, p))
+	end
+	return tostring(last)
+      end, 200)
     elseif ti.bits == 16 then
       local av, bv
       if ti.signed then
@@ -2181,6 +2189,14 @@ if simd.features().avx2 then
 	    last = simd.hsum(product)
 	  end
 	  return product, last
+	end, 120)
+	diff(ti.name .. " ymm hsum extrema difference", function(n)
+	  local last
+	  for i = 1, n do
+	    local p, q = x + ct(i % 7), y + ct(i % 11)
+	    last = simd.hsum(simd.max(p, q) - simd.min(q, p))
+	  end
+	  return last
 	end, 120)
       elseif ti.bits == 16 then
 	local av, bv = {}, {}

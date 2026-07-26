@@ -735,6 +735,93 @@ real_benches.checksum = {
 }
 end
 
+------------------------------------------------------------- block SAD --
+
+do
+-- Compute one sum-of-absolute-differences score for every 32-byte block in
+-- two 16 MiB image planes. Motion search, image comparison and block matching
+-- use this exact metric. Input deltas are bounded to seven, keeping every
+-- 32-byte SAD below 256 so the byte-vector hsum is the full score, not merely
+-- its low byte. The scalar expression is unrolled to avoid benchmarking an
+-- inner Lua loop; XMM consumes two vectors per block and AVX2 one YMM vector.
+local SAD_N = 16 * 1024 * 1024
+local SAD_BLOCKS = SAD_N / 32
+local SAD_PASSES = 3
+local sad_ref = ffi.new("uint8_t[?]", SAD_N)
+local sad_cur = ffi.new("uint8_t[?]", SAD_N)
+local sad_out_s = ffi.new("uint16_t[?]", SAD_BLOCKS)
+local sad_out_x = ffi.new("uint16_t[?]", SAD_BLOCKS)
+local sad_out_y = has_ymm and ffi.new("uint16_t[?]", SAD_BLOCKS)
+for i = 0, SAD_N-1 do
+  local base = (i*29 + math.floor(i/32)*3) % 240 + 8
+  sad_ref[i] = base
+  sad_cur[i] = base + (i*13 + math.floor(i/32)*5) % 15 - 7
+end
+local sad16 = ffi.typeof("u8x16")
+local sad32 = has_ymm and ffi.typeof("u8x32")
+local sad_r16 = ffi.cast(ffi.typeof("$ *", sad16), sad_ref)
+local sad_c16 = ffi.cast(ffi.typeof("$ *", sad16), sad_cur)
+local sad_r32 = has_ymm and ffi.cast(ffi.typeof("$ *", sad32), sad_ref)
+local sad_c32 = has_ymm and ffi.cast(ffi.typeof("$ *", sad32), sad_cur)
+
+local function sad_scalar()
+  local a, b, out, abs = sad_ref, sad_cur, sad_out_s, math.abs
+  for _ = 1, SAD_PASSES do
+    for i = 0, SAD_BLOCKS-1 do
+      local p = i*32
+      out[i] =
+	abs(a[p]   -b[p])    + abs(a[p+1] -b[p+1])  +
+	abs(a[p+2] -b[p+2])  + abs(a[p+3] -b[p+3])  +
+	abs(a[p+4] -b[p+4])  + abs(a[p+5] -b[p+5])  +
+	abs(a[p+6] -b[p+6])  + abs(a[p+7] -b[p+7])  +
+	abs(a[p+8] -b[p+8])  + abs(a[p+9] -b[p+9])  +
+	abs(a[p+10]-b[p+10]) + abs(a[p+11]-b[p+11]) +
+	abs(a[p+12]-b[p+12]) + abs(a[p+13]-b[p+13]) +
+	abs(a[p+14]-b[p+14]) + abs(a[p+15]-b[p+15]) +
+	abs(a[p+16]-b[p+16]) + abs(a[p+17]-b[p+17]) +
+	abs(a[p+18]-b[p+18]) + abs(a[p+19]-b[p+19]) +
+	abs(a[p+20]-b[p+20]) + abs(a[p+21]-b[p+21]) +
+	abs(a[p+22]-b[p+22]) + abs(a[p+23]-b[p+23]) +
+	abs(a[p+24]-b[p+24]) + abs(a[p+25]-b[p+25]) +
+	abs(a[p+26]-b[p+26]) + abs(a[p+27]-b[p+27]) +
+	abs(a[p+28]-b[p+28]) + abs(a[p+29]-b[p+29]) +
+	abs(a[p+30]-b[p+30]) + abs(a[p+31]-b[p+31])
+    end
+  end
+  return sample_sum(out, SAD_BLOCKS)
+end
+
+local function sad_xmm()
+  local a, b, out = sad_r16, sad_c16, sad_out_x
+  for _ = 1, SAD_PASSES do
+    for i = 0, SAD_BLOCKS-1 do
+      local p = i*2
+      local a0, b0, a1, b1 = a[p], b[p], a[p+1], b[p+1]
+      out[i] =
+	tonumber(simd.hsum(simd.max(a0, b0) - simd.min(b0, a0))) +
+	tonumber(simd.hsum(simd.max(a1, b1) - simd.min(b1, a1)))
+    end
+  end
+  return sample_sum(out, SAD_BLOCKS)
+end
+
+local function sad_ymm()
+  local a, b, out = sad_r32, sad_c32, sad_out_y
+  for _ = 1, SAD_PASSES do
+    for i = 0, SAD_BLOCKS-1 do
+      local av, bv = a[i], b[i]
+      out[i] = simd.hsum(simd.max(av, bv) - simd.min(bv, av))
+    end
+  end
+  return sample_sum(out, SAD_BLOCKS)
+end
+
+real_benches.sad = {
+  scalar = sad_scalar, xmm = sad_xmm, ymm = sad_ymm,
+  name = "32-byte block SAD", mib = SAD_N/(1024*1024),
+}
+end
+
 ---------------------------------------------------- 4K depth tile range --
 
 do
@@ -2264,9 +2351,10 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points + %.1fM voxelized points, %.0fs PCM envelope, %.0fs float gate, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual codebook/signed quantization, %.0f MiB checksums + %.0f MiB block SAD, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points + %.1fM voxelized points, %.0fs PCM envelope, %.0fs float gate, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.residual.mpixels,
-  real_benches.checksum.mib, real_benches.activations.mib,
+  real_benches.checksum.mib, real_benches.sad.mib,
+  real_benches.activations.mib,
   real_benches.ternary.mib,
   real_benches.transform.mpoints,
   real_benches.voxel.mpoints,
@@ -2295,6 +2383,7 @@ end
 
 run_real(real_benches.rgba)
 run_real(real_benches.checksum)
+run_real(real_benches.sad)
 run_real(real_benches.depth)
 run_real(real_benches.pcm)
 run_real(real_benches.gate)

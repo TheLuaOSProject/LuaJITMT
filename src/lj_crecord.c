@@ -1642,6 +1642,28 @@ static int crec_simd_match_mul_i8(jit_State *J, TRef tr,
   return 1;
 }
 
+/* Match an unsigned-byte absolute difference expressed with ordinary vector
+** operations. PSADBW computes exactly the same per-byte max(a,b)-min(a,b)
+** values before accumulating each group of eight bytes.
+*/
+static int crec_simd_match_absdiff_u8(jit_State *J, TRef tr,
+				      IRRef *pa, IRRef *pb)
+{
+  IRIns *sub = IR(tref_ref(tr)), *hi, *lo;
+  if (sub->o != IR_VSUB || irt_type(sub->t) != IRT_V16I8) return 0;
+  hi = IR(sub->op1);
+  lo = IR(sub->op2);
+  if (hi->o != IR_VMAXU || lo->o != IR_VMINU ||
+      !irt_sametype(hi->t, sub->t) || !irt_sametype(lo->t, sub->t))
+    return 0;
+  if (!((hi->op1 == lo->op1 && hi->op2 == lo->op2) ||
+	(hi->op1 == lo->op2 && hi->op2 == lo->op1)))
+    return 0;
+  *pa = hi->op1;
+  *pb = hi->op2;
+  return 1;
+}
+
 /* Record arithmetic on vector cdata. Returns 0 if this is not vector math. */
 static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
 			   RecordFFData *rd)
@@ -3660,7 +3682,12 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
   }
   if (rd->data == VRD_SUM && vi.esize == 1) {
     IRRef ma, mb;
-    if (crec_simd_match_mul_i8(J, a, &ma, &mb)) {
+    if (uns && crec_simd_match_absdiff_u8(J, a, &ma, &mb)) {
+      IRType qvt = (IRType)(IRT_V2I64 | (vt & IRT_VEC256));
+      r = emitir(IRT(IR_VSADU8, qvt), ma, mb);
+      rvt = qvt;
+      n = sz >> 3;
+    } else if (crec_simd_match_mul_i8(J, a, &ma, &mb)) {
       /*
       ** Pair-dot the even bytes as their containing words, then do the same
       ** after exposing odd bytes in the low half of each word. Every omitted
