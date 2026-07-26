@@ -158,6 +158,9 @@
   _(VOR,	C , ref, ref) \
   _(VXOR,	C , ref, ref) \
   _(VANDN,	N , ref, ref) \
+  /* High half of the lane product; the low half is VMUL. */ \
+  _(VMULHI,	C , ref, ref) \
+  _(VMULHIU,	C , ref, ref) \
   _(VMIN,	N , ref, ref) \
   _(VMAX,	N , ref, ref) \
   _(VMINU,	N , ref, ref) \

@@ -270,6 +270,28 @@ test("the IR dump renders vector types and constants", function()
   end
 end)
 
+test("mulhi is a single packed multiply", function()
+  -- 16 bit lanes have PMULHW/PMULHUW. Signedness picks the instruction, so
+  -- both have to be checked: using the wrong one is a wrong answer, not a
+  -- slow one, and the differential test alone would not say which was used.
+  -- One operand has to be loop-carried, or the whole multiply is hoisted out
+  -- of the loop as invariant and the body proves nothing.
+  local i16 = T.T.i16x8.ct
+  checkloop("i16x8 mulhi", {"pmulhw"}, {"call", "pmulhuw"}, function()
+    local acc = i16(1)
+    local b = i16(400)
+    for _ = 1, 400 do acc = simd.mulhi(acc, b) + i16(7) end
+    return acc
+  end)
+  local u16 = T.T.u16x8.ct
+  checkloop("u16x8 mulhi", {"pmulhuw"}, {"call", "pmulhw"}, function()
+    local acc = u16(1)
+    local b = u16(50000)
+    for _ = 1, 400 do acc = simd.mulhi(acc, b) + u16(7) end
+    return acc
+  end)
+end)
+
 test("fma compiles to a single fused instruction", function()
   if not simd.features().fma then
     check(true, "no FMA on this CPU, codegen skipped")

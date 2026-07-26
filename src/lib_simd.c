@@ -270,6 +270,20 @@ LJLIB_CF(ffi_simd_sqrt)		LJLIB_REC(simd_unop VUN_SQRT)
   return simd_unop(L, VUN_SQRT);
 }
 
+LJLIB_CF(ffi_simd_mulhi)		LJLIB_REC(.)
+{
+  SIMD_BINPRE(vi, ap, bp, id)
+  {
+    uint8_t rbuf[LJ_VEC_MAXSIZE];
+    CTSize size = (CTSize)vi.esize * vi.lanes;
+    if (!lj_simd_mulhi(rbuf, ap, bp, &vi))
+      lj_err_callermsg(L, "mulhi not supported for this element type");
+    memcpy(simd_newvec(L, cts, id, size), rbuf, size);
+    lj_gc_check(L);
+    return 1;
+  }
+}
+
 LJLIB_CF(ffi_simd_fma)		LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
@@ -368,18 +382,6 @@ LJLIB_CF(ffi_simd_movemask)	LJLIB_REC(simd_movemask)
   CTVecInfo vi;
   const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, NULL);
   setintV(L->top++, (int32_t)lj_simd_movemask(ap, &vi));
-  return 1;
-}
-
-LJLIB_CF(ffi_simd_allof)		LJLIB_REC(simd_maskcmp 0)
-{
-  CTState *cts = ctype_cts(L);
-  CTVecInfo vi;
-  const uint8_t *ap = simd_checkvec(L, cts, 1, &vi, NULL);
-  uint32_t all = vi.lanes == 32 ? 0xffffffffu : (1u << vi.lanes) - 1;
-  int res = lj_simd_movemask(ap, &vi) == all;
-  setboolV(L->top++, res);
-  setboolV(&G(L)->tmptv2, res);  /* Remember for the trace recorder. */
   return 1;
 }
 
@@ -622,7 +624,11 @@ static const char simd_luasrc[] =
   "function simd.le(a, b) return ge(b, a) end\n"
   /* anyof is exactly this, and as a Lua wrapper it needs no fast function
   ** ID and no LJ_POST_FIXGUARD dance: the comparison is ordinary Lua. */
-  "function simd.anyof(a) return movemask(a) ~= 0 end\n";
+  "function simd.anyof(a) return movemask(a) ~= 0 end\n"
+  /* Every lane's sign bit set is the same as no sign bit set after
+  ** inverting, which needs no fast function ID and no knowledge of the lane
+  ** count. Costs one packed XOR against a mask of all ones. */
+  "function simd.allof(a) return movemask(bnot(a)) == 0 end\n";
 
 static const luaL_Reg simd_plaincf[] = {
   { "isvector",    simd_cf_isvector },

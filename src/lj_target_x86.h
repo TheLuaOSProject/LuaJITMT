@@ -437,6 +437,8 @@ typedef enum {
   XO_PABSW =	XO_0f38(1d),		/* SSSE3 */
   XO_PABSD =	XO_0f38(1e),		/* SSSE3 */
   XO_PMULLD =	XO_0f38(40),		/* SSE4.1 */
+  XO_PMULHW =	XO_660f(e5),
+  XO_PMULHUW =	XO_660f(e4),
   XO_PMINSB =	XO_0f38(38),		/* SSE4.1 */
   XO_PMINSD =	XO_0f38(39),		/* SSE4.1 */
   XO_PMINUW =	XO_0f38(3a),		/* SSE4.1 */

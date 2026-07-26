@@ -3,6 +3,8 @@
 --   luajit test/simd/bench.lua [reps]
 --
 -- Every benchmark consumes its result, so nothing can be optimised away.
+collectgarbage("stop")
+
 local dir = arg[0]:match("^(.*)[/\\][^/\\]*$") or "."
 package.path = dir .. "/?.lua;" .. package.path
 

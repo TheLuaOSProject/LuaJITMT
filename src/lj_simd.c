@@ -381,6 +381,40 @@ int lj_simd_fma(void *dp, const void *ap, const void *bp, const void *cp,
   return 0;
 }
 
+/*
+** High half of the full-width lane product. The ordinary * operator keeps the
+** low half, so this is the other half of the same multiply and cannot be
+** expressed with it. Signedness comes from the lane kind, exactly as it does
+** for min/max and the shifts.
+*/
+#define VEC_MULHI(TY, WTY, SH) \
+  { TY *d = (TY *)dp; \
+    const TY *a = (const TY *)ap; const TY *b = (const TY *)bp; \
+    uint32_t i, n = vi->lanes; \
+    for (i = 0; i < n; i++) \
+      d[i] = (TY)(((WTY)a[i] * (WTY)b[i]) >> (SH)); \
+    return 1; }
+
+int lj_simd_mulhi(void *dp, const void *ap, const void *bp,
+		  const CTVecInfo *vi)
+{
+  int uns = veck_isunsigned(vi->kind);
+  if (veck_isfp(vi->kind)) return 0;
+  switch (vi->esize) {
+  case 1:
+    if (uns) VEC_MULHI(uint8_t, uint32_t, 8)
+    else VEC_MULHI(int8_t, int32_t, 8)
+  case 2:
+    if (uns) VEC_MULHI(uint16_t, uint32_t, 16)
+    else VEC_MULHI(int16_t, int32_t, 16)
+  case 4:
+    if (uns) VEC_MULHI(uint32_t, uint64_t, 32)
+    else VEC_MULHI(int32_t, int64_t, 32)
+  default:
+    return 0;  /* A 64 bit lane would need a 128 bit product. */
+  }
+}
+
 /* -- Comparisons --------------------------------------------------------- */
 
 /* Element-wise comparison. Writes an all-ones/all-zero mask of the same width. */

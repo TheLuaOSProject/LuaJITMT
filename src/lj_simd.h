@@ -81,6 +81,8 @@ LJ_FUNC int lj_simd_shiftv(void *dp, const void *ap, const void *np,
 			   const CTVecInfo *vi, uint32_t op);
 LJ_FUNC int lj_simd_fma(void *dp, const void *ap, const void *bp,
 			const void *cp, const CTVecInfo *vi);
+LJ_FUNC int lj_simd_mulhi(void *dp, const void *ap, const void *bp,
+			  const CTVecInfo *vi);
 LJ_FUNC void lj_simd_select(void *dp, const void *mp, const void *ap,
 			    const void *bp, CTSize size);
 LJ_FUNC void lj_simd_splat(void *dp, const void *ep, const CTVecInfo *vi);

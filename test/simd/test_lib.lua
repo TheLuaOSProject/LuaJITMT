@@ -286,6 +286,48 @@ test("shuffle with a runtime index vector", function()
   end
 end)
 
+test("mulhi is the high half of the product", function()
+  -- The * operator keeps the low half of each lane product; mulhi keeps the
+  -- high half. Together they are the full-width product, which is what the
+  -- reference checks: low + high*2^bits must equal the exact product.
+  for _, ti in ipairs(T.T) do
+    if not ti.fp and ti.bits <= 32 then
+      local rnd = T.rng(SEED + ti.bits * 811 + (ti.signed and 3 or 0))
+      for _ = 1, 40 do
+        local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
+        local lo, hi = a * b, simd.mulhi(a, b)
+        for i = 0, ti.lanes-1 do
+          -- Exact product in int64, which is wide enough for 32x32.
+          local x = ffi.cast("int64_t", a[i])
+          local y = ffi.cast("int64_t", b[i])
+          if not ti.signed then
+            x = ffi.cast("int64_t", ffi.cast("uint64_t", x) %
+                         (2ULL^ti.bits))
+            y = ffi.cast("int64_t", ffi.cast("uint64_t", y) %
+                         (2ULL^ti.bits))
+          end
+          local want = x * y
+          -- Reassemble from the two halves the same way the hardware splits.
+          local l = ffi.cast("uint64_t", ffi.cast("uint64_t", lo[i]) %
+                             (2ULL^ti.bits))
+          local h = ffi.cast("int64_t", hi[i])
+          local got = h * ffi.cast("int64_t", 2ULL^ti.bits) +
+                      ffi.cast("int64_t", l)
+          checkeq(tostring(got), tostring(want),
+                  ti.name .. " mulhi lane " .. i .. " a=" .. tostring(a[i]) ..
+                  " b=" .. tostring(b[i]))
+        end
+      end
+    elseif ti.fp then
+      check(not pcall(simd.mulhi, ti.ct(1), ti.ct(1)),
+            ti.name .. " float mulhi rejected")
+    else
+      check(not pcall(simd.mulhi, ti.ct(1), ti.ct(1)),
+            ti.name .. " 64-bit mulhi rejected")
+    end
+  end
+end)
+
 test("fma is a single rounding", function()
   -- fma(a, b, -(a*b)) is exactly the rounding error of the product, so it is
   -- non-zero only if the multiply and the add really are fused. An unfused

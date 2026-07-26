@@ -373,6 +373,52 @@ if simd.features().avx2 then
   end)
 end
 
+----------------------------------------------------- fixed point gain ------
+-- Q15 gain: multiply 16-bit samples by a fractional coefficient. The desired
+-- result is the full product shifted right by 15. Reassemble its low 16 bits
+-- from (hi << 1) and the top bit of lo; the * operator alone throws hi away.
+do
+  local N = 1 << 14
+  local buf = ffi.new(ffi.typeof("$[?]", i16), N)
+  for i = 0, N-1 do
+    buf[i] = i16(i%3001-1500, i%577-288, i%97-48, i%13-6,
+		 i%7919-4000, i%31-15, i%255-127, i%1023-511)
+  end
+  local gain = 0.6
+  local q15 = math.floor(gain * 32768 + 0.5)
+  local vg = i16(q15)
+
+  -- Accumulated with XOR rather than addition: a 16-bit lane accumulator
+  -- would wrap over this many terms while a Lua number would not, and XOR is
+  -- associative and commutative, so folding eight lane accumulators at the
+  -- end gives exactly the scalar result.
+  bench("Q15 gain on int16", function()
+    local acc = 0
+    for _ = 1, 20 do
+      for i = 0, N-1 do
+	local v = buf[i]
+	for k = 0, 7 do
+	  acc = bit.bxor(acc, bit.band(bit.arshift(v[k] * q15, 15), 0xffff))
+	end
+      end
+    end
+    return acc
+  end, function()
+    local acc = i16(0)
+    for _ = 1, 20 do
+      for i = 0, N-1 do
+	local lo = buf[i] * vg
+	local hi = simd.mulhi(buf[i], vg)
+	local scaled = simd.bor(simd.shl(hi, 1), simd.shr(lo, 15))
+	acc = simd.bxor(acc, scaled)
+      end
+    end
+    local s = 0
+    for k = 0, 7 do s = bit.bxor(s, bit.band(acc[k], 0xffff)) end
+    return s
+  end)
+end
+
 --------------------------------------------------------------- clamp -------
 -- Branchless saturation. The scalar version is branchy, which is why the
 -- vector version wins more than the 4x lane count.
@@ -467,6 +513,8 @@ do
 	  function(x, y) return x * y end)
   op_cost("i16x8 adds", function() return i16(1), i16(3) end,
 	  function(x, y) return simd.adds(x, y) end)
+  op_cost("i16x8 mulhi", function() return i16(30000), i16(30000) end,
+	  function(x, y) return simd.mulhi(x, y) end)
 end
 
 if failures > 0 then

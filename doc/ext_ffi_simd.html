@@ -163,6 +163,19 @@ Floating-point <tt>ne</tt> is unordered (true if either side is NaN); the
 other five are ordered.
 </p>
 <p>
+<tt>simd.mulhi()</tt> is integer only and takes its signedness from the lane
+type. It is the other half of the same multiply the <tt>*</tt> operator
+performs. Together the two halves let fixed-point code select any result
+scaling without losing the carry between them. For example, a signed Q15
+multiply shifts the full product right by 15:
+</p>
+<pre class="code">
+local q15  = int16x8(math.floor(0.6 * 32768 + 0.5))
+local lo   = samples * q15
+local hi   = simd.mulhi(samples, q15)
+local out  = simd.bor(simd.shl(hi, 1), simd.shr(lo, 15))
+</pre>
+<p>
 <tt>simd.fma(a, b, c)</tt> computes <tt>a*b + c</tt> with a <b>single</b>
 rounding, which is not the same value as the two-step <tt>a*b + c</tt>. It is
 the IEEE 754 fused multiply-add, so <tt>simd.fma(a, b, -(a*b))</tt> is exactly
@@ -182,7 +195,8 @@ if simd.anyof(simd.gt(v, limit)) then ... end
 <table class="convtable">
 <tr class="odd separate"><td class="convin"><tt>simd.min(a, b)</tt></td><td class="convop">per lane <tt>a &lt; b and a or b</tt></td></tr>
 <tr class="even"><td class="convin"><tt>simd.max(a, b)</tt></td><td class="convop">per lane <tt>a &gt; b and a or b</tt></td></tr>
-<tr class="odd"><td class="convin"><tt>simd.abs(a)</tt></td><td class="convop">absolute value; wraps for the most negative signed lane</td></tr>
+<tr class="odd"><td class="convin"><tt>simd.mulhi(a, b)</tt></td><td class="convop">high half of the lane product; <tt>a*b</tt> is the low half</td></tr>
+<tr class="even"><td class="convin"><tt>simd.abs(a)</tt></td><td class="convop">absolute value; wraps for the most negative signed lane</td></tr>
 <tr class="even"><td class="convin"><tt>simd.sqrt(a)</tt></td><td class="convop">square root, floating-point only</td></tr>
 <tr class="odd"><td class="convin"><tt>simd.fma(a, b, c)</tt></td><td class="convop"><tt>a*b + c</tt> with a single rounding, floating-point only</td></tr>
 <tr class="odd"><td class="convin"><tt>simd.floor/ceil/trunc/round(a)</tt></td><td class="convop">rounding, floating-point only; <tt>round</tt> is ties-to-even; a NaN operand comes back quieted</td></tr>

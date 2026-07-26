@@ -1989,19 +1989,19 @@ void LJ_FASTCALL recff_simd_movemask(jit_State *J, RecordFFData *rd)
   J->base[0] = emitir(IRTI(IR_VMOVMSK), a, IRVSRC(vt, 0));
 }
 
-void LJ_FASTCALL recff_simd_maskcmp(jit_State *J, RecordFFData *rd)
+void LJ_FASTCALL recff_ffi_simd_mulhi(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
-  TRef mm = emitir(IRTI(IR_VMOVMSK), a, IRVSRC(vt, 0));
-  uint32_t all = vi.lanes == 32 ? 0xffffffffu : (1u << vi.lanes) - 1;
-  /* Assume true. Fixup and emit the pending guard later. */
-  if (rd->data == 0)
-    lj_ir_set(J, IRTGI(IR_EQ), mm, lj_ir_kint(J, (int32_t)all));
-  else
-    lj_ir_set(J, IRTGI(IR_NE), mm, lj_ir_kint(J, 0));
-  J->postproc = LJ_POST_FIXGUARD;
-  J->base[0] = TREF_TRUE;
+  TRef b = crec_simd_arg2(J, rd, 1, &vi, id, vt);
+  /* PMULHW/PMULHUW cover 16 bit lanes. 8 bit has no instruction, and the
+  ** 32 bit form would need two PMULDQ plus shuffles to reassemble the four
+  ** high halves; both stay interpreted with identical results.
+  */
+  crec_simd_need(J, !veck_isfp(vi.kind) && vi.esize == 2);
+  J->base[0] = crec_vec_box(J,
+    emitir(IRT(veck_isunsigned(vi.kind) ? IR_VMULHIU : IR_VMULHI, vt), a, b),
+    vt, id);
 }
 
 void LJ_FASTCALL recff_ffi_simd_fma(jit_State *J, RecordFFData *rd)

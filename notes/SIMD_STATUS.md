@@ -38,6 +38,10 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M16 | `simd.shuffle` permutes by a runtime index vector (PSHUFB) | done |
 | M17 | `simd.shl/shr/sar` accept a per-lane count vector (AVX2 VPSLLV/VPSRLV/VPSRAV) | done |
 | M18 | `simd.fma` with a single rounding (VFMADD213PS/PD, runtime detected) | done |
+| M19 | Kernel and per-operation benchmark suite (`test/simd/bench_ops.lua`) | done |
+| M20 | Merge `upstream/v2.1` to `a471ab78`; both documented upstream bugs fixed | done |
+| M21 | FMA form selection (132/213/231) so no register copy is needed | done |
+| M22 | `simd.mulhi`, the high half of the lane product (PMULHW/PMULHUW) | done |
 
 ## Commands that pass
 
@@ -165,6 +169,17 @@ notes/*                          design/status/matrix/testing notes (new)
   tests pass, and every trace silently aborts with "cannot assemble IR
   instruction N". Only the codegen tests notice. This actually happened when
   `VSHLV`/`VSHRV`/`VSARV` were added.
+* There are **two** dispatch tables, and both need the new opcode: the `case`
+  list in `asm_ir()` (`lj_asm.c`) that routes to `asm_vec()`, and the switch
+  inside `asm_vec()` itself. Missing the second one is worse than missing the
+  first: instead of a clean NYI abort the assembler falls through its
+  `default`, leaves the destination register unwritten, and the trace dies
+  with "inconsistent register allocation". This happened when `VMULHI` was
+  added, and again the differential tests passed the whole time because the
+  interpreter was answering.
+* A codegen test whose operands are all loop-invariant proves nothing: the
+  operation is hoisted out of the loop and the body contains only the
+  accumulate. Make one operand loop-carried.
 * A fast function whose result is recorded as a **guard** must leave that
   result in `G(L)->tmptv2`. `LJ_POST_FIXGUARD` reads it to decide whether to
   flip the guard, so without it the compiled code can answer the opposite of

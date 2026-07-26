@@ -116,6 +116,7 @@ operand, exactly like the operators.
 | `band/bor/bxor/bandn(a,b)` | same ctype | bitwise | bitwise | bitwise | yes | yes |
 | `bnot(a)` | same ctype | bitwise | bitwise | bitwise | yes | yes |
 | `min(a,b)`, `max(a,b)` | same ctype | yes | yes | yes | yes | yes |
+| `mulhi(a,b)` | same ctype | — | 8/16/32-bit | 8/16/32-bit | yes | 16-bit only |
 | `abs(a)` | same ctype | clears sign bit | wraps at the min value | identity | yes | yes |
 | `sqrt(a)` | same ctype | yes | — | — | yes | yes |
 | `fma(a,b,c)` | same ctype | yes | — | — | yes | yes (FMA) |
@@ -161,6 +162,10 @@ Semantics worth pinning down:
   the trace aborts and the interpreter still gives the single-rounded
   result, so the two never disagree. Integer lanes are rejected: there is no
   packed integer FMA and an integer `a*b+c` is already exact.
+* `mulhi(a,b)` is the **high** half of the full-width lane product; `a*b` is
+  the low half. Together they are the exact product, which is what the test
+  checks. Signedness comes from the lane kind, as it does for min/max and the
+  shifts. 64-bit lanes are rejected: that would need a 128-bit product.
 * `abs` on signed integers wraps for the most negative lane value (like PABS).
 * `shl`/`shr`/`sar` also accept a **vector** count with the same lane width
   and lane count, shifting each lane by its own amount. The per-lane count is
@@ -187,6 +192,7 @@ Semantics worth pinning down:
 | `floor/ceil/trunc/round` | requires SSE4.1 (ROUNDPS); otherwise JIT NYI |
 | `fma` | requires the FMA feature; otherwise JIT NYI. The backend picks between VFMADD132/213/231 so the operand that has to live in the destination is already there, see `SIMD_DESIGN.md` D18. Ordinary `a*b+c` written with operators is **never** fused into it, because that would round once where the interpreter rounds twice |
 | `shuffle`/`shuffle2` with 8/16-bit lanes | requires SSSE3 (PSHUFB); otherwise JIT NYI |
+| `mulhi` on 8 and 32-bit lanes | no instruction: 8-bit has none at all, and 32-bit would need two PMULDQ plus shuffles to reassemble the four high halves. Both stay interpreted with identical results |
 | `abs` on 8/16/32-bit integer lanes | uses SSSE3 PABSB/W/D; without SSSE3 it stays interpreted |
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
 | shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a byte mask. Constant and variable counts are both packed; for a variable count the mask is built with the same shift applied to a constant and broadcast across the byte halves with `PMULLW` by `0x0101` |

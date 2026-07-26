@@ -1802,6 +1802,7 @@ static void asm_ir(ASMState *as, IRIns *ir)
   /* Vector ops. On other targets these fall through to the NYI default. */
   case IR_VSPLAT: case IR_VADD: case IR_VSUB: case IR_VMUL: case IR_VDIV:
   case IR_VAND: case IR_VOR: case IR_VXOR: case IR_VANDN:
+  case IR_VMULHI: case IR_VMULHIU:
   case IR_VMIN: case IR_VMAX: case IR_VMINU: case IR_VMAXU:
   case IR_VADDS: case IR_VSUBS: case IR_VADDSU: case IR_VSUBSU:
   case IR_VCMPEQ: case IR_VCMPGT: case IR_VCMPGE:
