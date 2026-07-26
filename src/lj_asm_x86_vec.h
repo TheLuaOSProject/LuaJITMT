@@ -270,12 +270,12 @@ static Reg asm_vecfuseload(ASMState *as, IRRef ref, RegSet allow)
 
 #if LJ_64
 /*
-** A loop-invariant vector constant is profitable in a register while the
-** trace has room for it. Using either of the final two free vector registers
-** tends to turn that constant into a repeated reload under pressure, so use
-** an instruction's read-only memory operand in that case.
+** A source is profitable in a register while the trace has room for it.
+** Using either of the final two free vector registers tends to cause repeated
+** reloads under pressure, so prefer an instruction's read-only memory operand
+** in that case.
 */
-static int asm_vecconst_mem(RegSet spare)
+static int asm_vecmem_pressure(RegSet spare)
 {
   if (spare) spare &= spare-1;
   return (spare & (spare-1)) == 0;
@@ -307,7 +307,7 @@ static void asm_vecbin(ASMState *as, IRIns *ir, x86Op xo, int is3byte)
 #if LJ_64
     if (lref != rref && IR(rref)->o == IR_KVEC &&
 	ra_noreg(IR(rref)->r) &&
-	asm_vecconst_mem(as->freeset & RSET_FPR)) {
+	asm_vecmem_pressure(as->freeset & RSET_FPR)) {
       const uint8_t *k = emit_internkvec(as, IR(rref));
       emit_rmro(as, emit_vexopv(xo, left, 0, wide),
 		dest, RID_RIP, (int32_t)mcpofs(as, k));
@@ -729,8 +729,11 @@ static void asm_vecshift(ASMState *as, IRIns *ir)
 
 /*
 ** Per-lane shift counts (AVX2). One instruction, and genuinely three operand,
-** so no register copy is ever needed. The recorder decomposes 8/16 bit lanes
-** into dword pieces and emulates the missing 64 bit arithmetic shift.
+** so no register copy is ever needed. Under register pressure its final
+** operand may consume a one-use count vector directly from memory; with room,
+** a separate load lets the CPU fetch the counts earlier. The recorder
+** decomposes 8/16 bit lanes into dword pieces and emulates the missing 64 bit
+** arithmetic shift.
 */
 static void asm_vecshiftv(ASMState *as, IRIns *ir)
 {
@@ -741,9 +744,17 @@ static void asm_vecshiftv(ASMState *as, IRIns *ir)
   int wide = irt_isvec256(ir->t);
   Reg dest = ra_dest(as, ir, RSET_FPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-  Reg cnt = ra_alloc1(as, ir->op2, rset_exclude(RSET_FPR, left));
+  RegSet allow = rset_exclude(RSET_FPR, left);
+  Reg cnt;
+#if LJ_64
+  if (asm_veccanfuseload(as, ir->op2) &&
+      asm_vecmem_pressure(as->freeset & allow))
+    cnt = asm_vecfuseload(as, ir->op2, allow);
+  else
+#endif
+    cnt = ra_alloc1(as, ir->op2, allow);
   lj_assertA(op != IR_VSARV || !w, "no VPSRAVQ before AVX-512");
-  emit_vexrrwl(as, xo, dest, left, cnt, w, wide);
+  emit_mrm(as, emit_vexopv(xo, left, w, wide), dest, cnt);
 }
 
 /*
@@ -941,7 +952,7 @@ static void asm_vecshufb(ASMState *as, IRIns *ir)
     if ((as->flags & JIT_F_AVX)) {
       Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
       RegSet spare = as->freeset & RSET_FPR;
-      if (asm_vecconst_mem(spare)) {
+      if (asm_vecmem_pressure(spare)) {
 	const uint8_t *k = emit_internkvec(as, irk);
 	emit_rmro(as, emit_vexopv(XO_PSHUFB, left, 0, wide),
 		  dest, RID_RIP, (int32_t)mcpofs(as, k));
@@ -954,7 +965,7 @@ static void asm_vecshufb(ASMState *as, IRIns *ir)
       RegSet allow = rset_exclude(RSET_FPR, dest);
       RegSet spare = as->freeset & allow;
       lj_assertA(!wide, "256 bit byte shuffle without AVX");
-      if (asm_vecconst_mem(spare)) {
+      if (asm_vecmem_pressure(spare)) {
 	const uint8_t *k = emit_internkvec(as, irk);
 	emit_rmro(as, XO_PSHUFB, dest, RID_RIP, (int32_t)mcpofs(as, k));
 	emit_prefix66(as, XO_PSHUFB);

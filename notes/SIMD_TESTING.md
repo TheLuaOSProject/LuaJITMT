@@ -189,6 +189,13 @@ another pointer to the same bytes, and then performs FMA; this ensures the
 special handling of the non-emitting `CARG` carrier never skips a real
 intervening store.
 
+Per-lane shift placement has checks on both sides of its cost decision.
+Low-pressure XMM and YMM loops reject a `VPSLLV` memory operand, preserving
+the separately schedulable count load. A fifteen-accumulator loop exhausts
+the vector register file and requires at least one RIP/base-addressed count
+operand on `VPSLLV`. The existing randomized signed, unsigned, narrow, qword,
+XMM, and YMM shift tests continue to validate every result.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

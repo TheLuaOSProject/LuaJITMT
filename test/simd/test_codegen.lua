@@ -714,6 +714,60 @@ test("per-lane shift counts use the AVX2 variable shifts", function()
       for _ = 1, 400 do acc = simd.sar(acc + av8, cv8) end
       return acc
     end)
+
+  local function check_regcount(name, ct)
+    local counts = ffi.new(ffi.typeof("$[512]", ct))
+    for i = 0, 511 do counts[i] = ct(i % 7) end
+    local body = rawdump("m", function()
+      local acc, one = ct(1), ct(1)
+      for i = 0, 399 do acc = simd.shl(acc + one, counts[i]) end
+      return acc
+    end)
+    local memshift = false
+    for line in body:gmatch("[^\n]+") do
+      if line:find("psllv", 1, true) and line:find("[", 1, true) then
+	memshift = true
+	break
+      end
+    end
+    check(not memshift, name .. " low-pressure count should be prefetched: " ..
+	  body:gsub("\n", " | "))
+  end
+
+  check_regcount("i32x4", i4)
+  check_regcount("i32x8", T.W.i32x8.ct)
+
+  local counts = ffi.new("i32x4[?]", 512 * 15)
+  for i = 0, 512 * 15 - 1 do counts[i] = i4(i % 3) end
+  local pressured = rawdump("m", function()
+    local a1,a2,a3,a4 = i4(1),i4(2),i4(3),i4(4)
+    local a5,a6,a7,a8 = i4(5),i4(6),i4(7),i4(8)
+    local a9,a10,a11,a12 = i4(9),i4(10),i4(11),i4(12)
+    local a13,a14,a15,one = i4(13),i4(14),i4(15),i4(1)
+    for i = 0, 399 do
+      local p = i*15
+      a1=simd.shl(a1+one,counts[p]); a2=simd.shl(a2+one,counts[p+1])
+      a3=simd.shl(a3+one,counts[p+2]); a4=simd.shl(a4+one,counts[p+3])
+      a5=simd.shl(a5+one,counts[p+4]); a6=simd.shl(a6+one,counts[p+5])
+      a7=simd.shl(a7+one,counts[p+6]); a8=simd.shl(a8+one,counts[p+7])
+      a9=simd.shl(a9+one,counts[p+8]); a10=simd.shl(a10+one,counts[p+9])
+      a11=simd.shl(a11+one,counts[p+10])
+      a12=simd.shl(a12+one,counts[p+11])
+      a13=simd.shl(a13+one,counts[p+12])
+      a14=simd.shl(a14+one,counts[p+13])
+      a15=simd.shl(a15+one,counts[p+14])
+    end
+    return a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14+a15
+  end)
+  local memshift = false
+  for line in pressured:gmatch("[^\n]+") do
+    if line:find("psllv", 1, true) and line:find("[", 1, true) then
+      memshift = true
+      break
+    end
+  end
+  check(memshift, "pressured VPSLLV count must use memory: " ..
+	pressured:gsub("\n", " | "))
 end)
 
 test("a runtime index permute is packed", function()

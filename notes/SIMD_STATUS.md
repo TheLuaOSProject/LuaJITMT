@@ -63,6 +63,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M40 | Let ordinary FFI array temporaries fuse into AVX unary, shuffle and conversion memory operands; ignore only virtual sink stores | done |
 | M41 | Expand byte multiply in IR so invariant shifts CSE; use binary constant memory operands only under vector-register pressure | done |
 | M42 | Fuse one-use vector loads into the compatible FMA form while retaining accumulator coalescing and alias safety | done |
+| M43 | Fold AVX2 per-lane count loads into shifts only under register pressure, retaining faster prefetched loads otherwise | done |
 
 ## Commands that pass
 
@@ -541,3 +542,12 @@ single chain remains flat, while twelve and fourteen independent streaming
 chains improve by roughly 2% and 5% because the loaded operand no longer
 needs a temporary vector register. The conflict scan skips only FMA's
 non-emitting `CARG` carrier; a real aliased store still blocks fusion.
+
+AVX2 per-lane shifts now apply the same pressure-sensitive memory policy.
+Unconditional count fusion made the ordinary streaming benchmark about 8%
+slower because it prevented the count load from issuing early, so
+register-rich traces deliberately retain `VMOVUPS`. At fifteen live
+accumulators, using memory for the final count operands instead removes spill
+traffic and improves about 8% (7.33 to 6.75 ms). The three-kernel dump falls
+from 1612 to 1564 instructions and from 59 to 46 spill reloads, while twelve-
+and fourteen-chain timings remain flat.

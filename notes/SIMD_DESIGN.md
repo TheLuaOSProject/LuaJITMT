@@ -1037,3 +1037,25 @@ disappear and machine code falls from 1572 to 1536 bytes. A dependent FMA
 chain remains execution-latency bound at about 0.76 ns/vector. With twelve and
 fourteen independent streamed accumulators, eliminating the temporary vector
 register improves elapsed time by about 2% and 5% respectively.
+
+## D37. Fuse variable-shift counts only when registers are exhausted
+
+AVX2 `VPSLLV`/`VPSRLV`/`VPSRAV` can read their per-lane count vector from
+memory. Doing so unconditionally is smaller but slower on the measured host:
+with ample registers, a standalone `VMOVUPS` lets the out-of-order core fetch
+the counts before the shift is ready. The production-sized low-pressure shift
+benchmark regressed from roughly 0.23 to 0.25 ms when every count load was
+folded.
+
+The constant-placement pressure heuristic from D35 now covers one-use count
+loads too. The normal path retains the separately schedulable load. Only when
+allocating the count would consume one of the final two vector registers does
+the shift use its memory operand. Fifteen live shift chains are the crossover
+on this register file: twelve- and fourteen-chain timings remain flat, while
+fifteen chains improve from about 7.33 to 6.75 ms, roughly 8%.
+
+Across the full twelve/fourteen/fifteen-chain trace dump, 35 variable shifts
+take a memory source. Total instructions fall from 1612 to 1564, standalone
+vector loads from 146 to 98, and spill reloads from 59 to 46. This is why
+memory-operand fusion is a cost decision rather than a blanket code-size
+rule.
