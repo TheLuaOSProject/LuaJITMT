@@ -948,6 +948,100 @@ real_benches.pcmfir = {
 }
 end
 
+------------------------------------------- 4K residual magnitude quantizer --
+
+do
+-- Find the nearest of four reconstruction levels for every signed 12-bit
+-- prediction residual in a full 4K frame, then fixed-point quantize the
+-- remaining magnitude. Video/image encoders use this kind of codebook search
+-- during mode and palette evaluation. The vector loops keep four absolute
+-- distances, their minimum tree, multiply, rounding shift and store packed
+-- for the entire frame.
+local RESID_W, RESID_H = 3840, 2160
+local RESID_N = RESID_W * RESID_H
+local RESID_PASSES = 4
+local resid_cur = ffi.new("int16_t[?]", RESID_N)
+local resid_pred = ffi.new("int16_t[?]", RESID_N)
+local resid_out_s = ffi.new("int16_t[?]", RESID_N)
+local resid_out_x = ffi.new("int16_t[?]", RESID_N)
+local resid_out_y = has_ymm and ffi.new("int16_t[?]", RESID_N)
+for i = 0, RESID_N-1 do
+  local row = math.floor(i / RESID_W)
+  resid_cur[i] = (i*37 + row*13 + 17) % 4096
+  resid_pred[i] = (i*19 + row*29 + 101) % 4096
+end
+local resid8 = ffi.typeof("i16x8")
+local resid16 = has_ymm and ffi.typeof("i16x16")
+local resid_cp8 = ffi.cast(ffi.typeof("$ *", resid8), resid_cur)
+local resid_pp8 = ffi.cast(ffi.typeof("$ *", resid8), resid_pred)
+local resid_op8 = ffi.cast(ffi.typeof("$ *", resid8), resid_out_x)
+local resid_cp16 = has_ymm and
+  ffi.cast(ffi.typeof("$ *", resid16), resid_cur)
+local resid_pp16 = has_ymm and
+  ffi.cast(ffi.typeof("$ *", resid16), resid_pred)
+local resid_op16 = has_ymm and
+  ffi.cast(ffi.typeof("$ *", resid16), resid_out_y)
+
+local function resid_scalar()
+  local cur, pred, out = resid_cur, resid_pred, resid_out_s
+  for _ = 1, RESID_PASSES do
+    for i = 0, RESID_N-1 do
+      local d = cur[i] - pred[i]
+      local a0, a1, a2, a3 = d+1536, d+512, d-512, d-1536
+      a0 = a0 < 0 and -a0 or a0
+      a1 = a1 < 0 and -a1 or a1
+      a2 = a2 < 0 and -a2 or a2
+      a3 = a3 < 0 and -a3 or a3
+      local mag = math.min(math.min(a0, a1), math.min(a2, a3))
+      -- Positive integer conversion truncates exactly like >> 4.
+      out[i] = (mag*7 + 8) / 16
+    end
+  end
+  return sample_sum(out, RESID_N)
+end
+
+local function resid_xmm()
+  local cur, pred, out = resid_cp8, resid_pp8, resid_op8
+  for _ = 1, RESID_PASSES do
+    for i = 0, RESID_N/8-1 do
+      local d = cur[i] - pred[i]
+      local v0, v1 = d + resid8(1536), d + resid8(512)
+      local v2, v3 = d - resid8(512), d - resid8(1536)
+      local a0 = simd.select(simd.gt(v0, resid8(0)), v0, -v0)
+      local a1 = simd.select(simd.gt(v1, resid8(0)), v1, -v1)
+      local a2 = simd.select(simd.gt(v2, resid8(0)), v2, -v2)
+      local a3 = simd.select(simd.gt(v3, resid8(0)), v3, -v3)
+      local mag = simd.min(simd.min(a0, a1), simd.min(a2, a3))
+      out[i] = simd.shr(mag*resid8(7) + resid8(8), 4)
+    end
+  end
+  return sample_sum(resid_out_x, RESID_N)
+end
+
+local function resid_ymm()
+  local cur, pred, out = resid_cp16, resid_pp16, resid_op16
+  for _ = 1, RESID_PASSES do
+    for i = 0, RESID_N/16-1 do
+      local d = cur[i] - pred[i]
+      local v0, v1 = d + resid16(1536), d + resid16(512)
+      local v2, v3 = d - resid16(512), d - resid16(1536)
+      local a0 = simd.select(simd.gt(v0, resid16(0)), v0, -v0)
+      local a1 = simd.select(simd.gt(v1, resid16(0)), v1, -v1)
+      local a2 = simd.select(simd.gt(v2, resid16(0)), v2, -v2)
+      local a3 = simd.select(simd.gt(v3, resid16(0)), v3, -v3)
+      local mag = simd.min(simd.min(a0, a1), simd.min(a2, a3))
+      out[i] = simd.shr(mag*resid16(7) + resid16(8), 4)
+    end
+  end
+  return sample_sum(resid_out_y, RESID_N)
+end
+
+real_benches.residual = {
+  scalar = resid_scalar, xmm = resid_xmm, ymm = resid_ymm,
+  name = "4K residual codebook", mpixels = RESID_N/1000000,
+}
+end
+
 -------------------------------------------------- INT8 activation range --
 
 do
@@ -1951,7 +2045,8 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth + dilation + %.1fMP residual quantization, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  real_benches.residual.mpixels,
   real_benches.checksum.mib, real_benches.activations.mib,
   real_benches.ternary.mib,
   real_benches.transform.mpoints,
@@ -1982,6 +2077,7 @@ run_real(real_benches.checksum)
 run_real(real_benches.depth)
 run_real(real_benches.pcm)
 run_real(real_benches.pcmfir)
+run_real(real_benches.residual)
 run_real(real_benches.activations)
 run_real(real_benches.ternary)
 run_real(real_benches.blur)

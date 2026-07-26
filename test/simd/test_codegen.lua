@@ -472,6 +472,55 @@ test("ffi.simd operations are packed", function()
 	return acc
       end)
   end
+  if simd.features().ssse3 then
+    local noabssel = {"pcmpgtb", "pcmpgtw", "pcmpgtd", "pcmpgtq",
+		      "pand", "pandn", "por"}
+    local i1 = T.T.i8x16.ct
+    checkloop("i8 compare-select abs", {"pabsb"}, noabssel, function()
+      local acc, step = i1(-7), i1(3)
+      for _ = 1, 400 do
+	local x = acc + step
+	acc = simd.select(simd.gt(x, i1(0)), x, -x)
+      end
+      return acc
+    end)
+    local i2 = T.T.i16x8.ct
+    checkloop("i16 reversed compare-select abs",
+      {"pabsw"}, noabssel, function()
+	local acc, step = i2(-17), i2(5)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.lt(x, i2(0)), -x, x)
+	end
+	return acc
+      end)
+    checkloop("i32 inclusive compare-select abs",
+      {"pabsd"}, noabssel, function()
+	local acc, step = i4(-31), i4(7)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.ge(x, i4(0)), x, -x)
+	end
+	return acc
+      end)
+  end
+  if simd.features().sse4_2 then
+    local q2 = T.T.i64x2.ct
+    local mq = checkloop("i64 compare-select abs fallback",
+      {"psrad", "pshufd", "pxor", "psubq"},
+      {"pcmpgtq", "pand", "pandn", "por"}, function()
+	local acc, step = q2(-63), q2(11)
+	for _ = 1, 400 do
+	  local x = acc + step
+	  acc = simd.select(simd.le(x, q2(0)), -x, x)
+	end
+	return acc
+      end)
+    if mq then
+      check(count(mq, "psubq") == 1,
+	    "i64 absolute value must have one subtract, not a separate negation")
+    end
+  end
   checkloop("shifts", {"pslld", "psrad"}, NOCALL, function()
     local acc = i4(1)
     for _ = 1, 400 do acc = simd.sar(simd.shl(acc + i4(1), 3), 2) end
@@ -1684,6 +1733,37 @@ if simd.features().avx2 then
 	  not body:find("vpand", 1, true) and
 	  not body:find("vpor", 1, true),
 	  "an exact YMM comparison-select max must be one VPMAXSD")
+
+    body = checkymm("i32x8 compare-select abs", {"vpabsd ymm"},
+      function()
+	local acc, step = i8(-31), i8(7)
+	for _ = 1, 400 do
+	  local v = acc + step
+	  acc = simd.select(simd.gt(v, i8(0)), v, -v)
+	end
+	return acc
+      end)
+    check(not body:find("vpcmpgtd", 1, true) and
+	  not body:find("vpand", 1, true) and
+	  not body:find("vpor", 1, true) and
+	  not body:find("vpsubd", 1, true),
+	  "an exact YMM comparison-select abs must be one VPABSD")
+
+    local q4 = T.W.i64x4.ct
+    body = checkymm("i64x4 compare-select abs",
+      {"vpsrad ymm", "vpshufd ymm", "vpxor ymm", "vpsubq ymm"},
+      function()
+	local acc, step = q4(-63), q4(11)
+	for _ = 1, 400 do
+	  local v = acc + step
+	  acc = simd.select(simd.le(v, q4(0)), -v, v)
+	end
+	return acc
+      end)
+    check(not body:find("vpcmpgtq", 1, true) and
+	  not body:find("vpand", 1, true) and
+	  not body:find("vpor", 1, true),
+	  "YMM qword absolute value retained compare-select logic")
 
     checkymm("i32x8 whole equality",
       {"vpcmpeqb ymm", "vpmovmskb"},

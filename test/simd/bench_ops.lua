@@ -569,6 +569,10 @@ do
 	  function(x, y) return simd.select(simd.gt(x, y), x, y) end)
   op_cost("i32x4 select ge max", function() return ia, ib end,
 	  function(x, y) return simd.select(simd.ge(x, y), x, y) end)
+  op_cost("i32x4 select abs", function() return i4(-7) end,
+	  function(x)
+	    return simd.select(simd.gt(x, i4(0)), x, -x)
+	  end)
   op_cost("i32x4 select generic", function() return ia, ib, i4(1) end,
 	  function(x, y, z)
 	    return simd.select(simd.gt(x, y), x + z, y)
@@ -948,6 +952,11 @@ if has_ymm then
     function() return i4(3), i4(5) end,
     function() return i8(3), i8(5) end,
     function(x, y) return simd.select(simd.ge(x, y), x, y) end)
+  width_cost("int32 select abs",
+    function() return i4(-7) end,
+    function() return i8(-7) end,
+    function(x) return simd.select(simd.gt(x, i4(0)), x, -x) end,
+    function(x) return simd.select(simd.gt(x, i8(0)), x, -x) end)
   width_cost("int32 select generic",
     function() return i4(3), i4(5), i4(1) end,
     function() return i8(3), i8(5), i8(1) end,

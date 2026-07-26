@@ -546,6 +546,82 @@ test("comparison-select min/max idioms on trace", function()
   end, 300)
 end)
 
+test("signed comparison-select absolute-value idioms on trace", function()
+  local tabs = {T.T}
+  if simd.features().avx2 then tabs[#tabs+1] = T.W end
+  local forms = {
+    {"gt positive", function(x, z)
+      return simd.select(simd.gt(x, z), x, -x)
+    end},
+    {"lt negative", function(x, z)
+      return simd.select(simd.lt(x, z), -x, x)
+    end},
+    {"ge positive", function(x, z)
+      return simd.select(simd.ge(x, z), x, -x)
+    end},
+    {"le negative", function(x, z)
+      return simd.select(simd.le(x, z), -x, x)
+    end},
+  }
+  for _, tab in ipairs(tabs) do
+    for _, ti in ipairs(tab) do
+      if ti.signed and not ti.fp then
+	local lanes = {}
+	local min = ti.bits == 64 and
+	  ffi.cast("int64_t", 0x8000000000000000ULL) or
+	  -(2 ^ (ti.bits-1))
+	for i = 1, ti.lanes do
+	  local pick = (i-1) % 5
+	  lanes[i] = pick == 0 and min or pick == 1 and -17 or
+		     pick == 2 and -1 or pick == 3 and 0 or 23
+	end
+	local a, ct = T.vec(ti, lanes), ti.ct
+	for _, form in ipairs(forms) do
+	  diffop(ti, "select abs " .. form[1], function(n)
+	    local r = ct(0)
+	    for _ = 1, n do
+	      -- Constructing zero here records a KVEC, which is the strict
+	      -- structural form accepted by the absolute-value matcher.
+	      r = form[2](a, ct(0))
+	    end
+	    return r
+	  end, 300)
+	end
+	-- A non-zero threshold has similar syntax but is not absolute value.
+	diffop(ti, "select signed threshold", function(n)
+	  local r = ct(0)
+	  for _ = 1, n do
+	    r = simd.select(simd.gt(a, ct(1)), a, -a)
+	  end
+	  return r
+	end, 300)
+      end
+    end
+  end
+
+  -- Bitcasts can make comparison operands and selected operands share the
+  -- same data reference despite having different comparison semantics. These
+  -- masks must remain ordinary selects, not signed integer absolute value.
+  local si = T.T.i32x4.ct(-1, 2, -3, 0)
+  local ui = simd.bitcast(T.T.u32x4.ct, si)
+  diff("unsigned mask selecting signed positive/negative arms", function(n)
+    local r = si
+    for _ = 1, n do
+      r = simd.select(simd.gt(ui, T.T.u32x4.ct(0)), si, -si)
+    end
+    return r
+  end, 300)
+  local fa = T.T.float4.ct(-2, 3, -4, 0)
+  local fi = simd.bitcast(T.T.i32x4.ct, fa)
+  diff("float mask selecting signed positive/negative arms", function(n)
+    local r = fi
+    for _ = 1, n do
+      r = simd.select(simd.gt(fa, T.T.float4.ct(0)), fi, -fi)
+    end
+    return r
+  end, 300)
+end)
+
 test("ffi.simd shifts on trace", function()
   -- The count is a *literal* in this first loop. Lane widths without a shift
   -- instruction (8 bit lanes, and the 64 bit arithmetic shift) are rewritten

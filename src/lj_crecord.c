@@ -2079,6 +2079,24 @@ void LJ_FASTCALL recff_simd_binop(jit_State *J, RecordFFData *rd)
   J->base[0] = crec_vec_box(J, emitir(IRT(op, vt), a, b), vt, id);
 }
 
+/* Packed absolute value for a signed integer vector. The 64 bit fallback
+** uses SSE2-class sign/shuffle operations at XMM width (their AVX2 forms at
+** YMM width); narrower lanes use the SSSE3 PABS family.
+*/
+static TRef crec_simd_iabs(jit_State *J, IRType vt, const CTVecInfo *vi,
+			   TRef a)
+{
+  if (vi->esize == 8) {
+    /* Broadcast the sign of each 64 bit lane, then (v^m)-m. */
+    IRType wvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+    TRef sh = emitir(IRT(IR_VSAR, wvt), a, lj_ir_kint(J, 31));
+    TRef m = emitir(IRT(IR_VSHUF, vt), sh,
+		    IRVSHUF(IRVSHUF_PSHUFD, 0xf5));
+    return emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), a, m), m);
+  }
+  return emitir(IRT(IR_VABS, vt), a, 0);
+}
+
 void LJ_FASTCALL recff_simd_unop(jit_State *J, RecordFFData *rd)
 {
   CTVecInfo vi; CTypeID id; IRType vt;
@@ -2100,16 +2118,9 @@ void LJ_FASTCALL recff_simd_unop(jit_State *J, RecordFFData *rd)
       r = emitir(IRT(IR_VAND, vt), a, crec_vec_kmask(J, vt, &vi, ebuf));
     } else if (veck_isunsigned(vi.kind)) {
       r = a;
-    } else if (vi.esize == 8) {
-      /* SSE2: broadcast the sign of each 64 bit lane, then (v^m)-m. */
-      IRType wvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
-      TRef sh = emitir(IRT(IR_VSAR, wvt), a, lj_ir_kint(J, 31));
-      TRef m = emitir(IRT(IR_VSHUF, vt), sh,
-		      IRVSHUF(IRVSHUF_PSHUFD, 0xf5));
-      r = emitir(IRT(IR_VSUB, vt), emitir(IRT(IR_VXOR, vt), a, m), m);
     } else {
-      crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0);
-      r = emitir(IRT(IR_VABS, vt), a, 0);
+      crec_simd_need(J, vi.esize == 8 || (J->flags & JIT_F_SSSE3));
+      r = crec_simd_iabs(J, vt, &vi, a);
     }
     break;
     }
@@ -2468,7 +2479,8 @@ void LJ_FASTCALL recff_ffi_simd_fma(jit_State *J, RecordFFData *rd)
     emitir(IRT(IR_VFMA, vt), a, emitir(IRT(IR_CARG, IRT_NIL), b, c)), vt, id);
 }
 
-static int crec_simd_isones(jit_State *J, IRRef ref, uint32_t size)
+static int crec_simd_iskfill(jit_State *J, IRRef ref, uint32_t size,
+			     uint8_t fill)
 {
   IRIns *k = IR(ref);
   const uint8_t *p;
@@ -2476,7 +2488,7 @@ static int crec_simd_isones(jit_State *J, IRRef ref, uint32_t size)
   if (k->o != IR_KVEC) return 0;
   p = ir_kvec(k);
   for (i = 0; i < size; i++)
-    if (p[i] != 0xff) return 0;
+    if (p[i] != fill) return 0;
   return 1;
 }
 
@@ -2505,14 +2517,52 @@ void LJ_FASTCALL recff_ffi_simd_select(jit_State *J, RecordFFData *rd)
       (vi.esize == 2 || (J->flags & JIT_F_SSE4_1))));
   if (mc->o == IR_VXOR && !veck_isfp(vi.kind)) {
     IRIns *x1 = IR(mc->op1), *x2 = IR(mc->op2);
-    if (x1->o == IR_VCMPGT && crec_simd_isones(J, mc->op2, size)) {
+    if (x1->o == IR_VCMPGT &&
+	crec_simd_iskfill(J, mc->op2, size, 0xff)) {
       mc = x1; inv = 1;
-    } else if (x2->o == IR_VCMPGT && crec_simd_isones(J, mc->op1, size)) {
+    } else if (x2->o == IR_VCMPGT &&
+	       crec_simd_iskfill(J, mc->op1, size, 0xff)) {
       mc = x2; inv = 1;
     }
   }
   ca = mc->op1;
   cb = mc->op2;
+  /*
+  ** select(x > 0, x, -x), and its <, >= and <= equivalents, are signed
+  ** integer absolute value. Match only a literal zero and the exact negated
+  ** selected operand. This preserves wraparound at INT_MIN and avoids
+  ** changing the subtler FP NaN and signed-zero rules.
+  */
+  if (!veck_isfp(vi.kind) && !veck_isunsigned(vi.kind) &&
+      mc->o == IR_VCMPGT && irt_vtype(mc->t) == vt &&
+      mvi.esize == vi.esize && mvi.lanes == vi.lanes &&
+      (vi.esize == 8 || (J->flags & JIT_F_SSSE3))) {
+    TRef x = 0;
+    int truthpos = 0, maskpos = 0, haszero = 0;
+    IRIns *na = IR(tref_ref(a)), *nb = IR(tref_ref(b));
+    if (nb->o == IR_VSUB && irt_vtype(nb->t) == vt &&
+	nb->op2 == tref_ref(a) &&
+	crec_simd_iskfill(J, nb->op1, size, 0)) {
+      x = a; truthpos = 1;
+    } else if (na->o == IR_VSUB && irt_vtype(na->t) == vt &&
+	       na->op2 == tref_ref(b) &&
+	       crec_simd_iskfill(J, na->op1, size, 0)) {
+      x = b; truthpos = 0;
+    }
+    if (x) {
+      if (ca == tref_ref(x) && crec_simd_iskfill(J, cb, size, 0)) {
+	maskpos = 1 ^ inv; haszero = 1;
+      } else if (cb == tref_ref(x) &&
+		 crec_simd_iskfill(J, ca, size, 0)) {
+	maskpos = inv; haszero = 1;
+      }
+      if (haszero && truthpos == maskpos) {
+	r = crec_simd_iabs(J, vt, &vi, x);
+	J->base[0] = crec_vec_box(J, r, vt, id);
+	return;
+      }
+    }
+  }
   if (mc->o == IR_VCMPGT && directmm &&
       irt_isvecfp(mc->t) == veck_isfp(vi.kind) &&
       irt_vecesz(mc->t) == vi.esize &&
