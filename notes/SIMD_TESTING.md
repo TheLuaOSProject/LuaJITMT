@@ -152,6 +152,16 @@ ChaCha20 benchmark provides a production-shaped check with sixteen live state
 vectors; its main traces contain 32 byte shuffles and are 62 instructions
 shorter at either width.
 
+Load-fusion codegen coverage checks both sides of the x86 feature boundary.
+On AVX it requires a cdata `XLOAD` to appear as the memory source of
+`VPADDD`, plus a 256-bit `VADDPS` case. On the Nehalem/SSE path it requires a
+separate `MOVUPS` and rejects memory-source packed arithmetic; executing
+legacy `ADDPS` on an eight-byte-aligned vector payload raises `#GP`. Sandy
+Bridge exercises the VEX-128 form and Haswell the AVX2/YMM form in the
+CPU-model matrix. The randomized NaN-payload programs additionally prevent
+the backend from exchanging floating add/multiply operands merely to fuse a
+left-hand load.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

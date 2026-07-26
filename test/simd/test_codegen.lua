@@ -139,6 +139,31 @@ test("float arithmetic is packed", function()
   end)
 end)
 
+test("vector loads fuse only into alignment-safe AVX arithmetic", function()
+  local i4 = T.T.i32x4.ct
+  local c = {[0] = i4(1, 2, 3, 4)}
+  local body = rawdump("m", function()
+    local acc = i4(0)
+    for _ = 1, 400 do acc = acc + c[0] end
+    return acc
+  end)
+  local memadd = false
+  for line in body:gmatch("[^\n]+") do
+    if line:find("paddd", 1, true) and line:find("[", 1, true) then
+      memadd = true
+      break
+    end
+  end
+  if simd.features().avx then
+    check(memadd, "AVX vector load did not fuse into arithmetic: " ..
+	  body:gsub("\n", " | "))
+  else
+    check(not memadd and body:find("movups", 1, true),
+	  "legacy SSE must load an unaligned vector separately: " ..
+	  body:gsub("\n", " | "))
+  end
+end)
+
 test("integer arithmetic is packed", function()
   local cases = {
     {"i8x16", "paddb", "psubb"},
@@ -810,8 +835,9 @@ if simd.features().avx2 then
 	  "float8 add must target YMM registers: " .. body:gsub("\n", " | "))
     check(body:find("vsubps ymm", 1, true) ~= nil,
 	  "float8 sub must target YMM registers: " .. body:gsub("\n", " | "))
-    check(body:find("vmovups ymm", 1, true) ~= nil,
-	  "float8 load must move 32 bytes: " .. body:gsub("\n", " | "))
+    check(body:match("vaddps ymm[^\n]*%[") ~= nil,
+	  "float8 load must fuse into YMM arithmetic: " ..
+	  body:gsub("\n", " | "))
 
     local i8 = T.W.i32x8.ct
     local b = i8(1, 2, 3, 4, 5, 6, 7, 8)

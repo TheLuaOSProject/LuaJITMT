@@ -908,3 +908,36 @@ consume one of the final two free vector registers. The constant is interned
 in the aligned mcode constant area; traces with room keep the original
 register form. This retains 0.19--0.25 ns low-pressure shuffle/conversion
 costs while eliminating the reload churn in the high-pressure loop.
+
+## D33. Fuse vector loads into arithmetic only when AVX makes it safe
+
+VEX three-operand arithmetic can read its final source directly from memory.
+Keeping a one-use `XLOAD` as a separate `VMOVUPS` wastes an instruction and a
+vector register, especially in coefficient-heavy filters and polynomial
+kernels. The AVX backend now gives a fusable `XLOAD` directly to the generic
+ModRM emitter. For commutative operations it may exchange the two IR operands
+so the load occupies the encodable memory-source position. Floating-point
+add and multiply are excluded from that exchange: although numerically
+commutative, reversing their hardware operands can select a different NaN
+payload or sign bit. They still fuse when the load is already the right
+operand. The IR and observable operation order are unchanged.
+
+This must not be backported mechanically to legacy SSE. A cdata vector payload
+is not guaranteed to be 16-byte aligned. Legacy `ADDPS xmm, m128`, for
+example, raises a general-protection fault for an eight-byte-aligned operand;
+the equivalent VEX instruction explicitly permits an unaligned memory source.
+The backend therefore retains `MOVUPS` plus register arithmetic whenever AVX
+is absent, and the generic x86 fusion gate independently rejects a vector
+`XLOAD` on that path.
+
+Fusion is deliberately limited to a real, one-use `XLOAD`. Letting the generic
+load helper turn an arbitrary spilled vector PHI into a memory operand bypasses
+the loop spill-slot synchronisation and can read the previous iteration's
+value. Constants have their separate pressure-sensitive policy from D32.
+
+In the degree-11 polynomial benchmark, twelve coefficient loads in both the
+root and loop portions become memory-source `VADDPD`s. The XMM trace falls
+from 189 to 165 instructions (1015 to 895 bytes) and the YMM trace from 234
+to 210 instructions (1229 to 1109 bytes). On the measured host XMM improves
+by about 8--9%; the dependency-bound YMM chain keeps essentially the same
+elapsed time with smaller code.

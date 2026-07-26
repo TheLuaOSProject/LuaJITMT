@@ -59,6 +59,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M36 | Central call-site YMM preservation, including GC/indirect calls; Windows x64 upper-lane runtime correctness | done |
 | M37 | Exact inline constant integer modulo, eliminating helper calls and YMM spill/reload traffic in mixed loops | done |
 | M38 | Byte-aligned integer rotate idioms collapse to one packed shuffle; constant shuffle masks use memory only under register pressure | done |
+| M39 | Fuse one-use vector loads into AVX arithmetic memory operands, while retaining safe separate loads for legacy SSE | done |
 
 ## Commands that pass
 
@@ -328,7 +329,7 @@ clamp (float)              scalar    28.5 ms   XMM     1.7 ms 17.27x   YMM     1
 
 Heavy kernels: FIR 32768x60, polynomial 32768x60, Mandelbrot 16384x4
 8-tap FIR (float)          scalar     3.4 ms   XMM     0.8 ms  4.10x   YMM     0.6 ms  5.52x (1.35x/XMM)
-degree-11 poly (double)    scalar     4.0 ms   XMM     2.3 ms  1.78x   YMM     1.4 ms  2.85x (1.60x/XMM)
+degree-11 poly (double)    scalar     4.0 ms   XMM     2.1 ms  1.90x   YMM     1.5 ms  2.77x (1.46x/XMM)
 Mandelbrot 64-it (double)  scalar     6.9 ms   XMM     7.4 ms  0.93x   YMM     6.8 ms  1.00x (1.08x/XMM)
 
 Real-world kernels: 1080p blur, 5.46s audio, 131072 particles, 131072 ChaCha blocks
@@ -345,6 +346,11 @@ scalar version is branchy and the vector version is branchless. Horizontal max
 is memory-bound at either width, but YMM still nearly doubles XMM throughput.
 The heavier group covers overlapping unaligned loads, a dependent Horner
 chain, and divergent mask updates rather than only one-instruction kernels.
+AVX load/arithmetic fusion removes the Horner trace's separate coefficient
+loads: the XMM/YMM traces shrink from 189/234 to 165/210 instructions and the
+XMM run improves from about 2.3 ms to 2.1 ms. YMM is already bound by its
+dependent multiply chain, so its elapsed time stays roughly flat while its
+code shrinks by the same 24 instructions.
 The production-sized group adds four different bottlenecks. The separable
 Gaussian processes a complete 1920x1080 float frame and reaches memory
 bandwidth at XMM width. The windowed-sinc FIR exposes four independent

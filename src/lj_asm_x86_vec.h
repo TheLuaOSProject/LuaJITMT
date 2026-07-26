@@ -253,6 +253,21 @@ static void emit_vshiftl(ASMState *as, x86Op xg, uint32_t grp, Reg dest,
 
 /* -- Generic two-operand lowering ---------------------------------------- */
 
+/* AVX arithmetic accepts an unaligned memory source. Legacy SSE does not. */
+static int asm_veccanfuseload(ASMState *as, IRRef ref)
+{
+  IRIns *ir = IR(ref);
+  return (as->flags & JIT_F_AVX) && ir->o == IR_XLOAD &&
+	 ra_noreg(ir->r) && mayfuse(as, ref);
+}
+
+static Reg asm_vecfuseload(ASMState *as, IRRef ref, RegSet allow)
+{
+  if (asm_veccanfuseload(as, ref))
+    return asm_fuseload(as, ref, allow);
+  return ra_alloc1(as, ref, allow);
+}
+
 /*
 ** dest = op1 <xo> op2, using the two operand x86 form. The left operand is
 ** moved into dest, so dest must never alias the right operand.
@@ -264,14 +279,20 @@ static void asm_vecbin(ASMState *as, IRIns *ir, x86Op xo, int is3byte)
   Reg dest, right;
   int wide = irt_isvec256(ir->t);
   UNUSED(is3byte);  /* The VEX map is derived from the opcode itself. */
+  if (!(irt_isvecfp(ir->t) &&
+	(ir->o == IR_VADD || ir->o == IR_VMUL)) &&
+      irm_iscomm(lj_ir_mode[ir->o]) && asm_veccanfuseload(as, lref) &&
+      !asm_veccanfuseload(as, rref)) {
+    IRRef tmp = lref; lref = rref; rref = tmp;
+  }
   if ((as->flags & JIT_F_AVX)) {
     /* Three operands: the destination may alias either source. */
     Reg left;
     dest = ra_dest(as, ir, RSET_FPR);
     left = ra_alloc1(as, lref, RSET_FPR);
     right = lref == rref ? left :
-	    ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
-    emit_vexrrl(as, xo, dest, left, right, wide);
+	    asm_vecfuseload(as, rref, rset_exclude(RSET_FPR, left));
+    emit_mrm(as, emit_vexopv(xo, left, 0, wide), dest, right);
     return;
   }
   lj_assertA(!wide, "256 bit vector operation without AVX");

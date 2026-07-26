@@ -512,9 +512,11 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
       }
     } else if (ir->o == IR_XLOAD) {
       /* Generic fusion is not ok for 8/16 bit operands (but see asm_comp).
-      ** Fusing unaligned memory operands is ok on x86 (except for SIMD types).
+      ** Legacy SSE arithmetic may fault on an unaligned vector operand; AVX
+      ** explicitly permits it.
       */
       if ((!irt_typerange(ir->t, IRT_I8, IRT_U16)) &&
+	  (!irt_isvec(ir->t) || (as->flags & JIT_F_AVX)) &&
 	  noconflict(as, ref, IR_XSTORE, 2)) {
 	asm_fusexref(as, ir->op1, xallow);
 	return RID_MRM;
