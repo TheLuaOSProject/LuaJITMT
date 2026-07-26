@@ -2261,69 +2261,93 @@ local function chacha_qr_vec(a, b, c, d)
   return a, b, c, d
 end
 
+local chacha_state4 = ffi.typeof("$[18]", u4)
+local chacha_state8 = has_ymm and ffi.typeof("$[18]", u8)
+local chacha_base4 = ffi.typeof("$[17]", u4)
+local chacha_base8 = has_ymm and ffi.typeof("$[17]", u8)
+
+-- Keep the round state in a fixed FFI scratch array at the nested-loop trace
+-- boundary. Otherwise the side trace must materialise sixteen temporary
+-- vector cdata boxes for every block before re-entering the round trace.
+local function chacha_dr_state(x)
+  local x0, x1, x2, x3 = x[0], x[1], x[2], x[3]
+  local x4, x5, x6, x7 = x[4], x[5], x[6], x[7]
+  local x8, x9, x10, x11 = x[8], x[9], x[10], x[11]
+  local x12, x13, x14, x15 = x[12], x[13], x[14], x[15]
+  x0, x4, x8, x12 = chacha_qr_vec(x0, x4, x8, x12)
+  x1, x5, x9, x13 = chacha_qr_vec(x1, x5, x9, x13)
+  x2, x6, x10, x14 = chacha_qr_vec(x2, x6, x10, x14)
+  x3, x7, x11, x15 = chacha_qr_vec(x3, x7, x11, x15)
+  x0, x5, x10, x15 = chacha_qr_vec(x0, x5, x10, x15)
+  x1, x6, x11, x12 = chacha_qr_vec(x1, x6, x11, x12)
+  x2, x7, x8, x13 = chacha_qr_vec(x2, x7, x8, x13)
+  x3, x4, x9, x14 = chacha_qr_vec(x3, x4, x9, x14)
+  x[0], x[1], x[2], x[3] = x0, x1, x2, x3
+  x[4], x[5], x[6], x[7] = x4, x5, x6, x7
+  x[8], x[9], x[10], x[11] = x8, x9, x10, x11
+  x[12], x[13], x[14], x[15] = x12, x13, x14, x15
+end
+
+local function chacha_reset_state(x, base)
+  x[0], x[1], x[2], x[3] = base[0], base[1], base[2], base[3]
+  x[4], x[5], x[6], x[7] = base[4], base[5], base[6], base[7]
+  x[8], x[9], x[10], x[11] = base[8], base[9], base[10], base[11]
+  x[12], x[13], x[14], x[15] = x[16], base[13], base[14], base[15]
+end
+
+local function chacha_finish_state(x, base)
+  x[17] = x[17] +
+    (x[0]+base[0])+(x[1]+base[1])+
+    (x[2]+base[2])+(x[3]+base[3])+
+    (x[4]+base[4])+(x[5]+base[5])+
+    (x[6]+base[6])+(x[7]+base[7])+
+    (x[8]+base[8])+(x[9]+base[9])+
+    (x[10]+base[10])+(x[11]+base[11])+
+    (x[12]+x[16])+(x[13]+base[13])+
+    (x[14]+base[14])+(x[15]+base[15])
+  x[16] = x[16] + base[16]
+end
+
 local function chacha_xmm()
-  local C0, C1, C2, C3 = u4(cc0), u4(cc1), u4(cc2), u4(cc3)
-  local K0, K1, K2, K3 = u4(ck0), u4(ck1), u4(ck2), u4(ck3)
-  local K4, K5, K6, K7 = u4(ck4), u4(ck5), u4(ck6), u4(ck7)
-  local N0, N1, N2 = u4(cn0), u4(cn1), u4(cn2)
-  local counter, step, checksum = u4(0, 1, 2, 3), u4(4), u4(0)
+  local base = ffi.new(chacha_base4)
+  base[0], base[1], base[2], base[3] =
+    u4(cc0), u4(cc1), u4(cc2), u4(cc3)
+  base[4], base[5], base[6], base[7] =
+    u4(ck0), u4(ck1), u4(ck2), u4(ck3)
+  base[8], base[9], base[10], base[11] =
+    u4(ck4), u4(ck5), u4(ck6), u4(ck7)
+  base[13], base[14], base[15], base[16] =
+    u4(cn0), u4(cn1), u4(cn2), u4(4)
+  local x = ffi.new(chacha_state4)
+  x[16], x[17] = u4(0, 1, 2, 3), u4(0)
   for _ = 1, CHACHA_PASSES*CHACHA_BLOCKS/4 do
-    local x0, x1, x2, x3 = C0, C1, C2, C3
-    local x4, x5, x6, x7 = K0, K1, K2, K3
-    local x8, x9, x10, x11 = K4, K5, K6, K7
-    local x12, x13, x14, x15 = counter, N0, N1, N2
-    for _ = 1, 10 do
-      x0, x4, x8, x12 = chacha_qr_vec(x0, x4, x8, x12)
-      x1, x5, x9, x13 = chacha_qr_vec(x1, x5, x9, x13)
-      x2, x6, x10, x14 = chacha_qr_vec(x2, x6, x10, x14)
-      x3, x7, x11, x15 = chacha_qr_vec(x3, x7, x11, x15)
-      x0, x5, x10, x15 = chacha_qr_vec(x0, x5, x10, x15)
-      x1, x6, x11, x12 = chacha_qr_vec(x1, x6, x11, x12)
-      x2, x7, x8, x13 = chacha_qr_vec(x2, x7, x8, x13)
-      x3, x4, x9, x14 = chacha_qr_vec(x3, x4, x9, x14)
-    end
-    x0, x1, x2, x3 = x0+C0, x1+C1, x2+C2, x3+C3
-    x4, x5, x6, x7 = x4+K0, x5+K1, x6+K2, x7+K3
-    x8, x9, x10, x11 = x8+K4, x9+K5, x10+K6, x11+K7
-    x12, x13, x14, x15 = x12+counter, x13+N0, x14+N1, x15+N2
-    checksum = checksum + x0+x1+x2+x3 + x4+x5+x6+x7 +
-	       x8+x9+x10+x11 + x12+x13+x14+x15
-    counter = counter + step
+    chacha_reset_state(x, base)
+    for _ = 1, 10 do chacha_dr_state(x) end
+    chacha_finish_state(x, base)
   end
+  local checksum = x[17]
   return tobit(tonumber(checksum[0]) + tonumber(checksum[1]) +
 	       tonumber(checksum[2]) + tonumber(checksum[3]))
 end
 
 local function chacha_ymm()
-  local C0, C1, C2, C3 = u8(cc0), u8(cc1), u8(cc2), u8(cc3)
-  local K0, K1, K2, K3 = u8(ck0), u8(ck1), u8(ck2), u8(ck3)
-  local K4, K5, K6, K7 = u8(ck4), u8(ck5), u8(ck6), u8(ck7)
-  local N0, N1, N2 = u8(cn0), u8(cn1), u8(cn2)
-  local counter = u8(0, 1, 2, 3, 4, 5, 6, 7)
-  local step, checksum = u8(8), u8(0)
+  local base = ffi.new(chacha_base8)
+  base[0], base[1], base[2], base[3] =
+    u8(cc0), u8(cc1), u8(cc2), u8(cc3)
+  base[4], base[5], base[6], base[7] =
+    u8(ck0), u8(ck1), u8(ck2), u8(ck3)
+  base[8], base[9], base[10], base[11] =
+    u8(ck4), u8(ck5), u8(ck6), u8(ck7)
+  base[13], base[14], base[15], base[16] =
+    u8(cn0), u8(cn1), u8(cn2), u8(8)
+  local x = ffi.new(chacha_state8)
+  x[16], x[17] = u8(0, 1, 2, 3, 4, 5, 6, 7), u8(0)
   for _ = 1, CHACHA_PASSES*CHACHA_BLOCKS/8 do
-    local x0, x1, x2, x3 = C0, C1, C2, C3
-    local x4, x5, x6, x7 = K0, K1, K2, K3
-    local x8, x9, x10, x11 = K4, K5, K6, K7
-    local x12, x13, x14, x15 = counter, N0, N1, N2
-    for _ = 1, 10 do
-      x0, x4, x8, x12 = chacha_qr_vec(x0, x4, x8, x12)
-      x1, x5, x9, x13 = chacha_qr_vec(x1, x5, x9, x13)
-      x2, x6, x10, x14 = chacha_qr_vec(x2, x6, x10, x14)
-      x3, x7, x11, x15 = chacha_qr_vec(x3, x7, x11, x15)
-      x0, x5, x10, x15 = chacha_qr_vec(x0, x5, x10, x15)
-      x1, x6, x11, x12 = chacha_qr_vec(x1, x6, x11, x12)
-      x2, x7, x8, x13 = chacha_qr_vec(x2, x7, x8, x13)
-      x3, x4, x9, x14 = chacha_qr_vec(x3, x4, x9, x14)
-    end
-    x0, x1, x2, x3 = x0+C0, x1+C1, x2+C2, x3+C3
-    x4, x5, x6, x7 = x4+K0, x5+K1, x6+K2, x7+K3
-    x8, x9, x10, x11 = x8+K4, x9+K5, x10+K6, x11+K7
-    x12, x13, x14, x15 = x12+counter, x13+N0, x14+N1, x15+N2
-    checksum = checksum + x0+x1+x2+x3 + x4+x5+x6+x7 +
-	       x8+x9+x10+x11 + x12+x13+x14+x15
-    counter = counter + step
+    chacha_reset_state(x, base)
+    for _ = 1, 10 do chacha_dr_state(x) end
+    chacha_finish_state(x, base)
   end
+  local checksum = x[17]
   local sum = 0
   for i = 0, 7 do sum = sum + tonumber(checksum[i]) end
   return tobit(sum)
