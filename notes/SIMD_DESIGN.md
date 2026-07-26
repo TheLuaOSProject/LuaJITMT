@@ -1351,3 +1351,21 @@ Measured XMM/YMM dword and qword patterns improve from about 0.571 to 0.386
 ns/vector, roughly 32%. A mixed YMM half concatenation improves from 1.138 to
 0.759 ns/vector, about 33%. The direct-operation benchmark reports 0.19
 ns/vector at both XMM and YMM width when the operation is isolated.
+
+## D48. Lower constant same-position blends to one instruction
+
+A `shuffle2` control that chooses lane `i` from either `a[i]` or `b[i]` is a
+blend, not a general permutation. `VSHUF2` now also lowers these controls to
+`PBLENDW` when SSE4.1 is available. The recogniser works in 16-bit word
+units, which captures every 16/32/64-bit lane blend and byte blends whose two
+bytes in each word select the same source.
+
+The immediate is shared by both 128-bit halves of a YMM instruction. The
+recorder therefore verifies that the high-half word mask repeats the low-half
+mask. Independent byte selections or a non-repeating YMM mask remain on the
+general two-shuffle path. This check is semantic, not merely an instruction
+preference: `PBLENDW` cannot express those controls.
+
+Paired-byte and dword dependent blends improve from about 0.571 to 0.386
+ns/vector at both XMM and YMM widths, roughly 32%. Isolated dword blend cost
+is about 0.19 ns/vector and preserves the usual 2x YMM lane throughput.

@@ -624,6 +624,11 @@ test("two-source immediate shuffles on trace", function()
   local cases = {
     {T.T.i32x4.ct, {3, 0, 6, 5}, {7, 4, 2, 1}},
     {T.T.i64x2.ct, {1, 2}, {3, 0}},
+    {T.T.i16x8.ct, {0,9,2,11,4,13,6,15},
+		    {8,1,10,3,12,5,14,7}},
+    {T.T.i8x16.ct,
+      {0,1,18,19,4,5,22,23,8,9,26,27,12,13,30,31},
+      {16,17,2,3,20,21,6,7,24,25,10,11,28,29,14,15}},
   }
   for i, c in ipairs(cases) do
     local ct, direct, swapped = c[1], c[2], c[3]
@@ -1407,21 +1412,23 @@ if simd.features().avx2 then
 
   test("256-bit constant and runtime shuffles cross halves", function()
     for _, ti in ipairs(T.W) do
-      local lanes, identity, localrev, halfswap, halfcat, halfcatrev,
+      local lanes, identity, localrev, halfswap, halfcat, halfcatrev, blend,
 	    unpklo, unpkhi, unpkswap, rev, mix, raw =
-	{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+	{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
       local half = ti.lanes / 2
       local nph = 128 / ti.bits
       for i = 0, ti.lanes-1 do
 	local h, out = (i-i%nph)/nph, i%nph
 	local lolane = h*nph + (out-out%2)/2
 	local hilane = lolane + nph/2
+	local blendunit = ti.bits == 8 and (i-i%2)/2 or i
 	lanes[i+1] = i + 1
 	identity[i+1] = i
 	localrev[i+1] = i-i%half + half-1-i%half
 	halfswap[i+1] = (i+half) % ti.lanes
 	halfcat[i+1] = i < half and i+half or ti.lanes+i-half
 	halfcatrev[i+1] = i < half and ti.lanes+half+i or i-half
+	blend[i+1] = blendunit%2 == 1 and ti.lanes+i or i
 	unpklo[i+1] = lolane + (out%2 == 1 and ti.lanes or 0)
 	unpkhi[i+1] = hilane + (out%2 == 1 and ti.lanes or 0)
 	unpkswap[i+1] = lolane + (out%2 == 0 and ti.lanes or 0)
@@ -1468,6 +1475,13 @@ if simd.features().avx2 then
 	local acc = ct(0)
 	for _ = 1, n do
 	  acc = simd.shuffle2(acc + a, b, unpack(halfcatrev, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm word blend", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(blend, 1, ti.lanes))
 	end
 	return acc
       end, 80)

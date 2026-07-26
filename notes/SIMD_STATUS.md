@@ -74,6 +74,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M51 | Collapse lane-local two-source low/high interleaves to one packed unpack instruction | done |
 | M52 | Collapse single-source and equal-source `shuffle2` controls to the ordinary one-source permute path | done |
 | M53 | Lower native two-source dword/qword shuffles and YMM half concatenations through direct immediate instructions | done |
+| M54 | Lower representable constant same-position two-source blends through one `PBLENDW` | done |
 
 ## Commands that pass
 
@@ -652,3 +653,10 @@ non-matching controls retain the general path. Dword/qword XMM/YMM patterns
 improve from about 0.571 to 0.386 ns/vector, roughly 32%; mixed YMM half
 concatenation improves from 1.138 to 0.759 ns/vector, about 33%. The isolated
 direct benchmark costs 0.19 ns at either width.
+
+Constant same-position `shuffle2` controls now use one `PBLENDW` when each
+16-bit word selects a single source and a YMM high-half mask repeats its low
+half. Paired-byte and dword dependent blends improve from about 0.571 to
+0.386 ns/vector at both widths, roughly 32%; isolated dword cost is about
+0.19 ns/vector. Unpaired bytes and non-repeating controls retain the generic
+route.

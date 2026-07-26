@@ -985,6 +985,8 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
     xo = XO_SHUFPS;
   else if (mode == IRVSHUF2_SHUFPD)
     xo = XO_SHUFPD;
+  else if (mode == IRVSHUF2_PBLENDW)
+    xo = XO_PBLENDW;
   else {
     lj_assertA(mode == IRVSHUF2_PERM2I128 && wide &&
 	       (as->flags & JIT_F_AVX2), "bad VSHUF2 mode");
@@ -1009,7 +1011,11 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
   dest = ra_dest(as, ir, allow);
   if (ra_noreg(right))
     right = ra_alloc1(as, rref, rset_clear(allow, dest));
-  emit_vrri(as, xo, dest, right, imm);
+  emit_i8(as, imm);
+  if (asm_vec3byte(xo))
+    emit_vrr66(as, xo, dest, right);
+  else
+    emit_rr(as, xo, dest, right);
   ra_left(as, dest, lref);
 }
 

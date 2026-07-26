@@ -2761,6 +2761,31 @@ static TRef crec_simd_shuf2_direct(jit_State *J, IRType vt,
       return crec_simd_shuf2_emit(J, vt, a, b,
 				  IRVSHUF2_PERM2I128, imm);
   }
+  if (J->flags & JIT_F_SSE4_1) {
+    int8_t wsel[16];
+    uint32_t nw = ((uint32_t)vi->esize * n) >> 1, imm = 0;
+    memset(wsel, -1, sizeof(wsel));
+    for (i = 0; i < n; i++) {
+      uint32_t v = idx[i], fromb, first, count, w;
+      if (v == i) fromb = 0;
+      else if (v == n+i) fromb = 1;
+      else break;
+      first = (i*(uint32_t)vi->esize) >> 1;
+      count = vi->esize == 1 ? 1 : (uint32_t)vi->esize >> 1;
+      for (w = first; w < first+count; w++) {
+	if (wsel[w] >= 0 && wsel[w] != (int8_t)fromb) break;
+	wsel[w] = (int8_t)fromb;
+      }
+      if (w != first+count) break;
+    }
+    if (i == n) {
+      for (i = 0; i < 8; i++) imm |= (uint32_t)wsel[i] << i;
+      for (i = 8; i < nw && wsel[i] == wsel[i-8]; i++) {}
+      if (i == nw)
+	return crec_simd_shuf2_emit(J, vt, a, b,
+				    IRVSHUF2_PBLENDW, imm);
+    }
+  }
   if (vi->esize == 4) {
     uint32_t sw;
     for (sw = 0; sw < 2; sw++) {

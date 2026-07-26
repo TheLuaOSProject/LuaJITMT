@@ -166,6 +166,10 @@ Direct two-source dword/qword patterns cover both input orders and require
 in both orders; codegen requires `VPERM2I128`. The deliberately irregular
 cross-half case still requires the generic byte routing, keeping the fallback
 live.
+Word-blend coverage spans XMM and YMM plus every lane kind. A paired-byte
+control must emit one `PBLENDW`; an otherwise identical control selecting
+the two bytes independently must retain `PSHUFB`/`POR`. This pins the
+fast-path legality boundary as well as its opcode.
 
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are

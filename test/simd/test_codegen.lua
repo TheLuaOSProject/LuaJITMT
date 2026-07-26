@@ -1094,6 +1094,16 @@ test("shuffle and insert are packed", function()
       end
       return acc
     end)
+  local b16 = T.T.i8x16.ct
+  checkloop("shuffle2 pblendw", {"pblendw"},
+    {"call", "pshufb", "por"}, function()
+      local acc, add, other = b16(0), b16(1), b16(9)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + add, other,
+	  0,1,18,19,4,5,22,23,8,9,26,27,12,13,30,31)
+      end
+      return acc
+    end)
   -- A variable lane index builds the mask with a packed compare instead of
   -- falling back to the interpreter.
   checkloop("insert var lane", {"pcmpeqd", "pandn", "por"}, NOCALL, function()
@@ -1932,6 +1942,32 @@ if simd.features().avx2 then
     check(not body:find("vpshufb ymm", 1, true) and
 	  not body:find("vpor ymm", 1, true),
 	  "a byte interleave must use PUNPCKLBW")
+
+    body = checkymm("i8x32 word blend", {"vpblendw ymm"}, function()
+      local acc, add, other = b32(0), b32(1), b32(9)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + add, other,
+	  0,1,34,35,4,5,38,39,8,9,42,43,12,13,46,47,
+	  16,17,50,51,20,21,54,55,24,25,58,59,28,29,62,63)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a representable byte blend must use VPBLENDW")
+
+    body = checkymm("i8x32 unpaired byte blend",
+      {"vpshufb ymm", "vpor ymm"}, function()
+      local acc, add, other = b32(0), b32(1), b32(9)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + add, other,
+	  0,33,2,35,4,37,6,39,8,41,10,43,12,45,14,47,
+	  16,49,18,51,20,53,22,55,24,57,26,59,28,61,30,63)
+      end
+      return acc
+    end)
+    check(not body:find("vpblendw ymm", 1, true),
+	  "independent byte selections must not use a word blend")
 
     body = checkymm("i32x8 shuffle2 one source", {"vpermd ymm"}, function()
       local acc = i8(0)
