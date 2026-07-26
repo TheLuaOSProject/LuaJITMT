@@ -222,6 +222,14 @@ checks negative values, signed extrema, wraparound and both widths. A
 one-minute PCM16 envelope benchmark writes and validates min/max metadata for
 180,000 independent 16-sample buckets over twelve passes.
 
+Byte-extrema codegen covers signed/unsigned min/max at both widths. XMM must
+use low/high byte unpacks, `PMINUW`, and one `PHMINPOSUW`, with the appropriate
+ordering XOR and no byte `PMIN*`/`PMAX*` or `PSRLDQ` tree. YMM additionally
+requires one half exchange and another `VPMINUW` before
+`VPHMINPOSUW xmm`. Randomized reduction differentials cover byte extrema and
+wraparound. A 16 MiB signed INT8 activation benchmark validates min/max
+metadata for 524,288 independent 32-value blocks over three passes.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

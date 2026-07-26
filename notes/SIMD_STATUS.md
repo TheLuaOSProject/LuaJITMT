@@ -81,6 +81,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M58 | Reduce signed/unsigned byte vectors through `PSADBW` qword partial sums | done |
 | M59 | Collapse unsigned-word horizontal min/max through `PHMINPOSUW` | done |
 | M60 | Map signed-word horizontal min/max to biased `PHMINPOSUW` reductions | done |
+| M61 | Widen byte extrema into word pairs and finish with `PHMINPOSUW` | done |
 
 ## Commands that pass
 
@@ -690,3 +691,10 @@ same mask restores the scalar result. Eight-chain XMM throughput improves
 about 34%. YMM dependent latency improves 29--32% and eight-chain throughput
 21--22%. A one-minute PCM16 waveform-envelope benchmark improves from about
 2.4 to 2.1 ms at XMM width and 2.8 to 2.3 ms at YMM width.
+
+Byte min/max now zero-unpacks low/high byte groups into word pairs, takes
+their unsigned packed minimum, and finishes with `PHMINPOSUW`. Signed and max
+forms reuse the `0x80`/`0x7f` and `0xff` ordering transforms. XMM dependency
+improves 6--26% and eight-chain throughput 20--31%; YMM dependency improves
+18--25% and throughput 7--18%. A 16 MiB INT8 activation-range benchmark
+improves from about 2.3 to 1.8 ms for XMM and 2.5 to 2.0 ms for YMM.

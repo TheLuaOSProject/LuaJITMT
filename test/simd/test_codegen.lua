@@ -1221,6 +1221,36 @@ test("signed word extrema use biased horizontal min-position", function()
   end
 end)
 
+test("byte extrema widen into horizontal word minimum", function()
+  for _, spec in ipairs({
+    {"u8x16", T.T.u8x16.ct, false},
+    {"i8x16", T.T.i8x16.ct, true},
+  }) do
+    local name, ct, signed = spec[1], spec[2], spec[3]
+    local a = ct(1)
+    for _, op in ipairs({"hmin", "hmax"}) do
+      local want = {"punpcklbw", "punpckhbw", "pminuw", "phminposuw"}
+      if signed or op == "hmax" then want[#want+1] = "pxor" end
+      local m = checkloop(name .. " " .. op, want, NOCALL, function()
+	local s, v = 0, ct(0)
+	for _ = 1, 400 do
+	  v = v + a
+	  s = s + tonumber(simd[op](v))
+	end
+	return s
+      end)
+      if m then
+	check(count(m, "phminposuw") == 1,
+	      name .. " " .. op .. ": exactly one horizontal word minimum")
+	check(count(m, "pminub") == 0 and count(m, "pmaxub") == 0 and
+	      count(m, "pminsb") == 0 and count(m, "pmaxsb") == 0 and
+	      count(m, "psrldq") == 0,
+	      name .. " " .. op .. ": byte shuffle tree must be gone")
+      end
+    end
+  end
+end)
+
 test("shuffle and insert are packed", function()
   local i4 = T.T.i32x4.ct
   local a = i4(1, 2, 3, 4)
@@ -2381,6 +2411,34 @@ if simd.features().avx2 then
 	    not body:find("vpmaxsw ymm", 1, true) and
 	    not body:find("vpsrldq ymm", 1, true),
 	    "i16x16 " .. op .. " must use the biased horizontal minimum")
+    end
+
+    for _, spec in ipairs({
+      {"u8x32", T.W.u8x32.ct, false},
+      {"i8x32", T.W.i8x32.ct, true},
+    }) do
+      local name, ct, signed = spec[1], spec[2], spec[3]
+      local add = ct(1)
+      for _, op in ipairs({"hmin", "hmax"}) do
+	local want = {"vpunpcklbw ymm", "vpunpckhbw ymm",
+		      "vpminuw ymm", "vperm2i128 ymm",
+		      "vphminposuw xmm"}
+	if signed or op == "hmax" then want[#want+1] = "vpxor ymm" end
+	body = checkymm(name .. " " .. op, want, function()
+	  local v, result = ct(0), 0
+	  for _ = 1, 400 do
+	    v = v + add
+	    result = result + tonumber(simd[op](v))
+	  end
+	  return v, result
+	end)
+	check(not body:find("vpminub ymm", 1, true) and
+	      not body:find("vpmaxub ymm", 1, true) and
+	      not body:find("vpminsb ymm", 1, true) and
+	      not body:find("vpmaxsb ymm", 1, true) and
+	      not body:find("vpsrldq ymm", 1, true),
+	      name .. " " .. op .. " must use widened word reduction")
+      end
     end
   end)
 end

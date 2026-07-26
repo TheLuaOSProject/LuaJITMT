@@ -1553,3 +1553,38 @@ one minute of signed 48 kHz PCM16 audio in 16-sample buckets. It shares the
 fully unrolled, stable scalar comparison tree used by the depth benchmark.
 The optimized XMM/YMM paths improve about 12%/18% over the prior SIMD code,
 reaching roughly 4.4x/4.0x scalar throughput.
+
+## D55. Widen byte extrema into the word min-position domain
+
+There is no horizontal byte-extrema instruction, but zero-unpacking the low
+and high byte groups gives two vectors of unsigned words. Their packed
+minimum contains every original byte exactly once:
+
+```
+lo = PUNPCKLBW(x, 0)
+hi = PUNPCKHBW(x, 0)
+pairs = PMINUW(lo, hi)
+result = PHMINPOSUW(pairs)
+```
+
+At YMM width the unpacks operate lane-locally. After the first `VPMINUW`,
+the existing half swap and second word minimum combine their results before
+the XMM-only horizontal instruction. XMM therefore falls from eight vector
+instructions to four; YMM falls from ten to six.
+
+Unsigned max complements bytes with `0xff` on input and the scalar result.
+Signed min and max use the same order-preserving `0x80` and `0x7f` masks as
+D54, now repeated per byte. All widening is zero-extension after that
+mapping, so the unsigned word minimum has exactly the desired byte order.
+The final extraction still uses the original byte ctype and preserves signed
+or unsigned result extension.
+
+Across signed/unsigned min/max, dependent XMM cost improves about 6--26% and
+eight-chain throughput 20--31%. YMM dependent cost improves 18--25%; its
+already parallel generic tree leaves a smaller 7--18% eight-chain gain.
+
+The production benchmark suite now scans 16 MiB of signed INT8 neural
+activations and emits min/max metadata for every 32-value block, as used by
+quantization calibration and saturation diagnostics. Compared with the prior
+SIMD reduction it improves about 22% at XMM width and 20% at YMM width,
+reaching roughly 6.9x/6.2x the fully unrolled scalar path.

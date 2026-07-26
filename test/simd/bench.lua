@@ -873,6 +873,77 @@ real_benches.pcm = {
 }
 end
 
+-------------------------------------------------- INT8 activation range --
+
+do
+-- Compute per-32-value range metadata over 16 MiB of quantized neural-network
+-- activations. Calibration, saturation diagnostics and blockwise dynamic
+-- quantization all scan signed INT8 tensors this way.
+local ACT_N = 16 * 1024 * 1024
+local ACT_BLOCKS = ACT_N / 32
+local ACT_PASSES = 3
+local act_in = ffi.new("int8_t[?]", ACT_N)
+local act_lo_s = ffi.new("int8_t[?]", ACT_BLOCKS)
+local act_hi_s = ffi.new("int8_t[?]", ACT_BLOCKS)
+local act_lo_x = ffi.new("int8_t[?]", ACT_BLOCKS)
+local act_hi_x = ffi.new("int8_t[?]", ACT_BLOCKS)
+local act_lo_y = has_ymm and ffi.new("int8_t[?]", ACT_BLOCKS)
+local act_hi_y = has_ymm and ffi.new("int8_t[?]", ACT_BLOCKS)
+local act_pattern = {
+  71,-63,45,-77,29,-51,80,-35,17,-69,57,-23,39,-55,67,-41,
+  53,-75,31,-47,73,-19,43,-65,13,-57,61,-27,35,-71,49,-33,
+}
+for i = 0, ACT_N-1 do
+  act_in[i] = (math.floor(i/32)*17)%80 - 40 + act_pattern[i%32+1]
+end
+local act16 = ffi.typeof("i8x16")
+local act32 = has_ymm and ffi.typeof("i8x32")
+local act_v16 = ffi.cast(ffi.typeof("$ *", act16), act_in)
+local act_v32 = has_ymm and ffi.cast(ffi.typeof("$ *", act32), act_in)
+
+local function act_scalar()
+  local src, lo, hi = act_in, act_lo_s, act_hi_s
+  for _ = 1, ACT_PASSES do
+    for i = 0, ACT_BLOCKS-1 do
+      local p = i*32
+      local l0, h0 = extrema16_scalar(src, p)
+      local l1, h1 = extrema16_scalar(src, p+16)
+      lo[i], hi[i] = l0 < l1 and l0 or l1, h0 > h1 and h0 or h1
+    end
+  end
+  return sample_sum(lo, ACT_BLOCKS) + sample_sum(hi, ACT_BLOCKS)
+end
+
+local function act_xmm()
+  local src, lo, hi = act_v16, act_lo_x, act_hi_x
+  for _ = 1, ACT_PASSES do
+    for i = 0, ACT_BLOCKS-1 do
+      local p = i*2
+      local a, b = src[p], src[p+1]
+      lo[i] = simd.hmin(simd.min(a, b))
+      hi[i] = simd.hmax(simd.max(a, b))
+    end
+  end
+  return sample_sum(lo, ACT_BLOCKS) + sample_sum(hi, ACT_BLOCKS)
+end
+
+local function act_ymm()
+  local src, lo, hi = act_v32, act_lo_y, act_hi_y
+  for _ = 1, ACT_PASSES do
+    for i = 0, ACT_BLOCKS-1 do
+      local v = src[i]
+      lo[i], hi[i] = simd.hmin(v), simd.hmax(v)
+    end
+  end
+  return sample_sum(lo, ACT_BLOCKS) + sample_sum(hi, ACT_BLOCKS)
+end
+
+real_benches.activations = {
+  scalar = act_scalar, xmm = act_xmm, ymm = act_ymm,
+  name = "INT8 activation range", mib = ACT_N/(1024*1024),
+}
+end
+
 -------------------------------------------------------- 1080p Gaussian blur --
 
 do
@@ -1522,9 +1593,10 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0fs PCM envelope, %.2fs FIR audio, %d particles, %d ChaCha blocks\n",
-  real_benches.checksum.mib, real_benches.pcm.seconds,
-  real_benches.audio.seconds, real_benches.particles.count,
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges, %.0fs PCM envelope, %.2fs FIR audio, %d particles, %d ChaCha blocks\n",
+  real_benches.checksum.mib, real_benches.activations.mib,
+  real_benches.pcm.seconds, real_benches.audio.seconds,
+  real_benches.particles.count,
   real_benches.chacha.blocks))
 
 local function run_real(b)
@@ -1548,6 +1620,7 @@ run_real(real_benches.rgba)
 run_real(real_benches.checksum)
 run_real(real_benches.depth)
 run_real(real_benches.pcm)
+run_real(real_benches.activations)
 run_real(real_benches.blur)
 run_real(real_benches.audio)
 run_real(real_benches.particles)
