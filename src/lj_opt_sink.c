@@ -17,6 +17,7 @@
 
 /* Some local macros to save typing. Undef'd at the end. */
 #define IR(ref)		(&J->cur.ir[(ref)])
+#define IRREF(p)	((IRRef)((p) - J->cur.ir))
 
 /* Check whether the store ref points to an eligible allocation. */
 static IRIns *sink_checkalloc(jit_State *J, IRIns *irs)
@@ -87,17 +88,17 @@ static void sink_mark_ins(jit_State *J)
     case IR_BASE:
       return;  /* Finished. */
     case IR_ALOAD: case IR_HLOAD: case IR_XLOAD: case IR_TBAR: case IR_ALEN:
-      irt_setmark(IR(ir->op1)->t);  /* Mark ref for remaining loads. */
+      irref_setmark(J, ir->op1);  /* Mark ref for remaining loads. */
       break;
     case IR_FLOAD:
-      if (irt_ismarked(ir->t) || ir->op2 == IRFL_TAB_META)
-	irt_setmark(IR(ir->op1)->t);  /* Mark table for remaining loads. */
+      if (irref_ismarked(J, IRREF(ir)) || ir->op2 == IRFL_TAB_META)
+	irref_setmark(J, ir->op1);  /* Mark table for remaining loads. */
       break;
     case IR_ASTORE: case IR_HSTORE: case IR_FSTORE: case IR_XSTORE: {
       IRIns *ira = sink_checkalloc(J, ir);
       if (!ira || (irt_isphi(ira->t) && !sink_checkphi(J, ira, ir->op2)))
-	irt_setmark(IR(ir->op1)->t);  /* Mark ineligible ref. */
-      irt_setmark(IR(ir->op2)->t);  /* Mark stored value. */
+	irref_setmark(J, ir->op1);  /* Mark ineligible ref. */
+      irref_setmark(J, ir->op2);  /* Mark stored value. */
       break;
       }
 #if LJ_HASFFI
@@ -106,17 +107,17 @@ static void sink_mark_ins(jit_State *J)
 	  (!sink_checkphi(J, ir, ir->op2) ||
 	   (LJ_32 && ir+1 < irlast && (ir+1)->o == IR_HIOP &&
 	    !sink_checkphi(J, ir, (ir+1)->op2))))
-	irt_setmark(ir->t);  /* Mark ineligible allocation. */
+	irref_setmark(J, IRREF(ir));  /* Mark ineligible allocation. */
 #endif
       /* fallthrough */
     case IR_USTORE:
-      irt_setmark(IR(ir->op2)->t);  /* Mark stored value. */
+      irref_setmark(J, ir->op2);  /* Mark stored value. */
       break;
 #if LJ_HASFFI
     case IR_CALLXS:
 #endif
     case IR_CALLS:
-      irt_setmark(IR(ir->op1)->t);  /* Mark (potentially) stored values. */
+      irref_setmark(J, ir->op1);  /* Mark (potentially) stored values. */
       break;
     case IR_PHI: {
       IRIns *irl = IR(ir->op1), *irr = IR(ir->op2);
@@ -125,14 +126,14 @@ static void sink_mark_ins(jit_State *J)
 	  (irl->o == IR_TNEW || irl->o == IR_TDUP ||
 	   (LJ_HASFFI && (irl->o == IR_CNEW || irl->o == IR_CNEWI))))
 	break;
-      irt_setmark(irl->t);
-      irt_setmark(irr->t);
+      irref_setmark(J, ir->op1);
+      irref_setmark(J, ir->op2);
       break;
       }
     default:
-      if (irt_ismarked(ir->t) || irt_isguard(ir->t)) {  /* Propagate mark. */
-	if (ir->op1 >= REF_FIRST) irt_setmark(IR(ir->op1)->t);
-	if (ir->op2 >= REF_FIRST) irt_setmark(IR(ir->op2)->t);
+      if (irref_ismarked(J, IRREF(ir)) || irt_isguard(ir->t)) {
+	if (ir->op1 >= REF_FIRST) irref_setmark(J, ir->op1);
+	if (ir->op2 >= REF_FIRST) irref_setmark(J, ir->op2);
       }
       break;
     }
@@ -147,7 +148,7 @@ static void sink_mark_snap(jit_State *J, SnapShot *snap)
   for (n = 0; n < nent; n++) {
     IRRef ref = snap_ref(map[n]);
     if (!irref_isk(ref))
-      irt_setmark(IR(ref)->t);
+      irref_setmark(J, ref);
   }
 }
 
@@ -160,11 +161,13 @@ static void sink_remark_phi(jit_State *J)
     remark = 0;
     for (ir = IR(J->cur.nins-1); ir->o == IR_PHI; ir--) {
       IRIns *irl = IR(ir->op1), *irr = IR(ir->op2);
-      if (!((irl->t.irt ^ irr->t.irt) & IRT_MARK) && irl->prev == irr->prev)
+      int lm = irref_ismarked(J, ir->op1);
+      int rm = irref_ismarked(J, ir->op2);
+      if (lm == rm && irl->prev == irr->prev)
 	continue;
-      remark |= (~(irl->t.irt & irr->t.irt) & IRT_MARK);
-      irt_setmark(IR(ir->op1)->t);
-      irt_setmark(IR(ir->op2)->t);
+      remark |= !(lm && rm);
+      irref_setmark(J, ir->op1);
+      irref_setmark(J, ir->op2);
     }
   } while (remark);
 }
@@ -177,7 +180,7 @@ static void sink_sweep_ins(jit_State *J)
     switch (ir->o) {
     case IR_ASTORE: case IR_HSTORE: case IR_FSTORE: case IR_XSTORE: {
       IRIns *ira = sink_checkalloc(J, ir);
-      if (ira && !irt_ismarked(ira->t)) {
+      if (ira && !irref_ismarked(J, IRREF(ira))) {
 	int delta = (int)(ir - ira);
 	ir->prev = REGSP(RID_SINK, delta > 255 ? 255 : delta);
       } else {
@@ -186,10 +189,10 @@ static void sink_sweep_ins(jit_State *J)
       break;
       }
     case IR_NEWREF:
-      if (!irt_ismarked(IR(ir->op1)->t)) {
+      if (!irref_ismarked(J, ir->op1)) {
 	ir->prev = REGSP(RID_SINK, 0);
       } else {
-	irt_clearmark(ir->t);
+	irref_clearmark(J, IRREF(ir));
 	ir->prev = REGSP_INIT;
       }
       break;
@@ -197,18 +200,18 @@ static void sink_sweep_ins(jit_State *J)
     case IR_CNEW: case IR_CNEWI:
 #endif
     case IR_TNEW: case IR_TDUP:
-      if (!irt_ismarked(ir->t)) {
+      if (!irref_ismarked(J, IRREF(ir))) {
 	ir->t.irt &= ~IRT_GUARD;
 	ir->prev = REGSP(RID_SINK, 0);
 	J->cur.sinktags = 1;  /* Signal present SINK tags to assembler. */
       } else {
-	irt_clearmark(ir->t);
+	irref_clearmark(J, IRREF(ir));
 	ir->prev = REGSP_INIT;
       }
       break;
     case IR_PHI: {
       IRIns *ira = IR(ir->op2);
-      if (!irt_ismarked(ira->t) &&
+      if (!irref_ismarked(J, ir->op2) &&
 	  (ira->o == IR_TNEW || ira->o == IR_TDUP ||
 	   (LJ_HASFFI && (ira->o == IR_CNEW || ira->o == IR_CNEWI)))) {
 	ir->prev = REGSP(RID_SINK, 0);
@@ -218,13 +221,13 @@ static void sink_sweep_ins(jit_State *J)
       break;
       }
     default:
-      irt_clearmark(ir->t);
+      irref_clearmark(J, IRREF(ir));
       ir->prev = REGSP_INIT;
       break;
     }
   }
   for (ir = IR(J->cur.nk); ir < irbase; ir++) {
-    irt_clearmark(ir->t);
+    irref_clearmark(J, IRREF(ir));
     ir->prev = REGSP_INIT;
     /* The false-positive of irt_is64() for ASMREF_L (REF_NIL) is OK here. */
     if (irt_isvec(ir->t))
@@ -255,6 +258,7 @@ void lj_opt_sink(jit_State *J)
   }
 }
 
+#undef IRREF
 #undef IR
 
 #endif

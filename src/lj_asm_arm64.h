@@ -569,7 +569,7 @@ static void asm_retf(ASMState *as, IRIns *ir)
   int32_t delta = 1+LJ_FR2+bc_a(*((const BCIns *)pc - 1));
   as->topslot -= (BCReg)delta;
   if ((int32_t)as->topslot < 0) as->topslot = 0;
-  irt_setmark(IR(REF_BASE)->t);  /* Children must not coalesce with BASE reg. */
+  ir_setmark(as, IR(REF_BASE));  /* Children must not coalesce with BASE reg. */
   emit_setgl(as, base, jit_base);
   emit_addptr(as, base, -8*delta);
   asm_guardcc(as, CC_NE);
@@ -1901,7 +1901,7 @@ static void asm_head_root_base(ASMState *as)
   Reg r = ir->r;
   if (ra_hasreg(r)) {
     ra_free(as, r);
-    if (rset_test(as->modset, r) || irt_ismarked(ir->t))
+    if (rset_test(as->modset, r) || ir_ismarked(as, ir))
       ir->r = RID_INIT;  /* No inheritance for modified BASE register. */
     if (r != RID_BASE)
       emit_movrr(as, ir, r, RID_BASE);
@@ -1915,7 +1915,7 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
   Reg r = ir->r;
   if (ra_hasreg(r)) {
     ra_free(as, r);
-    if (rset_test(as->modset, r) || irt_ismarked(ir->t))
+    if (rset_test(as->modset, r) || ir_ismarked(as, ir))
       ir->r = RID_INIT;  /* No inheritance for modified BASE register. */
     if (irp->r == r) {
       return r;  /* Same BASE register already coalesced. */
@@ -2098,4 +2098,3 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   if (cstart) lj_mcode_sync(cstart, px+1);
   lj_mcode_patch(J, mcarea, 1);
 }
-

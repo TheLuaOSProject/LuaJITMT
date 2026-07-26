@@ -414,8 +414,7 @@ IRTDEF(IRTENUM)
   IRT_INTP = LJ_64 ? IRT_I64 : IRT_INT,
   IRT_UINTP = LJ_64 ? IRT_U64 : IRT_U32,
 
-  /* Additional flags. */
-  IRT_MARK = 0x20,	/* Marker for misc. purposes. */
+  /* Additional flags. Bit 0x20 is reserved for vector width. */
   IRT_ISPHI = 0x40,	/* Instruction is left or right PHI operand. */
   IRT_GUARD = 0x80,	/* Instruction is a guard. */
 
@@ -525,9 +524,6 @@ static LJ_AINLINE uint32_t irt_toitype_(IRType t)
 #define irt_toitype(t)		irt_toitype_(irt_type((t)))
 
 #define irt_isguard(t)		((t).irt & IRT_GUARD)
-#define irt_ismarked(t)		((t).irt & IRT_MARK)
-#define irt_setmark(t)		((t).irt |= IRT_MARK)
-#define irt_clearmark(t)	((t).irt &= ~IRT_MARK)
 #define irt_isphi(t)		((t).irt & IRT_ISPHI)
 #define irt_setphi(t)		((t).irt |= IRT_ISPHI)
 #define irt_clearphi(t)		((t).irt &= ~IRT_ISPHI)

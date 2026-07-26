@@ -380,7 +380,7 @@ static void split_ir(jit_State *J)
     nir->op2 = ir->op2 < nk ? ir->op2 : oir[ir->op2].prev;
     ir->prev = nref;  /* Loword substitution. */
     nir->o = ir->o;
-    nir->t.irt = ir->t.irt & ~(IRT_MARK|IRT_ISPHI);
+    nir->t.irt = ir->t.irt & ~IRT_ISPHI;
     hisubst[ref] = 0;
 
     /* Split 64 bit instructions. */

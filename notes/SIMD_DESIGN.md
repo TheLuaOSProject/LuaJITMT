@@ -517,3 +517,22 @@ should be. On a loop whose iterations are independent it is slightly *slower*,
 because the loop is bound by the separate accumulator's dependency chain and
 the one remaining copy lands on the critical path. Reporting only the first
 number would oversell the operation.
+
+## D19. Keep the six lane types; encode 256-bit width in IR type bit `0x20`
+
+Duplicating the six vector base types for 256-bit values would consume six
+additional type IDs, but the five-bit base-type field only has two free.
+Widening that field would collide with the PHI and guard flags and would make
+the compact eight-byte `IRIns` representation substantially harder to keep.
+
+Width is orthogonal to lane kind, so 256-bit values will reuse the same six
+base types and carry `IRT_VEC256` in bit `0x20`. For example, `IRT_V4I32`
+still describes 32-bit integer lanes; adding the width flag changes the value
+from four lanes in an XMM register to eight lanes in a YMM register.
+
+That bit used to be the transient `IRT_MARK` flag shared by dead-code
+elimination, loop-PHI handling, allocation sinking, and register allocation.
+Those marks now live in an 8192-byte scratch bitset with one bit for every
+16-bit IR reference. The bitset is cleared at recording setup and before each
+assembly attempt. This frees the width bit without growing `IRIns` or changing
+the meaning of persistent IR.

@@ -42,6 +42,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M20 | Merge `upstream/v2.1` to `a471ab78`; both documented upstream bugs fixed | done |
 | M21 | FMA form selection (132/213/231) so no register copy is needed | done |
 | M22 | `simd.mulhi`, the high half of the lane product (PMULHW/PMULHUW) | done |
+| M23 | Move transient IR marks to a scratch bitset, reserving type bit `0x20` for 256-bit width | done |
 
 ## Commands that pass
 

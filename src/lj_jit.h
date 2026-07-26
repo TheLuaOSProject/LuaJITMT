@@ -326,6 +326,9 @@ typedef struct BPropEntry {
 /* Number of slots for the backpropagation cache. Must be a power of 2. */
 #define BPROP_SLOTS	16
 
+/* One transient optimizer/assembler mark bit for every possible IRRef. */
+#define IRMARK_BYTES	((REF_DROP+1u)/8u)
+
 /* Scalar evolution analysis cache. */
 typedef struct ScEvEntry {
   MRef pc;		/* Bytecode PC of FORI. */
@@ -481,6 +484,7 @@ typedef struct jit_State {
   IRRef1 ktrace;	/* Reference to KGC with GCtrace. */
 
   IRRef1 chain[IR__MAX];  /* IR instruction skip-list chain anchors. */
+  uint8_t irmark[IRMARK_BYTES];  /* Transient IR marks, indexed by IRRef. */
   TRef slot[LJ_MAX_JSLOTS+LJ_STACK_EXTRA];  /* Stack slot map. */
 
   int32_t param[JIT_P__MAX];  /* JIT engine parameters. */
@@ -523,6 +527,26 @@ typedef struct jit_State {
   int prof_mode;	/* Profiling mode: 0, 'f', 'l'. */
 #endif
 } jit_State;
+
+static LJ_AINLINE int irref_ismarked(jit_State *J, IRRef ref)
+{
+  return (J->irmark[ref >> 3] >> (ref & 7)) & 1;
+}
+
+static LJ_AINLINE void irref_setmark(jit_State *J, IRRef ref)
+{
+  J->irmark[ref >> 3] |= (uint8_t)(1u << (ref & 7));
+}
+
+static LJ_AINLINE void irref_clearmark(jit_State *J, IRRef ref)
+{
+  J->irmark[ref >> 3] &= (uint8_t)~(1u << (ref & 7));
+}
+
+static LJ_AINLINE void irref_clearmarks(jit_State *J)
+{
+  memset(J->irmark, 0, sizeof(J->irmark));
+}
 
 #ifdef LUA_USE_ASSERT
 #define lj_assertJ(c, ...)	lj_assertG_(J2G(J), (c), __VA_ARGS__)

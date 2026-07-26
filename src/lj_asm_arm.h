@@ -519,7 +519,7 @@ static void asm_retf(ASMState *as, IRIns *ir)
   int32_t delta = 1+LJ_FR2+bc_a(*((const BCIns *)pc - 1));
   as->topslot -= (BCReg)delta;
   if ((int32_t)as->topslot < 0) as->topslot = 0;
-  irt_setmark(IR(REF_BASE)->t);  /* Children must not coalesce with BASE reg. */
+  ir_setmark(as, IR(REF_BASE));  /* Children must not coalesce with BASE reg. */
   /* Need to force a spill on REF_BASE now to update the stack slot. */
   emit_lso(as, ARMI_STR, base, RID_SP, ra_spill(as, IR(REF_BASE)));
   emit_setgl(as, base, jit_base);
@@ -2204,7 +2204,7 @@ static void asm_head_root_base(ASMState *as)
   IRIns *ir;
   asm_head_lreg(as);
   ir = IR(REF_BASE);
-  if (ra_hasreg(ir->r) && (rset_test(as->modset, ir->r) || irt_ismarked(ir->t)))
+  if (ra_hasreg(ir->r) && (rset_test(as->modset, ir->r) || ir_ismarked(as, ir)))
     ra_spill(as, ir);
   ra_destreg(as, ir, RID_BASE);
 }
@@ -2215,7 +2215,7 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
   IRIns *ir;
   asm_head_lreg(as);
   ir = IR(REF_BASE);
-  if (ra_hasreg(ir->r) && (rset_test(as->modset, ir->r) || irt_ismarked(ir->t)))
+  if (ra_hasreg(ir->r) && (rset_test(as->modset, ir->r) || ir_ismarked(as, ir)))
     ra_spill(as, ir);
   if (ra_hasspill(irp->s)) {
     return ra_dest(as, ir, RSET_GPR);
@@ -2342,4 +2342,3 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   lj_mcode_sync(cstart, cend);
   lj_mcode_patch(J, mcarea, 1);
 }
-

@@ -2869,6 +2869,7 @@ void lj_record_setup(jit_State *J)
   /* Initialize state related to current trace. */
   memset(J->slot, 0, sizeof(J->slot));
   memset(J->chain, 0, sizeof(J->chain));
+  irref_clearmarks(J);
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
   memset(J->rbchash, 0, sizeof(J->rbchash));
 #endif

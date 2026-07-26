@@ -118,6 +118,12 @@ typedef struct ASMState {
 #endif
 
 #define IR(ref)			(&as->ir[(ref)])
+#define ir_ismarked(as, p) \
+  irref_ismarked((as)->J, (IRRef)((p) - (as)->ir))
+#define ir_setmark(as, p) \
+  irref_setmark((as)->J, (IRRef)((p) - (as)->ir))
+#define ir_clearmark(as, p) \
+  irref_clearmark((as)->J, (IRRef)((p) - (as)->ir))
 
 #define ASMREF_TMP1		REF_TRUE	/* Temp. register. */
 #define ASMREF_TMP2		REF_FALSE	/* Temp. register. */
@@ -1518,7 +1524,7 @@ static void asm_phi_shuffle(ASMState *as)
 	if (!rset_test(as->freeset, r)) {  /* PHI register blocked? */
 	  IRRef ref = regcost_ref(as->cost[r]);
 	  /* Blocked by other PHI (w/reg)? */
-	  if (!ra_iskref(ref) && irt_ismarked(IR(ref)->t)) {
+	  if (!ra_iskref(ref) && ir_ismarked(as, IR(ref))) {
 	    rset_set(blocked, r);
 	    if (ra_hasreg(left))
 	      rset_set(blockedby, left);
@@ -1568,7 +1574,7 @@ static void asm_phi_shuffle(ASMState *as)
     IRRef lref = as->phireg[r];
     IRIns *ir = IR(lref);
     if (ra_hasspill(ir->s)) {  /* Left PHI gained a spill slot? */
-      irt_clearmark(ir->t);  /* Handled here, so clear marker now. */
+      ir_clearmark(as, ir);  /* Handled here, so clear marker now. */
       ra_alloc1(as, lref, RID2RSET(r));
       ra_save(as, ir, r);  /* Save to spill slot inside the loop. */
       checkmclim(as);
@@ -1645,8 +1651,8 @@ static void asm_phi_fixup(ASMState *as)
     Reg r = rset_picktop(work);
     IRRef lref = as->phireg[r];
     IRIns *ir = IR(lref);
-    if (irt_ismarked(ir->t)) {
-      irt_clearmark(ir->t);
+    if (ir_ismarked(as, ir)) {
+      ir_clearmark(as, ir);
       /* Left PHI gained a spill slot before the loop? */
       if (ra_hasspill(ir->s)) {
 	ra_addrename(as, r, lref, as->loopsnapno);
@@ -1681,7 +1687,7 @@ static void asm_phi(ASMState *as, IRIns *ir)
     ir->r = (uint8_t)r;
     rset_set(as->phiset, r);
     as->phireg[r] = (IRRef1)ir->op1;
-    irt_setmark(irl->t);  /* Marks left PHIs _with_ register. */
+    ir_setmark(as, irl);  /* Marks left PHIs _with_ register. */
     if (ra_noreg(irl->r))
       ra_sethint(irl->r, r); /* Set register hint for left PHI. */
   } else {  /* Otherwise allocate a spill slot. */
@@ -2007,7 +2013,7 @@ static void asm_head_side(ASMState *as)
 	checkmclim(as);
       }
     } else if (ra_hasspill(ir->s)) {
-      irt_setmark(ir->t);
+      ir_setmark(as, ir);
       pass2 = 1;
     }
     if (ir->r == rs) {  /* Coalesce matching registers right now. */
@@ -2035,11 +2041,11 @@ static void asm_head_side(ASMState *as)
   if (pass2) {
     for (i = as->stopins; i > REF_BASE; i--) {
       IRIns *ir = IR(i);
-      if (irt_ismarked(ir->t)) {
+      if (ir_ismarked(as, ir)) {
 	RegSet mask;
 	Reg r;
 	RegSP rs;
-	irt_clearmark(ir->t);
+	ir_clearmark(as, ir);
 	rs = as->parentmap[i - REF_FIRST];
 	if (!ra_hasspill(regsp_spill(rs)))
 	  ra_sethint(ir->r, rs);  /* Hint may be gone, set it again. */
@@ -2593,6 +2599,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     as->gcsteps = 0;
     as->sectref = as->loopref;
     as->fuseref = (as->flags & JIT_F_OPT_FUSE) ? as->loopref : FUSE_DISABLED;
+    irref_clearmarks(J);
     asm_setup_regsp(as);
     if (!as->loopref)
       asm_tail_link(as);

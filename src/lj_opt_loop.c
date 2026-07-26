@@ -117,7 +117,7 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
       phi[j++] = (IRRef1)lref;
       if (!(IR(rref)->op1 == lref || IR(rref)->op2 == lref)) {
 	/* Quick check for simple recurrences failed, need pass2. */
-	irt_setmark(IR(lref)->t);
+	irref_setmark(J, lref);
 	passx = 1;
       }
     }
@@ -128,17 +128,19 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
     SnapNo s;
     for (i = J->cur.nins-1; i > invar; i--) {
       IRIns *ir = IR(i);
-      if (!irref_isk(ir->op2)) irt_clearmark(IR(ir->op2)->t);
+      if (!irref_isk(ir->op2)) irref_clearmark(J, ir->op2);
       if (!irref_isk(ir->op1)) {
-	irt_clearmark(IR(ir->op1)->t);
+	irref_clearmark(J, ir->op1);
 	if (ir->op1 < invar &&
 	    ir->o >= IR_CALLN && ir->o <= IR_CARG) {  /* ORDER IR */
-	  ir = IR(ir->op1);
+	  IRRef ref = ir->op1;
+	  ir = IR(ref);
 	  while (ir->o == IR_CARG) {
-	    if (!irref_isk(ir->op2)) irt_clearmark(IR(ir->op2)->t);
+	    if (!irref_isk(ir->op2)) irref_clearmark(J, ir->op2);
 	    if (irref_isk(ir->op1)) break;
-	    ir = IR(ir->op1);
-	    irt_clearmark(ir->t);
+	    ref = ir->op1;
+	    ir = IR(ref);
+	    irref_clearmark(J, ref);
 	  }
 	}
       }
@@ -149,7 +151,7 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
       MSize n, nent = snap->nent;
       for (n = 0; n < nent; n++) {
 	IRRef ref = snap_ref(map[n]);
-	if (!irref_isk(ref)) irt_clearmark(IR(ref)->t);
+	if (!irref_isk(ref)) irref_clearmark(J, ref);
       }
     }
   }
@@ -159,7 +161,7 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
     IRRef ref = tref_ref(J->slot[i]);
     while (!irref_isk(ref) && ref != subst[ref]) {
       IRIns *ir = IR(ref);
-      irt_clearmark(ir->t);  /* Unmark potential uses, too. */
+      irref_clearmark(J, ref);  /* Unmark potential uses, too. */
       if (irt_isphi(ir->t) || irt_ispri(ir->t))
 	break;
       irt_setphi(ir->t);
@@ -176,11 +178,10 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
     passx = 0;
     for (i = 0; i < nphi; i++) {
       IRRef lref = phi[i];
-      IRIns *ir = IR(lref);
-      if (!irt_ismarked(ir->t)) {  /* Propagate only from unmarked PHIs. */
-	IRIns *irr = IR(subst[lref]);
-	if (irt_ismarked(irr->t)) {  /* Right ref points to other PHI? */
-	  irt_clearmark(irr->t);  /* Mark that PHI as non-redundant. */
+      if (!irref_ismarked(J, lref)) {  /* Propagate from unmarked PHIs. */
+	IRRef rref = subst[lref];
+	if (irref_ismarked(J, rref)) {  /* Right ref points to other PHI? */
+	  irref_clearmark(J, rref);  /* Mark that PHI as non-redundant. */
 	  passx = 1;  /* Retry. */
 	}
       }
@@ -190,13 +191,13 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
   for (i = 0; i < nphi; i++) {
     IRRef lref = phi[i];
     IRIns *ir = IR(lref);
-    if (!irt_ismarked(ir->t)) {  /* Emit PHI if not marked. */
+    if (!irref_ismarked(J, lref)) {  /* Emit PHI if not marked. */
       IRRef rref = subst[lref];
       if (rref > invar)
 	irt_setphi(IR(rref)->t);
       emitir_raw(IRT(IR_PHI, irt_type(ir->t)), lref, rref);
     } else {  /* Otherwise eliminate PHI. */
-      irt_clearmark(ir->t);
+      irref_clearmark(J, lref);
       irt_clearphi(ir->t);
     }
   }
@@ -399,7 +400,7 @@ static void loop_undo(jit_State *J, IRRef ins, SnapNo nsnap, MSize nsnapmap)
   for (ins--; ins >= REF_FIRST; ins--) {  /* Remove flags. */
     IRIns *ir = IR(ins);
     irt_clearphi(ir->t);
-    irt_clearmark(ir->t);
+    irref_clearmark(J, ins);
   }
 }
 
