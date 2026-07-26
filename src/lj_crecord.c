@@ -2105,6 +2105,7 @@ void LJ_FASTCALL recff_ffi_simd_mulhi(jit_State *J, RecordFFData *rd)
   */
   crec_simd_need(J, !veck_isfp(vi.kind) &&
 		    (vi.esize == 2 ||
+		     vi.esize == 8 ||
 		     (vi.esize == 4 && (J->flags & JIT_F_SSE4_1))));
   J->base[0] = crec_vec_box(J,
     emitir(IRT(veck_isunsigned(vi.kind) ? IR_VMULHIU : IR_VMULHI, vt), a, b),

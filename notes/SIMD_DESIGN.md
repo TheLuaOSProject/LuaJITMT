@@ -692,3 +692,30 @@ The sequence is lane-local and identical at XMM and YMM width. Measured
 dependent latency is about 1.23 ns for words and 2.22 ns for bytes, versus
 32.5 ns and 35.1 ns in the interpreter. YMM processes twice the lanes at the
 same latency.
+
+## D26. Build 64-bit `mulhi` from four 32-bit partial products
+
+There is no packed 64x64-to-128 multiply before AVX-512, but `PMULUDQ`
+provides all the pieces. Split each unsigned lane into `a0 + 2^32*a1` and
+`b0 + 2^32*b1`, then compute:
+
+```
+w0 = a0*b0
+t  = a1*b0 + high32(w0)
+hi = a1*b1 + high32(t) + high32(low32(t) + a0*b1)
+```
+
+This needs four `PMULUDQ`s plus packed qword shifts and adds. All intermediate
+sums fit in 64 bits by construction. Signed multiplication reuses the
+unsigned result and applies the two's-complement correction
+`hi -= (a < 0 ? b : 0) + (b < 0 ? a : 0)` with packed sign masks.
+
+The interpreter uses the same identity at base 2^32, without depending on a C
+`__int128` extension. Tests deliberately use a separate base-2^16 schoolbook
+oracle, whose partial sums fit exactly in a Lua number, so they do not merely
+repeat the production algorithm.
+
+On the measured target dependent XMM latency is 3.33 ns signed and 2.75 ns
+unsigned, down from roughly 30 ns interpreted. YMM executes the same
+lane-local sequence in 3.24/2.67 ns while producing twice as many lane
+results.

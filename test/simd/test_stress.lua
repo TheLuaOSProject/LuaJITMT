@@ -46,6 +46,7 @@ local binary = {
   {"simd.bor(%1, %2)"},
   {"simd.bxor(%1, %2)"},
   {"simd.bandn(%1, %2)"},
+  {"simd.mulhi(%1, %2)", function(ti) return not ti.fp end},
   {"simd.adds(%1, %2)", function(ti) return not ti.fp and ti.bits <= 16 end},
   {"simd.subs(%1, %2)", function(ti) return not ti.fp and ti.bits <= 16 end},
 }

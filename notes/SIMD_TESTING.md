@@ -40,6 +40,10 @@ widened to `int64_t` before the arithmetic so the reference cannot itself
 wrap; float lanes are computed in double and rounded once to float, which is
 exact for `+ - * /` and `sqrt` because 53 >= 2*24+2.
 
+The 64-bit `mulhi` test uses a separate base-2^16 schoolbook multiplier.
+Every partial sum is exactly representable as a Lua number, and the oracle is
+structurally different from the production base-2^32 implementation.
+
 **Bit-exact comparison.** `M.same()` compares the raw bytes of two vectors, so
 NaN payloads, signed zeros and unsigned/signed confusion are all caught. Never
 compare vectors by their printed lane values.

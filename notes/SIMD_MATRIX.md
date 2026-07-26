@@ -56,7 +56,7 @@ The current YMM operation surface compiles:
 * the complete ordinary operator surface, including all integer multiply lane
   widths, whole-vector equality, unary minus, and dynamic scalar splats;
 * logical operations, comparisons/masks, select, min/max, shifts,
-  abs/sqrt/rounding, FMA, saturating arithmetic, 8/16/32-bit `mulhi`, equal-size
+  abs/sqrt/rounding, FMA, saturating arithmetic, every integer-width `mulhi`, equal-size
   bitcast, and the direct 32-bit lane conversions;
 * horizontal reductions, constant and runtime-index shuffles, two-source
   shuffles, and constant or runtime-index insertion across both 128-bit halves;
@@ -142,7 +142,7 @@ operand, exactly like the operators.
 | `band/bor/bxor/bandn(a,b)` | same ctype | bitwise | bitwise | bitwise | yes | yes |
 | `bnot(a)` | same ctype | bitwise | bitwise | bitwise | yes | yes |
 | `min(a,b)`, `max(a,b)` | same ctype | yes | yes | yes | yes | yes |
-| `mulhi(a,b)` | same ctype | — | 8/16/32-bit | 8/16/32-bit | yes | yes |
+| `mulhi(a,b)` | same ctype | — | 8/16/32/64-bit | 8/16/32/64-bit | yes | yes |
 | `abs(a)` | same ctype | clears sign bit | wraps at the min value | identity | yes | yes |
 | `sqrt(a)` | same ctype | yes | — | — | yes | yes |
 | `fma(a,b,c)` | same ctype | yes | — | — | yes | yes (FMA) |
@@ -191,7 +191,7 @@ Semantics worth pinning down:
 * `mulhi(a,b)` is the **high** half of the full-width lane product; `a*b` is
   the low half. Together they are the exact product, which is what the test
   checks. Signedness comes from the lane kind, as it does for min/max and the
-  shifts. 64-bit lanes are rejected: that would need a 128-bit product.
+  shifts. The 64-bit form uses four packed 32x32 partial products.
 * `abs` on signed integers wraps for the most negative lane value (like PABS).
 * `shl`/`shr`/`sar` also accept a **vector** count with the same lane width
   and lane count, shifting each lane by its own amount. The per-lane count is
@@ -219,6 +219,7 @@ Semantics worth pinning down:
 | `fma` | requires the FMA feature; otherwise JIT NYI. The backend picks between VFMADD132/213/231 so the operand that has to live in the destination is already there, see `SIMD_DESIGN.md` D18. Ordinary `a*b+c` written with operators is **never** fused into it, because that would round once where the interpreter rounds twice |
 | `shuffle`/`shuffle2` with 8/16-bit lanes | requires SSSE3 (PSHUFB); otherwise JIT NYI |
 | `mulhi` on 8 and 32-bit lanes | call-free packed emulations: byte lanes use scaled word products, while dword lanes use even/odd PMULDQ products and PBLENDW to reassemble their high halves |
+| `mulhi` on 64-bit lanes | call-free packed four-limb product. Four PMULUDQ partial products and carry propagation produce the unsigned high qword; signed lanes subtract the opposite operand under each sign mask |
 | `abs` on 8/16/32-bit integer lanes | uses SSSE3 PABSB/W/D; without SSSE3 it stays interpreted |
 | `abs` on 64-bit integer lanes | packed SSE2 sequence (PSRAD + PSHUFD to broadcast the sign, then `(v^m)-m`) |
 | shifts on 8-bit lanes | no instruction; rewritten into a 16-bit shift plus a byte mask. Constant and variable counts are both packed; for a variable count the mask is built with the same shift applied to a constant and broadcast across the byte halves with `PMULLW` by `0x0101` |

@@ -330,6 +330,29 @@ test("mulhi uses packed multiplication", function()
       for _ = 1, 400 do acc = simd.mulhi(acc + u32(3), b) end
       return acc
     end)
+
+  local i64 = T.T.i64x2.ct
+  local mi64 = checkloop("i64x2 mulhi",
+    {"pmuludq", "paddq", "psrlq", "psubq", "psrad", "pshufd"},
+    {"call"}, function()
+      local acc = i64(-9223372036854775807LL-1, 0x7000000000000001LL)
+      local b = i64(-12345678901234567LL, 0x4000000000000003LL)
+      for _ = 1, 400 do acc = simd.mulhi(acc + i64(3), b) end
+      return acc
+    end)
+  check(count(mi64, "pmuludq") == 4,
+	"i64x2 mulhi must use four unsigned dword products")
+
+  local u64 = T.T.u64x2.ct
+  local mu64 = checkloop("u64x2 mulhi", {"pmuludq", "paddq", "psrlq"},
+    {"call", "psubq"}, function()
+      local acc = u64(0xffffffffffffffffULL, 0x8000000000000001ULL)
+      local b = u64(0xc000000000000001ULL, 0x7000000000000003ULL)
+      for _ = 1, 400 do acc = simd.mulhi(acc + u64(3), b) end
+      return acc
+    end)
+  check(count(mu64, "pmuludq") == 4,
+	"u64x2 mulhi must use four unsigned dword products")
 end)
 
 test("fma compiles to a single fused instruction", function()
@@ -760,6 +783,30 @@ if simd.features().avx2 then
 	for _ = 1, 400 do acc = simd.mulhi(acc + ud8(7), k) end
 	return acc
       end)
+
+    local sq4, uq4 = T.W.i64x4.ct, T.W.u64x4.ct
+    local sbody = checkymm("i64x4 mulhi emulation",
+      {"vpmuludq ymm", "vpaddq ymm", "vpsubq ymm", "vpsrad ymm"},
+      function()
+	local acc = sq4(-9223372036854775807LL-1, -7, 7,
+			0x7000000000000001LL)
+	local k = sq4(-12345678901234567LL)
+	for _ = 1, 400 do acc = simd.mulhi(acc + sq4(3), k) end
+	return acc
+      end)
+    local _, sn = sbody:gsub("vpmuludq ymm", "")
+    check(sn == 4, "i64x4 mulhi must use four YMM dword products")
+
+    local ubody = checkymm("u64x4 mulhi emulation",
+      {"vpmuludq ymm", "vpaddq ymm", "vpsrlq ymm"}, function()
+	local acc = uq4(0xffffffffffffffffULL, 0x8000000000000001ULL,
+			7, 0xc000000000000003ULL)
+	local k = uq4(0xd000000000000001ULL)
+	for _ = 1, 400 do acc = simd.mulhi(acc + uq4(3), k) end
+	return acc
+      end)
+    local _, un = ubody:gsub("vpmuludq ymm", "")
+    check(un == 4, "u64x4 mulhi must use four YMM dword products")
 
     local fi, ii = T.W.float8.ct, T.W.i32x8.ct
     local fv = fi(-7.5, -1.25, 0, 1.25, 7.5, 100.75, 1234.5, 9999)

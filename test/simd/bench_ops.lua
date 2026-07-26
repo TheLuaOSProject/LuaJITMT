@@ -28,6 +28,8 @@ local u4 = ffi.typeof("u32x4")
 local s8 = ffi.typeof("i8x16")
 local i16 = ffi.typeof("i16x8")
 local u8 = ffi.typeof("u8x16")
+local i64 = ffi.typeof("i64x2")
+local u64 = ffi.typeof("u64x2")
 local features = simd.features()
 local has_ymm = features.avx2 and features.vecsize >= 32
 local f8 = has_ymm and ffi.typeof("float8")
@@ -36,6 +38,8 @@ local u8d = has_ymm and ffi.typeof("u32x8")
 local s8w = has_ymm and ffi.typeof("i8x32")
 local i16w = has_ymm and ffi.typeof("i16x16")
 local u8w = has_ymm and ffi.typeof("u8x32")
+local i64w = has_ymm and ffi.typeof("i64x4")
+local u64w = has_ymm and ffi.typeof("u64x4")
 
 local failures = 0
 
@@ -553,6 +557,16 @@ do
   op_cost("u32x4 mulhi",
 	  function() return u4(0xf0000000), u4(0xc0000001) end,
 	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("i64x2 mulhi",
+	  function()
+	    return i64(-0x7000000000000000LL), i64(-12345678901234567LL)
+	  end,
+	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("u64x2 mulhi",
+	  function()
+	    return u64(0xf000000000000001ULL), u64(0xc000000000000003ULL)
+	  end,
+	  function(x, y) return simd.mulhi(x, y) end)
 end
 
 if has_ymm then
@@ -651,6 +665,22 @@ if has_ymm then
   width_cost("uint32 mulhi",
     function() return u4(0xf0000000), u4(0xc0000001) end,
     function() return u8d(0xf0000000), u8d(0xc0000001) end,
+    function(x, y) return simd.mulhi(x, y) end)
+  width_cost("int64 mulhi",
+    function()
+      return i64(-0x7000000000000000LL), i64(-12345678901234567LL)
+    end,
+    function()
+      return i64w(-0x7000000000000000LL), i64w(-12345678901234567LL)
+    end,
+    function(x, y) return simd.mulhi(x, y) end)
+  width_cost("uint64 mulhi",
+    function()
+      return u64(0xf000000000000001ULL), u64(0xc000000000000003ULL)
+    end,
+    function()
+      return u64w(0xf000000000000001ULL), u64w(0xc000000000000003ULL)
+    end,
     function(x, y) return simd.mulhi(x, y) end)
   width_cost("int8 mulhi",
     function() return s8(-119), s8(117) end,

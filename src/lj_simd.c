@@ -395,6 +395,19 @@ int lj_simd_fma(void *dp, const void *ap, const void *bp, const void *cp,
       d[i] = (TY)(((WTY)a[i] * (WTY)b[i]) >> (SH)); \
     return 1; }
 
+/* High half of an unsigned 64x64 product, using exact 32 bit limbs. */
+static uint64_t simd_mulhi_u64(uint64_t a, uint64_t b)
+{
+  uint64_t a0 = (uint32_t)a, a1 = a >> 32;
+  uint64_t b0 = (uint32_t)b, b1 = b >> 32;
+  uint64_t w0 = a0 * b0;
+  uint64_t t = a1 * b0 + (w0 >> 32);
+  uint64_t w1 = (uint32_t)t;
+  uint64_t w2 = t >> 32;
+  w1 += a0 * b1;
+  return a1 * b1 + w2 + (w1 >> 32);
+}
+
 int lj_simd_mulhi(void *dp, const void *ap, const void *bp,
 		  const CTVecInfo *vi)
 {
@@ -410,8 +423,26 @@ int lj_simd_mulhi(void *dp, const void *ap, const void *bp,
   case 4:
     if (uns) VEC_MULHI(uint32_t, uint64_t, 32)
     else VEC_MULHI(int32_t, int64_t, 32)
+  case 8: {
+    uint64_t *d = (uint64_t *)dp;
+    const uint64_t *a = (const uint64_t *)ap;
+    const uint64_t *b = (const uint64_t *)bp;
+    uint32_t i, n = vi->lanes;
+    for (i = 0; i < n; i++) {
+      uint64_t hi = simd_mulhi_u64(a[i], b[i]);
+      if (!uns) {
+	/* signed_hi(a,b) = unsigned_hi(a,b) - (a<0 ? b : 0)
+	**                                      - (b<0 ? a : 0).
+	*/
+	hi -= b[i] & ((uint64_t)0 - (a[i] >> 63));
+	hi -= a[i] & ((uint64_t)0 - (b[i] >> 63));
+      }
+      d[i] = hi;
+    }
+    return 1;
+  }
   default:
-    return 0;  /* A 64 bit lane would need a 128 bit product. */
+    return 0;
   }
 }
 

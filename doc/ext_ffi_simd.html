@@ -310,7 +310,7 @@ keeps running interpreted with identical results.
 <tt>simd.features()</tt> reports what was found.</li>
 <li>The 256-bit JIT supports the ordinary vector operators, dynamic scalar
 splats, comparisons and masks, min/max, shifts, abs/sqrt/rounding, FMA,
-saturating arithmetic, 16-bit <tt>mulhi</tt>, direct 32-bit conversions,
+saturating arithmetic, <tt>mulhi</tt> at every integer lane width, direct 32-bit conversions,
 logical/select/bitcast, unaligned loads and stores, horizontal reductions,
 constant and runtime-index shuffles, two-source shuffles, and constant or
 runtime-index insertion.</li>

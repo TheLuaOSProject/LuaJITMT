@@ -52,6 +52,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M29 | Call-free packed 8- and 32-bit `mulhi` emulations for XMM and YMM | done |
 | M30 | Production-sized scalar/XMM/YMM benchmarks: 1080p Gaussian blur, 64-tap audio FIR, particle simulation, and ChaCha20 | done |
 | M31 | Per-lane AVX2 shifts for 8/16-bit XMM and YMM vectors via packed dword decomposition | done |
+| M32 | Signed and unsigned 64-bit `mulhi` via four packed 32x32 partial products, XMM and YMM | done |
 
 ## Commands that pass
 
@@ -356,6 +357,8 @@ int32 shuffle vector          0.30 ns   0.57 ns       1.04x
 int16 mulhi                   0.90 ns   0.89 ns       2.02x
 int32 mulhi                   1.51 ns   1.43 ns       2.11x
 uint32 mulhi                  1.46 ns   1.51 ns       1.93x
+int64 mulhi                   3.33 ns   3.24 ns       2.05x
+uint64 mulhi                  2.75 ns   2.67 ns       2.06x
 int8 mulhi                    1.80 ns   1.70 ns       2.12x
 uint8 mulhi                   1.89 ns   1.92 ns       1.97x
 uint8 saturated add           0.20 ns   0.20 ns       2.01x
@@ -372,6 +375,10 @@ The narrow per-lane shifts replace interpreter fallback (about 32.5 ns for
 words and 35.1 ns for bytes) with packed sequences at 1.23 ns and 2.22 ns:
 roughly 26x and 16x faster. YMM runs the same lane-local sequence at the same
 latency while shifting twice as many lanes.
+
+The 64-bit `mulhi` decomposition is 3.33 ns signed and 2.75 ns unsigned,
+versus about 30 ns in the interpreter. The YMM form is 3.24/2.67 ns and
+therefore slightly more than doubles per-lane throughput.
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:

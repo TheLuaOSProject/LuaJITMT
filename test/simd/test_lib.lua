@@ -290,6 +290,35 @@ test("shuffle with a runtime index vector", function()
   end
 end)
 
+-- Independent 64x64 -> high64 oracle. Base-2^16 schoolbook multiplication
+-- keeps every partial sum exactly representable as a Lua number; the tested
+-- implementation uses a different base-2^32 decomposition.
+local function mulhi64_ref(x, y, signed)
+  local xa = ffi.new("uint64_t[1]", ffi.cast("uint64_t", x))
+  local ya = ffi.new("uint64_t[1]", ffi.cast("uint64_t", y))
+  local xw = ffi.cast("uint16_t *", xa)
+  local yw = ffi.cast("uint16_t *", ya)
+  local p = {[0]=0, 0, 0, 0, 0, 0, 0, 0}
+  local base = 65536
+  for i = 0, 3 do
+    for j = 0, 3 do p[i+j] = p[i+j] + tonumber(xw[i])*tonumber(yw[j]) end
+  end
+  for i = 0, 7 do
+    local carry = math.floor(p[i] / base)
+    p[i] = p[i] - carry*base
+    if i < 7 then p[i+1] = p[i+1] + carry end
+  end
+  local ha = ffi.new("uint64_t[1]")
+  local hw = ffi.cast("uint16_t *", ha)
+  for i = 0, 3 do hw[i] = p[i+4] end
+  local hi = ha[0]
+  if signed then
+    if xw[3] >= 0x8000 then hi = hi - ya[0] end
+    if yw[3] >= 0x8000 then hi = hi - xa[0] end
+  end
+  return hi
+end
+
 test("mulhi is the high half of the product", function()
   -- The * operator keeps the low half of each lane product; mulhi keeps the
   -- high half. Together they are the full-width product, which is what the
@@ -322,12 +351,22 @@ test("mulhi is the high half of the product", function()
                   " b=" .. tostring(b[i]))
         end
       end
+    elseif not ti.fp then
+      local rnd = T.rng(SEED + ti.bits * 811 + (ti.signed and 3 or 0))
+      for _ = 1, 120 do
+	local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
+	local hi = simd.mulhi(a, b)
+	for i = 0, ti.lanes-1 do
+	  local got = ffi.cast("uint64_t", hi[i])
+	  local want = mulhi64_ref(a[i], b[i], ti.signed)
+	  checkeq(tostring(got), tostring(want),
+		  ti.name .. " mulhi64 lane " .. i .. " a=" .. tostring(a[i]) ..
+		  " b=" .. tostring(b[i]))
+	end
+      end
     elseif ti.fp then
       check(not pcall(simd.mulhi, ti.ct(1), ti.ct(1)),
             ti.name .. " float mulhi rejected")
-    else
-      check(not pcall(simd.mulhi, ti.ct(1), ti.ct(1)),
-            ti.name .. " 64-bit mulhi rejected")
     end
   end
 end)

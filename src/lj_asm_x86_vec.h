@@ -419,10 +419,74 @@ static void asm_vmulhi_i32(ASMState *as, IRIns *ir)
   emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, oddl, left, 32, wide);
 }
 
+/* High 64 bits of every 64x64 product, from four unsigned 32x32 products.
+**
+** For a=a0+2^32*a1 and b=b0+2^32*b1:
+**   w0 = a0*b0
+**   t  = a1*b0 + high32(w0)
+**   hi = a1*b1 + high32(t) + high32(low32(t) + a0*b1)
+**
+** The signed result follows from the unsigned one by subtracting b when a is
+** negative and a when b is negative.
+*/
+static void asm_vmulhi_i64(ASMState *as, IRIns *ir)
+{
+  int wide = irt_isvec256(ir->t);
+  int uns = ir->o == IR_VMULHIU;
+  Reg dest = ra_dest(as, ir, RSET_FPR);
+  RegSet allow = rset_exclude(RSET_FPR, dest);
+  Reg left = ra_alloc1(as, ir->op1, allow);
+  Reg right, ahi, bhi, aux, cross;
+  allow = rset_exclude(allow, left);
+  right = ir->op1 == ir->op2 ? left : ra_alloc1(as, ir->op2, allow);
+  allow = rset_exclude(allow, right);
+  ahi = ra_scratch(as, allow);
+  allow = rset_exclude(allow, ahi);
+  bhi = ra_scratch(as, allow);
+  allow = rset_exclude(allow, bhi);
+  aux = ra_scratch(as, allow);
+  allow = rset_exclude(allow, aux);
+  cross = ra_scratch(as, allow);
+
+  /* Signed correction, emitted first because assembly runs backwards. */
+  if (!uns) {
+    emit_vrr3l(as, XO_PSUBQ, dest, dest, bhi, wide);
+    emit_vrr3l(as, XO_PSUBQ, dest, dest, ahi, wide);
+    emit_vrr3l(as, XO_PAND, bhi, bhi, left, wide);
+    emit_vrr3l(as, XO_PAND, ahi, ahi, right, wide);
+    emit_vrr2il(as, XO_PSHUFD, bhi, bhi, 0xf5, wide);
+    emit_vrr2il(as, XO_PSHUFD, ahi, ahi, 0xf5, wide);
+    emit_vshiftl(as, XO_PSHIFTD, XOg_PSRA, bhi, right, 31, wide);
+    emit_vshiftl(as, XO_PSHIFTD, XOg_PSRA, ahi, left, 31, wide);
+    checkmclim(as);
+  }
+
+  /* Reverse emission of the forward sequence described above. */
+  emit_vrr3l(as, XO_PADDQ, dest, dest, aux, wide);
+  emit_vrr3l(as, XO_PMULUDQ, dest, ahi, bhi, wide);
+  emit_vrr3l(as, XO_PADDQ, aux, aux, dest, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, dest, dest, 32, wide);
+  emit_vrr3l(as, XO_PADDQ, dest, dest, cross, wide);
+  emit_vrr3l(as, XO_PMULUDQ, cross, left, bhi, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, dest, dest, 32, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSLL, dest, dest, 32, wide);
+  checkmclim(as);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, aux, aux, 32, wide);
+  emit_vrr2l(as, XO_MOVAPS, aux, dest, wide);
+  emit_vrr3l(as, XO_PADDQ, dest, dest, aux, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, aux, aux, 32, wide);
+  emit_vrr3l(as, XO_PMULUDQ, dest, ahi, right, wide);
+  emit_vrr3l(as, XO_PMULUDQ, aux, left, right, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, bhi, right, 32, wide);
+  emit_vshiftl(as, XO_PSHIFTQ, XOg_PSRL, ahi, left, 32, wide);
+}
+
 static void asm_vmulhi(ASMState *as, IRIns *ir)
 {
   if (irt_type(ir->t) == IRT_V8I16)
     asm_vecbin(as, ir, asm_vecxo((IROp)ir->o, IRT_V8I16), 1);
+  else if (irt_type(ir->t) == IRT_V2I64)
+    asm_vmulhi_i64(as, ir);
   else {
     lj_assertA(irt_type(ir->t) == IRT_V4I32,
 	       "no packed mulhi sequence for vector type %d", irt_type(ir->t));
