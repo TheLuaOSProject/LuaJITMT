@@ -141,7 +141,8 @@ end)
 
 test("vector loads fuse only into alignment-safe AVX arithmetic", function()
   local i4 = T.T.i32x4.ct
-  local c = {[0] = i4(1, 2, 3, 4)}
+  local c = ffi.new("i32x4[1]")
+  c[0] = i4(1, 2, 3, 4)
   local body = rawdump("m", function()
     local acc = i4(0)
     for _ = 1, 400 do acc = acc + c[0] end
@@ -161,6 +162,56 @@ test("vector loads fuse only into alignment-safe AVX arithmetic", function()
     check(not memadd and body:find("movups", 1, true),
 	  "legacy SSE must load an unaligned vector separately: " ..
 	  body:gsub("\n", " | "))
+  end
+end)
+
+test("vector loads fuse into AVX unary operations", function()
+  local cases = {
+    {"float4 sqrt", T.T.float4.ct, T.T.float4.ct(1, 4, 9, 16),
+      "sqrtps", simd.sqrt},
+    {"i32x4 abs", T.T.i32x4.ct, T.T.i32x4.ct(-1, 2, -3, 4),
+      "pabsd", simd.abs},
+    {"float4 round", T.T.float4.ct, T.T.float4.ct(1.25, 2.5, -3.75, 4),
+      "roundps", simd.round},
+  }
+  if simd.features().avx2 then
+    cases[#cases+1] = {
+      "float8 sqrt", T.W.float8.ct, T.W.float8.ct(1, 4, 9, 16, 25, 36, 49, 64),
+      "vsqrtps", simd.sqrt,
+    }
+    cases[#cases+1] = {
+      "i32x8 abs", T.W.i32x8.ct, T.W.i32x8.ct(-1, 2, -3, 4, -5, 6, -7, 8),
+      "vpabsd", simd.abs,
+    }
+    cases[#cases+1] = {
+      "float8 round", T.W.float8.ct,
+      T.W.float8.ct(1.25, 2.5, -3.75, 4, 5.5, -6.25, 7.75, 8),
+      "vroundps", simd.round,
+    }
+  end
+  for _, c in ipairs(cases) do
+    local values = ffi.new(ffi.typeof("$[1]", c[2]))
+    values[0] = c[3]
+    local body = rawdump("m", function()
+      local acc = c[2](0)
+      for _ = 1, 400 do acc = acc + c[5](values[0]) end
+      return acc
+    end)
+    local memop = false
+    for line in body:gmatch("[^\n]+") do
+      if line:find(c[4], 1, true) and line:find("[", 1, true) then
+	memop = true
+	break
+      end
+    end
+    if simd.features().avx then
+      check(memop, c[1] .. " load did not fuse into the unary operation: " ..
+	    body:gsub("\n", " | "))
+    else
+      check(not memop and body:find("movups", 1, true),
+	    c[1] .. " must load an unaligned vector separately without AVX: " ..
+	    body:gsub("\n", " | "))
+    end
   end
 end)
 
@@ -783,13 +834,26 @@ test("vector loads and stores use MOVUPS", function()
   local src = ffi.new(ffi.typeof("$[?]", ti.ct), N)
   local dst = ffi.new(ffi.typeof("$[?]", ti.ct), N)
   for i = 0, N-1 do src[i] = ti.ct(i) end
-  checkloop("array map", {"movups", "mulps"}, NOCALL, function()
+  local body = loopcode(function()
     local k = ti.ct(2)
     for r = 1, 40 do
       local base = 0
       for i = 0, N-1 do dst[i] = src[i] * k end
     end
   end)
+  local m = mnemonics(body)
+  check(count(m, "movups") > 0 and count(m, "mulps") > 0,
+	"array map must use packed unaligned memory operations: " ..
+	body:gsub("\n", " | "))
+  if simd.features().avx then
+    check(body:match("vmulps [^\n]*%[") ~= nil,
+	  "a sunk source box must not prevent AVX load fusion: " ..
+	  body:gsub("\n", " | "))
+  else
+    check(body:match("mulps [^\n]*%[") == nil,
+	  "legacy SSE must keep the unaligned array load separate: " ..
+	  body:gsub("\n", " | "))
+  end
 end)
 
 test("no boxing allocation remains in a hot vector loop", function()
@@ -1194,6 +1258,57 @@ if simd.features().avx2 then
     local _, nucvt = ubody:gsub("vcvtsi2ss", "")
     check(nucvt == 8,
 	  "u64x4 to float4 needs signed/high-half paths for every lane")
+  end)
+
+  test("AVX2 shuffles and conversions consume array loads directly", function()
+    local i8 = T.T.i8x16.ct
+    local h16 = T.W.i16x16.ct
+    local i32 = T.W.i32x8.ct
+    local f8 = T.W.float8.ct
+    local f4 = T.T.float4.ct
+    local d4 = T.W.double4.ct
+    local ix = i32(7, 0, 6, 1, 5, 2, 4, 3)
+    local cases = {
+      {"runtime permute", i32, i32(10, 20, 30, 40, 50, 60, 70, 80),
+       i32, "vpermd", function(x) return simd.shuffle(x, ix) end},
+      {"qword permute", T.W.i64x4.ct, T.W.i64x4.ct(10, 20, 30, 40),
+       T.W.i64x4.ct, "permq",
+       function(x) return simd.shuffle(x, 3, 1, 2, 0) end},
+      {"i32 to float", i32, i32(-7, 2, 30, -4, 5, 60, -8, 9),
+       f8, "vcvtdq2ps", function(x) return simd.convert(f8, x) end},
+      {"float to i32", f8, f8(-7.75, 2.5, 30.25, -4, 5, 60, -8, 9),
+       i32, "vcvttps2dq", function(x) return simd.convert(i32, x) end},
+      {"signed byte widening", i8,
+       i8(-1, 2, -3, 4, -5, 6, -7, 8, -9, 10, -11, 12, -13, 14, -15, 16),
+       h16, "vpmovsxbw", function(x) return simd.convert(h16, x) end},
+      {"float to double", f4, f4(-1.5, 2.25, -3.75, 4),
+       d4, "vcvtps2pd", function(x) return simd.convert(d4, x) end},
+      {"double to float", d4, d4(-1.5, 2.25, -3.75, 4),
+       f4, "vcvtpd2ps", function(x) return simd.convert(f4, x) end},
+    }
+    for _, c in ipairs(cases) do
+      local src = ffi.new(ffi.typeof("$[1]", c[2]))
+      src[0] = c[3]
+      local one = c[6](src[0])
+      local got
+      local body = rawdump("m", function()
+	local acc = c[4](0)
+	for _ = 1, 400 do acc = acc + c[6](src[0]) end
+	got = acc
+	return acc
+      end)
+      local memop = false
+      for line in body:gmatch("[^\n]+") do
+	if line:find(c[5], 1, true) and line:find("[", 1, true) then
+	  memop = true
+	  break
+	end
+      end
+      check(memop, c[1] .. " did not consume its array load directly: " ..
+	    body:gsub("\n", " | "))
+      check(T.same(got, one * c[4](400)),
+	    c[1] .. " memory-source result changed")
+    end
   end)
 
   test("mixed scalar and YMM loops stay entirely VEX-clean", function()

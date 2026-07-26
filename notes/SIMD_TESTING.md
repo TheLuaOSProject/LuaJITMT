@@ -162,6 +162,16 @@ CPU-model matrix. The randomized NaN-payload programs additionally prevent
 the backend from exchanging floating add/multiply operands merely to fuse a
 left-hand load.
 
+The load sources are FFI vector arrays, not pre-boxed table values. Array
+indexing creates a virtual cdata initializer `XSTORE`; the tests require that
+this sink-only store no longer blocks memory-operand fusion while a real
+array-map output store remains intact. Unary coverage checks memory-source
+XMM and YMM square root, absolute value, and rounding. AVX2 coverage executes
+and validates memory-source `VPERMD`, `VPERMQ`, signed-byte widening,
+integer/float conversion in both directions, and 128/256-bit float/double
+conversion. Nehalem, Sandy Bridge and Haswell codegen runs pin the legacy,
+AVX, and AVX2 boundaries respectively.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

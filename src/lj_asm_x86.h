@@ -147,6 +147,13 @@ static int noconflict(ASMState *as, IRRef ref, IROp conflict, int check)
   if (i > ref + CONFLICT_SEARCH_LIM)
     return 0;  /* Give up, ref is too far away. */
   while (--i > ref) {
+    /*
+    ** A sunk XSTORE only initializes a virtual cdata box. It emits no memory
+    ** access and is not a second run-time use of the stored value, so it
+    ** cannot alias a load or prevent folding that load into its real user.
+    */
+    if (ir[i].o == IR_XSTORE && ir[i].r == RID_SINK)
+      continue;
     if (ir[i].o == conflict)
       return 0;  /* Conflict found. */
     else if ((check & 1) && (ir[i].o == IR_NEWREF || ir[i].o == IR_CALLS))

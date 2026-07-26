@@ -781,11 +781,14 @@ static void asm_vecfma(ASMState *as, IRIns *ir)
 
 static void asm_vecsqrt(ASMState *as, IRIns *ir)
 {
+  x86Op xo = irt_type(ir->t) == IRT_V4F32 ? XO_SQRTPS : XO_SQRTPD;
   int wide = irt_isvec256(ir->t);
   Reg dest = ra_dest(as, ir, RSET_FPR);
-  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-  emit_vrr2l(as, irt_type(ir->t) == IRT_V4F32 ? XO_SQRTPS : XO_SQRTPD,
-	     dest, left, wide);
+  Reg left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+  if ((as->flags & JIT_F_AVX))
+    emit_mrm(as, emit_vexop(xo, 0, wide), dest, left);
+  else
+    emit_vrr2l(as, xo, dest, left, wide);
 }
 
 static void asm_vecabs(ASMState *as, IRIns *ir)
@@ -799,8 +802,11 @@ static void asm_vecabs(ASMState *as, IRIns *ir)
   default: xo = XO_PABSD; break;
   }
   dest = ra_dest(as, ir, RSET_FPR);
-  left = ra_alloc1(as, ir->op1, RSET_FPR);
-  emit_vrr2l(as, xo, dest, left, wide);
+  left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+  if ((as->flags & JIT_F_AVX))
+    emit_mrm(as, emit_vexop(xo, 0, wide), dest, left);
+  else
+    emit_vrr2l(as, xo, dest, left, wide);
 }
 
 static void asm_vecround(ASMState *as, IRIns *ir)
@@ -808,8 +814,15 @@ static void asm_vecround(ASMState *as, IRIns *ir)
   x86Op xo = irt_type(ir->t) == IRT_V4F32 ? XO_ROUNDPS : XO_ROUNDPD;
   int wide = irt_isvec256(ir->t);
   Reg dest = ra_dest(as, ir, RSET_FPR);
-  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-  emit_vrr2il(as, xo, dest, left, (int32_t)ir->op2, wide);
+  Reg left;
+  if ((as->flags & JIT_F_AVX)) {
+    emit_i8(as, (int32_t)ir->op2);
+    left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+    emit_mrm(as, emit_vexop(xo, 0, wide), dest, left);
+  } else {
+    left = ra_alloc1(as, ir->op1, RSET_FPR);
+    emit_vrr2il(as, xo, dest, left, (int32_t)ir->op2, wide);
+  }
 }
 
 static void asm_vecshuf(ASMState *as, IRIns *ir)
@@ -819,24 +832,41 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
   int32_t imm = (int32_t)(lit & 255);
   int wide = irt_isvec256(ir->t);
   Reg dest = ra_dest(as, ir, RSET_FPR);
-  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  Reg left;
   if (mode == IRVSHUF_SWAP128) {
     lj_assertA(wide && (as->flags & JIT_F_AVX2),
 	       "128 bit half swap without AVX2");
+    left = ra_alloc1(as, ir->op1, RSET_FPR);
     emit_i8(as, 0x01);
     emit_vexrrl(as, XO_VPERM2I128, dest, left, left, 1);
   } else if (mode == IRVSHUF_PERMQ) {
     lj_assertA(wide && (as->flags & JIT_F_AVX2),
 	       "64 bit YMM permute without AVX2");
     emit_i8(as, imm);
-    emit_vexrrwl(as, XO_VPERMQ, dest, VEXNOV, left, 1, 1);
+    left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+    emit_mrm(as, emit_vexop(XO_VPERMQ, 1, 1), dest, left);
   } else if (mode == IRVSHUF_PSRLDQ) {
-    emit_vshiftl(as, XO_PSHIFTQ, 3, dest, left, imm, wide);
     /* PSRLDQ is group 3. */
+    if ((as->flags & JIT_F_AVX)) {
+      emit_i8(as, imm);
+      left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+      emit_mrm(as, emit_vexopv(XO_PSHIFTQ, dest, 0, wide),
+	       (Reg)3, left);
+    } else {
+      left = ra_alloc1(as, ir->op1, RSET_FPR);
+      emit_vshiftl(as, XO_PSHIFTQ, 3, dest, left, imm, wide);
+    }
   } else {
     x86Op xo = mode == IRVSHUF_PSHUFD ? XO_PSHUFD :
 	       mode == IRVSHUF_PSHUFLW ? XO_PSHUFLW : XO_PSHUFHW;
-    emit_vrr2il(as, xo, dest, left, imm, wide);
+    if ((as->flags & JIT_F_AVX)) {
+      emit_i8(as, imm);
+      left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+      emit_mrm(as, emit_vexop(xo, 0, wide), dest, left);
+    } else {
+      left = ra_alloc1(as, ir->op1, RSET_FPR);
+      emit_vrr2il(as, xo, dest, left, imm, wide);
+    }
   }
 }
 
@@ -899,10 +929,14 @@ static void asm_vecpermd(ASMState *as, IRIns *ir)
   lj_assertA(irt_isvec256(ir->t) && irt_vecesz(ir->t) == 4 &&
 	     (as->flags & JIT_F_AVX2), "VPERMD without 32 bit YMM lanes");
   dest = ra_dest(as, ir, RSET_FPR);
-  data = ra_alloc1(as, ir->op1, RSET_FPR);
-  index = ir->op1 == ir->op2 ? data :
-	  ra_alloc1(as, ir->op2, rset_exclude(RSET_FPR, data));
-  emit_vexrrl(as, XO_VPERMD, dest, index, data, 1);
+  if (ir->op1 == ir->op2) {
+    data = index = ra_alloc1(as, ir->op1, RSET_FPR);
+  } else {
+    index = ra_alloc1(as, ir->op2, RSET_FPR);
+    data = asm_vecfuseload(as, ir->op1,
+			   rset_exclude(RSET_FPR, index));
+  }
+  emit_mrm(as, emit_vexopv(XO_VPERMD, index, 0, 1), dest, data);
 }
 
 /* Sign bits of all lanes, gathered into an integer. */
@@ -1133,14 +1167,15 @@ static void asm_vecconv_widen_int(ASMState *as, IRIns *ir, uint32_t sk)
   uint32_t sz = veck_size(sk);
   x86Op xo;
   Reg dest = ra_dest(as, ir, RSET_FPR);
-  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  Reg left;
   if (sz == 1)
     xo = veck_isunsigned(sk) ? XO_PMOVZXBW : XO_PMOVSXBW;
   else if (sz == 2)
     xo = veck_isunsigned(sk) ? XO_PMOVZXWD : XO_PMOVSXWD;
   else
     xo = veck_isunsigned(sk) ? XO_PMOVZXDQ : XO_PMOVSXDQ;
-  emit_vrr2l(as, xo, dest, left, 1);
+  left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+  emit_mrm(as, emit_vexop(xo, 0, 1), dest, left);
 }
 
 /* The recorder has already compacted narrowing integer lanes into qwords 0
@@ -1149,9 +1184,10 @@ static void asm_vecconv_widen_int(ASMState *as, IRIns *ir, uint32_t sk)
 static void asm_vecconv_narrow_int(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_FPR);
-  Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+  Reg left;
   emit_i8(as, 0x08);
-  emit_vexrrwl(as, XO_VPERMQ, dest, VEXNOV, left, 1, 1);
+  left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+  emit_mrm(as, emit_vexop(XO_VPERMQ, 1, 1), dest, left);
 }
 
 /* Lane conversion. Packed emulations are expanded by the recorder; the
@@ -1175,13 +1211,14 @@ static void asm_vecconv(ASMState *as, IRIns *ir)
       return;
     }
     dest = ra_dest(as, ir, RSET_FPR);
-    left = ra_alloc1(as, ir->op1, RSET_FPR);
-    if (dk == VECK_F64)
-      emit_vrr2l(as, sk == VECK_F32 ? XO_CVTPS2PD : XO_CVTDQ2PD,
-		 dest, left, 1);
-    else
-      emit_vrr2l(as, dk == VECK_F32 ? XO_CVTPD2PS : XO_CVTTPD2DQ,
-		 dest, left, 1);
+    left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+    if (dk == VECK_F64) {
+      x86Op xo = sk == VECK_F32 ? XO_CVTPS2PD : XO_CVTDQ2PD;
+      emit_mrm(as, emit_vexop(xo, 0, 1), dest, left);
+    } else {
+      x86Op xo = dk == VECK_F32 ? XO_CVTPD2PS : XO_CVTTPD2DQ;
+      emit_mrm(as, emit_vexop(xo, 0, 1), dest, left);
+    }
     return;
   }
   if (sk == VECK_F64 && (dk == VECK_I64 || dk == VECK_U64)) {
@@ -1189,12 +1226,20 @@ static void asm_vecconv(ASMState *as, IRIns *ir)
     return;
   }
   dest = ra_dest(as, ir, RSET_FPR);
-  left = ra_alloc1(as, ir->op1, RSET_FPR);
   if (dk == VECK_F32) {
-    emit_vrr2l(as, XO_CVTDQ2PS, dest, left, wide);
+    left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+    if ((as->flags & JIT_F_AVX))
+      emit_mrm(as, emit_vexop(XO_CVTDQ2PS, 0, wide), dest, left);
+    else
+      emit_vrr2l(as, XO_CVTDQ2PS, dest, left, wide);
   } else if (sk == VECK_F32) {
-    emit_vrr2l(as, XO_CVTTPS2DQ, dest, left, wide);
+    left = asm_vecfuseload(as, ir->op1, RSET_FPR);
+    if ((as->flags & JIT_F_AVX))
+      emit_mrm(as, emit_vexop(XO_CVTTPS2DQ, 0, wide), dest, left);
+    else
+      emit_vrr2l(as, XO_CVTTPS2DQ, dest, left, wide);
   } else {
+    left = ra_alloc1(as, ir->op1, RSET_FPR);
     emit_vrr2l(as, XO_MOVAPS, dest, left, wide);
     /* Same-width reinterpretation. */
   }

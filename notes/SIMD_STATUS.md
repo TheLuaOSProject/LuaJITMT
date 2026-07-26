@@ -60,6 +60,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M37 | Exact inline constant integer modulo, eliminating helper calls and YMM spill/reload traffic in mixed loops | done |
 | M38 | Byte-aligned integer rotate idioms collapse to one packed shuffle; constant shuffle masks use memory only under register pressure | done |
 | M39 | Fuse one-use vector loads into AVX arithmetic memory operands, while retaining safe separate loads for legacy SSE | done |
+| M40 | Let ordinary FFI array temporaries fuse into AVX unary, shuffle and conversion memory operands; ignore only virtual sink stores | done |
 
 ## Commands that pass
 
@@ -487,3 +488,24 @@ The second loop is dominated by the array load and the result boxing, not by
 the multiply-adds, so halving the arithmetic buys almost nothing. Use
 `simd.fma` for the single rounding it guarantees; treat the throughput as a
 bonus that only shows up in ALU-bound code.
+
+FFI array indexing records a temporary cdata box even when sink optimisation
+later removes it. Its virtual initializer used to stop the load-fusion scan as
+if it were a real aliasing store. Ignoring only that sink-tagged `XSTORE`
+allows the existing arithmetic fusion and the new unary/shuffle/conversion
+forms to consume array memory directly. A six-kernel square-root,
+rounding and absolute-value dump changes as follows:
+
+```
+                         instructions   standalone VMOVUPS
+before                         2008              210
+after                          1960              162
+```
+
+This includes XMM and YMM root and loop traces. The square-root timings remain
+flat because its execution unit, rather than the front end, is the bottleneck;
+the shorter code and freed vector register are still useful in larger,
+pressure-heavy traces. Runtime codegen tests validate the corresponding
+memory forms for `VPERMD`, `VPERMQ`, packed conversions and integer widening,
+and the Nehalem model continues to reject every legacy-SSE unaligned memory
+arithmetic form.

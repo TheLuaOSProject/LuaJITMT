@@ -941,3 +941,34 @@ from 189 to 165 instructions (1015 to 895 bytes) and the YMM trace from 234
 to 210 instructions (1229 to 1109 bytes). On the measured host XMM improves
 by about 8--9%; the dependency-bound YMM chain keeps essentially the same
 elapsed time with smaller code.
+
+## D34. Treat sunk vector boxes as virtual when fusing AVX loads
+
+Indexing an FFI vector array has value semantics: the recorder represents the
+result with an `XLOAD`, a temporary `CNEW`, and an `XSTORE` into that temporary.
+Sink optimisation removes the allocation and store, but the backend's
+conflict scan still counted the sunk `XSTORE` as a real alias and as a second
+use of the loaded value. Consequently an ordinary expression such as
+`dst[i] = simd.abs(src[i])` retained a standalone `VMOVUPS` even though the
+only emitted consumer could read `src[i]` itself.
+
+The x86 conflict scan now ignores a sink-tagged `XSTORE`. Such a store
+initialises only a virtual box and emits no memory access. If a snapshot needs
+that box, snapshot allocation independently keeps the source value live in a
+register or spill slot, which makes it ineligible for one-use fusion. Real
+stores and genuinely shared loads retain the existing conflict checks.
+
+This makes D33 apply to normal FFI array expressions, not just vectors already
+stored in Lua tables. The same alignment-safe AVX rule is extended to packed
+square root, integer absolute value, rounding, immediate permutations,
+`VPERMD`, direct packed numeric conversion, and integer widening/narrowing.
+Each uses the instruction's unaligned memory-source form. Nehalem and every
+other legacy-SSE path still issue `MOVUPS` before the packed instruction.
+
+In a six-kernel XMM/YMM streaming dump covering square root, rounding and
+absolute value, 48 standalone `VMOVUPS` instructions disappear across the
+root and loop traces (210 down to 162); total instructions fall from 2008 to
+1960. Square root remains execution-unit-bound on the measured host, so this
+is primarily a code-size, decode, and register-pressure win there. Cheaper
+operations have more opportunity to benefit when the surrounding trace is
+front-end or register-pressure limited.
