@@ -97,18 +97,21 @@ that only appear after a trace is linked.
 
 ## Reference-implementation hazards
 
-The Lua reference code must avoid the pre-existing upstream bug documented in
-`SIMD_STATUS.md` (`ffi.cast("int64_t", x) < ffi.cast("int64_t", y)` inside a
-compiled loop). The min/max references therefore compare the lane values
-directly instead of widening them first.
+The min/max references compare lane values directly instead of widening them
+to `int64_t` first. That was originally a workaround for the upstream
+zero-extension bug described in `SIMD_STATUS.md`, which the merge up to
+`a471ab78` fixed. The workaround is kept: comparing the lane values directly
+is what the operation actually means, and not widening keeps the reference
+independent of the conversion path it is meant to be checking.
 
 ## Non-vector regression check
 
 LuaJIT has no in-tree test suite, so the baseline for "nothing else changed" is
-an output diff against a pristine build of the base commit:
+an output diff against a pristine build of the upstream commit the branch
+is currently merged up to:
 
 ```
-git worktree add /tmp/ljbase 346ab587 && (cd /tmp/ljbase && make -j$(nproc))
+git worktree add /tmp/ljbase a471ab78 && (cd /tmp/ljbase && make -j$(nproc))
 ./src/luajit          test/simd/test_noregress.lua > /tmp/new.txt
 /tmp/ljbase/src/luajit test/simd/test_noregress.lua > /tmp/base.txt
 diff /tmp/base.txt /tmp/new.txt      # must be empty

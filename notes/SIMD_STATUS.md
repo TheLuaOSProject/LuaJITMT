@@ -4,7 +4,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 
 ## Where we are
 
-* Branch: `simd`, forked from `upstream/v2.1` at `346ab587`.
+* Branch: `simd`, forked from `upstream/v2.1` at `346ab587`, merged up to
+  `a471ab78` (2026-07-26).
 * Remote: `origin` = https://github.com/TheLuaOSProject/LuaJITMT
 * Upstream: `upstream` = https://github.com/LuaJIT/LuaJIT.git
 * **This branch is based on pristine upstream LuaJIT, not on `origin/v2.1`.**
@@ -58,48 +59,24 @@ backend bug that neither of the other two modes reached. Keep it.
 
 ## Known failing / pre-existing
 
-* **Pre-existing upstream bug, not caused by this work.** In a compiled loop,
-  `ffi.cast("int64_t", x) < ffi.cast("int64_t", y)` produces the wrong result;
-  the comparison always takes the true branch. Reproduced on a pristine build
-  of the base commit `346ab587` (worktree build) with plain `uint32_t[4]`
-  arrays and no vectors involved:
+* **Both previously documented upstream bugs are now fixed** by merging
+  `upstream/v2.1` up to `a471ab78` ("FFI: Fix widening semantics for 64 bit
+  arithmetic", `e4d80516`). They are kept here only so the history makes
+  sense:
 
-  ```lua
-  local a = ffi.new("uint32_t[4]", {3341494851,1,4294967295,1})
-  local b = ffi.new("uint32_t[4]", {411539894,2643763630,1032702654,529748659})
-  local function mn()
-    local t = {}
-    for i = 0, 3 do
-      local x, y = ffi.cast("int64_t", a[i]), ffi.cast("int64_t", b[i])
-      t[i] = (x < y) and x or y
-    end
-    return t
-  end
-  -- interpreted: 411539894 1 1032702654 1
-  -- compiled:    3341494851 2643763630 4294967295 1
-  ```
+  1. In a compiled loop, `ffi.cast("int64_t", x) < ffi.cast("int64_t", y)`
+     on a `uint32_t` source took the wrong branch. `simplify_conv_i64_num()`
+     folded a `u32 -> i64` conversion to the bare 32 bit value on x64,
+     dropping the zero-extension. Verified fixed: interpreter and JIT now
+     agree on the reproducer that used to differ.
+  2. `tonumber(u)` for a `uint64_t` at or above 2^63 differed by one ulp
+     between the interpreter and the JIT. Also verified fixed.
 
-  The SIMD test suite avoids this pattern in its reference implementations.
-  Out of scope for this work; recorded so it is not mistaken for a regression.
-
-* **Pre-existing upstream difference, not caused by this work.**
-  `tonumber(u)` for a `uint64_t` at or above 2^63 can differ by one ulp
-  between the interpreter and the JIT, because the JIT converts as signed and
-  then adds 2^64, which rounds twice. Reproduced on a pristine build of
-  `346ab587` with no vectors involved:
-
-  ```lua
-  local v = ffi.new("uint64_t[1]")
-  v[0] = 58ULL * 0x40d0f21a8ce41712ULL
-  -- interpreted 0x1.5eadb407d75a7p+63, compiled 0x1.5eadb407d75a8p+63
-  ```
-
-  `test_jit.lua` accumulates 64-bit lane values exactly instead of through
-  doubles so the suite does not depend on it.
+  The SIMD test suite never depended on either, so nothing in it changed.
 
 * LuaJIT has no in-tree test suite, so the regression baseline is an output
-  diff of `test/simd/test_noregress.lua` against a pristine build of the base
-  commit `346ab587`. It is currently **byte-for-byte identical**. See
+  diff of `test/simd/test_noregress.lua` against a pristine build of the
+  current upstream head `a471ab78`. It is **byte-for-byte identical**. See
   `SIMD_TESTING.md` for the exact commands.
 
 ## Files touched so far
